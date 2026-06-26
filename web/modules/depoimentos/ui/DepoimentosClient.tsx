@@ -17,6 +17,8 @@ import {
   saveCurso,
   saveDepoimento,
   saveTag,
+  enqueueTranscricao,
+  pollTranscricaoJob,
 } from './depoimentos-data';
 
 type Tab = 'biblioteca' | 'cursos' | 'tags';
@@ -99,6 +101,8 @@ function DepoimentoDrawer({ id, canEdit, onClose, onSaved }: { id: string; canEd
   const [transcript, setTranscript] = useState('');
   const [busy, setBusy] = useState(false);
   const [hlMsg, setHlMsg] = useState('');
+  const [trMsg, setTrMsg] = useState('');
+  const [trBusy, setTrBusy] = useState(false);
 
   const load = useCallback(async () => {
     const dep = await loadDepoimento(id);
@@ -126,6 +130,36 @@ function DepoimentoDrawer({ id, canEdit, onClose, onSaved }: { id: string; canEd
     load();
   }
 
+  // Enfileira a transcrição da pasta do Drive; o worker (faster-whisper) processa.
+  async function transcrever() {
+    if (!d?.drive_folder_url) { setTrMsg('Informe a URL da pasta do Drive e salve antes.'); return; }
+    setTrBusy(true); setTrMsg('Enfileirando transcrição…');
+    const r = await enqueueTranscricao(d.drive_folder_url);
+    if (!r.ok || !r.job) { setTrBusy(false); setTrMsg(r.error || 'Falha ao enfileirar.'); return; }
+    const jobId = r.job.id;
+    let tries = 0;
+    const tick = async () => {
+      const job = await pollTranscricaoJob(jobId);
+      tries += 1;
+      if (!job) { setTrBusy(false); setTrMsg('Não foi possível consultar o job.'); return; }
+      if (job.status === 'completed') {
+        if (job.transcript) {
+          setTranscript(job.transcript);
+          await saveDepoimento(id, { transcript: job.transcript });
+        }
+        setTrBusy(false);
+        setTrMsg(`Transcrição concluída (${job.audios_succeeded}/${job.source_audios_count} áudios).`);
+        load();
+        return;
+      }
+      if (job.status === 'error' || job.status === 'failed') { setTrBusy(false); setTrMsg(job.error_message || 'Falha na transcrição.'); return; }
+      setTrMsg(job.status === 'processing' ? 'Transcrevendo (worker)…' : 'Na fila, aguardando worker…');
+      if (tries < 120) setTimeout(tick, 5000); // ~10min de polling
+      else { setTrBusy(false); setTrMsg('Ainda processando — reabra mais tarde para ver o resultado.'); }
+    };
+    setTimeout(tick, 3000);
+  }
+
   const hlTone = d.highlights_status === 'ok' ? 'success' : d.highlights_status === 'erro' ? 'danger' : d.highlights_status === 'limite_diario' ? 'warning' : 'neutral';
   return (
     <Drawer
@@ -144,7 +178,15 @@ function DepoimentoDrawer({ id, canEdit, onClose, onSaved }: { id: string; canEd
         <div className="mb-4">
           <div className="text-xs font-semibold text-[var(--fg-3)] mb-1">Transcrição</div>
           <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8} readOnly={!canEdit} className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" placeholder="Cole/edite a transcrição aqui…" />
-          {canEdit && <Button variant="ghost" size="sm" onClick={() => persist({ transcript: transcript || null }, 'Transcrição salva.')} disabled={busy} className="mt-2">Salvar transcrição</Button>}
+          {canEdit && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => persist({ transcript: transcript || null }, 'Transcrição salva.')} disabled={busy}>Salvar transcrição</Button>
+              <Button variant="subtle" size="sm" onClick={transcrever} disabled={trBusy || !d.drive_folder_url} title={d.drive_folder_url ? 'Transcreve os áudios da pasta do Drive (worker)' : 'Informe a pasta do Drive primeiro'}>
+                {trBusy ? 'Transcrevendo…' : '🎙️ Transcrever pela pasta do Drive'}
+              </Button>
+              {trMsg && <span className="text-xs text-[var(--fg-3)]">{trMsg}</span>}
+            </div>
+          )}
         </div>
 
         <div className="rounded-[var(--r-lg)] border border-[var(--border)] p-3">

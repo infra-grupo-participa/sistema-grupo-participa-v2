@@ -92,6 +92,37 @@ export async function loadParaCopy(): Promise<Array<Depoimento & { aluno_nome?: 
   return deps.map((d) => ({ ...d, aluno_nome: nomes[d.aluno_id] }));
 }
 
+// ── Transcrição (fila → worker Python) ──
+export interface TranscriptionJob {
+  id: string;
+  status: string;
+  transcript: string | null;
+  source_audios_count: number;
+  audios_succeeded: number;
+  audios_failed: number;
+  error_message: string | null;
+  processing_notes: string | null;
+}
+
+export async function enqueueTranscricao(folderUrl: string, ctx: Record<string, string> = {}): Promise<{ ok: boolean; job?: TranscriptionJob; error?: string }> {
+  const r = await fetch('/api/depoimentos/transcricao-job', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folder_url: folderUrl, transcription_context: ctx }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) return { ok: false, error: j?.error || 'Falha ao enfileirar.' };
+  return { ok: true, job: j.data as TranscriptionJob };
+}
+
+export async function pollTranscricaoJob(jobId: string): Promise<TranscriptionJob | null> {
+  const r = await fetch(`/api/depoimentos/transcricao-job?id=${encodeURIComponent(jobId)}`, { credentials: 'include' });
+  if (!r.ok) return null;
+  const j = await r.json().catch(() => ({}));
+  return (j?.data as TranscriptionJob) ?? null;
+}
+
 // ── Cursos ──
 export async function loadCursos(): Promise<Curso[]> {
   const { data } = await db().from('gp_cursos').select('*').order('sort_order').order('name');
