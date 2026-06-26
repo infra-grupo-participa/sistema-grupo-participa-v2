@@ -5,7 +5,23 @@ import type { Aluno360 } from './aluno-360';
 import { nivelLabel } from '@/shared/domain/nivel-resultado';
 
 export type DashView = 'alunos' | 'socios';
+export interface DashFiltros {
+  nivel?: string;
+  estado?: string;
+  turma?: string;
+}
 const ATIVO = new Set(['renovado', 'vigente']);
+
+/** Aplica view (alunos/sócios) + filtros do dashboard. */
+export function applyDashFilters(alunos: Aluno360[], view: DashView, f: DashFiltros = {}): Aluno360[] {
+  return alunos.filter((a) => {
+    if (view === 'socios' && !a.eh_socio) return false;
+    if (f.nivel && a.nivel_resultado !== f.nivel) return false;
+    if (f.estado && String(a.estado ?? '').toUpperCase() !== f.estado) return false;
+    if (f.turma && a.turma_codigo !== f.turma) return false;
+    return true;
+  });
+}
 
 export interface Distribuicao {
   key: string;
@@ -28,6 +44,41 @@ export interface AlunosMetrics {
   porEspaco: Distribuicao[];
   porEstado: Distribuicao[];
   porAno: Distribuicao[];
+  porTurma: Distribuicao[];
+}
+
+/** Matriz turma × nível (heat). Linhas = turmas (top), colunas = níveis presentes. */
+export interface TurmaNivelMatrix {
+  turmas: string[];
+  niveis: { key: string; label: string; color: string }[];
+  cells: Record<string, Record<string, number>>;
+  max: number;
+}
+
+export function computeTurmaNivelMatrix(alunos: Aluno360[], topTurmas = 12): TurmaNivelMatrix {
+  const niveisPresentes = (Object.keys(NRANK) as string[])
+    .sort((a, b) => NRANK[b] - NRANK[a])
+    .filter((k) => alunos.some((a) => a.nivel_resultado === k))
+    .map((key) => ({ key, label: nivelLabel(key), color: NIVEL_COLOR[key] || 'var(--nivel-base)' }));
+
+  const turmaCounts = new Map<string, number>();
+  for (const a of alunos) if (a.turma_codigo) turmaCounts.set(a.turma_codigo, (turmaCounts.get(a.turma_codigo) ?? 0) + 1);
+  const turmas = Array.from(turmaCounts.entries())
+    .sort((x, y) => y[1] - x[1])
+    .slice(0, topTurmas)
+    .map(([t]) => t);
+
+  const cells: Record<string, Record<string, number>> = {};
+  let max = 0;
+  for (const t of turmas) {
+    cells[t] = {};
+    for (const n of niveisPresentes) {
+      const c = alunos.filter((a) => a.turma_codigo === t && a.nivel_resultado === n.key).length;
+      cells[t][n.key] = c;
+      if (c > max) max = c;
+    }
+  }
+  return { turmas, niveis: niveisPresentes, cells, max };
 }
 
 const NIVEL_COLOR: Record<string, string> = {
@@ -48,8 +99,8 @@ function tally(rows: Aluno360[], keyFn: (a: Aluno360) => string | null, labelFn?
     .sort((x, y) => y.count - x.count);
 }
 
-export function computeAlunosMetrics(alunos: Aluno360[], view: DashView = 'alunos'): AlunosMetrics {
-  const base = view === 'socios' ? alunos.filter((a) => a.eh_socio) : alunos;
+export function computeAlunosMetrics(alunos: Aluno360[], view: DashView = 'alunos', filtros: DashFiltros = {}): AlunosMetrics {
+  const base = applyDashFilters(alunos, view, filtros);
   const total = base.length;
   const ativos = base.filter((a) => ATIVO.has(String(a.status_acesso ?? '').toLowerCase())).length;
 
@@ -83,5 +134,6 @@ export function computeAlunosMetrics(alunos: Aluno360[], view: DashView = 'aluno
       base.filter((a) => a.data_compra_importada),
       (a) => String(a.data_compra_importada).slice(0, 4),
     ).sort((x, y) => x.key.localeCompare(y.key)),
+    porTurma: tally(base.filter((a) => a.turma_codigo), (a) => a.turma_codigo).slice(0, 8),
   };
 }
