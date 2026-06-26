@@ -11,7 +11,8 @@ import {
 } from '../domain/aluno-360';
 import { nivelLabel, nivelOptions } from '@/shared/domain/nivel-resultado';
 import { loadAlunos360, loadTurmas, updateAluno, type Turma } from './alunos-data';
-import { Badge, NivelBadge, StatCard, DataTable, Thead, Th as Thx, Tr, Td, EmptyState } from '@/shared/ui/components';
+import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Drawer, Tabs, Button } from '@/shared/ui/components';
+import { DashboardAlunos } from './DashboardAlunos';
 
 type SortCol = 'nome' | 'nivel' | 'situacao' | 'instrucao';
 interface Filtros { situacao: string; espaco: string; nivel: string; jornada: string; papel: string }
@@ -32,6 +33,7 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [toast, setToast] = useState('');
+  const [topTab, setTopTab] = useState<'dashboard' | 'lista'>('dashboard');
 
   const reload = useCallback(async () => setAlunos(await loadAlunos360()), []);
   useEffect(() => {
@@ -93,17 +95,6 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
     return list;
   }, [alunos, busca, filtros, sortCol, sortDir]);
 
-  const stats = useMemo(
-    () => ({
-      total: alunos.length,
-      ht: alunos.filter((a) => a.tem_ht).length,
-      hm: alunos.filter((a) => a.tem_hm).length,
-      placa: alunos.filter((a) => a.tem_placa).length,
-      depoimento: alunos.filter((a) => a.tem_depoimento).length,
-    }),
-    [alunos],
-  );
-
   const selected = selectedId ? alunos.find((a) => a.id === selectedId) ?? null : null;
   const sortBtn = (col: SortCol) => () => {
     if (sortCol === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -115,14 +106,24 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
       <h1 className="text-2xl font-bold text-[var(--fg)] mb-1">Base de Alunos</h1>
       <p className="text-sm text-[var(--fg-3)] mb-4">Centro de controle — ficha 360° do aluno. {loading && 'carregando…'}</p>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
-        <StatCard label="Total de alunos" value={stats.total} />
-        <StatCard label="Holding Total" value={stats.ht} tone="var(--nivel-platina)" />
-        <StatCard label="Holding Masters" value={stats.hm} tone="var(--accent)" />
-        <StatCard label="Com placa" value={stats.placa} tone="var(--nivel-ouro)" />
-        <StatCard label="Com depoimento" value={stats.depoimento} tone="var(--green)" />
+      <div className="flex gap-1 border-b border-[var(--border)] mb-5">
+        {([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos']] as const).map(([k, l]) => (
+          <button
+            key={k}
+            onClick={() => setTopTab(k)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              topTab === k ? 'border-[var(--accent)] text-[var(--fg)]' : 'border-transparent text-[var(--fg-3)] hover:text-[var(--fg-2)]'
+            }`}
+          >
+            {l}
+          </button>
+        ))}
       </div>
 
+      {topTab === 'dashboard' && <DashboardAlunos alunos={alunos} />}
+
+      {topTab === 'lista' && (
+      <>
       <div className="flex flex-wrap gap-2 mb-3">
         <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, e-mail, documento, cidade…" className="flex-1 min-w-[220px] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" />
         <Sel value={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={nivelOptions().map((n) => ({ value: n.id, label: n.label }))} />
@@ -157,6 +158,8 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
       </DataTable>
       {!filtered.length && !loading && <EmptyState title="Nenhum aluno encontrado" hint="Ajuste a busca ou os filtros." icon="👥" />}
       {filtered.length > 500 && <p className="text-xs text-[var(--fg-3)] mt-2">Exibindo 500 de {filtered.length}. Refine a busca.</p>}
+      </>
+      )}
 
       {selected && (
         <Drawer360
@@ -174,9 +177,6 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function sitColor(cls: string) {
-  return cls === 'green' ? 'var(--green)' : cls === 'red' ? 'var(--red)' : cls === 'yellow' ? 'var(--yellow)' : 'var(--fg-2)';
-}
 function Sel({ value, onChange, placeholder, options }: { value: string; onChange: (v: string) => void; placeholder: string; options: { value: string; label: string }[] }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]">
@@ -208,37 +208,30 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
   const saldo = Number(a.saldo_devedor) || 0;
   const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
   const espaco = ESPACO_LABEL[a.espaco_instrucao || ''] || null;
+  const sitTone = sit ? (sit.cls === 'green' ? 'success' : sit.cls === 'red' ? 'danger' : sit.cls === 'yellow' ? 'warning' : 'neutral') : 'neutral';
 
   return (
-    <div className="fixed inset-0 z-[1000] flex justify-end">
-      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/50" />
-      <div className="relative w-full max-w-lg h-full overflow-y-auto bg-[var(--surface-1)] border-l border-[var(--border)] p-5">
-        <div className="flex justify-between items-start mb-3">
-          <div>
-            <h2 className="text-lg font-bold text-[var(--fg)]">{a.nome || 'Sem nome'}</h2>
-            <p className="text-xs text-[var(--fg-3)]">{a.email || '—'}</p>
-          </div>
-          <div className="flex gap-2">
-            {canEdit && <button onClick={onToggleEdit} className="text-xs px-3 py-1.5 rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg-2)]">{editMode ? 'Cancelar' : 'Editar'}</button>}
-            <button onClick={onClose} className="text-[var(--fg-3)] hover:text-[var(--fg)]">✕</button>
-          </div>
-        </div>
-
-        {editMode ? (
+    <Drawer
+      onClose={onClose}
+      title={a.nome || 'Sem nome'}
+      subtitle={a.email || '—'}
+      badges={
+        !editMode ? (
+          <>
+            {sit && <Badge tone={sitTone} dot>{sit.label}</Badge>}
+            {a.nivel_resultado && <NivelBadge nivel={a.nivel_resultado} />}
+            {espaco && <Badge tone="info">{espaco}</Badge>}
+            {a.eh_socio && <Badge tone="accent">Sócio</Badge>}
+          </>
+        ) : undefined
+      }
+      actions={canEdit ? <Button size="sm" variant={editMode ? 'ghost' : 'subtle'} onClick={onToggleEdit}>{editMode ? 'Cancelar' : 'Editar'}</Button> : undefined}
+    >
+      {editMode ? (
           <EditForm a={a} turmas={turmas} onSaved={onSaved} />
         ) : (
           <>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {sit && <Pill color={sitColor(sit.cls)}>{sit.label}</Pill>}
-              {espaco && <Pill>{espaco}</Pill>}
-              {a.nivel_resultado && <Pill color="var(--accent)">{nivelLabel(a.nivel_resultado)}</Pill>}
-              {a.eh_socio && <Pill>Sócio</Pill>}
-            </div>
-            <div className="flex gap-1 border-b border-[var(--border)] mb-3 overflow-x-auto">
-              {TABS.map((t) => (
-                <button key={t.k} onClick={() => setTab(t.k)} className={`px-3 py-2 text-sm whitespace-nowrap border-b-2 ${tab === t.k ? 'border-[var(--accent)] text-[var(--fg)]' : 'border-transparent text-[var(--fg-3)]'}`}>{t.l}</button>
-              ))}
-            </div>
+            <Tabs tabs={TABS.map((t) => ({ k: t.k, l: t.l }))} active={tab} onChange={setTab} />
 
             {tab === 'geral' && (
               <Section>
@@ -315,8 +308,7 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
             )}
           </>
         )}
-      </div>
-    </div>
+    </Drawer>
   );
 }
 
@@ -325,9 +317,6 @@ function Section({ children }: { children: React.ReactNode }) {
 }
 function Row({ k, v }: { k: string; v: string | null }) {
   return <div className="flex justify-between gap-3 py-1 border-b border-[var(--border-faint)]"><span className="text-xs text-[var(--fg-3)]">{k}</span><span className="text-sm text-[var(--fg)] text-right">{v || '—'}</span></div>;
-}
-function Pill({ children, color }: { children: React.ReactNode; color?: string }) {
-  return <span className="text-xs px-2 py-1 rounded-[var(--r-pill)] border" style={{ color: color || 'var(--fg-2)', borderColor: 'var(--border)' }}>{children}</span>;
 }
 function Kpi({ label, value, color }: { label: string; value: string; color?: string }) {
   return <div className="rounded-[var(--r-md)] border border-[var(--border)] p-2 text-center"><div className="font-bold text-sm" style={{ color: color || 'var(--fg)' }}>{value}</div><div className="text-[10px] text-[var(--fg-3)]">{label}</div></div>;

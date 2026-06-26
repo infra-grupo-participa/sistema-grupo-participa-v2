@@ -31,6 +31,7 @@ export interface Aluno360 {
   espaco_instrucao: string | null;
   eh_socio: boolean | null;
   situacao_acesso: string | null;
+  status_acesso: string | null;
   status_acesso_central: string | null;
   produto: string | null;
   oferta: string | null;
