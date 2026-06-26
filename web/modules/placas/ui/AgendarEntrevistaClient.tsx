@@ -92,6 +92,13 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
 
   return (
     <div className="sp-wrap">
+      <div className="sp-brand">
+        <div className="sp-brand-logo">GP</div>
+        <div>
+          <div className="sp-brand-name">Grupo Participa</div>
+          <div className="sp-brand-sub">Agendamento de Entrevista</div>
+        </div>
+      </div>
       {view === 'loading' && <Card><div className="sp-card-body">Carregando horários…</div></Card>}
 
       {view === 'no-session' && (

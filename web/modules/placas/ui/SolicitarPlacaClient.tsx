@@ -379,7 +379,18 @@ export function SolicitarPlacaClient({ initialToken }: { initialToken: string })
 }
 
 function Wrap({ children }: { children: React.ReactNode }) {
-  return <div className="sp-wrap">{children}</div>;
+  return (
+    <div className="sp-wrap">
+      <div className="sp-brand">
+        <div className="sp-brand-logo">GP</div>
+        <div>
+          <div className="sp-brand-name">Grupo Participa</div>
+          <div className="sp-brand-sub">Solicitação de Placa de Resultado</div>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
 }
 function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
@@ -434,7 +445,7 @@ function TrackingCard({ data }: { data: Record<string, unknown> }) {
             return (
               <div key={s.title} className={`sp-tl-step ${cls}`}>
                 <div className="sp-tl-bullet">{i < activeIndex ? '✓' : i + 1}</div>
-                <div><div className="sp-tl-label">{s.title}</div><div className="sp-tl-note">{s.note}</div></div>
+                <div className="sp-tl-body"><div className="sp-tl-label">{s.title}</div><div className="sp-tl-note">{s.note}</div></div>
               </div>
             );
           })}
