@@ -20,8 +20,14 @@ export async function serverContainer() {
   };
 }
 
-/** Atalho memoizado por request: usuário canônico autenticado (ou null). */
+/** Atalho memoizado por request: usuário canônico autenticado (ou null).
+ *  Tolerante a falha de infraestrutura (env ausente/Supabase fora) → null,
+ *  para a página redirecionar ao login em vez de estourar 500. */
 export const getCurrentUser = cache(async (): Promise<GpUser | null> => {
-  const { getCurrentUser } = await serverContainer();
-  return getCurrentUser.execute();
+  try {
+    const { getCurrentUser } = await serverContainer();
+    return await getCurrentUser.execute();
+  } catch {
+    return null;
+  }
 });

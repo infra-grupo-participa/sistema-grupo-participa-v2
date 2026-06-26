@@ -23,6 +23,12 @@ function isPublic(pathname: string): boolean {
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  // Sem credenciais Supabase → não derruba a request (deixa a página/rota tratar).
+  // Evita 500 em cascata quando o build/runtime não recebeu as env vars.
+  if (!publicEnv.supabaseUrl || !publicEnv.supabaseAnonKey) {
+    return response;
+  }
+
   const supabase = createServerClient(publicEnv.supabaseUrl, publicEnv.supabaseAnonKey, {
     cookies: {
       getAll() {

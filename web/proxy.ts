@@ -8,7 +8,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Tudo exceto assets estáticos e otimização de imagem.
-    '/((?!_next/static|_next/image|favicon.ico|assets/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    // Tudo exceto assets estáticos, otimização de imagem e a rota de health (diagnóstico).
+    '/((?!_next/static|_next/image|favicon.ico|api/health|assets/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };
