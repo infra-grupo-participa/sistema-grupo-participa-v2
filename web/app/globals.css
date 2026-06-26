@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+/* ── Design Tokens — porta de app/assets/css/global.css ── */
+:root {
+  --accent:#F29725; --accent-dim:#D08220;
+  --accent-subtle:rgba(242,151,37,.12); --accent-border:rgba(242,151,37,.22);
+
+  --green:#16a34a; --green-subtle:rgba(22,163,74,.12); --green-border:rgba(22,163,74,.22);
+  --yellow:#d97706; --yellow-subtle:rgba(217,119,6,.12); --yellow-border:rgba(217,119,6,.22);
+  --purple:#7c3aed; --purple-subtle:rgba(124,58,237,.12); --purple-border:rgba(124,58,237,.22);
+  --red:#dc2626; --red-subtle:rgba(220,38,38,.12); --red-border:rgba(220,38,38,.22);
+
+  --surface-0:#000; --surface-1:#0d0d0d; --surface-2:#141414; --surface-3:#1c1c1c; --surface-4:#242424;
+
+  --border-faint:rgba(255,255,255,.04); --border:rgba(255,255,255,.08);
+  --border-strong:rgba(255,255,255,.14); --border-accent:rgba(242,151,37,.28);
+
+  --fg:#f0f0f0; --fg-2:#a0a0a0; --fg-3:#606060; --fg-4:#363636;
+
+  --r-sm:6px; --r-md:10px; --r-lg:14px; --r-xl:18px; --r-pill:999px;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.3);
+  --shadow-md:0 2px 8px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.3);
+  --shadow-lg:0 8px 24px rgba(0,0,0,.5);
+
+  --header-height:60px; --sidebar-width:264px;
+}
+
+[data-theme="light"] {
+  --accent:#E07F10; --accent-dim:#B56509;
+  --accent-subtle:rgba(224,127,16,.14); --accent-border:rgba(224,127,16,.38);
+  --green:#15803d; --green-subtle:rgba(21,128,61,.14); --green-border:rgba(21,128,61,.32);
+  --yellow:#b45309; --yellow-subtle:rgba(180,83,9,.14); --yellow-border:rgba(180,83,9,.32);
+  --purple:#6d28d9; --purple-subtle:rgba(109,40,217,.14); --purple-border:rgba(109,40,217,.32);
+  --red:#b91c1c; --red-subtle:rgba(185,28,28,.14); --red-border:rgba(185,28,28,.32);
+
+  --surface-0:#f4f5f7; --surface-1:#fff; --surface-2:#fff; --surface-3:#eef0f3; --surface-4:#e6e9ee;
+  --border-faint:rgba(0,0,0,.04); --border:rgba(0,0,0,.1);
+  --border-strong:rgba(0,0,0,.16); --border-accent:rgba(224,127,16,.4);
+  --fg:#1a1a1a; --fg-2:#52525b; --fg-3:#71717a; --fg-4:#a1a1aa;
+}
+
+@theme inline {
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
+  --color-accent: var(--accent);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-border-gp: var(--border);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--surface-0);
+  color: var(--fg);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

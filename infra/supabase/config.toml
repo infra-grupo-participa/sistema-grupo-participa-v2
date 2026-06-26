@@ -1,0 +1,23 @@
+# Configuração das Edge Functions do Supabase.
+#
+# verify_jwt = false desabilita a exigência do header Authorization (anon key
+# do Supabase). É obrigatório para webhooks de terceiros como a Hotmart, que
+# autenticam com seus próprios mecanismos (no nosso caso, X-Hotmart-Hottok).
+#
+# Sem isso o gateway (Kong) responde 401 UNAUTHORIZED_NO_AUTH_HEADER antes
+# da função executar — foi o que aconteceu nas compras de 13/05/2026, quando
+# os disparos da Hotmart pararam de cair no Slack.
+#
+# A autenticação real desses webhooks é feita dentro do código de cada função
+# via comparação do header X-Hotmart-Hottok com o secret HOTMART_HOTTOK.
+
+project_id = "mbvybujpkwuorhtdzcde"
+
+[functions.hotmart-events-webhook]
+verify_jwt = false
+
+[functions.hotmart-webhook]
+verify_jwt = false
+
+[functions.hotmart-hm-webhook]
+verify_jwt = false

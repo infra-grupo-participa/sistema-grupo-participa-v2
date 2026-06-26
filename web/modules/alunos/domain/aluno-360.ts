@@ -1,0 +1,145 @@
+// Domínio da ficha 360 — porta dos mapas/ranks de sistema/alunos/js/app.js.
+// O objeto vem do RPC fn_aluno_360_safe (documento já mascarado server-side via _can_see_sensivel).
+
+export interface Aluno360 {
+  id: string;
+  nome: string | null;
+  email: string | null;
+  telefone: string | null;
+  telefone_profissional: string | null;
+  documento: string | null;
+  tipo_documento: string | null;
+  profissao: string | null;
+  link_facebook: string | null;
+  instagram_url: string | null;
+  youtube_url: string | null;
+  site_profissional: string | null;
+  cep: string | null;
+  endereco_logradouro: string | null;
+  endereco_numero: string | null;
+  endereco_complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  estado: string | null;
+  pais: string | null;
+  turma_id: number | null;
+  turma_codigo: string | null;
+  turma_aurum_id: number | null;
+  turma_aurum_codigo: string | null;
+  nivel_resultado: string | null;
+  placa_aurum: string | null;
+  espaco_instrucao: string | null;
+  eh_socio: boolean | null;
+  situacao_acesso: string | null;
+  status_acesso_central: string | null;
+  produto: string | null;
+  oferta: string | null;
+  tipo_oferta: string | null;
+  regra_acesso: string | null;
+  origem_acesso: string | null;
+  instrucao: string | null;
+  tempo_acesso: string | null;
+  data_expiracao: string | null;
+  mes_expiracao: number | null;
+  ano_expiracao: number | null;
+  data_compra_importada: string | null;
+  hotmart_ucode: string | null;
+  // financeiro
+  valor_total: number | null;
+  valor_pago: number | null;
+  saldo_devedor: number | null;
+  status_pagamento: string | null;
+  ultimo_pagamento: string | null;
+  num_cobrancas: number | null;
+  // CS
+  cs_estagio: string | null;
+  cs_responsavel: string | null;
+  cs_ultimo_contato_em: string | null;
+  cs_proxima_acao_em: string | null;
+  cs_observacoes: string | null;
+  sip_registrado: boolean | null;
+  tratamento_manual: string | null;
+  obs_central: string | null;
+  // jornada (derivada, read-only)
+  tem_ht: boolean | null;
+  data_compra_ht: string | null;
+  ativacao_ht_status: string | null;
+  tem_hm: boolean | null;
+  data_compra_hm: string | null;
+  ativacao_hm_status: string | null;
+  hm_plano: string | null;
+  tem_placa: boolean | null;
+  placa_step: number | null;
+  placa_encerrada: boolean | null;
+  placa_protocolo: string | null;
+  tem_solicitacao_placa: boolean | null;
+  placa_sol_status: string | null;
+  placa_rastreio: string | null;
+  placa_entrevista_data: string | null;
+  placa_regularizacao_pendente: boolean | null;
+  tem_depoimento: boolean | null;
+  total_depoimentos: number | null;
+  // metadados
+  fonte: string | null;
+  importado_em: string | null;
+  atualizado_em: string | null;
+  _can_see_sensivel?: boolean;
+}
+
+export const ESPACO_LABEL: Record<string, string> = {
+  holding_masters: 'Holding Masters',
+  aurum: 'Aurum',
+  mastermind_diamante: 'Mastermind Diamante',
+  coach_platina: 'Coach Platina',
+  mastermind: 'Mastermind',
+};
+
+export const ESPACO_CLS: Record<string, string> = {
+  holding_masters: 'blue',
+  aurum: 'yellow',
+  mastermind_diamante: 'purple',
+  coach_platina: 'green',
+  mastermind: 'purple',
+};
+
+export const SITUACAO: Record<string, { cls: string; label: string }> = {
+  em_dia: { cls: 'green', label: 'Em dia' },
+  a_vencer: { cls: 'yellow', label: 'A vencer' },
+  vencido: { cls: 'red', label: 'Vencido' },
+  acompanha_titular: { cls: 'gray', label: 'Acompanha titular' },
+};
+
+// Rank de nível (mais alto primeiro). Porta de NRANK.
+export const NRANK: Record<string, number> = {
+  diamante_vermelho: 7,
+  diamante: 6,
+  platina: 5,
+  ouro: 4,
+  profissional: 3,
+  em_formacao: 2,
+  pessoal: 1,
+  iniciante: 0,
+};
+// Rank de situação. Porta de SRANK.
+export const SRANK: Record<string, number> = { vencido: 3, a_vencer: 2, em_dia: 1, acompanha_titular: 0 };
+
+export function searchHaystack(a: Aluno360): string {
+  const parts = [
+    a.nome,
+    a.email,
+    a.documento,
+    (a.nivel_resultado || '').replace(/_/g, ' '),
+    a.cidade,
+    a.estado,
+    a.turma_codigo,
+    a.turma_aurum_codigo,
+    ESPACO_LABEL[a.espaco_instrucao || ''],
+  ];
+  if (a.turma_aurum_id != null) parts.push('aurum mentoria');
+  if (a.tem_ht) parts.push('ht holding total');
+  if (a.tem_hm) parts.push('hm holding masters');
+  if (a.tem_placa) parts.push('placa');
+  if (a.tem_depoimento) parts.push('depoimento');
+  if (!a.nivel_resultado) parts.push('sem nivel sem nível');
+  return parts.filter(Boolean).join(' ').toLowerCase();
+}

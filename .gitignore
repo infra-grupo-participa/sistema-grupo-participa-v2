@@ -1,0 +1,80 @@
+# Env e credenciais — NUNCA subir (mas versionar os .env.example)
+.env
+*.env
+.env.local
+.env.*.local
+**/.env.local
+**/.env.*.local
+!.env.example
+!**/.env.example
+credentials/
+credentials.json
+service_account.json
+
+# Next.js (app web/)
+.next/
+**/.next/
+next-env.d.ts
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Supabase CLI (gerado automaticamente)
+supabase/.branches
+supabase/.temp
+
+# Estado de sincronização (gerado pelo hotmart_sync.py)
+.sync_state.json
+
+# Logs
+*.log
+
+# Pacotes locais de deploy/homologacao
+dashboard_homolog_*.zip
+/.claude/settings.json
+/.claude/settings.local.json
+
+# Node
+node_modules/
+
+# PHP / Composer
+vendor/
+
+# Tooling local de testes
+infra/tools/
+
+# Quality gate — outputs gerados (baseline e history vão pro repo)
+.quality/
+# Added by code-review-graph
+.code-review-graph/
+
+# Interface Design system (local por projeto)
+.interface-design/
+
+# Tooling/temporários locais de agentes e CLI (não versionar)
+.codex-temp/
+.claude/worktrees/
+.mcp.json
+infra/supabase/.temp/
+infra/supabase/supabase/
