@@ -62,6 +62,17 @@ export function Sidebar({ user }: { user: GpUser }) {
 
   return (
     <aside className="w-[var(--sidebar-width)] shrink-0 h-full overflow-y-auto bg-[var(--surface-1)] border-r border-[var(--border)] px-3 py-4 flex flex-col gap-1">
+      {/* Marca */}
+      <div className="px-3 pb-3 mb-1 border-b border-[var(--border-faint)]">
+        <div className="flex items-center gap-2">
+          <span className="grid place-items-center w-7 h-7 rounded-[var(--r-md)] bg-[var(--accent)] text-black font-bold text-sm">GP</span>
+          <div className="leading-tight">
+            <div className="text-sm font-bold text-[var(--fg)]">Grupo Participa</div>
+            <div className="text-[10px] text-[var(--fg-3)] capitalize">{user.cargo}</div>
+          </div>
+        </div>
+      </div>
+
       {/* Início */}
       <Group label="Início" collapsed={!!groups.home} onToggle={() => toggleGroup('home')}>
         <Link href="/" className={itemCls(cur === '/')}>
