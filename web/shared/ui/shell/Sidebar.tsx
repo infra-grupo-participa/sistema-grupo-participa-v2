@@ -82,7 +82,7 @@ export function Sidebar({ user }: { user: GpUser }) {
             <div key={group.key}>
               <div className={itemCls(onGroup)}>
                 <Link href={group.defaultHref} className="flex items-center gap-2.5 flex-1 min-w-0">
-                  <span>📋</span>
+                  <span className="w-5 text-center">{group.emoji || '📋'}</span>
                   <span className="truncate">{group.label}</span>
                 </Link>
                 {children.length > 0 && (
