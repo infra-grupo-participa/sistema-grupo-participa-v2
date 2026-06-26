@@ -11,6 +11,7 @@ import {
 } from '../domain/aluno-360';
 import { nivelLabel, nivelOptions } from '@/shared/domain/nivel-resultado';
 import { loadAlunos360, loadTurmas, updateAluno, type Turma } from './alunos-data';
+import { Badge, NivelBadge, StatCard, DataTable, Thead, Th as Thx, Tr, Td, EmptyState } from '@/shared/ui/components';
 
 type SortCol = 'nome' | 'nivel' | 'situacao' | 'instrucao';
 interface Filtros { situacao: string; espaco: string; nivel: string; jornada: string; papel: string }
@@ -115,18 +116,11 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
       <p className="text-sm text-[var(--fg-3)] mb-4">Centro de controle — ficha 360° do aluno. {loading && 'carregando…'}</p>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
-        {[
-          { l: 'Total', v: stats.total },
-          { l: 'Holding Total', v: stats.ht },
-          { l: 'Holding Masters', v: stats.hm },
-          { l: 'Com placa', v: stats.placa },
-          { l: 'Com depoimento', v: stats.depoimento },
-        ].map((s) => (
-          <div key={s.l} className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] p-3">
-            <div className="text-xl font-bold text-[var(--fg)]">{s.v}</div>
-            <div className="text-xs text-[var(--fg-3)]">{s.l}</div>
-          </div>
-        ))}
+        <StatCard label="Total de alunos" value={stats.total} />
+        <StatCard label="Holding Total" value={stats.ht} tone="var(--nivel-platina)" />
+        <StatCard label="Holding Masters" value={stats.hm} tone="var(--accent)" />
+        <StatCard label="Com placa" value={stats.placa} tone="var(--nivel-ouro)" />
+        <StatCard label="Com depoimento" value={stats.depoimento} tone="var(--green)" />
       </div>
 
       <div className="flex flex-wrap gap-2 mb-3">
@@ -137,34 +131,31 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
         <Sel value={filtros.situacao} onChange={(v) => setFiltros((f) => ({ ...f, situacao: v }))} placeholder="Toda situação" options={[...Object.entries(SITUACAO).map(([k, s]) => ({ value: k, label: s.label })), { value: 'inadimplente', label: 'Inadimplente' }]} />
       </div>
 
-      <div className="rounded-[var(--r-lg)] border border-[var(--border)] overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-[var(--surface-2)] text-[var(--fg-3)]">
-            <tr>
-              <Th onClick={sortBtn('nome')} active={sortCol === 'nome'} dir={sortDir}>Aluno</Th>
-              <Th onClick={sortBtn('nivel')} active={sortCol === 'nivel'} dir={sortDir}>Nível</Th>
-              <Th onClick={sortBtn('instrucao')} active={sortCol === 'instrucao'} dir={sortDir}>Espaço</Th>
-              <Th onClick={sortBtn('situacao')} active={sortCol === 'situacao'} dir={sortDir}>Situação</Th>
-              <th className="px-3 py-2 text-left font-medium">Jornada</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.slice(0, 500).map((a) => {
-              const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
-              return (
-                <tr key={a.id} onClick={() => { setSelectedId(a.id); setEditMode(false); }} className="border-t border-[var(--border)] hover:bg-[var(--surface-3)] cursor-pointer">
-                  <td className="px-3 py-2"><div className="text-[var(--fg)] font-medium">{a.nome || '—'}</div><div className="text-[var(--fg-3)] text-xs">{a.email}</div></td>
-                  <td className="px-3 py-2 text-[var(--fg-2)]">{nivelLabel(a.nivel_resultado) || '—'}</td>
-                  <td className="px-3 py-2 text-[var(--fg-2)]">{ESPACO_LABEL[a.espaco_instrucao || ''] || '—'}</td>
-                  <td className="px-3 py-2">{sit ? <span className="text-xs font-semibold" style={{ color: sitColor(sit.cls) }}>{sit.label}</span> : <span className="text-[var(--fg-3)]">—</span>}</td>
-                  <td className="px-3 py-2 text-xs text-[var(--fg-3)]">{[a.tem_ht && 'HT', a.tem_hm && 'HM', a.tem_placa && 'Placa', a.tem_depoimento && 'Dep'].filter(Boolean).join(' · ') || '—'}</td>
-                </tr>
-              );
-            })}
-            {!filtered.length && !loading && <tr><td colSpan={5} className="px-3 py-8 text-center text-[var(--fg-3)]">Nenhum aluno encontrado.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+      <DataTable>
+        <Thead>
+          <Thx sortable active={sortCol === 'nome'} dir={sortDir} onClick={sortBtn('nome')}>Aluno</Thx>
+          <Thx sortable active={sortCol === 'nivel'} dir={sortDir} onClick={sortBtn('nivel')}>Nível</Thx>
+          <Thx sortable active={sortCol === 'instrucao'} dir={sortDir} onClick={sortBtn('instrucao')}>Espaço</Thx>
+          <Thx sortable active={sortCol === 'situacao'} dir={sortDir} onClick={sortBtn('situacao')}>Situação</Thx>
+          <Thx>Jornada</Thx>
+        </Thead>
+        <tbody>
+          {filtered.slice(0, 500).map((a) => {
+            const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
+            const jornada = [a.tem_ht && 'HT', a.tem_hm && 'HM', a.tem_placa && 'Placa', a.tem_depoimento && 'Dep'].filter(Boolean) as string[];
+            return (
+              <Tr key={a.id} onClick={() => { setSelectedId(a.id); setEditMode(false); }}>
+                <Td><div className="text-[var(--fg)] font-medium">{a.nome || '—'}</div><div className="text-[var(--fg-3)] text-xs">{a.email}</div></Td>
+                <Td><NivelBadge nivel={a.nivel_resultado} /></Td>
+                <Td className="text-[var(--fg-2)]">{ESPACO_LABEL[a.espaco_instrucao || ''] || '—'}</Td>
+                <Td>{sit ? <Badge tone={sit.cls === 'green' ? 'success' : sit.cls === 'red' ? 'danger' : sit.cls === 'yellow' ? 'warning' : 'neutral'} dot>{sit.label}</Badge> : <span className="text-[var(--fg-3)]">—</span>}</Td>
+                <Td>{jornada.length ? <div className="flex gap-1 flex-wrap">{jornada.map((j) => <Badge key={j} tone="neutral">{j}</Badge>)}</div> : <span className="text-[var(--fg-3)]">—</span>}</Td>
+              </Tr>
+            );
+          })}
+        </tbody>
+      </DataTable>
+      {!filtered.length && !loading && <EmptyState title="Nenhum aluno encontrado" hint="Ajuste a busca ou os filtros." icon="👥" />}
       {filtered.length > 500 && <p className="text-xs text-[var(--fg-3)] mt-2">Exibindo 500 de {filtered.length}. Refine a busca.</p>}
 
       {selected && (
@@ -185,9 +176,6 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
 
 function sitColor(cls: string) {
   return cls === 'green' ? 'var(--green)' : cls === 'red' ? 'var(--red)' : cls === 'yellow' ? 'var(--yellow)' : 'var(--fg-2)';
-}
-function Th({ children, onClick, active, dir }: { children: React.ReactNode; onClick: () => void; active: boolean; dir: 'asc' | 'desc' }) {
-  return <th onClick={onClick} className="px-3 py-2 text-left font-medium cursor-pointer select-none">{children}{active && <span className="ml-1">{dir === 'asc' ? '↑' : '↓'}</span>}</th>;
 }
 function Sel({ value, onChange, placeholder, options }: { value: string; onChange: (v: string) => void; placeholder: string; options: { value: string; label: string }[] }) {
   return (

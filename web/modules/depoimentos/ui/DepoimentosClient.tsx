@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { nivelLabel } from '@/shared/domain/nivel-resultado';
+import { NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState } from '@/shared/ui/components';
 import {
   type Curso,
   type DepoimentoView,
@@ -63,27 +63,25 @@ export function DepoimentosClient({ canEdit }: { canEdit: boolean }) {
       {tab === 'biblioteca' && (
         <>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar aluno, e-mail, profissão…" className="w-full mb-3 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" />
-          <div className="rounded-[var(--r-lg)] border border-[var(--border)] overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-[var(--surface-2)] text-[var(--fg-3)]"><tr>
-                <th className="text-left px-3 py-2 font-medium">Aluno</th>
-                <th className="text-left px-3 py-2 font-medium">Nível</th>
-                <th className="text-left px-3 py-2 font-medium">Data</th>
-                <th className="text-left px-3 py-2 font-medium">Conteúdo</th>
-              </tr></thead>
-              <tbody>
-                {filtered.map((r) => (
-                  <tr key={r.depoimento_id} onClick={() => setOpenId(r.depoimento_id)} className="border-t border-[var(--border)] hover:bg-[var(--surface-3)] cursor-pointer">
-                    <td className="px-3 py-2"><div className="text-[var(--fg)] font-medium">{r.aluno_nome || '—'}</div><div className="text-[var(--fg-3)] text-xs">{r.profissao_resolvida || r.aluno_email}</div></td>
-                    <td className="px-3 py-2 text-[var(--fg-2)]">{nivelLabel(r.aluno_nivel_resultado) || '—'}</td>
-                    <td className="px-3 py-2 text-[var(--fg-2)]">{r.testimonial_date ? new Date(r.testimonial_date).toLocaleDateString('pt-BR') : '—'}</td>
-                    <td className="px-3 py-2 text-xs text-[var(--fg-3)]">{[r.video_url && '🎬', r.transcript && '📝', r.foto_url && '📷'].filter(Boolean).join(' ') || '—'}</td>
-                  </tr>
-                ))}
-                {!filtered.length && !loading && <tr><td colSpan={4} className="px-3 py-8 text-center text-[var(--fg-3)]">Nenhum depoimento.</td></tr>}
-              </tbody>
-            </table>
-          </div>
+          <DataTable>
+            <Thead>
+              <Th>Aluno</Th>
+              <Th>Nível</Th>
+              <Th>Data</Th>
+              <Th>Conteúdo</Th>
+            </Thead>
+            <tbody>
+              {filtered.map((r) => (
+                <Tr key={r.depoimento_id} onClick={() => setOpenId(r.depoimento_id)}>
+                  <Td><div className="text-[var(--fg)] font-medium">{r.aluno_nome || '—'}</div><div className="text-[var(--fg-3)] text-xs">{r.profissao_resolvida || r.aluno_email}</div></Td>
+                  <Td><NivelBadge nivel={r.aluno_nivel_resultado} /></Td>
+                  <Td className="text-[var(--fg-2)] tabular">{r.testimonial_date ? new Date(r.testimonial_date).toLocaleDateString('pt-BR') : '—'}</Td>
+                  <Td className="text-sm">{[r.video_url && '🎬', r.transcript && '📝', r.foto_url && '📷'].filter(Boolean).join(' ') || <span className="text-[var(--fg-3)]">—</span>}</Td>
+                </Tr>
+              ))}
+            </tbody>
+          </DataTable>
+          {!filtered.length && !loading && <EmptyState title="Nenhum depoimento" icon="💬" />}
         </>
       )}
 

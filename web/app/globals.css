@@ -23,6 +23,14 @@
   --shadow-lg:0 8px 24px rgba(0,0,0,.5);
 
   --header-height:60px; --sidebar-width:264px;
+
+  /* Níveis = metais/pedras (assinatura visual recorrente) */
+  --nivel-base:#9ca3af;
+  --nivel-ouro:#d9a441; --nivel-platina:#60a5fa; --nivel-diamante:#a78bfa; --nivel-diamante-vermelho:#f87171;
+
+  /* Interação */
+  --ring:0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent-border);
+  --t-fast:120ms cubic-bezier(.4,0,.2,1); --t-mid:200ms cubic-bezier(.4,0,.2,1);
 }
 
 [data-theme="light"] {
@@ -59,4 +67,24 @@ body {
   color: var(--fg);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11', 'ss01';
 }
+
+/* Números tabulares para dados (alinhamento em tabelas/KPIs) */
+.tabular { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+
+/* Scrollbar discreta (craft: presente só quando necessário) */
+* { scrollbar-width: thin; scrollbar-color: var(--surface-4) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--surface-4); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* Foco visível consistente (acessibilidade + craft) */
+:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--r-sm); }
+::selection { background: var(--accent-subtle); }
+
+/* Animações utilitárias */
+@keyframes gp-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes gp-slide-in { from { transform: translateX(16px); opacity: .4 } to { transform: translateX(0); opacity: 1 } }
+.gp-overlay-in { animation: gp-fade var(--t-mid); }
+.gp-panel-in { animation: gp-slide-in var(--t-mid); }

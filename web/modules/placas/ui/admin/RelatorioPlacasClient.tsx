@@ -13,6 +13,15 @@ import {
 import { nivelLabel } from '@/shared/domain/nivel-resultado';
 import type { Solicitacao, Auditoria, HorarioSlot } from '../../domain/types';
 import * as data from './placas-admin-data';
+import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState } from '@/shared/ui/components';
+
+const STATUS_TONE: Record<string, 'accent' | 'neutral' | 'success' | 'danger' | 'warning' | 'info'> = {
+  'sp-andamento': 'info',
+  'sp-aguardando': 'neutral',
+  'sp-entregue': 'success',
+  'sp-encerrado': 'danger',
+  'sp-regularizacao': 'warning',
+};
 
 type Tab = 'solicitacoes' | 'agenda-horarios';
 const BUCKETS: { key: SolicitacaoBucket; label: string }[] = [
@@ -21,14 +30,6 @@ const BUCKETS: { key: SolicitacaoBucket; label: string }[] = [
   { key: 'cadastro', label: 'Somente cadastro' },
   { key: 'questionarios', label: 'Finalizados' },
 ];
-
-const badgeColor: Record<string, string> = {
-  'sp-andamento': 'var(--accent)',
-  'sp-aguardando': 'var(--fg-3)',
-  'sp-entregue': 'var(--green)',
-  'sp-encerrado': 'var(--red)',
-  'sp-regularizacao': 'var(--yellow)',
-};
 
 export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
   const [tab, setTab] = useState<Tab>('solicitacoes');
@@ -119,43 +120,37 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar nome, e-mail, documento…" className="ml-auto min-w-[220px] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-1.5 text-sm text-[var(--fg)]" />
           </div>
 
-          <div className="rounded-[var(--r-lg)] border border-[var(--border)] overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-[var(--surface-2)] text-[var(--fg-3)]">
-                <tr>
-                  <th className="text-left px-3 py-2 font-medium">Aluno</th>
-                  <th className="text-left px-3 py-2 font-medium">Nível</th>
-                  <th className="text-left px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((s) => {
-                  const ds = computeDisplayStatus(s);
-                  const seen = isSolicitacaoSeen(s);
-                  return (
-                    <tr key={s.id} onClick={() => setOpenId(s.id)} className="border-t border-[var(--border)] hover:bg-[var(--surface-3)] cursor-pointer">
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          {!seen && <span className="w-2 h-2 rounded-full bg-[var(--accent)]" title="Atualização não vista" />}
-                          <div>
-                            <div className="text-[var(--fg)] font-medium">{s.nome || '—'}</div>
-                            <div className="text-[var(--fg-3)] text-xs">{s.email}</div>
-                          </div>
+          <DataTable>
+            <Thead>
+              <Th>Aluno</Th>
+              <Th>Nível</Th>
+              <Th>Status</Th>
+              <Th> </Th>
+            </Thead>
+            <tbody>
+              {filtered.map((s) => {
+                const ds = computeDisplayStatus(s);
+                const seen = isSolicitacaoSeen(s);
+                return (
+                  <Tr key={s.id} onClick={() => setOpenId(s.id)}>
+                    <Td>
+                      <div className="flex items-center gap-2">
+                        {!seen && <span className="w-2 h-2 rounded-full bg-[var(--accent)] shrink-0" title="Atualização não vista" />}
+                        <div>
+                          <div className="text-[var(--fg)] font-medium">{s.nome || '—'}</div>
+                          <div className="text-[var(--fg-3)] text-xs">{s.email}</div>
                         </div>
-                      </td>
-                      <td className="px-3 py-2 text-[var(--fg-2)]">{nivelLabel(s.nivel) || '—'}</td>
-                      <td className="px-3 py-2"><span className="text-xs font-semibold" style={{ color: badgeColor[ds.cls] || 'var(--fg-2)' }}>{ds.label}</span></td>
-                      <td className="px-3 py-2 text-right text-[var(--fg-3)]">›</td>
-                    </tr>
-                  );
-                })}
-                {!filtered.length && !loading && (
-                  <tr><td colSpan={4} className="px-3 py-8 text-center text-[var(--fg-3)]">Nenhuma solicitação neste filtro.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </Td>
+                    <Td><NivelBadge nivel={s.nivel} /></Td>
+                    <Td><Badge tone={STATUS_TONE[ds.cls] || 'neutral'} dot>{ds.label}</Badge></Td>
+                    <Td className="text-right text-[var(--fg-3)]">›</Td>
+                  </Tr>
+                );
+              })}
+            </tbody>
+          </DataTable>
+          {!filtered.length && !loading && <EmptyState title="Nenhuma solicitação neste filtro" icon="🏆" />}
         </>
       )}
 

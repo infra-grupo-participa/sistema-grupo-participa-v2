@@ -54,11 +54,12 @@ export function Sidebar({ user }: { user: GpUser }) {
 
   const cur = normalize(pathname);
   const itemCls = (active: boolean) =>
-    `flex items-center gap-2.5 px-3 py-2.5 rounded-[var(--r-md)] text-sm cursor-pointer transition-colors ${
+    `relative flex items-center gap-2.5 pl-3 pr-2 py-2 rounded-[var(--r-md)] text-sm cursor-pointer transition-colors duration-150 ${
       active
-        ? 'bg-[var(--accent-subtle)] text-[var(--fg)] border border-[var(--accent-border)]'
-        : 'text-[var(--fg-2)] hover:bg-[var(--surface-3)] hover:text-[var(--fg)] border border-transparent'
+        ? 'bg-[var(--accent-subtle)] text-[var(--fg)] font-medium before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-4 before:w-[3px] before:rounded-full before:bg-[var(--accent)]'
+        : 'text-[var(--fg-2)] hover:bg-[var(--surface-3)] hover:text-[var(--fg)]'
     }`;
+  const iconBox = 'grid place-items-center w-6 h-6 rounded-[var(--r-sm)] text-[13px] shrink-0';
 
   return (
     <aside className="w-[var(--sidebar-width)] shrink-0 h-full overflow-y-auto bg-[var(--surface-1)] border-r border-[var(--border)] px-3 py-4 flex flex-col gap-1">
@@ -76,8 +77,8 @@ export function Sidebar({ user }: { user: GpUser }) {
       {/* Início */}
       <Group label="Início" collapsed={!!groups.home} onToggle={() => toggleGroup('home')}>
         <Link href="/" className={itemCls(cur === '/')}>
-          <span>🏠</span>
-          <span>Sobre o sistema</span>
+          <span className={iconBox}>🏠</span>
+          <span>Início</span>
         </Link>
       </Group>
 
@@ -93,7 +94,7 @@ export function Sidebar({ user }: { user: GpUser }) {
             <div key={group.key}>
               <div className={itemCls(onGroup)}>
                 <Link href={group.defaultHref} className="flex items-center gap-2.5 flex-1 min-w-0">
-                  <span className="w-5 text-center">{group.emoji || '📋'}</span>
+                  <span className={iconBox}>{group.emoji || '📋'}</span>
                   <span className="truncate">{group.label}</span>
                 </Link>
                 {children.length > 0 && (
@@ -116,7 +117,7 @@ export function Sidebar({ user }: { user: GpUser }) {
                     const active = normalize(child.path) === cur;
                     return (
                       <Link key={child.key} href={child.href} className={itemCls(active)}>
-                        <span>•</span>
+                        <span className={iconBox}>{child.emoji || '•'}</span>
                         <span>{child.label}</span>
                       </Link>
                     );
@@ -138,7 +139,7 @@ export function Sidebar({ user }: { user: GpUser }) {
             (item.activePrefixes || []).some((p) => cur.startsWith(normalize(p) + '/'));
           return (
             <Link key={item.key} href={item.path} className={itemCls(active)}>
-              <span>{item.icon === '⚙' ? '⚙' : '▫'}</span>
+              <span className={iconBox}>{item.emoji || '▫'}</span>
               <span>{item.label}</span>
             </Link>
           );
