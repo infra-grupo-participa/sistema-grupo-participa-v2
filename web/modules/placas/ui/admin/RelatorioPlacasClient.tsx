@@ -1,18 +1,38 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AUDIT_STEPS } from '../../domain/auditoria';
+import { AUDIT_STEPS, AUDIT_STEP_TOTAL } from '../../domain/auditoria';
 import {
   computeDisplayStatus,
   getSolicitacaoBucketMatch,
   getSolicitacaoQueuePriority,
   isSolicitacaoSeen,
   isSolicitacaoRegularizacao,
+  isSolicitacaoFinalizada,
+  isSolicitacaoRascunho,
   type SolicitacaoBucket,
 } from '../../domain/solicitacao';
 import type { Solicitacao, Auditoria, HorarioSlot } from '../../domain/types';
 import * as data from './placas-admin-data';
-import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer } from '@/shared/ui/components';
+import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, Card, Button } from '@/shared/ui/components';
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://grupoparticipa.app.br';
+
+/** Progresso visual da solicitação: fração 0–1 + rótulo. */
+function progresso(s: Solicitacao): { pct: number; label: string } {
+  if (isSolicitacaoRegularizacao(s)) return { pct: 0.15, label: 'Correção' };
+  if (s.status === 'concluido') return { pct: 1, label: 'Concluído' };
+  if (s.status === 'rejeitado') return { pct: 1, label: 'Rejeitado' };
+  const step = Number(s.auditoria_step ?? -1);
+  if (step >= 0) return { pct: (step + 1) / AUDIT_STEP_TOTAL, label: `${step + 1}/${AUDIT_STEP_TOTAL}` };
+  if (s.status === 'cadastro_concluido') return { pct: 1, label: 'Cadastro' };
+  const form = Math.max(0, Math.min(Number(s.step_index ?? 0), 9));
+  return { pct: (form / 9) * 0.4, label: 'Rascunho' };
+}
+
+function initial(nome?: string | null): string {
+  return (nome || '?').trim().charAt(0).toUpperCase();
+}
 
 const STATUS_TONE: Record<string, 'accent' | 'neutral' | 'success' | 'danger' | 'warning' | 'info'> = {
   'sp-andamento': 'info',
@@ -88,35 +108,64 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
   }, [sols, bucket, q]);
 
   const open = openId ? sols.find((s) => s.id === openId) ?? null : null;
+  const stats = useMemo(() => {
+    const total = sols.length;
+    const finalizadas = sols.filter(isSolicitacaoFinalizada).length;
+    const rascunhos = sols.filter(isSolicitacaoRascunho).length;
+    return { total, finalizadas, rascunhos, emAndamento: total - finalizadas - rascunhos };
+  }, [sols]);
+  const linkPublico = `${APP_URL}/solicitar-placa`;
+  const [copiado, setCopiado] = useState(false);
+  const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-4">
-        <h1 className="text-2xl font-bold text-[var(--fg)]">Relatório de Placas</h1>
-        {loading && <span className="text-sm text-[var(--fg-3)]">carregando…</span>}
-      </div>
-
-      <div className="flex gap-2 mb-4 border-b border-[var(--border)]">
-        {(['solicitacoes', 'agenda-horarios'] as Tab[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => { setTab(t); window.location.hash = t; }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === t ? 'border-[var(--accent)] text-[var(--fg)]' : 'border-transparent text-[var(--fg-3)]'}`}
-          >
-            {t === 'solicitacoes' ? 'Solicitações' : 'Agenda de Horários'}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'solicitacoes' && (
+      {tab === 'solicitacoes' ? (
         <>
-          <div className="flex flex-wrap gap-2 mb-3">
-            {BUCKETS.map((b) => (
-              <button key={b.key} onClick={() => setBucket(b.key)} className={`px-3 py-1.5 rounded-[var(--r-pill)] text-sm ${bucket === b.key ? 'bg-[var(--accent-subtle)] text-[var(--fg)] border border-[var(--accent-border)]' : 'text-[var(--fg-2)] border border-[var(--border)]'}`}>
-                {b.label} ({sols.filter((s) => getSolicitacaoBucketMatch(s, b.key)).length})
-              </button>
-            ))}
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar nome, e-mail, documento…" className="ml-auto min-w-[220px] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-1.5 text-sm text-[var(--fg)]" />
+          <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
+            <h1 className="text-2xl font-bold text-[var(--fg)]">
+              Solicitações de <span className="text-[var(--accent)]">Placas</span>
+              <span className="ml-2 align-middle text-xs font-semibold rounded-[var(--r-pill)] bg-[var(--accent-subtle)] text-[var(--accent)] px-2 py-0.5">{stats.total}</span>
+            </h1>
+            <a href="/sistema/admin-dev" className="text-sm px-3 py-1.5 rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] inline-flex items-center gap-2">🗒️ Logs</a>
+          </div>
+          <p className="text-sm text-[var(--fg-3)] mb-4">Candidatos que iniciaram o processo via formulário público · Atualizado em {hoje}{loading && ' · carregando…'}</p>
+
+          {/* Stat cards com acento + ícone */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <StatBox value={stats.total} label="Total de processos" icon="≣" tone="var(--fg-2)" />
+            <StatBox value={stats.finalizadas} label="Finalizadas" icon="✓" tone="var(--green)" />
+            <StatBox value={stats.emAndamento} label="Em andamento" icon="↻" tone="var(--accent)" />
+            <StatBox value={stats.rascunhos} label="Rascunhos" icon="🖹" tone="var(--nivel-platina)" />
+          </div>
+
+          {/* Link do questionário público */}
+          <Card className="p-3 mb-4 flex items-center gap-3 flex-wrap">
+            <span className="text-[var(--fg-3)]">🔗</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">Link de envio do questionário</span>
+            <input readOnly value={linkPublico} className="flex-1 min-w-[200px] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-1.5 text-sm text-[var(--accent)] font-mono" />
+            <Button variant="subtle" size="sm" onClick={() => { navigator.clipboard?.writeText(linkPublico); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}>
+              {copiado ? '✓ Copiado' : '⧉ Copiar link'}
+            </Button>
+          </Card>
+
+          {/* Busca */}
+          <div className="relative mb-3">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fg-3)]">⌕</span>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nome, e-mail, documento ou cidade…" className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] pl-9 pr-3 py-2.5 text-sm text-[var(--fg)] focus:border-[var(--border-accent)] outline-none" />
+          </div>
+
+          {/* Abas-bucket com contagem */}
+          <div className="flex gap-1 border-b border-[var(--border)] mb-3 overflow-x-auto">
+            {BUCKETS.map((b) => {
+              const n = sols.filter((s) => getSolicitacaoBucketMatch(s, b.key)).length;
+              return (
+                <button key={b.key} onClick={() => setBucket(b.key)} className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors inline-flex items-center gap-2 ${bucket === b.key ? 'border-[var(--accent)] text-[var(--fg)]' : 'border-transparent text-[var(--fg-3)] hover:text-[var(--fg-2)]'}`}>
+                  {b.label}
+                  <span className={`text-[11px] rounded-[var(--r-pill)] px-1.5 py-0.5 ${bucket === b.key ? 'bg-[var(--accent-subtle)] text-[var(--accent)]' : 'bg-[var(--surface-3)] text-[var(--fg-3)]'}`}>{n}</span>
+                </button>
+              );
+            })}
           </div>
 
           <DataTable>
@@ -124,26 +173,41 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
               <Th>Aluno</Th>
               <Th>Nível</Th>
               <Th>Status</Th>
-              <Th> </Th>
+              <Th>Progresso</Th>
+              <Th>Turma</Th>
+              <Th>Última atualização</Th>
             </Thead>
             <tbody>
               {filtered.map((s) => {
                 const ds = computeDisplayStatus(s);
                 const seen = isSolicitacaoSeen(s);
+                const pr = progresso(s);
                 return (
                   <Tr key={s.id} onClick={() => setOpenId(s.id)}>
                     <Td>
-                      <div className="flex items-center gap-2">
-                        {!seen && <span className="w-2 h-2 rounded-full bg-[var(--accent)] shrink-0" title="Atualização não vista" />}
-                        <div>
-                          <div className="text-[var(--fg)] font-medium">{s.nome || '—'}</div>
-                          <div className="text-[var(--fg-3)] text-xs">{s.email}</div>
+                      <div className="flex items-center gap-2.5">
+                        <span className="relative grid place-items-center w-8 h-8 rounded-full bg-[var(--accent)] text-black font-bold text-sm shrink-0">
+                          {initial(s.nome)}
+                          {!seen && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[var(--accent)] ring-2 ring-[var(--surface-2)]" title="Atualização não vista" />}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-[var(--fg)] font-medium truncate">{s.nome || '—'}</div>
+                          <div className="text-[var(--fg-3)] text-xs truncate">{s.email}</div>
                         </div>
                       </div>
                     </Td>
                     <Td><NivelBadge nivel={s.nivel} /></Td>
                     <Td><Badge tone={STATUS_TONE[ds.cls] || 'neutral'} dot>{ds.label}</Badge></Td>
-                    <Td className="text-right text-[var(--fg-3)]">›</Td>
+                    <Td>
+                      <div className="flex items-center gap-2 min-w-[120px]">
+                        <div className="flex-1 h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
+                          <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(pr.pct * 100)}%` }} />
+                        </div>
+                        <span className="text-xs text-[var(--fg-3)] tabular whitespace-nowrap">{pr.label}</span>
+                      </div>
+                    </Td>
+                    <Td>{s.turma ? <span className="text-xs font-semibold rounded-[var(--r-sm)] bg-[var(--surface-3)] text-[var(--fg-2)] px-2 py-0.5">{s.turma}</span> : <span className="text-[var(--fg-3)]">—</span>}</Td>
+                    <Td className="text-xs text-[var(--fg-3)] tabular whitespace-nowrap">{s.updated_at ? new Date(s.updated_at).toLocaleDateString('pt-BR') : '—'}</Td>
                   </Tr>
                 );
               })}
@@ -151,9 +215,13 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
           </DataTable>
           {!filtered.length && !loading && <EmptyState title="Nenhuma solicitação neste filtro" icon="🏆" />}
         </>
+      ) : (
+        <>
+          <h1 className="text-2xl font-bold text-[var(--fg)] mb-1">Agenda de <span className="text-[var(--accent)]">Horários</span></h1>
+          <p className="text-sm text-[var(--fg-3)] mb-4">Slots de entrevista abertos para os candidatos.{loading && ' · carregando…'}</p>
+          <AgendaHorarios canEdit={canEdit} flash={flash} />
+        </>
       )}
-
-      {tab === 'agenda-horarios' && <AgendaHorarios canEdit={canEdit} flash={flash} />}
 
       {open && (
         <SolDetail
@@ -166,6 +234,22 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
       )}
 
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface-4)] text-[var(--fg)] px-4 py-2 rounded-[var(--r-md)] shadow-[var(--shadow-lg)] text-sm z-[1100]">{toast}</div>}
+    </div>
+  );
+}
+
+/** KPI rico: número + rótulo + ícone em container + acento colorido no topo. */
+function StatBox({ value, label, icon, tone }: { value: number; label: string; icon: string; tone: string }) {
+  return (
+    <div className="relative rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] shadow-[var(--shadow-sm)] p-4 overflow-hidden">
+      <span className="absolute inset-x-0 top-0 h-0.5" style={{ background: tone }} />
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="text-2xl font-bold tabular leading-none text-[var(--fg)]">{value.toLocaleString('pt-BR')}</div>
+          <div className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">{label}</div>
+        </div>
+        <span className="grid place-items-center w-8 h-8 rounded-[var(--r-md)] text-sm" style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}>{icon}</span>
+      </div>
     </div>
   );
 }
