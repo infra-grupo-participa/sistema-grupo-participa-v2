@@ -10,10 +10,9 @@ import {
   isSolicitacaoRegularizacao,
   type SolicitacaoBucket,
 } from '../../domain/solicitacao';
-import { nivelLabel } from '@/shared/domain/nivel-resultado';
 import type { Solicitacao, Auditoria, HorarioSlot } from '../../domain/types';
 import * as data from './placas-admin-data';
-import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState } from '@/shared/ui/components';
+import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer } from '@/shared/ui/components';
 
 const STATUS_TONE: Record<string, 'accent' | 'neutral' | 'success' | 'danger' | 'warning' | 'info'> = {
   'sp-andamento': 'info',
@@ -193,20 +192,20 @@ function SolDetail({
   const reenvioCompleto = regular && Boolean(sol.proof_url) && Boolean(sol.declaracao_url);
 
   return (
-    <div className="fixed inset-0 z-[1000] flex justify-end">
-      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/50" />
-      <div className="relative w-full max-w-md h-full overflow-y-auto bg-[var(--surface-1)] border-l border-[var(--border)] p-5">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h2 className="text-lg font-bold text-[var(--fg)]">{sol.nome || '—'}</h2>
-            <p className="text-xs text-[var(--fg-3)]">{sol.email} · {sol.telefone}</p>
-            <p className="text-xs text-[var(--fg-3)]">{nivelLabel(sol.nivel) || 'sem nível'} · {computeDisplayStatus(sol).label}</p>
-          </div>
-          <button onClick={onClose} className="text-[var(--fg-3)] hover:text-[var(--fg)]">✕</button>
-        </div>
-
+    <Drawer
+      width="max-w-md"
+      onClose={onClose}
+      title={sol.nome || '—'}
+      subtitle={`${sol.email ?? ''}${sol.telefone ? ' · ' + sol.telefone : ''}`}
+      badges={
+        <>
+          <NivelBadge nivel={sol.nivel} />
+          <Badge tone="info">{computeDisplayStatus(sol).label}</Badge>
+        </>
+      }
+    >
         {/* Timeline de auditoria */}
-        <div className="mb-4">
+        <div className="mb-5">
           {AUDIT_STEPS.map((s, i) => {
             const cls = i < step ? 'done' : i === step ? 'current' : 'pending';
             return (
@@ -268,8 +267,7 @@ function SolDetail({
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </Drawer>
   );
 }
 

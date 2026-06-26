@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState } from '@/shared/ui/components';
+import { NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, Badge, Button } from '@/shared/ui/components';
 import {
   type Curso,
   type DepoimentoView,
@@ -126,12 +126,13 @@ function DepoimentoDrawer({ id, canEdit, onClose, onSaved }: { id: string; canEd
     load();
   }
 
+  const hlTone = d.highlights_status === 'ok' ? 'success' : d.highlights_status === 'erro' ? 'danger' : d.highlights_status === 'limite_diario' ? 'warning' : 'neutral';
   return (
-    <div className="fixed inset-0 z-[1000] flex justify-end">
-      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/50" />
-      <div className="relative w-full max-w-lg h-full overflow-y-auto bg-[var(--surface-1)] border-l border-[var(--border)] p-5">
-        <div className="flex justify-between mb-3"><h2 className="text-lg font-bold text-[var(--fg)]">Depoimento</h2><button onClick={onClose} className="text-[var(--fg-3)]">✕</button></div>
-
+    <Drawer
+      onClose={onClose}
+      title="Depoimento"
+      badges={<Badge tone={hlTone} dot>{d.highlights_status === 'ok' ? 'Highlights prontos' : d.highlights_status === 'processando' ? 'Processando…' : d.highlights_status === 'erro' ? 'Erro nos highlights' : d.highlights_status === 'limite_diario' ? 'Limite diário' : 'Sem highlights'}</Badge>}
+    >
         <div className="space-y-2 mb-4">
           <Field label="Vídeo (URL)" value={d.video_url} onSave={canEdit ? (v) => persist({ video_url: v || null }, 'Vídeo salvo.') : undefined} />
           <Field label="Foto (URL)" value={d.foto_url} onSave={canEdit ? (v) => persist({ foto_url: v || null }, 'Foto salva.') : undefined} />
@@ -143,13 +144,13 @@ function DepoimentoDrawer({ id, canEdit, onClose, onSaved }: { id: string; canEd
         <div className="mb-4">
           <div className="text-xs font-semibold text-[var(--fg-3)] mb-1">Transcrição</div>
           <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8} readOnly={!canEdit} className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" placeholder="Cole/edite a transcrição aqui…" />
-          {canEdit && <button onClick={() => persist({ transcript: transcript || null }, 'Transcrição salva.')} disabled={busy} className="mt-2 px-3 py-1.5 rounded-[var(--r-md)] border border-[var(--border)] text-sm text-[var(--fg-2)]">Salvar transcrição</button>}
+          {canEdit && <Button variant="ghost" size="sm" onClick={() => persist({ transcript: transcript || null }, 'Transcrição salva.')} disabled={busy} className="mt-2">Salvar transcrição</Button>}
         </div>
 
         <div className="rounded-[var(--r-lg)] border border-[var(--border)] p-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-semibold text-[var(--fg)]">Highlights (IA)</span>
-            {canEdit && <button onClick={gerar} disabled={busy} className="px-3 py-1.5 rounded-[var(--r-md)] bg-[var(--accent)] text-black text-xs font-semibold disabled:opacity-60">{d.highlights_status === 'ok' ? 'Regerar' : 'Gerar highlights'}</button>}
+            {canEdit && <Button size="sm" onClick={gerar} disabled={busy}>{d.highlights_status === 'ok' ? 'Regerar' : 'Gerar highlights'}</Button>}
           </div>
           {hlMsg && <p className="text-xs text-[var(--fg-3)] mb-2">{hlMsg}</p>}
           {d.gancho && <Copyable label="Gancho" value={d.gancho} />}
@@ -159,8 +160,7 @@ function DepoimentoDrawer({ id, canEdit, onClose, onSaved }: { id: string; canEd
           {hls.map((h, i) => <Copyable key={i} label={h.tipo} value={h.texto} />)}
           {!d.gancho && !hls.length && d.highlights_status !== 'ok' && <p className="text-xs text-[var(--fg-3)]">Transcreva e gere os highlights para extrair gancho, resumo e trechos prontos para copy.</p>}
         </div>
-      </div>
-    </div>
+    </Drawer>
   );
 }
 
