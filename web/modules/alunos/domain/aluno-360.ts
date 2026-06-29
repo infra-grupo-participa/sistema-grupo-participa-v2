@@ -87,20 +87,46 @@ export interface Aluno360 {
   _can_see_sensivel?: boolean;
 }
 
+// Espaço de instrução = GRUPO em que o aluno está inserido (≠ nível, que é faturamento).
+// Chaves reais do banco (thb_alunos.espaco_instrucao): holding_masters, aurum,
+// platina, mastermind_diamante, diamante_vermelho.
 export const ESPACO_LABEL: Record<string, string> = {
   holding_masters: 'Holding Masters',
   aurum: 'Aurum',
+  platina: 'Platina',
   mastermind_diamante: 'Mastermind Diamante',
-  coach_platina: 'Coach Platina',
-  mastermind: 'Mastermind',
+  diamante_vermelho: 'Diamante Vermelho',
 };
 
 export const ESPACO_CLS: Record<string, string> = {
   holding_masters: 'blue',
   aurum: 'yellow',
+  platina: 'green',
   mastermind_diamante: 'purple',
-  coach_platina: 'green',
-  mastermind: 'purple',
+  diamante_vermelho: 'red',
+};
+
+// ── Renovação por faixa de turma ──
+// T1–T29 → em processo de renovação. T30+ → acesso vencido, sem processo
+// (todos com acesso em dia porém vencido, pois não passaram pela renovação).
+export type RenovacaoStatus = 'em_renovacao' | 'vencido_sem_processo' | null;
+
+/** Extrai o número da turma a partir do código (T17R, T29.2 → 17, 29). */
+export function turmaNumero(codigo: string | null | undefined): number | null {
+  if (!codigo) return null;
+  const m = /^T0*(\d+)/i.exec(codigo.trim());
+  return m ? Number(m[1]) : null;
+}
+
+export function renovacaoStatus(turmaCodigo: string | null | undefined): RenovacaoStatus {
+  const n = turmaNumero(turmaCodigo);
+  if (n == null) return null;
+  return n <= 29 ? 'em_renovacao' : 'vencido_sem_processo';
+}
+
+export const RENOVACAO_LABEL: Record<Exclude<RenovacaoStatus, null>, { label: string; cls: string }> = {
+  em_renovacao: { label: 'Processo de renovação', cls: 'yellow' },
+  vencido_sem_processo: { label: 'Vencido — sem processo de renovação', cls: 'red' },
 };
 
 export const SITUACAO: Record<string, { cls: string; label: string }> = {
@@ -128,6 +154,7 @@ export function searchHaystack(a: Aluno360): string {
   const parts = [
     a.nome,
     a.email,
+    a.profissao,
     a.documento,
     (a.nivel_resultado || '').replace(/_/g, ' '),
     a.cidade,

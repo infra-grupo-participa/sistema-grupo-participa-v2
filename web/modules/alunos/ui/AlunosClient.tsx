@@ -6,21 +6,55 @@ import {
   ESPACO_LABEL,
   NRANK,
   SITUACAO,
-  SRANK,
+  RENOVACAO_LABEL,
+  renovacaoStatus,
   searchHaystack,
 } from '../domain/aluno-360';
 import { nivelLabel, nivelOptions } from '@/shared/domain/nivel-resultado';
-import { loadAlunos360, loadTurmas, updateAluno, type Turma } from './alunos-data';
+import { loadAlunos360, loadTurmas, loadPlacaHistorico, updateAluno, type Turma, type PlacaHistorico } from './alunos-data';
+import { AUDIT_STEPS } from '@/modules/placas/domain/auditoria';
+import { cursoDesempenhoMock } from '../domain/curso-mock';
 import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Drawer, Tabs, Button } from '@/shared/ui/components';
 import { DashboardAlunos } from './DashboardAlunos';
 
-type SortCol = 'nome' | 'nivel' | 'situacao' | 'instrucao';
+type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento';
 interface Filtros { situacao: string; espaco: string; nivel: string; jornada: string; papel: string }
 
 const money = (v: number | null) =>
   v == null ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const dataBR = (v: string | null) => (v ? new Date(v).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—');
 const tel = (v: string | null) => v || '—';
+
+type Tone = 'success' | 'danger' | 'warning' | 'neutral' | 'info' | 'accent';
+const sitTone = (cls: string): Tone => (cls === 'green' ? 'success' : cls === 'red' ? 'danger' : cls === 'yellow' ? 'warning' : 'neutral');
+
+/** Turma THB + Aurum num só texto (HM e Aurum). */
+const turmaCombo = (a: Aluno360) => [a.turma_codigo, a.turma_aurum_codigo].filter(Boolean).join(' · ');
+
+function EspacoBadge({ espaco }: { espaco: string }) {
+  const label = ESPACO_LABEL[espaco];
+  if (!label) return <span className="text-[var(--fg-2)]">{espaco}</span>;
+  return <Badge tone="info">{label}</Badge>;
+}
+
+/** Texto com botão de copiar — não propaga o clique para a linha. */
+function CopyText({ value, display }: { value: string; display?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard?.writeText(value).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); });
+      }}
+      title="Copiar"
+      className="group inline-flex items-center gap-1 text-xs text-[var(--fg-3)] hover:text-[var(--accent)] transition-colors max-w-full"
+    >
+      <span className="truncate">{display || value}</span>
+      <span className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0">{copied ? '✓' : '⧉'}</span>
+    </button>
+  );
+}
 
 export function AlunosClient({ canEdit }: { canEdit: boolean }) {
   const [alunos, setAlunos] = useState<Aluno360[]>([]);
@@ -79,15 +113,19 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
         if (ra !== rb) return sortDir === 'asc' ? ra - rb : rb - ra;
         return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
       }
-      if (sortCol === 'situacao') {
-        const ra = a.situacao_acesso && a.situacao_acesso in SRANK ? SRANK[a.situacao_acesso] : -1;
-        const rb = b.situacao_acesso && b.situacao_acesso in SRANK ? SRANK[b.situacao_acesso] : -1;
+      if (sortCol === 'instrucao') {
+        const cmp = (ESPACO_LABEL[a.espaco_instrucao || ''] || '￿').localeCompare(ESPACO_LABEL[b.espaco_instrucao || ''] || '￿', 'pt-BR');
+        return sortDir === 'asc' ? cmp : -cmp;
+      }
+      if (sortCol === 'turma') {
+        const cmp = (turmaCombo(a) || '￿').localeCompare(turmaCombo(b) || '￿', 'pt-BR', { numeric: true });
+        return sortDir === 'asc' ? cmp : -cmp;
+      }
+      if (sortCol === 'vencimento') {
+        const ra = a.data_expiracao ? Date.parse(a.data_expiracao) : Infinity;
+        const rb = b.data_expiracao ? Date.parse(b.data_expiracao) : Infinity;
         if (ra !== rb) return sortDir === 'asc' ? ra - rb : rb - ra;
         return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
-      }
-      if (sortCol === 'instrucao') {
-        const cmp = (a.espaco_instrucao || '￿').localeCompare(b.espaco_instrucao || '￿', 'pt-BR');
-        return sortDir === 'asc' ? cmp : -cmp;
       }
       const cmp = (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
       return sortDir === 'asc' ? cmp : -cmp;
@@ -136,21 +174,32 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
         <Thead>
           <Thx sortable active={sortCol === 'nome'} dir={sortDir} onClick={sortBtn('nome')}>Aluno</Thx>
           <Thx sortable active={sortCol === 'nivel'} dir={sortDir} onClick={sortBtn('nivel')}>Nível</Thx>
+          <Thx>Profissão</Thx>
           <Thx sortable active={sortCol === 'instrucao'} dir={sortDir} onClick={sortBtn('instrucao')}>Espaço</Thx>
-          <Thx sortable active={sortCol === 'situacao'} dir={sortDir} onClick={sortBtn('situacao')}>Situação</Thx>
-          <Thx>Jornada</Thx>
+          <Thx sortable active={sortCol === 'turma'} dir={sortDir} onClick={sortBtn('turma')}>Turma</Thx>
+          <Thx sortable active={sortCol === 'vencimento'} dir={sortDir} onClick={sortBtn('vencimento')}>Vencimento</Thx>
         </Thead>
         <tbody>
           {filtered.slice(0, 500).map((a) => {
             const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
-            const jornada = [a.tem_ht && 'HT', a.tem_hm && 'HM', a.tem_placa && 'Placa', a.tem_depoimento && 'Dep'].filter(Boolean) as string[];
             return (
               <Tr key={a.id} onClick={() => { setSelectedId(a.id); setEditMode(false); }}>
-                <Td><div className="text-[var(--fg)] font-medium">{a.nome || '—'}</div><div className="text-[var(--fg-3)] text-xs">{a.email}</div></Td>
+                <Td>
+                  <div className="text-[var(--fg)] font-medium">{a.nome || '—'}</div>
+                  <div className="flex flex-col gap-0.5 mt-0.5">
+                    {a.email && <CopyText value={a.email} />}
+                    {a.telefone && <CopyText value={a.telefone} display={tel(a.telefone)} />}
+                  </div>
+                </Td>
                 <Td><NivelBadge nivel={a.nivel_resultado} /></Td>
-                <Td className="text-[var(--fg-2)]">{ESPACO_LABEL[a.espaco_instrucao || ''] || '—'}</Td>
-                <Td>{sit ? <Badge tone={sit.cls === 'green' ? 'success' : sit.cls === 'red' ? 'danger' : sit.cls === 'yellow' ? 'warning' : 'neutral'} dot>{sit.label}</Badge> : <span className="text-[var(--fg-3)]">—</span>}</Td>
-                <Td>{jornada.length ? <div className="flex gap-1 flex-wrap">{jornada.map((j) => <Badge key={j} tone="neutral">{j}</Badge>)}</div> : <span className="text-[var(--fg-3)]">—</span>}</Td>
+                <Td className="text-[var(--fg-2)]">{a.profissao || <span className="text-[var(--fg-3)]">—</span>}</Td>
+                <Td>{a.espaco_instrucao ? <EspacoBadge espaco={a.espaco_instrucao} /> : <span className="text-[var(--fg-3)]">—</span>}</Td>
+                <Td className="text-[var(--fg-2)] whitespace-nowrap">{turmaCombo(a) || <span className="text-[var(--fg-3)]">—</span>}</Td>
+                <Td className="whitespace-nowrap">
+                  {a.data_expiracao
+                    ? <div><span className="text-[var(--fg-2)]">{dataBR(a.data_expiracao)}</span>{sit && <div className="mt-0.5"><Badge tone={sitTone(sit.cls)} dot>{sit.label}</Badge></div>}</div>
+                    : <span className="text-[var(--fg-3)]">—</span>}
+                </Td>
               </Tr>
             );
           })}
@@ -190,6 +239,7 @@ function Sel({ value, onChange, placeholder, options }: { value: string; onChang
 const TABS = [
   { k: 'geral', l: 'Geral' },
   { k: 'acesso', l: 'Acesso' },
+  { k: 'curso', l: 'Curso' },
   { k: 'renovacao', l: 'Renovação' },
   { k: 'financeiro', l: 'Financeiro' },
   { k: 'jornada', l: 'Jornada' },
@@ -205,6 +255,16 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
   onSaved: (msg: string) => void;
 }) {
   const [tab, setTab] = useState('geral');
+  const [placaHist, setPlacaHist] = useState<PlacaHistorico | null>(null);
+  const [placaLoading, setPlacaLoading] = useState(false);
+  const temPlaca = !!(a.tem_placa || a.tem_solicitacao_placa);
+  useEffect(() => {
+    if (tab !== 'jornada' || !temPlaca || placaHist !== null) return;
+    setPlacaLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
+    loadPlacaHistorico(a.id, a.email)
+      .then(setPlacaHist)
+      .finally(() => setPlacaLoading(false));
+  }, [tab, temPlaca, placaHist, a.id, a.email]);
   const saldo = Number(a.saldo_devedor) || 0;
   const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
   const espaco = ESPACO_LABEL[a.espaco_instrucao || ''] || null;
@@ -269,8 +329,24 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
                 {a.obs_central && <Row k="Obs" v={a.obs_central} />}
               </Section>
             )}
+            {tab === 'curso' && <CursoTab alunoId={a.id} />}
             {tab === 'renovacao' && (
               <Section>
+                {(() => {
+                  const rs = renovacaoStatus(a.turma_codigo);
+                  const info = rs ? RENOVACAO_LABEL[rs] : null;
+                  return info ? (
+                    <div className={`p-2.5 rounded-[var(--r-md)] mb-2 text-xs ${rs === 'em_renovacao' ? 'bg-[var(--yellow-subtle)] text-[var(--yellow)]' : 'bg-[var(--red-subtle)] text-[var(--red)]'}`}>
+                      {rs === 'em_renovacao' ? '🔄' : '⚠'} {info.label}
+                      <div className="text-[var(--fg-3)] mt-0.5">
+                        {rs === 'em_renovacao'
+                          ? `Turma ${a.turma_codigo} (T1–T29): segue o processo de renovação.`
+                          : `Turma ${a.turma_codigo} (T30+): acesso vencido, sem processo de renovação (em dia, porém não renovado).`}
+                      </div>
+                    </div>
+                  ) : <div className="text-xs text-[var(--fg-3)] mb-2">Sem turma THB definida — status de renovação indisponível.</div>;
+                })()}
+                <Row k="Turma" v={a.turma_codigo || '—'} />
                 <Row k="Vencimento" v={dataBR(a.data_expiracao)} />
                 <Row k="Data da compra" v={dataBR(a.data_compra_importada)} />
                 {a.tempo_acesso && <Row k="Tempo de acesso" v={a.tempo_acesso} />}
@@ -297,7 +373,7 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
               <Section>
                 <JornadaCard label="Holding Total" on={!!a.tem_ht} extra={a.ativacao_ht_status ? `Status: ${a.ativacao_ht_status}` : ''} />
                 <JornadaCard label="Holding Masters" on={!!a.tem_hm} extra={a.hm_plano ? `Plano: ${a.hm_plano}` : ''} />
-                <JornadaCard label="Placa de Resultado" on={!!(a.tem_placa || a.tem_solicitacao_placa)} extra={a.placa_protocolo ? `Protocolo: ${a.placa_protocolo}` : a.placa_sol_status ? `Status: ${a.placa_sol_status}` : ''} href={a.tem_placa || a.tem_solicitacao_placa ? `/relatorios/placas#solicitacoes` : undefined} />
+                <PlacaJornada on={temPlaca} hist={placaHist} loading={placaLoading} />
                 <JornadaCard label="Depoimento" on={!!a.tem_depoimento} extra={a.total_depoimentos ? `${a.total_depoimentos} depoimento(s)` : ''} href={a.tem_depoimento ? '/depoimentos' : undefined} />
                 <div className="text-xs font-semibold text-[var(--fg-3)] mt-3 mb-1">Metadados</div>
                 {a.fonte && <Row k="Fonte" v={a.fonte} />}
@@ -332,6 +408,97 @@ function JornadaCard({ label, on, extra, href }: { label: string; on: boolean; e
     </div>
   );
   return href ? <a href={href}>{body}</a> : body;
+}
+
+// ── Placa de Resultado: card + histórico (solicitação + auditoria) ──
+function PlacaJornada({ on, hist, loading }: { on: boolean; hist: PlacaHistorico | null; loading: boolean }) {
+  const sol = hist?.solicitacao;
+  const aud = hist?.auditoria;
+  const stepIdx = aud?.step_index ?? sol?.auditoria_step ?? sol?.step_index ?? null;
+  const stepNome = stepIdx != null && AUDIT_STEPS[stepIdx] ? AUDIT_STEPS[stepIdx].name : null;
+  const dates = aud?.dates || {};
+  const carimbos = AUDIT_STEPS.map((s) => ({ nome: s.name, quando: dates[s.key] })).filter((c) => c.quando);
+
+  return (
+    <div className={`p-3 rounded-[var(--r-md)] border mb-2 ${on ? 'border-[var(--accent-border)]' : 'border-[var(--border)] opacity-60'}`}>
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-[var(--fg)]">Placa de Resultado</span>
+        <span className="text-xs" style={{ color: on ? 'var(--green)' : 'var(--fg-3)' }}>{on ? '✓ Sim' : '— Não'}</span>
+      </div>
+
+      {on && loading && <div className="text-xs text-[var(--fg-3)] mt-2">Carregando histórico…</div>}
+
+      {on && !loading && hist && (
+        <div className="mt-2 space-y-2">
+          <div className="flex flex-wrap gap-1.5">
+            {stepNome && <Badge tone="info">{stepNome}</Badge>}
+            {sol?.status && <Badge tone="neutral">{sol.status}</Badge>}
+            {aud?.encerrado && <Badge tone="warning">Encerrado</Badge>}
+            {sol?.regularizacao_pendente && <Badge tone="danger">Regularização pendente</Badge>}
+          </div>
+          <div className="text-xs space-y-0.5 text-[var(--fg-3)]">
+            {aud?.protocolo && <div>Protocolo: <span className="text-[var(--fg-2)]">{aud.protocolo}</span></div>}
+            {sol?.codigo_rastreio && <div>Rastreio: <span className="text-[var(--fg-2)]">{sol.codigo_rastreio}</span></div>}
+            {(aud?.faturamento || sol?.faturamento_declarado) != null && <div>Faturamento: <span className="text-[var(--fg-2)]">{money(aud?.faturamento ?? sol?.faturamento_declarado ?? null)}</span></div>}
+            {sol?.entrevista_data && <div>Entrevista: <span className="text-[var(--fg-2)]">{dataBR(sol.entrevista_data)}{sol.entrevista_hora ? ` ${String(sol.entrevista_hora).slice(0, 5)}` : ''}</span></div>}
+            {sol?.motivo_retorno && <div className="text-[var(--red)]">Motivo do retorno: {sol.motivo_retorno}</div>}
+          </div>
+
+          {carimbos.length > 0 && (
+            <div className="mt-2 border-l border-[var(--border)] pl-3 space-y-1.5">
+              {carimbos.map((c) => (
+                <div key={c.nome} className="relative text-xs">
+                  <span className="absolute -left-[15px] top-1 w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
+                  <span className="text-[var(--fg-2)]">{c.nome}</span>
+                  <span className="text-[var(--fg-4)]"> · {c.quando}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {aud?.obs && <div className="text-xs text-[var(--fg-3)] italic">“{aud.obs}”</div>}
+          <a href="/relatorios/placas#solicitacoes" className="inline-block text-xs text-[var(--accent)]">Abrir no Relatório de Placas →</a>
+        </div>
+      )}
+
+      {on && !loading && hist && !sol && !aud && (
+        <div className="text-xs text-[var(--fg-3)] mt-2">Sem registro detalhado de solicitação/auditoria.</div>
+      )}
+    </div>
+  );
+}
+
+// ── Curso: desempenho (DADOS ILUSTRATIVOS / MOCK) ──
+function CursoTab({ alunoId }: { alunoId: string }) {
+  const m = useMemo(() => cursoDesempenhoMock(alunoId), [alunoId]);
+  return (
+    <Section>
+      <div className="p-2 rounded-[var(--r-md)] bg-[var(--surface-3)] text-[10px] text-[var(--fg-3)] mb-2">
+        ⓘ Dados ilustrativos — sem integração real de progresso de curso ainda.
+      </div>
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        <Kpi label="Progresso" value={`${m.progressoGeral}%`} color={m.progressoGeral >= 66 ? 'var(--green)' : m.progressoGeral >= 33 ? 'var(--yellow)' : 'var(--red)'} />
+        <Kpi label="Módulos" value={`${m.modulosConcluidos}/${m.modulosTotal}`} />
+        <Kpi label="Aulas" value={`${m.aulasAssistidas}/${m.aulasTotal}`} />
+      </div>
+      <Row k="Engajamento" v={m.engajamento} />
+      <Row k="Último acesso" v={m.ultimoAcessoDias === 0 ? 'Hoje' : `Há ${m.ultimoAcessoDias} dia(s)`} />
+      <div className="text-xs font-semibold text-[var(--fg-3)] mt-3 mb-1">Progresso por módulo</div>
+      <div className="space-y-2">
+        {m.modulos.map((mod) => (
+          <div key={mod.nome}>
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-[var(--fg-2)]">{mod.nome}</span>
+              <span className="text-[var(--fg-3)] tabular">{mod.progresso}%{mod.concluido ? ' ✓' : ''}</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${mod.progresso}%`, background: mod.concluido ? 'var(--green)' : 'var(--accent)' }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
 }
 
 // ── Formulário de edição (porta de saveAlunoEdit) ──
