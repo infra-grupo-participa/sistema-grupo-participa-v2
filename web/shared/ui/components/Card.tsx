@@ -22,8 +22,8 @@ export function StatCard({ label, value, tone, hint, bar }: {
   label: string; value: React.ReactNode; tone?: string; hint?: string; bar?: keyof typeof BAR;
 }) {
   return (
-    <Card className="p-4" style={bar ? { borderTop: `2px solid ${BAR[bar]}` } : undefined}>
-      <div className="text-2xl font-bold tabular leading-none" style={tone ? { color: tone } : undefined}>{value}</div>
+    <Card className="p-4 min-w-0 overflow-hidden" style={bar ? { borderTop: `2px solid ${BAR[bar]}` } : undefined}>
+      <div className="text-2xl font-bold tabular leading-tight break-words" style={tone ? { color: tone } : undefined}>{value}</div>
       <div className="mt-1.5 text-xs font-medium text-[var(--fg-3)]">{label}</div>
       {hint && <div className="mt-0.5 text-[11px] text-[var(--fg-3)]">{hint}</div>}
     </Card>
@@ -35,9 +35,9 @@ export function KpiCard({ label, value, hint, bar = 'accent' }: {
   label: string; value: React.ReactNode; hint?: string; bar?: keyof typeof BAR;
 }) {
   return (
-    <Card className="p-4" style={{ borderLeft: `4px solid ${BAR[bar]}` }}>
-      <div className="text-xs font-medium uppercase tracking-wide text-[var(--fg-3)]">{label}</div>
-      <div className="mt-1 text-2xl font-bold tabular leading-none text-[var(--fg)]">{value}</div>
+    <Card className="p-4 min-w-0 overflow-hidden" style={{ borderLeft: `4px solid ${BAR[bar]}` }}>
+      <div className="text-xs font-medium uppercase tracking-wide text-[var(--fg-3)] truncate">{label}</div>
+      <div className="mt-1 text-lg font-bold tabular leading-tight break-words text-[var(--fg)]">{value}</div>
       {hint && <div className="mt-1 text-[11px] text-[var(--fg-3)]">{hint}</div>}
     </Card>
   );
