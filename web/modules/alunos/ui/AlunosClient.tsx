@@ -17,7 +17,7 @@ import { nivelLabel, nivelOptions } from '@/shared/domain/nivel-resultado';
 import { loadAlunos360, loadTurmas, loadPlacaHistorico, updateAluno, type Turma, type PlacaHistorico } from './alunos-data';
 import { AUDIT_STEPS } from '@/modules/placas/domain/auditoria';
 import { cursoDesempenhoMock } from '../domain/curso-mock';
-import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Drawer, Tabs, Button, Toolbar, SearchInput, FilterSelect, KpiCard, ProgressBar } from '@/shared/ui/components';
+import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Drawer, Tabs, Button, Toolbar, SearchInput, FilterSelect, KpiCard, ProgressBar, Spinner } from '@/shared/ui/components';
 import { DashboardAlunos } from './DashboardAlunos';
 
 type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento';
@@ -421,7 +421,7 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
                 <JornadaCard label="Holding Masters" on={!!a.tem_hm} extra={a.hm_plano ? `Plano: ${a.hm_plano}` : ''} />
                 <PlacaJornada on={temPlaca} hist={placaHist} loading={placaLoading} />
                 <JornadaCard label="Depoimento" on={!!a.tem_depoimento} extra={a.total_depoimentos ? `${a.total_depoimentos} depoimento(s)` : ''} href={a.tem_depoimento ? '/depoimentos' : undefined} />
-                <JornadaCard label="SIP — Time Holding Brasil" on={!!a.sip_registrado} extra={a.sip_registrado ? 'Possui registro no SIP (cruzado por e-mail)' : 'Sem registro no SIP'} />
+                <SipJornada email={a.email} on={!!a.sip_registrado} />
                 <div className="text-xs font-semibold text-[var(--fg-3)] mt-3 mb-1">Metadados</div>
                 {a.fonte && <Row k="Fonte" v={a.fonte} />}
                 <Row k="Importado em" v={dataBR(a.importado_em)} />
@@ -455,6 +455,92 @@ function JornadaCard({ label, on, extra, href }: { label: string; on: boolean; e
     </div>
   );
   return href ? <a href={href}>{body}</a> : body;
+}
+
+// ── SIP: card de jornada expansível (progresso real + link pro card do aluno no SIP) ──
+const SIP_BASE = 'https://sip.grupoparticipa.app.br';
+const SIP_STATUS: Record<string, string> = { approved: 'Aprovado', pending: 'Pendente', rejected: 'Rejeitado' };
+const SIP_CICLO: Record<string, string> = { aurum: 'Aurum', seminario: 'Seminário', diamante: 'Diamante', platina: 'Platina' };
+
+interface SipProgresso {
+  registrado: boolean;
+  sip_user_id?: string;
+  ciclo_type?: string | null;
+  approval_status?: string | null;
+  onboarding_done?: boolean | null;
+  nivel?: string | null;
+  turma?: string | null;
+  raiox?: { score: number; max: number | null } | null;
+  tarefas?: { concluidas: number | null; total: number | null };
+}
+
+function SipJornada({ email, on }: { email: string | null; on: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<SipProgresso | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(false);
+
+  async function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (next && !data && !loading && email) {
+      setLoading(true);
+      setErr(false);
+      try {
+        const r = await fetch(`/api/sip/progresso?email=${encodeURIComponent(email)}`);
+        setData((await r.json()) as SipProgresso);
+      } catch {
+        setErr(true);
+      } finally {
+        setLoading(false);
+      }
+    }
+  }
+
+  const sipUrl = data?.sip_user_id ? `${SIP_BASE}/admin.html?student=${data.sip_user_id}` : `${SIP_BASE}/admin.html`;
+  const tarefas = data?.tarefas;
+
+  return (
+    <div className={`rounded-[var(--r-md)] border mb-2 ${on ? 'border-[var(--accent-border)]' : 'border-[var(--border)] opacity-60'}`}>
+      <button type="button" onClick={toggle} className="w-full p-3 flex items-center justify-between text-left">
+        <span className="text-sm font-medium text-[var(--fg)]">SIP — Time Holding Brasil</span>
+        <span className="flex items-center gap-2">
+          <span className="text-xs" style={{ color: on ? 'var(--green)' : 'var(--fg-3)' }}>{on ? '✓ Sim' : '— Não'}</span>
+          <span className="text-[var(--fg-3)] text-[10px] transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }}>▾</span>
+        </span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3 pt-2 border-t border-[var(--border-faint)] gp-fade-in">
+          {loading && <div className="text-xs text-[var(--fg-3)] flex items-center gap-2"><Spinner size={14} /> Carregando progresso…</div>}
+          {err && <div className="text-xs text-[var(--red)]">Não foi possível carregar o progresso do SIP.</div>}
+          {data && !loading && (data.registrado ? (
+            <div className="space-y-1.5">
+              <Row k="Status" v={data.approval_status ? (SIP_STATUS[data.approval_status] || data.approval_status) : '—'} />
+              <Row k="Ciclo" v={data.ciclo_type ? (SIP_CICLO[data.ciclo_type] || data.ciclo_type) : '—'} />
+              {data.nivel && <Row k="Nível no SIP" v={data.nivel} />}
+              {data.turma && <Row k="Turma" v={data.turma} />}
+              {tarefas?.concluidas != null && (
+                <div className="py-1">
+                  <div className="flex justify-between text-xs text-[var(--fg-3)] mb-1">
+                    <span>Tarefas concluídas</span>
+                    <span className="tabular">{tarefas.concluidas}{tarefas.total ? ` / ${tarefas.total}` : ''}</span>
+                  </div>
+                  {tarefas.total ? <ProgressBar value={(tarefas.concluidas / tarefas.total) * 100} tone="accent" /> : null}
+                </div>
+              )}
+              {data.raiox && <Row k="Raio-X" v={`${data.raiox.score}${data.raiox.max ? '/' + data.raiox.max : ''}`} />}
+              <Row k="Onboarding" v={data.onboarding_done ? 'Concluído' : 'Pendente'} />
+              <a href={sipUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent)] hover:underline">
+                Abrir card no SIP ↗
+              </a>
+            </div>
+          ) : (
+            <div className="text-xs text-[var(--fg-3)]">Sem registro no SIP para este e-mail.</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Placa de Resultado: card + histórico (solicitação + auditoria) ──
