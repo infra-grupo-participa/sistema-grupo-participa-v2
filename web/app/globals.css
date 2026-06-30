@@ -1,27 +1,47 @@
 @import "tailwindcss";
 
-/* ── Design Tokens — porta de app/assets/css/global.css ── */
+/* ══════════════════════════════════════════════════════════════
+   globals.css — Identidade Visual (porta de app/assets/css/global.css)
+   Fonte de verdade dos tokens. Tema por html[data-theme]. Tailwind v4 CSS-first.
+   Regra: componentes usam utilities mapeadas (@theme) ou var(--x); NUNCA hex hardcoded aqui fora.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Tokens — tema escuro (default) ── */
 :root {
+  /* Brand */
   --accent:#F29725; --accent-dim:#D08220;
   --accent-subtle:rgba(242,151,37,.12); --accent-border:rgba(242,151,37,.22);
 
+  /* Semânticas */
   --green:#16a34a; --green-subtle:rgba(22,163,74,.12); --green-border:rgba(22,163,74,.22);
   --yellow:#d97706; --yellow-subtle:rgba(217,119,6,.12); --yellow-border:rgba(217,119,6,.22);
   --purple:#7c3aed; --purple-subtle:rgba(124,58,237,.12); --purple-border:rgba(124,58,237,.22);
   --red:#dc2626; --red-subtle:rgba(220,38,38,.12); --red-border:rgba(220,38,38,.22);
+  --info:#60a5fa; --info-subtle:rgba(96,165,250,.12); --info-border:rgba(96,165,250,.24);
 
+  /* Superfícies — elevação por lightness */
   --surface-0:#000; --surface-1:#0d0d0d; --surface-2:#141414; --surface-3:#1c1c1c; --surface-4:#242424;
 
+  /* Bordas */
   --border-faint:rgba(255,255,255,.04); --border:rgba(255,255,255,.08);
   --border-strong:rgba(255,255,255,.14); --border-accent:rgba(242,151,37,.28);
 
+  /* Foreground */
   --fg:#f0f0f0; --fg-2:#a0a0a0; --fg-3:#606060; --fg-4:#363636;
 
+  /* Espaçamento (escala 4px do legado) */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:20px; --space-6:24px; --space-8:32px; --space-10:40px;
+
+  /* Raio */
   --r-sm:6px; --r-md:10px; --r-lg:14px; --r-xl:18px; --r-pill:999px;
+
+  /* Sombras */
   --shadow-sm:0 1px 3px rgba(0,0,0,.3);
   --shadow-md:0 2px 8px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.3);
   --shadow-lg:0 8px 24px rgba(0,0,0,.5);
 
+  /* Layout */
   --header-height:60px; --sidebar-width:264px;
 
   /* Níveis = metais/pedras (assinatura visual recorrente) */
@@ -33,39 +53,97 @@
   --t-fast:120ms cubic-bezier(.4,0,.2,1); --t-mid:200ms cubic-bezier(.4,0,.2,1);
 }
 
+/* ── Tokens — tema claro ──
+   Paleta "surface elevada": fundo cinza frio → cards brancos com borda.
+   Profundidade por BORDA (sombras zeradas, fiel ao legado). Accent mais escuro p/ contraste AA.
+*/
 [data-theme="light"] {
   --accent:#E07F10; --accent-dim:#B56509;
   --accent-subtle:rgba(224,127,16,.14); --accent-border:rgba(224,127,16,.38);
+
   --green:#15803d; --green-subtle:rgba(21,128,61,.14); --green-border:rgba(21,128,61,.32);
   --yellow:#b45309; --yellow-subtle:rgba(180,83,9,.14); --yellow-border:rgba(180,83,9,.32);
   --purple:#6d28d9; --purple-subtle:rgba(109,40,217,.14); --purple-border:rgba(109,40,217,.32);
   --red:#b91c1c; --red-subtle:rgba(185,28,28,.14); --red-border:rgba(185,28,28,.32);
+  --info:#2563eb; --info-subtle:rgba(37,99,235,.12); --info-border:rgba(37,99,235,.3);
 
-  --surface-0:#f4f5f7; --surface-1:#fff; --surface-2:#fff; --surface-3:#eef0f3; --surface-4:#e6e9ee;
-  --border-faint:rgba(0,0,0,.04); --border:rgba(0,0,0,.1);
-  --border-strong:rgba(0,0,0,.16); --border-accent:rgba(224,127,16,.4);
-  --fg:#1a1a1a; --fg-2:#52525b; --fg-3:#71717a; --fg-4:#a1a1aa;
+  /* Superfícies — alinhadas ao legado (fundo cinza frio, cards brancos) */
+  --surface-0:#eef1f6; --surface-1:#fff; --surface-2:#fff; --surface-3:#eef1f6; --surface-4:#dde3ec;
+
+  --border-faint:rgba(15,23,42,.06); --border:rgba(15,23,42,.12);
+  --border-strong:rgba(15,23,42,.22); --border-accent:rgba(224,127,16,.42);
+
+  --fg:#0f172a; --fg-2:#475569; --fg-3:#64748b; --fg-4:#94a3b8;
+
+  /* Profundidade por borda — sombras zeradas no claro (fiel ao legado) */
+  --shadow-sm:none; --shadow-md:none; --shadow-lg:none;
 }
 
+/* ── Mapa Tailwind v4 (utilities) ──
+   Expõe as vars como tokens de cor. Raios ficam via arbitrary `rounded-[var(--r-md)]`
+   para não colidir com as utilities nativas (rounded-sm/md/lg do Tailwind).
+*/
 @theme inline {
+  /* Superfícies */
   --color-surface-0: var(--surface-0);
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
   --color-surface-4: var(--surface-4);
+
+  /* Acento */
   --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-border: var(--accent-border);
+
+  /* Foreground */
   --color-fg: var(--fg);
   --color-fg-2: var(--fg-2);
   --color-fg-3: var(--fg-3);
+  --color-fg-4: var(--fg-4);
+
+  /* Bordas */
   --color-border-gp: var(--border);
+  --color-border-faint: var(--border-faint);
+  --color-border-strong: var(--border-strong);
+  --color-border-accent: var(--border-accent);
+
+  /* Semânticas */
+  --color-green: var(--green);
+  --color-green-subtle: var(--green-subtle);
+  --color-green-border: var(--green-border);
+  --color-yellow: var(--yellow);
+  --color-yellow-subtle: var(--yellow-subtle);
+  --color-yellow-border: var(--yellow-border);
+  --color-purple: var(--purple);
+  --color-purple-subtle: var(--purple-subtle);
+  --color-purple-border: var(--purple-border);
+  --color-red: var(--red);
+  --color-red-subtle: var(--red-subtle);
+  --color-red-border: var(--red-border);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-border: var(--info-border);
+
+  /* Níveis (metal/pedra) */
+  --color-nivel-base: var(--nivel-base);
+  --color-nivel-ouro: var(--nivel-ouro);
+  --color-nivel-platina: var(--nivel-platina);
+  --color-nivel-diamante: var(--nivel-diamante);
+  --color-nivel-diamante-vermelho: var(--nivel-diamante-vermelho);
 }
 
+/* ── Base ── */
 * { box-sizing: border-box; }
+
+html[data-theme="light"] { color-scheme: light; }
+html { color-scheme: dark; }
 
 body {
   background: var(--surface-0);
   color: var(--fg);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   font-feature-settings: 'cv11', 'ss01';
 }
@@ -73,7 +151,7 @@ body {
 /* Números tabulares para dados (alinhamento em tabelas/KPIs) */
 .tabular { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
 
-/* Scrollbar discreta (craft: presente só quando necessário) */
+/* Scrollbar discreta — padrão único nos dois temas (D5#3) */
 * { scrollbar-width: thin; scrollbar-color: var(--surface-4) transparent; }
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-thumb { background: var(--surface-4); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
@@ -86,5 +164,9 @@ body {
 /* Animações utilitárias */
 @keyframes gp-fade { from { opacity: 0 } to { opacity: 1 } }
 @keyframes gp-slide-in { from { transform: translateX(16px); opacity: .4 } to { transform: translateX(0); opacity: 1 } }
+@keyframes gp-slide-up { from { transform: translateY(12px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+@keyframes gp-spin { to { transform: rotate(360deg) } }
 .gp-overlay-in { animation: gp-fade var(--t-mid); }
 .gp-panel-in { animation: gp-slide-in var(--t-mid); }
+.gp-modal-in { animation: gp-slide-up var(--t-mid); }
+.gp-fade-in { animation: gp-fade var(--t-fast); }

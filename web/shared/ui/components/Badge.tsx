@@ -8,7 +8,7 @@ const TONES: Record<Tone, { fg: string; bg: string; bd: string }> = {
   success: { fg: 'var(--green)', bg: 'var(--green-subtle)', bd: 'var(--green-border)' },
   warning: { fg: 'var(--yellow)', bg: 'var(--yellow-subtle)', bd: 'var(--yellow-border)' },
   danger: { fg: 'var(--red)', bg: 'var(--red-subtle)', bd: 'var(--red-border)' },
-  info: { fg: '#60a5fa', bg: 'rgba(96,165,250,.12)', bd: 'rgba(96,165,250,.24)' },
+  info: { fg: 'var(--info)', bg: 'var(--info-subtle)', bd: 'var(--info-border)' },
 };
 
 /** Pill/badge de status — base da linguagem visual. */

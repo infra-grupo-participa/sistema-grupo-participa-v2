@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/shared/composition/server-container';
 import { ehDev } from '@/shared/domain/auth';
 import { createAdminSupabase } from '@/shared/infrastructure/supabase/admin-client';
+import { StatCard, Badge, DataTable, Thead, Th, Tr, Td, EmptyState } from '@/shared/ui/components';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,35 +46,36 @@ export default async function AdminDevPage() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {cards.map((c) => (
-          <div key={c.k} className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] p-3">
-            <div className="text-xl font-bold text-[var(--fg)]">{metric(c.k)}</div>
-            <div className="text-xs text-[var(--fg-3)]">{c.l}</div>
-          </div>
+          <StatCard key={c.k} label={c.l} value={metric(c.k)} />
         ))}
       </div>
 
       <div className="text-sm font-semibold text-[var(--fg)] mb-2">Eventos recentes do sistema</div>
-      <div className="rounded-[var(--r-lg)] border border-[var(--border)] overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-[var(--surface-2)] text-[var(--fg-3)]"><tr>
-            <th className="text-left px-3 py-2 font-medium">Tipo</th>
-            <th className="text-left px-3 py-2 font-medium">Fonte</th>
-            <th className="text-left px-3 py-2 font-medium">Título</th>
-            <th className="text-left px-3 py-2 font-medium">Quando</th>
-          </tr></thead>
-          <tbody>
-            {eventos.map((ev) => (
-              <tr key={ev.id} className="border-t border-[var(--border)]">
-                <td className="px-3 py-2"><span className="text-xs font-semibold" style={{ color: ev.tipo === 'error' ? 'var(--red)' : 'var(--fg-2)' }}>{ev.tipo}</span></td>
-                <td className="px-3 py-2 text-[var(--fg-3)] text-xs">{ev.fonte}</td>
-                <td className="px-3 py-2 text-[var(--fg-2)]">{ev.titulo}</td>
-                <td className="px-3 py-2 text-[var(--fg-3)] text-xs">{new Date(ev.criado_em).toLocaleString('pt-BR')}</td>
-              </tr>
-            ))}
-            {!eventos.length && <tr><td colSpan={4} className="px-3 py-8 text-center text-[var(--fg-3)]">Sem eventos.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+      <DataTable>
+        <Thead>
+          <Th>Tipo</Th>
+          <Th>Fonte</Th>
+          <Th>Título</Th>
+          <Th>Quando</Th>
+        </Thead>
+        <tbody>
+          {eventos.map((ev) => (
+            <Tr key={ev.id}>
+              <Td><Badge tone={ev.tipo === 'error' ? 'danger' : 'neutral'}>{ev.tipo}</Badge></Td>
+              <Td className="text-[var(--fg-3)] text-xs">{ev.fonte}</Td>
+              <Td className="text-[var(--fg-2)]">{ev.titulo}</Td>
+              <Td className="text-[var(--fg-3)] text-xs">{new Date(ev.criado_em).toLocaleString('pt-BR')}</Td>
+            </Tr>
+          ))}
+          {!eventos.length && (
+            <tr>
+              <td colSpan={4}>
+                <EmptyState title="Sem eventos." />
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </DataTable>
     </div>
   );
 }

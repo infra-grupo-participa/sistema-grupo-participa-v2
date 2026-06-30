@@ -14,7 +14,7 @@ import {
 } from '../../domain/solicitacao';
 import type { Solicitacao, Auditoria, HorarioSlot } from '../../domain/types';
 import * as data from './placas-admin-data';
-import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, Card, Button } from '@/shared/ui/components';
+import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, Card, Button, StatCard, SearchInput, Input, Toggle, ProgressBar, Timeline, ConfirmDialog, type TimelineEntry } from '@/shared/ui/components';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://grupoparticipa.app.br';
 
@@ -127,7 +127,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
               Solicitações de <span className="text-[var(--accent)]">Placas</span>
               <span className="ml-2 align-middle text-xs font-semibold rounded-[var(--r-pill)] bg-[var(--accent-subtle)] text-[var(--accent)] px-2 py-0.5">{stats.total}</span>
             </h1>
-            <a href="/sistema/admin-dev" className="text-sm px-3 py-1.5 rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] inline-flex items-center gap-2">🗒️ Logs</a>
+            <a href="/sistema/admin-dev" className="inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent text-[var(--fg-2)] border border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors">🗒️ Logs</a>
           </div>
           <p className="text-sm text-[var(--fg-3)] mb-4">Candidatos que iniciaram o processo via formulário público · Atualizado em {hoje}{loading && ' · carregando…'}</p>
 
@@ -143,16 +143,15 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
           <Card className="p-3 mb-4 flex items-center gap-3 flex-wrap">
             <span className="text-[var(--fg-3)]">🔗</span>
             <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">Link de envio do questionário</span>
-            <input readOnly value={linkPublico} className="flex-1 min-w-[200px] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-1.5 text-sm text-[var(--accent)] font-mono" />
+            <Input readOnly value={linkPublico} className="flex-1 min-w-[200px] !text-[var(--accent)] font-mono" />
             <Button variant="subtle" size="sm" onClick={() => { navigator.clipboard?.writeText(linkPublico); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}>
               {copiado ? '✓ Copiado' : '⧉ Copiar link'}
             </Button>
           </Card>
 
           {/* Busca */}
-          <div className="relative mb-3">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fg-3)]">⌕</span>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nome, e-mail, documento ou cidade…" className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] pl-9 pr-3 py-2.5 text-sm text-[var(--fg)] focus:border-[var(--border-accent)] outline-none" />
+          <div className="mb-3">
+            <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nome, e-mail, documento ou cidade…" />
           </div>
 
           {/* Abas-bucket com contagem */}
@@ -200,9 +199,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
                     <Td><Badge tone={STATUS_TONE[ds.cls] || 'neutral'} dot>{ds.label}</Badge></Td>
                     <Td>
                       <div className="flex items-center gap-2 min-w-[120px]">
-                        <div className="flex-1 h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
-                          <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(pr.pct * 100)}%` }} />
-                        </div>
+                        <div className="flex-1"><ProgressBar value={pr.pct * 100} height={6} /></div>
                         <span className="text-xs text-[var(--fg-3)] tabular whitespace-nowrap">{pr.label}</span>
                       </div>
                     </Td>
@@ -238,11 +235,10 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-/** KPI rico: número + rótulo + ícone em container + acento colorido no topo. */
+/** KPI rico: StatCard do catálogo enriquecido com ícone em container (gap: StatCard sem slot de ícone). */
 function StatBox({ value, label, icon, tone }: { value: number; label: string; icon: string; tone: string }) {
   return (
-    <div className="relative rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] shadow-[var(--shadow-sm)] p-4 overflow-hidden">
-      <span className="absolute inset-x-0 top-0 h-0.5" style={{ background: tone }} />
+    <Card className="relative p-4 overflow-hidden" style={{ borderTop: `2px solid ${tone}` }}>
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-2xl font-bold tabular leading-none text-[var(--fg)]">{value.toLocaleString('pt-BR')}</div>
@@ -250,7 +246,7 @@ function StatBox({ value, label, icon, tone }: { value: number; label: string; i
         </div>
         <span className="grid place-items-center w-8 h-8 rounded-[var(--r-md)] text-sm" style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}>{icon}</span>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -270,6 +266,7 @@ function SolDetail({
   const [rastreio, setRastreio] = useState(sol.codigo_rastreio || '');
   const [motivo, setMotivo] = useState('');
   const [showCorrecao, setShowCorrecao] = useState(false);
+  const [confirmRejeitar, setConfirmRejeitar] = useState(false);
   const step = sol.auditoria_step ?? -1;
   const dates = (auditoria?.dates as Record<string, string>) || {};
   const regular = isSolicitacaoRegularizacao(sol);
@@ -290,24 +287,25 @@ function SolDetail({
     >
         {/* Timeline de auditoria */}
         <div className="mb-5">
-          {AUDIT_STEPS.map((s, i) => {
-            const cls = i < step ? 'done' : i === step ? 'current' : 'pending';
-            return (
-              <div key={s.key} className="flex gap-3 py-1.5">
-                <div className={`w-6 h-6 rounded-full grid place-items-center text-xs shrink-0 ${cls === 'done' ? 'bg-[var(--green)] text-black' : cls === 'current' ? 'bg-[var(--accent)] text-black' : 'bg-[var(--surface-3)] text-[var(--fg-3)]'}`}>{i < step ? '✓' : i + 1}</div>
-                <div>
-                  <div className={`text-sm ${cls === 'pending' ? 'text-[var(--fg-3)]' : 'text-[var(--fg)]'}`}>{s.name}</div>
-                  {dates[s.key] && <div className="text-xs text-[var(--fg-3)]">{dates[s.key]}</div>}
-                </div>
-              </div>
-            );
-          })}
+          <Timeline
+            items={AUDIT_STEPS.map((s, i): TimelineEntry => {
+              const done = i < step;
+              const current = i === step;
+              return {
+                tone: done ? 'green' : current ? 'accent' : 'base',
+                done,
+                icon: done ? '✓' : i + 1,
+                title: s.name,
+                meta: dates[s.key] || undefined,
+              };
+            })}
+          />
         </div>
 
         {/* Documentos */}
         <div className="flex gap-2 mb-4 text-xs">
-          {sol.proof_url && <a href={sol.proof_url} target="_blank" rel="noopener" className="px-2 py-1 rounded border border-[var(--border)] text-[var(--accent)]">Comprovante</a>}
-          {sol.declaracao_url && <a href={sol.declaracao_url} target="_blank" rel="noopener" className="px-2 py-1 rounded border border-[var(--border)] text-[var(--accent)]">Declaração</a>}
+          {sol.proof_url && <a href={sol.proof_url} target="_blank" rel="noopener" className="px-2 py-1 rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--accent)] hover:border-[var(--border-strong)] transition-colors">Comprovante</a>}
+          {sol.declaracao_url && <a href={sol.declaracao_url} target="_blank" rel="noopener" className="px-2 py-1 rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--accent)] hover:border-[var(--border-strong)] transition-colors">Declaração</a>}
         </div>
 
         {canEdit && (
@@ -329,7 +327,7 @@ function SolDetail({
             )}
             {step === 4 && (
               <div className="flex gap-2">
-                <input value={rastreio} onChange={(e) => setRastreio(e.target.value)} placeholder="Código de rastreio" className="flex-1 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" />
+                <Input value={rastreio} onChange={(e) => setRastreio(e.target.value)} placeholder="Código de rastreio" className="flex-1" />
                 <ActBtn onClick={() => act(() => data.salvarRastreio(sol, rastreio))}>Salvar</ActBtn>
               </div>
             )}
@@ -344,7 +342,17 @@ function SolDetail({
                 <ActBtn variant="warn" onClick={() => act(() => data.solicitarCorrecao(sol, motivo))}>Enviar pedido de correção</ActBtn>
               </div>
             )}
-            <ActBtn variant="danger" onClick={() => { if (confirm('Rejeitar esta solicitação?')) act(() => data.rejeitar(sol)); }}>Rejeitar</ActBtn>
+            <ActBtn variant="danger" onClick={() => setConfirmRejeitar(true)}>Rejeitar</ActBtn>
+            {confirmRejeitar && (
+              <ConfirmDialog
+                title="Rejeitar solicitação"
+                message="Rejeitar esta solicitação?"
+                confirmLabel="Rejeitar"
+                danger
+                onConfirm={() => { setConfirmRejeitar(false); act(() => data.rejeitar(sol)); }}
+                onCancel={() => setConfirmRejeitar(false)}
+              />
+            )}
             <div className="flex gap-2 pt-2 border-t border-[var(--border)]">
               <ActBtn variant="ghost" onClick={() => act(() => data.marcarVisto(sol, true))}>Marcar visto</ActBtn>
               <ActBtn variant="ghost" onClick={() => act(() => data.marcarVisto(sol, false))}>Não visto</ActBtn>
@@ -356,15 +364,14 @@ function SolDetail({
 }
 
 function ActBtn({ children, onClick, variant = 'primary' }: { children: React.ReactNode; onClick: () => void; variant?: 'primary' | 'success' | 'danger' | 'warn' | 'ghost' }) {
-  const styles: Record<string, string> = {
-    primary: 'bg-[var(--accent)] text-black',
-    success: 'bg-[var(--green)] text-black',
-    danger: 'bg-transparent text-[var(--red)] border border-[var(--red-border)]',
-    warn: 'bg-[var(--yellow)] text-black',
-    ghost: 'bg-transparent text-[var(--fg-2)] border border-[var(--border)]',
-  };
+  // gap_catalogo: Button não tem variante "warn" (âmbar/amarelo cheio) — fallback local apenas para esse tom.
+  if (variant === 'warn') {
+    return (
+      <button onClick={onClick} className="w-full inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] font-semibold transition-[filter,background] duration-150 px-4 py-2 text-sm bg-[var(--yellow)] text-black hover:brightness-110">{children}</button>
+    );
+  }
   return (
-    <button onClick={onClick} className={`w-full px-3 py-2 rounded-[var(--r-md)] text-sm font-medium ${styles[variant]}`}>{children}</button>
+    <Button variant={variant} onClick={onClick} className="w-full">{children}</Button>
   );
 }
 
@@ -372,6 +379,7 @@ function AgendaHorarios({ canEdit, flash }: { canEdit: boolean; flash: (m: strin
   const [slots, setSlots] = useState<HorarioSlot[]>([]);
   const [novaData, setNovaData] = useState('');
   const [novaHora, setNovaHora] = useState('');
+  const [excluirId, setExcluirId] = useState<number | null>(null);
 
   const reload = useCallback(async () => setSlots(await data.loadHorarios()), []);
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -390,9 +398,9 @@ function AgendaHorarios({ canEdit, flash }: { canEdit: boolean; flash: (m: strin
     <div>
       {canEdit && (
         <div className="flex flex-wrap gap-2 mb-4 items-end">
-          <div><label className="block text-xs text-[var(--fg-3)] mb-1">Data</label><input type="date" value={novaData} onChange={(e) => setNovaData(e.target.value)} className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" /></div>
-          <div><label className="block text-xs text-[var(--fg-3)] mb-1">Hora</label><input type="time" value={novaHora} onChange={(e) => setNovaHora(e.target.value)} className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" /></div>
-          <button onClick={async () => { if (novaData && novaHora && (await data.criarHorario(novaData, novaHora))) { flash('Horário criado.'); setNovaHora(''); reload(); } }} className="px-4 py-2 rounded-[var(--r-md)] bg-[var(--accent)] text-black text-sm font-medium">Adicionar slot</button>
+          <div><label className="block text-xs text-[var(--fg-3)] mb-1">Data</label><Input type="date" value={novaData} onChange={(e) => setNovaData(e.target.value)} className="w-auto" /></div>
+          <div><label className="block text-xs text-[var(--fg-3)] mb-1">Hora</label><Input type="time" value={novaHora} onChange={(e) => setNovaHora(e.target.value)} className="w-auto" /></div>
+          <Button onClick={async () => { if (novaData && novaHora && (await data.criarHorario(novaData, novaHora))) { flash('Horário criado.'); setNovaHora(''); reload(); } }}>Adicionar slot</Button>
         </div>
       )}
       {grouped.map(([d, arr]) => (
@@ -405,7 +413,7 @@ function AgendaHorarios({ canEdit, flash }: { canEdit: boolean; flash: (m: strin
                 {canEdit && (
                   <>
                     <button onClick={async () => { if (await data.toggleHorario(s.id, !s.ativo)) reload(); }} className="text-xs text-[var(--fg-3)] hover:text-[var(--fg)]" title={s.ativo ? 'Desativar' : 'Ativar'}>{s.ativo ? '⏸' : '▶'}</button>
-                    <button onClick={async () => { if (confirm('Excluir slot?') && (await data.excluirHorario(s.id))) reload(); }} className="text-xs text-[var(--red)]" title="Excluir">✕</button>
+                    <button onClick={() => setExcluirId(s.id)} className="text-xs text-[var(--red)]" title="Excluir">✕</button>
                   </>
                 )}
               </div>
@@ -414,6 +422,16 @@ function AgendaHorarios({ canEdit, flash }: { canEdit: boolean; flash: (m: strin
         </div>
       ))}
       {!grouped.length && <p className="text-[var(--fg-3)] text-sm">Nenhum horário cadastrado.</p>}
+      {excluirId !== null && (
+        <ConfirmDialog
+          title="Excluir slot"
+          message="Excluir slot?"
+          confirmLabel="Excluir"
+          danger
+          onConfirm={async () => { const id = excluirId; setExcluirId(null); if (id !== null && (await data.excluirHorario(id))) reload(); }}
+          onCancel={() => setExcluirId(null)}
+        />
+      )}
     </div>
   );
 }

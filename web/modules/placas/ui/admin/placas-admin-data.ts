@@ -1,7 +1,7 @@
 'use client';
 
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
-import { AUDIT_STEP_INDEX, AUDIT_STEPS, planAuditAdvance, type AdvancePlan } from '../../domain/auditoria';
+import { AUDIT_STEP_INDEX, AUDIT_STEPS, planAuditAdvance, statusForAuditStep, type AdvancePlan } from '../../domain/auditoria';
 import type { Solicitacao, Auditoria, HorarioSlot } from '../../domain/types';
 import { buildAdminSeenPatch } from '../../domain/solicitacao';
 
@@ -218,6 +218,36 @@ export async function marcarNaoCompareceu(sol: Solicitacao): Promise<boolean> {
   ]);
   await sendStatusEmail('nao_compareceu', sol, { token_link: agendarLink(sol.token) });
   return true;
+}
+
+/** Remanejamento rápido: posiciona a auditoria numa etapa específica (0–6). */
+export async function setAuditStep(sol: Solicitacao, step: number): Promise<boolean> {
+  let s = sol;
+  if (!s.aluno_id) {
+    await bootstrapAuditoria(s);
+    const { data } = await db().from('thb_placas_solicitacoes').select('*').eq('id', sol.id).single();
+    s = (data as Solicitacao) ?? s;
+  }
+  if (!s.aluno_id) return false;
+  const supabase = db();
+  const [r1, r2] = await Promise.all([
+    supabase.from('thb_placas_auditoria').upsert({ aluno_id: s.aluno_id, step_index: step, encerrado: false }, { onConflict: 'aluno_id' }),
+    supabase.from('thb_placas_solicitacoes').update({ auditoria_step: step, step_index: step, status: statusForAuditStep(step), regularizacao_pendente: false, motivo_retorno: null, ...buildAdminSeenPatch(true) }).eq('id', s.id),
+  ]);
+  return !r1.error && !r2.error;
+}
+
+/** "Já possui placa — avançar para o final": conclui o processo. */
+export async function confirmarJaPossuiPlaca(sol: Solicitacao): Promise<boolean> {
+  return setAuditStep(sol, AUDIT_STEP_INDEX.PLACA_RECEBIDA);
+}
+
+/** Exclui a solicitação (e a auditoria vinculada). Ação destrutiva. */
+export async function excluirSolicitacao(sol: Solicitacao): Promise<boolean> {
+  const supabase = db();
+  if (sol.aluno_id) await supabase.from('thb_placas_auditoria').delete().eq('aluno_id', sol.aluno_id);
+  const { error } = await supabase.from('thb_placas_solicitacoes').delete().eq('id', sol.id);
+  return !error;
 }
 
 export async function rejeitar(sol: Solicitacao): Promise<boolean> {

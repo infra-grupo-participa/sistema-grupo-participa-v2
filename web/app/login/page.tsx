@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
+import { Card, Input, Button } from '@/shared/ui/components';
 
 function LoginForm() {
   const router = useRouter();
@@ -47,43 +48,36 @@ function LoginForm() {
 
   return (
     <div className="min-h-dvh grid place-items-center bg-[var(--surface-0)] p-4">
-      <form
-        onSubmit={entrar}
-        className="w-full max-w-sm rounded-[var(--r-xl)] border border-[var(--border)] bg-[var(--surface-1)] p-6 shadow-[var(--shadow-lg)]"
-      >
+      <Card as="form" onSubmit={entrar} className="w-full max-w-sm p-6">
         <h1 className="text-xl font-bold text-[var(--accent)] text-center">Grupo Participa</h1>
         <p className="mt-1 text-center text-sm text-[var(--fg-3)]">Acesso ao sistema interno</p>
 
         <label className="mt-6 block text-sm text-[var(--fg-2)]">E-mail</label>
-        <input
+        <Input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
           required
-          className="mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2.5 text-[var(--fg)] outline-none focus:border-[var(--border-accent)]"
+          className="mt-1"
         />
 
         <label className="mt-4 block text-sm text-[var(--fg-2)]">Senha</label>
-        <input
+        <Input
           type="password"
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
           autoComplete="current-password"
           required
-          className="mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2.5 text-[var(--fg)] outline-none focus:border-[var(--border-accent)]"
+          className="mt-1"
         />
 
         {erro && <p className="mt-3 text-sm text-[var(--red)]">{erro}</p>}
         {info && <p className="mt-3 text-sm text-[var(--green)]">{info}</p>}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-5 w-full rounded-[var(--r-md)] bg-[var(--accent)] py-2.5 font-semibold text-black disabled:opacity-60"
-        >
+        <Button type="submit" disabled={loading} className="mt-5 w-full">
           {loading ? 'Entrando…' : 'Entrar'}
-        </button>
+        </Button>
 
         <button
           type="button"
@@ -92,7 +86,7 @@ function LoginForm() {
         >
           Esqueci minha senha
         </button>
-      </form>
+      </Card>
     </div>
   );
 }

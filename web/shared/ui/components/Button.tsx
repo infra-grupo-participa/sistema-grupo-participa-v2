@@ -2,7 +2,7 @@
 
 import { forwardRef } from 'react';
 
-type Variant = 'primary' | 'ghost' | 'danger' | 'success' | 'subtle';
+type Variant = 'primary' | 'ghost' | 'danger' | 'success' | 'subtle' | 'link';
 type Size = 'sm' | 'md';
 
 const VARIANTS: Record<Variant, string> = {
@@ -11,6 +11,7 @@ const VARIANTS: Record<Variant, string> = {
   danger: 'bg-transparent text-[var(--red)] border border-[var(--red-border)] hover:bg-[var(--red-subtle)]',
   ghost: 'bg-transparent text-[var(--fg-2)] border border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)]',
   subtle: 'bg-[var(--surface-3)] text-[var(--fg)] border border-[var(--border)] hover:bg-[var(--surface-4)]',
+  link: 'bg-transparent text-[var(--accent)] border border-transparent hover:underline !px-0',
 };
 const SIZES: Record<Size, string> = { sm: 'px-3 py-1.5 text-xs', md: 'px-4 py-2 text-sm' };
 

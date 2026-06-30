@@ -1,5 +1,11 @@
 export { Badge, NivelBadge } from './Badge';
 export { Button } from './Button';
-export { Card, StatCard, SectionTitle, EmptyState } from './Card';
+export { Card, StatCard, KpiCard, SectionCard, SectionTitle, EmptyState } from './Card';
 export { Drawer, Tabs, Row } from './Drawer';
 export { DataTable, Thead, Th, Tr, Td } from './Table';
+export { Spinner, Loading, ProgressBar } from './Feedback';
+export { Toolbar, SearchInput, Input, FilterSelect, Toggle } from './Controls';
+export { Checkbox } from './Checkbox';
+export { Modal, ConfirmDialog } from './Modal';
+export { Timeline } from './Timeline';
+export type { TimelineEntry } from './Timeline';

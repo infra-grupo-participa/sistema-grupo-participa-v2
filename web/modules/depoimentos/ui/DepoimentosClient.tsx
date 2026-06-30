@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, Badge, Button } from '@/shared/ui/components';
+import { NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, Tabs, Badge, Button, Card, Toolbar, SearchInput, Input } from '@/shared/ui/components';
 import {
   type Curso,
   type DepoimentoView,
@@ -55,16 +55,22 @@ export function DepoimentosClient({ canEdit }: { canEdit: boolean }) {
       <h1 className="text-2xl font-bold text-[var(--fg)] mb-1">Depoimentos</h1>
       <p className="text-sm text-[var(--fg-3)] mb-4">Biblioteca de depoimentos, cursos e tags. {loading && 'carregando…'}</p>
 
-      <div className="flex gap-2 mb-4 border-b border-[var(--border)]">
-        {(['biblioteca', 'cursos', 'tags'] as Tab[]).map((t) => (
-          <button key={t} onClick={() => { setTab(t); window.location.hash = t; }} className={`px-4 py-2 text-sm font-medium border-b-2 capitalize ${tab === t ? 'border-[var(--accent)] text-[var(--fg)]' : 'border-transparent text-[var(--fg-3)]'}`}>{t}</button>
-        ))}
-        <a href="/depoimentos/biblioteca" className="ml-auto px-4 py-2 text-sm text-[var(--accent)]">Para Copy →</a>
+      <div className="flex items-end gap-2 mb-4">
+        <div className="flex-1">
+          <Tabs
+            tabs={[{ k: 'biblioteca', l: 'Biblioteca' }, { k: 'cursos', l: 'Cursos' }, { k: 'tags', l: 'Tags' }]}
+            active={tab}
+            onChange={(k) => { setTab(k as Tab); window.location.hash = k; }}
+          />
+        </div>
+        <a href="/depoimentos/biblioteca" className="px-4 py-2 text-sm text-[var(--accent)] whitespace-nowrap">Para Copy →</a>
       </div>
 
       {tab === 'biblioteca' && (
         <>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar aluno, e-mail, profissão…" className="w-full mb-3 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" />
+          <Toolbar className="mb-3">
+            <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar aluno, e-mail, profissão…" />
+          </Toolbar>
           <DataTable>
             <Thead>
               <Th>Aluno</Th>
@@ -189,7 +195,7 @@ function DepoimentoDrawer({ id, canEdit, onClose, onSaved }: { id: string; canEd
           )}
         </div>
 
-        <div className="rounded-[var(--r-lg)] border border-[var(--border)] p-3">
+        <Card className="p-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-semibold text-[var(--fg)]">Highlights (IA)</span>
             {canEdit && <Button size="sm" onClick={gerar} disabled={busy}>{d.highlights_status === 'ok' ? 'Regerar' : 'Gerar highlights'}</Button>}
@@ -201,7 +207,7 @@ function DepoimentoDrawer({ id, canEdit, onClose, onSaved }: { id: string; canEd
           {d.antes_depois && <Copyable label="Antes → Depois" value={`Antes: ${d.antes_depois.antes}\nDepois: ${d.antes_depois.depois}`} />}
           {hls.map((h, i) => <Copyable key={i} label={h.tipo} value={h.texto} />)}
           {!d.gancho && !hls.length && d.highlights_status !== 'ok' && <p className="text-xs text-[var(--fg-3)]">Transcreva e gere os highlights para extrair gancho, resumo e trechos prontos para copy.</p>}
-        </div>
+        </Card>
     </Drawer>
   );
 }
@@ -215,8 +221,8 @@ function Field({ label, value, onSave }: { label: string; value: string | null; 
     <label className="block">
       <span className="text-xs text-[var(--fg-3)]">{label}</span>
       <div className="flex gap-2 mt-1">
-        <input value={v} onChange={(e) => setV(e.target.value)} readOnly={!onSave} className="flex-1 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1.5 text-sm text-[var(--fg)]" />
-        {onSave && <button onClick={() => onSave(v)} className="px-2.5 py-1.5 rounded-[var(--r-md)] border border-[var(--border)] text-xs text-[var(--fg-2)]">✓</button>}
+        <Input value={v} onChange={(e) => setV(e.target.value)} readOnly={!onSave} className="flex-1" />
+        {onSave && <Button variant="ghost" size="sm" onClick={() => onSave(v)}>✓</Button>}
       </div>
     </label>
   );
@@ -227,7 +233,7 @@ function Copyable({ label, value }: { label: string; value: string }) {
     <div className="mb-2 p-2 rounded-[var(--r-md)] bg-[var(--surface-2)]">
       <div className="flex items-center justify-between">
         <span className="text-[10px] uppercase tracking-wide text-[var(--accent)] font-semibold">{label}</span>
-        <button onClick={() => navigator.clipboard?.writeText(value)} className="text-xs text-[var(--fg-3)] hover:text-[var(--fg)]">copiar</button>
+        <Button variant="link" size="sm" onClick={() => navigator.clipboard?.writeText(value)}>copiar</Button>
       </div>
       <div className="text-sm text-[var(--fg)] whitespace-pre-wrap">{value}</div>
     </div>
@@ -244,20 +250,20 @@ function CursosTab({ canEdit, flash }: { canEdit: boolean; flash: (m: string) =>
   return (
     <div>
       {canEdit && (
-        <div className="flex gap-2 mb-4">
-          <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome do curso" className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" />
-          <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="slug" className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" />
-          <button onClick={async () => { if (nome && slug && (await saveCurso({ name: nome, slug }))) { flash('Curso criado.'); setNome(''); setSlug(''); reload(); } }} className="px-4 py-2 rounded-[var(--r-md)] bg-[var(--accent)] text-black text-sm font-medium">Adicionar</button>
-        </div>
+        <Toolbar className="mb-4">
+          <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome do curso" className="w-auto" />
+          <Input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="slug" className="w-auto" />
+          <Button onClick={async () => { if (nome && slug && (await saveCurso({ name: nome, slug }))) { flash('Curso criado.'); setNome(''); setSlug(''); reload(); } }}>Adicionar</Button>
+        </Toolbar>
       )}
       <div className="space-y-2">
         {cursos.map((c) => (
-          <div key={c.id} className="flex items-center justify-between p-3 rounded-[var(--r-md)] border border-[var(--border)]">
+          <Card key={c.id} className="flex items-center justify-between p-3">
             <div><span className="text-[var(--fg)] font-medium">{c.name}</span> <span className="text-xs text-[var(--fg-3)]">/{c.slug}{!c.active && ' · inativo'}</span></div>
-            {canEdit && <button onClick={async () => { if (confirm('Excluir curso?') && (await deleteCurso(c.id))) { flash('Excluído.'); reload(); } }} className="text-xs text-[var(--red)]">excluir</button>}
-          </div>
+            {canEdit && <Button variant="danger" size="sm" onClick={async () => { if (confirm('Excluir curso?') && (await deleteCurso(c.id))) { flash('Excluído.'); reload(); } }}>excluir</Button>}
+          </Card>
         ))}
-        {!cursos.length && <p className="text-[var(--fg-3)] text-sm">Nenhum curso.</p>}
+        {!cursos.length && <EmptyState title="Nenhum curso" icon="🎓" />}
       </div>
     </div>
   );
@@ -266,27 +272,27 @@ function CursosTab({ canEdit, flash }: { canEdit: boolean; flash: (m: string) =>
 function TagsTab({ canEdit, flash }: { canEdit: boolean; flash: (m: string) => void }) {
   const [tags, setTags] = useState<Tag[]>([]);
   const [label, setLabel] = useState('');
-  const [color, setColor] = useState('#F29725');
+  const [color, setColor] = useState('#F29725'); /* hex-ok: valor inicial do color-picker de tag */
   const reload = useCallback(async () => setTags(await loadTags()), []);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { reload(); }, [reload]);
   return (
     <div>
       {canEdit && (
-        <div className="flex gap-2 mb-4 items-center">
-          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Tag" className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" />
-          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-12 rounded border border-[var(--border)] bg-transparent" />
-          <button onClick={async () => { if (label && (await saveTag({ label, color }))) { flash('Tag criada.'); setLabel(''); reload(); } }} className="px-4 py-2 rounded-[var(--r-md)] bg-[var(--accent)] text-black text-sm font-medium">Adicionar</button>
-        </div>
+        <Toolbar className="mb-4">
+          <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Tag" className="w-auto" />
+          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-12 rounded-[var(--r-md)] border border-[var(--border)] bg-transparent" />
+          <Button onClick={async () => { if (label && (await saveTag({ label, color }))) { flash('Tag criada.'); setLabel(''); reload(); } }}>Adicionar</Button>
+        </Toolbar>
       )}
       <div className="flex flex-wrap gap-2">
         {tags.map((t) => (
-          <span key={t.id} className="flex items-center gap-2 px-3 py-1.5 rounded-[var(--r-pill)] border border-[var(--border)] text-sm" style={{ color: t.color || 'var(--fg-2)' }}>
+          <span key={t.id} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-[var(--r-pill)] border border-[var(--border)] text-sm" style={{ color: t.color || 'var(--fg-2)' /* viz-colors: cor da tag definida pelo usuário */ }}>
             {t.label}
             {canEdit && <button onClick={async () => { if (confirm('Excluir tag?') && (await deleteTag(t.id))) { flash('Excluída.'); reload(); } }} className="text-[var(--red)]">✕</button>}
           </span>
         ))}
-        {!tags.length && <p className="text-[var(--fg-3)] text-sm">Nenhuma tag.</p>}
+        {!tags.length && <EmptyState title="Nenhuma tag" icon="🏷️" />}
       </div>
     </div>
   );

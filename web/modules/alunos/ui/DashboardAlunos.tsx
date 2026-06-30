@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { applyDashFilters, computeAlunosMetrics, computeTurmaNivelMatrix, type DashFiltros, type DashView, type Distribuicao } from '../domain/metrics';
 import type { Aluno360 } from '../domain/aluno-360';
 import { nivelOptions } from '@/shared/domain/nivel-resultado';
-import { Card, StatCard, SectionTitle, Button } from '@/shared/ui/components';
+import { Card, StatCard, SectionTitle, Button, FilterSelect } from '@/shared/ui/components';
 
 const VIEWS_KEY = 'gp_dash_views';
+/* viz-colors: paleta de fatias do donut por turma — cores de gráfico, não da UI */
 const DONUT_COLORS = ['#f29725', '#60a5fa', '#a78bfa', '#34d399', '#f87171', '#fbbf24', '#22d3ee', '#c084fc'];
 
 interface SavedView {
@@ -45,7 +46,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div className="inline-flex rounded-[var(--r-md)] border border-[var(--border)] p-0.5 bg-[var(--surface-2)]">
           {(['alunos', 'socios'] as DashView[]).map((v) => (
-            <button key={v} onClick={() => setView(v)} className={`px-3.5 py-1.5 rounded-[var(--r-sm)] text-sm font-medium transition-colors ${view === v ? 'bg-[var(--accent)] text-black' : 'text-[var(--fg-2)] hover:text-[var(--fg)]'}`}>
+            <button key={v} onClick={() => setView(v)} className={`px-3.5 py-1.5 rounded-[var(--r-sm)] text-sm font-medium transition-colors ${view === v ? 'bg-[var(--accent)] text-black' /* hex-ok: texto preto sobre âmbar é a decisão de contraste D5#1 */ : 'text-[var(--fg-2)] hover:text-[var(--fg)]'}`}>
               {v === 'alunos' ? 'Alunos' : 'Sócios'}
             </button>
           ))}
@@ -73,12 +74,12 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
-        <StatCard label="Total" value={m.total.toLocaleString('pt-BR')} hint={`${m.pctAtivos}% ativos`} />
-        <StatCard label="Ativos" value={m.ativos.toLocaleString('pt-BR')} tone="var(--green)" />
-        <StatCard label="Holding Total" value={m.ht.toLocaleString('pt-BR')} tone="var(--nivel-platina)" />
-        <StatCard label="Holding Masters" value={m.hm.toLocaleString('pt-BR')} tone="var(--accent)" />
-        <StatCard label="Aurum" value={m.aurum.toLocaleString('pt-BR')} tone="var(--nivel-ouro)" />
-        <StatCard label="Sócios" value={m.socios.toLocaleString('pt-BR')} tone="var(--nivel-diamante)" />
+        <StatCard label="Total" value={m.total.toLocaleString('pt-BR')} hint={`${m.pctAtivos}% ativos`} bar="accent" />
+        <StatCard label="Ativos" value={m.ativos.toLocaleString('pt-BR')} tone="var(--green)" bar="green" />
+        <StatCard label="Holding Total" value={m.ht.toLocaleString('pt-BR')} tone="var(--nivel-platina)" bar="purple" />
+        <StatCard label="Holding Masters" value={m.hm.toLocaleString('pt-BR')} tone="var(--accent)" bar="accent" />
+        <StatCard label="Aurum" value={m.aurum.toLocaleString('pt-BR')} tone="var(--nivel-ouro)" bar="yellow" />
+        <StatCard label="Sócios" value={m.socios.toLocaleString('pt-BR')} tone="var(--nivel-diamante)" bar="purple" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -126,10 +127,10 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
 
 function Filtro({ value, onChange, placeholder, options }: { value: string; onChange: (v: string) => void; placeholder: string; options: { value: string; label: string }[] }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-1.5 text-sm text-[var(--fg)]">
+    <FilterSelect value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="">{placeholder}</option>
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
+    </FilterSelect>
   );
 }
 

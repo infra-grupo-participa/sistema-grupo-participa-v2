@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Badge, Button, Modal, ProgressBar, Timeline, type TimelineEntry } from '@/shared/ui/components';
 import './solicitar-placa.css';
 import { maskPhoneMobile, maskPhoneLandline, maskDoc, maskCep, maskCurrency, currencyDigits } from './masks';
 import { cepLookup, placaDuplicateCheck, placaGet, placaRecover, placaSave, placaUpload } from './placa-api';
@@ -246,9 +247,9 @@ export function SolicitarPlacaClient({ initialToken }: { initialToken: string })
   return (
     <Wrap>
       <div className="sp-track">
-        <div className="sp-bar"><div className="sp-bar-fill" style={{ width: `${pct}%` }} /></div>
+        <ProgressBar value={pct} tone="accent" height={8} />
         <div className="sp-meta">
-          <span className="sp-badge">Etapa {step} de {TOTAL_STEPS}</span>
+          <Badge tone="accent">Etapa {step} de {TOTAL_STEPS}</Badge>
           <span>{STEP_NAMES[step]}</span>
         </div>
       </div>
@@ -269,7 +270,7 @@ export function SolicitarPlacaClient({ initialToken }: { initialToken: string })
               <Field label="Instagram"><input value={form.instagram_url || ''} onChange={(e) => set('instagram_url', e.target.value)} placeholder="@seuperfil" /></Field>
               <Field label="Facebook"><input value={form.facebook_url || ''} onChange={(e) => set('facebook_url', e.target.value)} placeholder="@seuperfil" /></Field>
             </div>
-            {dup.email && <p className="sp-err">Este e-mail já possui uma solicitação. <button className="sp-btn-back" onClick={() => setRecoverOpen(true)}>Recuperar</button></p>}
+            {dup.email && <p className="sp-err">Este e-mail já possui uma solicitação. <Button type="button" variant="ghost" size="sm" onClick={() => setRecoverOpen(true)}>Recuperar</Button></p>}
             {err && <p className="sp-err">{err}</p>}
             <Nav onlyNext busy={busy} onNext={() => goNext(1)} nextLabel="Continuar →" />
           </Section>
@@ -363,16 +364,23 @@ export function SolicitarPlacaClient({ initialToken }: { initialToken: string })
       </div>
 
       {recoverOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', display: 'grid', placeItems: 'center', padding: 16 }}>
-          <div className="sp-card" style={{ maxWidth: 420 }}>
-            <Section title="Recuperar solicitação" subtitle="Informe e-mail e documento usados no cadastro.">
-              <Field label="E-mail"><input type="email" value={recoverEmail} onChange={(e) => setRecoverEmail(e.target.value)} /></Field>
-              <Field label="Documento"><input value={recoverDoc} onChange={(e) => setRecoverDoc(maskDoc(e.target.value))} /></Field>
-              {err && <p className="sp-err">{err}</p>}
-              <Nav busy={busy} onBack={() => setRecoverOpen(false)} backLabel="Cancelar" onNext={doRecover} nextLabel="Recuperar" />
-            </Section>
-          </div>
-        </div>
+        <Modal
+          open={recoverOpen}
+          onClose={() => setRecoverOpen(false)}
+          title="Recuperar solicitação"
+          width="max-w-md"
+          footer={
+            <>
+              <Button type="button" variant="ghost" onClick={() => setRecoverOpen(false)}>Cancelar</Button>
+              <Button type="button" variant="primary" onClick={doRecover} disabled={busy}>{busy ? 'Aguarde…' : 'Recuperar'}</Button>
+            </>
+          }
+        >
+          <p className="text-sm text-[var(--fg-2)] mb-4 leading-relaxed">Informe e-mail e documento usados no cadastro.</p>
+          <div className="sp-field"><label>E-mail</label><input type="email" value={recoverEmail} onChange={(e) => setRecoverEmail(e.target.value)} /></div>
+          <div className="sp-field"><label>Documento</label><input value={recoverDoc} onChange={(e) => setRecoverDoc(maskDoc(e.target.value))} /></div>
+          {err && <p className="sp-err">{err}</p>}
+        </Modal>
       )}
     </Wrap>
   );
@@ -406,8 +414,8 @@ function Field({ label, req, children }: { label: string; req?: boolean; childre
 function Nav({ onBack, onNext, nextLabel, backLabel = '← Voltar', onlyNext, busy }: { onBack?: () => void; onNext: () => void; nextLabel: string; backLabel?: string; onlyNext?: boolean; busy?: boolean }) {
   return (
     <div className="sp-nav">
-      {!onlyNext && onBack ? <button type="button" className="sp-btn-back" onClick={onBack}>{backLabel}</button> : <span />}
-      <button type="button" className="sp-btn-next" onClick={onNext} disabled={busy}>{busy ? 'Aguarde…' : nextLabel}</button>
+      {!onlyNext && onBack ? <Button type="button" variant="ghost" onClick={onBack}>{backLabel}</Button> : <span />}
+      <Button type="button" variant="primary" onClick={onNext} disabled={busy}>{busy ? 'Aguarde…' : nextLabel}</Button>
     </div>
   );
 }
@@ -419,7 +427,7 @@ function SuccessCard({ kind }: { kind: 'success' | 'cadastro' }) {
       <div className="sp-card-body sp-success">
         <div className="em">{isCad ? '✅' : '🎉'}</div>
         <h1 style={{ fontSize: 22, fontWeight: 800, marginTop: 8 }}>{isCad ? 'Cadastro registrado com sucesso!' : 'Recebemos sua solicitação!'}</h1>
-        <p style={{ color: '#6b7280', marginTop: 8 }}>
+        <p style={{ color: 'var(--muted)', marginTop: 8 }}>
           {isCad
             ? 'Registramos seus dados e o seu nível atual. Como este nível ainda não entra no fluxo da placa, nenhuma documentação adicional é necessária agora.'
             : 'Recebemos seus dados e vamos seguir com a análise da documentação. O acompanhamento fica resumido aos marcos principais do processo.'}
@@ -432,24 +440,21 @@ function SuccessCard({ kind }: { kind: 'success' | 'cadastro' }) {
 function TrackingCard({ data }: { data: Record<string, unknown> }) {
   const { activeIndex } = getClientTrackingState(data);
   const rastreio = String(data.codigo_rastreio ?? '');
+  const tlItems: TimelineEntry[] = CLIENT_TRACKING_STEPS.map((s, i) => ({
+    title: s.title,
+    body: s.note,
+    tone: i < activeIndex ? 'green' : i === activeIndex ? 'accent' : 'base',
+    done: i < activeIndex,
+    icon: i < activeIndex ? '✓' : String(i + 1),
+  }));
   return (
     <div className="sp-card">
-      <div className="sp-card-head" style={{ background: '#f29725', color: '#fff' }}>
-        <h1 style={{ color: '#fff' }}>Acompanhe sua solicitação</h1>
-        <p style={{ color: 'rgba(255,255,255,.85)' }}>Sua solicitação está em andamento</p>
+      <div className="sp-card-head" style={{ background: 'var(--orange)', color: '#fff' /* hex-ok: contraste branco sobre header âmbar da marca */ }}>
+        <h1 style={{ color: '#fff' /* hex-ok: contraste branco sobre header âmbar */ }}>Acompanhe sua solicitação</h1>
+        <p style={{ color: 'rgba(255,255,255,.85)' /* hex-ok: contraste branco sobre header âmbar */ }}>Sua solicitação está em andamento</p>
       </div>
       <div className="sp-card-body">
-        <div className="sp-tl">
-          {CLIENT_TRACKING_STEPS.map((s, i) => {
-            const cls = i < activeIndex ? 'done' : i === activeIndex ? 'current' : '';
-            return (
-              <div key={s.title} className={`sp-tl-step ${cls}`}>
-                <div className="sp-tl-bullet">{i < activeIndex ? '✓' : i + 1}</div>
-                <div className="sp-tl-body"><div className="sp-tl-label">{s.title}</div><div className="sp-tl-note">{s.note}</div></div>
-              </div>
-            );
-          })}
-        </div>
+        <Timeline items={tlItems} />
         {rastreio && (
           <div className="sp-info" style={{ marginTop: 16 }}>Código de rastreio: <strong>{rastreio}</strong></div>
         )}

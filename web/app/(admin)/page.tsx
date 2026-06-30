@@ -1,5 +1,6 @@
 import { getCurrentUser } from '@/shared/composition/server-container';
 import { ehAdminOuAcima, ehDev } from '@/shared/domain/auth';
+import { Card } from '@/shared/ui/components';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,15 +33,16 @@ export default async function DashboardPage() {
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {atalhos.map((c) => (
-          <a
+          <Card
             key={c.href}
+            as="a"
             href={c.href}
-            className="group block rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] p-5 hover:border-[var(--border-accent)] hover:bg-[var(--surface-3)] transition-colors"
+            className="group block p-5 hover:border-[var(--border-accent)] hover:bg-[var(--surface-3)] transition-colors"
           >
             <div className="text-2xl">{c.emoji}</div>
             <div className="mt-2 text-[var(--fg)] font-semibold group-hover:text-[var(--accent)] transition-colors">{c.label}</div>
             <div className="mt-0.5 text-sm text-[var(--fg-3)]">{c.desc}</div>
-          </a>
+          </Card>
         ))}
       </div>
     </div>

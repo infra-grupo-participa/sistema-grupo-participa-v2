@@ -17,7 +17,7 @@ import { nivelLabel, nivelOptions } from '@/shared/domain/nivel-resultado';
 import { loadAlunos360, loadTurmas, loadPlacaHistorico, updateAluno, type Turma, type PlacaHistorico } from './alunos-data';
 import { AUDIT_STEPS } from '@/modules/placas/domain/auditoria';
 import { cursoDesempenhoMock } from '../domain/curso-mock';
-import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Drawer, Tabs, Button } from '@/shared/ui/components';
+import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Drawer, Tabs, Button, Toolbar, SearchInput, FilterSelect, KpiCard, ProgressBar } from '@/shared/ui/components';
 import { DashboardAlunos } from './DashboardAlunos';
 
 type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento';
@@ -166,13 +166,13 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
 
       {topTab === 'lista' && (
       <>
-      <div className="flex flex-wrap gap-2 mb-3">
-        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, e-mail, documento, cidade…" className="flex-1 min-w-[220px] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" />
+      <Toolbar className="mb-3">
+        <SearchInput value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, e-mail, documento, cidade…" />
         <Sel value={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={nivelOptions().map((n) => ({ value: n.id, label: n.label }))} />
         <Sel value={filtros.espaco} onChange={(v) => setFiltros((f) => ({ ...f, espaco: v }))} placeholder="Todos os espaços" options={Object.entries(ESPACO_LABEL).map(([k, l]) => ({ value: k, label: l }))} />
         <Sel value={filtros.jornada} onChange={(v) => setFiltros((f) => ({ ...f, jornada: v }))} placeholder="Toda jornada" options={[{ value: 'com_ht', label: 'Com HT' }, { value: 'com_hm', label: 'Com HM' }, { value: 'com_placa', label: 'Com placa' }, { value: 'com_depoimento', label: 'Com depoimento' }, { value: 'com_sip', label: 'Com SIP' }]} />
         <Sel value={filtros.situacao} onChange={(v) => setFiltros((f) => ({ ...f, situacao: v }))} placeholder="Toda situação" options={[...Object.entries(SITUACAO).map(([k, s]) => ({ value: k, label: s.label })), { value: 'inadimplente', label: 'Inadimplente' }]} />
-      </div>
+      </Toolbar>
 
       <DataTable>
         <Thead>
@@ -232,10 +232,10 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
 
 function Sel({ value, onChange, placeholder, options }: { value: string; onChange: (v: string) => void; placeholder: string; options: { value: string; label: string }[] }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]">
+    <FilterSelect value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="">{placeholder}</option>
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
+    </FilterSelect>
   );
 }
 
@@ -402,9 +402,9 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
                   );
                 })()}
                 <div className="grid grid-cols-3 gap-3 mb-3">
-                  <Kpi label="Pago" value={money(a.valor_pago)} color="var(--green)" />
-                  <Kpi label="Total" value={money(a.valor_total)} />
-                  <Kpi label="Saldo devedor" value={money(saldo)} color={saldo > 0 ? 'var(--red)' : undefined} />
+                  <KpiCard label="Pago" value={money(a.valor_pago)} bar="green" />
+                  <KpiCard label="Total" value={money(a.valor_total)} bar="gray" />
+                  <KpiCard label="Saldo devedor" value={money(saldo)} bar={saldo > 0 ? 'red' : 'gray'} />
                 </div>
                 <Row k="Situação financeira" v={a.situacao_financeira ? (SITUACAO_FINANCEIRA[a.situacao_financeira]?.label || a.situacao_financeira) : '—'} />
                 <Row k="Status de pagamento" v={a.status_pagamento} />
@@ -443,9 +443,6 @@ function Section({ children }: { children: React.ReactNode }) {
 }
 function Row({ k, v }: { k: string; v: string | null }) {
   return <div className="flex justify-between gap-3 py-1 border-b border-[var(--border-faint)]"><span className="text-xs text-[var(--fg-3)]">{k}</span><span className="text-sm text-[var(--fg)] text-right">{v || '—'}</span></div>;
-}
-function Kpi({ label, value, color }: { label: string; value: string; color?: string }) {
-  return <div className="rounded-[var(--r-md)] border border-[var(--border)] p-2 text-center"><div className="font-bold text-sm" style={{ color: color || 'var(--fg)' }}>{value}</div><div className="text-[10px] text-[var(--fg-3)]">{label}</div></div>;
 }
 function JornadaCard({ label, on, extra, href }: { label: string; on: boolean; extra?: string; href?: string }) {
   const body = (
@@ -527,9 +524,9 @@ function CursoTab() {
         ⓘ Demonstração de layout — ainda sem integração de progresso de curso. Os valores aparecem zerados de propósito.
       </div>
       <div className="grid grid-cols-3 gap-3 mb-3">
-        <Kpi label="Progresso" value={`${m.progressoGeral}%`} />
-        <Kpi label="Módulos" value={`${m.modulosConcluidos}/${m.modulosTotal}`} />
-        <Kpi label="Aulas" value={`${m.aulasAssistidas}/${m.aulasTotal}`} />
+        <KpiCard label="Progresso" value={`${m.progressoGeral}%`} />
+        <KpiCard label="Módulos" value={`${m.modulosConcluidos}/${m.modulosTotal}`} />
+        <KpiCard label="Aulas" value={`${m.aulasAssistidas}/${m.aulasTotal}`} />
       </div>
       <Row k="Engajamento" v="—" />
       <Row k="Último acesso" v="—" />
@@ -541,9 +538,7 @@ function CursoTab() {
               <span className="text-[var(--fg-2)]">{mod.nome}</span>
               <span className="text-[var(--fg-3)] tabular">{mod.progresso}%</span>
             </div>
-            <div className="h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
-              <div className="h-full rounded-full" style={{ width: `${mod.progresso}%`, background: 'var(--accent)' }} />
-            </div>
+            <ProgressBar value={mod.progresso} height={6} />
           </div>
         ))}
       </div>
@@ -684,7 +679,7 @@ function EditForm({ a, turmas, onSaved }: { a: Aluno360; turmas: Turma[]; onSave
       <label className="block"><span className="text-xs text-[var(--fg-3)]">Obs central</span>
         <textarea value={f.obs_central} onChange={(e) => s('obs_central', e.target.value)} rows={3} className={FIELD_CLS} /></label>
 
-      <button onClick={save} disabled={busy} className="w-full py-2 rounded-[var(--r-md)] bg-[var(--accent)] text-black font-semibold disabled:opacity-60">{busy ? 'Salvando…' : 'Salvar alterações'}</button>
+      <Button onClick={save} disabled={busy} className="w-full justify-center">{busy ? 'Salvando…' : 'Salvar alterações'}</Button>
     </div>
   );
 }
