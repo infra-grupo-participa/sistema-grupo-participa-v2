@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Icon } from '@/shared/ui/icons';
 import { AUDIT_STEPS, AUDIT_STEP_TOTAL } from '../../domain/auditoria';
 import {
   computeDisplayStatus,
@@ -127,25 +128,25 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
               Solicitações de <span className="text-[var(--accent)]">Placas</span>
               <span className="ml-2 align-middle text-xs font-semibold rounded-[var(--r-pill)] bg-[var(--accent-subtle)] text-[var(--accent)] px-2 py-0.5">{stats.total}</span>
             </h1>
-            <a href="/sistema/admin-dev" className="inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent text-[var(--fg-2)] border border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors">🗒️ Logs</a>
+            <a href="/sistema/admin-dev" className="inline-flex items-center justify-center gap-1.5 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent text-[var(--fg-2)] border border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="notebook" size={14} /> Logs</a>
           </div>
           <p className="text-sm text-[var(--fg-3)] mb-4">Candidatos que iniciaram o processo via formulário público · Atualizado em {hoje}{loading && ' · carregando…'}</p>
 
           {/* Stat cards com acento + ícone */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-            <StatBox value={stats.total} label="Total de processos" icon="≣" tone="var(--fg-2)" />
-            <StatBox value={stats.finalizadas} label="Finalizadas" icon="✓" tone="var(--green)" />
-            <StatBox value={stats.emAndamento} label="Em andamento" icon="↻" tone="var(--accent)" />
-            <StatBox value={stats.rascunhos} label="Rascunhos" icon="🖹" tone="var(--nivel-platina)" />
+            <StatBox value={stats.total} label="Total de processos" icon="clipboard" tone="var(--fg-2)" />
+            <StatBox value={stats.finalizadas} label="Finalizadas" icon="check" tone="var(--green)" />
+            <StatBox value={stats.emAndamento} label="Em andamento" icon="rotate" tone="var(--accent)" />
+            <StatBox value={stats.rascunhos} label="Rascunhos" icon="file" tone="var(--nivel-platina)" />
           </div>
 
           {/* Link do questionário público */}
           <Card className="p-3 mb-4 flex items-center gap-3 flex-wrap">
-            <span className="text-[var(--fg-3)]">🔗</span>
+            <span className="text-[var(--fg-3)]"><Icon name="link" size={15} /></span>
             <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">Link de envio do questionário</span>
             <Input readOnly value={linkPublico} className="flex-1 min-w-[200px] !text-[var(--accent)] font-mono" />
             <Button variant="subtle" size="sm" onClick={() => { navigator.clipboard?.writeText(linkPublico); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}>
-              {copiado ? '✓ Copiado' : '⧉ Copiar link'}
+              {copiado ? <><Icon name="check" size={14} /> Copiado</> : <><Icon name="copy" size={14} /> Copiar link</>}
             </Button>
           </Card>
 
@@ -210,7 +211,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
               })}
             </tbody>
           </DataTable>
-          {!filtered.length && !loading && <EmptyState title="Nenhuma solicitação neste filtro" icon="🏆" />}
+          {!filtered.length && !loading && <EmptyState title="Nenhuma solicitação neste filtro" icon="trophy" />}
         </>
       ) : (
         <>
@@ -244,7 +245,7 @@ function StatBox({ value, label, icon, tone }: { value: number; label: string; i
           <div className="text-2xl font-bold tabular leading-none text-[var(--fg)]">{value.toLocaleString('pt-BR')}</div>
           <div className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">{label}</div>
         </div>
-        <span className="grid place-items-center w-8 h-8 rounded-[var(--r-md)] text-sm" style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}>{icon}</span>
+        <span className="grid place-items-center w-8 h-8 rounded-[var(--r-md)]" style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}><Icon name={icon} size={16} /></span>
       </div>
     </Card>
   );
@@ -294,7 +295,7 @@ function SolDetail({
               return {
                 tone: done ? 'green' : current ? 'accent' : 'base',
                 done,
-                icon: done ? '✓' : i + 1,
+                icon: done ? undefined : i + 1,
                 title: s.name,
                 meta: dates[s.key] || undefined,
               };
@@ -412,8 +413,8 @@ function AgendaHorarios({ canEdit, flash }: { canEdit: boolean; flash: (m: strin
                 {String(s.hora).slice(0, 5)}
                 {canEdit && (
                   <>
-                    <button onClick={async () => { if (await data.toggleHorario(s.id, !s.ativo)) reload(); }} className="text-xs text-[var(--fg-3)] hover:text-[var(--fg)]" title={s.ativo ? 'Desativar' : 'Ativar'}>{s.ativo ? '⏸' : '▶'}</button>
-                    <button onClick={() => setExcluirId(s.id)} className="text-xs text-[var(--red)]" title="Excluir">✕</button>
+                    <button onClick={async () => { if (await data.toggleHorario(s.id, !s.ativo)) reload(); }} className="text-xs text-[var(--fg-3)] hover:text-[var(--fg)] inline-flex" title={s.ativo ? 'Desativar' : 'Ativar'}><Icon name={s.ativo ? 'pause' : 'play'} size={14} /></button>
+                    <button onClick={() => setExcluirId(s.id)} className="text-xs text-[var(--red)] inline-flex" title="Excluir"><Icon name="x" size={14} /></button>
                   </>
                 )}
               </div>

@@ -49,7 +49,7 @@ export function ConfiguracoesClient({ user }: { user: GpUser }) {
         className="mt-4"
         title="Tema"
         subtitle="Claro ou escuro (salvo no navegador)"
-        right={<Toggle checked={theme === 'dark'} onChange={toggle} label={theme === 'dark' ? '☾ Escuro' : '☀ Claro'} />}
+        right={<Toggle checked={theme === 'dark'} onChange={toggle} label={theme === 'dark' ? 'Escuro' : 'Claro'} />}
       >
         <span className="sr-only">Alternar tema</span>
       </SectionCard>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Card, Toolbar, SearchInput, Button, EmptyState } from '@/shared/ui/components';
+import { Icon } from '@/shared/ui/icons';
 import { type Depoimento, loadParaCopy } from './depoimentos-data';
 
 export function ParaCopyClient() {
@@ -45,7 +46,7 @@ export function ParaCopyClient() {
             </Card>
           );
         })}
-        {!filtered.length && !loading && <EmptyState title="Nenhum depoimento com highlights ainda" hint="Gere highlights na Biblioteca." icon="💬" />}
+        {!filtered.length && !loading && <EmptyState title="Nenhum depoimento com highlights ainda" hint="Gere highlights na Biblioteca." icon="depoimentos" />}
       </div>
     </div>
   );
@@ -56,7 +57,7 @@ function Block({ label, value, onCopy, copied }: { label: string; value: string;
     <div className="mb-2 p-2 rounded-[var(--r-md)] bg-[var(--surface-1)]">
       <div className="flex items-center justify-between">
         <span className="text-[10px] uppercase tracking-wide text-[var(--accent)] font-semibold">{label}</span>
-        <Button variant="link" size="sm" onClick={() => onCopy(value)}>{copied === value ? '✓ copiado' : 'copiar'}</Button>
+        <Button variant="link" size="sm" onClick={() => onCopy(value)}>{copied === value ? <><Icon name="check" size={13} /> copiado</> : 'copiar'}</Button>
       </div>
       <div className="text-sm text-[var(--fg)] whitespace-pre-wrap">{value}</div>
     </div>

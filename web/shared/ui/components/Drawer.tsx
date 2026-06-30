@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { Icon } from '@/shared/ui/icons';
 
 /** Drawer lateral com overlay, animação e header. Hierarquia e foco consistentes. */
 export function Drawer({
@@ -41,7 +42,7 @@ export function Drawer({
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {actions}
-              <button onClick={onClose} aria-label="Fechar" className="w-8 h-8 grid place-items-center rounded-[var(--r-md)] text-[var(--fg-3)] hover:text-[var(--fg)] hover:bg-[var(--surface-3)] transition-colors">✕</button>
+              <button onClick={onClose} aria-label="Fechar" className="w-8 h-8 grid place-items-center rounded-[var(--r-md)] text-[var(--fg-3)] hover:text-[var(--fg)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="x" /></button>
             </div>
           </div>
           {badges && <div className="flex flex-wrap gap-1.5 mt-3">{badges}</div>}

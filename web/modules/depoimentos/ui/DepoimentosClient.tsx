@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, Tabs, Badge, Button, Card, Toolbar, SearchInput, Input } from '@/shared/ui/components';
+import { Icon } from '@/shared/ui/icons';
 import {
   type Curso,
   type DepoimentoView,
@@ -84,12 +85,18 @@ export function DepoimentosClient({ canEdit }: { canEdit: boolean }) {
                   <Td><div className="text-[var(--fg)] font-medium">{r.aluno_nome || '—'}</div><div className="text-[var(--fg-3)] text-xs">{r.profissao_resolvida || r.aluno_email}</div></Td>
                   <Td><NivelBadge nivel={r.aluno_nivel_resultado} /></Td>
                   <Td className="text-[var(--fg-2)] tabular">{r.testimonial_date ? new Date(r.testimonial_date).toLocaleDateString('pt-BR') : '—'}</Td>
-                  <Td className="text-sm">{[r.video_url && '🎬', r.transcript && '📝', r.foto_url && '📷'].filter(Boolean).join(' ') || <span className="text-[var(--fg-3)]">—</span>}</Td>
+                  <Td className="text-sm">{r.video_url || r.transcript || r.foto_url ? (
+                    <span className="inline-flex items-center gap-1.5 text-[var(--fg-3)]">
+                      {r.video_url && <Icon name="film" size={15} />}
+                      {r.transcript && <Icon name="file" size={15} />}
+                      {r.foto_url && <Icon name="camera" size={15} />}
+                    </span>
+                  ) : <span className="text-[var(--fg-3)]">—</span>}</Td>
                 </Tr>
               ))}
             </tbody>
           </DataTable>
-          {!filtered.length && !loading && <EmptyState title="Nenhum depoimento" icon="💬" />}
+          {!filtered.length && !loading && <EmptyState title="Nenhum depoimento" icon="depoimentos" />}
         </>
       )}
 
@@ -188,7 +195,7 @@ function DepoimentoDrawer({ id, canEdit, onClose, onSaved }: { id: string; canEd
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Button variant="ghost" size="sm" onClick={() => persist({ transcript: transcript || null }, 'Transcrição salva.')} disabled={busy}>Salvar transcrição</Button>
               <Button variant="subtle" size="sm" onClick={transcrever} disabled={trBusy || !d.drive_folder_url} title={d.drive_folder_url ? 'Transcreve os áudios da pasta do Drive (worker)' : 'Informe a pasta do Drive primeiro'}>
-                {trBusy ? 'Transcrevendo…' : '🎙️ Transcrever pela pasta do Drive'}
+                {trBusy ? 'Transcrevendo…' : <><Icon name="mic" size={14} /> Transcrever pela pasta do Drive</>}
               </Button>
               {trMsg && <span className="text-xs text-[var(--fg-3)]">{trMsg}</span>}
             </div>
@@ -222,7 +229,7 @@ function Field({ label, value, onSave }: { label: string; value: string | null; 
       <span className="text-xs text-[var(--fg-3)]">{label}</span>
       <div className="flex gap-2 mt-1">
         <Input value={v} onChange={(e) => setV(e.target.value)} readOnly={!onSave} className="flex-1" />
-        {onSave && <Button variant="ghost" size="sm" onClick={() => onSave(v)}>✓</Button>}
+        {onSave && <Button variant="ghost" size="sm" onClick={() => onSave(v)}><Icon name="check" size={14} /></Button>}
       </div>
     </label>
   );
@@ -263,7 +270,7 @@ function CursosTab({ canEdit, flash }: { canEdit: boolean; flash: (m: string) =>
             {canEdit && <Button variant="danger" size="sm" onClick={async () => { if (confirm('Excluir curso?') && (await deleteCurso(c.id))) { flash('Excluído.'); reload(); } }}>excluir</Button>}
           </Card>
         ))}
-        {!cursos.length && <EmptyState title="Nenhum curso" icon="🎓" />}
+        {!cursos.length && <EmptyState title="Nenhum curso" icon="cursos" />}
       </div>
     </div>
   );
@@ -289,10 +296,10 @@ function TagsTab({ canEdit, flash }: { canEdit: boolean; flash: (m: string) => v
         {tags.map((t) => (
           <span key={t.id} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-[var(--r-pill)] border border-[var(--border)] text-sm" style={{ color: t.color || 'var(--fg-2)' /* viz-colors: cor da tag definida pelo usuário */ }}>
             {t.label}
-            {canEdit && <button onClick={async () => { if (confirm('Excluir tag?') && (await deleteTag(t.id))) { flash('Excluída.'); reload(); } }} className="text-[var(--red)]">✕</button>}
+            {canEdit && <button onClick={async () => { if (confirm('Excluir tag?') && (await deleteTag(t.id))) { flash('Excluída.'); reload(); } }} className="text-[var(--red)] inline-flex"><Icon name="x" size={13} /></button>}
           </span>
         ))}
-        {!tags.length && <EmptyState title="Nenhuma tag" icon="🏷️" />}
+        {!tags.length && <EmptyState title="Nenhuma tag" icon="tags" />}
       </div>
     </div>
   );

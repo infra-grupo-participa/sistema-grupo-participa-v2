@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ehAdminOuAcima, ehDev, type GpUser } from '@/shared/domain/auth';
 import { REPORTS, SYSTEM_NAV } from '@/shared/ui/nav/config';
+import { Icon } from '@/shared/ui/icons';
 
 const GROUPS_KEY = 'gp_sidebar_groups';
 const REPORTS_KEY = 'gp_reports_nav_state';
@@ -77,7 +78,7 @@ export function Sidebar({ user }: { user: GpUser }) {
       {/* Início */}
       <Group label="Início" collapsed={!!groups.home} onToggle={() => toggleGroup('home')}>
         <Link href="/" className={itemCls(cur === '/')}>
-          <span className={iconBox}>🏠</span>
+          <span className={iconBox}><Icon name="home" /></span>
           <span>Início</span>
         </Link>
       </Group>
@@ -94,7 +95,7 @@ export function Sidebar({ user }: { user: GpUser }) {
             <div key={group.key}>
               <div className={itemCls(onGroup)}>
                 <Link href={group.defaultHref} className="flex items-center gap-2.5 flex-1 min-w-0">
-                  <span className={iconBox}>{group.emoji || '📋'}</span>
+                  <span className={iconBox}><Icon name={group.ico || 'clipboard'} /></span>
                   <span className="truncate">{group.label}</span>
                 </Link>
                 {children.length > 0 && (
@@ -107,7 +108,7 @@ export function Sidebar({ user }: { user: GpUser }) {
                     aria-label="Alternar subtópicos"
                     className="text-[var(--fg-3)] px-1"
                   >
-                    {open ? '▾' : '▸'}
+                    <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
                   </button>
                 )}
               </div>
@@ -117,7 +118,7 @@ export function Sidebar({ user }: { user: GpUser }) {
                     const active = normalize(child.path) === cur;
                     return (
                       <Link key={child.key} href={child.href} className={itemCls(active)}>
-                        <span className={iconBox}>{child.emoji || '•'}</span>
+                        <span className={iconBox}><Icon name={child.ico || 'circle'} size={14} /></span>
                         <span>{child.label}</span>
                       </Link>
                     );
@@ -139,7 +140,7 @@ export function Sidebar({ user }: { user: GpUser }) {
             (item.activePrefixes || []).some((p) => cur.startsWith(normalize(p) + '/'));
           return (
             <Link key={item.key} href={item.path} className={itemCls(active)}>
-              <span className={iconBox}>{item.emoji || '▫'}</span>
+              <span className={iconBox}><Icon name={item.ico || 'circle'} /></span>
               <span>{item.label}</span>
             </Link>
           );
@@ -168,7 +169,7 @@ function Group({
         className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)]"
       >
         <span>{label}</span>
-        <span>{collapsed ? '⌃' : '⌄'}</span>
+        <Icon name={collapsed ? 'chevron-up' : 'chevron-down'} size={14} className="text-[var(--fg-3)]" />
       </button>
       {!collapsed && <div className="flex flex-col gap-0.5">{children}</div>}
     </div>

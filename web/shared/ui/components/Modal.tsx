@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { Button } from './Button';
+import { Icon } from '@/shared/ui/icons';
 
 /** Modal centralizado com overlay e animação (paridade .modal-overlay/.modal do legado). */
 export function Modal({ open = true, onClose, title, children, footer, width = 'max-w-lg' }: {
@@ -21,7 +22,7 @@ export function Modal({ open = true, onClose, title, children, footer, width = '
         {title && (
           <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-2)] px-5 py-3.5">
             <h2 className="text-base font-bold text-[var(--fg)]">{title}</h2>
-            <button onClick={onClose} aria-label="Fechar" className="w-8 h-8 grid place-items-center rounded-[var(--r-md)] text-[var(--fg-3)] hover:text-[var(--fg)] hover:bg-[var(--surface-3)] transition-colors">✕</button>
+            <button onClick={onClose} aria-label="Fechar" className="w-8 h-8 grid place-items-center rounded-[var(--r-md)] text-[var(--fg-3)] hover:text-[var(--fg)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="x" /></button>
           </div>
         )}
         <div className="p-5">{children}</div>

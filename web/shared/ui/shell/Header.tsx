@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { useTheme } from './use-theme';
+import { Icon } from '@/shared/ui/icons';
 import type { GpUser } from '@/shared/domain/auth';
 
 export function Header({ user, onToggleSidebar }: { user: GpUser; onToggleSidebar?: () => void }) {
@@ -27,7 +28,7 @@ export function Header({ user, onToggleSidebar }: { user: GpUser; onToggleSideba
           aria-label="Alternar navegação"
           className="md:hidden w-9 h-9 grid place-items-center rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg)]"
         >
-          ☰
+          <Icon name="menu" size={18} />
         </button>
       )}
       <span className="font-bold text-[var(--accent)] tracking-tight">Grupo Participa</span>
@@ -49,7 +50,7 @@ export function Header({ user, onToggleSidebar }: { user: GpUser; onToggleSideba
           title="Alternar tema claro/escuro"
           className="w-8 h-8 grid place-items-center rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--fg)]"
         >
-          {theme === 'dark' ? '☀' : '☾'}
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
         </button>
         <button
           type="button"

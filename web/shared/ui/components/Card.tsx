@@ -1,3 +1,5 @@
+import { Icon } from '@/shared/ui/icons';
+
 /** Superfície elevada padrão (surface-2 + borda + sombra sutil). Profundidade consistente. */
 export function Card({ children, className = '', as: As = 'div', ...rest }: { children: React.ReactNode; className?: string; as?: React.ElementType } & React.HTMLAttributes<HTMLElement> & Partial<Pick<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href' | 'target' | 'rel'>>) {
   return (
@@ -73,10 +75,10 @@ export function SectionTitle({ children, right }: { children: React.ReactNode; r
   );
 }
 
-export function EmptyState({ title, hint, icon = '∅' }: { title: string; hint?: string; icon?: string }) {
+export function EmptyState({ title, hint, icon = 'inbox' }: { title: string; hint?: string; icon?: string }) {
   return (
     <div className="py-12 text-center">
-      <div className="text-2xl opacity-40">{icon}</div>
+      <div className="flex justify-center text-[var(--fg-3)] opacity-60"><Icon name={icon} size={30} strokeWidth={1.5} /></div>
       <div className="mt-2 text-sm text-[var(--fg-2)]">{title}</div>
       {hint && <div className="mt-1 text-xs text-[var(--fg-3)]">{hint}</div>}
     </div>

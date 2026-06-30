@@ -18,6 +18,7 @@ import { loadAlunos360, loadTurmas, loadPlacaHistorico, updateAluno, type Turma,
 import { AUDIT_STEPS } from '@/modules/placas/domain/auditoria';
 import { cursoDesempenhoMock } from '../domain/curso-mock';
 import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Drawer, Tabs, Button, Toolbar, SearchInput, FilterSelect, KpiCard, ProgressBar, Spinner } from '@/shared/ui/components';
+import { Icon } from '@/shared/ui/icons';
 import { DashboardAlunos } from './DashboardAlunos';
 
 type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento';
@@ -54,7 +55,7 @@ function CopyText({ value, display }: { value: string; display?: string }) {
       className="group inline-flex items-center gap-1 text-xs text-[var(--fg-3)] hover:text-[var(--accent)] transition-colors max-w-full"
     >
       <span className="truncate">{display || value}</span>
-      <span className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0">{copied ? '✓' : '⧉'}</span>
+      <span className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 inline-flex">{copied ? <Icon name="check" size={13} /> : <Icon name="copy" size={13} />}</span>
     </button>
   );
 }
@@ -209,7 +210,7 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
           })}
         </tbody>
       </DataTable>
-      {!filtered.length && !loading && <EmptyState title="Nenhum aluno encontrado" hint="Ajuste a busca ou os filtros." icon="👥" />}
+      {!filtered.length && !loading && <EmptyState title="Nenhum aluno encontrado" hint="Ajuste a busca ou os filtros." icon="users" />}
       {filtered.length > 500 && <p className="text-xs text-[var(--fg-3)] mt-2">Exibindo 500 de {filtered.length}. Refine a busca.</p>}
       </>
       )}
@@ -349,7 +350,7 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
                 <Row k="Holding Total (HT)" v={a.tem_ht ? `Sim${a.ativacao_ht_status ? ` · ${a.ativacao_ht_status}` : ''}` : 'Não'} />
                 <Row k="Holding Masters (HM)" v={a.tem_hm ? `Sim${a.hm_plano ? ` · ${a.hm_plano}` : ''}` : 'Não'} />
                 <Row k="Hotmart UCode" v={a.hotmart_ucode} />
-                <Row k="Registrado no SIP" v={a.sip_registrado ? 'Sim ✓' : 'Não'} />
+                <Row k="Registrado no SIP" v={a.sip_registrado ? 'Sim' : 'Não'} />
 
                 {(a.cs_estagio || a.cs_responsavel || a.cs_observacoes) && (
                   <>
@@ -360,7 +361,7 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
                   </>
                 )}
 
-                {a.tratamento_manual && <div className="mt-3 p-2 rounded bg-[var(--yellow-subtle)] text-[var(--yellow)] text-xs">⚠ {a.tratamento_manual}</div>}
+                {a.tratamento_manual && <div className="mt-3 p-2 rounded bg-[var(--yellow-subtle)] text-[var(--yellow)] text-xs flex items-center gap-1.5"><Icon name="alert" size={13} /> {a.tratamento_manual}</div>}
                 {a.obs_central && <Row k="Obs" v={a.obs_central} />}
               </Section>
             )}
@@ -372,7 +373,7 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
                   const info = rs ? RENOVACAO_LABEL[rs] : null;
                   return info ? (
                     <div className={`p-2.5 rounded-[var(--r-md)] mb-2 text-xs ${rs === 'em_renovacao' ? 'bg-[var(--yellow-subtle)] text-[var(--yellow)]' : 'bg-[var(--red-subtle)] text-[var(--red)]'}`}>
-                      {rs === 'em_renovacao' ? '🔄' : '⚠'} {info.label}
+                      <span className="inline-flex items-center gap-1.5">{rs === 'em_renovacao' ? <Icon name="refresh" size={12} /> : <Icon name="alert" size={12} />} {info.label}</span>
                       <div className="text-[var(--fg-3)] mt-0.5">
                         {rs === 'em_renovacao'
                           ? `Turma ${a.turma_codigo} (T1–T29): segue o processo de renovação.`
@@ -411,8 +412,8 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
                 <Row k="Último pagamento" v={dataBR(a.ultimo_pagamento)} />
                 <Row k="Nº de cobranças" v={a.num_cobrancas != null ? String(a.num_cobrancas) : '—'} />
                 {saldo > 0
-                  ? <div className="mt-3 p-2 rounded bg-[var(--red-subtle)] text-[var(--red)] text-xs">⚠ Regularização necessária — saldo em aberto: {money(saldo)}</div>
-                  : <div className="mt-3 p-2 rounded bg-[var(--green-subtle)] text-[var(--green)] text-xs">✓ Sem pendências financeiras</div>}
+                  ? <div className="mt-3 p-2 rounded bg-[var(--red-subtle)] text-[var(--red)] text-xs flex items-center gap-1.5"><Icon name="alert" size={13} /> Regularização necessária — saldo em aberto: {money(saldo)}</div>
+                  : <div className="mt-3 p-2 rounded bg-[var(--green-subtle)] text-[var(--green)] text-xs flex items-center gap-1.5"><Icon name="check" size={13} /> Sem pendências financeiras</div>}
               </Section>
             )}
             {tab === 'jornada' && (
@@ -449,7 +450,7 @@ function JornadaCard({ label, on, extra, href }: { label: string; on: boolean; e
     <div className={`p-3 rounded-[var(--r-md)] border mb-2 ${on ? 'border-[var(--accent-border)]' : 'border-[var(--border)] opacity-60'}`}>
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-[var(--fg)]">{label}</span>
-        <span className="text-xs" style={{ color: on ? 'var(--green)' : 'var(--fg-3)' }}>{on ? '✓ Sim' : '— Não'}</span>
+        <span className="text-xs" style={{ color: on ? 'var(--green)' : 'var(--fg-3)' }}>{on ? <span className="inline-flex items-center gap-1"><Icon name="check" size={12} /> Sim</span> : 'Não'}</span>
       </div>
       {extra && <div className="text-xs text-[var(--fg-3)] mt-1">{extra}</div>}
     </div>
@@ -505,8 +506,8 @@ function SipJornada({ email, on }: { email: string | null; on: boolean }) {
       <button type="button" onClick={toggle} className="w-full p-3 flex items-center justify-between text-left">
         <span className="text-sm font-medium text-[var(--fg)]">SIP — Time Holding Brasil</span>
         <span className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: on ? 'var(--green)' : 'var(--fg-3)' }}>{on ? '✓ Sim' : '— Não'}</span>
-          <span className="text-[var(--fg-3)] text-[10px] transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }}>▾</span>
+          <span className="text-xs" style={{ color: on ? 'var(--green)' : 'var(--fg-3)' }}>{on ? <span className="inline-flex items-center gap-1"><Icon name="check" size={12} /> Sim</span> : 'Não'}</span>
+          <span className="text-[var(--fg-3)] inline-flex transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }}><Icon name="chevron-down" size={13} /></span>
         </span>
       </button>
       {open && (
@@ -531,7 +532,7 @@ function SipJornada({ email, on }: { email: string | null; on: boolean }) {
               {data.raiox && <Row k="Raio-X" v={`${data.raiox.score}${data.raiox.max ? '/' + data.raiox.max : ''}`} />}
               <Row k="Onboarding" v={data.onboarding_done ? 'Concluído' : 'Pendente'} />
               <a href={sipUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent)] hover:underline">
-                Abrir card no SIP ↗
+                Abrir card no SIP <Icon name="arrow-up-right" size={13} />
               </a>
             </div>
           ) : (
@@ -556,7 +557,7 @@ function PlacaJornada({ on, hist, loading }: { on: boolean; hist: PlacaHistorico
     <div className={`p-3 rounded-[var(--r-md)] border mb-2 ${on ? 'border-[var(--accent-border)]' : 'border-[var(--border)] opacity-60'}`}>
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-[var(--fg)]">Placa de Resultado</span>
-        <span className="text-xs" style={{ color: on ? 'var(--green)' : 'var(--fg-3)' }}>{on ? '✓ Sim' : '— Não'}</span>
+        <span className="text-xs" style={{ color: on ? 'var(--green)' : 'var(--fg-3)' }}>{on ? <span className="inline-flex items-center gap-1"><Icon name="check" size={12} /> Sim</span> : 'Não'}</span>
       </div>
 
       {on && loading && <div className="text-xs text-[var(--fg-3)] mt-2">Carregando histórico…</div>}

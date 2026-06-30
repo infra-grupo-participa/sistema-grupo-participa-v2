@@ -1,3 +1,5 @@
+import { Icon } from '@/shared/ui/icons';
+
 /** Linha do tempo vertical (paridade .historico-list / steps de auditoria do legado). */
 
 const DOT: Record<string, string> = {
@@ -37,7 +39,7 @@ function TimelineItem({ icon, tone = 'base', title, meta, body, done, last }: Ti
           border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
         }}
       >
-        {icon ?? (done ? '✓' : '')}
+        {icon ?? (done ? <Icon name="check" size={11} strokeWidth={3} /> : null)}
       </span>
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-sm font-medium text-[var(--fg)]">{title}</span>

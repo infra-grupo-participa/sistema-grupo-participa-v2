@@ -5,6 +5,7 @@ import { applyDashFilters, computeAlunosMetrics, computeTurmaNivelMatrix, type D
 import type { Aluno360 } from '../domain/aluno-360';
 import { nivelOptions } from '@/shared/domain/nivel-resultado';
 import { Card, StatCard, SectionTitle, Button, FilterSelect } from '@/shared/ui/components';
+import { Icon } from '@/shared/ui/icons';
 
 const VIEWS_KEY = 'gp_dash_views';
 /* viz-colors: paleta de fatias do donut por turma — cores de gráfico, não da UI */
@@ -59,7 +60,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
         <Filtro value={filtros.turma || ''} onChange={(v) => set('turma', v)} placeholder="Todas as turmas" options={turmas.map((t) => ({ value: t, label: t }))} />
         <Filtro value={filtros.estado || ''} onChange={(v) => set('estado', v)} placeholder="Todos os estados" options={estados.map((e) => ({ value: e, label: e }))} />
         {temFiltro && <Button variant="ghost" size="sm" onClick={() => { setFiltros({}); setView('alunos'); }}>Limpar</Button>}
-        <Button variant="subtle" size="sm" onClick={salvarVisao}>★ Salvar visão</Button>
+        <Button variant="subtle" size="sm" onClick={salvarVisao}><Icon name="star" size={13} /> Salvar visão</Button>
       </div>
 
       {views.length > 0 && (
@@ -67,7 +68,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
           {views.map((v) => (
             <span key={v.name} className="inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[var(--border)] bg-[var(--surface-2)] pl-3 pr-1.5 py-1 text-xs">
               <button onClick={() => { setView(v.view); setFiltros(v.filtros); }} className="text-[var(--fg-2)] hover:text-[var(--accent)] font-medium">{v.name}</button>
-              <button onClick={() => persistViews(views.filter((x) => x.name !== v.name))} className="text-[var(--fg-4)] hover:text-[var(--red)]">✕</button>
+              <button onClick={() => persistViews(views.filter((x) => x.name !== v.name))} className="text-[var(--fg-4)] hover:text-[var(--red)] inline-flex"><Icon name="x" size={12} /></button>
             </span>
           ))}
         </div>

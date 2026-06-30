@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge, Button, Modal, ProgressBar, Timeline, type TimelineEntry } from '@/shared/ui/components';
+import { Icon } from '@/shared/ui/icons';
 import './solicitar-placa.css';
 import { maskPhoneMobile, maskPhoneLandline, maskDoc, maskCep, maskCurrency, currencyDigits } from './masks';
 import { cepLookup, placaDuplicateCheck, placaGet, placaRecover, placaSave, placaUpload } from './placa-api';
@@ -24,14 +25,14 @@ const ESPACOS = [
   { v: 'mastermind', l: 'Mastermind Diamante' },
 ];
 const NIVEIS = [
-  { v: 'iniciante', ic: '🌱', nm: 'Iniciante', fx: 'Ainda não comecei' },
-  { v: 'em_formacao', ic: '📚', nm: 'Em Formação', fx: 'Estudando o curso' },
-  { v: 'pessoal', ic: '👤', nm: 'Pessoal', fx: 'Só minha holding' },
-  { v: 'profissional', ic: '💼', nm: 'Profissional', fx: 'Oferecendo a clientes' },
-  { v: 'ouro', ic: '🥇', nm: 'Ouro', fx: 'Primeiros R$ 50k faturado' },
-  { v: 'platina', ic: '🪙', nm: 'Platina', fx: 'R$ 500k em 12 meses' },
-  { v: 'diamante', ic: '💎', nm: 'Diamante', fx: 'R$ 1M em 12 meses' },
-  { v: 'diamante_vermelho', ic: '🔴', nm: 'Diamante Vermelho', fx: 'R$ 5M em 12 meses' },
+  { v: 'iniciante', ic: 'sprout', nm: 'Iniciante', fx: 'Ainda não comecei' },
+  { v: 'em_formacao', ic: 'biblioteca', nm: 'Em Formação', fx: 'Estudando o curso' },
+  { v: 'pessoal', ic: 'user', nm: 'Pessoal', fx: 'Só minha holding' },
+  { v: 'profissional', ic: 'briefcase', nm: 'Profissional', fx: 'Oferecendo a clientes' },
+  { v: 'ouro', ic: 'medal', nm: 'Ouro', fx: 'Primeiros R$ 50k faturado' },
+  { v: 'platina', ic: 'coins', nm: 'Platina', fx: 'R$ 500k em 12 meses' },
+  { v: 'diamante', ic: 'gem', nm: 'Diamante', fx: 'R$ 1M em 12 meses' },
+  { v: 'diamante_vermelho', ic: 'gem', nm: 'Diamante Vermelho', fx: 'R$ 5M em 12 meses' },
 ];
 
 type Form = Record<string, string>;
@@ -297,7 +298,7 @@ export function SolicitarPlacaClient({ initialToken }: { initialToken: string })
               <div className="sp-level-grid">
                 {NIVEIS.map((o) => (
                   <label key={o.v} className={`sp-level ${form.nivel === o.v ? 'sel' : ''}`} onClick={() => set('nivel', o.v)}>
-                    <div className="ic">{o.ic}</div><div className="nm">{o.nm}</div><div className="fx">{o.fx}</div>
+                    <div className="ic"><Icon name={o.ic} size={22} /></div><div className="nm">{o.nm}</div><div className="fx">{o.fx}</div>
                   </label>
                 ))}
               </div>
@@ -317,10 +318,10 @@ export function SolicitarPlacaClient({ initialToken }: { initialToken: string })
         {step === 4 && (
           <Section title="4. Comprovação" subtitle="Envie os documentos que comprovem o nível informado.">
             <div className="sp-info">Faça o upload de um PDF/imagem com contratos, notas fiscais ou extratos que comprovem seu faturamento com Holding Familiar.</div>
-            <div className="sp-warn">⚠️ Certifique-se de que o arquivo esteja legível (PDF ou imagem, até 10MB).</div>
+            <div className="sp-warn"><Icon name="alert" size={14} /> Certifique-se de que o arquivo esteja legível (PDF ou imagem, até 10MB).</div>
             <Field label="Documento comprobatório (PDF ou imagem)" req>
               <input type="file" accept=".pdf,image/*" onChange={(e) => onUpload('comprovante', e.target.files?.[0] ?? null)} />
-              {form.proof_url && <div className="sp-hint">✓ Arquivo enviado.</div>}
+              {form.proof_url && <div className="sp-hint"><Icon name="check" size={13} /> Arquivo enviado.</div>}
             </Field>
             {err && <p className="sp-err">{err}</p>}
             <Nav busy={busy} onBack={() => goBack(4)} onNext={() => goNext(4)} nextLabel="Continuar para declaração →" />
@@ -330,11 +331,11 @@ export function SolicitarPlacaClient({ initialToken }: { initialToken: string })
         {step === 5 && (
           <Section title="5. Declaração" subtitle="Validação formal do nível de faturamento informado.">
             <div className="sp-info"><strong>Passo 1:</strong> baixe o modelo oficial, preencha os campos de identificação e assine — sem alterar o texto base.</div>
-            <a className="sp-btn-back" href="/modelos/declaracao-faturamento.pdf" target="_blank" rel="noopener" style={{ display: 'inline-block', marginBottom: 12 }}>⬇️ Baixar Modelo da Declaração</a>
-            <div className="sp-warn"><strong>⚠️ Atenção:</strong> após assinar, faça o upload do arquivo original (sem edições no texto base).</div>
+            <a className="sp-btn-back inline-flex items-center gap-1.5" href="/modelos/declaracao-faturamento.pdf" target="_blank" rel="noopener" style={{ marginBottom: 12 }}><Icon name="download" size={15} /> Baixar Modelo da Declaração</a>
+            <div className="sp-warn"><strong className="inline-flex items-center gap-1.5"><Icon name="alert" size={14} /> Atenção:</strong> após assinar, faça o upload do arquivo original (sem edições no texto base).</div>
             <Field label="Declaração assinada (PDF ou imagem)" req>
               <input type="file" accept=".pdf,image/*" onChange={(e) => onUpload('declaracao', e.target.files?.[0] ?? null)} />
-              {form.declaracao_url && <div className="sp-hint">✓ Arquivo enviado.</div>}
+              {form.declaracao_url && <div className="sp-hint"><Icon name="check" size={13} /> Arquivo enviado.</div>}
             </Field>
             {err && <p className="sp-err">{err}</p>}
             <Nav busy={busy} onBack={() => goBack(5)} onNext={() => goNext(5)} nextLabel="Continuar para endereço →" />
@@ -358,7 +359,7 @@ export function SolicitarPlacaClient({ initialToken }: { initialToken: string })
               </select>
             </Field>
             {err && <p className="sp-err">{err}</p>}
-            <Nav busy={busy} onBack={() => goBack(6)} onNext={() => goNext(6)} nextLabel="Concluir solicitação ✓" />
+            <Nav busy={busy} onBack={() => goBack(6)} onNext={() => goNext(6)} nextLabel="Concluir solicitação" />
           </Section>
         )}
       </div>
@@ -425,7 +426,7 @@ function SuccessCard({ kind }: { kind: 'success' | 'cadastro' }) {
   return (
     <div className="sp-card">
       <div className="sp-card-body sp-success">
-        <div className="em">{isCad ? '✅' : '🎉'}</div>
+        <div className="em"><Icon name={isCad ? 'check-circle' : 'party'} size={44} /></div>
         <h1 style={{ fontSize: 22, fontWeight: 800, marginTop: 8 }}>{isCad ? 'Cadastro registrado com sucesso!' : 'Recebemos sua solicitação!'}</h1>
         <p style={{ color: 'var(--muted)', marginTop: 8 }}>
           {isCad
@@ -445,7 +446,7 @@ function TrackingCard({ data }: { data: Record<string, unknown> }) {
     body: s.note,
     tone: i < activeIndex ? 'green' : i === activeIndex ? 'accent' : 'base',
     done: i < activeIndex,
-    icon: i < activeIndex ? '✓' : String(i + 1),
+    icon: i < activeIndex ? undefined : String(i + 1),
   }));
   return (
     <div className="sp-card">

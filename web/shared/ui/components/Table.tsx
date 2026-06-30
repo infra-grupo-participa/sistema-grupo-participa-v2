@@ -1,5 +1,7 @@
 'use client';
 
+import { Icon } from '@/shared/ui/icons';
+
 /** Tabela densa e legível: header sticky, hover sutil, sem zebra. */
 export function DataTable({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
@@ -41,7 +43,7 @@ export function Th({
     >
       <span className="inline-flex items-center gap-1">
         {children}
-        {sortable && <span className="text-[var(--accent)] w-2 inline-block">{active ? (dir === 'asc' ? '↑' : '↓') : ''}</span>}
+        {sortable && <span className="text-[var(--accent)] inline-flex w-3">{active ? <Icon name={dir === 'asc' ? 'arrow-up' : 'arrow-down'} size={12} /> : null}</span>}
       </span>
     </th>
   );

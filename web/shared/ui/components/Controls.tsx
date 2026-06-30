@@ -1,6 +1,7 @@
 'use client';
 
 import { forwardRef } from 'react';
+import { Icon } from '@/shared/ui/icons';
 
 /** Barra de ferramentas — agrupa busca, filtros e ações com espaçamento consistente. */
 export function Toolbar({ children, className = '' }: { children: React.ReactNode; className?: string }) {
@@ -16,7 +17,7 @@ export const SearchInput = forwardRef<HTMLInputElement, React.InputHTMLAttribute
   function SearchInput({ className = '', ...rest }, ref) {
     return (
       <div className="relative min-w-[200px] flex-1">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fg-3)] text-sm">🔍</span>
+        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--fg-3)]"><Icon name="search" size={15} /></span>
         <input ref={ref} type="search" className={`${inputCls} pl-8 ${className}`} {...rest} />
       </div>
     );
@@ -42,7 +43,7 @@ export const FilterSelect = forwardRef<HTMLSelectElement, React.SelectHTMLAttrib
         >
           {children}
         </select>
-        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--fg-3)] text-[10px]">▾</span>
+        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[var(--fg-3)]"><Icon name="chevron-down" size={14} /></span>
       </div>
     );
   },

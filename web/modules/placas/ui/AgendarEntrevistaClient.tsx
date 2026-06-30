@@ -111,7 +111,7 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
           <Head title="Sessão não encontrada" subtitle="" orange />
           <div className="sp-card-body">
             <EmptyState
-              icon="🔒"
+              icon="lock"
               title="Não localizamos sua solicitação"
               hint="Acesse pelo link enviado por e-mail."
             />
@@ -124,7 +124,7 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
           <Head title="Entrevista já concluída" subtitle="" orange />
           <div className="sp-card-body">
             <EmptyState
-              icon="✓"
+              icon="check"
               title="Não é possível reagendar"
               hint="Sua entrevista já foi concluída. Acompanhe o andamento na página de acompanhamento."
             />
@@ -137,7 +137,7 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
           <Head title="Sem horários disponíveis" subtitle="" orange />
           <div className="sp-card-body">
             <EmptyState
-              icon="🗓️"
+              icon="calendar-days"
               title="Nenhum horário aberto no momento"
               hint="Não há horários abertos para entrevista. Tente novamente mais tarde."
             />
@@ -191,7 +191,7 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
 
       {view === 'success' && (
         <Card>
-          <Head title="Entrevista confirmada! 🎉" subtitle="" orange />
+          <Head title="Entrevista confirmada!" subtitle="" orange />
           <div className="sp-card-body">
             <div style={{ marginBottom: 16 }}>
               <Badge tone="success" dot>Agendamento confirmado</Badge>
