@@ -98,6 +98,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
               { key: 'hm', label: 'Holding Masters', count: m.hm, color: 'var(--accent)' },
               { key: 'placa', label: 'Com placa', count: m.placa, color: 'var(--nivel-ouro)' },
               { key: 'dep', label: 'Com depoimento', count: m.depoimento, color: 'var(--green)' },
+              { key: 'sip', label: 'Com SIP (Time Holding Brasil)', count: m.sip, color: 'var(--nivel-diamante-vermelho)' },
             ]}
             total={m.total}
           />

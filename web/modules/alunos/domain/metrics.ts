@@ -38,6 +38,7 @@ export interface AlunosMetrics {
   hm: number;
   placa: number;
   depoimento: number;
+  sip: number;
   aurum: number;
   socios: number;
   porNivel: Distribuicao[];
@@ -125,6 +126,7 @@ export function computeAlunosMetrics(alunos: Aluno360[], view: DashView = 'aluno
     hm: base.filter((a) => a.tem_hm).length,
     placa: base.filter((a) => a.tem_placa).length,
     depoimento: base.filter((a) => a.tem_depoimento).length,
+    sip: base.filter((a) => a.sip_registrado).length,
     aurum: base.filter((a) => a.turma_aurum_id != null).length,
     socios: alunos.filter((a) => a.eh_socio).length,
     porNivel,

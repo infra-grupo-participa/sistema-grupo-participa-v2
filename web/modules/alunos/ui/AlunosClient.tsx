@@ -6,6 +6,9 @@ import {
   ESPACO_LABEL,
   NRANK,
   SITUACAO,
+  STATUS_ACESSO,
+  SITUACAO_FINANCEIRA,
+  SUGESTOES,
   RENOVACAO_LABEL,
   renovacaoStatus,
   searchHaystack,
@@ -104,6 +107,7 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
       if (f.jornada === 'com_hm' && !a.tem_hm) return false;
       if (f.jornada === 'com_placa' && !a.tem_placa) return false;
       if (f.jornada === 'com_depoimento' && !a.tem_depoimento) return false;
+      if (f.jornada === 'com_sip' && !a.sip_registrado) return false;
       return true;
     });
     list.sort((a, b) => {
@@ -166,7 +170,7 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
         <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, e-mail, documento, cidade…" className="flex-1 min-w-[220px] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" />
         <Sel value={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={nivelOptions().map((n) => ({ value: n.id, label: n.label }))} />
         <Sel value={filtros.espaco} onChange={(v) => setFiltros((f) => ({ ...f, espaco: v }))} placeholder="Todos os espaços" options={Object.entries(ESPACO_LABEL).map(([k, l]) => ({ value: k, label: l }))} />
-        <Sel value={filtros.jornada} onChange={(v) => setFiltros((f) => ({ ...f, jornada: v }))} placeholder="Toda jornada" options={[{ value: 'com_ht', label: 'Com HT' }, { value: 'com_hm', label: 'Com HM' }, { value: 'com_placa', label: 'Com placa' }, { value: 'com_depoimento', label: 'Com depoimento' }]} />
+        <Sel value={filtros.jornada} onChange={(v) => setFiltros((f) => ({ ...f, jornada: v }))} placeholder="Toda jornada" options={[{ value: 'com_ht', label: 'Com HT' }, { value: 'com_hm', label: 'Com HM' }, { value: 'com_placa', label: 'Com placa' }, { value: 'com_depoimento', label: 'Com depoimento' }, { value: 'com_sip', label: 'Com SIP' }]} />
         <Sel value={filtros.situacao} onChange={(v) => setFiltros((f) => ({ ...f, situacao: v }))} placeholder="Toda situação" options={[...Object.entries(SITUACAO).map(([k, s]) => ({ value: k, label: s.label })), { value: 'inadimplente', label: 'Inadimplente' }]} />
       </div>
 
@@ -238,10 +242,10 @@ function Sel({ value, onChange, placeholder, options }: { value: string; onChang
 // ── Drawer 360 ──
 const TABS = [
   { k: 'geral', l: 'Geral' },
-  { k: 'acesso', l: 'Acesso' },
+  { k: 'acesso', l: 'Acesso ao Curso' },
+  { k: 'financeiro', l: 'Financeiro' },
   { k: 'curso', l: 'Curso' },
   { k: 'renovacao', l: 'Renovação' },
-  { k: 'financeiro', l: 'Financeiro' },
   { k: 'jornada', l: 'Jornada' },
 ];
 
@@ -268,7 +272,6 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
   const saldo = Number(a.saldo_devedor) || 0;
   const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
   const espaco = ESPACO_LABEL[a.espaco_instrucao || ''] || null;
-  const sitTone = sit ? (sit.cls === 'green' ? 'success' : sit.cls === 'red' ? 'danger' : sit.cls === 'yellow' ? 'warning' : 'neutral') : 'neutral';
 
   return (
     <Drawer
@@ -278,7 +281,7 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
       badges={
         !editMode ? (
           <>
-            {sit && <Badge tone={sitTone} dot>{sit.label}</Badge>}
+            {sit && <Badge tone={sitTone(sit.cls)} dot>{sit.label}</Badge>}
             {a.nivel_resultado && <NivelBadge nivel={a.nivel_resultado} />}
             {espaco && <Badge tone="info">{espaco}</Badge>}
             {a.eh_socio && <Badge tone="accent">Sócio</Badge>}
@@ -310,26 +313,58 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
             )}
             {tab === 'acesso' && (
               <Section>
+                {(() => {
+                  const st = a.status_acesso ? STATUS_ACESSO[a.status_acesso] : null;
+                  return (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {sit && <Badge tone={sitTone(sit.cls)} dot>{sit.label}</Badge>}
+                      {st && <Badge tone={st.cls === 'green' ? 'success' : st.cls === 'blue' ? 'info' : 'neutral'}>{st.label}</Badge>}
+                      {a.status_acesso_central && <Badge tone="neutral">{a.status_acesso_central}</Badge>}
+                    </div>
+                  );
+                })()}
+
+                <SubTitle>Produto & oferta</SubTitle>
+                <Row k="Produto" v={a.produto} />
+                <Row k="Oferta" v={a.oferta} />
+                <Row k="Tipo de oferta" v={a.tipo_oferta} />
+                <Row k="Origem de acesso" v={a.origem_acesso} />
+                <Row k="Instrução" v={a.instrucao} />
+                <Row k="Espaço de instrução" v={espaco} />
+
+                <SubTitle>Programa</SubTitle>
                 <Row k="Nível de resultado" v={nivelLabel(a.nivel_resultado) || '—'} />
-                <Row k="Espaço de instrução" v={espaco || '—'} />
-                <Row k="Turma" v={[a.turma_codigo, a.turma_aurum_codigo].filter(Boolean).join(' · ') || '—'} />
+                <Row k="Turma THB" v={a.turma_codigo} />
+                <Row k="Turma Aurum" v={a.turma_aurum_codigo} />
                 {a.placa_aurum && <Row k="Placa Aurum" v={a.placa_aurum} />}
-                {a.status_acesso_central && <Row k="Status" v={a.status_acesso_central} />}
-                {a.produto && <Row k="Produto" v={a.produto} />}
-                {a.regra_acesso && <Row k="Regra de acesso" v={a.regra_acesso} />}
-                {a.origem_acesso && <Row k="Origem" v={a.origem_acesso} />}
+
+                <SubTitle>Vigência</SubTitle>
+                <Row k="Regra de acesso" v={a.regra_acesso} />
+                <Row k="Tempo de acesso" v={a.tempo_acesso} />
+                <Row k="Vencimento" v={dataBR(a.data_expiracao)} />
+                {(a.mes_expiracao || a.ano_expiracao) && <Row k="Mês/Ano expiração" v={[a.mes_expiracao, a.ano_expiracao].filter(Boolean).join('/')} />}
+                <Row k="Data da compra" v={dataBR(a.data_compra_importada)} />
+
+                <SubTitle>Hotmart</SubTitle>
+                <Row k="Holding Total (HT)" v={a.tem_ht ? `Sim${a.ativacao_ht_status ? ` · ${a.ativacao_ht_status}` : ''}` : 'Não'} />
+                <Row k="Holding Masters (HM)" v={a.tem_hm ? `Sim${a.hm_plano ? ` · ${a.hm_plano}` : ''}` : 'Não'} />
+                <Row k="Hotmart UCode" v={a.hotmart_ucode} />
                 <Row k="Registrado no SIP" v={a.sip_registrado ? 'Sim ✓' : 'Não'} />
+
                 {(a.cs_estagio || a.cs_responsavel || a.cs_observacoes) && (
-                  <><div className="text-xs font-semibold text-[var(--fg-3)] mt-3 mb-1">Acompanhamento CS</div>
+                  <>
+                    <SubTitle>Acompanhamento CS</SubTitle>
                     {a.cs_estagio && <Row k="Estágio" v={a.cs_estagio} />}
                     {a.cs_responsavel && <Row k="Responsável" v={a.cs_responsavel} />}
-                    {a.cs_observacoes && <Row k="Obs (CS)" v={a.cs_observacoes} />}</>
+                    {a.cs_observacoes && <Row k="Obs (CS)" v={a.cs_observacoes} />}
+                  </>
                 )}
+
                 {a.tratamento_manual && <div className="mt-3 p-2 rounded bg-[var(--yellow-subtle)] text-[var(--yellow)] text-xs">⚠ {a.tratamento_manual}</div>}
                 {a.obs_central && <Row k="Obs" v={a.obs_central} />}
               </Section>
             )}
-            {tab === 'curso' && <CursoTab alunoId={a.id} />}
+            {tab === 'curso' && <CursoTab />}
             {tab === 'renovacao' && (
               <Section>
                 {(() => {
@@ -356,14 +391,25 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
             )}
             {tab === 'financeiro' && (
               <Section>
+                <div className="text-xs text-[var(--fg-3)] mb-2">Situação financeira quanto à adesão ao THB.</div>
+                {(() => {
+                  const sf = a.situacao_financeira ? SITUACAO_FINANCEIRA[a.situacao_financeira] : null;
+                  return (
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {sf && <Badge tone={sitTone(sf.cls)} dot>{sf.label}</Badge>}
+                      {a.status_pagamento && <Badge tone="neutral">{a.status_pagamento}</Badge>}
+                    </div>
+                  );
+                })()}
                 <div className="grid grid-cols-3 gap-3 mb-3">
                   <Kpi label="Pago" value={money(a.valor_pago)} color="var(--green)" />
                   <Kpi label="Total" value={money(a.valor_total)} />
                   <Kpi label="Saldo devedor" value={money(saldo)} color={saldo > 0 ? 'var(--red)' : undefined} />
                 </div>
-                {a.status_pagamento && <Row k="Status" v={a.status_pagamento} />}
+                <Row k="Situação financeira" v={a.situacao_financeira ? (SITUACAO_FINANCEIRA[a.situacao_financeira]?.label || a.situacao_financeira) : '—'} />
+                <Row k="Status de pagamento" v={a.status_pagamento} />
                 <Row k="Último pagamento" v={dataBR(a.ultimo_pagamento)} />
-                {a.num_cobrancas != null && <Row k="Nº de cobranças" v={String(a.num_cobrancas)} />}
+                <Row k="Nº de cobranças" v={a.num_cobrancas != null ? String(a.num_cobrancas) : '—'} />
                 {saldo > 0
                   ? <div className="mt-3 p-2 rounded bg-[var(--red-subtle)] text-[var(--red)] text-xs">⚠ Regularização necessária — saldo em aberto: {money(saldo)}</div>
                   : <div className="mt-3 p-2 rounded bg-[var(--green-subtle)] text-[var(--green)] text-xs">✓ Sem pendências financeiras</div>}
@@ -375,6 +421,7 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
                 <JornadaCard label="Holding Masters" on={!!a.tem_hm} extra={a.hm_plano ? `Plano: ${a.hm_plano}` : ''} />
                 <PlacaJornada on={temPlaca} hist={placaHist} loading={placaLoading} />
                 <JornadaCard label="Depoimento" on={!!a.tem_depoimento} extra={a.total_depoimentos ? `${a.total_depoimentos} depoimento(s)` : ''} href={a.tem_depoimento ? '/depoimentos' : undefined} />
+                <JornadaCard label="SIP — Time Holding Brasil" on={!!a.sip_registrado} extra={a.sip_registrado ? 'Possui registro no SIP (cruzado por e-mail)' : 'Sem registro no SIP'} />
                 <div className="text-xs font-semibold text-[var(--fg-3)] mt-3 mb-1">Metadados</div>
                 {a.fonte && <Row k="Fonte" v={a.fonte} />}
                 <Row k="Importado em" v={dataBR(a.importado_em)} />
@@ -388,6 +435,9 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
   );
 }
 
+function SubTitle({ children }: { children: React.ReactNode }) {
+  return <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)] mt-3 mb-1 pt-1 border-t border-[var(--border-faint)]">{children}</div>;
+}
 function Section({ children }: { children: React.ReactNode }) {
   return <div className="space-y-1.5">{children}</div>;
 }
@@ -469,30 +519,30 @@ function PlacaJornada({ on, hist, loading }: { on: boolean; hist: PlacaHistorico
 }
 
 // ── Curso: desempenho (DADOS ILUSTRATIVOS / MOCK) ──
-function CursoTab({ alunoId }: { alunoId: string }) {
-  const m = useMemo(() => cursoDesempenhoMock(alunoId), [alunoId]);
+function CursoTab() {
+  const m = useMemo(() => cursoDesempenhoMock(), []);
   return (
     <Section>
       <div className="p-2 rounded-[var(--r-md)] bg-[var(--surface-3)] text-[10px] text-[var(--fg-3)] mb-2">
-        ⓘ Dados ilustrativos — sem integração real de progresso de curso ainda.
+        ⓘ Demonstração de layout — ainda sem integração de progresso de curso. Os valores aparecem zerados de propósito.
       </div>
       <div className="grid grid-cols-3 gap-3 mb-3">
-        <Kpi label="Progresso" value={`${m.progressoGeral}%`} color={m.progressoGeral >= 66 ? 'var(--green)' : m.progressoGeral >= 33 ? 'var(--yellow)' : 'var(--red)'} />
+        <Kpi label="Progresso" value={`${m.progressoGeral}%`} />
         <Kpi label="Módulos" value={`${m.modulosConcluidos}/${m.modulosTotal}`} />
         <Kpi label="Aulas" value={`${m.aulasAssistidas}/${m.aulasTotal}`} />
       </div>
-      <Row k="Engajamento" v={m.engajamento} />
-      <Row k="Último acesso" v={m.ultimoAcessoDias === 0 ? 'Hoje' : `Há ${m.ultimoAcessoDias} dia(s)`} />
+      <Row k="Engajamento" v="—" />
+      <Row k="Último acesso" v="—" />
       <div className="text-xs font-semibold text-[var(--fg-3)] mt-3 mb-1">Progresso por módulo</div>
       <div className="space-y-2">
         {m.modulos.map((mod) => (
           <div key={mod.nome}>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-[var(--fg-2)]">{mod.nome}</span>
-              <span className="text-[var(--fg-3)] tabular">{mod.progresso}%{mod.concluido ? ' ✓' : ''}</span>
+              <span className="text-[var(--fg-3)] tabular">{mod.progresso}%</span>
             </div>
             <div className="h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
-              <div className="h-full rounded-full" style={{ width: `${mod.progresso}%`, background: mod.concluido ? 'var(--green)' : 'var(--accent)' }} />
+              <div className="h-full rounded-full" style={{ width: `${mod.progresso}%`, background: 'var(--accent)' }} />
             </div>
           </div>
         ))}
@@ -501,19 +551,38 @@ function CursoTab({ alunoId }: { alunoId: string }) {
   );
 }
 
-// ── Formulário de edição (porta de saveAlunoEdit) ──
+// ── Formulário de edição — todos os dados do aluno, em seções (porta de saveAlunoEdit) ──
+const FIELD_CLS = 'mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1.5 text-sm text-[var(--fg)]';
+
+// Campos de texto livre persistidos como string (null se vazio).
+const TXT_FIELDS = [
+  'nome', 'email', 'telefone', 'telefone_profissional', 'tipo_documento', 'profissao',
+  'link_facebook', 'instagram_url', 'youtube_url', 'site_profissional',
+  'cep', 'endereco_logradouro', 'endereco_numero', 'endereco_complemento', 'bairro', 'cidade', 'pais',
+  'nivel_resultado', 'espaco_instrucao', 'placa_aurum', 'hotmart_ucode',
+  'produto', 'oferta', 'tipo_oferta', 'origem_acesso', 'instrucao', 'regra_acesso', 'tempo_acesso',
+  'status_acesso', 'status_acesso_central', 'situacao_acesso',
+  'situacao_financeira', 'status_pagamento',
+  'tratamento_manual', 'obs_central',
+];
+
 function EditForm({ a, turmas, onSaved }: { a: Aluno360; turmas: Turma[]; onSaved: (m: string) => void }) {
-  const [f, setF] = useState<Record<string, string>>(() => ({
-    nome: a.nome || '', email: a.email || '', telefone: a.telefone || '', telefone_profissional: a.telefone_profissional || '',
-    documento: a.documento && !a.documento.includes('*') ? a.documento : '', tipo_documento: a.tipo_documento || '', profissao: a.profissao || '',
-    link_facebook: a.link_facebook || '', instagram_url: a.instagram_url || '', youtube_url: a.youtube_url || '', site_profissional: a.site_profissional || '',
-    cep: a.cep || '', endereco_logradouro: a.endereco_logradouro || '', endereco_numero: a.endereco_numero || '', endereco_complemento: a.endereco_complemento || '',
-    bairro: a.bairro || '', cidade: a.cidade || '', estado: a.estado || '', pais: a.pais || '',
-    nivel_resultado: a.nivel_resultado || '', turma_id: a.turma_id ? String(a.turma_id) : '', turma_aurum_id: a.turma_aurum_id ? String(a.turma_aurum_id) : '',
-    espaco_instrucao: a.espaco_instrucao || '', placa_aurum: a.placa_aurum || '', hotmart_ucode: a.hotmart_ucode || '',
-    situacao_acesso: a.situacao_acesso || '', status_acesso_central: a.status_acesso_central || '',
-    data_expiracao: a.data_expiracao || '', tratamento_manual: a.tratamento_manual || '', obs_central: a.obs_central || '',
-  }));
+  const init: Record<string, string> = {};
+  for (const k of TXT_FIELDS) init[k] = (a as unknown as Record<string, unknown>)[k] != null ? String((a as unknown as Record<string, unknown>)[k]) : '';
+  init.documento = a.documento && !a.documento.includes('*') ? a.documento : '';
+  init.estado = a.estado || '';
+  init.turma_id = a.turma_id ? String(a.turma_id) : '';
+  init.turma_aurum_id = a.turma_aurum_id ? String(a.turma_aurum_id) : '';
+  init.data_expiracao = a.data_expiracao || '';
+  init.ultimo_pagamento = a.ultimo_pagamento || '';
+  init.mes_expiracao = a.mes_expiracao != null ? String(a.mes_expiracao) : '';
+  init.ano_expiracao = a.ano_expiracao != null ? String(a.ano_expiracao) : '';
+  init.valor_total = a.valor_total != null ? String(a.valor_total) : '';
+  init.valor_pago = a.valor_pago != null ? String(a.valor_pago) : '';
+  init.saldo_devedor = a.saldo_devedor != null ? String(a.saldo_devedor) : '';
+  init.num_cobrancas = a.num_cobrancas != null ? String(a.num_cobrancas) : '';
+
+  const [f, setF] = useState<Record<string, string>>(init);
   const [busy, setBusy] = useState(false);
   const s = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }));
   const thbTurmas = turmas.filter((t) => t.tipo !== 'aurum');
@@ -523,53 +592,98 @@ function EditForm({ a, turmas, onSaved }: { a: Aluno360; turmas: Turma[]; onSave
     setBusy(true);
     const fields: Record<string, unknown> = {};
     const txt = (k: string) => (f[k]?.trim() ? f[k].trim() : null);
-    for (const k of ['nome', 'email', 'telefone', 'telefone_profissional', 'tipo_documento', 'profissao', 'link_facebook', 'instagram_url', 'youtube_url', 'site_profissional', 'cep', 'endereco_logradouro', 'endereco_numero', 'endereco_complemento', 'bairro', 'cidade', 'pais', 'nivel_resultado', 'espaco_instrucao', 'placa_aurum', 'hotmart_ucode', 'situacao_acesso', 'status_acesso_central', 'data_expiracao', 'tratamento_manual', 'obs_central']) fields[k] = txt(k);
+    const numv = (k: string) => { const t = f[k]?.trim(); if (!t) return null; const n = Number(t.replace(',', '.')); return Number.isFinite(n) ? n : null; };
+    const intv = (k: string) => { const n = numv(k); return n == null ? null : Math.trunc(n); };
+    const dt = (k: string) => (f[k]?.trim() ? f[k].trim() : null);
+
+    for (const k of TXT_FIELDS) fields[k] = txt(k);
     fields.estado = f.estado?.trim() ? f.estado.trim().toUpperCase() : null;
     if (f.documento.trim()) fields.documento = f.documento.trim(); // só sobrescreve se preenchido (mascarado fica vazio)
     fields.turma_id = f.turma_id ? Number(f.turma_id) : null;
     fields.turma_aurum_id = f.turma_aurum_id ? Number(f.turma_aurum_id) : null;
+    fields.data_expiracao = dt('data_expiracao');
+    fields.ultimo_pagamento = dt('ultimo_pagamento');
+    fields.mes_expiracao = intv('mes_expiracao');
+    fields.ano_expiracao = intv('ano_expiracao');
+    fields.valor_total = numv('valor_total');
+    fields.valor_pago = numv('valor_pago');
+    fields.saldo_devedor = numv('saldo_devedor');
+    fields.num_cobrancas = intv('num_cobrancas');
+
     const r = await updateAluno(a.id, fields);
     setBusy(false);
     onSaved(r.ok ? 'Aluno atualizado!' : 'Erro ao salvar: ' + (r.msg || ''));
   }
 
-  // Função (não componente) — evita recriar tipo de componente a cada render (perda de foco).
-  const inp = (k: string, label: string) => (
+  // Funções (não componentes) — evitam recriar tipo de componente a cada render (perda de foco).
+  const inp = (k: string, label: string, type = 'text') => (
     <label className="block"><span className="text-xs text-[var(--fg-3)]">{label}</span>
-      <input value={f[k]} onChange={(e) => s(k, e.target.value)} className="mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1.5 text-sm text-[var(--fg)]" /></label>
+      <input type={type} value={f[k]} onChange={(e) => s(k, e.target.value)} className={FIELD_CLS} /></label>
   );
+  const inpList = (k: string, label: string, opts: readonly string[]) => (
+    <label className="block"><span className="text-xs text-[var(--fg-3)]">{label}</span>
+      <input list={`dl-${k}`} value={f[k]} onChange={(e) => s(k, e.target.value)} className={FIELD_CLS} />
+      <datalist id={`dl-${k}`}>{opts.map((o) => <option key={o} value={o} />)}</datalist></label>
+  );
+  const sel = (k: string, label: string, opts: { value: string; label: string }[]) => (
+    <label className="block"><span className="text-xs text-[var(--fg-3)]">{label}</span>
+      <select value={f[k]} onChange={(e) => s(k, e.target.value)} className={FIELD_CLS}>
+        <option value="">—</option>{opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select></label>
+  );
+  const espacoOpts = Object.entries(ESPACO_LABEL).map(([value, label]) => ({ value, label }));
+  const situacaoOpts = Object.entries(SITUACAO).map(([value, x]) => ({ value, label: x.label }));
+  const statusAcessoOpts = Object.entries(STATUS_ACESSO).map(([value, x]) => ({ value, label: x.label }));
+  const sitFinOpts = Object.entries(SITUACAO_FINANCEIRA).map(([value, x]) => ({ value, label: x.label }));
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3">
+      <SubTitle>Pessoal</SubTitle>
       <div className="grid grid-cols-2 gap-2">
         {inp('nome', 'Nome')}{inp('email', 'E-mail')}
         {inp('telefone', 'Telefone')}{inp('telefone_profissional', 'Tel. prof.')}
         {inp('documento', 'Documento (vazio mantém)')}{inp('tipo_documento', 'Tipo doc')}
         {inp('profissao', 'Profissão')}
-        <label className="block"><span className="text-xs text-[var(--fg-3)]">Nível</span>
-          <select value={f.nivel_resultado} onChange={(e) => s('nivel_resultado', e.target.value)} className="mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1.5 text-sm text-[var(--fg)]">
-            <option value="">—</option>{nivelOptions().map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
-          </select></label>
-        <label className="block"><span className="text-xs text-[var(--fg-3)]">Turma</span>
-          <select value={f.turma_id} onChange={(e) => s('turma_id', e.target.value)} className="mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1.5 text-sm text-[var(--fg)]">
-            <option value="">—</option>{thbTurmas.map((t) => <option key={t.id} value={t.id}>{t.codigo}</option>)}
-          </select></label>
-        <label className="block"><span className="text-xs text-[var(--fg-3)]">Turma Aurum</span>
-          <select value={f.turma_aurum_id} onChange={(e) => s('turma_aurum_id', e.target.value)} className="mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1.5 text-sm text-[var(--fg)]">
-            <option value="">—</option>{aurumTurmas.map((t) => <option key={t.id} value={t.id}>{t.codigo}</option>)}
-          </select></label>
-        {inp('espaco_instrucao', 'Espaço instrução')}{inp('placa_aurum', 'Placa Aurum')}
+        {inp('link_facebook', 'Facebook')}{inp('instagram_url', 'Instagram')}
+        {inp('youtube_url', 'YouTube')}{inp('site_profissional', 'Site')}
+      </div>
+
+      <SubTitle>Endereço</SubTitle>
+      <div className="grid grid-cols-2 gap-2">
         {inp('cep', 'CEP')}{inp('endereco_logradouro', 'Logradouro')}
         {inp('endereco_numero', 'Número')}{inp('endereco_complemento', 'Complemento')}
         {inp('bairro', 'Bairro')}{inp('cidade', 'Cidade')}
-        {inp('estado', 'Estado')}{inp('pais', 'País')}
-        {inp('situacao_acesso', 'Situação acesso')}{inp('status_acesso_central', 'Status central')}
-        {inp('data_expiracao', 'Data expiração (YYYY-MM-DD)')}{inp('hotmart_ucode', 'Hotmart UCode')}
+        {inp('estado', 'Estado (UF)')}{inp('pais', 'País')}
       </div>
-      <label className="block"><span className="text-xs text-[var(--fg-3)]">Tratamento manual</span>
-        <input value={f.tratamento_manual} onChange={(e) => s('tratamento_manual', e.target.value)} className="mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1.5 text-sm text-[var(--fg)]" /></label>
+
+      <SubTitle>Acesso ao Curso (Hotmart)</SubTitle>
+      <div className="grid grid-cols-2 gap-2">
+        {inpList('produto', 'Produto', SUGESTOES.produto)}{inp('oferta', 'Oferta')}
+        {inpList('tipo_oferta', 'Tipo de oferta', SUGESTOES.tipo_oferta)}{inpList('origem_acesso', 'Origem de acesso', SUGESTOES.origem_acesso)}
+        {inpList('instrucao', 'Instrução', SUGESTOES.instrucao)}{sel('espaco_instrucao', 'Espaço de instrução', espacoOpts)}
+        {sel('nivel_resultado', 'Nível', nivelOptions().map((n) => ({ value: n.id, label: n.label })))}{inp('placa_aurum', 'Placa Aurum')}
+        {sel('turma_id', 'Turma THB', thbTurmas.map((t) => ({ value: String(t.id), label: t.codigo })))}
+        {sel('turma_aurum_id', 'Turma Aurum', aurumTurmas.map((t) => ({ value: String(t.id), label: t.codigo })))}
+        {inpList('regra_acesso', 'Regra de acesso', SUGESTOES.regra_acesso)}{inpList('tempo_acesso', 'Tempo de acesso', SUGESTOES.tempo_acesso)}
+        {inp('data_expiracao', 'Vencimento', 'date')}{inp('hotmart_ucode', 'Hotmart UCode')}
+        {inp('mes_expiracao', 'Mês expiração', 'number')}{inp('ano_expiracao', 'Ano expiração', 'number')}
+        {sel('status_acesso', 'Status de acesso', statusAcessoOpts)}{inpList('status_acesso_central', 'Status central', SUGESTOES.status_acesso_central)}
+        {sel('situacao_acesso', 'Situação de acesso', situacaoOpts)}
+      </div>
+
+      <SubTitle>Situação Financeira (adesão THB)</SubTitle>
+      <div className="grid grid-cols-2 gap-2">
+        {sel('situacao_financeira', 'Situação financeira', sitFinOpts)}{inpList('status_pagamento', 'Status de pagamento', SUGESTOES.status_pagamento)}
+        {inp('valor_total', 'Valor total', 'number')}{inp('valor_pago', 'Valor pago', 'number')}
+        {inp('saldo_devedor', 'Saldo devedor', 'number')}{inp('num_cobrancas', 'Nº de cobranças', 'number')}
+        {inp('ultimo_pagamento', 'Último pagamento', 'date')}
+      </div>
+
+      <SubTitle>Observações</SubTitle>
+      {inp('tratamento_manual', 'Tratamento manual')}
       <label className="block"><span className="text-xs text-[var(--fg-3)]">Obs central</span>
-        <textarea value={f.obs_central} onChange={(e) => s('obs_central', e.target.value)} rows={3} className="mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1.5 text-sm text-[var(--fg)]" /></label>
+        <textarea value={f.obs_central} onChange={(e) => s('obs_central', e.target.value)} rows={3} className={FIELD_CLS} /></label>
+
       <button onClick={save} disabled={busy} className="w-full py-2 rounded-[var(--r-md)] bg-[var(--accent)] text-black font-semibold disabled:opacity-60">{busy ? 'Salvando…' : 'Salvar alterações'}</button>
     </div>
   );

@@ -31,6 +31,7 @@ export interface Aluno360 {
   espaco_instrucao: string | null;
   eh_socio: boolean | null;
   situacao_acesso: string | null;
+  situacao_financeira: string | null;
   status_acesso: string | null;
   status_acesso_central: string | null;
   produto: string | null;
@@ -136,6 +137,39 @@ export const SITUACAO: Record<string, { cls: string; label: string }> = {
   acompanha_titular: { cls: 'gray', label: 'Acompanha titular' },
 };
 
+// ── Acesso ao Curso (Hotmart) ──
+// Estado do acesso ao curso (status_acesso).
+export const STATUS_ACESSO: Record<string, { cls: string; label: string }> = {
+  renovado: { cls: 'green', label: 'Renovado' },
+  vigente: { cls: 'green', label: 'Vigente' },
+  gratuidade: { cls: 'blue', label: 'Gratuidade' },
+};
+
+// ── Situação Financeira (adesão THB) ──
+export const SITUACAO_FINANCEIRA: Record<string, { cls: string; label: string }> = {
+  quitado: { cls: 'green', label: 'Quitado' },
+  em_dia: { cls: 'green', label: 'Em dia' },
+  em_andamento: { cls: 'yellow', label: 'Em andamento' },
+  so_sinal: { cls: 'yellow', label: 'Só sinal pago' },
+  em_atraso: { cls: 'red', label: 'Em atraso' },
+  cancelada: { cls: 'red', label: 'Cancelada' },
+  reembolsado: { cls: 'gray', label: 'Reembolsado' },
+  acompanha_titular: { cls: 'gray', label: 'Acompanha titular' },
+};
+
+// Listas de sugestão (datalist) para campos de texto livre — valores reais já usados.
+export const SUGESTOES = {
+  produto: ['Holding Masters', 'Aurum', 'Diamante', 'Holding - Holding Masters'],
+  oferta: [],
+  tipo_oferta: ['Renovação (data fixa)', 'Sócio', '1 ano', 'Renovação (1 ano)', 'Parcelamento HM (1 ano)', 'Assinatura recorrente', 'Base atual (pré-Hotmart)', 'Curta — 3 meses', 'Curta — 6 meses', 'Cortesia'],
+  origem_acesso: ['Hotmart (THB)', 'Sócio/Convite', 'Hotmart (Assinatura)', 'Cadastro atual', 'Cortesia'],
+  regra_acesso: ['31/12/2026', 'Compra + 365 dias', 'Acompanha titular', 'Adesão + 12 meses', 'Compra + 3 meses', 'Compra + 6 meses', 'Confiar na base atual', 'Sem expiração'],
+  tempo_acesso: ['Até 31/12/2026', '1 ano', 'Acompanha titular', '12 meses (assinatura)', '3 meses', '6 meses', 'Ver base atual', 'Sem prazo'],
+  instrucao: ['THB', 'THB - SÓCIO', 'AURUM', 'AURUM - SÓCIO', 'DIAMANTE', 'DIAMANTE - SÓCIO', 'PLATINA', 'PLATINA - SÓCIO', 'DIAMANTE VERMELHO', 'DIAMANTE VERMELHO - SÓCIO'],
+  status_acesso_central: ['Ativo', 'Vencido', 'A vencer', 'Acompanha titular', 'Verificar', 'Ativo (cortesia)'],
+  status_pagamento: ['Quitado', 'Em atraso (cobrar)', 'Em atraso', 'Reembolsado', 'Quitado (plano concluído)', 'Em dia (ativa)', 'Só sinal pago', 'Em andamento', 'Cancelada pelo cliente'],
+} as const;
+
 // Rank de nível (mais alto primeiro). Porta de NRANK.
 export const NRANK: Record<string, number> = {
   diamante_vermelho: 7,
@@ -168,6 +202,7 @@ export function searchHaystack(a: Aluno360): string {
   if (a.tem_hm) parts.push('hm holding masters');
   if (a.tem_placa) parts.push('placa');
   if (a.tem_depoimento) parts.push('depoimento');
+  if (a.sip_registrado) parts.push('sip time holding brasil');
   if (!a.nivel_resultado) parts.push('sem nivel sem nível');
   return parts.filter(Boolean).join(' ').toLowerCase();
 }
