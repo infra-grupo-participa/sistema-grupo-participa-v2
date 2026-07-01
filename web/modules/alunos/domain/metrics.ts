@@ -27,6 +27,9 @@ export interface Distribuicao {
   label: string;
   count: number;
   color?: string;
+  /** Detalhe titular/sócio (ex.: Top estados) — opcional. */
+  titulares?: number;
+  socios?: number;
 }
 
 export interface AlunosMetrics {
@@ -61,8 +64,9 @@ export function computeTurmaEspacoMatrix(alunos: Aluno360[]): TurmaEspacoMatrix 
 
   const turmaCounts = new Map<string, number>();
   for (const a of alunos) if (a.turma_codigo) turmaCounts.set(a.turma_codigo, (turmaCounts.get(a.turma_codigo) ?? 0) + 1);
+  // Ordem decrescente por edição de turma (T38 → T1).
   const turmas = Array.from(turmaCounts.keys()).sort((a, b) =>
-    a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' }),
+    b.localeCompare(a, 'pt-BR', { numeric: true, sensitivity: 'base' }),
   );
 
   const cells: Record<string, Record<string, number>> = {};
@@ -127,7 +131,20 @@ export function computeAlunosMetrics(alunos: Aluno360[], view: DashView = 'aluno
     aurum: base.filter((a) => a.turma_aurum_id != null).length,
     socios: alunos.filter((a) => a.eh_socio).length,
     porEspaco,
-    porEstado: tally(base.filter((a) => a.estado), (a) => String(a.estado).toUpperCase()).slice(0, 8),
+    porEstado: (() => {
+      const byUf = new Map<string, { t: number; s: number }>();
+      for (const a of base) {
+        const uf = String(a.estado ?? '').toUpperCase();
+        if (!uf) continue;
+        const cur = byUf.get(uf) ?? { t: 0, s: 0 };
+        if (a.eh_socio) cur.s += 1; else cur.t += 1;
+        byUf.set(uf, cur);
+      }
+      return Array.from(byUf.entries())
+        .map(([key, v]) => ({ key, label: key, count: v.t + v.s, titulares: v.t, socios: v.s }))
+        .sort((x, y) => y.count - x.count)
+        .slice(0, 8);
+    })(),
     porAno: tally(
       base.filter((a) => a.data_compra_importada),
       (a) => String(a.data_compra_importada).slice(0, 4),

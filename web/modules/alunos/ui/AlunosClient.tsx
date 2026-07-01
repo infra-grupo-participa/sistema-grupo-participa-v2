@@ -20,7 +20,8 @@ import { Icon } from '@/shared/ui/icons';
 import { DashboardAlunos } from './DashboardAlunos';
 
 type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento';
-interface Filtros { situacao: string; espaco: string; nivel: string; jornada: string; papel: string }
+interface Filtros { situacao: string; espaco: string; nivel: string; jornada: string; papel: string; turma: string; estado: string }
+const FILTROS_VAZIO: Filtros = { situacao: '', espaco: '', nivel: '', jornada: '', papel: '', turma: '', estado: '' };
 
 const money = (v: number | null) =>
   v == null ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -63,7 +64,7 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
-  const [filtros, setFiltros] = useState<Filtros>({ situacao: '', espaco: '', nivel: '', jornada: '', papel: '' });
+  const [filtros, setFiltros] = useState<Filtros>(FILTROS_VAZIO);
   const [sortCol, setSortCol] = useState<SortCol>('nome');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -102,6 +103,8 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
       if (f.papel === 'socio' && !a.eh_socio) return false;
       if (f.papel === 'titular' && a.eh_socio) return false;
       if (f.papel === 'aurum' && a.turma_aurum_id == null) return false;
+      if (f.turma && a.turma_codigo !== f.turma && a.turma_aurum_codigo !== f.turma) return false;
+      if (f.estado && String(a.estado ?? '').toUpperCase() !== f.estado) return false;
       if (f.jornada === 'com_ht' && !a.tem_ht) return false;
       if (f.jornada === 'com_hm' && !a.tem_hm) return false;
       if (f.jornada === 'com_placa' && !a.tem_placa) return false;
@@ -136,6 +139,11 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
     return list;
   }, [alunos, busca, filtros, sortCol, sortDir]);
 
+  // Opções de filtro (turma em ordem decrescente T38→T1; estados A–Z).
+  const turmaOpts = useMemo(() => Array.from(new Set(alunos.flatMap((a) => [a.turma_codigo, a.turma_aurum_codigo]).filter(Boolean) as string[])).sort((a, b) => b.localeCompare(a, 'pt-BR', { numeric: true, sensitivity: 'base' })), [alunos]);
+  const estadoOpts = useMemo(() => Array.from(new Set(alunos.map((a) => String(a.estado ?? '').toUpperCase()).filter(Boolean))).sort(), [alunos]);
+  const temFiltroLista = Boolean(busca) || Object.values(filtros).some(Boolean);
+
   const selected = selectedId ? alunos.find((a) => a.id === selectedId) ?? null : null;
   const sortBtn = (col: SortCol) => () => {
     if (sortCol === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -167,11 +175,19 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
       <>
       <Toolbar className="mb-3">
         <SearchInput value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, e-mail, documento, cidade…" />
-        <Sel value={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={nivelOptions().map((n) => ({ value: n.id, label: n.label }))} />
+        <Sel value={filtros.turma} onChange={(v) => setFiltros((f) => ({ ...f, turma: v }))} placeholder="Todas as turmas" options={turmaOpts.map((t) => ({ value: t, label: t }))} />
         <Sel value={filtros.espaco} onChange={(v) => setFiltros((f) => ({ ...f, espaco: v }))} placeholder="Todos os espaços" options={Object.entries(ESPACO_LABEL).map(([k, l]) => ({ value: k, label: l }))} />
+        <Sel value={filtros.papel} onChange={(v) => setFiltros((f) => ({ ...f, papel: v }))} placeholder="Titular / Sócio" options={[{ value: 'titular', label: 'Titulares' }, { value: 'socio', label: 'Sócios' }, { value: 'aurum', label: 'Aurum' }]} />
+        <Sel value={filtros.estado} onChange={(v) => setFiltros((f) => ({ ...f, estado: v }))} placeholder="Todos os estados" options={estadoOpts.map((e) => ({ value: e, label: e }))} />
+        <Sel value={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={nivelOptions().map((n) => ({ value: n.id, label: n.label }))} />
         <Sel value={filtros.jornada} onChange={(v) => setFiltros((f) => ({ ...f, jornada: v }))} placeholder="Toda jornada" options={[{ value: 'com_ht', label: 'Com HT' }, { value: 'com_hm', label: 'Com HM' }, { value: 'com_placa', label: 'Com placa' }, { value: 'com_depoimento', label: 'Com depoimento' }, { value: 'com_sip', label: 'Com SIP' }]} />
         <Sel value={filtros.situacao} onChange={(v) => setFiltros((f) => ({ ...f, situacao: v }))} placeholder="Toda situação" options={[...Object.entries(SITUACAO).map(([k, s]) => ({ value: k, label: s.label })), { value: 'inadimplente', label: 'Inadimplente' }]} />
       </Toolbar>
+
+      <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+        <span className="text-xs text-[var(--fg-3)] tabular">{filtered.length.toLocaleString('pt-BR')} resultado{filtered.length === 1 ? '' : 's'} encontrado{filtered.length === 1 ? '' : 's'}</span>
+        {temFiltroLista && <Button variant="ghost" size="sm" onClick={() => { setBusca(''); setFiltros(FILTROS_VAZIO); }}>Limpar filtros</Button>}
+      </div>
 
       <DataTable>
         <Thead>
@@ -280,6 +296,7 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
           <>
             {sit && <Badge tone={sitTone(sit.cls)} dot>{sit.label}</Badge>}
             {a.nivel_resultado && <NivelBadge nivel={a.nivel_resultado} />}
+            {(a.cidade || a.estado) && <Badge>{[a.cidade, a.estado].filter(Boolean).join(' · ')}</Badge>}
             {espaco && <Badge tone="info">{espaco}</Badge>}
             {a.eh_socio && <Badge tone="accent">Sócio</Badge>}
           </>

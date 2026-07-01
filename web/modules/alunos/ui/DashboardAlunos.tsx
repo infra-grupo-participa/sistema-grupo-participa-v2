@@ -29,7 +29,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
   const matrix = useMemo(() => computeTurmaEspacoMatrix(applyDashFilters(alunos, view, filtros)), [alunos, view, filtros]);
 
   const estados = useMemo(() => Array.from(new Set(alunos.map((a) => String(a.estado ?? '').toUpperCase()).filter(Boolean))).sort(), [alunos]);
-  const turmas = useMemo(() => Array.from(new Set(alunos.map((a) => a.turma_codigo).filter(Boolean) as string[])).sort(), [alunos]);
+  const turmas = useMemo(() => Array.from(new Set(alunos.map((a) => a.turma_codigo).filter(Boolean) as string[])).sort((a, b) => b.localeCompare(a, 'pt-BR', { numeric: true, sensitivity: 'base' })), [alunos]);
   const temFiltro = Boolean(filtros.espaco || filtros.estado || filtros.turma || view === 'socios');
 
   const persistViews = (next: SavedView[]) => { setViews(next); localStorage.setItem(VIEWS_KEY, JSON.stringify(next)); };
@@ -43,15 +43,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
 
   return (
     <div>
-      {/* Toggle + filtros */}
-      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-        <div className="inline-flex rounded-[var(--r-md)] border border-[var(--border)] p-0.5 bg-[var(--surface-2)]">
-          {(['alunos', 'socios'] as DashView[]).map((v) => (
-            <button key={v} onClick={() => setView(v)} className={`px-3.5 py-1.5 rounded-[var(--r-sm)] text-sm font-medium transition-colors ${view === v ? 'bg-[var(--accent)] text-black' /* hex-ok: texto preto sobre âmbar é a decisão de contraste D5#1 */ : 'text-[var(--fg-2)] hover:text-[var(--fg)]'}`}>
-              {v === 'alunos' ? 'Alunos' : 'Sócios'}
-            </button>
-          ))}
-        </div>
+      <div className="flex items-center justify-end mb-3">
         <span className="text-xs text-[var(--fg-3)] tabular">{m.total.toLocaleString('pt-BR')} registros</span>
       </div>
 
@@ -74,9 +66,8 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <StatCard label="Total" value={m.total.toLocaleString('pt-BR')} hint={`${m.pctAtivos}% ativos`} bar="accent" />
-        <StatCard label="Ativos" value={m.ativos.toLocaleString('pt-BR')} tone="var(--green)" bar="green" />
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <StatCard label="Total de alunos" value={m.total.toLocaleString('pt-BR')} bar="accent" />
         <StatCard label="Aurum" value={m.aurum.toLocaleString('pt-BR')} tone="var(--nivel-ouro)" bar="yellow" />
         <StatCard label="Sócios" value={m.socios.toLocaleString('pt-BR')} tone="var(--nivel-diamante)" bar="purple" />
       </div>
@@ -92,6 +83,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
         </Card>
         <Card className="p-5">
           <SectionTitle>Jornada no programa</SectionTitle>
+          <p className="text-[11px] text-[var(--fg-3)] -mt-1 mb-3">Nº de alunos do recorte que atingiram cada marco.</p>
           <Bars
             data={[
               { key: 'ht', label: 'Holding Total', count: m.ht, color: 'var(--nivel-platina)' },
@@ -104,7 +96,13 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
           />
         </Card>
         <Card className="p-5">
-          <SectionTitle>Top estados</SectionTitle>
+          <SectionTitle right={
+            <span className="flex items-center gap-3 text-[10px] text-[var(--fg-3)]">
+              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} /> Titulares</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--nivel-diamante)' }} /> Sócios</span>
+            </span>
+          }>Top estados</SectionTitle>
+          <p className="text-[11px] text-[var(--fg-3)] -mt-1 mb-3">Passe o mouse para ver o detalhe titular/sócio.</p>
           <Bars data={m.porEstado} total={m.total} />
         </Card>
         {matrix.turmas.length > 0 && (
@@ -141,13 +139,20 @@ function Bars({ data, total }: { data: Distribuicao[]; total: number }) {
   return (
     <div className="space-y-2.5">
       {data.map((d) => (
-        <div key={d.key}>
+        <div key={d.key} title={d.titulares != null ? `${d.titulares} titulares · ${d.socios} sócios` : undefined}>
           <div className="flex justify-between text-xs mb-1">
             <span className="text-[var(--fg-2)]">{d.label}</span>
             <span className="text-[var(--fg-3)] tabular">{d.count.toLocaleString('pt-BR')}{total ? <span className="text-[var(--fg-4)]"> · {Math.round((d.count / total) * 100)}%</span> : null}</span>
           </div>
-          <div className="h-2 rounded-full bg-[var(--surface-3)] overflow-hidden">
-            <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${(d.count / max) * 100}%`, background: d.color || 'var(--accent)' }} />
+          <div className="h-2 rounded-full bg-[var(--surface-3)] overflow-hidden flex">
+            {d.titulares != null ? (
+              <>
+                <div className="h-full transition-[width] duration-500" style={{ width: `${(d.titulares / max) * 100}%`, background: 'var(--accent)' }} />
+                <div className="h-full transition-[width] duration-500" style={{ width: `${((d.socios ?? 0) / max) * 100}%`, background: 'var(--nivel-diamante)' }} />
+              </>
+            ) : (
+              <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${(d.count / max) * 100}%`, background: d.color || 'var(--accent)' }} />
+            )}
           </div>
         </div>
       ))}
