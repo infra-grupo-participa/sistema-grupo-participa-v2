@@ -34,6 +34,43 @@ const sitTone = (cls: string): Tone => (cls === 'green' ? 'success' : cls === 'r
 /** Turma THB + Aurum num só texto (HM e Aurum). */
 const turmaCombo = (a: Aluno360) => [a.turma_codigo, a.turma_aurum_codigo].filter(Boolean).join(' · ');
 
+/** Exporta a lista filtrada para CSV (separador ';' + BOM UTF-8 → abre no Excel). */
+function exportarCsvAlunos(rows: Aluno360[]) {
+  const cols: [string, (a: Aluno360) => unknown][] = [
+    ['Nome', (a) => a.nome],
+    ['E-mail', (a) => a.email],
+    ['Telefone', (a) => a.telefone],
+    ['Documento', (a) => a.documento],
+    ['Profissão', (a) => a.profissao],
+    ['Nível', (a) => nivelLabel(a.nivel_resultado)],
+    ['Espaço de instrução', (a) => ESPACO_LABEL[a.espaco_instrucao || ''] || ''],
+    ['Turma THB', (a) => a.turma_codigo],
+    ['Turma Aurum', (a) => a.turma_aurum_codigo],
+    ['Cidade', (a) => a.cidade],
+    ['Estado', (a) => a.estado],
+    ['Papel', (a) => (a.eh_socio ? 'Sócio' : 'Titular')],
+    ['Situação de acesso', (a) => (a.situacao_acesso ? SITUACAO[a.situacao_acesso]?.label || a.situacao_acesso : '')],
+    ['Vencimento', (a) => a.data_expiracao],
+    ['HT', (a) => (a.tem_ht ? 'Sim' : '')],
+    ['HM', (a) => (a.tem_hm ? 'Sim' : '')],
+    ['Placa', (a) => (a.tem_placa ? 'Sim' : '')],
+    ['Depoimento', (a) => (a.tem_depoimento ? 'Sim' : '')],
+    ['SIP', (a) => (a.sip_registrado ? 'Sim' : '')],
+  ];
+  const esc = (v: unknown) => {
+    const s = v == null ? '' : String(v);
+    return /[";\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [cols.map((c) => c[0]).join(';'), ...rows.map((a) => cols.map((c) => esc(c[1](a))).join(';'))].join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `alunos-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function EspacoBadge({ espaco }: { espaco: string }) {
   const label = ESPACO_LABEL[espaco];
   if (!label) return <span className="text-[var(--fg-2)]">{espaco}</span>;
@@ -186,7 +223,10 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
 
       <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
         <span className="text-xs text-[var(--fg-3)] tabular">{filtered.length.toLocaleString('pt-BR')} resultado{filtered.length === 1 ? '' : 's'} encontrado{filtered.length === 1 ? '' : 's'}</span>
-        {temFiltroLista && <Button variant="ghost" size="sm" onClick={() => { setBusca(''); setFiltros(FILTROS_VAZIO); }}>Limpar filtros</Button>}
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => exportarCsvAlunos(filtered)} disabled={!filtered.length}><Icon name="download" size={13} /> Exportar CSV</Button>
+          {temFiltroLista && <Button variant="ghost" size="sm" onClick={() => { setBusca(''); setFiltros(FILTROS_VAZIO); }}>Limpar filtros</Button>}
+        </div>
       </div>
 
       <DataTable>
@@ -466,6 +506,7 @@ interface SipProgresso {
   turma?: string | null;
   raiox?: { score: number; max: number | null } | null;
   tarefas?: { concluidas: number | null; total: number | null };
+  palestra?: { data: string; label: string } | null;
 }
 
 function SipJornada({ email, on }: { email: string | null; on: boolean }) {
@@ -512,6 +553,7 @@ function SipJornada({ email, on }: { email: string | null; on: boolean }) {
               <Row k="Status" v={data.approval_status ? (SIP_STATUS[data.approval_status] || data.approval_status) : '—'} />
               <Row k="Ciclo" v={data.ciclo_type ? (SIP_CICLO[data.ciclo_type] || data.ciclo_type) : '—'} />
               {data.taskline_label && <Row k="Trilha" v={data.taskline_label} />}
+              {data.palestra && <Row k="Palestra mais próxima" v={`${data.palestra.label} · ${dataBR(data.palestra.data)}`} />}
               {data.nivel && <Row k="Nível no SIP" v={data.nivel} />}
               {data.turma && <Row k="Turma" v={data.turma} />}
               {tarefas?.concluidas != null && (

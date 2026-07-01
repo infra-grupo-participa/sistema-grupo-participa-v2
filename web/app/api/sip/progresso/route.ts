@@ -84,6 +84,23 @@ export async function GET(request: NextRequest) {
     /* progresso é opcional */
   }
 
+  // Palestra mais próxima — dos milestones do cronograma (student_schedules).
+  let palestra: { data: string; label: string } | null = null;
+  try {
+    const { data: sched } = await sip.from('student_schedules').select('milestones').eq('user_id', u.id).maybeSingle();
+    const ms = (sched?.milestones as Array<{ key?: string; label?: string; date?: string }> | null) ?? [];
+    const pals = ms
+      .filter((mm) => typeof mm.key === 'string' && /^palestra(_\d+)?$/.test(mm.key) && mm.date)
+      .sort((x, y) => String(x.date).localeCompare(String(y.date)));
+    if (pals.length) {
+      const hoje = new Date().toISOString().slice(0, 10);
+      const prox = pals.find((mm) => String(mm.date) >= hoje) ?? pals[pals.length - 1];
+      palestra = { data: String(prox.date), label: prox.label || 'Palestra' };
+    }
+  } catch {
+    /* palestra é opcional */
+  }
+
   return jsonOk({
     registrado: true,
     sip_user_id: u.id,
@@ -98,6 +115,7 @@ export async function GET(request: NextRequest) {
     turma: u.turma_aurum || u.turma_thb || null,
     raiox: u.raiox_score != null ? { score: u.raiox_score, max: u.raiox_max_score } : null,
     tarefas: { concluidas, total },
+    palestra,
     criado_em: u.created_at,
   });
 }

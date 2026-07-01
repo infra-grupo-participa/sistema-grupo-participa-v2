@@ -32,6 +32,18 @@ export interface Distribuicao {
   socios?: number;
 }
 
+export interface EspacoKpi { key: string; label: string; total: number; titulares: number; socios: number; color: string }
+export interface AnoEspaco { year: string; total: number; segs: { key: string; count: number; color: string }[] }
+
+/** Espaços destacados nos KPIs (ordem fixa). */
+const ESPACO_KPI: { key: string; label: string }[] = [
+  { key: 'holding_masters', label: 'Holding Masters' },
+  { key: 'aurum', label: 'Aurum' },
+  { key: 'platina', label: 'Platina' },
+  { key: 'mastermind_diamante', label: 'Mastermind' },
+  { key: 'diamante_vermelho', label: 'Diamante Vermelho' },
+];
+
 export interface AlunosMetrics {
   total: number;
   ativos: number;
@@ -43,9 +55,12 @@ export interface AlunosMetrics {
   sip: number;
   aurum: number;
   socios: number;
+  totalTitulares: number;
+  totalSocios: number;
+  espacoKpi: EspacoKpi[];
   porEspaco: Distribuicao[];
   porEstado: Distribuicao[];
-  porAno: Distribuicao[];
+  porAnoEspaco: AnoEspaco[];
   porTurma: Distribuicao[];
 }
 
@@ -106,18 +121,25 @@ export function computeAlunosMetrics(alunos: Aluno360[], view: DashView = 'aluno
   const total = base.length;
   const ativos = base.filter((a) => ATIVO.has(String(a.status_acesso ?? '').toLowerCase())).length;
 
-  // Espaço de instrução (o que mais importa) — ordenado por volume; "sem espaço" ao fim.
+  // Espaço de instrução (o que mais importa) — com recorte titular/sócio; "sem espaço" ao fim.
   const porEspaco = (Object.keys(ESPACO_LABEL) as string[])
-    .map((key) => ({
-      key,
-      label: ESPACO_LABEL[key],
-      count: base.filter((a) => a.espaco_instrucao === key).length,
-      color: ESPACO_COLOR[key] || 'var(--nivel-base)',
-    }))
+    .map((key) => {
+      const rows = base.filter((a) => a.espaco_instrucao === key);
+      return {
+        key,
+        label: ESPACO_LABEL[key],
+        count: rows.length,
+        color: ESPACO_COLOR[key] || 'var(--nivel-base)',
+        titulares: rows.filter((a) => !a.eh_socio).length,
+        socios: rows.filter((a) => a.eh_socio).length,
+      };
+    })
     .filter((d) => d.count > 0)
     .sort((x, y) => y.count - x.count);
-  const semEspaco = base.filter((a) => !a.espaco_instrucao).length;
-  if (semEspaco) porEspaco.push({ key: '__none__', label: 'Sem espaço', count: semEspaco, color: 'var(--fg-4)' });
+  const semEspacoRows = base.filter((a) => !a.espaco_instrucao);
+  if (semEspacoRows.length) {
+    porEspaco.push({ key: '__none__', label: 'Sem espaço', count: semEspacoRows.length, color: 'var(--fg-4)', titulares: semEspacoRows.filter((a) => !a.eh_socio).length, socios: semEspacoRows.filter((a) => a.eh_socio).length });
+  }
 
   return {
     total,
@@ -130,6 +152,12 @@ export function computeAlunosMetrics(alunos: Aluno360[], view: DashView = 'aluno
     sip: base.filter((a) => a.sip_registrado).length,
     aurum: base.filter((a) => a.turma_aurum_id != null).length,
     socios: alunos.filter((a) => a.eh_socio).length,
+    totalTitulares: base.filter((a) => !a.eh_socio).length,
+    totalSocios: base.filter((a) => a.eh_socio).length,
+    espacoKpi: ESPACO_KPI.map(({ key, label }) => {
+      const rows = base.filter((a) => a.espaco_instrucao === key);
+      return { key, label, total: rows.length, titulares: rows.filter((a) => !a.eh_socio).length, socios: rows.filter((a) => a.eh_socio).length, color: ESPACO_COLOR[key] || 'var(--nivel-base)' };
+    }),
     porEspaco,
     porEstado: (() => {
       const byUf = new Map<string, { t: number; s: number }>();
@@ -145,10 +173,14 @@ export function computeAlunosMetrics(alunos: Aluno360[], view: DashView = 'aluno
         .sort((x, y) => y.count - x.count)
         .slice(0, 8);
     })(),
-    porAno: tally(
-      base.filter((a) => a.data_compra_importada),
-      (a) => String(a.data_compra_importada).slice(0, 4),
-    ).sort((x, y) => x.key.localeCompare(y.key)),
+    porAnoEspaco: (() => {
+      const anos = Array.from(new Set(base.filter((a) => a.data_compra_importada).map((a) => String(a.data_compra_importada).slice(0, 4)))).sort();
+      return anos.map((year) => {
+        const rows = base.filter((a) => String(a.data_compra_importada ?? '').slice(0, 4) === year);
+        const segs = ESPACO_KPI.map(({ key }) => ({ key, count: rows.filter((a) => a.espaco_instrucao === key).length, color: ESPACO_COLOR[key] || 'var(--nivel-base)' })).filter((s) => s.count > 0);
+        return { year, total: rows.length, segs };
+      });
+    })(),
     porTurma: tally(base.filter((a) => a.turma_codigo), (a) => a.turma_codigo).slice(0, 8),
   };
 }

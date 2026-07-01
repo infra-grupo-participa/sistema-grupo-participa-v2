@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { applyDashFilters, computeAlunosMetrics, computeTurmaEspacoMatrix, type DashFiltros, type DashView, type Distribuicao } from '../domain/metrics';
+import { applyDashFilters, computeAlunosMetrics, computeTurmaEspacoMatrix, type DashFiltros, type DashView, type Distribuicao, type AnoEspaco } from '../domain/metrics';
 import type { Aluno360 } from '../domain/aluno-360';
 import { ESPACO_LABEL } from '../domain/aluno-360';
-import { Card, StatCard, SectionTitle, Button, FilterSelect } from '@/shared/ui/components';
+import { Card, SectionTitle, Button, FilterSelect } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 
 const VIEWS_KEY = 'gp_dash_views';
@@ -66,15 +66,15 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-3 mb-5">
-        <StatCard label="Total de alunos" value={m.total.toLocaleString('pt-BR')} bar="accent" />
-        <StatCard label="Aurum" value={m.aurum.toLocaleString('pt-BR')} tone="var(--nivel-ouro)" bar="yellow" />
-        <StatCard label="Sócios" value={m.socios.toLocaleString('pt-BR')} tone="var(--nivel-diamante)" bar="purple" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+        <KpiBreak label="Total de alunos" total={m.total} titulares={m.totalTitulares} socios={m.totalSocios} color="var(--accent)" />
+        {m.espacoKpi.map((e) => <KpiBreak key={e.key} label={e.label} total={e.total} titulares={e.titulares} socios={e.socios} color={e.color} />)}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
-          <SectionTitle>Por espaço de instrução</SectionTitle>
+          <SectionTitle right={<LegendaTS />}>Por espaço de instrução</SectionTitle>
+          <p className="text-[11px] text-[var(--fg-3)] -mt-1 mb-3">Titulares × sócios por espaço de instrução.</p>
           <Bars data={m.porEspaco} total={m.total} />
         </Card>
         <Card className="p-5">
@@ -96,12 +96,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
           />
         </Card>
         <Card className="p-5">
-          <SectionTitle right={
-            <span className="flex items-center gap-3 text-[10px] text-[var(--fg-3)]">
-              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} /> Titulares</span>
-              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--nivel-diamante)' }} /> Sócios</span>
-            </span>
-          }>Top estados</SectionTitle>
+          <SectionTitle right={<LegendaTS />}>Top estados</SectionTitle>
           <p className="text-[11px] text-[var(--fg-3)] -mt-1 mb-3">Passe o mouse para ver o detalhe titular/sócio.</p>
           <Bars data={m.porEstado} total={m.total} />
         </Card>
@@ -113,10 +108,11 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
             </div>
           </Card>
         )}
-        {m.porAno.length > 0 && (
+        {m.porAnoEspaco.length > 0 && (
           <Card className="p-5 lg:col-span-2">
-            <SectionTitle>Ingresso por ano</SectionTitle>
-            <ColumnChart data={m.porAno} />
+            <SectionTitle right={<LegendaEspacos itens={m.espacoKpi} />}>Linha do tempo de entrada no THB</SectionTitle>
+            <p className="text-[11px] text-[var(--fg-3)] -mt-1 mb-3">Ingressos por ano, empilhados por espaço de instrução.</p>
+            <StackedColumn data={m.porAnoEspaco} />
           </Card>
         )}
       </div>
@@ -229,15 +225,49 @@ function Matrix({ matrix }: { matrix: ReturnType<typeof computeTurmaEspacoMatrix
   );
 }
 
-function ColumnChart({ data }: { data: Distribuicao[] }) {
-  const max = Math.max(1, ...data.map((d) => d.count));
+function KpiBreak({ label, total, titulares, socios, color }: { label: string; total: number; titulares: number; socios: number; color?: string }) {
   return (
-    <div className="flex items-end gap-2 h-32 pt-2">
+    <Card className="p-4 min-w-0 overflow-hidden" style={{ borderTop: `2px solid ${color || 'var(--accent)'}` }}>
+      <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-3)] truncate">{label}</div>
+      <div className="mt-1 text-2xl font-bold tabular leading-none text-[var(--fg)]">{total.toLocaleString('pt-BR')}</div>
+      <div className="mt-1.5 flex items-center gap-2 text-[11px] tabular text-[var(--fg-3)]">
+        <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />{titulares.toLocaleString('pt-BR')} tit.</span>
+        <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--nivel-diamante)' }} />{socios.toLocaleString('pt-BR')} sóc.</span>
+      </div>
+    </Card>
+  );
+}
+
+function LegendaTS() {
+  return (
+    <span className="flex items-center gap-3 text-[10px] text-[var(--fg-3)]">
+      <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} /> Titulares</span>
+      <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--nivel-diamante)' }} /> Sócios</span>
+    </span>
+  );
+}
+
+function LegendaEspacos({ itens }: { itens: { key: string; label: string; color: string; total: number }[] }) {
+  return (
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[var(--fg-3)]">
+      {itens.filter((e) => e.total !== 0).map((e) => (
+        <span key={e.key} className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: e.color }} /> {e.label}</span>
+      ))}
+    </span>
+  );
+}
+
+function StackedColumn({ data }: { data: AnoEspaco[] }) {
+  const max = Math.max(1, ...data.map((d) => d.total));
+  return (
+    <div className="flex items-end gap-2 h-40 pt-2">
       {data.map((d) => (
-        <div key={d.key} className="flex-1 flex flex-col items-center justify-end gap-1">
-          <span className="text-[10px] text-[var(--fg-3)] tabular">{d.count}</span>
-          <div className="w-full rounded-t bg-[var(--accent)] transition-[height] duration-500" style={{ height: `${(d.count / max) * 100}%`, minHeight: 2 }} />
-          <span className="text-[10px] text-[var(--fg-3)]">{d.label}</span>
+        <div key={d.year} className="flex-1 flex flex-col items-center justify-end gap-1" title={d.segs.map((s) => `${ESPACO_LABEL[s.key] || s.key}: ${s.count}`).join(' · ')}>
+          <span className="text-[10px] text-[var(--fg-3)] tabular">{d.total}</span>
+          <div className="w-full rounded-t overflow-hidden flex flex-col-reverse" style={{ height: `${(d.total / max) * 100}%`, minHeight: 2 }}>
+            {d.segs.map((s) => <div key={s.key} style={{ height: `${(s.count / d.total) * 100}%`, background: s.color }} />)}
+          </div>
+          <span className="text-[10px] text-[var(--fg-3)]">{d.year}</span>
         </div>
       ))}
     </div>
