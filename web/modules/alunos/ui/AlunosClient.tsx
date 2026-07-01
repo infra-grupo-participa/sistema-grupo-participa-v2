@@ -295,7 +295,7 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
       {editMode ? (
         <EditForm a={a} turmas={turmas} onSaved={onSaved} />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 items-start">
           {/* Faturamento & Comprovação — em destaque */}
           <SectionCard className="md:col-span-2" title={<SecTitle icon="coins">Faturamento &amp; Comprovação</SecTitle>}>
             {(() => {
@@ -340,8 +340,34 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
             </Section>
           </SectionCard>
 
+          {/* Renovação */}
+          <SectionCard title={<SecTitle icon="refresh">Renovação</SecTitle>}>
+            <Section>
+              {(() => {
+                const rs = renovacaoStatus(a.turma_codigo);
+                const info = rs ? RENOVACAO_LABEL[rs] : null;
+                return info ? (
+                  <div className={`p-2.5 rounded-[var(--r-md)] mb-2 text-xs ${rs === 'em_renovacao' ? 'bg-[var(--yellow-subtle)] text-[var(--yellow)]' : 'bg-[var(--red-subtle)] text-[var(--red)]'}`}>
+                    <span className="inline-flex items-center gap-1.5">{rs === 'em_renovacao' ? <Icon name="refresh" size={12} /> : <Icon name="alert" size={12} />} {info.label}</span>
+                    <div className="text-[var(--fg-3)] mt-0.5">
+                      {rs === 'em_renovacao'
+                        ? `Turma ${a.turma_codigo} (T1–T29): segue o processo de renovação.`
+                        : `Turma ${a.turma_codigo} (T30+): acesso vencido, sem processo de renovação (em dia, porém não renovado).`}
+                    </div>
+                  </div>
+                ) : <div className="text-xs text-[var(--fg-3)] mb-2">Sem turma THB definida — status de renovação indisponível.</div>;
+              })()}
+              <Row k="Turma" v={a.turma_codigo || '—'} />
+              <Row k="Vencimento" v={dataBR(a.data_expiracao)} />
+              <Row k="Data da compra" v={dataBR(a.data_compra_importada)} />
+              {a.tempo_acesso && <Row k="Tempo de acesso" v={a.tempo_acesso} />}
+              {a.oferta && <Row k="Oferta" v={a.oferta} />}
+              {a.tipo_oferta && <Row k="Tipo de oferta" v={a.tipo_oferta} />}
+            </Section>
+          </SectionCard>
+
           {/* Acesso ao Curso */}
-          <SectionCard title={<SecTitle icon="graduation">Acesso ao Curso</SecTitle>}>
+          <SectionCard className="md:col-span-2" title={<SecTitle icon="graduation">Acesso ao Curso</SecTitle>}>
             <Section>
               {(() => {
                 const st = a.status_acesso ? STATUS_ACESSO[a.status_acesso] : null;
@@ -408,34 +434,8 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
           </SectionCard>
 
           {/* Curso */}
-          <SectionCard title={<SecTitle icon="biblioteca">Curso</SecTitle>}>
+          <SectionCard className="md:col-span-2" title={<SecTitle icon="biblioteca">Curso</SecTitle>}>
             <CursoTab />
-          </SectionCard>
-
-          {/* Renovação */}
-          <SectionCard title={<SecTitle icon="refresh">Renovação</SecTitle>}>
-            <Section>
-              {(() => {
-                const rs = renovacaoStatus(a.turma_codigo);
-                const info = rs ? RENOVACAO_LABEL[rs] : null;
-                return info ? (
-                  <div className={`p-2.5 rounded-[var(--r-md)] mb-2 text-xs ${rs === 'em_renovacao' ? 'bg-[var(--yellow-subtle)] text-[var(--yellow)]' : 'bg-[var(--red-subtle)] text-[var(--red)]'}`}>
-                    <span className="inline-flex items-center gap-1.5">{rs === 'em_renovacao' ? <Icon name="refresh" size={12} /> : <Icon name="alert" size={12} />} {info.label}</span>
-                    <div className="text-[var(--fg-3)] mt-0.5">
-                      {rs === 'em_renovacao'
-                        ? `Turma ${a.turma_codigo} (T1–T29): segue o processo de renovação.`
-                        : `Turma ${a.turma_codigo} (T30+): acesso vencido, sem processo de renovação (em dia, porém não renovado).`}
-                    </div>
-                  </div>
-                ) : <div className="text-xs text-[var(--fg-3)] mb-2">Sem turma THB definida — status de renovação indisponível.</div>;
-              })()}
-              <Row k="Turma" v={a.turma_codigo || '—'} />
-              <Row k="Vencimento" v={dataBR(a.data_expiracao)} />
-              <Row k="Data da compra" v={dataBR(a.data_compra_importada)} />
-              {a.tempo_acesso && <Row k="Tempo de acesso" v={a.tempo_acesso} />}
-              {a.oferta && <Row k="Oferta" v={a.oferta} />}
-              {a.tipo_oferta && <Row k="Tipo de oferta" v={a.tipo_oferta} />}
-            </Section>
           </SectionCard>
         </div>
       )}
@@ -725,55 +725,95 @@ function EditForm({ a, turmas, onSaved }: { a: Aluno360; turmas: Turma[]; onSave
   const statusAcessoOpts = Object.entries(STATUS_ACESSO).map(([value, x]) => ({ value, label: x.label }));
   const sitFinOpts = Object.entries(SITUACAO_FINANCEIRA).map(([value, x]) => ({ value, label: x.label }));
 
+  // Edição espelha a MESMA ordem/agrupamento da leitura (Faturamento → Dados → Acesso → Observações).
+  const grid = 'grid grid-cols-1 sm:grid-cols-2 gap-2.5';
   return (
-    <div className="space-y-3">
-      <SubTitle>Pessoal</SubTitle>
-      <div className="grid grid-cols-2 gap-2">
-        {inp('nome', 'Nome')}{inp('email', 'E-mail')}
-        {inp('telefone', 'Telefone')}{inp('telefone_profissional', 'Tel. prof.')}
-        {inp('documento', 'Documento (vazio mantém)')}{inp('tipo_documento', 'Tipo doc')}
-        {inp('profissao', 'Profissão')}
-        {inp('link_facebook', 'Facebook')}{inp('instagram_url', 'Instagram')}
-        {inp('youtube_url', 'YouTube')}{inp('site_profissional', 'Site')}
-      </div>
+    <div className="space-y-4">
+      <SectionCard title={<SecTitle icon="coins">Faturamento &amp; Comprovação</SecTitle>}>
+        <div className={grid}>
+          {sel('situacao_financeira', 'Situação financeira', sitFinOpts)}
+          {inpList('status_pagamento', 'Status de pagamento', SUGESTOES.status_pagamento)}
+          {inp('valor_total', 'Valor total', 'number')}
+          {inp('valor_pago', 'Valor pago', 'number')}
+          {inp('saldo_devedor', 'Saldo devedor', 'number')}
+          {inp('num_cobrancas', 'Nº de cobranças', 'number')}
+          {inp('ultimo_pagamento', 'Último pagamento', 'date')}
+        </div>
+      </SectionCard>
 
-      <SubTitle>Endereço</SubTitle>
-      <div className="grid grid-cols-2 gap-2">
-        {inp('cep', 'CEP')}{inp('endereco_logradouro', 'Logradouro')}
-        {inp('endereco_numero', 'Número')}{inp('endereco_complemento', 'Complemento')}
-        {inp('bairro', 'Bairro')}{inp('cidade', 'Cidade')}
-        {inp('estado', 'Estado (UF)')}{inp('pais', 'País')}
-      </div>
+      <SectionCard title={<SecTitle icon="user">Dados Pessoais</SecTitle>}>
+        <div className={grid}>
+          {inp('nome', 'Nome')}
+          {inp('email', 'E-mail')}
+          {inp('telefone', 'Telefone')}
+          {inp('telefone_profissional', 'Tel. profissional')}
+          {inp('documento', 'Documento (vazio mantém)')}
+          {inp('tipo_documento', 'Tipo de documento')}
+          {inp('profissao', 'Profissão')}
+        </div>
+        <SubTitle>Endereço</SubTitle>
+        <div className={grid}>
+          {inp('cep', 'CEP')}
+          {inp('endereco_logradouro', 'Logradouro')}
+          {inp('endereco_numero', 'Número')}
+          {inp('endereco_complemento', 'Complemento')}
+          {inp('bairro', 'Bairro')}
+          {inp('cidade', 'Cidade')}
+          {inp('estado', 'Estado (UF)')}
+          {inp('pais', 'País')}
+        </div>
+        <SubTitle>Presença online</SubTitle>
+        <div className={grid}>
+          {inp('link_facebook', 'Facebook')}
+          {inp('instagram_url', 'Instagram')}
+          {inp('youtube_url', 'YouTube')}
+          {inp('site_profissional', 'Site')}
+        </div>
+      </SectionCard>
 
-      <SubTitle>Acesso ao Curso (Hotmart)</SubTitle>
-      <div className="grid grid-cols-2 gap-2">
-        {inpList('produto', 'Produto', SUGESTOES.produto)}{inp('oferta', 'Oferta')}
-        {inpList('tipo_oferta', 'Tipo de oferta', SUGESTOES.tipo_oferta)}{inpList('origem_acesso', 'Origem de acesso', SUGESTOES.origem_acesso)}
-        {inpList('instrucao', 'Instrução', SUGESTOES.instrucao)}{sel('espaco_instrucao', 'Espaço de instrução', espacoOpts)}
-        {sel('nivel_resultado', 'Nível', nivelOptions().map((n) => ({ value: n.id, label: n.label })))}{inp('placa_aurum', 'Placa Aurum')}
-        {sel('turma_id', 'Turma THB', thbTurmas.map((t) => ({ value: String(t.id), label: t.codigo })))}
-        {sel('turma_aurum_id', 'Turma Aurum', aurumTurmas.map((t) => ({ value: String(t.id), label: t.codigo })))}
-        {inpList('regra_acesso', 'Regra de acesso', SUGESTOES.regra_acesso)}{inpList('tempo_acesso', 'Tempo de acesso', SUGESTOES.tempo_acesso)}
-        {inp('data_expiracao', 'Vencimento', 'date')}{inp('hotmart_ucode', 'Hotmart UCode')}
-        {inp('mes_expiracao', 'Mês expiração', 'number')}{inp('ano_expiracao', 'Ano expiração', 'number')}
-        {sel('status_acesso', 'Status de acesso', statusAcessoOpts)}{inpList('status_acesso_central', 'Status central', SUGESTOES.status_acesso_central)}
-        {sel('situacao_acesso', 'Situação de acesso', situacaoOpts)}
-      </div>
+      <SectionCard title={<SecTitle icon="graduation">Acesso ao Curso</SecTitle>}>
+        <SubTitle>Produto &amp; oferta</SubTitle>
+        <div className={grid}>
+          {inpList('produto', 'Produto', SUGESTOES.produto)}
+          {inp('oferta', 'Oferta')}
+          {inpList('tipo_oferta', 'Tipo de oferta', SUGESTOES.tipo_oferta)}
+          {inpList('origem_acesso', 'Origem de acesso', SUGESTOES.origem_acesso)}
+          {inpList('instrucao', 'Instrução', SUGESTOES.instrucao)}
+          {sel('espaco_instrucao', 'Espaço de instrução', espacoOpts)}
+        </div>
+        <SubTitle>Programa</SubTitle>
+        <div className={grid}>
+          {sel('nivel_resultado', 'Nível de resultado', nivelOptions().map((n) => ({ value: n.id, label: n.label })))}
+          {inp('placa_aurum', 'Placa Aurum')}
+          {sel('turma_id', 'Turma THB', thbTurmas.map((t) => ({ value: String(t.id), label: t.codigo })))}
+          {sel('turma_aurum_id', 'Turma Aurum', aurumTurmas.map((t) => ({ value: String(t.id), label: t.codigo })))}
+        </div>
+        <SubTitle>Vigência</SubTitle>
+        <div className={grid}>
+          {inpList('regra_acesso', 'Regra de acesso', SUGESTOES.regra_acesso)}
+          {inpList('tempo_acesso', 'Tempo de acesso', SUGESTOES.tempo_acesso)}
+          {inp('data_expiracao', 'Vencimento', 'date')}
+          {inp('mes_expiracao', 'Mês expiração', 'number')}
+          {inp('ano_expiracao', 'Ano expiração', 'number')}
+        </div>
+        <SubTitle>Hotmart &amp; status</SubTitle>
+        <div className={grid}>
+          {inp('hotmart_ucode', 'Hotmart UCode')}
+          {sel('status_acesso', 'Status de acesso', statusAcessoOpts)}
+          {inpList('status_acesso_central', 'Status central', SUGESTOES.status_acesso_central)}
+          {sel('situacao_acesso', 'Situação de acesso', situacaoOpts)}
+        </div>
+      </SectionCard>
 
-      <SubTitle>Situação Financeira (adesão THB)</SubTitle>
-      <div className="grid grid-cols-2 gap-2">
-        {sel('situacao_financeira', 'Situação financeira', sitFinOpts)}{inpList('status_pagamento', 'Status de pagamento', SUGESTOES.status_pagamento)}
-        {inp('valor_total', 'Valor total', 'number')}{inp('valor_pago', 'Valor pago', 'number')}
-        {inp('saldo_devedor', 'Saldo devedor', 'number')}{inp('num_cobrancas', 'Nº de cobranças', 'number')}
-        {inp('ultimo_pagamento', 'Último pagamento', 'date')}
-      </div>
+      <SectionCard title={<SecTitle icon="pencil">Observações</SecTitle>}>
+        <div className="space-y-2.5">
+          {inp('tratamento_manual', 'Tratamento manual')}
+          <label className="block"><span className="text-xs text-[var(--fg-3)]">Obs central</span>
+            <textarea value={f.obs_central} onChange={(e) => s('obs_central', e.target.value)} rows={3} className={FIELD_CLS} /></label>
+        </div>
+      </SectionCard>
 
-      <SubTitle>Observações</SubTitle>
-      {inp('tratamento_manual', 'Tratamento manual')}
-      <label className="block"><span className="text-xs text-[var(--fg-3)]">Obs central</span>
-        <textarea value={f.obs_central} onChange={(e) => s('obs_central', e.target.value)} rows={3} className={FIELD_CLS} /></label>
-
-      <Button onClick={save} disabled={busy} className="w-full justify-center">{busy ? 'Salvando…' : 'Salvar alterações'}</Button>
+      <Button onClick={save} disabled={busy} className="w-full justify-center py-2.5"><Icon name="check" size={15} /> {busy ? 'Salvando…' : 'Salvar alterações'}</Button>
     </div>
   );
 }
