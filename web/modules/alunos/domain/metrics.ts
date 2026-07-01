@@ -1,6 +1,6 @@
 // Métricas do Dashboard da Base de Alunos — puras, client-side sobre os alunos carregados.
 // Porta da spec docs/specs/dashboard-indicadores.md (Opção A: dado limpo do acervo).
-import { NRANK } from './aluno-360';
+import { NRANK, ESPACO_LABEL } from './aluno-360';
 import type { Aluno360 } from './aluno-360';
 import { nivelLabel } from '@/shared/domain/nivel-resultado';
 
@@ -48,39 +48,45 @@ export interface AlunosMetrics {
   porTurma: Distribuicao[];
 }
 
-/** Matriz turma × nível (heat). Linhas = turmas (top), colunas = níveis presentes. */
-export interface TurmaNivelMatrix {
+/** Matriz turma × espaço de instrução (heat). Linhas = todas as turmas, colunas = espaços presentes. */
+export interface TurmaEspacoMatrix {
   turmas: string[];
-  niveis: { key: string; label: string; color: string }[];
+  colunas: { key: string; label: string; color: string }[];
   cells: Record<string, Record<string, number>>;
   max: number;
 }
 
-export function computeTurmaNivelMatrix(alunos: Aluno360[], topTurmas = 12): TurmaNivelMatrix {
-  const niveisPresentes = (Object.keys(NRANK) as string[])
-    .sort((a, b) => NRANK[b] - NRANK[a])
-    .filter((k) => alunos.some((a) => a.nivel_resultado === k))
-    .map((key) => ({ key, label: nivelLabel(key), color: NIVEL_COLOR[key] || 'var(--nivel-base)' }));
+export function computeTurmaEspacoMatrix(alunos: Aluno360[]): TurmaEspacoMatrix {
+  const colunas = (Object.keys(ESPACO_LABEL) as string[])
+    .filter((k) => alunos.some((a) => a.espaco_instrucao === k))
+    .map((key) => ({ key, label: ESPACO_LABEL[key], color: ESPACO_COLOR[key] || 'var(--nivel-base)' }));
 
   const turmaCounts = new Map<string, number>();
   for (const a of alunos) if (a.turma_codigo) turmaCounts.set(a.turma_codigo, (turmaCounts.get(a.turma_codigo) ?? 0) + 1);
-  const turmas = Array.from(turmaCounts.entries())
-    .sort((x, y) => y[1] - x[1])
-    .slice(0, topTurmas)
-    .map(([t]) => t);
+  const turmas = Array.from(turmaCounts.keys()).sort((a, b) =>
+    a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' }),
+  );
 
   const cells: Record<string, Record<string, number>> = {};
   let max = 0;
   for (const t of turmas) {
     cells[t] = {};
-    for (const n of niveisPresentes) {
-      const c = alunos.filter((a) => a.turma_codigo === t && a.nivel_resultado === n.key).length;
-      cells[t][n.key] = c;
+    for (const col of colunas) {
+      const c = alunos.filter((a) => a.turma_codigo === t && a.espaco_instrucao === col.key).length;
+      cells[t][col.key] = c;
       if (c > max) max = c;
     }
   }
-  return { turmas, niveis: niveisPresentes, cells, max };
+  return { turmas, colunas, cells, max };
 }
+
+const ESPACO_COLOR: Record<string, string> = {
+  holding_masters: 'var(--nivel-platina)',
+  aurum: 'var(--nivel-ouro)',
+  platina: 'var(--green)',
+  mastermind_diamante: 'var(--nivel-diamante)',
+  diamante_vermelho: 'var(--nivel-diamante-vermelho)',
+};
 
 const NIVEL_COLOR: Record<string, string> = {
   ouro: 'var(--nivel-ouro)',
