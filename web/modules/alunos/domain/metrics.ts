@@ -1,6 +1,6 @@
 // Métricas do Dashboard da Base de Alunos — puras, client-side sobre os alunos carregados.
 // Porta da spec docs/specs/dashboard-indicadores.md (Opção A: dado limpo do acervo).
-import { ESPACO_LABEL } from './aluno-360';
+import { ESPACO_LABEL, ESPACO_COLOR } from './aluno-360';
 import type { Aluno360 } from './aluno-360';
 
 export type DashView = 'alunos' | 'socios';
@@ -96,14 +96,6 @@ export function computeTurmaEspacoMatrix(alunos: Aluno360[]): TurmaEspacoMatrix 
   }
   return { turmas, colunas, cells, max };
 }
-
-const ESPACO_COLOR: Record<string, string> = {
-  holding_masters: 'var(--nivel-platina)',
-  aurum: 'var(--nivel-ouro)',
-  platina: 'var(--green)',
-  mastermind_diamante: 'var(--nivel-diamante)',
-  diamante_vermelho: 'var(--nivel-diamante-vermelho)',
-};
 
 function tally(rows: Aluno360[], keyFn: (a: Aluno360) => string | null, labelFn?: (k: string) => string): Distribuicao[] {
   const map = new Map<string, number>();

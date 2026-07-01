@@ -99,6 +99,15 @@ export const ESPACO_LABEL: Record<string, string> = {
   diamante_vermelho: 'Diamante Vermelho',
 };
 
+/** Cor por espaço de instrução (bolinhas/badges e gráficos). */
+export const ESPACO_COLOR: Record<string, string> = {
+  holding_masters: 'var(--nivel-platina)',
+  aurum: 'var(--nivel-ouro)',
+  platina: 'var(--green)',
+  mastermind_diamante: 'var(--nivel-diamante)',
+  diamante_vermelho: 'var(--nivel-diamante-vermelho)',
+};
+
 export const ESPACO_CLS: Record<string, string> = {
   holding_masters: 'blue',
   aurum: 'yellow',

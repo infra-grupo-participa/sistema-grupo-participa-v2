@@ -15,11 +15,13 @@ const DOT: Record<Tone, string> = {
 const CHIP =
   'inline-flex items-center gap-1.5 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-xs font-medium text-[var(--fg-2)] whitespace-nowrap';
 
-/** Chip de status corporativo — cor só no ponto, texto/fundo neutros. */
-export function Badge({ children, tone = 'neutral', dot = false }: { children: React.ReactNode; tone?: Tone; dot?: boolean }) {
+/** Chip de status corporativo — cor só no ponto, texto/fundo neutros.
+ *  `dotColor` sobrepõe a cor do ponto (ex.: cor por espaço/valor). */
+export function Badge({ children, tone = 'neutral', dot = false, dotColor }: { children: React.ReactNode; tone?: Tone; dot?: boolean; dotColor?: string }) {
+  const showDot = dot || tone !== 'neutral' || !!dotColor;
   return (
     <span className={CHIP}>
-      {(dot || tone !== 'neutral') && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: DOT[tone] }} />}
+      {showDot && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor || DOT[tone] }} />}
       {children}
     </span>
   );

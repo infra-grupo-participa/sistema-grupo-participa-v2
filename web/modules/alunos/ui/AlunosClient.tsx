@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   type Aluno360,
   ESPACO_LABEL,
+  ESPACO_COLOR,
   NRANK,
   SITUACAO,
   STATUS_ACESSO,  SUGESTOES,
@@ -74,7 +75,7 @@ function exportarCsvAlunos(rows: Aluno360[]) {
 function EspacoBadge({ espaco }: { espaco: string }) {
   const label = ESPACO_LABEL[espaco];
   if (!label) return <span className="text-[var(--fg-2)]">{espaco}</span>;
-  return <Badge tone="info">{label}</Badge>;
+  return <Badge dotColor={ESPACO_COLOR[espaco] || 'var(--nivel-base)'}>{label}</Badge>;
 }
 
 /** Texto com botão de copiar — não propaga o clique para a linha. */
