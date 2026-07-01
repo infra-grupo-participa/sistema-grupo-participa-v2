@@ -15,13 +15,13 @@ import { nivelLabel, nivelOptions } from '@/shared/domain/nivel-resultado';
 import { loadAlunos360, loadTurmas, loadPlacaHistorico, updateAluno, type Turma, type PlacaHistorico } from './alunos-data';
 import { AUDIT_STEPS } from '@/modules/placas/domain/auditoria';
 import { cursoDesempenhoMock } from '../domain/curso-mock';
-import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Drawer, AvatarInicial, SectionCard, Button, Toolbar, SearchInput, FilterSelect, KpiCard, ProgressBar, Spinner } from '@/shared/ui/components';
+import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Drawer, AvatarInicial, SectionCard, Button, Toolbar, SearchInput, MultiSelect, KpiCard, ProgressBar, Spinner } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { DashboardAlunos } from './DashboardAlunos';
 
 type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento';
-interface Filtros { situacao: string; espaco: string; nivel: string; jornada: string; papel: string; turma: string; estado: string }
-const FILTROS_VAZIO: Filtros = { situacao: '', espaco: '', nivel: '', jornada: '', papel: '', turma: '', estado: '' };
+interface Filtros { situacao: string[]; espaco: string[]; nivel: string[]; jornada: string[]; papel: string[]; turma: string[]; estado: string[] }
+const FILTROS_VAZIO: Filtros = { situacao: [], espaco: [], nivel: [], jornada: [], papel: [], turma: [], estado: [] };
 
 const money = (v: number | null) =>
   v == null ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -132,21 +132,14 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
         const hay = searchHaystack(a);
         if (!tokens.every((t) => hay.includes(t))) return false;
       }
-      if (f.situacao === 'inadimplente') {
-        if (!(Number(a.saldo_devedor) > 0)) return false;
-      } else if (f.situacao && a.situacao_acesso !== f.situacao) return false;
-      if (f.espaco && (a.espaco_instrucao || '') !== f.espaco) return false;
-      if (f.nivel && a.nivel_resultado !== f.nivel) return false;
-      if (f.papel === 'socio' && !a.eh_socio) return false;
-      if (f.papel === 'titular' && a.eh_socio) return false;
-      if (f.papel === 'aurum' && a.turma_aurum_id == null) return false;
-      if (f.turma && a.turma_codigo !== f.turma && a.turma_aurum_codigo !== f.turma) return false;
-      if (f.estado && String(a.estado ?? '').toUpperCase() !== f.estado) return false;
-      if (f.jornada === 'com_ht' && !a.tem_ht) return false;
-      if (f.jornada === 'com_hm' && !a.tem_hm) return false;
-      if (f.jornada === 'com_placa' && !a.tem_placa) return false;
-      if (f.jornada === 'com_depoimento' && !a.tem_depoimento) return false;
-      if (f.jornada === 'com_sip' && !a.sip_registrado) return false;
+      // Múltipla seleção: OR dentro de cada filtro, AND entre filtros.
+      if (f.situacao.length && !f.situacao.some((s) => (s === 'inadimplente' ? Number(a.saldo_devedor) > 0 : a.situacao_acesso === s))) return false;
+      if (f.espaco.length && !f.espaco.includes(a.espaco_instrucao || '')) return false;
+      if (f.nivel.length && !f.nivel.includes(a.nivel_resultado || '')) return false;
+      if (f.papel.length && !f.papel.some((p) => (p === 'socio' ? a.eh_socio : p === 'titular' ? !a.eh_socio : p === 'aurum' ? a.turma_aurum_id != null : false))) return false;
+      if (f.turma.length && !f.turma.some((t) => a.turma_codigo === t || a.turma_aurum_codigo === t)) return false;
+      if (f.estado.length && !f.estado.includes(String(a.estado ?? '').toUpperCase())) return false;
+      if (f.jornada.length && !f.jornada.some((j) => (j === 'com_ht' && a.tem_ht) || (j === 'com_hm' && a.tem_hm) || (j === 'com_placa' && a.tem_placa) || (j === 'com_depoimento' && a.tem_depoimento) || (j === 'com_sip' && a.sip_registrado))) return false;
       return true;
     });
     list.sort((a, b) => {
@@ -179,7 +172,7 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
   // Opções de filtro (turma em ordem decrescente T38→T1; estados A–Z).
   const turmaOpts = useMemo(() => Array.from(new Set(alunos.flatMap((a) => [a.turma_codigo, a.turma_aurum_codigo]).filter(Boolean) as string[])).sort((a, b) => b.localeCompare(a, 'pt-BR', { numeric: true, sensitivity: 'base' })), [alunos]);
   const estadoOpts = useMemo(() => Array.from(new Set(alunos.map((a) => String(a.estado ?? '').toUpperCase()).filter(Boolean))).sort(), [alunos]);
-  const temFiltroLista = Boolean(busca) || Object.values(filtros).some(Boolean);
+  const temFiltroLista = Boolean(busca) || Object.values(filtros).some((arr) => arr.length > 0);
 
   const selected = selectedId ? alunos.find((a) => a.id === selectedId) ?? null : null;
   const sortBtn = (col: SortCol) => () => {
@@ -212,13 +205,13 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
       <>
       <Toolbar className="mb-3">
         <SearchInput value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, e-mail, documento, cidade…" />
-        <Sel value={filtros.turma} onChange={(v) => setFiltros((f) => ({ ...f, turma: v }))} placeholder="Todas as turmas" options={turmaOpts.map((t) => ({ value: t, label: t }))} />
-        <Sel value={filtros.espaco} onChange={(v) => setFiltros((f) => ({ ...f, espaco: v }))} placeholder="Todos os espaços" options={Object.entries(ESPACO_LABEL).map(([k, l]) => ({ value: k, label: l }))} />
-        <Sel value={filtros.papel} onChange={(v) => setFiltros((f) => ({ ...f, papel: v }))} placeholder="Titular / Sócio" options={[{ value: 'titular', label: 'Titulares' }, { value: 'socio', label: 'Sócios' }, { value: 'aurum', label: 'Aurum' }]} />
-        <Sel value={filtros.estado} onChange={(v) => setFiltros((f) => ({ ...f, estado: v }))} placeholder="Todos os estados" options={estadoOpts.map((e) => ({ value: e, label: e }))} />
-        <Sel value={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={nivelOptions().map((n) => ({ value: n.id, label: n.label }))} />
-        <Sel value={filtros.jornada} onChange={(v) => setFiltros((f) => ({ ...f, jornada: v }))} placeholder="Toda jornada" options={[{ value: 'com_ht', label: 'Com HT' }, { value: 'com_hm', label: 'Com HM' }, { value: 'com_placa', label: 'Com placa' }, { value: 'com_depoimento', label: 'Com depoimento' }, { value: 'com_sip', label: 'Com SIP' }]} />
-        <Sel value={filtros.situacao} onChange={(v) => setFiltros((f) => ({ ...f, situacao: v }))} placeholder="Toda situação" options={[...Object.entries(SITUACAO).map(([k, s]) => ({ value: k, label: s.label })), { value: 'inadimplente', label: 'Inadimplente' }]} />
+        <MultiSelect values={filtros.turma} onChange={(v) => setFiltros((f) => ({ ...f, turma: v }))} placeholder="Todas as turmas" options={turmaOpts.map((t) => ({ value: t, label: t }))} />
+        <MultiSelect values={filtros.espaco} onChange={(v) => setFiltros((f) => ({ ...f, espaco: v }))} placeholder="Todos os espaços" options={Object.entries(ESPACO_LABEL).map(([k, l]) => ({ value: k, label: l }))} />
+        <MultiSelect values={filtros.papel} onChange={(v) => setFiltros((f) => ({ ...f, papel: v }))} placeholder="Titular / Sócio" options={[{ value: 'titular', label: 'Titulares' }, { value: 'socio', label: 'Sócios' }, { value: 'aurum', label: 'Aurum' }]} />
+        <MultiSelect values={filtros.estado} onChange={(v) => setFiltros((f) => ({ ...f, estado: v }))} placeholder="Todos os estados" options={estadoOpts.map((e) => ({ value: e, label: e }))} />
+        <MultiSelect values={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={nivelOptions().map((n) => ({ value: n.id, label: n.label }))} />
+        <MultiSelect values={filtros.jornada} onChange={(v) => setFiltros((f) => ({ ...f, jornada: v }))} placeholder="Toda jornada" options={[{ value: 'com_ht', label: 'Com HT' }, { value: 'com_hm', label: 'Com HM' }, { value: 'com_placa', label: 'Com placa' }, { value: 'com_depoimento', label: 'Com depoimento' }, { value: 'com_sip', label: 'Com SIP' }]} />
+        <MultiSelect values={filtros.situacao} onChange={(v) => setFiltros((f) => ({ ...f, situacao: v }))} placeholder="Toda situação" options={[...Object.entries(SITUACAO).map(([k, s]) => ({ value: k, label: s.label })), { value: 'inadimplente', label: 'Inadimplente' }]} />
       </Toolbar>
 
       <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
@@ -282,15 +275,6 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
       )}
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface-4)] text-[var(--fg)] px-4 py-2 rounded-[var(--r-md)] shadow-[var(--shadow-lg)] text-sm z-[1100]">{toast}</div>}
     </div>
-  );
-}
-
-function Sel({ value, onChange, placeholder, options }: { value: string; onChange: (v: string) => void; placeholder: string; options: { value: string; label: string }[] }) {
-  return (
-    <FilterSelect value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">{placeholder}</option>
-      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </FilterSelect>
   );
 }
 

@@ -4,7 +4,7 @@ export { Card, StatCard, KpiCard, SectionCard, SectionTitle, EmptyState } from '
 export { Drawer, AvatarInicial, Tabs, Row } from './Drawer';
 export { DataTable, Thead, Th, Tr, Td } from './Table';
 export { Spinner, Loading, ProgressBar } from './Feedback';
-export { Toolbar, SearchInput, Input, FilterSelect, Toggle } from './Controls';
+export { Toolbar, SearchInput, Input, FilterSelect, MultiSelect, Toggle } from './Controls';
 export { Checkbox } from './Checkbox';
 export { Modal, ConfirmDialog } from './Modal';
 export { Timeline } from './Timeline';

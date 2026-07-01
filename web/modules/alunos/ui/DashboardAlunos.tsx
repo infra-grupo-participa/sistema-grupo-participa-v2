@@ -179,7 +179,7 @@ function Donut({ data, total }: { data: Distribuicao[]; total: number }) {
         <text x="66" y="62" textAnchor="middle" className="tabular" style={{ fill: 'var(--fg)', fontSize: 22, fontWeight: 700 }}>{total.toLocaleString('pt-BR')}</text>
         <text x="66" y="80" textAnchor="middle" style={{ fill: 'var(--fg-3)', fontSize: 10 }}>registros</text>
       </svg>
-      <div className="flex-1 min-w-[140px] space-y-1.5">
+      <div className="flex-1 min-w-[140px] space-y-1.5 max-h-56 overflow-y-auto pr-1">
         {segs.map((s) => (
           <div key={s.label} className="flex items-center gap-2 text-xs">
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.color }} />

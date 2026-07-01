@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
 
 /** Barra de ferramentas — agrupa busca, filtros e ações com espaçamento consistente. */
@@ -11,6 +11,49 @@ export function Toolbar({ children, className = '' }: { children: React.ReactNod
 const inputCls =
   'w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] text-[var(--fg)] placeholder:text-[var(--fg-3)] ' +
   'px-3 py-2 text-sm transition-colors focus:border-[var(--border-accent)] disabled:opacity-50';
+
+/** Filtro de múltipla seleção (checkboxes). Recebe/retorna array de valores. */
+export function MultiSelect({ values, onChange, placeholder, options, className = '' }: {
+  values: string[];
+  onChange: (v: string[]) => void;
+  placeholder: string;
+  options: { value: string; label: string }[];
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+  const toggle = (val: string) => onChange(values.includes(val) ? values.filter((v) => v !== val) : [...values, val]);
+  const texto = values.length === 0 ? placeholder
+    : values.length === 1 ? (options.find((o) => o.value === values[0])?.label ?? values[0])
+    : `${values.length} selecionados`;
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <button type="button" onClick={() => setOpen((o) => !o)} className={`${inputCls} flex items-center justify-between gap-2 min-w-[160px] cursor-pointer ${values.length ? '!text-[var(--fg)]' : '!text-[var(--fg-3)]'}`}>
+        <span className="truncate">{texto}</span>
+        <span className="shrink-0 text-[var(--fg-3)]"><Icon name="chevron-down" size={14} /></span>
+      </button>
+      {open && (
+        <div className="absolute left-0 z-30 mt-1 w-max min-w-full max-w-[280px] max-h-64 overflow-auto rounded-[var(--r-md)] border border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[var(--shadow-lg)] p-1">
+          {values.length > 0 && (
+            <button type="button" onClick={() => onChange([])} className="w-full text-left px-2 py-1 text-[11px] font-semibold text-[var(--accent)] hover:underline">Limpar seleção</button>
+          )}
+          {options.length === 0 && <div className="px-2 py-1.5 text-sm text-[var(--fg-3)]">Sem opções</div>}
+          {options.map((o) => (
+            <label key={o.value} className="flex items-center gap-2 px-2 py-1.5 rounded-[var(--r-sm)] text-sm text-[var(--fg-2)] hover:bg-[var(--surface-3)] cursor-pointer">
+              <input type="checkbox" checked={values.includes(o.value)} onChange={() => toggle(o.value)} className="accent-[var(--accent)]" />
+              <span className="truncate">{o.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Campo de busca com ícone (paridade .search-wrap / .search-icon). */
 export const SearchInput = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
