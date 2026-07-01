@@ -474,6 +474,7 @@ interface SipProgresso {
   registrado: boolean;
   sip_user_id?: string;
   ciclo_type?: string | null;
+  taskline_label?: string | null;
   approval_status?: string | null;
   onboarding_done?: boolean | null;
   nivel?: string | null;
@@ -525,6 +526,7 @@ function SipJornada({ email, on }: { email: string | null; on: boolean }) {
             <div className="space-y-1.5">
               <Row k="Status" v={data.approval_status ? (SIP_STATUS[data.approval_status] || data.approval_status) : '—'} />
               <Row k="Ciclo" v={data.ciclo_type ? (SIP_CICLO[data.ciclo_type] || data.ciclo_type) : '—'} />
+              {data.taskline_label && <Row k="Trilha" v={data.taskline_label} />}
               {data.nivel && <Row k="Nível no SIP" v={data.nivel} />}
               {data.turma && <Row k="Turma" v={data.turma} />}
               {tarefas?.concluidas != null && (
