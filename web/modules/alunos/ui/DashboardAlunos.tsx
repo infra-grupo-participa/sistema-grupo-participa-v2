@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { applyDashFilters, computeAlunosMetrics, computeTurmaEspacoMatrix, type DashFiltros, type DashView, type Distribuicao } from '../domain/metrics';
 import type { Aluno360 } from '../domain/aluno-360';
-import { nivelOptions } from '@/shared/domain/nivel-resultado';
+import { ESPACO_LABEL } from '../domain/aluno-360';
 import { Card, StatCard, SectionTitle, Button, FilterSelect } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 
@@ -30,7 +30,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
 
   const estados = useMemo(() => Array.from(new Set(alunos.map((a) => String(a.estado ?? '').toUpperCase()).filter(Boolean))).sort(), [alunos]);
   const turmas = useMemo(() => Array.from(new Set(alunos.map((a) => a.turma_codigo).filter(Boolean) as string[])).sort(), [alunos]);
-  const temFiltro = Boolean(filtros.nivel || filtros.estado || filtros.turma || view === 'socios');
+  const temFiltro = Boolean(filtros.espaco || filtros.estado || filtros.turma || view === 'socios');
 
   const persistViews = (next: SavedView[]) => { setViews(next); localStorage.setItem(VIEWS_KEY, JSON.stringify(next)); };
   const salvarVisao = () => {
@@ -56,7 +56,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
       </div>
 
       <div className="flex flex-wrap gap-2 mb-3">
-        <Filtro value={filtros.nivel || ''} onChange={(v) => set('nivel', v)} placeholder="Todos os níveis" options={nivelOptions().map((n) => ({ value: n.id, label: n.label }))} />
+        <Filtro value={filtros.espaco || ''} onChange={(v) => set('espaco', v)} placeholder="Todos os espaços" options={Object.entries(ESPACO_LABEL).map(([value, label]) => ({ value, label }))} />
         <Filtro value={filtros.turma || ''} onChange={(v) => set('turma', v)} placeholder="Todas as turmas" options={turmas.map((t) => ({ value: t, label: t }))} />
         <Filtro value={filtros.estado || ''} onChange={(v) => set('estado', v)} placeholder="Todos os estados" options={estados.map((e) => ({ value: e, label: e }))} />
         {temFiltro && <Button variant="ghost" size="sm" onClick={() => { setFiltros({}); setView('alunos'); }}>Limpar</Button>}
@@ -83,8 +83,8 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
-          <SectionTitle>Funil por nível</SectionTitle>
-          <Bars data={m.porNivel} total={m.total} />
+          <SectionTitle>Por espaço de instrução</SectionTitle>
+          <Bars data={m.porEspaco} total={m.total} />
         </Card>
         <Card className="p-5">
           <SectionTitle>Distribuição por turma</SectionTitle>

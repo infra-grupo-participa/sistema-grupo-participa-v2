@@ -1,12 +1,11 @@
 // Métricas do Dashboard da Base de Alunos — puras, client-side sobre os alunos carregados.
 // Porta da spec docs/specs/dashboard-indicadores.md (Opção A: dado limpo do acervo).
-import { NRANK, ESPACO_LABEL } from './aluno-360';
+import { ESPACO_LABEL } from './aluno-360';
 import type { Aluno360 } from './aluno-360';
-import { nivelLabel } from '@/shared/domain/nivel-resultado';
 
 export type DashView = 'alunos' | 'socios';
 export interface DashFiltros {
-  nivel?: string;
+  espaco?: string;
   estado?: string;
   turma?: string;
 }
@@ -16,7 +15,7 @@ const ATIVO = new Set(['renovado', 'vigente']);
 export function applyDashFilters(alunos: Aluno360[], view: DashView, f: DashFiltros = {}): Aluno360[] {
   return alunos.filter((a) => {
     if (view === 'socios' && !a.eh_socio) return false;
-    if (f.nivel && a.nivel_resultado !== f.nivel) return false;
+    if (f.espaco && a.espaco_instrucao !== f.espaco) return false;
     if (f.estado && String(a.estado ?? '').toUpperCase() !== f.estado) return false;
     if (f.turma && a.turma_codigo !== f.turma) return false;
     return true;
@@ -41,7 +40,6 @@ export interface AlunosMetrics {
   sip: number;
   aurum: number;
   socios: number;
-  porNivel: Distribuicao[];
   porEspaco: Distribuicao[];
   porEstado: Distribuicao[];
   porAno: Distribuicao[];
@@ -88,13 +86,6 @@ const ESPACO_COLOR: Record<string, string> = {
   diamante_vermelho: 'var(--nivel-diamante-vermelho)',
 };
 
-const NIVEL_COLOR: Record<string, string> = {
-  ouro: 'var(--nivel-ouro)',
-  platina: 'var(--nivel-platina)',
-  diamante: 'var(--nivel-diamante)',
-  diamante_vermelho: 'var(--nivel-diamante-vermelho)',
-};
-
 function tally(rows: Aluno360[], keyFn: (a: Aluno360) => string | null, labelFn?: (k: string) => string): Distribuicao[] {
   const map = new Map<string, number>();
   for (const a of rows) {
@@ -111,18 +102,18 @@ export function computeAlunosMetrics(alunos: Aluno360[], view: DashView = 'aluno
   const total = base.length;
   const ativos = base.filter((a) => ATIVO.has(String(a.status_acesso ?? '').toLowerCase())).length;
 
-  // Nível ordenado do mais alto para o mais baixo (funil); "sem nível" ao fim.
-  const porNivel = (Object.keys(NRANK) as string[])
-    .sort((a, b) => NRANK[b] - NRANK[a])
+  // Espaço de instrução (o que mais importa) — ordenado por volume; "sem espaço" ao fim.
+  const porEspaco = (Object.keys(ESPACO_LABEL) as string[])
     .map((key) => ({
       key,
-      label: nivelLabel(key),
-      count: base.filter((a) => a.nivel_resultado === key).length,
-      color: NIVEL_COLOR[key] || 'var(--nivel-base)',
+      label: ESPACO_LABEL[key],
+      count: base.filter((a) => a.espaco_instrucao === key).length,
+      color: ESPACO_COLOR[key] || 'var(--nivel-base)',
     }))
-    .filter((d) => d.count > 0);
-  const semNivel = base.filter((a) => !a.nivel_resultado).length;
-  if (semNivel) porNivel.push({ key: '__none__', label: 'Sem nível', count: semNivel, color: 'var(--fg-4)' });
+    .filter((d) => d.count > 0)
+    .sort((x, y) => y.count - x.count);
+  const semEspaco = base.filter((a) => !a.espaco_instrucao).length;
+  if (semEspaco) porEspaco.push({ key: '__none__', label: 'Sem espaço', count: semEspaco, color: 'var(--fg-4)' });
 
   return {
     total,
@@ -135,8 +126,7 @@ export function computeAlunosMetrics(alunos: Aluno360[], view: DashView = 'aluno
     sip: base.filter((a) => a.sip_registrado).length,
     aurum: base.filter((a) => a.turma_aurum_id != null).length,
     socios: alunos.filter((a) => a.eh_socio).length,
-    porNivel,
-    porEspaco: tally(base.filter((a) => a.espaco_instrucao), (a) => a.espaco_instrucao, (k) => k.replace(/_/g, ' ')).slice(0, 6),
+    porEspaco,
     porEstado: tally(base.filter((a) => a.estado), (a) => String(a.estado).toUpperCase()).slice(0, 8),
     porAno: tally(
       base.filter((a) => a.data_compra_importada),
