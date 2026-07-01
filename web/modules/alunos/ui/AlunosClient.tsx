@@ -6,9 +6,7 @@ import {
   ESPACO_LABEL,
   NRANK,
   SITUACAO,
-  STATUS_ACESSO,
-  SITUACAO_FINANCEIRA,
-  SUGESTOES,
+  STATUS_ACESSO,  SUGESTOES,
   RENOVACAO_LABEL,
   renovacaoStatus,
   searchHaystack,
@@ -269,7 +267,6 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
       .then(setPlacaHist)
       .finally(() => setPlacaLoading(false));
   }, [temPlaca, placaHist, a.id, a.email]);
-  const saldo = Number(a.saldo_devedor) || 0;
   const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
   const espaco = ESPACO_LABEL[a.espaco_instrucao || ''] || null;
 
@@ -296,33 +293,6 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
         <EditForm a={a} turmas={turmas} onSaved={onSaved} />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 items-start">
-          {/* Faturamento & Comprovação — em destaque */}
-          <SectionCard className="md:col-span-2" title={<SecTitle icon="coins">Faturamento &amp; Comprovação</SecTitle>}>
-            {(() => {
-              const sf = a.situacao_financeira ? SITUACAO_FINANCEIRA[a.situacao_financeira] : null;
-              return (
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {sf && <Badge tone={sitTone(sf.cls)} dot>{sf.label}</Badge>}
-                  {a.status_pagamento && <Badge tone="neutral">{a.status_pagamento}</Badge>}
-                </div>
-              );
-            })()}
-            <div className="grid grid-cols-3 gap-3 mb-3">
-              <KpiCard label="Pago" value={money(a.valor_pago)} bar="green" />
-              <KpiCard label="Total" value={money(a.valor_total)} bar="gray" />
-              <KpiCard label="Saldo devedor" value={money(saldo)} bar={saldo > 0 ? 'red' : 'gray'} />
-            </div>
-            <div className="grid sm:grid-cols-2 sm:gap-x-6">
-              <Row k="Situação financeira" v={a.situacao_financeira ? (SITUACAO_FINANCEIRA[a.situacao_financeira]?.label || a.situacao_financeira) : '—'} />
-              <Row k="Status de pagamento" v={a.status_pagamento} />
-              <Row k="Último pagamento" v={dataBR(a.ultimo_pagamento)} />
-              <Row k="Nº de cobranças" v={a.num_cobrancas != null ? String(a.num_cobrancas) : '—'} />
-            </div>
-            {saldo > 0
-              ? <div className="mt-3 p-2 rounded bg-[var(--red-subtle)] text-[var(--red)] text-xs flex items-center gap-1.5"><Icon name="alert" size={13} /> Regularização necessária — saldo em aberto: {money(saldo)}</div>
-              : <div className="mt-3 p-2 rounded bg-[var(--green-subtle)] text-[var(--green)] text-xs flex items-center gap-1.5"><Icon name="check" size={13} /> Sem pendências financeiras</div>}
-          </SectionCard>
-
           {/* Dados Pessoais */}
           <SectionCard title={<SecTitle icon="user">Dados Pessoais</SecTitle>}>
             <Section>
@@ -723,24 +693,11 @@ function EditForm({ a, turmas, onSaved }: { a: Aluno360; turmas: Turma[]; onSave
   const espacoOpts = Object.entries(ESPACO_LABEL).map(([value, label]) => ({ value, label }));
   const situacaoOpts = Object.entries(SITUACAO).map(([value, x]) => ({ value, label: x.label }));
   const statusAcessoOpts = Object.entries(STATUS_ACESSO).map(([value, x]) => ({ value, label: x.label }));
-  const sitFinOpts = Object.entries(SITUACAO_FINANCEIRA).map(([value, x]) => ({ value, label: x.label }));
 
   // Edição espelha a MESMA ordem/agrupamento da leitura (Faturamento → Dados → Acesso → Observações).
   const grid = 'grid grid-cols-1 sm:grid-cols-2 gap-2.5';
   return (
     <div className="space-y-4">
-      <SectionCard title={<SecTitle icon="coins">Faturamento &amp; Comprovação</SecTitle>}>
-        <div className={grid}>
-          {sel('situacao_financeira', 'Situação financeira', sitFinOpts)}
-          {inpList('status_pagamento', 'Status de pagamento', SUGESTOES.status_pagamento)}
-          {inp('valor_total', 'Valor total', 'number')}
-          {inp('valor_pago', 'Valor pago', 'number')}
-          {inp('saldo_devedor', 'Saldo devedor', 'number')}
-          {inp('num_cobrancas', 'Nº de cobranças', 'number')}
-          {inp('ultimo_pagamento', 'Último pagamento', 'date')}
-        </div>
-      </SectionCard>
-
       <SectionCard title={<SecTitle icon="user">Dados Pessoais</SecTitle>}>
         <div className={grid}>
           {inp('nome', 'Nome')}

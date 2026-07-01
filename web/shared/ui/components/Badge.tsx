@@ -2,24 +2,24 @@ import { nivelLabel, nivelNormalize } from '@/shared/domain/nivel-resultado';
 
 type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
 
-const TONES: Record<Tone, { fg: string; bg: string; bd: string }> = {
-  neutral: { fg: 'var(--fg-2)', bg: 'var(--surface-3)', bd: 'var(--border)' },
-  accent: { fg: 'var(--accent)', bg: 'var(--accent-subtle)', bd: 'var(--accent-border)' },
-  success: { fg: 'var(--green)', bg: 'var(--green-subtle)', bd: 'var(--green-border)' },
-  warning: { fg: 'var(--yellow)', bg: 'var(--yellow-subtle)', bd: 'var(--yellow-border)' },
-  danger: { fg: 'var(--red)', bg: 'var(--red-subtle)', bd: 'var(--red-border)' },
-  info: { fg: 'var(--info)', bg: 'var(--info-subtle)', bd: 'var(--info-border)' },
+// Corporativo: chip neutro uniforme + ponto de status colorido (sem pílula colorida).
+const DOT: Record<Tone, string> = {
+  neutral: 'var(--fg-3)',
+  accent: 'var(--accent)',
+  success: 'var(--green)',
+  warning: 'var(--yellow)',
+  danger: 'var(--red)',
+  info: 'var(--info)',
 };
 
-/** Pill/badge de status — base da linguagem visual. */
+const CHIP =
+  'inline-flex items-center gap-1.5 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-xs font-medium text-[var(--fg-2)] whitespace-nowrap';
+
+/** Chip de status corporativo — cor só no ponto, texto/fundo neutros. */
 export function Badge({ children, tone = 'neutral', dot = false }: { children: React.ReactNode; tone?: Tone; dot?: boolean }) {
-  const t = TONES[tone];
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-[var(--r-pill)] px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap border"
-      style={{ color: t.fg, background: t.bg, borderColor: t.bd }}
-    >
-      {dot && <span className="w-1.5 h-1.5 rounded-full" style={{ background: t.fg }} />}
+    <span className={CHIP}>
+      {(dot || tone !== 'neutral') && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: DOT[tone] }} />}
       {children}
     </span>
   );
@@ -36,17 +36,14 @@ const NIVEL_COLOR: Record<string, string> = {
   diamante_vermelho: 'var(--nivel-diamante-vermelho)',
 };
 
-/** Assinatura: nível como dot colorido por metal/pedra. */
+/** Assinatura: nível como chip neutro com dot colorido por metal/pedra. */
 export function NivelBadge({ nivel }: { nivel: string | null | undefined }) {
   const key = nivelNormalize(nivel);
   if (!key) return <span className="text-[var(--fg-3)]">—</span>;
   const color = NIVEL_COLOR[key] || 'var(--nivel-base)';
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-[var(--r-pill)] px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap border"
-      style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)`, borderColor: `color-mix(in srgb, ${color} 30%, transparent)` }}
-    >
-      <span className="w-2 h-2 rounded-full" style={{ background: color }} />
+    <span className={CHIP}>
+      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
       {nivelLabel(key)}
     </span>
   );
