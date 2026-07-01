@@ -33,7 +33,7 @@ export function MultiSelect({ values, onChange, placeholder, options, className 
     : `${values.length} selecionados`;
   return (
     <div ref={ref} className={`relative ${className}`}>
-      <button type="button" onClick={() => setOpen((o) => !o)} className={`${inputCls} flex items-center justify-between gap-2 min-w-[160px] cursor-pointer ${values.length ? '!text-[var(--fg)]' : '!text-[var(--fg-3)]'}`}>
+      <button type="button" onClick={() => setOpen((o) => !o)} className={`${inputCls} flex items-center justify-between gap-2 min-w-[160px] cursor-pointer ${values.length ? '!text-[var(--fg)]' : '!text-[var(--fg-2)]'}`}>
         <span className="truncate">{texto}</span>
         <span className="shrink-0 text-[var(--fg-3)]"><Icon name="chevron-down" size={14} /></span>
       </button>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
 import { AUDIT_STEP_TOTAL, AUDIT_STEP_INDEX, type AuditStep } from '../../domain/auditoria';
 import {
@@ -28,7 +28,7 @@ import {
   type NivelFaixa,
   type EspacoOption,
 } from '../../domain/config';
-import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, AvatarInicial, Card, Button, StatCard, SearchInput, Input, FilterSelect, Toggle, ProgressBar, ConfirmDialog } from '@/shared/ui/components';
+import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, AvatarInicial, Card, Button, SearchInput, Input, FilterSelect, ProgressBar, ConfirmDialog } from '@/shared/ui/components';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://grupoparticipa.app.br';
 
@@ -56,7 +56,7 @@ const STATUS_TONE: Record<string, 'accent' | 'neutral' | 'success' | 'danger' | 
   'sp-regularizacao': 'warning',
 };
 
-type Tab = 'solicitacoes' | 'agenda-horarios';
+type Tab = 'solicitacoes' | 'agenda-horarios' | 'config';
 const BUCKETS: { key: SolicitacaoBucket; label: string }[] = [
   { key: 'processo', label: 'Em processo' },
   { key: 'rascunhos', label: 'Rascunhos' },
@@ -73,6 +73,9 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
   const [q, setQ] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [toast, setToast] = useState('');
+  const [cfg, setCfg] = useState<PlacasConfig | null>(null);
+
+  const steps = useMemo(() => resolveAuditSteps(cfg?.audit_steps), [cfg]);
 
   const reload = useCallback(async () => {
     const [s, a] = await Promise.all([data.loadSolicitacoes(), data.loadAuditorias()]);
@@ -87,11 +90,13 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
       const initial = await data.loadSolicitacoes();
       if (canEdit) await data.autoStartPending(initial); // auto-inicia auditorias 'enviado'
       await reload();
+      configData.loadPlacasConfig().then(setCfg).catch(() => {});
       setLoading(false);
     })();
     const applyHash = () => {
       const h = window.location.hash.replace('#', '');
       if (h === 'agenda-horarios') setTab('agenda-horarios');
+      else if (h === 'config') setTab('config');
       else setTab('solicitacoes');
     };
     applyHash();
@@ -118,8 +123,15 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
     return sols
       .filter((s) => getSolicitacaoBucketMatch(s, bucket))
       .filter((s) => !term || `${s.nome ?? ''} ${s.email ?? ''} ${s.documento_nf ?? ''}`.toLowerCase().includes(term))
-      .sort((a, b) => getSolicitacaoQueuePriority(a) - getSolicitacaoQueuePriority(b));
+      .sort((a, b) => {
+        // Não-vistos (ação nova do cliente) sempre no topo — estilo caixa de WhatsApp.
+        const sa = isSolicitacaoSeen(a) ? 1 : 0;
+        const sb = isSolicitacaoSeen(b) ? 1 : 0;
+        if (sa !== sb) return sa - sb;
+        return getSolicitacaoQueuePriority(a) - getSolicitacaoQueuePriority(b);
+      });
   }, [sols, bucket, q]);
+  const naoVistos = useMemo(() => sols.filter((s) => !isSolicitacaoSeen(s)).length, [sols]);
 
   const open = openId ? sols.find((s) => s.id === openId) ?? null : null;
   const stats = useMemo(() => {
@@ -141,9 +153,14 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
               Solicitações de <span className="text-[var(--accent)]">Placas</span>
               <span className="ml-2 align-middle text-xs font-semibold rounded-[var(--r-pill)] bg-[var(--accent-subtle)] text-[var(--accent)] px-2 py-0.5">{stats.total}</span>
             </h1>
-            <a href="/sistema/admin-dev" className="inline-flex items-center justify-center gap-1.5 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent text-[var(--fg-2)] border border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="notebook" size={14} /> Logs</a>
+            <div className="flex items-center gap-2">
+              {canEdit && (
+                <button onClick={() => { window.location.hash = 'config'; setTab('config'); }} className="inline-flex items-center justify-center gap-1.5 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent text-[var(--fg-2)] border border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="settings" size={14} /> Configurações</button>
+              )}
+              <a href="/sistema/admin-dev" className="inline-flex items-center justify-center gap-1.5 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent text-[var(--fg-2)] border border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="notebook" size={14} /> Logs</a>
+            </div>
           </div>
-          <p className="text-sm text-[var(--fg-3)] mb-4">Candidatos que iniciaram o processo via formulário público · Atualizado em {hoje}{loading && ' · carregando…'}</p>
+          <p className="text-sm text-[var(--fg-3)] mb-4">Candidatos que iniciaram o processo via formulário público · Atualizado em {hoje}{loading && ' · carregando…'}{naoVistos > 0 && <span className="ml-1 font-semibold text-[var(--accent)]">· {naoVistos} com ação nova do cliente</span>}</p>
 
           {/* Stat cards com acento + ícone */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
@@ -196,16 +213,24 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
                 const seen = isSolicitacaoSeen(s);
                 const pr = progresso(s);
                 return (
-                  <Tr key={s.id} onClick={() => setOpenId(s.id)}>
+                  <Tr
+                    key={s.id}
+                    onClick={() => setOpenId(s.id)}
+                    className={!seen ? '!bg-[var(--accent-subtle)] hover:!bg-[var(--accent-subtle)]' : ''}
+                    style={!seen ? { boxShadow: 'inset 3px 0 0 0 var(--accent)' } : undefined}
+                  >
                     <Td>
                       <div className="flex items-center gap-2.5">
-                        <span className="relative grid place-items-center w-8 h-8 rounded-full bg-[var(--accent)] text-black font-bold text-sm shrink-0">
+                        <span className={`relative grid place-items-center w-8 h-8 rounded-full font-bold text-sm shrink-0 ${!seen ? 'bg-[var(--accent)] text-black' : 'bg-[var(--surface-4)] text-[var(--fg-2)]'}`}>
                           {initial(s.nome)}
-                          {!seen && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[var(--accent)] ring-2 ring-[var(--surface-2)]" title="Atualização não vista" />}
+                          {!seen && <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-[var(--accent)] ring-2 ring-[var(--surface-2)] animate-pulse" title="Ação nova do cliente" />}
                         </span>
                         <div className="min-w-0">
-                          <div className="text-[var(--fg)] font-medium truncate">{s.nome || '—'}</div>
-                          <div className="text-[var(--fg-3)] text-xs truncate">{s.email}</div>
+                          <div className={`truncate flex items-center gap-1.5 ${!seen ? 'text-[var(--fg)] font-bold' : 'text-[var(--fg)] font-medium'}`}>
+                            {s.nome || '—'}
+                            {!seen && <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide rounded-[var(--r-pill)] bg-[var(--accent)] text-black px-1.5 py-px">Novo</span>}
+                          </div>
+                          <div className={`text-xs truncate ${!seen ? 'text-[var(--fg-2)]' : 'text-[var(--fg-3)]'}`}>{s.email}</div>
                         </div>
                       </div>
                     </Td>
@@ -226,7 +251,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
           </DataTable>
           {!filtered.length && !loading && <EmptyState title="Nenhuma solicitação neste filtro" icon="trophy" />}
         </>
-      ) : (
+      ) : tab === 'agenda-horarios' ? (
         <>
           <h1 className="text-2xl font-bold text-[var(--fg)] mb-1">Agenda de <span className="text-[var(--accent)]">Horários</span></h1>
           <p className="text-sm text-[var(--fg-3)] mb-4">Slots de entrevista abertos e agendamentos dos candidatos.{loading && ' · carregando…'}</p>
@@ -238,6 +263,8 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
               .map((s) => ({ data: s.entrevista_data as string, hora: String(s.entrevista_hora).slice(0, 5), nome: s.nome, email: s.email }))}
           />
         </>
+      ) : (
+        <ConfigPanel canEdit={canEdit} cfg={cfg} onSaved={(next) => setCfg(next)} onBack={() => { window.location.hash = ''; setTab('solicitacoes'); }} flash={flash} />
       )}
 
       {open && (
@@ -245,6 +272,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
           sol={open}
           auditoria={open.aluno_id ? auds[open.aluno_id] : undefined}
           canEdit={canEdit}
+          steps={steps}
           onClose={() => setOpenId(null)}
           act={act}
         />
@@ -274,12 +302,14 @@ function SolDetail({
   sol,
   auditoria,
   canEdit,
+  steps,
   onClose,
   act,
 }: {
   sol: Solicitacao;
   auditoria?: Auditoria;
   canEdit: boolean;
+  steps: AuditStep[];
   onClose: () => void;
   act: (fn: () => Promise<{ ok: boolean; msg?: string } | boolean>) => Promise<void>;
 }) {
@@ -287,6 +317,7 @@ function SolDetail({
   const [motivo, setMotivo] = useState('');
   const [showCorrecao, setShowCorrecao] = useState(false);
   const [confirmExcluir, setConfirmExcluir] = useState(false);
+  const [editando, setEditando] = useState(false);
   const step = sol.auditoria_step ?? -1;
   const dates = (auditoria?.dates as Record<string, string>) || {};
   const regular = isSolicitacaoRegularizacao(sol);
@@ -308,6 +339,7 @@ function SolDetail({
       }
       actions={canEdit ? (
         <div className="hidden sm:flex gap-1.5">
+          <Button size="sm" variant={editando ? 'primary' : 'subtle'} onClick={() => setEditando((v) => !v)}><Icon name="pencil" size={13} /> {editando ? 'Fechar edição' : 'Editar dados'}</Button>
           <Button size="sm" variant="subtle" onClick={() => act(() => data.marcarVisto(sol, true))}>Marcar visto</Button>
           <Button size="sm" variant="ghost" onClick={() => act(() => data.marcarVisto(sol, false))}>Não visto</Button>
         </div>
@@ -324,6 +356,10 @@ function SolDetail({
       <div className="grid gap-4 lg:grid-cols-[1fr_300px] items-start">
         {/* Coluna principal */}
         <div className="space-y-4 min-w-0">
+          {canEdit && editando && (
+            <EditarDados sol={sol} act={act} onDone={() => setEditando(false)} />
+          )}
+
           {sol.regularizacao_pendente && sol.motivo_retorno && (
             <Panel icon="alert" title="Motivo do retorno" accent="var(--yellow)">
               <p className="text-sm text-[var(--fg-2)] leading-relaxed whitespace-pre-wrap">{sol.motivo_retorno}</p>
@@ -354,14 +390,14 @@ function SolDetail({
               <div className="rounded-[var(--r-md)] bg-[var(--green-subtle)] text-[var(--green)] p-3 text-sm inline-flex items-center gap-2"><Icon name="check-circle" size={16} /> Processo concluído — placa recebida.</div>
             ) : (
               <>
-                <p className="text-sm text-[var(--fg-2)] mb-3 leading-relaxed">{AUDIT_STEPS[step]?.desc}</p>
+                <p className="text-sm text-[var(--fg-2)] mb-3 leading-relaxed">{steps[step]?.desc}</p>
                 {step === AUDIT_STEP_INDEX.PLACA_EM_CONFECCAO && (
                   <div className="flex gap-2 mb-2">
                     <Input value={rastreio} onChange={(e) => setRastreio(e.target.value)} placeholder="Código de rastreio" className="flex-1" />
                     <Button variant="subtle" onClick={() => act(() => data.salvarRastreio(sol, rastreio))}>Salvar</Button>
                   </div>
                 )}
-                <BigAction icon="check" onClick={() => act(() => data.avancarEtapa(sol))}>{AUDIT_STEPS[step]?.actionLabel || 'Avançar etapa'}</BigAction>
+                <BigAction icon="check" onClick={() => act(() => data.avancarEtapa(sol))}>{steps[step]?.actionLabel || 'Avançar etapa'}</BigAction>
                 {step === AUDIT_STEP_INDEX.ENTREVISTA_AGENDADA && (
                   <button onClick={() => act(() => data.marcarNaoCompareceu(sol))} className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] px-4 py-2 text-sm font-medium text-[var(--red)] border border-[var(--red-border)] hover:bg-[var(--red-subtle)] transition-colors"><Icon name="x" size={14} /> Não compareceu — reabrir agendamento</button>
                 )}
@@ -403,6 +439,7 @@ function SolDetail({
             </div>
           </Panel>
 
+          {!editando && (
           <Panel icon="user" title="Dados Pessoais">
             <div className="grid sm:grid-cols-2 sm:gap-x-6">
               <Row2 k="Nome" v={sol.nome} />
@@ -416,13 +453,14 @@ function SolDetail({
               {sol.codigo_rastreio && <Row2 k="Código de rastreio" v={sol.codigo_rastreio} />}
             </div>
           </Panel>
+          )}
         </div>
 
         {/* Coluna lateral: status + remanejamento */}
         <div className="space-y-4">
           <Panel icon="check-circle" title="Status da auditoria">
             <ol className="space-y-1">
-              {AUDIT_STEPS.map((s, i) => {
+              {steps.map((s, i) => {
                 const done = i < step;
                 const current = i === step;
                 return (
@@ -439,7 +477,7 @@ function SolDetail({
           {canEdit && step >= 0 && (
             <Panel title="Remanejamento rápido">
               <div className="flex flex-wrap gap-1.5">
-                {AUDIT_STEPS.map((s, i) => {
+                {steps.map((s, i) => {
                   const done = i < step;
                   const current = i === step;
                   return (
@@ -464,6 +502,113 @@ function SolDetail({
         />
       )}
     </Drawer>
+  );
+}
+
+// ── Edição inline dos dados do aluno (drawer) ──────────────────────────────
+const NIVEL_OPCOES = NIVEL_FAIXA_ORDER.map((v) => ({ v, l: DEFAULT_NIVEL_FAIXAS[v].nm }));
+
+function CampoEdit({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+  return (
+    <label className={`block ${full ? 'sm:col-span-2' : ''}`}>
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">{label}</span>
+      <div className="mt-1">{children}</div>
+    </label>
+  );
+}
+
+function EditarDados({
+  sol,
+  act,
+  onDone,
+}: {
+  sol: Solicitacao;
+  act: (fn: () => Promise<{ ok: boolean; msg?: string } | boolean>) => Promise<void>;
+  onDone: () => void;
+}) {
+  const [f, setF] = useState<Record<string, string>>({
+    nome: sol.nome ?? '',
+    email: sol.email ?? '',
+    telefone: sol.telefone ?? '',
+    turma: sol.turma ?? '',
+    profissao: sol.profissao ?? '',
+    nivel: sol.nivel ?? '',
+    interesse: sol.interesse ?? '',
+    espaco_instrucao: sol.espaco_instrucao ?? '',
+    faturamento_declarado: sol.faturamento_declarado != null ? String(sol.faturamento_declarado) : '',
+    documento_nf: sol.documento_nf ?? '',
+    email_entrega: sol.email_entrega ?? '',
+    cep: sol.cep ?? '',
+    logradouro: sol.logradouro ?? '',
+    numero: sol.numero ?? '',
+    complemento: sol.complemento ?? '',
+    bairro: sol.bairro ?? '',
+    cidade: sol.cidade ?? '',
+    estado_uf: sol.estado_uf ?? '',
+  });
+  const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }));
+
+  async function salvar() {
+    const fatDigits = f.faturamento_declarado.replace(/\D/g, '');
+    const campos: data.DadosEditaveis = {
+      nome: f.nome,
+      email: f.email,
+      telefone: f.telefone,
+      turma: f.turma,
+      profissao: f.profissao,
+      nivel: f.nivel,
+      interesse: f.interesse,
+      espaco_instrucao: f.espaco_instrucao,
+      faturamento_declarado: fatDigits ? Number(fatDigits) : null,
+      documento_nf: f.documento_nf,
+      email_entrega: f.email_entrega,
+      cep: f.cep,
+      logradouro: f.logradouro,
+      numero: f.numero,
+      complemento: f.complemento,
+      bairro: f.bairro,
+      cidade: f.cidade,
+      estado_uf: f.estado_uf,
+    };
+    await act(() => data.atualizarDadosSolicitacao(sol, campos));
+    onDone();
+  }
+
+  return (
+    <div className="rounded-[var(--r-lg)] border border-[var(--accent-border)] bg-[var(--surface-2)] p-4" style={{ borderLeft: '3px solid var(--accent)' }}>
+      <div className="flex items-center gap-2 mb-3 text-[11px] font-bold uppercase tracking-wider text-[var(--accent)]">
+        <Icon name="pencil" size={14} /> Editando dados do aluno
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <CampoEdit label="Nome"><Input value={f.nome} onChange={(e) => set('nome', e.target.value)} /></CampoEdit>
+        <CampoEdit label="E-mail"><Input value={f.email} onChange={(e) => set('email', e.target.value)} /></CampoEdit>
+        <CampoEdit label="Telefone"><Input value={f.telefone} onChange={(e) => set('telefone', e.target.value)} /></CampoEdit>
+        <CampoEdit label="Profissão"><Input value={f.profissao} onChange={(e) => set('profissao', e.target.value)} /></CampoEdit>
+        <CampoEdit label="Turma"><Input value={f.turma} onChange={(e) => set('turma', e.target.value)} placeholder="T1, A2…" /></CampoEdit>
+        <CampoEdit label="Nível">
+          <FilterSelect value={f.nivel} onChange={(e) => set('nivel', e.target.value)}>
+            <option value="">— sem nível —</option>
+            {NIVEL_OPCOES.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+          </FilterSelect>
+        </CampoEdit>
+        <CampoEdit label="Espaço de instrução"><Input value={f.espaco_instrucao} onChange={(e) => set('espaco_instrucao', e.target.value)} /></CampoEdit>
+        <CampoEdit label="Interesse"><Input value={f.interesse} onChange={(e) => set('interesse', e.target.value)} /></CampoEdit>
+        <CampoEdit label="Faturamento declarado (R$)"><Input value={f.faturamento_declarado} onChange={(e) => set('faturamento_declarado', e.target.value)} inputMode="numeric" placeholder="0" /></CampoEdit>
+        <CampoEdit label="Documento (NF)"><Input value={f.documento_nf} onChange={(e) => set('documento_nf', e.target.value)} /></CampoEdit>
+        <CampoEdit label="E-mail de entrega"><Input value={f.email_entrega} onChange={(e) => set('email_entrega', e.target.value)} /></CampoEdit>
+        <CampoEdit label="CEP"><Input value={f.cep} onChange={(e) => set('cep', e.target.value)} /></CampoEdit>
+        <CampoEdit label="Logradouro" full><Input value={f.logradouro} onChange={(e) => set('logradouro', e.target.value)} /></CampoEdit>
+        <CampoEdit label="Número"><Input value={f.numero} onChange={(e) => set('numero', e.target.value)} /></CampoEdit>
+        <CampoEdit label="Complemento"><Input value={f.complemento} onChange={(e) => set('complemento', e.target.value)} /></CampoEdit>
+        <CampoEdit label="Bairro"><Input value={f.bairro} onChange={(e) => set('bairro', e.target.value)} /></CampoEdit>
+        <CampoEdit label="Cidade"><Input value={f.cidade} onChange={(e) => set('cidade', e.target.value)} /></CampoEdit>
+        <CampoEdit label="UF"><Input value={f.estado_uf} onChange={(e) => set('estado_uf', e.target.value.toUpperCase().slice(0, 2))} maxLength={2} /></CampoEdit>
+      </div>
+      <div className="flex gap-2 mt-4">
+        <Button variant="primary" onClick={salvar}><Icon name="check" size={14} /> Salvar alterações</Button>
+        <Button variant="ghost" onClick={onDone}>Cancelar</Button>
+      </div>
+    </div>
   );
 }
 
@@ -522,6 +667,182 @@ function fmtDataExtenso(d: string): string {
   } catch {
     return d;
   }
+}
+
+// ── Aba Configurações (editável pelo admin, sem dev) ───────────────────────
+function Area(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const { className = '', ...rest } = props;
+  return <textarea {...rest} className={`w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)] placeholder:text-[var(--fg-4)] ${className}`} />;
+}
+
+function CfgLabel({ children }: { children: React.ReactNode }) {
+  return <span className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)] mb-1">{children}</span>;
+}
+
+function ConfigPanel({
+  canEdit,
+  cfg,
+  onSaved,
+  onBack,
+  flash,
+}: {
+  canEdit: boolean;
+  cfg: PlacasConfig | null;
+  onSaved: (next: PlacasConfig) => void;
+  onBack: () => void;
+  flash: (m: string) => void;
+}) {
+  const base: PlacasConfig = cfg ?? { audit_steps: null, email_templates: {}, nivel_faixas: {}, form_textos: {} };
+
+  const [sec, setSec] = useState<'emails' | 'etapas' | 'faixas' | 'form'>('emails');
+  const [emails, setEmails] = useState<Record<string, EmailTemplateOverride>>(base.email_templates || {});
+  const [etapas, setEtapas] = useState(() => auditStepsToEditable(resolveAuditSteps(base.audit_steps)));
+  const [faixas, setFaixas] = useState<Record<string, NivelFaixa>>(() => {
+    const m: Record<string, NivelFaixa> = {};
+    for (const v of NIVEL_FAIXA_ORDER) m[v] = { ...DEFAULT_NIVEL_FAIXAS[v], ...(base.nivel_faixas?.[v] || {}) };
+    return m;
+  });
+  const [textos, setTextos] = useState<{ upload_info: string; cadastro_info: string; espacos: EspacoOption[] }>(() => ({
+    upload_info: base.form_textos?.upload_info || DEFAULT_FORM_TEXTOS.upload_info,
+    cadastro_info: base.form_textos?.cadastro_info || DEFAULT_FORM_TEXTOS.cadastro_info,
+    espacos: base.form_textos?.espacos?.length ? base.form_textos.espacos : DEFAULT_FORM_TEXTOS.espacos,
+  }));
+  const seeded = useRef(false);
+
+  // Reseed quando a config termina de carregar (cfg null → carregado).
+  useEffect(() => {
+    if (!cfg || seeded.current) return;
+    seeded.current = true;
+    setEmails(cfg.email_templates || {});
+    setEtapas(auditStepsToEditable(resolveAuditSteps(cfg.audit_steps)));
+    const m: Record<string, NivelFaixa> = {};
+    for (const v of NIVEL_FAIXA_ORDER) m[v] = { ...DEFAULT_NIVEL_FAIXAS[v], ...(cfg.nivel_faixas?.[v] || {}) };
+    setFaixas(m);
+    setTextos({
+      upload_info: cfg.form_textos?.upload_info || DEFAULT_FORM_TEXTOS.upload_info,
+      cadastro_info: cfg.form_textos?.cadastro_info || DEFAULT_FORM_TEXTOS.cadastro_info,
+      espacos: cfg.form_textos?.espacos?.length ? cfg.form_textos.espacos : DEFAULT_FORM_TEXTOS.espacos,
+    });
+  }, [cfg]);
+
+  const [busy, setBusy] = useState(false);
+  async function persist(key: 'email_templates' | 'audit_steps' | 'nivel_faixas' | 'form_textos', value: unknown) {
+    if (!canEdit) return;
+    setBusy(true);
+    const ok = await configData.savePlacasConfig(key, value);
+    setBusy(false);
+    if (!ok) { flash('Não foi possível salvar.'); return; }
+    onSaved({ ...base, [key]: value } as PlacasConfig);
+    flash('Configuração salva!');
+  }
+
+  const setEmail = (tipo: string, campo: keyof EmailTemplateOverride, v: string) =>
+    setEmails((p) => ({ ...p, [tipo]: { ...p[tipo], [campo]: v } }));
+  const setEtapa = (i: number, campo: 'name' | 'desc' | 'actionLabel', v: string) =>
+    setEtapas((p) => p.map((e, idx) => (idx === i ? { ...e, [campo]: v } : e)));
+  const setFaixa = (v: string, campo: keyof NivelFaixa, val: string) =>
+    setFaixas((p) => ({ ...p, [v]: { ...p[v], [campo]: val } }));
+
+  const SECOES: { k: typeof sec; label: string; icon: string }[] = [
+    { k: 'emails', label: 'E-mails automáticos', icon: 'mail' },
+    { k: 'etapas', label: 'Etapas da auditoria', icon: 'check-circle' },
+    { k: 'faixas', label: 'Faixas de faturamento', icon: 'coins' },
+    { k: 'form', label: 'Textos do formulário', icon: 'clipboard' },
+  ];
+
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
+        <h1 className="text-2xl font-bold text-[var(--fg)]">Configurações de <span className="text-[var(--accent)]">Placas</span></h1>
+        <button onClick={onBack} className="inline-flex items-center justify-center gap-1.5 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent text-[var(--fg-2)] border border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="arrow-left" size={14} /> Voltar às solicitações</button>
+      </div>
+      <p className="text-sm text-[var(--fg-3)] mb-4">Ajuste textos, etapas, e-mails e faixas sem depender de um desenvolvedor. Campos em branco usam o texto padrão.</p>
+
+      {!canEdit && <div className="rounded-[var(--r-md)] bg-[var(--surface-3)] p-3 text-sm text-[var(--fg-3)] mb-4">Somente leitura — você não tem permissão para editar.</div>}
+
+      <div className="flex gap-1 border-b border-[var(--border)] mb-4 overflow-x-auto">
+        {SECOES.map((s) => (
+          <button key={s.k} onClick={() => setSec(s.k)} className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors inline-flex items-center gap-2 ${sec === s.k ? 'border-[var(--accent)] text-[var(--fg)]' : 'border-transparent text-[var(--fg-3)] hover:text-[var(--fg-2)]'}`}>
+            <Icon name={s.icon} size={14} /> {s.label}
+          </button>
+        ))}
+      </div>
+
+      {sec === 'emails' && (
+        <div className="space-y-4">
+          {EMAIL_TIPOS_CONFIG.map((t) => (
+            <Card key={t.tipo} className="p-4">
+              <div className="font-semibold text-[var(--fg)]">{t.label}</div>
+              <div className="text-xs text-[var(--fg-3)] mb-3">{t.descricao}</div>
+              <div className="space-y-2">
+                <div><CfgLabel>Assunto</CfgLabel><Input value={emails[t.tipo]?.assunto ?? ''} onChange={(e) => setEmail(t.tipo, 'assunto', e.target.value)} placeholder="(padrão do sistema)" disabled={!canEdit} /></div>
+                <div><CfgLabel>Introdução</CfgLabel><Area rows={2} value={emails[t.tipo]?.introducao ?? ''} onChange={(e) => setEmail(t.tipo, 'introducao', e.target.value)} placeholder="(padrão do sistema)" disabled={!canEdit} /></div>
+                <div><CfgLabel>Corpo (aceita HTML)</CfgLabel><Area rows={3} value={emails[t.tipo]?.corpo_extra ?? ''} onChange={(e) => setEmail(t.tipo, 'corpo_extra', e.target.value)} placeholder="(padrão do sistema)" disabled={!canEdit} /></div>
+              </div>
+            </Card>
+          ))}
+          {canEdit && <Button variant="primary" disabled={busy} onClick={() => persist('email_templates', emails)}><Icon name="check" size={14} /> Salvar e-mails</Button>}
+        </div>
+      )}
+
+      {sec === 'etapas' && (
+        <div className="space-y-3">
+          {etapas.map((e, i) => (
+            <Card key={i} className="p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-[var(--accent)] mb-2">Etapa {i + 1}</div>
+              <div className="grid sm:grid-cols-2 gap-2">
+                <div><CfgLabel>Nome</CfgLabel><Input value={e.name ?? ''} onChange={(ev) => setEtapa(i, 'name', ev.target.value)} disabled={!canEdit} /></div>
+                <div><CfgLabel>Rótulo do botão de avanço</CfgLabel><Input value={e.actionLabel ?? ''} onChange={(ev) => setEtapa(i, 'actionLabel', ev.target.value)} disabled={!canEdit} /></div>
+                <div className="sm:col-span-2"><CfgLabel>Descrição</CfgLabel><Area rows={2} value={e.desc ?? ''} onChange={(ev) => setEtapa(i, 'desc', ev.target.value)} disabled={!canEdit} /></div>
+              </div>
+            </Card>
+          ))}
+          {canEdit && <Button variant="primary" disabled={busy} onClick={() => persist('audit_steps', etapas)}><Icon name="check" size={14} /> Salvar etapas</Button>}
+        </div>
+      )}
+
+      {sec === 'faixas' && (
+        <div className="space-y-3">
+          <Card className="p-4">
+            <div className="grid gap-2">
+              {NIVEL_FAIXA_ORDER.map((v) => (
+                <div key={v} className="grid sm:grid-cols-[1fr_2fr] gap-2 items-center">
+                  <Input value={faixas[v]?.nm ?? ''} onChange={(e) => setFaixa(v, 'nm', e.target.value)} placeholder="Nome do nível" disabled={!canEdit} />
+                  <Input value={faixas[v]?.fx ?? ''} onChange={(e) => setFaixa(v, 'fx', e.target.value)} placeholder="Faixa (ex.: R$ 500k em 12 meses)" disabled={!canEdit} />
+                </div>
+              ))}
+            </div>
+          </Card>
+          {canEdit && <Button variant="primary" disabled={busy} onClick={() => persist('nivel_faixas', faixas)}><Icon name="check" size={14} /> Salvar faixas</Button>}
+        </div>
+      )}
+
+      {sec === 'form' && (
+        <div className="space-y-3">
+          <Card className="p-4 space-y-3">
+            <div><CfgLabel>Instrução de upload (comprovação)</CfgLabel><Area rows={2} value={textos.upload_info} onChange={(e) => setTextos((p) => ({ ...p, upload_info: e.target.value }))} disabled={!canEdit} /></div>
+            <div><CfgLabel>Aviso de cadastro (nível não elegível)</CfgLabel><Area rows={2} value={textos.cadastro_info} onChange={(e) => setTextos((p) => ({ ...p, cadastro_info: e.target.value }))} disabled={!canEdit} /></div>
+          </Card>
+          <Card className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <CfgLabel>Espaços de instrução</CfgLabel>
+              {canEdit && <button onClick={() => setTextos((p) => ({ ...p, espacos: [...p.espacos, { v: '', l: '' }] }))} className="text-xs font-semibold text-[var(--accent)] inline-flex items-center gap-1"><Icon name="plus" size={13} /> Adicionar</button>}
+            </div>
+            <div className="space-y-2">
+              {textos.espacos.map((o, i) => (
+                <div key={i} className="grid grid-cols-[1fr_1.4fr_auto] gap-2 items-center">
+                  <Input value={o.v} onChange={(e) => setTextos((p) => ({ ...p, espacos: p.espacos.map((x, idx) => idx === i ? { ...x, v: e.target.value } : x) }))} placeholder="chave" disabled={!canEdit} />
+                  <Input value={o.l} onChange={(e) => setTextos((p) => ({ ...p, espacos: p.espacos.map((x, idx) => idx === i ? { ...x, l: e.target.value } : x) }))} placeholder="Rótulo exibido" disabled={!canEdit} />
+                  {canEdit && <button onClick={() => setTextos((p) => ({ ...p, espacos: p.espacos.filter((_, idx) => idx !== i) }))} className="text-[var(--red)] p-1.5" title="Remover"><Icon name="x" size={14} /></button>}
+                </div>
+              ))}
+            </div>
+          </Card>
+          {canEdit && <Button variant="primary" disabled={busy} onClick={() => persist('form_textos', { upload_info: textos.upload_info, cadastro_info: textos.cadastro_info, espacos: textos.espacos.filter((e) => e.v && e.l) })}><Icon name="check" size={14} /> Salvar textos</Button>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface Agendamento { data: string; hora: string; nome: string | null; email: string | null }
