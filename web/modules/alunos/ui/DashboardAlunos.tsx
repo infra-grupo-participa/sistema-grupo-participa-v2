@@ -86,8 +86,6 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
           <p className="text-[11px] text-[var(--fg-3)] -mt-1 mb-3">Nº de alunos do recorte que atingiram cada marco.</p>
           <Bars
             data={[
-              { key: 'ht', label: 'Holding Total', count: m.ht, color: 'var(--nivel-platina)' },
-              { key: 'hm', label: 'Holding Masters', count: m.hm, color: 'var(--accent)' },
               { key: 'placa', label: 'Com placa', count: m.placa, color: 'var(--nivel-ouro)' },
               { key: 'dep', label: 'Com depoimento', count: m.depoimento, color: 'var(--green)' },
               { key: 'sip', label: 'Com SIP (Time Holding Brasil)', count: m.sip, color: 'var(--nivel-diamante-vermelho)' },
