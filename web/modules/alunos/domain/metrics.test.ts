@@ -21,10 +21,10 @@ describe('computeAlunosMetrics', () => {
     expect(m.socios).toBe(1);
   });
 
-  it('porNivel ordena do mais alto e inclui sem nível', () => {
+  it('porEspaco ordena por volume e inclui sem espaço', () => {
     const m = computeAlunosMetrics(alunos, 'alunos');
-    expect(m.porNivel[0].key).toBe('diamante'); // maior rank presente
-    expect(m.porNivel.some((d) => d.key === '__none__')).toBe(true);
+    expect(m.porEspaco[0].key).toBe('holding_masters'); // único espaço presente
+    expect(m.porEspaco.some((d) => d.key === '__none__')).toBe(true); // 2 alunos sem espaço
   });
 
   it('view socios filtra eh_socio', () => {
