@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
-import { AUDIT_STEPS, AUDIT_STEP_TOTAL, AUDIT_STEP_INDEX } from '../../domain/auditoria';
+import { AUDIT_STEP_TOTAL, AUDIT_STEP_INDEX, type AuditStep } from '../../domain/auditoria';
 import {
   computeDisplayStatus,
   getSolicitacaoBucketMatch,
@@ -15,7 +15,20 @@ import {
 } from '../../domain/solicitacao';
 import type { Solicitacao, Auditoria, HorarioSlot } from '../../domain/types';
 import * as data from './placas-admin-data';
-import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, AvatarInicial, Card, Button, StatCard, SearchInput, Input, Toggle, ProgressBar, ConfirmDialog } from '@/shared/ui/components';
+import * as configData from './placas-config-data';
+import {
+  resolveAuditSteps,
+  auditStepsToEditable,
+  EMAIL_TIPOS_CONFIG,
+  DEFAULT_NIVEL_FAIXAS,
+  DEFAULT_FORM_TEXTOS,
+  NIVEL_FAIXA_ORDER,
+  type PlacasConfig,
+  type EmailTemplateOverride,
+  type NivelFaixa,
+  type EspacoOption,
+} from '../../domain/config';
+import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, AvatarInicial, Card, Button, StatCard, SearchInput, Input, FilterSelect, Toggle, ProgressBar, ConfirmDialog } from '@/shared/ui/components';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://grupoparticipa.app.br';
 
@@ -216,8 +229,14 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
       ) : (
         <>
           <h1 className="text-2xl font-bold text-[var(--fg)] mb-1">Agenda de <span className="text-[var(--accent)]">Horários</span></h1>
-          <p className="text-sm text-[var(--fg-3)] mb-4">Slots de entrevista abertos para os candidatos.{loading && ' · carregando…'}</p>
-          <AgendaHorarios canEdit={canEdit} flash={flash} />
+          <p className="text-sm text-[var(--fg-3)] mb-4">Slots de entrevista abertos e agendamentos dos candidatos.{loading && ' · carregando…'}</p>
+          <AgendaHorarios
+            canEdit={canEdit}
+            flash={flash}
+            agendamentos={sols
+              .filter((s) => s.entrevista_data && s.entrevista_hora)
+              .map((s) => ({ data: s.entrevista_data as string, hora: String(s.entrevista_hora).slice(0, 5), nome: s.nome, email: s.email }))}
+          />
         </>
       )}
 
@@ -505,7 +524,9 @@ function fmtDataExtenso(d: string): string {
   }
 }
 
-function AgendaHorarios({ canEdit, flash }: { canEdit: boolean; flash: (m: string) => void }) {
+interface Agendamento { data: string; hora: string; nome: string | null; email: string | null }
+
+function AgendaHorarios({ canEdit, flash, agendamentos }: { canEdit: boolean; flash: (m: string) => void; agendamentos: Agendamento[] }) {
   const [slots, setSlots] = useState<HorarioSlot[]>([]);
   const [novaData, setNovaData] = useState('');
   const [novaHora, setNovaHora] = useState('');
@@ -515,43 +536,73 @@ function AgendaHorarios({ canEdit, flash }: { canEdit: boolean; flash: (m: strin
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { reload(); }, [reload]);
 
-  const grouped = useMemo(() => {
-    const m = new Map<string, HorarioSlot[]>();
-    for (const s of slots) {
-      if (!m.has(s.slot_data)) m.set(s.slot_data, []);
-      m.get(s.slot_data)!.push(s);
-    }
-    return Array.from(m.entries());
-  }, [slots]);
+  // Agenda combinada: por data → horários (slot disponível e/ou agendamento).
+  const agenda = useMemo(() => {
+    const byDate = new Map<string, Map<string, { slot?: HorarioSlot; ag?: Agendamento }>>();
+    const cell = (d: string, h: string) => {
+      if (!byDate.has(d)) byDate.set(d, new Map());
+      const md = byDate.get(d)!;
+      if (!md.has(h)) md.set(h, {});
+      return md.get(h)!;
+    };
+    for (const s of slots) cell(s.slot_data, String(s.hora).slice(0, 5)).slot = s;
+    for (const a of agendamentos) cell(a.data, a.hora).ag = a;
+    return Array.from(byDate.entries())
+      .sort((x, y) => x[0].localeCompare(y[0]))
+      .map(([d, horas]) => ({
+        data: d,
+        itens: Array.from(horas.entries()).sort((x, y) => x[0].localeCompare(y[0])).map(([hora, v]) => ({ hora, slot: v.slot, ag: v.ag })),
+      }));
+  }, [slots, agendamentos]);
 
   return (
     <div>
       {canEdit && (
-        <div className="flex flex-wrap gap-2 mb-4 items-end">
+        <div className="flex flex-wrap gap-2 mb-4 items-end rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] p-3">
           <div><label className="block text-xs text-[var(--fg-3)] mb-1">Data</label><Input type="date" value={novaData} onChange={(e) => setNovaData(e.target.value)} className="w-auto" /></div>
           <div><label className="block text-xs text-[var(--fg-3)] mb-1">Hora</label><Input type="time" value={novaHora} onChange={(e) => setNovaHora(e.target.value)} className="w-auto" /></div>
-          <Button onClick={async () => { if (novaData && novaHora && (await data.criarHorario(novaData, novaHora))) { flash('Horário criado.'); setNovaHora(''); reload(); } }}>Adicionar slot</Button>
+          <Button onClick={async () => { if (novaData && novaHora && (await data.criarHorario(novaData, novaHora))) { flash('Horário criado.'); setNovaHora(''); reload(); } }}><Icon name="plus" size={14} /> Adicionar slot</Button>
+          <span className="ml-auto flex items-center gap-3 text-[11px] text-[var(--fg-3)] self-center">
+            <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--green)' }} /> Disponível</span>
+            <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} /> Agendado</span>
+            <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--fg-4)' }} /> Inativo</span>
+          </span>
         </div>
       )}
-      {grouped.map(([d, arr]) => (
-        <div key={d} className="mb-4">
-          <div className="text-sm font-semibold text-[var(--fg)] mb-2">{d.split('-').reverse().join('/')}</div>
-          <div className="flex flex-wrap gap-2">
-            {arr.map((s) => (
-              <div key={s.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-[var(--r-md)] border text-sm ${s.ativo ? 'border-[var(--accent-border)] text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-3)] line-through'}`}>
-                {String(s.hora).slice(0, 5)}
-                {canEdit && (
-                  <>
-                    <button onClick={async () => { if (await data.toggleHorario(s.id, !s.ativo)) reload(); }} className="text-xs text-[var(--fg-3)] hover:text-[var(--fg)] inline-flex" title={s.ativo ? 'Desativar' : 'Ativar'}><Icon name={s.ativo ? 'pause' : 'play'} size={14} /></button>
-                    <button onClick={() => setExcluirId(s.id)} className="text-xs text-[var(--red)] inline-flex" title="Excluir"><Icon name="x" size={14} /></button>
-                  </>
-                )}
-              </div>
-            ))}
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {agenda.map(({ data: d, itens }) => (
+          <div key={d} className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] overflow-hidden">
+            <div className="px-3 py-2 border-b border-[var(--border)] bg-[var(--surface-3)] text-sm font-semibold text-[var(--fg)] capitalize flex items-center gap-2">
+              <Icon name="calendar" size={14} className="text-[var(--accent)]" /> {fmtDataExtenso(d)}
+            </div>
+            <div className="divide-y divide-[var(--border-faint)]">
+              {itens.map((it) => {
+                const booked = !!it.ag;
+                const inativo = !!it.slot && !it.slot.ativo;
+                const cor = booked ? 'var(--accent)' : inativo ? 'var(--fg-4)' : 'var(--green)';
+                return (
+                  <div key={it.hora} className="flex items-center gap-2 px-3 py-2">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: cor }} />
+                    <span className={`text-sm tabular font-medium ${inativo ? 'text-[var(--fg-3)] line-through' : 'text-[var(--fg)]'}`}>{it.hora}</span>
+                    <span className="text-xs flex-1 min-w-0 truncate">
+                      {booked ? <span className="text-[var(--accent)] font-medium" title={it.ag!.email || ''}>{it.ag!.nome || 'Agendado'}</span> : inativo ? <span className="text-[var(--fg-3)]">Inativo</span> : <span className="text-[var(--green)]">Disponível</span>}
+                      {booked && !it.slot && <span className="ml-1 text-[10px] text-[var(--yellow)]" title="Agendamento sem slot correspondente">· sem slot</span>}
+                    </span>
+                    {canEdit && it.slot && (
+                      <>
+                        <button onClick={async () => { if (await data.toggleHorario(it.slot!.id, !it.slot!.ativo)) reload(); }} className="text-[var(--fg-3)] hover:text-[var(--fg)] inline-flex" title={it.slot.ativo ? 'Desativar' : 'Ativar'}><Icon name={it.slot.ativo ? 'pause' : 'play'} size={13} /></button>
+                        <button onClick={() => setExcluirId(it.slot!.id)} className="text-[var(--red)] inline-flex" title="Excluir"><Icon name="x" size={13} /></button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
-      {!grouped.length && <p className="text-[var(--fg-3)] text-sm">Nenhum horário cadastrado.</p>}
+        ))}
+      </div>
+      {!agenda.length && <p className="text-[var(--fg-3)] text-sm">Nenhum horário cadastrado.</p>}
       {excluirId !== null && (
         <ConfirmDialog
           title="Excluir slot"

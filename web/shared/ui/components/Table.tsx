@@ -49,11 +49,12 @@ export function Th({
   );
 }
 
-export function Tr({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
+export function Tr({ children, onClick, className = '', style }: { children: React.ReactNode; onClick?: () => void; className?: string; style?: React.CSSProperties }) {
   return (
     <tr
       onClick={onClick}
-      className={`border-t border-[var(--border-faint)] transition-colors ${onClick ? 'cursor-pointer hover:bg-[var(--surface-3)]' : ''}`}
+      style={style}
+      className={`border-t border-[var(--border-faint)] transition-colors ${onClick ? 'cursor-pointer hover:bg-[var(--surface-3)]' : ''} ${className}`}
     >
       {children}
     </tr>

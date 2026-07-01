@@ -265,6 +265,71 @@ export async function marcarVisto(sol: Solicitacao, visto: boolean): Promise<boo
   return !error;
 }
 
+/** Campos que o admin pode editar diretamente na solicitação. */
+export type DadosEditaveis = Partial<
+  Pick<
+    Solicitacao,
+    | 'nome'
+    | 'email'
+    | 'telefone'
+    | 'turma'
+    | 'profissao'
+    | 'nivel'
+    | 'interesse'
+    | 'espaco_instrucao'
+    | 'faturamento_declarado'
+    | 'cep'
+    | 'logradouro'
+    | 'numero'
+    | 'complemento'
+    | 'bairro'
+    | 'cidade'
+    | 'estado_uf'
+    | 'documento_nf'
+    | 'email_entrega'
+  >
+>;
+
+/**
+ * Atualiza os dados da solicitação e propaga (write-back) para thb_alunos quando
+ * já vinculada — mantém o hub central em sincronia (convenção do projeto).
+ */
+export async function atualizarDadosSolicitacao(
+  sol: Solicitacao,
+  campos: DadosEditaveis,
+): Promise<{ ok: boolean; msg: string }> {
+  const supabase = db();
+  const patch: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(campos)) {
+    patch[k] = typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v;
+  }
+  if (!Object.keys(patch).length) return { ok: false, msg: 'Nada para salvar.' };
+
+  const { error } = await supabase.from('thb_placas_solicitacoes').update(patch).eq('id', sol.id);
+  if (error) return { ok: false, msg: 'Não foi possível salvar os dados.' };
+
+  // Write-back para thb_alunos (só campos correspondentes, quando vinculado).
+  if (sol.aluno_id) {
+    const back: Record<string, unknown> = {};
+    if ('nome' in patch) back.nome = patch.nome;
+    if ('email' in patch) back.email = patch.email;
+    if ('telefone' in patch) back.telefone = patch.telefone;
+    if ('nivel' in patch) back.nivel_resultado = patch.nivel;
+    if ('documento_nf' in patch) back.documento = patch.documento_nf;
+    if ('estado_uf' in patch) back.estado = patch.estado_uf;
+    if ('cidade' in patch) back.cidade = patch.cidade;
+    if ('cep' in patch) back.cep = patch.cep;
+    if ('bairro' in patch) back.bairro = patch.bairro;
+    if ('logradouro' in patch) back.endereco_logradouro = patch.logradouro;
+    if ('numero' in patch) back.endereco_numero = patch.numero;
+    if ('complemento' in patch) back.endereco_complemento = patch.complemento;
+    if (Object.keys(back).length) {
+      await supabase.from('thb_alunos').update(back).eq('id', sol.aluno_id);
+    }
+  }
+  return { ok: true, msg: 'Dados atualizados!' };
+}
+
 // ── Agenda de horários ──
 export async function loadHorarios(): Promise<HorarioSlot[]> {
   const { data } = await db().from('thb_horarios_disponiveis').select('*').order('slot_data', { ascending: true }).order('hora', { ascending: true });

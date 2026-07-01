@@ -38,7 +38,17 @@ const NIVEIS = [
 type Form = Record<string, string>;
 type View = 'loading' | 'form' | 'success' | 'cadastro' | 'tracking' | 'error';
 
-export function SolicitarPlacaClient({ initialToken }: { initialToken: string }) {
+/** Config personalizável (níveis/faixas + textos) resolvida no server e injetada aqui. */
+export interface FormConfig {
+  niveis: { v: string; ic: string; nm: string; fx: string }[];
+  textos: { upload_info: string; cadastro_info: string; espacos: { v: string; l: string }[] };
+}
+
+export function SolicitarPlacaClient({ initialToken, config }: { initialToken: string; config?: FormConfig }) {
+  const NIVEIS_CFG = config?.niveis?.length ? config.niveis : NIVEIS;
+  const ESPACOS_CFG = config?.textos?.espacos?.length ? config.textos.espacos : ESPACOS;
+  const UPLOAD_INFO = config?.textos?.upload_info || 'Faça o upload de um PDF/imagem com contratos, notas fiscais ou extratos que comprovem seu faturamento com Holding Familiar.';
+  const CADASTRO_INFO = config?.textos?.cadastro_info || 'Para o seu nível, registramos apenas o cadastro — a placa fica disponível ao atingir um nível elegível.';
   const [view, setView] = useState<View>('loading');
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<Form>({ pais: 'Brasil', faturamento_fmt: '' });
@@ -290,13 +300,13 @@ export function SolicitarPlacaClient({ initialToken }: { initialToken: string })
         {step === 3 && (
           <Section title="3. Seu nível" subtitle="Considere todos os ativos gerados com Holding Familiar.">
             <div className="sp-field"><label>Espaço de instrução <span className="req">*</span></label>
-              {ESPACOS.map((o) => (
+              {ESPACOS_CFG.map((o) => (
                 <label key={o.v} className={`sp-radio ${form.espaco_instrucao === o.v ? 'sel' : ''}`} onClick={() => set('espaco_instrucao', o.v)}>{o.l}</label>
               ))}
             </div>
             <div className="sp-field"><label>Nível atual <span className="req">*</span></label>
               <div className="sp-level-grid">
-                {NIVEIS.map((o) => (
+                {NIVEIS_CFG.map((o) => (
                   <label key={o.v} className={`sp-level ${form.nivel === o.v ? 'sel' : ''}`} onClick={() => set('nivel', o.v)}>
                     <div className="ic"><Icon name={o.ic} size={22} /></div><div className="nm">{o.nm}</div><div className="fx">{o.fx}</div>
                   </label>
@@ -309,7 +319,7 @@ export function SolicitarPlacaClient({ initialToken }: { initialToken: string })
                 <div className="sp-hint">Valor total gerado com Holding Familiar, em reais.</div>
               </Field>
             )}
-            {!eligible && form.nivel && <div className="sp-info">Para o seu nível, registramos apenas o cadastro — a placa fica disponível ao atingir um nível elegível.</div>}
+            {!eligible && form.nivel && <div className="sp-info">{CADASTRO_INFO}</div>}
             {err && <p className="sp-err">{err}</p>}
             <Nav busy={busy} onBack={() => goBack(3)} onNext={() => goNext(3)} nextLabel={eligible ? 'Continuar para comprovação →' : 'Concluir cadastro →'} />
           </Section>
@@ -317,7 +327,7 @@ export function SolicitarPlacaClient({ initialToken }: { initialToken: string })
 
         {step === 4 && (
           <Section title="4. Comprovação" subtitle="Envie os documentos que comprovem o nível informado.">
-            <div className="sp-info">Faça o upload de um PDF/imagem com contratos, notas fiscais ou extratos que comprovem seu faturamento com Holding Familiar.</div>
+            <div className="sp-info">{UPLOAD_INFO}</div>
             <div className="sp-warn"><Icon name="alert" size={14} /> Certifique-se de que o arquivo esteja legível (PDF ou imagem, até 10MB).</div>
             <Field label="Documento comprobatório (PDF ou imagem)" req>
               <input type="file" accept=".pdf,image/*" onChange={(e) => onUpload('comprovante', e.target.files?.[0] ?? null)} />

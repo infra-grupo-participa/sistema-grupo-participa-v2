@@ -4,6 +4,7 @@ import { safeEmail, isUuid } from '@/shared/infrastructure/http/validation';
 import { getCurrentUser } from '@/shared/composition/server-container';
 import { ehAdminOuAcima, podeEditar } from '@/shared/domain/auth';
 import { getEmailContentByStatus, type EmailTipo } from '@/modules/placas/application/email-content';
+import { readPlacasConfig } from '@/modules/placas/infrastructure/supabase-config';
 import { buildEmailTemplate } from '@/shared/infrastructure/email/template';
 import { sendMail } from '@/shared/infrastructure/email/mailer';
 
@@ -59,6 +60,15 @@ export async function POST(request: NextRequest) {
     codigo_rastreio: body.codigo_rastreio ? String(body.codigo_rastreio) : undefined,
     motivo_retorno: body.motivo_retorno ? String(body.motivo_retorno) : undefined,
   }, ctaLink);
+
+  // Override editável pelo admin (thb_placas_config → email_templates).
+  const { email_templates } = await readPlacasConfig();
+  const ov = email_templates?.[tipo];
+  if (ov) {
+    if (ov.assunto?.trim()) content.assunto = ov.assunto.trim();
+    if (ov.introducao?.trim()) content.templateData.introducao = ov.introducao.trim();
+    if (ov.corpo_extra?.trim()) content.templateData.corpo_extra = ov.corpo_extra.trim();
+  }
 
   const html = buildEmailTemplate({ ...content.templateData, nome: String(body.nome ?? 'Candidato') });
   const sent = await sendMail({ to: email, subject: content.assunto, html });

@@ -1,5 +1,7 @@
 import { SolicitarPlacaClient } from '@/modules/placas/ui/SolicitarPlacaClient';
 import { isUuid } from '@/shared/infrastructure/http/validation';
+import { readPlacasConfig } from '@/modules/placas/infrastructure/supabase-config';
+import { resolveNivelFaixas, resolveFormTextos } from '@/modules/placas/domain/config';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,5 +12,10 @@ export default async function SolicitarPlacaPage({
 }) {
   const { token } = await searchParams;
   const initialToken = token && isUuid(token) ? token.toLowerCase() : '';
-  return <SolicitarPlacaClient initialToken={initialToken} />;
+  const cfg = await readPlacasConfig();
+  const config = {
+    niveis: resolveNivelFaixas(cfg.nivel_faixas),
+    textos: resolveFormTextos(cfg.form_textos),
+  };
+  return <SolicitarPlacaClient initialToken={initialToken} config={config} />;
 }
