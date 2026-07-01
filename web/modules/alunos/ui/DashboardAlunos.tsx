@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { applyDashFilters, computeAlunosMetrics, computeTurmaNivelMatrix, type DashFiltros, type DashView, type Distribuicao } from '../domain/metrics';
+import { applyDashFilters, computeAlunosMetrics, computeTurmaEspacoMatrix, type DashFiltros, type DashView, type Distribuicao } from '../domain/metrics';
 import type { Aluno360 } from '../domain/aluno-360';
 import { nivelOptions } from '@/shared/domain/nivel-resultado';
 import { Card, StatCard, SectionTitle, Button, FilterSelect } from '@/shared/ui/components';
@@ -26,7 +26,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
   }, []);
 
   const m = useMemo(() => computeAlunosMetrics(alunos, view, filtros), [alunos, view, filtros]);
-  const matrix = useMemo(() => computeTurmaNivelMatrix(applyDashFilters(alunos, view, filtros)), [alunos, view, filtros]);
+  const matrix = useMemo(() => computeTurmaEspacoMatrix(applyDashFilters(alunos, view, filtros)), [alunos, view, filtros]);
 
   const estados = useMemo(() => Array.from(new Set(alunos.map((a) => String(a.estado ?? '').toUpperCase()).filter(Boolean))).sort(), [alunos]);
   const turmas = useMemo(() => Array.from(new Set(alunos.map((a) => a.turma_codigo).filter(Boolean) as string[])).sort(), [alunos]);
@@ -74,11 +74,9 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         <StatCard label="Total" value={m.total.toLocaleString('pt-BR')} hint={`${m.pctAtivos}% ativos`} bar="accent" />
         <StatCard label="Ativos" value={m.ativos.toLocaleString('pt-BR')} tone="var(--green)" bar="green" />
-        <StatCard label="Holding Total" value={m.ht.toLocaleString('pt-BR')} tone="var(--nivel-platina)" bar="purple" />
-        <StatCard label="Holding Masters" value={m.hm.toLocaleString('pt-BR')} tone="var(--accent)" bar="accent" />
         <StatCard label="Aurum" value={m.aurum.toLocaleString('pt-BR')} tone="var(--nivel-ouro)" bar="yellow" />
         <StatCard label="Sócios" value={m.socios.toLocaleString('pt-BR')} tone="var(--nivel-diamante)" bar="purple" />
       </div>
@@ -110,9 +108,11 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
           <Bars data={m.porEstado} total={m.total} />
         </Card>
         {matrix.turmas.length > 0 && (
-          <Card className="p-5 lg:col-span-2 overflow-x-auto">
-            <SectionTitle>Matriz turma × nível</SectionTitle>
-            <Matrix matrix={matrix} />
+          <Card className="p-5 lg:col-span-2">
+            <SectionTitle>Matriz turma × espaço de instrução</SectionTitle>
+            <div className="max-h-[420px] overflow-auto">
+              <Matrix matrix={matrix} />
+            </div>
           </Card>
         )}
         {m.porAno.length > 0 && (
@@ -191,15 +191,15 @@ function Donut({ data, total }: { data: Distribuicao[]; total: number }) {
   );
 }
 
-function Matrix({ matrix }: { matrix: ReturnType<typeof computeTurmaNivelMatrix> }) {
+function Matrix({ matrix }: { matrix: ReturnType<typeof computeTurmaEspacoMatrix> }) {
   return (
     <table className="text-sm border-collapse min-w-full">
-      <thead>
+      <thead className="sticky top-0 z-10 bg-[var(--surface-1)]">
         <tr>
-          <th className="text-left px-2 py-1.5 text-[11px] font-semibold uppercase text-[var(--fg-3)]">Turma</th>
-          {matrix.niveis.map((n) => (
-            <th key={n.key} className="px-2 py-1.5 text-center">
-              <span className="inline-flex items-center gap-1 text-[10px] text-[var(--fg-3)]"><span className="w-2 h-2 rounded-full" style={{ background: n.color }} />{n.label.split(' ')[0]}</span>
+          <th className="text-left px-2 py-1.5 text-[11px] font-semibold uppercase text-[var(--fg-3)] sticky left-0 bg-[var(--surface-1)]">Turma</th>
+          {matrix.colunas.map((col) => (
+            <th key={col.key} className="px-2 py-1.5 text-center">
+              <span className="inline-flex items-center gap-1 text-[10px] text-[var(--fg-3)] whitespace-nowrap"><span className="w-2 h-2 rounded-full" style={{ background: col.color }} />{col.label}</span>
             </th>
           ))}
         </tr>
@@ -207,12 +207,12 @@ function Matrix({ matrix }: { matrix: ReturnType<typeof computeTurmaNivelMatrix>
       <tbody>
         {matrix.turmas.map((t) => (
           <tr key={t} className="border-t border-[var(--border-faint)]">
-            <td className="px-2 py-1.5 font-medium text-[var(--fg)] whitespace-nowrap">{t}</td>
-            {matrix.niveis.map((n) => {
-              const c = matrix.cells[t][n.key];
+            <td className="px-2 py-1.5 font-medium text-[var(--fg)] whitespace-nowrap sticky left-0 bg-[var(--surface-1)]">{t}</td>
+            {matrix.colunas.map((col) => {
+              const c = matrix.cells[t][col.key];
               const intensity = matrix.max ? c / matrix.max : 0;
               return (
-                <td key={n.key} className="px-2 py-1.5 text-center tabular" style={{ background: c ? `color-mix(in srgb, ${n.color} ${Math.round(8 + intensity * 55)}%, transparent)` : 'transparent', color: c ? 'var(--fg)' : 'var(--fg-4)' }}>
+                <td key={col.key} className="px-2 py-1.5 text-center tabular" style={{ background: c ? `color-mix(in srgb, ${col.color} ${Math.round(8 + intensity * 55)}%, transparent)` : 'transparent', color: c ? 'var(--fg)' : 'var(--fg-4)' }}>
                   {c || '·'}
                 </td>
               );

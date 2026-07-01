@@ -418,8 +418,6 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
           {/* Jornada */}
           <SectionCard className="md:col-span-2" title={<SecTitle icon="check-circle">Jornada</SecTitle>}>
             <div className="grid sm:grid-cols-2 sm:gap-x-4">
-              <JornadaCard label="Holding Total" on={!!a.tem_ht} extra={a.ativacao_ht_status ? `Status: ${a.ativacao_ht_status}` : ''} />
-              <JornadaCard label="Holding Masters" on={!!a.tem_hm} extra={a.hm_plano ? `Plano: ${a.hm_plano}` : ''} />
               <PlacaJornada on={temPlaca} hist={placaHist} loading={placaLoading} />
               <JornadaCard label="Depoimento" on={!!a.tem_depoimento} extra={a.total_depoimentos ? `${a.total_depoimentos} depoimento(s)` : ''} href={a.tem_depoimento ? '/depoimentos' : undefined} />
               <SipJornada email={a.email} on={!!a.sip_registrado} />
