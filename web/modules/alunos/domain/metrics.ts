@@ -181,6 +181,12 @@ export function computeAlunosMetrics(alunos: Aluno360[], view: DashView = 'aluno
         return { year, total: rows.length, segs };
       });
     })(),
-    porTurma: tally(base.filter((a) => a.turma_codigo), (a) => a.turma_codigo).slice(0, 8),
+    porTurma: (() => {
+      const map = new Map<string, number>();
+      for (const a of base) if (a.turma_codigo) map.set(a.turma_codigo, (map.get(a.turma_codigo) ?? 0) + 1);
+      return Array.from(map.entries())
+        .map(([key, count]) => ({ key, label: key, count }))
+        .sort((x, y) => y.key.localeCompare(x.key, 'pt-BR', { numeric: true, sensitivity: 'base' })); // T38 → T1
+    })(),
   };
 }
