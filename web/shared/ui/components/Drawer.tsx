@@ -3,23 +3,28 @@
 import { useEffect } from 'react';
 import { Icon } from '@/shared/ui/icons';
 
-/** Drawer lateral com overlay, animação e header. Hierarquia e foco consistentes. */
+/** Card de detalhe: modal centralizado amplo com header (avatar/título/badges/ações),
+ *  corpo rolável e rodapé de ações fixo. Info à vista, orientado à operação. */
 export function Drawer({
   open = true,
   onClose,
   title,
   subtitle,
+  avatar,
   badges,
   actions,
+  footer,
   children,
-  width = 'max-w-lg',
+  width = 'max-w-3xl',
 }: {
   open?: boolean;
   onClose: () => void;
   title: React.ReactNode;
   subtitle?: React.ReactNode;
+  avatar?: React.ReactNode;
   badges?: React.ReactNode;
   actions?: React.ReactNode;
+  footer?: React.ReactNode;
   children: React.ReactNode;
   width?: string;
 }) {
@@ -31,14 +36,17 @@ export function Drawer({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[1000] flex justify-end">
-      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/55 backdrop-blur-[1px] gp-overlay-in" />
-      <div className={`relative w-full ${width} h-full overflow-y-auto bg-[var(--surface-1)] border-l border-[var(--border-strong)] shadow-[var(--shadow-lg)] gp-panel-in`}>
-        <div className="sticky top-0 z-10 bg-[var(--surface-1)]/95 backdrop-blur border-b border-[var(--border)] px-5 py-4">
+    <div className="fixed inset-0 z-[1000] flex items-start sm:items-center justify-center p-3 sm:p-6">
+      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/60 backdrop-blur-[2px] gp-overlay-in" />
+      <div className={`relative w-full ${width} max-h-[92vh] flex flex-col rounded-[var(--r-xl)] border border-[var(--border-strong)] bg-[var(--surface-1)] shadow-[var(--shadow-lg)] gp-modal-in overflow-hidden`}>
+        <div className="shrink-0 bg-[var(--surface-1)] border-b border-[var(--border)] px-5 py-4">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="text-lg font-bold text-[var(--fg)] truncate">{title}</h2>
-              {subtitle && <p className="text-xs text-[var(--fg-3)] truncate mt-0.5">{subtitle}</p>}
+            <div className="flex items-start gap-3 min-w-0">
+              {avatar && <div className="shrink-0">{avatar}</div>}
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold text-[var(--fg)] truncate">{title}</h2>
+                {subtitle && <p className="text-xs text-[var(--fg-3)] truncate mt-0.5">{subtitle}</p>}
+              </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {actions}
@@ -47,8 +55,22 @@ export function Drawer({
           </div>
           {badges && <div className="flex flex-wrap gap-1.5 mt-3">{badges}</div>}
         </div>
-        <div className="p-5">{children}</div>
+        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+        {footer && <div className="shrink-0 bg-[var(--surface-1)] border-t border-[var(--border)] px-5 py-3 flex flex-wrap items-center gap-2">{footer}</div>}
       </div>
+    </div>
+  );
+}
+
+/** Avatar circular com inicial — cabeçalho dos cards de detalhe. */
+export function AvatarInicial({ nome, size = 40 }: { nome?: string | null; size?: number }) {
+  const inicial = (nome || '?').trim().charAt(0).toUpperCase();
+  return (
+    <div
+      className="grid place-items-center rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] font-bold border border-[var(--accent-border)]"
+      style={{ width: size, height: size, fontSize: size * 0.4 }}
+    >
+      {inicial}
     </div>
   );
 }

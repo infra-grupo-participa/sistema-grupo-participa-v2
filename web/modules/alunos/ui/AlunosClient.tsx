@@ -17,7 +17,7 @@ import { nivelLabel, nivelOptions } from '@/shared/domain/nivel-resultado';
 import { loadAlunos360, loadTurmas, loadPlacaHistorico, updateAluno, type Turma, type PlacaHistorico } from './alunos-data';
 import { AUDIT_STEPS } from '@/modules/placas/domain/auditoria';
 import { cursoDesempenhoMock } from '../domain/curso-mock';
-import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Drawer, Tabs, Button, Toolbar, SearchInput, FilterSelect, KpiCard, ProgressBar, Spinner } from '@/shared/ui/components';
+import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Drawer, AvatarInicial, SectionCard, Button, Toolbar, SearchInput, FilterSelect, KpiCard, ProgressBar, Spinner } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { DashboardAlunos } from './DashboardAlunos';
 
@@ -241,14 +241,14 @@ function Sel({ value, onChange, placeholder, options }: { value: string; onChang
 }
 
 // ── Drawer 360 ──
-const TABS = [
-  { k: 'geral', l: 'Geral' },
-  { k: 'acesso', l: 'Acesso ao Curso' },
-  { k: 'financeiro', l: 'Financeiro' },
-  { k: 'curso', l: 'Curso' },
-  { k: 'renovacao', l: 'Renovação' },
-  { k: 'jornada', l: 'Jornada' },
-];
+/** Cabeçalho de seção com ícone de acento (linguagem do card de Placas). */
+function SecTitle({ icon, children }: { icon: string; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-2 text-[var(--fg)]">
+      <Icon name={icon} size={15} className="text-[var(--accent)]" /> {children}
+    </span>
+  );
+}
 
 function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSaved }: {
   a: Aluno360;
@@ -259,17 +259,16 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
   onClose: () => void;
   onSaved: (msg: string) => void;
 }) {
-  const [tab, setTab] = useState('geral');
   const [placaHist, setPlacaHist] = useState<PlacaHistorico | null>(null);
   const [placaLoading, setPlacaLoading] = useState(false);
   const temPlaca = !!(a.tem_placa || a.tem_solicitacao_placa);
   useEffect(() => {
-    if (tab !== 'jornada' || !temPlaca || placaHist !== null) return;
+    if (!temPlaca || placaHist !== null) return;
     setPlacaLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
     loadPlacaHistorico(a.id, a.email)
       .then(setPlacaHist)
       .finally(() => setPlacaLoading(false));
-  }, [tab, temPlaca, placaHist, a.id, a.email]);
+  }, [temPlaca, placaHist, a.id, a.email]);
   const saldo = Number(a.saldo_devedor) || 0;
   const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
   const espaco = ESPACO_LABEL[a.espaco_instrucao || ''] || null;
@@ -289,149 +288,157 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
           </>
         ) : undefined
       }
-      actions={canEdit ? <Button size="sm" variant={editMode ? 'ghost' : 'subtle'} onClick={onToggleEdit}>{editMode ? 'Cancelar' : 'Editar'}</Button> : undefined}
+      avatar={<AvatarInicial nome={a.nome} />}
+      width="max-w-5xl"
+      footer={canEdit ? <Button size="sm" variant={editMode ? 'ghost' : 'subtle'} onClick={onToggleEdit}><Icon name="pencil" size={13} /> {editMode ? 'Cancelar edição' : 'Editar dados'}</Button> : undefined}
     >
       {editMode ? (
-          <EditForm a={a} turmas={turmas} onSaved={onSaved} />
-        ) : (
-          <>
-            <Tabs tabs={TABS.map((t) => ({ k: t.k, l: t.l }))} active={tab} onChange={setTab} />
-
-            {tab === 'geral' && (
-              <Section>
-                {a.profissao && <Row k="Profissão" v={a.profissao} />}
-                <Row k="E-mail" v={a.email} />
-                <Row k="Telefone" v={tel(a.telefone)} />
-                {a.telefone_profissional && <Row k="Tel. profissional" v={tel(a.telefone_profissional)} />}
-                {a.documento && <Row k={a.tipo_documento || 'CPF/CNPJ'} v={a.documento} />}
-                <Row k="Endereço" v={[a.endereco_logradouro, a.endereco_numero, a.bairro, a.cidade, a.estado].filter(Boolean).join(', ') || '—'} />
-                <div className="flex gap-2 flex-wrap mt-2">
-                  {[['Facebook', a.link_facebook], ['Instagram', a.instagram_url], ['YouTube', a.youtube_url], ['Site', a.site_profissional]].filter(([, u]) => u).map(([l, u]) => (
-                    <a key={l as string} href={u as string} target="_blank" rel="noopener" className="text-xs px-2 py-1 rounded border border-[var(--border)] text-[var(--accent)]">{l}</a>
-                  ))}
+        <EditForm a={a} turmas={turmas} onSaved={onSaved} />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 items-start">
+          {/* Faturamento & Comprovação — em destaque */}
+          <SectionCard className="md:col-span-2" title={<SecTitle icon="coins">Faturamento &amp; Comprovação</SecTitle>}>
+            {(() => {
+              const sf = a.situacao_financeira ? SITUACAO_FINANCEIRA[a.situacao_financeira] : null;
+              return (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {sf && <Badge tone={sitTone(sf.cls)} dot>{sf.label}</Badge>}
+                  {a.status_pagamento && <Badge tone="neutral">{a.status_pagamento}</Badge>}
                 </div>
-              </Section>
-            )}
-            {tab === 'acesso' && (
-              <Section>
-                {(() => {
-                  const st = a.status_acesso ? STATUS_ACESSO[a.status_acesso] : null;
-                  return (
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {sit && <Badge tone={sitTone(sit.cls)} dot>{sit.label}</Badge>}
-                      {st && <Badge tone={st.cls === 'green' ? 'success' : st.cls === 'blue' ? 'info' : 'neutral'}>{st.label}</Badge>}
-                      {a.status_acesso_central && <Badge tone="neutral">{a.status_acesso_central}</Badge>}
+              );
+            })()}
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <KpiCard label="Pago" value={money(a.valor_pago)} bar="green" />
+              <KpiCard label="Total" value={money(a.valor_total)} bar="gray" />
+              <KpiCard label="Saldo devedor" value={money(saldo)} bar={saldo > 0 ? 'red' : 'gray'} />
+            </div>
+            <div className="grid sm:grid-cols-2 sm:gap-x-6">
+              <Row k="Situação financeira" v={a.situacao_financeira ? (SITUACAO_FINANCEIRA[a.situacao_financeira]?.label || a.situacao_financeira) : '—'} />
+              <Row k="Status de pagamento" v={a.status_pagamento} />
+              <Row k="Último pagamento" v={dataBR(a.ultimo_pagamento)} />
+              <Row k="Nº de cobranças" v={a.num_cobrancas != null ? String(a.num_cobrancas) : '—'} />
+            </div>
+            {saldo > 0
+              ? <div className="mt-3 p-2 rounded bg-[var(--red-subtle)] text-[var(--red)] text-xs flex items-center gap-1.5"><Icon name="alert" size={13} /> Regularização necessária — saldo em aberto: {money(saldo)}</div>
+              : <div className="mt-3 p-2 rounded bg-[var(--green-subtle)] text-[var(--green)] text-xs flex items-center gap-1.5"><Icon name="check" size={13} /> Sem pendências financeiras</div>}
+          </SectionCard>
+
+          {/* Dados Pessoais */}
+          <SectionCard title={<SecTitle icon="user">Dados Pessoais</SecTitle>}>
+            <Section>
+              {a.profissao && <Row k="Profissão" v={a.profissao} />}
+              <Row k="E-mail" v={a.email} />
+              <Row k="Telefone" v={tel(a.telefone)} />
+              {a.telefone_profissional && <Row k="Tel. profissional" v={tel(a.telefone_profissional)} />}
+              {a.documento && <Row k={a.tipo_documento || 'CPF/CNPJ'} v={a.documento} />}
+              <Row k="Endereço" v={[a.endereco_logradouro, a.endereco_numero, a.bairro, a.cidade, a.estado].filter(Boolean).join(', ') || '—'} />
+              <div className="flex gap-2 flex-wrap mt-2">
+                {[['Facebook', a.link_facebook], ['Instagram', a.instagram_url], ['YouTube', a.youtube_url], ['Site', a.site_profissional]].filter(([, u]) => u).map(([l, u]) => (
+                  <a key={l as string} href={u as string} target="_blank" rel="noopener" className="text-xs px-2 py-1 rounded border border-[var(--border)] text-[var(--accent)]">{l}</a>
+                ))}
+              </div>
+            </Section>
+          </SectionCard>
+
+          {/* Acesso ao Curso */}
+          <SectionCard title={<SecTitle icon="graduation">Acesso ao Curso</SecTitle>}>
+            <Section>
+              {(() => {
+                const st = a.status_acesso ? STATUS_ACESSO[a.status_acesso] : null;
+                return (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {sit && <Badge tone={sitTone(sit.cls)} dot>{sit.label}</Badge>}
+                    {st && <Badge tone={st.cls === 'green' ? 'success' : st.cls === 'blue' ? 'info' : 'neutral'}>{st.label}</Badge>}
+                    {a.status_acesso_central && <Badge tone="neutral">{a.status_acesso_central}</Badge>}
+                  </div>
+                );
+              })()}
+              <SubTitle>Produto &amp; oferta</SubTitle>
+              <Row k="Produto" v={a.produto} />
+              <Row k="Oferta" v={a.oferta} />
+              <Row k="Tipo de oferta" v={a.tipo_oferta} />
+              <Row k="Origem de acesso" v={a.origem_acesso} />
+              <Row k="Instrução" v={a.instrucao} />
+              <Row k="Espaço de instrução" v={espaco} />
+              <SubTitle>Programa</SubTitle>
+              <Row k="Nível de resultado" v={nivelLabel(a.nivel_resultado) || '—'} />
+              <Row k="Turma THB" v={a.turma_codigo} />
+              <Row k="Turma Aurum" v={a.turma_aurum_codigo} />
+              {a.placa_aurum && <Row k="Placa Aurum" v={a.placa_aurum} />}
+              <SubTitle>Vigência</SubTitle>
+              <Row k="Regra de acesso" v={a.regra_acesso} />
+              <Row k="Tempo de acesso" v={a.tempo_acesso} />
+              <Row k="Vencimento" v={dataBR(a.data_expiracao)} />
+              {(a.mes_expiracao || a.ano_expiracao) && <Row k="Mês/Ano expiração" v={[a.mes_expiracao, a.ano_expiracao].filter(Boolean).join('/')} />}
+              <Row k="Data da compra" v={dataBR(a.data_compra_importada)} />
+              <SubTitle>Hotmart</SubTitle>
+              <Row k="Holding Total (HT)" v={a.tem_ht ? `Sim${a.ativacao_ht_status ? ` · ${a.ativacao_ht_status}` : ''}` : 'Não'} />
+              <Row k="Holding Masters (HM)" v={a.tem_hm ? `Sim${a.hm_plano ? ` · ${a.hm_plano}` : ''}` : 'Não'} />
+              <Row k="Hotmart UCode" v={a.hotmart_ucode} />
+              <Row k="Registrado no SIP" v={a.sip_registrado ? 'Sim' : 'Não'} />
+              {(a.cs_estagio || a.cs_responsavel || a.cs_observacoes) && (
+                <>
+                  <SubTitle>Acompanhamento CS</SubTitle>
+                  {a.cs_estagio && <Row k="Estágio" v={a.cs_estagio} />}
+                  {a.cs_responsavel && <Row k="Responsável" v={a.cs_responsavel} />}
+                  {a.cs_observacoes && <Row k="Obs (CS)" v={a.cs_observacoes} />}
+                </>
+              )}
+              {a.tratamento_manual && <div className="mt-3 p-2 rounded bg-[var(--yellow-subtle)] text-[var(--yellow)] text-xs flex items-center gap-1.5"><Icon name="alert" size={13} /> {a.tratamento_manual}</div>}
+              {a.obs_central && <Row k="Obs" v={a.obs_central} />}
+            </Section>
+          </SectionCard>
+
+          {/* Jornada */}
+          <SectionCard className="md:col-span-2" title={<SecTitle icon="check-circle">Jornada</SecTitle>}>
+            <div className="grid sm:grid-cols-2 sm:gap-x-4">
+              <JornadaCard label="Holding Total" on={!!a.tem_ht} extra={a.ativacao_ht_status ? `Status: ${a.ativacao_ht_status}` : ''} />
+              <JornadaCard label="Holding Masters" on={!!a.tem_hm} extra={a.hm_plano ? `Plano: ${a.hm_plano}` : ''} />
+              <PlacaJornada on={temPlaca} hist={placaHist} loading={placaLoading} />
+              <JornadaCard label="Depoimento" on={!!a.tem_depoimento} extra={a.total_depoimentos ? `${a.total_depoimentos} depoimento(s)` : ''} href={a.tem_depoimento ? '/depoimentos' : undefined} />
+              <SipJornada email={a.email} on={!!a.sip_registrado} />
+            </div>
+            <div className="text-xs font-semibold text-[var(--fg-3)] mt-3 mb-1">Metadados</div>
+            <div className="grid sm:grid-cols-2 sm:gap-x-6">
+              {a.fonte && <Row k="Fonte" v={a.fonte} />}
+              <Row k="Importado em" v={dataBR(a.importado_em)} />
+              <Row k="Atualizado em" v={dataBR(a.atualizado_em)} />
+              {a.hotmart_ucode && <Row k="Hotmart UCode" v={a.hotmart_ucode} />}
+            </div>
+          </SectionCard>
+
+          {/* Curso */}
+          <SectionCard title={<SecTitle icon="biblioteca">Curso</SecTitle>}>
+            <CursoTab />
+          </SectionCard>
+
+          {/* Renovação */}
+          <SectionCard title={<SecTitle icon="refresh">Renovação</SecTitle>}>
+            <Section>
+              {(() => {
+                const rs = renovacaoStatus(a.turma_codigo);
+                const info = rs ? RENOVACAO_LABEL[rs] : null;
+                return info ? (
+                  <div className={`p-2.5 rounded-[var(--r-md)] mb-2 text-xs ${rs === 'em_renovacao' ? 'bg-[var(--yellow-subtle)] text-[var(--yellow)]' : 'bg-[var(--red-subtle)] text-[var(--red)]'}`}>
+                    <span className="inline-flex items-center gap-1.5">{rs === 'em_renovacao' ? <Icon name="refresh" size={12} /> : <Icon name="alert" size={12} />} {info.label}</span>
+                    <div className="text-[var(--fg-3)] mt-0.5">
+                      {rs === 'em_renovacao'
+                        ? `Turma ${a.turma_codigo} (T1–T29): segue o processo de renovação.`
+                        : `Turma ${a.turma_codigo} (T30+): acesso vencido, sem processo de renovação (em dia, porém não renovado).`}
                     </div>
-                  );
-                })()}
-
-                <SubTitle>Produto & oferta</SubTitle>
-                <Row k="Produto" v={a.produto} />
-                <Row k="Oferta" v={a.oferta} />
-                <Row k="Tipo de oferta" v={a.tipo_oferta} />
-                <Row k="Origem de acesso" v={a.origem_acesso} />
-                <Row k="Instrução" v={a.instrucao} />
-                <Row k="Espaço de instrução" v={espaco} />
-
-                <SubTitle>Programa</SubTitle>
-                <Row k="Nível de resultado" v={nivelLabel(a.nivel_resultado) || '—'} />
-                <Row k="Turma THB" v={a.turma_codigo} />
-                <Row k="Turma Aurum" v={a.turma_aurum_codigo} />
-                {a.placa_aurum && <Row k="Placa Aurum" v={a.placa_aurum} />}
-
-                <SubTitle>Vigência</SubTitle>
-                <Row k="Regra de acesso" v={a.regra_acesso} />
-                <Row k="Tempo de acesso" v={a.tempo_acesso} />
-                <Row k="Vencimento" v={dataBR(a.data_expiracao)} />
-                {(a.mes_expiracao || a.ano_expiracao) && <Row k="Mês/Ano expiração" v={[a.mes_expiracao, a.ano_expiracao].filter(Boolean).join('/')} />}
-                <Row k="Data da compra" v={dataBR(a.data_compra_importada)} />
-
-                <SubTitle>Hotmart</SubTitle>
-                <Row k="Holding Total (HT)" v={a.tem_ht ? `Sim${a.ativacao_ht_status ? ` · ${a.ativacao_ht_status}` : ''}` : 'Não'} />
-                <Row k="Holding Masters (HM)" v={a.tem_hm ? `Sim${a.hm_plano ? ` · ${a.hm_plano}` : ''}` : 'Não'} />
-                <Row k="Hotmart UCode" v={a.hotmart_ucode} />
-                <Row k="Registrado no SIP" v={a.sip_registrado ? 'Sim' : 'Não'} />
-
-                {(a.cs_estagio || a.cs_responsavel || a.cs_observacoes) && (
-                  <>
-                    <SubTitle>Acompanhamento CS</SubTitle>
-                    {a.cs_estagio && <Row k="Estágio" v={a.cs_estagio} />}
-                    {a.cs_responsavel && <Row k="Responsável" v={a.cs_responsavel} />}
-                    {a.cs_observacoes && <Row k="Obs (CS)" v={a.cs_observacoes} />}
-                  </>
-                )}
-
-                {a.tratamento_manual && <div className="mt-3 p-2 rounded bg-[var(--yellow-subtle)] text-[var(--yellow)] text-xs flex items-center gap-1.5"><Icon name="alert" size={13} /> {a.tratamento_manual}</div>}
-                {a.obs_central && <Row k="Obs" v={a.obs_central} />}
-              </Section>
-            )}
-            {tab === 'curso' && <CursoTab />}
-            {tab === 'renovacao' && (
-              <Section>
-                {(() => {
-                  const rs = renovacaoStatus(a.turma_codigo);
-                  const info = rs ? RENOVACAO_LABEL[rs] : null;
-                  return info ? (
-                    <div className={`p-2.5 rounded-[var(--r-md)] mb-2 text-xs ${rs === 'em_renovacao' ? 'bg-[var(--yellow-subtle)] text-[var(--yellow)]' : 'bg-[var(--red-subtle)] text-[var(--red)]'}`}>
-                      <span className="inline-flex items-center gap-1.5">{rs === 'em_renovacao' ? <Icon name="refresh" size={12} /> : <Icon name="alert" size={12} />} {info.label}</span>
-                      <div className="text-[var(--fg-3)] mt-0.5">
-                        {rs === 'em_renovacao'
-                          ? `Turma ${a.turma_codigo} (T1–T29): segue o processo de renovação.`
-                          : `Turma ${a.turma_codigo} (T30+): acesso vencido, sem processo de renovação (em dia, porém não renovado).`}
-                      </div>
-                    </div>
-                  ) : <div className="text-xs text-[var(--fg-3)] mb-2">Sem turma THB definida — status de renovação indisponível.</div>;
-                })()}
-                <Row k="Turma" v={a.turma_codigo || '—'} />
-                <Row k="Vencimento" v={dataBR(a.data_expiracao)} />
-                <Row k="Data da compra" v={dataBR(a.data_compra_importada)} />
-                {a.tempo_acesso && <Row k="Tempo de acesso" v={a.tempo_acesso} />}
-                {a.oferta && <Row k="Oferta" v={a.oferta} />}
-                {a.tipo_oferta && <Row k="Tipo de oferta" v={a.tipo_oferta} />}
-              </Section>
-            )}
-            {tab === 'financeiro' && (
-              <Section>
-                <div className="text-xs text-[var(--fg-3)] mb-2">Situação financeira quanto à adesão ao THB.</div>
-                {(() => {
-                  const sf = a.situacao_financeira ? SITUACAO_FINANCEIRA[a.situacao_financeira] : null;
-                  return (
-                    <div className="flex flex-wrap gap-1.5 mb-3">
-                      {sf && <Badge tone={sitTone(sf.cls)} dot>{sf.label}</Badge>}
-                      {a.status_pagamento && <Badge tone="neutral">{a.status_pagamento}</Badge>}
-                    </div>
-                  );
-                })()}
-                <div className="grid grid-cols-3 gap-3 mb-3">
-                  <KpiCard label="Pago" value={money(a.valor_pago)} bar="green" />
-                  <KpiCard label="Total" value={money(a.valor_total)} bar="gray" />
-                  <KpiCard label="Saldo devedor" value={money(saldo)} bar={saldo > 0 ? 'red' : 'gray'} />
-                </div>
-                <Row k="Situação financeira" v={a.situacao_financeira ? (SITUACAO_FINANCEIRA[a.situacao_financeira]?.label || a.situacao_financeira) : '—'} />
-                <Row k="Status de pagamento" v={a.status_pagamento} />
-                <Row k="Último pagamento" v={dataBR(a.ultimo_pagamento)} />
-                <Row k="Nº de cobranças" v={a.num_cobrancas != null ? String(a.num_cobrancas) : '—'} />
-                {saldo > 0
-                  ? <div className="mt-3 p-2 rounded bg-[var(--red-subtle)] text-[var(--red)] text-xs flex items-center gap-1.5"><Icon name="alert" size={13} /> Regularização necessária — saldo em aberto: {money(saldo)}</div>
-                  : <div className="mt-3 p-2 rounded bg-[var(--green-subtle)] text-[var(--green)] text-xs flex items-center gap-1.5"><Icon name="check" size={13} /> Sem pendências financeiras</div>}
-              </Section>
-            )}
-            {tab === 'jornada' && (
-              <Section>
-                <JornadaCard label="Holding Total" on={!!a.tem_ht} extra={a.ativacao_ht_status ? `Status: ${a.ativacao_ht_status}` : ''} />
-                <JornadaCard label="Holding Masters" on={!!a.tem_hm} extra={a.hm_plano ? `Plano: ${a.hm_plano}` : ''} />
-                <PlacaJornada on={temPlaca} hist={placaHist} loading={placaLoading} />
-                <JornadaCard label="Depoimento" on={!!a.tem_depoimento} extra={a.total_depoimentos ? `${a.total_depoimentos} depoimento(s)` : ''} href={a.tem_depoimento ? '/depoimentos' : undefined} />
-                <SipJornada email={a.email} on={!!a.sip_registrado} />
-                <div className="text-xs font-semibold text-[var(--fg-3)] mt-3 mb-1">Metadados</div>
-                {a.fonte && <Row k="Fonte" v={a.fonte} />}
-                <Row k="Importado em" v={dataBR(a.importado_em)} />
-                <Row k="Atualizado em" v={dataBR(a.atualizado_em)} />
-                {a.hotmart_ucode && <Row k="Hotmart UCode" v={a.hotmart_ucode} />}
-              </Section>
-            )}
-          </>
-        )}
+                  </div>
+                ) : <div className="text-xs text-[var(--fg-3)] mb-2">Sem turma THB definida — status de renovação indisponível.</div>;
+              })()}
+              <Row k="Turma" v={a.turma_codigo || '—'} />
+              <Row k="Vencimento" v={dataBR(a.data_expiracao)} />
+              <Row k="Data da compra" v={dataBR(a.data_compra_importada)} />
+              {a.tempo_acesso && <Row k="Tempo de acesso" v={a.tempo_acesso} />}
+              {a.oferta && <Row k="Oferta" v={a.oferta} />}
+              {a.tipo_oferta && <Row k="Tipo de oferta" v={a.tipo_oferta} />}
+            </Section>
+          </SectionCard>
+        </div>
+      )}
     </Drawer>
   );
 }
