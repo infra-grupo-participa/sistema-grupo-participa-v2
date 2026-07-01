@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
-import { AUDIT_STEPS, AUDIT_STEP_TOTAL } from '../../domain/auditoria';
+import { AUDIT_STEPS, AUDIT_STEP_TOTAL, AUDIT_STEP_INDEX } from '../../domain/auditoria';
 import {
   computeDisplayStatus,
   getSolicitacaoBucketMatch,
@@ -15,7 +15,7 @@ import {
 } from '../../domain/solicitacao';
 import type { Solicitacao, Auditoria, HorarioSlot } from '../../domain/types';
 import * as data from './placas-admin-data';
-import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, Card, Button, StatCard, SearchInput, Input, Toggle, ProgressBar, Timeline, ConfirmDialog, type TimelineEntry } from '@/shared/ui/components';
+import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, AvatarInicial, Card, Button, StatCard, SearchInput, Input, Toggle, ProgressBar, ConfirmDialog } from '@/shared/ui/components';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://grupoparticipa.app.br';
 
@@ -267,7 +267,7 @@ function SolDetail({
   const [rastreio, setRastreio] = useState(sol.codigo_rastreio || '');
   const [motivo, setMotivo] = useState('');
   const [showCorrecao, setShowCorrecao] = useState(false);
-  const [confirmRejeitar, setConfirmRejeitar] = useState(false);
+  const [confirmExcluir, setConfirmExcluir] = useState(false);
   const step = sol.auditoria_step ?? -1;
   const dates = (auditoria?.dates as Record<string, string>) || {};
   const regular = isSolicitacaoRegularizacao(sol);
@@ -275,105 +275,234 @@ function SolDetail({
 
   return (
     <Drawer
-      width="max-w-md"
+      width="max-w-5xl"
       onClose={onClose}
+      avatar={<AvatarInicial nome={sol.nome} />}
       title={sol.nome || '—'}
       subtitle={`${sol.email ?? ''}${sol.telefone ? ' · ' + sol.telefone : ''}`}
       badges={
         <>
           <NivelBadge nivel={sol.nivel} />
-          <Badge tone="info">{computeDisplayStatus(sol).label}</Badge>
+          <Badge tone="accent" dot>{step >= 0 && !regular ? `${step + 1}/${AUDIT_STEP_TOTAL} · ` : ''}{computeDisplayStatus(sol).label}</Badge>
+          {sol.admin_seen_at && <Badge tone="neutral">Visto</Badge>}
         </>
       }
+      actions={canEdit ? (
+        <div className="hidden sm:flex gap-1.5">
+          <Button size="sm" variant="subtle" onClick={() => act(() => data.marcarVisto(sol, true))}>Marcar visto</Button>
+          <Button size="sm" variant="ghost" onClick={() => act(() => data.marcarVisto(sol, false))}>Não visto</Button>
+        </div>
+      ) : undefined}
+      footer={canEdit ? (
+        <>
+          {step > 0 && step < AUDIT_STEP_TOTAL - 1 && <Button size="sm" variant="ghost" onClick={() => act(() => data.voltarEtapa(sol))}><Icon name="arrow-left" size={13} /> Etapa anterior</Button>}
+          {step >= 0 && step < AUDIT_STEP_TOTAL - 1 && <Button size="sm" variant="success" onClick={() => act(() => data.confirmarJaPossuiPlaca(sol))}><Icon name="check" size={13} /> Já possui placa — avançar para o final</Button>}
+          <Button size="sm" variant="ghost" onClick={() => setShowCorrecao((v) => !v)}><Icon name="rotate" size={13} /> Correção</Button>
+          <div className="ml-auto"><Button size="sm" variant="danger" onClick={() => setConfirmExcluir(true)}><Icon name="trash" size={13} /> Excluir</Button></div>
+        </>
+      ) : undefined}
     >
-        {/* Timeline de auditoria */}
-        <div className="mb-5">
-          <Timeline
-            items={AUDIT_STEPS.map((s, i): TimelineEntry => {
-              const done = i < step;
-              const current = i === step;
-              return {
-                tone: done ? 'green' : current ? 'accent' : 'base',
-                done,
-                icon: done ? undefined : i + 1,
-                title: s.name,
-                meta: dates[s.key] || undefined,
-              };
-            })}
-          />
-        </div>
+      <div className="grid gap-4 lg:grid-cols-[1fr_300px] items-start">
+        {/* Coluna principal */}
+        <div className="space-y-4 min-w-0">
+          {sol.regularizacao_pendente && sol.motivo_retorno && (
+            <Panel icon="alert" title="Motivo do retorno" accent="var(--yellow)">
+              <p className="text-sm text-[var(--fg-2)] leading-relaxed whitespace-pre-wrap">{sol.motivo_retorno}</p>
+            </Panel>
+          )}
 
-        {/* Documentos */}
-        <div className="flex gap-2 mb-4 text-xs">
-          {sol.proof_url && <a href={sol.proof_url} target="_blank" rel="noopener" className="px-2 py-1 rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--accent)] hover:border-[var(--border-strong)] transition-colors">Comprovante</a>}
-          {sol.declaracao_url && <a href={sol.declaracao_url} target="_blank" rel="noopener" className="px-2 py-1 rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--accent)] hover:border-[var(--border-strong)] transition-colors">Declaração</a>}
-        </div>
-
-        {canEdit && (
-          <div className="space-y-2">
-            {sol.status === 'enviado' && (
-              <ActBtn onClick={() => act(() => data.bootstrapAuditoria(sol).then(() => true))}>Iniciar auditoria</ActBtn>
-            )}
-            {regular && reenvioCompleto && (
-              <ActBtn variant="success" onClick={() => act(() => data.aprovarReenvio(sol))}>Aprovar reenvio</ActBtn>
-            )}
-            {!regular && step >= 0 && step < 6 && step !== 1 && (
-              <ActBtn variant="success" onClick={() => act(() => data.avancarEtapa(sol))}>
-                {AUDIT_STEPS[step]?.actionLabel || 'Avançar etapa'}
-              </ActBtn>
-            )}
-            {step === 1 && <p className="text-xs text-[var(--fg-3)]">Aguardando o cliente agendar a entrevista.</p>}
-            {step === 2 && (
-              <ActBtn variant="danger" onClick={() => act(() => data.marcarNaoCompareceu(sol))}>Não compareceu — reabrir agendamento</ActBtn>
-            )}
-            {step === 4 && (
-              <div className="flex gap-2">
-                <Input value={rastreio} onChange={(e) => setRastreio(e.target.value)} placeholder="Código de rastreio" className="flex-1" />
-                <ActBtn onClick={() => act(() => data.salvarRastreio(sol, rastreio))}>Salvar</ActBtn>
+          <Panel icon="arrow-right" title="Próxima ação">
+            {!canEdit ? (
+              <p className="text-sm text-[var(--fg-3)]">Somente leitura.</p>
+            ) : regular && !reenvioCompleto ? (
+              <div className="rounded-[var(--r-md)] bg-[var(--yellow-subtle)] p-3 text-sm flex items-start gap-2">
+                <Icon name="alert" size={16} className="text-[var(--yellow)] mt-0.5 shrink-0" />
+                <div><div className="font-semibold text-[var(--yellow)]">Cliente em correção</div><div className="text-[var(--fg-2)] mt-0.5">Aguardando novo envio de documentação ou correção do questionário pelo cliente. Quando ele reenviar, o processo volta para a fila ativa.</div></div>
               </div>
-            )}
-            {step > 0 && step < 6 && (
-              <ActBtn variant="ghost" onClick={() => act(() => data.voltarEtapa(sol))}>← Voltar etapa</ActBtn>
-            )}
-            {!showCorrecao ? (
-              <ActBtn variant="ghost" onClick={() => setShowCorrecao(true)}>Solicitar correção</ActBtn>
+            ) : regular && reenvioCompleto ? (
+              <>
+                <div className="rounded-[var(--r-md)] bg-[var(--green-subtle)] p-3 text-sm mb-3 flex items-start gap-2">
+                  <Icon name="check-circle" size={16} className="text-[var(--green)] mt-0.5 shrink-0" />
+                  <div><div className="font-semibold text-[var(--green)]">Reenvio recebido</div><div className="text-[var(--fg-2)] mt-0.5">A cliente reenviou os documentos da correção. Se estiverem corretos, aprove para enviar o link de agendamento.</div></div>
+                </div>
+                <BigAction variant="success" icon="check" onClick={() => act(() => data.aprovarReenvio(sol))}>Aprovar reenvio</BigAction>
+              </>
+            ) : step < 0 || sol.status === 'enviado' ? (
+              <BigAction icon="play" onClick={() => act(() => data.bootstrapAuditoria(sol).then(() => true))}>Iniciar auditoria</BigAction>
+            ) : step === AUDIT_STEP_INDEX.DOCS_APROVADOS ? (
+              <p className="text-sm text-[var(--fg-2)]">Aguardando o cliente agendar a entrevista.</p>
+            ) : step >= AUDIT_STEP_INDEX.PLACA_RECEBIDA ? (
+              <div className="rounded-[var(--r-md)] bg-[var(--green-subtle)] text-[var(--green)] p-3 text-sm inline-flex items-center gap-2"><Icon name="check-circle" size={16} /> Processo concluído — placa recebida.</div>
             ) : (
-              <div className="space-y-2">
+              <>
+                <p className="text-sm text-[var(--fg-2)] mb-3 leading-relaxed">{AUDIT_STEPS[step]?.desc}</p>
+                {step === AUDIT_STEP_INDEX.PLACA_EM_CONFECCAO && (
+                  <div className="flex gap-2 mb-2">
+                    <Input value={rastreio} onChange={(e) => setRastreio(e.target.value)} placeholder="Código de rastreio" className="flex-1" />
+                    <Button variant="subtle" onClick={() => act(() => data.salvarRastreio(sol, rastreio))}>Salvar</Button>
+                  </div>
+                )}
+                <BigAction icon="check" onClick={() => act(() => data.avancarEtapa(sol))}>{AUDIT_STEPS[step]?.actionLabel || 'Avançar etapa'}</BigAction>
+                {step === AUDIT_STEP_INDEX.ENTREVISTA_AGENDADA && (
+                  <button onClick={() => act(() => data.marcarNaoCompareceu(sol))} className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] px-4 py-2 text-sm font-medium text-[var(--red)] border border-[var(--red-border)] hover:bg-[var(--red-subtle)] transition-colors"><Icon name="x" size={14} /> Não compareceu — reabrir agendamento</button>
+                )}
+              </>
+            )}
+            {showCorrecao && canEdit && (
+              <div className="mt-3 space-y-2 pt-3 border-t border-[var(--border)]">
                 <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="O que precisa ser corrigido?" rows={3} className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" />
-                <ActBtn variant="warn" onClick={() => act(() => data.solicitarCorrecao(sol, motivo))}>Enviar pedido de correção</ActBtn>
+                <Button variant="subtle" onClick={() => act(() => data.solicitarCorrecao(sol, motivo).then((ok) => { if (ok) setShowCorrecao(false); return ok; }))}>Enviar pedido de correção</Button>
               </div>
             )}
-            <ActBtn variant="danger" onClick={() => setConfirmRejeitar(true)}>Rejeitar</ActBtn>
-            {confirmRejeitar && (
-              <ConfirmDialog
-                title="Rejeitar solicitação"
-                message="Rejeitar esta solicitação?"
-                confirmLabel="Rejeitar"
-                danger
-                onConfirm={() => { setConfirmRejeitar(false); act(() => data.rejeitar(sol)); }}
-                onCancel={() => setConfirmRejeitar(false)}
-              />
-            )}
-            <div className="flex gap-2 pt-2 border-t border-[var(--border)]">
-              <ActBtn variant="ghost" onClick={() => act(() => data.marcarVisto(sol, true))}>Marcar visto</ActBtn>
-              <ActBtn variant="ghost" onClick={() => act(() => data.marcarVisto(sol, false))}>Não visto</ActBtn>
+          </Panel>
+
+          {sol.entrevista_data && (
+            <Panel icon="calendar" title="Entrevista agendada">
+              <div className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] p-4 text-center mb-3">
+                <div className="text-lg font-bold text-[var(--fg)] capitalize">{fmtDataExtenso(sol.entrevista_data)}</div>
+                {sol.entrevista_hora && <div className="text-sm text-[var(--info)] mt-1 inline-flex items-center gap-1.5"><Icon name="calendar" size={14} /> Às {String(sol.entrevista_hora).slice(0, 5)}</div>}
+              </div>
+              {(sol.meet_link || sol.entrevista_link) && (
+                <a href={sol.meet_link || sol.entrevista_link!} target="_blank" rel="noopener" className="w-full inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110 transition-[filter]" style={{ background: 'var(--info)' }}><Icon name="camera" size={15} /> Abrir sala da entrevista</a>
+              )}
+            </Panel>
+          )}
+
+          <Panel icon="coins" title="Faturamento & Comprovação" accent="var(--accent)">
+            <div className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] p-4 mb-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">Faturamento declarado</div>
+              <div className="text-2xl font-bold tabular text-[var(--fg)] mt-1">{fmtBRL(sol.faturamento_declarado)}</div>
             </div>
-          </div>
-        )}
+            <div className="grid sm:grid-cols-2 gap-2 mb-3">
+              <DocLink url={sol.proof_url} label="Comprovante financeiro" />
+              <DocLink url={sol.declaracao_url} label="Declaração assinada" />
+            </div>
+            <div className="grid sm:grid-cols-2 sm:gap-x-6">
+              <Row2 k="Nível atual" v={<NivelBadge nivel={sol.nivel} />} />
+              <Row2 k="Espaço de instrução" v={sol.espaco_instrucao} />
+              <Row2 k="Interesse" v={sol.interesse} />
+            </div>
+          </Panel>
+
+          <Panel icon="user" title="Dados Pessoais">
+            <div className="grid sm:grid-cols-2 sm:gap-x-6">
+              <Row2 k="Nome" v={sol.nome} />
+              <Row2 k="E-mail" v={sol.email} />
+              <Row2 k="Telefone" v={sol.telefone} />
+              <Row2 k="Profissão" v={sol.profissao} />
+              <Row2 k="Endereço" v={[sol.logradouro, sol.numero, sol.bairro, sol.cidade, sol.estado_uf].filter(Boolean).join(', ') || null} />
+              <Row2 k="CEP" v={sol.cep} />
+              <Row2 k="Documento (NF)" v={sol.documento_nf} />
+              <Row2 k="E-mail de entrega" v={sol.email_entrega} />
+              {sol.codigo_rastreio && <Row2 k="Código de rastreio" v={sol.codigo_rastreio} />}
+            </div>
+          </Panel>
+        </div>
+
+        {/* Coluna lateral: status + remanejamento */}
+        <div className="space-y-4">
+          <Panel icon="check-circle" title="Status da auditoria">
+            <ol className="space-y-1">
+              {AUDIT_STEPS.map((s, i) => {
+                const done = i < step;
+                const current = i === step;
+                return (
+                  <li key={s.key} className={`flex items-center gap-2.5 rounded-[var(--r-md)] px-2 py-1.5 ${current ? 'bg-[var(--accent-subtle)] border border-[var(--accent-border)]' : ''}`}>
+                    <span className="grid place-items-center w-6 h-6 rounded-full text-[11px] font-bold shrink-0" style={{ background: done ? 'var(--green)' : current ? 'var(--accent)' : 'var(--surface-4)', color: done || current ? '#fff' /* hex-ok: contraste */ : 'var(--fg-3)' }}>{done ? <Icon name="check" size={12} strokeWidth={3} /> : i + 1}</span>
+                    <span className={`text-sm ${current ? 'font-semibold text-[var(--fg)]' : done ? 'text-[var(--fg-2)]' : 'text-[var(--fg-3)]'}`}>{s.name}</span>
+                    {dates[s.key] && <span className="ml-auto text-[10px] tabular text-[var(--fg-3)] shrink-0">{dates[s.key]}</span>}
+                  </li>
+                );
+              })}
+            </ol>
+          </Panel>
+
+          {canEdit && step >= 0 && (
+            <Panel title="Remanejamento rápido">
+              <div className="flex flex-wrap gap-1.5">
+                {AUDIT_STEPS.map((s, i) => {
+                  const done = i < step;
+                  const current = i === step;
+                  return (
+                    <button key={s.key} title={s.name} onClick={() => act(() => data.setAuditStep(sol, i))} className="grid place-items-center w-8 h-8 rounded-full text-xs font-bold border border-[var(--border)] transition-[filter] hover:brightness-125" style={{ background: done ? 'var(--green)' : current ? 'var(--accent)' : 'var(--surface-3)', color: done || current ? '#fff' /* hex-ok: contraste */ : 'var(--fg-2)' }}>{i + 1}</button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-[var(--fg-3)] mt-2">Clique para posicionar a auditoria na etapa (não dispara e-mails).</p>
+            </Panel>
+          )}
+        </div>
+      </div>
+
+      {confirmExcluir && (
+        <ConfirmDialog
+          title="Excluir solicitação"
+          message="Excluir esta solicitação e a auditoria vinculada? Ação irreversível."
+          confirmLabel="Excluir"
+          danger
+          onConfirm={() => { setConfirmExcluir(false); act(() => data.excluirSolicitacao(sol)); }}
+          onCancel={() => setConfirmExcluir(false)}
+        />
+      )}
     </Drawer>
   );
 }
 
-function ActBtn({ children, onClick, variant = 'primary' }: { children: React.ReactNode; onClick: () => void; variant?: 'primary' | 'success' | 'danger' | 'warn' | 'ghost' }) {
-  // gap_catalogo: Button não tem variante "warn" (âmbar/amarelo cheio) — fallback local apenas para esse tom.
-  if (variant === 'warn') {
-    return (
-      <button onClick={onClick} className="w-full inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] font-semibold transition-[filter,background] duration-150 px-4 py-2 text-sm bg-[var(--yellow)] text-black hover:brightness-110">{children}</button>
-    );
+/** Bloco de seção com cabeçalho de ícone (linguagem do card legado). */
+function Panel({ icon, title, accent, children }: { icon?: string; title: string; accent?: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] p-4" style={accent ? { borderLeft: `3px solid ${accent}` } : undefined}>
+      <div className="flex items-center gap-2 mb-3 text-[11px] font-bold uppercase tracking-wider text-[var(--fg-3)]">
+        {icon && <Icon name={icon} size={14} className="text-[var(--accent)]" />} {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Botão de ação primária, grande e destacado (Próxima Ação). */
+function BigAction({ children, onClick, variant = 'accent', icon }: { children: React.ReactNode; onClick: () => void; variant?: 'accent' | 'success'; icon?: string }) {
+  return (
+    <button onClick={onClick} className="w-full inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] px-4 py-3 text-sm font-bold text-black hover:brightness-110 transition-[filter]" style={{ background: variant === 'success' ? 'var(--green)' : 'var(--accent)' }}>
+      {icon && <Icon name={icon} size={16} />}{children}
+    </button>
+  );
+}
+
+/** Cartão de documento (comprovante/declaração). */
+function DocLink({ url, label }: { url: string | null; label: string }) {
+  if (!url) {
+    return <div className="rounded-[var(--r-md)] border border-dashed border-[var(--border)] p-3 text-xs text-[var(--fg-4)]">{label}: —</div>;
   }
   return (
-    <Button variant={variant} onClick={onClick} className="w-full">{children}</Button>
+    <a href={url} target="_blank" rel="noopener" className="block rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] p-3 hover:border-[var(--border-strong)] transition-colors">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--green)] flex items-center gap-1.5"><Icon name="file" size={13} /> {label}</div>
+      <div className="text-sm text-[var(--fg)] mt-1 inline-flex items-center gap-1.5"><Icon name="arrow-up-right" size={13} /> Abrir arquivo</div>
+    </a>
   );
+}
+
+/** Linha rótulo-em-cima / valor (leitura densa nas seções). */
+function Row2({ k, v }: { k: string; v: React.ReactNode }) {
+  return (
+    <div className="py-1.5 border-b border-[var(--border-faint)]">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">{k}</div>
+      <div className="text-sm text-[var(--fg)] mt-0.5">{v || '—'}</div>
+    </div>
+  );
+}
+
+function fmtBRL(n: number | null): string {
+  return n == null ? '—' : Number(n).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+}
+
+function fmtDataExtenso(d: string): string {
+  try {
+    const [y, m, dd] = d.split('-').map(Number);
+    return new Date(y, m - 1, dd).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  } catch {
+    return d;
+  }
 }
 
 function AgendaHorarios({ canEdit, flash }: { canEdit: boolean; flash: (m: string) => void }) {

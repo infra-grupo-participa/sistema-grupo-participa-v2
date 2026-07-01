@@ -295,7 +295,7 @@ function Drawer360({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSave
       {editMode ? (
         <EditForm a={a} turmas={turmas} onSaved={onSaved} />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 items-start">
+        <div className="grid gap-4 md:grid-cols-2">
           {/* Faturamento & Comprovação — em destaque */}
           <SectionCard className="md:col-span-2" title={<SecTitle icon="coins">Faturamento &amp; Comprovação</SecTitle>}>
             {(() => {
