@@ -170,3 +170,9 @@ body {
 .gp-panel-in { animation: gp-slide-in var(--t-mid); }
 .gp-modal-in { animation: gp-slide-up var(--t-mid); }
 .gp-fade-in { animation: gp-fade var(--t-fast); }
+
+/* Logo Grupo Participa — troca por tema (sem flicker: data-theme vem do script inline).
+   Wordmark branco no tema escuro, preto no tema claro. */
+.gp-logo-light { display: none; }
+[data-theme="light"] .gp-logo-dark { display: none; }
+[data-theme="light"] .gp-logo-light { display: block; }

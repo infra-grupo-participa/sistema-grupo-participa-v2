@@ -31,7 +31,10 @@ export function Header({ user, onToggleSidebar }: { user: GpUser; onToggleSideba
           <Icon name="menu" size={18} />
         </button>
       )}
-      <span className="font-bold text-[var(--accent)] tracking-tight">Grupo Participa</span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/images/logo-grupo-participa-branco.svg" alt="Grupo Participa" className="gp-logo-dark h-6 w-auto" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/images/logo-grupo-participa-preto.svg" alt="Grupo Participa" className="gp-logo-light h-6 w-auto" />
 
       <div className="ml-auto flex items-center gap-3">
         <span className="text-xs px-2 py-1 rounded-[var(--r-pill)] bg-[var(--surface-3)] text-[var(--fg-2)] capitalize">
