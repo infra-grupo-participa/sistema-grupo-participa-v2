@@ -52,10 +52,14 @@ export function Header({
           <Icon name={collapsed ? 'panel-open' : 'panel-close'} size={18} />
         </button>
       )}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/images/logo-grupo-participa-branco.svg" alt="Grupo Participa" className="gp-logo-dark h-6 w-auto" />
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/images/logo-grupo-participa-preto.svg" alt="Grupo Participa" className="gp-logo-light h-6 w-auto" />
+      {/* Logo no header só quando NÃO está visível na sidebar: sempre no mobile (drawer),
+          e no desktop apenas com a sidebar recolhida — evita a marca duplicada. */}
+      <div className={collapsed ? 'block' : 'md:hidden'}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/logo-grupo-participa-branco.svg" alt="Grupo Participa" className="gp-logo-dark h-6 w-auto" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/logo-grupo-participa-preto.svg" alt="Grupo Participa" className="gp-logo-light h-6 w-auto" />
+      </div>
 
       <div className="ml-auto flex items-center gap-3">
         <span className="text-xs px-2 py-1 rounded-[var(--r-pill)] bg-[var(--surface-3)] text-[var(--fg-2)] capitalize">
