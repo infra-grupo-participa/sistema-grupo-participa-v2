@@ -2,80 +2,147 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Declaração de Faturamento — Time Holding Brasil</title>
   <link rel="icon" type="image/png" href="/images/TimeHoldingBrasil.png" />
 <style>
     * { box-sizing: border-box; }
-    body { font-family: 'Times New Roman', Times, serif; max-width: 820px; margin: 0 auto; padding: 40px 50px; color: #000; font-size: 15px; line-height: 1.7; background: #fdfdfd; }
+    :root {
+      --orange: #F29725;
+      --orange-2: #e07f10;
+      --ink: #0f172a;
+      --muted: #5b6472;
+    }
+    html { background: #eef1f5; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Times New Roman', Times, serif;
+      color: #000;
+      font-size: 15px;
+      line-height: 1.7;
+    }
 
+    /* ── Barra de instruções (não sai na impressão) ─────────────────── */
     .no-print-bar {
-      position: fixed; top: 0; left: 0; right: 0;
-      background: #F29725; color: #fff; padding: 15px 25px;
-      display: flex; flex-direction: column; gap: 12px;
+      position: sticky; top: 0;
+      background: linear-gradient(135deg, var(--orange), var(--orange-2));
+      color: #1a1204;
+      padding: 14px 20px 12px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       font-size: 13px; z-index: 9999;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.18);
     }
-    .step-box { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 12px; }
-    .step-item { display: flex; align-items: center; gap: 5px; background: rgba(0,0,0,0.1); padding: 5px 10px; border-radius: 6px; }
-    .step-num { background: #fff; color: #F29725; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11px; }
+    .bar-inner { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+    .bar-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .bar-title { margin: 0; font-weight: 800; font-size: 15px; }
+    .bar-sub { margin: 2px 0 0; font-size: 12px; opacity: .85; }
+    .bar-buttons { display: flex; gap: 8px; }
+    .bar-buttons button {
+      border: none; padding: 11px 18px; border-radius: 10px;
+      font-weight: 800; font-size: 13px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+      transition: transform .15s, filter .15s;
+    }
+    .bar-buttons button:hover { transform: translateY(-1px); filter: brightness(1.03); }
+    .btn-print { background: #1a1204; color: #fff; box-shadow: 0 6px 16px -6px rgba(0,0,0,.5); }
+    .btn-close { background: rgba(255,255,255,.35); color: #1a1204; }
+    .step-box { display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid rgba(0,0,0,0.12); padding-top: 10px; }
+    .step-item { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,.3); padding: 5px 10px; border-radius: 999px; font-weight: 600; font-size: 12px; }
+    .step-num { background: #1a1204; color: #fff; width: 17px; height: 17px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 10px; }
 
-    .bar-actions { display: flex; align-items: center; justify-content: space-between; width: 100%; }
-    .bar-actions p { margin: 0; font-weight: 600; font-size: 14px; }
-    .bar-buttons { display: flex; gap: 10px; }
-    .bar-buttons button { background: #fff; color: #F29725; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer; transition: transform 0.2s, background 0.2s; }
-    .bar-buttons button:hover { transform: translateY(-1px); background: #f0f0f0; }
-    .bar-buttons .btn-close { background: rgba(0,0,0,0.2); color: #fff; }
+    /* ── Folha (documento) ──────────────────────────────────────────── */
+    .sheet-wrap { padding: 28px 14px 60px; }
+    .sheet {
+      max-width: 820px; margin: 0 auto;
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: 0 10px 40px -12px rgba(15,23,42,.25), 0 2px 8px rgba(15,23,42,.08);
+      padding: 64px 70px;
+      min-height: 900px;
+    }
+    @media (max-width: 640px) { .sheet { padding: 36px 22px; min-height: 0; } }
 
-    .spacer-top { height: 140px; }
-
-    h1 { text-align: center; font-size: 18px; font-weight: bold; text-transform: uppercase; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; margin-top: 20px; }
+    h1 { text-align: center; font-size: 18px; font-weight: bold; text-transform: uppercase; margin: 0 0 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
     p { text-align: justify; margin-bottom: 20px; }
 
+    /* Lacunas digitáveis: clique e complete antes de imprimir */
     .lacuna {
-      border-bottom: 2px solid #F29725;
-      color: #F29725;
-      min-width: 120px;
+      border-bottom: 2px solid var(--orange);
+      color: var(--orange-2);
+      min-width: 150px;
       display: inline-block;
       text-align: center;
-      padding: 0 5px;
+      padding: 0 6px;
       font-weight: 600;
+      outline: none;
+      cursor: text;
+      transition: background .15s, border-color .15s;
+    }
+    .lacuna:hover { background: rgba(242,151,37,.08); }
+    .lacuna:focus { background: rgba(242,151,37,.12); border-bottom-color: var(--orange-2); }
+    .lacuna:empty::before { content: attr(data-placeholder); color: rgba(224,127,16,.55); font-weight: 500; }
+    .lacuna:not(:empty) { color: #000; }
+
+    .dica-lacuna {
+      max-width: 820px; margin: 14px auto 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 12.5px; color: var(--muted);
+      background: #fff; border: 1px dashed var(--orange);
+      border-radius: 10px; padding: 10px 14px;
+      display: flex; gap: 8px; align-items: flex-start;
     }
 
     .assinatura-area { margin-top: 80px; }
-    .assinatura-linha { border-top: 1px solid #000; width: 350px; padding-top: 10px; margin-top: 50px; }
+    .assinatura-linha { border-top: 1px solid #000; width: 350px; max-width: 100%; padding-top: 10px; margin-top: 50px; }
     .assinatura-nome { font-weight: bold; font-size: 16px; text-transform: uppercase; }
     .assinatura-cargo { font-size: 14px; color: #333; font-style: italic; }
 
     @media print {
-      .no-print-bar, .spacer-top { display: none; }
-      body { margin: 0; padding: 0; background: #fff; }
-      .lacuna { border-bottom: 1px solid #000; color: transparent; font-weight: normal; }
+      html, body { background: #fff; }
+      .no-print-bar, .dica-lacuna { display: none; }
+      .sheet-wrap { padding: 0; }
+      .sheet { box-shadow: none; border-radius: 0; padding: 0; max-width: none; min-height: 0; }
+      /* Lacuna preenchida imprime em preto; vazia vira linha para preencher à caneta */
+      .lacuna { border-bottom: 1px solid #000; font-weight: normal; }
+      .lacuna:not(:empty) { color: #000; }
+      .lacuna:empty::before { content: ''; }
     }
   </style>
 </head>
 <body>
 <div class="no-print-bar">
-  <div class="bar-actions">
-    <p>📄 Siga as instruções para gerar sua declaração oficial:</p>
-    <div class="bar-buttons">
-      <button onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
-      <button class="btn-close" onclick="window.close()">✕ Fechar</button>
+  <div class="bar-inner">
+    <div class="bar-actions">
+      <div>
+        <p class="bar-title">Sua declaração oficial está pronta</p>
+        <p class="bar-sub">Complete as lacunas em laranja (pode digitar direto na página), depois imprima em papel timbrado e assine.</p>
+      </div>
+      <div class="bar-buttons">
+        <button class="btn-print" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
+        <button class="btn-close" onclick="window.close()">✕ Fechar</button>
+      </div>
+    </div>
+    <div class="step-box">
+      <div class="step-item"><div class="step-num">1</div><span>Complete as lacunas</span></div>
+      <div class="step-item"><div class="step-num">2</div><span>Imprima em papel timbrado</span></div>
+      <div class="step-item"><div class="step-num">3</div><span>Assine à mão</span></div>
+      <div class="step-item"><div class="step-num">4</div><span>Escaneie (PDF ou foto)</span></div>
+      <div class="step-item"><div class="step-num">5</div><span>Envie no portal</span></div>
     </div>
   </div>
-  <div class="step-box">
-    <div class="step-item"><div class="step-num">1</div><span>Papel timbrado</span></div>
-    <div class="step-item"><div class="step-num">2</div><span>Preencha as lacunas</span></div>
-    <div class="step-item"><div class="step-num">3</div><span>Imprima e Assine</span></div>
-    <div class="step-item"><div class="step-num">4</div><span>Escaneie (PDF)</span></div>
-    <div class="step-item"><div class="step-num">5</div><span>Envie no portal</span></div>
+</div>
+
+<div class="sheet-wrap">
+  <div class="sheet">
+    <h1>Declaração de Comprovação de Faturamento</h1>
+    <div id="content">Carregando conteúdo...</div>
+  </div>
+  <div class="dica-lacuna" id="dica">
+    <span>💡</span>
+    <span><strong>Dica:</strong> clique nas lacunas em laranja para digitar seu órgão de classe e o número de inscrição antes de imprimir. Se preferir, deixe em branco — elas viram linhas para preencher à caneta.</span>
   </div>
 </div>
-<div class="spacer-top"></div>
-
-<h1>Declaração de Comprovação de Faturamento</h1>
-
-<div id="content">Carregando conteúdo...</div>
 
 <script>
   window.onload = () => {
@@ -92,7 +159,8 @@
     const meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
     const dataHoje = `${dt.getDate()} de ${meses[dt.getMonth()]} de ${dt.getFullYear()}`;
 
-    const lacunaManual = (texto) => `<span class="lacuna">${texto}</span>`;
+    // Lacuna digitável: contenteditable + placeholder via CSS (:empty::before)
+    const lacunaManual = (placeholder) => `<span class="lacuna" contenteditable="true" spellcheck="false" data-placeholder="${placeholder}"></span>`;
     const campoDestaque = (texto) => `<strong>${texto}</strong>`;
 
     const NIVEL_MAP = {
@@ -106,11 +174,12 @@
     const cfg = NIVEL_MAP[nivelNormalizado];
     if (!cfg) {
       document.getElementById('content').innerHTML = '<p style="color:red; text-align:center">Nível inválido para geração de declaração.</p>';
+      document.getElementById('dica').style.display = 'none';
       return;
     }
 
     const html = `
-      <p>Me chamo ${campoDestaque(nome)}, sou ${campoDestaque(profissao)}, inscrito na ${lacunaManual('[órgão de classe]')} sob o número ${lacunaManual('[número da inscrição]')}, resido/atuo na cidade de ${campoDestaque(cidade)}/${campoDestaque(estado)} e declaro para todos os fins que me tornei profissional Nível ${campoDestaque(cfg.label)} por ter faturado mais de ${campoDestaque(cfg.valor)} nos últimos doze meses, trabalhando com Holding Familiar e implementando as técnicas específicas e de captação de clientes que me foram ensinadas pelo Professor Marcio Carvalho de Sá.</p>
+      <p>Me chamo ${campoDestaque(nome)}, sou ${campoDestaque(profissao)}, inscrito na ${lacunaManual('órgão de classe')} sob o número ${lacunaManual('nº da inscrição')}, resido/atuo na cidade de ${campoDestaque(cidade)}/${campoDestaque(estado)} e declaro para todos os fins que me tornei profissional Nível ${campoDestaque(cfg.label)} por ter faturado mais de ${campoDestaque(cfg.valor)} nos últimos doze meses, trabalhando com Holding Familiar e implementando as técnicas específicas e de captação de clientes que me foram ensinadas pelo Professor Marcio Carvalho de Sá.</p>
 
       <p style="margin-top:40px">${campoDestaque(cidade)}, ${campoDestaque(dataHoje)}.</p>
 
@@ -124,6 +193,16 @@
 
     document.title = `Declaração Nível ${cfg.label} - ${params.get('nome') || ''}`;
     document.getElementById('content').innerHTML = html;
+
+    // Higiene do contenteditable: sem quebras de linha e sem colar HTML formatado
+    document.querySelectorAll('.lacuna').forEach((el) => {
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
+      el.addEventListener('paste', (e) => {
+        e.preventDefault();
+        document.execCommand('insertText', false, (e.clipboardData || window.clipboardData).getData('text').replace(/\s+/g, ' '));
+      });
+      el.addEventListener('blur', () => { if (!el.textContent.trim()) el.innerHTML = ''; });
+    });
   };
 </script>
 </body>

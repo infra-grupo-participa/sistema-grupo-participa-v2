@@ -141,9 +141,24 @@ export function StepContent(p: StepProps) {
     };
     return (
       <Section title="5. Declaração" subtitle="Validação formal do nível de faturamento informado.">
-        <div className="sp-info"><strong>Passo 1:</strong> gere o modelo oficial já preenchido com seus dados, imprima em papel timbrado e assine — sem alterar o texto base.</div>
-        <button type="button" className="sp-btn-back inline-flex items-center gap-1.5" onClick={abrirDeclaracao} style={{ marginBottom: 12 }}><Icon name="download" size={15} /> Gerar Declaração</button>
-        <div className="sp-warn"><strong className="inline-flex items-center gap-1.5"><Icon name="alert" size={14} /> Atenção:</strong> após assinar, faça o upload do arquivo original (sem edições no texto base).</div>
+        <div className="sp-decl-flow">
+          <div className="sp-decl-step">
+            <span className="n">1</span>
+            <div><b>Gere o modelo</b><p>Abrimos a declaração oficial já preenchida com seus dados.</p></div>
+          </div>
+          <div className="sp-decl-step">
+            <span className="n">2</span>
+            <div><b>Imprima e assine</b><p>Em papel timbrado, complete as lacunas e assine à mão — sem alterar o texto base.</p></div>
+          </div>
+          <div className="sp-decl-step">
+            <span className="n">3</span>
+            <div><b>Envie o arquivo</b><p>Digitalize (PDF ou foto legível) e faça o upload aqui embaixo.</p></div>
+          </div>
+        </div>
+        <button type="button" className="sp-btn-next w-full inline-flex items-center justify-center gap-2" onClick={abrirDeclaracao} style={{ marginBottom: 14 }}>
+          <Icon name="file" size={16} /> Gerar declaração preenchida
+        </button>
+        <div className="sp-warn"><strong className="inline-flex items-center gap-1.5"><Icon name="alert" size={14} /> Atenção:</strong> após assinar, envie o arquivo original (sem edições no texto base).</div>
         <Field label="Declaração assinada (PDF ou imagem)" req>
           <input type="file" accept=".pdf,image/*" onChange={(e) => onUpload('declaracao', e.target.files?.[0] ?? null)} />
           {form.declaracao_url && <div className="sp-hint"><Icon name="check" size={13} /> Arquivo enviado.</div>}
