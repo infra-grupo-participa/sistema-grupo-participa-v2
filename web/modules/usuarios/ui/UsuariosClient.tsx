@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { normalizeCargo, type Cargo } from '@/shared/domain/auth';
-import { CARGO_META, SETOR_META, USER_STATUS, cargosGrantaveis, podeEditarUsuario } from '../domain/cargos';
+import { CARGO_META, FUNCAO_META, SETOR_META, USER_STATUS, cargosGrantaveis, podeEditarUsuario } from '../domain/cargos';
 import {
   Badge,
   Button,
@@ -26,7 +26,7 @@ import { fetchJson } from '@/shared/ui/fetch-json';
 
 interface PerfilRow {
   id: string; nome: string | null; email: string | null; cargo: string | null; status: string | null;
-  nivel_hierarquia: string | null; eh_dev: boolean | null; pode_ver_cpf_completo: boolean | null; areas: string[] | null; time: string | null;
+  funcoes: string[] | null; pode_ver_cpf_completo: boolean | null; areas: string[] | null; time: string | null;
 }
 
 const statusTone: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = { ativo: 'success', pendente: 'warning', negado: 'danger' };
@@ -107,19 +107,24 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
   const [cargo, setCargo] = useState<Cargo>(atual);
   const [status, setStatus] = useState(u.status || 'pendente');
   const [areas, setAreas] = useState<string[]>(u.areas || []);
+  const [funcoes, setFuncoes] = useState<string[]>(u.funcoes || []);
   const [cpf, setCpf] = useState(!!u.pode_ver_cpf_completo);
   const [busy, setBusy] = useState(false);
 
   async function save() {
     setBusy(true);
+    // Só persiste funções dos setores marcados (evita função órfã de setor removido).
+    const funcoesValidas = funcoes.filter((f) => areas.includes(FUNCAO_META[f]?.setor ?? f.split('.')[0]));
     const r = await fetchJson<{ ok?: boolean; error?: string }>('/api/admin/usuarios', {
       method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: u.id, fields: { cargo, status, areas, pode_ver_cpf_completo: cpf } }),
+      body: JSON.stringify({ id: u.id, fields: { cargo, status, areas, funcoes: funcoesValidas, pode_ver_cpf_completo: cpf } }),
     });
     setBusy(false);
     onSaved(r.json?.ok ? 'Usuário atualizado!' : (r.json?.error || (r.status === 0 ? 'Sem conexão — tente novamente.' : 'Falhou.')));
   }
   const showSetores = cargo === 'gestor' || cargo === 'operador';
+  const showFuncoes = cargo === 'operador' && areas.length > 0;
+  const funcoesDisponiveis = Object.entries(FUNCAO_META).filter(([, m]) => areas.includes(m.setor));
 
   return (
     <Drawer
@@ -146,6 +151,19 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
               {Object.entries(SETOR_META).map(([k, m]) => (
                 <label key={k} className="flex items-center gap-2 text-sm text-[var(--fg)]">
                   <input type="checkbox" className="accent-[var(--accent)]" checked={areas.includes(k)} onChange={(e) => setAreas((a) => (e.target.checked ? [...a, k] : a.filter((x) => x !== k)))} />{m.label}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        {showFuncoes && (
+          <div><span className="text-xs text-[var(--fg-3)]">Funções do operador</span>
+            <p className="text-[11px] text-[var(--fg-4)] mt-0.5">Sem função marcada, o operador só visualiza o setor.</p>
+            <div className="mt-1 space-y-1">
+              {funcoesDisponiveis.map(([k, m]) => (
+                <label key={k} className="flex items-center gap-2 text-sm text-[var(--fg)]">
+                  <input type="checkbox" className="accent-[var(--accent)]" checked={funcoes.includes(k)} onChange={(e) => setFuncoes((f) => (e.target.checked ? [...f, k] : f.filter((x) => x !== k)))} />
+                  {m.label} <span className="text-[10px] text-[var(--fg-4)]">({SETOR_META[m.setor]?.label})</span>
                 </label>
               ))}
             </div>

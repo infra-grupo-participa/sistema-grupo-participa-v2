@@ -81,6 +81,44 @@ Itens marcados ✅ foram executados nesta mesma data; itens ⏳ ficam como backl
 
 ---
 
+## Refatoração de cargos (executada em 2026-07-02, após a auditoria)
+
+Decisão do dono: manter os 5 cargos canônicos; fonte de verdade única = `perfis.cargo` + `areas`
+(setores) + `funcoes`; perfis inconsistentes resolvidos preservando o comportamento efetivo do app
+(`normalizeCargo` foi a regra de migração — inclui josue@ com `eh_dev=true` → `cargo='dev'`).
+
+**Fase A (banco — migration `unifica_modelo_cargos_fase_a`)** ✅
+- Constraint legada `perfis_cargo_check` (não permitia `dev`/`gestor` — a origem histórica do modelo
+  duplo com `nivel_hierarquia`) substituída por `perfis_cargo_canonico` (5 valores).
+- Nova coluna `perfis.funcoes text[]` (o app sempre exigiu funções para operador editar, mas a coluna
+  não existia — operador nunca conseguia editar).
+- Dados normalizados: cargo canônico, áreas `ativacao_ht/hm` → `ativacao`, `permissoes_usuario`
+  migrada para `funcoes` (chaves `ativacao_*.x` → `ativacao.x`).
+- Funções reescritas para ler só cargo/areas/funcoes: `gp_is_admin` (agora inclui dev),
+  `gp_pode_editar`, `tem_permissao` (espelha `temFuncao` do app; sem tabelas auxiliares),
+  `is_ht_operator` (não depende mais do cargo extinto `'ativacao'`), `handle_new_user` (sanitiza
+  cargo do metadata para o conjunto canônico).
+- `nivel_hierarquia`/`eh_dev`/`permissoes_usuario`/`templates_cargo` marcadas DEPRECATED (comments).
+
+**Fase B (app)** ✅
+- `normalizeCargo` lê só `cargo` (aliases legados mantidos por defesa); `PerfilData`/repositories/
+  API admin não leem nem escrevem mais `nivel_hierarquia`/`eh_dev`; `funcoes` entrou no select.
+- `FUNCAO_META` (catálogo de funções por setor) em `modules/usuarios/domain/cargos.ts`; EditDrawer
+  de Usuários ganhou checkboxes de funções para operador (filtradas pelos setores marcados).
+- Testes: normalizeCargo canônico + gramática do catálogo (chave prefixada pelo setor).
+
+**Fase C (pendente — rodar após janela de validação de ~1-2 semanas)** ⏳
+```sql
+ALTER TABLE public.perfis DROP COLUMN nivel_hierarquia;
+ALTER TABLE public.perfis DROP COLUMN eh_dev;
+DROP TABLE public.permissoes_usuario;
+DROP TABLE public.templates_cargo;
+```
+Antes de rodar: confirmar que nada no SIP legado lê essas colunas/tabelas e que nenhum erro novo
+apareceu em `/sistema/admin-dev`.
+
+---
+
 ### Detalhe DB-02 (políticas aplicadas)
 
 Escrita (INSERT/UPDATE/DELETE) nas tabelas operacionais passou a exigir cargo com permissão

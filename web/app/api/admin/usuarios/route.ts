@@ -6,7 +6,10 @@ import { createAdminSupabase } from '@/shared/infrastructure/supabase/admin-clie
 import { ehAdminOuAcima, normalizeCargo, type Cargo } from '@/shared/domain/auth';
 import { cargosGrantaveis, podeEditarUsuario } from '@/modules/usuarios/domain/cargos';
 
-const PERFIL_COLS = 'id, nome, email, cargo, status, nivel_hierarquia, eh_dev, pode_ver_cpf_completo, areas, time, criado_em';
+const PERFIL_COLS = 'id, nome, email, cargo, status, funcoes, pode_ver_cpf_completo, areas, time, criado_em';
+
+// Chave de função: `setor.acao` (minúsculas/underscore) — mesma gramática de temFuncao()/tem_permissao().
+const FUNCAO_RE = /^[a-z_]+\.[a-z_]+$/;
 
 // Porta das ações de usuário do admin-proxy.php — gestão de perfis (service_role + hierarquia).
 export async function GET() {
@@ -26,7 +29,7 @@ export async function PATCH(request: NextRequest) {
   if (!isUuid(id)) return jsonError('ID inválido.', 400);
 
   const admin = createAdminSupabase();
-  const { data: alvo } = await admin.from('perfis').select('id, cargo, nivel_hierarquia, eh_dev').eq('id', id).maybeSingle();
+  const { data: alvo } = await admin.from('perfis').select('id, cargo').eq('id', id).maybeSingle();
   if (!alvo) return jsonError('Usuário não encontrado.', 404);
 
   const alvoCargo = normalizeCargo(alvo);
@@ -38,14 +41,13 @@ export async function PATCH(request: NextRequest) {
   if (typeof fields.status === 'string' && ['ativo', 'pendente', 'negado'].includes(fields.status)) patch.status = fields.status;
   if (typeof fields.pode_ver_cpf_completo === 'boolean') patch.pode_ver_cpf_completo = fields.pode_ver_cpf_completo;
   if (Array.isArray(fields.areas)) patch.areas = fields.areas.filter((a) => typeof a === 'string');
+  if (Array.isArray(fields.funcoes)) patch.funcoes = fields.funcoes.filter((f) => typeof f === 'string' && FUNCAO_RE.test(f));
   if (typeof fields.time === 'string') patch.time = fields.time.trim() || null;
 
   if (typeof fields.cargo === 'string') {
     const novo = fields.cargo as Cargo;
     if (!cargosGrantaveis(user.cargo).includes(novo)) return jsonError('Você não pode atribuir este cargo.', 403);
     patch.cargo = novo;
-    patch.eh_dev = novo === 'dev';
-    patch.nivel_hierarquia = novo === 'admin' ? 'admin_principal' : novo;
   }
 
   patch.atualizado_em = new Date().toISOString();
@@ -76,8 +78,6 @@ export async function POST(request: NextRequest) {
       nome: nome || null,
       cargo,
       status: 'ativo',
-      eh_dev: cargo === 'dev',
-      nivel_hierarquia: cargo === 'admin' ? 'admin_principal' : cargo,
       atualizado_em: new Date().toISOString(),
     })
     .eq('id', invited.user.id);

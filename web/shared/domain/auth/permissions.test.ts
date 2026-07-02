@@ -112,22 +112,25 @@ describe('podeVerCpf / mascarar (LGPD)', () => {
   });
 });
 
-describe('normalizeCargo / buildGpUser (dados reais do banco)', () => {
-  it('cargo=admin prevalece mesmo com nivel_hierarquia divergente', () => {
-    // Estado real encontrado na auditoria: 2 perfis com cargo=admin e nivel=visualizador.
-    expect(normalizeCargo({ cargo: 'admin', nivel_hierarquia: 'visualizador' })).toBe('admin');
+describe('normalizeCargo / buildGpUser (modelo unificado: cargo é a única fonte)', () => {
+  it('aceita os 5 cargos canônicos', () => {
+    for (const c of ['dev', 'admin', 'gestor', 'operador', 'visualizador'] as const) {
+      expect(normalizeCargo({ cargo: c })).toBe(c);
+    }
   });
 
-  it('nivel_hierarquia promove quando cargo é legado', () => {
-    expect(normalizeCargo({ cargo: null, nivel_hierarquia: 'admin_principal' })).toBe('admin');
-    expect(normalizeCargo({ cargo: null, nivel_hierarquia: 'dev' })).toBe('dev');
-    expect(normalizeCargo({ cargo: 'ativacao', nivel_hierarquia: null })).toBe('operador');
+  it('mapeia aliases legados por defesa e cai em visualizador no desconhecido', () => {
+    expect(normalizeCargo({ cargo: 'ativacao' })).toBe('operador');
+    expect(normalizeCargo({ cargo: 'ativador' })).toBe('operador');
+    expect(normalizeCargo({ cargo: 'leitura' })).toBe('visualizador');
+    expect(normalizeCargo({ cargo: 'qualquer_coisa' })).toBe('visualizador');
     expect(normalizeCargo({})).toBe('visualizador');
   });
 
-  it('buildGpUser usa fallback areas→setores e deriva podeVerCpf', () => {
-    const user = buildGpUser({ id: '1', cargo: 'gestor', areas: ['placas'], pode_ver_cpf_completo: false });
+  it('buildGpUser usa fallback areas→setores, lê funcoes e deriva podeVerCpf', () => {
+    const user = buildGpUser({ id: '1', cargo: 'operador', areas: ['placas'], funcoes: ['placas.operar'], pode_ver_cpf_completo: false });
     expect(user.setores).toEqual(['placas']);
+    expect(user.funcoes).toEqual(['placas.operar']);
     expect(user.podeVerCpf).toBe(false);
     expect(buildGpUser({ id: '2', cargo: 'admin' }).podeVerCpf).toBe(true);
   });

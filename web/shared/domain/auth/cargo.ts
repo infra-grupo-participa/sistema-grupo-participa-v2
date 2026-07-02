@@ -14,24 +14,19 @@ export type Setor =
 /** Dados brutos de cargo vindos da tabela `perfis`. */
 export interface CargoSource {
   cargo?: string | null;
-  nivel_hierarquia?: string | null;
-  eh_dev?: boolean | null;
 }
 
 /**
- * Normaliza um perfil bruto (com possíveis cargos legados) para o cargo canônico v2.
- * Porta fiel de _gpNormalizeCargo() em auth.js.
+ * Normaliza o cargo bruto para o canônico v2.
+ * Desde a migration `unifica_modelo_cargos_fase_a`, `perfis.cargo` é a ÚNICA fonte de verdade
+ * (nivel_hierarquia/eh_dev foram absorvidos e estão deprecated). Os aliases legados ficam
+ * mapeados por defesa — o CHECK do banco já não os permite em linhas novas.
  */
 export function normalizeCargo(data: CargoSource): Cargo {
   const raw = String(data.cargo || '').toLowerCase().trim();
-  const nivel = String(data.nivel_hierarquia || '').toLowerCase().trim();
-  const ehDevFlag = data.eh_dev === true;
-
-  if (raw === 'dev' || nivel === 'dev' || ehDevFlag) return 'dev';
-  if (raw === 'admin' || nivel === 'admin_principal') return 'admin';
+  if (raw === 'dev') return 'dev';
+  if (raw === 'admin') return 'admin';
   if (raw === 'gestor') return 'gestor';
-  if (raw === 'operador') return 'operador';
-  if (raw === 'visualizador' || raw === 'leitura' || nivel === 'visualizador') return 'visualizador';
-  if (raw === 'ativacao' || raw === 'ativador') return 'operador';
-  return 'visualizador'; // fallback conservador
+  if (raw === 'operador' || raw === 'ativacao' || raw === 'ativador') return 'operador';
+  return 'visualizador'; // inclui 'visualizador', 'leitura' e qualquer valor desconhecido
 }

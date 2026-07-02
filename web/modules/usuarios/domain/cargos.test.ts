@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { CARGO_ORDEM, cargosGrantaveis, podeEditarUsuario } from './cargos';
+import { CARGO_ORDEM, FUNCAO_META, SETOR_META, cargosGrantaveis, podeEditarUsuario } from './cargos';
+
+describe('FUNCAO_META', () => {
+  it('toda chave é prefixada pelo próprio setor (gramática exigida por podeEditar/tem_permissao)', () => {
+    for (const [key, meta] of Object.entries(FUNCAO_META)) {
+      expect(key.startsWith(meta.setor + '.')).toBe(true);
+      expect(SETOR_META[meta.setor]).toBeDefined();
+    }
+  });
+});
 
 describe('cargosGrantaveis', () => {
   it('dev atribui qualquer cargo, inclusive dev', () => {

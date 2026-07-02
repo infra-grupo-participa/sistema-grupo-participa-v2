@@ -21,8 +21,6 @@ export interface PerfilData {
   email?: string | null;
   cargo?: string | null;
   status?: string | null;
-  nivel_hierarquia?: string | null;
-  eh_dev?: boolean | null;
   pode_ver_cpf_completo?: boolean | null;
   time?: string | null;
   avatar_url?: string | null;
@@ -33,7 +31,7 @@ export interface PerfilData {
 
 /**
  * Constrói o GpUser canônico a partir da linha de `perfis`.
- * Porta fiel do mapeamento de getUserProfile() em auth.js.
+ * Modelo unificado (migration unifica_modelo_cargos_fase_a): cargo + areas (setores) + funcoes.
  * Lê `setores`/`funcoes`; faz fallback para `areas` (nome legado da coluna).
  */
 export function buildGpUser(data: PerfilData): GpUser {
