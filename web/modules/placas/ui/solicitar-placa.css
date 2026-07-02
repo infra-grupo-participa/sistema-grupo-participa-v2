@@ -12,6 +12,18 @@
   --bg: #f3f5f8;
   --card: #ffffff;
   --r: 16px;
+  /* Alias dos tokens globais para componentes compartilhados (Timeline, Badge,
+     ProgressBar, Modal) renderizarem no tema CLARO do formulário público. */
+  --fg: var(--ink);
+  --fg-2: var(--muted);
+  --fg-3: var(--faint);
+  --border: var(--line);
+  --accent: var(--orange);
+  --green: #16a34a;
+  --yellow: #d97706;
+  --red: #dc2626;
+  --purple: #7c3aed;
+  --info: #0ea5e9;
   min-height: 100dvh;
   background: radial-gradient(1200px 500px at 50% -200px, rgba(242, 151, 37, 0.08), transparent 60%), var(--bg);
   color: var(--ink);
@@ -64,6 +76,21 @@
   width: 4px;
   background: linear-gradient(var(--orange), var(--orange-2));
 }
+.sp-head-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.sp-head-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: var(--orange-soft);
+  color: var(--orange-2);
+}
 .sp-card-head h1 {
   font-size: 21px;
   font-weight: 800;
@@ -79,39 +106,95 @@
   padding: 18px 30px 30px;
 }
 
-/* Progresso */
-.sp-track {
+/* Progresso — stepper */
+.sp-stepper {
   max-width: 660px;
-  margin: 0 auto 16px;
+  margin: 0 auto 18px;
 }
-.sp-bar {
-  height: 8px;
-  background: var(--line);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.sp-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--orange), var(--orange-2));
-  border-radius: 999px;
-  box-shadow: 0 0 12px rgba(242, 151, 37, 0.5);
-  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.sp-meta {
+.sp-stepper-track {
+  position: relative;
   display: flex;
   justify-content: space-between;
+}
+.sp-stepper-line {
+  position: absolute;
+  top: 13px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.sp-stepper-line span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--orange), var(--orange-2));
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.sp-node {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  margin-top: 10px;
+  gap: 6px;
+  min-width: 0;
+}
+.sp-node-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
   font-size: 12px;
+  font-weight: 700;
+  background: #fff;
+  border: 2px solid var(--line);
+  color: var(--faint);
+  transition: background 0.25s, border-color 0.25s, color 0.25s, box-shadow 0.25s;
+}
+.sp-node-name {
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--faint);
+  max-width: 84px;
+}
+.sp-node[data-state='done'] .sp-node-dot {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff; /* hex-ok: contraste sobre dot âmbar preenchido */
+}
+.sp-node[data-state='current'] .sp-node-dot {
+  border-color: var(--orange);
+  color: var(--orange-2);
+  box-shadow: 0 0 0 4px var(--orange-soft);
+}
+.sp-node[data-state='current'] .sp-node-name {
+  color: var(--ink);
+  font-weight: 700;
+}
+.sp-node[data-state='done'] .sp-node-name {
   color: var(--muted);
 }
-.sp-badge {
-  background: var(--orange-soft);
-  color: var(--orange-2);
-  border-radius: 999px;
-  padding: 3px 11px;
-  font-weight: 700;
-  font-size: 11px;
+.sp-stepper-current {
+  display: none;
+  margin-top: 12px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.sp-stepper-current strong {
+  color: var(--ink);
+}
+@media (max-width: 560px) {
+  .sp-node-name {
+    display: none;
+  }
+  .sp-stepper-current {
+    display: block;
+  }
 }
 
 /* Campos */
@@ -119,11 +202,17 @@
   margin-bottom: 15px;
 }
 .sp-field label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 6px;
   color: var(--ink);
+}
+.sp-field-ic {
+  color: var(--faint);
+  flex-shrink: 0;
 }
 .sp-field .req {
   color: #dc2626;
@@ -316,29 +405,58 @@
   text-align: center;
   margin: 0;
   padding: 16px 8px;
+  /* Cor do nível (tier) — sutil, sobrescrita por data-nivel abaixo. */
+  --lv: var(--faint);
+  --lv-soft: var(--line-2);
 }
 .sp-level.sel::after {
   content: '✓';
   position: absolute;
   right: 8px;
   top: 8px;
-  color: var(--orange-2);
+  color: var(--lv);
   font-weight: 800;
   font-size: 12px;
 }
 .sp-level .ic {
-  font-size: 24px;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--lv-soft);
+  color: var(--lv);
+  transition: background 0.15s, color 0.15s;
 }
 .sp-level .nm {
   font-weight: 700;
   font-size: 13px;
-  margin-top: 5px;
+  margin-top: 8px;
 }
 .sp-level .fx {
   font-size: 11px;
   color: var(--muted);
   margin-top: 2px;
 }
+/* Estados com a cor do próprio nível (mantém a marca âmbar como base do wizard) */
+.sp-level:hover {
+  border-color: var(--lv);
+}
+.sp-level.sel {
+  border-color: var(--lv);
+  background: var(--lv-soft);
+  box-shadow: 0 0 0 3px var(--lv-soft);
+}
+/* Paleta sutil por tier de resultado */
+.sp-level[data-nivel='iniciante'] { --lv: #64748b; --lv-soft: rgba(100, 116, 139, 0.12); }
+.sp-level[data-nivel='em_formacao'] { --lv: #0d9488; --lv-soft: rgba(13, 148, 136, 0.12); }
+.sp-level[data-nivel='pessoal'] { --lv: #0284c7; --lv-soft: rgba(2, 132, 199, 0.12); }
+.sp-level[data-nivel='profissional'] { --lv: #4f46e5; --lv-soft: rgba(79, 70, 229, 0.12); }
+.sp-level[data-nivel='ouro'] { --lv: #d97706; --lv-soft: rgba(217, 119, 6, 0.14); }
+.sp-level[data-nivel='platina'] { --lv: #475569; --lv-soft: rgba(71, 85, 105, 0.14); }
+.sp-level[data-nivel='diamante'] { --lv: #0891b2; --lv-soft: rgba(8, 145, 178, 0.14); }
+.sp-level[data-nivel='diamante_vermelho'] { --lv: #dc2626; --lv-soft: rgba(220, 38, 38, 0.14); }
 
 /* Avisos */
 .sp-info,

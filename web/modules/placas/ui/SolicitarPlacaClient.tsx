@@ -1,13 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Badge, Button, Modal, ProgressBar } from '@/shared/ui/components';
+import { Button, Modal } from '@/shared/ui/components';
 import './solicitar-placa.css';
 import { maskCep, maskCurrency, maskDoc } from './masks';
 import { cepLookup, placaDuplicateCheck, placaGet, placaRecover, placaSave, placaUpload } from './placa-api';
 import { isPlateEligible } from '../domain/form-progress';
 import { TOTAL_STEPS, STEP_NAMES, ESPACOS, NIVEIS, type Form, type View, type FormConfig } from './solicitar-placa-constants';
-import { Wrap, SuccessCard, TrackingCard, Banner } from './solicitar-placa-parts';
+import { Wrap, SuccessCard, TrackingCard, Banner, Stepper } from './solicitar-placa-parts';
 import { StepContent } from './SolicitarPlacaSteps';
 
 export type { FormConfig } from './solicitar-placa-constants';
@@ -245,8 +245,6 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
   if (view === 'cadastro') return <Wrap><SuccessCard kind="cadastro" /></Wrap>;
   if (view === 'tracking' && tracking) return <Wrap><TrackingCard data={tracking} /></Wrap>;
 
-  const pct = Math.round(((step - 1) / TOTAL_STEPS) * 100);
-
   return (
     <Wrap>
       {retorno && (
@@ -262,13 +260,7 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
         </Banner>
       )}
 
-      <div className="sp-track">
-        <ProgressBar value={pct} tone="accent" height={8} />
-        <div className="sp-meta">
-          <Badge tone="accent">Etapa {step} de {TOTAL_STEPS}</Badge>
-          <span>{STEP_NAMES[step]}</span>
-        </div>
-      </div>
+      <Stepper step={step} total={TOTAL_STEPS} names={STEP_NAMES} />
 
       <div className="sp-card">
         <StepContent

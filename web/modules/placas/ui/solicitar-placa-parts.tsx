@@ -19,6 +19,31 @@ export function Wrap({ children }: { children: React.ReactNode }) {
   );
 }
 
+export function Stepper({ step, total, names }: { step: number; total: number; names: string[] }) {
+  const inset = 100 / total / 2;
+  const pct = total > 1 ? ((step - 1) / (total - 1)) * 100 : 0;
+  return (
+    <div className="sp-stepper">
+      <div className="sp-stepper-track">
+        <div className="sp-stepper-line" style={{ left: `${inset}%`, right: `${inset}%` }}>
+          <span style={{ width: `${pct}%` }} />
+        </div>
+        {Array.from({ length: total }, (_, i) => {
+          const n = i + 1;
+          const state = n < step ? 'done' : n === step ? 'current' : 'todo';
+          return (
+            <div key={n} className="sp-node" data-state={state}>
+              <div className="sp-node-dot">{n < step ? <Icon name="check" size={13} strokeWidth={3} /> : n}</div>
+              <div className="sp-node-name">{names[n]}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="sp-stepper-current">Etapa {step} de {total} · <strong>{names[step]}</strong></div>
+    </div>
+  );
+}
+
 export function Banner({ tone, title, children, onClose }: { tone: 'info' | 'warn'; title: string; children?: React.ReactNode; onClose?: () => void }) {
   return (
     <div className={`sp-banner sp-banner-${tone}`} role="status">
@@ -31,17 +56,31 @@ export function Banner({ tone, title, children, onClose }: { tone: 'info' | 'war
   );
 }
 
-export function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+export function Section({ icon, title, subtitle, children }: { icon?: string; title: string; subtitle?: string; children: React.ReactNode }) {
   return (
     <>
-      <div className="sp-card-head"><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>
+      <div className="sp-card-head">
+        <div className="sp-head-row">
+          {icon && <span className="sp-head-icon"><Icon name={icon} size={20} /></span>}
+          <div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>
+        </div>
+      </div>
       <div className="sp-card-body">{children}</div>
     </>
   );
 }
 
-export function Field({ label, req, children }: { label: string; req?: boolean; children: React.ReactNode }) {
-  return <div className="sp-field"><label>{label} {req && <span className="req">*</span>}</label>{children}</div>;
+export function Field({ icon, label, req, children }: { icon?: string; label: string; req?: boolean; children: React.ReactNode }) {
+  return (
+    <div className="sp-field">
+      <label>
+        {icon && <Icon name={icon} size={14} className="sp-field-ic" />}
+        <span>{label}</span>
+        {req && <span className="req">*</span>}
+      </label>
+      {children}
+    </div>
+  );
 }
 
 export function Nav({ onBack, onNext, nextLabel, backLabel = '← Voltar', onlyNext, busy }: { onBack?: () => void; onNext: () => void; nextLabel: string; backLabel?: string; onlyNext?: boolean; busy?: boolean }) {

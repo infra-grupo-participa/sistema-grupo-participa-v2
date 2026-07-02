@@ -89,7 +89,7 @@ export function StepContent(p: StepProps) {
         <div className="sp-field"><label>Nível atual <span className="req">*</span></label>
           <div className="sp-level-grid">
             {niveis.map((o) => (
-              <label key={o.v} className={`sp-level ${form.nivel === o.v ? 'sel' : ''}`} onClick={() => set('nivel', o.v)}>
+              <label key={o.v} data-nivel={o.v} className={`sp-level ${form.nivel === o.v ? 'sel' : ''}`} onClick={() => set('nivel', o.v)}>
                 <div className="ic"><Icon name={o.ic} size={22} /></div><div className="nm">{o.nm}</div><div className="fx">{o.fx}</div>
               </label>
             ))}
