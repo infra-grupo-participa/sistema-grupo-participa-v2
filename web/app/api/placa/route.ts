@@ -7,12 +7,34 @@ import { SupabasePublicPlaca, maskDocsForPublic } from '@/modules/placas/infrast
 import { sanitizeFormPayload } from '@/modules/placas/application/sanitize-form';
 import { validateFormProgress } from '@/modules/placas/domain/form-progress';
 import { progressErrorMessage } from '@/modules/placas/application/progress-message';
+import { getEmailContentByStatus, emailDynamicBoxes, type EmailTipo } from '@/modules/placas/application/email-content';
+import { readPlacasConfig } from '@/modules/placas/infrastructure/supabase-config';
+import { buildEmailTemplate } from '@/shared/infrastructure/email/template';
+import { sendMail } from '@/shared/infrastructure/email/mailer';
 
 // Porta de app/api/placa-public.php — fluxo público (token UUID, service_role server-side).
 
 function todaySaoPaulo(): string {
   // Data de hoje no fuso America/Sao_Paulo (YYYY-MM-DD).
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+}
+
+/** Fecho do submit: confirmação de recebimento ou de cadastro (melhor-esforço, com override do admin). */
+async function emailFechoSubmit(tipo: EmailTipo, email: string, nome: string, trackingLink: string): Promise<void> {
+  try {
+    const content = getEmailContentByStatus(tipo, {}, trackingLink);
+    const { email_templates } = await readPlacasConfig();
+    const ov = email_templates?.[tipo];
+    if (ov) {
+      if (ov.assunto?.trim()) content.assunto = ov.assunto.trim();
+      if (ov.introducao?.trim()) content.templateData.introducao = ov.introducao.trim();
+      if (ov.corpo_extra?.trim()) content.templateData.corpo_extra = emailDynamicBoxes(tipo, {}) + ov.corpo_extra.trim();
+    }
+    const html = buildEmailTemplate({ ...content.templateData, nome });
+    await sendMail({ to: email, subject: content.assunto, html });
+  } catch {
+    /* e-mail é melhor-esforço — não bloqueia o submit */
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -66,7 +88,9 @@ export async function POST(request: NextRequest) {
     if (field === 'email') value = safeEmail(value);
     else if (field === 'documento_nf') value = onlyDigits(value);
     else return jsonError('Não foi possível concluir a operação.', 400);
-    const duplicate = value ? await gateway.duplicateExists(field as 'email' | 'documento_nf', value, token, false) : false;
+    // includeRascunho=true: o save de nova solicitação considera rascunhos — o blur precisa
+    // aplicar a MESMA regra, senão o usuário só descobre o bloqueio no 422 do final da etapa.
+    const duplicate = value ? await gateway.duplicateExists(field as 'email' | 'documento_nf', value, token, true) : false;
     return jsonOk({ ok: true, duplicate });
   }
 
@@ -121,8 +145,18 @@ export async function POST(request: NextRequest) {
 
   await gateway.updateByToken(token, payload);
 
+  const emailDestino = safeEmail(String(payload.email ?? existing.email ?? ''));
+  const nomeDestino = String(payload.nome ?? existing.nome ?? 'Candidato');
+  const trackingLink = `${boot.origin.replace(/\/$/, '')}/solicitar-placa?token=${token}`;
+  const jaEnviado = String(existing.status ?? '');
+
   if (payload.status === 'enviado' && Number(payload.step_index) === 6) {
     await gateway.promoteToAluno(token, payload);
+    // Confirmação de recebimento — o candidato saía do funil sem nenhum protocolo/registro.
+    if (emailDestino && jaEnviado !== 'enviado') await emailFechoSubmit('solicitacao_recebida', emailDestino, nomeDestino, trackingLink);
+  } else if (payload.status === 'cadastro_concluido' && jaEnviado !== 'cadastro_concluido') {
+    // Fecho do fluxo curto (nível abaixo de Ouro): registra o nível sem emissão de placa.
+    if (emailDestino) await emailFechoSubmit('nivel_registrado', emailDestino, nomeDestino, trackingLink);
   }
 
   return setPlacaCookie(jsonOk({ ok: true, token, status: payload.status, step_index: payload.step_index }), token);

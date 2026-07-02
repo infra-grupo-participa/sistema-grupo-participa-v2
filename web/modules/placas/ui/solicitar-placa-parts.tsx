@@ -118,13 +118,33 @@ function fmtInterviewDate(iso: string): string {
 }
 
 export function TrackingCard({ data }: { data: Record<string, unknown> }) {
-  const { activeIndex } = getClientTrackingState(data);
+  const { activeIndex, rejected } = getClientTrackingState(data);
   const rastreio = String(data.codigo_rastreio ?? '');
   const token = String(data.token ?? '');
   const entrevistaData = String(data.entrevista_data ?? '').slice(0, 10);
   const entrevistaHora = String(data.entrevista_hora ?? '').slice(0, 5);
   const zoomLink = String(data.entrevista_link ?? data.meet_link ?? '');
   const agendarHref = `/agendar-entrevista${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  const motivoRetorno = String(data.motivo_retorno ?? '');
+
+  if (rejected) {
+    // Antes o rejeitado caía na timeline normal e via "Documentação Aprovada" — progresso falso.
+    return (
+      <div className="sp-card">
+        <div className="sp-card-head">
+          <h1>Solicitação não aprovada</h1>
+          <p>Sua solicitação de placa não pôde ser aprovada neste momento.</p>
+        </div>
+        <div className="sp-card-body">
+          {motivoRetorno && <div className="sp-warn"><strong>Motivo:</strong> {motivoRetorno}</div>}
+          <div className="sp-info">
+            Se você acredita que houve um engano ou quer entender os critérios, fale com a nossa
+            Secretaria — teremos prazer em orientar os próximos passos.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Marco "Entrevista Realizada" ativo (index 2) = documentação aprovada, entrevista pendente.
   const inInterviewPhase = activeIndex === 2;

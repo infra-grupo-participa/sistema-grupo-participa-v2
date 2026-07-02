@@ -18,6 +18,9 @@ import { Badge, NivelBadge, Drawer, AvatarInicial, SectionCard, Button, CopyFiel
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import { fetchJson } from '@/shared/ui/fetch-json';
+
+// Liga a aba "Curso" quando a integração real de desempenho existir (hoje só há mock zerado).
+const CURSO_TAB_ATIVA = false as boolean;
 import { sitTone, tel } from './alunos-ui-shared';
 
 /** Cabeçalho de seção com ícone de acento (linguagem do card de Placas). */
@@ -183,10 +186,13 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
             </div>
           </SectionCard>
 
-          {/* Curso */}
-          <SectionCard className="md:col-span-2" title={<SecTitle icon="biblioteca">Curso</SecTitle>}>
-            <CursoTab />
-          </SectionCard>
+          {/* Curso: oculto até existir integração real — cursoDesempenhoMock é 100% zerado
+              e exibir métricas falsas confunde a operação. Reativar via CURSO_TAB_ATIVA. */}
+          {CURSO_TAB_ATIVA && (
+            <SectionCard className="md:col-span-2" title={<SecTitle icon="biblioteca">Curso</SecTitle>}>
+              <CursoTab />
+            </SectionCard>
+          )}
         </div>
       )}
     </Drawer>

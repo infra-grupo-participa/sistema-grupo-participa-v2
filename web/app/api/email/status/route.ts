@@ -11,13 +11,16 @@ import { sendMail } from '@/shared/infrastructure/email/mailer';
 
 const APP_BASE = process.env.NEXT_PUBLIC_APP_URL || 'https://grupoparticipa.app.br';
 const TIPOS: EmailTipo[] = [
+  'solicitacao_recebida',
   'docs_aprovados',
   'entrevista_agendada',
   'entrevista_finalizada',
   'placa_em_caminho',
+  'placa_recebida',
   'retorno_auditoria',
   'nivel_registrado',
   'nao_compareceu',
+  'solicitacao_rejeitada',
 ];
 
 function safeInternalLink(url: string): string {

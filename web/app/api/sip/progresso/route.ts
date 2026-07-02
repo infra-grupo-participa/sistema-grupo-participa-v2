@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { jsonError, jsonOk } from '@/shared/infrastructure/http/security';
+import { rateLimitOk } from '@/shared/infrastructure/http/rate-limit';
 import { safeEmail } from '@/shared/infrastructure/http/validation';
 import { getCurrentUser } from '@/shared/composition/server-container';
 import { createAdminSupabase } from '@/shared/infrastructure/supabase/admin-client';
@@ -46,6 +47,11 @@ async function resolveTaskline(
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user || !ehAdminOuAcima(user)) return jsonError('Não autorizado.', 403);
+
+  // Consulta cross-schema com service_role por e-mail arbitrário: limita enumeração em massa.
+  if (!rateLimitOk(user.id, 'gp_sip_progresso_rate_', 60, 300)) {
+    return jsonError('Muitas requisições. Tente novamente em instantes.', 429);
+  }
 
   const email = safeEmail(new URL(request.url).searchParams.get('email') || '');
   if (!email) return jsonError('E-mail inválido.', 400);

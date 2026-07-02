@@ -49,9 +49,11 @@ describe('agendamento — rescheduleBlockReason', () => {
     expect(canReschedule(base, NOW)).toBe(true);
   });
 
-  it('bloqueia status fora de em_auditoria/docs_aprovados', () => {
+  it('bloqueia qualquer status diferente de docs_aprovados', () => {
     expect(rescheduleBlockReason({ ...base, status: 'concluido' }, NOW)).toBe('status_invalido');
     expect(rescheduleBlockReason({ ...base, status: 'rascunho' }, NOW)).toBe('status_invalido');
+    // em_auditoria = documentação ainda em análise: agendar aqui pulava a aprovação do admin.
+    expect(rescheduleBlockReason({ ...base, status: 'em_auditoria' }, NOW)).toBe('status_invalido');
   });
 
   it('bloqueia quando entrevista finalizada (auditStep >= 3)', () => {

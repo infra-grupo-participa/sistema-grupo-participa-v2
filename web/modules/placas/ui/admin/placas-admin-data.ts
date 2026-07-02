@@ -50,14 +50,23 @@ export async function loadAuditorias(): Promise<Auditoria[]> {
   return (data as Auditoria[]) ?? [];
 }
 
-/** Inicia a auditoria: cria/atualiza aluno, upserta auditoria step 0, marca sol em_auditoria. */
+/** Escapa curingas de (i)like — o valor deve casar literal. */
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&');
+
+/** Protocolo legível e estável por solicitação (PRD prevê rastreabilidade por protocolo). */
+const gerarProtocolo = (sol: Solicitacao) =>
+  `PL-${new Date().getFullYear()}-${String(sol.id).replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+
+/** Inicia a auditoria: cria/atualiza aluno, garante auditoria step 0, marca sol em_auditoria. */
 export async function bootstrapAuditoria(sol: Solicitacao): Promise<void> {
   const supabase = db();
   const email = String(sol.email || '').trim().toLowerCase();
   let alunoId = sol.aluno_id;
 
   if (!alunoId && email) {
-    const { data: existe } = await supabase.from('thb_alunos').select('id').eq('email', email).maybeSingle();
+    // ilike: o matching precisa ser case-insensitive como no promoteToAluno — `.eq` não
+    // casava "Joao@X.com" e criava um segundo aluno para a mesma pessoa.
+    const { data: existe } = await supabase.from('thb_alunos').select('id').ilike('email', escapeLike(email)).limit(1).maybeSingle();
     if (existe?.id) {
       alunoId = existe.id;
     } else {
@@ -84,19 +93,31 @@ export async function bootstrapAuditoria(sol: Solicitacao): Promise<void> {
   }
   if (!alunoId) throw new Error('Não foi possível vincular o aluno.');
 
-  await supabase.from('thb_placas_auditoria').upsert(
-    {
+  // Idempotente: se a auditoria já existe, NÃO reseta step/dates (o upsert antigo apagava
+  // todo o histórico de carimbos quando o bootstrap reprocessava a mesma linha).
+  const { data: audExistente } = await supabase
+    .from('thb_placas_auditoria')
+    .select('id, protocolo')
+    .eq('aluno_id', alunoId)
+    .maybeSingle();
+
+  if (!audExistente) {
+    const { error } = await supabase.from('thb_placas_auditoria').insert({
       aluno_id: alunoId,
       step_index: AUDIT_STEP_INDEX.DOCUMENTACAO_EM_ANALISE,
       encerrado: false,
       dates: {},
+      protocolo: gerarProtocolo(sol),
       faturamento: sol.faturamento_declarado || null,
       obs: `Solicitação via wizard (${new Date().toLocaleDateString('pt-BR')}). Nível declarado: ${sol.nivel || '-'}.`,
-    },
-    { onConflict: 'aluno_id' },
-  );
+    });
+    logQueryError('bootstrapAuditoria:insert', error);
+    if (error) throw new Error('Não foi possível iniciar a auditoria.');
+  } else if (!audExistente.protocolo) {
+    await supabase.from('thb_placas_auditoria').update({ protocolo: gerarProtocolo(sol) }).eq('id', audExistente.id);
+  }
 
-  await supabase
+  const { error: solErr } = await supabase
     .from('thb_placas_solicitacoes')
     .update({
       status: 'em_auditoria',
@@ -108,6 +129,8 @@ export async function bootstrapAuditoria(sol: Solicitacao): Promise<void> {
       ...buildAdminSeenPatch(true),
     })
     .eq('id', sol.id);
+  logQueryError('bootstrapAuditoria:solicitacao', solErr);
+  if (solErr) throw new Error('Não foi possível iniciar a auditoria.');
 }
 
 /** Auto-inicia auditorias pendentes (status 'enviado'). Porta de autoStartPendingAuditorias. */
@@ -141,29 +164,39 @@ export async function avancarEtapa(sol: Solicitacao): Promise<{ ok: boolean; msg
   const supabase = db();
   const { data: aud } = await supabase.from('thb_placas_auditoria').select('dates').eq('aluno_id', sol.aluno_id).maybeSingle();
   const dates = { ...((aud?.dates as Record<string, string>) || {}), [p.stampStepKey]: nowBr() };
+  const ehFinal = p.novoStep === AUDIT_STEP_INDEX.PLACA_RECEBIDA;
 
-  const [r1, r2] = await Promise.all([
-    supabase.from('thb_placas_auditoria').upsert({ aluno_id: sol.aluno_id, step_index: p.novoStep, dates, encerrado: false }, { onConflict: 'aluno_id' }),
-    supabase
-      .from('thb_placas_solicitacoes')
-      .update({ auditoria_step: p.novoStep, step_index: p.novoStep, status: p.novoStatus, regularizacao_pendente: false, motivo_retorno: null, ...buildAdminSeenPatch(true) })
-      .eq('id', sol.id),
-  ]);
-  if (r1.error || r2.error) return { ok: false, msg: 'Não foi possível concluir a operação.' };
+  // Sem transação no PostgREST: gravamos SEQUENCIAL, solicitação primeiro (é o que a UI e o
+  // cliente leem). Se ela falhar, nada mudou. A auditoria é carimbo/histórico: falha nela é
+  // logada e se auto-corrige no próximo upsert — antes, o Promise.all podia deixar a
+  // solicitação avançada com e-mail não enviado e o botão travado para sempre.
+  const r2 = await supabase
+    .from('thb_placas_solicitacoes')
+    .update({ auditoria_step: p.novoStep, step_index: p.novoStep, status: p.novoStatus, regularizacao_pendente: false, motivo_retorno: null, ...buildAdminSeenPatch(true) })
+    .eq('id', sol.id);
+  logQueryError('avancarEtapa:solicitacao', r2.error);
+  if (r2.error) return { ok: false, msg: 'Não foi possível concluir a operação.' };
+
+  // encerrado=true no passo final dispara o trigger fn_sync_placa_nivel (nível oficial no aluno).
+  const r1 = await supabase
+    .from('thb_placas_auditoria')
+    .upsert({ aluno_id: sol.aluno_id, step_index: p.novoStep, dates, encerrado: ehFinal }, { onConflict: 'aluno_id' });
+  logQueryError('avancarEtapa:auditoria', r1.error);
 
   if (p.removeInterviewSlot && sol.entrevista_data && sol.entrevista_hora) {
-    const { data: slot } = await supabase
+    // Delete direto por (data, hora): cobre slots duplicados (o select .maybeSingle() antigo
+    // errava com múltiplas linhas e deixava o horário "usado" disponível para outros).
+    await supabase
       .from('thb_horarios_disponiveis')
-      .select('id')
+      .delete()
       .eq('slot_data', sol.entrevista_data)
-      .eq('hora', String(sol.entrevista_hora).slice(0, 5))
-      .maybeSingle();
-    if (slot?.id) await supabase.from('thb_horarios_disponiveis').delete().eq('id', slot.id);
+      .eq('hora', String(sol.entrevista_hora).slice(0, 5));
   }
 
   if (p.emailEvent === 'docs_aprovados') await sendStatusEmail('docs_aprovados', sol, { token_link: agendarLink(sol.token) });
   else if (p.emailEvent === 'entrevista_finalizada') await sendStatusEmail('entrevista_finalizada', sol);
   else if (p.emailEvent === 'placa_em_caminho') await sendStatusEmail('placa_em_caminho', sol, { codigo_rastreio: sol.codigo_rastreio || '' });
+  if (ehFinal) await sendStatusEmail('placa_recebida', sol);
 
   return { ok: true, msg: `"${AUDIT_STEPS[stepAtual].name}" confirmada!` };
 }
@@ -173,11 +206,19 @@ export async function voltarEtapa(sol: Solicitacao): Promise<boolean> {
   if (!sol.aluno_id) return false;
   const novo = Math.max(0, (sol.auditoria_step ?? 0) - 1);
   const supabase = db();
-  const [r1, r2] = await Promise.all([
-    supabase.from('thb_placas_auditoria').upsert({ aluno_id: sol.aluno_id, step_index: novo, encerrado: false }, { onConflict: 'aluno_id' }),
-    supabase.from('thb_placas_solicitacoes').update({ auditoria_step: novo, step_index: novo }).eq('id', sol.id),
-  ]);
-  return !r1.error && !r2.error;
+  // Recomputa o status: sem isso, voltar de "Placa enviada" mantinha status placa_postada
+  // e a fila/badge continuavam exibindo "7/7 · Placa enviada" com a etapa real atrás.
+  const r2 = await supabase
+    .from('thb_placas_solicitacoes')
+    .update({ auditoria_step: novo, step_index: novo, status: statusForAuditStep(novo) })
+    .eq('id', sol.id);
+  logQueryError('voltarEtapa:solicitacao', r2.error);
+  if (r2.error) return false;
+  const r1 = await supabase
+    .from('thb_placas_auditoria')
+    .upsert({ aluno_id: sol.aluno_id, step_index: novo, encerrado: false }, { onConflict: 'aluno_id' });
+  logQueryError('voltarEtapa:auditoria', r1.error);
+  return true;
 }
 
 /** Aprova reenvio após correção → DOCS_APROVADOS + e-mail de agendamento. */
@@ -193,10 +234,16 @@ export async function aprovarReenvio(sol: Solicitacao): Promise<boolean> {
   const supabase = db();
   const { data: aud } = await supabase.from('thb_placas_auditoria').select('dates').eq('aluno_id', s.aluno_id!).maybeSingle();
   const dates = { ...((aud?.dates as Record<string, string>) || {}), [AUDIT_STEPS[0].key]: nowBr() };
-  await Promise.all([
-    supabase.from('thb_placas_auditoria').upsert({ aluno_id: s.aluno_id, step_index: novoStep, dates, encerrado: false }, { onConflict: 'aluno_id' }),
-    supabase.from('thb_placas_solicitacoes').update({ auditoria_step: novoStep, step_index: novoStep, status: 'docs_aprovados', regularizacao_pendente: false, motivo_retorno: null, ...buildAdminSeenPatch(true) }).eq('id', s.id),
-  ]);
+  const r2 = await supabase
+    .from('thb_placas_solicitacoes')
+    .update({ auditoria_step: novoStep, step_index: novoStep, status: 'docs_aprovados', regularizacao_pendente: false, motivo_retorno: null, ...buildAdminSeenPatch(true) })
+    .eq('id', s.id);
+  logQueryError('aprovarReenvio:solicitacao', r2.error);
+  if (r2.error) return false; // antes retornava true mesmo com RLS negando — toast "Feito!" mentiroso
+  const r1 = await supabase
+    .from('thb_placas_auditoria')
+    .upsert({ aluno_id: s.aluno_id, step_index: novoStep, dates, encerrado: false }, { onConflict: 'aluno_id' });
+  logQueryError('aprovarReenvio:auditoria', r1.error);
   await sendStatusEmail('docs_aprovados', s, { token_link: agendarLink(s.token) });
   return true;
 }
@@ -249,10 +296,16 @@ export async function loadReprovacoes(solId: string): Promise<Reprovacao[]> {
 export async function marcarNaoCompareceu(sol: Solicitacao): Promise<boolean> {
   if (!sol.aluno_id) return false;
   const supabase = db();
-  await Promise.all([
-    supabase.from('thb_placas_auditoria').upsert({ aluno_id: sol.aluno_id, step_index: AUDIT_STEP_INDEX.DOCS_APROVADOS, encerrado: false }, { onConflict: 'aluno_id' }),
-    supabase.from('thb_placas_solicitacoes').update({ auditoria_step: AUDIT_STEP_INDEX.DOCS_APROVADOS, step_index: AUDIT_STEP_INDEX.DOCS_APROVADOS, status: 'docs_aprovados', entrevista_data: null, entrevista_hora: null, entrevista_link: null, meet_link: null }).eq('id', sol.id),
-  ]);
+  const r2 = await supabase
+    .from('thb_placas_solicitacoes')
+    .update({ auditoria_step: AUDIT_STEP_INDEX.DOCS_APROVADOS, step_index: AUDIT_STEP_INDEX.DOCS_APROVADOS, status: 'docs_aprovados', entrevista_data: null, entrevista_hora: null, entrevista_link: null, meet_link: null })
+    .eq('id', sol.id);
+  logQueryError('marcarNaoCompareceu:solicitacao', r2.error);
+  if (r2.error) return false;
+  const r1 = await supabase
+    .from('thb_placas_auditoria')
+    .upsert({ aluno_id: sol.aluno_id, step_index: AUDIT_STEP_INDEX.DOCS_APROVADOS, encerrado: false }, { onConflict: 'aluno_id' });
+  logQueryError('marcarNaoCompareceu:auditoria', r1.error);
   await sendStatusEmail('nao_compareceu', sol, { token_link: agendarLink(sol.token) });
   return true;
 }
@@ -267,11 +320,18 @@ export async function setAuditStep(sol: Solicitacao, step: number): Promise<bool
   }
   if (!s.aluno_id) return false;
   const supabase = db();
-  const [r1, r2] = await Promise.all([
-    supabase.from('thb_placas_auditoria').upsert({ aluno_id: s.aluno_id, step_index: step, encerrado: false }, { onConflict: 'aluno_id' }),
-    supabase.from('thb_placas_solicitacoes').update({ auditoria_step: step, step_index: step, status: statusForAuditStep(step), regularizacao_pendente: false, motivo_retorno: null, ...buildAdminSeenPatch(true) }).eq('id', s.id),
-  ]);
-  return !r1.error && !r2.error;
+  const ehFinal = step === AUDIT_STEP_INDEX.PLACA_RECEBIDA;
+  const r2 = await supabase
+    .from('thb_placas_solicitacoes')
+    .update({ auditoria_step: step, step_index: step, status: statusForAuditStep(step), regularizacao_pendente: false, motivo_retorno: null, ...buildAdminSeenPatch(true) })
+    .eq('id', s.id);
+  logQueryError('setAuditStep:solicitacao', r2.error);
+  if (r2.error) return false;
+  const r1 = await supabase
+    .from('thb_placas_auditoria')
+    .upsert({ aluno_id: s.aluno_id, step_index: step, encerrado: ehFinal }, { onConflict: 'aluno_id' });
+  logQueryError('setAuditStep:auditoria', r1.error);
+  return true;
 }
 
 /** "Já possui placa — avançar para o final": conclui o processo. */
@@ -284,12 +344,27 @@ export async function excluirSolicitacao(sol: Solicitacao): Promise<boolean> {
   const supabase = db();
   if (sol.aluno_id) await supabase.from('thb_placas_auditoria').delete().eq('aluno_id', sol.aluno_id);
   const { error } = await supabase.from('thb_placas_solicitacoes').delete().eq('id', sol.id);
-  return !error;
+  if (error) {
+    logQueryError('excluirSolicitacao', error);
+    return false;
+  }
+  // Limpa o vínculo no hub central — sem isso o aluno ficava apontando para uma
+  // solicitação inexistente (o rastreio já persistido em placa_codigo_rastreio permanece).
+  if (sol.aluno_id) {
+    await supabase.from('thb_alunos').update({ placa_solicitacao_id: null }).eq('id', sol.aluno_id);
+  }
+  return true;
 }
 
-export async function rejeitar(sol: Solicitacao): Promise<boolean> {
-  const { error } = await db().from('thb_placas_solicitacoes').update({ status: 'rejeitado', ...buildAdminSeenPatch(true) }).eq('id', sol.id);
-  return !error;
+/** Rejeição definitiva: mantém o registro, notifica o cliente. Reversível via Remanejamento. */
+export async function rejeitar(sol: Solicitacao, motivo?: string): Promise<boolean> {
+  const { error } = await db().from('thb_placas_solicitacoes').update({ status: 'rejeitado', motivo_retorno: motivo?.trim() || null, ...buildAdminSeenPatch(true) }).eq('id', sol.id);
+  if (error) {
+    logQueryError('rejeitar', error);
+    return false;
+  }
+  await sendStatusEmail('solicitacao_rejeitada', sol, motivo?.trim() ? { motivo_retorno: motivo.trim() } : {});
+  return true;
 }
 
 export async function salvarRastreio(sol: Solicitacao, codigo: string): Promise<boolean> {
@@ -374,7 +449,18 @@ export async function loadHorarios(): Promise<HorarioSlot[]> {
   return (data as HorarioSlot[]) ?? [];
 }
 export async function criarHorario(slotData: string, hora: string): Promise<boolean> {
-  const { error } = await db().from('thb_horarios_disponiveis').insert({ slot_data: slotData, hora, ativo: true });
+  const supabase = db();
+  // Sem duplicata: a UI deduplica a exibição, então um slot repetido ficava invisível no
+  // painel mas contava no banco (e quebrava a remoção automática ao finalizar a entrevista).
+  const { data: existente } = await supabase
+    .from('thb_horarios_disponiveis')
+    .select('id')
+    .eq('slot_data', slotData)
+    .eq('hora', hora)
+    .limit(1)
+    .maybeSingle();
+  if (existente) return false;
+  const { error } = await supabase.from('thb_horarios_disponiveis').insert({ slot_data: slotData, hora, ativo: true });
   return !error;
 }
 export async function toggleHorario(id: number, ativo: boolean): Promise<boolean> {

@@ -119,6 +119,55 @@ apareceu em `/sistema/admin-dev`.
 
 ---
 
+## Caça-bugs pré-produção (executada em 2026-07-02, 3 agentes + fixes)
+
+**Fluxo público (corrigidos ✅):** agendar exigia só `em_auditoria` (candidato pulava a aprovação
+de docs e a auditoria saltava 0→2) → agora exige `docs_aprovados`, com a mesma guarda no hold
+(que também deixava candidato bloqueado "envenenar" slots); e-mail com casing diferente criava
+solicitação duplicada (matching agora ilike); blur de duplicidade divergia do save (rascunhos);
+upload travava reenvio legítimo ao voltar etapas (agora: rascunho/correção liberam, resto bloqueia);
+gcalLink estourava em slots 23:xx e ignorava fuso; double-booking agora tem garantia no banco
+(índice único `uq_entrevista_slot` + 409 amigável).
+
+**Admin (corrigidos ✅):** `avancarEtapa` não-atômico podia travar o processo para sempre e perder
+o e-mail de agendamento (agora sequencial: solicitação → auditoria, e-mail após sucesso);
+`voltarEtapa` não recomputava status (badge "Placa enviada" com etapa atrás); `aprovarReenvio`/
+`marcarNaoCompareceu` retornavam sucesso mesmo com RLS negando; `bootstrapAuditoria` zerava
+histórico de carimbos ao reprocessar (agora idempotente), casava e-mail case-sensitive (criava
+aluno duplicado) e agora gera `protocolo` (PL-ANO-XXXXXXXX); `excluirSolicitacao` deixava
+`placa_solicitacao_id` órfão; export vazava rascunhos (fallback para step do formulário);
+slots duplicados quebravam a remoção automática.
+
+**Completude do fluxo (corrigidos ✅):** rejeição era inatingível (função sem botão) → botão
+"Rejeitar" com motivo + e-mail `solicitacao_rejeitada` + tela própria no acompanhamento do
+cliente (antes mostrava progresso falso); conclusão (step 6) agora seta `encerrado=true`
+(dispara o write-back oficial de nível via `fn_sync_placa_nivel`, agora SECURITY DEFINER) e
+envia e-mail `placa_recebida`; submit final envia `solicitacao_recebida`; fluxo curto
+(não-elegível) envia `nivel_registrado`; os 3 novos templates são editáveis na Config.
+
+**Regressão da unificação de cargos (corrigida ✅):** policies de `thb_alunos`/`ht_editions`/
+`gp_rate_limit_log` checavam `cargo='admin'` literal — dev não escrevia. Padronizadas em
+`gp_is_admin()`/`gp_pode_editar()`. Triggers de write-back viraram SECURITY DEFINER.
+
+**Backlog não bloqueante:** agenda recorrente (PRD prevê `dia_semana`; hoje só slot avulso);
+campo "faturamento comprovado" sem UI própria (admin edita só o declarado); config de e-mails
+com last-write-wins em edição concorrente; rate limit em memória (single-process por premissa).
+
+## Checklist de go-live (cut-over do domínio)
+
+1. **Envs na Hostinger** (painel → Node app): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+   `NEXT_PUBLIC_APP_URL=https://grupoparticipa.app.br`, `APP_ALLOWED_ORIGINS` — o /api/health
+   (logado como dev) mostra o que falta; hoje o app roda no fallback hardcoded (SEC-05).
+2. **Supabase Auth**: ativar "Leaked password protection" (dashboard → Auth → Passwords) e conferir
+   Site URL/Redirect URLs para o domínio final.
+3. **Resend/e-mails**: conferir `MAIL_FROM` no domínio verificado e `ADMIN_EMAIL`.
+4. **Trocar o document root** do domínio para o app Node (DEPLOY.md §Cut-over) e testar:
+   login, /solicitar-placa (wizard completo), /agendar-entrevista, /relatorios/placas, e-mails.
+5. **Pós-cut-over**: dropar backups antigos do banco (DB-08) e rodar a Fase C dos cargos após a
+   janela de validação; agendar `/security-review` periódico.
+
+---
+
 ### Detalhe DB-02 (políticas aplicadas)
 
 Escrita (INSERT/UPDATE/DELETE) nas tabelas operacionais passou a exigir cargo com permissão

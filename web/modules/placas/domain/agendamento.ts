@@ -46,18 +46,19 @@ export function buildSlotStart(date?: string | null, time?: string | null): Date
 }
 
 export type RescheduleBlock =
-  | 'status_invalido' // status fora de em_auditoria/docs_aprovados
+  | 'status_invalido' // status diferente de docs_aprovados (agendar exige documentação aprovada)
   | 'entrevista_finalizada' // auditStep >= 3
   | 'entrevista_passada' // entrevista existente já ocorreu
   | 'janela_24h'; // entrevista existente a menos de 24h
 
 /**
- * Pode (re)agendar a entrevista? Porta fiel das guardas de confirm-horario.php.
- * Retorna null se permitido, ou o motivo do bloqueio.
+ * Pode (re)agendar a entrevista? Retorna null se permitido, ou o motivo do bloqueio.
+ * Exige status docs_aprovados: aceitar em_auditoria deixava o candidato agendar com a
+ * documentação ainda em análise, pulando o gate manual do admin (auditoria saltava 0→2).
  */
 export function rescheduleBlockReason(row: AgendamentoRow, now: Date): RescheduleBlock | null {
   const status = String(row?.status || '').trim();
-  if (!['em_auditoria', 'docs_aprovados'].includes(status)) return 'status_invalido';
+  if (status !== 'docs_aprovados') return 'status_invalido';
   if (resolveAuditStep(row) >= ENTREVISTA_FINALIZADA_STEP) return 'entrevista_finalizada';
 
   const existingStart = buildSlotStart(row?.entrevista_data, row?.entrevista_hora);

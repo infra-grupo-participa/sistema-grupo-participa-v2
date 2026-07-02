@@ -33,14 +33,12 @@ export async function POST(request: NextRequest) {
 
   const gateway = new SupabasePublicPlaca();
   const sol = await gateway.loadForUpload(token);
-  if (!sol || ['rejeitado', 'concluido', 'enviado'].includes(String(sol.status))) {
+  // Upload só em RASCUNHO (preenchendo o wizard) ou em CORREÇÃO pendente (admin devolveu).
+  // Não travamos por step_index: goBack() do wizard não regride o step persistido, então
+  // quem voltava etapas para trocar um arquivo recebia 409 num reenvio legítimo.
+  const podeEnviar = sol && (String(sol.status) === 'rascunho' || sol.regularizacao_pendente === true);
+  if (!podeEnviar) {
     return jsonError('Não foi possível concluir a operação.', 404);
-  }
-
-  // Upload preso ao step atual (reduz replay/IDOR).
-  const step = Number(sol.step_index ?? 0);
-  if ((kind === 'comprovante' && step > 4) || (kind === 'declaracao' && step > 5)) {
-    return jsonError('Não foi possível concluir a operação.', 409);
   }
 
   const path = `placas/${token}/${kind}_${randomBytes(16).toString('hex')}.${validated.ext}`;

@@ -19,12 +19,15 @@ export interface TrackingInput {
   token?: string | null;
 }
 
-/** Índice do marco ativo (-1 = somente cadastro). Porta de getClientTrackingState. */
-export function getClientTrackingState(data: TrackingInput): { activeIndex: number } {
+/** Índice do marco ativo (-1 = somente cadastro; -2 = rejeitado). Porta de getClientTrackingState. */
+export function getClientTrackingState(data: TrackingInput): { activeIndex: number; rejected?: boolean } {
   const status = data?.status || '';
   const auditStep = Number(data?.auditoria_step ?? -1);
 
   if (status === 'cadastro_concluido') return { activeIndex: -1 };
+  // Rejeitado precisa de representação própria: cair na timeline normal mostrava
+  // "Documentação Aprovada" ativa — progresso falso para uma solicitação recusada.
+  if (status === 'rejeitado') return { activeIndex: -2, rejected: true };
 
   const docsApproved = auditStep >= AUDIT_STEP_INTERVIEW_SCHEDULED || status === 'docs_aprovados' || status === 'concluido';
   const interviewDone = auditStep >= AUDIT_STEP_INTERVIEW_FINALIZED || status === 'concluido';

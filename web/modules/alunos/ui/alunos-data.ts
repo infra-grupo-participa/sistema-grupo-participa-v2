@@ -1,6 +1,7 @@
 'use client';
 
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
+import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type { Aluno360 } from '../domain/aluno-360';
 
 const db = () => createBrowserSupabase();
@@ -19,6 +20,7 @@ export async function loadAlunos360(): Promise<Aluno360[]> {
   let from = 0;
   for (;;) {
     const { data, error } = await supabase.rpc('fn_aluno_360_safe').range(from, from + PAGE - 1);
+    logQueryError('loadAlunos360', error);
     if (error || !data || !data.length) break;
     all.push(...(data as Aluno360[]));
     if (data.length < PAGE) break;
@@ -28,7 +30,8 @@ export async function loadAlunos360(): Promise<Aluno360[]> {
 }
 
 export async function loadTurmas(): Promise<Turma[]> {
-  const { data } = await db().from('thb_turmas').select('id, codigo, tipo').order('id');
+  const { data, error } = await db().from('thb_turmas').select('id, codigo, tipo').order('id');
+  logQueryError('loadTurmas', error);
   return (data as Turma[]) ?? [];
 }
 
@@ -78,6 +81,8 @@ export async function loadPlacaHistorico(alunoId: string, email: string | null):
       .eq('aluno_id', alunoId)
       .maybeSingle(),
   ]);
+  logQueryError('loadPlacaHistorico:solicitacao', solRes.error);
+  logQueryError('loadPlacaHistorico:auditoria', audRes.error);
   return {
     solicitacao: (solRes.data as PlacaHistorico['solicitacao']) ?? null,
     auditoria: (audRes.data as PlacaHistorico['auditoria']) ?? null,

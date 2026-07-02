@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
+import { getCurrentUser } from '@/shared/composition/server-container';
+import { ehDev } from '@/shared/domain/auth';
 
 export const dynamic = 'force-dynamic';
 
-// Diagnóstico público — NÃO expõe valores, só presença (boolean) das env vars.
-export function GET() {
+// Health check: público responde só {ok:true}. O mapa de env vars (presença, nunca valores)
+// ajuda a mapear a superfície do sistema — restrito a dev logado.
+export async function GET() {
+  const user = await getCurrentUser().catch(() => null);
+  if (!user || !ehDev(user)) {
+    return NextResponse.json({ ok: true });
+  }
   const has = (k: string) => Boolean(process.env[k] && String(process.env[k]).length > 0);
   return NextResponse.json({
     ok: true,

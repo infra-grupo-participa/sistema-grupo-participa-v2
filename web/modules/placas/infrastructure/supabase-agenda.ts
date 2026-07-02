@@ -63,12 +63,14 @@ export class SupabaseAgenda {
   async confirm(
     id: string,
     fields: { entrevista_data: string; entrevista_hora: string; entrevista_link: string | null; meet_link: string | null },
-  ): Promise<boolean> {
+  ): Promise<{ ok: boolean; conflict: boolean }> {
     const { error } = await this.db
       .from('thb_placas_solicitacoes')
       .update({ ...fields, auditoria_step: 2, step_index: 2, status: 'docs_aprovados' })
       .eq('id', id);
-    return !error;
+    // 23505 = índice único uq_entrevista_slot: outro candidato confirmou o mesmo slot
+    // (garantia do banco para quando o slot-lock em memória não alcança — restart/multi-processo).
+    return { ok: !error, conflict: error?.code === '23505' };
   }
 
   async syncAuditoriaStep(alunoId: string, step: number): Promise<void> {

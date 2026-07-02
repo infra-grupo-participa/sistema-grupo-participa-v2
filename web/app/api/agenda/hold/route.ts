@@ -9,7 +9,7 @@ import {
   buildSlotStart,
   conflictsForSlot,
   holdUntil,
-  resolveAuditStep,
+  rescheduleBlockReason,
   SCHEDULE_MIN_LEAD_MS,
 } from '@/modules/placas/domain/agendamento';
 
@@ -48,11 +48,17 @@ export async function POST(request: NextRequest) {
   const result = await withSlotLock(`${data} ${slotHour}`, async () => {
     const sol = await agenda.loadByToken(token);
     if (!sol) return jsonError('Não foi possível localizar a solicitação.', 404);
-    if (!['em_auditoria', 'docs_aprovados'].includes(String(sol.status ?? ''))) {
-      return jsonError('O agendamento não está disponível para o estado atual do processo.', 409);
-    }
-    if (resolveAuditStep(sol) >= 3) {
-      return jsonError('A entrevista já foi concluída e não pode mais ser reagendada.', 409);
+    // Mesmas guardas do confirm: sem isso, um candidato bloqueado (janela 24h/entrevista
+    // passada) conseguia segurar slots dos outros por 10min sem nunca poder confirmar.
+    const block = rescheduleBlockReason(sol, now);
+    if (block !== null) {
+      const msg: Record<string, string> = {
+        status_invalido: 'O agendamento não está disponível para o estado atual do processo.',
+        entrevista_finalizada: 'A entrevista já foi concluída e não pode mais ser reagendada.',
+        entrevista_passada: 'O horário da sua entrevista já passou. Fale com a equipe para reabrir o agendamento.',
+        janela_24h: 'Sua entrevista atual está a menos de 24 horas e não pode mais ser remarcada.',
+      };
+      return jsonError(msg[block], 409);
     }
     if (!(await agenda.slotIsActive(data, slotHour))) {
       return jsonError('Este horário não está mais disponível na grade ativa. Escolha outro horário.', 409);

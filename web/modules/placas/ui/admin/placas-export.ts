@@ -33,7 +33,9 @@ const HEADERS = [
 export function solicitacoesExportaveis(rows: Solicitacao[]): Solicitacao[] {
   return rows.filter((s) => {
     if (IGNORED_STATUSES.has(String(s.status))) return false;
-    const step = Number(s.auditoria_step ?? s.step_index ?? -1);
+    // Só auditoria_step: step_index em rascunho é o passo do FORMULÁRIO (0-9) — o fallback
+    // antigo exportava rascunhos preenchidos até o passo 3+ como se estivessem em entrega.
+    const step = Number(s.auditoria_step ?? -1);
     return step >= MIN_STEP;
   });
 }

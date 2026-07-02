@@ -31,16 +31,20 @@ const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 function gcalLink(nome: string, data: string, hora: string, zoomLink: string | null): string {
-  const start = data.replace(/-/g, '') + 'T' + hora.replace(':', '') + '00';
-  const h = parseInt(hora.split(':')[0], 10);
-  const end = data.replace(/-/g, '') + 'T' + String(h + 1).padStart(2, '0') + hora.split(':')[1] + '00';
+  // Datas ancoradas em America/Sao_Paulo (UTC−3 fixo) + ctz: sem isso o Google interpretava
+  // o horário no fuso do dispositivo, e "hora+1" estourava em slots 23:xx (T2430 inválido).
+  const startD = buildSlotStart(data, hora);
+  const fmtSp = (d: Date) => new Date(d.getTime() - 3 * 3600 * 1000).toISOString().slice(0, 19).replace(/[-:]/g, '');
+  const startStr = startD ? fmtSp(startD) : data.replace(/-/g, '') + 'T' + hora.replace(':', '') + '00';
+  const endStr = startD ? fmtSp(new Date(startD.getTime() + 60 * 60 * 1000)) : startStr;
   const details = zoomLink
     ? `Entrevista - Treinamento em Holding Familiar.\n\nLink Zoom:\n${zoomLink}`
     : 'Entrevista - Treinamento em Holding Familiar.\n\nO link da reunião será enviado em breve.';
   let url =
     'https://calendar.google.com/calendar/render?action=TEMPLATE' +
     `&text=${encodeURIComponent('Entrevista ' + (nome || 'Candidato') + ' - Treinamento em Holding Familiar')}` +
-    `&dates=${start}/${end}` +
+    `&dates=${startStr}/${endStr}` +
+    '&ctz=America/Sao_Paulo' +
     `&details=${encodeURIComponent(details)}`;
   if (zoomLink) url += `&location=${encodeURIComponent(zoomLink)}`;
   return url;
@@ -96,13 +100,14 @@ export async function POST(request: NextRequest) {
     });
     const zoomLink = meeting?.joinUrl ?? null;
 
-    const ok = await agenda.confirm(String(sol.id), {
+    const confirmed = await agenda.confirm(String(sol.id), {
       entrevista_data: data,
       entrevista_hora: hora,
       entrevista_link: zoomLink,
       meet_link: zoomLink,
     });
-    if (!ok) return jsonError('Não foi possível concluir a operação.', 502);
+    if (confirmed.conflict) return jsonError('Este horário acabou de ser reservado por outra pessoa. Escolha outro.', 409, { session_link: sessionLink });
+    if (!confirmed.ok) return jsonError('Não foi possível concluir a operação.', 502);
     if (sol.aluno_id) await agenda.syncAuditoriaStep(String(sol.aluno_id), 2);
 
     // Notifica admin (melhor-esforço).

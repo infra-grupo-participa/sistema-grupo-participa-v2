@@ -9,6 +9,9 @@ const PUBLIC_FIELDS =
 
 type Row = Record<string, unknown>;
 
+/** Escapa curingas de (i)like — o valor vem do usuário e deve casar literal. */
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&');
+
 /** Mascara URLs de documento como 'uploaded' (resposta pública não expõe a URL real). */
 export function maskDocsForPublic(row: Row): Row {
   const out = { ...row };
@@ -35,7 +38,10 @@ export class SupabasePublicPlaca {
   }
 
   async duplicateExists(field: 'email' | 'documento_nf', value: string, token: string, includeRascunho: boolean): Promise<boolean> {
-    let q = this.db.from('thb_placas_solicitacoes').select('token,status').eq(field, value);
+    // E-mail casa case-insensitive: `.eq` deixava "Maria@X.com" e "maria@x.com" coexistirem
+    // como duas solicitações da mesma pessoa. Escapamos %/_ por serem curinga do (i)like.
+    let q = this.db.from('thb_placas_solicitacoes').select('token,status');
+    q = field === 'email' ? q.ilike('email', escapeLike(value)) : q.eq(field, value);
     if (!includeRascunho) q = q.neq('status', 'rascunho');
     const { data } = await q;
     return (data ?? []).some((r) => {
@@ -48,7 +54,7 @@ export class SupabasePublicPlaca {
     const { data } = await this.db
       .from('thb_placas_solicitacoes')
       .select(PUBLIC_FIELDS)
-      .eq('email', email)
+      .ilike('email', escapeLike(email))
       .eq('documento_nf', documento)
       .order('updated_at', { ascending: false })
       .limit(1)
@@ -69,15 +75,15 @@ export class SupabasePublicPlaca {
     await this.db.from('thb_placas_solicitacoes').update(payload).eq('token', token);
   }
 
-  /** Linha mínima para validar um upload (status + step). */
-  async loadForUpload(token: string): Promise<{ id: string; status: string; step_index: number } | null> {
+  /** Linha mínima para validar um upload (status + flag de correção). */
+  async loadForUpload(token: string): Promise<{ id: string; status: string; step_index: number; regularizacao_pendente: boolean | null } | null> {
     const { data } = await this.db
       .from('thb_placas_solicitacoes')
-      .select('id,status,step_index')
+      .select('id,status,step_index,regularizacao_pendente')
       .eq('token', token)
       .limit(1)
       .maybeSingle();
-    return (data as { id: string; status: string; step_index: number }) ?? null;
+    return (data as { id: string; status: string; step_index: number; regularizacao_pendente: boolean | null }) ?? null;
   }
 
   /** Sobe um documento ao bucket `documentos` e retorna a URL pública. */
@@ -105,7 +111,7 @@ export class SupabasePublicPlaca {
   async loadBookedSlots(limitDateIso: string | null): Promise<Array<{ entrevista_data: string; entrevista_hora: string }>> {
     let q = this.db
       .from('thb_placas_solicitacoes')
-      .select('token,status,auditoria_step,entrevista_data,entrevista_hora')
+      .select('token,status,step_index,auditoria_step,entrevista_data,entrevista_hora')
       .not('entrevista_data', 'is', null);
     if (limitDateIso) q = q.lte('entrevista_data', limitDateIso);
     const { data } = await q;

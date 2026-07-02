@@ -17,4 +17,9 @@ describe('client-tracking — marco ativo', () => {
   it('concluído → todos os marcos feitos (último ativo)', () => {
     expect(getClientTrackingState({ status: 'concluido', auditoria_step: 6 }).activeIndex).toBe(4);
   });
+  it('rejeitado → estado próprio (antes caía na timeline e mostrava progresso falso)', () => {
+    const s = getClientTrackingState({ status: 'rejeitado', auditoria_step: 1 });
+    expect(s.rejected).toBe(true);
+    expect(s.activeIndex).toBe(-2);
+  });
 });

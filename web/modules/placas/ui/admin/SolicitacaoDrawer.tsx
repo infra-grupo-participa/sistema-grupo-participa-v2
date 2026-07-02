@@ -30,6 +30,8 @@ export function SolicitacaoDrawer({
   const [motivo, setMotivo] = useState('');
   const [showCorrecao, setShowCorrecao] = useState(false);
   const [confirmExcluir, setConfirmExcluir] = useState(false);
+  const [confirmRejeitar, setConfirmRejeitar] = useState(false);
+  const [motivoRejeicao, setMotivoRejeicao] = useState('');
   const [editando, setEditando] = useState(false);
   const [reprovacoes, setReprovacoes] = useState<data.Reprovacao[]>([]);
   const [histOpen, setHistOpen] = useState(false);
@@ -70,7 +72,12 @@ export function SolicitacaoDrawer({
           {step > 0 && step < AUDIT_STEP_TOTAL - 1 && <Button size="sm" variant="ghost" onClick={() => act(() => data.voltarEtapa(sol))}><Icon name="arrow-left" size={13} /> Etapa anterior</Button>}
           {step >= 0 && step < AUDIT_STEP_TOTAL - 1 && <Button size="sm" variant="success" onClick={() => act(() => data.confirmarJaPossuiPlaca(sol))}><Icon name="check" size={13} /> Já possui placa — avançar para o final</Button>}
           <Button size="sm" variant="ghost" onClick={() => setShowCorrecao((v) => !v)}><Icon name="rotate" size={13} /> Correção</Button>
-          <div className="ml-auto"><Button size="sm" variant="danger" onClick={() => setConfirmExcluir(true)}><Icon name="trash" size={13} /> Excluir</Button></div>
+          <div className="ml-auto flex gap-1.5">
+            {sol.status !== 'rejeitado' && sol.status !== 'concluido' && (
+              <Button size="sm" variant="ghost" onClick={() => setConfirmRejeitar(true)}><Icon name="x" size={13} /> Rejeitar</Button>
+            )}
+            <Button size="sm" variant="danger" onClick={() => setConfirmExcluir(true)}><Icon name="trash" size={13} /> Excluir</Button>
+          </div>
         </>
       ) : undefined}
     >
@@ -236,6 +243,29 @@ export function SolicitacaoDrawer({
           onConfirm={() => { setConfirmExcluir(false); act(() => data.excluirSolicitacao(sol)); }}
           onCancel={() => setConfirmExcluir(false)}
         />
+      )}
+
+      {confirmRejeitar && (
+        <Modal
+          title="Rejeitar solicitação"
+          width="max-w-md"
+          onClose={() => setConfirmRejeitar(false)}
+          footer={
+            <>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmRejeitar(false)}>Cancelar</Button>
+              <Button variant="danger" size="sm" onClick={() => { setConfirmRejeitar(false); act(() => data.rejeitar(sol, motivoRejeicao)); setMotivoRejeicao(''); }}>Rejeitar e notificar</Button>
+            </>
+          }
+        >
+          <p className="text-sm text-[var(--fg-2)] leading-relaxed mb-3">
+            Diferente da exclusão, a rejeição <strong>mantém o registro</strong> e notifica o cliente por e-mail.
+            Se precisar reverter depois, use o Remanejamento rápido.
+          </p>
+          <label className="block">
+            <span className="text-xs text-[var(--fg-3)]">Motivo (vai no e-mail — opcional)</span>
+            <textarea value={motivoRejeicao} onChange={(e) => setMotivoRejeicao(e.target.value)} rows={3} placeholder="Ex.: não atende aos critérios de comprovação do nível…" className="mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" />
+          </label>
+        </Modal>
       )}
 
       {histOpen && (

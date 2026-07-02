@@ -2,13 +2,16 @@
 // Copy de produto preservado 1:1.
 
 export type EmailTipo =
+  | 'solicitacao_recebida'
   | 'docs_aprovados'
   | 'entrevista_agendada'
   | 'entrevista_finalizada'
   | 'placa_em_caminho'
+  | 'placa_recebida'
   | 'retorno_auditoria'
   | 'nivel_registrado'
-  | 'nao_compareceu';
+  | 'nao_compareceu'
+  | 'solicitacao_rejeitada';
 
 export interface EmailTemplateData {
   nome?: string;
@@ -68,7 +71,7 @@ export interface EmailExtra {
 export function emailDynamicBoxes(tipo: EmailTipo, extra: EmailExtra): string {
   if (tipo === 'entrevista_agendada') return entrevistaBox(extra.entrevista_data, extra.entrevista_hora);
   if (tipo === 'placa_em_caminho') return trackingCodeHtml(extra.codigo_rastreio || '');
-  if (tipo === 'retorno_auditoria') return motivoBox(extra.motivo_retorno || '');
+  if (tipo === 'retorno_auditoria' || tipo === 'solicitacao_rejeitada') return motivoBox(extra.motivo_retorno || '');
   return '';
 }
 
@@ -84,6 +87,52 @@ export function defaultEmailTemplate(tipo: EmailTipo): { assunto: string; introd
 
 export function getEmailContentByStatus(tipo: EmailTipo, extra: EmailExtra, ctaLink: string): EmailContent {
   switch (tipo) {
+    case 'solicitacao_recebida':
+      return {
+        assunto: '[Holding Brasil] Recebemos a sua solicitação de placa',
+        templateData: {
+          titulo: 'Solicitação recebida',
+          titulo_cor: '#F29725',
+          introducao:
+            'A sua solicitação de placa foi enviada com sucesso e já está na fila de análise da nossa equipe.',
+          corpo_extra:
+            '<p>Vamos revisar a documentação enviada e você receberá um novo e-mail assim que a análise for concluída.</p><p>Guarde este e-mail: o link abaixo é o seu canal de acompanhamento.</p>',
+          cta_link: ctaLink,
+          cta_label: 'Acompanhar solicitação',
+          nota: SECRETARIA_NOTA,
+        },
+      };
+    case 'placa_recebida':
+      return {
+        assunto: '[Holding Brasil] Placa entregue — processo concluído 🎉',
+        templateData: {
+          titulo: 'Processo concluído!',
+          titulo_cor: '#16a34a',
+          introducao:
+            'Confirmamos a entrega da sua placa e o encerramento do processo. Parabéns por essa conquista!',
+          corpo_extra:
+            '<p>O seu nível foi registrado oficialmente em nosso sistema.</p><p>Adoraríamos celebrar com você: se puder, compartilhe uma foto ou vídeo da placa e marque o Prof. Márcio (<strong>@marciocarvalhodesa</strong>) no Instagram.</p>',
+          cta_link: ctaLink,
+          cta_label: 'Ver acompanhamento',
+          nota: SECRETARIA_NOTA,
+        },
+      };
+    case 'solicitacao_rejeitada':
+      return {
+        assunto: '[Holding Brasil] Atualização sobre a sua solicitação de placa',
+        templateData: {
+          titulo: 'Solicitação não aprovada',
+          titulo_cor: '#dc2626',
+          introducao:
+            'Após análise da nossa equipe, a sua solicitação de placa não pôde ser aprovada neste momento.',
+          corpo_extra:
+            motivoBox(extra.motivo_retorno || '') +
+            '<p>Se você acredita que houve um engano ou quiser entender os critérios, fale com a nossa Secretaria — teremos prazer em orientar os próximos passos.</p>',
+          cta_link: ctaLink,
+          cta_label: 'Falar com a Secretaria',
+          cta_cor: '#dc2626',
+        },
+      };
     case 'docs_aprovados':
       return {
         assunto: '[Holding Brasil] Documentação validada — agende sua entrevista',
