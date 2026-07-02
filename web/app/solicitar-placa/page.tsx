@@ -5,6 +5,11 @@ import { resolveNivelFaixas, resolveFormTextos } from '@/modules/placas/domain/c
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = {
+  title: 'Solicitar Placa — Time Holding Brasil',
+  description: 'Solicitação de Placa — Treinamento em Holding Familiar',
+};
+
 export default async function SolicitarPlacaPage({
   searchParams,
 }: {

@@ -117,10 +117,20 @@ export function StepContent(p: StepProps) {
   }
 
   if (step === 5) {
+    const abrirDeclaracao = () => {
+      if (!form.nivel) return;
+      const qs = new URLSearchParams();
+      if (form.nome) qs.set('nome', form.nome);
+      if (form.profissao) qs.set('profissao', form.profissao);
+      if (form.cidade) qs.set('cidade', form.cidade);
+      if (form.estado_uf) qs.set('estado_uf', form.estado_uf);
+      qs.set('nivel', form.nivel);
+      window.open(`/modelos/declaracao-template.html?${qs.toString()}`, '_blank', 'noopener,noreferrer');
+    };
     return (
       <Section title="5. Declaração" subtitle="Validação formal do nível de faturamento informado.">
-        <div className="sp-info"><strong>Passo 1:</strong> baixe o modelo oficial, preencha os campos de identificação e assine — sem alterar o texto base.</div>
-        <a className="sp-btn-back inline-flex items-center gap-1.5" href="/modelos/declaracao-faturamento.pdf" target="_blank" rel="noopener" style={{ marginBottom: 12 }}><Icon name="download" size={15} /> Baixar Modelo da Declaração</a>
+        <div className="sp-info"><strong>Passo 1:</strong> gere o modelo oficial já preenchido com seus dados, imprima em papel timbrado e assine — sem alterar o texto base.</div>
+        <button type="button" className="sp-btn-back inline-flex items-center gap-1.5" onClick={abrirDeclaracao} style={{ marginBottom: 12 }}><Icon name="download" size={15} /> Gerar Declaração</button>
         <div className="sp-warn"><strong className="inline-flex items-center gap-1.5"><Icon name="alert" size={14} /> Atenção:</strong> após assinar, faça o upload do arquivo original (sem edições no texto base).</div>
         <Field label="Declaração assinada (PDF ou imagem)" req>
           <input type="file" accept=".pdf,image/*" onChange={(e) => onUpload('declaracao', e.target.files?.[0] ?? null)} />

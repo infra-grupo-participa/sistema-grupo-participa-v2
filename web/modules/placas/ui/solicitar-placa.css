@@ -25,30 +25,21 @@
   max-width: 660px;
   margin: 0 auto;
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 22px 4px 18px;
+  padding: 28px 4px 20px;
+  text-align: center;
 }
-.sp-brand-logo {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(135deg, var(--orange), var(--orange-2));
-  color: #fff;
-  font-weight: 800;
-  font-size: 14px;
-  box-shadow: 0 4px 12px rgba(242, 151, 37, 0.35);
-}
-.sp-brand-name {
-  font-weight: 800;
-  font-size: 15px;
-  letter-spacing: -0.01em;
+.sp-brand-mark {
+  height: 72px;
+  width: auto;
+  display: block;
 }
 .sp-brand-sub {
   font-size: 12px;
   color: var(--faint);
+  letter-spacing: 0.01em;
 }
 
 .sp-card {
