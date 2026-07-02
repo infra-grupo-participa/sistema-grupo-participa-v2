@@ -1,48 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Badge, Button, Modal, ProgressBar, Timeline, type TimelineEntry } from '@/shared/ui/components';
-import { Icon } from '@/shared/ui/icons';
+import { Badge, Button, Modal, ProgressBar } from '@/shared/ui/components';
 import './solicitar-placa.css';
-import { maskPhoneMobile, maskPhoneLandline, maskDoc, maskCep, maskCurrency, currencyDigits } from './masks';
+import { maskCep, maskCurrency, maskDoc } from './masks';
 import { cepLookup, placaDuplicateCheck, placaGet, placaRecover, placaSave, placaUpload } from './placa-api';
-import { getClientTrackingState, CLIENT_TRACKING_STEPS } from '../domain/client-tracking';
 import { isPlateEligible } from '../domain/form-progress';
+import { TOTAL_STEPS, STEP_NAMES, ESPACOS, NIVEIS, type Form, type View, type FormConfig } from './solicitar-placa-constants';
+import { Wrap, SuccessCard, TrackingCard } from './solicitar-placa-parts';
+import { StepContent } from './SolicitarPlacaSteps';
 
-const TOTAL_STEPS = 6;
-const STEP_NAMES = ['', 'Seus dados', 'Interesse', 'Seu nível', 'Comprovação', 'Declaração', 'Endereço'];
-const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
-
-const INTERESSES = [
-  { v: 'pessoal', l: 'Apenas fazer a minha Holding e/ou da minha família' },
-  { v: 'familia_e_possivel', l: 'Minha Holding + possibilidade de oferecer a outros clientes' },
-  { v: 'profissional', l: 'Trabalhar com Holding Familiar' },
-];
-const ESPACOS = [
-  { v: 'holding_masters', l: 'Holding Masters' },
-  { v: 'aurum', l: 'Mentoria Aurum' },
-  { v: 'coach_platina', l: 'Coach Platina' },
-  { v: 'mastermind', l: 'Mastermind Diamante' },
-];
-const NIVEIS = [
-  { v: 'iniciante', ic: 'sprout', nm: 'Iniciante', fx: 'Ainda não comecei' },
-  { v: 'em_formacao', ic: 'biblioteca', nm: 'Em Formação', fx: 'Estudando o curso' },
-  { v: 'pessoal', ic: 'user', nm: 'Pessoal', fx: 'Só minha holding' },
-  { v: 'profissional', ic: 'briefcase', nm: 'Profissional', fx: 'Oferecendo a clientes' },
-  { v: 'ouro', ic: 'medal', nm: 'Ouro', fx: 'Primeiros R$ 50k faturado' },
-  { v: 'platina', ic: 'coins', nm: 'Platina', fx: 'R$ 500k em 12 meses' },
-  { v: 'diamante', ic: 'gem', nm: 'Diamante', fx: 'R$ 1M em 12 meses' },
-  { v: 'diamante_vermelho', ic: 'gem', nm: 'Diamante Vermelho', fx: 'R$ 5M em 12 meses' },
-];
-
-type Form = Record<string, string>;
-type View = 'loading' | 'form' | 'success' | 'cadastro' | 'tracking' | 'error';
-
-/** Config personalizável (níveis/faixas + textos) resolvida no server e injetada aqui. */
-export interface FormConfig {
-  niveis: { v: string; ic: string; nm: string; fx: string }[];
-  textos: { upload_info: string; cadastro_info: string; espacos: { v: string; l: string }[] };
-}
+export type { FormConfig } from './solicitar-placa-constants';
 
 export function SolicitarPlacaClient({ initialToken, config }: { initialToken: string; config?: FormConfig }) {
   const NIVEIS_CFG = config?.niveis?.length ? config.niveis : NIVEIS;
@@ -266,112 +234,25 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
       </div>
 
       <div className="sp-card">
-        {step === 1 && (
-          <Section title="1. Seus dados" subtitle="Preencha seus dados de contato.">
-            <div className="sp-grid2">
-              <Field label="Nome completo" req><input value={form.nome || ''} onChange={(e) => set('nome', e.target.value)} placeholder="Seu nome completo" /></Field>
-              <Field label="E-mail" req><input type="email" value={form.email || ''} onChange={(e) => set('email', e.target.value)} onBlur={() => checkDup('email')} placeholder="seu@email.com" /></Field>
-              <Field label="WhatsApp" req><input value={form.telefone || ''} onChange={(e) => set('telefone', maskPhoneMobile(e.target.value))} placeholder="(11) 99999-9999" /></Field>
-              <Field label="Documento" req><input value={form.documento_nf || ''} onChange={(e) => set('documento_nf', maskDoc(e.target.value))} onBlur={() => checkDup('documento_nf')} placeholder="CPF ou CNPJ" inputMode="numeric" /></Field>
-              <Field label="Turma" req><input value={form.turma || ''} onChange={(e) => set('turma', e.target.value)} placeholder="Ex: T1" maxLength={24} /></Field>
-              <Field label="Profissão"><input value={form.profissao || ''} onChange={(e) => set('profissao', e.target.value)} placeholder="Ex: Empresário, Médico…" maxLength={100} /></Field>
-              <Field label="Telefone Profissional"><input value={form.telefone_profissional || ''} onChange={(e) => set('telefone_profissional', maskPhoneLandline(e.target.value))} placeholder="(11) 9999-9999" /></Field>
-              <Field label="Canal do YouTube"><input value={form.youtube_url || ''} onChange={(e) => set('youtube_url', e.target.value)} placeholder="https://youtube.com/@seucanal" /></Field>
-              <Field label="Site Profissional"><input value={form.site_profissional || ''} onChange={(e) => set('site_profissional', e.target.value)} placeholder="https://seusite.com.br" /></Field>
-              <Field label="Instagram"><input value={form.instagram_url || ''} onChange={(e) => set('instagram_url', e.target.value)} placeholder="@seuperfil" /></Field>
-              <Field label="Facebook"><input value={form.facebook_url || ''} onChange={(e) => set('facebook_url', e.target.value)} placeholder="@seuperfil" /></Field>
-            </div>
-            {dup.email && <p className="sp-err">Este e-mail já possui uma solicitação. <Button type="button" variant="ghost" size="sm" onClick={() => setRecoverOpen(true)}>Recuperar</Button></p>}
-            {err && <p className="sp-err">{err}</p>}
-            <Nav onlyNext busy={busy} onNext={() => goNext(1)} nextLabel="Continuar →" />
-          </Section>
-        )}
-
-        {step === 2 && (
-          <Section title="2. Seu interesse" subtitle="O que você busca com a Holding Familiar?">
-            {INTERESSES.map((o) => (
-              <label key={o.v} className={`sp-radio ${form.interesse === o.v ? 'sel' : ''}`} onClick={() => set('interesse', o.v)}>{o.l}</label>
-            ))}
-            {err && <p className="sp-err">{err}</p>}
-            <Nav busy={busy} onBack={() => goBack(2)} onNext={() => goNext(2)} nextLabel="Continuar →" />
-          </Section>
-        )}
-
-        {step === 3 && (
-          <Section title="3. Seu nível" subtitle="Considere todos os ativos gerados com Holding Familiar.">
-            <div className="sp-field"><label>Espaço de instrução <span className="req">*</span></label>
-              {ESPACOS_CFG.map((o) => (
-                <label key={o.v} className={`sp-radio ${form.espaco_instrucao === o.v ? 'sel' : ''}`} onClick={() => set('espaco_instrucao', o.v)}>{o.l}</label>
-              ))}
-            </div>
-            <div className="sp-field"><label>Nível atual <span className="req">*</span></label>
-              <div className="sp-level-grid">
-                {NIVEIS_CFG.map((o) => (
-                  <label key={o.v} className={`sp-level ${form.nivel === o.v ? 'sel' : ''}`} onClick={() => set('nivel', o.v)}>
-                    <div className="ic"><Icon name={o.ic} size={22} /></div><div className="nm">{o.nm}</div><div className="fx">{o.fx}</div>
-                  </label>
-                ))}
-              </div>
-            </div>
-            {eligible && (
-              <Field label="Faturamento declarado (R$)" req>
-                <input value={form.faturamento_fmt || ''} onChange={(e) => { const m = maskCurrency(e.target.value); set('faturamento_fmt', m); set('faturamento_declarado', String(currencyDigits(e.target.value))); }} placeholder="R$ 0" inputMode="numeric" />
-                <div className="sp-hint">Valor total gerado com Holding Familiar, em reais.</div>
-              </Field>
-            )}
-            {!eligible && form.nivel && <div className="sp-info">{CADASTRO_INFO}</div>}
-            {err && <p className="sp-err">{err}</p>}
-            <Nav busy={busy} onBack={() => goBack(3)} onNext={() => goNext(3)} nextLabel={eligible ? 'Continuar para comprovação →' : 'Concluir cadastro →'} />
-          </Section>
-        )}
-
-        {step === 4 && (
-          <Section title="4. Comprovação" subtitle="Envie os documentos que comprovem o nível informado.">
-            <div className="sp-info">{UPLOAD_INFO}</div>
-            <div className="sp-warn"><Icon name="alert" size={14} /> Certifique-se de que o arquivo esteja legível (PDF ou imagem, até 10MB).</div>
-            <Field label="Documento comprobatório (PDF ou imagem)" req>
-              <input type="file" accept=".pdf,image/*" onChange={(e) => onUpload('comprovante', e.target.files?.[0] ?? null)} />
-              {form.proof_url && <div className="sp-hint"><Icon name="check" size={13} /> Arquivo enviado.</div>}
-            </Field>
-            {err && <p className="sp-err">{err}</p>}
-            <Nav busy={busy} onBack={() => goBack(4)} onNext={() => goNext(4)} nextLabel="Continuar para declaração →" />
-          </Section>
-        )}
-
-        {step === 5 && (
-          <Section title="5. Declaração" subtitle="Validação formal do nível de faturamento informado.">
-            <div className="sp-info"><strong>Passo 1:</strong> baixe o modelo oficial, preencha os campos de identificação e assine — sem alterar o texto base.</div>
-            <a className="sp-btn-back inline-flex items-center gap-1.5" href="/modelos/declaracao-faturamento.pdf" target="_blank" rel="noopener" style={{ marginBottom: 12 }}><Icon name="download" size={15} /> Baixar Modelo da Declaração</a>
-            <div className="sp-warn"><strong className="inline-flex items-center gap-1.5"><Icon name="alert" size={14} /> Atenção:</strong> após assinar, faça o upload do arquivo original (sem edições no texto base).</div>
-            <Field label="Declaração assinada (PDF ou imagem)" req>
-              <input type="file" accept=".pdf,image/*" onChange={(e) => onUpload('declaracao', e.target.files?.[0] ?? null)} />
-              {form.declaracao_url && <div className="sp-hint"><Icon name="check" size={13} /> Arquivo enviado.</div>}
-            </Field>
-            {err && <p className="sp-err">{err}</p>}
-            <Nav busy={busy} onBack={() => goBack(5)} onNext={() => goNext(5)} nextLabel="Continuar para endereço →" />
-          </Section>
-        )}
-
-        {step === 6 && (
-          <Section title="6. Endereço de entrega" subtitle="Digite o CEP e aguarde o preenchimento automático.">
-            <Field label="CEP" req><input value={form.cep || ''} onChange={(e) => onCep(e.target.value)} placeholder="00000-000" maxLength={9} inputMode="numeric" /></Field>
-            <Field label="Logradouro" req><input value={form.logradouro || ''} onChange={(e) => set('logradouro', e.target.value)} placeholder="Rua / Avenida…" /></Field>
-            <div className="sp-grid2">
-              <Field label="Número" req><input value={form.numero || ''} onChange={(e) => set('numero', e.target.value)} placeholder="123" inputMode="numeric" /></Field>
-              <Field label="Complemento"><input value={form.complemento || ''} onChange={(e) => set('complemento', e.target.value)} placeholder="Apto 42…" /></Field>
-              <Field label="Bairro" req><input value={form.bairro || ''} onChange={(e) => set('bairro', e.target.value)} placeholder="Bairro" /></Field>
-              <Field label="Cidade" req><input value={form.cidade || ''} onChange={(e) => set('cidade', e.target.value)} placeholder="Cidade" /></Field>
-            </div>
-            <Field label="Estado" req>
-              <select value={form.estado_uf || ''} onChange={(e) => set('estado_uf', e.target.value)}>
-                <option value="">Selecione…</option>
-                {UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
-              </select>
-            </Field>
-            {err && <p className="sp-err">{err}</p>}
-            <Nav busy={busy} onBack={() => goBack(6)} onNext={() => goNext(6)} nextLabel="Concluir solicitação" />
-          </Section>
-        )}
+        <StepContent
+          step={step}
+          form={form}
+          set={set}
+          err={err}
+          busy={busy}
+          dup={dup}
+          eligible={eligible}
+          checkDup={checkDup}
+          onCep={onCep}
+          onUpload={onUpload}
+          goNext={goNext}
+          goBack={goBack}
+          onRecover={() => setRecoverOpen(true)}
+          espacos={ESPACOS_CFG}
+          niveis={NIVEIS_CFG}
+          uploadInfo={UPLOAD_INFO}
+          cadastroInfo={CADASTRO_INFO}
+        />
       </div>
 
       {recoverOpen && (
@@ -394,82 +275,5 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
         </Modal>
       )}
     </Wrap>
-  );
-}
-
-function Wrap({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="sp-wrap">
-      <div className="sp-brand">
-        <div className="sp-brand-logo">GP</div>
-        <div>
-          <div className="sp-brand-name">Grupo Participa</div>
-          <div className="sp-brand-sub">Solicitação de Placa de Resultado</div>
-        </div>
-      </div>
-      {children}
-    </div>
-  );
-}
-function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
-  return (
-    <>
-      <div className="sp-card-head"><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>
-      <div className="sp-card-body">{children}</div>
-    </>
-  );
-}
-function Field({ label, req, children }: { label: string; req?: boolean; children: React.ReactNode }) {
-  return <div className="sp-field"><label>{label} {req && <span className="req">*</span>}</label>{children}</div>;
-}
-function Nav({ onBack, onNext, nextLabel, backLabel = '← Voltar', onlyNext, busy }: { onBack?: () => void; onNext: () => void; nextLabel: string; backLabel?: string; onlyNext?: boolean; busy?: boolean }) {
-  return (
-    <div className="sp-nav">
-      {!onlyNext && onBack ? <Button type="button" variant="ghost" onClick={onBack}>{backLabel}</Button> : <span />}
-      <Button type="button" variant="primary" onClick={onNext} disabled={busy}>{busy ? 'Aguarde…' : nextLabel}</Button>
-    </div>
-  );
-}
-
-function SuccessCard({ kind }: { kind: 'success' | 'cadastro' }) {
-  const isCad = kind === 'cadastro';
-  return (
-    <div className="sp-card">
-      <div className="sp-card-body sp-success">
-        <div className="em"><Icon name={isCad ? 'check-circle' : 'party'} size={44} /></div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, marginTop: 8 }}>{isCad ? 'Cadastro registrado com sucesso!' : 'Recebemos sua solicitação!'}</h1>
-        <p style={{ color: 'var(--muted)', marginTop: 8 }}>
-          {isCad
-            ? 'Registramos seus dados e o seu nível atual. Como este nível ainda não entra no fluxo da placa, nenhuma documentação adicional é necessária agora.'
-            : 'Recebemos seus dados e vamos seguir com a análise da documentação. O acompanhamento fica resumido aos marcos principais do processo.'}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function TrackingCard({ data }: { data: Record<string, unknown> }) {
-  const { activeIndex } = getClientTrackingState(data);
-  const rastreio = String(data.codigo_rastreio ?? '');
-  const tlItems: TimelineEntry[] = CLIENT_TRACKING_STEPS.map((s, i) => ({
-    title: s.title,
-    body: s.note,
-    tone: i < activeIndex ? 'green' : i === activeIndex ? 'accent' : 'base',
-    done: i < activeIndex,
-    icon: i < activeIndex ? undefined : String(i + 1),
-  }));
-  return (
-    <div className="sp-card">
-      <div className="sp-card-head" style={{ background: 'var(--orange)', color: '#fff' /* hex-ok: contraste branco sobre header âmbar da marca */ }}>
-        <h1 style={{ color: '#fff' /* hex-ok: contraste branco sobre header âmbar */ }}>Acompanhe sua solicitação</h1>
-        <p style={{ color: 'rgba(255,255,255,.85)' /* hex-ok: contraste branco sobre header âmbar */ }}>Sua solicitação está em andamento</p>
-      </div>
-      <div className="sp-card-body">
-        <Timeline items={tlItems} />
-        {rastreio && (
-          <div className="sp-info" style={{ marginTop: 16 }}>Código de rastreio: <strong>{rastreio}</strong></div>
-        )}
-      </div>
-    </div>
   );
 }

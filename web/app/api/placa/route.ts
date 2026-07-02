@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
   if (action === 'recover-session') {
     const email = safeEmail(String(body.email ?? '').trim());
     const documento = onlyDigits(body.documento_nf);
-    if (!email || (documento !== '' && documento.length !== 11 && documento.length !== 14) || documento === '') {
+    if (!email || (documento.length !== 11 && documento.length !== 14)) {
       return jsonError('Não foi possível concluir a operação.', 400);
     }
     const row = await gateway.recoverSession(email, documento);

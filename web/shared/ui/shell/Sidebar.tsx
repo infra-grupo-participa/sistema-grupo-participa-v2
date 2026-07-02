@@ -30,13 +30,39 @@ export function Sidebar({ user }: { user: GpUser }) {
   // Estado de colapso dos grupos e subgrupos (persistido).
   const [groups, setGroups] = useState<Record<string, boolean>>({});
   const [reports, setReports] = useState<Record<string, boolean>>({});
+  // Hash atual da URL — usado para destacar a aba ativa dos itens hash-nav.
+  const [hash, setHash] = useState('');
   useEffect(() => {
     // Restaura o estado de colapso persistido (localStorage = sistema externo).
     /* eslint-disable react-hooks/set-state-in-effect */
     setGroups(loadState(GROUPS_KEY));
     setReports(loadState(REPORTS_KEY));
+    setHash(window.location.hash || '');
     /* eslint-enable react-hooks/set-state-in-effect */
+    const sync = () => setHash(window.location.hash || '');
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
   }, []);
+  // Nav entre páginas (Next Link) muda o pathname mas nem sempre dispara 'hashchange';
+  // re-sincroniza o hash quando a rota troca.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHash(window.location.hash || '');
+  }, [pathname]);
+
+  /**
+   * Clique num item hash-nav (ex.: #agenda-horarios) quando já estamos na mesma rota.
+   * O <Link> do Next atualiza a URL mas não dispara 'hashchange' para hash-na-mesma-rota,
+   * então setamos window.location.hash à mão para emitir o evento que a página escuta.
+   */
+  const onHashChildClick = (e: React.MouseEvent, childPath: string, childHash?: string) => {
+    if (!childHash || normalize(childPath) !== cur) return; // rota diferente: deixa o Link navegar
+    e.preventDefault();
+    // pushState (não location.hash=) atualiza a URL sem recarregar; o hashchange manual
+    // avisa a página e a própria sidebar a re-sincronizarem a aba ativa.
+    if ((window.location.hash || '') !== childHash) window.history.pushState(null, '', childHash);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+  };
 
   const toggleGroup = (name: string) => {
     setGroups((prev) => {
@@ -114,15 +140,26 @@ export function Sidebar({ user }: { user: GpUser }) {
               </div>
               {children.length > 0 && open && (
                 <div className="ml-4 mt-0.5 flex flex-col gap-0.5">
-                  {children.map((child) => {
-                    const active = normalize(child.path) === cur;
-                    return (
-                      <Link key={child.key} href={child.href} className={itemCls(active)}>
-                        <span className={iconBox}><Icon name={child.ico || 'circle'} size={14} /></span>
-                        <span>{child.label}</span>
-                      </Link>
-                    );
-                  })}
+                  {(() => {
+                    const defaultHashKey = children.find((c) => c.hash)?.key;
+                    return children.map((child) => {
+                      const onPath = normalize(child.path) === cur;
+                      const active = child.hash
+                        ? onPath && (hash === child.hash || (!hash && child.key === defaultHashKey))
+                        : onPath;
+                      return (
+                        <Link
+                          key={child.key}
+                          href={child.href}
+                          onClick={(e) => onHashChildClick(e, child.path, child.hash)}
+                          className={itemCls(active)}
+                        >
+                          <span className={iconBox}><Icon name={child.ico || 'circle'} size={14} /></span>
+                          <span>{child.label}</span>
+                        </Link>
+                      );
+                    });
+                  })()}
                 </div>
               )}
             </div>

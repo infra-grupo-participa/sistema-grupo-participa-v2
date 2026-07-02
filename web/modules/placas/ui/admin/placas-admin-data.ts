@@ -1,6 +1,7 @@
 'use client';
 
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
+import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import { AUDIT_STEP_INDEX, AUDIT_STEPS, planAuditAdvance, statusForAuditStep, type AdvancePlan } from '../../domain/auditoria';
 import type { Solicitacao, Auditoria, HorarioSlot } from '../../domain/types';
 import { buildAdminSeenPatch } from '../../domain/solicitacao';
@@ -33,16 +34,19 @@ function agendarLink(token?: string | null): string {
 }
 
 export async function loadSolicitacoes(): Promise<Solicitacao[]> {
-  const { data } = await db()
+  const { data, error } = await db()
     .from('thb_placas_solicitacoes')
     .select('*')
     .order('updated_at', { ascending: false })
     .range(0, 9999);
+  logQueryError('loadSolicitacoes', error);
   return (data as Solicitacao[]) ?? [];
 }
 
 export async function loadAuditorias(): Promise<Auditoria[]> {
-  const { data } = await db().from('thb_placas_auditoria').select('*');
+  // O painel só consome aluno_id/step_index/dates — payload enxuto (obs/protocolo ficam de fora).
+  const { data, error } = await db().from('thb_placas_auditoria').select('aluno_id, step_index, dates');
+  logQueryError('loadAuditorias', error);
   return (data as Auditoria[]) ?? [];
 }
 
@@ -197,15 +201,48 @@ export async function aprovarReenvio(sol: Solicitacao): Promise<boolean> {
   return true;
 }
 
-/** Solicita correção: regularizacao_pendente + motivo + e-mail de retorno. */
-export async function solicitarCorrecao(sol: Solicitacao, motivo: string): Promise<boolean> {
-  const { error } = await db()
-    .from('thb_placas_solicitacoes')
-    .update({ regularizacao_pendente: true, motivo_retorno: motivo, ...buildAdminSeenPatch(true) })
-    .eq('id', sol.id);
-  if (error) return false;
-  await sendStatusEmail('retorno_auditoria', sol, { token_link: `${window.location.origin}/solicitar-placa?token=${sol.token}`, motivo_retorno: motivo });
-  return true;
+/**
+ * Reprova/devolve a solicitação para correção.
+ * Usa a RPC atômica fn_placas_reprovar (SECURITY DEFINER): grava snapshot imutável em
+ * thb_placas_reprovacoes ANTES de resetar, limpa documentos/entrevista/etapa e marca
+ * regularizacao_pendente. Assim o histórico fica auditável e o estado volta a "aguardando
+ * nova documentação" (antes o v2 mantinha os docs e a fila mostrava "reenviou" na hora).
+ */
+export async function solicitarCorrecao(sol: Solicitacao, motivo: string): Promise<{ ok: boolean; msg: string }> {
+  const m = motivo.trim();
+  if (!m) return { ok: false, msg: 'Informe o motivo da reprovação.' };
+  const supabase = db();
+  const { error } = await supabase.rpc('fn_placas_reprovar', { p_sol_id: sol.id, p_motivo: m });
+  if (error) return { ok: false, msg: 'Não foi possível registrar a reprovação.' };
+  // A RPC zera admin_seen_at; como quem acabou de agir foi o admin, marcamos como visto
+  // (o item volta a chamar atenção só quando o cliente reenviar).
+  await supabase.from('thb_placas_solicitacoes').update(buildAdminSeenPatch(true)).eq('id', sol.id);
+  await sendStatusEmail('retorno_auditoria', sol, { token_link: `${window.location.origin}/solicitar-placa?token=${sol.token}`, motivo_retorno: m });
+  return { ok: true, msg: 'Reprovação registrada e cliente notificado.' };
+}
+
+/** thb_placas_reprovacoes — histórico imutável de reprovações (uma linha por evento). */
+export interface Reprovacao {
+  id: string;
+  motivo: string;
+  proof_url: string | null;
+  declaracao_url: string | null;
+  faturamento_declarado: number | null;
+  nivel: string | null;
+  step_index_reprovado: number | null;
+  reprovado_por_email: string | null;
+  created_at: string;
+}
+
+/** Carrega o histórico de reprovações da solicitação (mais recente primeiro). */
+export async function loadReprovacoes(solId: string): Promise<Reprovacao[]> {
+  const { data, error } = await db()
+    .from('thb_placas_reprovacoes')
+    .select('id, motivo, proof_url, declaracao_url, faturamento_declarado, nivel, step_index_reprovado, reprovado_por_email, created_at')
+    .eq('solicitacao_id', solId)
+    .order('created_at', { ascending: false });
+  logQueryError('loadReprovacoes', error);
+  return (data as Reprovacao[]) ?? [];
 }
 
 /** Não compareceu: reabre agendamento (volta para docs_aprovados, limpa entrevista) + e-mail. */
@@ -332,7 +369,8 @@ export async function atualizarDadosSolicitacao(
 
 // ── Agenda de horários ──
 export async function loadHorarios(): Promise<HorarioSlot[]> {
-  const { data } = await db().from('thb_horarios_disponiveis').select('*').order('slot_data', { ascending: true }).order('hora', { ascending: true });
+  const { data, error } = await db().from('thb_horarios_disponiveis').select('*').order('slot_data', { ascending: true }).order('hora', { ascending: true });
+  logQueryError('loadHorarios', error);
   return (data as HorarioSlot[]) ?? [];
 }
 export async function criarHorario(slotData: string, hora: string): Promise<boolean> {

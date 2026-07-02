@@ -3,7 +3,7 @@ import { jsonError, jsonOk } from '@/shared/infrastructure/http/security';
 import { safeEmail, isUuid } from '@/shared/infrastructure/http/validation';
 import { getCurrentUser } from '@/shared/composition/server-container';
 import { ehAdminOuAcima, podeEditar } from '@/shared/domain/auth';
-import { getEmailContentByStatus, type EmailTipo } from '@/modules/placas/application/email-content';
+import { getEmailContentByStatus, emailDynamicBoxes, type EmailTipo, type EmailExtra } from '@/modules/placas/application/email-content';
 import { readPlacasConfig } from '@/modules/placas/infrastructure/supabase-config';
 import { buildEmailTemplate } from '@/shared/infrastructure/email/template';
 import { sendMail } from '@/shared/infrastructure/email/mailer';
@@ -53,13 +53,14 @@ export async function POST(request: NextRequest) {
   if ((tipo === 'docs_aprovados' || tipo === 'retorno_auditoria') && tokenLink) ctaLink = tokenLink;
   else if (!ctaLink && tokenLink) ctaLink = tokenLink;
 
-  const content = getEmailContentByStatus(tipo, {
+  const extra: EmailExtra = {
     entrevista_data: body.entrevista_data ? String(body.entrevista_data) : undefined,
     entrevista_hora: body.entrevista_hora ? String(body.entrevista_hora) : undefined,
     zoom_link: body.zoom_link ? String(body.zoom_link) : undefined,
     codigo_rastreio: body.codigo_rastreio ? String(body.codigo_rastreio) : undefined,
     motivo_retorno: body.motivo_retorno ? String(body.motivo_retorno) : undefined,
-  }, ctaLink);
+  };
+  const content = getEmailContentByStatus(tipo, extra, ctaLink);
 
   // Override editável pelo admin (thb_placas_config → email_templates).
   const { email_templates } = await readPlacasConfig();
@@ -67,7 +68,9 @@ export async function POST(request: NextRequest) {
   if (ov) {
     if (ov.assunto?.trim()) content.assunto = ov.assunto.trim();
     if (ov.introducao?.trim()) content.templateData.introducao = ov.introducao.trim();
-    if (ov.corpo_extra?.trim()) content.templateData.corpo_extra = ov.corpo_extra.trim();
+    // O corpo customizado substitui o texto estático, mas re-injetamos os blocos dinâmicos
+    // (entrevista/rastreio/motivo) para não perder o conteúdo variável do e-mail.
+    if (ov.corpo_extra?.trim()) content.templateData.corpo_extra = emailDynamicBoxes(tipo, extra) + ov.corpo_extra.trim();
   }
 
   const html = buildEmailTemplate({ ...content.templateData, nome: String(body.nome ?? 'Candidato') });

@@ -32,7 +32,7 @@ const esc = (s: string) =>
   String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const SECRETARIA_NOTA = 'Em caso de dúvidas, fale com a nossa Secretaria.';
-const SECRETARIA_URL = 'https://grupoparticipa.app.br';
+const SECRETARIA_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://grupoparticipa.app.br';
 
 function entrevistaBox(data?: string, hora?: string): string {
   const dataFmt = data ? data.split('-').reverse().join('/') : '';
@@ -47,12 +47,39 @@ function trackingCodeHtml(codigo: string): string {
   return `<div style="margin:16px 0;padding:14px;border-radius:10px;background:#f0fdf4;border:1px solid #86efac;"><p style="margin:0 0 4px;font-size:12px;color:#166534;text-transform:uppercase;letter-spacing:.04em;font-weight:700">Código de rastreio</p><p style="margin:0;font-size:18px;color:#166534;font-weight:800;font-family:monospace">${esc(codigo)}</p></div>`;
 }
 
+function motivoBox(motivo: string): string {
+  if (!motivo.trim()) return '';
+  return `<div style="margin:18px 0;padding:16px;border-radius:10px;background:#fffbeb;border:1px solid #fcd34d;"><p style="margin:0 0 8px;font-size:12px;color:#92400e;text-transform:uppercase;letter-spacing:.04em;font-weight:700">O que precisa ser corrigido</p><p style="margin:0;font-size:14px;color:#78350f;line-height:1.6;white-space:pre-wrap;">${esc(motivo)}</p></div>`;
+}
+
 export interface EmailExtra {
   entrevista_data?: string;
   entrevista_hora?: string;
   zoom_link?: string;
   codigo_rastreio?: string;
   motivo_retorno?: string;
+}
+
+/**
+ * Blocos dinâmicos (caixa de entrevista, código de rastreio, motivo do retorno) por tipo.
+ * Injetados no corpo em tempo de envio para preservar o conteúdo variável mesmo quando o admin
+ * sobrescreve o corpo do e-mail na tela de configuração.
+ */
+export function emailDynamicBoxes(tipo: EmailTipo, extra: EmailExtra): string {
+  if (tipo === 'entrevista_agendada') return entrevistaBox(extra.entrevista_data, extra.entrevista_hora);
+  if (tipo === 'placa_em_caminho') return trackingCodeHtml(extra.codigo_rastreio || '');
+  if (tipo === 'retorno_auditoria') return motivoBox(extra.motivo_retorno || '');
+  return '';
+}
+
+/** Modelo padrão (texto estático, sem os blocos dinâmicos) — usado para pré-preencher a config. */
+export function defaultEmailTemplate(tipo: EmailTipo): { assunto: string; introducao: string; corpo_extra: string } {
+  const c = getEmailContentByStatus(tipo, {}, '');
+  return {
+    assunto: c.assunto,
+    introducao: c.templateData.introducao || '',
+    corpo_extra: c.templateData.corpo_extra || '',
+  };
 }
 
 export function getEmailContentByStatus(tipo: EmailTipo, extra: EmailExtra, ctaLink: string): EmailContent {
@@ -125,10 +152,7 @@ export function getEmailContentByStatus(tipo: EmailTipo, extra: EmailExtra, ctaL
       };
     }
     case 'retorno_auditoria': {
-      const motivo = (extra.motivo_retorno || '').trim();
-      const motivoHtml = motivo
-        ? `<div style="margin:18px 0;padding:16px;border-radius:10px;background:#fffbeb;border:1px solid #fcd34d;"><p style="margin:0 0 8px;font-size:12px;color:#92400e;text-transform:uppercase;letter-spacing:.04em;font-weight:700">O que precisa ser corrigido</p><p style="margin:0;font-size:14px;color:#78350f;line-height:1.6;white-space:pre-wrap;">${esc(motivo)}</p></div>`
-        : '';
+      const motivoHtml = motivoBox(extra.motivo_retorno || '');
       return {
         assunto: '[Holding Brasil] Pendência na sua solicitação',
         templateData: {

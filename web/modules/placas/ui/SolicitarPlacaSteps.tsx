@@ -1,0 +1,159 @@
+'use client';
+
+// Conteúdo das 6 etapas do wizard. Estado e handlers vêm do orquestrador (SolicitarPlacaClient) via props.
+
+import { Button } from '@/shared/ui/components';
+import { Icon } from '@/shared/ui/icons';
+import { maskPhoneMobile, maskPhoneLandline, maskDoc, maskCurrency, currencyDigits } from './masks';
+import { INTERESSES, UFS, type Form } from './solicitar-placa-constants';
+import { Section, Field, Nav } from './solicitar-placa-parts';
+
+export interface StepProps {
+  step: number;
+  form: Form;
+  set: (k: string, v: string) => void;
+  err: string;
+  busy: boolean;
+  dup: { email: boolean; documento_nf: boolean };
+  eligible: boolean;
+  checkDup: (field: 'email' | 'documento_nf') => void;
+  onCep: (v: string) => void;
+  onUpload: (kind: 'comprovante' | 'declaracao', file: File | null) => void;
+  goNext: (n: number) => void;
+  goBack: (n: number) => void;
+  onRecover: () => void;
+  espacos: { v: string; l: string }[];
+  niveis: { v: string; ic: string; nm: string; fx: string }[];
+  uploadInfo: string;
+  cadastroInfo: string;
+}
+
+export function StepContent(p: StepProps) {
+  const { step, form, set, err, busy, dup, eligible, checkDup, onCep, onUpload, goNext, goBack, onRecover, espacos, niveis, uploadInfo, cadastroInfo } = p;
+
+  if (step === 1) {
+    return (
+      <Section title="1. Seus dados" subtitle="Preencha seus dados de contato.">
+        <div className="sp-grid2">
+          <Field label="Nome completo" req><input value={form.nome || ''} onChange={(e) => set('nome', e.target.value)} placeholder="Seu nome completo" /></Field>
+          <Field label="E-mail" req><input type="email" value={form.email || ''} onChange={(e) => set('email', e.target.value)} onBlur={() => checkDup('email')} placeholder="seu@email.com" /></Field>
+          <Field label="WhatsApp" req><input value={form.telefone || ''} onChange={(e) => set('telefone', maskPhoneMobile(e.target.value))} placeholder="(11) 99999-9999" /></Field>
+          <Field label="Documento" req><input value={form.documento_nf || ''} onChange={(e) => set('documento_nf', maskDoc(e.target.value))} onBlur={() => checkDup('documento_nf')} placeholder="CPF ou CNPJ" inputMode="numeric" /></Field>
+          <Field label="Turma" req><input value={form.turma || ''} onChange={(e) => set('turma', e.target.value)} placeholder="Ex: T1" maxLength={24} /></Field>
+          <Field label="Profissão"><input value={form.profissao || ''} onChange={(e) => set('profissao', e.target.value)} placeholder="Ex: Empresário, Médico…" maxLength={100} /></Field>
+          <Field label="Telefone Profissional"><input value={form.telefone_profissional || ''} onChange={(e) => set('telefone_profissional', maskPhoneLandline(e.target.value))} placeholder="(11) 9999-9999" /></Field>
+          <Field label="Canal do YouTube"><input value={form.youtube_url || ''} onChange={(e) => set('youtube_url', e.target.value)} placeholder="https://youtube.com/@seucanal" /></Field>
+          <Field label="Site Profissional"><input value={form.site_profissional || ''} onChange={(e) => set('site_profissional', e.target.value)} placeholder="https://seusite.com.br" /></Field>
+          <Field label="Instagram"><input value={form.instagram_url || ''} onChange={(e) => set('instagram_url', e.target.value)} placeholder="@seuperfil" /></Field>
+          <Field label="Facebook"><input value={form.facebook_url || ''} onChange={(e) => set('facebook_url', e.target.value)} placeholder="@seuperfil" /></Field>
+        </div>
+        {dup.email && <p className="sp-err">Este e-mail já possui uma solicitação. <Button type="button" variant="ghost" size="sm" onClick={onRecover}>Recuperar</Button></p>}
+        {err && <p className="sp-err">{err}</p>}
+        <Nav onlyNext busy={busy} onNext={() => goNext(1)} nextLabel="Continuar →" />
+      </Section>
+    );
+  }
+
+  if (step === 2) {
+    return (
+      <Section title="2. Seu interesse" subtitle="O que você busca com a Holding Familiar?">
+        {INTERESSES.map((o) => (
+          <label key={o.v} className={`sp-radio ${form.interesse === o.v ? 'sel' : ''}`} onClick={() => set('interesse', o.v)}>
+            <span className="block font-medium">{o.l}</span>
+            <span className="block text-xs opacity-70 mt-0.5">{o.sub}</span>
+          </label>
+        ))}
+        {err && <p className="sp-err">{err}</p>}
+        <Nav busy={busy} onBack={() => goBack(2)} onNext={() => goNext(2)} nextLabel="Continuar →" />
+      </Section>
+    );
+  }
+
+  if (step === 3) {
+    return (
+      <Section title="3. Seu nível" subtitle="Considere todos os ativos gerados com Holding Familiar.">
+        <div className="sp-field"><label>Espaço de instrução <span className="req">*</span></label>
+          <div className="sp-hint" style={{ marginTop: 0, marginBottom: 8 }}>Selecione o ambiente em que você acompanha sua formação para mantermos seu cadastro organizado corretamente.</div>
+          {espacos.map((o) => (
+            <label key={o.v} className={`sp-radio ${form.espaco_instrucao === o.v ? 'sel' : ''}`} onClick={() => set('espaco_instrucao', o.v)}>{o.l}</label>
+          ))}
+        </div>
+        <div className="sp-info">Considere todos os ativos gerados trabalhando com Holding Familiar, incluindo Sessões de Viabilidade, Croquis Estruturais e outros serviços relacionados ao tema.</div>
+        <div className="sp-field"><label>Nível atual <span className="req">*</span></label>
+          <div className="sp-level-grid">
+            {niveis.map((o) => (
+              <label key={o.v} className={`sp-level ${form.nivel === o.v ? 'sel' : ''}`} onClick={() => set('nivel', o.v)}>
+                <div className="ic"><Icon name={o.ic} size={22} /></div><div className="nm">{o.nm}</div><div className="fx">{o.fx}</div>
+              </label>
+            ))}
+          </div>
+        </div>
+        {eligible && (
+          <Field label="Faturamento declarado (R$)" req>
+            <input value={form.faturamento_fmt || ''} onChange={(e) => { const m = maskCurrency(e.target.value); set('faturamento_fmt', m); set('faturamento_declarado', String(currencyDigits(e.target.value))); }} placeholder="R$ 0" inputMode="numeric" />
+            <div className="sp-hint">Valor total gerado com Holding Familiar, em reais.</div>
+          </Field>
+        )}
+        {!eligible && form.nivel && <div className="sp-info">{cadastroInfo}</div>}
+        {err && <p className="sp-err">{err}</p>}
+        <Nav busy={busy} onBack={() => goBack(3)} onNext={() => goNext(3)} nextLabel={eligible ? 'Continuar para comprovação →' : 'Concluir cadastro →'} />
+      </Section>
+    );
+  }
+
+  if (step === 4) {
+    return (
+      <Section title="4. Comprovação" subtitle="Envie os documentos que comprovem o nível informado.">
+        <div className="sp-info">{uploadInfo}</div>
+        <div className="sp-warn"><Icon name="alert" size={14} /> Certifique-se de que o arquivo esteja legível (PDF ou imagem, até 10MB).</div>
+        <Field label="Documento comprobatório (PDF ou imagem)" req>
+          <input type="file" accept=".pdf,image/*" onChange={(e) => onUpload('comprovante', e.target.files?.[0] ?? null)} />
+          {form.proof_url && <div className="sp-hint"><Icon name="check" size={13} /> Arquivo enviado.</div>}
+        </Field>
+        {err && <p className="sp-err">{err}</p>}
+        <Nav busy={busy} onBack={() => goBack(4)} onNext={() => goNext(4)} nextLabel="Continuar para declaração →" />
+      </Section>
+    );
+  }
+
+  if (step === 5) {
+    return (
+      <Section title="5. Declaração" subtitle="Validação formal do nível de faturamento informado.">
+        <div className="sp-info"><strong>Passo 1:</strong> baixe o modelo oficial, preencha os campos de identificação e assine — sem alterar o texto base.</div>
+        <a className="sp-btn-back inline-flex items-center gap-1.5" href="/modelos/declaracao-faturamento.pdf" target="_blank" rel="noopener" style={{ marginBottom: 12 }}><Icon name="download" size={15} /> Baixar Modelo da Declaração</a>
+        <div className="sp-warn"><strong className="inline-flex items-center gap-1.5"><Icon name="alert" size={14} /> Atenção:</strong> após assinar, faça o upload do arquivo original (sem edições no texto base).</div>
+        <Field label="Declaração assinada (PDF ou imagem)" req>
+          <input type="file" accept=".pdf,image/*" onChange={(e) => onUpload('declaracao', e.target.files?.[0] ?? null)} />
+          {form.declaracao_url && <div className="sp-hint"><Icon name="check" size={13} /> Arquivo enviado.</div>}
+        </Field>
+        {err && <p className="sp-err">{err}</p>}
+        <Nav busy={busy} onBack={() => goBack(5)} onNext={() => goNext(5)} nextLabel="Continuar para endereço →" />
+      </Section>
+    );
+  }
+
+  if (step === 6) {
+    return (
+      <Section title="6. Endereço de entrega" subtitle="Digite o CEP e aguarde o preenchimento automático.">
+        <Field label="CEP" req><input value={form.cep || ''} onChange={(e) => onCep(e.target.value)} placeholder="00000-000" maxLength={9} inputMode="numeric" /></Field>
+        <Field label="Logradouro" req><input value={form.logradouro || ''} onChange={(e) => set('logradouro', e.target.value)} placeholder="Rua / Avenida…" /></Field>
+        <div className="sp-grid2">
+          <Field label="Número" req><input value={form.numero || ''} onChange={(e) => set('numero', e.target.value)} placeholder="123" inputMode="numeric" /></Field>
+          <Field label="Complemento"><input value={form.complemento || ''} onChange={(e) => set('complemento', e.target.value)} placeholder="Apto 42…" /></Field>
+          <Field label="Bairro" req><input value={form.bairro || ''} onChange={(e) => set('bairro', e.target.value)} placeholder="Bairro" /></Field>
+          <Field label="Cidade" req><input value={form.cidade || ''} onChange={(e) => set('cidade', e.target.value)} placeholder="Cidade" /></Field>
+        </div>
+        <Field label="Estado" req>
+          <select value={form.estado_uf || ''} onChange={(e) => set('estado_uf', e.target.value)}>
+            <option value="">Selecione…</option>
+            {UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+          </select>
+        </Field>
+        {err && <p className="sp-err">{err}</p>}
+        <Nav busy={busy} onBack={() => goBack(6)} onNext={() => goNext(6)} nextLabel="Concluir solicitação" />
+      </Section>
+    );
+  }
+
+  return null;
+}
