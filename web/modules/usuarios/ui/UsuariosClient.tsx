@@ -106,24 +106,30 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
   const cargoOpts = grantaveis.includes(atual) ? grantaveis : [...grantaveis, atual];
   const [cargo, setCargo] = useState<Cargo>(atual);
   const [status, setStatus] = useState(u.status || 'pendente');
+  const [nome, setNome] = useState(u.nome || '');
+  const [time, setTime] = useState(u.time || '');
   const [areas, setAreas] = useState<string[]>(u.areas || []);
   const [funcoes, setFuncoes] = useState<string[]>(u.funcoes || []);
   const [cpf, setCpf] = useState(!!u.pode_ver_cpf_completo);
   const [busy, setBusy] = useState(false);
+  const souDev = meuCargo === 'dev';
 
   async function save() {
     setBusy(true);
     // Só persiste funções dos setores marcados (evita função órfã de setor removido).
     const funcoesValidas = funcoes.filter((f) => areas.includes(FUNCAO_META[f]?.setor ?? f.split('.')[0]));
+    const fields: Record<string, unknown> = { cargo, status, areas, funcoes: funcoesValidas, pode_ver_cpf_completo: cpf };
+    if (souDev) { fields.nome = nome; fields.time = time; }
     const r = await fetchJson<{ ok?: boolean; error?: string }>('/api/admin/usuarios', {
       method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: u.id, fields: { cargo, status, areas, funcoes: funcoesValidas, pode_ver_cpf_completo: cpf } }),
+      body: JSON.stringify({ id: u.id, fields }),
     });
     setBusy(false);
     onSaved(r.json?.ok ? 'Usuário atualizado!' : (r.json?.error || (r.status === 0 ? 'Sem conexão — tente novamente.' : 'Falhou.')));
   }
-  const showSetores = cargo === 'gestor' || cargo === 'operador';
-  const showFuncoes = cargo === 'operador' && areas.length > 0;
+  // Dev enxerga e ajusta todos os dados de acesso, independente do cargo do alvo.
+  const showSetores = souDev || cargo === 'gestor' || cargo === 'operador';
+  const showFuncoes = (souDev || cargo === 'operador') && areas.length > 0;
   const funcoesDisponiveis = Object.entries(FUNCAO_META).filter(([, m]) => areas.includes(m.setor));
 
   return (
@@ -134,6 +140,16 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
       badges={<Badge tone={statusTone[status] || 'neutral'} dot>{status}</Badge>}
     >
       <div className="space-y-3">
+        {souDev && (
+          <>
+            <label className="block"><span className="text-xs text-[var(--fg-3)]">Nome</span>
+              <Input value={nome} onChange={(e) => setNome(e.target.value)} className="mt-1" />
+            </label>
+            <label className="block"><span className="text-xs text-[var(--fg-3)]">Equipe / time</span>
+              <Input value={time} onChange={(e) => setTime(e.target.value)} placeholder="Ex.: Ativação" className="mt-1" />
+            </label>
+          </>
+        )}
         <label className="block"><span className="text-xs text-[var(--fg-3)]">Cargo</span>
           <FilterSelect value={cargo} onChange={(e) => setCargo(e.target.value as Cargo)} className="mt-1">
             {cargoOpts.map((c) => <option key={c} value={c}>{CARGO_META[c].label}</option>)}
