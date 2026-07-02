@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'Solicitar Placa — Time Holding Brasil',
-  description: 'Solicitação de Placa — Treinamento em Holding Familiar',
+  description: 'Solicitação de Placa — Time Holding Brasil',
 };
 
 export default async function SolicitarPlacaPage({

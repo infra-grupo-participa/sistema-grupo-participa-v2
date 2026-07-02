@@ -5,8 +5,9 @@
 import { Button } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { maskPhoneMobile, maskPhoneLandline, maskDoc, maskCurrency, currencyDigits } from './masks';
-import { INTERESSES, UFS, type Form } from './solicitar-placa-constants';
+import { INTERESSES, UFS, TURMAS, type Form } from './solicitar-placa-constants';
 import { Section, Field, Nav } from './solicitar-placa-parts';
+import { ProfissaoAutocomplete } from './ProfissaoAutocomplete';
 
 export interface StepProps {
   step: number;
@@ -39,8 +40,13 @@ export function StepContent(p: StepProps) {
           <Field label="E-mail" req><input type="email" value={form.email || ''} onChange={(e) => set('email', e.target.value)} onBlur={() => checkDup('email')} placeholder="seu@email.com" /></Field>
           <Field label="WhatsApp" req><input value={form.telefone || ''} onChange={(e) => set('telefone', maskPhoneMobile(e.target.value))} placeholder="(11) 99999-9999" /></Field>
           <Field label="Documento" req><input value={form.documento_nf || ''} onChange={(e) => set('documento_nf', maskDoc(e.target.value))} onBlur={() => checkDup('documento_nf')} placeholder="CPF ou CNPJ" inputMode="numeric" /></Field>
-          <Field label="Turma" req><input value={form.turma || ''} onChange={(e) => set('turma', e.target.value)} placeholder="Ex: T1" maxLength={24} /></Field>
-          <Field label="Profissão"><input value={form.profissao || ''} onChange={(e) => set('profissao', e.target.value)} placeholder="Ex: Empresário, Médico…" maxLength={100} /></Field>
+          <Field label="Turma" req>
+            <select value={form.turma || ''} onChange={(e) => set('turma', e.target.value)}>
+              <option value="">Selecione sua turma…</option>
+              {TURMAS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </Field>
+          <Field label="Profissão"><ProfissaoAutocomplete value={form.profissao || ''} onChange={(v) => set('profissao', v)} /></Field>
           <Field label="Telefone Profissional"><input value={form.telefone_profissional || ''} onChange={(e) => set('telefone_profissional', maskPhoneLandline(e.target.value))} placeholder="(11) 9999-9999" /></Field>
           <Field label="Canal do YouTube"><input value={form.youtube_url || ''} onChange={(e) => set('youtube_url', e.target.value)} placeholder="https://youtube.com/@seucanal" /></Field>
           <Field label="Site Profissional"><input value={form.site_profissional || ''} onChange={(e) => set('site_profissional', e.target.value)} placeholder="https://seusite.com.br" /></Field>

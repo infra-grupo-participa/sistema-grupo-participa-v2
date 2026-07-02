@@ -12,7 +12,7 @@ export function Wrap({ children }: { children: React.ReactNode }) {
       <div className="sp-brand">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img className="sp-brand-mark" src="/images/TimeHoldingBrasil.svg" alt="Time Holding Brasil" />
-        <div className="sp-brand-sub">Solicitação de Placa — Treinamento em Holding Familiar</div>
+        <div className="sp-brand-sub">Solicitação de Placa — Time Holding Brasil</div>
       </div>
       {children}
     </div>
