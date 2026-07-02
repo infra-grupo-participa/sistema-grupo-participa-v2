@@ -29,15 +29,29 @@ export function allowedOrigins(): string[] {
   return Array.from(new Set([...LEGACY_ORIGINS, ...env.app.allowedOrigins].map((o) => originBase(o)).filter(Boolean)));
 }
 
-/** Valida Origin/Referer contra a allowlist. Retorna a base válida ou null. */
+/** Origem do próprio deploy (proto+host), considerando proxies (Hostinger/Vercel). */
+function selfOrigin(request: Request): string {
+  const h = request.headers;
+  const proto = (h.get('x-forwarded-proto') || '').split(',')[0].trim() || 'https';
+  const host = (h.get('x-forwarded-host') || h.get('host') || '').split(',')[0].trim();
+  return host ? `${proto}://${host}`.toLowerCase() : '';
+}
+
+/**
+ * Valida Origin/Referer contra a allowlist. Retorna a base válida ou null.
+ * Requisições same-origin (a origem bate com o próprio host do deploy) são sempre
+ * aceitas — é o caso normal do formulário e não configura CSRF de terceiros. Isso
+ * dispensa cadastrar domínios de preview/definitivos (ex.: *.hostingersite.com) na allowlist.
+ */
 export function validateOrigin(request: Request): string | null {
   const origin = request.headers.get('origin') || '';
   const referer = request.headers.get('referer') || '';
   if (!origin && !referer) return null;
   const allow = allowedOrigins();
+  const self = selfOrigin(request);
   for (const header of [origin, referer]) {
     const base = originBase(header);
-    if (base && allow.includes(base)) return base;
+    if (base && (allow.includes(base) || (self && base === self))) return base;
   }
   return null;
 }
