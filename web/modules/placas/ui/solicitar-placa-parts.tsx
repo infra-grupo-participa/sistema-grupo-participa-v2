@@ -109,9 +109,27 @@ export function SuccessCard({ kind }: { kind: 'success' | 'cadastro' }) {
   );
 }
 
+/** Formata a data da entrevista (YYYY-MM-DD) por extenso, ancorada em America/Sao_Paulo. */
+function fmtInterviewDate(iso: string): string {
+  const dt = new Date(`${iso}T12:00:00-03:00`);
+  if (Number.isNaN(dt.getTime())) return iso;
+  const s = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo' }).format(dt);
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export function TrackingCard({ data }: { data: Record<string, unknown> }) {
   const { activeIndex } = getClientTrackingState(data);
   const rastreio = String(data.codigo_rastreio ?? '');
+  const token = String(data.token ?? '');
+  const entrevistaData = String(data.entrevista_data ?? '').slice(0, 10);
+  const entrevistaHora = String(data.entrevista_hora ?? '').slice(0, 5);
+  const zoomLink = String(data.entrevista_link ?? data.meet_link ?? '');
+  const agendarHref = `/agendar-entrevista${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+
+  // Marco "Entrevista Realizada" ativo (index 2) = documentação aprovada, entrevista pendente.
+  const inInterviewPhase = activeIndex === 2;
+  const hasInterview = inInterviewPhase && Boolean(entrevistaData);
+
   const tlItems: TimelineEntry[] = CLIENT_TRACKING_STEPS.map((s, i) => ({
     title: s.title,
     body: s.note,
@@ -119,6 +137,7 @@ export function TrackingCard({ data }: { data: Record<string, unknown> }) {
     done: i < activeIndex,
     icon: i < activeIndex ? undefined : String(i + 1),
   }));
+
   return (
     <div className="sp-card">
       <div className="sp-card-head" style={{ background: 'var(--orange)', color: '#fff' /* hex-ok: contraste branco sobre header âmbar da marca */ }}>
@@ -126,6 +145,23 @@ export function TrackingCard({ data }: { data: Record<string, unknown> }) {
         <p style={{ color: 'rgba(255,255,255,.85)' /* hex-ok: contraste branco sobre header âmbar */ }}>Sua solicitação está em andamento</p>
       </div>
       <div className="sp-card-body">
+        {inInterviewPhase && !hasInterview && (
+          <div className="sp-sched">
+            <div className="sp-sched-title"><Icon name="check-circle" size={17} /> Documentação aprovada!</div>
+            <p className="sp-sched-desc">Agora agende sua entrevista por videoconferência no melhor dia e horário para você.</p>
+            <a className="sp-sched-cta" href={agendarHref}><Icon name="calendar-days" size={16} /> Agendar entrevista</a>
+          </div>
+        )}
+        {hasInterview && (
+          <div className="sp-sched sp-sched-set">
+            <div className="sp-sched-title"><Icon name="calendar-days" size={17} /> Entrevista agendada</div>
+            <p className="sp-sched-when">{fmtInterviewDate(entrevistaData)} às <strong>{entrevistaHora}</strong></p>
+            <div className="sp-sched-actions">
+              {zoomLink && <a className="sp-sched-cta" href={zoomLink} target="_blank" rel="noopener"><Icon name="link" size={15} /> Entrar na sala</a>}
+              <a className="sp-sched-alt" href={agendarHref}>Reagendar</a>
+            </div>
+          </div>
+        )}
         <Timeline items={tlItems} />
         {rastreio && (
           <div className="sp-info" style={{ marginTop: 16 }}>Código de rastreio: <strong>{rastreio}</strong></div>

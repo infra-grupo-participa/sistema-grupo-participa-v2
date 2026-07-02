@@ -94,11 +94,9 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
   return (
     <div className="sp-wrap">
       <div className="sp-brand">
-        <div className="sp-brand-logo">GP</div>
-        <div>
-          <div className="sp-brand-name">Grupo Participa</div>
-          <div className="sp-brand-sub">Agendamento de Entrevista</div>
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="sp-brand-mark" src="/images/TimeHoldingBrasil.svg" alt="Time Holding Brasil" />
+        <div className="sp-brand-sub">Agendamento de Entrevista — Time Holding Brasil</div>
       </div>
       {view === 'loading' && (
         <Card>
