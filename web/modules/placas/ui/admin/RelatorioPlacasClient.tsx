@@ -20,6 +20,7 @@ import { SolicitacaoDrawer } from './SolicitacaoDrawer';
 import { ConfigPanel } from './ConfigPanel';
 import { AgendaHorarios } from './AgendaHorarios';
 import { fmtRelativo } from './relatorio-shared';
+import { exportarExcelPlacas } from './placas-export';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://grupoparticipa.app.br';
 
@@ -155,6 +156,23 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
 
   const open = openId ? sols.find((s) => s.id === openId) ?? null : null;
   const abrir = useCallback((id: string) => setOpenId(id), []);
+
+  const [exportando, setExportando] = useState(false);
+  const exportar = useCallback(async () => {
+    setExportando(true);
+    try {
+      // Exporta todos os elegíveis que batem com a busca (independe da gaveta) — a
+      // elegibilidade (entrevista finalizada+) é aplicada dentro de exportarExcelPlacas.
+      const term = dq.trim().toLowerCase();
+      const base = sols.filter((s) => !term || `${s.nome ?? ''} ${s.email ?? ''} ${s.documento_nf ?? ''}`.toLowerCase().includes(term));
+      const n = await exportarExcelPlacas(base);
+      flash(n ? `${n} ${n === 1 ? 'solicitação exportada' : 'solicitações exportadas'}.` : 'Nenhum registro elegível para exportar (entrevista finalizada em diante).');
+    } catch {
+      flash('Não foi possível gerar a planilha.');
+    } finally {
+      setExportando(false);
+    }
+  }, [sols, dq, flash]);
   const linkPublico = `${origin}/solicitar-placa`;
   const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
@@ -168,6 +186,14 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
               <span className="ml-2 align-middle text-xs font-semibold rounded-[var(--r-pill)] bg-[var(--accent-subtle)] text-[var(--accent)] px-2 py-0.5 tabular">{sols.length}</span>
             </h1>
             <div className="flex items-center gap-2">
+              <button
+                onClick={exportar}
+                disabled={exportando}
+                title="Exportar solicitações elegíveis (.xlsx)"
+                className="inline-flex items-center justify-center gap-1.5 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent border transition-colors text-[var(--fg-2)] border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] disabled:opacity-50"
+              >
+                <Icon name="download" size={14} /> {exportando ? 'Gerando…' : 'Exportar Excel'}
+              </button>
               <button
                 title={linkPublico}
                 onClick={() => { navigator.clipboard?.writeText(linkPublico); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}
