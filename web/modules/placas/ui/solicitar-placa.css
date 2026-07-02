@@ -12,18 +12,37 @@
   --bg: #f3f5f8;
   --card: #ffffff;
   --r: 16px;
-  /* Alias dos tokens globais para componentes compartilhados (Timeline, Badge,
-     ProgressBar, Modal) renderizarem no tema CLARO do formulário público. */
-  --fg: var(--ink);
-  --fg-2: var(--muted);
-  --fg-3: var(--faint);
-  --border: var(--line);
+  /* Tema CLARO completo para os componentes compartilhados (Badge, Button, EmptyState,
+     Loading, Modal, Timeline, ProgressBar). Sem isto eles herdam os tokens do tema ESCURO
+     global (ex.: --surface-3 escuro no fundo dos chips) e vazam resquícios dark no
+     formulário público. Valores alinhados ao tema claro de app/globals.css. */
+  --fg: #0f172a;
+  --fg-2: #475569;
+  --fg-3: #64748b;
+  --fg-4: #94a3b8;
+  --surface-0: #eef1f6;
+  --surface-1: #ffffff;
+  --surface-2: #ffffff;
+  --surface-3: #eef1f6;
+  --surface-4: #dde3ec;
+  --border-faint: rgba(15, 23, 42, 0.06);
+  --border: rgba(15, 23, 42, 0.12);
+  --border-strong: rgba(15, 23, 42, 0.22);
+  --border-accent: rgba(242, 151, 37, 0.42);
   --accent: var(--orange);
-  --green: #16a34a;
-  --yellow: #d97706;
-  --red: #dc2626;
-  --purple: #7c3aed;
-  --info: #0ea5e9;
+  --accent-dim: var(--orange-2);
+  --accent-subtle: var(--orange-soft);
+  --accent-border: rgba(242, 151, 37, 0.28);
+  --green: #15803d;
+  --green-subtle: rgba(21, 128, 61, 0.12);
+  --green-border: rgba(21, 128, 61, 0.28);
+  --yellow: #b45309;
+  --yellow-subtle: rgba(180, 83, 9, 0.12);
+  --red: #b91c1c;
+  --red-subtle: rgba(185, 28, 28, 0.12);
+  --purple: #6d28d9;
+  --info: #2563eb;
+  --nivel-base: #64748b;
   min-height: 100dvh;
   background: radial-gradient(1200px 500px at 50% -200px, rgba(242, 151, 37, 0.08), transparent 60%), var(--bg);
   color: var(--ink);
