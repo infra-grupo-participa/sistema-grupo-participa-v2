@@ -9,7 +9,7 @@ import { Icon } from '@/shared/ui/icons';
 
 const VIEWS_KEY = 'gp_dash_views';
 /* viz-colors: paleta de fatias do donut por turma — cores de gráfico, não da UI */
-const DONUT_COLORS = ['#f29725', '#60a5fa', '#a78bfa', '#34d399', '#f87171', '#fbbf24', '#22d3ee', '#c084fc'];
+const DONUT_COLORS = ['#f29725', '#60a5fa', '#a78bfa', '#34d399', '#f87171', '#fbbf24', '#22d3ee', '#c084fc']; /* viz-colors */
 
 interface SavedView {
   name: string;

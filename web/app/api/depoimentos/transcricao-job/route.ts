@@ -10,6 +10,9 @@ import { extractDriveFolderId } from '@/modules/depoimentos/domain/drive';
 // Porta de app/api/depoimentos/transcricao-job.php.
 // O Node enfileira/consulta o job; o worker Python (faster-whisper) faz Drive + transcrição.
 
+// Colunas que o cliente consome (interface TranscriptionJob) — evita puxar prompt_context/etc.
+const JOB_COLS = 'id, status, transcript, source_audios_count, audios_succeeded, audios_failed, error_message, processing_notes';
+
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user || !ehAdminOuAcima(user)) return jsonError('Não autorizado.', 403);
@@ -19,7 +22,7 @@ export async function GET(request: NextRequest) {
   if (!isUuid(jobId)) return jsonError('Informe um job válido.', 400);
 
   const admin = createAdminSupabase();
-  const { data } = await admin.from('gp_depoimento_transcription_jobs').select('*').eq('id', jobId).maybeSingle();
+  const { data } = await admin.from('gp_depoimento_transcription_jobs').select(JOB_COLS).eq('id', jobId).maybeSingle();
   if (!data) return jsonError('Job de transcrição não encontrado.', 404);
   return jsonOk({ success: true, data });
 }
@@ -39,7 +42,7 @@ export async function POST(request: NextRequest) {
   // Reaproveita job recente da mesma pasta (a não ser que force=true).
   const { data: latest } = await admin
     .from('gp_depoimento_transcription_jobs')
-    .select('*')
+    .select(JOB_COLS)
     .eq('folder_id', folderId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -65,7 +68,7 @@ export async function POST(request: NextRequest) {
       },
       requested_by: user.id,
     })
-    .select('*')
+    .select(JOB_COLS)
     .single();
 
   if (error || !created) return jsonError('Não foi possível enfileirar a transcrição agora.', 502);

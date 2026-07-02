@@ -91,15 +91,15 @@ export async function POST(request: NextRequest) {
     const adminEmail = process.env.ADMIN_EMAIL || 'contato@grupoparticipa.app.br';
     const dataFmt = data.split('-').reverse().join('/');
     const zoomBtn = zoomLink
-      ? `<p><a href="${escapeHtml(zoomLink)}" target="_blank" style="background:#2D8CFF;color:#fff;text-decoration:none;padding:12px 25px;border-radius:5px;font-weight:bold;display:inline-block">Acessar Sala (Zoom)</a></p>`
-      : '<p style="color:#c00;font-weight:bold;">⚠ Link Zoom não foi gerado — verificar manualmente.</p>';
+      ? `<p><a href="${escapeHtml(zoomLink)}" target="_blank" style="background:#2D8CFF;color:#fff;text-decoration:none;padding:12px 25px;border-radius:5px;font-weight:bold;display:inline-block">Acessar Sala (Zoom)</a></p>` // hex-ok: e-mail
+      : '<p style="color:#c00;font-weight:bold;">⚠ Link Zoom não foi gerado — verificar manualmente.</p>'; // hex-ok: e-mail
     await sendMail({
       to: adminEmail,
       subject: `Candidato agendou entrevista — ${dataFmt} às ${hora}`,
       html:
-        `<div style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px;">` +
-        `<h2 style="color:#F29725;">Candidato agendou entrevista</h2>` +
-        `<div style="background:#f8f9fa;border-left:4px solid #F29725;padding:15px;margin:20px 0;">` +
+        `<div style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px;">` + // hex-ok: e-mail
+        `<h2 style="color:#F29725;">Candidato agendou entrevista</h2>` + // hex-ok: e-mail
+        `<div style="background:#f8f9fa;border-left:4px solid #F29725;padding:15px;margin:20px 0;">` + // hex-ok: e-mail
         `<p style="margin:0"><strong>Candidato:</strong> ${escapeHtml(String(sol.nome ?? 'Candidato'))}</p>` +
         `<p style="margin:5px 0 0"><strong>E-mail:</strong> ${escapeHtml(String(sol.email ?? ''))}</p>` +
         `<p style="margin:5px 0 0"><strong>Data:</strong> ${dataFmt}</p>` +

@@ -8,6 +8,13 @@ export interface GroqChatResult {
   error?: string;
 }
 
+/** Shape mínimo da resposta OpenAI-compatible — só os campos que consumimos. */
+interface GroqResponse {
+  message?: unknown;
+  error?: { message?: unknown } | null;
+  choices?: Array<{ message?: { content?: unknown } | null }>;
+}
+
 export async function groqChatJson(opts: {
   apiKey: string;
   model: string;
@@ -33,16 +40,9 @@ export async function groqChatJson(opts: {
       signal: AbortSignal.timeout(90000),
     });
     const retryAfter = resp.headers.get('retry-after') ?? '';
-    const json = (await resp.json().catch(() => null)) as Record<string, unknown> | null;
-    const upstreamMessage =
-      (json?.error as Record<string, unknown> | undefined)?.message != null
-        ? String((json!.error as Record<string, unknown>).message)
-        : String((json as Record<string, unknown>)?.message ?? '');
-    const content = String(
-      ((json?.choices as unknown[])?.[0] as Record<string, unknown> | undefined)?.message != null
-        ? ((((json!.choices as unknown[])[0] as Record<string, unknown>).message as Record<string, unknown>).content ?? '')
-        : '',
-    );
+    const json = (await resp.json().catch(() => null)) as GroqResponse | null;
+    const upstreamMessage = String(json?.error?.message ?? json?.message ?? '');
+    const content = String(json?.choices?.[0]?.message?.content ?? '');
     return { status: resp.status, retryAfter, content, upstreamMessage };
   } catch (e) {
     return { status: 0, retryAfter: '', content: '', upstreamMessage: '', error: String(e) };

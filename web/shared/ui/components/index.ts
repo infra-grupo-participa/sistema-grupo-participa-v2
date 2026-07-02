@@ -9,3 +9,4 @@ export { Checkbox } from './Checkbox';
 export { Modal, ConfirmDialog } from './Modal';
 export { Timeline } from './Timeline';
 export type { TimelineEntry } from './Timeline';
+export { Toast, useFlash } from './Toast';

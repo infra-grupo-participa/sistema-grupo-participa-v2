@@ -15,13 +15,14 @@ export interface HighlightsResult {
   antes_depois: AntesDepois | null;
   gancho: string | null;
   resumo: string | null;
+  metricas: string[];
 }
 
 const cut = (s: string, n: number) => Array.from(String(s ?? '').trim()).slice(0, n).join('');
 
 /** Normaliza a saída JSON do Groq nos limites/whitelist exatos do legado. */
 export function parseGroqHighlights(parsed: Record<string, unknown> | null): HighlightsResult {
-  const out: HighlightsResult = { highlights: [], objecao: null, antes_depois: null, gancho: null, resumo: null };
+  const out: HighlightsResult = { highlights: [], objecao: null, antes_depois: null, gancho: null, resumo: null, metricas: [] };
   if (!parsed || typeof parsed !== 'object') return out;
 
   for (const hl of (Array.isArray(parsed.highlights) ? parsed.highlights : []) as unknown[]) {
@@ -46,6 +47,12 @@ export function parseGroqHighlights(parsed: Record<string, unknown> | null): Hig
     const antes = String((ad as Record<string, unknown>).antes ?? '').trim();
     const depois = String((ad as Record<string, unknown>).depois ?? '').trim();
     if (antes || depois) out.antes_depois = { antes: cut(antes, 400), depois: cut(depois, 400) };
+  }
+
+  for (const m of (Array.isArray(parsed.metricas) ? parsed.metricas : []) as unknown[]) {
+    const texto = cut(String(m ?? ''), 200);
+    if (texto) out.metricas.push(texto);
+    if (out.metricas.length >= 6) break;
   }
   return out;
 }

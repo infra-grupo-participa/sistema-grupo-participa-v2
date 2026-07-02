@@ -97,17 +97,6 @@ export function computeTurmaEspacoMatrix(alunos: Aluno360[]): TurmaEspacoMatrix 
   return { turmas, colunas, cells, max };
 }
 
-function tally(rows: Aluno360[], keyFn: (a: Aluno360) => string | null, labelFn?: (k: string) => string): Distribuicao[] {
-  const map = new Map<string, number>();
-  for (const a of rows) {
-    const k = keyFn(a) ?? '__none__';
-    map.set(k, (map.get(k) ?? 0) + 1);
-  }
-  return Array.from(map.entries())
-    .map(([key, count]) => ({ key, count, label: key === '__none__' ? '—' : labelFn ? labelFn(key) : key }))
-    .sort((x, y) => y.count - x.count);
-}
-
 export function computeAlunosMetrics(alunos: Aluno360[], view: DashView = 'alunos', filtros: DashFiltros = {}): AlunosMetrics {
   const base = applyDashFilters(alunos, view, filtros);
   const total = base.length;

@@ -15,17 +15,19 @@ import {
   Td,
   Th,
   Thead,
+  Toast,
   Toggle,
   Toolbar,
   Tr,
+  useFlash,
 } from '@/shared/ui/components';
+import { fetchJson } from '@/shared/ui/fetch-json';
 
 interface PerfilRow {
   id: string; nome: string | null; email: string | null; cargo: string | null; status: string | null;
   nivel_hierarquia: string | null; eh_dev: boolean | null; pode_ver_cpf_completo: boolean | null; areas: string[] | null; time: string | null;
 }
 
-const statusColor: Record<string, string> = { ativo: 'var(--green)', pendente: 'var(--yellow)', negado: 'var(--red)' };
 const statusTone: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = { ativo: 'success', pendente: 'warning', negado: 'danger' };
 
 export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
@@ -34,17 +36,15 @@ export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
   const [q, setQ] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [toast, setToast] = useState('');
+  const { toast, flash } = useFlash();
   const grantaveis = cargosGrantaveis(meuCargo);
 
   const reload = useCallback(async () => {
-    const r = await fetch('/api/admin/usuarios', { credentials: 'include' });
-    const j = await r.json().catch(() => ({}));
-    setUsers(j?.usuarios ?? []);
+    const r = await fetchJson<{ usuarios?: PerfilRow[] }>('/api/admin/usuarios', { credentials: 'include' });
+    setUsers(r.json?.usuarios ?? []);
   }, []);
   useEffect(() => { (async () => { await reload(); setLoading(false); })(); }, [reload]);
 
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000); };
   const filtered = useMemo(() => {
     const t = q.toLowerCase().trim();
     return users.filter((u) => !t || `${u.nome ?? ''} ${u.email ?? ''}`.toLowerCase().includes(t));
@@ -93,7 +93,7 @@ export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
 
       {editing && <EditDrawer u={editing} meuCargo={meuCargo} onClose={() => setEditId(null)} onSaved={async (m) => { flash(m); setEditId(null); await reload(); }} />}
       {inviteOpen && <InviteDrawer grantaveis={grantaveis} onClose={() => setInviteOpen(false)} onSaved={async (m) => { flash(m); setInviteOpen(false); await reload(); }} />}
-      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface-4)] text-[var(--fg)] px-4 py-2 rounded-[var(--r-md)] shadow-[var(--shadow-lg)] text-sm z-[1100]">{toast}</div>}
+      <Toast>{toast}</Toast>
     </div>
   );
 }
@@ -110,13 +110,12 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
 
   async function save() {
     setBusy(true);
-    const r = await fetch('/api/admin/usuarios', {
+    const r = await fetchJson<{ ok?: boolean; error?: string }>('/api/admin/usuarios', {
       method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: u.id, fields: { cargo, status, areas, pode_ver_cpf_completo: cpf } }),
     });
-    const j = await r.json().catch(() => ({}));
     setBusy(false);
-    onSaved(j?.ok ? 'Usuário atualizado!' : (j?.error || 'Falhou.'));
+    onSaved(r.json?.ok ? 'Usuário atualizado!' : (r.json?.error || (r.status === 0 ? 'Sem conexão — tente novamente.' : 'Falhou.')));
   }
   const showSetores = cargo === 'gestor' || cargo === 'operador';
 
@@ -166,14 +165,13 @@ function InviteDrawer({ grantaveis, onClose, onSaved }: { grantaveis: Cargo[]; o
 
   async function invite() {
     setBusy(true); setErr('');
-    const r = await fetch('/api/admin/usuarios', {
+    const r = await fetchJson<{ ok?: boolean; error?: string }>('/api/admin/usuarios', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, nome, cargo }),
     });
-    const j = await r.json().catch(() => ({}));
     setBusy(false);
-    if (j?.ok) onSaved('Convite enviado!');
-    else setErr(j?.error || 'Falhou.');
+    if (r.json?.ok) onSaved('Convite enviado!');
+    else setErr(r.json?.error || (r.status === 0 ? 'Sem conexão — tente novamente.' : 'Falhou.'));
   }
 
   return (

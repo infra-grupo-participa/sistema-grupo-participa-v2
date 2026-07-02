@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, Tabs, Badge, Button, Card, Toolbar, SearchInput, Input } from '@/shared/ui/components';
+import { NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, Tabs, Badge, Button, Card, Toolbar, SearchInput, Input, Toast, useFlash } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
+import { fmtData } from '@/shared/ui/format';
 import {
   type Curso,
   type DepoimentoView,
@@ -30,7 +31,7 @@ export function DepoimentosClient({ canEdit }: { canEdit: boolean }) {
   const [q, setQ] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState('');
+  const { toast, flash } = useFlash();
 
   const reload = useCallback(async () => setRows(await loadDepoimentosView()), []);
   useEffect(() => {
@@ -43,8 +44,6 @@ export function DepoimentosClient({ canEdit }: { canEdit: boolean }) {
     window.addEventListener('hashchange', applyHash);
     return () => window.removeEventListener('hashchange', applyHash);
   }, [reload]);
-
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000); };
 
   const filtered = useMemo(() => {
     const t = q.toLowerCase().trim();
@@ -84,7 +83,7 @@ export function DepoimentosClient({ canEdit }: { canEdit: boolean }) {
                 <Tr key={r.depoimento_id} onClick={() => setOpenId(r.depoimento_id)}>
                   <Td><div className="text-[var(--fg)] font-medium">{r.aluno_nome || '—'}</div><div className="text-[var(--fg-3)] text-xs">{r.profissao_resolvida || r.aluno_email}</div></Td>
                   <Td><NivelBadge nivel={r.aluno_nivel_resultado} /></Td>
-                  <Td className="text-[var(--fg-2)] tabular">{r.testimonial_date ? new Date(r.testimonial_date).toLocaleDateString('pt-BR') : '—'}</Td>
+                  <Td className="text-[var(--fg-2)] tabular">{fmtData(r.testimonial_date)}</Td>
                   <Td className="text-sm">{r.video_url || r.transcript || r.foto_url ? (
                     <span className="inline-flex items-center gap-1.5 text-[var(--fg-3)]">
                       {r.video_url && <Icon name="film" size={15} />}
@@ -104,7 +103,7 @@ export function DepoimentosClient({ canEdit }: { canEdit: boolean }) {
       {tab === 'tags' && <TagsTab canEdit={canEdit} flash={flash} />}
 
       {openId && <DepoimentoDrawer id={openId} canEdit={canEdit} onClose={() => setOpenId(null)} onSaved={async (m) => { flash(m); await reload(); }} />}
-      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface-4)] text-[var(--fg)] px-4 py-2 rounded-[var(--r-md)] shadow-[var(--shadow-lg)] text-sm z-[1100]">{toast}</div>}
+      <Toast>{toast}</Toast>
     </div>
   );
 }
@@ -127,6 +126,7 @@ function DepoimentoDrawer({ id, canEdit, onClose, onSaved }: { id: string; canEd
 
   if (!d) return null;
   const hls = Array.isArray(d.highlights) ? d.highlights : [];
+  const metricas = Array.isArray(d.metricas) ? d.metricas : [];
 
   async function persist(fields: Partial<Depoimento>, msg: string) {
     setBusy(true);
@@ -212,6 +212,7 @@ function DepoimentoDrawer({ id, canEdit, onClose, onSaved }: { id: string; canEd
           {d.resumo && <Copyable label="Resumo" value={d.resumo} />}
           {d.objecao && <Copyable label="Objeção vencida" value={d.objecao} />}
           {d.antes_depois && <Copyable label="Antes → Depois" value={`Antes: ${d.antes_depois.antes}\nDepois: ${d.antes_depois.depois}`} />}
+          {metricas.map((m, i) => <Copyable key={`m${i}`} label="Prova / número" value={m} />)}
           {hls.map((h, i) => <Copyable key={i} label={h.tipo} value={h.texto} />)}
           {!d.gancho && !hls.length && d.highlights_status !== 'ok' && <p className="text-xs text-[var(--fg-3)]">Transcreva e gere os highlights para extrair gancho, resumo e trechos prontos para copy.</p>}
         </Card>

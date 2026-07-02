@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
     model,
     system: HIGHLIGHTS_SYSTEM,
     user: buildHighlightsUserPrompt({ alunoNome, profissao: String(dep.profissao ?? ''), alunoNivel, cidade, estado, transcript: String(dep.transcript) }),
+    temperature: 0.3, // ganchos com um pouco mais de vida; guardrails anti-invenção seguram a fidelidade
   });
 
   const markErr = async (erro: string) => {
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
     antes_depois: result.antes_depois,
     gancho: result.gancho,
     resumo: result.resumo,
+    metricas: result.metricas,
     highlights_status: 'ok',
     highlights_processado_em: new Date().toISOString(),
     highlights_erro: null,

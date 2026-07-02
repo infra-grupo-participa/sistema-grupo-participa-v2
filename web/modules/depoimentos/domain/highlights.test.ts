@@ -25,6 +25,13 @@ describe('highlights — parsing do Groq', () => {
     expect(r.gancho).toBeNull();
     expect(r.objecao).toBeNull();
     expect(r.antes_depois).toBeNull();
+    expect(r.metricas).toEqual([]);
+  });
+
+  it('métricas: filtra vazias, limita a 6 e ausência vira array vazio', () => {
+    const r = parseGroqHighlights({ highlights: [], metricas: ['R$ 50k em 3 meses', '', '  ', '2 para 15 clientes'] });
+    expect(r.metricas).toEqual(['R$ 50k em 3 meses', '2 para 15 clientes']);
+    expect(parseGroqHighlights({ highlights: [] }).metricas).toEqual([]);
   });
 
   it('transcriptApto exige >= 80 chars', () => {
