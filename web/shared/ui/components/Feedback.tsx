@@ -27,6 +27,42 @@ export function Loading({ label = 'Carregando…', minHeight = 240 }: { label?: 
   );
 }
 
+/** Barra de skeleton pulsante — bloco de construção para placeholders de carga. */
+export function Skeleton({ w, h = 12, className = '' }: { w?: number | string; h?: number; className?: string }) {
+  return <div className={`rounded bg-[var(--surface-3)] animate-pulse ${className}`} style={{ width: w, height: h }} aria-hidden />;
+}
+
+/**
+ * Esqueleto de linhas de tabela na 1ª carga (padrão do piloto Placas).
+ * `cols` = larguras (px) das colunas após a primeira; `avatar` inclui célula inicial com avatar+2 linhas.
+ */
+export function SkeletonRows({ rows = 6, cols = [64, 80, 96, 40, 56], avatar = true }: {
+  rows?: number; cols?: number[]; avatar?: boolean;
+}) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, i) => (
+        <tr key={i} className="border-t border-[var(--border-faint)]">
+          {avatar && (
+            <td className="px-3 py-2.5">
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-full bg-[var(--surface-3)] animate-pulse shrink-0" />
+                <div className="space-y-1.5">
+                  <Skeleton w={144} h={12} />
+                  <Skeleton w={176} h={10} />
+                </div>
+              </div>
+            </td>
+          )}
+          {cols.map((w, j) => (
+            <td key={j} className="px-3 py-2.5"><Skeleton w={w} /></td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}
+
 const FILL: Record<string, string> = {
   accent: 'var(--accent)', green: 'var(--green)', yellow: 'var(--yellow)', red: 'var(--red)', purple: 'var(--purple)',
 };

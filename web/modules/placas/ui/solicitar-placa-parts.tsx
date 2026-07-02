@@ -140,9 +140,10 @@ export function TrackingCard({ data }: { data: Record<string, unknown> }) {
 
   return (
     <div className="sp-card">
-      <div className="sp-card-head" style={{ background: 'var(--orange)', color: '#fff' /* hex-ok: contraste branco sobre header âmbar da marca */ }}>
-        <h1 style={{ color: '#fff' /* hex-ok: contraste branco sobre header âmbar */ }}>Acompanhe sua solicitação</h1>
-        <p style={{ color: 'rgba(255,255,255,.85)' /* hex-ok: contraste branco sobre header âmbar */ }}>Sua solicitação está em andamento</p>
+      {/* Texto escuro sobre âmbar (decisão D5.1 do DS): branco sobre --orange fica abaixo de AA (~1.9:1). */}
+      <div className="sp-card-head" style={{ background: 'var(--orange)', color: 'var(--ink)' }}>
+        <h1 style={{ color: 'var(--ink)' }}>Acompanhe sua solicitação</h1>
+        <p style={{ color: 'rgba(15,23,42,.75)' /* hex-ok: --ink com 75% sobre âmbar */ }}>Sua solicitação está em andamento</p>
       </div>
       <div className="sp-card-body">
         {inInterviewPhase && !hasInterview && (

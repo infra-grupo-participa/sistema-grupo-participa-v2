@@ -3,7 +3,7 @@ export { Button } from './Button';
 export { Card, StatCard, KpiCard, SectionCard, SectionTitle, EmptyState } from './Card';
 export { Drawer, AvatarInicial, Tabs, Row } from './Drawer';
 export { DataTable, Thead, Th, Tr, Td } from './Table';
-export { Spinner, Loading, ProgressBar } from './Feedback';
+export { Spinner, Loading, ProgressBar, Skeleton, SkeletonRows } from './Feedback';
 export { Toolbar, SearchInput, Input, FilterSelect, MultiSelect, Toggle } from './Controls';
 export { Checkbox } from './Checkbox';
 export { Modal, ConfirmDialog } from './Modal';

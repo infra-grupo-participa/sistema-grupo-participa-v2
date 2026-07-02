@@ -11,7 +11,7 @@ import {
 } from '../domain/aluno-360';
 import { nivelOptions } from '@/shared/domain/nivel-resultado';
 import { loadAlunos360, loadTurmas, type Turma } from './alunos-data';
-import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Button, Toolbar, SearchInput, MultiSelect, Toast, useFlash } from '@/shared/ui/components';
+import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Button, Toolbar, SearchInput, MultiSelect, SkeletonRows, Toast, useFlash } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtData } from '@/shared/ui/format';
 import { DashboardAlunos } from './DashboardAlunos';
@@ -180,6 +180,7 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
           <Thx sortable active={sortCol === 'vencimento'} dir={sortDir} onClick={sortBtn('vencimento')}>Vencimento</Thx>
         </Thead>
         <tbody>
+          {loading && !filtered.length && <SkeletonRows cols={[56, 80, 64, 48, 72]} />}
           {filtered.slice(0, 500).map((a) => {
             const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
             return (

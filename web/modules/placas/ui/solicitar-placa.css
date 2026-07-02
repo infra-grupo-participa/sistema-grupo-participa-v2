@@ -401,6 +401,12 @@
   background: var(--orange-soft);
   box-shadow: 0 0 0 3px var(--orange-soft);
 }
+/* Radios reais ficam sr-only dentro do label; o foco de teclado precisa aparecer no cartão. */
+.sp-radio:has(input:focus-visible),
+.sp-level:has(input:focus-visible) {
+  outline: 2px solid var(--orange-2);
+  outline-offset: 2px;
+}
 .sp-radio.sel::after {
   content: '✓';
   position: absolute;

@@ -4,22 +4,21 @@ import { useState } from 'react';
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { useTheme } from '@/shared/ui/shell/use-theme';
 import type { GpUser } from '@/shared/domain/auth';
-import { SectionCard, Input, Button, Toggle, Badge } from '@/shared/ui/components';
+import { SectionCard, Input, Button, Toggle, Badge, Toast, useFlash } from '@/shared/ui/components';
 
 export function ConfiguracoesClient({ user }: { user: GpUser }) {
   const { theme, toggle } = useTheme();
   const [nome, setNome] = useState(user.nome);
   const [avatar, setAvatar] = useState(user.avatarUrl || '');
-  const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const { toast, flash } = useFlash();
 
   async function salvar() {
     setBusy(true);
     const supabase = createBrowserSupabase();
     const { error } = await supabase.from('perfis').update({ nome: nome.trim(), avatar_url: avatar.trim() || null, atualizado_em: new Date().toISOString() }).eq('id', user.id);
     setBusy(false);
-    setMsg(error ? 'Erro ao salvar.' : 'Perfil atualizado!');
-    setTimeout(() => setMsg(''), 3000);
+    flash(error ? 'Erro ao salvar.' : 'Perfil atualizado!');
   }
 
   return (
@@ -41,7 +40,6 @@ export function ConfiguracoesClient({ user }: { user: GpUser }) {
             <Badge tone="accent">{user.cargo}</Badge>
           </div>
           <Button onClick={salvar} disabled={busy} className="w-full">{busy ? 'Salvando…' : 'Salvar'}</Button>
-          {msg && <p className="text-sm text-[var(--green)]">{msg}</p>}
         </div>
       </SectionCard>
 
@@ -53,6 +51,7 @@ export function ConfiguracoesClient({ user }: { user: GpUser }) {
       >
         <span className="sr-only">Alternar tema</span>
       </SectionCard>
+      <Toast>{toast}</Toast>
     </div>
   );
 }

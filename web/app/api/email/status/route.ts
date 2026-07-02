@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { jsonError, jsonOk } from '@/shared/infrastructure/http/security';
+import { rateLimitOk } from '@/shared/infrastructure/http/rate-limit';
 import { safeEmail, isUuid } from '@/shared/infrastructure/http/validation';
 import { getCurrentUser } from '@/shared/composition/server-container';
 import { ehAdminOuAcima, podeEditar } from '@/shared/domain/auth';
@@ -35,6 +36,11 @@ export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user || (!ehAdminOuAcima(user) && !podeEditar(user, 'placas'))) {
     return jsonError('Não autorizado.', 403);
+  }
+
+  // Rota dispara e-mail para endereço arbitrário: limita por usuário para conter abuso/spam.
+  if (!rateLimitOk(user.id, 'gp_email_status_rate_', 30, 300)) {
+    return jsonError('Muitas requisições. Tente novamente em instantes.', 429);
   }
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;

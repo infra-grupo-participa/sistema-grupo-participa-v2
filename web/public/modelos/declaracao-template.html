@@ -80,11 +80,13 @@
 <script>
   window.onload = () => {
     const params = new URLSearchParams(window.location.search);
+    // Parâmetros vêm da URL (controlável por terceiros): sempre escapar antes de injetar em innerHTML.
+    const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const nivel = params.get('nivel') || '';
-    const nome = params.get('nome') || '_________________________';
-    const profissao = params.get('profissao') || '___________________';
-    const cidade = params.get('cidade') || '___________________';
-    const estado = params.get('estado_uf') || '___';
+    const nome = escapeHtml(params.get('nome') || '_________________________');
+    const profissao = escapeHtml(params.get('profissao') || '___________________');
+    const cidade = escapeHtml(params.get('cidade') || '___________________');
+    const estado = escapeHtml(params.get('estado_uf') || '___');
 
     const dt = new Date();
     const meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -120,7 +122,7 @@
       </div>
     `;
 
-    document.title = `Declaração Nível ${cfg.label} - ${nome}`;
+    document.title = `Declaração Nível ${cfg.label} - ${params.get('nome') || ''}`;
     document.getElementById('content').innerHTML = html;
   };
 </script>

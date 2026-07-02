@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, Tabs, Badge, Button, Card, Toolbar, SearchInput, Input, Toast, useFlash } from '@/shared/ui/components';
+import { NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, Drawer, Tabs, Badge, Button, Card, ConfirmDialog, Toolbar, SearchInput, Input, SkeletonRows, Toast, useFlash } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtData } from '@/shared/ui/format';
 import {
@@ -79,6 +79,7 @@ export function DepoimentosClient({ canEdit }: { canEdit: boolean }) {
               <Th>Conteúdo</Th>
             </Thead>
             <tbody>
+              {loading && !filtered.length && <SkeletonRows cols={[64, 72, 80]} />}
               {filtered.map((r) => (
                 <Tr key={r.depoimento_id} onClick={() => setOpenId(r.depoimento_id)}>
                   <Td><div className="text-[var(--fg)] font-medium">{r.aluno_nome || '—'}</div><div className="text-[var(--fg-3)] text-xs">{r.profissao_resolvida || r.aluno_email}</div></Td>
@@ -252,6 +253,7 @@ function CursosTab({ canEdit, flash }: { canEdit: boolean; flash: (m: string) =>
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [nome, setNome] = useState('');
   const [slug, setSlug] = useState('');
+  const [confirmDel, setConfirmDel] = useState<Curso | null>(null);
   const reload = useCallback(async () => setCursos(await loadCursos()), []);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { reload(); }, [reload]);
@@ -268,11 +270,21 @@ function CursosTab({ canEdit, flash }: { canEdit: boolean; flash: (m: string) =>
         {cursos.map((c) => (
           <Card key={c.id} className="flex items-center justify-between p-3">
             <div><span className="text-[var(--fg)] font-medium">{c.name}</span> <span className="text-xs text-[var(--fg-3)]">/{c.slug}{!c.active && ' · inativo'}</span></div>
-            {canEdit && <Button variant="danger" size="sm" onClick={async () => { if (confirm('Excluir curso?') && (await deleteCurso(c.id))) { flash('Excluído.'); reload(); } }}>excluir</Button>}
+            {canEdit && <Button variant="danger" size="sm" onClick={() => setConfirmDel(c)}>excluir</Button>}
           </Card>
         ))}
         {!cursos.length && <EmptyState title="Nenhum curso" icon="cursos" />}
       </div>
+      {confirmDel && (
+        <ConfirmDialog
+          title="Excluir curso"
+          message={<>Excluir o curso <strong>{confirmDel.name}</strong>? Esta ação não pode ser desfeita.</>}
+          confirmLabel="Excluir"
+          danger
+          onCancel={() => setConfirmDel(null)}
+          onConfirm={async () => { const c = confirmDel; setConfirmDel(null); if (await deleteCurso(c.id)) { flash('Excluído.'); reload(); } }}
+        />
+      )}
     </div>
   );
 }
@@ -281,6 +293,7 @@ function TagsTab({ canEdit, flash }: { canEdit: boolean; flash: (m: string) => v
   const [tags, setTags] = useState<Tag[]>([]);
   const [label, setLabel] = useState('');
   const [color, setColor] = useState('#F29725'); /* hex-ok: valor inicial do color-picker de tag */
+  const [confirmDel, setConfirmDel] = useState<Tag | null>(null);
   const reload = useCallback(async () => setTags(await loadTags()), []);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { reload(); }, [reload]);
@@ -289,7 +302,7 @@ function TagsTab({ canEdit, flash }: { canEdit: boolean; flash: (m: string) => v
       {canEdit && (
         <Toolbar className="mb-4">
           <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Tag" className="w-auto" />
-          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-12 rounded-[var(--r-md)] border border-[var(--border)] bg-transparent" />
+          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} aria-label="Cor da tag" className="h-9 w-12 rounded-[var(--r-md)] border border-[var(--border)] bg-transparent" />
           <Button onClick={async () => { if (label && (await saveTag({ label, color }))) { flash('Tag criada.'); setLabel(''); reload(); } }}>Adicionar</Button>
         </Toolbar>
       )}
@@ -297,11 +310,21 @@ function TagsTab({ canEdit, flash }: { canEdit: boolean; flash: (m: string) => v
         {tags.map((t) => (
           <span key={t.id} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-[var(--r-pill)] border border-[var(--border)] text-sm" style={{ color: t.color || 'var(--fg-2)' /* viz-colors: cor da tag definida pelo usuário */ }}>
             {t.label}
-            {canEdit && <button onClick={async () => { if (confirm('Excluir tag?') && (await deleteTag(t.id))) { flash('Excluída.'); reload(); } }} className="text-[var(--red)] inline-flex"><Icon name="x" size={13} /></button>}
+            {canEdit && <button onClick={() => setConfirmDel(t)} aria-label={`Excluir tag ${t.label}`} className="text-[var(--red)] inline-flex"><Icon name="x" size={13} /></button>}
           </span>
         ))}
         {!tags.length && <EmptyState title="Nenhuma tag" icon="tags" />}
       </div>
+      {confirmDel && (
+        <ConfirmDialog
+          title="Excluir tag"
+          message={<>Excluir a tag <strong>{confirmDel.label}</strong>?</>}
+          confirmLabel="Excluir"
+          danger
+          onCancel={() => setConfirmDel(null)}
+          onConfirm={async () => { const t = confirmDel; setConfirmDel(null); if (await deleteTag(t.id)) { flash('Excluída.'); reload(); } }}
+        />
+      )}
     </div>
   );
 }

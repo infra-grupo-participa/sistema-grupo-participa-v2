@@ -15,7 +15,7 @@ import type { Solicitacao, Auditoria } from '../../domain/types';
 import * as data from './placas-admin-data';
 import * as configData from './placas-config-data';
 import { resolveAuditSteps, type PlacasConfig } from '../../domain/config';
-import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, SearchInput, ProgressBar, Toast, useFlash } from '@/shared/ui/components';
+import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, SearchInput, ProgressBar, SkeletonRows, Toast, useFlash } from '@/shared/ui/components';
 import { SolicitacaoDrawer } from './SolicitacaoDrawer';
 import { ConfigPanel } from './ConfigPanel';
 import { AgendaHorarios } from './AgendaHorarios';
@@ -357,27 +357,3 @@ const LinhaSolicitacao = memo(function LinhaSolicitacao({ s, onOpen }: { s: Soli
     </Tr>
   );
 });
-
-/** Esqueleto da tabela durante a primeira carga — mesma métrica das linhas reais. */
-function SkeletonRows() {
-  return (
-    <>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <tr key={i} className="border-t border-[var(--border-faint)]">
-          <td className="px-3 py-2.5">
-            <div className="flex items-center gap-2.5">
-              <span className="w-8 h-8 rounded-full bg-[var(--surface-3)] animate-pulse shrink-0" />
-              <div className="space-y-1.5">
-                <div className="h-3 w-36 rounded bg-[var(--surface-3)] animate-pulse" />
-                <div className="h-2.5 w-44 rounded bg-[var(--surface-3)] animate-pulse" />
-              </div>
-            </div>
-          </td>
-          {[16, 20, 24, 10, 14].map((w, j) => (
-            <td key={j} className="px-3 py-2.5"><div className={`h-3 rounded bg-[var(--surface-3)] animate-pulse`} style={{ width: `${w * 4}px` }} /></td>
-          ))}
-        </tr>
-      ))}
-    </>
-  );
-}

@@ -12,6 +12,7 @@ import {
   FilterSelect,
   Input,
   SearchInput,
+  SkeletonRows,
   Td,
   Th,
   Thead,
@@ -72,6 +73,7 @@ export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
           <Th> </Th>
         </Thead>
         <tbody>
+          {loading && !filtered.length && <SkeletonRows rows={4} cols={[72, 64, 48]} />}
           {filtered.map((u) => {
             const cargo = normalizeCargo(u);
             const editavel = podeEditarUsuario(meuCargo, cargo);

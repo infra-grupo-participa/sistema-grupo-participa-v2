@@ -301,10 +301,11 @@ function LinkButton({ href, variant = 'primary', children, style }: {
   );
 }
 function Head({ title, subtitle, orange }: { title: string; subtitle?: string; orange?: boolean }) {
+  // Texto escuro sobre âmbar (decisão D5.1 do DS): branco sobre --orange fica abaixo de AA (~1.9:1).
   return (
-    <div className="sp-card-head" style={orange ? { background: 'var(--orange)', color: '#fff' /* hex-ok: texto branco sobre âmbar (contraste no header da marca) */ } : undefined}>
-      <h1 style={orange ? { color: '#fff' /* hex-ok: contraste branco no header âmbar */ } : undefined}>{title}</h1>
-      {subtitle && <p style={orange ? { color: 'rgba(255,255,255,.85)' /* hex-ok: subtítulo branco translúcido no header âmbar */ } : undefined}>{subtitle}</p>}
+    <div className="sp-card-head" style={orange ? { background: 'var(--orange)', color: 'var(--ink)' } : undefined}>
+      <h1 style={orange ? { color: 'var(--ink)' } : undefined}>{title}</h1>
+      {subtitle && <p style={orange ? { color: 'rgba(15,23,42,.75)' /* hex-ok: --ink com 75% sobre âmbar */ } : undefined}>{subtitle}</p>}
     </div>
   );
 }

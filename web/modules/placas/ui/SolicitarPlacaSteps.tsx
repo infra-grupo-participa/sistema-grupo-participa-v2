@@ -65,7 +65,8 @@ export function StepContent(p: StepProps) {
     return (
       <Section title="2. Seu interesse" subtitle="O que você busca com a Holding Familiar?">
         {INTERESSES.map((o) => (
-          <label key={o.v} className={`sp-radio ${form.interesse === o.v ? 'sel' : ''}`} onClick={() => set('interesse', o.v)}>
+          <label key={o.v} className={`sp-radio ${form.interesse === o.v ? 'sel' : ''}`}>
+            <input type="radio" name="interesse" value={o.v} checked={form.interesse === o.v} onChange={() => set('interesse', o.v)} className="sr-only" />
             <span className="block font-medium">{o.l}</span>
             <span className="block text-xs opacity-70 mt-0.5">{o.sub}</span>
           </label>
@@ -82,14 +83,18 @@ export function StepContent(p: StepProps) {
         <div className="sp-field"><label>Espaço de instrução <span className="req">*</span></label>
           <div className="sp-hint" style={{ marginTop: 0, marginBottom: 8 }}>Selecione o ambiente em que você acompanha sua formação para mantermos seu cadastro organizado corretamente.</div>
           {espacos.map((o) => (
-            <label key={o.v} className={`sp-radio ${form.espaco_instrucao === o.v ? 'sel' : ''}`} onClick={() => set('espaco_instrucao', o.v)}>{o.l}</label>
+            <label key={o.v} className={`sp-radio ${form.espaco_instrucao === o.v ? 'sel' : ''}`}>
+              <input type="radio" name="espaco_instrucao" value={o.v} checked={form.espaco_instrucao === o.v} onChange={() => set('espaco_instrucao', o.v)} className="sr-only" />
+              {o.l}
+            </label>
           ))}
         </div>
         <div className="sp-info">Considere todos os ativos gerados trabalhando com Holding Familiar, incluindo Sessões de Viabilidade, Croquis Estruturais e outros serviços relacionados ao tema.</div>
         <div className="sp-field"><label>Nível atual <span className="req">*</span></label>
           <div className="sp-level-grid">
             {niveis.map((o) => (
-              <label key={o.v} data-nivel={o.v} className={`sp-level ${form.nivel === o.v ? 'sel' : ''}`} onClick={() => set('nivel', o.v)}>
+              <label key={o.v} data-nivel={o.v} className={`sp-level ${form.nivel === o.v ? 'sel' : ''}`}>
+                <input type="radio" name="nivel" value={o.v} checked={form.nivel === o.v} onChange={() => set('nivel', o.v)} className="sr-only" />
                 <div className="ic"><Icon name={o.ic} size={22} /></div><div className="nm">{o.nm}</div><div className="fx">{o.fx}</div>
               </label>
             ))}

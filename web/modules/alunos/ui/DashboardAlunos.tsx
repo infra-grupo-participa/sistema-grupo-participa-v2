@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { applyDashFilters, computeAlunosMetrics, computeTurmaEspacoMatrix, type DashFiltros, type DashView, type Distribuicao, type AnoEspaco } from '../domain/metrics';
 import type { Aluno360 } from '../domain/aluno-360';
 import { ESPACO_LABEL } from '../domain/aluno-360';
-import { Card, SectionTitle, Button, MultiSelect } from '@/shared/ui/components';
+import { Card, SectionTitle, Button, Input, Modal, MultiSelect } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 
 // Coage valor de filtro para array (visões salvas no formato antigo eram string única).
@@ -40,10 +40,14 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
   const temFiltro = Boolean(filtros.espaco?.length || filtros.estado?.length || filtros.turma?.length || view === 'socios');
 
   const persistViews = (next: SavedView[]) => { setViews(next); localStorage.setItem(VIEWS_KEY, JSON.stringify(next)); };
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
   const salvarVisao = () => {
-    const name = prompt('Nome da visão rápida:')?.trim();
+    const name = saveName.trim();
     if (!name) return;
     persistViews([...views.filter((v) => v.name !== name), { name, view, filtros }]);
+    setSaveOpen(false);
+    setSaveName('');
   };
 
   const set = (k: keyof DashFiltros, v: string[]) => setFiltros((f) => ({ ...f, [k]: v.length ? v : undefined }));
@@ -59,15 +63,34 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
         <MultiSelect values={filtros.turma || []} onChange={(v) => set('turma', v)} placeholder="Todas as turmas" options={turmas.map((t) => ({ value: t, label: t }))} />
         <MultiSelect values={filtros.estado || []} onChange={(v) => set('estado', v)} placeholder="Todos os estados" options={estados.map((e) => ({ value: e, label: e }))} />
         {temFiltro && <Button variant="ghost" size="sm" onClick={() => { setFiltros({}); setView('alunos'); }}>Limpar</Button>}
-        <Button variant="subtle" size="sm" onClick={salvarVisao}><Icon name="star" size={13} /> Salvar visão</Button>
+        <Button variant="subtle" size="sm" onClick={() => setSaveOpen(true)}><Icon name="star" size={13} /> Salvar visão</Button>
       </div>
+
+      {saveOpen && (
+        <Modal
+          title="Salvar visão rápida"
+          width="max-w-sm"
+          onClose={() => setSaveOpen(false)}
+          footer={
+            <>
+              <Button variant="ghost" size="sm" onClick={() => setSaveOpen(false)}>Cancelar</Button>
+              <Button size="sm" onClick={salvarVisao} disabled={!saveName.trim()}>Salvar</Button>
+            </>
+          }
+        >
+          <label className="block">
+            <span className="text-xs text-[var(--fg-3)]">Nome da visão</span>
+            <Input autoFocus value={saveName} onChange={(e) => setSaveName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && salvarVisao()} placeholder="Ex.: THB GO ativos" className="mt-1" />
+          </label>
+        </Modal>
+      )}
 
       {views.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-4">
           {views.map((v) => (
             <span key={v.name} className="inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[var(--border)] bg-[var(--surface-2)] pl-3 pr-1.5 py-1 text-xs">
               <button onClick={() => { setView(v.view); setFiltros(v.filtros); }} className="text-[var(--fg-2)] hover:text-[var(--accent)] font-medium">{v.name}</button>
-              <button onClick={() => persistViews(views.filter((x) => x.name !== v.name))} className="text-[var(--fg-4)] hover:text-[var(--red)] inline-flex"><Icon name="x" size={12} /></button>
+              <button onClick={() => persistViews(views.filter((x) => x.name !== v.name))} aria-label={`Excluir visão ${v.name}`} className="text-[var(--fg-4)] hover:text-[var(--red)] inline-flex"><Icon name="x" size={12} /></button>
             </span>
           ))}
         </div>
