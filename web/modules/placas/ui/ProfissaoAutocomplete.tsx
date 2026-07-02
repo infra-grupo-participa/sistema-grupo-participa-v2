@@ -65,10 +65,11 @@ export function ProfissaoAutocomplete({ value, onChange }: { value: string; onCh
         onBlur={() => { blurTimer.current = setTimeout(() => setOpen(false), 120); }}
         role="combobox"
         aria-expanded={open}
+        aria-controls="sp-profissao-list"
         aria-autocomplete="list"
       />
       {open && items.length > 0 && (
-        <div className="sp-ac-list" role="listbox" aria-label="Sugestões de profissão">
+        <div id="sp-profissao-list" className="sp-ac-list" role="listbox" aria-label="Sugestões de profissão">
           {items.map((item, i) => (
             <button
               key={item}

@@ -194,6 +194,65 @@
   white-space: nowrap;
 }
 
+/* Hint de aviso (ex.: CEP não encontrado) */
+.sp-hint-warn {
+  color: #b45309;
+}
+
+/* Banners de retomada / retorno de auditoria */
+.sp-banner {
+  max-width: 660px;
+  margin: 0 auto 14px;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  border: 1px solid;
+}
+.sp-banner-info {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e3a8a;
+}
+.sp-banner-warn {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #78350f;
+}
+.sp-banner-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sp-banner-title {
+  font-weight: 800;
+  font-size: 14px;
+}
+.sp-banner-x {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+  padding: 0 2px;
+}
+.sp-banner-x:hover {
+  opacity: 1;
+}
+.sp-banner-body {
+  margin-top: 6px;
+}
+.sp-banner-quote {
+  background: rgba(120, 53, 15, 0.06);
+  border: 1px solid rgba(120, 53, 15, 0.15);
+  border-radius: 8px;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+}
+
 .sp-grid2 {
   display: grid;
   grid-template-columns: 1fr 1fr;

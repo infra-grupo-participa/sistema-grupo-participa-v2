@@ -19,6 +19,7 @@ export interface StepProps {
   eligible: boolean;
   checkDup: (field: 'email' | 'documento_nf') => void;
   onCep: (v: string) => void;
+  cepStatus: '' | 'loading' | 'error';
   onUpload: (kind: 'comprovante' | 'declaracao', file: File | null) => void;
   goNext: (n: number) => void;
   goBack: (n: number) => void;
@@ -30,16 +31,16 @@ export interface StepProps {
 }
 
 export function StepContent(p: StepProps) {
-  const { step, form, set, err, busy, dup, eligible, checkDup, onCep, onUpload, goNext, goBack, onRecover, espacos, niveis, uploadInfo, cadastroInfo } = p;
+  const { step, form, set, err, busy, dup, eligible, checkDup, onCep, cepStatus, onUpload, goNext, goBack, onRecover, espacos, niveis, uploadInfo, cadastroInfo } = p;
 
   if (step === 1) {
     return (
       <Section title="1. Seus dados" subtitle="Preencha seus dados de contato.">
         <div className="sp-grid2">
-          <Field label="Nome completo" req><input value={form.nome || ''} onChange={(e) => set('nome', e.target.value)} placeholder="Seu nome completo" /></Field>
-          <Field label="E-mail" req><input type="email" value={form.email || ''} onChange={(e) => set('email', e.target.value)} onBlur={() => checkDup('email')} placeholder="seu@email.com" /></Field>
-          <Field label="WhatsApp" req><input value={form.telefone || ''} onChange={(e) => set('telefone', maskPhoneMobile(e.target.value))} placeholder="(11) 99999-9999" /></Field>
-          <Field label="Documento" req><input value={form.documento_nf || ''} onChange={(e) => set('documento_nf', maskDoc(e.target.value))} onBlur={() => checkDup('documento_nf')} placeholder="CPF ou CNPJ" inputMode="numeric" /></Field>
+          <Field label="Nome completo" req><input value={form.nome || ''} onChange={(e) => set('nome', e.target.value)} placeholder="Seu nome completo" autoComplete="name" /></Field>
+          <Field label="E-mail" req><input type="email" value={form.email || ''} onChange={(e) => set('email', e.target.value)} onBlur={() => checkDup('email')} placeholder="seu@email.com" autoComplete="email" inputMode="email" /></Field>
+          <Field label="WhatsApp" req><input value={form.telefone || ''} onChange={(e) => set('telefone', maskPhoneMobile(e.target.value))} placeholder="(11) 99999-9999" autoComplete="tel-national" inputMode="numeric" /></Field>
+          <Field label="Documento" req><input value={form.documento_nf || ''} onChange={(e) => set('documento_nf', maskDoc(e.target.value))} onBlur={() => checkDup('documento_nf')} placeholder="CPF ou CNPJ" inputMode="numeric" autoComplete="off" /></Field>
           <Field label="Turma" req>
             <select value={form.turma || ''} onChange={(e) => set('turma', e.target.value)}>
               <option value="">Selecione sua turma…</option>
@@ -47,7 +48,7 @@ export function StepContent(p: StepProps) {
             </select>
           </Field>
           <Field label="Profissão"><ProfissaoAutocomplete value={form.profissao || ''} onChange={(v) => set('profissao', v)} /></Field>
-          <Field label="Telefone Profissional"><input value={form.telefone_profissional || ''} onChange={(e) => set('telefone_profissional', maskPhoneLandline(e.target.value))} placeholder="(11) 9999-9999" /></Field>
+          <Field label="Telefone Profissional"><input value={form.telefone_profissional || ''} onChange={(e) => set('telefone_profissional', maskPhoneLandline(e.target.value))} placeholder="(11) 9999-9999" inputMode="numeric" autoComplete="tel" /></Field>
           <Field label="Canal do YouTube"><input value={form.youtube_url || ''} onChange={(e) => set('youtube_url', e.target.value)} placeholder="https://youtube.com/@seucanal" /></Field>
           <Field label="Site Profissional"><input value={form.site_profissional || ''} onChange={(e) => set('site_profissional', e.target.value)} placeholder="https://seusite.com.br" /></Field>
           <Field label="Instagram"><input value={form.instagram_url || ''} onChange={(e) => set('instagram_url', e.target.value)} placeholder="@seuperfil" /></Field>
@@ -96,7 +97,7 @@ export function StepContent(p: StepProps) {
         </div>
         {eligible && (
           <Field label="Faturamento declarado (R$)" req>
-            <input value={form.faturamento_fmt || ''} onChange={(e) => { const m = maskCurrency(e.target.value); set('faturamento_fmt', m); set('faturamento_declarado', String(currencyDigits(e.target.value))); }} placeholder="R$ 0" inputMode="numeric" />
+            <input value={form.faturamento_fmt || ''} onChange={(e) => { const m = maskCurrency(e.target.value); set('faturamento_fmt', m); set('faturamento_declarado', String(currencyDigits(e.target.value))); }} onFocus={() => { if (!form.faturamento_fmt) set('faturamento_fmt', 'R$ '); }} onBlur={() => { if (form.faturamento_fmt === 'R$ ') set('faturamento_fmt', ''); }} placeholder="R$ 0" inputMode="numeric" />
             <div className="sp-hint">Valor total gerado com Holding Familiar, em reais.</div>
           </Field>
         )}
@@ -151,16 +152,20 @@ export function StepContent(p: StepProps) {
   if (step === 6) {
     return (
       <Section title="6. Endereço de entrega" subtitle="Digite o CEP e aguarde o preenchimento automático.">
-        <Field label="CEP" req><input value={form.cep || ''} onChange={(e) => onCep(e.target.value)} placeholder="00000-000" maxLength={9} inputMode="numeric" /></Field>
-        <Field label="Logradouro" req><input value={form.logradouro || ''} onChange={(e) => set('logradouro', e.target.value)} placeholder="Rua / Avenida…" /></Field>
+        <Field label="CEP" req>
+          <input value={form.cep || ''} onChange={(e) => onCep(e.target.value)} placeholder="00000-000" maxLength={9} inputMode="numeric" autoComplete="postal-code" />
+          {cepStatus === 'loading' && <div className="sp-hint">Buscando endereço…</div>}
+          {cepStatus === 'error' && <div className="sp-hint sp-hint-warn">CEP não encontrado. Preencha o endereço manualmente.</div>}
+        </Field>
+        <Field label="Logradouro" req><input value={form.logradouro || ''} onChange={(e) => set('logradouro', e.target.value)} placeholder="Rua / Avenida…" autoComplete="address-line1" /></Field>
         <div className="sp-grid2">
-          <Field label="Número" req><input value={form.numero || ''} onChange={(e) => set('numero', e.target.value)} placeholder="123" inputMode="numeric" /></Field>
-          <Field label="Complemento"><input value={form.complemento || ''} onChange={(e) => set('complemento', e.target.value)} placeholder="Apto 42…" /></Field>
-          <Field label="Bairro" req><input value={form.bairro || ''} onChange={(e) => set('bairro', e.target.value)} placeholder="Bairro" /></Field>
-          <Field label="Cidade" req><input value={form.cidade || ''} onChange={(e) => set('cidade', e.target.value)} placeholder="Cidade" /></Field>
+          <Field label="Número" req><input id="sp-numero" value={form.numero || ''} onChange={(e) => set('numero', e.target.value)} placeholder="123" inputMode="numeric" autoComplete="address-line2" /></Field>
+          <Field label="Complemento"><input value={form.complemento || ''} onChange={(e) => set('complemento', e.target.value)} placeholder="Apto 42…" autoComplete="address-line3" /></Field>
+          <Field label="Bairro" req><input value={form.bairro || ''} onChange={(e) => set('bairro', e.target.value)} placeholder="Bairro" autoComplete="address-level3" /></Field>
+          <Field label="Cidade" req><input value={form.cidade || ''} onChange={(e) => set('cidade', e.target.value)} placeholder="Cidade" autoComplete="address-level2" /></Field>
         </div>
         <Field label="Estado" req>
-          <select value={form.estado_uf || ''} onChange={(e) => set('estado_uf', e.target.value)}>
+          <select value={form.estado_uf || ''} onChange={(e) => set('estado_uf', e.target.value)} autoComplete="address-level1">
             <option value="">Selecione…</option>
             {UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
           </select>

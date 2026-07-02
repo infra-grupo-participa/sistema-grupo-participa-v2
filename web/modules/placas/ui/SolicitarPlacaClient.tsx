@@ -7,7 +7,7 @@ import { maskCep, maskCurrency, maskDoc } from './masks';
 import { cepLookup, placaDuplicateCheck, placaGet, placaRecover, placaSave, placaUpload } from './placa-api';
 import { isPlateEligible } from '../domain/form-progress';
 import { TOTAL_STEPS, STEP_NAMES, ESPACOS, NIVEIS, type Form, type View, type FormConfig } from './solicitar-placa-constants';
-import { Wrap, SuccessCard, TrackingCard } from './solicitar-placa-parts';
+import { Wrap, SuccessCard, TrackingCard, Banner } from './solicitar-placa-parts';
 import { StepContent } from './SolicitarPlacaSteps';
 
 export type { FormConfig } from './solicitar-placa-constants';
@@ -25,7 +25,17 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
   const [busy, setBusy] = useState(false);
   const [tracking, setTracking] = useState<Record<string, unknown> | null>(null);
   const [dup, setDup] = useState<{ email: boolean; documento_nf: boolean }>({ email: false, documento_nf: false });
+  const [cepStatus, setCepStatus] = useState<'' | 'loading' | 'error'>('');
+  const [resumed, setResumed] = useState(false);
+  const [retorno, setRetorno] = useState('');
   const cepSeq = useRef(0);
+  const mounted = useRef(false);
+
+  // Rola ao topo a cada troca de etapa (não no primeiro render).
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [step]);
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const eligible = isPlateEligible(form.nivel);
@@ -73,6 +83,9 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
       // rascunho — retoma no step do formulário
       const s = Math.min(Math.max(Number(sol.step_index ?? 0) || 1, 1), TOTAL_STEPS);
       setStep(s < 1 ? 1 : s);
+      setResumed(s > 1);
+      const motivo = String(sol.motivo_retorno ?? '').trim();
+      setRetorno(motivo);
       setView('form');
     }
   }
@@ -164,16 +177,19 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
     setDup((d) => ({ ...d, [field]: isDup }));
   }
 
-  // ── CEP (debounce) ──
+  // ── CEP (debounce + estado de busca + foco automático) ──
   function onCep(v: string) {
     set('cep', maskCep(v));
     const digits = v.replace(/\D/g, '');
+    setCepStatus('');
     if (digits.length !== 8) return;
     const seq = ++cepSeq.current;
+    setCepStatus('loading');
     setTimeout(async () => {
       if (seq !== cepSeq.current) return;
       const r = await cepLookup(digits);
-      if (r && seq === cepSeq.current) {
+      if (seq !== cepSeq.current) return;
+      if (r) {
         setForm((f) => ({
           ...f,
           logradouro: r.logradouro || f.logradouro || '',
@@ -181,6 +197,14 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
           cidade: r.cidade || f.cidade || '',
           estado_uf: r.estado_uf || f.estado_uf || '',
         }));
+        setCepStatus('');
+        // Foca o Número: campo que sempre exige preenchimento manual após o CEP.
+        requestAnimationFrame(() => {
+          const el = document.getElementById('sp-numero') as HTMLInputElement | null;
+          if (el && !el.value) el.focus();
+        });
+      } else {
+        setCepStatus('error');
       }
     }, 400);
   }
@@ -225,6 +249,19 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
 
   return (
     <Wrap>
+      {retorno && (
+        <Banner tone="warn" title="Sua solicitação foi devolvida para correção" onClose={() => setRetorno('')}>
+          <p className="mb-2">Nossa equipe revisou seus dados e pediu os seguintes ajustes:</p>
+          <div className="sp-banner-quote">{retorno}</div>
+          <p className="mt-2 text-xs">Corrija os pontos indicados e envie novamente.</p>
+        </Banner>
+      )}
+      {resumed && !retorno && (
+        <Banner tone="info" title="Continuamos de onde você parou" onClose={() => setResumed(false)}>
+          <p>Seus dados foram recuperados. Revise e siga o preenchimento.</p>
+        </Banner>
+      )}
+
       <div className="sp-track">
         <ProgressBar value={pct} tone="accent" height={8} />
         <div className="sp-meta">
@@ -244,6 +281,7 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
           eligible={eligible}
           checkDup={checkDup}
           onCep={onCep}
+          cepStatus={cepStatus}
           onUpload={onUpload}
           goNext={goNext}
           goBack={goBack}

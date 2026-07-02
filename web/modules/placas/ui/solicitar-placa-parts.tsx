@@ -19,6 +19,18 @@ export function Wrap({ children }: { children: React.ReactNode }) {
   );
 }
 
+export function Banner({ tone, title, children, onClose }: { tone: 'info' | 'warn'; title: string; children?: React.ReactNode; onClose?: () => void }) {
+  return (
+    <div className={`sp-banner sp-banner-${tone}`} role="status">
+      <div className="sp-banner-head">
+        <span className="sp-banner-title">{title}</span>
+        {onClose && <button type="button" className="sp-banner-x" aria-label="Fechar" onClick={onClose}>×</button>}
+      </div>
+      {children && <div className="sp-banner-body">{children}</div>}
+    </div>
+  );
+}
+
 export function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
     <>
