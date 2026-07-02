@@ -45,6 +45,8 @@ export interface PlacaHistorico {
     codigo_rastreio: string | null;
     regularizacao_pendente: boolean | null;
     motivo_retorno: string | null;
+    proof_url: string | null;
+    declaracao_url: string | null;
     created_at: string | null;
     updated_at: string | null;
   } | null;
@@ -65,7 +67,7 @@ export async function loadPlacaHistorico(alunoId: string, email: string | null):
   const [solRes, audRes] = await Promise.all([
     supabase
       .from('thb_placas_solicitacoes')
-      .select('token, status, nivel, faturamento_declarado, auditoria_step, step_index, entrevista_data, entrevista_hora, codigo_rastreio, regularizacao_pendente, motivo_retorno, created_at, updated_at')
+      .select('token, status, nivel, faturamento_declarado, auditoria_step, step_index, entrevista_data, entrevista_hora, codigo_rastreio, regularizacao_pendente, motivo_retorno, proof_url, declaracao_url, created_at, updated_at')
       .or(`aluno_id.eq.${alunoId}${e ? `,email.ilike.${e}` : ''}`)
       .order('updated_at', { ascending: false })
       .limit(1)

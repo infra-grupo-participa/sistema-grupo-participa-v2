@@ -5,19 +5,25 @@ import type { Aluno360 } from './aluno-360';
 
 export type DashView = 'alunos' | 'socios';
 export interface DashFiltros {
-  espaco?: string;
-  estado?: string;
-  turma?: string;
+  espaco?: string[];
+  estado?: string[];
+  turma?: string[];
 }
 const ATIVO = new Set(['renovado', 'vigente']);
 
-/** Aplica view (alunos/sócios) + filtros do dashboard. */
+// Coage valor de filtro para array (tolera visões salvas no formato antigo string única).
+const asArr = (v: string[] | string | undefined): string[] => (Array.isArray(v) ? v : v ? [v] : []);
+
+/** Aplica view (alunos/sócios) + filtros do dashboard (multi-seleção: OR dentro, AND entre). */
 export function applyDashFilters(alunos: Aluno360[], view: DashView, f: DashFiltros = {}): Aluno360[] {
+  const esp = asArr(f.espaco);
+  const est = asArr(f.estado);
+  const tur = asArr(f.turma);
   return alunos.filter((a) => {
     if (view === 'socios' && !a.eh_socio) return false;
-    if (f.espaco && a.espaco_instrucao !== f.espaco) return false;
-    if (f.estado && String(a.estado ?? '').toUpperCase() !== f.estado) return false;
-    if (f.turma && a.turma_codigo !== f.turma) return false;
+    if (esp.length && !esp.includes(a.espaco_instrucao || '')) return false;
+    if (est.length && !est.includes(String(a.estado ?? '').toUpperCase())) return false;
+    if (tur.length && !tur.includes(a.turma_codigo || '')) return false;
     return true;
   });
 }

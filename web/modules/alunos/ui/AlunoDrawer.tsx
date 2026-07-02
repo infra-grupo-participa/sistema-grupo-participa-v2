@@ -335,6 +335,21 @@ function PlacaJornada({ on, hist, loading }: { on: boolean; hist: PlacaHistorico
             {sol?.motivo_retorno && <div className="text-[var(--red)]">Motivo do retorno: {sol.motivo_retorno}</div>}
           </div>
 
+          {(sol?.proof_url || sol?.declaracao_url) && (
+            <div className="flex flex-wrap gap-1.5">
+              {sol?.proof_url && (
+                <a href={sol.proof_url} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--accent)] rounded-[var(--r-sm)] border border-[var(--border)] px-2 py-1 hover:border-[var(--border-strong)] transition-colors">
+                  <Icon name="file" size={12} /> Comprovante
+                </a>
+              )}
+              {sol?.declaracao_url && (
+                <a href={sol.declaracao_url} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--accent)] rounded-[var(--r-sm)] border border-[var(--border)] px-2 py-1 hover:border-[var(--border-strong)] transition-colors">
+                  <Icon name="file" size={12} /> Declaração
+                </a>
+              )}
+            </div>
+          )}
+
           {carimbos.length > 0 && (
             <div className="mt-2 border-l border-[var(--border)] pl-3 space-y-1.5">
               {carimbos.map((c) => (

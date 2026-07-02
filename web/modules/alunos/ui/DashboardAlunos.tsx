@@ -4,8 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { applyDashFilters, computeAlunosMetrics, computeTurmaEspacoMatrix, type DashFiltros, type DashView, type Distribuicao, type AnoEspaco } from '../domain/metrics';
 import type { Aluno360 } from '../domain/aluno-360';
 import { ESPACO_LABEL } from '../domain/aluno-360';
-import { Card, SectionTitle, Button, FilterSelect } from '@/shared/ui/components';
+import { Card, SectionTitle, Button, MultiSelect } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
+
+// Coage valor de filtro para array (visões salvas no formato antigo eram string única).
+const asArr = (v: unknown): string[] => (Array.isArray(v) ? (v as string[]) : typeof v === 'string' && v ? [v] : []);
+const normFiltros = (f: DashFiltros): DashFiltros => ({ espaco: asArr(f.espaco), estado: asArr(f.estado), turma: asArr(f.turma) });
 
 const VIEWS_KEY = 'gp_dash_views';
 /* viz-colors: paleta de fatias do donut por turma — cores de gráfico, não da UI */
@@ -22,7 +26,10 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
   const [filtros, setFiltros] = useState<DashFiltros>({});
   const [views, setViews] = useState<SavedView[]>([]);
   useEffect(() => {
-    try { setViews(JSON.parse(localStorage.getItem(VIEWS_KEY) || '[]')); } catch { /* ignore */ } // eslint-disable-line react-hooks/set-state-in-effect
+    try {
+      const raw = JSON.parse(localStorage.getItem(VIEWS_KEY) || '[]') as SavedView[];
+      setViews(raw.map((v) => ({ ...v, filtros: normFiltros(v.filtros) }))); // eslint-disable-line react-hooks/set-state-in-effect
+    } catch { /* ignore */ }
   }, []);
 
   const m = useMemo(() => computeAlunosMetrics(alunos, view, filtros), [alunos, view, filtros]);
@@ -30,7 +37,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
 
   const estados = useMemo(() => Array.from(new Set(alunos.map((a) => String(a.estado ?? '').toUpperCase()).filter(Boolean))).sort(), [alunos]);
   const turmas = useMemo(() => Array.from(new Set(alunos.map((a) => a.turma_codigo).filter(Boolean) as string[])).sort((a, b) => b.localeCompare(a, 'pt-BR', { numeric: true, sensitivity: 'base' })), [alunos]);
-  const temFiltro = Boolean(filtros.espaco || filtros.estado || filtros.turma || view === 'socios');
+  const temFiltro = Boolean(filtros.espaco?.length || filtros.estado?.length || filtros.turma?.length || view === 'socios');
 
   const persistViews = (next: SavedView[]) => { setViews(next); localStorage.setItem(VIEWS_KEY, JSON.stringify(next)); };
   const salvarVisao = () => {
@@ -39,7 +46,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
     persistViews([...views.filter((v) => v.name !== name), { name, view, filtros }]);
   };
 
-  const set = (k: keyof DashFiltros, v: string) => setFiltros((f) => ({ ...f, [k]: v || undefined }));
+  const set = (k: keyof DashFiltros, v: string[]) => setFiltros((f) => ({ ...f, [k]: v.length ? v : undefined }));
 
   return (
     <div>
@@ -48,9 +55,9 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
       </div>
 
       <div className="flex flex-wrap gap-2 mb-3">
-        <Filtro value={filtros.espaco || ''} onChange={(v) => set('espaco', v)} placeholder="Todos os espaços" options={Object.entries(ESPACO_LABEL).map(([value, label]) => ({ value, label }))} />
-        <Filtro value={filtros.turma || ''} onChange={(v) => set('turma', v)} placeholder="Todas as turmas" options={turmas.map((t) => ({ value: t, label: t }))} />
-        <Filtro value={filtros.estado || ''} onChange={(v) => set('estado', v)} placeholder="Todos os estados" options={estados.map((e) => ({ value: e, label: e }))} />
+        <MultiSelect values={filtros.espaco || []} onChange={(v) => set('espaco', v)} placeholder="Todos os espaços" options={Object.entries(ESPACO_LABEL).map(([value, label]) => ({ value, label }))} />
+        <MultiSelect values={filtros.turma || []} onChange={(v) => set('turma', v)} placeholder="Todas as turmas" options={turmas.map((t) => ({ value: t, label: t }))} />
+        <MultiSelect values={filtros.estado || []} onChange={(v) => set('estado', v)} placeholder="Todos os estados" options={estados.map((e) => ({ value: e, label: e }))} />
         {temFiltro && <Button variant="ghost" size="sm" onClick={() => { setFiltros({}); setView('alunos'); }}>Limpar</Button>}
         <Button variant="subtle" size="sm" onClick={salvarVisao}><Icon name="star" size={13} /> Salvar visão</Button>
       </div>
@@ -115,15 +122,6 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
         )}
       </div>
     </div>
-  );
-}
-
-function Filtro({ value, onChange, placeholder, options }: { value: string; onChange: (v: string) => void; placeholder: string; options: { value: string; label: string }[] }) {
-  return (
-    <FilterSelect value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">{placeholder}</option>
-      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </FilterSelect>
   );
 }
 
