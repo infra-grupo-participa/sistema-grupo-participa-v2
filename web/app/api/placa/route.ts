@@ -6,6 +6,7 @@ import { clearPlacaCookie, resolvePlacaToken, setPlacaCookie } from '@/shared/in
 import { SupabasePublicPlaca, maskDocsForPublic } from '@/modules/placas/infrastructure/supabase-public-placa';
 import { sanitizeFormPayload } from '@/modules/placas/application/sanitize-form';
 import { validateFormProgress } from '@/modules/placas/domain/form-progress';
+import { progressErrorMessage } from '@/modules/placas/application/progress-message';
 
 // Porta de app/api/placa-public.php — fluxo público (token UUID, service_role server-side).
 
@@ -93,14 +94,15 @@ export async function POST(request: NextRequest) {
 
   const isNew = token === '';
   if (payload.email && (await gateway.duplicateExists('email', String(payload.email), token, isNew))) {
-    return jsonError('Não foi possível concluir a operação.', 422);
+    return jsonError('Este e-mail já possui uma solicitação.', 422);
   }
   if (payload.documento_nf && (await gateway.duplicateExists('documento_nf', String(payload.documento_nf), token, isNew))) {
-    return jsonError('Não foi possível concluir a operação.', 422);
+    return jsonError('Este documento já possui uma solicitação.', 422);
   }
 
   if (isNew) {
-    if (validateFormProgress(payload)) return jsonError('Não foi possível concluir a operação.', 422);
+    const perr = validateFormProgress(payload);
+    if (perr) return jsonError(progressErrorMessage(perr), 422);
     const created = await gateway.create(payload);
     if (!created) return jsonError('Não foi possível concluir a operação.', 502);
     const newToken = String(created.token).toLowerCase();
@@ -114,7 +116,8 @@ export async function POST(request: NextRequest) {
   if (!existing) return clearPlacaCookie(jsonError('Não foi possível concluir a operação.', 404));
   if (['rejeitado', 'concluido'].includes(String(existing.status ?? ''))) return jsonError('Não foi possível concluir a operação.', 409);
 
-  if (validateFormProgress({ ...payload, token }, existing)) return jsonError('Não foi possível concluir a operação.', 422);
+  const perr = validateFormProgress({ ...payload, token }, existing);
+  if (perr) return jsonError(progressErrorMessage(perr), 422);
 
   await gateway.updateByToken(token, payload);
 

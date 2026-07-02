@@ -114,7 +114,7 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
   async function saveStep(targetStep: number, status: string): Promise<boolean> {
     const res = await placaSave(buildPayload(targetStep, status));
     if (!res?.ok) {
-      setErr('Não foi possível salvar. Verifique os dados e tente novamente.');
+      setErr(res?.error || 'Não foi possível salvar. Verifique os dados e tente novamente.');
       return false;
     }
     if (res.token) setToken(res.token);

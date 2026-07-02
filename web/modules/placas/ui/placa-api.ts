@@ -26,9 +26,16 @@ export async function placaGet(token: string, includeSlots = false): Promise<Pla
   return r.ok ? r.json : null;
 }
 
-export async function placaSave(payload: Record<string, unknown>): Promise<{ ok: boolean; token?: string; status?: string; step_index?: number } | null> {
-  const r = await fetchJson<{ ok: boolean; token?: string; status?: string; step_index?: number }>('/api/placa', opts({ action: 'save', ...payload }));
-  return r.ok ? r.json : null;
+export async function placaSave(
+  payload: Record<string, unknown>,
+): Promise<{ ok: boolean; token?: string; status?: string; step_index?: number; error?: string }> {
+  const r = await fetchJson<{ ok?: boolean; token?: string; status?: string; step_index?: number; error?: string }>(
+    '/api/placa',
+    opts({ action: 'save', ...payload }),
+  );
+  if (r.ok && r.json) return { ok: true, ...r.json };
+  // Propaga a mensagem específica do servidor (ex.: qual campo falta) quando houver.
+  return { ok: false, error: r.json?.error };
 }
 
 export async function placaDuplicateCheck(field: 'email' | 'documento_nf', value: string, token: string): Promise<boolean> {
