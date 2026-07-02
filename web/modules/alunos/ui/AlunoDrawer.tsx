@@ -170,7 +170,7 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
           {/* Jornada */}
           <SectionCard className="md:col-span-2" title={<SecTitle icon="check-circle">Jornada</SecTitle>}>
             <div className="grid sm:grid-cols-2 sm:gap-x-4">
-              <PlacaJornada on={temPlaca} hist={placaHist} loading={placaLoading} />
+              <PlacaJornada on={temPlaca} hist={placaHist} loading={placaLoading} rastreioAluno={a.placa_rastreio} />
               <JornadaCard label="Depoimento" on={!!a.tem_depoimento} extra={a.total_depoimentos ? `${a.total_depoimentos} depoimento(s)` : ''} href={a.tem_depoimento ? '/depoimentos' : undefined} />
               <SipJornada email={a.email} on={!!a.sip_registrado} />
             </div>
@@ -301,14 +301,39 @@ function SipJornada({ email, on }: { email: string | null; on: boolean }) {
   );
 }
 
+/** Código de rastreio em destaque, pronto para copiar. */
+function RastreioCopy({ codigo }: { codigo: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(codigo);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard indisponível (http/permissão) — usuário ainda pode selecionar o texto */ }
+  }
+  return (
+    <div className="mt-2 flex items-center justify-between gap-2 rounded-[var(--r-md)] border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-2.5 py-2">
+      <div className="min-w-0">
+        <div className="text-[10px] uppercase tracking-wide font-semibold text-[var(--accent)]">Código de rastreio</div>
+        <div className="text-sm font-semibold text-[var(--fg)] tabular truncate select-all" title={codigo}>{codigo}</div>
+      </div>
+      <Button variant="subtle" size="sm" onClick={copiar} aria-label="Copiar código de rastreio">
+        <Icon name={copied ? 'check' : 'copy'} size={13} /> {copied ? 'Copiado!' : 'Copiar'}
+      </Button>
+    </div>
+  );
+}
+
 // ── Placa de Resultado: card + histórico (solicitação + auditoria) ──
-function PlacaJornada({ on, hist, loading }: { on: boolean; hist: PlacaHistorico | null; loading: boolean }) {
+function PlacaJornada({ on, hist, loading, rastreioAluno }: { on: boolean; hist: PlacaHistorico | null; loading: boolean; rastreioAluno?: string | null }) {
   const sol = hist?.solicitacao;
   const aud = hist?.auditoria;
   const stepIdx = aud?.step_index ?? sol?.auditoria_step ?? sol?.step_index ?? null;
   const stepNome = stepIdx != null && AUDIT_STEPS[stepIdx] ? AUDIT_STEPS[stepIdx].name : null;
   const dates = aud?.dates || {};
   const carimbos = AUDIT_STEPS.map((s) => ({ nome: s.name, quando: dates[s.key] })).filter((c) => c.quando);
+  // Rastreio vinculado ao aluno: prefere a solicitação viva, cai para o write-back em thb_alunos.
+  const rastreio = sol?.codigo_rastreio || rastreioAluno || null;
 
   return (
     <div className={`p-3 rounded-[var(--r-md)] border mb-2 ${on ? 'border-[var(--accent-border)]' : 'border-[var(--border)] opacity-60'}`}>
@@ -316,6 +341,8 @@ function PlacaJornada({ on, hist, loading }: { on: boolean; hist: PlacaHistorico
         <span className="text-sm font-medium text-[var(--fg)]">Placa de Resultado</span>
         <span className="text-xs" style={{ color: on ? 'var(--green)' : 'var(--fg-3)' }}>{on ? <span className="inline-flex items-center gap-1"><Icon name="check" size={12} /> Sim</span> : 'Não'}</span>
       </div>
+
+      {rastreio && <RastreioCopy codigo={rastreio} />}
 
       {on && loading && <div className="text-xs text-[var(--fg-3)] mt-2">Carregando histórico…</div>}
 
@@ -329,7 +356,6 @@ function PlacaJornada({ on, hist, loading }: { on: boolean; hist: PlacaHistorico
           </div>
           <div className="text-xs space-y-0.5 text-[var(--fg-3)]">
             {aud?.protocolo && <div>Protocolo: <span className="text-[var(--fg-2)]">{aud.protocolo}</span></div>}
-            {sol?.codigo_rastreio && <div>Rastreio: <span className="text-[var(--fg-2)]">{sol.codigo_rastreio}</span></div>}
             {(aud?.faturamento || sol?.faturamento_declarado) != null && <div>Faturamento: <span className="text-[var(--fg-2)]">{fmtBRL(aud?.faturamento ?? sol?.faturamento_declarado ?? null)}</span></div>}
             {sol?.entrevista_data && <div>Entrevista: <span className="text-[var(--fg-2)]">{fmtData(sol.entrevista_data)}{sol.entrevista_hora ? ` ${String(sol.entrevista_hora).slice(0, 5)}` : ''}</span></div>}
             {sol?.motivo_retorno && <div className="text-[var(--red)]">Motivo do retorno: {sol.motivo_retorno}</div>}
