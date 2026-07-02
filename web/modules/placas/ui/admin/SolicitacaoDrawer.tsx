@@ -7,7 +7,7 @@ import { computeDisplayStatus, isSolicitacaoRegularizacao } from '../../domain/s
 import type { Solicitacao, Auditoria } from '../../domain/types';
 import * as data from './placas-admin-data';
 import { NIVEL_FAIXA_ORDER, DEFAULT_NIVEL_FAIXAS } from '../../domain/config';
-import { Badge, NivelBadge, Drawer, AvatarInicial, Button, Input, FilterSelect, ConfirmDialog, Modal } from '@/shared/ui/components';
+import { Badge, NivelBadge, Drawer, AvatarInicial, Button, CopyField, Input, FilterSelect, ConfirmDialog, Modal } from '@/shared/ui/components';
 import { fmtDataHora } from '@/shared/ui/format';
 import { fmtBRL, fmtDataExtenso, type Act } from './relatorio-shared';
 
@@ -98,6 +98,8 @@ export function SolicitacaoDrawer({
               </div>
             </Panel>
           ) : null}
+
+          {sol.codigo_rastreio && <CopyField label="Código de rastreio" value={sol.codigo_rastreio} />}
 
           <Panel icon="arrow-right" title="Próxima ação">
             {!canEdit ? (

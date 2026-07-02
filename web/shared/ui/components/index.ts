@@ -7,6 +7,7 @@ export { Spinner, Loading, ProgressBar, Skeleton, SkeletonRows } from './Feedbac
 export { Toolbar, SearchInput, Input, FilterSelect, MultiSelect, Toggle } from './Controls';
 export { Checkbox } from './Checkbox';
 export { Modal, ConfirmDialog } from './Modal';
+export { CopyField } from './Copy';
 export { Timeline } from './Timeline';
 export type { TimelineEntry } from './Timeline';
 export { Toast, useFlash } from './Toast';

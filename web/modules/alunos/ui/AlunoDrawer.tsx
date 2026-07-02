@@ -14,7 +14,7 @@ import { nivelLabel, nivelOptions } from '@/shared/domain/nivel-resultado';
 import { loadPlacaHistorico, updateAluno, type Turma, type PlacaHistorico } from './alunos-data';
 import { AUDIT_STEPS } from '@/modules/placas/domain/auditoria';
 import { cursoDesempenhoMock } from '../domain/curso-mock';
-import { Badge, NivelBadge, Drawer, AvatarInicial, SectionCard, Button, KpiCard, ProgressBar, Spinner } from '@/shared/ui/components';
+import { Badge, NivelBadge, Drawer, AvatarInicial, SectionCard, Button, CopyField, KpiCard, ProgressBar, Spinner } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import { fetchJson } from '@/shared/ui/fetch-json';
@@ -301,29 +301,6 @@ function SipJornada({ email, on }: { email: string | null; on: boolean }) {
   );
 }
 
-/** Código de rastreio em destaque, pronto para copiar. */
-function RastreioCopy({ codigo }: { codigo: string }) {
-  const [copied, setCopied] = useState(false);
-  async function copiar() {
-    try {
-      await navigator.clipboard.writeText(codigo);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch { /* clipboard indisponível (http/permissão) — usuário ainda pode selecionar o texto */ }
-  }
-  return (
-    <div className="mt-2 flex items-center justify-between gap-2 rounded-[var(--r-md)] border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-2.5 py-2">
-      <div className="min-w-0">
-        <div className="text-[10px] uppercase tracking-wide font-semibold text-[var(--accent)]">Código de rastreio</div>
-        <div className="text-sm font-semibold text-[var(--fg)] tabular truncate select-all" title={codigo}>{codigo}</div>
-      </div>
-      <Button variant="subtle" size="sm" onClick={copiar} aria-label="Copiar código de rastreio">
-        <Icon name={copied ? 'check' : 'copy'} size={13} /> {copied ? 'Copiado!' : 'Copiar'}
-      </Button>
-    </div>
-  );
-}
-
 // ── Placa de Resultado: card + histórico (solicitação + auditoria) ──
 function PlacaJornada({ on, hist, loading, rastreioAluno }: { on: boolean; hist: PlacaHistorico | null; loading: boolean; rastreioAluno?: string | null }) {
   const sol = hist?.solicitacao;
@@ -342,7 +319,7 @@ function PlacaJornada({ on, hist, loading, rastreioAluno }: { on: boolean; hist:
         <span className="text-xs" style={{ color: on ? 'var(--green)' : 'var(--fg-3)' }}>{on ? <span className="inline-flex items-center gap-1"><Icon name="check" size={12} /> Sim</span> : 'Não'}</span>
       </div>
 
-      {rastreio && <RastreioCopy codigo={rastreio} />}
+      {rastreio && <div className="mt-2"><CopyField label="Código de rastreio" value={rastreio} /></div>}
 
       {on && loading && <div className="text-xs text-[var(--fg-3)] mt-2">Carregando histórico…</div>}
 
