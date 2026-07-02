@@ -6,7 +6,17 @@ import { useTheme } from './use-theme';
 import { Icon } from '@/shared/ui/icons';
 import type { GpUser } from '@/shared/domain/auth';
 
-export function Header({ user, onToggleSidebar }: { user: GpUser; onToggleSidebar?: () => void }) {
+export function Header({
+  user,
+  onToggleSidebar,
+  collapsed,
+  onToggleCollapse,
+}: {
+  user: GpUser;
+  onToggleSidebar?: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}) {
   const router = useRouter();
   const { theme, toggle } = useTheme();
 
@@ -29,6 +39,17 @@ export function Header({ user, onToggleSidebar }: { user: GpUser; onToggleSideba
           className="md:hidden w-9 h-9 grid place-items-center rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg)]"
         >
           <Icon name="menu" size={18} />
+        </button>
+      )}
+      {onToggleCollapse && (
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          aria-label={collapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+          title={collapsed ? 'Expandir menu' : 'Recolher menu'}
+          className="hidden md:grid w-9 h-9 place-items-center rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--accent)] hover:border-[var(--border-accent)] hover:bg-[var(--accent-subtle)] transition-colors"
+        >
+          <Icon name={collapsed ? 'panel-open' : 'panel-close'} size={18} />
         </button>
       )}
       {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -1,21 +1,52 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import type { GpUser } from '@/shared/domain/auth';
 
-/** Casca autenticada: header + sidebar colapsável + área de conteúdo. */
+const COLLAPSE_KEY = 'gp_sidebar_collapsed';
+
+/** Casca autenticada: header + sidebar colapsável (desktop) / drawer (mobile) + conteúdo. */
 export function AppShell({ user, children }: { user: GpUser; children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (localStorage.getItem(COLLAPSE_KEY) === '1') setCollapsed(true);
+  }, []);
+
+  const toggleCollapse = () =>
+    setCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
 
   return (
     <div className="h-dvh flex flex-col overflow-hidden">
-      <Header user={user} onToggleSidebar={() => setMobileOpen((v) => !v)} />
+      <Header
+        user={user}
+        onToggleSidebar={() => setMobileOpen((v) => !v)}
+        collapsed={collapsed}
+        onToggleCollapse={toggleCollapse}
+      />
       <div className="flex flex-1 min-h-0">
-        {/* Sidebar: fixa no desktop, drawer no mobile */}
+        {/* Sidebar desktop — recolhível (anima a largura para liberar área de trabalho) */}
         <div
-          className={`${mobileOpen ? 'fixed inset-y-0 left-0 z-50 pt-[var(--header-height)]' : 'hidden'} md:static md:block md:pt-0`}
+          className={`hidden md:block shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out ${collapsed ? 'w-0' : 'w-[var(--sidebar-width)]'}`}
+        >
+          <Sidebar user={user} />
+        </div>
+
+        {/* Sidebar mobile — drawer sobreposto */}
+        <div
+          className={`${mobileOpen ? 'fixed inset-y-0 left-0 z-50 pt-[var(--header-height)]' : 'hidden'} md:hidden`}
         >
           <Sidebar user={user} />
         </div>

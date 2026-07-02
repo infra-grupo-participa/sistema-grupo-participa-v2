@@ -5,7 +5,8 @@ import {
   ChevronDown, ChevronUp, ChevronRight, ChevronLeft, ArrowRight, ArrowLeft, ArrowUp, ArrowDown,
   ArrowUpRight, Search, Sun, Moon, Menu, RefreshCw, RotateCw, Link2, Pause, Play, Lock, Download,
   Mic, Camera, Clapperboard, Truck, NotebookPen, FileText, PartyPopper, Hand, Star, Circle, Sprout,
-  Briefcase, Medal, Coins, Gem, LogOut, Plus, Trash2, Pencil, Inbox, Copy, type LucideIcon,
+  Briefcase, Medal, Coins, Gem, LogOut, Plus, Trash2, Pencil, Inbox, Copy,
+  PanelLeftClose, PanelLeftOpen, type LucideIcon,
 } from 'lucide-react';
 
 const MAP: Record<string, LucideIcon> = {
@@ -29,6 +30,8 @@ const MAP: Record<string, LucideIcon> = {
   sun: Sun, moon: Moon, menu: Menu,
   // níveis (metal/pedra)
   sprout: Sprout, briefcase: Briefcase, medal: Medal, coins: Coins, gem: Gem,
+  // navegação — recolher/expandir sidebar
+  'panel-close': PanelLeftClose, 'panel-open': PanelLeftOpen,
 };
 
 export function Icon({ name, size = 16, className, strokeWidth = 2, style }: {
