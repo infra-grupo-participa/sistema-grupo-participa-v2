@@ -1,13 +1,31 @@
 import type { NextRequest } from 'next/server';
 import { bootstrapPublic, clientIp, jsonError, jsonOk } from '@/shared/infrastructure/http/security';
 import { rateLimitOk, sweepRateLimit } from '@/shared/infrastructure/http/rate-limit';
-import { isDateIso, isTimeHm } from '@/shared/infrastructure/http/validation';
+import { isDateIso, isTimeHm, safeEmail } from '@/shared/infrastructure/http/validation';
 import { resolvePlacaToken } from '@/shared/infrastructure/http/session-cookie';
 import { withSlotLock } from '@/shared/infrastructure/http/slot-lock';
 import { SupabaseAgenda } from '@/modules/placas/infrastructure/supabase-agenda';
 import { ZoomMeetingProvider } from '@/modules/placas/infrastructure/zoom-meeting';
 import { sendMail } from '@/shared/infrastructure/email/mailer';
 import { buildSlotStart, conflictsForSlot, rescheduleBlockReason } from '@/modules/placas/domain/agendamento';
+import { getEmailContentByStatus, emailDynamicBoxes, type EmailExtra } from '@/modules/placas/application/email-content';
+import { buildEmailTemplate } from '@/shared/infrastructure/email/template';
+import { readPlacasConfig } from '@/modules/placas/infrastructure/supabase-config';
+
+/** E-mail de confirmação ao CANDIDATO (template entrevista_agendada + override editável do admin). */
+async function emailCandidato(email: string, nome: string, data: string, hora: string, zoomLink: string | null, trackingLink: string): Promise<void> {
+  const extra: EmailExtra = { entrevista_data: data, entrevista_hora: hora, zoom_link: zoomLink || undefined };
+  const content = getEmailContentByStatus('entrevista_agendada', extra, trackingLink);
+  const { email_templates } = await readPlacasConfig();
+  const ov = email_templates?.['entrevista_agendada'];
+  if (ov) {
+    if (ov.assunto?.trim()) content.assunto = ov.assunto.trim();
+    if (ov.introducao?.trim()) content.templateData.introducao = ov.introducao.trim();
+    if (ov.corpo_extra?.trim()) content.templateData.corpo_extra = emailDynamicBoxes('entrevista_agendada', extra) + ov.corpo_extra.trim();
+  }
+  const html = buildEmailTemplate({ ...content.templateData, nome });
+  await sendMail({ to: email, subject: content.assunto, html });
+}
 
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -105,6 +123,12 @@ export async function POST(request: NextRequest) {
         `<p style="margin:5px 0 0"><strong>Data:</strong> ${dataFmt}</p>` +
         `<p style="margin:5px 0 0"><strong>Hora:</strong> ${escapeHtml(hora)}</p></div>${zoomBtn}</div>`,
     }).catch(() => false);
+
+    // Confirmação ao CANDIDATO (melhor-esforço) — o link do Zoom vai por e-mail além da tela.
+    const candidatoEmail = safeEmail(String(sol.email ?? ''));
+    if (candidatoEmail) {
+      await emailCandidato(candidatoEmail, String(sol.nome ?? 'Candidato'), data, hora, zoomLink, `${origin}/solicitar-placa?token=${token}`).catch(() => undefined);
+    }
 
     return jsonOk({
       ok: true,
