@@ -53,6 +53,7 @@ export const EMAIL_TIPOS_CONFIG: { tipo: string; label: string; descricao: strin
   { tipo: 'entrevista_finalizada', label: 'Entrevista realizada', descricao: 'Confirma que a entrevista foi registrada.' },
   { tipo: 'placa_em_caminho', label: 'Placa a caminho', descricao: 'Enviado com o código de rastreio quando a placa é postada.' },
   { tipo: 'placa_recebida', label: 'Placa recebida (conclusão)', descricao: 'Enviado quando o admin confirma o recebimento da placa e encerra o processo.' },
+  { tipo: 'lembrete_entrevista', label: 'Lembrete de entrevista (4h)', descricao: 'Enviado automaticamente ~4h antes da entrevista agendada (cron).' },
   { tipo: 'retorno_auditoria', label: 'Pedido de correção', descricao: 'Enviado quando o admin devolve a solicitação para ajustes.' },
   { tipo: 'nao_compareceu', label: 'Não compareceu', descricao: 'Enviado quando o cliente falta à entrevista e precisa reagendar.' },
   { tipo: 'nivel_registrado', label: 'Cadastro concluído (sem placa)', descricao: 'Fecho do fluxo curto: nível abaixo de Ouro registrado, sem emissão de placa.' },

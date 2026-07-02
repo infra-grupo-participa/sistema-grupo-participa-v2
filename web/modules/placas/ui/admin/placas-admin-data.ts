@@ -292,6 +292,102 @@ export async function loadReprovacoes(solId: string): Promise<Reprovacao[]> {
   return (data as Reprovacao[]) ?? [];
 }
 
+/** Reenvia o e-mail de agendamento (docs_aprovados) — para cliente que perdeu o e-mail. */
+export async function reenviarEmailAgendamento(sol: Solicitacao): Promise<{ ok: boolean; msg: string }> {
+  try {
+    const res = await fetch('/api/email/status', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo: 'docs_aprovados', email: sol.email, nome: sol.nome, token: sol.token, token_link: agendarLink(sol.token) }),
+    });
+    const json = (await res.json().catch(() => null)) as { ok?: boolean } | null;
+    return json?.ok ? { ok: true, msg: 'E-mail de agendamento reenviado!' } : { ok: false, msg: 'Não foi possível reenviar o e-mail.' };
+  } catch {
+    return { ok: false, msg: 'Não foi possível reenviar o e-mail.' };
+  }
+}
+
+/** Agenda a entrevista manualmente (admin define data/hora; server cria Zoom e notifica). */
+export async function agendarEntrevistaManual(
+  sol: Solicitacao,
+  data: string,
+  hora: string,
+  enviarEmail: boolean,
+): Promise<{ ok: boolean; msg: string }> {
+  try {
+    const res = await fetch('/api/admin/placas/entrevista', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: sol.id, data, hora, enviar_email: enviarEmail }),
+    });
+    const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; zoom_pending?: boolean } | null;
+    if (!json?.ok) return { ok: false, msg: json?.error || 'Não foi possível agendar.' };
+    return { ok: true, msg: json.zoom_pending ? 'Entrevista agendada (link Zoom pendente — verifique a configuração).' : 'Entrevista agendada!' };
+  } catch {
+    return { ok: false, msg: 'Não foi possível agendar.' };
+  }
+}
+
+/** Cancela a entrevista (reset para vazio): volta a docs_aprovados SEM e-mail. Porta de reset-entrevista.php. */
+export async function cancelarEntrevista(sol: Solicitacao): Promise<boolean> {
+  if (!sol.aluno_id) return false;
+  const supabase = db();
+  const r2 = await supabase
+    .from('thb_placas_solicitacoes')
+    .update({ auditoria_step: AUDIT_STEP_INDEX.DOCS_APROVADOS, step_index: AUDIT_STEP_INDEX.DOCS_APROVADOS, status: 'docs_aprovados', entrevista_data: null, entrevista_hora: null, entrevista_link: null, meet_link: null, agendamento_hold_data: null, agendamento_hold_hora: null, agendamento_hold_until: null })
+    .eq('id', sol.id);
+  logQueryError('cancelarEntrevista:solicitacao', r2.error);
+  if (r2.error) return false;
+  const r1 = await supabase
+    .from('thb_placas_auditoria')
+    .upsert({ aluno_id: sol.aluno_id, step_index: AUDIT_STEP_INDEX.DOCS_APROVADOS, encerrado: false }, { onConflict: 'aluno_id' });
+  logQueryError('cancelarEntrevista:auditoria', r1.error);
+  return true;
+}
+
+/** Detalhe da auditoria para edição (obs/protocolo/faturamento comprovado — painel B do legado). */
+export interface AuditoriaDetalhe {
+  obs: string | null;
+  protocolo: string | null;
+  faturamento: number | null;
+  encerrado: boolean | null;
+}
+export async function loadAuditoriaDetalhe(alunoId: string): Promise<AuditoriaDetalhe | null> {
+  const { data, error } = await db()
+    .from('thb_placas_auditoria')
+    .select('obs, protocolo, faturamento, encerrado')
+    .eq('aluno_id', alunoId)
+    .maybeSingle();
+  logQueryError('loadAuditoriaDetalhe', error);
+  return (data as AuditoriaDetalhe) ?? null;
+}
+export async function salvarAuditoriaDetalhe(
+  alunoId: string,
+  campos: { obs?: string | null; protocolo?: string | null; faturamento?: number | null },
+): Promise<boolean> {
+  const { error } = await db().from('thb_placas_auditoria').update(campos).eq('aluno_id', alunoId);
+  logQueryError('salvarAuditoriaDetalhe', error);
+  return !error;
+}
+
+/** Bloco de dados logísticos pronto para copiar (etiqueta/expedição). Porta de copiarDadosLogistica. */
+export function dadosLogistica(sol: Solicitacao): string {
+  const linhas = [
+    `Nome: ${sol.nome ?? ''}`,
+    `Documento: ${sol.documento_nf ?? ''}`,
+    `Telefone: ${sol.telefone ?? ''}`,
+    `E-mail: ${sol.email_entrega || sol.email || ''}`,
+    `Endereço: ${[sol.logradouro, sol.numero].filter(Boolean).join(', ')}${sol.complemento ? ` — ${sol.complemento}` : ''}`,
+    `Bairro: ${sol.bairro ?? ''}`,
+    `Cidade/UF: ${[sol.cidade, sol.estado_uf].filter(Boolean).join('/')}`,
+    `CEP: ${sol.cep ?? ''}`,
+  ];
+  if (sol.codigo_rastreio) linhas.push(`Rastreio: ${sol.codigo_rastreio}`);
+  return linhas.join('\n');
+}
+
 /** Não compareceu: reabre agendamento (volta para docs_aprovados, limpa entrevista) + e-mail. */
 export async function marcarNaoCompareceu(sol: Solicitacao): Promise<boolean> {
   if (!sol.aluno_id) return false;
@@ -358,10 +454,17 @@ export async function excluirSolicitacao(sol: Solicitacao): Promise<boolean> {
 
 /** Rejeição definitiva: mantém o registro, notifica o cliente. Reversível via Remanejamento. */
 export async function rejeitar(sol: Solicitacao, motivo?: string): Promise<boolean> {
-  const { error } = await db().from('thb_placas_solicitacoes').update({ status: 'rejeitado', motivo_retorno: motivo?.trim() || null, ...buildAdminSeenPatch(true) }).eq('id', sol.id);
+  const supabase = db();
+  const { error } = await supabase.from('thb_placas_solicitacoes').update({ status: 'rejeitado', motivo_retorno: motivo?.trim() || null, ...buildAdminSeenPatch(true) }).eq('id', sol.id);
   if (error) {
     logQueryError('rejeitar', error);
     return false;
+  }
+  // Encerra a auditoria (paridade com encerrarSolicitacao do legado). O trigger de nível
+  // não dispara aqui: fn_sync_placa_nivel exige solicitação 'concluido'.
+  if (sol.aluno_id) {
+    const r = await supabase.from('thb_placas_auditoria').update({ encerrado: true }).eq('aluno_id', sol.aluno_id);
+    logQueryError('rejeitar:auditoria', r.error);
   }
   await sendStatusEmail('solicitacao_rejeitada', sol, motivo?.trim() ? { motivo_retorno: motivo.trim() } : {});
   return true;
@@ -399,6 +502,11 @@ export type DadosEditaveis = Partial<
     | 'estado_uf'
     | 'documento_nf'
     | 'email_entrega'
+    | 'telefone_profissional'
+    | 'instagram_url'
+    | 'facebook_url'
+    | 'youtube_url'
+    | 'site_profissional'
   >
 >;
 
@@ -435,6 +543,10 @@ export async function atualizarDadosSolicitacao(
     if ('logradouro' in patch) back.endereco_logradouro = patch.logradouro;
     if ('numero' in patch) back.endereco_numero = patch.numero;
     if ('complemento' in patch) back.endereco_complemento = patch.complemento;
+    if ('telefone_profissional' in patch) back.telefone_profissional = patch.telefone_profissional;
+    if ('instagram_url' in patch) back.instagram_url = patch.instagram_url;
+    if ('youtube_url' in patch) back.youtube_url = patch.youtube_url;
+    if ('site_profissional' in patch) back.site_profissional = patch.site_profissional;
     if (Object.keys(back).length) {
       await supabase.from('thb_alunos').update(back).eq('id', sol.aluno_id);
     }

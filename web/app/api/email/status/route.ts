@@ -19,6 +19,7 @@ const TIPOS: EmailTipo[] = [
   'placa_recebida',
   'retorno_auditoria',
   'nivel_registrado',
+  'lembrete_entrevista',
   'nao_compareceu',
   'solicitacao_rejeitada',
 ];

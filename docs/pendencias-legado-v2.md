@@ -1,5 +1,15 @@
 # Pendências Legado → V2 — Verificação profunda (2026-07-02)
 
+> **Atualização (mesmo dia):** sprint de paridade do RELATÓRIO DE PLACAS implementada — resolvidos:
+> L-01 (lembrete 4h: e-mail + rota `/api/cron/interview-reminder`, requer `CRON_SECRET` + agendador),
+> L-02 (reenviar e-mail de agendamento), L-03 (agendamento manual pelo admin com Zoom),
+> L-13 (cancelar entrevista), L-11 (filtros nível/turma/UF/status + busca ampliada + ordenação
+> por coluna + export do recorte visível), L-12 parcial (obs/protocolo/faturamento comprovado
+> editáveis no painel "Auditoria (interno)"; datas manuais dos carimbos ficaram de fora),
+> L-15 (copiar link de agendamento + dados logísticos), L-16 (presença online no drawer),
+> L-23 (rejeitar encerra a auditoria; trigger de nível agora exige status concluído).
+> Pendências restantes de placas: paginação da fila, painel de logs na tela, KPI "com rastreio".
+
 Varredura botão a botão do código legado (`../sistema-grupo-participa/app`) contra o v2 (`web/`),
 por 4 agentes (admin de placas, fluxo público, alunos/usuários/login/admin-dev, depoimentos+APIs).
 Diferenças puramente visuais ignoradas. Ganhos do v2 sem paralelo no legado não listados.

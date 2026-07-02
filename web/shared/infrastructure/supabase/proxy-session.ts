@@ -10,6 +10,7 @@ const PUBLIC_PREFIXES = [
   '/api/cep',
   '/api/placa',
   '/api/agenda',
+  '/api/cron', // autenticação própria via Bearer CRON_SECRET (cron não tem sessão)
 ];
 
 function isPublic(pathname: string): boolean {

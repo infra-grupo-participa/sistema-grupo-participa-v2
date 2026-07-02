@@ -14,8 +14,8 @@ import {
 import type { Solicitacao, Auditoria } from '../../domain/types';
 import * as data from './placas-admin-data';
 import * as configData from './placas-config-data';
-import { resolveAuditSteps, type PlacasConfig } from '../../domain/config';
-import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, SearchInput, ProgressBar, SkeletonRows, Toast, useFlash } from '@/shared/ui/components';
+import { resolveAuditSteps, NIVEL_FAIXA_ORDER, DEFAULT_NIVEL_FAIXAS, type PlacasConfig } from '../../domain/config';
+import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, MultiSelect, SearchInput, ProgressBar, SkeletonRows, Toast, Toolbar, useFlash, Button } from '@/shared/ui/components';
 import { SolicitacaoDrawer } from './SolicitacaoDrawer';
 import { ConfigPanel } from './ConfigPanel';
 import { AgendaHorarios } from './AgendaHorarios';
@@ -138,21 +138,49 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
     return { ...c, naoVistos };
   }, [sols]);
 
+  // Filtros dedicados (porta dos 5 selects do legado) + ordenação clicável.
+  const FILTROS_VAZIO = { nivel: [] as string[], turma: [] as string[], uf: [] as string[], status: [] as string[] };
+  const [filtros, setFiltros] = useState(FILTROS_VAZIO);
+  type SortCol = 'nome' | 'nivel' | 'status' | 'turma' | 'quando';
+  const [sortCol, setSortCol] = useState<SortCol | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const sortBtn = (col: SortCol) => () => {
+    if (sortCol === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortCol(col); setSortDir('asc'); }
+  };
+  const turmaOpts = useMemo(() => Array.from(new Set(sols.map((s) => s.turma).filter(Boolean) as string[])).sort((a, b) => b.localeCompare(a, 'pt-BR', { numeric: true })), [sols]);
+  const ufOpts = useMemo(() => Array.from(new Set(sols.map((s) => String(s.estado_uf ?? '').toUpperCase()).filter(Boolean))).sort(), [sols]);
+  const statusOpts = useMemo(() => Array.from(new Set(sols.map((s) => computeDisplayStatus(s).label))).sort(), [sols]);
+  const temFiltro = Object.values(filtros).some((a) => a.length > 0);
+
   // Busca adiada: digitar não trava a renderização da tabela.
   const dq = useDeferredValue(q);
   const filtered = useMemo(() => {
     const term = dq.trim().toLowerCase();
+    const nivelRank = (n: string | null | undefined) => { const i = (NIVEL_FAIXA_ORDER as readonly string[]).indexOf(String(n ?? '')); return i === -1 ? 99 : i; };
     return sols
       .filter((s) => getSolicitacaoBucketMatch(s, bucket))
-      .filter((s) => !term || `${s.nome ?? ''} ${s.email ?? ''} ${s.documento_nf ?? ''}`.toLowerCase().includes(term))
+      .filter((s) => !term || `${s.nome ?? ''} ${s.email ?? ''} ${s.documento_nf ?? ''} ${s.cidade ?? ''} ${s.estado_uf ?? ''} ${s.turma ?? ''}`.toLowerCase().includes(term))
+      .filter((s) => !filtros.nivel.length || filtros.nivel.includes(String(s.nivel ?? '')))
+      .filter((s) => !filtros.turma.length || filtros.turma.includes(String(s.turma ?? '')))
+      .filter((s) => !filtros.uf.length || filtros.uf.includes(String(s.estado_uf ?? '').toUpperCase()))
+      .filter((s) => !filtros.status.length || filtros.status.includes(computeDisplayStatus(s).label))
       .sort((a, b) => {
+        if (sortCol) {
+          const dir = sortDir === 'asc' ? 1 : -1;
+          if (sortCol === 'nome') return dir * String(a.nome ?? '').localeCompare(String(b.nome ?? ''), 'pt-BR');
+          if (sortCol === 'nivel') return dir * (nivelRank(a.nivel) - nivelRank(b.nivel));
+          if (sortCol === 'status') return dir * computeDisplayStatus(a).label.localeCompare(computeDisplayStatus(b).label, 'pt-BR');
+          if (sortCol === 'turma') return dir * String(a.turma ?? '').localeCompare(String(b.turma ?? ''), 'pt-BR', { numeric: true });
+          return dir * String(a.updated_at ?? '').localeCompare(String(b.updated_at ?? ''));
+        }
         // Não-vistos (ação nova do cliente) sempre no topo — estilo caixa de WhatsApp.
         const sa = isSolicitacaoSeen(a) ? 1 : 0;
         const sb = isSolicitacaoSeen(b) ? 1 : 0;
         if (sa !== sb) return sa - sb;
         return getSolicitacaoQueuePriority(a) - getSolicitacaoQueuePriority(b);
       });
-  }, [sols, bucket, dq]);
+  }, [sols, bucket, dq, filtros, sortCol, sortDir]);
 
   const open = openId ? sols.find((s) => s.id === openId) ?? null : null;
   const abrir = useCallback((id: string) => setOpenId(id), []);
@@ -161,18 +189,16 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
   const exportar = useCallback(async () => {
     setExportando(true);
     try {
-      // Exporta todos os elegíveis que batem com a busca (independe da gaveta) — a
-      // elegibilidade (entrevista finalizada+) é aplicada dentro de exportarExcelPlacas.
-      const term = dq.trim().toLowerCase();
-      const base = sols.filter((s) => !term || `${s.nome ?? ''} ${s.email ?? ''} ${s.documento_nf ?? ''}`.toLowerCase().includes(term));
-      const n = await exportarExcelPlacas(base);
+      // Exporta exatamente o recorte visível (gaveta + filtros + busca), como o legado —
+      // a elegibilidade (entrevista finalizada+) é aplicada dentro de exportarExcelPlacas.
+      const n = await exportarExcelPlacas(filtered);
       flash(n ? `${n} ${n === 1 ? 'solicitação exportada' : 'solicitações exportadas'}.` : 'Nenhum registro elegível para exportar (entrevista finalizada em diante).');
     } catch {
       flash('Não foi possível gerar a planilha.');
     } finally {
       setExportando(false);
     }
-  }, [sols, dq, flash]);
+  }, [filtered, flash]);
   const linkPublico = `${origin}/solicitar-placa`;
   const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
@@ -226,20 +252,29 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
             ))}
           </div>
 
-          {/* Busca */}
-          <div className="mb-3 flex items-center gap-3">
-            <div className="flex-1"><SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nome, e-mail ou documento…" /></div>
-            {dq.trim() && <span className="text-xs text-[var(--fg-3)] tabular whitespace-nowrap">{filtered.length} {filtered.length === 1 ? 'resultado' : 'resultados'}</span>}
-          </div>
+          {/* Busca + filtros dedicados */}
+          <Toolbar className="mb-3">
+            <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar nome, e-mail, documento, cidade, UF, turma…" />
+            <MultiSelect values={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={NIVEL_FAIXA_ORDER.map((n) => ({ value: n, label: DEFAULT_NIVEL_FAIXAS[n].nm }))} />
+            <MultiSelect values={filtros.turma} onChange={(v) => setFiltros((f) => ({ ...f, turma: v }))} placeholder="Todas as turmas" options={turmaOpts.map((t) => ({ value: t, label: t }))} />
+            <MultiSelect values={filtros.uf} onChange={(v) => setFiltros((f) => ({ ...f, uf: v }))} placeholder="Todas as UFs" options={ufOpts.map((u) => ({ value: u, label: u }))} />
+            <MultiSelect values={filtros.status} onChange={(v) => setFiltros((f) => ({ ...f, status: v }))} placeholder="Todos os status" options={statusOpts.map((s) => ({ value: s, label: s }))} />
+            {(temFiltro || dq.trim()) && (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => { setFiltros(FILTROS_VAZIO); setQ(''); }}>Limpar</Button>
+                <span className="text-xs text-[var(--fg-3)] tabular whitespace-nowrap">{filtered.length} {filtered.length === 1 ? 'resultado' : 'resultados'}</span>
+              </>
+            )}
+          </Toolbar>
 
           <DataTable>
             <Thead>
-              <Th>Aluno</Th>
-              <Th>Nível</Th>
-              <Th>Status</Th>
+              <Th sortable active={sortCol === 'nome'} dir={sortDir} onClick={sortBtn('nome')}>Aluno</Th>
+              <Th sortable active={sortCol === 'nivel'} dir={sortDir} onClick={sortBtn('nivel')}>Nível</Th>
+              <Th sortable active={sortCol === 'status'} dir={sortDir} onClick={sortBtn('status')}>Status</Th>
               <Th>Progresso</Th>
-              <Th>Turma</Th>
-              <Th>Última atualização</Th>
+              <Th sortable active={sortCol === 'turma'} dir={sortDir} onClick={sortBtn('turma')}>Turma</Th>
+              <Th sortable active={sortCol === 'quando'} dir={sortDir} onClick={sortBtn('quando')}>Última atualização</Th>
             </Thead>
             <tbody>
               {loading && !sols.length

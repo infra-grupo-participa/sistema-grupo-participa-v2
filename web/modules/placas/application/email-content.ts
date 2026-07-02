@@ -10,6 +10,7 @@ export type EmailTipo =
   | 'placa_recebida'
   | 'retorno_auditoria'
   | 'nivel_registrado'
+  | 'lembrete_entrevista'
   | 'nao_compareceu'
   | 'solicitacao_rejeitada';
 
@@ -69,7 +70,7 @@ export interface EmailExtra {
  * sobrescreve o corpo do e-mail na tela de configuração.
  */
 export function emailDynamicBoxes(tipo: EmailTipo, extra: EmailExtra): string {
-  if (tipo === 'entrevista_agendada') return entrevistaBox(extra.entrevista_data, extra.entrevista_hora);
+  if (tipo === 'entrevista_agendada' || tipo === 'lembrete_entrevista') return entrevistaBox(extra.entrevista_data, extra.entrevista_hora);
   if (tipo === 'placa_em_caminho') return trackingCodeHtml(extra.codigo_rastreio || '');
   if (tipo === 'retorno_auditoria' || tipo === 'solicitacao_rejeitada') return motivoBox(extra.motivo_retorno || '');
   return '';
@@ -229,6 +230,28 @@ export function getEmailContentByStatus(tipo: EmailTipo, extra: EmailExtra, ctaL
           cta_label: 'Acompanhar solicitação',
         },
       };
+    case 'lembrete_entrevista': {
+      const dataFmt = extra.entrevista_data ? extra.entrevista_data.split('-').reverse().join('/') : '';
+      const hora = (extra.entrevista_hora ?? '').slice(0, 5);
+      const dataLabel = dataFmt ? ` em ${dataFmt}` : '';
+      const horario = hora ? ` às ${hora}` : '';
+      return {
+        assunto: '[Holding Brasil] Sua entrevista começa em 4 horas',
+        templateData: {
+          titulo: 'Lembrete de entrevista',
+          titulo_cor: '#1e40af',
+          introducao: `A sua entrevista com o time Holding Brasil está agendada para hoje${dataLabel}${horario}. Faltam aproximadamente 4 horas.`,
+          corpo_extra:
+            entrevistaBox(extra.entrevista_data, extra.entrevista_hora) +
+            '<p>Certifique-se de estar em um local tranquilo, com boa conexão de internet.</p>' +
+            '<p>O link de acesso à sala foi enviado no e-mail de confirmação do agendamento.</p>',
+          cta_link: ctaLink,
+          cta_label: 'Ver detalhes da entrevista',
+          cta_cor: '#1e40af',
+          nota: SECRETARIA_NOTA,
+        },
+      };
+    }
     case 'nao_compareceu':
       return {
         assunto: '[Holding Brasil] Entrevista não realizada — reagendamento disponível',

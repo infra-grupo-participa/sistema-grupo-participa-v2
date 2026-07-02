@@ -32,6 +32,12 @@ export function SolicitacaoDrawer({
   const [confirmExcluir, setConfirmExcluir] = useState(false);
   const [confirmRejeitar, setConfirmRejeitar] = useState(false);
   const [motivoRejeicao, setMotivoRejeicao] = useState('');
+  const [agendarOpen, setAgendarOpen] = useState(false);
+  const [agData, setAgData] = useState('');
+  const [agHora, setAgHora] = useState('');
+  const [agEmail, setAgEmail] = useState(true);
+  const [confirmCancelarEntrevista, setConfirmCancelarEntrevista] = useState(false);
+  const [copiadoLogistica, setCopiadoLogistica] = useState(false);
   const [editando, setEditando] = useState(false);
   const [reprovacoes, setReprovacoes] = useState<data.Reprovacao[]>([]);
   const [histOpen, setHistOpen] = useState(false);
@@ -127,7 +133,14 @@ export function SolicitacaoDrawer({
             ) : step < 0 || sol.status === 'enviado' ? (
               <BigAction icon="play" onClick={() => act(() => data.bootstrapAuditoria(sol).then(() => true))}>Iniciar auditoria</BigAction>
             ) : step === AUDIT_STEP_INDEX.DOCS_APROVADOS ? (
-              <p className="text-sm text-[var(--fg-2)]">Aguardando o cliente agendar a entrevista.</p>
+              <div className="space-y-2">
+                <p className="text-sm text-[var(--fg-2)]">Aguardando o cliente agendar a entrevista.</p>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  <Button variant="subtle" size="sm" onClick={() => act(() => data.reenviarEmailAgendamento(sol))}><Icon name="rotate" size={13} /> Reenviar e-mail de agendamento</Button>
+                  <Button variant="subtle" size="sm" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/agendar-entrevista?token=${encodeURIComponent(sol.token || '')}`); }}><Icon name="copy" size={13} /> Copiar link de agendamento</Button>
+                </div>
+                <Button variant="ghost" size="sm" className="w-full" onClick={() => setAgendarOpen(true)}><Icon name="calendar" size={13} /> Agendar manualmente (admin)</Button>
+              </div>
             ) : step >= AUDIT_STEP_INDEX.PLACA_RECEBIDA ? (
               <div className="rounded-[var(--r-md)] bg-[var(--green-subtle)] text-[var(--green)] p-3 text-sm inline-flex items-center gap-2"><Icon name="check-circle" size={16} /> Processo concluído — placa recebida.</div>
             ) : (
@@ -163,6 +176,12 @@ export function SolicitacaoDrawer({
               {(sol.meet_link || sol.entrevista_link) && (
                 <a href={sol.meet_link || sol.entrevista_link!} target="_blank" rel="noopener" className="w-full inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110 transition-[filter]" style={{ background: 'var(--info)' }}><Icon name="camera" size={15} /> Abrir sala da entrevista</a>
               )}
+              {canEdit && step < AUDIT_STEP_INDEX.ENTREVISTA_FINALIZADA && (
+                <div className="grid sm:grid-cols-2 gap-2 mt-2">
+                  <Button variant="ghost" size="sm" onClick={() => setAgendarOpen(true)}><Icon name="calendar" size={13} /> Remarcar (admin)</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setConfirmCancelarEntrevista(true)}><Icon name="x" size={13} /> Cancelar entrevista</Button>
+                </div>
+              )}
             </Panel>
           )}
 
@@ -182,6 +201,8 @@ export function SolicitacaoDrawer({
             </div>
           </Panel>
 
+          {sol.aluno_id && <AuditoriaPanel alunoId={sol.aluno_id} canEdit={canEdit} act={act} />}
+
           {!editando && (
           <Panel icon="user" title="Dados Pessoais">
             <div className="grid sm:grid-cols-2 sm:gap-x-6">
@@ -194,6 +215,20 @@ export function SolicitacaoDrawer({
               <Row2 k="Documento (NF)" v={sol.documento_nf} />
               <Row2 k="E-mail de entrega" v={sol.email_entrega} />
               {sol.codigo_rastreio && <Row2 k="Código de rastreio" v={sol.codigo_rastreio} />}
+              {sol.telefone_profissional && <Row2 k="Tel. profissional" v={sol.telefone_profissional} />}
+              {sol.instagram_url && <Row2 k="Instagram" v={<LinkExt url={sol.instagram_url} />} />}
+              {sol.facebook_url && <Row2 k="Facebook" v={<LinkExt url={sol.facebook_url} />} />}
+              {sol.youtube_url && <Row2 k="YouTube" v={<LinkExt url={sol.youtube_url} />} />}
+              {sol.site_profissional && <Row2 k="Site" v={<LinkExt url={sol.site_profissional} />} />}
+            </div>
+            <div className="mt-3">
+              <Button
+                variant="subtle"
+                size="sm"
+                onClick={() => { navigator.clipboard?.writeText(data.dadosLogistica(sol)); setCopiadoLogistica(true); setTimeout(() => setCopiadoLogistica(false), 2000); }}
+              >
+                <Icon name={copiadoLogistica ? 'check' : 'copy'} size={13} /> {copiadoLogistica ? 'Copiado!' : 'Copiar dados de envio'}
+              </Button>
             </div>
           </Panel>
           )}
@@ -268,6 +303,49 @@ export function SolicitacaoDrawer({
         </Modal>
       )}
 
+      {agendarOpen && (
+        <Modal
+          title="Agendar entrevista (admin)"
+          width="max-w-md"
+          onClose={() => setAgendarOpen(false)}
+          footer={
+            <>
+              <Button variant="ghost" size="sm" onClick={() => setAgendarOpen(false)}>Cancelar</Button>
+              <Button size="sm" disabled={!agData || !agHora} onClick={() => { setAgendarOpen(false); act(() => data.agendarEntrevistaManual(sol, agData, agHora, agEmail)); }}>
+                <Icon name="calendar" size={13} /> Agendar
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-[var(--fg-2)] leading-relaxed mb-3">
+            Define a entrevista diretamente (sem o candidato agendar) — cria a sala Zoom e avança o processo para &ldquo;Entrevista agendada&rdquo;.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block"><span className="text-xs text-[var(--fg-3)]">Data</span>
+              <Input type="date" value={agData} onChange={(e) => setAgData(e.target.value)} className="mt-1" />
+            </label>
+            <label className="block"><span className="text-xs text-[var(--fg-3)]">Hora</span>
+              <Input type="time" value={agHora} onChange={(e) => setAgHora(e.target.value)} className="mt-1" />
+            </label>
+          </div>
+          <label className="flex items-center gap-2 mt-3 text-sm text-[var(--fg)]">
+            <input type="checkbox" className="accent-[var(--accent)]" checked={agEmail} onChange={(e) => setAgEmail(e.target.checked)} />
+            Enviar e-mail de confirmação ao candidato
+          </label>
+        </Modal>
+      )}
+
+      {confirmCancelarEntrevista && (
+        <ConfirmDialog
+          title="Cancelar entrevista"
+          message={<>Remove a entrevista agendada e devolve o processo para <strong>aguardando agendamento</strong>. O candidato NÃO é notificado (use &ldquo;Não compareceu&rdquo; para faltas, que notifica).</>}
+          confirmLabel="Cancelar entrevista"
+          danger
+          onConfirm={() => { setConfirmCancelarEntrevista(false); act(() => data.cancelarEntrevista(sol)); }}
+          onCancel={() => setConfirmCancelarEntrevista(false)}
+        />
+      )}
+
       {histOpen && (
         <Modal open onClose={() => setHistOpen(false)} title={`Histórico de reprovações (${reprovacoes.length})`} width="max-w-2xl">
           {reprovacoes.length === 0 ? (
@@ -340,6 +418,11 @@ function EditarDados({
     bairro: sol.bairro ?? '',
     cidade: sol.cidade ?? '',
     estado_uf: sol.estado_uf ?? '',
+    telefone_profissional: sol.telefone_profissional ?? '',
+    instagram_url: sol.instagram_url ?? '',
+    facebook_url: sol.facebook_url ?? '',
+    youtube_url: sol.youtube_url ?? '',
+    site_profissional: sol.site_profissional ?? '',
   });
   const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }));
 
@@ -364,6 +447,11 @@ function EditarDados({
       bairro: f.bairro,
       cidade: f.cidade,
       estado_uf: f.estado_uf,
+      telefone_profissional: f.telefone_profissional,
+      instagram_url: f.instagram_url,
+      facebook_url: f.facebook_url,
+      youtube_url: f.youtube_url,
+      site_profissional: f.site_profissional,
     };
     await act(() => data.atualizarDadosSolicitacao(sol, campos));
     onDone();
@@ -398,6 +486,11 @@ function EditarDados({
         <CampoEdit label="Bairro"><Input value={f.bairro} onChange={(e) => set('bairro', e.target.value)} /></CampoEdit>
         <CampoEdit label="Cidade"><Input value={f.cidade} onChange={(e) => set('cidade', e.target.value)} /></CampoEdit>
         <CampoEdit label="UF"><Input value={f.estado_uf} onChange={(e) => set('estado_uf', e.target.value.toUpperCase().slice(0, 2))} maxLength={2} /></CampoEdit>
+        <CampoEdit label="Tel. profissional"><Input value={f.telefone_profissional} onChange={(e) => set('telefone_profissional', e.target.value)} /></CampoEdit>
+        <CampoEdit label="Instagram"><Input value={f.instagram_url} onChange={(e) => set('instagram_url', e.target.value)} placeholder="@perfil ou URL" /></CampoEdit>
+        <CampoEdit label="Facebook"><Input value={f.facebook_url} onChange={(e) => set('facebook_url', e.target.value)} /></CampoEdit>
+        <CampoEdit label="YouTube"><Input value={f.youtube_url} onChange={(e) => set('youtube_url', e.target.value)} /></CampoEdit>
+        <CampoEdit label="Site profissional"><Input value={f.site_profissional} onChange={(e) => set('site_profissional', e.target.value)} /></CampoEdit>
       </div>
       <div className="flex gap-2 mt-4">
         <Button variant="primary" onClick={salvar}><Icon name="check" size={14} /> Salvar alterações</Button>
@@ -425,6 +518,81 @@ function BigAction({ children, onClick, variant = 'accent', icon }: { children: 
     <button onClick={onClick} className="w-full inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] px-4 py-3 text-sm font-bold text-black hover:brightness-110 transition-[filter]" style={{ background: variant === 'success' ? 'var(--green)' : 'var(--accent)' }}>
       {icon && <Icon name={icon} size={16} />}{children}
     </button>
+  );
+}
+
+/** Link externo curto (presença online). */
+function LinkExt({ url }: { url: string }) {
+  const href = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  return (
+    <a href={href} target="_blank" rel="noopener" className="text-[var(--accent)] hover:underline inline-flex items-center gap-1 max-w-full">
+      <span className="truncate max-w-[180px]">{url.replace(/^https?:\/\/(www\.)?/i, '')}</span>
+      <Icon name="arrow-up-right" size={11} className="shrink-0" />
+    </a>
+  );
+}
+
+/** Edição interna da auditoria: obs, protocolo e faturamento COMPROVADO (painel B do legado). */
+function AuditoriaPanel({ alunoId, canEdit, act }: { alunoId: string; canEdit: boolean; act: Act }) {
+  const [det, setDet] = useState<data.AuditoriaDetalhe | null>(null);
+  const [obs, setObs] = useState('');
+  const [protocolo, setProtocolo] = useState('');
+  const [faturamento, setFaturamento] = useState('');
+  const [aberto, setAberto] = useState(false);
+
+  useEffect(() => {
+    data.loadAuditoriaDetalhe(alunoId).then((d) => {
+      setDet(d);
+      setObs(d?.obs ?? '');
+      setProtocolo(d?.protocolo ?? '');
+      setFaturamento(d?.faturamento != null ? String(d.faturamento) : '');
+    });
+  }, [alunoId]);
+
+  if (!det) return null;
+
+  const salvar = () =>
+    act(async () => {
+      const fat = faturamento.replace(/\D/g, '');
+      const ok = await data.salvarAuditoriaDetalhe(alunoId, {
+        obs: obs.trim() || null,
+        protocolo: protocolo.trim() || null,
+        faturamento: fat ? Number(fat) : null,
+      });
+      return ok ? { ok: true, msg: 'Auditoria atualizada!' } : { ok: false, msg: 'Não foi possível salvar.' };
+    });
+
+  return (
+    <Panel icon="pencil" title="Auditoria (interno)">
+      {!aberto ? (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-sm text-[var(--fg-2)] space-y-0.5 min-w-0">
+            <div>Protocolo: <span className="text-[var(--fg)] tabular">{det.protocolo || '—'}</span></div>
+            <div>Faturamento comprovado: <span className="text-[var(--fg)] tabular">{det.faturamento != null ? fmtBRL(det.faturamento) : '—'}</span></div>
+            {det.obs && <div className="text-xs text-[var(--fg-3)] whitespace-pre-wrap line-clamp-2">{det.obs}</div>}
+          </div>
+          {canEdit && <Button variant="subtle" size="sm" onClick={() => setAberto(true)}><Icon name="pencil" size={13} /> Editar</Button>}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label className="block"><span className="text-xs text-[var(--fg-3)]">Protocolo</span>
+              <Input value={protocolo} onChange={(e) => setProtocolo(e.target.value)} className="mt-1" />
+            </label>
+            <label className="block"><span className="text-xs text-[var(--fg-3)]">Faturamento comprovado (R$)</span>
+              <Input value={faturamento} onChange={(e) => setFaturamento(e.target.value)} inputMode="numeric" placeholder="0" className="mt-1" />
+            </label>
+          </div>
+          <label className="block"><span className="text-xs text-[var(--fg-3)]">Observações internas</span>
+            <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={3} className="mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" />
+          </label>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => { setAberto(false); salvar(); }}><Icon name="check" size={13} /> Salvar</Button>
+            <Button variant="ghost" size="sm" onClick={() => setAberto(false)}>Cancelar</Button>
+          </div>
+        </div>
+      )}
+    </Panel>
   );
 }
 
