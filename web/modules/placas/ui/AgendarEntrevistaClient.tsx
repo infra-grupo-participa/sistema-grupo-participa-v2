@@ -7,7 +7,22 @@ import { agendaConfirm, agendaHold } from './agenda-api';
 import { buildSlotStart, isSlotSelectable, rescheduleBlockReason } from '../domain/agendamento';
 import { Badge, Button, EmptyState, Loading } from '@/shared/ui/components';
 
-type View = 'loading' | 'calendar' | 'confirming' | 'success' | 'no-slots' | 'no-session' | 'done' | 'error';
+type View = 'loading' | 'calendar' | 'confirming' | 'success' | 'no-slots' | 'no-session' | 'done' | 'blocked' | 'error';
+
+const BLOCK_MSG: Record<string, { title: string; hint: string }> = {
+  janela_24h: {
+    title: 'Reagendamento bloqueado',
+    hint: 'Sua entrevista acontecerá em menos de 24 horas e não pode mais ser remarcada. Em caso de imprevisto inadiável, responda ao e-mail de confirmação.',
+  },
+  entrevista_passada: {
+    title: 'Horário já passou',
+    hint: 'O horário da sua entrevista já passou. Acompanhe o andamento na página de acompanhamento.',
+  },
+  status_invalido: {
+    title: 'Agendamento ainda não liberado',
+    hint: 'Seu processo ainda não está liberado para agendar entrevista. Acompanhe o andamento na página de acompanhamento.',
+  },
+};
 
 interface Slot {
   slot_data: string;
@@ -28,6 +43,7 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
   const [booked, setBooked] = useState<Set<string>>(new Set());
   const [picked, setPicked] = useState<Slot | null>(null);
   const [result, setResult] = useState<{ zoom_link?: string | null; gcal_link?: string } | null>(null);
+  const [blockReason, setBlockReason] = useState<string>('');
   const [err, setErr] = useState('');
 
   useEffect(() => {
@@ -43,10 +59,15 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
       setBooked(new Set((r.booked_slots ?? []).map((b) => `${b.entrevista_data}|${b.entrevista_hora.slice(0, 5)}`)));
       setSlots((r.horarios ?? []).map((h) => ({ slot_data: String(h.slot_data), hora: String(h.hora).slice(0, 5) })));
 
-      // Entrevista finalizada → não pode reagendar.
+      // Guardas de (re)agendamento — mensagem clara em vez de deixar falhar no confirm.
       const block = rescheduleBlockReason(s, new Date());
       if (block === 'entrevista_finalizada') {
         setView('done');
+        return;
+      }
+      if (block === 'janela_24h' || block === 'entrevista_passada' || block === 'status_invalido') {
+        setBlockReason(block);
+        setView('blocked');
         return;
       }
       setView('calendar');
@@ -126,6 +147,19 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
               title="Não é possível reagendar"
               hint="Sua entrevista já foi concluída. Acompanhe o andamento na página de acompanhamento."
             />
+          </div>
+        </Card>
+      )}
+
+      {view === 'blocked' && (
+        <Card>
+          <Head title={BLOCK_MSG[blockReason]?.title ?? 'Não é possível reagendar'} subtitle="" orange />
+          <div className="sp-card-body">
+            <EmptyState icon="lock" title={BLOCK_MSG[blockReason]?.title ?? 'Reagendamento indisponível'} hint={BLOCK_MSG[blockReason]?.hint ?? ''} />
+            <div className="sp-nav">
+              <span />
+              <LinkButton href={`/solicitar-placa${token ? `?token=${encodeURIComponent(token)}` : ''}`} variant="ghost">Ver acompanhamento</LinkButton>
+            </div>
           </div>
         </Card>
       )}
