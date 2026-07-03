@@ -41,11 +41,11 @@ export function Th({
   return (
     <th
       onClick={onClick}
-      className={`text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap ${sortable ? 'cursor-pointer select-none hover:text-[var(--fg)]' : ''} ${active ? 'text-[var(--fg)]' : ''} ${className}`}
+      className={`text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap overflow-hidden ${sortable ? 'cursor-pointer select-none hover:text-[var(--fg)]' : ''} ${active ? 'text-[var(--fg)]' : ''} ${className}`}
     >
-      <span className="inline-flex items-center gap-1">
-        {children}
-        {sortable && <span className="text-[var(--accent)] inline-flex w-3">{active ? <Icon name={dir === 'asc' ? 'arrow-up' : 'arrow-down'} size={12} /> : null}</span>}
+      <span className="inline-flex max-w-full items-center gap-1">
+        <span className="truncate">{children}</span>
+        {sortable && <span className="text-[var(--accent)] inline-flex w-3 shrink-0">{active ? <Icon name={dir === 'asc' ? 'arrow-up' : 'arrow-down'} size={12} /> : null}</span>}
       </span>
     </th>
   );

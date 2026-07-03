@@ -12,17 +12,19 @@ const DOT: Record<Tone, string> = {
   info: 'var(--info)',
 };
 
+// max-w-full + texto em span com truncate: em célula estreita (table-fixed) o chip
+// encolhe com reticências em vez de ser decepado no meio da moldura.
 const CHIP =
-  'inline-flex items-center gap-1.5 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-xs font-medium text-[var(--fg-2)] whitespace-nowrap';
+  'inline-flex max-w-full items-center gap-1.5 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-xs font-medium text-[var(--fg-2)] whitespace-nowrap';
 
 /** Chip de status corporativo — cor só no ponto, texto/fundo neutros.
  *  `dotColor` sobrepõe a cor do ponto (ex.: cor por espaço/valor). */
 export function Badge({ children, tone = 'neutral', dot = false, dotColor }: { children: React.ReactNode; tone?: Tone; dot?: boolean; dotColor?: string }) {
   const showDot = dot || tone !== 'neutral' || !!dotColor;
   return (
-    <span className={CHIP}>
+    <span className={CHIP} title={typeof children === 'string' ? children : undefined}>
       {showDot && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor || DOT[tone] }} />}
-      {children}
+      <span className="truncate">{children}</span>
     </span>
   );
 }
@@ -44,9 +46,9 @@ export function NivelBadge({ nivel }: { nivel: string | null | undefined }) {
   if (!key) return <span className="text-[var(--fg-3)]">—</span>;
   const color = NIVEL_COLOR[key] || 'var(--nivel-base)';
   return (
-    <span className={CHIP}>
+    <span className={CHIP} title={nivelLabel(key)}>
       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-      {nivelLabel(key)}
+      <span className="truncate">{nivelLabel(key)}</span>
     </span>
   );
 }

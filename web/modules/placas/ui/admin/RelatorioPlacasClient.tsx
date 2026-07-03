@@ -283,12 +283,12 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
           <DataTable fixed>
             <Thead>
               <Th sortable active={sortCol === 'nome'} dir={sortDir} onClick={sortBtn('nome')}>Aluno</Th>
-              <Th sortable active={sortCol === 'espaco'} dir={sortDir} onClick={sortBtn('espaco')} className="w-[170px]">Espaço de Instrução</Th>
-              <Th sortable active={sortCol === 'nivel'} dir={sortDir} onClick={sortBtn('nivel')} className="w-[130px]">Nível</Th>
-              <Th sortable active={sortCol === 'status'} dir={sortDir} onClick={sortBtn('status')} className="w-[190px]">Status</Th>
-              <Th className="w-[105px]">Progresso</Th>
+              <Th sortable active={sortCol === 'espaco'} dir={sortDir} onClick={sortBtn('espaco')} className="w-[160px]">Espaço de Instrução</Th>
+              <Th sortable active={sortCol === 'nivel'} dir={sortDir} onClick={sortBtn('nivel')} className="w-[140px]">Nível</Th>
+              <Th sortable active={sortCol === 'status'} dir={sortDir} onClick={sortBtn('status')} className="w-[200px]">Status</Th>
+              <Th className="w-[110px]">Progresso</Th>
               <Th sortable active={sortCol === 'turma'} dir={sortDir} onClick={sortBtn('turma')} className="w-[70px]">Turma</Th>
-              <Th sortable active={sortCol === 'quando'} dir={sortDir} onClick={sortBtn('quando')} className="w-[100px]">Atualizado</Th>
+              <Th sortable active={sortCol === 'quando'} dir={sortDir} onClick={sortBtn('quando')} className="w-[105px]">Atualizado</Th>
             </Thead>
             <tbody>
               {loading && !sols.length
@@ -398,14 +398,14 @@ const LinhaSolicitacao = memo(function LinhaSolicitacao({ s, espaco, onOpen }: {
         {espaco ? <span className="block truncate text-xs text-[var(--fg-2)]" title={espaco}>{espaco}</span> : <span className="text-[var(--fg-3)]">—</span>}
       </Td>
       <Td className="overflow-hidden"><NivelBadge nivel={s.nivel} /></Td>
-      <Td className="overflow-hidden"><span title={ds.label}><Badge tone={displayStatusTone(ds.cls)} dot>{ds.label}</Badge></span></Td>
-      <Td>
+      <Td className="overflow-hidden"><Badge tone={displayStatusTone(ds.cls)} dot>{ds.label}</Badge></Td>
+      <Td className="overflow-hidden">
         <div className="flex items-center gap-2">
-          <div className="flex-1"><ProgressBar value={pr.pct * 100} height={6} tone={pr.tone} /></div>
-          <span className="text-xs text-[var(--fg-3)] tabular whitespace-nowrap">{pr.label}</span>
+          <div className="flex-1 min-w-[24px]"><ProgressBar value={pr.pct * 100} height={6} tone={pr.tone} /></div>
+          <span className="text-xs text-[var(--fg-3)] tabular truncate" title={pr.label}>{pr.label}</span>
         </div>
       </Td>
-      <Td>{s.turma ? <span className="text-xs font-semibold rounded-[var(--r-sm)] bg-[var(--surface-3)] text-[var(--fg-2)] px-2 py-0.5">{s.turma}</span> : <span className="text-[var(--fg-3)]">—</span>}</Td>
+      <Td className="overflow-hidden">{s.turma ? <span className="text-xs font-semibold rounded-[var(--r-sm)] bg-[var(--surface-3)] text-[var(--fg-2)] px-2 py-0.5 whitespace-nowrap">{s.turma}</span> : <span className="text-[var(--fg-3)]">—</span>}</Td>
       <Td className="text-xs text-[var(--fg-3)] tabular whitespace-nowrap"><span title={quando.title}>{quando.label}</span></Td>
     </Tr>
   );

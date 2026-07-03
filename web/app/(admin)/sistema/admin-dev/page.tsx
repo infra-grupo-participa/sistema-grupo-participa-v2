@@ -96,7 +96,7 @@ export default async function AdminDevPage() {
       <div className="text-sm font-semibold text-[var(--fg)] mb-2">Eventos recentes do sistema</div>
       <DataTable fixed>
         <Thead>
-          <Th className="w-[80px]">Tipo</Th>
+          <Th className="w-[100px]">Tipo</Th>
           <Th className="w-[130px]">Fonte</Th>
           <Th className="w-[300px]">Título</Th>
           <Th>Detalhe</Th>
