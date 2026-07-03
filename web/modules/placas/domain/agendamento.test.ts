@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  buildGcalLink,
   buildSlotStart,
   canReschedule,
   conflictsForSlot,
@@ -9,6 +10,22 @@ import {
   rescheduleBlockReason,
   resolveAuditStep,
 } from './agendamento';
+
+describe('agendamento — buildGcalLink', () => {
+  it('gera datas em wall-time de São Paulo com ctz e fim +1h', () => {
+    const url = buildGcalLink('Maria', '2026-07-10', '14:00', 'https://zoom.us/j/1');
+    expect(url).toContain('dates=20260710T140000/20260710T150000');
+    expect(url).toContain('ctz=America%2FSao_Paulo'.replace('%2F', '/'));
+    expect(url).toContain(encodeURIComponent('Entrevista Maria - Treinamento em Holding Familiar'));
+    expect(url).toContain(`location=${encodeURIComponent('https://zoom.us/j/1')}`);
+  });
+
+  it('slot 23:30 vira o dia no fim do evento (legado gerava T2430 inválido)', () => {
+    const url = buildGcalLink('X', '2026-07-10', '23:30', null);
+    expect(url).toContain('dates=20260710T233000/20260711T003000');
+    expect(url).not.toContain('T2430');
+  });
+});
 
 const NOW = new Date('2026-06-26T12:00:00.000Z');
 const inHours = (h: number) => new Date(NOW.getTime() + h * 3600000);

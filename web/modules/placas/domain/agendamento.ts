@@ -136,6 +136,29 @@ export function conflictsForSlot(
 }
 
 /**
+ * Link "Adicionar ao Google Agenda" da entrevista (1h de duração).
+ * Datas em wall-time de America/Sao_Paulo + `ctz`: sem o ctz o Google interpretava a hora
+ * no fuso do dispositivo, e o cálculo manual de fim estourava em slots 23:xx.
+ */
+export function buildGcalLink(nome: string, data: string, hora: string, zoomLink?: string | null): string {
+  const start = buildSlotStart(data, hora);
+  const fmtSp = (d: Date) => new Date(d.getTime() - 3 * 3600 * 1000).toISOString().slice(0, 19).replace(/[-:]/g, '');
+  const startStr = start ? fmtSp(start) : `${data.replace(/-/g, '')}T${hora.replace(':', '')}00`;
+  const endStr = start ? fmtSp(new Date(start.getTime() + 60 * 60 * 1000)) : startStr;
+  const details = zoomLink
+    ? `Entrevista - Treinamento em Holding Familiar.\n\nLink Zoom:\n${zoomLink}`
+    : 'Entrevista - Treinamento em Holding Familiar.\n\nO link da reunião será enviado em breve.';
+  let url =
+    'https://calendar.google.com/calendar/render?action=TEMPLATE' +
+    `&text=${encodeURIComponent(`Entrevista ${nome || 'Candidato'} - Treinamento em Holding Familiar`)}` +
+    `&dates=${startStr}/${endStr}` +
+    '&ctz=America/Sao_Paulo' +
+    `&details=${encodeURIComponent(details)}`;
+  if (zoomLink) url += `&location=${encodeURIComponent(zoomLink)}`;
+  return url;
+}
+
+/**
  * Slot é selecionável/ofertável? Lead mínimo de 2h e no máximo 3 meses à frente.
  * Porta de hold-horario.php (`> +2 hours`, `<= +3 months`) e do filtro do calendário.
  */

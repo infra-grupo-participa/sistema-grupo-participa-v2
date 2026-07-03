@@ -7,7 +7,7 @@ import { withSlotLock } from '@/shared/infrastructure/http/slot-lock';
 import { SupabaseAgenda } from '@/modules/placas/infrastructure/supabase-agenda';
 import { ZoomMeetingProvider } from '@/modules/placas/infrastructure/zoom-meeting';
 import { sendMail } from '@/shared/infrastructure/email/mailer';
-import { buildSlotStart, conflictsForSlot, rescheduleBlockReason } from '@/modules/placas/domain/agendamento';
+import { buildGcalLink, buildSlotStart, conflictsForSlot, rescheduleBlockReason } from '@/modules/placas/domain/agendamento';
 import { getEmailContentByStatus, emailDynamicBoxes, type EmailExtra } from '@/modules/placas/application/email-content';
 import { buildEmailTemplate } from '@/shared/infrastructure/email/template';
 import { readPlacasConfig } from '@/modules/placas/infrastructure/supabase-config';
@@ -30,25 +30,6 @@ async function emailCandidato(email: string, nome: string, data: string, hora: s
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-function gcalLink(nome: string, data: string, hora: string, zoomLink: string | null): string {
-  // Datas ancoradas em America/Sao_Paulo (UTC−3 fixo) + ctz: sem isso o Google interpretava
-  // o horário no fuso do dispositivo, e "hora+1" estourava em slots 23:xx (T2430 inválido).
-  const startD = buildSlotStart(data, hora);
-  const fmtSp = (d: Date) => new Date(d.getTime() - 3 * 3600 * 1000).toISOString().slice(0, 19).replace(/[-:]/g, '');
-  const startStr = startD ? fmtSp(startD) : data.replace(/-/g, '') + 'T' + hora.replace(':', '') + '00';
-  const endStr = startD ? fmtSp(new Date(startD.getTime() + 60 * 60 * 1000)) : startStr;
-  const details = zoomLink
-    ? `Entrevista - Treinamento em Holding Familiar.\n\nLink Zoom:\n${zoomLink}`
-    : 'Entrevista - Treinamento em Holding Familiar.\n\nO link da reunião será enviado em breve.';
-  let url =
-    'https://calendar.google.com/calendar/render?action=TEMPLATE' +
-    `&text=${encodeURIComponent('Entrevista ' + (nome || 'Candidato') + ' - Treinamento em Holding Familiar')}` +
-    `&dates=${startStr}/${endStr}` +
-    '&ctz=America/Sao_Paulo' +
-    `&details=${encodeURIComponent(details)}`;
-  if (zoomLink) url += `&location=${encodeURIComponent(zoomLink)}`;
-  return url;
-}
 
 // Porta de app/api/confirm-horario.php — confirma horário, cria Zoom e notifica admin.
 export async function POST(request: NextRequest) {
@@ -139,7 +120,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       zoom_link: zoomLink,
       zoom_pending: !zoomLink,
-      gcal_link: gcalLink(String(sol.nome ?? ''), data, hora, zoomLink),
+      gcal_link: buildGcalLink(String(sol.nome ?? ''), data, hora, zoomLink),
       data,
       hora,
       session_link: sessionLink,

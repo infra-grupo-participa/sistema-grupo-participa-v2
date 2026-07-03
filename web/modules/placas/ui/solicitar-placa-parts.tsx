@@ -5,6 +5,7 @@
 import { Button, CopyField, Timeline, type TimelineEntry } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { getClientTrackingState, CLIENT_TRACKING_STEPS } from '../domain/client-tracking';
+import { buildGcalLink } from '../domain/agendamento';
 
 export function Wrap({ children }: { children: React.ReactNode }) {
   return (
@@ -179,6 +180,7 @@ export function TrackingCard({ data }: { data: Record<string, unknown> }) {
             <p className="sp-sched-when">{fmtInterviewDate(entrevistaData)} às <strong>{entrevistaHora}</strong></p>
             <div className="sp-sched-actions">
               {zoomLink && <a className="sp-sched-cta" href={zoomLink} target="_blank" rel="noopener"><Icon name="link" size={15} /> Entrar na sala</a>}
+              <a className="sp-sched-alt" href={buildGcalLink('', entrevistaData, entrevistaHora, zoomLink || null)} target="_blank" rel="noopener"><Icon name="calendar" size={14} /> Adicionar ao Google Agenda</a>
               <a className="sp-sched-alt" href={agendarHref}>Reagendar</a>
             </div>
           </div>

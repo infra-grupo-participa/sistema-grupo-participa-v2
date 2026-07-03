@@ -1,6 +1,8 @@
 // Conteúdo dos e-mails transacionais de placa — porta de getEmailContentByStatus (email-template.php).
 // Copy de produto preservado 1:1.
 
+import { buildGcalLink } from '../domain/agendamento';
+
 export type EmailTipo =
   | 'link_acesso'
   | 'solicitacao_recebida'
@@ -165,7 +167,11 @@ export function getEmailContentByStatus(tipo: EmailTipo, extra: EmailExtra, ctaL
           nota: 'Para consultar a sua solicitação, utilize este mesmo link.',
         },
       };
-    case 'entrevista_agendada':
+    case 'entrevista_agendada': {
+      // Link "Adicionar ao Google Agenda" no e-mail — o candidato salva o compromisso na hora.
+      const gcal = extra.entrevista_data && extra.entrevista_hora
+        ? buildGcalLink('', extra.entrevista_data, extra.entrevista_hora, extra.zoom_link || null)
+        : '';
       return {
         assunto: '[Holding Brasil] Entrevista agendada — link de acesso',
         templateData: {
@@ -179,9 +185,13 @@ export function getEmailContentByStatus(tipo: EmailTipo, extra: EmailExtra, ctaL
           cta_link: extra.zoom_link || ctaLink,
           cta_label: 'Acessar sala (Zoom)',
           cta_cor: '#2D8CFF',
+          pos_cta: gcal
+            ? `<p style="margin-top:14px;text-align:center"><a href="${esc(gcal)}" target="_blank" style="color:#2D8CFF;text-decoration:underline;font-weight:600">📅 Adicionar ao Google Agenda</a></p>` // hex-ok: e-mail
+            : undefined,
           nota: SECRETARIA_NOTA,
         },
       };
+    }
     case 'entrevista_finalizada':
       return {
         assunto: '[Holding Brasil] Entrevista realizada — próximos passos',
