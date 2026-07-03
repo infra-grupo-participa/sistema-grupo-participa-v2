@@ -5,6 +5,7 @@ import { Icon } from '@/shared/ui/icons';
 import { AUDIT_STEP_TOTAL } from '../../domain/auditoria';
 import {
   computeDisplayStatus,
+  displayStatusTone,
   getSolicitacaoBucketMatch,
   getSolicitacaoQueuePriority,
   isSolicitacaoSeen,
@@ -39,14 +40,6 @@ function progresso(s: Solicitacao): { pct: number; label: string; tone: 'accent'
 function initial(nome?: string | null): string {
   return (nome || '?').trim().charAt(0).toUpperCase();
 }
-
-const STATUS_TONE: Record<string, 'accent' | 'neutral' | 'success' | 'danger' | 'warning' | 'info'> = {
-  'sp-andamento': 'info',
-  'sp-aguardando': 'neutral',
-  'sp-entregue': 'success',
-  'sp-encerrado': 'danger',
-  'sp-regularizacao': 'warning',
-};
 
 type Tab = 'solicitacoes' | 'agenda-horarios' | 'config';
 
@@ -380,7 +373,7 @@ const LinhaSolicitacao = memo(function LinhaSolicitacao({ s, onOpen }: { s: Soli
         </div>
       </Td>
       <Td><NivelBadge nivel={s.nivel} /></Td>
-      <Td><Badge tone={STATUS_TONE[ds.cls] || 'neutral'} dot>{ds.label}</Badge></Td>
+      <Td><Badge tone={displayStatusTone(ds.cls)} dot>{ds.label}</Badge></Td>
       <Td>
         <div className="flex items-center gap-2 min-w-[120px]">
           <div className="flex-1"><ProgressBar value={pr.pct * 100} height={6} tone={pr.tone} /></div>

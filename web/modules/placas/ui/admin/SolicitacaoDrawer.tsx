@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
 import { AUDIT_STEP_TOTAL, AUDIT_STEP_INDEX, type AuditStep } from '../../domain/auditoria';
-import { computeDisplayStatus, isSolicitacaoRegularizacao } from '../../domain/solicitacao';
+import { computeDisplayStatus, displayStatusTone, isSolicitacaoRegularizacao } from '../../domain/solicitacao';
 import type { Solicitacao, Auditoria } from '../../domain/types';
 import * as data from './placas-admin-data';
 import { NIVEL_FAIXA_ORDER, DEFAULT_NIVEL_FAIXAS } from '../../domain/config';
@@ -62,7 +62,7 @@ export function SolicitacaoDrawer({
       badges={
         <>
           <NivelBadge nivel={sol.nivel} />
-          <Badge tone="accent" dot>{step >= 0 && !regular ? `${step + 1}/${AUDIT_STEP_TOTAL} · ` : ''}{computeDisplayStatus(sol).label}</Badge>
+          <Badge tone={displayStatusTone(computeDisplayStatus(sol).cls)} dot>{computeDisplayStatus(sol).label}</Badge>
           {sol.admin_seen_at && <Badge tone="neutral">Visto</Badge>}
         </>
       }

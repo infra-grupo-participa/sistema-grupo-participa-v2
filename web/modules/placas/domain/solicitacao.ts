@@ -199,6 +199,22 @@ export function computeDisplayStatus(sol: SolicitacaoLike): DisplayStatus {
   };
 }
 
+/**
+ * Tom do Badge (DS) para a classe visual do status — mapeamento único usado pelas fichas
+ * fora do módulo de placas (ex.: ficha 360 do aluno), para o status do processo nunca
+ * aparecer cru/despadronizado.
+ */
+export function displayStatusTone(cls: string): 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info' {
+  switch (cls) {
+    case 'sp-entregue': return 'success'; // placa enviada/recebida
+    case 'sp-andamento': return 'info'; // em análise/andamento
+    case 'sp-aguardando': return 'warning'; // aguardando ação (cliente ou equipe)
+    case 'sp-regularizacao': return 'warning'; // reprovado · aguardando nova documentação
+    case 'sp-encerrado': return 'danger'; // rejeitado definitivo
+    default: return 'neutral';
+  }
+}
+
 /** Patch para marcar/desmarcar "visto" pelo admin (porta de buildAdminSeenPatch). */
 export function buildAdminSeenPatch(isSeen = true): { admin_seen_at: string | null } {
   return { admin_seen_at: isSeen ? new Date().toISOString() : null };

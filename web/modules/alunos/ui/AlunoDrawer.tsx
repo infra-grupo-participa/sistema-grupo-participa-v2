@@ -13,6 +13,7 @@ import {
 import { nivelLabel, nivelOptions } from '@/shared/domain/nivel-resultado';
 import { loadPlacaHistorico, updateAluno, type Turma, type PlacaHistorico } from './alunos-data';
 import { AUDIT_STEPS } from '@/modules/placas/domain/auditoria';
+import { computeDisplayStatus, displayStatusTone } from '@/modules/placas/domain/solicitacao';
 import { cursoDesempenhoMock } from '../domain/curso-mock';
 import { Badge, NivelBadge, Drawer, AvatarInicial, SectionCard, Button, CopyField, KpiCard, ProgressBar, Spinner } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
@@ -332,16 +333,25 @@ function PlacaJornada({ on, hist, loading, rastreioAluno }: { on: boolean; hist:
       {on && !loading && hist && (
         <div className="mt-2 space-y-2">
           <div className="flex flex-wrap gap-1.5">
-            {stepNome && <Badge tone="info">{stepNome}</Badge>}
-            {sol?.status && <Badge tone="neutral">{sol.status}</Badge>}
-            {aud?.encerrado && <Badge tone="warning">Encerrado</Badge>}
-            {sol?.regularizacao_pendente && <Badge tone="danger">Regularização pendente</Badge>}
+            {/* Status único e bem mapeado (mesmo vocabulário da fila de placas): cobre etapa,
+                reprovação em correção ("Cliente reprovado · aguardando nova documentação"),
+                reenvio e rejeição definitiva — nada de status cru no chip. */}
+            {sol && (() => {
+              const d = computeDisplayStatus(sol);
+              return <Badge tone={displayStatusTone(d.cls)}>{d.label}</Badge>;
+            })()}
+            {!sol && stepNome && <Badge tone="info">{stepNome}</Badge>}
+            {aud?.encerrado && sol?.status !== 'rejeitado' && sol?.status !== 'concluido' && <Badge tone="warning">Encerrado</Badge>}
           </div>
           <div className="text-xs space-y-0.5 text-[var(--fg-3)]">
             {aud?.protocolo && <div>Protocolo: <span className="text-[var(--fg-2)]">{aud.protocolo}</span></div>}
             {(aud?.faturamento || sol?.faturamento_declarado) != null && <div>Faturamento: <span className="text-[var(--fg-2)]">{fmtBRL(aud?.faturamento ?? sol?.faturamento_declarado ?? null)}</span></div>}
             {sol?.entrevista_data && <div>Entrevista: <span className="text-[var(--fg-2)]">{fmtData(sol.entrevista_data)}{sol.entrevista_hora ? ` ${String(sol.entrevista_hora).slice(0, 5)}` : ''}</span></div>}
-            {sol?.motivo_retorno && <div className="text-[var(--red)]">Motivo do retorno: {sol.motivo_retorno}</div>}
+            {sol?.motivo_retorno && (
+              <div className="text-[var(--red)]">
+                {sol.status === 'rejeitado' ? 'Motivo da rejeição' : 'Motivo do retorno'}: {sol.motivo_retorno}
+              </div>
+            )}
           </div>
 
           {(sol?.proof_url || sol?.declaracao_url) && (
