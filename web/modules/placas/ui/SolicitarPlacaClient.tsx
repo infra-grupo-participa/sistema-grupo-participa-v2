@@ -5,7 +5,14 @@ import { Button, Modal } from '@/shared/ui/components';
 import './solicitar-placa.css';
 import { maskCep, maskCurrency, maskDoc } from './masks';
 import { cepLookup, placaDuplicateCheck, placaGet, placaRecover, placaSave, placaUpload } from './placa-api';
-import { isPlateEligible } from '../domain/form-progress';
+import { isPlateEligible, faturamentoBlockReason, NIVEL_MIN_FATURAMENTO } from '../domain/form-progress';
+
+const NIVEL_NOME: Record<string, string> = {
+  ouro: 'Ouro',
+  platina: 'Platina',
+  diamante: 'Diamante',
+  diamante_vermelho: 'Diamante Vermelho',
+};
 import { TOTAL_STEPS, STEP_NAMES, ESPACOS, NIVEIS, type Form, type View, type FormConfig } from './solicitar-placa-constants';
 import { Wrap, SuccessCard, TrackingCard, Banner, Stepper } from './solicitar-placa-parts';
 import { StepContent } from './SolicitarPlacaSteps';
@@ -132,6 +139,16 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
     if (n === 3) {
       if (!form.espaco_instrucao || !form.nivel) return 'Selecione o espaço de instrução e o nível.';
       if (eligible && !form.faturamento_declarado) return 'Informe o faturamento declarado.';
+      if (eligible && form.faturamento_declarado) {
+        // Coerência nível × valor (mesma regra do servidor): Diamante com R$ 200k não passa.
+        const motivo = faturamentoBlockReason(form.nivel, Number(form.faturamento_declarado));
+        if (motivo === 'abaixo_minimo') {
+          const nomeNivel = NIVEL_NOME[form.nivel!] ?? form.nivel;
+          const min = NIVEL_MIN_FATURAMENTO[form.nivel!];
+          return `O nível ${nomeNivel} exige faturamento a partir de R$ ${min.toLocaleString('pt-BR')}. Confira o valor digitado ou selecione o nível compatível com o seu faturamento.`;
+        }
+        if (motivo === 'acima_teto') return 'O faturamento informado parece incorreto (valor alto demais). Confira o número digitado.';
+      }
     }
     if (n === 4 && eligible && (!form.proof_url || form.proof_url === '')) return 'Envie o documento comprobatório.';
     if (n === 5 && eligible && (!form.declaracao_url || form.declaracao_url === '')) return 'Envie a declaração assinada.';

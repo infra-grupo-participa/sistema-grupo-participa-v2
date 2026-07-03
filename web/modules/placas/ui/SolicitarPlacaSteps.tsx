@@ -8,6 +8,33 @@ import { maskPhoneMobile, maskPhoneLandline, maskDoc, maskCurrency, currencyDigi
 import { INTERESSES, UFS, TURMAS, type Form } from './solicitar-placa-constants';
 import { Section, Field, Nav } from './solicitar-placa-parts';
 import { ProfissaoAutocomplete } from './ProfissaoAutocomplete';
+import { faturamentoBlockReason, NIVEL_MIN_FATURAMENTO, nivelSugeridoPorFaturamento } from '../domain/form-progress';
+
+/** Feedback em tempo real da coerência nível × faturamento declarado (a validação dura fica no goNext/servidor). */
+function FaturamentoCoerencia({ nivel, valor, niveis }: { nivel?: string; valor: number; niveis: { v: string; nm: string }[] }) {
+  if (!nivel || !valor) return null;
+  const nome = (v: string) => niveis.find((n) => n.v === v)?.nm ?? v;
+  const motivo = faturamentoBlockReason(nivel, valor);
+  if (motivo === 'abaixo_minimo') {
+    return (
+      <div className="sp-hint sp-hint-warn">
+        O nível {nome(nivel)} exige faturamento a partir de R$ {NIVEL_MIN_FATURAMENTO[nivel].toLocaleString('pt-BR')}. Confira o valor ou ajuste o nível.
+      </div>
+    );
+  }
+  if (motivo === 'acima_teto') {
+    return <div className="sp-hint sp-hint-warn">Esse valor parece alto demais — confira o número digitado.</div>;
+  }
+  const sugestao = nivelSugeridoPorFaturamento(valor);
+  if (sugestao && sugestao !== nivel && NIVEL_MIN_FATURAMENTO[sugestao] > (NIVEL_MIN_FATURAMENTO[nivel] ?? 0)) {
+    return (
+      <div className="sp-hint">
+        💡 Com esse faturamento, você pode se qualificar para o nível <strong>{nome(sugestao)}</strong>.
+      </div>
+    );
+  }
+  return null;
+}
 
 export interface StepProps {
   step: number;
@@ -104,6 +131,7 @@ export function StepContent(p: StepProps) {
           <Field label="Faturamento declarado (R$)" req>
             <input value={form.faturamento_fmt || ''} onChange={(e) => { const m = maskCurrency(e.target.value); set('faturamento_fmt', m); set('faturamento_declarado', String(currencyDigits(e.target.value))); }} onFocus={() => { if (!form.faturamento_fmt) set('faturamento_fmt', 'R$ '); }} onBlur={() => { if (form.faturamento_fmt === 'R$ ') set('faturamento_fmt', ''); }} placeholder="R$ 0" inputMode="numeric" />
             <div className="sp-hint">Valor total gerado com Holding Familiar, em reais.</div>
+            <FaturamentoCoerencia nivel={form.nivel} valor={Number(form.faturamento_declarado || 0)} niveis={niveis} />
           </Field>
         )}
         {!eligible && form.nivel && <div className="sp-info">{cadastroInfo}</div>}

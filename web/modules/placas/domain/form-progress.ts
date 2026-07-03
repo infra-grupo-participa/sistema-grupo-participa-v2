@@ -18,6 +18,40 @@ export function isPlateEligible(nivel: string | null | undefined): boolean {
   return ['ouro', 'platina', 'diamante', 'diamante_vermelho'].includes(String(nivel ?? ''));
 }
 
+/** Faturamento mínimo (R$) de cada nível elegível — coerência nível × valor declarado. */
+export const NIVEL_MIN_FATURAMENTO: Record<string, number> = {
+  ouro: 50_000,
+  platina: 500_000,
+  diamante: 1_000_000,
+  diamante_vermelho: 5_000_000,
+};
+
+/** Teto de sanidade contra erro de digitação (R$ 1 bilhão). */
+export const FATURAMENTO_MAX = 1_000_000_000;
+
+/**
+ * O faturamento declarado é coerente com o nível solicitado?
+ * Retorna null se ok, ou o motivo: 'abaixo_minimo' (ex.: Diamante com R$ 200k) |
+ * 'acima_teto' (valor absurdo, provável erro de digitação).
+ */
+export function faturamentoBlockReason(nivel: string | null | undefined, valor: number): 'abaixo_minimo' | 'acima_teto' | null {
+  const min = NIVEL_MIN_FATURAMENTO[String(nivel ?? '')];
+  if (min === undefined) return null; // nível não-elegível não declara faturamento
+  if (!Number.isFinite(valor)) return 'abaixo_minimo';
+  if (valor > FATURAMENTO_MAX) return 'acima_teto';
+  if (valor < min) return 'abaixo_minimo';
+  return null;
+}
+
+/** Maior nível elegível que o valor declarado alcança (para sugestão na UI), ou null. */
+export function nivelSugeridoPorFaturamento(valor: number): string | null {
+  let melhor: string | null = null;
+  for (const [nivel, min] of Object.entries(NIVEL_MIN_FATURAMENTO)) {
+    if (valor >= min && (melhor === null || min > NIVEL_MIN_FATURAMENTO[melhor])) melhor = nivel;
+  }
+  return melhor;
+}
+
 export interface FormState {
   token?: string | null;
   step_index?: number | null;
@@ -107,7 +141,13 @@ export function validateFormProgress(payload: FormState, existing?: FormState | 
   if (step >= 3) {
     const e = missing(state, ['espaco_instrucao', 'nivel'], 'missing_step3_field');
     if (e) return e;
-    if (eligible && !nonNegInt(state.faturamento_declarado)) return { code: 'missing_faturamento' };
+    if (eligible) {
+      if (!nonNegInt(state.faturamento_declarado)) return { code: 'missing_faturamento' };
+      // Coerência nível × valor: bloqueia p.ex. Diamante com R$ 200k declarados.
+      const motivo = faturamentoBlockReason(nivel, Number(state.faturamento_declarado));
+      if (motivo === 'abaixo_minimo') return { code: 'faturamento_abaixo_nivel', field: nivel };
+      if (motivo === 'acima_teto') return { code: 'faturamento_acima_teto' };
+    }
   }
 
   if (!eligible) {

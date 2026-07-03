@@ -2,7 +2,16 @@
 // específicas em pt-BR. Substitui o "Não foi possível concluir a operação." genérico,
 // permitindo ao aluno saber exatamente o que falta preencher.
 
-import type { ProgressError } from '../domain/form-progress';
+import { NIVEL_MIN_FATURAMENTO, type ProgressError } from '../domain/form-progress';
+
+const NIVEL_NOME: Record<string, string> = {
+  ouro: 'Ouro',
+  platina: 'Platina',
+  diamante: 'Diamante',
+  diamante_vermelho: 'Diamante Vermelho',
+};
+
+const brl = (v: number) => `R$ ${v.toLocaleString('pt-BR')}`;
 
 const FIELD_LABEL: Record<string, string> = {
   nome: 'Nome completo',
@@ -33,6 +42,16 @@ export function progressErrorMessage(err: ProgressError): string {
       return label ? `Selecione: ${label}.` : 'Selecione o espaço de instrução e o nível.';
     case 'missing_faturamento':
       return 'Informe o faturamento declarado.';
+    case 'faturamento_abaixo_nivel': {
+      // err.field carrega o nível para compor a mensagem com o mínimo da faixa.
+      const nivel = String(err.field ?? '');
+      const min = NIVEL_MIN_FATURAMENTO[nivel];
+      return min
+        ? `O nível ${NIVEL_NOME[nivel] ?? nivel} exige faturamento a partir de ${brl(min)}. Confira o valor digitado ou selecione o nível compatível com o seu faturamento.`
+        : 'O faturamento declarado está abaixo do mínimo do nível selecionado.';
+    }
+    case 'faturamento_acima_teto':
+      return 'O faturamento informado parece incorreto (valor alto demais). Confira o número digitado — informe o valor em reais, sem centavos.';
     case 'missing_proof':
       return 'Envie o documento comprobatório.';
     case 'invalid_proof_url':
