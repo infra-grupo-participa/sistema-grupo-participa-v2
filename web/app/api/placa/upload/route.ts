@@ -45,5 +45,11 @@ export async function POST(request: NextRequest) {
   const url = await gateway.uploadDocumento(path, validated.buffer, validated.mime);
   if (!url) return jsonError('Não foi possível concluir a operação.', 502);
 
+  // Reenvio durante correção = documento entrando para análise: acende a notificação
+  // do admin na hora (upload não toca a linha; sem isso o item só subia ao salvar etapa).
+  if (sol.regularizacao_pendente === true) {
+    await gateway.markClientAttention(String(sol.id));
+  }
+
   return jsonOk({ ok: true, url });
 }

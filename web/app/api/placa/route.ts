@@ -149,6 +149,15 @@ export async function POST(request: NextRequest) {
   const perr = validateFormProgress({ ...payload, token }, existing);
   if (perr) return jsonError(progressErrorMessage(perr), 422);
 
+  // Documentação entrando para análise (submit final ou reenvio de correção): acende a
+  // notificação do admin — não-visto + topo da fila, com o badge "ação do cliente".
+  const viraEnviado = payload.status === 'enviado' && String(existing.status ?? '') !== 'enviado';
+  const reenvioCorrecao = existing.regularizacao_pendente === true && ('proof_url' in payload || 'declaracao_url' in payload);
+  if (viraEnviado || reenvioCorrecao) {
+    payload.admin_seen_at = null;
+    payload.admin_attention_at = new Date().toISOString();
+  }
+
   await gateway.updateByToken(token, payload);
 
   const emailDestino = safeEmail(String(payload.email ?? existing.email ?? ''));

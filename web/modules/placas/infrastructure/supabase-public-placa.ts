@@ -5,7 +5,7 @@ import { createAdminSupabase } from '@/shared/infrastructure/supabase/admin-clie
 // Usa service_role (token UUID é a fronteira de segurança), como no PHP legado.
 
 const PUBLIC_FIELDS =
-  'id,token,status,step_index,auditoria_step,nome,email,telefone,turma,profissao,telefone_profissional,youtube_url,site_profissional,instagram_url,facebook_url,interesse,espaco_instrucao,nivel,faturamento_declarado,proof_url,declaracao_url,cep,logradouro,numero,complemento,bairro,cidade,estado_uf,pais,documento_nf,entrevista_data,entrevista_hora,entrevista_link,meet_link,codigo_rastreio,motivo_retorno';
+  'id,token,status,step_index,auditoria_step,nome,email,telefone,turma,profissao,telefone_profissional,youtube_url,site_profissional,instagram_url,facebook_url,interesse,espaco_instrucao,nivel,faturamento_declarado,proof_url,declaracao_url,cep,logradouro,numero,complemento,bairro,cidade,estado_uf,pais,documento_nf,entrevista_data,entrevista_hora,entrevista_link,meet_link,codigo_rastreio,motivo_retorno,regularizacao_pendente';
 
 type Row = Record<string, unknown>;
 
@@ -73,6 +73,14 @@ export class SupabasePublicPlaca {
 
   async updateByToken(token: string, payload: Row): Promise<void> {
     await this.db.from('thb_placas_solicitacoes').update(payload).eq('token', token);
+  }
+
+  /** Acende a notificação do admin (não-visto + topo da fila): ação relevante do cliente. */
+  async markClientAttention(id: string): Promise<void> {
+    await this.db
+      .from('thb_placas_solicitacoes')
+      .update({ admin_seen_at: null, admin_attention_at: new Date().toISOString() })
+      .eq('id', id);
   }
 
   /** Linha mínima para validar um upload (status + flag de correção). */
