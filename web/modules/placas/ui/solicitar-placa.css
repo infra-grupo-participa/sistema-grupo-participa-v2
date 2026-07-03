@@ -582,14 +582,22 @@
   transform: translateY(-1px);
 }
 .sp-sched-alt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration: none;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 14px;
+  transition: border-color 0.15s, color 0.15s;
 }
 .sp-sched-alt:hover {
   color: var(--ink);
+  border-color: var(--faint);
 }
 .sp-hint {
   font-size: 12px;

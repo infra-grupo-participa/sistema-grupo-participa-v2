@@ -189,12 +189,21 @@ export function TrackingCard({ data }: { data: Record<string, unknown> }) {
     icon: i < activeIndex ? undefined : String(i + 1),
   }));
 
+  // Subtítulo vivo: diz o momento exato da jornada em vez do genérico "em andamento".
+  const subtitulo =
+    activeIndex >= 4 && rastreio ? 'Sua placa está a caminho — acompanhe pelo código de rastreio.'
+    : activeIndex >= 4 ? 'Sua placa foi enviada!'
+    : activeIndex === 3 ? 'Entrevista realizada — sua placa está em preparação.'
+    : hasInterview ? 'Entrevista agendada — é só comparecer no horário marcado.'
+    : activeIndex === 2 ? 'Documentação aprovada — agende sua entrevista.'
+    : 'Sua documentação está em análise pela equipe.';
+
   return (
     <div className="sp-card">
       {/* Texto escuro sobre âmbar (decisão D5.1 do DS): branco sobre --orange fica abaixo de AA (~1.9:1). */}
       <div className="sp-card-head" style={{ background: 'var(--orange)', color: 'var(--ink)' }}>
         <h1 style={{ color: 'var(--ink)' }}>Acompanhe sua solicitação</h1>
-        <p style={{ color: 'rgba(15,23,42,.75)' /* hex-ok: --ink com 75% sobre âmbar */ }}>Sua solicitação está em andamento</p>
+        <p style={{ color: 'rgba(15,23,42,.75)' /* hex-ok: --ink com 75% sobre âmbar */ }}>{subtitulo}</p>
       </div>
       <div className="sp-card-body">
         {inInterviewPhase && !hasInterview && (
@@ -225,7 +234,12 @@ export function TrackingCard({ data }: { data: Record<string, unknown> }) {
             </p>
           </div>
         )}
-        <Timeline items={tlItems} />
+        <div style={{ marginTop: 4 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--muted)', marginBottom: 10 }}>
+            Jornada do processo
+          </div>
+          <Timeline items={tlItems} />
+        </div>
       </div>
     </div>
   );

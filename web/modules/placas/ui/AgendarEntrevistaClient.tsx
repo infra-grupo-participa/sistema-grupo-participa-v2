@@ -6,8 +6,9 @@ import { placaGet } from './placa-api';
 import { agendaConfirm, agendaHold } from './agenda-api';
 import { buildSlotStart, isSlotSelectable, rescheduleBlockReason } from '../domain/agendamento';
 import { Badge, Button, EmptyState, Loading } from '@/shared/ui/components';
+import { Icon } from '@/shared/ui/icons';
 
-type View = 'loading' | 'calendar' | 'confirming' | 'success' | 'no-slots' | 'no-session' | 'done' | 'blocked' | 'error';
+type View = 'loading' | 'calendar' | 'confirming' | 'success' | 'already' | 'no-slots' | 'no-session' | 'done' | 'blocked' | 'error';
 
 const BLOCK_MSG: Record<string, { title: string; hint: string }> = {
   janela_24h: {
@@ -68,6 +69,14 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
       if (block === 'janela_24h' || block === 'entrevista_passada' || block === 'status_invalido') {
         setBlockReason(block);
         setView('blocked');
+        return;
+      }
+      // Já tem entrevista futura marcada: NÃO cai direto no calendário (voltar a esta
+      // página parecia "perdi meu agendamento"). Mostra o horário atual e dá a escolha:
+      // voltar ao acompanhamento ou reagendar de fato.
+      const atual = buildSlotStart(String(s.entrevista_data ?? ''), String(s.entrevista_hora ?? ''));
+      if (atual && atual > new Date()) {
+        setView('already');
         return;
       }
       setView('calendar');
@@ -221,28 +230,85 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
         </Card>
       )}
 
+      {view === 'already' && sol && (
+        <Card>
+          <Head title="Você já tem entrevista agendada" subtitle="Nenhuma ação é necessária — é só comparecer no horário marcado." orange />
+          <div className="sp-card-body">
+            <div className="sp-sched sp-sched-set" style={{ marginBottom: 16, textAlign: 'center' }}>
+              <div className="sp-sched-title" style={{ justifyContent: 'center' }}><Icon name="calendar-days" size={17} /> Seu horário</div>
+              <p className="sp-sched-when" style={{ fontSize: 18 }}>
+                {fmtDate(String(sol.entrevista_data ?? ''))} às <strong>{String(sol.entrevista_hora ?? '').slice(0, 5)}</strong>
+              </p>
+            </div>
+            {Boolean(sol.meet_link || sol.entrevista_link) && (
+              <LinkButton href={String(sol.meet_link || sol.entrevista_link)} variant="primary" style={{ marginBottom: 10 }}>
+                Abrir sala (Zoom)
+              </LinkButton>
+            )}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <LinkButton href={`/solicitar-placa${token ? `?token=${encodeURIComponent(token)}` : ''}`} variant="ghost">
+                ← Voltar ao acompanhamento
+              </LinkButton>
+              <button type="button" className="sp-sched-alt" onClick={() => setView('calendar')}>
+                <Icon name="rotate" size={14} /> Escolher novo horário
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {view === 'success' && (
         <Card>
-          <Head title="Entrevista confirmada!" subtitle="" orange />
+          {/* Texto escuro sobre âmbar (decisão D5.1 do DS). */}
+          <div className="sp-card-head" style={{ background: 'var(--orange)', color: 'var(--ink)', textAlign: 'center' }}>
+            <div className="sp-success-badge"><Icon name="calendar-days" size={26} /></div>
+            <h1 style={{ color: 'var(--ink)' }}>Entrevista confirmada! 🎉</h1>
+            <p style={{ color: 'rgba(15,23,42,.75)' /* hex-ok: --ink com 75% sobre âmbar */ }}>
+              Enviamos a confirmação com o link da sala para o seu e-mail.
+            </p>
+          </div>
           <div className="sp-card-body">
-            <div style={{ marginBottom: 16 }}>
-              <Badge tone="success" dot>Agendamento confirmado</Badge>
+            {picked && (
+              <div className="sp-sched sp-sched-set" style={{ marginBottom: 16, textAlign: 'center' }}>
+                <div className="sp-sched-title" style={{ justifyContent: 'center' }}><Icon name="calendar-days" size={17} /> Seu horário</div>
+                <p className="sp-sched-when" style={{ fontSize: 18 }}>
+                  {fmtDate(picked.slot_data)} às <strong>{picked.hora}</strong>
+                </p>
+              </div>
+            )}
+
+            <div className="sp-decl-flow" style={{ marginBottom: 16 }}>
+              <div className="sp-decl-step">
+                <span className="n">1</span>
+                <div><b>Confirmação por e-mail</b><p>O link da sala e os detalhes já estão na sua caixa de entrada (confira o spam).</p></div>
+              </div>
+              <div className="sp-decl-step">
+                <span className="n">2</span>
+                <div><b>Lembrete automático</b><p>Você recebe um lembrete por e-mail ~4 horas antes da entrevista.</p></div>
+              </div>
+              <div className="sp-decl-step">
+                <span className="n">3</span>
+                <div><b>No dia</b><p>Entre alguns minutos antes, em um local tranquilo e com boa conexão.</p></div>
+              </div>
             </div>
-            <p style={{ color: 'var(--muted)', marginBottom: 16 }}>Sua entrevista foi agendada com sucesso. Você receberá os detalhes por e-mail.</p>
+
             {result?.zoom_link ? (
               <LinkButton href={result.zoom_link} variant="primary" style={{ marginBottom: 10 }}>
                 Abrir sala (Zoom)
               </LinkButton>
             ) : (
-              <div className="sp-warn">O link da reunião será enviado em breve por e-mail.</div>
+              <div className="sp-warn" style={{ marginBottom: 10 }}>O link da reunião será enviado em breve por e-mail.</div>
             )}
-            {result?.gcal_link && (
-              <div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {result?.gcal_link && (
                 <LinkButton href={result.gcal_link} variant="ghost">
-                  Salvar na agenda Google
+                  📅 Salvar na agenda Google
                 </LinkButton>
-              </div>
-            )}
+              )}
+              <LinkButton href={`/solicitar-placa${token ? `?token=${encodeURIComponent(token)}` : ''}`} variant="ghost">
+                Acompanhar minha solicitação
+              </LinkButton>
+            </div>
           </div>
         </Card>
       )}
