@@ -130,6 +130,9 @@ export async function POST(request: NextRequest) {
     const created = await gateway.create(payload);
     if (!created) return jsonError('Não foi possível concluir a operação.', 502);
     const newToken = String(created.token).toLowerCase();
+    // Vínculo antecipado com a central: já no cadastro sabemos se é aluno da base
+    // (e-mail/documento) ou sem registro (possível ex-aluno).
+    await gateway.vincularCentral(newToken, safeEmail(String(payload.email ?? '')), String(payload.documento_nf ?? ''));
     // Âncora multi-dispositivo: o link pessoal vai para o e-mail já na 1ª etapa —
     // o candidato pode continuar de qualquer aparelho mesmo sem o cookie desta sessão.
     const emailNovo = safeEmail(String(payload.email ?? ''));

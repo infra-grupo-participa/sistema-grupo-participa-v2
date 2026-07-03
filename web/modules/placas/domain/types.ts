@@ -62,6 +62,8 @@ export interface Solicitacao {
   regularizacao_pendente: boolean | null;
   admin_seen_at: string | null;
   admin_attention_at: string | null;
+  /** Matching com a central (thb_alunos): 'email' | 'documento' | 'nenhum' (possível ex-aluno) | null (não verificado). */
+  central_match: string | null;
 
   // Hold de concorrência (agendamento)
   agendamento_hold_data: string | null;

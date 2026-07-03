@@ -137,32 +137,79 @@ export class SupabasePublicPlaca {
       .filter((s) => s.entrevista_data && s.entrevista_hora);
   }
 
+  /** Matching canônico com a central (e-mail tem prioridade sobre documento). */
+  async centralMatch(email: string, documento: string): Promise<{ aluno_id: string; match_por: string; espaco_instrucao: string | null } | null> {
+    const { data } = await this.db.rpc('fn_central_match', { p_email: email, p_documento: documento });
+    const row = Array.isArray(data) ? (data[0] as { aluno_id: string; match_por: string; espaco_instrucao: string | null } | undefined) : undefined;
+    return row ?? null;
+  }
+
+  /**
+   * Vínculo antecipado com a central logo no cadastro (etapa 1): grava o resultado do
+   * matching (central_match) e o aluno_id quando existe — o admin enxerga desde o rascunho
+   * quem é aluno da base e quem não tem registro (possível ex-aluno).
+   */
+  async vincularCentral(token: string, email: string, documento: string): Promise<void> {
+    try {
+      const m = await this.centralMatch(email, documento);
+      const patch: Row = { central_match: m?.match_por ?? 'nenhum' };
+      if (m?.aluno_id) patch.aluno_id = m.aluno_id;
+      await this.db.from('thb_placas_solicitacoes').update(patch).eq('token', token);
+    } catch {
+      /* melhor-esforço — vínculo se refaz no submit */
+    }
+  }
+
   /**
    * Promove dados da solicitação para thb_alunos (apenas no submit final).
-   * Seta placa_solicitacao_id sempre; campos de contato só se atualizado_por IS NULL.
-   * Não-crítico: erros são engolidos.
+   * Matching por e-mail OU documento; a central é fonte de verdade para espaco_instrucao
+   * (corrige o que o aluno digitou errado no formulário). Campos de contato fluem
+   * solicitação→aluno só se atualizado_por IS NULL. Não-crítico: erros são engolidos.
    */
   async promoteToAluno(token: string, payload: Row): Promise<void> {
     try {
       const email = String(payload.email ?? '').trim();
-      if (!email) return;
+      const documento = String(payload.documento_nf ?? '').trim();
+      if (!email && !documento) return;
 
       const { data: sol } = await this.db
         .from('thb_placas_solicitacoes')
-        .select('id')
+        .select('id, espaco_instrucao')
         .eq('token', token)
         .limit(1)
         .maybeSingle();
       const solicitacaoId = (sol as Row)?.id;
       if (!solicitacaoId) return;
 
+      const m = await this.centralMatch(email, documento);
+      if (!m) {
+        // Sem registro na base — pode se tratar de ex-aluno; o admin vê o alerta na fila.
+        await this.db.from('thb_placas_solicitacoes').update({ central_match: 'nenhum' }).eq('id', solicitacaoId);
+        return;
+      }
+
+      // Vínculo + inteligência central→solicitação: espaço de instrução da central corrige
+      // o informado no formulário (fonte de verdade é o cadastro oficial).
+      const solPatch: Row = { central_match: m.match_por, aluno_id: m.aluno_id };
+      const espacoForm = String((sol as Row)?.espaco_instrucao ?? payload.espaco_instrucao ?? '');
+      if (m.espaco_instrucao && espacoForm && m.espaco_instrucao !== espacoForm) {
+        solPatch.espaco_instrucao = m.espaco_instrucao;
+        await this.db.from('thb_system_events').insert({
+          tipo: 'business',
+          fonte: 'form_publico_placa',
+          titulo: 'Espaço de instrução corrigido pela central',
+          detalhe: { solicitacao_id: solicitacaoId, informado: espacoForm, central: m.espaco_instrucao },
+          aluno_id: m.aluno_id,
+        });
+      }
+      await this.db.from('thb_placas_solicitacoes').update(solPatch).eq('id', solicitacaoId);
+
       const { data: aluno } = await this.db
         .from('thb_alunos')
         .select(
           'id,atualizado_por,placa_solicitacao_id,telefone,documento,cep,cidade,estado,bairro,pais,endereco_logradouro,endereco_numero,endereco_complemento,profissao,telefone_profissional,instagram_url,youtube_url,site_profissional,link_facebook',
         )
-        .ilike('email', email)
-        .limit(1)
+        .eq('id', m.aluno_id)
         .maybeSingle();
       const a = aluno as Row | null;
       if (!a?.id) return;

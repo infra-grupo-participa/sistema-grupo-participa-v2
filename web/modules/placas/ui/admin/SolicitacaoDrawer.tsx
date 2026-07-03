@@ -63,6 +63,8 @@ export function SolicitacaoDrawer({
         <>
           <NivelBadge nivel={sol.nivel} />
           <Badge tone={displayStatusTone(computeDisplayStatus(sol).cls)} dot>{computeDisplayStatus(sol).label}</Badge>
+          {sol.central_match === 'nenhum' && <Badge tone="danger">Sem registro na central · possível ex-aluno</Badge>}
+          {(sol.central_match === 'email' || sol.central_match === 'documento') && <Badge tone="success">Vinculado à central</Badge>}
           {sol.admin_seen_at && <Badge tone="neutral">Visto</Badge>}
         </>
       }

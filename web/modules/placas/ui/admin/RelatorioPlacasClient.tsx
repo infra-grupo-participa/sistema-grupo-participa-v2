@@ -367,6 +367,7 @@ const LinhaSolicitacao = memo(function LinhaSolicitacao({ s, onOpen }: { s: Soli
             <div className={`truncate flex items-center gap-1.5 ${!seen ? 'text-[var(--fg)] font-bold' : 'text-[var(--fg)] font-medium'}`}>
               {s.nome || '—'}
               {!seen && <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide rounded-[var(--r-pill)] bg-[var(--accent)] text-black px-1.5 py-px">Novo</span>}
+              {s.central_match === 'nenhum' && <span title="Sem registro na central — possível ex-aluno" className="shrink-0 text-[10px] font-bold uppercase tracking-wide rounded-[var(--r-pill)] bg-[var(--red-subtle)] text-[var(--red)] px-1.5 py-px">Ex-aluno?</span>}
             </div>
             <div className={`text-xs truncate ${!seen ? 'text-[var(--fg-2)]' : 'text-[var(--fg-3)]'}`}>{s.email}</div>
           </div>
