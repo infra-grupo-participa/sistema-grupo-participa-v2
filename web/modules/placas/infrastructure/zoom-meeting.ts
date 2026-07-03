@@ -1,13 +1,20 @@
 import type { MeetingProvider } from '../application/ports';
+import { logSystemEvent, snippet } from '@/shared/infrastructure/observability/system-events';
 
 // Provedor de reunião Zoom (Server-to-Server OAuth) — porta de confirm-horario.php.
 // Não configurado (env ausente) → retorna null e o fluxo segue salvando sem link.
+// Toda falha (HTTP, timeout, resposta inesperada) vira evento em thb_system_events
+// para a aba Admin Dev — o retorno continua null para não travar o agendamento.
 export class ZoomMeetingProvider implements MeetingProvider {
   async createMeeting(input: { topic: string; startIso: string; durationMin: number }) {
     const accountId = process.env.ZOOM_ACCOUNT_ID;
     const clientId = process.env.ZOOM_CLIENT_ID;
     const clientSecret = process.env.ZOOM_CLIENT_SECRET;
-    if (!accountId || !clientId || !clientSecret) return null;
+    const ctx = { topic: input.topic, start: input.startIso };
+    if (!accountId || !clientId || !clientSecret) {
+      await logSystemEvent({ tipo: 'warn', fonte: 'zoom', titulo: 'Zoom não configurado — agendamento seguirá sem link', detalhe: ctx });
+      return null;
+    }
 
     try {
       const tokenResp = await fetch(
@@ -18,9 +25,20 @@ export class ZoomMeetingProvider implements MeetingProvider {
           signal: AbortSignal.timeout(15000),
         },
       );
-      if (!tokenResp.ok) return null;
+      if (!tokenResp.ok) {
+        await logSystemEvent({
+          tipo: 'error',
+          fonte: 'zoom',
+          titulo: `Falha no OAuth do Zoom (HTTP ${tokenResp.status})`,
+          detalhe: { ...ctx, etapa: 'token', http_status: tokenResp.status, resposta: snippet(await tokenResp.text().catch(() => '')) },
+        });
+        return null;
+      }
       const accessToken = ((await tokenResp.json()) as { access_token?: string }).access_token;
-      if (!accessToken) return null;
+      if (!accessToken) {
+        await logSystemEvent({ tipo: 'error', fonte: 'zoom', titulo: 'OAuth do Zoom sem access_token na resposta', detalhe: { ...ctx, etapa: 'token' } });
+        return null;
+      }
 
       const meetResp = await fetch('https://api.zoom.us/v2/users/me/meetings', {
         method: 'POST',
@@ -41,10 +59,28 @@ export class ZoomMeetingProvider implements MeetingProvider {
         }),
         signal: AbortSignal.timeout(15000),
       });
-      if (meetResp.status !== 201) return null;
+      if (meetResp.status !== 201) {
+        await logSystemEvent({
+          tipo: 'error',
+          fonte: 'zoom',
+          titulo: `Falha ao criar reunião no Zoom (HTTP ${meetResp.status})`,
+          detalhe: { ...ctx, etapa: 'meeting', http_status: meetResp.status, resposta: snippet(await meetResp.text().catch(() => '')) },
+        });
+        return null;
+      }
       const joinUrl = ((await meetResp.json()) as { join_url?: string }).join_url;
-      return joinUrl ? { joinUrl } : null;
-    } catch {
+      if (!joinUrl) {
+        await logSystemEvent({ tipo: 'error', fonte: 'zoom', titulo: 'Reunião criada mas sem join_url na resposta', detalhe: { ...ctx, etapa: 'meeting' } });
+        return null;
+      }
+      return { joinUrl };
+    } catch (err) {
+      await logSystemEvent({
+        tipo: 'error',
+        fonte: 'zoom',
+        titulo: 'Exceção ao falar com o Zoom (timeout/rede)',
+        detalhe: { ...ctx, erro: snippet(err instanceof Error ? `${err.name}: ${err.message}` : String(err)) },
+      });
       return null;
     }
   }

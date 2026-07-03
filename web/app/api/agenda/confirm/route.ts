@@ -11,6 +11,7 @@ import { buildGcalLink, buildSlotStart, conflictsForSlot, rescheduleBlockReason 
 import { getEmailContentByStatus, emailDynamicBoxes, type EmailExtra } from '@/modules/placas/application/email-content';
 import { buildEmailTemplate } from '@/shared/infrastructure/email/template';
 import { readPlacasConfig } from '@/modules/placas/infrastructure/supabase-config';
+import { logSystemEvent } from '@/shared/infrastructure/observability/system-events';
 
 /** E-mail de confirmação ao CANDIDATO (template entrevista_agendada + override editável do admin). */
 async function emailCandidato(email: string, nome: string, data: string, hora: string, zoomLink: string | null, trackingLink: string): Promise<void> {
@@ -80,6 +81,16 @@ export async function POST(request: NextRequest) {
       durationMin: 60,
     });
     const zoomLink = meeting?.joinUrl ?? null;
+    if (!zoomLink) {
+      // Causa-raiz (HTTP/timeout) já foi logada pelo provider; aqui fica o contexto do candidato.
+      await logSystemEvent({
+        tipo: 'warn',
+        fonte: 'agenda_confirm',
+        titulo: 'Entrevista agendada SEM link Zoom — enviar link manualmente',
+        detalhe: { solicitacao_id: sol.id, candidato: sol.nome, email: sol.email, data, hora },
+        aluno_id: sol.aluno_id ? String(sol.aluno_id) : null,
+      });
+    }
 
     const confirmed = await agenda.confirm(String(sol.id), {
       entrevista_data: data,
@@ -88,7 +99,16 @@ export async function POST(request: NextRequest) {
       meet_link: zoomLink,
     });
     if (confirmed.conflict) return jsonError('Este horário acabou de ser reservado por outra pessoa. Escolha outro.', 409, { session_link: sessionLink });
-    if (!confirmed.ok) return jsonError('Não foi possível concluir a operação.', 502);
+    if (!confirmed.ok) {
+      await logSystemEvent({
+        tipo: 'error',
+        fonte: 'agenda_confirm',
+        titulo: 'Falha ao salvar o agendamento no banco (HTTP 502 ao candidato)',
+        detalhe: { solicitacao_id: sol.id, candidato: sol.nome, email: sol.email, data, hora },
+        aluno_id: sol.aluno_id ? String(sol.aluno_id) : null,
+      });
+      return jsonError('Não foi possível concluir a operação.', 502);
+    }
     if (sol.aluno_id) await agenda.syncAuditoriaStep(String(sol.aluno_id), 2);
 
     // Notifica admin (melhor-esforço).

@@ -1,5 +1,8 @@
 // Mailer transacional. Usa Resend (HTTP, sem dependência extra) se configurado.
 // Sem RESEND_API_KEY → no-op silencioso (melhor-esforço, como o @mail() do legado).
+// Falha de envio (HTTP/timeout) vira evento em thb_system_events (aba Admin Dev).
+
+import { logSystemEvent, snippet } from '@/shared/infrastructure/observability/system-events';
 
 export interface MailMessage {
   to: string | string[];
@@ -29,8 +32,22 @@ export async function sendMail(msg: MailMessage): Promise<boolean> {
       }),
       signal: AbortSignal.timeout(15000),
     });
+    if (!resp.ok) {
+      await logSystemEvent({
+        tipo: 'error',
+        fonte: 'mailer',
+        titulo: `Falha no envio de e-mail (HTTP ${resp.status})`,
+        detalhe: { para: msg.to, assunto: msg.subject, http_status: resp.status, resposta: snippet(await resp.text().catch(() => '')) },
+      });
+    }
     return resp.ok;
-  } catch {
+  } catch (err) {
+    await logSystemEvent({
+      tipo: 'error',
+      fonte: 'mailer',
+      titulo: 'Exceção ao enviar e-mail (timeout/rede)',
+      detalhe: { para: msg.to, assunto: msg.subject, erro: snippet(err instanceof Error ? `${err.name}: ${err.message}` : String(err)) },
+    });
     return false;
   }
 }

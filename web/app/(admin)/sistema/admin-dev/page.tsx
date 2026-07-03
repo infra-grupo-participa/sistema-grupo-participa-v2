@@ -6,7 +6,28 @@ import { StatCard, Badge, DataTable, Thead, Th, Tr, Td, EmptyState } from '@/sha
 
 export const dynamic = 'force-dynamic';
 
-interface SystemEvent { id: number; tipo: string; fonte: string; titulo: string; criado_em: string }
+interface SystemEvent {
+  id: number;
+  tipo: string;
+  fonte: string;
+  titulo: string;
+  detalhe: Record<string, unknown> | null;
+  criado_em: string;
+}
+
+const TIPO_TONE: Record<string, 'danger' | 'warning' | 'info' | 'neutral'> = {
+  error: 'danger',
+  warn: 'warning',
+  business: 'info',
+};
+
+/** Detalhe jsonb como "chave: valor" compacto — legível sem abrir o banco. */
+function fmtDetalhe(d: Record<string, unknown> | null): string {
+  if (!d || !Object.keys(d).length) return '';
+  return Object.entries(d)
+    .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
+    .join(' · ');
+}
 
 export default async function AdminDevPage() {
   const user = await getCurrentUser();
@@ -15,14 +36,24 @@ export default async function AdminDevPage() {
 
   let resumo: Record<string, unknown> | null = null;
   let eventos: SystemEvent[] = [];
+  let zoomErros7d: number | null = null;
+  let mailerErros7d: number | null = null;
+  let semZoom7d: number | null = null;
   try {
     const admin = createAdminSupabase();
-    const [{ data: r }, { data: e }] = await Promise.all([
+    const seteDias = new Date(Date.now() - 7 * 86400000).toISOString();
+    const [{ data: r }, { data: e }, zoomQ, mailQ, semZoomQ] = await Promise.all([
       admin.from('vw_dashboard_resumo').select('*').maybeSingle(),
-      admin.from('thb_system_events').select('id, tipo, fonte, titulo, criado_em').order('criado_em', { ascending: false }).limit(50),
+      admin.from('thb_system_events').select('id, tipo, fonte, titulo, detalhe, criado_em').order('criado_em', { ascending: false }).limit(100),
+      admin.from('thb_system_events').select('id', { count: 'exact', head: true }).eq('fonte', 'zoom').eq('tipo', 'error').gte('criado_em', seteDias),
+      admin.from('thb_system_events').select('id', { count: 'exact', head: true }).eq('fonte', 'mailer').eq('tipo', 'error').gte('criado_em', seteDias),
+      admin.from('thb_system_events').select('id', { count: 'exact', head: true }).in('fonte', ['agenda_confirm', 'agenda_admin']).eq('tipo', 'warn').gte('criado_em', seteDias),
     ]);
     resumo = r ?? null;
     eventos = (e as SystemEvent[]) ?? [];
+    zoomErros7d = zoomQ.count ?? 0;
+    mailerErros7d = mailQ.count ?? 0;
+    semZoom7d = semZoomQ.count ?? 0;
   } catch {
     // service_role não configurado → painel mostra vazio.
   }
@@ -38,38 +69,57 @@ export default async function AdminDevPage() {
     { l: 'Audits (24h)', k: 'audits_24h' },
     { l: 'Inconsistências', k: 'total_inconsistencias' },
   ];
+  const saude = [
+    { l: 'Falhas Zoom (7d)', v: zoomErros7d },
+    { l: 'Agendamentos sem link Zoom (7d)', v: semZoom7d },
+    { l: 'Falhas de e-mail (7d)', v: mailerErros7d },
+  ];
 
   return (
     <div>
       <h1 className="text-2xl font-bold text-[var(--fg)] mb-1">Admin Dev</h1>
       <p className="text-sm text-[var(--fg-3)] mb-4">Observabilidade técnica {!resumo && '(configure SUPABASE_SERVICE_ROLE_KEY para ver as métricas)'}</p>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
         {cards.map((c) => (
           <StatCard key={c.k} label={c.l} value={metric(c.k)} />
         ))}
       </div>
 
+      {/* Saúde das integrações — zero é o estado saudável; >0 pede ação (Zoom fora do ar, Resend etc). */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+        {saude.map((c) => (
+          <StatCard key={c.l} label={c.l} value={c.v === null ? '—' : String(c.v)} tone={c.v ? 'var(--red)' : 'var(--green)'} />
+        ))}
+      </div>
+
       <div className="text-sm font-semibold text-[var(--fg)] mb-2">Eventos recentes do sistema</div>
-      <DataTable>
+      <DataTable fixed>
         <Thead>
-          <Th>Tipo</Th>
-          <Th>Fonte</Th>
-          <Th>Título</Th>
-          <Th>Quando</Th>
+          <Th className="w-[80px]">Tipo</Th>
+          <Th className="w-[130px]">Fonte</Th>
+          <Th className="w-[300px]">Título</Th>
+          <Th>Detalhe</Th>
+          <Th className="w-[140px]">Quando</Th>
         </Thead>
         <tbody>
-          {eventos.map((ev) => (
-            <Tr key={ev.id}>
-              <Td><Badge tone={ev.tipo === 'error' ? 'danger' : 'neutral'}>{ev.tipo}</Badge></Td>
-              <Td className="text-[var(--fg-3)] text-xs">{ev.fonte}</Td>
-              <Td className="text-[var(--fg-2)]">{ev.titulo}</Td>
-              <Td className="text-[var(--fg-3)] text-xs">{new Date(ev.criado_em).toLocaleString('pt-BR')}</Td>
-            </Tr>
-          ))}
+          {eventos.map((ev) => {
+            const det = fmtDetalhe(ev.detalhe);
+            return (
+              <Tr key={ev.id}>
+                <Td className="overflow-hidden"><Badge tone={TIPO_TONE[ev.tipo] ?? 'neutral'}>{ev.tipo}</Badge></Td>
+                <Td className="overflow-hidden"><span className="block truncate text-[var(--fg-3)] text-xs" title={ev.fonte}>{ev.fonte}</span></Td>
+                <Td className="overflow-hidden"><span className="block truncate text-[var(--fg-2)]" title={ev.titulo}>{ev.titulo}</span></Td>
+                <Td className="overflow-hidden">
+                  {det ? <span className="block truncate text-xs text-[var(--fg-3)] font-mono" title={det}>{det}</span> : <span className="text-[var(--fg-3)]">—</span>}
+                </Td>
+                <Td className="text-[var(--fg-3)] text-xs whitespace-nowrap">{new Date(ev.criado_em).toLocaleString('pt-BR')}</Td>
+              </Tr>
+            );
+          })}
           {!eventos.length && (
             <tr>
-              <td colSpan={4}>
+              <td colSpan={5}>
                 <EmptyState title="Sem eventos." />
               </td>
             </tr>

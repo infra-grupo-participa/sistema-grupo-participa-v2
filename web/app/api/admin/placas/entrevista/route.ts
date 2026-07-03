@@ -10,6 +10,7 @@ import { getEmailContentByStatus, emailDynamicBoxes, type EmailExtra } from '@/m
 import { readPlacasConfig } from '@/modules/placas/infrastructure/supabase-config';
 import { buildEmailTemplate } from '@/shared/infrastructure/email/template';
 import { sendMail } from '@/shared/infrastructure/email/mailer';
+import { logSystemEvent } from '@/shared/infrastructure/observability/system-events';
 
 // Agendamento MANUAL de entrevista pelo admin (porta do gerarCalendlyLink/edição de entrevista
 // do legado): define data/hora, cria a sala Zoom e opcionalmente notifica o candidato.
@@ -46,6 +47,16 @@ export async function POST(request: NextRequest) {
     durationMin: 60,
   });
   const zoomLink = meeting?.joinUrl ?? null;
+  if (!zoomLink) {
+    // Causa-raiz (HTTP/timeout) já foi logada pelo provider; aqui fica o contexto do candidato.
+    await logSystemEvent({
+      tipo: 'warn',
+      fonte: 'agenda_admin',
+      titulo: 'Entrevista agendada pelo admin SEM link Zoom — enviar link manualmente',
+      detalhe: { solicitacao_id: sol.id, candidato: sol.nome, email: sol.email, data, hora },
+      aluno_id: sol.aluno_id ? String(sol.aluno_id) : null,
+    });
+  }
 
   const confirmed = await agenda.confirm(String(sol.id), {
     entrevista_data: data,
@@ -54,7 +65,16 @@ export async function POST(request: NextRequest) {
     meet_link: zoomLink,
   });
   if (confirmed.conflict) return jsonError('Já existe uma entrevista nesse horário. Escolha outro.', 409);
-  if (!confirmed.ok) return jsonError('Não foi possível salvar o agendamento.', 502);
+  if (!confirmed.ok) {
+    await logSystemEvent({
+      tipo: 'error',
+      fonte: 'agenda_admin',
+      titulo: 'Falha ao salvar agendamento manual no banco',
+      detalhe: { solicitacao_id: sol.id, candidato: sol.nome, email: sol.email, data, hora },
+      aluno_id: sol.aluno_id ? String(sol.aluno_id) : null,
+    });
+    return jsonError('Não foi possível salvar o agendamento.', 502);
+  }
   if (sol.aluno_id) await agenda.syncAuditoriaStep(String(sol.aluno_id), 2);
 
   if (enviarEmail) {
