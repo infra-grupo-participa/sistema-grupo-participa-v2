@@ -292,7 +292,7 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
 
   // ── Render ──
   if (view === 'loading') return <Wrap><div className="sp-card"><div className="sp-card-body">Carregando…</div></div></Wrap>;
-  if (view === 'success') return <Wrap><SuccessCard kind="success" /></Wrap>;
+  if (view === 'success') return <Wrap><SuccessCard kind="success" token={token} /></Wrap>;
   if (view === 'cadastro') return <Wrap><SuccessCard kind="cadastro" /></Wrap>;
   if (view === 'tracking' && tracking) return <Wrap><TrackingCard data={tracking} /></Wrap>;
 

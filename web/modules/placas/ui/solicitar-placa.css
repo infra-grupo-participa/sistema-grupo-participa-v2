@@ -597,6 +597,20 @@
   margin-top: 5px;
 }
 
+/* Tela de sucesso — badge do ícone no cabeçalho âmbar */
+.sp-success-badge {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink);
+  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.25);
+}
+
 /* Etapa 5 — fluxo da declaração (gerar → assinar → enviar) */
 .sp-decl-flow {
   display: grid;

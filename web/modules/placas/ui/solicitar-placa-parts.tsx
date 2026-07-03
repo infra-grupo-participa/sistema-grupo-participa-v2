@@ -93,18 +93,48 @@ export function Nav({ onBack, onNext, nextLabel, backLabel = '← Voltar', onlyN
   );
 }
 
-export function SuccessCard({ kind }: { kind: 'success' | 'cadastro' }) {
+export function SuccessCard({ kind, token }: { kind: 'success' | 'cadastro'; token?: string }) {
   const isCad = kind === 'cadastro';
+  const passos = isCad
+    ? [
+        { t: 'Nível registrado', d: 'Seus dados e o seu nível atual já estão no nosso sistema.' },
+        { t: 'Evoluiu de nível?', d: 'Quando alcançar a faixa Ouro ou superior, retome pelo mesmo link e siga para a placa.' },
+        { t: 'Confirmação por e-mail', d: 'Enviamos um e-mail com o registro e o seu link pessoal de acesso.' },
+      ]
+    : [
+        { t: 'Análise da documentação', d: 'Nossa equipe revisa o comprovante e a declaração enviados.' },
+        { t: 'Avisos por e-mail', d: 'A cada etapa vencida você recebe um e-mail com o próximo passo.' },
+        { t: 'Acompanhamento online', d: 'Acesse o andamento quando quiser pelo seu link pessoal.' },
+      ];
   return (
     <div className="sp-card">
-      <div className="sp-card-body sp-success">
-        <div className="em"><Icon name={isCad ? 'check-circle' : 'party'} size={44} /></div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, marginTop: 8 }}>{isCad ? 'Cadastro registrado com sucesso!' : 'Recebemos sua solicitação!'}</h1>
-        <p style={{ color: 'var(--muted)', marginTop: 8 }}>
+      {/* Texto escuro sobre âmbar (decisão D5.1 do DS). */}
+      <div className="sp-card-head" style={{ background: 'var(--orange)', color: 'var(--ink)', textAlign: 'center' }}>
+        <div className="sp-success-badge"><Icon name={isCad ? 'check-circle' : 'party'} size={26} /></div>
+        <h1 style={{ color: 'var(--ink)' }}>{isCad ? 'Cadastro registrado com sucesso!' : 'Recebemos sua solicitação! 🎉'}</h1>
+        <p style={{ color: 'rgba(15,23,42,.75)' /* hex-ok: --ink com 75% sobre âmbar */ }}>
           {isCad
-            ? 'Registramos seus dados e o seu nível atual. Como este nível ainda não entra no fluxo da placa, nenhuma documentação adicional é necessária agora.'
-            : 'Recebemos seus dados e vamos seguir com a análise da documentação. O acompanhamento fica resumido aos marcos principais do processo.'}
+            ? 'Seus dados e o seu nível atual foram registrados pela nossa equipe.'
+            : 'Sua documentação entrou na fila de análise. Veja o que acontece agora:'}
         </p>
+      </div>
+      <div className="sp-card-body">
+        <div className="sp-decl-flow" style={{ marginBottom: 16 }}>
+          {passos.map((p, i) => (
+            <div key={p.t} className="sp-decl-step">
+              <span className="n">{i + 1}</span>
+              <div><b>{p.t}</b><p>{p.d}</p></div>
+            </div>
+          ))}
+        </div>
+        {!isCad && token && (
+          <a className="sp-btn-next" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, textDecoration: 'none', marginBottom: 12 }} href={`/solicitar-placa?token=${encodeURIComponent(token)}`}>
+            <Icon name="arrow-up-right" size={16} /> Acompanhar minha solicitação
+          </a>
+        )}
+        <div className="sp-hint" style={{ textAlign: 'center' }}>
+          📬 Enviamos a confirmação para o seu e-mail — se não encontrar, confira o spam ou a aba Promoções.
+        </div>
       </div>
     </div>
   );
