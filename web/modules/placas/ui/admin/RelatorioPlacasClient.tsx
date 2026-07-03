@@ -15,7 +15,7 @@ import {
 import type { Solicitacao, Auditoria } from '../../domain/types';
 import * as data from './placas-admin-data';
 import * as configData from './placas-config-data';
-import { resolveAuditSteps, NIVEL_FAIXA_ORDER, DEFAULT_NIVEL_FAIXAS, type PlacasConfig } from '../../domain/config';
+import { resolveAuditSteps, resolveFormTextos, NIVEL_FAIXA_ORDER, DEFAULT_NIVEL_FAIXAS, type PlacasConfig } from '../../domain/config';
 import { Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState, MultiSelect, SearchInput, ProgressBar, SkeletonRows, Toast, Toolbar, useFlash, Button } from '@/shared/ui/components';
 import { SolicitacaoDrawer } from './SolicitacaoDrawer';
 import { ConfigPanel } from './ConfigPanel';
@@ -68,6 +68,13 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
   useEffect(() => setOrigin(window.location.origin), []);
 
   const steps = useMemo(() => resolveAuditSteps(cfg?.audit_steps), [cfg]);
+  // Rótulos dos espaços de instrução (config sobrepõe o default) — valor cru como fallback.
+  const espacoMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const e of resolveFormTextos(cfg?.form_textos).espacos) m[e.v] = e.l;
+    return m;
+  }, [cfg]);
+  const espacoNome = useCallback((v: string | null | undefined) => (v ? espacoMap[v] || v : ''), [espacoMap]);
 
   const indexAuditorias = (a: Auditoria[]) => {
     const map: Record<string, Auditoria> = {};
@@ -134,7 +141,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
   // Filtros dedicados (porta dos 5 selects do legado) + ordenação clicável.
   const FILTROS_VAZIO = { nivel: [] as string[], turma: [] as string[], uf: [] as string[], status: [] as string[] };
   const [filtros, setFiltros] = useState(FILTROS_VAZIO);
-  type SortCol = 'nome' | 'nivel' | 'status' | 'turma' | 'quando';
+  type SortCol = 'nome' | 'espaco' | 'nivel' | 'status' | 'turma' | 'quando';
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const sortBtn = (col: SortCol) => () => {
@@ -153,7 +160,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
     const nivelRank = (n: string | null | undefined) => { const i = (NIVEL_FAIXA_ORDER as readonly string[]).indexOf(String(n ?? '')); return i === -1 ? 99 : i; };
     return sols
       .filter((s) => getSolicitacaoBucketMatch(s, bucket))
-      .filter((s) => !term || `${s.nome ?? ''} ${s.email ?? ''} ${s.documento_nf ?? ''} ${s.cidade ?? ''} ${s.estado_uf ?? ''} ${s.turma ?? ''}`.toLowerCase().includes(term))
+      .filter((s) => !term || `${s.nome ?? ''} ${s.email ?? ''} ${s.documento_nf ?? ''} ${s.cidade ?? ''} ${s.estado_uf ?? ''} ${s.turma ?? ''} ${espacoNome(s.espaco_instrucao)}`.toLowerCase().includes(term))
       .filter((s) => !filtros.nivel.length || filtros.nivel.includes(String(s.nivel ?? '')))
       .filter((s) => !filtros.turma.length || filtros.turma.includes(String(s.turma ?? '')))
       .filter((s) => !filtros.uf.length || filtros.uf.includes(String(s.estado_uf ?? '').toUpperCase()))
@@ -162,6 +169,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
         if (sortCol) {
           const dir = sortDir === 'asc' ? 1 : -1;
           if (sortCol === 'nome') return dir * String(a.nome ?? '').localeCompare(String(b.nome ?? ''), 'pt-BR');
+          if (sortCol === 'espaco') return dir * espacoNome(a.espaco_instrucao).localeCompare(espacoNome(b.espaco_instrucao), 'pt-BR');
           if (sortCol === 'nivel') return dir * (nivelRank(a.nivel) - nivelRank(b.nivel));
           if (sortCol === 'status') return dir * computeDisplayStatus(a).label.localeCompare(computeDisplayStatus(b).label, 'pt-BR');
           if (sortCol === 'turma') return dir * String(a.turma ?? '').localeCompare(String(b.turma ?? ''), 'pt-BR', { numeric: true });
@@ -173,7 +181,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
         if (sa !== sb) return sa - sb;
         return getSolicitacaoQueuePriority(a) - getSolicitacaoQueuePriority(b);
       });
-  }, [sols, bucket, dq, filtros, sortCol, sortDir]);
+  }, [sols, bucket, dq, filtros, sortCol, sortDir, espacoNome]);
 
   const open = openId ? sols.find((s) => s.id === openId) ?? null : null;
   // Abrir = visto automático (estilo WhatsApp): otimista no estado local + persistência
@@ -271,19 +279,21 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
             )}
           </Toolbar>
 
-          <DataTable>
+          {/* Layout fixo: larguras definidas aqui; células truncam em vez de forçar scroll lateral. */}
+          <DataTable fixed>
             <Thead>
               <Th sortable active={sortCol === 'nome'} dir={sortDir} onClick={sortBtn('nome')}>Aluno</Th>
-              <Th sortable active={sortCol === 'nivel'} dir={sortDir} onClick={sortBtn('nivel')}>Nível</Th>
-              <Th sortable active={sortCol === 'status'} dir={sortDir} onClick={sortBtn('status')}>Status</Th>
-              <Th>Progresso</Th>
-              <Th sortable active={sortCol === 'turma'} dir={sortDir} onClick={sortBtn('turma')}>Turma</Th>
-              <Th sortable active={sortCol === 'quando'} dir={sortDir} onClick={sortBtn('quando')}>Última atualização</Th>
+              <Th sortable active={sortCol === 'espaco'} dir={sortDir} onClick={sortBtn('espaco')} className="w-[170px]">Espaço de Instrução</Th>
+              <Th sortable active={sortCol === 'nivel'} dir={sortDir} onClick={sortBtn('nivel')} className="w-[130px]">Nível</Th>
+              <Th sortable active={sortCol === 'status'} dir={sortDir} onClick={sortBtn('status')} className="w-[190px]">Status</Th>
+              <Th className="w-[105px]">Progresso</Th>
+              <Th sortable active={sortCol === 'turma'} dir={sortDir} onClick={sortBtn('turma')} className="w-[70px]">Turma</Th>
+              <Th sortable active={sortCol === 'quando'} dir={sortDir} onClick={sortBtn('quando')} className="w-[100px]">Atualizado</Th>
             </Thead>
             <tbody>
               {loading && !sols.length
-                ? <SkeletonRows />
-                : filtered.map((s) => <LinhaSolicitacao key={s.id} s={s} onOpen={abrir} />)}
+                ? <SkeletonRows cols={[96, 64, 80, 96, 40, 56]} />
+                : filtered.map((s) => <LinhaSolicitacao key={s.id} s={s} espaco={espacoNome(s.espaco_instrucao)} onOpen={abrir} />)}
             </tbody>
           </DataTable>
           {!filtered.length && !loading && (
@@ -357,7 +367,7 @@ function QueueCard({ label, hint, icon, tone, value, active, badge, onClick }: {
 }
 
 /** Linha da fila — memoizada: digitar na busca não re-renderiza linhas que não mudaram. */
-const LinhaSolicitacao = memo(function LinhaSolicitacao({ s, onOpen }: { s: Solicitacao; onOpen: (id: string) => void }) {
+const LinhaSolicitacao = memo(function LinhaSolicitacao({ s, espaco, onOpen }: { s: Solicitacao; espaco: string; onOpen: (id: string) => void }) {
   const ds = computeDisplayStatus(s);
   const seen = isSolicitacaoSeen(s);
   const pr = progresso(s);
@@ -378,16 +388,19 @@ const LinhaSolicitacao = memo(function LinhaSolicitacao({ s, onOpen }: { s: Soli
             <div className={`truncate flex items-center gap-1.5 ${!seen ? 'text-[var(--fg)] font-bold' : 'text-[var(--fg)] font-medium'}`}>
               {s.nome || '—'}
               {!seen && <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide rounded-[var(--r-pill)] bg-[var(--accent)] text-black px-1.5 py-px">Novo</span>}
-              {s.central_match === 'nenhum' && <span title="Sem registro na central — possível ex-aluno" className="shrink-0 text-[10px] font-bold uppercase tracking-wide rounded-[var(--r-pill)] bg-[var(--red-subtle)] text-[var(--red)] px-1.5 py-px">Ex-aluno?</span>}
+              {s.central_match === 'nenhum' && <span title="Sem registro na central — possível ex-aluno" className="shrink-0 text-[10px] font-bold uppercase tracking-wide rounded-[var(--r-pill)] bg-[var(--red-subtle)] text-[var(--red)] px-1.5 py-px">NÃO ALUNO?</span>}
             </div>
             <div className={`text-xs truncate ${!seen ? 'text-[var(--fg-2)]' : 'text-[var(--fg-3)]'}`}>{s.email}</div>
           </div>
         </div>
       </Td>
-      <Td><NivelBadge nivel={s.nivel} /></Td>
-      <Td><Badge tone={displayStatusTone(ds.cls)} dot>{ds.label}</Badge></Td>
+      <Td className="overflow-hidden">
+        {espaco ? <span className="block truncate text-xs text-[var(--fg-2)]" title={espaco}>{espaco}</span> : <span className="text-[var(--fg-3)]">—</span>}
+      </Td>
+      <Td className="overflow-hidden"><NivelBadge nivel={s.nivel} /></Td>
+      <Td className="overflow-hidden"><span title={ds.label}><Badge tone={displayStatusTone(ds.cls)} dot>{ds.label}</Badge></span></Td>
       <Td>
-        <div className="flex items-center gap-2 min-w-[120px]">
+        <div className="flex items-center gap-2">
           <div className="flex-1"><ProgressBar value={pr.pct * 100} height={6} tone={pr.tone} /></div>
           <span className="text-xs text-[var(--fg-3)] tabular whitespace-nowrap">{pr.label}</span>
         </div>
