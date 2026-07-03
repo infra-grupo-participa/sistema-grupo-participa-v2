@@ -16,7 +16,7 @@ describe('agendamento — buildGcalLink', () => {
     const url = buildGcalLink('Maria', '2026-07-10', '14:00', 'https://zoom.us/j/1');
     expect(url).toContain('dates=20260710T140000/20260710T150000');
     expect(url).toContain('ctz=America%2FSao_Paulo'.replace('%2F', '/'));
-    expect(url).toContain(encodeURIComponent('Entrevista Maria - Treinamento em Holding Familiar'));
+    expect(url).toContain(encodeURIComponent('Entrevista Maria - Time Holding Brasil'));
     expect(url).toContain(`location=${encodeURIComponent('https://zoom.us/j/1')}`);
   });
 

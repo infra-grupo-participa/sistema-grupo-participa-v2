@@ -146,11 +146,11 @@ export function buildGcalLink(nome: string, data: string, hora: string, zoomLink
   const startStr = start ? fmtSp(start) : `${data.replace(/-/g, '')}T${hora.replace(':', '')}00`;
   const endStr = start ? fmtSp(new Date(start.getTime() + 60 * 60 * 1000)) : startStr;
   const details = zoomLink
-    ? `Entrevista - Treinamento em Holding Familiar.\n\nLink Zoom:\n${zoomLink}`
-    : 'Entrevista - Treinamento em Holding Familiar.\n\nO link da reunião será enviado em breve.';
+    ? `Entrevista - Time Holding Brasil.\n\nLink Zoom:\n${zoomLink}`
+    : 'Entrevista - Time Holding Brasil.\n\nO link da reunião será enviado em breve.';
   let url =
     'https://calendar.google.com/calendar/render?action=TEMPLATE' +
-    `&text=${encodeURIComponent(`Entrevista ${nome || 'Candidato'} - Treinamento em Holding Familiar`)}` +
+    `&text=${encodeURIComponent(`Entrevista ${nome || 'Candidato'} - Time Holding Brasil`)}` +
     `&dates=${startStr}/${endStr}` +
     '&ctz=America/Sao_Paulo' +
     `&details=${encodeURIComponent(details)}`;

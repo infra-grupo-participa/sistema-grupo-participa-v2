@@ -9,7 +9,7 @@ function button(link: string, label: string, cor: string): string {
   return `<p style="text-align:center;margin:28px 0;"><a href="${esc(link)}" target="_blank" style="background:${cor};color:#fff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">${esc(label)}</a></p>`;
 }
 
-const FOOTER = `<div style="margin-top:32px;padding-top:20px;border-top:1px solid #eee;text-align:center;color:#888;font-size:12px;"><p style="margin:0;">Time Holding Brasil — Treinamento em Holding Familiar</p><p style="margin:6px 0 0;"><a href="https://grupoparticipa.app.br" style="color:#F29725;text-decoration:none;">grupoparticipa.app.br</a></p></div>`;
+const FOOTER = `<div style="margin-top:32px;padding-top:20px;border-top:1px solid #eee;text-align:center;color:#888;font-size:12px;"><p style="margin:0;">Time Holding Brasil</p><p style="margin:6px 0 0;"><a href="https://grupoparticipa.app.br" style="color:#F29725;text-decoration:none;">grupoparticipa.app.br</a></p></div>`;
 
 const HEADER = `<div style="text-align:center;padding:32px 0 24px;border-bottom:1px solid #eee;margin-bottom:28px;"><img src="https://grupoparticipa.app.br/assets/images/TimeHoldingBrasil.png" alt="Time Holding Brasil" style="height:80px;width:auto;display:inline-block;" /></div>`;
 

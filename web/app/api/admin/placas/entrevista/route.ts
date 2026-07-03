@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
   }
 
   const meeting = await new ZoomMeetingProvider().createMeeting({
-    topic: `Entrevista ${sol.nome ?? ''} - Treinamento em Holding Familiar`,
+    topic: `Entrevista ${sol.nome ?? ''} - Time Holding Brasil`,
     startIso: `${data}T${hora}:00`,
     durationMin: 60,
   });
