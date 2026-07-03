@@ -2,7 +2,7 @@ import type { NextRequest, NextResponse } from 'next/server';
 import { isUuid } from './validation';
 
 export const PLACA_SESSION_COOKIE = 'gp_placa_session';
-const TTL_SECONDS = 2592000; // 30 dias
+const TTL_SECONDS = 7776000; // 90 dias — o processo de placa costuma atravessar semanas
 
 /** Token público da solicitação a partir de body/query/cookie (porta de api_get_public_session_token). */
 export function resolvePlacaToken(

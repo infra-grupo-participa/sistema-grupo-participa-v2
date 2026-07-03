@@ -2,6 +2,7 @@
 // Copy de produto preservado 1:1.
 
 export type EmailTipo =
+  | 'link_acesso'
   | 'solicitacao_recebida'
   | 'docs_aprovados'
   | 'entrevista_agendada'
@@ -88,6 +89,21 @@ export function defaultEmailTemplate(tipo: EmailTipo): { assunto: string; introd
 
 export function getEmailContentByStatus(tipo: EmailTipo, extra: EmailExtra, ctaLink: string): EmailContent {
   switch (tipo) {
+    case 'link_acesso':
+      return {
+        assunto: '[Holding Brasil] Seu link para continuar a solicitação de placa',
+        templateData: {
+          titulo: 'Guarde este link',
+          titulo_cor: '#F29725',
+          introducao:
+            'Você começou a sua solicitação de placa. Este é o seu link pessoal de acesso — com ele, você continua o preenchimento de qualquer dispositivo, de onde parou.',
+          corpo_extra:
+            '<p>Se trocar de celular ou computador, basta abrir este e-mail e clicar no botão abaixo.</p><p>Você também pode retomar informando seu e-mail e documento na própria página do formulário.</p>',
+          cta_link: ctaLink,
+          cta_label: 'Continuar minha solicitação',
+          nota: SECRETARIA_NOTA,
+        },
+      };
     case 'solicitacao_recebida':
       return {
         assunto: '[Holding Brasil] Recebemos a sua solicitação de placa',

@@ -169,12 +169,30 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
     setStep(Math.max(1, n - 1));
   };
 
-  // ── Duplicate-check (blur) ──
+  // ── Duplicate-check (blur) + recuperação automática de sessão ──
   async function checkDup(field: 'email' | 'documento_nf') {
     const value = field === 'email' ? form.email : (form.documento_nf || '').replace(/\D/g, '');
     if (!value) return;
     const isDup = await placaDuplicateCheck(field, value, token);
     setDup((d) => ({ ...d, [field]: isDup }));
+    // Multi-dispositivo: se já existe cadastro com este e-mail e o documento confere,
+    // recupera a sessão na hora (seta o cookie novo) em vez de travar o usuário no erro
+    // de duplicado — ele continua de onde parou sem redigitar nada.
+    if (isDup) await tryAutoRecover();
+  }
+
+  async function tryAutoRecover(): Promise<boolean> {
+    const email = (form.email || '').trim();
+    const doc = (form.documento_nf || '').replace(/\D/g, '');
+    if (!email || (doc.length !== 11 && doc.length !== 14)) return false;
+    const r = await placaRecover(email, doc);
+    if (!r.found || !r.solicitacao) return false;
+    setDup({ email: false, documento_nf: false });
+    setErr('');
+    hydrate(r.solicitacao as Record<string, unknown>);
+    routeByStatus(r.solicitacao as Record<string, unknown>);
+    setResumed(true);
+    return true;
   }
 
   // ── CEP (debounce + estado de busca + foco automático) ──
@@ -223,10 +241,26 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
     set(kind === 'comprovante' ? 'proof_url' : 'declaracao_url', url);
   }
 
-  // ── Recover session ──
+  // ── Tracking: reflete atualizações do admin (ex.: código de rastreio) sem refresh ──
+  useEffect(() => {
+    if (view !== 'tracking' || !token) return;
+    const id = setInterval(async () => {
+      const r = await placaGet(token, false).catch(() => null);
+      if (r?.ok && r.solicitacao) setTracking(r.solicitacao as Record<string, unknown>);
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [view, token]);
+
+  // ── Recover session (manual — fallback quando o documento não confere) ──
   const [recoverOpen, setRecoverOpen] = useState(false);
   const [recoverEmail, setRecoverEmail] = useState('');
   const [recoverDoc, setRecoverDoc] = useState('');
+  const abrirRecover = () => {
+    // Pré-preenche com o que o usuário já digitou no formulário (não redigitar).
+    setRecoverEmail((form.email || '').trim());
+    setRecoverDoc(form.documento_nf || '');
+    setRecoverOpen(true);
+  };
   async function doRecover() {
     setErr('');
     const r = await placaRecover(recoverEmail.trim(), recoverDoc.replace(/\D/g, ''));
@@ -277,7 +311,7 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
           onUpload={onUpload}
           goNext={goNext}
           goBack={goBack}
-          onRecover={() => setRecoverOpen(true)}
+          onRecover={abrirRecover}
           espacos={ESPACOS_CFG}
           niveis={NIVEIS_CFG}
           uploadInfo={UPLOAD_INFO}

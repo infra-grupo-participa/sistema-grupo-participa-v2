@@ -2,7 +2,7 @@
 
 // Componentes de apresentação (folhas, sem estado do wizard) do formulário público de placa.
 
-import { Button, Timeline, type TimelineEntry } from '@/shared/ui/components';
+import { Button, CopyField, Timeline, type TimelineEntry } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { getClientTrackingState, CLIENT_TRACKING_STEPS } from '../domain/client-tracking';
 
@@ -183,10 +183,17 @@ export function TrackingCard({ data }: { data: Record<string, unknown> }) {
             </div>
           </div>
         )}
-        <Timeline items={tlItems} />
+        {/* Rastreio em destaque no topo (não escondido no fim da timeline): o aluno chega
+            aqui pelo e-mail "placa a caminho" justamente atrás deste código. */}
         {rastreio && (
-          <div className="sp-info" style={{ marginTop: 16 }}>Código de rastreio: <strong>{rastreio}</strong></div>
+          <div style={{ marginBottom: 16 }}>
+            <CopyField label="Código de rastreio" value={rastreio} />
+            <p className="sp-hint" style={{ marginTop: 6 }}>
+              Acompanhe a entrega no site dos <a href={`https://rastreamento.correios.com.br/app/index.php?objeto=${encodeURIComponent(rastreio)}`} target="_blank" rel="noopener">Correios</a>.
+            </p>
+          </div>
         )}
+        <Timeline items={tlItems} />
       </div>
     </div>
   );

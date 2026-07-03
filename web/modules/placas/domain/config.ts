@@ -47,6 +47,7 @@ export type EmailTemplatesConfig = Record<string, EmailTemplateOverride>;
 
 /** Tipos de e-mail expostos na tela de configuração (label amigável). */
 export const EMAIL_TIPOS_CONFIG: { tipo: string; label: string; descricao: string }[] = [
+  { tipo: 'link_acesso', label: 'Link de acesso (rascunho)', descricao: 'Enviado ao concluir a 1ª etapa: link pessoal para continuar de qualquer dispositivo.' },
   { tipo: 'solicitacao_recebida', label: 'Solicitação recebida', descricao: 'Confirmação automática ao enviar o formulário (protocolo de recebimento).' },
   { tipo: 'docs_aprovados', label: 'Documentação aprovada', descricao: 'Enviado quando a documentação é validada e o cliente pode agendar a entrevista.' },
   { tipo: 'entrevista_agendada', label: 'Entrevista agendada', descricao: 'Confirmação com o link de acesso à sala.' },

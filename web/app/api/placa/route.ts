@@ -130,6 +130,12 @@ export async function POST(request: NextRequest) {
     const created = await gateway.create(payload);
     if (!created) return jsonError('Não foi possível concluir a operação.', 502);
     const newToken = String(created.token).toLowerCase();
+    // Âncora multi-dispositivo: o link pessoal vai para o e-mail já na 1ª etapa —
+    // o candidato pode continuar de qualquer aparelho mesmo sem o cookie desta sessão.
+    const emailNovo = safeEmail(String(payload.email ?? ''));
+    if (emailNovo) {
+      await emailFechoSubmit('link_acesso', emailNovo, String(payload.nome ?? 'Candidato'), `${boot.origin.replace(/\/$/, '')}/solicitar-placa?token=${newToken}`);
+    }
     return setPlacaCookie(
       jsonOk({ ok: true, token: newToken, status: created.status, step_index: created.step_index }),
       newToken,
