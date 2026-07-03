@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
   if (perr) return jsonError(progressErrorMessage(perr), 422);
 
   // Documentação entrando para análise (submit final ou reenvio de correção): acende a
-  // notificação do admin — não-visto + topo da fila, com o badge "ação do cliente".
+  // notificação do admin — não-visto + topo da fila, com o badge "ação do aluno".
   const viraEnviado = payload.status === 'enviado' && String(existing.status ?? '') !== 'enviado';
   const reenvioCorrecao = existing.regularizacao_pendente === true && ('proof_url' in payload || 'declaracao_url' in payload);
   if (viraEnviado || reenvioCorrecao) {

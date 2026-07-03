@@ -13,7 +13,7 @@ export type SolicitacaoStatus =
   | 'concluido'
   | 'rejeitado';
 
-export const REGULARIZACAO_LABEL = 'Cliente reprovado · aguardando nova documentação';
+export const REGULARIZACAO_LABEL = 'Aluno reprovado · aguardando nova documentação';
 
 /** Forma mínima de solicitação usada pelos predicados de domínio. */
 export interface SolicitacaoLike {
@@ -208,7 +208,7 @@ export function displayStatusTone(cls: string): 'neutral' | 'accent' | 'success'
   switch (cls) {
     case 'sp-entregue': return 'success'; // placa enviada/recebida
     case 'sp-andamento': return 'info'; // em análise/andamento
-    case 'sp-aguardando': return 'warning'; // aguardando ação (cliente ou equipe)
+    case 'sp-aguardando': return 'warning'; // aguardando ação (aluno ou equipe)
     case 'sp-regularizacao': return 'warning'; // reprovado · aguardando nova documentação
     case 'sp-encerrado': return 'danger'; // rejeitado definitivo
     default: return 'neutral';

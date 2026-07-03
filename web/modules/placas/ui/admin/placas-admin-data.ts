@@ -155,7 +155,7 @@ export async function avancarEtapa(sol: Solicitacao): Promise<{ ok: boolean; msg
   if ('blocked' in plan) {
     const m: Record<string, string> = {
       concluido: 'Processo já concluído.',
-      aguardando_agendamento: 'Aguardando o cliente agendar a entrevista.',
+      aguardando_agendamento: 'Aguardando o aluno agendar a entrevista.',
       sem_rastreio: 'Informe o código de rastreio para continuar.',
     };
     return { ok: false, msg: m[plan.blocked] };
@@ -167,7 +167,7 @@ export async function avancarEtapa(sol: Solicitacao): Promise<{ ok: boolean; msg
   const ehFinal = p.novoStep === AUDIT_STEP_INDEX.PLACA_RECEBIDA;
 
   // Sem transação no PostgREST: gravamos SEQUENCIAL, solicitação primeiro (é o que a UI e o
-  // cliente leem). Se ela falhar, nada mudou. A auditoria é carimbo/histórico: falha nela é
+  // aluno leem). Se ela falhar, nada mudou. A auditoria é carimbo/histórico: falha nela é
   // logada e se auto-corrige no próximo upsert — antes, o Promise.all podia deixar a
   // solicitação avançada com e-mail não enviado e o botão travado para sempre.
   const r2 = await supabase
@@ -262,10 +262,10 @@ export async function solicitarCorrecao(sol: Solicitacao, motivo: string): Promi
   const { error } = await supabase.rpc('fn_placas_reprovar', { p_sol_id: sol.id, p_motivo: m });
   if (error) return { ok: false, msg: 'Não foi possível registrar a reprovação.' };
   // A RPC zera admin_seen_at; como quem acabou de agir foi o admin, marcamos como visto
-  // (o item volta a chamar atenção só quando o cliente reenviar).
+  // (o item volta a chamar atenção só quando o aluno reenviar).
   await supabase.from('thb_placas_solicitacoes').update(buildAdminSeenPatch(true)).eq('id', sol.id);
   await sendStatusEmail('retorno_auditoria', sol, { token_link: `${window.location.origin}/solicitar-placa?token=${sol.token}`, motivo_retorno: m });
-  return { ok: true, msg: 'Reprovação registrada e cliente notificado.' };
+  return { ok: true, msg: 'Reprovação registrada e aluno notificado.' };
 }
 
 /** thb_placas_reprovacoes — histórico imutável de reprovações (uma linha por evento). */
@@ -292,7 +292,7 @@ export async function loadReprovacoes(solId: string): Promise<Reprovacao[]> {
   return (data as Reprovacao[]) ?? [];
 }
 
-/** Reenvia o e-mail de agendamento (docs_aprovados) — para cliente que perdeu o e-mail. */
+/** Reenvia o e-mail de agendamento (docs_aprovados) — para aluno que perdeu o e-mail. */
 export async function reenviarEmailAgendamento(sol: Solicitacao): Promise<{ ok: boolean; msg: string }> {
   try {
     const res = await fetch('/api/email/status', {
@@ -452,7 +452,7 @@ export async function excluirSolicitacao(sol: Solicitacao): Promise<boolean> {
   return true;
 }
 
-/** Rejeição definitiva: mantém o registro, notifica o cliente. Reversível via Remanejamento. */
+/** Rejeição definitiva: mantém o registro, notifica o aluno. Reversível via Remanejamento. */
 export async function rejeitar(sol: Solicitacao, motivo?: string): Promise<boolean> {
   const supabase = db();
   const { error } = await supabase.from('thb_placas_solicitacoes').update({ status: 'rejeitado', motivo_retorno: motivo?.trim() || null, ...buildAdminSeenPatch(true) }).eq('id', sol.id);

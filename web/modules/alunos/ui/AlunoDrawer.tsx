@@ -15,7 +15,7 @@ import { loadPlacaHistorico, updateAluno, type Turma, type PlacaHistorico } from
 import { AUDIT_STEPS } from '@/modules/placas/domain/auditoria';
 import { computeDisplayStatus, displayStatusTone } from '@/modules/placas/domain/solicitacao';
 import { cursoDesempenhoMock } from '../domain/curso-mock';
-import { Badge, NivelBadge, Drawer, AvatarInicial, SectionCard, Button, CopyField, KpiCard, ProgressBar, Spinner } from '@/shared/ui/components';
+import { Badge, NivelBadge, Drawer, AvatarInicial, SectionCard, Button, CopyField, KpiCard, ProgressBar, Spinner, Timeline, type TimelineEntry } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import { fetchJson } from '@/shared/ui/fetch-json';
@@ -334,7 +334,7 @@ function PlacaJornada({ on, hist, loading, rastreioAluno }: { on: boolean; hist:
         <div className="mt-2 space-y-2">
           <div className="flex flex-wrap gap-1.5">
             {/* Status único e bem mapeado (mesmo vocabulário da fila de placas): cobre etapa,
-                reprovação em correção ("Cliente reprovado · aguardando nova documentação"),
+                reprovação em correção ("Aluno reprovado · aguardando nova documentação"),
                 reenvio e rejeição definitiva — nada de status cru no chip. */}
             {sol && (() => {
               const d = computeDisplayStatus(sol);
@@ -369,36 +369,45 @@ function PlacaJornada({ on, hist, loading, rastreioAluno }: { on: boolean; hist:
             </div>
           )}
 
-          {/* Timeline completa do processo: bolinha por etapa com estado real —
-              verde (feita), âmbar (atual), amarela (atual em correção), cinza (pendente)
-              e vermelha quando o processo foi rejeitado. */}
+          {/* Jornada visual do processo (mesma linguagem do acompanhamento público):
+              cada etapa com estado real — verde (vencida, com data do carimbo), âmbar (atual),
+              amarela (atual em correção), numerada cinza (pendente) e o marco vermelho
+              "Reprovado" encerrando a linha quando rejeitado. */}
           {(stepIdx != null || carimbos.length > 0) && (
-            <div className="mt-2 border-l border-[var(--border)] pl-3 space-y-1.5">
-              {AUDIT_STEPS.map((s, i) => {
-                const concluido = sol?.status === 'concluido';
-                const rejeitado = sol?.status === 'rejeitado';
-                const emCorrecao = Boolean(sol?.regularizacao_pendente);
-                const feita = concluido || (stepIdx != null && i < stepIdx) || Boolean(dates[s.key]);
-                const atual = !concluido && !rejeitado && stepIdx === i;
-                const cor = feita ? 'var(--green)' : atual ? (emCorrecao ? 'var(--yellow)' : 'var(--accent)') : 'var(--surface-4)';
-                return (
-                  <div key={s.key} className="relative text-xs">
-                    <span className="absolute -left-[15px] top-1 w-1.5 h-1.5 rounded-full" style={{ background: cor }} />
-                    <span className={atual ? 'text-[var(--fg)] font-semibold' : feita ? 'text-[var(--fg-2)]' : 'text-[var(--fg-4)]'}>
-                      {s.name}
-                      {atual && emCorrecao && <span className="text-[var(--yellow)] font-medium"> · em correção</span>}
-                    </span>
-                    {dates[s.key] && <span className="text-[var(--fg-4)]"> · {dates[s.key]}</span>}
-                  </div>
-                );
-              })}
-              {sol?.status === 'rejeitado' && (
-                <div className="relative text-xs">
-                  <span className="absolute -left-[15px] top-1 w-1.5 h-1.5 rounded-full bg-[var(--red)]" />
-                  <span className="text-[var(--red)] font-semibold">Processo rejeitado</span>
-                  {sol?.updated_at && <span className="text-[var(--fg-4)]"> · {fmtData(sol.updated_at)}</span>}
-                </div>
-              )}
+            <div className="mt-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)] mb-2">Jornada do processo</div>
+              <Timeline
+                items={(() => {
+                  const concluido = sol?.status === 'concluido';
+                  const rejeitado = sol?.status === 'rejeitado';
+                  const emCorrecao = Boolean(sol?.regularizacao_pendente);
+                  const items: TimelineEntry[] = AUDIT_STEPS.map((s, i) => {
+                    const feita = concluido || (stepIdx != null && i < stepIdx) || Boolean(dates[s.key]);
+                    const atual = !concluido && !rejeitado && stepIdx === i;
+                    return {
+                      title: s.name,
+                      meta: dates[s.key],
+                      tone: feita ? 'green' : atual ? (emCorrecao ? 'yellow' : 'accent') : 'base',
+                      done: feita,
+                      icon: feita ? undefined : String(i + 1),
+                      body: atual
+                        ? (emCorrecao ? 'Aluno reprovado — aguardando nova documentação para retomar.' : 'Etapa atual do processo.')
+                        : undefined,
+                    };
+                  });
+                  if (rejeitado) {
+                    items.push({
+                      title: <span className="text-[var(--red)] font-semibold">Reprovado — processo rejeitado</span>,
+                      meta: sol?.updated_at ? fmtData(sol.updated_at) : undefined,
+                      tone: 'red',
+                      done: true,
+                      icon: <Icon name="x" size={11} strokeWidth={3} />,
+                      body: sol?.motivo_retorno ? `Motivo: ${sol.motivo_retorno}` : undefined,
+                    });
+                  }
+                  return items;
+                })()}
+              />
             </div>
           )}
 

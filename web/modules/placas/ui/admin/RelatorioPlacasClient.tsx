@@ -167,7 +167,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
           if (sortCol === 'turma') return dir * String(a.turma ?? '').localeCompare(String(b.turma ?? ''), 'pt-BR', { numeric: true });
           return dir * String(a.updated_at ?? '').localeCompare(String(b.updated_at ?? ''));
         }
-        // Não-vistos (ação nova do cliente) sempre no topo — estilo caixa de WhatsApp.
+        // Não-vistos (ação nova do aluno) sempre no topo — estilo caixa de WhatsApp.
         const sa = isSolicitacaoSeen(a) ? 1 : 0;
         const sb = isSolicitacaoSeen(b) ? 1 : 0;
         if (sa !== sb) return sa - sb;
@@ -176,7 +176,18 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
   }, [sols, bucket, dq, filtros, sortCol, sortDir]);
 
   const open = openId ? sols.find((s) => s.id === openId) ?? null : null;
-  const abrir = useCallback((id: string) => setOpenId(id), []);
+  // Abrir = visto automático (estilo WhatsApp): otimista no estado local + persistência
+  // em segundo plano. O "Não visto" do drawer continua disponível para re-marcar.
+  const abrir = useCallback(
+    (id: string) => {
+      setOpenId(id);
+      const s = sols.find((x) => x.id === id);
+      if (!canEdit || !s || isSolicitacaoSeen(s)) return;
+      setSols((prev) => prev.map((x) => (x.id === id ? { ...x, admin_seen_at: new Date().toISOString() } : x)));
+      void data.marcarVisto(s, true);
+    },
+    [sols, canEdit],
+  );
 
   const [exportando, setExportando] = useState(false);
   const exportar = useCallback(async () => {
@@ -239,7 +250,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
                 tone={b.tone}
                 value={counts[b.key]}
                 active={bucket === b.key}
-                badge={b.key === 'processo' && counts.naoVistos > 0 ? `${counts.naoVistos} ação do cliente` : undefined}
+                badge={b.key === 'processo' && counts.naoVistos > 0 ? `${counts.naoVistos} ação do aluno` : undefined}
                 onClick={() => setBucket(b.key)}
               />
             ))}
@@ -361,7 +372,7 @@ const LinhaSolicitacao = memo(function LinhaSolicitacao({ s, onOpen }: { s: Soli
         <div className="flex items-center gap-2.5">
           <span className={`relative grid place-items-center w-8 h-8 rounded-full font-bold text-sm shrink-0 ${!seen ? 'bg-[var(--accent)] text-black' : 'bg-[var(--surface-4)] text-[var(--fg-2)]'}`}>
             {initial(s.nome)}
-            {!seen && <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-[var(--accent)] ring-2 ring-[var(--surface-2)] animate-pulse" title="Ação nova do cliente" />}
+            {!seen && <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-[var(--accent)] ring-2 ring-[var(--surface-2)] animate-pulse" title="Ação nova do aluno" />}
           </span>
           <div className="min-w-0">
             <div className={`truncate flex items-center gap-1.5 ${!seen ? 'text-[var(--fg)] font-bold' : 'text-[var(--fg)] font-medium'}`}>

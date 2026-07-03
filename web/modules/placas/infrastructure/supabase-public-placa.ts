@@ -75,7 +75,7 @@ export class SupabasePublicPlaca {
     await this.db.from('thb_placas_solicitacoes').update(payload).eq('token', token);
   }
 
-  /** Acende a notificação do admin (não-visto + topo da fila): ação relevante do cliente. */
+  /** Acende a notificação do admin (não-visto + topo da fila): ação relevante do aluno. */
   async markClientAttention(id: string): Promise<void> {
     await this.db
       .from('thb_placas_solicitacoes')

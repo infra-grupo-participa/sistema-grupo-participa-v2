@@ -7,7 +7,7 @@ export interface Solicitacao {
   token: string;
   aluno_id: string | null;
 
-  // Dados pessoais informados pelo cliente
+  // Dados pessoais informados pelo aluno
   nome: string | null;
   email: string | null;
   telefone: string | null;

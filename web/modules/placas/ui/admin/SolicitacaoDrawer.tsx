@@ -122,13 +122,13 @@ export function SolicitacaoDrawer({
             ) : regular && !reenvioCompleto ? (
               <div className="rounded-[var(--r-md)] bg-[var(--yellow-subtle)] p-3 text-sm flex items-start gap-2">
                 <Icon name="alert" size={16} className="text-[var(--yellow)] mt-0.5 shrink-0" />
-                <div><div className="font-semibold text-[var(--yellow)]">Cliente em correção</div><div className="text-[var(--fg-2)] mt-0.5">Aguardando novo envio de documentação ou correção do questionário pelo cliente. Quando ele reenviar, o processo volta para a fila ativa.</div></div>
+                <div><div className="font-semibold text-[var(--yellow)]">Aluno em correção</div><div className="text-[var(--fg-2)] mt-0.5">Aguardando novo envio de documentação ou correção do questionário pelo aluno. Quando ele reenviar, o processo volta para a fila ativa.</div></div>
               </div>
             ) : regular && reenvioCompleto ? (
               <>
                 <div className="rounded-[var(--r-md)] bg-[var(--green-subtle)] p-3 text-sm mb-3 flex items-start gap-2">
                   <Icon name="check-circle" size={16} className="text-[var(--green)] mt-0.5 shrink-0" />
-                  <div><div className="font-semibold text-[var(--green)]">Reenvio recebido</div><div className="text-[var(--fg-2)] mt-0.5">A cliente reenviou os documentos da correção. Se estiverem corretos, aprove para enviar o link de agendamento.</div></div>
+                  <div><div className="font-semibold text-[var(--green)]">Reenvio recebido</div><div className="text-[var(--fg-2)] mt-0.5">O aluno reenviou os documentos da correção. Se estiverem corretos, aprove para enviar o link de agendamento.</div></div>
                 </div>
                 <BigAction variant="success" icon="check" onClick={() => act(() => data.aprovarReenvio(sol))}>Aprovar reenvio</BigAction>
               </>
@@ -136,7 +136,7 @@ export function SolicitacaoDrawer({
               <BigAction icon="play" onClick={() => act(() => data.bootstrapAuditoria(sol).then(() => true))}>Iniciar auditoria</BigAction>
             ) : step === AUDIT_STEP_INDEX.DOCS_APROVADOS ? (
               <div className="space-y-2">
-                <p className="text-sm text-[var(--fg-2)]">Aguardando o cliente agendar a entrevista.</p>
+                <p className="text-sm text-[var(--fg-2)]">Aguardando o aluno agendar a entrevista.</p>
                 <div className="grid sm:grid-cols-2 gap-2">
                   <Button variant="subtle" size="sm" onClick={() => act(() => data.reenviarEmailAgendamento(sol))}><Icon name="rotate" size={13} /> Reenviar e-mail de agendamento</Button>
                   <Button variant="subtle" size="sm" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/agendar-entrevista?token=${encodeURIComponent(sol.token || '')}`); }}><Icon name="copy" size={13} /> Copiar link de agendamento</Button>
@@ -162,7 +162,7 @@ export function SolicitacaoDrawer({
             )}
             {showCorrecao && canEdit && (
               <div className="mt-3 space-y-2 pt-3 border-t border-[var(--border)]">
-                <p className="text-xs text-[var(--fg-3)]">A reprovação registra o motivo no histórico, limpa os documentos enviados e devolve o processo para o cliente reenviar. O cliente é notificado por e-mail.</p>
+                <p className="text-xs text-[var(--fg-3)]">A reprovação registra o motivo no histórico, limpa os documentos enviados e devolve o processo para o aluno reenviar. O aluno é notificado por e-mail.</p>
                 <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Descreva o que precisa ser corrigido…" rows={3} className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]" />
                 <Button variant="subtle" disabled={!motivo.trim()} onClick={() => act(() => data.solicitarCorrecao(sol, motivo).then((r) => { if (r.ok) { setShowCorrecao(false); setMotivo(''); carregarReprovacoes(); } return r; }))}>Reprovar e solicitar correção</Button>
               </div>
@@ -295,7 +295,7 @@ export function SolicitacaoDrawer({
           }
         >
           <p className="text-sm text-[var(--fg-2)] leading-relaxed mb-3">
-            Diferente da exclusão, a rejeição <strong>mantém o registro</strong> e notifica o cliente por e-mail.
+            Diferente da exclusão, a rejeição <strong>mantém o registro</strong> e notifica o aluno por e-mail.
             Se precisar reverter depois, use o Remanejamento rápido.
           </p>
           <label className="block">

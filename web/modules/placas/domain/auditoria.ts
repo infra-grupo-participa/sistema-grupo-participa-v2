@@ -39,7 +39,7 @@ export const AUDIT_STEPS: readonly AuditStep[] = [
   {
     key: 'documentacao_em_analise',
     name: 'Documentação em Análise',
-    desc: 'Documentação enviada pelo cliente. Aguardando revisão e aprovação pela equipe.',
+    desc: 'Documentação enviada pelo aluno. Aguardando revisão e aprovação pela equipe.',
     actionLabel: 'Aprovar documentação',
     cls: 'sp-andamento',
     shortLabel: 'Documentação em análise',
@@ -47,7 +47,7 @@ export const AUDIT_STEPS: readonly AuditStep[] = [
   {
     key: 'docs_aprovados',
     name: DOCS_APROVADOS_LABEL,
-    desc: 'Documentação aprovada pela equipe. Aguardando o cliente agendar a entrevista.',
+    desc: 'Documentação aprovada pela equipe. Aguardando o aluno agendar a entrevista.',
     actionLabel: '',
     cls: 'sp-aguardando',
     shortLabel: DOCS_APROVADOS_LABEL,
@@ -55,7 +55,7 @@ export const AUDIT_STEPS: readonly AuditStep[] = [
   {
     key: 'entrevista_agendada',
     name: 'Entrevista Agendada',
-    desc: 'Cliente agendou a entrevista por videoconferência. Aguardando realização.',
+    desc: 'Aluno agendou a entrevista por videoconferência. Aguardando realização.',
     actionLabel: 'Finalizar entrevista',
     cls: 'sp-andamento',
     shortLabel: 'Entrevista agendada',

@@ -49,14 +49,14 @@ export type EmailTemplatesConfig = Record<string, EmailTemplateOverride>;
 export const EMAIL_TIPOS_CONFIG: { tipo: string; label: string; descricao: string }[] = [
   { tipo: 'link_acesso', label: 'Link de acesso (rascunho)', descricao: 'Enviado ao concluir a 1ª etapa: link pessoal para continuar de qualquer dispositivo.' },
   { tipo: 'solicitacao_recebida', label: 'Solicitação recebida', descricao: 'Confirmação automática ao enviar o formulário (protocolo de recebimento).' },
-  { tipo: 'docs_aprovados', label: 'Documentação aprovada', descricao: 'Enviado quando a documentação é validada e o cliente pode agendar a entrevista.' },
+  { tipo: 'docs_aprovados', label: 'Documentação aprovada', descricao: 'Enviado quando a documentação é validada e o aluno pode agendar a entrevista.' },
   { tipo: 'entrevista_agendada', label: 'Entrevista agendada', descricao: 'Confirmação com o link de acesso à sala.' },
   { tipo: 'entrevista_finalizada', label: 'Entrevista realizada', descricao: 'Confirma que a entrevista foi registrada.' },
   { tipo: 'placa_em_caminho', label: 'Placa a caminho', descricao: 'Enviado com o código de rastreio quando a placa é postada.' },
   { tipo: 'placa_recebida', label: 'Placa recebida (conclusão)', descricao: 'Enviado quando o admin confirma o recebimento da placa e encerra o processo.' },
   { tipo: 'lembrete_entrevista', label: 'Lembrete de entrevista (4h)', descricao: 'Enviado automaticamente ~4h antes da entrevista agendada (cron).' },
   { tipo: 'retorno_auditoria', label: 'Pedido de correção', descricao: 'Enviado quando o admin devolve a solicitação para ajustes.' },
-  { tipo: 'nao_compareceu', label: 'Não compareceu', descricao: 'Enviado quando o cliente falta à entrevista e precisa reagendar.' },
+  { tipo: 'nao_compareceu', label: 'Não compareceu', descricao: 'Enviado quando o aluno falta à entrevista e precisa reagendar.' },
   { tipo: 'nivel_registrado', label: 'Cadastro concluído (sem placa)', descricao: 'Fecho do fluxo curto: nível abaixo de Ouro registrado, sem emissão de placa.' },
   { tipo: 'solicitacao_rejeitada', label: 'Solicitação rejeitada', descricao: 'Enviado quando o admin rejeita definitivamente a solicitação.' },
 ];
