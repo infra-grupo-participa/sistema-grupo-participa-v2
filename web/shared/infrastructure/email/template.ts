@@ -9,9 +9,13 @@ function button(link: string, label: string, cor: string): string {
   return `<p style="text-align:center;margin:28px 0;"><a href="${esc(link)}" target="_blank" style="background:${cor};color:#fff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">${esc(label)}</a></p>`;
 }
 
-const FOOTER = `<div style="margin-top:32px;padding-top:20px;border-top:1px solid #eee;text-align:center;color:#888;font-size:12px;"><p style="margin:0;">Time Holding Brasil</p><p style="margin:6px 0 0;"><a href="https://grupoparticipa.app.br" style="color:#F29725;text-decoration:none;">grupoparticipa.app.br</a></p></div>`;
+// Base pública do app — o logo é servido pelo próprio Next (web/public/images/).
+const APP_BASE = (process.env.NEXT_PUBLIC_APP_URL || 'https://grupoparticipa.app.br').replace(/\/$/, '');
+const APP_HOST = APP_BASE.replace(/^https?:\/\//, '');
 
-const HEADER = `<div style="text-align:center;padding:32px 0 24px;border-bottom:1px solid #eee;margin-bottom:28px;"><img src="https://grupoparticipa.app.br/assets/images/TimeHoldingBrasil.png" alt="Time Holding Brasil" style="height:80px;width:auto;display:inline-block;" /></div>`;
+const FOOTER = `<div style="margin-top:32px;padding-top:20px;border-top:1px solid #eee;text-align:center;color:#888;font-size:12px;"><p style="margin:0;">Time Holding Brasil</p><p style="margin:6px 0 0;"><a href="${APP_BASE}" style="color:#F29725;text-decoration:none;">${APP_HOST}</a></p></div>`;
+
+const HEADER = `<div style="text-align:center;padding:32px 0 24px;border-bottom:1px solid #eee;margin-bottom:28px;"><img src="${APP_BASE}/images/TimeHoldingBrasil.png" alt="Time Holding Brasil" style="height:80px;width:auto;display:inline-block;" /></div>`;
 
 export function buildEmailTemplate(data: EmailTemplateData): string {
   const nome = esc(data.nome || 'Candidato');
