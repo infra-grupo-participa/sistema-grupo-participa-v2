@@ -418,21 +418,36 @@
 }
 .sp-level-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 11px;
 }
 @media (min-width: 560px) {
   .sp-level-grid {
-    grid-template-columns: repeat(4, 1fr);
+    /* auto-fit: quebra para 3/2 colunas quando não cabe — repeat(4, 1fr) fixo
+       estourava o card e cortava a última coluna em larguras intermediárias. */
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   }
 }
 .sp-level {
+  /* Layout explícito em coluna: garante ícone/nome/faixa empilhados e centrados,
+     independente de resets/heranças (bug: conteúdo rendia em linha e alargava o card). */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
   text-align: center;
+  overflow-wrap: anywhere;
   margin: 0;
   padding: 16px 8px;
   /* Cor do nível (tier) — sutil, sobrescrita por data-nivel abaixo. */
   --lv: var(--faint);
   --lv-soft: var(--line-2);
+}
+.sp-level .nm,
+.sp-level .fx {
+  display: block;
+  width: 100%;
 }
 .sp-level.sel::after {
   content: '✓';
