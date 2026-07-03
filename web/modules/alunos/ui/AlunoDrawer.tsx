@@ -369,15 +369,36 @@ function PlacaJornada({ on, hist, loading, rastreioAluno }: { on: boolean; hist:
             </div>
           )}
 
-          {carimbos.length > 0 && (
+          {/* Timeline completa do processo: bolinha por etapa com estado real —
+              verde (feita), âmbar (atual), amarela (atual em correção), cinza (pendente)
+              e vermelha quando o processo foi rejeitado. */}
+          {(stepIdx != null || carimbos.length > 0) && (
             <div className="mt-2 border-l border-[var(--border)] pl-3 space-y-1.5">
-              {carimbos.map((c) => (
-                <div key={c.nome} className="relative text-xs">
-                  <span className="absolute -left-[15px] top-1 w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
-                  <span className="text-[var(--fg-2)]">{c.nome}</span>
-                  <span className="text-[var(--fg-4)]"> · {c.quando}</span>
+              {AUDIT_STEPS.map((s, i) => {
+                const concluido = sol?.status === 'concluido';
+                const rejeitado = sol?.status === 'rejeitado';
+                const emCorrecao = Boolean(sol?.regularizacao_pendente);
+                const feita = concluido || (stepIdx != null && i < stepIdx) || Boolean(dates[s.key]);
+                const atual = !concluido && !rejeitado && stepIdx === i;
+                const cor = feita ? 'var(--green)' : atual ? (emCorrecao ? 'var(--yellow)' : 'var(--accent)') : 'var(--surface-4)';
+                return (
+                  <div key={s.key} className="relative text-xs">
+                    <span className="absolute -left-[15px] top-1 w-1.5 h-1.5 rounded-full" style={{ background: cor }} />
+                    <span className={atual ? 'text-[var(--fg)] font-semibold' : feita ? 'text-[var(--fg-2)]' : 'text-[var(--fg-4)]'}>
+                      {s.name}
+                      {atual && emCorrecao && <span className="text-[var(--yellow)] font-medium"> · em correção</span>}
+                    </span>
+                    {dates[s.key] && <span className="text-[var(--fg-4)]"> · {dates[s.key]}</span>}
+                  </div>
+                );
+              })}
+              {sol?.status === 'rejeitado' && (
+                <div className="relative text-xs">
+                  <span className="absolute -left-[15px] top-1 w-1.5 h-1.5 rounded-full bg-[var(--red)]" />
+                  <span className="text-[var(--red)] font-semibold">Processo rejeitado</span>
+                  {sol?.updated_at && <span className="text-[var(--fg-4)]"> · {fmtData(sol.updated_at)}</span>}
                 </div>
-              ))}
+              )}
             </div>
           )}
 
