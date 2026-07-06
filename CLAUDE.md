@@ -95,23 +95,14 @@ Sistema interno do **Grupo Participa** para gestão de alunos, projetos e proces
 
 ## Ambientes
 
+**Só existe produção.** O ambiente de homologação foi descontinuado (jul/2026) — não há mais branch `homologacao`, deploy de homolog, nem clone de banco. Mudanças de banco vão direto no Supabase de produção.
+
 | Ambiente | URL | Supabase |
 |----------|-----|---------|
 | Produção | grupoparticipa.app.br | `https://mbvybujpkwuorhtdzcde.supabase.co` |
-| Homologação | homologacao.grupoparticipa.app.br | `https://msjppzivlxmqclhxqutd.supabase.co` |
 
 ### Deploy
-- **Produção**: push para `main` → aciona `deploy.yml`
-- **Homologação**: push para `homologacao` → aciona `deploy-homologacao.yml`
-- O workflow de homolog substitui automaticamente as credenciais Supabase prod → homolog via script Python antes do upload FTP
-
-### Sincronização de banco
-- Workflow manual `db-clone.yml` → copia prod → homolog via `pg_dump` + `pg_restore`
-- Requer input `YES` para confirmar
-- Usa `postgresql-client-17` (Supabase roda Postgres 17 — versões antigas do pg_dump são incompatíveis)
-- Connection string usa o **pooler** (`aws-1-sa-east-1.pooler.supabase.com:5432`) — conexão direta (`db.xxx.supabase.co`) é bloqueada no plano gratuito
-- Usuário do pooler: `postgres.PROJECT_REF` (não apenas `postgres`)
-- Senhas com `@` devem ser codificadas como `%40` na URI
+- **Produção**: push para `main` → deploy automático do `web/` via git da Hostinger.
 
 ---
 
@@ -152,8 +143,6 @@ infra/scripts/*.py
 infra/supabase/functions/*/index.ts
 .github/workflows/
   deploy.yml                    ← Deploy prod (push main)
-  deploy-homologacao.yml        ← Deploy homolog (push homologacao)
-  db-clone.yml                  ← Clone prod → homolog (manual)
 ```
 
 ---
@@ -365,46 +354,31 @@ CREATE POLICY "autenticados podem gravar" ON nome_tabela
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 ```
 
-### 3. pg_dump versão incompatível
-GitHub Actions instala postgresql-client 16 por padrão. Supabase usa Postgres 17. Solução: instalar `postgresql-client-17` via apt-get com o repositório oficial da PostgreSQL e usar o binário explícito `/usr/lib/postgresql/17/bin/pg_dump`.
-
-### 4. Conexão direta ao Supabase bloqueada (Network unreachable)
-Plano gratuito bloqueia `db.xxx.supabase.co:5432`. Usar sempre o pooler: `aws-1-sa-east-1.pooler.supabase.com:5432` com usuário `postgres.PROJECT_REF`.
-
-### 5. Senha com caracteres especiais na URI
-`@` vira `%40`, `#` vira `%23`, etc. Sempre codificar a senha na connection string.
-
-### 6. db-clone apaga tabelas criadas só em homolog
-O `pg_restore --clean` apaga tudo em homolog antes de restaurar. Qualquer tabela criada só em homolog é perdida. Sempre criar tabelas novas em **prod primeiro**, depois clonar.
-
-### 7. z-index do edit panel abaixo do overlay principal
+### 3. z-index do edit panel abaixo do overlay principal
 O overlay principal tem z-index 900. Edit panel e ep-overlay devem ser 1001+ para aparecer por cima. Se o edit panel "não abre", verificar z-index.
 
-### 8. `nivel_resultado` default errado
+### 4. `nivel_resultado` default errado
 Nunca usar `a.nivel_resultado || 'diamante'` como fallback — mascara dados reais. Usar `|| null` e tratar null explicitamente no render.
 
-### 9. Perfil de usuário novo fica como `pendente`
+### 5. Perfil de usuário novo fica como `pendente`
 Ao criar usuário via Supabase Auth UI, o trigger cria o perfil com `status = 'pendente'` e `cargo = 'visualizador'`. Atualizar manualmente:
 ```sql
 UPDATE perfis SET cargo = 'admin', status = 'ativo' WHERE email = 'x@y.com';
 ```
 
-### 10. Clone de banco não copia auth.users corretamente
-O `pg_restore` tenta recriar tabelas do schema `auth` mas não tem permissão (Supabase gerencia internamente). Os erros de `permission denied for schema auth` são esperados e não impedem a restauração do schema `public`. Verificar com `SELECT COUNT(*) FROM thb_alunos` após o clone.
-
-### 11. Usuário criado em homolog tem UUID diferente do que está em `perfis`
+### 6. Usuário criado via Auth UI tem UUID diferente do que está em `perfis`
 Ao criar usuário via Auth UI, o UUID gerado pode conflitar com um perfil órfão existente. Verificar com `SELECT * FROM perfis WHERE email = '...'` e fazer UPDATE no perfil existente em vez de INSERT.
 
-### 12. Botão dentro do overlay principal não abre painel secundário
+### 7. Botão dentro do overlay principal não abre painel secundário
 Se um painel (edit panel) tem z-index menor que o overlay que o disparou, ele aparece atrás. Garantir que ep-overlay (1000) e edit-panel (1001) estejam acima do overlay principal (900).
 
-### 13. Agendamento público e e-mails precisam de proteção extra
+### 8. Agendamento público e e-mails precisam de proteção extra
 `confirm-horario.php` e `create-calendly-meeting.php` agora devem validar slot ativo, bloquear concorrência por horário e aplicar rate limit. Os endpoints `send-status-email.php` e `send-interview-email.php` devem aceitar somente origem/referer dos domínios oficiais e manter rate limit por IP.
 
-### 14. CEP e rastreio devem atualizar sem refresh
+### 9. CEP e rastreio devem atualizar sem refresh
 O CEP do formulário público passa por `/api/cep.php`, com busca debounced no frontend e validação server-side antes de consultar o ViaCEP. O código de rastreio deve refletir no painel do aluno via update em tempo real ou polling de fallback, e o admin deve poder salvar o rastreio com `Enter` sem depender de refresh.
 
-### 15. `step_index` 7 ainda é fase de agendamento
+### 10. `step_index` 7 ainda é fase de agendamento
 No fluxo de placas, `step_index`/`auditoria_step` igual a `7` não deve ser tratado como entrevista concluída. Use `step_index >= 8` ou data/hora já expiradas para bloquear reagendamento. Para links de retorno/acompanhamento, prefira origem permitida do request ou token já validado, nunca `HTTP_HOST` cru nem campo livre do payload.
 
 ---
