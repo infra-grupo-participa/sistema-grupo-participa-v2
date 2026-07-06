@@ -142,7 +142,7 @@ export function SolicitacaoDrawer({
           ) : null}
 
           {ciclos.length > 0 && (
-            <Panel icon="medal" title={`Histórico de níveis (${ciclos.length})`} accent="var(--accent)">
+            <Panel icon="medal" title={`Histórico de níveis (${ciclos.length})`} accent="var(--accent)" collapsible defaultOpen={false}>
               <p className="text-xs text-[var(--fg-3)] mb-2">Cada linha é um snapshot imutável de um ciclo anterior — placa recebida ou cadastro registrado — antes de o aluno refazer por evolução de nível.</p>
               <div className="space-y-2">
                 {ciclos.map((c) => {
@@ -174,7 +174,7 @@ export function SolicitacaoDrawer({
 
           {sol.codigo_rastreio && <CopyField label="Código de rastreio" value={sol.codigo_rastreio} />}
 
-          <Panel icon="arrow-right" title="Próxima ação">
+          <Panel icon="arrow-right" title="Próxima ação" accent="var(--accent)">
             {!canEdit ? (
               <p className="text-sm text-[var(--fg-3)]">Somente leitura.</p>
             ) : regular && !reenvioCompleto ? (
@@ -245,7 +245,7 @@ export function SolicitacaoDrawer({
             </Panel>
           )}
 
-          <Panel icon="coins" title="Faturamento & Comprovação" accent="var(--accent)">
+          <Panel icon="coins" title="Faturamento & Comprovação" accent="var(--accent)" collapsible defaultOpen={step <= AUDIT_STEP_INDEX.DOCS_APROVADOS}>
             <div className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] p-4 mb-3">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">Faturamento declarado</div>
               <div className="text-2xl font-bold tabular text-[var(--fg)] mt-1">{fmtBRL(sol.faturamento_declarado)}</div>
