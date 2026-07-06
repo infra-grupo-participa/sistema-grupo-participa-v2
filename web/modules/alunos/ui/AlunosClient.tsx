@@ -138,7 +138,7 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
       <p className="text-sm text-[var(--fg-3)] mb-4">Centro de controle — ficha 360° do aluno. {loading && 'carregando…'}</p>
 
       <div className="flex gap-1 border-b border-[var(--border)] mb-5">
-        {([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos'], ['acessoHm', 'Acesso HM']] as const).map(([k, l]) => (
+        {([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos'], ['acessoHm', 'Liberação Holding Masters']] as const).map(([k, l]) => (
           <button
             key={k}
             onClick={() => setTopTab(k)}
