@@ -18,6 +18,9 @@ import { DashboardAlunos } from './DashboardAlunos';
 import { AlunoDrawer } from './AlunoDrawer';
 import { exportarCsvAlunos, exportarExcelAlunos } from './alunos-export';
 import { sitTone, tel, turmaCombo } from './alunos-ui-shared';
+import { AcessoHmClient } from './AcessoHmClient';
+import { loadHmContagem } from './acesso-hm-data';
+import { hmBadgeTotal } from '../domain/acesso-hm';
 
 type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento';
 interface Filtros { situacao: string[]; espaco: string[]; nivel: string[]; jornada: string[]; papel: string[]; turma: string[]; estado: string[] }
@@ -59,14 +62,16 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const { toast, flash } = useFlash();
-  const [topTab, setTopTab] = useState<'dashboard' | 'lista'>('dashboard');
+  const [topTab, setTopTab] = useState<'dashboard' | 'lista' | 'acessoHm'>('dashboard');
+  const [hmCount, setHmCount] = useState<number | null>(null);
 
   const reload = useCallback(async () => setAlunos(await loadAlunos360()), []);
   useEffect(() => {
     (async () => {
-      const [a, t] = await Promise.all([loadAlunos360(), loadTurmas()]);
+      const [a, t, c] = await Promise.all([loadAlunos360(), loadTurmas(), loadHmContagem()]);
       setAlunos(a);
       setTurmas(t);
+      setHmCount(hmBadgeTotal(c));
       setLoading(false);
     })();
   }, []);
@@ -133,20 +138,31 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
       <p className="text-sm text-[var(--fg-3)] mb-4">Centro de controle — ficha 360° do aluno. {loading && 'carregando…'}</p>
 
       <div className="flex gap-1 border-b border-[var(--border)] mb-5">
-        {([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos']] as const).map(([k, l]) => (
+        {([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos'], ['acessoHm', 'Acesso HM']] as const).map(([k, l]) => (
           <button
             key={k}
             onClick={() => setTopTab(k)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               topTab === k ? 'border-[var(--accent)] text-[var(--fg)]' : 'border-transparent text-[var(--fg-3)] hover:text-[var(--fg-2)]'
             }`}
           >
             {l}
+            {k === 'acessoHm' && hmCount != null && hmCount > 0 && (
+              <span className="min-w-[18px] rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[11px] font-semibold text-black tabular">{hmCount}</span>
+            )}
           </button>
         ))}
       </div>
 
       {topTab === 'dashboard' && <DashboardAlunos alunos={alunos} />}
+
+      {topTab === 'acessoHm' && (
+        <AcessoHmClient
+          canEdit={canEdit}
+          onOpenAluno={(id) => { setSelectedId(id); setEditMode(false); }}
+          onCountChange={(c) => setHmCount(hmBadgeTotal(c))}
+        />
+      )}
 
       {topTab === 'lista' && (
       <>
