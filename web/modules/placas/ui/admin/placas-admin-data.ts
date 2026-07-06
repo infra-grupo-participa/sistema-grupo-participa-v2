@@ -314,6 +314,8 @@ export interface Ciclo {
   created_at: string;
 }
 
+const CICLO_FIELDS = 'id, ciclo, tipo, nivel, faturamento_declarado, faturamento_comprovado, protocolo, codigo_rastreio, espaco_instrucao, concluido_em, created_at';
+
 /**
  * Histórico de ciclos (placa + cadastro) da solicitação, mais recente primeiro.
  * Consulta por solicitacao_id (a linha/token é estável entre ciclos) — cobre também o
@@ -322,10 +324,24 @@ export interface Ciclo {
 export async function loadCiclos(solicitacaoId: string): Promise<Ciclo[]> {
   const { data, error } = await db()
     .from('thb_placas_ciclos')
-    .select('id, ciclo, tipo, nivel, faturamento_declarado, faturamento_comprovado, protocolo, codigo_rastreio, espaco_instrucao, concluido_em, created_at')
+    .select(CICLO_FIELDS)
     .eq('solicitacao_id', solicitacaoId)
     .order('ciclo', { ascending: false });
   logQueryError('loadCiclos', error);
+  return (data as Ciclo[]) ?? [];
+}
+
+/**
+ * Histórico de ciclos por aluno_id (para a ficha 360). Sobrevive à exclusão da solicitação
+ * (onde solicitacao_id vira null, mas aluno_id permanece).
+ */
+export async function loadCiclosByAluno(alunoId: string): Promise<Ciclo[]> {
+  const { data, error } = await db()
+    .from('thb_placas_ciclos')
+    .select(CICLO_FIELDS)
+    .eq('aluno_id', alunoId)
+    .order('ciclo', { ascending: false });
+  logQueryError('loadCiclosByAluno', error);
   return (data as Ciclo[]) ?? [];
 }
 

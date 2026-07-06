@@ -14,6 +14,7 @@ import { nivelLabel, nivelOptions } from '@/shared/domain/nivel-resultado';
 import { loadPlacaHistorico, updateAluno, type Turma, type PlacaHistorico } from './alunos-data';
 import { AUDIT_STEPS } from '@/modules/placas/domain/auditoria';
 import { computeDisplayStatus, displayStatusTone } from '@/modules/placas/domain/solicitacao';
+import { loadCiclosByAluno, type Ciclo } from '@/modules/placas/ui/admin/placas-admin-data';
 import { cursoDesempenhoMock } from '../domain/curso-mock';
 import { Badge, NivelBadge, Drawer, AvatarInicial, SectionCard, Button, CopyField, KpiCard, ProgressBar, Spinner, Timeline, type TimelineEntry } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
@@ -44,6 +45,7 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
 }) {
   const [placaHist, setPlacaHist] = useState<PlacaHistorico | null>(null);
   const [placaLoading, setPlacaLoading] = useState(false);
+  const [ciclos, setCiclos] = useState<Ciclo[]>([]);
   const temPlaca = !!(a.tem_placa || a.tem_solicitacao_placa);
   useEffect(() => {
     if (!temPlaca || placaHist !== null) return;
@@ -52,6 +54,11 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
       .then(setPlacaHist)
       .finally(() => setPlacaLoading(false));
   }, [temPlaca, placaHist, a.id, a.email]);
+  // Histórico de níveis (placa + cadastro) por aluno_id — sobrevive à exclusão da solicitação.
+  useEffect(() => {
+    if (!a.id) return;
+    loadCiclosByAluno(a.id).then(setCiclos).catch(() => {});
+  }, [a.id]);
   const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
   const espaco = ESPACO_LABEL[a.espaco_instrucao || ''] || null;
 
@@ -78,52 +85,66 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
       {editMode ? (
         <EditForm a={a} turmas={turmas} onSaved={onSaved} />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 items-start">
-          {/* Dados Pessoais */}
-          <SectionCard title={<SecTitle icon="user">Dados Pessoais</SecTitle>}>
-            <Section>
-              {a.profissao && <Row k="Profissão" v={a.profissao} />}
-              <Row k="E-mail" v={a.email} />
-              <Row k="Telefone" v={tel(a.telefone)} />
-              {a.telefone_profissional && <Row k="Tel. profissional" v={tel(a.telefone_profissional)} />}
-              {a.documento && <Row k={a.tipo_documento || 'CPF/CNPJ'} v={a.documento} />}
-              <Row k="Endereço" v={[a.endereco_logradouro, a.endereco_numero, a.bairro, a.cidade, a.estado].filter(Boolean).join(', ') || '—'} />
-              <div className="flex gap-2 flex-wrap mt-2">
-                {[['Facebook', a.link_facebook], ['Instagram', a.instagram_url], ['YouTube', a.youtube_url], ['Site', a.site_profissional]].filter(([, u]) => u).map(([l, u]) => (
-                  <a key={l as string} href={u as string} target="_blank" rel="noopener" className="text-xs px-2 py-1 rounded border border-[var(--border)] text-[var(--accent)]">{l}</a>
-                ))}
-              </div>
-            </Section>
+        <div className="space-y-4">
+          {/* HERO — resumo operacional em relance (nível, acesso, turma/vencimento, Hotmart) */}
+          <HeroResumo a={a} sit={sit} />
+
+          {/* JORNADA — o que a operação acompanha/age (subiu para o topo) + histórico de níveis */}
+          <SectionCard title={<SecTitle icon="check-circle">Jornada</SecTitle>}>
+            <div className="grid sm:grid-cols-2 sm:gap-x-4">
+              <PlacaJornada on={temPlaca} hist={placaHist} loading={placaLoading} rastreioAluno={a.placa_rastreio} />
+              <JornadaCard label="Depoimento" on={!!a.tem_depoimento} extra={a.total_depoimentos ? `${a.total_depoimentos} depoimento(s)` : ''} href={a.tem_depoimento ? '/depoimentos' : undefined} />
+              <SipJornada email={a.email} on={!!a.sip_registrado} />
+            </div>
+            <HistoricoNiveis ciclos={ciclos} />
           </SectionCard>
 
-          {/* Renovação */}
-          <SectionCard title={<SecTitle icon="refresh">Renovação</SecTitle>}>
-            <Section>
-              {(() => {
-                const rs = renovacaoStatus(a.turma_codigo);
-                const info = rs ? RENOVACAO_LABEL[rs] : null;
-                return info ? (
-                  <div className={`p-2.5 rounded-[var(--r-md)] mb-2 text-xs ${rs === 'em_renovacao' ? 'bg-[var(--yellow-subtle)] text-[var(--yellow)]' : 'bg-[var(--red-subtle)] text-[var(--red)]'}`}>
-                    <span className="inline-flex items-center gap-1.5">{rs === 'em_renovacao' ? <Icon name="refresh" size={12} /> : <Icon name="alert" size={12} />} {info.label}</span>
-                    <div className="text-[var(--fg-3)] mt-0.5">
-                      {rs === 'em_renovacao'
-                        ? `Turma ${a.turma_codigo} (T1–T29): segue o processo de renovação.`
-                        : `Turma ${a.turma_codigo} (T30+): acesso vencido, sem processo de renovação (em dia, porém não renovado).`}
+          {/* Dados Pessoais + Renovação lado a lado */}
+          <div className="grid gap-4 md:grid-cols-2 items-start">
+            <SectionCard title={<SecTitle icon="user">Dados Pessoais</SecTitle>}>
+              <Section>
+                {a.profissao && <Row k="Profissão" v={a.profissao} />}
+                <Row k="E-mail" v={a.email} />
+                <Row k="Telefone" v={tel(a.telefone)} />
+                {a.telefone_profissional && <Row k="Tel. profissional" v={tel(a.telefone_profissional)} />}
+                {a.documento && <Row k={a.tipo_documento || 'CPF/CNPJ'} v={a.documento} />}
+                <Row k="Endereço" v={[a.endereco_logradouro, a.endereco_numero, a.bairro, a.cidade, a.estado].filter(Boolean).join(', ') || '—'} />
+                <div className="flex gap-2 flex-wrap mt-2">
+                  {[['Facebook', a.link_facebook], ['Instagram', a.instagram_url], ['YouTube', a.youtube_url], ['Site', a.site_profissional]].filter(([, u]) => u).map(([l, u]) => (
+                    <a key={l as string} href={u as string} target="_blank" rel="noopener" className="text-xs px-2 py-1 rounded border border-[var(--border)] text-[var(--accent)]">{l}</a>
+                  ))}
+                </div>
+              </Section>
+            </SectionCard>
+
+            <SectionCard title={<SecTitle icon="refresh">Renovação</SecTitle>}>
+              <Section>
+                {(() => {
+                  const rs = renovacaoStatus(a.turma_codigo);
+                  const info = rs ? RENOVACAO_LABEL[rs] : null;
+                  return info ? (
+                    <div className={`p-2.5 rounded-[var(--r-md)] mb-2 text-xs ${rs === 'em_renovacao' ? 'bg-[var(--yellow-subtle)] text-[var(--yellow)]' : 'bg-[var(--red-subtle)] text-[var(--red)]'}`}>
+                      <span className="inline-flex items-center gap-1.5">{rs === 'em_renovacao' ? <Icon name="refresh" size={12} /> : <Icon name="alert" size={12} />} {info.label}</span>
+                      <div className="text-[var(--fg-3)] mt-0.5">
+                        {rs === 'em_renovacao'
+                          ? `Turma ${a.turma_codigo} (T1–T29): segue o processo de renovação.`
+                          : `Turma ${a.turma_codigo} (T30+): acesso vencido, sem processo de renovação (em dia, porém não renovado).`}
+                      </div>
                     </div>
-                  </div>
-                ) : <div className="text-xs text-[var(--fg-3)] mb-2">Sem turma THB definida — status de renovação indisponível.</div>;
-              })()}
-              <Row k="Turma" v={a.turma_codigo || '—'} />
-              <Row k="Vencimento" v={fmtData(a.data_expiracao)} />
-              <Row k="Data da compra" v={fmtData(a.data_compra_importada)} />
-              {a.tempo_acesso && <Row k="Tempo de acesso" v={a.tempo_acesso} />}
-              {a.oferta && <Row k="Oferta" v={a.oferta} />}
-              {a.tipo_oferta && <Row k="Tipo de oferta" v={a.tipo_oferta} />}
-            </Section>
-          </SectionCard>
+                  ) : <div className="text-xs text-[var(--fg-3)] mb-2">Sem turma THB definida — status de renovação indisponível.</div>;
+                })()}
+                <Row k="Turma" v={a.turma_codigo || '—'} />
+                <Row k="Vencimento" v={fmtData(a.data_expiracao)} />
+                <Row k="Data da compra" v={fmtData(a.data_compra_importada)} />
+                {a.tempo_acesso && <Row k="Tempo de acesso" v={a.tempo_acesso} />}
+                {a.oferta && <Row k="Oferta" v={a.oferta} />}
+                {a.tipo_oferta && <Row k="Tipo de oferta" v={a.tipo_oferta} />}
+              </Section>
+            </SectionCard>
+          </div>
 
-          {/* Acesso ao Curso */}
-          <SectionCard className="md:col-span-2" title={<SecTitle icon="graduation">Acesso ao Curso</SecTitle>}>
+          {/* Acesso ao Curso — essencial visível + detalhe pesado recolhível (corta densidade) */}
+          <SectionCard title={<SecTitle icon="graduation">Acesso ao Curso</SecTitle>}>
             <Section>
               {(() => {
                 const st = a.status_acesso ? STATUS_ACESSO[a.status_acesso] : null;
@@ -135,6 +156,7 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
                   </div>
                 );
               })()}
+              {a.tratamento_manual && <div className="mb-2 p-2 rounded bg-[var(--yellow-subtle)] text-[var(--yellow)] text-xs flex items-center gap-1.5"><Icon name="alert" size={13} /> {a.tratamento_manual}</div>}
               <SubTitle>Produto &amp; oferta</SubTitle>
               <Row k="Produto" v={a.produto} />
               <Row k="Oferta" v={a.oferta} />
@@ -153,32 +175,26 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
               <Row k="Vencimento" v={fmtData(a.data_expiracao)} />
               {(a.mes_expiracao || a.ano_expiracao) && <Row k="Mês/Ano expiração" v={[a.mes_expiracao, a.ano_expiracao].filter(Boolean).join('/')} />}
               <Row k="Data da compra" v={fmtData(a.data_compra_importada)} />
-              <SubTitle>Hotmart</SubTitle>
-              <Row k="Holding Total (HT)" v={a.tem_ht ? `Sim${a.ativacao_ht_status ? ` · ${a.ativacao_ht_status}` : ''}` : 'Não'} />
-              <Row k="Holding Masters (HM)" v={a.tem_hm ? `Sim${a.hm_plano ? ` · ${a.hm_plano}` : ''}` : 'Não'} />
-              <Row k="Hotmart UCode" v={a.hotmart_ucode} />
-              <Row k="Registrado no SIP" v={a.sip_registrado ? 'Sim' : 'Não'} />
-              {(a.cs_estagio || a.cs_responsavel || a.cs_observacoes) && (
-                <>
-                  <SubTitle>Acompanhamento CS</SubTitle>
-                  {a.cs_estagio && <Row k="Estágio" v={a.cs_estagio} />}
-                  {a.cs_responsavel && <Row k="Responsável" v={a.cs_responsavel} />}
-                  {a.cs_observacoes && <Row k="Obs (CS)" v={a.cs_observacoes} />}
-                </>
-              )}
-              {a.tratamento_manual && <div className="mt-3 p-2 rounded bg-[var(--yellow-subtle)] text-[var(--yellow)] text-xs flex items-center gap-1.5"><Icon name="alert" size={13} /> {a.tratamento_manual}</div>}
-              {a.obs_central && <Row k="Obs" v={a.obs_central} />}
+              <Collapse title="Hotmart, CS & observações">
+                <Row k="Holding Total (HT)" v={a.tem_ht ? `Sim${a.ativacao_ht_status ? ` · ${a.ativacao_ht_status}` : ''}` : 'Não'} />
+                <Row k="Holding Masters (HM)" v={a.tem_hm ? `Sim${a.hm_plano ? ` · ${a.hm_plano}` : ''}` : 'Não'} />
+                <Row k="Hotmart UCode" v={a.hotmart_ucode} />
+                <Row k="Registrado no SIP" v={a.sip_registrado ? 'Sim' : 'Não'} />
+                {(a.cs_estagio || a.cs_responsavel || a.cs_observacoes) && (
+                  <>
+                    <SubTitle>Acompanhamento CS</SubTitle>
+                    {a.cs_estagio && <Row k="Estágio" v={a.cs_estagio} />}
+                    {a.cs_responsavel && <Row k="Responsável" v={a.cs_responsavel} />}
+                    {a.cs_observacoes && <Row k="Obs (CS)" v={a.cs_observacoes} />}
+                  </>
+                )}
+                {a.obs_central && <Row k="Obs" v={a.obs_central} />}
+              </Collapse>
             </Section>
           </SectionCard>
 
-          {/* Jornada */}
-          <SectionCard className="md:col-span-2" title={<SecTitle icon="check-circle">Jornada</SecTitle>}>
-            <div className="grid sm:grid-cols-2 sm:gap-x-4">
-              <PlacaJornada on={temPlaca} hist={placaHist} loading={placaLoading} rastreioAluno={a.placa_rastreio} />
-              <JornadaCard label="Depoimento" on={!!a.tem_depoimento} extra={a.total_depoimentos ? `${a.total_depoimentos} depoimento(s)` : ''} href={a.tem_depoimento ? '/depoimentos' : undefined} />
-              <SipJornada email={a.email} on={!!a.sip_registrado} />
-            </div>
-            <div className="text-xs font-semibold text-[var(--fg-3)] mt-3 mb-1">Metadados</div>
+          {/* Metadados — bloco discreto no fim */}
+          <SectionCard title={<SecTitle icon="notebook">Metadados</SecTitle>}>
             <div className="grid sm:grid-cols-2 sm:gap-x-6">
               {a.fonte && <Row k="Fonte" v={a.fonte} />}
               <Row k="Importado em" v={fmtData(a.importado_em)} />
@@ -190,7 +206,7 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
           {/* Curso: oculto até existir integração real — cursoDesempenhoMock é 100% zerado
               e exibir métricas falsas confunde a operação. Reativar via CURSO_TAB_ATIVA. */}
           {CURSO_TAB_ATIVA && (
-            <SectionCard className="md:col-span-2" title={<SecTitle icon="biblioteca">Curso</SecTitle>}>
+            <SectionCard title={<SecTitle icon="biblioteca">Curso</SecTitle>}>
               <CursoTab />
             </SectionCard>
           )}
@@ -208,6 +224,78 @@ function Section({ children }: { children: React.ReactNode }) {
 }
 function Row({ k, v }: { k: string; v: string | null }) {
   return <div className="flex justify-between gap-3 py-1 border-b border-[var(--border-faint)]"><span className="text-xs text-[var(--fg-3)]">{k}</span><span className="text-sm text-[var(--fg)] text-right">{v || '—'}</span></div>;
+}
+
+/** Célula compacta do hero (rótulo minúsculo + valor destacado). */
+function MiniStat({ label, tone, children }: { label: string; tone?: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3 min-w-0" style={tone ? { borderLeft: `3px solid ${tone}` } : undefined}>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">{label}</div>
+      <div className="text-sm font-semibold text-[var(--fg)] mt-1 truncate">{children}</div>
+    </div>
+  );
+}
+
+/** Tira de resumo operacional no topo da ficha (relance: nível, acesso, turma/venc., Hotmart). */
+function HeroResumo({ a, sit }: { a: Aluno360; sit: { label: string; cls: string } | null }) {
+  const st = a.status_acesso ? STATUS_ACESSO[a.status_acesso] : null;
+  const rs = renovacaoStatus(a.turma_codigo);
+  const vencTone = rs ? (rs === 'em_renovacao' ? 'var(--yellow)' : 'var(--red)') : undefined;
+  const hotmart = [
+    a.tem_ht ? `HT${a.ativacao_ht_status ? ` · ${a.ativacao_ht_status}` : ''}` : null,
+    a.tem_hm ? `HM${a.hm_plano ? ` · ${a.hm_plano}` : ''}` : null,
+  ].filter(Boolean).join('  •  ');
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+      <MiniStat label="Nível de resultado" tone="var(--accent)">
+        {a.nivel_resultado ? <NivelBadge nivel={a.nivel_resultado} /> : '—'}
+      </MiniStat>
+      <MiniStat label="Acesso">{st?.label || sit?.label || '—'}</MiniStat>
+      <MiniStat label="Turma · Vencimento" tone={vencTone}>
+        {(a.turma_codigo || '—') + (a.data_expiracao ? ` · ${fmtData(a.data_expiracao)}` : '')}
+      </MiniStat>
+      <MiniStat label="Hotmart">{hotmart || '—'}</MiniStat>
+    </div>
+  );
+}
+
+/** Histórico de níveis (placa + cadastro) — snapshots de ciclos anteriores. */
+function HistoricoNiveis({ ciclos }: { ciclos: Ciclo[] }) {
+  if (!ciclos.length) return null;
+  return (
+    <div className="mt-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)] mb-2">Histórico de níveis ({ciclos.length})</div>
+      <div className="space-y-1.5">
+        {ciclos.map((c) => {
+          const ehPlaca = c.tipo === 'placa';
+          return (
+            <div key={c.id} className="flex items-center justify-between gap-2 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2">
+              <span className="text-sm text-[var(--fg)] inline-flex items-center gap-2 min-w-0">
+                <span className="grid place-items-center w-5 h-5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] text-[10px] font-bold shrink-0">{c.ciclo}</span>
+                <span className="truncate">{nivelLabel(c.nivel) || c.nivel || '—'}</span>
+                <Badge tone={ehPlaca ? 'success' : 'neutral'}>{ehPlaca ? 'Placa' : 'Cadastro'}</Badge>
+              </span>
+              {c.concluido_em && <span className="text-[11px] text-[var(--fg-3)] shrink-0">{fmtData(c.concluido_em)}</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Seção recolhível para detalhe secundário (corta densidade sem esconder dados). */
+function Collapse({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2 border-t border-[var(--border-faint)] pt-2">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)] hover:text-[var(--fg-2)] transition-colors">
+        <span>{title}</span>
+        <span className="inline-flex transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }}><Icon name="chevron-down" size={13} /></span>
+      </button>
+      {open && <div className="mt-2 space-y-1.5 gp-fade-in">{children}</div>}
+    </div>
+  );
 }
 function JornadaCard({ label, on, extra, href }: { label: string; on: boolean; extra?: string; href?: string }) {
   const body = (
