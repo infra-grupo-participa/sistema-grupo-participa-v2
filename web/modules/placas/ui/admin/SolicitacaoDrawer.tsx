@@ -8,7 +8,7 @@ import type { Solicitacao, Auditoria } from '../../domain/types';
 import * as data from './placas-admin-data';
 import { NIVEL_FAIXA_ORDER, DEFAULT_NIVEL_FAIXAS } from '../../domain/config';
 import { Badge, NivelBadge, Drawer, AvatarInicial, Button, CopyField, Input, FilterSelect, ConfirmDialog, Modal } from '@/shared/ui/components';
-import { fmtDataHora } from '@/shared/ui/format';
+import { fmtDataHora, fmtData } from '@/shared/ui/format';
 import { fmtBRL, fmtDataExtenso, type Act } from './relatorio-shared';
 
 export function SolicitacaoDrawer({
@@ -102,6 +102,14 @@ export function SolicitacaoDrawer({
       <div className="grid gap-4 lg:grid-cols-[1fr_300px] items-start">
         {/* Coluna principal */}
         <div className="space-y-4 min-w-0">
+          {/* Hero: resumo operacional em relance (inclui Turma, antes ausente da ficha). */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <MiniStat label="Turma">{sol.turma || '—'}</MiniStat>
+            <MiniStat label="Faturamento declarado">{sol.faturamento_declarado != null ? fmtBRL(sol.faturamento_declarado) : '—'}</MiniStat>
+            <MiniStat label="Entrevista">{sol.entrevista_data ? `${fmtData(sol.entrevista_data)}${sol.entrevista_hora ? ` ${String(sol.entrevista_hora).slice(0, 5)}` : ''}` : '—'}</MiniStat>
+            <MiniStat label="Documentos">{[sol.proof_url ? 'Compr.' : null, sol.declaracao_url ? 'Decl.' : null].filter(Boolean).join(' · ') || '—'}</MiniStat>
+          </div>
+
           {canEdit && editando && (
             <EditarDados sol={sol} act={act} onDone={() => setEditando(false)} />
           )}
@@ -247,7 +255,7 @@ export function SolicitacaoDrawer({
           {sol.aluno_id && <AuditoriaPanel alunoId={sol.aluno_id} canEdit={canEdit} act={act} />}
 
           {!editando && (
-          <Panel icon="user" title="Dados Pessoais">
+          <Panel icon="user" title="Dados Pessoais" collapsible defaultOpen={false}>
             <div className="grid sm:grid-cols-2 sm:gap-x-6">
               <Row2 k="Nome" v={sol.nome} />
               <Row2 k="E-mail" v={sol.email} />
@@ -543,14 +551,30 @@ function EditarDados({
   );
 }
 
-/** Bloco de seção com cabeçalho de ícone (linguagem do card legado). */
-function Panel({ icon, title, accent, children }: { icon?: string; title: string; accent?: string; children: React.ReactNode }) {
+/** Célula compacta do hero (rótulo minúsculo + valor destacado). Mesma linguagem da ficha 360. */
+function MiniStat({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3 min-w-0">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">{label}</div>
+      <div className="text-sm font-semibold text-[var(--fg)] mt-1 truncate">{children}</div>
+    </div>
+  );
+}
+
+/** Bloco de seção com cabeçalho de ícone (linguagem do card legado). `collapsible` recolhe o corpo. */
+function Panel({ icon, title, accent, children, collapsible, defaultOpen = true }: { icon?: string; title: string; accent?: string; children: React.ReactNode; collapsible?: boolean; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const shown = collapsible ? open : true;
   return (
     <div className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] p-4" style={accent ? { borderLeft: `3px solid ${accent}` } : undefined}>
-      <div className="flex items-center gap-2 mb-3 text-[11px] font-bold uppercase tracking-wider text-[var(--fg-3)]">
+      <div
+        className={`flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-[var(--fg-3)] ${shown ? 'mb-3' : ''} ${collapsible ? 'cursor-pointer select-none hover:text-[var(--fg-2)] transition-colors' : ''}`}
+        onClick={collapsible ? () => setOpen((o) => !o) : undefined}
+      >
         {icon && <Icon name={icon} size={14} className="text-[var(--accent)]" />} {title}
+        {collapsible && <span className="ml-auto inline-flex transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }}><Icon name="chevron-down" size={14} /></span>}
       </div>
-      {children}
+      {shown && children}
     </div>
   );
 }
