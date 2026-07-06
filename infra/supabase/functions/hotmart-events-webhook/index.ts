@@ -1,6 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const HOTMART_HOTTOK = Deno.env.get("HOTMART_HOTTOK") ?? "";
+
+// SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são injetados automaticamente em toda
+// Edge Function do Supabase. service_role é interno/confiável aqui (não é a
+// credencial do app, que é scoped) — usado só para persistir a compra.
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const SLACK_WEBHOOKS: Record<string, string> = {
   HT:      Deno.env.get("SLACK_WEBHOOK_EVENTS_HT")      ?? "",
@@ -54,12 +61,58 @@ function resolveChannel(productId: string, productName: string): string | null {
   return null;
 }
 
+// Tenta extrair o telefone do payload. Hotmart pode mandar em vários formatos:
+//   - buyer.checkout_phone (string já formatada)
+//   - buyer.phone (string)
+//   - buyer.phone_local_code + buyer.phone_number (DDD + número separados)
+//   - buyer.documents.phone (raro, contexto B2B)
+function extractPhone(buyer: Record<string, unknown>): string | null {
+  const candidates: Array<string | null | undefined> = [
+    buyer.checkout_phone as string,
+    buyer.phone as string,
+  ];
+
+  const localCode = buyer.phone_local_code as string | undefined;
+  const phoneNumber = buyer.phone_number as string | undefined;
+  if (localCode && phoneNumber) candidates.push(`${localCode}${phoneNumber}`);
+
+  for (const raw of candidates) {
+    const normalized = normalizePhone(raw);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
 function normalizePhone(phone: string | null | undefined): string | null {
   if (!phone) return null;
   let digits = phone.replace(/\D/g, "");
   if (!digits) return null;
   if (!digits.startsWith("55") && (digits.length === 10 || digits.length === 11)) digits = "55" + digits;
   return digits;
+}
+
+// Extrai o documento (CPF/CNPJ) do payload da Hotmart. Vários caminhos possíveis.
+function extractDocumento(buyer: Record<string, unknown>): string | null {
+  const raw = (buyer.document ?? buyer.documento ?? buyer.cpf ?? buyer.cnpj) as string | undefined;
+  if (!raw) return null;
+  const clean = String(raw).replace(/\D/g, "");
+  return clean.length >= 11 ? clean : null;
+}
+
+// Infere tipo do documento pelo tamanho (CPF=11, CNPJ=14).
+function inferTipoDocumento(doc: string | null | undefined): string | null {
+  if (!doc) return null;
+  const clean = doc.replace(/\D/g, "");
+  return clean.length === 11 ? "CPF" : clean.length === 14 ? "CNPJ" : null;
+}
+
+// True se a cidade for Porto Alegre OU o telefone (normalizado p/ 55DDD...) tiver DDD 51.
+function isPortoAlegre(city: string | null | undefined, phone: string | null): boolean {
+  const cityNorm = city ? normalizeStr(city).trim() : "";
+  if (cityNorm === "porto alegre") return true;
+  // phone vem como 55 + DDD + número; DDD 51 = Porto Alegre / região metropolitana.
+  if (phone && phone.startsWith("55") && phone.substring(2, 4) === "51") return true;
+  return false;
 }
 
 function formatBrDate(ms: number | null | undefined): string {
@@ -76,6 +129,60 @@ function formatBrDate(ms: number | null | undefined): string {
   }).format(d);
 }
 
+// Converte epoch (ms) para ISO. Retorna null se ausente/inválido.
+function msToIso(ms: number | null | undefined): string | null {
+  if (!ms) return null;
+  const d = new Date(Number(ms));
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+// Extrai cidade/estado tentando várias localizações conhecidas do payload da
+// Hotmart. Em produtos cujo checkout NÃO solicita endereço, todos esses caminhos
+// virão vazios — isso só se resolve marcando "endereço obrigatório" no painel.
+function extractAddress(
+  data: Record<string, unknown>,
+  buyer: Record<string, unknown>,
+  purchase: Record<string, unknown>,
+): { cidade: string | null; estado: string | null } {
+  const candidates: Array<Record<string, unknown> | undefined> = [
+    buyer.address as Record<string, unknown> | undefined,
+    purchase.address as Record<string, unknown> | undefined,
+    (data?.subscriber as Record<string, unknown> | undefined)?.address as Record<string, unknown> | undefined,
+  ];
+
+  for (const addr of candidates) {
+    if (!addr) continue;
+    const rawCity = (addr.city ?? addr.address_city ?? addr.cidade) as string | undefined;
+    const rawState = (addr.state ?? addr.address_state ?? addr.estado ?? addr.uf) as string | undefined;
+    const cidade = rawCity ? String(rawCity).trim() : null;
+    const estado = rawState ? String(rawState).trim().substring(0, 2).toUpperCase() : null;
+    if (cidade || estado) return { cidade, estado };
+  }
+
+  // Fallbacks planos: alguns payloads vêm com campos no nível do buyer/purchase.
+  const flatCity = (buyer.address_city ?? buyer.city ?? purchase.address_city) as string | undefined;
+  const flatState = (buyer.address_state ?? buyer.state ?? buyer.uf ?? purchase.address_state) as string | undefined;
+  return {
+    cidade: flatCity ? String(flatCity).trim() : null,
+    estado: flatState ? String(flatState).trim().substring(0, 2).toUpperCase() : null,
+  };
+}
+
+// Extrai a string sck (tracking) de vários caminhos possíveis do payload.
+function extractSck(purchase: Record<string, unknown>): string {
+  const originObj = purchase.origin as Record<string, unknown> | undefined;
+  const trackingParams = purchase.tracking as Record<string, unknown> | undefined;
+  const raw =
+    originObj?.sck
+    ?? originObj?.xcod
+    ?? purchase.sck
+    ?? purchase.checkout_origin
+    ?? trackingParams?.source_sck
+    ?? trackingParams?.utm_source
+    ?? "";
+  return String(raw).trim();
+}
+
 async function notifySlack(channel: string, payload: {
   nome: string;
   email: string;
@@ -87,6 +194,7 @@ async function notifySlack(channel: string, payload: {
   origem: string | null;
   cidade: string | null;
   estado: string | null;
+  markPortoAlegre: boolean;
 }) {
   const webhookUrl = SLACK_WEBHOOKS[channel];
   if (!webhookUrl) {
@@ -128,34 +236,103 @@ async function notifySlack(channel: string, payload: {
   }
 }
 
-// Classifica a string sck bruta em rótulo legível.
-// Formato sck: "s=Metaads|c=...|m=...|co=...|t=...|utm_id=..."
-// ou qualquer string livre como "Comercial", "GPT Maker", etc.
-function resolveOrigemLabel(sck: string): string {
-  const lower = sck.toLowerCase();
-
-  // Extrai o parâmetro s= quando presente (fonte principal)
-  const sMatch = sck.match(/(?:^|[|&])s=([^|&]+)/i);
-  const fonte = sMatch ? sMatch[1].trim().toLowerCase() : "";
-
-  if (fonte === "metaads" || lower.includes("metaads") || lower.includes("meta ads") || lower.includes("facebook") || lower.includes("instagram")) {
-    return "Meta Ads";
+// Persiste a compra aprovada nas tabelas canônicas public.compradores / public.compras.
+// Idempotente (upsert por email / hotmart_transaction) e NÃO-FATAL: qualquer erro é
+// logado, nunca lançado — assim uma falha de DB não provoca retry da Hotmart nem
+// atrapalha a notificação do Slack. Reusa o modelo existente (não cria compradores_ht).
+async function persistPurchase(args: {
+  nome: string;
+  email: string;
+  telefone: string | null;
+  documento: string | null;
+  cidade: string | null;
+  estado: string | null;
+  transaction: string;
+  productId: string;
+  productName: string;
+  offerCode: string | null;
+  moeda: string;
+  valor: number | null;
+  status: string;
+  isAssinatura: boolean;
+  numeroRecorrencia: number | null;
+  metodoPagamento: string | null;
+  parcelas: number | null;
+  dataCompraIso: string | null;
+  dataAprovacaoIso: string | null;
+}): Promise<void> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("[DB] SUPABASE_URL/SERVICE_ROLE_KEY ausentes — persistência ignorada");
+    return;
   }
-  if (fonte === "google" || lower.includes("google") || lower.includes("googleads") || lower.includes("google ads")) {
-    return "Google Ads";
-  }
-  if (lower.includes("youtube")) return "YouTube Ads";
-  if (lower.includes("tiktok")) return "TikTok Ads";
-  if (lower.includes("organic") || lower.includes("organico") || lower.includes("orgânico")) return "Orgânico";
-  if (lower.includes("email") || lower.includes("e-mail")) return "E-mail Marketing";
-  if (lower.includes("comercial") || lower.includes("vendas") || lower.includes("sdv") || lower.includes("sdr")) return "Comercial";
-  if (lower.includes("gpt") || lower.includes("chatbot") || lower.includes("ia") || lower.includes("whatsapp bot")) return "GPT / Automação";
-  if (lower.includes("hotmart") && (lower.includes("marketplace") || lower.includes("club"))) return "Hotmart Marketplace";
-  if (lower.includes("indicacao") || lower.includes("indicação") || lower.includes("referral")) return "Indicação";
-  if (lower.includes("direto") || lower.includes("direct")) return "Acesso Direto";
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
-  // Nenhuma regra bateu — retorna a string bruta truncada para não poluir o Slack
-  return sck.length > 80 ? sck.substring(0, 80) + "…" : sck;
+    const agora = new Date().toISOString();
+
+    // 1) Comprador — upsert por email (UNIQUE). Não sobrescreve criado_em.
+    // Documento/tipo só são gravados quando presentes (não apaga valor já existente).
+    const compradorPayload: Record<string, unknown> = {
+      nome: args.nome,
+      email: args.email,
+      telefone: args.telefone,
+      endereco_cidade: args.cidade,
+      endereco_estado: args.estado,
+      is_manual: false,
+      atualizado_em: agora,
+    };
+    if (args.documento) {
+      compradorPayload.documento = args.documento;
+      compradorPayload.tipo_documento = inferTipoDocumento(args.documento);
+    }
+
+    const { data: comprador, error: cErr } = await supabase
+      .from("compradores")
+      .upsert(compradorPayload, { onConflict: "email" })
+      .select("id")
+      .single();
+
+    if (cErr || !comprador) {
+      console.error("[DB] falha ao upsert comprador:", cErr?.message ?? cErr);
+      return;
+    }
+
+    // 2) Compra — upsert por hotmart_transaction (UNIQUE).
+    const { error: pErr } = await supabase
+      .from("compras")
+      .upsert(
+        {
+          comprador_id: comprador.id,
+          hotmart_transaction: args.transaction,
+          produto_id: args.productId || null,
+          produto_nome: args.productName || null,
+          oferta_codigo: args.offerCode,
+          moeda: args.moeda || "BRL",
+          preco: args.valor,
+          status: args.status,
+          is_assinatura: args.isAssinatura,
+          numero_recorrencia: args.numeroRecorrencia,
+          metodo_pagamento: args.metodoPagamento,
+          parcelas: args.parcelas,
+          data_compra: args.dataCompraIso,
+          data_aprovacao: args.dataAprovacaoIso,
+          hotmart_event: "PURCHASE_APPROVED",
+          atualizado_em: agora,
+        },
+        { onConflict: "hotmart_transaction" },
+      );
+
+    if (pErr) {
+      console.error("[DB] falha ao upsert compra:", pErr.message);
+      return;
+    }
+
+    console.log(`[DB] compra persistida: ${args.transaction} (${args.email})`);
+  } catch (e) {
+    console.error("[DB] exceção em persistPurchase:", e instanceof Error ? e.message : e);
+  }
 }
 
 serve(async (req) => {
@@ -232,20 +409,18 @@ serve(async (req) => {
     ? "Holding Masters — Renovação"
     : (CHANNEL_LABEL[channel] ?? productName);
 
-  // origem de checkout: origin.sck > checkout_origin > tracking.source_sck > tracking.utm_source
-  const originObj = purchase.origin as Record<string, unknown> | undefined;
-  const trackingParams = purchase.tracking as Record<string, unknown> | undefined;
-  const rawSck = String(
-    originObj?.sck ?? purchase.checkout_origin ?? trackingParams?.source_sck ?? trackingParams?.utm_source ?? ""
-  ).trim();
+  const rawSck = extractSck(purchase);
   const origem = rawSck ? resolveOrigemLabel(rawSck) : null;
 
-  // Endereço do comprador (quando disponível no payload).
-  const address = buyer.address as Record<string, unknown> | undefined;
-  const cidade = address?.city ? String(address.city).trim() : null;
-  const estado = address?.state ? String(address.state).trim().substring(0, 2).toUpperCase() : null;
+  // Endereço do comprador. Tenta vários caminhos conhecidos do payload da Hotmart.
+  const { cidade, estado } = extractAddress(data, buyer, purchase);
 
-  const telefone = normalizePhone(buyer.checkout_phone as string);
+  const telefone = extractPhone(buyer);
+  const documento = extractDocumento(buyer);
+  const markPortoAlegre = channel === "HT" && isPortoAlegre(cidade, telefone);
+
+  console.log(`[DIAG ${channel}] documento presente:`, documento != null);
+  console.log(`[DIAG ${channel}] productId/name:`, productId, "/", productName, "| isRenovacao:", isRenovacao);
 
   await notifySlack(channel, {
     nome: String(buyer.name ?? "Sem nome"),
@@ -258,6 +433,35 @@ serve(async (req) => {
     origem,
     cidade,
     estado,
+    markPortoAlegre,
+  });
+
+  // [ADICIONADO] Persiste a compra aprovada no banco (compradores/compras).
+  // Roda para todos os canais mapeados (base canônica é multi-produto). É a fonte
+  // de contatos do workspace de CS; a esteira de CS é semeada por trigger no banco.
+  // O documento (CPF/CNPJ) é gravado APENAS no banco — nunca exposto no Slack.
+  const offer = purchase.offer as Record<string, unknown> | undefined;
+  const payment = purchase.payment as Record<string, unknown> | undefined;
+  await persistPurchase({
+    nome: String(buyer.name ?? "Sem nome"),
+    email: String(buyer.email),
+    telefone,
+    documento,
+    cidade,
+    estado,
+    transaction: String(purchase.transaction),
+    productId,
+    productName,
+    offerCode: offer?.code ? String(offer.code) : null,
+    moeda: (price?.currency_code as string) ?? "BRL",
+    valor: (price?.value as number) ?? null,
+    status: String(purchase.status ?? "APPROVED"),
+    isAssinatura: purchase.is_subscription === true,
+    numeroRecorrencia: purchase.recurrency_number != null ? Number(purchase.recurrency_number) : null,
+    metodoPagamento: payment?.type ? String(payment.type) : null,
+    parcelas: payment?.installments_number != null ? Number(payment.installments_number) : null,
+    dataCompraIso: msToIso(Number(purchase.order_date ?? 0) || null),
+    dataAprovacaoIso: msToIso(Number(purchase.approved_date ?? 0) || null),
   });
 
   return new Response(JSON.stringify({ ok: true, channel }), {
@@ -265,3 +469,33 @@ serve(async (req) => {
     headers: { "Content-Type": "application/json" },
   });
 });
+
+// Classifica a string sck bruta em rótulo legível.
+// Formato sck: "s=Metaads|c=...|m=...|co=...|t=...|utm_id=..."
+// ou qualquer string livre como "Comercial", "GPT Maker", etc.
+function resolveOrigemLabel(sck: string): string {
+  const lower = sck.toLowerCase();
+
+  // Extrai o parâmetro s= quando presente (fonte principal)
+  const sMatch = sck.match(/(?:^|[|&])s=([^|&]+)/i);
+  const fonte = sMatch ? sMatch[1].trim().toLowerCase() : "";
+
+  if (fonte === "metaads" || lower.includes("metaads") || lower.includes("meta ads") || lower.includes("facebook") || lower.includes("instagram")) {
+    return "Meta Ads";
+  }
+  if (fonte === "google" || lower.includes("google") || lower.includes("googleads") || lower.includes("google ads")) {
+    return "Google Ads";
+  }
+  if (lower.includes("youtube")) return "YouTube Ads";
+  if (lower.includes("tiktok")) return "TikTok Ads";
+  if (lower.includes("organic") || lower.includes("organico") || lower.includes("orgânico")) return "Orgânico";
+  if (lower.includes("email") || lower.includes("e-mail")) return "E-mail Marketing";
+  if (lower.includes("comercial") || lower.includes("vendas") || lower.includes("sdv") || lower.includes("sdr")) return "Comercial";
+  if (lower.includes("gpt") || lower.includes("chatbot") || lower.includes("ia") || lower.includes("whatsapp bot")) return "GPT / Automação";
+  if (lower.includes("hotmart") && (lower.includes("marketplace") || lower.includes("club"))) return "Hotmart Marketplace";
+  if (lower.includes("indicacao") || lower.includes("indicação") || lower.includes("referral")) return "Indicação";
+  if (lower.includes("direto") || lower.includes("direct")) return "Acesso Direto";
+
+  // Nenhuma regra bateu — retorna a string bruta truncada para não poluir o Slack
+  return sck.length > 80 ? sck.substring(0, 80) + "…" : sck;
+}
