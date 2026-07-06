@@ -1,13 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { hmBadgeTotal, HM_CATEGORIA_LABEL, HM_BUCKETS } from './acesso-hm';
+import { hmBadgeTotal, HM_CATEGORIA_LABEL, HM_BUCKETS, turmaPendente, type HmFilaItem } from './acesso-hm';
+
+const base: HmFilaItem = {
+  compraId: 'x', alunoId: null, compradorId: null, nome: 'T', email: null, telefone: null,
+  offerCode: null, ofertaLabel: null, categoria: 'compra_cheia', preco: null, dataCompra: null,
+  bucket: 'pendente', alunoNovo: true, turmaId: null, turmaCodigo: null,
+  acessoEm: null, acessoPorNome: null, ignoradoEm: null, obs: null,
+};
 
 describe('acesso-hm domain', () => {
-  it('badge soma só liberações + renovações', () => {
-    expect(hmBadgeTotal({ liberacoes: 30, renovacoes: 7, aguardando_diferenca: 38, nao_classificado: 4 })).toBe(37);
-  });
-
-  it('badge tolera buckets ausentes', () => {
-    expect(hmBadgeTotal({ liberacoes: 5 })).toBe(5);
+  it('badge conta só pendentes', () => {
+    expect(hmBadgeTotal({ pendente: 12, concluido: 40 })).toBe(12);
     expect(hmBadgeTotal({})).toBe(0);
   });
 
@@ -18,8 +21,14 @@ describe('acesso-hm domain', () => {
     }
   });
 
-  it('buckets acionáveis excluem concluído', () => {
+  it('só concluídos são não-acionáveis', () => {
     expect(HM_BUCKETS.find((b) => b.key === 'concluido')?.acionavel).toBe(false);
-    expect(HM_BUCKETS.find((b) => b.key === 'liberacoes')?.acionavel).toBe(true);
+    expect(HM_BUCKETS.find((b) => b.key === 'pendente')?.acionavel).toBe(true);
+  });
+
+  it('turma pendente só para aluno novo sem turma', () => {
+    expect(turmaPendente({ ...base, alunoNovo: true, turmaId: null })).toBe(true);
+    expect(turmaPendente({ ...base, alunoNovo: true, turmaId: 53 })).toBe(false);
+    expect(turmaPendente({ ...base, alunoNovo: false, turmaId: null })).toBe(false);
   });
 });
