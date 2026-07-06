@@ -30,13 +30,15 @@ export function eligibleNivelRank(nivel: string | null | undefined): number {
 }
 
 /**
- * Ordem crescente COMPLETA dos níveis (ordem canônica da CLAUDE.md, = FORM_NIVEIS). Necessária
- * para o refazer de quem estava ABAIXO de Ouro (cadastro), onde o piso é um nível não-elegível.
+ * Ordem crescente COMPLETA dos níveis. Necessária para o refazer de quem estava ABAIXO de Ouro
+ * (cadastro), onde o piso é um nível não-elegível. Segue a MESMA ordem exibida no formulário
+ * (NIVEIS / NIVEL_FAIXA_ORDER) — assim um nível mostrado depois nunca é bloqueado como "inferior"
+ * a um mostrado antes (evita a incoerência entre exibição e bloqueio).
  */
 export const NIVEL_ORDER_FULL = [
   'iniciante',
-  'pessoal',
   'em_formacao',
+  'pessoal',
   'profissional',
   'ouro',
   'platina',

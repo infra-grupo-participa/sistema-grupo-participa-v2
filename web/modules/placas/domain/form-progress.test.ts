@@ -138,7 +138,7 @@ describe('form-progress — refazer processo (bloqueio de nível por piso)', () 
     expect(nivelRefazerBlockReason('ouro', 'profissional')).toBeNull(); // sobe para a placa
     expect(nivelRefazerBlockReason('profissional', 'profissional')).toBe('nao_superior'); // mesmo nível
     expect(nivelRefazerBlockReason('iniciante', 'profissional')).toBe('nao_superior'); // inferior
-    expect(nivelRefazerBlockReason('pessoal', 'em_formacao')).toBe('nao_superior'); // inferior na escala completa
+    expect(nivelRefazerBlockReason('iniciante', 'em_formacao')).toBe('nao_superior'); // inferior na escala completa
   });
 
   it('permite qualquer nível estritamente superior (piso elegível)', () => {

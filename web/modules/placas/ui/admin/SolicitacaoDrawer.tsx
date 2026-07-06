@@ -37,6 +37,7 @@ export function SolicitacaoDrawer({
   const [agHora, setAgHora] = useState('');
   const [agEmail, setAgEmail] = useState(true);
   const [confirmCancelarEntrevista, setConfirmCancelarEntrevista] = useState(false);
+  const [maisOpen, setMaisOpen] = useState(false);
   const [copiadoLogistica, setCopiadoLogistica] = useState(false);
   const [editando, setEditando] = useState(false);
   const [reprovacoes, setReprovacoes] = useState<data.Reprovacao[]>([]);
@@ -90,11 +91,19 @@ export function SolicitacaoDrawer({
           {step > 0 && step < AUDIT_STEP_TOTAL - 1 && <Button size="sm" variant="ghost" onClick={() => act(() => data.voltarEtapa(sol))}><Icon name="arrow-left" size={13} /> Etapa anterior</Button>}
           {step >= 0 && step < AUDIT_STEP_TOTAL - 1 && <Button size="sm" variant="success" onClick={() => act(() => data.confirmarJaPossuiPlaca(sol))}><Icon name="check" size={13} /> Já possui placa — avançar para o final</Button>}
           <Button size="sm" variant="ghost" onClick={() => setShowCorrecao((v) => !v)}><Icon name="rotate" size={13} /> Correção</Button>
-          <div className="ml-auto flex gap-1.5">
-            {sol.status !== 'rejeitado' && sol.status !== 'concluido' && (
-              <Button size="sm" variant="ghost" onClick={() => setConfirmRejeitar(true)}><Icon name="x" size={13} /> Rejeitar</Button>
+          <div className="ml-auto relative">
+            <Button size="sm" variant="ghost" onClick={() => setMaisOpen((o) => !o)}>Mais <Icon name="chevron-down" size={13} /></Button>
+            {maisOpen && (
+              <>
+                <div className="fixed inset-0 z-[1000]" onClick={() => setMaisOpen(false)} />
+                <div className="absolute right-0 bottom-full mb-1 z-[1001] min-w-[200px] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-1 shadow-[var(--shadow-lg)]">
+                  {sol.status !== 'rejeitado' && sol.status !== 'concluido' && (
+                    <button type="button" onClick={() => { setMaisOpen(false); setConfirmRejeitar(true); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--fg-2)] rounded-[var(--r-sm)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="x" size={14} /> Rejeitar solicitação</button>
+                  )}
+                  <button type="button" onClick={() => { setMaisOpen(false); setConfirmExcluir(true); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--red)] rounded-[var(--r-sm)] hover:bg-[var(--red-subtle)] transition-colors"><Icon name="trash" size={14} /> Excluir solicitação</button>
+                </div>
+              </>
             )}
-            <Button size="sm" variant="danger" onClick={() => setConfirmExcluir(true)}><Icon name="trash" size={13} /> Excluir</Button>
           </div>
         </>
       ) : undefined}

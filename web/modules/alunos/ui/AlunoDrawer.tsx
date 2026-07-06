@@ -175,20 +175,25 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
               <Row k="Vencimento" v={fmtData(a.data_expiracao)} />
               {(a.mes_expiracao || a.ano_expiracao) && <Row k="Mês/Ano expiração" v={[a.mes_expiracao, a.ano_expiracao].filter(Boolean).join('/')} />}
               <Row k="Data da compra" v={fmtData(a.data_compra_importada)} />
-              <Collapse title="Hotmart, CS & observações">
+              {(a.cs_estagio || a.cs_responsavel || a.cs_observacoes) && (
+                <>
+                  <SubTitle>Acompanhamento CS</SubTitle>
+                  {a.cs_estagio && <Row k="Estágio" v={a.cs_estagio} />}
+                  {a.cs_responsavel && <Row k="Responsável" v={a.cs_responsavel} />}
+                  {a.cs_observacoes && <Row k="Obs (CS)" v={a.cs_observacoes} />}
+                </>
+              )}
+              {a.obs_central && (
+                <>
+                  <SubTitle>Observações</SubTitle>
+                  <Row k="Obs central" v={a.obs_central} />
+                </>
+              )}
+              <Collapse title="Hotmart & integrações">
                 <Row k="Holding Total (HT)" v={a.tem_ht ? `Sim${a.ativacao_ht_status ? ` · ${a.ativacao_ht_status}` : ''}` : 'Não'} />
                 <Row k="Holding Masters (HM)" v={a.tem_hm ? `Sim${a.hm_plano ? ` · ${a.hm_plano}` : ''}` : 'Não'} />
                 <Row k="Hotmart UCode" v={a.hotmart_ucode} />
                 <Row k="Registrado no SIP" v={a.sip_registrado ? 'Sim' : 'Não'} />
-                {(a.cs_estagio || a.cs_responsavel || a.cs_observacoes) && (
-                  <>
-                    <SubTitle>Acompanhamento CS</SubTitle>
-                    {a.cs_estagio && <Row k="Estágio" v={a.cs_estagio} />}
-                    {a.cs_responsavel && <Row k="Responsável" v={a.cs_responsavel} />}
-                    {a.cs_observacoes && <Row k="Obs (CS)" v={a.cs_observacoes} />}
-                  </>
-                )}
-                {a.obs_central && <Row k="Obs" v={a.obs_central} />}
               </Collapse>
             </Section>
           </SectionCard>
