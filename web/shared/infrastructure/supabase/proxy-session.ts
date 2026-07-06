@@ -5,6 +5,8 @@ import { publicEnv } from '@/shared/infrastructure/config/env';
 // Rotas públicas (sem sessão). Fluxos de placa são acessados por token UUID.
 const PUBLIC_PREFIXES = [
   '/login',
+  '/auth/confirm', // valida o token do link de acesso (sem sessão ainda)
+  '/definir-senha', // cria a senha logo após o /auth/confirm
   '/solicitar-placa',
   '/agendar-entrevista',
   '/api/cep',

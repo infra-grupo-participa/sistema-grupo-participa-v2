@@ -31,6 +31,28 @@ interface PerfilRow {
 
 const statusTone: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = { ativo: 'success', pendente: 'warning', negado: 'danger' };
 
+function CopyLinkBox({ link }: { link: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard bloqueado — o campo já permite copiar manualmente */
+    }
+  }
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 space-y-2">
+      <p className="text-xs text-[var(--fg-3)]">Envie este link para a pessoa. Ela cria a senha e já entra no sistema.</p>
+      <div className="flex gap-2">
+        <Input readOnly value={link} onFocus={(e) => e.currentTarget.select()} className="flex-1 text-xs" />
+        <Button type="button" size="sm" onClick={copy}>{copied ? 'Copiado!' : 'Copiar'}</Button>
+      </div>
+    </div>
+  );
+}
+
 export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
   const [users, setUsers] = useState<PerfilRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,7 +116,7 @@ export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
       </DataTable>
 
       {editing && <EditDrawer u={editing} meuCargo={meuCargo} onClose={() => setEditId(null)} onSaved={async (m) => { flash(m); setEditId(null); await reload(); }} />}
-      {inviteOpen && <InviteDrawer grantaveis={grantaveis} onClose={() => setInviteOpen(false)} onSaved={async (m) => { flash(m); setInviteOpen(false); await reload(); }} />}
+      {inviteOpen && <InviteDrawer grantaveis={grantaveis} onClose={() => setInviteOpen(false)} reload={reload} flash={flash} />}
       <Toast>{toast}</Toast>
     </div>
   );
@@ -112,7 +134,21 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
   const [funcoes, setFuncoes] = useState<string[]>(u.funcoes || []);
   const [cpf, setCpf] = useState(!!u.pode_ver_cpf_completo);
   const [busy, setBusy] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [accessLink, setAccessLink] = useState('');
+  const [linkErr, setLinkErr] = useState('');
   const souDev = meuCargo === 'dev';
+
+  async function gerarLink() {
+    setLinking(true); setLinkErr(''); setAccessLink('');
+    const r = await fetchJson<{ ok?: boolean; error?: string; link?: string }>('/api/admin/usuarios/link', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: u.id }),
+    });
+    setLinking(false);
+    if (r.json?.ok && r.json.link) setAccessLink(r.json.link);
+    else setLinkErr(r.json?.error || (r.status === 0 ? 'Sem conexão — tente novamente.' : 'Falhou.'));
+  }
 
   async function save() {
     setBusy(true);
@@ -187,41 +223,67 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
         )}
         <Toggle checked={cpf} onChange={setCpf} label="Pode ver CPF completo (LGPD)" />
         <Button onClick={save} disabled={busy} className="w-full">{busy ? 'Salvando…' : 'Salvar'}</Button>
+
+        <div className="pt-3 border-t border-[var(--border)] space-y-2">
+          <p className="text-xs text-[var(--fg-3)]">Acesso: gere um link para a pessoa criar/redefinir a senha e entrar.</p>
+          {accessLink ? (
+            <CopyLinkBox link={accessLink} />
+          ) : (
+            <Button variant="ghost" onClick={gerarLink} disabled={linking} className="w-full">{linking ? 'Gerando…' : 'Gerar link de acesso'}</Button>
+          )}
+          {linkErr && <p className="text-sm text-[var(--red)]">{linkErr}</p>}
+        </div>
       </div>
     </Drawer>
   );
 }
 
-function InviteDrawer({ grantaveis, onClose, onSaved }: { grantaveis: Cargo[]; onClose: () => void; onSaved: (m: string) => void }) {
+function InviteDrawer({ grantaveis, onClose, reload, flash }: { grantaveis: Cargo[]; onClose: () => void; reload: () => Promise<void>; flash: (m: string) => void }) {
   const [email, setEmail] = useState('');
   const [nome, setNome] = useState('');
   const [cargo, setCargo] = useState<Cargo>(grantaveis[grantaveis.length - 1] || 'visualizador');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [link, setLink] = useState('');
 
   async function invite() {
     setBusy(true); setErr('');
-    const r = await fetchJson<{ ok?: boolean; error?: string }>('/api/admin/usuarios', {
+    const r = await fetchJson<{ ok?: boolean; error?: string; link?: string }>('/api/admin/usuarios', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, nome, cargo }),
     });
     setBusy(false);
-    if (r.json?.ok) onSaved('Convite enviado!');
-    else setErr(r.json?.error || (r.status === 0 ? 'Sem conexão — tente novamente.' : 'Falhou.'));
+    if (r.json?.ok && r.json.link) {
+      setLink(r.json.link);
+      flash('Usuário criado! Copie o link abaixo.');
+      await reload();
+    } else {
+      setErr(r.json?.error || (r.status === 0 ? 'Sem conexão — tente novamente.' : 'Falhou.'));
+    }
   }
 
   return (
     <Drawer onClose={onClose} width="max-w-sm" title="Convidar usuário">
       <div className="space-y-3">
-        <label className="block"><span className="text-xs text-[var(--fg-3)]">E-mail</span><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1" /></label>
-        <label className="block"><span className="text-xs text-[var(--fg-3)]">Nome</span><Input value={nome} onChange={(e) => setNome(e.target.value)} className="mt-1" /></label>
-        <label className="block"><span className="text-xs text-[var(--fg-3)]">Cargo</span>
-          <FilterSelect value={cargo} onChange={(e) => setCargo(e.target.value as Cargo)} className="mt-1">
-            {grantaveis.map((c) => <option key={c} value={c}>{CARGO_META[c].label}</option>)}
-          </FilterSelect>
-        </label>
-        {err && <p className="text-sm text-[var(--red)]">{err}</p>}
-        <Button onClick={invite} disabled={busy || !email} className="w-full">{busy ? 'Enviando…' : 'Enviar convite'}</Button>
+        {link ? (
+          <>
+            <div className="text-sm text-[var(--fg)]">{nome || email}</div>
+            <CopyLinkBox link={link} />
+            <Button variant="ghost" onClick={onClose} className="w-full">Concluir</Button>
+          </>
+        ) : (
+          <>
+            <label className="block"><span className="text-xs text-[var(--fg-3)]">E-mail</span><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1" /></label>
+            <label className="block"><span className="text-xs text-[var(--fg-3)]">Nome</span><Input value={nome} onChange={(e) => setNome(e.target.value)} className="mt-1" /></label>
+            <label className="block"><span className="text-xs text-[var(--fg-3)]">Cargo</span>
+              <FilterSelect value={cargo} onChange={(e) => setCargo(e.target.value as Cargo)} className="mt-1">
+                {grantaveis.map((c) => <option key={c} value={c}>{CARGO_META[c].label}</option>)}
+              </FilterSelect>
+            </label>
+            {err && <p className="text-sm text-[var(--red)]">{err}</p>}
+            <Button onClick={invite} disabled={busy || !email} className="w-full">{busy ? 'Criando…' : 'Criar e gerar link'}</Button>
+          </>
+        )}
       </div>
     </Drawer>
   );

@@ -5,6 +5,7 @@ import { getCurrentUser } from '@/shared/composition/server-container';
 import { createAdminSupabase } from '@/shared/infrastructure/supabase/admin-client';
 import { ehAdminOuAcima, normalizeCargo, type Cargo } from '@/shared/domain/auth';
 import { cargosGrantaveis, podeEditarUsuario } from '@/modules/usuarios/domain/cargos';
+import { appOrigin, buildAccessLink } from '@/modules/usuarios/domain/access-link';
 
 const PERFIL_COLS = 'id, nome, email, cargo, status, funcoes, pode_ver_cpf_completo, areas, time, criado_em';
 
@@ -67,9 +68,17 @@ export async function POST(request: NextRequest) {
   if (!cargosGrantaveis(user.cargo).includes(cargo)) return jsonError('Você não pode atribuir este cargo.', 403);
 
   const admin = createAdminSupabase();
-  const redirectTo = (process.env.NEXT_PUBLIC_APP_URL || 'https://grupoparticipa.app.br') + '/login';
-  const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
-  if (inviteErr || !invited?.user) return jsonError('Não foi possível convidar: ' + (inviteErr?.message || ''), 502);
+  const origin = appOrigin(request);
+  // generateLink cria o auth user SEM enviar e-mail e devolve o hashed_token —
+  // montamos o link copiável que o admin envia pelo canal que quiser.
+  const { data: gen, error: genErr } = await admin.auth.admin.generateLink({
+    type: 'invite',
+    email,
+    options: { redirectTo: origin + '/auth/confirm' },
+  });
+  if (genErr || !gen?.user || !gen.properties?.hashed_token) {
+    return jsonError('Não foi possível gerar o convite: ' + (genErr?.message || ''), 502);
+  }
 
   // O trigger handle_new_user cria o perfil; ajustamos cargo/status/nome.
   await admin
@@ -80,7 +89,8 @@ export async function POST(request: NextRequest) {
       status: 'ativo',
       atualizado_em: new Date().toISOString(),
     })
-    .eq('id', invited.user.id);
+    .eq('id', gen.user.id);
 
-  return jsonOk({ ok: true, id: invited.user.id });
+  const link = buildAccessLink(origin, gen.properties.hashed_token, 'invite');
+  return jsonOk({ ok: true, id: gen.user.id, link });
 }
