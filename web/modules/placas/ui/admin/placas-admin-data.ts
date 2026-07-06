@@ -57,8 +57,12 @@ const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&');
 const gerarProtocolo = (sol: Solicitacao) =>
   `PL-${new Date().getFullYear()}-${String(sol.id).replace(/-/g, '').slice(0, 8).toUpperCase()}`;
 
-/** Inicia a auditoria: cria/atualiza aluno, garante auditoria step 0, marca sol em_auditoria. */
-export async function bootstrapAuditoria(sol: Solicitacao): Promise<void> {
+/**
+ * Inicia a auditoria: cria/atualiza aluno, garante auditoria step 0, marca sol em_auditoria.
+ * `markSeen` — marca a solicitação como vista pelo admin. Deve ser `false` no auto-start
+ * (ação do sistema): senão a placa recém-enviada perde o badge "Novo" antes de o admin olhar.
+ */
+export async function bootstrapAuditoria(sol: Solicitacao, markSeen = true): Promise<void> {
   const supabase = db();
   const email = String(sol.email || '').trim().toLowerCase();
   let alunoId = sol.aluno_id;
@@ -126,7 +130,9 @@ export async function bootstrapAuditoria(sol: Solicitacao): Promise<void> {
       step_index: AUDIT_STEP_INDEX.DOCUMENTACAO_EM_ANALISE,
       regularizacao_pendente: false,
       motivo_retorno: null,
-      ...buildAdminSeenPatch(true),
+      // No auto-start (markSeen=false) preserva o estado "não visto" → a placa recém-enviada
+      // continua como "Novo" na fila até o admin realmente abri-la.
+      ...(markSeen ? buildAdminSeenPatch(true) : {}),
     })
     .eq('id', sol.id);
   logQueryError('bootstrapAuditoria:solicitacao', solErr);
@@ -139,7 +145,8 @@ export async function autoStartPending(sols: Solicitacao[]): Promise<boolean> {
   if (!pend.length) return false;
   for (const s of pend) {
     try {
-      await bootstrapAuditoria(s);
+      // Auto-start é ação do sistema: NÃO marca como visto, para o item continuar "Novo".
+      await bootstrapAuditoria(s, false);
     } catch {
       /* continua */
     }
