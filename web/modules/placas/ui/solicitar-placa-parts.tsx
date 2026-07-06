@@ -94,7 +94,7 @@ export function Nav({ onBack, onNext, nextLabel, backLabel = '← Voltar', onlyN
   );
 }
 
-export function SuccessCard({ kind, token }: { kind: 'success' | 'cadastro'; token?: string }) {
+export function SuccessCard({ kind, token, onRefazer, refazerBusy }: { kind: 'success' | 'cadastro'; token?: string; onRefazer?: () => void; refazerBusy?: boolean }) {
   const isCad = kind === 'cadastro';
   const passos = isCad
     ? [
@@ -132,6 +132,18 @@ export function SuccessCard({ kind, token }: { kind: 'success' | 'cadastro'; tok
           <a className="sp-btn-next" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, textDecoration: 'none', marginBottom: 12 }} href={`/solicitar-placa?token=${encodeURIComponent(token)}`}>
             <Icon name="arrow-up-right" size={16} /> Acompanhar minha solicitação
           </a>
+        )}
+        {isCad && onRefazer && (
+          <div className="sp-sched sp-sched-set" style={{ marginBottom: 12 }}>
+            <div className="sp-sched-title"><Icon name="medal" size={17} /> Evoluiu de nível?</div>
+            <p className="sp-sched-desc">
+              Se você subiu de nível desde este cadastro, refaça a solicitação para atualizar o seu nível —
+              e, ao alcançar Ouro ou acima, seguir para a emissão da placa. Seus dados já ficam preenchidos.
+            </p>
+            <button type="button" className="sp-sched-cta" disabled={refazerBusy} onClick={onRefazer} style={refazerBusy ? { opacity: 0.7, cursor: 'wait' } : undefined}>
+              <Icon name="rotate" size={15} /> {refazerBusy ? 'Preparando…' : 'Refazer solicitação — evoluí de nível'}
+            </button>
+          </div>
         )}
         <div className="sp-hint" style={{ textAlign: 'center' }}>
           📬 Enviamos a confirmação para o seu e-mail — se não encontrar, confira o spam ou a aba Promoções.

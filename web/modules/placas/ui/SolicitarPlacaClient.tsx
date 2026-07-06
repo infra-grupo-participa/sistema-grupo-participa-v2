@@ -8,6 +8,10 @@ import { cepLookup, placaDuplicateCheck, placaGet, placaRecover, placaRefazer, p
 import { isPlateEligible, faturamentoBlockReason, NIVEL_MIN_FATURAMENTO, nivelRefazerBlockReason } from '../domain/form-progress';
 
 const NIVEL_NOME: Record<string, string> = {
+  iniciante: 'Iniciante',
+  em_formacao: 'Em Formação',
+  pessoal: 'Pessoal',
+  profissional: 'Profissional',
   ouro: 'Ouro',
   platina: 'Platina',
   diamante: 'Diamante',
@@ -144,7 +148,7 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
         if (motivo === 'nao_elegivel') return 'Para refazer, selecione um nível a partir de Ouro (que emite placa).';
         if (motivo === 'nao_superior') {
           const nomeAnt = NIVEL_NOME[form.nivel_anterior] ?? form.nivel_anterior;
-          return `Você já concluiu o nível ${nomeAnt}. Escolha um nível superior — este e os inferiores estão bloqueados.`;
+          return `Seu nível atual é ${nomeAnt}. Escolha um nível superior — este e os inferiores estão bloqueados.`;
         }
       }
       if (eligible && !form.faturamento_declarado) return 'Informe o faturamento declarado.';
@@ -330,38 +334,66 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
   // ── Render ──
   if (view === 'loading') return <Wrap><div className="sp-card"><div className="sp-card-body">Carregando…</div></div></Wrap>;
   if (view === 'success') return <Wrap><SuccessCard kind="success" token={token} /></Wrap>;
-  if (view === 'cadastro') return <Wrap><SuccessCard kind="cadastro" /></Wrap>;
+
+  // Modal de confirmação de refazer/re-solicitar, compartilhado entre a tela de cadastro
+  // (< Ouro) e a de acompanhamento (placa concluída). Copy adapta conforme a origem.
+  const nivelAtualRaw = String(tracking?.nivel ?? form.nivel ?? '');
+  const nomeNivelAtual = NIVEL_NOME[nivelAtualRaw] ?? nivelAtualRaw;
+  const refazerDeCadastro = Boolean(nivelAtualRaw) && !isPlateEligible(nivelAtualRaw);
+  const refazerModalEl = refazerConfirm ? (
+    <Modal
+      open={refazerConfirm}
+      onClose={() => { if (!refazerBusy) { setRefazerConfirm(false); setErr(''); } }}
+      title={refazerDeCadastro ? 'Refazer a solicitação?' : 'Refazer o processo?'}
+      width="max-w-md"
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={() => { setRefazerConfirm(false); setErr(''); }} disabled={refazerBusy}>Cancelar</Button>
+          <Button type="button" variant="primary" onClick={doRefazer} disabled={refazerBusy}>{refazerBusy ? 'Preparando…' : 'Sim, refazer'}</Button>
+        </>
+      }
+    >
+      {refazerDeCadastro ? (
+        <>
+          <p className="text-sm text-[var(--fg-2)] leading-relaxed">
+            Seu cadastro está no nível <strong>{nomeNivelAtual || 'atual'}</strong>. Ao refazer, você atualiza sua
+            solicitação para um nível <strong>superior</strong> — este nível e os inferiores ficam bloqueados.
+          </p>
+          <ul className="text-sm text-[var(--fg-2)] leading-relaxed mt-3 space-y-1.5 list-disc pl-5">
+            <li>Ao alcançar <strong>Ouro</strong> ou acima, você segue para a emissão da placa.</li>
+            <li>Seus dados de contato e endereço já ficam preenchidos.</li>
+          </ul>
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-[var(--fg-2)] leading-relaxed">
+            Você concluiu a placa no nível <strong>{nomeNivelAtual || 'atual'}</strong>. Ao refazer, um novo processo
+            começa para um nível <strong>superior</strong> — este nível e os inferiores ficam bloqueados.
+          </p>
+          <ul className="text-sm text-[var(--fg-2)] leading-relaxed mt-3 space-y-1.5 list-disc pl-5">
+            <li>O histórico da sua placa atual é <strong>preservado</strong>.</li>
+            <li>Você precisará enviar novamente a <strong>comprovação</strong> e a <strong>declaração</strong> do novo nível.</li>
+            <li>Seus dados de contato e endereço já ficam preenchidos.</li>
+          </ul>
+        </>
+      )}
+      {err && <p className="sp-err" style={{ marginTop: 12 }}>{err}</p>}
+    </Modal>
+  ) : null;
+
+  if (view === 'cadastro') {
+    return (
+      <Wrap>
+        <SuccessCard kind="cadastro" onRefazer={() => { setErr(''); setRefazerConfirm(true); }} refazerBusy={refazerBusy} />
+        {refazerModalEl}
+      </Wrap>
+    );
+  }
   if (view === 'tracking' && tracking) {
-    const nivelConcl = String(tracking.nivel ?? '');
-    const nomeConcl = NIVEL_NOME[nivelConcl] ?? nivelConcl;
     return (
       <Wrap>
         <TrackingCard data={tracking} onRefazer={() => { setErr(''); setRefazerConfirm(true); }} refazerBusy={refazerBusy} error={err} />
-        {refazerConfirm && (
-          <Modal
-            open={refazerConfirm}
-            onClose={() => { if (!refazerBusy) { setRefazerConfirm(false); setErr(''); } }}
-            title="Refazer o processo?"
-            width="max-w-md"
-            footer={
-              <>
-                <Button type="button" variant="ghost" onClick={() => { setRefazerConfirm(false); setErr(''); }} disabled={refazerBusy}>Cancelar</Button>
-                <Button type="button" variant="primary" onClick={doRefazer} disabled={refazerBusy}>{refazerBusy ? 'Preparando…' : 'Sim, refazer processo'}</Button>
-              </>
-            }
-          >
-            <p className="text-sm text-[var(--fg-2)] leading-relaxed">
-              Você concluiu a placa no nível <strong>{nomeConcl || 'atual'}</strong>. Ao refazer, um novo processo começa
-              para um nível <strong>superior</strong> — este nível e os inferiores ficam bloqueados.
-            </p>
-            <ul className="text-sm text-[var(--fg-2)] leading-relaxed mt-3 space-y-1.5 list-disc pl-5">
-              <li>O histórico da sua placa atual é <strong>preservado</strong>.</li>
-              <li>Você precisará enviar novamente a <strong>comprovação</strong> e a <strong>declaração</strong> do novo nível.</li>
-              <li>Seus dados de contato e endereço já ficam preenchidos.</li>
-            </ul>
-            {err && <p className="sp-err" style={{ marginTop: 12 }}>{err}</p>}
-          </Modal>
-        )}
+        {refazerModalEl}
       </Wrap>
     );
   }
@@ -381,10 +413,10 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
         </Banner>
       )}
       {form.nivel_anterior && !retorno && (
-        <Banner tone="info" title="Novo processo — você subiu de nível 🎉">
+        <Banner tone="info" title="Você subiu de nível 🎉">
           <p>
-            No ciclo anterior você concluiu no nível <strong>{NIVEL_NOME[form.nivel_anterior] ?? form.nivel_anterior}</strong>.
-            Refaça o processo normalmente — na etapa <strong>Seu nível</strong>, escolha um nível <strong>superior</strong>:
+            Seu nível anterior era <strong>{NIVEL_NOME[form.nivel_anterior] ?? form.nivel_anterior}</strong>.
+            Refaça a solicitação normalmente — na etapa <strong>Seu nível</strong>, escolha um nível <strong>superior</strong>:
             o anterior e os inferiores ficam bloqueados.
           </p>
         </Banner>

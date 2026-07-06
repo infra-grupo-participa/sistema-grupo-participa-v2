@@ -19,9 +19,8 @@ export function isPlateEligible(nivel: string | null | undefined): boolean {
 }
 
 /**
- * Ordem crescente dos níveis elegíveis (que emitem placa). Usada no fluxo "refazer processo":
- * só um processo concluído (nível ≥ Ouro) pode ser refeito, e o novo nível precisa ser
- * estritamente superior ao concluído. Índice = grau (0 = Ouro … 3 = Diamante Vermelho).
+ * Ordem crescente dos níveis elegíveis (que emitem placa). Índice = grau (0 = Ouro …
+ * 3 = Diamante Vermelho). Usada no CTA de refazer (detectar topo: Diamante Vermelho não refaz).
  */
 export const ELIGIBLE_NIVEL_ORDER = ['ouro', 'platina', 'diamante', 'diamante_vermelho'] as const;
 
@@ -31,20 +30,45 @@ export function eligibleNivelRank(nivel: string | null | undefined): number {
 }
 
 /**
- * O nível escolhido é válido para refazer sobre um piso `nivelAnterior` (o concluído)?
+ * Ordem crescente COMPLETA dos níveis (ordem canônica da CLAUDE.md, = FORM_NIVEIS). Necessária
+ * para o refazer de quem estava ABAIXO de Ouro (cadastro), onde o piso é um nível não-elegível.
+ */
+export const NIVEL_ORDER_FULL = [
+  'iniciante',
+  'pessoal',
+  'em_formacao',
+  'profissional',
+  'ouro',
+  'platina',
+  'diamante',
+  'diamante_vermelho',
+] as const;
+
+/** Grau do nível na escala completa (0..7), ou -1 se desconhecido. */
+export function nivelRank(nivel: string | null | undefined): number {
+  return (NIVEL_ORDER_FULL as readonly string[]).indexOf(String(nivel ?? ''));
+}
+
+/**
+ * O nível escolhido é válido para re-solicitar sobre um piso `nivelAnterior`?
  * Retorna null se ok, ou o motivo do bloqueio:
- *  - 'nao_elegivel': nível abaixo de Ouro (refazer sempre visa subir para faixa com placa);
- *  - 'nao_superior': nível igual ou inferior ao concluído (piso + inferiores ficam bloqueados).
+ *  - 'nao_elegivel': o piso já era elegível (placa recebida) e o novo nível é abaixo de Ouro
+ *    — não se "desce" de uma placa para um cadastro sem placa;
+ *  - 'nao_superior': nível igual ou inferior ao anterior (piso + inferiores ficam bloqueados).
+ *
+ * A exigência de elegibilidade é automática pelo piso: piso elegível (concluído, ≥ Ouro) exige
+ * novo nível também elegível; piso abaixo de Ouro (cadastro) aceita qualquer nível superior
+ * (pode seguir abaixo de Ouro ou alcançar Ouro+).
  */
 export function nivelRefazerBlockReason(
   nivel: string | null | undefined,
   nivelAnterior: string | null | undefined,
 ): 'nao_elegivel' | 'nao_superior' | null {
-  const piso = eligibleNivelRank(nivelAnterior);
-  if (piso < 0) return null; // sem piso válido → não é um refazer; nada a bloquear
-  const alvo = eligibleNivelRank(nivel);
-  if (alvo < 0) return 'nao_elegivel';
-  if (alvo <= piso) return 'nao_superior';
+  const piso = nivelRank(nivelAnterior);
+  if (piso < 0) return null; // sem piso válido → nada a bloquear
+  if (isPlateEligible(nivelAnterior) && !isPlateEligible(nivel)) return 'nao_elegivel';
+  const alvo = nivelRank(nivel);
+  if (alvo < 0 || alvo <= piso) return 'nao_superior';
   return null;
 }
 

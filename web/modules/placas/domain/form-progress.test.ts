@@ -121,21 +121,27 @@ describe('form-progress — refazer processo (bloqueio de nível por piso)', () 
   it('sem piso não bloqueia nada', () => {
     expect(nivelRefazerBlockReason('ouro', null)).toBeNull();
     expect(nivelRefazerBlockReason('ouro', '')).toBeNull();
-    expect(nivelRefazerBlockReason('pessoal', 'profissional')).toBeNull(); // piso não-elegível é ignorado
+    expect(nivelRefazerBlockReason('platina', 'xpto')).toBeNull(); // piso desconhecido
   });
 
-  it('bloqueia o nível igual e os inferiores ao concluído', () => {
+  it('piso ELEGÍVEL (placa concluída): bloqueia igual/inferior e descida p/ sem placa', () => {
     expect(nivelRefazerBlockReason('ouro', 'ouro')).toBe('nao_superior'); // mesmo nível
     expect(nivelRefazerBlockReason('ouro', 'platina')).toBe('nao_superior'); // inferior
     expect(nivelRefazerBlockReason('platina', 'diamante')).toBe('nao_superior');
-  });
-
-  it('bloqueia descida para nível sem placa (abaixo de Ouro)', () => {
-    expect(nivelRefazerBlockReason('profissional', 'ouro')).toBe('nao_elegivel');
+    expect(nivelRefazerBlockReason('profissional', 'ouro')).toBe('nao_elegivel'); // não desce p/ cadastro
     expect(nivelRefazerBlockReason('iniciante', 'platina')).toBe('nao_elegivel');
   });
 
-  it('permite qualquer nível estritamente superior', () => {
+  it('piso ABAIXO de Ouro (cadastro): bloqueia igual/inferior, aceita superior mesmo sem placa', () => {
+    // Piso não-elegível NÃO exige subir para Ouro — qualquer nível superior vale.
+    expect(nivelRefazerBlockReason('em_formacao', 'iniciante')).toBeNull(); // sobe dentro do < Ouro
+    expect(nivelRefazerBlockReason('ouro', 'profissional')).toBeNull(); // sobe para a placa
+    expect(nivelRefazerBlockReason('profissional', 'profissional')).toBe('nao_superior'); // mesmo nível
+    expect(nivelRefazerBlockReason('iniciante', 'profissional')).toBe('nao_superior'); // inferior
+    expect(nivelRefazerBlockReason('pessoal', 'em_formacao')).toBe('nao_superior'); // inferior na escala completa
+  });
+
+  it('permite qualquer nível estritamente superior (piso elegível)', () => {
     expect(nivelRefazerBlockReason('platina', 'ouro')).toBeNull();
     expect(nivelRefazerBlockReason('diamante', 'ouro')).toBeNull();
     expect(nivelRefazerBlockReason('diamante_vermelho', 'diamante')).toBeNull();
@@ -155,5 +161,9 @@ describe('form-progress — refazer processo (bloqueio de nível por piso)', () 
     expect(validateFormProgress({ ...base, nivel: 'profissional', nivel_anterior: 'ouro' })?.code).toBe('refazer_nivel_nao_elegivel');
     // Concluiu Ouro → subir para Platina passa (com faturamento coerente)
     expect(validateFormProgress({ ...base, nivel: 'platina', faturamento_declarado: 500_000, nivel_anterior: 'ouro' })).toBeNull();
+    // Cadastro Iniciante → subir para Em Formação (ainda < Ouro) passa (cadastro_concluido, step 3)
+    expect(validateFormProgress({ token: TOKEN, ...step1, interesse: 'x', espaco_instrucao: 'casa', step_index: 3, status: 'cadastro_concluido', nivel: 'em_formacao', nivel_anterior: 'iniciante' })).toBeNull();
+    // Cadastro Profissional → tentar Iniciante (inferior) é bloqueado
+    expect(validateFormProgress({ token: TOKEN, ...step1, interesse: 'x', espaco_instrucao: 'casa', step_index: 3, status: 'cadastro_concluido', nivel: 'iniciante', nivel_anterior: 'profissional' })?.code).toBe('refazer_nivel_nao_superior');
   });
 });

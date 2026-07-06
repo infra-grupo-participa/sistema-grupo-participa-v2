@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     if (!token) return jsonError('Não foi possível concluir a operação.', 400);
     const res = await gateway.refazer(token);
     if (!res.ok) {
-      if (res.reason === 'nao_concluido') return jsonError('Este processo ainda não foi concluído.', 409);
+      if (res.reason === 'nao_refazivel') return jsonError('Esta solicitação ainda não pode ser refeita.', 409);
       if (res.reason === 'nivel_maximo') return jsonError('Você já está no nível máximo (Diamante Vermelho) — não há nível superior para refazer.', 409);
       if (res.reason === 'nao_encontrada') return clearPlacaCookie(jsonError('Não foi possível concluir a operação.', 404));
       return jsonError('Não foi possível iniciar o novo processo.', 502);

@@ -5,6 +5,10 @@
 import { NIVEL_MIN_FATURAMENTO, type ProgressError } from '../domain/form-progress';
 
 const NIVEL_NOME: Record<string, string> = {
+  iniciante: 'Iniciante',
+  em_formacao: 'Em Formação',
+  pessoal: 'Pessoal',
+  profissional: 'Profissional',
   ouro: 'Ouro',
   platina: 'Platina',
   diamante: 'Diamante',
@@ -56,9 +60,10 @@ export function progressErrorMessage(err: ProgressError): string {
       return 'Para refazer o processo você precisa selecionar um nível a partir de Ouro (que emite placa).';
     case 'refazer_nivel_nao_superior': {
       const anterior = String(err.field ?? '');
+      const nome = NIVEL_NOME[anterior] ?? anterior;
       return anterior
-        ? `Você já concluiu o nível ${NIVEL_NOME[anterior] ?? anterior}. Ao refazer, escolha um nível superior — este e os inferiores estão bloqueados.`
-        : 'Ao refazer, escolha um nível superior ao já concluído.';
+        ? `Seu nível atual é ${nome}. Ao refazer, escolha um nível superior — este e os inferiores estão bloqueados.`
+        : 'Ao refazer, escolha um nível superior ao atual.';
     }
     case 'missing_proof':
       return 'Envie o documento comprobatório.';

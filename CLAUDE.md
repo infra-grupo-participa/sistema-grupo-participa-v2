@@ -239,16 +239,22 @@ Snapshot **imutável** de cada ciclo de placa concluído (arquivado ao refazer).
 - **RLS ativo**: SELECT para `authenticated`; escrita só via `fn_placas_refazer` (SECURITY DEFINER) / service_role
 
 ### Refazer processo — "subiu de nível" (feature dentro de Placas)
-Aluno com placa **`concluido`** (nível ≥ Ouro) pode refazer o processo por evolução de nível:
-- Gatilho: CTA na tela de acompanhamento pública (`TrackingCard`) → `POST /api/placa` action `refazer`.
+Vale para dois casos, ambos por evolução de nível:
+1. **`concluido`** (placa recebida, ≥ Ouro) → CTA no `TrackingCard`.
+2. **`cadastro_concluido`** (< Ouro, sem placa) → CTA no `SuccessCard` (kind cadastro). Sem isso o aluno
+   abaixo de Ouro ficava preso na tela de cadastro sem volta ao formulário.
+- Gatilho: `POST /api/placa` action `refazer`.
 - **RPC atômica `fn_placas_refazer(p_token uuid)`** (SECURITY DEFINER, espelha `fn_placas_reprovar`):
-  faz snapshot em `thb_placas_ciclos` **antes** do reset destrutivo da **mesma linha** (token/sessão/cookie
-  preservados → o relatório continua associado à pessoa). Reseta solicitação p/ `rascunho`, incrementa `ciclo`,
-  grava `nivel_anterior` (= nível concluído) e reseta a auditoria. `nivel_resultado` do aluno só muda quando a
-  nova placa conclui (trigger `fn_sync_placa_nivel`, em `encerrado` false→true).
-- **Bloqueio de nível**: `nivelRefazerBlockReason()` (domínio `form-progress.ts`) trava o nível concluído e
-  todos os inferiores; só permite nível elegível **estritamente superior**. Validado no client (`validStep` /
-  step 3 com `sp-level-locked`) **e** no servidor (`validateFormProgress` via `nivel_anterior` de `existing`).
+  aceita status `concluido` OU `cadastro_concluido` (senão `nao_refazivel`). Reseta a **mesma linha** p/
+  `rascunho` (token/sessão/cookie preservados → relatório continua associado à pessoa), grava
+  `nivel_anterior` (= nível atual) e reseta a auditoria. **Só o caso `concluido`** faz snapshot em
+  `thb_placas_ciclos` e incrementa `ciclo` (cadastro não teve placa). Guarda `nivel_maximo` p/ Diamante
+  Vermelho. `nivel_resultado` do aluno só muda quando a nova placa conclui (trigger `fn_sync_placa_nivel`).
+- **Bloqueio de nível**: `nivelRefazerBlockReason()` (domínio `form-progress.ts`, escala completa
+  `NIVEL_ORDER_FULL`) trava o nível anterior e todos os inferiores. Elegibilidade é automática pelo piso:
+  piso elegível (placa) exige novo nível ≥ Ouro; piso < Ouro (cadastro) aceita qualquer nível superior
+  (pode seguir < Ouro ou chegar ao Ouro+). Validado no client (`validStep` / step 3 com `sp-level-locked`)
+  **e** no servidor (`validateFormProgress` via `nivel_anterior` de `existing`).
 - Admin vê badge "Ciclo N" + "Subiu de {nível}" e o painel "Ciclos de placa concluídos" no drawer.
 
 ### `thb_horarios_disponiveis`

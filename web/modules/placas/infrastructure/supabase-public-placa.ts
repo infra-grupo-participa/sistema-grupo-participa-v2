@@ -63,15 +63,15 @@ export class SupabasePublicPlaca {
   }
 
   /**
-   * Refazer processo (subiu de nível): arquiva o ciclo concluído e reseta a MESMA linha
-   * (token/sessão preservados) via RPC atômica. Retorna a solicitação já resetada, ou um
-   * erro tipado. Só permitido para status 'concluido' (a RPC garante).
+   * Refazer/re-solicitar (subiu de nível): reseta a MESMA linha (token/sessão preservados)
+   * via RPC atômica, gravando o piso de bloqueio. Vale para placa concluída (arquiva o ciclo)
+   * e para cadastro concluído (< Ouro). Retorna a solicitação já resetada ou um erro tipado.
    */
   async refazer(token: string): Promise<{ ok: true; row: Row } | { ok: false; reason: string }> {
     const { error } = await this.db.rpc('fn_placas_refazer', { p_token: token });
     if (error) {
       const msg = String(error.message ?? '');
-      if (msg.includes('nao_concluido')) return { ok: false, reason: 'nao_concluido' };
+      if (msg.includes('nao_refazivel')) return { ok: false, reason: 'nao_refazivel' };
       if (msg.includes('nivel_maximo')) return { ok: false, reason: 'nivel_maximo' };
       if (msg.includes('nao_encontrada')) return { ok: false, reason: 'nao_encontrada' };
       return { ok: false, reason: 'erro' };
