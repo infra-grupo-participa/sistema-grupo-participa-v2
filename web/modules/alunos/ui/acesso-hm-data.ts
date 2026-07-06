@@ -2,7 +2,7 @@
 
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import type { HmFilaItem, HmBucket, HmAcao } from '../domain/acesso-hm';
+import type { HmFilaItem, HmEtapa, TurmaThb } from '../domain/acesso-hm';
 
 const db = () => createBrowserSupabase();
 
@@ -18,13 +18,18 @@ interface FilaRow {
   categoria: string | null;
   preco: number | null;
   data_compra: string | null;
-  status_compra: string | null;
-  bucket: HmBucket;
+  bucket: HmFilaItem['bucket'];
   ja_era_aluno_hm: boolean | null;
   sinal_quitado: boolean | null;
-  baixa_acao: HmAcao | null;
-  baixado_em: string | null;
-  baixado_por_nome: string | null;
+  needs_ativacao: boolean | null;
+  turma_id: number | null;
+  turma_codigo: string | null;
+  ativado_em: string | null;
+  ativado_por_nome: string | null;
+  acesso_em: string | null;
+  acesso_por_nome: string | null;
+  ignorado_em: string | null;
+  obs: string | null;
 }
 
 function mapRow(r: FilaRow): HmFilaItem {
@@ -43,9 +48,15 @@ function mapRow(r: FilaRow): HmFilaItem {
     bucket: r.bucket,
     jaEraAlunoHm: !!r.ja_era_aluno_hm,
     sinalQuitado: !!r.sinal_quitado,
-    baixaAcao: r.baixa_acao,
-    baixadoEm: r.baixado_em,
-    baixadoPorNome: r.baixado_por_nome,
+    needsAtivacao: !!r.needs_ativacao,
+    turmaId: r.turma_id == null ? null : Number(r.turma_id),
+    turmaCodigo: r.turma_codigo,
+    ativadoEm: r.ativado_em,
+    ativadoPorNome: r.ativado_por_nome,
+    acessoEm: r.acesso_em,
+    acessoPorNome: r.acesso_por_nome,
+    ignoradoEm: r.ignorado_em,
+    obs: r.obs,
   };
 }
 
@@ -65,12 +76,42 @@ export async function loadHmContagem(): Promise<Record<string, number>> {
   return out;
 }
 
-/** Baixa manual (libera/renova/quita/ignora) — grava em hm_liberacoes via fn_hm_baixar. */
-export async function baixarHm(compraId: string, acao: HmAcao, obs?: string): Promise<{ ok: boolean; msg?: string }> {
-  const { error } = await db().rpc('fn_hm_baixar', { p_compra_id: compraId, p_acao: acao, p_obs: obs ?? null });
+/** Turmas THB para o seletor / gestão (id, código, atual). */
+export async function loadTurmasThb(): Promise<TurmaThb[]> {
+  const { data, error } = await db().from('thb_turmas').select('id, codigo, atual').eq('tipo', 'thb').order('id', { ascending: false });
+  logQueryError('loadTurmasThb', error);
+  return (data as TurmaThb[]) ?? [];
+}
+
+type RpcResult = { ok: boolean; msg?: string };
+async function rpc(fn: string, args: Record<string, unknown>): Promise<RpcResult> {
+  const { error } = await db().rpc(fn, args);
   if (error) {
-    logQueryError('baixarHm', error);
+    logQueryError(fn, error);
     return { ok: false, msg: error.message };
   }
   return { ok: true };
 }
+
+/** Atribui turma ao aluno novo (grava em hm_liberacoes + write-back thb_alunos). */
+export const setTurmaHm = (compraId: string, turmaId: number) =>
+  rpc('fn_hm_set_turma', { p_compra_id: compraId, p_turma_id: turmaId });
+
+/** Marca/desmarca uma etapa (ativacao | acesso). */
+export const marcarEtapa = (compraId: string, etapa: HmEtapa, feito: boolean) =>
+  rpc('fn_hm_marcar_etapa', { p_compra_id: compraId, p_etapa: etapa, p_feito: feito });
+
+/** Ignora (ou desfaz) um item da fila. */
+export const ignorarHm = (compraId: string, obs?: string, desfazer = false) =>
+  rpc('fn_hm_ignorar', { p_compra_id: compraId, p_obs: obs ?? null, p_desfazer: desfazer });
+
+/** Marca sinal como quitado manualmente (move de "Aguardando diferença" para Liberações). */
+export const quitarManual = (compraId: string, feito = true) =>
+  rpc('fn_hm_quitar_manual', { p_compra_id: compraId, p_feito: feito });
+
+/** Define a turma THB atual (default do seletor de aluno novo). */
+export const setTurmaAtual = (turmaId: number) => rpc('fn_turma_set_atual', { p_turma_id: turmaId });
+
+/** Cria nova turma THB (opcionalmente já como atual). */
+export const criarTurma = (codigo: string, atual = false) =>
+  rpc('fn_turma_criar', { p_codigo: codigo, p_tipo: 'thb', p_atual: atual });

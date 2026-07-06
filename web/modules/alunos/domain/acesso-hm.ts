@@ -1,5 +1,6 @@
 // Domínio da fila de Acesso HM (Holding Masters) — liberações, renovações e
 // pendências de diferença. Espelha o retorno do RPC fn_hm_fila (SECURITY DEFINER).
+// Processo em duas etapas: ATIVAÇÃO (turma + matrícula) e LIBERAÇÃO DE ACESSO (Hotmart).
 
 export type HmBucket =
   | 'liberacoes'
@@ -8,7 +9,7 @@ export type HmBucket =
   | 'nao_classificado'
   | 'concluido';
 
-export type HmAcao = 'liberado' | 'renovado' | 'quitado_manual' | 'ignorado';
+export type HmEtapa = 'ativacao' | 'acesso';
 
 type BadgeTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
 
@@ -27,9 +28,21 @@ export interface HmFilaItem {
   bucket: HmBucket;
   jaEraAlunoHm: boolean;
   sinalQuitado: boolean;
-  baixaAcao: HmAcao | null;
-  baixadoEm: string | null;
-  baixadoPorNome: string | null;
+  needsAtivacao: boolean;
+  turmaId: number | null;
+  turmaCodigo: string | null;
+  ativadoEm: string | null;
+  ativadoPorNome: string | null;
+  acessoEm: string | null;
+  acessoPorNome: string | null;
+  ignoradoEm: string | null;
+  obs: string | null;
+}
+
+export interface TurmaThb {
+  id: number;
+  codigo: string;
+  atual: boolean;
 }
 
 /** Rótulo + tom (dot da Badge) por categoria de oferta. */
@@ -50,16 +63,20 @@ export const HM_BUCKETS: { key: HmBucket; label: string; icon: string; acionavel
   { key: 'concluido', label: 'Concluídos', icon: 'check-circle', acionavel: false },
 ];
 
-export const HM_ACAO_LABEL: Record<HmAcao, string> = {
-  liberado: 'Liberado',
-  renovado: 'Renovado',
-  quitado_manual: 'Quitado (manual)',
-  ignorado: 'Ignorado',
-};
-
 /** Buckets que somam no badge principal da aba (pendências acionáveis de acesso). */
 export const HM_BADGE_BUCKETS: HmBucket[] = ['liberacoes', 'renovacoes'];
 
 export function hmBadgeTotal(contagem: Record<string, number>): number {
   return HM_BADGE_BUCKETS.reduce((s, b) => s + (contagem[b] ?? 0), 0);
+}
+
+/** Etapas aplicáveis a um item: renovação/aluno existente só precisa de acesso;
+ *  aluno novo precisa de ativação (turma) + acesso. */
+export function etapasDoItem(item: HmFilaItem): HmEtapa[] {
+  return item.needsAtivacao ? ['ativacao', 'acesso'] : ['acesso'];
+}
+
+/** Turma obrigatória antes de ativar: aluno novo sem turma definida. */
+export function turmaPendente(item: HmFilaItem): boolean {
+  return item.needsAtivacao && item.turmaId == null;
 }
