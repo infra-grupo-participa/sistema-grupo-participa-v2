@@ -28,6 +28,7 @@ export function MultiSelect({ values, onChange, placeholder, options, className 
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
   const toggle = (val: string) => onChange(values.includes(val) ? values.filter((v) => v !== val) : [...values, val]);
+  const allSelected = options.length > 0 && values.length === options.length;
   const texto = values.length === 0 ? placeholder
     : values.length === 1 ? (options.find((o) => o.value === values[0])?.label ?? values[0])
     : `${values.length} selecionados`;
@@ -39,8 +40,15 @@ export function MultiSelect({ values, onChange, placeholder, options, className 
       </button>
       {open && (
         <div className="absolute left-0 z-30 mt-1 w-max min-w-full max-w-[280px] max-h-64 overflow-auto rounded-[var(--r-md)] border border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[var(--shadow-lg)] p-1">
-          {values.length > 0 && (
-            <button type="button" onClick={() => onChange([])} className="w-full text-left px-2 py-1 text-[11px] font-semibold text-[var(--accent)] hover:underline">Limpar seleção</button>
+          {options.length > 0 && (
+            <div className="flex items-center gap-3 px-2 py-1">
+              {!allSelected && (
+                <button type="button" onClick={() => onChange(options.map((o) => o.value))} className="text-[11px] font-semibold text-[var(--accent)] hover:underline">Selecionar todas</button>
+              )}
+              {values.length > 0 && (
+                <button type="button" onClick={() => onChange([])} className="text-[11px] font-semibold text-[var(--accent)] hover:underline">Limpar seleção</button>
+              )}
+            </div>
           )}
           {options.length === 0 && <div className="px-2 py-1.5 text-sm text-[var(--fg-3)]">Sem opções</div>}
           {options.map((o) => (
