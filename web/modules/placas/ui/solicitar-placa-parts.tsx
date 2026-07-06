@@ -6,6 +6,7 @@ import { Button, CopyField, Timeline, type TimelineEntry } from '@/shared/ui/com
 import { Icon } from '@/shared/ui/icons';
 import { getClientTrackingState, CLIENT_TRACKING_STEPS } from '../domain/client-tracking';
 import { buildGcalLink } from '../domain/agendamento';
+import { eligibleNivelRank, ELIGIBLE_NIVEL_ORDER } from '../domain/form-progress';
 
 export function Wrap({ children }: { children: React.ReactNode }) {
   return (
@@ -148,8 +149,12 @@ function fmtInterviewDate(iso: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function TrackingCard({ data }: { data: Record<string, unknown> }) {
+export function TrackingCard({ data, onRefazer, refazerBusy, error }: { data: Record<string, unknown>; onRefazer?: () => void; refazerBusy?: boolean; error?: string }) {
   const { activeIndex, rejected } = getClientTrackingState(data);
+  const concluido = String(data.status ?? '') === 'concluido';
+  // Só oferece refazer se houver nível elegível superior (topo = Diamante Vermelho não refaz).
+  const nivelRank = eligibleNivelRank(String(data.nivel ?? ''));
+  const podeRefazer = concluido && nivelRank >= 0 && nivelRank < ELIGIBLE_NIVEL_ORDER.length - 1;
   const rastreio = String(data.codigo_rastreio ?? '');
   const token = String(data.token ?? '');
   const entrevistaData = String(data.entrevista_data ?? '').slice(0, 10);
@@ -206,6 +211,19 @@ export function TrackingCard({ data }: { data: Record<string, unknown> }) {
         <p style={{ color: 'rgba(15,23,42,.75)' /* hex-ok: --ink com 75% sobre âmbar */ }}>{subtitulo}</p>
       </div>
       <div className="sp-card-body">
+        {podeRefazer && onRefazer && (
+          <div className="sp-sched sp-sched-set" style={{ marginBottom: 16 }}>
+            <div className="sp-sched-title"><Icon name="medal" size={17} /> Subiu de nível?</div>
+            <p className="sp-sched-desc">
+              Sua placa deste nível já foi concluída. Se você evoluiu para um nível superior, refaça o
+              processo para receber a placa do novo nível — seus dados de contato já ficam preenchidos.
+            </p>
+            <button type="button" className="sp-sched-cta" disabled={refazerBusy} onClick={onRefazer} style={refazerBusy ? { opacity: 0.7, cursor: 'wait' } : undefined}>
+              <Icon name="rotate" size={15} /> {refazerBusy ? 'Preparando…' : 'Refazer processo — subi de nível'}
+            </button>
+            {error && <p className="sp-err" style={{ marginTop: 8 }}>{error}</p>}
+          </div>
+        )}
         {inInterviewPhase && !hasInterview && (
           <div className="sp-sched">
             <div className="sp-sched-title"><Icon name="check-circle" size={17} /> Documentação aprovada!</div>

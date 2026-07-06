@@ -41,13 +41,21 @@ export function SolicitacaoDrawer({
   const [editando, setEditando] = useState(false);
   const [reprovacoes, setReprovacoes] = useState<data.Reprovacao[]>([]);
   const [histOpen, setHistOpen] = useState(false);
+  const [ciclos, setCiclos] = useState<data.Ciclo[]>([]);
   const step = sol.auditoria_step ?? -1;
+  const ciclo = sol.ciclo ?? 1;
 
   // Histórico de reprovações do aluno (append-only em thb_placas_reprovacoes).
   const carregarReprovacoes = useCallback(() => {
     data.loadReprovacoes(sol.id).then(setReprovacoes).catch(() => {});
   }, [sol.id]);
   useEffect(() => { carregarReprovacoes(); }, [carregarReprovacoes]);
+
+  // Histórico de ciclos concluídos (feature "refazer processo — subiu de nível").
+  useEffect(() => {
+    if (!sol.aluno_id) return;
+    data.loadCiclos(sol.aluno_id).then(setCiclos).catch(() => {});
+  }, [sol.aluno_id]);
   const dates = (auditoria?.dates as Record<string, string>) || {};
   const regular = isSolicitacaoRegularizacao(sol);
   const reenvioCompleto = regular && Boolean(sol.proof_url) && Boolean(sol.declaracao_url);
@@ -63,6 +71,8 @@ export function SolicitacaoDrawer({
         <>
           <NivelBadge nivel={sol.nivel} />
           <Badge tone={displayStatusTone(computeDisplayStatus(sol).cls)} dot>{computeDisplayStatus(sol).label}</Badge>
+          {ciclo > 1 && <Badge tone="info">Ciclo {ciclo}</Badge>}
+          {sol.nivel_anterior && <Badge tone="accent">Subiu de {DEFAULT_NIVEL_FAIXAS[sol.nivel_anterior]?.nm || sol.nivel_anterior}</Badge>}
           {sol.central_match === 'nenhum' && <Badge tone="danger">Sem registro na central · possível ex-aluno</Badge>}
           {(sol.central_match === 'email' || sol.central_match === 'documento') && <Badge tone="success">Vinculado à central</Badge>}
           {sol.admin_seen_at && <Badge tone="neutral">Visto</Badge>}
@@ -113,6 +123,30 @@ export function SolicitacaoDrawer({
               </div>
             </Panel>
           ) : null}
+
+          {ciclos.length > 0 && (
+            <Panel icon="medal" title={`Ciclos de placa concluídos (${ciclos.length})`} accent="var(--accent)">
+              <p className="text-xs text-[var(--fg-3)] mb-2">Este aluno já recebeu placa e refez o processo por evolução de nível. Cada ciclo abaixo é um snapshot imutável do processo concluído.</p>
+              <div className="space-y-2">
+                {ciclos.map((c) => (
+                  <div key={c.id} className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] p-3">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-[var(--fg)] inline-flex items-center gap-2">
+                        <span className="grid place-items-center w-5 h-5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] text-[10px] font-bold">{c.ciclo}</span>
+                        {DEFAULT_NIVEL_FAIXAS[c.nivel ?? '']?.nm || c.nivel || '—'}
+                      </span>
+                      {c.concluido_em && <span className="text-[11px] text-[var(--fg-3)]">{fmtDataHora(c.concluido_em)}</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-2 text-[11px]">
+                      {c.protocolo && <span className="rounded-[var(--r-sm)] bg-[var(--surface-4)] px-2 py-0.5 text-[var(--fg-2)] tabular">Protocolo: {c.protocolo}</span>}
+                      {(c.faturamento_comprovado ?? c.faturamento_declarado) != null && <span className="rounded-[var(--r-sm)] bg-[var(--surface-4)] px-2 py-0.5 text-[var(--fg-2)] tabular">{fmtBRL(c.faturamento_comprovado ?? c.faturamento_declarado)}</span>}
+                      {c.codigo_rastreio && <span className="rounded-[var(--r-sm)] bg-[var(--surface-4)] px-2 py-0.5 text-[var(--fg-2)] tabular">Rastreio: {c.codigo_rastreio}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
 
           {sol.codigo_rastreio && <CopyField label="Código de rastreio" value={sol.codigo_rastreio} />}
 

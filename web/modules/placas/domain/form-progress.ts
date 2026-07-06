@@ -18,6 +18,36 @@ export function isPlateEligible(nivel: string | null | undefined): boolean {
   return ['ouro', 'platina', 'diamante', 'diamante_vermelho'].includes(String(nivel ?? ''));
 }
 
+/**
+ * Ordem crescente dos níveis elegíveis (que emitem placa). Usada no fluxo "refazer processo":
+ * só um processo concluído (nível ≥ Ouro) pode ser refeito, e o novo nível precisa ser
+ * estritamente superior ao concluído. Índice = grau (0 = Ouro … 3 = Diamante Vermelho).
+ */
+export const ELIGIBLE_NIVEL_ORDER = ['ouro', 'platina', 'diamante', 'diamante_vermelho'] as const;
+
+/** Grau do nível elegível (0..3), ou -1 se não for elegível. */
+export function eligibleNivelRank(nivel: string | null | undefined): number {
+  return ELIGIBLE_NIVEL_ORDER.indexOf(String(nivel ?? '') as (typeof ELIGIBLE_NIVEL_ORDER)[number]);
+}
+
+/**
+ * O nível escolhido é válido para refazer sobre um piso `nivelAnterior` (o concluído)?
+ * Retorna null se ok, ou o motivo do bloqueio:
+ *  - 'nao_elegivel': nível abaixo de Ouro (refazer sempre visa subir para faixa com placa);
+ *  - 'nao_superior': nível igual ou inferior ao concluído (piso + inferiores ficam bloqueados).
+ */
+export function nivelRefazerBlockReason(
+  nivel: string | null | undefined,
+  nivelAnterior: string | null | undefined,
+): 'nao_elegivel' | 'nao_superior' | null {
+  const piso = eligibleNivelRank(nivelAnterior);
+  if (piso < 0) return null; // sem piso válido → não é um refazer; nada a bloquear
+  const alvo = eligibleNivelRank(nivel);
+  if (alvo < 0) return 'nao_elegivel';
+  if (alvo <= piso) return 'nao_superior';
+  return null;
+}
+
 /** Faturamento mínimo (R$) de cada nível elegível — coerência nível × valor declarado. */
 export const NIVEL_MIN_FATURAMENTO: Record<string, number> = {
   ouro: 50_000,
@@ -57,6 +87,8 @@ export interface FormState {
   step_index?: number | null;
   status?: string | null;
   nivel?: string | null;
+  /** Piso de bloqueio de nível ao refazer (setado só pela RPC fn_placas_refazer). */
+  nivel_anterior?: string | null;
   faturamento_declarado?: number | string | null;
   nome?: string | null;
   email?: string | null;
@@ -141,6 +173,13 @@ export function validateFormProgress(payload: FormState, existing?: FormState | 
   if (step >= 3) {
     const e = missing(state, ['espaco_instrucao', 'nivel'], 'missing_step3_field');
     if (e) return e;
+    // Refazer processo: se há piso (nivel_anterior), o novo nível precisa ser elegível E superior.
+    const nivelAnterior = String(state.nivel_anterior ?? '');
+    if (nivelAnterior && nivel) {
+      const motivo = nivelRefazerBlockReason(nivel, nivelAnterior);
+      if (motivo === 'nao_elegivel') return { code: 'refazer_nivel_nao_elegivel', field: nivelAnterior };
+      if (motivo === 'nao_superior') return { code: 'refazer_nivel_nao_superior', field: nivelAnterior };
+    }
     if (eligible) {
       if (!nonNegInt(state.faturamento_declarado)) return { code: 'missing_faturamento' };
       // Coerência nível × valor: bloqueia p.ex. Diamante com R$ 200k declarados.

@@ -52,6 +52,14 @@ export function progressErrorMessage(err: ProgressError): string {
     }
     case 'faturamento_acima_teto':
       return 'O faturamento informado parece incorreto (valor alto demais). Confira o número digitado — informe o valor em reais, sem centavos.';
+    case 'refazer_nivel_nao_elegivel':
+      return 'Para refazer o processo você precisa selecionar um nível a partir de Ouro (que emite placa).';
+    case 'refazer_nivel_nao_superior': {
+      const anterior = String(err.field ?? '');
+      return anterior
+        ? `Você já concluiu o nível ${NIVEL_NOME[anterior] ?? anterior}. Ao refazer, escolha um nível superior — este e os inferiores estão bloqueados.`
+        : 'Ao refazer, escolha um nível superior ao já concluído.';
+    }
     case 'missing_proof':
       return 'Envie o documento comprobatório.';
     case 'invalid_proof_url':

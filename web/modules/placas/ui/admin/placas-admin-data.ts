@@ -292,6 +292,31 @@ export async function loadReprovacoes(solId: string): Promise<Reprovacao[]> {
   return (data as Reprovacao[]) ?? [];
 }
 
+/** thb_placas_ciclos — snapshot imutável de cada ciclo concluído (arquivado ao refazer). */
+export interface Ciclo {
+  id: string;
+  ciclo: number;
+  nivel: string | null;
+  faturamento_declarado: number | null;
+  faturamento_comprovado: number | null;
+  protocolo: string | null;
+  codigo_rastreio: string | null;
+  espaco_instrucao: string | null;
+  concluido_em: string | null;
+  created_at: string;
+}
+
+/** Histórico de ciclos concluídos do aluno (mais recente primeiro). */
+export async function loadCiclos(alunoId: string): Promise<Ciclo[]> {
+  const { data, error } = await db()
+    .from('thb_placas_ciclos')
+    .select('id, ciclo, nivel, faturamento_declarado, faturamento_comprovado, protocolo, codigo_rastreio, espaco_instrucao, concluido_em, created_at')
+    .eq('aluno_id', alunoId)
+    .order('ciclo', { ascending: false });
+  logQueryError('loadCiclos', error);
+  return (data as Ciclo[]) ?? [];
+}
+
 /** Reenvia o e-mail de agendamento (docs_aprovados) — para aluno que perdeu o e-mail. */
 export async function reenviarEmailAgendamento(sol: Solicitacao): Promise<{ ok: boolean; msg: string }> {
   try {

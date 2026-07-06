@@ -5,7 +5,7 @@ import { createAdminSupabase } from '@/shared/infrastructure/supabase/admin-clie
 // Usa service_role (token UUID é a fronteira de segurança), como no PHP legado.
 
 const PUBLIC_FIELDS =
-  'id,token,status,step_index,auditoria_step,nome,email,telefone,turma,profissao,telefone_profissional,youtube_url,site_profissional,instagram_url,facebook_url,interesse,espaco_instrucao,nivel,faturamento_declarado,proof_url,declaracao_url,cep,logradouro,numero,complemento,bairro,cidade,estado_uf,pais,documento_nf,entrevista_data,entrevista_hora,entrevista_link,meet_link,codigo_rastreio,motivo_retorno,regularizacao_pendente';
+  'id,token,status,step_index,auditoria_step,nome,email,telefone,turma,profissao,telefone_profissional,youtube_url,site_profissional,instagram_url,facebook_url,interesse,espaco_instrucao,nivel,nivel_anterior,ciclo,faturamento_declarado,proof_url,declaracao_url,cep,logradouro,numero,complemento,bairro,cidade,estado_uf,pais,documento_nf,entrevista_data,entrevista_hora,entrevista_link,meet_link,codigo_rastreio,motivo_retorno,regularizacao_pendente';
 
 type Row = Record<string, unknown>;
 
@@ -60,6 +60,25 @@ export class SupabasePublicPlaca {
       .limit(1)
       .maybeSingle();
     return (data as Row) ?? null;
+  }
+
+  /**
+   * Refazer processo (subiu de nível): arquiva o ciclo concluído e reseta a MESMA linha
+   * (token/sessão preservados) via RPC atômica. Retorna a solicitação já resetada, ou um
+   * erro tipado. Só permitido para status 'concluido' (a RPC garante).
+   */
+  async refazer(token: string): Promise<{ ok: true; row: Row } | { ok: false; reason: string }> {
+    const { error } = await this.db.rpc('fn_placas_refazer', { p_token: token });
+    if (error) {
+      const msg = String(error.message ?? '');
+      if (msg.includes('nao_concluido')) return { ok: false, reason: 'nao_concluido' };
+      if (msg.includes('nivel_maximo')) return { ok: false, reason: 'nivel_maximo' };
+      if (msg.includes('nao_encontrada')) return { ok: false, reason: 'nao_encontrada' };
+      return { ok: false, reason: 'erro' };
+    }
+    const row = await this.loadByToken(token);
+    if (!row) return { ok: false, reason: 'nao_encontrada' };
+    return { ok: true, row };
   }
 
   async create(payload: Row): Promise<Row | null> {

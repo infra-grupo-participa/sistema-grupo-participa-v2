@@ -48,6 +48,12 @@ export async function placaRecover(email: string, documento_nf: string): Promise
   return r.ok && r.json ? r.json : { ok: false };
 }
 
+export async function placaRefazer(token: string): Promise<{ ok: boolean; solicitacao?: Record<string, unknown>; error?: string }> {
+  const r = await fetchJson<{ ok?: boolean; solicitacao?: Record<string, unknown>; error?: string }>('/api/placa', opts({ action: 'refazer', token }));
+  if (r.ok && r.json?.ok) return { ok: true, solicitacao: r.json.solicitacao };
+  return { ok: false, error: r.json?.error };
+}
+
 export async function placaUpload(token: string, kind: 'comprovante' | 'declaracao', file: File): Promise<string | null> {
   const fd = new FormData();
   fd.append('token', token);

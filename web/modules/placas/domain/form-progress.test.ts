@@ -3,6 +3,7 @@ import {
   faturamentoBlockReason,
   isPlateEligible,
   isTokenDocumentUrl,
+  nivelRefazerBlockReason,
   nivelSugeridoPorFaturamento,
   validateFormProgress,
 } from './form-progress';
@@ -113,5 +114,46 @@ describe('form-progress — coerência nível × faturamento declarado', () => {
     const e = validateFormProgress({ ...fullEligible, nivel: 'diamante', faturamento_declarado: 200_000, step_index: 3, status: 'rascunho' });
     expect(e).toEqual({ code: 'faturamento_abaixo_nivel', field: 'diamante' });
     expect(validateFormProgress({ ...fullEligible, step_index: 3, status: 'rascunho' })).toBeNull();
+  });
+});
+
+describe('form-progress — refazer processo (bloqueio de nível por piso)', () => {
+  it('sem piso não bloqueia nada', () => {
+    expect(nivelRefazerBlockReason('ouro', null)).toBeNull();
+    expect(nivelRefazerBlockReason('ouro', '')).toBeNull();
+    expect(nivelRefazerBlockReason('pessoal', 'profissional')).toBeNull(); // piso não-elegível é ignorado
+  });
+
+  it('bloqueia o nível igual e os inferiores ao concluído', () => {
+    expect(nivelRefazerBlockReason('ouro', 'ouro')).toBe('nao_superior'); // mesmo nível
+    expect(nivelRefazerBlockReason('ouro', 'platina')).toBe('nao_superior'); // inferior
+    expect(nivelRefazerBlockReason('platina', 'diamante')).toBe('nao_superior');
+  });
+
+  it('bloqueia descida para nível sem placa (abaixo de Ouro)', () => {
+    expect(nivelRefazerBlockReason('profissional', 'ouro')).toBe('nao_elegivel');
+    expect(nivelRefazerBlockReason('iniciante', 'platina')).toBe('nao_elegivel');
+  });
+
+  it('permite qualquer nível estritamente superior', () => {
+    expect(nivelRefazerBlockReason('platina', 'ouro')).toBeNull();
+    expect(nivelRefazerBlockReason('diamante', 'ouro')).toBeNull();
+    expect(nivelRefazerBlockReason('diamante_vermelho', 'diamante')).toBeNull();
+  });
+
+  it('piso no nível máximo bloqueia todos (nada é superior a Diamante Vermelho)', () => {
+    for (const n of ['ouro', 'platina', 'diamante', 'diamante_vermelho']) {
+      expect(nivelRefazerBlockReason(n, 'diamante_vermelho')).toBe('nao_superior');
+    }
+  });
+
+  it('validateFormProgress aplica o piso no step 3 (servidor)', () => {
+    const base = { ...fullEligible, step_index: 3, status: 'rascunho' };
+    // Concluiu Ouro → tentar Ouro de novo é bloqueado
+    expect(validateFormProgress({ ...base, nivel: 'ouro', nivel_anterior: 'ouro' })?.code).toBe('refazer_nivel_nao_superior');
+    // Concluiu Ouro → descer para Profissional (sem placa) é bloqueado
+    expect(validateFormProgress({ ...base, nivel: 'profissional', nivel_anterior: 'ouro' })?.code).toBe('refazer_nivel_nao_elegivel');
+    // Concluiu Ouro → subir para Platina passa (com faturamento coerente)
+    expect(validateFormProgress({ ...base, nivel: 'platina', faturamento_declarado: 500_000, nivel_anterior: 'ouro' })).toBeNull();
   });
 });

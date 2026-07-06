@@ -57,6 +57,10 @@ export interface Solicitacao {
   auditoria_step: number; // -1 = não iniciada; 0-6 = escala de auditoria
   status: string;
 
+  // Ciclos (feature "refazer processo — subiu de nível")
+  ciclo: number; // 1 = primeiro processo; incrementa a cada refazer
+  nivel_anterior: string | null; // piso de bloqueio de nível no ciclo atual (null fora de um refazer)
+
   // Regularização / fila do admin
   motivo_retorno: string | null;
   regularizacao_pendente: boolean | null;
@@ -88,6 +92,25 @@ export interface Auditoria {
   protocolo: string | null;
   criado_em: string | null;
   atualizado_em: string | null;
+}
+
+/** thb_placas_ciclos — snapshot imutável de cada ciclo concluído (arquivado ao refazer). */
+export interface Ciclo {
+  id: string;
+  solicitacao_id: string | null;
+  aluno_id: string | null;
+  ciclo: number;
+  nivel: string | null;
+  faturamento_declarado: number | null; // bigint
+  faturamento_comprovado: number | null; // bigint
+  protocolo: string | null;
+  codigo_rastreio: string | null;
+  turma: string | null;
+  espaco_instrucao: string | null;
+  dates: Record<string, string>;
+  endereco: Record<string, string | null> | null;
+  concluido_em: string | null;
+  created_at: string;
 }
 
 /** thb_horarios_disponiveis — slots por data (recorrência por slot_data). */

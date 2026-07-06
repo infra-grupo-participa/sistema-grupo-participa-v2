@@ -498,6 +498,24 @@
 .sp-level[data-nivel='diamante'] { --lv: #0891b2; --lv-soft: rgba(8, 145, 178, 0.14); }
 .sp-level[data-nivel='diamante_vermelho'] { --lv: #dc2626; --lv-soft: rgba(220, 38, 38, 0.14); }
 
+/* Nível bloqueado (refazer processo — nível concluído e inferiores) */
+.sp-level-locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+}
+.sp-level-locked:hover {
+  border-color: var(--line-2);
+}
+.sp-level-lock {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
 /* Avisos */
 .sp-info,
 .sp-warn {

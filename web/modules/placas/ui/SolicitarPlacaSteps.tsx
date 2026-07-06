@@ -8,7 +8,7 @@ import { maskPhoneMobile, maskPhoneLandline, maskDoc, maskCurrency, currencyDigi
 import { INTERESSES, UFS, TURMAS, type Form } from './solicitar-placa-constants';
 import { Section, Field, Nav } from './solicitar-placa-parts';
 import { ProfissaoAutocomplete } from './ProfissaoAutocomplete';
-import { faturamentoBlockReason, NIVEL_MIN_FATURAMENTO, nivelSugeridoPorFaturamento } from '../domain/form-progress';
+import { faturamentoBlockReason, NIVEL_MIN_FATURAMENTO, nivelSugeridoPorFaturamento, nivelRefazerBlockReason } from '../domain/form-progress';
 
 /** Feedback em tempo real da coerência nível × faturamento declarado (a validação dura fica no goNext/servidor). */
 function FaturamentoCoerencia({ nivel, valor, niveis }: { nivel?: string; valor: number; niveis: { v: string; nm: string }[] }) {
@@ -53,12 +53,14 @@ export interface StepProps {
   onRecover: () => void;
   espacos: { v: string; l: string }[];
   niveis: { v: string; ic: string; nm: string; fx: string }[];
+  /** Piso de bloqueio de nível (refazer): este nível e os inferiores ficam travados. '' fora de um refazer. */
+  nivelAnterior?: string;
   uploadInfo: string;
   cadastroInfo: string;
 }
 
 export function StepContent(p: StepProps) {
-  const { step, form, set, err, busy, dup, eligible, checkDup, onCep, cepStatus, onUpload, goNext, goBack, onRecover, espacos, niveis, uploadInfo, cadastroInfo } = p;
+  const { step, form, set, err, busy, dup, eligible, checkDup, onCep, cepStatus, onUpload, goNext, goBack, onRecover, espacos, niveis, nivelAnterior, uploadInfo, cadastroInfo } = p;
 
   if (step === 1) {
     return (
@@ -118,13 +120,28 @@ export function StepContent(p: StepProps) {
         </div>
         <div className="sp-info">Considere todos os ativos gerados trabalhando com Holding Familiar, incluindo Sessões de Viabilidade, Croquis Estruturais e outros serviços relacionados ao tema.</div>
         <div className="sp-field"><label>Nível atual <span className="req">*</span></label>
+          {nivelAnterior && (
+            <div className="sp-hint sp-hint-warn" style={{ marginTop: 0, marginBottom: 8 }}>
+              Você já concluiu o nível <strong>{niveis.find((n) => n.v === nivelAnterior)?.nm ?? nivelAnterior}</strong>. Selecione um nível superior — os demais estão bloqueados.
+            </div>
+          )}
           <div className="sp-level-grid">
-            {niveis.map((o) => (
-              <label key={o.v} data-nivel={o.v} className={`sp-level ${form.nivel === o.v ? 'sel' : ''}`}>
-                <input type="radio" name="nivel" value={o.v} checked={form.nivel === o.v} onChange={() => set('nivel', o.v)} className="sr-only" />
-                <div className="ic"><Icon name={o.ic} size={22} /></div><div className="nm">{o.nm}</div><div className="fx">{o.fx}</div>
-              </label>
-            ))}
+            {niveis.map((o) => {
+              const bloqueado = Boolean(nivelAnterior) && nivelRefazerBlockReason(o.v, nivelAnterior) !== null;
+              return (
+                <label
+                  key={o.v}
+                  data-nivel={o.v}
+                  aria-disabled={bloqueado}
+                  className={`sp-level ${form.nivel === o.v ? 'sel' : ''} ${bloqueado ? 'sp-level-locked' : ''}`}
+                  title={bloqueado ? 'Nível bloqueado — escolha um nível superior ao já concluído.' : undefined}
+                >
+                  <input type="radio" name="nivel" value={o.v} checked={form.nivel === o.v} disabled={bloqueado} onChange={() => { if (!bloqueado) set('nivel', o.v); }} className="sr-only" />
+                  {bloqueado && <span className="sp-level-lock"><Icon name="lock" size={13} /></span>}
+                  <div className="ic"><Icon name={o.ic} size={22} /></div><div className="nm">{o.nm}</div><div className="fx">{o.fx}</div>
+                </label>
+              );
+            })}
           </div>
         </div>
         {eligible && (

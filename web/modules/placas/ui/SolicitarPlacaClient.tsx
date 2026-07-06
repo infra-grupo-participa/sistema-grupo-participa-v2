@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Modal } from '@/shared/ui/components';
 import './solicitar-placa.css';
 import { maskCep, maskCurrency, maskDoc } from './masks';
-import { cepLookup, placaDuplicateCheck, placaGet, placaRecover, placaSave, placaUpload } from './placa-api';
-import { isPlateEligible, faturamentoBlockReason, NIVEL_MIN_FATURAMENTO } from '../domain/form-progress';
+import { cepLookup, placaDuplicateCheck, placaGet, placaRecover, placaRefazer, placaSave, placaUpload } from './placa-api';
+import { isPlateEligible, faturamentoBlockReason, NIVEL_MIN_FATURAMENTO, nivelRefazerBlockReason } from '../domain/form-progress';
 
 const NIVEL_NOME: Record<string, string> = {
   ouro: 'Ouro',
@@ -68,7 +68,7 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
     for (const k of [
       'nome', 'email', 'telefone', 'documento_nf', 'turma', 'profissao', 'telefone_profissional',
       'youtube_url', 'site_profissional', 'instagram_url', 'facebook_url', 'interesse', 'espaco_instrucao',
-      'nivel', 'proof_url', 'declaracao_url', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado_uf',
+      'nivel', 'nivel_anterior', 'proof_url', 'declaracao_url', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado_uf',
     ]) {
       if (sol[k] != null) f[k] = String(sol[k]);
     }
@@ -138,6 +138,15 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
     if (n === 2 && !form.interesse) return 'Selecione uma opção.';
     if (n === 3) {
       if (!form.espaco_instrucao || !form.nivel) return 'Selecione o espaço de instrução e o nível.';
+      // Refazer: o novo nível precisa ser superior ao concluído (piso = nivel_anterior).
+      if (form.nivel_anterior) {
+        const motivo = nivelRefazerBlockReason(form.nivel, form.nivel_anterior);
+        if (motivo === 'nao_elegivel') return 'Para refazer, selecione um nível a partir de Ouro (que emite placa).';
+        if (motivo === 'nao_superior') {
+          const nomeAnt = NIVEL_NOME[form.nivel_anterior] ?? form.nivel_anterior;
+          return `Você já concluiu o nível ${nomeAnt}. Escolha um nível superior — este e os inferiores estão bloqueados.`;
+        }
+      }
       if (eligible && !form.faturamento_declarado) return 'Informe o faturamento declarado.';
       if (eligible && form.faturamento_declarado) {
         // Coerência nível × valor (mesma regra do servidor): Diamante com R$ 200k não passa.
@@ -268,6 +277,34 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
     return () => clearInterval(id);
   }, [view, token]);
 
+  // ── Refazer processo (subiu de nível) — só para status 'concluido' ──
+  const [refazerBusy, setRefazerBusy] = useState(false);
+  const [refazerConfirm, setRefazerConfirm] = useState(false);
+  async function doRefazer() {
+    if (!token || refazerBusy) return;
+    setErr('');
+    setRefazerBusy(true);
+    const r = await placaRefazer(token);
+    setRefazerBusy(false);
+    if (!r.ok || !r.solicitacao) {
+      setErr(r.error || 'Não foi possível iniciar um novo processo. Tente novamente.');
+      return;
+    }
+    setRefazerConfirm(false);
+    const sol = r.solicitacao as Record<string, unknown>;
+    // Novo ciclo: zera o form e re-hidrata só a identidade/endereço; nível e documentos
+    // do ciclo anterior NÃO são herdados (o aluno reescolhe um nível superior).
+    setForm({ pais: 'Brasil', faturamento_fmt: '' });
+    hydrate(sol);
+    setForm((f) => ({ ...f, nivel: '', faturamento_declarado: '', faturamento_fmt: '', proof_url: '', declaracao_url: '' }));
+    setTracking(null);
+    setRetorno('');
+    setResumed(false);
+    setDup({ email: false, documento_nf: false });
+    setStep(1);
+    setView('form');
+  }
+
   // ── Recover session (manual — fallback quando o documento não confere) ──
   const [recoverOpen, setRecoverOpen] = useState(false);
   const [recoverEmail, setRecoverEmail] = useState('');
@@ -294,7 +331,40 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
   if (view === 'loading') return <Wrap><div className="sp-card"><div className="sp-card-body">Carregando…</div></div></Wrap>;
   if (view === 'success') return <Wrap><SuccessCard kind="success" token={token} /></Wrap>;
   if (view === 'cadastro') return <Wrap><SuccessCard kind="cadastro" /></Wrap>;
-  if (view === 'tracking' && tracking) return <Wrap><TrackingCard data={tracking} /></Wrap>;
+  if (view === 'tracking' && tracking) {
+    const nivelConcl = String(tracking.nivel ?? '');
+    const nomeConcl = NIVEL_NOME[nivelConcl] ?? nivelConcl;
+    return (
+      <Wrap>
+        <TrackingCard data={tracking} onRefazer={() => { setErr(''); setRefazerConfirm(true); }} refazerBusy={refazerBusy} error={err} />
+        {refazerConfirm && (
+          <Modal
+            open={refazerConfirm}
+            onClose={() => { if (!refazerBusy) { setRefazerConfirm(false); setErr(''); } }}
+            title="Refazer o processo?"
+            width="max-w-md"
+            footer={
+              <>
+                <Button type="button" variant="ghost" onClick={() => { setRefazerConfirm(false); setErr(''); }} disabled={refazerBusy}>Cancelar</Button>
+                <Button type="button" variant="primary" onClick={doRefazer} disabled={refazerBusy}>{refazerBusy ? 'Preparando…' : 'Sim, refazer processo'}</Button>
+              </>
+            }
+          >
+            <p className="text-sm text-[var(--fg-2)] leading-relaxed">
+              Você concluiu a placa no nível <strong>{nomeConcl || 'atual'}</strong>. Ao refazer, um novo processo começa
+              para um nível <strong>superior</strong> — este nível e os inferiores ficam bloqueados.
+            </p>
+            <ul className="text-sm text-[var(--fg-2)] leading-relaxed mt-3 space-y-1.5 list-disc pl-5">
+              <li>O histórico da sua placa atual é <strong>preservado</strong>.</li>
+              <li>Você precisará enviar novamente a <strong>comprovação</strong> e a <strong>declaração</strong> do novo nível.</li>
+              <li>Seus dados de contato e endereço já ficam preenchidos.</li>
+            </ul>
+            {err && <p className="sp-err" style={{ marginTop: 12 }}>{err}</p>}
+          </Modal>
+        )}
+      </Wrap>
+    );
+  }
 
   return (
     <Wrap>
@@ -305,9 +375,18 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
           <p className="mt-2 text-xs">Corrija os pontos indicados e envie novamente.</p>
         </Banner>
       )}
-      {resumed && !retorno && (
+      {resumed && !retorno && !form.nivel_anterior && (
         <Banner tone="info" title="Continuamos de onde você parou" onClose={() => setResumed(false)}>
           <p>Seus dados foram recuperados. Revise e siga o preenchimento.</p>
+        </Banner>
+      )}
+      {form.nivel_anterior && !retorno && (
+        <Banner tone="info" title="Novo processo — você subiu de nível 🎉">
+          <p>
+            No ciclo anterior você concluiu no nível <strong>{NIVEL_NOME[form.nivel_anterior] ?? form.nivel_anterior}</strong>.
+            Refaça o processo normalmente — na etapa <strong>Seu nível</strong>, escolha um nível <strong>superior</strong>:
+            o anterior e os inferiores ficam bloqueados.
+          </p>
         </Banner>
       )}
 
@@ -331,6 +410,7 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
           onRecover={abrirRecover}
           espacos={ESPACOS_CFG}
           niveis={NIVEIS_CFG}
+          nivelAnterior={form.nivel_anterior || ''}
           uploadInfo={UPLOAD_INFO}
           cadastroInfo={CADASTRO_INFO}
         />

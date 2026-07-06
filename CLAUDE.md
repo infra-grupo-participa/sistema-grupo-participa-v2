@@ -239,8 +239,28 @@ Solicitações de placa via formulário público. Uma linha por aluno, identific
 - `documento_nf`, `email_entrega`
 - `step_index` (0–9), `status` (`rascunho`|`enviado`|`em_auditoria`|`docs_aprovados`|`concluido`|`rejeitado`)
 - `entrevista_data`, `entrevista_hora`, `entrevista_link`, `meet_link`
+- `ciclo` (smallint, default 1), `nivel_anterior` (piso de bloqueio ao refazer) — ver "Refazer processo" abaixo
 - **RLS desabilitado** — acesso público controlado pelo token UUID
 - Ver detalhes completos em `docs/prd-placas.md`
+
+### `thb_placas_ciclos`
+Snapshot **imutável** de cada ciclo de placa concluído (arquivado ao refazer). Uma linha por conclusão.
+- `solicitacao_id`, `aluno_id`, `ciclo`, `nivel`, `faturamento_declarado`, `faturamento_comprovado`
+- `protocolo`, `codigo_rastreio`, `turma`, `espaco_instrucao`, `dates` (jsonb), `endereco` (jsonb), `concluido_em`
+- **RLS ativo**: SELECT para `authenticated`; escrita só via `fn_placas_refazer` (SECURITY DEFINER) / service_role
+
+### Refazer processo — "subiu de nível" (feature dentro de Placas)
+Aluno com placa **`concluido`** (nível ≥ Ouro) pode refazer o processo por evolução de nível:
+- Gatilho: CTA na tela de acompanhamento pública (`TrackingCard`) → `POST /api/placa` action `refazer`.
+- **RPC atômica `fn_placas_refazer(p_token uuid)`** (SECURITY DEFINER, espelha `fn_placas_reprovar`):
+  faz snapshot em `thb_placas_ciclos` **antes** do reset destrutivo da **mesma linha** (token/sessão/cookie
+  preservados → o relatório continua associado à pessoa). Reseta solicitação p/ `rascunho`, incrementa `ciclo`,
+  grava `nivel_anterior` (= nível concluído) e reseta a auditoria. `nivel_resultado` do aluno só muda quando a
+  nova placa conclui (trigger `fn_sync_placa_nivel`, em `encerrado` false→true).
+- **Bloqueio de nível**: `nivelRefazerBlockReason()` (domínio `form-progress.ts`) trava o nível concluído e
+  todos os inferiores; só permite nível elegível **estritamente superior**. Validado no client (`validStep` /
+  step 3 com `sp-level-locked`) **e** no servidor (`validateFormProgress` via `nivel_anterior` de `existing`).
+- Admin vê badge "Ciclo N" + "Subiu de {nível}" e o painel "Ciclos de placa concluídos" no drawer.
 
 ### `thb_horarios_disponiveis`
 Slots de entrevista configurados pelo admin. Recorrência semanal.
