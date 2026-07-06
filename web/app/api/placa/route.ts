@@ -160,7 +160,12 @@ export async function POST(request: NextRequest) {
 
   const existing = await gateway.loadByToken(token);
   if (!existing) return clearPlacaCookie(jsonError('Não foi possível concluir a operação.', 404));
-  if (['rejeitado', 'concluido'].includes(String(existing.status ?? ''))) return jsonError('Não foi possível concluir a operação.', 409);
+  // Estados terminais só reabrem via RPC de refazer (fn_placas_refazer), que grava o piso
+  // nivel_anterior. Bloquear a escrita direta aqui impede burlar o bloqueio de nível: sem
+  // isso, uma chamada crua poderia re-salvar um cadastro_concluido sem passar pelo refazer.
+  if (['rejeitado', 'concluido', 'cadastro_concluido'].includes(String(existing.status ?? ''))) {
+    return jsonError('Não foi possível concluir a operação.', 409);
+  }
 
   const perr = validateFormProgress({ ...payload, token }, existing);
   if (perr) return jsonError(progressErrorMessage(perr), 422);

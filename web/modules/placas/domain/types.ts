@@ -100,6 +100,8 @@ export interface Ciclo {
   solicitacao_id: string | null;
   aluno_id: string | null;
   ciclo: number;
+  /** 'placa' (placa recebida) | 'cadastro' (registro < Ouro, sem placa). */
+  tipo: string;
   nivel: string | null;
   faturamento_declarado: number | null; // bigint
   faturamento_comprovado: number | null; // bigint

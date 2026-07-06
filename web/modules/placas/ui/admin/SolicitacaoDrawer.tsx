@@ -51,11 +51,11 @@ export function SolicitacaoDrawer({
   }, [sol.id]);
   useEffect(() => { carregarReprovacoes(); }, [carregarReprovacoes]);
 
-  // Histórico de ciclos concluídos (feature "refazer processo — subiu de nível").
+  // Histórico de ciclos (placa + cadastro) — feature "refazer / subiu de nível".
+  // Carrega por solicitacao_id (linha estável) p/ cobrir também o cadastro sem aluno_id.
   useEffect(() => {
-    if (!sol.aluno_id) return;
-    data.loadCiclos(sol.aluno_id).then(setCiclos).catch(() => {});
-  }, [sol.aluno_id]);
+    data.loadCiclos(sol.id).then(setCiclos).catch(() => {});
+  }, [sol.id]);
   const dates = (auditoria?.dates as Record<string, string>) || {};
   const regular = isSolicitacaoRegularizacao(sol);
   const reenvioCompleto = regular && Boolean(sol.proof_url) && Boolean(sol.declaracao_url);
@@ -125,25 +125,32 @@ export function SolicitacaoDrawer({
           ) : null}
 
           {ciclos.length > 0 && (
-            <Panel icon="medal" title={`Ciclos de placa concluídos (${ciclos.length})`} accent="var(--accent)">
-              <p className="text-xs text-[var(--fg-3)] mb-2">Este aluno já recebeu placa e refez o processo por evolução de nível. Cada ciclo abaixo é um snapshot imutável do processo concluído.</p>
+            <Panel icon="medal" title={`Histórico de níveis (${ciclos.length})`} accent="var(--accent)">
+              <p className="text-xs text-[var(--fg-3)] mb-2">Cada linha é um snapshot imutável de um ciclo anterior — placa recebida ou cadastro registrado — antes de o aluno refazer por evolução de nível.</p>
               <div className="space-y-2">
-                {ciclos.map((c) => (
-                  <div key={c.id} className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] p-3">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-[var(--fg)] inline-flex items-center gap-2">
-                        <span className="grid place-items-center w-5 h-5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] text-[10px] font-bold">{c.ciclo}</span>
-                        {DEFAULT_NIVEL_FAIXAS[c.nivel ?? '']?.nm || c.nivel || '—'}
-                      </span>
-                      {c.concluido_em && <span className="text-[11px] text-[var(--fg-3)]">{fmtDataHora(c.concluido_em)}</span>}
+                {ciclos.map((c) => {
+                  const ehPlaca = c.tipo === 'placa';
+                  const fat = c.faturamento_comprovado ?? c.faturamento_declarado;
+                  return (
+                    <div key={c.id} className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] p-3">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-[var(--fg)] inline-flex items-center gap-2">
+                          <span className="grid place-items-center w-5 h-5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] text-[10px] font-bold">{c.ciclo}</span>
+                          {DEFAULT_NIVEL_FAIXAS[c.nivel ?? '']?.nm || c.nivel || '—'}
+                          <Badge tone={ehPlaca ? 'success' : 'neutral'}>{ehPlaca ? 'Placa' : 'Cadastro'}</Badge>
+                        </span>
+                        {c.concluido_em && <span className="text-[11px] text-[var(--fg-3)]">{fmtDataHora(c.concluido_em)}</span>}
+                      </div>
+                      {ehPlaca && (
+                        <div className="flex flex-wrap gap-2 mt-2 text-[11px]">
+                          {c.protocolo && <span className="rounded-[var(--r-sm)] bg-[var(--surface-4)] px-2 py-0.5 text-[var(--fg-2)] tabular">Protocolo: {c.protocolo}</span>}
+                          {fat != null && <span className="rounded-[var(--r-sm)] bg-[var(--surface-4)] px-2 py-0.5 text-[var(--fg-2)] tabular">{fmtBRL(fat)}</span>}
+                          {c.codigo_rastreio && <span className="rounded-[var(--r-sm)] bg-[var(--surface-4)] px-2 py-0.5 text-[var(--fg-2)] tabular">Rastreio: {c.codigo_rastreio}</span>}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex flex-wrap gap-2 mt-2 text-[11px]">
-                      {c.protocolo && <span className="rounded-[var(--r-sm)] bg-[var(--surface-4)] px-2 py-0.5 text-[var(--fg-2)] tabular">Protocolo: {c.protocolo}</span>}
-                      {(c.faturamento_comprovado ?? c.faturamento_declarado) != null && <span className="rounded-[var(--r-sm)] bg-[var(--surface-4)] px-2 py-0.5 text-[var(--fg-2)] tabular">{fmtBRL(c.faturamento_comprovado ?? c.faturamento_declarado)}</span>}
-                      {c.codigo_rastreio && <span className="rounded-[var(--r-sm)] bg-[var(--surface-4)] px-2 py-0.5 text-[var(--fg-2)] tabular">Rastreio: {c.codigo_rastreio}</span>}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </Panel>
           )}

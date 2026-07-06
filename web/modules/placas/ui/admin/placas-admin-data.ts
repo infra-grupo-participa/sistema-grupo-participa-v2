@@ -303,6 +303,7 @@ export async function loadReprovacoes(solId: string): Promise<Reprovacao[]> {
 export interface Ciclo {
   id: string;
   ciclo: number;
+  tipo: string; // 'placa' | 'cadastro'
   nivel: string | null;
   faturamento_declarado: number | null;
   faturamento_comprovado: number | null;
@@ -313,12 +314,16 @@ export interface Ciclo {
   created_at: string;
 }
 
-/** Histórico de ciclos concluídos do aluno (mais recente primeiro). */
-export async function loadCiclos(alunoId: string): Promise<Ciclo[]> {
+/**
+ * Histórico de ciclos (placa + cadastro) da solicitação, mais recente primeiro.
+ * Consulta por solicitacao_id (a linha/token é estável entre ciclos) — cobre também o
+ * cadastro < Ouro, que pode não ter aluno_id vinculado.
+ */
+export async function loadCiclos(solicitacaoId: string): Promise<Ciclo[]> {
   const { data, error } = await db()
     .from('thb_placas_ciclos')
-    .select('id, ciclo, nivel, faturamento_declarado, faturamento_comprovado, protocolo, codigo_rastreio, espaco_instrucao, concluido_em, created_at')
-    .eq('aluno_id', alunoId)
+    .select('id, ciclo, tipo, nivel, faturamento_declarado, faturamento_comprovado, protocolo, codigo_rastreio, espaco_instrucao, concluido_em, created_at')
+    .eq('solicitacao_id', solicitacaoId)
     .order('ciclo', { ascending: false });
   logQueryError('loadCiclos', error);
   return (data as Ciclo[]) ?? [];
