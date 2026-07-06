@@ -9,7 +9,18 @@ import {
   isSlotSelectable,
   rescheduleBlockReason,
   resolveAuditStep,
+  stampBrDateTime,
 } from './agendamento';
+
+describe('agendamento — stampBrDateTime', () => {
+  it('formata data ISO + hora em dd/mm/aaaa HH:MM (carimbo durável da auditoria)', () => {
+    expect(stampBrDateTime('2026-06-01', '13:30')).toBe('01/06/2026 13:30');
+  });
+
+  it('tolera hora com segundos e normaliza para HH:MM', () => {
+    expect(stampBrDateTime('2026-07-17', '10:30:00')).toBe('17/07/2026 10:30');
+  });
+});
 
 describe('agendamento — buildGcalLink', () => {
   it('gera datas em wall-time de São Paulo com ctz e fim +1h', () => {

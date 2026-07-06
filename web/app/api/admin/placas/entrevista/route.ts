@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     });
     return jsonError('Não foi possível salvar o agendamento.', 502);
   }
-  if (sol.aluno_id) await agenda.syncAuditoriaStep(String(sol.aluno_id), 2);
+  if (sol.aluno_id) await agenda.syncAuditoriaStep(String(sol.aluno_id), 2, { data, hora });
 
   if (enviarEmail) {
     const to = safeEmail(String(sol.email ?? ''));

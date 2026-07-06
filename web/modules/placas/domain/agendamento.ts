@@ -45,6 +45,17 @@ export function buildSlotStart(date?: string | null, time?: string | null): Date
   return Number.isNaN(start.getTime()) ? null : start;
 }
 
+/**
+ * Carimbo "dd/mm/aaaa HH:MM" do horário da entrevista, para gravar em thb_placas_auditoria.dates.
+ * Mantém a MESMA representação que o restante do histórico de auditoria usa (avancarEtapa/nowBr),
+ * tornando o agendamento durável na auditoria — recuperável mesmo se entrevista_data for limpo depois.
+ */
+export function stampBrDateTime(data: string, hora: string): string {
+  const d = String(data || '').slice(0, 10);
+  const t = String(hora || '').slice(0, 5);
+  return `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)} ${t}`;
+}
+
 export type RescheduleBlock =
   | 'status_invalido' // status diferente de docs_aprovados (agendar exige documentação aprovada)
   | 'entrevista_finalizada' // auditStep >= 3

@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
       });
       return jsonError('Não foi possível concluir a operação.', 502);
     }
-    if (sol.aluno_id) await agenda.syncAuditoriaStep(String(sol.aluno_id), 2);
+    if (sol.aluno_id) await agenda.syncAuditoriaStep(String(sol.aluno_id), 2, { data, hora });
 
     // Notifica admin (melhor-esforço).
     const adminEmail = process.env.ADMIN_EMAIL || 'contato@grupoparticipa.app.br';

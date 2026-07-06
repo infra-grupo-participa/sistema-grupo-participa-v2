@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminSupabase } from '@/shared/infrastructure/supabase/admin-client';
 import type { AgendamentoRow } from '../domain/agendamento';
+import { stampBrDateTime } from '../domain/agendamento';
 
 // Gateway de agendamento (público, service_role) — porta de hold-horario.php + confirm-horario.php.
 
@@ -73,8 +74,27 @@ export class SupabaseAgenda {
     return { ok: !error, conflict: error?.code === '23505' };
   }
 
-  async syncAuditoriaStep(alunoId: string, step: number): Promise<void> {
-    await this.db.from('thb_placas_auditoria').update({ step_index: step }).eq('aluno_id', alunoId);
+  /**
+   * Sincroniza a etapa da auditoria e, quando é a etapa de ENTREVISTA AGENDADA (2), grava um
+   * carimbo DURÁVEL em `dates.entrevista_agendada`. Sem esse carimbo o agendamento vivia só em
+   * thb_placas_solicitacoes.entrevista_data (campo mutável): qualquer limpeza posterior (no-show,
+   * cancelamento ou recompute em massa da auditoria) apagava a entrevista das tabelas principais,
+   * sobrando apenas nos logs append-only. O carimbo preserva a prova no próprio histórico.
+   */
+  async syncAuditoriaStep(alunoId: string, step: number, entrevista?: { data: string; hora: string }): Promise<void> {
+    const patch: Record<string, unknown> = { step_index: step };
+    if (entrevista?.data && entrevista?.hora) {
+      const { data: aud } = await this.db
+        .from('thb_placas_auditoria')
+        .select('dates')
+        .eq('aluno_id', alunoId)
+        .maybeSingle();
+      patch.dates = {
+        ...((aud?.dates as Record<string, string>) || {}),
+        entrevista_agendada: stampBrDateTime(entrevista.data, entrevista.hora),
+      };
+    }
+    await this.db.from('thb_placas_auditoria').update(patch).eq('aluno_id', alunoId);
   }
 
   async log(entry: {
