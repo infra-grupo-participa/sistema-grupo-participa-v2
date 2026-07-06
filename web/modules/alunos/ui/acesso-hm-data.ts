@@ -13,6 +13,7 @@ interface FilaRow {
   nome: string | null;
   email: string | null;
   telefone: string | null;
+  documento: string | null;
   offer_code: string | null;
   oferta_label: string | null;
   categoria: string | null;
@@ -36,6 +37,7 @@ function mapRow(r: FilaRow): HmFilaItem {
     nome: r.nome,
     email: r.email,
     telefone: r.telefone,
+    documento: r.documento,
     offerCode: r.offer_code,
     ofertaLabel: r.oferta_label,
     categoria: r.categoria,

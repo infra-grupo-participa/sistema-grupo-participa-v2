@@ -13,6 +13,7 @@ export interface HmFilaItem {
   nome: string | null;
   email: string | null;
   telefone: string | null;
+  documento: string | null;
   offerCode: string | null;
   ofertaLabel: string | null;
   categoria: string | null;
@@ -59,4 +60,15 @@ export function hmBadgeTotal(contagem: Record<string, number>): number {
 /** Turma obrigatória antes de liberar: aluno novo sem turma definida. */
 export function turmaPendente(item: HmFilaItem): boolean {
   return item.alunoNovo && item.turmaId == null;
+}
+
+/** Bloco de dados do aluno para cadastro manual na área de membros (compra e renovação). */
+export function dadosAreaMembros(item: HmFilaItem): string {
+  return [
+    `Nome: ${item.nome ?? '—'}`,
+    `E-mail: ${item.email ?? '—'}`,
+    `Telefone: ${item.telefone ?? '—'}`,
+    `CPF/CNPJ: ${item.documento ?? '—'}`,
+    item.turmaCodigo ? `Turma: ${item.turmaCodigo}` : null,
+  ].filter(Boolean).join('\n');
 }

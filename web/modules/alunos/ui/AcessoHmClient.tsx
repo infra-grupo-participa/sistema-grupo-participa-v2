@@ -8,6 +8,7 @@ import {
   HM_BUCKETS,
   HM_CATEGORIA_LABEL,
   turmaPendente,
+  dadosAreaMembros,
 } from '../domain/acesso-hm';
 import {
   loadHmFila,
@@ -96,6 +97,10 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
     run(item.compraId, () => liberarHm(item.compraId, true), 'Acesso liberado.');
   }
 
+  function copiarDados(item: HmFilaItem) {
+    navigator.clipboard?.writeText(dadosAreaMembros(item)).then(() => flash('Dados copiados para a área de membros.'));
+  }
+
   async function gerirTurmaAtual(id: number) { await run('turmas', () => setTurmaAtual(id), 'Turma atual atualizada.'); }
   async function gerirCriarTurma() {
     const codigo = novaTurma.trim();
@@ -114,7 +119,7 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
           </div>
         }
       >
-        Acesso Holding Masters
+        Liberação Holding Masters
       </SectionTitle>
       <p className="text-xs text-[var(--fg-3)] -mt-1 mb-3">Compras e renovações do HM que precisam de liberação manual do acesso. Novas entram aqui automaticamente.</p>
 
@@ -174,6 +179,7 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
                     <div className="mt-1 text-xs text-[var(--fg-3)] flex flex-wrap gap-x-3 gap-y-0.5">
                       {item.email && <span>{item.email}</span>}
                       {item.telefone && <span>{tel(item.telefone)}</span>}
+                      {item.documento && <span>CPF/CNPJ: {item.documento}</span>}
                       {item.ofertaLabel && <span className="text-[var(--fg-2)]">{item.ofertaLabel}</span>}
                     </div>
                     {bucket === 'concluido' && (
@@ -191,6 +197,7 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
                       <div className="text-[11px] text-[var(--fg-3)]">{fmtData(item.dataCompra)}</div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap justify-end">
+                      <Button size="sm" variant="ghost" onClick={() => copiarDados(item)} title="Copiar nome, e-mail, CPF, telefone e turma"><Icon name="copy" size={14} /> Copiar dados</Button>
                       {item.alunoId && onOpenAluno && <Button size="sm" variant="ghost" onClick={() => onOpenAluno(item.alunoId!)}>Ver ficha</Button>}
                       {canEdit && bucket === 'pendente' && (
                         <>

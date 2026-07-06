@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { hmBadgeTotal, HM_CATEGORIA_LABEL, HM_BUCKETS, turmaPendente, type HmFilaItem } from './acesso-hm';
 
 const base: HmFilaItem = {
-  compraId: 'x', alunoId: null, compradorId: null, nome: 'T', email: null, telefone: null,
+  compraId: 'x', alunoId: null, compradorId: null, nome: 'T', email: null, telefone: null, documento: null,
   offerCode: null, ofertaLabel: null, categoria: 'compra_cheia', preco: null, dataCompra: null,
   bucket: 'pendente', alunoNovo: true, turmaId: null, turmaCodigo: null,
   acessoEm: null, acessoPorNome: null, ignoradoEm: null, obs: null,
