@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   type HmFilaItem,
   type HmTab,
@@ -26,6 +26,17 @@ import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import { tel } from './alunos-ui-shared';
 
+function Chip({ active, tone, children, onClick }: { active: boolean; tone?: 'warning'; children: ReactNode; onClick: () => void }) {
+  const cls = active
+    ? tone === 'warning' ? 'border-[var(--yellow)] text-[var(--yellow)]' : 'border-[var(--accent)] text-[var(--accent)]'
+    : 'border-[var(--border)] text-[var(--fg-3)] hover:text-[var(--fg-2)]';
+  return (
+    <button type="button" onClick={onClick} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${cls}`}>
+      {children}
+    </button>
+  );
+}
+
 function CategoriaBadge({ categoria }: { categoria: string | null }) {
   if (!categoria) return <Badge tone="danger" dot>Sem categoria</Badge>;
   const m = HM_CATEGORIA_LABEL[categoria];
@@ -44,6 +55,8 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<HmTab>('nova');
   const [busca, setBusca] = useState('');
+  const [filtroCat, setFiltroCat] = useState<string | null>(null);
+  const [soExcecoes, setSoExcecoes] = useState(false);
   const [ignorar, setIgnorar] = useState<HmFilaItem | null>(null);
   const [ignorarObs, setIgnorarObs] = useState('');
   const [turmasOpen, setTurmasOpen] = useState(false);
@@ -72,17 +85,30 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
   const turmaAtual = useMemo(() => turmas.find((t) => t.atual) ?? null, [turmas]);
   const doTab = HM_TABS.find((b) => b.key === tab)!;
 
+  // Itens da aba (antes dos filtros de categoria/exceção) — base para os chips.
+  const daAba = useMemo(() => items.filter((i) => hmTab(i) === tab), [items, tab]);
+  const catsDaAba = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const i of daAba) if (i.categoria) c[i.categoria] = (c[i.categoria] ?? 0) + 1;
+    return Object.entries(c).sort((a, b) => b[1] - a[1]);
+  }, [daAba]);
+  const nExcecoesAba = useMemo(() => daAba.filter(alunoExcecao).length, [daAba]);
+
+  // Reset dos filtros ao trocar de aba.
+  useEffect(() => { setFiltroCat(null); setSoExcecoes(false); }, [tab]);
+
   const lista = useMemo(() => {
     const tokens = busca.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    return items
-      .filter((i) => hmTab(i) === tab)
+    return daAba
+      .filter((i) => !filtroCat || i.categoria === filtroCat)
+      .filter((i) => !soExcecoes || alunoExcecao(i))
       .filter((i) => {
         if (!tokens.length) return true;
         const hay = `${i.nome ?? ''} ${i.email ?? ''} ${i.offerCode ?? ''} ${i.ofertaLabel ?? ''} ${i.turmaCodigo ?? ''}`.toLowerCase();
         return tokens.every((t) => hay.includes(t));
       })
       .sort((a, b) => (b.dataCompra ?? '').localeCompare(a.dataCompra ?? ''));
-  }, [items, tab, busca]);
+  }, [daAba, busca, filtroCat, soExcecoes]);
 
   /** Executa uma mutação, resincroniza e dá feedback. */
   async function run(compraId: string, action: () => Promise<{ ok: boolean; msg?: string }>, okMsg?: string) {
@@ -154,6 +180,25 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
         <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, e-mail, oferta, turma…" />
       </div>
 
+      {/* Filtros por tipo de compra + exceção */}
+      {(catsDaAba.length > 1 || nExcecoesAba > 0) && (
+        <div className="mb-4 flex flex-wrap items-center gap-1.5">
+          <Chip active={!filtroCat && !soExcecoes} onClick={() => { setFiltroCat(null); setSoExcecoes(false); }}>
+            Todas <span className="opacity-60">{daAba.length}</span>
+          </Chip>
+          {catsDaAba.map(([c, n]) => (
+            <Chip key={c} active={filtroCat === c} onClick={() => setFiltroCat(filtroCat === c ? null : c)}>
+              {HM_CATEGORIA_LABEL[c]?.label ?? c} <span className="opacity-60">{n}</span>
+            </Chip>
+          ))}
+          {nExcecoesAba > 0 && (
+            <Chip active={soExcecoes} tone="warning" onClick={() => setSoExcecoes((v) => !v)}>
+              <Icon name="alert" size={12} /> Exceções <span className="opacity-60">{nExcecoesAba}</span>
+            </Chip>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <Card className="p-4"><DataTable><Thead><Th>Aluno</Th><Th>Oferta</Th><Th>Valor</Th><Th> </Th></Thead><tbody><SkeletonRows cols={[80, 64, 40, 56]} /></tbody></DataTable></Card>
       ) : !lista.length ? (
@@ -168,23 +213,15 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
         />
       ) : (
         <div className="grid gap-2.5">
-          {(() => {
-            const nExcecoes = lista.filter(alunoExcecao).length;
-            return nExcecoes > 0 ? (
-              <div className="flex items-center gap-2 rounded-[var(--r-md)] border border-[var(--yellow)] px-3 py-2 text-xs text-[var(--yellow)]">
-                <Icon name="alert" size={14} />
-                <span><strong>{nExcecoes}</strong> {nExcecoes === 1 ? 'exceção' : 'exceções'} nesta aba: aluno já existia na base antes da compra. Confira antes de liberar.</span>
-              </div>
-            ) : null;
-          })()}
           {lista.map((item) => {
             const trabalhando = busy.has(item.compraId);
             const precisaTurma = turmaPendente(item);
             const excecao = alunoExcecao(item);
             return (
               <Card key={item.compraId} className={`p-4 ${excecao ? 'ring-1 ring-[var(--yellow)]' : ''}`}>
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div className="min-w-0">
+                {/* Cabeçalho: identificação à esquerda, valor à direita */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-[var(--fg)]">{item.nome || '—'}</span>
                       <CategoriaBadge categoria={item.categoria} />
@@ -198,12 +235,12 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
                     </div>
                     {excecao && (
                       <div className="mt-1.5 flex items-start gap-1.5 text-xs text-[var(--yellow)]">
-                        <Icon name="alert" size={13} />
+                        <Icon name="alert" size={13} className="mt-px shrink-0" />
                         <span>Exceção: entrou como compra nova, mas já existia na base{item.turmaCodigo ? ` (turma ${item.turmaCodigo})` : ''}. Confira antes de liberar.</span>
                       </div>
                     )}
                     <div className="mt-1 text-xs text-[var(--fg-3)] flex flex-wrap gap-x-3 gap-y-0.5">
-                      {item.email && <span>{item.email}</span>}
+                      {item.email && <span className="break-all">{item.email}</span>}
                       {item.telefone && <span>{tel(item.telefone)}</span>}
                       {item.documento && <span>CPF/CNPJ: {item.documento}</span>}
                       {item.ofertaLabel && <span className="text-[var(--fg-2)]">{item.ofertaLabel}</span>}
@@ -216,37 +253,36 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
                       </div>
                     )}
                   </div>
-
-                  <div className="flex flex-col items-end gap-2 shrink-0">
-                    <div className="text-right">
-                      <div className="font-bold tabular text-[var(--fg)]">{fmtBRL(item.preco)}</div>
-                      <div className="text-[11px] text-[var(--fg-3)]">{fmtData(item.dataCompra)}</div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap justify-end">
-                      <Button size="sm" variant="ghost" onClick={() => copiarDados(item)} title="Copiar nome, e-mail, CPF, telefone e turma"><Icon name="copy" size={14} /> Copiar dados</Button>
-                      {item.alunoId && onOpenAluno && <Button size="sm" variant="ghost" onClick={() => onOpenAluno(item.alunoId!)}>Ver ficha</Button>}
-                      {canEdit && tab !== 'concluido' && (
-                        <>
-                          {item.alunoNovo && (
-                            <select
-                              value={item.turmaId ?? ''}
-                              disabled={trabalhando}
-                              onChange={(e) => { const v = Number(e.target.value); if (v) run(item.compraId, () => setTurmaHm(item.compraId, v), 'Turma definida.'); }}
-                              className={`rounded-[var(--r-md)] border bg-[var(--surface-3)] px-2 py-1.5 text-xs text-[var(--fg)] ${precisaTurma ? 'border-[var(--yellow)]' : 'border-[var(--border)]'}`}
-                            >
-                              <option value="">{turmaAtual ? `Turma (${turmaAtual.codigo})…` : 'Selecionar turma…'}</option>
-                              {turmas.map((t) => <option key={t.id} value={t.id}>{t.codigo}{t.atual ? ' (atual)' : ''}</option>)}
-                            </select>
-                          )}
-                          <Button size="sm" variant="success" disabled={trabalhando} onClick={() => liberar(item)}><Icon name="check" size={14} /> Acesso liberado</Button>
-                          <Button size="sm" variant="ghost" disabled={trabalhando} onClick={() => { setIgnorar(item); setIgnorarObs(''); }}>Ignorar</Button>
-                        </>
-                      )}
-                      {canEdit && tab === 'concluido' && !item.ignoradoEm && (
-                        <Button size="sm" variant="ghost" disabled={trabalhando} onClick={() => run(item.compraId, () => liberarHm(item.compraId, false), 'Reaberto.')}>Reabrir</Button>
-                      )}
-                    </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-bold tabular text-[var(--fg)]">{fmtBRL(item.preco)}</div>
+                    <div className="text-[11px] text-[var(--fg-3)]">{fmtData(item.dataCompra)}</div>
                   </div>
+                </div>
+
+                {/* Ações: barra própria, sempre alinhada à direita */}
+                <div className="mt-3 flex items-center gap-2 flex-wrap justify-end">
+                  <Button size="sm" variant="ghost" onClick={() => copiarDados(item)} title="Copiar nome, e-mail, CPF, telefone e turma"><Icon name="copy" size={14} /> Copiar dados</Button>
+                  {item.alunoId && onOpenAluno && <Button size="sm" variant="ghost" onClick={() => onOpenAluno(item.alunoId!)}>Ver ficha</Button>}
+                  {canEdit && tab !== 'concluido' && (
+                    <>
+                      {item.alunoNovo && (
+                        <select
+                          value={item.turmaId ?? ''}
+                          disabled={trabalhando}
+                          onChange={(e) => { const v = Number(e.target.value); if (v) run(item.compraId, () => setTurmaHm(item.compraId, v), 'Turma definida.'); }}
+                          className={`rounded-[var(--r-md)] border bg-[var(--surface-3)] px-2 py-1.5 text-xs text-[var(--fg)] ${precisaTurma ? 'border-[var(--yellow)]' : 'border-[var(--border)]'}`}
+                        >
+                          <option value="">{turmaAtual ? `Turma (${turmaAtual.codigo})…` : 'Selecionar turma…'}</option>
+                          {turmas.map((t) => <option key={t.id} value={t.id}>{t.codigo}{t.atual ? ' (atual)' : ''}</option>)}
+                        </select>
+                      )}
+                      <Button size="sm" variant="success" disabled={trabalhando} onClick={() => liberar(item)}><Icon name="check" size={14} /> Acesso liberado</Button>
+                      <Button size="sm" variant="ghost" disabled={trabalhando} onClick={() => { setIgnorar(item); setIgnorarObs(''); }}>Ignorar</Button>
+                    </>
+                  )}
+                  {canEdit && tab === 'concluido' && !item.ignoradoEm && (
+                    <Button size="sm" variant="ghost" disabled={trabalhando} onClick={() => run(item.compraId, () => liberarHm(item.compraId, false), 'Reaberto.')}>Reabrir</Button>
+                  )}
                 </div>
               </Card>
             );
