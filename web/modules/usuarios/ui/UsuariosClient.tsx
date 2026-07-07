@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { normalizeCargo, type Cargo } from '@/shared/domain/auth';
-import { CARGO_META, FUNCAO_META, SETOR_META, USER_STATUS, cargosGrantaveis, podeEditarUsuario } from '../domain/cargos';
+import { CARGO_META, USER_STATUS, cargosGrantaveis, podeEditarUsuario } from '../domain/cargos';
+import {
+  LGPD_ACESSO,
+  MODULOS,
+  NIVEIS_BASE,
+  type NivelBase,
+  type NivelBaseMeta,
+  estadoDoPerfil,
+  niveisBaseGrantaveis,
+  perfilDoEstado,
+} from '../domain/catalogo-acessos';
 import {
   Badge,
   Button,
@@ -17,7 +27,6 @@ import {
   Th,
   Thead,
   Toast,
-  Toggle,
   Toolbar,
   Tr,
   useFlash,
@@ -30,6 +39,10 @@ interface PerfilRow {
 }
 
 const statusTone: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = { ativo: 'success', pendente: 'warning', negado: 'danger' };
+
+function Codigo({ children }: { children: React.ReactNode }) {
+  return <code className="rounded bg-[var(--surface-2)] px-1 text-[11px] text-[var(--fg-3)] tabular">{children}</code>;
+}
 
 function CopyLinkBox({ link }: { link: string }) {
   const [copied, setCopied] = useState(false);
@@ -49,6 +62,79 @@ function CopyLinkBox({ link }: { link: string }) {
         <Input readOnly value={link} onFocus={(e) => e.currentTarget.select()} className="flex-1 text-xs" />
         <Button type="button" size="sm" onClick={copy}>{copied ? 'Copiado!' : 'Copiar'}</Button>
       </div>
+    </div>
+  );
+}
+
+/** Árvore de códigos: nível-base + módulos (3.x) + LGPD (4.1). */
+function CatalogoAcessos({
+  niveis, base, setBase, areas, setAreas, funcoes, setFuncoes, lgpd, setLgpd,
+}: {
+  niveis: NivelBaseMeta[];
+  base: NivelBase; setBase: (b: NivelBase) => void;
+  areas: string[]; setAreas: React.Dispatch<React.SetStateAction<string[]>>;
+  funcoes: string[]; setFuncoes: React.Dispatch<React.SetStateAction<string[]>>;
+  lgpd: boolean; setLgpd: (v: boolean) => void;
+}) {
+  const lgpdImplicito = base === 'dev' || base === 'geral';
+  return (
+    <div className="space-y-3">
+      <div>
+        <span className="text-xs text-[var(--fg-3)]">Nível de acesso</span>
+        <div className="mt-1 space-y-1.5">
+          {niveis.map((n) => (
+            <label key={n.valor} className="flex items-start gap-2 text-sm text-[var(--fg)] cursor-pointer">
+              <input type="radio" name="nivel-base" className="mt-1 accent-[var(--accent)]" checked={base === n.valor} onChange={() => setBase(n.valor)} />
+              <span>
+                <span className="inline-flex items-center gap-1.5"><Codigo>{n.codigo}</Codigo><span className="font-medium">{n.label}</span></span>
+                <span className="block text-[11px] text-[var(--fg-4)]">{n.descricao}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {base === 'modulos' && (
+        <div className="rounded-lg border border-[var(--border)] p-2.5 space-y-3">
+          {MODULOS.map((m) => {
+            const verObrigatorio = m.acoes.some((a) => funcoes.includes(a.funcao)); // operar implica ver
+            return (
+              <div key={m.codigo}>
+                <div className="flex items-center gap-1.5 text-sm font-medium text-[var(--fg)]"><Codigo>{m.codigo}</Codigo>{m.label}</div>
+                <div className="mt-1 ml-1 space-y-1">
+                  <label className="flex items-center gap-2 text-sm text-[var(--fg-2)] cursor-pointer">
+                    <input
+                      type="checkbox" className="accent-[var(--accent)]"
+                      checked={areas.includes(m.setor) || verObrigatorio}
+                      disabled={verObrigatorio}
+                      onChange={(e) => setAreas((a) => (e.target.checked ? [...new Set([...a, m.setor])] : a.filter((x) => x !== m.setor)))}
+                    />
+                    <span className="inline-flex items-center gap-1.5"><Codigo>{m.verCodigo}</Codigo>{m.verLabel}</span>
+                  </label>
+                  {m.acoes.map((a) => (
+                    <label key={a.codigo} className="flex items-center gap-2 text-sm text-[var(--fg-2)] cursor-pointer">
+                      <input
+                        type="checkbox" className="accent-[var(--accent)]"
+                        checked={funcoes.includes(a.funcao)}
+                        onChange={(e) => {
+                          setFuncoes((f) => (e.target.checked ? [...new Set([...f, a.funcao])] : f.filter((x) => x !== a.funcao)));
+                          if (e.target.checked) setAreas((ar) => [...new Set([...ar, m.setor])]);
+                        }}
+                      />
+                      <span className="inline-flex items-center gap-1.5"><Codigo>{a.codigo}</Codigo>{a.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <label className="flex items-center gap-2 text-sm text-[var(--fg)] cursor-pointer">
+        <input type="checkbox" className="accent-[var(--accent)]" checked={lgpd || lgpdImplicito} disabled={lgpdImplicito} onChange={(e) => setLgpd(e.target.checked)} />
+        <span className="inline-flex items-center gap-1.5"><Codigo>{LGPD_ACESSO.codigo}</Codigo>{LGPD_ACESSO.label}</span>
+      </label>
     </div>
   );
 }
@@ -123,21 +209,26 @@ export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
 }
 
 function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo: Cargo; onClose: () => void; onSaved: (m: string) => void }) {
-  const grantaveis = cargosGrantaveis(meuCargo);
-  const atual = normalizeCargo(u);
-  const cargoOpts = grantaveis.includes(atual) ? grantaveis : [...grantaveis, atual];
-  const [cargo, setCargo] = useState<Cargo>(atual);
+  const souDev = meuCargo === 'dev';
+  const inicial = useMemo(() => estadoDoPerfil(u), [u]);
+  const niveis = useMemo(() => {
+    const base = niveisBaseGrantaveis(cargosGrantaveis(meuCargo));
+    if (base.some((n) => n.valor === inicial.base)) return base;
+    const atual = NIVEIS_BASE.find((n) => n.valor === inicial.base);
+    return atual ? [...base, atual] : base;
+  }, [meuCargo, inicial.base]);
+
+  const [base, setBase] = useState<NivelBase>(inicial.base);
+  const [areas, setAreas] = useState<string[]>(inicial.areas);
+  const [funcoes, setFuncoes] = useState<string[]>(inicial.funcoes);
+  const [lgpd, setLgpd] = useState<boolean>(inicial.lgpd);
   const [status, setStatus] = useState(u.status || 'pendente');
   const [nome, setNome] = useState(u.nome || '');
   const [time, setTime] = useState(u.time || '');
-  const [areas, setAreas] = useState<string[]>(u.areas || []);
-  const [funcoes, setFuncoes] = useState<string[]>(u.funcoes || []);
-  const [cpf, setCpf] = useState(!!u.pode_ver_cpf_completo);
   const [busy, setBusy] = useState(false);
   const [linking, setLinking] = useState(false);
   const [accessLink, setAccessLink] = useState('');
   const [linkErr, setLinkErr] = useState('');
-  const souDev = meuCargo === 'dev';
 
   async function gerarLink() {
     setLinking(true); setLinkErr(''); setAccessLink('');
@@ -152,9 +243,10 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
 
   async function save() {
     setBusy(true);
-    // Só persiste funções dos setores marcados (evita função órfã de setor removido).
-    const funcoesValidas = funcoes.filter((f) => areas.includes(FUNCAO_META[f]?.setor ?? f.split('.')[0]));
-    const fields: Record<string, unknown> = { cargo, status, areas, funcoes: funcoesValidas, pode_ver_cpf_completo: cpf };
+    const campos = perfilDoEstado({ base, areas, funcoes, lgpd }, { areas: u.areas, funcoes: u.funcoes });
+    const fields: Record<string, unknown> = {
+      cargo: campos.cargo, status, areas: campos.areas, funcoes: campos.funcoes, pode_ver_cpf_completo: campos.pode_ver_cpf_completo,
+    };
     if (souDev) { fields.nome = nome; fields.time = time; }
     const r = await fetchJson<{ ok?: boolean; error?: string }>('/api/admin/usuarios', {
       method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
@@ -163,18 +255,9 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
     setBusy(false);
     onSaved(r.json?.ok ? 'Usuário atualizado!' : (r.json?.error || (r.status === 0 ? 'Sem conexão — tente novamente.' : 'Falhou.')));
   }
-  // Dev enxerga e ajusta todos os dados de acesso, independente do cargo do alvo.
-  const showSetores = souDev || cargo === 'gestor' || cargo === 'operador';
-  const showFuncoes = (souDev || cargo === 'operador') && areas.length > 0;
-  const funcoesDisponiveis = Object.entries(FUNCAO_META).filter(([, m]) => areas.includes(m.setor));
 
   return (
-    <Drawer
-      onClose={onClose}
-      width="max-w-sm"
-      title={u.nome || u.email}
-      badges={<Badge tone={statusTone[status] || 'neutral'} dot>{status}</Badge>}
-    >
+    <Drawer onClose={onClose} width="max-w-sm" title={u.nome || u.email} badges={<Badge tone={statusTone[status] || 'neutral'} dot>{status}</Badge>}>
       <div className="space-y-3">
         {souDev && (
           <>
@@ -186,42 +269,19 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
             </label>
           </>
         )}
-        <label className="block"><span className="text-xs text-[var(--fg-3)]">Cargo</span>
-          <FilterSelect value={cargo} onChange={(e) => setCargo(e.target.value as Cargo)} className="mt-1">
-            {cargoOpts.map((c) => <option key={c} value={c}>{CARGO_META[c].label}</option>)}
-          </FilterSelect>
-          <span className="text-xs text-[var(--fg-3)]">{CARGO_META[cargo].description}</span>
-        </label>
+
+        <CatalogoAcessos
+          niveis={niveis} base={base} setBase={setBase}
+          areas={areas} setAreas={setAreas} funcoes={funcoes} setFuncoes={setFuncoes}
+          lgpd={lgpd} setLgpd={setLgpd}
+        />
+
         <label className="block"><span className="text-xs text-[var(--fg-3)]">Status</span>
           <FilterSelect value={status} onChange={(e) => setStatus(e.target.value)} className="mt-1">
             {USER_STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
           </FilterSelect>
         </label>
-        {showSetores && (
-          <div><span className="text-xs text-[var(--fg-3)]">Setores</span>
-            <div className="mt-1 space-y-1">
-              {Object.entries(SETOR_META).map(([k, m]) => (
-                <label key={k} className="flex items-center gap-2 text-sm text-[var(--fg)]">
-                  <input type="checkbox" className="accent-[var(--accent)]" checked={areas.includes(k)} onChange={(e) => setAreas((a) => (e.target.checked ? [...a, k] : a.filter((x) => x !== k)))} />{m.label}
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-        {showFuncoes && (
-          <div><span className="text-xs text-[var(--fg-3)]">Funções do operador</span>
-            <p className="text-[11px] text-[var(--fg-4)] mt-0.5">Sem função marcada, o operador só visualiza o setor.</p>
-            <div className="mt-1 space-y-1">
-              {funcoesDisponiveis.map(([k, m]) => (
-                <label key={k} className="flex items-center gap-2 text-sm text-[var(--fg)]">
-                  <input type="checkbox" className="accent-[var(--accent)]" checked={funcoes.includes(k)} onChange={(e) => setFuncoes((f) => (e.target.checked ? [...f, k] : f.filter((x) => x !== k)))} />
-                  {m.label} <span className="text-[10px] text-[var(--fg-4)]">({SETOR_META[m.setor]?.label})</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-        <Toggle checked={cpf} onChange={setCpf} label="Pode ver CPF completo (LGPD)" />
+
         <Button onClick={save} disabled={busy} className="w-full">{busy ? 'Salvando…' : 'Salvar'}</Button>
 
         <div className="pt-3 border-t border-[var(--border)] space-y-2">
@@ -239,18 +299,23 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
 }
 
 function InviteDrawer({ grantaveis, onClose, reload, flash }: { grantaveis: Cargo[]; onClose: () => void; reload: () => Promise<void>; flash: (m: string) => void }) {
+  const niveis = useMemo(() => niveisBaseGrantaveis(grantaveis), [grantaveis]);
   const [email, setEmail] = useState('');
   const [nome, setNome] = useState('');
-  const [cargo, setCargo] = useState<Cargo>(grantaveis[grantaveis.length - 1] || 'visualizador');
+  const [base, setBase] = useState<NivelBase>(niveis.find((n) => n.valor === 'visualizador')?.valor ?? niveis[niveis.length - 1]?.valor ?? 'visualizador');
+  const [areas, setAreas] = useState<string[]>([]);
+  const [funcoes, setFuncoes] = useState<string[]>([]);
+  const [lgpd, setLgpd] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [link, setLink] = useState('');
 
   async function invite() {
     setBusy(true); setErr('');
+    const campos = perfilDoEstado({ base, areas, funcoes, lgpd }, { areas: [], funcoes: [] });
     const r = await fetchJson<{ ok?: boolean; error?: string; link?: string }>('/api/admin/usuarios', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, nome, cargo }),
+      body: JSON.stringify({ email, nome, cargo: campos.cargo, areas: campos.areas, funcoes: campos.funcoes, pode_ver_cpf_completo: campos.pode_ver_cpf_completo }),
     });
     setBusy(false);
     if (r.json?.ok && r.json.link) {
@@ -275,11 +340,11 @@ function InviteDrawer({ grantaveis, onClose, reload, flash }: { grantaveis: Carg
           <>
             <label className="block"><span className="text-xs text-[var(--fg-3)]">E-mail</span><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1" /></label>
             <label className="block"><span className="text-xs text-[var(--fg-3)]">Nome</span><Input value={nome} onChange={(e) => setNome(e.target.value)} className="mt-1" /></label>
-            <label className="block"><span className="text-xs text-[var(--fg-3)]">Cargo</span>
-              <FilterSelect value={cargo} onChange={(e) => setCargo(e.target.value as Cargo)} className="mt-1">
-                {grantaveis.map((c) => <option key={c} value={c}>{CARGO_META[c].label}</option>)}
-              </FilterSelect>
-            </label>
+            <CatalogoAcessos
+              niveis={niveis} base={base} setBase={setBase}
+              areas={areas} setAreas={setAreas} funcoes={funcoes} setFuncoes={setFuncoes}
+              lgpd={lgpd} setLgpd={setLgpd}
+            />
             {err && <p className="text-sm text-[var(--red)]">{err}</p>}
             <Button onClick={invite} disabled={busy || !email} className="w-full">{busy ? 'Criando…' : 'Criar e gerar link'}</Button>
           </>

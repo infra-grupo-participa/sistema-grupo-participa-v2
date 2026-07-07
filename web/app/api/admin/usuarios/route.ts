@@ -67,6 +67,10 @@ export async function POST(request: NextRequest) {
   if (!email) return jsonError('E-mail inválido.', 400);
   if (!cargosGrantaveis(user.cargo).includes(cargo)) return jsonError('Você não pode atribuir este cargo.', 403);
 
+  const areas = Array.isArray(body?.areas) ? (body.areas as unknown[]).filter((a): a is string => typeof a === 'string') : [];
+  const funcoes = Array.isArray(body?.funcoes) ? (body.funcoes as unknown[]).filter((f): f is string => typeof f === 'string' && FUNCAO_RE.test(f)) : [];
+  const podeVerCpf = body?.pode_ver_cpf_completo === true;
+
   const admin = createAdminSupabase();
   const origin = appOrigin(request);
   // generateLink cria o auth user SEM enviar e-mail e devolve o hashed_token —
@@ -80,13 +84,16 @@ export async function POST(request: NextRequest) {
     return jsonError('Não foi possível gerar o convite: ' + (genErr?.message || ''), 502);
   }
 
-  // O trigger handle_new_user cria o perfil; ajustamos cargo/status/nome.
+  // O trigger handle_new_user cria o perfil; ajustamos cargo/status/nome + acessos.
   await admin
     .from('perfis')
     .update({
       nome: nome || null,
       cargo,
       status: 'ativo',
+      areas,
+      funcoes,
+      pode_ver_cpf_completo: podeVerCpf,
       atualizado_em: new Date().toISOString(),
     })
     .eq('id', gen.user.id);

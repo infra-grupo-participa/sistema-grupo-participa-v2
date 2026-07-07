@@ -28,6 +28,7 @@ export const USER_STATUS = ['ativo', 'pendente', 'negado'] as const;
  */
 export const FUNCAO_META: Record<string, { setor: Setor; label: string }> = {
   'placas.operar': { setor: 'placas', label: 'Operar fluxo de placas' },
+  'placas.hm_liberar': { setor: 'placas', label: 'Manipular / liberar Acesso HM' },
   'depoimentos.moderador': { setor: 'depoimentos', label: 'Moderar depoimentos' },
   'centro_controle.operar': { setor: 'centro_controle', label: 'Editar dados de alunos' },
   'social_media.operar': { setor: 'social_media', label: 'Operar Social Media' },

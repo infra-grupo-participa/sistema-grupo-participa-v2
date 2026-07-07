@@ -45,11 +45,13 @@ function CategoriaBadge({ categoria }: { categoria: string | null }) {
 
 interface Props {
   canEdit: boolean;
+  /** Gestão do catálogo de turmas (criar / tornar atual) — admin only. */
+  canManageTurmas?: boolean;
   onOpenAluno?: (alunoId: string) => void;
   onCountChange?: (contagem: Record<string, number>) => void;
 }
 
-export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
+export function AcessoHmClient({ canEdit, canManageTurmas = false, onOpenAluno, onCountChange }: Props) {
   const [items, setItems] = useState<HmFilaItem[]>([]);
   const [turmas, setTurmas] = useState<TurmaThb[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,7 +145,7 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
         right={
           <div className="flex items-center gap-2">
             {turmaAtual && <span className="text-xs text-[var(--fg-3)]">Turma atual: <strong className="text-[var(--fg-2)]">{turmaAtual.codigo}</strong></span>}
-            {canEdit && <Button variant="ghost" size="sm" onClick={() => setTurmasOpen(true)}><Icon name="tags" size={14} /> Turmas</Button>}
+            {canManageTurmas && <Button variant="ghost" size="sm" onClick={() => setTurmasOpen(true)}><Icon name="tags" size={14} /> Turmas</Button>}
           </div>
         }
       >
@@ -298,11 +300,11 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
             {turmas.map((t) => (
               <div key={t.id} className="flex items-center justify-between gap-3 rounded-[var(--r-md)] border border-[var(--border)] px-3 py-2">
                 <span className="text-sm text-[var(--fg)] inline-flex items-center gap-2">{t.codigo} {t.atual && <Badge tone="accent" dot>atual</Badge>}</span>
-                {!t.atual && canEdit && <Button size="sm" variant="ghost" onClick={() => gerirTurmaAtual(t.id)}>Tornar atual</Button>}
+                {!t.atual && canManageTurmas && <Button size="sm" variant="ghost" onClick={() => gerirTurmaAtual(t.id)}>Tornar atual</Button>}
               </div>
             ))}
           </div>
-          {canEdit && (
+          {canManageTurmas && (
             <div className="flex items-center gap-2 border-t border-[var(--border)] pt-3">
               <Input value={novaTurma} onChange={(e) => setNovaTurma(e.target.value)} placeholder="Nova turma (ex.: T40)" onKeyDown={(e) => { if (e.key === 'Enter') gerirCriarTurma(); }} />
               <Button size="sm" onClick={gerirCriarTurma} disabled={!novaTurma.trim()}><Icon name="plus" size={14} /> Criar</Button>

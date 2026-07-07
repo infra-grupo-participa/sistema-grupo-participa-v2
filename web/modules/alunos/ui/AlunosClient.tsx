@@ -51,7 +51,7 @@ function CopyText({ value, display }: { value: string; display?: string }) {
   );
 }
 
-export function AlunosClient({ canEdit }: { canEdit: boolean }) {
+export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = false, onlyHm = false }: { canEditBase: boolean; canLiberarHm: boolean; canManageTurmas?: boolean; onlyHm?: boolean }) {
   const [alunos, setAlunos] = useState<Aluno360[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,19 +62,25 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const { toast, flash } = useFlash();
-  const [topTab, setTopTab] = useState<'dashboard' | 'lista' | 'acessoHm'>('dashboard');
+  const [topTab, setTopTab] = useState<'dashboard' | 'lista' | 'acessoHm'>(onlyHm ? 'acessoHm' : 'dashboard');
   const [hmCount, setHmCount] = useState<number | null>(null);
 
   const reload = useCallback(async () => setAlunos(await loadAlunos360()), []);
   useEffect(() => {
     (async () => {
+      // HM-only: não carrega a base sensível de alunos, só a contagem da fila.
+      if (onlyHm) {
+        setHmCount(hmBadgeTotal(await loadHmContagem()));
+        setLoading(false);
+        return;
+      }
       const [a, t, c] = await Promise.all([loadAlunos360(), loadTurmas(), loadHmContagem()]);
       setAlunos(a);
       setTurmas(t);
       setHmCount(hmBadgeTotal(c));
       setLoading(false);
     })();
-  }, []);
+  }, [onlyHm]);
 
   const filtered = useMemo(() => {
     const tokens = busca.toLowerCase().trim().split(/\s+/).filter(Boolean);
@@ -138,7 +144,10 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
       <p className="text-sm text-[var(--fg-3)] mb-4">Centro de controle — ficha 360° do aluno. {loading && 'carregando…'}</p>
 
       <div className="flex gap-1 border-b border-[var(--border)] mb-5">
-        {([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos'], ['acessoHm', 'Liberação Holding Masters']] as const).map(([k, l]) => (
+        {(onlyHm
+          ? ([['acessoHm', 'Liberação Holding Masters']] as const)
+          : ([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos'], ['acessoHm', 'Liberação Holding Masters']] as const)
+        ).map(([k, l]) => (
           <button
             key={k}
             onClick={() => setTopTab(k)}
@@ -158,8 +167,9 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
 
       {topTab === 'acessoHm' && (
         <AcessoHmClient
-          canEdit={canEdit}
-          onOpenAluno={(id) => { setSelectedId(id); setEditMode(false); }}
+          canEdit={canLiberarHm}
+          canManageTurmas={canManageTurmas}
+          onOpenAluno={onlyHm ? undefined : (id) => { setSelectedId(id); setEditMode(false); }}
           onCountChange={(c) => setHmCount(hmBadgeTotal(c))}
         />
       )}
@@ -231,7 +241,7 @@ export function AlunosClient({ canEdit }: { canEdit: boolean }) {
         <AlunoDrawer
           a={selected}
           turmas={turmas}
-          canEdit={canEdit}
+          canEdit={canEditBase}
           editMode={editMode}
           onToggleEdit={() => setEditMode((e) => !e)}
           onClose={() => { setSelectedId(null); setEditMode(false); }}
