@@ -27,6 +27,7 @@ interface FilaRow {
   acesso_por_nome: string | null;
   ignorado_em: string | null;
   obs: string | null;
+  ja_cadastrado: boolean | null;
 }
 
 function mapRow(r: FilaRow): HmFilaItem {
@@ -51,6 +52,7 @@ function mapRow(r: FilaRow): HmFilaItem {
     acessoPorNome: r.acesso_por_nome,
     ignoradoEm: r.ignorado_em,
     obs: r.obs,
+    jaCadastrado: !!r.ja_cadastrado,
   };
 }
 

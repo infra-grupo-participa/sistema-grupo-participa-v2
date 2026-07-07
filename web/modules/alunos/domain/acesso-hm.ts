@@ -30,6 +30,8 @@ export interface HmFilaItem {
   acessoPorNome: string | null;
   ignoradoEm: string | null;
   obs: string | null;
+  /** Aluno já existia na base (importado antes desta compra) apesar de ser novo no HM — caso de exceção. */
+  jaCadastrado: boolean;
 }
 
 export interface TurmaThb {
@@ -70,6 +72,15 @@ export function hmBadgeTotal(contagem: Record<string, number>): number {
 /** Turma obrigatória antes de liberar: aluno novo sem turma definida. */
 export function turmaPendente(item: HmFilaItem): boolean {
   return item.alunoNovo && item.turmaId == null;
+}
+
+/**
+ * Exceção a tratar com atenção: entra como compra nova no HM (aluno_novo),
+ * mas o aluno já existia na base antes desta compra. Sinal de que veio de
+ * outro fluxo (planilha/backfill/HT) — o operador deve conferir antes de liberar.
+ */
+export function alunoExcecao(item: HmFilaItem): boolean {
+  return item.alunoNovo && item.jaCadastrado;
 }
 
 /** Bloco de dados do aluno para cadastro manual na área de membros (compra e renovação). */

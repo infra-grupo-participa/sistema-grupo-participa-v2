@@ -9,6 +9,7 @@ import {
   HM_CATEGORIA_LABEL,
   hmTab,
   turmaPendente,
+  alunoExcecao,
   dadosAreaMembros,
 } from '../domain/acesso-hm';
 import {
@@ -167,20 +168,40 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
         />
       ) : (
         <div className="grid gap-2.5">
+          {(() => {
+            const nExcecoes = lista.filter(alunoExcecao).length;
+            return nExcecoes > 0 ? (
+              <div className="flex items-center gap-2 rounded-[var(--r-md)] border border-[var(--yellow)] px-3 py-2 text-xs text-[var(--yellow)]">
+                <Icon name="alert" size={14} />
+                <span><strong>{nExcecoes}</strong> {nExcecoes === 1 ? 'exceção' : 'exceções'} nesta aba: aluno já existia na base antes da compra. Confira antes de liberar.</span>
+              </div>
+            ) : null;
+          })()}
           {lista.map((item) => {
             const trabalhando = busy.has(item.compraId);
             const precisaTurma = turmaPendente(item);
+            const excecao = alunoExcecao(item);
             return (
-              <Card key={item.compraId} className="p-4">
+              <Card key={item.compraId} className={`p-4 ${excecao ? 'ring-1 ring-[var(--yellow)]' : ''}`}>
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-[var(--fg)]">{item.nome || '—'}</span>
                       <CategoriaBadge categoria={item.categoria} />
                       {item.turmaCodigo && <Badge tone="accent" dot>{item.turmaCodigo}</Badge>}
-                      {item.alunoNovo ? <Badge tone="neutral" dot>Aluno novo</Badge> : <Badge tone="info" dot>Já era aluno HM</Badge>}
+                      {item.alunoNovo
+                        ? (excecao
+                            ? <Badge tone="warning" dot>Novo no HM · já cadastrado</Badge>
+                            : <Badge tone="neutral" dot>Aluno novo</Badge>)
+                        : <Badge tone="info" dot>Já era aluno HM</Badge>}
                       {!item.alunoId && <Badge tone="warning" dot>Sem aluno vinculado</Badge>}
                     </div>
+                    {excecao && (
+                      <div className="mt-1.5 flex items-start gap-1.5 text-xs text-[var(--yellow)]">
+                        <Icon name="alert" size={13} />
+                        <span>Exceção: entrou como compra nova, mas já existia na base{item.turmaCodigo ? ` (turma ${item.turmaCodigo})` : ''}. Confira antes de liberar.</span>
+                      </div>
+                    )}
                     <div className="mt-1 text-xs text-[var(--fg-3)] flex flex-wrap gap-x-3 gap-y-0.5">
                       {item.email && <span>{item.email}</span>}
                       {item.telefone && <span>{tel(item.telefone)}</span>}

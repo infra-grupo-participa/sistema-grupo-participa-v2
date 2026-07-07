@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { hmBadgeTotal, HM_CATEGORIA_LABEL, HM_TABS, hmTab, turmaPendente, type HmFilaItem } from './acesso-hm';
+import { hmBadgeTotal, HM_CATEGORIA_LABEL, HM_TABS, hmTab, turmaPendente, alunoExcecao, type HmFilaItem } from './acesso-hm';
 
 const base: HmFilaItem = {
   compraId: 'x', alunoId: null, compradorId: null, nome: 'T', email: null, telefone: null, documento: null,
   offerCode: null, ofertaLabel: null, categoria: 'compra_cheia', preco: null, dataCompra: null,
   bucket: 'pendente', alunoNovo: true, turmaId: null, turmaCodigo: null,
-  acessoEm: null, acessoPorNome: null, ignoradoEm: null, obs: null,
+  acessoEm: null, acessoPorNome: null, ignoradoEm: null, obs: null, jaCadastrado: false,
 };
 
 describe('acesso-hm domain', () => {
@@ -37,5 +37,11 @@ describe('acesso-hm domain', () => {
     expect(turmaPendente({ ...base, alunoNovo: true, turmaId: null })).toBe(true);
     expect(turmaPendente({ ...base, alunoNovo: true, turmaId: 53 })).toBe(false);
     expect(turmaPendente({ ...base, alunoNovo: false, turmaId: null })).toBe(false);
+  });
+
+  it('exceção: novo no HM mas já cadastrado na base', () => {
+    expect(alunoExcecao({ ...base, alunoNovo: true, jaCadastrado: true })).toBe(true);
+    expect(alunoExcecao({ ...base, alunoNovo: true, jaCadastrado: false })).toBe(false);
+    expect(alunoExcecao({ ...base, alunoNovo: false, jaCadastrado: true })).toBe(false);
   });
 });
