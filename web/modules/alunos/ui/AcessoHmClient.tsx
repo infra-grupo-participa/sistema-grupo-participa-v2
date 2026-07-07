@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   type HmFilaItem,
-  type HmBucket,
+  type HmTab,
   type TurmaThb,
-  HM_BUCKETS,
+  HM_TABS,
   HM_CATEGORIA_LABEL,
+  hmTab,
   turmaPendente,
   dadosAreaMembros,
 } from '../domain/acesso-hm';
@@ -40,7 +41,7 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
   const [items, setItems] = useState<HmFilaItem[]>([]);
   const [turmas, setTurmas] = useState<TurmaThb[]>([]);
   const [loading, setLoading] = useState(true);
-  const [bucket, setBucket] = useState<HmBucket>('pendente');
+  const [tab, setTab] = useState<HmTab>('nova');
   const [busca, setBusca] = useState('');
   const [ignorar, setIgnorar] = useState<HmFilaItem | null>(null);
   const [ignorarObs, setIgnorarObs] = useState('');
@@ -61,26 +62,26 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
 
   const contagem = useMemo(() => {
     const c: Record<string, number> = {};
-    for (const i of items) c[i.bucket] = (c[i.bucket] ?? 0) + 1;
+    for (const i of items) { const k = hmTab(i); c[k] = (c[k] ?? 0) + 1; }
     return c;
   }, [items]);
 
   useEffect(() => { if (!loading) onCountChange?.(contagem); }, [contagem, loading, onCountChange]);
 
   const turmaAtual = useMemo(() => turmas.find((t) => t.atual) ?? null, [turmas]);
-  const doBucket = HM_BUCKETS.find((b) => b.key === bucket)!;
+  const doTab = HM_TABS.find((b) => b.key === tab)!;
 
   const lista = useMemo(() => {
     const tokens = busca.toLowerCase().trim().split(/\s+/).filter(Boolean);
     return items
-      .filter((i) => i.bucket === bucket)
+      .filter((i) => hmTab(i) === tab)
       .filter((i) => {
         if (!tokens.length) return true;
         const hay = `${i.nome ?? ''} ${i.email ?? ''} ${i.offerCode ?? ''} ${i.ofertaLabel ?? ''} ${i.turmaCodigo ?? ''}`.toLowerCase();
         return tokens.every((t) => hay.includes(t));
       })
       .sort((a, b) => (b.dataCompra ?? '').localeCompare(a.dataCompra ?? ''));
-  }, [items, bucket, busca]);
+  }, [items, tab, busca]);
 
   /** Executa uma mutação, resincroniza e dá feedback. */
   async function run(compraId: string, action: () => Promise<{ ok: boolean; msg?: string }>, okMsg?: string) {
@@ -125,13 +126,13 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
 
       {/* Sub-abas */}
       <div className="flex flex-wrap gap-1 border-b border-[var(--border)] mb-4">
-        {HM_BUCKETS.map((b) => {
+        {HM_TABS.map((b) => {
           const n = contagem[b.key] ?? 0;
-          const ativo = bucket === b.key;
+          const ativo = tab === b.key;
           return (
             <button
               key={b.key}
-              onClick={() => setBucket(b.key)}
+              onClick={() => setTab(b.key)}
               className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
                 ativo ? 'border-[var(--accent)] text-[var(--fg)]' : 'border-transparent text-[var(--fg-3)] hover:text-[var(--fg-2)]'
               }`}
@@ -156,9 +157,13 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
         <Card className="p-4"><DataTable><Thead><Th>Aluno</Th><Th>Oferta</Th><Th>Valor</Th><Th> </Th></Thead><tbody><SkeletonRows cols={[80, 64, 40, 56]} /></tbody></DataTable></Card>
       ) : !lista.length ? (
         <EmptyState
-          title={bucket === 'pendente' ? 'Nenhuma pendência' : 'Nada concluído ainda'}
-          hint={bucket === 'pendente' ? 'Novas compras e renovações do HM aparecem aqui automaticamente.' : undefined}
-          icon={doBucket.icon}
+          title={tab === 'concluido' ? 'Nada concluído ainda' : tab === 'renovacao' ? 'Nenhuma renovação pendente' : 'Nenhuma compra nova pendente'}
+          hint={
+            tab === 'nova' ? 'Novas compras do HM aparecem aqui automaticamente.'
+            : tab === 'renovacao' ? 'Renovações do HM aparecem aqui automaticamente.'
+            : undefined
+          }
+          icon={doTab.icon}
         />
       ) : (
         <div className="grid gap-2.5">
@@ -182,7 +187,7 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
                       {item.documento && <span>CPF/CNPJ: {item.documento}</span>}
                       {item.ofertaLabel && <span className="text-[var(--fg-2)]">{item.ofertaLabel}</span>}
                     </div>
-                    {bucket === 'concluido' && (
+                    {tab === 'concluido' && (
                       <div className="mt-1.5 text-xs text-[var(--fg-3)]">
                         {item.ignoradoEm
                           ? <>Ignorado{item.obs ? ` — ${item.obs}` : ''} · {fmtData(item.ignoradoEm)}</>
@@ -199,7 +204,7 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
                     <div className="flex items-center gap-2 flex-wrap justify-end">
                       <Button size="sm" variant="ghost" onClick={() => copiarDados(item)} title="Copiar nome, e-mail, CPF, telefone e turma"><Icon name="copy" size={14} /> Copiar dados</Button>
                       {item.alunoId && onOpenAluno && <Button size="sm" variant="ghost" onClick={() => onOpenAluno(item.alunoId!)}>Ver ficha</Button>}
-                      {canEdit && bucket === 'pendente' && (
+                      {canEdit && tab !== 'concluido' && (
                         <>
                           {item.alunoNovo && (
                             <select
@@ -216,7 +221,7 @@ export function AcessoHmClient({ canEdit, onOpenAluno, onCountChange }: Props) {
                           <Button size="sm" variant="ghost" disabled={trabalhando} onClick={() => { setIgnorar(item); setIgnorarObs(''); }}>Ignorar</Button>
                         </>
                       )}
-                      {canEdit && bucket === 'concluido' && !item.ignoradoEm && (
+                      {canEdit && tab === 'concluido' && !item.ignoradoEm && (
                         <Button size="sm" variant="ghost" disabled={trabalhando} onClick={() => run(item.compraId, () => liberarHm(item.compraId, false), 'Reaberto.')}>Reabrir</Button>
                       )}
                     </div>

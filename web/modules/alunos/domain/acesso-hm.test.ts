@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hmBadgeTotal, HM_CATEGORIA_LABEL, HM_BUCKETS, turmaPendente, type HmFilaItem } from './acesso-hm';
+import { hmBadgeTotal, HM_CATEGORIA_LABEL, HM_TABS, hmTab, turmaPendente, type HmFilaItem } from './acesso-hm';
 
 const base: HmFilaItem = {
   compraId: 'x', alunoId: null, compradorId: null, nome: 'T', email: null, telefone: null, documento: null,
@@ -9,9 +9,15 @@ const base: HmFilaItem = {
 };
 
 describe('acesso-hm domain', () => {
-  it('badge conta só pendentes', () => {
-    expect(hmBadgeTotal({ pendente: 12, concluido: 40 })).toBe(12);
+  it('badge soma compras novas + renovações, ignora concluídos', () => {
+    expect(hmBadgeTotal({ nova: 8, renovacao: 4, concluido: 40 })).toBe(12);
     expect(hmBadgeTotal({})).toBe(0);
+  });
+
+  it('aba deriva do bucket + categoria', () => {
+    expect(hmTab({ ...base, bucket: 'pendente', categoria: 'compra_cheia' })).toBe('nova');
+    expect(hmTab({ ...base, bucket: 'pendente', categoria: 'renovacao' })).toBe('renovacao');
+    expect(hmTab({ ...base, bucket: 'concluido', categoria: 'renovacao' })).toBe('concluido');
   });
 
   it('toda categoria do catálogo tem rótulo e tom', () => {
@@ -22,8 +28,9 @@ describe('acesso-hm domain', () => {
   });
 
   it('só concluídos são não-acionáveis', () => {
-    expect(HM_BUCKETS.find((b) => b.key === 'concluido')?.acionavel).toBe(false);
-    expect(HM_BUCKETS.find((b) => b.key === 'pendente')?.acionavel).toBe(true);
+    expect(HM_TABS.find((b) => b.key === 'concluido')?.acionavel).toBe(false);
+    expect(HM_TABS.find((b) => b.key === 'nova')?.acionavel).toBe(true);
+    expect(HM_TABS.find((b) => b.key === 'renovacao')?.acionavel).toBe(true);
   });
 
   it('turma pendente só para aluno novo sem turma', () => {

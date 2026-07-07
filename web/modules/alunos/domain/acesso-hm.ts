@@ -4,6 +4,9 @@
 
 export type HmBucket = 'pendente' | 'concluido';
 
+/** Abas da UI: pendentes divididos por natureza da compra + concluídos. */
+export type HmTab = 'nova' | 'renovacao' | 'concluido';
+
 type BadgeTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
 
 export interface HmFilaItem {
@@ -44,17 +47,24 @@ export const HM_CATEGORIA_LABEL: Record<string, { label: string; tone: BadgeTone
   diferenca: { label: 'Diferença', tone: 'neutral' },
 };
 
-/** Sub-abas: pendentes (ação) e concluídos (histórico). */
-export const HM_BUCKETS: { key: HmBucket; label: string; icon: string; acionavel: boolean }[] = [
-  { key: 'pendente', label: 'Pendentes', icon: 'inbox', acionavel: true },
+/** Sub-abas: compras novas (ação), renovações (ação) e concluídos (histórico). */
+export const HM_TABS: { key: HmTab; label: string; icon: string; acionavel: boolean }[] = [
+  { key: 'nova', label: 'Compras novas', icon: 'inbox', acionavel: true },
+  { key: 'renovacao', label: 'Renovações', icon: 'refresh', acionavel: true },
   { key: 'concluido', label: 'Concluídos', icon: 'check-circle', acionavel: false },
 ];
 
-/** Buckets que somam no badge da aba. */
-export const HM_BADGE_BUCKETS: HmBucket[] = ['pendente'];
+/** Aba do item, derivada do bucket + categoria (renovação só entre os pendentes). */
+export function hmTab(item: HmFilaItem): HmTab {
+  if (item.bucket === 'concluido') return 'concluido';
+  return item.categoria === 'renovacao' ? 'renovacao' : 'nova';
+}
+
+/** Abas que somam no badge geral (pendências acionáveis). */
+export const HM_BADGE_TABS: HmTab[] = ['nova', 'renovacao'];
 
 export function hmBadgeTotal(contagem: Record<string, number>): number {
-  return HM_BADGE_BUCKETS.reduce((s, b) => s + (contagem[b] ?? 0), 0);
+  return HM_BADGE_TABS.reduce((s, b) => s + (contagem[b] ?? 0), 0);
 }
 
 /** Turma obrigatória antes de liberar: aluno novo sem turma definida. */
