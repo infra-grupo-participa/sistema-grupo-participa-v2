@@ -2,7 +2,7 @@
 
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import type { HmFilaItem, TurmaThb } from '../domain/acesso-hm';
+import type { HmFilaItem, HmPagamento, TurmaThb } from '../domain/acesso-hm';
 
 const db = () => createBrowserSupabase();
 
@@ -69,6 +69,16 @@ export async function loadHmContagem(): Promise<Record<string, number>> {
   logQueryError('loadHmContagem', error);
   const out: Record<string, number> = {};
   for (const r of (data as { bucket: string; total: number }[]) ?? []) out[r.bucket] = Number(r.total);
+  return out;
+}
+
+/** Dados de pagamento das compras (só na exportação), via fn_hm_pagamentos. */
+export async function loadHmPagamentos(compraIds: string[]): Promise<Map<string, HmPagamento>> {
+  const out = new Map<string, HmPagamento>();
+  if (!compraIds.length) return out;
+  const { data, error } = await db().rpc('fn_hm_pagamentos', { p_compra_ids: compraIds });
+  logQueryError('loadHmPagamentos', error);
+  for (const r of (data as (HmPagamento & { compra_id: string })[]) ?? []) out.set(r.compra_id, r);
   return out;
 }
 

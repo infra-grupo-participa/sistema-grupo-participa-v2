@@ -21,6 +21,7 @@ import {
   setTurmaAtual,
   criarTurma,
 } from './acesso-hm-data';
+import { exportarCsvHm } from './acesso-hm-export';
 import { Card, EmptyState, SectionTitle, Badge, Button, SkeletonRows, ConfirmDialog, Modal, Toast, useFlash, Input, DataTable, Thead, Th } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
@@ -64,6 +65,7 @@ export function AcessoHmClient({ canEdit, canManageTurmas = false, onOpenAluno, 
   const [turmasOpen, setTurmasOpen] = useState(false);
   const [novaTurma, setNovaTurma] = useState('');
   const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [exportando, setExportando] = useState(false);
   const { toast, flash } = useFlash();
 
   const recarregar = useCallback(async () => {
@@ -131,6 +133,14 @@ export function AcessoHmClient({ canEdit, canManageTurmas = false, onOpenAluno, 
     navigator.clipboard?.writeText(dadosAreaMembros(item)).then(() => flash('Dados copiados para a área de membros.'));
   }
 
+  const SUFIXO_ABA: Record<HmTab, string> = { nova: 'compras-novas', renovacao: 'renovacoes', concluido: 'concluidos' };
+  async function exportar() {
+    setExportando(true);
+    try { await exportarCsvHm(lista, SUFIXO_ABA[tab]); }
+    catch { flash('Falhou ao exportar.'); }
+    finally { setExportando(false); }
+  }
+
   async function gerirTurmaAtual(id: number) { await run('turmas', () => setTurmaAtual(id), 'Turma atual atualizada.'); }
   async function gerirCriarTurma() {
     const codigo = novaTurma.trim();
@@ -178,8 +188,19 @@ export function AcessoHmClient({ canEdit, canManageTurmas = false, onOpenAluno, 
         })}
       </div>
 
-      <div className="mb-3 max-w-sm">
-        <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, e-mail, oferta, turma…" />
+      <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
+        <div className="w-full max-w-sm">
+          <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, e-mail, oferta, turma…" />
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={exportar}
+          disabled={exportando || !lista.length}
+          title="Exportar a lista visível com os dados de pagamento"
+        >
+          <Icon name="download" size={13} /> {exportando ? 'Exportando…' : 'CSV'}
+        </Button>
       </div>
 
       {/* Filtros por tipo de compra + exceção */}

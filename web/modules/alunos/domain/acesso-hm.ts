@@ -34,6 +34,35 @@ export interface HmFilaItem {
   jaCadastrado: boolean;
 }
 
+/** Dados de pagamento da compra (fn_hm_pagamentos) — carregados só na exportação. */
+export interface HmPagamento {
+  hotmart_transaction: string | null;
+  produto_nome: string | null;
+  oferta_codigo: string | null;
+  moeda: string | null;
+  preco: number | null;
+  preco_original: number | null;
+  desconto: number | null;
+  cupom: string | null;
+  metodo_pagamento: string | null;
+  parcelas: number | null;
+  status: string | null;
+  is_assinatura: boolean | null;
+  numero_recorrencia: number | null;
+  data_compra: string | null;
+  data_aprovacao: string | null;
+}
+
+/** Métodos de pagamento devolvidos pela Hotmart. */
+export const HM_METODO_LABEL: Record<string, string> = {
+  CREDIT_CARD: 'Cartão de crédito',
+  PIX: 'PIX',
+  BILLET: 'Boleto',
+  WALLET: 'Carteira Hotmart',
+  HOTMART_INSTALLMENTS: 'Parcelado Hotmart',
+  NUPAY: 'NuPay',
+};
+
 export interface TurmaThb {
   id: number;
   codigo: string;
@@ -81,6 +110,13 @@ export function turmaPendente(item: HmFilaItem): boolean {
  */
 export function alunoExcecao(item: HmFilaItem): boolean {
   return item.alunoNovo && item.jaCadastrado;
+}
+
+/** Situação da liberação, legível (usada na exportação). */
+export function hmSituacao(item: HmFilaItem): 'Pendente' | 'Liberado' | 'Ignorado' {
+  if (item.ignoradoEm) return 'Ignorado';
+  if (item.acessoEm) return 'Liberado';
+  return 'Pendente';
 }
 
 /** Bloco de dados do aluno para cadastro manual na área de membros (compra e renovação). */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hmBadgeTotal, HM_CATEGORIA_LABEL, HM_TABS, hmTab, turmaPendente, alunoExcecao, type HmFilaItem } from './acesso-hm';
+import { hmBadgeTotal, HM_CATEGORIA_LABEL, HM_TABS, hmTab, turmaPendente, alunoExcecao, hmSituacao, type HmFilaItem } from './acesso-hm';
 
 const base: HmFilaItem = {
   compraId: 'x', alunoId: null, compradorId: null, nome: 'T', email: null, telefone: null, documento: null,
@@ -43,5 +43,12 @@ describe('acesso-hm domain', () => {
     expect(alunoExcecao({ ...base, alunoNovo: true, jaCadastrado: true })).toBe(true);
     expect(alunoExcecao({ ...base, alunoNovo: true, jaCadastrado: false })).toBe(false);
     expect(alunoExcecao({ ...base, alunoNovo: false, jaCadastrado: true })).toBe(false);
+  });
+
+  it('situação: ignorado tem precedência sobre liberado', () => {
+    expect(hmSituacao(base)).toBe('Pendente');
+    expect(hmSituacao({ ...base, acessoEm: '2026-07-08T12:00:00Z' })).toBe('Liberado');
+    expect(hmSituacao({ ...base, ignoradoEm: '2026-07-08T12:00:00Z' })).toBe('Ignorado');
+    expect(hmSituacao({ ...base, acessoEm: '2026-07-08T12:00:00Z', ignoradoEm: '2026-07-08T13:00:00Z' })).toBe('Ignorado');
   });
 });
