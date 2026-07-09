@@ -16,6 +16,7 @@ import { Icon } from '@/shared/ui/icons';
 import { fmtData } from '@/shared/ui/format';
 import { DashboardAlunos } from './DashboardAlunos';
 import { AlunoDrawer } from './AlunoDrawer';
+import { NovoAlunoDrawer } from './NovoAlunoDrawer';
 import { exportarCsvAlunos, exportarExcelAlunos } from './alunos-export';
 import { sitTone, tel, turmaCombo } from './alunos-ui-shared';
 import { AcessoHmClient } from './AcessoHmClient';
@@ -61,6 +62,7 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [novoAluno, setNovoAluno] = useState(false);
   const { toast, flash } = useFlash();
   const [topTab, setTopTab] = useState<'dashboard' | 'lista' | 'acessoHm'>(onlyHm ? 'acessoHm' : 'dashboard');
   const [hmCount, setHmCount] = useState<number | null>(null);
@@ -193,6 +195,7 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
           <Button variant="ghost" size="sm" onClick={() => exportarCsvAlunos(filtered)} disabled={!filtered.length}><Icon name="download" size={13} /> CSV</Button>
           <Button variant="ghost" size="sm" onClick={() => exportarExcelAlunos(filtered)} disabled={!filtered.length}><Icon name="download" size={13} /> Excel</Button>
           {temFiltroLista && <Button variant="ghost" size="sm" onClick={() => { setBusca(''); setFiltros(FILTROS_VAZIO); }}>Limpar filtros</Button>}
+          {canEditBase && <Button size="sm" onClick={() => setNovoAluno(true)}><Icon name="plus" size={13} /> Novo aluno</Button>}
         </div>
       </div>
 
@@ -235,6 +238,20 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
       {!filtered.length && !loading && <EmptyState title="Nenhum aluno encontrado" hint="Ajuste a busca ou os filtros." icon="users" />}
       {filtered.length > 500 && <p className="text-xs text-[var(--fg-3)] mt-2">Exibindo 500 de {filtered.length}. Refine a busca.</p>}
       </>
+      )}
+
+      {novoAluno && (
+        <NovoAlunoDrawer
+          turmas={turmas}
+          alunos={alunos}
+          onClose={() => setNovoAluno(false)}
+          onCreated={async (msg, novoId) => {
+            setNovoAluno(false);
+            flash(msg);
+            await reload();
+            if (novoId) { setSelectedId(novoId); setEditMode(false); } // abre a ficha recém-criada
+          }}
+        />
       )}
 
       {selected && (

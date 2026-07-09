@@ -89,6 +89,22 @@ export async function loadPlacaHistorico(alunoId: string, email: string | null):
   };
 }
 
+/** Cadastro manual em thb_alunos (RLS: policy thb_alunos_insert_editores). */
+export async function createAluno(fields: Record<string, unknown>): Promise<{ ok: boolean; id?: string; msg?: string }> {
+  const { data, error } = await db()
+    .from('thb_alunos')
+    .insert({ ...fields, fonte: 'cadastro_manual' })
+    .select('id')
+    .single();
+  if (error) {
+    logQueryError('createAluno', error);
+    // thb_alunos_email_uidx: UNIQUE em lower(trim(email)).
+    const msg = error.code === '23505' ? 'Já existe um aluno cadastrado com este e-mail.' : error.message;
+    return { ok: false, msg };
+  }
+  return { ok: true, id: (data as { id: string }).id };
+}
+
 /** Write-back em thb_alunos (RLS exige admin ativo). Porta de saveAlunoEdit. */
 export async function updateAluno(id: string, fields: Record<string, unknown>): Promise<{ ok: boolean; msg?: string }> {
   const { error } = await db()

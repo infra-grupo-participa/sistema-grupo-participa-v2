@@ -6,12 +6,11 @@ import {
   ESPACO_LABEL,
   SITUACAO,
   STATUS_ACESSO,
-  SUGESTOES,
   RENOVACAO_LABEL,
   renovacaoStatus,
 } from '../domain/aluno-360';
-import { nivelLabel, nivelOptions } from '@/shared/domain/nivel-resultado';
-import { loadPlacaHistorico, updateAluno, type Turma, type PlacaHistorico } from './alunos-data';
+import { nivelLabel } from '@/shared/domain/nivel-resultado';
+import { loadPlacaHistorico, type Turma, type PlacaHistorico } from './alunos-data';
 import { AUDIT_STEPS } from '@/modules/placas/domain/auditoria';
 import { computeDisplayStatus, displayStatusTone } from '@/modules/placas/domain/solicitacao';
 import { loadCiclosByAluno, type Ciclo } from '@/modules/placas/ui/admin/placas-admin-data';
@@ -20,19 +19,12 @@ import { Badge, NivelBadge, Drawer, AvatarInicial, SectionCard, Button, CopyFiel
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import { fetchJson } from '@/shared/ui/fetch-json';
+import { AlunoForm } from './AlunoForm';
+import { SecTitle, SubTitle, Section, Row } from './alunos-ui-bits';
 
 // Liga a aba "Curso" quando a integração real de desempenho existir (hoje só há mock zerado).
 const CURSO_TAB_ATIVA = false as boolean;
 import { sitTone, tel } from './alunos-ui-shared';
-
-/** Cabeçalho de seção com ícone de acento (linguagem do card de Placas). */
-function SecTitle({ icon, children }: { icon: string; children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-2 text-[var(--fg)]">
-      <Icon name={icon} size={15} className="text-[var(--accent)]" /> {children}
-    </span>
-  );
-}
 
 export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSaved }: {
   a: Aluno360;
@@ -83,7 +75,7 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
       footer={canEdit ? <Button size="sm" variant={editMode ? 'ghost' : 'subtle'} onClick={onToggleEdit}><Icon name="pencil" size={13} /> {editMode ? 'Cancelar edição' : 'Editar dados'}</Button> : undefined}
     >
       {editMode ? (
-        <EditForm a={a} turmas={turmas} onSaved={onSaved} />
+        <AlunoForm a={a} turmas={turmas} onSaved={onSaved} />
       ) : (
         <div className="space-y-4">
           {/* HERO — resumo operacional em relance (nível, acesso, turma/vencimento, Hotmart) */}
@@ -219,16 +211,6 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
       )}
     </Drawer>
   );
-}
-
-function SubTitle({ children }: { children: React.ReactNode }) {
-  return <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)] mt-3 mb-1 pt-1 border-t border-[var(--border-faint)]">{children}</div>;
-}
-function Section({ children }: { children: React.ReactNode }) {
-  return <div className="space-y-1.5">{children}</div>;
-}
-function Row({ k, v }: { k: string; v: string | null }) {
-  return <div className="flex justify-between gap-3 py-1 border-b border-[var(--border-faint)]"><span className="text-xs text-[var(--fg-3)]">{k}</span><span className="text-sm text-[var(--fg)] text-right">{v || '—'}</span></div>;
 }
 
 /** Célula compacta do hero (rótulo minúsculo + valor destacado). */
@@ -544,171 +526,5 @@ function CursoTab() {
         ))}
       </div>
     </Section>
-  );
-}
-
-// ── Formulário de edição — todos os dados do aluno, em seções (porta de saveAlunoEdit) ──
-const FIELD_CLS = 'mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1.5 text-sm text-[var(--fg)]';
-
-// Campos de texto livre persistidos como string (null se vazio).
-const TXT_FIELDS = [
-  'nome', 'email', 'telefone', 'telefone_profissional', 'tipo_documento', 'profissao',
-  'link_facebook', 'instagram_url', 'youtube_url', 'site_profissional',
-  'cep', 'endereco_logradouro', 'endereco_numero', 'endereco_complemento', 'bairro', 'cidade', 'pais',
-  'nivel_resultado', 'espaco_instrucao', 'placa_aurum', 'hotmart_ucode',
-  'produto', 'oferta', 'tipo_oferta', 'origem_acesso', 'instrucao', 'regra_acesso', 'tempo_acesso',
-  'status_acesso', 'status_acesso_central', 'situacao_acesso',
-  'situacao_financeira', 'status_pagamento',
-  'tratamento_manual', 'obs_central',
-];
-
-function EditForm({ a, turmas, onSaved }: { a: Aluno360; turmas: Turma[]; onSaved: (m: string) => void }) {
-  const init: Record<string, string> = {};
-  const raw = a as unknown as Record<string, unknown>;
-  for (const k of TXT_FIELDS) init[k] = raw[k] != null ? String(raw[k]) : '';
-  init.documento = a.documento && !a.documento.includes('*') ? a.documento : '';
-  init.estado = a.estado || '';
-  init.turma_id = a.turma_id ? String(a.turma_id) : '';
-  init.turma_aurum_id = a.turma_aurum_id ? String(a.turma_aurum_id) : '';
-  init.data_expiracao = a.data_expiracao || '';
-  init.ultimo_pagamento = a.ultimo_pagamento || '';
-  init.mes_expiracao = a.mes_expiracao != null ? String(a.mes_expiracao) : '';
-  init.ano_expiracao = a.ano_expiracao != null ? String(a.ano_expiracao) : '';
-  init.valor_total = a.valor_total != null ? String(a.valor_total) : '';
-  init.valor_pago = a.valor_pago != null ? String(a.valor_pago) : '';
-  init.saldo_devedor = a.saldo_devedor != null ? String(a.saldo_devedor) : '';
-  init.num_cobrancas = a.num_cobrancas != null ? String(a.num_cobrancas) : '';
-
-  const [f, setF] = useState<Record<string, string>>(init);
-  const [busy, setBusy] = useState(false);
-  const s = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }));
-  const thbTurmas = turmas.filter((t) => t.tipo !== 'aurum');
-  const aurumTurmas = turmas.filter((t) => t.tipo === 'aurum');
-
-  async function save() {
-    setBusy(true);
-    const fields: Record<string, unknown> = {};
-    const txt = (k: string) => (f[k]?.trim() ? f[k].trim() : null);
-    const numv = (k: string) => { const t = f[k]?.trim(); if (!t) return null; const n = Number(t.replace(',', '.')); return Number.isFinite(n) ? n : null; };
-    const intv = (k: string) => { const n = numv(k); return n == null ? null : Math.trunc(n); };
-    const dt = (k: string) => (f[k]?.trim() ? f[k].trim() : null);
-
-    for (const k of TXT_FIELDS) fields[k] = txt(k);
-    fields.estado = f.estado?.trim() ? f.estado.trim().toUpperCase() : null;
-    if (f.documento.trim()) fields.documento = f.documento.trim(); // só sobrescreve se preenchido (mascarado fica vazio)
-    fields.turma_id = f.turma_id ? Number(f.turma_id) : null;
-    fields.turma_aurum_id = f.turma_aurum_id ? Number(f.turma_aurum_id) : null;
-    fields.data_expiracao = dt('data_expiracao');
-    fields.ultimo_pagamento = dt('ultimo_pagamento');
-    fields.mes_expiracao = intv('mes_expiracao');
-    fields.ano_expiracao = intv('ano_expiracao');
-    fields.valor_total = numv('valor_total');
-    fields.valor_pago = numv('valor_pago');
-    fields.saldo_devedor = numv('saldo_devedor');
-    fields.num_cobrancas = intv('num_cobrancas');
-
-    const r = await updateAluno(a.id, fields);
-    setBusy(false);
-    onSaved(r.ok ? 'Aluno atualizado!' : 'Erro ao salvar: ' + (r.msg || ''));
-  }
-
-  // Funções (não componentes) — evitam recriar tipo de componente a cada render (perda de foco).
-  const inp = (k: string, label: string, type = 'text') => (
-    <label className="block"><span className="text-xs text-[var(--fg-3)]">{label}</span>
-      <input type={type} value={f[k]} onChange={(e) => s(k, e.target.value)} className={FIELD_CLS} /></label>
-  );
-  const inpList = (k: string, label: string, opts: readonly string[]) => (
-    <label className="block"><span className="text-xs text-[var(--fg-3)]">{label}</span>
-      <input list={`dl-${k}`} value={f[k]} onChange={(e) => s(k, e.target.value)} className={FIELD_CLS} />
-      <datalist id={`dl-${k}`}>{opts.map((o) => <option key={o} value={o} />)}</datalist></label>
-  );
-  const sel = (k: string, label: string, opts: { value: string; label: string }[]) => (
-    <label className="block"><span className="text-xs text-[var(--fg-3)]">{label}</span>
-      <select value={f[k]} onChange={(e) => s(k, e.target.value)} className={FIELD_CLS}>
-        <option value="">—</option>{opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select></label>
-  );
-  const espacoOpts = Object.entries(ESPACO_LABEL).map(([value, label]) => ({ value, label }));
-  const situacaoOpts = Object.entries(SITUACAO).map(([value, x]) => ({ value, label: x.label }));
-  const statusAcessoOpts = Object.entries(STATUS_ACESSO).map(([value, x]) => ({ value, label: x.label }));
-
-  // Edição espelha a MESMA ordem/agrupamento da leitura (Faturamento → Dados → Acesso → Observações).
-  const grid = 'grid grid-cols-1 sm:grid-cols-2 gap-2.5';
-  return (
-    <div className="space-y-4">
-      <SectionCard title={<SecTitle icon="user">Dados Pessoais</SecTitle>}>
-        <div className={grid}>
-          {inp('nome', 'Nome')}
-          {inp('email', 'E-mail')}
-          {inp('telefone', 'Telefone')}
-          {inp('telefone_profissional', 'Tel. profissional')}
-          {inp('documento', 'Documento (vazio mantém)')}
-          {inp('tipo_documento', 'Tipo de documento')}
-          {inp('profissao', 'Profissão')}
-        </div>
-        <SubTitle>Endereço</SubTitle>
-        <div className={grid}>
-          {inp('cep', 'CEP')}
-          {inp('endereco_logradouro', 'Logradouro')}
-          {inp('endereco_numero', 'Número')}
-          {inp('endereco_complemento', 'Complemento')}
-          {inp('bairro', 'Bairro')}
-          {inp('cidade', 'Cidade')}
-          {inp('estado', 'Estado (UF)')}
-          {inp('pais', 'País')}
-        </div>
-        <SubTitle>Presença online</SubTitle>
-        <div className={grid}>
-          {inp('link_facebook', 'Facebook')}
-          {inp('instagram_url', 'Instagram')}
-          {inp('youtube_url', 'YouTube')}
-          {inp('site_profissional', 'Site')}
-        </div>
-      </SectionCard>
-
-      <SectionCard title={<SecTitle icon="graduation">Acesso ao Curso</SecTitle>}>
-        <SubTitle>Produto &amp; oferta</SubTitle>
-        <div className={grid}>
-          {inpList('produto', 'Produto', SUGESTOES.produto)}
-          {inp('oferta', 'Oferta')}
-          {inpList('tipo_oferta', 'Tipo de oferta', SUGESTOES.tipo_oferta)}
-          {inpList('origem_acesso', 'Origem de acesso', SUGESTOES.origem_acesso)}
-          {inpList('instrucao', 'Instrução', SUGESTOES.instrucao)}
-          {sel('espaco_instrucao', 'Espaço de instrução', espacoOpts)}
-        </div>
-        <SubTitle>Programa</SubTitle>
-        <div className={grid}>
-          {sel('nivel_resultado', 'Nível de resultado', nivelOptions().map((n) => ({ value: n.id, label: n.label })))}
-          {inp('placa_aurum', 'Placa Aurum')}
-          {sel('turma_id', 'Turma THB', thbTurmas.map((t) => ({ value: String(t.id), label: t.codigo })))}
-          {sel('turma_aurum_id', 'Turma Aurum', aurumTurmas.map((t) => ({ value: String(t.id), label: t.codigo })))}
-        </div>
-        <SubTitle>Vigência</SubTitle>
-        <div className={grid}>
-          {inpList('regra_acesso', 'Regra de acesso', SUGESTOES.regra_acesso)}
-          {inpList('tempo_acesso', 'Tempo de acesso', SUGESTOES.tempo_acesso)}
-          {inp('data_expiracao', 'Vencimento', 'date')}
-          {inp('mes_expiracao', 'Mês expiração', 'number')}
-          {inp('ano_expiracao', 'Ano expiração', 'number')}
-        </div>
-        <SubTitle>Hotmart &amp; status</SubTitle>
-        <div className={grid}>
-          {inp('hotmart_ucode', 'Hotmart UCode')}
-          {sel('status_acesso', 'Status de acesso', statusAcessoOpts)}
-          {inpList('status_acesso_central', 'Status central', SUGESTOES.status_acesso_central)}
-          {sel('situacao_acesso', 'Situação de acesso', situacaoOpts)}
-        </div>
-      </SectionCard>
-
-      <SectionCard title={<SecTitle icon="pencil">Observações</SecTitle>}>
-        <div className="space-y-2.5">
-          {inp('tratamento_manual', 'Tratamento manual')}
-          <label className="block"><span className="text-xs text-[var(--fg-3)]">Obs central</span>
-            <textarea value={f.obs_central} onChange={(e) => s('obs_central', e.target.value)} rows={3} className={FIELD_CLS} /></label>
-        </div>
-      </SectionCard>
-
-      <Button onClick={save} disabled={busy} className="w-full justify-center py-2.5"><Icon name="check" size={15} /> {busy ? 'Salvando…' : 'Salvar alterações'}</Button>
-    </div>
   );
 }
