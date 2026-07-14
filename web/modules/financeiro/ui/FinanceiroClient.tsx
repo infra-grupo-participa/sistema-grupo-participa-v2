@@ -343,16 +343,16 @@ function QueueCard({ label, hint, icon, tone, value, active, onClick }: {
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`text-left rounded-[var(--r-lg)] bg-[var(--surface-2)] shadow-[var(--shadow-sm)] p-4 border transition-colors ${active ? 'border-[var(--border-accent)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}
+      className={`text-left rounded-[var(--r-lg)] bg-[var(--surface-2)] shadow-[var(--shadow-sm)] p-3.5 border transition-colors ${active ? 'border-[var(--border-accent)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}
       style={{ borderTopWidth: 2, borderTopColor: tone }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-2xl font-bold tabular leading-none text-[var(--fg)]">{value.toLocaleString('pt-BR')}</div>
-          <div className={`mt-2 text-[11px] font-semibold uppercase tracking-wide ${active ? 'text-[var(--fg)]' : 'text-[var(--fg-3)]'}`}>{label}</div>
-          <div className="mt-1 text-[11px] text-[var(--fg-3)] truncate">{hint}</div>
+          <div className="text-xl font-bold tabular leading-none text-[var(--fg)]">{value.toLocaleString('pt-BR')}</div>
+          <div className={`mt-1.5 text-[10px] font-semibold uppercase tracking-wider ${active ? 'text-[var(--fg)]' : 'text-[var(--fg-3)]'}`}>{label}</div>
+          <div className="mt-0.5 text-[10px] text-[var(--fg-3)] truncate">{hint}</div>
         </div>
-        <span className="grid place-items-center w-8 h-8 rounded-[var(--r-md)] shrink-0" style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}><Icon name={icon} size={16} /></span>
+        <span className="grid place-items-center w-7 h-7 rounded-[var(--r-md)] shrink-0" style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}><Icon name={icon} size={15} /></span>
       </div>
     </button>
   );
@@ -373,8 +373,8 @@ const LinhaConta = memo(function LinhaConta({ c, onOpen, flash }: {
     <Tr onClick={() => onOpen(c.contato_hm_id)}>
       <Td>
         <div className="min-w-0">
-          <div className="truncate font-medium text-[var(--fg)]">{c.nome || '—'}</div>
-          <div className="text-xs text-[var(--fg-3)] flex items-center gap-2 min-w-0">
+          <div className="truncate text-[13px] font-medium text-[var(--fg)]">{c.nome || '—'}</div>
+          <div className="text-[11px] text-[var(--fg-3)] flex items-center gap-2 min-w-0">
             <button type="button" title="Copiar e-mail" onClick={(e) => copiar(e, c.email, 'E-mail')} className="truncate hover:text-[var(--fg)] hover:underline transition-colors">{c.email}</button>
             {c.telefone && (
               <button type="button" title="Copiar telefone" onClick={(e) => copiar(e, c.telefone!, 'Telefone')} className="shrink-0 tabular hover:text-[var(--fg)] hover:underline transition-colors">{c.telefone}</button>
@@ -384,21 +384,21 @@ const LinhaConta = memo(function LinhaConta({ c, onOpen, flash }: {
       </Td>
       <Td><span className="inline-flex whitespace-normal"><Badge tone="neutral">{c.canal}</Badge></span></Td>
       <Td className="overflow-hidden">
-        <div className="tabular text-[var(--fg)]">{fmtBRL(c.sinal_bruto)}</div>
-        <div className="text-[11px] tabular text-[var(--fg-3)]">líq. {fmtBRL(c.sinal_liquido)}</div>
+        <div className="text-[13px] tabular text-[var(--fg)]">{fmtBRL(c.sinal_bruto)}</div>
+        <div className="text-[10px] tabular text-[var(--fg-3)]">líq. {fmtBRL(c.sinal_liquido)}</div>
       </Td>
       <Td className="text-xs text-[var(--fg-2)] tabular whitespace-nowrap">{fmtData(c.sinal_pago_em)}</Td>
       <Td className="overflow-hidden">
-        <span className={`tabular ${vencido ? 'text-[var(--red)] font-semibold' : 'text-[var(--fg)]'}`}>{fmtBRL(c.saldo_a_pagar)}</span>
+        <span className={`text-[13px] tabular ${vencido ? 'text-[var(--red)] font-semibold' : 'text-[var(--fg)]'}`}>{fmtBRL(c.saldo_a_pagar)}</span>
       </Td>
       <Td className="overflow-hidden">
         {c.saldo_pago_bruto > 0 ? (
           <>
-            <div className="tabular text-[var(--fg)]">
+            <div className="text-[13px] tabular text-[var(--fg)]">
               {fmtBRL(c.saldo_pago_bruto)}
-              {c.saldo_lancamentos > 1 && <span className="ml-1 text-[11px] font-semibold text-[var(--fg-3)]">{c.saldo_lancamentos}x</span>}
+              {c.saldo_lancamentos > 1 && <span className="ml-1 text-[10px] font-semibold text-[var(--fg-3)]">{c.saldo_lancamentos}x</span>}
             </div>
-            <div className="text-[11px] tabular text-[var(--fg-3)]">líq. {fmtBRL(c.saldo_pago_liquido)}</div>
+            <div className="text-[10px] tabular text-[var(--fg-3)]">líq. {fmtBRL(c.saldo_pago_liquido)}</div>
           </>
         ) : (
           <span className="text-[var(--fg-3)]">—</span>

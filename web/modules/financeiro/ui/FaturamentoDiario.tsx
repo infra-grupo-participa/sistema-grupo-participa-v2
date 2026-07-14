@@ -97,34 +97,34 @@ export function FaturamentoDiario({ dias, loading, turma }: {
                         {ehHoje && <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">hoje</span>}
                         {ehMelhor && !ehHoje && <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">melhor dia</span>}
                       </Td>
-                      <Td className="tabular text-right text-[var(--fg-2)]">{d.lancamentos}</Td>
-                      <Td className={`tabular text-right font-semibold ${ehMelhor ? 'text-[var(--green)]' : 'text-[var(--fg)]'}`}>{fmtBRL(d.bruto)}</Td>
-                      <Td className="tabular text-right text-[var(--fg-2)]">{fmtBRL(d.liquido)}</Td>
-                      <Td className="tabular text-right text-[var(--fg-3)]">{fmtBRL(d.taxas)}</Td>
-                      <Td className="tabular text-right text-[var(--fg-2)]">{fmtBRL(d.sinal)}</Td>
-                      <Td className="tabular text-right text-[var(--fg-2)]">{fmtBRL(d.saldo)}</Td>
-                      <Td className="tabular text-right text-[var(--fg-2)]">{fmtBRL(d.mensalidade)}</Td>
-                      <Td className="tabular text-right text-[var(--fg-2)]">{fmtBRL(d.compra_cheia)}</Td>
-                      <Td className="tabular text-right font-semibold text-[var(--fg)]">{fmtBRL(d.acumulado)}</Td>
-                      <Td className="tabular text-right text-[var(--fg-2)]">{d.alunos}</Td>
+                      <Td className="tabular text-xs text-right text-[var(--fg-3)]">{d.lancamentos}</Td>
+                      <Td className={`tabular text-xs text-right font-semibold ${ehMelhor ? 'text-[var(--green)]' : 'text-[var(--fg)]'}`}>{fmtBRL(d.bruto)}</Td>
+                      <Td className="tabular text-xs text-right text-[var(--fg-2)]">{fmtBRL(d.liquido)}</Td>
+                      <Td className="tabular text-xs text-right text-[var(--fg-3)]">{fmtBRL(d.taxas)}</Td>
+                      <Td className="tabular text-xs text-right text-[var(--fg-2)]">{fmtBRL(d.sinal)}</Td>
+                      <Td className="tabular text-xs text-right text-[var(--fg-2)]">{fmtBRL(d.saldo)}</Td>
+                      <Td className="tabular text-xs text-right text-[var(--fg-2)]">{fmtBRL(d.mensalidade)}</Td>
+                      <Td className="tabular text-xs text-right text-[var(--fg-2)]">{fmtBRL(d.compra_cheia)}</Td>
+                      <Td className="tabular text-xs text-right font-semibold text-[var(--fg)]">{fmtBRL(d.acumulado)}</Td>
+                      <Td className="tabular text-xs text-right text-[var(--fg-3)]">{d.alunos}</Td>
                     </Tr>
                   );
                 })}
             </tbody>
             {!loading && linhas.length > 0 && (
               <tfoot>
-                <tr className="border-t border-[var(--border)] bg-[var(--surface-3)]">
-                  <td className="px-3 py-2.5 text-xs font-semibold text-[var(--fg-2)]">Total</td>
-                  <td className="px-3 py-2.5 tabular text-right font-semibold text-[var(--fg-2)]">{tot.lancamentos}</td>
-                  <td className="px-3 py-2.5 tabular text-right font-semibold text-[var(--fg)]">{fmtBRL(tot.bruto)}</td>
-                  <td className="px-3 py-2.5 tabular text-right font-semibold text-[var(--fg)]">{fmtBRL(tot.liquido)}</td>
-                  <td className="px-3 py-2.5 tabular text-right font-semibold text-[var(--fg-3)]">{fmtBRL(tot.taxas)}</td>
-                  <td className="px-3 py-2.5 tabular text-right font-semibold text-[var(--fg-2)]">{fmtBRL(tot.sinal)}</td>
-                  <td className="px-3 py-2.5 tabular text-right font-semibold text-[var(--fg-2)]">{fmtBRL(tot.saldo)}</td>
-                  <td className="px-3 py-2.5 tabular text-right font-semibold text-[var(--fg-2)]">{fmtBRL(tot.mensalidade)}</td>
-                  <td className="px-3 py-2.5 tabular text-right font-semibold text-[var(--fg-2)]">{fmtBRL(tot.compraCheia)}</td>
-                  <td className="px-3 py-2.5 text-right text-[var(--fg-3)]">—</td>
-                  <td className="px-3 py-2.5 text-right text-[var(--fg-3)]">—</td>
+                <tr className="border-t border-[var(--border)] bg-[var(--surface-3)] text-xs">
+                  <td className="px-3 py-2 font-semibold text-[var(--fg-2)]">Total</td>
+                  <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg-2)]">{tot.lancamentos}</td>
+                  <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg)]">{fmtBRL(tot.bruto)}</td>
+                  <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg)]">{fmtBRL(tot.liquido)}</td>
+                  <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg-3)]">{fmtBRL(tot.taxas)}</td>
+                  <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg-2)]">{fmtBRL(tot.sinal)}</td>
+                  <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg-2)]">{fmtBRL(tot.saldo)}</td>
+                  <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg-2)]">{fmtBRL(tot.mensalidade)}</td>
+                  <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg-2)]">{fmtBRL(tot.compraCheia)}</td>
+                  <td className="px-3 py-2 text-right text-[var(--fg-3)]">—</td>
+                  <td className="px-3 py-2 text-right text-[var(--fg-3)]">—</td>
                 </tr>
               </tfoot>
             )}
