@@ -24,4 +24,3 @@ export default async function SolicitarPlacaPage({
   };
   return <SolicitarPlacaClient initialToken={initialToken} config={config} />;
 }
-''

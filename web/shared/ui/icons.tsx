@@ -6,7 +6,8 @@ import {
   ArrowUpRight, Search, Sun, Moon, Menu, RefreshCw, RotateCw, Link2, Pause, Play, Lock, Download,
   Mic, Camera, Clapperboard, Truck, NotebookPen, FileText, PartyPopper, Hand, Star, Circle, Sprout,
   Briefcase, Medal, Coins, Gem, LogOut, Plus, Trash2, Pencil, Inbox, Copy,
-  PanelLeftClose, PanelLeftOpen, type LucideIcon,
+  PanelLeftClose, PanelLeftOpen, Wallet, Receipt, TrendingUp, Banknote,
+  LayoutDashboard, CircleDollarSign, type LucideIcon,
 } from 'lucide-react';
 
 const MAP: Record<string, LucideIcon> = {
@@ -32,6 +33,9 @@ const MAP: Record<string, LucideIcon> = {
   sprout: Sprout, briefcase: Briefcase, medal: Medal, coins: Coins, gem: Gem,
   // navegação — recolher/expandir sidebar
   'panel-close': PanelLeftClose, 'panel-open': PanelLeftOpen,
+  // financeiro
+  wallet: Wallet, receipt: Receipt, 'trending-up': TrendingUp, banknote: Banknote,
+  dashboard: LayoutDashboard, dollar: CircleDollarSign,
 };
 
 export function Icon({ name, size = 16, className, strokeWidth = 2, style }: {

@@ -98,8 +98,14 @@ export function AcessoHmClient({ canEdit, canManageTurmas = false, onOpenAluno, 
   }, [daAba]);
   const nExcecoesAba = useMemo(() => daAba.filter(alunoExcecao).length, [daAba]);
 
-  // Reset dos filtros ao trocar de aba.
-  useEffect(() => { setFiltroCat(null); setSoExcecoes(false); }, [tab]);
+  // Reset dos filtros ao trocar de aba — ajuste durante o render (sem efeito),
+  // padrão "adjusting state when props change" do React.
+  const [tabAnterior, setTabAnterior] = useState(tab);
+  if (tabAnterior !== tab) {
+    setTabAnterior(tab);
+    setFiltroCat(null);
+    setSoExcecoes(false);
+  }
 
   const lista = useMemo(() => {
     const tokens = busca.toLowerCase().trim().split(/\s+/).filter(Boolean);

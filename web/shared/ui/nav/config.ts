@@ -78,6 +78,21 @@ export const REPORTS: ReportGroup[] = [
       { key: 'tags', label: 'Tags', path: '/depoimentos', hash: '#tags', href: '/depoimentos#tags', ico: 'tags', adminOnly: true },
     ],
   },
+  // Sem adminOnly: o gate é por setor. Quem vê é dev/admin ou quem tem a área
+  // 'financeiro' — ver podeVerFinanceiro(), que espelha gp_pode_ver_financeiro() no banco.
+  {
+    key: 'financeiro',
+    label: 'Financeiro',
+    path: '/relatorios/financeiro',
+    defaultHref: '/relatorios/financeiro#dashboard',
+    ico: 'wallet',
+    setor: 'financeiro',
+    children: [
+      { key: 'dashboard', label: 'Dashboard', path: '/relatorios/financeiro', hash: '#dashboard', href: '/relatorios/financeiro#dashboard', ico: 'dashboard' },
+      { key: 'contas-a-receber', label: 'Contas a Receber', path: '/relatorios/financeiro', hash: '#contas-a-receber', href: '/relatorios/financeiro#contas-a-receber', ico: 'receipt' },
+      { key: 'ofertas', label: 'Mapa de Ofertas', path: '/relatorios/financeiro', hash: '#ofertas', href: '/relatorios/financeiro#ofertas', ico: 'banknote' },
+    ],
+  },
 ];
 
 export const SYSTEM_NAV: SystemNavItem[] = [

@@ -60,6 +60,11 @@ export const MODULOS: ModuloAcesso[] = [
     verCodigo: '3.3.1', verLabel: 'Visualizar',
     acoes: [{ codigo: '3.3.2', funcao: 'depoimentos.moderador', label: 'Moderar depoimentos' }],
   },
+  {
+    codigo: '3.4', setor: 'financeiro', label: 'Financeiro',
+    verCodigo: '3.4.1', verLabel: 'Visualizar dash + contas a receber',
+    acoes: [{ codigo: '3.4.2', funcao: 'financeiro.operar', label: 'Registrar acordo de pagamento' }],
+  },
 ];
 
 export const LGPD_ACESSO = { codigo: '4.1', label: 'Ver CPF/documento completo (LGPD)' };

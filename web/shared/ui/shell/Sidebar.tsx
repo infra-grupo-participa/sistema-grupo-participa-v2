@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ehAdminOuAcima, ehDev, type GpUser } from '@/shared/domain/auth';
-import { REPORTS, SYSTEM_NAV } from '@/shared/ui/nav/config';
+import { ehAdminOuAcima, ehDev, podeVer, type GpUser } from '@/shared/domain/auth';
+import { podeVerFinanceiro } from '@/modules/financeiro/domain/acesso';
+import { REPORTS, SYSTEM_NAV, type ReportGroup } from '@/shared/ui/nav/config';
 import { Icon } from '@/shared/ui/icons';
 
 const GROUPS_KEY = 'gp_sidebar_groups';
@@ -80,6 +81,16 @@ export function Sidebar({ user }: { user: GpUser }) {
   };
 
   const cur = normalize(pathname);
+
+  // O grupo aparece se o cargo permite E o usuário tem o setor.
+  // Financeiro tem regra própria (visualizador NÃO vê dinheiro) — espelha
+  // gp_pode_ver_financeiro() no banco, senão a tela abriria vazia.
+  const podeVerGrupo = (g: ReportGroup) => {
+    if (g.adminOnly && !isAdmin) return false;
+    if (g.setor === 'financeiro') return podeVerFinanceiro(user);
+    return podeVer(user, g.setor);
+  };
+
   const itemCls = (active: boolean) =>
     `relative flex items-center gap-2.5 pl-3 pr-2 py-2 rounded-[var(--r-md)] text-sm cursor-pointer transition-colors duration-150 ${
       active
@@ -111,7 +122,7 @@ export function Sidebar({ user }: { user: GpUser }) {
 
       {/* Relatórios */}
       <Group label="Relatórios" collapsed={!!groups.reports} onToggle={() => toggleGroup('reports')}>
-        {REPORTS.filter((g) => !g.adminOnly || isAdmin).map((group) => {
+        {REPORTS.filter(podeVerGrupo).map((group) => {
           const onGroup = normalize(group.path) === cur;
           const open = reports[group.key] ?? onGroup;
           const children = group.children.filter((c) => !c.adminOnly || isAdmin);

@@ -9,7 +9,8 @@ export type Setor =
   | 'social_media'
   | 'placas'
   | 'depoimentos'
-  | 'centro_controle';
+  | 'centro_controle'
+  | 'financeiro';
 
 /** Dados brutos de cargo vindos da tabela `perfis`. */
 export interface CargoSource {
