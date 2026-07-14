@@ -5,9 +5,15 @@
 // permissão vive dentro de cada função no Postgres.
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import type { Acordo, ContaReceber, Lancamento, Oferta, TurmaFin } from '../domain/types';
+import type { Acordo, ContaReceber, DiaFaturamento, Lancamento, Oferta, TurmaFin } from '../domain/types';
 
 const db = () => createBrowserSupabase();
+
+export async function loadFaturamento(turma: string | null): Promise<DiaFaturamento[]> {
+  const { data, error } = await db().rpc('fn_fin_faturamento_diario', { p_turma: turma });
+  logQueryError('loadFaturamento', error);
+  return (data as DiaFaturamento[]) ?? [];
+}
 
 export async function loadTurmas(): Promise<TurmaFin[]> {
   const { data, error } = await db().rpc('fn_fin_turmas');

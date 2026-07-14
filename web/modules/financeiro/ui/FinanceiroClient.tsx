@@ -2,12 +2,13 @@
 
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
-import type { ContaReceber, Oferta, TurmaFin } from '../domain/types';
+import type { ContaReceber, DiaFaturamento, Oferta, TurmaFin } from '../domain/types';
 import {
   FILTROS_VAZIOS, STATUS_ORDEM, contaMorta, filtrar, resumir, statusLabel, statusTone, type Filtros,
 } from '../domain/financeiro';
 import * as data from './financeiro-data';
 import { FinanceiroDashboard } from './FinanceiroDashboard';
+import { FaturamentoDiario } from './FaturamentoDiario';
 import { ContaDrawer } from './ContaDrawer';
 import { exportarExcelFinanceiro } from './financeiro-export';
 import {
@@ -16,7 +17,7 @@ import {
 } from '@/shared/ui/components';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 
-type Tab = 'dashboard' | 'contas' | 'ofertas';
+type Tab = 'dashboard' | 'contas' | 'ofertas' | 'faturamento';
 type Gaveta = Filtros['gaveta'];
 
 /** Gavetas da fila — os cards de KPI são o próprio seletor (padrão do piloto Placas). */
@@ -24,17 +25,20 @@ const GAVETAS: { key: Gaveta; label: string; icon: string; tone: string }[] = [
   { key: 'todos', label: 'Todos', icon: 'users', tone: 'var(--fg-2)' },
   { key: 'vencido', label: 'Vencido', icon: 'alert', tone: 'var(--red)' },
   { key: 'sem_acordo', label: 'Sem acordo', icon: 'clipboard', tone: 'var(--fg-3)' },
+  { key: 'incalculavel', label: 'A calcular', icon: 'notebook', tone: 'var(--yellow)' },
   { key: 'a_receber', label: 'A receber', icon: 'trending-up', tone: 'var(--accent)' },
   { key: 'quitado', label: 'Quitado', icon: 'check', tone: 'var(--green)' },
 ];
 
 const SEM_CONTAS: ContaReceber[] = [];
+const SEM_DIAS: DiaFaturamento[] = [];
 
 export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; canVerDoc: boolean }) {
   const [tab, setTab] = useState<Tab>('dashboard');
   // Contas carimbadas com a turma de origem: `loading` é derivado (carga ≠ turma
   // selecionada), sem setState síncrono em efeito.
   const [carga, setCarga] = useState<{ turma: string | null; contas: ContaReceber[] } | null>(null);
+  const [cargaFat, setCargaFat] = useState<{ turma: string | null; dias: DiaFaturamento[] } | null>(null);
   const [turmas, setTurmas] = useState<TurmaFin[]>([]);
   const [ofertas, setOfertas] = useState<Oferta[]>([]);
   const [turma, setTurma] = useState<string | null>(null);
@@ -42,6 +46,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const [pronto, setPronto] = useState(false);
   const contas = carga && carga.turma === turma ? carga.contas : SEM_CONTAS;
   const loading = !pronto || !carga || carga.turma !== turma;
+  const dias = cargaFat && cargaFat.turma === turma ? cargaFat.dias : SEM_DIAS;
+  const loadingFat = !pronto || !cargaFat || cargaFat.turma !== turma;
   const [filtros, setFiltros] = useState<Filtros>(FILTROS_VAZIOS);
   const [q, setQ] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -61,6 +67,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       const h = window.location.hash.replace('#', '');
       if (h === 'contas-a-receber') setTab('contas');
       else if (h === 'ofertas') setTab('ofertas');
+      else if (h === 'faturamento') setTab('faturamento');
       else setTab('dashboard');
     };
     applyHash();
@@ -76,6 +83,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     if (!pronto) return;
     let vivo = true;
     data.loadContas(turma).then((cs) => { if (vivo) setCarga({ turma, contas: cs }); });
+    data.loadFaturamento(turma).then((ds) => { if (vivo) setCargaFat({ turma, dias: ds }); });
     return () => { vivo = false; };
   }, [turma, pronto]);
 
@@ -96,6 +104,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     todos: contas.length,
     vencido: contas.filter((c) => c.status_financeiro === 'vencido').length,
     sem_acordo: resumo.semAcordo,
+    incalculavel: resumo.incalculavel,
     a_receber: contas.filter((c) => (c.saldo_a_pagar ?? 0) > 0 && !contaMorta(c)).length,
     quitado: resumo.quitados,
   }), [contas, resumo]);
@@ -103,6 +112,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     todos: turma ? `turma ${turma}` : 'todas as turmas',
     vencido: `${fmtBRL(resumo.vencido)} em atraso`,
     sem_acordo: 'sem data combinada — agir',
+    incalculavel: 'sem insumo — descobrir o valor',
     a_receber: `${fmtBRL(resumo.aReceber)} a perseguir`,
     quitado: 'pacote 100% pago',
   };
@@ -172,6 +182,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               Contas a <span className="text-[var(--accent)]">Receber</span>
               <span className="ml-2 align-middle text-xs font-semibold rounded-[var(--r-pill)] bg-[var(--accent-subtle)] text-[var(--accent)] px-2 py-0.5 tabular">{contas.length}</span>
             </>
+          ) : tab === 'faturamento' ? (
+            <>Faturamento <span className="text-[var(--accent)]">Diário</span></>
           ) : (
             <>Mapa de <span className="text-[var(--accent)]">Ofertas</span></>
           )}
@@ -191,7 +203,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         </div>
       </div>
       <p className="text-sm text-[var(--fg-3)] mb-4">
-        Sinal pago na Hotmart + saldo do pacote combinado com o financeiro
+        {tab === 'faturamento'
+          ? 'Regime de caixa — o que entrou por dia de pagamento'
+          : 'Sinal pago na Hotmart + saldo do pacote combinado com o financeiro'}
         {turmaAtual ? ` · turma ${turmaAtual.turma} (${turmaAtual.alunos} alunos)` : ''}
       </p>
 
@@ -202,9 +216,11 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           onDrill={(g) => { setFiltros({ ...FILTROS_VAZIOS, gaveta: g }); setQ(''); irPara('#contas-a-receber'); }}
           onDrillStatus={(s) => { setFiltros({ ...FILTROS_VAZIOS, status: [s] }); setQ(''); irPara('#contas-a-receber'); }}
         />
+      ) : tab === 'faturamento' ? (
+        <FaturamentoDiario dias={dias} loading={loadingFat} turma={turma} />
       ) : tab === 'contas' ? (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4" role="tablist" aria-label="Gavetas de contas">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4" role="tablist" aria-label="Gavetas de contas">
             {GAVETAS.map((g) => (
               <QueueCard
                 key={g.key}

@@ -59,6 +59,14 @@ export function ContaDrawer({ conta: c, canEdit, canVerDoc, onClose, act }: {
 
       {tab === 'resumo' && (
         <div className="space-y-4">
+          {c.status_financeiro === 'incalculavel' && (
+            <div className="rounded-[var(--r-md)] border border-[var(--yellow-border)] bg-[var(--yellow-subtle)] p-3 text-sm flex items-center gap-1.5">
+              <Icon name="alert" size={14} className="text-[var(--yellow)] shrink-0" />
+              <span className="text-[var(--fg-2)]">
+                <strong className="text-[var(--yellow)]">Saldo a calcular</strong> — aluno da base sem insumo de crédito.
+              </span>
+            </div>
+          )}
           {cancelada && (
             <div className="rounded-[var(--r-md)] border border-[var(--red-border)] bg-[var(--red-subtle)] p-3 text-sm">
               <div className="font-semibold text-[var(--red)] flex items-center gap-1.5">
@@ -79,6 +87,16 @@ export function ContaDrawer({ conta: c, canEdit, canVerDoc, onClose, act }: {
             <Row k="Público" v={c.publico} />
             <Row k="Estágio (ativação)" v={c.estagio_nome ? `${c.estagio_nome}${c.estagio_aba ? ` · ${c.estagio_aba}` : ''}` : null} />
             <Row k="Pacote" v={fmtBRL(c.pacote)} />
+            {c.divergencia_regra != null && c.divergencia_regra !== 0 && (
+              <Row
+                k="Divergência da régua"
+                v={
+                  <span className={`font-semibold ${c.divergencia_regra > 0 ? 'text-[var(--yellow)]' : 'text-[var(--red)]'}`}>
+                    {fmtBRL(c.divergencia_regra)} · {c.divergencia_regra > 0 ? 'cobrando a mais' : 'dinheiro na mesa'}
+                  </span>
+                }
+              />
+            )}
             <Row
               k="Sinal"
               v={c.sinal_bruto != null

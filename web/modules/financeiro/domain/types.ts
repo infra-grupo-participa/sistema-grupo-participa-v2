@@ -15,6 +15,7 @@ export type StatusFinanceiro =
   | 'em_pagamento'
   | 'vencido'
   | 'a_vencer'
+  | 'incalculavel'
   | 'oferta_enviada'
   | 'sem_acordo';
 
@@ -55,6 +56,10 @@ export interface ContaReceber {
   total_pago_bruto: number | null;
   total_pago_liquido: number | null;
   pacote: number | null;
+  /** O que a régua manda (15.000 lead novo, ou 15.000 − crédito para aluno da base). */
+  pacote_regra: number | null;
+  /** Cravado − régua: positivo = cobrando a mais; negativo = dinheiro na mesa. */
+  divergencia_regra: number | null;
   credito: number | null;
   /** O que ainda falta receber. É a métrica que o financeiro persegue. */
   saldo_a_pagar: number | null;
@@ -128,6 +133,21 @@ export interface TurmaFin {
   turma: string;
   alunos: number;
   atual: boolean;
+}
+
+/** Uma linha do faturamento diário do HM (regime de caixa, por data de pagamento). */
+export interface DiaFaturamento {
+  dia: string;
+  lancamentos: number;
+  bruto: number;
+  liquido: number;
+  taxas: number;
+  sinal: number | null;
+  saldo: number | null;
+  mensalidade: number | null;
+  compra_cheia: number | null;
+  ajuste: number | null;
+  alunos: number;
 }
 
 /** O que o financeiro grava no card (mesmas colunas que a ativação lê). */
