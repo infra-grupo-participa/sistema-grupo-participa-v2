@@ -7,7 +7,11 @@ function conta(over: Partial<ContaReceber> = {}): ContaReceber {
     contato_hm_id: 'c1', comprador_id: 'p1', aluno_id: null,
     nome: 'Fulano', email: 'f@x.com', telefone: null, documento: null,
     turma: 'T39', turma_origem: null, canal: 'HT ATM', publico: 'lead_novo', tags: [],
-    estagio_nome: null, estagio_aba: null,
+    estagio_nome: null, estagio_aba: null, estagio_id: null,
+    produto: 'Holding Masters',
+    vendedor: null, reuniao_em: null, reuniao_resultado: null,
+    entrevista_em: null, entrevista_resultado: null, obs_comercial: null,
+    solicitou_cancelamento: false,
     sinal_bruto: 300, sinal_liquido: 287, sinal_taxas: 13,
     sinal_pago_em: '2026-07-01', sinal_metodo: 'PIX', sinal_transacao: 'TX1',
     saldo_pago_bruto: 0, saldo_pago_liquido: 0, saldo_taxas: 0,
@@ -41,6 +45,9 @@ describe('agingDe', () => {
   });
   it('vencimento futuro = a_vencer', () => {
     expect(agingDe(conta({ vencimento: '2026-12-01', dias_atraso: -20, saldo_a_pagar: 14700 }))).toBe('a_vencer');
+  });
+  it('status futuro (vence >30d) ainda entra no aging como a_vencer (não vencido)', () => {
+    expect(agingDe(conta({ vencimento: '2026-10-01', dias_atraso: -79, saldo_a_pagar: 14700, status_financeiro: 'futuro' }))).toBe('a_vencer');
   });
   it('faixas por dias de atraso', () => {
     expect(agingDe(conta({ vencimento: '2026-07-01', dias_atraso: 10, saldo_a_pagar: 1 }))).toBe('d1_15');
@@ -120,6 +127,15 @@ describe('preverRecebimento', () => {
     expect(f.proximos30).toBe(3000); // 1000 + 2000
     expect(f.emRisco).toBe(3000);
     expect(f.semPrazo).toBe(4000);
+    expect(f.alem30).toBe(0);
+  });
+  it('vencimento além de 30 dias entra em alem30 (Futuro), fora de proximos30', () => {
+    const f = preverRecebimento([
+      conta({ vencimento: '2026-07-18', saldo_a_pagar: 1000, status_financeiro: 'a_vencer' }), // +4d
+      conta({ vencimento: '2026-10-01', saldo_a_pagar: 5000, status_financeiro: 'futuro' }),   // +79d
+    ], hoje);
+    expect(f.proximos30).toBe(1000);
+    expect(f.alem30).toBe(5000);
   });
   it('ignora quitado e morto', () => {
     const f = preverRecebimento([

@@ -191,9 +191,10 @@ export function FinanceiroDashboard({ contas, dias, meta, loading, onDrill, onDr
       <div>
         <SectionTitle right={<Farol cond={indPrev.condicao} nota={indPrev.nota} />}>Previsão de recebimento</SectionTitle>
         <Card className="p-3.5">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-x-6 gap-y-3">
             <MiniPrevisao label="Próx. 7 dias" valor={forecast.proximos7} cor="var(--green)" />
             <MiniPrevisao label="Próx. 30 dias" valor={forecast.proximos30} cor="var(--accent)" />
+            <MiniPrevisao label="Futuro (+30 dias)" valor={forecast.alem30} cor="var(--fg-2)" />
             <MiniPrevisao label="Em risco (vencido)" valor={forecast.emRisco} cor="var(--red)" />
             <MiniPrevisao label="Sem prazo" valor={forecast.semPrazo} cor="var(--fg-3)" />
           </div>

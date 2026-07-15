@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { Card, Input, Button } from '@/shared/ui/components';
+import { Icon } from '@/shared/ui/icons';
 
 function LoginForm() {
   const router = useRouter();
@@ -47,42 +48,59 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-dvh grid place-items-center bg-[var(--surface-0)] p-4">
-      <Card as="form" onSubmit={entrar} className="w-full max-w-sm p-6">
-        <h1 className="text-xl font-bold text-[var(--accent)] text-center">Grupo Participa</h1>
-        <p className="mt-1 text-center text-sm text-[var(--fg-3)]">Acesso ao sistema interno</p>
+    <div className="relative min-h-dvh grid place-items-center overflow-hidden bg-[var(--surface-0)] p-4">
+      {/* Brilho de fundo sutil, herdando o accent — dá profundidade sem imagem externa. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-60"
+        style={{ background: 'radial-gradient(60% 45% at 50% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%)' }}
+      />
+      <Card as="form" onSubmit={entrar} className="relative w-full max-w-sm p-7 shadow-[var(--shadow-lg)]">
+        <div className="flex flex-col items-center text-center">
+          <span
+            className="grid h-12 w-12 place-items-center rounded-[var(--r-lg)] text-[var(--accent)]"
+            style={{ background: 'color-mix(in srgb, var(--accent) 14%, transparent)' }}
+          >
+            <Icon name="lock" size={22} />
+          </span>
+          <h1 className="mt-4 text-xl font-bold text-[var(--fg)]">Grupo Participa</h1>
+          <p className="mt-1 text-sm text-[var(--fg-3)]">Acesso ao sistema interno</p>
+        </div>
 
-        <label className="mt-6 block text-sm text-[var(--fg-2)]">E-mail</label>
+        <label className="mt-7 block text-sm font-medium text-[var(--fg-2)]">E-mail</label>
         <Input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
+          placeholder="voce@grupoparticipa.com.br"
           required
-          className="mt-1"
+          className="mt-1.5"
         />
 
-        <label className="mt-4 block text-sm text-[var(--fg-2)]">Senha</label>
+        <label className="mt-4 block text-sm font-medium text-[var(--fg-2)]">Senha</label>
         <Input
           type="password"
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
           autoComplete="current-password"
+          placeholder="••••••••"
           required
-          className="mt-1"
+          revealable
+          className="mt-1.5"
         />
 
         {erro && <p className="mt-3 text-sm text-[var(--red)]">{erro}</p>}
         {info && <p className="mt-3 text-sm text-[var(--green)]">{info}</p>}
 
-        <Button type="submit" disabled={loading} className="mt-5 w-full">
+        <Button type="submit" disabled={loading} className="mt-6 w-full">
           {loading ? 'Entrando…' : 'Entrar'}
         </Button>
 
         <button
           type="button"
           onClick={recuperar}
-          className="mt-3 w-full text-center text-sm text-[var(--fg-3)] hover:text-[var(--fg)]"
+          className="mt-3 w-full text-center text-sm text-[var(--fg-3)] transition-colors hover:text-[var(--fg)]"
         >
           Esqueci minha senha
         </button>

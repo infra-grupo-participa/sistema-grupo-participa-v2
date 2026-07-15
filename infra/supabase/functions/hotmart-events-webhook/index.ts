@@ -136,6 +136,72 @@ function msToIso(ms: number | null | undefined): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+// Lê um valor numérico que a Hotmart pode mandar plano (value: 12) ou aninhado
+// (value: { value: 12, currency_value: "BRL" }). Retorna null se não for número.
+function readAmount(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  const nested = (v as Record<string, unknown> | null)?.value;
+  if (typeof nested === "number" && Number.isFinite(nested)) return nested;
+  return null;
+}
+
+// Deriva o valor LÍQUIDO do produtor e a TAXA da Hotmart a partir de
+// data.commissions[]. O PURCHASE_APPROVED traz um array de comissões, cada uma
+// com source/commission_type ∈ {PRODUCER, COPRODUCER, AFFILIATE, MARKETPLACE…}.
+//   líquido do produtor = soma das entradas PRODUCER (o que de fato entra pra empresa)
+//   taxa Hotmart        = bruto − líquido
+// Defensivo: se o array não vier (ou não houver PRODUCER), devolve null/null — o
+// webhook grava só o bruto, exatamente como antes (nunca piora o dado existente).
+function extractComissao(
+  data: Record<string, unknown>,
+  gross: number | null,
+): { valorLiquido: number | null; taxaProcessamento: number | null } {
+  const commissions = data?.commissions;
+  if (!Array.isArray(commissions) || commissions.length === 0) {
+    return { valorLiquido: null, taxaProcessamento: null };
+  }
+  let produtor = 0;
+  let achouProdutor = false;
+  for (const c of commissions as Array<Record<string, unknown>>) {
+    const src = String(c.source ?? c.commission_type ?? "").toUpperCase();
+    const v = readAmount(c.value);
+    if (v == null) continue;
+    if (src === "PRODUCER") {
+      produtor += v;
+      achouProdutor = true;
+    }
+  }
+  if (!achouProdutor) return { valorLiquido: null, taxaProcessamento: null };
+  const liquido = Math.round(produtor * 100) / 100;
+  const taxa = gross != null ? Math.round((gross - liquido) * 100) / 100 : null;
+  return { valorLiquido: liquido, taxaProcessamento: taxa };
+}
+
+// Arquiva o payload bruto do evento (best-effort, não-fatal) via RPC SECURITY
+// DEFINER. Fonte de verdade para conferência e backfill de líquido/taxa.
+async function logHotmartEvento(
+  evento: string,
+  transacao: string | null,
+  email: string | null,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return;
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { error } = await supabase.rpc("fn_log_hotmart_evento", {
+      p_evento: evento,
+      p_transacao: transacao,
+      p_email: email,
+      p_payload: payload,
+    });
+    if (error) console.error("[DB] falha ao arquivar evento Hotmart:", error.message);
+  } catch (e) {
+    console.error("[DB] exceção em logHotmartEvento:", e instanceof Error ? e.message : e);
+  }
+}
+
 // Extrai cidade/estado tentando várias localizações conhecidas do payload da
 // Hotmart. Em produtos cujo checkout NÃO solicita endereço, todos esses caminhos
 // virão vazios — isso só se resolve marcando "endereço obrigatório" no painel.
@@ -258,6 +324,8 @@ async function persistPurchase(args: {
   numeroRecorrencia: number | null;
   metodoPagamento: string | null;
   parcelas: number | null;
+  valorLiquido: number | null;
+  taxaProcessamento: number | null;
   dataCompraIso: string | null;
   dataAprovacaoIso: string | null;
 }): Promise<void> {
@@ -316,6 +384,10 @@ async function persistPurchase(args: {
           numero_recorrencia: args.numeroRecorrencia,
           metodo_pagamento: args.metodoPagamento,
           parcelas: args.parcelas,
+          // Só grava líquido/taxa quando derivados das commissions. Condicional para
+          // NÃO sobrescrever com null um valor já enriquecido (CSV Sales / sync).
+          ...(args.valorLiquido != null ? { valor_liquido: args.valorLiquido } : {}),
+          ...(args.taxaProcessamento != null ? { taxa_processamento: args.taxaProcessamento } : {}),
           data_compra: args.dataCompraIso,
           data_aprovacao: args.dataAprovacaoIso,
           hotmart_event: "PURCHASE_APPROVED",
@@ -442,6 +514,14 @@ serve(async (req) => {
   // O documento (CPF/CNPJ) é gravado APENAS no banco — nunca exposto no Slack.
   const offer = purchase.offer as Record<string, unknown> | undefined;
   const payment = purchase.payment as Record<string, unknown> | undefined;
+  const grossValue = readAmount(price?.value) ?? (price?.value as number ?? null);
+  // Líquido/taxa derivados das commissions do payload (null se ausentes → grava só bruto).
+  const { valorLiquido, taxaProcessamento } = extractComissao(data, grossValue);
+
+  // Arquiva o payload bruto ANTES de persistir a compra: garante material p/ backfill
+  // e conferência mesmo que a gravação em compras falhe. Não-fatal.
+  await logHotmartEvento(event, String(purchase.transaction), String(buyer.email), body);
+
   await persistPurchase({
     nome: String(buyer.name ?? "Sem nome"),
     email: String(buyer.email),
@@ -460,6 +540,8 @@ serve(async (req) => {
     numeroRecorrencia: purchase.recurrency_number != null ? Number(purchase.recurrency_number) : null,
     metodoPagamento: payment?.type ? String(payment.type) : null,
     parcelas: payment?.installments_number != null ? Number(payment.installments_number) : null,
+    valorLiquido,
+    taxaProcessamento,
     dataCompraIso: msToIso(Number(purchase.order_date ?? 0) || null),
     dataAprovacaoIso: msToIso(Number(purchase.approved_date ?? 0) || null),
   });
@@ -490,8 +572,15 @@ function resolveOrigemLabel(sck: string): string {
   if (lower.includes("tiktok")) return "TikTok Ads";
   if (lower.includes("organic") || lower.includes("organico") || lower.includes("orgânico")) return "Orgânico";
   if (lower.includes("email") || lower.includes("e-mail")) return "E-mail Marketing";
-  if (lower.includes("comercial") || lower.includes("vendas") || lower.includes("sdv") || lower.includes("sdr")) return "Comercial";
-  if (lower.includes("gpt") || lower.includes("chatbot") || lower.includes("ia") || lower.includes("whatsapp bot")) return "GPT / Automação";
+  if (
+    lower.includes("comercial") || lower.includes("vendas") || lower.includes("sdv") || lower.includes("sdr")
+    || lower.includes("closer") || lower.includes("reuniao") || lower.includes("reunião")
+    || lower.includes("call") || lower.includes("agendou") || lower.includes("fechamento") || lower.includes("consultor")
+  ) return "Comercial";
+  // "ia" só bate como token isolado (\bia\b). Antes, includes("ia") capturava
+  // qualquer palavra com "ia" no meio (reuniao, consultoria, diaria…) e marcava
+  // vendas comerciais como GPT por engano.
+  if (lower.includes("gpt") || lower.includes("chatbot") || /\bia\b/.test(lower) || lower.includes("whatsapp bot") || lower.includes("automacao") || lower.includes("automação")) return "GPT / Automação";
   if (lower.includes("hotmart") && (lower.includes("marketplace") || lower.includes("club"))) return "Hotmart Marketplace";
   if (lower.includes("indicacao") || lower.includes("indicação") || lower.includes("referral")) return "Indicação";
   if (lower.includes("direto") || lower.includes("direct")) return "Acesso Direto";

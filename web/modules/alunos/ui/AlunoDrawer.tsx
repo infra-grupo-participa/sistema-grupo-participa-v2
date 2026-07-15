@@ -126,6 +126,7 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
                   ) : <div className="text-xs text-[var(--fg-3)] mb-2">Sem turma THB definida — status de renovação indisponível.</div>;
                 })()}
                 <Row k="Turma" v={a.turma_codigo || '—'} />
+                <Row k="Renovações" v={a.num_renovacoes == null ? '—' : String(a.num_renovacoes)} />
                 <Row k="Vencimento" v={fmtData(a.data_expiracao)} />
                 <Row k="Data da compra" v={fmtData(a.data_compra_importada)} />
                 {a.tempo_acesso && <Row k="Tempo de acesso" v={a.tempo_acesso} />}

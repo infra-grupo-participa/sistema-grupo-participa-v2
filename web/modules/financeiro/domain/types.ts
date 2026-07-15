@@ -15,6 +15,7 @@ export type StatusFinanceiro =
   | 'em_pagamento'
   | 'vencido'
   | 'a_vencer'
+  | 'futuro'
   | 'incalculavel'
   | 'oferta_enviada'
   | 'sem_acordo';
@@ -38,6 +39,22 @@ export interface ContaReceber {
   tags: string[] | null;
   estagio_nome: string | null;
   estagio_aba: string | null;
+  estagio_id: number | null;
+
+  /** Identificador de produto. Hoje sempre 'Holding Masters'; base para outras fontes de receita. */
+  produto: string;
+
+  // ── Comercial (espelhado do card da ativação, read-only) ────────────────────
+  /** Vendedor responsável (cs.contatos_hm.responsavel). */
+  vendedor: string | null;
+  reuniao_em: string | null;
+  reuniao_resultado: string | null;
+  entrevista_em: string | null;
+  entrevista_resultado: string | null;
+  obs_comercial: string | null;
+
+  /** Caiu no kanban de cancelamento (estágio 28) OU tem timestamp de cancelamento. */
+  solicitou_cancelamento: boolean;
 
   sinal_bruto: number | null;
   sinal_liquido: number | null;

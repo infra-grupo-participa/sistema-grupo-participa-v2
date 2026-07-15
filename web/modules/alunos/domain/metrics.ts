@@ -46,7 +46,7 @@ const ESPACO_KPI: { key: string; label: string }[] = [
   { key: 'holding_masters', label: 'Holding Masters' },
   { key: 'aurum', label: 'Aurum' },
   { key: 'platina', label: 'Platina' },
-  { key: 'mastermind_diamante', label: 'Mastermind' },
+  { key: 'mastermind_diamante', label: 'Diamante' },
   { key: 'diamante_vermelho', label: 'Diamante Vermelho' },
 ];
 

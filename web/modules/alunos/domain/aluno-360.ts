@@ -53,6 +53,8 @@ export interface Aluno360 {
   status_pagamento: string | null;
   ultimo_pagamento: string | null;
   num_cobrancas: number | null;
+  /** Quantas vezes o aluno renovou (compras de renovação HM em public.compras). */
+  num_renovacoes: number | null;
   // CS
   cs_estagio: string | null;
   cs_responsavel: string | null;
@@ -95,7 +97,7 @@ export const ESPACO_LABEL: Record<string, string> = {
   holding_masters: 'Holding Masters',
   aurum: 'Aurum',
   platina: 'Platina',
-  mastermind_diamante: 'Mastermind Diamante',
+  mastermind_diamante: 'Diamante',
   diamante_vermelho: 'Diamante Vermelho',
 };
 

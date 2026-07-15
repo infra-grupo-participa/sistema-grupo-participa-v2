@@ -12,7 +12,7 @@ import {
 } from '@/shared/ui/components';
 import { fmtBRL, fmtData, fmtDataHora } from '@/shared/ui/format';
 
-type TabKey = 'resumo' | 'acordo' | 'cobranca' | 'extrato';
+type TabKey = 'resumo' | 'comercial' | 'acordo' | 'cobranca' | 'extrato';
 type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
 type Act = (fn: () => Promise<{ ok: boolean; msg?: string }>) => Promise<void>;
 
@@ -51,13 +51,14 @@ export function ContaDrawer({ conta: c, regua, canEdit, canVerDoc, onClose, act,
       subtitle={c.email}
       badges={
         <>
+          <Badge tone="accent">{c.produto}</Badge>
           <Badge tone="neutral">{c.canal}</Badge>
           <Badge tone={statusTone(c.status_financeiro)} dot>{statusLabel(c.status_financeiro)}</Badge>
         </>
       }
     >
       <Tabs
-        tabs={[{ k: 'resumo', l: 'Resumo' }, { k: 'acordo', l: 'Acordo' }, { k: 'cobranca', l: 'Cobrança' }, { k: 'extrato', l: 'Extrato' }]}
+        tabs={[{ k: 'resumo', l: 'Resumo' }, { k: 'comercial', l: 'Comercial' }, { k: 'acordo', l: 'Acordo' }, { k: 'cobranca', l: 'Cobrança' }, { k: 'extrato', l: 'Extrato' }]}
         active={tab}
         onChange={(k) => setTab(k as TabKey)}
       />
@@ -140,12 +141,70 @@ export function ContaDrawer({ conta: c, regua, canEdit, canVerDoc, onClose, act,
         </div>
       )}
 
+      {tab === 'comercial' && <ComercialTab c={c} />}
+
       {tab === 'acordo' && <AcordoTab c={c} canEdit={canEdit} act={act} />}
 
       {tab === 'cobranca' && <CobrancaTab c={c} regua={regua} canEdit={canEdit} act={act} />}
 
       {tab === 'extrato' && <ExtratoTab compradorId={c.comprador_id} />}
     </Drawer>
+  );
+}
+
+// ── Comercial (espelho read-only do card da ativação) ────────────────────────
+
+const REUNIAO_TONE: Record<string, Tone> = {
+  'Realizada/pago': 'success',
+  Realizada: 'info',
+  Agendada: 'accent',
+  'Aguardando retorno': 'warning',
+};
+
+function ComercialTab({ c }: { c: ContaReceber }) {
+  const estagio = c.estagio_nome ? `${c.estagio_nome}${c.estagio_aba ? ` · ${c.estagio_aba}` : ''}` : null;
+  const reuniao = c.reuniao_em || c.reuniao_resultado
+    ? [c.reuniao_em ? fmtDataHora(c.reuniao_em) : null, c.reuniao_resultado].filter(Boolean).join(' · ')
+    : null;
+  const entrevista = c.entrevista_em || c.entrevista_resultado
+    ? [c.entrevista_em ? fmtDataHora(c.entrevista_em) : null, c.entrevista_resultado].filter(Boolean).join(' · ')
+    : null;
+  const negociado = c.pagamento_forma
+    ? [c.pagamento_forma, c.pagamento_parcelas != null ? `${c.pagamento_parcelas}x` : null, c.pagamento_meio].filter(Boolean).join(' · ')
+    : null;
+  const vazio = !c.vendedor && !estagio && !reuniao && !entrevista && !negociado && !c.obs_comercial;
+
+  if (vazio) {
+    return <EmptyState title="Sem dados do comercial" hint="Nada foi registrado no card da ativação para este aluno." icon="clipboard" />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-[var(--fg-3)]">
+        O que foi combinado com o comercial — espelhado do sistema de ativação, somente leitura.
+      </p>
+      <div className="grid sm:grid-cols-2 sm:gap-x-6">
+        <Row k="Vendedor responsável" v={c.vendedor} />
+        <Row k="Estágio (kanban)" v={estagio} />
+        <Row
+          k="Reunião"
+          v={reuniao ? (
+            <span className="inline-flex flex-wrap items-center gap-2">
+              {c.reuniao_em && <span className="tabular">{fmtDataHora(c.reuniao_em)}</span>}
+              {c.reuniao_resultado && <Badge tone={REUNIAO_TONE[c.reuniao_resultado] ?? 'neutral'}>{c.reuniao_resultado}</Badge>}
+            </span>
+          ) : null}
+        />
+        <Row k="Entrevista" v={entrevista} />
+        <Row k="Forma negociada" v={negociado} />
+      </div>
+      {c.obs_comercial && (
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)] mb-1">Observações do comercial</div>
+          <div className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] p-3 text-sm text-[var(--fg-2)] whitespace-pre-wrap">{c.obs_comercial}</div>
+        </div>
+      )}
+    </div>
   );
 }
 

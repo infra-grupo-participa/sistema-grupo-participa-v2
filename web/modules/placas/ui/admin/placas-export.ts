@@ -2,15 +2,14 @@
 
 // Exportação Excel do relatório de placas — colunas/ordem/formato idênticos ao legado
 // (relatorios.html → exportarXLSX): 14 colunas, aba "Solicitações de Placas",
-// arquivo placas-solicitacoes-YYYY-MM-DD.xlsx, só registros com entrevista finalizada+.
+// arquivo placas-solicitacoes-YYYY-MM-DD.xlsx.
+//
+// A planilha espelha a lista exibida: o recorte vem da tela (gaveta + filtros + busca +
+// ordenação) e é exportado como está, sem descartar linhas por elegibilidade.
 
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { nivelLabel } from '@/shared/domain/nivel-resultado';
-import { AUDIT_STEP_INDEX } from '../../domain/auditoria';
 import type { Solicitacao } from '../../domain/types';
-
-const IGNORED_STATUSES = new Set(['rejeitado', 'concluido', 'placa_postada']);
-const MIN_STEP = AUDIT_STEP_INDEX.ENTREVISTA_FINALIZADA; // 3
 
 const HEADERS = [
   'QR-CODE',
@@ -28,17 +27,6 @@ const HEADERS = [
   'Estado',
   'Código de Envio',
 ] as const;
-
-/** Só registros elegíveis: entrevista finalizada+ (step ≥ 3), excluindo rejeitado/concluído/enviada. */
-export function solicitacoesExportaveis(rows: Solicitacao[]): Solicitacao[] {
-  return rows.filter((s) => {
-    if (IGNORED_STATUSES.has(String(s.status))) return false;
-    // Só auditoria_step: step_index em rascunho é o passo do FORMULÁRIO (0-9) — o fallback
-    // antigo exportava rascunhos preenchidos até o passo 3+ como se estivessem em entrega.
-    const step = Number(s.auditoria_step ?? -1);
-    return step >= MIN_STEP;
-  });
-}
 
 const digits = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 const normEmail = (v: unknown) => String(v ?? '').trim().toLowerCase();
@@ -108,11 +96,10 @@ function buildRows(rows: Solicitacao[], anoDe: (s: Solicitacao) => string): stri
 const nomeArquivo = () => `placas-solicitacoes-${new Date().toISOString().slice(0, 10)}.xlsx`;
 
 /**
- * Exporta as solicitações elegíveis (a partir da lista já filtrada na tela) para .xlsx
- * idêntico ao legado. Retorna a quantidade de linhas exportadas (0 = nenhuma elegível).
+ * Exporta a lista visível (gaveta + filtros + busca + ordenação já aplicados na tela) para
+ * .xlsx idêntico ao legado. Retorna a quantidade de linhas exportadas.
  */
-export async function exportarExcelPlacas(filtradas: Solicitacao[]): Promise<number> {
-  const rows = solicitacoesExportaveis(filtradas);
+export async function exportarExcelPlacas(rows: Solicitacao[]): Promise<number> {
   if (!rows.length) return 0;
 
   const anoDe = await anoIngressoLookup(rows);

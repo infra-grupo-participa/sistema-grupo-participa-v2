@@ -124,6 +124,8 @@ export interface Forecast {
   /** Vence nos próximos 7 dias (a receber, ainda no prazo). */
   proximos7: number;
   proximos30: number;
+  /** Vence além de 30 dias — horizonte futuro (status 'futuro'). */
+  alem30: number;
   /** Vencido em aberto — em risco, cobrança ativa. */
   emRisco: number;
   /** Sem vencimento combinado — não previsível até virar acordo. */
@@ -133,7 +135,7 @@ export interface Forecast {
 export function preverRecebimento(contas: ContaReceber[], hojeISO: string): Forecast {
   const d7 = addDias(hojeISO, 7);
   const d30 = addDias(hojeISO, 30);
-  const f: Forecast = { proximos7: 0, proximos30: 0, emRisco: 0, semPrazo: 0 };
+  const f: Forecast = { proximos7: 0, proximos30: 0, alem30: 0, emRisco: 0, semPrazo: 0 };
   for (const c of contas) {
     if (contaMorta(c) || c.status_financeiro === 'quitado') continue;
     const saldo = c.saldo_a_pagar ?? 0;
@@ -143,6 +145,7 @@ export function preverRecebimento(contas: ContaReceber[], hojeISO: string): Fore
     if (venc < hojeISO) { f.emRisco += saldo; continue; }
     if (venc <= d7) f.proximos7 += saldo;
     if (venc <= d30) f.proximos30 += saldo;
+    else f.alem30 += saldo;
   }
   return f;
 }

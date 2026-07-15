@@ -4,7 +4,7 @@ import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } fro
 import { Icon } from '@/shared/ui/icons';
 import type { ContaReceber, DiaFaturamento, Meta, Oferta, ReguaPasso, TurmaFin } from '../domain/types';
 import {
-  FILTROS_VAZIOS, STATUS_ORDEM, contaMorta, filtrar, resumir, statusLabel, statusTone, type Filtros,
+  FILTROS_VAZIOS, STATUS_ORDEM, contaMorta, filtrar, formaPagamentoLabel, resumir, statusLabel, type Filtros,
 } from '../domain/financeiro';
 import { precisaAcao } from '../domain/cobranca';
 import * as data from './financeiro-data';
@@ -15,10 +15,10 @@ import { ConfiguracoesFinanceiro } from './ConfiguracoesFinanceiro';
 import { ContaDrawer } from './ContaDrawer';
 import { exportarExcelFinanceiro } from './financeiro-export';
 import {
-  Badge, Button, DataTable, EmptyState, FilterSelect, Loading, MultiSelect, SearchInput,
+  Badge, Button, DataTable, EmptyState, FilterSelect, Loading, MultiSelect, ProgressBar, SearchInput,
   SectionCard, SkeletonRows, Td, Th, Thead, Toast, Toolbar, Tr, useFlash,
 } from '@/shared/ui/components';
-import { fmtBRL, fmtData } from '@/shared/ui/format';
+import { fmtBRL, fmtBRLc, fmtData, fmtDesde } from '@/shared/ui/format';
 
 type Tab = 'dashboard' | 'contas' | 'cobranca' | 'ofertas' | 'faturamento' | 'config';
 type Gaveta = Filtros['gaveta'];
@@ -31,6 +31,8 @@ const GAVETAS: { key: Gaveta; label: string; icon: string; tone: string }[] = [
   { key: 'incalculavel', label: 'A calcular', icon: 'notebook', tone: 'var(--yellow)' },
   { key: 'a_receber', label: 'A receber', icon: 'trending-up', tone: 'var(--accent)' },
   { key: 'quitado', label: 'Quitado', icon: 'check', tone: 'var(--green)' },
+  { key: 'pediu_cancelamento', label: 'Pediu cancelamento', icon: 'logout', tone: 'var(--yellow)' },
+  { key: 'cancelado', label: 'Cancelado', icon: 'x', tone: 'var(--red)' },
 ];
 
 const SEM_CONTAS: ContaReceber[] = [];
@@ -133,6 +135,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     incalculavel: resumo.incalculavel,
     a_receber: contas.filter((c) => (c.saldo_a_pagar ?? 0) > 0 && !contaMorta(c)).length,
     quitado: resumo.quitados,
+    pediu_cancelamento: resumo.pediuCancelamento,
+    cancelado: resumo.cancelados,
   }), [contas, resumo]);
   const gavetaHint: Record<Gaveta, string> = {
     todos: turma ? `turma ${turma}` : 'todas as turmas',
@@ -141,14 +145,20 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     incalculavel: 'sem insumo — descobrir o valor',
     a_receber: `${fmtBRL(resumo.aReceber)} a perseguir`,
     quitado: 'pacote 100% pago',
+    pediu_cancelamento: 'caiu no kanban de cancelamento',
+    cancelado: 'cancelado ou reembolsado',
   };
 
   const canalOpts = useMemo(
     () => Array.from(new Set(contas.map((c) => c.canal).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR')),
     [contas],
   );
+  const produtoOpts = useMemo(
+    () => Array.from(new Set(contas.map((c) => c.produto).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    [contas],
+  );
 
-  type SortCol = 'nome' | 'canal' | 'sinal_pago_em' | 'saldo_a_pagar' | 'vencimento' | 'status_financeiro';
+  type SortCol = 'nome' | 'canal' | 'sinal_pago_em' | 'total_pago_bruto' | 'saldo_a_pagar' | 'ultimo_pagamento_em';
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const sortBtn = (col: SortCol) => () => {
@@ -159,10 +169,6 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // Busca adiada: digitar não trava a renderização da tabela.
   const dq = useDeferredValue(q);
   const visiveis = useMemo(() => {
-    const statusRank = (s: string) => {
-      const i = (STATUS_ORDEM as readonly string[]).indexOf(s);
-      return i === -1 ? STATUS_ORDEM.length : i;
-    };
     let lista = filtrar(contas, { ...filtros, termo: dq });
     if (soFila) lista = lista.filter((c) => filaSet.has(c.contato_hm_id));
     if (!sortCol) return lista;
@@ -172,13 +178,13 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       if (sortCol === 'canal') return dir * a.canal.localeCompare(b.canal, 'pt-BR');
       // Datas nulas sempre no fim, independente da direção.
       if (sortCol === 'sinal_pago_em') return dir * String(a.sinal_pago_em ?? '9999').localeCompare(String(b.sinal_pago_em ?? '9999'));
-      if (sortCol === 'vencimento') return dir * String(a.vencimento ?? '9999').localeCompare(String(b.vencimento ?? '9999'));
-      if (sortCol === 'saldo_a_pagar') return dir * ((a.saldo_a_pagar ?? -1) - (b.saldo_a_pagar ?? -1));
-      return dir * (statusRank(a.status_financeiro) - statusRank(b.status_financeiro));
+      if (sortCol === 'ultimo_pagamento_em') return dir * String(a.ultimo_pagamento_em ?? '9999').localeCompare(String(b.ultimo_pagamento_em ?? '9999'));
+      if (sortCol === 'total_pago_bruto') return dir * ((a.total_pago_bruto ?? -1) - (b.total_pago_bruto ?? -1));
+      return dir * ((a.saldo_a_pagar ?? -1) - (b.saldo_a_pagar ?? -1));
     });
   }, [contas, filtros, dq, sortCol, sortDir, soFila, filaSet]);
 
-  const temFiltro = filtros.status.length > 0 || filtros.canais.length > 0 || filtros.gaveta !== 'todos' || dq.trim().length > 0 || soFila;
+  const temFiltro = filtros.status.length > 0 || filtros.canais.length > 0 || filtros.produtos.length > 0 || filtros.gaveta !== 'todos' || dq.trim().length > 0 || soFila;
   const aberta = openId ? contas.find((c) => c.contato_hm_id === openId) ?? null : null;
 
   const [exportando, setExportando] = useState(false);
@@ -269,7 +275,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         <ConfiguracoesFinanceiro canEdit={canEdit} turmas={nomesTurmas} onReguaSalva={setRegua} />
       ) : tab === 'contas' ? (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3 mb-4" role="tablist" aria-label="Gavetas de contas">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5 mb-4" role="tablist" aria-label="Gavetas de contas">
             {GAVETAS.map((g) => (
               <QueueCard
                 key={g.key}
@@ -308,6 +314,15 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               placeholder="Todos os canais"
               options={canalOpts.map((c) => ({ value: c, label: c }))}
             />
+            {/* Filtro por produto — hoje só HM, mas pronto p/ outras fontes de receita. */}
+            {produtoOpts.length > 1 && (
+              <MultiSelect
+                values={filtros.produtos}
+                onChange={(v) => setFiltros((f) => ({ ...f, produtos: v }))}
+                placeholder="Todos os produtos"
+                options={produtoOpts.map((p) => ({ value: p, label: p }))}
+              />
+            )}
             {temFiltro && (
               <Button variant="ghost" size="sm" onClick={() => { setFiltros(FILTROS_VAZIOS); setQ(''); setSoFila(false); }}>Limpar</Button>
             )}
@@ -318,18 +333,17 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           <DataTable fixed>
             <Thead>
               <Th sortable active={sortCol === 'nome'} dir={sortDir} onClick={sortBtn('nome')}>Aluno</Th>
-              <Th sortable active={sortCol === 'canal'} dir={sortDir} onClick={sortBtn('canal')} className="w-[180px]">Canal</Th>
-              <Th className="w-[105px]">Sinal</Th>
-              <Th sortable active={sortCol === 'sinal_pago_em'} dir={sortDir} onClick={sortBtn('sinal_pago_em')} className="w-[95px]">Pago em</Th>
-              <Th sortable active={sortCol === 'saldo_a_pagar'} dir={sortDir} onClick={sortBtn('saldo_a_pagar')} className="w-[115px]">Saldo a pagar</Th>
-              <Th className="w-[115px]">Saldo pago</Th>
-              <Th className="w-[95px]">Pago em (saldo)</Th>
-              <Th sortable active={sortCol === 'vencimento'} dir={sortDir} onClick={sortBtn('vencimento')} className="w-[110px]">Vencimento</Th>
-              <Th sortable active={sortCol === 'status_financeiro'} dir={sortDir} onClick={sortBtn('status_financeiro')} className="w-[150px]">Status</Th>
+              <Th sortable active={sortCol === 'canal'} dir={sortDir} onClick={sortBtn('canal')} className="w-[170px]">Origem</Th>
+              <Th sortable active={sortCol === 'sinal_pago_em'} dir={sortDir} onClick={sortBtn('sinal_pago_em')} className="w-[95px]">Sinal pago em</Th>
+              <Th sortable active={sortCol === 'total_pago_bruto'} dir={sortDir} onClick={sortBtn('total_pago_bruto')} className="w-[160px]">Já pago</Th>
+              <Th className="w-[92px]">Parcelas</Th>
+              <Th sortable active={sortCol === 'saldo_a_pagar'} dir={sortDir} onClick={sortBtn('saldo_a_pagar')} className="w-[140px]">Falta pagar</Th>
+              <Th sortable active={sortCol === 'ultimo_pagamento_em'} dir={sortDir} onClick={sortBtn('ultimo_pagamento_em')} className="w-[115px]">Último pagamento</Th>
+              <Th className="w-[130px]">Forma</Th>
             </Thead>
             <tbody>
               {loading && !contas.length
-                ? <SkeletonRows cols={[88, 64, 56, 72, 72, 56, 64, 88]} />
+                ? <SkeletonRows cols={[70, 64, 96, 56, 84, 72, 84]} />
                 : visiveis.map((c) => <LinhaConta key={c.contato_hm_id} c={c} onOpen={setOpenId} flash={flash} />)}
             </tbody>
           </DataTable>
@@ -430,7 +444,14 @@ function QueueCard({ label, hint, icon, tone, value, active, onClick }: {
 const LinhaConta = memo(function LinhaConta({ c, onOpen, flash }: {
   c: ContaReceber; onOpen: (id: string) => void; flash: (msg: string) => void;
 }) {
+  const morta = contaMorta(c);
+  const quitado = c.status_financeiro === 'quitado';
   const vencido = c.status_financeiro === 'vencido';
+  const pediu = c.status_financeiro === 'cancelamento_solicitado';
+  const pct = c.pago_pct ?? 0;
+  const desde = fmtDesde(c.ultimo_pagamento_em);
+  // Forma real do pagamento (Hotmart): prioriza a do saldo; cai no sinal se ainda só pagou o sinal.
+  const forma = formaPagamentoLabel(c.saldo_metodo ?? c.sinal_metodo);
   // stopPropagation: o clique de copiar não pode abrir o drawer da linha.
   const copiar = (e: React.MouseEvent, valor: string, oQue: string) => {
     e.stopPropagation();
@@ -439,6 +460,7 @@ const LinhaConta = memo(function LinhaConta({ c, onOpen, flash }: {
   };
   return (
     <Tr onClick={() => onOpen(c.contato_hm_id)}>
+      {/* Aluno */}
       <Td>
         <div className="min-w-0">
           <div className="truncate text-[13px] font-medium text-[var(--fg)]">{c.nome || '—'}</div>
@@ -450,40 +472,63 @@ const LinhaConta = memo(function LinhaConta({ c, onOpen, flash }: {
           </div>
         </div>
       </Td>
-      <Td><span className="inline-flex whitespace-normal"><Badge tone="neutral">{c.canal}</Badge></span></Td>
-      <Td className="overflow-hidden">
-        <div className="text-[13px] tabular text-[var(--fg)]">{fmtBRL(c.sinal_bruto)}</div>
-        <div className="text-[10px] tabular text-[var(--fg-3)]">líq. {fmtBRL(c.sinal_liquido)}</div>
+      {/* Origem: canal + produto */}
+      <Td>
+        <div className="flex flex-col gap-1 items-start">
+          <span className="inline-flex whitespace-normal"><Badge tone="neutral">{c.canal}</Badge></span>
+          <span className="inline-flex whitespace-normal"><Badge tone="accent">{c.produto}</Badge></span>
+        </div>
       </Td>
+      {/* Sinal pago em */}
       <Td className="text-xs text-[var(--fg-2)] tabular whitespace-nowrap">{fmtData(c.sinal_pago_em)}</Td>
+      {/* Já pago: total bruto + barra de progresso do pacote */}
       <Td className="overflow-hidden">
-        <span className={`text-[13px] tabular ${vencido ? 'text-[var(--red)] font-semibold' : 'text-[var(--fg)]'}`}>{fmtBRL(c.saldo_a_pagar)}</span>
+        <div className="text-[13px] tabular font-semibold text-[var(--green)]">{fmtBRLc(c.total_pago_bruto)}</div>
+        <div className="mt-1"><ProgressBar value={pct} tone={quitado ? 'green' : 'accent'} height={5} showLabel /></div>
       </Td>
+      {/* Parcelas do plano (pagas / contratadas) + valor da parcela */}
       <Td className="overflow-hidden">
-        {c.saldo_pago_bruto > 0 ? (
+        {c.parcelas_contratadas ? (
           <>
             <div className="text-[13px] tabular text-[var(--fg)]">
-              {fmtBRL(c.saldo_pago_bruto)}
-              {c.saldo_lancamentos > 1 && <span className="ml-1 text-[10px] font-semibold text-[var(--fg-3)]">{c.saldo_lancamentos}x</span>}
+              <span className="font-semibold">{c.parcelas_pagas ?? 0}</span>
+              <span className="text-[var(--fg-3)]">/{c.parcelas_contratadas}</span>
             </div>
-            <div className="text-[10px] tabular text-[var(--fg-3)]">líq. {fmtBRL(c.saldo_pago_liquido)}</div>
+            {c.valor_parcela != null && <div className="text-[10px] tabular text-[var(--fg-3)]">{fmtBRLc(c.valor_parcela)}</div>}
           </>
         ) : (
           <span className="text-[var(--fg-3)]">—</span>
         )}
       </Td>
-      <Td className="text-xs text-[var(--fg-2)] tabular whitespace-nowrap">{c.saldo_pago_em ? fmtData(c.saldo_pago_em) : '—'}</Td>
+      {/* Falta pagar: saldo perseguível, ou estado quando não há o que perseguir */}
       <Td className="overflow-hidden">
-        {c.vencimento ? (
-          <>
-            <div className="text-xs text-[var(--fg)] tabular whitespace-nowrap">{fmtData(c.vencimento)}</div>
-            {(c.dias_atraso ?? 0) > 0 && <span className="text-[11px] text-[var(--red)] font-semibold">{c.dias_atraso}d em atraso</span>}
-          </>
+        {morta ? (
+          <Badge tone="danger">{statusLabel(c.status_financeiro)}</Badge>
+        ) : quitado ? (
+          <Badge tone="success">Quitado</Badge>
+        ) : c.saldo_a_pagar == null ? (
+          <Badge tone="warning">{statusLabel(c.status_financeiro)}</Badge>
         ) : (
-          <span className="text-xs text-[var(--fg-3)]">a combinar</span>
+          <>
+            <div className={`text-[13px] tabular font-semibold ${vencido ? 'text-[var(--red)]' : 'text-[var(--fg)]'}`}>{fmtBRLc(c.saldo_a_pagar)}</div>
+            {pediu ? (
+              <span className="text-[10px] font-semibold text-[var(--yellow)]">pediu cancelamento</span>
+            ) : (c.dias_atraso ?? 0) > 0 ? (
+              <span className="text-[10px] font-semibold text-[var(--red)]">{c.dias_atraso}d em atraso</span>
+            ) : c.vencimento ? (
+              <span className="text-[10px] tabular text-[var(--fg-3)]">vence {fmtData(c.vencimento)}</span>
+            ) : (
+              <span className="text-[10px] text-[var(--fg-3)]">{statusLabel(c.status_financeiro)}</span>
+            )}
+          </>
         )}
       </Td>
-      <Td className="overflow-hidden"><Badge tone={statusTone(c.status_financeiro)} dot>{statusLabel(c.status_financeiro)}</Badge></Td>
+      {/* Último pagamento (tempo decorrido fino) */}
+      <Td className="text-xs text-[var(--fg-2)] tabular whitespace-nowrap"><span title={desde.title}>{desde.label}</span></Td>
+      {/* Forma de pagamento real (Hotmart) */}
+      <Td className="overflow-hidden">
+        {forma === '—' ? <span className="text-[var(--fg-3)]">—</span> : <span className="inline-flex whitespace-normal"><Badge tone="neutral">{forma}</Badge></span>}
+      </Td>
     </Tr>
   );
 });

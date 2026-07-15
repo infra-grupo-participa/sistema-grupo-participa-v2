@@ -7,7 +7,7 @@ import {
   Mic, Camera, Clapperboard, Truck, NotebookPen, FileText, PartyPopper, Hand, Star, Circle, Sprout,
   Briefcase, Medal, Coins, Gem, LogOut, Plus, Trash2, Pencil, Inbox, Copy,
   PanelLeftClose, PanelLeftOpen, Wallet, Receipt, TrendingUp, Banknote,
-  LayoutDashboard, CircleDollarSign, type LucideIcon,
+  LayoutDashboard, CircleDollarSign, Eye, EyeOff, type LucideIcon,
 } from 'lucide-react';
 
 const MAP: Record<string, LucideIcon> = {
@@ -19,6 +19,7 @@ const MAP: Record<string, LucideIcon> = {
   clipboard: ClipboardList,
   // ações / estados
   check: Check, 'check-circle': CircleCheck, x: X, close: X, alert: TriangleAlert, copy: Copy,
+  eye: Eye, 'eye-off': EyeOff,
   search: Search, refresh: RefreshCw, rotate: RotateCw, link: Link2, pause: Pause, play: Play,
   lock: Lock, download: Download, logout: LogOut, plus: Plus, trash: Trash2, pencil: Pencil,
   star: Star, circle: Circle, party: PartyPopper, wave: Hand, file: FileText, notebook: NotebookPen,

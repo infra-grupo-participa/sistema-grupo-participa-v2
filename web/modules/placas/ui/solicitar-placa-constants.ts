@@ -72,7 +72,7 @@ export const ESPACOS = [
   { v: 'holding_masters', l: 'Holding Masters' },
   { v: 'aurum', l: 'Mentoria Aurum' },
   { v: 'coach_platina', l: 'Coach Platina' },
-  { v: 'mastermind', l: 'Mastermind Diamante' },
+  { v: 'mastermind', l: 'Diamante' },
 ];
 
 export const NIVEIS = [

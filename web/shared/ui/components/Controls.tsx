@@ -75,12 +75,41 @@ export const SearchInput = forwardRef<HTMLInputElement, React.InputHTMLAttribute
   },
 );
 
-/** Input de texto padrão do design system. */
-export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  function Input({ className = '', ...rest }, ref) {
-    return <input ref={ref} className={`${inputCls} ${className}`} {...rest} />;
-  },
-);
+/**
+ * Input de texto padrão do design system.
+ * `revealable`: em campos de senha, mostra um botão de olho para alternar
+ * a visibilidade do valor digitado. O `ref` permanece no <input>.
+ */
+export const Input = forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement> & { revealable?: boolean }
+>(function Input({ className = '', revealable = false, type, ...rest }, ref) {
+  const [show, setShow] = useState(false);
+  if (!revealable) {
+    return <input ref={ref} type={type} className={`${inputCls} ${className}`} {...rest} />;
+  }
+  const isPassword = type === 'password';
+  return (
+    <div className="relative">
+      <input
+        ref={ref}
+        type={isPassword && show ? 'text' : type}
+        className={`${inputCls} pr-10 ${className}`}
+        {...rest}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        aria-label={show ? 'Ocultar senha' : 'Mostrar senha'}
+        aria-pressed={show}
+        tabIndex={-1}
+        className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center rounded-[var(--r-sm)] p-1 text-[var(--fg-3)] transition-colors hover:text-[var(--fg)]"
+      >
+        <Icon name={show ? 'eye-off' : 'eye'} size={16} />
+      </button>
+    </div>
+  );
+});
 
 /** Select com chevron custom (paridade .filter-select). */
 export const FilterSelect = forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(

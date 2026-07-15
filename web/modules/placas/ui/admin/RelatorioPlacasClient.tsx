@@ -139,7 +139,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
   }, [sols]);
 
   // Filtros dedicados (porta dos 5 selects do legado) + ordenação clicável.
-  const FILTROS_VAZIO = { nivel: [] as string[], turma: [] as string[], uf: [] as string[], status: [] as string[] };
+  const FILTROS_VAZIO = { nivel: [] as string[], turma: [] as string[], uf: [] as string[], bairro: [] as string[], status: [] as string[] };
   const [filtros, setFiltros] = useState(FILTROS_VAZIO);
   type SortCol = 'nome' | 'espaco' | 'nivel' | 'status' | 'turma' | 'quando';
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
@@ -150,6 +150,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
   };
   const turmaOpts = useMemo(() => Array.from(new Set(sols.map((s) => s.turma).filter(Boolean) as string[])).sort((a, b) => b.localeCompare(a, 'pt-BR', { numeric: true })), [sols]);
   const ufOpts = useMemo(() => Array.from(new Set(sols.map((s) => String(s.estado_uf ?? '').toUpperCase()).filter(Boolean))).sort(), [sols]);
+  const bairroOpts = useMemo(() => Array.from(new Set(sols.map((s) => String(s.bairro ?? '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR')), [sols]);
   const statusOpts = useMemo(() => Array.from(new Set(sols.map((s) => computeDisplayStatus(s).label))).sort(), [sols]);
   const temFiltro = Object.values(filtros).some((a) => a.length > 0);
 
@@ -164,6 +165,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
       .filter((s) => !filtros.nivel.length || filtros.nivel.includes(String(s.nivel ?? '')))
       .filter((s) => !filtros.turma.length || filtros.turma.includes(String(s.turma ?? '')))
       .filter((s) => !filtros.uf.length || filtros.uf.includes(String(s.estado_uf ?? '').toUpperCase()))
+      .filter((s) => !filtros.bairro.length || filtros.bairro.includes(String(s.bairro ?? '').trim()))
       .filter((s) => !filtros.status.length || filtros.status.includes(computeDisplayStatus(s).label))
       .sort((a, b) => {
         if (sortCol) {
@@ -201,10 +203,9 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
   const exportar = useCallback(async () => {
     setExportando(true);
     try {
-      // Exporta exatamente o recorte visível (gaveta + filtros + busca), como o legado —
-      // a elegibilidade (entrevista finalizada+) é aplicada dentro de exportarExcelPlacas.
+      // Exporta exatamente o recorte visível: gaveta + filtros + busca + ordenação.
       const n = await exportarExcelPlacas(filtered);
-      flash(n ? `${n} ${n === 1 ? 'solicitação exportada' : 'solicitações exportadas'}.` : 'Nenhum registro elegível para exportar (entrevista finalizada em diante).');
+      flash(n ? `${n} ${n === 1 ? 'solicitação exportada' : 'solicitações exportadas'}.` : 'Nenhuma solicitação na lista para exportar.');
     } catch {
       flash('Não foi possível gerar a planilha.');
     } finally {
@@ -226,8 +227,8 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
             <div className="flex items-center gap-2">
               <button
                 onClick={exportar}
-                disabled={exportando}
-                title="Exportar solicitações elegíveis (.xlsx)"
+                disabled={exportando || !filtered.length}
+                title="Exportar a lista visível (.xlsx)"
                 className="inline-flex items-center justify-center gap-1.5 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent border transition-colors text-[var(--fg-2)] border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] disabled:opacity-50"
               >
                 <Icon name="download" size={14} /> {exportando ? 'Gerando…' : 'Exportar Excel'}
@@ -270,6 +271,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
             <MultiSelect values={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={NIVEL_FAIXA_ORDER.map((n) => ({ value: n, label: DEFAULT_NIVEL_FAIXAS[n].nm }))} />
             <MultiSelect values={filtros.turma} onChange={(v) => setFiltros((f) => ({ ...f, turma: v }))} placeholder="Todas as turmas" options={turmaOpts.map((t) => ({ value: t, label: t }))} />
             <MultiSelect values={filtros.uf} onChange={(v) => setFiltros((f) => ({ ...f, uf: v }))} placeholder="Todas as UFs" options={ufOpts.map((u) => ({ value: u, label: u }))} />
+            <MultiSelect values={filtros.bairro} onChange={(v) => setFiltros((f) => ({ ...f, bairro: v }))} placeholder="Todos os bairros" options={bairroOpts.map((b) => ({ value: b, label: b }))} />
             <MultiSelect values={filtros.status} onChange={(v) => setFiltros((f) => ({ ...f, status: v }))} placeholder="Todos os status" options={statusOpts.map((s) => ({ value: s, label: s }))} />
             {(temFiltro || dq.trim()) && (
               <>
