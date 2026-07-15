@@ -6,7 +6,7 @@
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type {
-  Acordo, Cobranca, ContaReceber, DiaFaturamento, Lancamento, Meta, Oferta, ReguaPasso, TurmaFin,
+  Acordo, Cobranca, CompraHistorico, ContaReceber, DiaFaturamento, Lancamento, Meta, Oferta, ReguaPasso, TurmaFin,
 } from '../domain/types';
 
 const db = () => createBrowserSupabase();
@@ -87,6 +87,13 @@ export async function loadExtrato(compradorId: string): Promise<Lancamento[]> {
   const { data, error } = await db().rpc('fn_fin_extrato', { p_comprador_id: compradorId });
   logQueryError('loadExtrato', error);
   return (data as Lancamento[]) ?? [];
+}
+
+/** Histórico completo de compras Hotmart do comprador — todos os status, inclusive boletos não pagos. */
+export async function loadComprasAluno(compradorId: string): Promise<CompraHistorico[]> {
+  const { data, error } = await db().rpc('fn_fin_compras_aluno', { p_comprador_id: compradorId });
+  logQueryError('loadComprasAluno', error);
+  return (data as CompraHistorico[]) ?? [];
 }
 
 export async function loadOfertas(): Promise<Oferta[]> {

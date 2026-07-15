@@ -2,17 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
-import type { Cobranca, ContaReceber, Lancamento, ReguaPasso } from '../domain/types';
+import type { Cobranca, CompraHistorico, ContaReceber, Lancamento, ReguaPasso } from '../domain/types';
 import { mascararDoc, statusLabel, statusTone } from '../domain/financeiro';
 import { proximaAcao } from '../domain/cobranca';
-import { loadCobrancas, loadExtrato, registrarCobranca, salvarAcordo } from './financeiro-data';
+import { loadCobrancas, loadComprasAluno, loadExtrato, registrarCobranca, salvarAcordo } from './financeiro-data';
 import {
   AvatarInicial, Badge, Button, DataTable, Drawer, EmptyState, FilterSelect, Input, Loading,
   ProgressBar, Row, Tabs, Td, Th, Thead, Tr,
 } from '@/shared/ui/components';
 import { fmtBRL, fmtData, fmtDataHora } from '@/shared/ui/format';
 
-type TabKey = 'resumo' | 'comercial' | 'acordo' | 'cobranca' | 'extrato';
+type TabKey = 'resumo' | 'comercial' | 'acordo' | 'cobranca' | 'extrato' | 'compras';
 type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
 type Act = (fn: () => Promise<{ ok: boolean; msg?: string }>) => Promise<void>;
 
@@ -58,7 +58,7 @@ export function ContaDrawer({ conta: c, regua, canEdit, canVerDoc, onClose, act,
       }
     >
       <Tabs
-        tabs={[{ k: 'resumo', l: 'Resumo' }, { k: 'comercial', l: 'Comercial' }, { k: 'acordo', l: 'Acordo' }, { k: 'cobranca', l: 'Cobrança' }, { k: 'extrato', l: 'Extrato' }]}
+        tabs={[{ k: 'resumo', l: 'Resumo' }, { k: 'comercial', l: 'Comercial' }, { k: 'acordo', l: 'Acordo' }, { k: 'cobranca', l: 'Cobrança' }, { k: 'extrato', l: 'Extrato' }, { k: 'compras', l: 'Compras' }]}
         active={tab}
         onChange={(k) => setTab(k as TabKey)}
       />
@@ -148,6 +148,8 @@ export function ContaDrawer({ conta: c, regua, canEdit, canVerDoc, onClose, act,
       {tab === 'cobranca' && <CobrancaTab c={c} regua={regua} canEdit={canEdit} act={act} />}
 
       {tab === 'extrato' && <ExtratoTab compradorId={c.comprador_id} />}
+
+      {tab === 'compras' && <ComprasTab compradorId={c.comprador_id} />}
     </Drawer>
   );
 }
@@ -482,6 +484,7 @@ function ExtratoTab({ compradorId }: { compradorId: string }) {
       <Thead>
         <Th>Data</Th>
         <Th>Categoria</Th>
+        <Th>Cliente pagou</Th>
         <Th>Bruto</Th>
         <Th>Líquido</Th>
         <Th>Taxa Hotmart</Th>
@@ -496,6 +499,7 @@ function ExtratoTab({ compradorId }: { compradorId: string }) {
           <Tr key={l.id}>
             <Td className="text-xs text-[var(--fg-2)] tabular whitespace-nowrap">{fmtDataHora(l.pago_em)}</Td>
             <Td><Badge tone={CAT_TONE[l.categoria] ?? 'neutral'} dot>{catLabel(l.categoria)}</Badge></Td>
+            <Td className="tabular text-[var(--fg-2)]">{fmtBRL(l.valor_bruto + l.juros_parcelamento)}</Td>
             <Td className="tabular text-[var(--fg)]">{fmtBRL(l.valor_bruto)}</Td>
             <Td className="tabular text-[var(--fg-2)]">{fmtBRL(l.valor_liquido)}</Td>
             <Td className="tabular text-[var(--fg-3)]">{fmtBRL(l.taxas)}</Td>
@@ -521,6 +525,7 @@ function ExtratoTab({ compradorId }: { compradorId: string }) {
       <tfoot>
         <tr className="border-t border-[var(--border)] bg-[var(--surface-3)]">
           <td className="px-3 py-2.5 text-xs font-semibold text-[var(--fg-2)]" colSpan={2}>Total · {lancs.length} {lancs.length === 1 ? 'lançamento' : 'lançamentos'}</td>
+          <td className="px-3 py-2.5 tabular font-semibold text-[var(--fg-2)]">{fmtBRL(soma((l) => l.valor_bruto + l.juros_parcelamento))}</td>
           <td className="px-3 py-2.5 tabular font-semibold text-[var(--fg)]">{fmtBRL(soma((l) => l.valor_bruto))}</td>
           <td className="px-3 py-2.5 tabular font-semibold text-[var(--fg)]">{fmtBRL(soma((l) => l.valor_liquido))}</td>
           <td className="px-3 py-2.5 tabular font-semibold text-[var(--fg-3)]">{fmtBRL(soma((l) => l.taxas))}</td>
@@ -528,6 +533,94 @@ function ExtratoTab({ compradorId }: { compradorId: string }) {
           <td colSpan={4} />
         </tr>
       </tfoot>
+      </DataTable>
+    </div>
+  );
+}
+
+// ── Compras (ciclo de vida completo na Hotmart) ─────────────────────────────
+
+const MORTO_LABEL: Record<string, string> = {
+  EXPIRED: 'Vencido',
+  CANCELED: 'Cancelado',
+  CANCELLED: 'Cancelado',
+  REFUNDED: 'Estornado',
+  CHARGEBACK: 'Chargeback',
+  PROTESTED: 'Protesto',
+};
+
+function compraStatusBadge(cp: CompraHistorico): { tone: Tone; label: string } {
+  if (cp.pago) return { tone: 'success', label: 'Pago' };
+  if (cp.pendente) return { tone: 'warning', label: /billet|boleto/i.test(cp.metodo_pagamento ?? '') ? 'Boleto gerado' : 'Aguardando' };
+  if (cp.morto) return { tone: 'danger', label: MORTO_LABEL[cp.status] ?? cp.status };
+  return { tone: 'neutral', label: cp.status };
+}
+
+function ComprasTab({ compradorId }: { compradorId: string }) {
+  const [compras, setCompras] = useState<CompraHistorico[] | null>(null);
+  const [copiadoTx, setCopiadoTx] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    loadComprasAluno(compradorId).then((cs) => { if (vivo) setCompras(cs); });
+    return () => { vivo = false; };
+  }, [compradorId]);
+
+  if (compras === null) return <Loading label="Carregando compras…" minHeight={160} />;
+  if (!compras.length) return <EmptyState title="Nenhuma compra" hint="Nada veio da Hotmart para este comprador." icon="receipt" />;
+
+  const copiarTx = (tx: string) => {
+    navigator.clipboard?.writeText(tx);
+    setCopiadoTx(tx);
+    setTimeout(() => setCopiadoTx(null), 2000);
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-[var(--fg-3)]">
+        Ciclo de vida de todas as compras Hotmart deste aluno — inclui boletos gerados e não pagos.
+      </p>
+      <DataTable>
+      <Thead>
+        <Th>Data</Th>
+        <Th>Produto</Th>
+        <Th>Status</Th>
+        <Th>Método</Th>
+        <Th>Parcelas</Th>
+        <Th>Cliente pagou</Th>
+        <Th>Bruto</Th>
+        <Th>Líquido</Th>
+        <Th>Transação</Th>
+      </Thead>
+      <tbody>
+        {compras.map((cp) => {
+          const st = compraStatusBadge(cp);
+          return (
+            <Tr key={cp.id}>
+              <Td className="text-xs text-[var(--fg-2)] tabular whitespace-nowrap">{fmtDataHora(cp.pago ? cp.data_aprovacao : cp.data_compra)}</Td>
+              <Td className="text-xs text-[var(--fg)]">{cp.produto_nome || '—'}</Td>
+              <Td><Badge tone={st.tone} dot>{st.label}</Badge></Td>
+              <Td className="text-xs text-[var(--fg-2)]">{cp.metodo_pagamento || '—'}</Td>
+              <Td className="text-xs text-[var(--fg-2)] tabular">{cp.parcelas != null ? `${cp.parcelas}x` : '—'}</Td>
+              <Td className="tabular text-[var(--fg-2)]">{fmtBRL(cp.cliente_pagou)}</Td>
+              <Td className="tabular text-[var(--fg)]">{fmtBRL(cp.bruto)}</Td>
+              <Td className="tabular text-[var(--fg-2)]">{fmtBRL(cp.valor_liquido)}</Td>
+              <Td>
+                {cp.transacao ? (
+                  <button
+                    type="button"
+                    title="Copiar código da transação"
+                    onClick={() => copiarTx(cp.transacao)}
+                    className="text-xs tabular text-[var(--fg-3)] hover:text-[var(--fg)] hover:underline transition-colors"
+                  >
+                    {copiadoTx === cp.transacao ? 'Copiado!' : cp.transacao}
+                  </button>
+                ) : '—'}
+              </Td>
+            </Tr>
+          );
+        })}
+      </tbody>
       </DataTable>
     </div>
   );

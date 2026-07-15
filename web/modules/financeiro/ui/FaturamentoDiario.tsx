@@ -26,6 +26,8 @@ export function FaturamentoDiario({ dias, loading, turma }: {
     const soma = (f: (d: DiaFaturamento) => number) => dias.reduce((a, d) => a + f(d), 0);
     return {
       lancamentos: soma((d) => d.lancamentos),
+      clientePagou: soma((d) => d.cliente_pagou ?? 0),
+      juros: soma((d) => d.juros ?? 0),
       bruto: soma((d) => d.bruto),
       liquido: soma((d) => d.liquido),
       taxas: soma((d) => d.taxas),
@@ -50,7 +52,7 @@ export function FaturamentoDiario({ dias, loading, turma }: {
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Entrou hoje" bar="green" value={loading ? '—' : fmtBRL(r.hoje?.bruto ?? 0)} hint={fmtData(hojeISO)} />
-        <KpiCard label="Total no período" bar="accent" value={loading ? '—' : fmtBRL(r.bruto)} hint={loading ? undefined : `líquido ${fmtBRL(r.liquido)} · taxas ${fmtBRL(r.taxas)}`} />
+        <KpiCard label="Total no período" bar="accent" value={loading ? '—' : fmtBRL(r.bruto)} hint={loading ? undefined : `cliente pagou ${fmtBRL(tot.clientePagou)} · líquido ${fmtBRL(r.liquido)} · taxas ${fmtBRL(r.taxas)}`} />
         <KpiCard label="Média/dia" bar="accent" value={loading ? '—' : fmtBRL(r.media)} hint={loading ? undefined : `${r.dias} ${r.dias === 1 ? 'dia' : 'dias'} com lançamento`} />
         <KpiCard label="Melhor dia" bar="purple" value={loading ? '—' : fmtBRL(r.melhorDia?.bruto ?? null)} hint={!loading && r.melhorDia ? fmtData(r.melhorDia.dia) : undefined} />
       </div>
@@ -70,6 +72,8 @@ export function FaturamentoDiario({ dias, loading, turma }: {
             <Thead>
               <Th>Dia</Th>
               <Th className="text-right">Lançamentos</Th>
+              <Th className="text-right">Cliente pagou</Th>
+              <Th className="text-right">Juros</Th>
               <Th className="text-right">Bruto</Th>
               <Th className="text-right">Líquido</Th>
               <Th className="text-right">Taxas</Th>
@@ -82,7 +86,7 @@ export function FaturamentoDiario({ dias, loading, turma }: {
             </Thead>
             <tbody>
               {loading
-                ? <SkeletonRows avatar={false} cols={[70, 40, 70, 70, 56, 56, 56, 56, 56, 80, 32]} />
+                ? <SkeletonRows avatar={false} cols={[70, 40, 70, 56, 70, 70, 56, 56, 56, 56, 56, 80, 32]} />
                 : linhas.map((d) => {
                   const ehHoje = d.dia === hojeISO;
                   const ehMelhor = d.dia === melhorDia;
@@ -98,6 +102,8 @@ export function FaturamentoDiario({ dias, loading, turma }: {
                         {ehMelhor && !ehHoje && <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">melhor dia</span>}
                       </Td>
                       <Td className="tabular text-xs text-right text-[var(--fg-3)]">{d.lancamentos}</Td>
+                      <Td className="tabular text-xs text-right text-[var(--fg-2)]">{fmtBRL(d.cliente_pagou)}</Td>
+                      <Td className="tabular text-xs text-right text-[var(--fg-3)]">{fmtBRL(d.juros)}</Td>
                       <Td className={`tabular text-xs text-right font-semibold ${ehMelhor ? 'text-[var(--green)]' : 'text-[var(--fg)]'}`}>{fmtBRL(d.bruto)}</Td>
                       <Td className="tabular text-xs text-right text-[var(--fg-2)]">{fmtBRL(d.liquido)}</Td>
                       <Td className="tabular text-xs text-right text-[var(--fg-3)]">{fmtBRL(d.taxas)}</Td>
@@ -116,6 +122,8 @@ export function FaturamentoDiario({ dias, loading, turma }: {
                 <tr className="border-t border-[var(--border)] bg-[var(--surface-3)] text-xs">
                   <td className="px-3 py-2 font-semibold text-[var(--fg-2)]">Total</td>
                   <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg-2)]">{tot.lancamentos}</td>
+                  <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg-2)]">{fmtBRL(tot.clientePagou)}</td>
+                  <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg-3)]">{fmtBRL(tot.juros)}</td>
                   <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg)]">{fmtBRL(tot.bruto)}</td>
                   <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg)]">{fmtBRL(tot.liquido)}</td>
                   <td className="px-3 py-2 tabular text-right font-semibold text-[var(--fg-3)]">{fmtBRL(tot.taxas)}</td>

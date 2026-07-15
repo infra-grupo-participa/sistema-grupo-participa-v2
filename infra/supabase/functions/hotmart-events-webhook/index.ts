@@ -326,6 +326,9 @@ async function persistPurchase(args: {
   parcelas: number | null;
   valorLiquido: number | null;
   taxaProcessamento: number | null;
+  valorCliente: number | null;
+  taxaParcelamento: number | null;
+  event: string;
   dataCompraIso: string | null;
   dataAprovacaoIso: string | null;
 }): Promise<void> {
@@ -368,6 +371,24 @@ async function persistPurchase(args: {
     }
 
     // 2) Compra — upsert por hotmart_transaction (UNIQUE).
+    // Guarda anti-rebaixamento: um evento pendente ou tardio (boleto gerado,
+    // aguardando) NÃO pode rebaixar uma compra já paga; um estorno/cancelamento
+    // (pós-pago) pode. Rank: pendente(1) < pago(2) < pós-pago/estorno(3).
+    const rank = (s: string): number => {
+      const u = (s || "").toUpperCase();
+      if (["REFUNDED", "CHARGEBACK", "PROTESTED", "CANCELED", "DISPUTE"].includes(u)) return 3;
+      if (["APPROVED", "COMPLETE", "COMPLETED"].includes(u)) return 2;
+      return 1;
+    };
+    const { data: existente } = await supabase
+      .from("compras")
+      .select("status, hotmart_event")
+      .eq("hotmart_transaction", args.transaction)
+      .maybeSingle();
+    const aplicaNovo = !existente || rank(args.status) >= rank(existente.status ?? "");
+    const statusEfetivo = aplicaNovo ? args.status : existente!.status;
+    const eventoEfetivo = aplicaNovo ? args.event : (existente!.hotmart_event ?? args.event);
+
     const { error: pErr } = await supabase
       .from("compras")
       .upsert(
@@ -379,18 +400,27 @@ async function persistPurchase(args: {
           oferta_codigo: args.offerCode,
           moeda: args.moeda || "BRL",
           preco: args.valor,
-          status: args.status,
+          status: statusEfetivo,
           is_assinatura: args.isAssinatura,
           numero_recorrencia: args.numeroRecorrencia,
-          metodo_pagamento: args.metodoPagamento,
-          parcelas: args.parcelas,
-          // Só grava líquido/taxa quando derivados das commissions. Condicional para
-          // NÃO sobrescrever com null um valor já enriquecido (CSV Sales / sync).
+          // Campos que um evento tardio sem o dado NÃO pode apagar (só grava se presente):
+          ...(args.metodoPagamento != null ? { metodo_pagamento: args.metodoPagamento } : {}),
+          ...(args.parcelas != null ? { parcelas: args.parcelas } : {}),
+          // Cascata do dinheiro. Condicionais para NÃO sobrescrever com null um valor
+          // já enriquecido (CSV Sales / sync / evento anterior):
+          //   valor_com_impostos = full_price  → o que o CLIENTE pagou (com juros)
+          //   taxa_parcelamento  = juros retidos pela Hotmart (full_price − preço base)
+          //   valor_liquido      = comissão PRODUCER (o que de fato recebemos)
+          //   taxa_processamento = comissão MARKETPLACE (taxa da Hotmart)
+          ...(args.valorCliente != null ? { valor_com_impostos: args.valorCliente } : {}),
+          ...(args.taxaParcelamento != null ? { taxa_parcelamento: args.taxaParcelamento } : {}),
           ...(args.valorLiquido != null ? { valor_liquido: args.valorLiquido } : {}),
           ...(args.taxaProcessamento != null ? { taxa_processamento: args.taxaProcessamento } : {}),
-          data_compra: args.dataCompraIso,
-          data_aprovacao: args.dataAprovacaoIso,
-          hotmart_event: "PURCHASE_APPROVED",
+          // Datas condicionais: um evento pendente/estorno (sem approved_date) não zera
+          // a data de aprovação já registrada.
+          ...(args.dataCompraIso ? { data_compra: args.dataCompraIso } : {}),
+          ...(args.dataAprovacaoIso ? { data_aprovacao: args.dataAprovacaoIso } : {}),
+          hotmart_event: eventoEfetivo,
           atualizado_em: agora,
         },
         { onConflict: "hotmart_transaction" },
@@ -439,7 +469,18 @@ serve(async (req) => {
   }
 
   const event = (body.event as string) ?? "";
-  if (event !== "PURCHASE_APPROVED") {
+  // Eventos PAGOS contam de verdade: notificam o Slack (métrica), semeiam a esteira
+  // e entram na razão financeira. Os demais são apenas HISTÓRICO do ciclo de vida
+  // (boleto gerado, aguardando pagamento, vencido, cancelado, estornado) — gravados
+  // na ficha do aluno, SEM Slack e SEM contar. Qualquer outro evento é ignorado.
+  const EVENTOS_PAGOS = ["PURCHASE_APPROVED", "PURCHASE_COMPLETE", "PURCHASE_COMPLETED"];
+  const EVENTOS_HISTORICO = [
+    "PURCHASE_BILLET_PRINTED", "PURCHASE_WAITING_PAYMENT", "PURCHASE_EXPIRED",
+    "PURCHASE_CANCELED", "PURCHASE_REFUNDED", "PURCHASE_CHARGEBACK",
+    "PURCHASE_PROTEST", "PURCHASE_DELAYED",
+  ];
+  const isAprovado = EVENTOS_PAGOS.includes(event);
+  if (!isAprovado && !EVENTOS_HISTORICO.includes(event)) {
     return new Response(JSON.stringify({ ok: true, reason: "event_ignored" }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -494,19 +535,23 @@ serve(async (req) => {
   console.log(`[DIAG ${channel}] documento presente:`, documento != null);
   console.log(`[DIAG ${channel}] productId/name:`, productId, "/", productName, "| isRenovacao:", isRenovacao);
 
-  await notifySlack(channel, {
-    nome: String(buyer.name ?? "Sem nome"),
-    email: String(buyer.email ?? ""),
-    telefone,
-    produto: produtoLabel,
-    valor: (price?.value as number) ?? null,
-    moeda: (price?.currency_code as string) ?? "BRL",
-    dataCompraMs: approvedDate,
-    origem,
-    cidade,
-    estado,
-    markPortoAlegre,
-  });
+  // Slack SÓ em compra aprovada — é a métrica de vendas do time. Boleto gerado,
+  // aguardando, vencido ou estornado NÃO notifica (evita inflar/confundir a contagem).
+  if (isAprovado) {
+    await notifySlack(channel, {
+      nome: String(buyer.name ?? "Sem nome"),
+      email: String(buyer.email ?? ""),
+      telefone,
+      produto: produtoLabel,
+      valor: (price?.value as number) ?? null,
+      moeda: (price?.currency_code as string) ?? "BRL",
+      dataCompraMs: approvedDate,
+      origem,
+      cidade,
+      estado,
+      markPortoAlegre,
+    });
+  }
 
   // [ADICIONADO] Persiste a compra aprovada no banco (compradores/compras).
   // Roda para todos os canais mapeados (base canônica é multi-produto). É a fonte
@@ -517,6 +562,14 @@ serve(async (req) => {
   const grossValue = readAmount(price?.value) ?? (price?.value as number ?? null);
   // Líquido/taxa derivados das commissions do payload (null se ausentes → grava só bruto).
   const { valorLiquido, taxaProcessamento } = extractComissao(data, grossValue);
+  // full_price = o que o CLIENTE paga (com juros de parcelamento). No à-vista é igual
+  // ao preço base; no parcelado é maior. Os juros (full_price − base) ficam com a
+  // Hotmart, não são nossa receita — mas guardamos p/ reconciliar com o painel Hotmart.
+  const fullPrice = purchase.full_price as Record<string, unknown> | undefined;
+  const valorCliente = readAmount(fullPrice?.value) ?? (typeof fullPrice?.value === "number" ? fullPrice.value : null);
+  const taxaParcelamento = (valorCliente != null && grossValue != null && valorCliente > grossValue)
+    ? Math.round((valorCliente - grossValue) * 100) / 100
+    : null;
 
   // Arquiva o payload bruto ANTES de persistir a compra: garante material p/ backfill
   // e conferência mesmo que a gravação em compras falhe. Não-fatal.
@@ -535,13 +588,18 @@ serve(async (req) => {
     offerCode: offer?.code ? String(offer.code) : null,
     moeda: (price?.currency_code as string) ?? "BRL",
     valor: (price?.value as number) ?? null,
-    status: String(purchase.status ?? "APPROVED"),
+    // Status real do payload; se ausente, deriva do evento (nunca assume "APPROVED"
+    // num evento de boleto/pendente).
+    status: String(purchase.status ?? (isAprovado ? "APPROVED" : event.replace("PURCHASE_", ""))),
     isAssinatura: purchase.is_subscription === true,
     numeroRecorrencia: purchase.recurrency_number != null ? Number(purchase.recurrency_number) : null,
     metodoPagamento: payment?.type ? String(payment.type) : null,
     parcelas: payment?.installments_number != null ? Number(payment.installments_number) : null,
     valorLiquido,
     taxaProcessamento,
+    valorCliente,
+    taxaParcelamento,
+    event,
     dataCompraIso: msToIso(Number(purchase.order_date ?? 0) || null),
     dataAprovacaoIso: msToIso(Number(purchase.approved_date ?? 0) || null),
   });

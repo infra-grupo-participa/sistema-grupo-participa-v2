@@ -194,6 +194,10 @@ export interface TurmaFin {
 export interface DiaFaturamento {
   dia: string;
   lancamentos: number;
+  /** O que os clientes pagaram (com juros de parcelamento) = "Valor da Compra" do painel Hotmart. */
+  cliente_pagou: number | null;
+  /** Juros de parcelamento retidos pela Hotmart (cliente_pagou − bruto). Não é receita nossa. */
+  juros: number | null;
   bruto: number;
   liquido: number;
   taxas: number;
@@ -203,6 +207,36 @@ export interface DiaFaturamento {
   compra_cheia: number | null;
   ajuste: number | null;
   alunos: number;
+}
+
+/**
+ * Uma compra Hotmart do aluno, em qualquer status — ciclo de vida completo
+ * (boletos gerados, pendentes, vencidos, estornados). Espelha fn_fin_compras_aluno.
+ */
+export interface CompraHistorico {
+  id: string;
+  transacao: string;
+  produto_id: string;
+  produto_nome: string;
+  oferta_codigo: string;
+  status: string;
+  hotmart_event: string;
+  metodo_pagamento: string;
+  parcelas: number | null;
+  data_compra: string | null;
+  data_aprovacao: string | null;
+  data_vencimento: string | null;
+  bruto: number | null;
+  cliente_pagou: number | null;
+  juros_parcelamento: number | null;
+  valor_liquido: number | null;
+  taxa_hotmart: number | null;
+  /** Status aprovado — dinheiro que entrou. */
+  pago: boolean;
+  /** Boleto gerado / aguardando pagamento. */
+  pendente: boolean;
+  /** Vencido, cancelado ou estornado — não vira receita. */
+  morto: boolean;
 }
 
 /** O que o financeiro grava no card (mesmas colunas que a ativação lê). */
