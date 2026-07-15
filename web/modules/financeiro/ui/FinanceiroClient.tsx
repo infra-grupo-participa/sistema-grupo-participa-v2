@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
-import type { ContaReceber, DiaFaturamento, Oferta, ReguaPasso, TurmaFin } from '../domain/types';
+import type { ContaReceber, DiaFaturamento, Meta, Oferta, ReguaPasso, TurmaFin } from '../domain/types';
 import {
   FILTROS_VAZIOS, STATUS_ORDEM, contaMorta, filtrar, resumir, statusLabel, statusTone, type Filtros,
 } from '../domain/financeiro';
@@ -44,6 +44,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const [cargaFat, setCargaFat] = useState<{ turma: string | null; dias: DiaFaturamento[] } | null>(null);
   const [turmas, setTurmas] = useState<TurmaFin[]>([]);
   const [ofertas, setOfertas] = useState<Oferta[]>([]);
+  const [metas, setMetas] = useState<Meta[]>([]);
   const [turma, setTurma] = useState<string | null>(null);
   // Só carrega contas depois de saber qual é a turma atual (evita carga dupla no mount).
   const [pronto, setPronto] = useState(false);
@@ -63,10 +64,11 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
 
   useEffect(() => {
     (async () => {
-      const [ts, ofs, rg] = await Promise.all([data.loadTurmas(), data.loadOfertas(), data.loadRegua()]);
+      const [ts, ofs, rg, ms] = await Promise.all([data.loadTurmas(), data.loadOfertas(), data.loadRegua(), data.loadMetas()]);
       setTurmas(ts);
       setOfertas(ofs);
       setRegua(rg);
+      setMetas(ms);
       setTurma(ts.find((t) => t.atual)?.turma ?? ts[0]?.turma ?? null);
       setPronto(true);
     })();
@@ -120,6 +122,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     () => contas.reduce((a, c) => a + (filaSet.has(c.contato_hm_id) ? (c.saldo_a_pagar ?? 0) : 0), 0),
     [contas, filaSet],
   );
+
+  const metaAtual = useMemo(() => metas.find((m) => m.turma === turma) ?? null, [metas, turma]);
 
   const resumo = useMemo(() => resumir(contas), [contas]);
   const counts = useMemo(() => ({
@@ -246,6 +250,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       {tab === 'dashboard' ? (
         <FinanceiroDashboard
           contas={contas}
+          dias={dias}
+          meta={metaAtual}
           loading={loading}
           onDrill={(g) => { setFiltros({ ...FILTROS_VAZIOS, gaveta: g }); setQ(''); irPara('#contas-a-receber'); }}
           onDrillStatus={(s) => { setFiltros({ ...FILTROS_VAZIOS, status: [s] }); setQ(''); irPara('#contas-a-receber'); }}
