@@ -1,16 +1,18 @@
 'use client';
 
-// Dashboard executivo do Financeiro — 4 blocos, de cima para baixo:
+// Dashboard executivo do Financeiro — 5 blocos, de cima para baixo:
 // 1. A foto do dinheiro (recebido / a receber / cobertura)
-// 2. Saúde da carteira (barra empilhada por status)
-// 3. Fazer agora (as 3 ações do operador)
-// 4. A receber por canal
+// 2. Previsão de recebimento (quando o dinheiro entra)
+// 3. Risco: envelhecimento do saldo (aging) + saúde da carteira, lado a lado
+// 4. Fazer agora (as 3 ações do operador)
+// 5. A receber por canal
 import { useMemo } from 'react';
 import { Icon } from '@/shared/ui/icons';
 import type { ContaReceber } from '../domain/types';
 import {
   agrupar, resumir, statusLabel, statusTone, STATUS_ORDEM, type Gaveta,
 } from '../domain/financeiro';
+import { AGING_META, distribuicaoAging, preverRecebimento } from '../domain/cobranca';
 import { Card, EmptyState, Loading, ProgressBar, SectionTitle } from '@/shared/ui/components';
 import { fmtBRL } from '@/shared/ui/format';
 
@@ -33,7 +35,10 @@ export function FinanceiroDashboard({ contas, loading, onDrill, onDrillStatus }:
   /** Statuses sem gaveta própria navegam com o filtro de status aplicado. */
   onDrillStatus?: (s: string) => void;
 }) {
+  const hojeISO = new Date().toISOString().slice(0, 10);
   const r = useMemo(() => resumir(contas), [contas]);
+  const forecast = useMemo(() => preverRecebimento(contas, hojeISO), [contas, hojeISO]);
+  const aging = useMemo(() => distribuicaoAging(contas), [contas]);
   const canais = useMemo(() => agrupar(contas, (c) => c.canal), [contas]);
   const porStatus = useMemo(() => {
     const rank = (s: string) => {
@@ -83,27 +88,73 @@ export function FinanceiroDashboard({ contas, loading, onDrill, onDrillStatus }:
         </div>
       </Card>
 
-      {/* Bloco 2 — saúde da carteira */}
+      {/* Bloco 2 — previsão de recebimento: quando o dinheiro entra */}
       <div>
-        <SectionTitle>Saúde da carteira</SectionTitle>
-        <Card className="p-4">
-          <div className="flex h-2.5 rounded-[var(--r-pill)] overflow-hidden bg-[var(--surface-4)]" role="img" aria-label="Distribuição dos alunos por status">
-            {vivos.map((f) => (
-              <div
-                key={f.chave}
-                title={`${statusLabel(f.chave)} · ${f.alunos}`}
-                style={{ flexGrow: f.alunos, flexBasis: 0, background: TONE_COLOR[statusTone(f.chave)] }}
-              />
-            ))}
-          </div>
-          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-0.5">
-            {vivos.map((f) => <LegendaStatus key={f.chave} chave={f.chave} alunos={f.alunos} onClick={onDrillStatus} />)}
-            {mortos.map((f) => <LegendaStatus key={f.chave} chave={f.chave} alunos={f.alunos} onClick={onDrillStatus} morta />)}
+        <SectionTitle>Previsão de recebimento</SectionTitle>
+        <Card className="p-3.5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3">
+            <MiniPrevisao label="Próx. 7 dias" valor={forecast.proximos7} cor="var(--green)" />
+            <MiniPrevisao label="Próx. 30 dias" valor={forecast.proximos30} cor="var(--accent)" />
+            <MiniPrevisao label="Em risco (vencido)" valor={forecast.emRisco} cor="var(--red)" />
+            <MiniPrevisao label="Sem prazo" valor={forecast.semPrazo} cor="var(--fg-3)" />
           </div>
         </Card>
       </div>
 
-      {/* Bloco 3 — fazer agora */}
+      {/* Bloco 3 — risco: aging do saldo (a novidade) + saúde por status, lado a lado */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div>
+          <SectionTitle>Envelhecimento do saldo</SectionTitle>
+          <Card className="p-4">
+            {!aging.length ? (
+              <EmptyState title="Nada a receber em aberto" icon="check" />
+            ) : (
+              <>
+                <div className="flex h-2.5 rounded-[var(--r-pill)] overflow-hidden bg-[var(--surface-4)]" role="img" aria-label="Distribuição do saldo a receber por faixa de atraso">
+                  {aging.map((f) => (
+                    <div
+                      key={f.bucket}
+                      title={`${AGING_META[f.bucket].label} · ${fmtBRL(f.valor)}`}
+                      style={{ flexGrow: f.valor, flexBasis: 0, background: TONE_COLOR[AGING_META[f.bucket].tone] }}
+                    />
+                  ))}
+                </div>
+                <div className="mt-3 space-y-0.5">
+                  {aging.map((f) => (
+                    <div key={f.bucket} className="flex items-center gap-2 px-1.5 py-1 min-w-0">
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: TONE_COLOR[AGING_META[f.bucket].tone] }} />
+                      <span className="text-[11px] text-[var(--fg-2)] truncate">{AGING_META[f.bucket].label}</span>
+                      <span className="ml-auto text-[11px] tabular text-[var(--fg-3)] shrink-0">{f.alunos} {f.alunos === 1 ? 'aluno' : 'alunos'}</span>
+                      <span className="text-[11px] font-semibold tabular text-[var(--fg)] shrink-0 w-20 text-right">{fmtBRL(f.valor)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </Card>
+        </div>
+
+        <div>
+          <SectionTitle>Saúde da carteira</SectionTitle>
+          <Card className="p-4">
+            <div className="flex h-2.5 rounded-[var(--r-pill)] overflow-hidden bg-[var(--surface-4)]" role="img" aria-label="Distribuição dos alunos por status">
+              {vivos.map((f) => (
+                <div
+                  key={f.chave}
+                  title={`${statusLabel(f.chave)} · ${f.alunos}`}
+                  style={{ flexGrow: f.alunos, flexBasis: 0, background: TONE_COLOR[statusTone(f.chave)] }}
+                />
+              ))}
+            </div>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5">
+              {vivos.map((f) => <LegendaStatus key={f.chave} chave={f.chave} alunos={f.alunos} onClick={onDrillStatus} />)}
+              {mortos.map((f) => <LegendaStatus key={f.chave} chave={f.chave} alunos={f.alunos} onClick={onDrillStatus} morta />)}
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* Bloco 4 — fazer agora */}
       <div>
         <SectionTitle>Fazer agora</SectionTitle>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -142,7 +193,7 @@ export function FinanceiroDashboard({ contas, loading, onDrill, onDrillStatus }:
         </div>
       </div>
 
-      {/* Bloco 4 — a receber por canal */}
+      {/* Bloco 5 — a receber por canal */}
       <div>
         <SectionTitle>A receber por canal</SectionTitle>
         <Card className="p-4">
@@ -167,6 +218,18 @@ export function FinanceiroDashboard({ contas, loading, onDrill, onDrillStatus }:
           </div>
         )}
         </Card>
+      </div>
+    </div>
+  );
+}
+
+/** Mini-KPI da previsão: rótulo pequeno + valor compacto colorido. */
+function MiniPrevisao({ label, valor, cor }: { label: string; valor: number; cor: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-3)] truncate">{label}</div>
+      <div className="mt-0.5 text-[15px] font-bold tabular leading-tight break-words" style={{ color: valor > 0 ? cor : 'var(--fg-3)' }}>
+        {fmtBRL(valor)}
       </div>
     </div>
   );

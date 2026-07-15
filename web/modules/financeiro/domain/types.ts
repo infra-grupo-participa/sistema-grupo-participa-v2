@@ -94,6 +94,44 @@ export interface ContaReceber {
   ultimo_pagamento_em: string | null;
   situacao_ativacao: string | null;
   status_financeiro: StatusFinanceiro;
+
+  /** Última cobrança registrada (régua). */
+  ultima_cobranca_em: string | null;
+  cobrancas_total: number;
+  /** Quantas vezes o vencimento foi remarcado — promessa quebrada/remanejada. */
+  remarcacoes: number;
+}
+
+/** Meta financeira de uma turma (personalização). */
+export interface Meta {
+  turma: string;
+  meta_arrecadacao: number | null;
+  meta_cobertura_pct: number | null;
+  prazo_quitacao_dias: number | null;
+  data_fechamento: string | null;
+  obs: string | null;
+  atualizado_em: string | null;
+  atualizado_por: string | null;
+}
+
+/** Um passo da régua de cobrança. offset relativo ao vencimento. */
+export interface ReguaPasso {
+  id?: number;
+  ordem: number;
+  offset_dias: number;
+  titulo: string;
+  canal: string | null;
+  ativo: boolean;
+}
+
+/** Uma cobrança registrada no histórico de uma conta. */
+export interface Cobranca {
+  id: string;
+  quando: string;
+  canal: string | null;
+  resultado: string | null;
+  obs: string | null;
+  autor: string | null;
 }
 
 /** Um lançamento na razão do aluno, casado com a compra que caiu do webhook. */

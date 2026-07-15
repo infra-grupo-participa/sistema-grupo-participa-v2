@@ -24,6 +24,7 @@ function conta(over: Partial<ContaReceber> = {}): ContaReceber {
     quitado_em: null, reembolso_em: null, reembolso_status: null, reembolso_valor: null,
     ultimo_pagamento_em: null, situacao_ativacao: null,
     status_financeiro: 'sem_acordo' as StatusFinanceiro,
+    ultima_cobranca_em: null, cobrancas_total: 0, remarcacoes: 0,
     ...over,
   };
 }

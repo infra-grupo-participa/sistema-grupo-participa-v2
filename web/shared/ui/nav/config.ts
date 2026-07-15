@@ -90,8 +90,10 @@ export const REPORTS: ReportGroup[] = [
     children: [
       { key: 'dashboard', label: 'Dashboard', path: '/relatorios/financeiro', hash: '#dashboard', href: '/relatorios/financeiro#dashboard', ico: 'dashboard' },
       { key: 'contas-a-receber', label: 'Contas a Receber', path: '/relatorios/financeiro', hash: '#contas-a-receber', href: '/relatorios/financeiro#contas-a-receber', ico: 'receipt' },
+      { key: 'cobranca', label: 'Cobrança', path: '/relatorios/financeiro', hash: '#cobranca', href: '/relatorios/financeiro#cobranca', ico: 'mail' },
       { key: 'faturamento', label: 'Faturamento Diário', path: '/relatorios/financeiro', hash: '#faturamento', href: '/relatorios/financeiro#faturamento', ico: 'trending-up' },
       { key: 'ofertas', label: 'Mapa de Ofertas', path: '/relatorios/financeiro', hash: '#ofertas', href: '/relatorios/financeiro#ofertas', ico: 'banknote' },
+      { key: 'configuracoes', label: 'Configurações', path: '/relatorios/financeiro', hash: '#configuracoes', href: '/relatorios/financeiro#configuracoes', ico: 'settings' },
     ],
   },
 ];

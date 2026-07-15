@@ -1,18 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
-import type { ContaReceber, Lancamento } from '../domain/types';
+import type { Cobranca, ContaReceber, Lancamento, ReguaPasso } from '../domain/types';
 import { mascararDoc, statusLabel, statusTone } from '../domain/financeiro';
-import { loadExtrato, salvarAcordo } from './financeiro-data';
+import { proximaAcao } from '../domain/cobranca';
+import { loadCobrancas, loadExtrato, registrarCobranca, salvarAcordo } from './financeiro-data';
 import {
   AvatarInicial, Badge, Button, DataTable, Drawer, EmptyState, FilterSelect, Input, Loading,
   ProgressBar, Row, Tabs, Td, Th, Thead, Tr,
 } from '@/shared/ui/components';
 import { fmtBRL, fmtData, fmtDataHora } from '@/shared/ui/format';
 
-type TabKey = 'resumo' | 'acordo' | 'extrato';
+type TabKey = 'resumo' | 'acordo' | 'cobranca' | 'extrato';
 type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
+type Act = (fn: () => Promise<{ ok: boolean; msg?: string }>) => Promise<void>;
 
 const FORMAS = ['À vista', 'Parcelado', 'Boleto', 'Pix', 'Cartão'];
 
@@ -27,14 +29,17 @@ const catLabel = (c: string) => {
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 
-export function ContaDrawer({ conta: c, canEdit, canVerDoc, onClose, act }: {
+export function ContaDrawer({ conta: c, regua, canEdit, canVerDoc, onClose, act, initialTab = 'resumo' }: {
   conta: ContaReceber;
+  regua: ReguaPasso[];
   canEdit: boolean;
   canVerDoc: boolean;
   onClose: () => void;
-  act: (fn: () => Promise<{ ok: boolean; msg?: string }>) => void;
+  act: Act;
+  /** Aba inicial — a fila do dia abre direto em "Cobrança". */
+  initialTab?: TabKey;
 }) {
-  const [tab, setTab] = useState<TabKey>('resumo');
+  const [tab, setTab] = useState<TabKey>(initialTab);
   const cancelada = c.status_financeiro === 'cancelado' || c.status_financeiro === 'reembolsado' || c.status_financeiro === 'cancelamento_solicitado';
 
   return (
@@ -52,7 +57,7 @@ export function ContaDrawer({ conta: c, canEdit, canVerDoc, onClose, act }: {
       }
     >
       <Tabs
-        tabs={[{ k: 'resumo', l: 'Resumo' }, { k: 'acordo', l: 'Acordo' }, { k: 'extrato', l: 'Extrato' }]}
+        tabs={[{ k: 'resumo', l: 'Resumo' }, { k: 'acordo', l: 'Acordo' }, { k: 'cobranca', l: 'Cobrança' }, { k: 'extrato', l: 'Extrato' }]}
         active={tab}
         onChange={(k) => setTab(k as TabKey)}
       />
@@ -137,6 +142,8 @@ export function ContaDrawer({ conta: c, canEdit, canVerDoc, onClose, act }: {
 
       {tab === 'acordo' && <AcordoTab c={c} canEdit={canEdit} act={act} />}
 
+      {tab === 'cobranca' && <CobrancaTab c={c} regua={regua} canEdit={canEdit} act={act} />}
+
       {tab === 'extrato' && <ExtratoTab compradorId={c.comprador_id} />}
     </Drawer>
   );
@@ -144,7 +151,7 @@ export function ContaDrawer({ conta: c, canEdit, canVerDoc, onClose, act }: {
 
 // ── Acordo ──────────────────────────────────────────────────────────────────
 
-function AcordoTab({ c, canEdit, act }: { c: ContaReceber; canEdit: boolean; act: (fn: () => Promise<{ ok: boolean; msg?: string }>) => void }) {
+function AcordoTab({ c, canEdit, act }: { c: ContaReceber; canEdit: boolean; act: Act }) {
   const [venc, setVenc] = useState(c.vencimento ? c.vencimento.slice(0, 10) : '');
   const [forma, setForma] = useState(c.pagamento_forma ?? '');
   const [meio, setMeio] = useState(c.pagamento_meio ?? '');
@@ -234,6 +241,149 @@ function OfertaSugerida({ c }: { c: ContaReceber }) {
           >
             <Icon name={copiado ? 'check' : 'copy'} size={13} /> {copiado ? 'Copiado!' : 'Copiar link'}
           </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Cobrança (régua) ────────────────────────────────────────────────────────
+
+const CANAIS_COBRANCA = [
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'ligacao', label: 'Ligação' },
+  { value: 'email', label: 'E-mail' },
+  { value: 'outro', label: 'Outro' },
+];
+const RESULTADOS = [
+  { value: 'prometeu_pagar', label: 'Prometeu pagar' },
+  { value: 'sem_resposta', label: 'Sem resposta' },
+  { value: 'pagou', label: 'Pagou' },
+  { value: 'recusou', label: 'Recusou' },
+  { value: 'remarcou', label: 'Remarcou' },
+  { value: 'outro', label: 'Outro' },
+];
+const RESULTADO_TONE: Record<string, Tone> = {
+  pagou: 'success',
+  prometeu_pagar: 'info',
+  remarcou: 'warning',
+  recusou: 'danger',
+  sem_resposta: 'neutral',
+};
+const canalCobrancaLabel = (v: string | null) => CANAIS_COBRANCA.find((x) => x.value === v)?.label ?? v ?? '—';
+const resultadoLabel = (v: string | null) => RESULTADOS.find((x) => x.value === v)?.label ?? v ?? '—';
+
+function CobrancaTab({ c, regua, canEdit, act }: {
+  c: ContaReceber; regua: ReguaPasso[]; canEdit: boolean; act: Act;
+}) {
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const acao = useMemo(() => proximaAcao(c, regua, hojeISO), [c, regua, hojeISO]);
+
+  const [historico, setHistorico] = useState<Cobranca[] | null>(null);
+  const [versao, setVersao] = useState(0);
+  useEffect(() => {
+    let vivo = true;
+    loadCobrancas(c.contato_hm_id).then((cs) => { if (vivo) setHistorico(cs); });
+    return () => { vivo = false; };
+  }, [c.contato_hm_id, versao]);
+
+  const [canal, setCanal] = useState('');
+  const [resultado, setResultado] = useState('');
+  const [obs, setObs] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  const registrar = async () => {
+    if (!canal || !resultado || salvando) return;
+    setSalvando(true);
+    try {
+      await act(() => registrarCobranca(c.contato_hm_id, canal, resultado, obs.trim() || null));
+      setObs('');
+      setVersao((v) => v + 1);
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Próxima ação segundo a régua */}
+      <div className={`rounded-[var(--r-md)] border p-3 ${acao.atrasada ? 'border-[var(--red-border)] bg-[var(--red-subtle)]' : 'border-[var(--border)] bg-[var(--surface-3)]'}`}>
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">Próxima ação</div>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <span className={`text-sm font-semibold ${acao.atrasada ? 'text-[var(--red)]' : 'text-[var(--fg)]'}`}>{acao.titulo}</span>
+          {acao.quando && <span className="text-xs tabular text-[var(--fg-2)]">{fmtData(acao.quando)}</span>}
+          {acao.atrasada && <Badge tone="danger">atrasada</Badge>}
+        </div>
+      </div>
+      {c.remarcacoes > 0 && (
+        <div className="rounded-[var(--r-md)] border border-[var(--yellow-border)] bg-[var(--yellow-subtle)] p-3 text-sm flex items-center gap-1.5">
+          <Icon name="alert" size={14} className="text-[var(--yellow)] shrink-0" />
+          <span className="text-[var(--fg-2)]">
+            <strong className="text-[var(--yellow)]">Promessa remarcada {c.remarcacoes}x</strong> — o vencimento já foi adiado.
+          </span>
+        </div>
+      )}
+
+      {/* Registrar cobrança */}
+      {canEdit && (
+        <div className="space-y-3">
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-xs text-[var(--fg-3)]">Canal</span>
+              <FilterSelect value={canal} onChange={(e) => setCanal(e.target.value)} className="mt-1">
+                <option value="">— canal —</option>
+                {CANAIS_COBRANCA.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </FilterSelect>
+            </label>
+            <label className="block">
+              <span className="text-xs text-[var(--fg-3)]">Resultado</span>
+              <FilterSelect value={resultado} onChange={(e) => setResultado(e.target.value)} className="mt-1">
+                <option value="">— resultado —</option>
+                {RESULTADOS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </FilterSelect>
+            </label>
+          </div>
+          <label className="block">
+            <span className="text-xs text-[var(--fg-3)]">Observação</span>
+            <textarea
+              value={obs}
+              onChange={(e) => setObs(e.target.value)}
+              rows={2}
+              placeholder="Ex.: prometeu pagar sexta via Pix…"
+              className="mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm text-[var(--fg)]"
+            />
+          </label>
+          <Button onClick={registrar} disabled={!canal || !resultado || salvando}>
+            <Icon name="check" size={14} /> {salvando ? 'Registrando…' : 'Registrar'}
+          </Button>
+        </div>
+      )}
+
+      {/* Histórico */}
+      <div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)] mb-1">
+          Histórico de cobranças{c.cobrancas_total > 0 ? ` · ${c.cobrancas_total}` : ''}
+        </div>
+        {historico === null ? (
+          <Loading label="Carregando histórico…" minHeight={100} />
+        ) : !historico.length ? (
+          <EmptyState title="Nenhuma cobrança registrada" hint="O que for registrado aqui vira a memória da régua." icon="mail" />
+        ) : (
+          <div className="divide-y divide-[var(--border-faint)]">
+            {historico.map((h) => (
+              <div key={h.id} className="py-2 flex items-start gap-3">
+                <div className="text-xs tabular text-[var(--fg-3)] whitespace-nowrap w-[110px] shrink-0">{fmtDataHora(h.quando)}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge tone={RESULTADO_TONE[h.resultado ?? ''] ?? 'neutral'}>{resultadoLabel(h.resultado)}</Badge>
+                    <span className="text-[11px] text-[var(--fg-3)]">via {canalCobrancaLabel(h.canal)}</span>
+                    {h.autor && <span className="text-[11px] text-[var(--fg-3)]">· {h.autor}</span>}
+                  </div>
+                  {h.obs && <div className="mt-0.5 text-xs text-[var(--fg-2)]">{h.obs}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

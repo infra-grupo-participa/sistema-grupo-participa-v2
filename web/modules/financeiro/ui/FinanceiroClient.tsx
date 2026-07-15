@@ -2,13 +2,16 @@
 
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
-import type { ContaReceber, DiaFaturamento, Oferta, TurmaFin } from '../domain/types';
+import type { ContaReceber, DiaFaturamento, Oferta, ReguaPasso, TurmaFin } from '../domain/types';
 import {
   FILTROS_VAZIOS, STATUS_ORDEM, contaMorta, filtrar, resumir, statusLabel, statusTone, type Filtros,
 } from '../domain/financeiro';
+import { precisaAcao } from '../domain/cobranca';
 import * as data from './financeiro-data';
 import { FinanceiroDashboard } from './FinanceiroDashboard';
 import { FaturamentoDiario } from './FaturamentoDiario';
+import { FilaCobranca } from './FilaCobranca';
+import { ConfiguracoesFinanceiro } from './ConfiguracoesFinanceiro';
 import { ContaDrawer } from './ContaDrawer';
 import { exportarExcelFinanceiro } from './financeiro-export';
 import {
@@ -17,7 +20,7 @@ import {
 } from '@/shared/ui/components';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 
-type Tab = 'dashboard' | 'contas' | 'ofertas' | 'faturamento';
+type Tab = 'dashboard' | 'contas' | 'cobranca' | 'ofertas' | 'faturamento' | 'config';
 type Gaveta = Filtros['gaveta'];
 
 /** Gavetas da fila — os cards de KPI são o próprio seletor (padrão do piloto Placas). */
@@ -50,14 +53,20 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const loadingFat = !pronto || !cargaFat || cargaFat.turma !== turma;
   const [filtros, setFiltros] = useState<Filtros>(FILTROS_VAZIOS);
   const [q, setQ] = useState('');
+  // "Só fila": recorte extra sobre a tabela — depende da régua, não cabe no filtrar() puro.
+  const [soFila, setSoFila] = useState(false);
+  const [regua, setRegua] = useState<ReguaPasso[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
+  // Aba inicial do drawer: a fila do dia abre direto em "Cobrança".
+  const [drawerTab, setDrawerTab] = useState<'resumo' | 'cobranca'>('resumo');
   const { toast, flash } = useFlash();
 
   useEffect(() => {
     (async () => {
-      const [ts, ofs] = await Promise.all([data.loadTurmas(), data.loadOfertas()]);
+      const [ts, ofs, rg] = await Promise.all([data.loadTurmas(), data.loadOfertas(), data.loadRegua()]);
       setTurmas(ts);
       setOfertas(ofs);
+      setRegua(rg);
       setTurma(ts.find((t) => t.atual)?.turma ?? ts[0]?.turma ?? null);
       setPronto(true);
     })();
@@ -66,8 +75,10 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     const applyHash = () => {
       const h = window.location.hash.replace('#', '');
       if (h === 'contas-a-receber') setTab('contas');
+      else if (h === 'cobranca') setTab('cobranca');
       else if (h === 'ofertas') setTab('ofertas');
       else if (h === 'faturamento') setTab('faturamento');
+      else if (h === 'configuracoes') setTab('config');
       else setTab('dashboard');
     };
     applyHash();
@@ -98,6 +109,17 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   }, [reload, flash]);
 
   const irPara = (hash: string) => { window.location.hash = hash; };
+
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  // Contas que a régua manda agir hoje — alimenta a gaveta "Cobrar hoje" e a fila.
+  const filaSet = useMemo(
+    () => new Set(contas.filter((c) => precisaAcao(c, regua, hojeISO)).map((c) => c.contato_hm_id)),
+    [contas, regua, hojeISO],
+  );
+  const filaValor = useMemo(
+    () => contas.reduce((a, c) => a + (filaSet.has(c.contato_hm_id) ? (c.saldo_a_pagar ?? 0) : 0), 0),
+    [contas, filaSet],
+  );
 
   const resumo = useMemo(() => resumir(contas), [contas]);
   const counts = useMemo(() => ({
@@ -137,7 +159,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       const i = (STATUS_ORDEM as readonly string[]).indexOf(s);
       return i === -1 ? STATUS_ORDEM.length : i;
     };
-    const lista = filtrar(contas, { ...filtros, termo: dq });
+    let lista = filtrar(contas, { ...filtros, termo: dq });
+    if (soFila) lista = lista.filter((c) => filaSet.has(c.contato_hm_id));
     if (!sortCol) return lista;
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...lista].sort((a, b) => {
@@ -149,9 +172,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       if (sortCol === 'saldo_a_pagar') return dir * ((a.saldo_a_pagar ?? -1) - (b.saldo_a_pagar ?? -1));
       return dir * (statusRank(a.status_financeiro) - statusRank(b.status_financeiro));
     });
-  }, [contas, filtros, dq, sortCol, sortDir]);
+  }, [contas, filtros, dq, sortCol, sortDir, soFila, filaSet]);
 
-  const temFiltro = filtros.status.length > 0 || filtros.canais.length > 0 || filtros.gaveta !== 'todos' || dq.trim().length > 0;
+  const temFiltro = filtros.status.length > 0 || filtros.canais.length > 0 || filtros.gaveta !== 'todos' || dq.trim().length > 0 || soFila;
   const aberta = openId ? contas.find((c) => c.contato_hm_id === openId) ?? null : null;
 
   const [exportando, setExportando] = useState(false);
@@ -170,6 +193,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
 
   const ofertasOrdenadas = useMemo(() => [...ofertas].sort((a, b) => (b.valor ?? 0) - (a.valor ?? 0)), [ofertas]);
   const turmaAtual = turmas.find((t) => t.turma === turma);
+  const nomesTurmas = useMemo(() => turmas.map((t) => t.turma), [turmas]);
 
   return (
     <div>
@@ -182,8 +206,12 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               Contas a <span className="text-[var(--accent)]">Receber</span>
               <span className="ml-2 align-middle text-xs font-semibold rounded-[var(--r-pill)] bg-[var(--accent-subtle)] text-[var(--accent)] px-2 py-0.5 tabular">{contas.length}</span>
             </>
+          ) : tab === 'cobranca' ? (
+            <>Fila de <span className="text-[var(--accent)]">Cobrança</span></>
           ) : tab === 'faturamento' ? (
             <>Faturamento <span className="text-[var(--accent)]">Diário</span></>
+          ) : tab === 'config' ? (
+            <>Configurações do <span className="text-[var(--accent)]">Financeiro</span></>
           ) : (
             <>Mapa de <span className="text-[var(--accent)]">Ofertas</span></>
           )}
@@ -194,19 +222,25 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               <Icon name="download" size={14} /> {exportando ? 'Gerando…' : 'Exportar Excel'}
             </Button>
           )}
-          <FilterSelect aria-label="Turma" value={turma ?? ''} onChange={(e) => setTurma(e.target.value || null)}>
-            {!turmas.length && <option value="">Todas as turmas</option>}
-            {turmas.map((t) => (
-              <option key={t.turma} value={t.turma}>{t.turma}{t.atual ? ' (atual)' : ''} · {t.alunos} alunos</option>
-            ))}
-          </FilterSelect>
+          {tab !== 'config' && (
+            <FilterSelect aria-label="Turma" value={turma ?? ''} onChange={(e) => setTurma(e.target.value || null)}>
+              {!turmas.length && <option value="">Todas as turmas</option>}
+              {turmas.map((t) => (
+                <option key={t.turma} value={t.turma}>{t.turma}{t.atual ? ' (atual)' : ''} · {t.alunos} alunos</option>
+              ))}
+            </FilterSelect>
+          )}
         </div>
       </div>
       <p className="text-sm text-[var(--fg-3)] mb-4">
         {tab === 'faturamento'
           ? 'Regime de caixa — o que entrou por dia de pagamento'
+          : tab === 'cobranca'
+          ? 'A fila de trabalho do dia — o que a régua de cobrança manda fazer agora'
+          : tab === 'config'
+          ? 'Metas por turma e régua de cobrança — o controle do seu jeito'
           : 'Sinal pago na Hotmart + saldo do pacote combinado com o financeiro'}
-        {turmaAtual ? ` · turma ${turmaAtual.turma} (${turmaAtual.alunos} alunos)` : ''}
+        {tab !== 'config' && turmaAtual ? ` · turma ${turmaAtual.turma} (${turmaAtual.alunos} alunos)` : ''}
       </p>
 
       {tab === 'dashboard' ? (
@@ -218,9 +252,18 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         />
       ) : tab === 'faturamento' ? (
         <FaturamentoDiario dias={dias} loading={loadingFat} turma={turma} />
+      ) : tab === 'cobranca' ? (
+        <FilaCobranca
+          contas={contas}
+          regua={regua}
+          loading={loading}
+          onAbrir={(id) => { setDrawerTab('cobranca'); setOpenId(id); }}
+        />
+      ) : tab === 'config' ? (
+        <ConfiguracoesFinanceiro canEdit={canEdit} turmas={nomesTurmas} onReguaSalva={setRegua} />
       ) : tab === 'contas' ? (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4" role="tablist" aria-label="Gavetas de contas">
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3 mb-4" role="tablist" aria-label="Gavetas de contas">
             {GAVETAS.map((g) => (
               <QueueCard
                 key={g.key}
@@ -229,10 +272,20 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
                 icon={g.icon}
                 tone={g.tone}
                 value={counts[g.key]}
-                active={filtros.gaveta === g.key}
-                onClick={() => setFiltros((f) => ({ ...f, gaveta: g.key }))}
+                active={filtros.gaveta === g.key && !soFila}
+                onClick={() => { setSoFila(false); setFiltros((f) => ({ ...f, gaveta: g.key })); }}
               />
             ))}
+            {/* Recorte pela régua: o que exige ação hoje. Ortogonal às gavetas de status. */}
+            <QueueCard
+              label="Cobrar hoje"
+              hint={filaSet.size ? `${fmtBRL(filaValor)} na fila` : 'régua em dia'}
+              icon="mail"
+              tone="var(--purple)"
+              value={filaSet.size}
+              active={soFila}
+              onClick={() => { setFiltros((f) => ({ ...f, gaveta: 'todos' })); setSoFila((s) => !s); }}
+            />
           </div>
 
           <Toolbar className="mb-3">
@@ -250,7 +303,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               options={canalOpts.map((c) => ({ value: c, label: c }))}
             />
             {temFiltro && (
-              <Button variant="ghost" size="sm" onClick={() => { setFiltros(FILTROS_VAZIOS); setQ(''); }}>Limpar</Button>
+              <Button variant="ghost" size="sm" onClick={() => { setFiltros(FILTROS_VAZIOS); setQ(''); setSoFila(false); }}>Limpar</Button>
             )}
             <span className="text-xs text-[var(--fg-3)] tabular whitespace-nowrap">{visiveis.length} de {contas.length}</span>
           </Toolbar>
@@ -326,7 +379,16 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       )}
 
       {aberta && (
-        <ContaDrawer conta={aberta} canEdit={canEdit} canVerDoc={canVerDoc} onClose={() => setOpenId(null)} act={act} />
+        <ContaDrawer
+          key={aberta.contato_hm_id}
+          conta={aberta}
+          regua={regua}
+          initialTab={drawerTab}
+          canEdit={canEdit}
+          canVerDoc={canVerDoc}
+          onClose={() => { setOpenId(null); setDrawerTab('resumo'); }}
+          act={act}
+        />
       )}
 
       <Toast>{toast}</Toast>
