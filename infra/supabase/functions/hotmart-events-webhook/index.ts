@@ -513,7 +513,14 @@ serve(async (req) => {
 
   const price = purchase.price as Record<string, unknown> | undefined;
   const approvedDate = Number(purchase.approved_date ?? 0) || Number(purchase.order_date ?? 0) || null;
+  // Parcelamento (HOTMART_INSTALLMENTS ou cartão parcelado) é modelado como
+  // assinatura recorrente pela Hotmart, mas NÃO é renovação. Só é renovação o produto
+  // de renovação (3507214) ou uma assinatura recorrente que não seja um parcelamento.
+  const paymentInfo = purchase.payment as Record<string, unknown> | undefined;
+  const ehParcelamento = paymentInfo?.type === "HOTMART_INSTALLMENTS"
+    || Number(paymentInfo?.installments_number ?? 1) > 1;
   const isRenovacao = channel === "HM"
+    && !ehParcelamento
     && (
       productId === "3507214"
       || (purchase.is_subscription === true && Number(purchase.recurrency_number ?? 1) > 1)

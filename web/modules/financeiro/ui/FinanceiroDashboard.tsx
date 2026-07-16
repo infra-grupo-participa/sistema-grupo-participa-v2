@@ -12,7 +12,8 @@ import { useMemo } from 'react';
 import { Icon } from '@/shared/ui/icons';
 import type { ContaReceber, DiaFaturamento, Meta } from '../domain/types';
 import {
-  agrupar, resumir, statusLabel, statusTone, STATUS_ORDEM, type Gaveta,
+  agrupar, resumir, segundaMetadeCondicional, SEGUNDA_METADE_VALOR, statusLabel, statusTone,
+  STATUS_ORDEM, type Gaveta,
 } from '../domain/financeiro';
 import { AGING_META, distribuicaoAging, preverRecebimento } from '../domain/cobranca';
 import {
@@ -54,6 +55,7 @@ export function FinanceiroDashboard({ contas, dias, meta, loading, onDrill, onDr
   const aging = useMemo(() => distribuicaoAging(contas), [contas]);
   const canais = useMemo(() => agrupar(contas, (c) => c.canal), [contas]);
   const estado = useMemo(() => estadoTurma(contas), [contas]);
+  const segundaMetade = useMemo(() => segundaMetadeCondicional(contas), [contas]);
   const mv = useMemo(() => metaVsReal(contas, meta, hojeISO), [contas, meta, hojeISO]);
   const indAging = useMemo(() => condicaoAging(contas), [contas]);
   const indPrev = useMemo(() => condicaoPrevisibilidade(contas), [contas]);
@@ -130,6 +132,31 @@ export function FinanceiroDashboard({ contas, dias, meta, loading, onDrill, onDr
         </div>
         <div className="mt-3 pt-2.5 border-t border-[var(--border-faint)] text-[10px] tabular text-[var(--fg-3)]">
           líquido {fmtBRL(r.recebidoLiquido)} · taxas {fmtBRL(r.taxas)} · {r.alunos} alunos
+        </div>
+      </Card>
+
+      {/* 2ª metade condicional — INFORMATIVA: honorário futuro atrelado ao marco de
+          faturamento do parceiro. Nunca soma nas contas a receber correntes. */}
+      <Card className="p-3.5">
+        <div className="flex items-center gap-3 flex-wrap min-w-0">
+          <span
+            className="grid place-items-center w-7 h-7 rounded-[var(--r-md)] shrink-0"
+            style={{ background: 'color-mix(in srgb, var(--purple) 14%, transparent)', color: 'var(--purple)' }}
+          >
+            <Icon name="banknote" size={15} />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">2ª metade (condicional)</div>
+            <div className="mt-0.5 text-[15px] font-bold tabular leading-none text-[var(--fg-2)] break-words">
+              {fmtBRL(segundaMetade.valor)}
+              <span className="ml-1.5 text-[11px] font-normal text-[var(--fg-3)]">
+                · {segundaMetade.parceiros} {segundaMetade.parceiros === 1 ? 'parceiro ativo' : 'parceiros ativos'} × {fmtBRL(SEGUNDA_METADE_VALOR)}
+              </span>
+            </div>
+          </div>
+          <div className="sm:ml-auto text-[10px] text-[var(--fg-3)] min-w-0">
+            Devida após o parceiro faturar R$ 150.000 · não entra nas contas a receber correntes
+          </div>
         </div>
       </Card>
 

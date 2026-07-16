@@ -63,6 +63,43 @@ export function contaMorta(c: ContaReceber): boolean {
   return c.status_financeiro === 'cancelado' || c.status_financeiro === 'reembolsado';
 }
 
+/**
+ * Tolerância de centavos: o arredondamento das 12x deixa resíduo de
+ * R$ 0,01–0,04 no saldo mesmo com o aluno quitado. Para TOTALIZAR ou EXIBIR
+ * saldo a receber, |saldo| < R$ 1 vale 0. Não mexe no status_financeiro —
+ * o banco continua sendo a fonte do status.
+ */
+export function saldoEfetivo(c: ContaReceber): number {
+  const s = c.saldo_a_pagar ?? 0;
+  return Math.abs(s) < 1 ? 0 : s;
+}
+
+/**
+ * Reserva de vaga: pagou só o sinal (R$ 300) e nada do saldo — ainda pode não
+ * converter em aluno. É diferente de "aluno em pagamento".
+ */
+export function ehReserva(c: ContaReceber): boolean {
+  return (c.saldo_pago_bruto ?? 0) <= 0 && (c.sinal_bruto ?? 0) > 0;
+}
+
+/** 2ª metade condicional do honorário do parceiro — R$ 15.000 por parceiro ativo. */
+export const SEGUNDA_METADE_VALOR = 15000;
+
+/**
+ * Métrica INFORMATIVA da 2ª metade do honorário (R$ 15.000 por parceiro),
+ * devida só depois que o parceiro fatura R$ 150.000 em até 1 ano. Não há fonte
+ * de dados desse marco ainda, então NUNCA entra nas contas a receber correntes.
+ * Parceiro ativo = conta sem cancelamento/reembolso E que já pagou algo do
+ * saldo (já é aluno de fato — reserva de vaga não conta).
+ */
+export function segundaMetadeCondicional(contas: ContaReceber[]): { valor: number; parceiros: number } {
+  const fora: StatusFinanceiro[] = ['cancelado', 'reembolsado', 'cancelamento_solicitado'];
+  const parceiros = contas.filter(
+    (c) => !fora.includes(c.status_financeiro) && (c.saldo_pago_bruto ?? 0) > 0,
+  ).length;
+  return { valor: parceiros * SEGUNDA_METADE_VALOR, parceiros };
+}
+
 export interface Resumo {
   alunos: number;
   recebidoBruto: number;
@@ -91,7 +128,7 @@ export function resumir(contas: ContaReceber[]): Resumo {
 
   const recebidoBruto = soma(contas.map((c) => c.total_pago_bruto ?? 0));
   const recebidoLiquido = soma(contas.map((c) => c.total_pago_liquido ?? 0));
-  const aReceber = soma(vivos.map((c) => c.saldo_a_pagar ?? 0));
+  const aReceber = soma(vivos.map(saldoEfetivo));
   const pacoteTotal = soma(vivos.map((c) => c.pacote ?? 0));
 
   return {
@@ -100,7 +137,7 @@ export function resumir(contas: ContaReceber[]): Resumo {
     recebidoLiquido,
     taxas: recebidoBruto - recebidoLiquido,
     aReceber,
-    vencido: soma(vivos.filter((c) => c.status_financeiro === 'vencido').map((c) => c.saldo_a_pagar ?? 0)),
+    vencido: soma(vivos.filter((c) => c.status_financeiro === 'vencido').map(saldoEfetivo)),
     vencidoQtd: qtd('vencido'),
     quitados: contas.filter((c) => c.status_financeiro === 'quitado').length,
     semAcordo: qtd('sem_acordo'),
@@ -129,7 +166,7 @@ export function agrupar(contas: ContaReceber[], por: (c: ContaReceber) => string
     const f = mapa.get(chave) ?? { chave, alunos: 0, recebido: 0, aReceber: 0 };
     f.alunos += 1;
     f.recebido += c.total_pago_bruto ?? 0;
-    if (!contaMorta(c)) f.aReceber += c.saldo_a_pagar ?? 0;
+    if (!contaMorta(c)) f.aReceber += saldoEfetivo(c);
     mapa.set(chave, f);
   }
   return [...mapa.values()].sort((a, b) => b.aReceber - a.aReceber || b.alunos - a.alunos);
@@ -158,7 +195,7 @@ export function filtrar(contas: ContaReceber[], f: Filtros): ContaReceber[] {
     if (f.gaveta === 'sem_acordo' && c.status_financeiro !== 'sem_acordo') return false;
     if (f.gaveta === 'incalculavel' && c.status_financeiro !== 'incalculavel') return false;
     if (f.gaveta === 'quitado' && c.status_financeiro !== 'quitado') return false;
-    if (f.gaveta === 'a_receber' && !((c.saldo_a_pagar ?? 0) > 0 && !contaMorta(c))) return false;
+    if (f.gaveta === 'a_receber' && !(saldoEfetivo(c) > 0 && !contaMorta(c))) return false;
     // Pediu cancelamento (kanban ou timestamp) e ainda perseguível; cancelado = efetivado/reembolso.
     if (f.gaveta === 'pediu_cancelamento' && !(c.solicitou_cancelamento && !contaMorta(c))) return false;
     if (f.gaveta === 'cancelado' && !contaMorta(c)) return false;

@@ -1,7 +1,7 @@
 // Regras puras de cobrança avançada: envelhecimento (aging), próxima ação da
 // régua, e previsão de recebimento. Sem I/O. Datas em ISO 'YYYY-MM-DD'.
 import type { ContaReceber, ReguaPasso } from './types';
-import { contaMorta } from './financeiro';
+import { contaMorta, saldoEfetivo } from './financeiro';
 
 // ── Aging (envelhecimento do saldo) ──────────────────────────────────────────
 
@@ -23,7 +23,7 @@ export const AGING_ORDEM: AgingBucket[] = ['a_vencer', 'd1_15', 'd16_30', 'd31_6
 /** Faixa de envelhecimento do saldo. Contas quitadas/mortas ficam fora (null). */
 export function agingDe(c: ContaReceber): AgingBucket | null {
   if (contaMorta(c) || c.status_financeiro === 'quitado') return null;
-  if ((c.saldo_a_pagar ?? 0) <= 0) return null;
+  if (saldoEfetivo(c) <= 0) return null;
   if (!c.vencimento) return 'sem_prazo';
   const d = c.dias_atraso ?? 0;
   if (d <= 0) return 'a_vencer';
@@ -47,7 +47,7 @@ export function distribuicaoAging(contas: ContaReceber[]): FatiaAging[] {
     if (!b) continue;
     const f = mapa.get(b) ?? { bucket: b, alunos: 0, valor: 0 };
     f.alunos += 1;
-    f.valor += c.saldo_a_pagar ?? 0;
+    f.valor += saldoEfetivo(c);
     mapa.set(b, f);
   }
   return AGING_ORDEM.filter((b) => mapa.has(b)).map((b) => mapa.get(b)!);
@@ -138,7 +138,7 @@ export function preverRecebimento(contas: ContaReceber[], hojeISO: string): Fore
   const f: Forecast = { proximos7: 0, proximos30: 0, alem30: 0, emRisco: 0, semPrazo: 0 };
   for (const c of contas) {
     if (contaMorta(c) || c.status_financeiro === 'quitado') continue;
-    const saldo = c.saldo_a_pagar ?? 0;
+    const saldo = saldoEfetivo(c);
     if (saldo <= 0) continue;
     if (!c.vencimento) { f.semPrazo += saldo; continue; }
     const venc = c.vencimento.slice(0, 10);

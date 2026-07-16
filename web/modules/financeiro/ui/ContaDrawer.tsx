@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
 import type { Cobranca, CompraHistorico, ContaReceber, Lancamento, ReguaPasso } from '../domain/types';
-import { mascararDoc, statusLabel, statusTone } from '../domain/financeiro';
+import { ehReserva, mascararDoc, saldoEfetivo, statusLabel, statusTone } from '../domain/financeiro';
 import { proximaAcao } from '../domain/cobranca';
 import { loadCobrancas, loadComprasAluno, loadExtrato, registrarCobranca, salvarAcordo } from './financeiro-data';
 import {
@@ -54,6 +54,8 @@ export function ContaDrawer({ conta: c, regua, canEdit, canVerDoc, onClose, act,
           <Badge tone="accent">{c.produto}</Badge>
           <Badge tone="neutral">{c.canal}</Badge>
           <Badge tone={statusTone(c.status_financeiro)} dot>{statusLabel(c.status_financeiro)}</Badge>
+          {/* Reserva de vaga: pagou só o sinal — ainda não é aluno em pagamento. */}
+          {ehReserva(c) && !cancelada && <Badge tone="warning">Reserva de vaga</Badge>}
         </>
       }
     >
@@ -65,6 +67,14 @@ export function ContaDrawer({ conta: c, regua, canEdit, canVerDoc, onClose, act,
 
       {tab === 'resumo' && (
         <div className="space-y-4">
+          {ehReserva(c) && !cancelada && (
+            <div className="rounded-[var(--r-md)] border border-[var(--yellow-border)] bg-[var(--yellow-subtle)] p-3 text-sm flex items-center gap-1.5">
+              <Icon name="alert" size={14} className="text-[var(--yellow)] shrink-0" />
+              <span className="text-[var(--fg-2)]">
+                <strong className="text-[var(--yellow)]">Reserva de vaga</strong> — só sinal pago, saldo em aberto. Pode não converter em aluno.
+              </span>
+            </div>
+          )}
           {c.status_financeiro === 'incalculavel' && (
             <div className="rounded-[var(--r-md)] border border-[var(--yellow-border)] bg-[var(--yellow-subtle)] p-3 text-sm flex items-center gap-1.5">
               <Icon name="alert" size={14} className="text-[var(--yellow)] shrink-0" />
@@ -117,7 +127,12 @@ export function ContaDrawer({ conta: c, regua, canEdit, canVerDoc, onClose, act,
             />
             <Row
               k="Saldo a pagar"
-              v={<span className={c.status_financeiro === 'vencido' ? 'text-[var(--red)] font-semibold' : undefined}>{fmtBRL(c.saldo_a_pagar)}</span>}
+              v={
+                // saldoEfetivo: resíduo de centavos das 12x (< R$ 1) não aparece como dívida.
+                <span className={c.status_financeiro === 'vencido' ? 'text-[var(--red)] font-semibold' : undefined}>
+                  {c.saldo_a_pagar == null ? fmtBRL(null) : fmtBRL(saldoEfetivo(c))}
+                </span>
+              }
             />
             {c.credito != null && c.credito > 0 && <Row k="Crédito (pró-rata)" v={fmtBRL(c.credito)} />}
             <Row

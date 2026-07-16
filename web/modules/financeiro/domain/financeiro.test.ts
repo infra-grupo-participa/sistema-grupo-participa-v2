@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { agrupar, contaMorta, filtrar, FILTROS_VAZIOS, mascararDoc, resumir, statusLabel } from './financeiro';
+import {
+  agrupar, contaMorta, ehReserva, filtrar, FILTROS_VAZIOS, mascararDoc, resumir,
+  saldoEfetivo, segundaMetadeCondicional, statusLabel,
+} from './financeiro';
 import type { ContaReceber, StatusFinanceiro } from './types';
 
 function conta(over: Partial<ContaReceber> = {}): ContaReceber {
@@ -83,6 +86,75 @@ describe('resumir', () => {
     ]);
     expect(r.pediuCancelamento).toBe(1);
     expect(r.cancelados).toBe(2);
+  });
+});
+
+describe('saldoEfetivo (tolerância de centavos)', () => {
+  it('resíduo de arredondamento das 12x (< R$ 1) vale 0', () => {
+    expect(saldoEfetivo(conta({ saldo_a_pagar: 0.04 }))).toBe(0);
+    expect(saldoEfetivo(conta({ saldo_a_pagar: -0.02 }))).toBe(0);
+    expect(saldoEfetivo(conta({ saldo_a_pagar: 0.99 }))).toBe(0);
+  });
+
+  it('saldo real passa intacto; null vale 0', () => {
+    expect(saldoEfetivo(conta({ saldo_a_pagar: 1 }))).toBe(1);
+    expect(saldoEfetivo(conta({ saldo_a_pagar: 14700 }))).toBe(14700);
+    expect(saldoEfetivo(conta({ saldo_a_pagar: null }))).toBe(0);
+  });
+
+  it('resumir não soma resíduo no a-receber nem no vencido', () => {
+    const r = resumir([
+      conta({ saldo_a_pagar: 0.04, status_financeiro: 'vencido' }),
+      conta({ saldo_a_pagar: 100, status_financeiro: 'vencido' }),
+    ]);
+    expect(r.aReceber).toBe(100);
+    expect(r.vencido).toBe(100);
+  });
+
+  it('gaveta a_receber ignora quem só tem resíduo de centavos', () => {
+    const b = [conta({ nome: 'Ana', saldo_a_pagar: 0.03 }), conta({ nome: 'Bia', saldo_a_pagar: 500 })];
+    expect(filtrar(b, { ...FILTROS_VAZIOS, gaveta: 'a_receber' }).map((c) => c.nome)).toEqual(['Bia']);
+  });
+});
+
+describe('ehReserva (reserva de vaga)', () => {
+  it('só sinal pago e nada do saldo = reserva', () => {
+    expect(ehReserva(conta({ sinal_bruto: 300, saldo_pago_bruto: 0 }))).toBe(true);
+  });
+
+  it('quem já pagou algo do saldo não é reserva', () => {
+    expect(ehReserva(conta({ sinal_bruto: 300, saldo_pago_bruto: 1225 }))).toBe(false);
+  });
+
+  it('sem sinal pago não é reserva', () => {
+    expect(ehReserva(conta({ sinal_bruto: null, saldo_pago_bruto: 0 }))).toBe(false);
+    expect(ehReserva(conta({ sinal_bruto: 0, saldo_pago_bruto: 0 }))).toBe(false);
+  });
+});
+
+describe('segundaMetadeCondicional', () => {
+  it('R$ 15.000 por parceiro ativo que já pagou algo do saldo', () => {
+    const r = segundaMetadeCondicional([
+      conta({ saldo_pago_bruto: 14700, status_financeiro: 'quitado' }),
+      conta({ saldo_pago_bruto: 1225, status_financeiro: 'em_pagamento' }),
+      conta({ saldo_pago_bruto: 0 }), // reserva de vaga: fora
+    ]);
+    expect(r).toEqual({ valor: 30000, parceiros: 2 });
+  });
+
+  it('cancelado, reembolsado e cancelamento solicitado ficam fora', () => {
+    const r = segundaMetadeCondicional([
+      conta({ saldo_pago_bruto: 14700, status_financeiro: 'cancelado' }),
+      conta({ saldo_pago_bruto: 14700, status_financeiro: 'reembolsado' }),
+      conta({ saldo_pago_bruto: 14700, status_financeiro: 'cancelamento_solicitado' }),
+      conta({ saldo_pago_bruto: 14700, status_financeiro: 'quitado' }),
+    ]);
+    expect(r).toEqual({ valor: 15000, parceiros: 1 });
+  });
+
+  it('sem parceiro ativo o valor é 0', () => {
+    expect(segundaMetadeCondicional([conta()])).toEqual({ valor: 0, parceiros: 0 });
+    expect(segundaMetadeCondicional([])).toEqual({ valor: 0, parceiros: 0 });
   });
 });
 

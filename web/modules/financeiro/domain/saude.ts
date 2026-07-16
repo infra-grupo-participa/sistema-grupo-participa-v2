@@ -2,7 +2,7 @@
 // visual do financeiro. Regras puras e testáveis; a UI só pinta o resultado.
 // Thresholds ancorados em benchmarks de contas a receber (aging 60+ saudável < 10%).
 import type { ContaReceber, Meta } from './types';
-import { resumir } from './financeiro';
+import { resumir, saldoEfetivo } from './financeiro';
 import { distribuicaoAging } from './cobranca';
 
 export type Condicao = 'boa' | 'atencao' | 'critica' | 'neutra';
@@ -63,7 +63,7 @@ export function condicaoPrevisibilidade(contas: ContaReceber[]): Indicador {
   const r = resumir(contas);
   const semPrazo = contas
     .filter((c) => c.status_financeiro === 'sem_acordo' || c.status_financeiro === 'incalculavel')
-    .reduce((a, c) => a + (c.saldo_a_pagar ?? 0), 0);
+    .reduce((a, c) => a + saldoEfetivo(c), 0);
   if (r.aReceber <= 0) return { condicao: 'boa', pct: 0, nota: 'nada a receber' };
   const pct = (semPrazo / r.aReceber) * 100;
   const condicao: Condicao = pct < 25 ? 'boa' : pct <= 60 ? 'atencao' : 'critica';

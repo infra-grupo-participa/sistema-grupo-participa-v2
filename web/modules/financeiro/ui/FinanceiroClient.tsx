@@ -4,7 +4,8 @@ import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } fro
 import { Icon } from '@/shared/ui/icons';
 import type { ContaReceber, DiaFaturamento, Meta, Oferta, ReguaPasso, TurmaFin } from '../domain/types';
 import {
-  FILTROS_VAZIOS, STATUS_ORDEM, contaMorta, filtrar, formaPagamentoLabel, resumir, statusLabel, type Filtros,
+  FILTROS_VAZIOS, STATUS_ORDEM, contaMorta, ehReserva, filtrar, formaPagamentoLabel, resumir,
+  saldoEfetivo, statusLabel, type Filtros,
 } from '../domain/financeiro';
 import { precisaAcao } from '../domain/cobranca';
 import * as data from './financeiro-data';
@@ -15,8 +16,8 @@ import { ConfiguracoesFinanceiro } from './ConfiguracoesFinanceiro';
 import { ContaDrawer } from './ContaDrawer';
 import { exportarExcelFinanceiro } from './financeiro-export';
 import {
-  Badge, Button, DataTable, EmptyState, FilterSelect, Loading, MultiSelect, ProgressBar, SearchInput,
-  SectionCard, SkeletonRows, Td, Th, Thead, Toast, Toolbar, Tr, useFlash,
+  Badge, Button, Checkbox, DataTable, EmptyState, FilterSelect, Loading, MultiSelect, ProgressBar,
+  SearchInput, SectionCard, SkeletonRows, Td, Th, Thead, Toast, Toolbar, Tr, useFlash,
 } from '@/shared/ui/components';
 import { fmtBRL, fmtBRLc, fmtData, fmtDesde } from '@/shared/ui/format';
 
@@ -58,6 +59,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const [q, setQ] = useState('');
   // "Só fila": recorte extra sobre a tabela — depende da régua, não cabe no filtrar() puro.
   const [soFila, setSoFila] = useState(false);
+  // Recorte de reservas de vaga (só sinal pago) — quem quer ver só aluno de fato oculta.
+  const [semReservas, setSemReservas] = useState(false);
   const [regua, setRegua] = useState<ReguaPasso[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   // Aba inicial do drawer: a fila do dia abre direto em "Cobrança".
@@ -121,7 +124,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     [contas, regua, hojeISO],
   );
   const filaValor = useMemo(
-    () => contas.reduce((a, c) => a + (filaSet.has(c.contato_hm_id) ? (c.saldo_a_pagar ?? 0) : 0), 0),
+    () => contas.reduce((a, c) => a + (filaSet.has(c.contato_hm_id) ? saldoEfetivo(c) : 0), 0),
     [contas, filaSet],
   );
 
@@ -133,7 +136,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     vencido: contas.filter((c) => c.status_financeiro === 'vencido').length,
     sem_acordo: resumo.semAcordo,
     incalculavel: resumo.incalculavel,
-    a_receber: contas.filter((c) => (c.saldo_a_pagar ?? 0) > 0 && !contaMorta(c)).length,
+    a_receber: contas.filter((c) => saldoEfetivo(c) > 0 && !contaMorta(c)).length,
     quitado: resumo.quitados,
     pediu_cancelamento: resumo.pediuCancelamento,
     cancelado: resumo.cancelados,
@@ -171,6 +174,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const visiveis = useMemo(() => {
     let lista = filtrar(contas, { ...filtros, termo: dq });
     if (soFila) lista = lista.filter((c) => filaSet.has(c.contato_hm_id));
+    if (semReservas) lista = lista.filter((c) => !ehReserva(c));
     if (!sortCol) return lista;
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...lista].sort((a, b) => {
@@ -182,9 +186,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       if (sortCol === 'total_pago_bruto') return dir * ((a.total_pago_bruto ?? -1) - (b.total_pago_bruto ?? -1));
       return dir * ((a.saldo_a_pagar ?? -1) - (b.saldo_a_pagar ?? -1));
     });
-  }, [contas, filtros, dq, sortCol, sortDir, soFila, filaSet]);
+  }, [contas, filtros, dq, sortCol, sortDir, soFila, filaSet, semReservas]);
 
-  const temFiltro = filtros.status.length > 0 || filtros.canais.length > 0 || filtros.produtos.length > 0 || filtros.gaveta !== 'todos' || dq.trim().length > 0 || soFila;
+  const temFiltro = filtros.status.length > 0 || filtros.canais.length > 0 || filtros.produtos.length > 0 || filtros.gaveta !== 'todos' || dq.trim().length > 0 || soFila || semReservas;
   const aberta = openId ? contas.find((c) => c.contato_hm_id === openId) ?? null : null;
 
   const [exportando, setExportando] = useState(false);
@@ -323,8 +327,14 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
                 options={produtoOpts.map((p) => ({ value: p, label: p }))}
               />
             )}
+            {/* Reserva de vaga (só sinal pago) polui a visão de quem persegue saldo — dá para ocultar. */}
+            <Checkbox
+              checked={semReservas}
+              onChange={setSemReservas}
+              label={<span className="whitespace-nowrap">Ocultar reservas de vaga</span>}
+            />
             {temFiltro && (
-              <Button variant="ghost" size="sm" onClick={() => { setFiltros(FILTROS_VAZIOS); setQ(''); setSoFila(false); }}>Limpar</Button>
+              <Button variant="ghost" size="sm" onClick={() => { setFiltros(FILTROS_VAZIOS); setQ(''); setSoFila(false); setSemReservas(false); }}>Limpar</Button>
             )}
             <span className="text-xs text-[var(--fg-3)] tabular whitespace-nowrap">{visiveis.length} de {contas.length}</span>
           </Toolbar>
@@ -463,7 +473,11 @@ const LinhaConta = memo(function LinhaConta({ c, onOpen, flash }: {
       {/* Aluno */}
       <Td>
         <div className="min-w-0">
-          <div className="truncate text-[13px] font-medium text-[var(--fg)]">{c.nome || '—'}</div>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="truncate text-[13px] font-medium text-[var(--fg)]">{c.nome || '—'}</span>
+            {/* Reserva de vaga: pagou só o sinal — ainda não é aluno em pagamento. */}
+            {ehReserva(c) && !morta && <Badge tone="warning">Reserva de vaga</Badge>}
+          </div>
           <div className="text-[11px] text-[var(--fg-3)] flex items-center gap-2 min-w-0">
             <button type="button" title="Copiar e-mail" onClick={(e) => copiar(e, c.email, 'E-mail')} className="truncate hover:text-[var(--fg)] hover:underline transition-colors">{c.email}</button>
             {c.telefone && (
@@ -510,7 +524,7 @@ const LinhaConta = memo(function LinhaConta({ c, onOpen, flash }: {
           <Badge tone="warning">{statusLabel(c.status_financeiro)}</Badge>
         ) : (
           <>
-            <div className={`text-[13px] tabular font-semibold ${vencido ? 'text-[var(--red)]' : 'text-[var(--fg)]'}`}>{fmtBRLc(c.saldo_a_pagar)}</div>
+            <div className={`text-[13px] tabular font-semibold ${vencido ? 'text-[var(--red)]' : 'text-[var(--fg)]'}`}>{fmtBRLc(saldoEfetivo(c))}</div>
             {pediu ? (
               <span className="text-[10px] font-semibold text-[var(--yellow)]">pediu cancelamento</span>
             ) : (c.dias_atraso ?? 0) > 0 ? (
