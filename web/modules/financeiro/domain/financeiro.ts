@@ -1,5 +1,8 @@
 // Regras puras do Financeiro: rótulos, agregação e filtro. Sem I/O.
+// Constantes do modelo HM (sinal, metades, marco, tolerância…) vêm de ./hm-modelo,
+// a fonte única — não repetir números soltos aqui.
 import type { ContaReceber, DiaFaturamento, StatusFinanceiro } from './types';
+import { SEGUNDA_METADE, TOLERANCIA_CENTAVOS } from './hm-modelo';
 
 type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
 
@@ -71,7 +74,7 @@ export function contaMorta(c: ContaReceber): boolean {
  */
 export function saldoEfetivo(c: ContaReceber): number {
   const s = c.saldo_a_pagar ?? 0;
-  return Math.abs(s) < 1 ? 0 : s;
+  return Math.abs(s) < TOLERANCIA_CENTAVOS ? 0 : s;
 }
 
 /**
@@ -82,8 +85,9 @@ export function ehReserva(c: ContaReceber): boolean {
   return (c.saldo_pago_bruto ?? 0) <= 0 && (c.sinal_bruto ?? 0) > 0;
 }
 
-/** 2ª metade condicional do honorário do parceiro — R$ 15.000 por parceiro ativo. */
-export const SEGUNDA_METADE_VALOR = 15000;
+/** 2ª metade condicional do honorário do parceiro — R$ 15.000 por parceiro ativo.
+ *  Valor vem de ./hm-modelo (fonte única); alias mantido por compatibilidade. */
+export const SEGUNDA_METADE_VALOR = SEGUNDA_METADE;
 
 /**
  * Métrica INFORMATIVA da 2ª metade do honorário (R$ 15.000 por parceiro),
