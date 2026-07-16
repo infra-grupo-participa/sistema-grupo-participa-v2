@@ -239,6 +239,28 @@ export interface CompraHistorico {
   morto: boolean;
 }
 
+/** Uma checagem de integridade do financeiro (fn_fin_saude). valor=0/ok=true = sem problema. */
+export interface SaudeCheck {
+  check_id: string;
+  label: string;
+  valor: number;
+  ok: boolean;
+}
+
+/** Oferta HM usada em compras mas ausente do catálogo (fn_fin_ofertas_orfas) — furo I-5. */
+export interface OfertaOrfa {
+  oferta_codigo: string;
+  produto_id: string;
+  produto_nome: string;
+  compras: number;
+  menor: number;
+  maior: number;
+  parceladas: number;
+  primeiro: string;
+  ultimo: string;
+  exemplo_aluno: string;
+}
+
 /** O que o financeiro grava no card (mesmas colunas que a ativação lê). */
 export interface Acordo {
   vencimento: string | null;

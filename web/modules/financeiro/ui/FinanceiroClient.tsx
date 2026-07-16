@@ -13,6 +13,7 @@ import { FinanceiroDashboard } from './FinanceiroDashboard';
 import { FaturamentoDiario } from './FaturamentoDiario';
 import { FilaCobranca } from './FilaCobranca';
 import { ConfiguracoesFinanceiro } from './ConfiguracoesFinanceiro';
+import { SaudeFinanceiro } from './SaudeFinanceiro';
 import { ContaDrawer } from './ContaDrawer';
 import { exportarExcelFinanceiro } from './financeiro-export';
 import {
@@ -272,7 +273,10 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           onAbrir={(id) => { setDrawerTab('cobranca'); setOpenId(id); }}
         />
       ) : tab === 'config' ? (
-        <ConfiguracoesFinanceiro canEdit={canEdit} turmas={nomesTurmas} onReguaSalva={setRegua} />
+        <>
+          <ConfiguracoesFinanceiro canEdit={canEdit} turmas={nomesTurmas} onReguaSalva={setRegua} />
+          <SaudeFinanceiro />
+        </>
       ) : tab === 'contas' ? (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5 mb-4" role="tablist" aria-label="Gavetas de contas">

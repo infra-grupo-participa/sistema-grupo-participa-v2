@@ -6,8 +6,21 @@
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type {
-  Acordo, Cobranca, CompraHistorico, ContaReceber, DiaFaturamento, Lancamento, Meta, Oferta, ReguaPasso, TurmaFin,
+  Acordo, Cobranca, CompraHistorico, ContaReceber, DiaFaturamento, Lancamento, Meta, Oferta, OfertaOrfa,
+  ReguaPasso, SaudeCheck, TurmaFin,
 } from '../domain/types';
+
+export async function loadSaude(): Promise<SaudeCheck[]> {
+  const { data, error } = await db().rpc('fn_fin_saude');
+  logQueryError('loadSaude', error);
+  return (data as SaudeCheck[]) ?? [];
+}
+
+export async function loadOfertasOrfas(): Promise<OfertaOrfa[]> {
+  const { data, error } = await db().rpc('fn_fin_ofertas_orfas');
+  logQueryError('loadOfertasOrfas', error);
+  return (data as OfertaOrfa[]) ?? [];
+}
 
 const db = () => createBrowserSupabase();
 
