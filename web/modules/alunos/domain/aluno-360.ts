@@ -163,7 +163,7 @@ export const SITUACAO_FINANCEIRA: Record<string, { cls: string; label: string }>
   em_andamento: { cls: 'yellow', label: 'Em andamento' },
   so_sinal: { cls: 'yellow', label: 'Só sinal pago' },
   em_atraso: { cls: 'red', label: 'Em atraso' },
-  cancelada: { cls: 'red', label: 'Cancelada' },
+  cancelado: { cls: 'red', label: 'Cancelada' }, // chave = valor real gravado por fn_hm_cancelar (masc.)
   reembolsado: { cls: 'gray', label: 'Reembolsado' },
   acompanha_titular: { cls: 'gray', label: 'Acompanha titular' },
 };
