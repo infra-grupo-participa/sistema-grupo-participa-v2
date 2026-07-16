@@ -16,7 +16,7 @@ import { ConfiguracoesFinanceiro } from './ConfiguracoesFinanceiro';
 import { ContaDrawer } from './ContaDrawer';
 import { exportarExcelFinanceiro } from './financeiro-export';
 import {
-  Badge, Button, Checkbox, DataTable, EmptyState, FilterSelect, Loading, MultiSelect, ProgressBar,
+  Badge, Button, Checkbox, DataTable, EmptyState, Loading, MultiSelect, ProgressBar,
   SearchInput, SectionCard, SkeletonRows, Td, Th, Thead, Toast, Toolbar, Tr, useFlash,
 } from '@/shared/ui/components';
 import { fmtBRL, fmtBRLc, fmtData, fmtDesde } from '@/shared/ui/format';
@@ -238,14 +238,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               <Icon name="download" size={14} /> {exportando ? 'Gerando…' : 'Exportar Excel'}
             </Button>
           )}
-          {tab !== 'config' && (
-            <FilterSelect aria-label="Turma" value={turma ?? ''} onChange={(e) => setTurma(e.target.value || null)}>
-              <option value="">Todas as turmas</option>{/* padrão: nada escondido por turma */}
-              {turmas.map((t) => (
-                <option key={t.turma} value={t.turma}>{t.turma}{t.atual ? ' (atual)' : ''} · {t.alunos} alunos</option>
-              ))}
-            </FilterSelect>
-          )}
+          {/* Sem filtro de turma: contas/faturamento sempre mostram TODAS as turmas
+              reunidas (turma = null). Segmentação por turma vive só no Config (metas). */}
         </div>
       </div>
       <p className="text-sm text-[var(--fg-3)] mb-4">
