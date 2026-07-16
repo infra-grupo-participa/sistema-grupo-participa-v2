@@ -74,7 +74,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       setOfertas(ofs);
       setRegua(rg);
       setMetas(ms);
-      setTurma(ts.find((t) => t.atual)?.turma ?? ts[0]?.turma ?? null);
+      // Padrão = TODAS as turmas reunidas. Aluno de turma antiga (T23–T34) que paga
+      // agora não pode sumir por trás do filtro da turma atual. Filtra-se depois se quiser.
+      setTurma(null);
       setPronto(true);
     })();
     // A sidebar dispara 'hashchange' nativo ao trocar de aba na mesma rota (ver Sidebar.tsx),
@@ -238,7 +240,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           )}
           {tab !== 'config' && (
             <FilterSelect aria-label="Turma" value={turma ?? ''} onChange={(e) => setTurma(e.target.value || null)}>
-              {!turmas.length && <option value="">Todas as turmas</option>}
+              <option value="">Todas as turmas</option>{/* padrão: nada escondido por turma */}
               {turmas.map((t) => (
                 <option key={t.turma} value={t.turma}>{t.turma}{t.atual ? ' (atual)' : ''} · {t.alunos} alunos</option>
               ))}
