@@ -437,6 +437,26 @@ async function persistPurchase(args: {
   }
 }
 
+// True se JÁ existe uma compra paga para esta transação. Usado para não notificar o
+// Slack de novo quando o PURCHASE_COMPLETE chega ~7 dias após o PURCHASE_APPROVED —
+// é a MESMA venda (fim da garantia da Hotmart); notificar 2x dobraria a métrica do time.
+async function compraJaPaga(transaction: string): Promise<boolean> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return false;
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data } = await supabase
+      .from("compras")
+      .select("status")
+      .eq("hotmart_transaction", transaction)
+      .maybeSingle();
+    return ["APPROVED", "COMPLETE", "COMPLETED"].includes(String(data?.status ?? "").toUpperCase());
+  } catch {
+    return false;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "GET") return new Response("OK", { status: 200 });
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
@@ -542,9 +562,10 @@ serve(async (req) => {
   console.log(`[DIAG ${channel}] documento presente:`, documento != null);
   console.log(`[DIAG ${channel}] productId/name:`, productId, "/", productName, "| isRenovacao:", isRenovacao);
 
-  // Slack SÓ em compra aprovada — é a métrica de vendas do time. Boleto gerado,
-  // aguardando, vencido ou estornado NÃO notifica (evita inflar/confundir a contagem).
-  if (isAprovado) {
+  // Slack SÓ na PRIMEIRA vez que a compra vira paga. Boleto/pendente/estorno não
+  // notificam; e um PURCHASE_COMPLETE que chega dias depois do APPROVED (mesma venda,
+  // fim da garantia) também não — senão a métrica do time conta a venda duas vezes.
+  if (isAprovado && !(await compraJaPaga(String(purchase.transaction)))) {
     await notifySlack(channel, {
       nome: String(buyer.name ?? "Sem nome"),
       email: String(buyer.email ?? ""),

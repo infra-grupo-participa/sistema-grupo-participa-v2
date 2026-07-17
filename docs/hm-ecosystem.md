@@ -141,7 +141,7 @@ Hotmart na cascata. Ex. real (Teresa, 12×): 1.142,65 = 994,73 + 147,92; líquid
 - **I-1. Parcela ≠ renovação.** Parcela do pacote HM **nunca** renova o anual do curso nem rotula "Renovação". Anual = **1ª compra + 365** (estável). Renovação real = produto `3507214` / oferta de renovação. Aplicado em `fn_hm_provisionar_aluno`, `fn_aluno_360_safe.num_renovacoes`, webhook `isRenovacao`.
 - **I-2. Sinal-only = reserva, não aluno.** Quem pagou só o sinal (R$300) é **reserva de vaga** — não vira `thb_alunos` até pagar saldo. No financeiro aparece com badge "Reserva de vaga".
 - **I-3. Reembolso propaga.** Compra que vira REFUNDED/CHARGEBACK/CANCELED **cancela** card + aluno automaticamente (`trg_hm_compra_cancelada`). Nunca deixar reembolso só na compra.
-- **I-4. Boleto confirma no pagamento.** Card e razão nascem quando o boleto **aprova** (UPDATE→pago), não quando é gerado. Slack só dispara no aprovado.
+- **I-4. Boleto confirma no pagamento.** Card e razão nascem quando o boleto **aprova** (UPDATE→pago), não quando é gerado. Slack só dispara no aprovado — e **só na PRIMEIRA vez** que a compra vira paga: o `PURCHASE_COMPLETE` que a Hotmart manda ~7 dias depois (fim da garantia) é a mesma venda e **não** re-notifica (senão a métrica do time conta 2x). Guard: `compraJaPaga()` no webhook.
 - **I-5. Toda oferta HM catalogada.** `offer_code` sem linha em `hm_product_catalog` = furo. A geração de oferta de saldo da ativação **deve** registrar no catálogo.
 - **I-6. Cascata sempre completa.** Gravar os 5 valores (cliente pagou/juros/bruto/taxa/líquido). Nunca declarar só o bruto sem o full_price quando houver parcelamento.
 - **I-7. Fuso BRT.** Agregados diários agrupam em `America/Sao_Paulo` (banco é UTC).
