@@ -5,11 +5,14 @@ import { Icon } from '@/shared/ui/icons';
 /** Tabela densa e legível: header sticky, hover sutil, sem zebra.
  *  `fixed`: layout de colunas fixo (larguras definidas nos Th) — células truncam
  *  em vez de alargar a tabela, eliminando o scroll horizontal. */
-export function DataTable({ children, className = '', fixed = false }: { children: React.ReactNode; className?: string; fixed?: boolean }) {
+export function DataTable({ children, className = '', fixed = false, minWidth }: { children: React.ReactNode; className?: string; fixed?: boolean; minWidth?: number }) {
   return (
     <div className={`rounded-[var(--r-lg)] border border-[var(--border)] overflow-hidden bg-[var(--surface-2)] shadow-[var(--shadow-sm)] ${className}`}>
+      {/* Com muitas colunas, `minWidth` mantém as larguras e deixa a tabela ROLAR
+          na horizontal em telas estreitas, em vez de espremer a 1ª coluna (o nome)
+          até sumir. Sem minWidth, table-fixed + w-full comprime tudo no container. */}
       <div className="overflow-x-auto">
-        <table className={`w-full text-sm border-collapse ${fixed ? 'table-fixed' : ''}`}>{children}</table>
+        <table style={minWidth ? { minWidth } : undefined} className={`w-full text-sm border-collapse ${fixed ? 'table-fixed' : ''}`}>{children}</table>
       </div>
     </div>
   );

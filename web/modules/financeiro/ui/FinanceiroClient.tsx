@@ -339,10 +339,11 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <span className="text-xs text-[var(--fg-3)] tabular whitespace-nowrap">{visiveis.length} de {contas.length}</span>
           </Toolbar>
 
-          {/* Layout fixo: larguras definidas aqui; células truncam em vez de forçar scroll lateral. */}
-          <DataTable fixed>
+          {/* Layout fixo com min-width: as larguras são respeitadas e a tabela rola
+              na horizontal em telas estreitas, em vez de espremer o nome do aluno. */}
+          <DataTable fixed minWidth={1300}>
             <Thead>
-              <Th sortable active={sortCol === 'nome'} dir={sortDir} onClick={sortBtn('nome')}>Aluno</Th>
+              <Th sortable active={sortCol === 'nome'} dir={sortDir} onClick={sortBtn('nome')} className="w-[240px]">Aluno</Th>
               <Th sortable active={sortCol === 'canal'} dir={sortDir} onClick={sortBtn('canal')} className="w-[170px]">Origem</Th>
               <Th sortable active={sortCol === 'sinal_pago_em'} dir={sortDir} onClick={sortBtn('sinal_pago_em')} className="w-[95px]">Sinal pago em</Th>
               <Th sortable active={sortCol === 'total_pago_bruto'} dir={sortDir} onClick={sortBtn('total_pago_bruto')} className="w-[160px]">Já pago</Th>
@@ -351,7 +352,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               <Th sortable active={sortCol === 'ultimo_pagamento_em'} dir={sortDir} onClick={sortBtn('ultimo_pagamento_em')} className="w-[115px]">Último pagamento</Th>
               <Th className="w-[130px]">Forma</Th>
               {/* O que o comercial combinou na reunião (ch.acordo, vindo da ativação). */}
-              <Th className="w-[200px]">Acordo</Th>
+              <Th className="w-[160px]">Acordo</Th>
             </Thead>
             <tbody>
               {loading && !contas.length
@@ -476,9 +477,11 @@ const LinhaConta = memo(function LinhaConta({ c, onOpen, flash }: {
       <Td>
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="truncate text-[13px] font-medium text-[var(--fg)]">{c.nome || '—'}</span>
+            {/* O nome é prioridade: ocupa o espaço e trunca com reticências; a badge
+                encurtada ("Reserva") não rouba mais a linha inteira do nome. */}
+            <span className="flex-1 min-w-0 truncate text-[13px] font-medium text-[var(--fg)]" title={c.nome || undefined}>{c.nome || '—'}</span>
             {/* Reserva de vaga: pagou só o sinal — ainda não é aluno em pagamento. */}
-            {ehReserva(c) && !morta && <Badge tone="warning">Reserva de vaga</Badge>}
+            {ehReserva(c) && !morta && <Badge tone="warning">Reserva</Badge>}
           </div>
           <div className="text-[11px] text-[var(--fg-3)] flex items-center gap-2 min-w-0">
             <button type="button" title="Copiar e-mail" onClick={(e) => copiar(e, c.email, 'E-mail')} className="truncate hover:text-[var(--fg)] hover:underline transition-colors">{c.email}</button>
