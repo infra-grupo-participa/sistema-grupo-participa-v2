@@ -351,8 +351,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               <Th sortable active={sortCol === 'saldo_a_pagar'} dir={sortDir} onClick={sortBtn('saldo_a_pagar')} className="w-[140px]">Falta pagar</Th>
               <Th sortable active={sortCol === 'ultimo_pagamento_em'} dir={sortDir} onClick={sortBtn('ultimo_pagamento_em')} className="w-[115px]">Último pagamento</Th>
               <Th className="w-[130px]">Forma</Th>
-              {/* O que o comercial combinou na reunião (ch.acordo, vindo da ativação). */}
-              <Th className="w-[160px]">Acordo</Th>
+              {/* A DATA que o comercial prometeu com o cliente (pagamento_previsto_em);
+                  o texto do acordo vai de apoio embaixo. */}
+              <Th className="w-[160px]">Promessa de pagto</Th>
             </Thead>
             <tbody>
               {loading && !contas.length
@@ -548,12 +549,21 @@ const LinhaConta = memo(function LinhaConta({ c, onOpen, flash }: {
       <Td className="overflow-hidden">
         {forma === '—' ? <span className="text-[var(--fg-3)]">—</span> : <span className="inline-flex whitespace-normal"><Badge tone="neutral">{forma}</Badge></span>}
       </Td>
-      {/* Acordo do comercial: o que foi combinado na reunião (ch.acordo, da ativação).
-          Trunca em 2 linhas; o texto inteiro fica no title. */}
+      {/* Promessa de pagamento: a DATA que o comercial combinou com o cliente
+          (c.vencimento = pagamento_previsto_em). Vermelha se já passou e ainda
+          deve. O texto do acordo fica de apoio, truncado, embaixo. */}
       <Td className="overflow-hidden">
-        {c.acordo
-          ? <span className="text-[12px] text-[var(--fg-2)] line-clamp-2 whitespace-normal" title={c.acordo}>{c.acordo}</span>
-          : <span className="text-[var(--fg-3)]">—</span>}
+        {c.vencimento ? (
+          <div
+            className={`text-[12px] tabular font-medium ${(c.dias_atraso ?? 0) > 0 ? 'text-[var(--red)]' : 'text-[var(--fg)]'}`}
+            title={(c.dias_atraso ?? 0) > 0 ? `${c.dias_atraso} dias em atraso` : 'Data prometida pelo cliente'}
+          >
+            {fmtData(c.vencimento)}
+          </div>
+        ) : (
+          <span className="text-[var(--fg-3)]" title="O comercial ainda não registrou a data prometida">—</span>
+        )}
+        {c.acordo && <div className="text-[11px] text-[var(--fg-3)] truncate" title={c.acordo}>{c.acordo}</div>}
       </Td>
     </Tr>
   );
