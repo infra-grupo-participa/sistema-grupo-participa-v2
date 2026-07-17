@@ -350,10 +350,12 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               <Th sortable active={sortCol === 'saldo_a_pagar'} dir={sortDir} onClick={sortBtn('saldo_a_pagar')} className="w-[140px]">Falta pagar</Th>
               <Th sortable active={sortCol === 'ultimo_pagamento_em'} dir={sortDir} onClick={sortBtn('ultimo_pagamento_em')} className="w-[115px]">Último pagamento</Th>
               <Th className="w-[130px]">Forma</Th>
+              {/* O que o comercial combinou na reunião (ch.acordo, vindo da ativação). */}
+              <Th className="w-[200px]">Acordo</Th>
             </Thead>
             <tbody>
               {loading && !contas.length
-                ? <SkeletonRows cols={[70, 64, 96, 56, 84, 72, 84]} />
+                ? <SkeletonRows cols={[70, 64, 96, 56, 84, 72, 84, 120]} />
                 : visiveis.map((c) => <LinhaConta key={c.contato_hm_id} c={c} onOpen={setOpenId} flash={flash} />)}
             </tbody>
           </DataTable>
@@ -542,6 +544,13 @@ const LinhaConta = memo(function LinhaConta({ c, onOpen, flash }: {
       {/* Forma de pagamento real (Hotmart) */}
       <Td className="overflow-hidden">
         {forma === '—' ? <span className="text-[var(--fg-3)]">—</span> : <span className="inline-flex whitespace-normal"><Badge tone="neutral">{forma}</Badge></span>}
+      </Td>
+      {/* Acordo do comercial: o que foi combinado na reunião (ch.acordo, da ativação).
+          Trunca em 2 linhas; o texto inteiro fica no title. */}
+      <Td className="overflow-hidden">
+        {c.acordo
+          ? <span className="text-[12px] text-[var(--fg-2)] line-clamp-2 whitespace-normal" title={c.acordo}>{c.acordo}</span>
+          : <span className="text-[var(--fg-3)]">—</span>}
       </Td>
     </Tr>
   );
