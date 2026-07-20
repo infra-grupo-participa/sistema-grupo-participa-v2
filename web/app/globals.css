@@ -26,8 +26,8 @@
   --border-faint:rgba(255,255,255,.04); --border:rgba(255,255,255,.08);
   --border-strong:rgba(255,255,255,.14); --border-accent:rgba(242,151,37,.28);
 
-  /* Foreground */
-  --fg:#f0f0f0; --fg-2:#a0a0a0; --fg-3:#606060; --fg-4:#363636;
+  /* Foreground — fg-3 elevado p/ AA (texto secundário legível sobre canvas preto) */
+  --fg:#f0f0f0; --fg-2:#a6a6a6; --fg-3:#767676; --fg-4:#3a3a3a;
 
   /* Espaçamento (escala 4px do legado) */
   --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
@@ -165,11 +165,27 @@ body {
 @keyframes gp-fade { from { opacity: 0 } to { opacity: 1 } }
 @keyframes gp-slide-in { from { transform: translateX(16px); opacity: .4 } to { transform: translateX(0); opacity: 1 } }
 @keyframes gp-slide-up { from { transform: translateY(12px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+@keyframes gp-rise { from { transform: translateY(10px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
 @keyframes gp-spin { to { transform: rotate(360deg) } }
 .gp-overlay-in { animation: gp-fade var(--t-mid); }
 .gp-panel-in { animation: gp-slide-in var(--t-mid); }
 .gp-modal-in { animation: gp-slide-up var(--t-mid); }
 .gp-fade-in { animation: gp-fade var(--t-fast); }
+
+/* Entrada de listas/grids — stagger sutil (delay aplicado por índice via style inline).
+   Reveal informacional discreto (sem overshoot), fiel ao painel operacional. */
+.gp-rise { animation: gp-rise 320ms cubic-bezier(.22,.61,.36,1) both; }
+
+/* Respeita quem pediu menos movimento (checklist de acessibilidade).
+   Zera animações e transições, mantendo o estado final visível. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* Logo Grupo Participa — troca por tema (sem flicker: data-theme vem do script inline).
    Wordmark branco no tema escuro, preto no tema claro. */

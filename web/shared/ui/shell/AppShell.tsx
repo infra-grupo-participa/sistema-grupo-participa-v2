@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import type { GpUser } from '@/shared/domain/auth';
@@ -11,6 +12,7 @@ const COLLAPSE_KEY = 'gp_sidebar_collapsed';
 export function AppShell({ user, children }: { user: GpUser; children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -59,7 +61,10 @@ export function AppShell({ user, children }: { user: GpUser; children: React.Rea
           />
         )}
         <main className="flex-1 min-w-0 overflow-auto p-4 sm:p-6 bg-[var(--surface-0)]">
-          {children}
+          {/* key por rota → fade sutil a cada navegação (percepção de fluidez, sem quebrar densidade) */}
+          <div key={pathname} className="gp-fade-in">
+            {children}
+          </div>
         </main>
       </div>
     </div>

@@ -92,12 +92,16 @@ export function Sidebar({ user }: { user: GpUser }) {
   };
 
   const itemCls = (active: boolean) =>
-    `relative flex items-center gap-2.5 pl-3 pr-2 py-2 rounded-[var(--r-md)] text-sm cursor-pointer transition-colors duration-150 ${
+    `group/item relative flex items-center gap-2.5 pl-3 pr-2 py-2 rounded-[var(--r-md)] text-sm cursor-pointer transition-colors duration-150 ${
       active
         ? 'bg-[var(--accent-subtle)] text-[var(--fg)] font-medium before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-4 before:w-[3px] before:rounded-full before:bg-[var(--accent)]'
         : 'text-[var(--fg-2)] hover:bg-[var(--surface-3)] hover:text-[var(--fg)]'
     }`;
-  const iconBox = 'grid place-items-center w-6 h-6 rounded-[var(--r-sm)] text-[13px] shrink-0';
+  // Ícone: âmbar no item ativo (assinatura da marca) e no hover; herda a cor do texto no repouso.
+  const iconBoxCls = (active: boolean) =>
+    `grid place-items-center w-6 h-6 rounded-[var(--r-sm)] text-[13px] shrink-0 transition-colors duration-150 ${
+      active ? 'text-[var(--accent)]' : 'text-[var(--fg-3)] group-hover/item:text-[var(--accent)]'
+    }`;
 
   return (
     <aside className="w-[var(--sidebar-width)] shrink-0 h-full overflow-y-auto bg-[var(--surface-1)] border-r border-[var(--border)] px-3 py-4 flex flex-col gap-1">
@@ -113,7 +117,7 @@ export function Sidebar({ user }: { user: GpUser }) {
       {/* Início */}
       <Group label="Início" collapsed={!!groups.home} onToggle={() => toggleGroup('home')}>
         <Link href="/" className={itemCls(cur === '/')}>
-          <span className={iconBox}><Icon name="home" /></span>
+          <span className={iconBoxCls(cur === '/')}><Icon name="home" /></span>
           <span>Início</span>
         </Link>
       </Group>
@@ -130,7 +134,7 @@ export function Sidebar({ user }: { user: GpUser }) {
             <div key={group.key}>
               <div className={itemCls(onGroup)}>
                 <Link href={group.defaultHref} className="flex items-center gap-2.5 flex-1 min-w-0">
-                  <span className={iconBox}><Icon name={group.ico || 'clipboard'} /></span>
+                  <span className={iconBoxCls(onGroup)}><Icon name={group.ico || 'clipboard'} /></span>
                   <span className="truncate">{group.label}</span>
                 </Link>
                 {children.length > 0 && (
@@ -163,7 +167,7 @@ export function Sidebar({ user }: { user: GpUser }) {
                           onClick={(e) => onHashChildClick(e, child.path, child.hash)}
                           className={itemCls(active)}
                         >
-                          <span className={iconBox}><Icon name={child.ico || 'circle'} size={14} /></span>
+                          <span className={iconBoxCls(active)}><Icon name={child.ico || 'circle'} size={14} /></span>
                           <span>{child.label}</span>
                         </Link>
                       );
@@ -186,7 +190,7 @@ export function Sidebar({ user }: { user: GpUser }) {
             (item.activePrefixes || []).some((p) => cur.startsWith(normalize(p) + '/'));
           return (
             <Link key={item.key} href={item.path} className={itemCls(active)}>
-              <span className={iconBox}><Icon name={item.ico || 'circle'} /></span>
+              <span className={iconBoxCls(active)}><Icon name={item.ico || 'circle'} /></span>
               <span>{item.label}</span>
             </Link>
           );
@@ -212,10 +216,10 @@ function Group({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)]"
+        className="group/grp w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)] hover:text-[var(--fg-2)] transition-colors rounded-[var(--r-sm)]"
       >
         <span>{label}</span>
-        <Icon name={collapsed ? 'chevron-up' : 'chevron-down'} size={14} className="text-[var(--fg-3)]" />
+        <Icon name={collapsed ? 'chevron-up' : 'chevron-down'} size={14} className="text-[var(--fg-4)] group-hover/grp:text-[var(--fg-2)] transition-colors" />
       </button>
       {!collapsed && <div className="flex flex-col gap-0.5">{children}</div>}
     </div>

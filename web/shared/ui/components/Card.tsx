@@ -4,7 +4,7 @@ import { Icon } from '@/shared/ui/icons';
 export function Card({ children, className = '', as: As = 'div', ...rest }: { children: React.ReactNode; className?: string; as?: React.ElementType } & React.HTMLAttributes<HTMLElement> & Partial<Pick<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href' | 'target' | 'rel'>>) {
   return (
     <As
-      className={`rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] shadow-[var(--shadow-sm)] ${className}`}
+      className={`rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] shadow-[var(--shadow-sm)] transition-[border-color,background-color,box-shadow,transform] duration-150 ${className}`}
       {...rest}
     >
       {children}
@@ -46,11 +46,11 @@ export function KpiCard({ label, value, hint, bar = 'accent' }: {
 }
 
 /** Card de seção com título e subtítulo — bloco de conteúdo padrão. */
-export function SectionCard({ title, subtitle, right, children, className = '' }: {
-  title?: React.ReactNode; subtitle?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode; className?: string;
+export function SectionCard({ title, subtitle, right, children, className = '', style }: {
+  title?: React.ReactNode; subtitle?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode; className?: string; style?: React.CSSProperties;
 }) {
   return (
-    <Card className={`p-5 ${className}`}>
+    <Card className={`p-5 ${className}`} style={style}>
       {(title || right) && (
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="min-w-0">
@@ -77,10 +77,12 @@ export function SectionTitle({ children, right }: { children: React.ReactNode; r
 
 export function EmptyState({ title, hint, icon = 'inbox' }: { title: string; hint?: string; icon?: string }) {
   return (
-    <div className="py-12 text-center">
-      <div className="flex justify-center text-[var(--fg-3)] opacity-60"><Icon name={icon} size={30} strokeWidth={1.5} /></div>
-      <div className="mt-2 text-sm text-[var(--fg-2)]">{title}</div>
-      {hint && <div className="mt-1 text-xs text-[var(--fg-3)]">{hint}</div>}
+    <div className="py-12 text-center gp-fade-in">
+      <div className="mx-auto w-12 h-12 grid place-items-center rounded-full bg-[var(--surface-3)] border border-[var(--border)] text-[var(--fg-3)]">
+        <Icon name={icon} size={22} strokeWidth={1.5} />
+      </div>
+      <div className="mt-3 text-sm font-medium text-[var(--fg-2)]">{title}</div>
+      {hint && <div className="mt-1 text-xs text-[var(--fg-3)] max-w-xs mx-auto leading-relaxed">{hint}</div>}
     </div>
   );
 }

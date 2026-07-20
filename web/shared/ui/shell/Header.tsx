@@ -68,7 +68,7 @@ export function Header({
         <span className="text-sm text-[var(--fg)] max-w-[200px] truncate hidden sm:inline">
           {user.nome || 'Usuário'}
         </span>
-        <div className="w-8 h-8 grid place-items-center rounded-full bg-[var(--accent)] text-black font-semibold text-sm">
+        <div className="w-8 h-8 grid place-items-center rounded-full bg-[var(--accent)] text-black font-semibold text-sm ring-1 ring-[var(--border-accent)] select-none">
           {inicial}
         </div>
         <button
@@ -76,14 +76,14 @@ export function Header({
           onClick={toggle}
           aria-label="Alternar tema"
           title="Alternar tema claro/escuro"
-          className="w-8 h-8 grid place-items-center rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--fg)]"
+          className="w-8 h-8 grid place-items-center rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--accent)] hover:border-[var(--border-accent)] hover:bg-[var(--accent-subtle)] transition-colors"
         >
           <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
         </button>
         <button
           type="button"
           onClick={logout}
-          className="text-sm px-3 py-1.5 rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--fg)] hover:border-[var(--border-strong)]"
+          className="text-sm px-3 py-1.5 rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors"
         >
           Sair
         </button>
