@@ -79,9 +79,9 @@ export function AgendaHorarios({ canEdit, flash, agendamentos }: { canEdit: bool
     <div>
       {/* Resumo + próxima entrevista */}
       <div className="grid gap-3 sm:grid-cols-3 mb-4">
-        <Stat icon="calendar" tone="var(--accent)" value={proximas.length} label="Entrevistas agendadas" />
-        <Stat icon="clipboard" tone="var(--green)" value={slotsFuturos} label="Horários livres à frente" />
-        <Stat icon="check-circle" tone="var(--fg-2)" value={realizadas} label="Entrevistas realizadas" />
+        <Stat index={0} icon="calendar" tone="var(--accent)" value={proximas.length} label="Entrevistas agendadas" />
+        <Stat index={1} icon="clipboard" tone="var(--green)" value={slotsFuturos} label="Horários livres à frente" />
+        <Stat index={2} icon="check-circle" tone="var(--fg-2)" value={realizadas} label="Entrevistas realizadas" />
       </div>
 
       {proxima && (
@@ -128,8 +128,8 @@ export function AgendaHorarios({ canEdit, flash, agendamentos }: { canEdit: bool
         )
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {listaAtiva.map((dia) => (
-            <DiaCard key={dia.data} dia={dia} canEdit={canEdit} onToggle={async (id, ativo) => { if (await data.toggleHorario(id, ativo)) reload(); }} onExcluir={setExcluirId} />
+          {listaAtiva.map((dia, i) => (
+            <DiaCard key={dia.data} index={i} dia={dia} canEdit={canEdit} onToggle={async (id, ativo) => { if (await data.toggleHorario(id, ativo)) reload(); }} onExcluir={setExcluirId} />
           ))}
         </div>
       )}
@@ -148,11 +148,11 @@ export function AgendaHorarios({ canEdit, flash, agendamentos }: { canEdit: bool
   );
 }
 
-function DiaCard({ dia, canEdit, onToggle, onExcluir }: {
-  dia: DiaAgenda; canEdit: boolean; onToggle: (id: number, ativo: boolean) => void; onExcluir: (id: number) => void;
+function DiaCard({ dia, canEdit, onToggle, onExcluir, index = 0 }: {
+  dia: DiaAgenda; canEdit: boolean; onToggle: (id: number, ativo: boolean) => void; onExcluir: (id: number) => void; index?: number;
 }) {
   return (
-    <div className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] overflow-hidden">
+    <div className="gp-rise rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] overflow-hidden" style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
       <div className="px-3 py-2.5 border-b border-[var(--border)] bg-[var(--surface-3)] flex items-center gap-2">
         <Icon name="calendar" size={14} className="text-[var(--accent)] shrink-0" />
         <span className="text-sm font-semibold text-[var(--fg)] capitalize truncate flex-1">{fmtDataExtenso(dia.data)}</span>
@@ -184,8 +184,8 @@ function DiaCard({ dia, canEdit, onToggle, onExcluir }: {
               </span>
               {canEdit && it.slot && !dia.passado && (
                 <>
-                  <button onClick={() => onToggle(it.slot!.id, !it.slot!.ativo)} className="text-[var(--fg-3)] hover:text-[var(--fg)] inline-flex" title={it.slot.ativo ? 'Desativar' : 'Ativar'}><Icon name={it.slot.ativo ? 'pause' : 'play'} size={13} /></button>
-                  <button onClick={() => onExcluir(it.slot!.id)} className="text-[var(--red)] inline-flex" title="Excluir"><Icon name="x" size={13} /></button>
+                  <button onClick={() => onToggle(it.slot!.id, !it.slot!.ativo)} className="text-[var(--fg-3)] hover:text-[var(--fg)] inline-flex cursor-pointer transition-colors" title={it.slot.ativo ? 'Desativar' : 'Ativar'} aria-label={`${it.slot.ativo ? 'Desativar' : 'Ativar'} horário ${it.hora}`}><Icon name={it.slot.ativo ? 'pause' : 'play'} size={13} /></button>
+                  <button onClick={() => onExcluir(it.slot!.id)} className="text-[var(--red)] inline-flex cursor-pointer" title="Excluir" aria-label={`Excluir horário ${it.hora}`}><Icon name="x" size={13} /></button>
                 </>
               )}
             </div>
@@ -196,9 +196,9 @@ function DiaCard({ dia, canEdit, onToggle, onExcluir }: {
   );
 }
 
-function Stat({ icon, tone, value, label }: { icon: string; tone: string; value: number; label: string }) {
+function Stat({ icon, tone, value, label, index = 0 }: { icon: string; tone: string; value: number; label: string; index?: number }) {
   return (
-    <div className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] shadow-[var(--shadow-sm)] p-3 flex items-center gap-3">
+    <div className="gp-rise rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] shadow-[var(--shadow-sm)] p-3 flex items-center gap-3" style={{ animationDelay: `${index * 45}ms` }}>
       <span className="grid place-items-center w-9 h-9 rounded-[var(--r-md)] shrink-0" style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}><Icon name={icon} size={17} /></span>
       <div className="min-w-0">
         <div className="text-xl font-bold tabular leading-none text-[var(--fg)]">{value}</div>

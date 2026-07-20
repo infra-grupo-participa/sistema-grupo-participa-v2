@@ -26,7 +26,7 @@ export function ParaCopyClient() {
     <div>
       <div className="flex items-center gap-3 mb-1">
         <h1 className="text-2xl font-bold text-[var(--fg)]">Para Copy</h1>
-        <a href="/depoimentos#biblioteca" className="text-sm text-[var(--accent)]">← Biblioteca</a>
+        <a href="/depoimentos#biblioteca" className="text-sm text-[var(--accent)] hover:underline">← Biblioteca</a>
       </div>
       <p className="text-sm text-[var(--fg-3)] mb-4">Trechos prontos para posts, reels e anúncios. {loading && 'carregando…'}</p>
       <Toolbar className="mb-4">
@@ -34,11 +34,11 @@ export function ParaCopyClient() {
       </Toolbar>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {filtered.map((d) => {
+        {filtered.map((d, i) => {
           const hls = Array.isArray(d.highlights) ? d.highlights : [];
           const metricas = Array.isArray(d.metricas) ? d.metricas : [];
           return (
-            <Card key={d.id} className="p-4">
+            <Card key={d.id} className="p-4 gp-rise" style={{ animationDelay: `${i * 45}ms` }}>
               <div className="text-xs text-[var(--fg-3)] mb-2">{d.aluno_nome || 'Aluno'}{d.profissao ? ` · ${d.profissao}` : ''}</div>
               {d.gancho && <Block label="Gancho" value={d.gancho} onCopy={copy} copied={copied} />}
               {d.resumo && <Block label="Resumo" value={d.resumo} onCopy={copy} copied={copied} />}

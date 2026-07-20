@@ -113,10 +113,10 @@ export function SolicitacaoDrawer({
         <div className="space-y-4 min-w-0">
           {/* Hero: resumo operacional em relance (inclui Turma, antes ausente da ficha). */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <MiniStat label="Turma">{sol.turma || '—'}</MiniStat>
-            <MiniStat label="Faturamento declarado">{sol.faturamento_declarado != null ? fmtBRL(sol.faturamento_declarado) : '—'}</MiniStat>
-            <MiniStat label="Entrevista">{sol.entrevista_data ? `${fmtData(sol.entrevista_data)}${sol.entrevista_hora ? ` ${String(sol.entrevista_hora).slice(0, 5)}` : ''}` : '—'}</MiniStat>
-            <MiniStat label="Documentos">{[sol.proof_url ? 'Compr.' : null, sol.declaracao_url ? 'Decl.' : null].filter(Boolean).join(' · ') || '—'}</MiniStat>
+            <MiniStat index={0} label="Turma">{sol.turma || '—'}</MiniStat>
+            <MiniStat index={1} label="Faturamento declarado">{sol.faturamento_declarado != null ? fmtBRL(sol.faturamento_declarado) : '—'}</MiniStat>
+            <MiniStat index={2} label="Entrevista">{sol.entrevista_data ? `${fmtData(sol.entrevista_data)}${sol.entrevista_hora ? ` ${String(sol.entrevista_hora).slice(0, 5)}` : ''}` : '—'}</MiniStat>
+            <MiniStat index={3} label="Documentos">{[sol.proof_url ? 'Compr.' : null, sol.declaracao_url ? 'Decl.' : null].filter(Boolean).join(' · ') || '—'}</MiniStat>
           </div>
 
           {canEdit && editando && (
@@ -561,9 +561,9 @@ function EditarDados({
 }
 
 /** Célula compacta do hero (rótulo minúsculo + valor destacado). Mesma linguagem da ficha 360. */
-function MiniStat({ label, children }: { label: string; children: React.ReactNode }) {
+function MiniStat({ label, children, index = 0 }: { label: string; children: React.ReactNode; index?: number }) {
   return (
-    <div className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3 min-w-0">
+    <div className="gp-rise rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3 min-w-0" style={{ animationDelay: `${index * 45}ms` }}>
       <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">{label}</div>
       <div className="text-sm font-semibold text-[var(--fg)] mt-1 truncate">{children}</div>
     </div>

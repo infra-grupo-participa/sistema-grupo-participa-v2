@@ -63,7 +63,7 @@ export function DepoimentosClient({ canEdit }: { canEdit: boolean }) {
             onChange={(k) => { setTab(k as Tab); window.location.hash = k; }}
           />
         </div>
-        <a href="/depoimentos/biblioteca" className="px-4 py-2 text-sm text-[var(--accent)] whitespace-nowrap">Para Copy →</a>
+        <a href="/depoimentos/biblioteca" className="px-4 py-2 text-sm text-[var(--accent)] whitespace-nowrap hover:underline">Para Copy →</a>
       </div>
 
       {tab === 'biblioteca' && (
@@ -231,7 +231,7 @@ function Field({ label, value, onSave }: { label: string; value: string | null; 
       <span className="text-xs text-[var(--fg-3)]">{label}</span>
       <div className="flex gap-2 mt-1">
         <Input value={v} onChange={(e) => setV(e.target.value)} readOnly={!onSave} className="flex-1" />
-        {onSave && <Button variant="ghost" size="sm" onClick={() => onSave(v)}><Icon name="check" size={14} /></Button>}
+        {onSave && <Button variant="ghost" size="sm" aria-label={`Salvar ${label}`} title="Salvar" onClick={() => onSave(v)}><Icon name="check" size={14} /></Button>}
       </div>
     </label>
   );
@@ -267,8 +267,8 @@ function CursosTab({ canEdit, flash }: { canEdit: boolean; flash: (m: string) =>
         </Toolbar>
       )}
       <div className="space-y-2">
-        {cursos.map((c) => (
-          <Card key={c.id} className="flex items-center justify-between p-3">
+        {cursos.map((c, i) => (
+          <Card key={c.id} className="flex items-center justify-between p-3 gp-rise" style={{ animationDelay: `${i * 45}ms` }}>
             <div><span className="text-[var(--fg)] font-medium">{c.name}</span> <span className="text-xs text-[var(--fg-3)]">/{c.slug}{!c.active && ' · inativo'}</span></div>
             {canEdit && <Button variant="danger" size="sm" onClick={() => setConfirmDel(c)}>excluir</Button>}
           </Card>
@@ -307,8 +307,8 @@ function TagsTab({ canEdit, flash }: { canEdit: boolean; flash: (m: string) => v
         </Toolbar>
       )}
       <div className="flex flex-wrap gap-2">
-        {tags.map((t) => (
-          <span key={t.id} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-[var(--r-pill)] border border-[var(--border)] text-sm" style={{ color: t.color || 'var(--fg-2)' /* viz-colors: cor da tag definida pelo usuário */ }}>
+        {tags.map((t, i) => (
+          <span key={t.id} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-[var(--r-pill)] border border-[var(--border)] text-sm gp-rise" style={{ color: t.color || 'var(--fg-2)' /* viz-colors: cor da tag definida pelo usuário */, animationDelay: `${i * 45}ms` }}>
             {t.label}
             {canEdit && <button onClick={() => setConfirmDel(t)} aria-label={`Excluir tag ${t.label}`} className="text-[var(--red)] inline-flex"><Icon name="x" size={13} /></button>}
           </span>

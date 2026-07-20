@@ -225,34 +225,26 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
               <span className="ml-2 align-middle text-xs font-semibold rounded-[var(--r-pill)] bg-[var(--accent-subtle)] text-[var(--accent)] px-2 py-0.5 tabular">{sols.length}</span>
             </h1>
             <div className="flex items-center gap-2">
-              <button
-                onClick={exportar}
-                disabled={exportando || !filtered.length}
-                title="Exportar a lista visível (.xlsx)"
-                className="inline-flex items-center justify-center gap-1.5 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent border transition-colors text-[var(--fg-2)] border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] disabled:opacity-50"
-              >
+              <Button variant="ghost" size="sm" onClick={exportar} disabled={exportando || !filtered.length} title="Exportar a lista visível (.xlsx)">
                 <Icon name="download" size={14} /> {exportando ? 'Gerando…' : 'Exportar Excel'}
-              </button>
-              <button
-                title={linkPublico}
-                onClick={() => { navigator.clipboard?.writeText(linkPublico); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}
-                className="inline-flex items-center justify-center gap-1.5 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent border transition-colors text-[var(--fg-2)] border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)]"
-              >
+              </Button>
+              <Button variant="ghost" size="sm" title={linkPublico} onClick={() => { navigator.clipboard?.writeText(linkPublico); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}>
                 {copiado ? <><Icon name="check" size={14} className="text-[var(--green)]" /> Copiado!</> : <><Icon name="link" size={14} /> Copiar link do formulário</>}
-              </button>
+              </Button>
               {canEdit && (
-                <button onClick={() => { window.location.hash = 'config'; setTab('config'); }} className="inline-flex items-center justify-center gap-1.5 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent text-[var(--fg-2)] border border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="settings" size={14} /> Configurações</button>
+                <Button variant="ghost" size="sm" onClick={() => { window.location.hash = 'config'; setTab('config'); }}><Icon name="settings" size={14} /> Configurações</Button>
               )}
-              <a href="/sistema/admin-dev" className="inline-flex items-center justify-center gap-1.5 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent text-[var(--fg-2)] border border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="notebook" size={14} /> Logs</a>
+              <a href="/sistema/admin-dev" className="inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent text-[var(--fg-2)] border border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="notebook" size={14} /> Logs</a>
             </div>
           </div>
           <p className="text-sm text-[var(--fg-3)] mb-4">Candidatos que iniciaram o processo via formulário público · Atualizado em {hoje}</p>
 
           {/* Fila em gavetas: os cards filtram a tabela (substituem a fita de abas) */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4" role="tablist" aria-label="Filas de solicitações">
-            {BUCKETS.map((b) => (
+            {BUCKETS.map((b, i) => (
               <QueueCard
                 key={b.key}
+                index={i}
                 label={b.label}
                 hint={b.hint}
                 icon={b.icon}
@@ -339,16 +331,16 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
 }
 
 /** Card-gaveta da fila: KPI clicável que filtra a tabela. Ativo = borda âmbar + rótulo aceso. */
-function QueueCard({ label, hint, icon, tone, value, active, badge, onClick }: {
-  label: string; hint: string; icon: string; tone: string; value: number; active: boolean; badge?: string; onClick: () => void;
+function QueueCard({ label, hint, icon, tone, value, active, badge, index = 0, onClick }: {
+  label: string; hint: string; icon: string; tone: string; value: number; active: boolean; badge?: string; index?: number; onClick: () => void;
 }) {
   return (
     <button
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`text-left rounded-[var(--r-lg)] bg-[var(--surface-2)] shadow-[var(--shadow-sm)] p-4 border transition-colors ${active ? 'border-[var(--border-accent)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}
-      style={{ borderTopWidth: 2, borderTopColor: tone }}
+      className={`gp-rise text-left rounded-[var(--r-lg)] bg-[var(--surface-2)] shadow-[var(--shadow-sm)] p-4 border transition-[transform,border-color,box-shadow,background-color] duration-150 ${active ? 'border-[var(--border-accent)]' : 'border-[var(--border)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] hover:border-[var(--border-accent)]'}`}
+      style={{ borderTopWidth: 2, borderTopColor: tone, animationDelay: `${index * 45}ms` }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">

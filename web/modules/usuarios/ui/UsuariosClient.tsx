@@ -41,7 +41,7 @@ interface PerfilRow {
 const statusTone: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = { ativo: 'success', pendente: 'warning', negado: 'danger' };
 
 function Codigo({ children }: { children: React.ReactNode }) {
-  return <code className="rounded bg-[var(--surface-2)] px-1 text-[11px] text-[var(--fg-3)] tabular">{children}</code>;
+  return <code className="rounded-[var(--r-sm)] bg-[var(--surface-2)] px-1 text-[11px] text-[var(--fg-3)] tabular">{children}</code>;
 }
 
 function CopyLinkBox({ link }: { link: string }) {
@@ -56,7 +56,7 @@ function CopyLinkBox({ link }: { link: string }) {
     }
   }
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 space-y-2">
+    <div className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] p-3 space-y-2">
       <p className="text-xs text-[var(--fg-3)]">Envie este link para a pessoa. Ela cria a senha e já entra no sistema.</p>
       <div className="flex gap-2">
         <Input readOnly value={link} onFocus={(e) => e.currentTarget.select()} className="flex-1 text-xs" />
@@ -95,7 +95,7 @@ function CatalogoAcessos({
       </div>
 
       {base === 'modulos' && (
-        <div className="rounded-lg border border-[var(--border)] p-2.5 space-y-3">
+        <div className="rounded-[var(--r-lg)] border border-[var(--border)] p-2.5 space-y-3">
           {MODULOS.map((m) => {
             const verObrigatorio = m.acoes.some((a) => funcoes.includes(a.funcao)); // operar implica ver
             return (
@@ -188,7 +188,7 @@ export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
             const st = u.status || 'pendente';
             return (
               <Tr key={u.id}>
-                <Td><div className="text-[var(--fg)] font-medium">{u.nome || '—'}</div><div className="text-[var(--fg-3)] text-xs">{u.email}</div></Td>
+                <Td><div className="text-[var(--fg)] font-medium truncate">{u.nome || '—'}</div><div className="text-[var(--fg-3)] text-xs truncate">{u.email}</div></Td>
                 <Td className="text-[var(--fg-2)]">{CARGO_META[cargo].label}</Td>
                 <Td><Badge tone={statusTone[st] || 'neutral'} dot>{st}</Badge></Td>
                 <Td className="text-right">{editavel && <Button variant="ghost" size="sm" onClick={() => setEditId(u.id)}>editar</Button>}</Td>

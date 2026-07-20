@@ -117,7 +117,7 @@ export function ConfigPanel({
     <div>
       <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
         <h1 className="text-2xl font-bold text-[var(--fg)]">Configurações de <span className="text-[var(--accent)]">Placas</span></h1>
-        <button onClick={onBack} className="inline-flex items-center justify-center gap-1.5 rounded-[var(--r-md)] px-3 py-1.5 text-xs font-semibold bg-transparent text-[var(--fg-2)] border border-[var(--border)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="arrow-left" size={14} /> Voltar às solicitações</button>
+        <Button variant="ghost" size="sm" onClick={onBack}><Icon name="arrow-left" size={14} /> Voltar às solicitações</Button>
       </div>
       <p className="text-sm text-[var(--fg-3)] mb-4">Ajuste textos, etapas, e-mails e faixas sem depender de um desenvolvedor. Campos em branco usam o texto padrão.</p>
 
@@ -136,10 +136,10 @@ export function ConfigPanel({
           <div className="rounded-[var(--r-md)] bg-[var(--surface-3)] border border-[var(--border)] p-3 text-xs text-[var(--fg-3)] leading-relaxed">
             Os campos vêm <strong className="text-[var(--fg-2)]">pré-preenchidos com os modelos atuais</strong> — edite à vontade. Blocos automáticos (caixa da entrevista, código de rastreio e motivo do retorno) são inseridos no envio, então não precisa colá-los aqui.
           </div>
-          {EMAIL_TIPOS_CONFIG.map((t) => {
+          {EMAIL_TIPOS_CONFIG.map((t, i) => {
             const temBloco = t.tipo === 'entrevista_agendada' || t.tipo === 'placa_em_caminho' || t.tipo === 'retorno_auditoria';
             return (
-              <Card key={t.tipo} className="p-4">
+              <Card key={t.tipo} className="p-4 gp-rise" style={{ animationDelay: `${i * 45}ms` }}>
                 <div className="font-semibold text-[var(--fg)]">{t.label}</div>
                 <div className="text-xs text-[var(--fg-3)] mb-3">{t.descricao}</div>
                 <div className="space-y-2">
@@ -161,7 +161,7 @@ export function ConfigPanel({
       {sec === 'etapas' && (
         <div className="space-y-3">
           {etapas.map((e, i) => (
-            <Card key={i} className="p-4">
+            <Card key={i} className="p-4 gp-rise" style={{ animationDelay: `${i * 45}ms` }}>
               <div className="text-[11px] font-bold uppercase tracking-wide text-[var(--accent)] mb-2">Etapa {i + 1}</div>
               <div className="grid sm:grid-cols-2 gap-2">
                 <div><CfgLabel>Nome</CfgLabel><Input value={e.name ?? ''} onChange={(ev) => setEtapa(i, 'name', ev.target.value)} disabled={!canEdit} /></div>
@@ -206,7 +206,7 @@ export function ConfigPanel({
                 <div key={i} className="grid grid-cols-[1fr_1.4fr_auto] gap-2 items-center">
                   <Input value={o.v} onChange={(e) => setTextos((p) => ({ ...p, espacos: p.espacos.map((x, idx) => idx === i ? { ...x, v: e.target.value } : x) }))} placeholder="chave" disabled={!canEdit} />
                   <Input value={o.l} onChange={(e) => setTextos((p) => ({ ...p, espacos: p.espacos.map((x, idx) => idx === i ? { ...x, l: e.target.value } : x) }))} placeholder="Rótulo exibido" disabled={!canEdit} />
-                  {canEdit && <button onClick={() => setTextos((p) => ({ ...p, espacos: p.espacos.filter((_, idx) => idx !== i) }))} className="text-[var(--red)] p-1.5" title="Remover"><Icon name="x" size={14} /></button>}
+                  {canEdit && <button onClick={() => setTextos((p) => ({ ...p, espacos: p.espacos.filter((_, idx) => idx !== i) }))} className="text-[var(--red)] p-1.5 cursor-pointer inline-flex" title="Remover" aria-label="Remover espaço de instrução"><Icon name="x" size={14} /></button>}
                 </div>
               ))}
             </div>
