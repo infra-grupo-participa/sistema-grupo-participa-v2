@@ -492,6 +492,15 @@ const LinhaConta = memo(function LinhaConta({ c, onOpen, flash }: {
               <button type="button" title="Copiar telefone" onClick={(e) => copiar(e, c.telefone!, 'Telefone')} className="shrink-0 tabular hover:text-[var(--fg)] hover:underline transition-colors">{c.telefone}</button>
             )}
           </div>
+          {/* Onde a pessoa está na ATIVAÇÃO — leitura rasa, só para o financeiro
+              saber com quem está falando (aluno já ativando? ainda no comercial?).
+              Sem coluna própria de propósito: a tabela já é larga e quem opera aqui
+              persegue dinheiro, não etapa. */}
+          {c.estagio_nome && (
+            <div className="text-[10px] text-[var(--fg-3)] truncate" title={`Situação na ativação: ${c.estagio_nome}`}>
+              <span className="opacity-60">ativação:</span> {c.estagio_nome}
+            </div>
+          )}
         </div>
       </Td>
       {/* Origem: canal + produto */}
