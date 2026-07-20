@@ -8,7 +8,7 @@ import { SectionCard, Button } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { SecTitle, SubTitle } from './alunos-ui-bits';
 
-const FIELD_CLS = 'mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1.5 text-sm text-[var(--fg)]';
+const FIELD_CLS = 'mt-1 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1.5 text-sm text-[var(--fg)] transition-colors focus:border-[var(--border-accent)] focus:outline-none';
 
 // Campos de texto livre persistidos como string (null se vazio).
 const TXT_FIELDS = [

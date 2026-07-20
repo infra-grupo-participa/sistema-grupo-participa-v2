@@ -103,7 +103,7 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
                 <Row k="Endereço" v={[a.endereco_logradouro, a.endereco_numero, a.bairro, a.cidade, a.estado].filter(Boolean).join(', ') || '—'} />
                 <div className="flex gap-2 flex-wrap mt-2">
                   {[['Facebook', a.link_facebook], ['Instagram', a.instagram_url], ['YouTube', a.youtube_url], ['Site', a.site_profissional]].filter(([, u]) => u).map(([l, u]) => (
-                    <a key={l as string} href={u as string} target="_blank" rel="noopener" className="text-xs px-2 py-1 rounded border border-[var(--border)] text-[var(--accent)]">{l}</a>
+                    <a key={l as string} href={u as string} target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--accent)] transition-colors hover:border-[var(--border-accent)] hover:bg-[var(--accent-subtle)]"><Icon name="arrow-up-right" size={11} />{l}</a>
                   ))}
                 </div>
               </Section>
@@ -215,9 +215,9 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
 }
 
 /** Célula compacta do hero (rótulo minúsculo + valor destacado). */
-function MiniStat({ label, tone, children }: { label: string; tone?: string; children: React.ReactNode }) {
+function MiniStat({ label, tone, i = 0, children }: { label: string; tone?: string; i?: number; children: React.ReactNode }) {
   return (
-    <div className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3 min-w-0" style={tone ? { borderLeft: `3px solid ${tone}` } : undefined}>
+    <div className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3 min-w-0 gp-rise" style={{ ...(tone ? { borderLeft: `3px solid ${tone}` } : {}), animationDelay: `${i * 45}ms` }}>
       <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">{label}</div>
       <div className="text-sm font-semibold text-[var(--fg)] mt-1 truncate">{children}</div>
     </div>
@@ -235,14 +235,14 @@ function HeroResumo({ a, sit }: { a: Aluno360; sit: { label: string; cls: string
   ].filter(Boolean).join('  •  ');
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-      <MiniStat label="Nível de resultado" tone="var(--accent)">
+      <MiniStat label="Nível de resultado" tone="var(--accent)" i={0}>
         {a.nivel_resultado ? <NivelBadge nivel={a.nivel_resultado} /> : '—'}
       </MiniStat>
-      <MiniStat label="Acesso">{st?.label || sit?.label || '—'}</MiniStat>
-      <MiniStat label="Turma · Vencimento" tone={vencTone}>
-        {(a.turma_codigo || '—') + (a.data_expiracao ? ` · ${fmtData(a.data_expiracao)}` : '')}
+      <MiniStat label="Acesso" i={1}>{st?.label || sit?.label || '—'}</MiniStat>
+      <MiniStat label="Turma · Vencimento" tone={vencTone} i={2}>
+        <span className="tabular">{(a.turma_codigo || '—') + (a.data_expiracao ? ` · ${fmtData(a.data_expiracao)}` : '')}</span>
       </MiniStat>
-      <MiniStat label="Hotmart">{hotmart || '—'}</MiniStat>
+      <MiniStat label="Hotmart" i={3}>{hotmart || '—'}</MiniStat>
     </div>
   );
 }
@@ -263,7 +263,7 @@ function HistoricoNiveis({ ciclos }: { ciclos: Ciclo[] }) {
                 <span className="truncate">{nivelLabel(c.nivel) || c.nivel || '—'}</span>
                 <Badge tone={ehPlaca ? 'success' : 'neutral'}>{ehPlaca ? 'Placa' : 'Cadastro'}</Badge>
               </span>
-              {c.concluido_em && <span className="text-[11px] text-[var(--fg-3)] shrink-0">{fmtData(c.concluido_em)}</span>}
+              {c.concluido_em && <span className="text-[11px] text-[var(--fg-3)] shrink-0 tabular">{fmtData(c.concluido_em)}</span>}
             </div>
           );
         })}
@@ -287,7 +287,7 @@ function Collapse({ title, children }: { title: string; children: React.ReactNod
 }
 function JornadaCard({ label, on, extra, href }: { label: string; on: boolean; extra?: string; href?: string }) {
   const body = (
-    <div className={`p-3 rounded-[var(--r-md)] border mb-2 ${on ? 'border-[var(--accent-border)]' : 'border-[var(--border)] opacity-60'}`}>
+    <div className={`p-3 rounded-[var(--r-md)] border mb-2 transition-[border-color,background-color,box-shadow,transform] duration-150 ${on ? 'border-[var(--accent-border)]' : 'border-[var(--border)] opacity-60'} ${href ? 'hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] hover:border-[var(--border-accent)]' : ''}`}>
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-[var(--fg)]">{label}</span>
         <span className="text-xs" style={{ color: on ? 'var(--green)' : 'var(--fg-3)' }}>{on ? <span className="inline-flex items-center gap-1"><Icon name="check" size={12} /> Sim</span> : 'Não'}</span>
@@ -295,7 +295,7 @@ function JornadaCard({ label, on, extra, href }: { label: string; on: boolean; e
       {extra && <div className="text-xs text-[var(--fg-3)] mt-1">{extra}</div>}
     </div>
   );
-  return href ? <a href={href}>{body}</a> : body;
+  return href ? <a href={href} className="block">{body}</a> : body;
 }
 
 // ── SIP: card de jornada expansível (progresso real + link pro card do aluno no SIP) ──
@@ -420,9 +420,9 @@ function PlacaJornada({ on, hist, loading, rastreioAluno }: { on: boolean; hist:
             {aud?.encerrado && sol?.status !== 'rejeitado' && sol?.status !== 'concluido' && <Badge tone="warning">Encerrado</Badge>}
           </div>
           <div className="text-xs space-y-0.5 text-[var(--fg-3)]">
-            {aud?.protocolo && <div>Protocolo: <span className="text-[var(--fg-2)]">{aud.protocolo}</span></div>}
-            {(aud?.faturamento || sol?.faturamento_declarado) != null && <div>Faturamento: <span className="text-[var(--fg-2)]">{fmtBRL(aud?.faturamento ?? sol?.faturamento_declarado ?? null)}</span></div>}
-            {sol?.entrevista_data && <div>Entrevista: <span className="text-[var(--fg-2)]">{fmtData(sol.entrevista_data)}{sol.entrevista_hora ? ` ${String(sol.entrevista_hora).slice(0, 5)}` : ''}</span></div>}
+            {aud?.protocolo && <div>Protocolo: <span className="text-[var(--fg-2)] tabular">{aud.protocolo}</span></div>}
+            {(aud?.faturamento || sol?.faturamento_declarado) != null && <div>Faturamento: <span className="text-[var(--fg-2)] tabular">{fmtBRL(aud?.faturamento ?? sol?.faturamento_declarado ?? null)}</span></div>}
+            {sol?.entrevista_data && <div>Entrevista: <span className="text-[var(--fg-2)] tabular">{fmtData(sol.entrevista_data)}{sol.entrevista_hora ? ` ${String(sol.entrevista_hora).slice(0, 5)}` : ''}</span></div>}
             {sol?.motivo_retorno && (
               <div className="text-[var(--red)]">
                 {sol.status === 'rejeitado' ? 'Motivo da rejeição' : 'Motivo do retorno'}: {sol.motivo_retorno}

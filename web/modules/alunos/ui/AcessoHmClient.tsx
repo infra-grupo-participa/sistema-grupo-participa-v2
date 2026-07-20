@@ -242,12 +242,12 @@ export function AcessoHmClient({ canEdit, canManageTurmas = false, onOpenAluno, 
         />
       ) : (
         <div className="grid gap-2.5">
-          {lista.map((item) => {
+          {lista.map((item, i) => {
             const trabalhando = busy.has(item.compraId);
             const precisaTurma = turmaPendente(item);
             const excecao = alunoExcecao(item);
             return (
-              <Card key={item.compraId} className={`p-4 ${excecao ? 'ring-1 ring-[var(--yellow)]' : ''}`}>
+              <Card key={item.compraId} className={`p-4 gp-rise ${excecao ? 'ring-1 ring-[var(--yellow)]' : ''}`} style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}>
                 {/* Cabeçalho: identificação à esquerda, valor à direita */}
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
@@ -299,7 +299,7 @@ export function AcessoHmClient({ canEdit, canManageTurmas = false, onOpenAluno, 
                           value={item.turmaId ?? ''}
                           disabled={trabalhando}
                           onChange={(e) => { const v = Number(e.target.value); if (v) run(item.compraId, () => setTurmaHm(item.compraId, v), 'Turma definida.'); }}
-                          className={`rounded-[var(--r-md)] border bg-[var(--surface-3)] px-2 py-1.5 text-xs text-[var(--fg)] ${precisaTurma ? 'border-[var(--yellow)]' : 'border-[var(--border)]'}`}
+                          className={`rounded-[var(--r-md)] border bg-[var(--surface-3)] px-2 py-1.5 text-xs text-[var(--fg)] transition-colors focus:border-[var(--border-accent)] focus:outline-none ${precisaTurma ? 'border-[var(--yellow)]' : 'border-[var(--border)]'}`}
                         >
                           <option value="">{turmaAtual ? `Turma (${turmaAtual.codigo})…` : 'Selecionar turma…'}</option>
                           {turmas.map((t) => <option key={t.id} value={t.id}>{t.codigo}{t.atual ? ' (atual)' : ''}</option>)}
@@ -350,7 +350,7 @@ export function AcessoHmClient({ canEdit, canManageTurmas = false, onOpenAluno, 
                 value={ignorarObs}
                 onChange={(e) => setIgnorarObs(e.target.value)}
                 rows={2}
-                className="mt-2 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2 py-1.5 text-sm text-[var(--fg)]"
+                className="mt-2 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2 py-1.5 text-sm text-[var(--fg)] transition-colors focus:border-[var(--border-accent)] focus:outline-none"
                 placeholder="Ex.: compra duplicada / teste"
               />
             </span>

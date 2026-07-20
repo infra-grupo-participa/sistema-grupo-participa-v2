@@ -97,21 +97,21 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
-        <KpiBreak label="Total de alunos" total={m.total} titulares={m.totalTitulares} socios={m.totalSocios} color="var(--accent)" />
-        {m.espacoKpi.map((e) => <KpiBreak key={e.key} label={e.label} total={e.total} titulares={e.titulares} socios={e.socios} color={e.color} />)}
+        <KpiBreak label="Total de alunos" total={m.total} titulares={m.totalTitulares} socios={m.totalSocios} color="var(--accent)" i={0} />
+        {m.espacoKpi.map((e, i) => <KpiBreak key={e.key} label={e.label} total={e.total} titulares={e.titulares} socios={e.socios} color={e.color} i={i + 1} />)}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="p-5">
+        <Card className="p-5 gp-rise" style={{ animationDelay: '0ms' }}>
           <SectionTitle right={<LegendaTS />}>Por espaço de instrução</SectionTitle>
           <p className="text-[11px] text-[var(--fg-3)] -mt-1 mb-3">Titulares × sócios por espaço de instrução.</p>
           <Bars data={m.porEspaco} total={m.total} />
         </Card>
-        <Card className="p-5">
+        <Card className="p-5 gp-rise" style={{ animationDelay: '60ms' }}>
           <SectionTitle>Distribuição por turma</SectionTitle>
           <Donut data={m.porTurma} total={m.total} />
         </Card>
-        <Card className="p-5">
+        <Card className="p-5 gp-rise" style={{ animationDelay: '120ms' }}>
           <SectionTitle>Jornada no programa</SectionTitle>
           <p className="text-[11px] text-[var(--fg-3)] -mt-1 mb-3">Nº de alunos do recorte que atingiram cada marco.</p>
           <Bars
@@ -123,13 +123,13 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
             total={m.total}
           />
         </Card>
-        <Card className="p-5">
+        <Card className="p-5 gp-rise" style={{ animationDelay: '180ms' }}>
           <SectionTitle right={<LegendaTS />}>Top estados</SectionTitle>
           <p className="text-[11px] text-[var(--fg-3)] -mt-1 mb-3">Passe o mouse para ver o detalhe titular/sócio.</p>
           <Bars data={m.porEstado} total={m.total} />
         </Card>
         {matrix.turmas.length > 0 && (
-          <Card className="p-5 lg:col-span-2">
+          <Card className="p-5 lg:col-span-2 gp-rise" style={{ animationDelay: '240ms' }}>
             <SectionTitle>Matriz turma × espaço de instrução</SectionTitle>
             <div className="max-h-[420px] overflow-auto">
               <Matrix matrix={matrix} />
@@ -137,7 +137,7 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
           </Card>
         )}
         {m.porAnoEspaco.length > 0 && (
-          <Card className="p-5 lg:col-span-2">
+          <Card className="p-5 lg:col-span-2 gp-rise" style={{ animationDelay: '300ms' }}>
             <SectionTitle right={<LegendaEspacos itens={m.espacoKpi} />}>Linha do tempo de entrada no THB</SectionTitle>
             <p className="text-[11px] text-[var(--fg-3)] -mt-1 mb-3">Ingressos por ano, empilhados por espaço de instrução.</p>
             <StackedColumn data={m.porAnoEspaco} />
@@ -244,9 +244,9 @@ function Matrix({ matrix }: { matrix: ReturnType<typeof computeTurmaEspacoMatrix
   );
 }
 
-function KpiBreak({ label, total, titulares, socios, color }: { label: string; total: number; titulares: number; socios: number; color?: string }) {
+function KpiBreak({ label, total, titulares, socios, color, i = 0 }: { label: string; total: number; titulares: number; socios: number; color?: string; i?: number }) {
   return (
-    <Card className="p-4 min-w-0 overflow-hidden" style={{ borderTop: `2px solid ${color || 'var(--accent)'}` }}>
+    <Card className="p-4 min-w-0 overflow-hidden gp-rise" style={{ borderTop: `2px solid ${color || 'var(--accent)'}`, animationDelay: `${i * 45}ms` }}>
       <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-3)] truncate">{label}</div>
       <div className="mt-1 text-2xl font-bold tabular leading-none text-[var(--fg)]">{total.toLocaleString('pt-BR')}</div>
       <div className="mt-1.5 flex items-center gap-2 text-[11px] tabular text-[var(--fg-3)]">
