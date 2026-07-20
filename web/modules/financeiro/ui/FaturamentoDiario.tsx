@@ -51,10 +51,10 @@ export function FaturamentoDiario({ dias, loading, turma }: {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="Entrou hoje" bar="green" value={loading ? '—' : fmtBRL(r.hoje?.bruto ?? 0)} hint={fmtData(hojeISO)} />
-        <KpiCard label="Total no período" bar="accent" value={loading ? '—' : fmtBRL(r.bruto)} hint={loading ? undefined : `cliente pagou ${fmtBRL(tot.clientePagou)} · líquido ${fmtBRL(r.liquido)} · taxas ${fmtBRL(r.taxas)}`} />
-        <KpiCard label="Média/dia" bar="accent" value={loading ? '—' : fmtBRL(r.media)} hint={loading ? undefined : `${r.dias} ${r.dias === 1 ? 'dia' : 'dias'} com lançamento`} />
-        <KpiCard label="Melhor dia" bar="purple" value={loading ? '—' : fmtBRL(r.melhorDia?.bruto ?? null)} hint={!loading && r.melhorDia ? fmtData(r.melhorDia.dia) : undefined} />
+        <div className="gp-rise"><KpiCard label="Entrou hoje" bar="green" value={loading ? '—' : fmtBRL(r.hoje?.bruto ?? 0)} hint={fmtData(hojeISO)} /></div>
+        <div className="gp-rise" style={{ animationDelay: '45ms' }}><KpiCard label="Total no período" bar="accent" value={loading ? '—' : fmtBRL(r.bruto)} hint={loading ? undefined : `cliente pagou ${fmtBRL(tot.clientePagou)} · líquido ${fmtBRL(r.liquido)} · taxas ${fmtBRL(r.taxas)}`} /></div>
+        <div className="gp-rise" style={{ animationDelay: '90ms' }}><KpiCard label="Média/dia" bar="accent" value={loading ? '—' : fmtBRL(r.media)} hint={loading ? undefined : `${r.dias} ${r.dias === 1 ? 'dia' : 'dias'} com lançamento`} /></div>
+        <div className="gp-rise" style={{ animationDelay: '135ms' }}><KpiCard label="Melhor dia" bar="purple" value={loading ? '—' : fmtBRL(r.melhorDia?.bruto ?? null)} hint={!loading && r.melhorDia ? fmtData(r.melhorDia.dia) : undefined} /></div>
       </div>
 
       {!loading && !dias.length ? (

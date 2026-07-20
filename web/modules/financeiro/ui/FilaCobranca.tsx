@@ -62,11 +62,11 @@ export function FilaCobranca({ contas, regua, loading, onAbrir }: {
       {/* KPI do dia — quantas ações e quanto dinheiro está em jogo. */}
       <Card className="p-4" style={{ borderTop: '3px solid var(--accent)' }}>
         <div className="grid grid-cols-2 gap-x-6 sm:max-w-md">
-          <div className="min-w-0">
+          <div className="min-w-0 gp-rise">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Ações hoje</div>
             <div className="mt-1 text-[22px] font-bold tabular leading-none text-[var(--fg)]">{fila.length.toLocaleString('pt-BR')}</div>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 gp-rise" style={{ animationDelay: '45ms' }}>
             <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Em jogo</div>
             <div className="mt-1 text-[22px] font-bold tabular leading-none text-[var(--accent)] break-words">{fmtBRL(total)}</div>
           </div>

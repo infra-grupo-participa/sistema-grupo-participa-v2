@@ -115,15 +115,15 @@ export function FinanceiroDashboard({ contas, dias, meta, loading, onDrill, onDr
       {/* Bloco 1 — a foto do dinheiro */}
       <Card className="p-4 border-[var(--border-accent)]" style={{ borderTop: '3px solid var(--accent)' }}>
         <div className="grid gap-x-6 gap-y-3.5 sm:grid-cols-3">
-          <div className="min-w-0">
+          <div className="min-w-0 gp-rise">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Recebido</div>
             <div className="mt-1 text-[22px] font-bold tabular leading-none text-[var(--green)] break-words">{fmtBRL(r.recebidoBruto)}</div>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 gp-rise" style={{ animationDelay: '45ms' }}>
             <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">A receber</div>
             <div className="mt-1 text-[22px] font-bold tabular leading-none text-[var(--accent)] break-words">{fmtBRL(r.aReceber)}</div>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 gp-rise" style={{ animationDelay: '90ms' }}>
             <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Cobertura</div>
             <div className="mt-1 text-[22px] font-bold tabular leading-none text-[var(--fg)]">{r.cobertura.toFixed(1)}%</div>
             <div className="mt-1.5"><ProgressBar value={r.cobertura} tone="accent" height={5} /></div>
@@ -219,11 +219,11 @@ export function FinanceiroDashboard({ contas, dias, meta, loading, onDrill, onDr
         <SectionTitle right={<Farol cond={indPrev.condicao} nota={indPrev.nota} />}>Previsão de recebimento</SectionTitle>
         <Card className="p-3.5">
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-x-6 gap-y-3">
-            <MiniPrevisao label="Próx. 7 dias" valor={forecast.proximos7} cor="var(--green)" />
-            <MiniPrevisao label="Próx. 30 dias" valor={forecast.proximos30} cor="var(--accent)" />
-            <MiniPrevisao label="Futuro (+30 dias)" valor={forecast.alem30} cor="var(--fg-2)" />
-            <MiniPrevisao label="Em risco (vencido)" valor={forecast.emRisco} cor="var(--red)" />
-            <MiniPrevisao label="Sem prazo" valor={forecast.semPrazo} cor="var(--fg-3)" />
+            <MiniPrevisao i={0} label="Próx. 7 dias" valor={forecast.proximos7} cor="var(--green)" />
+            <MiniPrevisao i={1} label="Próx. 30 dias" valor={forecast.proximos30} cor="var(--accent)" />
+            <MiniPrevisao i={2} label="Futuro (+30 dias)" valor={forecast.alem30} cor="var(--fg-2)" />
+            <MiniPrevisao i={3} label="Em risco (vencido)" valor={forecast.emRisco} cor="var(--red)" />
+            <MiniPrevisao i={4} label="Sem prazo" valor={forecast.semPrazo} cor="var(--fg-3)" />
           </div>
         </Card>
       </div>
@@ -285,7 +285,7 @@ export function FinanceiroDashboard({ contas, dias, meta, loading, onDrill, onDr
       <div>
         <SectionTitle>Fazer agora</SectionTitle>
         <div className="grid gap-3 sm:grid-cols-3">
-          {acoes.map((a) => {
+          {acoes.map((a, i) => {
             const vazio = a.n === 0;
             return (
               <button
@@ -293,8 +293,8 @@ export function FinanceiroDashboard({ contas, dias, meta, loading, onDrill, onDr
                 type="button"
                 disabled={vazio}
                 onClick={() => onDrill(a.g)}
-                className={`text-left rounded-[var(--r-lg)] border bg-[var(--surface-2)] shadow-[var(--shadow-sm)] p-3.5 transition-colors ${vazio ? 'opacity-50 cursor-default border-[var(--border)]' : 'border-[var(--border)] hover:border-[var(--border-strong)] cursor-pointer'}`}
-                style={{ borderTopWidth: 3, borderTopColor: vazio ? 'var(--border)' : a.color }}
+                className={`gp-rise text-left rounded-[var(--r-lg)] border bg-[var(--surface-2)] shadow-[var(--shadow-sm)] p-3.5 transition-[transform,box-shadow,border-color,background-color] duration-150 ${vazio ? 'opacity-50 cursor-default border-[var(--border)]' : 'border-[var(--border)] cursor-pointer hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] hover:border-[var(--border-accent)]'}`}
+                style={{ borderTopWidth: 3, borderTopColor: vazio ? 'var(--border)' : a.color, animationDelay: `${i * 45}ms` }}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -477,9 +477,9 @@ function Sparkline({ valores, cor = 'var(--accent)', altura = 44 }: { valores: n
 }
 
 /** Mini-KPI da previsão: rótulo pequeno + valor compacto colorido. */
-function MiniPrevisao({ label, valor, cor }: { label: string; valor: number; cor: string }) {
+function MiniPrevisao({ label, valor, cor, i = 0 }: { label: string; valor: number; cor: string; i?: number }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 gp-rise" style={{ animationDelay: `${i * 45}ms` }}>
       <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-3)] truncate">{label}</div>
       <div className="mt-0.5 text-[15px] font-bold tabular leading-tight break-words" style={{ color: valor > 0 ? cor : 'var(--fg-3)' }}>
         {fmtBRL(valor)}

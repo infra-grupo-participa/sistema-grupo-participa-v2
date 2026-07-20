@@ -280,9 +280,10 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       ) : tab === 'contas' ? (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5 mb-4" role="tablist" aria-label="Gavetas de contas">
-            {GAVETAS.map((g) => (
+            {GAVETAS.map((g, i) => (
               <QueueCard
                 key={g.key}
+                i={i}
                 label={g.label}
                 hint={gavetaHint[g.key]}
                 icon={g.icon}
@@ -294,6 +295,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             ))}
             {/* Recorte pela régua: o que exige ação hoje. Ortogonal às gavetas de status. */}
             <QueueCard
+              i={GAVETAS.length}
               label="Cobrar hoje"
               hint={filaSet.size ? `${fmtBRL(filaValor)} na fila` : 'régua em dia'}
               icon="mail"
@@ -431,16 +433,16 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
 }
 
 /** Card-gaveta da fila: KPI clicável que filtra a tabela (mesma anatomia do piloto Placas). */
-function QueueCard({ label, hint, icon, tone, value, active, onClick }: {
-  label: string; hint: string; icon: string; tone: string; value: number; active: boolean; onClick: () => void;
+function QueueCard({ label, hint, icon, tone, value, active, onClick, i = 0 }: {
+  label: string; hint: string; icon: string; tone: string; value: number; active: boolean; onClick: () => void; i?: number;
 }) {
   return (
     <button
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`text-left rounded-[var(--r-lg)] bg-[var(--surface-2)] shadow-[var(--shadow-sm)] p-3.5 border transition-colors ${active ? 'border-[var(--border-accent)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}
-      style={{ borderTopWidth: 2, borderTopColor: tone }}
+      className={`gp-rise text-left rounded-[var(--r-lg)] bg-[var(--surface-2)] shadow-[var(--shadow-sm)] p-3.5 border cursor-pointer transition-[transform,box-shadow,border-color,background-color] duration-150 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] ${active ? 'border-[var(--border-accent)]' : 'border-[var(--border)] hover:border-[var(--border-accent)]'}`}
+      style={{ borderTopWidth: 2, borderTopColor: tone, animationDelay: `${i * 45}ms` }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
