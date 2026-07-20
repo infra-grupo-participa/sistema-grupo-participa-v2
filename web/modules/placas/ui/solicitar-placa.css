@@ -43,6 +43,22 @@
   --purple: #6d28d9;
   --info: #2563eb;
   --nivel-base: #64748b;
+  /* Fundos e avisos — fonte local de tokens (este arquivo é bloco de tokens independente).
+     Concentra o hex aqui para que as regras abaixo usem só var(). */
+  --field-bg: #fbfcfd;
+  --req: #dc2626;
+  --info-fg: #075985;
+  --info-bg: #f0f9ff;
+  --info-line: #bae6fd;
+  --warn-fg: #92400e;
+  --warn-bg: #fffbeb;
+  --warn-line: #fde68a;
+  --bnr-info-fg: #1e3a8a;
+  --bnr-info-bg: #eff6ff;
+  --bnr-info-line: #bfdbfe;
+  --bnr-warn-fg: #78350f;
+  --bnr-warn-bg: #fffbeb;
+  --bnr-warn-line: #fcd34d;
   min-height: 100dvh;
   background: radial-gradient(1200px 500px at 50% -200px, rgba(242, 151, 37, 0.08), transparent 60%), var(--bg);
   color: var(--ink);
@@ -81,6 +97,8 @@
   border-radius: var(--r);
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 12px 40px -12px rgba(16, 24, 40, 0.12);
   overflow: hidden;
+  /* Entrada discreta (reduced-motion é neutralizado globalmente). */
+  animation: gp-rise 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 .sp-card-head {
   padding: 26px 30px 10px;
@@ -168,7 +186,8 @@
   place-items: center;
   font-size: 12px;
   font-weight: 700;
-  background: #fff;
+  font-variant-numeric: tabular-nums;
+  background: var(--card);
   border: 2px solid var(--line);
   color: var(--faint);
   transition: background 0.25s, border-color 0.25s, color 0.25s, box-shadow 0.25s;
@@ -234,7 +253,7 @@
   flex-shrink: 0;
 }
 .sp-field .req {
-  color: #dc2626;
+  color: var(--req);
 }
 .sp-field input,
 .sp-field select {
@@ -242,9 +261,10 @@
   border: 1px solid var(--line);
   border-radius: 11px;
   padding: 12px 14px;
+  min-height: 44px;
   font-size: 14px;
   outline: none;
-  background: #fbfcfd;
+  background: var(--field-bg);
   color: var(--ink);
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
@@ -254,7 +274,7 @@
 .sp-field input:focus,
 .sp-field select:focus {
   border-color: var(--orange);
-  background: #fff;
+  background: var(--card);
   box-shadow: 0 0 0 4px var(--orange-soft);
 }
 
@@ -272,7 +292,7 @@
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 11px;
-  background: #fff;
+  background: var(--card);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12);
   padding: 6px;
 }
@@ -304,7 +324,7 @@
 
 /* Hint de aviso (ex.: CEP não encontrado) */
 .sp-hint-warn {
-  color: #b45309;
+  color: var(--yellow);
 }
 
 /* Banners de retomada / retorno de auditoria */
@@ -318,14 +338,14 @@
   border: 1px solid;
 }
 .sp-banner-info {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #1e3a8a;
+  background: var(--bnr-info-bg);
+  border-color: var(--bnr-info-line);
+  color: var(--bnr-info-fg);
 }
 .sp-banner-warn {
-  background: #fffbeb;
-  border-color: #fcd34d;
-  color: #78350f;
+  background: var(--bnr-warn-bg);
+  border-color: var(--bnr-warn-line);
+  color: var(--bnr-warn-fg);
 }
 .sp-banner-head {
   display: flex;
@@ -387,7 +407,7 @@
   padding: 15px 16px;
   margin-bottom: 11px;
   cursor: pointer;
-  background: #fff;
+  background: var(--card);
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, transform 0.1s;
 }
 .sp-radio:hover,
@@ -527,17 +547,17 @@
   border: 1px solid;
 }
 .sp-info {
-  background: #f0f9ff;
-  border-color: #bae6fd;
-  color: #075985;
+  background: var(--info-bg);
+  border-color: var(--info-line);
+  color: var(--info-fg);
 }
 .sp-warn {
-  background: #fffbeb;
-  border-color: #fde68a;
-  color: #92400e;
+  background: var(--warn-bg);
+  border-color: var(--warn-line);
+  color: var(--warn-fg);
 }
 .sp-err {
-  color: #b91c1c;
+  color: var(--red);
   font-size: 13px;
   margin: 10px 0;
   font-weight: 500;
@@ -552,7 +572,7 @@
   margin-bottom: 18px;
 }
 .sp-sched-set {
-  border-color: #16a34a;
+  border-color: var(--green);
   background: linear-gradient(180deg, rgba(22, 163, 74, 0.09), transparent);
 }
 .sp-sched-title {
@@ -572,6 +592,7 @@
 .sp-sched-when {
   color: var(--ink);
   font-size: 14px;
+  font-variant-numeric: tabular-nums;
   margin: 8px 0 14px;
   text-transform: capitalize;
 }
@@ -599,6 +620,10 @@
   filter: brightness(1.05);
   transform: translateY(-1px);
 }
+.sp-sched-cta:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
 .sp-sched-alt {
   display: inline-flex;
   align-items: center;
@@ -607,10 +632,11 @@
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
-  background: #fff;
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 9px 14px;
+  padding: 10px 14px;
+  min-height: 44px;
   transition: border-color 0.15s, color 0.15s;
 }
 .sp-sched-alt:hover {
@@ -652,7 +678,7 @@
   align-items: flex-start;
   border: 1.5px solid var(--line);
   border-radius: 12px;
-  background: #fff;
+  background: var(--card);
   padding: 12px;
 }
 .sp-decl-step .n {
@@ -680,10 +706,11 @@
 }
 .sp-btn-next {
   background: linear-gradient(135deg, var(--orange), var(--orange-2));
-  color: #fff;
+  color: #fff; /* hex-ok: contraste sobre botão âmbar */
   border: none;
   border-radius: 12px;
   padding: 13px 24px;
+  min-height: 44px;
   font-weight: 700;
   font-size: 14px;
   cursor: pointer;
@@ -694,17 +721,22 @@
   filter: brightness(1.05);
   transform: translateY(-1px);
 }
+.sp-btn-next:active:not(:disabled) {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
 .sp-btn-next:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   box-shadow: none;
 }
 .sp-btn-back {
-  background: #fff;
+  background: var(--card);
   color: var(--muted);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 13px 20px;
+  min-height: 44px;
   cursor: pointer;
   font-weight: 600;
   transition: border-color 0.15s, color 0.15s;
@@ -740,19 +772,20 @@
   height: 28px;
   border-radius: 999px;
   border: 2px solid var(--line);
-  background: #fff;
+  background: var(--card);
   flex-shrink: 0;
   display: grid;
   place-items: center;
   font-size: 13px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: var(--faint);
   z-index: 1;
 }
 .sp-tl-step.done .sp-tl-bullet {
-  background: #16a34a;
-  border-color: #16a34a;
-  color: #fff;
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff; /* hex-ok: contraste sobre bullet verde preenchido */
 }
 .sp-tl-step.current .sp-tl-bullet {
   border-color: var(--orange);

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { Card, Input, Button } from '@/shared/ui/components';
+import { Icon } from '@/shared/ui/icons';
 
 export default function DefinirSenhaPage() {
   const router = useRouter();
@@ -49,9 +50,17 @@ export default function DefinirSenhaPage() {
 
   return (
     <div className="min-h-dvh grid place-items-center bg-[var(--surface-0)] p-4">
-      <Card className="w-full max-w-sm p-6">
-        <h1 className="text-xl font-bold text-[var(--accent)] text-center">Grupo Participa</h1>
-        <p className="mt-1 text-center text-sm text-[var(--fg-3)]">Defina sua senha de acesso</p>
+      <Card className="w-full max-w-sm p-7 shadow-[var(--shadow-lg)] gp-rise">
+        <div className="flex flex-col items-center text-center">
+          <span
+            className="grid h-12 w-12 place-items-center rounded-[var(--r-lg)] text-[var(--accent)]"
+            style={{ background: 'color-mix(in srgb, var(--accent) 14%, transparent)' }}
+          >
+            <Icon name="lock" size={22} />
+          </span>
+          <h1 className="mt-4 text-xl font-bold text-[var(--fg)]">Grupo Participa</h1>
+          <p className="mt-1 text-sm text-[var(--fg-3)]">Defina sua senha de acesso</p>
+        </div>
 
         {!ready && <p className="mt-6 text-center text-sm text-[var(--fg-3)]">Validando link…</p>}
 
@@ -71,27 +80,30 @@ export default function DefinirSenhaPage() {
 
         {ready && hasSession && (
           <form onSubmit={salvar}>
-            <label className="mt-6 block text-sm text-[var(--fg-2)]">Nova senha</label>
+            <label className="mt-6 block text-sm font-medium text-[var(--fg-2)]">Nova senha</label>
             <Input
               type="password"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
               autoComplete="new-password"
               required
-              className="mt-1"
+              revealable
+              className="mt-1.5"
             />
+            <p className="mt-1.5 text-xs text-[var(--fg-3)]">Use ao menos 8 caracteres.</p>
 
-            <label className="mt-4 block text-sm text-[var(--fg-2)]">Confirmar senha</label>
+            <label className="mt-4 block text-sm font-medium text-[var(--fg-2)]">Confirmar senha</label>
             <Input
               type="password"
               value={confirma}
               onChange={(e) => setConfirma(e.target.value)}
               autoComplete="new-password"
               required
-              className="mt-1"
+              revealable
+              className="mt-1.5"
             />
 
-            {erro && <p className="mt-3 text-sm text-[var(--red)]">{erro}</p>}
+            {erro && <p role="alert" className="mt-3 flex items-center gap-1.5 text-sm text-[var(--red)]"><Icon name="alert" size={14} />{erro}</p>}
 
             <Button type="submit" disabled={loading} className="mt-5 w-full">
               {loading ? 'Salvando…' : 'Salvar e entrar'}

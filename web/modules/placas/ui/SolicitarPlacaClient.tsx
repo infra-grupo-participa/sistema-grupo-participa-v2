@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Modal } from '@/shared/ui/components';
+import { Button, Loading, Modal } from '@/shared/ui/components';
 import './solicitar-placa.css';
 import { maskCep, maskCurrency, maskDoc } from './masks';
 import { cepLookup, placaDuplicateCheck, placaGet, placaRecover, placaRefazer, placaSave, placaUpload } from './placa-api';
@@ -332,7 +332,7 @@ export function SolicitarPlacaClient({ initialToken, config }: { initialToken: s
   }
 
   // ── Render ──
-  if (view === 'loading') return <Wrap><div className="sp-card"><div className="sp-card-body">Carregando…</div></div></Wrap>;
+  if (view === 'loading') return <Wrap><div className="sp-card"><div className="sp-card-body"><Loading label="Carregando sua solicitação…" minHeight={160} /></div></div></Wrap>;
   if (view === 'success') return <Wrap><SuccessCard kind="success" token={token} /></Wrap>;
 
   // Modal de confirmação de refazer/re-solicitar, compartilhado entre a tela de cadastro

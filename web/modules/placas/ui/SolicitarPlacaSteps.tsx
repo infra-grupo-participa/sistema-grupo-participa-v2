@@ -93,8 +93,8 @@ export function StepContent(p: StepProps) {
   if (step === 2) {
     return (
       <Section title="2. Seu interesse" subtitle="O que você busca com a Holding Familiar?">
-        {INTERESSES.map((o) => (
-          <label key={o.v} className={`sp-radio ${form.interesse === o.v ? 'sel' : ''}`}>
+        {INTERESSES.map((o, i) => (
+          <label key={o.v} className={`sp-radio gp-rise ${form.interesse === o.v ? 'sel' : ''}`} style={{ animationDelay: `${i * 45}ms` }}>
             <input type="radio" name="interesse" value={o.v} checked={form.interesse === o.v} onChange={() => set('interesse', o.v)} className="sr-only" />
             <span className="block font-medium">{o.l}</span>
             <span className="block text-xs opacity-70 mt-0.5">{o.sub}</span>
@@ -126,14 +126,15 @@ export function StepContent(p: StepProps) {
             </div>
           )}
           <div className="sp-level-grid">
-            {niveis.map((o) => {
+            {niveis.map((o, i) => {
               const bloqueado = Boolean(nivelAnterior) && nivelRefazerBlockReason(o.v, nivelAnterior) !== null;
               return (
                 <label
                   key={o.v}
                   data-nivel={o.v}
                   aria-disabled={bloqueado}
-                  className={`sp-level ${form.nivel === o.v ? 'sel' : ''} ${bloqueado ? 'sp-level-locked' : ''}`}
+                  className={`sp-level gp-rise ${form.nivel === o.v ? 'sel' : ''} ${bloqueado ? 'sp-level-locked' : ''}`}
+                  style={{ animationDelay: `${i * 40}ms` }}
                   title={bloqueado ? 'Nível bloqueado — escolha um nível superior ao já concluído.' : undefined}
                 >
                   <input type="radio" name="nivel" value={o.v} checked={form.nivel === o.v} disabled={bloqueado} onChange={() => { if (!bloqueado) set('nivel', o.v); }} className="sr-only" />

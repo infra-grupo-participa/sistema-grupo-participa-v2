@@ -194,8 +194,8 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
               <div className="sp-info">Você já tem uma entrevista marcada. Escolher um novo horário irá substituí-la.</div>
             )}
             {err && <p className="sp-err">{err}</p>}
-            {byDate.map(([date, horas]) => (
-              <div key={date} style={{ marginBottom: 16 }}>
+            {byDate.map(([date, horas], di) => (
+              <div key={date} className="gp-rise" style={{ marginBottom: 16, animationDelay: `${di * 50}ms` }}>
                 <div style={{ fontWeight: 700, fontSize: 14, textTransform: 'capitalize', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span>{fmtDate(date)}</span>
                   <Badge tone="neutral">{horas.length} horário{horas.length > 1 ? 's' : ''}</Badge>
@@ -334,10 +334,14 @@ function SlotButton({ hora, selected, onClick }: { hora: string; selected: boole
       style={{
         width: 'auto',
         margin: 0,
-        padding: '10px 16px',
+        padding: '11px 16px',
+        minHeight: 44,
+        display: 'inline-flex',
+        alignItems: 'center',
         borderColor: selected ? 'var(--orange)' : undefined,
         background: selected ? 'var(--orange-soft)' : undefined,
         fontWeight: 700,
+        fontVariantNumeric: 'tabular-nums',
       }}
     >
       {hora}

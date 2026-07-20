@@ -55,7 +55,7 @@ function LoginForm() {
         className="pointer-events-none absolute inset-0 opacity-60"
         style={{ background: 'radial-gradient(60% 45% at 50% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%)' }}
       />
-      <Card as="form" onSubmit={entrar} className="relative w-full max-w-sm p-7 shadow-[var(--shadow-lg)]">
+      <Card as="form" onSubmit={entrar} className="relative w-full max-w-sm p-7 shadow-[var(--shadow-lg)] gp-rise">
         <div className="flex flex-col items-center text-center">
           <span
             className="grid h-12 w-12 place-items-center rounded-[var(--r-lg)] text-[var(--accent)]"
@@ -90,8 +90,8 @@ function LoginForm() {
           className="mt-1.5"
         />
 
-        {erro && <p className="mt-3 text-sm text-[var(--red)]">{erro}</p>}
-        {info && <p className="mt-3 text-sm text-[var(--green)]">{info}</p>}
+        {erro && <p role="alert" className="mt-3 flex items-center gap-1.5 text-sm text-[var(--red)]"><Icon name="alert" size={14} />{erro}</p>}
+        {info && <p role="status" className="mt-3 flex items-center gap-1.5 text-sm text-[var(--green)]"><Icon name="check" size={14} />{info}</p>}
 
         <Button type="submit" disabled={loading} className="mt-6 w-full">
           {loading ? 'Entrando…' : 'Entrar'}
