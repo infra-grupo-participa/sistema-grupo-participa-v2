@@ -25,31 +25,42 @@ export default async function DashboardPage() {
 
   return (
     <div className="max-w-5xl">
-      <div className="rounded-[var(--r-xl)] border border-[var(--border)] bg-gradient-to-br from-[var(--surface-2)] to-[var(--surface-1)] p-6 sm:p-8">
-        <div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Grupo Participa</div>
-        <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-[var(--fg)] inline-flex items-center gap-2">Olá, {primeiroNome} <Icon name="wave" size={24} className="text-[var(--accent)]" /></h1>
-        <p className="mt-2 text-[var(--fg-2)] max-w-2xl">
-          Sistema interno do Grupo Participa. Acesse abaixo os módulos disponíveis para o seu perfil
-          {user?.cargo ? ` (${user.cargo})` : ''}.
-        </p>
+      {/* Hero — assinatura âmbar sutil (glow radial no canto), fiel ao painel operacional */}
+      <div className="relative overflow-hidden rounded-[var(--r-xl)] border border-[var(--border)] bg-gradient-to-br from-[var(--surface-2)] to-[var(--surface-1)] p-6 sm:p-8 gp-rise">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-16 -right-16 h-56 w-56 rounded-full opacity-60"
+          style={{ background: 'radial-gradient(circle, var(--accent-subtle), transparent 70%)' }}
+        />
+        <div className="relative">
+          <div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Grupo Participa</div>
+          <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-[var(--fg)] inline-flex items-center gap-2">Olá, {primeiroNome} <Icon name="wave" size={24} className="text-[var(--accent)]" /></h1>
+          <p className="mt-2 text-[var(--fg-2)] max-w-2xl leading-relaxed">
+            Sistema interno do Grupo Participa. Acesse abaixo os módulos disponíveis para o seu perfil
+            {user?.cargo ? ` (${user.cargo})` : ''}.
+          </p>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {atalhos.map((c) => (
+        {atalhos.map((c, i) => (
           <Card
             key={c.href}
             as="a"
             href={c.href}
             target={c.external ? '_blank' : undefined}
             rel={c.external ? 'noopener noreferrer' : undefined}
-            className="group block p-5 hover:border-[var(--border-accent)] hover:bg-[var(--surface-3)] transition-colors"
+            style={{ animationDelay: `${i * 45}ms` }}
+            className="group gp-rise block p-5 hover:border-[var(--border-accent)] hover:bg-[var(--surface-3)] hover:shadow-[var(--shadow-md)] hover:-translate-y-0.5"
           >
             <div className="flex items-start justify-between">
-              <div className="text-[var(--accent)]"><Icon name={c.ico} size={24} /></div>
-              {c.external && <Icon name="arrow-up-right" size={16} className="text-[var(--fg-3)] group-hover:text-[var(--accent)] transition-colors" />}
+              <div className="grid place-items-center w-11 h-11 rounded-[var(--r-md)] bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent)] transition-colors group-hover:bg-[var(--accent)] group-hover:text-black">
+                <Icon name={c.ico} size={22} />
+              </div>
+              {c.external && <Icon name="arrow-up-right" size={16} className="text-[var(--fg-3)] transition-transform group-hover:text-[var(--accent)] group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />}
             </div>
-            <div className="mt-2 text-[var(--fg)] font-semibold group-hover:text-[var(--accent)] transition-colors">{c.label}</div>
-            <div className="mt-0.5 text-sm text-[var(--fg-3)]">{c.desc}</div>
+            <div className="mt-3 text-[var(--fg)] font-semibold group-hover:text-[var(--accent)] transition-colors">{c.label}</div>
+            <div className="mt-0.5 text-sm text-[var(--fg-3)] leading-relaxed">{c.desc}</div>
           </Card>
         ))}
       </div>

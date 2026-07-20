@@ -23,20 +23,21 @@ export function ConfiguracoesClient({ user }: { user: GpUser }) {
 
   return (
     <div className="max-w-lg">
-      <h1 className="text-2xl font-bold text-[var(--fg)] mb-4">Configurações</h1>
+      <h1 className="text-2xl font-bold text-[var(--fg)]">Configurações</h1>
+      <p className="mt-1 mb-4 text-sm text-[var(--fg-3)]">Seu perfil e preferências de aparência.</p>
 
-      <SectionCard title="Meu perfil">
+      <SectionCard title="Meu perfil" className="gp-rise">
         <div className="space-y-3">
           <label className="block">
-            <span className="text-xs text-[var(--fg-3)]">Nome</span>
+            <span className="text-xs font-medium text-[var(--fg-2)]">Nome</span>
             <Input value={nome} onChange={(e) => setNome(e.target.value)} className="mt-1" />
           </label>
           <label className="block">
-            <span className="text-xs text-[var(--fg-3)]">Avatar (URL)</span>
+            <span className="text-xs font-medium text-[var(--fg-2)]">Avatar (URL)</span>
             <Input value={avatar} onChange={(e) => setAvatar(e.target.value)} className="mt-1" />
           </label>
-          <div className="flex items-center justify-between gap-2 text-xs text-[var(--fg-3)]">
-            <span>E-mail: {user.email}</span>
+          <div className="flex items-center justify-between gap-2 text-xs text-[var(--fg-3)] pt-1 border-t border-[var(--border-faint)]">
+            <span className="truncate">E-mail: {user.email}</span>
             <Badge tone="accent">{user.cargo}</Badge>
           </div>
           <Button onClick={salvar} disabled={busy} className="w-full">{busy ? 'Salvando…' : 'Salvar'}</Button>
@@ -44,7 +45,8 @@ export function ConfiguracoesClient({ user }: { user: GpUser }) {
       </SectionCard>
 
       <SectionCard
-        className="mt-4"
+        className="mt-4 gp-rise"
+        style={{ animationDelay: '60ms' }}
         title="Tema"
         subtitle="Claro ou escuro (salvo no navegador)"
         right={<Toggle checked={theme === 'dark'} onChange={toggle} label={theme === 'dark' ? 'Escuro' : 'Claro'} />}

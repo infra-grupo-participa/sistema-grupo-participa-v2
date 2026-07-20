@@ -81,15 +81,19 @@ export default async function AdminDevPage() {
       <p className="text-sm text-[var(--fg-3)] mb-4">Observabilidade técnica {!resumo && '(configure SUPABASE_SERVICE_ROLE_KEY para ver as métricas)'}</p>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-        {cards.map((c) => (
-          <StatCard key={c.k} label={c.l} value={metric(c.k)} />
+        {cards.map((c, i) => (
+          <div key={c.k} className="gp-rise" style={{ animationDelay: `${i * 40}ms` }}>
+            <StatCard label={c.l} value={metric(c.k)} />
+          </div>
         ))}
       </div>
 
       {/* Saúde das integrações — zero é o estado saudável; >0 pede ação (Zoom fora do ar, Resend etc). */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
-        {saude.map((c) => (
-          <StatCard key={c.l} label={c.l} value={c.v === null ? '—' : String(c.v)} tone={c.v ? 'var(--red)' : 'var(--green)'} />
+        {saude.map((c, i) => (
+          <div key={c.l} className="gp-rise" style={{ animationDelay: `${(i + 8) * 40}ms` }}>
+            <StatCard label={c.l} value={c.v === null ? '—' : String(c.v)} tone={c.v ? 'var(--red)' : 'var(--green)'} bar={c.v ? 'red' : 'green'} />
+          </div>
         ))}
       </div>
 
