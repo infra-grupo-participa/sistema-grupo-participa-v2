@@ -141,12 +141,18 @@ export function DashboardAlunos({ alunos, onAbrirAluno }: { alunos: Aluno360[]; 
         </Card>
         <Card className="p-5 gp-rise" style={{ animationDelay: '180ms' }}>
           <SectionTitle right={<LegendaTS />}>Top estados</SectionTitle>
-          <p className="text-[11px] text-[var(--fg-3)] -mt-1 mb-3">Passe o mouse para ver o detalhe titular/sócio.</p>
+          <p className="text-[11px] text-[var(--fg-3)] -mt-1 mb-3">
+            Os {m.porEstado.length} estados com mais alunos, de {m.totalEstados} no total. Passe o mouse para ver titulares × sócios.
+          </p>
           <Bars data={m.porEstado} total={m.total} />
         </Card>
         {matrix.turmas.length > 0 && (
           <Card className="p-5 lg:col-span-2 gp-rise" style={{ animationDelay: '240ms' }}>
             <SectionTitle>Matriz turma × espaço de instrução</SectionTitle>
+            <p className="text-[11px] text-[var(--fg-3)] -mt-1 mb-3">
+              Turma do THB (T40 → T1) × espaço. {matrix.turmas.length} turmas
+              {m.semTurma > 0 && <> · {m.semTurma} {m.semTurma === 1 ? 'pessoa sem turma fica de fora' : 'pessoas sem turma ficam de fora'}</>}.
+            </p>
             <div className="max-h-[420px] overflow-auto">
               <Matrix matrix={matrix} />
             </div>

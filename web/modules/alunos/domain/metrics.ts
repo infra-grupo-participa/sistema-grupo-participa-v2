@@ -66,6 +66,10 @@ export interface AlunosMetrics {
   espacoKpi: EspacoKpi[];
   porEspaco: Distribuicao[];
   porEstado: Distribuicao[];
+  /** Quantas UFs distintas existem no recorte (porEstado mostra só as 8 maiores). */
+  totalEstados: number;
+  /** Pessoas sem turma — ficam de fora da matriz turma × espaço. */
+  semTurma: number;
   porAnoEspaco: AnoEspaco[];
   porTurma: Distribuicao[];
 }
@@ -146,6 +150,8 @@ export function computeAlunosMetrics(alunos: Aluno360[], view: DashView = 'aluno
       return { key, label, total: rows.length, titulares: rows.filter((a) => !a.eh_socio).length, socios: rows.filter((a) => a.eh_socio).length, color: ESPACO_COLOR[key] || 'var(--nivel-base)' };
     }),
     porEspaco,
+    totalEstados: new Set(base.map((a) => String(a.estado ?? '').toUpperCase()).filter(Boolean)).size,
+    semTurma: base.filter((a) => !a.turma_codigo).length,
     porEstado: (() => {
       const byUf = new Map<string, { t: number; s: number }>();
       for (const a of base) {
