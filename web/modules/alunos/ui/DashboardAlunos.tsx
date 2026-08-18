@@ -200,6 +200,7 @@ function ListaDoCard({ pessoas, onAbrirAluno }: { pessoas: Aluno360[]; onAbrirAl
         <Thead>
           <Th>Aluno</Th>
           <Th>Nível</Th>
+          <Th>Profissão</Th>
           <Th>Espaço</Th>
           <Th>Turma</Th>
           <Th>Vencimento</Th>
@@ -214,6 +215,7 @@ function ListaDoCard({ pessoas, onAbrirAluno }: { pessoas: Aluno360[]; onAbrirAl
                   {a.email && <div className="text-xs text-[var(--fg-3)] truncate">{a.email}</div>}
                 </Td>
                 <Td><NivelBadge nivel={a.nivel_resultado} /></Td>
+                <Td className="text-[var(--fg-2)]">{a.profissao || <span className="text-[var(--fg-3)]">—</span>}</Td>
                 <Td>
                   {a.espaco_instrucao
                     ? <Badge dotColor={ESPACO_COLOR[a.espaco_instrucao] || 'var(--nivel-base)'}>{ESPACO_LABEL[a.espaco_instrucao] || a.espaco_instrucao}</Badge>
