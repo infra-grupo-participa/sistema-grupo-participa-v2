@@ -128,6 +128,7 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
                 <Row k="Turma" v={a.turma_codigo || '—'} />
                 <Row k="Renovações" v={a.num_renovacoes == null ? '—' : String(a.num_renovacoes)} />
                 <Row k="Vencimento" v={fmtData(a.data_expiracao)} />
+                <Row k="Entrou no THB" v={a.data_entrada_thb ? fmtData(a.data_entrada_thb) : '—'} />
                 <Row k="Data da compra" v={fmtData(a.data_compra_importada)} />
                 {a.tempo_acesso && <Row k="Tempo de acesso" v={a.tempo_acesso} />}
                 {a.oferta && <Row k="Oferta" v={a.oferta} />}
@@ -167,6 +168,7 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
               <Row k="Tempo de acesso" v={a.tempo_acesso} />
               <Row k="Vencimento" v={fmtData(a.data_expiracao)} />
               {(a.mes_expiracao || a.ano_expiracao) && <Row k="Mês/Ano expiração" v={[a.mes_expiracao, a.ano_expiracao].filter(Boolean).join('/')} />}
+              <Row k="Entrou no THB" v={a.data_entrada_thb ? fmtData(a.data_entrada_thb) : '—'} />
               <Row k="Data da compra" v={fmtData(a.data_compra_importada)} />
               {(a.cs_estagio || a.cs_responsavel || a.cs_observacoes) && (
                 <>

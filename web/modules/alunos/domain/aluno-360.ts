@@ -45,6 +45,9 @@ export interface Aluno360 {
   mes_expiracao: number | null;
   ano_expiracao: number | null;
   data_compra_importada: string | null;
+  /** Data em que a pessoa entrou no Time Holding Brasil (1ª compra que a tornou aluna).
+   *  Vem da Central de Acessos; para sócio, é herdada do titular. */
+  data_entrada_thb?: string | null;
   hotmart_ucode: string | null;
   // financeiro
   valor_total: number | null;
