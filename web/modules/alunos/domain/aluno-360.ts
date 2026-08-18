@@ -83,6 +83,12 @@ export interface Aluno360 {
   placa_regularizacao_pendente: boolean | null;
   tem_depoimento: boolean | null;
   total_depoimentos: number | null;
+  // Card do funil de ativação (cs.contatos_hm) — a view traz UMA LINHA POR CARD.
+  // Só são usados para escolher qual linha manter quando a pessoa tem card de HM e de AURUM.
+  hm_estagio?: string | null;
+  hm_estagio_aba?: string | null;
+  hm_pagamento_em?: string | null;
+  hm_entrevista_em?: string | null;
   // metadados
   fonte: string | null;
   importado_em: string | null;

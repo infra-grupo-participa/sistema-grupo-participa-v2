@@ -165,7 +165,7 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
         ))}
       </div>
 
-      {topTab === 'dashboard' && <DashboardAlunos alunos={alunos} />}
+      {topTab === 'dashboard' && <DashboardAlunos alunos={alunos} onAbrirAluno={(id) => { setSelectedId(id); setEditMode(false); }} />}
 
       {topTab === 'acessoHm' && (
         <AcessoHmClient

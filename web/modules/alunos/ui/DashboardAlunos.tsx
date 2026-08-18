@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { applyDashFilters, computeAlunosMetrics, computeTurmaEspacoMatrix, type DashFiltros, type DashView, type Distribuicao, type AnoEspaco } from '../domain/metrics';
 import type { Aluno360 } from '../domain/aluno-360';
-import { ESPACO_LABEL } from '../domain/aluno-360';
-import { Card, SectionTitle, Button, Input, Modal, MultiSelect } from '@/shared/ui/components';
+import { ESPACO_LABEL, ESPACO_COLOR, SITUACAO } from '../domain/aluno-360';
+import { Card, SectionTitle, Button, Input, Modal, MultiSelect, Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
+import { fmtData } from '@/shared/ui/format';
+import { sitTone, turmaCombo } from './alunos-ui-shared';
 
 // Coage valor de filtro para array (visões salvas no formato antigo eram string única).
 const asArr = (v: unknown): string[] => (Array.isArray(v) ? (v as string[]) : typeof v === 'string' && v ? [v] : []);
@@ -21,10 +23,12 @@ interface SavedView {
   filtros: DashFiltros;
 }
 
-export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
+export function DashboardAlunos({ alunos, onAbrirAluno }: { alunos: Aluno360[]; onAbrirAluno?: (id: string) => void }) {
   const [view, setView] = useState<DashView>('alunos');
   const [filtros, setFiltros] = useState<DashFiltros>({});
   const [views, setViews] = useState<SavedView[]>([]);
+  /* Card clicado: abre a lista de quem está por trás do número. */
+  const [detalhe, setDetalhe] = useState<{ titulo: string; pessoas: Aluno360[] } | null>(null);
   useEffect(() => {
     try {
       const raw = JSON.parse(localStorage.getItem(VIEWS_KEY) || '[]') as SavedView[];
@@ -51,6 +55,16 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
   };
 
   const set = (k: keyof DashFiltros, v: string[]) => setFiltros((f) => ({ ...f, [k]: v.length ? v : undefined }));
+
+  // Mesma base que alimenta os KPIs — o modal mostra exatamente quem está contado no card.
+  const baseAtual = useMemo(() => applyDashFilters(alunos, view, filtros), [alunos, view, filtros]);
+  const abrirCard = (label: string, espaco?: string) =>
+    setDetalhe({
+      titulo: label,
+      pessoas: (espaco ? baseAtual.filter((a) => a.espaco_instrucao === espaco) : baseAtual)
+        .slice()
+        .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR')),
+    });
 
   return (
     <div>
@@ -97,8 +111,10 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
-        <KpiBreak label="Total de alunos" total={m.total} titulares={m.totalTitulares} socios={m.totalSocios} color="var(--accent)" i={0} />
-        {m.espacoKpi.map((e, i) => <KpiBreak key={e.key} label={e.label} total={e.total} titulares={e.titulares} socios={e.socios} color={e.color} i={i + 1} />)}
+        <KpiBreak label="Total de alunos" total={m.total} titulares={m.totalTitulares} socios={m.totalSocios} color="var(--accent)" i={0} onClick={() => abrirCard('Total de alunos')} />
+        {m.espacoKpi.map((e, i) => (
+          <KpiBreak key={e.key} label={e.label} total={e.total} titulares={e.titulares} socios={e.socios} color={e.color} i={i + 1} onClick={() => abrirCard(e.label, e.key)} />
+        ))}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -144,6 +160,79 @@ export function DashboardAlunos({ alunos }: { alunos: Aluno360[] }) {
           </Card>
         )}
       </div>
+
+      {detalhe && (
+        <Modal
+          title={`${detalhe.titulo} · ${detalhe.pessoas.length.toLocaleString('pt-BR')} ${detalhe.pessoas.length === 1 ? 'pessoa' : 'pessoas'}`}
+          width="max-w-5xl"
+          onClose={() => setDetalhe(null)}
+          footer={<Button variant="ghost" size="sm" onClick={() => setDetalhe(null)}>Fechar</Button>}
+        >
+          <ListaDoCard pessoas={detalhe.pessoas} onAbrirAluno={onAbrirAluno ? (id) => { setDetalhe(null); onAbrirAluno(id); } : undefined} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/** Lista de quem está por trás do número do card. Mesmas colunas da aba "Lista de alunos". */
+function ListaDoCard({ pessoas, onAbrirAluno }: { pessoas: Aluno360[]; onAbrirAluno?: (id: string) => void }) {
+  const [busca, setBusca] = useState('');
+  const filtradas = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return pessoas;
+    return pessoas.filter((a) =>
+      [a.nome, a.email, a.turma_codigo, a.turma_aurum_codigo, a.cidade, a.estado, a.profissao]
+        .filter(Boolean).join(' ').toLowerCase().includes(q),
+    );
+  }, [pessoas, busca]);
+  const LIMITE = 300;
+  if (!pessoas.length) return <EmptyState title="Nenhuma pessoa neste recorte" icon="users" />;
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Filtrar por nome, e-mail, turma, cidade…" className="max-w-xs" />
+        <span className="text-xs text-[var(--fg-3)] tabular">
+          {filtradas.length.toLocaleString('pt-BR')} de {pessoas.length.toLocaleString('pt-BR')}
+        </span>
+      </div>
+      <DataTable>
+        <Thead>
+          <Th>Aluno</Th>
+          <Th>Nível</Th>
+          <Th>Espaço</Th>
+          <Th>Turma</Th>
+          <Th>Vencimento</Th>
+        </Thead>
+        <tbody>
+          {filtradas.slice(0, LIMITE).map((a) => {
+            const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
+            return (
+              <Tr key={a.id} onClick={onAbrirAluno ? () => onAbrirAluno(a.id) : undefined}>
+                <Td>
+                  <div className="text-[var(--fg)] font-medium">{a.nome || '—'}</div>
+                  {a.email && <div className="text-xs text-[var(--fg-3)] truncate">{a.email}</div>}
+                </Td>
+                <Td><NivelBadge nivel={a.nivel_resultado} /></Td>
+                <Td>
+                  {a.espaco_instrucao
+                    ? <Badge dotColor={ESPACO_COLOR[a.espaco_instrucao] || 'var(--nivel-base)'}>{ESPACO_LABEL[a.espaco_instrucao] || a.espaco_instrucao}</Badge>
+                    : <span className="text-[var(--fg-3)]">—</span>}
+                </Td>
+                <Td className="text-[var(--fg-2)] whitespace-nowrap">{turmaCombo(a) || <span className="text-[var(--fg-3)]">—</span>}</Td>
+                <Td className="whitespace-nowrap">
+                  {a.data_expiracao
+                    ? <div><span className="text-[var(--fg-2)]">{fmtData(a.data_expiracao)}</span>{sit && <div className="mt-0.5"><Badge tone={sitTone(sit.cls)} dot>{sit.label}</Badge></div>}</div>
+                    : <span className="text-[var(--fg-3)]">—</span>}
+                </Td>
+              </Tr>
+            );
+          })}
+        </tbody>
+      </DataTable>
+      {filtradas.length > LIMITE && (
+        <p className="text-xs text-[var(--fg-3)] mt-2">Exibindo {LIMITE} de {filtradas.length.toLocaleString('pt-BR')}. Use o filtro acima para refinar.</p>
+      )}
     </div>
   );
 }
@@ -244,15 +333,32 @@ function Matrix({ matrix }: { matrix: ReturnType<typeof computeTurmaEspacoMatrix
   );
 }
 
-function KpiBreak({ label, total, titulares, socios, color, i = 0 }: { label: string; total: number; titulares: number; socios: number; color?: string; i?: number }) {
-  return (
-    <Card className="p-4 min-w-0 overflow-hidden gp-rise" style={{ borderTop: `2px solid ${color || 'var(--accent)'}`, animationDelay: `${i * 45}ms` }}>
-      <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-3)] truncate">{label}</div>
+function KpiBreak({ label, total, titulares, socios, color, i = 0, onClick }: { label: string; total: number; titulares: number; socios: number; color?: string; i?: number; onClick?: () => void }) {
+  const conteudo = (
+    <>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-3)] truncate">{label}</span>
+        {onClick && <Icon name="chevron-right" size={12} className="shrink-0 text-[var(--fg-4)]" />}
+      </div>
       <div className="mt-1 text-2xl font-bold tabular leading-none text-[var(--fg)]">{total.toLocaleString('pt-BR')}</div>
       <div className="mt-1.5 flex items-center gap-2 text-[11px] tabular text-[var(--fg-3)]">
         <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />{titulares.toLocaleString('pt-BR')} tit.</span>
         <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--nivel-diamante)' }} />{socios.toLocaleString('pt-BR')} sóc.</span>
       </div>
+    </>
+  );
+  const estilo = { borderTop: `2px solid ${color || 'var(--accent)'}`, animationDelay: `${i * 45}ms` } as React.CSSProperties;
+  if (!onClick) return <Card className="p-4 min-w-0 overflow-hidden gp-rise" style={estilo}>{conteudo}</Card>;
+  return (
+    <Card className="p-0 min-w-0 overflow-hidden gp-rise" style={estilo}>
+      <button
+        type="button"
+        onClick={onClick}
+        title={`Ver os ${total.toLocaleString('pt-BR')} de ${label}`}
+        className="w-full text-left p-4 transition-colors hover:bg-[var(--surface-3)] focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+      >
+        {conteudo}
+      </button>
     </Card>
   );
 }

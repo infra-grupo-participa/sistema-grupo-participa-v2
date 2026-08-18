@@ -12,7 +12,37 @@ export interface Turma {
   tipo: string | null;
 }
 
-/** Carrega todos os alunos via fn_aluno_360_safe (paginado, igual ao legado PAGE=1000). */
+/**
+ * Registros que existem em thb_alunos mas NÃO são aluno da Central de Acessos.
+ * São mantidos na tabela de propósito — o funil de ativação (sinal pago, cobrança do saldo)
+ * lê thb_alunos e precisa deles. Só não podem contar como aluno aqui.
+ */
+const FORA_DA_CENTRAL = new Set(['fora_central_acessos_2026']);
+const ehForaDaCentral = (a: Aluno360) => {
+  const s = String(a.status_acesso_central ?? '').trim();
+  return FORA_DA_CENTRAL.has(s) || s.startsWith('DUPLICADA');
+};
+
+/**
+ * fn_aluno_360_safe devolve UMA LINHA POR CARD de cs.contatos_hm, então quem tem card de HM
+ * e de AURUM (legítimo: a tabela tem UNIQUE (comprador_id, produto)) vem duas vezes.
+ * Aqui fica só uma linha por aluno — a que tiver a informação de HM mais avançada.
+ */
+function dedupePorAluno(linhas: Aluno360[]): Aluno360[] {
+  const peso = (a: Aluno360) =>
+    (a.hm_pagamento_em ? 4 : 0) + (a.hm_entrevista_em ? 2 : 0) + (a.hm_estagio ? 1 : 0);
+  const porId = new Map<string, Aluno360>();
+  for (const a of linhas) {
+    const atual = porId.get(a.id);
+    if (!atual || peso(a) > peso(atual)) porId.set(a.id, a);
+  }
+  return Array.from(porId.values());
+}
+
+/**
+ * Carrega os alunos da Central via fn_aluno_360_safe (paginado, igual ao legado PAGE=1000),
+ * já sem as duplicações da view e sem quem está marcado como fora da Central.
+ */
 export async function loadAlunos360(): Promise<Aluno360[]> {
   const PAGE = 1000;
   const supabase = db();
@@ -26,7 +56,7 @@ export async function loadAlunos360(): Promise<Aluno360[]> {
     if (data.length < PAGE) break;
     from += PAGE;
   }
-  return all;
+  return dedupePorAluno(all).filter((a) => !ehForaDaCentral(a));
 }
 
 export async function loadTurmas(): Promise<Turma[]> {
