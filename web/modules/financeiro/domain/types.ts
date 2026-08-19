@@ -182,6 +182,14 @@ export interface Oferta {
   link: string;
   ativo: boolean;
   usos: number;
+  /**
+   * `categoria` (read-only, legado que mente para 3 ofertas) e `papel`
+   * (editável) NÃO vêm de fn_fin_ofertas hoje — a RPC retorna só os 6 campos
+   * acima. Campos opcionais aqui para a UI não quebrar quando a RPC evoluir;
+   * até lá ficam sempre undefined e a UI não finge exibir o que não tem.
+   */
+  categoria?: string | null;
+  papel?: string | null;
 }
 
 export interface TurmaFin {
@@ -268,4 +276,82 @@ export interface Acordo {
   meio: string | null;
   forma: string | null;
   parcelas: number | null;
+}
+
+/** As 5 faixas resolvidas pelo SQL (cs.vw_fin_board.faixa) — eixo de ESTÁGIO
+ *  DO FUNIL comercial, distinto das 6 FAIXAS de ./board.ts (eixo de OBSTÁCULO
+ *  DE RECEBIMENTO, testado, calculado a partir de status_financeiro). São
+ *  dois eixos válidos e paralelos: a coluna do board financeiro usa esta
+ *  (`faixa`, do banco); `faixaDe()` do domínio segue disponível como
+ *  visão/filtro alternativo — nenhuma força a outra. */
+export type FaixaFunil = 'sem_tratativa' | 'em_negociacao' | 'acordo_em_curso' | 'quitado' | 'em_risco';
+
+/**
+ * Uma linha do board novo (HM + Aurum unificados). Espelha fn_fin_board(text,text)
+ * 1:1 — CONFERIDO contra o `returns table` de 20260819d_fn_fin_board.sql
+ * (versão aplicada em produção 2026-08-19, com sinal_bruto/saldo_pago_bruto
+ * repassados de cs.vw_fin_contas_receber por correção do arquiteto — ver nota
+ * de divergência da entrega; a migration local nesta pasta ainda precisa ser
+ * sincronizada pelo backend-engineer com o SQL efetivamente aplicado).
+ *
+ * Ainda mais enxuto que ContaReceber (fn_fin_contas_receber, o "razão") em:
+ * ultima_cobranca_em/cobrancas_total/remarcacoes — custo medido dessas
+ * subqueries na RPC legada (ver comentário de 20260819d_fn_fin_board.sql).
+ * Ficam só na ficha (fn_fin_ficha, 1 card por vez).
+ */
+export interface CardBoard {
+  origem: 'HM' | 'AURUM';
+  contato_hm_id: string;
+  comprador_id: string;
+  aluno_id: string | null;
+  nome: string;
+  email: string;
+  // documento e telefone NÃO vêm no board: dado pessoal sem consumidor na tela
+  // não deve trafegar (LGPD, princípio da necessidade). O card não os exibe —
+  // quem precisa deles é a ficha (1 card, sob clique) e o relatório, ambos sob
+  // gp_pode_ver_cpf()/mascararDoc. Achado da auditoria de segurança de 19/08.
+  turma: string | null;
+  turma_origem: string | null;
+  canal: string;
+  publico: string | null;
+  produto: string;
+  /** Chave do estágio comercial (cs.estagios.chave) — não o id. */
+  estagio_chave: string | null;
+  estagio_nome: string | null;
+  estagio_aba: string | null;
+  vendedor: string | null;
+  status_financeiro: StatusFinanceiro;
+  /** Faixa por ESTÁGIO DO FUNIL (ver FaixaFunil) — a coluna do board. */
+  faixa: FaixaFunil;
+  pacote: number | null;
+  total_pago_bruto: number | null;
+  total_pago_liquido: number | null;
+  /** Sinal pago na Hotmart (R$ 300) — junto com saldo_pago_bruto define ehReserva(). */
+  sinal_bruto: number | null;
+  /** Pago do saldo do pacote (fora o sinal). 0 = nada pago do saldo ainda. */
+  saldo_pago_bruto: number;
+  saldo_a_pagar: number | null;
+  credito: number | null;
+  pago_pct: number | null;
+  vencimento: string | null;
+  dias_atraso: number | null;
+  entrou_estagio_em: string | null;
+  dias_no_estagio: number | null;
+  solicitou_cancelamento: boolean;
+  cancelamento_em: string | null;
+  cancelamento_efetivado_em: string | null;
+  quitado_em: string | null;
+  reembolso_em: string | null;
+  reembolso_valor: number | null;
+  oferta_codigo: string | null;
+  oferta_enviada_em: string | null;
+  ultimo_pagamento_em: string | null;
+  /** AURUM: distingue "não cobrar por decisão" de "sem dado". HM = sempre null. */
+  aurum_excecao: boolean | null;
+  aurum_excecao_motivo: string | null;
+  aurum_rotulo_operador: string | null;
+  /** Nome do canal/ação da timeline (cs.hm_evento_janela.nota) — null quando o
+   *  pagamento do sinal não caiu em nenhuma janela conhecida (133 de 305 cards). */
+  acao_nome: string | null;
+  acao_data: string | null;
 }

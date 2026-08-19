@@ -192,3 +192,148 @@ body {
 .gp-logo-light { display: none; }
 [data-theme="light"] .gp-logo-dark { display: none; }
 [data-theme="light"] .gp-logo-light { display: block; }
+
+/* ══════════════════════════════════════════════════════════════
+   Card de status (board financeiro) — cor como EFEITO, não chapada.
+   Base continua --surface-2; a cor lava o card (halo em gradiente),
+   não pinta a superfície. Urgência escala a força do efeito.
+   Uso: <div class="gp-card gp-card--{verde|azul|vermelho|neutro} gp-card--u{0|1|2|3}">
+   ══════════════════════════════════════════════════════════════ */
+.gp-card {
+  position: relative;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Barra-topo 2px no tom do status — mesmo padrão de StatCard (prop `bar`). */
+.gp-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--border-strong);
+  z-index: 2;
+}
+
+/* Halo: gradiente do tom (alpha .12) até transparente, ~40% da altura a
+   partir do topo. É o "efeito" — lava o card, não o pinta. Ausente em
+   urgência 0 (sem halo) e no tom neutro (sem tom próprio para lavar). */
+.gp-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(to bottom, var(--gp-card-tone-subtle, transparent) 0%, transparent 40%);
+  opacity: 0;
+}
+
+.gp-card--verde { --gp-card-tone: var(--green); --gp-card-tone-subtle: var(--green-subtle); --gp-card-tone-border: var(--green-border); }
+.gp-card--azul { --gp-card-tone: var(--info); --gp-card-tone-subtle: var(--info-subtle); --gp-card-tone-border: var(--info-border); }
+.gp-card--vermelho { --gp-card-tone: var(--red); --gp-card-tone-subtle: var(--red-subtle); --gp-card-tone-border: var(--red-border); }
+/* Neutro não lava o card com cor nenhuma — reflete sem_acordo/incalculavel:
+   ausência de sinal, não sinal de baixa prioridade. Barra-topo fica no tom neutro do border-strong. */
+.gp-card--neutro { --gp-card-tone: var(--border-strong); --gp-card-tone-subtle: transparent; --gp-card-tone-border: var(--border); }
+
+.gp-card--verde::before, .gp-card--azul::before, .gp-card--vermelho::before, .gp-card--neutro::before {
+  background: var(--gp-card-tone);
+}
+
+/* Urgência 0: sem halo, sem borda tonal — só a barra-topo identifica o status. */
+.gp-card--u0::after { opacity: 0; }
+
+/* Urgência 1: halo padrão. */
+.gp-card--u1::after { opacity: 1; }
+
+/* Urgência 2: halo + borda tonal (mais forte que a borda neutra padrão). */
+.gp-card--u2::after { opacity: 1; }
+.gp-card--u2 { border-color: var(--gp-card-tone-border); }
+
+/* Urgência 3: halo + borda + dot pulsante — o mais urgente, coloração mais forte. */
+.gp-card--u3::after { opacity: 1; }
+.gp-card--u3 { border-color: var(--gp-card-tone-border); }
+
+.gp-card__dot {
+  position: relative;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--gp-card-tone, var(--red));
+  flex: none;
+}
+.gp-card--u3 .gp-card__dot::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: var(--r-pill);
+  background: var(--gp-card-tone, var(--red));
+  opacity: .55;
+  animation: gp-card-pulse 1.6s ease-out infinite;
+}
+
+@keyframes gp-card-pulse {
+  0% { transform: scale(.6); opacity: .55; }
+  70% { transform: scale(1.8); opacity: 0; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* Tema claro herda --{tom}-subtle/-border automaticamente (redefinidos em
+   [data-theme="light"] acima) e NÃO ganha sombra — decisão do design system
+   (superfícies claras ganham profundidade por borda, não por sombra). */
+[data-theme="light"] .gp-card { box-shadow: none; }
+
+/* A11y: a informação de urgência nunca pode depender só de movimento.
+   Desliga o pulso, mantendo borda e halo — o dot continua visível, parado. */
+@media (prefers-reduced-motion: reduce) {
+  .gp-card--u3 .gp-card__dot::before { animation: none; opacity: 0; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Print — base do export "PDF" via window.print() (custo 0 KB, vs. ~350 KB
+   do jspdf e ~500 KB do @react-pdf/renderer, este sem compatibilidade
+   verificada com React 19.2.4). Aplica-se a qualquer página do app: força
+   tema claro, esconde o shell (header/sidebar) e trata tabelas para paginação.
+   ══════════════════════════════════════════════════════════════ */
+@media print {
+  /* Força tema claro na impressão, independente do tema ativo na tela. */
+  :root, [data-theme="dark"] {
+    color-scheme: light;
+    --accent:#E07F10; --accent-dim:#B56509;
+    --accent-subtle:rgba(224,127,16,.14); --accent-border:rgba(224,127,16,.38);
+    --green:#15803d; --green-subtle:rgba(21,128,61,.14); --green-border:rgba(21,128,61,.32);
+    --yellow:#b45309; --yellow-subtle:rgba(180,83,9,.14); --yellow-border:rgba(180,83,9,.32);
+    --purple:#6d28d9; --purple-subtle:rgba(109,40,217,.14); --purple-border:rgba(109,40,217,.32);
+    --red:#b91c1c; --red-subtle:rgba(185,28,28,.14); --red-border:rgba(185,28,28,.32);
+    --info:#2563eb; --info-subtle:rgba(37,99,235,.12); --info-border:rgba(37,99,235,.3);
+    --surface-0:#eef1f6; --surface-1:#fff; --surface-2:#fff; --surface-3:#eef1f6; --surface-4:#dde3ec;
+    --border-faint:rgba(15,23,42,.06); --border:rgba(15,23,42,.12);
+    --border-strong:rgba(15,23,42,.22); --border-accent:rgba(224,127,16,.42);
+    --fg:#0f172a; --fg-2:#475569; --fg-3:#64748b; --fg-4:#94a3b8;
+    --shadow-sm:none; --shadow-md:none; --shadow-lg:none;
+  }
+
+  body { background: #fff; color: var(--fg); }
+
+  /* Esconde o shell do app — só o conteúdo do relatório vai para o papel. */
+  header, aside, .gp-print-hide { display: none !important; }
+  main { padding: 0 !important; overflow: visible !important; background: #fff !important; }
+  .h-dvh { height: auto !important; overflow: visible !important; }
+
+  /* Tabelas: cabeçalho repete em cada página, linha nunca corta ao meio. */
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  tr { break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; }
+
+  /* Cards de status na impressão: sem halo/sombra/pulso — só a informação,
+     em preto e branco funcional (impressora pode não reproduzir cor fiel). */
+  .gp-card { box-shadow: none !important; }
+  .gp-card::after { display: none; }
+  .gp-card--u3 .gp-card__dot::before { animation: none; opacity: 0; }
+
+  a[href]::after { content: none; }
+}
