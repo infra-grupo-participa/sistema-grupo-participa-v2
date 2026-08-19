@@ -269,6 +269,24 @@ export interface OfertaOrfa {
   exemplo_aluno: string;
 }
 
+/**
+ * Uma interação do histórico de ativação (comercial), espelhada na ficha do
+ * financeiro — fn_fin_historico_ativacao(uuid). Fonte: cs.interacoes.
+ * `autor` é texto livre na origem (nome da pessoa, 'sistema' ou 'hotmart'),
+ * não é FK — pode vir null. `estagio_de`/`estagio_para` só vêm preenchidos
+ * quando tipo === 'mudanca_estagio' (já resolvidos para nome legível).
+ */
+export interface InteracaoAtivacao {
+  id: string;
+  quando: string;
+  tipo: 'disparo' | 'resposta' | 'nota' | 'mudanca_estagio' | 'sistema';
+  canal: string | null;
+  descricao: string | null;
+  autor: string | null;
+  estagio_de: string | null;
+  estagio_para: string | null;
+}
+
 /** O que o financeiro grava no card (mesmas colunas que a ativação lê). */
 export interface Acordo {
   vencimento: string | null;

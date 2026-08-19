@@ -34,13 +34,16 @@ const TOM_BARRA: Record<CardComEfeito['cor'], 'green' | 'info' | 'red' | 'neutra
   neutro: 'neutral',
 };
 
-/** Badge de origem por tom semântico (info=HM, purple=AURUM) — mesma pessoa
- *  pode ter 1 card por produto (ex.: Vania Thomaz: AURUM sem_tratativa + HM
- *  quitado, valores distintos). Precisa saltar aos olhos para não parecer
- *  duplicata — cor + peso maior que um badge neutro genérico. */
+/** Badge de origem na temática de cada produto (decisão do Marcio, 19/08):
+ *  HM laranja, AURUM dourado ("aurum" = ouro em latim). Mesmos tokens das abas
+ *  (ProdutoTabs.tsx) — um produto tem UMA cor em todo o board.
+ *
+ *  Precisa saltar aos olhos: a mesma pessoa pode ter 1 card por produto (ex.:
+ *  Vania Thomaz — AURUM sem_tratativa R$ 58.700 + HM quitado R$ 13.376, valores
+ *  distintos), e sem o badge forte os dois cards parecem duplicata/bug. */
 const ORIGEM_CLASSE: Record<CardComEfeito['origem'], string> = {
-  HM: 'bg-[var(--info-subtle)] text-[var(--info)] border border-[var(--info-border)]',
-  AURUM: 'bg-[var(--purple-subtle)] text-[var(--purple)] border border-[var(--purple-border)]',
+  HM: 'bg-[var(--produto-hm-subtle)] text-[var(--produto-hm)] border border-[var(--produto-hm-border)]',
+  AURUM: 'bg-[var(--produto-aurum-subtle)] text-[var(--produto-aurum)] border border-[var(--produto-aurum-border)]',
 };
 
 /** Faixa visual do tempo parado — calibrada pela distribuição real medida em

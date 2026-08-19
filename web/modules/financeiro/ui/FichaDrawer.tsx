@@ -8,13 +8,36 @@ import {
 } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRLc, fmtData, fmtDesde } from '@/shared/ui/format';
-import type { ContaReceber, Cobranca } from '../domain/types';
+import type { ContaReceber, Cobranca, InteracaoAtivacao } from '../domain/types';
 import { contaMorta, mascararDoc, statusLabel, statusTone } from '../domain/financeiro';
 import type { FinanceiroRepository } from '../application/ports';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
 
 const CANAIS_COBRANCA = ['WhatsApp', 'E-mail', 'Ligação', 'Reunião'];
 const RESULTADOS_COBRANCA = ['Sem resposta', 'Prometeu pagar', 'Renegociou', 'Recusou', 'Pagou'];
+
+/** Tom + ícone por tipo de interação — âmbar é exclusivo de seleção/ação (system.md),
+ *  por isso mudança de estágio (decisão de negócio) usa purple, não accent; nota é
+ *  o operador registrando algo à mão (info); disparo/resposta são mensageria (base);
+ *  sistema é evento automático (base). */
+const TOM_INTERACAO: Record<InteracaoAtivacao['tipo'], { tone: 'purple' | 'info' | 'base'; icon: 'arrow-right' | 'notebook' | 'mail' | 'circle' }> = {
+  mudanca_estagio: { tone: 'purple', icon: 'arrow-right' },
+  nota: { tone: 'info', icon: 'notebook' },
+  disparo: { tone: 'base', icon: 'mail' },
+  resposta: { tone: 'base', icon: 'mail' },
+  sistema: { tone: 'base', icon: 'circle' },
+};
+
+function tituloInteracao(it: InteracaoAtivacao): React.ReactNode {
+  if (it.tipo === 'mudanca_estagio' && it.estagio_de && it.estagio_para) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        {it.estagio_de} <Icon name="arrow-right" size={11} /> {it.estagio_para}
+      </span>
+    );
+  }
+  return it.descricao || '—';
+}
 
 export function FichaDrawer({ conta, repo, canEdit, canVerDoc, onClose, onAcordoSalvo }: {
   conta: ContaReceber;
@@ -143,6 +166,25 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, onClose, onAcordo
                     }
                   />
                 ))
+              )}
+            </section>
+            <section>
+              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Histórico do comercial ({ficha.historicoAtivacao.length})</h3>
+              {!ficha.historicoAtivacao.length ? (
+                <EmptyState title="Nenhuma interação registrada" hint="O comercial ainda não registrou contato, nota ou mudança de estágio para esta conta." icon="clipboard" />
+              ) : (
+                <Timeline
+                  items={ficha.historicoAtivacao.map((it) => {
+                    const { tone, icon } = TOM_INTERACAO[it.tipo];
+                    return {
+                      tone,
+                      icon: <Icon name={icon} size={11} />,
+                      title: tituloInteracao(it),
+                      meta: fmtDesde(it.quando).label,
+                      body: it.autor ? `por ${it.autor}` : undefined,
+                    };
+                  })}
+                />
               )}
             </section>
           </div>

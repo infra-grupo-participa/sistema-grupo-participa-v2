@@ -7,8 +7,8 @@
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type {
-  Acordo, CardBoard, Cobranca, CompraHistorico, DiaFaturamento, Lancamento, Meta, Oferta,
-  OfertaOrfa, ReguaPasso, SaudeCheck, TurmaFin,
+  Acordo, CardBoard, Cobranca, CompraHistorico, DiaFaturamento, InteracaoAtivacao, Lancamento, Meta,
+  Oferta, OfertaOrfa, ReguaPasso, SaudeCheck, TurmaFin,
 } from '../domain/types';
 import type { FinanceiroRepository, Resultado } from '../application/ports';
 
@@ -94,6 +94,13 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     logQueryError('loadCobrancas', error);
     if (error) throw new Error('Não foi possível carregar o histórico de cobrança.');
     return (data as Cobranca[]) ?? [];
+  }
+
+  async loadHistoricoAtivacao(contatoHmId: string): Promise<InteracaoAtivacao[]> {
+    const { data, error } = await this.db().rpc('fn_fin_historico_ativacao', { p_contato_hm_id: contatoHmId });
+    logQueryError('loadHistoricoAtivacao', error);
+    if (error) throw new Error('Não foi possível carregar o histórico do comercial.');
+    return (data as InteracaoAtivacao[]) ?? [];
   }
 
   async registrarCobranca(contatoHmId: string, canal: string, resultado: string, obs: string | null): Promise<Resultado> {

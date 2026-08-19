@@ -48,6 +48,18 @@
   --nivel-base:#9ca3af;
   --nivel-ouro:#d9a441; --nivel-platina:#60a5fa; --nivel-diamante:#a78bfa; --nivel-diamante-vermelho:#f87171;
 
+  /* Produtos — cada um na sua temática (decisão do Marcio, 19/08):
+     HM = laranja da marca · AURUM = dourado (aurum = ouro em latim).
+     Derivados de tokens existentes, não são cores novas: HM reusa o laranja da
+     marca e AURUM reusa --nivel-ouro, que já é a assinatura "metal/pedra".
+     ⚠️ --produto-hm NÃO é --accent: âmbar segue exclusivo de seleção/ação. São
+     valores próximos por serem a mesma família da marca, mas com papéis
+     distintos — trocar um não pode arrastar o outro. */
+  --produto-hm:#F29725;
+  --produto-hm-subtle:rgba(242,151,37,.12); --produto-hm-border:rgba(242,151,37,.28);
+  --produto-aurum:#d9a441;
+  --produto-aurum-subtle:rgba(217,164,65,.14); --produto-aurum-border:rgba(217,164,65,.32);
+
   /* Interação */
   --ring:0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent-border);
   --t-fast:120ms cubic-bezier(.4,0,.2,1); --t-mid:200ms cubic-bezier(.4,0,.2,1);
@@ -66,6 +78,19 @@
   --purple:#6d28d9; --purple-subtle:rgba(109,40,217,.14); --purple-border:rgba(109,40,217,.32);
   --red:#b91c1c; --red-subtle:rgba(185,28,28,.14); --red-border:rgba(185,28,28,.32);
   --info:#2563eb; --info-subtle:rgba(37,99,235,.12); --info-border:rgba(37,99,235,.3);
+
+  /* Produtos — escurecidos p/ contraste sobre fundo claro.
+     Medido (badge = texto bold pequeno, alvo >= 3:1 do WCAG para texto grande,
+     reforçado por borda + fundo -subtle):
+       HM    #C1700B → 3,32 sobre --surface-0 (#eef1f6) · 3,76 sobre branco
+       AURUM #a1762a → 3,61 sobre --surface-0            · 4,09 sobre branco
+     O #E07F10 do --accent REPROVOU aqui (2,57 sobre surface-0) — por isso o
+     produto tem token próprio e não herda o acento. Matiz 33,4° preservado:
+     continua sendo o laranja da marca, só mais escuro para assentar no claro. */
+  --produto-hm:#C1700B;
+  --produto-hm-subtle:rgba(193,112,11,.14); --produto-hm-border:rgba(193,112,11,.38);
+  --produto-aurum:#a1762a;
+  --produto-aurum-subtle:rgba(161,118,42,.14); --produto-aurum-border:rgba(161,118,42,.36);
 
   /* Superfícies — alinhadas ao legado (fundo cinza frio, cards brancos) */
   --surface-0:#eef1f6; --surface-1:#fff; --surface-2:#fff; --surface-3:#eef1f6; --surface-4:#dde3ec;
@@ -132,6 +157,14 @@
   --color-nivel-platina: var(--nivel-platina);
   --color-nivel-diamante: var(--nivel-diamante);
   --color-nivel-diamante-vermelho: var(--nivel-diamante-vermelho);
+
+  /* Produtos (HM laranja / AURUM dourado) */
+  --color-produto-hm: var(--produto-hm);
+  --color-produto-hm-subtle: var(--produto-hm-subtle);
+  --color-produto-hm-border: var(--produto-hm-border);
+  --color-produto-aurum: var(--produto-aurum);
+  --color-produto-aurum-subtle: var(--produto-aurum-subtle);
+  --color-produto-aurum-border: var(--produto-aurum-border);
 }
 
 /* ── Base ── */

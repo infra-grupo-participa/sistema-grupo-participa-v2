@@ -5,11 +5,15 @@
 // (board.cards já vem inteiro numa chamada, `origem` está em cada card —
 // troca instantânea, zero query nova; 305 cards no total, custo desprezível).
 //
-// Cor por produto reaproveita a MESMA paleta do badge de origem no card
-// (CardBoard.tsx: info=HM, purple=AURUM) — sinal consistente em todo o board,
-// não uma terceira convenção de cor. Âmbar (--accent) fica de fora: é
-// exclusivo de seleção/ação, e aqui a cor identifica o PRODUTO, não marca
-// "está selecionado" (isso é a borda/peso do tab ativo).
+// Cor por produto = temática de cada marca (decisão do Marcio, 19/08):
+// HM laranja, AURUM dourado ("aurum" = ouro em latim). Tokens
+// --produto-hm / --produto-aurum, os mesmos usados no badge de origem do card
+// (CardBoard.tsx) — sinal consistente em todo o board, não uma segunda
+// convenção de cor.
+//
+// ⚠️ --produto-hm NÃO é --accent, ainda que sejam da mesma família: âmbar segue
+// exclusivo de seleção/ação. Aqui a cor identifica o PRODUTO; "está
+// selecionado" é comunicado pela borda/fundo/peso do tab ativo.
 import type { CardBoard } from '../domain/types';
 
 export type ProdutoChave = CardBoard['origem'];
@@ -20,8 +24,16 @@ export const PRODUTOS: { chave: ProdutoChave; rotulo: string }[] = [
 ];
 
 const TOM: Record<ProdutoChave, { texto: string; borda: string; fundo: string }> = {
-  HM: { texto: 'text-[var(--info)]', borda: 'border-[var(--info-border)]', fundo: 'bg-[var(--info-subtle)]' },
-  AURUM: { texto: 'text-[var(--purple)]', borda: 'border-[var(--purple-border)]', fundo: 'bg-[var(--purple-subtle)]' },
+  HM: {
+    texto: 'text-[var(--produto-hm)]',
+    borda: 'border-[var(--produto-hm-border)]',
+    fundo: 'bg-[var(--produto-hm-subtle)]',
+  },
+  AURUM: {
+    texto: 'text-[var(--produto-aurum)]',
+    borda: 'border-[var(--produto-aurum-border)]',
+    fundo: 'bg-[var(--produto-aurum-subtle)]',
+  },
 };
 
 export function ProdutoTabs({ contagens, ativo, onSelecionar }: {
