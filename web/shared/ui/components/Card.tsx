@@ -32,12 +32,14 @@ export function StatCard({ label, value, tone, hint, bar }: {
   );
 }
 
-/** KPI com borda-esquerda colorida (paridade com .vg-kpi-card / .ht21-info-card do legado). */
-export function KpiCard({ label, value, hint, bar = 'accent' }: {
-  label: string; value: React.ReactNode; hint?: string; bar?: keyof typeof BAR;
+/** KPI com borda-esquerda colorida (paridade com .vg-kpi-card / .ht21-info-card do legado).
+ *  `title` = definição do indicador em texto puro (tooltip nativo do navegador,
+ *  acessível por teclado/leitor de tela via `title` no elemento focável). */
+export function KpiCard({ label, value, hint, bar = 'accent', title }: {
+  label: string; value: React.ReactNode; hint?: string; bar?: keyof typeof BAR; title?: string;
 }) {
   return (
-    <Card className="p-4 min-w-0 overflow-hidden" style={{ borderLeft: `4px solid ${BAR[bar]}` }}>
+    <Card className="p-4 min-w-0 overflow-hidden" style={{ borderLeft: `4px solid ${BAR[bar]}` }} title={title}>
       <div className="text-xs font-medium uppercase tracking-wide text-[var(--fg-3)] truncate">{label}</div>
       <div className="mt-1 text-lg font-bold tabular leading-tight break-words text-[var(--fg)]">{value}</div>
       {hint && <div className="mt-1 text-[11px] text-[var(--fg-3)]">{hint}</div>}

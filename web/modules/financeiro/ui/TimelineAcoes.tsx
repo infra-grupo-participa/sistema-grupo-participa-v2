@@ -2,8 +2,10 @@
 
 // Timeline de canais/ações no topo do board — botões que filtram os cards.
 // acao_nome + acao_data (nome/data da janela de campanha em que o SINAL foi
-// pago). 133 dos 305 cards têm acao_nome NULL: viram o chip "Sem ação
-// identificada" — nunca somem da lista, só ficam agrupados à parte.
+// pago). Após o fix do backend em 19/08 (comparação de timestamptz que
+// comia o 1º dia de toda janela), 89 dos 305 cards têm acao_nome NULL
+// (82 HM + 7 Aurum, não mais 133): viram o chip "Sem ação identificada" —
+// nunca somem da lista, só ficam agrupados à parte.
 import { Icon } from '@/shared/ui/icons';
 import { fmtData } from '@/shared/ui/format';
 import type { CardComEfeito } from '../application/carregar-board';
@@ -17,8 +19,12 @@ export interface AcaoResumo {
   total: number;
 }
 
-/** Agrupa os cards por ação, ordenado por data. Sem ação (null) vai por
- *  último, sempre visível com a contagem — nunca escondido em silêncio. */
+/** Agrupa os cards por ação, ordenado por data CRESCENTE (mais antiga primeiro
+ *  — pedido explícito: "ordem cronológica entre eles"). Sem ação (null) vai
+ *  por último, sempre visível com a contagem — nunca escondido em silêncio.
+ *  Cards já vêm filtrados por produto (HM/Aurum) por quem chama — a lista
+ *  resultante é só dos canais daquele produto: Aurum tem 1 canal (ETHB SP),
+ *  HM tem 4, e essa função não sabe nem precisa saber a diferença. */
 export function agruparPorAcao(cards: CardComEfeito[]): AcaoResumo[] {
   const mapa = new Map<string, AcaoResumo>();
   for (const c of cards) {

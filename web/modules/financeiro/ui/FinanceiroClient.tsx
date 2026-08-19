@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
 import { Loading } from '@/shared/ui/components';
-import type { ContaReceber, Oferta, TurmaFin } from '../domain/types';
+import type { ContaReceber, FaixaFunil, Oferta, TurmaFin } from '../domain/types';
 // Mesma função pura de application/carregar-board.ts — reusada aqui para
 // recalcular sobre o recorte filtrado pela timeline de ações (sem query nova).
 import { calcularTotais as recalcularTotais } from '../domain/totais';
@@ -12,6 +12,7 @@ import { carregarBoard, type BoardCarregado, type CardComEfeito } from '../appli
 import { carregarFaturamento, type FaturamentoCarregado } from '../application/carregar-faturamento';
 import { listarOfertas } from '../application/gerenciar-ofertas';
 import { agruparPorAcao, SEM_ACAO, TimelineAcoes } from './TimelineAcoes';
+import { ProdutoTabs, type ProdutoChave } from './ProdutoTabs';
 import { BoardView } from './BoardView';
 import { RodapeTotais } from './RodapeTotais';
 import { FichaDrawer } from './FichaDrawer';
@@ -39,8 +40,17 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // Reintroduzir exige decisão de produto: onde a régua/meta mora na navegação
   // nova (board · faturamento · relatórios · ofertas não têm aba óbvia para
   // isso) — reportado como divergência, não decidido aqui.
+  // Aba de produto — nível acima da timeline de canais (pedido do Marcio: HM
+  // e Aurum nunca misturados). Trocar de aba reseta o canal ativo: um canal
+  // do HM não faz sentido selecionado depois de trocar para Aurum.
+  const [produtoAtivo, setProdutoAtivo] = useState<ProdutoChave>('HM');
   const [acaoAtiva, setAcaoAtiva] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+
+  const selecionarProduto = (produto: ProdutoChave) => {
+    setProdutoAtivo(produto);
+    setAcaoAtiva(null);
+  };
 
   const hojeISO = new Date().toISOString().slice(0, 10);
 
@@ -103,7 +113,25 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  const acoes = useMemo(() => (board ? agruparPorAcao(board.cards) : []), [board]);
+  // Contagem por produto sobre o board INTEIRO (nunca sobre o recorte de
+  // canal) — é o número que a aba mostra, precisa ser estável ao trocar de
+  // canal. Aba vazia não pode ficar muda: HM 264 · Aurum 41 aparecem sempre,
+  // mesmo que um produto zere após algum filtro futuro ([].every() é true —
+  // commit 0814910 — contagem explícita evita a mesma armadilha aqui).
+  const contagensProduto = useMemo(() => {
+    const base: Record<ProdutoChave, number> = { HM: 0, AURUM: 0 };
+    if (!board) return base;
+    for (const c of board.cards) base[c.origem] += 1;
+    return base;
+  }, [board]);
+
+  // Cards do produto ativo — HM e Aurum nunca se misturam a partir daqui.
+  const cardsDoProduto: CardComEfeito[] = useMemo(() => {
+    if (!board) return [];
+    return board.cards.filter((c) => c.origem === produtoAtivo);
+  }, [board, produtoAtivo]);
+
+  const acoes = useMemo(() => agruparPorAcao(cardsDoProduto), [cardsDoProduto]);
 
   // Rótulo legível do filtro ativo (nome da ação/canal) — o rodapé usa para
   // deixar explícito que os totais são do recorte, não da carteira (problema 6).
@@ -113,33 +141,31 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   }, [acoes, acaoAtiva]);
 
   const cardsFiltrados: CardComEfeito[] = useMemo(() => {
-    if (!board) return [];
-    if (!acaoAtiva) return board.cards;
-    if (acaoAtiva === SEM_ACAO) return board.cards.filter((c) => c.acaoNome == null);
-    return board.cards.filter((c) => c.acaoNome === acaoAtiva);
-  }, [board, acaoAtiva]);
+    if (!acaoAtiva) return cardsDoProduto;
+    if (acaoAtiva === SEM_ACAO) return cardsDoProduto.filter((c) => c.acaoNome == null);
+    return cardsDoProduto.filter((c) => c.acaoNome === acaoAtiva);
+  }, [cardsDoProduto, acaoAtiva]);
 
   const contasFiltradas: ContaReceber[] = useMemo(() => cardsFiltrados.map((c) => c.conta), [cardsFiltrados]);
 
   const colunasFiltradas = useMemo(() => {
     if (!board) return null;
-    if (!acaoAtiva) return board.colunas;
-    const grupos = { ...board.colunas };
-    for (const chave of Object.keys(grupos) as (keyof typeof grupos)[]) {
-      grupos[chave] = grupos[chave].filter((c) =>
-        acaoAtiva === SEM_ACAO ? c.acaoNome == null : c.acaoNome === acaoAtiva,
-      );
+    const grupos = {} as Record<FaixaFunil, CardComEfeito[]>;
+    for (const chave of Object.keys(board.colunas) as FaixaFunil[]) {
+      grupos[chave] = board.colunas[chave].filter((c) => {
+        if (c.origem !== produtoAtivo) return false;
+        if (!acaoAtiva) return true;
+        return acaoAtiva === SEM_ACAO ? c.acaoNome == null : c.acaoNome === acaoAtiva;
+      });
     }
     return grupos;
-  }, [board, acaoAtiva]);
+  }, [board, produtoAtivo, acaoAtiva]);
 
-  // calcularTotais roda sobre o array já filtrado pela ação — sem query nova.
-  const totaisFiltrados = useMemo(() => {
-    if (!board) return null;
-    if (!acaoAtiva) return board.totais;
-    // Reimporta o cálculo puro do domínio sobre o recorte visível.
-    return recalcularTotais(contasFiltradas);
-  }, [board, acaoAtiva, contasFiltradas]);
+  // calcularTotais roda sobre o array já filtrado por produto + ação — sem
+  // query nova. Nunca reaproveita board.totais aqui: aquele total é da
+  // carteira inteira (HM + Aurum somados), e o pedido do Marcio é o oposto —
+  // os 4 totais têm que falar SÓ do recorte da aba ativa.
+  const totaisFiltrados = useMemo(() => recalcularTotais(contasFiltradas), [contasFiltradas]);
 
   const aberta = openId ? board?.cards.find((c) => c.conta.contato_hm_id === openId)?.conta ?? null : null;
 
@@ -174,15 +200,21 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       {tab === 'board' && (
         erroBoard ? (
           <ErroCarregamento msg={erroBoard} onRetry={carregarBoardAgora} />
-        ) : !board || !colunasFiltradas || !totaisFiltrados ? (
+        ) : !board || !colunasFiltradas ? (
           <Loading label="Carregando board financeiro…" minHeight={320} />
         ) : (
           <>
+            <ProdutoTabs contagens={contagensProduto} ativo={produtoAtivo} onSelecionar={selecionarProduto} />
             <div className="mb-3">
               <TimelineAcoes acoes={acoes} ativa={acaoAtiva} onSelecionar={setAcaoAtiva} />
             </div>
             <BoardView colunas={colunasFiltradas} onOpen={setOpenId} />
-            <RodapeTotais totais={totaisFiltrados} totalCards={cardsFiltrados.length} filtroAtivo={rotuloFiltroAtivo} />
+            <RodapeTotais
+              totais={totaisFiltrados}
+              totalCards={cardsFiltrados.length}
+              produtoAtivo={produtoAtivo === 'HM' ? 'Holding Masters' : 'Aurum'}
+              filtroAtivo={rotuloFiltroAtivo}
+            />
           </>
         )
       )}
