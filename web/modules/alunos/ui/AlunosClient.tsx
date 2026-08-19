@@ -24,8 +24,11 @@ import { loadHmContagem } from './acesso-hm-data';
 import { hmBadgeTotal } from '../domain/acesso-hm';
 
 type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento';
-interface Filtros { situacao: string[]; espaco: string[]; nivel: string[]; jornada: string[]; papel: string[]; turma: string[]; estado: string[] }
-const FILTROS_VAZIO: Filtros = { situacao: [], espaco: [], nivel: [], jornada: [], papel: [], turma: [], estado: [] };
+interface Filtros { status: string[]; espaco: string[]; nivel: string[]; jornada: string[]; papel: string[]; turma: string[]; estado: string[]; anoEntrada: string[] }
+const FILTROS_VAZIO: Filtros = { status: [], espaco: [], nivel: [], jornada: [], papel: [], turma: [], estado: [], anoEntrada: [] };
+
+/** Valor do filtro de ano para quem não tem data de entrada registrada. */
+const SEM_DATA = '__sem_data__';
 
 function EspacoBadge({ espaco }: { espaco: string }) {
   const label = ESPACO_LABEL[espaco];
@@ -93,13 +96,27 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
         if (!tokens.every((t) => hay.includes(t))) return false;
       }
       // Múltipla seleção: OR dentro de cada filtro, AND entre filtros.
-      if (f.situacao.length && !f.situacao.some((s) => (s === 'inadimplente' ? Number(a.saldo_devedor) > 0 : a.situacao_acesso === s))) return false;
+      // STATUS = `status_acesso_central`, que é a coluna Status da PLANILHA da Central.
+      // Antes isto filtrava `situacao_acesso`, um campo derivado do sistema cujos rótulos
+      // (ex.: "Em dia") não existem na planilha — e ainda misturava "Inadimplente", que é
+      // cobrança, não status de acesso. A planilha é a fonte; a tela não inventa rótulo.
+      if (f.status.length && !f.status.includes(String(a.status_acesso_central ?? '').trim())) return false;
       if (f.espaco.length && !f.espaco.includes(a.espaco_instrucao || '')) return false;
       if (f.nivel.length && !f.nivel.includes(a.nivel_resultado || '')) return false;
-      if (f.papel.length && !f.papel.some((p) => (p === 'socio' ? a.eh_socio : p === 'titular' ? !a.eh_socio : p === 'aurum' ? a.turma_aurum_id != null : false))) return false;
+      // Papel é só titular ou sócio. "Aurum" saiu daqui: não é papel, é espaço de
+      // instrução, e já tem filtro próprio — deixar nos dois lugares fazia a mesma
+      // pessoa ser filtrada por dois conceitos diferentes com o mesmo nome.
+      if (f.papel.length && !f.papel.some((p) => (p === 'socio' ? a.eh_socio : !a.eh_socio))) return false;
       if (f.turma.length && !f.turma.some((t) => a.turma_codigo === t || a.turma_aurum_codigo === t)) return false;
       if (f.estado.length && !f.estado.includes(String(a.estado ?? '').toUpperCase())) return false;
       if (f.jornada.length && !f.jornada.some((j) => (j === 'com_ht' && a.tem_ht) || (j === 'com_hm' && a.tem_hm) || (j === 'com_placa' && a.tem_placa) || (j === 'com_depoimento' && a.tem_depoimento) || (j === 'com_sip' && a.sip_registrado))) return false;
+      // Ano de entrada no THB. Quem não tem data cai em SEM_DATA em vez de sumir:
+      // a informação não existe para todo mundo na Central, e sem essa opção essas
+      // pessoas ficariam invisíveis em qualquer recorte por ano.
+      if (f.anoEntrada.length) {
+        const ano = a.data_entrada_thb ? String(a.data_entrada_thb).slice(0, 4) : SEM_DATA;
+        if (!f.anoEntrada.includes(ano)) return false;
+      }
       return true;
     });
     list.sort((a, b) => {
@@ -129,9 +146,44 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
     return list;
   }, [alunos, busca, filtros, sortCol, sortDir]);
 
-  // Opções de filtro (turma em ordem decrescente T38→T1; estados A–Z).
+  // ── Opções de filtro ────────────────────────────────────────────────────────
+  // Regra: TODA opção sai da própria base carregada, nunca de lista fixa no código.
+  // Lista fixa produz os dois defeitos que a tarefa pede pra matar: valor que existe
+  // na planilha e não aparece no filtro (fica invisível), e opção no filtro sem
+  // ninguém atrás (o usuário seleciona e recebe zero). Turma e Estado já faziam
+  // assim; Status, Espaço e Nível passam a fazer também.
+  const distintos = (vals: (string | null | undefined)[]) =>
+    Array.from(new Set(vals.map((v) => String(v ?? '').trim()).filter(Boolean)));
+
   const turmaOpts = useMemo(() => Array.from(new Set(alunos.flatMap((a) => [a.turma_codigo, a.turma_aurum_codigo]).filter(Boolean) as string[])).sort((a, b) => b.localeCompare(a, 'pt-BR', { numeric: true, sensitivity: 'base' })), [alunos]);
   const estadoOpts = useMemo(() => Array.from(new Set(alunos.map((a) => String(a.estado ?? '').toUpperCase()).filter(Boolean))).sort(), [alunos]);
+
+  // Status: valores crus da planilha (Ativo, A vencer, Vencido, Acompanha titular,
+  // Verificar, Ativo (cortesia)…). Sem tradução: o rótulo na tela é o da fonte.
+  const statusOpts = useMemo(() => distintos(alunos.map((a) => a.status_acesso_central)).sort((a, b) => a.localeCompare(b, 'pt-BR')), [alunos]);
+
+  // Espaço: rótulo bonito quando conhecido, valor cru quando não — do mesmo jeito
+  // que o EspacoBadge já faz na tabela, pra tela e filtro não divergirem.
+  const espacoOpts = useMemo(() => distintos(alunos.map((a) => a.espaco_instrucao))
+    .sort((a, b) => (ESPACO_LABEL[a] || a).localeCompare(ESPACO_LABEL[b] || b, 'pt-BR')), [alunos]);
+
+  // Nível: ordenado pela hierarquia (NRANK), não alfabético.
+  const NIVEL_LABEL = useMemo(() => Object.fromEntries(nivelOptions().map((x) => [x.id, x.label])) as Record<string, string>, []);
+  const nivelOpts = useMemo(() => distintos(alunos.map((a) => a.nivel_resultado))
+    .sort((a, b) => (NRANK[b] ?? -1) - (NRANK[a] ?? -1)), [alunos]);
+
+  // Ano de entrada no THB: os anos que existirem na base, do mais novo pro mais
+  // antigo, e "Sem data" no fim para quem não tem a informação.
+  const anoEntradaOpts = useMemo(() => {
+    const anos = distintos(alunos.map((a) => (a.data_entrada_thb ? String(a.data_entrada_thb).slice(0, 4) : null)))
+      .filter((y) => /^\d{4}$/.test(y))
+      .sort((a, b) => b.localeCompare(a));
+    const temSemData = alunos.some((a) => !a.data_entrada_thb);
+    return [
+      ...anos.map((y) => ({ value: y, label: y })),
+      ...(temSemData ? [{ value: SEM_DATA, label: 'Sem data' }] : []),
+    ];
+  }, [alunos]);
   const temFiltroLista = Boolean(busca) || Object.values(filtros).some((arr) => arr.length > 0);
 
   const selected = selectedId ? alunos.find((a) => a.id === selectedId) ?? null : null;
@@ -181,12 +233,13 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
       <Toolbar className="mb-3">
         <SearchInput value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, e-mail, documento, cidade…" />
         <MultiSelect values={filtros.turma} onChange={(v) => setFiltros((f) => ({ ...f, turma: v }))} placeholder="Todas as turmas" options={turmaOpts.map((t) => ({ value: t, label: t }))} />
-        <MultiSelect values={filtros.espaco} onChange={(v) => setFiltros((f) => ({ ...f, espaco: v }))} placeholder="Todos os espaços" options={Object.entries(ESPACO_LABEL).map(([k, l]) => ({ value: k, label: l }))} />
-        <MultiSelect values={filtros.papel} onChange={(v) => setFiltros((f) => ({ ...f, papel: v }))} placeholder="Titular / Sócio" options={[{ value: 'titular', label: 'Titulares' }, { value: 'socio', label: 'Sócios' }, { value: 'aurum', label: 'Aurum' }]} />
+        <MultiSelect values={filtros.espaco} onChange={(v) => setFiltros((f) => ({ ...f, espaco: v }))} placeholder="Todos os espaços" options={espacoOpts.map((k) => ({ value: k, label: ESPACO_LABEL[k] || k }))} />
+        <MultiSelect values={filtros.papel} onChange={(v) => setFiltros((f) => ({ ...f, papel: v }))} placeholder="Titular / Sócio" options={[{ value: 'titular', label: 'Titular' }, { value: 'socio', label: 'Sócio' }]} />
         <MultiSelect values={filtros.estado} onChange={(v) => setFiltros((f) => ({ ...f, estado: v }))} placeholder="Todos os estados" options={estadoOpts.map((e) => ({ value: e, label: e }))} />
-        <MultiSelect values={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={nivelOptions().map((n) => ({ value: n.id, label: n.label }))} />
+        <MultiSelect values={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={nivelOpts.map((k) => ({ value: k, label: NIVEL_LABEL[k] || k }))} />
         <MultiSelect values={filtros.jornada} onChange={(v) => setFiltros((f) => ({ ...f, jornada: v }))} placeholder="Toda jornada" options={[{ value: 'com_ht', label: 'Com HT' }, { value: 'com_hm', label: 'Com HM' }, { value: 'com_placa', label: 'Com placa' }, { value: 'com_depoimento', label: 'Com depoimento' }, { value: 'com_sip', label: 'Com SIP' }]} />
-        <MultiSelect values={filtros.situacao} onChange={(v) => setFiltros((f) => ({ ...f, situacao: v }))} placeholder="Toda situação" options={[...Object.entries(SITUACAO).map(([k, s]) => ({ value: k, label: s.label })), { value: 'inadimplente', label: 'Inadimplente' }]} />
+        <MultiSelect values={filtros.anoEntrada} onChange={(v) => setFiltros((f) => ({ ...f, anoEntrada: v }))} placeholder="Ano de entrada no THB" options={anoEntradaOpts} />
+        <MultiSelect values={filtros.status} onChange={(v) => setFiltros((f) => ({ ...f, status: v }))} placeholder="Todos os status" options={statusOpts.map((s) => ({ value: s, label: s }))} />
       </Toolbar>
 
       <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
