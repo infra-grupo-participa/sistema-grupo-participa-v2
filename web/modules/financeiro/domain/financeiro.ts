@@ -217,21 +217,87 @@ export function filtrar(contas: ContaReceber[], f: Filtros): ContaReceber[] {
 }
 
 // ── Faturamento diário ───────────────────────────────────────────────────────
+// comAcumulado() (simples, sem lacunas) foi substituída por comMetricas() —
+// único ponto de cálculo do acumulado agora, já sobre a série com lacunas
+// preenchidas. Ver decisão em preencherLacunas().
 
-export interface DiaComAcumulado extends DiaFaturamento {
-  acumulado: number;
+/** 'YYYY-MM-DD' → 'YYYY-MM-DD' do dia seguinte, sem depender de fuso (aritmética em UTC). */
+function proximoDiaISO(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + 1));
+  return dt.toISOString().slice(0, 10);
 }
 
-/** Adiciona o acumulado corrido (do mais antigo ao mais recente). Entrada vem desc. */
-export function comAcumulado(dias: DiaFaturamento[]): DiaComAcumulado[] {
+export interface DiaFaturamentoPreenchido extends DiaFaturamento {
+  /** true = dia sem lançamento algum na RPC (fn_fin_faturamento_diario só
+   *  devolve dias COM lançamento) — preenchido aqui como zero explícito.
+   *  Distingue "não faturou" de "não sabemos" na UI (nunca confundir com dado ausente). */
+  preenchido: boolean;
+}
+
+/**
+ * fn_fin_faturamento_diario só retorna dias com pelo menos 1 lançamento —
+ * dias sem faturamento simplesmente não aparecem na série (medido: 04/08 e
+ * 08/08 ausentes no período de referência). Se a média/gráfico ignorasse o
+ * buraco, a média móvel de 7 dias mentiria pra cima (soma dos dias que
+ * faturaram dividida por menos dias do que realmente existem na janela).
+ *
+ * Decisão: preencher cada dia ausente entre o primeiro e o último dia da
+ * série com um registro zerado explícito (`preenchido: true`). A UI usa essa
+ * flag para sinalizar a lacuna (não é "zero real e mudo", é "sem lançamento,
+ * mostrado às claras") e os cálculos de média passam a contar o dia certo.
+ */
+export function preencherLacunas(dias: DiaFaturamento[]): DiaFaturamentoPreenchido[] {
+  if (!dias.length) return [];
   const asc = [...dias].sort((a, b) => a.dia.localeCompare(b.dia));
-  let acc = 0;
-  const mapa = new Map<string, number>();
-  for (const d of asc) {
-    acc += d.bruto;
-    mapa.set(d.dia, acc);
+  const porDia = new Map(asc.map((d) => [d.dia, d]));
+  const resultado: DiaFaturamentoPreenchido[] = [];
+  let cursor = asc[0].dia;
+  const ultimo = asc[asc.length - 1].dia;
+  while (cursor <= ultimo) {
+    const real = porDia.get(cursor);
+    if (real) {
+      resultado.push({ ...real, preenchido: false });
+    } else {
+      resultado.push({
+        dia: cursor, lancamentos: 0, cliente_pagou: 0, juros: 0, bruto: 0, liquido: 0, taxas: 0,
+        sinal: 0, saldo: 0, mensalidade: 0, compra_cheia: 0, ajuste: 0, alunos: 0, preenchido: true,
+      });
+    }
+    cursor = proximoDiaISO(cursor);
   }
-  return dias.map((d) => ({ ...d, acumulado: mapa.get(d.dia) ?? 0 }));
+  return resultado;
+}
+
+export interface DiaComMetricas extends DiaFaturamentoPreenchido {
+  acumulado: number;
+  /** Variação percentual de `bruto` vs. o dia anterior na série (null = sem dia anterior). */
+  variacaoDiaAnterior: number | null;
+  /** Média móvel dos 7 dias anteriores a este (exclui o próprio dia; null = menos de 1 dia de histórico). */
+  media7d: number | null;
+  /** (bruto − media7d) / media7d — posição vs. a média móvel. Null = sem média7d ainda. */
+  vsMedia7d: number | null;
+}
+
+/**
+ * Série completa (lacunas preenchidas) + acumulado + variação dia-a-dia +
+ * posição vs. média móvel de 7 dias — tudo puro, sobre o array já ordenado
+ * asc. `dias` de entrada pode vir em qualquer ordem (a RPC devolve desc).
+ */
+export function comMetricas(diasBrutos: DiaFaturamento[]): DiaComMetricas[] {
+  const asc = preencherLacunas(diasBrutos);
+  let acc = 0;
+  return asc.map((d, i) => {
+    acc += d.bruto;
+    const anterior = i > 0 ? asc[i - 1] : null;
+    const variacaoDiaAnterior = anterior && anterior.bruto > 0 ? ((d.bruto - anterior.bruto) / anterior.bruto) * 100 : null;
+
+    const janela = asc.slice(Math.max(0, i - 7), i); // 7 dias ANTERIORES a este, sem incluir hoje
+    const media7d = janela.length ? janela.reduce((a, x) => a + x.bruto, 0) / janela.length : null;
+    const vsMedia7d = media7d && media7d > 0 ? ((d.bruto - media7d) / media7d) * 100 : null;
+
+    return { ...d, acumulado: acc, variacaoDiaAnterior, media7d, vsMedia7d };
+  });
 }
 
 export interface ResumoFaturamento {

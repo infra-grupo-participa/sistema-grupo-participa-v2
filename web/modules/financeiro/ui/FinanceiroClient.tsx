@@ -105,6 +105,13 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
 
   const acoes = useMemo(() => (board ? agruparPorAcao(board.cards) : []), [board]);
 
+  // Rótulo legível do filtro ativo (nome da ação/canal) — o rodapé usa para
+  // deixar explícito que os totais são do recorte, não da carteira (problema 6).
+  const rotuloFiltroAtivo = useMemo(() => {
+    if (!acaoAtiva) return null;
+    return acoes.find((a) => a.chave === acaoAtiva)?.nome ?? null;
+  }, [acoes, acaoAtiva]);
+
   const cardsFiltrados: CardComEfeito[] = useMemo(() => {
     if (!board) return [];
     if (!acaoAtiva) return board.cards;
@@ -175,7 +182,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               <TimelineAcoes acoes={acoes} ativa={acaoAtiva} onSelecionar={setAcaoAtiva} />
             </div>
             <BoardView colunas={colunasFiltradas} onOpen={setOpenId} />
-            <RodapeTotais totais={totaisFiltrados} totalCards={cardsFiltrados.length} />
+            <RodapeTotais totais={totaisFiltrados} totalCards={cardsFiltrados.length} filtroAtivo={rotuloFiltroAtivo} />
           </>
         )
       )}

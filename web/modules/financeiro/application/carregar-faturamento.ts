@@ -1,10 +1,13 @@
 // Caso de uso: faturamento diário (regime de caixa). fn_fin_faturamento_diario
 // inalterada — só reescrito sobre o caso de uso, mesmo contrato de antes.
-import { comAcumulado, resumirFaturamento, type DiaComAcumulado, type ResumoFaturamento } from '../domain/financeiro';
+// `dias` agora vem com lacunas preenchidas (dia sem lançamento = zero
+// explícito, não some da série) + variação dia-a-dia + média móvel 7d —
+// ver comMetricas() para a decisão de como tratar dias ausentes.
+import { comMetricas, resumirFaturamento, type DiaComMetricas, type ResumoFaturamento } from '../domain/financeiro';
 import type { FinanceiroRepository } from './ports';
 
 export interface FaturamentoCarregado {
-  dias: DiaComAcumulado[];
+  dias: DiaComMetricas[];
   resumo: ResumoFaturamento;
 }
 
@@ -14,5 +17,8 @@ export async function carregarFaturamento(
   hojeISO: string,
 ): Promise<FaturamentoCarregado> {
   const brutos = await repo.loadFaturamento(turma);
-  return { dias: comAcumulado(brutos), resumo: resumirFaturamento(brutos, hojeISO) };
+  // resumirFaturamento usa os dias BRUTOS (só os que têm lançamento) — "dias
+  // com lançamento" e "média por dia com lançamento" são leituras distintas
+  // da média móvel de 7 dias corridos usada na tabela.
+  return { dias: comMetricas(brutos), resumo: resumirFaturamento(brutos, hojeISO) };
 }

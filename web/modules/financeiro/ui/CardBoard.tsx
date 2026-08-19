@@ -3,6 +3,12 @@
 // Card individual do board — cor por status_financeiro (corDe), intensidade
 // por urgência (urgencia, 0–3). Efeito via .gp-card (halo/borda/dot), tokens
 // já definidos em globals.css — nenhum hex aqui.
+//
+// Redesign 2026-08-19 (squint test: o valor tem que saltar aos olhos, não o
+// e-mail). Composição: nome (destaque) · badge origem · valor grande e
+// dominante · tempo parado · selo de reserva. E-mail sai do card (LGPD +
+// ruído visual) — permanece na ficha (FichaDrawer). Estágio da ativação vira
+// `title` do card em vez de linha fixa — informação secundária, não estrutural.
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRLc, fmtData } from '@/shared/ui/format';
 import type { CardComEfeito } from '../application/carregar-board';
@@ -15,24 +21,49 @@ const TOM_CLASSE: Record<CardComEfeito['cor'], string> = {
   neutro: 'gp-card--neutro',
 };
 
+/** Badge de origem por tom semântico (info=HM, purple=AURUM) — mesma pessoa
+ *  pode ter 1 card por produto (ex.: Vania Thomaz: AURUM sem_tratativa + HM
+ *  quitado, valores distintos). Precisa saltar aos olhos para não parecer
+ *  duplicata — cor + peso maior que um badge neutro genérico. */
+const ORIGEM_CLASSE: Record<CardComEfeito['origem'], string> = {
+  HM: 'bg-[var(--info-subtle)] text-[var(--info)] border border-[var(--info-border)]',
+  AURUM: 'bg-[var(--purple-subtle)] text-[var(--purple)] border border-[var(--purple-border)]',
+};
+
+/** Faixa visual do tempo parado — calibrada pela distribuição real medida em
+ *  19/08 (305 cards: até 7d=114, 8–30d=131, 31–60d=44, nenhum acima de 60d).
+ *  Sem faixa "muito antigo": não existe caso real acima de 60 dias hoje. */
+function tomParado(dias: number): 'discreto' | 'atencao' | 'forte' {
+  if (dias <= 7) return 'discreto';
+  if (dias <= 30) return 'atencao';
+  return 'forte';
+}
+
+const TEXTO_PARADO: Record<ReturnType<typeof tomParado>, string> = {
+  discreto: 'text-[var(--fg-3)]',
+  atencao: 'text-[var(--yellow)]',
+  forte: 'text-[var(--red)]',
+};
+
 export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (id: string) => void }) {
   const { conta } = card;
+  const dias = card.diasNoEstagio;
+  const titleEstagio = conta.estagio_nome ? `Situação na ativação: ${conta.estagio_nome}` : undefined;
+
   return (
     <button
       type="button"
       onClick={() => onOpen(conta.contato_hm_id)}
       className={`gp-card ${TOM_CLASSE[card.cor]} gp-card--u${card.urgencia} w-full text-left p-3 cursor-pointer transition-transform duration-150 hover:-translate-y-0.5 focus-visible:ring-2`}
       aria-label={`Abrir ficha de ${conta.nome}`}
+      title={titleEstagio}
     >
       <div className="relative z-[1] flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="gp-card__dot" aria-hidden />
-            <span className="truncate text-[13px] font-semibold text-[var(--fg)]" title={conta.nome || undefined}>{conta.nome || '—'}</span>
-          </div>
-          <div className="mt-0.5 truncate text-[11px] text-[var(--fg-3)]" title={conta.email}>{conta.email}</div>
+        <div className="min-w-0 flex items-center gap-1.5">
+          <span className="gp-card__dot" aria-hidden />
+          <span className="truncate text-[13px] font-semibold text-[var(--fg)]" title={conta.nome || undefined}>{conta.nome || '—'}</span>
         </div>
-        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide rounded-[var(--r-sm)] px-1.5 py-0.5 bg-[var(--surface-3)] text-[var(--fg-3)]">
+        <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wide rounded-[var(--r-sm)] px-1.5 py-0.5 ${ORIGEM_CLASSE[card.origem]}`}>
           {card.origem}
         </span>
       </div>
@@ -48,14 +79,22 @@ export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (
         </div>
       )}
 
-      <div className="relative z-[1] mt-2 flex items-end justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-[10px] text-[var(--fg-3)]">Falta pagar</div>
-          <div className="text-[14px] font-bold tabular text-[var(--fg)]">
-            {conta.saldo_a_pagar == null ? '—' : fmtBRLc(conta.saldo_a_pagar)}
-          </div>
+      {/* Valor: elemento dominante do card (squint test) — fonte maior que
+          nome/badge/status, únicos números que precisam saltar aos olhos. */}
+      <div className="relative z-[1] mt-2">
+        <div className="text-[10px] text-[var(--fg-3)]">Falta pagar</div>
+        <div className="text-[20px] font-extrabold tabular leading-tight text-[var(--fg)]">
+          {conta.saldo_a_pagar == null ? '—' : fmtBRLc(conta.saldo_a_pagar)}
         </div>
-        <span className="shrink-0 text-[10px] font-medium text-[var(--fg-3)]">{statusLabel(conta.status_financeiro)}</span>
+      </div>
+
+      <div className="relative z-[1] mt-1.5 flex items-center justify-between gap-2">
+        <span className="text-[10px] font-medium text-[var(--fg-3)]">{statusLabel(conta.status_financeiro)}</span>
+        {dias != null && (
+          <span className={`shrink-0 text-[10px] font-semibold tabular ${TEXTO_PARADO[tomParado(dias)]}`}>
+            parado há {dias}d
+          </span>
+        )}
       </div>
 
       {(conta.dias_atraso ?? 0) > 0 ? (
@@ -65,12 +104,6 @@ export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (
       ) : conta.vencimento ? (
         <div className="relative z-[1] mt-1.5 text-[10px] tabular text-[var(--fg-3)]">vence {fmtData(conta.vencimento)}</div>
       ) : null}
-
-      {conta.estagio_nome && (
-        <div className="relative z-[1] mt-1.5 truncate text-[10px] text-[var(--fg-3)]" title={`Situação na ativação: ${conta.estagio_nome}`}>
-          <span className="opacity-60">ativação:</span> {conta.estagio_nome}
-        </div>
-      )}
     </button>
   );
 }

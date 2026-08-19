@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-  agrupar, contaMorta, ehReserva, filtrar, FILTROS_VAZIOS, mascararDoc, resumir,
+  agrupar, comMetricas, contaMorta, ehReserva, filtrar, FILTROS_VAZIOS, mascararDoc, preencherLacunas, resumir,
   saldoEfetivo, segundaMetadeCondicional, statusLabel,
 } from './financeiro';
-import type { ContaReceber, StatusFinanceiro } from './types';
+import type { ContaReceber, DiaFaturamento, StatusFinanceiro } from './types';
 
 function conta(over: Partial<ContaReceber> = {}): ContaReceber {
   return {
@@ -247,6 +247,101 @@ describe('statusLabel', () => {
     expect(statusLabel('a_vencer')).toBe('A vencer');
     expect(statusLabel('futuro')).toBe('Futuro');
     expect(statusLabel('xpto')).toBe('xpto');
+  });
+});
+
+function dia(over: Partial<DiaFaturamento> & { dia: string; bruto: number }): DiaFaturamento {
+  return {
+    lancamentos: 1, cliente_pagou: over.bruto, juros: 0, liquido: over.bruto, taxas: 0,
+    sinal: null, saldo: null, mensalidade: null, compra_cheia: null, ajuste: null, alunos: 1,
+    ...over,
+  };
+}
+
+describe('preencherLacunas', () => {
+  it('mantém a série intacta quando não há buraco', () => {
+    const r = preencherLacunas([dia({ dia: '2026-08-05', bruto: 100 }), dia({ dia: '2026-08-06', bruto: 200 })]);
+    expect(r.map((d) => [d.dia, d.bruto, d.preenchido])).toEqual([
+      ['2026-08-05', 100, false],
+      ['2026-08-06', 200, false],
+    ]);
+  });
+
+  it('preenche dia ausente entre o primeiro e o último com zero explícito (caso real: 04/08 e 08/08 faltando)', () => {
+    const r = preencherLacunas([
+      dia({ dia: '2026-08-03', bruto: 3820 }),
+      dia({ dia: '2026-08-05', bruto: 43676 }),
+      dia({ dia: '2026-08-06', bruto: 22150 }),
+      dia({ dia: '2026-08-07', bruto: 999 }),
+      dia({ dia: '2026-08-09', bruto: 13242 }),
+    ]);
+    expect(r.map((d) => d.dia)).toEqual([
+      '2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07', '2026-08-08', '2026-08-09',
+    ]);
+    const d04 = r.find((d) => d.dia === '2026-08-04')!;
+    expect(d04.preenchido).toBe(true);
+    expect(d04.bruto).toBe(0);
+    expect(d04.lancamentos).toBe(0);
+    const d08 = r.find((d) => d.dia === '2026-08-08')!;
+    expect(d08.preenchido).toBe(true);
+  });
+
+  it('lista vazia devolve vazia (não inventa dia)', () => {
+    expect(preencherLacunas([])).toEqual([]);
+  });
+
+  it('entrada fora de ordem é normalizada asc', () => {
+    const r = preencherLacunas([dia({ dia: '2026-08-06', bruto: 20 }), dia({ dia: '2026-08-05', bruto: 10 })]);
+    expect(r.map((d) => d.dia)).toEqual(['2026-08-05', '2026-08-06']);
+  });
+});
+
+describe('comMetricas', () => {
+  it('dia ausente (preenchido=0) DERRUBA a média móvel de 7 dias — não pode ser ignorado', () => {
+    // 7 dias a 100 seguidos por 1 buraco (dia 8, ausente) então dia 9 com 100:
+    // média7d do dia 9 deve considerar o zero do dia 8, não pular direto para 100 flat.
+    const dias: DiaFaturamento[] = [
+      dia({ dia: '2026-08-01', bruto: 100 }),
+      dia({ dia: '2026-08-02', bruto: 100 }),
+      dia({ dia: '2026-08-03', bruto: 100 }),
+      dia({ dia: '2026-08-04', bruto: 100 }),
+      dia({ dia: '2026-08-05', bruto: 100 }),
+      dia({ dia: '2026-08-06', bruto: 100 }),
+      dia({ dia: '2026-08-07', bruto: 100 }),
+      // 08/08 ausente — vira 0 explícito
+      dia({ dia: '2026-08-09', bruto: 100 }),
+    ];
+    const r = comMetricas(dias);
+    const dia09 = r.find((d) => d.dia === '2026-08-09')!;
+    // janela dos 7 dias anteriores ao dia 9: 02..08 = [100,100,100,100,100,100,0] → média = 600/7 ≈ 85,71
+    // Se o buraco fosse ignorado (dia 08 nunca existisse na série), a janela seria
+    // [100,100,100,100,100,100,100] = média 100 — a diferença de ~14,3 pontos É o preço
+    // de deixar a média mentir para cima. O teste prova que o zero explícito entra na conta.
+    expect(dia09.media7d).toBeCloseTo(600 / 7, 5);
+    expect(dia09.media7d).not.toBeCloseTo(100, 0);
+    const dia08Preenchido = r.find((d) => d.dia === '2026-08-08')!;
+    expect(dia08Preenchido.preenchido).toBe(true);
+    expect(dia08Preenchido.bruto).toBe(0);
+    // vsMedia7d do dia 08 (bruto 0) vs média dos 7 dias anteriores (todos 100) deve ser -100%
+    expect(dia08Preenchido.vsMedia7d).toBeCloseTo(-100, 5);
+  });
+
+  it('variação vs. dia anterior: alta e queda em percentual', () => {
+    const r = comMetricas([dia({ dia: '2026-08-01', bruto: 100 }), dia({ dia: '2026-08-02', bruto: 150 }), dia({ dia: '2026-08-03', bruto: 75 })]);
+    expect(r[0].variacaoDiaAnterior).toBeNull(); // sem dia anterior
+    expect(r[1].variacaoDiaAnterior).toBeCloseTo(50, 5); // 100 → 150 = +50%
+    expect(r[2].variacaoDiaAnterior).toBeCloseTo(-50, 5); // 150 → 75 = -50%
+  });
+
+  it('acumulado soma do primeiro dia até o dia atual, incluindo dias preenchidos como zero', () => {
+    const r = comMetricas([dia({ dia: '2026-08-01', bruto: 100 }), dia({ dia: '2026-08-03', bruto: 50 })]);
+    expect(r.map((d) => d.acumulado)).toEqual([100, 100, 150]); // dia 02 preenchido não muda o acumulado
+  });
+
+  it('sem histórico suficiente, media7d e vsMedia7d ficam null', () => {
+    const r = comMetricas([dia({ dia: '2026-08-01', bruto: 100 })]);
+    expect(r[0].media7d).toBeNull();
+    expect(r[0].vsMedia7d).toBeNull();
   });
 });
 

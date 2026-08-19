@@ -105,6 +105,10 @@ export interface CardComEfeito {
   reserva: boolean;
   acaoNome: string | null;
   acaoData: string | null;
+  /** Dias parados no estágio atual (cs.vw_fin_board.dias_no_estagio) — sinal de
+   *  cobrança de posição pro comercial. Null = sem `entrou_estagio_em` gravado
+   *  (16 de 305 cards) — "não sabemos", nunca vira 0 no card. */
+  diasNoEstagio: number | null;
 }
 
 export const FAIXAS_FUNIL: { chave: FaixaFunil; rotulo: string }[] = [
@@ -151,6 +155,7 @@ export async function carregarBoard(
       reserva: ehReserva(conta),
       acaoNome: bruto.acao_nome,
       acaoData: bruto.acao_data,
+      diasNoEstagio: bruto.dias_no_estagio,
     };
   });
 
