@@ -18,7 +18,7 @@ import { DashboardAlunos } from './DashboardAlunos';
 import { AlunoDrawer } from './AlunoDrawer';
 import { NovoAlunoDrawer } from './NovoAlunoDrawer';
 import { exportarCsvAlunos, exportarExcelAlunos } from './alunos-export';
-import { sitTone, tel, turmaCombo } from './alunos-ui-shared';
+import { motivoSemVencimento, sitTone, tel, turmaCombo } from './alunos-ui-shared';
 import { AcessoHmClient } from './AcessoHmClient';
 import { loadHmContagem } from './acesso-hm-data';
 import { hmBadgeTotal } from '../domain/acesso-hm';
@@ -226,9 +226,17 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
                 <Td>{a.espaco_instrucao ? <EspacoBadge espaco={a.espaco_instrucao} /> : <span className="text-[var(--fg-3)]">—</span>}</Td>
                 <Td className="text-[var(--fg-2)] whitespace-nowrap">{turmaCombo(a) || <span className="text-[var(--fg-3)]">—</span>}</Td>
                 <Td className="whitespace-nowrap">
-                  {a.data_expiracao
-                    ? <div><span className="text-[var(--fg-2)]">{fmtData(a.data_expiracao)}</span>{sit && <div className="mt-0.5"><Badge tone={sitTone(sit.cls)} dot>{sit.label}</Badge></div>}</div>
-                    : <span className="text-[var(--fg-3)]">—</span>}
+                  {/* Sem data, o status ainda tem de aparecer: sócio herda o prazo do
+                      titular e a base pré-Hotmart nunca teve ano — nos dois casos o
+                      badge é a única resposta para "está em dia ou vencido?". */}
+                  <div>
+                    {a.data_expiracao
+                      ? <span className="text-[var(--fg-2)]">{fmtData(a.data_expiracao)}</span>
+                      : <span className="text-[var(--fg-3)]">{motivoSemVencimento(a) || '—'}</span>}
+                    {sit
+                      ? <div className="mt-0.5"><Badge tone={sitTone(sit.cls)} dot>{sit.label}</Badge></div>
+                      : a.status_acesso_central && <div className="mt-0.5"><Badge tone="neutral" dot>{a.status_acesso_central}</Badge></div>}
+                  </div>
                 </Td>
               </Tr>
             );

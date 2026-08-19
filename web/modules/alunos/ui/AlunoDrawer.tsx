@@ -24,7 +24,7 @@ import { SecTitle, SubTitle, Section, Row } from './alunos-ui-bits';
 
 // Liga a aba "Curso" quando a integração real de desempenho existir (hoje só há mock zerado).
 const CURSO_TAB_ATIVA = false as boolean;
-import { sitTone, tel } from './alunos-ui-shared';
+import { motivoSemVencimento, sitTone, tel } from './alunos-ui-shared';
 
 export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSaved }: {
   a: Aluno360;
@@ -127,7 +127,7 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
                 })()}
                 <Row k="Turma" v={a.turma_codigo || '—'} />
                 <Row k="Renovações" v={a.num_renovacoes == null ? '—' : String(a.num_renovacoes)} />
-                <Row k="Vencimento" v={fmtData(a.data_expiracao)} />
+                <Row k="Vencimento" v={a.data_expiracao ? fmtData(a.data_expiracao) : (motivoSemVencimento(a) || (a.situacao_acesso === 'acompanha_titular' ? 'Acompanha titular' : '—'))} />
                 <Row k="Entrou no THB" v={a.data_entrada_thb ? fmtData(a.data_entrada_thb) : '—'} />
                 <Row k="Data da compra" v={fmtData(a.data_compra_importada)} />
                 {a.tempo_acesso && <Row k="Tempo de acesso" v={a.tempo_acesso} />}
@@ -166,7 +166,7 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
               <SubTitle>Vigência</SubTitle>
               <Row k="Regra de acesso" v={a.regra_acesso} />
               <Row k="Tempo de acesso" v={a.tempo_acesso} />
-              <Row k="Vencimento" v={fmtData(a.data_expiracao)} />
+              <Row k="Vencimento" v={a.data_expiracao ? fmtData(a.data_expiracao) : (motivoSemVencimento(a) || (a.situacao_acesso === 'acompanha_titular' ? 'Acompanha titular' : '—'))} />
               {(a.mes_expiracao || a.ano_expiracao) && <Row k="Mês/Ano expiração" v={[a.mes_expiracao, a.ano_expiracao].filter(Boolean).join('/')} />}
               <Row k="Entrou no THB" v={a.data_entrada_thb ? fmtData(a.data_entrada_thb) : '—'} />
               <Row k="Data da compra" v={fmtData(a.data_compra_importada)} />
@@ -242,7 +242,7 @@ function HeroResumo({ a, sit }: { a: Aluno360; sit: { label: string; cls: string
       </MiniStat>
       <MiniStat label="Acesso" i={1}>{st?.label || sit?.label || '—'}</MiniStat>
       <MiniStat label="Turma · Vencimento" tone={vencTone} i={2}>
-        <span className="tabular">{(a.turma_codigo || '—') + (a.data_expiracao ? ` · ${fmtData(a.data_expiracao)}` : '')}</span>
+        <span className="tabular">{(a.turma_codigo || '—') + (a.data_expiracao ? ` · ${fmtData(a.data_expiracao)}` : (motivoSemVencimento(a) ? ` · ${motivoSemVencimento(a)}` : ''))}</span>
       </MiniStat>
       <MiniStat label="Hotmart" i={3}>{hotmart || '—'}</MiniStat>
     </div>

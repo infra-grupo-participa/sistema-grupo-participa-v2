@@ -7,7 +7,7 @@ import { ESPACO_LABEL, ESPACO_COLOR, SITUACAO } from '../domain/aluno-360';
 import { Card, SectionTitle, Button, Input, Modal, MultiSelect, Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtData } from '@/shared/ui/format';
-import { sitTone, turmaCombo } from './alunos-ui-shared';
+import { motivoSemVencimento, sitTone, turmaCombo } from './alunos-ui-shared';
 
 // Coage valor de filtro para array (visões salvas no formato antigo eram string única).
 const asArr = (v: unknown): string[] => (Array.isArray(v) ? (v as string[]) : typeof v === 'string' && v ? [v] : []);
@@ -229,9 +229,17 @@ function ListaDoCard({ pessoas, onAbrirAluno }: { pessoas: Aluno360[]; onAbrirAl
                 </Td>
                 <Td className="text-[var(--fg-2)] whitespace-nowrap">{turmaCombo(a) || <span className="text-[var(--fg-3)]">—</span>}</Td>
                 <Td className="whitespace-nowrap">
-                  {a.data_expiracao
-                    ? <div><span className="text-[var(--fg-2)]">{fmtData(a.data_expiracao)}</span>{sit && <div className="mt-0.5"><Badge tone={sitTone(sit.cls)} dot>{sit.label}</Badge></div>}</div>
-                    : <span className="text-[var(--fg-3)]">—</span>}
+                  {/* Sem data, o status ainda tem de aparecer: sócio herda o prazo do
+                      titular e a base pré-Hotmart nunca teve ano — nos dois casos o
+                      badge é a única resposta para "está em dia ou vencido?". */}
+                  <div>
+                    {a.data_expiracao
+                      ? <span className="text-[var(--fg-2)]">{fmtData(a.data_expiracao)}</span>
+                      : <span className="text-[var(--fg-3)]">{motivoSemVencimento(a) || '—'}</span>}
+                    {sit
+                      ? <div className="mt-0.5"><Badge tone={sitTone(sit.cls)} dot>{sit.label}</Badge></div>
+                      : a.status_acesso_central && <div className="mt-0.5"><Badge tone="neutral" dot>{a.status_acesso_central}</Badge></div>}
+                  </div>
                 </Td>
               </Tr>
             );
