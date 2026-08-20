@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   type Aluno360,
   ESPACO_LABEL,
+  parseInstrucao,
   SITUACAO,
   STATUS_ACESSO,
   RENOVACAO_LABEL,
@@ -24,15 +25,19 @@ import { SecTitle, SubTitle, Section, Row } from './alunos-ui-bits';
 
 // Liga a aba "Curso" quando a integração real de desempenho existir (hoje só há mock zerado).
 const CURSO_TAB_ATIVA = false as boolean;
-import { motivoSemVencimento, sitTone, tel } from './alunos-ui-shared';
+import { motivoSemVencimento, sitTone, tel, vinculoSocio, type VinculoSocio } from './alunos-ui-shared';
 
-export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClose, onSaved }: {
+export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggleEdit, onClose, onAbrirAluno, onSaved }: {
   a: Aluno360;
   turmas: Turma[];
+  /** Base carregada, usada para ligar o sócio ao titular e vice-versa. */
+  alunos?: Aluno360[];
   canEdit: boolean;
   editMode: boolean;
   onToggleEdit: () => void;
   onClose: () => void;
+  /** Troca a ficha aberta — usado para pular do sócio para o titular e de volta. */
+  onAbrirAluno?: (id: string) => void;
   onSaved: (msg: string) => void;
 }) {
   const [placaHist, setPlacaHist] = useState<PlacaHistorico | null>(null);
@@ -53,6 +58,8 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
   }, [a.id]);
   const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
   const espaco = ESPACO_LABEL[a.espaco_instrucao || ''] || null;
+  const instr = parseInstrucao(a);
+  const vinculo = useMemo(() => vinculoSocio(a, alunos), [a, alunos]);
 
   return (
     <Drawer
@@ -65,8 +72,14 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
             {sit && <Badge tone={sitTone(sit.cls)} dot>{sit.label}</Badge>}
             {a.nivel_resultado && <NivelBadge nivel={a.nivel_resultado} />}
             {(a.cidade || a.estado) && <Badge>{[a.cidade, a.estado].filter(Boolean).join(' · ')}</Badge>}
-            {espaco && <Badge tone="info">{espaco}</Badge>}
-            {a.eh_socio && <Badge tone="accent">Sócio</Badge>}
+            {instr ? <Badge dotColor={instr.cor}>{instr.label}</Badge> : espaco && <Badge tone="info">{espaco}</Badge>}
+            {/* Ser sócio só é útil junto com "de quem" — o badge sozinho obrigava a caçar o titular. */}
+            {instr?.ehSocio && (vinculo.titularNome
+              ? <Badge tone="accent">Sócio de {vinculo.titularNome}</Badge>
+              : <span title="Marcado como sócio, mas sem titular no cadastro"><Badge tone="warning">Sócio · titular não informado</Badge></span>)}
+            {!instr?.ehSocio && vinculo.socios.length > 0 && (
+              <Badge tone="accent">{vinculo.socios.length === 1 ? '1 sócio' : `${vinculo.socios.length} sócios`}</Badge>
+            )}
           </>
         ) : undefined
       }
@@ -156,8 +169,9 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
               <Row k="Oferta" v={a.oferta} />
               <Row k="Tipo de oferta" v={a.tipo_oferta} />
               <Row k="Origem de acesso" v={a.origem_acesso} />
-              <Row k="Instrução" v={a.instrucao} />
+              <Row k="Instrução" v={instr ? instr.label : a.instrucao} />
               <Row k="Espaço de instrução" v={espaco} />
+              <VinculoSocios a={a} vinculo={vinculo} onAbrirAluno={onAbrirAluno} />
               <SubTitle>Programa</SubTitle>
               <Row k="Nível de resultado" v={nivelLabel(a.nivel_resultado) || '—'} />
               <Row k="Turma THB" v={a.turma_codigo} />
@@ -213,6 +227,63 @@ export function AlunoDrawer({ a, turmas, canEdit, editMode, onToggleEdit, onClos
         </div>
       )}
     </Drawer>
+  );
+}
+
+/**
+ * Sociedade: de quem a pessoa é sócia, ou quem são os sócios dela.
+ *
+ * Só o `eh_socio` não resolve nada na operação — a pergunta real é "sócio de
+ * quem?". Quando o titular está na base, o nome vira botão e a ficha dele abre
+ * no lugar desta; quando não está (titular fora da Central, por exemplo), o nome
+ * aparece como texto, porque saber o nome já responde a pergunta.
+ */
+function VinculoSocios({ a, vinculo, onAbrirAluno }: {
+  a: Aluno360;
+  vinculo: VinculoSocio;
+  onAbrirAluno?: (id: string) => void;
+}) {
+  const { titular, titularNome, socios } = vinculo;
+  const ehSocio = Boolean(a.eh_socio) || Boolean(titularNome);
+
+  const link = (nome: string | null, id?: string) => {
+    const texto = nome || 'Sem nome';
+    if (!id || !onAbrirAluno) return <span className="text-sm text-[var(--fg)]">{texto}</span>;
+    return (
+      <button
+        type="button"
+        onClick={() => onAbrirAluno(id)}
+        className="inline-flex items-center gap-1 text-sm text-[var(--accent)] hover:underline text-right"
+      >
+        {texto}<Icon name="arrow-up-right" size={11} />
+      </button>
+    );
+  };
+
+  if (ehSocio) {
+    return (
+      <div className="flex justify-between gap-3 py-1 border-b border-[var(--border-faint)]">
+        <span className="text-xs text-[var(--fg-3)]">Sócio de</span>
+        <span className="text-right">
+          {titularNome
+            ? link(titularNome, titular?.id)
+            : <span className="text-sm text-[var(--yellow)]">Titular não informado</span>}
+          {titularNome && !titular && (
+            <div className="text-[11px] text-[var(--fg-3)]">titular não está na base carregada</div>
+          )}
+        </span>
+      </div>
+    );
+  }
+
+  if (!socios.length) return null;
+  return (
+    <div className="flex justify-between gap-3 py-1 border-b border-[var(--border-faint)]">
+      <span className="text-xs text-[var(--fg-3)]">{socios.length === 1 ? 'Sócio' : `Sócios (${socios.length})`}</span>
+      <span className="flex flex-col items-end gap-0.5">
+        {socios.map((s) => <span key={s.id}>{link(s.nome, s.id)}</span>)}
+      </span>
+    </div>
   );
 }
 

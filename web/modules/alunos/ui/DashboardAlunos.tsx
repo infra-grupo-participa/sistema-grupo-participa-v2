@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { applyDashFilters, computeAlunosMetrics, computeTurmaEspacoMatrix, type DashFiltros, type DashView, type Distribuicao, type AnoEspaco } from '../domain/metrics';
 import type { Aluno360 } from '../domain/aluno-360';
-import { ESPACO_LABEL, ESPACO_COLOR, SITUACAO } from '../domain/aluno-360';
+import { ESPACO_LABEL, SITUACAO } from '../domain/aluno-360';
 import { Card, SectionTitle, Button, Input, Modal, MultiSelect, Badge, NivelBadge, DataTable, Thead, Th, Tr, Td, EmptyState } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtData } from '@/shared/ui/format';
 import { motivoSemVencimento, sitTone, turmaCombo } from './alunos-ui-shared';
+import { InstrucaoBadge } from './alunos-ui-bits';
 
 // Coage valor de filtro para array (visões salvas no formato antigo eram string única).
 const asArr = (v: unknown): string[] => (Array.isArray(v) ? (v as string[]) : typeof v === 'string' && v ? [v] : []);
@@ -188,7 +189,8 @@ function ListaDoCard({ pessoas, onAbrirAluno }: { pessoas: Aluno360[]; onAbrirAl
     const q = busca.trim().toLowerCase();
     if (!q) return pessoas;
     return pessoas.filter((a) =>
-      [a.nome, a.email, a.turma_codigo, a.turma_aurum_codigo, a.cidade, a.estado, a.profissao]
+      // `socio_de_nome` entra na busca para achar todos os sócios de um titular pelo nome dele.
+      [a.nome, a.email, a.turma_codigo, a.turma_aurum_codigo, a.cidade, a.estado, a.profissao, a.instrucao, a.socio_de_nome]
         .filter(Boolean).join(' ').toLowerCase().includes(q),
     );
   }, [pessoas, busca]);
@@ -207,7 +209,7 @@ function ListaDoCard({ pessoas, onAbrirAluno }: { pessoas: Aluno360[]; onAbrirAl
           <Th>Aluno</Th>
           <Th>Nível</Th>
           <Th>Profissão</Th>
-          <Th>Espaço</Th>
+          <Th>Instrução</Th>
           <Th>Turma</Th>
           <Th>Vencimento</Th>
         </Thead>
@@ -223,9 +225,14 @@ function ListaDoCard({ pessoas, onAbrirAluno }: { pessoas: Aluno360[]; onAbrirAl
                 <Td><NivelBadge nivel={a.nivel_resultado} /></Td>
                 <Td className="text-[var(--fg-2)]">{a.profissao || <span className="text-[var(--fg-3)]">—</span>}</Td>
                 <Td>
-                  {a.espaco_instrucao
-                    ? <Badge dotColor={ESPACO_COLOR[a.espaco_instrucao] || 'var(--nivel-base)'}>{ESPACO_LABEL[a.espaco_instrucao] || a.espaco_instrucao}</Badge>
-                    : <span className="text-[var(--fg-3)]">—</span>}
+                  {/* Espaço mostrava só o grupo: mil pessoas como "Holding Masters", sem
+                      separar titular de sócio. A instrução responde as duas coisas. */}
+                  <InstrucaoBadge a={a} />
+                  {a.eh_socio && a.socio_de_nome && (
+                    <div className="text-[11px] text-[var(--fg-3)] mt-0.5 truncate max-w-[190px]" title={`Sócio de ${a.socio_de_nome}`}>
+                      de {a.socio_de_nome}
+                    </div>
+                  )}
                 </Td>
                 <Td className="text-[var(--fg-2)] whitespace-nowrap">{turmaCombo(a) || <span className="text-[var(--fg-3)]">—</span>}</Td>
                 <Td className="whitespace-nowrap">

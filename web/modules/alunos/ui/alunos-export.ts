@@ -1,6 +1,6 @@
 // Exportação da lista filtrada de alunos (CSV e Excel compartilham as colunas).
 
-import { type Aluno360, ESPACO_LABEL, SITUACAO } from '../domain/aluno-360';
+import { type Aluno360, ESPACO_LABEL, SITUACAO, instrucaoCanonica } from '../domain/aluno-360';
 import { nivelLabel } from '@/shared/domain/nivel-resultado';
 
 const EXPORT_COLS: [string, (a: Aluno360) => unknown][] = [
@@ -11,11 +11,13 @@ const EXPORT_COLS: [string, (a: Aluno360) => unknown][] = [
   ['Profissão', (a) => a.profissao],
   ['Nível', (a) => nivelLabel(a.nivel_resultado)],
   ['Espaço de instrução', (a) => ESPACO_LABEL[a.espaco_instrucao || ''] || ''],
+  ['Instrução', (a) => instrucaoCanonica(a) || ''],
   ['Turma THB', (a) => a.turma_codigo],
   ['Turma Aurum', (a) => a.turma_aurum_codigo],
   ['Cidade', (a) => a.cidade],
   ['Estado', (a) => a.estado],
   ['Papel', (a) => (a.eh_socio ? 'Sócio' : 'Titular')],
+  ['Sócio de (titular)', (a) => a.socio_de_nome || ''],
   ['Situação de acesso', (a) => (a.situacao_acesso ? SITUACAO[a.situacao_acesso]?.label || a.situacao_acesso : '')],
   ['Vencimento', (a) => a.data_expiracao],
   ['HT', (a) => (a.tem_ht ? 'Sim' : '')],

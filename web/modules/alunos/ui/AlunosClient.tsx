@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   type Aluno360,
   ESPACO_LABEL,
-  ESPACO_COLOR,
+  INSTRUCOES,
   NRANK,
   SITUACAO,
+  instrucaoCanonica,
+  parseInstrucao,
   searchHaystack,
 } from '../domain/aluno-360';
 import { nivelOptions } from '@/shared/domain/nivel-resultado';
@@ -19,22 +21,20 @@ import { AlunoDrawer } from './AlunoDrawer';
 import { NovoAlunoDrawer } from './NovoAlunoDrawer';
 import { exportarCsvAlunos, exportarExcelAlunos } from './alunos-export';
 import { motivoSemVencimento, sitTone, tel, turmaCombo } from './alunos-ui-shared';
+import { InstrucaoBadge } from './alunos-ui-bits';
 import { AcessoHmClient } from './AcessoHmClient';
 import { loadHmContagem } from './acesso-hm-data';
 import { hmBadgeTotal } from '../domain/acesso-hm';
 
 type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento';
-interface Filtros { status: string[]; espaco: string[]; nivel: string[]; jornada: string[]; papel: string[]; turma: string[]; estado: string[]; anoEntrada: string[] }
-const FILTROS_VAZIO: Filtros = { status: [], espaco: [], nivel: [], jornada: [], papel: [], turma: [], estado: [], anoEntrada: [] };
+interface Filtros { status: string[]; espaco: string[]; instrucao: string[]; nivel: string[]; jornada: string[]; papel: string[]; turma: string[]; estado: string[]; anoEntrada: string[] }
+const FILTROS_VAZIO: Filtros = { status: [], espaco: [], instrucao: [], nivel: [], jornada: [], papel: [], turma: [], estado: [], anoEntrada: [] };
 
 /** Valor do filtro de ano para quem não tem data de entrada registrada. */
 const SEM_DATA = '__sem_data__';
 
-function EspacoBadge({ espaco }: { espaco: string }) {
-  const label = ESPACO_LABEL[espaco];
-  if (!label) return <span className="text-[var(--fg-2)]">{espaco}</span>;
-  return <Badge dotColor={ESPACO_COLOR[espaco] || 'var(--nivel-base)'}>{label}</Badge>;
-}
+/** Ordem de exibição das instruções: nível crescente, titular antes do sócio. */
+const INSTRUCAO_RANK: Record<string, number> = Object.fromEntries(INSTRUCOES.map((v, i) => [v, i]));
 
 /** Texto com botão de copiar — não propaga o clique para a linha. */
 function CopyText({ value, display }: { value: string; display?: string }) {
@@ -102,6 +102,9 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
       // cobrança, não status de acesso. A planilha é a fonte; a tela não inventa rótulo.
       if (f.status.length && !f.status.includes(String(a.status_acesso_central ?? '').trim())) return false;
       if (f.espaco.length && !f.espaco.includes(a.espaco_instrucao || '')) return false;
+      // Instrução é o recorte fino do espaço: separa nível E papel na mesma escolha
+      // ("AURUM - SÓCIO"), que o par espaço + papel só consegue com dois filtros.
+      if (f.instrucao.length && !f.instrucao.includes(instrucaoCanonica(a) || '')) return false;
       if (f.nivel.length && !f.nivel.includes(a.nivel_resultado || '')) return false;
       // Papel é só titular ou sócio. "Aurum" saiu daqui: não é papel, é espaço de
       // instrução, e já tem filtro próprio — deixar nos dois lugares fazia a mesma
@@ -127,8 +130,11 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
         return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
       }
       if (sortCol === 'instrucao') {
-        const cmp = (ESPACO_LABEL[a.espaco_instrucao || ''] || '￿').localeCompare(ESPACO_LABEL[b.espaco_instrucao || ''] || '￿', 'pt-BR');
-        return sortDir === 'asc' ? cmp : -cmp;
+        // Pela hierarquia (THB → Diamante Vermelho, titular antes do sócio), não alfabético.
+        const ra = INSTRUCAO_RANK[instrucaoCanonica(a) || ''] ?? 99;
+        const rb = INSTRUCAO_RANK[instrucaoCanonica(b) || ''] ?? 99;
+        if (ra !== rb) return sortDir === 'asc' ? ra - rb : rb - ra;
+        return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
       }
       if (sortCol === 'turma') {
         const cmp = (turmaCombo(a) || '￿').localeCompare(turmaCombo(b) || '￿', 'pt-BR', { numeric: true });
@@ -166,6 +172,16 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
   // que o EspacoBadge já faz na tabela, pra tela e filtro não divergirem.
   const espacoOpts = useMemo(() => distintos(alunos.map((a) => a.espaco_instrucao))
     .sort((a, b) => (ESPACO_LABEL[a] || a).localeCompare(ESPACO_LABEL[b] || b, 'pt-BR')), [alunos]);
+
+  // Instrução: só as que existem na base, na ordem da hierarquia.
+  const instrucaoOpts = useMemo(() => {
+    const presentes = new Set(alunos.map((a) => instrucaoCanonica(a)).filter(Boolean) as string[]);
+    return INSTRUCOES.filter((i) => presentes.has(i));
+  }, [alunos]);
+  const instrucaoLabel = useCallback((v: string) => {
+    const i = parseInstrucao({ instrucao: v, espaco_instrucao: null, eh_socio: null });
+    return i ? i.label : v;
+  }, []);
 
   // Nível: ordenado pela hierarquia (NRANK), não alfabético.
   const NIVEL_LABEL = useMemo(() => Object.fromEntries(nivelOptions().map((x) => [x.id, x.label])) as Record<string, string>, []);
@@ -234,6 +250,7 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
         <SearchInput value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, e-mail, documento, cidade…" />
         <MultiSelect values={filtros.turma} onChange={(v) => setFiltros((f) => ({ ...f, turma: v }))} placeholder="Todas as turmas" options={turmaOpts.map((t) => ({ value: t, label: t }))} />
         <MultiSelect values={filtros.espaco} onChange={(v) => setFiltros((f) => ({ ...f, espaco: v }))} placeholder="Todos os espaços" options={espacoOpts.map((k) => ({ value: k, label: ESPACO_LABEL[k] || k }))} />
+        <MultiSelect values={filtros.instrucao} onChange={(v) => setFiltros((f) => ({ ...f, instrucao: v }))} placeholder="Todas as instruções" options={instrucaoOpts.map((k) => ({ value: k, label: instrucaoLabel(k) }))} />
         <MultiSelect values={filtros.papel} onChange={(v) => setFiltros((f) => ({ ...f, papel: v }))} placeholder="Titular / Sócio" options={[{ value: 'titular', label: 'Titular' }, { value: 'socio', label: 'Sócio' }]} />
         <MultiSelect values={filtros.estado} onChange={(v) => setFiltros((f) => ({ ...f, estado: v }))} placeholder="Todos os estados" options={estadoOpts.map((e) => ({ value: e, label: e }))} />
         <MultiSelect values={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={nivelOpts.map((k) => ({ value: k, label: NIVEL_LABEL[k] || k }))} />
@@ -257,7 +274,7 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
           <Thx sortable active={sortCol === 'nome'} dir={sortDir} onClick={sortBtn('nome')}>Aluno</Thx>
           <Thx sortable active={sortCol === 'nivel'} dir={sortDir} onClick={sortBtn('nivel')}>Nível</Thx>
           <Thx>Profissão</Thx>
-          <Thx sortable active={sortCol === 'instrucao'} dir={sortDir} onClick={sortBtn('instrucao')}>Espaço</Thx>
+          <Thx sortable active={sortCol === 'instrucao'} dir={sortDir} onClick={sortBtn('instrucao')}>Instrução</Thx>
           <Thx sortable active={sortCol === 'turma'} dir={sortDir} onClick={sortBtn('turma')}>Turma</Thx>
           <Thx sortable active={sortCol === 'vencimento'} dir={sortDir} onClick={sortBtn('vencimento')}>Vencimento</Thx>
         </Thead>
@@ -276,7 +293,14 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
                 </Td>
                 <Td><NivelBadge nivel={a.nivel_resultado} /></Td>
                 <Td className="text-[var(--fg-2)]">{a.profissao || <span className="text-[var(--fg-3)]">—</span>}</Td>
-                <Td>{a.espaco_instrucao ? <EspacoBadge espaco={a.espaco_instrucao} /> : <span className="text-[var(--fg-3)]">—</span>}</Td>
+                <Td>
+                  <InstrucaoBadge a={a} />
+                  {a.eh_socio && a.socio_de_nome && (
+                    <div className="text-[11px] text-[var(--fg-3)] mt-0.5 truncate max-w-[190px]" title={`Sócio de ${a.socio_de_nome}`}>
+                      de {a.socio_de_nome}
+                    </div>
+                  )}
+                </Td>
                 <Td className="text-[var(--fg-2)] whitespace-nowrap">{turmaCombo(a) || <span className="text-[var(--fg-3)]">—</span>}</Td>
                 <Td className="whitespace-nowrap">
                   {/* Sem data, o status ainda tem de aparecer: sócio herda o prazo do
@@ -319,10 +343,12 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
         <AlunoDrawer
           a={selected}
           turmas={turmas}
+          alunos={alunos}
           canEdit={canEditBase}
           editMode={editMode}
           onToggleEdit={() => setEditMode((e) => !e)}
           onClose={() => { setSelectedId(null); setEditMode(false); }}
+          onAbrirAluno={(id) => { setSelectedId(id); setEditMode(false); }}
           onSaved={async (msg) => { flash(msg); setEditMode(false); await reload(); }}
         />
       )}

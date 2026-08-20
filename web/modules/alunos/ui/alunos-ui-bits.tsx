@@ -1,6 +1,24 @@
 // Blocos visuais da ficha do aluno — compartilhados entre leitura (AlunoDrawer) e edição (AlunoForm).
 
 import { Icon } from '@/shared/ui/icons';
+import { Badge } from '@/shared/ui/components';
+import { parseInstrucao, type Aluno360 } from '../domain/aluno-360';
+
+/**
+ * Instrução do aluno: nível E papel na mesma etiqueta (`Aurum · sócio`).
+ *
+ * Existe porque o badge de espaço mostra só o grupo — mais de mil pessoas
+ * aparecendo como "Holding Masters", sem dizer quem é titular e quem é sócio.
+ * Quem está sem `instrucao` cai no espaço, e aí o rótulo ganha "~" para deixar
+ * claro que aquele nível foi inferido, não lido do cadastro.
+ */
+export function InstrucaoBadge({ a }: { a: Pick<Aluno360, 'instrucao' | 'espaco_instrucao' | 'eh_socio'> }) {
+  const i = parseInstrucao(a);
+  if (!i) return <span className="text-[var(--fg-3)]">—</span>;
+  const badge = <Badge dotColor={i.cor}>{i.inferido ? `~${i.label}` : i.label}</Badge>;
+  if (!i.inferido) return badge;
+  return <span title="Nível inferido do espaço de instrução — este cadastro está sem instrução">{badge}</span>;
+}
 
 /** Cabeçalho de seção com ícone de acento (linguagem do card de Placas). */
 export function SecTitle({ icon, children }: { icon: string; children: React.ReactNode }) {

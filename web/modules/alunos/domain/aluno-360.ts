@@ -30,6 +30,12 @@ export interface Aluno360 {
   placa_aurum: string | null;
   espaco_instrucao: string | null;
   eh_socio: boolean | null;
+  /** Nome do titular de quem esta pessoa é sócia (texto, vem da Central). */
+  socio_de_nome: string | null;
+  /** Vínculo forte com o titular. Nem todo sócio tem — parte da base só tem o nome. */
+  socio_de_aluno_id: string | null;
+  /** Quantos sócios este titular tem cadastrados. */
+  num_socios: number | null;
   situacao_acesso: string | null;
   situacao_financeira: string | null;
   status_acesso: string | null;
@@ -125,6 +131,105 @@ export const ESPACO_CLS: Record<string, string> = {
   platina: 'green',
   mastermind_diamante: 'purple',
   diamante_vermelho: 'red',
+};
+
+// ── Instrução ──
+// O espaço de instrução diz só o GRUPO ("Holding Masters" para mais de mil pessoas).
+// A instrução é o dado fino: o mesmo grupo, separado por nível E por papel
+// (titular × sócio). São 5 níveis × 2 papéis = as 10 instruções da Central.
+// Valores reais de thb_alunos.instrucao, em CAIXA ALTA e com o sufixo " - SÓCIO".
+
+/** Nível da instrução, sem o papel. Ordenado do menor para o maior. */
+export const INSTRUCAO_NIVEIS = ['THB', 'PLATINA', 'AURUM', 'DIAMANTE', 'DIAMANTE VERMELHO'] as const;
+export type InstrucaoNivel = (typeof INSTRUCAO_NIVEIS)[number];
+
+/** As 10 instruções, na ordem em que fazem sentido numa legenda. */
+export const INSTRUCOES: string[] = INSTRUCAO_NIVEIS.flatMap((n) => [n, `${n} - SÓCIO`]);
+
+const INSTRUCAO_NIVEL_LABEL: Record<InstrucaoNivel, string> = {
+  'THB': 'THB',
+  'PLATINA': 'Platina',
+  'AURUM': 'Aurum',
+  'DIAMANTE': 'Diamante',
+  'DIAMANTE VERMELHO': 'Diamante Vermelho',
+};
+
+/** Cor por nível de instrução — mesma paleta dos espaços, para não criar um segundo código de cores. */
+const INSTRUCAO_NIVEL_COLOR: Record<InstrucaoNivel, string> = {
+  'THB': 'var(--nivel-platina)',
+  'PLATINA': 'var(--green)',
+  'AURUM': 'var(--nivel-ouro)',
+  'DIAMANTE': 'var(--nivel-diamante)',
+  'DIAMANTE VERMELHO': 'var(--nivel-diamante-vermelho)',
+};
+
+/** Espaço de instrução → nível, para quem está sem `instrucao` preenchida. */
+const ESPACO_PARA_NIVEL: Record<string, InstrucaoNivel> = {
+  holding_masters: 'THB',
+  platina: 'PLATINA',
+  aurum: 'AURUM',
+  mastermind_diamante: 'DIAMANTE',
+  diamante_vermelho: 'DIAMANTE VERMELHO',
+};
+
+export interface InstrucaoInfo {
+  /** Nível sem o papel, em caixa alta (`AURUM`). */
+  nivel: InstrucaoNivel;
+  /** Rótulo de tela já com o papel (`Aurum · sócio`). */
+  label: string;
+  /** Rótulo do nível sozinho (`Aurum`). */
+  nivelLabel: string;
+  ehSocio: boolean;
+  cor: string;
+  /** `true` quando o nível saiu do espaço de instrução, e não do campo `instrucao`. */
+  inferido: boolean;
+}
+
+/**
+ * Lê a instrução de um aluno.
+ *
+ * Cerca de 100 registros estão com `instrucao` vazia (quase todos fora da Central).
+ * Para esses, o nível é inferido do espaço de instrução e o papel do `eh_socio`,
+ * e o resultado vem marcado com `inferido: true` — quem exibe decide se sinaliza.
+ * Devolve `null` só quando não há nem instrução nem espaço.
+ */
+export function parseInstrucao(a: Pick<Aluno360, 'instrucao' | 'espaco_instrucao' | 'eh_socio'>): InstrucaoInfo | null {
+  const bruto = (a.instrucao || '').trim().toUpperCase();
+  let nivel: InstrucaoNivel | null = null;
+  let ehSocio = false;
+  let inferido = false;
+
+  if (bruto) {
+    // O sufixo pode vir com hífen ou travessão, com ou sem acento — normaliza antes de cortar.
+    const semSufixo = bruto.replace(/\s*[-–—]\s*S[ÓO]CIOS?\s*$/, '').trim();
+    ehSocio = semSufixo !== bruto;
+    nivel = (INSTRUCAO_NIVEIS as readonly string[]).includes(semSufixo) ? (semSufixo as InstrucaoNivel) : null;
+  }
+  if (!nivel) {
+    nivel = ESPACO_PARA_NIVEL[a.espaco_instrucao || ''] ?? null;
+    if (!nivel) return null;
+    inferido = true;
+    ehSocio = Boolean(a.eh_socio);
+  }
+  // `eh_socio` é o campo booleano canônico; se ele disser sócio, vale, mesmo que o
+  // texto da instrução não tenha o sufixo (acontece em cadastro manual).
+  if (a.eh_socio) ehSocio = true;
+
+  const nivelLabel = INSTRUCAO_NIVEL_LABEL[nivel];
+  return {
+    nivel,
+    nivelLabel,
+    label: ehSocio ? `${nivelLabel} · sócio` : nivelLabel,
+    ehSocio,
+    cor: INSTRUCAO_NIVEL_COLOR[nivel],
+    inferido,
+  };
+}
+
+/** Valor canônico da instrução (`AURUM - SÓCIO`), para filtro e exportação. */
+export const instrucaoCanonica = (a: Pick<Aluno360, 'instrucao' | 'espaco_instrucao' | 'eh_socio'>): string | null => {
+  const i = parseInstrucao(a);
+  return i ? (i.ehSocio ? `${i.nivel} - SÓCIO` : i.nivel) : null;
 };
 
 // ── Renovação por faixa de turma ──
