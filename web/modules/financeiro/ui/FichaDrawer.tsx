@@ -10,6 +10,7 @@ import { Icon } from '@/shared/ui/icons';
 import { fmtBRLc, fmtData, fmtDesde } from '@/shared/ui/format';
 import type { ContaReceber, Cobranca, InteracaoAtivacao } from '../domain/types';
 import { contaMorta, mascararDoc, statusLabel } from '../domain/financeiro';
+import { labelMotivoReuniao } from '../domain/reuniao';
 import { statusCompraLabel, statusTone, TONE_BADGE } from './cor';
 import type { FinanceiroRepository } from '../application/ports';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
@@ -38,6 +39,47 @@ function tituloInteracao(it: InteracaoAtivacao): React.ReactNode {
     );
   }
   return it.descricao || '—';
+}
+
+// F8 (0307/0308 no repo da esteira: "Reunião Finalizada exige prazo de
+// pagamento") — o que foi combinado na reunião + responsável comercial.
+// `vendedor` já aparece em "Dados pessoais" acima, repetido aqui no rodapé
+// da seção para o contexto ficar junto do combinado. Estendido em produção
+// pelo coordenador (2026-08-20): cs.vw_fin_board/fn_fin_board agora
+// projetam reuniao_resultado + os 4 campos da trilha A/B — todos REAIS em
+// ContaReceber agora (sem cast), mapeados em
+// application/carregar-board.ts:cardBoardParaContaReceber. `obs_comercial`
+// (campo DIFERENTE de intencao_pagamento_obs) continua sem fonte na RPC —
+// fica null, não confundir os dois. Seção INTEIRA some quando não há nada
+// para mostrar — não poluir 100% das fichas com um bloco vazio.
+//
+// Rótulos pt-BR do motivo (trilha B): FONTE ÚNICA em ../domain/reuniao.ts,
+// consumida também por CardBoard.tsx (chip/tooltip) — achado do
+// fable-orchestrator, 2026-08-21: o mapa vivia só aqui, e o chip do board
+// mostrava o valor cru.
+function SecaoCombinadoComercial({ conta }: { conta: ContaReceber }) {
+  const prometeu = conta.intencao_pagamento === 'vai_pagar';
+  const naoPrometeu = !prometeu && !!conta.reuniao_motivo_tipo;
+  const temAlgo = !!conta.reuniao_resultado || !!conta.obs_comercial || prometeu || naoPrometeu;
+  if (!temAlgo) return null;
+
+  return (
+    <section>
+      <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">
+        Combinado na reunião
+      </h3>
+      <Row k="Resultado da reunião" v={conta.reuniao_resultado} />
+      {(prometeu || naoPrometeu) && (
+        <Row k="Trilha" v={prometeu ? 'Prometeu pagar' : 'Não prometeu pagar'} />
+      )}
+      {naoPrometeu && <Row k="Motivo" v={labelMotivoReuniao(conta.reuniao_motivo_tipo)} />}
+      {naoPrometeu && conta.reuniao_retomar_em && (
+        <Row k="Comercial retoma em" v={fmtData(conta.reuniao_retomar_em)} />
+      )}
+      <Row k="Observação do comercial" v={conta.intencao_pagamento_obs || conta.obs_comercial} />
+      <Row k="Responsável comercial" v={conta.vendedor} />
+    </section>
+  );
 }
 
 export function FichaDrawer({ conta, repo, canEdit, canVerDoc, onClose, onAcordoSalvo }: {
@@ -107,6 +149,7 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, onClose, onAcordo
             <Row k="Vendedor" v={conta.vendedor} />
             <Row k="Situação na ativação" v={conta.estagio_nome} />
           </section>
+          <SecaoCombinadoComercial conta={conta} />
           <section>
             <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Por que ainda não pagou</h3>
             <Row k="Pacote" v={conta.pacote != null ? fmtBRLc(conta.pacote) : '—'} />

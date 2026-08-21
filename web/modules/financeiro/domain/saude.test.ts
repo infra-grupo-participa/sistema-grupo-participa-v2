@@ -13,6 +13,8 @@ function conta(over: Partial<ContaReceber> = {}): ContaReceber {
     produto: 'Holding Masters',
     vendedor: null, reuniao_em: null, reuniao_resultado: null,
     entrevista_em: null, entrevista_resultado: null, obs_comercial: null,
+    intencao_pagamento: null, intencao_pagamento_obs: null,
+    reuniao_motivo_tipo: null, reuniao_retomar_em: null,
     solicitou_cancelamento: false,
     sinal_bruto: 300, sinal_liquido: 287, sinal_taxas: 13,
     sinal_pago_em: '2026-07-01', sinal_metodo: 'PIX', sinal_transacao: 'TX1',

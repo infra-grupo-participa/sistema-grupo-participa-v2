@@ -215,7 +215,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               <TimelineAcoes acoes={acoes} ativa={acaoAtiva} onSelecionar={setAcaoAtiva} />
             </div>
             <LegendaCores existeNeutro={existeNeutro} />
-            <BoardView colunas={colunasFiltradas} onOpen={setOpenId} />
+            <BoardView colunas={colunasFiltradas} cards={cardsFiltrados} hojeISO={hojeISO} onOpen={setOpenId} />
             <RodapeTotais
               totais={totaisFiltrados}
               totalCards={cardsFiltrados.length}

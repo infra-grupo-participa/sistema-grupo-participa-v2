@@ -14,6 +14,12 @@ import type { FinanceiroRepository } from './ports';
  * já calculava, só não repassava); os demais campos ausentes no board
  * (acordo, parcelas, tags…) entram como null/0 — "não sei", nunca um valor
  * inventado. Ficam completos só na ficha (fn_fin_ficha, 1 card por vez).
+ *
+ * ATUALIZADO 2026-08-20: reuniao_resultado/intencao_pagamento/
+ * intencao_pagamento_obs/reuniao_motivo_tipo/reuniao_retomar_em (desfecho da
+ * reunião, F6/F7/F8) agora vêm REAIS da RPC — mapeados 1:1 do `c`, não mais
+ * fixados em null. `obs_comercial` continua sem fonte (ver comentário no
+ * corpo abaixo) — é campo DIFERENTE de intencao_pagamento_obs.
  */
 export function cardBoardParaContaReceber(c: CardBoard): ContaReceber {
   return {
@@ -37,11 +43,22 @@ export function cardBoardParaContaReceber(c: CardBoard): ContaReceber {
     estagio_id: null,
     produto: c.produto,
     vendedor: c.vendedor,
+    // reuniao_em/entrevista_em/entrevista_resultado seguem sem fonte na RPC
+    // do board (null) — a extensão de 2026-08-20 só trouxe o DESFECHO
+    // (reuniao_resultado + os 4 campos da trilha A/B abaixo), não a data
+    // bruta da reunião nem o bloco de entrevista.
     reuniao_em: null,
-    reuniao_resultado: null,
+    reuniao_resultado: c.reuniao_resultado,
     entrevista_em: null,
     entrevista_resultado: null,
+    // obs_comercial CONTINUA sem fonte na RPC — não confundir com
+    // intencao_pagamento_obs (a observação do desfecho da reunião, essa sim
+    // real agora). Ver nota em CardBoard/ContaReceber (domain/types.ts).
     obs_comercial: null,
+    intencao_pagamento: c.intencao_pagamento,
+    intencao_pagamento_obs: c.intencao_pagamento_obs,
+    reuniao_motivo_tipo: c.reuniao_motivo_tipo,
+    reuniao_retomar_em: c.reuniao_retomar_em,
     solicitou_cancelamento: c.solicitou_cancelamento,
     sinal_bruto: c.sinal_bruto,
     sinal_liquido: null,

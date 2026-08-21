@@ -52,6 +52,19 @@ export interface ContaReceber {
   entrevista_em: string | null;
   entrevista_resultado: string | null;
   obs_comercial: string | null;
+  // Desfecho da reunião (F6/F7/F8, 0307/0308 — mesma extensão de 2026-08-20
+  // documentada em CardBoard, abaixo). `intencao_pagamento_obs` é OUTRO campo
+  // que `obs_comercial` acima — não confundir: obs_comercial segue sem fonte
+  // na RPC do board (fica null via cardBoardParaContaReceber).
+  /** Declaração comercial do desfecho — trilha [A] quando 'vai_pagar'. */
+  intencao_pagamento: 'vai_pagar' | 'indeciso' | 'nao_vai_pagar' | null;
+  /** A observação do que foi combinado na reunião. */
+  intencao_pagamento_obs: string | null;
+  /** Motivo categorizado da trilha [B] (não prometeu pagar) — lista fechada. */
+  reuniao_motivo_tipo: string | null;
+  /** Data em que o comercial disse que retoma o contato (trilha B). Não é
+   *  vencimento — não entra em cobrança. */
+  reuniao_retomar_em: string | null;
 
   /** Caiu no kanban de cancelamento (estágio 28) OU tem timestamp de cancelamento. */
   solicitou_cancelamento: boolean;
@@ -308,6 +321,14 @@ export type FaixaFunil = 'sem_tratativa' | 'em_negociacao' | 'acordo_em_curso' |
  * de divergência da entrega; a migration local nesta pasta ainda precisa ser
  * sincronizada pelo backend-engineer com o SQL efetivamente aplicado).
  *
+ * ATUALIZADO 2026-08-20 (coordenador): cs.vw_fin_board/fn_fin_board ganharam
+ * 5 colunas NOVAS ao final do returns table (reuniao_resultado/
+ * intencao_pagamento/intencao_pagamento_obs/reuniao_motivo_tipo/
+ * reuniao_retomar_em) — desfecho da reunião comercial (0307/0308 no repo da
+ * esteira). Migration local ainda não sincronizada (mesma dívida do
+ * parágrafo acima); confiar no relato do coordenador até a migration
+ * aparecer nesta pasta.
+ *
  * Ainda mais enxuto que ContaReceber (fn_fin_contas_receber, o "razão") em:
  * ultima_cobranca_em/cobrancas_total/remarcacoes — custo medido dessas
  * subqueries na RPC legada (ver comentário de 20260819d_fn_fin_board.sql).
@@ -368,4 +389,30 @@ export interface CardBoard {
    *  pagamento do sinal não caiu em nenhuma janela conhecida (133 de 305 cards). */
   acao_nome: string | null;
   acao_data: string | null;
+  // ── Desfecho da reunião (F6/F7/F8, 0307/0308 no repo da esteira) ────────────
+  // Estendido em produção (coordenador, 2026-08-20): cs.vw_fin_board e
+  // fn_fin_board agora projetam estas 5 colunas AO FINAL do returns table —
+  // ordem posicional importa, não reordenar. Custo medido: zero (81,8 ms /
+  // 14.335 buffers, 1 buffer A MENOS que antes — o join com contatos_hm já
+  // existia, são colunas de projeção pura, sem novo JOIN).
+  /** Resultado categórico da reunião comercial (ex.: "Realizada"). 165 de N
+   *  cards já trazem valor (medido 2026-08-20). */
+  reuniao_resultado: string | null;
+  /** Declaração comercial do desfecho — trilha [A] quando 'vai_pagar'. NÃO é
+   *  dado de pagamento (irmã de `acordo`). */
+  intencao_pagamento: 'vai_pagar' | 'indeciso' | 'nao_vai_pagar' | null;
+  /** A observação do que foi combinado na reunião — DIFERENTE de
+   *  `obs_comercial` (ContaReceber): aquele é outro campo, sem fonte na RPC
+   *  do board (mapeado como null em cardBoardParaContaReceber). Não confundir
+   *  os dois. 20 cards já trazem valor (medido 2026-08-20). */
+  intencao_pagamento_obs: string | null;
+  /** Motivo categorizado da trilha [B] (não prometeu pagar) — lista fechada,
+   *  mesmos 5 valores de lib/reuniao-motivos.ts no repo da esteira (NÃO
+   *  importar de lá — repos separados, duplicar 5 strings é aceitável).
+   *  0 cards hoje (coluna nova da 0307, preenche daqui pra frente). */
+  reuniao_motivo_tipo: string | null;
+  /** Data em que o comercial disse que retoma o contato — só preenchida na
+   *  trilha [B]. Informativo para o financeiro; NÃO é vencimento e não entra
+   *  em cobrança (decisão do Marcio: só quem prometeu pagar entra na fila). */
+  reuniao_retomar_em: string | null;
 }
