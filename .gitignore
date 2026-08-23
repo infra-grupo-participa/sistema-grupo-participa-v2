@@ -78,3 +78,7 @@ infra/tools/
 .mcp.json
 infra/supabase/.temp/
 infra/supabase/supabase/
+
+# Scratchpad da squad de agentes — dossiê de trabalho, nunca versionar.
+# (Carrega número financeiro e relatório de pentest, e este repo deploya sozinho no push.)
+tmp/
