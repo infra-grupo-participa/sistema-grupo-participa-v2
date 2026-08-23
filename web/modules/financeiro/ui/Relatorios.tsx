@@ -4,10 +4,11 @@
 // A MESMA tabela renderizada aqui é o que vai para o papel — print CSS de
 // globals.css cuida de tema claro/paginação; nada de componente exclusivo pra impressão.
 import { useMemo, useState } from 'react';
-import { Button, Checkbox, DataTable, EmptyState, SectionCard, Td, Th, Thead, Toolbar, Tr, useFlash, Toast } from '@/shared/ui/components';
+import { Badge, Button, Checkbox, DataTable, EmptyState, SectionCard, Td, Th, Thead, Toolbar, Tr, useFlash, Toast } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import type { ContaReceber } from '../domain/types';
 import { COLUNAS_PADRAO, COLUNAS_RELATORIO, montarRelatorio } from '../application/montar-relatorio';
+import { statusTone } from './cor';
 import { exportarXLSX, exportarPDF, formatarCelulaTela } from './exportar';
 
 export function Relatorios({ contas, turma, canVerDoc }: { contas: ContaReceber[]; turma: string | null; canVerDoc: boolean }) {
@@ -18,6 +19,16 @@ export function Relatorios({ contas, turma, canVerDoc }: { contas: ContaReceber[
   const dataset = useMemo(
     () => montarRelatorio(contas, selecionadas, { canVerDoc }),
     [contas, selecionadas, canVerDoc],
+  );
+
+  // `dataset` guarda só o rótulo (statusLabel) — application não formata cor,
+  // é camada de apresentação (mesma regra de montar-relatorio.ts). Mapa por
+  // contato_hm_id (== linha.chave) para achar o status_financeiro cru na hora
+  // de escolher o tom do Badge, sem mudar o formato do dataset (o export
+  // XLSX/PDF continua recebendo string pura de formatarCelulaTela).
+  const statusPorLinha = useMemo(
+    () => new Map(contas.map((c) => [c.contato_hm_id, c.status_financeiro])),
+    [contas],
   );
 
   const toggle = (key: string) =>
@@ -67,7 +78,13 @@ export function Relatorios({ contas, turma, canVerDoc }: { contas: ContaReceber[
               <Tr key={linha.chave}>
                 {dataset.colunas.map((c) => (
                   <Td key={c.key} className={c.tipo === 'moeda' || c.tipo === 'numero' ? 'tabular' : undefined}>
-                    {formatarCelulaTela(c, linha.valores[c.key])}
+                    {c.key === 'status' ? (
+                      <Badge tone={statusTone(statusPorLinha.get(linha.chave) ?? '')}>
+                        {formatarCelulaTela(c, linha.valores[c.key])}
+                      </Badge>
+                    ) : (
+                      formatarCelulaTela(c, linha.valores[c.key])
+                    )}
                   </Td>
                 ))}
               </Tr>

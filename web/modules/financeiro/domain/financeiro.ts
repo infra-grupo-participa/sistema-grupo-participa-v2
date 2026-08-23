@@ -4,26 +4,19 @@
 import type { ContaReceber, DiaFaturamento, StatusFinanceiro } from './types';
 import { SEGUNDA_METADE, TOLERANCIA_CENTAVOS } from './hm-modelo';
 
-type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
-
-export const STATUS_META: Record<StatusFinanceiro, { label: string; tone: Tone }> = {
-  reembolsado: { label: 'Reembolsado', tone: 'danger' },
-  cancelado: { label: 'Cancelado', tone: 'danger' },
-  cancelamento_solicitado: { label: 'Pediu cancelamento', tone: 'warning' },
-  quitado: { label: 'Quitado', tone: 'success' },
-  em_pagamento: { label: 'Em pagamento', tone: 'info' },
-  vencido: { label: 'Vencido', tone: 'danger' },
-  a_vencer: { label: 'A vencer', tone: 'accent' },
-  futuro: { label: 'Futuro', tone: 'info' },
-  incalculavel: { label: 'A calcular', tone: 'warning' },
-  oferta_enviada: { label: 'Oferta enviada', tone: 'info' },
-  sem_acordo: { label: 'Sem acordo', tone: 'neutral' },
+export const STATUS_META: Record<StatusFinanceiro, { label: string }> = {
+  reembolsado: { label: 'Reembolsado' },
+  cancelado: { label: 'Cancelado' },
+  cancelamento_solicitado: { label: 'Pediu cancelamento' },
+  quitado: { label: 'Quitado' },
+  em_pagamento: { label: 'Em pagamento' },
+  vencido: { label: 'Vencido' },
+  a_vencer: { label: 'A vencer' },
+  futuro: { label: 'Futuro' },
+  incalculavel: { label: 'A calcular' },
+  oferta_enviada: { label: 'Oferta enviada' },
+  sem_acordo: { label: 'Sem acordo' },
 };
-
-export const STATUS_ORDEM: StatusFinanceiro[] = [
-  'vencido', 'sem_acordo', 'oferta_enviada', 'incalculavel', 'a_vencer', 'futuro', 'em_pagamento',
-  'quitado', 'cancelamento_solicitado', 'cancelado', 'reembolsado',
-];
 
 /** Máscara LGPD do documento: mantém os 4 últimos dígitos. Igual a mascarar() do auth. */
 export function mascararDoc(doc: string | null, podeVer: boolean): string {
@@ -52,9 +45,6 @@ export function formaPagamentoLabel(metodo: string | null | undefined): string {
 
 export function statusLabel(s: string): string {
   return STATUS_META[s as StatusFinanceiro]?.label ?? s;
-}
-export function statusTone(s: string): Tone {
-  return STATUS_META[s as StatusFinanceiro]?.tone ?? 'neutral';
 }
 
 /**

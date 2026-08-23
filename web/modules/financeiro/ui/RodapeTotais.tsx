@@ -78,7 +78,10 @@ export function RodapeTotais({ totais, totalCards, produtoAtivo, filtroAtivo }: 
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--fg-3)]">
           {totais.semValorDefinido > 0 && (
             <span>
-              <strong className="text-[var(--yellow)] font-semibold">{totais.semValorDefinido}</strong> conta(s) sem valor definido — fora dos 4 totais (não é zero, é &quot;não sabemos&quot;)
+              {/* --info, não --yellow: "sem valor definido" cobre incalculavel/sem_acordo,
+                  que na gramática de CorStatus são AZUL (em negociação). --yellow agora
+                  significa "vencido" — manter amarelo aqui seria a 6ª divergência no dia 1. */}
+              <strong className="text-[var(--info)] font-semibold">{totais.semValorDefinido}</strong> conta(s) sem valor definido — fora dos 4 totais (não é zero, é &quot;não sabemos&quot;)
             </span>
           )}
           {totais.segundaMetade.parceiros > 0 && (

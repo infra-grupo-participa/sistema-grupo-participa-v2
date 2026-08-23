@@ -9,7 +9,8 @@ import {
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRLc, fmtData, fmtDesde } from '@/shared/ui/format';
 import type { ContaReceber, Cobranca, InteracaoAtivacao } from '../domain/types';
-import { contaMorta, mascararDoc, statusLabel, statusTone } from '../domain/financeiro';
+import { contaMorta, mascararDoc, statusLabel } from '../domain/financeiro';
+import { statusCompraLabel, statusTone, TONE_BADGE } from './cor';
 import type { FinanceiroRepository } from '../application/ports';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
 
@@ -161,7 +162,14 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, onClose, onAcordo
                     v={
                       <span>
                         {c.bruto != null ? fmtBRLc(c.bruto) : '—'}{' '}
-                        <Badge tone={c.pago ? 'success' : c.pendente ? 'warning' : c.morto ? 'danger' : 'neutral'}>{c.status}</Badge>
+                        {/* Tom deriva do MESMO vocabulário do card/ficha (TONE_BADGE), não
+                            mais decidido aqui. `morto` funde vencido/cancelado/estornado na
+                            origem (CompraHistorico.morto) — sai vermelho mesmo quando era só
+                            um boleto vencido; imprecisão conhecida, documentada no plano
+                            (CONFLITO 3), não separada no cliente sem migration. */}
+                        <Badge tone={c.pago ? TONE_BADGE.verde : c.pendente ? TONE_BADGE.azul : c.morto ? TONE_BADGE.vermelho : TONE_BADGE.neutro}>
+                          {statusCompraLabel(c.status)}
+                        </Badge>
                       </span>
                     }
                   />

@@ -13,6 +13,7 @@ import { carregarFaturamento, type FaturamentoCarregado } from '../application/c
 import { listarOfertas } from '../application/gerenciar-ofertas';
 import { agruparPorAcao, SEM_ACAO, TimelineAcoes } from './TimelineAcoes';
 import { ProdutoTabs, type ProdutoChave } from './ProdutoTabs';
+import { LegendaCores } from './LegendaCores';
 import { BoardView } from './BoardView';
 import { RodapeTotais } from './RodapeTotais';
 import { FichaDrawer } from './FichaDrawer';
@@ -167,6 +168,11 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // os 4 totais têm que falar SÓ do recorte da aba ativa.
   const totaisFiltrados = useMemo(() => recalcularTotais(contasFiltradas), [contasFiltradas]);
 
+  // Sobre o board INTEIRO (não o recorte filtrado) — a legenda é dicionário,
+  // não resumo do que está visível; a 5ª entrada é o alarme de drift, e um
+  // filtro que esconde o card neutro não pode apagar o alarme.
+  const existeNeutro = useMemo(() => (board?.cards ?? []).some((c) => c.cor === 'neutro'), [board]);
+
   const aberta = openId ? board?.cards.find((c) => c.conta.contato_hm_id === openId)?.conta ?? null : null;
 
   const turmaAtual = turmas.find((t) => t.turma === turma);
@@ -208,6 +214,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <div className="mb-3">
               <TimelineAcoes acoes={acoes} ativa={acaoAtiva} onSelecionar={setAcaoAtiva} />
             </div>
+            <LegendaCores existeNeutro={existeNeutro} />
             <BoardView colunas={colunasFiltradas} onOpen={setOpenId} />
             <RodapeTotais
               totais={totaisFiltrados}

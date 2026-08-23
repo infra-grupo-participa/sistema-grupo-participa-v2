@@ -1,7 +1,8 @@
 // Caso de uso: carregar o board de cards + totais do rodapé + timeline de ações.
 // Importa só domain + o port do repository — nunca Supabase direto.
 import type { CardBoard, ContaReceber, FaixaFunil, ReguaPasso } from '../domain/types';
-import { corDe, faixaDe, urgencia, type FaixaChave } from '../domain/board';
+import { motivoUrgencia, urgencia } from '../domain/board';
+import { corStatus, type CorStatus } from '../domain/cor-status';
 import { ehReserva } from '../domain/financeiro';
 import { calcularTotais, type Totais } from '../domain/totais';
 import type { FinanceiroRepository } from './ports';
@@ -97,10 +98,11 @@ export interface CardComEfeito {
   origem: CardBoard['origem'];
   /** Coluna do board — estágio do funil comercial (vem do SQL, cs.vw_fin_board.faixa). */
   faixaFunil: FaixaFunil;
-  /** Visão alternativa — obstáculo de recebimento (domínio, testado). Usada como filtro extra. */
-  faixaObstaculo: FaixaChave;
-  cor: ReturnType<typeof corDe>;
+  cor: CorStatus;
   urgencia: 0 | 1 | 2 | 3;
+  /** Prosa da urgência acima — canal para aria-label/title (F6). Mesma bijeção
+   *  de urgencia(): null sse urgencia === 0. Nunca diverge dela (ver board.ts). */
+  motivoUrgencia: string | null;
   /** Pagou só o sinal (R$ 300), nada do saldo — esperado mais frágil, marca própria no card. */
   reserva: boolean;
   acaoNome: string | null;
@@ -149,9 +151,9 @@ export async function carregarBoard(
       conta,
       origem: bruto.origem,
       faixaFunil: bruto.faixa,
-      faixaObstaculo: faixaDe(conta),
-      cor: corDe(conta),
+      cor: corStatus(conta.status_financeiro),
       urgencia: urgencia(conta, regua, hojeISO),
+      motivoUrgencia: motivoUrgencia(conta, regua, hojeISO),
       reserva: ehReserva(conta),
       acaoNome: bruto.acao_nome,
       acaoData: bruto.acao_data,

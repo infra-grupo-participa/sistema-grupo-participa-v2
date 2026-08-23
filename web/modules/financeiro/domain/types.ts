@@ -296,12 +296,8 @@ export interface Acordo {
   parcelas: number | null;
 }
 
-/** As 5 faixas resolvidas pelo SQL (cs.vw_fin_board.faixa) — eixo de ESTÁGIO
- *  DO FUNIL comercial, distinto das 6 FAIXAS de ./board.ts (eixo de OBSTÁCULO
- *  DE RECEBIMENTO, testado, calculado a partir de status_financeiro). São
- *  dois eixos válidos e paralelos: a coluna do board financeiro usa esta
- *  (`faixa`, do banco); `faixaDe()` do domínio segue disponível como
- *  visão/filtro alternativo — nenhuma força a outra. */
+/** As 5 faixas resolvidas pelo SQL (cs.vw_fin_board.faixa) — estágio do funil
+ *  comercial. É a coluna do board financeiro. */
 export type FaixaFunil = 'sem_tratativa' | 'em_negociacao' | 'acordo_em_curso' | 'quitado' | 'em_risco';
 
 /**

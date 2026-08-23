@@ -1,6 +1,6 @@
 'use client';
 
-// Card individual do board — cor por status_financeiro (corDe), intensidade
+// Card individual do board — cor por status_financeiro (corStatus), intensidade
 // por urgência (urgencia, 0–3). Efeito via .gp-card (halo/borda/dot), tokens
 // já definidos em globals.css — nenhum hex aqui.
 //
@@ -15,24 +15,12 @@ import { ProgressBar } from '@/shared/ui/components';
 import { fmtBRLc, fmtRelativo } from '@/shared/ui/format';
 import type { CardComEfeito } from '../application/carregar-board';
 import { statusLabel } from '../domain/financeiro';
+import { CLASSE_CARD, TONE_BARRA } from './cor';
 
-const TOM_CLASSE: Record<CardComEfeito['cor'], string> = {
-  verde: 'gp-card--verde',
-  azul: 'gp-card--azul',
-  vermelho: 'gp-card--vermelho',
-  neutro: 'gp-card--neutro',
-};
-
-/** Tom da barra de progresso segue a mesma leitura semântica da cor do card
- *  (corDe) — quitado/em dia = verde, em acompanhamento = azul, vencido =
- *  vermelho, sem acordo/incalculável = neutro. Nunca âmbar: --accent é
- *  exclusivo de seleção/ação, não de status. */
-const TOM_BARRA: Record<CardComEfeito['cor'], 'green' | 'info' | 'red' | 'neutral'> = {
-  verde: 'green',
-  azul: 'info',
-  vermelho: 'red',
-  neutro: 'neutral',
-};
+// Classe do card e tom da barra de progresso vêm de ui/cor.ts — projeção
+// única de CorStatus (nenhum Record<> de cor nasce aqui). "Nunca âmbar"
+// continua valendo para --accent (exclusivo de seleção/ação); --yellow
+// agora É uma cor de status (vencido), não mais reservado.
 
 /** Badge de origem na temática de cada produto (decisão do Marcio, 19/08):
  *  HM laranja, AURUM dourado ("aurum" = ouro em latim). Mesmos tokens das abas
@@ -55,10 +43,22 @@ function tomParado(dias: number): 'discreto' | 'atencao' | 'forte' {
   return 'forte';
 }
 
+/** Marcador textual do limiar 7d/30d — não pode depender só de cor (leitor de
+ *  tela, print sem tinta). Título explícito é o que permite `forte` sair do
+ *  vermelho (que agora significa "cancelado") sem perder o sinal. */
+const LIMIAR_PARADO: Record<ReturnType<typeof tomParado>, string | null> = {
+  discreto: null,
+  atencao: 'acima de 7 dias',
+  forte: 'acima de 30 dias',
+};
+
+// `forte` sai de --red (agora reservado para "cancelado/reembolsado" na
+// gramática de CorStatus) e passa a --yellow — mesma família de "vencido",
+// que é semanticamente o que "parado há muito tempo" significa aqui.
 const TEXTO_PARADO: Record<ReturnType<typeof tomParado>, string> = {
   discreto: 'text-[var(--fg-4)]',
   atencao: 'text-[var(--yellow)]',
-  forte: 'text-[var(--red)]',
+  forte: 'text-[var(--yellow)]',
 };
 
 export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (id: string) => void }) {
@@ -82,10 +82,10 @@ export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (
     <button
       type="button"
       onClick={() => onOpen(conta.contato_hm_id)}
-      className={`gp-card ${TOM_CLASSE[card.cor]} gp-card--u${card.urgencia} w-full text-left p-4 cursor-pointer shadow-[var(--shadow-sm)] transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] focus-visible:ring-2`}
+      className={`gp-card ${CLASSE_CARD[card.cor]} gp-card--u${card.urgencia} w-full text-left p-4 cursor-pointer shadow-[var(--shadow-sm)] transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] focus-visible:ring-2`}
       aria-label={`Abrir ficha de ${conta.nome}, ${card.origem}, ${statusLabel(conta.status_financeiro)}${
         conta.saldo_a_pagar != null ? `, falta pagar ${fmtBRLc(conta.saldo_a_pagar)}` : ''
-      }`}
+      }${card.motivoUrgencia ? `, ${card.motivoUrgencia}` : ''}`}
       title={titleEstagio}
     >
       {/* Nível 1 — identidade: nome + origem. O badge de origem precisa
@@ -102,10 +102,14 @@ export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (
 
       {/* Reserva de vaga (só sinal pago): esperado mais frágil que saldo em
           curso — R$ 300 de um pacote de R$ 15.000. Marca própria, não some
-          do total (reserva ENTRA em esperado/naRua). */}
+          do total (reserva ENTRA em esperado/naRua). Chip NEUTRO de propósito:
+          --yellow agora é cor de status (vencido) — um card com barra-topo
+          verde/azul não pode carregar um segundo papel para o mesmo pigmento,
+          e o chip amarelo sobre --yellow-subtle reprovava contraste AA no
+          tema claro (4,14:1, medido em 2026-08-23). */}
       {card.reserva && (
         <div className="relative z-[1] mt-2">
-          <span className="inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--yellow-border)] bg-[var(--yellow-subtle)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--yellow)]">
+          <span className="inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-2)]">
             <Icon name="alert" size={10} /> Reserva de vaga
           </span>
         </div>
@@ -137,7 +141,15 @@ export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (
               )}
             </div>
             <div className="mt-1">
-              <ProgressBar value={Math.min(100, pct ?? 0)} tone={TOM_BARRA[card.cor]} height={5} />
+              <ProgressBar
+                value={Math.min(100, pct ?? 0)}
+                tone={TONE_BARRA[card.cor]}
+                height={5}
+                valueMin={0}
+                valueMax={conta.pacote ?? undefined}
+                valueNow={pago}
+                ariaLabel={`${fmtBRLc(pago)} de ${fmtBRLc(conta.pacote)} pagos`}
+              />
             </div>
           </div>
         ) : (
@@ -151,6 +163,10 @@ export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (
       <div className="relative z-[1] mt-3 pt-2 border-t border-[var(--border-faint)] space-y-1">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[10px] font-medium text-[var(--fg-3)]">{statusLabel(conta.status_financeiro)}</span>
+          {/* --red DE PROPÓSITO: não é cor de status do card (essa é CLASSE_CARD/
+              TONE_BARRA acima) — é o alarme pontual de prazo estourado. É o que
+              impede um card `em_pagamento` (verde) com atraso de parecer
+              resolvido. Não "corrigir" para amarelo — ver plano, CONFLITO 1. */}
           {emAtraso ? (
             <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--red)]">
               <Icon name="alert" size={11} /> {conta.dias_atraso}d em atraso
@@ -168,7 +184,11 @@ export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (
               {conta.vendedor ?? ''}
             </span>
             {dias != null && (
-              <span className={`shrink-0 text-[10px] font-semibold tabular ${TEXTO_PARADO[tomParado(dias)]}`}>
+              <span
+                className={`shrink-0 text-[10px] font-semibold tabular ${TEXTO_PARADO[tomParado(dias)]}`}
+                title={LIMIAR_PARADO[tomParado(dias)] ? `parado há ${dias} dias, ${LIMIAR_PARADO[tomParado(dias)]}` : undefined}
+                aria-label={LIMIAR_PARADO[tomParado(dias)] ? `parado há ${dias} dias, ${LIMIAR_PARADO[tomParado(dias)]}` : `parado há ${dias} dias`}
+              >
                 parado há {dias}d
               </span>
             )}

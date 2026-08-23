@@ -1,6 +1,8 @@
 import { nivelLabel, nivelNormalize } from '@/shared/domain/nivel-resultado';
 
-type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
+/** Vocabulário de tom do design system. Dono deste tipo — quem precisa de
+ *  Tone importa daqui em vez de redeclarar (ex.: modules/financeiro/ui/cor.ts). */
+export type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
 
 // Corporativo: chip neutro uniforme + ponto de status colorido (sem pílula colorida).
 const DOT: Record<Tone, string> = {

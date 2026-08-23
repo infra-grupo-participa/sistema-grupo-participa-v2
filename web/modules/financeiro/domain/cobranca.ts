@@ -7,15 +7,13 @@ import { contaMorta, saldoEfetivo } from './financeiro';
 
 export type AgingBucket = 'sem_prazo' | 'a_vencer' | 'd1_15' | 'd16_30' | 'd31_60' | 'd60_plus';
 
-type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
-
-export const AGING_META: Record<AgingBucket, { label: string; tone: Tone }> = {
-  sem_prazo: { label: 'Sem prazo', tone: 'neutral' },
-  a_vencer: { label: 'A vencer', tone: 'accent' },
-  d1_15: { label: '1–15 dias', tone: 'warning' },
-  d16_30: { label: '16–30 dias', tone: 'warning' },
-  d31_60: { label: '31–60 dias', tone: 'danger' },
-  d60_plus: { label: '60+ dias', tone: 'danger' },
+export const AGING_META: Record<AgingBucket, { label: string }> = {
+  sem_prazo: { label: 'Sem prazo' },
+  a_vencer: { label: 'A vencer' },
+  d1_15: { label: '1–15 dias' },
+  d16_30: { label: '16–30 dias' },
+  d31_60: { label: '31–60 dias' },
+  d60_plus: { label: '60+ dias' },
 };
 
 export const AGING_ORDEM: AgingBucket[] = ['a_vencer', 'd1_15', 'd16_30', 'd31_60', 'd60_plus', 'sem_prazo'];

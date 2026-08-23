@@ -260,18 +260,41 @@ body {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: linear-gradient(to bottom, var(--gp-card-tone-subtle, transparent) 0%, transparent 40%);
+  background: linear-gradient(to bottom, var(--gp-card-alerta-subtle, transparent) 0%, transparent 40%);
   opacity: 0;
 }
 
 .gp-card--verde { --gp-card-tone: var(--green); --gp-card-tone-subtle: var(--green-subtle); --gp-card-tone-border: var(--green-border); }
 .gp-card--azul { --gp-card-tone: var(--info); --gp-card-tone-subtle: var(--info-subtle); --gp-card-tone-border: var(--info-border); }
+.gp-card--amarelo { --gp-card-tone: var(--yellow); --gp-card-tone-subtle: var(--yellow-subtle); --gp-card-tone-border: var(--yellow-border); }
 .gp-card--vermelho { --gp-card-tone: var(--red); --gp-card-tone-subtle: var(--red-subtle); --gp-card-tone-border: var(--red-border); }
-/* Neutro não lava o card com cor nenhuma — reflete sem_acordo/incalculavel:
-   ausência de sinal, não sinal de baixa prioridade. Barra-topo fica no tom neutro do border-strong. */
+/* Neutro não lava o card com cor nenhuma. Desde 23/08/2026 ele NÃO é estado de negócio:
+   os 11 status conhecidos caem em verde/azul/amarelo/vermelho (ver domain/cor-status.ts).
+   Card neutro significa que o banco mandou um status que o front não conhece — é alarme
+   silencioso de drift, e é por isso que a legenda ganha a 5ª entrada quando ele aparece. */
 .gp-card--neutro { --gp-card-tone: var(--border-strong); --gp-card-tone-subtle: transparent; --gp-card-tone-border: var(--border); }
 
-.gp-card--verde::before, .gp-card--azul::before, .gp-card--vermelho::before, .gp-card--neutro::before {
+/* Identidade (o que é) x Atenção (o que fazer): --gp-card-tone pinta barra-topo e dot
+   estático — fato do status. --gp-card-alerta pinta halo, borda tonal (u2/u3) e o anel
+   de pulso (u3) — urgência. Default = a mesma família do tom; só o verde diverge, porque
+   `em_pagamento` (verde) pode estar atrasado e um halo verde pulsante lê como "tudo certo",
+   o oposto do que a urgência 2/3 significa. Decisão do arquiteto, 2026-08-23. */
+.gp-card--verde,
+.gp-card--azul,
+.gp-card--amarelo,
+.gp-card--vermelho,
+.gp-card--neutro {
+  --gp-card-alerta: var(--gp-card-tone);
+  --gp-card-alerta-subtle: var(--gp-card-tone-subtle);
+  --gp-card-alerta-border: var(--gp-card-tone-border);
+}
+.gp-card--verde {
+  --gp-card-alerta: var(--yellow);
+  --gp-card-alerta-subtle: var(--yellow-subtle);
+  --gp-card-alerta-border: var(--yellow-border);
+}
+
+.gp-card--verde::before, .gp-card--azul::before, .gp-card--amarelo::before, .gp-card--vermelho::before, .gp-card--neutro::before {
   background: var(--gp-card-tone);
 }
 
@@ -283,11 +306,11 @@ body {
 
 /* Urgência 2: halo + borda tonal (mais forte que a borda neutra padrão). */
 .gp-card--u2::after { opacity: 1; }
-.gp-card--u2 { border-color: var(--gp-card-tone-border); }
+.gp-card--u2 { border-color: var(--gp-card-alerta-border); }
 
 /* Urgência 3: halo + borda + dot pulsante — o mais urgente, coloração mais forte. */
 .gp-card--u3::after { opacity: 1; }
-.gp-card--u3 { border-color: var(--gp-card-tone-border); }
+.gp-card--u3 { border-color: var(--gp-card-alerta-border); }
 
 .gp-card__dot {
   position: relative;
@@ -303,7 +326,7 @@ body {
   position: absolute;
   inset: -4px;
   border-radius: var(--r-pill);
-  background: var(--gp-card-tone, var(--red));
+  background: var(--gp-card-alerta, var(--red));
   opacity: .55;
   animation: gp-card-pulse 1.6s ease-out infinite;
 }
@@ -367,6 +390,11 @@ body {
   .gp-card { box-shadow: none !important; }
   .gp-card::after { display: none; }
   .gp-card--u3 .gp-card__dot::before { animation: none; opacity: 0; }
+  /* Barra-topo é o único pigmento de status que sobra no papel (halo já
+     desligado acima) — força a cor a sobreviver quando "gráficos de fundo"
+     está ligado na impressão. Sem depender disso: o rótulo textual é o
+     canal garantido no papel independente dessa opção do usuário. */
+  .gp-card::before { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 
   a[href]::after { content: none; }
 }

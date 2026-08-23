@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { agruparPorFaixa, corDe, FAIXAS, faixaDe, urgencia } from './board';
+import { motivoUrgencia, urgencia } from './board';
 import type { ContaReceber, ReguaPasso, StatusFinanceiro } from './types';
 
 function conta(over: Partial<ContaReceber> = {}): ContaReceber {
@@ -39,85 +39,6 @@ const REGUA: ReguaPasso[] = [
   { ordem: 2, offset_dias: 0, titulo: 'Cobrar no vencimento', canal: 'whatsapp', ativo: true },
   { ordem: 3, offset_dias: 5, titulo: 'Cobrar 5 dias depois', canal: 'whatsapp', ativo: true },
 ];
-
-describe('faixaDe', () => {
-  it('sem_valor: status incalculavel', () => {
-    expect(faixaDe(conta({ status_financeiro: 'incalculavel' }))).toBe('sem_valor');
-  });
-
-  it('sem_acordo: status sem_acordo', () => {
-    expect(faixaDe(conta({ status_financeiro: 'sem_acordo' }))).toBe('sem_acordo');
-  });
-
-  it('oferta_enviada: status oferta_enviada', () => {
-    expect(faixaDe(conta({ status_financeiro: 'oferta_enviada' }))).toBe('oferta_enviada');
-  });
-
-  it('em_cobranca: vencido, a_vencer, futuro, em_pagamento', () => {
-    for (const s of ['vencido', 'a_vencer', 'futuro', 'em_pagamento'] as StatusFinanceiro[]) {
-      expect(faixaDe(conta({ status_financeiro: s }))).toBe('em_cobranca');
-    }
-  });
-
-  it('risco_perda: cancelamento_solicitado', () => {
-    expect(faixaDe(conta({ status_financeiro: 'cancelamento_solicitado' }))).toBe('risco_perda');
-  });
-
-  it('risco_perda: solicitou_cancelamento true e não morta, mesmo com outro status', () => {
-    expect(faixaDe(conta({ status_financeiro: 'vencido', solicitou_cancelamento: true }))).toBe('em_cobranca');
-    // status vencido casa antes na ordem de checagem — risco_perda só pega quem
-    // não caiu em nenhuma regra anterior (ex.: status quitado com o flag setado).
-    expect(faixaDe(conta({ status_financeiro: 'quitado', solicitou_cancelamento: true }))).toBe('risco_perda');
-  });
-
-  it('encerrado: conta morta (cancelado/reembolsado)', () => {
-    expect(faixaDe(conta({ status_financeiro: 'cancelado' }))).toBe('encerrado');
-    expect(faixaDe(conta({ status_financeiro: 'reembolsado' }))).toBe('encerrado');
-  });
-
-  it('encerrado: quitado sem saldo residual', () => {
-    expect(faixaDe(conta({ status_financeiro: 'quitado', saldo_a_pagar: 0 }))).toBe('encerrado');
-  });
-
-  it('primeira regra que casar vence: incalculavel prevalece sobre solicitou_cancelamento', () => {
-    expect(faixaDe(conta({ status_financeiro: 'incalculavel', solicitou_cancelamento: true }))).toBe('sem_valor');
-  });
-
-  it('FAIXAS tem as 6 chaves na ordem documentada', () => {
-    expect(FAIXAS.map((f) => f.chave)).toEqual([
-      'sem_valor', 'sem_acordo', 'oferta_enviada', 'em_cobranca', 'risco_perda', 'encerrado',
-    ]);
-  });
-});
-
-describe('agruparPorFaixa', () => {
-  it('separa contas nas faixas certas e ordena por saldo_a_pagar desc dentro de cada uma', () => {
-    const g = agruparPorFaixa([
-      conta({ nome: 'A', status_financeiro: 'vencido', saldo_a_pagar: 100 }),
-      conta({ nome: 'B', status_financeiro: 'vencido', saldo_a_pagar: 900 }),
-      conta({ nome: 'C', status_financeiro: 'sem_acordo', saldo_a_pagar: 14700 }),
-    ]);
-    expect(g.em_cobranca.map((c) => c.nome)).toEqual(['B', 'A']);
-    expect(g.sem_acordo.map((c) => c.nome)).toEqual(['C']);
-    expect(g.encerrado).toEqual([]);
-  });
-
-  it('todas as 6 chaves existem mesmo vazias (lista vazia não afirma nada, mas também não quebra)', () => {
-    const g = agruparPorFaixa([]);
-    expect(Object.keys(g).sort()).toEqual(
-      ['em_cobranca', 'encerrado', 'oferta_enviada', 'risco_perda', 'sem_acordo', 'sem_valor'].sort(),
-    );
-    for (const chave of Object.keys(g) as (keyof typeof g)[]) expect(g[chave]).toEqual([]);
-  });
-
-  it('trata saldo_a_pagar null como 0 na ordenação, sem quebrar', () => {
-    const g = agruparPorFaixa([
-      conta({ nome: 'Nulo', status_financeiro: 'sem_acordo', saldo_a_pagar: null }),
-      conta({ nome: 'Com valor', status_financeiro: 'sem_acordo', saldo_a_pagar: 500 }),
-    ]);
-    expect(g.sem_acordo.map((c) => c.nome)).toEqual(['Com valor', 'Nulo']);
-  });
-});
 
 describe('urgencia', () => {
   it('0: conta morta', () => {
@@ -179,25 +100,30 @@ describe('urgencia', () => {
   });
 });
 
-describe('corDe', () => {
-  it('verde: quitado', () => {
-    expect(corDe(conta({ status_financeiro: 'quitado' }))).toBe('verde');
-  });
+// Mesmos casos do describe('urgencia') acima — a bijeção é o que impede o
+// aria-label (motivoUrgencia) de mentir quando urgencia() mudar.
+describe('motivoUrgencia — bijeção com urgencia()', () => {
+  const HOJE = '2026-08-19';
+  const casos: { titulo: string; c: ContaReceber; regua: ReguaPasso[] }[] = [
+    { titulo: '0: conta morta (cancelado)', c: conta({ status_financeiro: 'cancelado', saldo_a_pagar: 14700 }), regua: REGUA_VAZIA },
+    { titulo: '0: conta morta (reembolsado)', c: conta({ status_financeiro: 'reembolsado', saldo_a_pagar: 14700 }), regua: REGUA_VAZIA },
+    { titulo: '0: quitada sem saldo', c: conta({ status_financeiro: 'quitado', saldo_a_pagar: 0 }), regua: REGUA_VAZIA },
+    { titulo: '0: dentro do prazo, sem sinal de risco', c: conta({ status_financeiro: 'a_vencer', saldo_a_pagar: 5000, dias_atraso: null, vencimento: '2026-09-01' }), regua: REGUA_VAZIA },
+    { titulo: '1: sem_acordo, saldo positivo sem prazo', c: conta({ status_financeiro: 'sem_acordo', saldo_a_pagar: 14700, dias_atraso: null }), regua: REGUA_VAZIA },
+    { titulo: '0: incalculavel sem saldo (saldo_a_pagar null)', c: conta({ status_financeiro: 'incalculavel', saldo_a_pagar: null, dias_atraso: null }), regua: REGUA_VAZIA },
+    { titulo: '2: dias_atraso entre 1 e 30', c: conta({ status_financeiro: 'vencido', saldo_a_pagar: 5000, dias_atraso: 15 }), regua: REGUA_VAZIA },
+    { titulo: '2: proximaAcao atrasada com saldo > 0', c: conta({ status_financeiro: 'a_vencer', saldo_a_pagar: 5000, dias_atraso: null, vencimento: '2026-08-01' }), regua: REGUA },
+    { titulo: '3: dias_atraso > 30', c: conta({ status_financeiro: 'vencido', saldo_a_pagar: 5000, dias_atraso: 31 }), regua: REGUA_VAZIA },
+    { titulo: '3: cancelamento solicitado, mesmo sem atraso', c: conta({ status_financeiro: 'cancelamento_solicitado', saldo_a_pagar: 5000, dias_atraso: 0 }), regua: REGUA_VAZIA },
+    { titulo: '3: solicitou_cancelamento (flag) com outro status', c: conta({ status_financeiro: 'em_pagamento', solicitou_cancelamento: true, saldo_a_pagar: 5000 }), regua: REGUA_VAZIA },
+    { titulo: '1: dias_atraso null em sem_acordo vira 1, não 0 nem 3', c: conta({ status_financeiro: 'sem_acordo', saldo_a_pagar: 2300, dias_atraso: null, vencimento: null }), regua: REGUA },
+  ];
 
-  it('azul: em_pagamento, a_vencer, futuro, oferta_enviada', () => {
-    for (const s of ['em_pagamento', 'a_vencer', 'futuro', 'oferta_enviada'] as StatusFinanceiro[]) {
-      expect(corDe(conta({ status_financeiro: s }))).toBe('azul');
-    }
-  });
-
-  it('vermelho: cancelado, reembolsado, cancelamento_solicitado, vencido', () => {
-    for (const s of ['cancelado', 'reembolsado', 'cancelamento_solicitado', 'vencido'] as StatusFinanceiro[]) {
-      expect(corDe(conta({ status_financeiro: s }))).toBe('vermelho');
-    }
-  });
-
-  it('neutro: sem_acordo, incalculavel', () => {
-    expect(corDe(conta({ status_financeiro: 'sem_acordo' }))).toBe('neutro');
-    expect(corDe(conta({ status_financeiro: 'incalculavel' }))).toBe('neutro');
-  });
+  for (const { titulo, c, regua } of casos) {
+    it(`${titulo} — motivo null sse urgencia 0`, () => {
+      const u = urgencia(c, regua, HOJE);
+      const motivo = motivoUrgencia(c, regua, HOJE);
+      expect(motivo === null).toBe(u === 0);
+    });
+  }
 });

@@ -7,13 +7,11 @@ import { distribuicaoAging } from './cobranca';
 
 export type Condicao = 'boa' | 'atencao' | 'critica' | 'neutra';
 
-type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
-
-export const CONDICAO_META: Record<Condicao, { label: string; tone: Tone; icon: string }> = {
-  boa: { label: 'Saudável', tone: 'success', icon: 'check-circle' },
-  atencao: { label: 'Atenção', tone: 'warning', icon: 'alert' },
-  critica: { label: 'Em risco', tone: 'danger', icon: 'alert' },
-  neutra: { label: 'Sem dados', tone: 'neutral', icon: 'circle' },
+export const CONDICAO_META: Record<Condicao, { label: string; icon: string }> = {
+  boa: { label: 'Saudável', icon: 'check-circle' },
+  atencao: { label: 'Atenção', icon: 'alert' },
+  critica: { label: 'Em risco', icon: 'alert' },
+  neutra: { label: 'Sem dados', icon: 'circle' },
 };
 
 const RANK: Record<Condicao, number> = { boa: 0, neutra: 1, atencao: 2, critica: 3 };

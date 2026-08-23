@@ -1,4 +1,5 @@
 export { Badge, NivelBadge } from './Badge';
+export type { Tone } from './Badge';
 export { Board } from './Board';
 export type { BoardColuna } from './Board';
 export { Button } from './Button';

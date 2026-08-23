@@ -9,55 +9,6 @@ import type { ContaReceber, ReguaPasso } from './types';
 import { contaMorta, saldoEfetivo } from './financeiro';
 import { proximaAcao } from './cobranca';
 
-// ── Faixas (colunas do board) ────────────────────────────────────────────────
-
-export type FaixaChave =
-  | 'sem_valor' | 'sem_acordo' | 'oferta_enviada' | 'em_cobranca' | 'risco_perda' | 'encerrado';
-
-export interface FaixaMeta {
-  chave: FaixaChave;
-  rotulo: string;
-  descricao: string;
-}
-
-/** As 6 faixas do board, na ordem de checagem (primeira que casar vence — igual ao CASE do banco). */
-export const FAIXAS: FaixaMeta[] = [
-  { chave: 'sem_valor', rotulo: 'Sem valor definido', descricao: 'Ainda não dá para calcular o que a pessoa deve.' },
-  { chave: 'sem_acordo', rotulo: 'Sem acordo', descricao: 'Valor calculado, mas sem vencimento combinado.' },
-  { chave: 'oferta_enviada', rotulo: 'Oferta enviada', descricao: 'Link de pagamento enviado, aguardando o aluno pagar.' },
-  { chave: 'em_cobranca', rotulo: 'Em cobrança', descricao: 'Acordo em andamento — vencido, a vencer, futuro ou parcelando.' },
-  { chave: 'risco_perda', rotulo: 'Risco de perda', descricao: 'Pediu cancelamento — ainda perseguível, mas em risco.' },
-  { chave: 'encerrado', rotulo: 'Encerrado', descricao: 'Conta morta (cancelada/reembolsada) ou quitada sem saldo residual.' },
-];
-
-const EM_COBRANCA_STATUS = new Set(['vencido', 'a_vencer', 'futuro', 'em_pagamento']);
-
-/** Faixa de uma conta. Primeira regra que casar vence, igual ao CASE do banco. */
-export function faixaDe(c: ContaReceber): FaixaChave {
-  if (c.status_financeiro === 'incalculavel') return 'sem_valor';
-  if (c.status_financeiro === 'sem_acordo') return 'sem_acordo';
-  if (c.status_financeiro === 'oferta_enviada') return 'oferta_enviada';
-  if (EM_COBRANCA_STATUS.has(c.status_financeiro)) return 'em_cobranca';
-  if (c.status_financeiro === 'cancelamento_solicitado' || (c.solicitou_cancelamento && !contaMorta(c))) {
-    return 'risco_perda';
-  }
-  // contaMorta (cancelado/reembolsado) ou quitado sem saldo residual (tolerância de centavos).
-  return 'encerrado';
-}
-
-/** Agrupa as contas nas 6 faixas, ordenadas por saldo_a_pagar desc dentro de cada uma. */
-export function agruparPorFaixa(contas: ContaReceber[]): Record<FaixaChave, ContaReceber[]> {
-  const grupos = Object.fromEntries(FAIXAS.map((f) => [f.chave, [] as ContaReceber[]])) as Record<
-    FaixaChave,
-    ContaReceber[]
-  >;
-  for (const c of contas) grupos[faixaDe(c)].push(c);
-  for (const chave of Object.keys(grupos) as FaixaChave[]) {
-    grupos[chave].sort((a, b) => (b.saldo_a_pagar ?? 0) - (a.saldo_a_pagar ?? 0));
-  }
-  return grupos;
-}
-
 // ── Urgência (escalar 0–3) ───────────────────────────────────────────────────
 //
 // Nenhum sinal isolado serve de gatilho:
@@ -91,23 +42,30 @@ export function urgencia(conta: ContaReceber, regua: ReguaPasso[], hojeISO: stri
   return 0;
 }
 
-// ── Cor (efeito visual, não semântica de status isolada) ────────────────────
+/**
+ * Motivo textual da urgência — a mesma lógica de `urgencia()`, em prosa, para
+ * canais que não podem depender só de cor (aria-label, title). Deliberadamente
+ * ao lado de `urgencia()` no mesmo arquivo para as duas nunca divergirem.
+ * Bijeção travada em teste: `motivoUrgencia(c) === null` sse `urgencia(c, ...) === 0`.
+ */
+export function motivoUrgencia(conta: ContaReceber, regua: ReguaPasso[], hojeISO: string): string | null {
+  if (contaMorta(conta) || conta.status_financeiro === 'quitado') return null;
+  const saldo = saldoEfetivo(conta);
+  if (saldo <= 0) return null;
 
-export type CorConta = 'verde' | 'azul' | 'vermelho' | 'neutro';
+  const diasAtraso = conta.dias_atraso ?? 0;
+  const pediuCancelamento = conta.status_financeiro === 'cancelamento_solicitado' || conta.solicitou_cancelamento;
 
-const VERDE = new Set(['quitado']);
-const AZUL = new Set(['em_pagamento', 'a_vencer', 'futuro', 'oferta_enviada']);
-// `vencido` entra em vermelho por decisão consciente: é a fila mais urgente do
-// financeiro (24 contas, R$ 344 mil), então recebe a cor de alarme junto com
-// cancelamento/reembolso. Diferencia-se de conta morta pela FORMA do card
-// (ver F3 — halo/borda/dot de urgência), não pela cor: vencido ainda é vivo e
-// perseguível, morto não é. Não separar em tom próprio para não fragmentar a
-// paleta de status em mais uma variação sem necessidade real de leitura.
-const VERMELHO = new Set(['cancelado', 'reembolsado', 'cancelamento_solicitado', 'vencido']);
+  if (diasAtraso > 30) return `${diasAtraso} dias em atraso`;
+  if (pediuCancelamento) return 'pediu cancelamento';
 
-export function corDe(c: ContaReceber): CorConta {
-  if (VERDE.has(c.status_financeiro)) return 'verde';
-  if (AZUL.has(c.status_financeiro)) return 'azul';
-  if (VERMELHO.has(c.status_financeiro)) return 'vermelho';
-  return 'neutro'; // sem_acordo, incalculavel
+  if (conta.status_financeiro === 'sem_acordo' || conta.status_financeiro === 'incalculavel') {
+    return 'sem prazo definido';
+  }
+
+  const acao = proximaAcao(conta, regua, hojeISO);
+  if (diasAtraso >= 1 && diasAtraso <= 30) return `${diasAtraso} dias em atraso`;
+  if (acao.atrasada && saldo > 0) return 'cobrança atrasada';
+
+  return null;
 }

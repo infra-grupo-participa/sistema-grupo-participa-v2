@@ -68,14 +68,32 @@ const FILL: Record<string, string> = {
   neutral: 'var(--border-strong)',
 };
 
-/** Barra de progresso fina (paridade .progress-bar / .vg-progress-bar). */
-export function ProgressBar({ value, tone = 'accent', height = 6, showLabel = false }: {
+/** Barra de progresso fina (paridade .progress-bar / .vg-progress-bar).
+ *  Props de acessibilidade são opcionais e aditivas (F6, 2026-08-23) — sem
+ *  elas o componente se comporta exatamente como antes para quem já consome.
+ *  Quando o chamador sabe o valor real (não só %), `ariaLabel`/`valueNow` etc.
+ *  dão ao leitor de tela algo mais útil que "42%". */
+export function ProgressBar({
+  value, tone = 'accent', height = 6, showLabel = false, ariaLabel, valueNow, valueMin, valueMax,
+}: {
   value: number; tone?: keyof typeof FILL; height?: number; showLabel?: boolean;
+  /** Rótulo acessível (ex.: "R$ 300 de R$ 15.000 pagos") — vira aria-label da barra. */
+  ariaLabel?: string;
+  /** Valor cru (não percentual) para aria-valuenow/min/max — sem eles, cai no % clampado. */
+  valueNow?: number; valueMin?: number; valueMax?: number;
 }) {
   const pct = Math.max(0, Math.min(100, value));
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 rounded-[var(--r-pill)] bg-[var(--surface-4)] overflow-hidden" style={{ height }}>
+      <div
+        className="flex-1 rounded-[var(--r-pill)] bg-[var(--surface-4)] overflow-hidden"
+        style={{ height }}
+        role="progressbar"
+        aria-valuenow={valueNow ?? Math.round(pct)}
+        aria-valuemin={valueMin ?? 0}
+        aria-valuemax={valueMax ?? 100}
+        aria-label={ariaLabel}
+      >
         <div className="h-full rounded-[var(--r-pill)] transition-[width] duration-300" style={{ width: `${pct}%`, background: FILL[tone] }} />
       </div>
       {showLabel && <span className="text-[11px] tabular text-[var(--fg-3)] w-9 text-right">{Math.round(pct)}%</span>}
