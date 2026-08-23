@@ -1,0 +1,50 @@
+name: CI
+
+# Por que existe: em 23/08/2026 um símbolo duplicado numa Edge Function passou por
+# revisão humana, por checagem de sintaxe e pelo build verde do app — porque nenhum
+# gate cobria `infra/`, e porque nenhum gate rodava sozinho. `supabase functions
+# deploy` teria falhado no bundle. Gate que depende de alguém lembrar de rodar não é
+# gate. Este workflow roda os cinco, incluindo `lint:edge`.
+#
+# Não faz deploy: produção do `web/` sobe pela integração git da Hostinger no push
+# para `main`, e as Edge Functions sobem pelo Supabase CLI/MCP, à parte.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # `npm ci` e não `npm install`: install poda dependências opcionais de Linux do
+      # lockfile quando roda no Windows, e foi assim que um build da Hostinger quebrou.
+      - run: npm ci
+
+      - name: Tipos do app
+        run: npx tsc --noEmit
+
+      - name: Tipos das Edge Functions
+        run: npm run lint:edge
+
+      - name: Tokens do design system (sem hex cru)
+        run: npm run lint:tokens
+
+      - name: Testes
+        run: npm test
+
+      - name: Build
+        run: npm run build
