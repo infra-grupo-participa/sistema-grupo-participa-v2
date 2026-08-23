@@ -341,6 +341,9 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
 
       {selected && (
         <AlunoDrawer
+          // remonta ao trocar de aluno (ex.: pular do sócio para o titular) — sem isto o
+          // estado interno (placa, ciclos, SIP expandido) do aluno anterior vaza para a ficha nova.
+          key={selected.id}
           a={selected}
           turmas={turmas}
           alunos={alunos}

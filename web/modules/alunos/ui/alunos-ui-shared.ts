@@ -55,13 +55,14 @@ export interface VinculoSocio {
 export function vinculoSocio(a: Aluno360, todos: Aluno360[]): VinculoSocio {
   const titularNome = (a.socio_de_nome || '').trim() || null;
 
+  // A FK forte (`socio_de_aluno_id`) vale por si — não depende de `eh_socio` nem do nome
+  // textual estarem preenchidos. Um registro pode ter só a FK (ex.: vínculo criado direto
+  // no banco) e ainda assim precisa resolver o titular.
   let titular: Aluno360 | null = null;
-  if (a.eh_socio || titularNome) {
-    if (a.socio_de_aluno_id) titular = todos.find((o) => o.id === a.socio_de_aluno_id) ?? null;
-    if (!titular && titularNome) {
-      const k = chaveNome(titularNome);
-      titular = todos.find((o) => o.id !== a.id && chaveNome(o.nome) === k) ?? null;
-    }
+  if (a.socio_de_aluno_id) titular = todos.find((o) => o.id === a.socio_de_aluno_id) ?? null;
+  if (!titular && titularNome) {
+    const k = chaveNome(titularNome);
+    titular = todos.find((o) => o.id !== a.id && chaveNome(o.nome) === k) ?? null;
   }
 
   const meuNome = chaveNome(a.nome);

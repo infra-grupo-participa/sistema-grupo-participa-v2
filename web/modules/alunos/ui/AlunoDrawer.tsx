@@ -243,8 +243,11 @@ function VinculoSocios({ a, vinculo, onAbrirAluno }: {
   vinculo: VinculoSocio;
   onAbrirAluno?: (id: string) => void;
 }) {
-  const { titular, titularNome, socios } = vinculo;
-  const ehSocio = Boolean(a.eh_socio) || Boolean(titularNome);
+  const { titular, socios } = vinculo;
+  // FK resolvida (`socio_de_aluno_id`) também conta como sociedade, mesmo sem `eh_socio`
+  // marcado ou `socio_de_nome` preenchido — senão o vínculo existe no banco e some da ficha.
+  const ehSocio = Boolean(a.eh_socio) || Boolean(vinculo.titularNome) || Boolean(titular);
+  const titularNome = vinculo.titularNome || titular?.nome || null;
 
   const link = (nome: string | null, id?: string) => {
     const texto = nome || 'Sem nome';

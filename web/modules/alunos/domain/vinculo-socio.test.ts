@@ -47,4 +47,11 @@ describe('vinculoSocio', () => {
     const outro = p('n2', 'Alguém', { eh_socio: true, socio_de_nome: null });
     expect(vinculoSocio(semNome, [semNome, outro]).socios).toHaveLength(0);
   });
+
+  it('resolve o titular pela FK mesmo sem eh_socio marcado e sem socio_de_nome', () => {
+    // Vínculo criado direto no banco (ex.: backfill): só a FK está preenchida.
+    const socioSoFk = p('s4', 'Fulano Sem Flags', { socio_de_aluno_id: 't1' });
+    const v = vinculoSocio(socioSoFk, [...base, socioSoFk]);
+    expect(v.titular?.id).toBe('t1');
+  });
 });
