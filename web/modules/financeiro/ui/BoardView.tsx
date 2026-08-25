@@ -32,7 +32,7 @@
 // (FinanceiroClient) acima do mosaico — sem cabeçalho de coluna, é ele que
 // ensina o que cada cor quer dizer. Aqui entra só o CONTADOR por cor (quantos
 // cards, quanto saldo), que era o que o cabeçalho da coluna dava.
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState, SearchInput } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRL } from '@/shared/ui/format';
@@ -63,7 +63,7 @@ const PESO_PRAZO = Object.fromEntries(
  *  para legenda e contador nunca listarem as cores em ordens diferentes. */
 const ORDEM_COR: CorStatus[] = ['verde', 'azul', 'amarelo', 'vermelho', 'neutro'];
 
-export function BoardView({ cards, hojeISO, onOpen, busca, onBusca, totalSemBusca }: {
+export function BoardView({ cards, hojeISO, onOpen, busca, onBusca, totalSemBusca, atalhoAtivo = true }: {
   /** Lista plana já filtrada por produto/ação — única fonte do mosaico.
    *  (O agrupamento por coluna deixou de existir; ver cabeçalho do arquivo.) */
   cards: CardComEfeito[];
@@ -78,17 +78,28 @@ export function BoardView({ cards, hojeISO, onOpen, busca, onBusca, totalSemBusc
    *  ("os totais são do recorte, não da carteira"). */
   busca: string;
   onBusca: (v: string) => void;
+  /** Liga o atalho "/". Falso enquanto a ficha (FichaDrawer) está aberta: o
+   *  Drawer não tem focus trap, e "/" moveria o foco para um campo ATRÁS do
+   *  overlay — o usuário digitaria às cegas num input que não consegue ver. */
+  atalhoAtivo?: boolean;
   /** Quantos cards havia ANTES da busca — o número que o botão de limpar
    *  promete devolver. Vem do pai porque `cards` aqui já chega filtrado. */
   totalSemBusca: number;
 }) {
   const [eixo, setEixo] = useState<Eixo>('funil');
-  // useDeferredValue em vez de debounce por setTimeout: o input responde a
-  // CADA tecla (nunca engasga, nunca "come" letra), e o React reprioriza a
-  // refiltragem dos 308 cards para depois de pintar o caractere. Debounce
-  // manual atrasaria o texto tambem — aqui só a lista chega com atraso.
-  const buscaAplicada = useDeferredValue(busca);
-  const filtrando = busca !== buscaAplicada;
+
+  // SEM debounce e SEM useDeferredValue, de propósito. O filtro é um
+  // `Array.filter` sobre ~308 objetos já em memória (nenhuma query por tecla,
+  // ver FinanceiroClient) — trabalho de fração de milissegundo, abaixo do
+  // limiar em que adiar melhora alguma coisa.
+  //
+  // 🔑 Uma tentativa anterior deferia só o TERMO exibido, enquanto a lista
+  // continuava sendo filtrada pelo texto atual. O resultado era o contrário do
+  // pretendido: a contagem do termo novo aparecia colada ao termo antigo
+  // ("3 cards encontrados para «mar»" com 3 sendo a contagem de «mari»), e o
+  // live region anunciava esse par inconsistente. Filtrar direto mantém termo
+  // e contagem sempre do mesmo instante — que é o que o leitor de tela lê.
+  const buscaAplicada = busca;
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -98,6 +109,7 @@ export function BoardView({ cards, hojeISO, onOpen, busca, onBusca, totalSemBusc
   // atalho. Esc é tratado no próprio input (não global) para não competir com
   // o Esc que fecha o FichaDrawer.
   useEffect(() => {
+    if (!atalhoAtivo) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
       const alvo = e.target as HTMLElement | null;
@@ -108,7 +120,7 @@ export function BoardView({ cards, hojeISO, onOpen, busca, onBusca, totalSemBusc
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [atalhoAtivo]);
 
   // Ordena sobre uma CÓPIA: `cards` é prop do pai (FinanceiroClient) e sort()
   // muta o array no lugar — ordenar o original reordenaria a lista dele.
@@ -152,7 +164,7 @@ export function BoardView({ cards, hojeISO, onOpen, busca, onBusca, totalSemBusc
           seletores abaixo só reordenam o que sobrou — a ordem visual espelha
           a ordem de aplicação. */}
       <div className="mb-3">
-        <div className="relative max-w-[420px]">
+        <div className="max-w-[420px]">
         <SearchInput
           ref={inputRef}
           value={busca}
@@ -172,28 +184,9 @@ export function BoardView({ cards, hojeISO, onOpen, busca, onBusca, totalSemBusc
           placeholder="Buscar por nome ou vendedor…"
           aria-label="Buscar card por nome do aluno ou vendedor. Atalho: barra para focar, Esc para limpar."
           aria-describedby="board-busca-resultado"
-          className="pr-9"
+          onLimpar={() => onBusca('')}
+          dica="/"
         />
-        {/* Dica do atalho quando o campo está vazio; vira botão de limpar
-            quando tem texto — o mesmo canto nunca mostra os dois, e o alvo
-            de toque (32px + padding do pai) não cai abaixo do mínimo. */}
-        {busca ? (
-          <button
-            type="button"
-            onClick={() => { onBusca(''); inputRef.current?.focus(); }}
-            aria-label="Limpar busca"
-            className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[var(--r-sm)] text-[var(--fg-3)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--fg)] focus-visible:ring-2"
-          >
-            <Icon name="x" size={14} />
-          </button>
-        ) : (
-          <kbd
-            aria-hidden
-            className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-4)]"
-          >
-            /
-          </kbd>
-        )}
         </div>
         {/* role="status" (não aria-live cru num número): anuncia a FRASE
             inteira "12 cards encontrados para maria", nunca "12" solto, e sem
@@ -290,12 +283,11 @@ export function BoardView({ cards, hojeISO, onOpen, busca, onBusca, totalSemBusc
         // `auto-rows-min` mantém cada card na altura do próprio conteúdo — sem
         // esticar para casar com o vizinho mais alto da linha.
         <ul
-          // aria-busy enquanto o useDeferredValue ainda não alcançou o texto:
-          // a lista abaixo é do termo ANTERIOR por alguns ms. `opacity` é a
-          // única propriedade animada (composta na GPU, sem reflow) — a altura
-          // não muda, então não há CLS.
-          aria-busy={filtrando}
-          className={`grid auto-rows-min gap-2 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))] transition-opacity duration-150 ${filtrando ? 'opacity-60' : 'opacity-100'}`}
+          // Sem aria-busy nem esmaecimento: a lista é sempre do termo atual
+          // (ver nota sobre o deferral removido acima). Marcar como "ocupada"
+          // uma lista já correta faria o leitor de tela esperar por uma
+          // atualização que nunca vem.
+          className="grid auto-rows-min gap-2 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]"
           aria-label={`Mosaico do financeiro — ${ordenados.length} ${ordenados.length === 1 ? 'card' : 'cards'}`}
         >
           {ordenados.map((c) => (

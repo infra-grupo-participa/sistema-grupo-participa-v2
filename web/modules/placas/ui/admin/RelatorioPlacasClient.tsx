@@ -259,7 +259,7 @@ export function RelatorioPlacasClient({ canEdit }: { canEdit: boolean }) {
 
           {/* Busca + filtros dedicados */}
           <Toolbar className="mb-3">
-            <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar nome, e-mail, documento, cidade, UF, turma…" />
+            <SearchInput value={q} onChange={(e) => setQ(e.target.value)} onLimpar={() => setQ('')} placeholder="Buscar nome, e-mail, documento, cidade, UF, turma…" />
             <MultiSelect values={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={NIVEL_FAIXA_ORDER.map((n) => ({ value: n, label: DEFAULT_NIVEL_FAIXAS[n].nm }))} />
             <MultiSelect values={filtros.turma} onChange={(v) => setFiltros((f) => ({ ...f, turma: v }))} placeholder="Todas as turmas" options={turmaOpts.map((t) => ({ value: t, label: t }))} />
             <MultiSelect values={filtros.uf} onChange={(v) => setFiltros((f) => ({ ...f, uf: v }))} placeholder="Todas as UFs" options={ufOpts.map((u) => ({ value: u, label: u }))} />

@@ -348,10 +348,15 @@ body {
   .gp-card--u3 .gp-card__dot::before { animation: none; opacity: 0; }
 }
 
-/* Suprime o "x" NATIVO do input[type=search] (WebKit/Blink). Os campos de
-   busca do app desenham o próprio botão de limpar, com aria-label e alvo de
-   toque adequado — sem isto, o Chrome empilha dois X no mesmo canto e o
-   nativo (sem rótulo acessível) fica por cima do nosso. */
+/* Suprime o "x" NATIVO do input[type=search] (WebKit/Blink). O substituto é
+   desenhado pelo próprio SearchInput (shared/ui/components/Controls.tsx), com
+   aria-label e alvo de toque de 28px — por isso a supressão pode ser global:
+   todo campo de busca do app passa por aquele componente. Sem isto o Chrome
+   empilha dois X no mesmo canto, e o nativo (sem rótulo acessível) fica por
+   cima do nosso.
+
+   ⚠️ Se algum dia um input[type=search] nascer FORA do SearchInput, ele fica
+   sem nenhuma forma visível de limpar — use o componente, não um <input> cru. */
 input[type='search']::-webkit-search-cancel-button,
 input[type='search']::-webkit-search-decoration {
   -webkit-appearance: none;

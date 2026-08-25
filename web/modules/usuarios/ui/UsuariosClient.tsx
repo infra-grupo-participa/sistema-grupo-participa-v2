@@ -170,7 +170,7 @@ export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
       </div>
 
       <Toolbar className="mb-3">
-        <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar nome ou e-mail…" />
+        <SearchInput value={q} onChange={(e) => setQ(e.target.value)} onLimpar={() => setQ('')} placeholder="Buscar nome ou e-mail…" />
       </Toolbar>
 
       <DataTable>

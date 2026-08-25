@@ -247,6 +247,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               busca={busca}
               onBusca={setBusca}
               totalSemBusca={cardsFiltrados.length}
+              atalhoAtivo={!openId}
             />
             <RodapeTotais
               totais={totaisFiltrados}

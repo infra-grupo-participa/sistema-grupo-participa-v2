@@ -247,7 +247,7 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
       {topTab === 'lista' && (
       <>
       <Toolbar className="mb-3">
-        <SearchInput value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, e-mail, documento, cidade…" />
+        <SearchInput value={busca} onChange={(e) => setBusca(e.target.value)} onLimpar={() => setBusca('')} placeholder="Buscar nome, e-mail, documento, cidade…" />
         <MultiSelect values={filtros.turma} onChange={(v) => setFiltros((f) => ({ ...f, turma: v }))} placeholder="Todas as turmas" options={turmaOpts.map((t) => ({ value: t, label: t }))} />
         <MultiSelect values={filtros.espaco} onChange={(v) => setFiltros((f) => ({ ...f, espaco: v }))} placeholder="Todos os espaços" options={espacoOpts.map((k) => ({ value: k, label: ESPACO_LABEL[k] || k }))} />
         <MultiSelect values={filtros.instrucao} onChange={(v) => setFiltros((f) => ({ ...f, instrucao: v }))} placeholder="Todas as instruções" options={instrucaoOpts.map((k) => ({ value: k, label: instrucaoLabel(k) }))} />

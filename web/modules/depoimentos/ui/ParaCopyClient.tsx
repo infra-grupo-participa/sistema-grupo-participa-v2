@@ -30,7 +30,7 @@ export function ParaCopyClient() {
       </div>
       <p className="text-sm text-[var(--fg-3)] mb-4">Trechos prontos para posts, reels e anúncios. {loading && 'carregando…'}</p>
       <Toolbar className="mb-4">
-        <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por aluno ou trecho…" />
+        <SearchInput value={q} onChange={(e) => setQ(e.target.value)} onLimpar={() => setQ('')} placeholder="Buscar por aluno ou trecho…" />
       </Toolbar>
 
       <div className="grid gap-4 sm:grid-cols-2">
