@@ -12,10 +12,27 @@
 // fixa — informação secundária, não estrutural.
 import { Icon } from '@/shared/ui/icons';
 import { ProgressBar } from '@/shared/ui/components';
-import { fmtBRLc, fmtRelativo } from '@/shared/ui/format';
+import { fmtBRLc, fmtData, fmtRelativo } from '@/shared/ui/format';
 import type { CardComEfeito } from '../application/carregar-board';
 import { statusLabel } from '../domain/financeiro';
+import { labelMotivoReuniao } from '../domain/reuniao';
 import { CLASSE_CARD, TONE_BARRA } from './cor';
+
+// F7 (0307/0308 no repo da esteira): decisão do Marcio — "só o comercial
+// grava a data, o financeiro apenas sinaliza". O chip aqui é INFORMATIVO,
+// sem ação de escrita nenhuma (nem "Definir agora"): quem não ouviu a
+// promessa não pode registrá-la, senão a autoria na timeline fica errada.
+// O botão que grava existe só no board comercial (outro repo, card-sinais.tsx).
+//
+// ATUALIZADO 2026-08-20: reuniao_motivo_tipo/reuniao_retomar_em/
+// intencao_pagamento agora vêm REAIS de fn_fin_board (o coordenador
+// estendeu cs.vw_fin_board/fn_fin_board em produção) — sem cast, direto de
+// `conta`. Trilha B real (não prometeu pagar) é o sinal preciso: motivo
+// preenchido, sem vencimento combinado — NÃO entra em cobrança, é só
+// contexto para o financeiro saber que já está sendo tratado. O fallback
+// genérico (faixaFunil 'em_negociacao' sem vencimento e sem motivo) cobre
+// cards que entraram na etapa antes da trava existir — mesmo espírito do
+// board comercial (a trava só guarda a porta de entrada).
 
 // Classe do card e tom da barra de progresso vêm de ui/cor.ts — projeção
 // única de CorStatus (nenhum Record<> de cor nasce aqui). "Nunca âmbar"
@@ -77,6 +94,27 @@ export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (
   const quitado = conta.status_financeiro === 'quitado';
   const emAtraso = (conta.dias_atraso ?? 0) > 0;
   const venceRel = conta.vencimento ? fmtRelativo(conta.vencimento) : null;
+
+  // F7: "sem data de pagamento" — informativo, sem ação. Trilha B (não
+  // prometeu): mostra motivo + data de retomar, para o financeiro saber que
+  // está sendo tratado e por quem — NÃO é cobrança, ninguém prometeu pagar
+  // (decisão do Marcio), por isso fica fora da fila de vencimento acima.
+  const motivoB = conta.reuniao_motivo_tipo ?? null;
+  // Rótulo pt-BR — fonte única em ../domain/reuniao.ts, consumida também
+  // por FichaDrawer.tsx. Achado do fable-orchestrator (2026-08-21): este
+  // chip mostrava o slug CRU (`quer_parcelar`) no texto e no tooltip, a
+  // mesma classe de erro que scripts/test-vocabulario.ts barra no repo da
+  // esteira (o repo B não tem essa trava).
+  const motivoBLabel = labelMotivoReuniao(motivoB);
+  const retomarB = conta.reuniao_retomar_em ?? null;
+  // Trilha B real (motivo preenchido) OU o fallback genérico de cards sem
+  // NENHUMA trilha gravada ainda (card antigo, entrou antes da trava 0308).
+  // Nunca conta trilha A (intencao_pagamento === 'vai_pagar') como "sem
+  // data": quem prometeu pagar tem vencimento — se este card não tem, é
+  // porque a trilha A ainda não foi completada, mesma situação do fallback.
+  const semDataPagamento = !quitado && !conta.vencimento
+    && conta.intencao_pagamento !== 'vai_pagar'
+    && (!!motivoB || card.faixaFunil === 'em_negociacao');
 
   return (
     <button
@@ -177,6 +215,23 @@ export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (
             </span>
           ) : null}
         </div>
+
+        {/* F7: chip informativo — sem botão de ação (decisão do Marcio: só o
+            comercial registra a promessa). Trilha B mostra o motivo + a data
+            de retomar, para o financeiro entender que já está sendo tratado,
+            sem entrar na fila de cobrança (não é vencimento combinado). */}
+        {semDataPagamento && (
+          <div
+            className="inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--red-border)] bg-[var(--red-subtle)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--red)]"
+            title={
+              motivoBLabel
+                ? `Não prometeu pagar — motivo: ${motivoBLabel}${retomarB ? `, retomar em ${fmtData(retomarB)}` : ''}. Quem registra é o comercial, não o financeiro.`
+                : 'Sem data de pagamento combinada — quem registra é o comercial, não o financeiro.'
+            }
+          >
+            <Icon name="alert" size={10} /> {motivoBLabel ? `sem data · ${retomarB ? `retoma ${fmtData(retomarB)}` : motivoBLabel}` : 'sem data de pagamento'}
+          </div>
+        )}
 
         {(conta.vendedor || dias != null) && (
           <div className="flex items-center justify-between gap-2">

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
 import { Loading } from '@/shared/ui/components';
-import type { ContaReceber, FaixaFunil, Oferta, TurmaFin } from '../domain/types';
+import type { ContaReceber, Oferta, TurmaFin } from '../domain/types';
 // Mesma função pura de application/carregar-board.ts — reusada aqui para
 // recalcular sobre o recorte filtrado pela timeline de ações (sem query nova).
 import { calcularTotais as recalcularTotais } from '../domain/totais';
@@ -149,18 +149,10 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
 
   const contasFiltradas: ContaReceber[] = useMemo(() => cardsFiltrados.map((c) => c.conta), [cardsFiltrados]);
 
-  const colunasFiltradas = useMemo(() => {
-    if (!board) return null;
-    const grupos = {} as Record<FaixaFunil, CardComEfeito[]>;
-    for (const chave of Object.keys(board.colunas) as FaixaFunil[]) {
-      grupos[chave] = board.colunas[chave].filter((c) => {
-        if (c.origem !== produtoAtivo) return false;
-        if (!acaoAtiva) return true;
-        return acaoAtiva === SEM_ACAO ? c.acaoNome == null : c.acaoNome === acaoAtiva;
-      });
-    }
-    return grupos;
-  }, [board, produtoAtivo, acaoAtiva]);
+  // O agrupamento por coluna (board.colunas) deixou de ser consumido em
+  // 2026-08-24: o BoardView virou mosaico sem colunas, alimentado só pela
+  // lista plana `cardsFiltrados`. A situação de cada conta é carregada pela
+  // COR do card (corDe/urgencia), não mais pela posição — ver BoardView.tsx.
 
   // calcularTotais roda sobre o array já filtrado por produto + ação — sem
   // query nova. Nunca reaproveita board.totais aqui: aquele total é da
@@ -206,7 +198,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       {tab === 'board' && (
         erroBoard ? (
           <ErroCarregamento msg={erroBoard} onRetry={carregarBoardAgora} />
-        ) : !board || !colunasFiltradas ? (
+        ) : !board ? (
           <Loading label="Carregando board financeiro…" minHeight={320} />
         ) : (
           <>
@@ -215,7 +207,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               <TimelineAcoes acoes={acoes} ativa={acaoAtiva} onSelecionar={setAcaoAtiva} />
             </div>
             <LegendaCores existeNeutro={existeNeutro} />
-            <BoardView colunas={colunasFiltradas} onOpen={setOpenId} />
+            <BoardView cards={cardsFiltrados} hojeISO={hojeISO} onOpen={setOpenId} />
             <RodapeTotais
               totais={totaisFiltrados}
               totalCards={cardsFiltrados.length}
