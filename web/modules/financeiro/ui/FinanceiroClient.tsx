@@ -7,6 +7,7 @@ import type { ContaReceber, Oferta, TurmaFin } from '../domain/types';
 // Mesma função pura de application/carregar-board.ts — reusada aqui para
 // recalcular sobre o recorte filtrado pela timeline de ações (sem query nova).
 import { calcularTotais as recalcularTotais } from '../domain/totais';
+import { casaBusca } from '../domain/busca';
 import { SupabaseFinanceiroRepository } from '../infrastructure/supabase-financeiro.repository';
 import { carregarBoard, type BoardCarregado, type CardComEfeito } from '../application/carregar-board';
 import { carregarFaturamento, type FaturamentoCarregado } from '../application/carregar-faturamento';
@@ -46,11 +47,23 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // do HM não faz sentido selecionado depois de trocar para Aurum.
   const [produtoAtivo, setProdutoAtivo] = useState<ProdutoChave>('HM');
   const [acaoAtiva, setAcaoAtiva] = useState<string | null>(null);
+  // Busca mora AQUI, não no BoardView, porque o rodapé de totais precisa somar
+  // exatamente o conjunto que o mosaico mostra (ver comentário da prop `busca`
+  // em BoardView.tsx). Trocar de produto ou de canal limpa a busca: um termo
+  // que achava 3 cards no HM quase sempre acha 0 no Aurum, e um mosaico vazio
+  // logo após clicar numa aba parece aba quebrada, não busca sobrando.
+  const [busca, setBusca] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
 
   const selecionarProduto = (produto: ProdutoChave) => {
     setProdutoAtivo(produto);
     setAcaoAtiva(null);
+    setBusca('');
+  };
+
+  const selecionarAcao = (acao: string | null) => {
+    setAcaoAtiva(acao);
+    setBusca('');
   };
 
   const hojeISO = new Date().toISOString().slice(0, 10);
@@ -147,7 +160,27 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     return cardsDoProduto.filter((c) => c.acaoNome === acaoAtiva);
   }, [cardsDoProduto, acaoAtiva]);
 
-  const contasFiltradas: ContaReceber[] = useMemo(() => cardsFiltrados.map((c) => c.conta), [cardsFiltrados]);
+  // Camada mais rasa do funil de filtros: produto → canal → BUSCA. Sai daqui
+  // (e não do BoardView) para alimentar o mesmo array ao mosaico E ao rodapé.
+  const cardsVisiveis: CardComEfeito[] = useMemo(
+    () => (busca.trim() ? cardsFiltrados.filter((c) => casaBusca(c.conta, busca)) : cardsFiltrados),
+    [cardsFiltrados, busca],
+  );
+
+  // DOIS arrays de contas, de propósito — não unificar:
+  //
+  //   contasVisiveis  = produto → canal → BUSCA. Alimenta o rodapé de totais,
+  //                     que precisa somar exatamente o que o mosaico mostra.
+  //   contasDoRecorte = produto → canal, SEM a busca. Alimenta a aba
+  //                     Relatórios.
+  //
+  // 🔑 O relatório NÃO herda a busca do board. A barra de busca só existe na
+  // aba board; quem digita "maria", troca para Relatórios e exporta não teria
+  // como saber que a planilha saiu com 1 linha em vez de 264 — o filtro que
+  // encolheu o arquivo estaria invisível na tela que gerou o arquivo. Export
+  // que sai menor sem dizer por quê é dado errado entregue em silêncio.
+  const contasVisiveis: ContaReceber[] = useMemo(() => cardsVisiveis.map((c) => c.conta), [cardsVisiveis]);
+  const contasDoRecorte: ContaReceber[] = useMemo(() => cardsFiltrados.map((c) => c.conta), [cardsFiltrados]);
 
   // O agrupamento por coluna (board.colunas) deixou de ser consumido em
   // 2026-08-24: o BoardView virou mosaico sem colunas, alimentado só pela
@@ -158,7 +191,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // query nova. Nunca reaproveita board.totais aqui: aquele total é da
   // carteira inteira (HM + Aurum somados), e o pedido do Marcio é o oposto —
   // os 4 totais têm que falar SÓ do recorte da aba ativa.
-  const totaisFiltrados = useMemo(() => recalcularTotais(contasFiltradas), [contasFiltradas]);
+  const totaisFiltrados = useMemo(() => recalcularTotais(contasVisiveis), [contasVisiveis]);
 
   // Sobre o board INTEIRO (não o recorte filtrado) — a legenda é dicionário,
   // não resumo do que está visível; a 5ª entrada é o alarme de drift, e um
@@ -204,15 +237,23 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           <>
             <ProdutoTabs contagens={contagensProduto} ativo={produtoAtivo} onSelecionar={selecionarProduto} />
             <div className="mb-3">
-              <TimelineAcoes acoes={acoes} ativa={acaoAtiva} onSelecionar={setAcaoAtiva} />
+              <TimelineAcoes acoes={acoes} ativa={acaoAtiva} onSelecionar={selecionarAcao} />
             </div>
             <LegendaCores existeNeutro={existeNeutro} />
-            <BoardView cards={cardsFiltrados} hojeISO={hojeISO} onOpen={setOpenId} />
+            <BoardView
+              cards={cardsVisiveis}
+              hojeISO={hojeISO}
+              onOpen={setOpenId}
+              busca={busca}
+              onBusca={setBusca}
+              totalSemBusca={cardsFiltrados.length}
+            />
             <RodapeTotais
               totais={totaisFiltrados}
-              totalCards={cardsFiltrados.length}
+              totalCards={cardsVisiveis.length}
               produtoAtivo={produtoAtivo === 'HM' ? 'Holding Masters' : 'Aurum'}
               filtroAtivo={rotuloFiltroAtivo}
+              busca={busca}
             />
           </>
         )
@@ -223,7 +264,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       )}
 
       {tab === 'relatorios' && (
-        board ? <Relatorios contas={contasFiltradas} turma={turma} canVerDoc={canVerDoc} /> : <Loading label="Carregando…" minHeight={200} />
+        board ? <Relatorios contas={contasDoRecorte} turma={turma} canVerDoc={canVerDoc} /> : <Loading label="Carregando…" minHeight={200} />
       )}
 
       {tab === 'ofertas' && (

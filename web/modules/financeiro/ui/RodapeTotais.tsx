@@ -25,15 +25,22 @@ import { Icon } from '@/shared/ui/icons';
 import { fmtBRL } from '@/shared/ui/format';
 import type { Totais } from '../domain/totais';
 
-export function RodapeTotais({ totais, totalCards, produtoAtivo, filtroAtivo }: {
+export function RodapeTotais({ totais, totalCards, produtoAtivo, filtroAtivo, busca }: {
   totais: Totais;
   totalCards: number;
   /** Rótulo do produto ativo (ex.: "Holding Masters", "Aurum") — sempre presente, é o 1º eixo do recorte. */
   produtoAtivo: string;
   /** Rótulo legível da ação/canal ativo na timeline (null = sem filtro de canal, ainda dentro do produto). */
   filtroAtivo: string | null;
+  /** Termo de busca ativo (string vazia = sem busca). Entra no rótulo do
+   *  recorte porque a busca MEXE nos 4 totais: com ela ligada, "Valor
+   *  esperado" é o esperado dos cards que casaram, não o do canal. Um total
+   *  que despenca sem dizer por quê é a mesma armadilha do problema 6 (o
+   *  rodapé parecia contradizer a contagem do board). */
+  busca?: string;
 }) {
-  const recorte = filtroAtivo ? `${produtoAtivo} · ${filtroAtivo}` : produtoAtivo;
+  const termo = busca?.trim() ?? '';
+  const recorte = [produtoAtivo, filtroAtivo, termo ? `busca "${termo}"` : null].filter(Boolean).join(' · ');
   return (
     <div className="gp-print-hide mt-3 pt-3 border-t border-[var(--border)]">
       <div className="mb-2 flex items-center gap-1.5 text-[11px] text-[var(--fg-3)]">
