@@ -63,17 +63,74 @@ export function MultiSelect({ values, onChange, placeholder, options, className 
   );
 }
 
-/** Campo de busca com ícone (paridade .search-wrap / .search-icon). */
-export const SearchInput = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  function SearchInput({ className = '', ...rest }, ref) {
-    return (
-      <div className="relative min-w-[200px] flex-1">
-        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--fg-3)]"><Icon name="search" size={15} /></span>
-        <input ref={ref} type="search" className={`${inputCls} pl-8 ${className}`} {...rest} />
-      </div>
-    );
-  },
-);
+/** Campo de busca com ícone (paridade .search-wrap / .search-icon).
+ *
+ *  O botão de limpar mora AQUI, e não em cada tela, porque globals.css suprime
+ *  o "x" NATIVO do input[type=search] em todo o app (o nativo não tem rótulo
+ *  acessível e empilhava com botões próprios). Uma vez suprimido o nativo, o
+ *  substituto tem que nascer no componente compartilhado — senão cada tela que
+ *  esquecer de desenhar o seu fica sem nenhuma forma de limpar a busca.
+ *
+ *  O botão aparece quando há texto E o chamador passou `onLimpar` — sem ele,
+ *  o botão não é desenhado (melhor nenhum botão que um botão inerte). `dica`
+ *  desenha um <kbd> no lugar dele enquanto o campo está vazio, para telas que
+ *  anunciam atalho de teclado. */
+export const SearchInput = forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement> & { dica?: string; onLimpar?: () => void }
+>(function SearchInput({ className = '', dica, onLimpar, ...rest }, ref) {
+  const interno = useRef<HTMLInputElement>(null);
+  const temTexto = String(rest.value ?? '') !== '';
+
+  // `onLimpar` explícito, sem sintetizar evento de input pelo setter nativo do
+  // prototype: aquele truque funciona, mas depende de detalhe interno de como
+  // o React intercepta `value` — é o tipo de código que quebra em silêncio numa
+  // atualização de versão e ninguém liga o defeito à causa. O chamador já tem
+  // o setter do próprio estado; pedir uma linha a ele é mais barato que manter
+  // um truque frágil no componente compartilhado.
+  const limpar = () => {
+    onLimpar?.();
+    interno.current?.focus();
+  };
+
+  return (
+    <div className="relative min-w-[200px] flex-1">
+      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--fg-3)]"><Icon name="search" size={15} /></span>
+      <input
+        ref={mesclarRefs(ref, interno)}
+        type="search"
+        className={`${inputCls} pl-8 ${(temTexto && onLimpar) || dica ? 'pr-9' : ''} ${className}`}
+        {...rest}
+      />
+      {temTexto && onLimpar ? (
+        <button
+          type="button"
+          onClick={limpar}
+          aria-label="Limpar busca"
+          className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[var(--r-sm)] text-[var(--fg-3)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--fg)] focus-visible:ring-2"
+        >
+          <Icon name="x" size={14} />
+        </button>
+      ) : dica ? (
+        <kbd
+          aria-hidden
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-4)]"
+        >
+          {dica}
+        </kbd>
+      ) : null}
+    </div>
+  );
+});
+
+/** Encaminha o mesmo nó para o ref do chamador e para o ref interno. */
+function mesclarRefs<T>(externo: React.Ref<T> | undefined, interno: React.RefObject<T | null>) {
+  return (no: T | null) => {
+    interno.current = no;
+    if (typeof externo === 'function') externo(no);
+    else if (externo) (externo as React.MutableRefObject<T | null>).current = no;
+  };
+}
 
 /**
  * Input de texto padrão do design system.

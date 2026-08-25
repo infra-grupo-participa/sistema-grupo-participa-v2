@@ -69,7 +69,7 @@ export function DepoimentosClient({ canEdit }: { canEdit: boolean }) {
       {tab === 'biblioteca' && (
         <>
           <Toolbar className="mb-3">
-            <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar aluno, e-mail, profissão…" />
+            <SearchInput value={q} onChange={(e) => setQ(e.target.value)} onLimpar={() => setQ('')} placeholder="Buscar aluno, e-mail, profissão…" />
           </Toolbar>
           <DataTable>
             <Thead>
