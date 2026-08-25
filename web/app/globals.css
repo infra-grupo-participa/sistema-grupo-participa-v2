@@ -348,6 +348,16 @@ body {
   .gp-card--u3 .gp-card__dot::before { animation: none; opacity: 0; }
 }
 
+/* Suprime o "x" NATIVO do input[type=search] (WebKit/Blink). Os campos de
+   busca do app desenham o próprio botão de limpar, com aria-label e alvo de
+   toque adequado — sem isto, o Chrome empilha dois X no mesmo canto e o
+   nativo (sem rótulo acessível) fica por cima do nosso. */
+input[type='search']::-webkit-search-cancel-button,
+input[type='search']::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 /* ══════════════════════════════════════════════════════════════
    Print — base do export "PDF" via window.print() (custo 0 KB, vs. ~350 KB
    do jspdf e ~500 KB do @react-pdf/renderer, este sem compatibilidade
