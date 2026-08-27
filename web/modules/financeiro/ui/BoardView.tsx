@@ -192,16 +192,43 @@ export function BoardView({
           fable-orchestrator (2026-08-27): a validação anterior foi num
           preview isolado, sem o AppShell, por isso passou.
 
+          ⚠️ A sangria negativa precisa casar com o padding REAL do <main>
+          (`p-4 sm:p-6` = 16px/24px em AppShell.tsx:63), não com um valor
+          simbólico. Com `-mx-1` (4px) a barra media 1222px num main de
+          1272px: sobravam 20px de cada lado por onde os cards ROLAVAM
+          VISÍVEIS ao lado do fundo sólido — o defeito que o Marcio reportou
+          como "a div da pesquisa fica feia". `-mx-4 sm:-mx-6` + o padding
+          equivalente de volta cobre a faixa inteira em qualquer viewport.
+
           Fundo sólido (--surface-0, o mesmo do <main>) para o mosaico não
-          aparecer por trás enquanto rola; `pt-1` casa com o padding do
-          container. z-index baixo (1) — abaixo de qualquer overlay
-          (FichaDrawer etc., que ficam em 900+). */}
-      <div className="sticky top-0 z-[1] -mx-1 bg-[var(--surface-0)] px-1 pb-2 pt-1">
+          aparecer por trás enquanto rola. z-index baixo (1) — abaixo de
+          qualquer overlay (FichaDrawer etc., que ficam em 900+). */}
+      {/* Sangria pela CUSTOM PROP do padding real do <main> (--gp-main-pad,
+          publicada em AppShell.tsx), não por um `-mx-N` adivinhado: com
+          `-mx-6` sobravam ~10px — a largura da barra de rolagem do próprio
+          <main> — e os cards apareciam por trás da barra nessa fresta. Ligar
+          na variável faz a faixa acompanhar o breakpoint (16px → 24px)
+          sozinha; se o padding mudar no shell, muda aqui junto. */}
+      <div
+        className="sticky top-0 z-[1] bg-[var(--surface-0)] pb-3 pt-1"
+        style={{
+          marginInline: 'calc(-1 * var(--gp-main-pad, 24px))',
+          paddingInline: 'var(--gp-main-pad, 24px)',
+        }}
+      >
       {/* Busca acima dos controles: é o filtro que muda O CONJUNTO, e os
           seletores abaixo só reordenam o que sobrou — a ordem visual espelha
           a ordem de aplicação. */}
-      <div className="mb-3">
-        <div className="max-w-[420px]">
+      {/* Uma faixa só: busca à esquerda, ordenação e contadores à direita.
+          Antes eram DUAS faixas empilhadas (busca / ordenar+contadores) que
+          somavam 121px de altura fixa e deixavam um vão morto à direita da
+          busca — muito espaço gasto para pouca informação num board de 264
+          cards. Agrupadas numa superfície própria (--surface-1 + borda), a
+          barra vira um objeto reconhecível em vez de controles soltos sobre
+          o fundo. Em telas estreitas o `flex-wrap` volta a empilhar. */}
+      <div className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
+        <div className="min-w-[240px] flex-1 max-w-[420px]">
         <SearchInput
           ref={inputRef}
           value={busca}
@@ -225,6 +252,20 @@ export function BoardView({
           dica="/"
         />
         </div>
+
+        {/* Grupo da direita: ordenação + contadores por cor. Mesma linha da
+            busca — os dois são controles do mesmo mosaico. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex items-center gap-1.5" role="group" aria-label="Ordenar o mosaico por">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-4)]">Ordenar por</span>
+          <SeletorEixo ativo={eixo === 'funil'} onClick={() => setEixo('funil')}>Estágio do funil</SeletorEixo>
+          <SeletorEixo ativo={eixo === 'prazo'} onClick={() => setEixo('prazo')}>Prazo de pagamento</SeletorEixo>
+          <SeletorEixo ativo={eixo === 'valor'} onClick={() => setEixo('valor')}>Valor</SeletorEixo>
+        </div>
+        <ContadoresCor contadores={contadores} corFiltro={corFiltro} onCorFiltro={onCorFiltro} />
+        </div>
+        </div>
+
         {/* role="status" (não aria-live cru num número): anuncia a FRASE
             inteira "12 cards encontrados para maria", nunca "12" solto, e sem
             roubar o foco de quem ainda está digitando. */}
@@ -232,7 +273,7 @@ export function BoardView({
           id="board-busca-resultado"
           role="status"
           aria-atomic="true"
-          className="mt-1.5 min-h-[16px] text-[11px] text-[var(--fg-3)]"
+          className="mt-2 min-h-0 text-[11px] text-[var(--fg-3)] empty:hidden"
         >
           {/* Zero resultados NÃO é anunciado aqui: o painel de vazio logo
               abaixo já diz "Nenhum card para X" com as sugestões e o botão de
@@ -254,51 +295,6 @@ export function BoardView({
             </>
           ) : null}
         </p>
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="flex items-center gap-1.5" role="group" aria-label="Ordenar o mosaico por">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-4)]">Ordenar por</span>
-          <SeletorEixo ativo={eixo === 'funil'} onClick={() => setEixo('funil')}>Estágio do funil</SeletorEixo>
-          <SeletorEixo ativo={eixo === 'prazo'} onClick={() => setEixo('prazo')}>Prazo de pagamento</SeletorEixo>
-          <SeletorEixo ativo={eixo === 'valor'} onClick={() => setEixo('valor')}>Valor</SeletorEixo>
-        </div>
-
-        {/* N4 (2026-08-27): contador por cor virou filtro clicável — já
-            calculava {cor, n, saldo} e renderizava como texto morto; o
-            mosaico não tinha filtro por cor, e a cor é justamente o que ele
-            passou a carregar (faixa lateral, ver globals.css). Clicar de
-            novo na cor já ativa desliga o filtro (toggle). `role="group"` +
-            `aria-pressed` por botão: mesmo padrão de SeletorEixo acima. */}
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1" role="group" aria-label="Filtrar o mosaico por cor">
-          {contadores.map(({ cor, n, saldo }) => {
-            const ativo = corFiltro === cor;
-            return (
-              <button
-                key={cor}
-                type="button"
-                aria-pressed={ativo}
-                onClick={() => onCorFiltro(ativo ? null : cor)}
-                title={`${ROTULO_COR[cor]} — ${n} ${n === 1 ? 'card' : 'cards'}${ativo ? ' (clique para remover o filtro)' : ' (clique para filtrar)'}`}
-                className={`flex items-center gap-1.5 rounded-[var(--r-sm)] px-1.5 py-0.5 text-[11px] transition-colors focus-visible:ring-2 ${
-                  ativo
-                    ? 'bg-[var(--surface-3)] text-[var(--fg-2)] font-semibold border border-[var(--border-strong)]'
-                    : 'text-[var(--fg-3)] border border-transparent hover:bg-[var(--surface-2)]'
-                }`}
-              >
-                <span
-                  className="h-2 w-2 shrink-0 rounded-[var(--r-pill)]"
-                  style={{ background: VAR_COR[cor] }}
-                  aria-hidden
-                />
-                <span className="tabular">
-                  {n}
-                  {saldo > 0 && ` · ${fmtBRL(saldo)}`}
-                </span>
-              </button>
-            );
-          })}
-        </div>
       </div>
       </div>
 
@@ -352,6 +348,54 @@ export function BoardView({
         </ul>
       )}
     </div>
+  );
+}
+
+/** Contadores por cor — também o filtro por cor do mosaico (N4). Extraído
+ *  para componente em 2026-08-27 ao unificar a barra de controles numa linha
+ *  só: o JSX inline empurrava a barra para duas faixas e 121px de altura
+ *  fixa. Nenhum mapa de cor nasce aqui — VAR_COR/ROTULO_COR vêm de ui/cor.ts
+ *  e domain/cor-status.ts, mesma regra de todo o módulo. */
+function ContadoresCor({ contadores, corFiltro, onCorFiltro }: {
+  contadores: { cor: CorStatus; n: number; saldo: number }[];
+  corFiltro: CorStatus | null;
+  onCorFiltro: (c: CorStatus | null) => void;
+}) {
+  // N4 (2026-08-27): o contador por cor virou filtro clicável — já calculava
+  // {cor, n, saldo} e renderizava como texto morto; o mosaico não tinha filtro
+  // por cor, e a cor é justamente o que ele passou a carregar (faixa lateral,
+  // ver globals.css). Clicar de novo na cor ativa desliga o filtro (toggle).
+  // `role="group"` + `aria-pressed` por botão: mesmo padrão de SeletorEixo.
+  return (
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1" role="group" aria-label="Filtrar o mosaico por cor">
+          {contadores.map(({ cor, n, saldo }) => {
+            const ativo = corFiltro === cor;
+            return (
+              <button
+                key={cor}
+                type="button"
+                aria-pressed={ativo}
+                onClick={() => onCorFiltro(ativo ? null : cor)}
+                title={`${ROTULO_COR[cor]} — ${n} ${n === 1 ? 'card' : 'cards'}${ativo ? ' (clique para remover o filtro)' : ' (clique para filtrar)'}`}
+                className={`flex items-center gap-1.5 rounded-[var(--r-sm)] px-1.5 py-0.5 text-[11px] transition-colors focus-visible:ring-2 ${
+                  ativo
+                    ? 'bg-[var(--surface-3)] text-[var(--fg-2)] font-semibold border border-[var(--border-strong)]'
+                    : 'text-[var(--fg-3)] border border-transparent hover:bg-[var(--surface-2)]'
+                }`}
+              >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-[var(--r-pill)]"
+                  style={{ background: VAR_COR[cor] }}
+                  aria-hidden
+                />
+                <span className="tabular">
+                  {n}
+                  {saldo > 0 && ` · ${fmtBRL(saldo)}`}
+                </span>
+              </button>
+            );
+          })}
+        </div>
   );
 }
 
