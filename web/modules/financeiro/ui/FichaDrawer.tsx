@@ -4,14 +4,16 @@
 // e o que cobrar do comercial. Reusa Drawer/Tabs/Row do design system.
 import { useEffect, useState } from 'react';
 import {
-  AvatarInicial, Badge, Button, Drawer, EmptyState, Loading, Row, Tabs, Textarea, Timeline, useFlash,
+  AvatarInicial, Badge, Button, CopyField, Drawer, EmptyState, Loading, Row, SectionTitle, Tabs, Textarea, Timeline, useFlash,
 } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRLc, fmtData, fmtDesde } from '@/shared/ui/format';
-import type { ContaReceber, Cobranca, InteracaoAtivacao } from '../domain/types';
+import type { ContaReceber, Cobranca, InteracaoAtivacao, ReguaPasso } from '../domain/types';
 import { contaMorta, mascararDoc, statusLabel } from '../domain/financeiro';
+import { corStatus } from '../domain/cor-status';
 import { labelMotivoReuniao } from '../domain/reuniao';
 import { statusCompraLabel, statusTone, TONE_BADGE } from './cor';
+import { FichaResumoTopo } from './FichaResumoTopo';
 import type { FinanceiroRepository } from '../application/ports';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
 
@@ -65,9 +67,7 @@ function SecaoCombinadoComercial({ conta }: { conta: ContaReceber }) {
 
   return (
     <section>
-      <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">
-        Combinado na reunião
-      </h3>
+      <SectionTitle>Combinado na reunião</SectionTitle>
       <Row k="Resultado da reunião" v={conta.reuniao_resultado} />
       {(prometeu || naoPrometeu) && (
         <Row k="Trilha" v={prometeu ? 'Prometeu pagar' : 'Não prometeu pagar'} />
@@ -82,11 +82,16 @@ function SecaoCombinadoComercial({ conta }: { conta: ContaReceber }) {
   );
 }
 
-export function FichaDrawer({ conta, repo, canEdit, canVerDoc, onClose, onAcordoSalvo }: {
+export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, onClose, onAcordoSalvo }: {
   conta: ContaReceber;
   repo: FinanceiroRepository;
   canEdit: boolean;
   canVerDoc: boolean;
+  /** Régua de cobrança já carregada pelo chamador (FinanceiroClient) — nunca
+   *  buscada aqui: seria N queries por abertura de ficha para um dado que já
+   *  está em memória (F3 do plano). */
+  regua: ReguaPasso[];
+  hojeISO: string;
   onClose: () => void;
   onAcordoSalvo: () => void;
 }) {
@@ -140,29 +145,29 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, onClose, onAcordo
 
       {tab === 'resumo' && (
         <div className="space-y-4">
+          <FichaResumoTopo conta={conta} cor={corStatus(conta.status_financeiro)} regua={regua} hojeISO={hojeISO} />
           <section>
-            <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Dados pessoais</h3>
-            <Row k="E-mail" v={conta.email} />
-            <Row k="Telefone" v={conta.telefone} />
+            <SectionTitle>Por que ainda não pagou</SectionTitle>
+            <Row k="Pacote" v={conta.pacote != null ? fmtBRLc(conta.pacote) : 'Sem valor de pacote definido'} />
+            <Row k="Já pago (bruto)" v={fmtBRLc(conta.total_pago_bruto)} />
+            <Row k="Solicitou cancelamento" v={conta.solicitou_cancelamento ? 'Sim' : 'Não'} />
+            {conta.oferta_codigo && <Row k="Oferta enviada" v={`${conta.oferta_codigo} (${fmtData(conta.oferta_enviada_em)})`} />}
+          </section>
+          <SecaoCombinadoComercial conta={conta} />
+          <section>
+            <SectionTitle>Dados pessoais</SectionTitle>
+            <div className="space-y-2 mb-2">
+              {conta.telefone && <CopyField label="Telefone" value={conta.telefone} />}
+              {conta.email && <CopyField label="E-mail" value={conta.email} />}
+            </div>
             <Row k="Documento" v={mascararDoc(conta.documento, canVerDoc)} />
             <Row k="Canal de origem" v={conta.canal} />
             <Row k="Vendedor" v={conta.vendedor} />
             <Row k="Situação na ativação" v={conta.estagio_nome} />
           </section>
-          <SecaoCombinadoComercial conta={conta} />
-          <section>
-            <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Por que ainda não pagou</h3>
-            <Row k="Pacote" v={conta.pacote != null ? fmtBRLc(conta.pacote) : '—'} />
-            <Row k="Já pago (bruto)" v={fmtBRLc(conta.total_pago_bruto)} />
-            <Row k="Falta pagar" v={conta.saldo_a_pagar != null ? fmtBRLc(conta.saldo_a_pagar) : 'Sem valor definido'} />
-            <Row k="Vencimento combinado" v={conta.vencimento ? fmtData(conta.vencimento) : 'Sem acordo registrado'} />
-            <Row k="Dias em atraso" v={conta.dias_atraso != null && conta.dias_atraso > 0 ? `${conta.dias_atraso} dias` : '—'} />
-            <Row k="Solicitou cancelamento" v={conta.solicitou_cancelamento ? 'Sim' : 'Não'} />
-            {conta.oferta_codigo && <Row k="Oferta enviada" v={`${conta.oferta_codigo} (${fmtData(conta.oferta_enviada_em)})`} />}
-          </section>
           {morta && (
             <section>
-              <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Encerramento</h3>
+              <SectionTitle>Encerramento</SectionTitle>
               {conta.cancelamento_em && <Row k="Cancelamento solicitado em" v={fmtData(conta.cancelamento_em)} />}
               {conta.cancelamento_efetivado_em && <Row k="Cancelamento efetivado em" v={fmtData(conta.cancelamento_efetivado_em)} />}
               {conta.reembolso_em && <Row k="Reembolso em" v={fmtData(conta.reembolso_em)} />}
@@ -178,7 +183,7 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, onClose, onAcordo
         ) : !ficha ? null : (
           <div className="space-y-4">
             <section>
-              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Lançamentos ({ficha.extrato.length})</h3>
+              <SectionTitle>Lançamentos ({ficha.extrato.length})</SectionTitle>
               {!ficha.extrato.length ? (
                 <EmptyState title="Nenhum lançamento" icon="receipt" />
               ) : (
@@ -194,7 +199,7 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, onClose, onAcordo
               )}
             </section>
             <section>
-              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Compras Hotmart ({ficha.compras.length})</h3>
+              <SectionTitle>Compras Hotmart ({ficha.compras.length})</SectionTitle>
               {!ficha.compras.length ? (
                 <EmptyState title="Nenhuma compra encontrada" icon="receipt" />
               ) : (
@@ -220,7 +225,7 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, onClose, onAcordo
               )}
             </section>
             <section>
-              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Histórico do comercial ({ficha.historicoAtivacao.length})</h3>
+              <SectionTitle>Histórico do comercial ({ficha.historicoAtivacao.length})</SectionTitle>
               {!ficha.historicoAtivacao.length ? (
                 <EmptyState title="Nenhuma interação registrada" hint="O comercial ainda não registrou contato, nota ou mudança de estágio para esta conta." icon="clipboard" />
               ) : (
@@ -294,7 +299,7 @@ function CobrancaTab({ conta, repo, canEdit, cobrancas, carregando, flash, onAco
     <div className="space-y-4">
       {canEdit && (
         <section className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] p-3">
-          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Registrar cobrança</h3>
+          <SectionTitle>Registrar cobrança</SectionTitle>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <label className="text-xs text-[var(--fg-3)]">
               Canal
@@ -322,7 +327,7 @@ function CobrancaTab({ conta, repo, canEdit, cobrancas, carregando, flash, onAco
       )}
 
       <section>
-        <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-3)]">Histórico de cobrança</h3>
+        <SectionTitle>Histórico de cobrança</SectionTitle>
         {carregando ? (
           <Loading label="Carregando…" minHeight={100} />
         ) : !cobrancas.length ? (

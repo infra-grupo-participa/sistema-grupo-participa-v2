@@ -24,8 +24,9 @@ import { KpiCard } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRL } from '@/shared/ui/format';
 import type { Totais } from '../domain/totais';
+import { rotuloRecorte } from '../domain/recorte';
 
-export function RodapeTotais({ totais, totalCards, produtoAtivo, filtroAtivo, busca }: {
+export function RodapeTotais({ totais, totalCards, produtoAtivo, filtroAtivo, busca, corAtiva }: {
   totais: Totais;
   totalCards: number;
   /** Rótulo do produto ativo (ex.: "Holding Masters", "Aurum") — sempre presente, é o 1º eixo do recorte. */
@@ -38,9 +39,17 @@ export function RodapeTotais({ totais, totalCards, produtoAtivo, filtroAtivo, bu
    *  que despenca sem dizer por quê é a mesma armadilha do problema 6 (o
    *  rodapé parecia contradizer a contagem do board). */
   busca?: string;
+  /** Rótulo da cor filtrada (null = sem filtro de cor). Entra no recorte pelo
+   *  MESMO motivo da busca: o filtro de cor mexe nos 4 totais. Sem isto, com
+   *  amarelo ativo a frase dizia "só de Holding Masters — 37 card(s)" enquanto
+   *  HM tem 264 — o rodapé contradizendo o board, exatamente o problema 6 que
+   *  este bloco existe para evitar. Achado do fable-orchestrator, 2026-08-27. */
+  corAtiva?: string | null;
 }) {
-  const termo = busca?.trim() ?? '';
-  const recorte = [produtoAtivo, filtroAtivo, termo ? `busca "${termo}"` : null].filter(Boolean).join(' · ');
+  // Montagem do rótulo agora vem de domain/recorte.ts — mesma função que a
+  // barra de recorte (BarraRecorte, acima do mosaico) usa para os chips
+  // removíveis, para as duas nunca divergirem no texto do mesmo recorte.
+  const recorte = rotuloRecorte({ produtoLabel: produtoAtivo, canalLabel: filtroAtivo, busca: busca ?? '', corLabel: corAtiva ?? null });
   return (
     <div className="gp-print-hide mt-3 pt-3 border-t border-[var(--border)]">
       <div className="mb-2 flex items-center gap-1.5 text-[11px] text-[var(--fg-3)]">

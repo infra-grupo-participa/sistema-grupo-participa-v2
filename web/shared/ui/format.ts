@@ -58,6 +58,43 @@ export function fmtRelativo(iso: string | null | undefined): { label: string; ti
   return { label: d.toLocaleDateString('pt-BR'), title };
 }
 
+/**
+ * Prazo FUTURO ("vence hoje", "vence amanhã", "vence em 5 dias", "vence 12/09/2026").
+ *
+ * ⚠️ Existe porque `fmtRelativo` acima é formatador de PASSADO: ele calcula
+ * `hoje − data` e colapsa TODO futuro em `dias <= 0 → "hoje"`. Usá-lo num
+ * vencimento fazia uma conta que vence em 14 dias exibir "vence hoje" — o
+ * oposto do que a tela precisa responder ("estou atrasado?"). Achado do
+ * fable-orchestrator, 2026-08-27.
+ *
+ * `hojeISO` é injetado (função pura, não lê relógio) — mesma disciplina de
+ * proximaAcao()/faixaPrazoDe() no domínio do financeiro, e é o que torna o
+ * limiar testável sem congelar o relógio do processo.
+ *
+ * Passado devolve `null`: quem está atrasado tem outro canal na tela (o chip
+ * "Nd em atraso", com dias_atraso do banco). Devolver "há 3 dias" aqui
+ * duplicaria o sinal com uma contagem calculada de forma diferente.
+ */
+export function fmtPrazo(iso: string | null | undefined, hojeISO: string): { label: string; title: string } | null {
+  if (!iso) return null;
+  const ymd = String(iso).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd) || !/^\d{4}-\d{2}-\d{2}$/.test(hojeISO)) return null;
+
+  // Calendário puro (UTC dos dois lados) — sem fuso, igual a addDias() de cobranca.ts.
+  const ms = (s: string) => {
+    const [y, m, d] = s.split('-').map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  const dias = Math.round((ms(ymd) - ms(hojeISO)) / 86400000);
+  if (dias < 0) return null;
+
+  const title = fmtData(ymd);
+  if (dias === 0) return { label: 'vence hoje', title };
+  if (dias === 1) return { label: 'vence amanhã', title };
+  if (dias <= 30) return { label: `vence em ${dias} dias`, title };
+  return { label: `vence ${title}`, title };
+}
+
 /** Tempo decorrido com granularidade fina ("agora", "há 58 min", "há 3h", "há 2 dias").
  *  Para o último evento de uma linha — mais preciso que fmtRelativo (que é por dia). */
 export function fmtDesde(iso: string | null | undefined): { label: string; title: string } {

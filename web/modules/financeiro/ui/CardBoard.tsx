@@ -12,7 +12,7 @@
 // fixa — informação secundária, não estrutural.
 import { Icon } from '@/shared/ui/icons';
 import { ProgressBar } from '@/shared/ui/components';
-import { fmtBRLc, fmtData, fmtRelativo } from '@/shared/ui/format';
+import { fmtBRLc, fmtData, fmtPrazo } from '@/shared/ui/format';
 import type { CardComEfeito } from '../application/carregar-board';
 import { statusLabel } from '../domain/financeiro';
 import { labelMotivoReuniao } from '../domain/reuniao';
@@ -78,7 +78,7 @@ const TEXTO_PARADO: Record<ReturnType<typeof tomParado>, string> = {
   forte: 'text-[var(--yellow)]',
 };
 
-export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (id: string) => void }) {
+export function CardBoardView({ card, onOpen, hojeISO }: { card: CardComEfeito; onOpen: (id: string) => void; hojeISO: string }) {
   const { conta } = card;
   const dias = card.diasNoEstagio;
   const titleEstagio = conta.estagio_nome ? `Situação na ativação: ${conta.estagio_nome}` : undefined;
@@ -93,7 +93,12 @@ export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (
 
   const quitado = conta.status_financeiro === 'quitado';
   const emAtraso = (conta.dias_atraso ?? 0) > 0;
-  const venceRel = conta.vencimento ? fmtRelativo(conta.vencimento) : null;
+  // fmtPrazo (futuro), NÃO fmtRelativo (passado) — fmtRelativo colapsa todo
+  // futuro em "hoje", então um card com vencimento em 14 dias mostrava
+  // "vence hoje". Bug pré-existente, achado em 2026-08-27 junto com o mesmo
+  // uso na ficha; corrigido nos DOIS lugares para não divergirem.
+  // Travado em shared/ui/format.test.ts.
+  const prazo = fmtPrazo(conta.vencimento, hojeISO);
 
   // F7: "sem data de pagamento" — informativo, sem ação. Trilha B (não
   // prometeu): mostra motivo + data de retomar, para o financeiro saber que
@@ -120,7 +125,12 @@ export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (
     <button
       type="button"
       onClick={() => onOpen(conta.contato_hm_id)}
-      className={`gp-card ${CLASSE_CARD[card.cor]} gp-card--u${card.urgencia} w-full text-left p-4 cursor-pointer shadow-[var(--shadow-sm)] transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] focus-visible:ring-2`}
+      // ⚠️ 2026-08-27: SEM `shadow-*` do Tailwind aqui. A faixa lateral de status
+      // é `box-shadow: inset` (.gp-card--{cor} em globals.css), e uma utility de
+      // sombra na mesma especificidade sobrescreve a propriedade inteira — a
+      // faixa sumia no hover, justamente o sinal de cor mais forte do card.
+      // Elevação e faixa convivem em UMA declaração só, em `.gp-card`/`.gp-card:hover`.
+      className={`gp-card ${CLASSE_CARD[card.cor]} gp-card--u${card.urgencia} w-full text-left p-4 cursor-pointer transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 focus-visible:ring-2`}
       aria-label={`Abrir ficha de ${conta.nome}, ${card.origem}, ${statusLabel(conta.status_financeiro)}${
         conta.saldo_a_pagar != null ? `, falta pagar ${fmtBRLc(conta.saldo_a_pagar)}` : ''
       }${card.motivoUrgencia ? `, ${card.motivoUrgencia}` : ''}`}
@@ -209,9 +219,9 @@ export function CardBoardView({ card, onOpen }: { card: CardComEfeito; onOpen: (
             <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--red)]">
               <Icon name="alert" size={11} /> {conta.dias_atraso}d em atraso
             </span>
-          ) : venceRel ? (
-            <span className="shrink-0 text-[10px] tabular text-[var(--fg-3)]" title={venceRel.title}>
-              vence {venceRel.label}
+          ) : prazo ? (
+            <span className="shrink-0 text-[10px] tabular text-[var(--fg-3)]" title={prazo.title}>
+              {prazo.label}
             </span>
           ) : null}
         </div>
