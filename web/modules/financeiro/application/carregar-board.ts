@@ -141,8 +141,6 @@ export const FAIXAS_FUNIL: { chave: FaixaFunil; rotulo: string }[] = [
 export interface BoardCarregado {
   /** Todos os cards, já com faixa/cor/urgência/reserva calculadas — para filtro no cliente. */
   cards: CardComEfeito[];
-  /** Cards agrupados nas 5 faixas do funil (colunas do board), na ordem de FAIXAS_FUNIL. */
-  colunas: Record<FaixaFunil, CardComEfeito[]>;
   /** Totais do rodapé sobre TODOS os cards (recalcular sobre `visiveis` ao filtrar).
    *  Reserva ENTRA em esperado/naRua (é dinheiro contratado) — só ganha marca visual no card. */
   totais: Totais;
@@ -178,12 +176,5 @@ export async function carregarBoard(
     };
   });
 
-  const colunas = Object.fromEntries(
-    FAIXAS_FUNIL.map(({ chave }) => [
-      chave,
-      cards.filter((c) => c.faixaFunil === chave).sort((a, b) => (b.conta.saldo_a_pagar ?? 0) - (a.conta.saldo_a_pagar ?? 0)),
-    ]),
-  ) as Record<FaixaFunil, CardComEfeito[]>;
-
-  return { cards, colunas, totais: calcularTotais(cards.map((c) => c.conta)) };
+  return { cards, totais: calcularTotais(cards.map((c) => c.conta)) };
 }

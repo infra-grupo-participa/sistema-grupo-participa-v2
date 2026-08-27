@@ -19,6 +19,26 @@
   --red:#dc2626; --red-subtle:rgba(220,38,38,.12); --red-border:rgba(220,38,38,.22);
   --info:#60a5fa; --info-subtle:rgba(96,165,250,.12); --info-border:rgba(96,165,250,.24);
 
+  /* Halo de cor MAIS FORTE (tokens NOVOS, 2026-08-27 — pedido do Marcio de
+     mais destaque nos cards do board financeiro). Não tocam --{tom}-subtle
+     acima: aqueles servem Badge/chips e outros 6 módulos (regressão de
+     25/08 — CSS global de 4 linhas quebrou 5 telas). Alpha .26, não .12:
+     medido (WCAG 2.x, alpha-over-background) com o halo encurtado para 26%
+     de altura (ver .gp-card::after) — "Falta pagar" (10px, --fg-3, y≈62px)
+     sai de 3,97 (REPROVA 4,5:1) para 4,06 no dark / 4,76 no light. */
+  --green-halo:rgba(22,163,74,.26); --yellow-halo:rgba(217,119,6,.26);
+  --red-halo:rgba(220,38,38,.26); --info-halo:rgba(96,165,250,.26);
+
+  /* Borda tonal de urgência MAIS FORTE (token NOVO, 2026-08-27). A borda
+     original (--{tom}-border, alpha .22) mede 1,19-1,77:1 contra o card —
+     praticamente invisível, causa direta da queixa "muito sutil". Alpha .70
+     mede 2,73-4,71 (dark) / 2,58-3,39 (light). Verde/azul no claro ficam
+     abaixo de 3:1 (2,58/2,67) — ACEITO por decisão do Marcio: a borda não é
+     canal único de urgência (há halo, dot, pulso u3 e motivoUrgencia em
+     aria-label/title). Não subir para .85: competiria com a faixa lateral. */
+  --green-border-forte:rgba(22,163,74,.70); --yellow-border-forte:rgba(217,119,6,.70);
+  --red-border-forte:rgba(220,38,38,.70); --info-border-forte:rgba(96,165,250,.70);
+
   /* Superfícies — elevação por lightness */
   --surface-0:#000; --surface-1:#0d0d0d; --surface-2:#141414; --surface-3:#1c1c1c; --surface-4:#242424;
 
@@ -78,6 +98,13 @@
   --purple:#6d28d9; --purple-subtle:rgba(109,40,217,.14); --purple-border:rgba(109,40,217,.32);
   --red:#b91c1c; --red-subtle:rgba(185,28,28,.14); --red-border:rgba(185,28,28,.32);
   --info:#2563eb; --info-subtle:rgba(37,99,235,.12); --info-border:rgba(37,99,235,.3);
+
+  /* Halo/borda-forte no tema claro — mesmos tokens NOVOS de :root (2026-08-27),
+     valores medidos para o fundo claro (ver :root para a nota completa). */
+  --green-halo:rgba(21,128,61,.26); --yellow-halo:rgba(180,83,9,.26);
+  --red-halo:rgba(185,28,28,.26); --info-halo:rgba(37,99,235,.26);
+  --green-border-forte:rgba(21,128,61,.70); --yellow-border-forte:rgba(180,83,9,.70);
+  --red-border-forte:rgba(185,28,28,.70); --info-border-forte:rgba(37,99,235,.70);
 
   /* Produtos — escurecidos p/ contraste sobre fundo claro.
      Medido (badge = texto bold pequeno, alvo >= 3:1 do WCAG para texto grande,
@@ -241,41 +268,64 @@ body {
   isolation: isolate;
 }
 
-/* Barra-topo 2px no tom do status — mesmo padrão de StatCard (prop `bar`). */
+/* Barra-topo no tom do status — mesmo padrão de StatCard (prop `bar`).
+   2px→3px (2026-08-27, mais força): medido a 100% opacidade vs card/página —
+   verde 5,59/6,37 · amarelo 5,78/6,59 · vermelho 3,81/4,35 · azul 7,25/8,26
+   (dark); todos ≥3:1 no light também. Passa. */
 .gp-card::before {
   content: '';
   position: absolute;
   inset: 0 0 auto 0;
-  height: 2px;
+  height: 3px;
   background: var(--border-strong);
   z-index: 2;
 }
 
-/* Halo: gradiente do tom (alpha .12) até transparente, ~40% da altura a
-   partir do topo. É o "efeito" — lava o card, não o pinta. Ausente em
-   urgência 0 (sem halo) e no tom neutro (sem tom próprio para lavar). */
+/* Halo: gradiente do tom até transparente. Encurtado de 40%→26% da altura e
+   alpha subiu de .12→.26 (--gp-card-alerta-forte, tokens NOVOS --{tom}-halo,
+   2026-08-27) — o halo mais curto tira o texto pequeno ("Falta pagar", y≈62px)
+   da zona pigmentada: mede 4,06 (dark) / 4,76 (light) mesmo com o alpha maior.
+   Nome do aluno (y≈16px, ponto mais pigmentado) mede 12,16-14,18 (dark) /
+   13,19-14,04 (light) — folga enorme. É o "efeito" — lava o card, não o
+   pinta. Ausente em urgência 0 (sem halo) e no tom neutro (sem tom próprio
+   para lavar). */
 .gp-card::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: linear-gradient(to bottom, var(--gp-card-alerta-subtle, transparent) 0%, transparent 40%);
+  background: linear-gradient(to bottom, var(--gp-card-alerta-forte, transparent) 0%, transparent 26%);
   opacity: 0;
 }
 
-.gp-card--verde { --gp-card-tone: var(--green); --gp-card-tone-subtle: var(--green-subtle); --gp-card-tone-border: var(--green-border); }
-.gp-card--azul { --gp-card-tone: var(--info); --gp-card-tone-subtle: var(--info-subtle); --gp-card-tone-border: var(--info-border); }
-.gp-card--amarelo { --gp-card-tone: var(--yellow); --gp-card-tone-subtle: var(--yellow-subtle); --gp-card-tone-border: var(--yellow-border); }
-.gp-card--vermelho { --gp-card-tone: var(--red); --gp-card-tone-subtle: var(--red-subtle); --gp-card-tone-border: var(--red-border); }
+.gp-card--verde {
+  --gp-card-tone: var(--green); --gp-card-tone-subtle: var(--green-subtle); --gp-card-tone-border: var(--green-border);
+  --gp-card-tone-halo: var(--green-halo); --gp-card-tone-border-forte: var(--green-border-forte);
+}
+.gp-card--azul {
+  --gp-card-tone: var(--info); --gp-card-tone-subtle: var(--info-subtle); --gp-card-tone-border: var(--info-border);
+  --gp-card-tone-halo: var(--info-halo); --gp-card-tone-border-forte: var(--info-border-forte);
+}
+.gp-card--amarelo {
+  --gp-card-tone: var(--yellow); --gp-card-tone-subtle: var(--yellow-subtle); --gp-card-tone-border: var(--yellow-border);
+  --gp-card-tone-halo: var(--yellow-halo); --gp-card-tone-border-forte: var(--yellow-border-forte);
+}
+.gp-card--vermelho {
+  --gp-card-tone: var(--red); --gp-card-tone-subtle: var(--red-subtle); --gp-card-tone-border: var(--red-border);
+  --gp-card-tone-halo: var(--red-halo); --gp-card-tone-border-forte: var(--red-border-forte);
+}
 /* Neutro não lava o card com cor nenhuma. Desde 23/08/2026 ele NÃO é estado de negócio:
    os 11 status conhecidos caem em verde/azul/amarelo/vermelho (ver domain/cor-status.ts).
    Card neutro significa que o banco mandou um status que o front não conhece — é alarme
    silencioso de drift, e é por isso que a legenda ganha a 5ª entrada quando ele aparece. */
-.gp-card--neutro { --gp-card-tone: var(--border-strong); --gp-card-tone-subtle: transparent; --gp-card-tone-border: var(--border); }
+.gp-card--neutro {
+  --gp-card-tone: var(--border-strong); --gp-card-tone-subtle: transparent; --gp-card-tone-border: var(--border);
+  --gp-card-tone-halo: transparent; --gp-card-tone-border-forte: var(--border-strong);
+}
 
 /* Identidade (o que é) x Atenção (o que fazer): --gp-card-tone pinta barra-topo e dot
-   estático — fato do status. --gp-card-alerta pinta halo, borda tonal (u2/u3) e o anel
+   estático — fato do status. --gp-card-alerta* pinta halo, borda tonal (u2/u3) e o anel
    de pulso (u3) — urgência. Default = a mesma família do tom; só o verde diverge, porque
    `em_pagamento` (verde) pode estar atrasado e um halo verde pulsante lê como "tudo certo",
    o oposto do que a urgência 2/3 significa. Decisão do arquiteto, 2026-08-23. */
@@ -287,11 +337,15 @@ body {
   --gp-card-alerta: var(--gp-card-tone);
   --gp-card-alerta-subtle: var(--gp-card-tone-subtle);
   --gp-card-alerta-border: var(--gp-card-tone-border);
+  --gp-card-alerta-forte: var(--gp-card-tone-halo);
+  --gp-card-alerta-border-forte: var(--gp-card-tone-border-forte);
 }
 .gp-card--verde {
   --gp-card-alerta: var(--yellow);
   --gp-card-alerta-subtle: var(--yellow-subtle);
   --gp-card-alerta-border: var(--yellow-border);
+  --gp-card-alerta-forte: var(--yellow-halo);
+  --gp-card-alerta-border-forte: var(--yellow-border-forte);
 }
 
 .gp-card--verde::before, .gp-card--azul::before, .gp-card--amarelo::before, .gp-card--vermelho::before, .gp-card--neutro::before {
@@ -304,13 +358,52 @@ body {
 /* Urgência 1: halo padrão. */
 .gp-card--u1::after { opacity: 1; }
 
-/* Urgência 2: halo + borda tonal (mais forte que a borda neutra padrão). */
+/* Urgência 2: halo + borda tonal FORTE (2026-08-27: alpha .70 em vez de .22 —
+   a borda .22 media 1,19-1,77:1 contra o card, praticamente invisível, causa
+   direta da queixa "muito sutil". Medido a .70: 2,73-4,71 (dark) / 2,58-3,39
+   (light). Verde/azul no claro ficam abaixo de 3:1 (2,58/2,67) — ACEITO por
+   decisão do Marcio: a borda não é canal único de urgência, há halo, dot,
+   pulso (u3) e o motivo textual em title/aria-label via motivoUrgencia. Não
+   subir para .85: a borda passaria a competir com a faixa lateral (ver
+   .gp-card--{tom} box-shadow abaixo). */
 .gp-card--u2::after { opacity: 1; }
-.gp-card--u2 { border-color: var(--gp-card-alerta-border); }
+.gp-card--u2 { border-color: var(--gp-card-alerta-border-forte); }
 
-/* Urgência 3: halo + borda + dot pulsante — o mais urgente, coloração mais forte. */
+/* Urgência 3: halo + borda forte + dot pulsante — o mais urgente, coloração mais forte. */
 .gp-card--u3::after { opacity: 1; }
-.gp-card--u3 { border-color: var(--gp-card-alerta-border); }
+.gp-card--u3 { border-color: var(--gp-card-alerta-border-forte); }
+
+/* Faixa lateral esquerda — regra NOVA (2026-08-27), o maior ganho de força
+   pedido pelo Marcio. box-shadow inset, NÃO border-left: o card já tem
+   `border: 1px solid` e trocar a borda por lado quebraria o alinhamento do
+   border-radius. Pigmento 100% opaco, em posição FIXA e ALINHADA entre todos
+   os cards do grid — num mosaico de 264 cards uma coluna de 3px alinhada lê
+   como padrão à distância ("quanto amarelo tem na tela"). Halo é difuso e
+   some no meio do mosaico; faixa opaca não some.
+   --gp-card-faixa é var própria (não --gp-card-tone) para permitir o gate de
+   intensidade abaixo sem tocar a cor da barra-topo/dot. */
+.gp-card--verde, .gp-card--azul, .gp-card--amarelo, .gp-card--vermelho, .gp-card--neutro {
+  --gp-card-faixa: var(--gp-card-tone);
+}
+
+/* Faixa + elevação numa declaração SÓ. `box-shadow` é uma propriedade única:
+   duas regras não se somam, a última vence. Por isso a sombra de elevação NÃO
+   pode vir de utility Tailwind no componente (`shadow-sm`/`hover:shadow-md`) —
+   ela apagava a faixa inteira, e no hover o card perdia a cor de status.
+   Ver nota em CardBoard.tsx. */
+.gp-card { box-shadow: inset 3px 0 0 0 var(--gp-card-faixa, transparent), var(--shadow-sm); }
+.gp-card:hover { box-shadow: inset 3px 0 0 0 var(--gp-card-faixa, transparent), var(--shadow-md); }
+
+/* Gate de intensidade da faixa — DECISÃO DO MARCIO, 2026-08-27 (vinculante):
+   - Card ENCERRADO (cancelado/reembolsado/cancelamento_solicitado → vermelho)
+     = faixa RECUADA (alpha ~.45). A legenda promete "vermelho apagado =
+     encerrado, não perseguir"; faixa vermelha cheia quebraria essa promessa.
+   - Card QUITADO (verde, urgência 0) = faixa VERDE CHEIA (100%) — "brilha
+     como recompensa visual". Diferencia quitado de cancelado, os dois u0
+     (ver domain/board.ts:23) — por isso o gate NÃO pode ser só por urgência,
+     é por COR: só .gp-card--vermelho recua, nunca .gp-card--verde.
+   - Todo o resto (u1+) segue 100% (regra acima, sem exceção). */
+.gp-card--vermelho { --gp-card-faixa: color-mix(in srgb, var(--gp-card-tone) 45%, transparent); }
 
 .gp-card__dot {
   position: relative;
@@ -337,10 +430,14 @@ body {
   100% { transform: scale(1.8); opacity: 0; }
 }
 
-/* Tema claro herda --{tom}-subtle/-border automaticamente (redefinidos em
-   [data-theme="light"] acima) e NÃO ganha sombra — decisão do design system
-   (superfícies claras ganham profundidade por borda, não por sombra). */
-[data-theme="light"] .gp-card { box-shadow: none; }
+/* Tema claro NÃO ganha sombra de elevação — decisão do design system
+   (superfícies claras ganham profundidade por borda, não por sombra). Isso já
+   acontece sozinho: --shadow-sm/-md são `none` em [data-theme="light"], e a
+   regra única de .gp-card acima compõe `inset <faixa>, none`.
+   ⚠️ 2026-08-27: a regra `[data-theme="light"] .gp-card { box-shadow: none }`
+   que existia aqui foi REMOVIDA de propósito — ela apagava a faixa lateral de
+   status (que também é box-shadow, inset) por completo no tema claro. Não
+   recriar: para tirar elevação, zere o TOKEN, nunca a propriedade. */
 
 /* A11y: a informação de urgência nunca pode depender só de movimento.
    Desliga o pulso, mantendo borda e halo — o dot continua visível, parado. */
@@ -380,6 +477,10 @@ input[type='search']::-webkit-search-decoration {
     --purple:#6d28d9; --purple-subtle:rgba(109,40,217,.14); --purple-border:rgba(109,40,217,.32);
     --red:#b91c1c; --red-subtle:rgba(185,28,28,.14); --red-border:rgba(185,28,28,.32);
     --info:#2563eb; --info-subtle:rgba(37,99,235,.12); --info-border:rgba(37,99,235,.3);
+    /* Halo já é display:none no print (abaixo) — redefinido aqui só para a
+       borda tonal forte (.gp-card--u2/u3) não vazar o valor do tema ativo. */
+    --green-border-forte:rgba(21,128,61,.70); --yellow-border-forte:rgba(180,83,9,.70);
+    --red-border-forte:rgba(185,28,28,.70); --info-border-forte:rgba(37,99,235,.70);
     --surface-0:#eef1f6; --surface-1:#fff; --surface-2:#fff; --surface-3:#eef1f6; --surface-4:#dde3ec;
     --border-faint:rgba(15,23,42,.06); --border:rgba(15,23,42,.12);
     --border-strong:rgba(15,23,42,.22); --border-accent:rgba(224,127,16,.42);
@@ -401,7 +502,11 @@ input[type='search']::-webkit-search-decoration {
   table { border-collapse: collapse; width: 100%; }
 
   /* Cards de status na impressão: sem halo/sombra/pulso — só a informação,
-     em preto e branco funcional (impressora pode não reproduzir cor fiel). */
+     em preto e branco funcional (impressora pode não reproduzir cor fiel).
+     A faixa lateral (2026-08-27) é box-shadow inset — já morre aqui de graça,
+     junto com a sombra de elevação. INTENCIONAL: mantenha assim, não recrie a
+     faixa via border no print. A barra-topo (::before, abaixo) é o único
+     pigmento de status que sobrevive ao papel. */
   .gp-card { box-shadow: none !important; }
   .gp-card::after { display: none; }
   .gp-card--u3 .gp-card__dot::before { animation: none; opacity: 0; }
