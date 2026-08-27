@@ -60,7 +60,16 @@ export function AppShell({ user, children }: { user: GpUser; children: React.Rea
             className="fixed inset-0 z-40 bg-black/45 md:hidden"
           />
         )}
-        <main className="flex-1 min-w-0 overflow-auto p-4 sm:p-6 bg-[var(--surface-0)]">
+        {/* `--gp-main-pad` publica o padding horizontal desta área de scroll
+            para quem precisa de uma faixa full-bleed dentro dela (barra sticky
+            do board financeiro, por exemplo). Sem isso o consumidor tem que
+            ADIVINHAR o valor com `-mx-N`, e erra no breakpoint ou na largura
+            da barra de rolagem — foi assim que os cards apareciam por trás da
+            barra de busca numa fresta de 10px (2026-08-27). Se o padding
+            mudar aqui, muda lá junto. */}
+        <main
+          className="flex-1 min-w-0 overflow-auto p-4 sm:p-6 bg-[var(--surface-0)] [--gp-main-pad:16px] sm:[--gp-main-pad:24px]"
+        >
           {/* key por rota → fade sutil a cada navegação (percepção de fluidez, sem quebrar densidade) */}
           <div key={pathname} className="gp-fade-in">
             {children}
