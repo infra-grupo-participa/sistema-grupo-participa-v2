@@ -111,6 +111,39 @@ export function FichaResumoTopo({ conta, cor, regua, hojeISO }: {
           )}
         </div>
       )}
+
+      {/* AÇÃO de contato junto da recomendação — não o DADO, que segue em
+          "Dados pessoais" no fim da ficha (CopyField).
+          🔑 Correção de 2026-08-27: a ficha recomendava "fazer 2ª cobrança" no
+          topo e escondia o instrumento dessa ação no rodapé, obrigando a rolar
+          a ficha inteira para obedecer à própria recomendação. Nielsen resolve
+          o conflito "agrupamento lógico × frequência de uso" a favor da
+          FREQUÊNCIA ("disclose everything that users frequently need up front",
+          nngroup.com/articles/progressive-disclosure) — e num time de cobrança
+          acionar o devedor é a ação frequente. Separar AÇÃO de DADO evita
+          devolver o ruído das 20 linhas: o endereço continua embaixo, só o
+          botão sobe.
+
+          ⚠️ SÓ E-MAIL, de propósito. `conta.telefone` chega SEMPRE null aqui:
+          a RPC do board não devolve telefone/documento por LGPD (dado pessoal
+          sem consumidor na tela não trafega — ver carregar-board.ts:31) e a
+          ficha reusa o card já carregado, não busca a conta completa. Um botão
+          de WhatsApp/Ligar renderizaria zero vezes hoje. Para tê-lo é preciso
+          decidir ANTES se o telefone passa a trafegar — decisão de LGPD, não
+          de UI. Registrado como pendência, não implementado às cegas.
+
+          Some quando a conta não pede ação (mesma condição do bloco acima):
+          botão de cobrar em conta quitada seria CTA fantasma. */}
+      {acao.tipo !== 'nenhuma' && conta.email && (
+        <div className="mt-2.5">
+          <a
+            href={`mailto:${conta.email}`}
+            className="inline-flex items-center gap-1.5 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1.5 text-xs font-semibold text-[var(--fg-2)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--fg)] focus-visible:ring-2"
+          >
+            <Icon name="mail" size={13} /> Escrever e-mail
+          </a>
+        </div>
+      )}
     </section>
   );
 }
