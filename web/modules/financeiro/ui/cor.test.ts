@@ -6,12 +6,15 @@ import { describe, it, expect } from 'vitest';
 import type { StatusFinanceiro } from '../domain/types';
 import { corStatus, COR_POR_STATUS, type CorStatus } from '../domain/cor-status';
 import { CLASSE_CARD, TONE_BADGE, TONE_BARRA, VAR_COR, statusTone, statusCompraLabel } from './cor';
+import { CORES_BASE } from './LegendaCores';
+import { ORDEM_COR } from './BoardView';
 
 const TODOS_STATUS = Object.keys(COR_POR_STATUS) as StatusFinanceiro[];
 
 /** Tabela de projeção do plano do arquiteto — a verdade a ser travada. */
 const PROJECAO: Record<CorStatus, { classe: string; badge: string; barra: string; var: string }> = {
   verde: { classe: 'gp-card--verde', badge: 'success', barra: 'green', var: 'var(--green)' },
+  ciano: { classe: 'gp-card--ciano', badge: 'cyan', barra: 'cyan', var: 'var(--cyan)' },
   azul: { classe: 'gp-card--azul', badge: 'info', barra: 'info', var: 'var(--info)' },
   amarelo: { classe: 'gp-card--amarelo', badge: 'warning', barra: 'yellow', var: 'var(--yellow)' },
   vermelho: { classe: 'gp-card--vermelho', badge: 'danger', barra: 'red', var: 'var(--red)' },
@@ -41,11 +44,25 @@ describe('ui/cor — paridade card/ficha/barra/tabela (11 status)', () => {
     expect(statusTone('status_que_o_banco_inventou')).toBe('neutral');
   });
 
-  it('as 5 projeções (CLASSE_CARD/TONE_BADGE/TONE_BARRA/VAR_COR) cobrem as 5 cores, exaustivamente', () => {
-    const cores: CorStatus[] = ['verde', 'azul', 'amarelo', 'vermelho', 'neutro'];
+  it('as 4 projeções (CLASSE_CARD/TONE_BADGE/TONE_BARRA/VAR_COR) cobrem as 6 cores, exaustivamente', () => {
+    const cores: CorStatus[] = ['verde', 'ciano', 'azul', 'amarelo', 'vermelho', 'neutro'];
     for (const mapa of [CLASSE_CARD, TONE_BADGE, TONE_BARRA, VAR_COR]) {
       expect(Object.keys(mapa).sort()).toEqual([...cores].sort());
     }
+  });
+});
+
+describe('LegendaCores/BoardView — arrays literais em paridade com COR_POR_STATUS', () => {
+  // Import direto de CORES_BASE/ORDEM_COR (não cópia): são arrays literais, o
+  // TypeScript não avisa se alguém esquecer uma cor nova — é o furo que este
+  // teste existe para travar (ver pedido do Marcio, 2026-09-04).
+  it('CORES_BASE (LegendaCores) e ORDEM_COR (BoardView, sem o neutro final) são a mesma lista, na mesma ordem', () => {
+    expect(CORES_BASE).toEqual(ORDEM_COR.slice(0, -1));
+  });
+
+  it('CORES_BASE contém exatamente as mesmas cores de negócio de COR_POR_STATUS (exclui neutro)', () => {
+    const coresDeNegocio = new Set(Object.values(COR_POR_STATUS));
+    expect(new Set(CORES_BASE)).toEqual(coresDeNegocio);
   });
 });
 

@@ -16,6 +16,7 @@ export type { Tone };
 /** Classe .gp-card--* (globals.css) por cor de status. */
 export const CLASSE_CARD: Record<CorStatus, string> = {
   verde: 'gp-card--verde',
+  ciano: 'gp-card--ciano',
   azul: 'gp-card--azul',
   amarelo: 'gp-card--amarelo',
   vermelho: 'gp-card--vermelho',
@@ -25,6 +26,7 @@ export const CLASSE_CARD: Record<CorStatus, string> = {
 /** Tom de Badge (shared/ui/components/Badge.tsx) por cor de status. */
 export const TONE_BADGE: Record<CorStatus, Tone> = {
   verde: 'success',
+  ciano: 'cyan',
   azul: 'info',
   amarelo: 'warning',
   vermelho: 'danger',
@@ -32,8 +34,9 @@ export const TONE_BADGE: Record<CorStatus, Tone> = {
 };
 
 /** Tom de ProgressBar (shared/ui/components/Feedback.tsx) por cor de status. */
-export const TONE_BARRA: Record<CorStatus, 'green' | 'info' | 'yellow' | 'red' | 'neutral'> = {
+export const TONE_BARRA: Record<CorStatus, 'green' | 'cyan' | 'info' | 'yellow' | 'red' | 'neutral'> = {
   verde: 'green',
+  ciano: 'cyan',
   azul: 'info',
   amarelo: 'yellow',
   vermelho: 'red',
@@ -43,6 +46,7 @@ export const TONE_BARRA: Record<CorStatus, 'green' | 'info' | 'yellow' | 'red' |
 /** Var CSS crua por cor de status — para texto solto que não passa por Badge/ProgressBar/card. */
 export const VAR_COR: Record<CorStatus, string> = {
   verde: 'var(--green)',
+  ciano: 'var(--cyan)',
   azul: 'var(--info)',
   amarelo: 'var(--yellow)',
   vermelho: 'var(--red)',

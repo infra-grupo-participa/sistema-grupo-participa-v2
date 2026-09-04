@@ -9,7 +9,7 @@ import {
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRLc, fmtData, fmtDesde } from '@/shared/ui/format';
 import type { ContaReceber, Cobranca, InteracaoAtivacao, ReguaPasso } from '../domain/types';
-import { contaMorta, mascararDoc, statusLabel } from '../domain/financeiro';
+import { contaMorta, direcaoDivergencia, mascararDoc, statusLabel, temDivergenciaPacote } from '../domain/financeiro';
 import { corStatus } from '../domain/cor-status';
 import { labelMotivoReuniao } from '../domain/reuniao';
 import { statusCompraLabel, statusTone, TONE_BADGE } from './cor';
@@ -149,6 +149,19 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
           <section>
             <SectionTitle>Por que ainda não pagou</SectionTitle>
             <Row k="Pacote" v={conta.pacote != null ? fmtBRLc(conta.pacote) : 'Sem valor de pacote definido'} />
+            {/* Divergência pacote cravado × régua (N2, 2026-09-04): informação
+                NEUTRA, não alerta — o cravado (Row "Pacote" acima) sempre
+                prevalece no cálculo. Sem divergência conhecida (dado ausente
+                ou dentro da tolerância), nada muda aqui. */}
+            {temDivergenciaPacote(conta) && (
+              <>
+                <Row k="Pacote pela régua" v={fmtBRLc(conta.pacote_regra)} />
+                <Row
+                  k="Diferença"
+                  v={`${fmtBRLc(Math.abs(conta.divergencia_regra as number))} ${direcaoDivergencia(conta) === 'a_maior' ? 'a mais' : 'a menos'}`}
+                />
+              </>
+            )}
             <Row k="Já pago (bruto)" v={fmtBRLc(conta.total_pago_bruto)} />
             <Row k="Solicitou cancelamento" v={conta.solicitou_cancelamento ? 'Sim' : 'Não'} />
             {conta.oferta_codigo && <Row k="Oferta enviada" v={`${conta.oferta_codigo} (${fmtData(conta.oferta_enviada_em)})`} />}

@@ -61,7 +61,9 @@ const PESO_PRAZO = Object.fromEntries(
 
 /** Ordem do contador — a mesma de LegendaCores (CORES_BASE + neutro no fim),
  *  para legenda e contador nunca listarem as cores em ordens diferentes. */
-const ORDEM_COR: CorStatus[] = ['verde', 'azul', 'amarelo', 'vermelho', 'neutro'];
+/** Exportado só para o teste comparar com CORES_BASE (LegendaCores) — arrays
+ *  literais não são vigiados pelo TypeScript, ver ui/cor.test.ts. */
+export const ORDEM_COR: CorStatus[] = ['verde', 'ciano', 'azul', 'amarelo', 'vermelho', 'neutro'];
 
 export function BoardView({
   cards, cardsParaContador, hojeISO, onOpen, busca, onBusca, totalSemBusca, atalhoAtivo = true, corFiltro, onCorFiltro,

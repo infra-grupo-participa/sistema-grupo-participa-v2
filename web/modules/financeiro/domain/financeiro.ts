@@ -75,6 +75,38 @@ export function ehReserva(c: ContaReceber): boolean {
   return (c.saldo_pago_bruto ?? 0) <= 0 && (c.sinal_bruto ?? 0) > 0;
 }
 
+/**
+ * `pacote_regra` diverge de `pacote` (cravado) além da tolerância de
+ * centavos? O cravado SEMPRE prevalece no cálculo (comportamento já
+ * existente, não muda) — isto é só SINAL, informação neutra, não alerta de
+ * erro nem fila de correção (decisão do Marcio, 2026-09-04).
+ *
+ * `null` em qualquer um dos dois campos = "não sei" (dado ausente, RPC ainda
+ * não aplicada em produção ou card sem régua calculável) — NUNCA "sem
+ * divergência". Retorna `false` neste caso por segurança de exibição (não
+ * marca o card), mas é um `false` de dado ausente, distinto do `false` de
+ * "checado e igual".
+ *
+ * Mesma TOLERANCIA_CENTAVOS de saldoEfetivo (R$ 1) — uma segunda tolerância
+ * faria o card discordar do rodapé sobre o que é "igual".
+ */
+export function temDivergenciaPacote(c: ContaReceber): boolean {
+  if (c.pacote_regra == null || c.divergencia_regra == null) return false;
+  return Math.abs(c.divergencia_regra) >= TOLERANCIA_CENTAVOS;
+}
+
+/**
+ * Sentido da divergência (só tem sentido quando `temDivergenciaPacote` é
+ * true): positivo = cravado cobrando A MAIS que a régua; negativo = dinheiro
+ * na mesa (régua cobraria mais que o cravado). `null` = sem divergência
+ * conhecida (dado ausente ou dentro da tolerância) — companheiro de
+ * `temDivergenciaPacote`, nunca usar um sem o outro.
+ */
+export function direcaoDivergencia(c: ContaReceber): 'a_maior' | 'a_menor' | null {
+  if (!temDivergenciaPacote(c)) return null;
+  return (c.divergencia_regra as number) > 0 ? 'a_maior' : 'a_menor';
+}
+
 /** 2ª metade condicional do honorário do parceiro — R$ 15.000 por parceiro ativo.
  *  Valor vem de ./hm-modelo (fonte única); alias mantido por compatibilidade. */
 export const SEGUNDA_METADE_VALOR = SEGUNDA_METADE;

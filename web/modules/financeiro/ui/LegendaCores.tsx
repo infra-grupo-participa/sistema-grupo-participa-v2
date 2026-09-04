@@ -17,7 +17,9 @@
 import { ROTULO_COR, type CorStatus } from '../domain/cor-status';
 import { CLASSE_CARD } from './cor';
 
-const CORES_BASE: CorStatus[] = ['verde', 'azul', 'amarelo', 'vermelho'];
+/** Exportado só para o teste comparar com ORDEM_COR (BoardView) — arrays
+ *  literais não são vigiados pelo TypeScript, ver ui/cor.test.ts. */
+export const CORES_BASE: CorStatus[] = ['verde', 'ciano', 'azul', 'amarelo', 'vermelho'];
 
 export function LegendaCores({ existeNeutro }: { existeNeutro: boolean }) {
   const cores = existeNeutro ? [...CORES_BASE, 'neutro' as CorStatus] : CORES_BASE;

@@ -3,10 +3,12 @@ import { COR_POR_STATUS, corStatus, ROTULO_COR } from './cor-status';
 import type { StatusFinanceiro } from './types';
 
 describe('corStatus', () => {
-  it('verde: quitado, em_pagamento', () => {
-    for (const s of ['quitado', 'em_pagamento'] as StatusFinanceiro[]) {
-      expect(corStatus(s)).toBe('verde');
-    }
+  it('verde: quitado (pagamento completo)', () => {
+    expect(corStatus('quitado' as StatusFinanceiro)).toBe('verde');
+  });
+
+  it('ciano: em_pagamento (em processo de pagamento) — separado do verde, decisão do Marcio 2026-09-04', () => {
+    expect(corStatus('em_pagamento' as StatusFinanceiro)).toBe('ciano');
   });
 
   it('azul: sem_acordo, oferta_enviada, a_vencer, futuro, incalculavel', () => {
@@ -39,7 +41,7 @@ describe('corStatus', () => {
 });
 
 describe('ROTULO_COR', () => {
-  it('tem rótulo para as 5 cores, incluindo neutro', () => {
-    expect(Object.keys(ROTULO_COR).sort()).toEqual(['amarelo', 'azul', 'neutro', 'verde', 'vermelho'].sort());
+  it('tem rótulo para as 6 cores, incluindo ciano e neutro', () => {
+    expect(Object.keys(ROTULO_COR).sort()).toEqual(['amarelo', 'azul', 'ciano', 'neutro', 'verde', 'vermelho'].sort());
   });
 });

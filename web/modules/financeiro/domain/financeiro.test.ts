@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  agrupar, comMetricas, contaMorta, ehReserva, filtrar, FILTROS_VAZIOS, mascararDoc, preencherLacunas, resumir,
-  saldoEfetivo, segundaMetadeCondicional, statusLabel,
+  agrupar, comMetricas, contaMorta, direcaoDivergencia, ehReserva, filtrar, FILTROS_VAZIOS, mascararDoc, preencherLacunas, resumir,
+  saldoEfetivo, segundaMetadeCondicional, statusLabel, temDivergenciaPacote,
 } from './financeiro';
 import type { ContaReceber, DiaFaturamento, StatusFinanceiro } from './types';
 
@@ -37,6 +37,37 @@ function conta(over: Partial<ContaReceber> = {}): ContaReceber {
     ...over,
   };
 }
+
+describe('temDivergenciaPacote', () => {
+  it('null (dado ausente, RPC ainda não aplicada) → false, "não sei" ≠ "sem divergência"', () => {
+    expect(temDivergenciaPacote(conta({ pacote_regra: null, divergencia_regra: null }))).toBe(false);
+    expect(temDivergenciaPacote(conta({ pacote_regra: 15000, divergencia_regra: null }))).toBe(false);
+  });
+
+  it('0,40 (dentro da tolerância de R$ 1) → false', () => {
+    expect(temDivergenciaPacote(conta({ pacote_regra: 14999.60, divergencia_regra: 0.40 }))).toBe(false);
+    expect(temDivergenciaPacote(conta({ pacote_regra: 15000.40, divergencia_regra: -0.40 }))).toBe(false);
+  });
+
+  it('2604,31 (acima da tolerância) → true', () => {
+    expect(temDivergenciaPacote(conta({ pacote: 17604.31, pacote_regra: 15000, divergencia_regra: 2604.31 }))).toBe(true);
+  });
+
+  it('direcaoDivergencia: positivo = a_maior (cravado cobrando a mais)', () => {
+    const c = conta({ pacote: 17604.31, pacote_regra: 15000, divergencia_regra: 2604.31 });
+    expect(direcaoDivergencia(c)).toBe('a_maior');
+  });
+
+  it('direcaoDivergencia: negativo = a_menor (dinheiro na mesa)', () => {
+    const c = conta({ pacote: 14200, pacote_regra: 15000, divergencia_regra: -800 });
+    expect(direcaoDivergencia(c)).toBe('a_menor');
+  });
+
+  it('direcaoDivergencia: null quando não há divergência conhecida', () => {
+    expect(direcaoDivergencia(conta({ pacote_regra: null, divergencia_regra: null }))).toBeNull();
+    expect(direcaoDivergencia(conta({ pacote_regra: 15000, divergencia_regra: 0.40 }))).toBeNull();
+  });
+});
 
 describe('contaMorta', () => {
   it('cancelado e reembolsado saem da conta', () => {
