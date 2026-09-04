@@ -415,4 +415,14 @@ export interface CardBoard {
    *  trilha [B]. Informativo para o financeiro; NÃO é vencimento e não entra
    *  em cobrança (decisão do Marcio: só quem prometeu pagar entra na fila). */
   reuniao_retomar_em: string | null;
+  // ── Divergência de pacote (backend-engineer, migration em paralelo a esta
+  // entrega — campos podem chegar `null` do banco até a RPC ser aplicada em
+  // produção; tratar como "sem divergência conhecida", nunca crashar). ────────
+  /** O que a régua manda (15.000 lead novo, ou 15.000 − crédito para aluno da
+   *  base) — pode divergir do `pacote` cravado manualmente no card. */
+  pacote_regra: number | null;
+  /** Cravado − régua: positivo = cobrando a mais; negativo = dinheiro na mesa.
+   *  Informativo — o cravado sempre prevalece no cálculo (comportamento já
+   *  existente, decisão do Marcio de 2026-09-04 só pede para SINALIZAR). */
+  divergencia_regra: number | null;
 }

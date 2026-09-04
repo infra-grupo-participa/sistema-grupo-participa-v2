@@ -14,7 +14,7 @@ import { Icon } from '@/shared/ui/icons';
 import { ProgressBar } from '@/shared/ui/components';
 import { fmtBRLc, fmtData, fmtPrazo } from '@/shared/ui/format';
 import type { CardComEfeito } from '../application/carregar-board';
-import { statusLabel } from '../domain/financeiro';
+import { direcaoDivergencia, statusLabel, temDivergenciaPacote } from '../domain/financeiro';
 import { labelMotivoReuniao } from '../domain/reuniao';
 import { CLASSE_CARD, TONE_BARRA } from './cor';
 
@@ -121,6 +121,17 @@ export function CardBoardView({ card, onOpen, hojeISO }: { card: CardComEfeito; 
     && conta.intencao_pagamento !== 'vai_pagar'
     && (!!motivoB || card.faixaFunil === 'em_negociacao');
 
+  // Divergência pacote cravado × régua (N2, 2026-09-04): informação NEUTRA,
+  // nunca alerta de erro — o cravado sempre prevalece (comportamento já
+  // existente). Cor --fg-2/--fg-3 de propósito: o card já usa 3 pigmentos de
+  // status/alerta (CLASSE_CARD, --red de atraso, --yellow de parado); um 4º
+  // pigmento aqui competiria por atenção com sinais que de fato pedem ação.
+  const divergePacote = temDivergenciaPacote(conta);
+  const direcaoPacote = direcaoDivergencia(conta);
+  const tituloDivergencia = divergePacote
+    ? `Valor travado manualmente: ${fmtBRLc(conta.pacote)}. Cálculo automático: ${fmtBRLc(conta.pacote_regra)}. Diferença: ${fmtBRLc(Math.abs(conta.divergencia_regra as number))} ${direcaoPacote === 'a_maior' ? 'a mais' : 'a menos'}.`
+    : undefined;
+
   return (
     <button
       type="button"
@@ -133,7 +144,9 @@ export function CardBoardView({ card, onOpen, hojeISO }: { card: CardComEfeito; 
       className={`gp-card ${CLASSE_CARD[card.cor]} gp-card--u${card.urgencia} w-full text-left p-4 cursor-pointer transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 focus-visible:ring-2`}
       aria-label={`Abrir ficha de ${conta.nome}, ${card.origem}, ${statusLabel(conta.status_financeiro)}${
         conta.saldo_a_pagar != null ? `, falta pagar ${fmtBRLc(conta.saldo_a_pagar)}` : ''
-      }${card.motivoUrgencia ? `, ${card.motivoUrgencia}` : ''}`}
+      }${card.motivoUrgencia ? `, ${card.motivoUrgencia}` : ''}${
+        divergePacote ? `, pacote divergente da régua, ${direcaoPacote === 'a_maior' ? 'a mais' : 'a menos'}` : ''
+      }`}
       title={titleEstagio}
     >
       {/* Nível 1 — identidade: nome + origem. O badge de origem precisa
@@ -178,7 +191,17 @@ export function CardBoardView({ card, onOpen, hojeISO }: { card: CardComEfeito; 
         {temPacote ? (
           <div className="mt-2">
             <div className="flex items-center justify-between gap-2 text-[10px] tabular text-[var(--fg-3)]">
-              <span>{fmtBRLc(pago)} de {fmtBRLc(conta.pacote)}</span>
+              <span className="inline-flex items-center gap-1">
+                {fmtBRLc(pago)} de {fmtBRLc(conta.pacote)}
+                {/* Divergência pacote cravado × régua: marca discreta, cor
+                    NEUTRA (nunca cor de status) — mesmo padrão do selo +N%
+                    ao lado. O cravado sempre prevalece; isto é só sinal. */}
+                {divergePacote && (
+                  <span className="shrink-0 text-[var(--fg-3)]" title={tituloDivergencia}>
+                    <Icon name="alert" size={10} />
+                  </span>
+                )}
+              </span>
               {excedeu && (
                 <span
                   className="shrink-0 font-semibold text-[var(--fg-2)]"

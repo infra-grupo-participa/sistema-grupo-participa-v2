@@ -2,7 +2,7 @@ import { nivelLabel, nivelNormalize } from '@/shared/domain/nivel-resultado';
 
 /** Vocabulário de tom do design system. Dono deste tipo — quem precisa de
  *  Tone importa daqui em vez de redeclarar (ex.: modules/financeiro/ui/cor.ts). */
-export type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
+export type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info' | 'cyan';
 
 // Corporativo: chip neutro uniforme + ponto de status colorido (sem pílula colorida).
 const DOT: Record<Tone, string> = {
@@ -12,6 +12,7 @@ const DOT: Record<Tone, string> = {
   warning: 'var(--yellow)',
   danger: 'var(--red)',
   info: 'var(--info)',
+  cyan: 'var(--cyan)',
 };
 
 // max-w-full + texto em span com truncate: em célula estreita (table-fixed) o chip

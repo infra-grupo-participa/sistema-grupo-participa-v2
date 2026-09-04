@@ -64,7 +64,7 @@ export function SkeletonRows({ rows = 6, cols = [64, 80, 96, 40, 56], avatar = t
 }
 
 const FILL: Record<string, string> = {
-  accent: 'var(--accent)', green: 'var(--green)', yellow: 'var(--yellow)', red: 'var(--red)', purple: 'var(--purple)', info: 'var(--info)',
+  accent: 'var(--accent)', green: 'var(--green)', yellow: 'var(--yellow)', red: 'var(--red)', purple: 'var(--purple)', info: 'var(--info)', cyan: 'var(--cyan)',
   neutral: 'var(--border-strong)',
 };
 

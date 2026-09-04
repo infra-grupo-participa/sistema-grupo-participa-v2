@@ -20,6 +20,13 @@ import type { FinanceiroRepository } from './ports';
  * reunião, F6/F7/F8) agora vêm REAIS da RPC — mapeados 1:1 do `c`, não mais
  * fixados em null. `obs_comercial` continua sem fonte (ver comentário no
  * corpo abaixo) — é campo DIFERENTE de intencao_pagamento_obs.
+ *
+ * ATUALIZADO 2026-09-04: pacote_regra/divergencia_regra agora repassados
+ * 1:1 do `c` (fn_fin_board), não mais fixados em null. Migration em paralelo
+ * ao mesmo trabalho — até ser aplicada em produção, a RPC devolve os dois
+ * campos como null e o mapeamento aqui continua correto (degradação segura:
+ * `temDivergenciaPacote` em domain/financeiro.ts trata null como "sem
+ * divergência conhecida", nunca crasha).
  */
 export function cardBoardParaContaReceber(c: CardBoard): ContaReceber {
   return {
@@ -75,8 +82,8 @@ export function cardBoardParaContaReceber(c: CardBoard): ContaReceber {
     total_pago_bruto: c.total_pago_bruto,
     total_pago_liquido: c.total_pago_liquido,
     pacote: c.pacote,
-    pacote_regra: null,
-    divergencia_regra: null,
+    pacote_regra: c.pacote_regra,
+    divergencia_regra: c.divergencia_regra,
     credito: c.credito,
     saldo_a_pagar: c.saldo_a_pagar,
     pago_pct: c.pago_pct,

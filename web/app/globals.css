@@ -14,6 +14,7 @@
 
   /* Semânticas */
   --green:#16a34a; --green-subtle:rgba(22,163,74,.12); --green-border:rgba(22,163,74,.22);
+  --cyan:#0d9488; --cyan-subtle:rgba(13,148,136,.12); --cyan-border:rgba(13,148,136,.22);
   --yellow:#d97706; --yellow-subtle:rgba(217,119,6,.12); --yellow-border:rgba(217,119,6,.22);
   --purple:#7c3aed; --purple-subtle:rgba(124,58,237,.12); --purple-border:rgba(124,58,237,.22);
   --red:#dc2626; --red-subtle:rgba(220,38,38,.12); --red-border:rgba(220,38,38,.22);
@@ -26,7 +27,7 @@
      medido (WCAG 2.x, alpha-over-background) com o halo encurtado para 26%
      de altura (ver .gp-card::after) — "Falta pagar" (10px, --fg-3, y≈62px)
      sai de 3,97 (REPROVA 4,5:1) para 4,06 no dark / 4,76 no light. */
-  --green-halo:rgba(22,163,74,.26); --yellow-halo:rgba(217,119,6,.26);
+  --green-halo:rgba(22,163,74,.26); --cyan-halo:rgba(13,148,136,.26); --yellow-halo:rgba(217,119,6,.26);
   --red-halo:rgba(220,38,38,.26); --info-halo:rgba(96,165,250,.26);
 
   /* Borda tonal de urgência MAIS FORTE (token NOVO, 2026-08-27). A borda
@@ -36,7 +37,7 @@
      abaixo de 3:1 (2,58/2,67) — ACEITO por decisão do Marcio: a borda não é
      canal único de urgência (há halo, dot, pulso u3 e motivoUrgencia em
      aria-label/title). Não subir para .85: competiria com a faixa lateral. */
-  --green-border-forte:rgba(22,163,74,.70); --yellow-border-forte:rgba(217,119,6,.70);
+  --green-border-forte:rgba(22,163,74,.70); --cyan-border-forte:rgba(13,148,136,.70); --yellow-border-forte:rgba(217,119,6,.70);
   --red-border-forte:rgba(220,38,38,.70); --info-border-forte:rgba(96,165,250,.70);
 
   /* Superfícies — elevação por lightness */
@@ -94,6 +95,7 @@
   --accent-subtle:rgba(224,127,16,.14); --accent-border:rgba(224,127,16,.38);
 
   --green:#15803d; --green-subtle:rgba(21,128,61,.14); --green-border:rgba(21,128,61,.32);
+  --cyan:#0f766e; --cyan-subtle:rgba(15,118,110,.14); --cyan-border:rgba(15,118,110,.32);
   --yellow:#b45309; --yellow-subtle:rgba(180,83,9,.14); --yellow-border:rgba(180,83,9,.32);
   --purple:#6d28d9; --purple-subtle:rgba(109,40,217,.14); --purple-border:rgba(109,40,217,.32);
   --red:#b91c1c; --red-subtle:rgba(185,28,28,.14); --red-border:rgba(185,28,28,.32);
@@ -101,9 +103,9 @@
 
   /* Halo/borda-forte no tema claro — mesmos tokens NOVOS de :root (2026-08-27),
      valores medidos para o fundo claro (ver :root para a nota completa). */
-  --green-halo:rgba(21,128,61,.26); --yellow-halo:rgba(180,83,9,.26);
+  --green-halo:rgba(21,128,61,.26); --cyan-halo:rgba(15,118,110,.26); --yellow-halo:rgba(180,83,9,.26);
   --red-halo:rgba(185,28,28,.26); --info-halo:rgba(37,99,235,.26);
-  --green-border-forte:rgba(21,128,61,.70); --yellow-border-forte:rgba(180,83,9,.70);
+  --green-border-forte:rgba(21,128,61,.70); --cyan-border-forte:rgba(15,118,110,.70); --yellow-border-forte:rgba(180,83,9,.70);
   --red-border-forte:rgba(185,28,28,.70); --info-border-forte:rgba(37,99,235,.70);
 
   /* Produtos — escurecidos p/ contraste sobre fundo claro.
@@ -165,6 +167,9 @@
   --color-green: var(--green);
   --color-green-subtle: var(--green-subtle);
   --color-green-border: var(--green-border);
+  --color-cyan: var(--cyan);
+  --color-cyan-subtle: var(--cyan-subtle);
+  --color-cyan-border: var(--cyan-border);
   --color-yellow: var(--yellow);
   --color-yellow-subtle: var(--yellow-subtle);
   --color-yellow-border: var(--yellow-border);
@@ -303,6 +308,10 @@ body {
   --gp-card-tone: var(--green); --gp-card-tone-subtle: var(--green-subtle); --gp-card-tone-border: var(--green-border);
   --gp-card-tone-halo: var(--green-halo); --gp-card-tone-border-forte: var(--green-border-forte);
 }
+.gp-card--ciano {
+  --gp-card-tone: var(--cyan); --gp-card-tone-subtle: var(--cyan-subtle); --gp-card-tone-border: var(--cyan-border);
+  --gp-card-tone-halo: var(--cyan-halo); --gp-card-tone-border-forte: var(--cyan-border-forte);
+}
 .gp-card--azul {
   --gp-card-tone: var(--info); --gp-card-tone-subtle: var(--info-subtle); --gp-card-tone-border: var(--info-border);
   --gp-card-tone-halo: var(--info-halo); --gp-card-tone-border-forte: var(--info-border-forte);
@@ -330,6 +339,7 @@ body {
    `em_pagamento` (verde) pode estar atrasado e um halo verde pulsante lê como "tudo certo",
    o oposto do que a urgência 2/3 significa. Decisão do arquiteto, 2026-08-23. */
 .gp-card--verde,
+.gp-card--ciano,
 .gp-card--azul,
 .gp-card--amarelo,
 .gp-card--vermelho,
@@ -340,15 +350,19 @@ body {
   --gp-card-alerta-forte: var(--gp-card-tone-halo);
   --gp-card-alerta-border-forte: var(--gp-card-tone-border-forte);
 }
-.gp-card--verde {
-  --gp-card-alerta: var(--yellow);
-  --gp-card-alerta-subtle: var(--yellow-subtle);
-  --gp-card-alerta-border: var(--yellow-border);
-  --gp-card-alerta-forte: var(--yellow-halo);
-  --gp-card-alerta-border-forte: var(--yellow-border-forte);
-}
+/* A exceção --gp-card-alerta: var(--yellow) que existia aqui para
+   .gp-card--verde foi REMOVIDA em 2026-09-04: ela existia só porque
+   `em_pagamento` (antes verde) podia estar atrasado e um halo verde
+   pulsante lia como "tudo certo" — o oposto da urgência 2/3. Agora
+   `em_pagamento` é .gp-card--ciano (ver domain/cor-status.ts, decisão do
+   Marcio revogando a fusão de 23/08) e `quitado` (o único status que
+   permanece verde) tem urgência sempre 0 (confirmado em domain/board.ts —
+   ver testes de board.test.ts), então verde nunca precisa da exceção: sem
+   urgência ≥1, o halo/borda de alerta nunca acendem para pintar de amarelo.
+   Se aparecer um caso real de verde com urgência ≥1, reintroduzir a exceção
+   aqui e avisar — não presumir de novo. */
 
-.gp-card--verde::before, .gp-card--azul::before, .gp-card--amarelo::before, .gp-card--vermelho::before, .gp-card--neutro::before {
+.gp-card--verde::before, .gp-card--ciano::before, .gp-card--azul::before, .gp-card--amarelo::before, .gp-card--vermelho::before, .gp-card--neutro::before {
   background: var(--gp-card-tone);
 }
 
@@ -382,7 +396,7 @@ body {
    some no meio do mosaico; faixa opaca não some.
    --gp-card-faixa é var própria (não --gp-card-tone) para permitir o gate de
    intensidade abaixo sem tocar a cor da barra-topo/dot. */
-.gp-card--verde, .gp-card--azul, .gp-card--amarelo, .gp-card--vermelho, .gp-card--neutro {
+.gp-card--verde, .gp-card--ciano, .gp-card--azul, .gp-card--amarelo, .gp-card--vermelho, .gp-card--neutro {
   --gp-card-faixa: var(--gp-card-tone);
 }
 
@@ -473,13 +487,14 @@ input[type='search']::-webkit-search-decoration {
     --accent:#E07F10; --accent-dim:#B56509;
     --accent-subtle:rgba(224,127,16,.14); --accent-border:rgba(224,127,16,.38);
     --green:#15803d; --green-subtle:rgba(21,128,61,.14); --green-border:rgba(21,128,61,.32);
+    --cyan:#0f766e; --cyan-subtle:rgba(15,118,110,.14); --cyan-border:rgba(15,118,110,.32);
     --yellow:#b45309; --yellow-subtle:rgba(180,83,9,.14); --yellow-border:rgba(180,83,9,.32);
     --purple:#6d28d9; --purple-subtle:rgba(109,40,217,.14); --purple-border:rgba(109,40,217,.32);
     --red:#b91c1c; --red-subtle:rgba(185,28,28,.14); --red-border:rgba(185,28,28,.32);
     --info:#2563eb; --info-subtle:rgba(37,99,235,.12); --info-border:rgba(37,99,235,.3);
     /* Halo já é display:none no print (abaixo) — redefinido aqui só para a
        borda tonal forte (.gp-card--u2/u3) não vazar o valor do tema ativo. */
-    --green-border-forte:rgba(21,128,61,.70); --yellow-border-forte:rgba(180,83,9,.70);
+    --green-border-forte:rgba(21,128,61,.70); --cyan-border-forte:rgba(15,118,110,.70); --yellow-border-forte:rgba(180,83,9,.70);
     --red-border-forte:rgba(185,28,28,.70); --info-border-forte:rgba(37,99,235,.70);
     --surface-0:#eef1f6; --surface-1:#fff; --surface-2:#fff; --surface-3:#eef1f6; --surface-4:#dde3ec;
     --border-faint:rgba(15,23,42,.06); --border:rgba(15,23,42,.12);
