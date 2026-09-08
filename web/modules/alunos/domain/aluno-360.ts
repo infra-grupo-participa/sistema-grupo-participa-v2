@@ -54,6 +54,14 @@ export interface Aluno360 {
   /** Data em que a pessoa entrou no Time Holding Brasil (1ª compra que a tornou aluna).
    *  Vem da Central de Acessos; para sócio, é herdada do titular. */
   data_entrada_thb?: string | null;
+  /** Por onde a pessoa entrou: HT 12, ETHB, Acelera Holding, Renovação, Sócio…
+   *  Vem da Central. NULL = ainda não mapeado, e é assim que aparece no filtro. */
+  canal_aquisicao?: string | null;
+  /** Compra nova | Renovação | Sócio. */
+  tipo_entrada?: string | null;
+  /** Como o canal foi atribuído — separa o que é dado do que é regra.
+   *  Só aparece na ficha; a lista mostra o canal, não a procedência dele. */
+  canal_fonte?: string | null;
   hotmart_ucode: string | null;
   // financeiro
   valor_total: number | null;

@@ -57,32 +57,52 @@ export async function loadAlunos360(): Promise<Aluno360[]> {
     from += PAGE;
   }
   const alunos = dedupePorAluno(all).filter((a) => !ehForaDaCentral(a));
-  return comDataDeEntrada(supabase, alunos);
+  return comCamposDaCentral(supabase, alunos);
+}
+
+/** Campos que moram em thb_alunos e não passam por fn_aluno_360_safe. */
+interface CamposDaCentral {
+  id: string;
+  data_entrada_thb: string | null;
+  canal_aquisicao: string | null;
+  tipo_entrada: string | null;
+  canal_fonte: string | null;
 }
 
 /**
- * A data de entrada no THB não vem por fn_aluno_360_safe — é lida direto de thb_alunos
- * e mesclada aqui. Assim a ficha 360 mostra o campo sem depender de alterar a função.
- * Se a coluna ainda não existir no banco, a consulta falha em silêncio e a ficha
- * simplesmente não mostra a linha.
+ * Data de entrada e canal de aquisição não vêm por fn_aluno_360_safe — são lidos
+ * direto de thb_alunos e mesclados aqui. Assim a tela mostra os campos sem depender
+ * de alterar a função. Se alguma coluna ainda não existir no banco, a consulta falha
+ * em silêncio e a tela simplesmente não mostra aquele dado.
  */
-async function comDataDeEntrada(
+async function comCamposDaCentral(
   supabase: ReturnType<typeof db>,
   alunos: Aluno360[],
 ): Promise<Aluno360[]> {
   const PAGE = 1000;
-  const porId = new Map<string, string | null>();
+  const porId = new Map<string, CamposDaCentral>();
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from('thb_alunos')
-      .select('id, data_entrada_thb')
+      .select('id, data_entrada_thb, canal_aquisicao, tipo_entrada, canal_fonte')
       .range(from, from + PAGE - 1);
-    if (error || !data) break; // coluna ausente ou sem permissão: segue sem o campo
-    for (const r of data as { id: string; data_entrada_thb: string | null }[]) porId.set(r.id, r.data_entrada_thb);
+    if (error || !data) break; // coluna ausente ou sem permissão: segue sem os campos
+    for (const r of data as CamposDaCentral[]) porId.set(r.id, r);
     if (data.length < PAGE) break;
   }
   if (!porId.size) return alunos;
-  return alunos.map((a) => ({ ...a, data_entrada_thb: porId.get(a.id) ?? null }));
+  return alunos.map((a) => {
+    const c = porId.get(a.id);
+    return c
+      ? {
+          ...a,
+          data_entrada_thb: c.data_entrada_thb ?? null,
+          canal_aquisicao: c.canal_aquisicao ?? null,
+          tipo_entrada: c.tipo_entrada ?? null,
+          canal_fonte: c.canal_fonte ?? null,
+        }
+      : a;
+  });
 }
 
 export async function loadTurmas(): Promise<Turma[]> {
