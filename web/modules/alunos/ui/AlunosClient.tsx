@@ -12,7 +12,7 @@ import {
   searchHaystack,
 } from '../domain/aluno-360';
 import { nivelOptions } from '@/shared/domain/nivel-resultado';
-import { loadAlunos360, loadTurmas, type Turma } from './alunos-data';
+import { loadAlunos360, loadTurmas, STATUS_DA_CENTRAL_ORDEM, type Turma } from './alunos-data';
 import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Button, Toolbar, SearchInput, MultiSelect, SkeletonRows, Toast, useFlash } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtData } from '@/shared/ui/format';
@@ -186,7 +186,10 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
 
   // Status: valores crus da planilha (Ativo, A vencer, Vencido, Acompanha titular,
   // Verificar, Ativo (cortesia)…). Sem tradução: o rótulo na tela é o da fonte.
-  const statusOpts = useMemo(() => distintos(alunos.map((a) => a.status_acesso_central)).sort((a, b) => a.localeCompare(b, 'pt-BR')), [alunos]);
+  const statusOpts = useMemo(() => {
+    const presentes = new Set(distintos(alunos.map((a) => a.status_acesso_central)));
+    return STATUS_DA_CENTRAL_ORDEM.filter((s) => presentes.has(s));
+  }, [alunos]);
 
   // Espaço: rótulo bonito quando conhecido, valor cru quando não — do mesmo jeito
   // que o EspacoBadge já faz na tabela, pra tela e filtro não divergirem.

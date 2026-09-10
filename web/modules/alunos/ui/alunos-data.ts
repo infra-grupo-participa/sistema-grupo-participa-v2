@@ -13,15 +13,34 @@ export interface Turma {
 }
 
 /**
+ * Os ÚNICOS status de acesso que existem na Central. É uma allowlist de propósito:
+ * a coluna também recebe MARCAS DE PROCESSO — `fora_central_acessos_2026`,
+ * `Oculto (19/08/2026)`, `Removido (duplicada …)`, `arquivado_vencido_historico`,
+ * `DUPLICADA …` — que não são estado de acesso de ninguém e vazavam para o filtro
+ * de Status da lista, misturadas com Ativo e Vencido.
+ *
+ * Allowlist, e não lista de exclusão, porque a marca seguinte que alguém inventar
+ * na planilha entraria sozinha no filtro de novo. Aqui ela fica de fora até ser
+ * reconhecida aqui — o custo de errar para este lado é a pessoa não aparecer, que
+ * se percebe na hora; o outro lado é o filtro voltar a encher de lixo em silêncio.
+ */
+export const STATUS_DA_CENTRAL_ORDEM = [
+  'Ativo',
+  'Ativo (cortesia)',
+  'A vencer',
+  'Vencido',
+  'Acompanha titular',
+  'Verificar',
+] as const;
+const STATUS_DA_CENTRAL = new Set<string>(STATUS_DA_CENTRAL_ORDEM);
+
+/**
  * Registros que existem em thb_alunos mas NÃO são aluno da Central de Acessos.
  * São mantidos na tabela de propósito — o funil de ativação (sinal pago, cobrança do saldo)
  * lê thb_alunos e precisa deles. Só não podem contar como aluno aqui.
  */
-const FORA_DA_CENTRAL = new Set(['fora_central_acessos_2026']);
-const ehForaDaCentral = (a: Aluno360) => {
-  const s = String(a.status_acesso_central ?? '').trim();
-  return FORA_DA_CENTRAL.has(s) || s.startsWith('DUPLICADA');
-};
+const ehForaDaCentral = (a: Aluno360) =>
+  !STATUS_DA_CENTRAL.has(String(a.status_acesso_central ?? '').trim());
 
 /**
  * fn_aluno_360_safe devolve UMA LINHA POR CARD de cs.contatos_hm, então quem tem card de HM
