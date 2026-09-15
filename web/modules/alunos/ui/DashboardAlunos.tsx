@@ -111,7 +111,8 @@ export function DashboardAlunos({ alunos, onAbrirAluno }: { alunos: Aluno360[]; 
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+      {/* Total + 6 espaços = 7 cards: 4 por linha no lg, todos numa linha só no xl. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 mb-5">
         <KpiBreak label="Total de alunos" total={m.total} titulares={m.totalTitulares} socios={m.totalSocios} color="var(--accent)" i={0} onClick={() => abrirCard('Total de alunos')} />
         {m.espacoKpi.map((e, i) => (
           <KpiBreak key={e.key} label={e.label} total={e.total} titulares={e.titulares} socios={e.socios} color={e.color} i={i + 1} onClick={() => abrirCard(e.label, e.key)} />
@@ -360,7 +361,8 @@ function KpiBreak({ label, total, titulares, socios, color, i = 0, onClick }: { 
   const conteudo = (
     <>
       <div className="flex items-center gap-1.5">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-3)] truncate">{label}</span>
+        {/* Quebra em vez de cortar: "Holding Masters Implementação" não cabe numa linha no card estreito. */}
+        <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-3)] leading-tight break-words min-w-0">{label}</span>
         {onClick && <Icon name="chevron-right" size={12} className="shrink-0 text-[var(--fg-4)]" />}
       </div>
       <div className="mt-1 text-2xl font-bold tabular leading-none text-[var(--fg)]">{total.toLocaleString('pt-BR')}</div>

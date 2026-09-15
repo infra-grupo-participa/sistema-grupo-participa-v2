@@ -27,6 +27,23 @@ describe('computeAlunosMetrics', () => {
     expect(m.porEspaco.some((d) => d.key === '__none__')).toBe(true); // 2 alunos sem espaço
   });
 
+  it('card do espaço novo vem logo depois do Holding Masters, com titulares × sócios', () => {
+    const base = [
+      a({ espaco_instrucao: 'holding_masters', eh_socio: false }),
+      a({ espaco_instrucao: 'holding_masters_implementacao', eh_socio: false }),
+      a({ espaco_instrucao: 'holding_masters_implementacao', eh_socio: false }),
+      a({ espaco_instrucao: 'holding_masters_implementacao', eh_socio: true }),
+    ];
+    const m = computeAlunosMetrics(base, 'alunos');
+    expect(m.espacoKpi.map((e) => e.key).slice(0, 2)).toEqual(['holding_masters', 'holding_masters_implementacao']);
+    expect(m.espacoKpi.find((e) => e.key === 'holding_masters_implementacao')).toMatchObject({
+      label: 'Holding Masters Implementação', total: 3, titulares: 2, socios: 1, color: 'var(--produto-hm)',
+    });
+    // O espaço novo não pode vazar para o card do Holding Masters.
+    expect(m.espacoKpi.find((e) => e.key === 'holding_masters')?.total).toBe(1);
+    expect(m.porEspaco.find((d) => d.key === 'holding_masters_implementacao')?.count).toBe(3);
+  });
+
   it('view socios filtra eh_socio', () => {
     const m = computeAlunosMetrics(alunos, 'socios');
     expect(m.total).toBe(1);

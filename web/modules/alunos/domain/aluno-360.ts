@@ -114,10 +114,13 @@ export interface Aluno360 {
 }
 
 // Espaço de instrução = GRUPO em que o aluno está inserido (≠ nível, que é faturamento).
-// Chaves reais do banco (thb_alunos.espaco_instrucao): holding_masters, aurum,
-// platina, mastermind_diamante, diamante_vermelho.
+// Chaves reais do banco (thb_alunos.espaco_instrucao): holding_masters,
+// holding_masters_implementacao, aurum, platina, mastermind_diamante, diamante_vermelho.
+// holding_masters_implementacao (15/09/2026) = quem quitou o saldo do Programa de
+// Implementação do HM, independente do canal. É THB mais a implementação assistida.
 export const ESPACO_LABEL: Record<string, string> = {
   holding_masters: 'Holding Masters',
+  holding_masters_implementacao: 'Holding Masters Implementação',
   aurum: 'Aurum',
   platina: 'Platina',
   mastermind_diamante: 'Diamante',
@@ -127,6 +130,7 @@ export const ESPACO_LABEL: Record<string, string> = {
 /** Cor por espaço de instrução (bolinhas/badges e gráficos). */
 export const ESPACO_COLOR: Record<string, string> = {
   holding_masters: 'var(--nivel-platina)',
+  holding_masters_implementacao: 'var(--produto-hm)',
   aurum: 'var(--nivel-ouro)',
   platina: 'var(--green)',
   mastermind_diamante: 'var(--nivel-diamante)',
@@ -135,6 +139,7 @@ export const ESPACO_COLOR: Record<string, string> = {
 
 export const ESPACO_CLS: Record<string, string> = {
   holding_masters: 'blue',
+  holding_masters_implementacao: 'yellow',
   aurum: 'yellow',
   platina: 'green',
   mastermind_diamante: 'purple',
@@ -144,18 +149,19 @@ export const ESPACO_CLS: Record<string, string> = {
 // ── Instrução ──
 // O espaço de instrução diz só o GRUPO ("Holding Masters" para mais de mil pessoas).
 // A instrução é o dado fino: o mesmo grupo, separado por nível E por papel
-// (titular × sócio). São 5 níveis × 2 papéis = as 10 instruções da Central.
+// (titular × sócio). São 6 níveis × 2 papéis = as 12 instruções da Central.
 // Valores reais de thb_alunos.instrucao, em CAIXA ALTA e com o sufixo " - SÓCIO".
 
 /** Nível da instrução, sem o papel. Ordenado do menor para o maior. */
-export const INSTRUCAO_NIVEIS = ['THB', 'PLATINA', 'AURUM', 'DIAMANTE', 'DIAMANTE VERMELHO'] as const;
+export const INSTRUCAO_NIVEIS = ['THB', 'THB IMPLEMENTAÇÃO', 'PLATINA', 'AURUM', 'DIAMANTE', 'DIAMANTE VERMELHO'] as const;
 export type InstrucaoNivel = (typeof INSTRUCAO_NIVEIS)[number];
 
-/** As 10 instruções, na ordem em que fazem sentido numa legenda. */
+/** As 12 instruções, na ordem em que fazem sentido numa legenda. */
 export const INSTRUCOES: string[] = INSTRUCAO_NIVEIS.flatMap((n) => [n, `${n} - SÓCIO`]);
 
 const INSTRUCAO_NIVEL_LABEL: Record<InstrucaoNivel, string> = {
   'THB': 'THB',
+  'THB IMPLEMENTAÇÃO': 'THB Implementação',
   'PLATINA': 'Platina',
   'AURUM': 'Aurum',
   'DIAMANTE': 'Diamante',
@@ -165,6 +171,7 @@ const INSTRUCAO_NIVEL_LABEL: Record<InstrucaoNivel, string> = {
 /** Cor por nível de instrução — mesma paleta dos espaços, para não criar um segundo código de cores. */
 const INSTRUCAO_NIVEL_COLOR: Record<InstrucaoNivel, string> = {
   'THB': 'var(--nivel-platina)',
+  'THB IMPLEMENTAÇÃO': 'var(--produto-hm)',
   'PLATINA': 'var(--green)',
   'AURUM': 'var(--nivel-ouro)',
   'DIAMANTE': 'var(--nivel-diamante)',
@@ -174,6 +181,7 @@ const INSTRUCAO_NIVEL_COLOR: Record<InstrucaoNivel, string> = {
 /** Espaço de instrução → nível, para quem está sem `instrucao` preenchida. */
 const ESPACO_PARA_NIVEL: Record<string, InstrucaoNivel> = {
   holding_masters: 'THB',
+  holding_masters_implementacao: 'THB IMPLEMENTAÇÃO',
   platina: 'PLATINA',
   aurum: 'AURUM',
   mastermind_diamante: 'DIAMANTE',
@@ -201,6 +209,9 @@ export interface InstrucaoInfo {
  * e o resultado vem marcado com `inferido: true` — quem exibe decide se sinaliza.
  * Devolve `null` só quando não há nem instrução nem espaço.
  */
+/** Compara níveis sem acento: `THB IMPLEMENTACAO` digitado sem cedilha ainda é THB IMPLEMENTAÇÃO. */
+const semAcento = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
 export function parseInstrucao(a: Pick<Aluno360, 'instrucao' | 'espaco_instrucao' | 'eh_socio'>): InstrucaoInfo | null {
   const bruto = (a.instrucao || '').trim().toUpperCase();
   let nivel: InstrucaoNivel | null = null;
@@ -211,7 +222,9 @@ export function parseInstrucao(a: Pick<Aluno360, 'instrucao' | 'espaco_instrucao
     // O sufixo pode vir com hífen ou travessão, com ou sem acento — normaliza antes de cortar.
     const semSufixo = bruto.replace(/\s*[-–—]\s*S[ÓO]CIOS?\s*$/, '').trim();
     ehSocio = semSufixo !== bruto;
-    nivel = (INSTRUCAO_NIVEIS as readonly string[]).includes(semSufixo) ? (semSufixo as InstrucaoNivel) : null;
+    // Igualdade exata (sem acento), nunca prefixo: THB IMPLEMENTAÇÃO não pode cair em THB,
+    // do mesmo jeito que DIAMANTE VERMELHO não cai em DIAMANTE.
+    nivel = INSTRUCAO_NIVEIS.find((n) => semAcento(n) === semAcento(semSufixo)) ?? null;
   }
   if (!nivel) {
     nivel = ESPACO_PARA_NIVEL[a.espaco_instrucao || ''] ?? null;
@@ -298,7 +311,7 @@ export const SUGESTOES = {
   origem_acesso: ['Hotmart (THB)', 'Sócio/Convite', 'Hotmart (Assinatura)', 'Cadastro atual', 'Cortesia'],
   regra_acesso: ['31/12/2026', 'Compra + 365 dias', 'Acompanha titular', 'Adesão + 12 meses', 'Compra + 3 meses', 'Compra + 6 meses', 'Confiar na base atual', 'Sem expiração'],
   tempo_acesso: ['Até 31/12/2026', '1 ano', 'Acompanha titular', '12 meses (assinatura)', '3 meses', '6 meses', 'Ver base atual', 'Sem prazo'],
-  instrucao: ['THB', 'THB - SÓCIO', 'AURUM', 'AURUM - SÓCIO', 'DIAMANTE', 'DIAMANTE - SÓCIO', 'PLATINA', 'PLATINA - SÓCIO', 'DIAMANTE VERMELHO', 'DIAMANTE VERMELHO - SÓCIO'],
+  instrucao: ['THB', 'THB - SÓCIO', 'THB IMPLEMENTAÇÃO', 'THB IMPLEMENTAÇÃO - SÓCIO', 'AURUM', 'AURUM - SÓCIO', 'DIAMANTE', 'DIAMANTE - SÓCIO', 'PLATINA', 'PLATINA - SÓCIO', 'DIAMANTE VERMELHO', 'DIAMANTE VERMELHO - SÓCIO'],
   status_acesso_central: ['Ativo', 'Vencido', 'A vencer', 'Acompanha titular', 'Verificar', 'Ativo (cortesia)'],
   status_pagamento: ['Quitado', 'Em atraso (cobrar)', 'Em atraso', 'Reembolsado', 'Quitado (plano concluído)', 'Em dia (ativa)', 'Só sinal pago', 'Em andamento', 'Cancelada pelo cliente'],
 } as const;
