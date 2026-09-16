@@ -35,8 +35,10 @@ Visualizador geral **não** entra (dado pessoal). Tabelas `ra_*` fechadas; tudo 
 
 ## Slack (n8n)
 
-O n8n chama, com a chave anon, `ra_slack_pendentes(segredo)`, posta cada mensagem e confirma com
-`ra_slack_confirmar(segredo, caso, aviso, ts)`. O aviso `novo`/`alerta` abre a thread; `liberado`,
+Toda mudança de caso chama na hora o webhook do n8n (`trg_ra_avisar_n8n` + pg_net, URL em
+`ra_config.n8n_webhook_url`); o disparo de 5 em 5 min é a garantia. O n8n, com a chave anon, reserva o que
+vai postar com `ra_slack_reservar(segredo)` (reserva de 2 min, para os dois caminhos não duplicarem), posta
+e confirma com `ra_slack_confirmar(segredo, caso, aviso, ts)`. A mensagem sai em 2 a 5 segundos. O aviso `novo`/`alerta` abre a thread; `liberado`,
 `fechado` e `concluido` respondem nela. `ra_slack_lembrete(segredo)` monta o lembrete do dia útil.
 O segredo está em `ra_config.slack_segredo` (não é lido pelo PostgREST). Quem é marcado vem de `ra_slack`.
 
