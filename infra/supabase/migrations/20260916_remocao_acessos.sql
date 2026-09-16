@@ -86,7 +86,7 @@ insert into public.ra_itens_catalogo (item, rotulo, responsavel_id, ordem, so_pr
   ('grupo_informes',      'Grupo de informes',                     'e303b8d1-e31a-4539-a450-259a8cb1d71a', 30, false), -- Ana Camila
   ('comunidade_facebook', 'Comunidade no Facebook',                'e303b8d1-e31a-4539-a450-259a8cb1d71a', 40, false), -- Ana Camila
   ('sistema_programa',    'Sistema do Programa de Implementação',  '843d43db-73b3-44a9-b449-1731e362dbc3', 50, true),  -- João
-  ('central_planilha',    'Central de Alunos (planilha) e aba de removidos', '81d2eaee-cce1-4058-8714-439b0fc6f970', 60, false), -- Victor
+  ('central_planilha',    'Central de Alunos (planilha)', '81d2eaee-cce1-4058-8714-439b0fc6f970', 60, false), -- Victor
   ('central_sistema',     'Base de Alunos (sistema)',              '81d2eaee-cce1-4058-8714-439b0fc6f970', 70, false)  -- Victor
 on conflict (item) do nothing;
 
