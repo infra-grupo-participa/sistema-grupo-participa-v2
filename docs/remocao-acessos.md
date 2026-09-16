@@ -34,3 +34,18 @@ O n8n chama, com a chave anon, `ra_slack_pendentes(segredo)`, posta cada mensage
 O segredo está em `ra_config.slack_segredo` (não é lido pelo PostgREST). Quem é marcado vem de `ra_slack`.
 
 Migration: `infra/supabase/migrations/20260916_remocao_acessos.sql`.
+
+## Webhook próprio (`remocao-acessos-webhook`)
+
+URL para a Hotmart: `https://mbvybujpkwuorhtdzcde.supabase.co/functions/v1/remocao-acessos-webhook`
+(eventos: reembolso, chargeback e protesto; produto Holding Masters). Confere o `HOTMART_HOTTOK` e passa
+o payload para `ra_receber_hotmart`. Não grava compra, não mexe no financeiro, não avisa o canal do time.
+Todo evento recebido fica em `ra_webhook_eventos` com o resultado (caso criado, ignorado e por quê).
+
+O caso nasce do payload; se a transação existe em `compras`, fica ligada. O gatilho em `compras` segue
+como rede de segurança, e os dois caminhos viram um caso só.
+
+**Modo de teste** (`ra_config.webhook_modo = 'teste'`): transação que não existe em `compras` vira caso
+**de teste** (aceita qualquer produto, selo "Teste" na tela, prefixo TESTE no Slack, botão para apagar;
+reenviar a mesma transação recria o caso). Em `producao`, só Holding Masters e nada é teste.
+Deploy: `verify_jwt = false`. Migration: `20260916_remocao_acessos_webhook.sql`.

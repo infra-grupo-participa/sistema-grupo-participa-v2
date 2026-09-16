@@ -180,6 +180,7 @@ export function RemocaoClient() {
                         {c.pessoas > 1 ? `titular + ${c.pessoas - 1} sócio(s)` : 'titular'}
                         {c.eh_programa && ' · Programa de Implementação'}
                       </div>
+                      {c.teste && <div className="mt-1"><Badge tone="info">Teste</Badge></div>}
                     </Td>
                     <Td><Badge tone={c.tipo === 'disputa' ? 'info' : 'danger'}>{ROTULO_TIPO[c.tipo]}</Badge></Td>
                     <Td>

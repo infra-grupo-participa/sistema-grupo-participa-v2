@@ -9,7 +9,7 @@ import type { CasoDetalhe, ItemCaso, SituacaoItem } from '../domain/types';
 import type { SupabaseRemocaoRepository } from '../infrastructure/supabase-remocao.repository';
 
 const ROTULO_ACAO: Record<string, string> = {
-  aberto: 'Caso aberto pela Hotmart',
+  aberto: 'Caso aberto',
   triagem: 'Triagem',
   item: 'Item marcado',
   concluido: 'Caso concluído',
@@ -25,7 +25,10 @@ function descreverEvento(acao: string, d: Record<string, unknown>): string {
     const sit = d.situacao === 'feito' ? 'feito' : d.situacao === 'nao_se_aplica' ? 'não se aplica' : 'voltou a pendente';
     return `${String(d.item)}: ${sit}${d.correcao ? ' (correção)' : ''}${d.obs ? ` · ${String(d.obs)}` : ''}`;
   }
-  if (acao === 'aberto') return `${String(d.status_compra ?? '')} ${d.evento ? `(${String(d.evento)})` : ''}`.trim();
+  if (acao === 'aberto') {
+    const via = d.origem === 'webhook' ? 'webhook da remoção' : 'compra no sistema';
+    return [via, d.evento ? String(d.evento) : '', d.teste ? 'teste' : ''].filter(Boolean).join(' · ');
+  }
   return '';
 }
 
@@ -121,6 +124,15 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
     onMudou();
   };
 
+  const apagarTeste = async () => {
+    if (!window.confirm('Apagar este caso de teste? Não dá para desfazer.')) return;
+    setOcupado(true);
+    const r = await repo.apagarTeste(id);
+    setOcupado(false);
+    flash(r.msg);
+    if (r.ok) { onMudou(); onClose(); }
+  };
+
   const c = d?.caso;
   const sug = c?.sugestao;
 
@@ -129,11 +141,15 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
       onClose={onClose}
       title={c ? c.nome || 'sem nome' : 'Caso'}
       subtitle={c ? `${c.email ?? 'sem e-mail'} · ${c.hotmart_transaction}` : undefined}
+      footer={c?.teste && d?.pode_triar ? (
+        <Button variant="danger" size="sm" disabled={ocupado} onClick={apagarTeste}>Apagar caso de teste</Button>
+      ) : undefined}
       badges={c && (
         <>
           <Badge tone={c.tipo === 'disputa' ? 'info' : 'danger'}>{ROTULO_TIPO[c.tipo]}</Badge>
           <Badge tone={TOM_STATUS[c.status]}>{ROTULO_STATUS[c.status]}</Badge>
           {c.eh_programa && <Badge tone="accent">Programa de Implementação</Badge>}
+          {c.teste && <Badge tone="info">Teste</Badge>}
         </>
       )}
     >

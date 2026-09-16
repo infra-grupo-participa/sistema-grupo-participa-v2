@@ -28,6 +28,8 @@ export interface CasoFila {
   prazo_em: string | null;
   concluido_em: string | null;
   eh_programa: boolean;
+  teste: boolean;
+  origem: 'compras' | 'webhook';
   recomendacao: Recomendacao | null;
   pessoas: number;
   itens_total: number;
