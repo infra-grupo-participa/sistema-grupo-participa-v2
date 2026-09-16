@@ -7,7 +7,7 @@ import {
   Mic, Camera, Clapperboard, Truck, NotebookPen, FileText, PartyPopper, Hand, Star, Circle, Sprout,
   Briefcase, Medal, Coins, Gem, LogOut, Plus, Trash2, Pencil, Inbox, Copy,
   PanelLeftClose, PanelLeftOpen, Wallet, Receipt, TrendingUp, Banknote,
-  LayoutDashboard, CircleDollarSign, Eye, EyeOff, type LucideIcon,
+  LayoutDashboard, CircleDollarSign, Eye, EyeOff, UserX, type LucideIcon,
 } from 'lucide-react';
 
 const MAP: Record<string, LucideIcon> = {
@@ -37,6 +37,8 @@ const MAP: Record<string, LucideIcon> = {
   // financeiro
   wallet: Wallet, receipt: Receipt, 'trending-up': TrendingUp, banknote: Banknote,
   dashboard: LayoutDashboard, dollar: CircleDollarSign,
+  // remoção de acessos
+  'user-x': UserX,
 };
 
 export function Icon({ name, size = 16, className, strokeWidth = 2, style }: {

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ehAdminOuAcima, ehDev, podeVer, type GpUser } from '@/shared/domain/auth';
 import { podeVerFinanceiro } from '@/modules/financeiro/domain/acesso';
+import { podeVerRemocao } from '@/modules/remocao-acessos/domain/acesso';
 import { REPORTS, SYSTEM_NAV, type ReportGroup } from '@/shared/ui/nav/config';
 import { Icon } from '@/shared/ui/icons';
 
@@ -86,8 +87,14 @@ export function Sidebar({ user }: { user: GpUser }) {
   // Financeiro tem regra própria (visualizador NÃO vê dinheiro) — espelha
   // gp_pode_ver_financeiro() no banco, senão a tela abriria vazia.
   const podeVerGrupo = (g: ReportGroup) => {
-    if (g.adminOnly && !isAdmin) return false;
     if (g.setor === 'financeiro') return podeVerFinanceiro(user);
+    if (g.setor === 'remocao_acessos') return podeVerRemocao(user);
+    // Base de Alunos: mesma regra da página (admin+ ou módulo Centro de Controle);
+    // visualizador global fica de fora (dado sensível).
+    if (g.setor === 'centro_controle') {
+      return isAdmin || ((user?.cargo === 'gestor' || user?.cargo === 'operador') && (user?.setores || []).includes('centro_controle'));
+    }
+    if (g.adminOnly && !isAdmin) return false;
     return podeVer(user, g.setor);
   };
 
