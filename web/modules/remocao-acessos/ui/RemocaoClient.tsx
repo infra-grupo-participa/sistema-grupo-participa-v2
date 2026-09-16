@@ -64,8 +64,7 @@ export function RemocaoClient() {
       const r = await buscar();
       if (!vivo) return;
       aplicar(r);
-      // Quem tem item pendente e não faz triagem começa vendo só os dele.
-      if (r.f?.some((c) => c.meus_pendentes > 0) && !r.p?.pode_triar) setFiltro('meus');
+      // Todo mundo abre em "Em aberto": quem já fez a sua parte continua vendo o que falta dos outros.
       // Link do Slack: /relatorios/remocoes?caso=<id> abre a ficha direto.
       const id = new URLSearchParams(window.location.search).get('caso');
       if (id) setAberto(id);
