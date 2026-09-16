@@ -35,9 +35,11 @@ export class SupabaseRemocaoRepository {
     return (data as CasoDetalhe | null) ?? null;
   }
 
-  async triar(id: string, decisao: 'manter' | 'remover', obs: string, programa: boolean): Promise<Resultado> {
+  async triar(id: string, decisao: 'manter' | 'remover', obs: string, programa: boolean,
+    expiracaoAntiga: string | null, instrucaoAntiga: string | null): Promise<Resultado> {
     const { data, error } = await this.db().rpc('ra_triar', {
       p_caso: id, p_decisao: decisao, p_obs: obs || null, p_programa: programa,
+      p_expiracao_antiga: expiracaoAntiga || null, p_instrucao_antiga: instrucaoAntiga || null,
     });
     logQueryError('ra_triar', error);
     if (error) return ERRO_REDE;

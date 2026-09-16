@@ -11,7 +11,11 @@ quem pede reembolso ou dá chargeback no **Holding Masters** (produtos 5064314 e
    O gatilho nunca derruba a gravação da compra (erro vira `warning` no log).
 2. **Triagem** (só o triador, `ra_config.triador_id`, hoje o Victor): verifica se a pessoa tinha acesso
    antes (regra da Central: reembolso volta ao acesso antigo quando ele ainda vale).
-   "Mantém acesso antigo" encerra; "Remover acessos" cria o checklist.
+   - "Remover acessos" cria o checklist de remoção.
+   - "Não remover" exige a **expiração antiga** (pré-preenchida pelo histórico da base quando dá) e, se mudou,
+     a instrução antiga. O caso fica em **Ajustar acesso**, com dois itens do triador por pessoa (Central e
+     Base de Alunos), e só conclui quando os dois são marcados. Sócios acompanham a data do titular.
+     O ajuste da Base é manual por decisão do Victor; `ra_casos` guarda as datas para automatizar depois.
 3. **Checklist** para o titular e cada sócio (`socio_de_aluno_id`, ou nome do titular quando o sócio não tem vínculo).
    Cada item tem um responsável (`ra_itens_catalogo`) e **só ele marca**. O triador pode corrigir
    (`corrigido = true`, fica no histórico). O item do sistema do Programa de Implementação só entra

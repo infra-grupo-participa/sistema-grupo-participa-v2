@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filtrarCasos, situacaoPrazo } from './caso';
+import { filtrarCasos, situacaoPrazo, sugestaoAjuste } from './caso';
 import type { CasoFila } from './types';
 
 const agora = new Date('2026-09-16T15:00:00-03:00');
@@ -33,13 +33,30 @@ describe('filtrarCasos', () => {
     { ...base, id: '3', status: 'alerta' },
     { ...base, id: '4', status: 'concluido' },
     { ...base, id: '5', status: 'mantem_acesso' },
+    { ...base, id: '6', status: 'ajustando_acesso' },
   ] as CasoFila[];
   const ids = (f: Parameters<typeof filtrarCasos>[1]) => filtrarCasos(casos, f).map((c) => c.id);
   it('separa abertos, meus, alertas e encerrados', () => {
-    expect(ids('abertos')).toEqual(['1', '2']);
+    expect(ids('abertos')).toEqual(['1', '2', '6']);
     expect(ids('meus')).toEqual(['2']);
     expect(ids('alertas')).toEqual(['3']);
     expect(ids('encerrados')).toEqual(['4', '5']);
-    expect(ids('todos')).toHaveLength(5);
+    expect(ids('todos')).toHaveLength(6);
+  });
+});
+
+describe('sugestaoAjuste', () => {
+  const aluno = { instrucao: 'THB IMPLEMENTAÇÃO', espaco: null, turma: null, data_expiracao: '2027-08-31',
+    data_entrada_thb: null, status_central: null, eh_socio: false };
+  it('pega a data de antes da mudança que levou à expiração atual', () => {
+    const r = sugestaoAjuste({ aluno, historico_expiracao: [
+      { de: '2026-12-31', para: '2027-08-31', origem: 'x', em: '2026-09-10' },
+      { de: '2026-06-30', para: '2026-12-31', origem: 'x', em: '2026-01-10' },
+    ] });
+    expect(r).toEqual({ expiracao: '2026-12-31', instrucao: 'THB' });
+  });
+  it('sem histórico que bata, não inventa data', () => {
+    expect(sugestaoAjuste({ aluno: { ...aluno, instrucao: 'THB' }, historico_expiracao: [] })).toEqual({ expiracao: '', instrucao: '' });
+    expect(sugestaoAjuste(null)).toEqual({ expiracao: '', instrucao: '' });
   });
 });

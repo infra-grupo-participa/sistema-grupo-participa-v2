@@ -232,7 +232,7 @@ export function RemocaoClient() {
                       <div className="text-[var(--fg)]">{i.responsavel || 'sem responsável'}</div>
                       {i.email && <div className="text-[11px] text-[var(--fg-3)]">{i.email}</div>}
                     </Td>
-                    <Td className="text-[var(--fg-2)]">{i.so_programa ? 'Só se a pessoa é do Programa de Implementação' : 'Sempre'}</Td>
+                    <Td className="text-[var(--fg-2)]">{i.fluxo === 'ajuste' ? 'Quando não remove (mantém acesso antigo)' : i.so_programa ? 'Remoção, só se a pessoa é do Programa de Implementação' : 'Remoção'}</Td>
                   </Tr>
                 ))}
               </tbody>

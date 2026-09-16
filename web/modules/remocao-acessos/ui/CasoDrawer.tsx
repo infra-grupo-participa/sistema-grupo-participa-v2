@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Drawer, Loading, Row, SectionCard, Textarea, Toggle } from '@/shared/ui/components';
+import { Badge, Button, Drawer, Input, Loading, Row, SectionCard, Textarea, Toggle } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData, fmtDataHora } from '@/shared/ui/format';
-import { ROTULO_STATUS, ROTULO_TIPO, TOM_STATUS } from '../domain/caso';
+import { ROTULO_STATUS, ROTULO_TIPO, sugestaoAjuste, TOM_STATUS } from '../domain/caso';
 import type { CasoDetalhe, ItemCaso, SituacaoItem } from '../domain/types';
 import type { SupabaseRemocaoRepository } from '../infrastructure/supabase-remocao.repository';
 
@@ -19,7 +19,9 @@ const ROTULO_ACAO: Record<string, string> = {
 
 function descreverEvento(acao: string, d: Record<string, unknown>): string {
   if (acao === 'triagem') {
-    const decisao = d.decisao === 'manter' ? 'mantém o acesso antigo' : 'remover acessos';
+    const decisao = d.decisao === 'manter'
+      ? `não remover, expiração volta para ${d.expiracao_antiga ? fmtData(String(d.expiracao_antiga)) : 'data antiga'}`
+      : 'remover acessos';
     return d.obs ? `${decisao} · ${String(d.obs)}` : decisao;
   }
   if (acao === 'item') {
@@ -81,6 +83,8 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
   const [ocupado, setOcupado] = useState(false);
   const [obs, setObs] = useState('');
   const [programa, setPrograma] = useState(false);
+  const [expAntiga, setExpAntiga] = useState('');
+  const [instAntiga, setInstAntiga] = useState('');
 
   const buscar = useCallback(async (): Promise<{ d: CasoDetalhe | null; erro: string | null }> => {
     try {
@@ -96,6 +100,9 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
     if (r.erro || !r.d) { setErro(r.erro); return; }
     setD(r.d);
     setPrograma(r.d.caso.eh_programa);
+    const s = sugestaoAjuste(r.d.caso.sugestao);
+    setExpAntiga(s.expiracao);
+    setInstAntiga(s.instrucao);
     setErro(null);
   }, []);
 
@@ -108,9 +115,11 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
   }, [aplicar, buscar]);
 
   const triar = async (decisao: 'manter' | 'remover') => {
-    if (decisao === 'manter' && !obs.trim()) { flash('Escreva por que o acesso antigo continua (ex.: HM válido até 31/12/2026).'); return; }
+    if (decisao === 'manter' && !expAntiga) { flash('Informe a data de expiração antiga, a que volta a valer.'); return; }
     setOcupado(true);
-    const r = await repo.triar(id, decisao, obs.trim(), programa);
+    const r = decisao === 'manter'
+      ? await repo.triar(id, decisao, obs.trim(), programa, expAntiga, instAntiga.trim())
+      : await repo.triar(id, decisao, obs.trim(), programa, null, null);
     setOcupado(false);
     flash(r.msg);
     if (r.ok) { setObs(''); await carregar(); onMudou(); }
@@ -126,7 +135,7 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
   };
 
   const desfazer = async () => {
-    if (!window.confirm('Desfazer a triagem? O caso volta para "aguardando triagem" e os itens de remoção somem até a próxima decisão.')) return;
+    if (!window.confirm('Desfazer a triagem? O caso volta para "aguardando triagem" e os itens somem até a próxima decisão.')) return;
     setOcupado(true);
     const r = await repo.desfazerTriagem(id);
     setOcupado(false);
@@ -145,7 +154,7 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
 
   const c = d?.caso;
   const sug = c?.sugestao;
-  const podeDesfazer = !!c && (c.status === 'em_remocao' || c.status === 'mantem_acesso' || c.status === 'concluido');
+  const podeDesfazer = !!c && (['em_remocao', 'mantem_acesso', 'ajustando_acesso', 'concluido'] as const).some((s) => s === c.status);
 
   return (
     <Drawer
@@ -241,13 +250,40 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
               {d.pode_triar ? (
                 <div className="flex flex-col gap-3">
                   <Toggle checked={programa} onChange={setPrograma} label="Participa do Programa de Implementação (inclui o sistema do programa)" />
-                  <Textarea id="ra-obs-triagem" placeholder="Observação (obrigatória para manter o acesso)" value={obs} onChange={(e) => setObs(e.target.value)} />
+                  <Textarea id="ra-obs-triagem" placeholder="Observação (opcional)" value={obs} onChange={(e) => setObs(e.target.value)} />
+                  <div className="rounded-[var(--r-md)] border border-[var(--border)] p-3 flex flex-col gap-2">
+                    <div className="text-xs font-semibold text-[var(--fg-2)]">Se a pessoa mantém o acesso antigo</div>
+                    <div className="flex flex-wrap gap-3">
+                      <label className="flex flex-col gap-1 text-xs text-[var(--fg-3)]" htmlFor="ra-exp-antiga">
+                        Expiração que volta a valer (obrigatória)
+                        <Input id="ra-exp-antiga" type="date" value={expAntiga} onChange={(e) => setExpAntiga(e.target.value)} className="w-44" />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-[var(--fg-3)]" htmlFor="ra-inst-antiga">
+                        Instrução antiga (se mudou)
+                        <Input id="ra-inst-antiga" value={instAntiga} placeholder={c.sugestao?.aluno?.instrucao ?? 'ex.: THB'} onChange={(e) => setInstAntiga(e.target.value)} className="w-56" />
+                      </label>
+                    </div>
+                    <div className="text-[11px] text-[var(--fg-3)]">
+                      Expiração atual na base: {c.sugestao?.aluno?.data_expiracao ? fmtData(c.sugestao.aluno.data_expiracao) : 'sem dado'}.
+                      {' '}Os sócios acompanham a data do titular.
+                    </div>
+                  </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button variant="ghost" disabled={ocupado} onClick={() => triar('manter')}>Mantém acesso antigo</Button>
+                    <Button variant="ghost" disabled={ocupado} onClick={() => triar('manter')}>Não remover (mantém acesso antigo)</Button>
                     <Button variant="primary" disabled={ocupado} onClick={() => triar('remover')}>Remover acessos</Button>
                   </div>
                 </div>
               ) : <span />}
+            </SectionCard>
+          )}
+
+          {c.decisao === 'manter' && c.expiracao_antiga && (
+            <SectionCard title="Não remover: ajustar acesso" subtitle={`${c.triado_por_nome ?? ''} em ${fmtDataHora(c.triado_em)}`}>
+              <Row k="Expiração" v={`${c.expiracao_atual ? fmtData(c.expiracao_atual) : 'data atual'} → ${fmtData(c.expiracao_antiga)}`} />
+              {c.instrucao_antiga && c.instrucao_antiga !== c.instrucao_atual && (
+                <Row k="Instrução" v={`${c.instrucao_atual ?? 'sem instrução'} → ${c.instrucao_antiga}`} />
+              )}
+              {c.decisao_obs && <p className="text-sm text-[var(--fg-2)] mt-2">{c.decisao_obs}</p>}
             </SectionCard>
           )}
 

@@ -2,7 +2,8 @@
 // (migration 20260916_remocao_acessos.sql).
 
 export type TipoCaso = 'reembolso' | 'chargeback' | 'disputa';
-export type StatusCaso = 'alerta' | 'aguardando_triagem' | 'mantem_acesso' | 'em_remocao' | 'concluido';
+export type StatusCaso = 'alerta' | 'aguardando_triagem' | 'mantem_acesso' | 'em_remocao' | 'ajustando_acesso' | 'concluido';
+export type Decisao = 'remover' | 'manter';
 export type SituacaoItem = 'pendente' | 'feito' | 'nao_se_aplica';
 export type Recomendacao = 'remover' | 'verificar';
 
@@ -30,6 +31,8 @@ export interface CasoFila {
   eh_programa: boolean;
   teste: boolean;
   origem: 'compras' | 'webhook';
+  decisao: Decisao | null;
+  expiracao_antiga: string | null;
   recomendacao: Recomendacao | null;
   pessoas: number;
   itens_total: number;
@@ -100,6 +103,9 @@ export interface CasoDetalhe {
     triado_em: string | null;
     triado_por_nome: string | null;
     aluno_id: string | null;
+    expiracao_atual: string | null;
+    instrucao_atual: string | null;
+    instrucao_antiga: string | null;
   };
   pessoas: PessoaCaso[];
   historico: EventoCaso[];
@@ -111,6 +117,7 @@ export interface ItemCatalogo {
   rotulo: string;
   ordem: number;
   so_programa: boolean;
+  fluxo: 'remocao' | 'ajuste';
   ativo: boolean;
   responsavel_id: string | null;
   responsavel: string | null;
