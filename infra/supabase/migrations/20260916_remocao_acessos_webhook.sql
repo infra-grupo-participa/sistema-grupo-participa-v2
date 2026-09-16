@@ -10,7 +10,7 @@
 -- • O gatilho em compras continua como rede de segurança: o que chegar pelos
 --   dois caminhos vira um caso só (unique transação + tipo).
 -- • ra_config.webhook_modo = 'teste': caso cuja transação não existe em compras
---   nasce marcado como TESTE (aceita qualquer produto, aparece com selo, pode ser
+--   (ou do produto 0, o de teste da Hotmart) nasce marcado como TESTE (aceita qualquer produto, aparece com selo, pode ser
 --   apagado, e o Slack avisa que é teste). Em 'producao', só HM e nada é teste.
 -- =====================================================================
 
@@ -253,7 +253,11 @@ begin
     v_resultado := 'ignorado: sem transação';
   else
     select * into v_compra from public.compras where hotmart_transaction = v_transacao;
-    v_teste := v_modo = 'teste' and v_compra.id is null;
+    -- Teste = transação desconhecida OU produto 0, que é o produto fictício do teste
+    -- da Hotmart (a transação dele, HP16015479281022, já está em compras desde 14/04
+    -- por um teste antigo no webhook geral). Caso de teste não se liga a compra.
+    v_teste := v_modo = 'teste' and (v_compra.id is null or coalesce(v_produto, '') = '0');
+    if v_teste then v_compra := null; end if;
 
     if not v_teste and coalesce(v_produto, v_compra.produto_id, '') not in ('5064314', '3507214') then
       v_resultado := 'ignorado: produto não é Holding Masters';
