@@ -51,6 +51,13 @@ export class SupabaseRemocaoRepository {
     return data as Resultado;
   }
 
+  async desfazerTriagem(id: string): Promise<Resultado> {
+    const { data, error } = await this.db().rpc('ra_desfazer_triagem', { p_caso: id });
+    logQueryError('ra_desfazer_triagem', error);
+    if (error) return ERRO_REDE;
+    return data as Resultado;
+  }
+
   async apagarTeste(id: string): Promise<Resultado> {
     const { data, error } = await this.db().rpc('ra_apagar_teste', { p_caso: id });
     logQueryError('ra_apagar_teste', error);

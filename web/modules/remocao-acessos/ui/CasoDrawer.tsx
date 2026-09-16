@@ -14,6 +14,7 @@ const ROTULO_ACAO: Record<string, string> = {
   item: 'Item marcado',
   concluido: 'Caso concluído',
   reaberto: 'Caso reaberto',
+  triagem_desfeita: 'Triagem desfeita',
 };
 
 function descreverEvento(acao: string, d: Record<string, unknown>): string {
@@ -124,6 +125,15 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
     onMudou();
   };
 
+  const desfazer = async () => {
+    if (!window.confirm('Desfazer a triagem? O caso volta para "aguardando triagem" e os itens de remoção somem até a próxima decisão.')) return;
+    setOcupado(true);
+    const r = await repo.desfazerTriagem(id);
+    setOcupado(false);
+    flash(r.msg);
+    if (r.ok) { await carregar(); onMudou(); }
+  };
+
   const apagarTeste = async () => {
     if (!window.confirm('Apagar este caso de teste? Não dá para desfazer.')) return;
     setOcupado(true);
@@ -135,14 +145,22 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
 
   const c = d?.caso;
   const sug = c?.sugestao;
+  const podeDesfazer = !!c && (c.status === 'em_remocao' || c.status === 'mantem_acesso' || c.status === 'concluido');
 
   return (
     <Drawer
       onClose={onClose}
       title={c ? c.nome || 'sem nome' : 'Caso'}
       subtitle={c ? `${c.email ?? 'sem e-mail'} · ${c.hotmart_transaction}` : undefined}
-      footer={c?.teste && d?.pode_triar ? (
-        <Button variant="danger" size="sm" disabled={ocupado} onClick={apagarTeste}>Apagar caso de teste</Button>
+      footer={c && d?.pode_triar && (podeDesfazer || c.teste) ? (
+        <>
+          {podeDesfazer && (
+            <Button variant="ghost" size="sm" disabled={ocupado} onClick={desfazer}>
+              <Icon name="rotate" size={14} /> Desfazer triagem
+            </Button>
+          )}
+          {c.teste && <Button variant="danger" size="sm" disabled={ocupado} onClick={apagarTeste}>Apagar caso de teste</Button>}
+        </>
       ) : undefined}
       badges={c && (
         <>

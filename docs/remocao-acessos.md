@@ -17,6 +17,9 @@ quem pede reembolso ou dá chargeback no **Holding Masters** (produtos 5064314 e
    (`corrigido = true`, fica no histórico). O item do sistema do Programa de Implementação só entra
    se a pessoa é do programa (espaço `holding_masters_implementacao`, ajustável na triagem).
 4. Último item marcado → caso **concluído**. Desmarcar reabre.
+5. **Desfazer triagem** (só o triador, `ra_desfazer_triagem`): volta o caso para aguardando triagem e apaga os
+   itens pendentes. Bloqueia se algum item já foi marcado (desmarcar antes). Se o Slack já tinha avisado,
+   responde na thread que a triagem foi desfeita.
 
 **Prazo:** 1 dia útil a partir do evento (`ra_calcular_prazo`). Horário útil 9h às 18h de segunda a sexta,
 sem os feriados de `ra_feriados` (nacionais, Carnaval e Corpus Christi, 2026 e 2027). Fora do horário, conta da próxima abertura.
