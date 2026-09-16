@@ -19,7 +19,7 @@ quem pede reembolso ou dá chargeback no **Holding Masters** (produtos 5064314 e
 4. Último item marcado → caso **concluído**. Desmarcar reabre.
 
 **Prazo:** 1 dia útil a partir do evento (`ra_calcular_prazo`). Horário útil 9h às 18h de segunda a sexta,
-sem os feriados de `ra_feriados` (nacionais 2026 e 2027). Fora do horário, conta da próxima abertura.
+sem os feriados de `ra_feriados` (nacionais, Carnaval e Corpus Christi, 2026 e 2027). Fora do horário, conta da próxima abertura.
 
 ## Acesso
 

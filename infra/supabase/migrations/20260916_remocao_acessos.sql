@@ -33,8 +33,8 @@ create table if not exists public.ra_feriados (
   nome text not null
 );
 
--- Feriados nacionais (lei federal). Carnaval e Corpus Christi são ponto
--- facultativo e ficaram de fora até o Victor decidir.
+-- Feriados nacionais, mais Carnaval (segunda e terça) e Corpus Christi,
+-- que o Victor decidiu contar como feriado (16/09/2026).
 insert into public.ra_feriados (data, nome) values
   ('2026-01-01', 'Confraternização Universal'), ('2026-04-03', 'Sexta-feira Santa'),
   ('2026-04-21', 'Tiradentes'), ('2026-05-01', 'Dia do Trabalho'),
@@ -45,7 +45,9 @@ insert into public.ra_feriados (data, nome) values
   ('2027-04-21', 'Tiradentes'), ('2027-05-01', 'Dia do Trabalho'),
   ('2027-09-07', 'Independência'), ('2027-10-12', 'Nossa Senhora Aparecida'),
   ('2027-11-02', 'Finados'), ('2027-11-15', 'Proclamação da República'),
-  ('2027-11-20', 'Dia Nacional de Zumbi e da Consciência Negra'), ('2027-12-25', 'Natal')
+  ('2027-11-20', 'Dia Nacional de Zumbi e da Consciência Negra'), ('2027-12-25', 'Natal'),
+  ('2026-02-16', 'Carnaval (segunda)'), ('2026-02-17', 'Carnaval (terça)'), ('2026-06-04', 'Corpus Christi'),
+  ('2027-02-08', 'Carnaval (segunda)'), ('2027-02-09', 'Carnaval (terça)'), ('2027-05-27', 'Corpus Christi')
 on conflict (data) do nothing;
 
 -- Configuração privada: segredo do n8n, triador e endereço do sistema.
