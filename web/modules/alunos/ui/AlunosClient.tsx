@@ -12,7 +12,7 @@ import {
   searchHaystack,
 } from '../domain/aluno-360';
 import { nivelOptions } from '@/shared/domain/nivel-resultado';
-import { loadAlunos360, loadTurmas, type Turma } from './alunos-data';
+import { loadAlunos360, loadTurmas, STATUS_DA_CENTRAL_ORDEM, type Turma } from './alunos-data';
 import { Badge, NivelBadge, DataTable, Thead, Th as Thx, Tr, Td, EmptyState, Button, Toolbar, SearchInput, MultiSelect, SkeletonRows, Toast, useFlash } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtData } from '@/shared/ui/format';
@@ -26,12 +26,16 @@ import { AcessoHmClient } from './AcessoHmClient';
 import { loadHmContagem } from './acesso-hm-data';
 import { hmBadgeTotal } from '../domain/acesso-hm';
 
-type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento';
-interface Filtros { status: string[]; espaco: string[]; instrucao: string[]; nivel: string[]; jornada: string[]; papel: string[]; turma: string[]; estado: string[]; anoEntrada: string[] }
-const FILTROS_VAZIO: Filtros = { status: [], espaco: [], instrucao: [], nivel: [], jornada: [], papel: [], turma: [], estado: [], anoEntrada: [] };
+type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento' | 'canal';
+interface Filtros { status: string[]; espaco: string[]; instrucao: string[]; nivel: string[]; jornada: string[]; papel: string[]; turma: string[]; estado: string[]; anoEntrada: string[]; canal: string[] }
+const FILTROS_VAZIO: Filtros = { status: [], espaco: [], instrucao: [], nivel: [], jornada: [], papel: [], turma: [], estado: [], anoEntrada: [], canal: [] };
 
 /** Valor do filtro de ano para quem não tem data de entrada registrada. */
 const SEM_DATA = '__sem_data__';
+
+/** Idem para o canal de aquisição: parte da base ainda não foi mapeada, e sem
+ *  esta opção essas pessoas ficariam invisíveis em qualquer recorte por canal. */
+const SEM_CANAL = '__sem_canal__';
 
 /** Ordem de exibição das instruções: nível crescente, titular antes do sócio. */
 const INSTRUCAO_RANK: Record<string, number> = Object.fromEntries(INSTRUCOES.map((v, i) => [v, i]));
@@ -120,6 +124,12 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
         const ano = a.data_entrada_thb ? String(a.data_entrada_thb).slice(0, 4) : SEM_DATA;
         if (!f.anoEntrada.includes(ano)) return false;
       }
+      // Canal de aquisição: mesma regra do ano. Quem ainda não foi mapeado cai em
+      // SEM_CANAL e continua alcançável — é justamente o recorte que diz o que falta.
+      if (f.canal.length) {
+        const c = String(a.canal_aquisicao ?? '').trim() || SEM_CANAL;
+        if (!f.canal.includes(c)) return false;
+      }
       return true;
     });
     list.sort((a, b) => {
@@ -139,6 +149,16 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
       if (sortCol === 'turma') {
         const cmp = (turmaCombo(a) || '￿').localeCompare(turmaCombo(b) || '￿', 'pt-BR', { numeric: true });
         return sortDir === 'asc' ? cmp : -cmp;
+      }
+      if (sortCol === 'canal') {
+        // Sem canal vai sempre para o fim, nos dois sentidos: é ausência de dado,
+        // não um valor que disputa ordem alfabética com os demais.
+        const ca = String(a.canal_aquisicao ?? '').trim();
+        const cb = String(b.canal_aquisicao ?? '').trim();
+        if (!ca !== !cb) return ca ? -1 : 1;
+        const cmp = ca.localeCompare(cb, 'pt-BR', { numeric: true });
+        if (cmp) return sortDir === 'asc' ? cmp : -cmp;
+        return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
       }
       if (sortCol === 'vencimento') {
         const ra = a.data_expiracao ? Date.parse(a.data_expiracao) : Infinity;
@@ -166,7 +186,10 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
 
   // Status: valores crus da planilha (Ativo, A vencer, Vencido, Acompanha titular,
   // Verificar, Ativo (cortesia)…). Sem tradução: o rótulo na tela é o da fonte.
-  const statusOpts = useMemo(() => distintos(alunos.map((a) => a.status_acesso_central)).sort((a, b) => a.localeCompare(b, 'pt-BR')), [alunos]);
+  const statusOpts = useMemo(() => {
+    const presentes = new Set(distintos(alunos.map((a) => a.status_acesso_central)));
+    return STATUS_DA_CENTRAL_ORDEM.filter((s) => presentes.has(s));
+  }, [alunos]);
 
   // Espaço: rótulo bonito quando conhecido, valor cru quando não — do mesmo jeito
   // que o EspacoBadge já faz na tabela, pra tela e filtro não divergirem.
@@ -200,6 +223,18 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
       ...(temSemData ? [{ value: SEM_DATA, label: 'Sem data' }] : []),
     ];
   }, [alunos]);
+  // Canal de aquisição: os canais que existirem na base, em ordem alfabética, e
+  // "Não atribuído" no fim para quem ainda não foi mapeado na Central.
+  const canalOpts = useMemo(() => {
+    const canais = distintos(alunos.map((a) => a.canal_aquisicao))
+      .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+    const temSemCanal = alunos.some((a) => !String(a.canal_aquisicao ?? '').trim());
+    return [
+      ...canais.map((c) => ({ value: c, label: c })),
+      ...(temSemCanal ? [{ value: SEM_CANAL, label: 'Não atribuído' }] : []),
+    ];
+  }, [alunos]);
+
   const temFiltroLista = Boolean(busca) || Object.values(filtros).some((arr) => arr.length > 0);
 
   const selected = selectedId ? alunos.find((a) => a.id === selectedId) ?? null : null;
@@ -256,6 +291,7 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
         <MultiSelect values={filtros.nivel} onChange={(v) => setFiltros((f) => ({ ...f, nivel: v }))} placeholder="Todos os níveis" options={nivelOpts.map((k) => ({ value: k, label: NIVEL_LABEL[k] || k }))} />
         <MultiSelect values={filtros.jornada} onChange={(v) => setFiltros((f) => ({ ...f, jornada: v }))} placeholder="Toda jornada" options={[{ value: 'com_ht', label: 'Com HT' }, { value: 'com_hm', label: 'Com HM' }, { value: 'com_placa', label: 'Com placa' }, { value: 'com_depoimento', label: 'Com depoimento' }, { value: 'com_sip', label: 'Com SIP' }]} />
         <MultiSelect values={filtros.anoEntrada} onChange={(v) => setFiltros((f) => ({ ...f, anoEntrada: v }))} placeholder="Ano de entrada no THB" options={anoEntradaOpts} />
+        <MultiSelect values={filtros.canal} onChange={(v) => setFiltros((f) => ({ ...f, canal: v }))} placeholder="Todos os canais" options={canalOpts} />
         <MultiSelect values={filtros.status} onChange={(v) => setFiltros((f) => ({ ...f, status: v }))} placeholder="Todos os status" options={statusOpts.map((s) => ({ value: s, label: s }))} />
       </Toolbar>
 
@@ -276,10 +312,11 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
           <Thx>Profissão</Thx>
           <Thx sortable active={sortCol === 'instrucao'} dir={sortDir} onClick={sortBtn('instrucao')}>Instrução</Thx>
           <Thx sortable active={sortCol === 'turma'} dir={sortDir} onClick={sortBtn('turma')}>Turma</Thx>
+          <Thx sortable active={sortCol === 'canal'} dir={sortDir} onClick={sortBtn('canal')}>Canal de aquisição</Thx>
           <Thx sortable active={sortCol === 'vencimento'} dir={sortDir} onClick={sortBtn('vencimento')}>Vencimento</Thx>
         </Thead>
         <tbody>
-          {loading && !filtered.length && <SkeletonRows cols={[56, 80, 64, 48, 72]} />}
+          {loading && !filtered.length && <SkeletonRows cols={[56, 80, 64, 48, 72, 72]} />}
           {filtered.slice(0, 500).map((a) => {
             const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
             return (
@@ -302,6 +339,16 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
                   )}
                 </Td>
                 <Td className="text-[var(--fg-2)] whitespace-nowrap">{turmaCombo(a) || <span className="text-[var(--fg-3)]">—</span>}</Td>
+                <Td>
+                  {/* Canal longo ("HM — Programa de Implementação") não pode empurrar
+                      a coluna de vencimento para fora: trunca com o valor inteiro no title. */}
+                  {a.canal_aquisicao
+                    ? <div className="text-[var(--fg-2)] truncate max-w-[170px]" title={a.canal_aquisicao}>{a.canal_aquisicao}</div>
+                    : <span className="text-[var(--fg-3)]">—</span>}
+                  {a.tipo_entrada && a.tipo_entrada !== a.canal_aquisicao && (
+                    <div className="text-[11px] text-[var(--fg-3)] mt-0.5">{a.tipo_entrada}</div>
+                  )}
+                </Td>
                 <Td className="whitespace-nowrap">
                   {/* Sem data, o status ainda tem de aparecer: sócio herda o prazo do
                       titular e a base pré-Hotmart nunca teve ano — nos dois casos o

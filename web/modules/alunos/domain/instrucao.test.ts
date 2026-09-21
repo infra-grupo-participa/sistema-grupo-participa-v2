@@ -5,9 +5,10 @@ type Entrada = Parameters<typeof parseInstrucao>[0];
 const a = (p: Partial<Entrada>): Entrada => ({ instrucao: null, espaco_instrucao: null, eh_socio: null, ...p });
 
 describe('parseInstrucao', () => {
-  it('cobre as 10 instruções da Central', () => {
+  it('cobre as 12 instruções da Central', () => {
     expect(INSTRUCOES).toEqual([
       'THB', 'THB - SÓCIO',
+      'THB IMPLEMENTAÇÃO', 'THB IMPLEMENTAÇÃO - SÓCIO',
       'PLATINA', 'PLATINA - SÓCIO',
       'AURUM', 'AURUM - SÓCIO',
       'DIAMANTE', 'DIAMANTE - SÓCIO',
@@ -25,6 +26,31 @@ describe('parseInstrucao', () => {
     expect(parseInstrucao(a({ instrucao: 'DIAMANTE VERMELHO - SÓCIO' }))).toMatchObject({
       nivel: 'DIAMANTE VERMELHO', ehSocio: true, nivelLabel: 'Diamante Vermelho',
     });
+  });
+
+  it('reconhece THB IMPLEMENTAÇÃO, titular e sócio', () => {
+    expect(parseInstrucao(a({ instrucao: 'THB IMPLEMENTAÇÃO' }))).toMatchObject({
+      nivel: 'THB IMPLEMENTAÇÃO', ehSocio: false, label: 'THB Implementação', inferido: false,
+    });
+    expect(parseInstrucao(a({ instrucao: 'THB IMPLEMENTAÇÃO - SÓCIO' }))).toMatchObject({
+      nivel: 'THB IMPLEMENTAÇÃO', ehSocio: true, label: 'THB Implementação · sócio',
+    });
+  });
+
+  it('não confunde THB IMPLEMENTAÇÃO com THB', () => {
+    expect(parseInstrucao(a({ instrucao: 'THB IMPLEMENTAÇÃO' }))?.nivel).not.toBe('THB');
+    expect(parseInstrucao(a({ instrucao: 'THB' }))).toMatchObject({ nivel: 'THB', ehSocio: false });
+    expect(parseInstrucao(a({ instrucao: 'THB - SÓCIO' }))).toMatchObject({ nivel: 'THB', ehSocio: true });
+  });
+
+  it('aceita THB IMPLEMENTAÇÃO escrito sem acento', () => {
+    expect(instrucaoCanonica(a({ instrucao: 'thb implementacao - socio' }))).toBe('THB IMPLEMENTAÇÃO - SÓCIO');
+  });
+
+  it('infere THB IMPLEMENTAÇÃO pelo espaço novo', () => {
+    const r = parseInstrucao(a({ instrucao: '', espaco_instrucao: 'holding_masters_implementacao', eh_socio: true }));
+    expect(r).toMatchObject({ nivel: 'THB IMPLEMENTAÇÃO', ehSocio: true, inferido: true });
+    expect(instrucaoCanonica(a({ espaco_instrucao: 'holding_masters_implementacao' }))).toBe('THB IMPLEMENTAÇÃO');
   });
 
   it('aceita variações de escrita do sufixo de sócio', () => {

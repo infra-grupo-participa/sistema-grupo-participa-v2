@@ -94,6 +94,16 @@ export const REPORTS: ReportGroup[] = [
       { key: 'ofertas', label: 'Ofertas', path: '/relatorios/financeiro', hash: '#ofertas', href: '/relatorios/financeiro#ofertas', ico: 'banknote' },
     ],
   },
+  // Gate por setor, como o financeiro: ver podeVerRemocao(), espelho de ra_pode_ver().
+  {
+    key: 'remocoes',
+    label: 'Remoção de Acessos',
+    path: '/relatorios/remocoes',
+    defaultHref: '/relatorios/remocoes',
+    ico: 'user-x',
+    setor: 'remocao_acessos',
+    children: [],
+  },
 ];
 
 export const SYSTEM_NAV: SystemNavItem[] = [

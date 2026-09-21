@@ -14,6 +14,10 @@ const EXPORT_COLS: [string, (a: Aluno360) => unknown][] = [
   ['Instrução', (a) => instrucaoCanonica(a) || ''],
   ['Turma THB', (a) => a.turma_codigo],
   ['Turma Aurum', (a) => a.turma_aurum_codigo],
+  // Acompanham a coluna nova da lista: exportar sem elas faria o arquivo divergir
+  // da tela que o usuário acabou de filtrar.
+  ['Canal de aquisição', (a) => a.canal_aquisicao || ''],
+  ['Tipo de entrada', (a) => a.tipo_entrada || ''],
   ['Cidade', (a) => a.cidade],
   ['Estado', (a) => a.estado],
   ['Papel', (a) => (a.eh_socio ? 'Sócio' : 'Titular')],

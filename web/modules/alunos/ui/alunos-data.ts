@@ -13,15 +13,34 @@ export interface Turma {
 }
 
 /**
+ * Os ÚNICOS status de acesso que existem na Central. É uma allowlist de propósito:
+ * a coluna também recebe MARCAS DE PROCESSO — `fora_central_acessos_2026`,
+ * `Oculto (19/08/2026)`, `Removido (duplicada …)`, `arquivado_vencido_historico`,
+ * `DUPLICADA …` — que não são estado de acesso de ninguém e vazavam para o filtro
+ * de Status da lista, misturadas com Ativo e Vencido.
+ *
+ * Allowlist, e não lista de exclusão, porque a marca seguinte que alguém inventar
+ * na planilha entraria sozinha no filtro de novo. Aqui ela fica de fora até ser
+ * reconhecida aqui — o custo de errar para este lado é a pessoa não aparecer, que
+ * se percebe na hora; o outro lado é o filtro voltar a encher de lixo em silêncio.
+ */
+export const STATUS_DA_CENTRAL_ORDEM = [
+  'Ativo',
+  'Ativo (cortesia)',
+  'A vencer',
+  'Vencido',
+  'Acompanha titular',
+  'Verificar',
+] as const;
+const STATUS_DA_CENTRAL = new Set<string>(STATUS_DA_CENTRAL_ORDEM);
+
+/**
  * Registros que existem em thb_alunos mas NÃO são aluno da Central de Acessos.
  * São mantidos na tabela de propósito — o funil de ativação (sinal pago, cobrança do saldo)
  * lê thb_alunos e precisa deles. Só não podem contar como aluno aqui.
  */
-const FORA_DA_CENTRAL = new Set(['fora_central_acessos_2026']);
-const ehForaDaCentral = (a: Aluno360) => {
-  const s = String(a.status_acesso_central ?? '').trim();
-  return FORA_DA_CENTRAL.has(s) || s.startsWith('DUPLICADA');
-};
+const ehForaDaCentral = (a: Aluno360) =>
+  !STATUS_DA_CENTRAL.has(String(a.status_acesso_central ?? '').trim());
 
 /**
  * fn_aluno_360_safe devolve UMA LINHA POR CARD de cs.contatos_hm, então quem tem card de HM
@@ -57,32 +76,52 @@ export async function loadAlunos360(): Promise<Aluno360[]> {
     from += PAGE;
   }
   const alunos = dedupePorAluno(all).filter((a) => !ehForaDaCentral(a));
-  return comDataDeEntrada(supabase, alunos);
+  return comCamposDaCentral(supabase, alunos);
+}
+
+/** Campos que moram em thb_alunos e não passam por fn_aluno_360_safe. */
+interface CamposDaCentral {
+  id: string;
+  data_entrada_thb: string | null;
+  canal_aquisicao: string | null;
+  tipo_entrada: string | null;
+  canal_fonte: string | null;
 }
 
 /**
- * A data de entrada no THB não vem por fn_aluno_360_safe — é lida direto de thb_alunos
- * e mesclada aqui. Assim a ficha 360 mostra o campo sem depender de alterar a função.
- * Se a coluna ainda não existir no banco, a consulta falha em silêncio e a ficha
- * simplesmente não mostra a linha.
+ * Data de entrada e canal de aquisição não vêm por fn_aluno_360_safe — são lidos
+ * direto de thb_alunos e mesclados aqui. Assim a tela mostra os campos sem depender
+ * de alterar a função. Se alguma coluna ainda não existir no banco, a consulta falha
+ * em silêncio e a tela simplesmente não mostra aquele dado.
  */
-async function comDataDeEntrada(
+async function comCamposDaCentral(
   supabase: ReturnType<typeof db>,
   alunos: Aluno360[],
 ): Promise<Aluno360[]> {
   const PAGE = 1000;
-  const porId = new Map<string, string | null>();
+  const porId = new Map<string, CamposDaCentral>();
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from('thb_alunos')
-      .select('id, data_entrada_thb')
+      .select('id, data_entrada_thb, canal_aquisicao, tipo_entrada, canal_fonte')
       .range(from, from + PAGE - 1);
-    if (error || !data) break; // coluna ausente ou sem permissão: segue sem o campo
-    for (const r of data as { id: string; data_entrada_thb: string | null }[]) porId.set(r.id, r.data_entrada_thb);
+    if (error || !data) break; // coluna ausente ou sem permissão: segue sem os campos
+    for (const r of data as CamposDaCentral[]) porId.set(r.id, r);
     if (data.length < PAGE) break;
   }
   if (!porId.size) return alunos;
-  return alunos.map((a) => ({ ...a, data_entrada_thb: porId.get(a.id) ?? null }));
+  return alunos.map((a) => {
+    const c = porId.get(a.id);
+    return c
+      ? {
+          ...a,
+          data_entrada_thb: c.data_entrada_thb ?? null,
+          canal_aquisicao: c.canal_aquisicao ?? null,
+          tipo_entrada: c.tipo_entrada ?? null,
+          canal_fonte: c.canal_fonte ?? null,
+        }
+      : a;
+  });
 }
 
 export async function loadTurmas(): Promise<Turma[]> {

@@ -44,6 +44,7 @@ export interface AnoEspaco { year: string; total: number; segs: { key: string; c
 /** Espaços destacados nos KPIs (ordem fixa). */
 const ESPACO_KPI: { key: string; label: string }[] = [
   { key: 'holding_masters', label: 'Holding Masters' },
+  { key: 'holding_masters_implementacao', label: 'Holding Masters Implementação' },
   { key: 'aurum', label: 'Aurum' },
   { key: 'platina', label: 'Platina' },
   { key: 'mastermind_diamante', label: 'Diamante' },

@@ -169,6 +169,14 @@ export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggl
               <Row k="Oferta" v={a.oferta} />
               <Row k="Tipo de oferta" v={a.tipo_oferta} />
               <Row k="Origem de acesso" v={a.origem_acesso} />
+              {/* Canal de aquisição ≠ origem de acesso: aquele diz por onde a pessoa
+                  ENTROU (HT 12, ETHB, Acelera), este diz de onde veio o acesso
+                  (Hotmart, Sócio/Convite). A procedência fica ao lado do canal para
+                  separar o que é dado do que é regra — é o que sustenta o número
+                  quando alguém questionar. */}
+              <Row k="Canal de aquisição" v={a.canal_aquisicao || '—'} />
+              <Row k="Tipo de entrada" v={a.tipo_entrada || '—'} />
+              {a.canal_fonte && <Row k="Como foi atribuído" v={a.canal_fonte} />}
               <Row k="Instrução" v={instr ? instr.label : a.instrucao} />
               <Row k="Espaço de instrução" v={espaco} />
               <VinculoSocios a={a} vinculo={vinculo} onAbrirAluno={onAbrirAluno} />

@@ -65,6 +65,13 @@ export const MODULOS: ModuloAcesso[] = [
     verCodigo: '3.4.1', verLabel: 'Visualizar dash + contas a receber',
     acoes: [{ codigo: '3.4.2', funcao: 'financeiro.operar', label: 'Registrar acordo de pagamento' }],
   },
+  // Sem ação separada: quem entra marca só os itens em que é o responsável
+  // (a trava é por item, no banco — ra_marcar_item).
+  {
+    codigo: '3.5', setor: 'remocao_acessos', label: 'Remoção de Acessos',
+    verCodigo: '3.5.1', verLabel: 'Ver casos e marcar os próprios itens',
+    acoes: [],
+  },
 ];
 
 export const LGPD_ACESSO = { codigo: '4.1', label: 'Ver CPF/documento completo (LGPD)' };
