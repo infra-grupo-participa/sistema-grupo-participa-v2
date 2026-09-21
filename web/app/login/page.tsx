@@ -7,6 +7,11 @@ import { ehEmailDaEquipe } from '@/shared/domain/auth';
 import { Card, Input, Button } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 
+// Mensagem única para credencial inválida E domínio recusado: a tela não revela
+// qual dos dois foi, nem qual é o domínio da equipe.
+const ERRO_CREDENCIAL = 'E-mail ou senha inválidos.';
+const AVISO_RECUPERACAO = 'Se o e-mail existir, enviamos as instruções de recuperação.';
+
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
@@ -23,23 +28,23 @@ function LoginForm() {
     setErro(null);
     setInfo(null);
     setLoading(true);
+    // `auth.users` é compartilhada pelos 7 sistemas do grupo: a credencial de um
+    // aluno autentica aqui também. A checagem vem ANTES de `signInWithPassword` —
+    // e-mail de fora nem chega ao servidor, não cria sessão e a senha não sai do
+    // navegador. Mensagem idêntica à de credencial inválida, de propósito: dizer
+    // "domínio errado" entregaria a quem está tentando qual domínio procurar.
+    if (!ehEmailDaEquipe(email)) {
+      setLoading(false);
+      setErro(ERRO_CREDENCIAL);
+      return;
+    }
     const supabase = createBrowserSupabase();
-    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: senha });
-    if (error) {
-      setLoading(false);
-      setErro('E-mail ou senha inválidos.');
-      return;
-    }
-    // A credencial vale nos 7 sistemas do grupo, mas este é o sistema interno da
-    // equipe. Sem a trava abaixo o aluno logava, era barrado no layout e voltava
-    // para cá em loop, sem nunca saber por quê.
-    if (!ehEmailDaEquipe(data.user?.email)) {
-      await supabase.auth.signOut();
-      setLoading(false);
-      setErro('Este acesso é exclusivo da equipe do Grupo Participa. Se você é aluno, use o portal do seu programa.');
-      return;
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: senha });
     setLoading(false);
+    if (error) {
+      setErro(ERRO_CREDENCIAL);
+      return;
+    }
     router.push(redirect);
     router.refresh();
   }
@@ -50,11 +55,17 @@ function LoginForm() {
       return;
     }
     setErro(null);
+    // Fora do domínio: responde o mesmo texto neutro, sem disparar e-mail nenhum.
+    // Assim a tela não serve de oráculo para descobrir quem é da equipe.
+    if (!ehEmailDaEquipe(email)) {
+      setInfo(AVISO_RECUPERACAO);
+      return;
+    }
     const supabase = createBrowserSupabase();
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${window.location.origin}/login`,
     });
-    setInfo(error ? null : 'Se o e-mail existir, enviamos as instruções de recuperação.');
+    setInfo(error ? null : AVISO_RECUPERACAO);
     if (error) setErro('Não foi possível enviar a recuperação agora.');
   }
 
@@ -84,7 +95,7 @@ function LoginForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
-          placeholder="voce@grupoparticipa.com.br"
+          placeholder="seu e-mail corporativo"
           required
           className="mt-1.5"
         />
