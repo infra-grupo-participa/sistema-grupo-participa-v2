@@ -66,3 +66,60 @@ describe('proxy — só o domínio da equipe atravessa', () => {
     expect(FONTE).toContain('status: 401');
   });
 });
+
+/**
+ * Confinamento do candidato de placa (21/09/2026).
+ *
+ * Pedido do Marcio: quem tem processo de placa, ao sair do formulário, volta
+ * para o formulário dele — não vê a tela de login nem alcança outra área.
+ */
+describe('proxy — candidato de placa fica no processo dele', () => {
+  it('o cookie da placa é o sinal, e o token é validado como UUID', () => {
+    expect(FONTE).toContain('PLACA_SESSION_COOKIE');
+    expect(FONTE).toMatch(/isUuid\(tokenPlaca/);
+  });
+
+  it('candidato fora das rotas dele volta ao formulário', () => {
+    expect(FONTE).toMatch(/if\s*\(ehCandidato\s*&&\s*!ehRotaDoCandidato\(pathname\)\)/);
+    expect(FONTE).toMatch(/url\.pathname\s*=\s*'\/solicitar-placa'/);
+  });
+
+  it('🔴 a EQUIPE tem precedência — cookie de placa não prende quem tem sessão', () => {
+    // Sem `!sessaoValida`, alguém da equipe que preencheu uma placa de teste
+    // no mesmo navegador ficaria trancado para fora do próprio sistema.
+    expect(FONTE).toMatch(/ehCandidato\s*=\s*!sessaoValida\s*&&/);
+  });
+
+  it('/login NÃO está entre as rotas do candidato — é a tela que ele não deve ver', () => {
+    const bloco = FONTE.slice(
+      FONTE.indexOf('const ROTAS_DO_CANDIDATO'),
+      FONTE.indexOf('function ehRotaDoCandidato'),
+    );
+    expect(bloco).toContain("'/solicitar-placa'");
+    expect(bloco).toContain("'/agendar-entrevista'");
+    expect(bloco).not.toContain("'/login'");
+    // Fluxo de conta da EQUIPE, não do candidato.
+    expect(bloco).not.toContain("'/auth/confirm'");
+    expect(bloco).not.toContain("'/definir-senha'");
+  });
+
+  it('o redirecionamento não escreve o token na URL', () => {
+    // O cookie httpOnly já identifica a sessão. Pôr o token na barra de
+    // endereço o exporia em histórico, Referer e print — é a credencial.
+    const bloco = FONTE.slice(FONTE.indexOf('if (ehCandidato'), FONTE.indexOf('if (!sessaoValida'));
+    expect(bloco).toMatch(/url\.search\s*=\s*''/);
+    expect(bloco).not.toMatch(/searchParams\.set\('token'/);
+  });
+
+  it('API fora do escopo do candidato responde 401, não redireciona', () => {
+    const bloco = FONTE.slice(FONTE.indexOf('if (ehCandidato'), FONTE.indexOf('if (!sessaoValida'));
+    expect(bloco).toContain('status: 401');
+  });
+
+  it('🔑 existe válvula de escape: /login?equipe=1 não é sequestrado', () => {
+    // Alguém da equipe que preencheu placa de teste e teve a sessão expirada
+    // ficaria preso fora do próprio sistema, sem pista do porquê.
+    expect(FONTE).toMatch(/pedeTelaDaEquipe\s*=\s*pathname === '\/login'/);
+    expect(FONTE).toMatch(/&&\s*!pedeTelaDaEquipe/);
+  });
+});
