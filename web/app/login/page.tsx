@@ -19,7 +19,17 @@ function LoginForm() {
 
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
-  const [erro, setErro] = useState<string | null>(null);
+  // 🔑 `?erro=sem_acesso` vem do proxy quando a sessão é válida mas NÃO é da
+  // equipe (conta de aluno/lead — `auth.users` é compartilhada pelos 7
+  // sistemas). Sem esta mensagem a pessoa cairia num laço mudo: entra, é
+  // devolvida ao login, tenta de novo. A frase não cita o domínio — dizer
+  // qual é transforma a tela em oráculo para quem tenta adivinhar login
+  // (mesma razão da recusa genérica em `entrar`, commit 6d89d22).
+  const [erro, setErro] = useState<string | null>(
+    params.get('erro') === 'sem_acesso'
+      ? 'Esta conta não tem acesso ao sistema interno. Use a conta corporativa da equipe.'
+      : null,
+  );
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
