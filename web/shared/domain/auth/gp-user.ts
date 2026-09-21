@@ -55,3 +55,16 @@ export function buildGpUser(data: PerfilData): GpUser {
     avatarUrl: data.avatar_url || null,
   };
 }
+
+/** Domínio de e-mail da equipe. O sistema interno é exclusivo dele. */
+export const DOMINIO_EQUIPE = '@advmais.com';
+
+/**
+ * O e-mail pertence à equipe? Regra do sistema interno: `auth.users` é compartilhada
+ * pelos 7 sistemas do grupo (aluno, lead, workbook, CNHF…), então sessão válida não
+ * basta — só entra quem tem e-mail do domínio da equipe.
+ * Espelha `public.gp_eh_equipe()` no banco (migration 20260921).
+ */
+export function ehEmailDaEquipe(email: string | null | undefined): boolean {
+  return String(email ?? '').trim().toLowerCase().endsWith(DOMINIO_EQUIPE);
+}

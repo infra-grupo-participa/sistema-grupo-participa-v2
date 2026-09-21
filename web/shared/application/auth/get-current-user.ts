@@ -1,4 +1,4 @@
-import { buildGpUser, type GpUser } from '@/shared/domain/auth';
+import { buildGpUser, ehEmailDaEquipe, type GpUser } from '@/shared/domain/auth';
 import type { AuthGateway, ProfileRepository } from './ports';
 
 /**
@@ -16,10 +16,14 @@ export class GetCurrentUser {
     if (!authUser) return null;
 
     const perfil = await this.profiles.findById(authUser.id);
-    if (!perfil) {
-      // Sessão válida sem perfil → usuário mínimo (cargo visualizador via fallback).
-      return buildGpUser({ id: authUser.id, email: authUser.email });
-    }
+    // `auth.users` é compartilhada pelos 7 sistemas do grupo: ter sessão válida NÃO
+    // significa ser equipe. Sem perfil → não entra (antes caía num usuário mínimo
+    // com cargo `visualizador`, e `podeVer()` libera visualizador em qualquer setor).
+    if (!perfil) return null;
+    // O sistema interno é só do domínio da equipe.
+    if (!ehEmailDaEquipe(perfil.email)) return null;
+    // Perfil existe mas ainda não foi liberado por um admin.
+    if (perfil.status !== 'ativo') return null;
     return buildGpUser(perfil);
   }
 }

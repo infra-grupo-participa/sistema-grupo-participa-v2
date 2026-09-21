@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
+import { ehEmailDaEquipe } from '@/shared/domain/auth';
 import { Card, Input, Button } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 
@@ -23,12 +24,22 @@ function LoginForm() {
     setInfo(null);
     setLoading(true);
     const supabase = createBrowserSupabase();
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: senha });
-    setLoading(false);
+    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: senha });
     if (error) {
+      setLoading(false);
       setErro('E-mail ou senha inválidos.');
       return;
     }
+    // A credencial vale nos 7 sistemas do grupo, mas este é o sistema interno da
+    // equipe. Sem a trava abaixo o aluno logava, era barrado no layout e voltava
+    // para cá em loop, sem nunca saber por quê.
+    if (!ehEmailDaEquipe(data.user?.email)) {
+      await supabase.auth.signOut();
+      setLoading(false);
+      setErro('Este acesso é exclusivo da equipe do Grupo Participa. Se você é aluno, use o portal do seu programa.');
+      return;
+    }
+    setLoading(false);
     router.push(redirect);
     router.refresh();
   }
