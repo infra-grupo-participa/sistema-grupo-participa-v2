@@ -171,3 +171,62 @@ describe('proxy — o candidato alcança o modelo da declaração', () => {
     expect(ehRota('/relatorios/placas')).toBe(false);
   });
 });
+
+/**
+ * 🔴 AS DUAS TRAVAS (23/09/2026, segunda rodada).
+ *
+ * A primeira correção liberou `/modelos` só em `ROTAS_DO_CANDIDATO` e ficou
+ * verde — mas em PRODUÇÃO o redirect continuou. O teste media METADE do
+ * Proxy: existem DUAS travas em sequência, e a segunda (`isPublic`) barra
+ * ANTES de qualquer cookie existir.
+ *
+ *   1. `ehCandidato && !ehRotaDoCandidato(...)` → volta ao formulário
+ *   2. `!sessaoValida && !isPublic(...)`        → manda para /login
+ *
+ * O candidato não tem sessão de equipe, então SEMPRE cai na 2ª. Medido com
+ * curl na produção: 307 para /login MESMO SEM COOKIE — prova de que a causa
+ * não era o bloco do candidato.
+ *
+ * Estes testes percorrem as duas, na ordem real.
+ */
+describe('proxy — o modelo da declaração passa pelas DUAS travas', () => {
+  const listaDe = (nome: string, fim: string) => {
+    const t = FONTE.slice(FONTE.indexOf(nome), FONTE.indexOf(fim));
+    return [...t.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  };
+  const casa = (lista: string[], p: string) =>
+    lista.some((r) => p === r || p.startsWith(r + '/'));
+
+  const PUB = listaDe('const PUBLIC_PREFIXES', 'function isPublic');
+  const CAND = listaDe('const ROTAS_DO_CANDIDATO', 'function ehRotaDoCandidato');
+  const DECL = '/modelos/declaracao-template.html';
+
+  it('🔴 trava 2 (isPublic): sem ela o candidato vai para /login — foi o bug real', () => {
+    expect(casa(PUB, DECL)).toBe(true);
+  });
+
+  it('trava 1 (candidato): a rota segue liberada no confinamento', () => {
+    expect(casa(CAND, DECL)).toBe(true);
+  });
+
+  it('🔑 o candidato SEM sessão atravessa as duas e chega no arquivo', () => {
+    // Ordem real do Proxy. `sessaoValida` é false: candidato não é equipe.
+    const ehCandidato = true;
+    const voltaAoFormulario = ehCandidato && !casa(CAND, DECL);
+    const vaiProLogin = !voltaAoFormulario && !casa(PUB, DECL);
+    expect(voltaAoFormulario).toBe(false);
+    expect(vaiProLogin).toBe(false);
+  });
+
+  it('visitante SEM cookie nenhum também alcança (é público)', () => {
+    // Produção devolvia 307 neste caso — a prova de que faltava isPublic.
+    expect(casa(PUB, DECL)).toBe(true);
+  });
+
+  it('liberar /modelos NÃO abriu área interna', () => {
+    for (const alvo of ['/relatorios/placas', '/financeiro', '/usuarios', '/sistema/admin-dev']) {
+      expect(casa(PUB, alvo)).toBe(false);
+      expect(casa(CAND, alvo)).toBe(false);
+    }
+  });
+});

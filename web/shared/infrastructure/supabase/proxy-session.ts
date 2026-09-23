@@ -12,6 +12,11 @@ const PUBLIC_PREFIXES = [
   '/definir-senha', // cria a senha logo após o /auth/confirm
   '/solicitar-placa',
   '/agendar-entrevista',
+  // 🔴 O modelo da declaração (passo 5) é um `.html` ESTÁTICO em `public/`. O
+  // matcher do Proxy só isenta imagem, então ele ATRAVESSA o Proxy como página
+  // e precisa ser PÚBLICO — o candidato não tem sessão. Faltando aqui, ele caía
+  // em `/login`: os chamados do Renan e do Michel Camargo (23/09).
+  '/modelos',
   '/api/cep',
   '/api/placa',
   '/api/agenda',
