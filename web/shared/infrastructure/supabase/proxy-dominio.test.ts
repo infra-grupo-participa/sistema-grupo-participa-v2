@@ -123,3 +123,51 @@ describe('proxy — candidato de placa fica no processo dele', () => {
     expect(FONTE).toMatch(/&&\s*!pedeTelaDaEquipe/);
   });
 });
+/**
+ * Regressão do botão "Gerar declaração preenchida" (23/09/2026).
+ *
+ * 🔴 O chamado do Renan: clicava em "Gerar declaração preenchida" (passo 5) e
+ * voltava para a tela de comprovação. Causa: o botão abre
+ * `/modelos/declaracao-template.html`, um arquivo ESTÁTICO em `public/` — e o
+ * matcher do Proxy só isenta imagens, então `.html` atravessa o Proxy como
+ * página. Fora de `ROTAS_DO_CANDIDATO`, o candidato era devolvido ao
+ * formulário. Nasceu em c8d78b9, o commit que tentava resolver o caso dele.
+ *
+ * Os dois testes abaixo trancam as DUAS metades: a lista tem `/modelos`, e o
+ * matcher de fato deixa o `.html` passar (é por isso que a lista precisa dele).
+ */
+describe('proxy — o candidato alcança o modelo da declaração', () => {
+  it('/modelos está entre as rotas do candidato', () => {
+    const bloco = FONTE.slice(
+      FONTE.indexOf('const ROTAS_DO_CANDIDATO'),
+      FONTE.indexOf('function ehRotaDoCandidato'),
+    );
+    expect(bloco).toContain("'/modelos'");
+  });
+
+  it('🔴 o matcher do Proxy NÃO isenta .html — por isso /modelos precisa da entrada', () => {
+    // Se um dia o matcher passar a isentar `.html`, este teste cai e avisa que
+    // a entrada acima virou redundante — em vez de ela ficar ali sem motivo.
+    const proxy = readFileSync(join(__dirname, '..', '..', '..', 'proxy.ts'), 'utf8');
+    // O array tem comentário entre `[` e a string — casa a 1ª string do bloco.
+    const bloco = proxy.slice(proxy.indexOf('matcher:'));
+    const m = bloco.match(/'([^']+)'/);
+    expect(m).not.toBeNull();
+    // `split/join`, não `replace`: no replacement do replace a barra tem
+    // semântica própria e a troca não acontece.
+    const padrao = m![1].split('\\\\').join('\\');
+    const matcher = new RegExp('^' + padrao + '$');
+    expect(matcher.test('/modelos/declaracao-template.html')).toBe(true);
+    // Contraprova: imagem é isenta de verdade, então o regex lido é o certo.
+    expect(matcher.test('/logo.png')).toBe(false);
+  });
+
+  it('a rota do candidato aceita /modelos e o arquivo dentro dele', () => {
+    const ROTAS = ['/solicitar-placa', '/agendar-entrevista', '/modelos', '/api/cep', '/api/placa', '/api/agenda'];
+    const ehRota = (p: string) => ROTAS.some((r) => p === r || p.startsWith(r + '/'));
+    expect(ehRota('/modelos/declaracao-template.html')).toBe(true);
+    // E não abre o sistema interno de tabela: prefixo parecido não passa.
+    expect(ehRota('/modelos-internos/segredo')).toBe(false);
+    expect(ehRota('/relatorios/placas')).toBe(false);
+  });
+});

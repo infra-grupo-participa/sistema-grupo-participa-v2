@@ -35,10 +35,23 @@ function isPublic(pathname: string): boolean {
  * 🔑 `/login` fica DE FORA de propósito: é a tela que o candidato não deve
  * alcançar. `/auth/confirm` e `/definir-senha` também — são do fluxo de conta
  * da EQUIPE, não do candidato.
+ *
+ * 🔴 `/modelos` É DO CANDIDATO. O botão "Gerar declaração preenchida" (passo 5
+ * do formulário) abre `/modelos/declaracao-template.html` em aba nova. O
+ * matcher do Proxy só isenta imagens (`svg|png|jpg|jpeg|gif|webp|ico`) — um
+ * `.html` em `public/` ATRAVESSA o Proxy como qualquer página. Sem esta
+ * entrada, o candidato clicava no botão e caía de volta no próprio formulário:
+ * foi o chamado do Renan (23/09), regressão nascida em c8d78b9, o commit que
+ * tentava justamente resolver o caso dele.
+ *
+ * ⚠️ Arquivo novo em `public/` que NÃO seja imagem e precise ser aberto pelo
+ * candidato precisa entrar aqui. O teste `proxy-dominio.test.ts` tranca este
+ * caso; a regra geral não se descobre sozinha.
  */
 const ROTAS_DO_CANDIDATO = [
   '/solicitar-placa',
   '/agendar-entrevista',
+  '/modelos',
   '/api/cep',
   '/api/placa',
   '/api/agenda',
