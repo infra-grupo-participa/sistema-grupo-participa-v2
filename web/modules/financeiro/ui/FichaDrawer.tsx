@@ -15,6 +15,7 @@ import { labelMotivoReuniao } from '../domain/reuniao';
 import { statusCompraLabel, statusTone, TONE_BADGE } from './cor';
 import { FichaResumoTopo } from './FichaResumoTopo';
 import type { FinanceiroRepository } from '../application/ports';
+import { ExtratoHotmart } from './Hotmart';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
 
 const CANAIS_COBRANCA = ['WhatsApp', 'E-mail', 'Ligação', 'Reunião'];
@@ -236,6 +237,14 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
                   />
                 ))
               )}
+            </section>
+            <section>
+              <SectionTitle>Histórico na Hotmart (API oficial)</SectionTitle>
+              <p className="mb-2 text-[11px] text-[var(--fg-3)]">
+                Tudo o que este e-mail comprou e tentou comprar, direto da Hotmart — inclusive cartão recusado,
+                boleto não pago, parcela atrasada e reembolso. Só leitura.
+              </p>
+              <ExtratoHotmart email={conta.email} repo={repo} />
             </section>
             <section>
               <SectionTitle>Histórico do comercial ({ficha.historicoAtivacao.length})</SectionTitle>

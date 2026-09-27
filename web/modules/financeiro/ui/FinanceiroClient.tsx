@@ -24,8 +24,9 @@ import { FichaDrawer } from './FichaDrawer';
 import { Faturamento } from './Faturamento';
 import { Relatorios } from './Relatorios';
 import { Ofertas } from './Ofertas';
+import { Hotmart } from './Hotmart';
 
-type Tab = 'board' | 'faturamento' | 'relatorios' | 'ofertas';
+type Tab = 'board' | 'faturamento' | 'relatorios' | 'ofertas' | 'hotmart';
 
 const repo = new SupabaseFinanceiroRepository();
 
@@ -117,6 +118,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       if (base === 'faturamento') setTab('faturamento');
       else if (base === 'relatorios') setTab('relatorios');
       else if (base === 'ofertas') setTab('ofertas');
+      else if (base === 'hotmart') setTab('hotmart');
       else setTab('board');
 
       if (base === 'board' && query) {
@@ -311,6 +313,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <>Faturamento <span className="text-[var(--accent)]">Diário</span></>
           ) : tab === 'relatorios' ? (
             <>Relatórios <span className="text-[var(--accent)]">Financeiro</span></>
+          ) : tab === 'hotmart' ? (
+            <>Hotmart <span className="text-[var(--accent)]">Oficial</span></>
           ) : (
             <>Ofertas de <span className="text-[var(--accent)]">Cobrança</span></>
           )}
@@ -323,6 +327,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           ? 'Regime de caixa — o que entrou por dia de pagamento'
           : tab === 'relatorios'
           ? 'Selecione colunas e exporte (Excel ou impressão/PDF)'
+          : tab === 'hotmart'
+          ? 'Direto da API da Hotmart: bruto × líquido, situação de cada pessoa, ofertas e conciliação com o banco'
           : 'Ofertas Hotmart usadas para cobrar o saldo do pacote'}
         {turmaAtual ? ` · turma ${turmaAtual.turma} (${turmaAtual.alunos} alunos)` : ''}
       </p>
@@ -377,6 +383,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       {tab === 'relatorios' && (
         board ? <Relatorios contas={contasDoRecorte} turma={turma} canVerDoc={canVerDoc} /> : <Loading label="Carregando…" minHeight={200} />
       )}
+
+      {tab === 'hotmart' && <Hotmart repo={repo} />}
 
       {tab === 'ofertas' && (
         erroOfertas ? (

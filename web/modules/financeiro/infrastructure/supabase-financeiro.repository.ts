@@ -11,6 +11,9 @@ import type {
   Oferta, OfertaOrfa, ReguaPasso, SaudeCheck, TurmaFin,
 } from '../domain/types';
 import type { FinanceiroRepository, Resultado } from '../application/ports';
+import type {
+  DiaHotmart, DivergenciaHotmart, FamiliaHotmart, OfertaHotmart, PessoaHotmart, SyncHotmart, TransacaoHotmart,
+} from '../domain/hotmart';
 
 function erroPara(msg: string): Resultado {
   return { ok: false, msg };
@@ -172,5 +175,44 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     logQueryError('loadOfertasOrfas', error);
     if (error) throw new Error('Não foi possível carregar as ofertas órfãs.');
     return (data as OfertaOrfa[]) ?? [];
+  }
+
+  // ── Espelho da Hotmart (fn_fin_hotmart_*, só leitura) ─────────────────────
+  private async rpcLista<T>(nome: string, args: Record<string, unknown>, msg: string): Promise<T[]> {
+    const { data, error } = await this.db().rpc(nome, args);
+    logQueryError(nome, error);
+    if (error) throw new Error(msg);
+    return (data as T[]) ?? [];
+  }
+
+  loadHotmartFaturamento(familia: FamiliaHotmart, inicio: string | null, fim: string | null): Promise<DiaHotmart[]> {
+    return this.rpcLista<DiaHotmart>('fn_fin_hotmart_faturamento', { p_familia: familia, p_inicio: inicio, p_fim: fim },
+      'Não foi possível carregar o faturamento da Hotmart.');
+  }
+
+  loadHotmartPessoas(familia: FamiliaHotmart): Promise<PessoaHotmart[]> {
+    return this.rpcLista<PessoaHotmart>('fn_fin_hotmart_pessoas', { p_familia: familia },
+      'Não foi possível carregar a situação das pessoas.');
+  }
+
+  loadHotmartExtrato(email: string): Promise<TransacaoHotmart[]> {
+    return this.rpcLista<TransacaoHotmart>('fn_fin_hotmart_extrato', { p_email: email },
+      'Não foi possível carregar o histórico da Hotmart.');
+  }
+
+  loadHotmartOfertas(familia: FamiliaHotmart): Promise<OfertaHotmart[]> {
+    return this.rpcLista<OfertaHotmart>('fn_fin_hotmart_ofertas', { p_familia: familia },
+      'Não foi possível carregar as ofertas da Hotmart.');
+  }
+
+  loadHotmartConciliacao(familia: FamiliaHotmart): Promise<DivergenciaHotmart[]> {
+    return this.rpcLista<DivergenciaHotmart>('fn_fin_hotmart_conciliacao', { p_familia: familia },
+      'Não foi possível carregar a conciliação.');
+  }
+
+  async loadHotmartSync(): Promise<SyncHotmart | null> {
+    const lista = await this.rpcLista<SyncHotmart>('fn_fin_hotmart_sync_status', {},
+      'Não foi possível conferir a sincronização com a Hotmart.');
+    return lista[0] ?? null;
   }
 }

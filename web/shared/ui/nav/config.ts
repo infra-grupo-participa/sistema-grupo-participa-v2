@@ -90,6 +90,7 @@ export const REPORTS: ReportGroup[] = [
     children: [
       { key: 'board', label: 'Board', path: '/relatorios/financeiro', hash: '#board', href: '/relatorios/financeiro#board', ico: 'dashboard' },
       { key: 'faturamento', label: 'Faturamento Diário', path: '/relatorios/financeiro', hash: '#faturamento', href: '/relatorios/financeiro#faturamento', ico: 'trending-up' },
+      { key: 'hotmart', label: 'Hotmart (oficial)', path: '/relatorios/financeiro', hash: '#hotmart', href: '/relatorios/financeiro#hotmart', ico: 'receipt' },
       { key: 'relatorios', label: 'Relatórios', path: '/relatorios/financeiro', hash: '#relatorios', href: '/relatorios/financeiro#relatorios', ico: 'file' },
       { key: 'ofertas', label: 'Ofertas', path: '/relatorios/financeiro', hash: '#ofertas', href: '/relatorios/financeiro#ofertas', ico: 'banknote' },
     ],
