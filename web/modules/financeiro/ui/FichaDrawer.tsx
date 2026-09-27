@@ -17,7 +17,7 @@ import { FichaResumoTopo } from './FichaResumoTopo';
 import type { FinanceiroRepository } from '../application/ports';
 import { ExtratoHotmart } from './hotmart/ExtratoHotmart';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
-import { rotuloMetodo, type BoardHotmart, type ProrataHM } from '../domain/hotmart';
+import { rotuloCategorias, rotuloMetodo, type BoardHotmart, type ProrataHM } from '../domain/hotmart';
 import { explicarDivergencia, fmtMesAno, rotuloParcelamento, temAssinaturaHM, temDadoHotmart } from '../domain/board-hotmart';
 import { prorataDoCard } from '../domain/prorata-hm';
 import { carregarProrataHM, VALOR_PROGRAMA_HM } from '../application/carregar-prorata';
@@ -363,6 +363,7 @@ function SecaoBoardHotmart({ conta, repo, hm, carregando, erro }: {
         <p className="mt-1 text-[11px] text-[var(--fg-4)]">Hotmart sincronizada em {fmtDataHora(hm.sincronizado_em)}.</p>
       )}
       {temAssinaturaHM(hm) && <BlocoAssinaturaHM hm={hm} />}
+      {(hm.outros_pagamentos ?? 0) > 0 && <BlocoOutrosPagamentos hm={hm} />}
       {hm.origem === 'HM' && <BlocoProrataHM repo={repo} contatoHmId={conta.contato_hm_id} hm={hm} />}
     </section>
   );
@@ -386,6 +387,22 @@ function BlocoAssinaturaHM({ hm }: { hm: BoardHotmart }) {
         v={hm.assinatura_ativa == null ? '—' : <Badge tone={hm.assinatura_ativa ? 'success' : 'neutral'}>{hm.assinatura_ativa ? 'ativa' : 'encerrada'}</Badge>}
       />
       <p className="mt-1 text-[11px] text-[var(--fg-3)]">Não entra no &quot;pago&quot; deste card — é outro contrato.</p>
+    </div>
+  );
+}
+
+/** Outros pagamentos da pessoa na Hotmart que o card não mostra (renovação,
+ *  complemento, oferta fora do catálogo = "desconhecida") — só informação,
+ *  não entra no "pago" do card (20260928i). */
+function BlocoOutrosPagamentos({ hm }: { hm: BoardHotmart }) {
+  const n = hm.outros_pagamentos ?? 0;
+  return (
+    <div>
+      <div className={SUBTITULO}>Outros pagamentos na Hotmart (fora do board)</div>
+      <Row k={`${n} pagamento${n === 1 ? '' : 's'}`} v={fmtBRLc(hm.outros_valor ?? 0)} />
+      <Row k="O que são" v={rotuloCategorias(hm.outros_formas)} />
+      <Row k="Último" v={hm.outros_ultimo ? fmtData(hm.outros_ultimo) : '—'} />
+      <p className="mt-1 text-[11px] text-[var(--fg-3)]">Não entram no &quot;pago&quot; deste card. &quot;Oferta desconhecida&quot; = a oferta não está no catálogo e o valor não diz o que é.</p>
     </div>
   );
 }

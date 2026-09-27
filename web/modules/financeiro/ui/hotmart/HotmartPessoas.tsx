@@ -10,10 +10,11 @@ import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../../application/ports';
 import {
-  celulaCsv, contarSituacoes, ORDEM_SITUACAO, ROTULO_SITUACAO, rotuloDocumento, rotuloMetodo,
-  type FamiliaHotmart, type PessoaHotmart, type SituacaoPessoa,
+  celulaCsv, contarSituacoes, ORDEM_SITUACAO, resumirAdimplencia, ROTULO_SITUACAO, rotuloCategorias, rotuloDocumento, rotuloMetodo,
+  type FamiliaHotmart, type LinhaAdimplencia, type PessoaHotmart, type SituacaoPessoa,
 } from '../../domain/hotmart';
 import { Chip, Erro, useCarga } from './comum';
+import { carregarPessoasHotmart } from '../../application/carregar-pessoas';
 import { ExtratoHotmart } from './ExtratoHotmart';
 
 const TOM_SITUACAO: Record<SituacaoPessoa, Tone> = {
@@ -28,15 +29,20 @@ function rotuloParcelamento(p: PessoaHotmart): string {
   return p.vendas_parceladas > 0 ? `${base} · ${p.vendas_parceladas} parcelada(s)` : base;
 }
 
-export function HotmartPessoas({ repo, familia }: { repo: FinanceiroRepository; familia: FamiliaHotmart }) {
-  const { dados, erro } = useCarga<PessoaHotmart[]>(() => repo.loadHotmartPessoas(familia), [familia]);
+/**
+ * `recorte="sem_card"` (Board, 27/09): mostra antes a adimplência de TODO mundo que pagou na família e,
+ * na tabela, só quem pagou na Hotmart e não tem card no board ("pode exibir elas, mesmo sem oferta" — João).
+ */
+export function HotmartPessoas({ repo, familia, recorte }: { repo: FinanceiroRepository; familia: FamiliaHotmart; recorte?: 'sem_card' }) {
+  const { dados: todos, erro } = useCarga<PessoaHotmart[]>(() => carregarPessoasHotmart(repo, familia), [familia]);
+  const dados = todos && recorte === 'sem_card' ? todos.filter((p) => p.cards === 0 && p.compras_pagas > 0) : todos;
   const [filtro, setFiltro] = useState<SituacaoPessoa | 'avisos' | 'multi' | null>(null);
   const [periodo, setPeriodo] = useState<{ de: string; ate: string }>({ de: '', ate: '' });
   const [busca, setBusca] = useState('');
   const [aberta, setAberta] = useState<string | null>(null);
 
   if (erro) return <Erro msg={erro} />;
-  if (!dados) return <Loading label="Carregando situação das pessoas…" minHeight={200} />;
+  if (!dados || !todos) return <Loading label="Carregando situação das pessoas…" minHeight={200} />;
 
   const contagem = contarSituacoes(dados);
   const avisos = dados.filter((p) => p.aviso).length;
@@ -56,6 +62,7 @@ export function HotmartPessoas({ repo, familia }: { repo: FinanceiroRepository; 
 
   return (
     <div className="space-y-3">
+      {recorte === 'sem_card' && <ResumoAdimplencia linhas={resumirAdimplencia(todos)} semCard={dados.length} />}
       <div className="flex flex-wrap gap-1.5">
         <Chip ativo={filtro == null} onClick={() => setFiltro(null)}>Todas · {dados.length}</Chip>
         <Chip ativo={filtro === 'avisos'} onClick={() => setFiltro('avisos')} tom="danger">Avisos · {avisos}</Chip>
@@ -85,7 +92,12 @@ export function HotmartPessoas({ repo, familia }: { repo: FinanceiroRepository; 
           Exportar CSV ({lista.length})
         </button>
       </div>
-      <SectionCard title={`${lista.length} pessoa(s)`} subtitle="Clique numa linha para ver tudo o que a pessoa comprou e tentou comprar na Hotmart.">
+      <SectionCard
+        title={recorte === 'sem_card' ? `Pagaram na Hotmart e não estão no board · ${lista.length}` : `${lista.length} pessoa(s)`}
+        subtitle={recorte === 'sem_card'
+          ? 'Sem card no board. Oferta que não está no catálogo aparece como "oferta desconhecida". Clique numa linha para ver cada pagamento.'
+          : 'Clique numa linha para ver tudo o que a pessoa comprou e tentou comprar na Hotmart.'}
+      >
         {!lista.length ? <EmptyState title="Ninguém neste recorte" /> : (
           <DataTable minWidth={1000}>
             <Thead>
@@ -131,7 +143,7 @@ function LinhaPessoa({ p, aberta, temCoproducao, onToggle, repo }: {
         <Td className="text-[11px]">
           <div className="text-[var(--fg-2)]">{p.primeira_compra ? fmtData(p.primeira_compra) : '—'}{p.primeira_oferta ? ` · ${p.primeira_oferta}` : ''}</div>
           {p.origem && <div className="text-[var(--fg-3)] break-all">{p.origem}</div>}
-          {p.fluxo && <div className="text-[var(--fg-3)]">{p.fluxo}</div>}
+          {p.fluxo && <div className="text-[var(--fg-3)]">{rotuloCategorias(p.fluxo)}</div>}
         </Td>
         <Td className="tabular">{fmtBRL(Number(p.valor_pago))}<div className="text-[11px] text-[var(--fg-3)]">{p.compras_pagas} pagamento(s)</div></Td>
         <Td className="tabular text-[var(--green)]">{fmtBRL(Number(p.liquido))}</Td>
@@ -172,7 +184,7 @@ function exportarPessoasCsv(lista: PessoaHotmart[]) {
     ['Nome', (p) => p.nome], ['E-mails', (p) => p.emails.join(' | ')], ['Documentos', (p) => p.documentos.join(' | ')],
     ['Telefone', (p) => p.telefone], ['Cidade', (p) => p.cidade], ['Situação', (p) => ROTULO_SITUACAO[p.situacao]],
     ['Aviso', (p) => p.aviso], ['1ª compra', (p) => p.primeira_compra], ['1ª oferta', (p) => p.primeira_oferta],
-    ['Origem (sck)', (p) => p.origem], ['Caminho', (p) => p.fluxo], ['Pagamentos', (p) => p.compras_pagas],
+    ['Origem (sck)', (p) => p.origem], ['Caminho', (p) => rotuloCategorias(p.fluxo)], ['Pagamentos', (p) => p.compras_pagas],
     ['Pago bruto', (p) => p.valor_pago], ['Líquido', (p) => p.liquido],
     ['Cliente pagou (c/ juros)', (p) => Number(p.cobrado_cliente ?? 0)],
     ['Juros', (p) => Number(p.juros ?? 0)],
@@ -193,4 +205,31 @@ function exportarPessoasCsv(lista: PessoaHotmart[]) {
   a.download = `hotmart-pessoas-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+/** Adimplência de quem pagou (com e sem card). Números de Pessoas — dívida da Hotmart por parcela. */
+function ResumoAdimplencia({ linhas, semCard }: { linhas: LinhaAdimplencia[]; semCard: number }) {
+  const total = linhas.reduce((s, l) => s + l.pessoas, 0);
+  const tom: Record<LinhaAdimplencia['chave'], string> = {
+    em_dia: 'text-[var(--green)]', boleto: 'text-[var(--yellow)]', devendo: 'text-[var(--red)]', antiga: 'text-[var(--yellow)]',
+    cancelamento: 'text-[var(--red)]', reembolsado: 'text-[var(--fg-3)]', vencido: 'text-[var(--fg-3)]',
+  };
+  return (
+    <SectionCard
+      title={`Está todo mundo pagando em dia? · ${total} pessoa(s) que pagaram`}
+      subtitle={`Pela Hotmart, parcela a parcela (com e sem card). ${semCard} delas não têm card no board — lista abaixo. Saldo combinado fora da Hotmart continua no card.`}
+    >
+      <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(170px,1fr))]">
+        {linhas.map((l) => (
+          <div key={l.chave} className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
+            <div className="text-[11px] text-[var(--fg-3)]">{l.rotulo}</div>
+            <div className={`tabular text-lg font-semibold ${tom[l.chave]}`}>{l.pessoas}</div>
+            <div className="text-[11px] text-[var(--fg-3)]">
+              {l.valor > 0 ? `${fmtBRL(l.valor)} · ` : ''}{l.comCard} com card
+            </div>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
 }

@@ -163,6 +163,37 @@ export interface BoardHotmart {
   assinatura_ate?: string | null;
   /** Última mensalidade paga há ≤ 45 dias e nenhuma parcela HM devida (≤ 120 d). null no AURUM / sem pessoa. */
   assinatura_ativa?: boolean | null;
+  /**
+   * Outros pagamentos (20260928i): vendas pagas da família que o card NÃO mostra — renovação, complemento,
+   * oferta fora do catálogo ("desconhecida"). Fora: escopo do card e assinatura HM. Só informação.
+   */
+  outros_pagamentos?: number;
+  outros_valor?: number;
+  /** Categorias separadas por " · " (valores de fin.oferta_categoria — ver rotuloCategoria). */
+  outros_formas?: string | null;
+  outros_ultimo?: string | null;
+}
+
+/**
+ * Categoria de uma venda (fin.oferta_categoria, 20260928i): mensalidade → catálogo → ≥ R$ 11 mil
+ * "compra cheia (inferida)" → "desconhecida". Rótulo em português para caminho/formas.
+ */
+export const ROTULO_CATEGORIA: Record<string, string> = {
+  mensalidade: 'mensalidade', sinal: 'sinal', diferenca: 'saldo', saldo: 'saldo', compra_cheia: 'compra cheia',
+  compra_cheia_inferida: 'compra cheia (inferida)', renovacao: 'renovação', reserva: 'reserva',
+  desconhecida: 'oferta desconhecida',
+};
+
+/** Espelho em TS da inferência de fin.oferta_categoria para oferta FORA do catálogo (mesma ordem, 20260928i). */
+export function categoriaInferida(modo: string | null | undefined, preco: number | null | undefined): 'mensalidade' | 'compra_cheia_inferida' | 'desconhecida' {
+  if (modo === 'SUBSCRIPTION') return 'mensalidade';
+  return preco != null && Number(preco) >= 11000 ? 'compra_cheia_inferida' : 'desconhecida';
+}
+
+/** "renovacao · desconhecida" → "renovação · oferta desconhecida"; também "a → b" (caminho). */
+export function rotuloCategorias(s: string | null | undefined): string {
+  if (!s) return '—';
+  return s.replace(/[a-z_]+/g, (c) => ROTULO_CATEGORIA[c] ?? c.replace(/_/g, ' '));
 }
 
 /**
@@ -394,6 +425,30 @@ export const ORDEM_SITUACAO: SituacaoPessoa[] = [
   'reembolsado', 'ativo', 'inadimplencia_antiga', 'vencido', 'so_tentou',
 ];
 
+/**
+ * "Está todo mundo pagando em dia?" — quem já pagou alguma coisa na família, pela situação de Pessoas
+ * (dívida por PARCELA da Hotmart, fin.parcelas_devidas). Quem só tentou não entra. Card do board e
+ * "sem card" contados à parte: o board só vê uma fatia de quem paga.
+ */
+export interface LinhaAdimplencia { chave: 'em_dia' | 'boleto' | 'devendo' | 'antiga' | 'cancelamento' | 'reembolsado' | 'vencido'; rotulo: string; pessoas: number; comCard: number; valor: number }
+export function resumirAdimplencia(pessoas: PessoaHotmart[]): LinhaAdimplencia[] {
+  const def: [LinhaAdimplencia['chave'], string, (p: PessoaHotmart) => boolean, (p: PessoaHotmart) => number][] = [
+    ['em_dia', 'Em dia', (p) => p.situacao === 'ativo' || p.situacao === 'em_pagamento', () => 0],
+    // boleto gerado e ainda não pago não é "em dia" nem dívida vencida (Fable, 27/09)
+    ['boleto', 'Boleto em aberto', (p) => p.situacao === 'boleto_em_aberto', () => 0],
+    ['devendo', 'Devendo agora', (p) => p.situacao === 'devendo', (p) => Number(p.valor_atrasado)],
+    ['antiga', 'Atraso antigo (> 120 dias)', (p) => p.situacao === 'inadimplencia_antiga', (p) => Number(p.valor_atrasado_antigo)],
+    ['cancelamento', 'Pediu cancelamento', (p) => p.situacao === 'negociacao_cancelamento', (p) => Number(p.valor_atrasado)],
+    ['reembolsado', 'Reembolsado', (p) => p.situacao === 'reembolsado', (p) => Number(p.valor_estornado)],
+    ['vencido', 'Pagou tudo, acesso de 1 ano já passou', (p) => p.situacao === 'vencido', () => 0],
+  ];
+  const pagaram = pessoas.filter((p) => p.compras_pagas > 0 || p.estornos > 0);
+  return def.map(([chave, rotulo, f, v]) => {
+    const g = pagaram.filter(f);
+    return { chave, rotulo, pessoas: g.length, comCard: g.filter((p) => p.cards > 0).length, valor: g.reduce((s, p) => s + (v(p) || 0), 0) };
+  });
+}
+
 export function contarSituacoes(pessoas: PessoaHotmart[]): Record<SituacaoPessoa, number> {
   const base = Object.fromEntries(ORDEM_SITUACAO.map((s) => [s, 0])) as Record<SituacaoPessoa, number>;
   for (const p of pessoas) if (p.situacao in base) base[p.situacao] += 1;
@@ -489,6 +544,7 @@ export const COLUNAS_BOARD_HOTMART = [
   'falta_no_board', 'valor_falta_no_board', 'board_sem_hotmart',
   'diverge', 'sincronizado_em',
   'assinatura_mensalidades', 'assinatura_valor', 'assinatura_de', 'assinatura_ate', 'assinatura_ativa',
+  'outros_pagamentos', 'outros_valor', 'outros_formas', 'outros_ultimo',
 ] as const satisfies readonly (keyof BoardHotmart)[];
 
 export const COLUNAS_PRORATA_HM = [

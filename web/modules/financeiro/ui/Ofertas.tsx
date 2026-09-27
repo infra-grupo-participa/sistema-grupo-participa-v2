@@ -21,7 +21,7 @@ import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import type { Oferta } from '../domain/types';
 import { juntarOfertas } from '../domain/ofertas-juntar';
-import { ROTULO_FAMILIA, type FamiliaHotmart, type OfertaHotmart } from '../domain/hotmart';
+import { categoriaInferida, ROTULO_CATEGORIA, ROTULO_FAMILIA, type FamiliaHotmart, type OfertaHotmart } from '../domain/hotmart';
 import type { FinanceiroRepository } from '../application/ports';
 import { Chip, Erro, useCarga } from './hotmart/comum';
 
@@ -151,7 +151,10 @@ export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
                   {!l.temVenda ? <span className="text-[var(--fg-3)]">—</span> : l.categoriaCatalogo ? (
                     <Badge tone="success">{l.categoriaCatalogo}{l.papelCatalogo ? ` · ${l.papelCatalogo}` : ''}</Badge>
                   ) : (
-                    <Badge tone={l.vendasPagas > 0 ? 'danger' : 'neutral'}>sem categoria</Badge>
+                    // fora do catálogo: a mesma inferência do banco (fin.oferta_categoria) — "desconhecida" quando o valor não diz
+                    <Badge tone={l.vendasPagas > 0 ? 'warning' : 'neutral'}>
+                      {ROTULO_CATEGORIA[categoriaInferida(l.modoPagamento, l.precoOferta)]}
+                    </Badge>
                   )}
                 </Td>
                 <Td>

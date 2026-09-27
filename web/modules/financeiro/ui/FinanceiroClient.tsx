@@ -18,6 +18,7 @@ import { BoardView } from './BoardView';
 import { BarraRecorte } from './BarraRecorte';
 import type { RecorteAtivo } from '../domain/recorte';
 import { RodapeTotais } from './RodapeTotais';
+import { HotmartPessoas } from './hotmart/HotmartPessoas';
 import { ROTULO_COR, type CorStatus } from '../domain/cor-status';
 import { FichaDrawer } from './FichaDrawer';
 import { Relatorios } from './Relatorios';
@@ -412,6 +413,11 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               hotmartPorCard={hotmartPorCard}
               hotmartErro={hotmartErro}
             />
+            {/* Quem pagou na Hotmart e não tem card — e a adimplência de todo mundo que pagou (27/09, João:
+                "pode exibir elas, mesmo que não tenha oferta"). Fica abaixo do mosaico: não muda card nem total. */}
+            <div className="mt-6">
+              <HotmartPessoas repo={repo} familia={produtoAtivo} recorte="sem_card" />
+            </div>
           </>
         )
       )}

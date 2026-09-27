@@ -10,7 +10,7 @@ import { Badge, DataTable, Drawer, EmptyState, Loading, Td, Th, Thead, Tr } from
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRLc, fmtData } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../../application/ports';
-import type { ProrataPagamento } from '../../domain/hotmart';
+import { rotuloCategorias, type ProrataPagamento } from '../../domain/hotmart';
 import { Erro, useCarga } from './comum';
 import { VALOR_PROGRAMA_HM } from '../../domain/prorata-hm';
 
@@ -155,7 +155,7 @@ function TabelaPagamentos({ pagamentos }: { pagamentos: ProrataPagamento[] }) {
           <Tr key={p.transacao}>
             <Td className="tabular">{fmtData(p.data)}</Td>
             <Td>{p.produto ?? '—'}{p.oferta && <div className="text-[11px] text-[var(--fg-3)]">{p.oferta}</div>}</Td>
-            <Td>{p.forma ?? '—'}</Td>
+            <Td>{rotuloCategorias(p.forma)}</Td>
             <Td>{p.metodo ?? '—'}</Td>
             <Td className="tabular">{fmtBRLc(p.valor)}</Td>
             <Td className={p.entra ? 'font-semibold text-[var(--green)]' : 'text-[var(--fg-4)]'}>{p.entra ? '✓' : '✗'}</Td>

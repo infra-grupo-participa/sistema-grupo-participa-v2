@@ -14,7 +14,7 @@ import { ProrataDiagnostico } from './ProrataDiagnostico';
 import { carregarProrataHM } from '../../application/carregar-prorata';
 import { hojeSaoPaulo, VALOR_PROGRAMA_HM } from '../../domain/prorata-hm';
 
-type Filtro = 'credito' | 'vence60' | 'vencido' | 'gps' | null;
+type Filtro = 'credito' | 'vence60' | 'vencido' | 'gps' | 'sem_hotmart' | null;
 
 /** Diferença em dias de calendário entre `iso` e `hojeISO` (ambos 'YYYY-MM-DD...'). Positivo = futuro. */
 function diffDias(iso: string, hojeISO: string): number {
@@ -42,6 +42,8 @@ export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
   const qtdVence60 = dados.filter((p) => { const d = diffDias(p.vencimento, hojeISO); return d >= 0 && d <= 60; }).length;
   const qtdVencido = dados.filter((p) => p.meses_restantes === 0 && diffDias(p.vencimento, hojeISO) < 0).length;
   const qtdGps = dados.filter((p) => p.no_gps).length;
+  // aluno da turma sem nenhuma venda de HM na Hotmart (pagou por fora ou com e-mail que o espelho não liga) — 20260928i
+  const qtdSemHotmart = dados.filter((p) => p.ultimo_pagamento == null).length;
 
   const termo = busca.trim().toLowerCase();
   const lista = dados
@@ -50,6 +52,7 @@ export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
       if (filtro === 'vence60') { const d = diffDias(p.vencimento, hojeISO); return d >= 0 && d <= 60; }
       if (filtro === 'vencido') return p.meses_restantes === 0 && diffDias(p.vencimento, hojeISO) < 0;
       if (filtro === 'gps') return p.no_gps;
+      if (filtro === 'sem_hotmart') return p.ultimo_pagamento == null;
       return true;
     })
     .filter((p) => !termo ||
@@ -63,7 +66,8 @@ export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
       <SectionCard title="Como o crédito é calculado">
         <p className="text-sm text-[var(--fg-2)] leading-relaxed">
           Crédito = o que a pessoa pagou no HM no ciclo atual × meses cheios que faltam do acesso ÷ 12.
-          Diferença = {fmtBRLc(VALOR_PROGRAMA_HM)} − crédito. O vencimento vem da turma.
+          Diferença = {fmtBRLc(VALOR_PROGRAMA_HM)} − crédito. O vencimento vem da turma. Estão aqui todos os alunos
+          de turma com vencimento — quem não tem pagamento de HM na Hotmart aparece com crédito zero e o aviso na linha.
         </p>
       </SectionCard>
 
@@ -79,6 +83,7 @@ export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
         <Chip ativo={filtro === 'vence60'} onClick={() => setFiltro('vence60')} tom="warning">Vence em até 60 dias · {qtdVence60}</Chip>
         <Chip ativo={filtro === 'vencido'} onClick={() => setFiltro('vencido')} tom="danger">Já vencido · {qtdVencido}</Chip>
         <Chip ativo={filtro === 'gps'} onClick={() => setFiltro('gps')} tom="info">No GPS · {qtdGps}</Chip>
+        <Chip ativo={filtro === 'sem_hotmart'} onClick={() => setFiltro('sem_hotmart')} tom="warning">Sem pagamento de HM na Hotmart · {qtdSemHotmart}</Chip>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -113,6 +118,7 @@ export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
                   <Td className="tabular">
                     {fmtBRLc(Number(p.pago_no_ciclo))}
                     {p.formas && <div className="text-[11px] text-[var(--fg-3)]">{p.formas}</div>}
+                    {p.ultimo_pagamento == null && <div className="text-[11px] text-[var(--yellow)]">sem pagamento de HM na Hotmart — confirmar com a Isabela</div>}
                   </Td>
                   <Td className="tabular">{fmtBRLc(Number(p.credito))}</Td>
                   <Td className="tabular font-semibold text-[var(--fg)]">{fmtBRLc(Number(p.diferenca))}</Td>

@@ -5,10 +5,13 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { COLUNAS_ACELERA_PARA_HM, COLUNAS_BOARD_HOTMART, COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, COLUNAS_PRORATA_HM, celulaCsv, rotuloDocumento, type FunilHotmart } from './hotmart';
+import { COLUNAS_ACELERA_PARA_HM, COLUNAS_BOARD_HOTMART, COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, COLUNAS_PRORATA_HM, categoriaInferida, celulaCsv, resumirAdimplencia, rotuloCategorias, rotuloDocumento, type FunilHotmart } from './hotmart';
 
 const migracao = (nome: string) =>
   readFileSync(fileURLToPath(new URL(`../../../../infra/supabase/migrations/${nome}`, import.meta.url)), 'utf8');
+
+/** Última migração que (re)define fn_fin_board_hotmart e fn_fin_prorata_hm — o espelho do corpo vigente. */
+const ULTIMA_BOARD_PRORATA = '20260928i_fin_nada_faltando.sql';
 
 /** Divide por vírgula no nível zero (fora de parênteses, colchetes e aspas simples). */
 function dividirTopo(s: string): string[] {
@@ -77,7 +80,7 @@ describe('contrato fn_fin_hotmart_pessoas', () => {
 });
 
 describe('contrato fn_fin_board_hotmart', () => {
-  const sql = migracao('20260928d_fin_assinatura_prorata.sql');
+  const sql = migracao(ULTIMA_BOARD_PRORATA);
   it('RETURNS TABLE = colunas de BoardHotmart', () => {
     expect(colunasRetorno(sql, 'public.fn_fin_board_hotmart')).toEqual([...COLUNAS_BOARD_HOTMART]);
   });
@@ -87,7 +90,7 @@ describe('contrato fn_fin_board_hotmart', () => {
 });
 
 describe('contrato fn_fin_prorata_hm', () => {
-  const sql = migracao('20260928d_fin_assinatura_prorata.sql');
+  const sql = migracao(ULTIMA_BOARD_PRORATA);
   const corpo = sql.slice(inicioCreate(sql, 'public.fn_fin_prorata_hm'), sql.indexOf('end $$;', inicioCreate(sql, 'public.fn_fin_prorata_hm')));
   it('RETURNS TABLE = colunas de ProrataHM', () => {
     expect(colunasRetorno(sql, 'public.fn_fin_prorata_hm')).toEqual([...COLUNAS_PRORATA_HM]);
@@ -109,7 +112,7 @@ describe('contrato fn_fin_prorata_hm', () => {
 });
 
 describe('contrato fn_fin_board_hotmart — assinatura fora do pago do card', () => {
-  const sql = migracao('20260928d_fin_assinatura_prorata.sql');
+  const sql = migracao(ULTIMA_BOARD_PRORATA);
   it('o escopo do pago continua sinal / diferenca / compra_cheia', () => {
     const corpo = sql.slice(inicioCreate(sql, 'public.fn_fin_board_hotmart'));
     expect(corpo).toMatch(/cat\.categoria in \('sinal','diferenca','compra_cheia'\)/);
@@ -198,9 +201,99 @@ describe('fn_fin_prorata_hm — desempenho protegido', () => {
   // Sem 'set enable_nestloop = off' a função volta a 34,8 s (medido 27/09). O ajuste tem de estar no CABEÇALHO
   // da última definição: um create or replace sem ele apaga o atributo em silêncio.
   it('última definição declara set enable_nestloop = off antes do corpo', () => {
-    const sql = migracao('20260928d_fin_assinatura_prorata.sql');
+    const sql = migracao(ULTIMA_BOARD_PRORATA);
     const ini = sql.lastIndexOf('create or replace function public.fn_fin_prorata_hm(');
     const cabecalho = sql.slice(ini, sql.indexOf('as $$', ini));
     expect(cabecalho).toMatch(/set\s+enable_nestloop\s*=\s*off/i);
+  });
+});
+
+describe('20260928i — nada faltando', () => {
+  const sql = migracao(ULTIMA_BOARD_PRORATA);
+  it('categoria: mensalidade antes do catálogo, catálogo antes da inferência, e "desconhecida" no fim', () => {
+    const f = sql.slice(sql.indexOf('function fin.oferta_categoria'), sql.indexOf('$$;', sql.indexOf('function fin.oferta_categoria')));
+    const i = (t: string) => f.indexOf(t);
+    expect(i("'mensalidade'")).toBeGreaterThan(-1);
+    expect(i("'mensalidade'")).toBeLessThan(i('hm_product_catalog'));
+    expect(i('hm_product_catalog')).toBeLessThan(i("'compra_cheia_inferida'"));
+    expect(i("'compra_cheia_inferida'")).toBeLessThan(i("'desconhecida'"));
+  });
+  it('o catálogo que alimenta o webhook não é escrito', () => {
+    expect(sql).not.toMatch(/(insert\s+into|update|delete\s+from)\s+public\.hm_product_catalog/i);
+  });
+  it('outros pagamentos do card excluem o escopo do pago e a assinatura HM', () => {
+    const ou = sql.slice(sql.indexOf('), ou as ('), sql.indexOf('), sinc as ('));
+    expect(ou).toMatch(/not exists \(select 1 from public\.hm_product_catalog cat[\s\S]*'sinal','diferenca','compra_cheia'/);
+    expect(ou).toMatch(/not \(e\.familia = 'HM' and t\.oferta_modo is not distinct from 'SUBSCRIPTION'\)/);
+  });
+  it('pro rata: entra aluno THB com vencimento mesmo sem venda na Hotmart', () => {
+    const corpo = sql.slice(sql.lastIndexOf('create or replace function public.fn_fin_prorata_hm('));
+    expect(corpo).toMatch(/where p\.pessoa is not null or al\.thb/);
+  });
+  it('pessoas: o caminho é recriado do corpo vigente e a troca é conferida', () => {
+    expect(sql).toMatch(/pg_get_functiondef\('public\.fn_fin_hotmart_pessoas\(text\)'::regprocedure\)/);
+    expect(sql).toMatch(/if n <> 2 then raise exception/);
+  });
+});
+
+describe('rotuloCategorias', () => {
+  it('traduz categorias e mantém separadores', () => {
+    expect(rotuloCategorias('renovacao · desconhecida')).toBe('renovação · oferta desconhecida');
+    expect(rotuloCategorias('sinal → diferenca → compra_cheia_inferida')).toBe('sinal → saldo → compra cheia (inferida)');
+    expect(rotuloCategorias(null)).toBe('—');
+  });
+});
+
+describe('categoriaInferida (espelho de fin.oferta_categoria)', () => {
+  it('mensalidade, compra cheia a partir de 11 mil, senão desconhecida', () => {
+    expect(categoriaInferida('SUBSCRIPTION', 20000)).toBe('mensalidade');
+    expect(categoriaInferida('UNIQUE_PAYMENT', 11000)).toBe('compra_cheia_inferida');
+    expect(categoriaInferida('UNIQUE_PAYMENT', 10999.99)).toBe('desconhecida');
+    expect(categoriaInferida(null, null)).toBe('desconhecida');
+  });
+  it('o limite de 11 mil é o mesmo da função do banco', () => {
+    expect(migracao(ULTIMA_BOARD_PRORATA)).toMatch(/when p_valor >= 11000 then 'compra_cheia_inferida'/);
+  });
+});
+
+describe('resumirAdimplencia', () => {
+  const p = (situacao: string, extra: Record<string, unknown> = {}) =>
+    ({ situacao, compras_pagas: 1, estornos: 0, cards: 0, valor_atrasado: 0, valor_atrasado_antigo: 0, valor_estornado: 0, ...extra }) as never;
+  it('conta só quem pagou, separa com card e soma o valor devido', () => {
+    const r = resumirAdimplencia([
+      p('ativo'), p('em_pagamento', { cards: 1 }), p('devendo', { valor_atrasado: '1500.5' }),
+      p('so_tentou', { compras_pagas: 0 }), p('inadimplencia_antiga', { valor_atrasado_antigo: 300 }),
+    ]);
+    const por = Object.fromEntries(r.map((l) => [l.chave, l]));
+    expect(por.em_dia.pessoas).toBe(2);
+    expect(por.em_dia.comCard).toBe(1);
+    expect(por.devendo.valor).toBeCloseTo(1500.5);
+    expect(por.antiga.valor).toBe(300);
+    expect(r.reduce((s, l) => s + l.pessoas, 0)).toBe(4);
+    expect(resumirAdimplencia([p('boleto_em_aberto')]).find((l) => l.chave === 'em_dia')!.pessoas).toBe(0);
+  });
+});
+
+describe('20260928j — produto A_CLASSIFICAR fora da identidade', () => {
+  const sql = migracao('20260928j_fin_identidade_sem_a_classificar.sql');
+  it('a view da identidade exclui a família A_CLASSIFICAR', () => {
+    expect(sql).toMatch(/create or replace view fin\.hotmart_transacoes_identidade[\s\S]*familia = 'A_CLASSIFICAR'/);
+    expect(sql).toMatch(/revoke all on fin\.hotmart_transacoes_identidade from public, anon, authenticated/);
+  });
+  it('recalcular_identidade é recriada do corpo vigente e a troca é conferida (9 leituras)', () => {
+    expect(sql).toMatch(/pg_get_functiondef\('fin\.recalcular_identidade\(\)'::regprocedure\)/);
+    expect(sql).toMatch(/if n <> 9 then raise exception/);
+  });
+  it('o diagnóstico do pro rata classifica a venda com a mesma função da lista', () => {
+    expect(sql).toMatch(/replace\(v, alvo, 'fin\.oferta_categoria\(t\.oferta_codigo, t\.oferta_modo, t\.valor_oferta\) forma'\)/);
+  });
+});
+
+describe('20260928k — extrato sem produto A_CLASSIFICAR', () => {
+  it('o extrato recriado do corpo vigente filtra a família e confere 1 ocorrência', () => {
+    const sql = migracao('20260928k_fin_extrato_sem_a_classificar.sql');
+    expect(sql).toMatch(/pg_get_functiondef\('public\.fn_fin_hotmart_extrato\(text\)'::regprocedure\)/);
+    expect(sql).toMatch(/and t\.familia <> 'A_CLASSIFICAR'/);
+    expect(sql).toMatch(/<> 1 then\s+raise exception/);
   });
 });
