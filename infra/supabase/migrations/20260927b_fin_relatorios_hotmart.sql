@@ -256,19 +256,20 @@ begin
   end if;
   -- O webhook de cada produto só existe desde a 1ª compra dele gravada; antes disso "faltar" não é furo.
   -- Produto que o banco nunca recebeu vira um aviso só (produto_sem_webhook), não milhares de linhas.
+  -- Cobrança ATRASADA (OVERDUE) não é pagamento: o webhook não a grava, então não é "falta no banco" (27/09).
   return query
   with inicio as (select c.produto_id, min(c.data_compra) desde from public.compras c group by 1)
   select 'falta_no_banco', t.transacao, t.email, t.status, null::text, t.valor_oferta, null::numeric, t.pedido_em,
          'Venda paga na Hotmart que o webhook não gravou'
     from fin.vw_transacoes t
     join inicio i on i.produto_id = t.produto_id
-   where t.familia = p_familia and t.grupo in ('pago','estornado','atrasado') and t.pedido_em >= i.desde
+   where t.familia = p_familia and t.grupo in ('pago','estornado') and t.pedido_em >= i.desde
      and not exists (select 1 from public.compras c where c.hotmart_transaction = t.transacao)
   union all
   select 'produto_sem_webhook', null, null, null, null, sum(t.valor_oferta), null, max(t.pedido_em),
-         'Produto ' || t.produto_id || ' (' || max(t.produto_nome) || '): ' || count(*) || ' transações pagas/atrasadas e nenhuma no banco'
+         'Produto ' || t.produto_id || ' (' || max(t.produto_nome) || '): ' || count(*) || ' transações pagas/estornadas e nenhuma no banco'
     from fin.vw_transacoes t
-   where t.familia = p_familia and t.grupo in ('pago','estornado','atrasado')
+   where t.familia = p_familia and t.grupo in ('pago','estornado')
      and not exists (select 1 from inicio i where i.produto_id = t.produto_id)
    group by t.produto_id
   union all
