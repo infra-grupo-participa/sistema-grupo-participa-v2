@@ -342,7 +342,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           {tab === 'board' ? (
             <>Board <span className="text-[var(--accent)]">Financeiro</span></>
           ) : tab === 'faturamento' ? (
-            <>Faturamento <span className="text-[var(--accent)]">Diário</span></>
+            <>Faturamento <span className="text-[var(--accent)]">da Hotmart</span></>
           ) : tab === 'relatorios' ? (
             <>Relatórios <span className="text-[var(--accent)]">Financeiro</span></>
           ) : tab === 'prorata' ? (
@@ -356,7 +356,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         {tab === 'board'
           ? 'Cards por faixa do funil — cor por status, intensidade por urgência'
           : tab === 'faturamento'
-          ? 'Direto da Hotmart: quanto foi vendido (bruto), a taxa da Hotmart e quanto fica para nós (líquido) — por dia de pagamento, atualizado de hora em hora'
+          ? 'Direto da Hotmart: quanto foi vendido (bruto), a taxa da Hotmart e quanto fica para nós (líquido) — por dia, mês ou ano, atualizado de hora em hora'
           : tab === 'relatorios'
           ? 'Selecione colunas e exporte (Excel ou impressão/PDF)'
           : tab === 'prorata'

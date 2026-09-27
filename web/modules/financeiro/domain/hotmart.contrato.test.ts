@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { COLUNAS_ACELERA_PARA_HM, COLUNAS_BOARD_HOTMART, COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, COLUNAS_PRORATA_HM, categoriaInferida, celulaCsv, resumirAdimplencia, rotuloCategorias, rotuloDocumento, type FunilHotmart } from './hotmart';
+import { COLUNAS_ACELERA_PARA_HM, COLUNAS_BOARD_HOTMART, COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, COLUNAS_PRORATA_HM, agruparFaturamento, categoriaInferida, celulaCsv, resumirAdimplencia, rotuloCategorias, rotuloDocumento, type FunilHotmart } from './hotmart';
 
 const migracao = (nome: string) =>
   readFileSync(fileURLToPath(new URL(`../../../../infra/supabase/migrations/${nome}`, import.meta.url)), 'utf8');
@@ -295,5 +295,27 @@ describe('20260928k — extrato sem produto A_CLASSIFICAR', () => {
     expect(sql).toMatch(/pg_get_functiondef\('public\.fn_fin_hotmart_extrato\(text\)'::regprocedure\)/);
     expect(sql).toMatch(/and t\.familia <> 'A_CLASSIFICAR'/);
     expect(sql).toMatch(/<> 1 then\s+raise exception/);
+  });
+});
+
+describe('agruparFaturamento', () => {
+  const dia = (d: string, bruto: number, preenchido = false) => ({
+    dia: d, preenchido, vendas: bruto ? 1 : 0, bruto, taxa: 0, repasses: 0, liquido: bruto * 0.9, juros: 0, estornos: 0,
+    valorEstornado: 0, recusadas: 0, boletos: 0, liquidoEstimado: 0, acumulado: 0, variacaoDiaAnterior: null,
+  });
+  const serie = [dia('2026-08-30', 100), dia('2026-08-31', 0, true), dia('2026-09-01', 300), dia('2026-09-02', 0, true)];
+  let acc = 0; for (const d of serie) { acc += d.bruto; d.acumulado = acc; }
+  it('soma por mês, acumulado do último dia e variação contra o mês anterior', () => {
+    const m = agruparFaturamento(serie, 'mes');
+    expect(m.map((p) => p.chave)).toEqual(['2026-08', '2026-09']);
+    expect(m[0].bruto).toBe(100); expect(m[1].bruto).toBe(300);
+    expect(m[1].acumulado).toBe(400);
+    expect(m[1].variacao).toBe(200);
+    expect(m[0].vazio).toBe(false);
+  });
+  it('por ano junta tudo; por dia mantém os dias vazios marcados', () => {
+    expect(agruparFaturamento(serie, 'ano')).toHaveLength(1);
+    const d = agruparFaturamento(serie, 'dia');
+    expect(d).toHaveLength(4); expect(d[1].vazio).toBe(true);
   });
 });

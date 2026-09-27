@@ -407,6 +407,48 @@ export function serieHotmart(dias: DiaHotmart[]): DiaHotmartSerie[] {
   return saida;
 }
 
+/** Visão do Faturamento (João, 27/09): diária, mensal ou anual — mesma série, agrupada. */
+export type GranularidadeFaturamento = 'dia' | 'mes' | 'ano';
+
+export interface PeriodoFaturamento extends Omit<DiaHotmartSerie, 'dia' | 'preenchido' | 'variacaoDiaAnterior'> {
+  /** 'YYYY-MM-DD' (dia), 'YYYY-MM' (mês) ou 'YYYY' (ano). */
+  chave: string;
+  /** Sem nenhuma venda no período (dia preenchido com zero, ou mês/ano só com dias vazios). */
+  vazio: boolean;
+  /** Variação % do bruto contra o período anterior (null sem anterior com venda). */
+  variacao: number | null;
+}
+
+/**
+ * Agrupa a série diária (serieHotmart, já com dias vazios preenchidos) por mês ou ano. Soma tudo; o acumulado é o do
+ * último dia do grupo; a variação compara com o grupo anterior. Mês/ano PARCIAIS nas pontas do intervalo somam só os
+ * dias que estão no intervalo — a tela diz o intervalo.
+ */
+export function agruparFaturamento(serie: DiaHotmartSerie[], g: GranularidadeFaturamento): PeriodoFaturamento[] {
+  const tam = g === 'dia' ? 10 : g === 'mes' ? 7 : 4;
+  const saida: PeriodoFaturamento[] = [];
+  for (const d of serie) {
+    const chave = d.dia.slice(0, tam);
+    let p = saida[saida.length - 1];
+    if (!p || p.chave !== chave) {
+      p = {
+        chave, vazio: true, variacao: null, vendas: 0, bruto: 0, taxa: 0, repasses: 0, liquido: 0, juros: 0, estornos: 0,
+        valorEstornado: 0, recusadas: 0, boletos: 0, liquidoEstimado: 0, acumulado: 0,
+      };
+      saida.push(p);
+    }
+    p.vendas += d.vendas; p.bruto += d.bruto; p.taxa += d.taxa; p.repasses += d.repasses; p.liquido += d.liquido;
+    p.juros += d.juros; p.estornos += d.estornos; p.valorEstornado += d.valorEstornado; p.recusadas += d.recusadas;
+    p.boletos += d.boletos; p.liquidoEstimado += d.liquidoEstimado; p.acumulado = d.acumulado;
+    if (!d.preenchido) p.vazio = false;
+  }
+  for (let i = 1; i < saida.length; i++) {
+    const ant = saida[i - 1];
+    saida[i].variacao = ant.bruto > 0 ? ((saida[i].bruto - ant.bruto) / ant.bruto) * 100 : null;
+  }
+  return saida;
+}
+
 export const ROTULO_SITUACAO: Record<SituacaoPessoa, string> = {
   devendo: 'Devendo',
   em_pagamento: 'Em pagamento',
