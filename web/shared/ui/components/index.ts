@@ -15,4 +15,3 @@ export { CopyField } from './Copy';
 export { Timeline } from './Timeline';
 export type { TimelineEntry } from './Timeline';
 export { Toast, useFlash } from './Toast';
-export { Sparkline } from './Sparkline';

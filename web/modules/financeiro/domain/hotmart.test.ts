@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { contarSituacoes, resumirHotmart, type DiaHotmart, type PessoaHotmart } from './hotmart';
+import { contarSituacoes, resumirHotmart, serieHotmart, type DiaHotmart, type PessoaHotmart } from './hotmart';
 
 function dia(over: Partial<DiaHotmart> = {}): DiaHotmart {
   return {
@@ -40,5 +40,41 @@ describe('contarSituacoes', () => {
     expect(c.devendo).toBe(2);
     expect(c.ativo).toBe(1);
     expect(c.reembolsado).toBe(0);
+  });
+});
+
+describe('serieHotmart (Faturamento Diário)', () => {
+  it('preenche o dia sem venda com zero explícito e a variação compara com o dia de verdade anterior', () => {
+    const s = serieHotmart([
+      dia({ dia: '2026-09-03', vendas: 1, valor_oferta: 50, taxa_hotmart: 3, liquido: 47 }),
+      dia({ dia: '2026-09-01', vendas: 2, valor_oferta: 100, taxa_hotmart: 5, liquido: 95 }),
+    ]);
+    expect(s.map((d) => [d.dia, d.preenchido, d.bruto, d.acumulado])).toEqual([
+      ['2026-09-01', false, 100, 100],
+      ['2026-09-02', true, 0, 100],
+      ['2026-09-03', false, 50, 150],
+    ]);
+    expect(s[1].variacaoDiaAnterior).toBe(-100);
+    expect(s[2].variacaoDiaAnterior).toBeNull(); // dia anterior sem venda: não inventa %
+  });
+
+  it('coprodução = oferta − taxa − líquido (Aurum antigo); HM sem repasse fica 0', () => {
+    const [aurum] = serieHotmart([dia({ valor_oferta: 21599, taxa_hotmart: 864.96, liquido: 20517.16 })]);
+    expect(aurum.repasses).toBeCloseTo(216.88, 2);
+    const [hm] = serieHotmart([dia({ valor_oferta: 15000, taxa_hotmart: 601, liquido: 14399 })]);
+    expect(hm.repasses).toBe(0);
+  });
+
+  it('sem dia, série vazia', () => {
+    expect(serieHotmart([])).toEqual([]);
+  });
+});
+
+describe('resumirHotmart — do bruto ao líquido', () => {
+  it('bruto − taxa − repasses = líquido, e a taxa em % do bruto', () => {
+    const r = resumirHotmart([dia({ vendas: 1, valor_oferta: 15000, taxa_hotmart: 601, liquido: 14399 })]);
+    expect(r.valorOferta - r.taxa - r.repasses).toBeCloseTo(r.liquido, 2);
+    expect(r.taxaPct).toBeCloseTo(0.0401, 4);
+    expect(resumirHotmart([]).taxaPct).toBeNull();
   });
 });

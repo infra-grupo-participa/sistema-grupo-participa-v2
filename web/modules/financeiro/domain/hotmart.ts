@@ -154,8 +154,12 @@ export interface ResumoHotmart {
   estornos: number;
   valorEstornado: number;
   recusadas: number;
+  /** Repasse a coprodutor/afiliado/add-on = oferta − taxa − líquido (Aurum antigo tem coprodutor; HM não). */
+  repasses: number;
   /** líquido ÷ valor da oferta (0..1). null sem venda — nunca 0% inventado. */
   margem: number | null;
+  /** taxa ÷ valor da oferta (0..1). null sem venda. */
+  taxaPct: number | null;
 }
 
 /** Soma os dias do período. Números vêm do Postgres como string às vezes (numeric). */
@@ -176,7 +180,77 @@ export function resumirHotmart(dias: DiaHotmart[]): ResumoHotmart {
     }),
     { vendas: 0, valorOferta: 0, cobrado: 0, juros: 0, taxa: 0, liquido: 0, liquidoEstimado: 0, estornos: 0, valorEstornado: 0, recusadas: 0 },
   );
-  return { ...r, margem: r.valorOferta > 0 ? r.liquido / r.valorOferta : null };
+  const repasses = Math.max(0, Math.round((r.valorOferta - r.taxa - r.liquido) * 100) / 100);
+  return {
+    ...r,
+    repasses,
+    margem: r.valorOferta > 0 ? r.liquido / r.valorOferta : null,
+    taxaPct: r.valorOferta > 0 ? r.taxa / r.valorOferta : null,
+  };
+}
+
+/**
+ * Regra de cobrança da Hotmart, medida em 27/09/2026 sobre 3.571 vendas pagas (HM + Aurum):
+ * **4% do valor da oferta + R$ 1 por venda** (≈ 95% das vendas; até 2024 algumas saíam a ~6%).
+ * Taxa efetiva 4,05% nos dois produtos. Juros do parcelamento são pagos pelo CLIENTE e ficam com
+ * a Hotmart — não saem do nosso bruto nem entram no líquido.
+ */
+export const REGRA_TAXA_HOTMART = '4% do valor + R$ 1 por venda';
+
+export interface DiaHotmartSerie {
+  dia: string;
+  /** true = dia sem movimento algum (a RPC só devolve dias com movimento) — zero explícito, não omitido. */
+  preenchido: boolean;
+  vendas: number;
+  bruto: number;
+  taxa: number;
+  repasses: number;
+  liquido: number;
+  juros: number;
+  estornos: number;
+  valorEstornado: number;
+  recusadas: number;
+  boletos: number;
+  liquidoEstimado: number;
+  acumulado: number;
+  /** Variação % do bruto vs. o dia anterior (null sem dia anterior com venda). */
+  variacaoDiaAnterior: number | null;
+}
+
+function proximoDia(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * Série do Faturamento Diário: dias em ordem crescente, com os dias SEM movimento entre o primeiro e o
+ * último preenchidos como zero explícito (`preenchido`) — senão a variação comparava com um dia que não
+ * é o anterior. Números do Postgres (numeric) podem vir como string.
+ */
+export function serieHotmart(dias: DiaHotmart[]): DiaHotmartSerie[] {
+  if (!dias.length) return [];
+  const n = (v: unknown) => Number(v ?? 0) || 0;
+  const asc = [...dias].sort((a, b) => a.dia.localeCompare(b.dia));
+  const porDia = new Map(asc.map((d) => [d.dia, d]));
+  const saida: DiaHotmartSerie[] = [];
+  let acumulado = 0;
+  let anterior: DiaHotmartSerie | null = null;
+  for (let dia = asc[0].dia; dia <= asc[asc.length - 1].dia; dia = proximoDia(dia)) {
+    const d = porDia.get(dia);
+    const bruto = n(d?.valor_oferta), taxa = n(d?.taxa_hotmart), liquido = n(d?.liquido);
+    acumulado += bruto;
+    const linha: DiaHotmartSerie = {
+      dia, preenchido: !d, vendas: n(d?.vendas), bruto, taxa, liquido,
+      repasses: Math.max(0, Math.round((bruto - taxa - liquido) * 100) / 100),
+      juros: n(d?.juros), estornos: n(d?.estornos), valorEstornado: n(d?.valor_estornado),
+      recusadas: n(d?.recusadas), boletos: n(d?.boletos_gerados), liquidoEstimado: n(d?.liquido_estimado),
+      acumulado,
+      variacaoDiaAnterior: anterior && anterior.bruto > 0 ? ((bruto - anterior.bruto) / anterior.bruto) * 100 : null,
+    };
+    saida.push(linha);
+    anterior = linha;
+  }
+  return saida;
 }
 
 export const ROTULO_SITUACAO: Record<SituacaoPessoa, string> = {

@@ -7,7 +7,7 @@
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type {
-  Acordo, CardBoard, Cobranca, CompraHistorico, DiaFaturamento, InteracaoAtivacao, Lancamento, Meta,
+  Acordo, CardBoard, Cobranca, CompraHistorico, InteracaoAtivacao, Lancamento, Meta,
   Oferta, OfertaOrfa, ReguaPasso, SaudeCheck, TurmaFin,
 } from '../domain/types';
 import type { FinanceiroRepository, Resultado } from '../application/ports';
@@ -133,13 +133,6 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
       return erroPara(r?.erro === 'sem_permissao' ? 'Você não tem permissão para registrar acordos.' : 'Não foi possível salvar o acordo.');
     }
     return { ok: true, msg: 'Acordo registrado.' };
-  }
-
-  async loadFaturamento(turma: string | null): Promise<DiaFaturamento[]> {
-    const { data, error } = await this.db().rpc('fn_fin_faturamento_diario', { p_turma: turma });
-    logQueryError('loadFaturamento', error);
-    if (error) throw new Error('Não foi possível carregar o faturamento diário.');
-    return (data as DiaFaturamento[]) ?? [];
   }
 
   async loadOfertas(): Promise<Oferta[]> {

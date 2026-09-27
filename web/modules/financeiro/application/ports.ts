@@ -2,7 +2,7 @@
 // em infrastructure. Casos de uso dependem só destas interfaces, nunca de
 // Supabase direto — mesmo padrão de modules/placas/application/ports.ts.
 import type {
-  Acordo, CardBoard, Cobranca, CompraHistorico, DiaFaturamento, InteracaoAtivacao, Lancamento,
+  Acordo, CardBoard, Cobranca, CompraHistorico, InteracaoAtivacao, Lancamento,
   Meta, Oferta, OfertaOrfa, ReguaPasso, SaudeCheck, TurmaFin,
 } from '../domain/types';
 import type {
@@ -35,9 +35,6 @@ export interface FinanceiroRepository {
   loadHistoricoAtivacao(contatoHmId: string): Promise<InteracaoAtivacao[]>;
   registrarCobranca(contatoHmId: string, canal: string, resultado: string, obs: string | null): Promise<Resultado>;
   salvarAcordo(contatoHmId: string, a: Acordo): Promise<Resultado>;
-
-  // ── Faturamento diário ───────────────────────────────────────────────────
-  loadFaturamento(turma: string | null): Promise<DiaFaturamento[]>;
 
   // ── Ofertas ──────────────────────────────────────────────────────────────
   loadOfertas(): Promise<Oferta[]>;

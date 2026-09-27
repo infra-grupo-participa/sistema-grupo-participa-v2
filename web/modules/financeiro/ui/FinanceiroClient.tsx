@@ -10,7 +10,6 @@ import { calcularTotais as recalcularTotais } from '../domain/totais';
 import { casaBusca } from '../domain/busca';
 import { SupabaseFinanceiroRepository } from '../infrastructure/supabase-financeiro.repository';
 import { carregarBoard, type BoardCarregado, type CardComEfeito } from '../application/carregar-board';
-import { carregarFaturamento, type FaturamentoCarregado } from '../application/carregar-faturamento';
 import { listarOfertas } from '../application/gerenciar-ofertas';
 import { agruparPorAcao, SEM_ACAO, TimelineAcoes } from './TimelineAcoes';
 import { ProdutoTabs, type ProdutoChave } from './ProdutoTabs';
@@ -21,12 +20,11 @@ import type { RecorteAtivo } from '../domain/recorte';
 import { RodapeTotais } from './RodapeTotais';
 import { ROTULO_COR, type CorStatus } from '../domain/cor-status';
 import { FichaDrawer } from './FichaDrawer';
-import { Faturamento } from './Faturamento';
 import { Relatorios } from './Relatorios';
 import { Ofertas } from './Ofertas';
 import { Hotmart } from './Hotmart';
 
-type Tab = 'board' | 'faturamento' | 'relatorios' | 'ofertas' | 'hotmart';
+type Tab = 'board' | 'faturamento' | 'relatorios' | 'ofertas';
 
 const repo = new SupabaseFinanceiroRepository();
 
@@ -37,8 +35,6 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // Guardada aqui (e não descartada após montar o board) para alimentar
   // proximaAcao() na ficha — sem query nova por abertura de drawer (F3 do plano).
   const [regua, setRegua] = useState<ReguaPasso[]>([]);
-  const [fat, setFat] = useState<FaturamentoCarregado | null>(null);
-  const [erroFat, setErroFat] = useState<string | null>(null);
   const [turmas, setTurmas] = useState<TurmaFin[]>([]);
   const [ofertas, setOfertas] = useState<Oferta[]>([]);
   const [erroOfertas, setErroOfertas] = useState<string | null>(null);
@@ -118,7 +114,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       if (base === 'faturamento') setTab('faturamento');
       else if (base === 'relatorios') setTab('relatorios');
       else if (base === 'ofertas') setTab('ofertas');
-      else if (base === 'hotmart') setTab('hotmart');
+      // #hotmart era a aba "Hotmart (oficial)", unificada no Faturamento Diário em 27/09 — link antigo cai nela.
+      else if (base === 'hotmart') setTab('faturamento');
       else setTab('board');
 
       if (base === 'board' && query) {
@@ -141,14 +138,6 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (tab !== 'faturamento' || fat) return;
-    carregarFaturamento(repo, turma, hojeISO)
-      .then((f) => { setFat(f); setErroFat(null); })
-      .catch(() => setErroFat('Não foi possível carregar o faturamento diário.'));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
 
   useEffect(() => {
     if (tab !== 'ofertas' || ofertas.length) return;
@@ -313,8 +302,6 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <>Faturamento <span className="text-[var(--accent)]">Diário</span></>
           ) : tab === 'relatorios' ? (
             <>Relatórios <span className="text-[var(--accent)]">Financeiro</span></>
-          ) : tab === 'hotmart' ? (
-            <>Hotmart <span className="text-[var(--accent)]">Oficial</span></>
           ) : (
             <>Ofertas de <span className="text-[var(--accent)]">Cobrança</span></>
           )}
@@ -324,13 +311,11 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         {tab === 'board'
           ? 'Cards por faixa do funil — cor por status, intensidade por urgência'
           : tab === 'faturamento'
-          ? 'Regime de caixa — o que entrou por dia de pagamento'
+          ? 'Direto da Hotmart: quanto foi vendido (bruto), a taxa da Hotmart e quanto fica para nós (líquido) — por dia de pagamento, atualizado de hora em hora'
           : tab === 'relatorios'
           ? 'Selecione colunas e exporte (Excel ou impressão/PDF)'
-          : tab === 'hotmart'
-          ? 'Direto da API da Hotmart: bruto × líquido, situação de cada pessoa, ofertas e conciliação com o banco'
           : 'Ofertas Hotmart usadas para cobrar o saldo do pacote'}
-        {turmaAtual ? ` · turma ${turmaAtual.turma} (${turmaAtual.alunos} alunos)` : ''}
+        {tab === 'board' && turmaAtual ? ` · turma ${turmaAtual.turma} (${turmaAtual.alunos} alunos)` : ''}
       </p>
 
       {tab === 'board' && (
@@ -376,15 +361,13 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         )
       )}
 
-      {tab === 'faturamento' && (
-        erroFat ? <ErroCarregamento msg={erroFat} onRetry={() => { setFat(null); setErroFat(null); }} /> : <Faturamento dados={fat} loading={!fat} />
-      )}
+      {tab === 'faturamento' && <Hotmart repo={repo} />}
 
       {tab === 'relatorios' && (
         board ? <Relatorios contas={contasDoRecorte} turma={turma} canVerDoc={canVerDoc} /> : <Loading label="Carregando…" minHeight={200} />
       )}
 
-      {tab === 'hotmart' && <Hotmart repo={repo} />}
+
 
       {tab === 'ofertas' && (
         erroOfertas ? (

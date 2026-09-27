@@ -16,7 +16,8 @@ import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData, fmtDataHora } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../application/ports';
 import {
-  celulaCsv, contarSituacoes, ORDEM_SITUACAO, resumirHotmart, ROTULO_GRUPO, ROTULO_SITUACAO, rotuloDocumento,
+  celulaCsv, contarSituacoes, ORDEM_SITUACAO, REGRA_TAXA_HOTMART, resumirHotmart, ROTULO_GRUPO, ROTULO_SITUACAO,
+  rotuloDocumento, serieHotmart,
   type DiaHotmart, type DivergenciaHotmart, type FamiliaHotmart, type OfertaHotmart,
   type IdentidadeRevisao, type PessoaHotmart, type SituacaoPessoa, type SyncHotmart, type TransacaoHotmart,
 } from '../domain/hotmart';
@@ -71,7 +72,7 @@ export function Hotmart({ repo }: { repo: FinanceiroRepository }) {
             onClick={() => setVisao(v)}
             className={`rounded-[var(--r-md)] border px-3 py-1.5 text-xs font-semibold ${visao === v ? 'border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-2)] hover:bg-[var(--surface-3)]'}`}
           >
-            {{ faturamento: 'Faturamento', pessoas: 'Pessoas', identidade: 'Mesma pessoa?', ofertas: 'Ofertas', conciliacao: 'Conciliação' }[v]}
+            {{ faturamento: 'Dia a dia', pessoas: 'Pessoas', identidade: 'Mesma pessoa?', ofertas: 'Ofertas', conciliacao: 'Conciliação' }[v]}
           </button>
         ))}
         <span className="mx-1 h-5 w-px bg-[var(--border)]" aria-hidden="true" />
@@ -146,6 +147,7 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
   const { dados, erro } = useCarga<DiaHotmart[]>(
     () => repo.loadHotmartFaturamento(familia, intervalo.de, intervalo.ate), [familia, intervalo.de, intervalo.ate]);
   const resumo = useMemo(() => resumirHotmart(dados ?? []), [dados]);
+  const serie = useMemo(() => serieHotmart(dados ?? []), [dados]);
 
   return (
     <div className="space-y-4">
@@ -166,42 +168,64 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
           onChange={(e) => e.target.value && setIntervalo({ ...intervalo, ate: e.target.value, preset: null })}
           className="rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs" />
       </div>
-      {erro ? <Erro msg={erro} /> : !dados ? <Loading label="Carregando faturamento da Hotmart…" minHeight={200} /> : (
+      {erro ? <Erro msg={erro} /> : !dados ? <Loading label="Carregando faturamento…" minHeight={200} /> : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-            <KpiCard label="Faturamento bruto" value={fmtBRL(resumo.valorOferta)} bar="accent"
-              hint={`${resumo.vendas} venda(s) paga(s) · valor das ofertas`}
+          {/* Do bruto ao líquido: o que foi vendido, o que a Hotmart tira e o que fica para nós. */}
+          <div className={`grid grid-cols-2 gap-2.5 ${resumo.repasses > 0 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+            <KpiCard label="Bruto (vendido)" value={fmtBRL(resumo.valorOferta)} bar="accent"
+              hint={`${resumo.vendas} venda(s) paga(s) · preço das ofertas`}
               title="Soma do preço das ofertas vendidas e pagas. Não inclui os juros do parcelamento, que o cliente paga à Hotmart." />
-            <KpiCard label="Faturamento líquido" value={fmtBRL(resumo.liquido)} bar="green"
+            <KpiCard label="− Taxa da Hotmart" value={fmtBRL(resumo.taxa)} bar="yellow"
+              hint={resumo.taxaPct != null ? `${(resumo.taxaPct * 100).toFixed(2)}% do bruto · ${REGRA_TAXA_HOTMART}` : REGRA_TAXA_HOTMART}
+              title="O que a Hotmart cobra de nós por venda. Regra medida em 27/09/2026: 4% do valor da oferta + R$ 1 por venda." />
+            {resumo.repasses > 0 && (
+              <KpiCard label="− Coprodução / afiliados" value={fmtBRL(resumo.repasses)} bar="purple"
+                hint="coprodutor, afiliados e add-on (produtos antigos do Aurum)"
+                title="Oferta − taxa − líquido: comissão de coprodutor (Borboleta Digital), de afiliados e do add-on Club nas vendas antigas do Aurum." />
+            )}
+            <KpiCard label="= Líquido (fica para nós)" value={fmtBRL(resumo.liquido)} bar="green"
               hint={resumo.margem != null ? `${(resumo.margem * 100).toFixed(1)}% do bruto${resumo.liquidoEstimado ? ` · ${resumo.liquidoEstimado} estimado(s)` : ''}` : 'sem venda no período'}
-              title="O que fica para o produtor depois da taxa da Hotmart (comissão PRODUCER da API)." />
-            <KpiCard label="Taxa Hotmart" value={fmtBRL(resumo.taxa)} bar="yellow"
-              hint={`juros pagos pelos clientes: ${fmtBRL(resumo.juros)}`} />
-            <KpiCard label="Reembolsos / chargebacks" value={fmtBRL(resumo.valorEstornado)} bar="red"
-              hint={`${resumo.estornos} venda(s) · ${resumo.recusadas} cartão(ões) recusado(s)`} />
+              title="O que cai para o produtor (comissão PRODUCER da API da Hotmart)." />
           </div>
-          <SectionCard title="Dia a dia" subtitle="Dia da aprovação do pagamento (horário de São Paulo). Recusas e boletos contam no dia do pedido.">
-            {!dados.length ? <EmptyState title="Nenhuma movimentação no período" icon="trending-up" /> : (
-              <DataTable minWidth={900}>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5">
+            <KpiCard label="Juros do parcelamento" value={fmtBRL(resumo.juros)} bar="gray"
+              hint="pago pelo cliente · fica com a Hotmart, não é nosso"
+              title="Quando o cliente parcela no cartão, ele paga juros à Hotmart. Esse valor não sai do nosso bruto nem entra no líquido." />
+            <KpiCard label="Reembolsos / chargebacks" value={fmtBRL(resumo.valorEstornado)} bar="red"
+              hint={`${resumo.estornos} venda(s) devolvida(s)`} />
+            <KpiCard label="Cartões recusados" value={String(resumo.recusadas)} bar="gray"
+              hint="tentativas de compra que não passaram" />
+          </div>
+          <SectionCard title="Dia a dia" subtitle="Dia da aprovação do pagamento (horário de São Paulo). Recusas e boletos contam no dia do pedido. Dia sem venda aparece como R$ 0.">
+            {!serie.length ? <EmptyState title="Nenhuma movimentação no período" icon="trending-up" /> : (
+              <DataTable minWidth={1100}>
                 <Thead>
-                  <Th>Dia</Th><Th>Vendas</Th><Th>Bruto</Th><Th>Líquido</Th><Th>Taxa</Th><Th>Juros (cliente)</Th>
+                  <Th>Dia</Th><Th>Vendas</Th><Th>Bruto</Th><Th>Taxa Hotmart</Th>
+                  {resumo.repasses > 0 && <Th>Coprodução / afiliados</Th>}
+                  <Th>Líquido</Th><Th>vs. dia anterior</Th><Th>Acumulado</Th><Th>Juros (cliente)</Th>
                   <Th>Reembolsos</Th><Th>Recusados</Th><Th>Boletos</Th>
                 </Thead>
                 <tbody>
-                  {[...dados].reverse().map((d) => (
-                    <Tr key={d.dia}>
-                      <Td className="tabular">{fmtData(d.dia)}</Td>
-                      <Td className="tabular">{d.vendas}</Td>
-                      <Td className="tabular font-semibold">{fmtBRL(Number(d.valor_oferta))}</Td>
-                      <Td className="tabular font-semibold text-[var(--green)]">
-                        {fmtBRL(Number(d.liquido))}
-                        {Number(d.liquido_estimado) > 0 && <span className="ml-1 text-[10px] text-[var(--fg-3)]" title="Sem comissão na API: líquido = oferta − taxa">≈</span>}
+                  {[...serie].reverse().map((d) => (
+                    <Tr key={d.dia} className={d.preenchido ? 'opacity-60' : undefined}>
+                      <Td className="tabular">
+                        {fmtData(d.dia)}
+                        {d.preenchido && <span className="ml-1.5 text-[10px] font-medium text-[var(--fg-3)]">sem venda</span>}
                       </Td>
-                      <Td className="tabular text-[var(--fg-2)]">{fmtBRL(Number(d.taxa_hotmart))}</Td>
-                      <Td className="tabular text-[var(--fg-3)]">{fmtBRL(Number(d.juros))}</Td>
-                      <Td className="tabular">{Number(d.estornos) > 0 ? <span className="text-[var(--red)]">{d.estornos} · {fmtBRL(Number(d.valor_estornado))}</span> : '—'}</Td>
+                      <Td className="tabular">{d.vendas}</Td>
+                      <Td className="tabular font-semibold">{fmtBRL(d.bruto)}</Td>
+                      <Td className="tabular text-[var(--fg-2)]">{fmtBRL(d.taxa)}</Td>
+                      {resumo.repasses > 0 && <Td className="tabular text-[var(--fg-2)]">{d.repasses > 0 ? fmtBRL(d.repasses) : '—'}</Td>}
+                      <Td className="tabular font-semibold text-[var(--green)]">
+                        {fmtBRL(d.liquido)}
+                        {d.liquidoEstimado > 0 && <span className="ml-1 text-[10px] text-[var(--fg-3)]" title="Sem comissão na API: líquido = oferta − taxa">≈</span>}
+                      </Td>
+                      <Td><Variacao pct={d.variacaoDiaAnterior} /></Td>
+                      <Td className="tabular text-[var(--fg-3)]">{fmtBRL(d.acumulado)}</Td>
+                      <Td className="tabular text-[var(--fg-3)]">{d.juros ? fmtBRL(d.juros) : '—'}</Td>
+                      <Td className="tabular">{d.estornos > 0 ? <span className="text-[var(--red)]">{d.estornos} · {fmtBRL(d.valorEstornado)}</span> : '—'}</Td>
                       <Td className="tabular text-[var(--fg-3)]">{d.recusadas || '—'}</Td>
-                      <Td className="tabular text-[var(--fg-3)]">{d.boletos_gerados || '—'}</Td>
+                      <Td className="tabular text-[var(--fg-3)]">{d.boletos || '—'}</Td>
                     </Tr>
                   ))}
                 </tbody>
@@ -211,6 +235,18 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
         </>
       )}
     </div>
+  );
+}
+
+/** Seta + % vs. dia anterior — verde alta, vermelho queda. */
+function Variacao({ pct }: { pct: number | null }) {
+  if (pct == null) return <span className="text-[11px] text-[var(--fg-4)]">—</span>;
+  const subiu = pct >= 0;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold tabular ${subiu ? 'text-[var(--green)]' : 'text-[var(--red)]'}`}>
+      <Icon name={subiu ? 'arrow-up' : 'arrow-down'} size={12} />
+      {Math.abs(pct).toFixed(0)}%
+    </span>
   );
 }
 

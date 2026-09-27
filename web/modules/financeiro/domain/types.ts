@@ -211,25 +211,6 @@ export interface TurmaFin {
   atual: boolean;
 }
 
-/** Uma linha do faturamento diário do HM (regime de caixa, por data de pagamento). */
-export interface DiaFaturamento {
-  dia: string;
-  lancamentos: number;
-  /** O que os clientes pagaram (com juros de parcelamento) = "Valor da Compra" do painel Hotmart. */
-  cliente_pagou: number | null;
-  /** Juros de parcelamento retidos pela Hotmart (cliente_pagou − bruto). Não é receita nossa. */
-  juros: number | null;
-  bruto: number;
-  liquido: number;
-  taxas: number;
-  sinal: number | null;
-  saldo: number | null;
-  mensalidade: number | null;
-  compra_cheia: number | null;
-  ajuste: number | null;
-  alunos: number;
-}
-
 /**
  * Uma compra Hotmart do aluno, em qualquer status — ciclo de vida completo
  * (boletos gerados, pendentes, vencidos, estornados). Espelha fn_fin_compras_aluno.
