@@ -24,12 +24,16 @@ export interface RecorteAtivo {
    *  BarraRecorte não ofereceria como remover. Achado do fable-orchestrator,
    *  2026-08-27. */
   corLabel?: string | null;
+  /** Filtro "Diverge da Hotmart" ligado — mexe nos totais como os demais,
+   *  então entra no rótulo e vira chip removível. Fora do hash, igual a cor. */
+  diverge?: boolean;
 }
 
 export type ItemRecorte =
   | { tipo: 'canal'; label: string }
   | { tipo: 'busca'; label: string }
-  | { tipo: 'cor'; label: string };
+  | { tipo: 'cor'; label: string }
+  | { tipo: 'diverge'; label: string };
 
 /** Chips removíveis do recorte — só o que tem estado "nenhum" (canal, busca).
  *  Produto fica de fora de propósito (ver nota do arquivo). Ordem fixa:
@@ -41,6 +45,7 @@ export function itensRecorte(r: RecorteAtivo): ItemRecorte[] {
   const termo = r.busca.trim();
   if (termo) itens.push({ tipo: 'busca', label: `busca "${termo}"` });
   if (r.corLabel) itens.push({ tipo: 'cor', label: r.corLabel });
+  if (r.diverge) itens.push({ tipo: 'diverge', label: 'Diverge da Hotmart' });
   return itens;
 }
 

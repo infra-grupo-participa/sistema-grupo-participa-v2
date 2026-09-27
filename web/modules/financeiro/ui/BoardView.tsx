@@ -43,6 +43,7 @@ import { VAR_COR } from './cor';
 import { CardBoardView } from './CardBoard';
 import { FAIXAS_FUNIL, type CardComEfeito } from '../application/carregar-board';
 import type { FaixaFunil } from '../domain/types';
+import type { BoardHotmart } from '../domain/hotmart';
 
 type Eixo = 'funil' | 'prazo' | 'valor';
 
@@ -67,6 +68,7 @@ export const ORDEM_COR: CorStatus[] = ['verde', 'ciano', 'azul', 'amarelo', 'ver
 
 export function BoardView({
   cards, cardsParaContador, hojeISO, onOpen, busca, onBusca, totalSemBusca, atalhoAtivo = true, corFiltro, onCorFiltro,
+  hotmartPorCard = null, divergeFiltro = false, qtdDiverge = 0, onDivergeFiltro,
 }: {
   /** Lista plana já filtrada por produto/ação/busca/COR — única fonte do
    *  mosaico. (O agrupamento por coluna deixou de existir; ver cabeçalho do
@@ -101,6 +103,14 @@ export function BoardView({
    *  exatamente o que o mosaico mostra. */
   corFiltro: CorStatus | null;
   onCorFiltro: (c: CorStatus | null) => void;
+  /** Camada Hotmart por contato_hm_id (null = carregando ou falhou — o board
+   *  segue igual, só sem o selo). Carregada uma vez pelo pai. */
+  hotmartPorCard?: Map<string, BoardHotmart> | null;
+  /** Filtro "Diverge da Hotmart" — controlado pelo pai, mesma razão de `busca`. */
+  divergeFiltro?: boolean;
+  /** Quantos cards do recorte (antes deste filtro) divergem — número do chip. */
+  qtdDiverge?: number;
+  onDivergeFiltro?: (v: boolean) => void;
 }) {
   const [eixo, setEixo] = useState<Eixo>('funil');
 
@@ -265,6 +275,26 @@ export function BoardView({
           <SeletorEixo ativo={eixo === 'valor'} onClick={() => setEixo('valor')}>Valor</SeletorEixo>
         </div>
         <ContadoresCor contadores={contadores} corFiltro={corFiltro} onCorFiltro={onCorFiltro} />
+        {/* Chip "Diverge da Hotmart" — só existe quando há o que filtrar (Aurum
+            nunca diverge: planilha sem transação) ou quando já está ligado,
+            para sempre haver como desligar. Mesmo visual do contador por cor. */}
+        {onDivergeFiltro && (divergeFiltro || qtdDiverge > 0) && (
+          <button
+            type="button"
+            aria-pressed={divergeFiltro}
+            onClick={() => onDivergeFiltro(!divergeFiltro)}
+            title={`${qtdDiverge} ${qtdDiverge === 1 ? 'card não bate' : 'cards não batem'} com a Hotmart (venda paga lá que não está no board, ou lançamento do board sem par lá)${divergeFiltro ? ' — clique para remover o filtro' : ' — clique para filtrar'}`}
+            className={`flex items-center gap-1.5 rounded-[var(--r-sm)] px-1.5 py-0.5 text-[11px] transition-colors focus-visible:ring-2 ${
+              divergeFiltro
+                ? 'bg-[var(--surface-3)] text-[var(--fg-2)] font-semibold border border-[var(--border-strong)]'
+                : 'text-[var(--fg-3)] border border-transparent hover:bg-[var(--surface-2)]'
+            }`}
+          >
+            <Icon name="alert" size={11} className="text-[var(--yellow)]" />
+            <span>Diverge da Hotmart</span>
+            <span className="tabular">{qtdDiverge}</span>
+          </button>
+        )}
         </div>
         </div>
 
@@ -344,7 +374,7 @@ export function BoardView({
         >
           {ordenados.map((c) => (
             <li key={c.conta.contato_hm_id}>
-              <CardBoardView card={c} onOpen={onOpen} hojeISO={hojeISO} />
+              <CardBoardView card={c} onOpen={onOpen} hojeISO={hojeISO} hotmart={hotmartPorCard?.get(c.conta.contato_hm_id) ?? null} />
             </li>
           ))}
         </ul>

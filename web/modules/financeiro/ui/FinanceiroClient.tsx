@@ -23,6 +23,8 @@ import { FichaDrawer } from './FichaDrawer';
 import { Relatorios } from './Relatorios';
 import { Ofertas } from './Ofertas';
 import { FaturamentoDiario } from './FaturamentoDiario';
+import type { BoardHotmart } from '../domain/hotmart';
+import { indexarBoardHotmart } from '../domain/board-hotmart';
 
 type Tab = 'board' | 'faturamento' | 'relatorios' | 'ofertas';
 
@@ -60,19 +62,29 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // busca. Mesmo motivo de `busca` morar aqui (não no BoardView): o rodapé
   // de totais precisa somar exatamente o que o mosaico mostra.
   const [corFiltro, setCorFiltro] = useState<CorStatus | null>(null);
+  // Filtro "Diverge da Hotmart" — mesma camada/disciplina de busca e cor:
+  // mora aqui para o rodapé somar o que o mosaico mostra; fora do hash.
+  const [divergeFiltro, setDivergeFiltro] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  // Camada Hotmart do board (fn_fin_board_hotmart): carregada UMA vez junto
+  // com o board, nunca por card. Falha não bloqueia o board — só a camada
+  // mostra aviso. `null` = ainda carregando ou falhou (ver hotmartErro).
+  const [hotmartPorCard, setHotmartPorCard] = useState<Map<string, BoardHotmart> | null>(null);
+  const [hotmartErro, setHotmartErro] = useState(false);
 
   const selecionarProduto = (produto: ProdutoChave) => {
     setProdutoAtivo(produto);
     setAcaoAtiva(null);
     setBusca('');
     setCorFiltro(null);
+    setDivergeFiltro(false);
   };
 
   const selecionarAcao = (acao: string | null) => {
     setAcaoAtiva(acao);
     setBusca('');
     setCorFiltro(null);
+    setDivergeFiltro(false);
   };
 
   const hojeISO = new Date().toISOString().slice(0, 10);
@@ -80,12 +92,19 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   /** Busca board+régua (sem tocar estado) — usado pelo mount e pelo retry/callback. */
   const buscarBoard = () => repo.loadRegua().then((rg) => carregarBoard(repo, rg, hojeISO, turma, null).then((b) => ({ b, rg })));
 
+  /** Camada Hotmart — disparada em paralelo ao board; erro fica só nela. */
+  const buscarHotmart = () => repo.loadBoardHotmart().then(indexarBoardHotmart);
+
   // Recarrega o board a partir de um evento do usuário (retry do erro,
   // onAcordoSalvo do drawer) — componente já montado, sem guard de unmount.
-  const carregarBoardAgora = () =>
-    buscarBoard()
+  const carregarBoardAgora = () => {
+    buscarHotmart()
+      .then((m) => { setHotmartPorCard(m); setHotmartErro(false); })
+      .catch(() => setHotmartErro(true));
+    return buscarBoard()
       .then(({ b, rg }) => { setBoard(b); setRegua(rg); setErroBoard(null); })
       .catch(() => setErroBoard('Não foi possível carregar o board financeiro. Verifique sua conexão e tente novamente.'));
+  };
 
   useEffect(() => {
     let vivo = true;
@@ -97,6 +116,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         if (vivo) setErroBoard('Não foi possível carregar o board financeiro. Verifique sua conexão e tente novamente.');
       }
     })();
+    buscarHotmart()
+      .then((m) => { if (vivo) { setHotmartPorCard(m); setHotmartErro(false); } })
+      .catch(() => { if (vivo) setHotmartErro(true); });
     (async () => {
       const t = await repo.loadTurmas().catch(() => []);
       if (vivo) setTurmas(t);
@@ -228,9 +250,26 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
 
   // Camada mais rasa do funil de filtros: produto → canal → BUSCA. Sai daqui
   // (e não do BoardView) para alimentar o mesmo array ao mosaico E ao rodapé.
-  const cardsVisiveis: CardComEfeito[] = useMemo(
+  const cardsBuscados: CardComEfeito[] = useMemo(
     () => (busca.trim() ? cardsFiltrados.filter((c) => casaBusca(c.conta, busca)) : cardsFiltrados),
     [cardsFiltrados, busca],
+  );
+
+  // Quantos cards do recorte (depois da busca, antes do filtro) divergem da
+  // Hotmart — número do chip, estável ao ligar/desligar o próprio filtro.
+  const qtdDiverge = useMemo(
+    () => (hotmartPorCard ? cardsBuscados.filter((c) => hotmartPorCard.get(c.conta.contato_hm_id)?.diverge === true).length : 0),
+    [cardsBuscados, hotmartPorCard],
+  );
+
+  // Diverge entra entre busca e cor. Sem dado Hotmart (carregando/erro) o
+  // filtro não se aplica — nunca esvazia o board por falta da camada.
+  const divergeAtivo = divergeFiltro && !!hotmartPorCard;
+  const cardsVisiveis: CardComEfeito[] = useMemo(
+    () => (divergeAtivo && hotmartPorCard
+      ? cardsBuscados.filter((c) => hotmartPorCard.get(c.conta.contato_hm_id)?.diverge === true)
+      : cardsBuscados),
+    [cardsBuscados, divergeAtivo, hotmartPorCard],
   );
 
   // DOIS arrays de contas, de propósito — não unificar:
@@ -284,8 +323,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       // Rótulo pt-BR da cor vem de ROTULO_COR (domain/cor-status.ts), a mesma
       // fonte da legenda — o chip nunca mostra a chave crua ("amarelo").
       corLabel: corFiltro ? ROTULO_COR[corFiltro] : null,
+      diverge: divergeAtivo,
     }),
-    [produtoAtivo, rotuloFiltroAtivo, busca, corFiltro],
+    [produtoAtivo, rotuloFiltroAtivo, busca, corFiltro, divergeAtivo],
   );
 
   const aberta = openId ? board?.cards.find((c) => c.conta.contato_hm_id === openId)?.conta ?? null : null;
@@ -335,7 +375,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               onLimparCanal={() => selecionarAcao(null)}
               onLimparBusca={() => setBusca('')}
               onLimparCor={() => setCorFiltro(null)}
-              onLimparTudo={() => { setAcaoAtiva(null); setBusca(''); setCorFiltro(null); }}
+              onLimparDiverge={() => setDivergeFiltro(false)}
+              onLimparTudo={() => { setAcaoAtiva(null); setBusca(''); setCorFiltro(null); setDivergeFiltro(false); }}
             />
             <BoardView
               cards={cardsComCor}
@@ -348,6 +389,10 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               onBusca={setBusca}
               totalSemBusca={cardsFiltrados.length}
               atalhoAtivo={!openId}
+              hotmartPorCard={hotmartPorCard}
+              divergeFiltro={divergeAtivo}
+              qtdDiverge={qtdDiverge}
+              onDivergeFiltro={setDivergeFiltro}
             />
             <RodapeTotais
               totais={totaisFiltrados}
@@ -356,6 +401,10 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               filtroAtivo={rotuloFiltroAtivo}
               busca={busca}
               corAtiva={recorteAtivo.corLabel}
+              diverge={divergeAtivo}
+              contatoIds={contasVisiveis.map((c) => c.contato_hm_id)}
+              hotmartPorCard={hotmartPorCard}
+              hotmartErro={hotmartErro}
             />
           </>
         )
@@ -364,7 +413,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       {tab === 'faturamento' && <FaturamentoDiario repo={repo} />}
 
       {tab === 'relatorios' && (
-        board ? <Relatorios contas={contasDoRecorte} turma={turma} canVerDoc={canVerDoc} /> : <Loading label="Carregando…" minHeight={200} />
+        board ? <Relatorios contas={contasDoRecorte} turma={turma} canVerDoc={canVerDoc} repo={repo} hotmartPorCard={hotmartPorCard} /> : <Loading label="Carregando…" minHeight={200} />
       )}
 
 
@@ -388,6 +437,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           hojeISO={hojeISO}
           onClose={() => setOpenId(null)}
           onAcordoSalvo={carregarBoardAgora}
+          hotmartPorCard={hotmartPorCard}
+          hotmartErro={hotmartErro}
         />
       )}
     </div>

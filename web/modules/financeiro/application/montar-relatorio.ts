@@ -7,12 +7,20 @@
 // exibir/exportar (fmtData), igual ao padrão do export legado (financeiro-export.ts).
 import type { ContaReceber } from '../domain/types';
 import { statusLabel } from '../domain/financeiro';
+import type { BoardHotmart } from '../domain/hotmart';
+
+export interface OpcoesRelatorio {
+  canVerDoc: boolean;
+  /** Card do board × espelho Hotmart, por contato_hm_id — null quando a carga falhou/ainda não veio.
+   *  Alimenta as colunas "hm_*" (opcionais); sem entrada para a linha, a coluna sai vazia. */
+  hotmartPorCard?: Map<string, BoardHotmart> | null;
+}
 
 export interface ColunaRelatorio {
   key: string;
   label: string;
   tipo: 'texto' | 'moeda' | 'data' | 'numero';
-  get: (c: ContaReceber, opts: { canVerDoc: boolean }) => string | number | null;
+  get: (c: ContaReceber, opts: OpcoesRelatorio) => string | number | null;
 }
 
 /** Todas as colunas disponíveis para seleção — ordem = ordem de exibição por padrão. */
@@ -40,6 +48,30 @@ export const COLUNAS_RELATORIO: ColunaRelatorio[] = [
   { key: 'solicitou_cancelamento', label: 'Solicitou cancelamento', tipo: 'texto', get: (c) => (c.solicitou_cancelamento ? 'Sim' : 'Não') },
   { key: 'oferta_codigo', label: 'Oferta (código)', tipo: 'texto', get: (c) => c.oferta_codigo ?? '' },
   { key: 'ultimo_pagamento_em', label: 'Último pagamento', tipo: 'data', get: (c) => c.ultimo_pagamento_em },
+
+  // ── Espelho da Hotmart por card (opcionais — vazias sem hotmartPorCard) ──
+  // Fonte: fn_fin_board_hotmart via opts.hotmartPorCard (chave = contato_hm_id).
+  // Nunca inventa 0: sem entrada no mapa, a célula fica vazia (formatarCelulaTela → "—").
+  { key: 'hm_pago_bruto', label: 'Pago na Hotmart (bruto)', tipo: 'moeda', get: (c, opts) => opts.hotmartPorCard?.get(c.contato_hm_id)?.pago_bruto ?? null },
+  { key: 'hm_taxa_hotmart', label: 'Taxa Hotmart', tipo: 'moeda', get: (c, opts) => opts.hotmartPorCard?.get(c.contato_hm_id)?.taxa_hotmart ?? null },
+  { key: 'hm_liquido', label: 'Líquido Hotmart', tipo: 'moeda', get: (c, opts) => opts.hotmartPorCard?.get(c.contato_hm_id)?.liquido ?? null },
+  { key: 'hm_juros', label: 'Juros do cliente', tipo: 'moeda', get: (c, opts) => opts.hotmartPorCard?.get(c.contato_hm_id)?.juros ?? null },
+  {
+    key: 'hm_parcelamento', label: 'Parcelamento', tipo: 'texto',
+    get: (c, opts) => {
+      const max = opts.hotmartPorCard?.get(c.contato_hm_id)?.parcelas_max;
+      return max != null ? `até ${max}x` : null;
+    },
+  },
+  { key: 'hm_ultimo_pagamento', label: 'Último pagamento (Hotmart)', tipo: 'data', get: (c, opts) => opts.hotmartPorCard?.get(c.contato_hm_id)?.ultimo_pagamento_em ?? null },
+  { key: 'hm_devido_120', label: 'Devido ≤120 dias', tipo: 'moeda', get: (c, opts) => opts.hotmartPorCard?.get(c.contato_hm_id)?.valor_devido ?? null },
+  {
+    key: 'hm_diverge', label: 'Diverge da Hotmart', tipo: 'texto',
+    get: (c, opts) => {
+      const d = opts.hotmartPorCard?.get(c.contato_hm_id)?.diverge;
+      return d == null ? null : d ? 'Sim' : 'Não';
+    },
+  },
 ];
 
 export const COLUNAS_PADRAO = ['nome', 'email', 'produto', 'canal', 'status', 'total_pago_bruto', 'saldo_a_pagar', 'vencimento', 'dias_atraso'];
@@ -59,7 +91,7 @@ export interface DatasetRelatorio {
 export function montarRelatorio(
   contas: ContaReceber[],
   colunasChaves: string[],
-  opts: { canVerDoc: boolean },
+  opts: OpcoesRelatorio,
 ): DatasetRelatorio {
   const colunas = colunasChaves
     .map((k) => COLUNAS_RELATORIO.find((c) => c.key === k))

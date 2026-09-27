@@ -17,11 +17,12 @@
 import { Icon } from '@/shared/ui/icons';
 import { itensRecorte, type ItemRecorte, type RecorteAtivo } from '../domain/recorte';
 
-export function BarraRecorte({ recorte, onLimparCanal, onLimparBusca, onLimparCor, onLimparTudo }: {
+export function BarraRecorte({ recorte, onLimparCanal, onLimparBusca, onLimparCor, onLimparDiverge, onLimparTudo }: {
   recorte: RecorteAtivo;
   onLimparCanal: () => void;
   onLimparBusca: () => void;
   onLimparCor: () => void;
+  onLimparDiverge: () => void;
   /** Limpa canal + busca + cor, mantém produto (ver nota do arquivo). */
   onLimparTudo: () => void;
 }) {
@@ -34,6 +35,7 @@ export function BarraRecorte({ recorte, onLimparCanal, onLimparBusca, onLimparCo
     canal: onLimparCanal,
     busca: onLimparBusca,
     cor: onLimparCor,
+    diverge: onLimparDiverge,
   };
   if (!itens.length) return null;
 

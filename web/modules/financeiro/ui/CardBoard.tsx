@@ -12,7 +12,9 @@
 // fixa — informação secundária, não estrutural.
 import { Icon } from '@/shared/ui/icons';
 import { ProgressBar } from '@/shared/ui/components';
-import { fmtBRLc, fmtData, fmtPrazo } from '@/shared/ui/format';
+import { fmtBRL, fmtBRLc, fmtData, fmtPrazo } from '@/shared/ui/format';
+import type { BoardHotmart } from '../domain/hotmart';
+import { explicarDivergencia, rotuloParcelamento, temDadoHotmart } from '../domain/board-hotmart';
 import type { CardComEfeito } from '../application/carregar-board';
 import { direcaoDivergencia, statusLabel, temDivergenciaPacote } from '../domain/financeiro';
 import { labelMotivoReuniao } from '../domain/reuniao';
@@ -78,7 +80,13 @@ const TEXTO_PARADO: Record<ReturnType<typeof tomParado>, string> = {
   forte: 'text-[var(--yellow)]',
 };
 
-export function CardBoardView({ card, onOpen, hojeISO }: { card: CardComEfeito; onOpen: (id: string) => void; hojeISO: string }) {
+export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
+  card: CardComEfeito;
+  onOpen: (id: string) => void;
+  hojeISO: string;
+  /** Linha de fn_fin_board_hotmart deste card (null = sem dado ou camada não carregou → selo some). */
+  hotmart?: BoardHotmart | null;
+}) {
   const { conta } = card;
   const dias = card.diasNoEstagio;
   const titleEstagio = conta.estagio_nome ? `Situação na ativação: ${conta.estagio_nome}` : undefined;
@@ -132,6 +140,21 @@ export function CardBoardView({ card, onOpen, hojeISO }: { card: CardComEfeito; 
     ? `Valor travado manualmente: ${fmtBRLc(conta.pacote)}. Cálculo automático: ${fmtBRLc(conta.pacote_regra)}. Diferença: ${fmtBRLc(Math.abs(conta.divergencia_regra as number))} ${direcaoPacote === 'a_maior' ? 'a mais' : 'a menos'}.`
     : undefined;
 
+  // Camada Hotmart: só aviso, nunca muda valor do card. Sem dado → nada
+  // (nunca "R$ 0", que diria "não pagou nada" quando a verdade é "não sabemos").
+  const hm = temDadoHotmart(hotmart) ? hotmart : null;
+  const hmDiverge = hm?.diverge === true;
+  const hmExplicacao = hm ? explicarDivergencia(hm, fmtBRLc) : null;
+  const hmParcelamento = hm ? rotuloParcelamento(hm.parcelas_max) : null;
+  const hmLinha = hm
+    ? hm.vendas_pagas > 0
+      ? `Hotmart: pago ${fmtBRL(hm.pago_bruto)} · líquido ${fmtBRL(hm.liquido)}${hmParcelamento ? ` · ${hmParcelamento}` : ''}`
+      : 'Hotmart: nenhuma venda paga'
+    : null;
+  const hmTitle = hm
+    ? `Números da Hotmart (não mudam os valores do board).${hm.cards_da_pessoa > 1 ? ` Esta pessoa tem ${hm.cards_da_pessoa} cards: os mesmos números aparecem em cada um.` : ''}`
+    : undefined;
+
   return (
     <button
       type="button"
@@ -146,7 +169,7 @@ export function CardBoardView({ card, onOpen, hojeISO }: { card: CardComEfeito; 
         conta.saldo_a_pagar != null ? `, falta pagar ${fmtBRLc(conta.saldo_a_pagar)}` : ''
       }${card.motivoUrgencia ? `, ${card.motivoUrgencia}` : ''}${
         divergePacote ? `, pacote divergente da régua, ${direcaoPacote === 'a_maior' ? 'a mais' : 'a menos'}` : ''
-      }`}
+      }${hmDiverge ? ', diverge da Hotmart' : ''}`}
       title={titleEstagio}
     >
       {/* Nível 1 — identidade: nome + origem. O badge de origem precisa
@@ -263,6 +286,27 @@ export function CardBoardView({ card, onOpen, hojeISO }: { card: CardComEfeito; 
             }
           >
             <Icon name="alert" size={10} /> {motivoBLabel ? `sem data · ${retomarB ? `retoma ${fmtData(retomarB)}` : motivoBLabel}` : 'sem data de pagamento'}
+          </div>
+        )}
+
+        {/* Camada Hotmart — linha discreta de contexto (mesmo corpo/cor do
+            status acima); dívida por parcela e divergência só quando existem. */}
+        {hm && (
+          <div className="space-y-0.5" title={hmTitle}>
+            <div className="truncate text-[10px] tabular text-[var(--fg-3)]">{hmLinha}</div>
+            {hm.parcelas_devidas > 0 && (
+              <div className="text-[10px] font-semibold tabular text-[var(--yellow)]">
+                devendo {fmtBRL(hm.valor_devido)} ({hm.parcelas_devidas} parc.)
+              </div>
+            )}
+          </div>
+        )}
+        {hmDiverge && (
+          <div
+            className="inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-2)]"
+            title={hmExplicacao ?? undefined}
+          >
+            <Icon name="alert" size={10} className="text-[var(--yellow)]" /> Diverge da Hotmart
           </div>
         )}
 

@@ -7,7 +7,7 @@ import {
   AvatarInicial, Badge, Button, CopyField, Drawer, EmptyState, Loading, Row, SectionTitle, Tabs, Textarea, Timeline, useFlash,
 } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
-import { fmtBRLc, fmtData, fmtDesde } from '@/shared/ui/format';
+import { fmtBRLc, fmtData, fmtDataHora, fmtDesde } from '@/shared/ui/format';
 import type { ContaReceber, Cobranca, InteracaoAtivacao, ReguaPasso } from '../domain/types';
 import { contaMorta, direcaoDivergencia, mascararDoc, statusLabel, temDivergenciaPacote } from '../domain/financeiro';
 import { corStatus } from '../domain/cor-status';
@@ -17,6 +17,8 @@ import { FichaResumoTopo } from './FichaResumoTopo';
 import type { FinanceiroRepository } from '../application/ports';
 import { ExtratoHotmart } from './hotmart/ExtratoHotmart';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
+import { rotuloMetodo, type BoardHotmart } from '../domain/hotmart';
+import { explicarDivergencia, rotuloParcelamento, temDadoHotmart } from '../domain/board-hotmart';
 
 const CANAIS_COBRANCA = ['WhatsApp', 'E-mail', 'Ligação', 'Reunião'];
 const RESULTADOS_COBRANCA = ['Sem resposta', 'Prometeu pagar', 'Renegociou', 'Recusou', 'Pagou'];
@@ -83,7 +85,7 @@ function SecaoCombinadoComercial({ conta }: { conta: ContaReceber }) {
   );
 }
 
-export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, onClose, onAcordoSalvo }: {
+export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, onClose, onAcordoSalvo, hotmartPorCard = null, hotmartErro = false }: {
   conta: ContaReceber;
   repo: FinanceiroRepository;
   canEdit: boolean;
@@ -95,6 +97,9 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
   hojeISO: string;
   onClose: () => void;
   onAcordoSalvo: () => void;
+  /** Camada Hotmart do board, já carregada pelo chamador (nenhuma query aqui). */
+  hotmartPorCard?: Map<string, BoardHotmart> | null;
+  hotmartErro?: boolean;
 }) {
   const [tab, setTab] = useState<'resumo' | 'historico' | 'cobranca'>('resumo');
   const [ficha, setFicha] = useState<Ficha | null>(null);
@@ -238,6 +243,12 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
                 ))
               )}
             </section>
+            <SecaoBoardHotmart
+              conta={conta}
+              hm={hotmartPorCard?.get(conta.contato_hm_id) ?? null}
+              carregando={!hotmartPorCard && !hotmartErro}
+              erro={hotmartErro && !hotmartPorCard}
+            />
             <section>
               <SectionTitle>Histórico na Hotmart (API oficial)</SectionTitle>
               <p className="mb-2 text-[11px] text-[var(--fg-3)]">
@@ -287,6 +298,67 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
         </div>
       )}
     </Drawer>
+  );
+}
+
+/** Board × Hotmart — os números da Hotmart deste card, lado a lado com o que
+ *  o board registra. Só leitura e só aviso: não muda nenhum valor do board. */
+function SecaoBoardHotmart({ conta, hm, carregando, erro }: {
+  conta: ContaReceber;
+  hm: BoardHotmart | null;
+  carregando: boolean;
+  erro: boolean;
+}) {
+  if (carregando) return null;
+  const aviso = (texto: string) => (
+    <section>
+      <SectionTitle>Board × Hotmart</SectionTitle>
+      <p className="text-[11px] text-[var(--fg-3)]">{texto}</p>
+    </section>
+  );
+  if (erro) return aviso('Números da Hotmart indisponíveis agora. O board não depende deles.');
+  if (!temDadoHotmart(hm)) return aviso('Esta pessoa não foi encontrada na Hotmart — sem números para comparar.');
+
+  const explicacao = explicarDivergencia(hm, fmtBRLc);
+  const parcelamento = rotuloParcelamento(hm.parcelas_max);
+  return (
+    <section>
+      <SectionTitle>Board × Hotmart</SectionTitle>
+      {hm.cards_da_pessoa > 1 && (
+        <p className="mb-1 text-[11px] text-[var(--fg-3)]">
+          Esta pessoa tem {hm.cards_da_pessoa} cards: os números da Hotmart abaixo são dela inteira e se repetem em cada card.
+        </p>
+      )}
+      <Row k="Pago segundo o board (bruto)" v={fmtBRLc(conta.total_pago_bruto)} />
+      <Row k={`Pago na Hotmart (${hm.vendas_pagas} venda${hm.vendas_pagas === 1 ? '' : 's'})`} v={fmtBRLc(hm.pago_bruto)} />
+      <Row k="Taxa da Hotmart" v={fmtBRLc(hm.taxa_hotmart)} />
+      {hm.coproducao > 0 && <Row k="Coprodução" v={fmtBRLc(hm.coproducao)} />}
+      <Row k="Líquido (fica para nós)" v={fmtBRLc(hm.liquido)} />
+      <Row k="Cliente pagou (com juros)" v={fmtBRLc(hm.cobrado_cliente)} />
+      <Row k="Juros do parcelamento" v={fmtBRLc(hm.juros)} />
+      <Row k="Parcelamento" v={parcelamento ?? '—'} />
+      <Row k="Forma de pagamento" v={rotuloMetodo(hm.forma_pagamento_principal)} />
+      <Row
+        k="Último pagamento"
+        v={hm.ultimo_pagamento_em ? `${fmtData(hm.ultimo_pagamento_em)}${hm.ultimo_pagamento_valor != null ? ` · ${fmtBRLc(hm.ultimo_pagamento_valor)}` : ''}` : '—'}
+      />
+      <Row
+        k="Devendo na Hotmart"
+        v={hm.parcelas_devidas > 0 ? `${fmtBRLc(hm.valor_devido)} (${hm.parcelas_devidas} parcela${hm.parcelas_devidas === 1 ? '' : 's'})` : 'Nada'}
+      />
+      {hm.estornos > 0 && <Row k="Estornos" v={`${fmtBRLc(hm.valor_estornado)} (${hm.estornos})`} />}
+      {explicacao ? (
+        <div className="mt-2 flex items-start gap-1.5 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2 text-xs text-[var(--fg-2)]">
+          <Icon name="alert" size={13} className="mt-0.5 shrink-0 text-[var(--yellow)]" />
+          <span><strong className="font-semibold">Diverge da Hotmart:</strong> {explicacao}</span>
+        </div>
+      ) : hm.diverge === false ? (
+        <p className="mt-1 text-[11px] text-[var(--fg-3)]">Board e Hotmart batem para esta pessoa.</p>
+      ) : null}
+      {hm.sincronizado_em && (
+        <p className="mt-1 text-[11px] text-[var(--fg-4)]">Hotmart sincronizada em {fmtDataHora(hm.sincronizado_em)}.</p>
+      )}
+    </section>
   );
 }
 

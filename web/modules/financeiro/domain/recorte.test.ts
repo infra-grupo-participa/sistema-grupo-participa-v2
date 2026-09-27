@@ -102,3 +102,11 @@ describe('recorte com filtro de cor', () => {
     expect(itensRecorte({ ...base, corLabel: 'Cancelado ou reembolsado' })).toHaveLength(1);
   });
 });
+
+describe('filtro Diverge da Hotmart', () => {
+  it('vira chip removível depois da cor e entra no rótulo', () => {
+    const r = base({ corLabel: 'Vencido', diverge: true });
+    expect(itensRecorte(r).map((i) => i.tipo)).toEqual(['cor', 'diverge']);
+    expect(rotuloRecorte(r)).toBe('Holding Masters · Vencido · Diverge da Hotmart');
+  });
+});

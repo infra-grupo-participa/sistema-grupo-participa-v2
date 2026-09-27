@@ -1,24 +1,118 @@
 'use client';
 
-// Aba Relatórios: seleção de colunas + export XLSX e "PDF" (window.print()).
-// A MESMA tabela renderizada aqui é o que vai para o papel — print CSS de
+// Aba Relatórios: seletor de 4 relatórios.
+// "Carteira do board" = seleção de colunas + export XLSX e "PDF" (window.print()) —
+// a MESMA tabela renderizada aqui é o que vai para o papel; print CSS de
 // globals.css cuida de tema claro/paginação; nada de componente exclusivo pra impressão.
+// Os outros 3 são leitura do espelho da Hotmart (schema fin), já prontos em ui/hotmart/*.
 import { useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, DataTable, EmptyState, SectionCard, Td, Th, Thead, Toolbar, Tr, useFlash, Toast } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import type { ContaReceber } from '../domain/types';
 import { COLUNAS_PADRAO, COLUNAS_RELATORIO, montarRelatorio } from '../application/montar-relatorio';
+import type { FinanceiroRepository } from '../application/ports';
+import { ROTULO_FAMILIA, type BoardHotmart, type FamiliaHotmart } from '../domain/hotmart';
 import { statusTone } from './cor';
 import { exportarXLSX, exportarPDF, formatarCelulaTela } from './exportar';
+import { HotmartConciliacao } from './hotmart/HotmartConciliacao';
+import { HotmartIdentidade } from './hotmart/HotmartIdentidade';
+import { HotmartPessoas } from './hotmart/HotmartPessoas';
 
-export function Relatorios({ contas, turma, canVerDoc }: { contas: ContaReceber[]; turma: string | null; canVerDoc: boolean }) {
+type TipoRelatorio = 'board' | 'pessoas' | 'conciliacao' | 'identidade';
+
+const RELATORIOS: { tipo: TipoRelatorio; rotulo: string }[] = [
+  { tipo: 'board', rotulo: 'Carteira do board' },
+  { tipo: 'pessoas', rotulo: 'Pessoas na Hotmart' },
+  { tipo: 'conciliacao', rotulo: 'Conciliação Hotmart × banco' },
+  { tipo: 'identidade', rotulo: 'Mesma pessoa?' },
+];
+
+/** Botão do seletor de relatório — mesmo padrão visual do seletor de família (FaturamentoDiario.tsx). */
+function BotaoRelatorio({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={ativo}
+      onClick={onClick}
+      className={`rounded-[var(--r-md)] border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${ativo ? 'border-[var(--accent)] text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-3)]'}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Seletor de família (HM / Aurum / Acelera Holding) — usado pelos relatórios que leem por família. */
+function SeletorFamilia({ familia, onChange }: { familia: FamiliaHotmart; onChange: (f: FamiliaHotmart) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {(['HM', 'AURUM', 'ACELERA'] as FamiliaHotmart[]).map((f) => (
+        <BotaoRelatorio key={f} ativo={familia === f} onClick={() => onChange(f)}>
+          {ROTULO_FAMILIA[f]}
+        </BotaoRelatorio>
+      ))}
+    </div>
+  );
+}
+
+export function Relatorios({
+  contas, turma, canVerDoc, repo, hotmartPorCard,
+}: {
+  contas: ContaReceber[];
+  turma: string | null;
+  canVerDoc: boolean;
+  repo: FinanceiroRepository;
+  hotmartPorCard: Map<string, BoardHotmart> | null;
+}) {
+  const [tipo, setTipo] = useState<TipoRelatorio>('board');
+  const [familia, setFamilia] = useState<FamiliaHotmart>('HM');
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2 gp-print-hide">
+        {RELATORIOS.map((r) => (
+          <BotaoRelatorio key={r.tipo} ativo={tipo === r.tipo} onClick={() => setTipo(r.tipo)}>
+            {r.rotulo}
+          </BotaoRelatorio>
+        ))}
+      </div>
+
+      {tipo === 'board' && <CarteiraDoBoard contas={contas} turma={turma} canVerDoc={canVerDoc} hotmartPorCard={hotmartPorCard} />}
+
+      {tipo === 'pessoas' && (
+        <div className="space-y-4">
+          <SeletorFamilia familia={familia} onChange={setFamilia} />
+          <HotmartPessoas repo={repo} familia={familia} />
+        </div>
+      )}
+
+      {tipo === 'conciliacao' && (
+        <div className="space-y-4">
+          <SeletorFamilia familia={familia} onChange={setFamilia} />
+          <HotmartConciliacao repo={repo} familia={familia} />
+        </div>
+      )}
+
+      {tipo === 'identidade' && <HotmartIdentidade repo={repo} />}
+    </div>
+  );
+}
+
+/** Relatório original da aba: seleção de colunas do board + export XLSX/PDF. */
+function CarteiraDoBoard({
+  contas, turma, canVerDoc, hotmartPorCard,
+}: {
+  contas: ContaReceber[];
+  turma: string | null;
+  canVerDoc: boolean;
+  hotmartPorCard: Map<string, BoardHotmart> | null;
+}) {
   const [selecionadas, setSelecionadas] = useState<string[]>(COLUNAS_PADRAO);
   const [exportando, setExportando] = useState(false);
   const { toast, flash } = useFlash();
 
   const dataset = useMemo(
-    () => montarRelatorio(contas, selecionadas, { canVerDoc }),
-    [contas, selecionadas, canVerDoc],
+    () => montarRelatorio(contas, selecionadas, { canVerDoc, hotmartPorCard }),
+    [contas, selecionadas, canVerDoc, hotmartPorCard],
   );
 
   // `dataset` guarda só o rótulo (statusLabel) — application não formata cor,
