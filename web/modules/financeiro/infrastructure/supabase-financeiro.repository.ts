@@ -12,7 +12,7 @@ import type {
 } from '../domain/types';
 import type { FinanceiroRepository, Resultado } from '../application/ports';
 import type {
-  BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, SyncHotmart, TransacaoHotmart,
+  AceleraParaHM, BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, ProrataHM, SyncHotmart, TransacaoHotmart,
 } from '../domain/hotmart';
 
 function erroPara(msg: string): Resultado {
@@ -222,5 +222,15 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
   loadBoardHotmart(): Promise<BoardHotmart[]> {
     return this.rpcLista<BoardHotmart>('fn_fin_board_hotmart', {},
       'Não foi possível carregar os dados da Hotmart do board.');
+  }
+
+  loadProrataHM(valorPrograma = 15000): Promise<ProrataHM[]> {
+    return this.rpcLista<ProrataHM>('fn_fin_prorata_hm', { p_valor_programa: valorPrograma },
+      'Não foi possível calcular o pro rata do HM.');
+  }
+
+  loadAceleraParaHM(): Promise<AceleraParaHM[]> {
+    return this.rpcLista<AceleraParaHM>('fn_fin_acelera_para_hm', {},
+      'Não foi possível carregar quem subiu do Acelera para o HM.');
   }
 }

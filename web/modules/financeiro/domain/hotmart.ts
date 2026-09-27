@@ -152,6 +152,44 @@ export interface BoardHotmart {
   /** null no AURUM (planilha sem transação) e em card sem pessoa. */
   diverge: boolean | null;
   sincronizado_em: string | null;
+  /**
+   * Assinatura HM (20260928d): mensalidades pagas (oferta_modo SUBSCRIPTION) — contrato à parte, fora de
+   * vendas_pagas/pago_bruto. Por pessoa × família HM; AURUM e card sem pessoa = 0 / null.
+   * Opcionais: a função de 20260928c (antes de aplicar a 20260928d) não devolve estas colunas.
+   */
+  assinatura_mensalidades?: number;
+  assinatura_valor?: number;
+  assinatura_de?: string | null;
+  assinatura_ate?: string | null;
+  /** Última mensalidade paga há ≤ 45 dias e nenhuma parcela HM devida (≤ 120 d). null no AURUM / sem pessoa. */
+  assinatura_ativa?: boolean | null;
+}
+
+/**
+ * Pro rata do HM (fn_fin_prorata_hm, 20260928d): 1 linha por pessoa com acesso (thb_alunos.data_expiracao)
+ * e ao menos 1 venda HM paga. credito = pago_no_ciclo × meses_restantes ÷ 12; diferenca = programa − credito
+ * (piso 0). Sem Acelera. Numeric pode chegar como string pelo PostgREST.
+ */
+export interface ProrataHM {
+  pessoa_chave: string;
+  nome: string | null;
+  email: string | null;
+  turma: string | null;
+  /** Maior data_expiracao entre os alunos da pessoa. */
+  vencimento: string;
+  /** Meses cheios de hoje (America/Sao_Paulo) até o vencimento; vencido = 0. */
+  meses_restantes: number;
+  /** Vendas HM pagas com dia_aprovado em [vencimento − 12 meses − 60 dias, vencimento]. */
+  pago_no_ciclo: number;
+  pagamentos_no_ciclo: number;
+  /** Ex.: '12 mensalidades · 1 renovação'. null sem pagamento no ciclo. */
+  formas: string | null;
+  credito: number;
+  diferenca: number;
+  ultimo_pagamento: string | null;
+  tem_card: boolean;
+  contato_hm_id: string | null;
+  no_gps: boolean;
 }
 
 export interface TransacaoHotmart {
@@ -450,8 +488,38 @@ export const COLUNAS_BOARD_HOTMART = [
   'estornos', 'valor_estornado',
   'falta_no_board', 'valor_falta_no_board', 'board_sem_hotmart',
   'diverge', 'sincronizado_em',
+  'assinatura_mensalidades', 'assinatura_valor', 'assinatura_de', 'assinatura_ate', 'assinatura_ativa',
 ] as const satisfies readonly (keyof BoardHotmart)[];
+
+export const COLUNAS_PRORATA_HM = [
+  'pessoa_chave', 'nome', 'email', 'turma', 'vencimento', 'meses_restantes', 'pago_no_ciclo', 'pagamentos_no_ciclo',
+  'formas', 'credito', 'diferenca', 'ultimo_pagamento', 'tem_card', 'contato_hm_id', 'no_gps',
+] as const satisfies readonly (keyof ProrataHM)[];
 
 export const COLUNAS_IDENTIDADE_REVISAO = [
   'tipo', 'motivo', 'evidencia', 'pessoa_a', 'emails_a', 'nomes_a', 'pessoa_b', 'emails_b', 'nomes_b', 'pago_a', 'pago_b',
 ] as const satisfies readonly (keyof IdentidadeRevisao)[];
+
+/** Quem comprou o Acelera Holding e o que comprou de HM depois (fn_fin_acelera_para_hm, 27/09/2026). */
+export interface AceleraParaHM {
+  pessoa_chave: string;
+  nome: string | null;
+  email: string | null;
+  primeira_acelera: string | null;
+  acelera_pago: number;
+  acelera_funil: string | null;
+  /** Já tinha pago HM antes da 1ª compra do Acelera. */
+  ja_era_hm: boolean;
+  /** Pagou HM na data da 1ª compra do Acelera ou depois. */
+  subiu: boolean;
+  primeira_hm_depois: string | null;
+  dias_ate_subir: number | null;
+  hm_pago_depois: number;
+  hm_caminho: string | null;
+  tem_card: boolean;
+}
+
+export const COLUNAS_ACELERA_PARA_HM = [
+  'pessoa_chave', 'nome', 'email', 'primeira_acelera', 'acelera_pago', 'acelera_funil', 'ja_era_hm', 'subiu',
+  'primeira_hm_depois', 'dias_ate_subir', 'hm_pago_depois', 'hm_caminho', 'tem_card',
+] as const satisfies readonly (keyof AceleraParaHM)[];

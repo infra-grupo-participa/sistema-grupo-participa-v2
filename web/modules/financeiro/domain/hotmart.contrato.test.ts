@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { COLUNAS_BOARD_HOTMART, COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, celulaCsv, rotuloDocumento, type FunilHotmart } from './hotmart';
+import { COLUNAS_ACELERA_PARA_HM, COLUNAS_BOARD_HOTMART, COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, COLUNAS_PRORATA_HM, celulaCsv, rotuloDocumento, type FunilHotmart } from './hotmart';
 
 const migracao = (nome: string) =>
   readFileSync(fileURLToPath(new URL(`../../../../infra/supabase/migrations/${nome}`, import.meta.url)), 'utf8');
@@ -77,12 +77,42 @@ describe('contrato fn_fin_hotmart_pessoas', () => {
 });
 
 describe('contrato fn_fin_board_hotmart', () => {
-  const sql = migracao('20260928c_fn_fin_board_hotmart.sql');
+  const sql = migracao('20260928d_fin_assinatura_prorata.sql');
   it('RETURNS TABLE = colunas de BoardHotmart', () => {
     expect(colunasRetorno(sql, 'public.fn_fin_board_hotmart')).toEqual([...COLUNAS_BOARD_HOTMART]);
   });
   it('o SELECT final projeta o mesmo número de colunas', () => {
     expect(projecao(selectFinal(sql, 'public.fn_fin_board_hotmart'))).toHaveLength(COLUNAS_BOARD_HOTMART.length);
+  });
+});
+
+describe('contrato fn_fin_prorata_hm', () => {
+  const sql = migracao('20260928d_fin_assinatura_prorata.sql');
+  const corpo = sql.slice(inicioCreate(sql, 'public.fn_fin_prorata_hm'), sql.indexOf('end $$;', inicioCreate(sql, 'public.fn_fin_prorata_hm')));
+  it('RETURNS TABLE = colunas de ProrataHM', () => {
+    expect(colunasRetorno(sql, 'public.fn_fin_prorata_hm')).toEqual([...COLUNAS_PRORATA_HM]);
+  });
+  it('o SELECT final projeta o mesmo número de colunas', () => {
+    expect(projecao(selectFinal(sql, 'public.fn_fin_prorata_hm'))).toHaveLength(COLUNAS_PRORATA_HM.length);
+  });
+  it('sem Acelera: o espelho é lido só na família HM', () => {
+    expect(corpo).toMatch(/t\.familia = 'HM'/);
+    expect(corpo).not.toMatch(/ACELERA/);
+  });
+  it('não devolve documento nem telefone (LGPD)', () => {
+    expect(COLUNAS_PRORATA_HM.join(' ')).not.toMatch(/documento|telefone/);
+  });
+  it('guarda de permissão e grant só para authenticated', () => {
+    expect(corpo).toMatch(/gp_pode_ver_financeiro\(\)/);
+    expect(sql).toMatch(/revoke all on function public\.fn_fin_prorata_hm\(numeric\) from public, anon;/);
+  });
+});
+
+describe('contrato fn_fin_board_hotmart — assinatura fora do pago do card', () => {
+  const sql = migracao('20260928d_fin_assinatura_prorata.sql');
+  it('o escopo do pago continua sinal / diferenca / compra_cheia', () => {
+    const corpo = sql.slice(inicioCreate(sql, 'public.fn_fin_board_hotmart'));
+    expect(corpo).toMatch(/cat\.categoria in \('sinal','diferenca','compra_cheia'\)/);
   });
 });
 
@@ -154,5 +184,12 @@ describe('celulaCsv — casos do pentest de 27/09', () => {
   });
   it('texto comum com espaço no início não muda', () => {
     expect(celulaCsv(' Maria')).toBe(' Maria');
+  });
+});
+
+describe('contrato fn_fin_acelera_para_hm', () => {
+  it('RETURNS TABLE = colunas de AceleraParaHM', () => {
+    const sql = migracao('20260928e_fin_acelera_para_hm.sql');
+    expect(colunasRetorno(sql, 'public.fn_fin_acelera_para_hm')).toEqual([...COLUNAS_ACELERA_PARA_HM]);
   });
 });

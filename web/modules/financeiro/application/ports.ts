@@ -6,7 +6,7 @@ import type {
   Meta, Oferta, OfertaOrfa, ReguaPasso, SaudeCheck, TurmaFin,
 } from '../domain/types';
 import type {
-  BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, SyncHotmart, TransacaoHotmart,
+  AceleraParaHM, BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, ProrataHM, SyncHotmart, TransacaoHotmart,
 } from '../domain/hotmart';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
@@ -62,4 +62,8 @@ export interface FinanceiroRepository {
   loadHotmartIdentidade(): Promise<IdentidadeRevisao[]>;
   /** fn_fin_board_hotmart — card do board × espelho Hotmart, por pessoa/família. */
   loadBoardHotmart(): Promise<BoardHotmart[]>;
+  /** fn_fin_prorata_hm — pro rata do HM por pessoa (regra do João, 27/09). */
+  loadProrataHM(valorPrograma?: number): Promise<ProrataHM[]>;
+  /** fn_fin_acelera_para_hm — quem comprou o Acelera e o que comprou de HM depois. */
+  loadAceleraParaHM(): Promise<AceleraParaHM[]>;
 }
