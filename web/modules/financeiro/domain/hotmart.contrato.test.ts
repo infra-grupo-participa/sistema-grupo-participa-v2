@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, celulaCsv, rotuloDocumento } from './hotmart';
+import { COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, celulaCsv, rotuloDocumento, type FunilHotmart } from './hotmart';
 
 const migracao = (nome: string) =>
   readFileSync(fileURLToPath(new URL(`../../../../infra/supabase/migrations/${nome}`, import.meta.url)), 'utf8');
@@ -108,5 +108,16 @@ describe('contrato fn_fin_hotmart_faturamento', () => {
     const corpo = sql.slice(sql.lastIndexOf('function public.fn_fin_hotmart_faturamento('));
     const fim = corpo.indexOf('end $$;');
     expect(corpo.slice(0, fim)).not.toMatch(/v_fim\s*-\s*v_ini\s*>\s*\d+/);
+  });
+});
+
+describe('contrato fn_fin_hotmart_funis', () => {
+  const COLUNAS_FUNIL = [
+    'funil', 'vale_de', 'vale_ate', 'vendas', 'compradores', 'valor_oferta', 'cobrado_cliente', 'juros', 'taxa_hotmart',
+    'liquido', 'estornos', 'valor_estornado', 'recusadas', 'boletos', 'parcelado', 'parcelas_media',
+  ] as const satisfies readonly (keyof FunilHotmart)[];
+  it('RETURNS TABLE = colunas de FunilHotmart', () => {
+    const sql = migracao('20260927h_fin_acelera_e_funis.sql');
+    expect(colunasRetorno(sql, 'public.fn_fin_hotmart_funis')).toEqual([...COLUNAS_FUNIL]);
   });
 });

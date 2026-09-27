@@ -16,9 +16,9 @@ import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData, fmtDataHora } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../application/ports';
 import {
-  celulaCsv, contarSituacoes, ORDEM_SITUACAO, REGRA_TAXA_HOTMART, resumirHotmart, ROTULO_GRUPO, ROTULO_SITUACAO,
+  celulaCsv, contarSituacoes, ORDEM_SITUACAO, QUEM_DIVIDE, REGRA_TAXA_HOTMART, resumirHotmart, ROTULO_GRUPO, ROTULO_SITUACAO,
   rotuloDocumento, serieHotmart,
-  type DiaHotmart, type DivergenciaHotmart, type FamiliaHotmart, type OfertaHotmart,
+  ROTULO_FAMILIA, type DiaHotmart, type DivergenciaHotmart, type FamiliaHotmart, type FunilHotmart, type OfertaHotmart,
   type IdentidadeRevisao, type PessoaHotmart, type SituacaoPessoa, type SyncHotmart, type TransacaoHotmart,
 } from '../domain/hotmart';
 
@@ -76,7 +76,7 @@ export function Hotmart({ repo }: { repo: FinanceiroRepository }) {
           </button>
         ))}
         <span className="mx-1 h-5 w-px bg-[var(--border)]" aria-hidden="true" />
-        {(['HM', 'AURUM'] as FamiliaHotmart[]).map((f) => (
+        {(['HM', 'AURUM', 'ACELERA'] as FamiliaHotmart[]).map((f) => (
           <button
             key={f}
             type="button"
@@ -84,7 +84,7 @@ export function Hotmart({ repo }: { repo: FinanceiroRepository }) {
             onClick={() => setFamilia(f)}
             className={`rounded-[var(--r-md)] border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${familia === f ? 'border-[var(--accent)] text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-3)]'}`}
           >
-            {f === 'HM' ? 'Holding Masters' : 'Aurum'}
+            {ROTULO_FAMILIA[f]}
           </button>
         ))}
         <SyncSelo sync={sync} />
@@ -176,12 +176,12 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
               hint={`${resumo.vendas} venda(s) paga(s) · preço das ofertas`}
               title="Soma do preço das ofertas vendidas e pagas. Não inclui os juros do parcelamento, que o cliente paga à Hotmart." />
             <KpiCard label="− Taxa da Hotmart" value={fmtBRL(resumo.taxa)} bar="yellow"
-              hint={resumo.taxaPct != null ? `${(resumo.taxaPct * 100).toFixed(2)}% do bruto · ${REGRA_TAXA_HOTMART}` : REGRA_TAXA_HOTMART}
-              title="O que a Hotmart cobra de nós por venda. Regra medida em 27/09/2026: 4% do valor da oferta + R$ 1 por venda." />
+              hint={resumo.taxaPct != null ? `${(resumo.taxaPct * 100).toFixed(2)}% do bruto · ${REGRA_TAXA_HOTMART[familia]}` : REGRA_TAXA_HOTMART[familia]}
+              title={`O que a Hotmart cobra de nós por venda. Regra medida em 27/09/2026: ${REGRA_TAXA_HOTMART[familia]}.`} />
             {resumo.repasses > 0 && (
               <KpiCard label="− Coprodução / afiliados" value={fmtBRL(resumo.repasses)} bar="purple"
-                hint="coprodutor, afiliados e add-on (produtos antigos do Aurum)"
-                title="Oferta − taxa − líquido: comissão de coprodutor (Borboleta Digital), de afiliados e do add-on Club nas vendas antigas do Aurum." />
+                hint={QUEM_DIVIDE[familia]}
+                title={`Oferta − taxa − líquido: ${QUEM_DIVIDE[familia]}.`} />
             )}
             <KpiCard label="= Líquido (fica para nós)" value={fmtBRL(resumo.liquido)} bar="green"
               hint={resumo.margem != null ? `${(resumo.margem * 100).toFixed(1)}% do bruto${resumo.liquidoEstimado ? ` · ${resumo.liquidoEstimado} estimado(s)` : ''}` : 'sem venda no período'}
@@ -196,6 +196,7 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
             <KpiCard label="Cartões recusados" value={String(resumo.recusadas)} bar="gray"
               hint="tentativas de compra que não passaram" />
           </div>
+          <PorFunil repo={repo} familia={familia} de={intervalo.de} ate={intervalo.ate} />
           <SectionCard title="Dia a dia" subtitle="Dia da aprovação do pagamento (horário de São Paulo). Recusas e boletos contam no dia do pedido. Dia sem venda aparece como R$ 0.">
             {!serie.length ? <EmptyState title="Nenhuma movimentação no período" icon="trending-up" /> : (
               <DataTable minWidth={1100}>
@@ -235,6 +236,40 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
         </>
       )}
     </div>
+  );
+}
+
+/** Faturamento por funil (janelas de fin.funis). Só aparece quando a família tem funil cadastrado. */
+function PorFunil({ repo, familia, de, ate }: { repo: FinanceiroRepository; familia: FamiliaHotmart; de: string; ate: string }) {
+  const { dados, erro } = useCarga<FunilHotmart[]>(() => repo.loadHotmartFunis(familia, de, ate), [familia, de, ate]);
+  if (erro) return <Erro msg={erro} />;
+  if (!dados || !dados.some((f) => f.funil !== 'Sem funil')) return null;
+  const n = (v: unknown) => Number(v ?? 0) || 0;
+  return (
+    <SectionCard title="Por funil" subtitle="De onde veio cada venda (janela de datas do funil). Juros e parcelamento mostram como o cliente pagou.">
+      <DataTable minWidth={1000}>
+        <Thead>
+          <Th>Funil</Th><Th>Vendas</Th><Th>Compradores</Th><Th>Bruto</Th><Th>Taxa Hotmart</Th><Th>Líquido</Th>
+          <Th>Cliente pagou (c/ juros)</Th><Th>Parcelado</Th><Th>Reembolsos</Th><Th>Recusados</Th>
+        </Thead>
+        <tbody>
+          {dados.map((f) => (
+            <Tr key={f.funil}>
+              <Td className="font-medium">{f.funil}</Td>
+              <Td className="tabular">{f.vendas}</Td>
+              <Td className="tabular">{f.compradores}</Td>
+              <Td className="tabular font-semibold">{fmtBRL(n(f.valor_oferta))}</Td>
+              <Td className="tabular text-[var(--fg-2)]">{fmtBRL(n(f.taxa_hotmart))}</Td>
+              <Td className="tabular font-semibold text-[var(--green)]">{fmtBRL(n(f.liquido))}</Td>
+              <Td className="tabular text-[var(--fg-2)]">{fmtBRL(n(f.cobrado_cliente))}<span className="ml-1 text-[10px] text-[var(--fg-3)]">juros {fmtBRL(n(f.juros))}</span></Td>
+              <Td className="tabular text-[var(--fg-2)]">{f.vendas ? `${f.parcelado} de ${f.vendas}` : '—'}{f.parcelas_media ? <span className="ml-1 text-[10px] text-[var(--fg-3)]">média {Number(f.parcelas_media).toFixed(1)}x</span> : null}</Td>
+              <Td className="tabular">{f.estornos ? <span className="text-[var(--red)]">{f.estornos} · {fmtBRL(n(f.valor_estornado))}</span> : '—'}</Td>
+              <Td className="tabular text-[var(--fg-3)]">{f.recusadas || '—'}</Td>
+            </Tr>
+          ))}
+        </tbody>
+      </DataTable>
+    </SectionCard>
   );
 }
 

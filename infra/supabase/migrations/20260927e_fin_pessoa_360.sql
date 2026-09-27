@@ -104,7 +104,7 @@ begin
            bool_or(coalesce(b.solicitou_cancelamento, false)) solicitou
       from email_pessoa e
       join public.compradores c on lower(trim(c.email)) = e.email
-      join cs.vw_fin_board b on b.comprador_id = c.id and b.origem = case p_familia when 'AURUM' then 'AURUM' else 'HM' end
+      join cs.vw_fin_board b on b.comprador_id = c.id and b.origem = p_familia  -- só HM e AURUM têm card; ACELERA não casa com nada
      group by e.pessoa
   ), aluno as (
     select e.pessoa, max(a.data_expiracao) acesso,

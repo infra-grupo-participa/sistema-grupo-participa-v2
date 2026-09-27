@@ -6,7 +6,7 @@ import type {
   Meta, Oferta, OfertaOrfa, ReguaPasso, SaudeCheck, TurmaFin,
 } from '../domain/types';
 import type {
-  DiaHotmart, DivergenciaHotmart, FamiliaHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, SyncHotmart, TransacaoHotmart,
+  DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, SyncHotmart, TransacaoHotmart,
 } from '../domain/hotmart';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
@@ -53,6 +53,7 @@ export interface FinanceiroRepository {
 
   // ── Espelho da Hotmart (schema fin, só leitura — 27/09/2026) ─────────────
   loadHotmartFaturamento(familia: FamiliaHotmart, inicio: string | null, fim: string | null): Promise<DiaHotmart[]>;
+  loadHotmartFunis(familia: FamiliaHotmart, inicio: string | null, fim: string | null): Promise<FunilHotmart[]>;
   loadHotmartPessoas(familia: FamiliaHotmart): Promise<PessoaHotmart[]>;
   loadHotmartExtrato(email: string): Promise<TransacaoHotmart[]>;
   loadHotmartOfertas(familia: FamiliaHotmart): Promise<OfertaHotmart[]>;

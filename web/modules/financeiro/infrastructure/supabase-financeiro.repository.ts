@@ -12,7 +12,7 @@ import type {
 } from '../domain/types';
 import type { FinanceiroRepository, Resultado } from '../application/ports';
 import type {
-  DiaHotmart, DivergenciaHotmart, FamiliaHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, SyncHotmart, TransacaoHotmart,
+  DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, SyncHotmart, TransacaoHotmart,
 } from '../domain/hotmart';
 
 function erroPara(msg: string): Resultado {
@@ -181,6 +181,11 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
   loadHotmartFaturamento(familia: FamiliaHotmart, inicio: string | null, fim: string | null): Promise<DiaHotmart[]> {
     return this.rpcLista<DiaHotmart>('fn_fin_hotmart_faturamento', { p_familia: familia, p_inicio: inicio, p_fim: fim },
       'Não foi possível carregar o faturamento da Hotmart.');
+  }
+
+  loadHotmartFunis(familia: FamiliaHotmart, inicio: string | null, fim: string | null): Promise<FunilHotmart[]> {
+    return this.rpcLista<FunilHotmart>('fn_fin_hotmart_funis', { p_familia: familia, p_inicio: inicio, p_fim: fim },
+      'Não foi possível carregar o faturamento por funil.');
   }
 
   loadHotmartPessoas(familia: FamiliaHotmart): Promise<PessoaHotmart[]> {

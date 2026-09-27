@@ -11,7 +11,33 @@
 //   taxaHotmart  — 4% + R$ 1 sobre o valor da oferta.
 //   liquido      — o que fica para o produtor (comissão PRODUCER).
 
-export type FamiliaHotmart = 'HM' | 'AURUM';
+export type FamiliaHotmart = 'HM' | 'AURUM' | 'ACELERA';
+
+/** Rótulo de tela da família (fin.produtos.familia). Acelera Holding = preparatório do HM (27/09/2026). */
+export const ROTULO_FAMILIA: Record<FamiliaHotmart, string> = {
+  HM: 'Holding Masters', AURUM: 'Aurum', ACELERA: 'Acelera Holding',
+};
+
+/** Faturamento por funil (fin.funis: janela de datas por família), de fn_fin_hotmart_funis. */
+export interface FunilHotmart {
+  funil: string;
+  vale_de: string | null;
+  vale_ate: string | null;
+  vendas: number;
+  compradores: number;
+  valor_oferta: number;
+  cobrado_cliente: number;
+  juros: number;
+  taxa_hotmart: number;
+  liquido: number;
+  estornos: number;
+  valor_estornado: number;
+  recusadas: number;
+  boletos: number;
+  /** Vendas pagas em mais de 1 parcela. */
+  parcelado: number;
+  parcelas_media: number | null;
+}
 
 export interface DiaHotmart {
   dia: string;
@@ -190,12 +216,23 @@ export function resumirHotmart(dias: DiaHotmart[]): ResumoHotmart {
 }
 
 /**
- * Regra de cobrança da Hotmart, medida em 27/09/2026 sobre 3.571 vendas pagas (HM + Aurum):
- * **4% do valor da oferta + R$ 1 por venda** (≈ 95% das vendas; até 2024 algumas saíam a ~6%).
- * Taxa efetiva 4,05% nos dois produtos. Juros do parcelamento são pagos pelo CLIENTE e ficam com
- * a Hotmart — não saem do nosso bruto nem entram no líquido.
+ * Regra de cobrança da Hotmart por produto, medida em 27/09/2026 sobre as vendas pagas:
+ * - HM e Aurum: **4% do valor da oferta + R$ 1** (≈ 95% de 3.571 vendas; até 2024 algumas saíam a ~6%). Efetiva 4,05%.
+ * - Acelera Holding: **5,3% + R$ 1** (414 de 415 vendas). Efetiva 5,35%.
+ * Juros do parcelamento são pagos pelo CLIENTE e ficam com a Hotmart — não saem do bruto nem entram no líquido.
  */
-export const REGRA_TAXA_HOTMART = '4% do valor + R$ 1 por venda';
+export const REGRA_TAXA_HOTMART: Record<FamiliaHotmart, string> = {
+  HM: '4% do valor + R$ 1 por venda',
+  AURUM: '4% do valor + R$ 1 por venda',
+  ACELERA: '5,3% do valor + R$ 1 por venda',
+};
+
+/** Quem divide a venda com o produtor, por produto (comissões COPRODUCER/AFFILIATE/ADDON da API). */
+export const QUEM_DIVIDE: Record<FamiliaHotmart, string> = {
+  HM: 'coprodutor, afiliados e add-on',
+  AURUM: 'coprodutor (Borboleta Digital), afiliados e add-on — produtos antigos do Aurum',
+  ACELERA: 'coprodutores Filipe Jung Jorge e Henrique Brenha, e add-on',
+};
 
 export interface DiaHotmartSerie {
   dia: string;
