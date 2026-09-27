@@ -11,6 +11,7 @@ import type {
   Oferta, OfertaOrfa, ReguaPasso, SaudeCheck, TurmaFin,
 } from '../domain/types';
 import type { FinanceiroRepository, Resultado } from '../application/ports';
+import { VALOR_PROGRAMA_HM } from '../domain/prorata-hm';
 import type {
   AceleraParaHM, BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, ProrataDiagnostico, ProrataHM, SyncHotmart, TransacaoHotmart,
 } from '../domain/hotmart';
@@ -224,7 +225,7 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
       'Não foi possível carregar os dados da Hotmart do board.');
   }
 
-  loadProrataHM(valorPrograma = 15000): Promise<ProrataHM[]> {
+  loadProrataHM(valorPrograma = VALOR_PROGRAMA_HM): Promise<ProrataHM[]> {
     return this.rpcLista<ProrataHM>('fn_fin_prorata_hm', { p_valor_programa: valorPrograma },
       'Não foi possível calcular o pro rata do HM.');
   }
@@ -234,7 +235,7 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
       'Não foi possível carregar quem subiu do Acelera para o HM.');
   }
 
-  async loadProrataDiagnostico(email: string, vencimento: string | null = null, valorPrograma = 15000): Promise<ProrataDiagnostico | null> {
+  async loadProrataDiagnostico(email: string, vencimento: string | null = null, valorPrograma = VALOR_PROGRAMA_HM): Promise<ProrataDiagnostico | null> {
     const { data, error } = await this.db().rpc('fn_fin_prorata_diagnostico',
       { p_email: email, p_vencimento: vencimento, p_valor_programa: valorPrograma });
     logQueryError('loadProrataDiagnostico', error);

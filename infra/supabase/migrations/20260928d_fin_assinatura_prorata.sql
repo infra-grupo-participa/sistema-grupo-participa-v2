@@ -162,6 +162,9 @@ returns table (
   pago_no_ciclo numeric, pagamentos_no_ciclo int, formas text, credito numeric, diferenca numeric,
   ultimo_pagamento date, tem_card boolean, contato_hm_id uuid, no_gps boolean)
 language plpgsql stable security definer set search_path = ''
+-- sem laço aninhado: com ele o planejador reavalia cic/crd por linha (34,8 s); com hash, 265 ms (27/09). Mantenha no cabeçalho —
+-- um create or replace sem esta linha apaga o ajuste em silêncio (o teste de contrato cobra).
+set enable_nestloop = off
 as $$
 #variable_conflict use_column
 begin

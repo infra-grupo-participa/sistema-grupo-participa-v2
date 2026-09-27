@@ -4,9 +4,9 @@
 // de "hoje" e de pagamentos novos). Falha não fica em cache: a próxima ficha tenta de novo.
 import type { FinanceiroRepository } from './ports';
 import type { ProrataHM } from '../domain/hotmart';
-import { normalizarProrataHM } from '../domain/prorata-hm';
+import { normalizarProrataHM, VALOR_PROGRAMA_HM } from '../domain/prorata-hm';
 
-export const VALOR_PROGRAMA_HM = 15000;
+export { VALOR_PROGRAMA_HM };
 const VALIDADE_MS = 10 * 60 * 1000;
 
 type Entrada = { em: number; p: Promise<ProrataHM[]> };

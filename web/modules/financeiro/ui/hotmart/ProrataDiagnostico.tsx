@@ -12,8 +12,9 @@ import { fmtBRLc, fmtData } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../../application/ports';
 import type { ProrataPagamento } from '../../domain/hotmart';
 import { Erro, useCarga } from './comum';
+import { VALOR_PROGRAMA_HM } from '../../domain/prorata-hm';
 
-const VALOR_PADRAO = 15000;
+const VALOR_PADRAO = VALOR_PROGRAMA_HM;
 
 export function ProrataDiagnostico({ repo, email, onClose }: {
   repo: FinanceiroRepository; email: string; onClose: () => void;

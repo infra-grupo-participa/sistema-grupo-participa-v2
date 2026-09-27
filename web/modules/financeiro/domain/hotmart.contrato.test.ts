@@ -193,3 +193,14 @@ describe('contrato fn_fin_acelera_para_hm', () => {
     expect(colunasRetorno(sql, 'public.fn_fin_acelera_para_hm')).toEqual([...COLUNAS_ACELERA_PARA_HM]);
   });
 });
+
+describe('fn_fin_prorata_hm — desempenho protegido', () => {
+  // Sem 'set enable_nestloop = off' a função volta a 34,8 s (medido 27/09). O ajuste tem de estar no CABEÇALHO
+  // da última definição: um create or replace sem ele apaga o atributo em silêncio.
+  it('última definição declara set enable_nestloop = off antes do corpo', () => {
+    const sql = migracao('20260928d_fin_assinatura_prorata.sql');
+    const ini = sql.lastIndexOf('create or replace function public.fn_fin_prorata_hm(');
+    const cabecalho = sql.slice(ini, sql.indexOf('as $$', ini));
+    expect(cabecalho).toMatch(/set\s+enable_nestloop\s*=\s*off/i);
+  });
+});

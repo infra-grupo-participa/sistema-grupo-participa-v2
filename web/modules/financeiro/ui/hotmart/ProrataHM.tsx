@@ -11,6 +11,8 @@ import type { FinanceiroRepository } from '../../application/ports';
 import { celulaCsv, type ProrataHM as LinhaProrataHM } from '../../domain/hotmart';
 import { Chip, Erro, useCarga } from './comum';
 import { ProrataDiagnostico } from './ProrataDiagnostico';
+import { carregarProrataHM } from '../../application/carregar-prorata';
+import { hojeSaoPaulo, VALOR_PROGRAMA_HM } from '../../domain/prorata-hm';
 
 type Filtro = 'credito' | 'vence60' | 'vencido' | 'gps' | null;
 
@@ -24,7 +26,8 @@ function diffDias(iso: string, hojeISO: string): number {
 }
 
 export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
-  const { dados, erro } = useCarga<LinhaProrataHM[]>(() => repo.loadProrataHM(15000), []);
+  // mesma carga (e mesmo cache de 10 min) da ficha do board: uma consulta, não duas
+  const { dados, erro } = useCarga<LinhaProrataHM[]>(() => carregarProrataHM(repo), []);
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<Filtro>(null);
   const [abertoEmail, setAbertoEmail] = useState<string | null>(null);
@@ -32,7 +35,7 @@ export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
   if (erro) return <Erro msg={erro} />;
   if (!dados) return <Loading label="Calculando o pro rata do HM…" minHeight={200} />;
 
-  const hojeISO = new Date().toISOString().slice(0, 10);
+  const hojeISO = hojeSaoPaulo();
 
   const comCredito = dados.filter((p) => Number(p.credito) > 0).length;
   const somaCreditos = dados.reduce((s, p) => s + Number(p.credito), 0);
@@ -60,7 +63,7 @@ export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
       <SectionCard title="Como o crédito é calculado">
         <p className="text-sm text-[var(--fg-2)] leading-relaxed">
           Crédito = o que a pessoa pagou no HM no ciclo atual × meses cheios que faltam do acesso ÷ 12.
-          Diferença = R$ 15.000 − crédito. O vencimento vem da turma.
+          Diferença = {fmtBRLc(VALOR_PROGRAMA_HM)} − crédito. O vencimento vem da turma.
         </p>
       </SectionCard>
 

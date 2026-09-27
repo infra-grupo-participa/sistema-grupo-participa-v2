@@ -5,6 +5,14 @@
 // banco; aqui só normaliza números e acha a linha do card aberto na ficha.
 import type { BoardHotmart, ProrataHM } from './hotmart';
 
+/** Valor do Programa de Implementação Assistida usado no pro rata (fonte única — telas, repositório e ficha). */
+export const VALOR_PROGRAMA_HM = 15000;
+
+/** 'YYYY-MM-DD' de hoje em São Paulo (o banco calcula o ciclo nesse fuso). */
+export function hojeSaoPaulo(agora: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(agora);
+}
+
 const num = (v: unknown): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
