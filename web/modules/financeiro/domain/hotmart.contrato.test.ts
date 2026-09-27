@@ -142,3 +142,17 @@ describe('contrato fn_fin_hotmart_funis', () => {
     expect(colunasRetorno(sql, 'public.fn_fin_hotmart_funis')).toEqual([...COLUNAS_FUNIL]);
   });
 });
+
+describe('celulaCsv — casos do pentest de 27/09', () => {
+  it('CR no meio do texto fica entre aspas (não quebra a célula)', () => {
+    expect(celulaCsv('x\r=HYPERLINK(A1)')).toBe('"x\r=HYPERLINK(A1)"');
+  });
+  it('espaço antes do = e = de largura cheia ganham apóstrofo', () => {
+    expect(celulaCsv(' =1+1').startsWith("'")).toBe(true);
+    expect(celulaCsv('＝1+1').startsWith("'")).toBe(true);
+    expect(celulaCsv('＋55 11').startsWith("'")).toBe(true);
+  });
+  it('texto comum com espaço no início não muda', () => {
+    expect(celulaCsv(' Maria')).toBe(' Maria');
+  });
+});

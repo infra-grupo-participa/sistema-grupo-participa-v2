@@ -418,13 +418,16 @@ export function rotuloMetodo(metodo: string | null): string {
 }
 
 /**
- * Célula de CSV (separador ;). Nome e origem vêm de terceiros (Hotmart): célula que começa
- * com = + - @ tab ou CR ganha apóstrofo, para o Excel/Sheets ler como texto e não fórmula.
+ * Célula de CSV (separador ;). Nome, cidade e origem (sck) vêm de terceiros (Hotmart):
+ * - célula que começa (depois de espaços) com = + - @ — inclusive as de largura cheia ＝＋－＠ — ou tab/CR
+ *   ganha apóstrofo, para o Excel/Sheets ler como texto e não fórmula;
+ * - CR ou LF no MEIO do texto também força aspas: o Excel lê `\r` solto como fim de linha e a fórmula
+ *   depois dele abriria célula nova (pentest 27/09).
  */
 export function celulaCsv(v: unknown): string {
   let t = v == null ? '' : String(v);
-  if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
-  return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  if (/^\s*[=+\-@＝＋－＠]/.test(t) || /^[\t\r]/.test(t)) t = `'${t}`;
+  return /[;"\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
 }
 
 /** Colunas que as RPCs devolvem — o teste de contrato confere contra o RETURNS TABLE das migrações. */
