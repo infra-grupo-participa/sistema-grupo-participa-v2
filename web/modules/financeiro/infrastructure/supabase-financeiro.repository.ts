@@ -12,7 +12,7 @@ import type {
 } from '../domain/types';
 import type { FinanceiroRepository, Resultado } from '../application/ports';
 import type {
-  DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, SyncHotmart, TransacaoHotmart,
+  BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, SyncHotmart, TransacaoHotmart,
 } from '../domain/hotmart';
 
 function erroPara(msg: string): Resultado {
@@ -217,5 +217,10 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
   loadHotmartIdentidade(): Promise<IdentidadeRevisao[]> {
     return this.rpcLista<IdentidadeRevisao>('fn_fin_hotmart_identidade', {},
       'Não foi possível carregar a revisão de identidade.');
+  }
+
+  loadBoardHotmart(): Promise<BoardHotmart[]> {
+    return this.rpcLista<BoardHotmart>('fn_fin_board_hotmart', {},
+      'Não foi possível carregar os dados da Hotmart do board.');
   }
 }

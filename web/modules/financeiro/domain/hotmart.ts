@@ -398,6 +398,26 @@ export function rotuloDocumento(doc: string): string {
 }
 
 /**
+ * Rótulo pt-BR do método de pagamento (fin.*.metodo — vem cru da API da Hotmart, ex.:
+ * CREDIT_CARD_VISA, CREDIT_CARD_MASTERCARD, BILLET, PIX, PAYPAL, APPLE_PAY, GOOGLE_PAY…).
+ * Qualquer CREDIT_CARD_* cai em "Cartão" — a bandeira não importa para o financeiro.
+ * Desconhecido: Title Case do texto cru (nunca esconde um método novo como "—").
+ */
+export function rotuloMetodo(metodo: string | null): string {
+  if (!metodo) return '—';
+  const m = metodo.toUpperCase();
+  if (m.startsWith('CREDIT_CARD')) return 'Cartão';
+  if (m === 'BILLET' || m === 'BOLETO') return 'Boleto';
+  if (m === 'PIX') return 'Pix';
+  const CONHECIDOS: Record<string, string> = {
+    PAYPAL: 'PayPal', APPLE_PAY: 'Apple Pay', GOOGLE_PAY: 'Google Pay', SAMSUNG_PAY: 'Samsung Pay',
+    DIRECT_BANK_TRANSFER: 'Transferência bancária', HOTCARD: 'HotCard', PICPAY: 'PicPay',
+  };
+  if (CONHECIDOS[m]) return CONHECIDOS[m];
+  return m.split('_').filter(Boolean).map((w) => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
+}
+
+/**
  * Célula de CSV (separador ;). Nome e origem vêm de terceiros (Hotmart): célula que começa
  * com = + - @ tab ou CR ganha apóstrofo, para o Excel/Sheets ler como texto e não fórmula.
  */

@@ -22,7 +22,7 @@ import { ROTULO_COR, type CorStatus } from '../domain/cor-status';
 import { FichaDrawer } from './FichaDrawer';
 import { Relatorios } from './Relatorios';
 import { Ofertas } from './Ofertas';
-import { Hotmart } from './Hotmart';
+import { FaturamentoDiario } from './FaturamentoDiario';
 
 type Tab = 'board' | 'faturamento' | 'relatorios' | 'ofertas';
 
@@ -361,7 +361,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         )
       )}
 
-      {tab === 'faturamento' && <Hotmart repo={repo} />}
+      {tab === 'faturamento' && <FaturamentoDiario repo={repo} />}
 
       {tab === 'relatorios' && (
         board ? <Relatorios contas={contasDoRecorte} turma={turma} canVerDoc={canVerDoc} /> : <Loading label="Carregando…" minHeight={200} />

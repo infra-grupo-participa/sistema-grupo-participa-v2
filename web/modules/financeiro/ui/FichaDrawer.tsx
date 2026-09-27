@@ -15,7 +15,7 @@ import { labelMotivoReuniao } from '../domain/reuniao';
 import { statusCompraLabel, statusTone, TONE_BADGE } from './cor';
 import { FichaResumoTopo } from './FichaResumoTopo';
 import type { FinanceiroRepository } from '../application/ports';
-import { ExtratoHotmart } from './Hotmart';
+import { ExtratoHotmart } from './hotmart/ExtratoHotmart';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
 
 const CANAIS_COBRANCA = ['WhatsApp', 'E-mail', 'Ligação', 'Reunião'];

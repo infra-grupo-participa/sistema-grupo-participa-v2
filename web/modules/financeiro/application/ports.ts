@@ -6,7 +6,7 @@ import type {
   Meta, Oferta, OfertaOrfa, ReguaPasso, SaudeCheck, TurmaFin,
 } from '../domain/types';
 import type {
-  DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, SyncHotmart, TransacaoHotmart,
+  BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, SyncHotmart, TransacaoHotmart,
 } from '../domain/hotmart';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
@@ -60,4 +60,6 @@ export interface FinanceiroRepository {
   loadHotmartConciliacao(familia: FamiliaHotmart): Promise<DivergenciaHotmart[]>;
   loadHotmartSync(): Promise<SyncHotmart | null>;
   loadHotmartIdentidade(): Promise<IdentidadeRevisao[]>;
+  /** fn_fin_board_hotmart — card do board × espelho Hotmart, por pessoa/família. */
+  loadBoardHotmart(): Promise<BoardHotmart[]>;
 }

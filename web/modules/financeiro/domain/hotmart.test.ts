@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { contarSituacoes, resumirHotmart, serieHotmart, type DiaHotmart, type PessoaHotmart } from './hotmart';
+import { contarSituacoes, resumirHotmart, rotuloMetodo, serieHotmart, type DiaHotmart, type PessoaHotmart } from './hotmart';
 
 function dia(over: Partial<DiaHotmart> = {}): DiaHotmart {
   return {
@@ -76,5 +76,29 @@ describe('resumirHotmart — do bruto ao líquido', () => {
     expect(r.valorOferta - r.taxa - r.repasses).toBeCloseTo(r.liquido, 2);
     expect(r.taxaPct).toBeCloseTo(0.0401, 4);
     expect(resumirHotmart([]).taxaPct).toBeNull();
+  });
+});
+
+describe('rotuloMetodo', () => {
+  it('qualquer bandeira de cartão vira "Cartão"', () => {
+    expect(rotuloMetodo('CREDIT_CARD_VISA')).toBe('Cartão');
+    expect(rotuloMetodo('CREDIT_CARD_MASTERCARD')).toBe('Cartão');
+    expect(rotuloMetodo('CREDIT_CARD')).toBe('Cartão');
+  });
+  it('boleto e pix', () => {
+    expect(rotuloMetodo('BILLET')).toBe('Boleto');
+    expect(rotuloMetodo('BOLETO')).toBe('Boleto');
+    expect(rotuloMetodo('PIX')).toBe('Pix');
+  });
+  it('métodos conhecidos ganham nome simples', () => {
+    expect(rotuloMetodo('PAYPAL')).toBe('PayPal');
+    expect(rotuloMetodo('APPLE_PAY')).toBe('Apple Pay');
+    expect(rotuloMetodo('GOOGLE_PAY')).toBe('Google Pay');
+  });
+  it('método desconhecido: Title Case do texto cru, nunca escondido', () => {
+    expect(rotuloMetodo('SOME_NEW_METHOD')).toBe('Some New Method');
+  });
+  it('sem método: travessão', () => {
+    expect(rotuloMetodo(null)).toBe('—');
   });
 });
