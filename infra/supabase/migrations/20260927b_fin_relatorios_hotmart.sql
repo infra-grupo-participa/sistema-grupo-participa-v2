@@ -18,7 +18,13 @@ select
   t.transacao, t.produto_id, coalesce(p.familia, 'OUTRO') as familia, coalesce(p.papel, 'desconhecido') as papel_produto,
   t.produto_nome, t.oferta_codigo, t.oferta_modo, t.status, t.recorrencia, t.metodo, t.tipo_pagamento, t.parcelas,
   coalesce(t.valor_base, nullif(t.bruto_json #>> '{purchase,hotmart_fee,base}', '')::numeric, t.valor_cobrado) as valor_oferta,
-  t.valor_cobrado, coalesce(t.juros_parcelamento, 0) as juros, t.taxa_hotmart,
+  t.valor_cobrado,
+  -- juros do cliente = o que ele pagou acima do valor da oferta. A Hotmart informa juros_parcelamento = 0 no
+  -- boleto parcelado e em parte do Pix/cartão (108 vendas, R$ 21 mil medidos em 27/09/2026), mas cobra a mais.
+  greatest(coalesce(t.juros_parcelamento, 0),
+           t.valor_cobrado - coalesce(t.valor_base, nullif(t.bruto_json #>> '{purchase,hotmart_fee,base}', '')::numeric, t.valor_cobrado),
+           0) as juros,
+  t.taxa_hotmart,
   case
     when t.status in ('APPROVED','COMPLETE') then
       coalesce(t.liquido_produtor,

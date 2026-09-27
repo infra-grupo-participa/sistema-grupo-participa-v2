@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, celulaCsv, rotuloDocumento, type FunilHotmart } from './hotmart';
+import { COLUNAS_BOARD_HOTMART, COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, celulaCsv, rotuloDocumento, type FunilHotmart } from './hotmart';
 
 const migracao = (nome: string) =>
   readFileSync(fileURLToPath(new URL(`../../../../infra/supabase/migrations/${nome}`, import.meta.url)), 'utf8');
@@ -27,9 +27,16 @@ function dividirTopo(s: string): string[] {
   return partes;
 }
 
+/** Posição do CREATE da função — não do `drop function <nome>(...)` que o precede na migração. */
+function inicioCreate(sql: string, funcao: string): number {
+  const nome = funcao.replace(/\./g, '\\.');
+  const m = new RegExp(`create\\s+(or\\s+replace\\s+)?function\\s+${nome}\\(`, 'i').exec(sql);
+  if (!m) throw new Error(`create function ${funcao} não encontrado`);
+  return m.index;
+}
+
 function colunasRetorno(sql: string, funcao: string): string[] {
-  const ini = sql.indexOf(`function ${funcao}(`);
-  const trecho = sql.slice(ini);
+  const trecho = sql.slice(inicioCreate(sql, funcao));
   const a = trecho.indexOf('returns table (') + 'returns table ('.length;
   let prof = 1, i = a;
   while (prof > 0) { if (trecho[i] === '(') prof++; if (trecho[i] === ')') prof--; i++; }
@@ -52,16 +59,30 @@ function projecao(ramo: string): string[] {
   return dividirTopo(corpo.slice(0, corte));
 }
 
+/** Último `select` do corpo antes do `order by` final da função. */
+function selectFinal(sql: string, funcao: string): string {
+  const corpo = sql.slice(inicioCreate(sql, funcao));
+  const fim = corpo.indexOf('\n   order by ');
+  return corpo.slice(corpo.lastIndexOf('\n  select ', fim), fim);
+}
+
 describe('contrato fn_fin_hotmart_pessoas', () => {
-  const sql = migracao('20260927e_fin_pessoa_360.sql');
+  const sql = migracao('20260928b_fin_pessoas_operacao.sql');
   it('RETURNS TABLE = colunas de PessoaHotmart', () => {
     expect(colunasRetorno(sql, 'public.fn_fin_hotmart_pessoas')).toEqual([...COLUNAS_PESSOA_HOTMART]);
   });
   it('o SELECT final projeta o mesmo número de colunas', () => {
-    const corpo = sql.slice(sql.indexOf('function public.fn_fin_hotmart_pessoas('));
-    const fim = corpo.indexOf('\n   order by ');
-    const ultimo = corpo.slice(corpo.lastIndexOf('\n  select ', fim), fim);
-    expect(projecao(ultimo)).toHaveLength(COLUNAS_PESSOA_HOTMART.length);
+    expect(projecao(selectFinal(sql, 'public.fn_fin_hotmart_pessoas'))).toHaveLength(COLUNAS_PESSOA_HOTMART.length);
+  });
+});
+
+describe('contrato fn_fin_board_hotmart', () => {
+  const sql = migracao('20260928c_fn_fin_board_hotmart.sql');
+  it('RETURNS TABLE = colunas de BoardHotmart', () => {
+    expect(colunasRetorno(sql, 'public.fn_fin_board_hotmart')).toEqual([...COLUNAS_BOARD_HOTMART]);
+  });
+  it('o SELECT final projeta o mesmo número de colunas', () => {
+    expect(projecao(selectFinal(sql, 'public.fn_fin_board_hotmart'))).toHaveLength(COLUNAS_BOARD_HOTMART.length);
   });
 });
 

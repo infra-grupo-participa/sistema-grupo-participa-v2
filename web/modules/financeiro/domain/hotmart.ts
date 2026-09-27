@@ -104,6 +104,54 @@ export interface PessoaHotmart {
   solicitou_cancelamento: boolean;
   /** Pares "talvez mesma pessoa" (telefone/nome igual) ainda não confirmados. */
   sugestoes: number;
+  /** Operação (20260928b), só vendas pagas: o que saiu do bolso do cliente (inclui juros). */
+  cobrado_cliente: number;
+  juros: number;
+  taxa_hotmart: number;
+  /** oferta − taxa − líquido somado (piso 0): a parte do coprodutor. */
+  coproducao: number;
+  vendas_parceladas: number;
+  parcelas_max: number | null;
+  /** Método mais frequente nas vendas pagas; empate → o mais recente. */
+  forma_pagamento_principal: string | null;
+}
+
+/**
+ * Card do board × espelho Hotmart (fn_fin_board_hotmart, 20260928c). Só aviso: não muda valor do board.
+ * Valores são por pessoa × família — cards_da_pessoa > 1 repete os números em cada card.
+ */
+export interface BoardHotmart {
+  contato_hm_id: string;
+  origem: 'HM' | 'AURUM';
+  encontrado: boolean;
+  pessoa_chave: string | null;
+  cards_da_pessoa: number;
+  /** Vendas pagas em ofertas de categoria sinal / diferenca / compra_cheia (escopo do board). */
+  vendas_pagas: number;
+  pago_bruto: number;
+  taxa_hotmart: number;
+  coproducao: number;
+  liquido: number;
+  cobrado_cliente: number;
+  juros: number;
+  parcelas_max: number | null;
+  forma_pagamento_principal: string | null;
+  ultimo_pagamento_em: string | null;
+  ultimo_pagamento_valor: number | null;
+  /** Dívida por parcela (fin.parcelas_devidas), todas as ofertas da família. */
+  parcelas_devidas: number;
+  valor_devido: number;
+  devido_antigo: number;
+  estornos: number;
+  valor_estornado: number;
+  /** Vendas pagas no escopo cuja transação não está em cs.hm_pagamentos. */
+  falta_no_board: number;
+  valor_falta_no_board: number;
+  /** Lançamentos origem 'hotmart' do card que o espelho não tem ou dá como estornados. */
+  board_sem_hotmart: number;
+  /** null no AURUM (planilha sem transação) e em card sem pessoa. */
+  diverge: boolean | null;
+  sincronizado_em: string | null;
 }
 
 export interface TransacaoHotmart {
@@ -367,7 +415,19 @@ export const COLUNAS_PESSOA_HOTMART = [
   'atrasadas_antigas', 'valor_atrasado_antigo', 'em_aberto', 'recusadas', 'ultima_tentativa', 'no_gps', 'turma',
   'acesso_ate', 'acesso_hotmart_ate', 'cards', 'contato_hm_id', 'status_card', 'saldo_card', 'canal_card',
   'solicitou_cancelamento', 'sugestoes',
+  'cobrado_cliente', 'juros', 'taxa_hotmart', 'coproducao', 'vendas_parceladas', 'parcelas_max', 'forma_pagamento_principal',
 ] as const satisfies readonly (keyof PessoaHotmart)[];
+
+export const COLUNAS_BOARD_HOTMART = [
+  'contato_hm_id', 'origem', 'encontrado', 'pessoa_chave', 'cards_da_pessoa',
+  'vendas_pagas', 'pago_bruto', 'taxa_hotmart', 'coproducao', 'liquido',
+  'cobrado_cliente', 'juros', 'parcelas_max', 'forma_pagamento_principal',
+  'ultimo_pagamento_em', 'ultimo_pagamento_valor',
+  'parcelas_devidas', 'valor_devido', 'devido_antigo',
+  'estornos', 'valor_estornado',
+  'falta_no_board', 'valor_falta_no_board', 'board_sem_hotmart',
+  'diverge', 'sincronizado_em',
+] as const satisfies readonly (keyof BoardHotmart)[];
 
 export const COLUNAS_IDENTIDADE_REVISAO = [
   'tipo', 'motivo', 'evidencia', 'pessoa_a', 'emails_a', 'nomes_a', 'pessoa_b', 'emails_b', 'nomes_b', 'pago_a', 'pago_b',
