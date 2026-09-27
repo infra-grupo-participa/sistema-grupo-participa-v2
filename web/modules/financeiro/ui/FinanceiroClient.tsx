@@ -19,7 +19,6 @@ import { BarraRecorte } from './BarraRecorte';
 import type { RecorteAtivo } from '../domain/recorte';
 import { RodapeTotais } from './RodapeTotais';
 import { ForaDoBoard } from './hotmart/ForaDoBoard';
-import { MapaAlunos } from './MapaAlunos';
 import { ROTULO_COR, type CorStatus } from '../domain/cor-status';
 import { FichaDrawer } from './FichaDrawer';
 import { Relatorios } from './Relatorios';
@@ -54,8 +53,6 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // e Aurum nunca misturados). Trocar de aba reseta o canal ativo: um canal
   // do HM não faz sentido selecionado depois de trocar para Aurum.
   const [produtoAtivo, setProdutoAtivo] = useState<ProdutoChave>('HM');
-  // Board HM em duas visões (27/09): os cards de sempre, ou o mapa de TODOS os alunos do Programa (pessoa a pessoa).
-  const [visaoBoard, setVisaoBoard] = useState<'cards' | 'mapa'>('cards');
   const [acaoAtiva, setAcaoAtiva] = useState<string | null>(null);
   // Busca mora AQUI, não no BoardView, porque o rodapé de totais precisa somar
   // exatamente o conjunto que o mosaico mostra (ver comentário da prop `busca`
@@ -376,19 +373,6 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         ) : (
           <>
             <ProdutoTabs contagens={contagensProduto} ativo={produtoAtivo} onSelecionar={selecionarProduto} />
-            {produtoAtivo === 'HM' && (
-              <div className="mb-3 flex overflow-hidden rounded-[var(--r-md)] border border-[var(--border)] w-fit" role="group" aria-label="Visão do board">
-                {([['cards', 'Cards do board'], ['mapa', 'Mapa de alunos (todos)']] as const).map(([k, l]) => (
-                  <button key={k} type="button" aria-pressed={visaoBoard === k} onClick={() => setVisaoBoard(k)}
-                    className={`px-3 py-1.5 text-xs font-semibold ${visaoBoard === k ? 'bg-[var(--accent-subtle)] text-[var(--accent)]' : 'text-[var(--fg-3)] hover:bg-[var(--surface-2)]'}`}>
-                    {l}
-                  </button>
-                ))}
-              </div>
-            )}
-            {produtoAtivo === 'HM' && visaoBoard === 'mapa' ? (
-              <MapaAlunos repo={repo} onAbrirCard={setOpenId} />
-            ) : (<>
             <div className="mb-3">
               <TimelineAcoes acoes={acoes} ativa={acaoEfetiva} onSelecionar={selecionarAcao} />
             </div>
@@ -434,7 +418,6 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <div className="mt-6">
               <ForaDoBoard key={produtoAtivo} repo={repo} familia={produtoAtivo} />
             </div>
-            </>)}
           </>
         )
       )}

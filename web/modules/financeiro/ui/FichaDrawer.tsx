@@ -184,13 +184,22 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
           </section>
           <SecaoCombinadoComercial conta={conta} />
           <section>
+            <SectionTitle>De onde veio</SectionTitle>
+            <Row k="Ação / evento" v={conta.acao_nome ?? '—'} />
+            <Row k="Canal" v={conta.canal} />
+            <Row k="1ª compra" v={conta.captado_em ? fmtData(conta.captado_em) : 'ainda não pagou'} />
+            {conta.captado_sck && <Row k="Link de venda (sck)" v={conta.captado_sck} />}
+            {conta.acao_regra && (
+              <p className="mt-1 text-[11px] text-[var(--fg-4)]">Identificado por: {conta.acao_regra}.</p>
+            )}
+          </section>
+          <section>
             <SectionTitle>Dados pessoais</SectionTitle>
             <div className="space-y-2 mb-2">
               {conta.telefone && <CopyField label="Telefone" value={conta.telefone} />}
               {conta.email && <CopyField label="E-mail" value={conta.email} />}
             </div>
             <Row k="Documento" v={mascararDoc(conta.documento, canVerDoc)} />
-            <Row k="Canal de origem" v={conta.canal} />
             <Row k="Vendedor" v={conta.vendedor} />
             <Row k="Situação na ativação" v={conta.estagio_nome} />
           </section>

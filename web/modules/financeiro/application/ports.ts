@@ -1,4 +1,3 @@
-import type { MapaAluno } from '../domain/mapa-alunos';
 // Ports (contratos) do módulo Financeiro. Implementados por adapters Supabase
 // em infrastructure. Casos de uso dependem só destas interfaces, nunca de
 // Supabase direto — mesmo padrão de modules/placas/application/ports.ts.
@@ -67,8 +66,6 @@ export interface FinanceiroRepository {
   loadProrataHM(valorPrograma?: number): Promise<ProrataHM[]>;
   /** fn_fin_acelera_para_hm — quem comprou o Acelera e o que comprou de HM depois. */
   loadAceleraParaHM(): Promise<AceleraParaHM[]>;
-  /** Mapa de alunos do HM (fn_fin_mapa_alunos): uma linha por pessoa, do início do Programa até hoje. */
-  loadMapaAlunos(): Promise<MapaAluno[]>;
   /** fn_fin_prorata_diagnostico — uma pessoa, com cada pagamento e o motivo; vencimento/valor = simulação. */
   loadProrataDiagnostico(email: string, vencimento?: string | null, valorPrograma?: number): Promise<ProrataDiagnostico | null>;
 }

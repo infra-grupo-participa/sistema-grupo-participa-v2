@@ -12,7 +12,6 @@ import type {
 } from '../domain/types';
 import type { FinanceiroRepository, Resultado } from '../application/ports';
 import { VALOR_PROGRAMA_HM } from '../domain/prorata-hm';
-import { normalizarMapaAluno, type MapaAluno } from '../domain/mapa-alunos';
 import type {
   AceleraParaHM, BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, ProrataDiagnostico, ProrataHM, SyncHotmart, TransacaoHotmart,
 } from '../domain/hotmart';
@@ -229,11 +228,6 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
   loadProrataHM(valorPrograma = VALOR_PROGRAMA_HM): Promise<ProrataHM[]> {
     return this.rpcLista<ProrataHM>('fn_fin_prorata_hm', { p_valor_programa: valorPrograma },
       'Não foi possível calcular o pro rata do HM.');
-  }
-
-  async loadMapaAlunos(): Promise<MapaAluno[]> {
-    const ls = await this.rpcLista<MapaAluno>('fn_fin_mapa_alunos', {}, 'Não foi possível carregar o mapa de alunos.');
-    return ls.map(normalizarMapaAluno);
   }
 
   loadAceleraParaHM(): Promise<AceleraParaHM[]> {

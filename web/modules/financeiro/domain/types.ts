@@ -90,6 +90,12 @@ export interface ContaReceber {
   pacote_regra: number | null;
   /** Cravado − régua: positivo = cobrando a mais; negativo = dinheiro na mesa. */
   divergencia_regra: number | null;
+  /** De onde a pessoa veio (fin.vw_acao_card, 20260928n): ação, como foi identificada, data e link da 1ª compra.
+   *  Opcionais: a função antiga não devolve. */
+  acao_nome?: string | null;
+  acao_regra?: string | null;
+  captado_em?: string | null;
+  captado_sck?: string | null;
   credito: number | null;
   /** O que ainda falta receber. É a métrica que o financeiro persegue. */
   saldo_a_pagar: number | null;
@@ -406,4 +412,9 @@ export interface CardBoard {
    *  Informativo — o cravado sempre prevalece no cálculo (comportamento já
    *  existente, decisão do Marcio de 2026-09-04 só pede para SINALIZAR). */
   divergencia_regra: number | null;
+  /** 20260928n: como a ação foi identificada (janela do evento · link de venda · data da compra · link do comercial ·
+   *  data de entrada no board) e a 1ª compra (data e link). Toda linha tem ação desde então. */
+  acao_regra?: string | null;
+  captado_em?: string | null;
+  captado_sck?: string | null;
 }
