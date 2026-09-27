@@ -12,15 +12,15 @@ import type { ContaReceber, Cobranca, InteracaoAtivacao, ReguaPasso } from '../d
 import { contaMorta, direcaoDivergencia, mascararDoc, statusLabel, temDivergenciaPacote } from '../domain/financeiro';
 import { corStatus } from '../domain/cor-status';
 import { labelMotivoReuniao } from '../domain/reuniao';
-import { statusCompraLabel, statusTone, TONE_BADGE } from './cor';
+import { statusTone } from './cor';
 import { FichaResumoTopo } from './FichaResumoTopo';
 import type { FinanceiroRepository } from '../application/ports';
-import { ExtratoHotmart } from './hotmart/ExtratoHotmart';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
-import { rotuloCategorias, rotuloMetodo, type BoardHotmart, type ProrataHM } from '../domain/hotmart';
-import { explicarDivergencia, fmtMesAno, rotuloParcelamento, temAssinaturaHM, temDadoHotmart } from '../domain/board-hotmart';
+import { rotuloMetodo, type BoardHotmart, type ProrataHM } from '../domain/hotmart';
+import { fmtMesAno, rotuloParcelamento, temAssinaturaHM, temDadoHotmart } from '../domain/board-hotmart';
 import { inicioDoCiclo, prorataDoCard } from '../domain/prorata-hm';
 import { ContaProrata } from './hotmart/ContaProrata';
+import { Bloco, EmUmaOlhada, PagamentosFicha } from './FichaPagamentos';
 import { carregarProrataHM, VALOR_PROGRAMA_HM } from '../application/carregar-prorata';
 
 const CANAIS_COBRANCA = ['WhatsApp', 'E-mail', 'Ligação', 'Reunião'];
@@ -104,7 +104,12 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
   hotmartPorCard?: Map<string, BoardHotmart> | null;
   hotmartErro?: boolean;
 }) {
-  const [tab, setTab] = useState<'resumo' | 'historico' | 'cobranca'>('resumo');
+  // Reorganizada em 27/09 (João: "entender melhor o que está acontecendo"): uma pergunta por aba —
+  // quanto falta e por quê (Resumo) · o que pagou (Pagamentos) · quanto dá o pro rata · quem está cobrando.
+  const [tab, setTab] = useState<'resumo' | 'pagamentos' | 'prorata' | 'cobranca'>('resumo');
+  const hm = hotmartPorCard?.get(conta.contato_hm_id) ?? null;
+  const hmCarregando = !hotmartPorCard && !hotmartErro;
+  const ehHM = (hm?.origem ?? (/aurum/i.test(conta.produto) ? 'AURUM' : 'HM')) === 'HM';
   const [ficha, setFicha] = useState<Ficha | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const { toast, flash } = useFlash();
@@ -141,7 +146,8 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
         onChange={(k) => setTab(k as typeof tab)}
         tabs={[
           { k: 'resumo', l: 'Resumo' },
-          { k: 'historico', l: 'Histórico financeiro' },
+          { k: 'pagamentos', l: 'Pagamentos' },
+          ...(ehHM ? [{ k: 'prorata', l: 'Pro rata' }] : []),
           { k: 'cobranca', l: 'Cobrança' },
         ]}
       />
@@ -155,6 +161,7 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
       {tab === 'resumo' && (
         <div className="space-y-4">
           <FichaResumoTopo conta={conta} cor={corStatus(conta.status_financeiro)} regua={regua} hojeISO={hojeISO} />
+          <EmUmaOlhada conta={conta} hm={hotmartErro ? null : hm} carregando={hmCarregando} />
           <section>
             <SectionTitle>Por que ainda não pagou</SectionTitle>
             <Row k="Pacote" v={conta.pacote != null ? fmtBRLc(conta.pacote) : 'Sem valor de pacote definido'} />
@@ -199,101 +206,52 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
         </div>
       )}
 
-      {tab === 'historico' && (
+      {tab === 'pagamentos' && (
         ficha === null && !erro ? (
-          <Loading label="Carregando histórico…" minHeight={160} />
+          <Loading label="Carregando pagamentos…" minHeight={160} />
         ) : !ficha ? null : (
-          <div className="space-y-4">
-            <section>
-              <SectionTitle>Lançamentos ({ficha.extrato.length})</SectionTitle>
-              {!ficha.extrato.length ? (
-                <EmptyState title="Nenhum lançamento" icon="receipt" />
-              ) : (
-                <Timeline
-                  items={ficha.extrato.map((l) => ({
-                    tone: l.categoria === 'sinal' ? 'purple' : 'green',
-                    done: true,
-                    title: `${l.categoria} — ${fmtBRLc(l.valor_bruto)}`,
-                    meta: fmtData(l.pago_em),
-                    body: `${l.metodo_pagamento ?? '—'}${l.parcela ? ` · parcela ${l.parcela}` : ''}${l.oferta_codigo ? ` · oferta ${l.oferta_codigo}` : ''}`,
-                  }))}
-                />
-              )}
-            </section>
-            <section>
-              <SectionTitle>Compras Hotmart ({ficha.compras.length})</SectionTitle>
-              {!ficha.compras.length ? (
-                <EmptyState title="Nenhuma compra encontrada" icon="receipt" />
-              ) : (
-                ficha.compras.map((c) => (
-                  <Row
-                    key={c.id}
-                    k={c.produto_nome}
-                    v={
-                      <span>
-                        {c.bruto != null ? fmtBRLc(c.bruto) : '—'}{' '}
-                        {/* Tom deriva do MESMO vocabulário do card/ficha (TONE_BADGE), não
-                            mais decidido aqui. `morto` funde vencido/cancelado/estornado na
-                            origem (CompraHistorico.morto) — sai vermelho mesmo quando era só
-                            um boleto vencido; imprecisão conhecida, documentada no plano
-                            (CONFLITO 3), não separada no cliente sem migration. */}
-                        <Badge tone={c.pago ? TONE_BADGE.verde : c.pendente ? TONE_BADGE.azul : c.morto ? TONE_BADGE.vermelho : TONE_BADGE.neutro}>
-                          {statusCompraLabel(c.status)}
-                        </Badge>
-                      </span>
-                    }
-                  />
-                ))
-              )}
-            </section>
-            <SecaoBoardHotmart
-              conta={conta}
-              repo={repo}
-              hm={hotmartPorCard?.get(conta.contato_hm_id) ?? null}
-              carregando={!hotmartPorCard && !hotmartErro}
-              erro={hotmartErro && !hotmartPorCard}
-            />
-            <section>
-              <SectionTitle>Histórico na Hotmart (API oficial)</SectionTitle>
-              <p className="mb-2 text-[11px] text-[var(--fg-3)]">
-                Tudo o que este e-mail comprou e tentou comprar, direto da Hotmart — inclusive cartão recusado,
-                boleto não pago, parcela atrasada e reembolso. Só leitura.
-              </p>
-              <ExtratoHotmart email={conta.email} repo={repo} />
-            </section>
-            <section>
-              <SectionTitle>Histórico do comercial ({ficha.historicoAtivacao.length})</SectionTitle>
-              {!ficha.historicoAtivacao.length ? (
-                <EmptyState title="Nenhuma interação registrada" hint="O comercial ainda não registrou contato, nota ou mudança de estágio para esta conta." icon="clipboard" />
-              ) : (
-                <Timeline
-                  items={ficha.historicoAtivacao.map((it) => {
-                    const { tone, icon } = TOM_INTERACAO[it.tipo];
-                    return {
-                      tone,
-                      icon: <Icon name={icon} size={11} />,
-                      title: tituloInteracao(it),
-                      meta: fmtDesde(it.quando).label,
-                      body: it.autor ? `por ${it.autor}` : undefined,
-                    };
-                  })}
-                />
-              )}
-            </section>
+          <div className="space-y-5">
+            <PagamentosFicha conta={conta} repo={repo} board={ficha.extrato} />
+            <SecaoBoardHotmart hm={hm} carregando={hmCarregando} erro={hotmartErro && !hotmartPorCard} />
           </div>
         )
       )}
 
+      {tab === 'prorata' && ehHM && (
+        <BlocoProrataHM repo={repo} contatoHmId={conta.contato_hm_id} hm={hm} />
+      )}
+
       {tab === 'cobranca' && (
-        <CobrancaTab
-          conta={conta}
-          repo={repo}
-          canEdit={canEdit}
-          cobrancas={ficha?.cobrancas ?? []}
-          carregando={ficha === null && !erro}
-          flash={flash}
-          onAcordoSalvo={onAcordoSalvo}
-        />
+        <div className="space-y-5">
+          <CobrancaTab
+            conta={conta}
+            repo={repo}
+            canEdit={canEdit}
+            cobrancas={ficha?.cobrancas ?? []}
+            carregando={ficha === null && !erro}
+            flash={flash}
+            onAcordoSalvo={onAcordoSalvo}
+          />
+          <section>
+            <SectionTitle>Histórico do comercial ({ficha?.historicoAtivacao.length ?? 0})</SectionTitle>
+            {!ficha ? <Loading label="Carregando…" minHeight={80} /> : !ficha.historicoAtivacao.length ? (
+              <EmptyState title="Nenhuma interação registrada" hint="O comercial ainda não registrou contato, nota ou mudança de estágio para esta conta." icon="clipboard" />
+            ) : (
+              <Timeline
+                items={ficha.historicoAtivacao.map((it) => {
+                  const { tone, icon } = TOM_INTERACAO[it.tipo];
+                  return {
+                    tone,
+                    icon: <Icon name={icon} size={11} />,
+                    title: tituloInteracao(it),
+                    meta: fmtDesde(it.quando).label,
+                    body: it.autor ? `por ${it.autor}` : undefined,
+                  };
+                })}
+              />
+            )}
+          </section>
+        </div>
       )}
 
       {toast && (
@@ -305,67 +263,39 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
   );
 }
 
-/** Board × Hotmart — os números da Hotmart deste card, lado a lado com o que
- *  o board registra. Só leitura e só aviso: não muda nenhum valor do board. */
-function SecaoBoardHotmart({ conta, repo, hm, carregando, erro }: {
-  conta: ContaReceber;
-  repo: FinanceiroRepository;
+/** Números da Hotmart deste contrato em blocos — taxa, líquido, juros, parcelamento. Só leitura: não muda o board.
+ *  A assinatura entra em bloco próprio (contrato à parte); os outros pagamentos já estão na lista acima. */
+function SecaoBoardHotmart({ hm, carregando, erro }: {
   hm: BoardHotmart | null;
   carregando: boolean;
   erro: boolean;
 }) {
   if (carregando) return null;
-  const aviso = (texto: string) => (
-    <section>
-      <SectionTitle>Board × Hotmart</SectionTitle>
-      <p className="text-[11px] text-[var(--fg-3)]">{texto}</p>
-    </section>
-  );
-  if (erro) return aviso('Números da Hotmart indisponíveis agora. O board não depende deles.');
-  if (!temDadoHotmart(hm)) return aviso('Esta pessoa não foi encontrada na Hotmart — sem números para comparar.');
-
-  const explicacao = explicarDivergencia(hm, fmtBRLc);
+  const titulo = <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">Como pagou na Hotmart</div>;
+  if (erro) return <section>{titulo}<p className="text-[11px] text-[var(--fg-3)]">Números da Hotmart indisponíveis agora. O board não depende deles.</p></section>;
+  if (!temDadoHotmart(hm)) return <section>{titulo}<p className="text-[11px] text-[var(--fg-3)]">Esta pessoa não foi encontrada na Hotmart.</p></section>;
   const parcelamento = rotuloParcelamento(hm.parcelas_max);
   return (
     <section>
-      <SectionTitle>Board × Hotmart</SectionTitle>
+      {titulo}
       {hm.cards_da_pessoa > 1 && (
-        <p className="mb-1 text-[11px] text-[var(--fg-3)]">
-          Esta pessoa tem {hm.cards_da_pessoa} cards: os números da Hotmart abaixo são dela inteira e se repetem em cada card.
+        <p className="mb-2 text-[11px] text-[var(--fg-3)]">
+          Esta pessoa tem {hm.cards_da_pessoa} cards: os números abaixo são dela inteira e se repetem em cada card.
         </p>
       )}
-      <Row k="Pago segundo o board (bruto)" v={fmtBRLc(conta.total_pago_bruto)} />
-      <Row k={`Pago na Hotmart (${hm.vendas_pagas} venda${hm.vendas_pagas === 1 ? '' : 's'})`} v={fmtBRLc(hm.pago_bruto)} />
-      <Row k="Taxa da Hotmart" v={fmtBRLc(hm.taxa_hotmart)} />
-      {hm.coproducao > 0 && <Row k="Coprodução" v={fmtBRLc(hm.coproducao)} />}
-      <Row k="Líquido (fica para nós)" v={fmtBRLc(hm.liquido)} />
-      <Row k="Cliente pagou (com juros)" v={fmtBRLc(hm.cobrado_cliente)} />
-      <Row k="Juros do parcelamento" v={fmtBRLc(hm.juros)} />
-      <Row k="Parcelamento" v={parcelamento ?? '—'} />
-      <Row k="Forma de pagamento" v={rotuloMetodo(hm.forma_pagamento_principal)} />
-      <Row
-        k="Último pagamento"
-        v={hm.ultimo_pagamento_em ? `${fmtData(hm.ultimo_pagamento_em)}${hm.ultimo_pagamento_valor != null ? ` · ${fmtBRLc(hm.ultimo_pagamento_valor)}` : ''}` : '—'}
-      />
-      <Row
-        k="Devendo na Hotmart"
-        v={hm.parcelas_devidas > 0 ? `${fmtBRLc(hm.valor_devido)} (${hm.parcelas_devidas} parcela${hm.parcelas_devidas === 1 ? '' : 's'})` : 'Nada'}
-      />
-      {hm.estornos > 0 && <Row k="Estornos" v={`${fmtBRLc(hm.valor_estornado)} (${hm.estornos})`} />}
-      {explicacao ? (
-        <div className="mt-2 flex items-start gap-1.5 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2 text-xs text-[var(--fg-2)]">
-          <Icon name="alert" size={13} className="mt-0.5 shrink-0 text-[var(--yellow)]" />
-          <span><strong className="font-semibold">Diverge da Hotmart:</strong> {explicacao}</span>
-        </div>
-      ) : hm.diverge === false ? (
-        <p className="mt-1 text-[11px] text-[var(--fg-3)]">Board e Hotmart batem para esta pessoa.</p>
-      ) : null}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Bloco rotulo="Recebido (bruto)" valor={fmtBRLc(hm.pago_bruto)} detalhe={`${hm.vendas_pagas} venda${hm.vendas_pagas === 1 ? '' : 's'} deste contrato`} />
+        <Bloco rotulo="Taxa da Hotmart" valor={fmtBRLc(hm.taxa_hotmart)} detalhe={hm.coproducao > 0 ? `coprodução ${fmtBRLc(hm.coproducao)}` : null} />
+        <Bloco rotulo="Líquido" tom="verde" valor={fmtBRLc(hm.liquido)} detalhe="fica para nós" />
+        <Bloco rotulo="Cliente pagou" valor={fmtBRLc(hm.cobrado_cliente)} detalhe={hm.juros > 0 ? `juros ${fmtBRLc(hm.juros)} (ficam com a Hotmart)` : 'sem juros'} />
+        <Bloco rotulo="Como pagou" valor={rotuloMetodo(hm.forma_pagamento_principal)} detalhe={parcelamento ?? null} />
+        <Bloco rotulo="Último pagamento" valor={hm.ultimo_pagamento_em ? fmtData(hm.ultimo_pagamento_em) : '—'}
+          detalhe={hm.ultimo_pagamento_valor != null ? fmtBRLc(hm.ultimo_pagamento_valor) : null} />
+      </div>
+      {temAssinaturaHM(hm) && <div className="mt-3"><BlocoAssinaturaHM hm={hm} /></div>}
       {hm.sincronizado_em && (
-        <p className="mt-1 text-[11px] text-[var(--fg-4)]">Hotmart sincronizada em {fmtDataHora(hm.sincronizado_em)}.</p>
+        <p className="mt-2 text-[11px] text-[var(--fg-4)]">Hotmart sincronizada em {fmtDataHora(hm.sincronizado_em)}.</p>
       )}
-      {temAssinaturaHM(hm) && <BlocoAssinaturaHM hm={hm} />}
-      {(hm.outros_pagamentos ?? 0) > 0 && <BlocoOutrosPagamentos hm={hm} />}
-      {hm.origem === 'HM' && <BlocoProrataHM repo={repo} contatoHmId={conta.contato_hm_id} hm={hm} />}
     </section>
   );
 }
@@ -392,25 +322,9 @@ function BlocoAssinaturaHM({ hm }: { hm: BoardHotmart }) {
   );
 }
 
-/** Outros pagamentos da pessoa na Hotmart que o card não mostra (renovação,
- *  complemento, oferta fora do catálogo = "desconhecida") — só informação,
- *  não entra no "pago" do card (20260928i). */
-function BlocoOutrosPagamentos({ hm }: { hm: BoardHotmart }) {
-  const n = hm.outros_pagamentos ?? 0;
-  return (
-    <div>
-      <div className={SUBTITULO}>Outros pagamentos na Hotmart (fora do board)</div>
-      <Row k={`${n} pagamento${n === 1 ? '' : 's'}`} v={fmtBRLc(hm.outros_valor ?? 0)} />
-      <Row k="O que são" v={rotuloCategorias(hm.outros_formas)} />
-      <Row k="Último" v={hm.outros_ultimo ? fmtData(hm.outros_ultimo) : '—'} />
-      <p className="mt-1 text-[11px] text-[var(--fg-3)]">Não entram no &quot;pago&quot; deste card. &quot;Oferta desconhecida&quot; = a oferta não está no catálogo e o valor não diz o que é.</p>
-    </div>
-  );
-}
-
 /** Pro rata HM → Programa. fn_fin_prorata_hm carregada SOB DEMANDA na 1ª ficha
  *  aberta e reaproveitada (application/carregar-prorata.ts) — nunca por card. */
-function BlocoProrataHM({ repo, contatoHmId, hm }: { repo: FinanceiroRepository; contatoHmId: string; hm: BoardHotmart }) {
+function BlocoProrataHM({ repo, contatoHmId, hm }: { repo: FinanceiroRepository; contatoHmId: string; hm: BoardHotmart | null }) {
   const [linhas, setLinhas] = useState<ProrataHM[] | null>(null);
   const [erro, setErro] = useState(false);
   useEffect(() => {

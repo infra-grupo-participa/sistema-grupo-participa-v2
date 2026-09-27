@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { explicarProrata, inicioDoCiclo, normalizarProrataHM, prorataDoCard } from './prorata-hm';
+import { explicarProrata, inicioDoCiclo, normalizarProrataHM, prorataDoCard, simularProrata } from './prorata-hm';
 import type { BoardHotmart, ProrataHM } from './hotmart';
 
 function pr(over: Partial<ProrataHM> = {}): ProrataHM {
@@ -60,5 +60,18 @@ describe('explicarProrata', () => {
   });
   it('sem pagamento no ciclo → valor cheio e confirmar com a Isabela', () => {
     expect(explicarProrata({ ...base, pago: 0, meses: 5, credito: 0, diferenca: 15000 })).toContain('Isabela');
+  });
+});
+
+describe('simularProrata (mesma regra do banco)', () => {
+  it('Marcio: 3.997 × 3 ÷ 12 = 999,25 → 14.000,75', () => {
+    expect(simularProrata(3997, 3)).toEqual({ credito: 999.25, diferenca: 14000.75 });
+  });
+  it('trunca no centavo e nunca paga negativo', () => {
+    expect(simularProrata(1000, 1).credito).toBe(83.33);
+    expect(simularProrata(200000, 11).diferenca).toBe(0);
+  });
+  it('0 mês cheio → valor cheio', () => {
+    expect(simularProrata(23964, 0)).toEqual({ credito: 0, diferenca: 15000 });
   });
 });

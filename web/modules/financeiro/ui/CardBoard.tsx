@@ -146,11 +146,6 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
   const hmDiverge = hm?.diverge === true;
   const hmExplicacao = hm ? explicarDivergencia(hm, fmtBRLc) : null;
   const hmParcelamento = hm ? rotuloParcelamento(hm.parcelas_max) : null;
-  const hmLinha = hm
-    ? hm.vendas_pagas > 0
-      ? `Hotmart: pago ${fmtBRL(hm.pago_bruto)} · líquido ${fmtBRL(hm.liquido)}${hmParcelamento ? ` · ${hmParcelamento}` : ''}`
-      : 'Hotmart: nenhuma venda paga'
-    : null;
   const hmTitle = hm
     ? `Números da Hotmart (não mudam os valores do board).${hm.cards_da_pessoa > 1 ? ` Esta pessoa tem ${hm.cards_da_pessoa} cards: os mesmos números aparecem em cada um.` : ''}`
     : undefined;
@@ -257,33 +252,26 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
         )}
       </div>
 
-      {/* Nível 3 — contexto: status/reserva/prazo agrupados, respiro do bloco
-          de dinheiro acima; vendedor + tempo parado no rodapé (discreto,
-          cobrança de posição do comercial sem competir com o valor). */}
-      <div className="relative z-[1] mt-3 pt-2 border-t border-[var(--border-faint)] space-y-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-medium text-[var(--fg-3)]">{statusLabel(conta.status_financeiro)}</span>
-          {/* --red DE PROPÓSITO: não é cor de status do card (essa é CLASSE_CARD/
-              TONE_BARRA acima) — é o alarme pontual de prazo estourado. É o que
-              impede um card `em_pagamento` (verde) com atraso de parecer
-              resolvido. Não "corrigir" para amarelo — ver plano, CONFLITO 1. */}
-          {emAtraso ? (
-            <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--red)]">
-              <Icon name="alert" size={11} /> {conta.dias_atraso}d em atraso
-            </span>
-          ) : prazo ? (
-            <span className="shrink-0 text-[10px] tabular text-[var(--fg-3)]" title={prazo.title}>
-              {prazo.label}
-            </span>
-          ) : null}
-        </div>
-
-        {/* F7: chip informativo — sem botão de ação (decisão do Marcio: só o
-            comercial registra a promessa). Trilha B mostra o motivo + a data
-            de retomar, para o financeiro entender que já está sendo tratado,
-            sem entrar na fila de cobrança (não é vencimento combinado). */}
+      {/* Nível 3 — situação (27/09, João: "as partes dentro do card estão muito desorganizadas"): uma linha de
+          selos (status + prazo + avisos), depois a Hotmart em dois números lado a lado, e o rodapé com quem cuida
+          e há quanto tempo está parado. Cada informação num lugar fixo — o olho acha sem ler o card inteiro. */}
+      <div className="relative z-[1] mt-3 flex flex-wrap items-center gap-1">
+        <span className="rounded-[var(--r-sm)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-2)]">
+          {statusLabel(conta.status_financeiro)}
+        </span>
+        {/* --red DE PROPÓSITO: alarme pontual de prazo estourado, não cor de status (ver plano, CONFLITO 1). */}
+        {emAtraso ? (
+          <span className="inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--red-border)] bg-[var(--red-subtle)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--red)]">
+            <Icon name="alert" size={10} /> {conta.dias_atraso}d em atraso
+          </span>
+        ) : prazo ? (
+          <span className="rounded-[var(--r-sm)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] tabular text-[var(--fg-3)]" title={prazo.title}>
+            {prazo.label}
+          </span>
+        ) : null}
+        {/* F7: informativo, sem ação (só o comercial registra a promessa). */}
         {semDataPagamento && (
-          <div
+          <span
             className="inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--red-border)] bg-[var(--red-subtle)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--red)]"
             title={
               motivoBLabel
@@ -291,60 +279,67 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
                 : 'Sem data de pagamento combinada — quem registra é o comercial, não o financeiro.'
             }
           >
-            <Icon name="alert" size={10} /> {motivoBLabel ? `sem data · ${retomarB ? `retoma ${fmtData(retomarB)}` : motivoBLabel}` : 'sem data de pagamento'}
-          </div>
-        )}
-
-        {/* Camada Hotmart — linha discreta de contexto (mesmo corpo/cor do
-            status acima); dívida por parcela e divergência só quando existem. */}
-        {hm && (
-          <div className="space-y-0.5" title={hmTitle}>
-            <div className="truncate text-[10px] tabular text-[var(--fg-3)]">{hmLinha}</div>
-            {hm.parcelas_devidas > 0 && (
-              <div className="text-[10px] font-semibold tabular text-[var(--yellow)]">
-                devendo {fmtBRL(hm.valor_devido)} ({hm.parcelas_devidas} parc.)
-              </div>
-            )}
-          </div>
-        )}
-        {hmAssinatura && (
-          <div
-            className="flex items-center justify-between gap-2"
-            title="Assinatura HM (mensalidades) é outro contrato: não entra no pago deste card."
-          >
-            <span className="truncate text-[10px] tabular text-[var(--fg-3)]">{hmAssinatura}</span>
-            <span className="shrink-0 inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-2)]">
-              {hmAssinaturaAtiva && <span className="h-1.5 w-1.5 rounded-full bg-[var(--green)]" aria-hidden />}
-              {hmAssinaturaAtiva ? 'ativa' : 'encerrada'}
-            </span>
-          </div>
+            {motivoBLabel ? `sem data · ${retomarB ? `retoma ${fmtData(retomarB)}` : motivoBLabel}` : 'sem data de pagamento'}
+          </span>
         )}
         {hmDiverge && (
-          <div
+          <span
             className="inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-2)]"
             title={hmExplicacao ?? undefined}
           >
             <Icon name="alert" size={10} className="text-[var(--yellow)]" /> Diverge da Hotmart
-          </div>
-        )}
-
-        {(conta.vendedor || dias != null) && (
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-[10px] text-[var(--fg-3)]" title={conta.vendedor ? `Comercial: ${conta.vendedor}` : undefined}>
-              {conta.vendedor ?? ''}
-            </span>
-            {dias != null && (
-              <span
-                className={`shrink-0 text-[10px] font-semibold tabular ${TEXTO_PARADO[tomParado(dias)]}`}
-                title={LIMIAR_PARADO[tomParado(dias)] ? `parado há ${dias} dias, ${LIMIAR_PARADO[tomParado(dias)]}` : undefined}
-                aria-label={LIMIAR_PARADO[tomParado(dias)] ? `parado há ${dias} dias, ${LIMIAR_PARADO[tomParado(dias)]}` : `parado há ${dias} dias`}
-              >
-                parado há {dias}d
-              </span>
-            )}
-          </div>
+          </span>
         )}
       </div>
+
+      {/* Camada Hotmart: dois números fixos. Sem dado → nada (nunca "R$ 0", que diria "não pagou"). */}
+      {hm && (
+        <div className="relative z-[1] mt-2 grid grid-cols-2 gap-1.5" title={hmTitle}>
+          <div className="rounded-[var(--r-sm)] bg-[var(--surface-2)] px-2 py-1">
+            <div className="text-[9px] font-medium uppercase tracking-wide text-[var(--fg-4)]">Hotmart</div>
+            <div className="truncate text-[11px] font-semibold tabular text-[var(--fg)]">
+              {hm.vendas_pagas > 0 ? fmtBRL(hm.pago_bruto) : 'nada pago'}
+            </div>
+            {hm.vendas_pagas > 0 && hmParcelamento && <div className="truncate text-[9px] text-[var(--fg-4)]">{hmParcelamento}</div>}
+          </div>
+          <div className="rounded-[var(--r-sm)] bg-[var(--surface-2)] px-2 py-1">
+            <div className="text-[9px] font-medium uppercase tracking-wide text-[var(--fg-4)]">Devendo</div>
+            <div className={`truncate text-[11px] font-semibold tabular ${hm.parcelas_devidas > 0 ? 'text-[var(--red)]' : 'text-[var(--fg-3)]'}`}>
+              {hm.parcelas_devidas > 0 ? fmtBRL(hm.valor_devido) : 'em dia'}
+            </div>
+            {hm.parcelas_devidas > 0 && <div className="truncate text-[9px] text-[var(--fg-4)]">{hm.parcelas_devidas} parcela{hm.parcelas_devidas === 1 ? '' : 's'}</div>}
+          </div>
+        </div>
+      )}
+      {hmAssinatura && (
+        <div
+          className="relative z-[1] mt-1.5 flex items-center justify-between gap-2"
+          title="Assinatura HM (mensalidades) é outro contrato: não entra no pago deste card."
+        >
+          <span className="truncate text-[10px] tabular text-[var(--fg-3)]">{hmAssinatura}</span>
+          <span className="shrink-0 inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-2)]">
+            {hmAssinaturaAtiva && <span className="h-1.5 w-1.5 rounded-full bg-[var(--green)]" aria-hidden />}
+            {hmAssinaturaAtiva ? 'ativa' : 'encerrada'}
+          </span>
+        </div>
+      )}
+
+      {(conta.vendedor || dias != null) && (
+        <div className="relative z-[1] mt-3 flex items-center justify-between gap-2 border-t border-[var(--border-faint)] pt-2">
+          <span className="inline-flex min-w-0 items-center gap-1 truncate text-[10px] text-[var(--fg-3)]" title={conta.vendedor ? `Comercial: ${conta.vendedor}` : undefined}>
+            {conta.vendedor && <Icon name="user" size={10} className="shrink-0" />}{conta.vendedor ?? ''}
+          </span>
+          {dias != null && (
+            <span
+              className={`shrink-0 text-[10px] font-semibold tabular ${TEXTO_PARADO[tomParado(dias)]}`}
+              title={LIMIAR_PARADO[tomParado(dias)] ? `parado há ${dias} dias, ${LIMIAR_PARADO[tomParado(dias)]}` : undefined}
+              aria-label={LIMIAR_PARADO[tomParado(dias)] ? `parado há ${dias} dias, ${LIMIAR_PARADO[tomParado(dias)]}` : `parado há ${dias} dias`}
+            >
+              parado há {dias}d
+            </span>
+          )}
+        </div>
+      )}
     </button>
   );
 }

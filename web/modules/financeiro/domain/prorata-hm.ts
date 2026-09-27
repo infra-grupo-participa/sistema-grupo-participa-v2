@@ -85,3 +85,14 @@ export function explicarProrata(c: ContaProrata): string {
   const meses = c.meses === 1 ? '1 mês cheio' : `${c.meses} meses cheios`;
   return `Pagou ${brl(c.pago)} no HM neste ciclo. Como ainda faltam ${meses} de acesso, ${c.meses}/12 desse valor volta como crédito: ${brl(c.credito)}. Por isso paga ${aPagar} para entrar no Programa (${brl(c.valorPrograma)} − ${brl(c.credito)}).`;
 }
+
+/**
+ * Simulação "e se ele tivesse pago X no ciclo?" (João, 27/09) — a MESMA regra do banco (fn_fin_prorata_hm):
+ * crédito = pago × meses ÷ 12, truncado no centavo; valor a pagar = programa − crédito, piso 0. Nada é gravado.
+ */
+export function simularProrata(pago: number, meses: number, valorPrograma: number = VALOR_PROGRAMA_HM) {
+  const p = Math.max(0, Number.isFinite(pago) ? pago : 0);
+  const m = Math.max(0, Math.floor(meses));
+  const credito = Math.trunc((p * m / 12) * 100) / 100;
+  return { credito, diferenca: Math.max(valorPrograma - credito, 0) };
+}
