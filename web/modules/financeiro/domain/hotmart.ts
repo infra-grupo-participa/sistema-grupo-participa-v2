@@ -34,11 +34,22 @@ export type SituacaoPessoa =
   | 'ativo' | 'inadimplencia_antiga' | 'vencido' | 'boleto_em_aberto' | 'so_tentou';
 
 export interface PessoaHotmart {
-  email: string;
+  /** Componente conexo do grafo e-mail × documento × conta Hotmart (fin.identidade). */
+  pessoa_chave: string;
   nome: string | null;
+  emails: string[];
+  documentos: string[];
+  telefone: string | null;
+  cidade: string | null;
   situacao: SituacaoPessoa;
   aviso: string | null;
   primeira_compra: string | null;
+  primeira_oferta: string | null;
+  /** SCK da primeira compra — de onde a pessoa veio. */
+  origem: string | null;
+  /** Caminho das categorias pagas, ex.: "sinal → diferenca → renovacao". */
+  fluxo: string | null;
+  produtos: string[] | null;
   ultima_compra_paga: string | null;
   compras_pagas: number;
   valor_pago: number;
@@ -55,16 +66,23 @@ export interface PessoaHotmart {
   recusadas: number;
   ultima_tentativa: string | null;
   no_gps: boolean;
+  turma: string | null;
   acesso_ate: string | null;
   acesso_hotmart_ate: string | null;
+  cards: number;
   contato_hm_id: string | null;
   status_card: string | null;
   saldo_card: number | null;
+  canal_card: string | null;
   solicitou_cancelamento: boolean;
+  /** Pares "talvez mesma pessoa" (telefone/nome igual) ainda não confirmados. */
+  sugestoes: number;
 }
 
 export interface TransacaoHotmart {
   transacao: string;
+  /** E-mail usado NESTA compra (a pessoa pode ter vários). */
+  email: string;
   produto: string | null;
   oferta_codigo: string | null;
   status: string;
@@ -193,3 +211,52 @@ export const ROTULO_GRUPO: Record<TransacaoHotmart['grupo'], string> = {
   expirado: 'Boleto vencido',
   outro: 'Outro',
 };
+
+/** Par "talvez mesma pessoa" (telefone/nome igual) ou documento em revisão. Nada é juntado sozinho. */
+export interface IdentidadeRevisao {
+  tipo: 'sugestao' | 'revisao';
+  motivo: string;
+  evidencia: string | null;
+  pessoa_a: string;
+  emails_a: string[] | null;
+  nomes_a: string[] | null;
+  pessoa_b: string | null;
+  emails_b: string[] | null;
+  nomes_b: string[] | null;
+  pago_a: number | null;
+  pago_b: number | null;
+}
+
+/**
+ * Rótulo do documento na lista. Quem tem gp_pode_ver_cpf() recebe só dígitos e o tipo sai
+ * do tamanho; os demais já recebem "CPF ···1234" / "CNPJ ···1234" do banco — o tamanho da
+ * string mascarada não diz o tipo (7 caracteres rotulariam todo CNPJ como CPF).
+ */
+export function rotuloDocumento(doc: string): string {
+  if (!/^\d+$/.test(doc)) return doc;
+  return `${doc.length === 14 ? 'CNPJ' : 'CPF'} ···${doc.slice(-4)}`;
+}
+
+/**
+ * Célula de CSV (separador ;). Nome e origem vêm de terceiros (Hotmart): célula que começa
+ * com = + - @ tab ou CR ganha apóstrofo, para o Excel/Sheets ler como texto e não fórmula.
+ */
+export function celulaCsv(v: unknown): string {
+  let t = v == null ? '' : String(v);
+  if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
+  return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+}
+
+/** Colunas que as RPCs devolvem — o teste de contrato confere contra o RETURNS TABLE das migrações. */
+export const COLUNAS_PESSOA_HOTMART = [
+  'pessoa_chave', 'nome', 'emails', 'documentos', 'telefone', 'cidade', 'situacao', 'aviso',
+  'primeira_compra', 'primeira_oferta', 'origem', 'fluxo', 'produtos', 'ultima_compra_paga', 'compras_pagas',
+  'valor_pago', 'liquido', 'estornos', 'valor_estornado', 'parcelas_atrasadas', 'valor_atrasado',
+  'atrasadas_antigas', 'valor_atrasado_antigo', 'em_aberto', 'recusadas', 'ultima_tentativa', 'no_gps', 'turma',
+  'acesso_ate', 'acesso_hotmart_ate', 'cards', 'contato_hm_id', 'status_card', 'saldo_card', 'canal_card',
+  'solicitou_cancelamento', 'sugestoes',
+] as const satisfies readonly (keyof PessoaHotmart)[];
+
+export const COLUNAS_IDENTIDADE_REVISAO = [
+  'tipo', 'motivo', 'evidencia', 'pessoa_a', 'emails_a', 'nomes_a', 'pessoa_b', 'emails_b', 'nomes_b', 'pago_a', 'pago_b',
+] as const satisfies readonly (keyof IdentidadeRevisao)[];

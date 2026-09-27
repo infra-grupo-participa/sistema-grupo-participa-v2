@@ -12,7 +12,7 @@ import type {
 } from '../domain/types';
 import type { FinanceiroRepository, Resultado } from '../application/ports';
 import type {
-  DiaHotmart, DivergenciaHotmart, FamiliaHotmart, OfertaHotmart, PessoaHotmart, SyncHotmart, TransacaoHotmart,
+  DiaHotmart, DivergenciaHotmart, FamiliaHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, SyncHotmart, TransacaoHotmart,
 } from '../domain/hotmart';
 
 function erroPara(msg: string): Resultado {
@@ -214,5 +214,10 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     const lista = await this.rpcLista<SyncHotmart>('fn_fin_hotmart_sync_status', {},
       'Não foi possível conferir a sincronização com a Hotmart.');
     return lista[0] ?? null;
+  }
+
+  loadHotmartIdentidade(): Promise<IdentidadeRevisao[]> {
+    return this.rpcLista<IdentidadeRevisao>('fn_fin_hotmart_identidade', {},
+      'Não foi possível carregar a revisão de identidade.');
   }
 }

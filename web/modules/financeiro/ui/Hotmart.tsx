@@ -16,12 +16,12 @@ import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData, fmtDataHora } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../application/ports';
 import {
-  contarSituacoes, ORDEM_SITUACAO, resumirHotmart, ROTULO_GRUPO, ROTULO_SITUACAO,
+  celulaCsv, contarSituacoes, ORDEM_SITUACAO, resumirHotmart, ROTULO_GRUPO, ROTULO_SITUACAO, rotuloDocumento,
   type DiaHotmart, type DivergenciaHotmart, type FamiliaHotmart, type OfertaHotmart,
-  type PessoaHotmart, type SituacaoPessoa, type SyncHotmart, type TransacaoHotmart,
+  type IdentidadeRevisao, type PessoaHotmart, type SituacaoPessoa, type SyncHotmart, type TransacaoHotmart,
 } from '../domain/hotmart';
 
-type Visao = 'faturamento' | 'pessoas' | 'ofertas' | 'conciliacao';
+type Visao = 'faturamento' | 'pessoas' | 'identidade' | 'ofertas' | 'conciliacao';
 const PERIODOS = [
   { dias: 30, rotulo: '30 dias' }, { dias: 90, rotulo: '90 dias' },
   { dias: 365, rotulo: '12 meses' }, { dias: 1095, rotulo: 'Tudo (3 anos)' },
@@ -30,6 +30,9 @@ const PERIODOS = [
 const TOM_SITUACAO: Record<SituacaoPessoa, Tone> = {
   devendo: 'danger', negociacao_cancelamento: 'danger', em_pagamento: 'warning', boleto_em_aberto: 'warning',
   reembolsado: 'neutral', ativo: 'success', inadimplencia_antiga: 'warning', vencido: 'neutral', so_tentou: 'info',
+};
+const MOTIVO_SUGESTAO: Record<string, string> = {
+  mesmo_telefone: 'Mesmo telefone', mesmo_nome: 'Mesmo nome', mesmo_documento_tentativa: 'Mesmo CPF em tentativa',
 };
 const TOM_GRUPO: Record<TransacaoHotmart['grupo'], Tone> = {
   pago: 'success', estornado: 'danger', atrasado: 'danger', em_aberto: 'warning', recusado: 'neutral', expirado: 'neutral', outro: 'neutral',
@@ -58,7 +61,7 @@ export function Hotmart({ repo }: { repo: FinanceiroRepository }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        {(['faturamento', 'pessoas', 'ofertas', 'conciliacao'] as Visao[]).map((v) => (
+        {(['faturamento', 'pessoas', 'identidade', 'ofertas', 'conciliacao'] as Visao[]).map((v) => (
           <button
             key={v}
             type="button"
@@ -66,7 +69,7 @@ export function Hotmart({ repo }: { repo: FinanceiroRepository }) {
             onClick={() => setVisao(v)}
             className={`rounded-[var(--r-md)] border px-3 py-1.5 text-xs font-semibold ${visao === v ? 'border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-2)] hover:bg-[var(--surface-3)]'}`}
           >
-            {{ faturamento: 'Faturamento', pessoas: 'Pessoas', ofertas: 'Ofertas', conciliacao: 'Conciliação' }[v]}
+            {{ faturamento: 'Faturamento', pessoas: 'Pessoas', identidade: 'Mesma pessoa?', ofertas: 'Ofertas', conciliacao: 'Conciliação' }[v]}
           </button>
         ))}
         <span className="mx-1 h-5 w-px bg-[var(--border)]" aria-hidden="true" />
@@ -76,8 +79,6 @@ export function Hotmart({ repo }: { repo: FinanceiroRepository }) {
             type="button"
             aria-pressed={familia === f}
             onClick={() => setFamilia(f)}
-            disabled={f === 'AURUM'}
-            title={f === 'AURUM' ? 'O Aurum entra na próxima etapa (ainda não sincronizado).' : undefined}
             className={`rounded-[var(--r-md)] border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${familia === f ? 'border-[var(--accent)] text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-3)]'}`}
           >
             {f === 'HM' ? 'Holding Masters' : 'Aurum'}
@@ -88,6 +89,7 @@ export function Hotmart({ repo }: { repo: FinanceiroRepository }) {
 
       {visao === 'faturamento' && <VisaoFaturamento repo={repo} familia={familia} />}
       {visao === 'pessoas' && <VisaoPessoas repo={repo} familia={familia} />}
+      {visao === 'identidade' && <VisaoIdentidade repo={repo} />}
       {visao === 'ofertas' && <VisaoOfertas repo={repo} familia={familia} />}
       {visao === 'conciliacao' && <VisaoConciliacao repo={repo} familia={familia} />}
     </div>
@@ -137,20 +139,30 @@ function Erro({ msg }: { msg: string }) {
 
 // ─── Faturamento ────────────────────────────────────────────────────────────
 function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; familia: FamiliaHotmart }) {
-  const [periodo, setPeriodo] = useState<number>(30);
+  const [intervalo, setIntervalo] = useState<{ de: string; ate: string; preset: number | null }>(
+    { de: isoDiasAtras(29), ate: isoDiasAtras(0), preset: 30 });
   const { dados, erro } = useCarga<DiaHotmart[]>(
-    () => repo.loadHotmartFaturamento(familia, isoDiasAtras(periodo - 1), isoDiasAtras(0)), [familia, periodo]);
+    () => repo.loadHotmartFaturamento(familia, intervalo.de, intervalo.ate), [familia, intervalo.de, intervalo.ate]);
   const resumo = useMemo(() => resumirHotmart(dados ?? []), [dados]);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         {PERIODOS.map((p) => (
-          <button key={p.dias} type="button" aria-pressed={periodo === p.dias} onClick={() => setPeriodo(p.dias)}
-            className={`rounded-[var(--r-sm)] border px-2.5 py-1 text-xs ${periodo === p.dias ? 'border-[var(--accent)] font-semibold text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-3)]'}`}>
+          <button key={p.dias} type="button" aria-pressed={intervalo.preset === p.dias}
+            onClick={() => setIntervalo({ de: isoDiasAtras(p.dias - 1), ate: isoDiasAtras(0), preset: p.dias })}
+            className={`rounded-[var(--r-sm)] border px-2.5 py-1 text-xs ${intervalo.preset === p.dias ? 'border-[var(--accent)] font-semibold text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-3)]'}`}>
             {p.rotulo}
           </button>
         ))}
+        <span className="ml-2 text-xs text-[var(--fg-3)]">ou de</span>
+        <input type="date" aria-label="Data inicial" value={intervalo.de} max={intervalo.ate}
+          onChange={(e) => e.target.value && setIntervalo({ ...intervalo, de: e.target.value, preset: null })}
+          className="rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs" />
+        <span className="text-xs text-[var(--fg-3)]">até</span>
+        <input type="date" aria-label="Data final" value={intervalo.ate} min={intervalo.de}
+          onChange={(e) => e.target.value && setIntervalo({ ...intervalo, ate: e.target.value, preset: null })}
+          className="rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs" />
       </div>
       {erro ? <Erro msg={erro} /> : !dados ? <Loading label="Carregando faturamento da Hotmart…" minHeight={200} /> : (
         <>
@@ -203,7 +215,8 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
 // ─── Pessoas ────────────────────────────────────────────────────────────────
 function VisaoPessoas({ repo, familia }: { repo: FinanceiroRepository; familia: FamiliaHotmart }) {
   const { dados, erro } = useCarga<PessoaHotmart[]>(() => repo.loadHotmartPessoas(familia), [familia]);
-  const [filtro, setFiltro] = useState<SituacaoPessoa | 'avisos' | null>(null);
+  const [filtro, setFiltro] = useState<SituacaoPessoa | 'avisos' | 'multi' | null>(null);
+  const [periodo, setPeriodo] = useState<{ de: string; ate: string }>({ de: '', ate: '' });
   const [busca, setBusca] = useState('');
   const [aberta, setAberta] = useState<string | null>(null);
 
@@ -213,37 +226,58 @@ function VisaoPessoas({ repo, familia }: { repo: FinanceiroRepository; familia: 
   const contagem = contarSituacoes(dados);
   const avisos = dados.filter((p) => p.aviso).length;
   const termo = busca.trim().toLowerCase();
+  const termoDigitos = termo.replace(/\D/g, '');
   const lista = dados.filter((p) =>
-    (filtro == null || (filtro === 'avisos' ? !!p.aviso : p.situacao === filtro)) &&
-    (!termo || p.email.includes(termo) || (p.nome ?? '').toLowerCase().includes(termo)));
+    (filtro == null || (filtro === 'avisos' ? !!p.aviso : filtro === 'multi' ? p.emails.length > 1 : p.situacao === filtro)) &&
+    (!periodo.de || (p.primeira_compra ?? '') >= periodo.de) &&
+    (!periodo.ate || (p.primeira_compra ?? '9999') <= periodo.ate) &&
+    (!termo || p.emails.some((e) => e.includes(termo)) || (p.nome ?? '').toLowerCase().includes(termo) ||
+      (termoDigitos.length >= 4 && p.documentos.some((d) => d.includes(termoDigitos))) ||
+      (p.origem ?? '').toLowerCase().includes(termo)));
+  const multi = dados.filter((p) => p.emails.length > 1).length;
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-1.5">
         <Chip ativo={filtro == null} onClick={() => setFiltro(null)}>Todas · {dados.length}</Chip>
         <Chip ativo={filtro === 'avisos'} onClick={() => setFiltro('avisos')} tom="danger">Avisos · {avisos}</Chip>
+        <Chip ativo={filtro === 'multi'} onClick={() => setFiltro('multi')} tom="info">Mais de um e-mail · {multi}</Chip>
         {ORDEM_SITUACAO.map((s) => (
           <Chip key={s} ativo={filtro === s} onClick={() => setFiltro(s)} tom={TOM_SITUACAO[s]}>
             {ROTULO_SITUACAO[s]} · {contagem[s]}
           </Chip>
         ))}
       </div>
-      <input
-        type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome ou e-mail"
-        aria-label="Buscar pessoa por nome ou e-mail"
-        className="w-full max-w-sm rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-sm"
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Nome, e-mail, CPF/CNPJ ou origem"
+          aria-label="Buscar pessoa por nome, e-mail, documento ou origem"
+          className="w-full max-w-sm rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-sm"
+        />
+        <span className="text-xs text-[var(--fg-3)]">1ª compra de</span>
+        <input type="date" aria-label="Primeira compra a partir de" value={periodo.de}
+          onChange={(e) => setPeriodo({ ...periodo, de: e.target.value })}
+          className="rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs" />
+        <span className="text-xs text-[var(--fg-3)]">até</span>
+        <input type="date" aria-label="Primeira compra até" value={periodo.ate}
+          onChange={(e) => setPeriodo({ ...periodo, ate: e.target.value })}
+          className="rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs" />
+        <button type="button" onClick={() => exportarPessoasCsv(lista)}
+          className="rounded-[var(--r-md)] border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--fg-2)] hover:bg-[var(--surface-3)]">
+          Exportar CSV ({lista.length})
+        </button>
+      </div>
       <SectionCard title={`${lista.length} pessoa(s)`} subtitle="Clique numa linha para ver tudo o que a pessoa comprou e tentou comprar na Hotmart.">
         {!lista.length ? <EmptyState title="Ninguém neste recorte" /> : (
           <DataTable minWidth={1000}>
             <Thead>
-              <Th>Pessoa</Th><Th>Situação</Th><Th>Pago (bruto)</Th><Th>Líquido</Th><Th>Último pagamento</Th>
-              <Th>Atrasado (120 dias)</Th><Th>Tentativas</Th><Th>GPS</Th>
+              <Th>Pessoa</Th><Th>Situação</Th><Th>Origem e caminho</Th><Th>Pago (bruto)</Th><Th>Líquido</Th><Th>Último pagamento</Th>
+              <Th>Atrasado (120 dias)</Th><Th>Tentativas</Th><Th>Board · GPS</Th>
             </Thead>
             <tbody>
               {lista.slice(0, 500).map((p) => (
-                <LinhaPessoa key={p.email} p={p} aberta={aberta === p.email}
-                  onToggle={() => setAberta(aberta === p.email ? null : p.email)} repo={repo} />
+                <LinhaPessoa key={p.pessoa_chave} p={p} aberta={aberta === p.pessoa_chave}
+                  onToggle={() => setAberta(aberta === p.pessoa_chave ? null : p.pessoa_chave)} repo={repo} />
               ))}
             </tbody>
           </DataTable>
@@ -264,15 +298,26 @@ function Chip({ ativo, onClick, children, tom = 'neutral' }: { ativo: boolean; o
 }
 
 function LinhaPessoa({ p, aberta, onToggle, repo }: { p: PessoaHotmart; aberta: boolean; onToggle: () => void; repo: FinanceiroRepository }) {
+  const doc = p.documentos[0];
   return (
     <>
       <Tr onClick={onToggle} className="cursor-pointer">
         <Td>
           <div className="font-medium text-[var(--fg)]">{p.nome ?? '—'}</div>
-          <div className="text-[11px] text-[var(--fg-3)] break-all">{p.email}</div>
+          {p.emails.map((e) => <div key={e} className="text-[11px] text-[var(--fg-3)] break-all">{e}</div>)}
+          {(doc || p.cidade) && (
+            <div className="text-[11px] text-[var(--fg-4)]">
+              {doc ? rotuloDocumento(doc) : ''}{doc && p.cidade ? ' · ' : ''}{p.cidade ?? ''}
+            </div>
+          )}
           {p.aviso && <div className="mt-0.5 text-[11px] font-medium text-[var(--red)]"><Icon name="alert" size={11} className="mr-1 inline" />{p.aviso}</div>}
         </Td>
         <Td><Badge tone={TOM_SITUACAO[p.situacao]}>{ROTULO_SITUACAO[p.situacao]}</Badge></Td>
+        <Td className="text-[11px]">
+          <div className="text-[var(--fg-2)]">{p.primeira_compra ? fmtData(p.primeira_compra) : '—'}{p.primeira_oferta ? ` · ${p.primeira_oferta}` : ''}</div>
+          {p.origem && <div className="text-[var(--fg-3)] break-all">{p.origem}</div>}
+          {p.fluxo && <div className="text-[var(--fg-3)]">{p.fluxo}</div>}
+        </Td>
         <Td className="tabular">{fmtBRL(Number(p.valor_pago))}<div className="text-[11px] text-[var(--fg-3)]">{p.compras_pagas} pagamento(s)</div></Td>
         <Td className="tabular text-[var(--green)]">{fmtBRL(Number(p.liquido))}</Td>
         <Td className="tabular">{p.ultima_compra_paga ? fmtData(p.ultima_compra_paga) : '—'}
@@ -282,13 +327,43 @@ function LinhaPessoa({ p, aberta, onToggle, repo }: { p: PessoaHotmart; aberta: 
           {p.atrasadas_antigas > 0 && <div className="text-[11px] text-[var(--fg-3)]" title="Parcelas vencidas há mais de 120 dias (em geral assinatura já cancelada)">antigas: {p.atrasadas_antigas} · {fmtBRL(Number(p.valor_atrasado_antigo))}</div>}
         </Td>
         <Td className="tabular text-[var(--fg-3)]">{p.recusadas > 0 ? `${p.recusadas} recusa(s)` : '—'}{p.em_aberto > 0 ? ` · ${p.em_aberto} boleto(s)` : ''}</Td>
-        <Td>{p.no_gps ? <Badge tone="info">No GPS</Badge> : <span className="text-[var(--fg-4)]">—</span>}</Td>
+        <Td className="text-[11px]">
+          {p.cards > 0
+            ? <div>{p.cards} card(s){p.status_card ? ` · ${p.status_card}` : ''}{p.canal_card ? <div className="text-[var(--fg-3)]">{p.canal_card}</div> : null}</div>
+            : <span className="text-[var(--fg-4)]">sem card</span>}
+          <div className="mt-0.5 flex flex-wrap gap-1">
+            {p.turma && <Badge>{p.turma}</Badge>}
+            {p.no_gps && <Badge tone="info">No GPS</Badge>}
+          </div>
+        </Td>
       </Tr>
       {aberta && (
-        <tr><td colSpan={8} className="bg-[var(--surface-2)] px-4 py-3"><ExtratoHotmart email={p.email} repo={repo} /></td></tr>
+        <tr><td colSpan={9} className="bg-[var(--surface-2)] px-4 py-3"><ExtratoHotmart email={p.emails[0]} repo={repo} /></td></tr>
       )}
     </>
   );
+}
+
+/** CSV da lista filtrada (separador ; para abrir direto no Excel em pt-BR). */
+function exportarPessoasCsv(lista: PessoaHotmart[]) {
+  const col: [string, (p: PessoaHotmart) => unknown][] = [
+    ['Nome', (p) => p.nome], ['E-mails', (p) => p.emails.join(' | ')], ['Documentos', (p) => p.documentos.join(' | ')],
+    ['Telefone', (p) => p.telefone], ['Cidade', (p) => p.cidade], ['Situação', (p) => ROTULO_SITUACAO[p.situacao]],
+    ['Aviso', (p) => p.aviso], ['1ª compra', (p) => p.primeira_compra], ['1ª oferta', (p) => p.primeira_oferta],
+    ['Origem (sck)', (p) => p.origem], ['Caminho', (p) => p.fluxo], ['Pagamentos', (p) => p.compras_pagas],
+    ['Pago bruto', (p) => p.valor_pago], ['Líquido', (p) => p.liquido], ['Último pagamento', (p) => p.ultima_compra_paga],
+    ['Acesso até (+1 ano)', (p) => p.acesso_hotmart_ate], ['Atrasado 120d', (p) => p.valor_atrasado],
+    ['Atrasado antigo', (p) => p.valor_atrasado_antigo], ['Reembolsado', (p) => p.valor_estornado],
+    ['Recusas', (p) => p.recusadas], ['Cards', (p) => p.cards], ['Status card', (p) => p.status_card],
+    ['Canal', (p) => p.canal_card], ['Turma', (p) => p.turma], ['No GPS', (p) => (p.no_gps ? 'sim' : 'não')],
+  ];
+  const linhas = [col.map(([c]) => c).join(';'), ...lista.map((p) => col.map(([, f]) => celulaCsv(f(p))).join(';'))];
+  const blob = new Blob(['﻿' + linhas.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `hotmart-pessoas-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 /** Extrato completo de uma pessoa na Hotmart — reusado na ficha do board. */
@@ -299,11 +374,12 @@ export function ExtratoHotmart({ email, repo }: { email: string; repo: Financeir
   if (!dados.length) return <p className="text-xs text-[var(--fg-3)]">Nenhuma transação na Hotmart com este e-mail.</p>;
   return (
     <DataTable minWidth={760}>
-      <Thead><Th>Pedido</Th><Th>Situação</Th><Th>Oferta</Th><Th>Bruto</Th><Th>Cobrado</Th><Th>Líquido</Th><Th>Pagamento</Th><Th>Origem</Th></Thead>
+      <Thead><Th>Pedido</Th><Th>E-mail</Th><Th>Situação</Th><Th>Oferta</Th><Th>Bruto</Th><Th>Cobrado</Th><Th>Líquido</Th><Th>Pagamento</Th><Th>Origem</Th></Thead>
       <tbody>
         {dados.map((t) => (
           <Tr key={t.transacao}>
             <Td className="tabular">{t.pedido_em ? fmtDataHora(t.pedido_em) : '—'}<div className="text-[10px] text-[var(--fg-4)]">{t.transacao}</div></Td>
+            <Td className="text-[11px] text-[var(--fg-3)] break-all">{t.email}</Td>
             <Td><Badge tone={TOM_GRUPO[t.grupo]}>{ROTULO_GRUPO[t.grupo]}</Badge></Td>
             <Td className="text-xs">{t.oferta_codigo ?? '—'}<div className="text-[10px] text-[var(--fg-3)]">{t.produto}</div></Td>
             <Td className="tabular">{fmtBRL(Number(t.valor_oferta ?? 0))}</Td>
@@ -387,5 +463,59 @@ function VisaoConciliacao({ repo, familia }: { repo: FinanceiroRepository; famil
         </DataTable>
       )}
     </SectionCard>
+  );
+}
+
+// ─── Mesma pessoa? ──────────────────────────────────────────────────────────
+// E-mail, CPF/CNPJ e conta Hotmart iguais JÁ juntam a pessoa sozinhos (componente
+// conexo). Aqui ficam só os casos que precisam de olho humano: telefone ou nome
+// igual em pessoas diferentes, e documento compartilhado (escritório/contador).
+function VisaoIdentidade({ repo }: { repo: FinanceiroRepository }) {
+  const { dados, erro } = useCarga<IdentidadeRevisao[]>(() => repo.loadHotmartIdentidade(), ['identidade']);
+  if (erro) return <Erro msg={erro} />;
+  if (!dados) return <Loading label="Carregando revisão de identidade…" minHeight={200} />;
+  const sug = dados.filter((d) => d.tipo === 'sugestao');
+  const rev = dados.filter((d) => d.tipo === 'revisao');
+  const lista = (v: string[] | null) => (v?.length ? v.join(', ') : '—');
+  return (
+    <div className="space-y-4">
+      <SectionCard title={`${sug.length} par(es) que podem ser a mesma pessoa`}
+        subtitle="Mesmo telefone, mesmo nome completo ou mesmo CPF digitado numa tentativa de compra que não foi paga. Não foram juntados: confira antes.">
+        {!sug.length ? <EmptyState title="Nenhum par para conferir" icon="check" /> : (
+          <DataTable minWidth={900}>
+            <Thead><Th>Motivo</Th><Th>Pessoa A</Th><Th>Pessoa B</Th><Th>Pago A</Th><Th>Pago B</Th></Thead>
+            <tbody>
+              {sug.map((d) => (
+                <Tr key={`${d.motivo}-${d.pessoa_a}-${d.pessoa_b}`}>
+                  <Td>
+                    <Badge tone="warning">{MOTIVO_SUGESTAO[d.motivo] ?? d.motivo}</Badge>
+                    <div className="text-[10px] text-[var(--fg-4)]">
+                      {d.motivo !== 'mesmo_nome' && d.evidencia ? `···${d.evidencia.slice(-4)}` : d.evidencia}
+                    </div>
+                  </Td>
+                  <Td className="text-xs"><div className="font-medium">{lista(d.nomes_a)}</div><div className="text-[var(--fg-3)] break-all">{lista(d.emails_a)}</div></Td>
+                  <Td className="text-xs"><div className="font-medium">{lista(d.nomes_b)}</div><div className="text-[var(--fg-3)] break-all">{lista(d.emails_b)}</div></Td>
+                  <Td className="tabular text-xs">{fmtBRL(Number(d.pago_a ?? 0))}</Td>
+                  <Td className="tabular text-xs">{fmtBRL(Number(d.pago_b ?? 0))}</Td>
+                </Tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
+      </SectionCard>
+      <SectionCard title={`${rev.length} documento(s) em revisão`}
+        subtitle="Documento compartilhado por pessoas diferentes ou ligado a muitos e-mails (escritório, contador). Não junta ninguém.">
+        {!rev.length ? <EmptyState title="Nada em revisão" icon="check" /> : (
+          <DataTable minWidth={600}>
+            <Thead><Th>Documento</Th><Th>Motivo</Th></Thead>
+            <tbody>
+              {rev.map((d) => (
+                <Tr key={d.pessoa_a}><Td className="font-mono text-xs">{d.evidencia}</Td><Td className="text-xs">{d.motivo}</Td></Tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
+      </SectionCard>
+    </div>
   );
 }

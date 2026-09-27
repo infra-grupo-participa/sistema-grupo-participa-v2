@@ -146,6 +146,30 @@ async function processarJanela(tk: string, j: { produto_id: string; inicio: stri
         detalhes_em = now(), atualizado_em = now()
       where transacao = ${c.transaction}`;
   }
+  // Participantes (CPF/CNPJ, telefone e cidade do comprador) — é o que liga e-mails
+  // diferentes da mesma pessoa. Guarda só o comprador; dos outros papéis, só o papel.
+  // Sem transaction_status a API só devolve venda paga: pede status por status
+  // (recusa, reembolso e boleto vencido também têm CPF — é o que liga quem tentou comprar).
+  const usuarios: Item[] = [];
+  for (const st of STATUS) {
+    usuarios.push(...await paginar(tk, "/payments/api/v1/sales/users", { ...base, transaction_status: st }));
+  }
+  const digitos = (v: unknown) => (v == null ? null : String(v).replace(/\D/g, "") || null);
+  for (const u of usuarios) {
+    if (!u.transaction) continue;
+    const comprador = (u.users ?? []).find((x: Item) => x.role === "BUYER")?.user ?? null;
+    const doc = (comprador?.documents ?? [])[0] ?? null;
+    const papeis = (u.users ?? []).map((x: Item) => x.role);
+    await sql`update fin.hotmart_transacoes set
+        comprador_documento = ${digitos(doc?.value)},
+        comprador_documento_tipo = ${doc?.type ?? null},
+        comprador_telefone = ${digitos(comprador?.cellphone ?? comprador?.phone)},
+        comprador_cidade = ${comprador?.address?.city ?? null},
+        comprador_uf = ${comprador?.address?.state ?? null},
+        participantes = ${sql.json(papeis)},
+        atualizado_em = now()
+      where transacao = ${u.transaction}`;
+  }
   return total;
 }
 
