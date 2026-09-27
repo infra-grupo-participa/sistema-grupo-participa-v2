@@ -59,14 +59,19 @@ export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
       (p.nome ?? '').toLowerCase().includes(termo) ||
       (p.email ?? '').toLowerCase().includes(termo) ||
       (p.turma ?? '').toLowerCase().includes(termo))
-    .sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+    // acesso vigente primeiro (vence antes = mais urgente); vencidos no fim, o mais recente antes
+    .sort((a, b) => {
+      const va = a.vencimento >= hojeISO, vb = b.vencimento >= hojeISO;
+      if (va !== vb) return va ? -1 : 1;
+      return va ? a.vencimento.localeCompare(b.vencimento) : b.vencimento.localeCompare(a.vencimento);
+    });
 
   return (
     <div className="space-y-4">
       <SectionCard title="Como o crédito é calculado">
         <p className="text-sm text-[var(--fg-2)] leading-relaxed">
           Crédito = o que a pessoa pagou no HM no ciclo atual × meses cheios que faltam do acesso ÷ 12.
-          Diferença = {fmtBRLc(VALOR_PROGRAMA_HM)} − crédito. O vencimento vem da turma. Estão aqui todos os alunos
+          Valor a pagar = {fmtBRLc(VALOR_PROGRAMA_HM)} − crédito. O vencimento vem da turma. Estão aqui todos os alunos
           de turma com vencimento — quem não tem pagamento de HM na Hotmart aparece com crédito zero e o aviso na linha.
         </p>
       </SectionCard>
@@ -98,12 +103,12 @@ export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
         </button>
       </div>
 
-      <SectionCard title={`${lista.length} pessoa(s)`} subtitle="Clique numa linha para ver o diagnóstico completo do cálculo.">
+      <SectionCard title={`${lista.length} pessoa(s)`} subtitle="Clique numa pessoa para ver a conta: quanto pagou, quanto vira crédito e quanto tem que pagar.">
         {!lista.length ? <EmptyState title="Ninguém neste recorte" /> : (
           <DataTable minWidth={960}>
             <Thead>
-              <Th>Pessoa</Th><Th>Turma</Th><Th>Vence em</Th><Th>Meses restantes</Th>
-              <Th>Pago no ciclo</Th><Th>Crédito</Th><Th>Diferença a pagar</Th><Th>Card no board</Th>
+              <Th>Pessoa</Th><Th>Turma</Th><Th>Vence em</Th><Th>Meses cheios restantes</Th>
+              <Th>Pago no ciclo</Th><Th>Crédito</Th><Th>Valor a pagar</Th><Th>Card no board</Th>
             </Thead>
             <tbody>
               {lista.map((p) => (
@@ -118,7 +123,7 @@ export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
                   <Td className="tabular">
                     {fmtBRLc(Number(p.pago_no_ciclo))}
                     {p.formas && <div className="text-[11px] text-[var(--fg-3)]">{p.formas}</div>}
-                    {p.ultimo_pagamento == null && <div className="text-[11px] text-[var(--yellow)]">sem pagamento de HM na Hotmart — confirmar com a Isabela</div>}
+                    {p.ultimo_pagamento == null && <div className="whitespace-nowrap text-[11px] text-[var(--yellow)]" title="Sem pagamento de HM na Hotmart neste cadastro — confirmar com a Isabela se pagou por fora ou com outro e-mail">sem pagamento na Hotmart</div>}
                   </Td>
                   <Td className="tabular">{fmtBRLc(Number(p.credito))}</Td>
                   <Td className="tabular font-semibold text-[var(--fg)]">{fmtBRLc(Number(p.diferenca))}</Td>
@@ -143,7 +148,7 @@ function exportarProrataCsv(lista: LinhaProrataHM[]) {
     ['Nome', (p) => p.nome], ['E-mail', (p) => p.email], ['Turma', (p) => p.turma],
     ['Vencimento', (p) => p.vencimento], ['Meses restantes', (p) => p.meses_restantes],
     ['Pago no ciclo', (p) => Number(p.pago_no_ciclo)], ['Pagamentos no ciclo', (p) => p.pagamentos_no_ciclo],
-    ['Formas', (p) => p.formas], ['Crédito', (p) => Number(p.credito)], ['Diferença a pagar', (p) => Number(p.diferenca)],
+    ['Formas', (p) => p.formas], ['Crédito', (p) => Number(p.credito)], ['Valor a pagar', (p) => Number(p.diferenca)],
     ['Último pagamento', (p) => p.ultimo_pagamento], ['Card no board', (p) => (p.tem_card ? 'sim' : 'não')],
     ['No GPS', (p) => (p.no_gps ? 'sim' : 'não')],
   ];

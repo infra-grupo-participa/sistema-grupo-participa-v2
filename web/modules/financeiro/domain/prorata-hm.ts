@@ -44,3 +44,44 @@ export function prorataDoCard(
   if (hm?.origem !== 'HM' || !hm.pessoa_chave) return null;
   return linhas.find((l) => l.pessoa_chave === hm.pessoa_chave) ?? null;
 }
+
+/** Início do ciclo do pro rata: vencimento − 12 meses − 60 dias (mesma conta de fn_fin_prorata_hm). */
+export function inicioDoCiclo(vencimento: string): string {
+  const [y, m, d] = vencimento.slice(0, 10).split('-').map(Number);
+  const dt = new Date(Date.UTC(y - 1, m - 1, d));
+  // 12 meses antes num dia que não existe (29/02) cai no último dia do mês, como o interval do Postgres
+  if (dt.getUTCMonth() !== m - 1) dt.setUTCDate(0);
+  dt.setUTCDate(dt.getUTCDate() - 60);
+  return dt.toISOString().slice(0, 10);
+}
+
+/** Números da conta do pro rata, de qualquer das duas fontes (lista ou diagnóstico). */
+export interface ContaProrata {
+  pago: number;
+  pagamentos: number;
+  formas?: string | null;
+  vencimento: string | null;
+  inicioCiclo: string | null;
+  meses: number;
+  credito: number;
+  valorPrograma: number;
+  diferenca: number;
+}
+
+const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }).replace(/\s/g, ' ');
+
+/**
+ * A frase que diz POR QUE a pessoa paga aquele valor ("ele gastou tanto, por isso vai pagar isso" — João, 27/09).
+ * Três casos: sem pagamento no ciclo, sem mês cheio restante, e o caso com crédito.
+ */
+export function explicarProrata(c: ContaProrata): string {
+  const aPagar = brl(c.diferenca);
+  if (c.pago <= 0) {
+    return `Não há pagamento de HM na Hotmart neste ciclo, então não existe crédito: paga o valor cheio do Programa, ${aPagar}. Se pagou por fora ou com outro e-mail, confirme com a Isabela.`;
+  }
+  if (c.meses <= 0) {
+    return `Pagou ${brl(c.pago)} no HM neste ciclo, mas o acesso não tem mais nenhum mês cheio pela frente, então esse pagamento já foi usado e não vira crédito: paga o valor cheio do Programa, ${aPagar}.`;
+  }
+  const meses = c.meses === 1 ? '1 mês cheio' : `${c.meses} meses cheios`;
+  return `Pagou ${brl(c.pago)} no HM neste ciclo. Como ainda faltam ${meses} de acesso, ${c.meses}/12 desse valor volta como crédito: ${brl(c.credito)}. Por isso paga ${aPagar} para entrar no Programa (${brl(c.valorPrograma)} − ${brl(c.credito)}).`;
+}

@@ -19,7 +19,8 @@ import { ExtratoHotmart } from './hotmart/ExtratoHotmart';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
 import { rotuloCategorias, rotuloMetodo, type BoardHotmart, type ProrataHM } from '../domain/hotmart';
 import { explicarDivergencia, fmtMesAno, rotuloParcelamento, temAssinaturaHM, temDadoHotmart } from '../domain/board-hotmart';
-import { prorataDoCard } from '../domain/prorata-hm';
+import { inicioDoCiclo, prorataDoCard } from '../domain/prorata-hm';
+import { ContaProrata } from './hotmart/ContaProrata';
 import { carregarProrataHM, VALOR_PROGRAMA_HM } from '../application/carregar-prorata';
 
 const CANAIS_COBRANCA = ['WhatsApp', 'E-mail', 'Ligação', 'Reunião'];
@@ -429,14 +430,11 @@ function BlocoProrataHM({ repo, contatoHmId, hm }: { repo: FinanceiroRepository;
     <div>
       {titulo}
       <Row k="Turma" v={p.turma ?? '—'} />
-      <Row k="Vence em" v={fmtData(p.vencimento)} />
-      <Row k="Meses cheios restantes" v={p.meses_restantes} />
-      <Row k="Pago no ciclo" v={`${fmtBRLc(p.pago_no_ciclo)}${p.formas ? ` (${p.formas})` : ''}`} />
-      <Row k="Crédito" v={fmtBRLc(p.credito)} />
-      <Row k="Diferença a pagar" v={<strong className="text-base font-bold tabular text-[var(--fg)]">{fmtBRLc(p.diferenca)}</strong>} />
-      <p className="mt-1 text-[11px] text-[var(--fg-3)]">
-        Regra: crédito = pago no ciclo × meses cheios restantes ÷ 12; diferença = {fmtBRLc(VALOR_PROGRAMA_HM)} − crédito.
-      </p>
+      <ContaProrata c={{
+        pago: p.pago_no_ciclo, pagamentos: p.pagamentos_no_ciclo, formas: p.formas, vencimento: p.vencimento,
+        inicioCiclo: inicioDoCiclo(p.vencimento), meses: p.meses_restantes, credito: p.credito,
+        valorPrograma: VALOR_PROGRAMA_HM, diferenca: p.diferenca,
+      }} />
     </div>
   );
 }

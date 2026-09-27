@@ -26,6 +26,8 @@ import type { FinanceiroRepository } from '../application/ports';
 import { Chip, Erro, useCarga } from './hotmart/comum';
 
 type Filtro = 'todas' | 'cobranca' | 'sem_categoria' | 'com_venda';
+/** "Qual oferta mais vendeu" (João, 27/09): o padrão é a que mais deixou líquido, de toda a história da família. */
+type Ordem = 'liquido' | 'vendas' | 'recente';
 
 export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
   ofertas: Oferta[];
@@ -37,6 +39,7 @@ export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
   const { toast, flash } = useFlash();
   const [familia, setFamilia] = useState<FamiliaHotmart>('HM');
   const [filtro, setFiltro] = useState<Filtro>('todas');
+  const [ordem, setOrdem] = useState<Ordem>('liquido');
   const [editando, setEditando] = useState<string | null>(null);
   const [papel, setPapel] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -59,6 +62,14 @@ export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
       default: return linhas;
     }
   }, [linhas, filtro]);
+
+  // Ordena uma CÓPIA (linhasFiltradas pode ser o próprio `linhas` memoizado).
+  const linhasOrdenadas = useMemo(() => {
+    const l = [...linhasFiltradas];
+    if (ordem === 'liquido') return l.sort((a, b) => b.receitaLiquida - a.receitaLiquida || b.vendasPagas - a.vendasPagas);
+    if (ordem === 'vendas') return l.sort((a, b) => b.vendasPagas - a.vendasPagas || b.receitaLiquida - a.receitaLiquida);
+    return l.sort((a, b) => (b.ultimaVenda ?? '').localeCompare(a.ultimaVenda ?? ''));
+  }, [linhasFiltradas, ordem]);
 
   const salvar = async (codigo: string) => {
     setSalvando(true);
@@ -101,6 +112,10 @@ export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
         <Chip ativo={filtro === 'cobranca'} onClick={() => setFiltro('cobranca')} tom="info">Cobrança de saldo</Chip>
         <Chip ativo={filtro === 'sem_categoria'} onClick={() => setFiltro('sem_categoria')} tom="warning">Sem categoria no catálogo</Chip>
         <Chip ativo={filtro === 'com_venda'} onClick={() => setFiltro('com_venda')} tom="success">Com venda</Chip>
+        <span className="ml-2 text-[11px] font-medium uppercase tracking-wide text-[var(--fg-4)]">Ordenar por</span>
+        <Chip ativo={ordem === 'liquido'} onClick={() => setOrdem('liquido')}>Mais faturou</Chip>
+        <Chip ativo={ordem === 'vendas'} onClick={() => setOrdem('vendas')}>Mais vendas</Chip>
+        <Chip ativo={ordem === 'recente'} onClick={() => setOrdem('recente')}>Venda mais recente</Chip>
       </div>
 
       {erroVendas && <div className="mb-3"><Erro msg={erroVendas} /></div>}
@@ -126,21 +141,22 @@ export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
             <Th>1ª / última venda</Th>
           </Thead>
           <tbody>
-            {linhasFiltradas.map((l) => (
+            {linhasOrdenadas.map((l, i) => (
               <Tr key={l.codigo}>
                 <Td>
                   <div className="flex items-center gap-1.5">
+                    {ordem !== 'recente' && l.vendasPagas > 0 && <span className="tabular text-[11px] text-[var(--fg-4)]">{i + 1}º</span>}
                     <span className="font-semibold text-[var(--fg)] tabular">{l.codigo}</span>
                     {l.temConfig && l.ativoConfig === false && <Badge tone="danger">Inativa</Badge>}
                   </div>
                   {l.link && (
-                    <Button size="sm" variant="ghost" className="mt-1"
+                    <Button size="sm" variant="ghost" className="mt-1 whitespace-nowrap"
                       onClick={() => { navigator.clipboard?.writeText(l.link!); flash('Link copiado.'); }}>
                       <Icon name="copy" size={12} /> Copiar link
                     </Button>
                   )}
                 </Td>
-                <Td className="text-xs">
+                <Td className="min-w-[180px] text-xs">
                   {l.nomeComercial ?? l.produto ?? <span className="text-[var(--fg-3)]">—</span>}
                   {l.produto && l.nomeComercial && l.produto !== l.nomeComercial && (
                     <div className="text-[10px] text-[var(--fg-3)]">{l.produto}</div>
@@ -149,7 +165,7 @@ export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
                 </Td>
                 <Td>
                   {!l.temVenda ? <span className="text-[var(--fg-3)]">—</span> : l.categoriaCatalogo ? (
-                    <Badge tone="success">{l.categoriaCatalogo}{l.papelCatalogo ? ` · ${l.papelCatalogo}` : ''}</Badge>
+                    <Badge tone="success">{ROTULO_CATEGORIA[l.categoriaCatalogo] ?? l.categoriaCatalogo}{l.papelCatalogo && l.papelCatalogo !== l.categoriaCatalogo ? ` · ${l.papelCatalogo}` : ''}</Badge>
                   ) : (
                     // fora do catálogo: a mesma inferência do banco (fin.oferta_categoria) — "desconhecida" quando o valor não diz
                     <Badge tone={l.vendasPagas > 0 ? 'warning' : 'neutral'}>
@@ -181,7 +197,12 @@ export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
                     </div>
                   )}
                 </Td>
-                <Td className="tabular text-[var(--fg)]">{l.temConfig ? fmtBRL(l.valorConfig) : '—'}</Td>
+                <Td className="tabular text-[var(--fg)]">
+                  {l.temConfig ? fmtBRL(l.valorConfig) : l.precoOferta != null ? (
+                    // sem configuração de cobrança: o preço mais comum da oferta na Hotmart
+                    <span title="Preço mais comum desta oferta nas vendas da Hotmart">{fmtBRL(l.precoOferta)}</span>
+                  ) : '—'}
+                </Td>
                 <Td className="tabular text-[var(--fg-2)]">{l.temConfig ? l.usosBoard : '—'}</Td>
                 <Td className="tabular">{l.vendasPagas}</Td>
                 <Td className="tabular font-semibold">{fmtBRL(l.receitaBruta)}</Td>

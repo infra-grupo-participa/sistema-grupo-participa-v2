@@ -98,25 +98,25 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
                 <tbody>
                   {/* Total do período selecionado — primeira linha, antes dos dias (pedido do João, 27/09). */}
                   <Tr className="bg-[var(--surface-2)] font-semibold">
-                    <Td className="text-[var(--fg)]">Total do período</Td>
+                    <Td className="whitespace-nowrap text-[var(--fg)]">Total do período</Td>
                     <Td className="tabular">{resumo.vendas}</Td>
                     <Td className="tabular">{fmtBRL(resumo.valorOferta)}</Td>
                     <Td className="tabular text-[var(--fg-2)]">{fmtBRL(resumo.taxa)}</Td>
                     {resumo.repasses > 0 && <Td className="tabular text-[var(--fg-2)]">{fmtBRL(resumo.repasses)}</Td>}
-                    <Td className="tabular text-[var(--green)]">
+                    <Td className="whitespace-nowrap tabular text-[var(--green)]">
                       {fmtBRL(resumo.liquido)}
                       {resumo.margem != null && <span className="ml-1 text-[10px] font-normal text-[var(--fg-3)]">{(resumo.margem * 100).toFixed(1)}%</span>}
                     </Td>
                     <Td className="text-[var(--fg-4)]">—</Td>
                     <Td className="text-[var(--fg-4)]">—</Td>
                     <Td className="tabular text-[var(--fg-2)]">{resumo.juros ? fmtBRL(resumo.juros) : '—'}</Td>
-                    <Td className="tabular">{resumo.estornos > 0 ? <span className="text-[var(--red)]">{resumo.estornos} · {fmtBRL(resumo.valorEstornado)}</span> : '—'}</Td>
+                    <Td className="whitespace-nowrap tabular">{resumo.estornos > 0 ? <span className="text-[var(--red)]">{resumo.estornos} · {fmtBRL(resumo.valorEstornado)}</span> : '—'}</Td>
                     <Td className="tabular text-[var(--fg-2)]">{resumo.recusadas || '—'}</Td>
                     <Td className="tabular text-[var(--fg-2)]">{serie.reduce((a, d) => a + d.boletos, 0) || '—'}</Td>
                   </Tr>
                   {[...serie].reverse().map((d) => (
                     <Tr key={d.dia} className={d.preenchido ? 'opacity-60' : undefined}>
-                      <Td className="tabular">
+                      <Td className="whitespace-nowrap tabular">
                         {fmtData(d.dia)}
                         {d.preenchido && <span className="ml-1.5 text-[10px] font-medium text-[var(--fg-3)]">sem venda</span>}
                       </Td>

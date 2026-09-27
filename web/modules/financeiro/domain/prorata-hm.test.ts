@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizarProrataHM, prorataDoCard } from './prorata-hm';
+import { explicarProrata, inicioDoCiclo, normalizarProrataHM, prorataDoCard } from './prorata-hm';
 import type { BoardHotmart, ProrataHM } from './hotmart';
 
 function pr(over: Partial<ProrataHM> = {}): ProrataHM {
@@ -34,5 +34,31 @@ describe('prorataDoCard', () => {
   it('sem linha → null', () => {
     expect(prorataDoCard([], 'c1', hm())).toBeNull();
     expect(prorataDoCard([pr({ contato_hm_id: null, pessoa_chave: 'outra' })], 'c1', hm())).toBeNull();
+  });
+});
+
+describe('inicioDoCiclo', () => {
+  it('vencimento − 12 meses − 60 dias', () => {
+    expect(inicioDoCiclo('2026-12-31')).toBe('2025-11-01');
+    expect(inicioDoCiclo('2026-10-05')).toBe('2025-08-06');
+  });
+});
+
+describe('explicarProrata', () => {
+  const base = { pagamentos: 1, vencimento: '2026-12-31', inicioCiclo: '2025-11-01', valorPrograma: 15000 };
+  it('Marcio: pagou 3.997, faltam 3 meses → crédito 999,25 → paga 14.000,75', () => {
+    const t = explicarProrata({ ...base, pago: 3997, meses: 3, credito: 999.25, diferenca: 14000.75 });
+    expect(t).toContain('R$ 3.997,00');
+    expect(t).toContain('3 meses cheios');
+    expect(t).toContain('R$ 999,25');
+    expect(t).toContain('paga R$ 14.000,75');
+  });
+  it('Carlos: pagou 23.964 mas 0 mês cheio → valor cheio', () => {
+    const t = explicarProrata({ ...base, pago: 23964, pagamentos: 12, meses: 0, credito: 0, diferenca: 15000 });
+    expect(t).toContain('não vira crédito');
+    expect(t).toContain('R$ 15.000,00');
+  });
+  it('sem pagamento no ciclo → valor cheio e confirmar com a Isabela', () => {
+    expect(explicarProrata({ ...base, pago: 0, meses: 5, credito: 0, diferenca: 15000 })).toContain('Isabela');
   });
 });
