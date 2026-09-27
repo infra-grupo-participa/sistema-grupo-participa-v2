@@ -3,6 +3,7 @@
 // (espelho do corpo vigente no banco) e confere: RETURNS TABLE = colunas do tipo, e cada ramo
 // do SELECT final devolve exatamente esse número de colunas.
 import { readFileSync } from 'node:fs';
+import { COLUNAS_MAPA_ALUNOS } from './mapa-alunos';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { COLUNAS_ACELERA_PARA_HM, COLUNAS_BOARD_HOTMART, COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, COLUNAS_PRORATA_HM, agruparFaturamento, categoriaInferida, celulaCsv, resumirAdimplencia, rotuloCategorias, rotuloDocumento, type FunilHotmart } from './hotmart';
@@ -317,5 +318,22 @@ describe('agruparFaturamento', () => {
     expect(agruparFaturamento(serie, 'ano')).toHaveLength(1);
     const d = agruparFaturamento(serie, 'dia');
     expect(d).toHaveLength(4); expect(d[1].vazio).toBe(true);
+  });
+});
+
+describe('contrato fn_fin_mapa_alunos', () => {
+  const sql = migracao('20260928m_fin_mapa_alunos.sql');
+  it('RETURNS TABLE = colunas de MapaAluno', () => {
+    expect(colunasRetorno(sql, 'public.fn_fin_mapa_alunos')).toEqual([...COLUNAS_MAPA_ALUNOS]);
+  });
+  it('o SELECT final projeta o mesmo número de colunas', () => {
+    expect(projecao(selectFinal(sql, 'public.fn_fin_mapa_alunos'))).toHaveLength(COLUNAS_MAPA_ALUNOS.length);
+  });
+  it('guarda, grant, telefone mascarado e "do Programa" = cheio/saldo', () => {
+    expect(sql).toMatch(/coalesce\(public\.gp_pode_ver_financeiro\(\), false\)/);
+    expect(sql).toMatch(/revoke all on function public\.fn_fin_mapa_alunos\(\) from public, anon;/);
+    expect(sql).toMatch(/gp_pode_ver_cpf\(\)[\s\S]*'···' \|\| right\(k\.tel, 4\)/);
+    expect(sql).toMatch(/when a\.tem_cheio then 'programa'/);
+    expect(sql).toMatch(/x\.cat in \('compra_cheia','diferenca'\)\), false\) tem_cheio/);
   });
 });
