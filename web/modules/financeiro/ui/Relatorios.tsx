@@ -14,17 +14,19 @@ import type { FinanceiroRepository } from '../application/ports';
 import { ROTULO_FAMILIA, type BoardHotmart, type FamiliaHotmart } from '../domain/hotmart';
 import { statusTone } from './cor';
 import { exportarXLSX, exportarPDF, formatarCelulaTela } from './exportar';
+import { AceleraParaHM } from './hotmart/AceleraParaHM';
 import { HotmartConciliacao } from './hotmart/HotmartConciliacao';
 import { HotmartIdentidade } from './hotmart/HotmartIdentidade';
 import { HotmartPessoas } from './hotmart/HotmartPessoas';
 
-type TipoRelatorio = 'board' | 'pessoas' | 'conciliacao' | 'identidade';
+type TipoRelatorio = 'board' | 'pessoas' | 'conciliacao' | 'identidade' | 'acelera';
 
 const RELATORIOS: { tipo: TipoRelatorio; rotulo: string }[] = [
   { tipo: 'board', rotulo: 'Carteira do board' },
   { tipo: 'pessoas', rotulo: 'Pessoas na Hotmart' },
   { tipo: 'conciliacao', rotulo: 'Conciliação Hotmart × banco' },
   { tipo: 'identidade', rotulo: 'Mesma pessoa?' },
+  { tipo: 'acelera', rotulo: 'Acelera → HM' },
 ];
 
 /** Botão do seletor de relatório — mesmo padrão visual do seletor de família (FaturamentoDiario.tsx). */
@@ -93,6 +95,8 @@ export function Relatorios({
       )}
 
       {tipo === 'identidade' && <HotmartIdentidade repo={repo} />}
+
+      {tipo === 'acelera' && <AceleraParaHM repo={repo} />}
     </div>
   );
 }

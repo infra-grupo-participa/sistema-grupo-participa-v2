@@ -14,7 +14,7 @@ import { Icon } from '@/shared/ui/icons';
 import { ProgressBar } from '@/shared/ui/components';
 import { fmtBRL, fmtBRLc, fmtData, fmtPrazo } from '@/shared/ui/format';
 import type { BoardHotmart } from '../domain/hotmart';
-import { explicarDivergencia, rotuloParcelamento, temDadoHotmart } from '../domain/board-hotmart';
+import { explicarDivergencia, linhaAssinaturaHM, rotuloParcelamento, temDadoHotmart } from '../domain/board-hotmart';
 import type { CardComEfeito } from '../application/carregar-board';
 import { direcaoDivergencia, statusLabel, temDivergenciaPacote } from '../domain/financeiro';
 import { labelMotivoReuniao } from '../domain/reuniao';
@@ -154,6 +154,10 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
   const hmTitle = hm
     ? `Números da Hotmart (não mudam os valores do board).${hm.cards_da_pessoa > 1 ? ` Esta pessoa tem ${hm.cards_da_pessoa} cards: os mesmos números aparecem em cada um.` : ''}`
     : undefined;
+  // Assinatura HM (mensalidades): contrato à parte — decisão do João, NÃO soma
+  // no "pago" do card nem na linha Hotmart acima. Sem assinatura → nada.
+  const hmAssinatura = linhaAssinaturaHM(hm, fmtBRL);
+  const hmAssinaturaAtiva = hm?.assinatura_ativa === true;
 
   return (
     <button
@@ -169,7 +173,9 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
         conta.saldo_a_pagar != null ? `, falta pagar ${fmtBRLc(conta.saldo_a_pagar)}` : ''
       }${card.motivoUrgencia ? `, ${card.motivoUrgencia}` : ''}${
         divergePacote ? `, pacote divergente da régua, ${direcaoPacote === 'a_maior' ? 'a mais' : 'a menos'}` : ''
-      }${hmDiverge ? ', diverge da Hotmart' : ''}`}
+      }${hmDiverge ? ', diverge da Hotmart' : ''}${
+        hmAssinatura ? `, assinatura HM ${hmAssinaturaAtiva ? 'ativa' : 'encerrada'}` : ''
+      }`}
       title={titleEstagio}
     >
       {/* Nível 1 — identidade: nome + origem. O badge de origem precisa
@@ -299,6 +305,18 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
                 devendo {fmtBRL(hm.valor_devido)} ({hm.parcelas_devidas} parc.)
               </div>
             )}
+          </div>
+        )}
+        {hmAssinatura && (
+          <div
+            className="flex items-center justify-between gap-2"
+            title="Assinatura HM (mensalidades) é outro contrato: não entra no pago deste card."
+          >
+            <span className="truncate text-[10px] tabular text-[var(--fg-3)]">{hmAssinatura}</span>
+            <span className="shrink-0 inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-2)]">
+              {hmAssinaturaAtiva && <span className="h-1.5 w-1.5 rounded-full bg-[var(--green)]" aria-hidden />}
+              {hmAssinaturaAtiva ? 'ativa' : 'encerrada'}
+            </span>
           </div>
         )}
         {hmDiverge && (

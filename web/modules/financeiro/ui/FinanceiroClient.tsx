@@ -23,10 +23,11 @@ import { FichaDrawer } from './FichaDrawer';
 import { Relatorios } from './Relatorios';
 import { Ofertas } from './Ofertas';
 import { FaturamentoDiario } from './FaturamentoDiario';
+import { ProrataHM } from './hotmart/ProrataHM';
 import type { BoardHotmart } from '../domain/hotmart';
 import { indexarBoardHotmart } from '../domain/board-hotmart';
 
-type Tab = 'board' | 'faturamento' | 'relatorios' | 'ofertas';
+type Tab = 'board' | 'faturamento' | 'relatorios' | 'ofertas' | 'prorata';
 
 const repo = new SupabaseFinanceiroRepository();
 
@@ -136,6 +137,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       if (base === 'faturamento') setTab('faturamento');
       else if (base === 'relatorios') setTab('relatorios');
       else if (base === 'ofertas') setTab('ofertas');
+      else if (base === 'prorata') setTab('prorata');
       // #hotmart era a aba "Hotmart (oficial)", unificada no Faturamento Diário em 27/09 — link antigo cai nela.
       else if (base === 'hotmart') setTab('faturamento');
       else setTab('board');
@@ -342,6 +344,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <>Faturamento <span className="text-[var(--accent)]">Diário</span></>
           ) : tab === 'relatorios' ? (
             <>Relatórios <span className="text-[var(--accent)]">Financeiro</span></>
+          ) : tab === 'prorata' ? (
+            <>Calculadora de <span className="text-[var(--accent)]">Pro Rata</span></>
           ) : (
             <>Ofertas de <span className="text-[var(--accent)]">Cobrança</span></>
           )}
@@ -354,6 +358,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           ? 'Direto da Hotmart: quanto foi vendido (bruto), a taxa da Hotmart e quanto fica para nós (líquido) — por dia de pagamento, atualizado de hora em hora'
           : tab === 'relatorios'
           ? 'Selecione colunas e exporte (Excel ou impressão/PDF)'
+          : tab === 'prorata'
+          ? 'O crédito de cada aluno do HM para migrar ao Programa — e o porquê'
           : 'Ofertas Hotmart usadas para cobrar o saldo do pacote'}
         {tab === 'board' && turmaAtual ? ` · turma ${turmaAtual.turma} (${turmaAtual.alunos} alunos)` : ''}
       </p>
@@ -416,7 +422,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         board ? <Relatorios contas={contasDoRecorte} turma={turma} canVerDoc={canVerDoc} repo={repo} hotmartPorCard={hotmartPorCard} /> : <Loading label="Carregando…" minHeight={200} />
       )}
 
-
+      {tab === 'prorata' && <ProrataHM repo={repo} />}
 
       {tab === 'ofertas' && (
         erroOfertas ? (

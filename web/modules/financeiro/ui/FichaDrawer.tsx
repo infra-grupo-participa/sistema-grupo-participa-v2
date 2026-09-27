@@ -17,8 +17,10 @@ import { FichaResumoTopo } from './FichaResumoTopo';
 import type { FinanceiroRepository } from '../application/ports';
 import { ExtratoHotmart } from './hotmart/ExtratoHotmart';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
-import { rotuloMetodo, type BoardHotmart } from '../domain/hotmart';
-import { explicarDivergencia, rotuloParcelamento, temDadoHotmart } from '../domain/board-hotmart';
+import { rotuloMetodo, type BoardHotmart, type ProrataHM } from '../domain/hotmart';
+import { explicarDivergencia, fmtMesAno, rotuloParcelamento, temAssinaturaHM, temDadoHotmart } from '../domain/board-hotmart';
+import { prorataDoCard } from '../domain/prorata-hm';
+import { carregarProrataHM, VALOR_PROGRAMA_HM } from '../application/carregar-prorata';
 
 const CANAIS_COBRANCA = ['WhatsApp', 'E-mail', 'Ligação', 'Reunião'];
 const RESULTADOS_COBRANCA = ['Sem resposta', 'Prometeu pagar', 'Renegociou', 'Recusou', 'Pagou'];
@@ -245,6 +247,7 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
             </section>
             <SecaoBoardHotmart
               conta={conta}
+              repo={repo}
               hm={hotmartPorCard?.get(conta.contato_hm_id) ?? null}
               carregando={!hotmartPorCard && !hotmartErro}
               erro={hotmartErro && !hotmartPorCard}
@@ -303,8 +306,9 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
 
 /** Board × Hotmart — os números da Hotmart deste card, lado a lado com o que
  *  o board registra. Só leitura e só aviso: não muda nenhum valor do board. */
-function SecaoBoardHotmart({ conta, hm, carregando, erro }: {
+function SecaoBoardHotmart({ conta, repo, hm, carregando, erro }: {
   conta: ContaReceber;
+  repo: FinanceiroRepository;
   hm: BoardHotmart | null;
   carregando: boolean;
   erro: boolean;
@@ -358,7 +362,65 @@ function SecaoBoardHotmart({ conta, hm, carregando, erro }: {
       {hm.sincronizado_em && (
         <p className="mt-1 text-[11px] text-[var(--fg-4)]">Hotmart sincronizada em {fmtDataHora(hm.sincronizado_em)}.</p>
       )}
+      {temAssinaturaHM(hm) && <BlocoAssinaturaHM hm={hm} />}
+      {hm.origem === 'HM' && <BlocoProrataHM repo={repo} contatoHmId={conta.contato_hm_id} hm={hm} />}
     </section>
+  );
+}
+
+const SUBTITULO = 'mt-3 mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]';
+
+/** Assinatura HM (mensalidades) — contrato à parte (decisão do João): fica
+ *  fora do "pago" do card e fora das linhas de venda acima. */
+function BlocoAssinaturaHM({ hm }: { hm: BoardHotmart }) {
+  const de = fmtMesAno(hm.assinatura_de);
+  const ate = fmtMesAno(hm.assinatura_ate);
+  return (
+    <div>
+      <div className={SUBTITULO}>Assinatura HM (contrato à parte)</div>
+      <Row k="Mensalidades pagas" v={hm.assinatura_mensalidades} />
+      <Row k="Total das mensalidades" v={fmtBRLc(hm.assinatura_valor)} />
+      <Row k="De / até" v={`${de ?? '—'} → ${ate ?? '—'}`} />
+      <Row
+        k="Situação"
+        v={hm.assinatura_ativa == null ? '—' : <Badge tone={hm.assinatura_ativa ? 'success' : 'neutral'}>{hm.assinatura_ativa ? 'ativa' : 'encerrada'}</Badge>}
+      />
+      <p className="mt-1 text-[11px] text-[var(--fg-3)]">Não entra no &quot;pago&quot; deste card — é outro contrato.</p>
+    </div>
+  );
+}
+
+/** Pro rata HM → Programa. fn_fin_prorata_hm carregada SOB DEMANDA na 1ª ficha
+ *  aberta e reaproveitada (application/carregar-prorata.ts) — nunca por card. */
+function BlocoProrataHM({ repo, contatoHmId, hm }: { repo: FinanceiroRepository; contatoHmId: string; hm: BoardHotmart }) {
+  const [linhas, setLinhas] = useState<ProrataHM[] | null>(null);
+  const [erro, setErro] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    carregarProrataHM(repo)
+      .then((ls) => { if (vivo) setLinhas(ls); })
+      .catch(() => { if (vivo) setErro(true); });
+    return () => { vivo = false; };
+  }, [repo]);
+
+  const titulo = <div className={SUBTITULO}>Pro rata para o Programa</div>;
+  if (erro) return <div>{titulo}<p className="text-[11px] text-[var(--fg-3)]">Pro rata indisponível agora. Tente abrir a ficha de novo.</p></div>;
+  if (!linhas) return <div>{titulo}<p className="text-[11px] text-[var(--fg-4)]">Calculando pro rata…</p></div>;
+  const p = prorataDoCard(linhas, contatoHmId, hm);
+  if (!p) return <div>{titulo}<p className="text-[11px] text-[var(--fg-3)]">Sem vencimento cadastrado na turma — confirme com a Isabela.</p></div>;
+  return (
+    <div>
+      {titulo}
+      <Row k="Turma" v={p.turma ?? '—'} />
+      <Row k="Vence em" v={fmtData(p.vencimento)} />
+      <Row k="Meses cheios restantes" v={p.meses_restantes} />
+      <Row k="Pago no ciclo" v={`${fmtBRLc(p.pago_no_ciclo)}${p.formas ? ` (${p.formas})` : ''}`} />
+      <Row k="Crédito" v={fmtBRLc(p.credito)} />
+      <Row k="Diferença a pagar" v={<strong className="text-base font-bold tabular text-[var(--fg)]">{fmtBRLc(p.diferenca)}</strong>} />
+      <p className="mt-1 text-[11px] text-[var(--fg-3)]">
+        Regra: crédito = pago no ciclo × meses cheios restantes ÷ 12; diferença = {fmtBRLc(VALOR_PROGRAMA_HM)} − crédito.
+      </p>
+    </div>
   );
 }
 

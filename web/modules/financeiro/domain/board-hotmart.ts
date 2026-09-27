@@ -34,6 +34,9 @@ export function normalizarBoardHotmart(r: BoardHotmart): BoardHotmart {
     falta_no_board: num(r.falta_no_board),
     valor_falta_no_board: num(r.valor_falta_no_board),
     board_sem_hotmart: num(r.board_sem_hotmart),
+    // Assinatura HM (20260928d): opcionais no tipo — ausente vira 0 (= sem assinatura).
+    assinatura_mensalidades: num(r.assinatura_mensalidades),
+    assinatura_valor: num(r.assinatura_valor),
   };
 }
 
@@ -132,4 +135,22 @@ export function explicarDivergencia(h: BoardHotmart, fmtValor: (n: number) => st
   }
   if (!partes.length) return 'O board e a Hotmart não batem para esta pessoa.';
   return `${partes.join('; ')}.`;
+}
+
+/** 'YYYY-MM-DD' → 'MM/YYYY'. Coluna `date` do Postgres: sem fuso, recorte direto. */
+export function fmtMesAno(ymd: string | null | undefined): string | null {
+  const m = ymd?.match(/^(\d{4})-(\d{2})/);
+  return m ? `${m[2]}/${m[1]}` : null;
+}
+
+/** Card tem assinatura HM (mensalidades pagas)? Contrato à parte — nunca entra no "pago" do card. */
+export function temAssinaturaHM(h: BoardHotmart | null | undefined): h is BoardHotmart {
+  return temDadoHotmart(h) && num(h.assinatura_mensalidades) > 0;
+}
+
+/** Linha curta do card: "Assinatura HM: 12 × · R$ 23.964 · até 09/2026". null sem assinatura. */
+export function linhaAssinaturaHM(h: BoardHotmart | null | undefined, fmtValor: (n: number) => string): string | null {
+  if (!temAssinaturaHM(h)) return null;
+  const ate = fmtMesAno(h.assinatura_ate);
+  return `Assinatura HM: ${num(h.assinatura_mensalidades)} × · ${fmtValor(num(h.assinatura_valor))}${ate ? ` · até ${ate}` : ''}`;
 }

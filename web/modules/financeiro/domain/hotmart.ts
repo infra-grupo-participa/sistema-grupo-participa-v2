@@ -523,3 +523,55 @@ export const COLUNAS_ACELERA_PARA_HM = [
   'pessoa_chave', 'nome', 'email', 'primeira_acelera', 'acelera_pago', 'acelera_funil', 'ja_era_hm', 'subiu',
   'primeira_hm_depois', 'dias_ate_subir', 'hm_pago_depois', 'hm_caminho', 'tem_card',
 ] as const satisfies readonly (keyof AceleraParaHM)[];
+
+/** Um pagamento no diagnóstico do pro rata, com o motivo de entrar ou não no ciclo. */
+export interface ProrataPagamento {
+  transacao: string;
+  data: string | null;
+  produto: string | null;
+  familia: FamiliaHotmart;
+  oferta: string | null;
+  /** mensalidade · sinal · diferenca · compra_cheia · renovacao · reserva… */
+  forma: string | null;
+  metodo: string | null;
+  parcelas: number | null;
+  recorrencia: number | null;
+  situacao: TransacaoHotmart['grupo'];
+  valor: number | null;
+  cobrado: number | null;
+  juros: number | null;
+  liquido: number | null;
+  entra: boolean;
+  /** Frase pronta: "entra: pago dentro do ciclo atual", "fora: pago antes do ciclo atual (ciclo anterior)"… */
+  motivo: string;
+  email: string;
+}
+
+/**
+ * Diagnóstico do pro rata de UMA pessoa (fn_fin_prorata_diagnostico, 27/09/2026) — a Calculadora de Pro Rata.
+ * crédito = pago no ciclo × meses cheios restantes ÷ 12; diferença = valor do programa − crédito. Sem Acelera.
+ * `vencimento`/`valor` informados na tela são SIMULAÇÃO (nada é gravado).
+ */
+export interface ProrataDiagnostico {
+  pessoa: {
+    nome: string | null;
+    emails: string[];
+    turma: string | null;
+    vencimento_cadastrado: string | null;
+    vencimento_usado: string | null;
+    vencimento_simulado: boolean;
+    no_gps: boolean;
+  };
+  ciclo: { inicio: string | null; fim: string | null; hoje: string; meses_restantes: number };
+  calculo: {
+    pago_no_ciclo: number;
+    pagamentos_no_ciclo: number;
+    meses_restantes: number;
+    credito: number;
+    valor_programa: number;
+    diferenca: number;
+  };
+  pagamentos: ProrataPagamento[];
+  board: { contato_hm_id: string; status: string | null; pago: number | null; saldo: number | null; canal: string | null } | null;
+  avisos: string[];
+}

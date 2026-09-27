@@ -9,7 +9,7 @@
 // Extraído de ui/Hotmart.tsx: as demais visões (Pessoas, Mesma pessoa?, Ofertas,
 // Conciliação) saíram desta aba e vivem em ui/hotmart/*.
 import { useEffect, useMemo, useState } from 'react';
-import { DataTable, EmptyState, KpiCard, Loading, SectionCard, Td, Th, Thead, Tr } from '@/shared/ui/components';
+import { DataTable, EmptyState, Loading, SectionCard, Td, Th, Thead, Tr } from '@/shared/ui/components';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../application/ports';
 import {
@@ -84,34 +84,9 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
       </div>
       {erro ? <Erro msg={erro} /> : !dados ? <Loading label="Carregando faturamento…" minHeight={200} /> : (
         <>
-          {/* Do bruto ao líquido: o que foi vendido, o que a Hotmart tira e o que fica para nós. */}
-          <div className={`grid grid-cols-2 gap-2.5 ${resumo.repasses > 0 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-            <KpiCard label="Bruto (vendido)" value={fmtBRL(resumo.valorOferta)} bar="accent"
-              hint={`${resumo.vendas} venda(s) paga(s) · preço das ofertas`}
-              title="Soma do preço das ofertas vendidas e pagas. Não inclui os juros do parcelamento, que o cliente paga à Hotmart." />
-            <KpiCard label="− Taxa da Hotmart" value={fmtBRL(resumo.taxa)} bar="yellow"
-              hint={resumo.taxaPct != null ? `${(resumo.taxaPct * 100).toFixed(2)}% do bruto · ${REGRA_TAXA_HOTMART[familia]}` : REGRA_TAXA_HOTMART[familia]}
-              title={`O que a Hotmart cobra de nós por venda. Regra medida em 27/09/2026: ${REGRA_TAXA_HOTMART[familia]}.`} />
-            {resumo.repasses > 0 && (
-              <KpiCard label="− Coprodução / afiliados" value={fmtBRL(resumo.repasses)} bar="purple"
-                hint={QUEM_DIVIDE[familia]}
-                title={`Oferta − taxa − líquido: ${QUEM_DIVIDE[familia]}.`} />
-            )}
-            <KpiCard label="= Líquido (fica para nós)" value={fmtBRL(resumo.liquido)} bar="green"
-              hint={resumo.margem != null ? `${(resumo.margem * 100).toFixed(1)}% do bruto${resumo.liquidoEstimado ? ` · ${resumo.liquidoEstimado} estimado(s)` : ''}` : 'sem venda no período'}
-              title="O que cai para o produtor (comissão PRODUCER da API da Hotmart)." />
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5">
-            <KpiCard label="Juros do parcelamento" value={fmtBRL(resumo.juros)} bar="gray"
-              hint="pago pelo cliente · fica com a Hotmart, não é nosso"
-              title="Quando o cliente parcela no cartão, ele paga juros à Hotmart. Esse valor não sai do nosso bruto nem entra no líquido." />
-            <KpiCard label="Reembolsos / chargebacks" value={fmtBRL(resumo.valorEstornado)} bar="red"
-              hint={`${resumo.estornos} venda(s) devolvida(s)`} />
-            <KpiCard label="Cartões recusados" value={String(resumo.recusadas)} bar="gray"
-              hint="tentativas de compra que não passaram" />
-          </div>
           <PorFunil repo={repo} familia={familia} de={intervalo.de} ate={intervalo.ate} />
-          <SectionCard title="Dia a dia" subtitle="Dia da aprovação do pagamento (horário de São Paulo). Recusas e boletos contam no dia do pedido. Dia sem venda aparece como R$ 0.">
+          <SectionCard title="Dia a dia"
+            subtitle={`Dia da aprovação do pagamento (horário de São Paulo); recusas e boletos contam no dia do pedido; dia sem venda aparece como R$ 0. Taxa da Hotmart: ${REGRA_TAXA_HOTMART[familia]}${resumo.taxaPct != null ? ` (${(resumo.taxaPct * 100).toFixed(2)}% do bruto no período)` : ''}. Juros são pagos pelo cliente e ficam com a Hotmart.${resumo.repasses > 0 ? ` Coprodução/afiliados: ${QUEM_DIVIDE[familia]}.` : ''}`}>
             {!serie.length ? <EmptyState title="Nenhuma movimentação no período" icon="trending-up" /> : (
               <DataTable minWidth={1100}>
                 <Thead>
@@ -121,6 +96,24 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
                   <Th>Reembolsos</Th><Th>Recusados</Th><Th>Boletos</Th>
                 </Thead>
                 <tbody>
+                  {/* Total do período selecionado — primeira linha, antes dos dias (pedido do João, 27/09). */}
+                  <Tr className="bg-[var(--surface-2)] font-semibold">
+                    <Td className="text-[var(--fg)]">Total do período</Td>
+                    <Td className="tabular">{resumo.vendas}</Td>
+                    <Td className="tabular">{fmtBRL(resumo.valorOferta)}</Td>
+                    <Td className="tabular text-[var(--fg-2)]">{fmtBRL(resumo.taxa)}</Td>
+                    {resumo.repasses > 0 && <Td className="tabular text-[var(--fg-2)]">{fmtBRL(resumo.repasses)}</Td>}
+                    <Td className="tabular text-[var(--green)]">
+                      {fmtBRL(resumo.liquido)}
+                      {resumo.margem != null && <span className="ml-1 text-[10px] font-normal text-[var(--fg-3)]">{(resumo.margem * 100).toFixed(1)}%</span>}
+                    </Td>
+                    <Td className="text-[var(--fg-4)]">—</Td>
+                    <Td className="text-[var(--fg-4)]">—</Td>
+                    <Td className="tabular text-[var(--fg-2)]">{resumo.juros ? fmtBRL(resumo.juros) : '—'}</Td>
+                    <Td className="tabular">{resumo.estornos > 0 ? <span className="text-[var(--red)]">{resumo.estornos} · {fmtBRL(resumo.valorEstornado)}</span> : '—'}</Td>
+                    <Td className="tabular text-[var(--fg-2)]">{resumo.recusadas || '—'}</Td>
+                    <Td className="tabular text-[var(--fg-2)]">{serie.reduce((a, d) => a + d.boletos, 0) || '—'}</Td>
+                  </Tr>
                   {[...serie].reverse().map((d) => (
                     <Tr key={d.dia} className={d.preenchido ? 'opacity-60' : undefined}>
                       <Td className="tabular">
