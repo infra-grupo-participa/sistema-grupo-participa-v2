@@ -59,7 +59,9 @@ begin
   if not coalesce(public.gp_pode_ver_financeiro(), false) then
     raise exception 'Sem permissão.' using errcode = '42501';
   end if;
-  if v_fim - v_ini > 1100 then raise exception 'Período máximo de 3 anos.' using errcode = '22023'; end if;
+  -- Sem teto de dias: o custo é o das transações da família (plano 27/09: Aurum 2021→hoje 50 ms), não do intervalo.
+  -- Um teto fixo voltaria a quebrar o "Tudo" da tela quando a história passasse dele.
+  if v_fim < v_ini then raise exception 'Data final antes da inicial.' using errcode = '22023'; end if;
   return query
   with p as (
     select t.dia_aprovado d,

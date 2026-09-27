@@ -24,7 +24,9 @@ import {
 type Visao = 'faturamento' | 'pessoas' | 'identidade' | 'ofertas' | 'conciliacao';
 const PERIODOS = [
   { dias: 30, rotulo: '30 dias' }, { dias: 90, rotulo: '90 dias' },
-  { dias: 365, rotulo: '12 meses' }, { dias: 1095, rotulo: 'Tudo (3 anos)' },
+  { dias: 365, rotulo: '12 meses' },
+  // "Tudo" = desde a 1ª venda do espelho (Aurum, 2021). "3 anos" cortava o HM de ago/2023.
+  { dias: Math.ceil((Date.now() - Date.UTC(2021, 0, 1)) / 86_400_000), rotulo: 'Tudo (desde 2021)' },
 ] as const;
 
 const TOM_SITUACAO: Record<SituacaoPessoa, Tone> = {

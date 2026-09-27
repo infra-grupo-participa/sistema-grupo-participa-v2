@@ -59,7 +59,7 @@ describe('contrato fn_fin_hotmart_pessoas', () => {
   });
   it('o SELECT final projeta o mesmo número de colunas', () => {
     const corpo = sql.slice(sql.indexOf('function public.fn_fin_hotmart_pessoas('));
-    const fim = corpo.indexOf('order by a.valor_atrasado desc');
+    const fim = corpo.indexOf('\n   order by ');
     const ultimo = corpo.slice(corpo.lastIndexOf('\n  select ', fim), fim);
     expect(projecao(ultimo)).toHaveLength(COLUNAS_PESSOA_HOTMART.length);
   });
@@ -97,5 +97,16 @@ describe('celulaCsv', () => {
     expect(celulaCsv('a;b')).toBe('"a;b"');
     expect(celulaCsv('diz "oi"')).toBe('"diz ""oi"""');
     expect(celulaCsv(null)).toBe('');
+  });
+});
+
+describe('contrato fn_fin_hotmart_faturamento', () => {
+  // O preset "Tudo" cresce todo dia. Um teto fixo de dias na RPC já quebrou a tela duas vezes
+  // (3 anos cortava o HM de ago/2023; 7 anos voltaria a dar 400 em 2028). O custo é o das transações, não do intervalo.
+  it('não tem teto fixo de dias no período', () => {
+    const sql = migracao('20260927b_fin_relatorios_hotmart.sql');
+    const corpo = sql.slice(sql.lastIndexOf('function public.fn_fin_hotmart_faturamento('));
+    const fim = corpo.indexOf('end $$;');
+    expect(corpo.slice(0, fim)).not.toMatch(/v_fim\s*-\s*v_ini\s*>\s*\d+/);
   });
 });

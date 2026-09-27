@@ -56,7 +56,8 @@ export interface PessoaHotmart {
   liquido: number;
   estornos: number;
   valor_estornado: number;
-  /** Parcelas OVERDUE dos últimos 120 dias — a dívida atual. */
+  /** Parcelas devidas há até 120 dias — a dívida atual. Parcela = e-mail × produto × oferta ×
+   *  recorrência: cada nova tentativa de cobrança não conta de novo, e parcela paga depois sai. */
   parcelas_atrasadas: number;
   valor_atrasado: number;
   /** OVERDUE mais antigo (assinatura cancelada fica OVERDUE para sempre). */

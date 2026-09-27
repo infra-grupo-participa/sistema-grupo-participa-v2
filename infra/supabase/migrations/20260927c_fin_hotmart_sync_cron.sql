@@ -38,8 +38,8 @@ begin
 end $$;
 revoke all on function fin.hotmart_sync_enfileirar(int) from public, anon, authenticated;
 
--- Backfill: a história inteira desde 2022-01-01 (nenhuma venda antes disso, medido na API).
-select fin.hotmart_sync_enfileirar(((now() at time zone 'America/Sao_Paulo')::date - date '2022-01-01'));
+-- Backfill: a história inteira desde 2021-01-01 (Aurum tem vendas em 2021; nada antes disso, medido na API em 27/09).
+select fin.hotmart_sync_enfileirar(((now() at time zone 'America/Sao_Paulo')::date - date '2021-01-01'));
 
 -- Fila: a cada 2 min, só dispara se houver trabalho e menos de 3 execuções recentes em curso.
 select cron.schedule('fin-hotmart-sync-fila', '*/2 * * * *', $cron$
@@ -61,4 +61,4 @@ select cron.schedule('fin-hotmart-sync-purga', '17 4 * * *',
 -- e a rotina de hora em hora só relê 3 dias.
 select cron.schedule('fin-hotmart-sync-60dias', '23 3 * * *', $$ select fin.hotmart_sync_enfileirar(60) $$);
 select cron.schedule('fin-hotmart-sync-historia', '13 2 * * 0',
-  $$ select fin.hotmart_sync_enfileirar(((now() at time zone 'America/Sao_Paulo')::date - date '2022-01-01')) $$);
+  $$ select fin.hotmart_sync_enfileirar(((now() at time zone 'America/Sao_Paulo')::date - date '2021-01-01')) $$);

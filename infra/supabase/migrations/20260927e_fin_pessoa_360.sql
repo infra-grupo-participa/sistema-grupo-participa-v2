@@ -55,10 +55,6 @@ begin
            coalesce(sum(x.valor_oferta) filter (where x.grupo = 'estornado'), 0) valor_estornado,
            max(x.aprovado_em) filter (where x.grupo = 'estornado') ultimo_estorno,
            max(x.aprovado_em) filter (where x.grupo = 'pago') ultimo_pago,
-           count(*) filter (where x.grupo = 'atrasado' and x.pedido_em >= now() - interval '120 days')::int atrasadas,
-           coalesce(sum(x.valor_oferta) filter (where x.grupo = 'atrasado' and x.pedido_em >= now() - interval '120 days'), 0) valor_atrasado,
-           count(*) filter (where x.grupo = 'atrasado' and x.pedido_em < now() - interval '120 days')::int atrasadas_antigas,
-           coalesce(sum(x.valor_oferta) filter (where x.grupo = 'atrasado' and x.pedido_em < now() - interval '120 days'), 0) valor_atrasado_antigo,
            count(*) filter (where x.grupo = 'em_aberto')::int em_aberto,
            count(*) filter (where x.grupo = 'recusado')::int recusadas,
            max(x.dia_pedido) ultima_tentativa,
@@ -70,6 +66,23 @@ begin
       from tx x
       join fin.hotmart_transacoes h on h.transacao = x.transacao
      group by x.pessoa
+  ), parc as (
+    -- A Hotmart cria uma transação OVERDUE nova a cada tentativa de cobrança da MESMA parcela
+    -- (a recorrência 7 de uma aluna do Aurum tem 9). Parcela = e-mail × produto × oferta × recorrência;
+    -- conta uma vez, e sai da dívida se foi paga (ou estornada) depois. "Desde" = 1ª tentativa.
+    select x.pessoa, x.email, x.produto_id, x.oferta_codigo, coalesce(x.recorrencia::text, 't:' || x.transacao) parcela,
+           bool_or(x.grupo in ('pago','estornado')) quitada, bool_or(x.grupo = 'atrasado') atrasou,
+           min(x.pedido_em) desde, max(x.valor_oferta) valor
+      from tx x  -- sem recorrência (pagamento único protestado/atrasado) = a própria transação é a parcela
+     group by x.pessoa, x.email, x.produto_id, x.oferta_codigo, coalesce(x.recorrencia::text, 't:' || x.transacao)
+  ), pa as (
+    select p.pessoa,
+           count(*) filter (where p.desde >= now() - interval '120 days')::int n_atual,
+           coalesce(sum(p.valor) filter (where p.desde >= now() - interval '120 days'), 0) valor_atual,
+           count(*) filter (where p.desde < now() - interval '120 days')::int n_antigas,
+           coalesce(sum(p.valor) filter (where p.desde < now() - interval '120 days'), 0) valor_antigo
+      from parc p where p.atrasou and not p.quitada
+     group by p.pessoa
   ), flx as (
     -- caminho: categorias pagas em ordem, sem repetição consecutiva (sinal → diferenca → renovacao…)
     select z.pessoa, string_agg(z.c, ' → ' order by z.o) fluxo
@@ -115,17 +128,17 @@ begin
          case
            when a.pagas = 0 and a.estornos > 0 then 'reembolsado'
            when coalesce(c.solicitou, false) then 'negociacao_cancelamento'
-           when a.atrasadas > 0 then 'devendo'
+           when coalesce(pa.n_atual, 0) > 0 then 'devendo'
            when a.estornos > 0 and a.ultimo_estorno > coalesce(a.ultimo_pago, '-infinity') then 'reembolsado'
            when coalesce(c.saldo, 0) > 0.5 or a.parcelado_em_curso then 'em_pagamento'
            when a.pagas > 0 and a.ultima_paga >= (now() at time zone 'America/Sao_Paulo')::date - 365 then 'ativo'
-           when a.atrasadas_antigas > 0 then 'inadimplencia_antiga'
+           when coalesce(pa.n_antigas, 0) > 0 then 'inadimplencia_antiga'
            when a.pagas > 0 then 'vencido'
            when a.em_aberto > 0 then 'boleto_em_aberto'
            else 'so_tentou'
          end,
          case
-           when coalesce(al.no_gps, false) and (a.atrasadas > 0 or a.estornos > 0 or coalesce(c.solicitou, false))
+           when coalesce(al.no_gps, false) and (coalesce(pa.n_atual, 0) > 0 or a.estornos > 0 or coalesce(c.solicitou, false))
              then 'Está no GPS e tem pendência financeira — não mexer no acesso, resolver com o João'
            when c.pessoa is null and p_familia = 'HM' and a.ultima_paga_card >= date '2026-06-25'
              then 'Pagou na Hotmart depois de 25/06 e não tem card no board'
@@ -134,7 +147,7 @@ begin
          end,
          a.primeira, a.primeira_oferta, a.origem, f.fluxo, a.produtos,
          a.ultima_paga, a.pagas, a.valor_pago, a.liquido, a.estornos, a.valor_estornado,
-         a.atrasadas, a.valor_atrasado, a.atrasadas_antigas, a.valor_atrasado_antigo,
+         coalesce(pa.n_atual, 0), coalesce(pa.valor_atual, 0), coalesce(pa.n_antigas, 0), coalesce(pa.valor_antigo, 0),
          a.em_aberto, a.recusadas, a.ultima_tentativa,
          coalesce(al.no_gps, false), al.turma, al.acesso, a.ultima_paga + 365,
          coalesce(c.n, 0), c.contato_hm_id, c.status, c.saldo, c.canal,
@@ -144,7 +157,8 @@ begin
     left join aluno al on al.pessoa = a.pessoa
     left join sug s on s.p = a.pessoa
     left join flx f on f.pessoa = a.pessoa
-   order by a.valor_atrasado desc, a.valor_atrasado_antigo desc, a.ultima_tentativa desc nulls last;
+    left join pa on pa.pessoa = a.pessoa
+   order by coalesce(pa.valor_atual, 0) desc, coalesce(pa.valor_antigo, 0) desc, a.ultima_tentativa desc nulls last;
 end $$;
 revoke all on function public.fn_fin_hotmart_pessoas(text) from public, anon;
 grant execute on function public.fn_fin_hotmart_pessoas(text) to authenticated;
