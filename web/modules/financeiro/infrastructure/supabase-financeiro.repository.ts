@@ -335,7 +335,7 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
 
   // Contas a Receber — p_corte/p_ate nulos: o banco decide o corte (última venda) e o horizonte.
   async loadContasReceber(): Promise<LinhaReceber[]> {
-    const linhas = await this.rpcLista<Record<string, unknown>>('fn_fin_contas_receber', { p_corte: null, p_ate: null },
+    const linhas = await this.rpcLista<Record<string, unknown>>('fn_fin_receber_semanal', { p_corte: null, p_ate: null },
       'Não foi possível carregar as contas a receber.');
     return linhas.map(normalizarLinhaReceber);
   }

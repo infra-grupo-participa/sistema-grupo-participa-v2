@@ -1,4 +1,4 @@
-// Contas a Receber (fase 1): UMA chamada a fn_fin_contas_receber quando a aba abre. A grade, o clique numa célula
+// Contas a Receber (fase 1): UMA chamada a fn_fin_receber_semanal quando a aba abre. A grade, o clique numa célula
 // (quem compõe) e a lista de Recorrências saem todos desta mesma resposta — nenhum clique consulta de novo.
 import type { FinanceiroRepository } from './ports';
 import {

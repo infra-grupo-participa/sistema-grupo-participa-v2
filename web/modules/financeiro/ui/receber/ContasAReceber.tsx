@@ -3,7 +3,7 @@
 // Aba "Contas a Receber" (fase 1, 28/09/2026): grade semana (colunas) × bloco/grupo (linhas), com total por semana,
 // por mês e acumulado. Substitui o "Fluxo Semanal" da planilha do financeiro nos blocos 1 e 2 (o que é certo).
 // Clicar num número abre, logo abaixo da grade e SEM consulta nova, quem compõe aquele valor — tudo sai da mesma
-// resposta de fn_fin_contas_receber (application/carregar-contas-receber.ts).
+// resposta de fn_fin_receber_semanal (application/carregar-contas-receber.ts).
 // O detalhe fica no fluxo da página (não é `absolute`): nada invisível entra na área rolável da grade.
 import { useState } from 'react';
 import { fmtBRLc, fmtData } from '@/shared/ui/format';

@@ -53,7 +53,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const [turmas, setTurmas] = useState<TurmaFin[]>([]);
   const [ofertas, setOfertas] = useState<Oferta[]>([]);
   const [erroOfertas, setErroOfertas] = useState<string | null>(null);
-  // Contas a Receber: 1 RPC (fn_fin_contas_receber) na 1ª vez que a aba abre; guardado aqui, voltar à aba não consulta
+  // Contas a Receber: 1 RPC (fn_fin_receber_semanal) na 1ª vez que a aba abre; guardado aqui, voltar à aba não consulta
   // de novo (o componente da aba desmonta a cada troca — por isso o dado mora no pai). Falha não fica guardada.
   const [receber, setReceber] = useState<ContasReceberCarregado | null>(null);
   const [erroReceber, setErroReceber] = useState<string | null>(null);

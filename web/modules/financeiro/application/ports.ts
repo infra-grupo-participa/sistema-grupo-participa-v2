@@ -97,7 +97,7 @@ export interface FinanceiroRepository {
   loadProrataDiagnostico(email: string, vencimento?: string | null, valorPrograma?: number): Promise<ProrataDiagnostico | null>;
 
   // ── Contas a Receber (fase 1: blocos 1 e 2) ──────────────────────────────
-  /** fn_fin_contas_receber(p_corte, p_ate) — UMA chamada por abertura da aba; numeric já convertido. */
+  /** fn_fin_receber_semanal(p_corte, p_ate) — UMA chamada por abertura da aba; numeric já convertido. */
   loadContasReceber(): Promise<LinhaReceber[]>;
 
   // ── Protocolo dos relatórios em PDF (fn_fin_relatorio_*, 20260928z50) ───

@@ -4,7 +4,7 @@
 //   bloco 2 — assinaturas e parcelas futuras já contratadas.
 // Blocos 3–7 da planilha (vendas novas, evento, recebimentos informados, ajustes, Soluções) ficam para depois.
 //
-// Fonte: public.fn_fin_contas_receber(p_corte, p_ate) — UMA chamada; o cálculo de data de caixa (dias úteis,
+// Fonte: public.fn_fin_receber_semanal(p_corte, p_ate) — UMA chamada (NÃO é fn_fin_contas_receber(text), o razão do board); o cálculo de data de caixa (dias úteis,
 // feriados) e a baixa do que já se realizou moram no banco. Aqui só: tipar, converter numeric, cortar em semanas e somar.
 //
 // Esta é a ÚNICA fonte da semana: a tela e o PDF futuro usam `semanas()` e `agregarReceber()` daqui.
@@ -22,7 +22,7 @@ export interface VendaDoDia {
   liquido: number;
 }
 
-/** Uma linha de fn_fin_contas_receber, já normalizada. */
+/** Uma linha de fn_fin_receber_semanal, já normalizada. */
 export interface LinhaReceber {
   bloco: number;
   grupo: string;
