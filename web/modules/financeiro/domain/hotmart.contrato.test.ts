@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { COLUNAS_ACELERA_PARA_HM, COLUNAS_BOARD_HOTMART, COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, COLUNAS_PRORATA_HM, agruparFaturamento, categoriaInferida, celulaCsv, resumirAdimplencia, rotuloCategorias, rotuloDocumento, type FunilHotmart } from './hotmart';
+import { COLUNAS_ASSINATURA_HM_BOARD, COLUNAS_ASSINATURA_HM_SEM_CARD } from './assinatura-hm';
 
 const migracao = (nome: string) =>
   readFileSync(fileURLToPath(new URL(`../../../../infra/supabase/migrations/${nome}`, import.meta.url)), 'utf8');
@@ -348,5 +349,41 @@ describe('20260928o — boleto em aberto e telefone', () => {
   });
   it('boleto em aberto: só grupo em_aberto dos últimos 30 dias', () => {
     expect(sql).toMatch(/t\.grupo = 'em_aberto' and t\.dia_pedido >= \(now\(\) at time zone 'America\/Sao_Paulo'\)::date - 30/);
+  });
+});
+
+describe('20260928z52 — mensalidade do HM antigo', () => {
+  const sql = migracao('20260928z52_fin_assinatura_hm.sql');
+  const corpoDe = (f: string) => { const i = inicioCreate(sql, f); return sql.slice(i, sql.indexOf('end $$;', i)); };
+
+  it('lista sem card: RETURNS TABLE = colunas de AssinaturaHMSemCard', () => {
+    expect(colunasRetorno(sql, 'public.fn_fin_assinatura_hm_sem_card')).toEqual([...COLUNAS_ASSINATURA_HM_SEM_CARD]);
+  });
+  it('lista sem card: o SELECT final projeta o mesmo número de colunas', () => {
+    expect(projecao(selectFinal(sql, 'public.fn_fin_assinatura_hm_sem_card'))).toHaveLength(COLUNAS_ASSINATURA_HM_SEM_CARD.length);
+  });
+  it('board: RETURNS TABLE = colunas de AssinaturaHMBoard, e o SELECT projeta o mesmo número', () => {
+    expect(colunasRetorno(sql, 'public.fn_fin_board_assinatura_hm')).toEqual([...COLUNAS_ASSINATURA_HM_BOARD]);
+    const c = corpoDe('public.fn_fin_board_assinatura_hm');
+    const sel = c.slice(c.indexOf('  select ', c.indexOf('return query')));
+    expect(projecao(sel)).toHaveLength(COLUNAS_ASSINATURA_HM_BOARD.length);
+  });
+  it('board: a chave é fin.chave_opaca, a mesma do pessoa_chave de fn_fin_board_hotmart', () => {
+    expect(corpoDe('public.fn_fin_board_assinatura_hm')).toMatch(/select fin\.chave_opaca\(a\.pessoa\)/);
+    expect(migracao('20260928o_fin_board_boleto_telefone.sql')).toMatch(/case when k\.pessoa is not null then fin\.chave_opaca\(k\.pessoa\) end/);
+  });
+  it('board não devolve dado pessoal', () => {
+    expect(COLUNAS_ASSINATURA_HM_BOARD.join(' ')).not.toMatch(/nome|email|documento|telefone/);
+  });
+  it.each(['public.fn_fin_assinatura_hm_sem_card', 'public.fn_fin_board_assinatura_hm'])('%s: guarda de permissão e grant só para authenticated', (f) => {
+    expect(corpoDe(f)).toMatch(/auth\.uid\(\) is null or not coalesce\(public\.gp_pode_ver_financeiro\(\), false\)/);
+    expect(sql).toContain(`revoke all on function ${f}() from public, anon;`);
+    expect(sql).toContain(`grant execute on function ${f}() to authenticated;`);
+  });
+  it('lista sem card: documento e telefone completos só para gp_pode_ver_cpf()', () => {
+    const c = corpoDe('public.fn_fin_assinatura_hm_sem_card');
+    expect(c).toMatch(/v_cpf := coalesce\(public\.gp_pode_ver_cpf\(\), false\)/);
+    expect(c).toMatch(/case when v_cpf then a\.documento/);
+    expect(c).toMatch(/case when v_cpf then a\.telefone/);
   });
 });

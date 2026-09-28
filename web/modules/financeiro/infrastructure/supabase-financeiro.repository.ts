@@ -20,6 +20,9 @@ import type { LinhaServicoDiamante } from '../domain/servico-diamante';
 import type { CompradorFunil, Funil } from '../domain/funis';
 import type { PassoTrajetoria } from '../domain/trajetoria';
 import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-card';
+import {
+  normalizarAssinaturaBoard, normalizarAssinaturaSemCard, type AssinaturaHMBoard, type AssinaturaHMSemCard,
+} from '../domain/assinatura-hm';
 
 function erroPara(msg: string): Resultado {
   return { ok: false, msg };
@@ -297,6 +300,18 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
   loadBoardHotmart(): Promise<BoardHotmart[]> {
     return this.rpcLista<BoardHotmart>('fn_fin_board_hotmart', {},
       'Não foi possível carregar os dados da Hotmart do board.');
+  }
+
+  async loadBoardAssinaturaHM(): Promise<AssinaturaHMBoard[]> {
+    const linhas = await this.rpcLista<AssinaturaHMBoard>('fn_fin_board_assinatura_hm', {},
+      'Não foi possível carregar a mensalidade do HM antigo.');
+    return linhas.map(normalizarAssinaturaBoard);
+  }
+
+  async loadAssinaturaHMSemCard(): Promise<AssinaturaHMSemCard[]> {
+    const linhas = await this.rpcLista<AssinaturaHMSemCard>('fn_fin_assinatura_hm_sem_card', {},
+      'Não foi possível carregar quem paga a mensalidade do HM antigo sem card.');
+    return linhas.map(normalizarAssinaturaSemCard);
   }
 
   loadProrataHM(valorPrograma = VALOR_PROGRAMA_HM): Promise<ProrataHM[]> {

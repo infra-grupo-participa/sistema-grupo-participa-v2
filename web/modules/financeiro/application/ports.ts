@@ -13,6 +13,7 @@ import type { LinhaServicoDiamante } from '../domain/servico-diamante';
 import type { CompradorFunil, Funil } from '../domain/funis';
 import type { PassoTrajetoria } from '../domain/trajetoria';
 import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-card';
+import type { AssinaturaHMBoard, AssinaturaHMSemCard } from '../domain/assinatura-hm';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
 export interface Resultado {
@@ -83,6 +84,10 @@ export interface FinanceiroRepository {
   loadHotmartIdentidade(): Promise<IdentidadeRevisao[]>;
   /** fn_fin_board_hotmart — card do board × espelho Hotmart, por pessoa/família. */
   loadBoardHotmart(): Promise<BoardHotmart[]>;
+  /** fn_fin_board_assinatura_hm — mensalidade do HM antigo (3507214) por pessoa_chave; 1 chamada por abertura do board (z52). */
+  loadBoardAssinaturaHM(): Promise<AssinaturaHMBoard[]>;
+  /** fn_fin_assinatura_hm_sem_card — pagou mensalidade do HM antigo e não tem card (z52). */
+  loadAssinaturaHMSemCard(): Promise<AssinaturaHMSemCard[]>;
   /** fn_fin_prorata_hm — pro rata do HM por pessoa (regra do João, 27/09). */
   loadProrataHM(valorPrograma?: number): Promise<ProrataHM[]>;
   /** fn_fin_acelera_para_hm — quem comprou o Acelera e o que comprou de HM depois. */
