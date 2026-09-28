@@ -97,3 +97,17 @@ describe('Recorrências', () => {
     expect(html).toContain('Fora da projeção');
   });
 });
+
+describe('cálculo de recebimento desligado', () => {
+  it('bloco 1 vazio e bloco 2 sem data de caixa: aviso no lugar da grade zerada', () => {
+    const d = montarContasReceber([
+      L({ bloco: 2, grupo: 'Parcelas a vencer HM', ref: 'e|o', rotulo: 'Pessoa B', origem_dia: '2026-10-01', data_caixa: null, valor: 1500, k: 2, componente: 'cheio' }),
+    ], '2026-09-28');
+    expect(d.desligado).toBe(true);
+    const html = renderToStaticMarkup(createElement(ContasAReceber, { dados: d }));
+    expect(html).toContain('Cálculo de recebimento desligado');
+    expect(html).not.toContain('Total da semana');
+    expect(html).not.toContain('R$ 0,00');
+    expect(html).toContain('Pessoa B'); // Recorrências continuam (têm vencimento)
+  });
+});

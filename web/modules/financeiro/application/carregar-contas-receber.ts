@@ -2,7 +2,7 @@
 // (quem compõe) e a lista de Recorrências saem todos desta mesma resposta — nenhum clique consulta de novo.
 import type { FinanceiroRepository } from './ports';
 import {
-  agregarReceber, cobrancasRecorrentes, periodoReceber,
+  agregarReceber, cobrancasRecorrentes, periodoReceber, recebimentoDesligado,
   type CobrancaRecorrente, type GradeReceber, type LinhaReceber,
 } from '../domain/contas-receber';
 
@@ -10,6 +10,8 @@ export interface ContasReceberCarregado {
   linhas: LinhaReceber[];
   grade: GradeReceber;
   recorrencias: CobrancaRecorrente[];
+  /** Premissa de recebimento desligada no banco: sem data de caixa, a grade zerada não é dado. */
+  desligado: boolean;
   /** Dia (São Paulo) em que a grade foi montada — início do período. */
   hojeISO: string;
 }
@@ -21,7 +23,10 @@ export function hojeSaoPaulo(agora: Date = new Date()): string {
 
 export function montarContasReceber(linhas: LinhaReceber[], hojeISO: string): ContasReceberCarregado {
   const { inicio, fim } = periodoReceber(linhas, hojeISO);
-  return { linhas, grade: agregarReceber(linhas, inicio, fim), recorrencias: cobrancasRecorrentes(linhas), hojeISO };
+  return {
+    linhas, grade: agregarReceber(linhas, inicio, fim), recorrencias: cobrancasRecorrentes(linhas),
+    desligado: recebimentoDesligado(linhas), hojeISO,
+  };
 }
 
 export async function carregarContasReceber(

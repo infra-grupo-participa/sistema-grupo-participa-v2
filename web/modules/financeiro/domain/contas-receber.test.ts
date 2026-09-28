@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  agregarReceber, cobrancasRecorrentes, composicaoDaCelula, DIAS_MINIMOS_SEMANA, fimDoMes, normalizarLinhaReceber, periodoReceber, semanas,
+  agregarReceber, cobrancasRecorrentes, composicaoDaCelula, DIAS_MINIMOS_SEMANA, fimDoMes, normalizarLinhaReceber, periodoReceber,
+  recebimentoDesligado, semanas,
   type LinhaReceber,
 } from './contas-receber';
 
@@ -149,5 +150,27 @@ describe('cobrancasRecorrentes — bloco 2, todas as situações', () => {
       ['Pessoa C', '2026-09-02', 20, 'em_atraso_fora', 1],
       ['Pessoa A', '2026-09-26', 1381.18, 'a_receber', 2],
     ]);
+  });
+});
+
+describe('cálculo de recebimento desligado (data_caixa NULL)', () => {
+  const b2 = (p: Partial<LinhaReceber>) => L({ bloco: 2, grupo: 'Parcelas a vencer HM', data_caixa: null, ...p });
+  it('data_caixa nula continua nula (não vira data nem string vazia)', () => {
+    expect(normalizarLinhaReceber({ data_caixa: null }).data_caixa).toBeNull();
+  });
+  it('bloco 1 vazio + bloco 2 a_receber sem data = desligado', () => {
+    expect(recebimentoDesligado([b2({ valor: 100 })])).toBe(true);
+    expect(recebimentoDesligado([b2({ valor: 100 }), L({ valor: 1 })])).toBe(false);
+    // realizada/em_atraso_fora sem data é o contrato normal, não desligamento
+    expect(recebimentoDesligado([b2({ situacao: 'realizada' }), b2({ situacao: 'em_atraso_fora' })])).toBe(false);
+    expect(recebimentoDesligado([])).toBe(false);
+  });
+  it('a_receber sem data não soma, não conta como fora do período e não entra em célula', () => {
+    const ls = [b2({ valor: 100 }), b2({ valor: 50, data_caixa: '2026-10-05' })];
+    const g = agregarReceber(ls, '2026-09-28', '2026-10-31');
+    expect(g.total).toBe(50);
+    expect(g.semDataCaixa).toEqual({ linhas: 1, valor: 100 });
+    expect(g.foraDoPeriodo).toEqual({ linhas: 0, valor: 0 });
+    expect(composicaoDaCelula(ls, null, 2, 'Parcelas a vencer HM').map((l) => l.valor)).toEqual([50]);
   });
 });

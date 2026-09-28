@@ -18,6 +18,8 @@ import { BLOCOS_RECEBER, COMPONENTES_VENDA, ESCOPO_RECEBER, ESTADOS_RECEBER, ROT
 const PROVISORIO = {
   total: 'Total',
   componenteCheio: 'Valor cheio',
+  recebimentoDesligado: 'Cálculo de recebimento desligado',
+  semDataCaixa: (n: number, v: string) => `${n} cobrança(s) a receber sem data de caixa (${v}) não estão somadas acima.`,
   foraDoPeriodo: (n: number, v: string) => `${n} lançamento(s) a receber fora do período da grade (${v}) não estão somados acima.`,
   fechar: 'Fechar',
   todasAsSemanas: 'todas as semanas',
@@ -236,18 +238,26 @@ function CobrancasDaCelula({ itens }: { itens: LinhaReceber[] }) {
 
 export function ContasAReceber({ dados }: { dados: ContasReceberCarregado }) {
   const [celula, setCelula] = useState<Celula | null>(null);
-  const { grade, linhas, recorrencias } = dados;
+  const { grade, linhas, recorrencias, desligado } = dados;
   const semana = celula?.semana == null ? null : grade.semanas[celula.semana] ?? null;
   const vazio = grade.linhas.length === 0;
 
   return (
     <div className="space-y-3">
       <p className="text-xs text-[var(--fg-3)]">{ESCOPO_RECEBER.legenda}</p>
-      {vazio ? (
+      {desligado ? (
+        // Premissa de recebimento desligada: sem data de caixa não há grade — zero aqui seria mentira.
+        <p role="alert" className="rounded-[var(--r-md)] border border-[var(--yellow-border)] bg-[var(--yellow-subtle)] px-3 py-2 text-sm font-semibold text-[var(--fg)]">
+          {PROVISORIO.recebimentoDesligado}
+        </p>
+      ) : vazio ? (
         <p className="rounded-[var(--r-md)] border border-[var(--border)] px-3 py-2 text-sm text-[var(--fg-2)]">{ESTADOS_RECEBER.vazio}</p>
       ) : (
         <GradeContasReceber grade={grade} selecionada={celula}
           onSelecionar={(c) => setCelula((a) => (a && a.bloco === c.bloco && a.grupo === c.grupo && a.semana === c.semana ? null : c))} />
+      )}
+      {!desligado && grade.semDataCaixa.linhas > 0 && (
+        <p className="text-xs text-[var(--fg-3)]">{PROVISORIO.semDataCaixa(grade.semDataCaixa.linhas, fmtBRLc(grade.semDataCaixa.valor))}</p>
       )}
       {grade.foraDoPeriodo.linhas > 0 && (
         <p className="text-xs text-[var(--fg-3)]">{PROVISORIO.foraDoPeriodo(grade.foraDoPeriodo.linhas, fmtBRLc(grade.foraDoPeriodo.valor))}</p>

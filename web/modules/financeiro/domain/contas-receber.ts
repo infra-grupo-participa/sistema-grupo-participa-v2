@@ -27,8 +27,9 @@ export interface LinhaReceber {
   bloco: number;
   grupo: string;
   componente: ComponenteReceber;
-  /** Dia em que o dinheiro fica disponível (YYYY-MM-DD). É o eixo da grade. */
-  data_caixa: string;
+  /** Dia em que o dinheiro fica disponível (YYYY-MM-DD). É o eixo da grade. NULL em realizada/em_atraso_fora e
+   *  quando a premissa de recebimento está desligada no banco — nunca vira data inventada. */
+  data_caixa: string | null;
   valor: number;
   situacao: SituacaoReceber;
   /** Bloco 1: dia da venda. Bloco 2: dia previsto da cobrança. */
@@ -85,7 +86,7 @@ export function normalizarLinhaReceber(r: Record<string, unknown>): LinhaReceber
     // Valor fora do contrato é mantido cru e NÃO vira a_receber: não soma e a lista mostra o valor como veio.
     situacao,
     componente,
-    data_caixa: dia(r.data_caixa) ?? '',
+    data_caixa: dia(r.data_caixa),
     valor: num(r.valor),
     origem_dia: dia(r.origem_dia),
     ref: r.ref == null ? null : String(r.ref),
@@ -200,6 +201,8 @@ export interface GradeReceber {
   acumuladoPorSemana: number[];
   meses: MesGrade[];
   total: number;
+  /** a_receber sem data de caixa (cálculo de recebimento desligado): não entra na grade, mas não some em silêncio. */
+  semDataCaixa: { linhas: number; valor: number };
   /** a_receber com data_caixa fora do período: não entra na grade, mas não some em silêncio. */
   foraDoPeriodo: { linhas: number; valor: number };
 }
@@ -220,8 +223,11 @@ export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: stri
   const porGrupo = new Map<string, { bloco: number; grupo: string; cs: number[] }>();
   let foraN = 0;
   let foraC = 0;
+  let semDataN = 0;
+  let semDataC = 0;
   for (const l of linhas) {
     if (l.situacao !== 'a_receber') continue;
+    if (!l.data_caixa) { semDataN += 1; semDataC += c(l.valor); continue; }
     const i = semanaDe(sems, l.data_caixa);
     if (i === -1) { foraN += 1; foraC += c(l.valor); continue; }
     const chave = `${l.bloco}\u0000${l.grupo}`;
@@ -259,6 +265,7 @@ export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: stri
     acumuladoPorSemana: acumC.map(r),
     meses,
     total: r(soma(totalC)),
+    semDataCaixa: { linhas: semDataN, valor: r(semDataC) },
     foraDoPeriodo: { linhas: foraN, valor: r(foraC) },
   };
 }
@@ -278,14 +285,23 @@ export function periodoReceber(linhas: LinhaReceber[], hojeISO: string): { inici
   return { inicio: min, fim: fimDoMes(max) };
 }
 
+/**
+ * Cálculo de recebimento desligado no banco (premissa de recebimento inativa): o bloco 1 vem vazio e as cobranças
+ * a receber do bloco 2 vêm sem data de caixa. A grade sairia toda zerada — zero que não é dado. A tela avisa.
+ */
+export function recebimentoDesligado(linhas: LinhaReceber[]): boolean {
+  return !linhas.some((l) => l.bloco === 1)
+    && linhas.some((l) => l.bloco === 2 && l.situacao === 'a_receber' && l.data_caixa == null);
+}
+
 /** Quem compõe uma célula (grupo × semana), SEM consulta nova: as linhas a_receber daquele grupo naquela semana. */
 export function composicaoDaCelula(
   linhas: LinhaReceber[], sem: Semana | null, bloco: number, grupo: string,
 ): LinhaReceber[] {
   return linhas
     .filter((l) => l.situacao === 'a_receber' && l.bloco === bloco && l.grupo === grupo
-      && (sem == null || (l.data_caixa >= sem.inicio && l.data_caixa <= sem.fim)))
-    .sort((a, b) => a.data_caixa.localeCompare(b.data_caixa) || (a.rotulo ?? '').localeCompare(b.rotulo ?? '', 'pt-BR'));
+      && l.data_caixa != null && (sem == null || (l.data_caixa >= sem.inicio && l.data_caixa <= sem.fim)))
+    .sort((a, b) => (a.data_caixa ?? '').localeCompare(b.data_caixa ?? '') || (a.rotulo ?? '').localeCompare(b.rotulo ?? '', 'pt-BR'));
 }
 
 // ─── Recorrências (bloco 2, todas as situações) ─────────────────────────────
@@ -313,14 +329,14 @@ export function cobrancasRecorrentes(linhas: LinhaReceber[]): CobrancaRecorrente
     let x = mapa.get(chave);
     if (!x) {
       x = {
-        ref: l.ref, grupo: l.grupo, rotulo: l.rotulo, produto: l.produto, prevista: l.origem_dia ?? l.data_caixa,
+        ref: l.ref, grupo: l.grupo, rotulo: l.rotulo, produto: l.produto, prevista: l.origem_dia ?? l.data_caixa ?? '',
         caixa: [], valor: 0, cents: 0, situacao: l.situacao, k: l.k,
       };
       mapa.set(chave, x);
     }
     x.cents += c(l.valor);
     if (l.data_caixa && !x.caixa.includes(l.data_caixa)) x.caixa.push(l.data_caixa);
-    if (!l.origem_dia && l.data_caixa < x.prevista) x.prevista = l.data_caixa;
+    if (!l.origem_dia && l.data_caixa && (!x.prevista || l.data_caixa < x.prevista)) x.prevista = l.data_caixa;
   }
   return [...mapa.values()]
     .map(({ cents, ...x }) => ({ ...x, valor: r(cents), caixa: x.caixa.sort() }))
