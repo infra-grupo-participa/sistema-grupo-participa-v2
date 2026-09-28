@@ -228,10 +228,13 @@ function ConferirProtocolo({ repo }: { repo: FinanceiroRepository }) {
 }
 
 export function Relatorios({
-  contas, turma, canVerDoc, repo, hotmartPorCard, tipoInicial,
+  contas, produtoLabel, acaoLabel, turma, canVerDoc, repo, hotmartPorCard, tipoInicial,
 }: {
   tipoInicial?: TipoRelatorio;
   contas: ContaReceber[];
+  /** Filtros que já encolheram `contas` no board — declarados no PDF da Carteira. */
+  produtoLabel: string;
+  acaoLabel: string | null;
   turma: string | null;
   canVerDoc: boolean;
   repo: FinanceiroRepository;
@@ -250,7 +253,7 @@ export function Relatorios({
         </FilterSelect>
       </div>
 
-      {tipo === 'board' && <CarteiraDoBoard contas={contas} turma={turma} canVerDoc={canVerDoc} hotmartPorCard={hotmartPorCard} />}
+      {tipo === 'board' && <CarteiraDoBoard contas={contas} produtoLabel={produtoLabel} acaoLabel={acaoLabel} turma={turma} canVerDoc={canVerDoc} hotmartPorCard={hotmartPorCard} />}
 
       {tipo === 'pessoas' && (
         <div className="space-y-4">

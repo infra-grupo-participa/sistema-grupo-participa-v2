@@ -18,9 +18,12 @@ import { chamadasProtocoloFinanceiro } from './pdf/protocolo';
 
 /** Relatório original da aba: seleção de colunas do board + export XLSX e PDF com protocolo. */
 export function CarteiraDoBoard({
-  contas, turma, canVerDoc, hotmartPorCard,
+  contas, produtoLabel, acaoLabel, turma, canVerDoc, hotmartPorCard,
 }: {
   contas: ContaReceber[];
+  /** Produto (HM/Aurum) e ação/canal que filtraram `contas` no board — vão no cabeçalho do PDF. */
+  produtoLabel: string;
+  acaoLabel: string | null;
   turma: string | null;
   canVerDoc: boolean;
   hotmartPorCard: Map<string, BoardHotmart> | null;
@@ -74,7 +77,7 @@ export function CarteiraDoBoard({
           <Icon name="download" size={14} /> {exportando ? 'Gerando…' : 'Exportar Excel'}
         </Button>
         <BotaoExportarPdf
-          montar={() => rascunhoCarteira(dataset, contas, recorteCarteira(turma))}
+          montar={() => rascunhoCarteira(dataset, contas, recorteCarteira({ turma, produto: produtoLabel, acao: acaoLabel }))}
           niveis={NIVEIS_RELATORIO.board}
           chamadas={chamadasProtocoloFinanceiro()}
           desabilitado={!dataset.linhas.length}

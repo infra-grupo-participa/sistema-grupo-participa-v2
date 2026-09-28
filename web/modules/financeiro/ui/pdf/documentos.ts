@@ -59,9 +59,18 @@ export const PII_COLUNA_BOARD: Record<string, ClassePii> = {
 
 const PESO_BOARD: Record<string, number> = { nome: 1.6, email: 1.9, telefone: 1.1, canal: 1.2, status: 1.2, oferta_codigo: 1.1 };
 
-export function recorteCarteira(turma: string | null): ItemRecorte[] {
+/**
+ * A lista da Carteira chega filtrada por PRODUTO e AÇÃO/canal (contasDoRecorte em
+ * FinanceiroClient.tsx) — o cabeçalho declara os dois: filtro que encolheu a lista
+ * nunca fica escondido (pentest 28/09). `acao` null = nenhuma ação escolhida.
+ * Nome de ação é nome de evento/canal, não dado pessoal: vai no recorte gravado.
+ * Busca e cor do board NÃO chegam aqui (não filtram a lista do relatório).
+ */
+export function recorteCarteira(f: { turma: string | null; produto: string; acao: string | null }): ItemRecorte[] {
   return [
-    { rotulo: 'Turma', valor: turma ?? 'Todas' },
+    { rotulo: 'Produto', valor: f.produto },
+    { rotulo: 'Ação', valor: f.acao ?? 'todas as ações' },
+    { rotulo: 'Turma', valor: f.turma ?? 'Todas' },
     { rotulo: 'Base', valor: 'recorte atual do board' },
   ];
 }

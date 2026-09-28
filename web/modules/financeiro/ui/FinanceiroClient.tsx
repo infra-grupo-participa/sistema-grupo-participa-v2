@@ -448,7 +448,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       {tab === 'faturamento' && <FaturamentoDiario repo={repo} />}
 
       {tab === 'relatorios' && (
-        board ? <Relatorios key={relatorioInicial ?? 'padrao'} tipoInicial={relatorioInicial ?? undefined} contas={contasDoRecorte} turma={turma} canVerDoc={canVerDoc} repo={repo} hotmartPorCard={hotmartPorCard} /> : <Loading label="Carregando…" minHeight={200} />
+        board ? <Relatorios key={relatorioInicial ?? 'padrao'} tipoInicial={relatorioInicial ?? undefined} contas={contasDoRecorte} produtoLabel={recorteAtivo.produtoLabel} acaoLabel={rotuloFiltroAtivo} turma={turma} canVerDoc={canVerDoc} repo={repo} hotmartPorCard={hotmartPorCard} /> : <Loading label="Carregando…" minHeight={200} />
       )}
 
       {tab === 'funis' && <FunisEAnalise repo={repo} />}

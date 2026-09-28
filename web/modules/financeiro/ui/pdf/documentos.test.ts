@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { aplicarNivel } from '@/shared/ui/pdf/nivel';
 import { DocumentoPdf } from '@/shared/ui/pdf/DocumentoPdf';
-import { contarPaginasPdf } from '@/shared/ui/pdf/gerar-pdf';
+import { contarPaginasPdf, recorteParaEmissao } from '@/shared/ui/pdf/gerar-pdf';
 import { caracteresPorLinha, larguraColunas } from '@/shared/ui/pdf/paginar';
 import type { NivelPii, RascunhoRelatorio } from '@/shared/ui/pdf/modelo';
 import type { ContaReceber } from '../../domain/types';
@@ -93,7 +93,7 @@ function seis(): RascunhoRelatorio[] {
   const todasColunas = COLUNAS_RELATORIO.map((c) => c.key);
   const ds = montarRelatorio(contas, todasColunas, { canVerDoc: true, hotmartPorCard: null });
   return [
-    rascunhoCarteira(ds, contas, recorteCarteira('T39')),
+    rascunhoCarteira(ds, contas, recorteCarteira({ turma: 'T39', produto: 'Holding Masters', acao: 'Holding Total ATM (06/07/2026)' })),
     rascunhoPessoas([pessoa(), pessoa({ pessoa_chave: 'p2', nome: PII.nome2, emails: [PII.email2], documentos: [PII.cnpj] })],
       recortePessoas({ familia: 'HM', filtro: null, de: '', ate: '', busca: 'Mariana' })),
     rascunhoConciliacao([divergencia(), divergencia({ tipo: 'valor_diferente', email: PII.email2, transacao: 'HP9' })], recorteConciliacao('HM')),
@@ -192,7 +192,7 @@ describe('mapeadores', () => {
   it('carteira: células vêm de formatarCelulaTela e o total soma as colunas de moeda', () => {
     const contas = [conta(), conta({ contato_hm_id: 'c2', total_pago_bruto: 700 })];
     const ds = montarRelatorio(contas, ['nome', 'status', 'total_pago_bruto'], { canVerDoc: false, hotmartPorCard: null });
-    const det = rascunhoCarteira(ds, contas, recorteCarteira(null)).secoes[1];
+    const det = rascunhoCarteira(ds, contas, recorteCarteira({ turma: null, produto: 'Aurum', acao: null })).secoes[1];
     expect(det.linhas[0].celulas.total_pago_bruto).toMatch(/^R\$\s300,00$/);
     expect(det.total?.total_pago_bruto).toMatch(/^R\$\s1\.000,00$/);
     expect(det.colunas.find((c) => c.chave === 'nome')?.pii).toBe('identificacao');
@@ -206,9 +206,31 @@ describe('mapeadores', () => {
       { rotulo: '1ª compra', valor: '01/01/2026 a hoje' },
       { rotulo: 'Busca', valor: '"Ana"', pii: true },
     ]);
-    expect(recorteCarteira(null)[0]).toEqual({ rotulo: 'Turma', valor: 'Todas' });
+    // Carteira: produto e ação que encolheram a lista sempre declarados (pentest 28/09).
+    expect(recorteCarteira({ turma: null, produto: 'Holding Masters', acao: 'Holding Total ATM (06/07/2026)' })).toEqual([
+      { rotulo: 'Produto', valor: 'Holding Masters' },
+      { rotulo: 'Ação', valor: 'Holding Total ATM (06/07/2026)' },
+      { rotulo: 'Turma', valor: 'Todas' },
+      { rotulo: 'Base', valor: 'recorte atual do board' },
+    ]);
+    expect(recorteCarteira({ turma: null, produto: 'Aurum', acao: null }).slice(0, 2)).toEqual([
+      { rotulo: 'Produto', valor: 'Aurum' },
+      { rotulo: 'Ação', valor: 'todas as ações' },
+    ]);
     expect(recorteAcelera('sem_card')).toEqual([{ rotulo: 'Filtro', valor: 'Subiram sem card' }]);
     expect(recorteProrata('vence60', '')).toEqual([{ rotulo: 'Filtro', valor: 'Vence em até 60 dias' }]);
+  });
+
+  it('carteira: produto e ação vão no cabeçalho em todo nível e no recorte gravado na emissão', () => {
+    const contas = [conta()];
+    const r = rascunhoCarteira(montarRelatorio(contas, COLUNAS_PADRAO, { canVerDoc: false, hotmartPorCard: null }), contas,
+      recorteCarteira({ turma: null, produto: 'Holding Masters', acao: 'Holding Total ATM (06/07/2026)' }));
+    for (const nivel of r.niveisPermitidos) {
+      expect(aplicarNivel(r, nivel).recorte.slice(0, 2), nivel).toEqual(['Produto: Holding Masters', 'Ação: Holding Total ATM (06/07/2026)']);
+    }
+    expect(recorteParaEmissao(r)).toEqual({
+      filtros: ['Produto: Holding Masters', 'Ação: Holding Total ATM (06/07/2026)', 'Turma: Todas', 'Base: recorte atual do board'],
+    });
   });
 
   it('busca livre sai como "termo omitido" fora do nível completo', () => {
