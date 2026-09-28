@@ -7,7 +7,7 @@ import {
 
 const L = (p: Partial<LinhaReceber>): LinhaReceber => ({
   bloco: 1, grupo: 'Vendas já realizadas', componente: 'antecipacao', data_caixa: '2026-09-29', valor: 0,
-  situacao: 'a_receber', origem_dia: null, ref: null, rotulo: null, produto: null, k: null, detalhe: [], ...p,
+  situacao: 'a_receber', origem_dia: null, ref: null, rotulo: null, produto: null, k: null, detalhe: [], pagas: [], fator: 1, certeza: 'certo', centro_custo: null, tratamento: null, cenario: 'base', ...p, valor_bruto: p.valor_bruto ?? p.valor ?? 0,
 });
 
 describe('semanas — seg a dom, cortada no mês; pedaço < 4 dias unido à vizinha do mesmo mês', () => {
@@ -106,8 +106,8 @@ describe('agregarReceber — semana × bloco × grupo, só a_receber soma', () =
       'Vendas já realizadas', 'Assinaturas Serviço Diamante', 'Parcelas a vencer HM', 'Grupo novo do banco',
     ]);
     expect(g.blocos).toEqual([
-      { bloco: 1, porSemana: [100.3, 0, 0, 0, 0, 0], total: 100.3 },
-      { bloco: 2, porSemana: [0, 80, 5, 0, 0, 0], total: 85 },
+      { bloco: 1, porSemana: [100.3, 0, 0, 0, 0, 0], total: 100.3, brutoPorSemana: [100.3, 0, 0, 0, 0, 0], brutoTotal: 100.3 },
+      { bloco: 2, porSemana: [0, 80, 5, 0, 0, 0], total: 85, brutoPorSemana: [0, 80, 5, 0, 0, 0], brutoTotal: 85 },
     ]);
   });
   it('total por mês e acumulado', () => {
@@ -254,5 +254,43 @@ describe('coberta_informado — cobrança do bloco 2 coberta por informado (conf
     const r = cobrancasRecorrentes([coberta]);
     expect(r).toHaveLength(1);
     expect(r[0]).toMatchObject({ situacao: 'coberta_informado', grupo: 'Parcelas a vencer Aurum', valor: 5000 });
+  });
+});
+
+describe('contrato v2 (z66) — tolerante à versão do banco', () => {
+  it('banco antigo (sem as 6 colunas): valor_bruto = valor, fator 1, cenário base', () => {
+    const l = normalizarLinhaReceber({ bloco: 2, grupo: 'Parcelas a vencer HM', componente: 'antecipacao', data_caixa: '2026-10-05', valor: '1238.05', situacao: 'a_receber', detalhe: null });
+    expect(l).toMatchObject({ valor: 1238.05, valor_bruto: 1238.05, fator: 1, certeza: null, tratamento: null, cenario: 'base', pagas: [] });
+  });
+  it('banco novo: lê as 6 colunas; bloco 2 detalhe vira `pagas` (e não vendas do dia)', () => {
+    const l = normalizarLinhaReceber({
+      bloco: 2, grupo: 'Parcelas a vencer HM', componente: 'antecipacao', data_caixa: '2026-11-05', valor: '950.00', situacao: 'a_receber',
+      valor_bruto: '1000', fator: '0.95', certeza: 'certo', centro_custo: '1. Receita de vendas (Hotmart)',
+      tratamento: 'Antecipação D+2 útil (90% − 3,89%) · Perda 5%/mês × 1 mês', cenario: 'conservador',
+      detalhe: [{ transacao: 'HP1', n: 1, dia: '2026-08-05', liquido: '1000' }, { transacao: 'HP2', n: 2, dia: '2026-09-05', liquido: 1000 }],
+    });
+    expect(l).toMatchObject({ valor: 950, valor_bruto: 1000, fator: 0.95, cenario: 'conservador', detalhe: [] });
+    expect(l.pagas).toEqual([{ transacao: 'HP1', n: 1, dia: '2026-08-05', liquido: 1000 }, { transacao: 'HP2', n: 2, dia: '2026-09-05', liquido: 1000 }]);
+    expect(Object.keys(l.pagas[0])).not.toContain('email');
+  });
+  it('agregação soma o ESPERADO; o bruto anda junto e não entra no total', () => {
+    const g = agregarReceber([
+      L({ bloco: 2, grupo: 'Parcelas a vencer HM', data_caixa: '2026-10-05', valor: 950, valor_bruto: 1000, fator: 0.95 }),
+      L({ bloco: 1, data_caixa: '2026-10-05', valor: 100 }),
+    ], '2026-10-01', '2026-10-31');
+    expect(g.total).toBe(1050);
+    expect(g.brutoTotal).toBe(1100);
+    const b2 = g.blocos.find((b) => b.bloco === 2)!;
+    expect(b2.total).toBe(950);
+    expect(b2.brutoTotal).toBe(1000);
+    expect(g.meses[0]).toMatchObject({ total: 1050, brutoTotal: 1100 });
+  });
+  it('Recorrências: valor = bruto da cobrança; esperado = o que soma', () => {
+    const [c] = cobrancasRecorrentes([
+      L({ bloco: 2, grupo: 'Parcelas a vencer HM', ref: 'r', origem_dia: '2026-11-01', data_caixa: '2026-11-04', valor: 855, valor_bruto: 900, fator: 0.95 }),
+      L({ bloco: 2, grupo: 'Parcelas a vencer HM', ref: 'r', origem_dia: '2026-11-01', data_caixa: '2026-12-01', componente: 'garantia', valor: 95, valor_bruto: 100, fator: 0.95 }),
+    ]);
+    expect(c.valor).toBe(1000);
+    expect(c.esperado).toBe(950);
   });
 });

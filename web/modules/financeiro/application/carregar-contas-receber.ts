@@ -1,9 +1,10 @@
-// Contas a Receber (fase 1): UMA chamada a fn_fin_receber_semanal quando a aba abre. A grade, o clique numa célula
-// (quem compõe) e a lista de Recorrências saem todos desta mesma resposta — nenhum clique consulta de novo.
+// Contas a Receber: UMA chamada a fn_fin_receber_semanal por cenário, quando a aba abre ou o cenário muda. A grade, o
+// clique numa célula (quem compõe) e a lista de Recorrências saem todos desta mesma resposta — nenhum clique consulta
+// de novo. O cache por cenário mora no pai (FinanceiroClient): voltar a um cenário já visto não consulta.
 import type { FinanceiroRepository } from './ports';
 import {
   agregarReceber, cobrancasRecorrentes, periodoReceber, recebimentoDesligado,
-  type CobrancaRecorrente, type GradeReceber, type LinhaReceber,
+  type CenarioReceber, type CobrancaRecorrente, type GradeReceber, type LinhaReceber,
 } from '../domain/contas-receber';
 
 export interface ContasReceberCarregado {
@@ -14,6 +15,8 @@ export interface ContasReceberCarregado {
   desligado: boolean;
   /** Dia (São Paulo) em que a grade foi montada — início do período. */
   hojeISO: string;
+  /** Cenário pedido. */
+  cenario: CenarioReceber;
 }
 
 /** Hoje no fuso de São Paulo (YYYY-MM-DD). `new Date().toISOString()` viraria o dia às 21h. */
@@ -21,16 +24,16 @@ export function hojeSaoPaulo(agora: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(agora);
 }
 
-export function montarContasReceber(linhas: LinhaReceber[], hojeISO: string): ContasReceberCarregado {
+export function montarContasReceber(linhas: LinhaReceber[], hojeISO: string, cenario: CenarioReceber = 'base'): ContasReceberCarregado {
   const { inicio, fim } = periodoReceber(linhas, hojeISO);
   return {
     linhas, grade: agregarReceber(linhas, inicio, fim), recorrencias: cobrancasRecorrentes(linhas),
-    desligado: recebimentoDesligado(linhas), hojeISO,
+    desligado: recebimentoDesligado(linhas), hojeISO, cenario,
   };
 }
 
 export async function carregarContasReceber(
-  repo: Pick<FinanceiroRepository, 'loadContasReceber'>, hojeISO: string = hojeSaoPaulo(),
+  repo: Pick<FinanceiroRepository, 'loadContasReceber'>, cenario: CenarioReceber = 'base', hojeISO: string = hojeSaoPaulo(),
 ): Promise<ContasReceberCarregado> {
-  return montarContasReceber(await repo.loadContasReceber(), hojeISO);
+  return montarContasReceber(await repo.loadContasReceber(cenario), hojeISO, cenario);
 }

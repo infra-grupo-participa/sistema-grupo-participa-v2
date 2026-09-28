@@ -5,7 +5,7 @@
 //   bloco 5 — recebimentos informados (renovações Diamante/Aurum negociadas fora, cadastradas no sistema — 28/09).
 // Blocos 3, 4, 6 e 7 da planilha (vendas novas, evento, ajustes, Soluções) ficam para depois.
 //
-// Fonte: public.fn_fin_receber_semanal(p_corte, p_ate) — UMA chamada (NÃO é fn_fin_contas_receber(text), o razão do board); o cálculo de data de caixa (dias úteis,
+// Fonte: public.fn_fin_receber_semanal(p_corte, p_ate, p_cenario) — UMA chamada por cenário (NÃO é fn_fin_contas_receber(text), o razão do board); o cálculo de data de caixa (dias úteis,
 // feriados) e a baixa do que já se realizou moram no banco. Aqui só: tipar, converter numeric, cortar em semanas e somar.
 //
 // Esta é a ÚNICA fonte da semana: a tela e o PDF futuro usam `semanas()` e `agregarReceber()` daqui.
@@ -27,6 +27,20 @@ export interface VendaDoDia {
   liquido: number;
 }
 
+/** Bloco 2 (contrato v2, z66): uma transação PAGA do contrato até o corte. Sem e-mail, sem documento, sem nome. */
+export interface PagamentoContrato {
+  transacao: string;
+  /** Nº da recorrência/parcela na Hotmart. */
+  n: number | null;
+  /** Dia da aprovação (YYYY-MM-DD). */
+  dia: string | null;
+  liquido: number;
+}
+
+/** Cenário da previsão (z66): muda só as premissas que aceitam cenário; sem valor próprio, vale a base. */
+export type CenarioReceber = 'base' | 'conservador' | 'otimista';
+export const CENARIOS_RECEBER: readonly CenarioReceber[] = ['base', 'conservador', 'otimista'];
+
 /** Uma linha de fn_fin_receber_semanal, já normalizada. */
 export interface LinhaReceber {
   bloco: number;
@@ -35,6 +49,7 @@ export interface LinhaReceber {
   /** Dia em que o dinheiro fica disponível (YYYY-MM-DD). É o eixo da grade. NULL em realizada/em_atraso_fora e
    *  quando a premissa de recebimento está desligada no banco — nunca vira data inventada. */
   data_caixa: string | null;
+  /** ESPERADO (contrato v2): round(valor_bruto × fator, 2). É o que soma na grade. */
   valor: number;
   situacao: SituacaoReceber;
   /** Bloco 1: dia da venda. Bloco 2: vencimento da cobrança (contrato do victor, 28/09). */
@@ -45,8 +60,21 @@ export interface LinhaReceber {
   produto: string | null;
   /** Meses à frente (mês do corte = 1). */
   k: number | null;
-  /** Bloco 1: vendas do dia. Bloco 2: NULL no banco, [] aqui. */
+  /** Bloco 1: vendas do dia. Blocos 2 e 5: [] (o detalhe do bloco 2 tem outro formato — ver `pagas`). */
   detalhe: VendaDoDia[];
+  /** Bloco 2: transações pagas do contrato, na linha antecipação/cheio da cobrança (garantia: []). Outros blocos: []. */
+  pagas: PagamentoContrato[];
+  /** Valor sem perda. Banco na versão antiga (sem a coluna): = valor. */
+  valor_bruto: number;
+  /** 1, ou (1 − perda)^k. Banco na versão antiga: 1. */
+  fator: number;
+  /** 'certo' | 'estimado' (reservado). NULL no banco antigo. */
+  certeza: string | null;
+  centro_custo: string | null;
+  /** Porquê da linha, partes separadas por ' · '. NULL no banco antigo ou sem tratamento. */
+  tratamento: string | null;
+  /** Cenário que o banco devolveu. Banco antigo: 'base'. */
+  cenario: string;
 }
 
 export const GRUPO_BLOCO_1 = 'Vendas já realizadas';
@@ -74,14 +102,18 @@ const num = (v: unknown): number => Number(v ?? 0) || 0;
 const numOuNull = (v: unknown): number | null => (v == null || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
 const dia = (v: unknown): string | null => (v == null || v === '' ? null : String(v).slice(0, 10));
 
-function lerDetalhe(v: unknown): VendaDoDia[] {
+function lerLista(v: unknown): Record<string, unknown>[] {
   let bruto: unknown = v;
   if (typeof bruto === 'string') {
     try { bruto = JSON.parse(bruto); } catch { return []; }
   }
   if (!Array.isArray(bruto)) return [];
-  return bruto.map((x) => {
-    const o = (x ?? {}) as Record<string, unknown>;
+  return bruto.map((x) => (x ?? {}) as Record<string, unknown>);
+}
+
+function lerDetalhe(v: unknown): VendaDoDia[] {
+  return lerLista(v).map((x) => {
+    const o = x;
     return {
       transacao: String(o.transacao ?? ''),
       produto: o.produto == null ? null : String(o.produto),
@@ -91,25 +123,53 @@ function lerDetalhe(v: unknown): VendaDoDia[] {
   });
 }
 
+function lerPagas(v: unknown): PagamentoContrato[] {
+  return lerLista(v).map((o) => ({
+    transacao: String(o.transacao ?? ''),
+    n: numOuNull(o.n),
+    dia: dia(o.dia),
+    liquido: num(o.liquido),
+  }));
+}
+
+const textoOuNull = (v: unknown): string | null => (v == null || v === '' ? null : String(v));
+
+/**
+ * Tolerante à versão do banco: durante o deploy a RPC pode ainda ser a da z63 (sem as 6 colunas do contrato v2).
+ * Coluna ausente (chave inexistente ou NULL) → valor_bruto = valor, fator = 1, cenário 'base'. Nada é inventado.
+ */
 export function normalizarLinhaReceber(r: Record<string, unknown>): LinhaReceber {
   const situacao = String(r.situacao ?? '') as SituacaoReceber;
   const componente = String(r.componente ?? '') as ComponenteReceber;
+  const bloco = num(r.bloco);
+  const valor = num(r.valor);
+  const fator = numOuNull(r.fator);
   return {
-    bloco: num(r.bloco),
+    bloco,
     grupo: String(r.grupo ?? ''),
     // Valor fora do contrato é mantido cru e NÃO vira a_receber: não soma e a lista mostra o valor como veio.
     situacao,
     componente,
     data_caixa: dia(r.data_caixa),
-    valor: num(r.valor),
+    valor,
     origem_dia: dia(r.origem_dia),
     ref: r.ref == null ? null : String(r.ref),
     rotulo: r.rotulo == null ? null : String(r.rotulo),
     produto: r.produto == null ? null : String(r.produto),
     k: numOuNull(r.k),
-    detalhe: lerDetalhe(r.detalhe),
+    detalhe: bloco === 2 ? [] : lerDetalhe(r.detalhe),
+    pagas: bloco === 2 ? lerPagas(r.detalhe) : [],
+    valor_bruto: r.valor_bruto == null || r.valor_bruto === '' ? valor : num(r.valor_bruto),
+    fator: fator == null ? 1 : fator,
+    certeza: textoOuNull(r.certeza),
+    centro_custo: textoOuNull(r.centro_custo),
+    tratamento: textoOuNull(r.tratamento),
+    cenario: textoOuNull(r.cenario) ?? 'base',
   };
 }
+
+/** Linha com perda aplicada (fator < 1): a tela mostra bruto e esperado lado a lado. */
+export const temPerda = (l: Pick<LinhaReceber, 'fator'>): boolean => l.fator < 1;
 
 // ─── Calendário (UTC puro, sem fuso) ────────────────────────────────────────
 const ms = (iso: string) => {
@@ -191,11 +251,16 @@ export function semanaDe(sems: Semana[], d: string): number {
 }
 
 // ─── Agregação semana × bloco × grupo (só a_receber) ────────────────────────
+// Soma `valor` (o ESPERADO do contrato v2). O bruto (sem perda) anda junto só para a tela mostrar "bruto × esperado"
+// onde houver perda — nunca entra no total.
 export interface LinhaGrade {
   bloco: number;
   grupo: string;
   porSemana: number[];
   total: number;
+  /** Sem perda (valor_bruto). Igual a porSemana onde o fator é 1. */
+  brutoPorSemana: number[];
+  brutoTotal: number;
 }
 
 export interface MesGrade {
@@ -203,6 +268,7 @@ export interface MesGrade {
   /** Índices das semanas do mês (contíguos). */
   semanas: number[];
   total: number;
+  brutoTotal: number;
   acumulado: number;
 }
 
@@ -210,11 +276,13 @@ export interface GradeReceber {
   semanas: Semana[];
   linhas: LinhaGrade[];
   /** Subtotal por bloco, por semana (bloco 2 tem vários grupos). */
-  blocos: { bloco: number; porSemana: number[]; total: number }[];
+  blocos: { bloco: number; porSemana: number[]; total: number; brutoPorSemana: number[]; brutoTotal: number }[];
   totalPorSemana: number[];
+  brutoPorSemana: number[];
   acumuladoPorSemana: number[];
   meses: MesGrade[];
   total: number;
+  brutoTotal: number;
   /** a_receber sem data de caixa (cálculo de recebimento desligado): não entra na grade, mas não some em silêncio. */
   semDataCaixa: { linhas: number; valor: number };
   /** a_receber com data_caixa fora do período: não entra na grade, mas não some em silêncio. */
@@ -235,7 +303,7 @@ function ordemGrupo(bloco: number, grupo: string): number {
 export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: string): GradeReceber {
   const sems = semanas(inicio, fim);
   const n = sems.length;
-  const porGrupo = new Map<string, { bloco: number; grupo: string; cs: number[] }>();
+  const porGrupo = new Map<string, { bloco: number; grupo: string; cs: number[]; bs: number[] }>();
   let foraN = 0;
   let foraC = 0;
   let semDataN = 0;
@@ -247,18 +315,20 @@ export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: stri
     if (i === -1) { foraN += 1; foraC += c(l.valor); continue; }
     const chave = `${l.bloco}\u0000${l.grupo}`;
     let g = porGrupo.get(chave);
-    if (!g) { g = { bloco: l.bloco, grupo: l.grupo, cs: new Array(n).fill(0) }; porGrupo.set(chave, g); }
+    if (!g) { g = { bloco: l.bloco, grupo: l.grupo, cs: new Array(n).fill(0), bs: new Array(n).fill(0) }; porGrupo.set(chave, g); }
     g.cs[i] += c(l.valor);
+    g.bs[i] += c(l.valor_bruto);
   }
   const grupos = [...porGrupo.values()].sort((a, b) =>
     a.bloco - b.bloco || ordemGrupo(a.bloco, a.grupo) - ordemGrupo(b.bloco, b.grupo) || a.grupo.localeCompare(b.grupo, 'pt-BR'));
 
   const totalC = new Array(n).fill(0);
-  const porBloco = new Map<number, number[]>();
+  const totalB = new Array(n).fill(0);
+  const porBloco = new Map<number, { cs: number[]; bs: number[] }>();
   for (const g of grupos) {
     let b = porBloco.get(g.bloco);
-    if (!b) { b = new Array(n).fill(0); porBloco.set(g.bloco, b); }
-    for (let i = 0; i < n; i++) { totalC[i] += g.cs[i]; b[i] += g.cs[i]; }
+    if (!b) { b = { cs: new Array(n).fill(0), bs: new Array(n).fill(0) }; porBloco.set(g.bloco, b); }
+    for (let i = 0; i < n; i++) { totalC[i] += g.cs[i]; b.cs[i] += g.cs[i]; totalB[i] += g.bs[i]; b.bs[i] += g.bs[i]; }
   }
   const acumC: number[] = [];
   totalC.reduce((s, v, i) => (acumC[i] = s + v), 0);
@@ -266,20 +336,27 @@ export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: stri
   const meses: MesGrade[] = [];
   for (let i = 0; i < n; i++) {
     const ultimo = meses[meses.length - 1];
-    if (ultimo && ultimo.mes === sems[i].mes) { ultimo.semanas.push(i); ultimo.total += totalC[i]; } else meses.push({ mes: sems[i].mes, semanas: [i], total: totalC[i], acumulado: 0 });
+    if (ultimo && ultimo.mes === sems[i].mes) { ultimo.semanas.push(i); ultimo.total += totalC[i]; ultimo.brutoTotal += totalB[i]; }
+    else meses.push({ mes: sems[i].mes, semanas: [i], total: totalC[i], brutoTotal: totalB[i], acumulado: 0 });
   }
   let acM = 0;
-  for (const m of meses) { acM += m.total; m.acumulado = r(acM); m.total = r(m.total); }
+  for (const m of meses) { acM += m.total; m.acumulado = r(acM); m.total = r(m.total); m.brutoTotal = r(m.brutoTotal); }
 
   const soma = (xs: number[]) => xs.reduce((s, v) => s + v, 0);
   return {
     semanas: sems,
-    linhas: grupos.map((g) => ({ bloco: g.bloco, grupo: g.grupo, porSemana: g.cs.map(r), total: r(soma(g.cs)) })),
-    blocos: [...porBloco.entries()].sort((a, b) => a[0] - b[0]).map(([bloco, cs]) => ({ bloco, porSemana: cs.map(r), total: r(soma(cs)) })),
+    linhas: grupos.map((g) => ({
+      bloco: g.bloco, grupo: g.grupo, porSemana: g.cs.map(r), total: r(soma(g.cs)), brutoPorSemana: g.bs.map(r), brutoTotal: r(soma(g.bs)),
+    })),
+    blocos: [...porBloco.entries()].sort((a, b) => a[0] - b[0]).map(([bloco, x]) => ({
+      bloco, porSemana: x.cs.map(r), total: r(soma(x.cs)), brutoPorSemana: x.bs.map(r), brutoTotal: r(soma(x.bs)),
+    })),
     totalPorSemana: totalC.map(r),
+    brutoPorSemana: totalB.map(r),
     acumuladoPorSemana: acumC.map(r),
     meses,
     total: r(soma(totalC)),
+    brutoTotal: r(soma(totalB)),
     semDataCaixa: { linhas: semDataN, valor: r(semDataC) },
     foraDoPeriodo: { linhas: foraN, valor: r(foraC) },
   };
@@ -329,7 +406,10 @@ export interface CobrancaRecorrente {
   prevista: string;
   /** Dias em que as partes caem no caixa. Vazio em realizada/em_atraso_fora (componente cheio, data NULL). */
   caixa: string[];
+  /** Valor da cobrança SEM perda (soma de valor_bruto das partes). */
   valor: number;
+  /** Esperado no cenário (soma de valor das partes). Igual a `valor` sem perda. */
+  esperado: number;
   situacao: SituacaoReceber;
   k: number | null;
 }
@@ -340,7 +420,7 @@ export interface CobrancaRecorrente {
  * cobrança (antecipação + garantia) somam na mesma linha. Sem ref ou sem vencimento, cada linha é uma cobrança.
  */
 export function cobrancasRecorrentes(linhas: LinhaReceber[]): CobrancaRecorrente[] {
-  const mapa = new Map<string, CobrancaRecorrente & { cents: number }>();
+  const mapa = new Map<string, CobrancaRecorrente & { cents: number; centsEsp: number }>();
   let semRef = 0;
   for (const l of linhas) {
     if (l.bloco !== 2) continue;
@@ -349,15 +429,16 @@ export function cobrancasRecorrentes(linhas: LinhaReceber[]): CobrancaRecorrente
     if (!x) {
       x = {
         ref: l.ref, grupo: l.grupo, rotulo: l.rotulo, produto: l.produto, prevista: l.origem_dia ?? l.data_caixa ?? '',
-        caixa: [], valor: 0, cents: 0, situacao: l.situacao, k: l.k,
+        caixa: [], valor: 0, esperado: 0, cents: 0, centsEsp: 0, situacao: l.situacao, k: l.k,
       };
       mapa.set(chave, x);
     }
-    x.cents += c(l.valor);
+    x.cents += c(l.valor_bruto);
+    x.centsEsp += c(l.valor);
     if (l.data_caixa && !x.caixa.includes(l.data_caixa)) x.caixa.push(l.data_caixa);
     if (!l.origem_dia && l.data_caixa && (!x.prevista || l.data_caixa < x.prevista)) x.prevista = l.data_caixa;
   }
   return [...mapa.values()]
-    .map(({ cents, ...x }) => ({ ...x, valor: r(cents), caixa: x.caixa.sort() }))
+    .map(({ cents, centsEsp, ...x }) => ({ ...x, valor: r(cents), esperado: r(centsEsp), caixa: x.caixa.sort() }))
     .sort((a, b) => a.prevista.localeCompare(b.prevista) || (a.rotulo ?? '').localeCompare(b.rotulo ?? '', 'pt-BR'));
 }
