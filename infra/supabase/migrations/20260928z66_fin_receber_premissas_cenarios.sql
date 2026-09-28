@@ -1,7 +1,7 @@
 -- 20260928z66 — Contas a Receber, fatia F2: premissas editáveis com vigência, perda composta, cenários e contrato v2
 --               de public.fn_fin_receber_semanal.
 --
--- NÃO APLICADA — coordenador aplica (apply_migration "fin_receber_premissas_cenarios"). Provas no fim, por medir.
+-- APLICADA em produção em 28/09/2026 (conferência 8.1–8.8 verde). Faixa máx. de perda e de conciliação reduzida de 50% para 20% (achado do Kirad). Medido: RPC 204–233 ms quente, 551 linhas, 534 KB.
 -- Ordem obrigatória: z63 (informados) → z64 (feriados) → z65 (já aplicada) → z66. Guarda: o corpo VIVO de
 -- public.fn_fin_receber_semanal tem que ser o da z63 e o de fin.cobrancas_previstas o da z65 (comparação sem espaço,
 -- sem comentário e SEM o texto das mensagens de "raise exception": a z65 foi aplicada com mensagens encurtadas).
@@ -412,23 +412,23 @@ insert into fin.premissas_receber_catalogo (chave, rotulo, unidade, minimo, maxi
    'Cobrança vencida há até este número de dias continua na previsão e entra no dia seguinte ao corte. Passou disso, sai da projeção como "em atraso".', false),
   ('atraso_max_projetado_dias', 'Atraso máximo listado', 'dias', 0, 120, 'Recorrências e informados',
    'Contrato cuja cobrança em aberto venceu há mais que este número de dias sai inteiro da lista.', false),
-  ('tolerancia_conciliacao', 'Tolerância de conciliação', 'percentual', 0, 0.5, 'Recorrências e informados',
+  ('tolerancia_conciliacao', 'Tolerância de conciliação', 'percentual', 0, 0.2, 'Recorrências e informados',
    'Recebimento informado via Hotmart conta como realizado quando o recebido chega ao acumulado do acordo menos esta tolerância.', false),
   ('informados_no_receber', 'Recebimentos informados na previsão', 'liga_desliga', 0, 1, 'Recorrências e informados',
    '1 = os recebimentos informados entram (e cobrem a recorrência do mesmo acordo); 0 = desliga, sem deploy.', false),
-  ('perda_mensal:servico_diamante', 'Perda mensal — Assinaturas Serviço Diamante', 'percentual', 0, 0.5, 'Perda por inadimplência',
+  ('perda_mensal:servico_diamante', 'Perda mensal — Assinaturas Serviço Diamante', 'percentual', 0, 0.2, 'Perda por inadimplência',
    'Esperado = valor × (1 − perda)^k, k = meses à frente (mês do corte = 1).', true),
-  ('perda_mensal:holding_hm', 'Perda mensal — Assinaturas Holding - Holding Masters', 'percentual', 0, 0.5, 'Perda por inadimplência',
+  ('perda_mensal:holding_hm', 'Perda mensal — Assinaturas Holding - Holding Masters', 'percentual', 0, 0.2, 'Perda por inadimplência',
    'Esperado = valor × (1 − perda)^k, k = meses à frente (mês do corte = 1).', true),
-  ('perda_mensal:outras_assinaturas', 'Perda mensal — Outras assinaturas', 'percentual', 0, 0.5, 'Perda por inadimplência',
+  ('perda_mensal:outras_assinaturas', 'Perda mensal — Outras assinaturas', 'percentual', 0, 0.2, 'Perda por inadimplência',
    'Esperado = valor × (1 − perda)^k, k = meses à frente (mês do corte = 1).', true),
-  ('perda_mensal:parcelas_hm', 'Perda mensal — Parcelas a vencer HM', 'percentual', 0, 0.5, 'Perda por inadimplência',
+  ('perda_mensal:parcelas_hm', 'Perda mensal — Parcelas a vencer HM', 'percentual', 0, 0.2, 'Perda por inadimplência',
    'Esperado = valor × (1 − perda)^k, k = meses à frente (mês do corte = 1).', true),
-  ('perda_mensal:parcelas_aurum', 'Perda mensal — Parcelas a vencer Aurum', 'percentual', 0, 0.5, 'Perda por inadimplência',
+  ('perda_mensal:parcelas_aurum', 'Perda mensal — Parcelas a vencer Aurum', 'percentual', 0, 0.2, 'Perda por inadimplência',
    'Esperado = valor × (1 − perda)^k, k = meses à frente (mês do corte = 1).', true),
-  ('perda_mensal:parcelas_outros', 'Perda mensal — Parcelas a vencer outros', 'percentual', 0, 0.5, 'Perda por inadimplência',
+  ('perda_mensal:parcelas_outros', 'Perda mensal — Parcelas a vencer outros', 'percentual', 0, 0.2, 'Perda por inadimplência',
    'Esperado = valor × (1 − perda)^k, k = meses à frente (mês do corte = 1).', true),
-  ('perda_mensal:informados', 'Perda mensal — Recebimentos informados', 'percentual', 0, 0.5, 'Perda por inadimplência',
+  ('perda_mensal:informados', 'Perda mensal — Recebimentos informados', 'percentual', 0, 0.2, 'Perda por inadimplência',
    'Esperado = valor × (1 − perda)^k, k = meses à frente (mês do corte = 1). Decisão de 28/09: sem perda.', true);
 
 alter table fin.premissas_receber
