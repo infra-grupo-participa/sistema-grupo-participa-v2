@@ -29,6 +29,7 @@ import { normalizarLinhaReceber, type CenarioReceber, type LinhaReceber } from '
 import {
   normalizarLinhaCaixa, normalizarTotaisCaixa, type LinhaCaixaHotmart, type TotaisCaixaHotmart,
 } from '../domain/caixa-hotmart';
+import { normalizarDivergencia, type DivergenciaTaxa } from '../domain/taxa-hotmart';
 import {
   normalizarFeriado, normalizarSugestao, normalizarVigencia, type FeriadoBancario, type SugestaoPremissa, type VigenciaPremissa,
 } from '../domain/premissas-receber';
@@ -105,6 +106,15 @@ export function erroCaixaHotmart(nome: string, error: { code?: string; message?:
   if (error.code === '22023' && error.message) return error.message;
   if (error.code === 'PGRST202') return 'Caixa Hotmart ainda não disponível no banco.';
   return 'Não foi possível carregar o caixa da Hotmart (erro de rede).';
+}
+
+/** Erro das leituras da auditoria da taxa Hotmart (z70): mesmos códigos do Caixa (42501, 22023). */
+export function erroTaxaHotmart(nome: string, error: { code?: string; message?: string }): string {
+  logQueryError(nome, { message: `código ${error.code ?? 'desconhecido'}` });
+  if (error.code === '42501') return 'Sem permissão para ver o financeiro.';
+  if (error.code === '22023' && error.message) return error.message;
+  if (error.code === 'PGRST202') return 'Auditoria da taxa Hotmart ainda não disponível no banco.';
+  return 'Não foi possível carregar a auditoria da taxa Hotmart (erro de rede).';
 }
 
 export class SupabaseFinanceiroRepository implements FinanceiroRepository {
@@ -422,6 +432,19 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     const { data, error } = await this.db().rpc('fn_fin_caixa_hotmart_totais', { p_inicio: inicio, p_fim: fim });
     if (error) throw new Error(erroCaixaHotmart('fn_fin_caixa_hotmart_totais', error));
     return normalizarTotaisCaixa(((data as Record<string, unknown>[]) ?? [])[0]);
+  }
+
+  // ── Taxa Hotmart (z70) ───────────────────────────────────────────────────
+  async loadTaxaAuditoria(inicio: string, fim: string): Promise<Record<string, unknown>[]> {
+    const { data, error } = await this.db().rpc('fn_fin_taxa_auditoria', { p_inicio: inicio, p_fim: fim });
+    if (error) throw new Error(erroTaxaHotmart('fn_fin_taxa_auditoria', error));
+    return (data as Record<string, unknown>[]) ?? [];
+  }
+
+  async loadTaxaDivergencias(inicio: string, fim: string): Promise<DivergenciaTaxa[]> {
+    const { data, error } = await this.db().rpc('fn_fin_taxa_divergencias', { p_inicio: inicio, p_fim: fim });
+    if (error) throw new Error(erroTaxaHotmart('fn_fin_taxa_divergencias', error));
+    return ((data as Record<string, unknown>[]) ?? []).map(normalizarDivergencia);
   }
 
   // ── Premissas do Contas a Receber e feriados bancários (z66) ────────────

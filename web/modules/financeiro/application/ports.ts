@@ -19,6 +19,7 @@ import type { FeriadoBancario, SugestaoPremissa, VigenciaPremissa } from '../dom
 import type { FotoReceber, LinhaPrevistoRealizado, MudancaReceber } from '../domain/visao-receber';
 import type { EventoPlanejado, EventoPlanejadoEntrada } from '../domain/eventos-planejados';
 import type { LinhaCaixaHotmart, TotaisCaixaHotmart } from '../domain/caixa-hotmart';
+import type { DivergenciaTaxa } from '../domain/taxa-hotmart';
 import type { Informado, InformadoEntrada, ResultadoLinhaImportacao } from '../domain/recebimentos-informados';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
@@ -70,6 +71,11 @@ export interface FinanceiroRepository {
   loadCaixaHotmart(inicio: string, fim: string): Promise<LinhaCaixaHotmart[]>;
   /** fn_fin_caixa_hotmart_totais(p_inicio, p_fim) — 1 linha com os totais do período (z68). */
   loadCaixaHotmartTotais(inicio: string, fim: string): Promise<TotaisCaixaHotmart>;
+  /** fn_fin_taxa_auditoria(p_inicio, p_fim) — taxa Hotmart real × acordo por produto ('a_vista') e por nº de parcelas
+   *  ('parcelado', 1..12), linhas cruas (z70); janela ≤ 400 dias. Quem separa e normaliza é domain/taxa-hotmart. */
+  loadTaxaAuditoria(inicio: string, fim: string): Promise<Record<string, unknown>[]>;
+  /** fn_fin_taxa_divergencias(p_inicio, p_fim) — vendas à vista com |real − esperado| > R$ 10, até 500 (z70). */
+  loadTaxaDivergencias(inicio: string, fim: string): Promise<DivergenciaTaxa[]>;
   /** fn_fin_contratado — dinheiro já vendido que ainda vai entrar, por mês e fonte (20260928p). */
   loadContratado(familia: FamiliaHotmart): Promise<LinhaContratado[]>;
   /** fn_fin_faturamento_por_acao — faturamento dentro da janela de cada ação de fin.acoes. */
