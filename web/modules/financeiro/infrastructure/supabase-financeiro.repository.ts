@@ -27,6 +27,9 @@ import {
 } from '../domain/assinatura-hm';
 import { normalizarLinhaReceber, type CenarioReceber, type LinhaReceber } from '../domain/contas-receber';
 import {
+  normalizarLinhaCaixa, normalizarTotaisCaixa, type LinhaCaixaHotmart, type TotaisCaixaHotmart,
+} from '../domain/caixa-hotmart';
+import {
   normalizarFeriado, normalizarVigencia, type FeriadoBancario, type VigenciaPremissa,
 } from '../domain/premissas-receber';
 import {
@@ -72,6 +75,18 @@ export function erroPremissa(nome: string, error: { code?: string; message?: str
   if (error.code === '23505') return 'Já existe vigência nesta data. Grave com outra data.';
   if (error.code === 'PGRST202') return `Não foi possível ${acao}: recurso ainda não disponível no banco.`;
   return `Não foi possível ${acao} (erro de rede ou recurso ainda não disponível).`;
+}
+
+/**
+ * Erro das leituras do Caixa Hotmart (z68). 42501 = sem gp_pode_ver_financeiro(); 22023 = período recusado (datas,
+ * fim antes do início, janela > 400 dias), mensagem do SQL já em português. O log leva só o código.
+ */
+export function erroCaixaHotmart(nome: string, error: { code?: string; message?: string }): string {
+  logQueryError(nome, { message: `código ${error.code ?? 'desconhecido'}` });
+  if (error.code === '42501') return 'Sem permissão para ver o financeiro.';
+  if (error.code === '22023' && error.message) return error.message;
+  if (error.code === 'PGRST202') return 'Caixa Hotmart ainda não disponível no banco.';
+  return 'Não foi possível carregar o caixa da Hotmart (erro de rede).';
 }
 
 export class SupabaseFinanceiroRepository implements FinanceiroRepository {
@@ -376,6 +391,19 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     const linhas = await this.rpcLista<Record<string, unknown>>('fn_fin_receber_semanal', args,
       'Não foi possível carregar as contas a receber.');
     return linhas.map(normalizarLinhaReceber);
+  }
+
+  // ── Caixa Hotmart (z68) ──────────────────────────────────────────────────
+  async loadCaixaHotmart(inicio: string, fim: string): Promise<LinhaCaixaHotmart[]> {
+    const { data, error } = await this.db().rpc('fn_fin_caixa_hotmart', { p_inicio: inicio, p_fim: fim });
+    if (error) throw new Error(erroCaixaHotmart('fn_fin_caixa_hotmart', error));
+    return ((data as Record<string, unknown>[]) ?? []).map(normalizarLinhaCaixa);
+  }
+
+  async loadCaixaHotmartTotais(inicio: string, fim: string): Promise<TotaisCaixaHotmart> {
+    const { data, error } = await this.db().rpc('fn_fin_caixa_hotmart_totais', { p_inicio: inicio, p_fim: fim });
+    if (error) throw new Error(erroCaixaHotmart('fn_fin_caixa_hotmart_totais', error));
+    return normalizarTotaisCaixa(((data as Record<string, unknown>[]) ?? [])[0]);
   }
 
   // ── Premissas do Contas a Receber e feriados bancários (z66) ────────────

@@ -158,13 +158,14 @@ describe('celulaCsv', () => {
 // 20260927b e 20260927h definiam o corpo ORIGINAL de fn_fin_hotmart_faturamento/funis. A 20260928z54 (28/09,
 // líquido realista com antecipação D+2 e retenção de 10%) recriou as duas com um DROP + CREATE — RETURNS TABLE
 // ganhou 5 colunas de recebimento no fim (entra_rapido, retido, retido_a_liberar, custo_antecipacao, liquido_total).
-// O corpo vivo no banco é o da z54; o front (DiaHotmart / FunilHotmart, ver hotmart.ts) ainda não lê as 5 novas —
-// por isso o contrato aqui é "as colunas do front são um PREFIXO do RETURNS TABLE", não igualdade.
+// Desde a F6 o front (DiaHotmart) lê as 5 — o contrato do Faturamento volta a ser IGUALDADE com o RETURNS TABLE.
+// FunilHotmart ainda não lê as 5 (continua prefixo).
 describe('contrato fn_fin_hotmart_faturamento', () => {
   const sql = migracao('20260928z54_fin_premissas_recebimento.sql');
   const COLUNAS_DIA_HOTMART = [
     'dia', 'vendas', 'valor_oferta', 'cobrado_cliente', 'juros', 'taxa_hotmart', 'liquido', 'liquido_estimado',
     'estornos', 'valor_estornado', 'recusadas', 'boletos_gerados', 'compradores',
+    'entra_rapido', 'retido', 'retido_a_liberar', 'custo_antecipacao', 'liquido_total',
   ] as const satisfies readonly (keyof DiaHotmart)[];
   // O preset "Tudo" cresce todo dia. Um teto fixo de dias na RPC já quebrou a tela duas vezes
   // (3 anos cortava o HM de ago/2023; 7 anos voltaria a dar 400 em 2028). O custo é o das transações, não do intervalo.
@@ -173,9 +174,8 @@ describe('contrato fn_fin_hotmart_faturamento', () => {
     const fim = corpo.indexOf('end $$;');
     expect(corpo.slice(0, fim)).not.toMatch(/v_fim\s*-\s*v_ini\s*>\s*\d+/);
   });
-  it('RETURNS TABLE começa pelas colunas de DiaHotmart, na ordem (as 5 novas de recebimento vêm depois)', () => {
-    const colunas = colunasRetorno(sql, 'public.fn_fin_hotmart_faturamento');
-    expect(colunas.slice(0, COLUNAS_DIA_HOTMART.length)).toEqual([...COLUNAS_DIA_HOTMART]);
+  it('RETURNS TABLE = colunas de DiaHotmart, na ordem (inclui as 5 de recebimento)', () => {
+    expect(colunasRetorno(sql, 'public.fn_fin_hotmart_faturamento')).toEqual([...COLUNAS_DIA_HOTMART]);
   });
 });
 
@@ -316,7 +316,8 @@ describe('20260928k — extrato sem produto A_CLASSIFICAR', () => {
 describe('agruparFaturamento', () => {
   const dia = (d: string, bruto: number, preenchido = false) => ({
     dia: d, preenchido, vendas: bruto ? 1 : 0, bruto, taxa: 0, repasses: 0, liquido: bruto * 0.9, juros: 0, estornos: 0,
-    valorEstornado: 0, recusadas: 0, boletos: 0, liquidoEstimado: 0, acumulado: 0, variacaoDiaAnterior: null,
+    valorEstornado: 0, recusadas: 0, boletos: 0, liquidoEstimado: 0, entraRapido: bruto * 0.8, retido: bruto * 0.09,
+    liquidoTotal: bruto * 0.89, acumulado: 0, variacaoDiaAnterior: null,
   });
   const serie = [dia('2026-08-30', 100), dia('2026-08-31', 0, true), dia('2026-09-01', 300), dia('2026-09-02', 0, true)];
   let acc = 0; for (const d of serie) { acc += d.bruto; d.acumulado = acc; }
@@ -327,6 +328,12 @@ describe('agruparFaturamento', () => {
     expect(m[1].acumulado).toBe(400);
     expect(m[1].variacao).toBe(200);
     expect(m[0].vazio).toBe(false);
+  });
+  it('as três linhas do recebimento (entra em 2 dias, retido, líquido total) também somam por mês', () => {
+    const m = agruparFaturamento(serie, 'mes');
+    expect(m[1].entraRapido).toBeCloseTo(240);
+    expect(m[1].retido).toBeCloseTo(27);
+    expect(m[1].liquidoTotal).toBeCloseTo(267);
   });
   it('por ano junta tudo; por dia mantém os dias vazios marcados', () => {
     expect(agruparFaturamento(serie, 'ano')).toHaveLength(1);

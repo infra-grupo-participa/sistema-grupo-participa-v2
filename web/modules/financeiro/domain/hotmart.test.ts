@@ -5,7 +5,8 @@ function dia(over: Partial<DiaHotmart> = {}): DiaHotmart {
   return {
     dia: '2026-09-26', vendas: 0, valor_oferta: 0, cobrado_cliente: 0, juros: 0, taxa_hotmart: 0,
     liquido: 0, liquido_estimado: 0, estornos: 0, valor_estornado: 0, recusadas: 0, boletos_gerados: 0,
-    compradores: 0, ...over,
+    compradores: 0, entra_rapido: null, retido: null, retido_a_liberar: null, custo_antecipacao: null, liquido_total: null,
+    ...over,
   };
 }
 
@@ -63,6 +64,19 @@ describe('serieHotmart (Faturamento Diário)', () => {
     expect(aurum.repasses).toBeCloseTo(216.88, 2);
     const [hm] = serieHotmart([dia({ valor_oferta: 15000, taxa_hotmart: 601, liquido: 14399 })]);
     expect(hm.repasses).toBe(0);
+  });
+
+  it('três linhas do recebimento: numeric como texto vira número; sem premissa (null) vira 0; somam no resumo', () => {
+    const dias = [
+      dia({ dia: '2026-09-01', liquido: 93.7, entra_rapido: '81.05' as unknown as number, retido: '9.37' as unknown as number,
+        liquido_total: '90.42' as unknown as number }),
+      dia({ dia: '2026-09-02', liquido: 10 }), // entra_rapido/retido/liquido_total = null
+    ];
+    const s = serieHotmart(dias);
+    expect([s[0].entraRapido, s[0].retido, s[0].liquidoTotal]).toEqual([81.05, 9.37, 90.42]);
+    expect([s[1].entraRapido, s[1].retido, s[1].liquidoTotal]).toEqual([0, 0, 0]);
+    const r = resumirHotmart(dias);
+    expect([r.entraRapido, r.retido, r.liquidoTotal]).toEqual([81.05, 9.37, 90.42]);
   });
 
   it('sem dia, série vazia', () => {

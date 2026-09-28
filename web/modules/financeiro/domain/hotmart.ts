@@ -61,6 +61,13 @@ export interface DiaHotmart {
   recusadas: number;
   boletos_gerados: number;
   compradores: number;
+  // z54 (recebimento do líquido pago do dia, via fin.recebimento): null quando não há premissa ativa para o dia.
+  // Antes de 01/06/2026 (z68) não havia antecipação: entra_rapido = 0 e o líquido inteiro é retido (volta em D+30).
+  entra_rapido: number | null;
+  retido: number | null;
+  retido_a_liberar: number | null;
+  custo_antecipacao: number | null;
+  liquido_total: number | null;
 }
 
 export type SituacaoPessoa =
@@ -313,6 +320,12 @@ export interface ResumoHotmart {
   estornos: number;
   valorEstornado: number;
   recusadas: number;
+  /** Entra em 2 dias úteis (líquido − retido − custo da antecipação). */
+  entraRapido: number;
+  /** Retido, volta em 30 dias (1º dia útil ≥ D+30). */
+  retido: number;
+  /** Entra em 2 dias + retido (sem reembolso). */
+  liquidoTotal: number;
   /** Repasse a coprodutor/afiliado/add-on = oferta − taxa − líquido (Aurum antigo tem coprodutor; HM não). */
   repasses: number;
   /** líquido ÷ valor da oferta (0..1). null sem venda — nunca 0% inventado. */
@@ -336,8 +349,14 @@ export function resumirHotmart(dias: DiaHotmart[]): ResumoHotmart {
       estornos: a.estornos + n(d.estornos),
       valorEstornado: a.valorEstornado + n(d.valor_estornado),
       recusadas: a.recusadas + n(d.recusadas),
+      entraRapido: a.entraRapido + n(d.entra_rapido),
+      retido: a.retido + n(d.retido),
+      liquidoTotal: a.liquidoTotal + n(d.liquido_total),
     }),
-    { vendas: 0, valorOferta: 0, cobrado: 0, juros: 0, taxa: 0, liquido: 0, liquidoEstimado: 0, estornos: 0, valorEstornado: 0, recusadas: 0 },
+    {
+      vendas: 0, valorOferta: 0, cobrado: 0, juros: 0, taxa: 0, liquido: 0, liquidoEstimado: 0, estornos: 0, valorEstornado: 0,
+      recusadas: 0, entraRapido: 0, retido: 0, liquidoTotal: 0,
+    },
   );
   const repasses = Math.max(0, Math.round((r.valorOferta - r.taxa - r.liquido) * 100) / 100);
   return {
@@ -396,6 +415,10 @@ export interface DiaHotmartSerie {
   recusadas: number;
   boletos: number;
   liquidoEstimado: number;
+  /** Entra em 2 dias úteis · retido (volta em 30 dias) · líquido total — do SQL (fin.recebimento), sem recalcular aqui. */
+  entraRapido: number;
+  retido: number;
+  liquidoTotal: number;
   acumulado: number;
   /** Variação % do bruto vs. o dia anterior (null sem dia anterior com venda). */
   variacaoDiaAnterior: number | null;
@@ -428,6 +451,7 @@ export function serieHotmart(dias: DiaHotmart[]): DiaHotmartSerie[] {
       repasses: Math.max(0, Math.round((bruto - taxa - liquido) * 100) / 100),
       juros: n(d?.juros), estornos: n(d?.estornos), valorEstornado: n(d?.valor_estornado),
       recusadas: n(d?.recusadas), boletos: n(d?.boletos_gerados), liquidoEstimado: n(d?.liquido_estimado),
+      entraRapido: n(d?.entra_rapido), retido: n(d?.retido), liquidoTotal: n(d?.liquido_total),
       acumulado,
       variacaoDiaAnterior: anterior && anterior.bruto > 0 ? ((bruto - anterior.bruto) / anterior.bruto) * 100 : null,
     };
@@ -463,13 +487,14 @@ export function agruparFaturamento(serie: DiaHotmartSerie[], g: GranularidadeFat
     if (!p || p.chave !== chave) {
       p = {
         chave, vazio: true, variacao: null, vendas: 0, bruto: 0, taxa: 0, repasses: 0, liquido: 0, juros: 0, estornos: 0,
-        valorEstornado: 0, recusadas: 0, boletos: 0, liquidoEstimado: 0, acumulado: 0,
+        valorEstornado: 0, recusadas: 0, boletos: 0, liquidoEstimado: 0, entraRapido: 0, retido: 0, liquidoTotal: 0, acumulado: 0,
       };
       saida.push(p);
     }
     p.vendas += d.vendas; p.bruto += d.bruto; p.taxa += d.taxa; p.repasses += d.repasses; p.liquido += d.liquido;
     p.juros += d.juros; p.estornos += d.estornos; p.valorEstornado += d.valorEstornado; p.recusadas += d.recusadas;
     p.boletos += d.boletos; p.liquidoEstimado += d.liquidoEstimado; p.acumulado = d.acumulado;
+    p.entraRapido += d.entraRapido; p.retido += d.retido; p.liquidoTotal += d.liquidoTotal;
     if (!d.preenchido) p.vazio = false;
   }
   for (let i = 1; i < saida.length; i++) {

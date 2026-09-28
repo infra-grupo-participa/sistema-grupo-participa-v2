@@ -16,6 +16,7 @@ import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-car
 import type { AssinaturaHMBoard, AssinaturaHMSemCard } from '../domain/assinatura-hm';
 import type { CenarioReceber, LinhaReceber } from '../domain/contas-receber';
 import type { FeriadoBancario, VigenciaPremissa } from '../domain/premissas-receber';
+import type { LinhaCaixaHotmart, TotaisCaixaHotmart } from '../domain/caixa-hotmart';
 import type { Informado, InformadoEntrada, ResultadoLinhaImportacao } from '../domain/recebimentos-informados';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
@@ -63,6 +64,10 @@ export interface FinanceiroRepository {
   // ── Espelho da Hotmart (schema fin, só leitura — 27/09/2026) ─────────────
   loadHotmartFaturamento(familia: FamiliaHotmart, inicio: string | null, fim: string | null): Promise<DiaHotmart[]>;
   loadHotmartFunis(familia: FamiliaHotmart, inicio: string | null, fim: string | null): Promise<FunilHotmart[]>;
+  /** fn_fin_caixa_hotmart(p_inicio, p_fim) — Caixa Hotmart por dia de aprovação (z68); janela ≤ 400 dias. */
+  loadCaixaHotmart(inicio: string, fim: string): Promise<LinhaCaixaHotmart[]>;
+  /** fn_fin_caixa_hotmart_totais(p_inicio, p_fim) — 1 linha com os totais do período (z68). */
+  loadCaixaHotmartTotais(inicio: string, fim: string): Promise<TotaisCaixaHotmart>;
   /** fn_fin_contratado — dinheiro já vendido que ainda vai entrar, por mês e fonte (20260928p). */
   loadContratado(familia: FamiliaHotmart): Promise<LinhaContratado[]>;
   /** fn_fin_faturamento_por_acao — faturamento dentro da janela de cada ação de fin.acoes. */
