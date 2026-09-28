@@ -4,12 +4,14 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { ColarDaPlanilha, Informados, type RepoInformados } from './Informados';
+import { ColarDaPlanilha, FormularioInformado, Informados, type RepoInformados } from './Informados';
 import { ContasAReceber } from './ContasAReceber';
 import { Recorrencias } from './Recorrencias';
 import { montarContasReceber } from '../../application/carregar-contas-receber';
 import type { LinhaReceber } from '../../domain/contas-receber';
-import { lerColagem, normalizarInformado } from '../../domain/recebimentos-informados';
+import { formDeInformado, lerColagem, normalizarInformado } from '../../domain/recebimentos-informados';
+
+const VE = { podeVerDoc: true };
 
 const repoEspiao = (): RepoInformados => ({
   loadInformados: vi.fn(async () => []),
@@ -60,6 +62,15 @@ describe('Informados — sub-seção', () => {
     expect(html).not.toMatch(/devendo|carteira/i);
   });
 
+  it('recebido_hotmart NULL (quem não vê CPF, z63): "— / acumulado", não some nem vira zero', () => {
+    const html = renderToStaticMarkup(createElement(Informados, {
+      repo: repoEspiao(), canEdit: false, canVerDoc: false,
+      inicial: [I({ id: 'f', cliente: 'Cliente F', via_hotmart: true, produtos: ['Aurum'], recebido_hotmart: null, acumulado_acordo: 18750 })],
+    }));
+    expect(html).toMatch(/>— \/ R\$\s18\.750,00</);
+    expect(html).not.toMatch(/R\$\s0,00 \/ R\$\s18\.750,00/);
+  });
+
   it('sem permissão de operar: nenhum botão de escrita, aviso de somente leitura', () => {
     const html = renderToStaticMarkup(createElement(Informados, { repo: repoEspiao(), canEdit: false, canVerDoc: false, inicial: lista }));
     for (const b of ['>Editar<', '>Baixar<', 'Desfazer baixa', '>Arquivar<', 'Colar da planilha', '>Novo<']) expect(html).not.toContain(b);
@@ -78,8 +89,8 @@ describe('Colar da planilha — prévia', () => {
   const CPF = '111.444.777-35';
   const ok = `05/10/2026\tCliente Um\tRenovação Diamante\tR$ 18.750,00\tS\tServiço Diamante\t${CPF}\tum@example.com\t01/09/2026\t`;
   it('erro de formato: linha a linha, sem ir ao banco, gravar desligado; CPF/e-mail colados não reaparecem em claro', () => {
-    const colagem = lerColagem(`${ok}\n31/02/2026\tX\tConsultoria\tR$ 1,00\tN\t\t\t\t\t`);
-    const html = renderToStaticMarkup(createElement(ColarDaPlanilha, { repo: repoEspiao(), onGravado: () => {}, inicial: { colagem, previa: null } }));
+    const colagem = lerColagem(`${ok}\n31/02/2026\tX\tConsultoria\tR$ 1,00\tN\t\t\t\t\t`, VE);
+    const html = renderToStaticMarkup(createElement(ColarDaPlanilha, { repo: repoEspiao(), canVerDoc: true, onGravado: () => {}, inicial: { colagem, previa: null } }));
     expect(html).toContain('Data prevista inválida');
     expect(html).toContain('Tipo não reconhecido');
     expect(html).toContain('Corrija na planilha e cole de novo');
@@ -89,22 +100,64 @@ describe('Colar da planilha — prévia', () => {
     expect(html).toContain('···7735 · u***@example.com');
   });
   it('banco conferiu tudo ok: "Gravar N linhas" liberado', () => {
-    const colagem = lerColagem(ok);
+    const colagem = lerColagem(ok, VE);
     const html = renderToStaticMarkup(createElement(ColarDaPlanilha, {
-      repo: repoEspiao(), onGravado: () => {}, inicial: { colagem, previa: [{ linha: 1, ok: true, erro: null, id: null }] },
+      repo: repoEspiao(), canVerDoc: true, onGravado: () => {}, inicial: { colagem, previa: [{ linha: 1, ok: true, erro: null, id: null }] },
     }));
     expect(html).toMatch(/<button[^>]*>Gravar 1 linha<\/button>/);
     expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Gravar 1 linha/);
     expect(html).toContain('>OK<');
   });
   it('banco recusou uma linha: erro do SQL na linha e gravar desligado', () => {
-    const colagem = lerColagem(`${ok}\n${ok}`);
+    const colagem = lerColagem(`${ok}\n${ok}`, VE);
     const html = renderToStaticMarkup(createElement(ColarDaPlanilha, {
-      repo: repoEspiao(), onGravado: () => {},
+      repo: repoEspiao(), canVerDoc: true, onGravado: () => {},
       inicial: { colagem, previa: [{ linha: 1, ok: true, erro: null, id: null }, { linha: 2, ok: false, erro: 'Linha duplicada.', id: null }] },
     }));
     expect(html).toContain('Linha duplicada.');
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Gravar 2 linhas<\/button>/);
+  });
+  it('sem permissão de ver CPF: aviso visível; linha com CPF/e-mail é erro local, sem ir ao banco; gravar desligado', () => {
+    const semId = '20/10/2026\tCliente Dois\tRenovação Aurum\tR$ 9.000,00\tN\t\t\t\t\t';
+    const colagem = lerColagem(`${ok}\n${semId}`, { podeVerDoc: false });
+    const repo = repoEspiao();
+    const html = renderToStaticMarkup(createElement(ColarDaPlanilha, { repo, canVerDoc: false, onGravado: () => {}, inicial: { colagem, previa: null } }));
+    expect(html).toContain('Sem permissão para ver CPF: deixe Identificador 1 e 2 vazios');
+    expect(html).toContain('Sem permissão para informar CPF/e-mail.');
+    expect(html).toContain('Corrija na planilha e cole de novo. Nada foi enviado ao banco.');
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Gravar 2 linhas<\/button>/);
+    expect(html).not.toContain(CPF);
+    expect(html).not.toContain('um@example.com');
+    expect(repo.importarInformados).not.toHaveBeenCalled();
+  });
+  it('quem vê CPF: sem o aviso de permissão', () => {
+    const html = renderToStaticMarkup(createElement(ColarDaPlanilha, { repo: repoEspiao(), canVerDoc: true, onGravado: () => {} }));
+    expect(html).not.toContain('Sem permissão para ver CPF');
+  });
+});
+
+describe('Formulário — identificador conforme gp_pode_ver_cpf', () => {
+  const orig = I({ id: 'a', via_hotmart: true, produtos: ['Aurum'], identificador1: '···7735', identificador2: null });
+  const render = (canVerDoc: boolean, original: typeof orig | null) => renderToStaticMarkup(createElement(FormularioInformado, {
+    form: { original, valores: formDeInformado(original, canVerDoc), erros: [] }, canVerDoc, ocupado: false,
+    onMudar: () => {}, onSalvar: () => {}, onCancelar: () => {},
+  }));
+  const inputsIdent = (html: string) => html.match(/<input type="text"[^>]*autoComplete="off"[^>]*>/gi) ?? [];
+  it('sem permissão: Identificador 1 e 2 desabilitados, com o texto de ajuda; máscara só no placeholder', () => {
+    const html = render(false, orig);
+    const ids = inputsIdent(html);
+    expect(ids).toHaveLength(2);
+    for (const i of ids) expect(i).toContain('disabled=""');
+    expect(html.split('Só quem pode ver CPF informa CPF/e-mail').length - 1).toBe(2);
+    expect(ids[0]).toContain('placeholder="···7735"');
+    expect(ids[0]).toContain('value=""');
+    expect(render(false, null)).toContain('Só quem pode ver CPF informa CPF/e-mail'); // criação também
+  });
+  it('com permissão: campos habilitados, ajuda normal', () => {
+    const html = render(true, orig);
+    for (const i of inputsIdent(html)) expect(i).not.toContain('disabled');
+    expect(html).not.toContain('Só quem pode ver CPF');
+    expect(html).toContain('CPF, CNPJ ou e-mail do pagador');
   });
 });
 
