@@ -1702,3 +1702,10 @@ select jobid, jobname, schedule, command, active from cron.job where jobname = '
 select status, start_time, end_time, return_message from cron.job_run_details
  where jobid = (select jobid from cron.job where jobname = 'fin-receber-foto-semanal') order by start_time desc limit 5;
 */
+
+-- ═══ MEDIDO em produção (28/09/2026, coordenador; 2ª execução) ═════════════════════════════════════════════════════
+-- P3 leitura de uma foto: Index Only Scan Backward using receber_fotos_cabecalho_pkey (max foto) + Seq Scan on
+--    receber_fotos (467 linhas, 1 foto só — o planner prefere seq em tabela deste tamanho) — 0,38 ms. Com várias fotos, a
+--    UNIQUE (foto_em, …) passa a ser escolhida; reconferir após ~10 fotos.
+--    vendas depois do corte (7 d): Index Scan using hotmart_transacoes_aprovado_pago_idx (58 linhas) — 0,11 ms.
+-- P2 RPCs: listar 0,4 ms · previsto_realizado(8) 6,7 ms · fn_fin_receber_semanal 202,9 ms.

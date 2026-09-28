@@ -1,7 +1,7 @@
 -- 20260928z70 — Contas a Receber / Faturamento, fatia F7 (catálogo A.1 R08–R13): auditoria da taxa Hotmart por produto.
 --
 -- APLICADA em produção em 28/09/2026 (conferência verde; trava de 1% passou). 2026 à vista: 0 divergências em todos os produtos (HM 4,027% = acordo; Serviço Diamante 5,389% = acordo…). RPC 48 ms.
--- hotmart_transacoes_aprovado_pago_idx/z61 e de public.gp_pode_ver_financeiro/z14).
+-- Depende de hotmart_transacoes_aprovado_pago_idx (z61) e de public.gp_pode_ver_financeiro (z14).
 --
 -- Por quê: a taxa Hotmart combinada é POR PRODUTO (R08). Medido em produção em 28/09/2026: 1.995 vendas à vista
 -- (parcelas ≤ 1) com oferta ≥ R$ 100 em 2026, tolerância ± R$ 10 — a regra por produto bate 100% em todos os
@@ -485,3 +485,7 @@ select pg_size_pretty(pg_total_relation_size('fin.hotmart_transacoes')) tamanho,
        (select count(*) from fin.hotmart_transacoes) linhas,
        (select count(*) from fin.hotmart_transacoes where status in ('APPROVED','COMPLETE')) pagas;
 */
+
+-- ═══ MEDIDO em produção (28/09/2026, coordenador; 2ª execução) ═════════════════════════════════════════════════════
+-- P4 fin.taxa_hotmart_vendas(30 dias): 4,8 ms (373 linhas). Leitura interna: Index Scan using
+--    hotmart_transacoes_aprovado_pago_idx (375 linhas) — 0,29 ms. P3: fn_fin_taxa_auditoria(2026) 48 ms (2ª execução).

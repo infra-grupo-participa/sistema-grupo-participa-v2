@@ -1888,3 +1888,14 @@ select relname, relacl, relrowsecurity from pg_class
  where oid in ('fin.eventos_planejados'::regclass, 'fin.eventos_planejados_trilha'::regclass,
                'fin.receber_grupos_venda_nova'::regclass);
 */
+
+-- ═══ MEDIDO em produção (28/09/2026, coordenador; 2ª execução; usuário do Financeiro; begin/rollback) ═══════════════
+-- E7 projeção LIGADA (rollback): fn_fin_receber_semanal(null,null) 1ª (fria) 1546,9 ms · 2ª 274,1 ms (shared hit=17632)
+--    · 'conservador' 273,9 ms · 1.018 linhas (467 dos blocos 3/4/6/8) · 444 kB (147 kB novos). Desligada: 206–238 ms, 296 kB.
+--    fn_fin_receber_sugestoes('base') 30,6 ms (4 linhas) · fn_fin_eventos_planejados_listar() 1,4 ms.
+-- E8 venda semanal (12 semanas): Index Scan using hotmart_transacoes_aprovado_pago_idx (loops=12, 76 linhas/semana) — 3,6 ms.
+--    estornos 9 meses: Bitmap Index Scan on hotmart_transacoes_status_idx + produto_idx → Bitmap Heap Scan — 2,9 ms.
+--    vendido 9 meses: Index Scan using hotmart_transacoes_aprovado_pago_idx (4.183 linhas) — 4,5 ms.
+-- E9 curva do evento 72: Index Scan eventos_pkey → evento_produtos_pkey → hotmart_transacoes_produto_idx (379 linhas) — 1,2 ms.
+-- E10 board: CTE bd (cs.vw_fin_contas_receber, 0 linhas hoje) → Index Scan using hotmart_transacoes_contrato_rec_idx — 1,1 ms.
+-- Nenhum "Seq Scan on hotmart_transacoes" em E8–E10.
