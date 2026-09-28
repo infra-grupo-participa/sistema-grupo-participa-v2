@@ -6,7 +6,7 @@ const rpc = vi.fn();
 vi.mock('@/shared/infrastructure/supabase/browser-client', () => ({ createBrowserSupabase: () => ({ rpc }) }));
 vi.mock('@/shared/infrastructure/supabase/query-log', () => ({ logQueryError: vi.fn() }));
 
-const { SupabaseFinanceiroRepository, erroPremissa } = await import('./supabase-financeiro.repository');
+const { SupabaseFinanceiroRepository, erroPremissa, erroLeituraReceber } = await import('./supabase-financeiro.repository');
 const repo = new SupabaseFinanceiroRepository();
 
 beforeEach(() => rpc.mockReset());
@@ -64,5 +64,45 @@ describe('premissas e feriados', () => {
     rpc.mockResolvedValue({ data: null, error: { code: '23505', message: 'Já existe vigência desta premissa nesta data. Grave com outra data.' } });
     const r = await repo.salvarPremissaReceber('tolerancia_atraso_dias', 5, '2026-10-01', 'base');
     expect(r).toEqual({ ok: false, msg: 'Já existe vigência desta premissa nesta data. Grave com outra data.' });
+  });
+});
+
+describe('leituras do Contas a Receber: 42501 é "ver", nunca "operar"', () => {
+  it('erroLeituraReceber: 42501, 22023 (mensagem do SQL), PGRST202, rede', () => {
+    expect(erroLeituraReceber('t', { code: '42501', message: 'Sem permissão.' }, 'carregar')).toBe('Sem permissão para ver o financeiro.');
+    expect(erroLeituraReceber('t', { code: '22023', message: 'Foto não encontrada (use fn_fin_receber_fotos_listar).' }, 'carregar'))
+      .toBe('Foto não encontrada (use fn_fin_receber_fotos_listar).');
+    expect(erroLeituraReceber('t', { code: 'PGRST202' }, 'carregar o que mudou')).toContain('ainda não disponível no banco');
+    expect(erroLeituraReceber('t', {}, 'carregar as fotos')).toContain('erro de rede');
+  });
+  it.each([
+    ['loadPremissasReceber', () => repo.loadPremissasReceber()],
+    ['loadFeriados', () => repo.loadFeriados()],
+    ['loadSugestoesReceber', () => repo.loadSugestoesReceber()],
+    ['loadEventosPlanejados', () => repo.loadEventosPlanejados()],
+    ['loadFotosReceber', () => repo.loadFotosReceber()],
+    ['loadMudancasReceber', () => repo.loadMudancasReceber('a', 'b')],
+    ['loadPrevistoRealizado', () => repo.loadPrevistoRealizado()],
+  ])('%s: 42501 → "Sem permissão para ver o financeiro."', async (_n, chamar) => {
+    rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'Sem permissão.' } });
+    await expect(chamar()).rejects.toThrow('Sem permissão para ver o financeiro.');
+  });
+});
+
+describe('fotografia semanal (z69): argumentos exatos', () => {
+  it('fotos_listar sem argumento; mudancas(p_foto_a, p_foto_b); previsto_realizado(p_semanas, padrão 8)', async () => {
+    rpc.mockResolvedValue({ data: [], error: null });
+    await repo.loadFotosReceber();
+    await repo.loadMudancasReceber('2026-09-28T12:00:00+00:00', '2026-10-05T09:11:00+00:00');
+    await repo.loadPrevistoRealizado();
+    await repo.loadPrevistoRealizado(4);
+    expect(rpc).toHaveBeenNthCalledWith(1, 'fn_fin_receber_fotos_listar');
+    expect(rpc).toHaveBeenNthCalledWith(2, 'fn_fin_receber_mudancas', { p_foto_a: '2026-09-28T12:00:00+00:00', p_foto_b: '2026-10-05T09:11:00+00:00' });
+    expect(rpc).toHaveBeenNthCalledWith(3, 'fn_fin_receber_previsto_realizado', { p_semanas: 8 });
+    expect(rpc).toHaveBeenNthCalledWith(4, 'fn_fin_receber_previsto_realizado', { p_semanas: 4 });
+  });
+  it('22023 (foto não existe): a mensagem do SQL chega à tela', async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: '22023', message: 'Foto não encontrada (use fn_fin_receber_fotos_listar).' } });
+    await expect(repo.loadMudancasReceber('a', 'b')).rejects.toThrow('Foto não encontrada');
   });
 });

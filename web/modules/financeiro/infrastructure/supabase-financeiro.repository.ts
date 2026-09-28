@@ -36,6 +36,10 @@ import {
   normalizarInformado, normalizarResultadoImportacao, type Informado, type InformadoEntrada,
 } from '../domain/recebimentos-informados';
 import { normalizarEventoPlanejado, type EventoPlanejado, type EventoPlanejadoEntrada } from '../domain/eventos-planejados';
+import {
+  normalizarFoto, normalizarMudanca, normalizarPrevistoRealizado,
+  type FotoReceber, type LinhaPrevistoRealizado, type MudancaReceber,
+} from '../domain/visao-receber';
 
 function erroPara(msg: string): Resultado {
   return { ok: false, msg };
@@ -74,6 +78,19 @@ export function erroPremissa(nome: string, error: { code?: string; message?: str
   if (error.code === '42501') return 'Sem permissão para operar o financeiro.';
   if ((error.code === '22023' || error.code === '23505') && error.message) return error.message;
   if (error.code === '23505') return 'Já existe vigência nesta data. Grave com outra data.';
+  if (error.code === 'PGRST202') return `Não foi possível ${acao}: recurso ainda não disponível no banco.`;
+  return `Não foi possível ${acao} (erro de rede ou recurso ainda não disponível).`;
+}
+
+/**
+ * Erro das LEITURAS do Contas a Receber (premissas, feriados, sugestões, eventos e as fotos da z69). A guarda de leitura
+ * é gp_pode_ver_financeiro(): 42501 aqui é "ver", nunca "operar" (a escrita usa erroPremissa). 22023 = parâmetro
+ * recusado, mensagem do SQL em português; PGRST202 = a função ainda não existe no banco. O log leva só o código.
+ */
+export function erroLeituraReceber(nome: string, error: { code?: string; message?: string }, acao: string): string {
+  logQueryError(nome, { message: `código ${error.code ?? 'desconhecido'}` });
+  if (error.code === '42501') return 'Sem permissão para ver o financeiro.';
+  if (error.code === '22023' && error.message) return error.message;
   if (error.code === 'PGRST202') return `Não foi possível ${acao}: recurso ainda não disponível no banco.`;
   return `Não foi possível ${acao} (erro de rede ou recurso ainda não disponível).`;
 }
@@ -409,9 +426,9 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
 
   // ── Premissas do Contas a Receber e feriados bancários (z66) ────────────
   async loadPremissasReceber(): Promise<VigenciaPremissa[]> {
-    const linhas = await this.rpcLista<Record<string, unknown>>('fn_fin_premissas_receber_listar', {},
-      'Não foi possível carregar as premissas.');
-    return linhas.map(normalizarVigencia);
+    const { data, error } = await this.db().rpc('fn_fin_premissas_receber_listar', {});
+    if (error) throw new Error(erroLeituraReceber('fn_fin_premissas_receber_listar', error, 'carregar as premissas'));
+    return ((data as Record<string, unknown>[] | null) ?? []).map(normalizarVigencia);
   }
 
   async salvarPremissaReceber(chave: string, valor: number, vigenteDe: string, cenario: CenarioReceber): Promise<Resultado> {
@@ -422,9 +439,9 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
   }
 
   async loadFeriados(): Promise<FeriadoBancario[]> {
-    const linhas = await this.rpcLista<Record<string, unknown>>('fn_fin_feriados_listar', {},
-      'Não foi possível carregar os feriados.');
-    return linhas.map(normalizarFeriado);
+    const { data, error } = await this.db().rpc('fn_fin_feriados_listar', {});
+    if (error) throw new Error(erroLeituraReceber('fn_fin_feriados_listar', error, 'carregar os feriados'));
+    return ((data as Record<string, unknown>[] | null) ?? []).map(normalizarFeriado);
   }
 
   async salvarFeriado(dia: string, nome: string, ativo: boolean): Promise<Resultado> {
@@ -434,16 +451,16 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
   }
 
   // ── Sugestões medidas e eventos planejados (z67) ─────────────────────────
-  // Leitura: erro vira exceção com a mensagem de erroPremissa (só o código vai ao log; nada do conteúdo).
+  // Leitura: erro vira exceção com a mensagem de erroLeituraReceber (só o código vai ao log; nada do conteúdo).
   async loadSugestoesReceber(cenario: CenarioReceber = 'base'): Promise<SugestaoPremissa[]> {
     const { data, error } = await this.db().rpc('fn_fin_receber_sugestoes', { p_cenario: cenario });
-    if (error) throw new Error(erroPremissa('fn_fin_receber_sugestoes', error, 'carregar as sugestões medidas'));
+    if (error) throw new Error(erroLeituraReceber('fn_fin_receber_sugestoes', error, 'carregar as sugestões medidas'));
     return ((data as Record<string, unknown>[] | null) ?? []).map(normalizarSugestao);
   }
 
   async loadEventosPlanejados(): Promise<EventoPlanejado[]> {
     const { data, error } = await this.db().rpc('fn_fin_eventos_planejados_listar');
-    if (error) throw new Error(erroPremissa('fn_fin_eventos_planejados_listar', error, 'carregar os eventos planejados'));
+    if (error) throw new Error(erroLeituraReceber('fn_fin_eventos_planejados_listar', error, 'carregar os eventos planejados'));
     return ((data as Record<string, unknown>[] | null) ?? []).map(normalizarEventoPlanejado);
   }
 
@@ -458,6 +475,25 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     const { error } = await this.db().rpc('fn_fin_evento_planejado_arquivar', { p_id: id, p_motivo: motivo });
     if (error) return erroPara(erroPremissa('arquivarEventoPlanejado', error, 'arquivar o evento planejado'));
     return { ok: true, msg: 'Evento planejado arquivado.' };
+  }
+
+  // ── Fotografia semanal da previsão (z69) ─────────────────────────────────
+  async loadFotosReceber(): Promise<FotoReceber[]> {
+    const { data, error } = await this.db().rpc('fn_fin_receber_fotos_listar');
+    if (error) throw new Error(erroLeituraReceber('fn_fin_receber_fotos_listar', error, 'carregar as fotos da previsão'));
+    return ((data as Record<string, unknown>[] | null) ?? []).map(normalizarFoto);
+  }
+
+  async loadMudancasReceber(fotoA: string, fotoB: string): Promise<MudancaReceber[]> {
+    const { data, error } = await this.db().rpc('fn_fin_receber_mudancas', { p_foto_a: fotoA, p_foto_b: fotoB });
+    if (error) throw new Error(erroLeituraReceber('fn_fin_receber_mudancas', error, 'carregar o que mudou'));
+    return ((data as Record<string, unknown>[] | null) ?? []).map(normalizarMudanca);
+  }
+
+  async loadPrevistoRealizado(semanas = 8): Promise<LinhaPrevistoRealizado[]> {
+    const { data, error } = await this.db().rpc('fn_fin_receber_previsto_realizado', { p_semanas: semanas });
+    if (error) throw new Error(erroLeituraReceber('fn_fin_receber_previsto_realizado', error, 'carregar o previsto × realizado'));
+    return ((data as Record<string, unknown>[] | null) ?? []).map(normalizarPrevistoRealizado);
   }
 
   // ── Recebimentos informados (bloco 5, 20260928z63) ───────────────────────

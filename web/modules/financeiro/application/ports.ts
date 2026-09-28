@@ -16,6 +16,7 @@ import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-car
 import type { AssinaturaHMBoard, AssinaturaHMSemCard } from '../domain/assinatura-hm';
 import type { CenarioReceber, LinhaReceber } from '../domain/contas-receber';
 import type { FeriadoBancario, SugestaoPremissa, VigenciaPremissa } from '../domain/premissas-receber';
+import type { FotoReceber, LinhaPrevistoRealizado, MudancaReceber } from '../domain/visao-receber';
 import type { EventoPlanejado, EventoPlanejadoEntrada } from '../domain/eventos-planejados';
 import type { LinhaCaixaHotmart, TotaisCaixaHotmart } from '../domain/caixa-hotmart';
 import type { Informado, InformadoEntrada, ResultadoLinhaImportacao } from '../domain/recebimentos-informados';
@@ -128,6 +129,14 @@ export interface FinanceiroRepository {
   salvarEventoPlanejado(p: EventoPlanejadoEntrada): Promise<Resultado & { id?: number }>;
   /** fn_fin_evento_planejado_arquivar(p_id, p_motivo) — motivo 3 a 500. Nada se apaga. */
   arquivarEventoPlanejado(id: number, motivo: string): Promise<Resultado>;
+
+  // ── Fotografia semanal da previsão (z69) — leitura, guarda gp_pode_ver_financeiro ──
+  /** fn_fin_receber_fotos_listar() — fotos disponíveis, mais nova primeiro. */
+  loadFotosReceber(): Promise<FotoReceber[]>;
+  /** fn_fin_receber_mudancas(p_foto_a, p_foto_b) — por (bloco, grupo), com os motivos. 22023 = foto não existe. */
+  loadMudancasReceber(fotoA: string, fotoB: string): Promise<MudancaReceber[]>;
+  /** fn_fin_receber_previsto_realizado(p_semanas 1..52) — linhas 'semana' e 'perda'. */
+  loadPrevistoRealizado(semanas?: number): Promise<LinhaPrevistoRealizado[]>;
 
   // ── Recebimentos informados (bloco 5, 20260928z63) ───────────────────────
   // Escrita: guarda gp_pode_operar_financeiro() no banco; erro de validação = mensagem em português do SQL.
