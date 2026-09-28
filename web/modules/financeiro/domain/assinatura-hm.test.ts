@@ -34,8 +34,18 @@ describe('assinaturaDoCard', () => {
   it('card HM acha pela pessoa_chave do board', () => {
     expect(assinaturaDoCard(hm(), m)?.turma_origem).toBe('T29');
   });
-  it('card Aurum, pessoa não encontrada, sem chave ou mapa ausente → null', () => {
-    expect(assinaturaDoCard(hm({ origem: 'AURUM' }), m)).toBeNull();
+  it('card Aurum com mensalidade mostra o bloco (senão a pessoa some: a lista sem card exclui quem tem card Aurum)', () => {
+    // Linha Aurum do board: a CTE `ass` só preenche HM, então assinatura_* vem 0/null.
+    const aurum = hm({ contato_hm_id: 'c2', origem: 'AURUM', assinatura_mensalidades: 0, assinatura_valor: 0, assinatura_ativa: null });
+    const a = assinaturaDoCard(aurum, m);
+    expect(a?.pessoa_chave).toBe('p1');
+    const r = resumoAssinaturaCard(aurum, a);
+    expect(r).not.toBeNull();
+    expect(r!.mensalidades).toBe(12);
+    expect(r!.situacao).toBe('ativa');
+  });
+  it('pessoa não encontrada, sem chave, fora do mapa ou mapa ausente → null', () => {
+    expect(assinaturaDoCard(hm({ origem: 'AURUM', pessoa_chave: 'p9' }), m)).toBeNull();
     expect(assinaturaDoCard(hm({ encontrado: false }), m)).toBeNull();
     expect(assinaturaDoCard(hm({ pessoa_chave: null }), m)).toBeNull();
     expect(assinaturaDoCard(hm(), null)).toBeNull();

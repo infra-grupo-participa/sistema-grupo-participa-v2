@@ -96,13 +96,14 @@ export function indexarAssinaturaHM(linhas: readonly AssinaturaHMBoard[]): Map<s
 }
 
 /**
- * Mensalidade da pessoa deste card. Só card HM (a mensalidade é do HM) e só com pessoa identificada —
- * card sem pessoa_chave nunca casa com ninguém.
+ * Mensalidade da pessoa deste card, em card de QUALQUER produto: o mapa só tem quem paga/pagou o 3507214, e a lista
+ * sem card exclui quem tem card HM ou Aurum — exigir card HM aqui fazia a pessoa com card Aurum sumir de tudo
+ * (5 pessoas, P2 da z52; reprovação do João, 28/09). Só com pessoa identificada: card sem pessoa_chave nunca casa.
  */
 export function assinaturaDoCard(
   hm: BoardHotmart | null | undefined, mapa: ReadonlyMap<string, AssinaturaHMBoard> | null | undefined,
 ): AssinaturaHMBoard | null {
-  if (!mapa || !hm || !hm.encontrado || hm.origem !== 'HM' || !hm.pessoa_chave) return null;
+  if (!mapa || !hm || !hm.encontrado || !hm.pessoa_chave) return null;
   return mapa.get(hm.pessoa_chave) ?? null;
 }
 
