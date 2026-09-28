@@ -17,7 +17,9 @@ export type Veredito =
   | { tipo: 'nao_concluido'; texto: string };
 
 export const TEXTO_NAO_ENCONTRADO = 'Protocolo não encontrado — nenhum relatório foi emitido com esse número.';
-export const TEXTO_ALTERADO = 'Este arquivo foi alterado depois da emissão — não corresponde ao protocolo.';
+// Hash diferente não distingue "mexeram no arquivo" de "é o PDF íntegro de OUTRO protocolo":
+// o texto diz só o que o hash prova, sem acusar adulteração que pode não ter havido.
+export const TEXTO_ALTERADO = 'Este arquivo não é o documento selado com este protocolo (foi alterado ou é de outro protocolo).';
 export const TEXTO_SO_REGISTRO = 'Sem o arquivo, só se confirma o registro, não o conteúdo. Anexe o PDF para comparar.';
 
 /** SHA-256 do arquivo recebido, no navegador (mesma função e formato do selo). */

@@ -51,6 +51,14 @@ describe('conferir o ARQUIVO contra o protocolo', () => {
     expect(vereditoConferencia(v, hashMexido)).toEqual({ tipo: 'alterado', texto: TEXTO_ALTERADO });
   }, 30_000);
 
+  it('PDF íntegro de OUTRO protocolo: não acusa alteração, diz que não é o documento deste protocolo', () => {
+    const outro = verificado({ protocolo: 'GP-REL-2026-000042', sha256: 'b'.repeat(64) });
+    const veredito = vereditoConferencia(outro, 'a'.repeat(64)); // hash do PDF selado no 000041
+    expect(veredito.tipo).toBe('alterado');
+    expect(veredito.texto).toBe('Este arquivo não é o documento selado com este protocolo (foi alterado ou é de outro protocolo).');
+    expect(veredito.texto).not.toMatch(/foi alterado depois/);
+  });
+
   it('selo gravado em maiúsculas ainda compara (formato canônico é hex minúsculo)', () => {
     expect(vereditoConferencia(verificado({ sha256: 'AB'.repeat(32) }), 'ab'.repeat(32)).tipo).toBe('identico');
   });
