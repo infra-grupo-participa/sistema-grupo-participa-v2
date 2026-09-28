@@ -9,9 +9,13 @@ const ROOTS = ['shared', 'modules', 'app'];
 // Arquivos inteiros fora do guard:
 // - globals.css é a fonte de verdade dos tokens;
 // - templates de e-mail usam hex por obrigação (clientes de e-mail não suportam CSS vars);
-// - solicitar-placa.css é a identidade própria da página pública (bloco de tokens independente).
+// - solicitar-placa.css é a identidade própria da página pública (bloco de tokens independente);
+// - tema-pdf.ts é a fonte única de cor do PDF de relatório: o @react-pdf/renderer desenha fora
+//   do DOM e não lê variável CSS (mesmo motivo do template de e-mail). Só ESTE arquivo do PDF
+//   tem hex; DocumentoPdf.tsx e os demais importam COR_PDF daqui e continuam sob o guard.
 const SKIP_FILES = new Set([
   join('app', 'globals.css'),
+  join('shared', 'ui', 'pdf', 'tema-pdf.ts'),
   join('shared', 'infrastructure', 'email', 'template.ts'),
   join('modules', 'placas', 'application', 'email-content.ts'),
   join('modules', 'placas', 'ui', 'solicitar-placa.css'),

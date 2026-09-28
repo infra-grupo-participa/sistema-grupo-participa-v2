@@ -1,0 +1,74 @@
+'use client';
+
+// "Exportar PDF" + seletor de nível de dado pessoal (quando o relatório aceita mais de um).
+// Trava enquanto gera: duplo clique = dois protocolos consumidos à toa. A trava é um ref
+// (síncrono) além do estado — o estado só re-renderiza depois do 2º clique já ter entrado.
+//
+// Nenhuma lib de PDF é importada aqui: gerar-pdf.ts carrega @react-pdf no clique.
+import { useRef, useState } from 'react';
+import { Button } from '@/shared/ui/components';
+import { Icon } from '@/shared/ui/icons';
+import type { NivelPii, RascunhoRelatorio } from './modelo';
+import { ROTULO_NIVEL } from './modelo';
+import { NIVEIS_PII } from './nivel';
+import type { ChamadasProtocolo } from './gerar-pdf';
+
+export function BotaoExportarPdf({
+  montar, niveis, chamadas, desabilitado,
+}: {
+  /** Monta o rascunho da lista JÁ FILTRADA da tela — chamado só no clique. */
+  montar: () => RascunhoRelatorio;
+  /** Níveis aceitos pelo relatório. Um só (ex.: "Mesma pessoa?") = sem seletor. */
+  niveis: NivelPii[];
+  /** null = protocolo ainda não ligado ao banco: botão travado, nunca gera sem protocolo. */
+  chamadas: ChamadasProtocolo | null;
+  desabilitado?: boolean;
+}) {
+  const oferecidos = NIVEIS_PII.filter((n) => niveis.includes(n));
+  const [nivel, setNivel] = useState<NivelPii>(oferecidos[0] ?? 'completo');
+  const [gerando, setGerando] = useState(false);
+  const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null);
+  const trava = useRef(false);
+
+  const exportar = async () => {
+    if (trava.current || !chamadas) return;
+    trava.current = true;
+    setGerando(true);
+    setAviso(null);
+    try {
+      const { gerarPdfComProtocolo } = await import('./gerar-pdf');
+      const { protocolo } = await gerarPdfComProtocolo(montar(), nivel, chamadas);
+      setAviso({ ok: true, texto: `PDF emitido · Protocolo ${protocolo}` });
+    } catch (e) {
+      setAviso({ ok: false, texto: e instanceof Error ? e.message : 'Não foi possível gerar o PDF.' });
+    } finally {
+      trava.current = false;
+      setGerando(false);
+    }
+  };
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      {oferecidos.length > 1 && (
+        <select
+          aria-label="Dados pessoais no PDF" value={nivel} disabled={gerando}
+          onChange={(e) => setNivel(e.target.value as NivelPii)}
+          className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--fg-2)]"
+        >
+          {oferecidos.map((n) => <option key={n} value={n}>{ROTULO_NIVEL[n]}</option>)}
+        </select>
+      )}
+      <Button
+        variant="ghost" size="sm" onClick={exportar}
+        disabled={gerando || desabilitado || !chamadas}
+        aria-busy={gerando}
+        title={!chamadas ? 'Protocolo de emissão ainda não ligado ao banco.' : undefined}
+      >
+        <Icon name="file" size={14} /> {gerando ? 'Gerando PDF…' : 'Exportar PDF'}
+      </Button>
+      {aviso && (
+        <span role="status" className={`text-xs ${aviso.ok ? 'text-[var(--fg-3)]' : 'text-[var(--red)]'}`}>{aviso.texto}</span>
+      )}
+    </span>
+  );
+}
