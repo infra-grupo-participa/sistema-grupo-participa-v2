@@ -10,7 +10,8 @@
 
 /** Título e subtítulo da aba, no topo do Financeiro. */
 export const CABECALHO_RECEBER = {
-  titulo: 'Contas a Receber',
+  // A aba é "Previsão de caixa" (o item do menu); "Contas a Receber" é o título da SEÇÃO do menu, não da aba.
+  titulo: 'Previsão de caixa',
   subtitulo: 'Quanto dinheiro entra no caixa, semana a semana.',
 } as const;
 
@@ -43,9 +44,130 @@ export const SECAO_RECORRENCIAS = {
 
 /** Rótulos das sub-abas de Previsão de caixa (#receber?ver=), nesta ordem. */
 export const SUBABAS_RECEBER = {
+  rotuloGrupo: 'Previsão de caixa',
   semana: 'Semana a semana',
   recorrencias: 'Recorrências',
   informados: 'Recebimentos informados',
+  premissas: 'Premissas',
+} as const;
+
+/** Grade semana a semana e composição da célula (antes PROVISORIO em ContasAReceber.tsx). */
+export const GRADE_RECEBER = {
+  total: 'Total',
+  componenteCheio: 'Valor cheio',
+  recebimentoDesligado: 'Cálculo de recebimento desligado',
+  semDataCaixa: (n: number, v: string) => `${n} cobrança(s) a receber sem data de caixa (${v}) não estão somadas acima.`,
+  foraDoPeriodo: (n: number, v: string) => `${n} lançamento(s) a receber fora do período da grade (${v}) não estão somados acima.`,
+  fechar: 'Fechar',
+  todasAsSemanas: 'todas as semanas',
+  caiNoCaixa: 'Cai no caixa',
+  parte: 'Parte',
+  vendasDe: 'Vendas de',
+  transacao: 'Transação',
+  produto: 'Produto',
+  nome: 'Nome',
+  liquidoDaVenda: 'Líquido da venda',
+  valor: 'Valor',
+  cobrancaPrevista: 'Vencimento',
+  semVendasNoDetalhe: 'vendas do dia não vieram no detalhe',
+  vendas: (n: number) => `${n} venda(s)`,
+  bruto: 'Bruto',
+  esperado: 'Esperado',
+  fator: 'Fator',
+  tratamento: 'Tratamento',
+  /** Linha pequena sob o esperado, na célula com perda. */
+  brutoCurto: (v: string) => `bruto ${v}`,
+  resumoComPerda: (bruto: string, esperado: string) => `Bruto ${bruto} · esperado ${esperado}`,
+  pagasDoContrato: (n: number) => `${n} ${n === 1 ? 'transação paga' : 'transações pagas'} do contrato`,
+  semPagasNoContrato: 'nenhuma transação paga do contrato até o corte',
+  parcela: 'Nº',
+  pagaEm: 'Paga em',
+  liquidoPago: 'Líquido pago',
+  carregandoCenario: 'Carregando o cenário…',
+} as const;
+
+/** Seletor de cenário da grade. O cenário muda só premissas que aceitam cenário (hoje: a perda mensal). */
+export const CENARIO_RECEBER = {
+  rotulo: 'Cenário',
+  base: 'Base',
+  conservador: 'Conservador',
+  otimista: 'Otimista',
+  legenda: 'O cenário muda só a perda mensal de assinaturas, parcelas e informados (Premissas). Sem valor próprio gravado, conservador e otimista usam o da base.',
+} as const;
+
+/** Recorrências (antes PROVISORIO em Recorrencias.tsx). */
+export const TABELA_RECORRENCIAS = {
+  todas: 'Todas',
+  grupo: 'Grupo',
+  nome: 'Nome',
+  produto: 'Produto',
+  cobrancaPrevista: 'Vencimento',
+  caiNoCaixa: 'Cai no caixa',
+  valor: 'Valor',
+  esperado: 'Esperado',
+  situacao: 'Situação',
+  nenhuma: 'Nenhuma cobrança nesta situação.',
+} as const;
+
+/** Sub-aba Premissas: com que números a previsão é feita, desde quando e quem mudou. */
+export const PREMISSAS_RECEBER = {
+  titulo: 'Premissas da previsão',
+  explicacao: 'Cada mudança grava uma vigência nova a partir da data escolhida; nada é apagado. A previsão já vista não muda.',
+  carregando: 'Carregando premissas…',
+  erroCarregamento: 'Não foi possível carregar as premissas.',
+  tentarDeNovo: 'Tentar de novo',
+  vazio: 'Nenhuma premissa cadastrada.',
+  somenteLeitura: 'Somente leitura: alterar premissa exige permissão de operar o financeiro.',
+  premissa: 'Premissa',
+  cenario: 'Cenário',
+  valor: 'Valor',
+  desde: 'Desde',
+  quem: 'Quem mudou',
+  faixa: 'Faixa',
+  acoes: 'Ações',
+  usaBase: (v: string) => `usa a base (${v})`,
+  semVigente: 'sem vigência hoje',
+  proxima: (v: string, d: string) => `próxima: ${v} a partir de ${d}`,
+  historico: (n: number) => `Histórico (${n})`,
+  ocultarHistorico: 'Ocultar histórico',
+  semHistorico: 'sem vigência anterior',
+  situacaoVigencia: { vigente: 'vigente', futura: 'futura', anterior: 'anterior' } as Record<string, string>,
+  fonte: 'Fonte',
+  alterar: 'Alterar',
+  novoValor: (unidade: string) => `Novo valor${unidade ? ` (${unidade})` : ''}`,
+  vigenteDe: 'Vale a partir de',
+  salvar: 'Gravar vigência',
+  salvando: 'Gravando…',
+  cancelar: 'Cancelar',
+  gravou: 'Vigência gravada. A previsão foi recarregada.',
+  ligado: 'Ligado',
+  desligado: 'Desligado',
+  sistema: 'carga inicial',
+} as const;
+
+/** Seção "Feriados bancários" dentro de Premissas. */
+export const FERIADOS_RECEBER = {
+  titulo: 'Feriados bancários',
+  explicacao: 'Dia útil de caixa desconsidera sábado, domingo e os feriados ativos. Desligar mantém o registro.',
+  carregando: 'Carregando feriados…',
+  erroCarregamento: 'Não foi possível carregar os feriados.',
+  ano: 'Ano',
+  todos: 'Todos',
+  dia: 'Dia',
+  nome: 'Nome',
+  situacao: 'Situação',
+  ativo: 'Ativo',
+  inativo: 'Desligado',
+  fonte: 'Fonte',
+  quem: 'Quem mudou',
+  acoes: 'Ações',
+  adicionar: 'Adicionar feriado',
+  gravar: 'Gravar feriado',
+  desligar: 'Desligar',
+  religar: 'Religar',
+  vazio: 'Nenhum feriado neste ano.',
+  gravou: 'Feriado gravado. A previsão foi recarregada.',
+  desligou: 'Feriado desligado. A previsão foi recarregada.',
 } as const;
 
 /** Componentes do bloco 1 (vendas já realizadas): a divisão antecipação/retido. "Garantia" tinha três sentidos
