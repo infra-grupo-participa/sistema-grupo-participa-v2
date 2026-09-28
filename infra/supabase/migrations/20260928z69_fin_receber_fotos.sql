@@ -33,7 +33,7 @@
 --     linhas de fin.receber_posicao agregadas nessa chave (soma de valor e valor_bruto). ref: bloco 1 NULL; bloco 2 =
 --     fin.chave_opaca('rc:e-mail|oferta') (HMAC, já opaca na origem); bloco 3 'vn:<grupo>'; 4 'ep:<id>'; 5 = id (uuid) do
 --     informado; 6 'reserva'; 8 = contato_hm_id (id interno do card; o Kirad não pediu HMAC no bloco 8 na revisão da z67).
---     Nenhum ref é dado pessoal; nenhuma RPC devolve ref.
+--     Nenhum ref é dado pessoal direto (são pseudônimos: chave opaca, id do informado); nenhuma RPC devolve ref.
 --   public.fn_fin_receber_fotos_listar() → (foto_em, dia, cenario, corte, ate, linhas, soma_a_receber, reconstruida),
 --     mais nova primeiro. reconstruida = a foto foi tirada depois do dia do corte (só por chamada manual com p_corte).
 --   public.fn_fin_receber_mudancas(p_foto_a, p_foto_b) → (bloco, grupo, valor_a, valor_b, delta, motivos jsonb), uma
@@ -1124,6 +1124,7 @@ begin
     select x.bloco, x.grupo, x.ref, x.origem_dia, x.data_caixa, x.componente, x.situacao, x.certeza,
            sum(x.valor) valor, sum(x.valor_bruto) valor_bruto
       from fin.receber_posicao(v_corte, v_ate, v_cen) x
+     where x.bloco <> 8   -- Kirad z69: o informativo do board não é lido por nenhuma RPC → não se guarda (LGPD art. 6º III)
      group by x.bloco, x.grupo, x.ref, x.origem_dia, x.data_caixa, x.componente, x.situacao, x.certeza
   ), h as (
     -- corrida: a UNIQUE (dia, cenario) decide; quem perde não grava linha nenhuma
@@ -1578,12 +1579,16 @@ begin
     from (select x.bloco, x.grupo, x.ref, x.origem_dia, x.data_caixa, x.componente, x.situacao, x.certeza,
                  sum(x.valor) valor, sum(x.valor_bruto) valor_bruto
             from fin.receber_posicao(v_corte, v_ate, 'base') x
+           where x.bloco <> 8
            group by 1, 2, 3, 4, 5, 6, 7, 8) z;
   select md5(coalesce(string_agg(z::text, '|' order by z::text), '')) into v_obt
     from (select f.bloco, f.grupo, f.ref, f.origem_dia, f.data_caixa, f.componente, f.situacao, f.certeza, f.valor,
                  f.valor_bruto
             from fin.receber_fotos f where f.foto_em = v_foto) z;
   if v_esp is distinct from v_obt then raise exception 'z69: linhas da 1ª foto ≠ posição agregada'; end if;
+  if exists (select 1 from fin.receber_fotos f where f.bloco = 8) then
+    raise exception 'z69: bloco 8 (informativo do board) gravado na foto';
+  end if;
   if exists (select 1 from fin.receber_fotos f where f.foto_em = v_foto and (f.corte <> v_corte or f.cenario <> 'base')) then
     raise exception 'z69: corte/cenário da linha ≠ cabeçalho';
   end if;
