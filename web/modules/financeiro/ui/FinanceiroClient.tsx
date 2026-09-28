@@ -12,6 +12,8 @@ import { SupabaseFinanceiroRepository } from '../infrastructure/supabase-finance
 import { carregarBoard, type BoardCarregado, type CardComEfeito } from '../application/carregar-board';
 import { listarOfertas } from '../application/gerenciar-ofertas';
 import { agruparPorAcao, chaveDaAcao, SEM_ACAO, TimelineAcoes } from './TimelineAcoes';
+import { ResultadoAcoes } from './ResultadoAcoes';
+import { ProgramaSemCard } from './ProgramaSemCard';
 import { ProdutoTabs, type ProdutoChave } from './ProdutoTabs';
 import { LegendaCores } from './LegendaCores';
 import { BoardView } from './BoardView';
@@ -387,6 +389,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <ProdutoTabs contagens={contagensProduto} ativo={produtoAtivo} onSelecionar={selecionarProduto}
               diamante={{ ativo: verDiamante, contagem: contarDiamantes(diamante.dados), onSelecionar: () => setVerDiamante(true) }} />
             {verDiamante ? <ServicoDiamante dados={diamante.dados} erro={diamante.erro} repo={repo} /> : <>
+            {produtoAtivo === 'HM' && <ProgramaSemCard repo={repo} />}
+            <ResultadoAcoes cards={cardsDoProduto} ativa={acaoEfetiva} onSelecionar={selecionarAcao} />
             <div className="mb-3">
               <TimelineAcoes acoes={acoes} ativa={acaoEfetiva} onSelecionar={selecionarAcao} />
             </div>

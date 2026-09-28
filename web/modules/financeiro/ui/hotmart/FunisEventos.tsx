@@ -3,7 +3,7 @@
 // Funis (eventos) — Faturamento › Funis (28/09/2026). Macro: por setor (educação × escritório) e categoria, quanto
 // entrou, quantas pessoas pagaram, média por evento. Micro: cada evento com ingresso + oferta, a conferência com o
 // número registrado na época e, ao clicar, quem pagou.
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { DataTable, Drawer, Loading, SearchInput, Td, Th, Thead, Tr } from '@/shared/ui/components';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../../application/ports';
@@ -13,6 +13,7 @@ import {
 } from '../../domain/funis';
 import { celulaCsv } from '../../domain/hotmart';
 import { Erro, useCarga } from './comum';
+import { Trajetoria } from '../Trajetoria';
 
 const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -158,6 +159,7 @@ function Dif({ pct }: { pct: number }) {
 function FichaFunil({ repo, f, onClose }: { repo: FinanceiroRepository; f: Funil; onClose: () => void }) {
   const { dados, erro } = useCarga<CompradorFunil[]>(() => repo.loadFunilCompradores(f.evento_id), [f.evento_id]);
   const [busca, setBusca] = useState('');
+  const [aberta, setAberta] = useState<string | null>(null);
   const q = semAcento(busca.trim());
   const linhas = (dados ?? []).filter((c) => !q || semAcento(`${c.nome ?? ''} ${c.email ?? ''}`).includes(q));
   return (
@@ -187,13 +189,24 @@ function FichaFunil({ repo, f, onClose }: { repo: FinanceiroRepository; f: Funil
             <Thead><Th>Pessoa</Th><Th>Comprou</Th><Th>Dia</Th><Th>Valor</Th><Th>Situação</Th></Thead>
             <tbody>
               {linhas.map((c, i) => (
-                <Tr key={`${c.email}-${c.dia}-${i}`}>
-                  <Td><div className="font-medium">{c.nome ?? '—'}</div><div className="text-[10px] text-[var(--fg-3)]">{c.email}{c.telefone ? ` · ${c.telefone}` : ''}</div></Td>
+                <Fragment key={`${c.email}-${c.dia}-${i}`}>
+                <Tr>
+                  <Td>
+                    <button type="button" onClick={() => setAberta(aberta === `${c.email}-${i}` ? null : `${c.email}-${i}`)}
+                      aria-expanded={aberta === `${c.email}-${i}`} className="text-left font-medium text-[var(--fg)] underline-offset-2 hover:underline" title="Ver a trajetória desta pessoa">
+                      {c.nome ?? '—'}
+                    </button>
+                    <div className="text-[10px] text-[var(--fg-3)]">{c.email}{c.telefone ? ` · ${c.telefone}` : ''}</div>
+                  </Td>
                   <Td className="text-[11px]">{c.papel === 'ingresso' ? 'Ingresso' : 'Oferta'} · {c.produto}<span className="block text-[10px] text-[var(--fg-4)]">{c.oferta}{c.parcelas && c.parcelas > 1 ? ` · ${c.parcelas}x` : ''}</span></Td>
                   <Td className="tabular text-[11px]">{c.dia ? fmtData(c.dia) : '—'}</Td>
                   <Td className="tabular">{fmtBRL(c.valor)}</Td>
                   <Td className={c.situacao === 'pago' ? 'text-[var(--green)]' : 'text-[var(--red)]'}>{c.situacao === 'pago' ? 'Pago' : 'Estornado'}</Td>
                 </Tr>
+                {aberta === `${c.email}-${i}` && (
+                  <tr><td colSpan={5} className="bg-[var(--surface-2)] px-3 py-3"><Trajetoria repo={repo} email={c.email} /></td></tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </DataTable>

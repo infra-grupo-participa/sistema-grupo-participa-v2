@@ -1,0 +1,2 @@
+-- 20260928z19 — a trajetória mostra a turma de ORIGEM da pessoa (1ª compra de HM/Aurum) em todas as linhas, não a turma
+-- do evento de cada compra. Vigente: arquivo da z14 (já com o bloco `tor`).

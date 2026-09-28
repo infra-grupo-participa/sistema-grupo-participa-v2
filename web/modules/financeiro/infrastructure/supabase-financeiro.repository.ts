@@ -18,6 +18,8 @@ import type {
 import type { FaturamentoAcao, LinhaContratado } from '../domain/faturamento-analise';
 import type { LinhaServicoDiamante } from '../domain/servico-diamante';
 import type { CompradorFunil, Funil } from '../domain/funis';
+import type { PassoTrajetoria } from '../domain/trajetoria';
+import type { PagouSemCard } from '../domain/programa-sem-card';
 
 function erroPara(msg: string): Resultado {
   return { ok: false, msg };
@@ -230,6 +232,18 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     const linhas = await this.rpcLista<CompradorFunil>('fn_fin_funil_compradores', { p_evento_id: eventoId },
       'Não foi possível carregar quem pagou neste funil.');
     return linhas.map((c) => ({ ...c, valor: n(c.valor), liquido: n(c.liquido) }));
+  }
+
+  async loadProgramaSemCard(): Promise<PagouSemCard[]> {
+    const linhas = await this.rpcLista<PagouSemCard>('fn_fin_programa_sem_card', { p_familia: 'HM' },
+      'Não foi possível carregar quem pagou o Programa sem card.');
+    return linhas.map((p) => ({ ...p, valor: Number(p.valor ?? 0) || 0 }));
+  }
+
+  async loadTrajetoria(email: string): Promise<PassoTrajetoria[]> {
+    const linhas = await this.rpcLista<PassoTrajetoria>('fn_fin_trajetoria', { p_email: email },
+      'Não foi possível carregar a trajetória desta pessoa.');
+    return linhas.map((p) => ({ ...p, valor: Number(p.valor ?? 0) || 0 }));
   }
 
   loadHotmartPessoas(familia: FamiliaHotmart): Promise<PessoaHotmart[]> {

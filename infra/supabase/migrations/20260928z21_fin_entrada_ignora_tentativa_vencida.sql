@@ -1,0 +1,4 @@
+-- 20260928z21 — Entrada no Programa: compra com dinheiro (paga, estornada, boleto em aberto/atraso) vence tentativa
+-- expirada/recusada. Caso Sandra da Silva Pinto: boleto R$ 697 expirado no HT30 e R$ 15 mil pagos no HT32 — o card
+-- estava em HT30. Depois disto o HT32 bate com a Hotmart: 16 pagantes, R$ 240 mil.
+-- Aplicado por replace sobre pg_get_viewdef: ORDER BY ganha (t.grupo = ANY('{pago,estornado,em_aberto,atrasado}')) DESC.

@@ -1,0 +1,3 @@
+-- 20260928z16 — "dia do evento" (board e trajetória) só para evento com até 10 dias de venda: os ciclos de 2 semanas
+-- do HT perpétuo (HT23–HT28) não são o momento da venda do HM (3 cards do HM caíam no HT28). A view e a função vigentes
+-- estão nos arquivos da z11 e da z14 (já com a condição).

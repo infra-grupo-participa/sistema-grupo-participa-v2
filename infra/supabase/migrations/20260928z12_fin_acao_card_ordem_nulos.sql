@@ -1,0 +1,2 @@
+-- 20260928z12 — correção da z11: na ordenação, NULL em "desc" sobe para o topo; o Aurum pegava a compra sem categoria
+-- antes do sinal/cheio (6 cards trocaram de evento). Vigente: coalesce(..., false). O arquivo da z11 já traz a forma certa.

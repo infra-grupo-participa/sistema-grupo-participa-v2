@@ -2,8 +2,9 @@
 
 // Timeline de origem no topo do board — botões que filtram os cards.
 // Desde 28/09 (20260928z7) a origem sai de um calendário único (fin.acoes ligado a fin.eventos, o mesmo da aba Funis):
-// link de venda → evento no dia da compra → comercial → turma. No HM o botão é a TURMA (T39, T40…) e o card mostra o
-// evento exato ("T39 · Holding Total ATM (06/07/2026)"); no Aurum o botão é o evento. Grupos que não são evento —
+// link de venda → evento no dia da compra → comercial → depois do evento. Um botão por AÇÃO/EVENTO (João, 28/09: "não quero
+// dividir por turma… por ação que a gente fez, desde que anunciou o programa"). O prefixo de turma do nome ("T39 · ") sai
+// do rótulo; a ordem é a da data da ação. Grupos que não são evento —
 // venda direta do comercial, base fora de evento, sem pagamento — vão para o fim, sem data.
 import { Icon } from '@/shared/ui/icons';
 import { fmtData } from '@/shared/ui/format';
@@ -21,8 +22,10 @@ export interface AcaoResumo {
 }
 
 const TURMA = /^(T\d+(?:\.\d+)?) · /;
-/** Chave do filtro: a turma quando o nome começa por ela ("T39 · …" → "T39"); senão o próprio nome. */
-export const chaveDaAcao = (nome: string | null): string => (nome ? (TURMA.exec(nome)?.[1] ?? nome) : SEM_ACAO);
+/** Chave do filtro: a própria ação (nome completo). */
+export const chaveDaAcao = (nome: string | null): string => nome ?? SEM_ACAO;
+/** Rótulo sem o prefixo de turma: "T39 · Holding Total ATM (06/07/2026)" → "Holding Total ATM (06/07/2026)". */
+export const rotuloDaAcao = (nome: string): string => nome.replace(TURMA, '');
 
 /** Agrupa os cards por ação, ordenado por data CRESCENTE (mais antiga primeiro
  *  — pedido explícito: "ordem cronológica entre eles"). Sem ação (null) vai
@@ -38,7 +41,7 @@ export function agruparPorAcao(cards: CardComEfeito[]): AcaoResumo[] {
   for (const c of cards) {
     const chave = chaveDaAcao(c.acaoNome);
     const fora = !c.acaoNome || FORA_DE_EVENTO.test(c.acaoNome);
-    const atual = mapa.get(chave) ?? { chave, nome: chave === SEM_ACAO ? 'Sem ação identificada' : chave, data: null, total: 0, eventos: [] };
+    const atual = mapa.get(chave) ?? { chave, nome: chave === SEM_ACAO ? 'Sem ação identificada' : rotuloDaAcao(chave), data: null, total: 0, eventos: [] };
     atual.total += 1;
     // data do grupo = a mais antiga dos seus eventos
     if (!fora && c.acaoData && (atual.data == null || String(c.acaoData) < String(atual.data))) atual.data = c.acaoData;
@@ -79,7 +82,7 @@ export function TimelineAcoes({ acoes, ativa, onSelecionar }: {
             role="tab"
             aria-selected={active}
             onClick={() => onSelecionar(a.chave)}
-            title={a.eventos.length > 1 || a.eventos[0] !== a.nome ? a.eventos.join(' · ') : a.data ? fmtData(a.data) : undefined}
+            title={a.data ? fmtData(a.data) : undefined}
             className={`shrink-0 inline-flex items-center gap-1.5 rounded-[var(--r-pill)] border px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
               active ? 'border-[var(--border-accent)] bg-[var(--accent-subtle)] text-[var(--accent)]' : semAcao ? 'border-[var(--border)] text-[var(--fg-3)] hover:border-[var(--border-strong)]' : 'border-[var(--border)] text-[var(--fg-2)] hover:border-[var(--border-strong)]'
             }`}

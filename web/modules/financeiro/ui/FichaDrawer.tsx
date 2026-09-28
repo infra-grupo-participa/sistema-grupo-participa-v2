@@ -20,6 +20,8 @@ import { rotuloMetodo, type BoardHotmart, type ProrataHM } from '../domain/hotma
 import { descreverBoletoAberto, fmtMesAno, rotuloParcelamento, temAssinaturaHM, temDadoHotmart } from '../domain/board-hotmart';
 import { inicioDoCiclo, prorataDoCard } from '../domain/prorata-hm';
 import { ContaProrata } from './hotmart/ContaProrata';
+import { Trajetoria } from './Trajetoria';
+import { rotuloDaAcao } from './TimelineAcoes';
 import { Bloco, EmUmaOlhada, PagamentosFicha } from './FichaPagamentos';
 import { carregarProrataHM, VALOR_PROGRAMA_HM } from '../application/carregar-prorata';
 
@@ -106,7 +108,7 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
 }) {
   // Reorganizada em 27/09 (João: "entender melhor o que está acontecendo"): uma pergunta por aba —
   // quanto falta e por quê (Resumo) · o que pagou (Pagamentos) · quanto dá o pro rata · quem está cobrando.
-  const [tab, setTab] = useState<'resumo' | 'pagamentos' | 'prorata' | 'cobranca'>('resumo');
+  const [tab, setTab] = useState<'resumo' | 'trajetoria' | 'pagamentos' | 'prorata' | 'cobranca'>('resumo');
   const hm = hotmartPorCard?.get(conta.contato_hm_id) ?? null;
   const hmCarregando = !hotmartPorCard && !hotmartErro;
   const ehHM = (hm?.origem ?? (/aurum/i.test(conta.produto) ? 'AURUM' : 'HM')) === 'HM';
@@ -146,6 +148,7 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
         onChange={(k) => setTab(k as typeof tab)}
         tabs={[
           { k: 'resumo', l: 'Resumo' },
+          { k: 'trajetoria', l: 'Trajetória' },
           { k: 'pagamentos', l: 'Pagamentos' },
           ...(ehHM ? [{ k: 'prorata', l: 'Pro rata' }] : []),
           { k: 'cobranca', l: 'Cobrança' },
@@ -186,7 +189,8 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
           <SecaoCombinadoComercial conta={conta} />
           <section>
             <SectionTitle>De onde veio</SectionTitle>
-            <Row k="Ação / evento" v={conta.acao_nome ?? '—'} />
+            <Row k="Ação / evento" v={conta.acao_nome ? rotuloDaAcao(conta.acao_nome) : '—'} />
+            <Row k="Turma de origem" v={conta.turma ?? '—'} />
             <Row k="Canal" v={conta.canal} />
             <Row k="1ª compra" v={conta.captado_em ? fmtData(conta.captado_em) : 'ainda não pagou'} />
             {conta.captado_sck && <Row k="Link de venda (sck)" v={conta.captado_sck} />}
@@ -215,6 +219,8 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
           )}
         </div>
       )}
+
+      {tab === 'trajetoria' && <Trajetoria repo={repo} email={conta.email} />}
 
       {tab === 'pagamentos' && (
         ficha === null && !erro ? (

@@ -11,6 +11,8 @@ import type {
 import type { FaturamentoAcao, LinhaContratado } from '../domain/faturamento-analise';
 import type { LinhaServicoDiamante } from '../domain/servico-diamante';
 import type { CompradorFunil, Funil } from '../domain/funis';
+import type { PassoTrajetoria } from '../domain/trajetoria';
+import type { PagouSemCard } from '../domain/programa-sem-card';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
 export interface Resultado {
@@ -67,6 +69,10 @@ export interface FinanceiroRepository {
   loadFunis(): Promise<Funil[]>;
   /** fn_fin_funil_compradores — quem pagou num funil. */
   loadFunilCompradores(eventoId: number): Promise<CompradorFunil[]>;
+  /** Trajetória da pessoa (fn_fin_trajetoria): toda compra, em que funil, desde 2019. */
+  loadTrajetoria(email: string): Promise<PassoTrajetoria[]>;
+  /** Pagou oferta do Programa e não tem card no board (fn_fin_programa_sem_card). */
+  loadProgramaSemCard(): Promise<PagouSemCard[]>;
   loadHotmartPessoas(familia: FamiliaHotmart): Promise<PessoaHotmart[]>;
   loadHotmartExtrato(email: string): Promise<TransacaoHotmart[]>;
   loadHotmartOfertas(familia: FamiliaHotmart): Promise<OfertaHotmart[]>;
