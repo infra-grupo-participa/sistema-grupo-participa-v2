@@ -683,6 +683,8 @@ begin
     from cron.job j
    where j.active
      and array_length(regexp_split_to_array(btrim(j.schedule), '\s+'), 1) = 5
+     -- job de todo minuto (minuto = '*') bate com qualquer horário: não é colisão evitável, só avisa (plantao-emails-sala)
+     and split_part(regexp_replace(btrim(j.schedule), '\s+', ' ', 'g'), ' ', 1) <> '*'
      and pg_temp.z69_cron_bate(split_part(regexp_replace(btrim(j.schedule), '\s+', ' ', 'g'), ' ', 1), 11)
      and pg_temp.z69_cron_bate(split_part(regexp_replace(btrim(j.schedule), '\s+', ' ', 'g'), ' ', 2), 9)
      and pg_temp.z69_cron_bate(split_part(regexp_replace(btrim(j.schedule), '\s+', ' ', 'g'), ' ', 5), 1);
