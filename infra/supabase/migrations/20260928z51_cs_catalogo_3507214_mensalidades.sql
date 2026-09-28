@@ -1,5 +1,7 @@
 -- 20260928z51 — Catálogo: as 12 ofertas do produto 3507214 ("Holding - Holding Masters") que o catálogo não conhecia.
--- NÃO APLICADA — coordenador aplica.
+-- APLICADA em produção 28/09. Conferido: cs.hm_pagamentos 538→538 e cs.contatos_hm 383→383 (nenhum pagamento nem card
+-- criado); 12 ofertas catalogadas; 0 compras do 3507214 sem oferta catalogada. O trigger trg_hm_fecha_alerta_ao_catalogar
+-- (existe, 1) chama cs.fn_hm_lancar_compra, que sai sem fazer nada para categoria fora de sinal/diferenca/compra_cheia.
 --
 -- O 3507214 é a MENSALIDADE de um plano antigo do Holding Masters, paga no cartão (definição do Marcio, 28/09).
 -- Medido pelo coordenador em 28/09: 10 destas ofertas têm pagamento (R$ 637.830) e 2 não têm. Fora do catálogo elas só
