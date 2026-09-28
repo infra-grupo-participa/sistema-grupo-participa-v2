@@ -189,7 +189,7 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
           ) : (
             <>
               {canEdit && colando && (
-                <ColarDaPlanilha repo={repo} onGravado={(n) => { setColando(false); void depoisDeGravar(COLAR_PLANILHA.gravou(n)); }} />
+                <ColarDaPlanilha repo={repo} canVerDoc={canVerDoc} onGravado={(n) => { setColando(false); void depoisDeGravar(COLAR_PLANILHA.gravou(n)); }} />
               )}
               {canEdit && form && (
                 <FormularioInformado form={form} canVerDoc={canVerDoc} ocupado={ocupado}
@@ -291,7 +291,7 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
   );
 }
 
-function FormularioInformado({ form, canVerDoc, ocupado, onMudar, onSalvar, onCancelar }: {
+export function FormularioInformado({ form, canVerDoc, ocupado, onMudar, onSalvar, onCancelar }: {
   form: NonNullable<Form>; canVerDoc: boolean; ocupado: boolean;
   onMudar: (v: FormInformado) => void; onSalvar: () => void; onCancelar: () => void;
 }) {
@@ -305,9 +305,12 @@ function FormularioInformado({ form, canVerDoc, ocupado, onMudar, onSalvar, onCa
   const ident = (k: 'identificador1' | 'identificador2') => {
     const orig = form.original?.[k] ?? null;
     const oculto = form.original != null && identificadorOculto(orig, canVerDoc);
+    // Sem gp_pode_ver_cpf() o banco recusa criar/trocar/apagar identificador (P0001): campo desabilitado, mostra só a
+    // máscara do atual; entradaDoFormulario não manda as chaves.
     return (
-      <input type="text" className={INPUT} value={v[k]} autoComplete="off" spellCheck={false}
-        placeholder={oculto && orig ? CAMPOS_INFORMADO.identificadorMantido(orig) : ''}
+      <input type="text" className={INPUT} value={canVerDoc ? v[k] : ''} autoComplete="off" spellCheck={false}
+        disabled={!canVerDoc}
+        placeholder={!canVerDoc ? orig ?? '' : oculto && orig ? CAMPOS_INFORMADO.identificadorMantido(orig) : ''}
         onChange={(e) => set(k, e.target.value)} />
     );
   };
@@ -334,8 +337,9 @@ function FormularioInformado({ form, canVerDoc, ocupado, onMudar, onSalvar, onCa
           </select>
         ))}
         {campo(CAMPOS_INFORMADO.produtos, <input type="text" className={INPUT} value={v.produtos} onChange={(e) => set('produtos', e.target.value)} />, CAMPOS_INFORMADO.produtosAjuda)}
-        {campo(CAMPOS_INFORMADO.identificador1, ident('identificador1'), CAMPOS_INFORMADO.identificadorAjuda)}
-        {campo(CAMPOS_INFORMADO.identificador2, ident('identificador2'))}
+        {campo(CAMPOS_INFORMADO.identificador1, ident('identificador1'),
+          canVerDoc ? CAMPOS_INFORMADO.identificadorAjuda : CAMPOS_INFORMADO.identificadorSemPermissao)}
+        {campo(CAMPOS_INFORMADO.identificador2, ident('identificador2'), canVerDoc ? undefined : CAMPOS_INFORMADO.identificadorSemPermissao)}
         {campo(CAMPOS_INFORMADO.acordoDesde, <input type="date" className={INPUT} value={v.acordo_desde} onChange={(e) => set('acordo_desde', e.target.value)} />)}
       </div>
       {form.erros.length > 0 && (
@@ -350,8 +354,10 @@ function FormularioInformado({ form, canVerDoc, ocupado, onMudar, onSalvar, onCa
 }
 
 /** Colar da planilha: lê o TSV (puro), confere no banco com p_simular=true (prévia) e só então grava (p_simular=false). */
-export function ColarDaPlanilha({ repo, onGravado, inicial }: {
+export function ColarDaPlanilha({ repo, canVerDoc, onGravado, inicial }: {
   repo: Pick<RepoInformados, 'importarInformados'>;
+  /** gp_pode_ver_cpf(): sem ele, linha com identificador é erro local e nenhuma entrada leva identificador1/2. */
+  canVerDoc: boolean;
   onGravado: (n: number) => void;
   /** Só para teste de render: colagem e conferência já feitas. */
   inicial?: { colagem: Colagem; previa: (ResultadoLinhaImportacao | null)[] | null };
@@ -367,7 +373,7 @@ export function ColarDaPlanilha({ repo, onGravado, inicial }: {
   const gravavel = !!colagem && previaGravavel(colagem.linhas, previa);
 
   const conferir = async () => {
-    const c = lerColagem(texto);
+    const c = lerColagem(texto, { podeVerDoc: canVerDoc });
     setColagem(c); setPrevia(null); setMsg(null);
     if (c.erroGeral || c.linhas.some((l) => l.erros.length > 0)) return; // erro de formato: nada vai ao banco
     setOcupado('conferindo');
@@ -404,6 +410,7 @@ export function ColarDaPlanilha({ repo, onGravado, inicial }: {
     <section className="space-y-2 rounded-[var(--r-md)] border border-[var(--border)] p-2" aria-labelledby="colar-titulo">
       <p id="colar-titulo" className="text-xs font-semibold text-[var(--fg)]">{COLAR_PLANILHA.titulo}</p>
       <p className="text-xs text-[var(--fg-3)]">{COLAR_PLANILHA.instrucao} {COLUNAS_PLANILHA.join(' · ')}. {COLAR_PLANILHA.tudoOuNada}</p>
+      {!canVerDoc && <p className="text-xs text-[var(--fg-2)]">{COLAR_PLANILHA.identificadoresSemPermissao}</p>}
       <textarea aria-label={COLAR_PLANILHA.rotuloTexto} rows={6} value={texto} spellCheck={false} autoComplete="off"
         className={`${INPUT} font-mono`}
         onChange={(e) => { setTexto(e.target.value); setColagem(null); setPrevia(null); setMsg(null); }} />
