@@ -1,6 +1,6 @@
 -- 20260928z65 — Contas a Receber, bloco 2: TETO de cobranças por plano de assinatura (fin.cobrancas_previstas).
 --
--- NÃO APLICADA — coordenador aplica (apply_migration "fin_cobrancas_teto_assinatura"). Provas no fim, por medir.
+-- APLICADA em produção em 28/09/2026 (apply_migration "fin_cobrancas_teto_assinatura"; mensagens de erro encurtadas e sem os raise notice, lógica idêntica). Depois (corte 25/09): Holding-HM 45→18 cobranças (R$ 86.286→34.507); Outras assinaturas 7→6.
 -- Depende da z61 (aplicada). Guarda: o corpo VIVO de fin.cobrancas_previstas tem que ser o da z61, caractere a caractere
 -- (sem espaço e sem comentário). A z63 NÃO mexe em fin.cobrancas_previstas (só a consome, pela mesma assinatura e o
 -- mesmo RETURNS TABLE, que esta migration preserva); a z64 também não. Ordem entre z63, z64 e z65 é livre.
