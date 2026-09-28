@@ -1,6 +1,10 @@
 -- 20260928z54 — Faturamento líquido realista: antecipação D+2 e retenção de 10% (decisão do Marcio, 28/09/2026).
 --
--- NÃO APLICADA — coordenador aplica. Uma transação só (o apply_migration do Supabase já envolve o arquivo em uma).
+-- APLICADA em produção 28/09 (2ª tentativa: a 1ª abortou na guarda porque o corpo vivo não guardava os comentários —
+-- a guarda passou a ignorar comentários "--"). Conferido: aceite 81,05/9,37/3,28/90,42; HM 12 meses razão
+-- liquido_total/liquido = 0,9650, custo de antecipação R$ 210.103, 0 quebras nas identidades.
+-- Tempo (ms, 2ª execução, usuário do Financeiro) antes → depois: HT tudo 293→313 · HM tudo 270→255 · HM 30 d 78→76 ·
+-- funis HM 322→353 — depois do "parallel safe" em fin.recebimento (sem ele: 466/425/99/366).
 --
 -- Regra: a empresa paga 3,89% sobre 90% do líquido do dia para receber em D+2 (em vez de D+30); 10% ficam retidos para
 -- reembolso e voltam em 30 dias. Vale para todas as formas de pagamento e todo o histórico. Venda de 100:
@@ -19,7 +23,8 @@
 --   4) public.fn_fin_hotmart_faturamento e public.fn_fin_hotmart_funis — mesmos argumentos, + entra_rapido, retido,
 --      retido_a_liberar, custo_antecipacao, liquido_total (nulas sem premissa ativa). Drop/create: o RETURNS TABLE muda.
 --
--- Guarda: as duas funções só são recriadas se o corpo VIVO (prosrc, sem espaços) for igual ao do repositório
+-- Guarda: as duas funções só são recriadas se o corpo VIVO (prosrc, sem espaços e sem comentários --) for igual ao do repositório
+-- (1ª aplicação em 28/09 abortou só porque o corpo vivo não guardou os comentários; lógica idêntica)
 -- (20260927b linhas 53–101 e 20260927h linhas 32–71). Divergiu → exception e nada é aplicado.
 --
 -- REVERSÃO (uma transação; o corpo antigo é o do repositório, que a guarda provou ser o vivo no momento da aplicação):
@@ -139,13 +144,15 @@ begin
   end if;
 
   select prosrc, pg_get_function_result(oid) into v_src, v_res from pg_proc where oid = v_fat;
-  if regexp_replace(v_src, '\s+', '', 'g') <> regexp_replace(e_fat, '\s+', '', 'g')
+  if regexp_replace(regexp_replace(v_src, '--[^\n]*', '', 'g'), '\s+', '', 'g')
+     <> regexp_replace(regexp_replace(e_fat, '--[^\n]*', '', 'g'), '\s+', '', 'g')
      or regexp_replace(v_res, '\s+', '', 'g') <> regexp_replace(e_fat_res, '\s+', '', 'g') then
     raise exception 'z54: corpo vivo de fn_fin_hotmart_faturamento diverge do repositório (20260927b). Já aplicada, ou alterada fora do repo? Mandar pg_get_functiondef ao Victor.';
   end if;
 
   select prosrc, pg_get_function_result(oid) into v_src, v_res from pg_proc where oid = v_fun;
-  if regexp_replace(v_src, '\s+', '', 'g') <> regexp_replace(e_fun, '\s+', '', 'g')
+  if regexp_replace(regexp_replace(v_src, '--[^\n]*', '', 'g'), '\s+', '', 'g')
+     <> regexp_replace(regexp_replace(e_fun, '--[^\n]*', '', 'g'), '\s+', '', 'g')
      or regexp_replace(v_res, '\s+', '', 'g') <> regexp_replace(e_fun_res, '\s+', '', 'g') then
     raise exception 'z54: corpo vivo de fn_fin_hotmart_funis diverge do repositório (20260927h). Já aplicada, ou alterada fora do repo? Mandar pg_get_functiondef ao Victor.';
   end if;
@@ -203,6 +210,10 @@ $$;
 comment on function fin.recebimento(date, numeric) is
   'Fonte única da fórmula do líquido realista (z54): retido = round(L×pct,2); custo = round((L−retido)×taxa,2); entra = L−retido−custo.';
 revoke all on function fin.recebimento(date, numeric) from public, anon, authenticated;
+-- PARALLEL SAFE (medido 28/09): sem isto o Postgres desliga o paralelismo da consulta inteira e o Faturamento ficava
+-- +57–59% mais lento (HT tudo 293 → 466 ms). Com isto: HT 313, HM tudo 255, HM 30 d 76, funis 353 (antes 322) — ≤ +10%.
+-- É seguro: só lê fin.premissas_recebimento, não escreve nem usa tabela temporária.
+alter function fin.recebimento(date, numeric) parallel safe;
 
 
 -- ─── 3. Parâmetros para a tela ────────────────────────────────────────────────────────────────────────────────────────
