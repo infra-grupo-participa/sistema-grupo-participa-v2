@@ -1,4 +1,4 @@
--- 20260928z62 — NÃO APLICADA — coordenador aplica.
+-- 20260928z62 — APLICADA em produção em 28/09/2026 (apply_migration "fin_sync_releitura_45d_todos").
 --
 -- Problema: fin.hotmart_sync_enfileirar(60) (20260927c_fin_hotmart_sync_cron.sql l.26-38, cron
 -- 'fin-hotmart-sync-60dias' às 03:23) só releva os produtos com fin.produtos.sincroniza = true (HM,
