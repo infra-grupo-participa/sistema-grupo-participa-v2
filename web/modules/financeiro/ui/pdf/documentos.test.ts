@@ -322,6 +322,8 @@ describe('os 6 relatórios desenham (renderToBuffer)', () => {
 
   // Caso medido: Pessoas do HM com 9.228 linhas — o total "R$ 153.309.378" é o que define a
   // largura mínima da coluna e ia para 2 linhas por 0,001 pt de arredondamento.
+  // Medido (orquestrador): 695 ms sozinho, 1.855 ms na suíte, 3.991 ms com build rodando ao lado — CPU disputada,
+  // não resultado errado (a conta é determinística). Teto próprio para não estourar os 5.000 ms padrão do vitest.
   it('valor que define a largura mínima da coluna cabe numa linha só (Pessoas, 9.228 linhas)', () => {
     const lista = Array.from({ length: 9228 }, (_, i) => pessoa({ pessoa_chave: `p${i}`, valor_pago: 12000 + i, parcelas_atrasadas: i % 4 ? 0 : 2 }));
     const s = aplicarNivel(rascunhoPessoas(lista, []), 'completo').secoes[1];
@@ -331,7 +333,7 @@ describe('os 6 relatórios desenham (renderToBuffer)', () => {
       const tt = textoCelula(s.total, c, i, true);
       expect(linhasCelula(layout, i, tt, 600), `total ${c.rotulo}: ${tt}`).toHaveLength(1);
     });
-  });
+  }, 20_000);
 
   it('coluna de data comporta dd/mm/aaaa sem quebrar nos relatórios de colunas fixas', () => {
     const contas = [conta()];
