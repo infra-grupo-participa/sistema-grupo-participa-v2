@@ -14,7 +14,8 @@ import type { CompradorFunil, Funil } from '../domain/funis';
 import type { PassoTrajetoria } from '../domain/trajetoria';
 import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-card';
 import type { AssinaturaHMBoard, AssinaturaHMSemCard } from '../domain/assinatura-hm';
-import type { LinhaReceber } from '../domain/contas-receber';
+import type { CenarioReceber, LinhaReceber } from '../domain/contas-receber';
+import type { FeriadoBancario, VigenciaPremissa } from '../domain/premissas-receber';
 import type { Informado, InformadoEntrada, ResultadoLinhaImportacao } from '../domain/recebimentos-informados';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
@@ -97,9 +98,20 @@ export interface FinanceiroRepository {
   /** fn_fin_prorata_diagnostico — uma pessoa, com cada pagamento e o motivo; vencimento/valor = simulação. */
   loadProrataDiagnostico(email: string, vencimento?: string | null, valorPrograma?: number): Promise<ProrataDiagnostico | null>;
 
-  // ── Contas a Receber (fase 1: blocos 1 e 2) ──────────────────────────────
-  /** fn_fin_receber_semanal(p_corte, p_ate) — UMA chamada por abertura da aba; numeric já convertido. */
-  loadContasReceber(): Promise<LinhaReceber[]>;
+  // ── Contas a Receber (blocos 1, 2 e 5; contrato v2 z66) ──────────────────
+  /** fn_fin_receber_semanal(p_corte, p_ate, p_cenario) — UMA chamada por cenário; numeric já convertido.
+   *  'base' não envia p_cenario (funciona com o banco antes e depois da z66). */
+  loadContasReceber(cenario?: CenarioReceber): Promise<LinhaReceber[]>;
+
+  // ── Premissas do Contas a Receber e feriados bancários (z66; feriados z60/z64) ──
+  /** fn_fin_premissas_receber_listar() — uma linha por vigência. */
+  loadPremissasReceber(): Promise<VigenciaPremissa[]>;
+  /** fn_fin_premissa_receber_salvar(p_chave, p_valor, p_vigente_de, p_cenario) — só acrescenta vigência; valor na unidade do banco. */
+  salvarPremissaReceber(chave: string, valor: number, vigenteDe: string, cenario: CenarioReceber): Promise<Resultado>;
+  /** fn_fin_feriados_listar(). */
+  loadFeriados(): Promise<FeriadoBancario[]>;
+  /** fn_fin_feriado_salvar(p_dia, p_nome, p_ativo) — cria ou liga/desliga; nada se apaga. */
+  salvarFeriado(dia: string, nome: string, ativo: boolean): Promise<Resultado>;
 
   // ── Recebimentos informados (bloco 5, 20260928z63) ───────────────────────
   // Escrita: guarda gp_pode_operar_financeiro() no banco; erro de validação = mensagem em português do SQL.

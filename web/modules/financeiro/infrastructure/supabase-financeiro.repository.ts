@@ -25,7 +25,10 @@ import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-car
 import {
   normalizarAssinaturaBoard, normalizarAssinaturaSemCard, type AssinaturaHMBoard, type AssinaturaHMSemCard,
 } from '../domain/assinatura-hm';
-import { normalizarLinhaReceber, type LinhaReceber } from '../domain/contas-receber';
+import { normalizarLinhaReceber, type CenarioReceber, type LinhaReceber } from '../domain/contas-receber';
+import {
+  normalizarFeriado, normalizarVigencia, type FeriadoBancario, type VigenciaPremissa,
+} from '../domain/premissas-receber';
 import {
   normalizarInformado, normalizarResultadoImportacao, type Informado, type InformadoEntrada,
 } from '../domain/recebimentos-informados';
@@ -54,6 +57,20 @@ function erroInformado(nome: string, error: { code?: string; message?: string },
   logQueryError(nome, { message: `código ${error.code ?? 'desconhecido'}` });
   if (error.code === '42501') return 'Sem permissão para operar o financeiro.';
   if (error.code === 'P0001' && error.message) return error.message;
+  return `Não foi possível ${acao} (erro de rede ou recurso ainda não disponível).`;
+}
+
+/**
+ * Erro das escritas de premissa e feriado (z66/z64). 42501 = sem gp_pode_operar_financeiro(); 22023 = faixa, inteiro,
+ * cenário ou data (mensagem do SQL, em português, com o rótulo da premissa); 23505 = mesma premissa na mesma data;
+ * PGRST202 = a função ainda não existe no banco (migration não aplicada). O log leva só o código.
+ */
+export function erroPremissa(nome: string, error: { code?: string; message?: string }, acao: string): string {
+  logQueryError(nome, { message: `código ${error.code ?? 'desconhecido'}` });
+  if (error.code === '42501') return 'Sem permissão para operar o financeiro.';
+  if ((error.code === '22023' || error.code === '23505') && error.message) return error.message;
+  if (error.code === '23505') return 'Já existe vigência nesta data. Grave com outra data.';
+  if (error.code === 'PGRST202') return `Não foi possível ${acao}: recurso ainda não disponível no banco.`;
   return `Não foi possível ${acao} (erro de rede ou recurso ainda não disponível).`;
 }
 
@@ -350,11 +367,41 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     return (data as ProrataDiagnostico | null) ?? null;
   }
 
-  // Contas a Receber — p_corte/p_ate nulos: o banco decide o corte (última venda) e o horizonte.
-  async loadContasReceber(): Promise<LinhaReceber[]> {
-    const linhas = await this.rpcLista<Record<string, unknown>>('fn_fin_receber_semanal', { p_corte: null, p_ate: null },
+  // Contas a Receber — p_corte/p_ate nulos: o banco decide o corte (agora) e o horizonte. Cenário 'base' NÃO envia
+  // p_cenario: durante o deploy o banco pode estar na z63 (sem o parâmetro) e o PostgREST recusaria a chamada; na z66
+  // o padrão do parâmetro já é 'base'. Os outros cenários exigem a z66 (antes dela: erro de carga, com "tentar de novo").
+  async loadContasReceber(cenario: CenarioReceber = 'base'): Promise<LinhaReceber[]> {
+    const args: Record<string, unknown> = { p_corte: null, p_ate: null };
+    if (cenario !== 'base') args.p_cenario = cenario;
+    const linhas = await this.rpcLista<Record<string, unknown>>('fn_fin_receber_semanal', args,
       'Não foi possível carregar as contas a receber.');
     return linhas.map(normalizarLinhaReceber);
+  }
+
+  // ── Premissas do Contas a Receber e feriados bancários (z66) ────────────
+  async loadPremissasReceber(): Promise<VigenciaPremissa[]> {
+    const linhas = await this.rpcLista<Record<string, unknown>>('fn_fin_premissas_receber_listar', {},
+      'Não foi possível carregar as premissas.');
+    return linhas.map(normalizarVigencia);
+  }
+
+  async salvarPremissaReceber(chave: string, valor: number, vigenteDe: string, cenario: CenarioReceber): Promise<Resultado> {
+    const { error } = await this.db().rpc('fn_fin_premissa_receber_salvar',
+      { p_chave: chave, p_valor: valor, p_vigente_de: vigenteDe, p_cenario: cenario });
+    if (error) return erroPara(erroPremissa('salvarPremissaReceber', error, 'gravar a premissa'));
+    return { ok: true, msg: 'Vigência gravada.' };
+  }
+
+  async loadFeriados(): Promise<FeriadoBancario[]> {
+    const linhas = await this.rpcLista<Record<string, unknown>>('fn_fin_feriados_listar', {},
+      'Não foi possível carregar os feriados.');
+    return linhas.map(normalizarFeriado);
+  }
+
+  async salvarFeriado(dia: string, nome: string, ativo: boolean): Promise<Resultado> {
+    const { error } = await this.db().rpc('fn_fin_feriado_salvar', { p_dia: dia, p_nome: nome, p_ativo: ativo });
+    if (error) return erroPara(erroPremissa('salvarFeriado', error, 'gravar o feriado'));
+    return { ok: true, msg: ativo ? 'Feriado gravado.' : 'Feriado desligado.' };
   }
 
   // ── Recebimentos informados (bloco 5, 20260928z63) ───────────────────────
