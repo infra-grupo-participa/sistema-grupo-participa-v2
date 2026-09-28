@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hashDaSubAbaReceber, subAbaReceberDoHash } from './hash';
+import { filtroReceberDoHash, hashDaSubAbaReceber, hashReceberFiltrado, subAbaReceberDoHash } from './hash';
 
 describe('subAbaReceberDoHash', () => {
   it('sem query: grade (Semana a semana)', () => {
@@ -37,5 +37,25 @@ describe('hashDaSubAbaReceber', () => {
       const [, query] = h.split('?');
       expect(subAbaReceberDoHash(query)).toBe(s);
     }
+  });
+});
+
+describe('filtro de situação pelo hash (links da Visão geral)', () => {
+  it('ida e volta: o link filtrado é lido de volta como a mesma sub-aba e o mesmo filtro', () => {
+    for (const [sub, sit] of [['recorrencias', 'em_atraso_fora'], ['informados', 'em_atraso_cobrar'], ['eventos', 'encerrado']] as const) {
+      const h = hashReceberFiltrado(sub, sit);
+      const query = h.split('?')[1];
+      expect(subAbaReceberDoHash(query)).toBe(sub);
+      expect(filtroReceberDoHash(query)).toBe(sit);
+    }
+    expect(hashReceberFiltrado('recorrencias', 'em_atraso_fora')).toBe('#receber?ver=recorrencias&situacao=em_atraso_fora');
+  });
+  it('filtro que a sub-aba não aceita: ignorado (sem filtro), nos dois sentidos', () => {
+    expect(filtroReceberDoHash('ver=recorrencias&situacao=encerrado')).toBeNull();
+    expect(filtroReceberDoHash('ver=premissas&situacao=em_atraso_fora')).toBeNull();
+    expect(filtroReceberDoHash('situacao=em_atraso_fora')).toBeNull(); // sem ver: grade, que não filtra
+    expect(filtroReceberDoHash(undefined)).toBeNull();
+    expect(hashReceberFiltrado('premissas', 'x')).toBe('#receber?ver=premissas');
+    expect(hashReceberFiltrado('eventos', null)).toBe('#receber?ver=eventos');
   });
 });

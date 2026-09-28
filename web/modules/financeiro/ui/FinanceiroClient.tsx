@@ -36,15 +36,17 @@ import type { PagouSemCard } from '../domain/programa-sem-card';
 import { criarCacheListasSemCard, listasVisiveis } from '../application/carregar-listas-sem-card';
 import { carregarContasReceber, type ContasReceberCarregado } from '../application/carregar-contas-receber';
 import { ContasAReceber, type EventosEstado, type PremissasEstado } from './receber/ContasAReceber';
-import { CABECALHO_RECEBER, ESTADOS_RECEBER, EVENTOS_RECEBER, FERIADOS_RECEBER, PREMISSAS_RECEBER } from './receber/textos';
+import { CABECALHO_RECEBER, ESTADOS_RECEBER, EVENTOS_RECEBER, FERIADOS_RECEBER, PREMISSAS_RECEBER, VISAO_GERAL } from './receber/textos';
+import { VisaoGeral } from './receber/VisaoGeral';
+import { carregarVisaoReceber, type VisaoReceberCarregada } from '../application/carregar-visao-receber';
 import type { CenarioReceber } from '../domain/contas-receber';
-import { hashDaSubAbaReceber, subAbaReceberDoHash, type SubAbaReceber } from './receber/hash';
+import { filtroReceberDoHash, hashDaSubAbaReceber, subAbaReceberDoHash, type SubAbaReceber } from './receber/hash';
 import { hashDaSubAbaFaturamento, subAbaFaturamentoDoHash, type SubAbaFaturamento } from './faturamento/hash';
 import { criarCacheCaixaHotmart } from '../application/carregar-caixa-hotmart';
 import { periodoInicialCaixa, type PeriodoCaixa } from './faturamento/CaixaHotmart';
 import { isoDiasAtras } from './hotmart/comum';
 
-type Tab = 'board' | 'faturamento' | 'receber' | 'funis' | 'relatorios' | 'ofertas';
+type Tab = 'board' | 'faturamento' | 'visao' | 'receber' | 'funis' | 'relatorios' | 'ofertas';
 
 const repo = new SupabaseFinanceiroRepository();
 
@@ -84,6 +86,15 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // Sub-aba de Previsão de caixa (#receber?ver=) — mesmo padrão de hash do #board?produto=. "semana" é o padrão
   // (hash limpo #receber, sem `?`, o mesmo link do item do menu).
   const [receberSub, setReceberSub] = useState<SubAbaReceber>('semana');
+  // Filtro de situação que veio no hash (`&situacao=`, links da Visão geral): a sub-aba nasce filtrada. Trocar de
+  // sub-aba pelo tablist limpa (o filtro vale para a chegada pelo link, não gruda na sub-aba).
+  const [filtroReceber, setFiltroReceber] = useState<string | null>(null);
+  const trocarSubReceber = (s: SubAbaReceber) => { setFiltroReceber(null); setReceberSub(s); };
+  // Visão geral (#visao, z69): fotos + previsto × realizado em paralelo e, com 2 fotos base, o que mudou — SÓ ao abrir
+  // a Visão geral, 1× enquanto a página está aberta (guardado aqui: o componente desmonta a cada troca de aba).
+  // "Tentar de novo" pede só as partes que falharam.
+  const [visao, setVisao] = useState<VisaoReceberCarregada | null>(null);
+  const pedidoVisao = useRef(false);
   // Sub-aba do Faturamento (#faturamento?ver=caixa) e o período do Caixa Hotmart. O cache do Caixa (2 RPCs por período,
   // só quando a sub-aba abre) mora aqui porque a aba desmonta a cada troca; voltar a um período visto não consulta.
   const [faturamentoSub, setFaturamentoSub] = useState<SubAbaFaturamento>('periodo');
@@ -210,7 +221,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       const h = window.location.hash.replace('#', '');
       const [base, query] = h.split('?');
       if (base === 'faturamento') { setTab('faturamento'); setFaturamentoSub(subAbaFaturamentoDoHash(query)); }
-      else if (base === 'receber') { setTab('receber'); setReceberSub(subAbaReceberDoHash(query)); }
+      else if (base === 'receber') { setTab('receber'); setReceberSub(subAbaReceberDoHash(query)); setFiltroReceber(filtroReceberDoHash(query)); }
+      else if (base === 'visao') setTab('visao');
       else if (base === 'funis') setTab('funis');
       else if (base === 'relatorios') { setTab('relatorios'); setRelatorioInicial(null); }
       else if (base === 'ofertas') setTab('ofertas');
@@ -259,9 +271,11 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
+  // A Visão geral usa a carga do cenário BASE (a mesma da grade): já em memória, reusa; senão, 1 chamada, que fica no
+  // mesmo cache — abrir a Previsão de caixa depois não consulta de novo.
   useEffect(() => {
-    const cen = cenarioReceber;
-    if (tab !== 'receber' || receberPorCenario[cen] || pedidosReceber.current.has(cen)) return;
+    const cen: CenarioReceber = tab === 'visao' ? 'base' : cenarioReceber;
+    if ((tab !== 'receber' && tab !== 'visao') || receberPorCenario[cen] || pedidosReceber.current.has(cen)) return;
     const ger = geracaoReceber.current;
     pedidosReceber.current.add(cen);
     carregarContasReceber(repo, cen)
@@ -306,16 +320,17 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         (e: unknown) => setPremissasReceber((s) => ({ ...s, erroSugestoes: e instanceof Error ? e.message : PREMISSAS_RECEBER.erroSugestoes })),
       );
     }
+    // Leitura: a mensagem vem de erroLeituraReceber (42501 = "ver o financeiro", nunca "operar").
     if (quais.premissas) {
       repo.loadPremissasReceber().then(
         (p) => setPremissasReceber((s) => ({ ...s, premissas: p, erroPremissas: null })),
-        () => setPremissasReceber((s) => ({ ...s, erroPremissas: PREMISSAS_RECEBER.erroCarregamento })),
+        (e: unknown) => setPremissasReceber((s) => ({ ...s, erroPremissas: e instanceof Error && e.message ? e.message : PREMISSAS_RECEBER.erroCarregamento })),
       );
     }
     if (quais.feriados) {
       repo.loadFeriados().then(
         (f) => setPremissasReceber((s) => ({ ...s, feriados: f, erroFeriados: null })),
-        () => setPremissasReceber((s) => ({ ...s, erroFeriados: FERIADOS_RECEBER.erroCarregamento })),
+        (e: unknown) => setPremissasReceber((s) => ({ ...s, erroFeriados: e instanceof Error && e.message ? e.message : FERIADOS_RECEBER.erroCarregamento })),
       );
     }
   };
@@ -343,11 +358,27 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       (e: unknown) => setEventosReceber((s) => ({ ...s, erro: e instanceof Error ? e.message : EVENTOS_RECEBER.erroCarregamento })),
     );
   };
+  // A lista de eventos também alimenta o alerta "encerrados, sem arquivar" da Visão geral — mesma lista, mesmo cache:
+  // quem abre as duas telas consulta 1×.
   useEffect(() => {
-    if (tab !== 'receber' || receberSub !== 'eventos' || pedidoEventos.current) return;
+    if (!(tab === 'visao' || (tab === 'receber' && receberSub === 'eventos')) || pedidoEventos.current) return;
     pedidoEventos.current = true;
     buscarEventos();
   }, [tab, receberSub]);
+
+  const buscarVisao = (anterior: VisaoReceberCarregada | null) => {
+    carregarVisaoReceber(repo, anterior).then(setVisao);
+  };
+  useEffect(() => {
+    if (tab !== 'visao' || pedidoVisao.current) return;
+    pedidoVisao.current = true;
+    buscarVisao(null);
+  }, [tab]);
+  const tentarVisaoDeNovo = () => {
+    const anterior = visao;
+    setVisao(null);
+    buscarVisao(anterior);
+  };
   const tentarEventosDeNovo = () => {
     setEventosReceber((s) => ({ ...s, eventos: null, erro: null }));
     buscarEventos();
@@ -566,6 +597,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <>Relatórios <span className="text-[var(--accent)]">Financeiro</span></>
           ) : tab === 'receber' ? (
             <>{CABECALHO_RECEBER.titulo}</>
+          ) : tab === 'visao' ? (
+            <>{VISAO_GERAL.titulo}</>
           ) : tab === 'funis' ? (
             <>Funis <span className="text-[var(--accent)]">e Análise</span></>
           ) : (
@@ -662,7 +695,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         ) : Object.keys(receberPorCenario).length > 0 ? (
           // Cenário ainda não carregado: a grade mostra "carregando o cenário" (dados = null), o resto da aba segue.
           <ContasAReceber dados={receberPorCenario[cenarioReceber] ?? null} repo={repo} canEdit={canEdit} canVerDoc={canVerDoc}
-            onInformadosAlterados={recarregarReceber} sub={receberSub} onSubChange={setReceberSub}
+            onInformadosAlterados={recarregarReceber} sub={receberSub} onSubChange={trocarSubReceber} filtroInicial={filtroReceber}
             cenario={cenarioReceber} onCenario={setCenarioReceber}
             premissas={premissasReceber} onTentarPremissas={tentarPremissasDeNovo}
             onPremissaGravada={() => { buscarPremissas({ premissas: true, feriados: false }); recarregarReceber(); }}
@@ -670,6 +703,13 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             eventos={eventosReceber} onTentarEventos={tentarEventosDeNovo} onPedirCandidatos={pedirCandidatos}
             onEventoAlterado={() => { buscarEventos(); recarregarReceber(); }} />
         ) : <Loading label="Carregando a previsão de caixa…" minHeight={200} />
+      )}
+
+      {tab === 'visao' && (
+        <VisaoGeral dados={receberPorCenario.base ?? null} erroReceber={erroReceber}
+          onTentarReceber={() => { setErroReceber(null); setTentativaReceber((t) => t + 1); }}
+          visao={visao} onTentarVisao={tentarVisaoDeNovo}
+          eventos={eventosReceber.eventos} erroEventos={eventosReceber.erro} />
       )}
 
       {tab === 'funis' && <FunisEAnalise repo={repo} />}

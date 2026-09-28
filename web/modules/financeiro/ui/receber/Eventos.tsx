@@ -48,6 +48,7 @@ function formDe(e: EventoPlanejado | null): FormEvento {
 
 export function Eventos({
   eventos, erro, candidatos, erroCandidatos, canEdit, hojeISO, repo, onTentarDeNovo, onPedirCandidatos, onAlterado,
+  filtroInicial = null,
 }: {
   /** NULL = carregando. */
   eventos: EventoPlanejado[] | null;
@@ -61,9 +62,12 @@ export function Eventos({
   onTentarDeNovo?: () => void;
   onPedirCandidatos?: () => void;
   onAlterado?: () => void;
+  /** Situação já filtrada ao abrir (link da Visão geral, `&situacao=encerrado`). */
+  filtroInicial?: string | null;
 }) {
   const podeEditar = canEdit && !!repo;
-  const [filtro, setFiltro] = useState<Filtro>('sem_arquivados');
+  const [filtro, setFiltro] = useState<Filtro>(
+    filtroInicial === 'ativo' || filtroInicial === 'encerrado' || filtroInicial === 'arquivado' ? filtroInicial : 'sem_arquivados');
   const [form, setForm] = useState<(FormEvento & { erros: string[] }) | null>(null);
   const [arquivando, setArquivando] = useState<{ id: number; motivo: string; erro: string | null } | null>(null);
   const [curvaAberta, setCurvaAberta] = useState<Set<number>>(new Set());

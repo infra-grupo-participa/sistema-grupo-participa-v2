@@ -558,7 +558,7 @@ export interface EventosEstado {
 export function ContasAReceber({
   dados, repo, canEdit, canVerDoc, onInformadosAlterados, sub, onSubChange,
   cenario = 'base', onCenario, premissas, onTentarPremissas, onPremissaGravada, onFeriadoGravado,
-  eventos, onTentarEventos, onPedirCandidatos, onEventoAlterado,
+  eventos, onTentarEventos, onPedirCandidatos, onEventoAlterado, filtroInicial = null,
 }: {
   /** Carga do cenário ativo. NULL = o cenário ainda está carregando (a grade e Recorrências esperam; o resto não). */
   dados: ContasReceberCarregado | null;
@@ -584,6 +584,9 @@ export function ContasAReceber({
   onPedirCandidatos?: () => void;
   /** Evento gravado ou arquivado: o pai rebusca a lista e a grade. */
   onEventoAlterado?: () => void;
+  /** Filtro de situação que veio no hash (`&situacao=`, links da Visão geral). A sub-aba nasce filtrada; a `key` troca
+   * com ele, então um link novo refiltra mesmo com a sub-aba já aberta. */
+  filtroInicial?: string | null;
 }) {
   const [celula, setCelula] = useState<Celula | null>(null);
   const [subLocal, setSubLocal] = useState<SubAbaReceber>('semana');
@@ -650,7 +653,7 @@ export function ContasAReceber({
 
       {subAtiva === 'recorrencias' && (
         <div id="receber-painel-recorrencias" role="tabpanel" aria-labelledby="receber-tab-recorrencias">
-          {dados ? <Recorrencias cobrancas={dados.recorrencias} />
+          {dados ? <Recorrencias key={filtroInicial ?? ''} cobrancas={dados.recorrencias} filtroInicial={filtroInicial} />
             : <p role="status" className="text-xs text-[var(--fg-3)]">{GRADE_RECEBER.carregandoCenario}</p>}
         </div>
       )}
@@ -658,13 +661,14 @@ export function ContasAReceber({
       {subAtiva === 'informados' && repo && (
         <div id="receber-painel-informados" role="tabpanel" aria-labelledby="receber-tab-informados">
           {/* A carga (fn_fin_informados_listar) acontece SOB DEMANDA ao abrir esta sub-aba, não junto da grade. */}
-          <Informados repo={repo} canEdit={!!canEdit} canVerDoc={!!canVerDoc} onAlterado={onInformadosAlterados} />
+          <Informados key={filtroInicial ?? ''} repo={repo} canEdit={!!canEdit} canVerDoc={!!canVerDoc} onAlterado={onInformadosAlterados}
+            filtroInicial={filtroInicial} />
         </div>
       )}
 
       {subAtiva === 'eventos' && (
         <div id="receber-painel-eventos" role="tabpanel" aria-labelledby="receber-tab-eventos">
-          <Eventos eventos={eventos?.eventos ?? null} erro={eventos?.erro ?? null} candidatos={eventos?.candidatos ?? null}
+          <Eventos key={filtroInicial ?? ''} filtroInicial={filtroInicial} eventos={eventos?.eventos ?? null} erro={eventos?.erro ?? null} candidatos={eventos?.candidatos ?? null}
             erroCandidatos={eventos?.erroCandidatos ?? null} canEdit={!!canEdit} hojeISO={dados?.hojeISO ?? hojeSaoPaulo()}
             repo={repoEventos} onTentarDeNovo={onTentarEventos} onPedirCandidatos={onPedirCandidatos} onAlterado={onEventoAlterado} />
         </div>

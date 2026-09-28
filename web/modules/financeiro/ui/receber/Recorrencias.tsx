@@ -26,8 +26,13 @@ export function rotuloSituacao(s: string): string {
 
 const TH = 'px-2 py-1.5 text-left text-[11px] font-semibold uppercase text-[var(--fg-3)] whitespace-nowrap';
 
-export function Recorrencias({ cobrancas }: { cobrancas: CobrancaRecorrente[] }) {
-  const [filtro, setFiltro] = useState<SituacaoReceber | null>(null);
+export function Recorrencias({ cobrancas, filtroInicial = null }: {
+  cobrancas: CobrancaRecorrente[];
+  /** Situação já filtrada ao abrir (link da Visão geral, `&situacao=`). O pai troca a `key` quando ele muda. */
+  filtroInicial?: string | null;
+}) {
+  const [filtro, setFiltro] = useState<SituacaoReceber | null>(
+    ORDEM.includes(filtroInicial as SituacaoReceber) ? (filtroInicial as SituacaoReceber) : null);
   const resumo = useMemo(() => {
     const r = new Map<string, { n: number; cents: number }>();
     for (const c of cobrancas) {

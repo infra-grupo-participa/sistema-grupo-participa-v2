@@ -39,7 +39,7 @@ type Aviso = { tipo: 'ok' | 'erro'; msg: string } | null;
 type AcaoLinha = { id: string; tipo: 'baixar' | 'arquivar'; valor: string } | null;
 type Form = { original: Informado | null; valores: FormInformado; erros: string[] } | null;
 
-export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = null }: {
+export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = null, filtroInicial = null }: {
   repo: RepoInformados;
   canEdit: boolean;
   canVerDoc: boolean;
@@ -47,10 +47,12 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
   onAlterado?: () => void;
   /** Só para teste de render: lista já carregada (não consulta ao montar). */
   inicial?: Informado[] | null;
+  /** Situação já filtrada ao abrir (link da Visão geral, `&situacao=`). */
+  filtroInicial?: string | null;
 }) {
   const [lista, setLista] = useState<Informado[] | null>(inicial ? ordenarInformados(inicial) : null);
   const [erro, setErro] = useState<string | null>(null);
-  const [filtro, setFiltro] = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<string | null>(filtroInicial);
   const [aviso, setAviso] = useState<Aviso>(null);
   const [ocupado, setOcupado] = useState(false);
   const [form, setForm] = useState<Form>(null);
