@@ -138,6 +138,7 @@ export const CAMPOS_INFORMADO = {
   identificador2: 'Identificador 2',
   identificadorAjuda: 'CPF, CNPJ ou e-mail do pagador',
   identificadorMantido: (m: string) => `mantido (${m}) — digite para trocar`,
+  identificadorSemPermissao: 'Só quem pode ver CPF informa CPF/e-mail',
   acordoDesde: 'Acordo a partir de',
   recebidoAcumulado: 'Recebido / acumulado',
   baixaManual: 'Baixa manual',
@@ -187,6 +188,7 @@ export const COLAR_PLANILHA = {
   ok: 'OK',
   semConferencia: 'sem resposta do banco para esta linha',
   identificadores: 'Identificadores',
+  identificadoresSemPermissao: 'Sem permissão para ver CPF: deixe Identificador 1 e 2 vazios (linha com CPF/e-mail volta com erro e nada vai ao banco).',
 } as const;
 
 /** Rótulos dos totais, usados nos dois blocos. */
