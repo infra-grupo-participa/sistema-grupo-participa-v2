@@ -35,8 +35,8 @@ import { indexarAssinaturaHM, type AssinaturaHMBoard, type AssinaturaHMSemCard }
 import type { PagouSemCard } from '../domain/programa-sem-card';
 import { criarCacheListasSemCard, listasVisiveis } from '../application/carregar-listas-sem-card';
 import { carregarContasReceber, type ContasReceberCarregado } from '../application/carregar-contas-receber';
-import { ContasAReceber, type PremissasEstado } from './receber/ContasAReceber';
-import { CABECALHO_RECEBER, ESTADOS_RECEBER, FERIADOS_RECEBER, PREMISSAS_RECEBER } from './receber/textos';
+import { ContasAReceber, type EventosEstado, type PremissasEstado } from './receber/ContasAReceber';
+import { CABECALHO_RECEBER, ESTADOS_RECEBER, EVENTOS_RECEBER, FERIADOS_RECEBER, PREMISSAS_RECEBER } from './receber/textos';
 import type { CenarioReceber } from '../domain/contas-receber';
 import { hashDaSubAbaReceber, subAbaReceberDoHash, type SubAbaReceber } from './receber/hash';
 import { hashDaSubAbaFaturamento, subAbaFaturamentoDoHash, type SubAbaFaturamento } from './faturamento/hash';
@@ -70,10 +70,17 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const [tentativaReceber, setTentativaReceber] = useState(0);
   const pedidosReceber = useRef(new Set<CenarioReceber>());
   const geracaoReceber = useRef(0);
-  // Sub-aba Premissas: 1 chamada de premissas + 1 de feriados na 1ª vez que a sub-aba abre (guardado aqui).
+  // Sub-aba Premissas: 1 chamada de premissas + 1 de feriados + 1 de sugestões medidas (z67) na 1ª vez que a sub-aba
+  // abre (guardado aqui). As sugestões não mudam quando uma premissa é gravada (são medidas do histórico): não rebusca.
   const [premissasReceber, setPremissasReceber] = useState<PremissasEstado>(
-    { premissas: null, feriados: null, erroPremissas: null, erroFeriados: null });
+    { premissas: null, feriados: null, erroPremissas: null, erroFeriados: null, sugestoes: null, erroSugestoes: null });
   const pedidoPremissas = useRef(false);
+  // Sub-aba Eventos (z67): a lista na 1ª vez que a sub-aba abre; os candidatos a referência (fn_fin_funis) só quando o
+  // formulário abre, 1×. Gravou/arquivou: rebusca a lista e a grade.
+  const [eventosReceber, setEventosReceber] = useState<EventosEstado>(
+    { eventos: null, erro: null, candidatos: null, erroCandidatos: null });
+  const pedidoEventos = useRef(false);
+  const pedidoCandidatos = useRef(false);
   // Sub-aba de Previsão de caixa (#receber?ver=) — mesmo padrão de hash do #board?produto=. "semana" é o padrão
   // (hash limpo #receber, sem `?`, o mesmo link do item do menu).
   const [receberSub, setReceberSub] = useState<SubAbaReceber>('semana');
@@ -291,8 +298,14 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       });
   };
 
-  // Premissas e feriados: setState só nos retornos (nunca síncrono no corpo do efeito).
-  const buscarPremissas = (quais: { premissas: boolean; feriados: boolean }) => {
+  // Premissas, feriados e sugestões: setState só nos retornos (nunca síncrono no corpo do efeito).
+  const buscarPremissas = (quais: { premissas: boolean; feriados: boolean; sugestoes?: boolean }) => {
+    if (quais.sugestoes) {
+      repo.loadSugestoesReceber('base').then(
+        (x) => setPremissasReceber((s) => ({ ...s, sugestoes: x, erroSugestoes: null })),
+        (e: unknown) => setPremissasReceber((s) => ({ ...s, erroSugestoes: e instanceof Error ? e.message : PREMISSAS_RECEBER.erroSugestoes })),
+      );
+    }
     if (quais.premissas) {
       repo.loadPremissasReceber().then(
         (p) => setPremissasReceber((s) => ({ ...s, premissas: p, erroPremissas: null })),
@@ -309,15 +322,47 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   useEffect(() => {
     if (tab !== 'receber' || receberSub !== 'premissas' || pedidoPremissas.current) return;
     pedidoPremissas.current = true;
-    buscarPremissas({ premissas: true, feriados: true });
+    buscarPremissas({ premissas: true, feriados: true, sugestoes: true });
   }, [tab, receberSub]);
   const tentarPremissasDeNovo = () => {
-    const quais = { premissas: premissasReceber.erroPremissas != null, feriados: premissasReceber.erroFeriados != null };
+    const quais = {
+      premissas: premissasReceber.erroPremissas != null, feriados: premissasReceber.erroFeriados != null,
+      sugestoes: premissasReceber.erroSugestoes != null,
+    };
     setPremissasReceber((s) => ({
-      ...s, erroPremissas: null, erroFeriados: null,
+      ...s, erroPremissas: null, erroFeriados: null, erroSugestoes: null,
       premissas: quais.premissas ? null : s.premissas, feriados: quais.feriados ? null : s.feriados,
+      sugestoes: quais.sugestoes ? null : s.sugestoes,
     }));
     buscarPremissas(quais);
+  };
+
+  const buscarEventos = () => {
+    repo.loadEventosPlanejados().then(
+      (x) => setEventosReceber((s) => ({ ...s, eventos: x, erro: null })),
+      (e: unknown) => setEventosReceber((s) => ({ ...s, erro: e instanceof Error ? e.message : EVENTOS_RECEBER.erroCarregamento })),
+    );
+  };
+  useEffect(() => {
+    if (tab !== 'receber' || receberSub !== 'eventos' || pedidoEventos.current) return;
+    pedidoEventos.current = true;
+    buscarEventos();
+  }, [tab, receberSub]);
+  const tentarEventosDeNovo = () => {
+    setEventosReceber((s) => ({ ...s, eventos: null, erro: null }));
+    buscarEventos();
+  };
+  // Candidatos a referência: fn_fin_funis, 1× quando o formulário abre (falha pode ser pedida de novo reabrindo).
+  const pedirCandidatos = () => {
+    if (pedidoCandidatos.current) return;
+    pedidoCandidatos.current = true;
+    repo.loadFunis().then(
+      (f) => setEventosReceber((s) => ({ ...s, candidatos: f, erroCandidatos: null })),
+      () => {
+        pedidoCandidatos.current = false;
+        setEventosReceber((s) => ({ ...s, erroCandidatos: EVENTOS_RECEBER.erroRef }));
+      },
+    );
   };
 
   // Contagem por produto sobre o board INTEIRO (nunca sobre o recorte de
@@ -621,7 +666,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             cenario={cenarioReceber} onCenario={setCenarioReceber}
             premissas={premissasReceber} onTentarPremissas={tentarPremissasDeNovo}
             onPremissaGravada={() => { buscarPremissas({ premissas: true, feriados: false }); recarregarReceber(); }}
-            onFeriadoGravado={() => { buscarPremissas({ premissas: false, feriados: true }); recarregarReceber(); }} />
+            onFeriadoGravado={() => { buscarPremissas({ premissas: false, feriados: true }); recarregarReceber(); }}
+            eventos={eventosReceber} onTentarEventos={tentarEventosDeNovo} onPedirCandidatos={pedirCandidatos}
+            onEventoAlterado={() => { buscarEventos(); recarregarReceber(); }} />
         ) : <Loading label="Carregando a previsão de caixa…" minHeight={200} />
       )}
 

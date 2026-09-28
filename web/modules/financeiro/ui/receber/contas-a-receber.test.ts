@@ -10,7 +10,7 @@ import type { LinhaReceber } from '../../domain/contas-receber';
 
 const L = (p: Partial<LinhaReceber>): LinhaReceber => ({
   bloco: 1, grupo: 'Vendas já realizadas', componente: 'antecipacao', data_caixa: '2026-09-29', valor: 0,
-  situacao: 'a_receber', origem_dia: null, ref: null, rotulo: null, produto: null, k: null, detalhe: [], pagas: [], fator: 1, certeza: 'certo', centro_custo: null, tratamento: null, cenario: 'base', ...p, valor_bruto: p.valor_bruto ?? p.valor ?? 0,
+  situacao: 'a_receber', origem_dia: null, ref: null, rotulo: null, produto: null, k: null, detalhe: [], projecao: [], pagas: [], fator: 1, certeza: 'certo', centro_custo: null, tratamento: null, cenario: 'base', ...p, valor_bruto: p.valor_bruto ?? p.valor ?? 0,
 });
 
 const linhas: LinhaReceber[] = [
@@ -57,7 +57,7 @@ describe('grade Contas a Receber (HTML estático)', () => {
 
   it('a tela inteira: legenda de escopo, grade e Recorrências (nunca "Carteira" nem "devendo")', () => {
     const tela = renderToStaticMarkup(createElement(ContasAReceber, { dados }));
-    expect(tela).toContain('Só dinheiro já vendido, contratado ou informado pelo financeiro');
+    expect(tela).toContain('Certo: dinheiro já vendido, contratado ou informado pelo financeiro');
     expect(tela).toContain('Recorrências');
     expect(tela).not.toMatch(/carteira|devendo/i);
   });

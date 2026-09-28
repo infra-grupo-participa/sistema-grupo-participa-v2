@@ -7,16 +7,20 @@
 //   e a grade (a previsão depende das premissas e dos feriados).
 // - Escrita: só com canEdit. A trava real é o banco (gp_pode_operar_financeiro em cada RPC); a validação daqui só
 //   poupa uma ida ao banco com as mesmas regras (faixa, inteiro, vigência de hoje a hoje+366).
-// - Percentual é fração no banco (0,05) e % na tela (5).
+// - Percentual é fração no banco (0,05) e % na tela (5). Reais (z67) em R$.
+// - Sugestão medida (z67): o pai faz 1 chamada de fn_fin_receber_sugestoes junto com as premissas. Ao lado da premissa
+//   com sugestão: "Sugestão medida: X (base: …)", a diferença para o valor em uso e "Usar sugestão" (grava vigência de
+//   hoje, no cenário da linha). Sem vigência gravada, o banco usa a sugestão — a tela diz isso, não "sem vigência".
+// - Projeção na previsão (projecao_no_receber): liga/desliga no topo, com o que muda na Semana a semana.
 // Formulários ficam no fluxo da página (nada `absolute`).
 import { useId, useMemo, useState } from 'react';
 import { fmtData, fmtDataHora } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../../application/ports';
 import type { CenarioReceber } from '../../domain/contas-receber';
 import {
-  agruparPremissas, anosDosFeriados, formatarFaixa, formatarPremissa, paraExibicao, somarDias, validarFeriado,
-  validarPremissa, VIGENCIA_MAX_DIAS,
-  type CenarioPremissa, type FeriadoBancario, type PremissaTela, type VigenciaPremissa,
+  agruparPremissas, anosDosFeriados, diferencaDaSugestao, formatarFaixa, formatarPremissa, paraExibicao, somarDias,
+  validarFeriado, validarPremissa, valorDaSugestao, VIGENCIA_MAX_DIAS,
+  type CenarioPremissa, type FeriadoBancario, type PremissaTela, type SugestaoPremissa, type VigenciaPremissa,
 } from '../../domain/premissas-receber';
 import { CENARIO_RECEBER, FERIADOS_RECEBER, PREMISSAS_RECEBER } from './textos';
 
@@ -29,12 +33,15 @@ const BTN_1 = 'rounded-[var(--r-sm)] border border-[var(--accent)] px-2 py-0.5 t
 const INPUT = 'rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-2 py-1 text-xs text-[var(--fg)]';
 
 const rotuloCenario = (c: CenarioReceber) => CENARIO_RECEBER[c] ?? c;
-const unidadeCurta = (u: string) => (u === 'percentual' ? '%' : u === 'dias' ? 'dias' : '');
+const unidadeCurta = (u: string) => (u === 'percentual' ? '%' : u === 'dias' ? 'dias' : u === 'reais' ? 'R$' : '');
+/** Chave do liga/desliga da projeção (z67). */
+const CHAVE_PROJECAO = 'projecao_no_receber';
 
 type Aviso = { tipo: 'ok' | 'erro'; msg: string } | null;
 
 export function Premissas({
   premissas, feriados, erroPremissas, erroFeriados, canEdit, hojeISO, repo, onTentarDeNovo, onPremissaGravada, onFeriadoGravado,
+  sugestoes, erroSugestoes = null,
 }: {
   /** NULL = carregando (ou ainda não pedido). */
   premissas: VigenciaPremissa[] | null;
@@ -48,8 +55,13 @@ export function Premissas({
   /** Gravou: o pai rebusca a lista de premissas e a grade. */
   onPremissaGravada?: () => void;
   onFeriadoGravado?: () => void;
+  /** undefined = o pai não pede sugestões; null = carregando. */
+  sugestoes?: SugestaoPremissa[] | null;
+  erroSugestoes?: string | null;
 }) {
   const grupos = useMemo(() => (premissas ? agruparPremissas(premissas) : []), [premissas]);
+  const porChave = useMemo(() => new Map((sugestoes ?? []).map((x) => [x.chave, x])), [sugestoes]);
+  const projecao = grupos.flatMap((g) => g.premissas).find((p) => p.chave_base === CHAVE_PROJECAO) ?? null;
   return (
     <div className="space-y-4">
       <section className="space-y-2" aria-labelledby="premissas-titulo">
@@ -66,7 +78,19 @@ export function Premissas({
         ) : grupos.length === 0 ? (
           <p className="text-xs text-[var(--fg-3)]">{PREMISSAS_RECEBER.vazio}</p>
         ) : (
-          <TabelaPremissas grupos={grupos} canEdit={canEdit && !!repo} hojeISO={hojeISO} repo={repo} onGravada={onPremissaGravada} />
+          <>
+            {projecao && <ProjecaoNaPrevisao p={projecao} canEdit={canEdit && !!repo} hojeISO={hojeISO} repo={repo} onGravada={onPremissaGravada} />}
+            {erroSugestoes ? (
+              <p role="alert" className="text-xs text-[var(--fg-2)]">
+                {PREMISSAS_RECEBER.erroSugestoes} {erroSugestoes}{' '}
+                {onTentarDeNovo && <button type="button" className={BTN} onClick={onTentarDeNovo}>{PREMISSAS_RECEBER.tentarDeNovo}</button>}
+              </p>
+            ) : sugestoes === null ? (
+              <p role="status" className="text-xs text-[var(--fg-3)]">{PREMISSAS_RECEBER.carregandoSugestoes}</p>
+            ) : null}
+            <TabelaPremissas grupos={grupos} canEdit={canEdit && !!repo} hojeISO={hojeISO} repo={repo} onGravada={onPremissaGravada}
+              sugestoes={porChave} />
+          </>
         )}
       </section>
 
@@ -76,10 +100,58 @@ export function Premissas({
   );
 }
 
+/** Liga/desliga da projeção: estado de hoje em texto (o que entra e o que não entra) e um botão que grava a vigência de
+ * hoje. A trilha e as vigências futuras continuam na tabela abaixo. */
+function ProjecaoNaPrevisao({ p, canEdit, hojeISO, repo, onGravada }: {
+  p: PremissaTela; canEdit: boolean; hojeISO: string; repo?: RepoPremissas; onGravada?: () => void;
+}) {
+  const [ocupado, setOcupado] = useState(false);
+  const [aviso, setAviso] = useState<Aviso>(null);
+  // Gravou: o botão espera a lista rebuscada pelo pai mostrar o estado novo (sem isso, um 2º clique antes da volta
+  // tentaria gravar a mesma data e o banco recusaria).
+  const [esperando, setEsperando] = useState<boolean | null>(null);
+  const vig = p.cenarios.find((c) => c.cenario === 'base')?.vigente ?? null;
+  const ligada = vig != null && vig.valor > 0;
+  const aguardando = esperando != null && esperando !== ligada;
+  const alternar = async () => {
+    if (!repo) return;
+    setOcupado(true);
+    setAviso(null);
+    try {
+      const r = await repo.salvarPremissaReceber(p.chave_base, ligada ? 0 : 1, hojeISO, 'base');
+      if (!r.ok) { setAviso({ tipo: 'erro', msg: r.msg ?? 'Não foi possível gravar.' }); return; }
+      setAviso({ tipo: 'ok', msg: PREMISSAS_RECEBER.projecaoGravada(!ligada) });
+      setEsperando(!ligada);
+      onGravada?.();
+    } finally {
+      setOcupado(false);
+    }
+  };
+  return (
+    <div className="space-y-1 rounded-[var(--r-md)] border border-[var(--border)] px-2 py-1.5 text-xs">
+      <p className="text-[var(--fg)]">
+        <span className="font-semibold">{PREMISSAS_RECEBER.projecaoTitulo}: </span>
+        {ligada ? PREMISSAS_RECEBER.projecaoLigada : PREMISSAS_RECEBER.projecaoDesligada}
+        {vig && <span className="text-[var(--fg-3)]"> ({PREMISSAS_RECEBER.desde.toLowerCase()} {fmtData(vig.vigente_de)})</span>}
+      </p>
+      {canEdit && (
+        <button type="button" className={BTN_1} disabled={ocupado || aguardando} aria-pressed={ligada} onClick={() => void alternar()}>
+          {ocupado || aguardando ? PREMISSAS_RECEBER.salvando : ligada ? PREMISSAS_RECEBER.desligarProjecao : PREMISSAS_RECEBER.ligarProjecao}
+        </button>
+      )}
+      {aviso && (
+        <p role={aviso.tipo === 'erro' ? 'alert' : 'status'}
+          className={aviso.tipo === 'erro' ? 'font-semibold text-[var(--red)]' : 'text-[var(--fg-2)]'}>{aviso.msg}</p>
+      )}
+    </div>
+  );
+}
+
 type Edicao = { chave: string; cenario: CenarioReceber; valor: string; vigenteDe: string; erros: string[] } | null;
 
-function TabelaPremissas({ grupos, canEdit, hojeISO, repo, onGravada }: {
+function TabelaPremissas({ grupos, canEdit, hojeISO, repo, onGravada, sugestoes }: {
   grupos: ReturnType<typeof agruparPremissas>; canEdit: boolean; hojeISO: string; repo?: RepoPremissas; onGravada?: () => void;
+  sugestoes: Map<string, SugestaoPremissa>;
 }) {
   const [historico, setHistorico] = useState<Set<string>>(new Set());
   const [edicao, setEdicao] = useState<Edicao>(null);
@@ -119,6 +191,22 @@ function TabelaPremissas({ grupos, canEdit, hojeISO, repo, onGravada }: {
     }
   };
 
+  // "Usar sugestão": grava a sugestão (como a tela mostra) como vigência de hoje, no cenário da linha.
+  const usarSugestao = async (p: PremissaTela, cenario: CenarioReceber, valor: number) => {
+    if (!repo) return;
+    setOcupado(true);
+    setAviso(null);
+    try {
+      const r = await repo.salvarPremissaReceber(p.chave_base, valor, hojeISO, cenario);
+      if (!r.ok) { setAviso({ tipo: 'erro', msg: r.msg ?? 'Não foi possível gravar.' }); return; }
+      setEdicao(null);
+      setAviso({ tipo: 'ok', msg: PREMISSAS_RECEBER.gravouSugestao });
+      onGravada?.();
+    } finally {
+      setOcupado(false);
+    }
+  };
+
   return (
     <div className="space-y-2">
       {aviso && (
@@ -147,6 +235,13 @@ function TabelaPremissas({ grupos, canEdit, hojeISO, repo, onGravada }: {
                 const aberto = historico.has(k);
                 const editando = edicao?.chave === p.chave_base && edicao.cenario === c.cenario;
                 const idHist = `premissa-hist-${k.replace(/[^a-z0-9_-]/gi, '_')}`;
+                // Sugestão medida: mesma para todos os cenários; o que muda por linha é o valor em uso (fin.premissa_linha:
+                // vigência do cenário, senão a da base, senão a sugestão).
+                const sug = sugestoes.get(p.chave_base) ?? null;
+                const sugValor = sug?.sugestao != null ? valorDaSugestao(sug.sugestao, p.unidade) : null;
+                const emUsoGravado = c.vigente?.valor ?? base?.valor ?? null;
+                const podeUsarSugestao = canEdit && sugValor != null && sugValor >= p.minimo && sugValor <= p.maximo
+                  && !(c.vigente && c.vigente.vigente_de === hojeISO) && emUsoGravado !== sugValor;
                 return [
                   <tr key={k} className={`${i === 0 ? 'border-t border-[var(--border)]' : 'border-t border-[var(--border-faint)]'} text-[var(--fg)]`}>
                     <td className={TD}>
@@ -154,14 +249,32 @@ function TabelaPremissas({ grupos, canEdit, hojeISO, repo, onGravada }: {
                         <>
                           <span className="font-semibold">{p.rotulo}</span>
                           <span className="block max-w-[46ch] text-[11px] text-[var(--fg-3)]">{p.ajuda}</span>
+                          {sug && (
+                            <span className="mt-0.5 block max-w-[46ch] text-[11px] text-[var(--fg-2)]">
+                              {sugValor != null
+                                ? PREMISSAS_RECEBER.sugestaoMedida(formatarPremissa(sugValor, p.unidade), sug.base_medida ?? '—')
+                                : PREMISSAS_RECEBER.sugestaoSemBase(sug.base_medida ?? '—')}
+                            </span>
+                          )}
                         </>
                       ) : null}
                     </td>
                     <td className={`${TD} whitespace-nowrap`}>{rotuloCenario(c.cenario)}</td>
                     <td className={`${TD} text-right tabular whitespace-nowrap`}>
                       {c.vigente ? formatarPremissa(c.vigente.valor, p.unidade)
-                        : c.usaBase ? <span className="text-[var(--fg-3)]">{PREMISSAS_RECEBER.usaBase(base ? formatarPremissa(base.valor, p.unidade) : '—')}</span>
-                          : <span className="text-[var(--fg-3)]">{PREMISSAS_RECEBER.semVigente}</span>}
+                        : c.usaBase ? (
+                          <span className="text-[var(--fg-3)]">
+                            {PREMISSAS_RECEBER.usaBase(base ? formatarPremissa(base.valor, p.unidade)
+                              : sugValor != null ? PREMISSAS_RECEBER.valeSugestao(formatarPremissa(sugValor, p.unidade)) : '—')}
+                          </span>
+                        ) : sug ? (
+                          <span className="text-[var(--fg-3)]">
+                            {sugValor != null ? PREMISSAS_RECEBER.valeSugestao(formatarPremissa(sugValor, p.unidade)) : PREMISSAS_RECEBER.semBaseMedida}
+                          </span>
+                        ) : <span className="text-[var(--fg-3)]">{PREMISSAS_RECEBER.semVigente}</span>}
+                      {sug && emUsoGravado != null && sugValor != null && (
+                        <span className="block text-[11px] text-[var(--fg-2)]">{diferencaDaSugestao(emUsoGravado, sugValor, p.unidade)}</span>
+                      )}
                       {c.futuras[0] && (
                         <span className="block text-[11px] text-[var(--fg-3)]">
                           {PREMISSAS_RECEBER.proxima(formatarPremissa(c.futuras[0].valor, p.unidade), fmtData(c.futuras[0].vigente_de))}
@@ -182,10 +295,18 @@ function TabelaPremissas({ grupos, canEdit, hojeISO, repo, onGravada }: {
                     {canEdit && (
                       <td className={TD}>
                         {!editando && (
-                          <button type="button" className={BTN} disabled={ocupado} onClick={() => abrirEdicao(p, c)}
-                            aria-label={`${PREMISSAS_RECEBER.alterar}: ${p.rotulo} (${rotuloCenario(c.cenario)})`}>
-                            {PREMISSAS_RECEBER.alterar}
-                          </button>
+                          <span className="flex flex-wrap gap-1">
+                            <button type="button" className={BTN} disabled={ocupado} onClick={() => abrirEdicao(p, c)}
+                              aria-label={`${PREMISSAS_RECEBER.alterar}: ${p.rotulo} (${rotuloCenario(c.cenario)})`}>
+                              {PREMISSAS_RECEBER.alterar}
+                            </button>
+                            {podeUsarSugestao && sugValor != null && (
+                              <button type="button" className={BTN} disabled={ocupado} onClick={() => void usarSugestao(p, c.cenario, sugValor)}
+                                aria-label={PREMISSAS_RECEBER.usarSugestaoRotulo(p.rotulo, rotuloCenario(c.cenario), formatarPremissa(sugValor, p.unidade))}>
+                                {PREMISSAS_RECEBER.usarSugestao}
+                              </button>
+                            )}
+                          </span>
                         )}
                       </td>
                     )}

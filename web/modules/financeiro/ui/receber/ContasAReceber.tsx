@@ -1,25 +1,31 @@
 'use client';
 
-// Aba "Previsão de caixa" (#receber; fase 1 28/09/2026, F2 com cenários e perda): grade semana (colunas) × bloco/grupo (linhas), com total por semana,
-// por mês e acumulado. Substitui o "Fluxo Semanal" da planilha do financeiro nos blocos 1 e 2 (o que é certo).
+// Aba "Previsão de caixa" (#receber; fase 1 28/09/2026, F2 com cenários e perda, F3 com o estimado): grade semana (colunas)
+// × bloco/grupo (linhas), com total por semana, por mês e acumulado. Substitui o "Fluxo Semanal" da planilha do financeiro.
+// Seções, nesta ordem: CERTO (blocos 1, 2, 5) com subtotal; ESTIMADO (blocos 3, 4, 6; a reserva é negativa) com subtotal;
+// total geral; e, abaixo dos totais, a faixa "Informativo — fora da soma" (bloco 8, acordos do board). Grupo estimado
+// sem base aparece como "sem base medida", nunca como zero.
 // Clicar num número abre, logo abaixo da grade e SEM consulta nova, quem compõe aquele valor — tudo sai da mesma
 // resposta de fn_fin_receber_semanal (application/carregar-contas-receber.ts). A grade soma o ESPERADO (contrato v2);
 // onde há perda (fator < 1) a célula mostra também o bruto, e a composição mostra bruto, fator, esperado e o porquê.
 // O detalhe fica no fluxo da página (não é `absolute`): nada invisível entra na área rolável da grade.
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { fmtBRLc, fmtData } from '@/shared/ui/format';
 import { hojeSaoPaulo, type ContasReceberCarregado } from '../../application/carregar-contas-receber';
 import {
-  CENARIOS_RECEBER, composicaoDaCelula, GRUPO_BLOCO_1, temPerda,
-  type CenarioReceber, type GradeReceber, type LinhaReceber, type PagamentoContrato, type Semana,
+  BLOCO_INFORMATIVO, CENARIOS_RECEBER, composicaoDaCelula, GRUPO_BLOCO_1, GRUPO_BLOCO_6, secaoDoBloco, temPerda,
+  type CenarioReceber, type GradeReceber, type LinhaGrade, type LinhaReceber, type PagamentoContrato, type Semana,
 } from '../../domain/contas-receber';
-import type { FeriadoBancario, VigenciaPremissa } from '../../domain/premissas-receber';
+import type { FeriadoBancario, SugestaoPremissa, VigenciaPremissa } from '../../domain/premissas-receber';
+import type { EventoPlanejado } from '../../domain/eventos-planejados';
+import type { Funil } from '../../domain/funis';
 import { Recorrencias } from './Recorrencias';
 import { Informados, type RepoInformados } from './Informados';
 import { Premissas, type RepoPremissas } from './Premissas';
+import { Eventos, type RepoEventos } from './Eventos';
 import {
   BLOCOS_RECEBER, CENARIO_RECEBER, COMPONENTES_VENDA, ESCOPO_RECEBER, ESTADOS_RECEBER, GRADE_RECEBER, ROTULOS_TOTAL,
-  SUBABAS_RECEBER,
+  SECOES_RECEBER, SUBABAS_RECEBER,
 } from './textos';
 import type { SubAbaReceber } from './hash';
 
@@ -34,11 +40,18 @@ export function rotuloComponente(c: string): string {
   if (c === 'antecipacao') return COMPONENTES_VENDA.antecipacao;
   if (c === 'garantia') return COMPONENTES_VENDA.garantia;
   if (c === 'cheio') return GRADE_RECEBER.componenteCheio;
+  if (c === 'reserva') return COMPONENTES_VENDA.reserva;
   return c;
 }
 
-const rotuloBloco = (b: number) => (b === 1 ? BLOCOS_RECEBER.vendasRealizadas : b === 2 ? BLOCOS_RECEBER.assinaturasEParcelasFuturas
-  : b === 5 ? BLOCOS_RECEBER.recebimentosInformados : `Bloco ${b}`);
+const ROTULOS_BLOCO: Record<number, string> = {
+  1: BLOCOS_RECEBER.vendasRealizadas, 2: BLOCOS_RECEBER.assinaturasEParcelasFuturas, 3: BLOCOS_RECEBER.vendasNovas,
+  4: BLOCOS_RECEBER.eventosPlanejados, 5: BLOCOS_RECEBER.recebimentosInformados, 6: BLOCOS_RECEBER.reserva,
+  8: BLOCOS_RECEBER.informativoBoard,
+};
+const rotuloBloco = (b: number) => ROTULOS_BLOCO[b] ?? `Bloco ${b}`;
+/** Nome do grupo que, sozinho no bloco, faz o bloco virar uma linha só (clicável). */
+const grupoUnico = (b: number) => (b === 1 ? GRUPO_BLOCO_1 : b === 6 ? GRUPO_BLOCO_6 : rotuloBloco(b));
 
 type Celula = { bloco: number; grupo: string; semana: number | null };
 
@@ -63,13 +76,102 @@ function Numero({ v, bruto, onClick, ativo }: { v: number; bruto?: number; onCli
   );
 }
 
+type BlocoGrade = GradeReceber['blocos'][number];
+
 export function GradeContasReceber({ grade, selecionada, onSelecionar }: {
   grade: GradeReceber; selecionada: Celula | null; onSelecionar: (c: Celula) => void;
 }) {
   const sems = grade.semanas;
+  const nCols = sems.length + 1; // semanas + Total (a 1ª coluna fica de fora)
   const eAtiva = (bloco: number, grupo: string, semana: number | null) =>
     selecionada?.bloco === bloco && selecionada.grupo === grupo && selecionada.semana === semana;
   const linhasDoBloco = (b: number) => grade.linhas.filter((l) => l.bloco === b);
+  const semBaseDoBloco = (b: number) => grade.semBase.filter((x) => x.bloco === b);
+  const blocosDa = (secao: 'certo' | 'estimado') => {
+    const nums = new Set<number>([
+      ...grade.blocos.filter((b) => secaoDoBloco(b.bloco) === secao).map((b) => b.bloco),
+      ...grade.semBase.filter((x) => secaoDoBloco(x.bloco) === secao).map((x) => x.bloco),
+    ]);
+    return [...nums].sort((a, b) => a - b);
+  };
+  const certo = blocosDa('certo');
+  const estimado = blocosDa('estimado');
+  const temEstimado = estimado.length > 0;
+
+  /** Cabeçalho de seção: o rótulo na 1ª coluna (fixa ao rolar), o resto da linha vazio. */
+  const cabecalhoSecao = (k: string, titulo: string, ajuda: string) => (
+    <tr key={k} className="border-t-2 border-[var(--border)] bg-[var(--surface-2)]">
+      <th scope="rowgroup" className={`${COL1} bg-[var(--surface-2)] text-[11px] font-semibold uppercase text-[var(--fg-2)]`}>
+        {titulo} <span className="font-normal normal-case text-[var(--fg-3)]">— {ajuda}</span>
+      </th>
+      <td colSpan={nCols} />
+    </tr>
+  );
+
+  const linhaSemBase = (k: string, rotulo: ReactNode, tratamento: string | null, recuo: boolean) => (
+    <tr key={k} className="border-t border-[var(--border-faint)]">
+      <td className={`${COL1} ${recuo ? 'pl-5 text-[var(--fg-2)]' : 'font-semibold text-[var(--fg)]'}`}>{rotulo}</td>
+      <td colSpan={nCols} className="px-2 py-1 text-left text-[var(--fg-2)]">
+        <span className="font-semibold text-[var(--fg)]">{SECOES_RECEBER.semBase}</span>{tratamento ? ` — ${tratamento}` : ''}
+      </td>
+    </tr>
+  );
+
+  const linhasDeValor = (bloco: number, g: LinhaGrade | BlocoGrade, clicavel: string | null, forte: boolean) => [
+    ...g.porSemana.map((v, i) => (
+      <td key={i} className={`${TD_NUM} ${forte ? 'font-semibold' : ''}`}>
+        <Numero v={v} bruto={g.brutoPorSemana[i]} onClick={clicavel != null ? () => onSelecionar({ bloco, grupo: clicavel, semana: i }) : undefined}
+          ativo={clicavel != null && eAtiva(bloco, clicavel, i)} />
+      </td>
+    )),
+    <td key="t" className={`${TD_NUM} ${forte ? 'font-semibold' : ''} border-l border-[var(--border)]`}>
+      <Numero v={g.total} bruto={g.brutoTotal} onClick={clicavel != null ? () => onSelecionar({ bloco, grupo: clicavel, semana: null }) : undefined}
+        ativo={clicavel != null && eAtiva(bloco, clicavel, null)} />
+    </td>,
+  ];
+
+  const linhasDoBlocoNaGrade = (bloco: number) => {
+    const b = grade.blocos.find((x) => x.bloco === bloco);
+    const gs = linhasDoBloco(bloco);
+    const sb = semBaseDoBloco(bloco);
+    const titulo = `${bloco}. ${rotuloBloco(bloco)}`;
+    if (!b) {
+      // Só "sem base": o bloco aparece, sem número.
+      if (sb.length === 1 && sb[0].grupo === grupoUnico(bloco)) return [linhaSemBase(`sb${bloco}`, titulo, sb[0].tratamento, false)];
+      return [
+        <tr key={`b${bloco}`} className="border-t border-[var(--border)]">
+          <td className={`${COL1} font-semibold text-[var(--fg)]`}>{titulo}</td>
+          <td colSpan={nCols} />
+        </tr>,
+        ...sb.map((x) => linhaSemBase(`sb${bloco}-${x.grupo}`, x.grupo, x.tratamento, true)),
+      ];
+    }
+    // Bloco com um grupo só e de mesmo nome (blocos 1 e 6): uma linha, clicável. Senão: subtotal + grupos.
+    const unico = gs.length === 1 && gs[0].grupo === grupoUnico(bloco);
+    return [
+      <tr key={`b${bloco}`} className="border-t border-[var(--border)]">
+        <td className={`${COL1} font-semibold text-[var(--fg)]`}>{titulo}</td>
+        {linhasDeValor(bloco, b, unico ? gs[0].grupo : null, true)}
+      </tr>,
+      ...(unico ? [] : gs.map((g) => (
+        <tr key={`g${bloco}-${g.grupo}`} className="border-t border-[var(--border-faint)]">
+          <td className={`${COL1} pl-5 text-[var(--fg-2)]`}>{g.grupo}</td>
+          {linhasDeValor(bloco, g, g.grupo, false)}
+        </tr>
+      ))),
+      ...sb.map((x) => linhaSemBase(`sb${bloco}-${x.grupo}`, x.grupo, x.tratamento, true)),
+    ];
+  };
+
+  const linhaTotal = (k: string, rotulo: string, porSemana: number[], total: number, classe: string) => (
+    <tr key={k} className={classe}>
+      <td className={COL1}>{rotulo}</td>
+      {porSemana.map((v, i) => <td key={i} className={TD_NUM}><Numero v={v} /></td>)}
+      <td className={`${TD_NUM} border-l border-[var(--border)]`}><Numero v={total} /></td>
+    </tr>
+  );
+
+  const info = grade.informativo;
 
   return (
     <div className="overflow-x-auto rounded-[var(--r-md)] border border-[var(--border)]">
@@ -91,41 +193,25 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar }: {
           </tr>
         </thead>
         <tbody>
-          {grade.blocos.map((b) => {
-            const gs = linhasDoBloco(b.bloco);
-            // Bloco com um grupo só e de mesmo nome (bloco 1): uma linha, clicável. Senão: subtotal + grupos.
-            const unico = gs.length === 1 && gs[0].grupo === (b.bloco === 1 ? GRUPO_BLOCO_1 : rotuloBloco(b.bloco));
-            return [
-              <tr key={`b${b.bloco}`} className="border-t border-[var(--border)]">
-                <td className={`${COL1} font-semibold text-[var(--fg)]`}>{b.bloco}. {rotuloBloco(b.bloco)}</td>
-                {b.porSemana.map((v, i) => (
-                  <td key={i} className={`${TD_NUM} font-semibold`}>
-                    <Numero v={v} bruto={b.brutoPorSemana[i]} onClick={unico ? () => onSelecionar({ bloco: b.bloco, grupo: gs[0].grupo, semana: i }) : undefined}
-                      ativo={unico && eAtiva(b.bloco, gs[0].grupo, i)} />
-                  </td>
-                ))}
-                <td className={`${TD_NUM} font-semibold border-l border-[var(--border)]`}>
-                  <Numero v={b.total} bruto={b.brutoTotal} onClick={unico ? () => onSelecionar({ bloco: b.bloco, grupo: gs[0].grupo, semana: null }) : undefined}
-                    ativo={unico && eAtiva(b.bloco, gs[0].grupo, null)} />
-                </td>
-              </tr>,
-              ...(unico ? [] : gs.map((g) => (
-                <tr key={`g${b.bloco}-${g.grupo}`} className="border-t border-[var(--border-faint)]">
-                  <td className={`${COL1} pl-5 text-[var(--fg-2)]`}>{g.grupo}</td>
-                  {g.porSemana.map((v, i) => (
-                    <td key={i} className={TD_NUM}>
-                      <Numero v={v} bruto={g.brutoPorSemana[i]} onClick={() => onSelecionar({ bloco: g.bloco, grupo: g.grupo, semana: i })} ativo={eAtiva(g.bloco, g.grupo, i)} />
-                    </td>
-                  ))}
-                  <td className={`${TD_NUM} border-l border-[var(--border)]`}>
-                    <Numero v={g.total} bruto={g.brutoTotal} onClick={() => onSelecionar({ bloco: g.bloco, grupo: g.grupo, semana: null })} ativo={eAtiva(g.bloco, g.grupo, null)} />
-                  </td>
-                </tr>
-              ))),
-            ];
-          })}
+          {cabecalhoSecao('sec-certo', SECOES_RECEBER.certo, SECOES_RECEBER.certoAjuda)}
+          {certo.flatMap(linhasDoBlocoNaGrade)}
+          {temEstimado && linhaTotal('sub-certo', SECOES_RECEBER.subtotalCerto, grade.certoPorSemana, grade.certoTotal,
+            'border-t border-[var(--border)] font-semibold text-[var(--fg)]')}
+        </tbody>
+        <tbody>
+          {cabecalhoSecao('sec-estimado', SECOES_RECEBER.estimado, SECOES_RECEBER.estimadoAjuda)}
+          {temEstimado ? estimado.flatMap(linhasDoBlocoNaGrade) : (
+            <tr className="border-t border-[var(--border-faint)]">
+              <td className={`${COL1} text-[var(--fg-3)]`}>{SECOES_RECEBER.nenhumEstimado}</td>
+              <td colSpan={nCols} />
+            </tr>
+          )}
+          {temEstimado && linhaTotal('sub-est', SECOES_RECEBER.subtotalEstimado, grade.estimadoPorSemana, grade.estimadoTotal,
+            'border-t border-[var(--border)] font-semibold text-[var(--fg)]')}
+        </tbody>
+        <tbody>
           <tr className="border-t-2 border-[var(--border)] font-semibold text-[var(--fg)]">
-            <td className={COL1}>{ROTULOS_TOTAL.totalDaSemana}</td>
+            <td className={COL1}>{temEstimado ? SECOES_RECEBER.totalGeral : ROTULOS_TOTAL.totalDaSemana}</td>
             {grade.totalPorSemana.map((v, i) => <td key={i} className={TD_NUM}><Numero v={v} bruto={grade.brutoPorSemana[i]} /></td>)}
             <td className={`${TD_NUM} border-l border-[var(--border)]`}><Numero v={grade.total} bruto={grade.brutoTotal} /></td>
           </tr>
@@ -142,6 +228,24 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar }: {
             <td className={`${TD_NUM} border-l border-[var(--border)]`} />
           </tr>
         </tbody>
+        {info && (
+          <tbody>
+            {cabecalhoSecao('sec-info', SECOES_RECEBER.informativo, SECOES_RECEBER.informativoAjuda)}
+            <tr className="border-t border-[var(--border-faint)] text-[var(--fg-2)]">
+              <td className={`${COL1} pl-5`}>{rotuloBloco(BLOCO_INFORMATIVO)}</td>
+              {info.porSemana.map((v, i) => (
+                <td key={i} className={TD_NUM}>
+                  <Numero v={v} onClick={() => onSelecionar({ bloco: BLOCO_INFORMATIVO, grupo: info.grupo, semana: i })}
+                    ativo={eAtiva(BLOCO_INFORMATIVO, info.grupo, i)} />
+                </td>
+              ))}
+              <td className={`${TD_NUM} border-l border-[var(--border)]`}>
+                <Numero v={info.total} onClick={() => onSelecionar({ bloco: BLOCO_INFORMATIVO, grupo: info.grupo, semana: null })}
+                  ativo={eAtiva(BLOCO_INFORMATIVO, info.grupo, null)} />
+              </td>
+            </tr>
+          </tbody>
+        )}
       </table>
     </div>
   );
@@ -164,12 +268,16 @@ export function ComposicaoCelula({ linhas, pagasPorRef, celula, semana, onFechar
         <span className="tabular font-semibold text-[var(--fg)]">
           {comPerda ? GRADE_RECEBER.resumoComPerda(fmtBRLc(bruto), fmtBRLc(total)) : fmtBRLc(total)}
         </span>
+        {celula.bloco === BLOCO_INFORMATIVO && <span className="text-[var(--fg-3)]">{GRADE_RECEBER.foraDaSoma}</span>}
         <button type="button" onClick={onFechar} className="ml-auto rounded-[var(--r-sm)] border border-[var(--border)] px-2 py-0.5 text-[var(--fg-2)] hover:bg-[var(--surface-3)]">
           {GRADE_RECEBER.fechar}
         </button>
       </div>
       <div className="overflow-x-auto">
-        {celula.bloco === 1 ? <VendasDoDia itens={itens} /> : <CobrancasDaCelula itens={itens} comPerda={comPerda} pagasPorRef={pagasPorRef} />}
+        {celula.bloco === 1 ? <VendasDoDia itens={itens} />
+          : celula.bloco === 3 || celula.bloco === 4 ? <VendasProjetadas itens={itens} />
+            : celula.bloco === 6 ? <ReservaDaCelula itens={itens} />
+              : <CobrancasDaCelula itens={itens} comPerda={comPerda} pagasPorRef={pagasPorRef} />}
       </div>
     </section>
   );
@@ -210,6 +318,83 @@ function VendasDoDia({ itens }: { itens: LinhaReceber[] }) {
             </tr>
           )),
         ])}
+      </tbody>
+    </table>
+  );
+}
+
+/** Blocos 3 e 4 (estimado): cada data de caixa com a parte, a base do valor e as vendas projetadas que caem nela, com a
+ * base de cada venda (mediana, definido por, curva). A linha do retido não repete a lista (é a mesma venda). */
+function VendasProjetadas({ itens }: { itens: LinhaReceber[] }) {
+  return (
+    <table className="w-full border-collapse text-xs">
+      <thead>
+        <tr className="text-left">
+          <th className={TH}>{GRADE_RECEBER.caiNoCaixa}</th><th className={TH}>{GRADE_RECEBER.parte}</th>
+          <th className={TH}>{GRADE_RECEBER.vendasDe}</th><th className={TH}>{GRADE_RECEBER.deOndeVeio}</th>
+          <th className={`${TH} text-right`}>{GRADE_RECEBER.valor}</th><th className={TH}>{GRADE_RECEBER.tratamento}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {itens.map((l, i) => [
+          <tr key={`p${i}`} className="border-t border-[var(--border)] text-[var(--fg)]">
+            <td className="px-2 py-1 tabular">{fmtData(l.data_caixa)}</td>
+            <td className="px-2 py-1">{rotuloComponente(l.componente)}</td>
+            <td className="px-2 py-1 tabular">{fmtData(l.origem_dia)}</td>
+            <td className="px-2 py-1 text-[var(--fg-2)]">{l.rotulo ?? '—'}</td>
+            <td className={`${TD_NUM} font-semibold`}>{fmtBRLc(l.valor)}</td>
+            <td className="px-2 py-1 text-[var(--fg-2)]">{l.tratamento ?? '—'}</td>
+          </tr>,
+          ...(l.projecao.length ? [
+            <tr key={`p${i}d`}>
+              <td className="px-2 pb-1 pl-5 text-[11px] text-[var(--fg-3)]" colSpan={6}>
+                <span>{GRADE_RECEBER.vendasProjetadas(l.projecao.length)}</span>
+                <table className="mt-0.5 border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="pr-3 text-left font-normal">{GRADE_RECEBER.vendasDe}</th>
+                      <th className="pr-3 text-right font-normal">{GRADE_RECEBER.vendaDoDia}</th>
+                      <th className="text-left font-normal">{GRADE_RECEBER.deOndeVeio}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[var(--fg-2)]">
+                    {l.projecao.map((v, j) => (
+                      <tr key={`${v.dia}-${j}`}>
+                        <td className="pr-3 tabular">{fmtData(v.dia)}</td>
+                        <td className="pr-3 text-right tabular">{fmtBRLc(v.valor_venda)}</td>
+                        <td>{v.base ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </td>
+            </tr>,
+          ] : []),
+        ])}
+      </tbody>
+    </table>
+  );
+}
+
+/** Bloco 6: a reserva (negativa) por data de caixa, o percentual e de onde ele veio; a base em R$ vem no tratamento. */
+function ReservaDaCelula({ itens }: { itens: LinhaReceber[] }) {
+  return (
+    <table className="w-full border-collapse text-xs">
+      <thead>
+        <tr className="text-left">
+          <th className={TH}>{GRADE_RECEBER.caiNoCaixa}</th><th className={`${TH} text-right`}>{GRADE_RECEBER.valor}</th>
+          <th className={TH}>{GRADE_RECEBER.deOndeVeio}</th><th className={TH}>{GRADE_RECEBER.tratamento}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {itens.map((l, i) => (
+          <tr key={`r${i}`} className="border-t border-[var(--border-faint)] text-[var(--fg)]">
+            <td className="px-2 py-1 tabular">{fmtData(l.data_caixa)}</td>
+            <td className={`${TD_NUM} font-semibold`}>{fmtBRLc(l.valor)}</td>
+            <td className="px-2 py-1 text-[var(--fg-2)]">{l.rotulo ?? '—'}</td>
+            <td className="px-2 py-1 text-[var(--fg-2)]">{l.tratamento ?? '—'}</td>
+          </tr>
+        ))}
       </tbody>
     </table>
   );
@@ -298,6 +483,7 @@ const SUBABAS_LISTA: { k: SubAbaReceber; l: string }[] = [
   { k: 'semana', l: SUBABAS_RECEBER.semana },
   { k: 'recorrencias', l: SUBABAS_RECEBER.recorrencias },
   { k: 'informados', l: SUBABAS_RECEBER.informados },
+  { k: 'eventos', l: SUBABAS_RECEBER.eventos },
   { k: 'premissas', l: SUBABAS_RECEBER.premissas },
 ];
 
@@ -368,16 +554,29 @@ export interface PremissasEstado {
   feriados: FeriadoBancario[] | null;
   erroPremissas: string | null;
   erroFeriados: string | null;
+  /** fn_fin_receber_sugestoes (z67), 1 chamada ao abrir a sub-aba. Ausente (pai antigo/teste) = sem sugestões. */
+  sugestoes?: SugestaoPremissa[] | null;
+  erroSugestoes?: string | null;
+}
+
+/** Estado da sub-aba Eventos, guardado pelo pai (carga sob demanda: a lista ao abrir a sub-aba; os candidatos a
+ * referência, fn_fin_funis, só quando o formulário abre). */
+export interface EventosEstado {
+  eventos: EventoPlanejado[] | null;
+  erro: string | null;
+  candidatos: Funil[] | null;
+  erroCandidatos: string | null;
 }
 
 export function ContasAReceber({
   dados, repo, canEdit, canVerDoc, onInformadosAlterados, sub, onSubChange,
   cenario = 'base', onCenario, premissas, onTentarPremissas, onPremissaGravada, onFeriadoGravado,
+  eventos, onTentarEventos, onPedirCandidatos, onEventoAlterado,
 }: {
   /** Carga do cenário ativo. NULL = o cenário ainda está carregando (a grade e Recorrências esperam; o resto não). */
   dados: ContasReceberCarregado | null;
   /** Recebimentos informados (bloco 5) e premissas. Sem repo, as sub-abas de escrita ficam vazias (teste de render). */
-  repo?: RepoInformados & Partial<RepoPremissas>;
+  repo?: RepoInformados & Partial<RepoPremissas> & Partial<RepoEventos>;
   canEdit?: boolean;
   canVerDoc?: boolean;
   onInformadosAlterados?: () => void;
@@ -392,6 +591,12 @@ export function ContasAReceber({
   onTentarPremissas?: () => void;
   onPremissaGravada?: () => void;
   onFeriadoGravado?: () => void;
+  eventos?: EventosEstado;
+  onTentarEventos?: () => void;
+  /** O formulário de evento abriu: o pai busca os candidatos a referência (1×). */
+  onPedirCandidatos?: () => void;
+  /** Evento gravado ou arquivado: o pai rebusca a lista e a grade. */
+  onEventoAlterado?: () => void;
 }) {
   const [celula, setCelula] = useState<Celula | null>(null);
   const [subLocal, setSubLocal] = useState<SubAbaReceber>('semana');
@@ -401,6 +606,9 @@ export function ContasAReceber({
   const semana = celula?.semana == null || !grade ? null : grade.semanas[celula.semana] ?? null;
   const repoPremissas: RepoPremissas | undefined = repo?.salvarPremissaReceber && repo.salvarFeriado
     ? { salvarPremissaReceber: repo.salvarPremissaReceber.bind(repo), salvarFeriado: repo.salvarFeriado.bind(repo) }
+    : undefined;
+  const repoEventos: RepoEventos | undefined = repo?.salvarEventoPlanejado && repo.arquivarEventoPlanejado
+    ? { salvarEventoPlanejado: repo.salvarEventoPlanejado.bind(repo), arquivarEventoPlanejado: repo.arquivarEventoPlanejado.bind(repo) }
     : undefined;
 
   return (
@@ -430,6 +638,11 @@ export function ContasAReceber({
           {grade && grade.foraDoPeriodo.linhas > 0 && (
             <p className="text-xs text-[var(--fg-3)]">{GRADE_RECEBER.foraDoPeriodo(grade.foraDoPeriodo.linhas, fmtBRLc(grade.foraDoPeriodo.valor))}</p>
           )}
+          {grade && grade.informativo && grade.informativo.foraDoPeriodo.linhas > 0 && (
+            <p className="text-xs text-[var(--fg-3)]">
+              {SECOES_RECEBER.informativoForaDoPeriodo(grade.informativo.foraDoPeriodo.linhas, fmtBRLc(grade.informativo.foraDoPeriodo.valor))}
+            </p>
+          )}
           {dados && celula && <ComposicaoCelula linhas={dados.linhas} pagasPorRef={dados.pagasPorRef} celula={celula} semana={semana} onFechar={() => setCelula(null)} />}
         </div>
       )}
@@ -448,10 +661,19 @@ export function ContasAReceber({
         </div>
       )}
 
+      {subAtiva === 'eventos' && (
+        <div id="receber-painel-eventos" role="tabpanel" aria-labelledby="receber-tab-eventos">
+          <Eventos eventos={eventos?.eventos ?? null} erro={eventos?.erro ?? null} candidatos={eventos?.candidatos ?? null}
+            erroCandidatos={eventos?.erroCandidatos ?? null} canEdit={!!canEdit} hojeISO={dados?.hojeISO ?? hojeSaoPaulo()}
+            repo={repoEventos} onTentarDeNovo={onTentarEventos} onPedirCandidatos={onPedirCandidatos} onAlterado={onEventoAlterado} />
+        </div>
+      )}
+
       {subAtiva === 'premissas' && (
         <div id="receber-painel-premissas" role="tabpanel" aria-labelledby="receber-tab-premissas">
           <Premissas premissas={premissas?.premissas ?? null} feriados={premissas?.feriados ?? null}
             erroPremissas={premissas?.erroPremissas ?? null} erroFeriados={premissas?.erroFeriados ?? null}
+            sugestoes={premissas?.sugestoes} erroSugestoes={premissas?.erroSugestoes ?? null}
             canEdit={!!canEdit} hojeISO={dados?.hojeISO ?? hojeSaoPaulo()} repo={repoPremissas}
             onTentarDeNovo={onTentarPremissas} onPremissaGravada={onPremissaGravada} onFeriadoGravado={onFeriadoGravado} />
         </div>

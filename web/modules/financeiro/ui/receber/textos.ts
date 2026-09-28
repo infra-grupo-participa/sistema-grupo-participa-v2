@@ -15,9 +15,9 @@ export const CABECALHO_RECEBER = {
   subtitulo: 'Quanto dinheiro entra no caixa, semana a semana.',
 } as const;
 
-/** Legenda de escopo — fixa acima dos blocos, para não confundir com projeção de vendas novas. */
+/** Legenda de escopo — fixa acima dos blocos: o que é certo, o que é estimado e o que fica fora da soma. */
 export const ESCOPO_RECEBER = {
-  legenda: 'Só dinheiro já vendido, contratado ou informado pelo financeiro (renovações negociadas fora, cadastradas em Recebimentos informados). Projeção de vendas novas e eventos entra em outra etapa.',
+  legenda: 'Certo: dinheiro já vendido, contratado ou informado pelo financeiro. Estimado: vendas novas, eventos planejados e reserva de reembolso, calculados por premissa (a projeção liga e desliga em Premissas). Acordos combinados no board aparecem como informativo, fora da soma.',
 } as const;
 
 /** Nomes dos blocos da tela. */
@@ -25,6 +25,26 @@ export const BLOCOS_RECEBER = {
   vendasRealizadas: 'Vendas já realizadas',
   assinaturasEParcelasFuturas: 'Assinaturas e parcelas futuras',
   recebimentosInformados: 'Recebimentos informados',
+  vendasNovas: 'Vendas novas',
+  eventosPlanejados: 'Eventos planejados',
+  reserva: 'Reserva de reembolso e chargeback',
+  informativoBoard: 'Acordos combinados no board',
+} as const;
+
+/** Seções da grade: certo × estimado, e a faixa informativa abaixo dos totais. */
+export const SECOES_RECEBER = {
+  certo: 'Certo',
+  certoAjuda: 'vendido, contratado ou informado',
+  estimado: 'Estimado',
+  estimadoAjuda: 'calculado por premissa',
+  subtotalCerto: 'Subtotal certo',
+  subtotalEstimado: 'Subtotal estimado',
+  totalGeral: 'Total da semana (certo + estimado)',
+  nenhumEstimado: 'Nenhum valor estimado nesta previsão. A projeção liga e desliga em Premissas.',
+  informativo: 'Informativo — fora da soma',
+  informativoAjuda: 'somar contaria duas vezes com a venda nova',
+  semBase: 'sem base medida',
+  informativoForaDoPeriodo: (n: number, v: string) => `${n} acordo(s) do board fora do período da grade (${v}), também fora da soma.`,
 } as const;
 
 /** Nomes dos grupos dentro do bloco 2 (recorrências e parcelas a vencer). */
@@ -48,6 +68,7 @@ export const SUBABAS_RECEBER = {
   semana: 'Semana a semana',
   recorrencias: 'Recorrências',
   informados: 'Recebimentos informados',
+  eventos: 'Eventos',
   premissas: 'Premissas',
 } as const;
 
@@ -84,15 +105,23 @@ export const GRADE_RECEBER = {
   pagaEm: 'Paga em',
   liquidoPago: 'Líquido pago',
   carregandoCenario: 'Carregando o cenário…',
+  /** Composição dos blocos 3 e 4: de onde veio cada venda projetada. */
+  deOndeVeio: 'De onde veio',
+  vendaDoDia: 'Venda do dia',
+  vendasProjetadas: (n: number) => `${n} dia(s) de venda projetada`,
+  percentual: 'Percentual',
+  foraDaSoma: 'fora da soma',
 } as const;
 
-/** Seletor de cenário da grade. O cenário muda só premissas que aceitam cenário (hoje: a perda mensal). */
+/** Seletor de cenário da grade. Conferido contra o banco (z66/z67): o cenário escolhe o tamanho do evento planejado e,
+ * quando há valor próprio do cenário em Premissas, a venda nova, a reserva e a perda mensal. A perda mensal mexe no
+ * esperado do CERTO (assinaturas, parcelas, informados) — por isso a legenda não diz "só o estimado". */
 export const CENARIO_RECEBER = {
   rotulo: 'Cenário',
   base: 'Base',
   conservador: 'Conservador',
   otimista: 'Otimista',
-  legenda: 'O cenário muda só a perda mensal de assinaturas, parcelas e informados (Premissas). Sem valor próprio gravado, conservador e otimista usam o da base.',
+  legenda: 'O cenário muda o estimado: o tamanho do evento planejado e, se gravadas em Premissas para o cenário, a venda nova e a reserva. No certo, muda só a perda mensal que tiver valor próprio do cenário. Sem valor próprio gravado, conservador e otimista usam o da base.',
 } as const;
 
 /** Recorrências (antes PROVISORIO em Recorrencias.tsx). */
@@ -143,6 +172,23 @@ export const PREMISSAS_RECEBER = {
   ligado: 'Ligado',
   desligado: 'Desligado',
   sistema: 'carga inicial',
+  /** Sugestão medida (z67, fn_fin_receber_sugestoes). */
+  sugestaoMedida: (v: string, base: string) => `Sugestão medida: ${v} (base: ${base})`,
+  sugestaoSemBase: (base: string) => `Sugestão medida: sem base medida (${base})`,
+  valeSugestao: (v: string) => `vale a sugestão medida (${v})`,
+  semBaseMedida: 'sem vigência gravada e sem base medida',
+  usarSugestao: 'Usar sugestão',
+  usarSugestaoRotulo: (rotulo: string, cenario: string, v: string) => `Usar sugestão: ${rotulo} (${cenario}) = ${v}, a partir de hoje`,
+  gravouSugestao: 'Sugestão gravada como vigência de hoje. A previsão foi recarregada.',
+  erroSugestoes: 'Sugestões medidas indisponíveis agora.',
+  carregandoSugestoes: 'Carregando sugestões medidas…',
+  /** Liga/desliga da projeção (projecao_no_receber). */
+  projecaoTitulo: 'Projeção na previsão',
+  projecaoLigada: 'Ligada: vendas novas, eventos planejados, reserva de reembolso e o informativo dos acordos do board entram na Semana a semana (seção Estimado e faixa Informativo).',
+  projecaoDesligada: 'Desligada: a Semana a semana mostra só o certo (vendas já realizadas, assinaturas e parcelas, recebimentos informados).',
+  ligarProjecao: 'Ligar a projeção a partir de hoje',
+  desligarProjecao: 'Desligar a projeção a partir de hoje',
+  projecaoGravada: (ligada: boolean) => `Projeção ${ligada ? 'ligada' : 'desligada'} a partir de hoje. A previsão foi recarregada.`,
 } as const;
 
 /** Seção "Feriados bancários" dentro de Premissas. */
@@ -170,11 +216,75 @@ export const FERIADOS_RECEBER = {
   desligou: 'Feriado desligado. A previsão foi recarregada.',
 } as const;
 
+/** Sub-aba Eventos (#receber?ver=eventos, z67): evento planejado do bloco 4. */
+export const EVENTOS_RECEBER = {
+  titulo: 'Eventos planejados',
+  explicacao: 'Venda do evento = tamanho × a venda de cada dia do evento de referência, a partir da abertura. Só os dias depois de hoje entram na previsão; o efeito rebote depois do evento não é somado. Nada é apagado: arquive.',
+  carregando: 'Carregando eventos planejados…',
+  erroCarregamento: 'Não foi possível carregar os eventos planejados.',
+  tentarDeNovo: 'Tentar de novo',
+  vazio: 'Nenhum evento planejado nesta situação.',
+  somenteLeitura: 'Somente leitura: cadastrar e arquivar exige permissão de operar o financeiro.',
+  novo: 'Novo evento planejado',
+  filtro: 'Situação',
+  todosSemArquivados: 'Todos (sem arquivados)',
+  situacao: { ativo: 'Ativo', encerrado: 'Encerrado', arquivado: 'Arquivado' } as Record<string, string>,
+  evento: 'Evento',
+  vendas: 'Vendas',
+  referencia: 'Referência',
+  tamanho: 'Tamanho',
+  tamanhoAjuda: 'Tamanho em vezes a referência: 1 = igual; 1,3 = 30% maior.',
+  totalEsperado: 'Venda esperada',
+  totalEsperadoAjuda: 'Tamanho × líquido total da referência. É venda, não caixa.',
+  pausa: 'Pausa HM avulso',
+  sim: 'Sim',
+  nao: 'Não',
+  quem: 'Quem mudou',
+  acoes: 'Ações',
+  editar: 'Editar',
+  arquivar: 'Arquivar',
+  verCurva: 'Ver curva',
+  ocultarCurva: 'Ocultar curva',
+  semVendaRef: 'referência sem venda medida',
+  cenarios: (c: string, b: string, o: string) => `cons. ${c} · base ${b} · ot. ${o}`,
+  tituloNovo: 'Novo evento planejado',
+  tituloEditar: 'Editar evento planejado',
+  nome: 'Nome',
+  abertura: 'Abertura (dia 0 da curva)',
+  eventoRef: 'Evento de referência',
+  eventoRefAjuda: 'Só eventos da educação, com as vendas encerradas e até 31 dias de venda.',
+  carregandoRef: 'Carregando eventos de referência…',
+  erroRef: 'Não foi possível carregar os eventos de referência.',
+  selecione: 'Selecione',
+  conservador: 'Conservador',
+  base: 'Base',
+  otimista: 'Otimista',
+  pausaAvulso: 'Pausar o HM avulso nas semanas do evento',
+  pausaAvulsoAjuda: 'Zera a venda nova do HM avulso nas semanas (segunda a domingo) tocadas pelo evento, para não contar duas vezes.',
+  observacao: 'Observação',
+  salvar: 'Gravar evento',
+  salvando: 'Gravando…',
+  cancelar: 'Cancelar',
+  gravou: 'Evento gravado. A previsão foi recarregada.',
+  motivo: 'Motivo (3 a 500 caracteres)',
+  confirmarArquivar: 'Confirmar arquivamento',
+  arquivou: 'Evento arquivado. A previsão foi recarregada.',
+  arquivadoPor: (quem: string, motivo: string) => `Arquivado por ${quem}: ${motivo}`,
+  curvaTitulo: (ref: string) => `Curva de ${ref}`,
+  dia: 'Dia',
+  diaPlanejado: 'No evento planejado',
+  participacao: 'Participação',
+  liquidoRef: 'Líquido da referência',
+  vendaBase: 'Venda esperada (base)',
+  curvaVazia: 'A referência não tem venda por dia no espelho.',
+} as const;
+
 /** Componentes do bloco 1 (vendas já realizadas): a divisão antecipação/retido. "Garantia" tinha três sentidos
  * diferentes no sistema (Conflito 2 do catálogo) — o rótulo agora diz o que a linha é: 10% retido, volta em D+30. */
 export const COMPONENTES_VENDA = {
   antecipacao: 'Antecipação (D+2)',
   garantia: 'Retido 10% (volta em D+30)',
+  reserva: 'Reserva (negativa)',
 } as const;
 
 /**
