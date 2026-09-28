@@ -84,14 +84,63 @@ export function aplicarNivel(r: RascunhoRelatorio, nivel: NivelPii): RelatorioNi
   else if (nivel === 'sem_dado_pessoal') secoes = r.secoes.map(semDadoPessoal);
   else secoes = r.secoes.filter((s) => s.tipo === 'resumo');
 
-  const recorte = r.recorte.map((i) =>
-    i.pii && nivel !== 'completo' ? `${i.rotulo}: termo omitido` : `${i.rotulo}: ${i.valor}`);
-
-  return { ...r, nivel, recorte, secoes };
+  return { ...r, nivel, recorte: recorteEmTexto(r, nivel === 'completo'), secoes };
 }
 
-/** Linhas de detalhe do rascunho (o tamanho da lista da tela) — vai para a emissão. */
-export function contarLinhasDetalhe(r: RascunhoRelatorio): number {
+function recorteEmTexto(r: RascunhoRelatorio, comBusca: boolean): string[] {
+  return r.recorte.map((i) => (i.pii && !comBusca ? `${i.rotulo}: termo omitido` : `${i.rotulo}: ${i.valor}`));
+}
+
+/**
+ * Acima deste número de linhas na lista o PDF sai SÓ COM TOTAIS (decisão do Marcio, 28/09):
+ * a Pessoas do HM com 9.228 linhas deu 924 folhas e 83 s no Chrome. A lista completa fica
+ * na planilha do relatório. Constante única: a tela avisa e o documento corta pelo mesmo número.
+ */
+export const LINHAS_MAX_NO_PDF = 2000;
+
+/** true = neste nível o PDF sairia com mais linhas do que LINHAS_MAX_NO_PDF. */
+export function excedeLimiteDoPdf(linhasDaLista: number, nivel: NivelPii): boolean {
+  return nivel !== 'so_numeros' && linhasDaLista > LINHAS_MAX_NO_PDF;
+}
+
+export function textoAvisoSoTotais(linhasDaLista: number, temPlanilha: boolean): string {
+  const n = linhasDaLista.toLocaleString('pt-BR');
+  return temPlanilha
+    ? `Lista completa com ${n} linhas disponível na exportação em planilha deste relatório.`
+    : `Lista completa com ${n} linhas disponível na tela deste relatório.`;
+}
+
+/** O que vai para o PDF e para a emissão. */
+export interface PreparoPdf {
+  documento: RelatorioNivelado;
+  /** Tamanho da lista da tela (linhas de detalhe do rascunho). */
+  linhasDaLista: number;
+  /** Linhas de detalhe que o PDF de fato imprime (0 quando só totais ou só números). */
+  linhasImpressas: number;
+}
+
+/**
+ * aplicarNivel + limite de linhas. Lista acima de LINHAS_MAX_NO_PDF (fora do nível só
+ * números): saem as seções de detalhe — ficam cabeçalho, KPIs e resumo, o mesmo conteúdo
+ * do nível so_numeros, com a busca livre omitida — e entra o aviso no corpo.
+ */
+export function prepararParaPdf(r: RascunhoRelatorio, nivel: NivelPii): PreparoPdf {
+  const nivelado = aplicarNivel(r, nivel); // lança se o relatório não aceita o nível
+  const linhasDaLista = contarLinhasDetalhe(r);
+  if (!excedeLimiteDoPdf(linhasDaLista, nivel)) {
+    return { documento: nivelado, linhasDaLista, linhasImpressas: contarLinhasDetalhe(nivelado) };
+  }
+  const documento: RelatorioNivelado = {
+    ...nivelado,
+    secoes: nivelado.secoes.filter((s) => s.tipo === 'resumo'),
+    recorte: recorteEmTexto(r, false),
+    avisoSoTotais: textoAvisoSoTotais(linhasDaLista, !!r.temPlanilha),
+  };
+  return { documento, linhasDaLista, linhasImpressas: 0 };
+}
+
+/** Linhas das seções de detalhe (no rascunho = tamanho da lista da tela). */
+export function contarLinhasDetalhe(r: Pick<RascunhoRelatorio, 'secoes'>): number {
   return r.secoes.filter((s) => s.tipo === 'detalhe').reduce((n, s) => n + s.linhas.length, 0);
 }
 

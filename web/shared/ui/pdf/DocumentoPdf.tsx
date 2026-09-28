@@ -71,6 +71,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', fontSize: M.rodape, color: COR_PDF.textoDiscreto,
   },
   kpis: { flexDirection: 'row', marginBottom: 14 },
+  aviso: { fontSize: M.corpo + 1, color: COR_PDF.textoSecundario, marginBottom: 14 },
   kpi: { marginRight: 36 },
   kpiRotulo: { fontSize: M.rotulo, color: COR_PDF.textoSecundario, textTransform: 'uppercase', letterSpacing: 0.4 },
   kpiValor: { fontSize: M.kpiValor, fontWeight: 600, marginTop: 3 },
@@ -159,6 +160,7 @@ function palavrasDoDocumento(folhas: BlocoPagina[][], fixas: string[]): number {
     n += porFolha;
     for (const b of blocos) {
       if (b.tipo === 'kpis') { n += b.kpis.reduce((m, k) => m + contar(k.rotulo) + contar(k.valor), 0); continue; }
+      if (b.tipo === 'aviso') { n += contar(b.texto); continue; }
       n += contar(b.secao.titulo) + b.secao.colunas.reduce((m, c) => m + contar(c.rotulo), 0);
       for (const { linha } of b.linhas) n += b.secao.colunas.reduce((m, c) => m + contar(linha.celulas[c.chave] || '—'), 0);
     }
@@ -174,8 +176,10 @@ export function DocumentoPdf({ doc, recursos, sinais }: {
   if (!doc.protocolo) throw new Error('Documento sem protocolo: o PDF não é gerado.');
   registrarFontesPdf(recursos.base);
   const { data, hora } = dataHoraSaoPaulo(doc.emitidoEm);
-  const folhas = paginar(doc.kpis, doc.secoes);
-  const recorte = [...doc.recorte, INDICADOR_NIVEL[doc.nivel]].join('  ·  ');
+  const folhas = paginar(doc.kpis, doc.secoes, undefined, doc.avisoSoTotais);
+  // Só totais (lista acima do limite): o papel não tem lista de pessoas, seja qual for o nível pedido.
+  const indicador = doc.avisoSoTotais ? INDICADOR_NIVEL.so_numeros : INDICADOR_NIVEL[doc.nivel];
+  const recorte = [...doc.recorte, indicador].join('  ·  ');
   sinais?.aoPaginar(folhas.length, palavrasDoDocumento(folhas, [
     `Gerado em ${data} ${hora}`, doc.titulo, recorte, `Emitido pelo Sistema Grupo Participa em ${data} às ${hora} Protocolo ${doc.protocolo}`,
   ]));
@@ -194,7 +198,9 @@ export function DocumentoPdf({ doc, recursos, sinais }: {
             <View style={s.fioMarca} />
           </View>
 
-          {blocos.map((b, j) => (b.tipo === 'kpis' ? <Kpis key={j} kpis={b.kpis} /> : <Tabela key={j} bloco={b} />))}
+          {blocos.map((b, j) => (b.tipo === 'kpis' ? <Kpis key={j} kpis={b.kpis} />
+            : b.tipo === 'aviso' ? <Text key={j} style={s.aviso}>{b.texto}</Text>
+              : <Tabela key={j} bloco={b} />))}
 
           <View style={s.rodape} fixed>
             <Text>Emitido pelo Sistema Grupo Participa em {data} às {hora}  ·  Protocolo {doc.protocolo}</Text>

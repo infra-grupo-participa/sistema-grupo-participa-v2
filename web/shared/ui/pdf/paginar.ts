@@ -29,6 +29,8 @@ import { ALTURA_UTIL_PDF, LARGURA_UTIL_PDF, MEDIDA_PDF } from './tema-pdf';
 
 const ALTURA_TITULO_SECAO = 24;
 const ALTURA_KPIS = 46;
+/** Aviso "lista completa na planilha" (uma linha, ver prepararParaPdf em nivel.ts). */
+const ALTURA_AVISO = 18;
 const ALTURA_VAZIO = 20;
 const ESPACO_ENTRE_SECOES = 14;
 /** Tabela de resumo (poucas colunas) não se estica na folha inteira: fica legível. */
@@ -55,6 +57,7 @@ export type PesoFonte = 400 | 600;
 
 export type BlocoPagina =
   | { tipo: 'kpis'; kpis: KpiPdf[] }
+  | { tipo: 'aviso'; texto: string }
   | { tipo: 'secao'; secao: SecaoPdf; continuacao: boolean; linhas: { linha: LinhaPdf; indice: number }[]; comTotal: boolean };
 
 type SecaoMedida = Pick<SecaoPdf, 'tipo' | 'colunas' | 'linhas' | 'total'>;
@@ -291,7 +294,9 @@ export function alturaLinha(celulas: Record<string, string>, secao: SecaoMedida,
 }
 
 /** Distribui KPIs e seções em folhas. Cabeçalho da tabela se repete em cada folha. */
-export function paginar(kpis: KpiPdf[] | undefined, secoes: SecaoPdf[], alturaUtil: number = ALTURA_UTIL_PDF): BlocoPagina[][] {
+export function paginar(
+  kpis: KpiPdf[] | undefined, secoes: SecaoPdf[], alturaUtil: number = ALTURA_UTIL_PDF, aviso?: string,
+): BlocoPagina[][] {
   const paginas: BlocoPagina[][] = [];
   let atual: BlocoPagina[] = [];
   let usado = 0;
@@ -304,6 +309,10 @@ export function paginar(kpis: KpiPdf[] | undefined, secoes: SecaoPdf[], alturaUt
   if (kpis?.length) {
     atual.push({ tipo: 'kpis', kpis });
     usado += ALTURA_KPIS + ESPACO_ENTRE_SECOES;
+  }
+  if (aviso) {
+    atual.push({ tipo: 'aviso', texto: aviso });
+    usado += ALTURA_AVISO + ESPACO_ENTRE_SECOES;
   }
 
   for (const secao of secoes) {

@@ -193,7 +193,15 @@ function ConferirProtocolo({ repo }: { repo: FinanceiroRepository }) {
             <div><dt className="text-[var(--fg-3)]">Nível</dt><dd className="text-[var(--fg)]">{rotuloNivel(resultado.nivel)}</dd></div>
             <div><dt className="text-[var(--fg-3)]">Emitido por</dt><dd className="text-[var(--fg)]">{resultado.gerado_por_nome}</dd></div>
             <div><dt className="text-[var(--fg-3)]">Emitido em</dt><dd className="text-[var(--fg)]">{quandoEmitido(resultado.emitido_em)}</dd></div>
-            <div><dt className="text-[var(--fg-3)]">Linhas</dt><dd className="text-[var(--fg)]">{resultado.linhas.toLocaleString('pt-BR')}</dd></div>
+            {/* Emissões desde 28/09 gravam linhas_da_lista e `linhas` = linhas impressas (lista acima de 2.000 = só totais). */}
+            {typeof resultado.recorte?.linhas_da_lista === 'number' ? (
+              <>
+                <div><dt className="text-[var(--fg-3)]">Linhas no PDF</dt><dd className="text-[var(--fg)]">{resultado.linhas.toLocaleString('pt-BR')}</dd></div>
+                <div><dt className="text-[var(--fg-3)]">Linhas da lista</dt><dd className="text-[var(--fg)]">{resultado.recorte.linhas_da_lista.toLocaleString('pt-BR')}</dd></div>
+              </>
+            ) : (
+              <div><dt className="text-[var(--fg-3)]">Linhas</dt><dd className="text-[var(--fg)]">{resultado.linhas.toLocaleString('pt-BR')}</dd></div>
+            )}
             {resultado.selado_em && (
               <div><dt className="text-[var(--fg-3)]">Selado em</dt><dd className="text-[var(--fg)]">{quandoEmitido(resultado.selado_em)}</dd></div>
             )}

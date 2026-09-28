@@ -7,12 +7,15 @@
 // Nenhuma lib de PDF é importada aqui: gerar-pdf.ts carrega @react-pdf no clique, num
 // Web Worker. Enquanto desenha, a linha ao lado do botão mostra a etapa e a folha
 // ("Montando folha 120 de 660 · 34 s") — a tela segue respondendo.
+//
+// Lista acima de LINHAS_MAX_NO_PDF: o 1º clique só avisa ("Esta lista tem N linhas…") e o
+// botão vira "Gerar PDF com os totais"; o 2º clique gera. Sem modal: uma linha de texto.
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import type { NivelPii, RascunhoRelatorio } from './modelo';
 import { ROTULO_NIVEL } from './modelo';
-import { NIVEIS_PII } from './nivel';
+import { NIVEIS_PII, contarLinhasDetalhe, excedeLimiteDoPdf } from './nivel';
 import type { ChamadasProtocolo, ProgressoPdf } from './gerar-pdf';
 
 export function textoProgresso(p: ProgressoPdf): string {
@@ -43,6 +46,8 @@ export function BotaoExportarPdf({
   const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null);
   const [progresso, setProgresso] = useState<ProgressoPdf | null>(null);
   const [segundos, setSegundos] = useState(0);
+  /** Linhas da lista já avisadas acima do limite; o próximo clique com a mesma contagem gera. */
+  const [avisadas, setAvisadas] = useState<{ linhas: number; temPlanilha: boolean } | null>(null);
   const trava = useRef(false);
 
   // Relógio da geração: mostra que a tela está viva mesmo na etapa sem contagem de folha.
@@ -55,13 +60,21 @@ export function BotaoExportarPdf({
 
   const exportar = async () => {
     if (trava.current || !chamadas) return;
+    const rascunho = montar();
+    const linhas = contarLinhasDetalhe(rascunho);
+    if (excedeLimiteDoPdf(linhas, nivel) && avisadas?.linhas !== linhas) {
+      setAviso(null);
+      setAvisadas({ linhas, temPlanilha: !!rascunho.temPlanilha });
+      return;
+    }
+    setAvisadas(null);
     trava.current = true;
     setGerando(true);
     setSegundos(0);
     setAviso(null);
     try {
       const { gerarPdfComProtocolo } = await import('./gerar-pdf');
-      const { protocolo } = await gerarPdfComProtocolo(montar(), nivel, chamadas, setProgresso);
+      const { protocolo } = await gerarPdfComProtocolo(rascunho, nivel, chamadas, setProgresso);
       setAviso({ ok: true, texto: `PDF emitido · Protocolo ${protocolo}` });
     } catch (e) {
       setAviso({ ok: false, texto: e instanceof Error ? e.message : 'Não foi possível gerar o PDF.' });
@@ -77,7 +90,7 @@ export function BotaoExportarPdf({
       {oferecidos.length > 1 && (
         <select
           aria-label="Dados pessoais no PDF" value={nivel} disabled={gerando}
-          onChange={(e) => setNivel(e.target.value as NivelPii)}
+          onChange={(e) => { setNivel(e.target.value as NivelPii); setAvisadas(null); }}
           className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--fg-2)]"
         >
           {oferecidos.map((n) => <option key={n} value={n}>{ROTULO_NIVEL[n]}</option>)}
@@ -89,8 +102,14 @@ export function BotaoExportarPdf({
         aria-busy={gerando}
         title={!chamadas ? 'Protocolo de emissão ainda não ligado ao banco.' : undefined}
       >
-        <Icon name="file" size={14} /> {gerando ? 'Gerando PDF…' : 'Exportar PDF'}
+        <Icon name="file" size={14} /> {gerando ? 'Gerando PDF…' : avisadas ? 'Gerar PDF com os totais' : 'Exportar PDF'}
       </Button>
+      {avisadas && !gerando && (
+        <span role="status" className="text-xs text-[var(--fg-2)]">
+          Esta lista tem {avisadas.linhas.toLocaleString('pt-BR')} linhas. O PDF trará os totais; para a lista completa,
+          {avisadas.temPlanilha ? ' filtre ou use a planilha.' : ' filtre a lista.'}
+        </span>
+      )}
       {gerando && progresso && (
         <span className="text-xs tabular-nums text-[var(--fg-3)]">{textoProgresso(progresso)}{segundos ? ` · ${segundos} s` : ''}</span>
       )}

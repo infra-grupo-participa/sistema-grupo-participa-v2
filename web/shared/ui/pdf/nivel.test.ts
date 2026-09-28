@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { RascunhoRelatorio } from './modelo';
-import { aplicarNivel, contarLinhasDetalhe, mascararDocumento, niveisDoRelatorio } from './nivel';
+import {
+  LINHAS_MAX_NO_PDF, aplicarNivel, contarLinhasDetalhe, excedeLimiteDoPdf, mascararDocumento, niveisDoRelatorio, prepararParaPdf,
+} from './nivel';
 
 /** Modelo genérico com as 4 classes de coluna e uma seção de resumo. */
 function rascunho(over: Partial<RascunhoRelatorio> = {}): RascunhoRelatorio {
@@ -100,5 +102,59 @@ describe('aplicarNivel', () => {
 
   it('conta as linhas de detalhe (vai para a emissão)', () => {
     expect(contarLinhasDetalhe(rascunho())).toBe(2);
+  });
+});
+
+describe('prepararParaPdf: limite de linhas do PDF (LINHAS_MAX_NO_PDF)', () => {
+  const comLinhas = (n: number, over: Partial<RascunhoRelatorio> = {}) => {
+    const r = rascunho(over);
+    const base = r.secoes[1].linhas[0];
+    r.secoes[1].linhas = Array.from({ length: n }, () => ({ celulas: { ...base.celulas } }));
+    return r;
+  };
+
+  it('o limite é 2.000', () => expect(LINHAS_MAX_NO_PDF).toBe(2000));
+
+  for (const nivel of ['completo', 'sem_dado_pessoal'] as const) {
+    it(`${nivel} · 2.001 linhas: só cabeçalho, KPIs e resumo, com aviso; nada pessoal; 0 linhas impressas`, () => {
+      const p = prepararParaPdf(comLinhas(2001, { temPlanilha: true }), nivel);
+      expect(p.linhasDaLista).toBe(2001);
+      expect(p.linhasImpressas).toBe(0);
+      expect(p.documento.secoes.map((s) => s.tipo)).toEqual(['resumo']);
+      expect(p.documento.secoes).toEqual(aplicarNivel(comLinhas(2001), 'so_numeros').secoes); // o mesmo resumo do só números
+      expect(p.documento.kpis).toEqual([{ rotulo: 'Pessoas', valor: '2' }]);
+      expect(p.documento.avisoSoTotais).toBe('Lista completa com 2.001 linhas disponível na exportação em planilha deste relatório.');
+      expect(p.documento.nivel).toBe(nivel); // o protocolo registra o nível pedido
+      const tudo = JSON.stringify(p.documento);
+      for (const pii of ['Maria', 'maria@x.com', '99999', '8901']) expect(tudo).not.toContain(pii);
+      expect(p.documento.recorte).toEqual(['Família: HM', 'Busca: termo omitido']);
+    });
+
+    it(`${nivel} · 2.000 linhas: PDF completo, sem aviso`, () => {
+      const p = prepararParaPdf(comLinhas(2000), nivel);
+      expect(p.linhasImpressas).toBe(2000);
+      expect(p.documento.avisoSoTotais).toBeUndefined();
+      expect(p.documento.secoes.map((s) => s.tipo)).toEqual(['resumo', 'detalhe']);
+      expect(p.documento).toEqual(aplicarNivel(comLinhas(2000), nivel));
+    });
+  }
+
+  it('so_numeros: nunca imprime linha e não precisa de aviso, com qualquer tamanho de lista', () => {
+    const p = prepararParaPdf(comLinhas(9228), 'so_numeros');
+    expect(p).toMatchObject({ linhasDaLista: 9228, linhasImpressas: 0 });
+    expect(p.documento.avisoSoTotais).toBeUndefined();
+    expect(excedeLimiteDoPdf(9228, 'so_numeros')).toBe(false);
+  });
+
+  it('relatório sem planilha na tela: o aviso aponta para a tela, não para planilha que não existe', () => {
+    expect(prepararParaPdf(comLinhas(2001), 'completo').documento.avisoSoTotais)
+      .toBe('Lista completa com 2.001 linhas disponível na tela deste relatório.');
+  });
+
+  it('"Mesma pessoa?" (só nível completo) também respeita o limite', () => {
+    const r = comLinhas(2001, { tipo: 'identidade', niveisPermitidos: ['completo'] });
+    const p = prepararParaPdf(r, 'completo');
+    expect(p.linhasImpressas).toBe(0);
+    expect(p.documento.secoes.every((s) => s.tipo === 'resumo')).toBe(true);
   });
 });

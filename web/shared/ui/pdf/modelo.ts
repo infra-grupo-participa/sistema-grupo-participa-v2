@@ -74,6 +74,11 @@ export interface RascunhoRelatorio {
   secoes: SecaoPdf[];
   /** Base do nome do arquivo, sem data nem extensão. */
   arquivo: string;
+  /**
+   * A tela deste relatório tem exportação em planilha (Excel na Carteira, CSV nos outros).
+   * Lista acima de LINHAS_MAX_NO_PDF aponta para ela no aviso; sem planilha, aponta para a tela.
+   */
+  temPlanilha?: boolean;
 }
 
 /** Rascunho depois de aplicarNivel(): ainda sem protocolo. */
@@ -81,6 +86,11 @@ export interface RelatorioNivelado extends Omit<RascunhoRelatorio, 'recorte'> {
   nivel: NivelPii;
   /** Recorte já em texto final (busca livre omitida fora do nível completo). */
   recorte: string[];
+  /**
+   * Presente quando a lista passou de LINHAS_MAX_NO_PDF (nivel.ts): o documento saiu só
+   * com cabeçalho, KPIs e resumo, e este texto vai no corpo apontando onde está a lista.
+   */
+  avisoSoTotais?: string;
 }
 
 /** O que o PDF desenha. Protocolo e data de emissão vêm da emissão no banco — obrigatórios. */

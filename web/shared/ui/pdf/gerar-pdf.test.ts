@@ -284,3 +284,52 @@ describe('recorte gravado na emissão: termo de busca em lugar nenhum', () => {
     }
   });
 });
+
+// ─── Limite de linhas (LINHAS_MAX_NO_PDF): o que sai no papel e o que o protocolo grava ──
+// Espelho de fin.relatorio_recorte_valido (migration 20260928z50): objeto, ≤ 4 KB, sem estas chaves.
+const CHAVES_PROIBIDAS = ['busca', 'q', 'search', 'texto', 'termo', 'pesquisa', 'nome', 'email', 'cpf', 'documento', 'telefone'];
+// jsonb::text põe espaço depois de ':' e ','; margem de 2 bytes por caractere de pontuação cobre isso.
+const bytesJsonb = (o: unknown) => { const s = JSON.stringify(o); return Buffer.byteLength(s) + 2 * (s.match(/[:,]/g)?.length ?? 0); };
+
+describe('limite de linhas do PDF', () => {
+  const muitas = (n: number) => Array.from({ length: n }, (_, i) => ({ ...pessoa, pessoa_chave: `p${i}`, nome: `${TERMO} ${i}` }) as PessoaHotmart);
+
+  for (const nivel of ['completo', 'sem_dado_pessoal'] as NivelPii[]) {
+    it(`Pessoas com 2.001 linhas · ${nivel}: PDF só com totais e aviso; protocolo grava 0 linhas e linhas_da_lista 2.001`, async () => {
+      const docs: { secoes: { tipo: string }[]; avisoSoTotais?: string }[] = [];
+      const mod = await import('./DocumentoPdf');
+      const original = mod.DocumentoPdf;
+      vi.spyOn(mod, 'DocumentoPdf').mockImplementation((p) => { docs.push(p.doc); return original(p); });
+      const { chamadas, metas, selos } = stub();
+      const r = rascunhoPessoas(muitas(2001), recortePessoas({ familia: 'HM', filtro: null, de: '', ate: '', busca: TERMO }));
+
+      await gerarPdfComProtocolo(r, nivel, chamadas);
+      await esperarDownloads();
+
+      expect(metas[0].linhas).toBe(0);
+      expect(metas[0].recorte).toEqual({ filtros: ['Família: Holding Masters', 'Situação: Todas'], busca_aplicada: true, linhas_da_lista: 2001 });
+      expect(Object.keys(metas[0].recorte).filter((k) => CHAVES_PROIBIDAS.includes(k))).toEqual([]);
+      expect(bytesJsonb(metas[0].recorte)).toBeLessThanOrEqual(4096);
+      expect(bytesJsonb(metas[0].totais)).toBeLessThanOrEqual(8192);
+
+      expect(docs).toHaveLength(1);
+      expect(docs[0].secoes.map((s) => s.tipo)).toEqual(['resumo']);
+      expect(docs[0].avisoSoTotais).toBe('Lista completa com 2.001 linhas disponível na exportação em planilha deste relatório.');
+      expect(JSON.stringify(docs[0])).not.toMatch(/Mariana|Teixeira|mariana@/);
+      expect(selos[0].paginas).toBe(1); // cabeçalho + KPIs + aviso + resumo cabem numa folha
+      expect(baixados).toHaveLength(1);
+    }, 60_000);
+  }
+
+  it('Pessoas com 2.000 linhas · completo: emissão grava as 2.000 linhas impressas (PDF completo)', async () => {
+    const { chamadas, metas } = stub({ emitirLanca: true }); // só a emissão interessa aqui (desenhar 2.000 linhas leva ~14 s)
+    await expect(gerarPdfComProtocolo(rascunhoPessoas(muitas(2000), []), 'completo', chamadas)).rejects.toThrow();
+    expect(metas[0]).toMatchObject({ linhas: 2000, recorte: { linhas_da_lista: 2000 } });
+  });
+
+  it('só números: emissão grava 0 linhas impressas e o tamanho da lista', async () => {
+    const { chamadas, metas } = stub({ emitirLanca: true });
+    await expect(gerarPdfComProtocolo(rascunhoPessoas(muitas(30), []), 'so_numeros', chamadas)).rejects.toThrow();
+    expect(metas[0]).toMatchObject({ linhas: 0, recorte: { linhas_da_lista: 30 } });
+  });
+});

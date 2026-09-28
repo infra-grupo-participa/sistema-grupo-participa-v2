@@ -108,7 +108,7 @@ export function rascunhoCarteira(dataset: DatasetRelatorio, contas: ContaReceber
   };
 
   return {
-    tipo: 'board', titulo: 'Carteira do board', recorte, niveisPermitidos: NIVEIS_RELATORIO.board, arquivo: 'financeiro-carteira-board',
+    tipo: 'board', titulo: 'Carteira do board', recorte, niveisPermitidos: NIVEIS_RELATORIO.board, arquivo: 'financeiro-carteira-board', temPlanilha: true, // Excel (exportarXLSX) na Carteira
     kpis: [
       { rotulo: 'Contas', valor: contas.length.toLocaleString('pt-BR') },
       { rotulo: 'Valor esperado', valor: fmtBRL(t.esperado) },
@@ -213,7 +213,7 @@ export function rascunhoPessoas(lista: PessoaHotmart[], recorte: ItemRecorte[]):
   };
 
   return {
-    tipo: 'pessoas', titulo: 'Pessoas na Hotmart', recorte, niveisPermitidos: NIVEIS_RELATORIO.pessoas, arquivo: 'hotmart-pessoas',
+    tipo: 'pessoas', titulo: 'Pessoas na Hotmart', recorte, niveisPermitidos: NIVEIS_RELATORIO.pessoas, arquivo: 'hotmart-pessoas', temPlanilha: true, // CSV em HotmartPessoas
     kpis: [
       { rotulo: 'Pessoas', valor: lista.length.toLocaleString('pt-BR') },
       { rotulo: 'Pago (bruto)', valor: fmtBRL(totPago) },
@@ -373,7 +373,7 @@ export function rascunhoAcelera(lista: AceleraParaHM[], recorte: ItemRecorte[]):
   const totAcelera = soma(lista, (p) => n(p.acelera_pago));
   const totHm = soma(lista, (p) => n(p.hm_pago_depois));
   return {
-    tipo: 'acelera', titulo: 'Acelera → HM', recorte, niveisPermitidos: NIVEIS_RELATORIO.acelera, arquivo: 'acelera-para-hm',
+    tipo: 'acelera', titulo: 'Acelera → HM', recorte, niveisPermitidos: NIVEIS_RELATORIO.acelera, arquivo: 'acelera-para-hm', temPlanilha: true, // CSV em AceleraParaHM
     kpis: [
       { rotulo: 'Compradores do Acelera', valor: lista.length.toLocaleString('pt-BR') },
       { rotulo: 'Subiram para o HM', valor: subiram.length.toLocaleString('pt-BR') },
@@ -431,7 +431,7 @@ export function rascunhoProrata(lista: ProrataHM[], recorte: ItemRecorte[]): Ras
   const totCredito = soma(lista, (p) => n(p.credito));
   const totPagar = soma(lista, (p) => n(p.diferenca));
   return {
-    tipo: 'prorata', titulo: 'Pro rata do HM', recorte, niveisPermitidos: NIVEIS_RELATORIO.prorata, arquivo: 'prorata-hm',
+    tipo: 'prorata', titulo: 'Pro rata do HM', recorte, niveisPermitidos: NIVEIS_RELATORIO.prorata, arquivo: 'prorata-hm', temPlanilha: true, // CSV em ProrataHM
     kpis: [
       { rotulo: 'Pessoas', valor: lista.length.toLocaleString('pt-BR') },
       { rotulo: 'Com crédito', valor: lista.filter((p) => n(p.credito) > 0).length.toLocaleString('pt-BR') },

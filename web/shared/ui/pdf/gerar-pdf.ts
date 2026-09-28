@@ -10,7 +10,7 @@
 // desenhar ou selar lança erro e o arquivo não sai. Não existe caminho sem
 // protocolo e não existe fallback para window.print().
 import type { DocumentoRelatorio, NivelPii, RascunhoRelatorio } from './modelo';
-import { aplicarNivel, contarLinhasDetalhe } from './nivel';
+import { prepararParaPdf } from './nivel';
 import type { Desenho, PedidoDesenho, ProgressoDesenho, RespostaDesenho } from './desenho-pdf';
 
 /** Dados que a emissão grava (fn_fin_relatorio_emitir: p_tipo, p_nivel, p_recorte, p_linhas, p_totais). */
@@ -20,8 +20,10 @@ export interface MetaEmissao {
   /**
    * Objeto de 1º nível SEM chave de busca/dado pessoal (fin.relatorio_recorte_valido recusa
    * 'busca','nome','email','cpf'…). O termo de busca livre nunca vai: só `busca_aplicada: true`.
+   * `linhas_da_lista` = tamanho da lista da tela (pode ser maior que `linhas`, ver LINHAS_MAX_NO_PDF).
    */
-  recorte: { filtros: string[]; busca_aplicada?: true };
+  recorte: { filtros: string[]; busca_aplicada?: true; linhas_da_lista?: number };
+  /** Linhas de detalhe IMPRESSAS no PDF (0 quando só totais ou só números). */
   linhas: number;
   /** KPIs do documento em texto (≤ 8 KB). */
   totais: Record<string, string>;
@@ -118,14 +120,15 @@ function baixarPdf(bytes: Uint8Array, nome: string): void {
 }
 
 /**
- * Fluxo completo: nível → (lib carregada) → emitir → desenhar + SHA-256 (worker) → selar → baixar.
+ * Fluxo completo: nível e limite de linhas → (lib carregada) → emitir → desenhar + SHA-256 (worker) → selar → baixar.
  * A lib é carregada ANTES de emitir: falha de rede no carregamento não consome protocolo.
  */
 export async function gerarPdfComProtocolo(
   rascunho: RascunhoRelatorio, nivel: NivelPii, chamadas: ChamadasProtocolo,
   aoProgresso?: (p: ProgressoPdf) => void,
 ): Promise<{ protocolo: string; paginas: number }> {
-  const nivelado = aplicarNivel(rascunho, nivel); // lança se o relatório não aceita o nível
+  // lança se o relatório não aceita o nível; acima de LINHAS_MAX_NO_PDF, só totais
+  const { documento: nivelado, linhasDaLista, linhasImpressas } = prepararParaPdf(rascunho, nivel);
   aoProgresso?.({ etapa: 'preparando' });
   const desenhista = typeof Worker === 'undefined' ? desenhistaLocal() : desenhistaEmWorker();
   try {
@@ -135,8 +138,8 @@ export async function gerarPdfComProtocolo(
     const emissao = await chamadas.emitir({
       tipo: rascunho.tipo,
       nivel,
-      recorte: recorteParaEmissao(rascunho),
-      linhas: contarLinhasDetalhe(rascunho),
+      recorte: { ...recorteParaEmissao(rascunho), linhas_da_lista: linhasDaLista },
+      linhas: linhasImpressas,
       totais: Object.fromEntries((rascunho.kpis ?? []).map((k) => [k.rotulo, k.valor])),
     });
     if (!emissao?.protocolo) throw new Error('A emissão não devolveu protocolo.');
