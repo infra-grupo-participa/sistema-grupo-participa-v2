@@ -19,6 +19,24 @@ export interface RecursosPdf {
   base: string;
 }
 
+/**
+ * Sinais do motor durante o desenho — o react-pdf não expõe progresso. Servem à barra
+ * "folha X de Y" (desenho-pdf.ts); não mudam nada no documento.
+ */
+export interface SinaisDesenho {
+  /** Folhas montadas pela paginação e palavras estimadas no documento inteiro. */
+  aoPaginar(folhas: number, palavras: number): void;
+  /** Rodapé da folha resolvido (o motor passa 2 vezes; na 1ª, total vem undefined). */
+  aoNumerarFolha(folha: number, total: number | undefined): void;
+}
+
+let aoPalavra: (() => void) | null = null;
+
+/** Liga (ou desliga, com null) o aviso por palavra diagramada. A hifenização do motor é global. */
+export function ligarAvisoDePalavra(fn: (() => void) | null): void {
+  aoPalavra = fn;
+}
+
 let fontesRegistradas: string | null = null;
 
 /** Registra o Inter uma vez por base. Hifenização desligada: nome e e-mail não se partem com hífen. */
@@ -28,7 +46,10 @@ export function registrarFontesPdf(base: string): void {
     family: FONTE_PDF.familia,
     fonts: FONTE_PDF.arquivos.map((f) => ({ src: `${base}${f.arquivo}`, fontWeight: f.peso })),
   });
-  Font.registerHyphenationCallback((palavra) => [palavra]);
+  Font.registerHyphenationCallback((palavra) => {
+    aoPalavra?.();
+    return [palavra];
+  });
   fontesRegistradas = base;
 }
 
@@ -129,12 +150,35 @@ function Tabela({ bloco }: { bloco: Extract<BlocoPagina, { tipo: 'secao' }> }) {
   );
 }
 
-export function DocumentoPdf({ doc, recursos }: { doc: DocumentoRelatorio; recursos: RecursosPdf }) {
+/** Palavras que o motor vai diagramar (estimativa para o progresso; não precisa ser exata). */
+function palavrasDoDocumento(folhas: BlocoPagina[][], fixas: string[]): number {
+  const contar = (t: string) => t.split(/\s+/).filter(Boolean).length;
+  const porFolha = fixas.reduce((n, t) => n + contar(t), 0);
+  let n = 0;
+  for (const blocos of folhas) {
+    n += porFolha;
+    for (const b of blocos) {
+      if (b.tipo === 'kpis') { n += b.kpis.reduce((m, k) => m + contar(k.rotulo) + contar(k.valor), 0); continue; }
+      n += contar(b.secao.titulo) + b.secao.colunas.reduce((m, c) => m + contar(c.rotulo), 0);
+      for (const { linha } of b.linhas) n += b.secao.colunas.reduce((m, c) => m + contar(linha.celulas[c.chave] || '—'), 0);
+    }
+  }
+  return n;
+}
+
+export function DocumentoPdf({ doc, recursos, sinais }: {
+  doc: DocumentoRelatorio;
+  recursos: RecursosPdf;
+  sinais?: SinaisDesenho;
+}) {
   if (!doc.protocolo) throw new Error('Documento sem protocolo: o PDF não é gerado.');
   registrarFontesPdf(recursos.base);
   const { data, hora } = dataHoraSaoPaulo(doc.emitidoEm);
   const folhas = paginar(doc.kpis, doc.secoes);
   const recorte = [...doc.recorte, INDICADOR_NIVEL[doc.nivel]].join('  ·  ');
+  sinais?.aoPaginar(folhas.length, palavrasDoDocumento(folhas, [
+    `Gerado em ${data} ${hora}`, doc.titulo, recorte, `Emitido pelo Sistema Grupo Participa em ${data} às ${hora} Protocolo ${doc.protocolo}`,
+  ]));
 
   return (
     <Document title={`${doc.titulo} · ${doc.protocolo}`} author="Grupo Participa" creator="Sistema Grupo Participa" producer="Sistema Grupo Participa" language="pt-BR">
@@ -154,7 +198,10 @@ export function DocumentoPdf({ doc, recursos }: { doc: DocumentoRelatorio; recur
 
           <View style={s.rodape} fixed>
             <Text>Emitido pelo Sistema Grupo Participa em {data} às {hora}  ·  Protocolo {doc.protocolo}</Text>
-            <Text render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`} />
+            <Text render={({ pageNumber, totalPages }) => {
+              sinais?.aoNumerarFolha(pageNumber, totalPages);
+              return `Página ${pageNumber} de ${totalPages}`;
+            }} />
           </View>
         </Page>
       ))}

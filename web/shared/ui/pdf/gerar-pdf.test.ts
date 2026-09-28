@@ -1,9 +1,17 @@
-// Junção emitir → desenhar → selar → baixar (gerarPdfComProtocolo), com o renderizarPdf
-// REAL (@react-pdf + Inter + DocumentoPdf de verdade) e só duas trocas:
+// Junção emitir → desenhar → selar → baixar (gerarPdfComProtocolo), com o desenho REAL
+// (@react-pdf + Inter + DocumentoPdf de verdade) e só três trocas:
 //  - ChamadasProtocolo é um stub que registra a ordem e o que recebeu;
 //  - o download (URL.createObjectURL + <a>.click) é interceptado para o teste ver os
-//    bytes que saíram. Nenhuma mudança no código de produção para isso.
-// A única troca no desenho é o caminho das fontes: no navegador é '/', no Node é web/public.
+//    bytes que saíram. Nenhuma mudança no código de produção para isso;
+//  - o caminho das fontes: no navegador é '/', no Node é web/public.
+//
+// Roda nos DOIS caminhos de gerar-pdf.ts:
+//  - "worker": o Node não tem Web Worker; WorkerFalso faz o papel do navegador — clona
+//    cada mensagem com structuredClone (transferindo o ArrayBuffer, como postMessage) e
+//    entrega o pedido ao MESMO atenderPedido que pdf.worker.ts chama. Fica de fora só o
+//    arquivo pdf.worker.ts (4 linhas: liga onmessage e avisa "pronto") e a thread de
+//    verdade — esses são provados no navegador (next build + Chrome), não aqui;
+//  - "mesma thread": sem Worker no ambiente, desenha na thread de quem chamou.
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,6 +22,8 @@ import { paginar } from './paginar';
 import { aplicarNivel } from './nivel';
 import type { PessoaHotmart, ProrataHM } from '@/modules/financeiro/domain/hotmart';
 import { rascunhoPessoas, rascunhoProrata, recortePessoas, recorteProrata } from '@/modules/financeiro/ui/pdf/documentos';
+import { atenderPedido, type PedidoDesenho, type RespostaDesenho } from './desenho-pdf';
+import type { ProgressoPdf } from './gerar-pdf';
 
 const PUBLICO = path.resolve(__dirname, '../../../public') + path.sep;
 
@@ -60,6 +70,34 @@ afterEach(() => {
 });
 
 let esperarDownloads: () => Promise<void>;
+
+// ─── Worker falso (ver o topo do arquivo) ─────────────────────────────────────
+class WorkerFalso {
+  static criados: WorkerFalso[] = [];
+  static falharAoCarregar = false;
+  onmessage: ((e: { data: RespostaDesenho }) => void) | null = null;
+  onerror: ((e: { message: string; preventDefault(): void }) => void) | null = null;
+  onmessageerror: (() => void) | null = null;
+  encerrado = false;
+  pedidos = 0;
+  constructor(readonly url: URL | string, readonly opcoes?: { type?: string }) {
+    WorkerFalso.criados.push(this);
+    setTimeout(() => {
+      if (WorkerFalso.falharAoCarregar) this.onerror?.({ message: 'chunk do worker não carregou', preventDefault() {} });
+      else this.entregar({ tipo: 'pronto' });
+    });
+  }
+  private entregar(r: RespostaDesenho, transferir?: Transferable[]) {
+    if (this.encerrado) return;
+    const data = structuredClone(r, { transfer: transferir });
+    setTimeout(() => { if (!this.encerrado) this.onmessage?.({ data }); });
+  }
+  postMessage(pedido: PedidoDesenho) {
+    this.pedidos += 1;
+    void atenderPedido(structuredClone(pedido), (r, t) => this.entregar(r, t));
+  }
+  terminate() { this.encerrado = true; }
+}
 
 // ─── Stub do protocolo ────────────────────────────────────────────────────────
 function stub(opcoes: { selou?: boolean; emitirLanca?: boolean } = {}) {
@@ -116,7 +154,21 @@ function contagemDeclarada(bytes: Uint8Array): number {
   return Math.max(...contagens);
 }
 
-describe('gerarPdfComProtocolo — junção com o renderizarPdf real', () => {
+for (const modo of ['worker', 'mesma thread'] as const) describe(`gerarPdfComProtocolo — ${modo}`, () => {
+  beforeEach(() => {
+    WorkerFalso.criados = [];
+    WorkerFalso.falharAoCarregar = false;
+    if (modo === 'worker') vi.stubGlobal('Worker', WorkerFalso);
+  });
+  const workerUsado = () => {
+    if (modo === 'mesma thread') { expect(WorkerFalso.criados).toHaveLength(0); return; }
+    expect(WorkerFalso.criados).toHaveLength(1);
+    const w = WorkerFalso.criados[0];
+    expect(String(w.url)).toMatch(/pdf.worker.ts$/);
+    expect(w.opcoes?.type).toBe('module');
+    expect(w.encerrado).toBe(true); // o worker não fica vivo depois da geração
+  };
+
   it('ordem emitir → desenhar → selar → baixar; hash e páginas do selo são os do arquivo baixado', async () => {
     await marcarRender();
     const { chamadas, selos } = stub();
@@ -124,8 +176,19 @@ describe('gerarPdfComProtocolo — junção com o renderizarPdf real', () => {
     const esperado = paginar(r.kpis, aplicarNivel(r, 'completo').secoes).length;
     expect(esperado).toBeGreaterThan(1);
 
-    const saida = await gerarPdfComProtocolo(r, 'completo', chamadas);
+    const progresso: ProgressoPdf[] = [];
+    const saida = await gerarPdfComProtocolo(r, 'completo', chamadas, (p) => progresso.push(p));
     await esperarDownloads();
+    workerUsado();
+
+    // progresso: etapas na ordem e folha que sobe até o total
+    const etapas = progresso.map((p) => p.etapa).filter((e, i, a) => e !== a[i - 1]);
+    expect(etapas).toEqual(['preparando', 'emitindo', 'montando', 'numerando', 'gravando', 'selando']);
+    const montando = progresso.flatMap((p) => (p.etapa === 'montando' ? [p] : []));
+    expect(montando.length).toBeGreaterThan(1);
+    expect(montando.every((p, i) => p.folhas === esperado && (i === 0 || p.folha >= montando[i - 1].folha))).toBe(true);
+    const numerando = progresso.flatMap((p) => (p.etapa === 'numerando' ? [p] : []));
+    expect(numerando.at(-1)).toEqual({ etapa: 'numerando', feito: 2 * esperado, total: 2 * esperado });
 
     expect(eventos).toEqual(['emitir', 'render', 'selar', 'baixar']);
     expect(baixados).toHaveLength(1);
@@ -148,6 +211,7 @@ describe('gerarPdfComProtocolo — junção com o renderizarPdf real', () => {
     expect(eventos).toEqual(['emitir', 'selar']);
     expect(baixados).toEqual([]);
     expect(URL.createObjectURL).not.toHaveBeenCalled();
+    workerUsado();
   }, 60_000);
 
   it('emitir lançando: não desenha, não sela, não baixa', async () => {
@@ -158,7 +222,18 @@ describe('gerarPdfComProtocolo — junção com o renderizarPdf real', () => {
     expect(eventos).toEqual(['emitir']);
     expect(baixados).toEqual([]);
     expect(URL.createObjectURL).not.toHaveBeenCalled();
+    workerUsado();
+    if (modo === 'worker') expect(WorkerFalso.criados[0].pedidos).toBe(0);
   }, 60_000);
+
+  it.runIf(modo === 'worker')('worker que não carrega: falha ANTES de emitir (nenhum protocolo consumido)', async () => {
+    WorkerFalso.falharAoCarregar = true;
+    const { chamadas } = stub();
+    await expect(gerarPdfComProtocolo(rascunho(3), 'completo', chamadas)).rejects.toThrow(/gerador de PDF falhou/);
+    expect(eventos).toEqual([]);
+    expect(baixados).toEqual([]);
+    workerUsado();
+  });
 });
 
 // ─── Busca livre nunca chega ao banco ─────────────────────────────────────────

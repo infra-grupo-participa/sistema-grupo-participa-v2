@@ -9,7 +9,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { DocumentoPdf } from './DocumentoPdf';
 import type { DocumentoRelatorio, RascunhoRelatorio } from './modelo';
 import { aplicarNivel } from './nivel';
-import { contarPaginasPdf } from './gerar-pdf';
+import { contarPaginasPdf } from './bytes-pdf';
 
 const PUBLICO = path.resolve(__dirname, '../../../public') + path.sep;
 const recursos = { base: PUBLICO };

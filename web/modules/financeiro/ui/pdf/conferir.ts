@@ -3,9 +3,9 @@
 // não prova nada sobre o papel que chegou na mão de quem confere).
 //
 // O hash é calculado no navegador com a MESMA função que sela (sha256Hex de
-// shared/ui/pdf/gerar-pdf.ts): hex minúsculo de 64. O arquivo não sobe para
+// shared/ui/pdf/bytes-pdf.ts): hex minúsculo de 64. O arquivo não sobe para
 // lugar nenhum; a única chamada ao banco é verificarRelatorio (já existente).
-import { sha256Hex } from '@/shared/ui/pdf/gerar-pdf';
+import { sha256Hex } from '@/shared/ui/pdf/bytes-pdf';
 import { dataHoraSaoPaulo } from '@/shared/ui/pdf/modelo';
 import type { RelatorioVerificado } from '../../application/ports';
 

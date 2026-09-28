@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { aplicarNivel } from '@/shared/ui/pdf/nivel';
 import { DocumentoPdf } from '@/shared/ui/pdf/DocumentoPdf';
-import { sha256Hex } from '@/shared/ui/pdf/gerar-pdf';
+import { sha256Hex } from '@/shared/ui/pdf/bytes-pdf';
 import type { RelatorioVerificado } from '../../application/ports';
 import {
   TEXTO_ALTERADO, TEXTO_SO_REGISTRO, hashDoArquivo, protocoloDoNomeArquivo, quandoEmitido, totaisParaTela, vereditoConferencia,

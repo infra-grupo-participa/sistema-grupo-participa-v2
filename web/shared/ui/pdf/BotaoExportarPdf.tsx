@@ -4,14 +4,27 @@
 // Trava enquanto gera: duplo clique = dois protocolos consumidos à toa. A trava é um ref
 // (síncrono) além do estado — o estado só re-renderiza depois do 2º clique já ter entrado.
 //
-// Nenhuma lib de PDF é importada aqui: gerar-pdf.ts carrega @react-pdf no clique.
-import { useRef, useState } from 'react';
+// Nenhuma lib de PDF é importada aqui: gerar-pdf.ts carrega @react-pdf no clique, num
+// Web Worker. Enquanto desenha, a linha ao lado do botão mostra a etapa e a folha
+// ("Montando folha 120 de 660 · 34 s") — a tela segue respondendo.
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import type { NivelPii, RascunhoRelatorio } from './modelo';
 import { ROTULO_NIVEL } from './modelo';
 import { NIVEIS_PII } from './nivel';
-import type { ChamadasProtocolo } from './gerar-pdf';
+import type { ChamadasProtocolo, ProgressoPdf } from './gerar-pdf';
+
+export function textoProgresso(p: ProgressoPdf): string {
+  switch (p.etapa) {
+    case 'preparando': return 'Carregando o gerador de PDF…';
+    case 'emitindo': return 'Emitindo protocolo…';
+    case 'montando': return `Montando folha ${p.folha.toLocaleString('pt-BR')} de ${p.folhas.toLocaleString('pt-BR')}`;
+    case 'numerando': return `Numerando folhas · ${Math.floor((100 * p.feito) / Math.max(p.total, 1))}%`;
+    case 'gravando': return `Gravando ${p.folhas.toLocaleString('pt-BR')} folhas…`;
+    case 'selando': return 'Selando protocolo…';
+  }
+}
 
 export function BotaoExportarPdf({
   montar, niveis, chamadas, desabilitado,
@@ -28,22 +41,34 @@ export function BotaoExportarPdf({
   const [nivel, setNivel] = useState<NivelPii>(oferecidos[0] ?? 'completo');
   const [gerando, setGerando] = useState(false);
   const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null);
+  const [progresso, setProgresso] = useState<ProgressoPdf | null>(null);
+  const [segundos, setSegundos] = useState(0);
   const trava = useRef(false);
+
+  // Relógio da geração: mostra que a tela está viva mesmo na etapa sem contagem de folha.
+  useEffect(() => {
+    if (!gerando) return;
+    const inicio = Date.now();
+    const id = setInterval(() => setSegundos(Math.floor((Date.now() - inicio) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [gerando]);
 
   const exportar = async () => {
     if (trava.current || !chamadas) return;
     trava.current = true;
     setGerando(true);
+    setSegundos(0);
     setAviso(null);
     try {
       const { gerarPdfComProtocolo } = await import('./gerar-pdf');
-      const { protocolo } = await gerarPdfComProtocolo(montar(), nivel, chamadas);
+      const { protocolo } = await gerarPdfComProtocolo(montar(), nivel, chamadas, setProgresso);
       setAviso({ ok: true, texto: `PDF emitido · Protocolo ${protocolo}` });
     } catch (e) {
       setAviso({ ok: false, texto: e instanceof Error ? e.message : 'Não foi possível gerar o PDF.' });
     } finally {
       trava.current = false;
       setGerando(false);
+      setProgresso(null);
     }
   };
 
@@ -66,6 +91,9 @@ export function BotaoExportarPdf({
       >
         <Icon name="file" size={14} /> {gerando ? 'Gerando PDF…' : 'Exportar PDF'}
       </Button>
+      {gerando && progresso && (
+        <span className="text-xs tabular-nums text-[var(--fg-3)]">{textoProgresso(progresso)}{segundos ? ` · ${segundos} s` : ''}</span>
+      )}
       {aviso && (
         <span role="status" className={`text-xs ${aviso.ok ? 'text-[var(--fg-3)]' : 'text-[var(--red)]'}`}>{aviso.texto}</span>
       )}
