@@ -1,6 +1,6 @@
 -- 20260928z63 — Contas a Receber, fatia 3: RECEBIMENTOS INFORMADOS (bloco 5 da planilha semanal).
 --
--- NÃO APLICADA — coordenador aplica (apply_migration "fin_recebimentos_informados"). Provas no fim, por medir.
+-- APLICADA em produção em 28/09/2026 (apply_migration; conferência interna rodada e verde). Rodada 2 do Kirad aprovada; lock da importação só ao gravar e lock da z64 por dias desde 2000-01-01 (ajustes finais do Kirad).
 -- Depende da z60 e da z61 (aplicadas). A guarda aborta se o corpo VIVO de public.fn_fin_receber_semanal não for o da z61.
 -- z62 fica reservada (releitura do espelho, juan).
 --
@@ -872,10 +872,12 @@ begin
   if v_uid is null or not coalesce(public.gp_pode_operar_financeiro(), false) then
     raise exception 'Sem permissão.' using errcode = '42501';
   end if;
-  -- serializa as escritas de informados (mesma chave de fn_fin_informado_salvar): duas importações simultâneas da
-  -- mesma planilha não passam juntas pela checagem "Já cadastrado"
-  perform pg_advisory_xact_lock(hashtext('fin.recebimentos_informados:escrita'));
   if p_simular is null then raise exception 'Informe se é simulação.' using errcode = 'P0001'; end if;
+  -- serializa as escritas de informados (mesma chave de fn_fin_informado_salvar): duas importações simultâneas da
+  -- mesma planilha não passam juntas pela checagem "Já cadastrado". A prévia (simular) é leitura: não trava.
+  if not p_simular then
+    perform pg_advisory_xact_lock(hashtext('fin.recebimentos_informados:escrita'));
+  end if;
   if p_linhas is null or jsonb_typeof(p_linhas) <> 'array' then
     raise exception 'Envie a lista de linhas.' using errcode = 'P0001';
   end if;

@@ -1,6 +1,6 @@
 -- 20260928z64 — Feriados bancários: dois achados BAIXOS do Kirad na z60 (já aplicada), corrigidos em migration nova.
 --
--- NÃO APLICADA — coordenador aplica (apply_migration "fin_feriados_endurecer"). Independe da z63.
+-- APLICADA em produção em 28/09/2026 (apply_migration; conferência interna rodada e verde). Rodada 2 do Kirad aprovada; lock da importação só ao gravar e lock da z64 por dias desde 2000-01-01 (ajustes finais do Kirad).
 -- Obs.: o plano do Arthur reservava "z64" para o PDF (fatia 4); o coordenador realocou o número para esta correção.
 --
 -- (1) fin.recalcular_calendario_caixa() e fin.tg_feriados_recalcular() eram SECURITY DEFINER sem guarda. Não precisam:
@@ -139,8 +139,8 @@ begin
   end if;
 
   -- serializa por dia: sem isto, duas gravações do MESMO dia novo leem "não existe" juntas (FOR UPDATE não trava linha
-  -- ausente) e a trilha registra duas criações com antes = NULL. Chave em dois inteiros: (classe feriado, dia).
-  perform pg_advisory_xact_lock(hashtext('fin.feriados_bancarios'), hashtext(p_dia::text));
+  -- ausente) e a trilha registra duas criações com antes = NULL. Chave em dois inteiros: (classe feriado, dias desde 2000-01-01 — independe do DateStyle).
+  perform pg_advisory_xact_lock(hashtext('fin.feriados_bancarios'), (p_dia - date '2000-01-01'));
   select * into v_antes from fin.feriados_bancarios f where f.dia = p_dia for update;
   if found and (v_antes.nome, v_antes.ativo) is not distinct from (v_nome, p_ativo) then
     -- nada mudou: sem escrita, sem trilha, sem recálculo do calendário
