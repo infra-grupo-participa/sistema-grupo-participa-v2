@@ -6,6 +6,18 @@
 --
 -- Contrato: scratchpad "contrato-bloco5.md" (28/09). A tela do iromar depende dele. Desvios: ver o relatório do Victor.
 --
+-- Rodada 2 (reprovação do Kirad, 28/09) — o que mudou:
+--   [MÉDIO] histórico grava identificador1/2 MASCARADOS (fin.informado_mascara) em antes e depois; CPF/e-mail em claro
+--           não entra na trilha só-acréscimo (e anonimizar a linha não recopia o CPF para lá). `cliente` continua em
+--           claro no histórico: é o nome que o Financeiro digitou, o mesmo que a lista mostra a quem vê o financeiro.
+--   [BAIXO] máscara no campo N só resolve para o identificadorN atual (posição): dois CPFs com o mesmo final não colidem.
+--   [BAIXO] gravar/alterar identificador exige gp_pode_ver_cpf() (P0001 "Sem permissão para informar CPF/e-mail.");
+--           máscara devolvida sem mudança passa. Na lista, recebido_hotmart só para quem vê CPF (senão NULL).
+--   [BAIXO] tetos: até 10 produtos, identificador até 254 caracteres, cliente até 200, motivo do arquivo até 500
+--           (na RPC e em CHECK na tabela).
+--   [BAIXO] pg_advisory_xact_lock com chave fixa no início de fn_fin_informado_salvar e fn_fin_informados_importar
+--           (duas importações simultâneas não passam juntas pela checagem de duplicata).
+--
 -- O que cria:
 --   1) fin.recebimentos_informados — previsão de recebimento que a Hotmart ainda não mostra (renovação Diamante/Aurum,
 --      extras do Serviço Diamante, outros). Nada se apaga (trigger barra DELETE/TRUNCATE): arquiva com motivo.
@@ -155,8 +167,10 @@ create table fin.recebimentos_informados (
   via_hotmart      boolean not null,
   produtos         text[] not null default '{}',   -- nomes oficiais (fin.produtos.nome), alinhados a produto_ids
   produto_ids      text[] not null default '{}',   -- códigos Hotmart resolvidos: a baixa automática casa por eles
-  identificador1   text check (identificador1 ~ '^(d:([0-9]{11}|[0-9]{14})|e:[^@[:space:]]+@[^@[:space:]]+)$'),
-  identificador2   text check (identificador2 ~ '^(d:([0-9]{11}|[0-9]{14})|e:[^@[:space:]]+@[^@[:space:]]+)$'),
+  identificador1   text check (length(identificador1) <= 256
+                               and identificador1 ~ '^(d:([0-9]{11}|[0-9]{14})|e:[^@[:space:]]+@[^@[:space:]]+)$'),
+  identificador2   text check (length(identificador2) <= 256
+                               and identificador2 ~ '^(d:([0-9]{11}|[0-9]{14})|e:[^@[:space:]]+@[^@[:space:]]+)$'),
   acordo_desde     date,
   baixa_manual_em  date,
   baixa_manual_por uuid,
@@ -170,10 +184,12 @@ create table fin.recebimentos_informados (
   motivo_arquivo   text,
   constraint recebimentos_informados_hotmart_ck
     check (not via_hotmart or (cardinality(produto_ids) >= 1 and acordo_desde is not null)),
-  constraint recebimentos_informados_produtos_ck check (cardinality(produtos) = cardinality(produto_ids)),
+  constraint recebimentos_informados_produtos_ck
+    check (cardinality(produtos) = cardinality(produto_ids) and cardinality(produto_ids) <= 10),
   constraint recebimentos_informados_acordo_ck check (acordo_desde is null or acordo_desde <= data_prevista),
   constraint recebimentos_informados_arquivo_ck
-    check ((arquivado_em is null) = (motivo_arquivo is null) and (motivo_arquivo is null or length(btrim(motivo_arquivo)) >= 3)),
+    check ((arquivado_em is null) = (motivo_arquivo is null)
+           and (motivo_arquivo is null or length(btrim(motivo_arquivo)) between 3 and 500)),
   constraint recebimentos_informados_ids_ck check (identificador2 is null or identificador1 is not null)
 );
 comment on table fin.recebimentos_informados is
@@ -195,7 +211,8 @@ create index recebimentos_informados_historico_informado_idx
   on fin.recebimentos_informados_historico (informado_id, em);
 comment on table fin.recebimentos_informados_historico is
   'Trilha só-acréscimo de fin.recebimentos_informados (z63). Gravada por trigger; UPDATE/DELETE/TRUNCATE barrados. '
-  'Contém identificador em claro (CPF/e-mail): anonimização LGPD tem que passar por aqui também.';
+  'identificador1/2 gravados MASCARADOS (CPF ···1234 / a***@dominio), nunca em claro. cliente fica em claro (nome digitado '
+  'pelo Financeiro, o mesmo que a lista mostra).';
 alter table fin.recebimentos_informados_historico enable row level security;
 revoke all on fin.recebimentos_informados_historico from public, anon, authenticated;
 revoke all on sequence fin.recebimentos_informados_historico_id_seq from public, anon, authenticated;
@@ -212,8 +229,13 @@ begin
                when old.baixa_manual_em is distinct from new.baixa_manual_em and new.baixa_manual_em is null then 'baixa_desfeita'
                when old.baixa_manual_em is distinct from new.baixa_manual_em then 'baixa'
                else 'alterado' end,
-          case when tg_op = 'UPDATE' then to_jsonb(old) end,
-          to_jsonb(new),
+          -- identificador mascarado (LGPD): a trilha é só-acréscimo, CPF/e-mail em claro ficaria para sempre
+          case when tg_op = 'UPDATE' then to_jsonb(old)
+                 || jsonb_build_object('identificador1', fin.informado_mascara(old.identificador1),
+                                       'identificador2', fin.informado_mascara(old.identificador2)) end,
+          to_jsonb(new)
+                 || jsonb_build_object('identificador1', fin.informado_mascara(new.identificador1),
+                                       'identificador2', fin.informado_mascara(new.identificador2)),
           coalesce((select auth.uid()), new.atualizado_por, new.criado_por));
   return null;
 end $$;
@@ -308,7 +330,9 @@ $$;
 revoke all on function fin.informados_catalogo() from public, anon, authenticated;
 
 -- Aceita CPF/CNPJ com ou sem pontuação, e-mail, ou já prefixado (d:/e:). Valor MASCARADO (a tela de quem não vê CPF
--- devolve o que recebeu) só passa se for a máscara de um identificador atual — aí mantém o atual.
+-- devolve o que recebeu) só passa se for a máscara do identificador atual DO MESMO CAMPO — aí mantém o atual. O chamador
+-- passa só o atual da mesma posição (p_atuais = array[identificadorN]): dois CPFs com o mesmo final (máscara igual)
+-- não colidem, o campo 2 nunca vira o campo 1.
 create function fin.informado_identificador(p_valor text, p_atuais text[])
 returns text
 language plpgsql stable set search_path = ''
@@ -327,6 +351,9 @@ begin
       using errcode = 'P0001';
   end if;
   if v ~* '^[de]:' then v := btrim(substr(v, 3)); end if;
+  if length(v) > 254 then
+    raise exception 'Identificador longo demais (até 254 caracteres).' using errcode = 'P0001';
+  end if;
   if position('@' in v) > 0 then
     v := lower(v);
     if v !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
@@ -417,6 +444,8 @@ begin
       r.produtos := '{}';
     elsif jsonb_typeof(p -> 'produtos') <> 'array' then
       raise exception 'Produtos deve ser uma lista.' using errcode = 'P0001';
+    elsif jsonb_array_length(p -> 'produtos') > 10 then
+      raise exception 'No máximo 10 produtos por lançamento.' using errcode = 'P0001';
     else
       v_ids := '{}';
       for v_prod in select btrim(x) from jsonb_array_elements_text(p -> 'produtos') x loop
@@ -444,17 +473,22 @@ begin
 
   if p_criando or p ? 'identificador1' then
     r.identificador1 := fin.informado_identificador(p ->> 'identificador1',
-                          case when p_criando then null else array[p_atual.identificador1, p_atual.identificador2] end);
+                          case when p_criando then null else array[p_atual.identificador1] end);   -- só a mesma posição
   end if;
   if p_criando or p ? 'identificador2' then
     r.identificador2 := fin.informado_identificador(p ->> 'identificador2',
-                          case when p_criando then null else array[p_atual.identificador1, p_atual.identificador2] end);
+                          case when p_criando then null else array[p_atual.identificador2] end);   -- só a mesma posição
   end if;
   if r.identificador1 is null and r.identificador2 is not null then
     r.identificador1 := r.identificador2;
     r.identificador2 := null;
   end if;
   if r.identificador2 = r.identificador1 then r.identificador2 := null; end if;
+  -- CPF/e-mail só grava quem pode vê-lo (regra da 0819g). Máscara devolvida sem mudança não é escrita.
+  if (r.identificador1, r.identificador2) is distinct from (p_atual.identificador1, p_atual.identificador2)
+     and not coalesce(public.gp_pode_ver_cpf(), false) then
+    raise exception 'Sem permissão para informar CPF/e-mail.' using errcode = 'P0001';
+  end if;
 
   if p_criando or p ? 'acordo_desde' then
     r.acordo_desde := fin.informado_data(p ->> 'acordo_desde', 'Início do acordo');
@@ -670,13 +704,14 @@ begin
     raise exception 'Sem permissão.' using errcode = '42501';
   end if;
   -- LGPD (regra da 0819g): identificador completo só para gp_pode_ver_cpf(); o resto vê CPF ···1234 / a***@dominio.
+  -- recebido_hotmart (quanto a pessoa identificada pagou na Hotmart) também só para quem vê CPF; senão NULL.
   v_cpf := coalesce(public.gp_pode_ver_cpf(), false);
   return query
   select r.id, r.data_prevista, r.cliente, r.tipo, r.valor::numeric, r.via_hotmart, r.produtos,
          case when v_cpf then substr(r.identificador1, 3) else fin.informado_mascara(r.identificador1) end,
          case when v_cpf then substr(r.identificador2, 3) else fin.informado_mascara(r.identificador2) end,
          r.acordo_desde, r.baixa_manual_em,
-         s.situacao, s.recebido_hotmart, s.acumulado_acordo, s.valor_provisionado,
+         s.situacao, case when v_cpf then s.recebido_hotmart end, s.acumulado_acordo, s.valor_provisionado,
          r.arquivado_em, r.motivo_arquivo, r.atualizado_em
     from fin.recebimentos_informados r
     join fin.informados_situacao(now()) s on s.id = r.id
@@ -700,6 +735,8 @@ begin
   if v_uid is null or not coalesce(public.gp_pode_operar_financeiro(), false) then
     raise exception 'Sem permissão.' using errcode = '42501';
   end if;
+  -- serializa as escritas de informados (mesma chave da importação): checagem de duplicata sem corrida
+  perform pg_advisory_xact_lock(hashtext('fin.recebimentos_informados:escrita'));
   if p is null or jsonb_typeof(p) <> 'object' then
     raise exception 'Envie o lançamento como objeto.' using errcode = 'P0001';
   end if;
@@ -835,6 +872,9 @@ begin
   if v_uid is null or not coalesce(public.gp_pode_operar_financeiro(), false) then
     raise exception 'Sem permissão.' using errcode = '42501';
   end if;
+  -- serializa as escritas de informados (mesma chave de fn_fin_informado_salvar): duas importações simultâneas da
+  -- mesma planilha não passam juntas pela checagem "Já cadastrado"
+  perform pg_advisory_xact_lock(hashtext('fin.recebimentos_informados:escrita'));
   if p_simular is null then raise exception 'Informe se é simulação.' using errcode = 'P0001'; end if;
   if p_linhas is null or jsonb_typeof(p_linhas) <> 'array' then
     raise exception 'Envie a lista de linhas.' using errcode = 'P0001';
@@ -1006,6 +1046,8 @@ declare
   v_c     uuid;
   v_n     int;
   v_s     numeric;
+  v_row   fin.recebimentos_informados;
+  v_r     fin.recebimentos_informados;
   f       text;
   t       text;
 begin
@@ -1057,6 +1099,12 @@ begin
   end if;
   if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'fn_fin_informad%') <> 5 then
     raise exception 'z63: esperava 5 RPCs fn_fin_informad* (sobrecarga?)';
+  end if;
+  if (select count(*) from pg_proc p
+       where p.oid in ('public.fn_fin_informado_salvar(jsonb)'::regprocedure,
+                       'public.fn_fin_informados_importar(jsonb,boolean)'::regprocedure)
+         and p.prosrc like '%pg_advisory_xact_lock(hashtext(''fin.recebimentos_informados:escrita''))%') <> 2 then
+    raise exception 'z63: salvar/importar sem o advisory lock de escrita';
   end if;
 
   -- 7.2 sem sessão → 42501 nas 6 RPCs (e nada gravado)
@@ -1179,6 +1227,73 @@ begin
       raise exception 'z63: máscara fora do padrão 0819g';
     end if;
 
+    -- 7.5 (rodada 2) histórico sem identificador em claro: criação de C e troca de identificador (antes e depois)
+    update fin.recebimentos_informados set identificador1 = 'd:12345678901', identificador2 = 'e:z63-outro@invalido.example'
+     where id = v_c;
+    if exists (select 1 from fin.recebimentos_informados_historico h
+                where (coalesce(h.antes::text, '') || h.depois::text) ~ '(z63-teste@|z63-outro@|12345678901)')
+       or (select string_agg(coalesce(h.antes ->> 'identificador1', '∅') || '>' || (h.depois ->> 'identificador1')
+                             || '|' || coalesce(h.depois ->> 'identificador2', '∅'), ',' order by h.id)
+             from fin.recebimentos_informados_historico h where h.informado_id = v_c)
+          is distinct from '∅>z***@invalido.example|∅,z***@invalido.example>CPF ···8901|z***@invalido.example' then
+      raise exception 'z63: histórico com identificador em claro ou sem máscara: %',
+        (select string_agg(coalesce(h.antes ->> 'identificador1', '∅') || '>' || (h.depois ->> 'identificador1'), ',' order by h.id)
+           from fin.recebimentos_informados_historico h where h.informado_id = v_c);
+    end if;
+
+    -- 7.6 (rodada 2) colisão de máscara: dois CPFs com o mesmo final, a tela sem CPF devolve as duas máscaras iguais →
+    --     cada campo mantém o SEU atual (id2 preservado). Sem sessão (gp_pode_ver_cpf = false): sem mudança, passa.
+    update fin.recebimentos_informados set identificador1 = 'd:11111111234', identificador2 = 'd:22222221234' where id = v_c;
+    select * into v_row from fin.recebimentos_informados where id = v_c;
+    v_r := fin.informado_normalizar('{"identificador1":"CPF ···1234","identificador2":"CPF ···1234"}'::jsonb,
+                                    v_row, false);
+    if (v_r.identificador1, v_r.identificador2) is distinct from ('d:11111111234'::text, 'd:22222221234'::text) then
+      raise exception 'z63: colisão de máscara: id1=% id2=%', fin.informado_mascara(v_r.identificador1),
+        fin.informado_mascara(v_r.identificador2);
+    end if;
+
+    -- 7.7 (rodada 2) sem gp_pode_ver_cpf: criar com identificador, trocar ou apagar identificador → P0001; o admin (vê
+    --     CPF) passa. Sessão sem perfil = gp_pode_ver_cpf() falso (o banco não tem operador sem CPF para usar aqui —
+    --     medido pelo Kirad: 0 de 22; a prova pela RPC com esse perfil está no PGlite e em P-LGPD).
+    perform set_config('request.jwt.claims', json_build_object('sub', gen_random_uuid(), 'role', 'authenticated')::text, true);
+    foreach f in array array[
+        'select fin.informado_normalizar(''{"data_prevista":"2026-12-01","cliente":"z63","tipo":"outro","valor":1,"via_hotmart":false,"identificador1":"z63@invalido.example"}''::jsonb, null::fin.recebimentos_informados, true)',
+        'select fin.informado_normalizar(''{"identificador2":"33333333333"}''::jsonb, (select x from fin.recebimentos_informados x where x.id = ''' || v_c || '''), false)',
+        'select fin.informado_normalizar(''{"identificador1":null}''::jsonb, (select x from fin.recebimentos_informados x where x.id = ''' || v_c || '''), false)'] loop
+      v_ok := false;
+      begin
+        execute f;
+      exception when raise_exception then
+        v_ok := sqlerrm = 'Sem permissão para informar CPF/e-mail.';
+      end;
+      if not v_ok then raise exception 'z63: identificador gravável sem gp_pode_ver_cpf: %', f; end if;
+    end loop;
+    perform set_config('request.jwt.claims', json_build_object('sub', v_adm, 'role', 'authenticated')::text, true);
+    v_r := fin.informado_normalizar('{"identificador2":"33333333333"}'::jsonb, v_row, false);
+    if v_r.identificador2 is distinct from 'd:33333333333' then
+      raise exception 'z63: admin (vê CPF) não conseguiu trocar o identificador';
+    end if;
+    perform set_config('request.jwt.claims', '', true);
+
+    -- 7.8 (rodada 2) tetos
+    foreach f in array array[
+        'select fin.informado_normalizar(''{"data_prevista":"2026-12-01","cliente":"z63","tipo":"outro","valor":1,"via_hotmart":false,"produtos":["1","2","3","4","5","6","7","8","9","10","11"]}''::jsonb, null::fin.recebimentos_informados, true)',
+        'select fin.informado_identificador(repeat(''a'', 250) || ''@x.example'', null)',
+        'select fin.informado_normalizar(''{"data_prevista":"2026-12-01","cliente":"' || repeat('c', 201) || '","tipo":"outro","valor":1,"via_hotmart":false}''::jsonb, null::fin.recebimentos_informados, true)'] loop
+      v_ok := false;
+      begin
+        execute f;
+      exception when raise_exception then v_ok := true;
+      end;
+      if not v_ok then raise exception 'z63: teto não barrou: %', left(f, 120); end if;
+    end loop;
+    v_ok := false;
+    begin
+      update fin.recebimentos_informados set motivo_arquivo = repeat('m', 501) where id = v_a;
+    exception when check_violation then v_ok := true;
+    end;
+    if not v_ok then raise exception 'z63: motivo_arquivo > 500 aceito pela tabela'; end if;
+
     raise exception using errcode = 'P0001', message = 'z63_desfaz_teste';
   exception when raise_exception then
     if sqlerrm <> 'z63_desfaz_teste' then raise; end if;
@@ -1277,8 +1392,14 @@ rollback;
 begin;
 select set_config('request.jwt.claims', '{"sub":"<UUID_SO_VE>","role":"authenticated"}', true);
 set local role authenticated;
-select l.identificador1, l.identificador2 from public.fn_fin_informados_listar() l limit 5;
+select l.identificador1, l.identificador2, l.recebido_hotmart deve_ser_null from public.fn_fin_informados_listar() l limit 5;
 select public.fn_fin_informado_salvar('{"data_prevista":"2026-12-01","cliente":"x","tipo":"outro","valor":1,"via_hotmart":false}'::jsonb);  -- 42501 se não opera
+rollback;
+-- (rodada 2) se o perfil OPERA mas não vê CPF: gravar com identificador → P0001 "Sem permissão para informar CPF/e-mail."
+begin;
+select set_config('request.jwt.claims', '{"sub":"<UUID_OPERA_SEM_CPF>","role":"authenticated"}', true);
+set local role authenticated;
+select public.fn_fin_informado_salvar('{"data_prevista":"2026-12-01","cliente":"x","tipo":"outro","valor":1,"via_hotmart":false,"identificador1":"x@invalido.example"}'::jsonb);
 rollback;
 
 -- CONF-SOMA) Bloco 5 fecha com a listagem: caixa a receber (antecipação + garantia + custo de antecipação, ou cheio)

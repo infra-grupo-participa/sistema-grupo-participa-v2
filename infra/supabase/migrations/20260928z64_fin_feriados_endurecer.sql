@@ -11,6 +11,7 @@
 --     pela própria RPC; (b) nada mudou (nome e ativo iguais, "is not distinct from") → devolve a linha e SAI sem
 --     escrever — sem UPDATE, o trigger AFTER STATEMENT não dispara e o calendário (8 mil linhas) não é refeito.
 --     Mesma assinatura, mesmo RETURNS TABLE, mesma ACL. Guarda: o corpo vivo tem que ser o da z60.
+--     (c) rodada 2 (Kirad, 28/09): pg_advisory_xact_lock por dia ANTES do select … for update (linha ausente não trava).
 --
 -- REVERSÃO (uma transação):
 --   begin;
@@ -137,6 +138,9 @@ begin
     raise exception 'Nome do feriado vazio ou longo demais (até 120).' using errcode = '22023';
   end if;
 
+  -- serializa por dia: sem isto, duas gravações do MESMO dia novo leem "não existe" juntas (FOR UPDATE não trava linha
+  -- ausente) e a trilha registra duas criações com antes = NULL. Chave em dois inteiros: (classe feriado, dia).
+  perform pg_advisory_xact_lock(hashtext('fin.feriados_bancarios'), hashtext(p_dia::text));
   select * into v_antes from fin.feriados_bancarios f where f.dia = p_dia for update;
   if found and (v_antes.nome, v_antes.ativo) is not distinct from (v_nome, p_ativo) then
     -- nada mudou: sem escrita, sem trilha, sem recálculo do calendário
@@ -190,6 +194,10 @@ begin
                               'public.fn_fin_feriado_salvar(date,text,boolean)'::regprocedure)
                 and (p.proacl is null or exists (select 1 from unnest(p.proacl) ac where ac::text like '=%'))) then
     raise exception 'z64: função com EXECUTE para PUBLIC (ou proacl nulo)';
+  end if;
+  if (select position('pg_advisory_xact_lock' in p.prosrc) between 1 and position('for update' in p.prosrc)
+        from pg_proc p where p.oid = 'public.fn_fin_feriado_salvar(date,text,boolean)'::regprocedure) is not true then
+    raise exception 'z64: fn_fin_feriado_salvar sem advisory lock por dia antes do select … for update';
   end if;
 
   -- 4.2 sem sessão → 42501
