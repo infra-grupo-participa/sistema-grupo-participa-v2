@@ -15,6 +15,7 @@ import type { PassoTrajetoria } from '../domain/trajetoria';
 import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-card';
 import type { AssinaturaHMBoard, AssinaturaHMSemCard } from '../domain/assinatura-hm';
 import type { LinhaReceber } from '../domain/contas-receber';
+import type { Informado, InformadoEntrada, ResultadoLinhaImportacao } from '../domain/recebimentos-informados';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
 export interface Resultado {
@@ -100,6 +101,19 @@ export interface FinanceiroRepository {
   /** fn_fin_receber_semanal(p_corte, p_ate) — UMA chamada por abertura da aba; numeric já convertido. */
   loadContasReceber(): Promise<LinhaReceber[]>;
 
+  // ── Recebimentos informados (bloco 5, 20260928z63) ───────────────────────
+  // Escrita: guarda gp_pode_operar_financeiro() no banco; erro de validação = mensagem em português do SQL.
+  /** fn_fin_informados_listar() — identificadores MASCARADOS sem gp_pode_ver_cpf(). */
+  loadInformados(): Promise<Informado[]>;
+  /** fn_fin_informado_salvar(p) — sem id cria; com id atualiza. Chave ausente = não mexe. */
+  salvarInformado(p: InformadoEntrada): Promise<Resultado & { id?: string }>;
+  /** fn_fin_informado_baixar(p_id, p_data) — data nula desfaz a baixa manual. */
+  baixarInformado(id: string, data: string | null): Promise<Resultado>;
+  /** fn_fin_informado_arquivar(p_id, p_motivo) — motivo ≥ 3 caracteres. Nada se apaga. */
+  arquivarInformado(id: string, motivo: string): Promise<Resultado>;
+  /** fn_fin_informados_importar(p_linhas, p_simular) — simular = prévia sem gravar; gravar = tudo ou nada. */
+  importarInformados(linhas: InformadoEntrada[], simular: boolean): Promise<ImportacaoInformados>;
+
   // ── Protocolo dos relatórios em PDF (fn_fin_relatorio_*, 20260928z50) ───
   /** fn_fin_relatorio_emitir — grava a emissão e devolve o protocolo GP-REL-AAAA-NNNNNN. */
   emitirRelatorio(
@@ -109,6 +123,13 @@ export interface FinanceiroRepository {
   selarRelatorio(protocolo: string, sha256: string, paginas: number): Promise<boolean>;
   /** fn_fin_relatorio_verificar — conferência manual, dentro do sistema, de um protocolo já emitido. */
   verificarRelatorio(protocolo: string): Promise<RelatorioVerificado | null>;
+}
+
+/** Devolvido por importarInformados: falha de transporte/permissão em `msg`; resultado por linha em `linhas`. */
+export interface ImportacaoInformados {
+  ok: boolean;
+  msg?: string;
+  linhas: ResultadoLinhaImportacao[];
 }
 
 /** Devolvido por fn_fin_relatorio_emitir. */

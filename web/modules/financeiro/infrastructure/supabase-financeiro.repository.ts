@@ -10,7 +10,9 @@ import type {
   Acordo, CardBoard, Cobranca, CompraHistorico, InteracaoAtivacao, Lancamento, Meta,
   Oferta, OfertaOrfa, ReguaPasso, SaudeCheck, TurmaFin,
 } from '../domain/types';
-import type { FinanceiroRepository, RelatorioEmitido, RelatorioVerificado, Resultado } from '../application/ports';
+import type {
+  FinanceiroRepository, ImportacaoInformados, RelatorioEmitido, RelatorioVerificado, Resultado,
+} from '../application/ports';
 import { VALOR_PROGRAMA_HM } from '../domain/prorata-hm';
 import type {
   AceleraParaHM, BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, ProrataDiagnostico, ProrataHM, SyncHotmart, TransacaoHotmart,
@@ -24,6 +26,9 @@ import {
   normalizarAssinaturaBoard, normalizarAssinaturaSemCard, type AssinaturaHMBoard, type AssinaturaHMSemCard,
 } from '../domain/assinatura-hm';
 import { normalizarLinhaReceber, type LinhaReceber } from '../domain/contas-receber';
+import {
+  normalizarInformado, normalizarResultadoImportacao, type Informado, type InformadoEntrada,
+} from '../domain/recebimentos-informados';
 
 function erroPara(msg: string): Resultado {
   return { ok: false, msg };
@@ -38,6 +43,18 @@ function msgErroRelatorio(error: { code?: string; message?: string } | null, aca
   if (error?.code === '42501') return 'Sem permissão para emitir relatórios do Financeiro.';
   if (error?.code === '22023') return error.message ?? 'Dados do relatório inválidos.';
   return `Não foi possível ${acao} o protocolo do relatório (erro de rede).`;
+}
+
+/**
+ * Erro das escritas de recebimentos informados. 42501 = sem gp_pode_operar_financeiro(); P0001 (raise exception) =
+ * validação do SQL, mensagem já em português para a tela. O log leva só o CÓDIGO: a mensagem do SQL pode repetir
+ * cliente/identificador colado, e o texto colado nunca vai para o console.
+ */
+function erroInformado(nome: string, error: { code?: string; message?: string }, acao: string): string {
+  logQueryError(nome, { message: `código ${error.code ?? 'desconhecido'}` });
+  if (error.code === '42501') return 'Sem permissão para operar o financeiro.';
+  if (error.code === 'P0001' && error.message) return error.message;
+  return `Não foi possível ${acao} (erro de rede ou recurso ainda não disponível).`;
 }
 
 export class SupabaseFinanceiroRepository implements FinanceiroRepository {
@@ -338,6 +355,38 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     const linhas = await this.rpcLista<Record<string, unknown>>('fn_fin_receber_semanal', { p_corte: null, p_ate: null },
       'Não foi possível carregar as contas a receber.');
     return linhas.map(normalizarLinhaReceber);
+  }
+
+  // ── Recebimentos informados (bloco 5, 20260928z63) ───────────────────────
+  async loadInformados(): Promise<Informado[]> {
+    const linhas = await this.rpcLista<Record<string, unknown>>('fn_fin_informados_listar', {},
+      'Não foi possível carregar os recebimentos informados.');
+    return linhas.map(normalizarInformado);
+  }
+
+  async salvarInformado(p: InformadoEntrada): Promise<Resultado & { id?: string }> {
+    const { data, error } = await this.db().rpc('fn_fin_informado_salvar', { p });
+    if (error) return erroPara(erroInformado('salvarInformado', error, 'salvar o recebimento informado'));
+    return { ok: true, msg: p.id ? 'Recebimento informado atualizado.' : 'Recebimento informado criado.', id: data == null ? undefined : String(data) };
+  }
+
+  async baixarInformado(id: string, data: string | null): Promise<Resultado> {
+    const { error } = await this.db().rpc('fn_fin_informado_baixar', { p_id: id, p_data: data });
+    if (error) return erroPara(erroInformado('baixarInformado', error, data ? 'registrar a baixa' : 'desfazer a baixa'));
+    return { ok: true, msg: data ? 'Baixa manual registrada.' : 'Baixa manual desfeita.' };
+  }
+
+  async arquivarInformado(id: string, motivo: string): Promise<Resultado> {
+    const { error } = await this.db().rpc('fn_fin_informado_arquivar', { p_id: id, p_motivo: motivo });
+    if (error) return erroPara(erroInformado('arquivarInformado', error, 'arquivar'));
+    return { ok: true, msg: 'Recebimento informado arquivado.' };
+  }
+
+  async importarInformados(linhas: InformadoEntrada[], simular: boolean): Promise<ImportacaoInformados> {
+    const { data, error } = await this.db().rpc('fn_fin_informados_importar', { p_linhas: linhas, p_simular: simular });
+    if (error) return { ok: false, msg: erroInformado('importarInformados', error, simular ? 'conferir as linhas' : 'gravar as linhas'), linhas: [] };
+    const res = ((data as Record<string, unknown>[] | null) ?? []).map(normalizarResultadoImportacao);
+    return { ok: res.every((r) => r.ok), linhas: res };
   }
 
   // ── Protocolo dos relatórios em PDF (fn_fin_relatorio_*, 20260928z50) ───
