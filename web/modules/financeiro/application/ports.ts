@@ -72,7 +72,7 @@ export interface FinanceiroRepository {
   /** Trajetória da pessoa (fn_fin_trajetoria): toda compra, em que funil, desde 2019. */
   loadTrajetoria(email: string): Promise<PassoTrajetoria[]>;
   /** Pagou oferta do Programa e não tem card no board (fn_fin_programa_sem_card). */
-  loadProgramaSemCard(): Promise<PagouSemCard[]>;
+  loadProgramaSemCard(familia: 'HM' | 'AURUM'): Promise<PagouSemCard[]>;
   loadHotmartPessoas(familia: FamiliaHotmart): Promise<PessoaHotmart[]>;
   loadHotmartExtrato(email: string): Promise<TransacaoHotmart[]>;
   loadHotmartOfertas(familia: FamiliaHotmart): Promise<OfertaHotmart[]>;

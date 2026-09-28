@@ -389,7 +389,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <ProdutoTabs contagens={contagensProduto} ativo={produtoAtivo} onSelecionar={selecionarProduto}
               diamante={{ ativo: verDiamante, contagem: contarDiamantes(diamante.dados), onSelecionar: () => setVerDiamante(true) }} />
             {verDiamante ? <ServicoDiamante dados={diamante.dados} erro={diamante.erro} repo={repo} /> : <>
-            {produtoAtivo === 'HM' && <ProgramaSemCard repo={repo} />}
+            {(produtoAtivo === 'HM' || produtoAtivo === 'AURUM') && <ProgramaSemCard key={produtoAtivo} repo={repo} familia={produtoAtivo} />}
             <ResultadoAcoes cards={cardsDoProduto} ativa={acaoEfetiva} onSelecionar={selecionarAcao} />
             <div className="mb-3">
               <TimelineAcoes acoes={acoes} ativa={acaoEfetiva} onSelecionar={selecionarAcao} />

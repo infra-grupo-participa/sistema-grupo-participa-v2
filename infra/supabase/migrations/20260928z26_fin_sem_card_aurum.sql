@@ -1,0 +1,11 @@
+-- 20260928z26 — "pagaram e não têm card" também para o AURUM, desde 01/01/2026 (João, 28/09: "o Aurum pode começar
+-- antes"). As compras de jan–jun/2026 usam ofertas que nunca foram catalogadas e o saldo do Aurum vem da planilha, não
+-- da compra — criar card com pacote inventado viraria cobrança errada. Então: visível e exportável no board do Aurum
+-- (33 pessoas, R$ 609.724 em 28/09), card nasce quando a oferta for catalogada.
+-- Aplicado por replace sobre pg_get_functiondef (a vigente é a do banco):
+--   where t.grupo = 'pago' and coalesce(t.recorrencia, 1) = 1 and categoria fora de renovacao/reserva
+--     and ((p_familia = 'HM' and t.produto_id = '5064314' and t.dia_aprovado >= '2026-06-25')
+--       or (p_familia = 'AURUM' and t.familia = 'AURUM' and t.dia_aprovado >= '2026-01-01'))
+--   e a ação de origem passa a considerar as turmas do Aurum (sem o filtro prioridade <> 50).
+-- Junto (dado, 28/09): as 54 janelas de 60 dias da varredura '*' que viraram janelas de 10 dias estavam como 'erro' e a
+-- tela do Faturamento mostrava "54 janela(s) com erro" — passaram a 'feito' com erro = 'substituída por janelas de 10 dias'.

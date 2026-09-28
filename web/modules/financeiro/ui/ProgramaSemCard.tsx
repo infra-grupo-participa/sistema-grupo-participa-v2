@@ -8,29 +8,34 @@ import type { FinanceiroRepository } from '../application/ports';
 import type { PagouSemCard } from '../domain/programa-sem-card';
 import { celulaCsv } from '../domain/hotmart';
 
-export function ProgramaSemCard({ repo }: { repo: FinanceiroRepository }) {
+export function ProgramaSemCard({ repo, familia }: { repo: FinanceiroRepository; familia: 'HM' | 'AURUM' }) {
   const [dados, setDados] = useState<PagouSemCard[] | null>(null);
   const [aberto, setAberto] = useState(false);
   useEffect(() => {
     let vivo = true;
-    repo.loadProgramaSemCard().then((d) => { if (vivo) setDados(d); }).catch(() => { if (vivo) setDados([]); });
+    repo.loadProgramaSemCard(familia).then((d) => { if (vivo) setDados(d); }).catch(() => { if (vivo) setDados([]); });
     return () => { vivo = false; };
-  }, [repo]);
+  }, [repo, familia]);
   if (!dados?.length) return null;
   const total = dados.reduce((s, d) => s + d.valor, 0);
   const fora = dados.filter((d) => d.fora_do_catalogo).length;
   return (
     <section className="mb-3 rounded-[var(--r-lg)] border border-[var(--red-border)] bg-[var(--red-subtle)]">
-      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-        <button type="button" onClick={() => setAberto(!aberto)} aria-expanded={aberto} className="text-left text-sm font-semibold text-[var(--red)]">
-          {dados.length} pagaram o Programa e não têm card no board · {fmtBRL(total)} {aberto ? '▾' : '▸'}
+      <div className="flex items-center gap-2 px-3 py-2">
+        <button type="button" onClick={() => setAberto(!aberto)} aria-expanded={aberto} className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-[var(--red)]">
+          {dados.length} pagaram {familia === 'HM' ? 'o Programa' : 'o Aurum (desde jan/2026)'} e não têm card no board · {fmtBRL(total)} {aberto ? '▾' : '▸'}
         </button>
-        {fora > 0 && <span className="text-[11px] text-[var(--fg-2)]">{fora} por oferta fora do catálogo</span>}
-        <button type="button" onClick={() => exportar(dados)}
-          className="ml-auto rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--fg-2)] hover:bg-[var(--surface-2)]">
+        <button type="button" onClick={() => exportar(dados, familia)}
+          className="shrink-0 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--fg-2)] hover:bg-[var(--surface-2)]">
           Baixar lista
         </button>
       </div>
+      {aberto && fora > 0 && (
+        <p className="border-t border-[var(--red-border)] bg-[var(--surface)] px-3 py-2 text-[11px] text-[var(--fg-2)]">
+          {fora} {fora === 1 ? 'pagou' : 'pagaram'} por oferta fora do catálogo: o pacote combinado com o vendedor não está registrado,
+          então o sistema não sabe quanto cobrar. O card nasce quando a oferta for cadastrada no catálogo.
+        </p>
+      )}
       {aberto && (
         <div className="overflow-x-auto border-t border-[var(--red-border)] bg-[var(--surface)]">
           <table className="w-full min-w-[640px] text-xs">
@@ -57,7 +62,7 @@ export function ProgramaSemCard({ repo }: { repo: FinanceiroRepository }) {
   );
 }
 
-function exportar(dados: PagouSemCard[]) {
+function exportar(dados: PagouSemCard[], familia: 'HM' | 'AURUM') {
   const col: [string, (d: PagouSemCard) => unknown][] = [
     ['Nome', (d) => d.nome], ['E-mail', (d) => d.email], ['Telefone', (d) => d.telefone], ['Ação', (d) => d.acao],
     ['Pagou em', (d) => d.primeira], ['Valor', (d) => d.valor.toFixed(2).replace('.', ',')], ['Ofertas', (d) => d.ofertas],
@@ -66,7 +71,7 @@ function exportar(dados: PagouSemCard[]) {
   const txt = [col.map(([n]) => n).join(';'), ...dados.map((d) => col.map(([, g]) => celulaCsv(g(d))).join(';'))].join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + txt], { type: 'text/csv;charset=utf-8' }));
-  a.download = 'programa-pago-sem-card.csv';
+  a.download = `${familia.toLowerCase()}-pago-sem-card.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

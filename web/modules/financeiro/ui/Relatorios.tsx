@@ -11,7 +11,7 @@ import { Icon } from '@/shared/ui/icons';
 import type { ContaReceber } from '../domain/types';
 import { COLUNAS_PADRAO, COLUNAS_RELATORIO, montarRelatorio } from '../application/montar-relatorio';
 import type { FinanceiroRepository } from '../application/ports';
-import { ROTULO_FAMILIA, type BoardHotmart, type FamiliaHotmart } from '../domain/hotmart';
+import { FAMILIAS_EM_ORDEM, ROTULO_FAMILIA, type BoardHotmart, type FamiliaHotmart } from '../domain/hotmart';
 import { statusTone } from './cor';
 import { exportarXLSX, exportarPDF, formatarCelulaTela } from './exportar';
 import { AceleraParaHM } from './hotmart/AceleraParaHM';
@@ -47,7 +47,7 @@ function BotaoRelatorio({ ativo, onClick, children }: { ativo: boolean; onClick:
 function SeletorFamilia({ familia, onChange }: { familia: FamiliaHotmart; onChange: (f: FamiliaHotmart) => void }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {(['HM', 'AURUM', 'ACELERA', 'DIAMANTE'] as FamiliaHotmart[]).map((f) => (
+      {FAMILIAS_EM_ORDEM.map((f) => (
         <BotaoRelatorio key={f} ativo={familia === f} onClick={() => onChange(f)}>
           {ROTULO_FAMILIA[f]}
         </BotaoRelatorio>

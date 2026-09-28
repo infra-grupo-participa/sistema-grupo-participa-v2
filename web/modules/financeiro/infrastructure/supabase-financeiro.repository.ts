@@ -234,8 +234,8 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     return linhas.map((c) => ({ ...c, valor: n(c.valor), liquido: n(c.liquido) }));
   }
 
-  async loadProgramaSemCard(): Promise<PagouSemCard[]> {
-    const linhas = await this.rpcLista<PagouSemCard>('fn_fin_programa_sem_card', { p_familia: 'HM' },
+  async loadProgramaSemCard(familia: 'HM' | 'AURUM'): Promise<PagouSemCard[]> {
+    const linhas = await this.rpcLista<PagouSemCard>('fn_fin_programa_sem_card', { p_familia: familia },
       'Não foi possível carregar quem pagou o Programa sem card.');
     return linhas.map((p) => ({ ...p, valor: Number(p.valor ?? 0) || 0 }));
   }

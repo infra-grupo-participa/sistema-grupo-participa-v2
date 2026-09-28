@@ -4,6 +4,7 @@
 import type { StatusFinanceiro } from './types';
 
 export interface CardDaAcao {
+  /** Nome do grupo (ação, turma ou canal — quem chama escolhe). */
   acaoNome: string | null;
   acaoData: string | null;
   status: StatusFinanceiro;
@@ -27,7 +28,7 @@ const MORTO: StatusFinanceiro[] = ['cancelado', 'reembolsado'];
 export function resultadoPorAcao(cards: CardDaAcao[]): ResultadoAcao[] {
   const mapa = new Map<string, ResultadoAcao>();
   for (const c of cards) {
-    const acao = c.acaoNome ?? 'Sem ação identificada';
+    const acao = c.acaoNome ?? 'Sem identificação';
     const r = mapa.get(acao) ?? { acao, data: null, pessoas: 0, pagaram: 0, quitados: 0, saidas: 0, recebido: 0, aReceber: 0 };
     r.pessoas += 1;
     const pago = Number(c.pago) || 0;

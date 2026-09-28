@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { DataTable, EmptyState, Loading, SectionCard, Td, Th, Thead, Tr } from '@/shared/ui/components';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../application/ports';
-import {
+import { FAMILIAS_EM_ORDEM,
   agruparFaturamento, resumirHotmart, ROTULO_FAMILIA, serieHotmart,
   type DiaHotmart, type FamiliaHotmart, type FunilHotmart, type GranularidadeFaturamento, type SyncHotmart,
 } from '../domain/hotmart';
@@ -39,7 +39,7 @@ export function FaturamentoDiario({ repo }: { repo: FinanceiroRepository }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        {(['HM', 'AURUM', 'ACELERA', 'DIAMANTE'] as FamiliaHotmart[]).map((f) => (
+        {FAMILIAS_EM_ORDEM.map((f) => (
           <button
             key={f}
             type="button"

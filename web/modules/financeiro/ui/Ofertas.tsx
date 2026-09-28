@@ -21,7 +21,7 @@ import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import type { Oferta } from '../domain/types';
 import { juntarOfertas } from '../domain/ofertas-juntar';
-import { categoriaInferida, ROTULO_CATEGORIA, ROTULO_FAMILIA, type FamiliaHotmart, type OfertaHotmart } from '../domain/hotmart';
+import { FAMILIAS_EM_ORDEM, categoriaInferida, ROTULO_CATEGORIA, ROTULO_FAMILIA, type FamiliaHotmart, type OfertaHotmart } from '../domain/hotmart';
 import type { FinanceiroRepository } from '../application/ports';
 import { Chip, Erro, useCarga } from './hotmart/comum';
 
@@ -43,6 +43,8 @@ export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
   const [editando, setEditando] = useState<string | null>(null);
   const [papel, setPapel] = useState('');
   const [salvando, setSalvando] = useState(false);
+  // 28/09: o Curso Prático antigo (2019–2024) tinha as maiores ofertas e escondia as do Programa. Fica fora por padrão.
+  const [mostrarLegado, setMostrarLegado] = useState(false);
 
   const { dados: vendas, erro: erroVendas } = useCarga<OfertaHotmart[]>(
     () => repo.loadHotmartOfertas(familia), [familia, repo]);
@@ -54,14 +56,16 @@ export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
     [linhas],
   );
 
+  const qtdLegado = useMemo(() => linhas.filter((l) => l.papelProduto === 'legado').length, [linhas]);
   const linhasFiltradas = useMemo(() => {
+    const base = mostrarLegado ? linhas : linhas.filter((l) => l.papelProduto !== 'legado');
     switch (filtro) {
-      case 'cobranca': return linhas.filter((l) => l.temConfig);
-      case 'sem_categoria': return linhas.filter((l) => l.temVenda && !l.categoriaCatalogo);
-      case 'com_venda': return linhas.filter((l) => l.vendasPagas > 0);
-      default: return linhas;
+      case 'cobranca': return base.filter((l) => l.temConfig);
+      case 'sem_categoria': return base.filter((l) => l.temVenda && !l.categoriaCatalogo);
+      case 'com_venda': return base.filter((l) => l.vendasPagas > 0);
+      default: return base;
     }
-  }, [linhas, filtro]);
+  }, [linhas, filtro, mostrarLegado]);
 
   // Ordena uma CÓPIA (linhasFiltradas pode ser o próprio `linhas` memoizado).
   const linhasOrdenadas = useMemo(() => {
@@ -92,7 +96,7 @@ export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
       title="Ofertas"
       right={
         <div className="flex flex-wrap items-center gap-2">
-          {(['HM', 'AURUM', 'ACELERA', 'DIAMANTE'] as FamiliaHotmart[]).map((f) => (
+          {FAMILIAS_EM_ORDEM.map((f) => (
             <button
               key={f}
               type="button"
@@ -111,6 +115,11 @@ export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
         <Chip ativo={filtro === 'cobranca'} onClick={() => setFiltro('cobranca')} tom="info">Cobrança de saldo</Chip>
         <Chip ativo={filtro === 'sem_categoria'} onClick={() => setFiltro('sem_categoria')} tom="warning">Sem categoria no catálogo</Chip>
         <Chip ativo={filtro === 'com_venda'} onClick={() => setFiltro('com_venda')} tom="success">Com venda</Chip>
+        {qtdLegado > 0 && (
+          <Chip ativo={mostrarLegado} onClick={() => setMostrarLegado(!mostrarLegado)}>
+            {mostrarLegado ? 'Esconder' : 'Mostrar'} produtos antigos ({qtdLegado})
+          </Chip>
+        )}
         <span className="ml-2 text-[11px] font-medium uppercase tracking-wide text-[var(--fg-4)]">Ordenar por</span>
         <Chip ativo={ordem === 'liquido'} onClick={() => setOrdem('liquido')}>Mais faturou</Chip>
         <Chip ativo={ordem === 'vendas'} onClick={() => setOrdem('vendas')}>Mais vendas</Chip>

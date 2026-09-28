@@ -11,11 +11,14 @@
 //   taxaHotmart  — 4% + R$ 1 sobre o valor da oferta.
 //   liquido      — o que fica para o produtor (comissão PRODUCER).
 
-export type FamiliaHotmart = 'HM' | 'AURUM' | 'ACELERA' | 'DIAMANTE';
+export type FamiliaHotmart = 'HT' | 'HM' | 'AURUM' | 'ACELERA' | 'DIAMANTE';
+
+/** Ordem da escada (João, 28/09): o Holding Total é a entrada do Acelera/HM, o HM a do Aurum, e o Serviço Diamante vem por último. */
+export const FAMILIAS_EM_ORDEM: FamiliaHotmart[] = ['HT', 'ACELERA', 'HM', 'AURUM', 'DIAMANTE'];
 
 /** Rótulo de tela da família (fin.produtos.familia). Acelera Holding = preparatório do HM (27/09/2026). */
 export const ROTULO_FAMILIA: Record<FamiliaHotmart, string> = {
-  HM: 'Holding Masters', AURUM: 'Aurum', ACELERA: 'Acelera Holding', DIAMANTE: 'Serviço Diamante',
+  HT: 'Holding Total', HM: 'Holding Masters', AURUM: 'Aurum', ACELERA: 'Acelera Holding', DIAMANTE: 'Serviço Diamante',
 };
 
 /** Faturamento por funil (fin.funis: janela de datas por família), de fn_fin_hotmart_funis. */
@@ -344,10 +347,12 @@ export function resumirHotmart(dias: DiaHotmart[]): ResumoHotmart {
  * Regra de cobrança da Hotmart por produto, medida em 27/09/2026 sobre as vendas pagas:
  * - HM e Aurum: **4% do valor da oferta + R$ 1** (≈ 95% de 3.571 vendas; até 2024 algumas saíam a ~6%). Efetiva 4,05%.
  * - Acelera Holding: **5,3% + R$ 1** (414 de 415 vendas). Efetiva 5,35%.
+ * - Holding Total: **6% + R$ 1** em 12.253 vendas, **5,3% + R$ 1** nas 4.754 mais recentes (medido 28/09/2026).
  * - Serviço Diamante: **5,3% + R$ 1** (1.431 de 1.974 mensalidades; efetiva 5,56%), sem comissão.
  * Juros do parcelamento são pagos pelo CLIENTE e ficam com a Hotmart — não saem do bruto nem entram no líquido.
  */
 export const REGRA_TAXA_HOTMART: Record<FamiliaHotmart, string> = {
+  HT: '6% do valor + R$ 1 por venda (5,3% + R$ 1 nas mais recentes)',
   HM: '4% do valor + R$ 1 por venda',
   AURUM: '4% do valor + R$ 1 por venda',
   ACELERA: '5,3% do valor + R$ 1 por venda',
@@ -356,6 +361,7 @@ export const REGRA_TAXA_HOTMART: Record<FamiliaHotmart, string> = {
 
 /** Quem divide a venda com o produtor, por produto (comissões COPRODUCER/AFFILIATE/ADDON da API). */
 export const QUEM_DIVIDE: Record<FamiliaHotmart, string> = {
+  HT: 'afiliados e coprodução em 41% das vendas',
   HM: 'coprodutor, afiliados e add-on',
   AURUM: 'coprodutor (Borboleta Digital), afiliados e add-on — produtos antigos do Aurum',
   ACELERA: 'coprodutores Filipe Jung Jorge e Henrique Brenha, e add-on',
