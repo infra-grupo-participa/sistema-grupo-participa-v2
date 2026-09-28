@@ -17,7 +17,11 @@ import { FichaResumoTopo } from './FichaResumoTopo';
 import type { FinanceiroRepository } from '../application/ports';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
 import { rotuloMetodo, type BoardHotmart, type ProrataHM } from '../domain/hotmart';
-import { descreverBoletoAberto, fmtMesAno, rotuloParcelamento, temAssinaturaHM, temDadoHotmart } from '../domain/board-hotmart';
+import { descreverBoletoAberto, fmtMesAno, rotuloParcelamento, temDadoHotmart } from '../domain/board-hotmart';
+import {
+  assinaturaDoCard, linhaAtrasoMensalidade, resumoAssinaturaCard, ROTULO_SITUACAO_ASSINATURA,
+  type AssinaturaHMBoard, type ResumoAssinaturaCard,
+} from '../domain/assinatura-hm';
 import { inicioDoCiclo, prorataDoCard } from '../domain/prorata-hm';
 import { ContaProrata } from './hotmart/ContaProrata';
 import { Trajetoria } from './Trajetoria';
@@ -90,7 +94,7 @@ function SecaoCombinadoComercial({ conta }: { conta: ContaReceber }) {
   );
 }
 
-export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, onClose, onAcordoSalvo, hotmartPorCard = null, hotmartErro = false }: {
+export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, onClose, onAcordoSalvo, hotmartPorCard = null, hotmartErro = false, assinaturaPorPessoa = null }: {
   conta: ContaReceber;
   repo: FinanceiroRepository;
   canEdit: boolean;
@@ -105,12 +109,15 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
   /** Camada Hotmart do board, já carregada pelo chamador (nenhuma query aqui). */
   hotmartPorCard?: Map<string, BoardHotmart> | null;
   hotmartErro?: boolean;
+  /** Mensalidade do HM antigo por pessoa_chave (z52), já carregada pelo chamador (nenhuma query aqui). */
+  assinaturaPorPessoa?: Map<string, AssinaturaHMBoard> | null;
 }) {
   // Reorganizada em 27/09 (João: "entender melhor o que está acontecendo"): uma pergunta por aba —
   // quanto falta e por quê (Resumo) · o que pagou (Pagamentos) · quanto dá o pro rata · quem está cobrando.
   const [tab, setTab] = useState<'resumo' | 'trajetoria' | 'pagamentos' | 'prorata' | 'cobranca'>('resumo');
   const hm = hotmartPorCard?.get(conta.contato_hm_id) ?? null;
   const hmCarregando = !hotmartPorCard && !hotmartErro;
+  const assinatura = resumoAssinaturaCard(temDadoHotmart(hm) ? hm : null, assinaturaDoCard(hm, assinaturaPorPessoa));
   const ehHM = (hm?.origem ?? (/aurum/i.test(conta.produto) ? 'AURUM' : 'HM')) === 'HM';
   const [ficha, setFicha] = useState<Ficha | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -165,7 +172,7 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
         <div className="space-y-4">
           <FichaResumoTopo conta={conta} cor={corStatus(conta.status_financeiro)} regua={regua} hojeISO={hojeISO} />
           <AvisoBoleto hm={hm} hojeISO={hojeISO} />
-          <EmUmaOlhada conta={conta} hm={hotmartErro ? null : hm} carregando={hmCarregando} />
+          <EmUmaOlhada conta={conta} hm={hotmartErro ? null : hm} carregando={hmCarregando} assinatura={assinatura} />
           <section>
             <SectionTitle>Por que ainda não pagou</SectionTitle>
             <Row k="Pacote" v={conta.pacote != null ? fmtBRLc(conta.pacote) : 'Sem valor de pacote definido'} />
@@ -228,7 +235,7 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
         ) : !ficha ? null : (
           <div className="space-y-5">
             <PagamentosFicha conta={conta} repo={repo} board={ficha.extrato} />
-            <SecaoBoardHotmart hm={hm} carregando={hmCarregando} erro={hotmartErro && !hotmartPorCard} />
+            <SecaoBoardHotmart hm={hm} carregando={hmCarregando} erro={hotmartErro && !hotmartPorCard} assinatura={assinatura} />
           </div>
         )
       )}
@@ -281,10 +288,11 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
 
 /** Números da Hotmart deste contrato em blocos — taxa, líquido, juros, parcelamento. Só leitura: não muda o board.
  *  A assinatura entra em bloco próprio (contrato à parte); os outros pagamentos já estão na lista acima. */
-function SecaoBoardHotmart({ hm, carregando, erro }: {
+function SecaoBoardHotmart({ hm, carregando, erro, assinatura }: {
   hm: BoardHotmart | null;
   carregando: boolean;
   erro: boolean;
+  assinatura: ResumoAssinaturaCard | null;
 }) {
   if (carregando) return null;
   const titulo = <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">Como pagou na Hotmart</div>;
@@ -308,7 +316,7 @@ function SecaoBoardHotmart({ hm, carregando, erro }: {
         <Bloco rotulo="Último pagamento" valor={hm.ultimo_pagamento_em ? fmtData(hm.ultimo_pagamento_em) : '—'}
           detalhe={hm.ultimo_pagamento_valor != null ? fmtBRLc(hm.ultimo_pagamento_valor) : null} />
       </div>
-      {temAssinaturaHM(hm) && <div className="mt-3"><BlocoAssinaturaHM hm={hm} /></div>}
+      {assinatura && <div className="mt-3"><BlocoAssinaturaHM a={assinatura} /></div>}
       {hm.sincronizado_em && (
         <p className="mt-2 text-[11px] text-[var(--fg-4)]">Hotmart sincronizada em {fmtDataHora(hm.sincronizado_em)}.</p>
       )}
@@ -352,21 +360,25 @@ export function TelefoneContato({ telefone }: { telefone: string | null }) {
 const SUBTITULO = 'mt-3 mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]';
 
 /** Assinatura HM (mensalidades) — contrato à parte (decisão do João): fica
- *  fora do "pago" do card e fora das linhas de venda acima. */
-function BlocoAssinaturaHM({ hm }: { hm: BoardHotmart }) {
-  const de = fmtMesAno(hm.assinatura_de);
-  const ate = fmtMesAno(hm.assinatura_ate);
+ *  fora do "pago" do card e fora das linhas de venda acima. O atraso da mensalidade
+ *  mora AQUI, separado do "devendo" do Programa (z52, decisão 3 do Marcio, 28/09). */
+function BlocoAssinaturaHM({ a }: { a: ResumoAssinaturaCard }) {
+  const de = fmtMesAno(a.de);
+  const ate = fmtMesAno(a.ate);
+  const atraso = linhaAtrasoMensalidade(a, fmtBRLc);
   return (
     <div>
       <div className={SUBTITULO}>Assinatura HM (contrato à parte)</div>
-      <Row k="Mensalidades pagas" v={hm.assinatura_mensalidades} />
-      <Row k="Total das mensalidades" v={fmtBRLc(hm.assinatura_valor)} />
+      <Row k="Mensalidades pagas" v={a.mensalidades} />
+      <Row k="Total das mensalidades" v={fmtBRLc(a.valor)} />
       <Row k="De / até" v={`${de ?? '—'} → ${ate ?? '—'}`} />
+      {a.turmaOrigem && <Row k="Turma de origem" v={a.turmaOrigem} />}
       <Row
         k="Situação"
-        v={hm.assinatura_ativa == null ? '—' : <Badge tone={hm.assinatura_ativa ? 'success' : 'neutral'}>{hm.assinatura_ativa ? 'ativa' : 'encerrada'}</Badge>}
+        v={a.situacao == null ? '—' : <Badge tone={a.situacao === 'ativa' ? 'success' : a.situacao === 'em_atraso' ? 'danger' : 'neutral'}>{ROTULO_SITUACAO_ASSINATURA[a.situacao]}</Badge>}
       />
-      <p className="mt-1 text-[11px] text-[var(--fg-3)]">Não entra no &quot;pago&quot; deste card — é outro contrato.</p>
+      {atraso && <p className="mt-1 text-xs font-semibold text-[var(--red)]">{atraso} <span className="font-normal text-[var(--fg-3)]">(últimos 120 dias)</span></p>}
+      <p className="mt-1 text-[11px] text-[var(--fg-3)]">Não entra no &quot;pago&quot; nem no &quot;devendo&quot; deste card — é outro contrato.</p>
     </div>
   );
 }

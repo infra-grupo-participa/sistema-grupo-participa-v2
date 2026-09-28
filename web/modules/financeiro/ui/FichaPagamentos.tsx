@@ -13,6 +13,7 @@ import type { FinanceiroRepository } from '../application/ports';
 import type { ContaReceber, Lancamento } from '../domain/types';
 import { ROTULO_GRUPO, rotuloCategorias, rotuloMetodo, type BoardHotmart, type TransacaoHotmart } from '../domain/hotmart';
 import { explicarDivergencia, temDadoHotmart } from '../domain/board-hotmart';
+import { linhaAtrasoMensalidade, type ResumoAssinaturaCard } from '../domain/assinatura-hm';
 import { juntarPagamentos, resumirPagamentos, type PagamentoFicha } from '../domain/pagamentos-ficha';
 import { Chip, Erro, useCarga } from './hotmart/comum';
 
@@ -31,11 +32,16 @@ export function Bloco({ rotulo, valor, detalhe, tom = 'neutro' }: {
 
 /** A situação em 4 números: o que o board registra, o que a Hotmart recebeu, o que está devendo lá e o que existe
  *  fora do card (assinatura/outros). Uma frase embaixo quando board e Hotmart não batem. */
-export function EmUmaOlhada({ conta, hm, carregando }: { conta: ContaReceber; hm: BoardHotmart | null; carregando: boolean }) {
+export function EmUmaOlhada({ conta, hm, carregando, assinatura = null }: {
+  conta: ContaReceber; hm: BoardHotmart | null; carregando: boolean;
+  /** Bloco Assinatura HM já resolvido (z52): só o atraso da mensalidade é lido aqui — nunca soma no "devendo". */
+  assinatura?: ResumoAssinaturaCard | null;
+}) {
   const tem = temDadoHotmart(hm);
   const outros = tem ? (hm.outros_valor ?? 0) + (hm.assinatura_valor ?? 0) : 0;
   const nOutros = tem ? (hm.outros_pagamentos ?? 0) + (hm.assinatura_mensalidades ?? 0) : 0;
   const explicacao = tem ? explicarDivergencia(hm, fmtBRLc) : null;
+  const atrasoMensalidade = tem ? linhaAtrasoMensalidade(assinatura, fmtBRLc) : null;
   return (
     <section>
       <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">Em uma olhada</div>
@@ -51,6 +57,11 @@ export function EmUmaOlhada({ conta, hm, carregando }: { conta: ContaReceber; hm
         <Bloco rotulo="Fora deste card" valor={carregando ? '…' : tem && nOutros > 0 ? fmtBRLc(outros) : 'Nada'}
           detalhe={tem && nOutros > 0 ? `${nOutros} pagamento${nOutros === 1 ? '' : 's'} (renovação, assinatura, outras ofertas)` : 'sem outros pagamentos'} />
       </div>
+      {atrasoMensalidade && (
+        <p className="mt-1.5 text-[11px] font-semibold text-[var(--red)]">
+          Assinatura HM: {atrasoMensalidade} <span className="font-normal text-[var(--fg-3)]">(últimos 120 dias; fora do devendo do Programa)</span>
+        </p>
+      )}
       {explicacao ? (
         <div className="mt-2 flex items-start gap-1.5 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2 text-xs text-[var(--fg-2)]">
           <Icon name="alert" size={13} className="mt-0.5 shrink-0 text-[var(--yellow)]" />

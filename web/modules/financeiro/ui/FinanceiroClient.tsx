@@ -31,6 +31,7 @@ import { FaturamentoDiario } from './FaturamentoDiario';
 import { contarDiamantes, ServicoDiamante, useServicoDiamante } from './ServicoDiamante';
 import type { BoardHotmart } from '../domain/hotmart';
 import { indexarBoardHotmart } from '../domain/board-hotmart';
+import { indexarAssinaturaHM, type AssinaturaHMBoard } from '../domain/assinatura-hm';
 
 type Tab = 'board' | 'faturamento' | 'funis' | 'relatorios' | 'ofertas';
 
@@ -83,6 +84,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // mostra aviso. `null` = ainda carregando ou falhou (ver hotmartErro).
   const [hotmartPorCard, setHotmartPorCard] = useState<Map<string, BoardHotmart> | null>(null);
   const [hotmartErro, setHotmartErro] = useState(false);
+  // Mensalidade do HM antigo por pessoa_chave (fn_fin_board_assinatura_hm, z52): UMA chamada por abertura do board,
+  // junto da camada Hotmart, nunca por card. `null` = carregando ou falhou — o bloco Assinatura cai no dado antigo.
+  const [assinaturaPorPessoa, setAssinaturaPorPessoa] = useState<Map<string, AssinaturaHMBoard> | null>(null);
 
   const selecionarProduto = (produto: ProdutoChave) => {
     setVerDiamante(false);
@@ -107,6 +111,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
 
   /** Camada Hotmart — disparada em paralelo ao board; erro fica só nela. */
   const buscarHotmart = () => repo.loadBoardHotmart().then(indexarBoardHotmart);
+  const buscarAssinatura = () => repo.loadBoardAssinaturaHM().then(indexarAssinaturaHM);
 
   // Recarrega o board a partir de um evento do usuário (retry do erro,
   // onAcordoSalvo do drawer) — componente já montado, sem guard de unmount.
@@ -114,6 +119,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     buscarHotmart()
       .then((m) => { setHotmartPorCard(m); setHotmartErro(false); })
       .catch(() => setHotmartErro(true));
+    buscarAssinatura().then(setAssinaturaPorPessoa).catch(() => {});
     return buscarBoard()
       .then(({ b, rg }) => { setBoard(b); setRegua(rg); setErroBoard(null); })
       .catch(() => setErroBoard('Não foi possível carregar o board financeiro. Verifique sua conexão e tente novamente.'));
@@ -132,6 +138,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     buscarHotmart()
       .then((m) => { if (vivo) { setHotmartPorCard(m); setHotmartErro(false); } })
       .catch(() => { if (vivo) setHotmartErro(true); });
+    buscarAssinatura()
+      .then((m) => { if (vivo) setAssinaturaPorPessoa(m); })
+      .catch(() => { /* sem a camada nova o bloco Assinatura mostra o que já mostrava */ });
     (async () => {
       const t = await repo.loadTurmas().catch(() => []);
       if (vivo) setTurmas(t);
@@ -418,6 +427,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               totalSemBusca={cardsFiltrados.length}
               atalhoAtivo={!openId}
               hotmartPorCard={hotmartPorCard}
+              assinaturaPorPessoa={assinaturaPorPessoa}
               divergeFiltro={divergeAtivo}
               qtdDiverge={qtdDiverge}
               onDivergeFiltro={setDivergeFiltro}
@@ -477,6 +487,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           onAcordoSalvo={carregarBoardAgora}
           hotmartPorCard={hotmartPorCard}
           hotmartErro={hotmartErro}
+          assinaturaPorPessoa={assinaturaPorPessoa}
         />
       )}
     </div>

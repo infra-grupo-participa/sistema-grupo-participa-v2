@@ -44,6 +44,7 @@ import { CardBoardView } from './CardBoard';
 import { FAIXAS_FUNIL, type CardComEfeito } from '../application/carregar-board';
 import type { FaixaFunil } from '../domain/types';
 import type { BoardHotmart } from '../domain/hotmart';
+import { assinaturaDoCard, type AssinaturaHMBoard } from '../domain/assinatura-hm';
 
 type Eixo = 'funil' | 'prazo' | 'valor';
 
@@ -68,7 +69,7 @@ export const ORDEM_COR: CorStatus[] = ['verde', 'ciano', 'azul', 'amarelo', 'ver
 
 export function BoardView({
   cards, cardsParaContador, hojeISO, onOpen, busca, onBusca, totalSemBusca, atalhoAtivo = true, corFiltro, onCorFiltro,
-  hotmartPorCard = null, divergeFiltro = false, qtdDiverge = 0, onDivergeFiltro,
+  hotmartPorCard = null, assinaturaPorPessoa = null, divergeFiltro = false, qtdDiverge = 0, onDivergeFiltro,
   boletoFiltro = false, qtdBoleto = 0, onBoletoFiltro,
 }: {
   /** Lista plana já filtrada por produto/ação/busca/COR — única fonte do
@@ -107,6 +108,8 @@ export function BoardView({
   /** Camada Hotmart por contato_hm_id (null = carregando ou falhou — o board
    *  segue igual, só sem o selo). Carregada uma vez pelo pai. */
   hotmartPorCard?: Map<string, BoardHotmart> | null;
+  /** Mensalidade do HM antigo por pessoa_chave (z52) — carregada uma vez pelo pai; null = cai no dado antigo. */
+  assinaturaPorPessoa?: Map<string, AssinaturaHMBoard> | null;
   /** Filtro "Diverge da Hotmart" — controlado pelo pai, mesma razão de `busca`. */
   divergeFiltro?: boolean;
   /** Quantos cards do recorte (antes deste filtro) divergem — número do chip. */
@@ -396,7 +399,8 @@ export function BoardView({
         >
           {ordenados.map((c) => (
             <li key={c.conta.contato_hm_id}>
-              <CardBoardView card={c} onOpen={onOpen} hojeISO={hojeISO} hotmart={hotmartPorCard?.get(c.conta.contato_hm_id) ?? null} />
+              <CardBoardView card={c} onOpen={onOpen} hojeISO={hojeISO} hotmart={hotmartPorCard?.get(c.conta.contato_hm_id) ?? null}
+                assinatura={assinaturaDoCard(hotmartPorCard?.get(c.conta.contato_hm_id), assinaturaPorPessoa)} />
             </li>
           ))}
         </ul>

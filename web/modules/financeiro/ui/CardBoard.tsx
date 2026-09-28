@@ -14,7 +14,10 @@ import { Icon } from '@/shared/ui/icons';
 import { ProgressBar } from '@/shared/ui/components';
 import { fmtBRL, fmtBRLc, fmtData, fmtPrazo } from '@/shared/ui/format';
 import type { BoardHotmart } from '../domain/hotmart';
-import { descreverBoletoAberto, explicarDivergencia, linhaAssinaturaHM, rotuloParcelamento, temDadoHotmart } from '../domain/board-hotmart';
+import { descreverBoletoAberto, explicarDivergencia, rotuloParcelamento, temDadoHotmart } from '../domain/board-hotmart';
+import {
+  linhaAtrasoMensalidade, linhaResumoAssinatura, resumoAssinaturaCard, ROTULO_SITUACAO_ASSINATURA, type AssinaturaHMBoard,
+} from '../domain/assinatura-hm';
 import type { CardComEfeito } from '../application/carregar-board';
 import { direcaoDivergencia, statusLabel, temDivergenciaPacote } from '../domain/financeiro';
 import { labelMotivoReuniao } from '../domain/reuniao';
@@ -80,12 +83,14 @@ const TEXTO_PARADO: Record<ReturnType<typeof tomParado>, string> = {
   forte: 'text-[var(--yellow)]',
 };
 
-export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
+export function CardBoardView({ card, onOpen, hojeISO, hotmart = null, assinatura = null }: {
   card: CardComEfeito;
   onOpen: (id: string) => void;
   hojeISO: string;
   /** Linha de fn_fin_board_hotmart deste card (null = sem dado ou camada não carregou → selo some). */
   hotmart?: BoardHotmart | null;
+  /** Mensalidade do HM antigo desta pessoa (fn_fin_board_assinatura_hm, z52). null = sem ou camada não carregou. */
+  assinatura?: AssinaturaHMBoard | null;
 }) {
   const { conta } = card;
   const dias = card.diasNoEstagio;
@@ -151,8 +156,12 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
     : undefined;
   // Assinatura HM (mensalidades): contrato à parte — decisão do João, NÃO soma
   // no "pago" do card nem na linha Hotmart acima. Sem assinatura → nada.
-  const hmAssinatura = linhaAssinaturaHM(hm, fmtBRL);
-  const hmAssinaturaAtiva = hm?.assinatura_ativa === true;
+  // Situação e atraso vêm da z52 (atraso separado do "devendo" do Programa, decisão 3 do Marcio, 28/09).
+  const assinaturaResumo = resumoAssinaturaCard(hm, assinatura);
+  const hmAssinatura = assinaturaResumo ? linhaResumoAssinatura(assinaturaResumo, fmtBRL) : null;
+  const situacaoAssinatura = assinaturaResumo?.situacao ?? 'encerrada';
+  const hmAssinaturaAtiva = situacaoAssinatura === 'ativa';
+  const atrasoMensalidade = linhaAtrasoMensalidade(assinaturaResumo, fmtBRL);
   // Boleto/Pix gerado e não pago: selo à parte (tracejado, cor info), nunca confundido com a cor de status do card.
   const boleto = descreverBoletoAberto(hm, hojeISO, fmtBRL);
 
@@ -171,7 +180,7 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
       }${card.motivoUrgencia ? `, ${card.motivoUrgencia}` : ''}${
         divergePacote ? `, pacote divergente da régua, ${direcaoPacote === 'a_maior' ? 'a mais' : 'a menos'}` : ''
       }${hmDiverge ? ', diverge da Hotmart' : ''}${boleto ? `, ${boleto.titulo}` : ''}${
-        hmAssinatura ? `, assinatura HM ${hmAssinaturaAtiva ? 'ativa' : 'encerrada'}` : ''
+        hmAssinatura ? `, assinatura HM ${ROTULO_SITUACAO_ASSINATURA[situacaoAssinatura]}${atrasoMensalidade ? `, ${atrasoMensalidade}` : ''}` : ''
       }`}
       title={titleEstagio}
     >
@@ -324,14 +333,17 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
       )}
       {hmAssinatura && (
         <div
-          className="relative z-[1] mt-1.5 flex items-center justify-between gap-2"
-          title="Assinatura HM (mensalidades) é outro contrato: não entra no pago deste card."
+          className="relative z-[1] mt-1.5"
+          title={`Assinatura HM (mensalidades) é outro contrato: não entra no pago nem no devendo deste card.${assinaturaResumo?.turmaOrigem ? ` Turma de origem: ${assinaturaResumo.turmaOrigem}.` : ''}`}
         >
-          <span className="truncate text-[10px] tabular text-[var(--fg-3)]">{hmAssinatura}</span>
-          <span className="shrink-0 inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-2)]">
-            {hmAssinaturaAtiva && <span className="h-1.5 w-1.5 rounded-full bg-[var(--green)]" aria-hidden />}
-            {hmAssinaturaAtiva ? 'ativa' : 'encerrada'}
-          </span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-[10px] tabular text-[var(--fg-3)]">{hmAssinatura}</span>
+            <span className="shrink-0 inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-2)]">
+              {hmAssinaturaAtiva && <span className="h-1.5 w-1.5 rounded-full bg-[var(--green)]" aria-hidden />}
+              {ROTULO_SITUACAO_ASSINATURA[situacaoAssinatura]}
+            </span>
+          </div>
+          {atrasoMensalidade && <div className="truncate text-[10px] font-semibold tabular text-[var(--red)]">{atrasoMensalidade}</div>}
         </div>
       )}
 

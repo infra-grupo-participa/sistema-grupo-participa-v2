@@ -7,6 +7,7 @@
 // Fonte: 20260928z52 — fn_fin_board_assinatura_hm (1 chamada por abertura do board) e fn_fin_assinatura_hm_sem_card.
 // `pessoa_chave` = fin.chave_opaca(fin.identidade.pessoa_chave), a MESMA chave de BoardHotmart.pessoa_chave.
 import type { BoardHotmart } from './hotmart';
+import { fmtMesAno } from './board-hotmart';
 
 /** fn_fin_board_assinatura_hm — uma linha por pessoa que tem cobrança da mensalidade. Sem dado pessoal. */
 export interface AssinaturaHMBoard {
@@ -154,6 +155,13 @@ export function resumoAssinaturaCard(
     atrasoValor: a?.atraso_120d_valor ?? 0,
     turmaOrigem: a?.turma_origem ?? null,
   };
+}
+
+/** Linha curta do card: "Assinatura HM: 12 × · R$ 23.964 · até 09/2026" (ou "nenhuma paga" quando só há atraso). */
+export function linhaResumoAssinatura(r: ResumoAssinaturaCard, fmtValor: (n: number) => string): string {
+  if (r.mensalidades <= 0) return 'Assinatura HM: nenhuma paga';
+  const ate = fmtMesAno(r.ate);
+  return `Assinatura HM: ${r.mensalidades} × · ${fmtValor(r.valor)}${ate ? ` · até ${ate}` : ''}`;
 }
 
 /** "mensalidade em atraso: 2 · R$ 3.994" — null sem atraso. */

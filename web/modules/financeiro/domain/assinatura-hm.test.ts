@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  assinaturaDoCard, assinaturaEmDia, indexarAssinaturaHM, linhaAtrasoMensalidade, normalizarAssinaturaSemCard,
+  assinaturaDoCard, assinaturaEmDia, indexarAssinaturaHM, linhaAtrasoMensalidade, linhaResumoAssinatura, normalizarAssinaturaSemCard,
   resumoAssinaturaCard, totaisAssinaturaSemCard, type AssinaturaHMBoard, type AssinaturaHMSemCard,
 } from './assinatura-hm';
 import type { BoardHotmart } from './hotmart';
@@ -81,6 +81,15 @@ describe('resumoAssinaturaCard', () => {
     expect(resumoAssinaturaCard(hm(), null)).toBeNull();
     expect(resumoAssinaturaCard(hm(), ass({ mensalidades_pagas: 0, atraso_120d_n: 0 }))).toBeNull();
     expect(resumoAssinaturaCard(hm({ encontrado: false, assinatura_mensalidades: 3 }), null)).toBeNull();
+  });
+});
+
+describe('linhaResumoAssinatura', () => {
+  it('mesma linha que o card já mostrava; só atraso vira "nenhuma paga"', () => {
+    const fmt = (n: number) => `R$ ${n}`;
+    const doBoard = hm({ assinatura_mensalidades: 12, assinatura_valor: 23964, assinatura_ate: '2026-09-03', assinatura_ativa: true });
+    expect(linhaResumoAssinatura(resumoAssinaturaCard(doBoard, null)!, fmt)).toBe('Assinatura HM: 12 × · R$ 23964 · até 09/2026');
+    expect(linhaResumoAssinatura(resumoAssinaturaCard(hm(), ass({ mensalidades_pagas: 0, atraso_120d_n: 1 }))!, fmt)).toBe('Assinatura HM: nenhuma paga');
   });
 });
 
