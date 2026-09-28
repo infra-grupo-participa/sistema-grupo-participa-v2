@@ -9,6 +9,7 @@ import { SUBABAS_FATURAMENTO } from './textos';
 export const SUBABAS_FATURAMENTO_LISTA: { k: SubAbaFaturamento; l: string }[] = [
   { k: 'periodo', l: SUBABAS_FATURAMENTO.periodo },
   { k: 'caixa', l: SUBABAS_FATURAMENTO.caixa },
+  { k: 'taxa', l: SUBABAS_FATURAMENTO.taxa },
 ];
 
 export function SubAbasFaturamento({ ativa, onSelecionar }: {

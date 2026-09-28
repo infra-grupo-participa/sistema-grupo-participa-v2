@@ -1,4 +1,4 @@
-// Textos da aba Faturamento (sub-abas Por período e Caixa Hotmart). Moram aqui, fora dos componentes, no mesmo
+// Textos da aba Faturamento (sub-abas Por período, Caixa Hotmart e Taxa Hotmart). Moram aqui, fora dos componentes, no mesmo
 // padrão de ui/receber/textos.ts. Nenhum percentual de antecipação ou retenção é escrito aqui: os valores vêm do
 // banco (fin.premissas_recebimento). A única data fixa é o marco da antecipação, recebido por parâmetro.
 
@@ -7,6 +7,7 @@ export const SUBABAS_FATURAMENTO = {
   rotuloGrupo: 'Faturamento',
   periodo: 'Por período',
   caixa: 'Caixa Hotmart',
+  taxa: 'Taxa Hotmart',
 } as const;
 
 /** As três linhas do líquido realista (decisão de tela de 28/09), na tabela de Por período. */
@@ -71,4 +72,66 @@ export const CAIXA_HOTMART = {
     liberado: 'Liberado',
     em_garantia: 'A liberar',
   },
+} as const;
+
+const n = (v: number) => v.toLocaleString('pt-BR');
+const vendas = (v: number) => `${n(v)} ${v === 1 ? 'venda' : 'vendas'}`;
+
+/** Taxa Hotmart (F7, z70). Nenhum percentual de acordo mora aqui: o texto do acordo vem do banco (grupo_acordo). */
+export const TAXA_HOTMART = {
+  pergunta: 'A Hotmart está cobrando o que combinou?',
+  escopo: 'Todas as vendas pagas da conta Hotmart da Academy, pelo dia da aprovação. Venda com oferta abaixo de R$ 100 fica fora (ruído). Divergente = taxa cobrada difere do acordo do produto em mais de R$ 10.',
+  periodo: 'Período',
+  anoCorrente: (ano: string) => `Ano de ${ano}`,
+  meses12: '12 meses',
+  de: 'Data inicial',
+  ate: 'Data final',
+  ou: 'ou de',
+  ateCurto: 'até',
+  erroDatas: 'Informe as duas datas.',
+  erroInvertido: 'A data final está antes da inicial.',
+  erroJanela: (max: number) => `O período vai até ${max} dias. Encurte o intervalo.`,
+  carregando: 'Carregando a auditoria da taxa Hotmart…',
+  tentarDeNovo: 'Tentar de novo',
+  // Resumo do topo (uma frase, sem card)
+  resumoRotulo: 'Resumo do período',
+  semVendas: 'Nenhuma venda à vista com oferta a partir de R$ 100 no período.',
+  vendasAVista: (v: number) => `${vendas(v)} à vista`,
+  tudoCerto: 'A Hotmart cobrou o combinado em todas as vendas do período.',
+  divergentes: (d: number, impacto: string, aMais: boolean) =>
+    `${n(d)} ${d === 1 ? 'divergente' : 'divergentes'}, impacto ${impacto} ${aMais ? 'cobrado a mais' : 'cobrado a menos'}.`,
+  semTaxa: (v: number) => `${vendas(v)} ${v === 1 ? 'veio' : 'vieram'} sem a taxa informada pela Hotmart e ficaram fora da conta.`,
+  semAcordo: (p: number) => `${n(p)} ${p === 1 ? 'produto não tem' : 'produtos não têm'} acordo específico e ${p === 1 ? 'cai' : 'caem'} no acordo padrão.`,
+  // Tabela por produto
+  produtosTitulo: 'À vista, por produto',
+  produtosRotulo: 'Taxa Hotmart à vista por produto: real × acordo',
+  produto: 'Produto',
+  acordo: 'Acordo',
+  semAcordoEspecifico: 'sem acordo específico',
+  nVendas: 'Vendas',
+  oferta: 'Oferta',
+  taxaReal: 'Taxa cobrada',
+  taxaEsperada: 'Taxa do acordo',
+  nDivergentes: 'Divergentes',
+  impacto: 'Impacto',
+  ajudaImpacto: 'Soma de (cobrado − acordo) só das vendas divergentes. Positivo = a Hotmart cobrou a mais.',
+  semTaxaNota: (v: number) => `+ ${n(v)} sem taxa`,
+  // Parcelado (informativo)
+  parceladoTitulo: 'Parcelado: quanto o cliente paga a mais por nº de parcelas',
+  parceladoExplica: 'O juro do parcelamento é pago pelo cliente. A empresa recebe o mesmo líquido da venda à vista, então o parcelado não entra na auditoria acima. A tabela é só informativa: (valor cobrado do cliente − líquido da empresa) ÷ oferta.',
+  parceladoRotulo: 'Quanto o cliente paga a mais por número de parcelas',
+  parcelas: 'Parcelas',
+  parcela: (p: number) => (p === 1 ? '1× (referência)' : `${p}×`),
+  clientePaga: 'Cobrado − líquido, sobre a oferta',
+  aMaisQue1x: 'A mais que 1×',
+  pontos: (v: string) => `+${v} p.p.`,
+  // Divergências
+  divergenciasTitulo: 'Vendas divergentes',
+  divergenciasRotulo: 'Vendas à vista com taxa diferente do acordo, maior diferença primeiro',
+  limite: (mostradas: number, total: number) => `Mostrando as ${n(mostradas)} maiores diferenças de ${n(total)} divergentes.`,
+  transacao: 'Transação',
+  dia: 'Dia',
+  diferenca: 'Diferença',
+  exportar: 'Exportar CSV',
+  exportarAjuda: 'Transação, dia, produto e valores. Sem nome, e-mail ou documento.',
 } as const;

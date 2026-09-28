@@ -85,7 +85,9 @@ describe('CaixaHotmart', () => {
 describe('FaturamentoDiario — sub-abas', () => {
   const repo = { loadHotmartSync: () => new Promise(() => {}) } as unknown as FinanceiroRepository;
   const base = { repo, onSubChange: () => {}, cacheCaixa: cacheCom(carregado),
-    periodoCaixa: { de: '2026-05-01', ate: '2026-09-28', preset: null } as PeriodoCaixa, onPeriodoCaixa: () => {} };
+    periodoCaixa: { de: '2026-05-01', ate: '2026-09-28', preset: null } as PeriodoCaixa, onPeriodoCaixa: () => {},
+    cacheTaxa: { lido: () => undefined, obter: vi.fn(() => new Promise<never>(() => {})) },
+    periodoTaxa: { de: '2026-01-01', ate: '2026-09-28', preset: 'ano' } as const, onPeriodoTaxa: () => {} };
   it('tablist com Por período e Caixa Hotmart; o painel aponta para a aba ativa', () => {
     const h = renderToStaticMarkup(createElement(FaturamentoDiario, { ...base, sub: 'caixa' }));
     expect(h).toContain('role="tablist"');

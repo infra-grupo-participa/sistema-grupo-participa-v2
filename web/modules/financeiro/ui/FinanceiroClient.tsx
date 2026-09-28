@@ -44,6 +44,8 @@ import { filtroReceberDoHash, hashDaSubAbaReceber, subAbaReceberDoHash, type Sub
 import { hashDaSubAbaFaturamento, subAbaFaturamentoDoHash, type SubAbaFaturamento } from './faturamento/hash';
 import { criarCacheCaixaHotmart } from '../application/carregar-caixa-hotmart';
 import { periodoInicialCaixa, type PeriodoCaixa } from './faturamento/CaixaHotmart';
+import { criarCacheTaxaHotmart } from '../application/carregar-taxa-hotmart';
+import { periodoInicialTaxa, type PeriodoTaxa } from './faturamento/TaxaHotmart';
 import { isoDiasAtras } from './hotmart/comum';
 
 type Tab = 'board' | 'faturamento' | 'visao' | 'receber' | 'funis' | 'relatorios' | 'ofertas';
@@ -100,6 +102,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const [faturamentoSub, setFaturamentoSub] = useState<SubAbaFaturamento>('periodo');
   const [periodoCaixa, setPeriodoCaixa] = useState<PeriodoCaixa>(() => periodoInicialCaixa(isoDiasAtras(0)));
   const [cacheCaixa] = useState(() => criarCacheCaixaHotmart(repo));
+  // Idem para a Taxa Hotmart (#faturamento?ver=taxa): auditoria + divergências (só se houver divergente) por período.
+  const [periodoTaxa, setPeriodoTaxa] = useState<PeriodoTaxa>(() => periodoInicialTaxa(isoDiasAtras(0)));
+  const [cacheTaxa] = useState(() => criarCacheTaxaHotmart(repo));
   const [turma] = useState<string | null>(null); // sem filtro de turma no board novo — todas reunidas, igual ao legado.
   // Metas por turma (fn_fin_metas) não têm tela própria nesta entrega — o
   // board novo não filtra por turma (todas reunidas), e a UI de metas/régua
@@ -682,7 +687,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
 
       {tab === 'faturamento' && (
         <FaturamentoDiario repo={repo} sub={faturamentoSub} onSubChange={setFaturamentoSub}
-          cacheCaixa={cacheCaixa} periodoCaixa={periodoCaixa} onPeriodoCaixa={setPeriodoCaixa} />
+          cacheCaixa={cacheCaixa} periodoCaixa={periodoCaixa} onPeriodoCaixa={setPeriodoCaixa}
+          cacheTaxa={cacheTaxa} periodoTaxa={periodoTaxa} onPeriodoTaxa={setPeriodoTaxa} />
       )}
 
       {tab === 'relatorios' && (

@@ -24,17 +24,25 @@ import { INICIO_ANTECIPACAO, pegaAntesDaAntecipacao } from '../domain/caixa-hotm
 import type { SubAbaFaturamento } from './faturamento/hash';
 import { SubAbasFaturamento } from './faturamento/SubAbasFaturamento';
 import { CaixaHotmart, type PeriodoCaixa } from './faturamento/CaixaHotmart';
+import type { CacheTaxaHotmart } from '../application/carregar-taxa-hotmart';
+import { TaxaHotmart, type PeriodoTaxa } from './faturamento/TaxaHotmart';
 import { avisoSemAntecipacao, LINHAS_RECEBIMENTO } from './faturamento/textos';
 
-/** Sub-abas (F6): Por período (a visão de sempre, por família) · Caixa Hotmart (toda a conta, por dia de aprovação).
- *  A sub-aba e o período do Caixa moram no FinanceiroClient (esta aba desmonta a cada troca de aba). */
-export function FaturamentoDiario({ repo, sub, onSubChange, cacheCaixa, periodoCaixa, onPeriodoCaixa }: {
+/** Sub-abas: Por período (a visão de sempre, por família) · Caixa Hotmart (F6, toda a conta, por dia de aprovação) ·
+ *  Taxa Hotmart (F7, cobrado × acordo por produto). A sub-aba, os períodos e os caches moram no FinanceiroClient
+ *  (esta aba desmonta a cada troca de aba). */
+export function FaturamentoDiario({
+  repo, sub, onSubChange, cacheCaixa, periodoCaixa, onPeriodoCaixa, cacheTaxa, periodoTaxa, onPeriodoTaxa,
+}: {
   repo: FinanceiroRepository;
   sub: SubAbaFaturamento;
   onSubChange: (s: SubAbaFaturamento) => void;
   cacheCaixa: CacheCaixaHotmart;
   periodoCaixa: PeriodoCaixa;
   onPeriodoCaixa: (p: PeriodoCaixa) => void;
+  cacheTaxa: CacheTaxaHotmart;
+  periodoTaxa: PeriodoTaxa;
+  onPeriodoTaxa: (p: PeriodoTaxa) => void;
 }) {
   const [familia, setFamilia] = useState<FamiliaHotmart>('HM');
   const [sync, setSync] = useState<{ s: SyncHotmart; atrasado: boolean } | null>(null);
@@ -58,6 +66,8 @@ export function FaturamentoDiario({ repo, sub, onSubChange, cacheCaixa, periodoC
       <div role="tabpanel" id={`faturamento-painel-${sub}`} aria-labelledby={`faturamento-tab-${sub}`} className="space-y-4">
       {sub === 'caixa' ? (
         <CaixaHotmart cache={cacheCaixa} periodo={periodoCaixa} onPeriodo={onPeriodoCaixa} hojeISO={isoDiasAtras(0)} />
+      ) : sub === 'taxa' ? (
+        <TaxaHotmart cache={cacheTaxa} periodo={periodoTaxa} onPeriodo={onPeriodoTaxa} hojeISO={isoDiasAtras(0)} />
       ) : <>
       <div className="flex flex-wrap items-center gap-2">
         {FAMILIAS_EM_ORDEM.map((f) => (
