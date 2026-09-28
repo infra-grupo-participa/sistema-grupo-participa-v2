@@ -24,12 +24,12 @@ import { FichaDrawer } from './FichaDrawer';
 import { Relatorios } from './Relatorios';
 import { Ofertas } from './Ofertas';
 import { FaturamentoDiario } from './FaturamentoDiario';
-import { ServicoDiamante } from './ServicoDiamante';
+import { contarDiamantes, ServicoDiamante, useServicoDiamante } from './ServicoDiamante';
 import { ProrataHM } from './hotmart/ProrataHM';
 import type { BoardHotmart } from '../domain/hotmart';
 import { indexarBoardHotmart } from '../domain/board-hotmart';
 
-type Tab = 'board' | 'faturamento' | 'relatorios' | 'ofertas' | 'prorata' | 'diamante';
+type Tab = 'board' | 'faturamento' | 'relatorios' | 'ofertas' | 'prorata';
 
 const repo = new SupabaseFinanceiroRepository();
 
@@ -54,6 +54,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // e Aurum nunca misturados). Trocar de aba reseta o canal ativo: um canal
   // do HM não faz sentido selecionado depois de trocar para Aurum.
   const [produtoAtivo, setProdutoAtivo] = useState<ProdutoChave>('HM');
+  // Serviço Diamante: aba do board ao lado de HM/Aurum (27/09/2026). Carrega junto com o board (1 RPC, ~180 linhas).
+  const [verDiamante, setVerDiamante] = useState(false);
+  const diamante = useServicoDiamante(repo, tab === 'board');
   const [acaoAtiva, setAcaoAtiva] = useState<string | null>(null);
   // Busca mora AQUI, não no BoardView, porque o rodapé de totais precisa somar
   // exatamente o conjunto que o mosaico mostra (ver comentário da prop `busca`
@@ -78,6 +81,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const [hotmartErro, setHotmartErro] = useState(false);
 
   const selecionarProduto = (produto: ProdutoChave) => {
+    setVerDiamante(false);
     setProdutoAtivo(produto);
     setAcaoAtiva(null);
     setBusca('');
@@ -142,7 +146,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       else if (base === 'relatorios') setTab('relatorios');
       else if (base === 'ofertas') setTab('ofertas');
       else if (base === 'prorata') setTab('prorata');
-      else if (base === 'diamante') setTab('diamante');
+      // #diamante era a tela própria do Serviço Diamante; virou aba do board (27/09).
+      else if (base === 'diamante') { setTab('board'); setVerDiamante(true); }
       // #hotmart era a aba "Hotmart (oficial)", unificada no Faturamento Diário em 27/09 — link antigo cai nela.
       else if (base === 'hotmart') setTab('faturamento');
       else setTab('board');
@@ -150,7 +155,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       if (base === 'board' && query) {
         const params = new URLSearchParams(query);
         const produto = params.get('produto');
-        if (produto === 'HM' || produto === 'AURUM') setProdutoAtivo(produto);
+        if (produto === 'HM' || produto === 'AURUM') { setProdutoAtivo(produto); setVerDiamante(false); }
+        if (produto === 'DIAMANTE') setVerDiamante(true);
         // Guardado cru; a VALIDAÇÃO contra as ações reais acontece no render
         // (`acaoEfetiva`), porque a lista de ações só existe depois que os
         // cards chegam. Ver nota em `acaoEfetiva`.
@@ -234,13 +240,13 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     // apagava o próprio deep link a cada load. Achado do fable-orchestrator.
     if (tab !== 'board' || !board) return;
     const params = new URLSearchParams();
-    params.set('produto', produtoAtivo);
-    if (acaoEfetiva) params.set('canal', acaoEfetiva);
+    params.set('produto', verDiamante ? 'DIAMANTE' : produtoAtivo);
+    if (acaoEfetiva && !verDiamante) params.set('canal', acaoEfetiva);
     const novoHash = `#board?${params.toString()}`;
     if (window.location.hash !== novoHash) {
       window.history.replaceState(null, '', novoHash);
     }
-  }, [tab, board, produtoAtivo, acaoEfetiva]);
+  }, [tab, board, produtoAtivo, acaoEfetiva, verDiamante]);
 
   // Rótulo legível do filtro ativo (nome da ação/canal) — o rodapé usa para
   // deixar explícito que os totais são do recorte, não da carteira (problema 6).
@@ -359,8 +365,6 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <>Relatórios <span className="text-[var(--accent)]">Financeiro</span></>
           ) : tab === 'prorata' ? (
             <>Calculadora de <span className="text-[var(--accent)]">Pro Rata</span></>
-          ) : tab === 'diamante' ? (
-            <>Serviço <span className="text-[var(--cyan)]">Diamante</span></>
           ) : (
             <>Ofertas de <span className="text-[var(--accent)]">Cobrança</span></>
           )}
@@ -380,7 +384,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           <Loading label="Carregando board financeiro…" minHeight={320} />
         ) : (
           <>
-            <ProdutoTabs contagens={contagensProduto} ativo={produtoAtivo} onSelecionar={selecionarProduto} />
+            <ProdutoTabs contagens={contagensProduto} ativo={produtoAtivo} onSelecionar={selecionarProduto}
+              diamante={{ ativo: verDiamante, contagem: contarDiamantes(diamante.dados), onSelecionar: () => setVerDiamante(true) }} />
+            {verDiamante ? <ServicoDiamante dados={diamante.dados} erro={diamante.erro} /> : <>
             <div className="mb-3">
               <TimelineAcoes acoes={acoes} ativa={acaoEfetiva} onSelecionar={selecionarAcao} />
             </div>
@@ -429,6 +435,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <div className="mt-6">
               <ForaDoBoard key={produtoAtivo} repo={repo} familia={produtoAtivo} />
             </div>
+            </>}
           </>
         )
       )}
@@ -441,7 +448,6 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
 
       {tab === 'prorata' && <ProrataHM repo={repo} />}
 
-      {tab === 'diamante' && <ServicoDiamante repo={repo} />}
 
       {tab === 'ofertas' && (
         erroOfertas ? (

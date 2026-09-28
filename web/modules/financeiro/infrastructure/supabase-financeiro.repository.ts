@@ -209,6 +209,7 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     const n = (v: unknown) => Number(v ?? 0) || 0;
     return linhas.map((l) => ({
       ...l, total_pago: n(l.total_pago), liquido: n(l.liquido), devendo_valor: n(l.devendo_valor), antigo_valor: n(l.antigo_valor),
+      coberto_valor: n(l.coberto_valor), meses: (l.meses ?? {}) as LinhaServicoDiamante['meses'],
       mensalidade: l.mensalidade == null ? null : n(l.mensalidade),
     }));
   }

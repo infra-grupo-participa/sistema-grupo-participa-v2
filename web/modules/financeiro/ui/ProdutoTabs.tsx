@@ -36,16 +36,18 @@ const TOM: Record<ProdutoChave, { texto: string; borda: string; fundo: string }>
   },
 };
 
-export function ProdutoTabs({ contagens, ativo, onSelecionar }: {
+export function ProdutoTabs({ contagens, ativo, onSelecionar, diamante }: {
   /** Contagem de cards por produto no board completo (sem filtro de canal) — nunca 0 silencioso. */
   contagens: Record<ProdutoChave, number>;
   ativo: ProdutoChave;
   onSelecionar: (produto: ProdutoChave) => void;
+  /** Aba "Serviço Diamante" (27/09/2026): não é origem de card do board, é uma visão própria ao lado. */
+  diamante?: { ativo: boolean; contagem: number | null; onSelecionar: () => void };
 }) {
   return (
     <div className="flex items-center gap-1.5 mb-3" role="tablist" aria-label="Produto">
       {PRODUTOS.map((p) => {
-        const active = ativo === p.chave;
+        const active = !diamante?.ativo && ativo === p.chave;
         const tom = TOM[p.chave];
         const vazio = contagens[p.chave] === 0;
         return (
@@ -75,6 +77,24 @@ export function ProdutoTabs({ contagens, ativo, onSelecionar }: {
           </button>
         );
       })}
+      {diamante && (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={diamante.ativo}
+          onClick={diamante.onSelecionar}
+          className={`inline-flex items-center gap-2 rounded-[var(--r-md)] border px-3.5 py-2 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-[var(--border-accent)] ${
+            diamante.ativo
+              ? 'border-[var(--cyan)] bg-[var(--surface-2)] text-[var(--cyan)]'
+              : 'border-[var(--border)] text-[var(--fg-3)] hover:border-[var(--border-strong)] hover:text-[var(--fg-2)]'
+          }`}
+        >
+          Serviço Diamante
+          <span className={`tabular rounded-[var(--r-pill)] px-1.5 py-0.5 text-[11px] font-bold ${diamante.ativo ? 'bg-[var(--surface-1)]' : 'bg-[var(--surface-3)]'}`}>
+            {diamante.contagem ?? '…'}
+          </span>
+        </button>
+      )}
     </div>
   );
 }

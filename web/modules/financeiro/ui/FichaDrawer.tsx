@@ -326,7 +326,7 @@ function AvisoBoleto({ hm, hojeISO }: { hm: BoardHotmart | null; hojeISO: string
 }
 
 /** Telefone com copiar e WhatsApp. Mascarado (···1234) para quem não pode ver dado pessoal completo: aí só mostra. */
-function TelefoneContato({ telefone }: { telefone: string | null }) {
+export function TelefoneContato({ telefone }: { telefone: string | null }) {
   if (!telefone) return <Row k="Telefone" v="não informado" />;
   const digitos = telefone.replace(/\D/g, '');
   const mascarado = telefone.includes('·') || digitos.length < 10;

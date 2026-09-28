@@ -4,9 +4,16 @@
 
 export type SituacaoServico = 'devendo' | 'em_dia' | 'parou_devendo' | 'encerrado' | 'nunca_pagou';
 
+export type EstadoMes = 'pago' | 'atrasado' | 'coberto' | 'estornado' | 'tentativa';
+
 export interface LinhaServicoDiamante {
   pessoa_chave: string;
   nome: string | null;
+  /** Nome que está na compra da Hotmart quando é outro (ex.: empresa que paga pela pessoa). */
+  nome_compra: string | null;
+  nome_empresa: boolean;
+  /** Está no cadastro operacional do sistema Diamantes (fonte do nome). */
+  cliente_cadastro: boolean;
   email: string | null;
   emails: string[] | null;
   telefone: string | null;
@@ -27,8 +34,14 @@ export interface LinhaServicoDiamante {
   antigo_n: number;
   antigo_valor: number;
   antigo_desde: string | null;
+  /** Mensalidades em aberto abatidas por pagamento agrupado, oferta "Vencido" ou acordo. */
+  coberto_n: number;
+  coberto_valor: number;
   estornos: number;
   tentativas: number;
+  ultima_tentativa: string | null;
+  /** 'YYYY-MM' → estado da mensalidade daquele mês (últimos 24 meses). */
+  meses: Record<string, EstadoMes>;
   situacao: SituacaoServico;
 }
 
@@ -42,6 +55,7 @@ export const SERVICOS_DIAMANTE: { chave: string; rotulo: string }[] = [
   { chave: 'disparos', rotulo: 'Gestor de Disparos' },
   { chave: 'automacao', rotulo: 'Automação' },
   { chave: 'pacote', rotulo: 'Pacote de serviços' },
+  { chave: 'acordo', rotulo: 'Acordo de dívida' },
   { chave: 'desconhecida', rotulo: 'Oferta desconhecida' },
 ];
 
@@ -53,9 +67,12 @@ export const ROTULO_SITUACAO_SERVICO: Record<SituacaoServico, string> = {
   devendo: 'Devendo',
   em_dia: 'Em dia',
   parou_devendo: 'Parou devendo',
-  encerrado: 'Parou sem dever',
+  encerrado: 'Encerrado',
   nunca_pagou: 'Nunca pagou',
 };
+
+/** Linha que não é serviço contratado (acordo de dívida) — não entra em "serviços" nem em mensalidade. */
+export const ehServico = (l: { servico: string }) => l.servico !== 'acordo';
 
 /** Ordem de leitura: o que pede ação primeiro. */
 export const ORDEM_SITUACAO_SERVICO: SituacaoServico[] = ['devendo', 'em_dia', 'parou_devendo', 'encerrado', 'nunca_pagou'];
@@ -69,6 +86,9 @@ export const ehNivelDiamante = (n: string | null) => n === 'diamante' || n === '
 export interface DiamanteCliente {
   pessoa_chave: string;
   nome: string;
+  nomeCompra: string | null;
+  nomeEmpresa: boolean;
+  clienteCadastro: boolean;
   email: string | null;
   emails: string[];
   telefone: string | null;
@@ -82,6 +102,11 @@ export interface DiamanteCliente {
   devendoDesde: string | null;
   antigoValor: number;
   antigoN: number;
+  cobertoValor: number;
+  cobertoN: number;
+  /** Total pago em acordo de dívida, e a linha dele (para a grade de meses). */
+  acordoPago: number;
+  acordo: LinhaServicoDiamante | null;
   /** Soma da última mensalidade dos serviços em dia. */
   mensalidadeAtiva: number;
   ultimaPaga: string | null;
@@ -98,11 +123,23 @@ export function agruparPorDiamante(linhas: LinhaServicoDiamante[]): DiamanteClie
     let c = por.get(l.pessoa_chave);
     if (!c) {
       c = {
-        pessoa_chave: l.pessoa_chave, nome: l.nome?.trim() || l.email || '—', email: l.email, emails: l.emails ?? [],
+        pessoa_chave: l.pessoa_chave, nome: l.nome?.trim() || l.email || '—', nomeCompra: l.nome_compra,
+        nomeEmpresa: l.nome_empresa, clienteCadastro: l.cliente_cadastro, email: l.email, emails: l.emails ?? [],
         telefone: l.telefone, nivel: l.nivel, servicos: [], situacao: 'nunca_pagou', jaPagou: false, totalPago: 0,
-        devendoValor: 0, devendoN: 0, devendoDesde: null, antigoValor: 0, antigoN: 0, mensalidadeAtiva: 0, ultimaPaga: null, primeiraPaga: null,
+        devendoValor: 0, devendoN: 0, devendoDesde: null, antigoValor: 0, antigoN: 0, cobertoValor: 0, cobertoN: 0,
+        acordoPago: 0, acordo: null, mensalidadeAtiva: 0, ultimaPaga: null, primeiraPaga: null,
       };
       por.set(l.pessoa_chave, c);
+    }
+    c.cobertoValor += Number(l.coberto_valor) || 0;
+    c.cobertoN += l.coberto_n || 0;
+    if (!ehServico(l)) {
+      c.acordoPago += Number(l.total_pago) || 0;
+      c.totalPago += Number(l.total_pago) || 0;
+      c.acordo = l;
+      c.ultimaPaga = maxData(c.ultimaPaga, l.ultima_paga);
+      if (l.pagamentos > 0) c.jaPagou = true;
+      continue;
     }
     c.servicos.push(l);
     c.totalPago += Number(l.total_pago) || 0;
@@ -117,7 +154,12 @@ export function agruparPorDiamante(linhas: LinhaServicoDiamante[]): DiamanteClie
     c.primeiraPaga = minData(c.primeiraPaga, l.primeira_paga);
   }
   for (const c of por.values()) {
-    c.situacao = ORDEM_SITUACAO_SERVICO.find((s) => c.servicos.some((x) => x.situacao === s)) ?? 'nunca_pagou';
+    // Situação da PESSOA: dívida + ainda ativo (algum serviço em dia ou devendo) = devendo — não se esconde atrás do
+    // serviço que ela ainda paga (Pedro Nery, 27/09: vídeo em dia e R$ 11,4 mil em aberto nos outros).
+    const ativo = c.servicos.some((x) => x.situacao === 'em_dia' || x.situacao === 'devendo');
+    const deve = c.devendoValor + c.antigoValor > 0;
+    c.situacao = deve ? (ativo ? 'devendo' : 'parou_devendo')
+      : ORDEM_SITUACAO_SERVICO.find((s) => c.servicos.some((x) => x.situacao === s)) ?? 'nunca_pagou';
     c.servicos.sort((a, b) => ORDEM_SITUACAO_SERVICO.indexOf(a.situacao) - ORDEM_SITUACAO_SERVICO.indexOf(b.situacao)
       || (b.total_pago - a.total_pago));
   }
@@ -135,6 +177,9 @@ export interface ResumoDiamante {
   devendoValor: number;
   pararam: number;
   pararamDevendo: number;
+  /** Em aberto de quem ainda está ativo (coluna Devendo) e de quem parou (coluna Parou devendo). */
+  devendoAtivoValor: number;
+  pararamDevendoValor: number;
   antigoValor: number;
   mensalidadeAtiva: number;
   totalPago: number;
@@ -164,6 +209,8 @@ export function resumirDiamantes(clientes: DiamanteCliente[]): ResumoDiamante {
     devendoValor: pagantes.reduce((s, c) => s + c.devendoValor, 0),
     pararam: pagantes.filter((c) => c.situacao === 'encerrado').length,
     pararamDevendo: pagantes.filter((c) => c.situacao === 'parou_devendo').length,
+    devendoAtivoValor: pagantes.filter((c) => c.situacao === 'devendo').reduce((s, c) => s + c.devendoValor + c.antigoValor, 0),
+    pararamDevendoValor: pagantes.filter((c) => c.situacao === 'parou_devendo').reduce((s, c) => s + c.devendoValor + c.antigoValor, 0),
     antigoValor: pagantes.reduce((s, c) => s + c.antigoValor, 0),
     mensalidadeAtiva: pagantes.reduce((s, c) => s + c.mensalidadeAtiva, 0),
     totalPago: pagantes.reduce((s, c) => s + c.totalPago, 0),
@@ -176,4 +223,28 @@ export function resumirDiamantes(clientes: DiamanteCliente[]): ResumoDiamante {
 export function diasEntre(deISO: string, ateISO: string): number {
   const d = (s: string) => Date.UTC(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10)));
   return Math.round((d(ateISO) - d(deISO)) / 86_400_000);
+}
+
+/** Os últimos `n` meses até o de hoje, do mais antigo ao mais novo ('YYYY-MM'). */
+export function ultimosMeses(hojeISO: string, n: number): string[] {
+  const y = Number(hojeISO.slice(0, 4)), m = Number(hojeISO.slice(5, 7));
+  const out: string[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const t = y * 12 + (m - 1) - i;
+    out.push(`${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`);
+  }
+  return out;
+}
+
+/** Dívida total da pessoa (recente + antiga). */
+export const dividaTotal = (c: DiamanteCliente) => c.devendoValor + c.antigoValor;
+
+const EMPRESA = /\b(ltda|eireli|epp|s\/a|me)\b|sociedade|advogad|advocacia|contabil|assessoria|consultoria|planejamento|servi[cç]os|empreendimentos|associados|&|holding|escrit[oó]rio|com[eé]rcio|digital/i;
+const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+/** O nome na compra é de OUTRA pessoa ou de empresa (não só o nome completo da mesma pessoa)? */
+export function compraEmOutroNome(nome: string, compra: string | null): boolean {
+  if (!compra) return false;
+  if (EMPRESA.test(compra)) return true;
+  return norm(nome).split(/\s+/)[0] !== norm(compra).split(/\s+/)[0];
 }
