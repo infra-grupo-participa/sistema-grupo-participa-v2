@@ -11,7 +11,7 @@ import { fmtBRLc, fmtData } from '@/shared/ui/format';
 import { hojeSaoPaulo, type ContasReceberCarregado } from '../../application/carregar-contas-receber';
 import {
   CENARIOS_RECEBER, composicaoDaCelula, GRUPO_BLOCO_1, temPerda,
-  type CenarioReceber, type GradeReceber, type LinhaReceber, type Semana,
+  type CenarioReceber, type GradeReceber, type LinhaReceber, type PagamentoContrato, type Semana,
 } from '../../domain/contas-receber';
 import type { FeriadoBancario, VigenciaPremissa } from '../../domain/premissas-receber';
 import { Recorrencias } from './Recorrencias';
@@ -149,8 +149,8 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar }: {
 
 /** Quem compõe a célula clicada. Bloco 1: as vendas do dia (detalhe). Blocos 2 e 5: as cobranças, com bruto, esperado e
  * o porquê; no bloco 2, as transações pagas do contrato (sem e-mail). */
-export function ComposicaoCelula({ linhas, celula, semana, onFechar }: {
-  linhas: LinhaReceber[]; celula: Celula; semana: Semana | null; onFechar: () => void;
+export function ComposicaoCelula({ linhas, pagasPorRef, celula, semana, onFechar }: {
+  linhas: LinhaReceber[]; pagasPorRef: Map<string, PagamentoContrato[]>; celula: Celula; semana: Semana | null; onFechar: () => void;
 }) {
   const itens = composicaoDaCelula(linhas, semana, celula.bloco, celula.grupo);
   const total = itens.reduce((s, l) => s + Math.round(l.valor * 100), 0) / 100;
@@ -169,7 +169,7 @@ export function ComposicaoCelula({ linhas, celula, semana, onFechar }: {
         </button>
       </div>
       <div className="overflow-x-auto">
-        {celula.bloco === 1 ? <VendasDoDia itens={itens} /> : <CobrancasDaCelula itens={itens} comPerda={comPerda} />}
+        {celula.bloco === 1 ? <VendasDoDia itens={itens} /> : <CobrancasDaCelula itens={itens} comPerda={comPerda} pagasPorRef={pagasPorRef} />}
       </div>
     </section>
   );
@@ -218,7 +218,11 @@ function VendasDoDia({ itens }: { itens: LinhaReceber[] }) {
 /** Fator de perda com 4 casas: 0,857375 → "× 0,8574". */
 const fmtFator = (f: number) => `× ${f.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`;
 
-function CobrancasDaCelula({ itens, comPerda }: { itens: LinhaReceber[]; comPerda: boolean }) {
+function CobrancasDaCelula({ itens, comPerda, pagasPorRef }: {
+  itens: LinhaReceber[]; comPerda: boolean; pagasPorRef: Map<string, PagamentoContrato[]>;
+}) {
+  // Pelo contrato (ref), nunca por l.pagas: o banco manda a lista uma vez por contrato, só na 1ª linha a_receber.
+  const pagasDe = (l: LinhaReceber) => (l.ref != null ? pagasPorRef.get(l.ref) : l.pagas) ?? [];
   const nCols = comPerda ? 9 : 7;
   return (
     <table className="w-full border-collapse text-xs">
@@ -256,9 +260,9 @@ function CobrancasDaCelula({ itens, comPerda }: { itens: LinhaReceber[]; comPerd
           ...(l.bloco === 2 && l.componente !== 'garantia' ? [
             <tr key={`c${i}p`}>
               <td className="px-2 pb-1 pl-5 text-[11px] text-[var(--fg-3)]" colSpan={nCols}>
-                {l.pagas.length === 0 ? GRADE_RECEBER.semPagasNoContrato : (
+                {pagasDe(l).length === 0 ? GRADE_RECEBER.semPagasNoContrato : (
                   <>
-                    <span>{GRADE_RECEBER.pagasDoContrato(l.pagas.length)}</span>
+                    <span>{GRADE_RECEBER.pagasDoContrato(pagasDe(l).length)}</span>
                     <table className="mt-0.5 border-collapse">
                       <thead>
                         <tr>
@@ -269,7 +273,7 @@ function CobrancasDaCelula({ itens, comPerda }: { itens: LinhaReceber[]; comPerd
                         </tr>
                       </thead>
                       <tbody className="text-[var(--fg-2)]">
-                        {l.pagas.map((p, j) => (
+                        {pagasDe(l).map((p, j) => (
                           <tr key={`${p.transacao}-${j}`}>
                             <td className="pr-3 tabular">{p.n ?? '—'}</td>
                             <td className="pr-3 font-mono">{p.transacao}</td>
@@ -426,7 +430,7 @@ export function ContasAReceber({
           {grade && grade.foraDoPeriodo.linhas > 0 && (
             <p className="text-xs text-[var(--fg-3)]">{GRADE_RECEBER.foraDoPeriodo(grade.foraDoPeriodo.linhas, fmtBRLc(grade.foraDoPeriodo.valor))}</p>
           )}
-          {dados && celula && <ComposicaoCelula linhas={dados.linhas} celula={celula} semana={semana} onFechar={() => setCelula(null)} />}
+          {dados && celula && <ComposicaoCelula linhas={dados.linhas} pagasPorRef={dados.pagasPorRef} celula={celula} semana={semana} onFechar={() => setCelula(null)} />}
         </div>
       )}
 

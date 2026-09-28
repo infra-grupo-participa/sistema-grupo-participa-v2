@@ -62,8 +62,10 @@ export interface LinhaReceber {
   k: number | null;
   /** Bloco 1: vendas do dia. Blocos 2 e 5: [] (o detalhe do bloco 2 tem outro formato — ver `pagas`). */
   detalhe: VendaDoDia[];
-  /** Bloco 2: transações pagas do contrato, na linha antecipação/cheio da cobrança (garantia: []). Outros blocos: []. */
-  pagas: PagamentoContrato[];
+  /** Bloco 2: transações pagas do contrato como vieram NESTA linha. null = a linha não trouxe (o banco manda a lista
+   *  UMA vez por contrato, na 1ª linha a_receber; na z66 vinha em todas). Leia sempre por `pagasPorContrato` (ref),
+   *  nunca direto daqui. Outros blocos: []. */
+  pagas: PagamentoContrato[] | null;
   /** Valor sem perda. Banco na versão antiga (sem a coluna): = valor. */
   valor_bruto: number;
   /** 1, ou (1 − perda)^k. Banco na versão antiga: 1. */
@@ -123,7 +125,9 @@ function lerDetalhe(v: unknown): VendaDoDia[] {
   });
 }
 
-function lerPagas(v: unknown): PagamentoContrato[] {
+/** `detalhe` NULL (ou ausente) = a linha não trouxe a lista → null; `[]` = o contrato não tem transação paga. */
+function lerPagas(v: unknown): PagamentoContrato[] | null {
+  if (v == null || v === '') return null;
   return lerLista(v).map((o) => ({
     transacao: String(o.transacao ?? ''),
     n: numOuNull(o.n),
@@ -166,6 +170,20 @@ export function normalizarLinhaReceber(r: Record<string, unknown>): LinhaReceber
     tratamento: textoOuNull(r.tratamento),
     cenario: textoOuNull(r.cenario) ?? 'base',
   };
+}
+
+/**
+ * Transações pagas por contrato (bloco 2, chave = ref). Montado de QUALQUER linha que traga a lista: o banco novo manda
+ * só na 1ª linha a_receber do contrato (NULL nas demais); a z66 mandava em todas (a 1ª vence, são iguais). Contrato
+ * sem nenhuma linha com a lista não entra no mapa (a tela diz "nenhuma transação paga").
+ */
+export function pagasPorContrato(linhas: LinhaReceber[]): Map<string, PagamentoContrato[]> {
+  const m = new Map<string, PagamentoContrato[]>();
+  for (const l of linhas) {
+    if (l.bloco !== 2 || l.ref == null || l.pagas == null || m.has(l.ref)) continue;
+    m.set(l.ref, l.pagas);
+  }
+  return m;
 }
 
 /** Linha com perda aplicada (fator < 1): a tela mostra bruto e esperado lado a lado. */

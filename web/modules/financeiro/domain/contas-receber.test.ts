@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  agregarReceber, cobrancasRecorrentes, composicaoDaCelula, DIAS_MINIMOS_SEMANA, fimDoMes, GRUPOS_BLOCO_5, normalizarLinhaReceber, periodoReceber,
-  recebimentoDesligado, semanas,
+  agregarReceber, cobrancasRecorrentes, composicaoDaCelula, DIAS_MINIMOS_SEMANA, fimDoMes, GRUPOS_BLOCO_5, normalizarLinhaReceber, pagasPorContrato,
+  periodoReceber, recebimentoDesligado, semanas,
   type LinhaReceber,
 } from './contas-receber';
 
@@ -260,7 +260,12 @@ describe('coberta_informado — cobrança do bloco 2 coberta por informado (conf
 describe('contrato v2 (z66) — tolerante à versão do banco', () => {
   it('banco antigo (sem as 6 colunas): valor_bruto = valor, fator 1, cenário base', () => {
     const l = normalizarLinhaReceber({ bloco: 2, grupo: 'Parcelas a vencer HM', componente: 'antecipacao', data_caixa: '2026-10-05', valor: '1238.05', situacao: 'a_receber', detalhe: null });
-    expect(l).toMatchObject({ valor: 1238.05, valor_bruto: 1238.05, fator: 1, certeza: null, tratamento: null, cenario: 'base', pagas: [] });
+    expect(l).toMatchObject({ valor: 1238.05, valor_bruto: 1238.05, fator: 1, certeza: null, tratamento: null, cenario: 'base', pagas: null });
+  });
+  it('bloco 2: detalhe NULL = a linha não trouxe (null); [] = contrato sem transação paga ([])', () => {
+    const base = { bloco: 2, grupo: 'Parcelas a vencer HM', componente: 'antecipacao', data_caixa: '2026-10-05', valor: 1, situacao: 'a_receber' };
+    expect(normalizarLinhaReceber({ ...base, detalhe: null }).pagas).toBeNull();
+    expect(normalizarLinhaReceber({ ...base, detalhe: [] }).pagas).toEqual([]);
   });
   it('banco novo: lê as 6 colunas; bloco 2 detalhe vira `pagas` (e não vendas do dia)', () => {
     const l = normalizarLinhaReceber({
@@ -271,7 +276,7 @@ describe('contrato v2 (z66) — tolerante à versão do banco', () => {
     });
     expect(l).toMatchObject({ valor: 950, valor_bruto: 1000, fator: 0.95, cenario: 'conservador', detalhe: [] });
     expect(l.pagas).toEqual([{ transacao: 'HP1', n: 1, dia: '2026-08-05', liquido: 1000 }, { transacao: 'HP2', n: 2, dia: '2026-09-05', liquido: 1000 }]);
-    expect(Object.keys(l.pagas[0])).not.toContain('email');
+    expect(Object.keys(l.pagas![0])).not.toContain('email');
   });
   it('agregação soma o ESPERADO; o bruto anda junto e não entra no total', () => {
     const g = agregarReceber([
@@ -292,5 +297,30 @@ describe('contrato v2 (z66) — tolerante à versão do banco', () => {
     ]);
     expect(c.valor).toBe(1000);
     expect(c.esperado).toBe(950);
+  });
+});
+
+describe('pagasPorContrato — lista por ref, de qualquer linha que a traga', () => {
+  const P1 = [{ transacao: 'HP1', n: 1, dia: '2026-08-05', liquido: 1000 }];
+  it('banco novo: só a 1ª linha a_receber traz; a 2ª (null) não apaga', () => {
+    const m = pagasPorContrato([
+      L({ bloco: 2, ref: 'c|1', situacao: 'a_receber', pagas: P1 }),
+      L({ bloco: 2, ref: 'c|1', situacao: 'a_receber', pagas: null }),
+    ]);
+    expect(m.get('c|1')).toEqual(P1);
+  });
+  it('a lista pode vir numa linha depois de outra sem lista (ordem da RPC não importa)', () => {
+    const m = pagasPorContrato([L({ bloco: 2, ref: 'c|1', pagas: null }), L({ bloco: 2, ref: 'c|1', pagas: P1 })]);
+    expect(m.get('c|1')).toEqual(P1);
+  });
+  it('z66 (todas trazem): a 1ª vence; [] é "sem transação paga" e fica no mapa; outros blocos e ref nula ficam fora', () => {
+    const m = pagasPorContrato([
+      L({ bloco: 2, ref: 'c|1', pagas: P1 }), L({ bloco: 2, ref: 'c|1', pagas: P1 }),
+      L({ bloco: 2, ref: 'c|2', pagas: [] }),
+      L({ bloco: 2, ref: null, pagas: P1 }),
+      L({ bloco: 5, ref: 'c|3', pagas: [] }),
+    ]);
+    expect([...m.keys()]).toEqual(['c|1', 'c|2']);
+    expect(m.get('c|2')).toEqual([]);
   });
 });

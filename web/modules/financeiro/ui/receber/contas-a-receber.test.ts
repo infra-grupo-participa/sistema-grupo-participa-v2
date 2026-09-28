@@ -66,7 +66,7 @@ describe('grade Contas a Receber (HTML estático)', () => {
 describe('composição da célula (sem consulta nova)', () => {
   it('bloco 1: as vendas do dia do detalhe', () => {
     const html = renderToStaticMarkup(createElement(ComposicaoCelula, {
-      linhas, celula: { bloco: 1, grupo: 'Vendas já realizadas', semana: 0 }, semana: dados.grade.semanas[0], onFechar: () => {},
+      linhas, pagasPorRef: dados.pagasPorRef, celula: { bloco: 1, grupo: 'Vendas já realizadas', semana: 0 }, semana: dados.grade.semanas[0], onFechar: () => {},
     }));
     expect(html).toContain('HP123');
     expect(html).toContain('Pessoa A');
@@ -77,7 +77,7 @@ describe('composição da célula (sem consulta nova)', () => {
   });
   it('bloco 2: as cobranças, com nome, produto, data prevista e valor', () => {
     const html = renderToStaticMarkup(createElement(ComposicaoCelula, {
-      linhas, celula: { bloco: 2, grupo: 'Parcelas a vencer HM', semana: null }, semana: null, onFechar: () => {},
+      linhas, pagasPorRef: dados.pagasPorRef, celula: { bloco: 2, grupo: 'Parcelas a vencer HM', semana: null }, semana: null, onFechar: () => {},
     }));
     expect(html).toContain('Pessoa B');
     expect(html).toContain('Holding Masters');
@@ -142,7 +142,7 @@ describe('F2 — bruto × esperado, tratamento, pagas do contrato e cenário', (
   });
   it('composição do bloco 2: bruto, fator, esperado, tratamento e as transações pagas (sem e-mail)', () => {
     const html = renderToStaticMarkup(createElement(ComposicaoCelula, {
-      linhas: d.linhas, celula: { bloco: 2, grupo: 'Parcelas a vencer HM', semana: null }, semana: null, onFechar: () => {},
+      linhas: d.linhas, pagasPorRef: d.pagasPorRef, celula: { bloco: 2, grupo: 'Parcelas a vencer HM', semana: null }, semana: null, onFechar: () => {},
     }));
     expect(html).toMatch(/Bruto R\$\s1\.100,00 · esperado R\$\s1\.045,00/);
     expect(html).toContain('× 0,9500');
@@ -151,6 +151,31 @@ describe('F2 — bruto × esperado, tratamento, pagas do contrato e cenário', (
     expect(html).toContain('1 transação paga do contrato');
     expect(html.match(/HP777/g)).toHaveLength(1); // a garantia é a mesma cobrança: não repete a lista
     expect(html).not.toContain('@');
+  });
+  it('pagas UMA vez por contrato (banco novo): 2 cobranças futuras, lista só na 1ª → aparece sob as duas', () => {
+    const P = [{ transacao: 'HP900', n: 1, dia: '2026-08-10', liquido: 500 }];
+    const c = (origem: string, caixa: string, pagas: typeof P | null) => L({ bloco: 2, grupo: 'Parcelas a vencer HM', ref: 'y|9',
+      rotulo: 'Pessoa C', origem_dia: origem, data_caixa: caixa, valor: 500, valor_bruto: 500, pagas });
+    const novo = montarContasReceber([c('2026-10-10', '2026-10-14', P), c('2026-11-10', '2026-11-12', null)], '2026-09-28');
+    const z66 = montarContasReceber([c('2026-10-10', '2026-10-14', P), c('2026-11-10', '2026-11-12', P)], '2026-09-28');
+    for (const d2 of [novo, z66]) {
+      const html = renderToStaticMarkup(createElement(ComposicaoCelula, {
+        linhas: d2.linhas, pagasPorRef: d2.pagasPorRef, celula: { bloco: 2, grupo: 'Parcelas a vencer HM', semana: null }, semana: null, onFechar: () => {},
+      }));
+      expect(html.match(/HP900/g)).toHaveLength(2);
+      expect(html).not.toContain('nenhuma transação paga');
+    }
+  });
+  it('contrato sem nenhuma linha com a lista: "nenhuma transação paga", nunca lista de outro contrato', () => {
+    const d2 = montarContasReceber([
+      L({ bloco: 2, grupo: 'Parcelas a vencer HM', ref: 'a|1', data_caixa: '2026-10-14', valor: 1, pagas: [{ transacao: 'HPA', n: 1, dia: '2026-08-01', liquido: 1 }] }),
+      L({ bloco: 2, grupo: 'Parcelas a vencer HM', ref: 'b|2', data_caixa: '2026-10-15', valor: 1, pagas: null }),
+    ], '2026-09-28');
+    const html = renderToStaticMarkup(createElement(ComposicaoCelula, {
+      linhas: d2.linhas, pagasPorRef: d2.pagasPorRef, celula: { bloco: 2, grupo: 'Parcelas a vencer HM', semana: null }, semana: null, onFechar: () => {},
+    }));
+    expect(html.match(/HPA/g)).toHaveLength(1);
+    expect(html).toContain('nenhuma transação paga');
   });
   it('seletor de cenário só com o pai; dados null = "carregando o cenário" sem derrubar a aba', () => {
     expect(renderToStaticMarkup(createElement(ContasAReceber, { dados: d }))).not.toContain('Cenário');
