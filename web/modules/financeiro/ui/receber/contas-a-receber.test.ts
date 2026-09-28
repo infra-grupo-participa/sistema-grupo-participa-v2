@@ -10,7 +10,7 @@ import type { LinhaReceber } from '../../domain/contas-receber';
 
 const L = (p: Partial<LinhaReceber>): LinhaReceber => ({
   bloco: 1, grupo: 'Vendas já realizadas', componente: 'antecipacao', data_caixa: '2026-09-29', valor: 0,
-  situacao: 'a_receber', origem_dia: null, ref: null, rotulo: null, produto: null, k: null, detalhe: [], ...p,
+  situacao: 'a_receber', origem_dia: null, ref: null, rotulo: null, produto: null, k: null, detalhe: [], pagas: [], fator: 1, certeza: 'certo', centro_custo: null, tratamento: null, cenario: 'base', ...p, valor_bruto: p.valor_bruto ?? p.valor ?? 0,
 });
 
 const linhas: LinhaReceber[] = [
@@ -123,5 +123,51 @@ describe('Recorrências — contrato do bloco 2', () => {
     expect(html).toContain('Vencimento');
     expect(html).toContain('10/09/2026');
     expect(html).toContain('>—</td>');
+  });
+});
+
+describe('F2 — bruto × esperado, tratamento, pagas do contrato e cenário', () => {
+  const lp = [
+    L({ bloco: 2, grupo: 'Parcelas a vencer HM', ref: 'x|3', rotulo: 'Pessoa B', produto: 'Holding Masters', origem_dia: '2026-10-01',
+      data_caixa: '2026-10-05', valor: 950, valor_bruto: 1000, fator: 0.95, tratamento: 'Antecipação D+2 útil · Perda 5%/mês × 1 mês',
+      pagas: [{ transacao: 'HP777', n: 2, dia: '2026-09-01', liquido: 1000 }] }),
+    L({ bloco: 2, grupo: 'Parcelas a vencer HM', ref: 'x|3', rotulo: 'Pessoa B', produto: 'Holding Masters', origem_dia: '2026-10-01',
+      data_caixa: '2026-10-06', componente: 'garantia', valor: 95, valor_bruto: 100, fator: 0.95, tratamento: 'Retido 10% volta em D+30' }),
+  ];
+  const d = montarContasReceber(lp, '2026-09-28');
+  it('grade: célula mostra o esperado e, com perda, o bruto em texto', () => {
+    const html = renderToStaticMarkup(createElement(GradeContasReceber, { grade: d.grade, selecionada: null, onSelecionar: () => {} }));
+    expect(html).toMatch(/R\$\s1\.045,00/);
+    expect(html).toMatch(/bruto R\$\s1\.100,00/);
+  });
+  it('composição do bloco 2: bruto, fator, esperado, tratamento e as transações pagas (sem e-mail)', () => {
+    const html = renderToStaticMarkup(createElement(ComposicaoCelula, {
+      linhas: d.linhas, celula: { bloco: 2, grupo: 'Parcelas a vencer HM', semana: null }, semana: null, onFechar: () => {},
+    }));
+    expect(html).toMatch(/Bruto R\$\s1\.100,00 · esperado R\$\s1\.045,00/);
+    expect(html).toContain('× 0,9500');
+    expect(html).toContain('Perda 5%/mês × 1 mês');
+    expect(html).toContain('HP777');
+    expect(html).toContain('1 transação paga do contrato');
+    expect(html.match(/HP777/g)).toHaveLength(1); // a garantia é a mesma cobrança: não repete a lista
+    expect(html).not.toContain('@');
+  });
+  it('seletor de cenário só com o pai; dados null = "carregando o cenário" sem derrubar a aba', () => {
+    expect(renderToStaticMarkup(createElement(ContasAReceber, { dados: d }))).not.toContain('Cenário');
+    const html = renderToStaticMarkup(createElement(ContasAReceber, { dados: null, cenario: 'conservador', onCenario: () => {} }));
+    expect(html).toContain('Cenário');
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Conservador/);
+    expect(html).toContain('Carregando o cenário');
+    expect(html).toContain('conservador e otimista usam o da base');
+  });
+  it('Recorrências: coluna Esperado só quando há perda', () => {
+    expect(renderToStaticMarkup(createElement(Recorrencias, { cobrancas: d.recorrencias }))).toContain('Esperado');
+    expect(renderToStaticMarkup(createElement(Recorrencias, { cobrancas: dados.recorrencias }))).not.toContain('Esperado');
+  });
+  it('sub-aba Premissas existe no tablist e abre com ?ver=premissas', () => {
+    const html = renderToStaticMarkup(createElement(ContasAReceber, { dados: d, sub: 'premissas' }));
+    expect(html).toContain('id="receber-tab-premissas"');
+    expect(html).toContain('id="receber-painel-premissas"');
+    expect(html).toContain('Carregando premissas');
   });
 });

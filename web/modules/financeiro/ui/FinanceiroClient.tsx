@@ -35,8 +35,9 @@ import { indexarAssinaturaHM, type AssinaturaHMBoard, type AssinaturaHMSemCard }
 import type { PagouSemCard } from '../domain/programa-sem-card';
 import { criarCacheListasSemCard, listasVisiveis } from '../application/carregar-listas-sem-card';
 import { carregarContasReceber, type ContasReceberCarregado } from '../application/carregar-contas-receber';
-import { ContasAReceber } from './receber/ContasAReceber';
-import { CABECALHO_RECEBER, ESTADOS_RECEBER } from './receber/textos';
+import { ContasAReceber, type PremissasEstado } from './receber/ContasAReceber';
+import { CABECALHO_RECEBER, ESTADOS_RECEBER, FERIADOS_RECEBER, PREMISSAS_RECEBER } from './receber/textos';
+import type { CenarioReceber } from '../domain/contas-receber';
 import { hashDaSubAbaReceber, subAbaReceberDoHash, type SubAbaReceber } from './receber/hash';
 
 type Tab = 'board' | 'faturamento' | 'receber' | 'funis' | 'relatorios' | 'ofertas';
@@ -56,10 +57,19 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const [erroOfertas, setErroOfertas] = useState<string | null>(null);
   // Contas a Receber: 1 RPC (fn_fin_receber_semanal) na 1ª vez que a aba abre; guardado aqui, voltar à aba não consulta
   // de novo (o componente da aba desmonta a cada troca — por isso o dado mora no pai). Falha não fica guardada.
-  const [receber, setReceber] = useState<ContasReceberCarregado | null>(null);
+  // F2: o mesmo vale POR CENÁRIO — 1 RPC na 1ª vez que cada cenário é pedido; voltar a um cenário já visto não consulta.
+  // Gravou algo que muda a previsão (informado, premissa, feriado): o cache inteiro é invalidado (`geracaoReceber`),
+  // a grade atual fica na tela enquanto só o cenário ativo é rebuscado; resposta de geração velha é descartada.
+  const [receberPorCenario, setReceberPorCenario] = useState<Partial<Record<CenarioReceber, ContasReceberCarregado>>>({});
+  const [cenarioReceber, setCenarioReceber] = useState<CenarioReceber>('base');
   const [erroReceber, setErroReceber] = useState<string | null>(null);
   const [tentativaReceber, setTentativaReceber] = useState(0);
-  const pedidoReceber = useRef(false);
+  const pedidosReceber = useRef(new Set<CenarioReceber>());
+  const geracaoReceber = useRef(0);
+  // Sub-aba Premissas: 1 chamada de premissas + 1 de feriados na 1ª vez que a sub-aba abre (guardado aqui).
+  const [premissasReceber, setPremissasReceber] = useState<PremissasEstado>(
+    { premissas: null, feriados: null, erroPremissas: null, erroFeriados: null });
+  const pedidoPremissas = useRef(false);
   // Sub-aba de Previsão de caixa (#receber?ver=) — mesmo padrão de hash do #board?produto=. "semana" é o padrão
   // (hash limpo #receber, sem `?`, o mesmo link do item do menu).
   const [receberSub, setReceberSub] = useState<SubAbaReceber>('semana');
@@ -234,19 +244,71 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   }, [tab]);
 
   useEffect(() => {
-    if (tab !== 'receber' || pedidoReceber.current) return;
-    pedidoReceber.current = true;
-    carregarContasReceber(repo)
-      .then((r) => { setReceber(r); setErroReceber(null); })
-      .catch(() => { pedidoReceber.current = false; setErroReceber(ESTADOS_RECEBER.erroCarregamento); });
-  }, [tab, tentativaReceber]);
+    const cen = cenarioReceber;
+    if (tab !== 'receber' || receberPorCenario[cen] || pedidosReceber.current.has(cen)) return;
+    const ger = geracaoReceber.current;
+    pedidosReceber.current.add(cen);
+    carregarContasReceber(repo, cen)
+      .then((r) => {
+        if (ger !== geracaoReceber.current) return;
+        setReceberPorCenario((m) => ({ ...m, [cen]: r }));
+        setErroReceber(null);
+      })
+      .catch(() => {
+        if (ger !== geracaoReceber.current) return;
+        pedidosReceber.current.delete(cen);
+        setErroReceber(ESTADOS_RECEBER.erroCarregamento);
+      });
+  }, [tab, cenarioReceber, receberPorCenario, tentativaReceber]);
 
-  // Recebimento informado gravado: o bloco 5 da grade mudou. Rebusca fn_fin_receber_semanal SEM apagar a grade atual
-  // (a sub-seção de informados continua montada); falha vira o erro da aba, com "tentar de novo".
+  // Algo que muda a previsão foi gravado (informado, premissa, feriado). Invalida TODOS os cenários guardados e rebusca
+  // só o ativo, SEM apagar a grade atual (a sub-aba continua montada); falha vira o erro da aba, com "tentar de novo".
   const recarregarReceber = () => {
-    carregarContasReceber(repo)
-      .then((r) => { setReceber(r); setErroReceber(null); })
-      .catch(() => setErroReceber(ESTADOS_RECEBER.erroCarregamento));
+    geracaoReceber.current += 1;
+    const ger = geracaoReceber.current;
+    const cen = cenarioReceber;
+    pedidosReceber.current = new Set([cen]);
+    setReceberPorCenario((m) => (m[cen] ? { [cen]: m[cen] } : {}));
+    carregarContasReceber(repo, cen)
+      .then((r) => {
+        if (ger !== geracaoReceber.current) return;
+        setReceberPorCenario({ [cen]: r });
+        setErroReceber(null);
+      })
+      .catch(() => {
+        if (ger !== geracaoReceber.current) return;
+        pedidosReceber.current.delete(cen);
+        setErroReceber(ESTADOS_RECEBER.erroCarregamento);
+      });
+  };
+
+  // Premissas e feriados: setState só nos retornos (nunca síncrono no corpo do efeito).
+  const buscarPremissas = (quais: { premissas: boolean; feriados: boolean }) => {
+    if (quais.premissas) {
+      repo.loadPremissasReceber().then(
+        (p) => setPremissasReceber((s) => ({ ...s, premissas: p, erroPremissas: null })),
+        () => setPremissasReceber((s) => ({ ...s, erroPremissas: PREMISSAS_RECEBER.erroCarregamento })),
+      );
+    }
+    if (quais.feriados) {
+      repo.loadFeriados().then(
+        (f) => setPremissasReceber((s) => ({ ...s, feriados: f, erroFeriados: null })),
+        () => setPremissasReceber((s) => ({ ...s, erroFeriados: FERIADOS_RECEBER.erroCarregamento })),
+      );
+    }
+  };
+  useEffect(() => {
+    if (tab !== 'receber' || receberSub !== 'premissas' || pedidoPremissas.current) return;
+    pedidoPremissas.current = true;
+    buscarPremissas({ premissas: true, feriados: true });
+  }, [tab, receberSub]);
+  const tentarPremissasDeNovo = () => {
+    const quais = { premissas: premissasReceber.erroPremissas != null, feriados: premissasReceber.erroFeriados != null };
+    setPremissasReceber((s) => ({
+      ...s, erroPremissas: null, erroFeriados: null,
+      premissas: quais.premissas ? null : s.premissas, feriados: quais.feriados ? null : s.feriados,
+    }));
+    buscarPremissas(quais);
   };
 
   // Contagem por produto sobre o board INTEIRO (nunca sobre o recorte de
@@ -531,10 +593,15 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       {tab === 'receber' && (
         erroReceber ? (
           <ErroCarregamento msg={erroReceber} onRetry={() => { setErroReceber(null); setTentativaReceber((t) => t + 1); }} />
-        ) : receber ? (
-          <ContasAReceber dados={receber} repo={repo} canEdit={canEdit} canVerDoc={canVerDoc} onInformadosAlterados={recarregarReceber}
-            sub={receberSub} onSubChange={setReceberSub} />
-        ) : <Loading label="Carregando contas a receber…" minHeight={200} />
+        ) : Object.keys(receberPorCenario).length > 0 ? (
+          // Cenário ainda não carregado: a grade mostra "carregando o cenário" (dados = null), o resto da aba segue.
+          <ContasAReceber dados={receberPorCenario[cenarioReceber] ?? null} repo={repo} canEdit={canEdit} canVerDoc={canVerDoc}
+            onInformadosAlterados={recarregarReceber} sub={receberSub} onSubChange={setReceberSub}
+            cenario={cenarioReceber} onCenario={setCenarioReceber}
+            premissas={premissasReceber} onTentarPremissas={tentarPremissasDeNovo}
+            onPremissaGravada={() => { buscarPremissas({ premissas: true, feriados: false }); recarregarReceber(); }}
+            onFeriadoGravado={() => { buscarPremissas({ premissas: false, feriados: true }); recarregarReceber(); }} />
+        ) : <Loading label="Carregando a previsão de caixa…" minHeight={200} />
       )}
 
       {tab === 'funis' && <FunisEAnalise repo={repo} />}
