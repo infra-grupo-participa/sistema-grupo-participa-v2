@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
 import { Loading } from '@/shared/ui/components';
 import type { ContaReceber, Oferta, ReguaPasso, TurmaFin } from '../domain/types';
@@ -34,8 +34,11 @@ import { indexarBoardHotmart } from '../domain/board-hotmart';
 import { indexarAssinaturaHM, type AssinaturaHMBoard, type AssinaturaHMSemCard } from '../domain/assinatura-hm';
 import type { PagouSemCard } from '../domain/programa-sem-card';
 import { criarCacheListasSemCard, listasVisiveis } from '../application/carregar-listas-sem-card';
+import { carregarContasReceber, type ContasReceberCarregado } from '../application/carregar-contas-receber';
+import { ContasAReceber } from './receber/ContasAReceber';
+import { CABECALHO_RECEBER, ESTADOS_RECEBER } from './receber/textos';
 
-type Tab = 'board' | 'faturamento' | 'funis' | 'relatorios' | 'ofertas';
+type Tab = 'board' | 'faturamento' | 'receber' | 'funis' | 'relatorios' | 'ofertas';
 
 const repo = new SupabaseFinanceiroRepository();
 
@@ -50,6 +53,12 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const [turmas, setTurmas] = useState<TurmaFin[]>([]);
   const [ofertas, setOfertas] = useState<Oferta[]>([]);
   const [erroOfertas, setErroOfertas] = useState<string | null>(null);
+  // Contas a Receber: 1 RPC (fn_fin_contas_receber) na 1ª vez que a aba abre; guardado aqui, voltar à aba não consulta
+  // de novo (o componente da aba desmonta a cada troca — por isso o dado mora no pai). Falha não fica guardada.
+  const [receber, setReceber] = useState<ContasReceberCarregado | null>(null);
+  const [erroReceber, setErroReceber] = useState<string | null>(null);
+  const [tentativaReceber, setTentativaReceber] = useState(0);
+  const pedidoReceber = useRef(false);
   const [turma] = useState<string | null>(null); // sem filtro de turma no board novo — todas reunidas, igual ao legado.
   // Metas por turma (fn_fin_metas) não têm tela própria nesta entrega — o
   // board novo não filtra por turma (todas reunidas), e a UI de metas/régua
@@ -171,6 +180,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       const h = window.location.hash.replace('#', '');
       const [base, query] = h.split('?');
       if (base === 'faturamento') setTab('faturamento');
+      else if (base === 'receber') setTab('receber');
       else if (base === 'funis') setTab('funis');
       else if (base === 'relatorios') { setTab('relatorios'); setRelatorioInicial(null); }
       else if (base === 'ofertas') setTab('ofertas');
@@ -218,6 +228,14 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       .catch(() => setErroOfertas('Não foi possível carregar as ofertas.'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  useEffect(() => {
+    if (tab !== 'receber' || pedidoReceber.current) return;
+    pedidoReceber.current = true;
+    carregarContasReceber(repo)
+      .then((r) => { setReceber(r); setErroReceber(null); })
+      .catch(() => { pedidoReceber.current = false; setErroReceber(ESTADOS_RECEBER.erroCarregamento); });
+  }, [tab, tentativaReceber]);
 
   // Contagem por produto sobre o board INTEIRO (nunca sobre o recorte de
   // canal) — é o número que a aba mostra, precisa ser estável ao trocar de
@@ -398,6 +416,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <>Faturamento <span className="text-[var(--accent)]">da Hotmart</span></>
           ) : tab === 'relatorios' ? (
             <>Relatórios <span className="text-[var(--accent)]">Financeiro</span></>
+          ) : tab === 'receber' ? (
+            <>{CABECALHO_RECEBER.titulo}</>
           ) : tab === 'funis' ? (
             <>Funis <span className="text-[var(--accent)]">e Análise</span></>
           ) : (
@@ -483,6 +503,12 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
 
       {tab === 'relatorios' && (
         board ? <Relatorios key={relatorioInicial ?? 'padrao'} tipoInicial={relatorioInicial ?? undefined} contas={contasDoRecorte} produtoLabel={recorteAtivo.produtoLabel} acaoLabel={rotuloFiltroAtivo} turma={turma} canVerDoc={canVerDoc} repo={repo} hotmartPorCard={hotmartPorCard} /> : <Loading label="Carregando…" minHeight={200} />
+      )}
+
+      {tab === 'receber' && (
+        erroReceber ? (
+          <ErroCarregamento msg={erroReceber} onRetry={() => { setErroReceber(null); setTentativaReceber((t) => t + 1); }} />
+        ) : receber ? <ContasAReceber dados={receber} /> : <Loading label="Carregando contas a receber…" minHeight={200} />
       )}
 
       {tab === 'funis' && <FunisEAnalise repo={repo} />}
