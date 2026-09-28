@@ -37,6 +37,7 @@ import { criarCacheListasSemCard, listasVisiveis } from '../application/carregar
 import { carregarContasReceber, type ContasReceberCarregado } from '../application/carregar-contas-receber';
 import { ContasAReceber } from './receber/ContasAReceber';
 import { CABECALHO_RECEBER, ESTADOS_RECEBER } from './receber/textos';
+import { hashDaSubAbaReceber, subAbaReceberDoHash, type SubAbaReceber } from './receber/hash';
 
 type Tab = 'board' | 'faturamento' | 'receber' | 'funis' | 'relatorios' | 'ofertas';
 
@@ -59,6 +60,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const [erroReceber, setErroReceber] = useState<string | null>(null);
   const [tentativaReceber, setTentativaReceber] = useState(0);
   const pedidoReceber = useRef(false);
+  // Sub-aba de Previsão de caixa (#receber?ver=) — mesmo padrão de hash do #board?produto=. "semana" é o padrão
+  // (hash limpo #receber, sem `?`, o mesmo link do item do menu).
+  const [receberSub, setReceberSub] = useState<SubAbaReceber>('semana');
   const [turma] = useState<string | null>(null); // sem filtro de turma no board novo — todas reunidas, igual ao legado.
   // Metas por turma (fn_fin_metas) não têm tela própria nesta entrega — o
   // board novo não filtra por turma (todas reunidas), e a UI de metas/régua
@@ -180,7 +184,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       const h = window.location.hash.replace('#', '');
       const [base, query] = h.split('?');
       if (base === 'faturamento') setTab('faturamento');
-      else if (base === 'receber') setTab('receber');
+      else if (base === 'receber') { setTab('receber'); setReceberSub(subAbaReceberDoHash(query)); }
       else if (base === 'funis') setTab('funis');
       else if (base === 'relatorios') { setTab('relatorios'); setRelatorioInicial(null); }
       else if (base === 'ofertas') setTab('ofertas');
@@ -310,6 +314,17 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       window.history.replaceState(null, '', novoHash);
     }
   }, [tab, board, produtoAtivo, acaoEfetiva, verDiamante]);
+
+  // Mesma disciplina do hash do board, mas para a sub-aba de Previsão de caixa — sem gate de carregamento: a
+  // sub-aba é estado só de navegação (não depende de `receber` ter chegado), então não há janela em que reescrever
+  // o hash apagaria um deep link que o próprio efeito ainda não leu.
+  useEffect(() => {
+    if (tab !== 'receber') return;
+    const novoHash = hashDaSubAbaReceber(receberSub);
+    if (window.location.hash !== novoHash) {
+      window.history.replaceState(null, '', novoHash);
+    }
+  }, [tab, receberSub]);
 
   // Rótulo legível do filtro ativo (nome da ação/canal) — o rodapé usa para
   // deixar explícito que os totais são do recorte, não da carteira (problema 6).
@@ -517,7 +532,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         erroReceber ? (
           <ErroCarregamento msg={erroReceber} onRetry={() => { setErroReceber(null); setTentativaReceber((t) => t + 1); }} />
         ) : receber ? (
-          <ContasAReceber dados={receber} repo={repo} canEdit={canEdit} canVerDoc={canVerDoc} onInformadosAlterados={recarregarReceber} />
+          <ContasAReceber dados={receber} repo={repo} canEdit={canEdit} canVerDoc={canVerDoc} onInformadosAlterados={recarregarReceber}
+            sub={receberSub} onSubChange={setReceberSub} />
         ) : <Loading label="Carregando contas a receber…" minHeight={200} />
       )}
 

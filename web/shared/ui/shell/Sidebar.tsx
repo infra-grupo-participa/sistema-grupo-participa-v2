@@ -162,21 +162,32 @@ export function Sidebar({ user }: { user: GpUser }) {
                 <div className="ml-4 mt-0.5 flex flex-col gap-0.5">
                   {(() => {
                     const defaultHashKey = children.find((c) => c.hash)?.key;
+                    let secaoAnterior: string | undefined;
                     return children.map((child) => {
                       const onPath = normalize(child.path) === cur;
                       const active = child.hash
                         ? onPath && (hash === child.hash || (!hash && child.key === defaultHashKey))
                         : onPath;
+                      // Título de seção: só quando o item declara `secao` e ela muda em relação ao item anterior — os
+                      // outros grupos nunca usam `secao`, então nunca desenham nada aqui (layout deles não muda).
+                      const mostrarSecao = !!child.secao && child.secao !== secaoAnterior;
+                      secaoAnterior = child.secao;
                       return (
-                        <Link
-                          key={child.key}
-                          href={child.href}
-                          onClick={(e) => onHashChildClick(e, child.path, child.hash)}
-                          className={itemCls(active)}
-                        >
-                          <span className={iconBoxCls(active)}><Icon name={child.ico || 'circle'} size={14} /></span>
-                          <span>{child.label}</span>
-                        </Link>
+                        <div key={child.key}>
+                          {mostrarSecao && (
+                            <div className="px-2 pt-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--fg-4)]">
+                              {child.secao}
+                            </div>
+                          )}
+                          <Link
+                            href={child.href}
+                            onClick={(e) => onHashChildClick(e, child.path, child.hash)}
+                            className={itemCls(active)}
+                          >
+                            <span className={iconBoxCls(active)}><Icon name={child.ico || 'circle'} size={14} /></span>
+                            <span>{child.label}</span>
+                          </Link>
+                        </div>
                       );
                     });
                   })()}

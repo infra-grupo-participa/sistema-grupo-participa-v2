@@ -8,7 +8,7 @@
 // - Identificadores chegam MASCARADOS sem gp_pode_ver_cpf(); a máscara nunca volta ao banco (ver entradaDoFormulario).
 // - O texto colado nunca é logado; a prévia mostra os identificadores mascarados localmente.
 // Formulário e confirmações ficam no fluxo da página (nada `absolute`).
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Badge } from '@/shared/ui/components';
 import { fmtBRLc, fmtData } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../../application/ports';
@@ -39,7 +39,7 @@ type Aviso = { tipo: 'ok' | 'erro'; msg: string } | null;
 type AcaoLinha = { id: string; tipo: 'baixar' | 'arquivar'; valor: string } | null;
 type Form = { original: Informado | null; valores: FormInformado; erros: string[] } | null;
 
-export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = null }: {
+export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = null, autoAbrir = false }: {
   repo: RepoInformados;
   canEdit: boolean;
   canVerDoc: boolean;
@@ -47,8 +47,11 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
   onAlterado?: () => void;
   /** Só para teste de render: lista já carregada, sub-seção aberta. */
   inicial?: Informado[] | null;
+  /** A sub-seção agora é uma sub-aba própria (Previsão de caixa): abrir a aba já carrega, sem exigir um segundo
+   * clique no acordeão interno. Padrão continua fechado (compatível com quem usa Informados fora da sub-aba). */
+  autoAbrir?: boolean;
 }) {
-  const [aberto, setAberto] = useState(inicial != null);
+  const [aberto, setAberto] = useState(inicial != null || autoAbrir);
   const [lista, setLista] = useState<Informado[] | null>(inicial ? ordenarInformados(inicial) : null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
@@ -76,6 +79,13 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
     setAberto(abrir);
     if (abrir && lista == null && !carregando) void carregar();
   };
+
+  // autoAbrir (sub-aba própria): carrega uma vez, ao montar já aberto — sem depender do clique no acordeão.
+  // `inicial` (teste de render) já entra com a lista pronta, então esta condição não dispara chamada nenhuma.
+  useEffect(() => {
+    if (autoAbrir && lista == null && !carregando) void carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Escrita que deu certo: recarrega a lista (1 chamada) e avisa o pai (grade). */
   const depoisDeGravar = async (msg: string) => {

@@ -41,10 +41,18 @@ export const SECAO_RECORRENCIAS = {
   titulo: 'Recorrências',
 } as const;
 
-/** Componentes do bloco 1 (vendas já realizadas): a divisão antecipação/garantia. */
+/** Rótulos das sub-abas de Previsão de caixa (#receber?ver=), nesta ordem. */
+export const SUBABAS_RECEBER = {
+  semana: 'Semana a semana',
+  recorrencias: 'Recorrências',
+  informados: 'Recebimentos informados',
+} as const;
+
+/** Componentes do bloco 1 (vendas já realizadas): a divisão antecipação/retido. "Garantia" tinha três sentidos
+ * diferentes no sistema (Conflito 2 do catálogo) — o rótulo agora diz o que a linha é: 10% retido, volta em D+30. */
 export const COMPONENTES_VENDA = {
   antecipacao: 'Antecipação (D+2)',
-  garantia: 'Garantia (D+30)',
+  garantia: 'Retido 10% (volta em D+30)',
 } as const;
 
 /**

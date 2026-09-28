@@ -5,7 +5,7 @@
 // Clicar num número abre, logo abaixo da grade e SEM consulta nova, quem compõe aquele valor — tudo sai da mesma
 // resposta de fn_fin_receber_semanal (application/carregar-contas-receber.ts).
 // O detalhe fica no fluxo da página (não é `absolute`): nada invisível entra na área rolável da grade.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { fmtBRLc, fmtData } from '@/shared/ui/format';
 import type { ContasReceberCarregado } from '../../application/carregar-contas-receber';
 import {
@@ -13,7 +13,10 @@ import {
 } from '../../domain/contas-receber';
 import { Recorrencias } from './Recorrencias';
 import { Informados, type RepoInformados } from './Informados';
-import { BLOCOS_RECEBER, COMPONENTES_VENDA, ESCOPO_RECEBER, ESTADOS_RECEBER, ROTULOS_TOTAL } from './textos';
+import { BLOCOS_RECEBER, COMPONENTES_VENDA, ESCOPO_RECEBER, ESTADOS_RECEBER, ROTULOS_TOTAL, SUBABAS_RECEBER } from './textos';
+import type { SubAbaReceber } from './hash';
+
+export type { SubAbaReceber } from './hash';
 
 // Textos provisórios — ainda não existem em ./textos (luis move para lá).
 const PROVISORIO = {
@@ -238,15 +241,72 @@ function CobrancasDaCelula({ itens }: { itens: LinhaReceber[] }) {
   );
 }
 
-export function ContasAReceber({ dados, repo, canEdit, canVerDoc, onInformadosAlterados }: {
+const SUBABAS_LISTA: { k: SubAbaReceber; l: string }[] = [
+  { k: 'semana', l: SUBABAS_RECEBER.semana },
+  { k: 'recorrencias', l: SUBABAS_RECEBER.recorrencias },
+  { k: 'informados', l: SUBABAS_RECEBER.informados },
+];
+
+const SECAO_TABS_LABEL = 'Previsão de caixa';
+
+/** Tablist das sub-abas de Previsão de caixa. Padrão WAI-ARIA de "automatic activation": seta move o foco E
+ * já troca a aba — não precisa de Enter/Espaço depois. */
+function SubAbasReceber({ ativa, onSelecionar }: { ativa: SubAbaReceber; onSelecionar: (s: SubAbaReceber) => void }) {
+  const botoes = useRef<Partial<Record<SubAbaReceber, HTMLButtonElement | null>>>({});
+  const mover = (dir: 1 | -1) => {
+    const i = SUBABAS_LISTA.findIndex((s) => s.k === ativa);
+    const alvo = SUBABAS_LISTA[(i + dir + SUBABAS_LISTA.length) % SUBABAS_LISTA.length];
+    onSelecionar(alvo.k);
+    botoes.current[alvo.k]?.focus();
+  };
+  return (
+    <div
+      role="tablist"
+      aria-label={SECAO_TABS_LABEL}
+      className="flex w-fit overflow-hidden rounded-[var(--r-md)] border border-[var(--border)]"
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowRight') { e.preventDefault(); mover(1); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); mover(-1); }
+      }}
+    >
+      {SUBABAS_LISTA.map((s, i) => (
+        <button
+          key={s.k}
+          ref={(el) => { botoes.current[s.k] = el; }}
+          type="button"
+          role="tab"
+          id={`receber-tab-${s.k}`}
+          aria-selected={ativa === s.k}
+          aria-controls={`receber-painel-${s.k}`}
+          tabIndex={ativa === s.k ? 0 : -1}
+          onClick={() => onSelecionar(s.k)}
+          className={`${i ? 'border-l border-[var(--border)] ' : ''}px-3 py-1.5 text-xs font-semibold ${
+            ativa === s.k ? 'bg-[var(--accent-subtle)] text-[var(--accent)]' : 'text-[var(--fg-3)] hover:bg-[var(--surface-2)]'
+          }`}
+        >
+          {s.l}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function ContasAReceber({ dados, repo, canEdit, canVerDoc, onInformadosAlterados, sub, onSubChange }: {
   dados: ContasReceberCarregado;
-  /** Recebimentos informados (bloco 5). Sem repo, a sub-seção não aparece (teste de render da grade). */
+  /** Recebimentos informados (bloco 5). Sem repo, a sub-aba fica vazia (teste de render da grade). */
   repo?: RepoInformados;
   canEdit?: boolean;
   canVerDoc?: boolean;
   onInformadosAlterados?: () => void;
+  /** Sub-aba ativa. Controlada pelo pai (hash `#receber?ver=`, ver FinanceiroClient.tsx). Sem pai (ex.: testes),
+   * o componente guarda o próprio estado, começando em "semana" — o mesmo destino do link `#receber` puro. */
+  sub?: SubAbaReceber;
+  onSubChange?: (s: SubAbaReceber) => void;
 }) {
   const [celula, setCelula] = useState<Celula | null>(null);
+  const [subLocal, setSubLocal] = useState<SubAbaReceber>('semana');
+  const subAtiva = sub ?? subLocal;
+  const setSub = onSubChange ?? setSubLocal;
   const { grade, linhas, recorrencias, desligado } = dados;
   const semana = celula?.semana == null ? null : grade.semanas[celula.semana] ?? null;
   const vazio = grade.linhas.length === 0;
@@ -254,26 +314,44 @@ export function ContasAReceber({ dados, repo, canEdit, canVerDoc, onInformadosAl
   return (
     <div className="space-y-3">
       <p className="text-xs text-[var(--fg-3)]">{ESCOPO_RECEBER.legenda}</p>
-      {desligado ? (
-        // Premissa de recebimento desligada: sem data de caixa não há grade — zero aqui seria mentira.
-        <p role="alert" className="rounded-[var(--r-md)] border border-[var(--yellow-border)] bg-[var(--yellow-subtle)] px-3 py-2 text-sm font-semibold text-[var(--fg)]">
-          {PROVISORIO.recebimentoDesligado}
-        </p>
-      ) : vazio ? (
-        <p className="rounded-[var(--r-md)] border border-[var(--border)] px-3 py-2 text-sm text-[var(--fg-2)]">{ESTADOS_RECEBER.vazio}</p>
-      ) : (
-        <GradeContasReceber grade={grade} selecionada={celula}
-          onSelecionar={(c) => setCelula((a) => (a && a.bloco === c.bloco && a.grupo === c.grupo && a.semana === c.semana ? null : c))} />
+      <SubAbasReceber ativa={subAtiva} onSelecionar={setSub} />
+
+      {subAtiva === 'semana' && (
+        <div id="receber-painel-semana" role="tabpanel" aria-labelledby="receber-tab-semana" className="space-y-3">
+          {desligado ? (
+            // Premissa de recebimento desligada: sem data de caixa não há grade — zero aqui seria mentira.
+            <p role="alert" className="rounded-[var(--r-md)] border border-[var(--yellow-border)] bg-[var(--yellow-subtle)] px-3 py-2 text-sm font-semibold text-[var(--fg)]">
+              {PROVISORIO.recebimentoDesligado}
+            </p>
+          ) : vazio ? (
+            <p className="rounded-[var(--r-md)] border border-[var(--border)] px-3 py-2 text-sm text-[var(--fg-2)]">{ESTADOS_RECEBER.vazio}</p>
+          ) : (
+            <GradeContasReceber grade={grade} selecionada={celula}
+              onSelecionar={(c) => setCelula((a) => (a && a.bloco === c.bloco && a.grupo === c.grupo && a.semana === c.semana ? null : c))} />
+          )}
+          {!desligado && grade.semDataCaixa.linhas > 0 && (
+            <p className="text-xs text-[var(--fg-3)]">{PROVISORIO.semDataCaixa(grade.semDataCaixa.linhas, fmtBRLc(grade.semDataCaixa.valor))}</p>
+          )}
+          {grade.foraDoPeriodo.linhas > 0 && (
+            <p className="text-xs text-[var(--fg-3)]">{PROVISORIO.foraDoPeriodo(grade.foraDoPeriodo.linhas, fmtBRLc(grade.foraDoPeriodo.valor))}</p>
+          )}
+          {celula && <ComposicaoCelula linhas={linhas} celula={celula} semana={semana} onFechar={() => setCelula(null)} />}
+        </div>
       )}
-      {!desligado && grade.semDataCaixa.linhas > 0 && (
-        <p className="text-xs text-[var(--fg-3)]">{PROVISORIO.semDataCaixa(grade.semDataCaixa.linhas, fmtBRLc(grade.semDataCaixa.valor))}</p>
+
+      {subAtiva === 'recorrencias' && (
+        <div id="receber-painel-recorrencias" role="tabpanel" aria-labelledby="receber-tab-recorrencias">
+          <Recorrencias cobrancas={recorrencias} />
+        </div>
       )}
-      {grade.foraDoPeriodo.linhas > 0 && (
-        <p className="text-xs text-[var(--fg-3)]">{PROVISORIO.foraDoPeriodo(grade.foraDoPeriodo.linhas, fmtBRLc(grade.foraDoPeriodo.valor))}</p>
+
+      {subAtiva === 'informados' && repo && (
+        <div id="receber-painel-informados" role="tabpanel" aria-labelledby="receber-tab-informados">
+          {/* autoAbrir: a carga (fn_fin_informados_listar) acontece SOB DEMANDA ao abrir esta sub-aba, não junto da
+              grade — mesma disciplina de antes, só que o gatilho agora é trocar de aba, não um acordeão a mais. */}
+          <Informados repo={repo} canEdit={!!canEdit} canVerDoc={!!canVerDoc} onAlterado={onInformadosAlterados} autoAbrir />
+        </div>
       )}
-      {celula && <ComposicaoCelula linhas={linhas} celula={celula} semana={semana} onFechar={() => setCelula(null)} />}
-      <Recorrencias cobrancas={recorrencias} />
-      {repo && <Informados repo={repo} canEdit={!!canEdit} canVerDoc={!!canVerDoc} onAlterado={onInformadosAlterados} />}
     </div>
   );
 }

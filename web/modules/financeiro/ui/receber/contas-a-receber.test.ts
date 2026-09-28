@@ -73,7 +73,7 @@ describe('composição da célula (sem consulta nova)', () => {
     expect(html).toContain('Antecipação (D+2)');
     expect(html).toContain('R$ 1.000,00'); // líquido da venda
     expect(html).toContain('R$ 865,01'); // o que cai
-    expect(html).not.toContain('Garantia (D+30)'); // a garantia cai em outra semana
+    expect(html).not.toContain('Retido 10% (volta em D+30)'); // o retido cai em outra semana
   });
   it('bloco 2: as cobranças, com nome, produto, data prevista e valor', () => {
     const html = renderToStaticMarkup(createElement(ComposicaoCelula, {
@@ -108,7 +108,9 @@ describe('cálculo de recebimento desligado', () => {
     expect(html).toContain('Cálculo de recebimento desligado');
     expect(html).not.toContain('Total da semana');
     expect(html).not.toContain('R$ 0,00');
-    expect(html).toContain('Pessoa B'); // Recorrências continuam (têm vencimento)
+    // Recorrências continuam (têm vencimento) — agora numa sub-aba própria.
+    const recHtml = renderToStaticMarkup(createElement(ContasAReceber, { dados: d, sub: 'recorrencias' }));
+    expect(recHtml).toContain('Pessoa B');
   });
 });
 

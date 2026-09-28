@@ -66,11 +66,11 @@ describe('Informados — sub-seção', () => {
     expect(html).toContain('Somente leitura');
   });
 
-  it('dentro da aba: aparece com repo; sem repo, não', () => {
+  it('dentro da sub-aba "Recebimentos informados": aparece com repo; sem repo, não', () => {
     const d = montarContasReceber([], '2026-09-28');
-    expect(renderToStaticMarkup(createElement(ContasAReceber, { dados: d, repo: repoEspiao(), canEdit: true, canVerDoc: false })))
+    expect(renderToStaticMarkup(createElement(ContasAReceber, { dados: d, repo: repoEspiao(), canEdit: true, canVerDoc: false, sub: 'informados' })))
       .toContain('informados-titulo');
-    expect(renderToStaticMarkup(createElement(ContasAReceber, { dados: d }))).not.toContain('informados-titulo');
+    expect(renderToStaticMarkup(createElement(ContasAReceber, { dados: d, sub: 'informados' }))).not.toContain('informados-titulo');
   });
 });
 
