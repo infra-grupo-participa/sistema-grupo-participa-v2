@@ -1,7 +1,7 @@
 -- 20260928z68 — Contas a Receber / Faturamento, fatia F6: Caixa Hotmart por dia + vigência real da antecipação
 --               (decisão do coordenador, 28/09, delegada pelo Marcio) + carga de feriados bancários 2028–2030.
 --
--- NÃO APLICADA — coordenador aplica.
+-- APLICADA em produção em 28/09/2026. Corrigido antes de aplicar: dias_uteis = true nas vigências novas (default da coluna é false — sem isso voltava a dias corridos). Medido: 12 meses 18 ms; desde 01/06 custo antecipação R$ 138.684 (planilha 136 mil), D+2 R$ 3,43 mi (planilha 3,37 mi).
 --
 -- Por quê (3 coisas nesta migration, todas em fin.premissas_recebimento / fin.recebimento — SEM MUDAR O CORPO da
 -- função, só o dado que ela lê):
@@ -123,11 +123,11 @@ end $guarda$;
 -- Sem antecipação até 31/05/2026: pct_retido=100% zera a base antecipável (entra_rapido = 0 sempre) e
 -- taxa_antecipacao=0 zera o custo; o líquido inteiro vira "retido" e só libera em WORKDAY(dia+29, 1) = D+30 útil.
 insert into fin.premissas_recebimento
-  (vigente_de, taxa_antecipacao, pct_retido, dias_ate_entrar, dias_retencao, ativa, fonte)
+  (vigente_de, taxa_antecipacao, pct_retido, dias_ate_entrar, dias_retencao, ativa, dias_uteis, fonte)
 values
-  (date '2015-01-01', 0.00000, 1.0000, 2, 30, true,
+  (date '2015-01-01', 0.00000, 1.0000, 2, 30, true, true,   -- dias_uteis: o default da coluna é FALSE (z60)
    'coordenador 28/09/2026 (decisão delegada pelo Marcio): sem antecipação antes de 01/06/2026 — líquido inteiro no 1º dia útil ≥ D+30, custo 0'),
-  (date '2026-06-01', 0.03890, 0.1000, 2, 30, true,
+  (date '2026-06-01', 0.03890, 0.1000, 2, 30, true, true,
    'coordenador 28/09/2026 (decisão delegada pelo Marcio): antecipação vigente desde 01/06/2026, como a aba Faturamento Diário da planilha — mesmos parâmetros da linha de 2000-01-01 (Marcio 28/09/2026)')
 on conflict (vigente_de) do nothing;
 
@@ -283,6 +283,18 @@ begin
   if r.entra_rapido is distinct from 81.05 or r.retido is distinct from 9.37 or r.custo_antecipacao is distinct from 3.28
      or r.liquido_total is distinct from 90.42 then
     raise exception 'z68: virada (01/06/2026) falhou: %', row_to_json(r);
+  end if;
+  -- datas em dias ÚTEIS (a coluna dias_uteis tem default false: sem ela as vigências novas voltariam a dias corridos)
+  if exists (select 1 from fin.premissas_recebimento where vigente_de in (date '2015-01-01', date '2026-06-01') and not dias_uteis) then
+    raise exception 'z68: vigência nova sem dias_uteis';
+  end if;
+  select * into r from fin.recebimento(date '2026-06-12', 100);   -- sexta → D+2 útil = terça 16/06
+  if r.entra_em is distinct from date '2026-06-16' then
+    raise exception 'z68: D+2 útil errado para 12/06/2026: %', r.entra_em;
+  end if;
+  select * into r from fin.recebimento(date '2026-05-15', 100);   -- D+30 = 14/06 (domingo) → 1º útil 15/06
+  if r.libera_em is distinct from date '2026-06-15' then
+    raise exception 'z68: 1º dia útil ≥ D+30 errado para 15/05/2026: %', r.libera_em;
   end if;
   select * into r from fin.recebimento(date '2026-06-15', 93.70);
   if r.entra_rapido is distinct from 81.05 or r.retido is distinct from 9.37 or r.custo_antecipacao is distinct from 3.28
