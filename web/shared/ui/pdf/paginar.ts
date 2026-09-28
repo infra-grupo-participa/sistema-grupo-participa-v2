@@ -173,9 +173,13 @@ export function textoCelula(valores: Record<string, string>, coluna: ColunaPdf, 
   return total ? (valores[coluna.chave] || (i === 0 ? 'Total' : '')) : (valores[coluna.chave] || '—');
 }
 
-/** Largura útil (sem padding) da coluna `i`, onde o texto é quebrado. */
+/**
+ * Largura útil (sem padding) da coluna `i`, onde o texto é quebrado. O milésimo de ponto
+ * absorve o arredondamento de ponto flutuante: sem ele, o valor que DEFINE a largura mínima
+ * da coluna media 57,443 contra 57,442 de útil e ia para duas linhas (total da Pessoas, 9.228 linhas).
+ */
 export function larguraUtil(layout: LayoutTabela, i: number): number {
-  return Math.max(layout.larguras[i] - 2 * layout.padX - FOLGA_LINHA, 1);
+  return Math.max(layout.larguras[i] - 2 * layout.padX - FOLGA_LINHA + 0.001, 1);
 }
 
 /** Linhas da célula como o PDF vai desenhar. */

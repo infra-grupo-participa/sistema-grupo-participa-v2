@@ -302,8 +302,15 @@ describe('os 6 relatórios desenham (renderToBuffer)', () => {
           conferir(`linha ${k} ${c.rotulo}`, i, linhas, layout.corpo, 400);
           // valor (R$, data, número) só pode ir para a linha de baixo no espaço rígido: "R$" / "123.456,78"
           if (c.tipo !== 'texto') expect(linhas.join(' '), `${c.rotulo}: ${texto}`).toBe(texto);
+          // 9 colunas padrão: sobra folha, valor nunca vai para 2 linhas
+          if (c.tipo !== 'texto' && chaves.length === COLUNAS_PADRAO.length) expect(linhas, `${c.rotulo}: ${texto}`).toHaveLength(1);
         }
-        if (s.total) conferir(`total ${c.rotulo}`, i, linhasCelula(layout, i, textoCelula(s.total, c, i, true), 600), layout.corpo, 600);
+        if (s.total) {
+          const tt = textoCelula(s.total, c, i, true);
+          const lt = linhasCelula(layout, i, tt, 600);
+          conferir(`total ${c.rotulo}`, i, lt, layout.corpo, 600);
+          if (c.tipo !== 'texto' && chaves.length === COLUNAS_PADRAO.length) expect(lt, `total ${c.rotulo}: ${tt}`).toHaveLength(1);
+        }
       });
       expect(excessos).toEqual([]);
       if (chaves.length === COLUNAS_PADRAO.length) {
@@ -312,6 +319,19 @@ describe('os 6 relatórios desenham (renderToBuffer)', () => {
       }
     });
   }
+
+  // Caso medido: Pessoas do HM com 9.228 linhas — o total "R$ 153.309.378" é o que define a
+  // largura mínima da coluna e ia para 2 linhas por 0,001 pt de arredondamento.
+  it('valor que define a largura mínima da coluna cabe numa linha só (Pessoas, 9.228 linhas)', () => {
+    const lista = Array.from({ length: 9228 }, (_, i) => pessoa({ pessoa_chave: `p${i}`, valor_pago: 12000 + i, parcelas_atrasadas: i % 4 ? 0 : 2 }));
+    const s = aplicarNivel(rascunhoPessoas(lista, []), 'completo').secoes[1];
+    const layout = layoutTabela(s);
+    s.colunas.forEach((c, i) => {
+      if (c.tipo === 'texto' || !s.total) return;
+      const tt = textoCelula(s.total, c, i, true);
+      expect(linhasCelula(layout, i, tt, 600), `total ${c.rotulo}: ${tt}`).toHaveLength(1);
+    });
+  });
 
   it('coluna de data comporta dd/mm/aaaa sem quebrar nos relatórios de colunas fixas', () => {
     const contas = [conta()];
