@@ -14,6 +14,7 @@ import type { CompradorFunil, Funil } from '../domain/funis';
 import type { PassoTrajetoria } from '../domain/trajetoria';
 import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-card';
 import type { AssinaturaHMBoard, AssinaturaHMSemCard } from '../domain/assinatura-hm';
+import type { LinhaReceber } from '../domain/contas-receber';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
 export interface Resultado {
@@ -94,6 +95,10 @@ export interface FinanceiroRepository {
   loadAceleraParaHM(): Promise<AceleraParaHM[]>;
   /** fn_fin_prorata_diagnostico — uma pessoa, com cada pagamento e o motivo; vencimento/valor = simulação. */
   loadProrataDiagnostico(email: string, vencimento?: string | null, valorPrograma?: number): Promise<ProrataDiagnostico | null>;
+
+  // ── Contas a Receber (fase 1: blocos 1 e 2) ──────────────────────────────
+  /** fn_fin_contas_receber(p_corte, p_ate) — UMA chamada por abertura da aba; numeric já convertido. */
+  loadContasReceber(): Promise<LinhaReceber[]>;
 
   // ── Protocolo dos relatórios em PDF (fn_fin_relatorio_*, 20260928z50) ───
   /** fn_fin_relatorio_emitir — grava a emissão e devolve o protocolo GP-REL-AAAA-NNNNNN. */

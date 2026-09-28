@@ -23,6 +23,7 @@ import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-car
 import {
   normalizarAssinaturaBoard, normalizarAssinaturaSemCard, type AssinaturaHMBoard, type AssinaturaHMSemCard,
 } from '../domain/assinatura-hm';
+import { normalizarLinhaReceber, type LinhaReceber } from '../domain/contas-receber';
 
 function erroPara(msg: string): Resultado {
   return { ok: false, msg };
@@ -330,6 +331,13 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     logQueryError('loadProrataDiagnostico', error);
     if (error) throw new Error('Não foi possível montar o diagnóstico do pro rata.');
     return (data as ProrataDiagnostico | null) ?? null;
+  }
+
+  // Contas a Receber — p_corte/p_ate nulos: o banco decide o corte (última venda) e o horizonte.
+  async loadContasReceber(): Promise<LinhaReceber[]> {
+    const linhas = await this.rpcLista<Record<string, unknown>>('fn_fin_contas_receber', { p_corte: null, p_ate: null },
+      'Não foi possível carregar as contas a receber.');
+    return linhas.map(normalizarLinhaReceber);
   }
 
   // ── Protocolo dos relatórios em PDF (fn_fin_relatorio_*, 20260928z50) ───
