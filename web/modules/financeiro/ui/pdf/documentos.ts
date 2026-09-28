@@ -263,7 +263,9 @@ export function rascunhoConciliacao(lista: DivergenciaHotmart[], recorte: ItemRe
         titulo: plural(lista.length, 'divergência', 'divergências'), tipo: 'detalhe',
         colunas: [
           { chave: 'tipo', rotulo: 'Tipo', tipo: 'texto', pii: 'nenhuma', peso: 1.4 },
-          { chave: 'transacao', rotulo: 'Transação', tipo: 'texto', pii: 'nenhuma', peso: 1.1 },
+          // Código HP… identifica o comprador para quem tem acesso à Hotmart (pseudônimo = dado
+          // pessoal pela LGPD — pentest 28/09): só sai no nível completo.
+          { chave: 'transacao', rotulo: 'Transação', tipo: 'texto', pii: 'identificacao', peso: 1.1 },
           { chave: 'email', rotulo: 'E-mail', tipo: 'texto', pii: 'contato', peso: 1.7 },
           { chave: 'hotmart', rotulo: 'Hotmart', tipo: 'texto', pii: 'nenhuma', peso: 1.1 },
           { chave: 'banco', rotulo: 'Banco', tipo: 'texto', pii: 'nenhuma', peso: 1.1 },

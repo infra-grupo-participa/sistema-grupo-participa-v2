@@ -24,7 +24,8 @@ const PII = {
   email: 'mariana.teixeira@exemplo.com', email2: 'otavio@exemplo.com',
   tel: '(11) 98888-7777', cpf: '39053344705', cnpj: '11222333000181',
 };
-const FRAGMENTOS_PII = [PII.nome, PII.nome2, PII.email, PII.email2, '98888', '4705', '0181', 'Mariana', 'Otávio', 'teixeira', 'otavio@'];
+// 'HP123' = código de transação Hotmart da fixture de conciliação (pseudônimo do comprador).
+const FRAGMENTOS_PII = [PII.nome, PII.nome2, PII.email, PII.email2, '98888', '4705', '0181', 'Mariana', 'Otávio', 'teixeira', 'otavio@', 'HP123'];
 
 function conta(over: Partial<ContaReceber> = {}): ContaReceber {
   return {
@@ -141,6 +142,20 @@ describe('classe de dado pessoal: os 6 relatórios', () => {
     }
     const id = seis().find((r) => r.tipo === 'identidade')!;
     expect(() => aplicarNivel(id, 'sem_dado_pessoal')).toThrow();
+  });
+
+  it('conciliação: código da transação Hotmart (HP…) é pessoal — só sai no nível completo', () => {
+    const r = seis().find((x) => x.tipo === 'conciliacao')!;
+    const det = r.secoes.find((s) => s.tipo === 'detalhe')!;
+    expect(det.colunas.find((c) => c.chave === 'transacao')?.pii).toBe('identificacao');
+    for (const nivel of ['sem_dado_pessoal', 'so_numeros'] as const) {
+      const out = aplicarNivel(r, nivel);
+      expect(out.secoes.flatMap((s) => s.colunas.map((c) => c.chave)), nivel).not.toContain('transacao');
+      const tudo = JSON.stringify(out);
+      expect(tudo, nivel).not.toContain('HP123');
+      expect(tudo, nivel).not.toContain('HP9');
+    }
+    expect(JSON.stringify(aplicarNivel(r, 'completo'))).toContain('HP123');
   });
 
   it('toda coluna de COLUNAS_RELATORIO (Carteira do board) tem classe de dado pessoal declarada', () => {
