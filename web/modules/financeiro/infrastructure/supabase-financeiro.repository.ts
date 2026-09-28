@@ -19,7 +19,7 @@ import type { FaturamentoAcao, LinhaContratado } from '../domain/faturamento-ana
 import type { LinhaServicoDiamante } from '../domain/servico-diamante';
 import type { CompradorFunil, Funil } from '../domain/funis';
 import type { PassoTrajetoria } from '../domain/trajetoria';
-import type { PagouSemCard } from '../domain/programa-sem-card';
+import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-card';
 
 function erroPara(msg: string): Resultado {
   return { ok: false, msg };
@@ -232,6 +232,12 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     const linhas = await this.rpcLista<CompradorFunil>('fn_fin_funil_compradores', { p_evento_id: eventoId },
       'Não foi possível carregar quem pagou neste funil.');
     return linhas.map((c) => ({ ...c, valor: n(c.valor), liquido: n(c.liquido) }));
+  }
+
+  async loadOfertasSemCatalogo(): Promise<OfertaSemCatalogo[]> {
+    const linhas = await this.rpcLista<OfertaSemCatalogo>('fn_fin_ofertas_sem_catalogo', {},
+      'Não foi possível carregar as ofertas fora do catálogo.');
+    return linhas.map((o) => ({ ...o, valor: Number(o.valor ?? 0) || 0 }));
   }
 
   async loadProgramaSemCard(familia: 'HM' | 'AURUM'): Promise<PagouSemCard[]> {

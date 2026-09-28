@@ -12,7 +12,7 @@ import type { FaturamentoAcao, LinhaContratado } from '../domain/faturamento-ana
 import type { LinhaServicoDiamante } from '../domain/servico-diamante';
 import type { CompradorFunil, Funil } from '../domain/funis';
 import type { PassoTrajetoria } from '../domain/trajetoria';
-import type { PagouSemCard } from '../domain/programa-sem-card';
+import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-card';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
 export interface Resultado {
@@ -73,6 +73,8 @@ export interface FinanceiroRepository {
   loadTrajetoria(email: string): Promise<PassoTrajetoria[]>;
   /** Pagou oferta do Programa e não tem card no board (fn_fin_programa_sem_card). */
   loadProgramaSemCard(familia: 'HM' | 'AURUM'): Promise<PagouSemCard[]>;
+  /** Ofertas pagas fora do catálogo (fn_fin_ofertas_sem_catalogo). */
+  loadOfertasSemCatalogo(): Promise<OfertaSemCatalogo[]>;
   loadHotmartPessoas(familia: FamiliaHotmart): Promise<PessoaHotmart[]>;
   loadHotmartExtrato(email: string): Promise<TransacaoHotmart[]>;
   loadHotmartOfertas(familia: FamiliaHotmart): Promise<OfertaHotmart[]>;

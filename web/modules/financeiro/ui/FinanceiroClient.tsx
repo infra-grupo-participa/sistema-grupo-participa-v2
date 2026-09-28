@@ -14,6 +14,7 @@ import { listarOfertas } from '../application/gerenciar-ofertas';
 import { agruparPorAcao, chaveDaAcao, SEM_ACAO, TimelineAcoes } from './TimelineAcoes';
 import { ResultadoAcoes } from './ResultadoAcoes';
 import { ProgramaSemCard } from './ProgramaSemCard';
+import { OfertasSemCatalogo } from './OfertasSemCatalogo';
 import { ProdutoTabs, type ProdutoChave } from './ProdutoTabs';
 import { LegendaCores } from './LegendaCores';
 import { BoardView } from './BoardView';
@@ -389,6 +390,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <ProdutoTabs contagens={contagensProduto} ativo={produtoAtivo} onSelecionar={selecionarProduto}
               diamante={{ ativo: verDiamante, contagem: contarDiamantes(diamante.dados), onSelecionar: () => setVerDiamante(true) }} />
             {verDiamante ? <ServicoDiamante dados={diamante.dados} erro={diamante.erro} repo={repo} /> : <>
+            {(produtoAtivo === 'HM' || produtoAtivo === 'AURUM') && <OfertasSemCatalogo repo={repo} familia={produtoAtivo} />}
             {(produtoAtivo === 'HM' || produtoAtivo === 'AURUM') && <ProgramaSemCard key={produtoAtivo} repo={repo} familia={produtoAtivo} />}
             <ResultadoAcoes cards={cardsDoProduto} ativa={acaoEfetiva} onSelecionar={selecionarAcao} />
             <div className="mb-3">
