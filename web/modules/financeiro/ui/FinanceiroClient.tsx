@@ -33,6 +33,7 @@ import type { BoardHotmart } from '../domain/hotmart';
 import { indexarBoardHotmart } from '../domain/board-hotmart';
 import { indexarAssinaturaHM, type AssinaturaHMBoard, type AssinaturaHMSemCard } from '../domain/assinatura-hm';
 import type { PagouSemCard } from '../domain/programa-sem-card';
+import { criarCacheListasSemCard, listasVisiveis } from '../application/carregar-listas-sem-card';
 
 type Tab = 'board' | 'faturamento' | 'funis' | 'relatorios' | 'ofertas';
 
@@ -88,11 +89,16 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // Mensalidade do HM antigo por pessoa_chave (fn_fin_board_assinatura_hm, z52): UMA chamada por abertura do board,
   // junto da camada Hotmart, nunca por card. `null` = carregando ou falhou — o bloco Assinatura cai no dado antigo.
   const [assinaturaPorPessoa, setAssinaturaPorPessoa] = useState<Map<string, AssinaturaHMBoard> | null>(null);
-  // Listas "sem card" (Programa HM/Aurum e mensalidade do HM antigo): carregadas UMA vez por abertura do board e
-  // recarregadas só no mesmo gatilho dele — antes cada bloco consultava de novo a cada volta à aba (reprovação do João,
-  // 28/09). `null` = carregando; falha vira lista vazia (o bloco some, como antes).
+  // Listas "sem card" (Programa HM/Aurum e mensalidade do HM antigo): cada uma carrega na 1ª vez que o produto dela
+  // fica visível e fica guardada aqui — voltar à aba não consulta de novo, e Aurum nunca visitado nunca consulta
+  // (programa_sem_card('AURUM') = 713 ms medidos, 28/09). O recarregar do board invalida o cache.
+  // `null` = carregando; falha vira lista vazia (o bloco some, como antes).
   const [programaSemCard, setProgramaSemCard] = useState<Record<'HM' | 'AURUM', PagouSemCard[] | null>>({ HM: null, AURUM: null });
   const [assinaturaSemCard, setAssinaturaSemCard] = useState<AssinaturaHMSemCard[] | null>(null);
+  const [cacheSemCard] = useState(() => criarCacheListasSemCard(repo, (lista, dados) => {
+    if (lista === 'assinatura_HM') setAssinaturaSemCard(dados as AssinaturaHMSemCard[]);
+    else setProgramaSemCard((p) => ({ ...p, [lista === 'programa_HM' ? 'HM' : 'AURUM']: dados as PagouSemCard[] }));
+  }));
 
   const selecionarProduto = (produto: ProdutoChave) => {
     setVerDiamante(false);
@@ -119,18 +125,6 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const buscarHotmart = () => repo.loadBoardHotmart().then(indexarBoardHotmart);
   const buscarAssinatura = () => repo.loadBoardAssinaturaHM().then(indexarAssinaturaHM);
 
-  /** As 3 listas "sem card" — 1 chamada de cada, em paralelo ao board. `vivo` protege o mount. */
-  const buscarListasSemCard = (vivo: () => boolean = () => true) => {
-    for (const familia of ['HM', 'AURUM'] as const) {
-      repo.loadProgramaSemCard(familia)
-        .catch((): PagouSemCard[] => [])
-        .then((d) => { if (vivo()) setProgramaSemCard((p) => ({ ...p, [familia]: d })); });
-    }
-    repo.loadAssinaturaHMSemCard()
-      .catch((): AssinaturaHMSemCard[] => [])
-      .then((d) => { if (vivo()) setAssinaturaSemCard(d); });
-  };
-
   // Recarrega o board a partir de um evento do usuário (retry do erro,
   // onAcordoSalvo do drawer) — componente já montado, sem guard de unmount.
   const carregarBoardAgora = () => {
@@ -138,7 +132,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       .then((m) => { setHotmartPorCard(m); setHotmartErro(false); })
       .catch(() => setHotmartErro(true));
     buscarAssinatura().then(setAssinaturaPorPessoa).catch(() => {});
-    buscarListasSemCard();
+    // Invalida as listas sem card: recarrega agora só as visíveis; as outras, na próxima visita.
+    cacheSemCard.invalidar();
+    cacheSemCard.garantir(listasVisiveis(tab, produtoAtivo, verDiamante));
     return buscarBoard()
       .then(({ b, rg }) => { setBoard(b); setRegua(rg); setErroBoard(null); })
       .catch(() => setErroBoard('Não foi possível carregar o board financeiro. Verifique sua conexão e tente novamente.'));
@@ -160,7 +156,6 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     buscarAssinatura()
       .then((m) => { if (vivo) setAssinaturaPorPessoa(m); })
       .catch(() => { /* sem a camada nova o bloco Assinatura mostra o que já mostrava */ });
-    buscarListasSemCard(() => vivo);
     (async () => {
       const t = await repo.loadTurmas().catch(() => []);
       if (vivo) setTurmas(t);
@@ -208,6 +203,13 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Listas sem card do produto visível: pede só o que ainda não foi pedido (o cache ignora o resto).
+  useEffect(() => {
+    cacheSemCard.garantir(listasVisiveis(tab, produtoAtivo, verDiamante));
+  }, [cacheSemCard, tab, produtoAtivo, verDiamante]);
+  // Desmontou: respostas em voo são descartadas (e, no StrictMode, a remontagem pede de novo).
+  useEffect(() => () => cacheSemCard.invalidar(), [cacheSemCard]);
 
   useEffect(() => {
     if (tab !== 'ofertas' || ofertas.length) return;
