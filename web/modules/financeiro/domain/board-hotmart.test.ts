@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  descreverBoletoAberto, explicarDivergencia, fmtMesAno, indexarBoardHotmart, linhaAssinaturaHM, rotuloParcelamento, somarHotmart, temAssinaturaHM, temDadoHotmart,
+  descreverBoletoAberto, explicarDivergencia, fmtMesAno, indexarBoardHotmart, rotuloParcelamento, somarHotmart, temDadoHotmart,
 } from './board-hotmart';
 import type { BoardHotmart } from './hotmart';
 
@@ -116,26 +116,17 @@ describe('explicarDivergencia', () => {
 });
 
 describe('assinatura HM (contrato à parte)', () => {
-  const brl = (n: number) => `R$ ${n.toLocaleString('pt-BR')}`;
-  it('caso Carlos Roberto: 12 × R$ 1.997 = R$ 23.964, até 09/2026', () => {
+  it('caso Carlos Roberto: 12 × R$ 1.997 = R$ 23.964 normalizado', () => {
     const m = indexarBoardHotmart([linha({
       assinatura_mensalidades: 12, assinatura_valor: '23964.00' as unknown as number,
       assinatura_de: '2025-10-03', assinatura_ate: '2026-09-03', assinatura_ativa: true,
     })]);
     const h = m.get('c1')!;
     expect(h.assinatura_valor).toBe(23964);
-    expect(temAssinaturaHM(h)).toBe(true);
-    expect(linhaAssinaturaHM(h, brl)).toBe('Assinatura HM: 12 × · R$ 23.964 · até 09/2026');
   });
-  it('sem assinatura (colunas ausentes da função antiga ou 0) → nada', () => {
+  it('sem assinatura (colunas ausentes da função antiga) → 0', () => {
     const h = indexarBoardHotmart([linha()]).get('c1')!;
     expect(h.assinatura_mensalidades).toBe(0);
-    expect(temAssinaturaHM(h)).toBe(false);
-    expect(linhaAssinaturaHM(h, brl)).toBeNull();
-    expect(linhaAssinaturaHM(null, brl)).toBeNull();
-  });
-  it('pessoa não encontrada não mostra assinatura', () => {
-    expect(temAssinaturaHM(linha({ encontrado: false, assinatura_mensalidades: 3 }))).toBe(false);
   });
   it('fmtMesAno', () => {
     expect(fmtMesAno('2026-09-03')).toBe('09/2026');

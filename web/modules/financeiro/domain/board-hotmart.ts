@@ -143,17 +143,7 @@ export function fmtMesAno(ymd: string | null | undefined): string | null {
   return m ? `${m[2]}/${m[1]}` : null;
 }
 
-/** Card tem assinatura HM (mensalidades pagas)? Contrato à parte — nunca entra no "pago" do card. */
-export function temAssinaturaHM(h: BoardHotmart | null | undefined): h is BoardHotmart {
-  return temDadoHotmart(h) && num(h.assinatura_mensalidades) > 0;
-}
-
-/** Linha curta do card: "Assinatura HM: 12 × · R$ 23.964 · até 09/2026". null sem assinatura. */
-export function linhaAssinaturaHM(h: BoardHotmart | null | undefined, fmtValor: (n: number) => string): string | null {
-  if (!temAssinaturaHM(h)) return null;
-  const ate = fmtMesAno(h.assinatura_ate);
-  return `Assinatura HM: ${num(h.assinatura_mensalidades)} × · ${fmtValor(num(h.assinatura_valor))}${ate ? ` · até ${ate}` : ''}`;
-}
+// Bloco "Assinatura HM" do card/ficha: domain/assinatura-hm.ts (resumoAssinaturaCard / linhaResumoAssinatura).
 
 /** Dias corridos entre duas datas 'YYYY-MM-DD'. */
 function diasEntre(de: string, ate: string): number {
