@@ -96,6 +96,20 @@ export const ROTULO_NIVEL: Record<NivelPii, string> = {
   so_numeros: 'Só números',
 };
 
+const FUSO = 'America/Sao_Paulo';
+/**
+ * Data/hora da emissão no fuso de São Paulo — a MESMA que o PDF imprime no
+ * cabeçalho. Mora aqui (sem @react-pdf) para a tela de conferência usar sem
+ * puxar a lib de PDF para o bundle.
+ */
+export function dataHoraSaoPaulo(iso: string): { data: string; hora: string } {
+  const d = new Date(iso);
+  return {
+    data: new Intl.DateTimeFormat('pt-BR', { timeZone: FUSO, day: '2-digit', month: '2-digit', year: 'numeric' }).format(d),
+    hora: new Intl.DateTimeFormat('pt-BR', { timeZone: FUSO, hour: '2-digit', minute: '2-digit', hour12: false }).format(d),
+  };
+}
+
 /** Texto do indicador no cabeçalho do PDF. */
 export const INDICADOR_NIVEL: Record<NivelPii, string> = {
   completo: 'Contém dados pessoais (CPF mascarado)',

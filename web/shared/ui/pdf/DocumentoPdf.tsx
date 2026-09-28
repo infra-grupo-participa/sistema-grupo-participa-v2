@@ -9,7 +9,7 @@
 // lib entra no bundle da página (chunk medido no next build de 28/09: 1,22 MB, 443 KB gzip).
 import { Document, Font, Page, Path, StyleSheet, Svg, Text, View } from '@react-pdf/renderer';
 import type { DocumentoRelatorio, KpiPdf, SecaoPdf } from './modelo';
-import { INDICADOR_NIVEL } from './modelo';
+import { INDICADOR_NIVEL, dataHoraSaoPaulo } from './modelo';
 import { caracteresPorLinha, corpoDaSecao, larguraColunas, larguraTabela, paginar, quebrarTokens, type BlocoPagina } from './paginar';
 import { COR_PDF, FONTE_PDF, MEDIDA_PDF } from './tema-pdf';
 import { LOGO_LARANJA, LOGO_SILHUETA, LOGO_VIEWBOX } from './logo-pdf';
@@ -32,14 +32,6 @@ export function registrarFontesPdf(base: string): void {
   fontesRegistradas = base;
 }
 
-const FUSO = 'America/Sao_Paulo';
-export function dataHoraSaoPaulo(iso: string): { data: string; hora: string } {
-  const d = new Date(iso);
-  return {
-    data: new Intl.DateTimeFormat('pt-BR', { timeZone: FUSO, day: '2-digit', month: '2-digit', year: 'numeric' }).format(d),
-    hora: new Intl.DateTimeFormat('pt-BR', { timeZone: FUSO, hour: '2-digit', minute: '2-digit', hour12: false }).format(d),
-  };
-}
 
 const M = MEDIDA_PDF;
 const s = StyleSheet.create({
