@@ -1,0 +1,4 @@
+-- 20260928z32 — cs.fn_hm_cadastrar_manual falhava em TODA chamada: "on conflict (comprador_id)" sem trava única
+-- correspondente (a trava de cs.contatos_hm é (comprador_id, produto) desde o card por produto). Agora grava produto 'HM'
+-- e usa on conflict (comprador_id, produto). Testado em transação desfeita: ok, card criado.
+-- Aplicado por replace sobre pg_get_functiondef (a vigente é a do banco).

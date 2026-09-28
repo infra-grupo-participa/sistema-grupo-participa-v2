@@ -55,8 +55,9 @@ export function FunisEventos({ repo }: { repo: FinanceiroRepository }) {
 
       {escritorioSemConta && (
         <p className="rounded-[var(--r-md)] border border-[var(--yellow)] px-3 py-2 text-xs text-[var(--fg-2)]">
-          As vendas do escritório (Sessão de Viabilidade, Croqui, Holding) estão na conta Hotmart <strong>mcsmarciosa@gmail.com</strong>, que ainda não
-          está conectada. Os valores abaixo vêm só das planilhas da época (coluna Registrado) até a conta entrar.
+          De 2021 a 2024 a Sessão de Viabilidade e o Croqui foram vendidos nesta conta, e os números estão aqui. De 2025 em diante as
+          vendas do escritório estão na conta Hotmart <strong>mcsmarciosa@gmail.com</strong>, que ainda não está conectada: esses
+          seminários mostram só o que foi registrado na época.
         </p>
       )}
 
