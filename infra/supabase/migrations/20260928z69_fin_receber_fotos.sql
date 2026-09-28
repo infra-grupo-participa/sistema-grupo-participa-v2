@@ -2,7 +2,7 @@
 --               Junto: os 2 achados BAIXOS do Kirad na z67 (obrigatórios antes de ligar projecao_no_receber) e o DEFAULT
 --               de fin.premissas_recebimento.dias_uteis = true.
 --
--- NÃO APLICADA — coordenador aplica (apply_migration "fin_receber_fotos"). Provas no fim, por medir.
+-- APLICADA em produção em 28/09/2026 (fin_receber_fotos + _b; md5 dos 8 corpos = arquivo; conferência verde). 1ª foto 551 linhas, R$ 609.036,43, 272 kB, sem bloco 8. Cron 11 9 * * 1 (postgres). Medido: listar 0,4 ms · previsto_realizado(8) 6,7 ms · semanal 203 ms.
 -- Ordem obrigatória: z67 aplicada antes. Guarda: o corpo VIVO de fin.receber_posicao, fin.receber_projecao,
 -- public.fn_fin_eventos_planejados_listar e public.fn_fin_evento_planejado_salvar tem que ser o da z67 (comparação sem
 -- espaço, sem comentário e sem o texto das mensagens de erro). A migration inteira é UMA transação.
