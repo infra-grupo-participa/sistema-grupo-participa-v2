@@ -1,6 +1,6 @@
 -- 20260928z61 — Contas a Receber, fatia 2: blocos 1 e 2 da planilha semanal do financeiro, derivados do espelho Hotmart.
 --
--- NÃO APLICADA — coordenador aplica (o Victor não tem ferramenta de banco; nada aqui foi medido em produção).
+-- APLICADA em produção em 28/09/2026 (apply_migration "fin_contas_receber"), já com o nome fn_fin_receber_semanal. Provas (seção PROVAS) ainda por medir.
 -- Depende da z60 (calendário de caixa em dias úteis). A guarda aborta se a z60 não estiver aplicada.
 --
 -- Substitui, da planilha "Contas a Receber Semanal Set-Dez26", só o que é CERTO:
@@ -16,7 +16,7 @@
 --      projetado 35 d (aba Premissas da planilha).
 --   3) fin.receber_vendas_realizadas(corte) — bloco 1, interna.
 --   4) fin.cobrancas_previstas(corte, ate) — bloco 2, interna, derivada (sem tabela).
---   5) public.fn_fin_contas_receber(p_corte, p_ate) — ÚNICA RPC da aba. Contrato (a tela do iromar depende dele):
+--   5) public.fn_fin_receber_semanal(p_corte, p_ate) — ÚNICA RPC da aba. Contrato (a tela do iromar depende dele):
 --        bloco smallint, grupo text, componente text, data_caixa date, valor numeric, situacao text, origem_dia date,
 --        ref text, rotulo text, produto text, k int, detalhe jsonb
 --      componente: 'antecipacao' | 'garantia' (dinheiro que cai em data_caixa) | 'cheio' (linha de auditoria, data_caixa NULL)
@@ -42,7 +42,7 @@
 --   * caixa de cada cobrança a receber = fin.recebimento(data efetiva, valor). k = meses à frente (mês do corte = 1).
 --
 -- REVERSÃO (nada mais depende disto; a tela some sem a RPC):
---   drop function public.fn_fin_contas_receber(timestamptz, date);
+--   drop function public.fn_fin_receber_semanal(timestamptz, date);
 --   drop function fin.cobrancas_previstas(timestamptz, date);
 --   drop function fin.receber_vendas_realizadas(timestamptz);
 --   alter table fin.premissas_receber rename to premissas_receber_arquivada_z61;
@@ -58,11 +58,11 @@ begin
     raise exception 'z61: aplicar a z60 (calendário de caixa) antes';
   end if;
   if to_regclass('fin.premissas_receber') is not null
-     or to_regprocedure('public.fn_fin_contas_receber(timestamptz,date)') is not null then
-    raise exception 'z61: já aplicada (fin.premissas_receber ou fn_fin_contas_receber existe)';
+     or to_regprocedure('public.fn_fin_receber_semanal(timestamptz,date)') is not null then
+    raise exception 'z61: já aplicada (fin.premissas_receber ou fn_fin_receber_semanal existe)';
   end if;
-  if exists (select 1 from pg_proc where proname = 'fn_fin_contas_receber' and pronamespace = 'public'::regnamespace) then
-    raise exception 'z61: existe fn_fin_contas_receber com outra assinatura — conferir antes (sobrecarga)';
+  if exists (select 1 from pg_proc where proname = 'fn_fin_receber_semanal' and pronamespace = 'public'::regnamespace) then
+    raise exception 'z61: existe fn_fin_receber_semanal com outra assinatura — conferir antes (sobrecarga)';
   end if;
 end $guarda$;
 
@@ -256,7 +256,7 @@ revoke all on function fin.cobrancas_previstas(timestamptz, date) from public, a
 
 
 -- ─── 5. A RPC da aba ────────────────────────────────────────────────────────────────────────────────────────────────
-create function public.fn_fin_contas_receber(p_corte timestamptz default null, p_ate date default null)
+create function public.fn_fin_receber_semanal(p_corte timestamptz default null, p_ate date default null)
 returns table (bloco smallint, grupo text, componente text, data_caixa date, valor numeric, situacao text,
                origem_dia date, ref text, rotulo text, produto text, k int, detalhe jsonb)
 language plpgsql stable security definer set search_path = ''
@@ -291,10 +291,10 @@ begin
     ) u(componente, data_caixa, valor)
    order by 1, 4 nulls last, 2, 3;
 end $$;
-comment on function public.fn_fin_contas_receber(timestamptz, date) is
+comment on function public.fn_fin_receber_semanal(timestamptz, date) is
   'Aba Contas a Receber (z61): blocos 1 e 2. Soma só situacao = a_receber. Sem e-mail/documento: ref opaca, nome próprio.';
-revoke all on function public.fn_fin_contas_receber(timestamptz, date) from public, anon;
-grant execute on function public.fn_fin_contas_receber(timestamptz, date) to authenticated;
+revoke all on function public.fn_fin_receber_semanal(timestamptz, date) from public, anon;
+grant execute on function public.fn_fin_receber_semanal(timestamptz, date) to authenticated;
 
 
 -- ─── 6. Conferência dentro da migration (falha → rollback de tudo) ──────────────────────────────────────────────────
@@ -329,10 +329,10 @@ begin
   -- RPC sem sessão → 42501
   v_ok := false;
   begin
-    perform * from public.fn_fin_contas_receber(null, null);
+    perform * from public.fn_fin_receber_semanal(null, null);
   exception when insufficient_privilege then v_ok := true;
   end;
-  if not v_ok then raise exception 'z61: fn_fin_contas_receber respondeu sem sessão'; end if;
+  if not v_ok then raise exception 'z61: fn_fin_receber_semanal respondeu sem sessão'; end if;
 
   -- grants
   if has_table_privilege('anon', 'fin.premissas_receber', 'select,insert,update,delete,truncate,references,trigger')
@@ -341,16 +341,16 @@ begin
      or has_function_privilege('authenticated', 'fin.receber_vendas_realizadas(timestamptz)', 'execute')
      or has_function_privilege('anon', 'fin.cobrancas_previstas(timestamptz,date)', 'execute')
      or has_function_privilege('authenticated', 'fin.cobrancas_previstas(timestamptz,date)', 'execute')
-     or has_function_privilege('anon', 'public.fn_fin_contas_receber(timestamptz,date)', 'execute') then
+     or has_function_privilege('anon', 'public.fn_fin_receber_semanal(timestamptz,date)', 'execute') then
     raise exception 'z61: grant aberto demais (conferir relacl/proacl)';
   end if;
-  if not has_function_privilege('authenticated', 'public.fn_fin_contas_receber(timestamptz,date)', 'execute') then
-    raise exception 'z61: authenticated sem execute em fn_fin_contas_receber';
+  if not has_function_privilege('authenticated', 'public.fn_fin_receber_semanal(timestamptz,date)', 'execute') then
+    raise exception 'z61: authenticated sem execute em fn_fin_receber_semanal';
   end if;
   if exists (select 1 from pg_proc p, unnest(coalesce(p.proacl, '{=X/postgres}'::aclitem[])) ac
               where p.oid in ('fin.receber_vendas_realizadas(timestamptz)'::regprocedure,
                               'fin.cobrancas_previstas(timestamptz,date)'::regprocedure,
-                              'public.fn_fin_contas_receber(timestamptz,date)'::regprocedure)
+                              'public.fn_fin_receber_semanal(timestamptz,date)'::regprocedure)
                 and ac::text like '=%') then
     raise exception 'z61: função com EXECUTE para PUBLIC (ou proacl nulo)';
   end if;
@@ -477,9 +477,9 @@ explain (analyze, buffers) execute b2(now(), (date_trunc('month', current_date) 
 begin;
 select set_config('request.jwt.claims', '{"sub":"<UUID_FINANCEIRO>","role":"authenticated"}', true);
 set local role authenticated;
-explain (analyze, buffers) select * from public.fn_fin_contas_receber(null, null);
-explain (analyze, buffers) select * from public.fn_fin_contas_receber('2026-09-25 23:59:59-03', '2026-12-31');
-select count(*), pg_size_pretty(sum(pg_column_size(x))::bigint) tamanho from public.fn_fin_contas_receber(null, null) x;
+explain (analyze, buffers) select * from public.fn_fin_receber_semanal(null, null);
+explain (analyze, buffers) select * from public.fn_fin_receber_semanal('2026-09-25 23:59:59-03', '2026-12-31');
+select count(*), pg_size_pretty(sum(pg_column_size(x))::bigint) tamanho from public.fn_fin_receber_semanal(null, null) x;
 rollback;
 
 -- P-B1-EQ) Regra aplicada por DIA (como o Faturamento) × por VENDA. Esperado: por venda, entra ≤ 0,01 (dois
@@ -524,7 +524,7 @@ begin;
 select set_config('request.jwt.claims', '{"sub":"<UUID_FINANCEIRO>","role":"authenticated"}', true);
 set local role authenticated;
 with l as (
-  select * from public.fn_fin_contas_receber('2026-09-25 23:59:59-03', '2026-12-31') where situacao = 'a_receber'
+  select * from public.fn_fin_receber_semanal('2026-09-25 23:59:59-03', '2026-12-31') where situacao = 'a_receber'
 )
 select l.bloco, l.grupo,
        greatest(date_trunc('week', l.data_caixa)::date, date_trunc('month', l.data_caixa)::date, date '2026-09-24') semana,

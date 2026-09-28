@@ -1,6 +1,6 @@
 -- 20260928z60 — Contas a Receber, fatia 1: calendário de caixa em DIAS ÚTEIS com feriados bancários.
 --
--- NÃO APLICADA — coordenador aplica (o Victor não tem ferramenta de banco; nada aqui foi executado nem medido).
+-- APLICADA em produção em 28/09/2026 (apply_migration "fin_calendario_caixa_dias_uteis"). Faturamento medido depois: HT mediana ~310 ms, HM ~265 ms, funis ~375 ms (sem regressão relevante).
 --
 -- Por quê: a planilha do financeiro ("Contas a Receber Semanal", aba Premissas) usa D+2 em dias ÚTEIS (WORKDAY com
 -- feriados) para os 90% antecipados e "1º dia útil a partir de D+30" para os 10% retidos. A z54 usava dias CORRIDOS.
