@@ -10,7 +10,7 @@ import type {
   Acordo, CardBoard, Cobranca, CompraHistorico, InteracaoAtivacao, Lancamento, Meta,
   Oferta, OfertaOrfa, ReguaPasso, SaudeCheck, TurmaFin,
 } from '../domain/types';
-import type { FinanceiroRepository, Resultado } from '../application/ports';
+import type { FinanceiroRepository, RelatorioEmitido, RelatorioVerificado, Resultado } from '../application/ports';
 import { VALOR_PROGRAMA_HM } from '../domain/prorata-hm';
 import type {
   AceleraParaHM, BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, ProrataDiagnostico, ProrataHM, SyncHotmart, TransacaoHotmart,
@@ -23,6 +23,17 @@ import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-car
 
 function erroPara(msg: string): Resultado {
   return { ok: false, msg };
+}
+
+/**
+ * Mensagem legível para as RPCs fn_fin_relatorio_* (20260928z50): 42501 = sem
+ * permissão (gp_pode_ver_financeiro/dono do protocolo), 22023 = validação de
+ * entrada (tipo/nível/recorte/linhas/totais/sha/páginas fora do formato).
+ */
+function msgErroRelatorio(error: { code?: string; message?: string } | null, acao: string): string {
+  if (error?.code === '42501') return 'Sem permissão para emitir relatórios do Financeiro.';
+  if (error?.code === '22023') return error.message ?? 'Dados do relatório inválidos.';
+  return `Não foi possível ${acao} o protocolo do relatório (erro de rede).`;
 }
 
 export class SupabaseFinanceiroRepository implements FinanceiroRepository {
@@ -304,5 +315,35 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     logQueryError('loadProrataDiagnostico', error);
     if (error) throw new Error('Não foi possível montar o diagnóstico do pro rata.');
     return (data as ProrataDiagnostico | null) ?? null;
+  }
+
+  // ── Protocolo dos relatórios em PDF (fn_fin_relatorio_*, 20260928z50) ───
+  async emitirRelatorio(
+    tipo: string, nivel: string, recorte: Record<string, unknown>, linhas: number, totais: Record<string, unknown>,
+  ): Promise<RelatorioEmitido> {
+    const { data, error } = await this.db().rpc('fn_fin_relatorio_emitir', {
+      p_tipo: tipo, p_nivel: nivel, p_recorte: recorte, p_linhas: linhas, p_totais: totais,
+    });
+    logQueryError('emitirRelatorio', error);
+    if (error) throw new Error(msgErroRelatorio(error, 'emitir'));
+    const linha = (data as RelatorioEmitido[] | null)?.[0];
+    if (!linha?.protocolo) throw new Error('A emissão não devolveu protocolo.');
+    return linha;
+  }
+
+  async selarRelatorio(protocolo: string, sha256: string, paginas: number): Promise<boolean> {
+    const { data, error } = await this.db().rpc('fn_fin_relatorio_selar', {
+      p_protocolo: protocolo, p_sha256: sha256, p_paginas: paginas,
+    });
+    logQueryError('selarRelatorio', error);
+    if (error) throw new Error(msgErroRelatorio(error, 'selar'));
+    return data === true;
+  }
+
+  async verificarRelatorio(protocolo: string): Promise<RelatorioVerificado | null> {
+    const { data, error } = await this.db().rpc('fn_fin_relatorio_verificar', { p_protocolo: protocolo });
+    logQueryError('verificarRelatorio', error);
+    if (error) throw new Error(msgErroRelatorio(error, 'conferir'));
+    return (data as RelatorioVerificado[] | null)?.[0] ?? null;
   }
 }

@@ -89,4 +89,37 @@ export interface FinanceiroRepository {
   loadAceleraParaHM(): Promise<AceleraParaHM[]>;
   /** fn_fin_prorata_diagnostico — uma pessoa, com cada pagamento e o motivo; vencimento/valor = simulação. */
   loadProrataDiagnostico(email: string, vencimento?: string | null, valorPrograma?: number): Promise<ProrataDiagnostico | null>;
+
+  // ── Protocolo dos relatórios em PDF (fn_fin_relatorio_*, 20260928z50) ───
+  /** fn_fin_relatorio_emitir — grava a emissão e devolve o protocolo GP-REL-AAAA-NNNNNN. */
+  emitirRelatorio(
+    tipo: string, nivel: string, recorte: Record<string, unknown>, linhas: number, totais: Record<string, unknown>,
+  ): Promise<RelatorioEmitido>;
+  /** fn_fin_relatorio_selar — true = selou agora; false = fora da janela, já selado ou não é seu. */
+  selarRelatorio(protocolo: string, sha256: string, paginas: number): Promise<boolean>;
+  /** fn_fin_relatorio_verificar — conferência manual, dentro do sistema, de um protocolo já emitido. */
+  verificarRelatorio(protocolo: string): Promise<RelatorioVerificado | null>;
+}
+
+/** Devolvido por fn_fin_relatorio_emitir. */
+export interface RelatorioEmitido {
+  protocolo: string;
+  emitido_em: string;
+  gerado_por_nome: string;
+}
+
+/** Devolvido por fn_fin_relatorio_verificar. */
+export interface RelatorioVerificado {
+  protocolo: string;
+  tipo: string;
+  nivel: string;
+  recorte: Record<string, unknown>;
+  linhas: number;
+  totais: Record<string, unknown>;
+  emitido_em: string;
+  gerado_por_nome: string;
+  selado_em: string | null;
+  paginas: number | null;
+  sha256: string | null;
+  situacao: 'selado' | 'aguardando_selo' | 'nao_concluido';
 }
