@@ -11,11 +11,11 @@
 //   taxaHotmart  — 4% + R$ 1 sobre o valor da oferta.
 //   liquido      — o que fica para o produtor (comissão PRODUCER).
 
-export type FamiliaHotmart = 'HM' | 'AURUM' | 'ACELERA';
+export type FamiliaHotmart = 'HM' | 'AURUM' | 'ACELERA' | 'DIAMANTE';
 
 /** Rótulo de tela da família (fin.produtos.familia). Acelera Holding = preparatório do HM (27/09/2026). */
 export const ROTULO_FAMILIA: Record<FamiliaHotmart, string> = {
-  HM: 'Holding Masters', AURUM: 'Aurum', ACELERA: 'Acelera Holding',
+  HM: 'Holding Masters', AURUM: 'Aurum', ACELERA: 'Acelera Holding', DIAMANTE: 'Serviço Diamante',
 };
 
 /** Faturamento por funil (fin.funis: janela de datas por família), de fn_fin_hotmart_funis. */
@@ -344,12 +344,14 @@ export function resumirHotmart(dias: DiaHotmart[]): ResumoHotmart {
  * Regra de cobrança da Hotmart por produto, medida em 27/09/2026 sobre as vendas pagas:
  * - HM e Aurum: **4% do valor da oferta + R$ 1** (≈ 95% de 3.571 vendas; até 2024 algumas saíam a ~6%). Efetiva 4,05%.
  * - Acelera Holding: **5,3% + R$ 1** (414 de 415 vendas). Efetiva 5,35%.
+ * - Serviço Diamante: **5,3% + R$ 1** (1.431 de 1.974 mensalidades; efetiva 5,56%), sem comissão.
  * Juros do parcelamento são pagos pelo CLIENTE e ficam com a Hotmart — não saem do bruto nem entram no líquido.
  */
 export const REGRA_TAXA_HOTMART: Record<FamiliaHotmart, string> = {
   HM: '4% do valor + R$ 1 por venda',
   AURUM: '4% do valor + R$ 1 por venda',
   ACELERA: '5,3% do valor + R$ 1 por venda',
+  DIAMANTE: '5,3% do valor + R$ 1 por mensalidade',
 };
 
 /** Quem divide a venda com o produtor, por produto (comissões COPRODUCER/AFFILIATE/ADDON da API). */
@@ -357,6 +359,7 @@ export const QUEM_DIVIDE: Record<FamiliaHotmart, string> = {
   HM: 'coprodutor, afiliados e add-on',
   AURUM: 'coprodutor (Borboleta Digital), afiliados e add-on — produtos antigos do Aurum',
   ACELERA: 'coprodutores Filipe Jung Jorge e Henrique Brenha, e add-on',
+  DIAMANTE: 'ninguém — sem coprodução nem afiliado nas mensalidades',
 };
 
 export interface DiaHotmartSerie {

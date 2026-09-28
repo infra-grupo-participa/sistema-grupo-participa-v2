@@ -16,6 +16,7 @@ import type {
   AceleraParaHM, BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, ProrataDiagnostico, ProrataHM, SyncHotmart, TransacaoHotmart,
 } from '../domain/hotmart';
 import type { FaturamentoAcao, LinhaContratado } from '../domain/faturamento-analise';
+import type { LinhaServicoDiamante } from '../domain/servico-diamante';
 
 function erroPara(msg: string): Resultado {
   return { ok: false, msg };
@@ -200,6 +201,16 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     const linhas = await this.rpcLista<FaturamentoAcao>('fn_fin_faturamento_por_acao', { p_familia: familia },
       'Não foi possível carregar o faturamento por ação.');
     return linhas.map((a) => ({ ...a, bruto: Number(a.bruto) || 0, liquido: Number(a.liquido) || 0 }));
+  }
+
+  async loadServicoDiamante(): Promise<LinhaServicoDiamante[]> {
+    const linhas = await this.rpcLista<LinhaServicoDiamante>('fn_fin_diamante_servicos', {},
+      'Não foi possível carregar os serviços Diamante.');
+    const n = (v: unknown) => Number(v ?? 0) || 0;
+    return linhas.map((l) => ({
+      ...l, total_pago: n(l.total_pago), liquido: n(l.liquido), devendo_valor: n(l.devendo_valor), antigo_valor: n(l.antigo_valor),
+      mensalidade: l.mensalidade == null ? null : n(l.mensalidade),
+    }));
   }
 
   loadHotmartPessoas(familia: FamiliaHotmart): Promise<PessoaHotmart[]> {

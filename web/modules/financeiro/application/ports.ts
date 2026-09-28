@@ -9,6 +9,7 @@ import type {
   AceleraParaHM, BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, ProrataDiagnostico, ProrataHM, SyncHotmart, TransacaoHotmart,
 } from '../domain/hotmart';
 import type { FaturamentoAcao, LinhaContratado } from '../domain/faturamento-analise';
+import type { LinhaServicoDiamante } from '../domain/servico-diamante';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
 export interface Resultado {
@@ -59,6 +60,8 @@ export interface FinanceiroRepository {
   loadContratado(familia: FamiliaHotmart): Promise<LinhaContratado[]>;
   /** fn_fin_faturamento_por_acao — faturamento dentro da janela de cada ação de fin.acoes. */
   loadFaturamentoPorAcao(familia: FamiliaHotmart): Promise<FaturamentoAcao[]>;
+  /** fn_fin_diamante_servicos — Serviço Diamante: uma linha por pessoa × serviço (20260928r). */
+  loadServicoDiamante(): Promise<LinhaServicoDiamante[]>;
   loadHotmartPessoas(familia: FamiliaHotmart): Promise<PessoaHotmart[]>;
   loadHotmartExtrato(email: string): Promise<TransacaoHotmart[]>;
   loadHotmartOfertas(familia: FamiliaHotmart): Promise<OfertaHotmart[]>;

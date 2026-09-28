@@ -92,7 +92,7 @@ export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
       title="Ofertas"
       right={
         <div className="flex flex-wrap items-center gap-2">
-          {(['HM', 'AURUM', 'ACELERA'] as FamiliaHotmart[]).map((f) => (
+          {(['HM', 'AURUM', 'ACELERA', 'DIAMANTE'] as FamiliaHotmart[]).map((f) => (
             <button
               key={f}
               type="button"

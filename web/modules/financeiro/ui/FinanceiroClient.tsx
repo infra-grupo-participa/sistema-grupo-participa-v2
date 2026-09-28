@@ -24,11 +24,12 @@ import { FichaDrawer } from './FichaDrawer';
 import { Relatorios } from './Relatorios';
 import { Ofertas } from './Ofertas';
 import { FaturamentoDiario } from './FaturamentoDiario';
+import { ServicoDiamante } from './ServicoDiamante';
 import { ProrataHM } from './hotmart/ProrataHM';
 import type { BoardHotmart } from '../domain/hotmart';
 import { indexarBoardHotmart } from '../domain/board-hotmart';
 
-type Tab = 'board' | 'faturamento' | 'relatorios' | 'ofertas' | 'prorata';
+type Tab = 'board' | 'faturamento' | 'relatorios' | 'ofertas' | 'prorata' | 'diamante';
 
 const repo = new SupabaseFinanceiroRepository();
 
@@ -141,6 +142,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       else if (base === 'relatorios') setTab('relatorios');
       else if (base === 'ofertas') setTab('ofertas');
       else if (base === 'prorata') setTab('prorata');
+      else if (base === 'diamante') setTab('diamante');
       // #hotmart era a aba "Hotmart (oficial)", unificada no Faturamento Diário em 27/09 — link antigo cai nela.
       else if (base === 'hotmart') setTab('faturamento');
       else setTab('board');
@@ -357,6 +359,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <>Relatórios <span className="text-[var(--accent)]">Financeiro</span></>
           ) : tab === 'prorata' ? (
             <>Calculadora de <span className="text-[var(--accent)]">Pro Rata</span></>
+          ) : tab === 'diamante' ? (
+            <>Serviço <span className="text-[var(--cyan)]">Diamante</span></>
           ) : (
             <>Ofertas de <span className="text-[var(--accent)]">Cobrança</span></>
           )}
@@ -436,6 +440,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       )}
 
       {tab === 'prorata' && <ProrataHM repo={repo} />}
+
+      {tab === 'diamante' && <ServicoDiamante repo={repo} />}
 
       {tab === 'ofertas' && (
         erroOfertas ? (

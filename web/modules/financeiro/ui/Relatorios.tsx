@@ -47,7 +47,7 @@ function BotaoRelatorio({ ativo, onClick, children }: { ativo: boolean; onClick:
 function SeletorFamilia({ familia, onChange }: { familia: FamiliaHotmart; onChange: (f: FamiliaHotmart) => void }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {(['HM', 'AURUM', 'ACELERA'] as FamiliaHotmart[]).map((f) => (
+      {(['HM', 'AURUM', 'ACELERA', 'DIAMANTE'] as FamiliaHotmart[]).map((f) => (
         <BotaoRelatorio key={f} ativo={familia === f} onClick={() => onChange(f)}>
           {ROTULO_FAMILIA[f]}
         </BotaoRelatorio>
