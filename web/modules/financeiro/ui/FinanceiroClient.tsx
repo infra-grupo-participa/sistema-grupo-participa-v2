@@ -15,6 +15,7 @@ import { agruparPorAcao, chaveDaAcao, SEM_ACAO, TimelineAcoes } from './Timeline
 import { ResultadoAcoes } from './ResultadoAcoes';
 import { FunisEAnalise } from './hotmart/FunisEAnalise';
 import { ProgramaSemCard } from './ProgramaSemCard';
+import { AssinaturaSemCard } from './AssinaturaSemCard';
 import { OfertasSemCatalogo } from './OfertasSemCatalogo';
 import { ProdutoTabs, type ProdutoChave } from './ProdutoTabs';
 import { BoardView } from './BoardView';
@@ -392,6 +393,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             {verDiamante ? <ServicoDiamante dados={diamante.dados} erro={diamante.erro} repo={repo} /> : <>
             {(produtoAtivo === 'HM' || produtoAtivo === 'AURUM') && <OfertasSemCatalogo repo={repo} familia={produtoAtivo} />}
             {(produtoAtivo === 'HM' || produtoAtivo === 'AURUM') && <ProgramaSemCard key={produtoAtivo} repo={repo} familia={produtoAtivo} />}
+            {produtoAtivo === 'HM' && <AssinaturaSemCard repo={repo} />}
             <ResultadoAcoes cards={cardsDoProduto} ativa={acaoEfetiva} onSelecionar={selecionarAcao} />
             <div className="mb-3">
               <TimelineAcoes acoes={acoes} ativa={acaoEfetiva} onSelecionar={selecionarAcao} />
