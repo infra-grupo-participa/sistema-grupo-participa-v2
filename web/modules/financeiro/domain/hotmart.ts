@@ -11,14 +11,19 @@
 //   taxaHotmart  — 4% + R$ 1 sobre o valor da oferta.
 //   liquido      — o que fica para o produtor (comissão PRODUCER).
 
-export type FamiliaHotmart = 'HT' | 'EVENTOS' | 'HM' | 'AURUM' | 'ACELERA' | 'DIAMANTE';
+export type FamiliaHotmart =
+  | 'HT' | 'EVENTOS' | 'HM' | 'AURUM' | 'ACELERA' | 'PROGRAMA_DIAMANTE' | 'DIAMANTE' | 'OUTROS';
 
-/** Ordem da escada (João, 28/09): o Holding Total é a entrada do Acelera/HM, o HM a do Aurum, e o Serviço Diamante vem por último. */
-export const FAMILIAS_EM_ORDEM: FamiliaHotmart[] = ['HT', 'EVENTOS', 'ACELERA', 'HM', 'AURUM', 'DIAMANTE'];
+/**
+ * Ordem da escada (João, 28/09): o Holding Total é a entrada do Acelera/HM, o HM a do Aurum, o Programa Diamante
+ * vem acima do Aurum, e o Serviço Diamante por último. "Outros produtos" fecha a lista (cursos e entradas antigas).
+ */
+export const FAMILIAS_EM_ORDEM: FamiliaHotmart[] = ['HT', 'EVENTOS', 'ACELERA', 'HM', 'AURUM', 'PROGRAMA_DIAMANTE', 'DIAMANTE', 'OUTROS'];
 
 /** Rótulo de tela da família (fin.produtos.familia). Acelera Holding = preparatório do HM (27/09/2026). */
 export const ROTULO_FAMILIA: Record<FamiliaHotmart, string> = {
-  HT: 'Holding Total', EVENTOS: 'Eventos (ingressos)', HM: 'Holding Masters', AURUM: 'Aurum', ACELERA: 'Acelera Holding', DIAMANTE: 'Serviço Diamante',
+  HT: 'Holding Total', EVENTOS: 'Eventos (ingressos)', HM: 'Holding Masters', AURUM: 'Aurum', ACELERA: 'Acelera Holding',
+  PROGRAMA_DIAMANTE: 'Programa Diamante', DIAMANTE: 'Serviço Diamante', OUTROS: 'Outros produtos',
 };
 
 /** Faturamento por funil (fin.funis: janela de datas por família), de fn_fin_hotmart_funis. */
@@ -349,6 +354,8 @@ export function resumirHotmart(dias: DiaHotmart[]): ResumoHotmart {
  * - Acelera Holding: **5,3% + R$ 1** (414 de 415 vendas). Efetiva 5,35%.
  * - Holding Total: **6% + R$ 1** em 12.253 vendas, **5,3% + R$ 1** nas 4.754 mais recentes (medido 28/09/2026).
  * - Serviço Diamante: **5,3% + R$ 1** (1.431 de 1.974 mensalidades; efetiva 5,56%), sem comissão.
+ * - Programa Diamante: **4% + R$ 1** (101 de 101 vendas, medido 28/09/2026), sem comissão.
+ * - Outros produtos: **6% + R$ 1** em 199 de 403 vendas, **5,3% + R$ 1** em 143 (medido 28/09/2026).
  * Juros do parcelamento são pagos pelo CLIENTE e ficam com a Hotmart — não saem do bruto nem entram no líquido.
  */
 export const REGRA_TAXA_HOTMART: Record<FamiliaHotmart, string> = {
@@ -357,7 +364,9 @@ export const REGRA_TAXA_HOTMART: Record<FamiliaHotmart, string> = {
   HM: '4% do valor + R$ 1 por venda',
   AURUM: '4% do valor + R$ 1 por venda',
   ACELERA: '5,3% do valor + R$ 1 por venda',
+  PROGRAMA_DIAMANTE: '4% do valor + R$ 1 por venda',
   DIAMANTE: '5,3% do valor + R$ 1 por mensalidade',
+  OUTROS: '6% do valor + R$ 1 por venda (5,3% + R$ 1 nas mais recentes)',
 };
 
 /** Quem divide a venda com o produtor, por produto (comissões COPRODUCER/AFFILIATE/ADDON da API). */
@@ -367,7 +376,9 @@ export const QUEM_DIVIDE: Record<FamiliaHotmart, string> = {
   HM: 'coprodutor, afiliados e add-on',
   AURUM: 'coprodutor (Borboleta Digital), afiliados e add-on — produtos antigos do Aurum',
   ACELERA: 'coprodutores Filipe Jung Jorge e Henrique Brenha, e add-on',
+  PROGRAMA_DIAMANTE: 'ninguém — sem coprodução nem afiliado',
   DIAMANTE: 'ninguém — sem coprodução nem afiliado nas mensalidades',
+  OUTROS: 'afiliados e coprodução em 33% das vendas',
 };
 
 export interface DiaHotmartSerie {
