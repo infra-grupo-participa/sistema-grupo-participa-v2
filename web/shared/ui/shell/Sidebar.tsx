@@ -8,6 +8,7 @@ import { podeVerFinanceiro } from '@/modules/financeiro/domain/acesso';
 import { podeVerRemocao } from '@/modules/remocao-acessos/domain/acesso';
 import { REPORTS, SYSTEM_NAV, type ReportGroup } from '@/shared/ui/nav/config';
 import { Icon } from '@/shared/ui/icons';
+import { chaveHashPadrao, itemHashAtivo } from './item-ativo';
 
 const GROUPS_KEY = 'gp_sidebar_groups';
 const REPORTS_KEY = 'gp_reports_nav_state';
@@ -161,13 +162,11 @@ export function Sidebar({ user }: { user: GpUser }) {
               {children.length > 0 && open && (
                 <div className="ml-4 mt-0.5 flex flex-col gap-0.5">
                   {(() => {
-                    const defaultHashKey = children.find((c) => c.hash)?.key;
+                    const defaultHashKey = chaveHashPadrao(group.defaultHref, children);
                     let secaoAnterior: string | undefined;
                     return children.map((child) => {
                       const onPath = normalize(child.path) === cur;
-                      const active = child.hash
-                        ? onPath && (hash === child.hash || (!hash && child.key === defaultHashKey))
-                        : onPath;
+                      const active = child.hash ? itemHashAtivo(child, hash, onPath, defaultHashKey) : onPath;
                       // Título de seção: só quando o item declara `secao` e ela muda em relação ao item anterior — os
                       // outros grupos nunca usam `secao`, então nunca desenham nada aqui (layout deles não muda).
                       const mostrarSecao = !!child.secao && child.secao !== secaoAnterior;
