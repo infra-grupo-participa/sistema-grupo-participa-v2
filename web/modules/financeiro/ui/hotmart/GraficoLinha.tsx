@@ -22,7 +22,7 @@ export interface PontoGrafico {
 const ALTURA = 190;
 
 /** "R$ 1,2 mi" / "R$ 350 mil" — só para eixo e marcadores; valores exatos ficam na dica e na tabela. */
-function compacto(v: number): string {
+export function compacto(v: number): string {
   if (v >= 1_000_000) return `R$ ${(v / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`;
   if (v >= 1_000) return `R$ ${Math.round(v / 1_000).toLocaleString('pt-BR')} mil`;
   return `R$ ${Math.round(v)}`;

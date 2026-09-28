@@ -15,12 +15,11 @@ import { fmtBRL, fmtData } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../application/ports';
 import {
   agruparFaturamento, resumirHotmart, ROTULO_FAMILIA, serieHotmart,
-  type DiaHotmart, type FamiliaHotmart, type FunilHotmart, type GranularidadeFaturamento, type PeriodoFaturamento, type SyncHotmart,
+  type DiaHotmart, type FamiliaHotmart, type FunilHotmart, type GranularidadeFaturamento, type SyncHotmart,
 } from '../domain/hotmart';
 import { Erro, isoDiasAtras, PERIODOS, SyncSelo, useCarga, Variacao } from './hotmart/comum';
 import { GraficoLinha } from './hotmart/GraficoLinha';
-import { alinharAnterior, intervaloAnterior, mediaMovel, projetarPeriodoAtual } from '../domain/faturamento-analise';
-import { hojeSaoPaulo } from '../domain/prorata-hm';
+import { AnaliseFaturamento } from './hotmart/AnaliseFaturamento';
 
 export function FaturamentoDiario({ repo }: { repo: FinanceiroRepository }) {
   const [familia, setFamilia] = useState<FamiliaHotmart>('HM');
@@ -86,27 +85,12 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
   const pontos = useMemo(
     () => periodos.map((p) => ({ ...rotulos(p.chave, visao), bruto: p.bruto, liquido: p.liquido, vendas: p.vendas })),
     [periodos, visao]);
-
-  // Painel de cruzamentos (27/09): camadas ligáveis, ponto fixado por clique e projeção pelo ritmo.
-  const [camadas, setCamadas] = useState({ anterior: false, media: false, vendas: false });
-  const [fixado, setFixado] = useState<string | null>(null);
-  const ant = intervaloAnterior(intervalo.de, intervalo.ate);
-  const { dados: dadosAnt } = useCarga<DiaHotmart[] | null>(
-    () => (camadas.anterior ? repo.loadHotmartFaturamento(familia, ant.de, ant.ate) : Promise.resolve(null)),
-    [familia, ant.de, ant.ate, camadas.anterior]);
-  const anterior = useMemo(
-    () => (camadas.anterior && dadosAnt ? alinharAnterior(periodos, agruparFaturamento(serieHotmart(dadosAnt), visao)) : null),
-    [camadas.anterior, dadosAnt, periodos, visao]);
-  const media = useMemo(
-    () => (camadas.media ? mediaMovel(periodos.map((p) => p.bruto), visao === 'dia' ? 7 : 3) : null),
-    [camadas.media, periodos, visao]);
-  const projecao = useMemo(
-    () => projetarPeriodoAtual(serie.map((d) => ({ dia: d.dia, bruto: d.bruto })), visao, hojeSaoPaulo(), intervalo.ate),
-    [serie, visao, intervalo.ate]);
-  const idxFixado = fixado ? periodos.findIndex((p) => p.chave === fixado) : -1;
+  // "Análise" (27/09) substitui o painel "Cruzar com": previsão, contratado, eventos e crescimento — ui/hotmart/AnaliseFaturamento.
+  const [analise, setAnalise] = useState(false);
 
   // Trocar de visão já leva a um período que faz sentido para ela (30 dias / 12 meses / tudo); dá para mudar depois.
   const escolherVisao = (v: (typeof VISOES)[number]) => {
+    setAnalise(false);
     setVisao(v.g);
     setIntervalo({ de: isoDiasAtras(v.preset - 1), ate: isoDiasAtras(0), preset: v.preset });
   };
@@ -119,12 +103,17 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
       <div className="flex flex-wrap items-center gap-1.5">
         <div className="mr-2 flex overflow-hidden rounded-[var(--r-md)] border border-[var(--border)]" role="group" aria-label="Visão do faturamento">
           {VISOES.map((v) => (
-            <button key={v.g} type="button" aria-pressed={visao === v.g} onClick={() => escolherVisao(v)}
-              className={`px-3 py-1.5 text-xs font-semibold ${visao === v.g ? 'bg-[var(--accent-subtle)] text-[var(--accent)]' : 'text-[var(--fg-3)] hover:bg-[var(--surface-2)]'}`}>
+            <button key={v.g} type="button" aria-pressed={!analise && visao === v.g} onClick={() => escolherVisao(v)}
+              className={`px-3 py-1.5 text-xs font-semibold ${!analise && visao === v.g ? 'bg-[var(--accent-subtle)] text-[var(--accent)]' : 'text-[var(--fg-3)] hover:bg-[var(--surface-2)]'}`}>
               {v.rotulo}
             </button>
           ))}
+          <button type="button" aria-pressed={analise} onClick={() => setAnalise(true)}
+            className={`border-l border-[var(--border)] px-3 py-1.5 text-xs font-semibold ${analise ? 'bg-[var(--accent-subtle)] text-[var(--accent)]' : 'text-[var(--fg-3)] hover:bg-[var(--surface-2)]'}`}>
+            Análise
+          </button>
         </div>
+        {!analise && <>
         {PERIODOS.map((p) => (
           <button key={p.dias} type="button" aria-pressed={intervalo.preset === p.dias}
             onClick={() => setIntervalo({ de: isoDiasAtras(p.dias - 1), ate: isoDiasAtras(0), preset: p.dias })}
@@ -140,31 +129,15 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
         <input type="date" aria-label="Data final" value={intervalo.ate} min={intervalo.de}
           onChange={(e) => e.target.value && setIntervalo({ ...intervalo, ate: e.target.value, preset: null })}
           className="rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs" />
+        </>}
       </div>
-      {erro ? <Erro msg={erro} /> : !dados ? <Loading label="Carregando faturamento…" minHeight={200} /> : (
+      {analise ? <AnaliseFaturamento repo={repo} familia={familia} /> : erro ? <Erro msg={erro} /> : !dados ? <Loading label="Carregando faturamento…" minHeight={200} /> : (
         <>
           {pontos.length >= 2 ? (
-            <div>
-              <GraficoLinha
-                pontos={pontos}
-                titulo={`Faturamento ${nomeVisao.toLowerCase()} · ${ROTULO_FAMILIA[familia]} · ${fmtData(intervalo.de)} a ${fmtData(intervalo.ate)}`}
-                camadas={{ anterior, media, vendas: camadas.vendas }}
-                selecionado={idxFixado >= 0 ? idxFixado : null}
-                onSelecionar={(i) => setFixado(i == null ? null : periodos[i]?.chave ?? null)}
-              />
-              <PainelCruzamentos
-                camadas={camadas} onCamadas={setCamadas} carregandoAnterior={camadas.anterior && !dadosAnt}
-                projecao={projecao}
-                fixado={idxFixado >= 0 ? {
-                  rotulo: rotulos(periodos[idxFixado].chave, visao).rotulo, p: periodos[idxFixado],
-                  anterior: anterior?.[idxFixado] ?? null,
-                  mediaPeriodo: resumo.valorOferta / Math.max(1, periodos.length),
-                  total: resumo.valorOferta,
-                } : null}
-                onLimpar={() => setFixado(null)}
-                unidade={unidade}
-              />
-            </div>
+            <GraficoLinha
+              pontos={pontos}
+              titulo={`Faturamento ${nomeVisao.toLowerCase()} · ${ROTULO_FAMILIA[familia]} · ${fmtData(intervalo.de)} a ${fmtData(intervalo.ate)}`}
+            />
           ) : pontos.length === 1 ? (
             <p className="text-xs text-[var(--fg-3)]">
               O período escolhido cabe num {unidade} só; o gráfico aparece a partir de dois. Escolha um período maior ou a visão {visao === 'ano' ? 'mensal' : 'diária'}.
@@ -227,74 +200,6 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
           <PorFunil repo={repo} familia={familia} de={intervalo.de} ate={intervalo.ate} />
         </>
       )}
-    </div>
-  );
-}
-
-/** Painel embaixo do gráfico: liga/desliga camadas, projeção pelo ritmo e o detalhe do período clicado. */
-function PainelCruzamentos({ camadas, onCamadas, carregandoAnterior, projecao, fixado, onLimpar, unidade }: {
-  camadas: { anterior: boolean; media: boolean; vendas: boolean };
-  onCamadas: (c: { anterior: boolean; media: boolean; vendas: boolean }) => void;
-  carregandoAnterior: boolean;
-  projecao: ReturnType<typeof projetarPeriodoAtual>;
-  fixado: { rotulo: string; p: PeriodoFaturamento; anterior: number | null; mediaPeriodo: number; total: number } | null;
-  onLimpar: () => void;
-  unidade: string;
-}) {
-  const chip = (k: keyof typeof camadas, rotulo: string, cor: string) => (
-    <button type="button" aria-pressed={camadas[k]} onClick={() => onCamadas({ ...camadas, [k]: !camadas[k] })}
-      className={`inline-flex items-center gap-1.5 rounded-[var(--r-pill)] border px-2.5 py-1 text-xs transition-colors ${camadas[k] ? 'border-[var(--accent)] bg-[var(--accent-subtle)] font-semibold text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-3)] hover:bg-[var(--surface-2)]'}`}>
-      <span className="h-0.5 w-3.5 rounded" style={{ background: cor }} aria-hidden />{rotulo}
-    </button>
-  );
-  const pct = (a: number, b: number) => (b > 0 ? ((a - b) / b) * 100 : null);
-  const vsAnt = fixado && fixado.anterior != null ? pct(fixado.p.bruto, fixado.anterior) : null;
-  const vsMedia = fixado ? pct(fixado.p.bruto, fixado.mediaPeriodo) : null;
-  const sinal = (v: number | null) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%`);
-  return (
-    <div className="mt-2 rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-1)] p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">Cruzar com</span>
-        {chip('anterior', carregandoAnterior ? 'Período anterior…' : 'Período anterior', 'var(--fg-3)')}
-        {chip('media', 'Média móvel', 'var(--cyan)')}
-        {chip('vendas', 'Quantidade de vendas', 'var(--fg-4)')}
-      </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        {projecao ? (
-          <div className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
-            <div className="text-[11px] text-[var(--fg-3)]">Projeção {projecao.alvo === 'mes' ? 'do mês' : 'do ano'} no ritmo atual</div>
-            <div className="tabular text-lg font-bold text-[var(--fg)]">{fmtBRL(projecao.projetado)}</div>
-            <div className="text-[11px] tabular text-[var(--fg-3)]">
-              {fmtBRL(projecao.parcial)} até hoje · {Math.round(projecao.decorrido * 100)}% do {projecao.alvo === 'mes' ? 'mês' : 'ano'} decorrido
-            </div>
-          </div>
-        ) : (
-          <div className="rounded-[var(--r-md)] border border-dashed border-[var(--border)] px-3 py-2 text-[11px] text-[var(--fg-4)]">
-            Projeção aparece quando o período termina hoje.
-          </div>
-        )}
-        {fixado ? (
-          <div className="rounded-[var(--r-md)] border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-3 py-2">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[11px] font-semibold text-[var(--fg)]">{fixado.rotulo}</span>
-              <button type="button" onClick={onLimpar} className="text-[11px] text-[var(--fg-3)] hover:text-[var(--fg)]">limpar</button>
-            </div>
-            <div className="tabular text-lg font-bold text-[var(--fg)]">{fmtBRL(fixado.p.bruto)}</div>
-            <div className="grid grid-cols-2 gap-x-3 text-[11px] tabular text-[var(--fg-2)]">
-              <span>líquido {fmtBRL(fixado.p.liquido)}</span>
-              <span>{fixado.p.vendas} venda{fixado.p.vendas === 1 ? '' : 's'}</span>
-              <span>ticket médio {fixado.p.vendas ? fmtBRL(fixado.p.bruto / fixado.p.vendas) : '—'}</span>
-              <span>{fixado.total > 0 ? `${((fixado.p.bruto / fixado.total) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% do total` : '—'}</span>
-              <span>vs. média por {unidade} {sinal(vsMedia)}</span>
-              <span>vs. período anterior {fixado.anterior == null ? (camadas.anterior ? '—' : 'ligue acima') : sinal(vsAnt)}</span>
-            </div>
-          </div>
-        ) : (
-          <div className="rounded-[var(--r-md)] border border-dashed border-[var(--border)] px-3 py-2 text-[11px] text-[var(--fg-4)]">
-            Clique num ponto do gráfico para comparar aquele {unidade}.
-          </div>
-        )}
-      </div>
     </div>
   );
 }

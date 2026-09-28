@@ -15,6 +15,7 @@ import { VALOR_PROGRAMA_HM } from '../domain/prorata-hm';
 import type {
   AceleraParaHM, BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, ProrataDiagnostico, ProrataHM, SyncHotmart, TransacaoHotmart,
 } from '../domain/hotmart';
+import type { FaturamentoAcao, LinhaContratado } from '../domain/faturamento-analise';
 
 function erroPara(msg: string): Resultado {
   return { ok: false, msg };
@@ -187,6 +188,18 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
   loadHotmartFunis(familia: FamiliaHotmart, inicio: string | null, fim: string | null): Promise<FunilHotmart[]> {
     return this.rpcLista<FunilHotmart>('fn_fin_hotmart_funis', { p_familia: familia, p_inicio: inicio, p_fim: fim },
       'Não foi possível carregar o faturamento por funil.');
+  }
+
+  async loadContratado(familia: FamiliaHotmart): Promise<LinhaContratado[]> {
+    const linhas = await this.rpcLista<LinhaContratado>('fn_fin_contratado', { p_familia: familia },
+      'Não foi possível carregar o dinheiro já contratado.');
+    return linhas.map((l) => ({ ...l, valor: Number(l.valor) || 0, em_risco: Number(l.em_risco) || 0 }));
+  }
+
+  async loadFaturamentoPorAcao(familia: FamiliaHotmart): Promise<FaturamentoAcao[]> {
+    const linhas = await this.rpcLista<FaturamentoAcao>('fn_fin_faturamento_por_acao', { p_familia: familia },
+      'Não foi possível carregar o faturamento por ação.');
+    return linhas.map((a) => ({ ...a, bruto: Number(a.bruto) || 0, liquido: Number(a.liquido) || 0 }));
   }
 
   loadHotmartPessoas(familia: FamiliaHotmart): Promise<PessoaHotmart[]> {

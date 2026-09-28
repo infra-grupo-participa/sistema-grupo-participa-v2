@@ -8,6 +8,7 @@ import type {
 import type {
   AceleraParaHM, BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, ProrataDiagnostico, ProrataHM, SyncHotmart, TransacaoHotmart,
 } from '../domain/hotmart';
+import type { FaturamentoAcao, LinhaContratado } from '../domain/faturamento-analise';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
 export interface Resultado {
@@ -54,6 +55,10 @@ export interface FinanceiroRepository {
   // ── Espelho da Hotmart (schema fin, só leitura — 27/09/2026) ─────────────
   loadHotmartFaturamento(familia: FamiliaHotmart, inicio: string | null, fim: string | null): Promise<DiaHotmart[]>;
   loadHotmartFunis(familia: FamiliaHotmart, inicio: string | null, fim: string | null): Promise<FunilHotmart[]>;
+  /** fn_fin_contratado — dinheiro já vendido que ainda vai entrar, por mês e fonte (20260928p). */
+  loadContratado(familia: FamiliaHotmart): Promise<LinhaContratado[]>;
+  /** fn_fin_faturamento_por_acao — faturamento dentro da janela de cada ação de fin.acoes. */
+  loadFaturamentoPorAcao(familia: FamiliaHotmart): Promise<FaturamentoAcao[]>;
   loadHotmartPessoas(familia: FamiliaHotmart): Promise<PessoaHotmart[]>;
   loadHotmartExtrato(email: string): Promise<TransacaoHotmart[]>;
   loadHotmartOfertas(familia: FamiliaHotmart): Promise<OfertaHotmart[]>;
