@@ -227,7 +227,14 @@ export interface Colagem {
 
 const ehCabecalho = (l: string[]) => lerDataBR(l[0] ?? '') === undefined && /data/i.test(l[0] ?? '');
 
-export function lerColagem(texto: string): Colagem {
+/** Mesmo texto do P0001 do banco (z63): sem gp_pode_ver_cpf() não se cria, troca nem apaga identificador. */
+export const SEM_PERMISSAO_IDENTIFICADOR = 'Sem permissão para informar CPF/e-mail.';
+
+/**
+ * `podeVerDoc` = gp_pode_ver_cpf() do usuário. Sem ele, linha com Identificador 1/2 preenchido é erro local (não vai
+ * ao banco) e nenhuma entrada leva as chaves identificador1/2.
+ */
+export function lerColagem(texto: string, { podeVerDoc }: { podeVerDoc: boolean }): Colagem {
   const tabela = lerTSV(texto);
   const cabecalhoIgnorado = tabela.length > 0 && ehCabecalho(tabela[0]);
   const corpo = cabecalhoIgnorado ? tabela.slice(1) : tabela;
@@ -262,23 +269,20 @@ export function lerColagem(texto: string): Colagem {
     if (acordo === undefined) erros.push('Acordo a partir de: data inválida (use dd/mm/aaaa).');
     const baixa = lerDataBR(c(9));
     if (baixa === undefined) erros.push('Baixa manual: data inválida (use dd/mm/aaaa).');
+    if (!podeVerDoc && (c(6) || c(7))) erros.push(SEM_PERMISSAO_IDENTIFICADOR);
 
-    return {
-      n,
-      erros,
-      entrada: {
-        data_prevista: data ?? null,
-        cliente,
-        tipo: tipo ?? null,
-        valor: valor ?? null,
-        via_hotmart: via ?? null,
-        produtos,
-        identificador1: c(6) || null,
-        identificador2: c(7) || null,
-        acordo_desde: acordo ?? null,
-        baixa_manual_em: baixa ?? null,
-      },
+    const entrada: InformadoEntrada = {
+      data_prevista: data ?? null,
+      cliente,
+      tipo: tipo ?? null,
+      valor: valor ?? null,
+      via_hotmart: via ?? null,
+      produtos,
+      acordo_desde: acordo ?? null,
+      baixa_manual_em: baixa ?? null,
     };
+    if (podeVerDoc) { entrada.identificador1 = c(6) || null; entrada.identificador2 = c(7) || null; }
+    return { n, erros, entrada };
   });
   return { linhas, cabecalhoIgnorado, erroGeral: null };
 }
@@ -361,8 +365,9 @@ export const identificadorOculto = (v: string | null, podeVerDoc: boolean) => !!
 
 /**
  * Formulário → p de fn_fin_informado_salvar. Checagem mínima para não mandar lixo; a regra de verdade é do SQL.
- * Edição: identificador oculto e deixado vazio sai do p (chave ausente = manter); baixa_manual_em nunca vai na
- * edição (RPC própria).
+ * Sem podeVerDoc: identificador1/2 NUNCA vão no p (o banco recusa criar/trocar/apagar com P0001; o campo fica
+ * desabilitado na tela). Edição: identificador oculto e deixado vazio sai do p (chave ausente = manter);
+ * baixa_manual_em nunca vai na edição (RPC própria).
  */
 export function entradaDoFormulario(
   f: FormInformado, original: Informado | null, podeVerDoc: boolean,
@@ -389,6 +394,7 @@ export function entradaDoFormulario(
     data_prevista: data, cliente, tipo, valor, via_hotmart: via, produtos, acordo_desde: acordo ?? null,
   };
   if (!original) entrada.baixa_manual_em = null;
+  if (!podeVerDoc) return { entrada, erros };
   for (const k of ['identificador1', 'identificador2'] as const) {
     const v = f[k].trim();
     if (v) entrada[k] = v;
