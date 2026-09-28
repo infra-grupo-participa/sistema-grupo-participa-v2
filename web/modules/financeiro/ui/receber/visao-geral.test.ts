@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { VisaoGeral } from './VisaoGeral';
 import { Recorrencias } from './Recorrencias';
 import { Eventos } from './Eventos';
+import { Informados, type RepoInformados } from './Informados';
 import { montarContasReceber } from '../../application/carregar-contas-receber';
 import type { VisaoReceberCarregada } from '../../application/carregar-visao-receber';
 import { cobrancasRecorrentes, normalizarLinhaReceber } from '../../domain/contas-receber';
@@ -123,5 +124,18 @@ describe('sub-abas nascem filtradas pelo link', () => {
       filtroInicial: 'encerrado',
     }));
     expect(html).toMatch(/<option value="encerrado" selected=""/);
+  });
+  it('Informados com filtroInicial em_atraso_cobrar', () => {
+    const repo: RepoInformados = {
+      loadInformados: vi.fn(async () => []),
+      salvarInformado: vi.fn(async () => ({ ok: true })),
+      baixarInformado: vi.fn(async () => ({ ok: true })),
+      arquivarInformado: vi.fn(async () => ({ ok: true })),
+      importarInformados: vi.fn(async () => ({ ok: true, linhas: [] })),
+    };
+    const html = renderToStaticMarkup(createElement(Informados, {
+      repo, canEdit: false, canVerDoc: false, inicial: [], filtroInicial: 'em_atraso_cobrar',
+    }));
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Em atraso — cobrar/);
   });
 });
