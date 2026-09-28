@@ -1,7 +1,7 @@
 -- 20260928z67 — Contas a Receber, fatia F3: projeção (bloco 3 vendas novas, bloco 4 evento planejado, bloco 6 reserva de
 --               reembolso) e o informativo dos acordos do board (bloco 8, fora da soma).
 --
--- NÃO APLICADA — coordenador aplica (apply_migration "fin_receber_projecao"). Provas no fim, por medir.
+-- APLICADA em produção em 28/09/2026 (2 partes: fin_receber_projecao + _b; md5 das 15 funções = arquivo; conferência 9.x verde). Projeção DESLIGADA. Medido: 206–238 ms, 551 linhas, 296 KB (era 534), detalhe b2 77 KB em 76 linhas/76 contratos. Sugestões: reserva 5,10%; HM avulso 19.678/sem; HT 1.853,72; outros 10.765,63.
 -- Ordem obrigatória: z66 aplicada antes. Guarda: o corpo VIVO de fin.receber_posicao, de public.fn_fin_receber_semanal
 -- e de fin.premissa tem que ser o da z66 (comparação sem espaço, sem comentário e sem o texto das mensagens de erro).
 -- A migration inteira é UMA transação (apply_migration).
