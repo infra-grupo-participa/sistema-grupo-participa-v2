@@ -1,0 +1,2 @@
+-- 20260928z24 — Trajetória: compra de Aurum sem evento no calendário ganha a turma de lançamento do Aurum (z23), em vez
+-- de "Fora de evento". Aplicado por replace sobre pg_get_functiondef (bloco `ev3`); vigente é a função no banco.
