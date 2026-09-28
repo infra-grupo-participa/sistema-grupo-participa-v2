@@ -10,7 +10,7 @@
 import { Document, Font, Page, Path, StyleSheet, Svg, Text, View } from '@react-pdf/renderer';
 import type { DocumentoRelatorio, KpiPdf, SecaoPdf } from './modelo';
 import { INDICADOR_NIVEL, dataHoraSaoPaulo } from './modelo';
-import { caracteresPorLinha, corpoDaSecao, larguraColunas, larguraTabela, paginar, quebrarTokens, type BlocoPagina } from './paginar';
+import { larguraTabela, layoutTabela, linhasCabecalho, linhasCelula, paginar, textoCelula, type BlocoPagina } from './paginar';
 import { COR_PDF, FONTE_PDF, MEDIDA_PDF } from './tema-pdf';
 import { LOGO_LARANJA, LOGO_SILHUETA, LOGO_VIEWBOX } from './logo-pdf';
 
@@ -94,21 +94,16 @@ function Kpis({ kpis }: { kpis: KpiPdf[] }) {
 
 function Tabela({ bloco }: { bloco: Extract<BlocoPagina, { tipo: 'secao' }> }) {
   const { secao } = bloco;
-  const larguras = larguraColunas(secao);
-  const corpo = corpoDaSecao(secao);
-  const maximos = larguras.map((l) => caracteresPorLinha(l, corpo));
-  const corpoTh = Math.min(corpo, M.rotulo + 0.5);
+  // Larguras, corpo e quebra de linha vêm de paginar.ts: o texto chega já quebrado em
+  // linhas que cabem (medidas com a métrica do Inter), igual ao que a paginação estimou.
+  const layout = layoutTabela(secao);
+  const { larguras, corpo, corpoTh, padX } = layout;
   const celula = (secaoAtual: SecaoPdf, valores: Record<string, string>, total = false) =>
-    secaoAtual.colunas.map((c, i) => {
-      // Linha de total: célula vazia fica vazia (não "—"); a 1ª coluna sem valor diz "Total"
-      // (cobre o nível sem dado pessoal, em que a coluna do nome saiu e entrou "Pessoa").
-      const texto = total ? (valores[c.chave] || (i === 0 ? 'Total' : '')) : (valores[c.chave] || '—');
-      return (
-        <Text key={c.chave} style={[s.td, { width: larguras[i], textAlign: direita(c.tipo) ? 'right' : 'left' }, total ? s.tdTotal : {}]}>
-          {quebrarTokens(texto, maximos[i])}
-        </Text>
-      );
-    });
+    secaoAtual.colunas.map((c, i) => (
+      <Text key={c.chave} style={[s.td, { width: larguras[i], paddingHorizontal: padX, textAlign: direita(c.tipo) ? 'right' : 'left' }, total ? s.tdTotal : {}]}>
+        {linhasCelula(layout, i, textoCelula(valores, c, i, total), total ? 600 : 400).join('\n')}
+      </Text>
+    ));
   return (
     <View style={[s.secao, { width: larguraTabela(secao), fontSize: corpo }]}>
       <Text style={s.secaoTitulo}>
@@ -116,8 +111,8 @@ function Tabela({ bloco }: { bloco: Extract<BlocoPagina, { tipo: 'secao' }> }) {
       </Text>
       <View style={s.thLinha} wrap={false}>
         {secao.colunas.map((c, i) => (
-          <Text key={c.chave} style={[s.th, { width: larguras[i], fontSize: corpoTh, textAlign: direita(c.tipo) ? 'right' : 'left' }]}>
-            {quebrarTokens(c.rotulo, caracteresPorLinha(larguras[i], corpoTh))}
+          <Text key={c.chave} style={[s.th, { width: larguras[i], paddingHorizontal: padX, fontSize: corpoTh, textAlign: direita(c.tipo) ? 'right' : 'left' }]}>
+            {linhasCabecalho(layout, i, c.rotulo).join('\n')}
           </Text>
         ))}
       </View>

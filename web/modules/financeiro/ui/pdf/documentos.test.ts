@@ -6,10 +6,11 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { aplicarNivel } from '@/shared/ui/pdf/nivel';
 import { DocumentoPdf } from '@/shared/ui/pdf/DocumentoPdf';
 import { contarPaginasPdf, recorteParaEmissao } from '@/shared/ui/pdf/gerar-pdf';
-import { caracteresPorLinha, larguraColunas } from '@/shared/ui/pdf/paginar';
+import { larguraUtil, layoutTabela, linhasCabecalho, linhasCelula, textoCelula } from '@/shared/ui/pdf/paginar';
+import { createRequire } from 'node:module';
 import type { NivelPii, RascunhoRelatorio } from '@/shared/ui/pdf/modelo';
 import type { ContaReceber } from '../../domain/types';
-import type { AceleraParaHM, DivergenciaHotmart, IdentidadeRevisao, PessoaHotmart, ProrataHM } from '../../domain/hotmart';
+import type { AceleraParaHM, BoardHotmart, DivergenciaHotmart, IdentidadeRevisao, PessoaHotmart, ProrataHM } from '../../domain/hotmart';
 import { COLUNAS_PADRAO, COLUNAS_RELATORIO, montarRelatorio } from '../../application/montar-relatorio';
 import {
   NIVEIS_RELATORIO, PII_COLUNA_BOARD,
@@ -247,16 +248,78 @@ describe('mapeadores', () => {
 });
 
 describe('os 6 relatórios desenham (renderToBuffer)', () => {
-  // Carteira com as colunas PADRÃO (9). Com as 25 marcadas, a data quebra em 2 linhas
-  // ("10/02/" + "2025"): continua legível, é o limite de 25 colunas numa folha A4.
-  it('coluna de data comporta dd/mm/aaaa sem quebrar', () => {
+  // Geometria da tabela medida com a FONTE REAL (fontkit sobre o Inter embutido, com
+  // kerning) — não com a tabela de métrica que a paginação usa: se a métrica errar para
+  // baixo, este teste pega. Carteira com as 25 colunas marcadas e valores longos.
+  const PUBLICO = path.resolve(__dirname, '../../../../public');
+  // fontkit vem com o @react-pdf/renderer (dependência dele, sem tipos): só o necessário.
+  type FonteReal = { unitsPerEm: number; layout(t: string): { glyphs: { advanceWidth: number }[] } };
+  const fontkit = createRequire(__filename)('fontkit') as { openSync(caminho: string): FonteReal };
+  const fontes = {
+    400: fontkit.openSync(path.join(PUBLICO, 'fonts/Inter-Regular.ttf')),
+    600: fontkit.openSync(path.join(PUBLICO, 'fonts/Inter-SemiBold.ttf')),
+  };
+  const medirReal = (texto: string, corpo: number, peso: 400 | 600) =>
+    (fontes[peso].layout(texto).glyphs.reduce((s, g) => s + g.advanceWidth, 0) * corpo) / fontes[peso].unitsPerEm;
+
+  function carteira(chaves: string[]) {
+    const contas = Array.from({ length: 30 }, (_, i) => conta({
+      contato_hm_id: `c${i}`, nome: i % 2 ? 'Maria das Graças Oliveira Albuquerque' : PII.nome,
+      email: `pessoa.exemplo${i}@dominio-comprido-de-empresa.com.br`, canal: 'Holding Total ATM (06/07/2026)',
+      total_pago_bruto: 123456.78 + i, total_pago_liquido: 98765.43, saldo_a_pagar: 14700, pacote: 150000, credito: i % 3 ? null : 1250.5,
+      dias_atraso: 1234, solicitou_cancelamento: i % 2 === 0, oferta_codigo: 'k8x2abcd', ultimo_pagamento_em: '2026-09-01',
+    }));
+    const hp = new Map<string, BoardHotmart>(contas.map((c) => [c.contato_hm_id, {
+      pago_bruto: 123456.78, taxa_hotmart: 12345.67, liquido: 111111.11, juros: 9999.9, parcelas_max: 12,
+      ultimo_pagamento_em: '2026-08-15', valor_devido: 45000, diverge: true,
+    } as unknown as BoardHotmart]));
+    const r = rascunhoCarteira(montarRelatorio(contas, chaves, { canVerDoc: true, hotmartPorCard: hp }), contas, []);
+    return aplicarNivel(r, 'completo').secoes[1];
+  }
+
+  for (const [nome, chaves] of [['25 colunas', COLUNAS_RELATORIO.map((c) => c.key)], ['9 colunas (padrão)', COLUNAS_PADRAO]] as const) {
+    it(`carteira ${nome}: nenhum texto passa da largura da coluna; cabeçalho e valor não se partem`, () => {
+      const s = carteira([...chaves]);
+      expect(s.colunas).toHaveLength(chaves.length);
+      const layout = layoutTabela(s);
+      expect(layout.larguras.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(770 + 0.01);
+      const excessos: string[] = [];
+      const conferir = (onde: string, i: number, linhas: string[], corpo: number, peso: 400 | 600) => {
+        for (const l of linhas) {
+          const w = medirReal(l, corpo, peso);
+          if (w > larguraUtil(layout, i) + 0.01) excessos.push(`${onde} "${l}" ${w.toFixed(1)} > ${larguraUtil(layout, i).toFixed(1)}`);
+        }
+      };
+      s.colunas.forEach((c, i) => {
+        const cab = linhasCabecalho(layout, i, c.rotulo);
+        conferir(`cabeçalho ${c.rotulo}`, i, cab, layout.corpoTh, 600);
+        // palavra do cabeçalho nunca se parte: toda linha é feita de palavras inteiras do rótulo
+        expect(cab.join(' ').split(' '), c.rotulo).toEqual(c.rotulo.split(' '));
+        for (const [k, l] of s.linhas.entries()) {
+          const texto = textoCelula(l.celulas, c, i);
+          const linhas = linhasCelula(layout, i, texto);
+          conferir(`linha ${k} ${c.rotulo}`, i, linhas, layout.corpo, 400);
+          // valor (R$, data, número) só pode ir para a linha de baixo no espaço rígido: "R$" / "123.456,78"
+          if (c.tipo !== 'texto') expect(linhas.join(' '), `${c.rotulo}: ${texto}`).toBe(texto);
+        }
+        if (s.total) conferir(`total ${c.rotulo}`, i, linhasCelula(layout, i, textoCelula(s.total, c, i, true), 600), layout.corpo, 600);
+      });
+      expect(excessos).toEqual([]);
+      if (chaves.length === COLUNAS_PADRAO.length) {
+        expect(layout.corpo).toBe(7.5); // as 9 padrão não apertam: corpo e espaçamento normais
+        expect(layout.padX).toBe(4);
+      }
+    });
+  }
+
+  it('coluna de data comporta dd/mm/aaaa sem quebrar nos relatórios de colunas fixas', () => {
     const contas = [conta()];
     const padrao = rascunhoCarteira(montarRelatorio(contas, COLUNAS_PADRAO, { canVerDoc: false, hotmartPorCard: null }), contas, []);
     for (const r of [padrao, ...seis().filter((x) => x.tipo !== 'board')]) {
       for (const s of r.secoes) {
-        const larguras = larguraColunas(s);
+        const layout = layoutTabela(s);
         s.colunas.forEach((c, i) => {
-          if (c.tipo === 'data') expect(caracteresPorLinha(larguras[i]), `${r.tipo}/${c.rotulo}`).toBeGreaterThanOrEqual(10);
+          if (c.tipo === 'data') expect(linhasCelula(layout, i, '10/02/2025'), `${r.tipo}/${c.rotulo}`).toHaveLength(1);
         });
       }
     }
