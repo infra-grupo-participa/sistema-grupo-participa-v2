@@ -15,7 +15,8 @@ import type { PassoTrajetoria } from '../domain/trajetoria';
 import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-card';
 import type { AssinaturaHMBoard, AssinaturaHMSemCard } from '../domain/assinatura-hm';
 import type { CenarioReceber, LinhaReceber } from '../domain/contas-receber';
-import type { FeriadoBancario, VigenciaPremissa } from '../domain/premissas-receber';
+import type { FeriadoBancario, SugestaoPremissa, VigenciaPremissa } from '../domain/premissas-receber';
+import type { EventoPlanejado, EventoPlanejadoEntrada } from '../domain/eventos-planejados';
 import type { LinhaCaixaHotmart, TotaisCaixaHotmart } from '../domain/caixa-hotmart';
 import type { Informado, InformadoEntrada, ResultadoLinhaImportacao } from '../domain/recebimentos-informados';
 
@@ -117,6 +118,16 @@ export interface FinanceiroRepository {
   loadFeriados(): Promise<FeriadoBancario[]>;
   /** fn_fin_feriado_salvar(p_dia, p_nome, p_ativo) — cria ou liga/desliga; nada se apaga. */
   salvarFeriado(dia: string, nome: string, ativo: boolean): Promise<Resultado>;
+  /** fn_fin_receber_sugestoes(p_cenario) (z67) — sugestão medida da venda nova semanal e da reserva, com o valor em uso. */
+  loadSugestoesReceber(cenario?: CenarioReceber): Promise<SugestaoPremissa[]>;
+
+  // ── Eventos planejados (bloco 4, z67) ────────────────────────────────────
+  /** fn_fin_eventos_planejados_listar() — todos (ativo, encerrado, arquivado), com a curva da referência. */
+  loadEventosPlanejados(): Promise<EventoPlanejado[]>;
+  /** fn_fin_evento_planejado_salvar(p) — sem id cria; com id altera (todas as chaves). Guarda gp_pode_operar_financeiro. */
+  salvarEventoPlanejado(p: EventoPlanejadoEntrada): Promise<Resultado & { id?: number }>;
+  /** fn_fin_evento_planejado_arquivar(p_id, p_motivo) — motivo 3 a 500. Nada se apaga. */
+  arquivarEventoPlanejado(id: number, motivo: string): Promise<Resultado>;
 
   // ── Recebimentos informados (bloco 5, 20260928z63) ───────────────────────
   // Escrita: guarda gp_pode_operar_financeiro() no banco; erro de validação = mensagem em português do SQL.

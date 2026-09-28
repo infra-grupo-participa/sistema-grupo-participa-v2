@@ -30,11 +30,12 @@ import {
   normalizarLinhaCaixa, normalizarTotaisCaixa, type LinhaCaixaHotmart, type TotaisCaixaHotmart,
 } from '../domain/caixa-hotmart';
 import {
-  normalizarFeriado, normalizarVigencia, type FeriadoBancario, type VigenciaPremissa,
+  normalizarFeriado, normalizarSugestao, normalizarVigencia, type FeriadoBancario, type SugestaoPremissa, type VigenciaPremissa,
 } from '../domain/premissas-receber';
 import {
   normalizarInformado, normalizarResultadoImportacao, type Informado, type InformadoEntrada,
 } from '../domain/recebimentos-informados';
+import { normalizarEventoPlanejado, type EventoPlanejado, type EventoPlanejadoEntrada } from '../domain/eventos-planejados';
 
 function erroPara(msg: string): Resultado {
   return { ok: false, msg };
@@ -430,6 +431,33 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     const { error } = await this.db().rpc('fn_fin_feriado_salvar', { p_dia: dia, p_nome: nome, p_ativo: ativo });
     if (error) return erroPara(erroPremissa('salvarFeriado', error, 'gravar o feriado'));
     return { ok: true, msg: ativo ? 'Feriado gravado.' : 'Feriado desligado.' };
+  }
+
+  // ── Sugestões medidas e eventos planejados (z67) ─────────────────────────
+  // Leitura: erro vira exceção com a mensagem de erroPremissa (só o código vai ao log; nada do conteúdo).
+  async loadSugestoesReceber(cenario: CenarioReceber = 'base'): Promise<SugestaoPremissa[]> {
+    const { data, error } = await this.db().rpc('fn_fin_receber_sugestoes', { p_cenario: cenario });
+    if (error) throw new Error(erroPremissa('fn_fin_receber_sugestoes', error, 'carregar as sugestões medidas'));
+    return ((data as Record<string, unknown>[] | null) ?? []).map(normalizarSugestao);
+  }
+
+  async loadEventosPlanejados(): Promise<EventoPlanejado[]> {
+    const { data, error } = await this.db().rpc('fn_fin_eventos_planejados_listar');
+    if (error) throw new Error(erroPremissa('fn_fin_eventos_planejados_listar', error, 'carregar os eventos planejados'));
+    return ((data as Record<string, unknown>[] | null) ?? []).map(normalizarEventoPlanejado);
+  }
+
+  async salvarEventoPlanejado(p: EventoPlanejadoEntrada): Promise<Resultado & { id?: number }> {
+    const { data, error } = await this.db().rpc('fn_fin_evento_planejado_salvar', { p });
+    if (error) return erroPara(erroPremissa('salvarEventoPlanejado', error, 'gravar o evento planejado'));
+    const linha = ((data as Record<string, unknown>[] | null) ?? [])[0];
+    return { ok: true, msg: p.id != null ? 'Evento planejado alterado.' : 'Evento planejado criado.', id: linha?.id == null ? undefined : Number(linha.id) };
+  }
+
+  async arquivarEventoPlanejado(id: number, motivo: string): Promise<Resultado> {
+    const { error } = await this.db().rpc('fn_fin_evento_planejado_arquivar', { p_id: id, p_motivo: motivo });
+    if (error) return erroPara(erroPremissa('arquivarEventoPlanejado', error, 'arquivar o evento planejado'));
+    return { ok: true, msg: 'Evento planejado arquivado.' };
   }
 
   // ── Recebimentos informados (bloco 5, 20260928z63) ───────────────────────
