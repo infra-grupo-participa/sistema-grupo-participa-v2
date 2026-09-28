@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { COLUNAS_ACELERA_PARA_HM, COLUNAS_BOARD_HOTMART, COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, COLUNAS_PRORATA_HM, agruparFaturamento, categoriaInferida, celulaCsv, resumirAdimplencia, rotuloCategorias, rotuloDocumento, type FunilHotmart } from './hotmart';
+import { COLUNAS_ACELERA_PARA_HM, COLUNAS_BOARD_HOTMART, COLUNAS_IDENTIDADE_REVISAO, COLUNAS_PESSOA_HOTMART, COLUNAS_PRORATA_HM, agruparFaturamento, categoriaInferida, celulaCsv, resumirAdimplencia, rotuloCategorias, rotuloDocumento, type DiaHotmart, type FunilHotmart } from './hotmart';
 import { COLUNAS_ASSINATURA_HM_BOARD, COLUNAS_ASSINATURA_HM_SEM_CARD } from './assinatura-hm';
 
 const migracao = (nome: string) =>
@@ -155,25 +155,39 @@ describe('celulaCsv', () => {
   });
 });
 
+// 20260927b e 20260927h definiam o corpo ORIGINAL de fn_fin_hotmart_faturamento/funis. A 20260928z54 (28/09,
+// líquido realista com antecipação D+2 e retenção de 10%) recriou as duas com um DROP + CREATE — RETURNS TABLE
+// ganhou 5 colunas de recebimento no fim (entra_rapido, retido, retido_a_liberar, custo_antecipacao, liquido_total).
+// O corpo vivo no banco é o da z54; o front (DiaHotmart / FunilHotmart, ver hotmart.ts) ainda não lê as 5 novas —
+// por isso o contrato aqui é "as colunas do front são um PREFIXO do RETURNS TABLE", não igualdade.
 describe('contrato fn_fin_hotmart_faturamento', () => {
+  const sql = migracao('20260928z54_fin_premissas_recebimento.sql');
+  const COLUNAS_DIA_HOTMART = [
+    'dia', 'vendas', 'valor_oferta', 'cobrado_cliente', 'juros', 'taxa_hotmart', 'liquido', 'liquido_estimado',
+    'estornos', 'valor_estornado', 'recusadas', 'boletos_gerados', 'compradores',
+  ] as const satisfies readonly (keyof DiaHotmart)[];
   // O preset "Tudo" cresce todo dia. Um teto fixo de dias na RPC já quebrou a tela duas vezes
   // (3 anos cortava o HM de ago/2023; 7 anos voltaria a dar 400 em 2028). O custo é o das transações, não do intervalo.
   it('não tem teto fixo de dias no período', () => {
-    const sql = migracao('20260927b_fin_relatorios_hotmart.sql');
-    const corpo = sql.slice(sql.lastIndexOf('function public.fn_fin_hotmart_faturamento('));
+    const corpo = sql.slice(inicioCreate(sql, 'public.fn_fin_hotmart_faturamento'));
     const fim = corpo.indexOf('end $$;');
     expect(corpo.slice(0, fim)).not.toMatch(/v_fim\s*-\s*v_ini\s*>\s*\d+/);
+  });
+  it('RETURNS TABLE começa pelas colunas de DiaHotmart, na ordem (as 5 novas de recebimento vêm depois)', () => {
+    const colunas = colunasRetorno(sql, 'public.fn_fin_hotmart_faturamento');
+    expect(colunas.slice(0, COLUNAS_DIA_HOTMART.length)).toEqual([...COLUNAS_DIA_HOTMART]);
   });
 });
 
 describe('contrato fn_fin_hotmart_funis', () => {
+  const sql = migracao('20260928z54_fin_premissas_recebimento.sql');
   const COLUNAS_FUNIL = [
     'funil', 'vale_de', 'vale_ate', 'vendas', 'compradores', 'valor_oferta', 'cobrado_cliente', 'juros', 'taxa_hotmart',
     'liquido', 'estornos', 'valor_estornado', 'recusadas', 'boletos', 'parcelado', 'parcelas_media',
   ] as const satisfies readonly (keyof FunilHotmart)[];
-  it('RETURNS TABLE = colunas de FunilHotmart', () => {
-    const sql = migracao('20260927h_fin_acelera_e_funis.sql');
-    expect(colunasRetorno(sql, 'public.fn_fin_hotmart_funis')).toEqual([...COLUNAS_FUNIL]);
+  it('RETURNS TABLE começa pelas colunas de FunilHotmart, na ordem (as 5 novas de recebimento vêm depois)', () => {
+    const colunas = colunasRetorno(sql, 'public.fn_fin_hotmart_funis');
+    expect(colunas.slice(0, COLUNAS_FUNIL.length)).toEqual([...COLUNAS_FUNIL]);
   });
 });
 
