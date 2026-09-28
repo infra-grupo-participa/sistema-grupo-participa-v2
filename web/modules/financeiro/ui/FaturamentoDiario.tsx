@@ -19,8 +19,6 @@ import { FAMILIAS_EM_ORDEM,
 } from '../domain/hotmart';
 import { Erro, isoDiasAtras, PERIODOS, SyncSelo, useCarga, Variacao } from './hotmart/comum';
 import { GraficoLinha } from './hotmart/GraficoLinha';
-import { AnaliseFaturamento } from './hotmart/AnaliseFaturamento';
-import { FunisEventos } from './hotmart/FunisEventos';
 
 export function FaturamentoDiario({ repo }: { repo: FinanceiroRepository }) {
   const [familia, setFamilia] = useState<FamiliaHotmart>('HM');
@@ -86,14 +84,11 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
   const pontos = useMemo(
     () => periodos.map((p) => ({ ...rotulos(p.chave, visao), bruto: p.bruto, liquido: p.liquido, vendas: p.vendas })),
     [periodos, visao]);
-  // "Análise" (27/09) substitui o painel "Cruzar com": previsão, contratado, eventos e crescimento — ui/hotmart/AnaliseFaturamento.
-  // "Funis" (28/09): cada evento 2020→hoje, educação × escritório — ui/hotmart/FunisEventos.
-  const [modo, setModo] = useState<'serie' | 'analise' | 'funis'>('serie');
-  const analise = modo !== 'serie';
+  // Funis e Análise viraram a aba "Funis" do menu (limpeza de 28/09) — ui/hotmart/FunisEAnalise.
+  const analise = false;
 
   // Trocar de visão já leva a um período que faz sentido para ela (30 dias / 12 meses / tudo); dá para mudar depois.
   const escolherVisao = (v: (typeof VISOES)[number]) => {
-    setModo('serie');
     setVisao(v.g);
     setIntervalo({ de: isoDiasAtras(v.preset - 1), ate: isoDiasAtras(0), preset: v.preset });
   };
@@ -111,14 +106,6 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
               {v.rotulo}
             </button>
           ))}
-          <button type="button" aria-pressed={modo === 'funis'} onClick={() => setModo('funis')}
-            className={`border-l border-[var(--border)] px-3 py-1.5 text-xs font-semibold ${modo === 'funis' ? 'bg-[var(--accent-subtle)] text-[var(--accent)]' : 'text-[var(--fg-3)] hover:bg-[var(--surface-2)]'}`}>
-            Funis
-          </button>
-          <button type="button" aria-pressed={modo === 'analise'} onClick={() => setModo('analise')}
-            className={`border-l border-[var(--border)] px-3 py-1.5 text-xs font-semibold ${modo === 'analise' ? 'bg-[var(--accent-subtle)] text-[var(--accent)]' : 'text-[var(--fg-3)] hover:bg-[var(--surface-2)]'}`}>
-            Análise
-          </button>
         </div>
         {!analise && <>
         {PERIODOS.map((p) => (
@@ -138,7 +125,7 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
           className="rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs" />
         </>}
       </div>
-      {modo === 'funis' ? <FunisEventos repo={repo} /> : modo === 'analise' ? <AnaliseFaturamento repo={repo} familia={familia} /> : erro ? <Erro msg={erro} /> : !dados ? <Loading label="Carregando faturamento…" minHeight={200} /> : (
+      {erro ? <Erro msg={erro} /> : !dados ? <Loading label="Carregando faturamento…" minHeight={200} /> : (
         <>
           {pontos.length >= 2 ? (
             <GraficoLinha

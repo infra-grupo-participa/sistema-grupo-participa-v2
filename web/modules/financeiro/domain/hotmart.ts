@@ -11,14 +11,14 @@
 //   taxaHotmart  — 4% + R$ 1 sobre o valor da oferta.
 //   liquido      — o que fica para o produtor (comissão PRODUCER).
 
-export type FamiliaHotmart = 'HT' | 'HM' | 'AURUM' | 'ACELERA' | 'DIAMANTE';
+export type FamiliaHotmart = 'HT' | 'EVENTOS' | 'HM' | 'AURUM' | 'ACELERA' | 'DIAMANTE';
 
 /** Ordem da escada (João, 28/09): o Holding Total é a entrada do Acelera/HM, o HM a do Aurum, e o Serviço Diamante vem por último. */
-export const FAMILIAS_EM_ORDEM: FamiliaHotmart[] = ['HT', 'ACELERA', 'HM', 'AURUM', 'DIAMANTE'];
+export const FAMILIAS_EM_ORDEM: FamiliaHotmart[] = ['HT', 'EVENTOS', 'ACELERA', 'HM', 'AURUM', 'DIAMANTE'];
 
 /** Rótulo de tela da família (fin.produtos.familia). Acelera Holding = preparatório do HM (27/09/2026). */
 export const ROTULO_FAMILIA: Record<FamiliaHotmart, string> = {
-  HT: 'Holding Total', HM: 'Holding Masters', AURUM: 'Aurum', ACELERA: 'Acelera Holding', DIAMANTE: 'Serviço Diamante',
+  HT: 'Holding Total', EVENTOS: 'Eventos (ingressos)', HM: 'Holding Masters', AURUM: 'Aurum', ACELERA: 'Acelera Holding', DIAMANTE: 'Serviço Diamante',
 };
 
 /** Faturamento por funil (fin.funis: janela de datas por família), de fn_fin_hotmart_funis. */
@@ -353,6 +353,7 @@ export function resumirHotmart(dias: DiaHotmart[]): ResumoHotmart {
  */
 export const REGRA_TAXA_HOTMART: Record<FamiliaHotmart, string> = {
   HT: '6% do valor + R$ 1 por venda (5,3% + R$ 1 nas mais recentes)',
+  EVENTOS: '6% do valor + R$ 1 por ingresso (5,3% + R$ 1 nos mais recentes)',
   HM: '4% do valor + R$ 1 por venda',
   AURUM: '4% do valor + R$ 1 por venda',
   ACELERA: '5,3% do valor + R$ 1 por venda',
@@ -362,6 +363,7 @@ export const REGRA_TAXA_HOTMART: Record<FamiliaHotmart, string> = {
 /** Quem divide a venda com o produtor, por produto (comissões COPRODUCER/AFFILIATE/ADDON da API). */
 export const QUEM_DIVIDE: Record<FamiliaHotmart, string> = {
   HT: 'afiliados e coprodução em 41% das vendas',
+  EVENTOS: 'afiliados em 13% das vendas',
   HM: 'coprodutor, afiliados e add-on',
   AURUM: 'coprodutor (Borboleta Digital), afiliados e add-on — produtos antigos do Aurum',
   ACELERA: 'coprodutores Filipe Jung Jorge e Henrique Brenha, e add-on',

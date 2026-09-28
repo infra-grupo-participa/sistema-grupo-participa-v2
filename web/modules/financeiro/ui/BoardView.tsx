@@ -442,7 +442,8 @@ function ContadoresCor({ contadores, corFiltro, onCorFiltro }: {
                   style={{ background: VAR_COR[cor] }}
                   aria-hidden
                 />
-                <span className="tabular">
+                <span>{ROTULO_COR[cor]}</span>
+                <span className="tabular font-semibold text-[var(--fg-2)]">
                   {n}
                   {saldo > 0 && ` · ${fmtBRL(saldo)}`}
                 </span>

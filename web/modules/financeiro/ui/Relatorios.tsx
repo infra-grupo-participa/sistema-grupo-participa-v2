@@ -15,11 +15,12 @@ import { FAMILIAS_EM_ORDEM, ROTULO_FAMILIA, type BoardHotmart, type FamiliaHotma
 import { statusTone } from './cor';
 import { exportarXLSX, exportarPDF, formatarCelulaTela } from './exportar';
 import { AceleraParaHM } from './hotmart/AceleraParaHM';
+import { ProrataHM } from './hotmart/ProrataHM';
 import { HotmartConciliacao } from './hotmart/HotmartConciliacao';
 import { HotmartIdentidade } from './hotmart/HotmartIdentidade';
 import { HotmartPessoas } from './hotmart/HotmartPessoas';
 
-type TipoRelatorio = 'board' | 'pessoas' | 'conciliacao' | 'identidade' | 'acelera';
+type TipoRelatorio = 'board' | 'pessoas' | 'conciliacao' | 'identidade' | 'acelera' | 'prorata';
 
 const RELATORIOS: { tipo: TipoRelatorio; rotulo: string }[] = [
   { tipo: 'board', rotulo: 'Carteira do board' },
@@ -27,6 +28,8 @@ const RELATORIOS: { tipo: TipoRelatorio; rotulo: string }[] = [
   { tipo: 'conciliacao', rotulo: 'Conciliação Hotmart × banco' },
   { tipo: 'identidade', rotulo: 'Mesma pessoa?' },
   { tipo: 'acelera', rotulo: 'Acelera → HM' },
+  // Saiu do menu lateral na limpeza de 28/09; por pessoa continua na ficha do aluno.
+  { tipo: 'prorata', rotulo: 'Pro rata (todos)' },
 ];
 
 /** Botão do seletor de relatório — mesmo padrão visual do seletor de família (FaturamentoDiario.tsx). */
@@ -57,15 +60,16 @@ function SeletorFamilia({ familia, onChange }: { familia: FamiliaHotmart; onChan
 }
 
 export function Relatorios({
-  contas, turma, canVerDoc, repo, hotmartPorCard,
+  contas, turma, canVerDoc, repo, hotmartPorCard, tipoInicial,
 }: {
+  tipoInicial?: TipoRelatorio;
   contas: ContaReceber[];
   turma: string | null;
   canVerDoc: boolean;
   repo: FinanceiroRepository;
   hotmartPorCard: Map<string, BoardHotmart> | null;
 }) {
-  const [tipo, setTipo] = useState<TipoRelatorio>('board');
+  const [tipo, setTipo] = useState<TipoRelatorio>(tipoInicial ?? 'board');
   const [familia, setFamilia] = useState<FamiliaHotmart>('HM');
 
   return (
@@ -97,6 +101,8 @@ export function Relatorios({
       {tipo === 'identidade' && <HotmartIdentidade repo={repo} />}
 
       {tipo === 'acelera' && <AceleraParaHM repo={repo} />}
+
+      {tipo === 'prorata' && <ProrataHM repo={repo} />}
     </div>
   );
 }

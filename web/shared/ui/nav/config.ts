@@ -90,9 +90,9 @@ export const REPORTS: ReportGroup[] = [
     children: [
       { key: 'board', label: 'Board', path: '/relatorios/financeiro', hash: '#board', href: '/relatorios/financeiro#board', ico: 'dashboard' },
       { key: 'faturamento', label: 'Faturamento', path: '/relatorios/financeiro', hash: '#faturamento', href: '/relatorios/financeiro#faturamento', ico: 'trending-up' },
+      { key: 'funis', label: 'Funis', path: '/relatorios/financeiro', hash: '#funis', href: '/relatorios/financeiro#funis', ico: 'trending-up' },
       { key: 'relatorios', label: 'Relatórios', path: '/relatorios/financeiro', hash: '#relatorios', href: '/relatorios/financeiro#relatorios', ico: 'file' },
       { key: 'ofertas', label: 'Ofertas', path: '/relatorios/financeiro', hash: '#ofertas', href: '/relatorios/financeiro#ofertas', ico: 'banknote' },
-      { key: 'prorata', label: 'Calculadora de Pro Rata', path: '/relatorios/financeiro', hash: '#prorata', href: '/relatorios/financeiro#prorata', ico: 'file' },
     ],
   },
   // Gate por setor, como o financeiro: ver podeVerRemocao(), espelho de ra_pode_ver().

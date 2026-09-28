@@ -13,10 +13,10 @@ import { carregarBoard, type BoardCarregado, type CardComEfeito } from '../appli
 import { listarOfertas } from '../application/gerenciar-ofertas';
 import { agruparPorAcao, chaveDaAcao, SEM_ACAO, TimelineAcoes } from './TimelineAcoes';
 import { ResultadoAcoes } from './ResultadoAcoes';
+import { FunisEAnalise } from './hotmart/FunisEAnalise';
 import { ProgramaSemCard } from './ProgramaSemCard';
 import { OfertasSemCatalogo } from './OfertasSemCatalogo';
 import { ProdutoTabs, type ProdutoChave } from './ProdutoTabs';
-import { LegendaCores } from './LegendaCores';
 import { BoardView } from './BoardView';
 import { BarraRecorte } from './BarraRecorte';
 import type { RecorteAtivo } from '../domain/recorte';
@@ -28,16 +28,16 @@ import { Relatorios } from './Relatorios';
 import { Ofertas } from './Ofertas';
 import { FaturamentoDiario } from './FaturamentoDiario';
 import { contarDiamantes, ServicoDiamante, useServicoDiamante } from './ServicoDiamante';
-import { ProrataHM } from './hotmart/ProrataHM';
 import type { BoardHotmart } from '../domain/hotmart';
 import { indexarBoardHotmart } from '../domain/board-hotmart';
 
-type Tab = 'board' | 'faturamento' | 'relatorios' | 'ofertas' | 'prorata';
+type Tab = 'board' | 'faturamento' | 'funis' | 'relatorios' | 'ofertas';
 
 const repo = new SupabaseFinanceiroRepository();
 
 export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; canVerDoc: boolean }) {
   const [tab, setTab] = useState<Tab>('board');
+  const [relatorioInicial, setRelatorioInicial] = useState<'prorata' | null>(null);
   const [board, setBoard] = useState<BoardCarregado | null>(null);
   const [erroBoard, setErroBoard] = useState<string | null>(null);
   // Guardada aqui (e não descartada após montar o board) para alimentar
@@ -146,9 +146,11 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       const h = window.location.hash.replace('#', '');
       const [base, query] = h.split('?');
       if (base === 'faturamento') setTab('faturamento');
-      else if (base === 'relatorios') setTab('relatorios');
+      else if (base === 'funis') setTab('funis');
+      else if (base === 'relatorios') { setTab('relatorios'); setRelatorioInicial(null); }
       else if (base === 'ofertas') setTab('ofertas');
-      else if (base === 'prorata') setTab('prorata');
+      // A Calculadora de Pro Rata saiu do menu (limpeza, 28/09) e mora em Relatórios; o link antigo abre lá.
+      else if (base === 'prorata') { setTab('relatorios'); setRelatorioInicial('prorata'); }
       // #diamante era a tela própria do Serviço Diamante; virou aba do board (27/09).
       else if (base === 'diamante') { setTab('board'); setVerDiamante(true); }
       // #hotmart era a aba "Hotmart (oficial)", unificada no Faturamento Diário em 27/09 — link antigo cai nela.
@@ -331,10 +333,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // os 4 totais têm que falar SÓ do recorte da aba ativa.
   const totaisFiltrados = useMemo(() => recalcularTotais(contasVisiveis), [contasVisiveis]);
 
-  // Sobre o board INTEIRO (não o recorte filtrado) — a legenda é dicionário,
-  // não resumo do que está visível; a 5ª entrada é o alarme de drift, e um
-  // filtro que esconde o card neutro não pode apagar o alarme.
-  const existeNeutro = useMemo(() => (board?.cards ?? []).some((c) => c.cor === 'neutro'), [board]);
+  // A legenda de cores saiu (limpeza de 28/09): o nome de cada cor está no próprio contador do BoardView,
+  // que inclui o "neutro" (alarme de status desconhecido) sempre que houver card assim no recorte.
 
   // Recorte ativo (N1) — mesma fonte que o rodapé usa para o rótulo completo
   // (domain/recorte.ts), para a barra de chips e a frase do rodapé nunca
@@ -366,8 +366,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <>Faturamento <span className="text-[var(--accent)]">da Hotmart</span></>
           ) : tab === 'relatorios' ? (
             <>Relatórios <span className="text-[var(--accent)]">Financeiro</span></>
-          ) : tab === 'prorata' ? (
-            <>Calculadora de <span className="text-[var(--accent)]">Pro Rata</span></>
+          ) : tab === 'funis' ? (
+            <>Funis <span className="text-[var(--accent)]">e Análise</span></>
           ) : (
             <>Ofertas de <span className="text-[var(--accent)]">Cobrança</span></>
           )}
@@ -396,7 +396,6 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <div className="mb-3">
               <TimelineAcoes acoes={acoes} ativa={acaoEfetiva} onSelecionar={selecionarAcao} />
             </div>
-            <LegendaCores existeNeutro={existeNeutro} />
             <BarraRecorte
               recorte={recorteAtivo}
               onLimparCanal={() => selecionarAcao(null)}
@@ -449,10 +448,10 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       {tab === 'faturamento' && <FaturamentoDiario repo={repo} />}
 
       {tab === 'relatorios' && (
-        board ? <Relatorios contas={contasDoRecorte} turma={turma} canVerDoc={canVerDoc} repo={repo} hotmartPorCard={hotmartPorCard} /> : <Loading label="Carregando…" minHeight={200} />
+        board ? <Relatorios key={relatorioInicial ?? 'padrao'} tipoInicial={relatorioInicial ?? undefined} contas={contasDoRecorte} turma={turma} canVerDoc={canVerDoc} repo={repo} hotmartPorCard={hotmartPorCard} /> : <Loading label="Carregando…" minHeight={200} />
       )}
 
-      {tab === 'prorata' && <ProrataHM repo={repo} />}
+      {tab === 'funis' && <FunisEAnalise repo={repo} />}
 
 
       {tab === 'ofertas' && (
