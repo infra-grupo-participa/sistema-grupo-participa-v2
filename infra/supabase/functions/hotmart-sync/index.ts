@@ -9,6 +9,7 @@
 // Chamada: POST com header `x-sync-chave` (= Vault `fin_hotmart_sync_chave`).
 //   body {}                 → processa a fila (backfill pendente)
 //   body {"rotina": true}   → enfileira os últimos 3 dias de cada produto e processa
+//   body {"catalogo": true} → grava a lista de TODOS os produtos da conta em fin.hotmart_catalogo
 // Quem chama é o pg_cron (via pg_net). Credenciais só no Vault, lidas pelo Postgres.
 import postgres from "npm:postgres@3.4.4";
 
@@ -25,6 +26,8 @@ const STATUS = [
 type Item = Record<string, any>;
 
 let tokenCache: { token: string; expira: number } | null = null;
+// Basic da conta, guardado para renovar o token no meio de uma janela longa (401 na varredura geral, 27/09).
+let basicAtual = "";
 
 // Credenciais em cache no isolate (10 min): chamada sem chave não abre conexão no
 // banco a cada request — sem isso, uma enxurrada anônima esgotaria o pool (pentest 27/09).
@@ -37,6 +40,7 @@ async function credenciais(): Promise<{ basic: string; chave: string }> {
 }
 
 async function token(basic: string): Promise<string> {
+  basicAtual = basic;
   if (tokenCache && tokenCache.expira > Date.now() + 120_000) return tokenCache.token;
   const [id, secret] = atob(basic).split(":");
   const q = new URLSearchParams({ grant_type: "client_credentials", client_id: id, client_secret: secret });
@@ -53,9 +57,12 @@ async function token(basic: string): Promise<string> {
 async function get(tk: string, path: string, params: Record<string, string | number | undefined>) {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") q.set(k, String(v));
+  let atual = tokenCache?.token ?? tk;
   for (let tentativa = 0; tentativa < 4; tentativa++) {
-    const r = await fetch(`${API}${path}?${q}`, { headers: { Authorization: `Bearer ${tk}` } });
+    const r = await fetch(`${API}${path}?${q}`, { headers: { Authorization: `Bearer ${atual}` } });
     if (r.status === 429) { await new Promise((ok) => setTimeout(ok, 5000 * (tentativa + 1))); continue; }
+    // Token venceu no meio da janela: pede outro e repete (uma vez por tentativa).
+    if (r.status === 401 && basicAtual) { tokenCache = null; atual = await token(basicAtual); continue; }
     if (!r.ok) throw new Error(`${path} HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
     return await r.json();
   }
@@ -80,7 +87,12 @@ const inicioDia = (d: string) => new Date(`${d}T00:00:00-03:00`).getTime();
 const fimDia = (d: string) => new Date(`${d}T00:00:00-03:00`).getTime() + 86_400_000 - 1;
 
 async function processarJanela(tk: string, j: { produto_id: string; inicio: string; fim: string }) {
-  const base = { product_id: j.produto_id, start_date: inicioDia(j.inicio), end_date: fimDia(j.fim) };
+  // produto_id '*' = varredura de TODOS os produtos da conta (27/09/2026: "nada fora do sistema"); o produto de cada
+  // venda vem do próprio item.
+  const base = {
+    product_id: j.produto_id === "*" ? undefined : j.produto_id,
+    start_date: inicioDia(j.inicio), end_date: fimDia(j.fim),
+  };
   let total = 0;
   for (const st of STATUS) {
     const itens = await paginar(tk, "/payments/api/v1/sales/history", { ...base, transaction_status: st });
@@ -181,6 +193,29 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ erro: "não autorizado" }), { status: 401 });
     }
     const body = await req.json().catch(() => ({}));
+    if (body?.catalogo) {
+      // Catálogo de TODOS os produtos da conta (só leitura) → fin.hotmart_catalogo. Não mexe na fila.
+      const tk0 = await token(cred.basic);
+      const produtos = await paginar(tk0, "/products/api/v1/products", {});
+      for (const p of produtos) {
+        if (p.id == null) continue;
+        await sql`
+          insert into fin.hotmart_catalogo (produto_id, nome, status, formato, ucode, criado_na_hotmart, bruto_json, visto_em)
+          values (${String(p.id)}, ${p.name ?? null}, ${p.status ?? null}, ${p.format ?? null}, ${p.ucode ?? null},
+                  ${msParaTs(p.created_at)}, ${sql.json(p)}, now())
+          on conflict (produto_id) do update set nome = excluded.nome, status = excluded.status, formato = excluded.formato,
+            ucode = excluded.ucode, criado_na_hotmart = excluded.criado_na_hotmart, bruto_json = excluded.bruto_json, visto_em = now()`;
+      }
+      // Produto novo entra INVISÍVEL (A_CLASSIFICAR: nenhuma tela lê e o grafo de identidade exclui) até alguém classificar.
+      await sql`
+        insert into fin.produtos (produto_id, nome, familia, papel, sincroniza, nota)
+        select c.produto_id, c.nome, 'A_CLASSIFICAR', null, false, 'Do catálogo da Hotmart; aguarda classificação.'
+          from fin.hotmart_catalogo c
+        on conflict (produto_id) do nothing`;
+      return new Response(JSON.stringify({ catalogo: produtos.length, ms: Date.now() - inicio }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     if (body?.rotina) {
       // Janela móvel de 3 dias: pega mudança de status (boleto pago, reembolso, chargeback).
       await sql`

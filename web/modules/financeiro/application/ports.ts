@@ -10,6 +10,7 @@ import type {
 } from '../domain/hotmart';
 import type { FaturamentoAcao, LinhaContratado } from '../domain/faturamento-analise';
 import type { LinhaServicoDiamante } from '../domain/servico-diamante';
+import type { CompradorFunil, Funil } from '../domain/funis';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
 export interface Resultado {
@@ -62,6 +63,10 @@ export interface FinanceiroRepository {
   loadFaturamentoPorAcao(familia: FamiliaHotmart): Promise<FaturamentoAcao[]>;
   /** fn_fin_diamante_servicos — Serviço Diamante: uma linha por pessoa × serviço (20260928r). */
   loadServicoDiamante(): Promise<LinhaServicoDiamante[]>;
+  /** fn_fin_funis — resultado de cada evento/funil (fin.eventos × Hotmart). */
+  loadFunis(): Promise<Funil[]>;
+  /** fn_fin_funil_compradores — quem pagou num funil. */
+  loadFunilCompradores(eventoId: number): Promise<CompradorFunil[]>;
   loadHotmartPessoas(familia: FamiliaHotmart): Promise<PessoaHotmart[]>;
   loadHotmartExtrato(email: string): Promise<TransacaoHotmart[]>;
   loadHotmartOfertas(familia: FamiliaHotmart): Promise<OfertaHotmart[]>;

@@ -17,6 +17,7 @@ import type {
 } from '../domain/hotmart';
 import type { FaturamentoAcao, LinhaContratado } from '../domain/faturamento-analise';
 import type { LinhaServicoDiamante } from '../domain/servico-diamante';
+import type { CompradorFunil, Funil } from '../domain/funis';
 
 function erroPara(msg: string): Resultado {
   return { ok: false, msg };
@@ -212,6 +213,23 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
       coberto_valor: n(l.coberto_valor), meses: (l.meses ?? {}) as LinhaServicoDiamante['meses'],
       mensalidade: l.mensalidade == null ? null : n(l.mensalidade),
     }));
+  }
+
+  async loadFunis(): Promise<Funil[]> {
+    const n = (v: unknown) => Number(v ?? 0) || 0;
+    const linhas = await this.rpcLista<Funil>('fn_fin_funis', {}, 'Não foi possível carregar os funis.');
+    return linhas.map((f) => ({
+      ...f, ingressos_bruto: n(f.ingressos_bruto), ingressos_liquido: n(f.ingressos_liquido), oferta_bruto: n(f.oferta_bruto),
+      oferta_liquido: n(f.oferta_liquido), bruto: n(f.bruto), liquido: n(f.liquido),
+      ref_valor: f.ref_valor == null ? null : n(f.ref_valor), liquido_conferencia: n(f.liquido_conferencia),
+    }));
+  }
+
+  async loadFunilCompradores(eventoId: number): Promise<CompradorFunil[]> {
+    const n = (v: unknown) => Number(v ?? 0) || 0;
+    const linhas = await this.rpcLista<CompradorFunil>('fn_fin_funil_compradores', { p_evento_id: eventoId },
+      'Não foi possível carregar quem pagou neste funil.');
+    return linhas.map((c) => ({ ...c, valor: n(c.valor), liquido: n(c.liquido) }));
   }
 
   loadHotmartPessoas(familia: FamiliaHotmart): Promise<PessoaHotmart[]> {
