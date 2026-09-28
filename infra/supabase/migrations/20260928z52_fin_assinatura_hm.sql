@@ -1,8 +1,8 @@
 -- 20260928z52 — Mensalidade do HM antigo (produto 3507214) à parte: regra única por pessoa, lista de quem paga sem card,
 -- e o atraso dela SEPARADO do "devendo" do Programa.
--- APLICADA EM PARTE em produção 28/09: seções 1–3 (as três funções). A SEÇÃO 4 (fin.parcelas_devidas sem o 3507214)
--- NÃO foi aplicada: vai junto com o deploy do front que mostra o atraso no bloco Assinatura — antes disso o atraso
--- sumiria do card sem aparecer em lugar nenhum.
+-- APLICADA em produção 28/09: seções 1–3 primeiro; SEÇÃO 4 (fin.parcelas_devidas sem o 3507214) aplicada depois do
+-- APROVADO do João e ANTES do push do front (regra dele: banco antes do front — número ausente > número duplicado).
+-- P6 medido: devendo HM ≤120 d 51 → 27 parcelas, R$ 90.585 → R$ 42.636 (−24 / −R$ 47.949, exatamente o previsto).
 -- Conferido (usuário do Financeiro): board 165 pessoas / R$ 1.093.985 / 11 ainda pagam / atraso 120d 24 = R$ 47.949;
 -- lista sem card 130 pessoas / R$ 973.668 (as 21 a menos do que 151 nunca pagaram); T29 = 81; sem origem 4.
 -- Tempo (cache quente): lista 104–134 ms; RPC do board 39 ms. fn_fin_board_hotmart ≈ 1,1 s com e sem a z51 (lentidão
