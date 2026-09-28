@@ -32,15 +32,15 @@ export interface LinhaReceber {
   data_caixa: string | null;
   valor: number;
   situacao: SituacaoReceber;
-  /** Bloco 1: dia da venda. Bloco 2: dia previsto da cobrança. */
+  /** Bloco 1: dia da venda. Bloco 2: vencimento da cobrança (contrato do victor, 28/09). */
   origem_dia: string | null;
-  /** Chave opaca da cobrança (bloco 2). */
+  /** Chave opaca. Bloco 2: UMA POR CONTRATO (e-mail|oferta), não por cobrança. */
   ref: string | null;
   rotulo: string | null;
   produto: string | null;
-  /** Meses à frente. */
+  /** Meses à frente (mês do corte = 1). */
   k: number | null;
-  /** Bloco 1: vendas do dia. Bloco 2: vazio. */
+  /** Bloco 1: vendas do dia. Bloco 2: NULL no banco, [] aqui. */
   detalhe: VendaDoDia[];
 }
 
@@ -310,22 +310,26 @@ export interface CobrancaRecorrente {
   grupo: string;
   rotulo: string | null;
   produto: string | null;
-  /** Dia previsto da cobrança (origem_dia; sem ele, a 1ª data de caixa). */
+  /** Vencimento da cobrança (origem_dia; sem ele, a 1ª data de caixa). */
   prevista: string;
-  /** Dias em que as partes (D+2 / garantia / cheio) caem no caixa. */
+  /** Dias em que as partes caem no caixa. Vazio em realizada/em_atraso_fora (componente cheio, data NULL). */
   caixa: string[];
   valor: number;
   situacao: SituacaoReceber;
   k: number | null;
 }
 
-/** Junta as partes (antecipação + garantia) da mesma cobrança pela `ref`; sem ref, cada linha é uma cobrança. */
+/**
+ * Uma cobrança = ref + vencimento (origem_dia) + situação. Contrato do victor (28/09): no bloco 2 a `ref` é UMA POR
+ * CONTRATO (e-mail|oferta, opaca) — sozinha juntaria todas as mensalidades do contrato numa linha. As partes da mesma
+ * cobrança (antecipação + garantia) somam na mesma linha. Sem ref ou sem vencimento, cada linha é uma cobrança.
+ */
 export function cobrancasRecorrentes(linhas: LinhaReceber[]): CobrancaRecorrente[] {
   const mapa = new Map<string, CobrancaRecorrente & { cents: number }>();
   let semRef = 0;
   for (const l of linhas) {
     if (l.bloco !== 2) continue;
-    const chave = l.ref != null ? `${l.ref}\u0000${l.situacao}` : `\u0001${semRef++}`;
+    const chave = l.ref != null && l.origem_dia ? `${l.ref}\u0000${l.origem_dia}\u0000${l.situacao}` : `\u0001${semRef++}`;
     let x = mapa.get(chave);
     if (!x) {
       x = {

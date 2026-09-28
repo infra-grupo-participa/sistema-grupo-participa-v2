@@ -174,3 +174,29 @@ describe('cálculo de recebimento desligado (data_caixa NULL)', () => {
     expect(composicaoDaCelula(ls, null, 2, 'Parcelas a vencer HM').map((l) => l.valor)).toEqual([50]);
   });
 });
+
+describe('contrato do bloco 2 (victor, 28/09): ref por contrato, origem_dia = vencimento, cheio sem data', () => {
+  const ref = 'email|oferta';
+  const ls = [
+    L({ bloco: 2, grupo: 'Parcelas a vencer HM', ref, rotulo: 'Pessoa A', origem_dia: '2026-10-10', data_caixa: '2026-10-14', valor: 900, k: 1 }),
+    L({ bloco: 2, grupo: 'Parcelas a vencer HM', ref, rotulo: 'Pessoa A', origem_dia: '2026-10-10', data_caixa: '2026-11-09', valor: 100, componente: 'garantia', k: 1 }),
+    L({ bloco: 2, grupo: 'Parcelas a vencer HM', ref, rotulo: 'Pessoa A', origem_dia: '2026-11-10', data_caixa: '2026-11-12', valor: 900, k: 2 }),
+    L({ bloco: 2, grupo: 'Parcelas a vencer HM', ref, rotulo: 'Pessoa A', origem_dia: '2026-09-10', data_caixa: null, valor: 1000, componente: 'cheio', situacao: 'realizada', k: 0 }),
+    L({ bloco: 2, grupo: 'Parcelas a vencer HM', ref, rotulo: 'Pessoa A', origem_dia: '2026-08-10', data_caixa: null, valor: 1000, componente: 'cheio', situacao: 'em_atraso_fora', k: -1 }),
+  ];
+  it('mesma ref com vencimentos diferentes são cobranças diferentes; partes do mesmo vencimento somam', () => {
+    const cs = cobrancasRecorrentes(ls);
+    expect(cs.map((x) => [x.prevista, x.valor, x.situacao, x.caixa])).toEqual([
+      ['2026-08-10', 1000, 'em_atraso_fora', []],
+      ['2026-09-10', 1000, 'realizada', []],
+      ['2026-10-10', 1000, 'a_receber', ['2026-10-14', '2026-11-09']],
+      ['2026-11-10', 900, 'a_receber', ['2026-11-12']],
+    ]);
+  });
+  it('detalhe NULL do bloco 2 vira []', () => {
+    expect(normalizarLinhaReceber({ bloco: 2, detalhe: null, componente: 'cheio', data_caixa: null }).detalhe).toEqual([]);
+  });
+  it('não é "desligado": bloco 2 sem data só em realizada/em_atraso_fora', () => {
+    expect(recebimentoDesligado(ls.filter((l) => l.situacao !== 'a_receber'))).toBe(false);
+  });
+});

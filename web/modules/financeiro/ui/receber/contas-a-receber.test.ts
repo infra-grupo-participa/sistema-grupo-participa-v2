@@ -111,3 +111,15 @@ describe('cálculo de recebimento desligado', () => {
     expect(html).toContain('Pessoa B'); // Recorrências continuam (têm vencimento)
   });
 });
+
+describe('Recorrências — contrato do bloco 2', () => {
+  it('coluna Vencimento (origem_dia) e "—" em Cai no caixa para realizada/fora (cheio, data NULL)', () => {
+    const d = montarContasReceber([
+      L({ bloco: 2, grupo: 'Outras assinaturas', ref: 'e|o', rotulo: 'Pessoa E', origem_dia: '2026-09-10', data_caixa: null, valor: 70, componente: 'cheio', situacao: 'realizada' }),
+    ], '2026-09-28');
+    const html = renderToStaticMarkup(createElement(Recorrencias, { cobrancas: d.recorrencias }));
+    expect(html).toContain('Vencimento');
+    expect(html).toContain('10/09/2026');
+    expect(html).toContain('>—</td>');
+  });
+});

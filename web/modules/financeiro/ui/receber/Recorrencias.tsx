@@ -16,7 +16,7 @@ const PROVISORIO = {
   grupo: 'Grupo',
   nome: 'Nome',
   produto: 'Produto',
-  cobrancaPrevista: 'Cobrança prevista',
+  cobrancaPrevista: 'Vencimento',
   caiNoCaixa: 'Cai no caixa',
   valor: 'Valor',
   situacao: 'Situação',

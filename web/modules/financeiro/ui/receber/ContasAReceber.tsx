@@ -31,7 +31,7 @@ const PROVISORIO = {
   nome: 'Nome',
   liquidoDaVenda: 'Líquido da venda',
   valor: 'Valor',
-  cobrancaPrevista: 'Cobrança prevista',
+  cobrancaPrevista: 'Vencimento',
   semVendasNoDetalhe: 'vendas do dia não vieram no detalhe',
 } as const;
 
