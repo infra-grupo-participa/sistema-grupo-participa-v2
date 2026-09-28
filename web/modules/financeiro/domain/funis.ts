@@ -102,10 +102,13 @@ export function diferencaPct(sistema: number, referencia: number | null): number
   return ((sistema - referencia) / referencia) * 100;
 }
 
+const conferePorIngresso = (f: Funil) => f.categoria === 'clinica' || f.categoria === 'encontro_thb';
 /** Vendas da conferência: as PAGAS (a planilha da época contava as pagas; T11 342=342, T14 626=626). Clínica e
  *  Encontro comparam ingressos. O valor compara com liquido_conferencia (inclui estornadas depois). */
-export const vendasParaConferencia = (f: Funil) =>
-  f.categoria === 'clinica' || f.categoria === 'encontro_thb' ? f.ingressos : f.oferta_vendas;
-/** Valor da conferência conforme o tipo registrado: bruto compara com o bruto; o resto com o líquido incl. estornos. */
-export const valorParaConferencia = (f: Funil) =>
-  f.ref_tipo === 'bruto' ? (f.categoria === 'clinica' ? f.ingressos_bruto : f.bruto) : f.liquido_conferencia;
+export const vendasParaConferencia = (f: Funil) => (conferePorIngresso(f) ? f.ingressos : f.oferta_vendas);
+/** Valor da conferência conforme o tipo registrado. Clínica/Encontro: a planilha soma só o ingresso (Goiânia 66 ·
+ *  R$ 95.597 líquido; POA 88 · R$ 100.373 bruto). Demais: bruto com bruto; o resto com o líquido incl. estornos. */
+export const valorParaConferencia = (f: Funil) => {
+  if (conferePorIngresso(f)) return f.ref_tipo === 'bruto' ? f.ingressos_bruto : f.ingressos_liquido;
+  return f.ref_tipo === 'bruto' ? f.bruto : f.liquido_conferencia;
+};

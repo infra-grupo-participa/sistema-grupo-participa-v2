@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diferencaPct, resumirPorCategoria, vendasParaConferencia, type Funil } from './funis';
+import { diferencaPct, resumirPorCategoria, valorParaConferencia, vendasParaConferencia, type Funil } from './funis';
 
 const f = (x: Partial<Funil>): Funil => ({
   evento_id: 1, nome: 'E', categoria: 'jornada', setor: 'educacao', inicio: '2022-01-24', fim: '2022-01-28', carrinho_inicio: null,
@@ -17,6 +17,13 @@ describe('funis', () => {
   it('conferência: vendas pagas; clínica compara ingressos', () => {
     expect(vendasParaConferencia(f({}))).toBe(10);
     expect(vendasParaConferencia(f({ categoria: 'clinica', ingressos: 88 }))).toBe(88);
+  });
+  it('conferência de valor: líquido incl. estornos; clínica só o ingresso, pelo tipo registrado', () => {
+    expect(valorParaConferencia(f({ ref_tipo: 'comissao' }))).toBe(950);
+    expect(valorParaConferencia(f({ ref_tipo: 'bruto' }))).toBe(1000);
+    const clin = { categoria: 'clinica', ingressos_bruto: 101017, ingressos_liquido: 95597, bruto: 160000, liquido_conferencia: 150000 };
+    expect(valorParaConferencia(f({ ...clin, ref_tipo: 'liquido' }))).toBe(95597);
+    expect(valorParaConferencia(f({ ...clin, ref_tipo: 'bruto' }))).toBe(101017);
   });
   it('diferença % contra o registrado', () => {
     expect(diferencaPct(626, 626)).toBe(0);
