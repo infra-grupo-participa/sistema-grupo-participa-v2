@@ -36,10 +36,24 @@ export function tetoRedondo(max: number): number {
   return 10 * exp;
 }
 
-export function GraficoLinha({ pontos, titulo }: { pontos: PontoGrafico[]; titulo: string }) {
+/** Camadas opcionais do painel de cruzamentos (FaturamentoDiario): período anterior, média móvel e vendas. */
+export interface CamadasGrafico {
+  /** Bruto do período anterior alinhado por posição (null = sem dado). */
+  anterior?: (number | null)[] | null;
+  /** Média móvel do bruto. */
+  media?: number[] | null;
+  /** Barras com a QUANTIDADE de vendas no pé do gráfico. */
+  vendas?: boolean;
+}
+
+export function GraficoLinha({ pontos, titulo, camadas, selecionado, onSelecionar }: {
+  pontos: PontoGrafico[]; titulo: string; camadas?: CamadasGrafico;
+  /** Período clicado (índice) — o detalhe aparece no painel abaixo do gráfico. */
+  selecionado?: number | null; onSelecionar?: (i: number | null) => void;
+}) {
   const [foco, setFoco] = useState<number | null>(null);
   const calc = useMemo(() => {
-    const maxBruto = Math.max(0, ...pontos.map((p) => p.bruto));
+    const maxBruto = Math.max(0, ...pontos.map((p) => p.bruto), ...(camadas?.anterior ?? []).map((v) => v ?? 0));
     const teto = tetoRedondo(maxBruto);
     const totalBruto = pontos.reduce((s, p) => s + p.bruto, 0);
     const totalLiquido = pontos.reduce((s, p) => s + p.liquido, 0);
@@ -49,7 +63,7 @@ export function GraficoLinha({ pontos, titulo }: { pontos: PontoGrafico[]; titul
     const ant = pontos[pontos.length - 2];
     const variacao = ult && ant && ant.bruto > 0 ? ((ult.bruto - ant.bruto) / ant.bruto) * 100 : null;
     return { teto, totalBruto, totalLiquido, media, pico, variacao };
-  }, [pontos]);
+  }, [pontos, camadas?.anterior]);
   if (pontos.length < 2) return null;
 
   const { teto, totalBruto, totalLiquido, media, pico, variacao } = calc;
@@ -57,6 +71,17 @@ export function GraficoLinha({ pontos, titulo }: { pontos: PontoGrafico[]; titul
   const x = (i: number) => (i / ultimo) * 100;
   const y = (v: number) => 100 - (v / teto) * 100;
   const linha = (k: 'bruto' | 'liquido') => pontos.map((p, i) => `${x(i)},${y(p[k])}`).join(' ');
+  // período anterior em trechos (quebra onde não há dado)
+  const trechosAnterior: string[] = [];
+  if (camadas?.anterior) {
+    let atual: string[] = [];
+    camadas.anterior.forEach((v, i) => {
+      if (v == null) { if (atual.length > 1) trechosAnterior.push(atual.join(' ')); atual = []; return; }
+      atual.push(`${x(i)},${y(v)}`);
+    });
+    if (atual.length > 1) trechosAnterior.push(atual.join(' '));
+  }
+  const maxVendas = Math.max(1, ...pontos.map((pt) => pt.vendas));
   const area = `0,100 ${linha('bruto')} 100,100`;
   const passo = Math.max(1, Math.ceil(ultimo / 5));
   // rótulo do meio colado no último (fica por cima dele em tela estreita) sai; o último sempre fica
@@ -102,13 +127,14 @@ export function GraficoLinha({ pontos, titulo }: { pontos: PontoGrafico[]; titul
             role="img"
             aria-label={`${titulo}: ${pontos.length} períodos, de ${pontos[0].rotulo} a ${pontos[ultimo].rotulo}. Bruto ${fmtBRL(totalBruto)}, líquido ${fmtBRL(totalLiquido)}. Pico em ${pontos[pico].rotulo}: ${fmtBRL(pontos[pico].bruto)}. Média ${fmtBRL(media)} por período. Os valores de cada período estão na tabela abaixo.`}
             onMouseLeave={() => setFoco(null)}
+            onClick={() => onSelecionar?.(foco != null && foco === selecionado ? null : foco)}
             onMouseMove={(e) => {
               const r = e.currentTarget.getBoundingClientRect();
               const i = Math.round(((e.clientX - r.left) / r.width) * ultimo);
               setFoco(Math.min(ultimo, Math.max(0, i)));
             }}
           >
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className={`absolute inset-0 h-full w-full overflow-visible ${onSelecionar ? 'cursor-pointer' : ''}`}>
               <defs>
                 <linearGradient id="fat-area" x1="0" x2="0" y1="0" y2="1">
                   <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
@@ -122,8 +148,24 @@ export function GraficoLinha({ pontos, titulo }: { pontos: PontoGrafico[]; titul
               <polygon points={area} fill="url(#fat-area)" />
               {/* média do bruto */}
               <line x1="0" x2="100" y1={y(media)} y2={y(media)} stroke="var(--fg-3)" strokeWidth="1" strokeDasharray="6 4" vectorEffect="non-scaling-stroke" opacity="0.7" />
+              {camadas?.vendas && pontos.map((pt, i) => (
+                <rect key={`v${i}`} x={x(i) - 40 / pontos.length / 2} width={Math.max(0.3, 40 / pontos.length)}
+                  y={100 - (pt.vendas / maxVendas) * 22} height={(pt.vendas / maxVendas) * 22}
+                  fill="var(--fg-3)" opacity="0.25" />
+              ))}
+              {trechosAnterior.map((t, i) => (
+                <polyline key={`a${i}`} points={t} fill="none" stroke="var(--fg-3)" strokeWidth="1.5" strokeDasharray="4 4"
+                  vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+              ))}
+              {camadas?.media && (
+                <polyline points={camadas.media.map((v, i) => `${x(i)},${y(v)}`).join(' ')} fill="none" stroke="var(--cyan)"
+                  strokeWidth="1.75" vectorEffect="non-scaling-stroke" strokeLinejoin="round" opacity="0.9" />
+              )}
               <polyline points={linha('liquido')} fill="none" stroke="var(--green)" strokeWidth="1.75" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
               <polyline points={linha('bruto')} fill="none" stroke="var(--accent)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+              {selecionado != null && selecionado < pontos.length && (
+                <line x1={x(selecionado)} x2={x(selecionado)} y1="0" y2="100" stroke="var(--accent)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+              )}
               {foco != null && (
                 <line x1={x(foco)} x2={x(foco)} y1="0" y2="100" stroke="var(--fg-4)" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
               )}
@@ -174,6 +216,10 @@ export function GraficoLinha({ pontos, titulo }: { pontos: PontoGrafico[]; titul
                   <div className="tabular text-[var(--fg-2)]">Bruto {fmtBRL(p.bruto)}</div>
                   <div className="tabular text-[var(--green)]">Líquido {fmtBRL(p.liquido)}</div>
                   <div className="tabular text-[var(--fg-3)]">{p.vendas} venda{p.vendas === 1 ? '' : 's'}</div>
+                  {camadas?.anterior && camadas.anterior[foco] != null && (
+                    <div className="tabular text-[var(--fg-3)]">período anterior {fmtBRL(camadas.anterior[foco] as number)}</div>
+                  )}
+                  {onSelecionar && <div className="mt-0.5 text-[10px] text-[var(--fg-4)]">clique para fixar</div>}
                 </div>
               </>
             )}

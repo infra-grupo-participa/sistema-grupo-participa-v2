@@ -128,9 +128,6 @@ export function PagamentosFicha({ conta, repo, board }: { conta: ContaReceber; r
           ))}
         </ul>
       )}
-      <p className="mt-1.5 text-[11px] text-[var(--fg-4)]">
-        Hotmart pelo e-mail {conta.email ?? '—'} (fonte oficial) + lançamentos do board. Cada venda aparece uma vez.
-      </p>
     </section>
   );
 }

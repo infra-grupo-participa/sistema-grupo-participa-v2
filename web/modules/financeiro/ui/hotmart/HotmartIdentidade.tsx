@@ -25,8 +25,7 @@ export function HotmartIdentidade({ repo }: { repo: FinanceiroRepository }) {
   const lista = (v: string[] | null) => (v?.length ? v.join(', ') : '—');
   return (
     <div className="space-y-4">
-      <SectionCard title={`${sug.length} par(es) que podem ser a mesma pessoa`}
-        subtitle="Mesmo telefone, mesmo nome completo ou mesmo CPF digitado numa tentativa de compra que não foi paga. Não foram juntados: confira antes.">
+      <SectionCard title={`${sug.length} par(es) que podem ser a mesma pessoa`}>
         {!sug.length ? <EmptyState title="Nenhum par para conferir" icon="check" /> : (
           <DataTable minWidth={900}>
             <Thead><Th>Motivo</Th><Th>Pessoa A</Th><Th>Pessoa B</Th><Th>Pago A</Th><Th>Pago B</Th></Thead>
@@ -49,8 +48,7 @@ export function HotmartIdentidade({ repo }: { repo: FinanceiroRepository }) {
           </DataTable>
         )}
       </SectionCard>
-      <SectionCard title={`${rev.length} documento(s) em revisão`}
-        subtitle="Documento compartilhado por pessoas diferentes ou ligado a muitos e-mails (escritório, contador). Não junta ninguém.">
+      <SectionCard title={`${rev.length} documento(s) em revisão`}>
         {!rev.length ? <EmptyState title="Nada em revisão" icon="check" /> : (
           <DataTable minWidth={600}>
             <Thead><Th>Documento</Th><Th>Motivo</Th></Thead>

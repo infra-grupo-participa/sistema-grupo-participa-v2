@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  explicarDivergencia, fmtMesAno, indexarBoardHotmart, linhaAssinaturaHM, rotuloParcelamento, somarHotmart, temAssinaturaHM, temDadoHotmart,
+  descreverBoletoAberto, explicarDivergencia, fmtMesAno, indexarBoardHotmart, linhaAssinaturaHM, rotuloParcelamento, somarHotmart, temAssinaturaHM, temDadoHotmart,
 } from './board-hotmart';
 import type { BoardHotmart } from './hotmart';
 
@@ -140,5 +140,26 @@ describe('assinatura HM (contrato à parte)', () => {
   it('fmtMesAno', () => {
     expect(fmtMesAno('2026-09-03')).toBe('09/2026');
     expect(fmtMesAno(null)).toBeNull();
+  });
+});
+
+describe('descreverBoletoAberto', () => {
+  const brl = (n: number) => `R$ ${n}`;
+  it('sem boleto → null', () => {
+    expect(descreverBoletoAberto({ boleto_aberto_n: 0 } as never, '2026-09-27', brl)).toBeNull();
+  });
+  it('boleto de saldo gerado há 3 dias', () => {
+    const d = descreverBoletoAberto({ boleto_aberto_n: 1, boleto_aberto_valor: 12000, boleto_aberto_em: '2026-09-24',
+      boleto_aberto_categoria: 'diferenca', boleto_aberto_metodo: 'BILLET' } as never, '2026-09-27', brl)!;
+    expect(d.titulo).toBe('Boleto de saldo em aberto: R$ 12000');
+    expect(d.detalhe).toContain('gerado há 3 dias');
+    expect(d.detalhe).toContain('não informa o vencimento');
+  });
+  it('Pix de compra cheia gerado hoje', () => {
+    const d = descreverBoletoAberto({ boleto_aberto_n: 2, boleto_aberto_valor: 1300, boleto_aberto_em: '2026-09-27',
+      boleto_aberto_categoria: 'compra_cheia', boleto_aberto_metodo: 'PIX' } as never, '2026-09-27', brl)!;
+    expect(d.curto).toBe('Pix em aberto · R$ 1300');
+    expect(d.titulo).toContain('(2 gerados)');
+    expect(d.detalhe).toContain('gerado hoje');
   });
 });

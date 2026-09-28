@@ -62,7 +62,7 @@ export function HotmartPessoas({ repo, familia, recorte }: { repo: FinanceiroRep
 
   return (
     <div className="space-y-3">
-      {recorte === 'sem_card' && <ResumoAdimplencia linhas={resumirAdimplencia(todos)} semCard={dados.length} />}
+      {recorte === 'sem_card' && <ResumoAdimplencia linhas={resumirAdimplencia(todos)} />}
       <div className="flex flex-wrap gap-1.5">
         <Chip ativo={filtro == null} onClick={() => setFiltro(null)}>Todas · {dados.length}</Chip>
         <Chip ativo={filtro === 'avisos'} onClick={() => setFiltro('avisos')} tom="danger">Avisos · {avisos}</Chip>
@@ -94,9 +94,6 @@ export function HotmartPessoas({ repo, familia, recorte }: { repo: FinanceiroRep
       </div>
       <SectionCard
         title={recorte === 'sem_card' ? `Pagaram na Hotmart e não estão no board · ${lista.length}` : `${lista.length} pessoa(s)`}
-        subtitle={recorte === 'sem_card'
-          ? 'Sem card no board. Oferta que não está no catálogo aparece como "oferta desconhecida". Clique numa linha para ver cada pagamento.'
-          : 'Clique numa linha para ver tudo o que a pessoa comprou e tentou comprar na Hotmart.'}
       >
         {!lista.length ? <EmptyState title="Ninguém neste recorte" /> : (
           <DataTable minWidth={1000}>
@@ -208,7 +205,7 @@ function exportarPessoasCsv(lista: PessoaHotmart[]) {
 }
 
 /** Adimplência de quem pagou (com e sem card). Números de Pessoas — dívida da Hotmart por parcela. */
-function ResumoAdimplencia({ linhas, semCard }: { linhas: LinhaAdimplencia[]; semCard: number }) {
+function ResumoAdimplencia({ linhas }: { linhas: LinhaAdimplencia[] }) {
   const total = linhas.reduce((s, l) => s + l.pessoas, 0);
   const tom: Record<LinhaAdimplencia['chave'], string> = {
     em_dia: 'text-[var(--green)]', boleto: 'text-[var(--yellow)]', devendo: 'text-[var(--red)]', antiga: 'text-[var(--yellow)]',
@@ -217,7 +214,6 @@ function ResumoAdimplencia({ linhas, semCard }: { linhas: LinhaAdimplencia[]; se
   return (
     <SectionCard
       title={`Está todo mundo pagando em dia? · ${total} pessoa(s) que pagaram`}
-      subtitle={`Pela Hotmart, parcela a parcela (com e sem card). ${semCard} delas não têm card no board — lista abaixo. Saldo combinado fora da Hotmart continua no card.`}
     >
       <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(170px,1fr))]">
         {linhas.map((l) => (

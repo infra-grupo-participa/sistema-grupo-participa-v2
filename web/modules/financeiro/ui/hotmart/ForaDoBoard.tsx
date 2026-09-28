@@ -20,7 +20,6 @@ export function ForaDoBoard({ repo, familia }: { repo: FinanceiroRepository; fam
     >
       <span>
         <span className="block text-sm font-semibold text-[var(--fg)]">Está todo mundo pagando em dia? · Quem pagou na Hotmart e não está no board</span>
-        <span className="block text-xs text-[var(--fg-3)]">Toda a base da Hotmart desde a primeira venda — leva alguns segundos para carregar.</span>
       </span>
       <Icon name="chevron-down" size={16} className="shrink-0 text-[var(--fg-3)]" />
     </button>

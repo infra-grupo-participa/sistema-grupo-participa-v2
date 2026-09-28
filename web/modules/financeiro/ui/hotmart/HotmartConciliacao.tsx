@@ -21,8 +21,7 @@ export function HotmartConciliacao({ repo, familia }: { repo: FinanceiroReposito
   if (erro) return <Erro msg={erro} />;
   if (!dados) return <Loading label="Conferindo Hotmart × banco…" minHeight={200} />;
   return (
-    <SectionCard title={dados.length ? `${dados.length} divergência(s)` : 'Hotmart e banco batem'}
-      subtitle="Compara o espelho da Hotmart com o que o webhook gravou em public.compras. Nada aqui é corrigido sozinho.">
+    <SectionCard title={dados.length ? `${dados.length} divergência(s)` : 'Hotmart e banco batem'}>
       {!dados.length ? <EmptyState title="Nenhuma divergência" icon="check" /> : (
         <DataTable minWidth={900}>
           <Thead><Th>Tipo</Th><Th>Transação</Th><Th>E-mail</Th><Th>Hotmart</Th><Th>Banco</Th><Th>Pedido</Th><Th>Detalhe</Th></Thead>

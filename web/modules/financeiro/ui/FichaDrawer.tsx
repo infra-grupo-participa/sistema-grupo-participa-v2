@@ -17,7 +17,7 @@ import { FichaResumoTopo } from './FichaResumoTopo';
 import type { FinanceiroRepository } from '../application/ports';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
 import { rotuloMetodo, type BoardHotmart, type ProrataHM } from '../domain/hotmart';
-import { fmtMesAno, rotuloParcelamento, temAssinaturaHM, temDadoHotmart } from '../domain/board-hotmart';
+import { descreverBoletoAberto, fmtMesAno, rotuloParcelamento, temAssinaturaHM, temDadoHotmart } from '../domain/board-hotmart';
 import { inicioDoCiclo, prorataDoCard } from '../domain/prorata-hm';
 import { ContaProrata } from './hotmart/ContaProrata';
 import { Bloco, EmUmaOlhada, PagamentosFicha } from './FichaPagamentos';
@@ -161,6 +161,7 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
       {tab === 'resumo' && (
         <div className="space-y-4">
           <FichaResumoTopo conta={conta} cor={corStatus(conta.status_financeiro)} regua={regua} hojeISO={hojeISO} />
+          <AvisoBoleto hm={hm} hojeISO={hojeISO} />
           <EmUmaOlhada conta={conta} hm={hotmartErro ? null : hm} carregando={hmCarregando} />
           <section>
             <SectionTitle>Por que ainda não pagou</SectionTitle>
@@ -196,8 +197,8 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
           <section>
             <SectionTitle>Dados pessoais</SectionTitle>
             <div className="space-y-2 mb-2">
-              {conta.telefone && <CopyField label="Telefone" value={conta.telefone} />}
               {conta.email && <CopyField label="E-mail" value={conta.email} />}
+              <TelefoneContato telefone={conta.telefone ?? hm?.telefone ?? null} />
             </div>
             <Row k="Documento" v={mascararDoc(conta.documento, canVerDoc)} />
             <Row k="Vendedor" v={conta.vendedor} />
@@ -306,6 +307,39 @@ function SecaoBoardHotmart({ hm, carregando, erro }: {
         <p className="mt-2 text-[11px] text-[var(--fg-4)]">Hotmart sincronizada em {fmtDataHora(hm.sincronizado_em)}.</p>
       )}
     </section>
+  );
+}
+
+/** Boleto/Pix gerado e não pago (20260928o): o que é, quanto, há quanto tempo. Some quando não há. */
+function AvisoBoleto({ hm, hojeISO }: { hm: BoardHotmart | null; hojeISO: string }) {
+  const b = descreverBoletoAberto(hm, hojeISO, fmtBRLc);
+  if (!b) return null;
+  return (
+    <section className="flex items-start gap-2 rounded-[var(--r-lg)] border border-dashed border-[var(--info-border)] bg-[var(--info-subtle)] px-3 py-2.5">
+      <Icon name="receipt" size={16} className="mt-0.5 shrink-0 text-[var(--info)]" />
+      <div className="text-sm">
+        <div className="font-semibold text-[var(--fg)]">{b.titulo}</div>
+        <div className="text-xs text-[var(--fg-2)]">{b.detalhe} Veja na aba Pagamentos (filtro «Não pagos»).</div>
+      </div>
+    </section>
+  );
+}
+
+/** Telefone com copiar e WhatsApp. Mascarado (···1234) para quem não pode ver dado pessoal completo: aí só mostra. */
+function TelefoneContato({ telefone }: { telefone: string | null }) {
+  if (!telefone) return <Row k="Telefone" v="não informado" />;
+  const digitos = telefone.replace(/\D/g, '');
+  const mascarado = telefone.includes('·') || digitos.length < 10;
+  if (mascarado) return <Row k="Telefone" v={telefone} />;
+  const comDdi = digitos.length <= 11 ? `55${digitos}` : digitos;
+  return (
+    <div className="space-y-1">
+      <CopyField label="Telefone" value={telefone} />
+      <a href={`https://wa.me/${comDdi}`} target="_blank" rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1 text-xs font-semibold text-[var(--fg-2)] hover:text-[var(--fg)] focus-visible:ring-2">
+        <Icon name="arrow-up-right" size={13} /> Abrir no WhatsApp
+      </a>
+    </div>
   );
 }
 

@@ -69,6 +69,7 @@ export const ORDEM_COR: CorStatus[] = ['verde', 'ciano', 'azul', 'amarelo', 'ver
 export function BoardView({
   cards, cardsParaContador, hojeISO, onOpen, busca, onBusca, totalSemBusca, atalhoAtivo = true, corFiltro, onCorFiltro,
   hotmartPorCard = null, divergeFiltro = false, qtdDiverge = 0, onDivergeFiltro,
+  boletoFiltro = false, qtdBoleto = 0, onBoletoFiltro,
 }: {
   /** Lista plana já filtrada por produto/ação/busca/COR — única fonte do
    *  mosaico. (O agrupamento por coluna deixou de existir; ver cabeçalho do
@@ -111,6 +112,10 @@ export function BoardView({
   /** Quantos cards do recorte (antes deste filtro) divergem — número do chip. */
   qtdDiverge?: number;
   onDivergeFiltro?: (v: boolean) => void;
+  /** Filtro "Boleto em aberto" (20260928o) — controlado pelo pai, mesma razão de `busca`. */
+  boletoFiltro?: boolean;
+  qtdBoleto?: number;
+  onBoletoFiltro?: (v: boolean) => void;
 }) {
   const [eixo, setEixo] = useState<Eixo>('funil');
 
@@ -293,6 +298,23 @@ export function BoardView({
             <Icon name="alert" size={11} className="text-[var(--yellow)]" />
             <span>Diverge da Hotmart</span>
             <span className="tabular">{qtdDiverge}</span>
+          </button>
+        )}
+        {onBoletoFiltro && (boletoFiltro || qtdBoleto > 0) && (
+          <button
+            type="button"
+            aria-pressed={boletoFiltro}
+            onClick={() => onBoletoFiltro(!boletoFiltro)}
+            title={`${qtdBoleto} ${qtdBoleto === 1 ? 'pessoa gerou' : 'pessoas geraram'} boleto ou Pix nos últimos 30 dias e ainda não pagou${boletoFiltro ? ' — clique para remover o filtro' : ' — clique para ver só elas'}`}
+            className={`flex items-center gap-1.5 rounded-[var(--r-sm)] border border-dashed px-1.5 py-0.5 text-[11px] transition-colors focus-visible:ring-2 ${
+              boletoFiltro
+                ? 'border-[var(--info)] bg-[var(--info-subtle)] font-semibold text-[var(--info)]'
+                : 'border-[var(--info-border)] text-[var(--info)] hover:bg-[var(--info-subtle)]'
+            }`}
+          >
+            <Icon name="receipt" size={11} />
+            <span>Boleto em aberto</span>
+            <span className="tabular">{qtdBoleto}</span>
           </button>
         )}
         </div>

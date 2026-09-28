@@ -12,7 +12,7 @@ import { celulaCsv, type ProrataHM as LinhaProrataHM } from '../../domain/hotmar
 import { Chip, Erro, useCarga } from './comum';
 import { ProrataDiagnostico } from './ProrataDiagnostico';
 import { carregarProrataHM } from '../../application/carregar-prorata';
-import { hojeSaoPaulo, VALOR_PROGRAMA_HM } from '../../domain/prorata-hm';
+import { hojeSaoPaulo } from '../../domain/prorata-hm';
 
 type Filtro = 'credito' | 'vence60' | 'vencido' | 'gps' | 'sem_hotmart' | null;
 
@@ -68,14 +68,6 @@ export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
 
   return (
     <div className="space-y-4">
-      <SectionCard title="Como o crédito é calculado">
-        <p className="text-sm text-[var(--fg-2)] leading-relaxed">
-          Crédito = o que a pessoa pagou no HM no ciclo atual × meses cheios que faltam do acesso ÷ 12.
-          Valor a pagar = {fmtBRLc(VALOR_PROGRAMA_HM)} − crédito. O vencimento vem da turma. Estão aqui todos os alunos
-          de turma com vencimento — quem não tem pagamento de HM na Hotmart aparece com crédito zero e o aviso na linha.
-        </p>
-      </SectionCard>
-
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
         <KpiCard label="Pessoas" value={String(dados.length)} bar="accent" />
         <KpiCard label="Com crédito" value={String(comCredito)} bar="green" />
@@ -103,7 +95,7 @@ export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
         </button>
       </div>
 
-      <SectionCard title={`${lista.length} pessoa(s)`} subtitle="Clique numa pessoa para ver a conta: quanto pagou, quanto vira crédito e quanto tem que pagar.">
+      <SectionCard title={`${lista.length} pessoa(s)`}>
         {!lista.length ? <EmptyState title="Ninguém neste recorte" /> : (
           <DataTable minWidth={960}>
             <Thead>

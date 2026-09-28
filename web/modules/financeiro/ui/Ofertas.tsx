@@ -90,7 +90,6 @@ export function Ofertas({ ofertas, loading, repo, canEdit, onSalvo }: {
   return (
     <SectionCard
       title="Ofertas"
-      subtitle="Cada código de oferta da Hotmart, com o que está configurado para cobrança do saldo e o que de fato vendeu."
       right={
         <div className="flex flex-wrap items-center gap-2">
           {(['HM', 'AURUM', 'ACELERA'] as FamiliaHotmart[]).map((f) => (

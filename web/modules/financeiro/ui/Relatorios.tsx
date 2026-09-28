@@ -146,7 +146,7 @@ function CarteiraDoBoard({
 
   return (
     <div className="space-y-4">
-      <SectionCard title="Colunas do relatório" subtitle="Selecione o que entra no export (XLSX ou PDF/impressão)." className="gp-print-hide">
+      <SectionCard title="Colunas do relatório" className="gp-print-hide">
         <div className="flex flex-wrap gap-x-4 gap-y-2">
           {COLUNAS_RELATORIO.map((c) => (
             <Checkbox key={c.key} checked={selecionadas.includes(c.key)} onChange={() => toggle(c.key)} label={c.label} />

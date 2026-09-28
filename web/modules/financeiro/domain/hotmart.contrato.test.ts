@@ -80,7 +80,7 @@ describe('contrato fn_fin_hotmart_pessoas', () => {
 });
 
 describe('contrato fn_fin_board_hotmart', () => {
-  const sql = migracao(ULTIMA_BOARD_PRORATA);
+  const sql = migracao('20260928o_fin_board_boleto_telefone.sql');
   it('RETURNS TABLE = colunas de BoardHotmart', () => {
     expect(colunasRetorno(sql, 'public.fn_fin_board_hotmart')).toEqual([...COLUNAS_BOARD_HOTMART]);
   });
@@ -336,5 +336,17 @@ describe('20260928n — ação de todo card do board', () => {
   });
   it('o Mapa de alunos saiu', () => {
     expect(sql).toMatch(/drop function if exists public\.fn_fin_mapa_alunos\(\);/);
+  });
+});
+
+describe('20260928o — boleto em aberto e telefone', () => {
+  const sql = migracao('20260928o_fin_board_boleto_telefone.sql');
+  it('telefone mascarado para quem não pode ver CPF, e o fallback é recriado do corpo vigente com guarda', () => {
+    expect(sql).toMatch(/when coalesce\(public\.gp_pode_ver_cpf\(\), false\) then tl\.comprador_telefone/);
+    expect(sql).toMatch(/'···' \|\| right\(/);
+    expect(sql).toMatch(/raise exception 'fn_fin_board_hotmart: trecho do telefone não encontrado/);
+  });
+  it('boleto em aberto: só grupo em_aberto dos últimos 30 dias', () => {
+    expect(sql).toMatch(/t\.grupo = 'em_aberto' and t\.dia_pedido >= \(now\(\) at time zone 'America\/Sao_Paulo'\)::date - 30/);
   });
 });

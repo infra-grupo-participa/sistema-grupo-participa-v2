@@ -34,14 +34,7 @@ export function LegendaCores({ existeNeutro }: { existeNeutro: boolean }) {
           <span>{ROTULO_COR[c]}</span>
         </span>
       ))}
-      {/* Ajustada para continuar verdadeira depois do redesign: a faixa
-          lateral agora carrega o STATUS (a cor em si), halo/borda/dot
-          carregam a URGÊNCIA (o quanto precisa de ação). Antes só existia
-          halo+borda; agora a faixa cheia é o próprio sinal de identidade, daí
-          "faixa cheia" substituir "brilho e borda" na frase. */}
-      <span className="text-[var(--fg-4)]">
-        Faixa lateral = status. Halo, borda e dot = precisa de ação. Vermelho com faixa recuada = encerrado, não perseguir.
-      </span>
+      {/* A frase que explicava faixa/halo/dot saiu (João, 27/09: tirar descrições que não ajudam). A legenda são as cores. */}
     </div>
   );
 }

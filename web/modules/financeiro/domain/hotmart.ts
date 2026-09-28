@@ -172,6 +172,14 @@ export interface BoardHotmart {
   /** Categorias separadas por " · " (valores de fin.oferta_categoria — ver rotuloCategoria). */
   outros_formas?: string | null;
   outros_ultimo?: string | null;
+  /** 20260928o: telefone (Hotmart → cadastro do comprador → base de alunos; mascarado salvo gp_pode_ver_cpf) e o
+   *  boleto/Pix gerado e não pago nos últimos 30 dias (a Hotmart não informa vencimento). */
+  telefone?: string | null;
+  boleto_aberto_n?: number;
+  boleto_aberto_valor?: number;
+  boleto_aberto_em?: string | null;
+  boleto_aberto_categoria?: string | null;
+  boleto_aberto_metodo?: string | null;
 }
 
 /**
@@ -587,6 +595,7 @@ export const COLUNAS_BOARD_HOTMART = [
   'diverge', 'sincronizado_em',
   'assinatura_mensalidades', 'assinatura_valor', 'assinatura_de', 'assinatura_ate', 'assinatura_ativa',
   'outros_pagamentos', 'outros_valor', 'outros_formas', 'outros_ultimo',
+  'telefone', 'boleto_aberto_n', 'boleto_aberto_valor', 'boleto_aberto_em', 'boleto_aberto_categoria', 'boleto_aberto_metodo',
 ] as const satisfies readonly (keyof BoardHotmart)[];
 
 export const COLUNAS_PRORATA_HM = [

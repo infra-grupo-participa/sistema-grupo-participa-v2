@@ -67,6 +67,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // Filtro "Diverge da Hotmart" — mesma camada/disciplina de busca e cor:
   // mora aqui para o rodapé somar o que o mosaico mostra; fora do hash.
   const [divergeFiltro, setDivergeFiltro] = useState(false);
+  // Boleto/Pix gerado e não pago (27/09, João: "boleto aberto tem que ter uma visualização diferente").
+  const [boletoFiltro, setBoletoFiltro] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   // Camada Hotmart do board (fn_fin_board_hotmart): carregada UMA vez junto
   // com o board, nunca por card. Falha não bloqueia o board — só a camada
@@ -268,11 +270,19 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // Diverge entra entre busca e cor. Sem dado Hotmart (carregando/erro) o
   // filtro não se aplica — nunca esvazia o board por falta da camada.
   const divergeAtivo = divergeFiltro && !!hotmartPorCard;
+  const qtdBoleto = useMemo(
+    () => (hotmartPorCard ? cardsBuscados.filter((c) => (hotmartPorCard.get(c.conta.contato_hm_id)?.boleto_aberto_n ?? 0) > 0).length : 0),
+    [cardsBuscados, hotmartPorCard],
+  );
+  const boletoAtivo = boletoFiltro && !!hotmartPorCard;
   const cardsVisiveis: CardComEfeito[] = useMemo(
-    () => (divergeAtivo && hotmartPorCard
-      ? cardsBuscados.filter((c) => hotmartPorCard.get(c.conta.contato_hm_id)?.diverge === true)
-      : cardsBuscados),
-    [cardsBuscados, divergeAtivo, hotmartPorCard],
+    () => cardsBuscados.filter((c) => {
+      const h = hotmartPorCard?.get(c.conta.contato_hm_id);
+      if (divergeAtivo && h?.diverge !== true) return false;
+      if (boletoAtivo && !((h?.boleto_aberto_n ?? 0) > 0)) return false;
+      return true;
+    }),
+    [cardsBuscados, divergeAtivo, boletoAtivo, hotmartPorCard],
   );
 
   // DOIS arrays de contas, de propósito — não unificar:
@@ -352,18 +362,12 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           )}
         </h1>
       </div>
-      <p className="text-sm text-[var(--fg-3)] mb-4">
-        {tab === 'board'
-          ? 'Cards por faixa do funil — cor por status, intensidade por urgência'
-          : tab === 'faturamento'
-          ? 'Direto da Hotmart: quanto foi vendido (bruto), a taxa da Hotmart e quanto fica para nós (líquido) — por dia, mês ou ano, atualizado de hora em hora'
-          : tab === 'relatorios'
-          ? 'Selecione colunas e exporte (Excel ou impressão/PDF)'
-          : tab === 'prorata'
-          ? 'O crédito de cada aluno do HM para migrar ao Programa — e o porquê'
-          : 'Ofertas Hotmart usadas para cobrar o saldo do pacote'}
-        {tab === 'board' && turmaAtual ? ` · turma ${turmaAtual.turma} (${turmaAtual.alunos} alunos)` : ''}
-      </p>
+      {/* Sem subtítulo explicativo (João, 27/09: "tira essas descrições… não ajudam em nada"). Só a turma escolhida. */}
+      <div className="mb-4">
+        {tab === 'board' && turmaAtual && (
+          <p className="text-sm text-[var(--fg-3)]">turma {turmaAtual.turma} ({turmaAtual.alunos} alunos)</p>
+        )}
+      </div>
 
       {tab === 'board' && (
         erroBoard ? (
@@ -383,7 +387,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               onLimparBusca={() => setBusca('')}
               onLimparCor={() => setCorFiltro(null)}
               onLimparDiverge={() => setDivergeFiltro(false)}
-              onLimparTudo={() => { setAcaoAtiva(null); setBusca(''); setCorFiltro(null); setDivergeFiltro(false); }}
+              onLimparTudo={() => { setAcaoAtiva(null); setBusca(''); setCorFiltro(null); setDivergeFiltro(false); setBoletoFiltro(false); }}
             />
             <BoardView
               cards={cardsComCor}
@@ -400,6 +404,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               divergeFiltro={divergeAtivo}
               qtdDiverge={qtdDiverge}
               onDivergeFiltro={setDivergeFiltro}
+              boletoFiltro={boletoAtivo}
+              qtdBoleto={qtdBoleto}
+              onBoletoFiltro={setBoletoFiltro}
             />
             <RodapeTotais
               totais={totaisFiltrados}

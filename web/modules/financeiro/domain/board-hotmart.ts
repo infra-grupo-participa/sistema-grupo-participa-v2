@@ -154,3 +154,36 @@ export function linhaAssinaturaHM(h: BoardHotmart | null | undefined, fmtValor: 
   const ate = fmtMesAno(h.assinatura_ate);
   return `Assinatura HM: ${num(h.assinatura_mensalidades)} × · ${fmtValor(num(h.assinatura_valor))}${ate ? ` · até ${ate}` : ''}`;
 }
+
+/** Dias corridos entre duas datas 'YYYY-MM-DD'. */
+function diasEntre(de: string, ate: string): number {
+  const d = (s: string) => { const [y, m, dd] = s.slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, dd); };
+  return Math.round((d(ate) - d(de)) / 86_400_000);
+}
+
+const ROTULO_CAT_BOLETO: Record<string, string> = {
+  sinal: 'sinal', diferenca: 'saldo', compra_cheia: 'compra cheia', compra_cheia_inferida: 'compra cheia',
+  renovacao: 'renovação', reserva: 'reserva', mensalidade: 'mensalidade', desconhecida: 'oferta desconhecida',
+};
+
+/**
+ * Boleto/Pix gerado e não pago (20260928o): o que é, quanto e há quanto tempo. null sem boleto em aberto.
+ * A Hotmart não informa o vencimento — a frase nunca promete data.
+ */
+export function descreverBoletoAberto(h: BoardHotmart | null | undefined, hojeISO: string, fmtValor: (n: number) => string):
+  { curto: string; titulo: string; detalhe: string; dias: number | null } | null {
+  if (!h || !h.boleto_aberto_n) return null;
+  const pix = h.boleto_aberto_metodo === 'PIX';
+  const meio = pix ? 'Pix' : 'Boleto';
+  const oque = ROTULO_CAT_BOLETO[h.boleto_aberto_categoria ?? ''] ?? 'pagamento';
+  const dias = h.boleto_aberto_em ? diasEntre(h.boleto_aberto_em, hojeISO) : null;
+  const quando = dias == null ? '' : dias <= 0 ? 'gerado hoje' : dias === 1 ? 'gerado ontem' : `gerado há ${dias} dias`;
+  const valor = fmtValor(num(h.boleto_aberto_valor));
+  const n = num(h.boleto_aberto_n);
+  return {
+    curto: `${meio} em aberto · ${valor}`,
+    titulo: `${meio} de ${oque} em aberto: ${valor}${n > 1 ? ` (${n} gerados)` : ''}`,
+    detalhe: `${quando}${quando ? '. ' : ''}Ainda não pago na Hotmart. A Hotmart não informa o vencimento.`,
+    dias,
+  };
+}

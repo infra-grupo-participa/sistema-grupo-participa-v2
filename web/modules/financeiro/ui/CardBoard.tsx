@@ -14,7 +14,7 @@ import { Icon } from '@/shared/ui/icons';
 import { ProgressBar } from '@/shared/ui/components';
 import { fmtBRL, fmtBRLc, fmtData, fmtPrazo } from '@/shared/ui/format';
 import type { BoardHotmart } from '../domain/hotmart';
-import { explicarDivergencia, linhaAssinaturaHM, rotuloParcelamento, temDadoHotmart } from '../domain/board-hotmart';
+import { descreverBoletoAberto, explicarDivergencia, linhaAssinaturaHM, rotuloParcelamento, temDadoHotmart } from '../domain/board-hotmart';
 import type { CardComEfeito } from '../application/carregar-board';
 import { direcaoDivergencia, statusLabel, temDivergenciaPacote } from '../domain/financeiro';
 import { labelMotivoReuniao } from '../domain/reuniao';
@@ -153,6 +153,8 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
   // no "pago" do card nem na linha Hotmart acima. Sem assinatura → nada.
   const hmAssinatura = linhaAssinaturaHM(hm, fmtBRL);
   const hmAssinaturaAtiva = hm?.assinatura_ativa === true;
+  // Boleto/Pix gerado e não pago: selo à parte (tracejado, cor info), nunca confundido com a cor de status do card.
+  const boleto = descreverBoletoAberto(hm, hojeISO, fmtBRL);
 
   return (
     <button
@@ -168,7 +170,7 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
         conta.saldo_a_pagar != null ? `, falta pagar ${fmtBRLc(conta.saldo_a_pagar)}` : ''
       }${card.motivoUrgencia ? `, ${card.motivoUrgencia}` : ''}${
         divergePacote ? `, pacote divergente da régua, ${direcaoPacote === 'a_maior' ? 'a mais' : 'a menos'}` : ''
-      }${hmDiverge ? ', diverge da Hotmart' : ''}${
+      }${hmDiverge ? ', diverge da Hotmart' : ''}${boleto ? `, ${boleto.titulo}` : ''}${
         hmAssinatura ? `, assinatura HM ${hmAssinaturaAtiva ? 'ativa' : 'encerrada'}` : ''
       }`}
       title={titleEstagio}
@@ -291,6 +293,15 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null }: {
           </span>
         )}
       </div>
+
+      {boleto && (
+        <div className="relative z-[1] mt-2 flex items-center gap-1.5 rounded-[var(--r-sm)] border border-dashed border-[var(--info-border)] bg-[var(--info-subtle)] px-2 py-1"
+          title={`${boleto.titulo}. ${boleto.detalhe}`}>
+          <Icon name="receipt" size={12} className="shrink-0 text-[var(--info)]" />
+          <span className="min-w-0 truncate text-[10px] font-semibold text-[var(--info)]">{boleto.curto}</span>
+          {boleto.dias != null && <span className="ml-auto shrink-0 text-[10px] tabular text-[var(--fg-3)]">{boleto.dias <= 0 ? 'hoje' : `há ${boleto.dias}d`}</span>}
+        </div>
+      )}
 
       {/* Camada Hotmart: dois números fixos. Sem dado → nada (nunca "R$ 0", que diria "não pagou"). */}
       {hm && (
