@@ -5,7 +5,8 @@
 // só poupa uma ida ao banco, a trava de verdade é a RPC.
 import { CENARIOS_RECEBER, type CenarioReceber } from './contas-receber';
 
-export type UnidadePremissa = 'dias' | 'percentual' | 'liga_desliga';
+/** 'reais' (z67): R$ por semana da venda nova, guardado em reais. */
+export type UnidadePremissa = 'dias' | 'percentual' | 'liga_desliga' | 'reais';
 export type SituacaoVigencia = 'vigente' | 'futura' | 'anterior';
 
 export interface VigenciaPremissa {
@@ -126,10 +127,12 @@ export const paraBanco = (exibido: number, unidade: UnidadePremissa): number =>
   unidade === 'percentual' ? Math.round((exibido / 100) * 1e8) / 1e8 : exibido;
 
 const fmtNum = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+const fmtReais = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** Valor como a tela mostra: "5%", "30 dias", "Ligado"/"Desligado". */
+/** Valor como a tela mostra: "5%", "30 dias", "Ligado"/"Desligado", "R$ 30.000,00". */
 export function formatarPremissa(valor: number, unidade: UnidadePremissa): string {
   if (unidade === 'percentual') return `${fmtNum(paraExibicao(valor, unidade))}%`;
+  if (unidade === 'reais') return fmtReais(valor);
   if (unidade === 'dias') return `${fmtNum(valor)} ${valor === 1 ? 'dia' : 'dias'}`;
   if (unidade === 'liga_desliga') return valor > 0 ? 'Ligado' : 'Desligado';
   return fmtNum(valor);
@@ -139,14 +142,19 @@ export function formatarPremissa(valor: number, unidade: UnidadePremissa): strin
 export function formatarFaixa(p: Pick<PremissaTela, 'minimo' | 'maximo' | 'unidade'>): string {
   if (p.unidade === 'percentual') return `${fmtNum(paraExibicao(p.minimo, 'percentual'))}% a ${fmtNum(paraExibicao(p.maximo, 'percentual'))}%`;
   if (p.unidade === 'dias') return `${fmtNum(p.minimo)} a ${fmtNum(p.maximo)} dias`;
+  if (p.unidade === 'reais') return `${fmtReais(p.minimo)} a ${fmtReais(p.maximo)}`;
   return `${fmtNum(p.minimo)} a ${fmtNum(p.maximo)}`;
 }
 
-/** Número digitado em pt-BR ("5,5", "1.000,5") ou com ponto ("5.5"). NULL = não é número. */
-export function lerNumeroDigitado(t: string): number | null {
-  const s = t.trim().replace(/\s|%/g, '');
+/**
+ * Número digitado em pt-BR ("5,5", "1.000,5") ou com ponto ("5.5"). NULL = não é número.
+ * `milharComPonto` (reais): "30.000" é trinta mil, não 30 — sem vírgula, ponto seguido de grupos de 3 dígitos é milhar.
+ */
+export function lerNumeroDigitado(t: string, milharComPonto = false): number | null {
+  const s = t.trim().replace(/\s|%|R\$/g, '');
   if (!s) return null;
-  const normal = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s;
+  const normal = s.includes(',') ? s.replace(/\./g, '').replace(',', '.')
+    : milharComPonto && /^-?\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g, '') : s;
   if (!/^-?\d+(\.\d+)?$/.test(normal)) return null;
   const n = Number(normal);
   return Number.isFinite(n) ? n : null;
@@ -171,7 +179,7 @@ export function validarPremissa(
   p: Pick<PremissaTela, 'minimo' | 'maximo' | 'unidade' | 'rotulo'>, digitado: string, vigenteDe: string, hojeISO: string,
 ): ValidacaoPremissa {
   const erros: string[] = [];
-  const exibido = lerNumeroDigitado(digitado);
+  const exibido = lerNumeroDigitado(digitado, p.unidade === 'reais');
   let valor = 0;
   if (exibido == null) erros.push('Informe um número.');
   else {
@@ -225,4 +233,73 @@ export function validarFeriado(diaISO: string, nome: string): string[] {
   const n = nome.trim();
   if (!n || n.length > 120) erros.push('Nome do feriado obrigatório (até 120 caracteres).');
   return erros;
+}
+
+// ─── Sugestão medida (z67: fn_fin_receber_sugestoes) ────────────────────────
+/** Uma premissa com sugestão calculada do histórico: venda nova semanal por grupo e reserva de reembolso. */
+export interface SugestaoPremissa {
+  chave: string;
+  rotulo: string;
+  unidade: UnidadePremissa;
+  /** Na unidade do banco (fração no percentual). NULL = sem base medida. */
+  sugestao: number | null;
+  /** Texto do banco: de onde a sugestão veio (janela, regra). */
+  base_medida: string | null;
+  /** Venda semanal: as semanas medidas. Reserva: vendido e estornado na janela. */
+  semanas: { semana: string; valor: number }[];
+  reserva: { vendido: number; estornado: number; de: string | null; ate: string | null } | null;
+  /** O que vale hoje no cenário pedido: premissa gravada, senão a sugestão. NULL = sem base. */
+  valor_efetivo: number | null;
+  /** 'sugestão medida' | 'definido por <nome> em dd/mm/aaaa' | 'sem base medida'. */
+  origem: string;
+  vigente_de: string | null;
+  cenario: string;
+}
+
+const numOuNull = (v: unknown): number | null => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+
+export function normalizarSugestao(r: Record<string, unknown>): SugestaoPremissa {
+  let medida: unknown = r.medida;
+  if (typeof medida === 'string') { try { medida = JSON.parse(medida); } catch { medida = null; } }
+  const semanas = Array.isArray(medida)
+    ? medida.map((x) => { const o = (x ?? {}) as Record<string, unknown>; return { semana: dia(o.semana), valor: num(o.valor) }; })
+    : [];
+  const m = medida && typeof medida === 'object' && !Array.isArray(medida) ? (medida as Record<string, unknown>) : null;
+  return {
+    chave: String(r.chave ?? ''),
+    rotulo: String(r.rotulo ?? r.chave ?? ''),
+    unidade: String(r.unidade ?? '') as UnidadePremissa,
+    sugestao: numOuNull(r.sugestao),
+    base_medida: texto(r.base_medida),
+    semanas,
+    reserva: m ? { vendido: num(m.vendido), estornado: num(m.estornado), de: texto(m.de) && dia(m.de), ate: texto(m.ate) && dia(m.ate) } : null,
+    valor_efetivo: numOuNull(r.valor_efetivo),
+    origem: String(r.origem ?? ''),
+    vigente_de: texto(r.vigente_de) && dia(r.vigente_de),
+    cenario: String(r.cenario ?? 'base'),
+  };
+}
+
+/**
+ * Valor que o botão "Usar sugestão" grava (unidade do banco), arredondado como a tela mostra: reais em centavos,
+ * percentual em centésimo de ponto (fração com 4 casas). O que se vê é o que se grava.
+ */
+export function valorDaSugestao(sugestao: number, unidade: UnidadePremissa): number {
+  if (unidade === 'reais') return Math.round(sugestao * 100) / 100;
+  if (unidade === 'percentual') return Math.round(sugestao * 1e4) / 1e4;
+  return sugestao;
+}
+
+/**
+ * Diferença "em uso − sugestão", na unidade de exibição, como texto: "R$ 1.500,00 acima da sugestão",
+ * "0,5 p.p. abaixo da sugestão", "igual à sugestão". NULL quando falta um dos dois.
+ */
+export function diferencaDaSugestao(emUso: number | null, sugestao: number | null, unidade: UnidadePremissa): string | null {
+  if (emUso == null || sugestao == null) return null;
+  const d = unidade === 'reais' ? Math.round((emUso - sugestao) * 100) / 100
+    : unidade === 'percentual' ? Math.round((emUso - sugestao) * 1e6) / 1e4 : emUso - sugestao;
+  if (d === 0) return 'igual à sugestão';
+  const abs = Math.abs(d);
+  const txt = unidade === 'reais' ? fmtReais(abs) : unidade === 'percentual' ? `${fmtNum(abs)} p.p.` : fmtNum(abs);
+  return `${txt} ${d > 0 ? 'acima' : 'abaixo'} da sugestão`;
 }
