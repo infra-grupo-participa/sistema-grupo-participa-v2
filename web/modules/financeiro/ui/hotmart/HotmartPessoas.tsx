@@ -16,6 +16,9 @@ import {
 import { Chip, Erro, useCarga } from './comum';
 import { carregarPessoasHotmart } from '../../application/carregar-pessoas';
 import { ExtratoHotmart } from './ExtratoHotmart';
+import { BotaoExportarPdf } from '@/shared/ui/pdf/BotaoExportarPdf';
+import { chamadasProtocoloFinanceiro } from '../pdf/protocolo';
+import { NIVEIS_RELATORIO, rascunhoPessoas, recortePessoas } from '../pdf/documentos';
 
 const TOM_SITUACAO: Record<SituacaoPessoa, Tone> = {
   devendo: 'danger', negociacao_cancelamento: 'danger', em_pagamento: 'warning', boleto_em_aberto: 'warning',
@@ -91,6 +94,13 @@ export function HotmartPessoas({ repo, familia, recorte }: { repo: FinanceiroRep
           className="rounded-[var(--r-md)] border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--fg-2)] hover:bg-[var(--surface-3)]">
           Exportar CSV ({lista.length})
         </button>
+        <BotaoExportarPdf
+          montar={() => rascunhoPessoas(lista, recortePessoas({
+            familia, filtro, de: periodo.de, ate: periodo.ate, busca, semCard: recorte === 'sem_card',
+          }))}
+          niveis={NIVEIS_RELATORIO.pessoas}
+          chamadas={chamadasProtocoloFinanceiro()}
+        />
       </div>
       <SectionCard
         title={recorte === 'sem_card' ? `Pagaram na Hotmart e não estão no board · ${lista.length}` : `${lista.length} pessoa(s)`}

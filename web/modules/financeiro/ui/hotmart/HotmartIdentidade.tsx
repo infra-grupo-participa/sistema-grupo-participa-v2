@@ -11,10 +11,10 @@ import { fmtBRL } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../../application/ports';
 import type { IdentidadeRevisao } from '../../domain/hotmart';
 import { Erro, useCarga } from './comum';
-
-const MOTIVO_SUGESTAO: Record<string, string> = {
-  mesmo_telefone: 'Mesmo telefone', mesmo_nome: 'Mesmo nome', mesmo_documento_tentativa: 'Mesmo CPF em tentativa',
-};
+import { MOTIVO_SUGESTAO, rotuloEvidencia } from './rotulos';
+import { BotaoExportarPdf } from '@/shared/ui/pdf/BotaoExportarPdf';
+import { chamadasProtocoloFinanceiro } from '../pdf/protocolo';
+import { NIVEIS_RELATORIO, rascunhoIdentidade } from '../pdf/documentos';
 
 export function HotmartIdentidade({ repo }: { repo: FinanceiroRepository }) {
   const { dados, erro } = useCarga<IdentidadeRevisao[]>(() => repo.loadHotmartIdentidade(), ['identidade']);
@@ -25,6 +25,10 @@ export function HotmartIdentidade({ repo }: { repo: FinanceiroRepository }) {
   const lista = (v: string[] | null) => (v?.length ? v.join(', ') : '—');
   return (
     <div className="space-y-4">
+      {/* Só nível completo (auditoria interna): sem seletor de nível. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <BotaoExportarPdf montar={() => rascunhoIdentidade(dados)} niveis={NIVEIS_RELATORIO.identidade} chamadas={chamadasProtocoloFinanceiro()} />
+      </div>
       <SectionCard title={`${sug.length} par(es) que podem ser a mesma pessoa`}>
         {!sug.length ? <EmptyState title="Nenhum par para conferir" icon="check" /> : (
           <DataTable minWidth={900}>
@@ -35,7 +39,7 @@ export function HotmartIdentidade({ repo }: { repo: FinanceiroRepository }) {
                   <Td>
                     <Badge tone="warning">{MOTIVO_SUGESTAO[d.motivo] ?? d.motivo}</Badge>
                     <div className="text-[10px] text-[var(--fg-4)]">
-                      {d.motivo !== 'mesmo_nome' && d.evidencia ? `···${d.evidencia.slice(-4)}` : d.evidencia}
+                      {rotuloEvidencia(d.motivo, d.evidencia)}
                     </div>
                   </Td>
                   <Td className="text-xs"><div className="font-medium">{lista(d.nomes_a)}</div><div className="text-[var(--fg-3)] break-all">{lista(d.emails_a)}</div></Td>

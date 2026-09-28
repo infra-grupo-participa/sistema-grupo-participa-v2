@@ -1,8 +1,9 @@
 'use client';
 
-// "Carteira do board" = seleção de colunas + export XLSX e "PDF" (window.print()) —
-// a MESMA tabela renderizada aqui é o que vai para o papel; print CSS de
-// globals.css cuida de tema claro/paginação; nada de componente exclusivo pra impressão.
+// "Carteira do board" = seleção de colunas + export XLSX e PDF oficial.
+// O PDF sai do MESMO dataset da tabela (colunas selecionadas, contas do recorte)
+// via ui/pdf/documentos.ts → shared/ui/pdf (identidade Grupo Participa + protocolo).
+// O antigo "Exportar PDF (imprimir)" (window.print()) saiu em 28/09/2026.
 import { useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, DataTable, EmptyState, SectionCard, Td, Th, Thead, Toolbar, Tr, useFlash, Toast } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
@@ -10,9 +11,12 @@ import type { ContaReceber } from '../domain/types';
 import { COLUNAS_PADRAO, COLUNAS_RELATORIO, montarRelatorio } from '../application/montar-relatorio';
 import type { BoardHotmart } from '../domain/hotmart';
 import { statusTone } from './cor';
-import { exportarXLSX, exportarPDF, formatarCelulaTela } from './exportar';
+import { exportarXLSX, formatarCelulaTela } from './exportar';
+import { BotaoExportarPdf } from '@/shared/ui/pdf/BotaoExportarPdf';
+import { NIVEIS_RELATORIO, rascunhoCarteira, recorteCarteira } from './pdf/documentos';
+import { chamadasProtocoloFinanceiro } from './pdf/protocolo';
 
-/** Relatório original da aba: seleção de colunas do board + export XLSX/PDF. */
+/** Relatório original da aba: seleção de colunas do board + export XLSX e PDF com protocolo. */
 export function CarteiraDoBoard({
   contas, turma, canVerDoc, hotmartPorCard,
 }: {
@@ -69,9 +73,12 @@ export function CarteiraDoBoard({
         <Button variant="ghost" size="sm" onClick={exportar} disabled={exportando || !dataset.linhas.length}>
           <Icon name="download" size={14} /> {exportando ? 'Gerando…' : 'Exportar Excel'}
         </Button>
-        <Button variant="ghost" size="sm" onClick={exportarPDF} disabled={!dataset.linhas.length}>
-          <Icon name="file" size={14} /> Exportar PDF (imprimir)
-        </Button>
+        <BotaoExportarPdf
+          montar={() => rascunhoCarteira(dataset, contas, recorteCarteira(turma))}
+          niveis={NIVEIS_RELATORIO.board}
+          chamadas={chamadasProtocoloFinanceiro()}
+          desabilitado={!dataset.linhas.length}
+        />
         <span className="text-xs text-[var(--fg-3)] tabular">{dataset.linhas.length} linha(s)</span>
       </Toolbar>
 

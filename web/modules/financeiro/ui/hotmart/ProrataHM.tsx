@@ -13,6 +13,9 @@ import { Chip, Erro, useCarga } from './comum';
 import { ProrataDiagnostico } from './ProrataDiagnostico';
 import { carregarProrataHM } from '../../application/carregar-prorata';
 import { hojeSaoPaulo } from '../../domain/prorata-hm';
+import { BotaoExportarPdf } from '@/shared/ui/pdf/BotaoExportarPdf';
+import { chamadasProtocoloFinanceiro } from '../pdf/protocolo';
+import { NIVEIS_RELATORIO, rascunhoProrata, recorteProrata } from '../pdf/documentos';
 
 type Filtro = 'credito' | 'vence60' | 'vencido' | 'gps' | 'sem_hotmart' | null;
 
@@ -93,6 +96,11 @@ export function ProrataHM({ repo }: { repo: FinanceiroRepository }) {
           className="rounded-[var(--r-md)] border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--fg-2)] hover:bg-[var(--surface-3)]">
           Exportar CSV ({lista.length})
         </button>
+        <BotaoExportarPdf
+          montar={() => rascunhoProrata(lista, recorteProrata(filtro, busca))}
+          niveis={NIVEIS_RELATORIO.prorata}
+          chamadas={chamadasProtocoloFinanceiro()}
+        />
       </div>
 
       <SectionCard title={`${lista.length} pessoa(s)`}>

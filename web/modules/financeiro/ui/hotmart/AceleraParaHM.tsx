@@ -9,6 +9,9 @@ import { fmtBRLc, fmtData } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../../application/ports';
 import { celulaCsv, type AceleraParaHM as LinhaAceleraParaHM } from '../../domain/hotmart';
 import { Chip, Erro, useCarga } from './comum';
+import { BotaoExportarPdf } from '@/shared/ui/pdf/BotaoExportarPdf';
+import { chamadasProtocoloFinanceiro } from '../pdf/protocolo';
+import { NIVEIS_RELATORIO, rascunhoAcelera, recorteAcelera } from '../pdf/documentos';
 
 type Filtro = 'subiram' | 'sem_card' | 'ja_eram' | 'nao_subiram' | null;
 
@@ -63,6 +66,11 @@ export function AceleraParaHM({ repo }: { repo: FinanceiroRepository }) {
         >
           Exportar CSV ({lista.length})
         </button>
+        <BotaoExportarPdf
+          montar={() => rascunhoAcelera(lista, recorteAcelera(filtro))}
+          niveis={NIVEIS_RELATORIO.acelera}
+          chamadas={chamadasProtocoloFinanceiro()}
+        />
         <span className="text-xs text-[var(--fg-3)] tabular">{lista.length} pessoa(s)</span>
       </div>
 

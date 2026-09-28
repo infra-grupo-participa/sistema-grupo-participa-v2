@@ -1,9 +1,9 @@
 'use client';
 
 // Export XLSX (SheetJS por CDN, `await import('xlsx')` — mesmo padrão do
-// export legado) a partir do dataset neutro de montar-relatorio.ts. O export
-// "PDF" é window.print() com o print CSS já em globals.css — sem código aqui,
-// é o próprio botão de imprimir do navegador sobre o DOM da tela.
+// export legado) a partir do dataset neutro de montar-relatorio.ts. O PDF não
+// mora aqui: é o documento com protocolo de ui/pdf/documentos.ts + shared/ui/pdf
+// (o antigo exportarPDF() = window.print() foi removido em 28/09/2026).
 import type { DatasetRelatorio } from '../application/montar-relatorio';
 import { fmtBRLc, fmtData } from '@/shared/ui/format';
 
@@ -48,11 +48,4 @@ export function formatarCelulaTela(coluna: DatasetRelatorio['colunas'][number], 
   if (coluna.tipo === 'moeda' && typeof valor === 'number') return fmtBRLc(valor);
   if (coluna.tipo === 'data' && typeof valor === 'string') return fmtData(valor);
   return String(valor);
-}
-
-/** Dispara o print do navegador — o print CSS de globals.css já esconde o
- *  shell e força tema claro. Sem lib nova (jspdf +350KB / @react-pdf +500KB
- *  descartados por custo × compatibilidade não verificada com React 19). */
-export function exportarPDF(): void {
-  window.print();
 }

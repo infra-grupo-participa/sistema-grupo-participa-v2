@@ -1,6 +1,6 @@
 // Caso de uso: dataset neutro para a aba Relatórios. Serve os DOIS exports
-// (XLSX via SheetJS e "PDF" via window.print()) a partir do MESMO array de
-// linhas + colunas selecionadas — sem duplicar formatação entre os dois.
+// (XLSX via SheetJS e PDF com protocolo via ui/pdf/documentos.ts) a partir do
+// MESMO array de linhas + colunas selecionadas — sem duplicar formatação.
 //
 // Datas saem em ISO puro aqui de propósito: application não importa
 // shared/ui/format (é camada de apresentação) — a UI formata na hora de
