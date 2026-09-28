@@ -1,21 +1,15 @@
 'use client';
 
 // "Pagam ou pagaram a mensalidade do HM antigo e não têm card" (z52, decisão 2 do Marcio, 28/09): lista própria com a
-// turma de origem — essa gente NÃO ganha card. Mesmo carregamento e exportação do bloco "pagaram o Programa sem card".
-import { useEffect, useState } from 'react';
+// turma de origem — essa gente NÃO ganha card. Mesma exportação do bloco "pagaram o Programa sem card"; os dados vêm do
+// FinanceiroClient (1 carga por abertura do board, nunca por volta à aba).
+import { useState } from 'react';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
-import type { FinanceiroRepository } from '../application/ports';
 import { totaisAssinaturaSemCard, type AssinaturaHMSemCard } from '../domain/assinatura-hm';
 import { celulaCsv } from '../domain/hotmart';
 
-export function AssinaturaSemCard({ repo }: { repo: FinanceiroRepository }) {
-  const [dados, setDados] = useState<AssinaturaHMSemCard[] | null>(null);
+export function AssinaturaSemCard({ dados }: { dados: AssinaturaHMSemCard[] | null }) {
   const [aberto, setAberto] = useState(false);
-  useEffect(() => {
-    let vivo = true;
-    repo.loadAssinaturaHMSemCard().then((d) => { if (vivo) setDados(d); }).catch(() => { if (vivo) setDados([]); });
-    return () => { vivo = false; };
-  }, [repo]);
   if (!dados?.length) return null;
   const t = totaisAssinaturaSemCard(dados);
   return (

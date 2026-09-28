@@ -1,21 +1,14 @@
 'use client';
 
 // "Pagaram o Programa e não têm card no board" — dinheiro que entrou sem cadastro na ativação. Só visível e exportável:
-// quem cria o card é o sistema de ativação.
-import { useEffect, useState } from 'react';
+// quem cria o card é o sistema de ativação. Os dados vêm do FinanceiroClient (1 carga por abertura do board).
+import { useState } from 'react';
 import { fmtBRL, fmtData } from '@/shared/ui/format';
-import type { FinanceiroRepository } from '../application/ports';
 import type { PagouSemCard } from '../domain/programa-sem-card';
 import { celulaCsv } from '../domain/hotmart';
 
-export function ProgramaSemCard({ repo, familia }: { repo: FinanceiroRepository; familia: 'HM' | 'AURUM' }) {
-  const [dados, setDados] = useState<PagouSemCard[] | null>(null);
+export function ProgramaSemCard({ dados, familia }: { dados: PagouSemCard[] | null; familia: 'HM' | 'AURUM' }) {
   const [aberto, setAberto] = useState(false);
-  useEffect(() => {
-    let vivo = true;
-    repo.loadProgramaSemCard(familia).then((d) => { if (vivo) setDados(d); }).catch(() => { if (vivo) setDados([]); });
-    return () => { vivo = false; };
-  }, [repo, familia]);
   if (!dados?.length) return null;
   const total = dados.reduce((s, d) => s + d.valor, 0);
   const fora = dados.filter((d) => d.fora_do_catalogo).length;

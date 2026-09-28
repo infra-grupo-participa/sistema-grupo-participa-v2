@@ -31,7 +31,8 @@ import { FaturamentoDiario } from './FaturamentoDiario';
 import { contarDiamantes, ServicoDiamante, useServicoDiamante } from './ServicoDiamante';
 import type { BoardHotmart } from '../domain/hotmart';
 import { indexarBoardHotmart } from '../domain/board-hotmart';
-import { indexarAssinaturaHM, type AssinaturaHMBoard } from '../domain/assinatura-hm';
+import { indexarAssinaturaHM, type AssinaturaHMBoard, type AssinaturaHMSemCard } from '../domain/assinatura-hm';
+import type { PagouSemCard } from '../domain/programa-sem-card';
 
 type Tab = 'board' | 'faturamento' | 'funis' | 'relatorios' | 'ofertas';
 
@@ -87,6 +88,11 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // Mensalidade do HM antigo por pessoa_chave (fn_fin_board_assinatura_hm, z52): UMA chamada por abertura do board,
   // junto da camada Hotmart, nunca por card. `null` = carregando ou falhou — o bloco Assinatura cai no dado antigo.
   const [assinaturaPorPessoa, setAssinaturaPorPessoa] = useState<Map<string, AssinaturaHMBoard> | null>(null);
+  // Listas "sem card" (Programa HM/Aurum e mensalidade do HM antigo): carregadas UMA vez por abertura do board e
+  // recarregadas só no mesmo gatilho dele — antes cada bloco consultava de novo a cada volta à aba (reprovação do João,
+  // 28/09). `null` = carregando; falha vira lista vazia (o bloco some, como antes).
+  const [programaSemCard, setProgramaSemCard] = useState<Record<'HM' | 'AURUM', PagouSemCard[] | null>>({ HM: null, AURUM: null });
+  const [assinaturaSemCard, setAssinaturaSemCard] = useState<AssinaturaHMSemCard[] | null>(null);
 
   const selecionarProduto = (produto: ProdutoChave) => {
     setVerDiamante(false);
@@ -113,6 +119,18 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const buscarHotmart = () => repo.loadBoardHotmart().then(indexarBoardHotmart);
   const buscarAssinatura = () => repo.loadBoardAssinaturaHM().then(indexarAssinaturaHM);
 
+  /** As 3 listas "sem card" — 1 chamada de cada, em paralelo ao board. `vivo` protege o mount. */
+  const buscarListasSemCard = (vivo: () => boolean = () => true) => {
+    for (const familia of ['HM', 'AURUM'] as const) {
+      repo.loadProgramaSemCard(familia)
+        .catch((): PagouSemCard[] => [])
+        .then((d) => { if (vivo()) setProgramaSemCard((p) => ({ ...p, [familia]: d })); });
+    }
+    repo.loadAssinaturaHMSemCard()
+      .catch((): AssinaturaHMSemCard[] => [])
+      .then((d) => { if (vivo()) setAssinaturaSemCard(d); });
+  };
+
   // Recarrega o board a partir de um evento do usuário (retry do erro,
   // onAcordoSalvo do drawer) — componente já montado, sem guard de unmount.
   const carregarBoardAgora = () => {
@@ -120,6 +138,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       .then((m) => { setHotmartPorCard(m); setHotmartErro(false); })
       .catch(() => setHotmartErro(true));
     buscarAssinatura().then(setAssinaturaPorPessoa).catch(() => {});
+    buscarListasSemCard();
     return buscarBoard()
       .then(({ b, rg }) => { setBoard(b); setRegua(rg); setErroBoard(null); })
       .catch(() => setErroBoard('Não foi possível carregar o board financeiro. Verifique sua conexão e tente novamente.'));
@@ -141,6 +160,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     buscarAssinatura()
       .then((m) => { if (vivo) setAssinaturaPorPessoa(m); })
       .catch(() => { /* sem a camada nova o bloco Assinatura mostra o que já mostrava */ });
+    buscarListasSemCard(() => vivo);
     (async () => {
       const t = await repo.loadTurmas().catch(() => []);
       if (vivo) setTurmas(t);
@@ -401,8 +421,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
               diamante={{ ativo: verDiamante, contagem: contarDiamantes(diamante.dados), onSelecionar: () => setVerDiamante(true) }} />
             {verDiamante ? <ServicoDiamante dados={diamante.dados} erro={diamante.erro} repo={repo} /> : <>
             {(produtoAtivo === 'HM' || produtoAtivo === 'AURUM') && <OfertasSemCatalogo repo={repo} familia={produtoAtivo} />}
-            {(produtoAtivo === 'HM' || produtoAtivo === 'AURUM') && <ProgramaSemCard key={produtoAtivo} repo={repo} familia={produtoAtivo} />}
-            {produtoAtivo === 'HM' && <AssinaturaSemCard repo={repo} />}
+            {(produtoAtivo === 'HM' || produtoAtivo === 'AURUM') && <ProgramaSemCard key={produtoAtivo} dados={programaSemCard[produtoAtivo]} familia={produtoAtivo} />}
+            {produtoAtivo === 'HM' && <AssinaturaSemCard dados={assinaturaSemCard} />}
             <ResultadoAcoes cards={cardsDoProduto} ativa={acaoEfetiva} onSelecionar={selecionarAcao} />
             <div className="mb-3">
               <TimelineAcoes acoes={acoes} ativa={acaoEfetiva} onSelecionar={selecionarAcao} />
