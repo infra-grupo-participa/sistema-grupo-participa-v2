@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   casarResultado, entradaDoFormulario, formDeInformado, identificadorMascarado, mascararLocal, lerColagem, lerDataBR, lerProdutos, lerSimNao, lerTipo, lerTSV, lerValorBR,
-  normalizarInformado, normalizarResultadoImportacao, ordenarInformados, previaGravavel, TETO_IMPORTACAO,
+  normalizarInformado, normalizarResultadoImportacao, ordenarInformados, previaGravavel, SEM_PERMISSAO_IDENTIFICADOR, TETO_IMPORTACAO,
 } from './recebimentos-informados';
+
+const VE = { podeVerDoc: true };
+const NAO_VE = { podeVerDoc: false };
 
 // Dados fictícios (CPF de teste gerado, e-mail de domínio reservado).
 const CAB = 'Data prevista\tCliente\tTipo\tValor informado\tVia Hotmart? S/N\tProduto na Hotmart\tIdentificador 1\tIdentificador 2\tAcordo a partir de\tBaixa manual';
@@ -65,7 +68,7 @@ describe('TSV do Google Sheets', () => {
 
 describe('lerColagem — prévia local', () => {
   it('cabeçalho reconhecido e ignorado; linhas convertidas para as chaves do contrato', () => {
-    const c = lerColagem(`${CAB}\n${L1}\n${L2}\n`);
+    const c = lerColagem(`${CAB}\n${L1}\n${L2}\n`, VE);
     expect(c.cabecalhoIgnorado).toBe(true);
     expect(c.erroGeral).toBeNull();
     expect(c.linhas.map((l) => l.n)).toEqual([2, 3]);
@@ -78,10 +81,10 @@ describe('lerColagem — prévia local', () => {
     expect(c.linhas[1].entrada).toMatchObject({ via_hotmart: false, produtos: [], identificador1: null, identificador2: null, baixa_manual_em: '2026-10-22' });
   });
   it('sem cabeçalho: começa na linha 1', () => {
-    expect(lerColagem(L1).linhas.map((l) => l.n)).toEqual([1]);
+    expect(lerColagem(L1, VE).linhas.map((l) => l.n)).toEqual([1]);
   });
   it('erros por linha, sem repetir o identificador; valor ≤ 0; via S sem produto', () => {
-    const c = lerColagem('31/02/2026\t\tConsultoria\t0\tS\t\t111.444.777-35\t\txx\t');
+    const c = lerColagem('31/02/2026\t\tConsultoria\t0\tS\t\t111.444.777-35\t\txx\t', VE);
     const e = c.linhas[0].erros;
     expect(e).toEqual(expect.arrayContaining([
       'Data prevista inválida (use dd/mm/aaaa).', 'Cliente vazio.',
@@ -92,12 +95,27 @@ describe('lerColagem — prévia local', () => {
     expect(e.join(' ')).not.toContain('111.444');
   });
   it('colunas a mais é erro; vazio e acima do teto são erro geral', () => {
-    expect(lerColagem(`${L1}\textra`).linhas[0].erros[0]).toBe('11 colunas; a planilha tem 10.');
-    expect(lerColagem(' \n\t\n').erroGeral).toBe('Nada para importar: cole as linhas da planilha.');
-    expect(lerColagem(`${CAB}\n`).erroGeral).not.toBeNull();
+    expect(lerColagem(`${L1}\textra`, VE).linhas[0].erros[0]).toBe('11 colunas; a planilha tem 10.');
+    expect(lerColagem(' \n\t\n', VE).erroGeral).toBe('Nada para importar: cole as linhas da planilha.');
+    expect(lerColagem(`${CAB}\n`, VE).erroGeral).not.toBeNull();
     const muitas = Array.from({ length: TETO_IMPORTACAO + 1 }, () => L2).join('\n');
-    expect(lerColagem(muitas).erroGeral).toBe(`São ${TETO_IMPORTACAO + 1} linhas; o limite é ${TETO_IMPORTACAO} por importação.`);
-    expect(lerColagem(muitas).linhas).toEqual([]);
+    expect(lerColagem(muitas, VE).erroGeral).toBe(`São ${TETO_IMPORTACAO + 1} linhas; o limite é ${TETO_IMPORTACAO} por importação.`);
+    expect(lerColagem(muitas, VE).linhas).toEqual([]);
+  });
+  it('sem permissão de ver CPF: linha com identificador é erro local; nenhuma entrada leva identificador1/2', () => {
+    const c = lerColagem(`${CAB}\n${L1}\n${L2}\n`, NAO_VE);
+    expect(c.linhas[0].erros).toEqual([SEM_PERMISSAO_IDENTIFICADOR]);
+    expect(c.linhas[0].erros.join(' ')).not.toMatch(/111\.444|example\.com/);
+    expect(c.linhas[1].erros).toEqual([]); // L2 não traz identificador: passa
+    for (const l of c.linhas) {
+      expect(Object.keys(l.entrada)).not.toContain('identificador1');
+      expect(Object.keys(l.entrada)).not.toContain('identificador2');
+    }
+    // só o Identificador 2 preenchido também é erro
+    expect(lerColagem('20/10/2026\tC\tOutro\t10\tN\t\t\tx@example.com\t\t', NAO_VE).linhas[0].erros).toEqual([SEM_PERMISSAO_IDENTIFICADOR]);
+    // a prévia não fica gravável mesmo que o banco dissesse ok
+    const R = (linha: number) => ({ linha, ok: true, erro: null, id: null });
+    expect(previaGravavel(c.linhas, [R(1), R(2)])).toBe(false);
   });
 });
 
@@ -112,7 +130,7 @@ describe('resultado da importação (prévia do banco)', () => {
     expect(casarResultado(3, [R(1)])).toEqual([R(1), null, null]);
   });
   it('gravável só com tudo ok no banco e nada com erro de leitura', () => {
-    const c = lerColagem(`${L1}\n${L2}`);
+    const c = lerColagem(`${L1}\n${L2}`, VE);
     expect(previaGravavel(c.linhas, [R(1), R(2)])).toBe(true);
     expect(previaGravavel(c.linhas, [R(1), R(2, false, 'Produto desconhecido')])).toBe(false);
     expect(previaGravavel(c.linhas, [R(1), null])).toBe(false);
@@ -166,9 +184,25 @@ describe('formulário criar/editar', () => {
     expect(Object.keys(entrada ?? {})).not.toContain('identificador1');
     expect(Object.keys(entrada ?? {})).not.toContain('baixa_manual_em');
   });
-  it('edição digitando identificador novo: vai em claro', () => {
-    const f = { ...formDeInformado(orig, false), identificador1: 'novo@example.com' };
-    expect(entradaDoFormulario(f, orig, false).entrada).toMatchObject({ identificador1: 'novo@example.com' });
+  it('sem permissão de ver CPF: identificador digitado NÃO vai (chaves ausentes), na edição e na criação', () => {
+    // O campo fica desabilitado na tela; mesmo com valor no estado, o p não leva identificador (banco daria P0001).
+    const f = { ...formDeInformado(orig, false), identificador1: 'novo@example.com', identificador2: '111.444.777-35' };
+    const ed = entradaDoFormulario(f, orig, false).entrada;
+    expect(Object.keys(ed ?? {})).not.toContain('identificador1');
+    expect(Object.keys(ed ?? {})).not.toContain('identificador2');
+    const novo = {
+      ...formDeInformado(null, false), data_prevista: '2026-11-10', cliente: 'Novo', tipo: 'outro', valor: '1000', via_hotmart: 'N' as const,
+      identificador1: 'novo@example.com',
+    };
+    expect(entradaDoFormulario(novo, null, false).entrada).toEqual({
+      data_prevista: '2026-11-10', cliente: 'Novo', tipo: 'outro', valor: 1000, via_hotmart: false, produtos: [], acordo_desde: null,
+      baixa_manual_em: null,
+    });
+  });
+  it('quem vê CPF, edição digitando identificador novo: vai em claro', () => {
+    const f = { ...formDeInformado(orig, true), identificador1: 'novo@example.com' };
+    expect(entradaDoFormulario(f, orig, true).entrada).toMatchObject({ identificador1: 'novo@example.com' });
+    expect(Object.keys(entradaDoFormulario(f, orig, true).entrada ?? {})).not.toContain('identificador2'); // mascarado e vazio: manter
   });
   it('quem vê documento e apaga o identificador em claro: vai null (limpar)', () => {
     const claro = { ...orig, identificador1: '111.444.777-35', identificador2: null };
