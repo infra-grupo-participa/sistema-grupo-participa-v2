@@ -109,6 +109,8 @@ export interface DiamanteCliente {
   acordo: LinhaServicoDiamante | null;
   /** Soma da última mensalidade dos serviços em dia. */
   mensalidadeAtiva: number;
+  /** Faturamento esperado por mês: mensalidade dos serviços ainda cobrados (em dia + devendo). */
+  esperadoMes: number;
   ultimaPaga: string | null;
   primeiraPaga: string | null;
 }
@@ -127,7 +129,7 @@ export function agruparPorDiamante(linhas: LinhaServicoDiamante[]): DiamanteClie
         nomeEmpresa: l.nome_empresa, clienteCadastro: l.cliente_cadastro, email: l.email, emails: l.emails ?? [],
         telefone: l.telefone, nivel: l.nivel, servicos: [], situacao: 'nunca_pagou', jaPagou: false, totalPago: 0,
         devendoValor: 0, devendoN: 0, devendoDesde: null, antigoValor: 0, antigoN: 0, cobertoValor: 0, cobertoN: 0,
-        acordoPago: 0, acordo: null, mensalidadeAtiva: 0, ultimaPaga: null, primeiraPaga: null,
+        acordoPago: 0, acordo: null, mensalidadeAtiva: 0, esperadoMes: 0, ultimaPaga: null, primeiraPaga: null,
       };
       por.set(l.pessoa_chave, c);
     }
@@ -149,6 +151,7 @@ export function agruparPorDiamante(linhas: LinhaServicoDiamante[]): DiamanteClie
     c.antigoValor += Number(l.antigo_valor) || 0;
     c.antigoN += l.antigo_n || 0;
     if (l.situacao === 'em_dia') c.mensalidadeAtiva += Number(l.mensalidade) || 0;
+    if (l.situacao === 'em_dia' || l.situacao === 'devendo') c.esperadoMes += Number(l.mensalidade) || 0;
     if (l.pagamentos > 0) c.jaPagou = true;
     c.ultimaPaga = maxData(c.ultimaPaga, l.ultima_paga);
     c.primeiraPaga = minData(c.primeiraPaga, l.primeira_paga);
@@ -182,6 +185,9 @@ export interface ResumoDiamante {
   pararamDevendoValor: number;
   antigoValor: number;
   mensalidadeAtiva: number;
+  /** Faturamento esperado por mês (serviços ainda cobrados) e quantos Diamantes ativos. */
+  esperadoMes: number;
+  ativos: number;
   totalPago: number;
   foraDoDiamante: number;
   servicos: ResumoServico[];
@@ -213,6 +219,8 @@ export function resumirDiamantes(clientes: DiamanteCliente[]): ResumoDiamante {
     pararamDevendoValor: pagantes.filter((c) => c.situacao === 'parou_devendo').reduce((s, c) => s + c.devendoValor + c.antigoValor, 0),
     antigoValor: pagantes.reduce((s, c) => s + c.antigoValor, 0),
     mensalidadeAtiva: pagantes.reduce((s, c) => s + c.mensalidadeAtiva, 0),
+    esperadoMes: pagantes.reduce((s, c) => s + c.esperadoMes, 0),
+    ativos: pagantes.filter((c) => c.situacao === 'em_dia' || c.situacao === 'devendo').length,
     totalPago: pagantes.reduce((s, c) => s + c.totalPago, 0),
     foraDoDiamante: pagantes.filter((c) => (c.situacao === 'em_dia' || c.situacao === 'devendo') && !ehNivelDiamante(c.nivel)).length,
     servicos: [...porServ.values()].sort((a, b) => ordem.indexOf(a.chave) - ordem.indexOf(b.chave)),
@@ -247,4 +255,11 @@ export function compraEmOutroNome(nome: string, compra: string | null): boolean 
   if (!compra) return false;
   if (EMPRESA.test(compra)) return true;
   return norm(nome).split(/\s+/)[0] !== norm(compra).split(/\s+/)[0];
+}
+
+/** Soma do bruto por mês ('YYYY-MM') a partir da série diária do faturamento. */
+export function recebidoPorMes(dias: { dia: string; valor_oferta: number | string }[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const d of dias) m.set(d.dia.slice(0, 7), (m.get(d.dia.slice(0, 7)) ?? 0) + (Number(d.valor_oferta) || 0));
+  return m;
 }

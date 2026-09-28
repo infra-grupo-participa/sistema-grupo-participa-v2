@@ -386,7 +386,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           <>
             <ProdutoTabs contagens={contagensProduto} ativo={produtoAtivo} onSelecionar={selecionarProduto}
               diamante={{ ativo: verDiamante, contagem: contarDiamantes(diamante.dados), onSelecionar: () => setVerDiamante(true) }} />
-            {verDiamante ? <ServicoDiamante dados={diamante.dados} erro={diamante.erro} /> : <>
+            {verDiamante ? <ServicoDiamante dados={diamante.dados} erro={diamante.erro} repo={repo} /> : <>
             <div className="mb-3">
               <TimelineAcoes acoes={acoes} ativa={acaoEfetiva} onSelecionar={selecionarAcao} />
             </div>

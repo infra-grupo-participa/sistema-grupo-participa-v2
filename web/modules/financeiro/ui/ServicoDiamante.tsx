@@ -11,12 +11,13 @@ import { AvatarInicial, Drawer, Loading, NivelBadge, Row, SearchInput } from '@/
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../application/ports';
 import {
-  agruparPorDiamante, compraEmOutroNome, dividaTotal, ehNivelDiamante, resumirDiamantes, ROTULO_NIVEL, ROTULO_SITUACAO_SERVICO,
+  agruparPorDiamante, compraEmOutroNome, dividaTotal, ehNivelDiamante, recebidoPorMes, resumirDiamantes, ROTULO_NIVEL, ROTULO_SITUACAO_SERVICO,
   rotuloServico, ultimosMeses, type DiamanteCliente, type EstadoMes, type LinhaServicoDiamante, type SituacaoServico,
 } from '../domain/servico-diamante';
 import { hojeSaoPaulo } from '../domain/prorata-hm';
+import { celulaCsv, type DiaHotmart } from '../domain/hotmart';
 import { TelefoneContato } from './FichaDrawer';
-import { Erro } from './hotmart/comum';
+import { Erro, useCarga } from './hotmart/comum';
 
 const COR: Record<SituacaoServico, string> = {
   devendo: 'var(--red)', em_dia: 'var(--green)', parou_devendo: 'var(--accent)', encerrado: 'var(--fg-4)', nunca_pagou: 'var(--yellow)',
@@ -57,12 +58,16 @@ export function contarDiamantes(dados: LinhaServicoDiamante[] | null): number | 
   return new Set(dados.filter((l) => l.pagamentos > 0).map((l) => l.pessoa_chave)).size;
 }
 
-export function ServicoDiamante({ dados, erro }: { dados: LinhaServicoDiamante[] | null; erro: string | null }) {
+export function ServicoDiamante({ dados, erro, repo }: { dados: LinhaServicoDiamante[] | null; erro: string | null; repo: FinanceiroRepository }) {
   const [servico, setServico] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
   const [verNunca, setVerNunca] = useState(false);
   const [aberto, setAberto] = useState<string | null>(null);
   const hoje = hojeSaoPaulo();
+  const [mesAtual, mesAnterior] = [ultimosMeses(hoje, 1)[0], ultimosMeses(hoje, 2)[0]];
+  // Recebido no mês e no anterior (espelho da Hotmart, família DIAMANTE) — a comparação do faturamento esperado.
+  const { dados: fat } = useCarga<DiaHotmart[]>(() => repo.loadHotmartFaturamento('DIAMANTE', `${mesAnterior}-01`, hoje), [mesAnterior, hoje]);
+  const recebido = useMemo(() => recebidoPorMes(fat ?? []), [fat]);
 
   const clientes = useMemo(() => agruparPorDiamante(dados ?? []), [dados]);
   const resumo = useMemo(() => resumirDiamantes(clientes), [clientes]);
@@ -79,32 +84,42 @@ export function ServicoDiamante({ dados, erro }: { dados: LinhaServicoDiamante[]
   if (!dados) return <Loading label="Carregando Serviço Diamante…" minHeight={260} />;
 
   const devedores = clientes.filter((c) => c.jaPagou && dividaTotal(c) > 0);
+  const naRua = resumo.devendoAtivoValor + resumo.pararamDevendoValor;
+  const recebidoMes = fat ? recebido.get(mesAtual) ?? 0 : null;
+  const recebidoAnt = fat ? recebido.get(mesAnterior) ?? 0 : null;
+  const cobrancaAtiva = clientes.filter((c) => c.jaPagou && dividaTotal(c) > 0);
   const aberta = aberto ? clientes.find((c) => c.pessoa_chave === aberto) ?? null : null;
   const nunca = visiveis.filter((c) => !c.jaPagou);
 
   return (
     <div className="space-y-4">
-      {/* Cobrança: o que está em aberto, escancarado */}
-      <div className={`rounded-[var(--r-lg)] border px-4 py-3 ${devedores.length ? 'border-[var(--red)] bg-[var(--red-subtle)]' : 'border-[var(--green)] bg-[var(--surface-1)]'}`}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-2)]">Em aberto nos Serviços Diamante</div>
-            <div className="tabular text-3xl font-bold" style={{ color: devedores.length ? 'var(--red)' : 'var(--green)' }}>
-              {fmtBRL(resumo.devendoAtivoValor + resumo.pararamDevendoValor)}
-            </div>
-            <div className="text-xs text-[var(--fg-2)]">
-              {devedores.length} Diamante{devedores.length === 1 ? '' : 's'} com mensalidade sem pagar
-              {' · '}{fmtBRL(resumo.devendoAtivoValor)} de quem ainda está ativo · {fmtBRL(resumo.pararamDevendoValor)} de quem parou
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs sm:grid-cols-5">
-            <Numero rotulo="Mensalidades ativas" valor={`${fmtBRL(resumo.mensalidadeAtiva)}`} sub="por mês, serviços em dia" />
-            <Numero rotulo="Em dia" valor={String(resumo.emDia)} sub="sem nada em aberto" cor="var(--green)" />
-            <Numero rotulo="Devendo" valor={String(resumo.devendo)} sub="ainda ativos" cor="var(--red)" />
-            <Numero rotulo="Parou devendo" valor={String(resumo.pararamDevendo)} cor="var(--accent)" />
-            <Numero rotulo="Já pagaram" valor={String(resumo.jaPagaram)} sub={`${fmtBRL(resumo.totalPago)} no total`} />
-          </div>
-        </div>
+      {/* Visão macro (João, 27/09): faturamento esperado por mês · dinheiro na rua · quanto os Diamantes devem */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <Macro rotulo="Faturamento esperado por mês" valor={fmtBRL(resumo.esperadoMes)} cor="var(--fg)"
+          linhas={[
+            `${resumo.ativos} Diamantes ativos · serviços em dia e devendo`,
+            recebidoMes == null ? 'carregando o recebido…'
+              : `Recebido em ${mesCurto(mesAtual)}: ${fmtBRL(recebidoMes)} (${resumo.esperadoMes ? Math.round((recebidoMes / resumo.esperadoMes) * 100) : 0}% do esperado; inclui atrasados e acordos pagos no mês)`,
+            recebidoAnt == null ? '' : `Recebido em ${mesCurto(mesAnterior)}: ${fmtBRL(recebidoAnt)}`,
+          ]} />
+        <Macro rotulo="Dinheiro na rua" valor={fmtBRL(naRua)} cor={naRua > 0 ? 'var(--red)' : 'var(--green)'} destaque={naRua > 0}
+          linhas={[
+            `${devedores.length} Diamantes com mensalidade cobrada e não paga`,
+            `${fmtBRL(resumo.pararamDevendoValor)} de ${resumo.pararamDevendo} que pararam de pagar`,
+          ]} />
+        <Macro rotulo="Diamantes ativos devendo" valor={fmtBRL(resumo.devendoAtivoValor)} cor={resumo.devendoAtivoValor > 0 ? 'var(--red)' : 'var(--green)'} destaque={resumo.devendoAtivoValor > 0}
+          linhas={[
+            `${resumo.devendo} Diamantes ainda com serviço ativo`,
+            `${resumo.emDia} em dia · ${fmtBRL(resumo.mensalidadeAtiva)}/mês pagos em dia`,
+          ]} />
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--fg-3)]">
+        <span>{resumo.jaPagaram} Diamantes já pagaram · {fmtBRL(resumo.totalPago)} desde o início</span>
+        <button type="button" onClick={() => exportarCobranca(cobrancaAtiva)} disabled={!cobrancaAtiva.length}
+          className="rounded-[var(--r-md)] border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--fg-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
+          Baixar lista de cobrança ({cobrancaAtiva.length})
+        </button>
       </div>
 
       {/* Filtros: serviço + busca */}
@@ -161,14 +176,34 @@ export function ServicoDiamante({ dados, erro }: { dados: LinhaServicoDiamante[]
   );
 }
 
-function Numero({ rotulo, valor, sub, cor }: { rotulo: string; valor: string; sub?: string; cor?: string }) {
+function Macro({ rotulo, valor, cor, linhas, destaque }: { rotulo: string; valor: string; cor: string; linhas: string[]; destaque?: boolean }) {
   return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wide text-[var(--fg-3)]">{rotulo}</div>
-      <div className="tabular text-lg font-bold leading-tight" style={{ color: cor ?? 'var(--fg)' }}>{valor}</div>
-      {sub && <div className="tabular text-[10px] text-[var(--fg-3)]">{sub}</div>}
+    <div className={`rounded-[var(--r-lg)] border px-4 py-3 ${destaque ? 'border-[var(--red)] bg-[var(--red-subtle)]' : 'border-[var(--border)] bg-[var(--surface-1)]'}`}>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-2)]">{rotulo}</div>
+      <div className="tabular mt-0.5 text-3xl font-bold" style={{ color: cor }}>{valor}</div>
+      {linhas.filter(Boolean).map((l) => <div key={l} className="tabular text-xs text-[var(--fg-2)]">{l}</div>)}
     </div>
   );
+}
+
+/** Lista de cobrança (CSV, separador ; para o Excel pt-BR): quem deve, quanto, desde quando, de quais serviços. */
+function exportarCobranca(lista: DiamanteCliente[]) {
+  const col: [string, (c: DiamanteCliente) => unknown][] = [
+    ['Nome', (c) => c.nome], ['Situação', (c) => ROTULO_SITUACAO_SERVICO[c.situacao]], ['Nível', (c) => (c.nivel ? ROTULO_NIVEL[c.nivel] ?? c.nivel : '')],
+    ['Em aberto', (c) => dividaTotal(c).toFixed(2).replace('.', ',')], ['Mensalidades em aberto', (c) => c.devendoN + c.antigoN],
+    ['Desde', (c) => c.servicos.map((s) => s.antigo_desde ?? s.devendo_desde).filter(Boolean).sort()[0] ?? ''],
+    ['Serviços devendo', (c) => c.servicos.filter((s) => s.devendo_n + s.antigo_n > 0).map((s) => `${rotuloServico(s.servico)} ${s.devendo_n + s.antigo_n}x`).join(', ')],
+    ['Serviços em dia', (c) => c.servicos.filter((s) => s.situacao === 'em_dia').map((s) => rotuloServico(s.servico)).join(', ')],
+    ['Último pagamento', (c) => c.ultimaPaga ?? ''], ['E-mail', (c) => c.email], ['Outros e-mails', (c) => c.emails.filter((e) => e !== c.email).join(', ')],
+    ['Telefone', (c) => c.telefone ?? ''], ['Nome na compra', (c) => c.nomeCompra ?? ''],
+  ];
+  const linhas = [col.map(([n]) => n).join(';'), ...lista.map((c) => col.map(([, f]) => celulaCsv(f(c))).join(';'))];
+  const blob = new Blob(['\ufeff' + linhas.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `cobranca-servico-diamante-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 function Pilula({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: React.ReactNode }) {
