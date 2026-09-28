@@ -12,6 +12,7 @@ import {
   composicaoDaCelula, GRUPO_BLOCO_1, type GradeReceber, type LinhaReceber, type Semana,
 } from '../../domain/contas-receber';
 import { Recorrencias } from './Recorrencias';
+import { Informados, type RepoInformados } from './Informados';
 import { BLOCOS_RECEBER, COMPONENTES_VENDA, ESCOPO_RECEBER, ESTADOS_RECEBER, ROTULOS_TOTAL } from './textos';
 
 // Textos provisórios — ainda não existem em ./textos (luis move para lá).
@@ -47,7 +48,8 @@ export function rotuloComponente(c: string): string {
   return c;
 }
 
-const rotuloBloco = (b: number) => (b === 1 ? BLOCOS_RECEBER.vendasRealizadas : b === 2 ? BLOCOS_RECEBER.assinaturasEParcelasFuturas : `Bloco ${b}`);
+const rotuloBloco = (b: number) => (b === 1 ? BLOCOS_RECEBER.vendasRealizadas : b === 2 ? BLOCOS_RECEBER.assinaturasEParcelasFuturas
+  : b === 5 ? BLOCOS_RECEBER.recebimentosInformados : `Bloco ${b}`);
 
 type Celula = { bloco: number; grupo: string; semana: number | null };
 
@@ -236,7 +238,14 @@ function CobrancasDaCelula({ itens }: { itens: LinhaReceber[] }) {
   );
 }
 
-export function ContasAReceber({ dados }: { dados: ContasReceberCarregado }) {
+export function ContasAReceber({ dados, repo, canEdit, canVerDoc, onInformadosAlterados }: {
+  dados: ContasReceberCarregado;
+  /** Recebimentos informados (bloco 5). Sem repo, a sub-seção não aparece (teste de render da grade). */
+  repo?: RepoInformados;
+  canEdit?: boolean;
+  canVerDoc?: boolean;
+  onInformadosAlterados?: () => void;
+}) {
   const [celula, setCelula] = useState<Celula | null>(null);
   const { grade, linhas, recorrencias, desligado } = dados;
   const semana = celula?.semana == null ? null : grade.semanas[celula.semana] ?? null;
@@ -264,6 +273,7 @@ export function ContasAReceber({ dados }: { dados: ContasReceberCarregado }) {
       )}
       {celula && <ComposicaoCelula linhas={linhas} celula={celula} semana={semana} onFechar={() => setCelula(null)} />}
       <Recorrencias cobrancas={recorrencias} />
+      {repo && <Informados repo={repo} canEdit={!!canEdit} canVerDoc={!!canVerDoc} onAlterado={onInformadosAlterados} />}
     </div>
   );
 }

@@ -2,7 +2,8 @@
 
 // Recorrências: as cobranças futuras do bloco 2 (assinaturas e parcelas a vencer), uma linha por cobrança
 // (antecipação + garantia da mesma cobrança juntas pela `ref`), com a situação de cada uma.
-// "Realizada" aparece para auditoria e não soma na grade; "fora da projeção" saiu da projeção. Nunca "devendo".
+// "Realizada" aparece para auditoria e não soma na grade; "fora da projeção" saiu da projeção; "coberta por recebimento
+// informado" é a cobrança que um informado (bloco 5) já cobre — não soma, para não contar duas vezes. Nunca "devendo".
 // O nome "Carteira" está reservado para outra tela.
 import { useMemo, useState } from 'react';
 import { Badge } from '@/shared/ui/components';
@@ -23,12 +24,13 @@ const PROVISORIO = {
   nenhuma: 'Nenhuma cobrança nesta situação.',
 } as const;
 
-const ORDEM: SituacaoReceber[] = ['a_receber', 'realizada', 'em_atraso_fora'];
+const ORDEM: SituacaoReceber[] = ['a_receber', 'realizada', 'em_atraso_fora', 'coberta_informado'];
 
 export function rotuloSituacao(s: string): string {
   if (s === 'a_receber') return SITUACAO_RECEBER.aReceber;
   if (s === 'realizada') return SITUACAO_RECEBER.realizada;
   if (s === 'em_atraso_fora') return SITUACAO_RECEBER.foraDaProjecao;
+  if (s === 'coberta_informado') return SITUACAO_RECEBER.cobertaInformado;
   return s; // fora do contrato: mostra cru, não disfarça
 }
 

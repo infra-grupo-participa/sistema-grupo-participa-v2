@@ -237,6 +237,14 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       .catch(() => { pedidoReceber.current = false; setErroReceber(ESTADOS_RECEBER.erroCarregamento); });
   }, [tab, tentativaReceber]);
 
+  // Recebimento informado gravado: o bloco 5 da grade mudou. Rebusca fn_fin_receber_semanal SEM apagar a grade atual
+  // (a sub-seção de informados continua montada); falha vira o erro da aba, com "tentar de novo".
+  const recarregarReceber = () => {
+    carregarContasReceber(repo)
+      .then((r) => { setReceber(r); setErroReceber(null); })
+      .catch(() => setErroReceber(ESTADOS_RECEBER.erroCarregamento));
+  };
+
   // Contagem por produto sobre o board INTEIRO (nunca sobre o recorte de
   // canal) — é o número que a aba mostra, precisa ser estável ao trocar de
   // canal. Aba vazia não pode ficar muda: HM 264 · Aurum 41 aparecem sempre,
@@ -508,7 +516,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       {tab === 'receber' && (
         erroReceber ? (
           <ErroCarregamento msg={erroReceber} onRetry={() => { setErroReceber(null); setTentativaReceber((t) => t + 1); }} />
-        ) : receber ? <ContasAReceber dados={receber} /> : <Loading label="Carregando contas a receber…" minHeight={200} />
+        ) : receber ? (
+          <ContasAReceber dados={receber} repo={repo} canEdit={canEdit} canVerDoc={canVerDoc} onInformadosAlterados={recarregarReceber} />
+        ) : <Loading label="Carregando contas a receber…" minHeight={200} />
       )}
 
       {tab === 'funis' && <FunisEAnalise repo={repo} />}

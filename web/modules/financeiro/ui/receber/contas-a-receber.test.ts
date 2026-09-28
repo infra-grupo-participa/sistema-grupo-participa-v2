@@ -57,7 +57,7 @@ describe('grade Contas a Receber (HTML estático)', () => {
 
   it('a tela inteira: legenda de escopo, grade e Recorrências (nunca "Carteira" nem "devendo")', () => {
     const tela = renderToStaticMarkup(createElement(ContasAReceber, { dados }));
-    expect(tela).toContain('Só dinheiro já vendido ou contratado');
+    expect(tela).toContain('Só dinheiro já vendido, contratado ou informado pelo financeiro');
     expect(tela).toContain('Recorrências');
     expect(tela).not.toMatch(/carteira|devendo/i);
   });
