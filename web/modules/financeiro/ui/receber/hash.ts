@@ -2,14 +2,14 @@
 // mora DENTRO do hash, não é querystring de verdade — ver FinanceiroClient.tsx. Funções puras, sem DOM, para
 // poderem ser testadas sem navegador.
 
-export type SubAbaReceber = 'semana' | 'recorrencias' | 'informados' | 'eventos' | 'premissas';
+export type SubAbaReceber = 'semana' | 'recorrencias' | 'informados' | 'eventos' | 'premissas' | 'base';
 
 /** Lê `ver` da parte depois do `?` do hash (`#receber?ver=recorrencias` → passar só `ver=recorrencias`). Valor
  * ausente ou desconhecido cai na grade (Semana a semana) — o mesmo destino do link `#receber` sem query. */
 export function subAbaReceberDoHash(query: string | undefined | null): SubAbaReceber {
   if (!query) return 'semana';
   const ver = new URLSearchParams(query).get('ver');
-  if (ver === 'recorrencias' || ver === 'informados' || ver === 'eventos' || ver === 'premissas') return ver;
+  if (ver === 'recorrencias' || ver === 'informados' || ver === 'eventos' || ver === 'premissas' || ver === 'base') return ver;
   return 'semana';
 }
 

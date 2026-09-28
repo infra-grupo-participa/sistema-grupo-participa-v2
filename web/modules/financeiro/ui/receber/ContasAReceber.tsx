@@ -23,33 +23,19 @@ import { Recorrencias } from './Recorrencias';
 import { Informados, type RepoInformados } from './Informados';
 import { Premissas, type RepoPremissas } from './Premissas';
 import { Eventos, type RepoEventos } from './Eventos';
+import { BaseAuditavel } from './BaseAuditavel';
+import { rotuloBloco, rotuloComponente, rotuloMes } from './rotulos-receber';
 import {
-  BLOCOS_RECEBER, CENARIO_RECEBER, COMPONENTES_VENDA, ESCOPO_RECEBER, ESTADOS_RECEBER, GRADE_RECEBER, ROTULOS_TOTAL,
-  SECOES_RECEBER, SUBABAS_RECEBER,
+  CENARIO_RECEBER, ESCOPO_RECEBER, ESTADOS_RECEBER, GRADE_RECEBER, ROTULOS_TOTAL, SECOES_RECEBER, SUBABAS_RECEBER,
 } from './textos';
 import type { SubAbaReceber } from './hash';
 
 export type { SubAbaReceber } from './hash';
+export { rotuloComponente } from './rotulos-receber';
 
-const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-const rotuloMes = (m: string) => `${MESES[Number(m.slice(5, 7)) - 1]}/${m.slice(0, 4)}`;
 const ddmm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
 const rotuloSemana = (s: Semana) => (s.inicio === s.fim ? ddmm(s.inicio) : `${s.inicio.slice(8, 10)}–${ddmm(s.fim)}`);
 
-export function rotuloComponente(c: string): string {
-  if (c === 'antecipacao') return COMPONENTES_VENDA.antecipacao;
-  if (c === 'garantia') return COMPONENTES_VENDA.garantia;
-  if (c === 'cheio') return GRADE_RECEBER.componenteCheio;
-  if (c === 'reserva') return COMPONENTES_VENDA.reserva;
-  return c;
-}
-
-const ROTULOS_BLOCO: Record<number, string> = {
-  1: BLOCOS_RECEBER.vendasRealizadas, 2: BLOCOS_RECEBER.assinaturasEParcelasFuturas, 3: BLOCOS_RECEBER.vendasNovas,
-  4: BLOCOS_RECEBER.eventosPlanejados, 5: BLOCOS_RECEBER.recebimentosInformados, 6: BLOCOS_RECEBER.reserva,
-  8: BLOCOS_RECEBER.informativoBoard,
-};
-const rotuloBloco = (b: number) => ROTULOS_BLOCO[b] ?? `Bloco ${b}`;
 /** Nome do grupo que, sozinho no bloco, faz o bloco virar uma linha só (clicável). */
 const grupoUnico = (b: number) => (b === 1 ? GRUPO_BLOCO_1 : b === 6 ? GRUPO_BLOCO_6 : rotuloBloco(b));
 
@@ -485,6 +471,7 @@ const SUBABAS_LISTA: { k: SubAbaReceber; l: string }[] = [
   { k: 'informados', l: SUBABAS_RECEBER.informados },
   { k: 'eventos', l: SUBABAS_RECEBER.eventos },
   { k: 'premissas', l: SUBABAS_RECEBER.premissas },
+  { k: 'base', l: SUBABAS_RECEBER.base },
 ];
 
 /** Tablist das sub-abas de Previsão de caixa. Padrão WAI-ARIA de "automatic activation": seta move o foco E
@@ -644,6 +631,20 @@ export function ContasAReceber({
             </p>
           )}
           {dados && celula && <ComposicaoCelula linhas={dados.linhas} pagasPorRef={dados.pagasPorRef} celula={celula} semana={semana} onFechar={() => setCelula(null)} />}
+        </div>
+      )}
+
+      {subAtiva === 'base' && (
+        <div id="receber-painel-base" role="tabpanel" aria-labelledby="receber-tab-base" className="space-y-3">
+          {/* Sem consulta nova: as linhas do cenário ativo, as mesmas da grade. Trocar o cenário usa o cache do pai. */}
+          {onCenario && <SeletorCenario cenario={cenario} onCenario={(c) => { setCelula(null); onCenario(c); }} />}
+          {dados?.desligado && (
+            <p role="alert" className="rounded-[var(--r-md)] border border-[var(--yellow-border)] bg-[var(--yellow-subtle)] px-3 py-2 text-sm font-semibold text-[var(--fg)]">
+              {GRADE_RECEBER.recebimentoDesligado}
+            </p>
+          )}
+          {dados ? <BaseAuditavel dados={dados} rotuloCenario={CENARIO_RECEBER[dados.cenario]} />
+            : <p role="status" className="text-xs text-[var(--fg-3)]">{GRADE_RECEBER.carregandoCenario}</p>}
         </div>
       )}
 

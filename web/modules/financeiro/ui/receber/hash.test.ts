@@ -12,6 +12,7 @@ describe('subAbaReceberDoHash', () => {
     expect(subAbaReceberDoHash('ver=informados')).toBe('informados');
     expect(subAbaReceberDoHash('ver=premissas')).toBe('premissas');
     expect(subAbaReceberDoHash('ver=eventos')).toBe('eventos');
+    expect(subAbaReceberDoHash('ver=base')).toBe('base');
   });
   it('valor desconhecido ou outro parâmetro: cai na grade, não quebra', () => {
     expect(subAbaReceberDoHash('ver=carteira')).toBe('semana');
@@ -28,9 +29,10 @@ describe('hashDaSubAbaReceber', () => {
     expect(hashDaSubAbaReceber('informados')).toBe('#receber?ver=informados');
     expect(hashDaSubAbaReceber('premissas')).toBe('#receber?ver=premissas');
     expect(hashDaSubAbaReceber('eventos')).toBe('#receber?ver=eventos');
+    expect(hashDaSubAbaReceber('base')).toBe('#receber?ver=base');
   });
   it('ida e volta: parse(escrever(x)) === x', () => {
-    for (const s of ['semana', 'recorrencias', 'informados', 'eventos', 'premissas'] as const) {
+    for (const s of ['semana', 'recorrencias', 'informados', 'eventos', 'premissas', 'base'] as const) {
       const h = hashDaSubAbaReceber(s);
       const [, query] = h.split('?');
       expect(subAbaReceberDoHash(query)).toBe(s);
