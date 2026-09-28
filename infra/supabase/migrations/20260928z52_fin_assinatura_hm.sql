@@ -7,6 +7,15 @@
 -- lista sem card 130 pessoas / R$ 973.668 (as 21 a menos do que 151 nunca pagaram); T29 = 81; sem origem 4.
 -- Tempo (cache quente): lista 104–134 ms; RPC do board 39 ms. fn_fin_board_hotmart ≈ 1,1 s com e sem a z51 (lentidão
 -- anterior, não desta migration).
+-- PROVAS MEDIDAS em produção (28/09, coordenador):
+--   P8 regras coincidem: familia HM → (3507214, SUBSCRIPTION) = 1.167; (não 3507214, não SUBSCRIPTION) = 17.975; nenhuma
+--      linha mista. A CTE `ass` do board (SUBSCRIPTION) e esta regra (produto 3507214) contam o mesmo conjunto hoje.
+--   Junção card × mensalidade (fn_fin_board_hotmart ⋈ fn_fin_board_assinatura_hm por pessoa_chave): HM = 11, AURUM = 5.
+--   E1/E2 explain (analyze, buffers) do corpo de fin.assinatura_hm_por_pessoa: 33,9 ms; Bitmap Index Scan em
+--      hotmart_transacoes_produto_idx (1.218 linhas), Index Scan hotmart_transacoes_pkey, identidade_pkey e
+--      identidade_pessoa_idx; thb_alunos em Seq Scan (1.876 linhas, Merge Join) — no tamanho, o certo.
+--   E3 §4 simulada com rollback: devendo HM ≤120 d 51 → 27 parcelas (−24 = −R$ 47.949, exatamente o atraso da
+--      mensalidade); fn_fin_board_hotmart 980 → 979 ms. Decisão do João: §4 aplica ANTES do push do front.
 --
 -- Decisões do Marcio (28/09):
 --   1. mensalidade fica à parte no card (bloco "Assinatura HM"); pago e saldo do Programa não mudam;

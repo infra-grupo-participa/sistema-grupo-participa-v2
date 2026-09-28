@@ -10,8 +10,17 @@
 -- nunca passaram pela fila (0 liberações, 1 com login). Olhando a tabela inteira, a mensalidade de julho delas sumiria
 -- e elas perderiam o único caminho de ativação. Medido 28/09 (simulação com rollback): 3507214 pendente 32 → 16,
 -- no máximo 1 item por pessoa; outros produtos 351 → 351; fila 58 → 75 ms.
+-- explain (analyze, buffers) do corpo vivo (z53 + z55), usuário da equipe, 28/09: Execution Time 69,8 ms, 367 linhas.
+-- O NOT EXISTS da z53 roda 32× (só nas compras do 3507214) a 0,39 ms = 12,6 ms (Seq Scan em compras, 1.156 linhas na
+-- janela — no tamanho, o certo). A guarda z55 vira One-Time Filter (InitPlan), avaliada 1×, sem custo por linha.
+-- Provas do kirad (28/09): 0 compras HM sem produto_id; 0 pessoas do plano sem nenhuma linha na fila; aluno_novo das
+-- compras do Programa não mudou por causa da z51.
 --
 -- Replace sobre o corpo VIGENTE (pg_get_functiondef), com guarda. Não reescreve a função a partir de arquivo.
+-- ⚠️ RISCO DE COLISÃO: o arquivo NÃO versionado `20260908_fila_hm_reconhece_aurum.sql` (outra sessão) recria
+-- fn_hm_fila INTEIRA a partir de arquivo (create or replace, ~linha 252). Se alguém aplicar aquele arquivo depois,
+-- a z53 E a z55 (guarda de equipe) somem em silêncio. Conferido 28/09: o corpo vivo já tem o "aurum" daquele
+-- arquivo + a marca "z53" + a "z55". Antes de aplicar qualquer create de fn_hm_fila, reaplicar z53 e z55.
 --
 -- REVERSÃO:
 --   do $r$ declare d text; begin
