@@ -1,0 +1,3 @@
+-- 20260928z8 — correção da z7: para o Aurum o prefixo de turma era NULL e `NULL || e.nome` apagava o nome do evento
+-- (6 cards das Clínicas GO/POA caíam em "Reserva Aurum"). A view vigente é a da z7 com
+-- coalesce(case ... end, '') || e.nome — o arquivo da z7 já está com a forma corrigida.

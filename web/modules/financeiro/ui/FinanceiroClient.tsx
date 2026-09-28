@@ -11,7 +11,7 @@ import { casaBusca } from '../domain/busca';
 import { SupabaseFinanceiroRepository } from '../infrastructure/supabase-financeiro.repository';
 import { carregarBoard, type BoardCarregado, type CardComEfeito } from '../application/carregar-board';
 import { listarOfertas } from '../application/gerenciar-ofertas';
-import { agruparPorAcao, SEM_ACAO, TimelineAcoes } from './TimelineAcoes';
+import { agruparPorAcao, chaveDaAcao, SEM_ACAO, TimelineAcoes } from './TimelineAcoes';
 import { ProdutoTabs, type ProdutoChave } from './ProdutoTabs';
 import { LegendaCores } from './LegendaCores';
 import { BoardView } from './BoardView';
@@ -258,7 +258,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   const cardsFiltrados: CardComEfeito[] = useMemo(() => {
     if (!acaoEfetiva) return cardsDoProduto;
     if (acaoEfetiva === SEM_ACAO) return cardsDoProduto.filter((c) => c.acaoNome == null);
-    return cardsDoProduto.filter((c) => c.acaoNome === acaoEfetiva);
+    return cardsDoProduto.filter((c) => chaveDaAcao(c.acaoNome) === acaoEfetiva);
   }, [cardsDoProduto, acaoEfetiva]);
 
   // Camada mais rasa do funil de filtros: produto → canal → BUSCA. Sai daqui

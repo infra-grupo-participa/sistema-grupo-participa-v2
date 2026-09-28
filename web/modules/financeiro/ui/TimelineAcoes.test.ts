@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agruparPorAcao } from './TimelineAcoes';
+import { agruparPorAcao, chaveDaAcao } from './TimelineAcoes';
 import type { CardComEfeito } from '../application/carregar-board';
 
 const c = (acaoNome: string | null, acaoData: string | null) => ({ acaoNome, acaoData }) as unknown as CardComEfeito;
@@ -19,5 +19,19 @@ describe('agruparPorAcao', () => {
     ]);
     expect(r.find((a) => a.nome.startsWith('Comercial'))!.data).toBeNull();
     expect(r.find((a) => a.nome.startsWith('Comercial'))!.total).toBe(2);
+  });
+  it('HM agrupa pela turma; o botão guarda os eventos e a data mais antiga', () => {
+    const r = agruparPorAcao([
+      c('T40 · Holding Total HT30 (09–10/08/2026)', '2026-08-09T03:00:00Z'),
+      c('T39 · Holding Total ATM (06/07/2026)', '2026-07-06T03:00:00Z'),
+      c('T39 · Reunião fechada (25/06/2026)', '2026-06-25T03:00:00Z'),
+      c('T39 · Holding Total ATM (06/07/2026)', '2026-07-06T03:00:00Z'),
+      c('ETHB São Paulo (04–06/08/2026)', '2026-08-04T03:00:00Z'),
+    ]);
+    expect(r.map((a) => [a.nome, a.total])).toEqual([['T39', 3], ['ETHB São Paulo (04–06/08/2026)', 1], ['T40', 1]]);
+    expect(r[0].data).toBe('2026-06-25T03:00:00Z');
+    expect(r[0].eventos).toHaveLength(2);
+    expect(chaveDaAcao('T9 · Jornada de Holding Familiar — 03/2021')).toBe('T9');
+    expect(chaveDaAcao('Comercial (venda direta)')).toBe('Comercial (venda direta)');
   });
 });

@@ -1,9 +1,10 @@
 'use client';
 
-// Timeline de canais/ações no topo do board — botões que filtram os cards.
-// Desde 27/09 (20260928n) TODO card tem ação: a janela do evento, o link de venda (sck) ou a data da 1ª compra dizem de
-// onde a pessoa veio (fin.vw_acao_card). Os grupos que não são evento — venda direta do comercial, base antiga, base
-// fora de evento, sem pagamento — vão para o fim, sem data. "Sem ação identificada" só aparece se a função antiga voltar.
+// Timeline de origem no topo do board — botões que filtram os cards.
+// Desde 28/09 (20260928z7) a origem sai de um calendário único (fin.acoes ligado a fin.eventos, o mesmo da aba Funis):
+// link de venda → evento no dia da compra → comercial → turma. No HM o botão é a TURMA (T39, T40…) e o card mostra o
+// evento exato ("T39 · Holding Total ATM (06/07/2026)"); no Aurum o botão é o evento. Grupos que não são evento —
+// venda direta do comercial, base fora de evento, sem pagamento — vão para o fim, sem data.
 import { Icon } from '@/shared/ui/icons';
 import { fmtData } from '@/shared/ui/format';
 import type { CardComEfeito } from '../application/carregar-board';
@@ -15,7 +16,13 @@ export interface AcaoResumo {
   nome: string;
   data: string | null;
   total: number;
+  /** Eventos dentro do grupo (a turma junta vários) — vira o título do botão. */
+  eventos: string[];
 }
+
+const TURMA = /^(T\d+(?:\.\d+)?) · /;
+/** Chave do filtro: a turma quando o nome começa por ela ("T39 · …" → "T39"); senão o próprio nome. */
+export const chaveDaAcao = (nome: string | null): string => (nome ? (TURMA.exec(nome)?.[1] ?? nome) : SEM_ACAO);
 
 /** Agrupa os cards por ação, ordenado por data CRESCENTE (mais antiga primeiro
  *  — pedido explícito: "ordem cronológica entre eles"). Sem ação (null) vai
@@ -29,10 +36,13 @@ const FORA_DE_EVENTO = /^(Comercial|Base|Sem pagamento)/;
 export function agruparPorAcao(cards: CardComEfeito[]): AcaoResumo[] {
   const mapa = new Map<string, AcaoResumo>();
   for (const c of cards) {
-    const chave = c.acaoNome ?? SEM_ACAO;
+    const chave = chaveDaAcao(c.acaoNome);
     const fora = !c.acaoNome || FORA_DE_EVENTO.test(c.acaoNome);
-    const atual = mapa.get(chave) ?? { chave, nome: c.acaoNome ?? 'Sem ação identificada', data: fora ? null : c.acaoData, total: 0 };
+    const atual = mapa.get(chave) ?? { chave, nome: chave === SEM_ACAO ? 'Sem ação identificada' : chave, data: null, total: 0, eventos: [] };
     atual.total += 1;
+    // data do grupo = a mais antiga dos seus eventos
+    if (!fora && c.acaoData && (atual.data == null || String(c.acaoData) < String(atual.data))) atual.data = c.acaoData;
+    if (c.acaoNome && !atual.eventos.includes(c.acaoNome)) atual.eventos.push(c.acaoNome);
     mapa.set(chave, atual);
   }
   const lista = [...mapa.values()];
@@ -69,7 +79,7 @@ export function TimelineAcoes({ acoes, ativa, onSelecionar }: {
             role="tab"
             aria-selected={active}
             onClick={() => onSelecionar(a.chave)}
-            title={a.data ? fmtData(a.data) : undefined}
+            title={a.eventos.length > 1 || a.eventos[0] !== a.nome ? a.eventos.join(' · ') : a.data ? fmtData(a.data) : undefined}
             className={`shrink-0 inline-flex items-center gap-1.5 rounded-[var(--r-pill)] border px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
               active ? 'border-[var(--border-accent)] bg-[var(--accent-subtle)] text-[var(--accent)]' : semAcao ? 'border-[var(--border)] text-[var(--fg-3)] hover:border-[var(--border-strong)]' : 'border-[var(--border)] text-[var(--fg-2)] hover:border-[var(--border-strong)]'
             }`}
