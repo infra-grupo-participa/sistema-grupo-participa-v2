@@ -1,8 +1,8 @@
 'use client';
 
 // Recebimentos informados (bloco 5, 28/09/2026): renovações Diamante/Aurum negociadas fora, que o financeiro digitava
-// numa planilha. Sub-seção da aba Contas a Receber, como Recorrências.
-// - Carga: UMA chamada (fn_fin_informados_listar) quando a sub-seção abre; recarrega só depois de gravar.
+// numa planilha. Sub-aba própria de Previsão de caixa (#receber?ver=informados) — a sub-aba JÁ é o conteúdo, sem acordeão.
+// - Carga: UMA chamada (fn_fin_informados_listar) quando a sub-aba monta; recarrega só depois de gravar.
 // - Escrita (criar/editar, baixa manual, desfazer, arquivar, colar da planilha): só com canEdit (quem opera o
 //   financeiro). A trava real é o banco: gp_pode_operar_financeiro() em cada RPC.
 // - Identificadores chegam MASCARADOS sem gp_pode_ver_cpf(); a máscara nunca volta ao banco (ver entradaDoFormulario).
@@ -39,22 +39,17 @@ type Aviso = { tipo: 'ok' | 'erro'; msg: string } | null;
 type AcaoLinha = { id: string; tipo: 'baixar' | 'arquivar'; valor: string } | null;
 type Form = { original: Informado | null; valores: FormInformado; erros: string[] } | null;
 
-export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = null, autoAbrir = false }: {
+export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = null }: {
   repo: RepoInformados;
   canEdit: boolean;
   canVerDoc: boolean;
   /** Depois de gravar: a grade (bloco 5) muda — o pai recarrega fn_fin_receber_semanal. */
   onAlterado?: () => void;
-  /** Só para teste de render: lista já carregada, sub-seção aberta. */
+  /** Só para teste de render: lista já carregada (não consulta ao montar). */
   inicial?: Informado[] | null;
-  /** A sub-seção agora é uma sub-aba própria (Previsão de caixa): abrir a aba já carrega, sem exigir um segundo
-   * clique no acordeão interno. Padrão continua fechado (compatível com quem usa Informados fora da sub-aba). */
-  autoAbrir?: boolean;
 }) {
-  const [aberto, setAberto] = useState(inicial != null || autoAbrir);
   const [lista, setLista] = useState<Informado[] | null>(inicial ? ordenarInformados(inicial) : null);
   const [erro, setErro] = useState<string | null>(null);
-  const [carregando, setCarregando] = useState(false);
   const [filtro, setFiltro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<Aviso>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -62,28 +57,18 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
   const [acao, setAcao] = useState<AcaoLinha>(null);
   const [colando, setColando] = useState(false);
 
-  const carregar = async () => {
-    setCarregando(true);
-    try {
-      setLista(ordenarInformados(await repo.loadInformados()));
-      setErro(null);
-    } catch {
-      setErro(SECAO_INFORMADOS.erroCarregamento);
-    } finally {
-      setCarregando(false);
-    }
-  };
+  // Busca e aplica só no retorno (setState em callback assíncrono, nunca síncrono no corpo do efeito).
+  const buscar = () => repo.loadInformados().then(
+    (l) => { setLista(ordenarInformados(l)); setErro(null); },
+    () => setErro(SECAO_INFORMADOS.erroCarregamento),
+  );
+  /** Recarga pedida pelo usuário ("tentar de novo") ou depois de gravar. */
+  const carregar = () => { setErro(null); return buscar(); };
 
-  const alternar = () => {
-    const abrir = !aberto;
-    setAberto(abrir);
-    if (abrir && lista == null && !carregando) void carregar();
-  };
-
-  // autoAbrir (sub-aba própria): carrega uma vez, ao montar já aberto — sem depender do clique no acordeão.
-  // `inicial` (teste de render) já entra com a lista pronta, então esta condição não dispara chamada nenhuma.
+  // Carga ao montar a sub-aba. `inicial` (teste de render) já entra com a lista pronta: nenhuma chamada.
+  // O estado "carregando" é derivado (lista == null && !erro), então o efeito não precisa de setState síncrono.
   useEffect(() => {
-    if (autoAbrir && lista == null && !carregando) void carregar();
+    if (inicial == null) void buscar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -149,18 +134,14 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
   return (
     <section className="space-y-2" aria-labelledby="informados-titulo">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 id="informados-titulo" className="text-sm font-semibold text-[var(--fg)]">
-          <button type="button" onClick={alternar} aria-expanded={aberto} aria-controls="informados-corpo" className="hover:text-[var(--accent)]">
-            {aberto ? '▾' : '▸'} {SECAO_INFORMADOS.titulo}
-          </button>
-        </h2>
-        {aberto && lista && botoes.map((b) => (
+        <h2 id="informados-titulo" className="text-sm font-semibold text-[var(--fg)]">{SECAO_INFORMADOS.titulo}</h2>
+        {lista && botoes.map((b) => (
           <button key={b.k ?? 'ativos'} type="button" aria-pressed={filtro === b.k} onClick={() => setFiltro(b.k)}
             className={`rounded-[var(--r-sm)] border px-2 py-0.5 text-xs ${filtro === b.k ? 'border-[var(--accent)] font-semibold text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-2)]'}`}>
             {b.l} <span className="tabular">{b.n}</span>{b.v != null && b.n > 0 ? <span className="tabular"> · {fmtBRLc(b.v)}</span> : null}
           </button>
         ))}
-        {aberto && lista && canEdit && (
+        {lista && canEdit && (
           <span className="ml-auto flex gap-2">
             <button type="button" className={BTN} disabled={ocupado}
               onClick={() => { setAcao(null); setForm({ original: null, valores: formDeInformado(null, canVerDoc), erros: [] }); }}>
@@ -171,122 +152,120 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
         )}
       </div>
 
-      {aberto && (
-        <div id="informados-corpo" className="space-y-2">
-          <p className="text-xs text-[var(--fg-3)]">
-            {SECAO_INFORMADOS.explicacao}{!canEdit && <> {SECAO_INFORMADOS.somenteLeitura}</>}
+      <div id="informados-corpo" className="space-y-2">
+        <p className="text-xs text-[var(--fg-3)]">
+          {SECAO_INFORMADOS.explicacao}{!canEdit && <> {SECAO_INFORMADOS.somenteLeitura}</>}
+        </p>
+        {aviso && (
+          <p role={aviso.tipo === 'erro' ? 'alert' : 'status'}
+            className={`text-xs ${aviso.tipo === 'erro' ? 'font-semibold text-[var(--red)]' : 'text-[var(--fg-2)]'}`}>{aviso.msg}</p>
+        )}
+        {erro ? (
+          <p role="alert" className="text-xs text-[var(--fg-2)]">
+            {erro} <button type="button" className={BTN} onClick={() => void carregar()}>{SECAO_INFORMADOS.tentarDeNovo}</button>
           </p>
-          {aviso && (
-            <p role={aviso.tipo === 'erro' ? 'alert' : 'status'}
-              className={`text-xs ${aviso.tipo === 'erro' ? 'font-semibold text-[var(--red)]' : 'text-[var(--fg-2)]'}`}>{aviso.msg}</p>
-          )}
-          {erro ? (
-            <p role="alert" className="text-xs text-[var(--fg-2)]">
-              {erro} <button type="button" className={BTN} onClick={() => void carregar()}>{SECAO_INFORMADOS.tentarDeNovo}</button>
-            </p>
-          ) : lista == null ? (
-            <p className="text-xs text-[var(--fg-3)]">{SECAO_INFORMADOS.carregando}</p>
-          ) : (
-            <>
-              {canEdit && colando && (
-                <ColarDaPlanilha repo={repo} canVerDoc={canVerDoc} onGravado={(n) => { setColando(false); void depoisDeGravar(COLAR_PLANILHA.gravou(n)); }} />
-              )}
-              {canEdit && form && (
-                <FormularioInformado form={form} canVerDoc={canVerDoc} ocupado={ocupado}
-                  onMudar={(valores) => setForm({ ...form, valores })} onSalvar={salvarForm} onCancelar={() => setForm(null)} />
-              )}
-              <div className="overflow-x-auto rounded-[var(--r-md)] border border-[var(--border)]">
-                <table className="w-full border-collapse text-xs">
-                  <thead className="bg-[var(--surface-2)]">
-                    <tr>
-                      <th className={TH}>{CAMPOS_INFORMADO.dataPrevista}</th><th className={TH}>{CAMPOS_INFORMADO.cliente}</th>
-                      <th className={TH}>{CAMPOS_INFORMADO.tipo}</th><th className={`${TH} text-right`}>{CAMPOS_INFORMADO.valor}</th>
-                      <th className={TH}>{CAMPOS_INFORMADO.viaHotmart}</th><th className={TH}>{CAMPOS_INFORMADO.produtos}</th>
-                      <th className={TH}>{CAMPOS_INFORMADO.identificador1}</th><th className={TH}>{CAMPOS_INFORMADO.identificador2}</th>
-                      <th className={TH}>{CAMPOS_INFORMADO.acordoDesde}</th><th className={`${TH} text-right`}>{CAMPOS_INFORMADO.recebidoAcumulado}</th>
-                      <th className={TH}>{CAMPOS_INFORMADO.situacao}</th>
-                      {canEdit && <th className={TH}>{CAMPOS_INFORMADO.acoes}</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visiveis.length === 0 ? (
-                      <tr><td colSpan={nCols} className="px-2 py-2 text-[var(--fg-3)]">{SECAO_INFORMADOS.vazio}</td></tr>
-                    ) : visiveis.map((i) => [
-                      <tr key={i.id} className="border-t border-[var(--border-faint)] text-[var(--fg)]">
-                        <td className={`${TD} tabular whitespace-nowrap`}>{fmtData(i.data_prevista)}</td>
-                        <td className={TD}>{i.cliente}</td>
-                        <td className={`${TD} whitespace-nowrap text-[var(--fg-2)]`}>{rotuloTipoInformado(i.tipo)}</td>
-                        <td className={`${TD} text-right tabular whitespace-nowrap`}>{fmtBRLc(i.valor)}</td>
-                        <td className={TD}>{i.via_hotmart ? CAMPOS_INFORMADO.sim : CAMPOS_INFORMADO.nao}</td>
-                        <td className={`${TD} text-[var(--fg-2)]`}>{i.produtos.join('; ') || '—'}</td>
-                        <td className={`${TD} font-mono text-[11px] text-[var(--fg-2)]`}>{i.identificador1 ?? '—'}</td>
-                        <td className={`${TD} font-mono text-[11px] text-[var(--fg-2)]`}>{i.identificador2 ?? '—'}</td>
-                        <td className={`${TD} tabular whitespace-nowrap`}>{fmtData(i.acordo_desde)}</td>
-                        <td className={`${TD} text-right tabular whitespace-nowrap text-[var(--fg-2)]`}>
-                          {i.via_hotmart && (i.recebido_hotmart != null || i.acumulado_acordo != null)
-                            ? `${fmtBRLc(i.recebido_hotmart)} / ${fmtBRLc(i.acumulado_acordo)}` : '—'}
-                        </td>
+        ) : lista == null ? (
+          <p className="text-xs text-[var(--fg-3)]">{SECAO_INFORMADOS.carregando}</p>
+        ) : (
+          <>
+            {canEdit && colando && (
+              <ColarDaPlanilha repo={repo} canVerDoc={canVerDoc} onGravado={(n) => { setColando(false); void depoisDeGravar(COLAR_PLANILHA.gravou(n)); }} />
+            )}
+            {canEdit && form && (
+              <FormularioInformado form={form} canVerDoc={canVerDoc} ocupado={ocupado}
+                onMudar={(valores) => setForm({ ...form, valores })} onSalvar={salvarForm} onCancelar={() => setForm(null)} />
+            )}
+            <div className="overflow-x-auto rounded-[var(--r-md)] border border-[var(--border)]">
+              <table className="w-full border-collapse text-xs">
+                <thead className="bg-[var(--surface-2)]">
+                  <tr>
+                    <th className={TH}>{CAMPOS_INFORMADO.dataPrevista}</th><th className={TH}>{CAMPOS_INFORMADO.cliente}</th>
+                    <th className={TH}>{CAMPOS_INFORMADO.tipo}</th><th className={`${TH} text-right`}>{CAMPOS_INFORMADO.valor}</th>
+                    <th className={TH}>{CAMPOS_INFORMADO.viaHotmart}</th><th className={TH}>{CAMPOS_INFORMADO.produtos}</th>
+                    <th className={TH}>{CAMPOS_INFORMADO.identificador1}</th><th className={TH}>{CAMPOS_INFORMADO.identificador2}</th>
+                    <th className={TH}>{CAMPOS_INFORMADO.acordoDesde}</th><th className={`${TH} text-right`}>{CAMPOS_INFORMADO.recebidoAcumulado}</th>
+                    <th className={TH}>{CAMPOS_INFORMADO.situacao}</th>
+                    {canEdit && <th className={TH}>{CAMPOS_INFORMADO.acoes}</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visiveis.length === 0 ? (
+                    <tr><td colSpan={nCols} className="px-2 py-2 text-[var(--fg-3)]">{SECAO_INFORMADOS.vazio}</td></tr>
+                  ) : visiveis.map((i) => [
+                    <tr key={i.id} className="border-t border-[var(--border-faint)] text-[var(--fg)]">
+                      <td className={`${TD} tabular whitespace-nowrap`}>{fmtData(i.data_prevista)}</td>
+                      <td className={TD}>{i.cliente}</td>
+                      <td className={`${TD} whitespace-nowrap text-[var(--fg-2)]`}>{rotuloTipoInformado(i.tipo)}</td>
+                      <td className={`${TD} text-right tabular whitespace-nowrap`}>{fmtBRLc(i.valor)}</td>
+                      <td className={TD}>{i.via_hotmart ? CAMPOS_INFORMADO.sim : CAMPOS_INFORMADO.nao}</td>
+                      <td className={`${TD} text-[var(--fg-2)]`}>{i.produtos.join('; ') || '—'}</td>
+                      <td className={`${TD} font-mono text-[11px] text-[var(--fg-2)]`}>{i.identificador1 ?? '—'}</td>
+                      <td className={`${TD} font-mono text-[11px] text-[var(--fg-2)]`}>{i.identificador2 ?? '—'}</td>
+                      <td className={`${TD} tabular whitespace-nowrap`}>{fmtData(i.acordo_desde)}</td>
+                      <td className={`${TD} text-right tabular whitespace-nowrap text-[var(--fg-2)]`}>
+                        {i.via_hotmart && (i.recebido_hotmart != null || i.acumulado_acordo != null)
+                          ? `${fmtBRLc(i.recebido_hotmart)} / ${fmtBRLc(i.acumulado_acordo)}` : '—'}
+                      </td>
+                      <td className={`${TD} whitespace-nowrap`}>
+                        {/* Cor só no que pede ação: em atraso — cobrar. O texto diz a situação; a cor não é o único sinal. */}
+                        {i.situacao === 'em_atraso_cobrar' ? <Badge tone="warning">{rotuloSituacaoInformado(i.situacao)}</Badge> : rotuloSituacaoInformado(i.situacao)}
+                        {i.baixa_manual_em && <span className="text-[var(--fg-3)]"> · {fmtData(i.baixa_manual_em)}</span>}
+                        {i.situacao === 'arquivado' && i.motivo_arquivo && (
+                          <span className="block whitespace-normal text-[var(--fg-3)]">{ACOES_INFORMADO.arquivadoPor(i.motivo_arquivo)}</span>
+                        )}
+                      </td>
+                      {canEdit && (
                         <td className={`${TD} whitespace-nowrap`}>
-                          {/* Cor só no que pede ação: em atraso — cobrar. O texto diz a situação; a cor não é o único sinal. */}
-                          {i.situacao === 'em_atraso_cobrar' ? <Badge tone="warning">{rotuloSituacaoInformado(i.situacao)}</Badge> : rotuloSituacaoInformado(i.situacao)}
-                          {i.baixa_manual_em && <span className="text-[var(--fg-3)]"> · {fmtData(i.baixa_manual_em)}</span>}
-                          {i.situacao === 'arquivado' && i.motivo_arquivo && (
-                            <span className="block whitespace-normal text-[var(--fg-3)]">{ACOES_INFORMADO.arquivadoPor(i.motivo_arquivo)}</span>
+                          {i.situacao !== 'arquivado' && (
+                            <span className="flex gap-1">
+                              <button type="button" className={BTN} disabled={ocupado}
+                                onClick={() => { setAcao(null); setForm({ original: i, valores: formDeInformado(i, canVerDoc), erros: [] }); }}>
+                                {ACOES_INFORMADO.editar}
+                              </button>
+                              {i.baixa_manual_em ? (
+                                <button type="button" className={BTN} disabled={ocupado}
+                                  onClick={() => void executar(() => repo.baixarInformado(i.id, null))}>{ACOES_INFORMADO.desfazerBaixa}</button>
+                              ) : (
+                                <button type="button" className={BTN} disabled={ocupado} aria-expanded={acao?.id === i.id && acao.tipo === 'baixar'}
+                                  onClick={() => setAcao({ id: i.id, tipo: 'baixar', valor: hojeISO() })}>{ACOES_INFORMADO.baixar}</button>
+                              )}
+                              <button type="button" className={BTN} disabled={ocupado} aria-expanded={acao?.id === i.id && acao.tipo === 'arquivar'}
+                                onClick={() => setAcao({ id: i.id, tipo: 'arquivar', valor: '' })}>{ACOES_INFORMADO.arquivar}</button>
+                            </span>
                           )}
                         </td>
-                        {canEdit && (
-                          <td className={`${TD} whitespace-nowrap`}>
-                            {i.situacao !== 'arquivado' && (
-                              <span className="flex gap-1">
-                                <button type="button" className={BTN} disabled={ocupado}
-                                  onClick={() => { setAcao(null); setForm({ original: i, valores: formDeInformado(i, canVerDoc), erros: [] }); }}>
-                                  {ACOES_INFORMADO.editar}
-                                </button>
-                                {i.baixa_manual_em ? (
-                                  <button type="button" className={BTN} disabled={ocupado}
-                                    onClick={() => void executar(() => repo.baixarInformado(i.id, null))}>{ACOES_INFORMADO.desfazerBaixa}</button>
-                                ) : (
-                                  <button type="button" className={BTN} disabled={ocupado} aria-expanded={acao?.id === i.id && acao.tipo === 'baixar'}
-                                    onClick={() => setAcao({ id: i.id, tipo: 'baixar', valor: hojeISO() })}>{ACOES_INFORMADO.baixar}</button>
-                                )}
-                                <button type="button" className={BTN} disabled={ocupado} aria-expanded={acao?.id === i.id && acao.tipo === 'arquivar'}
-                                  onClick={() => setAcao({ id: i.id, tipo: 'arquivar', valor: '' })}>{ACOES_INFORMADO.arquivar}</button>
-                              </span>
-                            )}
-                          </td>
-                        )}
-                      </tr>,
-                      canEdit && acao?.id === i.id ? (
-                        <tr key={`${i.id}-acao`} className="bg-[var(--surface-2)]">
-                          <td colSpan={nCols} className="px-2 py-1.5">
-                            <span className="flex flex-wrap items-center gap-2 text-xs">
-                              <label className="flex items-center gap-2 text-[var(--fg-2)]">
-                                {acao.tipo === 'baixar' ? ACOES_INFORMADO.dataDaBaixa : ACOES_INFORMADO.motivo}
-                                {acao.tipo === 'baixar' ? (
-                                  <input type="date" className={`${INPUT} w-auto`} value={acao.valor} max={hojeISO()}
-                                    onChange={(e) => setAcao({ ...acao, valor: e.target.value })} />
-                                ) : (
-                                  <input type="text" className={`${INPUT} w-72`} value={acao.valor} maxLength={500}
-                                    onChange={(e) => setAcao({ ...acao, valor: e.target.value })} />
-                                )}
-                              </label>
-                              <button type="button" className={BTN_1} onClick={confirmarAcao}
-                                disabled={ocupado || (acao.tipo === 'baixar' ? !acao.valor : acao.valor.trim().length < 3)}>
-                                {acao.tipo === 'baixar' ? ACOES_INFORMADO.confirmarBaixa : ACOES_INFORMADO.confirmarArquivar}
-                              </button>
-                              <button type="button" className={BTN} onClick={() => setAcao(null)}>{ACOES_INFORMADO.cancelar}</button>
-                            </span>
-                          </td>
-                        </tr>
-                      ) : null,
-                    ])}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
-      )}
+                      )}
+                    </tr>,
+                    canEdit && acao?.id === i.id ? (
+                      <tr key={`${i.id}-acao`} className="bg-[var(--surface-2)]">
+                        <td colSpan={nCols} className="px-2 py-1.5">
+                          <span className="flex flex-wrap items-center gap-2 text-xs">
+                            <label className="flex items-center gap-2 text-[var(--fg-2)]">
+                              {acao.tipo === 'baixar' ? ACOES_INFORMADO.dataDaBaixa : ACOES_INFORMADO.motivo}
+                              {acao.tipo === 'baixar' ? (
+                                <input type="date" className={`${INPUT} w-auto`} value={acao.valor} max={hojeISO()}
+                                  onChange={(e) => setAcao({ ...acao, valor: e.target.value })} />
+                              ) : (
+                                <input type="text" className={`${INPUT} w-72`} value={acao.valor} maxLength={500}
+                                  onChange={(e) => setAcao({ ...acao, valor: e.target.value })} />
+                              )}
+                            </label>
+                            <button type="button" className={BTN_1} onClick={confirmarAcao}
+                              disabled={ocupado || (acao.tipo === 'baixar' ? !acao.valor : acao.valor.trim().length < 3)}>
+                              {acao.tipo === 'baixar' ? ACOES_INFORMADO.confirmarBaixa : ACOES_INFORMADO.confirmarArquivar}
+                            </button>
+                            <button type="button" className={BTN} onClick={() => setAcao(null)}>{ACOES_INFORMADO.cancelar}</button>
+                          </span>
+                        </td>
+                      </tr>
+                    ) : null,
+                  ])}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
     </section>
   );
 }

@@ -35,11 +35,13 @@ const lista = [
 ];
 
 describe('Informados — sub-seção', () => {
-  it('fechada: nenhuma chamada ao banco no render, e a lista não aparece', () => {
+  it('sem acordeão (a sub-aba já é o conteúdo): título simples e "carregando"; o render não consulta (carga no efeito)', () => {
     const repo = repoEspiao();
     const html = renderToStaticMarkup(createElement(Informados, { repo, canEdit: true, canVerDoc: false }));
-    expect(html).toContain('Recebimentos informados');
-    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('<h2 id="informados-titulo" class="text-sm font-semibold text-[var(--fg)]">Recebimentos informados</h2>');
+    expect(html).not.toContain('aria-expanded="false"');
+    expect(html).not.toMatch(/[▸▾]/);
+    expect(html).toContain('Carregando recebimentos informados');
     expect(html).not.toContain('Cliente');
     expect(repo.loadInformados).not.toHaveBeenCalled();
   });
@@ -164,7 +166,7 @@ describe('Formulário — identificador conforme gp_pode_ver_cpf', () => {
 describe('bloco 5 na grade e coberta_informado nas Recorrências', () => {
   const L = (p: Partial<LinhaReceber>): LinhaReceber => ({
     bloco: 5, grupo: 'Renovações Diamante', componente: 'cheio', data_caixa: '2026-10-05', valor: 0,
-    situacao: 'a_receber', origem_dia: null, ref: 'u', rotulo: 'Cliente A', produto: null, k: null, detalhe: [], ...p,
+    situacao: 'a_receber', origem_dia: null, ref: 'u', rotulo: 'Cliente A', produto: null, k: null, detalhe: [], pagas: [], fator: 1, certeza: 'certo', centro_custo: null, tratamento: null, cenario: 'base', ...p, valor_bruto: p.valor_bruto ?? p.valor ?? 0,
   });
   it('bloco 5 com nome próprio e grupos do contrato; coberta não soma e aparece com rótulo', () => {
     const d = montarContasReceber([
