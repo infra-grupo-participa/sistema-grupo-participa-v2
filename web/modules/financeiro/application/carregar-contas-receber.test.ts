@@ -4,7 +4,7 @@ import type { LinhaReceber } from '../domain/contas-receber';
 
 const linha: LinhaReceber = {
   bloco: 1, grupo: 'Vendas já realizadas', componente: 'antecipacao', data_caixa: '2026-09-29', valor: 865.01,
-  situacao: 'a_receber', origem_dia: '2026-09-25', ref: null, rotulo: null, produto: null, k: null, detalhe: [], pagas: [], valor_bruto: 865.01, fator: 1, certeza: 'certo', centro_custo: null, tratamento: null, cenario: 'base',
+  situacao: 'a_receber', origem_dia: '2026-09-25', ref: null, rotulo: null, produto: null, k: null, detalhe: [], projecao: [], pagas: [], valor_bruto: 865.01, fator: 1, certeza: 'certo', centro_custo: null, tratamento: null, cenario: 'base',
 };
 
 describe('carregarContasReceber', () => {

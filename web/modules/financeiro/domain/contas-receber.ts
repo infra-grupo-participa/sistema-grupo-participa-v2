@@ -1,22 +1,46 @@
-// Contas a Receber — fase 1 (28/09/2026). Função PURA, sem I/O. Substitui, na planilha semanal do financeiro
-// ("Contas a Receber Semanal Set-Dez26"), só o que é CERTO:
+// Contas a Receber (28/09/2026). Função PURA, sem I/O. Substitui a planilha semanal do financeiro
+// ("Contas a Receber Semanal Set-Dez26"), separando o CERTO do ESTIMADO:
+//   CERTO
 //   bloco 1 — vendas já feitas, dinheiro ainda a cair (90% − 3,89% em D+2 útil; 10% no 1º dia útil ≥ D+30);
 //   bloco 2 — assinaturas e parcelas futuras já contratadas;
 //   bloco 5 — recebimentos informados (renovações Diamante/Aurum negociadas fora, cadastradas no sistema — 28/09).
-// Blocos 3, 4, 6 e 7 da planilha (vendas novas, evento, ajustes, Soluções) ficam para depois.
+//   ESTIMADO (z67, só com a premissa projecao_no_receber ligada)
+//   bloco 3 — vendas novas por semana (premissa ou sugestão medida);
+//   bloco 4 — evento planejado (tamanho × curva do evento de referência);
+//   bloco 6 — reserva de reembolso e chargeback, NEGATIVA, sobre 3 + 4.
+//   FORA DA SOMA
+//   bloco 8 — informativo: saldos combinados no board (situacao 'informativo'); somar contaria duas vezes com o bloco 3.
+// Bloco 7 (Soluções) fica para depois.
 //
 // Fonte: public.fn_fin_receber_semanal(p_corte, p_ate, p_cenario) — UMA chamada por cenário (NÃO é fn_fin_contas_receber(text), o razão do board); o cálculo de data de caixa (dias úteis,
 // feriados) e a baixa do que já se realizou moram no banco. Aqui só: tipar, converter numeric, cortar em semanas e somar.
 //
 // Esta é a ÚNICA fonte da semana: a tela e o PDF futuro usam `semanas()` e `agregarReceber()` daqui.
 
-export type ComponenteReceber = 'antecipacao' | 'garantia' | 'cheio';
+export type ComponenteReceber = 'antecipacao' | 'garantia' | 'cheio' | 'reserva';
 /**
  * Só `a_receber` soma. `realizada` vem para auditoria; `em_atraso_fora` saiu da projeção; `coberta_informado` é a
  * cobrança do bloco 2 que um recebimento informado (bloco 5) já cobre — o informado prevalece e ela sai da soma com o
  * grupo inalterado (contrato do bloco 5, conflito 6 do plano).
  */
-export type SituacaoReceber = 'a_receber' | 'realizada' | 'em_atraso_fora' | 'coberta_informado';
+export type SituacaoReceber = 'a_receber' | 'realizada' | 'em_atraso_fora' | 'coberta_informado' | 'sem_base' | 'informativo';
+// z67: 'sem_base' = grupo estimado sem premissa e sem sugestão medida (valor e data NULL no banco: "não sei", nunca zero);
+// 'informativo' = bloco 8, acordos no board, visível e FORA da soma.
+
+/** Blocos do ESTIMADO (z67). O resto que soma é CERTO. O cenário mexe sobretudo aqui. */
+export const BLOCOS_ESTIMADO: readonly number[] = [3, 4, 6];
+/** Bloco informativo (acordos combinados no board): aparece, nunca soma. */
+export const BLOCO_INFORMATIVO = 8;
+export const secaoDoBloco = (bloco: number): 'certo' | 'estimado' => (BLOCOS_ESTIMADO.includes(bloco) ? 'estimado' : 'certo');
+
+/** Blocos 3 e 4 (z67): uma venda projetada do dia que cai nesta data de caixa, e de onde veio o valor. */
+export interface VendaProjetada {
+  dia: string | null;
+  /** Venda do dia (líquido estimado), não o que cai: esse é a linha. */
+  valor_venda: number;
+  /** 'mediana 12 sem' | 'definido por <nome> em dd/mm/aaaa' | 'curva <evento de referência>'. */
+  base: string | null;
+}
 
 /** Bloco 1: uma venda do dia que compõe a antecipação/garantia daquele dia. */
 export interface VendaDoDia {
@@ -49,7 +73,8 @@ export interface LinhaReceber {
   /** Dia em que o dinheiro fica disponível (YYYY-MM-DD). É o eixo da grade. NULL em realizada/em_atraso_fora e
    *  quando a premissa de recebimento está desligada no banco — nunca vira data inventada. */
   data_caixa: string | null;
-  /** ESPERADO (contrato v2): round(valor_bruto × fator, 2). É o que soma na grade. */
+  /** ESPERADO (contrato v2): round(valor_bruto × fator, 2). É o que soma na grade (só em a_receber). Em 'sem_base' o
+   *  banco manda NULL e aqui fica 0 — a tela lê a situação e escreve "sem base medida", nunca este número. */
   valor: number;
   situacao: SituacaoReceber;
   /** Bloco 1: dia da venda. Bloco 2: vencimento da cobrança (contrato do victor, 28/09). */
@@ -60,8 +85,12 @@ export interface LinhaReceber {
   produto: string | null;
   /** Meses à frente (mês do corte = 1). */
   k: number | null;
-  /** Bloco 1: vendas do dia. Blocos 2 e 5: [] (o detalhe do bloco 2 tem outro formato — ver `pagas`). */
+  /** Bloco 1: vendas do dia. Blocos 2 a 8: [] (o detalhe do bloco 2 e dos blocos 3/4 tem outro formato — ver `pagas`
+   *  e `projecao`). */
   detalhe: VendaDoDia[];
+  /** Blocos 3 e 4 (z67): vendas projetadas desta data de caixa. Só na linha 'antecipacao' (a 'garantia' é a mesma
+   *  venda e vem NULL → []). Outros blocos: []. */
+  projecao: VendaProjetada[];
   /** Bloco 2: transações pagas do contrato como vieram NESTA linha. null = a linha não trouxe (o banco manda a lista
    *  UMA vez por contrato, na 1ª linha a_receber; na z66 vinha em todas). Leia sempre por `pagasPorContrato` (ref),
    *  nunca direto daqui. Outros blocos: []. */
@@ -97,7 +126,14 @@ export const GRUPOS_BLOCO_5 = [
   'Outros recebimentos informados',
 ] as const;
 
-const GRUPOS_POR_BLOCO: Record<number, readonly string[]> = { 1: [GRUPO_BLOCO_1], 2: GRUPOS_BLOCO_2, 5: GRUPOS_BLOCO_5 };
+/** Ordem das linhas do bloco 3 (vendas novas, z67). O bloco 4 tem um grupo por evento planejado (ordem alfabética). */
+export const GRUPOS_BLOCO_3 = ['HM avulso', 'Holding Total', 'Outros produtos'] as const;
+export const GRUPO_BLOCO_6 = 'Reserva de reembolso e chargeback';
+export const GRUPO_BLOCO_8 = 'Informativo: acordos no board';
+
+const GRUPOS_POR_BLOCO: Record<number, readonly string[]> = {
+  1: [GRUPO_BLOCO_1], 2: GRUPOS_BLOCO_2, 3: GRUPOS_BLOCO_3, 5: GRUPOS_BLOCO_5, 6: [GRUPO_BLOCO_6],
+};
 
 // ─── Conversão (numeric do PostgREST pode chegar como texto) ────────────────
 const num = (v: unknown): number => Number(v ?? 0) || 0;
@@ -123,6 +159,14 @@ function lerDetalhe(v: unknown): VendaDoDia[] {
       liquido: num(o.liquido),
     };
   });
+}
+
+function lerProjecao(v: unknown): VendaProjetada[] {
+  return lerLista(v).map((o) => ({
+    dia: dia(o.dia),
+    valor_venda: num(o.valor_venda),
+    base: o.base == null || o.base === '' ? null : String(o.base),
+  }));
 }
 
 /** `detalhe` NULL (ou ausente) = a linha não trouxe a lista → null; `[]` = o contrato não tem transação paga. */
@@ -161,7 +205,8 @@ export function normalizarLinhaReceber(r: Record<string, unknown>): LinhaReceber
     rotulo: r.rotulo == null ? null : String(r.rotulo),
     produto: r.produto == null ? null : String(r.produto),
     k: numOuNull(r.k),
-    detalhe: bloco === 2 ? [] : lerDetalhe(r.detalhe),
+    detalhe: bloco === 2 || bloco === 3 || bloco === 4 ? [] : lerDetalhe(r.detalhe),
+    projecao: bloco === 3 || bloco === 4 ? lerProjecao(r.detalhe) : [],
     pagas: bloco === 2 ? lerPagas(r.detalhe) : [],
     valor_bruto: r.valor_bruto == null || r.valor_bruto === '' ? valor : num(r.valor_bruto),
     fator: fator == null ? 1 : fator,
@@ -305,6 +350,17 @@ export interface GradeReceber {
   semDataCaixa: { linhas: number; valor: number };
   /** a_receber com data_caixa fora do período: não entra na grade, mas não some em silêncio. */
   foraDoPeriodo: { linhas: number; valor: number };
+  /** Subtotais das duas seções (a soma dos dois = totalPorSemana). */
+  certoPorSemana: number[];
+  certoTotal: number;
+  estimadoPorSemana: number[];
+  estimadoTotal: number;
+  /** Grupos estimados sem base (situacao 'sem_base'): aparecem como "sem base medida", fora da soma. */
+  semBase: { bloco: number; grupo: string; tratamento: string | null }[];
+  /** Bloco 8 (situacao 'informativo'): mesma régua de semanas, FORA de toda soma. NULL = nenhuma linha. */
+  informativo: {
+    grupo: string; porSemana: number[]; total: number; linhas: number; foraDoPeriodo: { linhas: number; valor: number };
+  } | null;
 }
 
 /** Soma em centavos: 0,1 + 0,2 não vira 0,30000000000000004 no total da semana. */
@@ -326,7 +382,20 @@ export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: stri
   let foraC = 0;
   let semDataN = 0;
   let semDataC = 0;
+  const semBase: GradeReceber['semBase'] = [];
+  let info: { grupo: string; cs: number[]; n: number; foraN: number; foraC: number } | null = null;
   for (const l of linhas) {
+    if (l.situacao === 'sem_base') {
+      if (!semBase.some((x) => x.bloco === l.bloco && x.grupo === l.grupo)) semBase.push({ bloco: l.bloco, grupo: l.grupo, tratamento: l.tratamento });
+      continue;
+    }
+    if (l.situacao === 'informativo') {
+      if (!info) info = { grupo: l.grupo, cs: new Array(n).fill(0), n: 0, foraN: 0, foraC: 0 };
+      info.n += 1;
+      const i = l.data_caixa ? semanaDe(sems, l.data_caixa) : -1;
+      if (i === -1) { info.foraN += 1; info.foraC += c(l.valor); } else info.cs[i] += c(l.valor);
+      continue;
+    }
     if (l.situacao !== 'a_receber') continue;
     if (!l.data_caixa) { semDataN += 1; semDataC += c(l.valor); continue; }
     const i = semanaDe(sems, l.data_caixa);
@@ -342,11 +411,14 @@ export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: stri
 
   const totalC = new Array(n).fill(0);
   const totalB = new Array(n).fill(0);
+  const certoC = new Array(n).fill(0);
+  const estC = new Array(n).fill(0);
   const porBloco = new Map<number, { cs: number[]; bs: number[] }>();
   for (const g of grupos) {
     let b = porBloco.get(g.bloco);
     if (!b) { b = { cs: new Array(n).fill(0), bs: new Array(n).fill(0) }; porBloco.set(g.bloco, b); }
-    for (let i = 0; i < n; i++) { totalC[i] += g.cs[i]; b.cs[i] += g.cs[i]; totalB[i] += g.bs[i]; b.bs[i] += g.bs[i]; }
+    const secao = secaoDoBloco(g.bloco) === 'estimado' ? estC : certoC;
+    for (let i = 0; i < n; i++) { totalC[i] += g.cs[i]; b.cs[i] += g.cs[i]; totalB[i] += g.bs[i]; b.bs[i] += g.bs[i]; secao[i] += g.cs[i]; }
   }
   const acumC: number[] = [];
   totalC.reduce((s, v, i) => (acumC[i] = s + v), 0);
@@ -377,6 +449,15 @@ export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: stri
     brutoTotal: r(soma(totalB)),
     semDataCaixa: { linhas: semDataN, valor: r(semDataC) },
     foraDoPeriodo: { linhas: foraN, valor: r(foraC) },
+    certoPorSemana: certoC.map(r),
+    certoTotal: r(soma(certoC)),
+    estimadoPorSemana: estC.map(r),
+    estimadoTotal: r(soma(estC)),
+    semBase: semBase.sort((a, b) => a.bloco - b.bloco || ordemGrupo(a.bloco, a.grupo) - ordemGrupo(b.bloco, b.grupo)),
+    informativo: info && {
+      grupo: info.grupo, porSemana: info.cs.map(r), total: r(soma(info.cs)), linhas: info.n,
+      foraDoPeriodo: { linhas: info.foraN, valor: r(info.foraC) },
+    },
   };
 }
 
@@ -404,12 +485,14 @@ export function recebimentoDesligado(linhas: LinhaReceber[]): boolean {
     && linhas.some((l) => l.bloco === 2 && l.situacao === 'a_receber' && l.data_caixa == null);
 }
 
-/** Quem compõe uma célula (grupo × semana), SEM consulta nova: as linhas a_receber daquele grupo naquela semana. */
+/** Quem compõe uma célula (grupo × semana), SEM consulta nova: as linhas a_receber daquele grupo naquela semana
+ * (no bloco informativo, as linhas 'informativo' — o bloco inteiro é fora da soma). */
 export function composicaoDaCelula(
   linhas: LinhaReceber[], sem: Semana | null, bloco: number, grupo: string,
 ): LinhaReceber[] {
+  const situacao: SituacaoReceber = bloco === BLOCO_INFORMATIVO ? 'informativo' : 'a_receber';
   return linhas
-    .filter((l) => l.situacao === 'a_receber' && l.bloco === bloco && l.grupo === grupo
+    .filter((l) => l.situacao === situacao && l.bloco === bloco && l.grupo === grupo
       && l.data_caixa != null && (sem == null || (l.data_caixa >= sem.inicio && l.data_caixa <= sem.fim)))
     .sort((a, b) => (a.data_caixa ?? '').localeCompare(b.data_caixa ?? '') || (a.rotulo ?? '').localeCompare(b.rotulo ?? '', 'pt-BR'));
 }

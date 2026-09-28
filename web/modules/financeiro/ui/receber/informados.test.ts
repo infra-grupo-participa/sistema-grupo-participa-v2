@@ -166,7 +166,7 @@ describe('Formulário — identificador conforme gp_pode_ver_cpf', () => {
 describe('bloco 5 na grade e coberta_informado nas Recorrências', () => {
   const L = (p: Partial<LinhaReceber>): LinhaReceber => ({
     bloco: 5, grupo: 'Renovações Diamante', componente: 'cheio', data_caixa: '2026-10-05', valor: 0,
-    situacao: 'a_receber', origem_dia: null, ref: 'u', rotulo: 'Cliente A', produto: null, k: null, detalhe: [], pagas: [], fator: 1, certeza: 'certo', centro_custo: null, tratamento: null, cenario: 'base', ...p, valor_bruto: p.valor_bruto ?? p.valor ?? 0,
+    situacao: 'a_receber', origem_dia: null, ref: 'u', rotulo: 'Cliente A', produto: null, k: null, detalhe: [], projecao: [], pagas: [], fator: 1, certeza: 'certo', centro_custo: null, tratamento: null, cenario: 'base', ...p, valor_bruto: p.valor_bruto ?? p.valor ?? 0,
   });
   it('bloco 5 com nome próprio e grupos do contrato; coberta não soma e aparece com rótulo', () => {
     const d = montarContasReceber([
