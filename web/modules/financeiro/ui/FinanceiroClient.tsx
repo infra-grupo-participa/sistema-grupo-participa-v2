@@ -39,6 +39,10 @@ import { ContasAReceber, type PremissasEstado } from './receber/ContasAReceber';
 import { CABECALHO_RECEBER, ESTADOS_RECEBER, FERIADOS_RECEBER, PREMISSAS_RECEBER } from './receber/textos';
 import type { CenarioReceber } from '../domain/contas-receber';
 import { hashDaSubAbaReceber, subAbaReceberDoHash, type SubAbaReceber } from './receber/hash';
+import { hashDaSubAbaFaturamento, subAbaFaturamentoDoHash, type SubAbaFaturamento } from './faturamento/hash';
+import { criarCacheCaixaHotmart } from '../application/carregar-caixa-hotmart';
+import { periodoInicialCaixa, type PeriodoCaixa } from './faturamento/CaixaHotmart';
+import { isoDiasAtras } from './hotmart/comum';
 
 type Tab = 'board' | 'faturamento' | 'receber' | 'funis' | 'relatorios' | 'ofertas';
 
@@ -73,6 +77,11 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // Sub-aba de Previsão de caixa (#receber?ver=) — mesmo padrão de hash do #board?produto=. "semana" é o padrão
   // (hash limpo #receber, sem `?`, o mesmo link do item do menu).
   const [receberSub, setReceberSub] = useState<SubAbaReceber>('semana');
+  // Sub-aba do Faturamento (#faturamento?ver=caixa) e o período do Caixa Hotmart. O cache do Caixa (2 RPCs por período,
+  // só quando a sub-aba abre) mora aqui porque a aba desmonta a cada troca; voltar a um período visto não consulta.
+  const [faturamentoSub, setFaturamentoSub] = useState<SubAbaFaturamento>('periodo');
+  const [periodoCaixa, setPeriodoCaixa] = useState<PeriodoCaixa>(() => periodoInicialCaixa(isoDiasAtras(0)));
+  const [cacheCaixa] = useState(() => criarCacheCaixaHotmart(repo));
   const [turma] = useState<string | null>(null); // sem filtro de turma no board novo — todas reunidas, igual ao legado.
   // Metas por turma (fn_fin_metas) não têm tela própria nesta entrega — o
   // board novo não filtra por turma (todas reunidas), e a UI de metas/régua
@@ -193,7 +202,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     const applyHash = () => {
       const h = window.location.hash.replace('#', '');
       const [base, query] = h.split('?');
-      if (base === 'faturamento') setTab('faturamento');
+      if (base === 'faturamento') { setTab('faturamento'); setFaturamentoSub(subAbaFaturamentoDoHash(query)); }
       else if (base === 'receber') { setTab('receber'); setReceberSub(subAbaReceberDoHash(query)); }
       else if (base === 'funis') setTab('funis');
       else if (base === 'relatorios') { setTab('relatorios'); setRelatorioInicial(null); }
@@ -203,7 +212,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       // #diamante era a tela própria do Serviço Diamante; virou aba do board (27/09).
       else if (base === 'diamante') { setTab('board'); setVerDiamante(true); }
       // #hotmart era a aba "Hotmart (oficial)", unificada no Faturamento Diário em 27/09 — link antigo cai nela.
-      else if (base === 'hotmart') setTab('faturamento');
+      else if (base === 'hotmart') { setTab('faturamento'); setFaturamentoSub('periodo'); }
       else setTab('board');
 
       if (base === 'board' && query) {
@@ -387,6 +396,15 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       window.history.replaceState(null, '', novoHash);
     }
   }, [tab, receberSub]);
+
+  // Idem para as sub-abas do Faturamento: "Por período" = #faturamento limpo (o link do menu).
+  useEffect(() => {
+    if (tab !== 'faturamento') return;
+    const novoHash = hashDaSubAbaFaturamento(faturamentoSub);
+    if (window.location.hash !== novoHash) {
+      window.history.replaceState(null, '', novoHash);
+    }
+  }, [tab, faturamentoSub]);
 
   // Rótulo legível do filtro ativo (nome da ação/canal) — o rodapé usa para
   // deixar explícito que os totais são do recorte, não da carteira (problema 6).
@@ -584,7 +602,10 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         )
       )}
 
-      {tab === 'faturamento' && <FaturamentoDiario repo={repo} />}
+      {tab === 'faturamento' && (
+        <FaturamentoDiario repo={repo} sub={faturamentoSub} onSubChange={setFaturamentoSub}
+          cacheCaixa={cacheCaixa} periodoCaixa={periodoCaixa} onPeriodoCaixa={setPeriodoCaixa} />
+      )}
 
       {tab === 'relatorios' && (
         board ? <Relatorios key={relatorioInicial ?? 'padrao'} tipoInicial={relatorioInicial ?? undefined} contas={contasDoRecorte} produtoLabel={recorteAtivo.produtoLabel} acaoLabel={rotuloFiltroAtivo} turma={turma} canVerDoc={canVerDoc} repo={repo} hotmartPorCard={hotmartPorCard} /> : <Loading label="Carregando…" minHeight={200} />

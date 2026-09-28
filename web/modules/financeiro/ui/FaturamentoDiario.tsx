@@ -19,8 +19,23 @@ import { FAMILIAS_EM_ORDEM,
 } from '../domain/hotmart';
 import { Erro, isoDiasAtras, PERIODOS, SyncSelo, useCarga, Variacao } from './hotmart/comum';
 import { GraficoLinha } from './hotmart/GraficoLinha';
+import type { CacheCaixaHotmart } from '../application/carregar-caixa-hotmart';
+import { INICIO_ANTECIPACAO, pegaAntesDaAntecipacao } from '../domain/caixa-hotmart';
+import type { SubAbaFaturamento } from './faturamento/hash';
+import { SubAbasFaturamento } from './faturamento/SubAbasFaturamento';
+import { CaixaHotmart, type PeriodoCaixa } from './faturamento/CaixaHotmart';
+import { avisoSemAntecipacao, LINHAS_RECEBIMENTO } from './faturamento/textos';
 
-export function FaturamentoDiario({ repo }: { repo: FinanceiroRepository }) {
+/** Sub-abas (F6): Por período (a visão de sempre, por família) · Caixa Hotmart (toda a conta, por dia de aprovação).
+ *  A sub-aba e o período do Caixa moram no FinanceiroClient (esta aba desmonta a cada troca de aba). */
+export function FaturamentoDiario({ repo, sub, onSubChange, cacheCaixa, periodoCaixa, onPeriodoCaixa }: {
+  repo: FinanceiroRepository;
+  sub: SubAbaFaturamento;
+  onSubChange: (s: SubAbaFaturamento) => void;
+  cacheCaixa: CacheCaixaHotmart;
+  periodoCaixa: PeriodoCaixa;
+  onPeriodoCaixa: (p: PeriodoCaixa) => void;
+}) {
   const [familia, setFamilia] = useState<FamiliaHotmart>('HM');
   const [sync, setSync] = useState<{ s: SyncHotmart; atrasado: boolean } | null>(null);
 
@@ -37,6 +52,14 @@ export function FaturamentoDiario({ repo }: { repo: FinanceiroRepository }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
+        <SubAbasFaturamento ativa={sub} onSelecionar={onSubChange} />
+        <SyncSelo sync={sync} />
+      </div>
+      <div role="tabpanel" id={`faturamento-painel-${sub}`} aria-labelledby={`faturamento-tab-${sub}`} className="space-y-4">
+      {sub === 'caixa' ? (
+        <CaixaHotmart cache={cacheCaixa} periodo={periodoCaixa} onPeriodo={onPeriodoCaixa} hojeISO={isoDiasAtras(0)} />
+      ) : <>
+      <div className="flex flex-wrap items-center gap-2">
         {FAMILIAS_EM_ORDEM.map((f) => (
           <button
             key={f}
@@ -48,10 +71,11 @@ export function FaturamentoDiario({ repo }: { repo: FinanceiroRepository }) {
             {ROTULO_FAMILIA[f]}
           </button>
         ))}
-        <SyncSelo sync={sync} />
       </div>
 
       <VisaoFaturamento repo={repo} familia={familia} />
+      </>}
+      </div>
     </div>
   );
 }
@@ -125,6 +149,11 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
           className="rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs" />
         </>}
       </div>
+      {pegaAntesDaAntecipacao(intervalo.de) && (
+        <p role="note" className="rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--fg-2)]">
+          {avisoSemAntecipacao(fmtData(INICIO_ANTECIPACAO))}
+        </p>
+      )}
       {erro ? <Erro msg={erro} /> : !dados ? <Loading label="Carregando faturamento…" minHeight={200} /> : (
         <>
           {pontos.length >= 2 ? (
@@ -139,11 +168,14 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
           ) : null}
           <SectionCard title={visao === 'dia' ? 'Dia a dia' : visao === 'mes' ? 'Mês a mês' : 'Ano a ano'}>
             {!periodos.length ? <EmptyState title="Nenhuma movimentação no período" icon="trending-up" /> : (
-              <DataTable minWidth={1100}>
+              <>
+              <DataTable minWidth={1500}>
                 <Thead>
                   <Th>{cabecalho}</Th><Th>Vendas</Th><Th>Bruto</Th><Th>Taxa Hotmart</Th>
                   {resumo.repasses > 0 && <Th>Coprodução / afiliados</Th>}
-                  <Th>Líquido</Th><Th>vs. {unidade} anterior</Th><Th>Acumulado</Th><Th>Juros (cliente)</Th>
+                  <Th>Líquido</Th>
+                  <Th>{LINHAS_RECEBIMENTO.entraRapido}</Th><Th>{LINHAS_RECEBIMENTO.retido}</Th><Th>{LINHAS_RECEBIMENTO.liquidoTotal}</Th>
+                  <Th>vs. {unidade} anterior</Th><Th>Acumulado</Th><Th>Juros (cliente)</Th>
                   <Th>Reembolsos</Th><Th>Recusados</Th><Th>Boletos</Th>
                 </Thead>
                 <tbody>
@@ -158,6 +190,9 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
                       {fmtBRL(resumo.liquido)}
                       {resumo.margem != null && <span className="ml-1 text-[10px] font-normal text-[var(--fg-3)]">{(resumo.margem * 100).toFixed(1)}%</span>}
                     </Td>
+                    <Td className="tabular">{fmtBRL(resumo.entraRapido)}</Td>
+                    <Td className="tabular text-[var(--fg-2)]">{fmtBRL(resumo.retido)}</Td>
+                    <Td className="tabular">{fmtBRL(resumo.liquidoTotal)}</Td>
                     <Td className="text-[var(--fg-4)]">—</Td>
                     <Td className="text-[var(--fg-4)]">—</Td>
                     <Td className="tabular text-[var(--fg-2)]">{resumo.juros ? fmtBRL(resumo.juros) : '—'}</Td>
@@ -179,6 +214,9 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
                         {fmtBRL(d.liquido)}
                         {d.liquidoEstimado > 0 && <span className="ml-1 text-[10px] text-[var(--fg-3)]" title="Sem comissão na API: líquido = oferta − taxa">≈</span>}
                       </Td>
+                      <Td className="tabular">{fmtBRL(d.entraRapido)}</Td>
+                      <Td className="tabular text-[var(--fg-2)]">{fmtBRL(d.retido)}</Td>
+                      <Td className="tabular">{fmtBRL(d.liquidoTotal)}</Td>
                       <Td><Variacao pct={d.variacao} /></Td>
                       <Td className="tabular text-[var(--fg-3)]">{fmtBRL(d.acumulado)}</Td>
                       <Td className="tabular text-[var(--fg-3)]">{d.juros ? fmtBRL(d.juros) : '—'}</Td>
@@ -189,6 +227,10 @@ function VisaoFaturamento({ repo, familia }: { repo: FinanceiroRepository; famil
                   ))}
                 </tbody>
               </DataTable>
+              <p className="mt-2 text-[11px] text-[var(--fg-3)]">
+                {LINHAS_RECEBIMENTO.entraRapido}: {LINHAS_RECEBIMENTO.ajudaEntraRapido} · {LINHAS_RECEBIMENTO.retido}: {LINHAS_RECEBIMENTO.ajudaRetido} · {LINHAS_RECEBIMENTO.liquidoTotal}: {LINHAS_RECEBIMENTO.ajudaLiquidoTotal}
+              </p>
+              </>
             )}
           </SectionCard>
           <PorFunil repo={repo} familia={familia} de={intervalo.de} ate={intervalo.ate} />
