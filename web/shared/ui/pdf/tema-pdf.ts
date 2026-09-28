@@ -27,11 +27,13 @@ export const COR_PDF = {
 
 export const FONTE_PDF = {
   familia: 'Inter',
-  /** Caminhos relativos à raiz pública (web/public). */
+  /**
+   * Caminhos relativos à raiz pública (web/public). Só os pesos que algum estilo usa:
+   * 400 e 600. Peso novo exige o .ttf aqui E a métrica em metrica-inter.ts.
+   */
   arquivos: [
     { arquivo: 'fonts/Inter-Regular.ttf', peso: 400 },
     { arquivo: 'fonts/Inter-SemiBold.ttf', peso: 600 },
-    { arquivo: 'fonts/Inter-Bold.ttf', peso: 700 },
   ],
 } as const;
 
