@@ -8,13 +8,15 @@ const ativos = (hash: string) =>
     .map((c) => c.key);
 
 describe('sidebar — item hash-nav ativo', () => {
-  it('sem hash, o ativo é o do defaultHref do grupo (#board), não o 1º filho com hash (#receber)', () => {
-    expect(financeiro.children[0].hash).toBe('#receber'); // pré-condição: é exatamente o caso que errava
+  it('sem hash, o ativo é o do defaultHref do grupo (#board), não o 1º filho com hash (#visao)', () => {
+    expect(financeiro.children[0].hash).toBe('#visao'); // pré-condição: é exatamente o caso que errava
     expect(chaveHashPadrao(financeiro.defaultHref, financeiro.children)).toBe('board');
     expect(ativos('')).toEqual(['board']);
   });
   it('hash com ? (sub-aba ou filtro) acende o item da base, e só ele', () => {
     expect(ativos('#receber?ver=premissas')).toEqual(['receber']);
+    expect(ativos('#receber?ver=recorrencias&situacao=em_atraso_fora')).toEqual(['receber']);
+    expect(ativos('#visao')).toEqual(['visao']);
     expect(ativos('#board?produto=HM&canal=x')).toEqual(['board']);
     expect(ativos('#faturamento')).toEqual(['faturamento']);
   });

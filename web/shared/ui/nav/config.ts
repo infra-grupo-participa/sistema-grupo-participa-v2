@@ -90,7 +90,10 @@ export const REPORTS: ReportGroup[] = [
     ico: 'wallet',
     setor: 'financeiro',
     children: [
-      // "Contas a Receber" é o título de seção (secao?), não o rótulo do item — o hash continua #receber, o link não muda.
+      // "Contas a Receber" é o título de seção (secao?), não o rótulo de item. A Visão geral (#visao, F4) é o 1º item da
+      // seção; o defaultHref do grupo continua #board (a página inicial só muda depois que o Marcio vir a Visão geral).
+      { key: 'visao', label: 'Visão geral', path: '/relatorios/financeiro', hash: '#visao', href: '/relatorios/financeiro#visao', ico: 'eye', secao: 'Contas a Receber' },
+      // Mesma seção: o título aparece uma vez só (a sidebar desenha quando a seção MUDA). O hash continua #receber.
       { key: 'receber', label: 'Previsão de caixa', path: '/relatorios/financeiro', hash: '#receber', href: '/relatorios/financeiro#receber', ico: 'receipt', secao: 'Contas a Receber' },
       { key: 'faturamento', label: 'Faturamento', path: '/relatorios/financeiro', hash: '#faturamento', href: '/relatorios/financeiro#faturamento', ico: 'trending-up' },
       { key: 'board', label: 'Board', path: '/relatorios/financeiro', hash: '#board', href: '/relatorios/financeiro#board', ico: 'dashboard' },
