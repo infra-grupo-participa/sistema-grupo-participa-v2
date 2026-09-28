@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  assinaturaDoCard, assinaturaEmDia, indexarAssinaturaHM, linhaAtrasoMensalidade, linhaResumoAssinatura, normalizarAssinaturaSemCard,
+  assinaturaDoCard, assinaturaEmDia, foraDoCard, indexarAssinaturaHM, linhaAtrasoMensalidade, linhaResumoAssinatura, normalizarAssinaturaSemCard,
   resumoAssinaturaCard, totaisAssinaturaSemCard, type AssinaturaHMBoard, type AssinaturaHMSemCard,
 } from './assinatura-hm';
 import type { BoardHotmart } from './hotmart';
@@ -100,6 +100,24 @@ describe('linhaResumoAssinatura', () => {
     const doBoard = hm({ assinatura_mensalidades: 12, assinatura_valor: 23964, assinatura_ate: '2026-09-03', assinatura_ativa: true });
     expect(linhaResumoAssinatura(resumoAssinaturaCard(doBoard, null)!, fmt)).toBe('Assinatura HM: 12 × · R$ 23964 · até 09/2026');
     expect(linhaResumoAssinatura(resumoAssinaturaCard(hm(), ass({ mensalidades_pagas: 0, atraso_120d_n: 1 }))!, fmt)).toBe('Assinatura HM: nenhuma paga');
+  });
+});
+
+describe('foraDoCard', () => {
+  const resumo = { mensalidades: 12, valor: 23964 };
+  it('card Aurum (board sem assinatura): soma as mensalidades do HM antigo aos outros pagamentos', () => {
+    const aurum = hm({ origem: 'AURUM', assinatura_mensalidades: 0, assinatura_valor: 0, outros_pagamentos: 1, outros_valor: 500 });
+    expect(foraDoCard(aurum, resumo)).toEqual({ n: 13, valor: 24464 });
+  });
+  it('card HM com a assinatura já no board: não soma duas vezes', () => {
+    const doBoard = hm({ assinatura_mensalidades: 12, assinatura_valor: 23964, outros_pagamentos: 1, outros_valor: 500 });
+    expect(foraDoCard(doBoard, resumo)).toEqual({ n: 13, valor: 24464 });
+  });
+  it('sem assinatura: fica igual ao que o board traz; pessoa não encontrada: zero', () => {
+    const h = hm({ outros_pagamentos: 2, outros_valor: 800 });
+    expect(foraDoCard(h, null)).toEqual({ n: 2, valor: 800 });
+    expect(foraDoCard(h, { mensalidades: 0, valor: 0 })).toEqual({ n: 2, valor: 800 });
+    expect(foraDoCard(hm({ encontrado: false }), resumo)).toEqual({ n: 0, valor: 0 });
   });
 });
 

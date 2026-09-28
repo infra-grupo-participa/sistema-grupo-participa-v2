@@ -55,5 +55,12 @@ describe('card AURUM com mensalidade do HM antigo', () => {
     }));
     expect(html).toContain('Assinatura HM: mensalidade em atraso: 2');
     expect(html).toContain('parcelas em dia');
+    // "Fora deste card" com as 12 mensalidades (R$ 23.964,00), não "Nada · sem outros pagamentos".
+    // Só o quadro "Fora deste card" ("Nada" legítimo existe no "Devendo na Hotmart").
+    const fora = html.slice(html.indexOf('Fora deste card'), html.indexOf('</div></div>', html.indexOf('Fora deste card')));
+    expect(fora).toContain('12 pagamentos (renovação, assinatura, outras ofertas)');
+    expect(fora).toContain('23.964,00');
+    expect(fora).not.toContain('Nada');
+    expect(fora).not.toContain('sem outros pagamentos');
   });
 });

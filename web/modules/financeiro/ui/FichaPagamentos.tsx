@@ -13,7 +13,7 @@ import type { FinanceiroRepository } from '../application/ports';
 import type { ContaReceber, Lancamento } from '../domain/types';
 import { ROTULO_GRUPO, rotuloCategorias, rotuloMetodo, type BoardHotmart, type TransacaoHotmart } from '../domain/hotmart';
 import { explicarDivergencia, temDadoHotmart } from '../domain/board-hotmart';
-import { linhaAtrasoMensalidade, type ResumoAssinaturaCard } from '../domain/assinatura-hm';
+import { foraDoCard, linhaAtrasoMensalidade, type ResumoAssinaturaCard } from '../domain/assinatura-hm';
 import { juntarPagamentos, resumirPagamentos, type PagamentoFicha } from '../domain/pagamentos-ficha';
 import { Chip, Erro, useCarga } from './hotmart/comum';
 
@@ -34,12 +34,12 @@ export function Bloco({ rotulo, valor, detalhe, tom = 'neutro' }: {
  *  fora do card (assinatura/outros). Uma frase embaixo quando board e Hotmart não batem. */
 export function EmUmaOlhada({ conta, hm, carregando, assinatura = null }: {
   conta: ContaReceber; hm: BoardHotmart | null; carregando: boolean;
-  /** Bloco Assinatura HM já resolvido (z52): só o atraso da mensalidade é lido aqui — nunca soma no "devendo". */
+  /** Bloco Assinatura HM já resolvido (z52): entra no "fora deste card" e no atraso — nunca soma no "devendo". */
   assinatura?: ResumoAssinaturaCard | null;
 }) {
   const tem = temDadoHotmart(hm);
-  const outros = tem ? (hm.outros_valor ?? 0) + (hm.assinatura_valor ?? 0) : 0;
-  const nOutros = tem ? (hm.outros_pagamentos ?? 0) + (hm.assinatura_mensalidades ?? 0) : 0;
+  // Mensalidade do HM antigo entra aqui também no card Aurum (o board só a traz na linha HM), sem somar duas vezes.
+  const { n: nOutros, valor: outros } = tem ? foraDoCard(hm, assinatura) : { n: 0, valor: 0 };
   const explicacao = tem ? explicarDivergencia(hm, fmtBRLc) : null;
   const atrasoMensalidade = tem ? linhaAtrasoMensalidade(assinatura, fmtBRLc) : null;
   return (

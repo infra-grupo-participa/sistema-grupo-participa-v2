@@ -165,6 +165,25 @@ export function linhaResumoAssinatura(r: ResumoAssinaturaCard, fmtValor: (n: num
   return `Assinatura HM: ${r.mensalidades} × · ${fmtValor(r.valor)}${ate ? ` · até ${ate}` : ''}`;
 }
 
+/**
+ * "Fora deste card" da ficha: outros pagamentos da família do card + mensalidades do HM antigo.
+ * O board só preenche assinatura_* na linha HM (CTE `ass`) e outros_* só vê a família do card, então no card Aurum
+ * a mensalidade ficava de fora ("Nada") — reprovação do João, 28/09. Quando o board já traz a assinatura, ela NÃO
+ * soma de novo; quando não traz, entra a do resumo (z52).
+ */
+export function foraDoCard(
+  hm: BoardHotmart | null | undefined, assinatura: Pick<ResumoAssinaturaCard, 'mensalidades' | 'valor'> | null | undefined,
+): { n: number; valor: number } {
+  if (!hm || !hm.encontrado) return { n: 0, valor: 0 };
+  let n = num(hm.outros_pagamentos) + num(hm.assinatura_mensalidades);
+  let valor = num(hm.outros_valor) + num(hm.assinatura_valor);
+  if (num(hm.assinatura_mensalidades) === 0 && assinatura && assinatura.mensalidades > 0) {
+    n += assinatura.mensalidades;
+    valor += num(assinatura.valor);
+  }
+  return { n, valor };
+}
+
 /** "mensalidade em atraso: 2 · R$ 3.994" — null sem atraso. */
 export function linhaAtrasoMensalidade(r: Pick<ResumoAssinaturaCard, 'atrasoN' | 'atrasoValor'> | null, fmtValor: (n: number) => string): string | null {
   if (!r || r.atrasoN <= 0) return null;
