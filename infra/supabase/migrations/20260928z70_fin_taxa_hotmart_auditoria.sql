@@ -1,6 +1,6 @@
 -- 20260928z70 — Contas a Receber / Faturamento, fatia F7 (catálogo A.1 R08–R13): auditoria da taxa Hotmart por produto.
 --
--- NÃO APLICADA — coordenador aplica. Não depende da z69 (só de fin.vw_transacoes/z27b, do índice
+-- APLICADA em produção em 28/09/2026 (conferência verde; trava de 1% passou). 2026 à vista: 0 divergências em todos os produtos (HM 4,027% = acordo; Serviço Diamante 5,389% = acordo…). RPC 48 ms.
 -- hotmart_transacoes_aprovado_pago_idx/z61 e de public.gp_pode_ver_financeiro/z14).
 --
 -- Por quê: a taxa Hotmart combinada é POR PRODUTO (R08). Medido em produção em 28/09/2026: 1.995 vendas à vista
