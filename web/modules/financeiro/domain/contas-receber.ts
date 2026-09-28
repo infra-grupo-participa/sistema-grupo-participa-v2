@@ -1,8 +1,9 @@
 // Contas a Receber — fase 1 (28/09/2026). Função PURA, sem I/O. Substitui, na planilha semanal do financeiro
 // ("Contas a Receber Semanal Set-Dez26"), só o que é CERTO:
 //   bloco 1 — vendas já feitas, dinheiro ainda a cair (90% − 3,89% em D+2 útil; 10% no 1º dia útil ≥ D+30);
-//   bloco 2 — assinaturas e parcelas futuras já contratadas.
-// Blocos 3–7 da planilha (vendas novas, evento, recebimentos informados, ajustes, Soluções) ficam para depois.
+//   bloco 2 — assinaturas e parcelas futuras já contratadas;
+//   bloco 5 — recebimentos informados (renovações Diamante/Aurum negociadas fora, cadastradas no sistema — 28/09).
+// Blocos 3, 4, 6 e 7 da planilha (vendas novas, evento, ajustes, Soluções) ficam para depois.
 //
 // Fonte: public.fn_fin_receber_semanal(p_corte, p_ate) — UMA chamada (NÃO é fn_fin_contas_receber(text), o razão do board); o cálculo de data de caixa (dias úteis,
 // feriados) e a baixa do que já se realizou moram no banco. Aqui só: tipar, converter numeric, cortar em semanas e somar.
@@ -10,8 +11,12 @@
 // Esta é a ÚNICA fonte da semana: a tela e o PDF futuro usam `semanas()` e `agregarReceber()` daqui.
 
 export type ComponenteReceber = 'antecipacao' | 'garantia' | 'cheio';
-/** `realizada` vem só para auditoria; `em_atraso_fora` saiu da projeção. Nenhum dos dois soma. */
-export type SituacaoReceber = 'a_receber' | 'realizada' | 'em_atraso_fora';
+/**
+ * Só `a_receber` soma. `realizada` vem para auditoria; `em_atraso_fora` saiu da projeção; `coberta_informado` é a
+ * cobrança do bloco 2 que um recebimento informado (bloco 5) já cobre — o informado prevalece e ela sai da soma com o
+ * grupo inalterado (contrato do bloco 5, conflito 6 do plano).
+ */
+export type SituacaoReceber = 'a_receber' | 'realizada' | 'em_atraso_fora' | 'coberta_informado';
 
 /** Bloco 1: uma venda do dia que compõe a antecipação/garantia daquele dia. */
 export interface VendaDoDia {
@@ -34,7 +39,7 @@ export interface LinhaReceber {
   situacao: SituacaoReceber;
   /** Bloco 1: dia da venda. Bloco 2: vencimento da cobrança (contrato do victor, 28/09). */
   origem_dia: string | null;
-  /** Chave opaca. Bloco 2: UMA POR CONTRATO (e-mail|oferta), não por cobrança. */
+  /** Chave opaca. Bloco 2: UMA POR CONTRATO (e-mail|oferta), não por cobrança. Bloco 5: id do recebimento informado. */
   ref: string | null;
   rotulo: string | null;
   produto: string | null;
@@ -54,6 +59,15 @@ export const GRUPOS_BLOCO_2 = [
   'Parcelas a vencer outros',
   'Outras assinaturas',
 ] as const;
+/** Ordem das linhas do bloco 5 (recebimentos informados), a do contrato. Grupo desconhecido vai para o fim, nunca some. */
+export const GRUPOS_BLOCO_5 = [
+  'Renovações Diamante',
+  'Renovações Aurum',
+  'Serviço Diamante extras',
+  'Outros recebimentos informados',
+] as const;
+
+const GRUPOS_POR_BLOCO: Record<number, readonly string[]> = { 1: [GRUPO_BLOCO_1], 2: GRUPOS_BLOCO_2, 5: GRUPOS_BLOCO_5 };
 
 // ─── Conversão (numeric do PostgREST pode chegar como texto) ────────────────
 const num = (v: unknown): number => Number(v ?? 0) || 0;
@@ -211,10 +225,11 @@ export interface GradeReceber {
 const c = (v: number) => Math.round(v * 100);
 const r = (centavos: number) => centavos / 100;
 
+/** Posição do grupo dentro do bloco; bloco sem ordem conhecida ou grupo desconhecido: fim (ordem alfabética entre eles). */
 function ordemGrupo(bloco: number, grupo: string): number {
-  if (bloco === 1) return grupo === GRUPO_BLOCO_1 ? 0 : 1;
-  const i = (GRUPOS_BLOCO_2 as readonly string[]).indexOf(grupo);
-  return i === -1 ? GRUPOS_BLOCO_2.length : i;
+  const ordem = GRUPOS_POR_BLOCO[bloco] ?? [];
+  const i = ordem.indexOf(grupo);
+  return i === -1 ? ordem.length : i;
 }
 
 export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: string): GradeReceber {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  agregarReceber, cobrancasRecorrentes, composicaoDaCelula, DIAS_MINIMOS_SEMANA, fimDoMes, normalizarLinhaReceber, periodoReceber,
+  agregarReceber, cobrancasRecorrentes, composicaoDaCelula, DIAS_MINIMOS_SEMANA, fimDoMes, GRUPOS_BLOCO_5, normalizarLinhaReceber, periodoReceber,
   recebimentoDesligado, semanas,
   type LinhaReceber,
 } from './contas-receber';
@@ -198,5 +198,61 @@ describe('contrato do bloco 2 (victor, 28/09): ref por contrato, origem_dia = ve
   });
   it('não é "desligado": bloco 2 sem data só em realizada/em_atraso_fora', () => {
     expect(recebimentoDesligado(ls.filter((l) => l.situacao !== 'a_receber'))).toBe(false);
+  });
+});
+
+describe('bloco 5 — recebimentos informados (contrato 28/09)', () => {
+  const B5 = (grupo: string, p: Partial<LinhaReceber> = {}) =>
+    L({ bloco: 5, grupo, componente: 'cheio', data_caixa: '2026-10-05', valor: 100, ref: 'uuid-1', rotulo: 'Cliente X', ...p });
+  it('grupos na ordem do contrato, depois dos blocos 1 e 2; grupo desconhecido no fim do bloco (não some)', () => {
+    const g = agregarReceber([
+      B5('Grupo novo do banco'),
+      B5('Outros recebimentos informados'),
+      B5('Serviço Diamante extras'),
+      B5('Renovações Aurum'),
+      B5('Renovações Diamante'),
+      L({ bloco: 2, grupo: 'Outras assinaturas', data_caixa: '2026-10-05', valor: 1 }),
+      L({ data_caixa: '2026-10-05', valor: 1 }),
+    ], '2026-10-01', '2026-10-31');
+    expect(g.linhas.map((l) => `${l.bloco}:${l.grupo}`)).toEqual([
+      '1:Vendas já realizadas', '2:Outras assinaturas',
+      ...GRUPOS_BLOCO_5.map((x) => `5:${x}`), '5:Grupo novo do banco',
+    ]);
+    expect(g.blocos.map((b) => [b.bloco, b.total])).toEqual([[1, 1], [2, 1], [5, 500]]);
+  });
+  it('realizada e em_atraso_fora do bloco 5 não somam; a_receber soma', () => {
+    const g = agregarReceber([
+      B5('Renovações Diamante', { valor: 18750 }),
+      B5('Renovações Diamante', { valor: 999, situacao: 'realizada', data_caixa: null }),
+      B5('Renovações Aurum', { valor: 777, situacao: 'em_atraso_fora', data_caixa: null }),
+    ], '2026-10-01', '2026-10-31');
+    expect(g.total).toBe(18750);
+    expect(g.semDataCaixa.linhas).toBe(0);
+  });
+  it('bloco 5 não entra nas Recorrências (só bloco 2)', () => {
+    expect(cobrancasRecorrentes([B5('Renovações Diamante')])).toEqual([]);
+  });
+});
+
+describe('coberta_informado — cobrança do bloco 2 coberta por informado (conflito 6)', () => {
+  const coberta = L({ bloco: 2, grupo: 'Parcelas a vencer Aurum', ref: 'a|1', origem_dia: '2026-10-10', data_caixa: '2026-10-12',
+    valor: 5000, situacao: 'coberta_informado' });
+  it('normalizar mantém a situação', () => {
+    expect(normalizarLinhaReceber({ bloco: 2, grupo: 'x', componente: 'antecipacao', valor: '1', situacao: 'coberta_informado' }).situacao)
+      .toBe('coberta_informado');
+  });
+  it('NÃO soma, não conta como sem data nem fora do período, não entra em célula nem no período', () => {
+    const g = agregarReceber([coberta, L({ bloco: 2, grupo: 'Parcelas a vencer Aurum', data_caixa: '2026-10-12', valor: 10 })],
+      '2026-10-01', '2026-10-31');
+    expect(g.total).toBe(10);
+    expect(g.linhas.map((l) => [l.grupo, l.total])).toEqual([['Parcelas a vencer Aurum', 10]]);
+    expect(g.semDataCaixa.linhas + g.foraDoPeriodo.linhas).toBe(0);
+    expect(composicaoDaCelula([coberta], null, 2, 'Parcelas a vencer Aurum')).toEqual([]);
+    expect(periodoReceber([{ ...coberta, data_caixa: '2027-03-01' }], '2026-10-01').fim).toBe('2026-10-31');
+  });
+  it('aparece nas Recorrências com a própria situação (auditoria), grupo inalterado', () => {
+    const r = cobrancasRecorrentes([coberta]);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ situacao: 'coberta_informado', grupo: 'Parcelas a vencer Aurum', valor: 5000 });
   });
 });
