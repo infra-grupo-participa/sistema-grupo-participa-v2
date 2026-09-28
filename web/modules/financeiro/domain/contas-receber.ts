@@ -120,27 +120,53 @@ export interface Semana {
 }
 
 /**
- * Semanas de `inicio` a `fim` (inclusive): segunda a domingo, cortadas na virada do mês e no início do período.
- * Uma semana nova começa na segunda-feira, no dia 1º do mês e no próprio `inicio`.
+ * Pedaço de semana com MENOS dias que isto é unido à semana vizinha do mesmo mês.
+ * Regra da planilha do financeiro (aba Fluxo Semanal): "Semanas de segunda a domingo, cortadas na virada do mês
+ * para o resumo mensal fechar (S1 = 24 a 30/09; pedaços de 1 dia foram unidos à semana vizinha)".
+ * O limiar 4 reproduz os 15 limites da planilha sem exceção: 28–30/09 (3 dias) entra na S1, 01/11 e 30/11 (1 dia)
+ * entram nas vizinhas; 24–27/09, 01–04/10 e 28–31/12 (4 dias) ficam.
+ */
+export const DIAS_MINIMOS_SEMANA = 4;
+
+const diasEntre = (inicio: string, fim: string) => (ms(fim) - ms(inicio)) / DIA + 1;
+
+/**
+ * Semanas de `inicio` a `fim` (inclusive): segunda a domingo, cortadas na virada do mês e nas pontas do período.
+ * Depois, dentro de cada mês, o pedaço com menos de DIAS_MINIMOS_SEMANA dias é unido à semana vizinha DO MESMO MÊS:
+ * no início do mês, à seguinte; no fim, à anterior. Mês com um pedaço só fica como está. Nenhuma semana cruza mês.
  */
 export function semanas(inicio: string, fim: string): Semana[] {
-  const out: Semana[] = [];
   const a = ms(inicio);
   const b = ms(fim);
-  if (!(a <= b)) return out;
-  let cur: Semana | null = null;
+  if (!(a <= b)) return [];
+  // 1) pedaços seg–dom cortados no mês e no início do período
+  const pedacos: { inicio: string; fim: string; mes: string }[] = [];
   for (let t = a; t <= b; t += DIA) {
     const d = new Date(t);
-    const novo = cur == null || d.getUTCDay() === 1 || d.getUTCDate() === 1;
-    const hoje = iso(t);
-    if (novo) {
-      cur = { n: out.length + 1, inicio: hoje, fim: hoje, mes: hoje.slice(0, 7) };
-      out.push(cur);
-    } else if (cur) {
-      cur.fim = hoje;
-    }
+    const dia = iso(t);
+    const ultimo = pedacos[pedacos.length - 1];
+    if (!ultimo || d.getUTCDay() === 1 || d.getUTCDate() === 1) pedacos.push({ inicio: dia, fim: dia, mes: dia.slice(0, 7) });
+    else ultimo.fim = dia;
   }
-  return out;
+  // 2) une os pedaços curtos à vizinha do mesmo mês
+  const out: { inicio: string; fim: string; mes: string }[] = [];
+  for (let i = 0; i < pedacos.length;) {
+    let j = i;
+    while (j + 1 < pedacos.length && pedacos[j + 1].mes === pedacos[i].mes) j++;
+    const doMes = pedacos.slice(i, j + 1).map((x) => ({ ...x }));
+    if (doMes.length > 1 && diasEntre(doMes[0].inicio, doMes[0].fim) < DIAS_MINIMOS_SEMANA) {
+      doMes[1].inicio = doMes[0].inicio;
+      doMes.shift();
+    }
+    const u = doMes.length - 1;
+    if (u > 0 && diasEntre(doMes[u].inicio, doMes[u].fim) < DIAS_MINIMOS_SEMANA) {
+      doMes[u - 1].fim = doMes[u].fim;
+      doMes.pop();
+    }
+    out.push(...doMes);
+    i = j + 1;
+  }
+  return out.map((x, i) => ({ n: i + 1, ...x }));
 }
 
 /** Índice da semana que contém `d`, ou -1 fora do período. */

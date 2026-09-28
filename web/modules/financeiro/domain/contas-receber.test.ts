@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  agregarReceber, cobrancasRecorrentes, composicaoDaCelula, fimDoMes, normalizarLinhaReceber, periodoReceber, semanas,
+  agregarReceber, cobrancasRecorrentes, composicaoDaCelula, DIAS_MINIMOS_SEMANA, fimDoMes, normalizarLinhaReceber, periodoReceber, semanas,
   type LinhaReceber,
 } from './contas-receber';
 
@@ -9,30 +9,48 @@ const L = (p: Partial<LinhaReceber>): LinhaReceber => ({
   situacao: 'a_receber', origem_dia: null, ref: null, rotulo: null, produto: null, k: null, detalhe: [], ...p,
 });
 
-describe('semanas — seg a dom, cortada na virada do mês e no início do período', () => {
-  // Período da planilha do financeiro: 24/09 (quinta) → 31/12/2026 (quinta).
+describe('semanas — seg a dom, cortada no mês; pedaço < 4 dias unido à vizinha do mesmo mês', () => {
+  const lim = (xs: { inicio: string; fim: string }[]) => xs.map((x) => `${x.inicio.slice(5)}..${x.fim.slice(5)}`);
+  // Período da planilha do financeiro (aba Fluxo Semanal): 24/09 (quinta) → 31/12/2026 (quinta).
   const s = semanas('2026-09-24', '2026-12-31');
-  it('limites de cada semana', () => {
-    expect(s.map((x) => `${x.inicio.slice(5)}..${x.fim.slice(5)}`)).toEqual([
-      '09-24..09-27', '09-28..09-30',
+  it('reproduz exatamente os 15 limites da planilha (S1 24–30/09 … S15 28–31/12)', () => {
+    expect(DIAS_MINIMOS_SEMANA).toBe(4);
+    expect(lim(s)).toEqual([
+      '09-24..09-30',
       '10-01..10-04', '10-05..10-11', '10-12..10-18', '10-19..10-25', '10-26..10-31',
-      '11-01..11-01', '11-02..11-08', '11-09..11-15', '11-16..11-22', '11-23..11-29', '11-30..11-30',
+      '11-01..11-08', '11-09..11-15', '11-16..11-22', '11-23..11-30',
       '12-01..12-06', '12-07..12-13', '12-14..12-20', '12-21..12-27', '12-28..12-31',
     ]);
+    expect(s.map((x) => x.n)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
   });
-  it('a última é 28–31/12 (segunda a quinta, cortada no fim do período) e nenhuma cruza mês', () => {
-    expect(s.at(-1)).toMatchObject({ inicio: '2026-12-28', fim: '2026-12-31', mes: '2026-12' });
+  it('nenhuma semana cruza mês; cobrem o período dia a dia, sem buraco nem sobreposição', () => {
     for (const x of s) expect(x.inicio.slice(0, 7)).toBe(x.fim.slice(0, 7));
-    expect(s.map((x) => x.n)).toEqual(s.map((_, i) => i + 1));
-  });
-  it('as semanas cobrem o período dia a dia, sem buraco nem sobreposição', () => {
+    for (const x of s) expect(x.mes).toBe(x.inicio.slice(0, 7));
     let dias = 0;
     for (const x of s) dias += (Date.parse(x.fim) - Date.parse(x.inicio)) / 86_400_000 + 1;
     expect(dias).toBe(99); // 7 (set) + 31 + 30 + 31
+    for (let i = 1; i < s.length; i++) expect((Date.parse(s[i].inicio) - Date.parse(s[i - 1].fim)) / 86_400_000).toBe(1);
   });
-  it('período invertido devolve vazio; período de 1 dia devolve 1 semana', () => {
+  it('pedaço de 4 dias fica (01–04/10, quinta a domingo)', () => {
+    expect(lim(semanas('2026-10-01', '2026-10-11'))).toEqual(['10-01..10-04', '10-05..10-11']);
+  });
+  it('mês que começa no domingo: o dia 1º entra na semana seguinte (nov/2026 e fev/2026)', () => {
+    expect(lim(semanas('2026-11-01', '2026-11-15'))).toEqual(['11-01..11-08', '11-09..11-15']);
+    expect(lim(semanas('2026-02-01', '2026-02-08'))).toEqual(['02-01..02-08']);
+  });
+  it('fim de mês curto vai para a semana anterior (30/11, segunda)', () => {
+    expect(lim(semanas('2026-11-16', '2026-11-30'))).toEqual(['11-16..11-22', '11-23..11-30']);
+  });
+  it('início do período no meio da semana: 4 dias ficam, 3 dias unem à seguinte', () => {
+    expect(lim(semanas('2026-10-08', '2026-10-18'))).toEqual(['10-08..10-11', '10-12..10-18']);
+    expect(lim(semanas('2026-10-09', '2026-10-25'))).toEqual(['10-09..10-18', '10-19..10-25']);
+  });
+  it('mês com um pedaço só fica como está, mesmo curto', () => {
+    expect(lim(semanas('2026-09-28', '2026-09-30'))).toEqual(['09-28..09-30']);
+    expect(lim(semanas('2026-10-01', '2026-10-01'))).toEqual(['10-01..10-01']);
+  });
+  it('período invertido devolve vazio', () => {
     expect(semanas('2026-10-02', '2026-10-01')).toEqual([]);
-    expect(semanas('2026-10-01', '2026-10-01')).toHaveLength(1);
   });
   it('fimDoMes', () => {
     expect(fimDoMes('2026-02-10')).toBe('2026-02-28');
@@ -77,33 +95,33 @@ describe('agregarReceber — semana × bloco × grupo, só a_receber soma', () =
 
   it('realizada e em_atraso_fora não somam', () => {
     expect(g.total).toBe(185.3);
-    expect(g.totalPorSemana.slice(0, 4)).toEqual([0.3, 100, 80, 5]);
+    expect(g.totalPorSemana.slice(0, 3)).toEqual([100.3, 80, 5]);
   });
   it('centavos exatos (0,1 + 0,2 = 0,3)', () => {
-    expect(g.linhas[0].porSemana[0]).toBe(0.3);
+    expect(agregarReceber(linhas, '2026-09-24', '2026-09-27').linhas[0].porSemana[0]).toBe(0.3);
   });
   it('ordem das linhas: bloco 1, depois bloco 2 na ordem da planilha, grupo desconhecido no fim (não some)', () => {
     expect(g.linhas.map((l) => l.grupo)).toEqual([
       'Vendas já realizadas', 'Assinaturas Serviço Diamante', 'Parcelas a vencer HM', 'Grupo novo do banco',
     ]);
     expect(g.blocos).toEqual([
-      { bloco: 1, porSemana: [0.3, 100, 0, 0, 0, 0, 0], total: 100.3 },
-      { bloco: 2, porSemana: [0, 0, 80, 5, 0, 0, 0], total: 85 },
+      { bloco: 1, porSemana: [100.3, 0, 0, 0, 0, 0], total: 100.3 },
+      { bloco: 2, porSemana: [0, 80, 5, 0, 0, 0], total: 85 },
     ]);
   });
   it('total por mês e acumulado', () => {
     expect(g.meses.map((m) => [m.mes, m.semanas, m.total, m.acumulado])).toEqual([
-      ['2026-09', [0, 1], 100.3, 100.3],
-      ['2026-10', [2, 3, 4, 5, 6], 85, 185.3],
+      ['2026-09', [0], 100.3, 100.3],
+      ['2026-10', [1, 2, 3, 4, 5], 85, 185.3],
     ]);
-    expect(g.acumuladoPorSemana).toEqual([0.3, 100.3, 180.3, 185.3, 185.3, 185.3, 185.3]);
+    expect(g.acumuladoPorSemana).toEqual([100.3, 180.3, 185.3, 185.3, 185.3, 185.3]);
   });
   it('a receber fora do período é contado à parte, não some', () => {
     expect(g.foraDoPeriodo).toEqual({ linhas: 1, valor: 40 });
   });
   it('composição da célula: só as linhas a_receber daquele grupo naquela semana', () => {
-    const cel = composicaoDaCelula(linhas, g.semanas[1], 1, 'Vendas já realizadas');
-    expect(cel.map((l) => l.valor)).toEqual([100]);
+    const cel = composicaoDaCelula(linhas, g.semanas[0], 1, 'Vendas já realizadas');
+    expect(cel.map((l) => l.valor)).toEqual([0.1, 0.2, 100]);
     expect(composicaoDaCelula(linhas, null, 2, 'Parcelas a vencer HM').map((l) => l.valor)).toEqual([50]);
   });
 });
