@@ -10,6 +10,7 @@
 //   body {}                 → processa a fila (backfill pendente)
 //   body {"rotina": true}   → enfileira os últimos 3 dias de cada produto e processa
 //   body {"catalogo": true} → grava a lista de TODOS os produtos da conta em fin.hotmart_catalogo
+//                             e as ofertas dos produtos com sincroniza = true em fin.ofertas
 // Quem chama é o pg_cron (via pg_net). Credenciais só no Vault, lidas pelo Postgres.
 import postgres from "npm:postgres@3.4.4";
 
@@ -79,6 +80,25 @@ async function paginar(tk: string, path: string, params: Record<string, string |
     if (!pageToken) break;
   }
   return itens;
+}
+
+// Oferta da Hotmart (GET /products/{ucode}/offers) → linha de fin.ofertas. Pura: formato diferente vira null,
+// o objeto inteiro fica em bruto_json (o chamador aplica sql.json). Sem code, devolve null (item ignorado).
+export function ofertaParaLinha(produtoId: string, o: Item) {
+  if (!o || o.code == null || String(o.code) === "") return null;
+  const v = o.price?.value;
+  const preco = v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v);
+  return {
+    oferta_codigo: String(o.code),
+    produto_id: produtoId,
+    nome: o.name ?? null,
+    descricao: o.description ?? null,
+    preco,
+    moeda: o.price?.currency_code ?? null,
+    modo: o.payment_mode ?? null,
+    is_main_offer: typeof o.is_main_offer === "boolean" ? o.is_main_offer : null,
+    bruto_json: o,
+  };
 }
 
 const msParaTs = (ms?: number | null) => (ms ? new Date(ms).toISOString() : null);
@@ -212,7 +232,36 @@ Deno.serve(async (req) => {
         select c.produto_id, c.nome, 'A_CLASSIFICAR', null, false, 'Do catálogo da Hotmart; aguarda classificação.'
           from fin.hotmart_catalogo c
         on conflict (produto_id) do nothing`;
-      return new Response(JSON.stringify({ catalogo: produtos.length, ms: Date.now() - inicio }), {
+      // Ofertas: uma chamada por produto sincronizado (lista montada antes). Falha de um não derruba os outros.
+      const alvos = await sql`
+        select p.produto_id, c.ucode from fin.produtos p
+          join fin.hotmart_catalogo c on c.produto_id = p.produto_id
+         where p.sincroniza = true and c.ucode is not null`;
+      let ofertas = 0;
+      const ofertasErro: string[] = [];
+      for (const a of alvos) {
+        try {
+          const lista = await paginar(tk0, `/products/api/v1/products/${encodeURIComponent(a.ucode)}/offers`, {});
+          const porCodigo = new Map<string, ReturnType<typeof ofertaParaLinha>>();
+          for (const o of lista) {
+            const l = ofertaParaLinha(a.produto_id, o);
+            if (l) porCodigo.set(l.oferta_codigo, l); // dedup: ON CONFLICT não aceita a mesma chave duas vezes no lote
+          }
+          const linhas = [...porCodigo.values()].map((l) => ({ ...l!, bruto_json: sql.json(l!.bruto_json) }));
+          if (!linhas.length) continue;
+          await sql`
+            insert into fin.ofertas ${sql(linhas)}
+            on conflict (oferta_codigo) do update set
+              produto_id = excluded.produto_id, nome = excluded.nome, descricao = excluded.descricao, preco = excluded.preco,
+              moeda = excluded.moeda, modo = excluded.modo, is_main_offer = excluded.is_main_offer,
+              bruto_json = excluded.bruto_json, visto_em = now()`;
+          ofertas += linhas.length;
+        } catch (e) {
+          console.error("hotmart-sync ofertas", a.produto_id, String(e).slice(0, 300));
+          ofertasErro.push(String(a.produto_id));
+        }
+      }
+      return new Response(JSON.stringify({ catalogo: produtos.length, ofertas, ofertas_erro: ofertasErro, ms: Date.now() - inicio }), {
         headers: { "Content-Type": "application/json" },
       });
     }
