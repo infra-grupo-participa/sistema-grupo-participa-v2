@@ -97,10 +97,10 @@ export function AnaliseFaturamento({ repo, familia }: { repo: FinanceiroReposito
               <>
                 <GraficoContratado meses={contratado} />
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--fg-3)]">
-                  <Legenda cor="var(--accent)" texto={`Parcelas Hotmart ${compacto(contratado.reduce((s, m) => s + m.parcelado, 0))}`} />
-                  <Legenda cor="var(--cyan)" texto={`Assinaturas (3 meses) ${compacto(contratado.reduce((s, m) => s + m.assinatura, 0))}`} />
+                  <Legenda cor="var(--accent)" texto={`Parcelas Hotmart (parcelamento e pagamento múltiplo) ${compacto(contratado.reduce((s, m) => s + m.parcelado, 0))}`} />
+                  <Legenda cor="var(--cyan)" texto={`Assinaturas (até 12 meses, parando no fim do plano) ${compacto(contratado.reduce((s, m) => s + m.assinatura, 0))}`} />
                   {contratado.some((m) => m.combinado > 0) && <Legenda cor="var(--yellow)" texto={`Saldo com data no board ${compacto(contratado.reduce((s, m) => s + m.combinado, 0))}`} />}
-                  <Legenda cor="var(--red)" texto={`Em risco (parcela aberta ou 45+ dias sem pagar) ${compacto(riscoContr)}`} risco />
+                  <Legenda cor="var(--red)" texto={`Em risco (contrato com cobrança atrasada há mais de 5 dias) ${compacto(riscoContr)}`} risco />
                 </div>
               </>
             )}
