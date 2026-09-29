@@ -184,7 +184,9 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar, hojeISO }
         <thead className="bg-[var(--surface-2)]">
           <tr>
             <th className={`${TH} sticky left-0 z-[1] bg-[var(--surface-2)] text-left`} rowSpan={2}>&nbsp;</th>
-            {grade.meses.map((m) => (
+            {/* Mês sem coluna própria (semana de fronteira do modo fluxo inteira no mês vizinho — domain/contas-receber.ts)
+                não entra aqui: colSpan=0 é HTML inválido e desalinharia o cabeçalho. A soma dele aparece só no Total do mês. */}
+            {grade.meses.filter((m) => m.semanas.length > 0).map((m) => (
               <th key={m.mes} colSpan={m.semanas.length} className={`${TH} border-l border-[var(--border)] text-center`}>{rotuloMes(m.mes)}</th>
             ))}
             <th className={`${TH} border-l border-[var(--border)] text-right`} rowSpan={2}>{GRADE_RECEBER.total}</th>
@@ -223,7 +225,7 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar, hojeISO }
           </tr>
           <tr className="border-t border-[var(--border-faint)] text-[var(--fg)]">
             <td className={COL1}>{ROTULOS_TOTAL.totalDoMes}</td>
-            {grade.meses.map((m) => (
+            {grade.meses.filter((m) => m.semanas.length > 0).map((m) => (
               <td key={m.mes} colSpan={m.semanas.length} className={`${TD_NUM} text-center border-l border-[var(--border)]`}><Numero v={m.total} bruto={m.brutoTotal} /></td>
             ))}
             <td className={`${TD_NUM} border-l border-[var(--border)]`}><Numero v={grade.total} bruto={grade.brutoTotal} /></td>
