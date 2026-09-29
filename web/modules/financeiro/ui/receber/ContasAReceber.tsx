@@ -2,7 +2,8 @@
 
 // Aba "Previsão de caixa" (#receber; fase 1 28/09/2026, F2 com cenários e perda, F3 com o estimado): grade semana (colunas)
 // × bloco/grupo (linhas), com total por semana, por mês e acumulado. Substitui o "Fluxo Semanal" da planilha do financeiro.
-// Seções, nesta ordem: CERTO (blocos 1, 2, 5) com subtotal; ESTIMADO (blocos 3, 4, 6; a reserva é negativa) com subtotal;
+// Seções, nesta ordem: CERTO (blocos 1, 2, 5 e 7 assinados) com subtotal; ESTIMADO (blocos 3, 4, 6 — a reserva é negativa —
+// e 7 sem contrato assinado) com subtotal. A seção de cada linha vem da coluna `certeza`, não do número do bloco;
 // total geral; e, abaixo dos totais, a faixa "Informativo — fora da soma" (bloco 8, acordos do board). Grupo estimado
 // sem base aparece como "sem base medida", nunca como zero.
 // Clicar num número abre, logo abaixo da grade e SEM consulta nova, quem compõe aquele valor — tudo sai da mesma
@@ -13,8 +14,8 @@ import { useRef, useState, type ReactNode } from 'react';
 import { fmtBRLc, fmtData } from '@/shared/ui/format';
 import { hojeSaoPaulo, type ContasReceberCarregado } from '../../application/carregar-contas-receber';
 import {
-  BLOCO_INFORMATIVO, CENARIOS_RECEBER, composicaoDaCelula, GRUPO_BLOCO_1, GRUPO_BLOCO_6, secaoDoBloco, temPerda,
-  type CenarioReceber, type GradeReceber, type LinhaGrade, type LinhaReceber, type PagamentoContrato, type Semana,
+  BLOCO_INFORMATIVO, CENARIOS_RECEBER, composicaoDaCelula, GRUPO_BLOCO_1, GRUPO_BLOCO_6, temPerda,
+  type CenarioReceber, type SecaoReceber, type GradeReceber, type LinhaGrade, type LinhaReceber, type PagamentoContrato, type Semana,
 } from '../../domain/contas-receber';
 import type { FeriadoBancario, SugestaoPremissa, VigenciaPremissa } from '../../domain/premissas-receber';
 import type { EventoPlanejado } from '../../domain/eventos-planejados';
@@ -84,12 +85,14 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar, hojeISO }
   const nCols = sems.length + 1; // semanas + Total (a 1ª coluna fica de fora)
   const eAtiva = (bloco: number, grupo: string, semana: number | null) =>
     selecionada?.bloco === bloco && selecionada.grupo === grupo && selecionada.semana === semana;
-  const linhasDoBloco = (b: number) => grade.linhas.filter((l) => l.bloco === b);
-  const semBaseDoBloco = (b: number) => grade.semBase.filter((x) => x.bloco === b);
-  const blocosDa = (secao: 'certo' | 'estimado') => {
+  // A seção vem da grade (coluna `certeza` de cada linha), nunca do número do bloco: o bloco 7 aparece nas duas seções
+  // (assinados no certo, sem contrato assinado no estimado), cada parte com o próprio subtotal.
+  const linhasDoBloco = (b: number, secao: SecaoReceber) => grade.linhas.filter((l) => l.bloco === b && l.secao === secao);
+  const semBaseDoBloco = (b: number, secao: SecaoReceber) => grade.semBase.filter((x) => x.bloco === b && x.secao === secao);
+  const blocosDa = (secao: SecaoReceber) => {
     const nums = new Set<number>([
-      ...grade.blocos.filter((b) => secaoDoBloco(b.bloco) === secao).map((b) => b.bloco),
-      ...grade.semBase.filter((x) => secaoDoBloco(x.bloco) === secao).map((x) => x.bloco),
+      ...grade.blocos.filter((b) => b.secao === secao).map((b) => b.bloco),
+      ...grade.semBase.filter((x) => x.secao === secao).map((x) => x.bloco),
     ]);
     return [...nums].sort((a, b) => a - b);
   };
@@ -130,10 +133,10 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar, hojeISO }
     </td>,
   ];
 
-  const linhasDoBlocoNaGrade = (bloco: number) => {
-    const b = grade.blocos.find((x) => x.bloco === bloco);
-    const gs = linhasDoBloco(bloco);
-    const sb = semBaseDoBloco(bloco);
+  const linhasDoBlocoNaGrade = (secao: SecaoReceber) => (bloco: number) => {
+    const b = grade.blocos.find((x) => x.bloco === bloco && x.secao === secao);
+    const gs = linhasDoBloco(bloco, secao);
+    const sb = semBaseDoBloco(bloco, secao);
     const titulo = `${bloco}. ${rotuloBloco(bloco)}`;
     if (!b) {
       // Só "sem base": o bloco aparece, sem número.
@@ -195,13 +198,13 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar, hojeISO }
         </thead>
         <tbody>
           {cabecalhoSecao('sec-certo', SECOES_RECEBER.certo, SECOES_RECEBER.certoAjuda, 'var(--green)')}
-          {certo.flatMap(linhasDoBlocoNaGrade)}
+          {certo.flatMap(linhasDoBlocoNaGrade('certo'))}
           {temEstimado && linhaTotal('sub-certo', SECOES_RECEBER.subtotalCerto, grade.certoPorSemana, grade.certoTotal,
             'border-t border-[var(--border)] font-semibold text-[var(--fg)]')}
         </tbody>
         <tbody>
           {cabecalhoSecao('sec-estimado', SECOES_RECEBER.estimado, SECOES_RECEBER.estimadoAjuda, 'var(--accent)')}
-          {temEstimado ? estimado.flatMap(linhasDoBlocoNaGrade) : (
+          {temEstimado ? estimado.flatMap(linhasDoBlocoNaGrade('estimado')) : (
             <tr className="border-t border-[var(--border-faint)]">
               <td className={`${COL1} text-[var(--fg-3)]`}>{SECOES_RECEBER.nenhumEstimado}</td>
               <td colSpan={nCols} />
@@ -487,7 +490,7 @@ function KpisGrade({ grade, hojeISO }: { grade: GradeReceber; hojeISO: string })
   const pctCerto = grade.total > 0 ? Math.round((grade.certoTotal / grade.total) * 100) : null;
   const pico = grade.totalPorSemana.reduce((m, v, i) => (v > grade.totalPorSemana[m] ? i : m), 0);
   const atual = grade.semanas.findIndex((s) => hojeISO >= s.inicio && hojeISO <= s.fim);
-  const temEstimado = grade.blocos.some((b) => secaoDoBloco(b.bloco) === 'estimado');
+  const temEstimado = grade.blocos.some((b) => b.secao === 'estimado');
   const K = GRADE_RECEBER.kpis;
   return (
     <FaixaKpis>

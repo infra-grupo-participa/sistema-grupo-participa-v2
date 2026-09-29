@@ -4,13 +4,16 @@
 //   bloco 1 — vendas já feitas, dinheiro ainda a cair (90% − 3,89% em D+2 útil; 10% no 1º dia útil ≥ D+30);
 //   bloco 2 — assinaturas e parcelas futuras já contratadas;
 //   bloco 5 — recebimentos informados (renovações Diamante/Aurum negociadas fora, cadastradas no sistema — 28/09).
+//   CERTO OU ESTIMADO pela coluna `certeza` (z73)
+//   bloco 7 — contratos Holding Familiar (fora da Hotmart): assinado = certo; sem contrato assinado = estimado. O bloco
+//             se divide entre as duas seções — por isso a seção de uma linha sai de `certeza`, não do número do bloco.
 //   ESTIMADO (z67, só com a premissa projecao_no_receber ligada)
 //   bloco 3 — vendas novas por semana (premissa ou sugestão medida);
 //   bloco 4 — evento planejado (tamanho × curva do evento de referência);
 //   bloco 6 — reserva de reembolso e chargeback, NEGATIVA, sobre 3 + 4.
 //   FORA DA SOMA
 //   bloco 8 — informativo: saldos combinados no board (situacao 'informativo'); somar contaria duas vezes com o bloco 3.
-// Bloco 7 (Soluções) fica para depois.
+// Vendas Hotmart da Soluções (P35–P37) ficam para depois.
 //
 // Fonte: public.fn_fin_receber_semanal(p_corte, p_ate, p_cenario) — UMA chamada por cenário (NÃO é fn_fin_contas_receber(text), o razão do board); o cálculo de data de caixa (dias úteis,
 // feriados) e a baixa do que já se realizou moram no banco. Aqui só: tipar, converter numeric, cortar em semanas e somar.
@@ -27,11 +30,21 @@ export type SituacaoReceber = 'a_receber' | 'realizada' | 'em_atraso_fora' | 'co
 // z67: 'sem_base' = grupo estimado sem premissa e sem sugestão medida (valor e data NULL no banco: "não sei", nunca zero);
 // 'informativo' = bloco 8, acordos no board, visível e FORA da soma.
 
-/** Blocos do ESTIMADO (z67). O resto que soma é CERTO. O cenário mexe sobretudo aqui. */
+/** Blocos INTEIROS no ESTIMADO (z67). O cenário mexe sobretudo aqui. O bloco 7 se divide: ver `secaoDaLinha`. */
 export const BLOCOS_ESTIMADO: readonly number[] = [3, 4, 6];
 /** Bloco informativo (acordos combinados no board): aparece, nunca soma. */
 export const BLOCO_INFORMATIVO = 8;
-export const secaoDoBloco = (bloco: number): 'certo' | 'estimado' => (BLOCOS_ESTIMADO.includes(bloco) ? 'estimado' : 'certo');
+/** Contratos Holding Familiar (z73): assinados no certo, sem contrato assinado no estimado. */
+export const BLOCO_CONTRATOS = 7;
+export type SecaoReceber = 'certo' | 'estimado';
+/** Seção pelo número do bloco — só o FALLBACK de banco sem a coluna `certeza`. Leia a seção por `secaoDaLinha`. */
+export const secaoDoBloco = (bloco: number): SecaoReceber => (BLOCOS_ESTIMADO.includes(bloco) ? 'estimado' : 'certo');
+/**
+ * Seção da linha: a coluna `certeza` do banco ('certo' | 'estimado') manda. Sem ela (banco antigo, ou valor fora do
+ * contrato como 'informativo'), cai no número do bloco. É a regra de seção da grade, das 4 semanas e do PDF.
+ */
+export const secaoDaLinha = (l: { bloco: number; certeza: string | null }): SecaoReceber =>
+  (l.certeza === 'certo' || l.certeza === 'estimado' ? l.certeza : secaoDoBloco(l.bloco));
 
 /** Blocos 3 e 4 (z67): uma venda projetada do dia que cai nesta data de caixa, e de onde veio o valor. */
 export interface VendaProjetada {
@@ -130,9 +143,20 @@ export const GRUPOS_BLOCO_5 = [
 export const GRUPOS_BLOCO_3 = ['HM avulso', 'Holding Total', 'Outros produtos'] as const;
 export const GRUPO_BLOCO_6 = 'Reserva de reembolso e chargeback';
 export const GRUPO_BLOCO_8 = 'Informativo: acordos no board';
+/** Grupos do bloco 7 (z73), nesta ordem. Grupo desconhecido vai para o fim, nunca some. */
+export const GRUPO_CONTRATO_ASSINADO = 'Contratos Holding Familiar — assinados';
+export const GRUPO_CONTRATO_SEM_ASSINATURA = 'Contratos Holding Familiar — sem contrato assinado';
+export const GRUPOS_BLOCO_7 = [GRUPO_CONTRATO_ASSINADO, GRUPO_CONTRATO_SEM_ASSINATURA] as const;
+/**
+ * Seção pelo (bloco, grupo), para fontes SEM a coluna `certeza` (fotos da z69: previsto × realizado). Bloco 7: o grupo
+ * diz se é assinado; grupo desconhecido do bloco 7 cai no estimado (não promove a certo o que não se sabe). Demais
+ * blocos: pelo número.
+ */
+export const secaoDoGrupo = (bloco: number, grupo: string | null): SecaoReceber =>
+  (bloco === BLOCO_CONTRATOS ? (grupo === GRUPO_CONTRATO_ASSINADO ? 'certo' : 'estimado') : secaoDoBloco(bloco));
 
 const GRUPOS_POR_BLOCO: Record<number, readonly string[]> = {
-  1: [GRUPO_BLOCO_1], 2: GRUPOS_BLOCO_2, 3: GRUPOS_BLOCO_3, 5: GRUPOS_BLOCO_5, 6: [GRUPO_BLOCO_6],
+  1: [GRUPO_BLOCO_1], 2: GRUPOS_BLOCO_2, 3: GRUPOS_BLOCO_3, 5: GRUPOS_BLOCO_5, 6: [GRUPO_BLOCO_6], 7: GRUPOS_BLOCO_7,
 };
 
 // ─── Conversão (numeric do PostgREST pode chegar como texto) ────────────────
@@ -319,6 +343,8 @@ export function semanaDe(sems: Semana[], d: string): number {
 export interface LinhaGrade {
   bloco: number;
   grupo: string;
+  /** Seção do grupo (pela `certeza` das linhas; ver `secaoDaLinha`). */
+  secao: SecaoReceber;
   porSemana: number[];
   total: number;
   /** Sem perda (valor_bruto). Igual a porSemana onde o fator é 1. */
@@ -338,8 +364,11 @@ export interface MesGrade {
 export interface GradeReceber {
   semanas: Semana[];
   linhas: LinhaGrade[];
-  /** Subtotal por bloco, por semana (bloco 2 tem vários grupos). */
-  blocos: { bloco: number; porSemana: number[]; total: number; brutoPorSemana: number[]; brutoTotal: number }[];
+  /** Subtotal por bloco E seção, por semana (bloco 2 tem vários grupos). O bloco 7 pode aparecer duas vezes: a parte
+   *  certa (assinados) e a estimada (sem contrato assinado). Ordem: bloco, depois certo antes de estimado. */
+  blocos: {
+    bloco: number; secao: SecaoReceber; porSemana: number[]; total: number; brutoPorSemana: number[]; brutoTotal: number;
+  }[];
   totalPorSemana: number[];
   brutoPorSemana: number[];
   acumuladoPorSemana: number[];
@@ -356,7 +385,7 @@ export interface GradeReceber {
   estimadoPorSemana: number[];
   estimadoTotal: number;
   /** Grupos estimados sem base (situacao 'sem_base'): aparecem como "sem base medida", fora da soma. */
-  semBase: { bloco: number; grupo: string; tratamento: string | null }[];
+  semBase: { bloco: number; grupo: string; secao: SecaoReceber; tratamento: string | null }[];
   /** Bloco 8 (situacao 'informativo'): mesma régua de semanas, FORA de toda soma. NULL = nenhuma linha. */
   informativo: {
     grupo: string; porSemana: number[]; total: number; linhas: number; foraDoPeriodo: { linhas: number; valor: number };
@@ -377,7 +406,7 @@ function ordemGrupo(bloco: number, grupo: string): number {
 export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: string): GradeReceber {
   const sems = semanas(inicio, fim);
   const n = sems.length;
-  const porGrupo = new Map<string, { bloco: number; grupo: string; cs: number[]; bs: number[] }>();
+  const porGrupo = new Map<string, { bloco: number; grupo: string; secao: SecaoReceber; cs: number[]; bs: number[] }>();
   let foraN = 0;
   let foraC = 0;
   let semDataN = 0;
@@ -386,7 +415,9 @@ export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: stri
   let info: { grupo: string; cs: number[]; n: number; foraN: number; foraC: number } | null = null;
   for (const l of linhas) {
     if (l.situacao === 'sem_base') {
-      if (!semBase.some((x) => x.bloco === l.bloco && x.grupo === l.grupo)) semBase.push({ bloco: l.bloco, grupo: l.grupo, tratamento: l.tratamento });
+      if (!semBase.some((x) => x.bloco === l.bloco && x.grupo === l.grupo)) {
+        semBase.push({ bloco: l.bloco, grupo: l.grupo, secao: secaoDaLinha(l), tratamento: l.tratamento });
+      }
       continue;
     }
     if (l.situacao === 'informativo') {
@@ -400,24 +431,30 @@ export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: stri
     if (!l.data_caixa) { semDataN += 1; semDataC += c(l.valor); continue; }
     const i = semanaDe(sems, l.data_caixa);
     if (i === -1) { foraN += 1; foraC += c(l.valor); continue; }
-    const chave = `${l.bloco}\u0000${l.grupo}`;
+    // A seção entra na chave: grupo com linhas de certeza diferente (fora do contrato) vira duas linhas, cada uma na sua
+    // seção — o estimado nunca soma no subtotal certo.
+    const secao = secaoDaLinha(l);
+    const chave = `${l.bloco}\u0000${l.grupo}\u0000${secao}`;
     let g = porGrupo.get(chave);
-    if (!g) { g = { bloco: l.bloco, grupo: l.grupo, cs: new Array(n).fill(0), bs: new Array(n).fill(0) }; porGrupo.set(chave, g); }
+    if (!g) { g = { bloco: l.bloco, grupo: l.grupo, secao, cs: new Array(n).fill(0), bs: new Array(n).fill(0) }; porGrupo.set(chave, g); }
     g.cs[i] += c(l.valor);
     g.bs[i] += c(l.valor_bruto);
   }
+  const ordemSecao = (s: SecaoReceber) => (s === 'certo' ? 0 : 1);
   const grupos = [...porGrupo.values()].sort((a, b) =>
-    a.bloco - b.bloco || ordemGrupo(a.bloco, a.grupo) - ordemGrupo(b.bloco, b.grupo) || a.grupo.localeCompare(b.grupo, 'pt-BR'));
+    a.bloco - b.bloco || ordemGrupo(a.bloco, a.grupo) - ordemGrupo(b.bloco, b.grupo) || a.grupo.localeCompare(b.grupo, 'pt-BR')
+    || ordemSecao(a.secao) - ordemSecao(b.secao));
 
   const totalC = new Array(n).fill(0);
   const totalB = new Array(n).fill(0);
   const certoC = new Array(n).fill(0);
   const estC = new Array(n).fill(0);
-  const porBloco = new Map<number, { cs: number[]; bs: number[] }>();
+  const porBloco = new Map<string, { bloco: number; secao: SecaoReceber; cs: number[]; bs: number[] }>();
   for (const g of grupos) {
-    let b = porBloco.get(g.bloco);
-    if (!b) { b = { cs: new Array(n).fill(0), bs: new Array(n).fill(0) }; porBloco.set(g.bloco, b); }
-    const secao = secaoDoBloco(g.bloco) === 'estimado' ? estC : certoC;
+    const kb = `${g.bloco}\u0000${g.secao}`;
+    let b = porBloco.get(kb);
+    if (!b) { b = { bloco: g.bloco, secao: g.secao, cs: new Array(n).fill(0), bs: new Array(n).fill(0) }; porBloco.set(kb, b); }
+    const secao = g.secao === 'estimado' ? estC : certoC;
     for (let i = 0; i < n; i++) { totalC[i] += g.cs[i]; b.cs[i] += g.cs[i]; totalB[i] += g.bs[i]; b.bs[i] += g.bs[i]; secao[i] += g.cs[i]; }
   }
   const acumC: number[] = [];
@@ -436,10 +473,11 @@ export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: stri
   return {
     semanas: sems,
     linhas: grupos.map((g) => ({
-      bloco: g.bloco, grupo: g.grupo, porSemana: g.cs.map(r), total: r(soma(g.cs)), brutoPorSemana: g.bs.map(r), brutoTotal: r(soma(g.bs)),
+      bloco: g.bloco, grupo: g.grupo, secao: g.secao, porSemana: g.cs.map(r), total: r(soma(g.cs)), brutoPorSemana: g.bs.map(r),
+      brutoTotal: r(soma(g.bs)),
     })),
-    blocos: [...porBloco.entries()].sort((a, b) => a[0] - b[0]).map(([bloco, x]) => ({
-      bloco, porSemana: x.cs.map(r), total: r(soma(x.cs)), brutoPorSemana: x.bs.map(r), brutoTotal: r(soma(x.bs)),
+    blocos: [...porBloco.values()].sort((a, b) => a.bloco - b.bloco || ordemSecao(a.secao) - ordemSecao(b.secao)).map((x) => ({
+      bloco: x.bloco, secao: x.secao, porSemana: x.cs.map(r), total: r(soma(x.cs)), brutoPorSemana: x.bs.map(r), brutoTotal: r(soma(x.bs)),
     })),
     totalPorSemana: totalC.map(r),
     brutoPorSemana: totalB.map(r),

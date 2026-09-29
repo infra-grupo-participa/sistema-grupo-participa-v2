@@ -3,7 +3,7 @@
 // fn_fin_receber_previsto_realizado(semanas); e, sem consulta nova, a carga do cenário base de fn_fin_receber_semanal
 // (a mesma da grade). A regra (foto, motivo, previsto, realizado, acerto, perda medida) mora no banco; aqui só: tipar,
 // converter numeric, somar por semana e agrupar para a tela.
-import { secaoDoBloco, type CobrancaRecorrente, type LinhaReceber } from './contas-receber';
+import { BLOCO_CONTRATOS, secaoDaLinha, secaoDoGrupo, type CobrancaRecorrente, type LinhaReceber } from './contas-receber';
 
 // ─── Tipos do contrato z69 ──────────────────────────────────────────────────
 export interface FotoReceber {
@@ -184,7 +184,7 @@ export function proximas4Semanas(linhas: LinhaReceber[], hojeISO: string): Proxi
     if (l.situacao !== 'a_receber' || !l.data_caixa || l.data_caixa > fim) continue;
     const i = l.data_caixa <= dom0 ? 0 : sems.findIndex((s) => l.data_caixa! >= s.inicio && l.data_caixa! <= s.fim);
     if (i === -1) continue;
-    if (secaoDoBloco(l.bloco) === 'estimado') sems[i].estimado += c(l.valor); else sems[i].certo += c(l.valor);
+    if (secaoDaLinha(l) === 'estimado') sems[i].estimado += c(l.valor); else sems[i].certo += c(l.valor);
   }
   const semanas = sems.map((s) => ({ inicio: s.inicio, fim: s.fim, certo: r(s.certo), estimado: r(s.estimado), total: r(s.certo + s.estimado) }));
   const certo = sems.reduce((a, s) => a + s.certo, 0);
@@ -196,7 +196,7 @@ export function proximas4Semanas(linhas: LinhaReceber[], hojeISO: string): Proxi
 export interface AlertasReceber {
   /** Bloco 2 'em_atraso_fora': cobranças (antecipação + garantia contam 1), como em Recorrências. */
   foraDaProjecao: { n: number; valor: number };
-  /** Bloco 5 'em_atraso_fora' = recebimento informado em atraso, a cobrar. */
+  /** Blocos 5 e 7 'em_atraso_fora' = recebimento informado (ou contrato Holding Familiar) em atraso, a cobrar. */
   informadosACobrar: { n: number; valor: number };
   /** Grupos estimados sem base medida (fora da soma). */
   semBase: { bloco: number; grupo: string }[];
@@ -213,7 +213,7 @@ export function alertasReceber(linhas: LinhaReceber[], recorrencias: CobrancaRec
   let infC = 0;
   const semBase: AlertasReceber['semBase'] = [];
   for (const l of linhas) {
-    if (l.bloco === 5 && l.situacao === 'em_atraso_fora') { infN += 1; infC += c(l.valor); }
+    if ((l.bloco === 5 || l.bloco === BLOCO_CONTRATOS) && l.situacao === 'em_atraso_fora') { infN += 1; infC += c(l.valor); }
     if (l.situacao === 'sem_base' && !semBase.some((x) => x.bloco === l.bloco && x.grupo === l.grupo)) semBase.push({ bloco: l.bloco, grupo: l.grupo });
   }
   return {
@@ -279,11 +279,12 @@ export interface SemanaPrevistoRealizado {
   janelaDe: string | null;
   janelaAte: string | null;
   fotoEm: string | null;
-  /** Certo (blocos 1, 2, 5): o que a foto previa e o que caiu, medidos. */
+  /** Certo (blocos 1, 2, 5 e os contratos assinados do 7): o que a foto previa e o que caiu, medidos. */
   certoPrevisto: number;
   certoRealizado: number;
   certoAcerto: number | null;
-  /** Estimado (3, 4, 6): só o previsto; a venda nova que caiu entra em "Fora da foto". */
+  /** Estimado (3, 4, 6 e os contratos sem assinatura do 7): só o previsto; a venda nova que caiu entra em "Fora da foto".
+   *  O realizado de contrato sem assinatura é medido pelo banco e aparece no detalhe do grupo, não neste resumo. */
   estimadoPrevisto: number;
   /** Bloco NULL: vendas novas e outros que caíram sem estar na foto. */
   foraDaFoto: number;
@@ -317,7 +318,7 @@ export function resumirPrevistoRealizado(linhas: LinhaPrevistoRealizado[]): Prev
     let cp = 0; let cr = 0; let ep = 0; let ff = 0;
     for (const x of xs) {
       if (x.bloco == null) { ff += c(x.realizado ?? 0); continue; }
-      if (secaoDoBloco(x.bloco) === 'estimado') { ep += c(x.previsto ?? 0); continue; }
+      if (secaoDoGrupo(x.bloco, x.grupo) === 'estimado') { ep += c(x.previsto ?? 0); continue; }
       cp += c(x.previsto ?? 0);
       cr += c(x.realizado ?? 0);
     }

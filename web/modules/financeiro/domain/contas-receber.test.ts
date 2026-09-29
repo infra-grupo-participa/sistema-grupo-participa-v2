@@ -106,8 +106,8 @@ describe('agregarReceber — semana × bloco × grupo, só a_receber soma', () =
       'Vendas já realizadas', 'Assinaturas Serviço Diamante', 'Parcelas a vencer HM', 'Grupo novo do banco',
     ]);
     expect(g.blocos).toEqual([
-      { bloco: 1, porSemana: [100.3, 0, 0, 0, 0, 0], total: 100.3, brutoPorSemana: [100.3, 0, 0, 0, 0, 0], brutoTotal: 100.3 },
-      { bloco: 2, porSemana: [0, 80, 5, 0, 0, 0], total: 85, brutoPorSemana: [0, 80, 5, 0, 0, 0], brutoTotal: 85 },
+      { bloco: 1, secao: 'certo', porSemana: [100.3, 0, 0, 0, 0, 0], total: 100.3, brutoPorSemana: [100.3, 0, 0, 0, 0, 0], brutoTotal: 100.3 },
+      { bloco: 2, secao: 'certo', porSemana: [0, 80, 5, 0, 0, 0], total: 85, brutoPorSemana: [0, 80, 5, 0, 0, 0], brutoTotal: 85 },
     ]);
   });
   it('total por mês e acumulado', () => {

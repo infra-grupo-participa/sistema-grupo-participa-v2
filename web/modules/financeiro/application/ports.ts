@@ -144,9 +144,11 @@ export interface FinanceiroRepository {
   /** fn_fin_receber_previsto_realizado(p_semanas 1..52) — linhas 'semana' e 'perda'. */
   loadPrevistoRealizado(semanas?: number): Promise<LinhaPrevistoRealizado[]>;
 
-  // ── Recebimentos informados (bloco 5, 20260928z63) ───────────────────────
+  // ── Recebimentos informados (bloco 5, 20260928z63; contrato Holding Familiar = bloco 7, z73) ──────────
   // Escrita: guarda gp_pode_operar_financeiro() no banco; erro de validação = mensagem em português do SQL.
-  /** fn_fin_informados_listar() — identificadores MASCARADOS sem gp_pode_ver_cpf(). */
+  // z73: tipo contrato_holding_familiar com parcela_n, parcela_de e contrato_assinado (chaves só nesse tipo).
+  /** fn_fin_informados_listar() — identificadores MASCARADOS sem gp_pode_ver_cpf(). parcela_n, parcela_de,
+   *  contrato_assinado no fim (nulos fora do contrato e no banco sem a z73). */
   loadInformados(): Promise<Informado[]>;
   /** fn_fin_informado_salvar(p) — sem id cria; com id atualiza. Chave ausente = não mexe. */
   salvarInformado(p: InformadoEntrada): Promise<Resultado & { id?: string }>;

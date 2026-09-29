@@ -25,7 +25,7 @@ import type { DatasetRelatorio } from '../../application/montar-relatorio';
 import { formatarCelulaTela } from '../exportar';
 import { MOTIVO_SUGESTAO, ROTULO_DIVERGENCIA, rotuloEvidencia } from '../hotmart/rotulos';
 import type { ContasReceberCarregado } from '../../application/carregar-contas-receber';
-import { BLOCO_INFORMATIVO, secaoDoBloco } from '../../domain/contas-receber';
+import { BLOCO_INFORMATIVO } from '../../domain/contas-receber';
 import {
   FILTRO_BASE_PADRAO, fatorCsv, filtrarBase, pseudonimizadorBase, resumoCentroMes, rotuloSemanaDaLinha, somarBase,
 } from '../receber/base-auditavel';
@@ -557,13 +557,19 @@ export function rascunhoReceber(dados: ContasReceberCarregado): RascunhoRelatori
   };
 
   // Grade semana × bloco: linhas = semana, colunas = bloco (as semanas de domain/contas-receber.ts).
-  const temEstimado = g.blocos.some((b) => secaoDoBloco(b.bloco) === 'estimado');
-  const colBloco = (b: number) => `b${b}`;
+  // Uma coluna por (bloco, seção), a mesma divisão da tela: a seção vem da `certeza` das linhas (grade.blocos), e o bloco 7
+  // pode ter a parte certa (assinados) e a estimada (sem contrato assinado) — aí o rótulo diz qual é qual.
+  const temEstimado = g.blocos.some((b) => b.secao === 'estimado');
+  const dividido = (bloco: number) => g.blocos.filter((x) => x.bloco === bloco).length > 1;
+  const colBloco = (b: { bloco: number; secao: string }) =>
+    `b${b.bloco}${dividido(b.bloco) ? (b.secao === 'estimado' ? 'e' : 'c') : ''}`;
+  const rotuloColBloco = (b: { bloco: number; secao: string }) =>
+    `${b.bloco}. ${rotuloBloco(b.bloco)}${dividido(b.bloco) ? (b.secao === 'estimado' ? ' (estimado)' : ' (certo)') : ''}`;
   const info = g.informativo;
   const colunasGrade: ColunaPdf[] = [
     { chave: 'semana', rotulo: 'Semana', tipo: 'texto', pii: 'nenhuma', peso: 0.6 },
     { chave: 'periodo', rotulo: 'Período', tipo: 'texto', pii: 'nenhuma', peso: 1.2 },
-    ...g.blocos.map((b): ColunaPdf => ({ chave: colBloco(b.bloco), rotulo: `${b.bloco}. ${rotuloBloco(b.bloco)}`, tipo: 'moeda', pii: 'nenhuma' })),
+    ...g.blocos.map((b): ColunaPdf => ({ chave: colBloco(b), rotulo: rotuloColBloco(b), tipo: 'moeda', pii: 'nenhuma' })),
   ];
   if (temEstimado) {
     colunasGrade.push(
@@ -583,7 +589,7 @@ export function rascunhoReceber(dados: ContasReceberCarregado): RascunhoRelatori
       celulas: {
         semana: `S${s.n}`,
         periodo: s.inicio === s.fim ? ddmm(s.inicio) : `${ddmm(s.inicio)} a ${ddmm(s.fim)}`, // o ano está no horizonte
-        ...Object.fromEntries(g.blocos.map((b) => [colBloco(b.bloco), moedaGrade(b.porSemana[i])])),
+        ...Object.fromEntries(g.blocos.map((b) => [colBloco(b), moedaGrade(b.porSemana[i])])),
         ...(temEstimado ? { certo: moedaGrade(g.certoPorSemana[i]), estimado: moedaGrade(g.estimadoPorSemana[i]) } : {}),
         total: moedaGrade(g.totalPorSemana[i]),
         acumulado: fmtBRLc(g.acumuladoPorSemana[i]),
@@ -593,7 +599,7 @@ export function rascunhoReceber(dados: ContasReceberCarregado): RascunhoRelatori
     total: sems.length
       ? {
         semana: 'Total',
-        ...Object.fromEntries(g.blocos.map((b) => [colBloco(b.bloco), fmtBRLc(b.total)])),
+        ...Object.fromEntries(g.blocos.map((b) => [colBloco(b), fmtBRLc(b.total)])),
         ...(temEstimado ? { certo: fmtBRLc(g.certoTotal), estimado: fmtBRLc(g.estimadoTotal) } : {}),
         total: fmtBRLc(g.total),
         ...(info ? { info: fmtBRLc(info.total) } : {}),

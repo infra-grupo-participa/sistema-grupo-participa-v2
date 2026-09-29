@@ -74,7 +74,7 @@ describe('Premissas — sugestão medida e projeção', () => {
   });
   it('projeção desligada: diz o que a Semana a semana mostra e oferece ligar', () => {
     expect(html).toContain('Projeção na previsão');
-    expect(html).toContain('Desligada: a Semana a semana mostra só o certo');
+    expect(html).toContain('Desligada: a Semana a semana mostra o certo');
     expect(html).toContain('Ligar a projeção a partir de hoje');
     expect(html).toContain('aria-pressed="false"');
   });

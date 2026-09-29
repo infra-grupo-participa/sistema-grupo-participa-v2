@@ -17,7 +17,7 @@ export const CABECALHO_RECEBER = {
 
 /** Legenda de escopo — fixa acima dos blocos: o que é certo, o que é estimado e o que fica fora da soma. */
 export const ESCOPO_RECEBER = {
-  legenda: 'Certo: dinheiro já vendido, contratado ou informado pelo financeiro. Estimado: vendas novas, eventos planejados e reserva de reembolso, calculados por premissa (a projeção liga e desliga em Premissas). Acordos combinados no board aparecem como informativo, fora da soma.',
+  legenda: 'Certo: dinheiro já vendido, contratado ou informado pelo financeiro, e contratos Holding Familiar assinados. Estimado: vendas novas, eventos planejados e reserva de reembolso, calculados por premissa (a projeção liga e desliga em Premissas), e contratos Holding Familiar sem contrato assinado. Acordos combinados no board aparecem como informativo, fora da soma.',
 } as const;
 
 /** Nomes dos blocos da tela. */
@@ -28,15 +28,16 @@ export const BLOCOS_RECEBER = {
   vendasNovas: 'Vendas novas',
   eventosPlanejados: 'Eventos planejados',
   reserva: 'Reserva de reembolso e chargeback',
+  contratosHoldingFamiliar: 'Contratos Holding Familiar',
   informativoBoard: 'Acordos combinados no board',
 } as const;
 
 /** Seções da grade: certo × estimado, e a faixa informativa abaixo dos totais. */
 export const SECOES_RECEBER = {
   certo: 'Certo',
-  certoAjuda: 'vendido, contratado ou informado',
+  certoAjuda: 'vendido, contratado, informado ou assinado',
   estimado: 'Estimado',
-  estimadoAjuda: 'calculado por premissa',
+  estimadoAjuda: 'calculado por premissa ou sem contrato assinado',
   subtotalCerto: 'Subtotal certo',
   subtotalEstimado: 'Subtotal estimado',
   totalGeral: 'Total da semana (certo + estimado)',
@@ -191,7 +192,7 @@ export const CENARIO_RECEBER = {
   base: 'Base',
   conservador: 'Conservador',
   otimista: 'Otimista',
-  legenda: 'O cenário muda o estimado: o tamanho do evento planejado e, se gravadas em Premissas para o cenário, a venda nova e a reserva. No certo, muda só a perda mensal que tiver valor próprio do cenário. Sem valor próprio gravado, conservador e otimista usam o da base.',
+  legenda: 'O cenário muda o estimado: o tamanho do evento planejado, o percentual de recebimento dos contratos sem assinatura e, se gravadas em Premissas para o cenário, a venda nova e a reserva. No certo, muda só a perda mensal e o recebimento de contrato assinado que tiverem valor próprio do cenário. Sem valor próprio gravado, conservador e otimista usam o da base.',
 } as const;
 
 /** Recorrências (antes PROVISORIO em Recorrencias.tsx). */
@@ -255,7 +256,7 @@ export const PREMISSAS_RECEBER = {
   /** Liga/desliga da projeção (projecao_no_receber). */
   projecaoTitulo: 'Projeção na previsão',
   projecaoLigada: 'Ligada: vendas novas, eventos planejados, reserva de reembolso e o informativo dos acordos do board entram na Semana a semana (seção Estimado e faixa Informativo).',
-  projecaoDesligada: 'Desligada: a Semana a semana mostra só o certo (vendas já realizadas, assinaturas e parcelas, recebimentos informados).',
+  projecaoDesligada: 'Desligada: a Semana a semana mostra o certo (vendas já realizadas, assinaturas e parcelas, recebimentos informados, contratos assinados) e, no estimado, só os contratos Holding Familiar sem assinatura.',
   ligarProjecao: 'Ligar a projeção a partir de hoje',
   desligarProjecao: 'Desligar a projeção a partir de hoje',
   projecaoGravada: (ligada: boolean) => `Projeção ${ligada ? 'ligada' : 'desligada'} a partir de hoje. A previsão foi recarregada.`,
@@ -399,7 +400,7 @@ export const SITUACAO_RECEBER = {
 /** Sub-seção da aba: lista, formulário, baixa manual, arquivar e colar da planilha. */
 export const SECAO_INFORMADOS = {
   titulo: 'Recebimentos informados',
-  explicacao: 'Renovações e serviços negociados fora. Via Hotmart: a baixa é automática quando o pagamento chega. Pago fora: baixa manual.',
+  explicacao: 'Renovações, serviços e contratos Holding Familiar negociados fora. Via Hotmart: a baixa é automática quando o pagamento chega. Pago fora: baixa manual. Contrato Holding Familiar entra na previsão como bloco 7 (assinado no certo, sem assinatura no estimado).',
   carregando: 'Carregando recebimentos informados…',
   erroCarregamento: 'Não foi possível carregar os recebimentos informados.',
   tentarDeNovo: 'Tentar de novo',
@@ -425,6 +426,7 @@ export const TIPO_INFORMADO: Record<string, string> = {
   renovacao_aurum: 'Renovação Aurum',
   diamante_extra: 'Diamante extra',
   outro: 'Outro',
+  contrato_holding_familiar: 'Contrato Holding Familiar',
 };
 
 /** Colunas da lista e campos do formulário. */
@@ -449,6 +451,22 @@ export const CAMPOS_INFORMADO = {
   sim: 'S',
   nao: 'N',
   selecione: 'Selecione',
+  // Contrato Holding Familiar (z73)
+  parcela: 'Parcela',
+  parcelaDe: 'de',
+  parcelaAjuda: 'nº e total (ex.: 2 de 5); vazio se não for parcelado',
+  parcelaN: 'Número da parcela',
+  parcelaTotal: 'Total de parcelas',
+  contratoAssinado: 'Contrato assinado',
+  assinado: 'assinado',
+  semAssinatura: 'sem contrato assinado',
+  simExtenso: 'Sim',
+  naoExtenso: 'Não',
+  resumoContrato: (n: number | null, de: number | null, assinado: boolean | null) =>
+    [n != null && de != null ? `${n} de ${de}` : null, assinado == null ? null : assinado ? 'assinado' : 'sem contrato assinado']
+      .filter(Boolean).join(' · '),
+  filtroTipo: 'Tipo',
+  todosTipos: 'Todos os tipos',
 } as const;
 
 /** Botões e confirmações das ações de cada linha. */
@@ -491,6 +509,12 @@ export const COLAR_PLANILHA = {
   semConferencia: 'sem resposta do banco para esta linha',
   identificadores: 'Identificadores',
   identificadoresSemPermissao: 'Sem permissão para ver CPF: deixe Identificador 1 e 2 vazios (linha com CPF/e-mail volta com erro e nada vai ao banco).',
+  // Planilha "Contratos Soluções" (z73): reconhecida pelo cabeçalho.
+  ouContratos: 'Ou a planilha Contratos Soluções, COM o cabeçalho (é por ele que ela é reconhecida):',
+  formatoContratos: 'Planilha Contratos Soluções reconhecida pelo cabeçalho: tudo entra como Contrato Holding Familiar.',
+  statusBaixa: 'Pago e Entrada gravam a baixa na data do vencimento (ou na data escrita no Status, ex.: Pago 12/10/2026); Pendente fica a receber.',
+  avisos: 'Avisos',
+  confirmeAvisos: (n: number) => `${n} ${n === 1 ? 'linha com aviso' : 'linhas com aviso'}: confira antes de gravar.`,
 } as const;
 
 /** Rótulos dos totais, usados nos dois blocos. */
@@ -672,7 +696,7 @@ export const EXECUTIVO_RECEBER = {
     ligada: 'Ligada',
     desligada: 'Desligada',
     projecaoLigadaAjuda: 'vendas novas e eventos entram na previsão',
-    projecaoDesligadaAjuda: 'a previsão mostra só o certo',
+    projecaoDesligadaAjuda: 'a previsão mostra o certo e, no estimado, só os contratos sem assinatura',
     total: 'Premissas',
     semVigente: (n: number) => (n === 0 ? 'todas com valor gravado' : `${n} sem valor gravado (vale a sugestão)`),
     diferem: 'Diferem da sugestão',

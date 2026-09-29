@@ -86,6 +86,9 @@ function ValorGrade({ v, rotulo, per }: { v: number; rotulo: string; per: string
 function QuatroSemanas({ dados, projecaoDesligada }: { dados: ContasReceberCarregado; projecaoDesligada: boolean }) {
   if (dados.desligado) return <p role="alert" className="text-xs font-semibold text-[var(--fg)]">{T.recebimentoDesligado}</p>;
   const q = proximas4Semanas(dados.linhas, dados.hojeISO);
+  // Projeção desligada tira os blocos 3, 4, 6 e 8 — mas NÃO o contrato sem assinatura (bloco 7, estimado, z73). Com ele no
+  // período, o estimado tem número e aparece; "desligado" só quando o estimado está mesmo vazio.
+  const estimadoDesligado = projecaoDesligada && Math.round(q.estimado * 100) === 0;
   const max = Math.max(0, ...q.semanas.map((s) => s.total));
   const cartao = (k: string, nome: string, per: string, s: { certo: number; estimado: number; total: number }, destaque: boolean, escala: number) => {
     const vazio = Math.round(s.total * 100) === 0;
@@ -111,7 +114,7 @@ function QuatroSemanas({ dados, projecaoDesligada }: { dados: ContasReceberCarre
           <dd className="text-right tabular"><ValorGrade v={s.certo} rotulo={T.certo} per={per} /></dd>
           <dt className="flex items-center gap-1 text-[var(--fg-3)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" aria-hidden="true" />{T.estimado}</dt>
           <dd className="text-right tabular">
-            {projecaoDesligada ? <span className="text-[var(--fg-3)]">{T.estimadoDesligado}</span>
+            {estimadoDesligado ? <span className="text-[var(--fg-3)]">{T.estimadoDesligado}</span>
               : <ValorGrade v={s.estimado} rotulo={T.estimado} per={per} />}
           </dd>
         </dl>
@@ -191,10 +194,10 @@ function Motivos({ x }: { x: MudancaReceber }) {
     <ul className="space-y-0.5">
       {x.motivos.map((m) => {
         const t = textoMotivo(m);
-        // Saiu por atraso: leva à lista de quem saiu (bloco 2 → Recorrências; bloco 5 → Informados a cobrar).
+        // Saiu por atraso: leva à lista de quem saiu (bloco 2 → Recorrências; blocos 5 e 7 → Informados a cobrar).
         const href = m.motivo === 'saiu_atraso'
           ? x.bloco === 2 ? hashReceberFiltrado('recorrencias', 'em_atraso_fora')
-            : x.bloco === 5 ? hashReceberFiltrado('informados', 'em_atraso_cobrar') : null
+            : x.bloco === 5 || x.bloco === 7 ? hashReceberFiltrado('informados', 'em_atraso_cobrar') : null
           : null;
         return <li key={m.motivo}>{href ? <a href={href} className={LINK}>{t}</a> : t}</li>;
       })}
@@ -459,6 +462,8 @@ function Painel({ dados, projecaoDesligada }: { dados: ContasReceberCarregado; p
   const nAtraso = a.foraDaProjecao.n + a.informadosACobrar.n;
   const s0 = q.semanas[0].total, s1 = q.semanas[1].total;
   const pctCerto = q.total > 0 ? (q.certo / q.total) * 100 : null;
+  // Mesma regra das 4 semanas: com contrato sem assinatura (bloco 7) no período, o estimado tem número mesmo desligado.
+  const estimadoDesligado = projecaoDesligada && Math.round(q.estimado * 100) === 0;
   return (
     <>
       <FaixaKpis>
@@ -468,7 +473,7 @@ function Painel({ dados, projecaoDesligada }: { dados: ContasReceberCarregado; p
           detalhe={<>próxima: {fmtBRLc(s1)} <Seta pct={s0 > 0 ? ((s1 - s0) / s0) * 100 : null} /></>} />
         <KpiFin rotulo="Já é certo" valor={pctCerto == null ? '—' : `${Math.round(pctCerto)}%`}
           tom={pctCerto == null ? 'neutro' : pctCerto >= 80 ? 'bom' : 'atencao'}
-          detalhe={projecaoDesligada ? 'estimado desligado em Premissas' : `estimado: ${fmtBRLc(q.estimado)}`} />
+          detalhe={estimadoDesligado ? 'estimado desligado em Premissas' : `estimado: ${fmtBRLc(q.estimado)}`} />
         <KpiFin rotulo="Em atraso, a cobrar" icone="alert" valor={nAtraso === 0 ? 'nenhum' : fmtBRLc(atraso)}
           tom={nAtraso === 0 ? 'bom' : 'ruim'}
           href={nAtraso === 0 ? undefined : a.foraDaProjecao.n > 0 ? hashReceberFiltrado('recorrencias', 'em_atraso_fora') : hashReceberFiltrado('informados', 'em_atraso_cobrar')}

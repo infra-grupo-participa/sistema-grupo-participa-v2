@@ -17,7 +17,7 @@ export function rotuloComponente(c: string): string {
 const ROTULOS_BLOCO: Record<number, string> = {
   1: BLOCOS_RECEBER.vendasRealizadas, 2: BLOCOS_RECEBER.assinaturasEParcelasFuturas, 3: BLOCOS_RECEBER.vendasNovas,
   4: BLOCOS_RECEBER.eventosPlanejados, 5: BLOCOS_RECEBER.recebimentosInformados, 6: BLOCOS_RECEBER.reserva,
-  8: BLOCOS_RECEBER.informativoBoard,
+  7: BLOCOS_RECEBER.contratosHoldingFamiliar, 8: BLOCOS_RECEBER.informativoBoard,
 };
 export const rotuloBloco = (b: number) => ROTULOS_BLOCO[b] ?? `Bloco ${b}`;
 

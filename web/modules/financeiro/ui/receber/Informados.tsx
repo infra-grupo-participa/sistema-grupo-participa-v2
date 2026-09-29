@@ -2,6 +2,9 @@
 
 // Recebimentos informados (bloco 5, 28/09/2026): renovações Diamante/Aurum negociadas fora, que o financeiro digitava
 // numa planilha. Sub-aba própria de Previsão de caixa (#receber?ver=informados) — a sub-aba JÁ é o conteúdo, sem acordeão.
+// z73: o tipo Contrato Holding Familiar (bloco 7) mora aqui também — parcela n de N e contrato assinado no formulário
+// (via Hotmart e produto somem: contrato é sempre fora da Hotmart), filtro por tipo, e a colagem da planilha
+// "Contratos Soluções" (reconhecida pelo cabeçalho; ver lerColagem).
 // - Carga: UMA chamada (fn_fin_informados_listar) quando a sub-aba monta; recarrega só depois de gravar.
 // - Escrita (criar/editar, baixa manual, desfazer, arquivar, colar da planilha): só com canEdit (quem opera o
 //   financeiro). A trava real é o banco: gp_pode_operar_financeiro() em cada RPC.
@@ -12,8 +15,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { fmtBRLc, fmtData } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../../application/ports';
 import {
-  casarResultado, COLUNAS_PLANILHA, entradaDoFormulario, formDeInformado, identificadorOculto, lerColagem, mascararLocal,
-  ordenarInformados, previaGravavel, SITUACOES_INFORMADO, TIPOS_INFORMADO,
+  casarResultado, COLUNAS_CONTRATOS, COLUNAS_PLANILHA, entradaDoFormulario, formDeInformado, identificadorOculto, lerColagem,
+  mascararLocal, ordenarInformados, previaGravavel, SITUACOES_INFORMADO, TIPO_CONTRATO, TIPOS_INFORMADO,
   type Colagem, type FormInformado, type Informado, type ResultadoLinhaImportacao,
 } from '../../domain/recebimentos-informados';
 import { diasEntre, resumoInformados } from '../../domain/receber-executivo';
@@ -80,6 +83,8 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
   const [lista, setLista] = useState<Informado[] | null>(inicial ? ordenarInformados(inicial) : null);
   const [erro, setErro] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<string | null>(filtroInicial);
+  /** Filtro por tipo (null = todos). Combina com o de situação: os contadores dos botões contam só o tipo escolhido. */
+  const [filtroTipo, setFiltroTipo] = useState<string | null>(null);
   const [aviso, setAviso] = useState<Aviso>(null);
   const [ocupado, setOcupado] = useState(false);
   const [form, setForm] = useState<Form>(null);
@@ -139,17 +144,21 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
     }
   };
 
+  const doTipo = useMemo(() => (lista ?? []).filter((i) => filtroTipo == null || i.tipo === filtroTipo), [lista, filtroTipo]);
   const resumo = useMemo(() => {
     const r = new Map<string, { n: number; cents: number }>();
-    for (const i of lista ?? []) {
+    for (const i of doTipo) {
       const x = r.get(i.situacao) ?? { n: 0, cents: 0 };
       x.n += 1; x.cents += Math.round(i.valor * 100);
       r.set(i.situacao, x);
     }
     return r;
-  }, [lista]);
+  }, [doTipo]);
 
-  const todos = lista ?? [];
+  // Tipos do filtro: os do contrato, na ordem dele, e qualquer tipo fora do contrato que veio na lista (não some).
+  const tiposNaLista = [...new Set((lista ?? []).map((i) => i.tipo))];
+  const tiposFiltro = [...TIPOS_INFORMADO, ...tiposNaLista.filter((t) => !(TIPOS_INFORMADO as readonly string[]).includes(t))];
+  const todos = doTipo;
   const ativos = todos.filter((i) => i.situacao !== 'arquivado');
   const visiveis = filtro ? todos.filter((i) => i.situacao === filtro) : ativos;
   const conhecidas = SITUACOES_INFORMADO as readonly string[];
@@ -170,6 +179,15 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
             {b.l} <span className="tabular">{b.n}</span>{b.v != null && b.n > 0 ? <span className="tabular"> · {fmtBRLc(b.v)}</span> : null}
           </button>
         ))}
+        {lista && (
+          <label className="flex items-center gap-1 text-xs text-[var(--fg-3)]">
+            {CAMPOS_INFORMADO.filtroTipo}
+            <select className={`${INPUT} w-auto`} value={filtroTipo ?? ''} onChange={(e) => setFiltroTipo(e.target.value || null)}>
+              <option value="">{CAMPOS_INFORMADO.todosTipos}</option>
+              {tiposFiltro.map((t) => <option key={t} value={t}>{rotuloTipoInformado(t)}</option>)}
+            </select>
+          </label>
+        )}
         {lista && canEdit && (
           <span className="ml-auto flex gap-2">
             <button type="button" className={BTN} disabled={ocupado}
@@ -225,7 +243,12 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
                     <tr key={i.id} className={`${LINHA} text-[var(--fg)]`}>
                       <td className={`${TD} tabular whitespace-nowrap ${i.situacao === 'em_atraso_cobrar' ? 'font-semibold text-[var(--red)]' : ''}`}>{fmtData(i.data_prevista)}</td>
                       <td className={TD}>{i.cliente}</td>
-                      <td className={`${TD} whitespace-nowrap text-[var(--fg-2)]`}>{rotuloTipoInformado(i.tipo)}</td>
+                      <td className={`${TD} whitespace-nowrap text-[var(--fg-2)]`}>
+                        {rotuloTipoInformado(i.tipo)}
+                        {i.tipo === TIPO_CONTRATO && (
+                          <span className="block text-[var(--fg-3)]">{CAMPOS_INFORMADO.resumoContrato(i.parcela_n, i.parcela_de, i.contrato_assinado) || '—'}</span>
+                        )}
+                      </td>
                       <td className={`${TD} text-right font-semibold tabular whitespace-nowrap`}>{fmtBRLc(i.valor)}</td>
                       <td className={TD}>{i.via_hotmart ? CAMPOS_INFORMADO.sim : CAMPOS_INFORMADO.nao}</td>
                       <td className={`${TD} text-[var(--fg-2)]`}>{i.produtos.join('; ') || '—'}</td>
@@ -308,7 +331,8 @@ export function FormularioInformado({ form, canVerDoc, ocupado, onMudar, onSalva
   onMudar: (v: FormInformado) => void; onSalvar: () => void; onCancelar: () => void;
 }) {
   const v = form.valores;
-  const set = <K extends keyof FormInformado>(k: K, x: FormInformado[K]) => onMudar({ ...v, [k]: x });
+  const contrato = v.tipo === TIPO_CONTRATO;
+  const set =<K extends keyof FormInformado>(k: K, x: FormInformado[K]) => onMudar({ ...v, [k]: x });
   const campo = (rotulo: string, filho: ReactNode, ajuda?: string) => (
     <label className="flex flex-col gap-0.5 text-[11px] text-[var(--fg-3)]">
       <span>{rotulo}{ajuda && <span className="text-[var(--fg-4)]"> · {ajuda}</span>}</span>{filho}
@@ -341,14 +365,37 @@ export function FormularioInformado({ form, canVerDoc, ocupado, onMudar, onSalva
           </select>
         ))}
         {campo(CAMPOS_INFORMADO.valor, <input type="text" inputMode="decimal" className={`${INPUT} text-right tabular`} value={v.valor} onChange={(e) => set('valor', e.target.value)} />)}
-        {campo(CAMPOS_INFORMADO.viaHotmart, (
-          <select className={INPUT} value={v.via_hotmart} onChange={(e) => set('via_hotmart', e.target.value as FormInformado['via_hotmart'])}>
-            <option value="">{CAMPOS_INFORMADO.selecione}</option>
-            <option value="S">{CAMPOS_INFORMADO.sim}</option>
-            <option value="N">{CAMPOS_INFORMADO.nao}</option>
-          </select>
-        ))}
-        {campo(CAMPOS_INFORMADO.produtos, <input type="text" className={INPUT} value={v.produtos} onChange={(e) => set('produtos', e.target.value)} />, CAMPOS_INFORMADO.produtosAjuda)}
+        {contrato ? (
+          // Contrato Holding Familiar: sempre fora da Hotmart — via Hotmart e produto não se aplicam (vão falso/vazio).
+          <>
+            {campo(CAMPOS_INFORMADO.parcelaN, (
+              <input type="text" inputMode="numeric" maxLength={2} className={`${INPUT} text-right tabular`} value={v.parcela_n}
+                onChange={(e) => set('parcela_n', e.target.value)} />
+            ), CAMPOS_INFORMADO.parcelaAjuda)}
+            {campo(CAMPOS_INFORMADO.parcelaTotal, (
+              <input type="text" inputMode="numeric" maxLength={2} className={`${INPUT} text-right tabular`} value={v.parcela_de}
+                onChange={(e) => set('parcela_de', e.target.value)} />
+            ))}
+            {campo(CAMPOS_INFORMADO.contratoAssinado, (
+              <select className={INPUT} value={v.contrato_assinado} onChange={(e) => set('contrato_assinado', e.target.value as FormInformado['contrato_assinado'])}>
+                <option value="">{CAMPOS_INFORMADO.selecione}</option>
+                <option value="S">{CAMPOS_INFORMADO.simExtenso}</option>
+                <option value="N">{CAMPOS_INFORMADO.naoExtenso}</option>
+              </select>
+            ))}
+          </>
+        ) : (
+          <>
+            {campo(CAMPOS_INFORMADO.viaHotmart, (
+              <select className={INPUT} value={v.via_hotmart} onChange={(e) => set('via_hotmart', e.target.value as FormInformado['via_hotmart'])}>
+                <option value="">{CAMPOS_INFORMADO.selecione}</option>
+                <option value="S">{CAMPOS_INFORMADO.sim}</option>
+                <option value="N">{CAMPOS_INFORMADO.nao}</option>
+              </select>
+            ))}
+            {campo(CAMPOS_INFORMADO.produtos, <input type="text" className={INPUT} value={v.produtos} onChange={(e) => set('produtos', e.target.value)} />, CAMPOS_INFORMADO.produtosAjuda)}
+          </>
+        )}
         {campo(CAMPOS_INFORMADO.identificador1, ident('identificador1'),
           canVerDoc ? CAMPOS_INFORMADO.identificadorAjuda : CAMPOS_INFORMADO.identificadorSemPermissao)}
         {campo(CAMPOS_INFORMADO.identificador2, ident('identificador2'), canVerDoc ? undefined : CAMPOS_INFORMADO.identificadorSemPermissao)}
@@ -381,11 +428,13 @@ export function ColarDaPlanilha({ repo, canVerDoc, onGravado, inicial }: {
   const [msg, setMsg] = useState<string | null>(null);
 
   const comErroLocal = colagem ? colagem.linhas.filter((l) => l.erros.length > 0).length : 0;
+  const comAviso = colagem ? colagem.linhas.filter((l) => (l.avisos?.length ?? 0) > 0).length : 0;
+  const contratos = colagem?.formato === 'contratos';
   const comErroBanco = previa ? previa.filter((r) => !r?.ok).length : 0;
   const gravavel = !!colagem && previaGravavel(colagem.linhas, previa);
 
   const conferir = async () => {
-    const c = lerColagem(texto, { podeVerDoc: canVerDoc });
+    const c = lerColagem(texto, { podeVerDoc: canVerDoc, hojeISO: hojeISO() });
     setColagem(c); setPrevia(null); setMsg(null);
     if (c.erroGeral || c.linhas.some((l) => l.erros.length > 0)) return; // erro de formato: nada vai ao banco
     setOcupado('conferindo');
@@ -421,7 +470,10 @@ export function ColarDaPlanilha({ repo, canVerDoc, onGravado, inicial }: {
   return (
     <section className="space-y-2 rounded-[var(--r-md)] border border-[var(--border)] p-2" aria-labelledby="colar-titulo">
       <p id="colar-titulo" className="text-xs font-semibold text-[var(--fg)]">{COLAR_PLANILHA.titulo}</p>
-      <p className="text-xs text-[var(--fg-3)]">{COLAR_PLANILHA.instrucao} {COLUNAS_PLANILHA.join(' · ')}. {COLAR_PLANILHA.tudoOuNada}</p>
+      <p className="text-xs text-[var(--fg-3)]">
+        {COLAR_PLANILHA.instrucao} {COLUNAS_PLANILHA.join(' · ')}. {COLAR_PLANILHA.ouContratos} {COLUNAS_CONTRATOS.join(' · ')}.
+        {' '}{COLAR_PLANILHA.statusBaixa} {COLAR_PLANILHA.tudoOuNada}
+      </p>
       {!canVerDoc && <p className="text-xs text-[var(--fg-2)]">{COLAR_PLANILHA.identificadoresSemPermissao}</p>}
       <textarea aria-label={COLAR_PLANILHA.rotuloTexto} rows={6} value={texto} spellCheck={false} autoComplete="off"
         className={`${INPUT} font-mono`}
@@ -442,6 +494,8 @@ export function ColarDaPlanilha({ repo, canVerDoc, onGravado, inicial }: {
           </span>
         )}
       </div>
+      {contratos && <p className="text-xs text-[var(--fg-2)]">{COLAR_PLANILHA.formatoContratos}</p>}
+      {comAviso > 0 && <p role="status" className="text-xs font-semibold text-[var(--fg)]">{COLAR_PLANILHA.confirmeAvisos(comAviso)}</p>}
       {colagem?.erroGeral && <p role="alert" className="text-xs font-semibold text-[var(--red)]">{colagem.erroGeral}</p>}
       {comErroLocal > 0 && <p role="alert" className="text-xs font-semibold text-[var(--red)]">{COLAR_PLANILHA.corrijaNaPlanilha}</p>}
       {msg && <p role="alert" className="text-xs font-semibold text-[var(--red)]">{msg}</p>}
@@ -452,9 +506,17 @@ export function ColarDaPlanilha({ repo, canVerDoc, onGravado, inicial }: {
               <tr>
                 <th className={TH}>{COLAR_PLANILHA.linha}</th><th className={TH}>{CAMPOS_INFORMADO.dataPrevista}</th>
                 <th className={TH}>{CAMPOS_INFORMADO.cliente}</th><th className={TH}>{CAMPOS_INFORMADO.tipo}</th>
-                <th className={`${TH} text-right`}>{CAMPOS_INFORMADO.valor}</th><th className={TH}>{CAMPOS_INFORMADO.viaHotmart}</th>
-                <th className={TH}>{CAMPOS_INFORMADO.produtos}</th><th className={TH}>{COLAR_PLANILHA.identificadores}</th>
-                <th className={TH}>{CAMPOS_INFORMADO.acordoDesde}</th><th className={TH}>{CAMPOS_INFORMADO.baixaManual}</th>
+                <th className={`${TH} text-right`}>{CAMPOS_INFORMADO.valor}</th>
+                {contratos ? (
+                  <><th className={TH}>{CAMPOS_INFORMADO.parcela}</th><th className={TH}>{CAMPOS_INFORMADO.contratoAssinado}</th></>
+                ) : (
+                  <>
+                    <th className={TH}>{CAMPOS_INFORMADO.viaHotmart}</th>
+                    <th className={TH}>{CAMPOS_INFORMADO.produtos}</th><th className={TH}>{COLAR_PLANILHA.identificadores}</th>
+                    <th className={TH}>{CAMPOS_INFORMADO.acordoDesde}</th>
+                  </>
+                )}
+                <th className={TH}>{CAMPOS_INFORMADO.baixaManual}</th>
                 <th className={TH}>{COLAR_PLANILHA.resultado}</th>
               </tr>
             </thead>
@@ -471,18 +533,29 @@ export function ColarDaPlanilha({ repo, canVerDoc, onGravado, inicial }: {
                     <td className={TD}>{e.cliente || '—'}</td>
                     <td className={`${TD} whitespace-nowrap`}>{rotuloTipoInformado(e.tipo)}</td>
                     <td className={`${TD} text-right tabular whitespace-nowrap`}>{fmtBRLc(e.valor)}</td>
-                    <td className={TD}>{e.via_hotmart == null ? '—' : e.via_hotmart ? CAMPOS_INFORMADO.sim : CAMPOS_INFORMADO.nao}</td>
-                    <td className={TD}>{e.produtos.join('; ') || '—'}</td>
-                    <td className={`${TD} font-mono text-[11px]`}>
-                      {[e.identificador1, e.identificador2].filter(Boolean).map(mascararLocal).join(' · ') || '—'}
-                    </td>
-                    <td className={`${TD} tabular whitespace-nowrap`}>{fmtData(e.acordo_desde)}</td>
+                    {contratos ? (
+                      <>
+                        <td className={`${TD} tabular whitespace-nowrap`}>{e.parcela_n != null && e.parcela_de != null ? `${e.parcela_n} ${CAMPOS_INFORMADO.parcelaDe} ${e.parcela_de}` : '—'}</td>
+                        <td className={`${TD} whitespace-nowrap`}>{e.contrato_assinado == null ? '—' : e.contrato_assinado ? CAMPOS_INFORMADO.assinado : CAMPOS_INFORMADO.semAssinatura}</td>
+                      </>
+                    ) : (
+                      <>
+                        <td className={TD}>{e.via_hotmart == null ? '—' : e.via_hotmart ? CAMPOS_INFORMADO.sim : CAMPOS_INFORMADO.nao}</td>
+                        <td className={TD}>{e.produtos.join('; ') || '—'}</td>
+                        <td className={`${TD} font-mono text-[11px]`}>
+                          {[e.identificador1, e.identificador2].filter(Boolean).map(mascararLocal).join(' · ') || '—'}
+                        </td>
+                        <td className={`${TD} tabular whitespace-nowrap`}>{fmtData(e.acordo_desde)}</td>
+                      </>
+                    )}
                     <td className={`${TD} tabular whitespace-nowrap`}>{fmtData(e.baixa_manual_em)}</td>
                     <td className={TD}>
                       {erros.length > 0 ? (
                         <ul className="font-semibold text-[var(--red)]">{erros.map((x) => <li key={x}>{x}</li>)}</ul>
                       ) : semResposta ? <span className="font-semibold text-[var(--red)]">{COLAR_PLANILHA.semConferencia}</span>
                         : r?.ok ? COLAR_PLANILHA.ok : '—'}
+                      {/* Aviso não trava a gravação: texto em negrito, sem cor de erro (a palavra diz o que é). */}
+                      {(l.avisos ?? []).map((x) => <span key={x} className="block font-semibold text-[var(--fg)]">{COLAR_PLANILHA.avisos}: {x}</span>)}
                     </td>
                   </tr>
                 );

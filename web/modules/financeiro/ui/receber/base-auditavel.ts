@@ -7,8 +7,8 @@
 //
 // Dado pessoal no CSV (padrão dos relatórios do Financeiro, shared/ui/pdf/nivel.ts): 'completo' leva o rótulo como veio;
 // 'sem_dado_pessoal' troca o rótulo das linhas que são pessoas por "Pessoa N", estável por contrato/cadastro (bloco + ref)
-// dentro do arquivo. Rótulo de pessoa = blocos 2 (nome do contrato), 5 (cliente do informado) e 8 (nome do card); nos
-// blocos 1, 3, 4 e 6 o rótulo é a base do cálculo, não pessoa. Bloco desconhecido é tratado como pessoa (nega por padrão).
+// dentro do arquivo. Rótulo de pessoa = blocos 2 (nome do contrato), 5 e 7 (cliente do informado / do contrato Holding
+// Familiar) e 8 (nome do card); nos blocos 1, 3, 4 e 6 o rótulo é a base do cálculo, não pessoa. Bloco desconhecido é tratado como pessoa (nega por padrão).
 // A `ref` nunca sai no arquivo (bloco 2 é chave opaca de e-mail|oferta).
 import { celulaCsv } from '../../domain/hotmart';
 import { semanaDe, type LinhaReceber, type Semana, type SituacaoReceber } from '../../domain/contas-receber';

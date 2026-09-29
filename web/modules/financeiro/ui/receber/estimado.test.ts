@@ -55,7 +55,7 @@ describe('domínio — certo × estimado × informativo', () => {
     expect(g.informativo?.linhas).toBe(1);
   });
   it('sem base: listado por grupo, fora da soma e fora de "sem data de caixa"', () => {
-    expect(g.semBase).toEqual([{ bloco: 3, grupo: 'Outros produtos', tratamento: expect.stringContaining('Sem sugestão medida') }]);
+    expect(g.semBase).toEqual([{ bloco: 3, grupo: 'Outros produtos', secao: 'estimado', tratamento: expect.stringContaining('Sem sugestão medida') }]);
     expect(g.semDataCaixa.linhas).toBe(0);
     expect(g.linhas.some((l) => l.grupo === 'Outros produtos')).toBe(false);
   });
