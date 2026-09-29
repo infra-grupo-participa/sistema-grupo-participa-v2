@@ -195,6 +195,16 @@ export const CENARIO_RECEBER = {
   legenda: 'O cenário muda o estimado: o tamanho do evento planejado, o percentual de recebimento dos contratos sem assinatura e, se gravadas em Premissas para o cenário, a venda nova e a reserva. No certo, muda só a perda mensal e o recebimento de contrato assinado que tiverem valor próprio do cenário. Sem valor próprio gravado, conservador e otimista usam o da base.',
 } as const;
 
+/** Seletor do modo de semana da grade e da coluna "Semana" da Base auditável (Conflito 3 do catálogo / C07): padrão
+ * ('receber') é a semana cortada no mês, da planilha de Contas a Receber Semanal; 'fluxo' é a semana seg-dom sem
+ * corte, S01 a S53 do ano, da planilha de Fluxo de Caixa. O resumo mensal é igual nos dois — só muda a coluna. */
+export const MODO_SEMANA_RECEBER = {
+  rotulo: 'Semanas',
+  receber: 'como a planilha de contas a receber',
+  fluxo: 'como o fluxo de caixa (S01–S53)',
+  legenda: 'Muda só como a semana é contada e a coluna "Semana" da base auditável. O total de cada mês é sempre o mesmo.',
+} as const;
+
 /** Recorrências (antes PROVISORIO em Recorrencias.tsx). */
 export const TABELA_RECORRENCIAS = {
   todas: 'Todas',
