@@ -10,12 +10,15 @@
 -- da decoração da tela do Receber (fin.chave_opaca = 1 leitura do Vault por contrato, fin.nome_proprio, fin.recebimento).
 --
 -- O que faz:
---   1) fin.cobrancas_nucleo(p_corte, p_ate, p_detalhe) — interna (invoker, search_path '', sem grant a ninguém). É o
+--   1) fin.cobrancas_nucleo(p_corte, p_ate, p_detalhe, p_familia) — interna (invoker, search_path '', sem grant a ninguém). É o
 --      corpo da z66 SEM chave_opaca, nome_proprio e recebimento, e SEM order by. Contrato agrupado por
 --      chave = md5(e-mail|oferta) (barato; só agrupa por dentro, nunca sai de RPC). Devolve também, da ÚLTIMA cobrança
 --      paga do contrato (a mesma que dá o valor), familia e valor_oferta. e-mail, oferta e nome crus saem só para a
 --      decoração de fin.cobrancas_previstas (função interna chamando função interna). p_detalhe = false não monta o
---      jsonb do detalhe (a Análise não usa).
+--      jsonb do detalhe (a Análise não usa). p_familia (default null = todas) corta o universo JÁ em `ativos` (índice
+--      de aprovado_em + filtro de família): a Análise monta só a família pedida; o Receber passa null.
+--      (1º ensaio em produção, sem esse corte: fn_fin_contratado 1169,2 → 2363,2 ms nas 8 famílias — cada família
+--      montava o núcleo de todas. Espelho: 57.243 linhas, 125 MB.)
 --   2) fin.cobrancas_previstas — create or replace, MESMA assinatura, MESMO RETURNS, mesma ACL: núcleo + decoração.
 --      chave_opaca passa a rodar 1× por contrato QUE APARECE na saída (antes: por contrato do universo). Saída idêntica
 --      ao centavo: a conferência 1 compara linha a linha (EXCEPT ALL nos dois sentidos) em 3 cortes, e a 2 compara
@@ -63,7 +66,7 @@
 --   P2) núcleo (depois):
 --       explain (analyze, buffers) select * from fin.cobrancas_nucleo(now(),
 --         (date_trunc('month', (now() at time zone 'America/Sao_Paulo')::date::timestamp) + interval '12 months'
---          - interval '1 day')::date, false);
+--          - interval '1 day')::date, false, 'HM');
 --   P3) o universo (tem que ser Index Scan em hotmart_transacoes_aprovado_pago_idx, sem Seq Scan em hotmart_transacoes):
 --       explain (analyze, buffers) select distinct t.email, t.oferta_codigo from fin.vw_transacoes t
 --        where t.status in ('APPROVED','COMPLETE') and t.aprovado_em > now() - interval '120 days' and t.aprovado_em <= now()
@@ -265,7 +268,7 @@ $esperado$;
                     'vencimento date, vencimento_b date, situacao text, data_efetiva date, valor numeric, k integer, '
                     'entra_em date, entra_rapido numeric, libera_em date, retido numeric, detalhe jsonb)';
 begin
-  if to_regprocedure('fin.cobrancas_nucleo(timestamptz,date,boolean)') is not null
+  if to_regprocedure('fin.cobrancas_nucleo(timestamptz,date,boolean,text)') is not null
      or exists (select 1 from pg_proc where proname = 'cobrancas_nucleo' and pronamespace = 'fin'::regnamespace) then
     raise exception 'z72: já aplicada (fin.cobrancas_nucleo existe)';
   end if;
@@ -393,7 +396,8 @@ end $foto$;
 
 
 -- ─── 2. O núcleo ────────────────────────────────────────────────────────────────────────────────────────────────────
-create function fin.cobrancas_nucleo(p_corte timestamptz, p_ate date, p_detalhe boolean default true)
+create function fin.cobrancas_nucleo(p_corte timestamptz, p_ate date, p_detalhe boolean default true,
+                                     p_familia text default null)
 returns table (
   grupo text, tipo text, chave text, email text, oferta_codigo text, nome text, produto text, familia text,
   valor_oferta numeric, n int, parcelas int, vencimento date, vencimento_b date, situacao text, data_efetiva date,
@@ -432,6 +436,7 @@ begin
       from fin.vw_transacoes t
      where t.status in ('APPROVED','COMPLETE')
        and t.aprovado_em > p_corte - interval '120 days' and t.aprovado_em <= p_corte
+       and (p_familia is null or t.familia = p_familia)   -- z72: a Análise corta a família já no universo
        and t.recorrencia is not null
        and (t.oferta_modo = 'SUBSCRIPTION' or t.oferta_modo = 'MULTIPLE_PAYMENTS'
             or t.oferta_modo like 'HOTMART_INSTALLMENTS%')
@@ -522,11 +527,11 @@ begin
          'realizada', null::date, f.liq_pago, null::int, f.detalhe
     from feitas f;
 end $$;
-comment on function fin.cobrancas_nucleo(timestamptz, date, boolean) is
+comment on function fin.cobrancas_nucleo(timestamptz, date, boolean, text) is
   'Interna (z72): regra ÚNICA das cobranças recorrentes previstas por contrato (z61; teto z65; detalhe z66). Sem Vault, '
   'sem nome formatado, sem recebimento. chave = md5(e-mail|oferta), só para agrupar por dentro. Consumidores: '
   'fin.cobrancas_previstas (Receber, bloco 2) e public.fn_fin_contratado (Análise). Nunca expor em RPC.';
-revoke all on function fin.cobrancas_nucleo(timestamptz, date, boolean) from public, anon, authenticated;
+revoke all on function fin.cobrancas_nucleo(timestamptz, date, boolean, text) from public, anon, authenticated;
 
 
 -- ─── 3. Bloco 2 do Receber = núcleo + decoração (saída idêntica) ────────────────────────────────────────────────────
@@ -561,7 +566,7 @@ begin
   return query
   with nu as materialized (
     -- z72: a regra mora em fin.cobrancas_nucleo; aqui só a decoração da tela do Receber
-    select x.* from fin.cobrancas_nucleo(p_corte, p_ate, true) x
+    select x.* from fin.cobrancas_nucleo(p_corte, p_ate, true, null) x
   ), kr as materialized (
     -- ref opaca 1× por contrato que aparece na saída (lê o Vault)
     select d.chave, fin.chave_opaca('rc:' || d.email || '|' || d.oferta_codigo) ref
@@ -604,7 +609,7 @@ begin
     -- Família e valor da OFERTA (bruto) vêm da última cobrança paga do contrato. Só 'a_receber' soma; 'em_atraso_fora'
     -- marca o contrato inteiro como em risco.
     select nu.chave, nu.tipo, nu.situacao, nu.data_efetiva, nu.email, nu.valor_oferta
-      from fin.cobrancas_nucleo(now(), v_fim, false) nu
+      from fin.cobrancas_nucleo(now(), v_fim, false, p_familia) nu   -- só a família pedida, cortada no universo
      where nu.familia = p_familia and nu.situacao in ('a_receber','em_atraso_fora')
   ), rk as (
     select cp.chave, bool_or(cp.situacao = 'em_atraso_fora') risco from cp group by cp.chave
@@ -858,14 +863,14 @@ begin
   end if;
 
   -- 5) ACL: núcleo e bloco 2 internos; RPC só para authenticated; nada para PUBLIC/anon
-  if has_function_privilege('anon', 'fin.cobrancas_nucleo(timestamptz,date,boolean)', 'execute')
-     or has_function_privilege('authenticated', 'fin.cobrancas_nucleo(timestamptz,date,boolean)', 'execute')
+  if has_function_privilege('anon', 'fin.cobrancas_nucleo(timestamptz,date,boolean,text)', 'execute')
+     or has_function_privilege('authenticated', 'fin.cobrancas_nucleo(timestamptz,date,boolean,text)', 'execute')
      or has_function_privilege('anon', 'fin.cobrancas_previstas(timestamptz,date)', 'execute')
      or has_function_privilege('authenticated', 'fin.cobrancas_previstas(timestamptz,date)', 'execute')
      or has_function_privilege('anon', 'public.fn_fin_contratado(text)', 'execute')
      or not has_function_privilege('authenticated', 'public.fn_fin_contratado(text)', 'execute')
      or exists (select 1 from pg_proc p, unnest(p.proacl) a
-                 where p.oid in ('fin.cobrancas_nucleo(timestamptz,date,boolean)'::regprocedure,
+                 where p.oid in ('fin.cobrancas_nucleo(timestamptz,date,boolean,text)'::regprocedure,
                                  'fin.cobrancas_previstas(timestamptz,date)'::regprocedure,
                                  'public.fn_fin_contratado(text)'::regprocedure)
                    and a::text like '=%') then
