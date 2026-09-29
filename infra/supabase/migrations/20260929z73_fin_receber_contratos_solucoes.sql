@@ -1,7 +1,7 @@
 -- 20260929z73 — Contas a Receber, F9 (parte dos contratos): CONTRATOS HOLDING FAMILIAR (CSM Soluções, fora da Hotmart)
 --               como BLOCO 7 da previsão. Catálogo A.3 P38–P40 (P42: sem assinatura a 50% no conservador).
 --
--- NÃO APLICADA — coordenador aplica. A migration inteira é UMA transação (apply_migration): guarda → foto antes →
+-- APLICADA em produção em 29/09/2026 (fin_receber_contratos_solucoes; ensaio + conferência 9.x verdes; md5 dos 7 corpos = arquivo sem comentários). Kirad APROVADO (sem achados).
 -- mudanças → conferência 9.x; qualquer falha desfaz tudo.
 -- Ordem: z63, z66, z67, z69 aplicadas (z60–z72 aplicadas em 28/09). Guarda de CORPO VIVO: md5 do corpo normalizado
 -- (sem espaço, sem comentário, sem o texto das mensagens de "raise exception" — a mesma normalização da z67/z69) de cada
@@ -1719,7 +1719,7 @@ rollback;
 */
 
 -- ═══ MEDIDO no PGlite (29/09/2026, Victor; dados sintéticos do harness z63→z69: 8 informados, 95 linhas na previsão) ═══
--- Produção: NÃO medido (sem acesso ao banco) — o coordenador roda P1–P4 depois de aplicar e cola aqui.
+-- Produção: medido em 29/09 (ver bloco MEDIDO em produção no fim) (sem acesso ao banco) — o coordenador roda P1–P4 depois de aplicar e cola aqui.
 -- P1 fin.receber_posicao(now(), null, 'base'), 5 execuções quentes, tabela SEM contratos:
 --    antes (corpo z67): 9,05–10,89 ms · Buffers: shared hit=1336
 --    depois (z73):      8,47–9,62 ms  · Buffers: shared hit=1336   ← mesmo custo (informados_situacao continua 1 chamada)
@@ -1731,3 +1731,12 @@ rollback;
 -- P3 duplicata da importação: Seq Scan on recebimentos_informados (Rows Removed by Filter: 8) — 0,015 ms.
 --    listar (Gestora): 1,82 ms, shared hit=44. fn_fin_receber_semanal (Gestora): 9,49 ms, shared hit=1339.
 -- P4 fn_fin_receber_previsto_realizado(8) (Gestora): 9,20 ms, shared hit=954.
+
+-- ═══ MEDIDO em produção (29/09/2026, 2ª execução; usuário do Financeiro) ═══════════════════════════════════════════
+-- fn_fin_receber_semanal(null,null) 205,1 ms (551 linhas, hit=8941; z69: 202,9 ms; teto +10% = 223) · listar 2,37 ms (0 linhas).
+-- P1 fin.receber_posicao(now(),null,'base') 203,5 ms. P2a bloco 7 1,92 ms (tabela vazia — Hash Join, Seq Scan nunca executado).
+-- P2b premissa: Seq Scan on premissas_receber (15 linhas, 1 buffer, 0,026 ms) — o planner prefere seq em tabela deste tamanho.
+-- P3 duplicata: Seq Scan on recebimentos_informados (vazia) 0,019 ms. P4 mudancas(foto,foto) 5,96 ms · previsto_realizado(8) 9,07 ms.
+-- Obs.: a P4 escrita acima usa min/max de fin.receber_fotos_cabecalho e falha como authenticated (sem USAGE em fin) — rodar
+-- como postgres para achar as fotos e depois chamar a RPC como authenticated com os horários literais.
+-- Reconferir P2/P3 com carga real (hoje 0 recebimentos informados).
