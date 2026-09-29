@@ -59,7 +59,7 @@ describe('VisaoGeral', () => {
     const html = render({ dados: montarContasReceber([L({ data_caixa: '2026-09-30', valor: 100 })], HOJE) });
     expect(html).toContain('>desligado</span>'); // cartão da semana: estimado em texto, sem valor fingido
     expect(html).toContain('href="#receber?ver=premissas"');
-    expect(html).toContain('desligada: o estimado não entra na previsão');
+    expect(html).toContain('desligada: vendas novas, evento e reserva não entram na previsão');
   });
   it('eventos encerrados sem arquivar: contados, link para Eventos filtrado', () => {
     const ev = normalizarEventoPlanejado({ id: 1, nome: 'Imersão', abertura: '2026-08-01', evento_ref_id: 2, situacao: 'encerrado' });
