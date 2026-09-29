@@ -21,3 +21,8 @@ verify_jwt = false
 
 [functions.hotmart-hm-webhook]
 verify_jwt = false
+
+# hotmart-sync: chamado pelo pg_cron via pg_net sem Authorization; autentica pelo header x-sync-chave (Vault).
+# Sem isto, um deploy sem --no-verify-jwt religa o JWT e o espelho da Hotmart para em silêncio (pentest 29/09).
+[functions.hotmart-sync]
+verify_jwt = false
