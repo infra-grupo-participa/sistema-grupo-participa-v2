@@ -10,13 +10,6 @@ const PRODUTO_ATIVACAO = "Holding Masters";
 // Statuses que indicam compra já aprovada/concluída — não devem ser sobrescritos por eventos de carrinho
 const FINAL_STATUSES = new Set(["APPROVED", "COMPLETE"]);
 
-type TurmaRow = {
-  id: number;
-  codigo: string;
-  sale_start_at: string | null;
-  sale_end_at: string | null;
-};
-
 function msToISO(ms: number | null | undefined): string | null {
   return ms ? new Date(ms).toISOString() : null;
 }
@@ -55,37 +48,6 @@ function resolvePlanFromOffer(offerCode: string | null): string {
 function isRenovacao(purchase: Record<string, unknown>, productId: string): boolean {
   if (productId === "3507214") return true;
   return (purchase.is_subscription === true) && (Number(purchase.recurrency_number ?? 1) > 1);
-}
-
-// Resolve turma HM ativa na data da compra
-async function resolveTurmaAtiva(
-  db: ReturnType<typeof createClient>,
-  purchaseMs: number | null,
-): Promise<TurmaRow | null> {
-  const purchaseISO = purchaseMs ? new Date(purchaseMs).toISOString() : new Date().toISOString();
-
-  const { data, error } = await db
-    .from("thb_turmas")
-    .select("id, codigo, sale_start_at, sale_end_at")
-    .eq("tipo", "thb")
-    .not("sale_start_at", "is", null)
-    .lte("sale_start_at", purchaseISO)
-    .order("sale_start_at", { ascending: false })
-    .limit(10);
-
-  if (error) {
-    console.error("Erro ao buscar turma ativa:", error);
-    return null;
-  }
-
-  const rows = (data ?? []) as TurmaRow[];
-
-  // Prefere turma com carrinho ainda aberto (sale_end_at NULL ou >= dataCompra)
-  const aberta = rows.find((t) => !t.sale_end_at || t.sale_end_at >= purchaseISO);
-  if (aberta) return aberta;
-
-  // Fallback: turma mais recente que começou antes da compra
-  return rows[0] ?? null;
 }
 
 async function upsertComprador(
@@ -127,7 +89,6 @@ async function syncThbAluno(
   db: ReturnType<typeof createClient>,
   compradorId: string,
   buyer: Record<string, unknown>,
-  turmaId: number | null,
   isRen: boolean,
 ): Promise<string | null> {
   const email = String(buyer.email ?? "").trim().toLowerCase();
@@ -147,8 +108,8 @@ async function syncThbAluno(
   if (existingAluno) {
     const updates: Record<string, unknown> = { atualizado_em: now };
     if (!existingAluno.comprador_id) updates.comprador_id = compradorId;
-    // Renovação não muda turma — só compra nova atribui turma
-    if (!isRen && !existingAluno.turma_id && turmaId) updates.turma_id = turmaId;
+    // Turma NÃO é gravada aqui (regra de 29/09): sinal não dá turma e quem já foi aluno fica com a
+    // primeira. A turma da base vem só do banco (cs.fn_hm_turma_calcular, migration 0312 do repo disparos).
     if (!existingAluno.nome && buyer.name) updates.nome = buyer.name;
     if (!existingAluno.telefone && buyer.checkout_phone) updates.telefone = normalizePhone(buyer.checkout_phone as string);
     if (!existingAluno.documento && doc) { updates.documento = doc; updates.tipo_documento = inferTipoDocumento(doc); }
@@ -185,7 +146,7 @@ async function syncThbAluno(
       cep: address?.zip_code ?? null,
       pais: address?.country ?? null,
       comprador_id: compradorId,
-      turma_id: isRen ? null : (turmaId ?? null),
+      turma_id: null, // regra de 29/09: turma só pelo banco (0312), nunca pela compra
       fonte: "webhook_hotmart_hm",
       importado_em: now,
       atualizado_em: now,
@@ -284,7 +245,7 @@ async function handleRenovacao(
   const compradorId = await upsertComprador(db, buyer);
   if (!compradorId) return { ok: false, reason: "comprador_error" };
 
-  await syncThbAluno(db, compradorId, buyer, null, true);
+  await syncThbAluno(db, compradorId, buyer, true);
 
   // Upsert compra da renovação
   const payment = purchase.payment as Record<string, unknown>;
@@ -398,14 +359,10 @@ async function handlePurchaseApproved(
     purchase.checkout_origin ?? trackingParams?.source_sck ?? trackingParams?.utm_source ?? ""
   ).trim() || null;
 
-  // Resolve turma ativa na data da compra
-  const turma = await resolveTurmaAtiva(db, purchaseMs);
-  if (!turma) console.warn("Nenhuma turma HM ativa encontrada para a compra — aluno ficará sem turma");
-
   const compradorId = await upsertComprador(db, buyer);
   if (!compradorId) return { ok: false, reason: "comprador_error" };
 
-  await syncThbAluno(db, compradorId, buyer, turma?.id ?? null, false);
+  await syncThbAluno(db, compradorId, buyer, false);
 
   const payment = purchase.payment as Record<string, unknown>;
   const price = purchase.price as Record<string, unknown>;
@@ -490,7 +447,7 @@ async function handlePurchaseApproved(
       telefone: normalizePhone(buyer.checkout_phone as string),
       nomeProduto: String(product?.name ?? PRODUTO_ATIVACAO),
       plano,
-      turma: turma?.codigo ?? null,
+      turma: null, // turma é do banco (0312); o Slack não a resolve mais
       dataCompraMs: (purchase.approved_date as number) || purchaseMs || null,
       renovacao: false,
       valor: (price?.value as number) ?? null,
@@ -523,7 +480,7 @@ async function handlePurchaseApproved(
         telefone: normalizePhone(buyer.checkout_phone as string),
         nomeProduto: String(product?.name ?? PRODUTO_ATIVACAO),
         plano,
-        turma: turma?.codigo ?? null,
+        turma: null, // turma é do banco (0312); o Slack não a resolve mais
         dataCompraMs: (purchase.approved_date as number) || purchaseMs || null,
         renovacao: false,
         valor: (price?.value as number) ?? null,
@@ -594,12 +551,8 @@ async function handleCartEvent(
   const hotmart_event = `PURCHASE_${status}`;
   const offerCode = String(offer?.code ?? "") || null;
   const plano = resolvePlanFromOffer(offerCode);
-  const purchaseMs = purchaseTimestampMs(purchase);
 
-  // Resolve turma desde o cart event para já associar ao aluno
-  const turma = await resolveTurmaAtiva(db, purchaseMs);
-
-  await syncThbAluno(db, compradorId, buyer, turma?.id ?? null, false);
+  await syncThbAluno(db, compradorId, buyer, false);
 
   // Verifica se já existe compra aprovada/concluída — eventos de carrinho não devem regredir o status
   const { data: existingCompra } = await db
