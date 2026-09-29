@@ -19,6 +19,7 @@ import {
 import { rotuloBloco } from './rotulos-receber';
 import { hashDaSubAbaReceber, hashReceberFiltrado } from './hash';
 import { SUBABAS_RECEBER, VISAO_GERAL as T } from './textos';
+import { BarrasSemanas, FaixaKpis, Farol, Intencao, KpiFin, Seta } from './visual';
 
 const TH = 'px-2 py-1.5 text-[11px] font-semibold uppercase text-[var(--fg-3)] whitespace-nowrap';
 const TD = 'px-2 py-1 whitespace-nowrap';
@@ -122,15 +123,17 @@ function QuatroSemanas({ dados, projecaoDesligada }: { dados: ContasReceberCarre
 }
 
 // ─── (d) Alertas ────────────────────────────────────────────────────────────
-function LinhaAlerta({ ativo, rotulo, children }: { ativo: boolean; rotulo: string; children: ReactNode }) {
+function LinhaAlerta({ ativo, rotulo, children, aviso = false }: { ativo: boolean; rotulo: string; children: ReactNode; aviso?: boolean }) {
+  // aviso = configuração (âmbar), não dinheiro a cobrar (vermelho)
+  const cor = aviso ? 'var(--yellow)' : 'var(--red)';
   // Cor só no que pede ação, e nunca sozinha: ícone + texto. Zero fica neutro (não é alarme).
   return (
     <li className="flex items-baseline gap-2 border-t border-[var(--border-faint)] py-1 first:border-t-0">
       <span className="w-4 shrink-0" aria-hidden="true">
-        {ativo && <Icon name="alert" size={12} className="text-[var(--yellow)]" />}
+        {ativo && <Icon name="alert" size={12} style={{ color: cor }} />}
       </span>
       <span className={`min-w-0 flex-1 ${ativo ? 'font-semibold text-[var(--fg)]' : 'text-[var(--fg-2)]'}`}>{rotulo}</span>
-      <span className="text-right tabular">{children}</span>
+      <span className={`text-right tabular ${ativo && !aviso ? 'font-semibold text-[var(--red)]' : ''}`}>{children}</span>
     </li>
   );
 }
@@ -146,27 +149,27 @@ function Alertas({ dados, eventos, erroEventos, projecaoDesligada }: {
   return (
     <ul className="text-xs">
       <LinhaAlerta ativo={a.foraDaProjecao.n > 0} rotulo={T.foraDaProjecao}>
-        {a.foraDaProjecao.n === 0 ? <span className="text-[var(--fg-3)]">{T.nenhuma}</span>
+        {a.foraDaProjecao.n === 0 ? <Farol ok>{T.nenhuma}</Farol>
           : ir(hashReceberFiltrado('recorrencias', 'em_atraso_fora'),
             `${T.cobrancas(a.foraDaProjecao.n)} · ${fmtBRLc(a.foraDaProjecao.valor)}`, SUBABAS_RECEBER.recorrencias)}
       </LinhaAlerta>
       <LinhaAlerta ativo={a.informadosACobrar.n > 0} rotulo={T.informadosACobrar}>
-        {a.informadosACobrar.n === 0 ? <span className="text-[var(--fg-3)]">{T.nenhum}</span>
+        {a.informadosACobrar.n === 0 ? <Farol ok>{T.nenhum}</Farol>
           : ir(hashReceberFiltrado('informados', 'em_atraso_cobrar'),
             `${T.informados(a.informadosACobrar.n)} · ${fmtBRLc(a.informadosACobrar.valor)}`, SUBABAS_RECEBER.informados)}
       </LinhaAlerta>
       <LinhaAlerta ativo={a.semBase.length > 0} rotulo={T.semBase}>
-        {a.semBase.length === 0 ? <span className="text-[var(--fg-3)]">{T.nenhum}</span>
+        {a.semBase.length === 0 ? <Farol ok>{T.nenhum}</Farol>
           : ir(hashDaSubAbaReceber('premissas'),
             `${T.grupos(a.semBase.length)}: ${a.semBase.map((x) => x.grupo).join(', ')}`, SUBABAS_RECEBER.premissas)}
       </LinhaAlerta>
       <LinhaAlerta ativo={encerrados > 0} rotulo={T.eventosEncerrados}>
         {erroEventos ? <span className="text-[var(--fg-2)]">{T.eventosErro}</span>
           : eventos == null ? <span className="text-[var(--fg-3)]">{T.eventosCarregando}</span>
-          : encerrados === 0 ? <span className="text-[var(--fg-3)]">{T.nenhum}</span>
+          : encerrados === 0 ? <Farol ok>{T.nenhum}</Farol>
           : ir(hashReceberFiltrado('eventos', 'encerrado'), T.eventos(encerrados), SUBABAS_RECEBER.eventos)}
       </LinhaAlerta>
-      <LinhaAlerta ativo={projecaoDesligada} rotulo={T.projecao}>
+      <LinhaAlerta aviso ativo={projecaoDesligada} rotulo={T.projecao}>
         {projecaoDesligada ? ir(hashDaSubAbaReceber('premissas'), T.projecaoDesligada, SUBABAS_RECEBER.premissas)
           : <span className="text-[var(--fg-3)]">{T.projecaoLigada}</span>}
       </LinhaAlerta>
@@ -403,6 +406,35 @@ function Perda({ perda }: { perda: LinhaPrevistoRealizado[] }) {
   );
 }
 
+// ─── Painel visual (números grandes + barras) ───────────────────────────────
+function Painel({ dados, projecaoDesligada }: { dados: ContasReceberCarregado; projecaoDesligada: boolean }) {
+  const q = proximas4Semanas(dados.linhas, dados.hojeISO);
+  const a = alertasReceber(dados.linhas, dados.recorrencias);
+  const atraso = a.foraDaProjecao.valor + a.informadosACobrar.valor;
+  const nAtraso = a.foraDaProjecao.n + a.informadosACobrar.n;
+  const s0 = q.semanas[0].total, s1 = q.semanas[1].total;
+  const pctCerto = q.total > 0 ? (q.certo / q.total) * 100 : null;
+  return (
+    <>
+      <FaixaKpis>
+        <KpiFin rotulo="Entra em 4 semanas" icone="wallet" valor={fmtBRLc(q.total)} href={hashDaSubAbaReceber('semana')}
+          detalhe={`${periodo(q.semanas[0].inicio, q.semanas[3].fim)}`} tom={q.total > 0 ? 'bom' : 'neutro'} />
+        <KpiFin rotulo="Esta semana" valor={fmtBRLc(s0)} href={hashDaSubAbaReceber('semana')}
+          detalhe={<>próxima: {fmtBRLc(s1)} <Seta pct={s0 > 0 ? ((s1 - s0) / s0) * 100 : null} /></>} />
+        <KpiFin rotulo="Já é certo" valor={pctCerto == null ? '—' : `${Math.round(pctCerto)}%`}
+          tom={pctCerto == null ? 'neutro' : pctCerto >= 80 ? 'bom' : 'atencao'}
+          detalhe={projecaoDesligada ? 'estimado desligado em Premissas' : `estimado: ${fmtBRLc(q.estimado)}`} />
+        <KpiFin rotulo="Em atraso, a cobrar" icone="alert" valor={nAtraso === 0 ? 'nenhum' : fmtBRLc(atraso)}
+          tom={nAtraso === 0 ? 'bom' : 'ruim'}
+          href={nAtraso === 0 ? undefined : a.foraDaProjecao.n > 0 ? hashReceberFiltrado('recorrencias', 'em_atraso_fora') : hashReceberFiltrado('informados', 'em_atraso_cobrar')}
+          detalhe={nAtraso === 0 ? 'nada vencido fora da previsão' : `${nAtraso} ${nAtraso === 1 ? 'item' : 'itens'} fora da previsão`} />
+      </FaixaKpis>
+      <BarrasSemanas titulo="Próximas 4 semanas — o que entra em cada uma"
+        barras={q.semanas.map((s, i) => ({ rotulo: i === 0 ? 'Esta semana' : `Semana ${i + 1}`, sub: periodo(s.inicio, s.fim), certo: s.certo, estimado: s.estimado }))} />
+    </>
+  );
+}
+
 // ─── A tela ─────────────────────────────────────────────────────────────────
 export function VisaoGeral({
   dados, erroReceber, onTentarReceber, visao, onTentarVisao, eventos, erroEventos, agora,
@@ -428,6 +460,12 @@ export function VisaoGeral({
     : <Status>{T.carregandoPrevisao}</Status>;
   return (
     <div className="space-y-3">
+      <Intencao>
+        Para que serve: numa olhada, <strong>quanto entra nas próximas 4 semanas</strong>, quanto disso já é certo e o que
+        pede ação agora. Verde = em dia · vermelho = cobrar · semana listrada = nada previsto. Todo número leva à sub-aba
+        onde ele mora.
+      </Intencao>
+      {dados && !dados.desligado && <Painel dados={dados} projecaoDesligada={projecaoDesligada} />}
       <div className="grid gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <Secao id="visao-semanas" titulo={T.semanasTitulo}>
           {semBase ?? <QuatroSemanas dados={dados!} projecaoDesligada={projecaoDesligada} />}

@@ -32,6 +32,7 @@ import {
   CENARIO_RECEBER, ESCOPO_RECEBER, ESTADOS_RECEBER, GRADE_RECEBER, ROTULOS_TOTAL, SECOES_RECEBER, SUBABAS_RECEBER,
 } from './textos';
 import type { SubAbaReceber } from './hash';
+import { BarrasSemanas, Intencao } from './visual';
 
 export type { SubAbaReceber } from './hash';
 export { rotuloComponente } from './rotulos-receber';
@@ -477,6 +478,17 @@ const SUBABAS_LISTA: { k: SubAbaReceber; l: string }[] = [
   { k: 'base', l: SUBABAS_RECEBER.base },
 ];
 
+/** Para que serve cada sub-aba — uma linha, dita antes do número. O escopo (certo × estimado) entra na da grade. */
+const INTENCAO_SUBABA: Record<SubAbaReceber, ReactNode> = {
+  semana: <>Quanto <strong>entra no caixa em cada semana</strong>. Verde = certo (vendido, contratado ou informado);
+    laranja = estimado por premissa; semana listrada = nada previsto. {ESCOPO_RECEBER.legenda}</>,
+  recorrencias: <>Cada <strong>parcela e assinatura que a Hotmart ainda vai cobrar</strong>, e as que atrasaram e saíram da previsão (a cobrar).</>,
+  informados: <>Dinheiro <strong>combinado fora da Hotmart</strong> que o financeiro registrou à mão — o que já entrou e o que está em atraso.</>,
+  eventos: <><strong>Eventos planejados</strong> que ainda vão vender: quanto cada um deve trazer e quando.</>,
+  premissas: <>As <strong>regras da estimativa</strong> (prazo de recebimento, taxa, perda, feriados). Mudou aqui, muda a previsão.</>,
+  base: <>A <strong>lista linha a linha</strong> por trás de todo número da previsão — para auditar e exportar.</>,
+};
+
 /** Tablist das sub-abas de Previsão de caixa. Padrão WAI-ARIA de "automatic activation": seta move o foco E
  * já troca a aba — não precisa de Enter/Espaço depois. Home/End vão à primeira/última. */
 function SubAbasReceber({ ativa, onSelecionar }: { ativa: SubAbaReceber; onSelecionar: (s: SubAbaReceber) => void }) {
@@ -606,8 +618,8 @@ export function ContasAReceber({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-[var(--fg-3)]">{ESCOPO_RECEBER.legenda}</p>
       <SubAbasReceber ativa={subAtiva} onSelecionar={setSub} />
+      <Intencao>{INTENCAO_SUBABA[subAtiva]}</Intencao>
 
       {subAtiva === 'semana' && (
         <div id="receber-painel-semana" role="tabpanel" aria-labelledby="receber-tab-semana" className="space-y-3">
@@ -628,8 +640,14 @@ export function ContasAReceber({
           ) : grade.linhas.length === 0 ? (
             <p className="rounded-[var(--r-md)] border border-[var(--border)] px-3 py-2 text-sm text-[var(--fg-2)]">{ESTADOS_RECEBER.vazio}</p>
           ) : (
+            <>
+            <BarrasSemanas titulo="Semana a semana — quanto entra e o acumulado"
+              barras={grade.semanas.map((sm, i) => ({ rotulo: `S${sm.n}`, sub: rotuloSemana(sm),
+                certo: grade.certoPorSemana?.[i] ?? grade.totalPorSemana[i], estimado: grade.estimadoPorSemana?.[i] ?? 0,
+                acumulado: grade.acumuladoPorSemana[i] }))} />
             <GradeContasReceber grade={grade} selecionada={celula}
               onSelecionar={(c) => setCelula((a) => (a && a.bloco === c.bloco && a.grupo === c.grupo && a.semana === c.semana ? null : c))} />
+            </>
           )}
           {dados && grade && !dados.desligado && grade.semDataCaixa.linhas > 0 && (
             <p className="text-xs text-[var(--fg-3)]">{GRADE_RECEBER.semDataCaixa(grade.semDataCaixa.linhas, fmtBRLc(grade.semDataCaixa.valor))}</p>
