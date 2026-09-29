@@ -195,6 +195,22 @@ export interface BoardHotmart {
   boleto_aberto_em?: string | null;
   boleto_aberto_categoria?: string | null;
   boleto_aberto_metodo?: string | null;
+  /** 20260929z76: TODOS os boletos/Pix em aberto (mesmo filtro de boleto_aberto_*), mais recente primeiro.
+   *  null = card sem boleto em aberto (ou função anterior à z76). */
+  boletos_abertos?: BoletoAberto[] | null;
+}
+
+/** Item de BoardHotmart.boletos_abertos (20260929z76). valor/pedido_em vêm de jsonb: valor é número, pedido_em 'YYYY-MM-DD'. */
+export interface BoletoAberto {
+  valor: number | null;
+  /** Categoria do hm_product_catalog (sinal / compra_cheia / diferenca…); null = oferta fora do catálogo. */
+  categoria: string | null;
+  /** fin.oferta_categoria: mensalidade / catálogo / compra_cheia_inferida / desconhecida (ver ROTULO_CATEGORIA). */
+  rotulo: string;
+  oferta_codigo: string | null;
+  /** BILLET / PIX (cru da Hotmart; ver rotuloMetodo). */
+  metodo: string | null;
+  pedido_em: string;
 }
 
 /**
@@ -643,6 +659,7 @@ export const COLUNAS_BOARD_HOTMART = [
   'assinatura_mensalidades', 'assinatura_valor', 'assinatura_de', 'assinatura_ate', 'assinatura_ativa',
   'outros_pagamentos', 'outros_valor', 'outros_formas', 'outros_ultimo',
   'telefone', 'boleto_aberto_n', 'boleto_aberto_valor', 'boleto_aberto_em', 'boleto_aberto_categoria', 'boleto_aberto_metodo',
+  'boletos_abertos',
 ] as const satisfies readonly (keyof BoardHotmart)[];
 
 export const COLUNAS_PRORATA_HM = [

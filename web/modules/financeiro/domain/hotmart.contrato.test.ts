@@ -13,6 +13,8 @@ const migracao = (nome: string) =>
 
 /** Última migração que (re)define fn_fin_board_hotmart e fn_fin_prorata_hm — o espelho do corpo vigente. */
 const ULTIMA_BOARD_PRORATA = '20260928i_fin_nada_faltando.sql';
+/** Última migração que (re)define fn_fin_board_hotmart (create completo, com os remendos o2/z46 incorporados). */
+const ULTIMA_BOARD_HOTMART = '20260929z76_fin_boletos_abertos_lista.sql';
 
 /** Divide por vírgula no nível zero (fora de parênteses, colchetes e aspas simples). */
 function dividirTopo(s: string): string[] {
@@ -81,7 +83,7 @@ describe('contrato fn_fin_hotmart_pessoas', () => {
 });
 
 describe('contrato fn_fin_board_hotmart', () => {
-  const sql = migracao('20260928o_fin_board_boleto_telefone.sql');
+  const sql = migracao(ULTIMA_BOARD_HOTMART);
   it('RETURNS TABLE = colunas de BoardHotmart', () => {
     expect(colunasRetorno(sql, 'public.fn_fin_board_hotmart')).toEqual([...COLUNAS_BOARD_HOTMART]);
   });
@@ -370,6 +372,47 @@ describe('20260928o — boleto em aberto e telefone', () => {
   });
   it('boleto em aberto: só grupo em_aberto dos últimos 30 dias', () => {
     expect(sql).toMatch(/t\.grupo = 'em_aberto' and t\.dia_pedido >= \(now\(\) at time zone 'America\/Sao_Paulo'\)::date - 30/);
+  });
+});
+
+describe('20260929z76 — lista de boletos em aberto', () => {
+  const sql = migracao(ULTIMA_BOARD_HOTMART);
+  const corpo = sql.slice(inicioCreate(sql, 'public.fn_fin_board_hotmart'), sql.indexOf('end $$;'));
+  const bol = corpo.slice(corpo.indexOf('), bol as ('), corpo.indexOf('), tel as ('));
+  it('boletos_abertos jsonb é a última coluna do RETURNS TABLE e do tipo TS', () => {
+    const cols = colunasRetorno(sql, 'public.fn_fin_board_hotmart');
+    expect(cols[cols.length - 1]).toBe('boletos_abertos');
+    expect(COLUNAS_BOARD_HOTMART[COLUNAS_BOARD_HOTMART.length - 1]).toBe('boletos_abertos');
+    expect(sql).toMatch(/boleto_aberto_metodo text,\s+boletos_abertos jsonb\)/);
+  });
+  it('as 5 colunas antigas do boleto seguem no lugar (mesma ordem, antes da nova)', () => {
+    const cols = colunasRetorno(sql, 'public.fn_fin_board_hotmart');
+    expect(cols.slice(-6)).toEqual(['boleto_aberto_n', 'boleto_aberto_valor', 'boleto_aberto_em', 'boleto_aberto_categoria', 'boleto_aberto_metodo', 'boletos_abertos']);
+  });
+  it('a lista usa o MESMO filtro do agregado (em_aberto, 30 dias) e sai da mais recente para a mais antiga', () => {
+    expect(bol).toMatch(/t\.grupo = 'em_aberto' and t\.dia_pedido >= \(now\(\) at time zone 'America\/Sao_Paulo'\)::date - 30/);
+    expect(bol).toMatch(/jsonb_agg\(jsonb_build_object\([\s\S]*order by t\.pedido_em desc\) lista/);
+  });
+  it('cada item tem valor, categoria (catálogo), rotulo, oferta_codigo, metodo e pedido_em (date)', () => {
+    for (const k of ['valor', 'categoria', 'rotulo', 'oferta_codigo', 'metodo', 'pedido_em']) expect(bol).toContain(`'${k}',`);
+    expect(bol).toMatch(/'pedido_em', t\.dia_pedido\)/);
+    expect(bol).toMatch(/'categoria', \(select min\(c\.categoria::text\) from public\.hm_product_catalog c where c\.offer_code = t\.oferta_codigo\)/);
+    expect(bol).toMatch(/'rotulo', fin\.oferta_categoria\(t\.oferta_codigo, t\.oferta_modo, t\.valor_oferta\)/);
+  });
+  it('o catálogo entra por subselect escalar: não multiplica boleto nem mexe em n/valor', () => {
+    expect(bol).not.toMatch(/join public\.hm_product_catalog/);
+    expect(bol).toMatch(/count\(\*\)::int n, coalesce\(sum\(t\.valor_oferta\), 0\) valor/);
+  });
+  it('remendos vivos incorporados: periodo_do_card (z46) e tel_card (o2)', () => {
+    expect(corpo).toContain('periodo_do_card (z46)');
+    expect(corpo).toContain('), tel_card as (');
+  });
+  it('guarda, SECURITY DEFINER / search_path vazio, drop + create e grants sem PUBLIC/anon', () => {
+    expect(sql).toMatch(/drop function if exists public\.fn_fin_board_hotmart\(\);/);
+    expect(corpo).toMatch(/gp_pode_ver_financeiro\(\)/);
+    expect(sql).toMatch(/language plpgsql stable security definer set search_path = ''/);
+    expect(sql).toMatch(/revoke all on function public\.fn_fin_board_hotmart\(\) from public, anon;/);
+    expect(sql).toMatch(/grant execute on function public\.fn_fin_board_hotmart\(\) to authenticated, service_role;/);
   });
 });
 
