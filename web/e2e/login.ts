@@ -5,7 +5,8 @@ import { DOMINIO_EQUIPE, ehEmailDaEquipe } from '../shared/domain/auth/gp-user';
 
 // Sessão do usuário-robô do Financeiro (operador, área financeiro, sem CPF completo).
 // Credenciais SÓ de .env.local (E2E_FIN_EMAIL / E2E_FIN_SENHA). Nunca logar, nunca gravar em arquivo versionado.
-export const ARQUIVO_SESSAO = path.join(__dirname, '.auth', 'fin.json');
+// Uma sessão por destino: local (next dev) e produção têm cookies de domínios diferentes.
+export const ARQUIVO_SESSAO = path.join(__dirname, '.auth', process.env.E2E_BASE_URL ? 'fin-prod.json' : 'fin.json');
 export const ROTA_FINANCEIRO = '/relatorios/financeiro';
 
 export const MOTIVO_SEM_CREDENCIAL =

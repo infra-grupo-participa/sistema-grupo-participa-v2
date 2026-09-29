@@ -4,14 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "lint:tokens": "node scripts/check-hex.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint:edge": "node scripts/check-edge.mjs",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:prod": "node e2e/prod.mjs"
   },
   "engines": {
     "node": ">=20"

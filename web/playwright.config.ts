@@ -6,7 +6,10 @@ import { loadEnvConfig } from '@next/env';
 loadEnvConfig(process.cwd());
 
 const PORTA = 3100;
-const BASE = `http://localhost:${PORTA}`;
+// E2E_BASE_URL (ex.: `npm run e2e:prod`) roda os MESMOS testes contra o site publicado — confere o deploy.
+// Sem ela, sobe o `next dev` local. Os testes são somente leitura nos dois casos.
+const REMOTO = process.env.E2E_BASE_URL?.replace(/\/$/, '');
+const BASE = REMOTO ?? `http://localhost:${PORTA}`;
 
 export default defineConfig({
   testDir: './e2e',
@@ -26,13 +29,13 @@ export default defineConfig({
     headless: true,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    storageState: './e2e/.auth/fin.json',
+    storageState: REMOTO ? './e2e/.auth/fin-prod.json' : './e2e/.auth/fin.json',
     locale: 'pt-BR',
     timezoneId: 'America/Sao_Paulo',
     viewport: { width: 1440, height: 900 },
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } }],
-  webServer: {
+  webServer: REMOTO ? undefined : {
     command: `npm run dev -- --port ${PORTA}`,
     url: `${BASE}/login`,
     reuseExistingServer: true,
