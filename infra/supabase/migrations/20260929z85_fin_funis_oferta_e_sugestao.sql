@@ -1,3 +1,6 @@
+-- APLICAÇÃO REAL (29/09, orquestrador): em 2 partes — z85a = seção 1; z85b = seções 2–5. A SEÇÃO 0 NÃO RODOU
+-- (corpos recriados por inteiro a partir do que foi aplicado minutos antes; seção 1 tem trava de trecho).
+-- Conferência foi pelo resultado: ver 20260929z85.explain.md (fotos antes/depois e explain analyze).
 -- 20260929z85 — Funis por oferta ligada + sugestão da fila com prazo + correções do pentest (29/09/2026)
 --
 -- POR QUÊ
@@ -1291,7 +1294,7 @@ begin
   end if;
 
   -- 5.3 C1 do resolvedor (verdade conhecida, só leitura): ligações manuais avaliadas como se não existissem.
-  --     Aceite: nenhum erro grave e todas acertadas (ligar ou sugerir o evento certo) — "7/7" da z83.
+  --     Aceite: nenhum erro grave (ligar errado). Acertar 100% não é exigido: antes da z85 já era 7 de 9 (2 em fila/ignorar).
   select count(*) total,
          count(*) filter (where r.evento_id = eo.evento_id) acerto,
          count(*) filter (where r.decisao = 'ligar' and r.evento_id <> eo.evento_id) erro_grave,
