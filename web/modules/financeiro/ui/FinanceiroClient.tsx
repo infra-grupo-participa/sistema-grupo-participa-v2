@@ -39,7 +39,7 @@ import { ContasAReceber, type EventosEstado, type PremissasEstado } from './rece
 import { CABECALHO_RECEBER, ESTADOS_RECEBER, EVENTOS_RECEBER, FERIADOS_RECEBER, PREMISSAS_RECEBER, VISAO_GERAL } from './receber/textos';
 import { VisaoGeral } from './receber/VisaoGeral';
 import { carregarVisaoReceber, type VisaoReceberCarregada } from '../application/carregar-visao-receber';
-import type { CenarioReceber } from '../domain/contas-receber';
+import type { CenarioReceber, ModoSemana } from '../domain/contas-receber';
 import { filtroReceberDoHash, hashDaSubAbaReceber, subAbaReceberDoHash, type SubAbaReceber } from './receber/hash';
 import { hashDaSubAbaFaturamento, subAbaFaturamentoDoHash, type SubAbaFaturamento } from './faturamento/hash';
 import { criarCacheCaixaHotmart } from '../application/carregar-caixa-hotmart';
@@ -70,6 +70,9 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // a grade atual fica na tela enquanto só o cenário ativo é rebuscado; resposta de geração velha é descartada.
   const [receberPorCenario, setReceberPorCenario] = useState<Partial<Record<CenarioReceber, ContasReceberCarregado>>>({});
   const [cenarioReceber, setCenarioReceber] = useState<CenarioReceber>('base');
+  // Modo de semana da grade e da Base auditável (Conflito 3 do catálogo / C07): recomputado no cliente a partir das
+  // linhas já carregadas (ContasAReceber.tsx) — trocar aqui NUNCA busca de novo.
+  const [modoSemanaReceber, setModoSemanaReceber] = useState<ModoSemana>('receber');
   const [erroReceber, setErroReceber] = useState<string | null>(null);
   const [tentativaReceber, setTentativaReceber] = useState(0);
   const pedidosReceber = useRef(new Set<CenarioReceber>());
@@ -703,6 +706,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
           <ContasAReceber dados={receberPorCenario[cenarioReceber] ?? null} repo={repo} canEdit={canEdit} canVerDoc={canVerDoc}
             onInformadosAlterados={recarregarReceber} sub={receberSub} onSubChange={trocarSubReceber} filtroInicial={filtroReceber}
             cenario={cenarioReceber} onCenario={setCenarioReceber}
+            modoSemana={modoSemanaReceber} onModoSemana={setModoSemanaReceber}
             premissas={premissasReceber} onTentarPremissas={tentarPremissasDeNovo}
             onPremissaGravada={() => { buscarPremissas({ premissas: true, feriados: false }); recarregarReceber(); }}
             onFeriadoGravado={() => { buscarPremissas({ premissas: false, feriados: true }); recarregarReceber(); }}
