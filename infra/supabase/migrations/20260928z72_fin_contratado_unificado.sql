@@ -877,3 +877,12 @@ begin
     raise exception 'z72: conferência 5 — ACL errada (núcleo/bloco 2 expostos, ou PUBLIC/anon com execute)';
   end if;
 end $conf$;
+
+-- ═══ MEDIDO em produção (29/09/2026, coordenador; 2ª execução; usuário do Financeiro) ════════════════════════════
+-- P1 fn_fin_contratado('HM') 185,4 ms (17 linhas, shared hit=22510) · ('DIAMANTE') 182,3 ms (12 linhas, hit=19581)
+--    · fn_fin_receber_semanal(null,null,'base') 200,9 ms (551 linhas, hit=9515).
+-- P2 fin.cobrancas_nucleo(now(), +12 meses, false, 'HM') 39,6 ms (325 linhas, hit=2356).
+-- P3 universo 120 d: Bitmap Heap Scan on hotmart_transacoes ← BitmapAnd(Bitmap Index Scan on
+--    hotmart_transacoes_aprovado_pago_idx (2.297) + Bitmap Index Scan on hotmart_transacoes_contrato_rec_idx (5.622))
+--    → 280 linhas, 1,25 ms. Nenhum Seq Scan em hotmart_transacoes. O resto do custo de fn_fin_contratado é o CTE `plano`
+--    da fonte 'combinado' (inalterado).
