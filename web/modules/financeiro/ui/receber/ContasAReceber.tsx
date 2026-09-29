@@ -10,12 +10,13 @@
 // resposta de fn_fin_receber_semanal (application/carregar-contas-receber.ts). A grade soma o ESPERADO (contrato v2);
 // onde há perda (fator < 1) a célula mostra também o bruto, e a composição mostra bruto, fator, esperado e o porquê.
 // O detalhe fica no fluxo da página (não é `absolute`): nada invisível entra na área rolável da grade.
-import { useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { fmtBRLc, fmtData } from '@/shared/ui/format';
 import { hojeSaoPaulo, type ContasReceberCarregado } from '../../application/carregar-contas-receber';
 import {
-  BLOCO_INFORMATIVO, CENARIOS_RECEBER, composicaoDaCelula, GRUPO_BLOCO_1, GRUPO_BLOCO_6, temPerda,
-  type CenarioReceber, type SecaoReceber, type GradeReceber, type LinhaGrade, type LinhaReceber, type PagamentoContrato, type Semana,
+  agregarReceber, BLOCO_INFORMATIVO, CENARIOS_RECEBER, composicaoDaCelula, GRUPO_BLOCO_1, GRUPO_BLOCO_6, periodoReceber, temPerda,
+  type CenarioReceber, type ModoSemana, type SecaoReceber, type GradeReceber, type LinhaGrade, type LinhaReceber, type PagamentoContrato,
+  type Semana,
 } from '../../domain/contas-receber';
 import type { FeriadoBancario, SugestaoPremissa, VigenciaPremissa } from '../../domain/premissas-receber';
 import type { EventoPlanejado } from '../../domain/eventos-planejados';
@@ -30,7 +31,8 @@ import { NIVEIS_RELATORIO, rascunhoReceber } from '../pdf/documentos';
 import { chamadasProtocoloFinanceiro } from '../pdf/protocolo';
 import { rotuloBloco, rotuloComponente, rotuloMes } from './rotulos-receber';
 import {
-  CENARIO_RECEBER, ESCOPO_RECEBER, ESTADOS_RECEBER, GRADE_RECEBER, ROTULOS_TOTAL, SECOES_RECEBER, SUBABAS_RECEBER,
+  CENARIO_RECEBER, ESCOPO_RECEBER, ESTADOS_RECEBER, GRADE_RECEBER, MODO_SEMANA_RECEBER, ROTULOS_TOTAL, SECOES_RECEBER,
+  SUBABAS_RECEBER,
 } from './textos';
 import type { SubAbaReceber } from './hash';
 import { BarrasSemanas, FaixaKpis, Intencao, KpiFin } from './visual';
@@ -587,6 +589,28 @@ export function SeletorCenario({ cenario, onCenario }: { cenario: CenarioReceber
   );
 }
 
+/** Seletor discreto do modo de semana (Conflito 3 do catálogo / C07): padrão = cortada no mês, como a planilha de
+ * Contas a Receber Semanal; "fluxo" = seg-dom sem corte, S01 a S53 do ano, como a planilha de Fluxo de Caixa. Muda a
+ * grade inteira (colunas, KPIs, barras) e a coluna "Semana" da Base auditável — nunca o resumo mensal. */
+export function SeletorModoSemana({ modo, onModo }: { modo: ModoSemana; onModo: (m: ModoSemana) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <div role="group" aria-labelledby="receber-modo-semana-rotulo" className="flex items-center gap-1">
+        <span id="receber-modo-semana-rotulo" className="font-semibold text-[var(--fg-3)]">{MODO_SEMANA_RECEBER.rotulo}:</span>
+        <button type="button" aria-pressed={modo === 'receber'} onClick={() => onModo('receber')}
+          className={`rounded-[var(--r-sm)] border px-2 py-0.5 ${modo === 'receber' ? 'border-[var(--accent)] font-semibold text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-2)] hover:bg-[var(--surface-3)]'}`}>
+          {MODO_SEMANA_RECEBER.receber}
+        </button>
+        <button type="button" aria-pressed={modo === 'fluxo'} onClick={() => onModo('fluxo')}
+          className={`rounded-[var(--r-sm)] border px-2 py-0.5 ${modo === 'fluxo' ? 'border-[var(--accent)] font-semibold text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-2)] hover:bg-[var(--surface-3)]'}`}>
+          {MODO_SEMANA_RECEBER.fluxo}
+        </button>
+      </div>
+      <span className="text-[var(--fg-3)]">{MODO_SEMANA_RECEBER.legenda}</span>
+    </div>
+  );
+}
+
 /** Estado da sub-aba Premissas, guardado pelo pai (carga sob demanda, 1× enquanto a página está aberta). */
 export interface PremissasEstado {
   premissas: VigenciaPremissa[] | null;
@@ -609,7 +633,7 @@ export interface EventosEstado {
 
 export function ContasAReceber({
   dados, repo, canEdit, canVerDoc, onInformadosAlterados, sub, onSubChange,
-  cenario = 'base', onCenario, premissas, onTentarPremissas, onPremissaGravada, onFeriadoGravado,
+  cenario = 'base', onCenario, modoSemana = 'receber', onModoSemana, premissas, onTentarPremissas, onPremissaGravada, onFeriadoGravado,
   eventos, onTentarEventos, onPedirCandidatos, onEventoAlterado, filtroInicial = null,
 }: {
   /** Carga do cenário ativo. NULL = o cenário ainda está carregando (a grade e Recorrências esperam; o resto não). */
@@ -626,6 +650,11 @@ export function ContasAReceber({
   cenario?: CenarioReceber;
   /** Troca de cenário: o pai consulta 1× por cenário e guarda. Sem pai, o seletor não aparece. */
   onCenario?: (c: CenarioReceber) => void;
+  /** Modo de semana da grade e da coluna "Semana" da Base auditável (Conflito 3 do catálogo / C07). Padrão: cortada
+   *  no mês (a de sempre). Recomputado no cliente a partir das MESMAS linhas já carregadas — nenhuma consulta nova. */
+  modoSemana?: ModoSemana;
+  /** Troca de modo: o pai guarda a escolha em memória (mesmo padrão do cenário). Sem pai, o seletor não aparece. */
+  onModoSemana?: (m: ModoSemana) => void;
   premissas?: PremissasEstado;
   onTentarPremissas?: () => void;
   onPremissaGravada?: () => void;
@@ -645,7 +674,19 @@ export function ContasAReceber({
   const subAtiva = sub ?? subLocal;
   const setSub = onSubChange ?? setSubLocal;
   const grade = dados?.grade ?? null;
-  const semana = celula?.semana == null || !grade ? null : grade.semanas[celula.semana] ?? null;
+  // Recomputada no cliente a partir das MESMAS linhas do cenário ativo (nenhuma consulta nova): 'receber' reusa a
+  // grade já montada; 'fluxo' reagrega com a mesma janela [inicio, fim] da grade padrão, só trocando a semana (C07).
+  const gradeSemana = useMemo(() => {
+    if (!dados || !grade || modoSemana === 'receber') return grade;
+    const { inicio, fim } = periodoReceber(dados.linhas, dados.hojeISO);
+    return agregarReceber(dados.linhas, inicio, fim, 'fluxo');
+  }, [dados, grade, modoSemana]);
+  // A Base auditável lê a semana de `dados.grade` — troca só esse campo, o resto da carga do cenário é o mesmo.
+  const dadosParaBase = useMemo(
+    () => (dados && gradeSemana && gradeSemana !== dados.grade ? { ...dados, grade: gradeSemana } : dados),
+    [dados, gradeSemana],
+  );
+  const semana = celula?.semana == null || !gradeSemana ? null : gradeSemana.semanas[celula.semana] ?? null;
   const repoPremissas: RepoPremissas | undefined = repo?.salvarPremissaReceber && repo.salvarFeriado
     ? { salvarPremissaReceber: repo.salvarPremissaReceber.bind(repo), salvarFeriado: repo.salvarFeriado.bind(repo) }
     : undefined;
@@ -661,41 +702,43 @@ export function ContasAReceber({
       {subAtiva === 'semana' && (
         <div id="receber-painel-semana" role="tabpanel" aria-labelledby="receber-tab-semana" className="space-y-3">
           {onCenario && <SeletorCenario cenario={cenario} onCenario={(c) => { setCelula(null); onCenario(c); }} />}
+          {onModoSemana && <SeletorModoSemana modo={modoSemana} onModo={(m) => { setCelula(null); onModoSemana(m); }} />}
           {/* PDF oficial (F5): as linhas já carregadas do cenário ativo; a única chamada é a emissão do protocolo, no clique.
-              Sem grade (carregando, recebimento desligado ou vazia) não há documento: zero ali não é dado. */}
+              Sem grade (carregando, recebimento desligado ou vazia) não há documento: zero ali não é dado. Sempre no modo
+              'receber' (o oficial não muda com o seletor discreto da tela). */}
           {dados && grade && !dados.desligado && grade.linhas.length > 0 && (
             <BotaoExportarPdf montar={() => rascunhoReceber(dados)} niveis={NIVEIS_RELATORIO.receber}
               chamadas={chamadasProtocoloFinanceiro()} rotulo="Gerar PDF oficial" />
           )}
-          {!dados || !grade ? (
+          {!dados || !gradeSemana ? (
             <p role="status" className="text-xs text-[var(--fg-3)]">{GRADE_RECEBER.carregandoCenario}</p>
           ) : dados.desligado ? (
             // Premissa de recebimento desligada: sem data de caixa não há grade — zero aqui seria mentira.
             <p role="alert" className="rounded-[var(--r-md)] border border-[var(--yellow-border)] bg-[var(--yellow-subtle)] px-3 py-2 text-sm font-semibold text-[var(--fg)]">
               {GRADE_RECEBER.recebimentoDesligado}
             </p>
-          ) : grade.linhas.length === 0 ? (
+          ) : gradeSemana.linhas.length === 0 ? (
             <p className="rounded-[var(--r-md)] border border-[var(--border)] px-3 py-2 text-sm text-[var(--fg-2)]">{ESTADOS_RECEBER.vazio}</p>
           ) : (
             <>
-            <KpisGrade grade={grade} hojeISO={dados.hojeISO} />
+            <KpisGrade grade={gradeSemana} hojeISO={dados.hojeISO} />
             <BarrasSemanas titulo="Semana a semana — quanto entra e o acumulado"
-              barras={grade.semanas.map((sm, i) => ({ rotulo: `S${sm.n}`, sub: rotuloSemana(sm),
-                certo: grade.certoPorSemana?.[i] ?? grade.totalPorSemana[i], estimado: grade.estimadoPorSemana?.[i] ?? 0,
-                acumulado: grade.acumuladoPorSemana[i] }))} />
-            <GradeContasReceber grade={grade} selecionada={celula} hojeISO={dados.hojeISO}
+              barras={gradeSemana.semanas.map((sm, i) => ({ rotulo: `S${sm.n}`, sub: rotuloSemana(sm),
+                certo: gradeSemana.certoPorSemana?.[i] ?? gradeSemana.totalPorSemana[i], estimado: gradeSemana.estimadoPorSemana?.[i] ?? 0,
+                acumulado: gradeSemana.acumuladoPorSemana[i] }))} />
+            <GradeContasReceber grade={gradeSemana} selecionada={celula} hojeISO={dados.hojeISO}
               onSelecionar={(c) => setCelula((a) => (a && a.bloco === c.bloco && a.grupo === c.grupo && a.semana === c.semana ? null : c))} />
             </>
           )}
-          {dados && grade && !dados.desligado && grade.semDataCaixa.linhas > 0 && (
-            <p className="text-xs text-[var(--fg-3)]">{GRADE_RECEBER.semDataCaixa(grade.semDataCaixa.linhas, fmtBRLc(grade.semDataCaixa.valor))}</p>
+          {dados && gradeSemana && !dados.desligado && gradeSemana.semDataCaixa.linhas > 0 && (
+            <p className="text-xs text-[var(--fg-3)]">{GRADE_RECEBER.semDataCaixa(gradeSemana.semDataCaixa.linhas, fmtBRLc(gradeSemana.semDataCaixa.valor))}</p>
           )}
-          {grade && grade.foraDoPeriodo.linhas > 0 && (
-            <p className="text-xs text-[var(--fg-3)]">{GRADE_RECEBER.foraDoPeriodo(grade.foraDoPeriodo.linhas, fmtBRLc(grade.foraDoPeriodo.valor))}</p>
+          {gradeSemana && gradeSemana.foraDoPeriodo.linhas > 0 && (
+            <p className="text-xs text-[var(--fg-3)]">{GRADE_RECEBER.foraDoPeriodo(gradeSemana.foraDoPeriodo.linhas, fmtBRLc(gradeSemana.foraDoPeriodo.valor))}</p>
           )}
-          {grade && grade.informativo && grade.informativo.foraDoPeriodo.linhas > 0 && (
+          {gradeSemana && gradeSemana.informativo && gradeSemana.informativo.foraDoPeriodo.linhas > 0 && (
             <p className="text-xs text-[var(--fg-3)]">
-              {SECOES_RECEBER.informativoForaDoPeriodo(grade.informativo.foraDoPeriodo.linhas, fmtBRLc(grade.informativo.foraDoPeriodo.valor))}
+              {SECOES_RECEBER.informativoForaDoPeriodo(gradeSemana.informativo.foraDoPeriodo.linhas, fmtBRLc(gradeSemana.informativo.foraDoPeriodo.valor))}
             </p>
           )}
           {dados && celula && <ComposicaoCelula linhas={dados.linhas} pagasPorRef={dados.pagasPorRef} celula={celula} semana={semana} onFechar={() => setCelula(null)} />}
@@ -704,14 +747,15 @@ export function ContasAReceber({
 
       {subAtiva === 'base' && (
         <div id="receber-painel-base" role="tabpanel" aria-labelledby="receber-tab-base" className="space-y-3">
-          {/* Sem consulta nova: as linhas do cenário ativo, as mesmas da grade. Trocar o cenário usa o cache do pai. */}
+          {/* Sem consulta nova: as linhas do cenário ativo, as mesmas da grade. Trocar o cenário usa o cache do pai. A
+              coluna "Semana" segue o mesmo seletor de modo da Semana a semana (guardado no pai). */}
           {onCenario && <SeletorCenario cenario={cenario} onCenario={(c) => { setCelula(null); onCenario(c); }} />}
           {dados?.desligado && (
             <p role="alert" className="rounded-[var(--r-md)] border border-[var(--yellow-border)] bg-[var(--yellow-subtle)] px-3 py-2 text-sm font-semibold text-[var(--fg)]">
               {GRADE_RECEBER.recebimentoDesligado}
             </p>
           )}
-          {dados ? <BaseAuditavel dados={dados} rotuloCenario={CENARIO_RECEBER[dados.cenario]} />
+          {dados && dadosParaBase ? <BaseAuditavel dados={dadosParaBase} rotuloCenario={CENARIO_RECEBER[dados.cenario]} />
             : <p role="status" className="text-xs text-[var(--fg-3)]">{GRADE_RECEBER.carregandoCenario}</p>}
         </div>
       )}
