@@ -54,6 +54,15 @@ describe('grade Contas a Receber (HTML estático)', () => {
   it('sem cor hex no HTML (só tokens)', () => {
     expect(html).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
+  it('mês sem coluna própria (semanas: []) não vira colSpan 0 nem desalinha o cabeçalho (João, achado 2)', () => {
+    // domain/contas-receber.ts admite MesGrade com `semanas: []` (mês tocado só por uma semana de fronteira do modo
+    // fluxo cujo 1º dia caiu no mês vizinho). Sem o filtro em GradeContasReceber, colSpan={0} é HTML inválido e
+    // desalinha as colunas seguintes.
+    const gradeComMesVazio = { ...dados.grade, meses: [...dados.grade.meses, { mes: '2026-11', semanas: [], total: 50, brutoTotal: 50, acumulado: dados.grade.total + 50 }] };
+    const htmlMesVazio = renderToStaticMarkup(createElement(GradeContasReceber, { grade: gradeComMesVazio, selecionada: null, onSelecionar: () => {} }));
+    expect(htmlMesVazio).not.toMatch(/colspan="0"/i);
+    expect(htmlMesVazio).not.toContain('nov/2026'); // sem coluna, o mês não ganha cabeçalho nem célula de total
+  });
 
   it('a tela inteira: legenda de escopo, grade e Recorrências (nunca "Carteira" nem "devendo")', () => {
     const tela = renderToStaticMarkup(createElement(ContasAReceber, { dados }));
@@ -196,5 +205,36 @@ describe('F2 — bruto × esperado, tratamento, pagas do contrato e cenário', (
     expect(html).toContain('id="receber-tab-premissas"');
     expect(html).toContain('id="receber-painel-premissas"');
     expect(html).toContain('Carregando premissas');
+  });
+});
+
+describe('modo de semana (Conflito 3 do catálogo / C07): fluxo × receber, sem consulta nova (João, achado 1)', () => {
+  // 30/09/2026 (quarta) e 02/10/2026 (sexta) caem na MESMA semana seg-dom (28/09 a 04/10) no modo fluxo — por isso a
+  // grade em fluxo mostra S40 (a semana com dado) e S41 (a seguinte, sem dado, só coluna do período) e nunca S1. No
+  // modo receber (cortado no mês), a mesma janela vira S1 (28-30/09) e S2 (01-04/10).
+  const linhasModo: LinhaReceber[] = [
+    L({ data_caixa: '2026-09-30', valor: 10 }),
+    L({ data_caixa: '2026-10-02', valor: 20 }),
+  ];
+  const dadosModo = montarContasReceber(linhasModo, '2026-09-28');
+
+  it('grade (sub "semana"): modo fluxo mostra S40 e S41, nunca S1; botão certo com aria-pressed', () => {
+    const html = renderToStaticMarkup(createElement(ContasAReceber, { dados: dadosModo, modoSemana: 'fluxo', onModoSemana: () => {} }));
+    expect(html).toContain('>S40<');
+    expect(html).toContain('>S41<');
+    expect(html).not.toContain('>S1<');
+    expect(html).toMatch(/aria-pressed="true"[^>]*>como o fluxo de caixa/);
+  });
+  it('grade (sub "semana"): modo receber (padrão) mostra S1, cortada no mês; botão certo com aria-pressed', () => {
+    const html = renderToStaticMarkup(createElement(ContasAReceber, { dados: dadosModo, modoSemana: 'receber', onModoSemana: () => {} }));
+    expect(html).toContain('>S1<');
+    expect(html).toMatch(/aria-pressed="true"[^>]*>como a planilha de contas a receber/);
+  });
+  it('sub "base": a coluna Semana segue o modo escolhido (S40 no fluxo, S1 no receber)', () => {
+    const fluxo = renderToStaticMarkup(createElement(ContasAReceber, { dados: dadosModo, sub: 'base', modoSemana: 'fluxo', onModoSemana: () => {} }));
+    expect(fluxo).toContain('>S40<');
+    expect(fluxo).not.toContain('>S1<');
+    const receber = renderToStaticMarkup(createElement(ContasAReceber, { dados: dadosModo, sub: 'base', modoSemana: 'receber', onModoSemana: () => {} }));
+    expect(receber).toContain('>S1<');
   });
 });
