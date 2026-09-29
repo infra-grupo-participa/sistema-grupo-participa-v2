@@ -359,6 +359,7 @@ function PrevistoRealizado({ visao, onTentar }: { visao: VisaoReceberCarregada; 
                   <th scope="col" className={`${TH} text-right`}>{T.certoRealizado}</th>
                   <th scope="col" className={`${TH} text-right`}>{T.acerto}</th>
                   <th scope="col" className={`${TH} text-right`}>{T.estimadoPrevisto}</th>
+                  <th scope="col" className={`${TH} text-right`}>{T.estimadoRealizado}</th>
                   <th scope="col" className={`${TH} text-right`}>{T.foraDaFoto}</th>
                   <th scope="col" className={TH}><span className="sr-only">{T.detalhar}</span></th>
                 </tr>
@@ -381,6 +382,7 @@ function PrevistoRealizado({ visao, onTentar }: { visao: VisaoReceberCarregada; 
                         </span>
                       </td>
                       <td className={TD_NUM}>{fmtBRLc(s.estimadoPrevisto)}</td>
+                      <td className={TD_NUM}>{s.estimadoRealizado == null ? '—' : fmtBRLc(s.estimadoRealizado)}</td>
                       <td className={TD_NUM}>{fmtBRLc(s.foraDaFoto)}</td>
                       <td className={TD}>
                         <button type="button" aria-expanded={aqui} aria-controls={idDet} onClick={() => setAberta(aqui ? null : s.de)}
@@ -391,7 +393,7 @@ function PrevistoRealizado({ visao, onTentar }: { visao: VisaoReceberCarregada; 
                     </tr>,
                     aqui && (
                       <tr key={`${s.de}-d`} id={idDet}>
-                        <td colSpan={7} className="bg-[var(--surface-2)] px-2 py-2"><DetalheSemana s={s} /></td>
+                        <td colSpan={8} className="bg-[var(--surface-2)] px-2 py-2"><DetalheSemana s={s} /></td>
                       </tr>
                     ),
                   ];

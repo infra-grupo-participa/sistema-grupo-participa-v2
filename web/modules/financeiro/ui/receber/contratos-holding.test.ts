@@ -100,6 +100,33 @@ describe('bloco 7 — Visão geral, Base auditável, CSV, PDF', () => {
     ].map(normalizarPrevistoRealizado));
     expect(pr.semanas[0]).toMatchObject({ certoPrevisto: 1000, certoRealizado: 1000, estimadoPrevisto: 400 });
   });
+  it('previsto × realizado: realizado do contrato sem assinatura soma em estimadoRealizado e o resumo fecha com o detalhe', () => {
+    const linhasSemana = [
+      { linha: 'semana', semana_de: '2026-10-05', semana_ate: '2026-10-11', foto_em: '2026-10-05T09:11:00Z', bloco: 1,
+        grupo: 'Vendas já realizadas', previsto: 500, realizado: 480 },
+      { linha: 'semana', semana_de: '2026-10-05', semana_ate: '2026-10-11', foto_em: '2026-10-05T09:11:00Z', bloco: 7,
+        grupo: GRUPO_CONTRATO_SEM_ASSINATURA, previsto: 4000, realizado: 3000 },
+      { linha: 'semana', semana_de: '2026-10-05', semana_ate: '2026-10-11', foto_em: '2026-10-05T09:11:00Z', bloco: null,
+        grupo: 'Fora da foto (vendas novas e outros)', previsto: 0, realizado: 200 },
+    ].map(normalizarPrevistoRealizado);
+    const pr = resumirPrevistoRealizado(linhasSemana);
+    const s = pr.semanas[0];
+    expect(s).toMatchObject({ certoPrevisto: 500, certoRealizado: 480, estimadoPrevisto: 4000, estimadoRealizado: 3000, foraDaFoto: 200 });
+    const somaResumo = s.certoRealizado + (s.estimadoRealizado ?? 0) + s.foraDaFoto;
+    const somaDetalhe = s.linhas.reduce((a, l) => a + (l.realizado ?? 0), 0);
+    expect(somaResumo).toBe(somaDetalhe);
+  });
+  it('previsto × realizado: só blocos 3/4/6 (realizado NULL do banco) → estimadoRealizado null', () => {
+    const pr = resumirPrevistoRealizado([
+      { linha: 'semana', semana_de: '2026-10-05', semana_ate: '2026-10-11', foto_em: '2026-10-05T09:11:00Z', bloco: 3,
+        grupo: 'Recorrência HT', previsto: 300, realizado: null },
+      { linha: 'semana', semana_de: '2026-10-05', semana_ate: '2026-10-11', foto_em: '2026-10-05T09:11:00Z', bloco: 4,
+        grupo: 'Recorrência HM', previsto: 200, realizado: null },
+      { linha: 'semana', semana_de: '2026-10-05', semana_ate: '2026-10-11', foto_em: '2026-10-05T09:11:00Z', bloco: 6,
+        grupo: 'Garantia', previsto: 100, realizado: null },
+    ].map(normalizarPrevistoRealizado));
+    expect(pr.semanas[0]).toMatchObject({ estimadoPrevisto: 600, estimadoRealizado: null });
+  });
   it('Base auditável: filtro de bloco e CSV com "7. Contratos Holding Familiar"; sem dado pessoal troca o cliente', () => {
     expect(rotuloBloco(7)).toBe('Contratos Holding Familiar');
     expect(opcoesBase(linhas).blocos).toEqual([1, 7]);

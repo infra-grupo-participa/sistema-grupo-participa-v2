@@ -607,6 +607,7 @@ export const VISAO_GERAL = {
   certoRealizado: 'Certo realizado',
   acerto: 'Acerto',
   estimadoPrevisto: 'Estimado previsto',
+  estimadoRealizado: 'Estimado realizado',
   foraDaFoto: 'Vendas novas e outros (caíram fora da foto)',
   detalhar: 'Detalhar',
   fechar: 'Fechar',

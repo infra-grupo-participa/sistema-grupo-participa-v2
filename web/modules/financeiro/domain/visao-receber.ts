@@ -283,9 +283,11 @@ export interface SemanaPrevistoRealizado {
   certoPrevisto: number;
   certoRealizado: number;
   certoAcerto: number | null;
-  /** Estimado (3, 4, 6 e os contratos sem assinatura do 7): só o previsto; a venda nova que caiu entra em "Fora da foto".
-   *  O realizado de contrato sem assinatura é medido pelo banco e aparece no detalhe do grupo, não neste resumo. */
+  /** Estimado (3, 4, 6 e os contratos sem assinatura do 7): só o previsto; a venda nova que caiu entra em "Fora da foto". */
   estimadoPrevisto: number;
+  /** Soma do realizado das linhas estimadas que o banco mediu (hoje só contrato sem assinatura, bloco 7). NULL =
+   *  nenhuma linha estimada da semana trouxe realizado (blocos 3, 4 e 6 chegam com realizado NULL do banco). */
+  estimadoRealizado: number | null;
   /** Bloco NULL: vendas novas e outros que caíram sem estar na foto. */
   foraDaFoto: number;
   linhas: LinhaPrevistoRealizado[];
@@ -315,17 +317,21 @@ export function resumirPrevistoRealizado(linhas: LinhaPrevistoRealizado[]): Prev
   for (const [de, xs] of porSemana) {
     const comFoto = xs.find((x) => x.foto_em);
     if (!comFoto) { semanasSemFoto += 1; continue; }
-    let cp = 0; let cr = 0; let ep = 0; let ff = 0;
+    let cp = 0; let cr = 0; let ep = 0; let er = 0; let temEr = false; let ff = 0;
     for (const x of xs) {
       if (x.bloco == null) { ff += c(x.realizado ?? 0); continue; }
-      if (secaoDoGrupo(x.bloco, x.grupo) === 'estimado') { ep += c(x.previsto ?? 0); continue; }
+      if (secaoDoGrupo(x.bloco, x.grupo) === 'estimado') {
+        ep += c(x.previsto ?? 0);
+        if (x.realizado != null) { er += c(x.realizado); temEr = true; }
+        continue;
+      }
       cp += c(x.previsto ?? 0);
       cr += c(x.realizado ?? 0);
     }
     semanas.push({
       de, ate: xs[0].semana_ate ?? de, janelaDe: comFoto.janela_de, janelaAte: comFoto.janela_ate, fotoEm: comFoto.foto_em,
       certoPrevisto: r(cp), certoRealizado: r(cr), certoAcerto: acertoPct(r(cp), r(cr)),
-      estimadoPrevisto: r(ep), foraDaFoto: r(ff),
+      estimadoPrevisto: r(ep), estimadoRealizado: temEr ? r(er) : null, foraDaFoto: r(ff),
       linhas: xs.filter((x) => x.grupo != null || x.bloco != null),
       notas: [...new Set(xs.map((x) => x.nota).filter((n): n is string => !!n))],
     });
