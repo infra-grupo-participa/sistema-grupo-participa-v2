@@ -16,7 +16,7 @@ import { ProgressBar } from '@/shared/ui/components';
 import { fmtBRL, fmtBRLc, fmtData, fmtPrazo } from '@/shared/ui/format';
 import type { BoardHotmart } from '../domain/hotmart';
 import {
-  descreverBoletoAberto, explicarDivergencia, metaACaminho, rotuloParcelamento, temDadoHotmart, valorACaminho,
+  descreverBoletoAberto, explicarDivergencia, metaACaminho, temDadoHotmart, valorACaminho,
 } from '../domain/board-hotmart';
 import { alertaCompraCheia } from '../domain/alerta-compra';
 import { entradaRetorno } from '../domain/entrada-retorno';
@@ -155,7 +155,6 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null, assinatur
   const hm = temDadoHotmart(hotmart) ? hotmart : null;
   const hmDiverge = hm?.diverge === true;
   const hmExplicacao = hm ? explicarDivergencia(hm, fmtBRLc) : null;
-  const hmParcelamento = hm ? rotuloParcelamento(hm.parcelas_max) : null;
   const hmTitle = hm
     ? `Números da Hotmart (não mudam os valores do board).${hm.cards_da_pessoa > 1 ? ` Esta pessoa tem ${hm.cards_da_pessoa} cards: os mesmos números aparecem em cada um.` : ''}`
     : undefined;
@@ -345,6 +344,15 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null, assinatur
             <Icon name="alert" size={10} className="shrink-0" /> <span className="truncate">{alertaCheio.curto}</span>
           </span>
         )}
+        {/* Dívida na Hotmart (parcelas vencidas): mesmo alarme pontual --red; "em dia" não gera selo. */}
+        {hm && hm.parcelas_devidas > 0 && (
+          <span
+            className="inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--red-border)] bg-[var(--red-subtle)] px-1.5 py-0.5 text-[10px] font-semibold tabular text-[var(--red)]"
+            title={`${hmTitle ?? ''} Devendo na Hotmart: ${fmtBRLc(hm.valor_devido)} em ${hm.parcelas_devidas} parcela${hm.parcelas_devidas === 1 ? '' : 's'}.`}
+          >
+            devendo {fmtBRL(hm.valor_devido)}
+          </span>
+        )}
         {hmDiverge && (
           <span
             className="inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-2)]"
@@ -364,25 +372,9 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null, assinatur
         </div>
       )}
 
-      {/* Camada Hotmart: dois números fixos. Sem dado → nada (nunca "R$ 0", que diria "não pagou"). */}
-      {hm && (
-        <div className="relative z-[1] mt-2 grid grid-cols-2 gap-1.5" title={hmTitle}>
-          <div className="rounded-[var(--r-sm)] bg-[var(--surface-2)] px-2 py-1">
-            <div className="text-[9px] font-medium uppercase tracking-wide text-[var(--fg-4)]">Hotmart</div>
-            <div className="truncate text-[11px] font-semibold tabular text-[var(--fg)]">
-              {hm.vendas_pagas > 0 ? fmtBRL(hm.pago_bruto) : 'nada pago'}
-            </div>
-            {hm.vendas_pagas > 0 && hmParcelamento && <div className="truncate text-[9px] text-[var(--fg-4)]">{hmParcelamento}</div>}
-          </div>
-          <div className="rounded-[var(--r-sm)] bg-[var(--surface-2)] px-2 py-1">
-            <div className="text-[9px] font-medium uppercase tracking-wide text-[var(--fg-4)]">Devendo</div>
-            <div className={`truncate text-[11px] font-semibold tabular ${hm.parcelas_devidas > 0 ? 'text-[var(--red)]' : 'text-[var(--fg-3)]'}`}>
-              {hm.parcelas_devidas > 0 ? fmtBRL(hm.valor_devido) : 'em dia'}
-            </div>
-            {hm.parcelas_devidas > 0 && <div className="truncate text-[9px] text-[var(--fg-4)]">{hm.parcelas_devidas} parcela{hm.parcelas_devidas === 1 ? '' : 's'}</div>}
-          </div>
-        </div>
-      )}
+      {/* Camada Hotmart saiu do card em 29/09 (Marcio: card menor, cor como referência visual). "Em dia" não
+          aparece — a cor do card já diz a situação; só a dívida vira selo vermelho na linha de situação.
+          Os números da Hotmart (pago, parcelamento) continuam na ficha. */}
       {hmAssinatura && (
         <div
           className="relative z-[1] mt-1.5"
