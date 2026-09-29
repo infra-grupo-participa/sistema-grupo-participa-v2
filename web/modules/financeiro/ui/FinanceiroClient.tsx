@@ -48,8 +48,11 @@ import { periodoInicialCaixa, type PeriodoCaixa } from './faturamento/CaixaHotma
 import { criarCacheTaxaHotmart } from '../application/carregar-taxa-hotmart';
 import { periodoInicialTaxa, type PeriodoTaxa } from './faturamento/TaxaHotmart';
 import { isoDiasAtras } from './hotmart/comum';
+import { criarCacheEscritorioFunil } from '../application/carregar-escritorio-funil';
+import { EscritorioAba } from './escritorio/EscritorioAba';
+import { hashDaSubAbaEscritorio, subAbaEscritorioDoHash, type SubAbaEscritorio } from './escritorio/hash';
 
-type Tab = 'board' | 'faturamento' | 'visao' | 'receber' | 'funis' | 'relatorios' | 'ofertas';
+type Tab = 'board' | 'faturamento' | 'visao' | 'receber' | 'funis' | 'escritorio' | 'relatorios' | 'ofertas';
 
 const repo = new SupabaseFinanceiroRepository();
 
@@ -109,6 +112,10 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // Idem para a Taxa Hotmart (#faturamento?ver=taxa): auditoria + divergências (só se houver divergente) por período.
   const [periodoTaxa, setPeriodoTaxa] = useState<PeriodoTaxa>(() => periodoInicialTaxa(isoDiasAtras(0)));
   const [cacheTaxa] = useState(() => criarCacheTaxaHotmart(repo));
+  // Aba Escritório (#escritorio?ver=): sub-aba e o cache do funil (1 RPC na 1ª abertura da aba, 1 por linha aberta no
+  // drill-down). Mora aqui porque a aba desmonta a cada troca — voltar a ela não consulta de novo.
+  const [escritorioSub, setEscritorioSub] = useState<SubAbaEscritorio>('funil');
+  const [cacheEscritorio] = useState(() => criarCacheEscritorioFunil(repo));
   const [turma] = useState<string | null>(null); // sem filtro de turma no board novo — todas reunidas, igual ao legado.
   // Metas por turma (fn_fin_metas) não têm tela própria nesta entrega — o
   // board novo não filtra por turma (todas reunidas), e a UI de metas/régua
@@ -233,6 +240,7 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       else if (base === 'receber') { setTab('receber'); setReceberSub(subAbaReceberDoHash(query)); setFiltroReceber(filtroReceberDoHash(query)); }
       else if (base === 'visao') setTab('visao');
       else if (base === 'funis') setTab('funis');
+      else if (base === 'escritorio') { setTab('escritorio'); setEscritorioSub(subAbaEscritorioDoHash(query)); }
       else if (base === 'relatorios') { setTab('relatorios'); setRelatorioInicial(null); }
       else if (base === 'ofertas') setTab('ofertas');
       // A Calculadora de Pro Rata saiu do menu (limpeza, 28/09) e mora em Relatórios; o link antigo abre lá.
@@ -491,6 +499,15 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
     }
   }, [tab, faturamentoSub]);
 
+  // Idem para as sub-abas do Escritório: Funil = #escritorio limpo (o link do menu).
+  useEffect(() => {
+    if (tab !== 'escritorio') return;
+    const novoHash = hashDaSubAbaEscritorio(escritorioSub);
+    if (window.location.hash !== novoHash) {
+      window.history.replaceState(null, '', novoHash);
+    }
+  }, [tab, escritorioSub]);
+
   // Rótulo legível do filtro ativo (nome da ação/canal) — o rodapé usa para
   // deixar explícito que os totais são do recorte, não da carteira (problema 6).
   const rotuloFiltroAtivo = useMemo(() => {
@@ -610,6 +627,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
             <>{VISAO_GERAL.titulo}</>
           ) : tab === 'funis' ? (
             <>Funis <span className="text-[var(--accent)]">e Análise</span></>
+          ) : tab === 'escritorio' ? (
+            <>Setor <span className="text-[var(--accent)]">Escritório</span></>
           ) : (
             <>Ofertas de <span className="text-[var(--accent)]">Cobrança</span></>
           )}
@@ -731,6 +750,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
       )}
 
       {tab === 'funis' && <FunisEAnalise repo={repo} />}
+
+      {tab === 'escritorio' && <EscritorioAba sub={escritorioSub} onSubChange={setEscritorioSub} cacheFunil={cacheEscritorio} />}
 
 
       {tab === 'ofertas' && (

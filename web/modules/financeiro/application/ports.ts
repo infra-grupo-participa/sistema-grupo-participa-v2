@@ -11,6 +11,7 @@ import type {
 import type { FaturamentoAcao, LinhaContratado } from '../domain/faturamento-analise';
 import type { LinhaServicoDiamante } from '../domain/servico-diamante';
 import type { CompradorFunil, Funil } from '../domain/funis';
+import type { LinhaFunilEscritorio, PessoaFunilEscritorio } from '../domain/escritorio-funil';
 import type { PassoTrajetoria } from '../domain/trajetoria';
 import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-card';
 import type { AssinaturaHMBoard, AssinaturaHMSemCard } from '../domain/assinatura-hm';
@@ -87,6 +88,10 @@ export interface FinanceiroRepository {
   loadFunis(): Promise<Funil[]>;
   /** fn_fin_funil_compradores — quem pagou num funil. */
   loadFunilCompradores(eventoId: number): Promise<CompradorFunil[]>;
+  /** fn_fin_escritorio_funil — Sessão → Croqui → HF por evento do escritório + 3 baldes (z92). */
+  loadEscritorioFunil(): Promise<LinhaFunilEscritorio[]>;
+  /** fn_fin_escritorio_funil_pessoas — pessoas de uma linha do funil do escritório (id do evento ou -1/-2/-3). */
+  loadEscritorioFunilPessoas(eventoId: number): Promise<PessoaFunilEscritorio[]>;
   /** Trajetória da pessoa (fn_fin_trajetoria): toda compra, em que funil, desde 2019. */
   loadTrajetoria(email: string): Promise<PassoTrajetoria[]>;
   /** Pagou oferta do Programa e não tem card no board (fn_fin_programa_sem_card). */

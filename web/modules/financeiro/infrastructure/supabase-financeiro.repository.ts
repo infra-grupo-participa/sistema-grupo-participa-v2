@@ -20,6 +20,7 @@ import type {
 import type { FaturamentoAcao, LinhaContratado } from '../domain/faturamento-analise';
 import type { LinhaServicoDiamante } from '../domain/servico-diamante';
 import type { CompradorFunil, Funil } from '../domain/funis';
+import type { LinhaFunilEscritorio, PessoaFunilEscritorio } from '../domain/escritorio-funil';
 import type { PassoTrajetoria } from '../domain/trajetoria';
 import type { OfertaSemCatalogo, PagouSemCard } from '../domain/programa-sem-card';
 import {
@@ -339,6 +340,27 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     const linhas = await this.rpcLista<CompradorFunil>('fn_fin_funil_compradores', { p_evento_id: eventoId },
       'Não foi possível carregar quem pagou neste funil.');
     return linhas.map((c) => ({ ...c, valor: n(c.valor), liquido: n(c.liquido) }));
+  }
+
+  async loadEscritorioFunil(): Promise<LinhaFunilEscritorio[]> {
+    const n = (v: unknown) => Number(v ?? 0) || 0;
+    const nn = (v: unknown) => (v == null ? null : Number(v));
+    const linhas = await this.rpcLista<LinhaFunilEscritorio>('fn_fin_escritorio_funil', {},
+      'Não foi possível carregar o funil do escritório.');
+    return linhas.map((l) => ({
+      ...l, evento_id: n(l.evento_id), sessoes_valor: n(l.sessoes_valor), sessoes_estornos_valor: n(l.sessoes_estornos_valor),
+      croqui_valor: n(l.croqui_valor), hf_valor: n(l.hf_valor), croqui_pct: nn(l.croqui_pct), hf_pct: nn(l.hf_pct),
+      mediana_dias_sessao_croqui: nn(l.mediana_dias_sessao_croqui), mediana_dias_croqui_hf: nn(l.mediana_dias_croqui_hf),
+    }));
+  }
+
+  async loadEscritorioFunilPessoas(eventoId: number): Promise<PessoaFunilEscritorio[]> {
+    const nn = (v: unknown) => (v == null ? null : Number(v));
+    const linhas = await this.rpcLista<PessoaFunilEscritorio>('fn_fin_escritorio_funil_pessoas', { p_evento: eventoId },
+      'Não foi possível carregar as pessoas desta linha do funil.');
+    return linhas.map((p) => ({
+      ...p, sessao_valor: nn(p.sessao_valor), croqui_valor: nn(p.croqui_valor), hf_valor: nn(p.hf_valor),
+    }));
   }
 
   async loadOfertasSemCatalogo(): Promise<OfertaSemCatalogo[]> {

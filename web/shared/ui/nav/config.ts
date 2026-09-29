@@ -98,6 +98,7 @@ export const REPORTS: ReportGroup[] = [
       { key: 'faturamento', label: 'Faturamento', path: '/relatorios/financeiro', hash: '#faturamento', href: '/relatorios/financeiro#faturamento', ico: 'trending-up' },
       { key: 'board', label: 'Board', path: '/relatorios/financeiro', hash: '#board', href: '/relatorios/financeiro#board', ico: 'dashboard' },
       { key: 'funis', label: 'Funis', path: '/relatorios/financeiro', hash: '#funis', href: '/relatorios/financeiro#funis', ico: 'trending-up' },
+      { key: 'escritorio', label: 'Escritório', path: '/relatorios/financeiro', hash: '#escritorio', href: '/relatorios/financeiro#escritorio', ico: 'trending-up' },
       { key: 'ofertas', label: 'Ofertas', path: '/relatorios/financeiro', hash: '#ofertas', href: '/relatorios/financeiro#ofertas', ico: 'banknote' },
       { key: 'relatorios', label: 'Relatórios', path: '/relatorios/financeiro', hash: '#relatorios', href: '/relatorios/financeiro#relatorios', ico: 'file' },
     ],

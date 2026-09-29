@@ -57,7 +57,10 @@ export function FunisEventos({ repo }: { repo: FinanceiroRepository }) {
         <p className="rounded-[var(--r-md)] border border-[var(--yellow)] px-3 py-2 text-xs text-[var(--fg-2)]">
           De 2021 a 2024 a Sessão de Viabilidade e o Croqui foram vendidos nesta conta, e os números estão aqui. De 2025 em diante as
           vendas do escritório estão na conta Hotmart <strong>mcsmarciosa@gmail.com</strong>, que ainda não está conectada: esses
-          seminários mostram só o que foi registrado na época.
+          seminários mostram só o que foi registrado na época.{' '}
+          <a href="#escritorio" className="font-semibold text-[var(--accent)] underline underline-offset-2">
+            Funil Sessão → Croqui → Holding Familiar por evento: aba Escritório
+          </a>
         </p>
       )}
 
