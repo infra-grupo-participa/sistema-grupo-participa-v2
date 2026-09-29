@@ -560,7 +560,7 @@ export const VISAO_GERAL = {
   eventosErro: 'não foi possível conferir',
   projecao: 'Projeção do estimado',
   projecaoLigada: 'ligada',
-  projecaoDesligada: 'desligada: o estimado não entra na previsão',
+  projecaoDesligada: 'desligada: vendas novas, evento e reserva não entram na previsão',
   nenhum: 'nenhum',
   nenhuma: 'nenhuma',
   cobrancas: (n: number) => `${n} ${n === 1 ? 'cobrança' : 'cobranças'}`,
