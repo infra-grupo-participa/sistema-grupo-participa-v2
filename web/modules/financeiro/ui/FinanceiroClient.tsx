@@ -36,6 +36,7 @@ import type { PagouSemCard } from '../domain/programa-sem-card';
 import { criarCacheListasSemCard, listasVisiveis } from '../application/carregar-listas-sem-card';
 import { carregarContasReceber, type ContasReceberCarregado } from '../application/carregar-contas-receber';
 import { ContasAReceber, type EventosEstado, type PremissasEstado } from './receber/ContasAReceber';
+import { FilaOfertasEvento } from './receber/FilaOfertasEvento';
 import { CABECALHO_RECEBER, ESTADOS_RECEBER, EVENTOS_RECEBER, FERIADOS_RECEBER, PREMISSAS_RECEBER, VISAO_GERAL } from './receber/textos';
 import { VisaoGeral } from './receber/VisaoGeral';
 import { carregarVisaoReceber, type VisaoReceberCarregada } from '../application/carregar-visao-receber';
@@ -698,6 +699,13 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
         board ? <Relatorios key={relatorioInicial ?? 'padrao'} tipoInicial={relatorioInicial ?? undefined} contas={contasDoRecorte} produtoLabel={recorteAtivo.produtoLabel} acaoLabel={rotuloFiltroAtivo} turma={turma} canVerDoc={canVerDoc} repo={repo} hotmartPorCard={hotmartPorCard} /> : <Loading label="Carregando…" minHeight={200} />
       )}
 
+      {/* Ofertas a confirmar (z82): 1 chamada ao abrir a aba; some quando não há nenhuma. Fica fora do ternário da grade:
+          aparece mesmo com a previsão carregando ou em erro. Reusa a lista de eventos da sub-aba Eventos (fn_fin_funis). */}
+      {tab === 'receber' && (
+        <FilaOfertasEvento repo={repo} candidatos={eventosReceber.candidatos} erroCandidatos={eventosReceber.erroCandidatos}
+          onPedirCandidatos={pedirCandidatos}
+          onEventoCriado={() => { pedidoCandidatos.current = false; setEventosReceber((s) => ({ ...s, candidatos: null, erroCandidatos: null })); }} />
+      )}
       {tab === 'receber' && (
         erroReceber ? (
           <ErroCarregamento msg={erroReceber} onRetry={() => { setErroReceber(null); setTentativaReceber((t) => t + 1); }} />

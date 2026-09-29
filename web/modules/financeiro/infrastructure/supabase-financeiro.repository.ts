@@ -37,6 +37,7 @@ import {
   normalizarInformado, normalizarResultadoImportacao, type Informado, type InformadoEntrada,
 } from '../domain/recebimentos-informados';
 import { normalizarEventoPlanejado, type EventoPlanejado, type EventoPlanejadoEntrada } from '../domain/eventos-planejados';
+import { argsDecidirOferta, normalizarOfertaFila, type DecisaoOferta, type OfertaFila } from '../domain/fila-ofertas';
 import {
   normalizarFoto, normalizarMudanca, normalizarPrevistoRealizado,
   type FotoReceber, type LinhaPrevistoRealizado, type MudancaReceber,
@@ -115,6 +116,20 @@ export function erroTaxaHotmart(nome: string, error: { code?: string; message?: 
   if (error.code === '22023' && error.message) return error.message;
   if (error.code === 'PGRST202') return 'Auditoria da taxa Hotmart ainda não disponível no banco.';
   return 'Não foi possível carregar a auditoria da taxa Hotmart (erro de rede).';
+}
+
+/**
+ * Erro de fn_fin_decidir_oferta (z82). 42501 = sem gp_pode_ver_financeiro(); 55000 = outra pessoa já decidiu; P0002 =
+ * saiu da fila ou o evento escolhido não existe; 22023/23505 = validação ou "já existe / já ligada" com mensagem do SQL
+ * em português. O log leva só o código.
+ */
+export function erroDecidirOferta(error: { code?: string; message?: string }): string {
+  logQueryError('fn_fin_decidir_oferta', { message: `código ${error.code ?? 'desconhecido'}` });
+  if (error.code === '42501') return 'Sem permissão para decidir as ofertas do financeiro.';
+  if (error.code === '55000') return 'Outra pessoa já decidiu esta oferta. A lista foi atualizada.';
+  if ((error.code === '22023' || error.code === '23505' || error.code === 'P0002') && error.message) return error.message;
+  if (error.code === 'PGRST202') return 'Não foi possível decidir a oferta: recurso ainda não disponível no banco.';
+  return 'Não foi possível gravar a decisão (erro de rede). Tente de novo.';
 }
 
 export class SupabaseFinanceiroRepository implements FinanceiroRepository {
@@ -498,6 +513,21 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     const { error } = await this.db().rpc('fn_fin_evento_planejado_arquivar', { p_id: id, p_motivo: motivo });
     if (error) return erroPara(erroPremissa('arquivarEventoPlanejado', error, 'arquivar o evento planejado'));
     return { ok: true, msg: 'Evento planejado arquivado.' };
+  }
+
+  // ── Ofertas a confirmar (z82) ───────────────────────────────────────────
+  async carregarFilaOfertas(): Promise<OfertaFila[]> {
+    const { data, error } = await this.db().rpc('fn_fin_fila_ofertas');
+    if (error) throw new Error(erroLeituraReceber('fn_fin_fila_ofertas', error, 'carregar as ofertas a confirmar'));
+    return ((data as Record<string, unknown>[] | null) ?? []).map(normalizarOfertaFila);
+  }
+
+  async decidirOferta(codigo: string, decisao: DecisaoOferta): Promise<Resultado & { recarregar?: boolean }> {
+    const { data, error } = await this.db().rpc('fn_fin_decidir_oferta', argsDecidirOferta(codigo, decisao));
+    if (error) return { ...erroPara(erroDecidirOferta(error)), recarregar: ['P0002', '55000', '23505'].includes(error.code ?? '') };
+    const r = (data ?? {}) as Record<string, unknown>;
+    if (r.status === 'rejeitada') return { ok: true, msg: 'Marcada como venda fora de evento.' };
+    return { ok: true, msg: r.evento_criado === true ? 'Evento criado e vendas ligadas a ele.' : 'Vendas ligadas ao evento.' };
   }
 
   // ── Fotografia semanal da previsão (z69) ─────────────────────────────────

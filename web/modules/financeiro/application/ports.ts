@@ -21,6 +21,7 @@ import type { EventoPlanejado, EventoPlanejadoEntrada } from '../domain/eventos-
 import type { LinhaCaixaHotmart, TotaisCaixaHotmart } from '../domain/caixa-hotmart';
 import type { DivergenciaTaxa } from '../domain/taxa-hotmart';
 import type { Informado, InformadoEntrada, ResultadoLinhaImportacao } from '../domain/recebimentos-informados';
+import type { DecisaoOferta, OfertaFila } from '../domain/fila-ofertas';
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
 export interface Resultado {
@@ -158,6 +159,13 @@ export interface FinanceiroRepository {
   arquivarInformado(id: string, motivo: string): Promise<Resultado>;
   /** fn_fin_informados_importar(p_linhas, p_simular) — simular = prévia sem gravar; gravar = tudo ou nada. */
   importarInformados(linhas: InformadoEntrada[], simular: boolean): Promise<ImportacaoInformados>;
+
+  // ── Ofertas a confirmar (z82) — guarda gp_pode_ver_financeiro nas duas (quem vê o Financeiro decide) ──
+  /** fn_fin_fila_ofertas() — pendentes, até 50, mais vendas primeiro. Erro vira exceção com mensagem simples. */
+  carregarFilaOfertas(): Promise<OfertaFila[]>;
+  /** fn_fin_decidir_oferta(p_oferta, p_evento_id | p_criar | p_rejeitar) — exatamente uma ação. `recarregar` = a oferta
+   *  já foi decidida/ligada por outra pessoa ou saiu da fila: a lista na tela está velha. */
+  decidirOferta(codigo: string, decisao: DecisaoOferta): Promise<Resultado & { recarregar?: boolean }>;
 
   // ── Protocolo dos relatórios em PDF (fn_fin_relatorio_*, 20260928z50) ───
   /** fn_fin_relatorio_emitir — grava a emissão e devolve o protocolo GP-REL-AAAA-NNNNNN. */

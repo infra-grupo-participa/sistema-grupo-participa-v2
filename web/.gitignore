@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# e2e (Playwright): sessão do robô e artefatos
+/e2e/.auth/
+/e2e/.resultados/
