@@ -20,11 +20,19 @@ export interface ColunaPdf {
   pii: ClassePii;
   /** Largura relativa (flex). Padrão 1. */
   peso?: number;
+  /**
+   * Coluna pessoal que NÃO some no nível sem_dado_pessoal: lá, cada célula vira o texto de
+   * `LinhaPdf.anonimas[chave]` (ex.: "Pessoa 3", estável por contrato), ou vazio se a linha não trouxer.
+   * O valor original nunca sai fora do nível completo. Só vale em seção de detalhe.
+   */
+  anonimavel?: boolean;
 }
 
 export interface LinhaPdf {
   /** Texto por chave de coluna. Ausente/'' sai como travessão. Pode ter '\n'. */
   celulas: Record<string, string>;
+  /** Substitutas das células das colunas `anonimavel` no nível sem_dado_pessoal (por chave de coluna). */
+  anonimas?: Record<string, string>;
 }
 
 export interface SecaoPdf {
@@ -61,7 +69,7 @@ export interface ItemRecorte {
 }
 
 /** Mesmos valores do check de fin.relatorios_emitidos.tipo. */
-export type TipoRelatorioPdf = 'board' | 'pessoas' | 'conciliacao' | 'identidade' | 'acelera' | 'prorata';
+export type TipoRelatorioPdf = 'board' | 'pessoas' | 'conciliacao' | 'identidade' | 'acelera' | 'prorata' | 'receber';
 
 /** O que o mapeador devolve: ainda sem nível aplicado e sem protocolo. */
 export interface RascunhoRelatorio {

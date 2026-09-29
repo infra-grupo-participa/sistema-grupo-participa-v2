@@ -3,21 +3,23 @@ import path from 'node:path';
 import { createElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { aplicarNivel } from '@/shared/ui/pdf/nivel';
+import { aplicarNivel, prepararParaPdf } from '@/shared/ui/pdf/nivel';
 import { DocumentoPdf } from '@/shared/ui/pdf/DocumentoPdf';
 import { recorteParaEmissao } from '@/shared/ui/pdf/gerar-pdf';
 import { contarPaginasPdf } from '@/shared/ui/pdf/bytes-pdf';
 import { larguraUtil, layoutTabela, linhasCabecalho, linhasCelula, textoCelula } from '@/shared/ui/pdf/paginar';
 import { createRequire } from 'node:module';
-import type { NivelPii, RascunhoRelatorio } from '@/shared/ui/pdf/modelo';
+import type { NivelPii, RascunhoRelatorio, SecaoPdf } from '@/shared/ui/pdf/modelo';
 import type { ContaReceber } from '../../domain/types';
 import type { AceleraParaHM, BoardHotmart, DivergenciaHotmart, IdentidadeRevisao, PessoaHotmart, ProrataHM } from '../../domain/hotmart';
 import { COLUNAS_PADRAO, COLUNAS_RELATORIO, montarRelatorio } from '../../application/montar-relatorio';
 import {
   NIVEIS_RELATORIO, PII_COLUNA_BOARD,
-  rascunhoAcelera, rascunhoCarteira, rascunhoConciliacao, rascunhoIdentidade, rascunhoPessoas, rascunhoProrata,
+  rascunhoAcelera, rascunhoCarteira, rascunhoConciliacao, rascunhoIdentidade, rascunhoPessoas, rascunhoProrata, rascunhoReceber,
   recorteAcelera, recorteCarteira, recorteConciliacao, recortePessoas, recorteProrata,
 } from './documentos';
+import { montarContasReceber } from '../../application/carregar-contas-receber';
+import { normalizarLinhaReceber } from '../../domain/contas-receber';
 
 // ─── Fixtures com dado pessoal reconhecível ───────────────────────────────────
 // Os literais abaixo NÃO podem aparecer no documento fora do nível completo.
@@ -360,6 +362,134 @@ describe('os 6 relatórios desenham (renderToBuffer)', () => {
         expect(contarPaginasPdf(new Uint8Array(buf))).toBeGreaterThanOrEqual(1);
         if (saida) writeFileSync(path.join(saida, `${r.tipo}-${nivel}.pdf`), buf);
       }
+    }
+  }, 60_000);
+});
+
+// ─── 7. Contas a receber (F5) ──────────────────────────────────────────────────
+describe('contas a receber (rascunhoReceber)', () => {
+  const HOT = '1. Receita de vendas (Hotmart)';
+  const DIR = '4. Receita de vendas (Direta de clientes)';
+  const DEV = '3. (Devoluções)';
+  // Linhas como o banco devolve, pelo mesmo caminho do repositório. Nomes reconhecíveis nos blocos de pessoa (2, 5).
+  const bruto: Record<string, unknown>[] = [
+    { bloco: 1, grupo: 'Vendas já realizadas', componente: 'antecipacao', data_caixa: '2026-09-29', valor: '1000', situacao: 'a_receber',
+      certeza: 'certo', centro_custo: HOT, tratamento: 'Antecipação D+2 útil', detalhe: [{ transacao: 'HP1', nome: PII.nome2, liquido: 1100 }] },
+    { bloco: 2, grupo: 'Parcelas a vencer HM', componente: 'antecipacao', data_caixa: '2026-10-05', valor: '85.74', valor_bruto: '100',
+      fator: '0.857375', situacao: 'a_receber', origem_dia: '2026-10-03', ref: 'opaca-A', rotulo: PII.nome, produto: 'Holding Masters',
+      certeza: 'certo', centro_custo: HOT, tratamento: 'Perda 5%/mês' },
+    { bloco: 2, grupo: 'Parcelas a vencer HM', componente: 'garantia', data_caixa: '2026-11-03', valor: '10', situacao: 'a_receber',
+      origem_dia: '2026-10-03', ref: 'opaca-A', rotulo: PII.nome, produto: 'Holding Masters', certeza: 'certo', centro_custo: HOT },
+    { bloco: 2, grupo: 'Parcelas a vencer HM', componente: 'cheio', data_caixa: null, valor: '300', situacao: 'realizada',
+      origem_dia: '2026-09-01', ref: 'opaca-B', rotulo: 'Bruno Realizado', certeza: 'certo', centro_custo: HOT },
+    { bloco: 5, grupo: 'Renovações Diamante', componente: 'cheio', data_caixa: '2026-10-10', valor: '5000', situacao: 'a_receber',
+      ref: '11', rotulo: PII.nome2, certeza: 'certo', centro_custo: DIR },
+    { bloco: 3, grupo: 'Outros produtos', componente: 'cheio', data_caixa: null, valor: null, valor_bruto: null, situacao: 'sem_base',
+      ref: 'vn:outros', rotulo: 'sem base', certeza: 'estimado', centro_custo: HOT, tratamento: 'Sem sugestão medida' },
+    { bloco: 3, grupo: 'HM avulso', componente: 'antecipacao', data_caixa: '2026-10-01', valor: '500.50', situacao: 'a_receber',
+      ref: 'vn:hm_avulso', rotulo: 'mediana 12 sem', certeza: 'estimado', centro_custo: HOT },
+    { bloco: 6, grupo: 'Reserva de reembolso e chargeback', componente: 'reserva', data_caixa: '2026-10-01', valor: '-19.47',
+      situacao: 'a_receber', ref: 'reserva', rotulo: 'taxa medida em 9 meses', certeza: 'estimado', centro_custo: DEV },
+    { bloco: 8, grupo: 'Informativo: acordos no board', componente: 'cheio', data_caixa: '2026-10-01', valor: '7000',
+      situacao: 'informativo', ref: '11', rotulo: 'Pessoa Board', certeza: 'informativo', centro_custo: null },
+  ];
+  const dados = montarContasReceber(bruto.map(normalizarLinhaReceber), '2026-09-28', 'conservador');
+  const r = rascunhoReceber(dados);
+  const secao = (doc: { secoes: SecaoPdf[] }, prefixo: string) => doc.secoes.find((s) => s.titulo.startsWith(prefixo))!;
+
+  it('capa: tipo receber, 3 níveis, cenário, corte e horizonte no recorte gravado; KPIs certo e estimado', () => {
+    expect(r.tipo).toBe('receber');
+    expect(NIVEIS_RELATORIO.receber).toEqual(['completo', 'sem_dado_pessoal', 'so_numeros']);
+    expect(r.niveisPermitidos).toEqual(NIVEIS_RELATORIO.receber);
+    expect(recorteParaEmissao(r)).toEqual({
+      filtros: ['Cenário: Conservador', 'Corte: 28/09/2026', `Horizonte: 28/09/2026 a 30/11/2026 · ${dados.grade.semanas.length} semanas`],
+    });
+    expect(r.kpis?.find((k) => k.rotulo === 'A receber no período')?.valor).toMatch(/^R\$\s6\.576,77$/);
+    expect(r.kpis?.find((k) => k.rotulo === 'Certo')?.valor).toMatch(/^R\$\s6\.095,74$/);
+    expect(r.kpis?.find((k) => k.rotulo === 'Estimado')?.valor).toMatch(/^R\$\s481,03$/);
+  });
+
+  it('resumo mensal certo × estimado fecha com a grade', () => {
+    const s = secao(r, 'Resumo mensal');
+    expect(s.linhas.map((l) => l.celulas.mes)).toEqual(['set/2026', 'out/2026', 'nov/2026']);
+    expect(s.linhas[1].celulas.certo).toMatch(/^R\$\s5\.085,74$/);
+    expect(s.linhas[1].celulas.estimado).toMatch(/^R\$\s481,03$/);
+    expect(s.linhas[2].celulas.estimado).toBe(''); // zero = travessão
+    expect(s.linhas[2].celulas.acumulado).toMatch(/^R\$\s6\.576,77$/);
+    expect(s.total?.total).toMatch(/^R\$\s6\.576,77$/);
+  });
+
+  it('por centro de custo × mês: os 3 centros de entrada, total igual ao da grade', () => {
+    const s = secao(r, 'Entradas por centro');
+    expect(s.colunas.slice(1, 4).map((c) => c.rotulo)).toEqual([HOT, DIR, DEV]);
+    expect(s.total?.total).toMatch(/^R\$\s6\.576,77$/);
+  });
+
+  it('semana × bloco: uma linha por semana de domain/contas-receber, colunas por bloco, informativo à parte', () => {
+    const s = secao(r, 'Semana × bloco');
+    expect(s.linhas).toHaveLength(dados.grade.semanas.length);
+    expect(s.linhas[0].celulas.semana).toBe('S1');
+    expect(s.colunas.map((c) => c.chave)).toEqual(['semana', 'periodo', 'b1', 'b2', 'b3', 'b5', 'b6', 'certo', 'estimado', 'total', 'acumulado', 'info']);
+    expect(s.total?.total).toMatch(/^R\$\s6\.576,77$/);
+    expect(s.total?.info).toMatch(/^R\$\s7\.000,00$/);
+  });
+
+  it('fora da soma: realizada contada, sem base listada', () => {
+    const txt = secao(r, 'Fora da soma').linhas.map((l) => l.celulas.situacao);
+    expect(txt).toContain('Realizada');
+    expect(txt.some((t) => /^Sem base medida: 3\. Outros produtos/.test(t))).toBe(true);
+    expect(txt).not.toContain('Sem base medida'); // sem contagem duplicada: o grupo já está listado
+  });
+
+  it('anexo: só a_receber; completo com nome; sem dado pessoal = "Pessoa N" estável por contrato; só números sem anexo', () => {
+    const anexo = secao(r, 'Anexo');
+    expect(anexo.linhas).toHaveLength(6);
+    expect(anexo.total?.esperado).toMatch(/^R\$\s6\.576,77$/);
+    expect(secao(aplicarNivel(r, 'completo'), 'Anexo').linhas.map((l) => l.celulas.descricao)).toContain(PII.nome);
+
+    const sem = aplicarNivel(r, 'sem_dado_pessoal');
+    const a = secao(sem, 'Anexo');
+    const desc = a.linhas.map((l) => [l.celulas.bloco, l.celulas.descricao]);
+    // bloco 2 (duas linhas do mesmo contrato) = Pessoa 1 nas duas; bloco 5 = Pessoa 2; blocos 1, 3 e 6 mantêm a base
+    expect(desc.filter(([b]) => b === '2').map(([, d]) => d)).toEqual(['Pessoa 1', 'Pessoa 1']);
+    expect(desc.find(([b]) => b === '5')?.[1]).toBe('Pessoa 2');
+    expect(desc.find(([b]) => b === '3')?.[1]).toBe('mediana 12 sem');
+    expect(a.colunas.every((c) => c.pii === 'nenhuma')).toBe(true);
+    const tudo = JSON.stringify(sem);
+    for (const f of FRAGMENTOS_PII) expect(tudo, `vazou "${f}"`).not.toContain(f);
+
+    const so = aplicarNivel(r, 'so_numeros');
+    expect(so.secoes.every((s) => s.tipo === 'resumo')).toBe(true);
+    expect(JSON.stringify(so)).not.toContain(PII.nome);
+  });
+
+  it('acima de 2.000 linhas a receber: só totais, aviso aponta para a planilha (CSV da Base auditável)', () => {
+    const muitas = Array.from({ length: 2001 }, (_, i) => normalizarLinhaReceber({
+      bloco: 2, grupo: 'Parcelas a vencer HM', componente: 'cheio', data_caixa: '2026-10-05', valor: '10', situacao: 'a_receber',
+      origem_dia: '2026-10-05', ref: `c${i}`, rotulo: `Pessoa real ${i}`, centro_custo: HOT,
+    }));
+    const p = prepararParaPdf(rascunhoReceber(montarContasReceber(muitas, '2026-09-28')), 'completo');
+    expect(p.linhasDaLista).toBe(2001);
+    expect(p.linhasImpressas).toBe(0);
+    expect(p.documento.avisoSoTotais).toMatch(/planilha/);
+    expect(JSON.stringify(p.documento)).not.toContain('Pessoa real');
+  });
+
+  it('desenha %PDF nos 3 níveis e a data cabe numa linha', async () => {
+    for (const s of r.secoes) {
+      const layout = layoutTabela(s);
+      s.colunas.forEach((c, i) => {
+        if (c.tipo === 'data') expect(linhasCelula(layout, i, '10/02/2025'), c.rotulo).toHaveLength(1);
+      });
+    }
+    const publico = path.resolve(__dirname, '../../../../public') + path.sep;
+    const saida = process.env.PDF_SAIDA;
+    for (const nivel of r.niveisPermitidos) {
+      const doc = { ...aplicarNivel(r, nivel), protocolo: 'GP-REL-2026-000008', emitidoEm: '2026-09-28T13:00:00Z' };
+      const buf = await renderToBuffer(createElement(DocumentoPdf, { doc, recursos: { base: publico } }) as Parameters<typeof renderToBuffer>[0]);
+      expect(buf.subarray(0, 5).toString('latin1'), nivel).toBe('%PDF-');
+      expect(contarPaginasPdf(new Uint8Array(buf))).toBeGreaterThanOrEqual(1);
+      if (saida) { mkdirSync(saida, { recursive: true }); writeFileSync(path.join(saida, `receber-${nivel}.pdf`), buf); }
     }
   }, 60_000);
 });

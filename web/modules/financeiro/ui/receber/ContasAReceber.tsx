@@ -24,6 +24,9 @@ import { Informados, type RepoInformados } from './Informados';
 import { Premissas, type RepoPremissas } from './Premissas';
 import { Eventos, type RepoEventos } from './Eventos';
 import { BaseAuditavel } from './BaseAuditavel';
+import { BotaoExportarPdf } from '@/shared/ui/pdf/BotaoExportarPdf';
+import { NIVEIS_RELATORIO, rascunhoReceber } from '../pdf/documentos';
+import { chamadasProtocoloFinanceiro } from '../pdf/protocolo';
 import { rotuloBloco, rotuloComponente, rotuloMes } from './rotulos-receber';
 import {
   CENARIO_RECEBER, ESCOPO_RECEBER, ESTADOS_RECEBER, GRADE_RECEBER, ROTULOS_TOTAL, SECOES_RECEBER, SUBABAS_RECEBER,
@@ -609,6 +612,12 @@ export function ContasAReceber({
       {subAtiva === 'semana' && (
         <div id="receber-painel-semana" role="tabpanel" aria-labelledby="receber-tab-semana" className="space-y-3">
           {onCenario && <SeletorCenario cenario={cenario} onCenario={(c) => { setCelula(null); onCenario(c); }} />}
+          {/* PDF oficial (F5): as linhas já carregadas do cenário ativo; a única chamada é a emissão do protocolo, no clique.
+              Sem grade (carregando, recebimento desligado ou vazia) não há documento: zero ali não é dado. */}
+          {dados && grade && !dados.desligado && grade.linhas.length > 0 && (
+            <BotaoExportarPdf montar={() => rascunhoReceber(dados)} niveis={NIVEIS_RELATORIO.receber}
+              chamadas={chamadasProtocoloFinanceiro()} rotulo="Gerar PDF oficial" />
+          )}
           {!dados || !grade ? (
             <p role="status" className="text-xs text-[var(--fg-3)]">{GRADE_RECEBER.carregandoCenario}</p>
           ) : dados.desligado ? (

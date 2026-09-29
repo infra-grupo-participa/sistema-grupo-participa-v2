@@ -5,6 +5,7 @@
 //                       mesmo para quem tem gp_pode_ver_cpf() e vê o CPF cru na tela.
 //   sem_dado_pessoal  → some toda coluna com pii ≠ 'nenhuma'; seção cujas linhas
 //                       são pessoas ganha "Pessoa 1", "Pessoa 2"… na ordem da lista.
+//                       Coluna `anonimavel` fica, com o substituto da linha (LinhaPdf.anonimas).
 //   so_numeros        → some toda seção de detalhe; ficam KPIs e seções de resumo.
 //
 // Busca livre no recorte (quase sempre nome de aluno) só aparece no nível completo.
@@ -37,6 +38,9 @@ function validar(r: RascunhoRelatorio, nivel: NivelPii): void {
     if (s.tipo === 'resumo' && s.colunas.some((c) => c.pii !== 'nenhuma')) {
       throw new Error(`Seção de resumo "${s.titulo}" não pode ter coluna com dado pessoal.`);
     }
+    if (s.tipo !== 'detalhe' && s.colunas.some((c) => c.anonimavel)) {
+      throw new Error(`Seção "${s.titulo}": coluna anonimavel só vale em seção de detalhe.`);
+    }
     if (s.linhasSaoPessoas && s.tipo !== 'detalhe') {
       throw new Error(`Seção "${s.titulo}": linhasSaoPessoas só vale em seção de detalhe.`);
     }
@@ -61,12 +65,21 @@ function mascararSecao(s: SecaoPdf): SecaoPdf {
 }
 
 function semDadoPessoal(s: SecaoPdf): SecaoPdf {
-  const ficam = s.colunas.filter((c) => c.pii === 'nenhuma');
-  const chaves = new Set(ficam.map((c) => c.chave));
+  // Coluna pessoal `anonimavel` fica, mas com o texto substituto da linha (nunca o original).
+  const anonimaveis = new Set(s.colunas.filter((c) => c.pii !== 'nenhuma' && c.anonimavel).map((c) => c.chave));
+  const ficam: ColunaPdf[] = s.colunas
+    .filter((c) => c.pii === 'nenhuma' || anonimaveis.has(c.chave))
+    .map((c) => (anonimaveis.has(c.chave) ? { chave: c.chave, rotulo: c.rotulo, tipo: c.tipo, pii: 'nenhuma', peso: c.peso } : c));
+  const chaves = new Set(s.colunas.filter((c) => c.pii === 'nenhuma').map((c) => c.chave));
   const filtrar = (cel: Record<string, string>) =>
     Object.fromEntries(Object.entries(cel).filter(([k]) => chaves.has(k)));
+  const celulas = (l: LinhaPdf) => {
+    const out = filtrar(l.celulas);
+    for (const k of anonimaveis) out[k] = l.anonimas?.[k] ?? '';
+    return out;
+  };
   const linhas: LinhaPdf[] = s.linhas.map((l, i) => ({
-    celulas: s.linhasSaoPessoas ? { [COLUNA_PSEUDONIMO.chave]: `Pessoa ${i + 1}`, ...filtrar(l.celulas) } : filtrar(l.celulas),
+    celulas: s.linhasSaoPessoas ? { [COLUNA_PSEUDONIMO.chave]: `Pessoa ${i + 1}`, ...celulas(l) } : celulas(l),
   }));
   return {
     ...s,

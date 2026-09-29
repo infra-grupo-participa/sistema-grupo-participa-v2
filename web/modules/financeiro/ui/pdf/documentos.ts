@@ -1,4 +1,4 @@
-// Mapeadores dos 6 relatórios do Financeiro para o modelo neutro do PDF.
+// Mapeadores dos 7 relatórios do Financeiro para o modelo neutro do PDF.
 //
 // Regras:
 //  - Recebem a LISTA JÁ FILTRADA da tela (a mesma do CSV/Excel) — nenhuma busca nova.
@@ -10,7 +10,7 @@
 //    sobre a base inteira: o documento declara o recorte no cabeçalho.
 //  - Sem protocolo: o protocolo nasce na emissão (gerarPdfComProtocolo).
 import type {
-  ClassePii, ColunaPdf, ItemRecorte, LinhaPdf, NivelPii, RascunhoRelatorio, SecaoPdf, TipoRelatorioPdf,
+  ClassePii, ColunaPdf, ItemRecorte, KpiPdf, LinhaPdf, NivelPii, RascunhoRelatorio, SecaoPdf, TipoRelatorioPdf,
 } from '@/shared/ui/pdf/modelo';
 import { fmtBRL, fmtBRLc, fmtData } from '@/shared/ui/format';
 import type { ContaReceber } from '../../domain/types';
@@ -24,6 +24,13 @@ import {
 import type { DatasetRelatorio } from '../../application/montar-relatorio';
 import { formatarCelulaTela } from '../exportar';
 import { MOTIVO_SUGESTAO, ROTULO_DIVERGENCIA, rotuloEvidencia } from '../hotmart/rotulos';
+import type { ContasReceberCarregado } from '../../application/carregar-contas-receber';
+import { BLOCO_INFORMATIVO, secaoDoBloco } from '../../domain/contas-receber';
+import {
+  FILTRO_BASE_PADRAO, fatorCsv, filtrarBase, pseudonimizadorBase, resumoCentroMes, rotuloSemanaDaLinha, somarBase,
+} from '../receber/base-auditavel';
+import { rotuloBloco, rotuloComponente, rotuloMes, rotuloSituacaoLinha } from '../receber/rotulos-receber';
+import { CENARIO_RECEBER } from '../receber/textos';
 
 /** Níveis aceitos por relatório — fonte única para o rascunho E para o seletor do botão. */
 export const NIVEIS_RELATORIO: Record<TipoRelatorioPdf, NivelPii[]> = {
@@ -34,6 +41,7 @@ export const NIVEIS_RELATORIO: Record<TipoRelatorioPdf, NivelPii[]> = {
   identidade: ['completo'],
   acelera: ['completo', 'sem_dado_pessoal', 'so_numeros'],
   prorata: ['completo', 'sem_dado_pessoal', 'so_numeros'],
+  receber: ['completo', 'sem_dado_pessoal', 'so_numeros'],
 };
 
 const n = (v: unknown) => Number(v ?? 0) || 0;
@@ -467,5 +475,219 @@ export function rascunhoProrata(lista: ProrataHM[], recorte: ItemRecorte[]): Ras
         vazio: 'Ninguém neste recorte.',
       },
     ],
+  };
+}
+
+// ─── 7. Contas a receber (Previsão de caixa, F5) ───────────────────────────────
+// Sai das linhas JÁ CARREGADAS do cenário ativo (a mesma resposta de fn_fin_receber_semanal que monta a grade e a Base
+// auditável): nenhuma consulta nova além da emissão do protocolo. Semanas, soma e resumo por centro de custo vêm das
+// MESMAS funções da tela (domain/contas-receber.ts, ui/receber/base-auditavel.ts). Só 'a_receber' soma.
+// Dado pessoal: a única coluna pessoal é a Descrição do anexo (nome do contrato, cliente do informado, nome do card);
+// no nível sem_dado_pessoal ela vira "Pessoa N" estável por contrato/cadastro (pseudonimizadorBase, a regra do CSV).
+
+/** Valor da grade: zero sai como travessão (igual ao '–' da tela). */
+const moedaGrade = (v: number) => (Math.round(v * 100) === 0 ? '' : fmtBRLc(v));
+const ddmm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+const centavos = (v: number) => Math.round(v * 100);
+const qtd = (v: number) => v.toLocaleString('pt-BR');
+
+export function rascunhoReceber(dados: ContasReceberCarregado): RascunhoRelatorio {
+  const g = dados.grade;
+  const sems = g.semanas;
+  const cenario = CENARIO_RECEBER[dados.cenario] ?? dados.cenario;
+  const inicio = sems[0]?.inicio ?? dados.hojeISO;
+  const fim = sems[sems.length - 1]?.fim ?? dados.hojeISO;
+  const recorte: ItemRecorte[] = [
+    { rotulo: 'Cenário', valor: cenario },
+    { rotulo: 'Corte', valor: fmtData(dados.hojeISO) },
+    { rotulo: 'Horizonte', valor: `${fmtData(inicio)} a ${fmtData(fim)} · ${plural(sems.length, 'semana', 'semanas')}` },
+  ];
+
+  // Resumo mensal certo × estimado (os meses da grade; a semana nunca cruza mês).
+  let acum = 0;
+  const porMes = g.meses.map((m) => {
+    const certo = m.semanas.reduce((x, i) => x + centavos(g.certoPorSemana[i]), 0);
+    const est = m.semanas.reduce((x, i) => x + centavos(g.estimadoPorSemana[i]), 0);
+    acum += certo + est;
+    return { mes: m.mes, certo: certo / 100, est: est / 100, total: (certo + est) / 100, acum: acum / 100 };
+  });
+  const resumoMensal: SecaoPdf = {
+    titulo: 'Resumo mensal: certo × estimado', tipo: 'resumo',
+    colunas: [
+      { chave: 'mes', rotulo: 'Mês', tipo: 'texto', pii: 'nenhuma' },
+      { chave: 'certo', rotulo: 'Certo', tipo: 'moeda', pii: 'nenhuma' },
+      { chave: 'estimado', rotulo: 'Estimado', tipo: 'moeda', pii: 'nenhuma' },
+      { chave: 'total', rotulo: 'Total do mês', tipo: 'moeda', pii: 'nenhuma' },
+      { chave: 'acumulado', rotulo: 'Acumulado', tipo: 'moeda', pii: 'nenhuma' },
+    ],
+    linhas: porMes.map((m) => ({
+      celulas: {
+        mes: rotuloMes(m.mes), certo: moedaGrade(m.certo), estimado: moedaGrade(m.est), total: moedaGrade(m.total), acumulado: fmtBRLc(m.acum),
+      },
+    })),
+    total: porMes.length
+      ? { mes: 'Total', certo: fmtBRLc(g.certoTotal), estimado: fmtBRLc(g.estimadoTotal), total: fmtBRLc(g.total) }
+      : undefined,
+    vazio: 'Nada a receber no período.',
+  };
+
+  // Por centro de custo: linhas = mês, colunas = centro (o horizonte pode passar de 12 meses; os centros são poucos).
+  const cc = resumoCentroMes(dados.linhas);
+  const colCentro = (i: number) => `cc${i}`;
+  const resumoCentro: SecaoPdf = {
+    titulo: 'Entradas por centro de custo × mês (valor esperado)', tipo: 'resumo',
+    colunas: [
+      { chave: 'mes', rotulo: 'Mês', tipo: 'texto', pii: 'nenhuma' },
+      ...cc.linhas.map((l, i): ColunaPdf => ({
+        chave: colCentro(i), rotulo: l.centro ?? 'Sem centro de custo', tipo: 'moeda', pii: 'nenhuma', peso: 1.3,
+      })),
+      { chave: 'total', rotulo: 'Total de entradas', tipo: 'moeda', pii: 'nenhuma' },
+    ],
+    linhas: cc.meses.map((m, j) => ({
+      celulas: {
+        mes: rotuloMes(m),
+        ...Object.fromEntries(cc.linhas.map((l, i) => [colCentro(i), moedaGrade(l.porMes[j])])),
+        total: moedaGrade(cc.totalPorMes[j]),
+      },
+    })),
+    total: cc.meses.length
+      ? { mes: 'Total', ...Object.fromEntries(cc.linhas.map((l, i) => [colCentro(i), fmtBRLc(l.total)])), total: fmtBRLc(cc.total) }
+      : undefined,
+    vazio: 'Nenhuma linha a receber com data de caixa.',
+  };
+
+  // Grade semana × bloco: linhas = semana, colunas = bloco (as semanas de domain/contas-receber.ts).
+  const temEstimado = g.blocos.some((b) => secaoDoBloco(b.bloco) === 'estimado');
+  const colBloco = (b: number) => `b${b}`;
+  const info = g.informativo;
+  const colunasGrade: ColunaPdf[] = [
+    { chave: 'semana', rotulo: 'Semana', tipo: 'texto', pii: 'nenhuma', peso: 0.6 },
+    { chave: 'periodo', rotulo: 'Período', tipo: 'texto', pii: 'nenhuma', peso: 1.2 },
+    ...g.blocos.map((b): ColunaPdf => ({ chave: colBloco(b.bloco), rotulo: `${b.bloco}. ${rotuloBloco(b.bloco)}`, tipo: 'moeda', pii: 'nenhuma' })),
+  ];
+  if (temEstimado) {
+    colunasGrade.push(
+      { chave: 'certo', rotulo: 'Certo', tipo: 'moeda', pii: 'nenhuma' },
+      { chave: 'estimado', rotulo: 'Estimado', tipo: 'moeda', pii: 'nenhuma' },
+    );
+  }
+  colunasGrade.push(
+    { chave: 'total', rotulo: 'Total', tipo: 'moeda', pii: 'nenhuma' },
+    { chave: 'acumulado', rotulo: 'Acumulado', tipo: 'moeda', pii: 'nenhuma' },
+  );
+  if (info) colunasGrade.push({ chave: 'info', rotulo: `${BLOCO_INFORMATIVO}. Informativo (fora da soma)`, tipo: 'moeda', pii: 'nenhuma' });
+  const gradeSemana: SecaoPdf = {
+    titulo: 'Semana × bloco (valor esperado)', tipo: 'resumo',
+    colunas: colunasGrade,
+    linhas: sems.map((s, i) => ({
+      celulas: {
+        semana: `S${s.n}`,
+        periodo: s.inicio === s.fim ? ddmm(s.inicio) : `${ddmm(s.inicio)} a ${ddmm(s.fim)}`, // o ano está no horizonte
+        ...Object.fromEntries(g.blocos.map((b) => [colBloco(b.bloco), moedaGrade(b.porSemana[i])])),
+        ...(temEstimado ? { certo: moedaGrade(g.certoPorSemana[i]), estimado: moedaGrade(g.estimadoPorSemana[i]) } : {}),
+        total: moedaGrade(g.totalPorSemana[i]),
+        acumulado: fmtBRLc(g.acumuladoPorSemana[i]),
+        ...(info ? { info: moedaGrade(info.porSemana[i]) } : {}),
+      },
+    })),
+    total: sems.length
+      ? {
+        semana: 'Total',
+        ...Object.fromEntries(g.blocos.map((b) => [colBloco(b.bloco), fmtBRLc(b.total)])),
+        ...(temEstimado ? { certo: fmtBRLc(g.certoTotal), estimado: fmtBRLc(g.estimadoTotal) } : {}),
+        total: fmtBRLc(g.total),
+        ...(info ? { info: fmtBRLc(info.total) } : {}),
+      }
+      : undefined,
+    vazio: 'Nada a receber no período.',
+  };
+
+  // O que não soma aparece contado, nunca some em silêncio.
+  const somaBase = somarBase(dados.linhas);
+  const fora: LinhaPdf[] = [
+    // 'sem_base' sai abaixo, grupo a grupo (com o porquê), em vez de uma contagem só.
+    ...somaBase.foraDaSoma.filter((f) => f.situacao !== 'sem_base')
+      .map((f) => ({ celulas: { situacao: rotuloSituacaoLinha(f.situacao), linhas: qtd(f.linhas) } })),
+    ...(g.semDataCaixa.linhas
+      ? [{ celulas: { situacao: 'A receber sem data de caixa', linhas: qtd(g.semDataCaixa.linhas), valor: fmtBRLc(g.semDataCaixa.valor) } }]
+      : []),
+    ...(g.foraDoPeriodo.linhas
+      ? [{ celulas: { situacao: 'A receber fora do período', linhas: qtd(g.foraDoPeriodo.linhas), valor: fmtBRLc(g.foraDoPeriodo.valor) } }]
+      : []),
+    ...g.semBase.map((x) => ({
+      celulas: {
+        situacao: `Sem base medida: ${x.bloco}. ${x.grupo}${x.tratamento ? ` (${x.tratamento})` : ''}`,
+        linhas: qtd(dados.linhas.filter((l) => l.situacao === 'sem_base' && l.bloco === x.bloco && l.grupo === x.grupo).length),
+      },
+    })),
+  ];
+  const foraDaSoma: SecaoPdf = {
+    titulo: 'Fora da soma', tipo: 'resumo',
+    colunas: [
+      { chave: 'situacao', rotulo: 'Situação', tipo: 'texto', pii: 'nenhuma', peso: 3 },
+      { chave: 'linhas', rotulo: 'Linhas', tipo: 'numero', pii: 'nenhuma' },
+      // Só o que tem data de caixa e valor (a receber fora da grade); o resto é contagem, como na Base auditável.
+      { chave: 'valor', rotulo: 'Valor esperado', tipo: 'moeda', pii: 'nenhuma' },
+    ],
+    linhas: fora,
+    vazio: 'Todas as linhas carregadas estão na soma.',
+  };
+
+  // Anexo: base auditável, só as linhas a_receber (as que somam), na ordem da tela.
+  const base = filtrarBase(dados.linhas, FILTRO_BASE_PADRAO);
+  const pseudonimo = pseudonimizadorBase();
+  const anexo: SecaoPdf = {
+    titulo: `Anexo: base auditável (${plural(base.length, 'linha a receber', 'linhas a receber')})`, tipo: 'detalhe',
+    colunas: [
+      { chave: 'data', rotulo: 'Data de caixa', tipo: 'data', pii: 'nenhuma', peso: 0.85 },
+      { chave: 'semana', rotulo: 'Semana', tipo: 'texto', pii: 'nenhuma', peso: 0.55 },
+      { chave: 'bloco', rotulo: 'Bloco', tipo: 'texto', pii: 'nenhuma', peso: 0.45 },
+      { chave: 'grupo', rotulo: 'Grupo', tipo: 'texto', pii: 'nenhuma', peso: 1.4 },
+      { chave: 'componente', rotulo: 'Componente', tipo: 'texto', pii: 'nenhuma', peso: 0.9 },
+      { chave: 'descricao', rotulo: 'Descrição', tipo: 'texto', pii: 'identificacao', anonimavel: true, peso: 1.6 },
+      { chave: 'produto', rotulo: 'Produto', tipo: 'texto', pii: 'nenhuma', peso: 1.1 },
+      { chave: 'esperado', rotulo: 'Valor esperado', tipo: 'moeda', pii: 'nenhuma', peso: 0.9 },
+      { chave: 'bruto', rotulo: 'Valor bruto', tipo: 'moeda', pii: 'nenhuma', peso: 0.9 },
+      { chave: 'fator', rotulo: 'Fator', tipo: 'numero', pii: 'nenhuma', peso: 0.55 },
+      { chave: 'centro', rotulo: 'Centro de custo', tipo: 'texto', pii: 'nenhuma', peso: 1.2 },
+      { chave: 'tratamento', rotulo: 'Tratamento', tipo: 'texto', pii: 'nenhuma', peso: 1.8 },
+    ],
+    linhas: base.map((l) => ({
+      celulas: {
+        data: l.data_caixa ? fmtData(l.data_caixa) : '',
+        semana: rotuloSemanaDaLinha(sems, l.data_caixa),
+        bloco: String(l.bloco),
+        grupo: l.grupo,
+        componente: rotuloComponente(l.componente),
+        descricao: l.rotulo ?? '',
+        produto: l.produto ?? '',
+        esperado: fmtBRLc(l.valor),
+        bruto: fmtBRLc(l.valor_bruto),
+        fator: fatorCsv(l.fator),
+        centro: l.centro_custo ?? '',
+        tratamento: l.tratamento ?? '',
+      },
+      anonimas: { descricao: pseudonimo(l) },
+    })),
+    total: base.length
+      ? { data: 'Total', esperado: fmtBRLc(somaBase.aReceber.valor), bruto: fmtBRLc(somaBase.aReceber.bruto) }
+      : undefined,
+    vazio: 'Nenhuma linha a receber.',
+  };
+
+  const kpis: KpiPdf[] = [
+    { rotulo: 'A receber no período', valor: fmtBRLc(g.total) },
+    { rotulo: 'Certo', valor: fmtBRLc(g.certoTotal) },
+    { rotulo: 'Estimado', valor: fmtBRLc(g.estimadoTotal) },
+  ];
+  if (centavos(g.brutoTotal) !== centavos(g.total)) kpis.push({ rotulo: 'Bruto (sem perda)', valor: fmtBRLc(g.brutoTotal) });
+  kpis.push({ rotulo: 'Linhas a receber', valor: qtd(somaBase.aReceber.linhas) });
+  if (info) kpis.push({ rotulo: 'Informativo, fora da soma', valor: fmtBRLc(info.total) });
+
+  return {
+    tipo: 'receber', titulo: 'Contas a receber: previsão de caixa', recorte, niveisPermitidos: NIVEIS_RELATORIO.receber,
+    arquivo: `financeiro-contas-a-receber-${dados.cenario}`, temPlanilha: true, // CSV da Base auditável, na mesma tela
+    kpis,
+    secoes: [resumoMensal, resumoCentro, gradeSemana, foraDaSoma, anexo],
   };
 }

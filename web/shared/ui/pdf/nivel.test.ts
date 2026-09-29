@@ -73,6 +73,28 @@ describe('aplicarNivel', () => {
     expect(r.recorte).toEqual(['Família: HM', 'Busca: termo omitido']);
   });
 
+  it('coluna anonimavel: completo leva o original; sem_dado_pessoal leva o substituto da linha (ou vazio), nunca o original', () => {
+    const base = rascunho();
+    const det0 = base.secoes[1];
+    det0.linhasSaoPessoas = false;
+    det0.colunas[0] = { ...det0.colunas[0], anonimavel: true };
+    det0.linhas[0].anonimas = { nome: 'Pessoa 7' }; // 2ª linha sem substituto
+    expect(aplicarNivel(base, 'completo').secoes[1].linhas[0].celulas.nome).toBe('Maria Souza');
+    const det = aplicarNivel(base, 'sem_dado_pessoal').secoes[1];
+    expect(det.colunas.map((c) => [c.chave, c.pii])).toEqual([['nome', 'nenhuma'], ['pago', 'nenhuma']]);
+    expect(det.linhas.map((l) => l.celulas)).toEqual([{ nome: 'Pessoa 7', pago: 'R$ 10' }, { nome: '', pago: 'R$ 20' }]);
+    expect(det.total).toEqual({ pago: 'R$ 30' }); // o "Total" da coluna pessoal não passa
+    const tudo = JSON.stringify(det);
+    for (const pii of ['Maria', 'João']) expect(tudo).not.toContain(pii);
+    expect(aplicarNivel(base, 'so_numeros').secoes.every((s) => s.tipo === 'resumo')).toBe(true);
+  });
+
+  it('recusa coluna anonimavel em seção de resumo', () => {
+    const base = rascunho();
+    base.secoes[0].colunas[0] = { ...base.secoes[0].colunas[0], anonimavel: true };
+    expect(() => aplicarNivel(base, 'completo')).toThrow(/anonimavel/);
+  });
+
   it('sem_dado_pessoal em seção que não é de pessoas: só remove a coluna, sem pseudônimo', () => {
     const base = rascunho();
     base.secoes[1].linhasSaoPessoas = false;

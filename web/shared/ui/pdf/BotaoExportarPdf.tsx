@@ -30,7 +30,7 @@ export function textoProgresso(p: ProgressoPdf): string {
 }
 
 export function BotaoExportarPdf({
-  montar, niveis, chamadas, desabilitado,
+  montar, niveis, chamadas, desabilitado, rotulo = 'Exportar PDF',
 }: {
   /** Monta o rascunho da lista JÁ FILTRADA da tela — chamado só no clique. */
   montar: () => RascunhoRelatorio;
@@ -39,6 +39,8 @@ export function BotaoExportarPdf({
   /** null = protocolo ainda não ligado ao banco: botão travado, nunca gera sem protocolo. */
   chamadas: ChamadasProtocolo | null;
   desabilitado?: boolean;
+  /** Texto do botão em repouso. Padrão "Exportar PDF". */
+  rotulo?: string;
 }) {
   const oferecidos = NIVEIS_PII.filter((n) => niveis.includes(n));
   const [nivel, setNivel] = useState<NivelPii>(oferecidos[0] ?? 'completo');
@@ -102,7 +104,7 @@ export function BotaoExportarPdf({
         aria-busy={gerando}
         title={!chamadas ? 'Protocolo de emissão ainda não ligado ao banco.' : undefined}
       >
-        <Icon name="file" size={14} /> {gerando ? 'Gerando PDF…' : avisadas ? 'Gerar PDF com os totais' : 'Exportar PDF'}
+        <Icon name="file" size={14} /> {gerando ? 'Gerando PDF…' : avisadas ? 'Gerar PDF com os totais' : rotulo}
       </Button>
       {avisadas && !gerando && (
         <span role="status" className="text-xs text-[var(--fg-2)]">

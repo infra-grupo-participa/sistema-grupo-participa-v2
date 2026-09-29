@@ -183,19 +183,29 @@ export const moedaCsv = (v: number) => v.toFixed(2).replace('.', ',');
 export const fatorCsv = (f: number) => String(Number(f.toFixed(6))).replace('.', ',');
 
 /**
- * CSV das linhas recebidas (já filtradas e ordenadas pela tela): separador ';', decimal ',', datas dd/mm/aaaa,
- * UTF-8 com BOM. Texto passa por celulaCsv (antifórmula). Linha 'sem_base' sai com os valores VAZIOS (não zero).
+ * Descrição sem dado pessoal, na ordem em que as linhas passam: rótulo de pessoa vira "Pessoa N", estável por
+ * contrato/cadastro (bloco + ref) dentro do documento; linha de pessoa sem ref ganha número próprio. Rótulo que não é
+ * pessoa sai como veio. Regra ÚNICA do CSV e do PDF (ui/pdf/documentos.ts) da Base auditável.
  */
-export function csvBaseAuditavel(linhas: LinhaReceber[], semanas: Semana[], nivel: NivelCsvBase, cenario: string): string {
+export function pseudonimizadorBase(): (l: LinhaReceber) => string {
   const pessoas = new Map<string, number>();
   let semRef = 0;
-  const descricao = (l: LinhaReceber): string => {
-    if (nivel === 'completo' || !rotuloEPessoa(l.bloco) || l.rotulo == null) return l.rotulo ?? '';
+  return (l) => {
+    if (!rotuloEPessoa(l.bloco) || l.rotulo == null) return l.rotulo ?? '';
     const chave = l.ref != null ? `${l.bloco}\u0000${l.ref}` : `\u0001${semRef++}`;
     let n = pessoas.get(chave);
     if (n == null) { n = pessoas.size + 1; pessoas.set(chave, n); }
     return T.pessoa(n);
   };
+}
+
+/**
+ * CSV das linhas recebidas (já filtradas e ordenadas pela tela): separador ';', decimal ',', datas dd/mm/aaaa,
+ * UTF-8 com BOM. Texto passa por celulaCsv (antifórmula). Linha 'sem_base' sai com os valores VAZIOS (não zero).
+ */
+export function csvBaseAuditavel(linhas: LinhaReceber[], semanas: Semana[], nivel: NivelCsvBase, cenario: string): string {
+  const pseudonimo = pseudonimizadorBase();
+  const descricao = (l: LinhaReceber): string => (nivel === 'completo' ? l.rotulo ?? '' : pseudonimo(l));
   const cab = [
     T.dataCaixa, T.semana, T.bloco, T.grupo, T.componente, T.descricao, T.produto, T.valorEsperado, T.valorBruto,
     T.fator, T.centroCusto, T.certeza, T.situacao, T.tratamento, T.cenario,

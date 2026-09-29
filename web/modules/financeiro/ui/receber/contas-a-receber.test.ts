@@ -60,6 +60,7 @@ describe('grade Contas a Receber (HTML estático)', () => {
     expect(tela).toContain('Certo: dinheiro já vendido, contratado ou informado pelo financeiro');
     expect(tela).toContain('Recorrências');
     expect(tela).not.toMatch(/carteira|devendo/i);
+    expect(tela).toContain('Gerar PDF oficial'); // porta de entrada do PDF (F5), na sub-aba da grade
   });
 });
 
@@ -107,6 +108,7 @@ describe('cálculo de recebimento desligado', () => {
     const html = renderToStaticMarkup(createElement(ContasAReceber, { dados: d }));
     expect(html).toContain('Cálculo de recebimento desligado');
     expect(html).not.toContain('Total da semana');
+    expect(html).not.toContain('Gerar PDF oficial'); // sem grade não há documento
     expect(html).not.toContain('R$ 0,00');
     // Recorrências continuam (têm vencimento) — agora numa sub-aba própria.
     const recHtml = renderToStaticMarkup(createElement(ContasAReceber, { dados: d, sub: 'recorrencias' }));

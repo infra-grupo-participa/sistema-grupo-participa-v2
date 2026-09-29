@@ -73,7 +73,9 @@ const COR_VEREDITO: Record<Veredito['tipo'], string> = {
   so_registro: 'border-[var(--border)] text-[var(--fg-2)]',
 };
 
-const rotuloTipo = (t: string) => RELATORIOS.find((r) => r.tipo === t)?.rotulo ?? t;
+// Tipos emitidos fora deste dropdown (o botão mora na própria tela): só o nome, para a conferência de protocolo.
+const TIPOS_FORA_DO_MENU: Record<string, string> = { receber: 'Contas a receber (Previsão de caixa)' };
+const rotuloTipo = (t: string) => RELATORIOS.find((r) => r.tipo === t)?.rotulo ?? TIPOS_FORA_DO_MENU[t] ?? t;
 const rotuloNivel = (n: string) => ROTULO_NIVEL[n as NivelPii] ?? n;
 const ehPdf = (f: File) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
 
