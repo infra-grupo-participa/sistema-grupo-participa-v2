@@ -1,6 +1,6 @@
 -- 20260928z72 — Financeiro, F8: "dinheiro já contratado" da Análise e bloco 2 do Contas a Receber com UM núcleo só.
 --
--- NÃO APLICADA — coordenador aplica. Depende de: 20260928p (fn_fin_contratado), z65 (teto), z66 (fin.cobrancas_previstas
+-- APLICADA em produção em 29/09/2026 00:14 UTC (fin_contratado_unificado + _b, este só recoloca o corpo do núcleo idêntico ao arquivo). Ensaio: fn_fin_contratado 8 famílias 1176,4 → 961,0 ms (−18%); fn_fin_receber_semanal 204,5 → 195,1 ms. Depois: HM/parcelado 505.572 → 390.222; HM/assinatura 40.473 → 43.952; DIAMANTE/assinatura 71.500 → 447.167 (12 meses em vez de 3); AURUM/assinatura 0 → 9.750.
 -- com detalhe). Independe da z71. A migration inteira é UMA transação: guarda ou conferência que falhe desfaz tudo.
 -- Guarda: corpo VIVO de fin.cobrancas_previstas = z66 e de fn_fin_contratado = 20260928p (sem espaço, sem comentário,
 -- sem o texto das mensagens de erro).
