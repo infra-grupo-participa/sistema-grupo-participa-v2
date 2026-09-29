@@ -1,6 +1,6 @@
 -- 20260928z71 — Financeiro, F5: tipo de relatório 'receber' no protocolo de PDF (fin.relatorios_emitidos).
 --
--- NÃO APLICADA — coordenador aplica. Depende da z50 (aplicada). A migration inteira é UMA transação: qualquer guarda
+-- APLICADA em produção em 28/09/2026 (fin_relatorio_receber; md5 = arquivo). CHECK = tipo = ANY (fin.relatorio_tipos()); tipos {board,pessoas,conciliacao,identidade,acelera,prorata,receber}.
 -- ou conferência que falhe desfaz tudo. (A parte F8, "dinheiro já contratado", saiu daqui e foi para a z72.)
 --
 -- O que faz:
