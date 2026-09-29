@@ -9,7 +9,6 @@
 // - O texto colado nunca é logado; a prévia mostra os identificadores mascarados localmente.
 // Formulário e confirmações ficam no fluxo da página (nada `absolute`).
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Badge } from '@/shared/ui/components';
 import { fmtBRLc, fmtData } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../../application/ports';
 import {
@@ -17,9 +16,11 @@ import {
   ordenarInformados, previaGravavel, SITUACOES_INFORMADO, TIPOS_INFORMADO,
   type Colagem, type FormInformado, type Informado, type ResultadoLinhaImportacao,
 } from '../../domain/recebimentos-informados';
+import { diasEntre, resumoInformados } from '../../domain/receber-executivo';
 import {
-  ACOES_INFORMADO, CAMPOS_INFORMADO, COLAR_PLANILHA, SECAO_INFORMADOS, SITUACAO_INFORMADO, TIPO_INFORMADO,
+  ACOES_INFORMADO, CAMPOS_INFORMADO, COLAR_PLANILHA, EXECUTIVO_RECEBER, SECAO_INFORMADOS, SITUACAO_INFORMADO, TIPO_INFORMADO,
 } from './textos';
+import { Chip, CX_TABELA_LONGA, FaixaKpis, KpiFin, LINHA, THEAD_FIXO, Vazio, type TomFin } from './visual';
 
 export type RepoInformados = Pick<FinanceiroRepository,
   'loadInformados' | 'salvarInformado' | 'baixarInformado' | 'arquivarInformado' | 'importarInformados'>;
@@ -34,6 +35,32 @@ export const rotuloSituacaoInformado = (s: string) => SITUACAO_INFORMADO[s] ?? s
 export const rotuloTipoInformado = (t: string | null) => (t ? TIPO_INFORMADO[t] ?? t : '—');
 
 const hojeISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+const X = EXECUTIVO_RECEBER.informados;
+/** Tom da situação: a cobrar = vermelho; recebido/baixado = verde; o resto neutro. O texto sempre diz a situação. */
+const TOM_INFORMADO: Record<string, TomFin> = { em_atraso_cobrar: 'ruim', realizado_hotmart: 'bom', baixado_fora: 'bom' };
+
+/** Faixa: a cobrar × a receber × recebido na Hotmart × baixado fora. Clicar filtra a lista abaixo (local: sem recarga). */
+function KpisInformados({ lista, onFiltrar }: { lista: Informado[]; onFiltrar: (s: string) => void }) {
+  const hoje = hojeISO();
+  const r = resumoInformados(lista, hoje);
+  return (
+    <FaixaKpis>
+      <KpiFin rotulo={X.aCobrar} icone="alert" valor={r.aCobrar.n === 0 ? X.nenhum : fmtBRLc(r.aCobrar.valor)}
+        tom={r.aCobrar.n === 0 ? 'bom' : 'ruim'} onClick={r.aCobrar.n === 0 ? undefined : () => onFiltrar('em_atraso_cobrar')}
+        detalhe={r.aCobrar.n === 0 ? X.nadaACobrar
+          : `${X.itens(r.aCobrar.n)}${r.atrasoMaisAntigoDias != null ? ` · ${X.maisAntigo(Math.max(0, r.atrasoMaisAntigoDias))}` : ''}`} />
+      <KpiFin rotulo={X.aReceber} icone="wallet" valor={fmtBRLc(r.aReceber.valor)} tom={r.aReceber.n > 0 ? 'bom' : 'neutro'}
+        onClick={r.aReceber.n === 0 ? undefined : () => onFiltrar('a_receber')}
+        detalhe={`${X.itens(r.aReceber.n)} · ${r.proximo ? X.proximo(fmtData(r.proximo.data), fmtBRLc(r.proximo.valor)) : X.semProximo}`} />
+      <KpiFin rotulo={X.recebido} icone="check" valor={fmtBRLc(r.recebidoHotmart.valor)}
+        onClick={r.recebidoHotmart.n === 0 ? undefined : () => onFiltrar('realizado_hotmart')}
+        detalhe={X.itens(r.recebidoHotmart.n)} />
+      <KpiFin rotulo={X.baixado} valor={fmtBRLc(r.baixadoFora.valor)}
+        onClick={r.baixadoFora.n === 0 ? undefined : () => onFiltrar('baixado_fora')}
+        detalhe={X.itens(r.baixadoFora.n)} />
+    </FaixaKpis>
+  );
+}
 
 type Aviso = { tipo: 'ok' | 'erro'; msg: string } | null;
 type AcaoLinha = { id: string; tipo: 'baixar' | 'arquivar'; valor: string } | null;
@@ -154,6 +181,7 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
         )}
       </div>
 
+      {lista && <KpisInformados lista={lista} onFiltrar={setFiltro} />}
       <div id="informados-corpo" className="space-y-2">
         <p className="text-xs text-[var(--fg-3)]">
           {SECAO_INFORMADOS.explicacao}{!canEdit && <> {SECAO_INFORMADOS.somenteLeitura}</>}
@@ -177,9 +205,9 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
               <FormularioInformado form={form} canVerDoc={canVerDoc} ocupado={ocupado}
                 onMudar={(valores) => setForm({ ...form, valores })} onSalvar={salvarForm} onCancelar={() => setForm(null)} />
             )}
-            <div className="overflow-x-auto rounded-[var(--r-md)] border border-[var(--border)]">
+            <div className={CX_TABELA_LONGA}>
               <table className="w-full border-collapse text-xs">
-                <thead className="bg-[var(--surface-2)]">
+                <thead className={THEAD_FIXO}>
                   <tr>
                     <th className={TH}>{CAMPOS_INFORMADO.dataPrevista}</th><th className={TH}>{CAMPOS_INFORMADO.cliente}</th>
                     <th className={TH}>{CAMPOS_INFORMADO.tipo}</th><th className={`${TH} text-right`}>{CAMPOS_INFORMADO.valor}</th>
@@ -192,13 +220,13 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
                 </thead>
                 <tbody>
                   {visiveis.length === 0 ? (
-                    <tr><td colSpan={nCols} className="px-2 py-2 text-[var(--fg-3)]">{SECAO_INFORMADOS.vazio}</td></tr>
+                    <tr><td colSpan={nCols} className="px-2 py-2"><Vazio>{SECAO_INFORMADOS.vazio} {X.trocarFiltro}</Vazio></td></tr>
                   ) : visiveis.map((i) => [
-                    <tr key={i.id} className="border-t border-[var(--border-faint)] text-[var(--fg)]">
-                      <td className={`${TD} tabular whitespace-nowrap`}>{fmtData(i.data_prevista)}</td>
+                    <tr key={i.id} className={`${LINHA} text-[var(--fg)]`}>
+                      <td className={`${TD} tabular whitespace-nowrap ${i.situacao === 'em_atraso_cobrar' ? 'font-semibold text-[var(--red)]' : ''}`}>{fmtData(i.data_prevista)}</td>
                       <td className={TD}>{i.cliente}</td>
                       <td className={`${TD} whitespace-nowrap text-[var(--fg-2)]`}>{rotuloTipoInformado(i.tipo)}</td>
-                      <td className={`${TD} text-right tabular whitespace-nowrap`}>{fmtBRLc(i.valor)}</td>
+                      <td className={`${TD} text-right font-semibold tabular whitespace-nowrap`}>{fmtBRLc(i.valor)}</td>
                       <td className={TD}>{i.via_hotmart ? CAMPOS_INFORMADO.sim : CAMPOS_INFORMADO.nao}</td>
                       <td className={`${TD} text-[var(--fg-2)]`}>{i.produtos.join('; ') || '—'}</td>
                       <td className={`${TD} font-mono text-[11px] text-[var(--fg-2)]`}>{i.identificador1 ?? '—'}</td>
@@ -209,8 +237,11 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
                           ? `${fmtBRLc(i.recebido_hotmart)} / ${fmtBRLc(i.acumulado_acordo)}` : '—'}
                       </td>
                       <td className={`${TD} whitespace-nowrap`}>
-                        {/* Cor só no que pede ação: em atraso — cobrar. O texto diz a situação; a cor não é o único sinal. */}
-                        {i.situacao === 'em_atraso_cobrar' ? <Badge tone="warning">{rotuloSituacaoInformado(i.situacao)}</Badge> : rotuloSituacaoInformado(i.situacao)}
+                        {/* O texto diz a situação; cor e ícone só reforçam. A cobrar diz há quantos dias venceu. */}
+                        <Chip tom={TOM_INFORMADO[i.situacao] ?? 'neutro'}>{rotuloSituacaoInformado(i.situacao)}</Chip>
+                        {i.situacao === 'em_atraso_cobrar' && i.data_prevista && (
+                          <span className="ml-1.5 text-[11px] text-[var(--red)]">{X.ha(Math.max(0, diasEntre(i.data_prevista, hojeISO())))}</span>
+                        )}
                         {i.baixa_manual_em && <span className="text-[var(--fg-3)]"> · {fmtData(i.baixa_manual_em)}</span>}
                         {i.situacao === 'arquivado' && i.motivo_arquivo && (
                           <span className="block whitespace-normal text-[var(--fg-3)]">{ACOES_INFORMADO.arquivadoPor(i.motivo_arquivo)}</span>

@@ -17,6 +17,7 @@ const BORDA: Record<TomFin, string> = {
 
 /** Listras diagonais: "aqui não entrou/não entra nada" — o mesmo gatilho do mês sem venda no Faturamento. */
 const RASURA = 'repeating-linear-gradient(135deg, var(--border) 0 2px, transparent 2px 7px)';
+export const RASURA_CSS = RASURA;
 
 /** Uma linha dizendo PARA QUE SERVE a aba — quem abre sabe o que está vendo antes de ler o número. */
 export function Intencao({ children }: { children: ReactNode }) {
@@ -28,36 +29,165 @@ export function Intencao({ children }: { children: ReactNode }) {
   );
 }
 
-/** Seta + % contra o período anterior. Subir é bom (verde), cair é ruim (vermelho) — a menos que `inverso`. */
-export function Seta({ pct, inverso = false }: { pct: number | null; inverso?: boolean }) {
+/** Seta + % contra o período anterior. Subir é bom (verde), cair é ruim (vermelho) — a menos que `inverso`.
+ * `sufixo` troca a unidade (ex.: " p.p." para diferença de acerto). */
+export function Seta({ pct, inverso = false, sufixo = '%' }: { pct: number | null; inverso?: boolean; sufixo?: string }) {
   if (pct == null || !Number.isFinite(pct)) return null;
   const subiu = pct >= 0;
   const bom = inverso ? !subiu : subiu;
   return (
     <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold tabular ${bom ? 'text-[var(--green)]' : 'text-[var(--red)]'}`}>
       <Icon name={subiu ? 'arrow-up' : 'arrow-down'} size={12} />
-      {Math.abs(pct).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%
+      {Math.abs(pct).toLocaleString('pt-BR', { maximumFractionDigits: sufixo === '%' ? 0 : 1 })}{sufixo}
+      <span className="sr-only">{subiu ? ' a mais' : ' a menos'}</span>
     </span>
   );
 }
 
-/** Número grande com rótulo, contexto numa linha e (opcional) link para onde o número mora. */
-export function KpiFin({ rotulo, valor, detalhe, tom = 'neutro', href, variacao, icone }: {
-  rotulo: string; valor: string; detalhe?: ReactNode; tom?: TomFin; href?: string; variacao?: ReactNode; icone?: string;
+/** Cor de cada tom como valor CSS (para `style`: barra, borda lateral). Só tokens. */
+export const COR_TOM: Record<TomFin, string> = {
+  bom: 'var(--green)', ruim: 'var(--red)', atencao: 'var(--yellow)', neutro: 'var(--fg-3)',
+};
+const CHIP: Record<TomFin, string> = {
+  bom: 'border-[var(--green-border)] bg-[var(--green-subtle)] text-[var(--green)]',
+  ruim: 'border-[var(--red-border)] bg-[var(--red-subtle)] text-[var(--red)]',
+  atencao: 'border-[var(--yellow-border)] bg-[var(--yellow-subtle)] text-[var(--yellow)]',
+  neutro: 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--fg-2)]',
+};
+const ICONE_TOM: Record<TomFin, string | null> = { bom: 'check', ruim: 'alert', atencao: 'alert', neutro: null };
+
+/** Situação em chip: o texto diz a situação, a cor e o ícone reforçam (nunca a cor sozinha). */
+export function Chip({ tom = 'neutro', children, icone }: { tom?: TomFin; children: ReactNode; icone?: string | null }) {
+  const ic = icone === undefined ? ICONE_TOM[tom] : icone;
+  return (
+    <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-1.5 py-px text-[11px] font-semibold ${CHIP[tom]}`}>
+      {ic && <Icon name={ic} size={11} />}{children}
+    </span>
+  );
+}
+
+/** Acerto da previsão em chip: ≥ 90% verde, ≥ 70% âmbar, abaixo vermelho. Sem medida: traço. */
+export function Acerto({ pct }: { pct: number | null }) {
+  if (pct == null) return <span className="text-[var(--fg-4)]">—</span>;
+  const tom: TomFin = pct >= 90 ? 'bom' : pct >= 70 ? 'atencao' : 'ruim';
+  return <Chip tom={tom}>{`${pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}</Chip>;
+}
+
+// Tabela estilizada (classes literais — o Tailwind só gera o que aparece escrito). Longa: a caixa rola e o cabeçalho fica.
+/** Caixa de tabela longa: rola dentro de si, então o `sticky top-0` do cabeçalho tem a quem se prender. */
+export const CX_TABELA_LONGA = 'max-h-[70vh] overflow-auto rounded-[var(--r-md)] border border-[var(--border)]';
+export const THEAD_FIXO = 'sticky top-0 z-[2] bg-[var(--surface-2)] shadow-[0_1px_0_var(--border)]';
+/** Linha de dado: zebra discreta + hover. */
+export const LINHA = 'border-t border-[var(--border-faint)] even:bg-[var(--surface-1)] hover:bg-[var(--surface-2)]';
+
+/** Lista vazia com instrução (não um "0" que parece dado). */
+export function Vazio({ children }: { children: ReactNode }) {
+  return <span className="inline-flex items-center gap-1.5 text-[var(--fg-3)]"><Icon name="circle" size={10} />{children}</span>;
+}
+
+export interface ItemBarra {
+  rotulo: string;
+  /** NULL = sem medida (listrado, texto `textoNulo`), nunca uma barra zerada. */
+  valor: number | null;
+  tom?: TomFin;
+  /** Texto à direita do valor (n, %). */
+  detalhe?: string;
+}
+
+/** Barras horizontais com o valor escrito ao lado; a maior define a escala. Uma série só, legível sem legenda. */
+export function BarrasH({ titulo, itens, textoNulo = 'sem medida', formato = fmtBRLc, extra }: {
+  titulo: string; itens: ItemBarra[]; textoNulo?: string; formato?: (v: number) => string; extra?: ReactNode;
 }) {
+  if (itens.length === 0) return null;
+  const max = Math.max(0, ...itens.map((i) => i.valor ?? 0));
+  const descricao = itens.map((i) => `${i.rotulo}: ${i.valor == null ? textoNulo : formato(i.valor)}${i.detalhe ? ` (${i.detalhe})` : ''}`).join('; ');
+  return (
+    <div className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-1)] p-3">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <div className="text-sm font-semibold text-[var(--fg)]">{titulo}</div>
+        {extra}
+      </div>
+      <ul role="img" aria-label={`${titulo}. ${descricao}`} className="space-y-1.5">
+        {itens.map((i, k) => {
+          const w = i.valor == null || max <= 0 || Math.round(i.valor * 100) === 0 ? 0 : Math.max(1.5, (i.valor / max) * 100);
+          return (
+            <li key={k} className="grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-center gap-2 text-xs" aria-hidden>
+              <span className="truncate text-[var(--fg-2)]" title={i.rotulo}>{i.rotulo}</span>
+              <span className="h-3 rounded-[var(--r-sm)] bg-[var(--surface-3)]">
+                {i.valor == null ? (
+                  <span className="block h-3 rounded-[var(--r-sm)] border border-dashed border-[var(--border)]" style={{ backgroundImage: RASURA }} />
+                ) : (
+                  <span className="block h-3 rounded-[var(--r-sm)]" style={{ width: `${w}%`, background: COR_TOM[i.tom ?? 'bom'] }} />
+                )}
+              </span>
+              <span className="min-w-[7rem] text-right tabular">
+                <span className={i.valor == null ? 'text-[var(--fg-4)]' : 'font-semibold text-[var(--fg)]'}>{i.valor == null ? textoNulo : formato(i.valor)}</span>
+                {i.detalhe && <span className="ml-1 text-[var(--fg-3)]">{i.detalhe}</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** Barras divergentes a partir do zero: entrou (verde, à direita, ▲) × saiu (vermelho, à esquerda, ▼). Conta o PORQUÊ
+ * de um saldo mudar, que a tabela por grupo espalha. */
+export function Divergentes({ titulo, itens, rodape }: {
+  titulo: string; itens: { rotulo: string; valor: number; detalhe?: string }[]; rodape?: ReactNode;
+}) {
+  if (itens.length === 0) return null;
+  const max = Math.max(...itens.map((i) => Math.abs(i.valor)), 0.01);
+  const descricao = itens.map((i) => `${i.rotulo}: ${i.valor >= 0 ? '+' : ''}${fmtBRLc(i.valor)}`).join('; ');
+  return (
+    <div className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-1)] p-3">
+      <div className="mb-2 text-sm font-semibold text-[var(--fg)]">{titulo}</div>
+      <ul role="img" aria-label={`${titulo}. ${descricao}`} className="space-y-1.5">
+        {itens.map((i, k) => {
+          const pos = i.valor >= 0;
+          const w = `${Math.max(1.5, (Math.abs(i.valor) / max) * 100)}%`;
+          const barra = <span className="block h-3 rounded-[var(--r-sm)]" style={{ width: w, background: pos ? 'var(--green)' : 'var(--red)' }} />;
+          return (
+            <li key={k} className="grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 text-xs" aria-hidden>
+              <span className="truncate text-[var(--fg-2)]" title={i.rotulo}>{i.rotulo}</span>
+              <span className="flex justify-end border-r border-[var(--border)] pr-px">{!pos && barra}</span>
+              <span className="flex">{pos && barra}</span>
+              <span className={`inline-flex min-w-[8rem] items-center justify-end gap-0.5 tabular font-semibold ${pos ? 'text-[var(--green)]' : 'text-[var(--red)]'}`}>
+                <Icon name={pos ? 'arrow-up' : 'arrow-down'} size={12} />{pos ? '+' : ''}{fmtBRLc(i.valor)}
+                {i.detalhe && <span className="ml-1 font-normal text-[var(--fg-3)]">{i.detalhe}</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      {rodape && <div className="mt-2 border-t border-[var(--border-faint)] pt-1.5 text-xs text-[var(--fg-2)]">{rodape}</div>}
+    </div>
+  );
+}
+
+/** Número grande com rótulo, contexto numa linha e (opcional) link para onde o número mora. */
+export function KpiFin({ rotulo, valor, detalhe, tom = 'neutro', href, onClick, variacao, icone }: {
+  rotulo: string; valor: string; detalhe?: ReactNode; tom?: TomFin; href?: string;
+  /** Ação local (ex.: filtrar a lista da própria sub-aba) — sem trocar o hash nem remontar nada. */
+  onClick?: () => void;
+  variacao?: ReactNode; icone?: string;
+}) {
+  // Só <span> dentro: o cartão pode ser <a> ou <button>, que não aceitam <div>.
   const corpo = (
     <>
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">
+      <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-3)]">
         {icone && <Icon name={icone} size={12} />}{rotulo}
-      </div>
-      <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
+      </span>
+      <span className="mt-1 flex flex-wrap items-baseline gap-x-2">
         <span className={`text-xl font-bold tabular ${COR[tom]}`}>{valor}</span>
         {variacao}
-      </div>
-      {detalhe && <div className="mt-0.5 text-[11px] text-[var(--fg-3)]">{detalhe}</div>}
+      </span>
+      {detalhe && <span className="mt-0.5 block text-[11px] text-[var(--fg-3)]">{detalhe}</span>}
     </>
   );
   const classe = `block rounded-[var(--r-lg)] border ${BORDA[tom]} bg-[var(--surface-1)] px-3 py-2.5`;
+  if (onClick) return <button type="button" onClick={onClick} className={`${classe} w-full text-left hover:bg-[var(--surface-2)]`}>{corpo}</button>;
   return href
     ? <a href={href} className={`${classe} hover:bg-[var(--surface-2)]`}>{corpo}</a>
     : <div className={classe}>{corpo}</div>;

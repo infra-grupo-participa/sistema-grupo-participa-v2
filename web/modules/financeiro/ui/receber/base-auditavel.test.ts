@@ -202,7 +202,8 @@ describe('tela', () => {
     }));
     const html = renderToStaticMarkup(createElement(BaseAuditavel, { dados: montarContasReceber(muitas, '2026-09-28'), rotuloCenario: 'Base' }));
     expect(html).toContain('Página 1 de 3');
-    expect((html.match(/<tr class="border-t border-\[var\(--border-faint\)\] text-/g) ?? []).length).toBe(LINHAS_POR_PAGINA + 3); // + 3 centros no resumo
+    expect((html.match(/<tr class="border-t border-\[var\(--border-faint\)\] even:/g) ?? []).length).toBe(LINHAS_POR_PAGINA); // linhas de dado (zebra)
+    expect((html.match(/<tr class="border-t border-\[var\(--border-faint\)\] text-/g) ?? []).length).toBe(3); // 3 centros no resumo
     expect(html).toContain('Soma a receber (450 linhas)');
   });
 });

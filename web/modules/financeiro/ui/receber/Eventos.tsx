@@ -16,7 +16,9 @@ import {
   type EventoPlanejado, type FormEvento, type SituacaoEventoPlanejado,
 } from '../../domain/eventos-planejados';
 import type { Funil } from '../../domain/funis';
-import { EVENTOS_RECEBER as T } from './textos';
+import { resumoEventos } from '../../domain/receber-executivo';
+import { EVENTOS_RECEBER as T, EXECUTIVO_RECEBER } from './textos';
+import { BarrasH, Chip, FaixaKpis, KpiFin, Vazio, type TomFin } from './visual';
 
 export type RepoEventos = Pick<FinanceiroRepository, 'salvarEventoPlanejado' | 'arquivarEventoPlanejado'>;
 
@@ -26,6 +28,9 @@ const BTN = 'rounded-[var(--r-sm)] border border-[var(--border)] px-2 py-0.5 tex
 const BTN_1 = 'rounded-[var(--r-sm)] border border-[var(--accent)] px-2 py-0.5 text-xs font-semibold text-[var(--fg)] hover:bg-[var(--surface-3)] disabled:opacity-50';
 const INPUT = 'rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-2 py-1 text-xs text-[var(--fg)]';
 const N_COLS = 9;
+const X = EXECUTIVO_RECEBER.eventos;
+/** Ativo = verde (vai vender), encerrado = âmbar (arquivar), arquivado = neutro. O texto diz a situação. */
+const TOM_EVENTO: Record<string, TomFin> = { ativo: 'bom', encerrado: 'atencao' };
 
 type Aviso = { tipo: 'ok' | 'erro'; msg: string } | null;
 type Filtro = 'sem_arquivados' | SituacaoEventoPlanejado;
@@ -77,6 +82,7 @@ export function Eventos({
 
   const visiveis = (eventos ?? []).filter((e) => (filtro === 'sem_arquivados' ? e.situacao !== 'arquivado' : e.situacao === filtro));
   const opcoes = useMemo(() => candidatosReferencia(candidatos ?? [], hojeISO), [candidatos, hojeISO]);
+  const ex = useMemo(() => (eventos ? resumoEventos(eventos, hojeISO) : null), [eventos, hojeISO]);
 
   const abrirForm = (e: EventoPlanejado | null) => {
     setAviso(null);
@@ -144,6 +150,26 @@ export function Eventos({
           <button type="button" className={`${BTN} ml-auto`} disabled={ocupado} onClick={() => abrirForm(null)}>{T.novo}</button>
         )}
       </div>
+      {ex && (
+        <>
+          <FaixaKpis>
+            <KpiFin rotulo={X.previsto} icone="trending-up" valor={fmtBRLc(ex.previstoAtivos)} tom={ex.previstoAtivos > 0 ? 'bom' : 'neutro'}
+              onClick={ex.ativos === 0 ? undefined : () => setFiltro('ativo')}
+              detalhe={`${X.ativos(ex.ativos)}${ex.semReferencia > 0 ? ` · ${X.foraDaSoma(ex.semReferencia)}` : ''}`} />
+            <KpiFin rotulo={X.proximo} valor={ex.proximo ? fmtData(ex.proximo.abertura) : X.nenhuma} detalhe={ex.proximo?.nome} />
+            <KpiFin rotulo={X.semReferencia} icone={ex.semReferencia > 0 ? 'alert' : undefined} valor={String(ex.semReferencia)}
+              tom={ex.semReferencia > 0 ? 'atencao' : 'bom'} detalhe={ex.semReferencia > 0 ? X.semReferenciaAjuda : X.todosComReferencia} />
+            <KpiFin rotulo={X.encerrados} valor={String(ex.encerrados)} tom={ex.encerrados > 0 ? 'atencao' : 'bom'}
+              onClick={ex.encerrados === 0 ? undefined : () => setFiltro('encerrado')}
+              detalhe={ex.encerrados > 0 ? X.encerradosAjuda : X.encerradosOk} />
+          </FaixaKpis>
+          {ex.porEvento.length > 0 && (
+            <BarrasH titulo={X.graficoTitulo} textoNulo={X.semVendaRef}
+              itens={ex.porEvento.map((e) => ({ rotulo: e.nome, valor: e.previsto, tom: TOM_EVENTO[e.situacao] ?? 'neutro',
+                detalhe: `${T.situacao[e.situacao] ?? e.situacao} · ${fmtData(e.abertura)}` }))} />
+          )}
+        </>
+      )}
       <p className="text-xs text-[var(--fg-3)]">{T.explicacao} {T.totalEsperado}: {T.totalEsperadoAjuda}{!canEdit && <> {T.somenteLeitura}</>}</p>
       {aviso && (
         <p role={aviso.tipo === 'erro' ? 'alert' : 'status'}
@@ -175,7 +201,7 @@ export function Eventos({
             </thead>
             <tbody>
               {visiveis.length === 0 ? (
-                <tr><td colSpan={N_COLS} className="px-2 py-2 text-[var(--fg-3)]">{T.vazio}</td></tr>
+                <tr><td colSpan={N_COLS} className="px-2 py-2"><Vazio>{T.vazio}</Vazio></td></tr>
               ) : visiveis.flatMap((e) => {
                 const aberta = curvaAberta.has(e.id);
                 const idCurva = `${id}-curva-${e.id}`;
@@ -183,7 +209,7 @@ export function Eventos({
                 const arquivandoEste = arquivando?.id === e.id;
                 const tb = totalEsperado(e, 'base');
                 return [
-                  <tr key={e.id} className={`border-t border-[var(--border)] ${e.situacao === 'arquivado' ? 'text-[var(--fg-3)]' : 'text-[var(--fg)]'}`}>
+                  <tr key={e.id} className={`border-t border-[var(--border)] hover:bg-[var(--surface-2)] ${e.situacao === 'arquivado' ? 'text-[var(--fg-3)]' : 'text-[var(--fg)]'}`}>
                     <td className={TD}>
                       <span className="font-semibold">{e.nome}</span>
                       {e.observacao && <span className="block max-w-[40ch] text-[11px] text-[var(--fg-3)]">{e.observacao}</span>}
@@ -202,7 +228,7 @@ export function Eventos({
                       </span>
                     </td>
                     <td className={`${TD} text-right tabular whitespace-nowrap`}>
-                      {tb == null ? <span className="text-[var(--fg-3)]">{T.semVendaRef}</span> : fmtBRLc(tb)}
+                      {tb == null ? <span className="text-[var(--fg-3)]">{T.semVendaRef}</span> : <span className="font-semibold">{fmtBRLc(tb)}</span>}
                       {tb != null && (
                         <span className="block text-[11px] text-[var(--fg-3)]">
                           {T.cenarios(fmtBRLc(totalEsperado(e, 'conservador')), fmtBRLc(tb), fmtBRLc(totalEsperado(e, 'otimista')))}
@@ -211,7 +237,7 @@ export function Eventos({
                     </td>
                     <td className={`${TD} whitespace-nowrap`}>{e.pausa_avulso ? T.sim : T.nao}</td>
                     <td className={`${TD} whitespace-nowrap`}>
-                      {T.situacao[e.situacao] ?? e.situacao}
+                      <Chip tom={TOM_EVENTO[e.situacao] ?? 'neutro'}>{T.situacao[e.situacao] ?? e.situacao}</Chip>
                       {e.situacao === 'arquivado' && e.arquivado_motivo && (
                         <span className="block max-w-[32ch] whitespace-normal text-[11px] text-[var(--fg-3)]">
                           {T.arquivadoPor(e.arquivado_por_nome ?? '—', e.arquivado_motivo)}

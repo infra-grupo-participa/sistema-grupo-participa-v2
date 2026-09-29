@@ -19,7 +19,8 @@ import {
 import { rotuloBloco } from './rotulos-receber';
 import { hashDaSubAbaReceber, hashReceberFiltrado } from './hash';
 import { SUBABAS_RECEBER, VISAO_GERAL as T } from './textos';
-import { BarrasSemanas, FaixaKpis, Farol, Intencao, KpiFin, Seta } from './visual';
+import { resumoAcerto, resumoMudancas } from '../../domain/receber-executivo';
+import { Acerto, Chip, Divergentes, FaixaKpis, Farol, Intencao, KpiFin, LINHA, RASURA_CSS, Seta } from './visual';
 
 const TH = 'px-2 py-1.5 text-[11px] font-semibold uppercase text-[var(--fg-3)] whitespace-nowrap';
 const TD = 'px-2 py-1 whitespace-nowrap';
@@ -80,45 +81,48 @@ function ValorGrade({ v, rotulo, per }: { v: number; rotulo: string; per: string
 }
 
 // ─── (a) Próximas 4 semanas ─────────────────────────────────────────────────
+// Um cartão por semana: o total grande, a barra certo (verde) × estimado (laranja) na mesma escala das 4, e os dois
+// valores em texto. Semana sem nada previsto = barra listrada e "nada previsto", nunca "R$ 0". Todo valor leva à grade.
 function QuatroSemanas({ dados, projecaoDesligada }: { dados: ContasReceberCarregado; projecaoDesligada: boolean }) {
+  if (dados.desligado) return <p role="alert" className="text-xs font-semibold text-[var(--fg)]">{T.recebimentoDesligado}</p>;
   const q = proximas4Semanas(dados.linhas, dados.hojeISO);
-  const linhas: { k: 'certo' | 'estimado' | 'total'; l: string }[] = [
-    { k: 'certo', l: T.certo }, { k: 'estimado', l: T.estimado }, { k: 'total', l: T.total },
-  ];
-  const rotuloTotal = `${T.quatroSemanas} (${periodo(q.semanas[0].inicio, q.semanas[3].fim)})`;
+  const max = Math.max(0, ...q.semanas.map((s) => s.total));
+  const cartao = (k: string, nome: string, per: string, s: { certo: number; estimado: number; total: number }, destaque: boolean, escala: number) => {
+    const vazio = Math.round(s.total * 100) === 0;
+    return (
+      <li key={k} className={`rounded-[var(--r-md)] border px-2.5 py-2 ${destaque ? 'border-[var(--accent-border)] bg-[var(--surface-2)]' : 'border-[var(--border)] bg-[var(--surface-1)]'}`}>
+        <div className="flex items-baseline justify-between gap-2 text-[11px]">
+          <span className="font-semibold uppercase text-[var(--fg-2)]">{nome}</span>
+          <span className="tabular text-[var(--fg-3)]">{per}</span>
+        </div>
+        <div className="mt-1 text-base font-bold tabular text-[var(--fg)]">
+          {vazio ? <span className="text-sm font-semibold text-[var(--fg-4)]">{T.nadaPrevisto}</span>
+            : <ValorGrade v={s.total} rotulo={T.total} per={per} />}
+        </div>
+        <div className="mt-1.5 flex h-2 overflow-hidden rounded-[var(--r-sm)] bg-[var(--surface-3)]" aria-hidden="true"
+          style={vazio ? { backgroundImage: RASURA_CSS } : undefined}>
+          {!vazio && escala > 0 && <>
+            <span className="block h-2 bg-[var(--green)]" style={{ width: `${(s.certo / escala) * 100}%` }} />
+            <span className="block h-2 bg-[var(--accent)] opacity-60" style={{ width: `${(Math.max(0, s.estimado) / escala) * 100}%` }} />
+          </>}
+        </div>
+        <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-2 text-[11px]">
+          <dt className="flex items-center gap-1 text-[var(--fg-3)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--green)]" aria-hidden="true" />{T.certo}</dt>
+          <dd className="text-right tabular"><ValorGrade v={s.certo} rotulo={T.certo} per={per} /></dd>
+          <dt className="flex items-center gap-1 text-[var(--fg-3)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" aria-hidden="true" />{T.estimado}</dt>
+          <dd className="text-right tabular">
+            {projecaoDesligada ? <span className="text-[var(--fg-3)]">{T.estimadoDesligado}</span>
+              : <ValorGrade v={s.estimado} rotulo={T.estimado} per={per} />}
+          </dd>
+        </dl>
+      </li>
+    );
+  };
   return (
-    <>
-      {dados.desligado && <p role="alert" className="mb-2 text-xs font-semibold text-[var(--fg)]">{T.recebimentoDesligado}</p>}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-xs">
-          <caption className="sr-only">{T.semanasCaption}</caption>
-          <thead>
-            <tr>
-              <th scope="col" className={`${TH} text-left`}><span className="sr-only">{T.linha}</span></th>
-              {q.semanas.map((s) => <th key={s.inicio} scope="col" className={`${TH} text-right`}>{periodo(s.inicio, s.fim)}</th>)}
-              <th scope="col" className={`${TH} border-l border-[var(--border)] text-right`}>{T.quatroSemanas}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {linhas.map(({ k, l }) => (
-              <tr key={k} className={`border-t border-[var(--border-faint)] ${k === 'total' ? 'font-semibold' : ''}`}>
-                <th scope="row" className={`${TD} text-left ${k === 'total' ? 'text-[var(--fg)]' : 'text-[var(--fg-2)]'}`}>{l}</th>
-                {k === 'estimado' && projecaoDesligada ? (
-                  <td colSpan={5} className={`${TD} text-right text-[var(--fg-3)]`}>{T.estimadoDesligado}</td>
-                ) : (
-                  <>
-                    {q.semanas.map((s) => (
-                      <td key={s.inicio} className={TD_NUM}><ValorGrade v={s[k]} rotulo={l} per={periodo(s.inicio, s.fim)} /></td>
-                    ))}
-                    <td className={`${TD_NUM} border-l border-[var(--border)]`}><ValorGrade v={q[k]} rotulo={l} per={rotuloTotal} /></td>
-                  </>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
+    <ul aria-label={T.semanasCaption} className="grid grid-cols-2 gap-2 md:grid-cols-5">
+      {q.semanas.map((s, i) => cartao(s.inicio, i === 0 ? T.estaSemana : T.semanaN(i + 1), periodo(s.inicio, s.fim), s, i === 0, max))}
+      {cartao('total', T.quatroSemanas, periodo(q.semanas[0].inicio, q.semanas[3].fim), q, false, q.total)}
+    </ul>
   );
 }
 
@@ -231,8 +235,13 @@ function OQueMudou({ visao, onTentar, agora }: { visao: VisaoReceberCarregada; o
 function TabelaMudancas({ mudancas }: { mudancas: MudancaReceber[] }) {
   const { mudaram, semMudanca } = separarMudancas(mudancas);
   if (mudaram.length === 0) return <p className="text-xs text-[var(--fg-2)]">{T.nadaMudou}</p>;
+  const rm = resumoMudancas(mudaram);
   return (
     <>
+      <Divergentes titulo={T.porMotivoTitulo}
+        itens={rm.porMotivo.map((m) => ({ rotulo: T.motivos[m.motivo] ?? m.motivo, valor: m.valor, detalhe: T.itens(m.itens) }))}
+        rodape={<>{T.entrouSaiu(fmtBRLc(rm.entrou), fmtBRLc(Math.abs(rm.saiu)))}{' · '}
+          <strong className={Math.round(rm.liquido * 100) >= 0 ? 'text-[var(--green)]' : 'text-[var(--red)]'}>{T.saldo(sinal(rm.liquido))}</strong></>} />
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-xs">
           <caption className="sr-only">{T.mudouCaption}</caption>
@@ -247,7 +256,7 @@ function TabelaMudancas({ mudancas }: { mudancas: MudancaReceber[] }) {
           </thead>
           <tbody>
             {mudaram.map((x) => (
-              <tr key={`${x.bloco}-${x.grupo}`} className="border-t border-[var(--border-faint)] align-top text-[var(--fg)]">
+              <tr key={`${x.bloco}-${x.grupo}`} className={`${LINHA} align-top text-[var(--fg)]`}>
                 <th scope="row" className={`${TD} text-left font-normal`}>
                   <span className="text-[var(--fg-3)]">{x.bloco}. {rotuloBloco(x.bloco)} · </span>{x.grupo}
                 </th>
@@ -256,7 +265,7 @@ function TabelaMudancas({ mudancas }: { mudancas: MudancaReceber[] }) {
                   {Math.round(x.valor_b * 100) === 0 ? fmtBRLc(0)
                     : <a href={hashDaSubAbaReceber('semana')} className={LINK} aria-label={T.abrirGrade(x.grupo, T.agora, fmtBRLc(x.valor_b))}>{fmtBRLc(x.valor_b)}</a>}
                 </td>
-                <td className={`${TD_NUM} font-semibold`}>{sinal(x.delta)}</td>
+                <td className={`${TD_NUM} font-semibold`}><Delta v={x.delta} /></td>
                 <td className="px-2 py-1 text-[var(--fg-2)]"><Motivos x={x} /></td>
               </tr>
             ))}
@@ -268,7 +277,32 @@ function TabelaMudancas({ mudancas }: { mudancas: MudancaReceber[] }) {
   );
 }
 
+/** Diferença com sinal, seta e cor: subiu = verde ▲, caiu = vermelho ▼, zero neutro. */
+function Delta({ v }: { v: number }) {
+  const cents = Math.round(v * 100);
+  if (cents === 0) return <span className="text-[var(--fg-3)]">{fmtBRLc(0)}</span>;
+  return (
+    <span className={`inline-flex items-center gap-0.5 ${cents > 0 ? 'text-[var(--green)]' : 'text-[var(--red)]'}`}>
+      <Icon name={cents > 0 ? 'arrow-up' : 'arrow-down'} size={11} />{sinal(v)}
+    </span>
+  );
+}
+
 // ─── (c) Previsão × realizado ───────────────────────────────────────────────
+/** Uma linha: acerto da última semana medida (chip), a seta contra a anterior e a média. */
+function ResumoAcertoLinha({ semanas }: { semanas: SemanaPrevistoRealizado[] }) {
+  const a = resumoAcerto(semanas);
+  if (a.ultima == null) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--fg-2)]">
+      <span className="font-semibold text-[var(--fg)]">{T.acertoUltima}</span>
+      <Acerto pct={a.ultima} />
+      <Seta pct={a.variacaoPp} sufixo=" p.p." />
+      {a.media != null && <span>· {T.acertoMedia(pctPronto(a.media), a.semanas)}</span>}
+    </p>
+  );
+}
+
 function DetalheSemana({ s }: { s: SemanaPrevistoRealizado }) {
   const nome = (l: LinhaPrevistoRealizado) => (l.bloco == null ? (l.grupo ?? T.foraDaFotoGrupo) : `${l.bloco}. ${rotuloBloco(l.bloco)} · ${l.grupo ?? ''}`);
   return (
@@ -311,6 +345,7 @@ function PrevistoRealizado({ visao, onTentar }: { visao: VisaoReceberCarregada; 
         </p>
       ) : (
         <>
+          <ResumoAcertoLinha semanas={r.semanas} />
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-xs">
               <caption className="sr-only">{T.prCaption}</caption>
@@ -326,18 +361,22 @@ function PrevistoRealizado({ visao, onTentar }: { visao: VisaoReceberCarregada; 
                 </tr>
               </thead>
               <tbody>
-                {r.semanas.map((s) => {
+                {r.semanas.map((s, i) => {
                   const idDet = `visao-pr-${s.de}`;
                   const aqui = aberta === s.de;
                   return [
-                    <tr key={s.de} className="border-t border-[var(--border-faint)] text-[var(--fg)]">
+                    <tr key={s.de} className={`${LINHA} text-[var(--fg)]`}>
                       <th scope="row" className={`${TD} text-left font-normal`}>
                         {periodo(s.de, s.ate)}
                         {s.notas.length > 0 && <span className="block text-[10px] text-[var(--fg-3)]">{s.notas.join(' · ')}</span>}
                       </th>
                       <td className={TD_NUM}>{fmtBRLc(s.certoPrevisto)}</td>
                       <td className={TD_NUM}>{fmtBRLc(s.certoRealizado)}</td>
-                      <td className={`${TD_NUM} font-semibold`}>{pctPronto(s.certoAcerto)}</td>
+                      <td className={TD_NUM}>
+                        <span className="inline-flex items-center gap-1.5"><Acerto pct={s.certoAcerto} />
+                          <Seta pct={s.certoAcerto != null && r.semanas[i + 1]?.certoAcerto != null ? s.certoAcerto - r.semanas[i + 1].certoAcerto! : null} sufixo=" p.p." />
+                        </span>
+                      </td>
                       <td className={TD_NUM}>{fmtBRLc(s.estimadoPrevisto)}</td>
                       <td className={TD_NUM}>{fmtBRLc(s.foraDaFoto)}</td>
                       <td className={TD}>
@@ -386,13 +425,19 @@ function Perda({ perda }: { perda: LinhaPrevistoRealizado[] }) {
             </thead>
             <tbody>
               {perda.map((p) => (
-                <tr key={p.grupo ?? ''} className="border-t border-[var(--border-faint)] text-[var(--fg)]">
+                <tr key={p.grupo ?? ''} className={`${LINHA} text-[var(--fg)]`}>
                   <th scope="row" className={`${TD} text-left font-normal`}>{p.grupo}</th>
-                  <td className={`${TD_NUM} font-semibold`}>{p.perda_medida == null ? T.semResolvidas : pct(p.perda_medida)}</td>
+                  <td className={TD_NUM}>
+                    {p.perda_medida == null ? <span className="text-[var(--fg-3)]">{T.semResolvidas}</span>
+                      : p.premissa_atual == null ? <Chip>{pct(p.perda_medida)}</Chip>
+                      : p.perda_medida > p.premissa_atual
+                        ? <span className="inline-flex items-center gap-1.5"><Chip tom="ruim">{pct(p.perda_medida)}</Chip><span className="text-[11px] text-[var(--red)]">{T.acimaDaPremissa}</span></span>
+                        : <span className="inline-flex items-center gap-1.5"><Chip tom="bom">{pct(p.perda_medida)}</Chip><span className="text-[11px] text-[var(--fg-3)]">{T.dentroDaPremissa}</span></span>}
+                  </td>
                   <td className={TD_NUM}>{pct(p.premissa_atual)}</td>
                   <td className={TD_NUM}>{p.cobrancas_resolvidas ?? 0}</td>
-                  <td className={TD_NUM}>{p.cobrancas_perdidas ?? 0}</td>
-                  <td className={TD_NUM}>{fmtBRLc(p.valor_perdido)} / {fmtBRLc(p.valor_resolvido)}</td>
+                  <td className={`${TD_NUM} ${(p.cobrancas_perdidas ?? 0) > 0 ? 'text-[var(--red)]' : ''}`}>{p.cobrancas_perdidas ?? 0}</td>
+                  <td className={TD_NUM}><span className={Math.round((p.valor_perdido ?? 0) * 100) > 0 ? 'font-semibold text-[var(--red)]' : ''}>{fmtBRLc(p.valor_perdido)}</span> / {fmtBRLc(p.valor_resolvido)}</td>
                   <td className={TD}>
                     <a href={hashDaSubAbaReceber('premissas')} className={LINK} aria-label={T.ajustarGrupo(p.grupo ?? '')}>{T.ajustar}</a>
                   </td>
@@ -429,9 +474,7 @@ function Painel({ dados, projecaoDesligada }: { dados: ContasReceberCarregado; p
           href={nAtraso === 0 ? undefined : a.foraDaProjecao.n > 0 ? hashReceberFiltrado('recorrencias', 'em_atraso_fora') : hashReceberFiltrado('informados', 'em_atraso_cobrar')}
           detalhe={nAtraso === 0 ? 'nada vencido fora da previsão' : `${nAtraso} ${nAtraso === 1 ? 'item' : 'itens'} fora da previsão`} />
       </FaixaKpis>
-      <BarrasSemanas titulo="Próximas 4 semanas — o que entra em cada uma"
-        barras={q.semanas.map((s, i) => ({ rotulo: i === 0 ? 'Esta semana' : `Semana ${i + 1}`, sub: periodo(s.inicio, s.fim), certo: s.certo, estimado: s.estimado }))} />
-    </>
+</>
   );
 }
 
@@ -466,16 +509,14 @@ export function VisaoGeral({
         onde ele mora.
       </Intencao>
       {dados && !dados.desligado && <Painel dados={dados} projecaoDesligada={projecaoDesligada} />}
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <Secao id="visao-semanas" titulo={T.semanasTitulo}>
-          {semBase ?? <QuatroSemanas dados={dados!} projecaoDesligada={projecaoDesligada} />}
-        </Secao>
-        <Secao id="visao-alertas" titulo={T.alertasTitulo}>
-          {dados ? <Alertas dados={dados} eventos={eventos} erroEventos={erroEventos} projecaoDesligada={projecaoDesligada} />
-            : erroReceber ? <p className="text-xs text-[var(--fg-2)]">{T.alertasSemPrevisao}</p>
-            : <Status>{T.carregandoPrevisao}</Status>}
-        </Secao>
-      </div>
+      <Secao id="visao-semanas" titulo={T.semanasTitulo}>
+        {semBase ?? <QuatroSemanas dados={dados!} projecaoDesligada={projecaoDesligada} />}
+      </Secao>
+      <Secao id="visao-alertas" titulo={T.alertasTitulo}>
+        {dados ? <Alertas dados={dados} eventos={eventos} erroEventos={erroEventos} projecaoDesligada={projecaoDesligada} />
+          : erroReceber ? <p className="text-xs text-[var(--fg-2)]">{T.alertasSemPrevisao}</p>
+          : <Status>{T.carregandoPrevisao}</Status>}
+      </Secao>
       <Secao id="visao-mudou" titulo={T.mudouTitulo}>
         {!visao ? <Status>{T.carregandoMudancas}</Status> : <OQueMudou visao={visao} onTentar={onTentarVisao} agora={relogio} />}
       </Secao>

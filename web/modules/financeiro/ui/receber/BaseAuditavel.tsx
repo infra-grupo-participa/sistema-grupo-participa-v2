@@ -13,7 +13,13 @@ import {
   rotuloSemanaDaLinha, SEM_VALOR, SITUACOES_BASE, somarBase, TODOS, type FiltroBase, type NivelCsvBase,
 } from './base-auditavel';
 import { rotuloBloco, rotuloCerteza, rotuloComponente, rotuloMes, rotuloSituacaoLinha } from './rotulos-receber';
-import { BASE_AUDITAVEL as T, GRADE_RECEBER } from './textos';
+import { BASE_AUDITAVEL as T, EXECUTIVO_RECEBER, GRADE_RECEBER } from './textos';
+import { maiorAReceber } from '../../domain/receber-executivo';
+import { Chip, CX_TABELA_LONGA, FaixaKpis, KpiFin, LINHA, THEAD_FIXO, Vazio, type TomFin } from './visual';
+
+const X = EXECUTIVO_RECEBER.base;
+/** Situação da linha: a receber (soma) verde, em atraso vermelho, sem base âmbar; o resto neutro. */
+const TOM_LINHA: Record<string, TomFin> = { a_receber: 'bom', em_atraso_fora: 'ruim', sem_base: 'atencao' };
 
 export const LINHAS_POR_PAGINA = 200;
 
@@ -44,6 +50,8 @@ export function BaseAuditavel({ dados, rotuloCenario }: { dados: ContasReceberCa
   const filtradas = useMemo(() => filtrarBase(dados.linhas, filtro), [dados.linhas, filtro]);
   const soma = useMemo(() => somarBase(filtradas), [filtradas]);
   const resumo = useMemo(() => resumoCentroMes(filtradas), [filtradas]);
+  const maior = useMemo(() => maiorAReceber(filtradas), [filtradas]);
+  const perda = Math.round((soma.aReceber.bruto - soma.aReceber.valor) * 100) / 100;
   const paginas = Math.max(1, Math.ceil(filtradas.length / LINHAS_POR_PAGINA));
   const pag = Math.min(pagina, paginas);
   const visiveis = filtradas.slice((pag - 1) * LINHAS_POR_PAGINA, pag * LINHAS_POR_PAGINA);
@@ -115,14 +123,24 @@ export function BaseAuditavel({ dados, rotuloCenario }: { dados: ContasReceberCa
       </form>
       {aviso && <p role="status" className="text-xs text-[var(--fg-2)]">{aviso}</p>}
 
+      <FaixaKpis>
+        <KpiFin rotulo={X.soma} icone="wallet" valor={soma.aReceber.linhas > 0 ? fmtBRLc(soma.aReceber.valor) : X.nenhuma}
+          tom={soma.aReceber.linhas > 0 ? 'bom' : 'neutro'} detalhe={X.somam(soma.aReceber.linhas)} />
+        <KpiFin rotulo={X.linhas} valor={filtradas.length.toLocaleString('pt-BR')} detalhe={X.linhasAjuda(dados.linhas.length.toLocaleString('pt-BR'))} />
+        <KpiFin rotulo={X.maior} valor={maior ? fmtBRLc(maior.valor) : '—'}
+          detalhe={maior ? `${[maior.rotulo, maior.grupo].filter(Boolean).join(' · ')}${maior.data_caixa ? ` · ${fmtData(maior.data_caixa)}` : ''}` : undefined} />
+        <KpiFin rotulo={X.perda} valor={soma.aReceber.linhas > 0 && perda > 0 ? fmtBRLc(perda) : '—'}
+          tom={perda > 0 ? 'atencao' : 'neutro'} detalhe={perda > 0 ? X.perdaAjuda : X.semPerda} />
+      </FaixaKpis>
+
       <ResumoCentroMesTabela resumo={resumo} />
 
-      <div className="overflow-x-auto rounded-[var(--r-md)] border border-[var(--border)]">
+      <div className={CX_TABELA_LONGA}>
         <table className="w-max min-w-full border-collapse text-xs">
           <caption className="px-2 py-1.5 text-left text-xs text-[var(--fg-2)]">
             <span className="font-semibold text-[var(--fg)]">{T.caption(rotuloCenario)}</span> · {T.linhas(filtradas.length, dados.linhas.length)}
           </caption>
-          <thead className="bg-[var(--surface-2)]">
+          <thead className={THEAD_FIXO}>
             <tr>
               <th scope="col" className={TH}>{T.dataCaixa}</th>
               <th scope="col" className={TH}>{T.semana}</th>
@@ -141,25 +159,25 @@ export function BaseAuditavel({ dados, rotuloCenario }: { dados: ContasReceberCa
           </thead>
           <tbody>
             {visiveis.length === 0 ? (
-              <tr><td colSpan={13} className="px-2 py-2 text-[var(--fg-3)]">{T.vazio}</td></tr>
+              <tr><td colSpan={13} className="px-2 py-2"><Vazio>{T.vazio} {X.trocarFiltro}</Vazio></td></tr>
             ) : visiveis.map((l, i) => {
               const semBase = l.situacao === 'sem_base';
               const somaNaLinha = l.situacao === 'a_receber';
               const desc = [l.rotulo, l.produto].filter(Boolean).join(' · ');
               return (
-                <tr key={i} className={`border-t border-[var(--border-faint)] ${somaNaLinha ? 'text-[var(--fg)]' : 'text-[var(--fg-3)]'}`}>
+                <tr key={i} className={`${LINHA} ${somaNaLinha ? 'text-[var(--fg)]' : 'text-[var(--fg-3)]'}`}>
                   <td className={`${TD} tabular`}>{fmtData(l.data_caixa)}</td>
                   <td className={`${TD} tabular`}>{rotuloSemanaDaLinha(semanas, l.data_caixa) || '—'}</td>
                   <td className={TD}>{`${l.bloco}. ${rotuloBloco(l.bloco)}`}</td>
                   <td className={TD}>{l.grupo}</td>
                   <td className={TD}>{rotuloComponente(l.componente)}</td>
                   <td className="px-2 py-1">{desc || '—'}</td>
-                  <td className={TD_NUM}>{semBase ? T.semBaseValor : fmtBRLc(l.valor)}</td>
+                  <td className={`${TD_NUM} ${somaNaLinha ? 'font-semibold' : ''}`}>{semBase ? T.semBaseValor : fmtBRLc(l.valor)}</td>
                   <td className={TD_NUM}>{semBase ? '—' : fmtBRLc(l.valor_bruto)}</td>
                   <td className={TD_NUM}>{temPerda(l) ? fmtFator(l.fator) : '—'}</td>
                   <td className={TD}>{l.centro_custo ?? '—'}</td>
                   <td className={TD}>{rotuloCerteza(l.certeza)}</td>
-                  <td className={TD}>{rotuloSituacaoLinha(l.situacao)}</td>
+                  <td className={TD}><Chip tom={TOM_LINHA[l.situacao] ?? 'neutro'}>{rotuloSituacaoLinha(l.situacao)}</Chip></td>
                   <td className="min-w-[16rem] px-2 py-1">{l.tratamento ?? '—'}</td>
                 </tr>
               );

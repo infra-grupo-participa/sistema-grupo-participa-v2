@@ -32,7 +32,7 @@ import {
   CENARIO_RECEBER, ESCOPO_RECEBER, ESTADOS_RECEBER, GRADE_RECEBER, ROTULOS_TOTAL, SECOES_RECEBER, SUBABAS_RECEBER,
 } from './textos';
 import type { SubAbaReceber } from './hash';
-import { BarrasSemanas, Intencao } from './visual';
+import { BarrasSemanas, FaixaKpis, Intencao, KpiFin } from './visual';
 
 export type { SubAbaReceber } from './hash';
 export { rotuloComponente } from './rotulos-receber';
@@ -68,10 +68,19 @@ function Numero({ v, bruto, onClick, ativo }: { v: number; bruto?: number; onCli
 
 type BlocoGrade = GradeReceber['blocos'][number];
 
-export function GradeContasReceber({ grade, selecionada, onSelecionar }: {
+export function GradeContasReceber({ grade, selecionada, onSelecionar, hojeISO }: {
   grade: GradeReceber; selecionada: Celula | null; onSelecionar: (c: Celula) => void;
+  /** Destaca a coluna da semana de hoje. Sem ele (teste, PDF), nenhuma coluna é destacada. */
+  hojeISO?: string;
 }) {
   const sems = grade.semanas;
+  // Semana de hoje: coluna com fundo âmbar discreto e "hoje" no cabeçalho (texto, não só cor).
+  const atual = hojeISO ? sems.findIndex((s) => hojeISO >= s.inicio && hojeISO <= s.fim) : -1;
+  const col = (i: number) => (i === atual ? ' bg-[var(--accent-subtle)]' : '');
+  // Heat do total da semana: quanto mais entra, mais verde o fundo (4–22% do token; o número segue em texto).
+  const maxSemana = Math.max(0, ...grade.totalPorSemana);
+  const calor = (v: number) => (maxSemana > 0 && v > 0
+    ? { backgroundColor: `color-mix(in srgb, var(--green) ${Math.round(4 + (v / maxSemana) * 18)}%, transparent)` } : undefined);
   const nCols = sems.length + 1; // semanas + Total (a 1ª coluna fica de fora)
   const eAtiva = (bloco: number, grupo: string, semana: number | null) =>
     selecionada?.bloco === bloco && selecionada.grupo === grupo && selecionada.semana === semana;
@@ -89,9 +98,10 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar }: {
   const temEstimado = estimado.length > 0;
 
   /** Cabeçalho de seção: o rótulo na 1ª coluna (fixa ao rolar), o resto da linha vazio. */
-  const cabecalhoSecao = (k: string, titulo: string, ajuda: string) => (
+  const cabecalhoSecao = (k: string, titulo: string, ajuda: string, cor: string) => (
     <tr key={k} className="border-t-2 border-[var(--border)] bg-[var(--surface-2)]">
-      <th scope="rowgroup" className={`${COL1} bg-[var(--surface-2)] text-[11px] font-semibold uppercase text-[var(--fg-2)]`}>
+      <th scope="rowgroup" style={{ boxShadow: `inset 3px 0 0 ${cor}` }}
+        className={`${COL1} bg-[var(--surface-2)] text-[11px] font-semibold uppercase text-[var(--fg-2)]`}>
         {titulo} <span className="font-normal normal-case text-[var(--fg-3)]">— {ajuda}</span>
       </th>
       <td colSpan={nCols} />
@@ -109,7 +119,7 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar }: {
 
   const linhasDeValor = (bloco: number, g: LinhaGrade | BlocoGrade, clicavel: string | null, forte: boolean) => [
     ...g.porSemana.map((v, i) => (
-      <td key={i} className={`${TD_NUM} ${forte ? 'font-semibold' : ''}`}>
+      <td key={i} className={`${TD_NUM} ${forte ? 'font-semibold' : ''}${col(i)}`}>
         <Numero v={v} bruto={g.brutoPorSemana[i]} onClick={clicavel != null ? () => onSelecionar({ bloco, grupo: clicavel, semana: i }) : undefined}
           ativo={clicavel != null && eAtiva(bloco, clicavel, i)} />
       </td>
@@ -156,7 +166,7 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar }: {
   const linhaTotal = (k: string, rotulo: string, porSemana: number[], total: number, classe: string) => (
     <tr key={k} className={classe}>
       <td className={COL1}>{rotulo}</td>
-      {porSemana.map((v, i) => <td key={i} className={TD_NUM}><Numero v={v} /></td>)}
+      {porSemana.map((v, i) => <td key={i} className={`${TD_NUM}${col(i)}`}><Numero v={v} /></td>)}
       <td className={`${TD_NUM} border-l border-[var(--border)]`}><Numero v={total} /></td>
     </tr>
   );
@@ -176,20 +186,21 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar }: {
           </tr>
           <tr>
             {sems.map((s, i) => (
-              <th key={s.n} className={`${TH} text-right font-normal normal-case ${grade.meses.some((m) => m.semanas[0] === i) ? 'border-l border-[var(--border)]' : ''}`}>
+              <th key={s.n} className={`${TH} text-right font-normal normal-case ${grade.meses.some((m) => m.semanas[0] === i) ? 'border-l border-[var(--border)]' : ''}${col(i)}`}>
                 <span className="block font-semibold">S{s.n}</span>{rotuloSemana(s)}
+                {i === atual && <span className="block text-[10px] font-semibold uppercase text-[var(--fg)]">{GRADE_RECEBER.hoje}</span>}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {cabecalhoSecao('sec-certo', SECOES_RECEBER.certo, SECOES_RECEBER.certoAjuda)}
+          {cabecalhoSecao('sec-certo', SECOES_RECEBER.certo, SECOES_RECEBER.certoAjuda, 'var(--green)')}
           {certo.flatMap(linhasDoBlocoNaGrade)}
           {temEstimado && linhaTotal('sub-certo', SECOES_RECEBER.subtotalCerto, grade.certoPorSemana, grade.certoTotal,
             'border-t border-[var(--border)] font-semibold text-[var(--fg)]')}
         </tbody>
         <tbody>
-          {cabecalhoSecao('sec-estimado', SECOES_RECEBER.estimado, SECOES_RECEBER.estimadoAjuda)}
+          {cabecalhoSecao('sec-estimado', SECOES_RECEBER.estimado, SECOES_RECEBER.estimadoAjuda, 'var(--accent)')}
           {temEstimado ? estimado.flatMap(linhasDoBlocoNaGrade) : (
             <tr className="border-t border-[var(--border-faint)]">
               <td className={`${COL1} text-[var(--fg-3)]`}>{SECOES_RECEBER.nenhumEstimado}</td>
@@ -200,9 +211,9 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar }: {
             'border-t border-[var(--border)] font-semibold text-[var(--fg)]')}
         </tbody>
         <tbody>
-          <tr className="border-t-2 border-[var(--border)] font-semibold text-[var(--fg)]">
-            <td className={COL1}>{temEstimado ? SECOES_RECEBER.totalGeral : ROTULOS_TOTAL.totalDaSemana}</td>
-            {grade.totalPorSemana.map((v, i) => <td key={i} className={TD_NUM}><Numero v={v} bruto={grade.brutoPorSemana[i]} /></td>)}
+          <tr className="border-t-2 border-[var(--border)] bg-[var(--surface-2)] font-bold text-[var(--fg)]">
+            <td className={`${COL1} bg-[var(--surface-2)]`}>{temEstimado ? SECOES_RECEBER.totalGeral : ROTULOS_TOTAL.totalDaSemana}</td>
+            {grade.totalPorSemana.map((v, i) => <td key={i} className={TD_NUM} style={calor(v)}><Numero v={v} bruto={grade.brutoPorSemana[i]} /></td>)}
             <td className={`${TD_NUM} border-l border-[var(--border)]`}><Numero v={grade.total} bruto={grade.brutoTotal} /></td>
           </tr>
           <tr className="border-t border-[var(--border-faint)] text-[var(--fg)]">
@@ -214,13 +225,13 @@ export function GradeContasReceber({ grade, selecionada, onSelecionar }: {
           </tr>
           <tr className="border-t border-[var(--border-faint)] text-[var(--fg-2)]">
             <td className={COL1}>{ROTULOS_TOTAL.acumulado}</td>
-            {grade.acumuladoPorSemana.map((v, i) => <td key={i} className={TD_NUM}><Numero v={v} /></td>)}
+            {grade.acumuladoPorSemana.map((v, i) => <td key={i} className={`${TD_NUM}${col(i)}`}><Numero v={v} /></td>)}
             <td className={`${TD_NUM} border-l border-[var(--border)]`} />
           </tr>
         </tbody>
         {info && (
           <tbody>
-            {cabecalhoSecao('sec-info', SECOES_RECEBER.informativo, SECOES_RECEBER.informativoAjuda)}
+            {cabecalhoSecao('sec-info', SECOES_RECEBER.informativo, SECOES_RECEBER.informativoAjuda, 'var(--fg-4)')}
             <tr className="border-t border-[var(--border-faint)] text-[var(--fg-2)]">
               <td className={`${COL1} pl-5`}>{rotuloBloco(BLOCO_INFORMATIVO)}</td>
               {info.porSemana.map((v, i) => (
@@ -469,6 +480,29 @@ function CobrancasDaCelula({ itens, comPerda, pagasPorRef }: {
   );
 }
 
+/** Faixa da grade: o total do período, quanto dele já é certo, o estimado e a semana de pico. Só soma o que a grade já
+ * somou (nenhuma regra nova). */
+function KpisGrade({ grade, hojeISO }: { grade: GradeReceber; hojeISO: string }) {
+  const n = grade.semanas.length;
+  const pctCerto = grade.total > 0 ? Math.round((grade.certoTotal / grade.total) * 100) : null;
+  const pico = grade.totalPorSemana.reduce((m, v, i) => (v > grade.totalPorSemana[m] ? i : m), 0);
+  const atual = grade.semanas.findIndex((s) => hojeISO >= s.inicio && hojeISO <= s.fim);
+  const temEstimado = grade.blocos.some((b) => secaoDoBloco(b.bloco) === 'estimado');
+  const K = GRADE_RECEBER.kpis;
+  return (
+    <FaixaKpis>
+      <KpiFin rotulo={K.total(n)} icone="wallet" valor={fmtBRLc(grade.total)} tom={grade.total > 0 ? 'bom' : 'neutro'}
+        detalhe={n ? `${rotuloSemana(grade.semanas[0])} a ${rotuloSemana(grade.semanas[n - 1])}` : undefined} />
+      <KpiFin rotulo={K.certo} valor={pctCerto == null ? '—' : `${pctCerto}%`}
+        tom={pctCerto == null ? 'neutro' : pctCerto >= 80 ? 'bom' : 'atencao'} detalhe={fmtBRLc(grade.certoTotal)} />
+      <KpiFin rotulo={K.estimado} valor={temEstimado ? fmtBRLc(grade.estimadoTotal) : K.semEstimado}
+        detalhe={temEstimado ? K.estimadoAjuda : K.semEstimadoAjuda} tom={temEstimado ? 'neutro' : 'atencao'} />
+      <KpiFin rotulo={K.pico} valor={grade.total > 0 ? fmtBRLc(grade.totalPorSemana[pico]) : '—'}
+        detalhe={grade.total > 0 ? `S${grade.semanas[pico].n} · ${rotuloSemana(grade.semanas[pico])}${atual >= 0 ? ` · ${K.hojeEm(grade.semanas[atual].n)}` : ''}` : undefined} />
+    </FaixaKpis>
+  );
+}
+
 const SUBABAS_LISTA: { k: SubAbaReceber; l: string }[] = [
   { k: 'semana', l: SUBABAS_RECEBER.semana },
   { k: 'recorrencias', l: SUBABAS_RECEBER.recorrencias },
@@ -641,11 +675,12 @@ export function ContasAReceber({
             <p className="rounded-[var(--r-md)] border border-[var(--border)] px-3 py-2 text-sm text-[var(--fg-2)]">{ESTADOS_RECEBER.vazio}</p>
           ) : (
             <>
+            <KpisGrade grade={grade} hojeISO={dados.hojeISO} />
             <BarrasSemanas titulo="Semana a semana — quanto entra e o acumulado"
               barras={grade.semanas.map((sm, i) => ({ rotulo: `S${sm.n}`, sub: rotuloSemana(sm),
                 certo: grade.certoPorSemana?.[i] ?? grade.totalPorSemana[i], estimado: grade.estimadoPorSemana?.[i] ?? 0,
                 acumulado: grade.acumuladoPorSemana[i] }))} />
-            <GradeContasReceber grade={grade} selecionada={celula}
+            <GradeContasReceber grade={grade} selecionada={celula} hojeISO={dados.hojeISO}
               onSelecionar={(c) => setCelula((a) => (a && a.bloco === c.bloco && a.grupo === c.grupo && a.semana === c.semana ? null : c))} />
             </>
           )}
@@ -680,7 +715,7 @@ export function ContasAReceber({
 
       {subAtiva === 'recorrencias' && (
         <div id="receber-painel-recorrencias" role="tabpanel" aria-labelledby="receber-tab-recorrencias">
-          {dados ? <Recorrencias key={filtroInicial ?? ''} cobrancas={dados.recorrencias} filtroInicial={filtroInicial} />
+          {dados ? <Recorrencias key={filtroInicial ?? ''} cobrancas={dados.recorrencias} filtroInicial={filtroInicial} hojeISO={dados.hojeISO} />
             : <p role="status" className="text-xs text-[var(--fg-3)]">{GRADE_RECEBER.carregandoCenario}</p>}
         </div>
       )}

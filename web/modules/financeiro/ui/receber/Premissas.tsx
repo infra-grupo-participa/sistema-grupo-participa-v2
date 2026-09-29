@@ -22,7 +22,10 @@ import {
   validarFeriado, validarPremissa, valorDaSugestao, VIGENCIA_MAX_DIAS,
   type CenarioPremissa, type FeriadoBancario, type PremissaTela, type SugestaoPremissa, type VigenciaPremissa,
 } from '../../domain/premissas-receber';
-import { CENARIO_RECEBER, FERIADOS_RECEBER, PREMISSAS_RECEBER } from './textos';
+import { resumoPremissas } from '../../domain/receber-executivo';
+import { Icon } from '@/shared/ui/icons';
+import { CENARIO_RECEBER, EXECUTIVO_RECEBER, FERIADOS_RECEBER, PREMISSAS_RECEBER } from './textos';
+import { Chip, FaixaKpis, KpiFin, LINHA, Vazio } from './visual';
 
 export type RepoPremissas = Pick<FinanceiroRepository, 'salvarPremissaReceber' | 'salvarFeriado'>;
 
@@ -36,6 +39,47 @@ const rotuloCenario = (c: CenarioReceber) => CENARIO_RECEBER[c] ?? c;
 const unidadeCurta = (u: string) => (u === 'percentual' ? '%' : u === 'dias' ? 'dias' : u === 'reais' ? 'R$' : '');
 /** Chave do liga/desliga da projeção (z67). */
 const CHAVE_PROJECAO = 'projecao_no_receber';
+const X = EXECUTIVO_RECEBER.premissas;
+
+/** Valor em uso × sugestão medida: igual = chip verde; diferente = seta âmbar (acima ▲ / abaixo ▼) com o texto do domínio. */
+function DiferencaSugestao({ emUso, sugestao, texto }: { emUso: number; sugestao: number; texto: string }) {
+  if (emUso === sugestao) return <span className="mt-0.5 block"><Chip tom="bom">{texto}</Chip></span>;
+  return (
+    <span className="mt-0.5 flex items-center justify-end gap-0.5 text-[11px] font-semibold text-[var(--yellow)]">
+      <Icon name={emUso > sugestao ? 'arrow-up' : 'arrow-down'} size={11} />{texto}
+    </span>
+  );
+}
+
+/** Faixa: projeção ligada?, quantas premissas, quantas diferem da medida e quantos feriados valem no ano. */
+function KpisPremissas({ premissas, sugestoes, projecao, feriados, hojeISO }: {
+  /** undefined = o pai não pede sugestões; null = carregando. */
+  premissas: PremissaTela[]; sugestoes: Map<string, SugestaoPremissa> | null | undefined; projecao: PremissaTela | null;
+  feriados: FeriadoBancario[] | null; hojeISO: string;
+}) {
+  const r = resumoPremissas(premissas, sugestoes ?? new Map());
+  const vig = projecao?.cenarios.find((c) => c.cenario === 'base')?.vigente ?? null;
+  const ligada = vig != null && vig.valor > 0;
+  const ano = Number(hojeISO.slice(0, 4));
+  const nFeriados = feriados?.filter((f) => f.ativo && f.dia.startsWith(String(ano))).length ?? null;
+  return (
+    <FaixaKpis>
+      {projecao ? (
+        <KpiFin rotulo={X.projecao} icone={ligada ? 'check' : 'alert'} valor={ligada ? X.ligada : X.desligada}
+          tom={ligada ? 'bom' : 'atencao'} detalhe={ligada ? X.projecaoLigadaAjuda : X.projecaoDesligadaAjuda} />
+      ) : <KpiFin rotulo={X.projecao} valor="—" />}
+      <KpiFin rotulo={X.total} valor={String(r.total)} tom={r.semVigente > 0 ? 'atencao' : 'neutro'} detalhe={X.semVigente(r.semVigente)} />
+      {sugestoes && r.comSugestao === 0 ? (
+        <KpiFin rotulo={X.diferem} valor="—" detalhe={X.semMedida} />
+      ) : sugestoes ? (
+        <KpiFin rotulo={X.diferem} valor={String(r.divergentes)} icone={r.divergentes > 0 ? 'alert' : 'check'}
+          tom={r.divergentes > 0 ? 'atencao' : 'bom'} detalhe={X.diferemAjuda(r.comSugestao)} />
+      ) : <KpiFin rotulo={X.diferem} valor="—" detalhe={sugestoes === null ? X.carregando : undefined} />}
+      <KpiFin rotulo={X.feriados(ano)} valor={nFeriados == null ? '—' : String(nFeriados)}
+        detalhe={nFeriados == null ? X.carregando : X.feriadosAjuda} />
+    </FaixaKpis>
+  );
+}
 
 type Aviso = { tipo: 'ok' | 'erro'; msg: string } | null;
 
@@ -79,6 +123,8 @@ export function Premissas({
           <p className="text-xs text-[var(--fg-3)]">{PREMISSAS_RECEBER.vazio}</p>
         ) : (
           <>
+            <KpisPremissas premissas={grupos.flatMap((g) => g.premissas)} sugestoes={sugestoes ? porChave : sugestoes}
+              projecao={projecao} feriados={feriados} hojeISO={hojeISO} />
             {projecao && <ProjecaoNaPrevisao p={projecao} canEdit={canEdit && !!repo} hojeISO={hojeISO} repo={repo} onGravada={onPremissaGravada} />}
             {erroSugestoes ? (
               <p role="alert" className="text-xs text-[var(--fg-2)]">
@@ -243,7 +289,7 @@ function TabelaPremissas({ grupos, canEdit, hojeISO, repo, onGravada, sugestoes 
                 const podeUsarSugestao = canEdit && sugValor != null && sugValor >= p.minimo && sugValor <= p.maximo
                   && !(c.vigente && c.vigente.vigente_de === hojeISO) && emUsoGravado !== sugValor;
                 return [
-                  <tr key={k} className={`${i === 0 ? 'border-t border-[var(--border)]' : 'border-t border-[var(--border-faint)]'} text-[var(--fg)]`}>
+                  <tr key={k} className={`${i === 0 ? 'border-t border-[var(--border)]' : 'border-t border-[var(--border-faint)]'} text-[var(--fg)] hover:bg-[var(--surface-2)]`}>
                     <td className={TD}>
                       {i === 0 ? (
                         <>
@@ -261,7 +307,7 @@ function TabelaPremissas({ grupos, canEdit, hojeISO, repo, onGravada, sugestoes 
                     </td>
                     <td className={`${TD} whitespace-nowrap`}>{rotuloCenario(c.cenario)}</td>
                     <td className={`${TD} text-right tabular whitespace-nowrap`}>
-                      {c.vigente ? formatarPremissa(c.vigente.valor, p.unidade)
+                      {c.vigente ? <span className="text-sm font-bold text-[var(--fg)]">{formatarPremissa(c.vigente.valor, p.unidade)}</span>
                         : c.usaBase ? (
                           <span className="text-[var(--fg-3)]">
                             {PREMISSAS_RECEBER.usaBase(base ? formatarPremissa(base.valor, p.unidade)
@@ -273,7 +319,7 @@ function TabelaPremissas({ grupos, canEdit, hojeISO, repo, onGravada, sugestoes 
                           </span>
                         ) : <span className="text-[var(--fg-3)]">{PREMISSAS_RECEBER.semVigente}</span>}
                       {sug && emUsoGravado != null && sugValor != null && (
-                        <span className="block text-[11px] text-[var(--fg-2)]">{diferencaDaSugestao(emUsoGravado, sugValor, p.unidade)}</span>
+                        <DiferencaSugestao emUso={emUsoGravado} sugestao={sugValor} texto={diferencaDaSugestao(emUsoGravado, sugValor, p.unidade) ?? X.igual} />
                       )}
                       {c.futuras[0] && (
                         <span className="block text-[11px] text-[var(--fg-3)]">
@@ -499,12 +545,12 @@ function Feriados({ feriados, erro, canEdit, repo, hojeISO, onTentarDeNovo, onGr
             </thead>
             <tbody>
               {visiveis.length === 0 ? (
-                <tr><td colSpan={canEdit ? 6 : 5} className="px-2 py-2 text-[var(--fg-3)]">{FERIADOS_RECEBER.vazio}</td></tr>
+                <tr><td colSpan={canEdit ? 6 : 5} className="px-2 py-2"><Vazio>{FERIADOS_RECEBER.vazio}</Vazio></td></tr>
               ) : visiveis.map((f) => (
-                <tr key={f.dia} className={`border-t border-[var(--border-faint)] ${f.ativo ? 'text-[var(--fg)]' : 'text-[var(--fg-3)]'}`}>
+                <tr key={f.dia} className={`${LINHA} ${f.ativo ? 'text-[var(--fg)]' : 'text-[var(--fg-3)]'}`}>
                   <td className={`${TD} tabular whitespace-nowrap`}>{fmtData(f.dia)}</td>
                   <td className={TD}>{f.nome}</td>
-                  <td className={`${TD} whitespace-nowrap`}>{f.ativo ? FERIADOS_RECEBER.ativo : FERIADOS_RECEBER.inativo}</td>
+                  <td className={`${TD} whitespace-nowrap`}>{f.ativo ? <Chip tom="bom">{FERIADOS_RECEBER.ativo}</Chip> : <Chip>{FERIADOS_RECEBER.inativo}</Chip>}</td>
                   <td className={`${TD} text-[var(--fg-3)]`}>{f.fonte ?? '—'}</td>
                   <td className={`${TD} whitespace-nowrap text-[var(--fg-2)]`}>
                     {f.atualizado_por_nome ?? '—'}{f.atualizado_em ? ` · ${fmtDataHora(f.atualizado_em)}` : ''}

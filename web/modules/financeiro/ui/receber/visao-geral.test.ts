@@ -57,7 +57,7 @@ describe('VisaoGeral', () => {
   });
   it('projeção desligada (sem blocos 3, 4, 6, 8): estimado "desligado" e alerta com link para Premissas', () => {
     const html = render({ dados: montarContasReceber([L({ data_caixa: '2026-09-30', valor: 100 })], HOJE) });
-    expect(html).toContain('desligado</td>');
+    expect(html).toContain('>desligado</span>'); // cartão da semana: estimado em texto, sem valor fingido
     expect(html).toContain('href="#receber?ver=premissas"');
     expect(html).toContain('desligada: o estimado não entra na previsão');
   });
