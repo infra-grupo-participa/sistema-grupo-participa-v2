@@ -272,12 +272,23 @@ export function fimDoMes(d: string): string {
   return iso(Date.UTC(y, m, 0));
 }
 
+/**
+ * Modo de contagem da semana (Conflito 3 do catálogo — duas planilhas, duas regras, uma função só):
+ * 'receber' = como a planilha de Contas a Receber Semanal — corta na virada do mês, pedaço curto une à vizinha do
+ * mesmo mês (regra de sempre, ver DIAS_MINIMOS_SEMANA). 'fluxo' = como a planilha de Fluxo de Caixa (C07) — segunda a
+ * domingo, SEM cortar no mês, numerada S01 a S53 do ano.
+ */
+export type ModoSemana = 'receber' | 'fluxo';
+
 export interface Semana {
-  /** 1, 2, 3… na ordem do período. */
+  /** Modo 'receber': 1, 2, 3… na ordem do período. Modo 'fluxo': o número da semana no ano (1 a 52/53), pela regra
+   *  C07 — ver numeroSemanaFluxo. */
   n: number;
   inicio: string;
   fim: string;
-  /** YYYY-MM — a semana nunca cruza mês. */
+  /** YYYY-MM. Modo 'receber': a semana nunca cruza mês, é sempre exata. Modo 'fluxo': é só o mês do 1º dia do
+   *  pedaço — referência de exibição (agrupar colunas sob o cabeçalho do mês). A semana PODE cruzar mês; a soma
+   *  mensal (agregarReceber) nunca usa este campo, soma pela data de caixa de cada linha. */
   mes: string;
 }
 
@@ -292,15 +303,62 @@ export const DIAS_MINIMOS_SEMANA = 4;
 
 const diasEntre = (inicio: string, fim: string) => (ms(fim) - ms(inicio)) / DIA + 1;
 
+/** Segunda-feira (UTC, ms) da semana seg–dom que contém `t`. */
+const segundaDaSemana = (t: number): number => {
+  const dow = new Date(t).getUTCDay(); // 0=domingo..6=sábado
+  return t - ((dow + 6) % 7) * DIA;
+};
+
 /**
- * Semanas de `inicio` a `fim` (inclusive): segunda a domingo, cortadas na virada do mês e nas pontas do período.
- * Depois, dentro de cada mês, o pedaço com menos de DIAS_MINIMOS_SEMANA dias é unido à semana vizinha DO MESMO MÊS:
- * no início do mês, à seguinte; no fim, à anterior. Mês com um pedaço só fica como está. Nenhuma semana cruza mês.
+ * Ano da semana (regra C07, "a semana que contém 1º de janeiro" — na prática, quando a virada cai no meio da
+ * semana, o desempate segue o mesmo critério da planilha/ISO 8601: vale o ano da QUINTA-feira da semana, não o da
+ * segunda. É o mesmo resultado de "contém 1º de janeiro" em quase todo ano — só desempata quando 1º de janeiro cai
+ * de sexta a domingo (a semana fica majoritariamente no ano anterior). Conferido contra os 3 fatos do catálogo:
+ * S01/2026 = 29/12/2025–04/01/2026, 28/09/2026 = S40, e 2020 teve 53 semanas (a "contém 1º de janeiro" ao pé da
+ * letra dava só 52 em 2020 — a quinta-feira é quem bate com o fato).
  */
-export function semanas(inicio: string, fim: string): Semana[] {
+const anoDaSemana = (segundaMs: number): number => new Date(segundaMs + 3 * DIA).getUTCFullYear();
+
+/** Segunda-feira (UTC, ms) do S01 do ano `y`: a segunda da semana que contém a quinta-feira de referência (4 de
+ * janeiro, que está sempre na S01 do próprio ano). */
+const referenciaS01 = (y: number): number => segundaDaSemana(Date.UTC(y, 0, 4));
+
+/** Número da semana (1 a 52/53) no modo fluxo (C07) — ver anoDaSemana para o critério do ano. */
+function numeroSemanaFluxo(segundaMs: number): number {
+  return Math.round((segundaMs - referenciaS01(anoDaSemana(segundaMs))) / (7 * DIA)) + 1;
+}
+
+/** Semanas seg–dom SEM corte no mês (C07, fluxo de caixa): só corta nas pontas do período pedido (`a`/`b`, já em
+ * ms). Rótulo pela regra do ano que contém 1º de janeiro — ver numeroSemanaFluxo. */
+function semanasFluxo(a: number, b: number): Semana[] {
+  const pedacos: { inicio: string; fim: string }[] = [];
+  for (let t = a; t <= b; t += DIA) {
+    const d = new Date(t);
+    const diaISO = iso(t);
+    const ultimo = pedacos[pedacos.length - 1];
+    if (!ultimo || d.getUTCDay() === 1) pedacos.push({ inicio: diaISO, fim: diaISO });
+    else ultimo.fim = diaISO;
+  }
+  return pedacos.map((p) => ({
+    n: numeroSemanaFluxo(segundaDaSemana(ms(p.inicio))),
+    inicio: p.inicio,
+    fim: p.fim,
+    mes: p.inicio.slice(0, 7),
+  }));
+}
+
+/**
+ * Semanas de `inicio` a `fim` (inclusive). Modo 'receber' (padrão): segunda a domingo, cortadas na virada do mês e
+ * nas pontas do período; depois, dentro de cada mês, o pedaço com menos de DIAS_MINIMOS_SEMANA dias é unido à semana
+ * vizinha DO MESMO MÊS (no início do mês, à seguinte; no fim, à anterior — mês com um pedaço só fica como está).
+ * Nenhuma semana cruza mês. Modo 'fluxo' (C07): segunda a domingo, SEM cortar no mês — só nas pontas do período —
+ * numeradas S01 a S53 do ano (ver numeroSemanaFluxo).
+ */
+export function semanas(inicio: string, fim: string, modo: ModoSemana = 'receber'): Semana[] {
   const a = ms(inicio);
   const b = ms(fim);
   if (!(a <= b)) return [];
+  if (modo === 'fluxo') return semanasFluxo(a, b);
   // 1) pedaços seg–dom cortados no mês e no início do período
   const pedacos: { inicio: string; fim: string; mes: string }[] = [];
   for (let t = a; t <= b; t += DIA) {
@@ -403,14 +461,22 @@ function ordemGrupo(bloco: number, grupo: string): number {
   return i === -1 ? ordem.length : i;
 }
 
-export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: string): GradeReceber {
-  const sems = semanas(inicio, fim);
+/**
+ * `modo` (Conflito 3 do catálogo, C07): 'receber' (padrão) usa a semana cortada no mês, da planilha de Contas a
+ * Receber Semanal; 'fluxo' usa a semana S01–S53 sem corte, da planilha de Fluxo de Caixa. O resumo mensal (`meses`)
+ * NUNCA muda entre os dois modos: soma pela data de caixa de cada linha, nunca pela semana da coluna — por isso a
+ * semana que cruza o mês (só existe no modo fluxo) entra no mês certo mesmo aparecendo numa coluna só.
+ */
+export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: string, modo: ModoSemana = 'receber'): GradeReceber {
+  const sems = semanas(inicio, fim, modo);
   const n = sems.length;
   const porGrupo = new Map<string, { bloco: number; grupo: string; secao: SecaoReceber; cs: number[]; bs: number[] }>();
   let foraN = 0;
   let foraC = 0;
   let semDataN = 0;
   let semDataC = 0;
+  const porMesC = new Map<string, number>();
+  const porMesB = new Map<string, number>();
   const semBase: GradeReceber['semBase'] = [];
   let info: { grupo: string; cs: number[]; n: number; foraN: number; foraC: number } | null = null;
   for (const l of linhas) {
@@ -431,6 +497,11 @@ export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: stri
     if (!l.data_caixa) { semDataN += 1; semDataC += c(l.valor); continue; }
     const i = semanaDe(sems, l.data_caixa);
     if (i === -1) { foraN += 1; foraC += c(l.valor); continue; }
+    // Soma mensal SEMPRE pela data de caixa da linha (nunca pela semana): no modo fluxo, uma semana cruzando o mês
+    // teria de outra forma o total inteiro jogado num mês só.
+    const mesDaLinha = l.data_caixa.slice(0, 7);
+    porMesC.set(mesDaLinha, (porMesC.get(mesDaLinha) ?? 0) + c(l.valor));
+    porMesB.set(mesDaLinha, (porMesB.get(mesDaLinha) ?? 0) + c(l.valor_bruto));
     // A seção entra na chave: grupo com linhas de certeza diferente (fora do contrato) vira duas linhas, cada uma na sua
     // seção — o estimado nunca soma no subtotal certo.
     const secao = secaoDaLinha(l);
@@ -460,14 +531,26 @@ export function agregarReceber(linhas: LinhaReceber[], inicio: string, fim: stri
   const acumC: number[] = [];
   totalC.reduce((s, v, i) => (acumC[i] = s + v), 0);
 
+  // Agrupa as colunas (semanas) sob o mês do seu 1º dia — só para o cabeçalho/colSpan da grade. A SOMA de cada mês
+  // vem de porMesC/porMesB (pela data de caixa de cada linha), nunca daqui.
   const meses: MesGrade[] = [];
   for (let i = 0; i < n; i++) {
     const ultimo = meses[meses.length - 1];
-    if (ultimo && ultimo.mes === sems[i].mes) { ultimo.semanas.push(i); ultimo.total += totalC[i]; ultimo.brutoTotal += totalB[i]; }
-    else meses.push({ mes: sems[i].mes, semanas: [i], total: totalC[i], brutoTotal: totalB[i], acumulado: 0 });
+    if (ultimo && ultimo.mes === sems[i].mes) ultimo.semanas.push(i);
+    else meses.push({ mes: sems[i].mes, semanas: [i], total: 0, brutoTotal: 0, acumulado: 0 });
   }
+  // Mês tocado por alguma linha mas sem nenhuma coluna própria (semana de fronteira, no modo fluxo, cujo 1º dia caiu
+  // no mês vizinho): entra também, na ordem certa — a soma do mês nunca some em silêncio.
+  for (const mes of porMesC.keys()) if (!meses.some((m) => m.mes === mes)) meses.push({ mes, semanas: [], total: 0, brutoTotal: 0, acumulado: 0 });
+  meses.sort((x, y) => x.mes.localeCompare(y.mes));
   let acM = 0;
-  for (const m of meses) { acM += m.total; m.acumulado = r(acM); m.total = r(m.total); m.brutoTotal = r(m.brutoTotal); }
+  for (const m of meses) {
+    const mc = porMesC.get(m.mes) ?? 0;
+    acM += mc;
+    m.total = r(mc);
+    m.brutoTotal = r(porMesB.get(m.mes) ?? 0);
+    m.acumulado = r(acM);
+  }
 
   const soma = (xs: number[]) => xs.reduce((s, v) => s + v, 0);
   return {
