@@ -59,6 +59,42 @@ describe('semanas — seg a dom, cortada no mês; pedaço < 4 dias unido à vizi
   });
 });
 
+describe('semanas — modo fluxo (C07): seg a dom SEM corte no mês, rótulo S01..S53 do ano', () => {
+  it('S01/2026 = 29/12/2025–04/01/2026 (a semana que contém 1º de janeiro)', () => {
+    const s = semanas('2025-12-29', '2026-01-11', 'fluxo');
+    expect(s[0]).toEqual({ n: 1, inicio: '2025-12-29', fim: '2026-01-04', mes: '2025-12' });
+    expect(s[1].n).toBe(2);
+  });
+  it('28/09/2026 (segunda) cai em S40', () => {
+    const s = semanas('2026-09-28', '2026-10-04', 'fluxo');
+    expect(s[0]).toEqual({ n: 40, inicio: '2026-09-28', fim: '2026-10-04', mes: '2026-09' });
+  });
+  it('2026 tem 53 semanas fluxo; 2020 também teve (52 é a regra comum, os dois são exceção)', () => {
+    // Ano-semana 2026 vai de 29/12/2025 (S01) a 03/01/2027 (fim do S53) — a virada do ano-semana não é 1º de janeiro
+    // toda vez (só quando 1º cai de segunda a quinta); por isso o teste usa os limites do PRÓPRIO ano-semana.
+    const s2026 = semanas('2025-12-29', '2027-01-03', 'fluxo');
+    expect(s2026.at(-1)?.n).toBe(53);
+    // Ano-semana 2020: 30/12/2019 a 03/01/2021 (também 53 semanas).
+    const s2020 = semanas('2019-12-30', '2021-01-03', 'fluxo');
+    expect(s2020.at(-1)?.n).toBe(53);
+    // Ano comum, para contraste: ano-semana 2025 (30/12/2024 a 28/12/2025) tem 52.
+    const s2025 = semanas('2024-12-30', '2025-12-28', 'fluxo');
+    expect(s2025.at(-1)?.n).toBe(52);
+  });
+  it('semana cruza o mês (sem corte): 28/09 a 04/10/2026 é uma linha só, com dias dos dois meses', () => {
+    const s = semanas('2026-09-24', '2026-10-11', 'fluxo');
+    const cruzada = s.find((x) => x.inicio === '2026-09-28');
+    expect(cruzada).toEqual({ n: 40, inicio: '2026-09-28', fim: '2026-10-04', mes: '2026-09' });
+  });
+  it('só corta nas pontas do período pedido (igual ao modo receber), nunca no mês', () => {
+    const s = semanas('2026-09-30', '2026-10-06', 'fluxo');
+    expect(s.map((x) => `${x.inicio}..${x.fim}`)).toEqual(['2026-09-30..2026-10-04', '2026-10-05..2026-10-06']);
+  });
+  it('período invertido devolve vazio', () => {
+    expect(semanas('2026-10-02', '2026-10-01', 'fluxo')).toEqual([]);
+  });
+});
+
 describe('normalizarLinhaReceber — numeric pode chegar como texto', () => {
   it('converte valor, bloco, k e o líquido das vendas do detalhe', () => {
     const l = normalizarLinhaReceber({
@@ -124,6 +160,33 @@ describe('agregarReceber — semana × bloco × grupo, só a_receber soma', () =
     const cel = composicaoDaCelula(linhas, g.semanas[0], 1, 'Vendas já realizadas');
     expect(cel.map((l) => l.valor)).toEqual([0.1, 0.2, 100]);
     expect(composicaoDaCelula(linhas, null, 2, 'Parcelas a vencer HM').map((l) => l.valor)).toEqual([50]);
+  });
+});
+
+describe('agregarReceber — modo fluxo (C07): a semana pode cruzar o mês, o resumo mensal não muda', () => {
+  it('semana única cruzando set/out: cada linha soma no MÊS da própria data de caixa, não no mês da semana', () => {
+    const linhas: LinhaReceber[] = [
+      L({ data_caixa: '2026-09-30', valor: 10 }),
+      L({ data_caixa: '2026-10-02', valor: 20 }),
+    ];
+    const g = agregarReceber(linhas, '2026-09-28', '2026-10-04', 'fluxo');
+    expect(g.semanas).toEqual([{ n: 40, inicio: '2026-09-28', fim: '2026-10-04', mes: '2026-09' }]);
+    expect(g.totalPorSemana).toEqual([30]); // a coluna (semana única) soma os dois
+    expect(g.meses.map((m) => [m.mes, m.semanas, m.total])).toEqual([
+      ['2026-09', [0], 10], // a semana aparece na coluna set (m.semanas), mas só a parte de set entra na soma
+      ['2026-10', [], 20], // out não tem coluna própria (a semana inteira ficou em set) e ainda assim soma certo
+    ]);
+    expect(g.total).toBe(30);
+  });
+  it('igual à soma do modo receber (cortado) para o mesmo total geral e o mesmo resumo por mês', () => {
+    const linhas: LinhaReceber[] = [
+      L({ data_caixa: '2026-09-30', valor: 10 }),
+      L({ data_caixa: '2026-10-02', valor: 20 }),
+    ];
+    const receber = agregarReceber(linhas, '2026-09-28', '2026-10-04');
+    const fluxo = agregarReceber(linhas, '2026-09-28', '2026-10-04', 'fluxo');
+    expect(fluxo.total).toBe(receber.total);
+    expect(fluxo.meses.map((m) => [m.mes, m.total])).toEqual(receber.meses.map((m) => [m.mes, m.total]));
   });
 });
 
