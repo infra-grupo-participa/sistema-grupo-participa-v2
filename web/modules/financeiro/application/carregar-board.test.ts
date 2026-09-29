@@ -38,3 +38,21 @@ describe('cardBoardParaContaReceber — pacote_regra/divergencia_regra', () => {
     expect(c.divergencia_regra).toBeNull();
   });
 });
+
+describe('cardBoardParaContaReceber — voltou_* (z75/z77)', () => {
+  it('repassa voltou_* e mantém acao_nome = ação de ENTRADA', () => {
+    const c = cardBoardParaContaReceber(cardBoard({
+      acao_nome: 'Holding Total HT30 (09–10/08/2026)',
+      voltou_nome: 'Imersão Holding Total HT32 (26–27/09/2026)', voltou_data: '2026-09-26T13:00:00+00:00', voltou_regra: 'compra_cheia',
+    }));
+    expect(c.acao_nome).toBe('Holding Total HT30 (09–10/08/2026)');
+    expect(c.voltou_nome).toBe('Imersão Holding Total HT32 (26–27/09/2026)');
+    expect(c.voltou_data).toBe('2026-09-26T13:00:00+00:00');
+    expect(c.voltou_regra).toBe('compra_cheia');
+  });
+  it('RPC anterior à z75 (sem as colunas) → null, não undefined', () => {
+    const c = cardBoardParaContaReceber(cardBoard());
+    expect(c.voltou_nome).toBeNull();
+    expect(c.voltou_data).toBeNull();
+  });
+});

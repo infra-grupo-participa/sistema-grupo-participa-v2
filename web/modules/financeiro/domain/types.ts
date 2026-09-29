@@ -96,6 +96,11 @@ export interface ContaReceber {
   acao_regra?: string | null;
   captado_em?: string | null;
   captado_sck?: string | null;
+  /** Compra NOVA (sinal ou HM cheio) numa ação diferente da entrada, últimos 90 dias (fn_fin_board z75/z77).
+   *  acao_nome continua sendo a ENTRADA. Opcionais: a função anterior não devolve. */
+  voltou_nome?: string | null;
+  voltou_data?: string | null;
+  voltou_regra?: string | null;
   credito: number | null;
   /** O que ainda falta receber. É a métrica que o financeiro persegue. */
   saldo_a_pagar: number | null;
@@ -417,4 +422,10 @@ export interface CardBoard {
   acao_regra?: string | null;
   captado_em?: string | null;
   captado_sck?: string | null;
+  /** z75/z77: ao FIM do returns table. Só vem quando a pessoa fez COMPRA NOVA (sinal ou HM cheio; paga, em aberto
+   *  ou atrasada; últimos 90 dias) numa ação diferente da de entrada. acao_nome segue = ENTRADA (o Resultado por
+   *  ação conta por ela). Opcionais: a função anterior à z75 não devolve. */
+  voltou_nome?: string | null;
+  voltou_data?: string | null;
+  voltou_regra?: string | null;
 }

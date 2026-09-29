@@ -4,7 +4,7 @@
 // vêm de fn_fin_board_hotmart (1 linha por card) e são POR PESSOA × família: se a
 // pessoa tem 2 cards, os mesmos valores vêm repetidos nos dois. Por isso a soma
 // do rodapé conta cada pessoa UMA vez — somar por card dobraria o dinheiro dela.
-import type { BoardHotmart } from './hotmart';
+import type { BoardHotmart, BoletoAberto } from './hotmart';
 
 const num = (v: unknown): number => {
   const n = Number(v);
@@ -176,4 +176,55 @@ export function descreverBoletoAberto(h: BoardHotmart | null | undefined, hojeIS
     detalhe: `${quando}${quando ? '. ' : ''}Ainda não pago na Hotmart. A Hotmart não informa o vencimento.`,
     dias,
   };
+}
+
+/**
+ * "A caminho" (29/09, Marcio): soma dos boletos/Pix gerados e ainda não pagos. NÃO entra no pago nem no saldo —
+ * é dinheiro que pode não chegar. Lista z76 quando veio; senão a soma antiga (boleto_aberto_valor). 0 = nada a caminho.
+ */
+export function valorACaminho(h: BoardHotmart | null | undefined): number {
+  if (!h) return 0;
+  if (h.boletos_abertos?.length) return h.boletos_abertos.reduce((s, b) => s + num(b.valor), 0);
+  return num(h.boleto_aberto_n) > 0 ? num(h.boleto_aberto_valor) : 0;
+}
+
+export interface LinhaBoletoAberto {
+  valor: number;
+  /** Tipo pelo catálogo (sinal / saldo / compra cheia…); fora do catálogo cai no rótulo de fin.oferta_categoria. */
+  tipo: string;
+  meio: 'Boleto' | 'Pix';
+  /** "gerado hoje" / "gerado ontem" / "gerado há N dias". A Hotmart não informa vencimento. */
+  quando: string;
+  dias: number;
+  oferta_codigo: string | null;
+}
+
+/** Cada boleto/Pix em aberto (z76), na ordem da RPC (mais recente primeiro). Sem lista → []. */
+export function listarBoletosAbertos(h: BoardHotmart | null | undefined, hojeISO: string): LinhaBoletoAberto[] {
+  return (h?.boletos_abertos ?? []).map((b: BoletoAberto) => {
+    const dias = diasEntre(b.pedido_em, hojeISO);
+    return {
+      valor: num(b.valor),
+      tipo: ROTULO_CAT_BOLETO[b.categoria ?? ''] ?? ROTULO_CAT_BOLETO[b.rotulo] ?? 'oferta fora do catálogo',
+      meio: b.metodo === 'PIX' ? 'Pix' : 'Boleto',
+      quando: dias <= 0 ? 'gerado hoje' : dias === 1 ? 'gerado ontem' : `gerado há ${dias} dias`,
+      dias,
+      oferta_codigo: b.oferta_codigo ?? null,
+    };
+  });
+}
+
+/**
+ * Meta curta do "a caminho" no card (João, 29/09: uma menção por card ao mesmo dinheiro): "Pix" só quando todos
+ * são Pix, quantidade quando > 1 e há quantos dias foi gerado o mais recente. null sem lista z76 (aí o card mantém
+ * o selo antigo "Boleto em aberto").
+ */
+export function metaACaminho(h: BoardHotmart | null | undefined, hojeISO: string): string | null {
+  const l = listarBoletosAbertos(h, hojeISO);
+  if (!l.length) return null;
+  const partes: string[] = [];
+  if (l.every((b) => b.meio === 'Pix')) partes.push('Pix');
+  if (l.length > 1) partes.push(`${l.length} gerados`);
+  partes.push(l[0].dias <= 0 ? 'hoje' : `há ${l[0].dias}d`);
+  return partes.join(' · ');
 }

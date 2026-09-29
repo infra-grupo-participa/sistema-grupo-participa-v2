@@ -6,7 +6,8 @@
 //
 // Redesign 2026-08-19 (2ª passada — acabamento). 3 níveis de hierarquia:
 // identidade (nome + origem) → dinheiro (valor + progresso rotulado) →
-// contexto (status/reserva/prazo em cima, vendedor/tempo parado no rodapé).
+// contexto (status/reserva/prazo em cima, tempo parado no rodapé). Vendedor saiu do card em 29/09
+// (Marcio: card menor) — continua na ficha.
 // E-mail continua fora do card (LGPD + ruído) — permanece na ficha
 // (FichaDrawer). Estágio da ativação vira `title` do card em vez de linha
 // fixa — informação secundária, não estrutural.
@@ -14,7 +15,11 @@ import { Icon } from '@/shared/ui/icons';
 import { ProgressBar } from '@/shared/ui/components';
 import { fmtBRL, fmtBRLc, fmtData, fmtPrazo } from '@/shared/ui/format';
 import type { BoardHotmart } from '../domain/hotmart';
-import { descreverBoletoAberto, explicarDivergencia, rotuloParcelamento, temDadoHotmart } from '../domain/board-hotmart';
+import {
+  descreverBoletoAberto, explicarDivergencia, metaACaminho, rotuloParcelamento, temDadoHotmart, valorACaminho,
+} from '../domain/board-hotmart';
+import { alertaCompraCheia } from '../domain/alerta-compra';
+import { entradaRetorno } from '../domain/entrada-retorno';
 import {
   linhaAtrasoMensalidade, linhaResumoAssinatura, resumoAssinaturaCard, ROTULO_SITUACAO_ASSINATURA, type AssinaturaHMBoard,
 } from '../domain/assinatura-hm';
@@ -164,6 +169,18 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null, assinatur
   const atrasoMensalidade = linhaAtrasoMensalidade(assinaturaResumo, fmtBRL);
   // Boleto/Pix gerado e não pago: selo à parte (tracejado, cor info), nunca confundido com a cor de status do card.
   const boleto = descreverBoletoAberto(hm, hojeISO, fmtBRL);
+  // "A caminho" (29/09, Marcio): boleto/Pix em aberto, SEPARADO do pago/saldo e nunca somado neles. Card sem
+  // pacote e sem nada pago (ex.: estágio "Boleto Gerado") → ele vira o número principal em vez de campos vazios.
+  // Uma menção por card ao mesmo dinheiro (João, 29/09): com a lista z76, o "a caminho" leva meio e idade
+  // ("Pix · há 1d") e o selo tracejado "Boleto em aberto" some. Sem lista (RPC antiga), o card fica como era:
+  // só o selo, sem "a caminho".
+  const metaCaminho = metaACaminho(hm, hojeISO);
+  const aCaminho = metaCaminho ? valorACaminho(hm) : 0;
+  const soACaminho = aCaminho > 0 && !quitado && !temPacote && pago <= 0;
+  const seloBoleto = metaCaminho ? null : boleto;
+  // Boleto do HM cheio com contrato já em curso: pagaria a mais (domain/alerta-compra.ts). Texto completo na ficha.
+  const alertaCheio = hm ? alertaCompraCheia(conta, hm.boletos_abertos, fmtBRL) : null;
+  const origemCard = entradaRetorno(conta);
 
   return (
     <button
@@ -177,9 +194,9 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null, assinatur
       className={`gp-card ${CLASSE_CARD[card.cor]} gp-card--u${card.urgencia} w-full text-left p-4 cursor-pointer transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 focus-visible:ring-2`}
       aria-label={`Abrir ficha de ${conta.nome}, ${card.origem}, ${statusLabel(conta.status_financeiro)}${
         conta.saldo_a_pagar != null ? `, falta pagar ${fmtBRLc(conta.saldo_a_pagar)}` : ''
-      }${card.motivoUrgencia ? `, ${card.motivoUrgencia}` : ''}${
+      }${aCaminho > 0 ? `, a caminho ${fmtBRLc(aCaminho)} em boleto ou Pix não pago, ${metaCaminho}` : ''}${card.motivoUrgencia ? `, ${card.motivoUrgencia}` : ''}${
         divergePacote ? `, pacote divergente da régua, ${direcaoPacote === 'a_maior' ? 'a mais' : 'a menos'}` : ''
-      }${hmDiverge ? ', diverge da Hotmart' : ''}${boleto ? `, ${boleto.titulo}` : ''}${
+      }${hmDiverge ? ', diverge da Hotmart' : ''}${seloBoleto ? `, ${seloBoleto.titulo}` : ''}${alertaCheio ? `, atenção: ${alertaCheio.texto}` : ''}${
         hmAssinatura ? `, assinatura HM ${ROTULO_SITUACAO_ASSINATURA[situacaoAssinatura]}${atrasoMensalidade ? `, ${atrasoMensalidade}` : ''}` : ''
       }`}
       title={titleEstagio}
@@ -195,6 +212,17 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null, assinatur
           {card.origem}
         </span>
       </div>
+      {/* De onde veio: entrada (a que o Resultado por ação conta) e, se houve compra nova em outra ação, a volta. */}
+      {(origemCard.entrou || origemCard.voltou) && (
+        <div className="relative z-[1] mt-1 text-[10px] leading-snug text-[var(--fg-3)]">
+          {origemCard.entrou && <div className="truncate" title={origemCard.entrou}>{origemCard.entrou}</div>}
+          {origemCard.voltou && (
+            <div className="truncate text-[var(--fg-2)]" title={`${origemCard.voltou}${origemCard.voltouData ? ` (${origemCard.voltouData} = data da ação, não da compra)` : ''}`}>
+              {origemCard.voltou}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Reserva de vaga (só sinal pago): esperado mais frágil que saldo em
           curso — R$ 300 de um pacote de R$ 15.000. Marca própria, não some
@@ -216,6 +244,15 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null, assinatur
           absoluto ("R$ 300 de R$ 15.000") — % sozinho não distingue um
           pacote de 15 mil de um de 60 mil. */}
       <div className="relative z-[1] mt-3">
+        {soACaminho ? (
+          <>
+            <div className="text-[10px] font-medium uppercase tracking-wide text-[var(--fg-3)]">A caminho</div>
+            <div className="text-[20px] font-extrabold tabular leading-tight text-[var(--fg)]" title="Boleto/Pix gerado e ainda não pago. Não entra no pago nem no saldo.">
+              {fmtBRLc(aCaminho)}
+            </div>
+            <div className="mt-2 text-[10px] tabular text-[var(--fg-4)]">{metaCaminho} · sem pacote, nada pago</div>
+          </>
+        ) : (<>
         <div className="text-[10px] font-medium uppercase tracking-wide text-[var(--fg-3)]">
           {quitado ? 'Quitado' : 'Falta pagar'}
         </div>
@@ -261,11 +298,17 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null, assinatur
         ) : (
           <div className="mt-2 text-[10px] text-[var(--fg-4)]">Sem valor de pacote definido</div>
         )}
+        {aCaminho > 0 && (
+          <div className="mt-1 text-[10px] font-semibold tabular text-[var(--info)]" title="Boleto/Pix gerado e ainda não pago. Não entra no pago nem no saldo.">
+            a caminho {fmtBRLc(aCaminho)}{metaCaminho && <span className="font-normal text-[var(--fg-3)]"> · {metaCaminho}</span>}
+          </div>
+        )}
+        </>)}
       </div>
 
       {/* Nível 3 — situação (27/09, João: "as partes dentro do card estão muito desorganizadas"): uma linha de
-          selos (status + prazo + avisos), depois a Hotmart em dois números lado a lado, e o rodapé com quem cuida
-          e há quanto tempo está parado. Cada informação num lugar fixo — o olho acha sem ler o card inteiro. */}
+          selos (status + prazo + avisos), depois a Hotmart em dois números lado a lado, e o rodapé com há quanto
+          tempo está parado. Cada informação num lugar fixo — o olho acha sem ler o card inteiro. */}
       <div className="relative z-[1] mt-3 flex flex-wrap items-center gap-1">
         <span className="rounded-[var(--r-sm)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-2)]">
           {statusLabel(conta.status_financeiro)}
@@ -293,6 +336,15 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null, assinatur
             {motivoBLabel ? `sem data · ${retomarB ? `retoma ${fmtData(retomarB)}` : motivoBLabel}` : 'sem data de pagamento'}
           </span>
         )}
+        {/* Boleto do HM cheio com contrato em curso: mesmo alarme pontual do atraso (--red), texto completo no title e na ficha. */}
+        {alertaCheio && (
+          <span
+            className="inline-flex max-w-full items-center gap-1 rounded-[var(--r-sm)] border border-[var(--red-border)] bg-[var(--red-subtle)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--red)]"
+            title={alertaCheio.texto}
+          >
+            <Icon name="alert" size={10} className="shrink-0" /> <span className="truncate">{alertaCheio.curto}</span>
+          </span>
+        )}
         {hmDiverge && (
           <span
             className="inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--fg-2)]"
@@ -303,12 +355,12 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null, assinatur
         )}
       </div>
 
-      {boleto && (
+      {seloBoleto && (
         <div className="relative z-[1] mt-2 flex items-center gap-1.5 rounded-[var(--r-sm)] border border-dashed border-[var(--info-border)] bg-[var(--info-subtle)] px-2 py-1"
-          title={`${boleto.titulo}. ${boleto.detalhe}`}>
+          title={`${seloBoleto.titulo}. ${seloBoleto.detalhe}`}>
           <Icon name="receipt" size={12} className="shrink-0 text-[var(--info)]" />
-          <span className="min-w-0 truncate text-[10px] font-semibold text-[var(--info)]">{boleto.curto}</span>
-          {boleto.dias != null && <span className="ml-auto shrink-0 text-[10px] tabular text-[var(--fg-3)]">{boleto.dias <= 0 ? 'hoje' : `há ${boleto.dias}d`}</span>}
+          <span className="min-w-0 truncate text-[10px] font-semibold text-[var(--info)]">{seloBoleto.curto}</span>
+          {seloBoleto.dias != null && <span className="ml-auto shrink-0 text-[10px] tabular text-[var(--fg-3)]">{seloBoleto.dias <= 0 ? 'hoje' : `há ${seloBoleto.dias}d`}</span>}
         </div>
       )}
 
@@ -347,20 +399,16 @@ export function CardBoardView({ card, onOpen, hojeISO, hotmart = null, assinatur
         </div>
       )}
 
-      {(conta.vendedor || dias != null) && (
-        <div className="relative z-[1] mt-3 flex items-center justify-between gap-2 border-t border-[var(--border-faint)] pt-2">
-          <span className="inline-flex min-w-0 items-center gap-1 truncate text-[10px] text-[var(--fg-3)]" title={conta.vendedor ? `Comercial: ${conta.vendedor}` : undefined}>
-            {conta.vendedor && <Icon name="user" size={10} className="shrink-0" />}{conta.vendedor ?? ''}
+      {/* Rodapé: só o tempo parado. O vendedor saiu do card em 29/09 (Marcio: card menor) — está na ficha. */}
+      {dias != null && (
+        <div className="relative z-[1] mt-3 flex items-center justify-end gap-2 border-t border-[var(--border-faint)] pt-2">
+          <span
+            className={`shrink-0 text-[10px] font-semibold tabular ${TEXTO_PARADO[tomParado(dias)]}`}
+            title={LIMIAR_PARADO[tomParado(dias)] ? `parado há ${dias} dias, ${LIMIAR_PARADO[tomParado(dias)]}` : undefined}
+            aria-label={LIMIAR_PARADO[tomParado(dias)] ? `parado há ${dias} dias, ${LIMIAR_PARADO[tomParado(dias)]}` : `parado há ${dias} dias`}
+          >
+            parado há {dias}d
           </span>
-          {dias != null && (
-            <span
-              className={`shrink-0 text-[10px] font-semibold tabular ${TEXTO_PARADO[tomParado(dias)]}`}
-              title={LIMIAR_PARADO[tomParado(dias)] ? `parado há ${dias} dias, ${LIMIAR_PARADO[tomParado(dias)]}` : undefined}
-              aria-label={LIMIAR_PARADO[tomParado(dias)] ? `parado há ${dias} dias, ${LIMIAR_PARADO[tomParado(dias)]}` : `parado há ${dias} dias`}
-            >
-              parado há {dias}d
-            </span>
-          )}
         </div>
       )}
     </button>

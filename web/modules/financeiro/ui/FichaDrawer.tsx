@@ -17,7 +17,9 @@ import { FichaResumoTopo } from './FichaResumoTopo';
 import type { FinanceiroRepository } from '../application/ports';
 import { carregarFicha, type Ficha } from '../application/carregar-ficha';
 import { rotuloMetodo, type BoardHotmart, type ProrataHM } from '../domain/hotmart';
-import { descreverBoletoAberto, fmtMesAno, rotuloParcelamento, temDadoHotmart } from '../domain/board-hotmart';
+import { descreverBoletoAberto, fmtMesAno, listarBoletosAbertos, rotuloParcelamento, temDadoHotmart, valorACaminho } from '../domain/board-hotmart';
+import { alertaCompraCheia } from '../domain/alerta-compra';
+import { fmtDiaMes } from '../domain/entrada-retorno';
 import {
   assinaturaDoCard, linhaAtrasoMensalidade, resumoAssinaturaCard, ROTULO_SITUACAO_ASSINATURA,
   type AssinaturaHMBoard, type ResumoAssinaturaCard,
@@ -171,6 +173,7 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
       {tab === 'resumo' && (
         <div className="space-y-4">
           <FichaResumoTopo conta={conta} cor={corStatus(conta.status_financeiro)} regua={regua} hojeISO={hojeISO} />
+          <AlertaCompraCheia conta={conta} hm={hm} />
           <AvisoBoleto hm={hm} hojeISO={hojeISO} />
           <EmUmaOlhada conta={conta} hm={hotmartErro ? null : hm} carregando={hmCarregando} assinatura={assinatura} />
           <section>
@@ -196,13 +199,26 @@ export function FichaDrawer({ conta, repo, canEdit, canVerDoc, regua, hojeISO, o
           <SecaoCombinadoComercial conta={conta} />
           <section>
             <SectionTitle>De onde veio</SectionTitle>
-            <Row k="Ação / evento" v={conta.acao_nome ? rotuloDaAcao(conta.acao_nome) : '—'} />
+            <Row k="Entrou por" v={conta.acao_nome ? rotuloDaAcao(conta.acao_nome) : '—'} />
+            {conta.voltou_nome && (
+              <Row
+                k="Voltou em"
+                v={`${rotuloDaAcao(conta.voltou_nome)}${fmtDiaMes(conta.voltou_data) ? ` · ação em ${fmtDiaMes(conta.voltou_data)}` : ''}`}
+              />
+            )}
             <Row k="Turma de origem" v={conta.turma ?? '—'} />
             <Row k="Canal" v={conta.canal} />
             <Row k="1ª compra" v={conta.captado_em ? fmtData(conta.captado_em) : 'ainda não pagou'} />
             {conta.captado_sck && <Row k="Link de venda (sck)" v={conta.captado_sck} />}
             {conta.acao_regra && (
-              <p className="mt-1 text-[11px] text-[var(--fg-4)]">Identificado por: {conta.acao_regra}.</p>
+              <p className="mt-1 text-[11px] text-[var(--fg-4)]">Entrada identificada por: {conta.acao_regra}.</p>
+            )}
+            {conta.voltou_nome && (
+              <p className="mt-1 text-[11px] text-[var(--fg-4)]">
+                Voltou = compra nova (sinal ou HM cheio) em outra ação, nos últimos 90 dias{conta.voltou_regra ? `, identificada por: ${conta.voltou_regra}` : ''}.
+                A data ao lado é a da ação, não a da compra.
+                O resultado por ação continua contando pela entrada.
+              </p>
             )}
           </section>
           <section>
@@ -324,17 +340,47 @@ function SecaoBoardHotmart({ hm, carregando, erro, assinatura }: {
   );
 }
 
-/** Boleto/Pix gerado e não pago (20260928o): o que é, quanto, há quanto tempo. Some quando não há. */
+/** Boleto/Pix gerado e não pago (20260928o): o que é, quanto, há quanto tempo. Some quando não há.
+ *  z76: lista cada um (valor, tipo pelo catálogo, gerado há N dias) e o total "a caminho", que NÃO soma no pago/saldo. */
 function AvisoBoleto({ hm, hojeISO }: { hm: BoardHotmart | null; hojeISO: string }) {
   const b = descreverBoletoAberto(hm, hojeISO, fmtBRLc);
   if (!b) return null;
+  const lista = listarBoletosAbertos(hm, hojeISO);
   return (
     <section className="flex items-start gap-2 rounded-[var(--r-lg)] border border-dashed border-[var(--info-border)] bg-[var(--info-subtle)] px-3 py-2.5">
       <Icon name="receipt" size={16} className="mt-0.5 shrink-0 text-[var(--info)]" />
-      <div className="text-sm">
+      <div className="min-w-0 flex-1 text-sm">
         <div className="font-semibold text-[var(--fg)]">{b.titulo}</div>
-        <div className="text-xs text-[var(--fg-2)]">{b.detalhe} Veja na aba Pagamentos (filtro «Não pagos»).</div>
+        {lista.length > 0 && (
+          <>
+            <div className="mt-1 text-xs text-[var(--fg-2)]">A caminho: <span className="font-semibold tabular text-[var(--fg)]">{fmtBRLc(valorACaminho(hm))}</span> (não soma no pago nem no saldo)</div>
+            <table className="mt-1 w-full text-xs tabular">
+              <tbody>
+                {lista.map((l, i) => (
+                  <tr key={i} className="border-t border-[var(--border-faint)]">
+                    <td className="py-0.5 pr-2 font-semibold text-[var(--fg)]">{fmtBRLc(l.valor)}</td>
+                    <td className="py-0.5 pr-2 text-[var(--fg-2)]">{l.meio} · {l.tipo}</td>
+                    <td className="py-0.5 text-right text-[var(--fg-3)]">{l.quando}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+        <div className="mt-1 text-xs text-[var(--fg-2)]">{lista.length > 0 ? 'Ainda não pagos na Hotmart. A Hotmart não informa o vencimento.' : b.detalhe} Veja na aba Pagamentos (filtro «Não pagos»).</div>
       </div>
+    </section>
+  );
+}
+
+/** Boleto do HM cheio com contrato já em curso (domain/alerta-compra.ts): texto completo. Some quando não se aplica. */
+function AlertaCompraCheia({ conta, hm }: { conta: ContaReceber; hm: BoardHotmart | null }) {
+  const a = temDadoHotmart(hm) ? alertaCompraCheia(conta, hm.boletos_abertos, fmtBRLc) : null;
+  if (!a) return null;
+  return (
+    <section className="flex items-start gap-2 rounded-[var(--r-lg)] border border-[var(--red-border)] bg-[var(--red-subtle)] px-3 py-2.5">
+      <Icon name="alert" size={16} className="mt-0.5 shrink-0 text-[var(--red)]" />
+      <div className="text-sm font-semibold text-[var(--red)]">{a.texto}</div>
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  descreverBoletoAberto, explicarDivergencia, fmtMesAno, indexarBoardHotmart, rotuloParcelamento, somarHotmart, temDadoHotmart,
+  descreverBoletoAberto, explicarDivergencia, fmtMesAno, indexarBoardHotmart, listarBoletosAbertos, metaACaminho, rotuloParcelamento,
+  somarHotmart, temDadoHotmart, valorACaminho,
 } from './board-hotmart';
 import type { BoardHotmart } from './hotmart';
 
@@ -152,5 +153,33 @@ describe('descreverBoletoAberto', () => {
     expect(d.curto).toBe('Pix em aberto · R$ 1300');
     expect(d.titulo).toContain('(2 gerados)');
     expect(d.detalhe).toContain('gerado hoje');
+  });
+});
+
+describe('valorACaminho / listarBoletosAbertos (z76)', () => {
+  const lista = [
+    { valor: 15000, categoria: 'compra_cheia', rotulo: 'compra_cheia', oferta_codigo: 'abc', metodo: 'BILLET', pedido_em: '2026-09-26' },
+    { valor: 697, categoria: null, rotulo: 'desconhecida', oferta_codigo: null, metodo: 'PIX', pedido_em: '2026-09-29' },
+  ];
+  it('soma a lista, nunca o pago/saldo', () => {
+    expect(valorACaminho(linha({ boletos_abertos: lista, boleto_aberto_n: 2, boleto_aberto_valor: 99 }))).toBe(15697);
+  });
+  it('sem lista (função anterior à z76) → soma antiga; sem boleto → 0', () => {
+    expect(valorACaminho(linha({ boleto_aberto_n: 1, boleto_aberto_valor: 1300 }))).toBe(1300);
+    expect(valorACaminho(linha())).toBe(0);
+    expect(valorACaminho(null)).toBe(0);
+  });
+  it('uma linha por boleto: tipo pelo catálogo, meio e há quantos dias (sem vencimento)', () => {
+    const l = listarBoletosAbertos(linha({ boletos_abertos: lista }), '2026-09-29');
+    expect(l.map((b) => [b.valor, b.tipo, b.meio, b.quando])).toEqual([
+      [15000, 'compra cheia', 'Boleto', 'gerado há 3 dias'],
+      [697, 'oferta desconhecida', 'Pix', 'gerado hoje'],
+    ]);
+    expect(listarBoletosAbertos(linha(), '2026-09-29')).toEqual([]);
+  });
+  it('metaACaminho: dias do 1º da lista (a RPC manda o mais recente primeiro); "Pix" só se todos forem Pix; sem lista → null', () => {
+    expect(metaACaminho(linha({ boletos_abertos: lista }), '2026-09-29')).toBe('2 gerados · há 3d');
+    expect(metaACaminho(linha({ boletos_abertos: [lista[1]] }), '2026-09-29')).toBe('Pix · hoje');
+    expect(metaACaminho(linha({ boleto_aberto_n: 1, boleto_aberto_valor: 1 }), '2026-09-29')).toBeNull();
   });
 });
