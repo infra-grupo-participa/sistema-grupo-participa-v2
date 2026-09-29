@@ -25,7 +25,8 @@ export function AceleraParaHM({ repo }: { repo: FinanceiroRepository }) {
   const subiram = dados.filter((p) => p.subiu);
   const jaEramHm = dados.filter((p) => p.ja_era_hm).length;
   const semCard = subiram.filter((p) => !p.tem_card).length;
-  const totalHmDepois = dados.reduce((s, p) => s + Number(p.hm_pago_depois ?? 0), 0);
+  // Só quem subiu: pagamento de quem já era HM (mensalidade, saldo antigo) não é conversão do Acelera.
+  const totalHmDepois = subiram.reduce((s, p) => s + Number(p.hm_pago_depois ?? 0), 0);
   const comDias = subiram.filter((p) => p.dias_ate_subir != null);
   const mediaDias = comDias.length ? comDias.reduce((s, p) => s + Number(p.dias_ate_subir), 0) / comDias.length : null;
 
@@ -43,7 +44,7 @@ export function AceleraParaHM({ repo }: { repo: FinanceiroRepository }) {
         <KpiCard label="Compradores do Acelera" value={String(dados.length)} bar="accent" />
         <KpiCard label="Subiram para o HM" value={String(subiram.length)} bar="green" />
         <KpiCard label="Já eram HM antes" value={String(jaEramHm)} bar="gray" />
-        <KpiCard label="Total pago no HM depois" value={fmtBRLc(totalHmDepois)} bar="purple" />
+        <KpiCard label="Pago no HM por quem subiu" value={fmtBRLc(totalHmDepois)} bar="purple" />
         <KpiCard label="Média de dias até subir" value={mediaDias != null ? `${mediaDias.toFixed(0)} dias` : '—'} bar="accent" />
         <KpiCard
           label="Subiram sem card no board" value={String(semCard)} bar="red"
