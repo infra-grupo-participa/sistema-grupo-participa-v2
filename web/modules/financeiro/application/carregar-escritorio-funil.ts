@@ -52,24 +52,32 @@ export interface TotalFunilEscritorio {
   sessoes_vendas: number;
   pessoas: number;
   croqui_pessoas: number;
-  croqui_pct: number | null;
   hf_pessoas: number;
+  /** % sobre quem começou pela Sessão (eventos + balde -3); os baldes -2 e -1 ficam fora do numerador e do denominador. */
+  croqui_pct: number | null;
   hf_pct: number | null;
 }
 
+/** Baldes de quem NÃO começou pela Sessão (-2 direto no Croqui, -1 direto na HF): contam nas somas, não no %. */
+const FORA_DO_PCT = new Set(['croqui', 'direto_hf']);
+
 /**
- * Rodapé: soma das linhas (eventos + baldes). Cada pessoa tem UMA linha de entrada no SQL (funil_id), então somar
- * `pessoas`, `croqui_pessoas` e `hf_pessoas` não conta ninguém duas vezes. A % é a mesma conta da RPC
- * (n / pessoas × 100, 1 casa) sobre as somas. Mediana não se soma: o rodapé não mostra.
+ * Rodapé. Contagens: soma de TODAS as linhas (eventos + 3 baldes). Cada pessoa tem UMA linha de entrada no SQL
+ * (funil_id), então a soma não conta ninguém duas vezes. %: conversão A PARTIR DA SESSÃO (decisão do coordenador,
+ * 30/09) — só eventos e o balde -3; nos baldes -2/-1 o SQL conta a própria entrada (39 → Croqui = 100%), o que inflaria
+ * a taxa. Mesma conta da RPC (n / pessoas × 100, 1 casa). Mediana não se soma: o rodapé não mostra.
  */
 export function totalizarFunilEscritorio(linhas: LinhaFunilEscritorio[]): TotalFunilEscritorio {
-  const soma = (f: (l: LinhaFunilEscritorio) => number) => linhas.reduce((s, l) => s + f(l), 0);
-  const pessoas = soma((l) => l.pessoas);
-  const croqui = soma((l) => l.croqui_pessoas);
-  const hf = soma((l) => l.hf_pessoas);
-  const pct = (n: number) => (pessoas ? Math.round((1000 * n) / pessoas) / 10 : null);
+  const soma = (ls: LinhaFunilEscritorio[], f: (l: LinhaFunilEscritorio) => number) => ls.reduce((s, l) => s + f(l), 0);
+  const sessao = linhas.filter((l) => !FORA_DO_PCT.has(l.tipo));
+  const base = soma(sessao, (l) => l.pessoas);
+  const pct = (n: number) => (base ? Math.round((1000 * n) / base) / 10 : null);
   return {
-    sessoes_vendas: soma((l) => l.sessoes_vendas), pessoas,
-    croqui_pessoas: croqui, croqui_pct: pct(croqui), hf_pessoas: hf, hf_pct: pct(hf),
+    sessoes_vendas: soma(linhas, (l) => l.sessoes_vendas),
+    pessoas: soma(linhas, (l) => l.pessoas),
+    croqui_pessoas: soma(linhas, (l) => l.croqui_pessoas),
+    hf_pessoas: soma(linhas, (l) => l.hf_pessoas),
+    croqui_pct: pct(soma(sessao, (l) => l.croqui_pessoas)),
+    hf_pct: pct(soma(sessao, (l) => l.hf_pessoas)),
   };
 }

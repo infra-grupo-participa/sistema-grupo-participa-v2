@@ -104,6 +104,7 @@ export function FunilEscritorio({ cache }: { cache: CacheEscritorioFunil }) {
           </tr>
         </tfoot>
       </DataTable>
+      <p className="text-[11px] text-[var(--fg-3)]">% calculado sobre quem começou pela Sessão.</p>
 
       {aberta && <PessoasDaLinha key={aberta.evento_id} cache={cache} linha={aberta} onClose={() => setAberta(null)} />}
     </div>

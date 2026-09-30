@@ -36,7 +36,9 @@ export function FunisEventos({ repo }: { repo: FinanceiroRepository }) {
   const totBruto = recorte.reduce((s, f) => s + f.bruto, 0);
   const totLiq = recorte.reduce((s, f) => s + f.liquido, 0);
   const totPessoas = recorte.reduce((s, f) => s + f.compradores, 0);
-  const escritorioSemConta = setor === 'escritorio';
+  // O aviso de conta desconectada segue o dado (conta_ausente vem de fin.hotmart_contas.visivel_funis, z89/z90), não o
+  // setor: a conta do escritório está ligada desde 29/09 e 0 de 16 eventos vêm ausentes (medido 30/09).
+  const escritorioSemConta = setor === 'escritorio' && doSetor.some((f) => f.conta_ausente);
 
   return (
     <div className="space-y-4">
@@ -57,7 +59,11 @@ export function FunisEventos({ repo }: { repo: FinanceiroRepository }) {
         <p className="rounded-[var(--r-md)] border border-[var(--yellow)] px-3 py-2 text-xs text-[var(--fg-2)]">
           De 2021 a 2024 a Sessão de Viabilidade e o Croqui foram vendidos nesta conta, e os números estão aqui. De 2025 em diante as
           vendas do escritório estão na conta Hotmart <strong>mcsmarciosa@gmail.com</strong>, que ainda não está conectada: esses
-          seminários mostram só o que foi registrado na época.{' '}
+          seminários mostram só o que foi registrado na época.
+        </p>
+      )}
+      {setor === 'escritorio' && (
+        <p className="text-xs text-[var(--fg-2)]">
           <a href="#escritorio" className="font-semibold text-[var(--accent)] underline underline-offset-2">
             Funil Sessão → Croqui → Holding Familiar por evento: aba Escritório
           </a>

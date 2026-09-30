@@ -10,13 +10,20 @@ const linha = (p: Partial<LinhaFunilEscritorio>): LinhaFunilEscritorio => ({
 });
 
 describe('totalizarFunilEscritorio', () => {
-  it('soma eventos + baldes; % sobre as somas, 1 casa', () => {
+  it('contagens somam tudo; % só sobre quem começou pela Sessão (eventos + -3), 1 casa', () => {
     const t = totalizarFunilEscritorio([
       linha({ sessoes_vendas: 101, pessoas: 100, croqui_pessoas: 30, hf_pessoas: 2 }),
       linha({ evento_id: -3, tipo: 'perene', sessoes_vendas: 110, pessoas: 110, croqui_pessoas: 36, hf_pessoas: 3 }),
-      linha({ evento_id: -2, tipo: 'croqui', pessoas: 29, croqui_pessoas: 0, hf_pessoas: 2 }),
+      linha({ evento_id: -2, tipo: 'croqui', pessoas: 29, croqui_pessoas: 29, hf_pessoas: 2 }),
+      linha({ evento_id: -1, tipo: 'direto_hf', pessoas: 5, hf_pessoas: 5 }),
     ]);
-    expect(t).toEqual({ sessoes_vendas: 211, pessoas: 239, croqui_pessoas: 66, croqui_pct: 27.6, hf_pessoas: 7, hf_pct: 2.9 });
+    // 66/210 = 31,4%; 5/210 = 2,4%. Com os baldes -2/-1 daria 95/244 = 38,9% e 12/244 = 4,9% (inflado).
+    expect(t).toEqual({ sessoes_vendas: 211, pessoas: 244, croqui_pessoas: 95, hf_pessoas: 12, croqui_pct: 31.4, hf_pct: 2.4 });
+  });
+  it('só baldes -2/-1: % nula (ninguém começou pela Sessão)', () => {
+    const t = totalizarFunilEscritorio([linha({ evento_id: -2, tipo: 'croqui', pessoas: 3, croqui_pessoas: 3 })]);
+    expect(t.pessoas).toBe(3);
+    expect(t.croqui_pct).toBeNull();
   });
   it('sem pessoas: % nula, nunca divisão por zero', () => {
     expect(totalizarFunilEscritorio([linha({})]).croqui_pct).toBeNull();

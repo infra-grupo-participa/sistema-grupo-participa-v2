@@ -45,6 +45,7 @@ test.describe('Financeiro · aba Escritório (somente leitura)', () => {
     }
     const rodape = tabela.locator('tfoot tr');
     await expect(rodape).toContainText('Total');
+    await expect(page.getByText('% calculado sobre quem começou pela Sessão.', { exact: true })).toBeVisible();
     console.log(`[e2e] rodapé: ${(await rodape.innerText()).replace(/\s+/g, ' ')}`);
     const aviso = page.getByRole('status').filter({ hasText: 'ainda estão sendo carregadas' });
     console.log(`[e2e] aviso de conta do escritório oculta: ${await aviso.count()}`);
