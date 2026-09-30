@@ -3,6 +3,7 @@
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type { Aluno360 } from '../domain/aluno-360';
+import { normalizarLinhas, type LinhaTrajetoriaAluno } from '../domain/trajetoria-aluno';
 
 const db = () => createBrowserSupabase();
 
@@ -182,6 +183,17 @@ export async function loadPlacaHistorico(alunoId: string, email: string | null):
     solicitacao: (solRes.data as PlacaHistorico['solicitacao']) ?? null,
     auditoria: (audRes.data as PlacaHistorico['auditoria']) ?? null,
   };
+}
+
+/**
+ * Trajetória do aluno (fn_aluno_trajetoria): 1 RPC por aluno. Lança erro — a seção mostra a mensagem e o
+ * "tentar de novo". A RPC já devolve `valor` null para quem está fora do financeiro.
+ */
+export async function loadTrajetoriaAluno(alunoId: string): Promise<LinhaTrajetoriaAluno[]> {
+  const { data, error } = await db().rpc('fn_aluno_trajetoria', { p_aluno_id: alunoId });
+  logQueryError('loadTrajetoriaAluno', error);
+  if (error) throw new Error('Não foi possível carregar a trajetória.');
+  return normalizarLinhas((data as unknown[]) ?? []);
 }
 
 /** Cadastro manual em thb_alunos (RLS: policy thb_alunos_insert_editores). */

@@ -18,6 +18,7 @@ import { Icon } from '@/shared/ui/icons';
 import { fmtData } from '@/shared/ui/format';
 import { DashboardAlunos } from './DashboardAlunos';
 import { AlunoDrawer } from './AlunoDrawer';
+import { invalidarTrajetoria } from './TrajetoriaAluno';
 import { NovoAlunoDrawer } from './NovoAlunoDrawer';
 import { exportarCsvAlunos, exportarExcelAlunos } from './alunos-export';
 import { motivoSemVencimento, sitTone, tel, turmaCombo } from './alunos-ui-shared';
@@ -399,7 +400,7 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
           onToggleEdit={() => setEditMode((e) => !e)}
           onClose={() => { setSelectedId(null); setEditMode(false); }}
           onAbrirAluno={(id) => { setSelectedId(id); setEditMode(false); }}
-          onSaved={async (msg) => { flash(msg); setEditMode(false); await reload(); }}
+          onSaved={async (msg) => { flash(msg); setEditMode(false); await reload(); invalidarTrajetoria(selected.id); }}
         />
       )}
       <Toast>{toast}</Toast>

@@ -22,6 +22,10 @@ import { fmtBRL, fmtData } from '@/shared/ui/format';
 import { fetchJson } from '@/shared/ui/fetch-json';
 import { AlunoForm } from './AlunoForm';
 import { SecTitle, SubTitle, Section, Row } from './alunos-ui-bits';
+import { TrajetoriaAluno } from './TrajetoriaAluno';
+
+// Trajetória do aluno: ligada por padrão; NEXT_PUBLIC_ALUNO_TRAJETORIA=off desliga (inlined no build).
+const TRAJETORIA_ATIVA = process.env.NEXT_PUBLIC_ALUNO_TRAJETORIA !== 'off';
 
 // Liga a aba "Curso" quando a integração real de desempenho existir (hoje só há mock zerado).
 const CURSO_TAB_ATIVA = false as boolean;
@@ -214,6 +218,9 @@ export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggl
               </Collapse>
             </Section>
           </SectionCard>
+
+          {/* Trajetória — aberta, carrega com a ficha (fn_aluno_trajetoria) */}
+          {TRAJETORIA_ATIVA && <TrajetoriaAluno alunoId={a.id} />}
 
           {/* Metadados — bloco discreto no fim */}
           <SectionCard title={<SecTitle icon="notebook">Metadados</SecTitle>}>
