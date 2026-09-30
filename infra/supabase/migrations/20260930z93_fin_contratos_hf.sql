@@ -141,6 +141,11 @@ begin
   if not exists (select 1 from cron.job where jobname = 'fin-oferta-evento-resolver') then
     raise exception 'z93: cron fin-oferta-evento-resolver (z84) ausente';
   end if;
+  if to_regprocedure('public.unaccent(regdictionary,text)') is null
+     or not exists (select 1 from pg_ts_dict d join pg_namespace n on n.oid = d.dictnamespace
+                     where d.dictname = 'unaccent' and n.nspname = 'public') then
+    raise exception 'z93: extensão unaccent (schema public) ausente — fin.contratos_hf_nome_norm depende dela';
+  end if;
   if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace
         and p.proname in ('fn_fin_informado_salvar','fn_fin_informados_importar','fn_fin_informados_listar')) <> 3
      or (select count(*) from pg_proc p where p.pronamespace = 'fin'::regnamespace and p.proname = 'informado_normalizar') <> 1 then
@@ -612,13 +617,13 @@ create trigger informados_baixa_hotmart_trava before insert or update on fin.rec
 -- Aparece quando a Hotmart regrava o e-mail do comprador em transações antigas (a edge hotmart-sync reescreve
 -- comprador_email): não pode tirar do contrato dono as baixas/entradas que ele já tinha (Kirad, 3ª rodada).
 -- Nome para comparar: minúsculas, sem acento, espaços colapsados (front pentest 30/09: parcela de outro cliente).
+-- Mesma régua do front (que tira qualquer diacrítico): public.unaccent com dicionário EXPLÍCITO — a forma de 2
+-- argumentos com regdictionary fixo é o wrapper imutável padrão (a de 1 argumento é STABLE por depender do search_path).
 create function fin.contratos_hf_nome_norm(p text)
 returns text
-language sql immutable security invoker set search_path = ''
+language sql immutable parallel safe security invoker set search_path = ''
 as $$
-  select btrim(regexp_replace(lower(translate(coalesce(p, ''),
-           'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ',
-           'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn')), '\s+', ' ', 'g'))
+  select btrim(regexp_replace(lower(public.unaccent('public.unaccent'::regdictionary, coalesce(p, ''))), '\s+', ' ', 'g'))
 $$;
 revoke all on function fin.contratos_hf_nome_norm(text) from public, anon, authenticated;
 
@@ -1265,8 +1270,7 @@ grant execute on function public.fn_fin_parcela_etapa_concluir(uuid, date) to au
 create function public.fn_fin_contratos_hf_pagamentos(p_so_fila boolean default true)
 returns table (transacao text, dia date, valor numeric, nome_hotmart text, email_hotmart text,
                contrato_id uuid, contrato_nome text, situacao text, motivo text,
-               informado_id uuid, parcela_n int, parcela_de int, atualizado_em timestamptz,
-               sync_ultima_em timestamptz, sync_erros int, sync_mensagem text)
+               informado_id uuid, parcela_n int, parcela_de int, atualizado_em timestamptz)
 language plpgsql stable security definer set search_path = ''
 as $$
 #variable_conflict use_column
@@ -1276,10 +1280,8 @@ begin
   end if;
   return query
   select pg.transacao, pg.dia, pg.valor::numeric, t.nome, t.email, pg.contrato_id, c.nome, pg.situacao, pg.motivo,
-         pg.informado_id, i.parcela_n, i.parcela_de, pg.atualizado_em,
-         st.ultima_em, st.erros, st.mensagem
+         pg.informado_id, i.parcela_n, i.parcela_de, pg.atualizado_em
     from fin.contratos_hf_pagamentos pg
-    left join fin.contratos_hf_sync_status st on st.id = 1
     left join fin.vw_transacoes_escritorio t on t.transacao = pg.transacao
     left join fin.contratos_hf c on c.id = pg.contrato_id
     left join fin.recebimentos_informados i on i.id = pg.informado_id
@@ -1288,8 +1290,8 @@ begin
 end $$;
 comment on function public.fn_fin_contratos_hf_pagamentos(boolean) is
   'z93: conciliação dos pagamentos HF da Hotmart. p_so_fila (padrão) = só a fila de conferência (o que não casou, com o '
-  'motivo); false = tudo (baixou_parcela, entrada, fila, estornado). sync_* = última sincronização (cron :25): '
-  'quando, quantos erros e as mensagens — repetidos em toda linha. Leitura: gp_pode_ver_financeiro().';
+  'motivo); false = tudo (baixou_parcela, entrada, fila, estornado). Status do cron: fn_fin_contratos_hf_sync_status(). '
+  'Leitura: gp_pode_ver_financeiro().';
 revoke all on function public.fn_fin_contratos_hf_pagamentos(boolean) from public, anon;
 grant execute on function public.fn_fin_contratos_hf_pagamentos(boolean) to authenticated;
 
@@ -1378,3 +1380,6 @@ begin
     raise exception 'z93: linha de outro tipo com contrato/etapa';
   end if;
 end $conf$;
+
+-- PostgREST: recarrega o cache do schema (RPCs novas e RETURNS alterado de fn_fin_informados_listar)
+notify pgrst, 'reload schema';
