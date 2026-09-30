@@ -36,6 +36,23 @@ describe('formulário Criar evento', () => {
     expect(formDaProposta(o)).toEqual({ nome: 'Clínica POA', categoria: 'clinica', inicio: '', fim: '',
       carrinho_inicio: '2026-09-10', venda_ate: '2026-09-25' });
   });
+  it('proposta com inicio (z95): formulário vem com a data da 1ª venda', () => {
+    const c = normalizarOfertaFila({ oferta_codigo: 'a', proposta_evento: { nome: 'X', categoria: 'clinica', inicio: '2026-09-27' } });
+    expect(c.proposta_evento?.inicio).toBe('2026-09-27');
+    expect(formDaProposta(c).inicio).toBe('2026-09-27');
+    const t = normalizarOfertaFila({ oferta_codigo: 'a', proposta_evento: '{"nome":"X","inicio":"2026-09-27"}' });
+    expect(formDaProposta(t).inicio).toBe('2026-09-27');
+  });
+  it('proposta antiga sem inicio: campo vazio', () => {
+    expect(o.proposta_evento).not.toHaveProperty('inicio');
+    expect(formDaProposta(o).inicio).toBe('');
+  });
+  it('inicio inválido: campo vazio', () => {
+    for (const inicio of ['27/09/2026', '2026-9-7', '2026-13-45', '', null, 20260927, 'lixo']) {
+      const c = normalizarOfertaFila({ oferta_codigo: 'a', proposta_evento: { nome: 'X', inicio } });
+      expect(formDaProposta(c).inicio).toBe('');
+    }
+  });
   it('sem proposta: nome da oferta, resto vazio', () => {
     expect(formDaProposta({ ...o, proposta_evento: null })).toMatchObject({ nome: 'Oferta', categoria: '', carrinho_inicio: '' });
   });

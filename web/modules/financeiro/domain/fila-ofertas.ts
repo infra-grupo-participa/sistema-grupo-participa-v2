@@ -10,6 +10,8 @@ export interface PropostaEvento {
   categoria: string | null;
   carrinho_inicio: string | null;
   venda_ate: string | null;
+  /** Data da 1ª venda (z95). Ausente em proposta antiga ou de formato inválido. */
+  inicio?: string;
 }
 
 export interface OfertaFila {
@@ -41,6 +43,7 @@ export type DecisaoOferta =
   | { tipo: 'criar'; evento: NovoEvento }
   | { tipo: 'rejeitar' };
 
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const texto = (v: unknown): string | null => (v == null || v === '' ? null : String(v));
 const dia = (v: unknown): string | null => (v == null || v === '' ? null : String(v).slice(0, 10));
 const idOuNull = (v: unknown): number | null => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
@@ -52,7 +55,10 @@ function lerProposta(v: unknown): PropostaEvento | null {
   }
   if (bruto == null || typeof bruto !== 'object' || Array.isArray(bruto)) return null;
   const o = bruto as Record<string, unknown>;
-  return { nome: texto(o.nome), categoria: texto(o.categoria), carrinho_inicio: dia(o.carrinho_inicio), venda_ate: dia(o.venda_ate) };
+  const p: PropostaEvento = { nome: texto(o.nome), categoria: texto(o.categoria), carrinho_inicio: dia(o.carrinho_inicio), venda_ate: dia(o.venda_ate) };
+  const inicio = typeof o.inicio === 'string' ? o.inicio : '';
+  if (ISO.test(inicio) && !Number.isNaN(Date.parse(inicio))) p.inicio = inicio;
+  return p;
 }
 
 export function normalizarOfertaFila(r: Record<string, unknown>): OfertaFila {
@@ -95,13 +101,13 @@ export interface FormNovoEvento {
   venda_ate: string;
 }
 
-/** Pré-preenche com a proposta do banco. A proposta não traz a data do evento: o início fica para quem decide. */
+/** Pré-preenche com a proposta do banco. `inicio` só vem em proposta nova (z95); sem ele fica para quem decide. */
 export function formDaProposta(o: Pick<OfertaFila, 'proposta_evento' | 'oferta_nome' | 'produto_nome'>): FormNovoEvento {
   const p = o.proposta_evento;
   return {
     nome: p?.nome ?? o.oferta_nome ?? o.produto_nome ?? '',
     categoria: p?.categoria ?? '',
-    inicio: '',
+    inicio: p?.inicio ?? '',
     fim: '',
     carrinho_inicio: p?.carrinho_inicio ?? '',
     venda_ate: p?.venda_ate ?? '',
@@ -109,7 +115,6 @@ export function formDaProposta(o: Pick<OfertaFila, 'proposta_evento' | 'oferta_n
 }
 
 export const CATEGORIA_EVENTO_RE = /^[a-z][a-z0-9_]{1,39}$/;
-const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Mesmas travas de fn_fin_decidir_oferta (p_criar). Lista vazia = pode enviar. */
 export function validarNovoEvento(f: FormNovoEvento): string[] {

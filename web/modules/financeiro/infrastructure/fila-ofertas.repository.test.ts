@@ -6,6 +6,7 @@ const rpc = vi.fn();
 vi.mock('@/shared/infrastructure/supabase/browser-client', () => ({ createBrowserSupabase: () => ({ rpc }) }));
 vi.mock('@/shared/infrastructure/supabase/query-log', () => ({ logQueryError: vi.fn() }));
 
+const { formDaProposta } = await import('../domain/fila-ofertas');
 const { SupabaseFinanceiroRepository } = await import('./supabase-financeiro.repository');
 const repo = new SupabaseFinanceiroRepository();
 
@@ -17,6 +18,16 @@ describe('Ofertas a confirmar — RPCs', () => {
     const [o] = await repo.carregarFilaOfertas();
     expect(rpc).toHaveBeenCalledWith('fn_fin_fila_ofertas');
     expect(o).toMatchObject({ oferta_codigo: 'a', n_vendas: 3, sugestao_evento_id: 9, sugestao_evento: 'Ev' });
+  });
+
+  it('fila: proposta_evento.inicio (z95) chega até o formulário; sem ele, vazio', async () => {
+    rpc.mockResolvedValue({ data: [
+      { oferta_codigo: 'a', proposta_evento: { nome: 'X', categoria: 'clinica', inicio: '2026-09-27' } },
+      { oferta_codigo: 'b', proposta_evento: { nome: 'Y', categoria: 'clinica' } },
+    ], error: null });
+    const [a, b] = await repo.carregarFilaOfertas();
+    expect(formDaProposta(a).inicio).toBe('2026-09-27');
+    expect(formDaProposta(b).inicio).toBe('');
   });
 
   it('fila: data null = lista vazia; 42501 = sem permissão; outro = rede', async () => {
