@@ -60,6 +60,9 @@
 --        fn_fin_parcela_etapa_concluir(uuid, date)            escrita  gp_pode_operar_financeiro()
 --        fn_fin_contratos_hf_pagamentos(p_so_fila boolean)    leitura  gp_pode_ver_financeiro()  (fila + status do cron)
 --        fn_fin_contrato_hf_desfundir(uuid, text) → uuid      escrita  gp_pode_operar_financeiro()
+--        fn_fin_contratos_hf_sync_status()                   leitura  gp_pode_ver_financeiro()  (sempre 1 linha)
+--   PENTEST DO FRONT (30/09): parcela com contrato_id recebe SEMPRE o nome da ficha como cliente; nome colado diferente
+--     (sem caixa/acento/espaços) fica em recebimentos_informados.observacao ("cliente informado na colagem: X").
 --   A CARGA dos 27 contratos lidos do Drive NÃO está aqui (repo público: dado pessoal de cliente fica fora do git).
 --   Ela é um script separado, fora do repo, rodado pela sessão principal depois do apply.
 --
@@ -562,7 +565,8 @@ alter table fin.recebimentos_informados
   add column contrato_id uuid references fin.contratos_hf (id),
   add column etapa text,
   add column etapa_concluida_em date,
-  add column transacao_hotmart text;
+  add column transacao_hotmart text,
+  add column observacao text check (observacao is null or length(observacao) <= 500);
 alter table fin.recebimentos_informados alter column data_prevista drop not null;
 -- baixa automática: uma transação baixa uma parcela só (e vice-versa: a parcela baixada sai da busca)
 create unique index recebimentos_informados_transacao_hotmart_uk
@@ -607,6 +611,17 @@ create trigger informados_baixa_hotmart_trava before insert or update on fin.rec
 -- Ficha "nova e vazia": criada sozinha pelo pagamento (origem hotmart_sinal) DEPOIS de p_desde e sem parcelas vivas.
 -- Aparece quando a Hotmart regrava o e-mail do comprador em transações antigas (a edge hotmart-sync reescreve
 -- comprador_email): não pode tirar do contrato dono as baixas/entradas que ele já tinha (Kirad, 3ª rodada).
+-- Nome para comparar: minúsculas, sem acento, espaços colapsados (front pentest 30/09: parcela de outro cliente).
+create function fin.contratos_hf_nome_norm(p text)
+returns text
+language sql immutable security invoker set search_path = ''
+as $$
+  select btrim(regexp_replace(lower(translate(coalesce(p, ''),
+           'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ',
+           'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn')), '\s+', ' ', 'g'))
+$$;
+revoke all on function fin.contratos_hf_nome_norm(text) from public, anon, authenticated;
+
 create function fin.contratos_hf_ficha_nova_vazia(p_id uuid, p_desde timestamptz)
 returns boolean
 language sql stable security invoker set search_path = ''
@@ -628,6 +643,9 @@ comment on column fin.recebimentos_informados.etapa_concluida_em is
 comment on column fin.recebimentos_informados.transacao_hotmart is
   'z93: baixa AUTOMÁTICA pelo pagamento HF na Hotmart (fin.contratos_hf_sincronizar). NULL = baixa manual (Pix) ou em aberto. '
   'Não se altera à mão; estorno na Hotmart desfaz sozinho.';
+comment on column fin.recebimentos_informados.observacao is
+  'z93: nota do sistema na parcela (ex.: "cliente informado na colagem: X" quando o nome colado difere da ficha do '
+  'contrato). Não é editável pela RPC.';
 comment on column fin.recebimentos_informados.data_prevista is
   'Vencimento. NULL só na parcela de contrato por etapa ainda não concluída (z93) — fica fora da previsão de caixa.';
 
@@ -677,6 +695,15 @@ declare
        and not exists (select 1 from fin.contratos_hf c where c.id = r.contrato_id and c.arquivado_em is null) then
       raise exception 'Contrato não encontrado ou arquivado.' using errcode = 'P0001';
     end if;
+    -- parcela ligada a uma ficha: o cliente é SEMPRE o nome da ficha (o enviado é ignorado). Se o colado for outro
+    -- nome, a parcela guarda o que foi colado na observação e segue — a tela pede a confirmação (pentest do front).
+    if r.contrato_id is not null then
+      if fin.contratos_hf_nome_norm(r.cliente)
+         is distinct from (select fin.contratos_hf_nome_norm(c.nome) from fin.contratos_hf c where c.id = r.contrato_id) then
+        r.observacao := left('cliente informado na colagem: ' || r.cliente, 500);
+      end if;
+      r.cliente := coalesce((select c.nome from fin.contratos_hf c where c.id = r.contrato_id), r.cliente);
+    end if;
     if r.etapa_concluida_em is not null and r.etapa is null then
       raise exception 'Conclusão de etapa sem etapa: informe a etapa.' using errcode = 'P0001';
     end if;
@@ -709,7 +736,7 @@ begin
                 $x$    if r.contrato_assinado is null then$x$,
                 $x$  if p_criando or p ? 'produtos' then$x$],
           array[$x$'parcela_n','parcela_de','contrato_assinado',
-                       'contrato_id','etapa','etapa_concluida_em','transacao_hotmart']) then$x$,
+                       'contrato_id','etapa','etapa_concluida_em','transacao_hotmart','observacao']) then$x$,
                 $x$  -- z93: "Informe a data prevista" desceu para depois do tipo (parcela por etapa fica sem data)$x$,
                 n_a, n_b, n_c]),
       (2, 'public.fn_fin_informado_salvar(jsonb)', '7d08051d5730cc4a585d649746561702',
@@ -719,14 +746,14 @@ begin
                 $x$v_atual.parcela_n, v_atual.parcela_de, v_atual.contrato_assinado)$x$,
                 $x$parcela_n = r.parcela_n, parcela_de = r.parcela_de, contrato_assinado = r.contrato_assinado,$x$],
           array[$x$baixa_manual_em, baixa_manual_por, origem, criado_por, atualizado_por, parcela_n, parcela_de, contrato_assinado,
-       contrato_id, etapa, etapa_concluida_em)$x$,
-                E'r.contrato_assinado, r.contrato_id, r.etapa, r.etapa_concluida_em)\n    returning x.id into v_id;',
+       contrato_id, etapa, etapa_concluida_em, observacao)$x$,
+                E'r.contrato_assinado, r.contrato_id, r.etapa, r.etapa_concluida_em, r.observacao)\n    returning x.id into v_id;',
                 $x$r.acordo_desde, r.baixa_manual_em, r.parcela_n, r.parcela_de, r.contrato_assinado,
-      r.contrato_id, r.etapa, r.etapa_concluida_em)$x$,
+      r.contrato_id, r.etapa, r.etapa_concluida_em, r.observacao)$x$,
                 $x$v_atual.parcela_n, v_atual.parcela_de, v_atual.contrato_assinado,
-      v_atual.contrato_id, v_atual.etapa, v_atual.etapa_concluida_em)$x$,
+      v_atual.contrato_id, v_atual.etapa, v_atual.etapa_concluida_em, v_atual.observacao)$x$,
                 $x$parcela_n = r.parcela_n, parcela_de = r.parcela_de, contrato_assinado = r.contrato_assinado,
-         contrato_id = r.contrato_id, etapa = r.etapa, etapa_concluida_em = r.etapa_concluida_em,$x$]),
+         contrato_id = r.contrato_id, etapa = r.etapa, etapa_concluida_em = r.etapa_concluida_em, observacao = r.observacao,$x$]),
       (3, 'public.fn_fin_informados_importar(jsonb,boolean)', 'f3e66ddc5e1317540aa8d025c35c1aed',
           array[$x$baixa_manual_em, baixa_manual_por, origem, criado_por, atualizado_por, parcela_n, parcela_de, contrato_assinado)$x$,
                 E'r.contrato_assinado)\n    returning x.id into v_id;',
@@ -734,8 +761,8 @@ begin
                 $x$x.arquivado_em is null and x.data_prevista = r.data_prevista$x$,
                 $x$and x.parcela_n is not distinct from r.parcela_n)$x$],
           array[$x$baixa_manual_em, baixa_manual_por, origem, criado_por, atualizado_por, parcela_n, parcela_de, contrato_assinado,
-       contrato_id, etapa, etapa_concluida_em)$x$,
-                E'r.contrato_assinado, r.contrato_id, r.etapa, r.etapa_concluida_em)\n    returning x.id into v_id;',
+       contrato_id, etapa, etapa_concluida_em, observacao)$x$,
+                E'r.contrato_assinado, r.contrato_id, r.etapa, r.etapa_concluida_em, r.observacao)\n    returning x.id into v_id;',
                 $x$r.tipo, r.parcela_n, r.contrato_id, r.etapa);$x$,
                 $x$x.arquivado_em is null and x.data_prevista is not distinct from r.data_prevista$x$,
                 $x$and x.parcela_n is not distinct from r.parcela_n
@@ -744,9 +771,10 @@ begin
       (4, 'public.fn_fin_informados_listar()', '1b6ce40e6e1e4a621b2422c326a5f959',
           array[$x$contrato_assinado boolean)$x$,
                 $x$r.parcela_n, r.parcela_de, r.contrato_assinado   -- z73$x$],
-          array[$x$contrato_assinado boolean, contrato_id uuid, etapa text, etapa_concluida_em date, transacao_hotmart text)$x$,
+          array[$x$contrato_assinado boolean, contrato_id uuid, etapa text, etapa_concluida_em date, transacao_hotmart text,
+               observacao text)$x$,
                 $x$r.parcela_n, r.parcela_de, r.contrato_assinado,   -- z73
-         r.contrato_id, r.etapa, r.etapa_concluida_em, r.transacao_hotmart   -- z93$x$])
+         r.contrato_id, r.etapa, r.etapa_concluida_em, r.transacao_hotmart, r.observacao   -- z93$x$])
     ) v(ordem, sig, md5_esperado, de, para)
     order by ordem
   loop
@@ -781,8 +809,8 @@ end $patch$;
 comment on function public.fn_fin_informados_listar() is
   'Contas a Receber (z63; contrato z73; ficha/etapa z93): recebimentos informados com situação no agora. Identificador '
   'mascarado sem gp_pode_ver_cpf(). No fim: parcela_n, parcela_de, contrato_assinado (z73), contrato_id, etapa, '
-  'etapa_concluida_em, transacao_hotmart (z93) — nulos fora do contrato Holding Familiar. data_prevista NULL = parcela '
-  'por etapa pendente; transacao_hotmart = baixa automática pela Hotmart.';
+  'etapa_concluida_em, transacao_hotmart, observacao (z93) — nulos fora do contrato Holding Familiar. data_prevista NULL = '
+  'parcela por etapa pendente; transacao_hotmart = baixa automática pela Hotmart; observacao = nota do sistema.';
 
 
 -- ─── 5. RPCs novas ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -820,7 +848,7 @@ begin
   with parc as materialized (
     -- parcelas vivas ligadas a uma ficha, com a situação da mesma regra da lista (1 chamada)
     select r.id, r.contrato_id cid, r.data_prevista, r.valor, r.baixa_manual_em, r.parcela_n, r.parcela_de,
-           r.etapa, r.etapa_concluida_em, r.transacao_hotmart, s.situacao sit
+           r.etapa, r.etapa_concluida_em, r.transacao_hotmart, r.observacao, s.situacao sit
       from fin.recebimentos_informados r
       join fin.informados_situacao(now()) s on s.id = r.id
      where r.contrato_id is not null and r.arquivado_em is null
@@ -843,7 +871,7 @@ begin
                                         'valor', p.valor, 'data_prevista', p.data_prevista, 'situacao', p.sit,
                                         'baixa_manual_em', p.baixa_manual_em, 'transacao_hotmart', p.transacao_hotmart,
                                         'etapa', p.etapa,
-                                        'etapa_concluida_em', p.etapa_concluida_em)
+                                        'etapa_concluida_em', p.etapa_concluida_em, 'observacao', p.observacao)
                      order by p.data_prevista, p.parcela_n, p.id) parcelas
       from parc p
      where p.data_prevista between v_de and v_fim
@@ -1266,6 +1294,29 @@ revoke all on function public.fn_fin_contratos_hf_pagamentos(boolean) from publi
 grant execute on function public.fn_fin_contratos_hf_pagamentos(boolean) to authenticated;
 
 
+-- Status da última sincronização SEMPRE (1 linha, mesmo sem pagamento na fila e mesmo antes da 1ª execução: aí nulos).
+-- Pentest do front 30/09: com a fila vazia as colunas sync_* de fn_fin_contratos_hf_pagamentos não aparecem.
+create function public.fn_fin_contratos_hf_sync_status()
+returns table (ultima_em timestamptz, fichas int, baixas int, desfeitas int, erros int, mensagem text)
+language plpgsql stable security definer set search_path = ''
+as $$
+#variable_conflict use_column
+begin
+  if (select auth.uid()) is null or not coalesce(public.gp_pode_ver_financeiro(), false) then
+    raise exception 'Sem permissão.' using errcode = '42501';
+  end if;
+  return query
+  select st.ultima_em, st.fichas, st.baixas, st.desfeitas, st.erros, st.mensagem
+    from (select 1) um
+    left join fin.contratos_hf_sync_status st on st.id = 1;
+end $$;
+comment on function public.fn_fin_contratos_hf_sync_status() is
+  'z93: status da última fin.contratos_hf_sincronizar (cron :25). Sempre 1 linha; tudo nulo se nunca rodou. '
+  'Leitura: gp_pode_ver_financeiro().';
+revoke all on function public.fn_fin_contratos_hf_sync_status() from public, anon;
+grant execute on function public.fn_fin_contratos_hf_sync_status() to authenticated;
+
+
 -- ─── 6. Conferência (falha → desfaz tudo) ───────────────────────────────────────────────────────────────────────────
 do $conf$
 declare
@@ -1287,6 +1338,7 @@ begin
               where p.oid in ('fin.contratos_hf_sincronizar()'::regprocedure, 'fin.tg_contratos_hf_historico()'::regprocedure,
                               'fin.contratos_hf_transacoes()'::regprocedure,
                               'fin.contratos_hf_ficha_nova_vazia(uuid,timestamptz)'::regprocedure,
+                              'fin.contratos_hf_nome_norm(text)'::regprocedure,
                               'fin.tg_informados_baixa_hotmart_trava()'::regprocedure,
                               'fin.tg_contratos_hf_nao_apaga()'::regprocedure,
                               'fin.tg_contratos_hf_historico_so_acrescimo()'::regprocedure)
@@ -1299,7 +1351,8 @@ begin
                               'public.fn_fin_parcela_etapa_concluir(uuid,date)'::regprocedure,
                               'public.fn_fin_informados_listar()'::regprocedure,
                               'public.fn_fin_contratos_hf_pagamentos(boolean)'::regprocedure,
-                              'public.fn_fin_contrato_hf_desfundir(uuid,text)'::regprocedure)
+                              'public.fn_fin_contrato_hf_desfundir(uuid,text)'::regprocedure,
+                              'public.fn_fin_contratos_hf_sync_status()'::regprocedure)
                 and a.grantee in (0::oid, 'anon'::regrole::oid))
      or (select count(*) from pg_proc p
           where p.oid in ('public.fn_fin_contratos_hf_mensal(date,date)'::regprocedure,
@@ -1307,9 +1360,10 @@ begin
                           'public.fn_fin_parcela_etapa_concluir(uuid,date)'::regprocedure,
                           'public.fn_fin_informados_listar()'::regprocedure,
                           'public.fn_fin_contratos_hf_pagamentos(boolean)'::regprocedure,
-                          'public.fn_fin_contrato_hf_desfundir(uuid,text)'::regprocedure)
+                          'public.fn_fin_contrato_hf_desfundir(uuid,text)'::regprocedure,
+                          'public.fn_fin_contratos_hf_sync_status()'::regprocedure)
             and p.prosecdef and p.proconfig = array['search_path=""']
-            and has_function_privilege('authenticated', p.oid, 'execute')) <> 6 then
+            and has_function_privilege('authenticated', p.oid, 'execute')) <> 7 then
     raise exception 'z93: ACL/atributos das RPCs fora do molde';
   end if;
   -- trava da conta Hotmart continua ligada (z89) e nenhum objeto novo a viola
