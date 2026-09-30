@@ -17,10 +17,11 @@ export const TIPOS_INFORMADO: readonly TipoInformado[] = [
 /** Teto do banco para o total de parcelas (CHECK recebimentos_informados_contrato_ck). */
 export const PARCELAS_MAX = 60;
 
-export type SituacaoInformado = 'a_receber' | 'realizado_hotmart' | 'baixado_fora' | 'em_atraso_cobrar' | 'arquivado';
+/** 'baixado_hotmart' não vem do banco: é a situação exibida da baixa automática pela Hotmart (ver situacaoExibidaInformado). */
+export type SituacaoInformado = 'a_receber' | 'realizado_hotmart' | 'baixado_hotmart' | 'baixado_fora' | 'em_atraso_cobrar' | 'arquivado';
 /** Ordem dos filtros da lista: o que pede ação primeiro. */
 export const SITUACOES_INFORMADO: readonly SituacaoInformado[] = [
-  'em_atraso_cobrar', 'a_receber', 'realizado_hotmart', 'baixado_fora', 'arquivado',
+  'em_atraso_cobrar', 'a_receber', 'realizado_hotmart', 'baixado_hotmart', 'baixado_fora', 'arquivado',
 ];
 
 /** Uma linha de fn_fin_informados_listar(). Identificadores chegam MASCARADOS sem gp_pode_ver_cpf(). */
@@ -47,6 +48,12 @@ export interface Informado {
   parcela_n: number | null;
   parcela_de: number | null;
   contrato_assinado: boolean | null;
+  /** z93, só no contrato Holding Familiar (nulos no banco sem a z93). transacao_hotmart preenchido = baixa AUTOMÁTICA
+   *  pela Hotmart: o banco recusa editar, desfazer e arquivar (P0001) — a tela esconde os botões. */
+  contrato_id: string | null;
+  etapa: string | null;
+  etapa_concluida_em: string | null;
+  transacao_hotmart: string | null;
 }
 
 /**
@@ -72,6 +79,8 @@ export interface InformadoEntrada {
   parcela_n?: number | null;
   parcela_de?: number | null;
   contrato_assinado?: boolean | null;
+  /** z93, SÓ no tipo contrato_holding_familiar: liga a parcela à ficha do contrato. Ausente = não mexer. */
+  contrato_id?: string | null;
 }
 
 // ─── Conversão da lista (numeric do PostgREST pode chegar como texto) ──────
@@ -116,7 +125,22 @@ export function normalizarInformado(r: Record<string, unknown>): Informado {
     parcela_n: intOuNull(r.parcela_n),
     parcela_de: intOuNull(r.parcela_de),
     contrato_assinado: boolOuNull(r.contrato_assinado),
+    contrato_id: txt(r.contrato_id),
+    etapa: txt(r.etapa),
+    etapa_concluida_em: dia(r.etapa_concluida_em),
+    transacao_hotmart: txt(r.transacao_hotmart),
   };
+}
+
+/** Baixa automática pela Hotmart (z93): a linha não se altera à mão — editar, desfazer e arquivar ficam escondidos. */
+export const baixaAutomaticaHotmart = (i: Pick<Informado, 'transacao_hotmart'>) => !!i.transacao_hotmart;
+
+/**
+ * Situação que a TELA mostra. O banco (z73) chama a baixa automática pela Hotmart de 'baixado_fora' — o texto da z73
+ * não foi alterado na z93; a tela separa pelo transacao_hotmart: 'baixado_hotmart' = "Baixado pela Hotmart".
+ */
+export function situacaoExibidaInformado(i: Pick<Informado, 'situacao' | 'transacao_hotmart'>): string {
+  return i.situacao === 'baixado_fora' && baixaAutomaticaHotmart(i) ? 'baixado_hotmart' : i.situacao;
 }
 
 /** Lista na ordem da planilha: data prevista, depois cliente. Sem data vai para o fim. */

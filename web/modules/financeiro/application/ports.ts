@@ -23,6 +23,12 @@ import type { LinhaCaixaHotmart, TotaisCaixaHotmart } from '../domain/caixa-hotm
 import type { DivergenciaTaxa } from '../domain/taxa-hotmart';
 import type { Informado, InformadoEntrada, ResultadoLinhaImportacao } from '../domain/recebimentos-informados';
 import type { DecisaoOferta, OfertaFila } from '../domain/fila-ofertas';
+import type { LinhaMensalContratoHF, PagamentoContratoHF } from '../domain/contratos-hf';
+
+/** A RPC não existe no banco (PostgREST PGRST202: migration ainda não aplicada). A tela esconde o recurso. */
+export class RecursoAusenteError extends Error {
+  constructor(msg = 'Recurso ainda não disponível no banco.') { super(msg); this.name = 'RecursoAusenteError'; }
+}
 
 /** Resultado padrão de uma escrita (RPC de mutação). */
 export interface Resultado {
@@ -92,6 +98,19 @@ export interface FinanceiroRepository {
   loadEscritorioFunil(): Promise<LinhaFunilEscritorio[]>;
   /** fn_fin_escritorio_funil_pessoas — pessoas de uma linha do funil do escritório (id do evento ou -1/-2/-3). */
   loadEscritorioFunilPessoas(eventoId: number): Promise<PessoaFunilEscritorio[]>;
+
+  // ── Contratos Holding Familiar (z93) — leitura gp_pode_ver_financeiro, escrita gp_pode_operar_financeiro ──
+  // Leitura: função ausente no banco (z93 não aplicada) → RecursoAusenteError; outra falha → Error com mensagem.
+  /** fn_fin_contratos_hf_mensal(p_de, p_ate) — grade contrato × mês; null = padrão do banco (5 meses atrás a 6 à frente). */
+  loadContratosHfMensal(de: string | null, ate: string | null): Promise<LinhaMensalContratoHF[]>;
+  /** fn_fin_contratos_hf_pagamentos(p_so_fila) — true = só a fila de conferência. */
+  loadContratosHfPagamentos(soFila: boolean): Promise<PagamentoContratoHF[]>;
+  /** fn_fin_contrato_hf_salvar(p) — id obrigatório; chave ausente = mantém. P0001 = mensagem do banco. */
+  salvarContratoHf(p: Record<string, string | null>): Promise<Resultado>;
+  /** fn_fin_parcela_etapa_concluir(p_id, p_data) — data nula desfaz. */
+  concluirEtapaParcela(id: string, data: string | null): Promise<Resultado>;
+  /** fn_fin_contrato_hf_desfundir(p_id, p_motivo) — devolve o id da ficha reaberta (ou null). */
+  desfundirContratoHf(id: string, motivo: string): Promise<Resultado>;
   /** Trajetória da pessoa (fn_fin_trajetoria): toda compra, em que funil, desde 2019. */
   loadTrajetoria(email: string): Promise<PassoTrajetoria[]>;
   /** Pagou oferta do Programa e não tem card no board (fn_fin_programa_sem_card). */

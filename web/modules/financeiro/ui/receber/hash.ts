@@ -22,7 +22,7 @@ export function hashDaSubAbaReceber(sub: SubAbaReceber): string {
 /** Filtro de situação que cada sub-aba aceita pelo hash (`&situacao=`). O resto é ignorado (cai sem filtro). */
 const FILTROS_POR_SUBABA: Partial<Record<SubAbaReceber, readonly string[]>> = {
   recorrencias: ['a_receber', 'realizada', 'em_atraso_fora', 'coberta_informado'],
-  informados: ['em_atraso_cobrar', 'a_receber', 'realizado_hotmart', 'baixado_fora', 'arquivado'],
+  informados: ['em_atraso_cobrar', 'a_receber', 'realizado_hotmart', 'baixado_hotmart', 'baixado_fora', 'arquivado'],
   eventos: ['ativo', 'encerrado', 'arquivado'],
 };
 

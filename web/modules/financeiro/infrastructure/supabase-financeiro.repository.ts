@@ -13,6 +13,10 @@ import type {
 import type {
   FinanceiroRepository, ImportacaoInformados, RelatorioEmitido, RelatorioVerificado, Resultado,
 } from '../application/ports';
+import { RecursoAusenteError } from '../application/ports';
+import {
+  normalizarLinhaMensal, normalizarPagamento, type LinhaMensalContratoHF, type PagamentoContratoHF,
+} from '../domain/contratos-hf';
 import { VALOR_PROGRAMA_HM } from '../domain/prorata-hm';
 import type {
   AceleraParaHM, BoardHotmart, DiaHotmart, DivergenciaHotmart, FamiliaHotmart, FunilHotmart, IdentidadeRevisao, OfertaHotmart, PessoaHotmart, ProrataDiagnostico, ProrataHM, SyncHotmart, TransacaoHotmart,
@@ -69,6 +73,21 @@ function erroInformado(nome: string, error: { code?: string; message?: string },
   if (error.code === '42501') return 'Sem permissão para operar o financeiro.';
   if (error.code === 'P0001' && error.message) return error.message;
   return `Não foi possível ${acao} (erro de rede ou recurso ainda não disponível).`;
+}
+
+/** Função inexistente no banco: PostgREST devolve PGRST202 (fora do schema cache); 42883 = undefined_function. */
+export const rpcAusente = (error: { code?: string } | null) => error?.code === 'PGRST202' || error?.code === '42883';
+
+/**
+ * Erro das LEITURAS dos contratos HF (z93). Função ausente vira RecursoAusenteError (a tela esconde a sub-aba);
+ * 42501 = sem gp_pode_ver_financeiro(); 22023 = período recusado (mensagem do SQL). O log leva só o código.
+ */
+export function erroLeituraContratosHf(nome: string, error: { code?: string; message?: string }, acao: string): Error {
+  logQueryError(nome, { message: `código ${error.code ?? 'desconhecido'}` });
+  if (rpcAusente(error)) return new RecursoAusenteError();
+  if (error.code === '42501') return new Error('Sem permissão para ver o financeiro.');
+  if (error.code === '22023' && error.message) return new Error(error.message);
+  return new Error(`Não foi possível ${acao} (erro de rede).`);
 }
 
 /**
@@ -361,6 +380,37 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     return linhas.map((p) => ({
       ...p, sessao_valor: nn(p.sessao_valor), croqui_valor: nn(p.croqui_valor), hf_valor: nn(p.hf_valor),
     }));
+  }
+
+  // ── Contratos Holding Familiar (z93) ─────────────────────────────────────
+  async loadContratosHfMensal(de: string | null, ate: string | null): Promise<LinhaMensalContratoHF[]> {
+    const { data, error } = await this.db().rpc('fn_fin_contratos_hf_mensal', { p_de: de, p_ate: ate });
+    if (error) throw erroLeituraContratosHf('fn_fin_contratos_hf_mensal', error, 'carregar os contratos');
+    return ((data as Record<string, unknown>[] | null) ?? []).map(normalizarLinhaMensal);
+  }
+
+  async loadContratosHfPagamentos(soFila: boolean): Promise<PagamentoContratoHF[]> {
+    const { data, error } = await this.db().rpc('fn_fin_contratos_hf_pagamentos', { p_so_fila: soFila });
+    if (error) throw erroLeituraContratosHf('fn_fin_contratos_hf_pagamentos', error, 'carregar a conferência da Hotmart');
+    return ((data as Record<string, unknown>[] | null) ?? []).map(normalizarPagamento);
+  }
+
+  async salvarContratoHf(p: Record<string, string | null>): Promise<Resultado> {
+    const { error } = await this.db().rpc('fn_fin_contrato_hf_salvar', { p });
+    if (error) return erroPara(erroInformado('salvarContratoHf', error, p.arquivar_motivo ? 'arquivar o contrato' : 'salvar o contrato'));
+    return { ok: true, msg: p.arquivar_motivo ? 'Contrato arquivado.' : 'Contrato atualizado.' };
+  }
+
+  async concluirEtapaParcela(id: string, data: string | null): Promise<Resultado> {
+    const { error } = await this.db().rpc('fn_fin_parcela_etapa_concluir', { p_id: id, p_data: data });
+    if (error) return erroPara(erroInformado('concluirEtapaParcela', error, data ? 'concluir a etapa' : 'reabrir a etapa'));
+    return { ok: true, msg: data ? 'Etapa concluída: a parcela entrou na previsão.' : 'Etapa reaberta.' };
+  }
+
+  async desfundirContratoHf(id: string, motivo: string): Promise<Resultado> {
+    const { data, error } = await this.db().rpc('fn_fin_contrato_hf_desfundir', { p_id: id, p_motivo: motivo });
+    if (error) return erroPara(erroInformado('desfundirContratoHf', error, 'desfazer a fusão'));
+    return { ok: true, msg: data ? 'Fusão desfeita: a ficha criada pelo sinal foi reaberta.' : 'Fusão desfeita.' };
   }
 
   async loadOfertasSemCatalogo(): Promise<OfertaSemCatalogo[]> {

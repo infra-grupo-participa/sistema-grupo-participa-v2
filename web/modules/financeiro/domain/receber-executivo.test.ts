@@ -70,6 +70,10 @@ describe('resumoInformados', () => {
     expect(r.atrasoMaisAntigoDias).toBe(10);
     expect(r.proximo).toEqual({ data: '2026-10-05', n: 2, valor: 50 });
   });
+  it('z93: baixa automática pela Hotmart (baixado_fora + transacao_hotmart) NÃO entra no "Baixado fora"', () => {
+    const r = resumoInformados([...lista, I({ situacao: 'baixado_fora', valor: 500, transacao_hotmart: 'HP1' })], HOJE);
+    expect(r.baixadoFora).toEqual({ n: 1, valor: 15 });
+  });
   it('lista vazia: sem atraso nem próximo', () => {
     const r = resumoInformados([], HOJE);
     expect(r.atrasoMaisAntigoDias).toBeNull();

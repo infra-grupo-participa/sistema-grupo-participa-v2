@@ -49,6 +49,7 @@ import { criarCacheTaxaHotmart } from '../application/carregar-taxa-hotmart';
 import { periodoInicialTaxa, type PeriodoTaxa } from './faturamento/TaxaHotmart';
 import { isoDiasAtras } from './hotmart/comum';
 import { criarCacheEscritorioFunil } from '../application/carregar-escritorio-funil';
+import { criarCacheContratosHF } from '../application/carregar-contratos-hf';
 import { EscritorioAba } from './escritorio/EscritorioAba';
 import { hashDaSubAbaEscritorio, subAbaEscritorioDoHash, type SubAbaEscritorio } from './escritorio/hash';
 
@@ -116,6 +117,8 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
   // drill-down). Mora aqui porque a aba desmonta a cada troca — voltar a ela não consulta de novo.
   const [escritorioSub, setEscritorioSub] = useState<SubAbaEscritorio>('funil');
   const [cacheEscritorio] = useState(() => criarCacheEscritorioFunil(repo));
+  // Contratos HF (z93): sonda + grade + pagamentos, 1× por página (ver carregar-contratos-hf.ts).
+  const [cacheContratos] = useState(() => criarCacheContratosHF(repo));
   const [turma] = useState<string | null>(null); // sem filtro de turma no board novo — todas reunidas, igual ao legado.
   // Metas por turma (fn_fin_metas) não têm tela própria nesta entrega — o
   // board novo não filtra por turma (todas reunidas), e a UI de metas/régua
@@ -310,6 +313,14 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
 
   // Algo que muda a previsão foi gravado (informado, premissa, feriado). Invalida TODOS os cenários guardados e rebusca
   // só o ativo, SEM apagar a grade atual (a sub-aba continua montada); falha vira o erro da aba, com "tentar de novo".
+  // Gravação feita FORA da Previsão de caixa (contratos do Escritório): esquece os cenários guardados sem consultar agora —
+  // a Previsão/Visão geral pedem de novo quando abrirem (o efeito de carga acima vê o mapa vazio).
+  const invalidarReceber = () => {
+    geracaoReceber.current += 1;
+    pedidosReceber.current = new Set();
+    setReceberPorCenario({});
+  };
+
   const recarregarReceber = () => {
     geracaoReceber.current += 1;
     const ger = geracaoReceber.current;
@@ -751,7 +762,10 @@ export function FinanceiroClient({ canEdit, canVerDoc }: { canEdit: boolean; can
 
       {tab === 'funis' && <FunisEAnalise repo={repo} />}
 
-      {tab === 'escritorio' && <EscritorioAba sub={escritorioSub} onSubChange={setEscritorioSub} cacheFunil={cacheEscritorio} />}
+      {tab === 'escritorio' && (
+        <EscritorioAba sub={escritorioSub} onSubChange={setEscritorioSub} cacheFunil={cacheEscritorio}
+          cacheContratos={cacheContratos} repo={repo} canEdit={canEdit} canVerDoc={canVerDoc} onContratoAlterado={invalidarReceber} />
+      )}
 
 
       {tab === 'ofertas' && (

@@ -79,6 +79,23 @@ describe('Informados — sub-seção', () => {
     expect(html).toContain('Somente leitura');
   });
 
+  it('z93: linha com transacao_hotmart = "Baixado pela Hotmart", filtro próprio e NENHUM botão (o banco recusa com P0001)', () => {
+    const auto = I({ id: 'h', cliente: 'Cliente H', tipo: 'contrato_holding_familiar', situacao: 'baixado_fora',
+      baixa_manual_em: '2026-09-20', transacao_hotmart: 'HP123', contrato_id: 'c1' });
+    const html = renderToStaticMarkup(createElement(Informados, { repo: repoEspiao(), canEdit: true, canVerDoc: false, inicial: [auto] }));
+    expect(html).toContain('Baixado pela Hotmart');
+    expect(html).toContain('Baixado pela Hotmart <span class="tabular">1</span>');
+    expect(html).toContain('Baixado fora <span class="tabular">0</span>');
+    expect(html).toContain('Baixa automática');
+    for (const b of ['>Editar<', 'Desfazer baixa', '>Arquivar<', '>Baixar<']) expect(html).not.toContain(b);
+    // Baixa manual (sem transacao_hotmart) continua com as ações e o rótulo "Baixado fora".
+    const manual = renderToStaticMarkup(createElement(Informados, { repo: repoEspiao(), canEdit: true, canVerDoc: false, inicial: [
+      I({ id: 'm', cliente: 'Cliente M', situacao: 'baixado_fora', baixa_manual_em: '2026-09-20' })] }));
+    expect(manual).toContain('Desfazer baixa');
+    expect(manual).toContain('>Editar<');
+    expect(manual).not.toContain('Baixa automática');
+  });
+
   it('dentro da sub-aba "Recebimentos informados": aparece com repo; sem repo, não', () => {
     const d = montarContasReceber([], '2026-09-28');
     expect(renderToStaticMarkup(createElement(ContasAReceber, { dados: d, repo: repoEspiao(), canEdit: true, canVerDoc: false, sub: 'informados' })))

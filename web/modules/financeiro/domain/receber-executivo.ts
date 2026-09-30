@@ -3,7 +3,7 @@
 // regra nova: situação, esperado e sugestão vêm prontos do banco/domínio; aqui só se conta, soma e fatia.
 // Dinheiro em centavos na soma (0,1 + 0,2 não vira 0,30000000000000004).
 import type { CobrancaRecorrente, LinhaReceber } from './contas-receber';
-import type { Informado } from './recebimentos-informados';
+import { situacaoExibidaInformado, type Informado } from './recebimentos-informados';
 import { totalEsperado, type EventoPlanejado } from './eventos-planejados';
 import { valorDaSugestao, type PremissaTela, type SugestaoPremissa } from './premissas-receber';
 import type { MudancaReceber, SemanaPrevistoRealizado } from './visao-receber';
@@ -85,7 +85,8 @@ export interface ResumoInformados {
 }
 
 export function resumoInformados(lista: Informado[], hojeISO: string): ResumoInformados {
-  const de = (s: string) => lista.filter((x) => x.situacao === s);
+  // Situação EXIBIDA: a baixa automática pela Hotmart (z93) não conta como "Baixado fora".
+  const de = (s: string) => lista.filter((x) => situacaoExibidaInformado(x) === s);
   const aCobrar = de('em_atraso_cobrar');
   const dias = aCobrar.filter((x) => x.data_prevista).map((x) => diasEntre(x.data_prevista!, hojeISO));
   const futuros = de('a_receber').filter((x) => x.data_prevista && x.data_prevista >= hojeISO);

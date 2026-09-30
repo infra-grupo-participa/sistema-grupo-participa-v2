@@ -7,8 +7,9 @@ describe('sub-abas do Escritório no hash', () => {
     expect(subAbaEscritorioDoHash('')).toBe('funil');
     expect(subAbaEscritorioDoHash('ver=outra')).toBe('funil');
   });
-  it('Contratos ainda não ativa: o link cai no Funil, nunca numa sub-aba vazia', () => {
-    expect(subAbaEscritorioDoHash('ver=contratos')).toBe('funil');
+  it('Contratos ativa no hash (a disponibilidade no banco é conferida no EscritorioAba)', () => {
+    expect(subAbaEscritorioDoHash('ver=contratos')).toBe('contratos');
+    expect(subAbaEscritorioDoHash(hashDaSubAbaEscritorio('contratos').split('?')[1])).toBe('contratos');
   });
   it('Funil usa o hash limpo do menu; ida e volta', () => {
     expect(hashDaSubAbaEscritorio('funil')).toBe('#escritorio');

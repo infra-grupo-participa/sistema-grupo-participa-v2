@@ -425,6 +425,8 @@ export const SECAO_INFORMADOS = {
 export const SITUACAO_INFORMADO: Record<string, string> = {
   a_receber: 'A receber',
   realizado_hotmart: 'Realizado na Hotmart',
+  /** z93: baixa automática da parcela de contrato pelo pagamento na Hotmart (o banco manda 'baixado_fora'). */
+  baixado_hotmart: 'Baixado pela Hotmart',
   baixado_fora: 'Baixado fora',
   em_atraso_cobrar: 'Em atraso — cobrar',
   arquivado: 'Arquivado',
@@ -495,6 +497,8 @@ export const ACOES_INFORMADO = {
   tituloNovo: 'Novo recebimento informado',
   tituloEditar: 'Editar recebimento informado',
   salvando: 'Salvando…',
+  /** z93: linha baixada pela Hotmart — o banco recusa editar, desfazer e arquivar; estorno na Hotmart desfaz sozinho. */
+  semAcaoHotmart: 'Baixa automática',
 } as const;
 
 /** Colar da planilha: prévia antes de gravar. */
@@ -676,6 +680,7 @@ export const EXECUTIVO_RECEBER = {
     aCobrar: 'Em atraso — cobrar',
     aReceber: 'A receber',
     recebido: 'Recebido na Hotmart',
+    /** Só a baixa manual: a automática pela Hotmart (z93) tem filtro próprio, "Baixado pela Hotmart". */
     baixado: 'Baixado fora',
     nenhum: 'nenhum',
     nadaACobrar: 'nenhum informado vencido',

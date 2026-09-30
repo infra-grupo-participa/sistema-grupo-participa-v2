@@ -15,8 +15,9 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { fmtBRLc, fmtData } from '@/shared/ui/format';
 import type { FinanceiroRepository } from '../../application/ports';
 import {
-  casarResultado, COLUNAS_CONTRATOS, COLUNAS_PLANILHA, entradaDoFormulario, formDeInformado, identificadorOculto, lerColagem,
-  mascararLocal, ordenarInformados, previaGravavel, SITUACOES_INFORMADO, TIPO_CONTRATO, TIPOS_INFORMADO,
+  baixaAutomaticaHotmart, casarResultado, COLUNAS_CONTRATOS, COLUNAS_PLANILHA, entradaDoFormulario, formDeInformado,
+  identificadorOculto, lerColagem, mascararLocal, ordenarInformados, previaGravavel, situacaoExibidaInformado,
+  SITUACOES_INFORMADO, TIPO_CONTRATO, TIPOS_INFORMADO,
   type Colagem, type FormInformado, type Informado, type ResultadoLinhaImportacao,
 } from '../../domain/recebimentos-informados';
 import { diasEntre, resumoInformados } from '../../domain/receber-executivo';
@@ -40,7 +41,7 @@ export const rotuloTipoInformado = (t: string | null) => (t ? TIPO_INFORMADO[t] 
 const hojeISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
 const X = EXECUTIVO_RECEBER.informados;
 /** Tom da situação: a cobrar = vermelho; recebido/baixado = verde; o resto neutro. O texto sempre diz a situação. */
-const TOM_INFORMADO: Record<string, TomFin> = { em_atraso_cobrar: 'ruim', realizado_hotmart: 'bom', baixado_fora: 'bom' };
+const TOM_INFORMADO: Record<string, TomFin> = { em_atraso_cobrar: 'ruim', realizado_hotmart: 'bom', baixado_hotmart: 'bom', baixado_fora: 'bom' };
 
 /** Faixa: a cobrar × a receber × recebido na Hotmart × baixado fora. Clicar filtra a lista abaixo (local: sem recarga). */
 function KpisInformados({ lista, onFiltrar }: { lista: Informado[]; onFiltrar: (s: string) => void }) {
@@ -148,9 +149,10 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
   const resumo = useMemo(() => {
     const r = new Map<string, { n: number; cents: number }>();
     for (const i of doTipo) {
-      const x = r.get(i.situacao) ?? { n: 0, cents: 0 };
+      const s = situacaoExibidaInformado(i);
+      const x = r.get(s) ?? { n: 0, cents: 0 };
       x.n += 1; x.cents += Math.round(i.valor * 100);
-      r.set(i.situacao, x);
+      r.set(s, x);
     }
     return r;
   }, [doTipo]);
@@ -160,7 +162,8 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
   const tiposFiltro = [...TIPOS_INFORMADO, ...tiposNaLista.filter((t) => !(TIPOS_INFORMADO as readonly string[]).includes(t))];
   const todos = doTipo;
   const ativos = todos.filter((i) => i.situacao !== 'arquivado');
-  const visiveis = filtro ? todos.filter((i) => i.situacao === filtro) : ativos;
+  // Filtro pela situação EXIBIDA: "Baixado pela Hotmart" (z93) tem botão próprio, fora do "Baixado fora".
+  const visiveis = filtro ? todos.filter((i) => situacaoExibidaInformado(i) === filtro) : ativos;
   const conhecidas = SITUACOES_INFORMADO as readonly string[];
   const extras = [...resumo.keys()].filter((s) => !conhecidas.includes(s)); // situação fora do contrato: aparece, não some
   const botoes: { k: string | null; l: string; n: number; v: number | null }[] = [
@@ -261,7 +264,7 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
                       </td>
                       <td className={`${TD} whitespace-nowrap`}>
                         {/* O texto diz a situação; cor e ícone só reforçam. A cobrar diz há quantos dias venceu. */}
-                        <Chip tom={TOM_INFORMADO[i.situacao] ?? 'neutro'}>{rotuloSituacaoInformado(i.situacao)}</Chip>
+                        <Chip tom={TOM_INFORMADO[situacaoExibidaInformado(i)] ?? 'neutro'}>{rotuloSituacaoInformado(situacaoExibidaInformado(i))}</Chip>
                         {i.situacao === 'em_atraso_cobrar' && i.data_prevista && (
                           <span className="ml-1.5 text-[11px] text-[var(--red)]">{X.ha(Math.max(0, diasEntre(i.data_prevista, hojeISO())))}</span>
                         )}
@@ -272,7 +275,12 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
                       </td>
                       {canEdit && (
                         <td className={`${TD} whitespace-nowrap`}>
-                          {i.situacao !== 'arquivado' && (
+                          {/* Baixa automática pela Hotmart (z93): o banco recusa editar, desfazer e arquivar (P0001) —
+                              nenhum botão; o estorno na Hotmart desfaz sozinho. */}
+                          {i.situacao !== 'arquivado' && baixaAutomaticaHotmart(i) && (
+                            <span className="text-[11px] text-[var(--fg-3)]">{ACOES_INFORMADO.semAcaoHotmart}</span>
+                          )}
+                          {i.situacao !== 'arquivado' && !baixaAutomaticaHotmart(i) && (
                             <span className="flex gap-1">
                               <button type="button" className={BTN} disabled={ocupado}
                                 onClick={() => { setAcao(null); setForm({ original: i, valores: formDeInformado(i, canVerDoc), erros: [] }); }}>
