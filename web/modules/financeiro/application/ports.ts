@@ -23,7 +23,7 @@ import type { LinhaCaixaHotmart, TotaisCaixaHotmart } from '../domain/caixa-hotm
 import type { DivergenciaTaxa } from '../domain/taxa-hotmart';
 import type { Informado, InformadoEntrada, ResultadoLinhaImportacao } from '../domain/recebimentos-informados';
 import type { DecisaoOferta, OfertaFila } from '../domain/fila-ofertas';
-import type { LinhaMensalContratoHF, PagamentoContratoHF } from '../domain/contratos-hf';
+import type { LinhaMensalContratoHF, PagamentoContratoHF, SyncStatusContratosHF } from '../domain/contratos-hf';
 
 /** A RPC não existe no banco (PostgREST PGRST202: migration ainda não aplicada). A tela esconde o recurso. */
 export class RecursoAusenteError extends Error {
@@ -105,6 +105,8 @@ export interface FinanceiroRepository {
   loadContratosHfMensal(de: string | null, ate: string | null): Promise<LinhaMensalContratoHF[]>;
   /** fn_fin_contratos_hf_pagamentos(p_so_fila) — true = só a fila de conferência. */
   loadContratosHfPagamentos(soFila: boolean): Promise<PagamentoContratoHF[]>;
+  /** fn_fin_contratos_hf_sync_status() — sempre 1 linha; tudo nulo = o cron nunca rodou. */
+  loadContratosHfSyncStatus(): Promise<SyncStatusContratosHF>;
   /** fn_fin_contrato_hf_salvar(p) — id obrigatório; chave ausente = mantém. P0001 = mensagem do banco. */
   salvarContratoHf(p: Record<string, string | null>): Promise<Resultado>;
   /** fn_fin_parcela_etapa_concluir(p_id, p_data) — data nula desfaz. */

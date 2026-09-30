@@ -5,9 +5,11 @@ import { RecursoAusenteError } from './ports';
 import { criarCacheContratosHF, entradaNovaParcela, repoColagemNoContrato } from './carregar-contratos-hf';
 import { formDeInformado, TIPO_CONTRATO, type InformadoEntrada } from '../domain/recebimentos-informados';
 
+const SYNC = { ultima_em: null, fichas: null, baixas: null, desfeitas: null, erros: null, mensagem: null };
 const repoFalso = (o: { mensal?: () => Promise<never[]>; pags?: () => Promise<never[]> } = {}) => ({
   loadContratosHfMensal: vi.fn(o.mensal ?? (async () => [])),
   loadContratosHfPagamentos: vi.fn(o.pags ?? (async () => [])),
+  loadContratosHfSyncStatus: vi.fn(async () => SYNC),
 });
 
 describe('cache dos contratos HF', () => {
@@ -22,6 +24,17 @@ describe('cache dos contratos HF', () => {
     expect(repo.loadContratosHfPagamentos).toHaveBeenCalledTimes(1);
     expect(repo.loadContratosHfPagamentos).toHaveBeenCalledWith(false);
     expect(repo.loadContratosHfMensal).not.toHaveBeenCalled(); // a grade só quando a sub-aba abre
+    expect(repo.loadContratosHfSyncStatus).not.toHaveBeenCalled(); // o status também
+  });
+
+  it('status da sincronização: 1 chamada; escrever (invalidar) não o esquece — só o cron o muda', async () => {
+    const repo = repoFalso();
+    const c = criarCacheContratosHF(repo);
+    await Promise.all([c.sync(), c.sync()]);
+    c.invalidar();
+    await c.sync();
+    expect(c.syncLido()).toEqual(SYNC);
+    expect(repo.loadContratosHfSyncStatus).toHaveBeenCalledTimes(1);
   });
 
   it('função ausente (z93 não aplicada): "nao", guardado — não consulta a cada volta à aba', async () => {
@@ -76,21 +89,45 @@ describe('colar da planilha dentro da ficha', () => {
     acordo_desde: null, ...p,
   });
 
-  it('liga cada linha ao contrato (contrato_id) e repassa simular', async () => {
+  it('liga cada linha ao contrato (contrato_id) e repassa simular; nome igual ao da ficha não pergunta', async () => {
     const importarInformados = vi.fn(async () => ({ ok: true, linhas: [] }));
-    const r = repoColagemNoContrato({ importarInformados }, 'c1');
+    const confirmar = vi.fn(async () => true);
+    const r = repoColagemNoContrato({ importarInformados }, 'c1', 'ANA', confirmar);
     await r.importarInformados([linha({}), linha({ data_prevista: '2026-11-10' })], true);
     expect(importarInformados).toHaveBeenCalledWith([
       expect.objectContaining({ contrato_id: 'c1', data_prevista: '2026-10-10' }),
       expect.objectContaining({ contrato_id: 'c1', data_prevista: '2026-11-10' }),
     ], true);
+    expect(confirmar).not.toHaveBeenCalled();
   });
 
-  it('recusa sem ir ao banco: 2 clientes, ou linha que não é contrato', async () => {
+  it('nome diferente do da ficha: pergunta ANTES de enviar; "não" = nada vai ao banco', async () => {
     const importarInformados = vi.fn(async () => ({ ok: true, linhas: [] }));
-    const r = repoColagemNoContrato({ importarInformados }, 'c1');
+    const confirmar = vi.fn(async () => false);
+    const r = repoColagemNoContrato({ importarInformados }, 'c1', 'Ana', confirmar);
     expect(await r.importarInformados([linha({}), linha({ cliente: 'Bia' })], true)).toMatchObject({ ok: false, linhas: [] });
+    expect(confirmar).toHaveBeenCalledWith(['Bia']);
+    expect(importarInformados).not.toHaveBeenCalled();
+  });
+
+  it('confirmado: envia (o banco grava com o nome da ficha); conferir → gravar não pergunta de novo o mesmo nome', async () => {
+    const importarInformados = vi.fn(async () => ({ ok: true, linhas: [] }));
+    const confirmar = vi.fn(async () => true);
+    const r = repoColagemNoContrato({ importarInformados }, 'c1', 'Ana', confirmar);
+    await r.importarInformados([linha({ cliente: 'Bia' })], true);
+    await r.importarInformados([linha({ cliente: ' bia ' })], false);
+    expect(confirmar).toHaveBeenCalledTimes(1);
+    expect(importarInformados).toHaveBeenCalledTimes(2);
+    await r.importarInformados([linha({ cliente: 'Carla' })], false);
+    expect(confirmar).toHaveBeenLastCalledWith(['Carla']);
+  });
+
+  it('linha que não é contrato: recusada sem perguntar e sem ir ao banco', async () => {
+    const importarInformados = vi.fn(async () => ({ ok: true, linhas: [] }));
+    const confirmar = vi.fn(async () => true);
+    const r = repoColagemNoContrato({ importarInformados }, 'c1', 'Ana', confirmar);
     expect(await r.importarInformados([linha({ tipo: 'renovacao_aurum' })], true)).toMatchObject({ ok: false, linhas: [] });
+    expect(confirmar).not.toHaveBeenCalled();
     expect(importarInformados).not.toHaveBeenCalled();
   });
 });

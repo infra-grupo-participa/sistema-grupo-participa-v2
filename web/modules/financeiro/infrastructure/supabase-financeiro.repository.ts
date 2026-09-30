@@ -15,7 +15,8 @@ import type {
 } from '../application/ports';
 import { RecursoAusenteError } from '../application/ports';
 import {
-  normalizarLinhaMensal, normalizarPagamento, type LinhaMensalContratoHF, type PagamentoContratoHF,
+  normalizarLinhaMensal, normalizarPagamento, normalizarSyncStatus, type LinhaMensalContratoHF, type PagamentoContratoHF,
+  type SyncStatusContratosHF,
 } from '../domain/contratos-hf';
 import { VALOR_PROGRAMA_HM } from '../domain/prorata-hm';
 import type {
@@ -393,6 +394,12 @@ export class SupabaseFinanceiroRepository implements FinanceiroRepository {
     const { data, error } = await this.db().rpc('fn_fin_contratos_hf_pagamentos', { p_so_fila: soFila });
     if (error) throw erroLeituraContratosHf('fn_fin_contratos_hf_pagamentos', error, 'carregar a conferência da Hotmart');
     return ((data as Record<string, unknown>[] | null) ?? []).map(normalizarPagamento);
+  }
+
+  async loadContratosHfSyncStatus(): Promise<SyncStatusContratosHF> {
+    const { data, error } = await this.db().rpc('fn_fin_contratos_hf_sync_status');
+    if (error) throw erroLeituraContratosHf('fn_fin_contratos_hf_sync_status', error, 'ler o status da sincronização');
+    return normalizarSyncStatus(data as Record<string, unknown>[] | null);
   }
 
   async salvarContratoHf(p: Record<string, string | null>): Promise<Resultado> {

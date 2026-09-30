@@ -245,7 +245,11 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
                   ) : visiveis.map((i) => [
                     <tr key={i.id} className={`${LINHA} text-[var(--fg)]`}>
                       <td className={`${TD} tabular whitespace-nowrap ${i.situacao === 'em_atraso_cobrar' ? 'font-semibold text-[var(--red)]' : ''}`}>{fmtData(i.data_prevista)}</td>
-                      <td className={TD}>{i.cliente}</td>
+                      <td className={TD}>
+                        {i.cliente}
+                        {/* z93: nome enviado diferente do da ficha do contrato ("cliente informado na colagem: X"). */}
+                        {i.observacao && <span className="block text-[11px] text-[var(--fg-3)]">{i.observacao}</span>}
+                      </td>
                       <td className={`${TD} whitespace-nowrap text-[var(--fg-2)]`}>
                         {rotuloTipoInformado(i.tipo)}
                         {i.tipo === TIPO_CONTRATO && (

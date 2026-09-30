@@ -21,6 +21,8 @@ export interface ParcelaContratoHF {
   transacao_hotmart: string | null;
   etapa: string | null;
   etapa_concluida_em: string | null;
+  /** z93 (pentest): "cliente informado na colagem: X" quando o nome enviado diferia do da ficha. Só na parcela do mês. */
+  observacao: string | null;
 }
 
 /** Uma linha de fn_fin_contratos_hf_mensal. `mes` NULL = linha "a receber na etapa X". */
@@ -77,6 +79,16 @@ export interface PagamentoContratoHF {
   sync_mensagem: string | null;
 }
 
+/** fn_fin_contratos_hf_sync_status(): SEMPRE 1 linha; tudo nulo = o cron nunca rodou. */
+export interface SyncStatusContratosHF {
+  ultima_em: string | null;
+  fichas: number | null;
+  baixas: number | null;
+  desfeitas: number | null;
+  erros: number | null;
+  mensagem: string | null;
+}
+
 /** Colunas que as RPCs devolvem — o teste de contrato confere contra o RETURNS TABLE da z93. */
 export const COLUNAS_CONTRATOS_HF_MENSAL: readonly (keyof LinhaMensalContratoHF)[] = [
   'contrato_id', 'mes',
@@ -86,6 +98,10 @@ export const COLUNAS_CONTRATOS_HF_MENSAL: readonly (keyof LinhaMensalContratoHF)
   'link_contrato', 'observacao', 'arquivado_em',
   'esperado', 'caiu_manual', 'caiu_hotmart', 'caiu_hotmart_liquido', 'caiu',
   'a_receber_etapa', 'situacao', 'parcelas',
+];
+
+export const COLUNAS_CONTRATOS_HF_SYNC: readonly (keyof SyncStatusContratosHF)[] = [
+  'ultima_em', 'fichas', 'baixas', 'desfeitas', 'erros', 'mensagem',
 ];
 
 export const COLUNAS_CONTRATOS_HF_PAGAMENTOS: readonly (keyof PagamentoContratoHF)[] = [
@@ -113,6 +129,7 @@ function normalizarParcela(r: Record<string, unknown>): ParcelaContratoHF {
     transacao_hotmart: txt(r.transacao_hotmart),
     etapa: txt(r.etapa),
     etapa_concluida_em: dia(r.etapa_concluida_em),
+    observacao: txt(r.observacao),
   };
 }
 
@@ -144,6 +161,15 @@ export function normalizarLinhaMensal(r: Record<string, unknown>): LinhaMensalCo
     a_receber_etapa: num(r.a_receber_etapa),
     situacao: txt(r.situacao),
     parcelas: lerParcelas(r.parcelas),
+  };
+}
+
+/** A RPC devolve 1 linha; sem linha (não deveria) = tudo nulo, igual a "nunca rodou". */
+export function normalizarSyncStatus(rows: Record<string, unknown>[] | null): SyncStatusContratosHF {
+  const r = rows?.[0] ?? {};
+  return {
+    ultima_em: txt(r.ultima_em), fichas: int(r.fichas), baixas: int(r.baixas), desfeitas: int(r.desfeitas),
+    erros: int(r.erros), mensagem: txt(r.mensagem),
   };
 }
 
@@ -283,13 +309,6 @@ export function lerMotivoFila(motivo: string | null): { rotulo: string; frase: s
   return rotulo ? { rotulo, frase } : { rotulo: motivo, frase: null };
 }
 
-/** Status da sincronização (repetido em toda linha): a 1ª linha basta. Sem linha = sem informação. */
-export function statusSync(pags: PagamentoContratoHF[]): { ultima_em: string | null; erros: number; mensagem: string | null } | null {
-  const p = pags[0];
-  if (!p) return null;
-  return { ultima_em: p.sync_ultima_em, erros: p.sync_erros ?? 0, mensagem: p.sync_mensagem };
-}
-
 // ─── Ficha: formulário → jsonb de fn_fin_contrato_hf_salvar ────────────────
 export interface FormFichaContrato {
   valor_bruto: string;
@@ -351,12 +370,24 @@ export const podeDesfundir = (f: FichaContratoHF) => !f.arquivado_em && f.origem
 /** Parcela baixada pela Hotmart: nenhuma ação manual (o banco recusa com P0001). */
 export const baixaPelaHotmart = (p: { transacao_hotmart: string | null }) => !!p.transacao_hotmart;
 
+/** MESMA normalização do banco (fin.contratos_hf_nome_norm): minúsculas, sem acento, espaços colapsados. */
+export function normalizarNome(v: string | null | undefined): string {
+  return (v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 /**
- * Colagem da planilha dentro da ficha: as linhas vão ligadas A ESTE contrato (contrato_id). Uma colagem com mais de um
- * cliente ligaria parcelas de outra pessoa à ficha — recusada antes de ir ao banco. Devolve a mensagem de recusa ou null.
+ * Nomes enviados que NÃO são o da ficha (o banco grava a parcela com o nome da ficha e guarda o enviado em observacao
+ * "cliente informado na colagem: X"). A tela pede confirmação explícita antes de enviar. Sem repetir, na ordem.
  */
-export function recusaColagemNoContrato(clientes: string[]): string | null {
-  const norm = new Set(clientes.map((c) => c.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()));
-  if (norm.size > 1) return `A colagem tem ${norm.size} clientes diferentes: cole só as linhas deste contrato.`;
-  return null;
+export function nomesDiferentesDaFicha(clientes: string[], nomeFicha: string | null): string[] {
+  const alvo = normalizarNome(nomeFicha);
+  const vistos = new Set<string>();
+  const out: string[] = [];
+  for (const c of clientes) {
+    const n = normalizarNome(c);
+    if (n === alvo || vistos.has(n)) continue;
+    vistos.add(n);
+    out.push(c.trim());
+  }
+  return out;
 }

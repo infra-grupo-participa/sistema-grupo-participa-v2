@@ -96,6 +96,12 @@ describe('Informados — sub-seção', () => {
     expect(manual).not.toContain('Baixa automática');
   });
 
+  it('z93: observacao (nome colado diferente do da ficha) aparece sob o cliente, escapada', () => {
+    const html = renderToStaticMarkup(createElement(Informados, { repo: repoEspiao(), canEdit: false, canVerDoc: false, inicial: [
+      I({ id: 'o', cliente: 'João da Silva', tipo: 'contrato_holding_familiar', contrato_id: 'c1', observacao: 'cliente informado na colagem: <b>Maria</b>' })] }));
+    expect(html).toContain('cliente informado na colagem: &lt;b&gt;Maria&lt;/b&gt;');
+  });
+
   it('dentro da sub-aba "Recebimentos informados": aparece com repo; sem repo, não', () => {
     const d = montarContasReceber([], '2026-09-28');
     expect(renderToStaticMarkup(createElement(ContasAReceber, { dados: d, repo: repoEspiao(), canEdit: true, canVerDoc: false, sub: 'informados' })))

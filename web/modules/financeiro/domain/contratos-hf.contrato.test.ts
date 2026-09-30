@@ -4,7 +4,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { COLUNAS_CONTRATOS_HF_MENSAL, COLUNAS_CONTRATOS_HF_PAGAMENTOS, type ParcelaContratoHF } from './contratos-hf';
+import {
+  COLUNAS_CONTRATOS_HF_MENSAL, COLUNAS_CONTRATOS_HF_PAGAMENTOS, COLUNAS_CONTRATOS_HF_SYNC, type ParcelaContratoHF,
+} from './contratos-hf';
 
 const sql = readFileSync(fileURLToPath(new URL(
   '../../../../infra/supabase/migrations/20260930z93_fin_contratos_hf.sql', import.meta.url)), 'utf8');
@@ -34,7 +36,7 @@ function chavesJsonb(cte: string): string[] {
 
 const CHAVES_PARCELA: readonly (keyof ParcelaContratoHF)[] = [
   'id', 'parcela_n', 'parcela_de', 'valor', 'data_prevista', 'situacao', 'baixa_manual_em', 'transacao_hotmart', 'etapa',
-  'etapa_concluida_em',
+  'etapa_concluida_em', 'observacao',
 ];
 
 describe('contrato z93 — fn_fin_contratos_hf_*', () => {
@@ -43,6 +45,10 @@ describe('contrato z93 — fn_fin_contratos_hf_*', () => {
   });
   it('fn_fin_contratos_hf_pagamentos: colunas iguais ao tipo, na ordem', () => {
     expect(colunasRetorno('public.fn_fin_contratos_hf_pagamentos')).toEqual([...COLUNAS_CONTRATOS_HF_PAGAMENTOS]);
+  });
+  it('fn_fin_contratos_hf_sync_status: colunas iguais ao tipo, na ordem (1 linha sempre)', () => {
+    expect(colunasRetorno('public.fn_fin_contratos_hf_sync_status')).toEqual([...COLUNAS_CONTRATOS_HF_SYNC]);
+    expect(sql).toMatch(/create function public\.fn_fin_contratos_hf_sync_status\(\)/);
   });
   it('parcelas (jsonb) do mês: as chaves que a tela lê; etapa: subconjunto com situacao', () => {
     expect(chavesJsonb('esp')).toEqual([...CHAVES_PARCELA]);
@@ -57,8 +63,10 @@ describe('contrato z93 — fn_fin_contratos_hf_*', () => {
     expect(sql).toMatch(/create function public\.fn_fin_contratos_hf_mensal\(p_de date default null, p_ate date default null\)/);
     expect(sql).toMatch(/create function public\.fn_fin_contratos_hf_pagamentos\(p_so_fila boolean default true\)/);
   });
-  it('fn_fin_informados_listar ganha contrato_id, etapa, etapa_concluida_em, transacao_hotmart no FIM (normalizarInformado lê)', () => {
-    expect(sql).toContain('contrato_assinado boolean, contrato_id uuid, etapa text, etapa_concluida_em date, transacao_hotmart text)');
+  it('fn_fin_informados_listar ganha contrato_id, etapa, etapa_concluida_em, transacao_hotmart, observacao no FIM (normalizarInformado lê)', () => {
+    expect(sql.replace(/\s+/g, ' ')).toContain(
+      'contrato_assinado boolean, contrato_id uuid, etapa text, etapa_concluida_em date, transacao_hotmart text, observacao text)');
+    expect(sql).toMatch(/r\.contrato_id, r\.etapa, r\.etapa_concluida_em, r\.transacao_hotmart, r\.observacao/);
   });
   it('link do contrato: a regex da tela é a MESMA do banco (texto a texto)', () => {
     const m = /n\.link_contrato !~ '([^']+)'/.exec(sql);

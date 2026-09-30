@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   formDaFicha, lerMotivoFila, linkContratoSeguro, montarGradeContratos, normalizarLinhaMensal, normalizarPagamento,
-  parcelasDoContrato, payloadFicha, podeDesfundir, recusaColagemNoContrato, statusSync, type LinhaMensalContratoHF,
+  nomesDiferentesDaFicha, normalizarNome, normalizarSyncStatus, parcelasDoContrato, payloadFicha, podeDesfundir,
+  type LinhaMensalContratoHF,
 } from './contratos-hf';
 
 /** Linha no formato do contrato de colunas da z93 (numeric como texto, como o PostgREST pode mandar). */
@@ -20,7 +21,9 @@ describe('normalização', () => {
       data_prevista: '2026-09-15', situacao: 'baixado_fora', baixa_manual_em: '2026-09-15', transacao_hotmart: 'HP123' }]) });
     expect(l.esperado).toBe(1000.1);
     expect(l.valor_bruto).toBe(44640);
-    expect(l.parcelas[0]).toMatchObject({ id: 'p1', parcela_n: 2, parcela_de: 5, valor: 1000.1, transacao_hotmart: 'HP123', etapa: null });
+    expect(l.parcelas[0]).toMatchObject({ id: 'p1', parcela_n: 2, parcela_de: 5, valor: 1000.1, transacao_hotmart: 'HP123', etapa: null, observacao: null });
+    expect(L({ parcelas: [{ id: 'p', observacao: 'cliente informado na colagem: Maria' }] }).parcelas[0].observacao)
+      .toBe('cliente informado na colagem: Maria');
   });
   it('mes NULL fica null (linha de etapa); parcelas inválidas viram []', () => {
     expect(L({ mes: null }).mes).toBeNull();
@@ -102,10 +105,12 @@ describe('fila de conferência', () => {
     expect(lerMotivoFila('novo_motivo: algo')).toEqual({ rotulo: 'novo_motivo: algo', frase: null });
     expect(lerMotivoFila(null)).toEqual({ rotulo: '—', frase: null });
   });
-  it('status da sincronização vem da 1ª linha; sem linha = null', () => {
-    const p = normalizarPagamento({ transacao: 'x', situacao: 'fila', sync_ultima_em: '2026-09-29T12:25:00Z', sync_erros: 1, sync_mensagem: 'falhou' });
-    expect(statusSync([p])).toEqual({ ultima_em: '2026-09-29T12:25:00Z', erros: 1, mensagem: 'falhou' });
-    expect(statusSync([])).toBeNull();
+  it('status da sincronização (RPC própria, 1 linha): inteiros; nunca rodou = tudo nulo; sem linha = igual', () => {
+    expect(normalizarSyncStatus([{ ultima_em: '2026-09-29T12:25:00Z', fichas: '3', baixas: 2, desfeitas: 0, erros: '1', mensagem: 'falhou' }]))
+      .toEqual({ ultima_em: '2026-09-29T12:25:00Z', fichas: 3, baixas: 2, desfeitas: 0, erros: 1, mensagem: 'falhou' });
+    const nulo = { ultima_em: null, fichas: null, baixas: null, desfeitas: null, erros: null, mensagem: null };
+    expect(normalizarSyncStatus([{ ultima_em: null, fichas: null, baixas: null, desfeitas: null, erros: null, mensagem: null }])).toEqual(nulo);
+    expect(normalizarSyncStatus([])).toEqual(nulo);
   });
 });
 
@@ -138,8 +143,13 @@ describe('ficha → fn_fin_contrato_hf_salvar', () => {
 });
 
 describe('colagem dentro da ficha', () => {
-  it('um cliente só (acento, caixa e espaço não contam)', () => {
-    expect(recusaColagemNoContrato(['Ana Lúcia', 'ana  lucia', 'ANA LÚCIA'])).toBeNull();
-    expect(recusaColagemNoContrato(['Ana', 'Bia'])).toContain('2 clientes');
+  it('mesma normalização do banco: minúsculas, sem acento, espaços colapsados', () => {
+    expect(normalizarNome('  João   da SILVA ')).toBe('joao da silva');
+    expect(normalizarNome(null)).toBe('');
+  });
+  it('nomes diferentes do da ficha: acento, caixa e espaço não contam; sem repetir; na ordem', () => {
+    expect(nomesDiferentesDaFicha(['Ana Lúcia', 'ana  lucia', 'ANA LÚCIA'], 'Ana Lucia')).toEqual([]);
+    expect(nomesDiferentesDaFicha(['Ana Lúcia', ' Maria ', 'maria', 'Bia'], 'Ana Lucia')).toEqual(['Maria', 'Bia']);
+    expect(nomesDiferentesDaFicha(['Ana'], null)).toEqual(['Ana']);
   });
 });

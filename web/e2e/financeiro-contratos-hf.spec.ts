@@ -10,11 +10,12 @@ const RPC_ESCRITA = /\/rest\/v1\/rpc\/[^?]*(decidir|salvar|criar|excluir|remover
 const LINK_OK = /^https:\/\/(docs|drive)\.google\.com\/[A-Za-z0-9/_?=&.%#-]*$/;
 
 function contarRpc(page: Page) {
-  const n = { mensal: 0, pagamentos: 0 };
+  const n = { mensal: 0, pagamentos: 0, sync: 0 };
   page.on('request', (r) => {
     const p = new URL(r.url()).pathname;
     if (p.endsWith('/rpc/fn_fin_contratos_hf_mensal')) n.mensal += 1;
     if (p.endsWith('/rpc/fn_fin_contratos_hf_pagamentos')) n.pagamentos += 1;
+    if (p.endsWith('/rpc/fn_fin_contratos_hf_sync_status')) n.sync += 1;
   });
   return n;
 }
@@ -91,7 +92,7 @@ test.describe('Financeiro · Escritório › Contratos HF (somente leitura)', ()
     await expect(page.getByRole('heading', { level: 1, name: /Board\s*Financeiro/ })).toBeVisible();
     await page.evaluate(() => { window.location.hash = 'escritorio?ver=contratos'; });
     await expect(grade).toBeVisible();
-    expect(rpc, '1 RPC da grade e 1 dos pagamentos por página').toEqual({ mensal: 1, pagamentos: 1 });
+    expect(rpc, '1 RPC da grade, 1 dos pagamentos e 1 do status por página').toEqual({ mensal: 1, pagamentos: 1, sync: 1 });
     expect(escritas, 'o teste tentou escrever em produção').toEqual([]);
   });
 
@@ -127,12 +128,15 @@ test.describe('Financeiro · Escritório › Contratos HF (somente leitura)', ()
         sync_ultima_em: new Date().toISOString(), sync_erros: 0, sync_mensagem: null }];
       await page.route(/\/rest\/v1\/rpc\/fn_fin_contratos_hf_mensal/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(linhas) }));
       await page.route(/\/rest\/v1\/rpc\/fn_fin_contratos_hf_pagamentos/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pags) }));
+      const sync = [{ ultima_em: new Date().toISOString(), fichas: 0, baixas: 0, desfeitas: 0, erros: 0, mensagem: null }];
+      await page.route(/\/rest\/v1\/rpc\/fn_fin_contratos_hf_sync_status/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(sync) }));
 
       await page.goto(`${ROTA_FINANCEIRO}#escritorio?ver=contratos`);
       await expect(page, 'sessão do robô caiu no login').not.toHaveURL(/\/login/);
       const grade = page.locator('table').filter({ has: page.getByRole('columnheader', { name: 'A receber na etapa' }) });
       await expect(grade).toBeVisible({ timeout: 90_000 });
       await expect(page.getByRole('tab', { name: 'Contratos', exact: true })).toBeVisible();
+      await expect(page.getByText(/Última sincronização com a Hotmart: .*, sem erro\./)).toBeVisible();
 
       const m = await grade.evaluate((tabela) => {
         const caixa = tabela.parentElement as HTMLElement; // o div overflow-x-auto do DataTable
@@ -178,6 +182,7 @@ test.describe('Financeiro · Escritório › Contratos HF (somente leitura)', ()
     await expect(page.getByText('ainda não disponíveis no banco')).toHaveCount(0);
     expect(rpc.pagamentos, 'a sonda consulta 1 vez').toBe(1);
     expect(rpc.mensal, 'sem a z93 a grade nem é pedida').toBe(0);
+    expect(rpc.sync, 'sem a z93 o status nem é pedido').toBe(0);
     expect(escritas).toEqual([]);
   });
 });

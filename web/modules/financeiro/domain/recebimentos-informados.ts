@@ -54,6 +54,8 @@ export interface Informado {
   etapa: string | null;
   etapa_concluida_em: string | null;
   transacao_hotmart: string | null;
+  /** z93 (pentest): "cliente informado na colagem: X" — o nome enviado diferia do da ficha do contrato. Só leitura. */
+  observacao: string | null;
 }
 
 /**
@@ -129,6 +131,7 @@ export function normalizarInformado(r: Record<string, unknown>): Informado {
     etapa: txt(r.etapa),
     etapa_concluida_em: dia(r.etapa_concluida_em),
     transacao_hotmart: txt(r.transacao_hotmart),
+    observacao: txt(r.observacao),
   };
 }
 

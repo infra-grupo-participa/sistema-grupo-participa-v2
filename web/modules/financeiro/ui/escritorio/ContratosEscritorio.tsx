@@ -9,18 +9,18 @@
 // - Texto do cliente (nome, e-mail, observação, link) só entra por JSX — nunca dangerouslySetInnerHTML. O link do
 //   contrato só vira <a href> se passar na MESMA regex do banco (linkContratoSeguro); fora dela, texto.
 // - Nada `absolute`: confirmações e formulários ficam no fluxo (célula, linha ou ficha).
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { DataTable, Drawer, Loading, Td, Th, Thead, Tr } from '@/shared/ui/components';
 import { fmtBRL, fmtBRLc, fmtData, fmtDataHora } from '@/shared/ui/format';
 import type { FinanceiroRepository, Resultado } from '../../application/ports';
 import { RecursoAusenteError } from '../../application/ports';
 import {
-  entradaNovaParcela, repoColagemNoContrato, type CacheContratosHF,
+  entradaNovaParcela, repoColagemNoContrato, type CacheContratosHF, type ConfirmarNomes,
 } from '../../application/carregar-contratos-hf';
 import {
   baixaPelaHotmart, formDaFicha, lerMotivoFila, linkContratoSeguro, montarGradeContratos, motivoValido, parcelasDoContrato,
-  payloadFicha, podeDesfundir, statusSync, type ContratoNaGrade, type FichaContratoHF, type FormFichaContrato,
-  type LinhaMensalContratoHF, type PagamentoContratoHF, type ParcelaContratoHF,
+  nomesDiferentesDaFicha, payloadFicha, podeDesfundir, type ContratoNaGrade, type FichaContratoHF, type FormFichaContrato,
+  type LinhaMensalContratoHF, type PagamentoContratoHF, type ParcelaContratoHF, type SyncStatusContratosHF,
 } from '../../domain/contratos-hf';
 import { formDeInformado, TIPO_CONTRATO, type FormInformado } from '../../domain/recebimentos-informados';
 import { ColarDaPlanilha, FormularioInformado } from '../receber/Informados';
@@ -68,6 +68,7 @@ export function ContratosEscritorio({ cache, repo, canEdit, canVerDoc, onAlterad
 }) {
   const [grade, setGrade] = useState<Estado<LinhaMensalContratoHF[]>>(null);
   const [pags, setPags] = useState<Estado<PagamentoContratoHF[]>>(null);
+  const [sync, setSync] = useState<Estado<SyncStatusContratosHF>>(null);
   const [versao, setVersao] = useState(0);
   const [abertoId, setAbertoId] = useState<string | null>(null);
   const [aviso, setAviso] = useState<Aviso>(null);
@@ -90,11 +91,18 @@ export function ContratosEscritorio({ cache, repo, canEdit, canVerDoc, onAlterad
         (e: unknown) => { if (vivo) setPags((g) => ({ dados: g?.dados ?? null, erro: msgErro(e, 'Não foi possível carregar a conferência da Hotmart.') })); },
       );
     }
+    if (!cache.syncLido()) {
+      cache.sync().then(
+        (d) => { if (vivo) setSync({ dados: d, erro: null }); },
+        (e: unknown) => { if (vivo) setSync({ dados: null, erro: msgErro(e, 'Não foi possível ler o status da sincronização com a Hotmart.') }); },
+      );
+    }
     return () => { vivo = false; };
   }, [cache, versao]);
 
   const linhas = cache.gradeLida() ?? grade?.dados ?? null;
   const pagamentos = cache.pagamentosLidos() ?? pags?.dados ?? null;
+  const statusSync = cache.syncLido() ?? sync?.dados ?? null;
 
   const executar = async (f: () => Promise<Resultado>, aoConcluir?: () => void): Promise<boolean> => {
     setOcupado(true);
@@ -141,7 +149,7 @@ export function ContratosEscritorio({ cache, repo, canEdit, canVerDoc, onAlterad
 
   return (
     <div className="space-y-4">
-      <SyncHotmart pagamentos={pagamentos} erro={pags?.erro ?? null} />
+      <SyncHotmart s={statusSync} erro={sync?.erro ?? null} />
       {aviso && !aberto && <AvisoLinha aviso={aviso} />}
       {grade?.erro && (
         // Releitura depois de gravar falhou: a grade anterior continua na tela, com o aviso de que pode estar velha.
@@ -296,22 +304,25 @@ function ConfirmarData({ acao, acoes, rotulo, confirmar }: { acao: NonNullable<A
   );
 }
 
-/** Status da última sincronização com a Hotmart (cron :25). Erro = faixa de aviso com a mensagem do banco. */
-function SyncHotmart({ pagamentos, erro }: { pagamentos: PagamentoContratoHF[] | null; erro: string | null }) {
-  if (erro && !pagamentos) return null; // o erro sai na seção da conferência
-  if (!pagamentos) return null;
-  const s = statusSync(pagamentos);
-  if (!s) return <p className="text-[11px] text-[var(--fg-3)]">Nenhum pagamento de Holding Familiar na Hotmart ainda.</p>;
-  if (s.erros > 0) {
+/**
+ * Status da última sincronização com a Hotmart (cron :25), lido de fn_fin_contratos_hf_sync_status — 1 linha sempre,
+ * independente da fila (fila vazia não quer dizer "sem erro"). Erro = faixa de aviso com a mensagem do banco.
+ */
+function SyncHotmart({ s, erro }: { s: SyncStatusContratosHF | null; erro: string | null }) {
+  if (!s && erro) return <p role="alert" className="text-xs font-semibold text-[var(--red)]">{erro}</p>;
+  if (!s) return <p className="text-[11px] text-[var(--fg-3)]">Lendo o status da sincronização com a Hotmart…</p>;
+  if (!s.ultima_em) return <p className="text-[11px] text-[var(--fg-3)]">A sincronização com a Hotmart ainda não rodou: nenhuma baixa automática até ela rodar.</p>;
+  const n = s.erros ?? 0;
+  if (n > 0) {
     return (
       <div role="alert" className="rounded-[var(--r-md)] border border-[var(--yellow)] px-3 py-2 text-xs text-[var(--fg)]">
-        <span className="font-semibold">Sincronização com a Hotmart: {s.erros} {s.erros === 1 ? 'erro' : 'erros'}</span>
-        {s.ultima_em && <> em {fmtDataHora(s.ultima_em)}</>}. Baixas automáticas podem estar atrasadas.
+        <span className="font-semibold">Sincronização com a Hotmart: {n} {n === 1 ? 'erro' : 'erros'}</span> em {fmtDataHora(s.ultima_em)}.
+        {' '}Baixas automáticas podem estar atrasadas.
         {s.mensagem && <span className="mt-1 block whitespace-pre-wrap text-[var(--fg-2)]">{s.mensagem}</span>}
       </div>
     );
   }
-  return <p className="text-[11px] text-[var(--fg-3)]">Última sincronização com a Hotmart: {s.ultima_em ? fmtDataHora(s.ultima_em) : '—'}, sem erro.</p>;
+  return <p className="text-[11px] text-[var(--fg-3)]">Última sincronização com a Hotmart: {fmtDataHora(s.ultima_em)}, sem erro.</p>;
 }
 
 /** Pagamentos HF da Hotmart que não casaram com nenhuma parcela, com o motivo. */
@@ -364,6 +375,13 @@ export function FichaContrato({ c, repo, canEdit, canVerDoc, ocupado, aviso, exe
   const [nova, setNova] = useState<{ valores: FormInformado; erros: string[] }>(() => novaParcela(f, canVerDoc));
   const parcelas = parcelasDoContrato(c);
   const vivo = !f.arquivado_em;
+  // Nome enviado diferente do da ficha: o banco grava com o nome da ficha e guarda o enviado na observação. A tela pergunta antes.
+  const [confirmacao, setConfirmacao] = useState<{ origem: 'planilha' | 'formulario'; nomes: string[]; responder: (ok: boolean) => void } | null>(null);
+  const perguntar = (origem: 'planilha' | 'formulario'): ConfirmarNomes => (nomes) => new Promise<boolean>((res) => {
+    setConfirmacao({ origem, nomes, responder: (ok) => { setConfirmacao(null); res(ok); } });
+  });
+  // Memo: o adaptador lembra os nomes já confirmados entre "Conferir" e "Gravar" (não pergunta duas vezes).
+  const repoColar = useMemo(() => repoColagemNoContrato(repo, f.id, f.nome, perguntar('planilha')), [repo, f.id, f.nome]);
   const abrir = (p: Painel) => { setErros([]); setMotivo(''); setPainel((x) => (x === p ? null : p)); };
 
   const salvar = () => {
@@ -450,12 +468,21 @@ export function FichaContrato({ c, repo, canEdit, canVerDoc, ocupado, aviso, exe
               const r = entradaNovaParcela(nova.valores, f.id, canVerDoc);
               if (!r.entrada) { setNova({ ...nova, erros: r.erros }); return; }
               const entrada = r.entrada;
-              void executar(() => repo.salvarInformado(entrada), () => setPainel(null));
+              const diferentes = nomesDiferentesDaFicha([entrada.cliente], f.nome);
+              void (async () => {
+                if (diferentes.length && !(await perguntar('formulario')(diferentes))) return;
+                await executar(() => repo.salvarInformado(entrada), () => setPainel(null));
+              })();
             }} />
         )}
 
+        {confirmacao && (
+          <ConfirmarNome origem={confirmacao.origem} nomes={confirmacao.nomes} nomeFicha={f.nome}
+            onResponder={confirmacao.responder} />
+        )}
+
         {canEdit && vivo && painel === 'colar' && (
-          <ColarDaPlanilha repo={repoColagemNoContrato(repo, f.id)} canVerDoc={canVerDoc}
+          <ColarDaPlanilha repo={repoColar} canVerDoc={canVerDoc}
             onGravado={(n) => void executar(async () => ({ ok: true, msg: `${n} ${n === 1 ? 'parcela gravada' : 'parcelas gravadas'} neste contrato.` }), () => setPainel(null))} />
         )}
 
@@ -463,7 +490,7 @@ export function FichaContrato({ c, repo, canEdit, canVerDoc, ocupado, aviso, exe
           <p className="font-semibold text-[var(--fg)]">Parcelas <span className="font-normal text-[var(--fg-3)]">(as do período da grade e as sem data)</span></p>
           {parcelas.length === 0 ? <p className="text-[var(--fg-3)]">Nenhuma parcela no período.</p> : (
             <DataTable minWidth={720}>
-              <Thead><Th>Parcela</Th><Th>Vencimento</Th><Th className="text-right">Valor</Th><Th>Situação</Th>{canEdit && <Th>Ações</Th>}</Thead>
+              <Thead><Th>Parcela</Th><Th>Vencimento</Th><Th className="text-right">Valor</Th><Th>Situação</Th><Th>Observação</Th>{canEdit && <Th>Ações</Th>}</Thead>
               <tbody>
                 {parcelas.map((p) => (
                   <LinhaParcela key={p.id} p={p} acoes={acoes} canEdit={canEdit && vivo} />
@@ -500,6 +527,7 @@ function LinhaParcela({ p, acoes, canEdit }: { p: ParcelaContratoHF; acoes: Acoe
         </span>
         {p.baixa_manual_em && <span className="text-[var(--fg-3)]"> · {fmtData(p.baixa_manual_em)}</span>}
       </Td>
+      <Td className="text-[11px] text-[var(--fg-2)]">{p.observacao ?? '—'}</Td>
       {canEdit && (
         <Td className="text-xs">
           {/* Baixa automática pela Hotmart: nenhuma ação (o banco recusa com P0001; estorno na Hotmart desfaz sozinho). */}
@@ -517,6 +545,25 @@ function LinhaParcela({ p, acoes, canEdit }: { p: ParcelaContratoHF; acoes: Acoe
         </Td>
       )}
     </Tr>
+  );
+}
+
+/** Confirmação explícita, no fluxo da ficha (nada absolute): os dois nomes à vista. */
+export function ConfirmarNome({ origem, nomes, nomeFicha, onResponder }: {
+  origem: 'planilha' | 'formulario'; nomes: string[]; nomeFicha: string | null; onResponder: (ok: boolean) => void;
+}) {
+  const diz = nomes.map((n) => `"${n}"`).join(', ');
+  return (
+    <div role="alertdialog" aria-label="Confirmar o nome do cliente" className="space-y-2 rounded-[var(--r-md)] border border-[var(--yellow)] p-2">
+      <p className="font-semibold text-[var(--fg)]">
+        {origem === 'planilha' ? 'A planilha diz' : 'O formulário diz'} {diz}; esta ficha é de &quot;{nomeFicha ?? '—'}&quot;. Gravar nesta ficha mesmo assim?
+      </p>
+      <p className="text-[var(--fg-2)]">A parcela fica com o nome da ficha; o nome {origem === 'planilha' ? 'da planilha' : 'digitado'} vai para a observação.</p>
+      <div className="flex gap-2">
+        <button type="button" className={BTN_1} onClick={() => onResponder(true)}>Gravar nesta ficha</button>
+        <button type="button" className={BTN} onClick={() => onResponder(false)}>Cancelar</button>
+      </div>
+    </div>
   );
 }
 

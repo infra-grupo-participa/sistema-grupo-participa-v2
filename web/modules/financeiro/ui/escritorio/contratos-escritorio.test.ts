@@ -4,11 +4,12 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { ContratosEscritorio, FichaContrato, type AcoesParcela, type RepoContratosEscrita } from './ContratosEscritorio';
+import { ConfirmarNome, ContratosEscritorio, FichaContrato, type AcoesParcela, type RepoContratosEscrita } from './ContratosEscritorio';
 import { subAbasVisiveis } from './EscritorioAba';
 import type { CacheContratosHF } from '../../application/carregar-contratos-hf';
 import {
   montarGradeContratos, normalizarLinhaMensal, normalizarPagamento, type LinhaMensalContratoHF, type PagamentoContratoHF,
+  type SyncStatusContratosHF,
 } from '../../domain/contratos-hf';
 
 const L = (p: Record<string, unknown>): LinhaMensalContratoHF => normalizarLinhaMensal({
@@ -22,7 +23,7 @@ const linhas = [
     { id: 'p1', parcela_n: 1, parcela_de: 3, valor: 1000, data_prevista: '2026-09-10', situacao: 'baixado_fora', baixa_manual_em: '2026-09-10', transacao_hotmart: 'HP999' },
   ] }),
   L({ mes: '2026-10-01', esperado: '2000', caiu_manual: '700', caiu: '700', situacao: 'em_atraso_cobrar', parcelas: [
-    { id: 'p2', parcela_n: 2, parcela_de: 3, valor: 2000, data_prevista: '2026-10-01', situacao: 'em_atraso_cobrar' },
+    { id: 'p2', parcela_n: 2, parcela_de: 3, valor: 2000, data_prevista: '2026-10-01', situacao: 'em_atraso_cobrar', observacao: 'cliente informado na colagem: <i>Maria</i>' },
   ] }),
   L({ mes: null, esperado: null, caiu_manual: null, caiu_hotmart: null, caiu: null, a_receber_etapa: '3000', situacao: 'a_receber_etapa', parcelas: [
     { id: 'p3', parcela_n: 3, parcela_de: 3, valor: 3000, etapa: 'registros', situacao: 'a_receber_etapa' },
@@ -38,9 +39,11 @@ const pag = (p: Record<string, unknown>): PagamentoContratoHF => normalizarPagam
   sync_ultima_em: '2026-09-29T12:25:00Z', sync_erros: 0, sync_mensagem: null, ...p,
 });
 
-const cacheCom = (g: LinhaMensalContratoHF[], p: PagamentoContratoHF[]): CacheContratosHF => ({
+const SYNC_OK: SyncStatusContratosHF = { ultima_em: '2026-09-29T12:25:00Z', fichas: 0, baixas: 1, desfeitas: 0, erros: 0, mensagem: null };
+const cacheCom = (g: LinhaMensalContratoHF[], p: PagamentoContratoHF[], s: SyncStatusContratosHF | null = SYNC_OK): CacheContratosHF => ({
   disponibilidade: () => 'sim', sondar: vi.fn(async () => 'sim' as const),
-  gradeLida: () => g, grade: vi.fn(async () => g), pagamentosLidos: () => p, pagamentos: vi.fn(async () => p), invalidar: vi.fn(),
+  gradeLida: () => g, grade: vi.fn(async () => g), pagamentosLidos: () => p, pagamentos: vi.fn(async () => p),
+  syncLido: () => s ?? undefined, sync: vi.fn(() => new Promise<SyncStatusContratosHF>(() => {})), invalidar: vi.fn(),
 });
 
 const repoEspiao = (): RepoContratosEscrita => ({
@@ -49,8 +52,9 @@ const repoEspiao = (): RepoContratosEscrita => ({
   salvarInformado: vi.fn(async () => ({ ok: true })), importarInformados: vi.fn(async () => ({ ok: true, linhas: [] })),
 });
 
-const render = (canEdit: boolean, p: PagamentoContratoHF[] = [pag({}), pag({ transacao: 'HP2', situacao: 'baixou_parcela', motivo: null })]) =>
-  renderToStaticMarkup(createElement(ContratosEscritorio, { cache: cacheCom(linhas, p), repo: repoEspiao(), canEdit, canVerDoc: false }));
+const render = (canEdit: boolean, p: PagamentoContratoHF[] = [pag({}), pag({ transacao: 'HP2', situacao: 'baixou_parcela', motivo: null })],
+  s: SyncStatusContratosHF | null = SYNC_OK) =>
+  renderToStaticMarkup(createElement(ContratosEscritorio, { cache: cacheCom(linhas, p, s), repo: repoEspiao(), canEdit, canVerDoc: false }));
 
 describe('grade mês a mês', () => {
   it('meses como colunas, esperado × caiu com H (Hotmart) e M (manual), totais', () => {
@@ -99,15 +103,23 @@ describe('fila de conferência e sincronização', () => {
     expect(html).not.toContain('HP2');
     expect(html).toContain('Última sincronização com a Hotmart');
   });
-  it('sync com erro: faixa de aviso com a mensagem (escapada)', () => {
-    const html = render(true, [pag({ sync_erros: 2, sync_mensagem: 'timeout <b>x</b>' })]);
+  it('sync com erro (da RPC de status, não da fila): faixa de aviso com a mensagem (escapada)', () => {
+    const html = render(true, [pag({ sync_erros: 0 })], { ...SYNC_OK, erros: 2, mensagem: 'timeout <b>x</b>' });
     expect(html).toContain('role="alert"');
     expect(html).toContain('Sincronização com a Hotmart: 2 erros');
     expect(html).toContain('timeout &lt;b&gt;x&lt;/b&gt;');
   });
-  it('fila vazia: diz que não há nada; sem pagamento algum: diz que não há sincronização a mostrar', () => {
-    expect(render(true, [pag({ situacao: 'baixou_parcela' })])).toContain('Nenhum pagamento da Hotmart esperando conferência.');
-    expect(render(true, [])).toContain('Nenhum pagamento de Holding Familiar na Hotmart ainda.');
+  it('fila VAZIA com erro na sincronização: a faixa aparece (lista vazia não é "sem erro")', () => {
+    const html = render(true, [], { ...SYNC_OK, erros: 1, mensagem: 'falhou' });
+    expect(html).toContain('Sincronização com a Hotmart: 1 erro');
+    expect(html).toContain('Nenhum pagamento da Hotmart esperando conferência.');
+  });
+  it('nunca rodou: diz isso; status ainda não lido: "lendo", nunca "sem erro"', () => {
+    const nulo = { ultima_em: null, fichas: null, baixas: null, desfeitas: null, erros: null, mensagem: null };
+    expect(render(true, [], nulo)).toContain('ainda não rodou');
+    const lendo = render(true, [], null);
+    expect(lendo).toContain('Lendo o status da sincronização');
+    expect(lendo).not.toContain('sem erro');
   });
 });
 
@@ -129,6 +141,7 @@ describe('ficha (drawer)', () => {
     expect(html).toContain('Editar ficha');
     expect(html).toContain('Arquivar');
     expect(html).not.toContain('Desfazer fusão'); // ficha sem sinal fundido
+    expect(html).toContain('cliente informado na colagem: &lt;i&gt;Maria&lt;/i&gt;'); // observação da parcela, escapada
   });
   it('sem permissão de operar: nenhum botão de escrita', () => {
     const html = ficha(false);
@@ -136,6 +149,17 @@ describe('ficha (drawer)', () => {
   });
   it('texto do cliente escapado no título', () => {
     expect(ficha(true, 1)).toContain('&lt;img src=x onerror=alert(1)&gt;');
+  });
+});
+
+describe('confirmação do nome (colagem / nova parcela)', () => {
+  it('mostra os dois nomes, escapados, e os dois botões', () => {
+    const html = renderToStaticMarkup(createElement(ConfirmarNome, {
+      origem: 'planilha', nomes: ['Maria <b>'], nomeFicha: 'João da Silva', onResponder: vi.fn(),
+    }));
+    expect(html).toContain('A planilha diz &quot;Maria &lt;b&gt;&quot;; esta ficha é de &quot;João da Silva&quot;. Gravar nesta ficha mesmo assim?');
+    expect(html).toContain('Gravar nesta ficha');
+    expect(html).toContain('Cancelar');
   });
 });
 
