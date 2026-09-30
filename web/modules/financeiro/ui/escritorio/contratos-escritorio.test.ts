@@ -36,7 +36,7 @@ const linhas = [
 const pag = (p: Record<string, unknown>): PagamentoContratoHF => normalizarPagamento({
   transacao: 'HP1', dia: '2026-09-20', valor: '500', nome_hotmart: 'Carla', email_hotmart: 'carla@example.com',
   situacao: 'fila', motivo: 'valor_nao_bate: nenhuma parcela em aberto com esse valor (tolerância R$ 1,00 ou 1%).',
-  sync_ultima_em: '2026-09-29T12:25:00Z', sync_erros: 0, sync_mensagem: null, ...p,
+  ...p,
 });
 
 const SYNC_OK: SyncStatusContratosHF = { ultima_em: '2026-09-29T12:25:00Z', fichas: 0, baixas: 1, desfeitas: 0, erros: 0, mensagem: null };
@@ -104,7 +104,7 @@ describe('fila de conferência e sincronização', () => {
     expect(html).toContain('Última sincronização com a Hotmart');
   });
   it('sync com erro (da RPC de status, não da fila): faixa de aviso com a mensagem (escapada)', () => {
-    const html = render(true, [pag({ sync_erros: 0 })], { ...SYNC_OK, erros: 2, mensagem: 'timeout <b>x</b>' });
+    const html = render(true, [pag({})], { ...SYNC_OK, erros: 2, mensagem: 'timeout <b>x</b>' });
     expect(html).toContain('role="alert"');
     expect(html).toContain('Sincronização com a Hotmart: 2 erros');
     expect(html).toContain('timeout &lt;b&gt;x&lt;/b&gt;');

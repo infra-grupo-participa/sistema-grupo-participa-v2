@@ -30,9 +30,10 @@ describe('normalização', () => {
     expect(L({ parcelas: '{quebrado' }).parcelas).toEqual([]);
     expect(L({ parcelas: null }).parcelas).toEqual([]);
   });
-  it('pagamento: sync_erros inteiro, valor numérico', () => {
-    const p = normalizarPagamento({ transacao: 'HP1', dia: '2026-09-20', valor: '12052.80', situacao: 'fila', sync_erros: '2' });
-    expect(p).toMatchObject({ valor: 12052.8, sync_erros: 2, contrato_id: null, motivo: null });
+  it('pagamento: valor numérico, parcela inteira; sem status da sincronização (vem de RPC própria)', () => {
+    const p = normalizarPagamento({ transacao: 'HP1', dia: '2026-09-20', valor: '12052.80', situacao: 'fila', parcela_n: '2' });
+    expect(p).toMatchObject({ valor: 12052.8, parcela_n: 2, contrato_id: null, motivo: null });
+    expect(p).not.toHaveProperty('sync_erros');
   });
 });
 
@@ -146,6 +147,8 @@ describe('colagem dentro da ficha', () => {
   it('mesma normalização do banco: minúsculas, sem acento, espaços colapsados', () => {
     expect(normalizarNome('  João   da SILVA ')).toBe('joao da silva');
     expect(normalizarNome(null)).toBe('');
+    // qualquer diacrítico (unaccent no banco), não só a lista do translate antigo
+    expect(normalizarNome('Ÿvès Müller Ñuñez Ğül Çağla')).toBe('yves muller nunez gul cagla');
   });
   it('nomes diferentes do da ficha: acento, caixa e espaço não contam; sem repetir; na ordem', () => {
     expect(nomesDiferentesDaFicha(['Ana Lúcia', 'ana  lucia', 'ANA LÚCIA'], 'Ana Lucia')).toEqual([]);

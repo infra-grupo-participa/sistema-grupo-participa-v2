@@ -124,8 +124,7 @@ test.describe('Financeiro · Escritório › Contratos HF (somente leitura)', ()
       ]);
       const pags = [{ transacao: 'HPSINTETICO', dia: meses[5], valor: 500, nome_hotmart: 'Sintético', email_hotmart: 's@example.com',
         contrato_id: null, contrato_nome: null, situacao: 'fila', motivo: 'sem_contrato: nenhuma ficha viva deste comprador.',
-        informado_id: null, parcela_n: null, parcela_de: null, atualizado_em: null,
-        sync_ultima_em: new Date().toISOString(), sync_erros: 0, sync_mensagem: null }];
+        informado_id: null, parcela_n: null, parcela_de: null, atualizado_em: null }];
       await page.route(/\/rest\/v1\/rpc\/fn_fin_contratos_hf_mensal/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(linhas) }));
       await page.route(/\/rest\/v1\/rpc\/fn_fin_contratos_hf_pagamentos/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pags) }));
       const sync = [{ ultima_em: new Date().toISOString(), fichas: 0, baixas: 0, desfeitas: 0, erros: 0, mensagem: null }];

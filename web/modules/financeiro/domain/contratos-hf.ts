@@ -74,9 +74,6 @@ export interface PagamentoContratoHF {
   parcela_n: number | null;
   parcela_de: number | null;
   atualizado_em: string | null;
-  sync_ultima_em: string | null;
-  sync_erros: number | null;
-  sync_mensagem: string | null;
 }
 
 /** fn_fin_contratos_hf_sync_status(): SEMPRE 1 linha; tudo nulo = o cron nunca rodou. */
@@ -108,7 +105,6 @@ export const COLUNAS_CONTRATOS_HF_PAGAMENTOS: readonly (keyof PagamentoContratoH
   'transacao', 'dia', 'valor', 'nome_hotmart', 'email_hotmart',
   'contrato_id', 'contrato_nome', 'situacao', 'motivo',
   'informado_id', 'parcela_n', 'parcela_de', 'atualizado_em',
-  'sync_ultima_em', 'sync_erros', 'sync_mensagem',
 ];
 
 // ─── Normalização ──────────────────────────────────────────────────────────
@@ -185,9 +181,6 @@ export function normalizarPagamento(r: Record<string, unknown>): PagamentoContra
     informado_id: txt(r.informado_id),
     parcela_n: int(r.parcela_n), parcela_de: int(r.parcela_de),
     atualizado_em: txt(r.atualizado_em),
-    sync_ultima_em: txt(r.sync_ultima_em),
-    sync_erros: int(r.sync_erros),
-    sync_mensagem: txt(r.sync_mensagem),
   };
 }
 
@@ -370,7 +363,11 @@ export const podeDesfundir = (f: FichaContratoHF) => !f.arquivado_em && f.origem
 /** Parcela baixada pela Hotmart: nenhuma ação manual (o banco recusa com P0001). */
 export const baixaPelaHotmart = (p: { transacao_hotmart: string | null }) => !!p.transacao_hotmart;
 
-/** MESMA normalização do banco (fin.contratos_hf_nome_norm): minúsculas, sem acento, espaços colapsados. */
+/**
+ * Mesma regra do banco (fin.contratos_hf_nome_norm = lower(unaccent(...)) + espaços colapsados): minúsculas, sem
+ * diacrítico (NFD tira qualquer marca combinante, como o unaccent), espaços colapsados. Diferença residual: letras sem
+ * decomposição (ø, ß, æ, ł) o unaccent translitera e o NFD não — aqui só decide se a tela PERGUNTA; quem grava é o banco.
+ */
 export function normalizarNome(v: string | null | undefined): string {
   return (v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
