@@ -387,6 +387,9 @@ O CEP do formulário público passa por `/api/cep.php`, com busca debounced no f
 ### 10. `step_index` 7 ainda é fase de agendamento
 No fluxo de placas, `step_index`/`auditoria_step` igual a `7` não deve ser tratado como entrevista concluída. Use `step_index >= 8` ou data/hora já expiradas para bloquear reagendamento. Para links de retorno/acompanhamento, prefira origem permitida do request ou token já validado, nunca `HTTP_HOST` cru nem campo livre do payload.
 
+### 11. Cron HTTP novo passa pelo vigia (`ops.cron_post`)
+Todo `cron.job` que chama edge function usa `ops.cron_post('<jobname>', url := ..., headers := ..., body := ...)` em vez de `net.http_post` (mesmos parâmetros + o nome do job na frente). Com `net.http_post` direto o vigia das rotinas não sabe de quem é a resposta e o job aparece como `sem_rastreio` na mensagem. Segredo de header sempre lido do Vault no command, nunca literal. Ver `docs/ADR/0001-vigia-de-rotinas.md`.
+
 ---
 
 ## Design Patterns
