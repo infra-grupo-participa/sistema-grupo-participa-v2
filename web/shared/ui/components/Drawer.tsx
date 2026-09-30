@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Icon } from '@/shared/ui/icons';
+import { idsAba, indiceAbaPorTecla, rotuloPendencias } from './tabs-teclado';
 
 /** Card de detalhe: modal centralizado amplo com header (avatar/título/badges/ações),
  *  corpo rolável e rodapé de ações fixo. Info à vista, orientado à operação. */
@@ -75,21 +76,57 @@ export function AvatarInicial({ nome, size = 40 }: { nome?: string | null; size?
   );
 }
 
-/** Abas internas (drawer/painel). */
-export function Tabs({ tabs, active, onChange }: { tabs: { k: string; l: string }[]; active: string; onChange: (k: string) => void }) {
+/** Abas internas (drawer/painel). Padrão WAI-ARIA Tabs: roving tabindex, ←/→ e Home/End
+ *  (ativação automática). Esc não é tratado aqui — borbulha até a gaveta, que fecha.
+ *  `idBase` (opcional) liga cada aba ao painel `idsAba(idBase, k).panel` via `aria-controls`;
+ *  sem ele não há painel com id para apontar, então o atributo não é emitido.
+ *  `n` (opcional) mostra um contador de pendências ao lado do rótulo (texto, não só cor). */
+export function Tabs({ tabs, active, onChange, idBase, label }: {
+  tabs: { k: string; l: string; n?: number }[];
+  active: string;
+  onChange: (k: string) => void;
+  idBase?: string;
+  label?: string;
+}) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const idxAtivo = Math.max(0, tabs.findIndex((t) => t.k === active));
+  const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, i: number) => {
+    const j = indiceAbaPorTecla(e.key, i, tabs.length);
+    if (j == null) return;
+    e.preventDefault();
+    refs.current[j]?.focus();
+    if (tabs[j].k !== active) onChange(tabs[j].k);
+  };
   return (
-    <div className="flex gap-1 border-b border-[var(--border)] mb-4 -mx-1 overflow-x-auto">
-      {tabs.map((t) => (
-        <button
-          key={t.k}
-          onClick={() => onChange(t.k)}
-          className={`px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px transition-colors ${
-            active === t.k ? 'border-[var(--accent)] text-[var(--fg)] font-medium' : 'border-transparent text-[var(--fg-3)] hover:text-[var(--fg-2)]'
-          }`}
-        >
-          {t.l}
-        </button>
-      ))}
+    <div role="tablist" aria-label={label} className="flex gap-1 border-b border-[var(--border)] mb-4 -mx-1 overflow-x-auto">
+      {tabs.map((t, i) => {
+        const ids = idBase ? idsAba(idBase, t.k) : null;
+        return (
+          <button
+            key={t.k}
+            ref={(el) => { refs.current[i] = el; }}
+            type="button"
+            role="tab"
+            id={ids?.tab}
+            aria-controls={ids?.panel}
+            aria-selected={active === t.k}
+            tabIndex={i === idxAtivo ? 0 : -1}
+            onClick={() => onChange(t.k)}
+            onKeyDown={(e) => onKeyDown(e, i)}
+            className={`px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px transition-colors ${
+              active === t.k ? 'border-[var(--accent)] text-[var(--fg)] font-medium' : 'border-transparent text-[var(--fg-3)] hover:text-[var(--fg-2)]'
+            }`}
+          >
+            {t.l}
+            {t.n ? (
+              <>
+                <span aria-hidden="true" className="ml-1.5 text-xs font-semibold tabular text-[var(--yellow)]">{t.n}</span>
+                <span className="sr-only">, {rotuloPendencias(t.n)}</span>
+              </>
+            ) : null}
+          </button>
+        );
+      })}
     </div>
   );
 }

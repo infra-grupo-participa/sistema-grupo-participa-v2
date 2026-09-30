@@ -26,6 +26,7 @@ import { InstrucaoBadge } from './alunos-ui-bits';
 import { AcessoHmClient } from './AcessoHmClient';
 import { loadHmContagem } from './acesso-hm-data';
 import { hmBadgeTotal } from '../domain/acesso-hm';
+import { lerHashFicha, montarHashFicha, type AbaFicha } from '../domain/ficha-aluno-abas';
 
 type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento' | 'canal';
 interface Filtros { status: string[]; espaco: string[]; instrucao: string[]; nivel: string[]; jornada: string[]; papel: string[]; turma: string[]; estado: string[]; anoEntrada: string[]; canal: string[] }
@@ -40,6 +41,11 @@ const SEM_CANAL = '__sem_canal__';
 
 /** Ordem de exibição das instruções: nível crescente, titular antes do sócio. */
 const INSTRUCAO_RANK: Record<string, number> = Object.fromEntries(INSTRUCOES.map((v, i) => [v, i]));
+
+/** Tira o `#aluno=…` da URL ao fechar a ficha (outro hash, se houver, fica). */
+function limparHashFicha() {
+  if (lerHashFicha(window.location.hash)) history.replaceState(null, '', window.location.pathname + window.location.search);
+}
 
 /** Texto com botão de copiar — não propaga o clique para a linha. */
 function CopyText({ value, display }: { value: string; display?: string }) {
@@ -70,6 +76,9 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
+  // Aba de abertura só vale para a ficha reaberta pelo link (#aluno=…&aba=…); clique sempre abre em Resumo.
+  const [abaInicial, setAbaInicial] = useState<AbaFicha | null>(null);
+  const abrirFicha = useCallback((id: string) => { setSelectedId(id); setEditMode(false); setAbaInicial(null); }, []);
   const [novoAluno, setNovoAluno] = useState(false);
   const { toast, flash } = useFlash();
   const [topTab, setTopTab] = useState<'dashboard' | 'lista' | 'acessoHm'>(onlyHm ? 'acessoHm' : 'dashboard');
@@ -89,6 +98,13 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
       setTurmas(t);
       setHmCount(hmBadgeTotal(c));
       setLoading(false);
+      // Reabre a ficha do link. Id fora da base carregada: ignora em silêncio.
+      const h = lerHashFicha(window.location.hash);
+      if (h && a.some((x) => x.id === h.alunoId)) {
+        setSelectedId(h.alunoId);
+        setEditMode(false);
+        setAbaInicial(h.aba);
+      }
     })();
   }, [onlyHm]);
 
@@ -239,6 +255,12 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
   const temFiltroLista = Boolean(busca) || Object.values(filtros).some((arr) => arr.length > 0);
 
   const selected = selectedId ? alunos.find((a) => a.id === selectedId) ?? null : null;
+  // Ficha aberta + aba no hash (replaceState: sem navegação do Next, sem request, sem entrada no histórico).
+  const gravarHashFicha = useCallback((aba: AbaFicha) => {
+    if (!selectedId) return;
+    const h = montarHashFicha(selectedId, aba);
+    if (window.location.hash !== h) history.replaceState(null, '', h);
+  }, [selectedId]);
   const sortBtn = (col: SortCol) => () => {
     if (sortCol === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     else { setSortCol(col); setSortDir('asc'); }
@@ -269,13 +291,13 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
         ))}
       </div>
 
-      {topTab === 'dashboard' && <DashboardAlunos alunos={alunos} onAbrirAluno={(id) => { setSelectedId(id); setEditMode(false); }} />}
+      {topTab === 'dashboard' && <DashboardAlunos alunos={alunos} onAbrirAluno={abrirFicha} />}
 
       {topTab === 'acessoHm' && (
         <AcessoHmClient
           canEdit={canLiberarHm}
           canManageTurmas={canManageTurmas}
-          onOpenAluno={onlyHm ? undefined : (id) => { setSelectedId(id); setEditMode(false); }}
+          onOpenAluno={onlyHm ? undefined : abrirFicha}
           onCountChange={(c) => setHmCount(hmBadgeTotal(c))}
         />
       )}
@@ -321,7 +343,7 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
           {filtered.slice(0, 500).map((a) => {
             const sit = a.situacao_acesso ? SITUACAO[a.situacao_acesso] : null;
             return (
-              <Tr key={a.id} onClick={() => { setSelectedId(a.id); setEditMode(false); }}>
+              <Tr key={a.id} onClick={() => abrirFicha(a.id)}>
                 <Td>
                   <div className="text-[var(--fg)] font-medium">{a.nome || '—'}</div>
                   <div className="flex flex-col gap-0.5 mt-0.5">
@@ -382,7 +404,7 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
             setNovoAluno(false);
             flash(msg);
             await reload();
-            if (novoId) { setSelectedId(novoId); setEditMode(false); } // abre a ficha recém-criada
+            if (novoId) abrirFicha(novoId); // abre a ficha recém-criada
           }}
         />
       )}
@@ -398,8 +420,10 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
           canEdit={canEditBase}
           editMode={editMode}
           onToggleEdit={() => setEditMode((e) => !e)}
-          onClose={() => { setSelectedId(null); setEditMode(false); }}
-          onAbrirAluno={(id) => { setSelectedId(id); setEditMode(false); }}
+          onClose={() => { setSelectedId(null); setEditMode(false); limparHashFicha(); }}
+          onAbrirAluno={abrirFicha}
+          abaInicial={abaInicial}
+          onAbaChange={gravarHashFicha}
           onSaved={async (msg) => { flash(msg); setEditMode(false); await reload(); invalidarTrajetoria(selected.id); }}
         />
       )}

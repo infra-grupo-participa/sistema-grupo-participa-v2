@@ -1,18 +1,17 @@
 'use client';
 
-// Seção "Trajetória" da ficha do aluno. Sempre aberta (regra do Marcio: nada atrás de clique); carrega quando a
-// ficha abre (1 RPC por abertura) e guarda por aluno_id
-// no módulo — a ficha remonta a cada troca de aluno (key={id} em AlunosClient), então cache em estado local
-// seria perdido ao reabrir. Filtro de dimensão é no cliente, dentro da LinhaDoTempo.
+// Corpo da aba "Trajetória" da ficha do aluno. Monta só quando a aba é aberta pela 1ª vez (1 RPC por aluno) e
+// depois fica montado, oculto, ao trocar de aba; o resultado fica guardado por aluno_id no módulo — a ficha
+// remonta a cada troca de aluno (key={id} em AlunosClient), então cache em estado local seria perdido ao
+// reabrir. Filtro de dimensão é no cliente, dentro da LinhaDoTempo.
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Loading, SectionCard } from '@/shared/ui/components';
+import { Button, Loading } from '@/shared/ui/components';
 import { fmtData } from '@/shared/ui/format';
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { LinhaDoTempo, NumeroResumo } from '@/shared/ui/timeline';
 import { resumirTrajetoriaAluno, type LinhaTrajetoriaAluno } from '../domain/trajetoria-aluno';
 import { loadTrajetoriaAluno } from './alunos-data';
 import { DIMENSOES_CHIPS, paraItensLinhaDoTempo } from './trajetoria-aluno-itens';
-import { SecTitle } from './alunos-ui-bits';
 
 const cache = new Map<string, LinhaTrajetoriaAluno[]>();
 
@@ -31,15 +30,7 @@ export function invalidarTrajetoria(alunoId: string) {
   ouvintes.forEach((f) => f(alunoId));
 }
 
-export function TrajetoriaAluno({ alunoId }: { alunoId: string }) {
-  return (
-    <SectionCard title={<SecTitle icon="calendar-days">Trajetória</SecTitle>}>
-      <CorpoTrajetoria alunoId={alunoId} />
-    </SectionCard>
-  );
-}
-
-function CorpoTrajetoria({ alunoId }: { alunoId: string }) {
+export function CorpoTrajetoria({ alunoId }: { alunoId: string }) {
   const [linhas, setLinhas] = useState<LinhaTrajetoriaAluno[] | null>(() => cache.get(alunoId) ?? null);
   const [erro, setErro] = useState<string | null>(null);
   const [tentativa, setTentativa] = useState(0);
