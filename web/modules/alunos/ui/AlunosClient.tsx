@@ -27,10 +27,14 @@ import { AcessoHmClient } from './AcessoHmClient';
 import { loadHmContagem } from './acesso-hm-data';
 import { hmBadgeTotal } from '../domain/acesso-hm';
 import { lerHashFicha, montarHashFicha, type AbaFicha } from '../domain/ficha-aluno-abas';
+import { CONCILIACAO_ATIVA, contarAbertosAlta } from '../domain/conciliacao';
+import { passaFiltroComprovacao, passaFiltroPrograma } from '../domain/programa-selo';
+import { ConciliacaoClient, useConciliacao } from './ConciliacaoClient';
+import { CelulaPrograma, FiltrosProgramaSelo, LinhaSelo, useProgramaSelo } from './programa-selo-ui';
 
 type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento' | 'canal';
-interface Filtros { status: string[]; espaco: string[]; instrucao: string[]; nivel: string[]; jornada: string[]; papel: string[]; turma: string[]; estado: string[]; anoEntrada: string[]; canal: string[] }
-const FILTROS_VAZIO: Filtros = { status: [], espaco: [], instrucao: [], nivel: [], jornada: [], papel: [], turma: [], estado: [], anoEntrada: [], canal: [] };
+interface Filtros { status: string[]; espaco: string[]; instrucao: string[]; nivel: string[]; jornada: string[]; papel: string[]; turma: string[]; estado: string[]; anoEntrada: string[]; canal: string[]; programa: string[]; comprovacao: string[] }
+const FILTROS_VAZIO: Filtros = { status: [], espaco: [], instrucao: [], nivel: [], jornada: [], papel: [], turma: [], estado: [], anoEntrada: [], canal: [], programa: [], comprovacao: [] };
 
 /** Valor do filtro de ano para quem não tem data de entrada registrada. */
 const SEM_DATA = '__sem_data__';
@@ -79,12 +83,19 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
   // Aba de abertura só vale para a ficha reaberta pelo link (#aluno=…&aba=…); clique sempre abre em Resumo.
   const [abaInicial, setAbaInicial] = useState<AbaFicha | null>(null);
   const abrirFicha = useCallback((id: string) => { setSelectedId(id); setEditMode(false); setAbaInicial(null); }, []);
+  // Vindo da Conciliação: a ficha abre na aba onde o item se resolve.
+  const abrirFichaNaAba = useCallback((id: string, aba: AbaFicha) => { setSelectedId(id); setEditMode(false); setAbaInicial(aba); }, []);
   const [novoAluno, setNovoAluno] = useState(false);
   const { toast, flash } = useFlash();
-  const [topTab, setTopTab] = useState<'dashboard' | 'lista' | 'acessoHm'>(onlyHm ? 'acessoHm' : 'dashboard');
+  const [topTab, setTopTab] = useState<'dashboard' | 'lista' | 'conciliacao' | 'acessoHm'>(onlyHm ? 'acessoHm' : 'dashboard');
   const [hmCount, setHmCount] = useState<number | null>(null);
 
   const reload = useCallback(async () => setAlunos(await loadAlunos360()), []);
+  // Segundo plano, depois da lista: conciliação 1× (a ficha reusa) e programa + selo 1×. Falha não trava a lista.
+  const conc = useConciliacao(CONCILIACAO_ATIVA && !onlyHm && !loading);
+  const prog = useProgramaSelo(!onlyHm && !loading);
+  const nConc = useMemo(() => contarAbertosAlta(conc.itens ?? []), [conc.itens]);
+  const colPrograma = prog.carregado && !prog.erro;
   useEffect(() => {
     (async () => {
       // HM-only: não carrega a base sensível de alunos, só a contagem da fila.
@@ -147,6 +158,8 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
         const c = String(a.canal_aquisicao ?? '').trim() || SEM_CANAL;
         if (!f.canal.includes(c)) return false;
       }
+      if (!passaFiltroPrograma(prog.programas.get(a.id), f.programa)) return false;
+      if (!passaFiltroComprovacao(prog.selos.get(a.id), f.comprovacao)) return false;
       return true;
     });
     list.sort((a, b) => {
@@ -187,7 +200,7 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return list;
-  }, [alunos, busca, filtros, sortCol, sortDir]);
+  }, [alunos, busca, filtros, sortCol, sortDir, prog]);
 
   // ── Opções de filtro ────────────────────────────────────────────────────────
   // Regra: TODA opção sai da própria base carregada, nunca de lista fixa no código.
@@ -274,7 +287,9 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
       <div className="flex gap-1 border-b border-[var(--border)] mb-5">
         {(onlyHm
           ? ([['acessoHm', 'Liberação Holding Masters']] as const)
-          : ([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos'], ['acessoHm', 'Liberação Holding Masters']] as const)
+          : CONCILIACAO_ATIVA
+            ? ([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos'], ['conciliacao', 'Conciliação'], ['acessoHm', 'Liberação Holding Masters']] as const)
+            : ([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos'], ['acessoHm', 'Liberação Holding Masters']] as const)
         ).map(([k, l]) => (
           <button
             key={k}
@@ -284,6 +299,9 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
             }`}
           >
             {l}
+            {k === 'conciliacao' && nConc > 0 && (
+              <span aria-label={`${nConc} ${nConc === 1 ? 'pendência de severidade alta' : 'pendências de severidade alta'}`} className="min-w-[18px] rounded-full bg-[var(--surface-3)] border border-[var(--border)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--fg)] tabular">{nConc}</span>
+            )}
             {k === 'acessoHm' && hmCount != null && hmCount > 0 && (
               <span className="min-w-[18px] rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[11px] font-semibold text-black tabular">{hmCount}</span>
             )}
@@ -292,6 +310,16 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
       </div>
 
       {topTab === 'dashboard' && <DashboardAlunos alunos={alunos} onAbrirAluno={abrirFicha} />}
+
+      {topTab === 'conciliacao' && (
+        <ConciliacaoClient
+          dados={conc}
+          alunos={alunos}
+          canEdit={canEditBase}
+          onAbrirAluno={abrirFichaNaAba}
+          onMudou={flash}
+        />
+      )}
 
       {topTab === 'acessoHm' && (
         <AcessoHmClient
@@ -316,6 +344,7 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
         <MultiSelect values={filtros.anoEntrada} onChange={(v) => setFiltros((f) => ({ ...f, anoEntrada: v }))} placeholder="Ano de entrada no THB" options={anoEntradaOpts} />
         <MultiSelect values={filtros.canal} onChange={(v) => setFiltros((f) => ({ ...f, canal: v }))} placeholder="Todos os canais" options={canalOpts} />
         <MultiSelect values={filtros.status} onChange={(v) => setFiltros((f) => ({ ...f, status: v }))} placeholder="Todos os status" options={statusOpts.map((s) => ({ value: s, label: s }))} />
+        <FiltrosProgramaSelo dados={prog} programa={filtros.programa} comprovacao={filtros.comprovacao} onPrograma={(v) => setFiltros((f) => ({ ...f, programa: v }))} onComprovacao={(v) => setFiltros((f) => ({ ...f, comprovacao: v }))} />
       </Toolbar>
 
       <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
@@ -332,6 +361,7 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
         <Thead>
           <Thx sortable active={sortCol === 'nome'} dir={sortDir} onClick={sortBtn('nome')}>Aluno</Thx>
           <Thx sortable active={sortCol === 'nivel'} dir={sortDir} onClick={sortBtn('nivel')}>Nível</Thx>
+          {colPrograma && <Thx>Programa</Thx>}
           <Thx>Profissão</Thx>
           <Thx sortable active={sortCol === 'instrucao'} dir={sortDir} onClick={sortBtn('instrucao')}>Instrução</Thx>
           <Thx sortable active={sortCol === 'turma'} dir={sortDir} onClick={sortBtn('turma')}>Turma</Thx>
@@ -351,7 +381,8 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
                     {a.telefone && <CopyText value={a.telefone} display={tel(a.telefone)} />}
                   </div>
                 </Td>
-                <Td><NivelBadge nivel={a.nivel_resultado} /></Td>
+                <Td><NivelBadge nivel={a.nivel_resultado} /><LinhaSelo nivel={a.nivel_resultado} s={prog.selos.get(a.id)} /></Td>
+                {colPrograma && <Td><CelulaPrograma p={prog.programas.get(a.id)} /></Td>}
                 <Td className="text-[var(--fg-2)]">{a.profissao || <span className="text-[var(--fg-3)]">—</span>}</Td>
                 <Td>
                   <InstrucaoBadge a={a} />
@@ -424,7 +455,11 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
           onAbrirAluno={abrirFicha}
           abaInicial={abaInicial}
           onAbaChange={gravarHashFicha}
-          onSaved={async (msg) => { flash(msg); setEditMode(false); await reload(); invalidarTrajetoria(selected.id); }}
+          onSaved={async (msg) => { flash(msg); setEditMode(false); await reload(); invalidarTrajetoria(selected.id); conc.recarregar(); }}
+          conciliacao={CONCILIACAO_ATIVA ? conc.porAluno.get(selected.id) ?? (conc.itens ? [] : null) : null}
+          conciliacaoErro={conc.erro}
+          programa={prog.programas.get(selected.id)}
+          onVinculoAlterado={async (msg) => { flash(msg); await reload(); conc.recarregar(); }}
         />
       )}
       <Toast>{toast}</Toast>

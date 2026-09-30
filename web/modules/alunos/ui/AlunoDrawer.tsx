@@ -14,7 +14,11 @@ import { nivelLabel } from '@/shared/domain/nivel-resultado';
 import { loadPlacaHistorico, type Turma, type PlacaHistorico } from './alunos-data';
 import { loadCiclosByAluno, type Ciclo } from '@/modules/placas/ui/admin/placas-admin-data';
 import { cursoDesempenhoMock } from '../domain/curso-mock';
-import { pendenciasAluno, contarPorAba, type PendenciaAluno } from '../domain/pendencias-aluno';
+import { pendenciasAluno, contarPorAba, type AbaPendencia, type PendenciaAluno } from '../domain/pendencias-aluno';
+import { TIPOS_VINCULO_TITULAR, type ItemConciliacao } from '../domain/conciliacao';
+import { PROGRAMA_ATIVO, type ProgramaAluno } from '../domain/programa-selo';
+import { AlunoProgramaEvidencias } from './AlunoProgramaEvidencias';
+import { DefinirTitular } from './DefinirTitular';
 import type { AbaFicha } from '../domain/ficha-aluno-abas';
 import { Badge, NivelBadge, Drawer, AvatarInicial, SectionCard, Button, KpiCard, ProgressBar, Tabs, idsAba } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
@@ -45,7 +49,7 @@ const ROTULO_ABA: Record<AbaFicha, string> = { resumo: 'Resumo', programa: 'Prog
  * (Trajetória, SIP expandido) nem perde o estado aberto dos blocos recolhíveis.
  * Placa e ciclos continuam carregando na abertura: as pendências do Resumo dependem deles.
  */
-export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggleEdit, onClose, onAbrirAluno, onSaved, abaInicial, onAbaChange }: {
+export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggleEdit, onClose, onAbrirAluno, onSaved, abaInicial, onAbaChange, conciliacao = null, conciliacaoErro = null, programa, onVinculoAlterado }: {
   a: Aluno360;
   turmas: Turma[];
   /** Base carregada, usada para ligar o sócio ao titular e vice-versa. */
@@ -61,6 +65,14 @@ export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggl
   abaInicial?: AbaFicha | null;
   /** Avisa a aba ativa (inclusive a inicial) — quem abre a ficha grava na URL. */
   onAbaChange?: (aba: AbaFicha) => void;
+  /** Itens em aberto da conciliação deste aluno (carga única da página). Nulo = ainda não carregou. */
+  conciliacao?: ItemConciliacao[] | null;
+  /** A carga da conciliação falhou: linha discreta no Resumo, o resto da ficha segue. */
+  conciliacaoErro?: string | null;
+  /** Linha de fn_aluno_programas_safe deste aluno (carga única da lista). */
+  programa?: ProgramaAluno;
+  /** Vínculo de sócio gravado por "Definir quem é o titular": quem abriu recarrega base e conciliação. */
+  onVinculoAlterado?: (msg: string) => void;
 }) {
   const [placaHist, setPlacaHist] = useState<PlacaHistorico | null>(null);
   const [placaLoading, setPlacaLoading] = useState(false);
@@ -102,15 +114,16 @@ export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggl
   }, [aba, idBase]);
 
   const pendencias = useMemo(
-    () => pendenciasAluno(a, { socio: vinculo, placa: placaHist?.solicitacao ?? null }),
-    [a, vinculo, placaHist],
+    () => pendenciasAluno(a, { socio: vinculo, placa: placaHist?.solicitacao ?? null, conciliacao }),
+    [a, vinculo, placaHist, conciliacao],
   );
   const nPorAba = contarPorAba(pendencias);
   const abas = ABAS_DISPONIVEIS.map((k) => ({
     k,
     l: ROTULO_ABA[k],
-    n: k === 'programa' || k === 'jornada' ? nPorAba[k] : undefined,
+    n: k === 'resumo' || k === 'programa' || k === 'jornada' ? nPorAba[k] : undefined,
   }));
+  const itensVinculo = useMemo(() => (conciliacao ?? []).filter((i) => TIPOS_VINCULO_TITULAR.includes(i.tipo)), [conciliacao]);
 
   const painel = (k: AbaFicha, conteudo: React.ReactNode) => {
     if (!visitadas.has(k)) return null;
@@ -159,6 +172,7 @@ export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggl
             {/* HERO — resumo operacional em relance (nível, acesso, turma/vencimento, Hotmart) */}
             <HeroResumo a={a} sit={sit} />
             {pendencias.length > 0 && <BlocoPendencias itens={pendencias} onIr={(k) => trocarAba(k, true)} />}
+            {conciliacaoErro && <p className="text-xs text-[var(--fg-3)]" role="status">Conciliação indisponível no momento: a lista de pendências pode estar incompleta.</p>}
             <SectionCard title={<SecTitle icon="user">Dados Pessoais</SecTitle>}>
               <Section>
                 {a.profissao && <Row k="Profissão" v={a.profissao} />}
@@ -177,7 +191,17 @@ export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggl
           </>
         ))}
 
-        {painel('programa', <AbaPrograma a={a} sit={sit} instr={instr} espaco={espaco} vinculo={vinculo} onAbrirAluno={onAbrirAluno} />)}
+        {painel('programa', (
+          <>
+            {PROGRAMA_ATIVO && <AlunoProgramaEvidencias alunoId={a.id} programa={programa} />}
+            <AbaPrograma
+              a={a} sit={sit} instr={instr} espaco={espaco} vinculo={vinculo} onAbrirAluno={onAbrirAluno}
+              definirTitular={canEdit && onVinculoAlterado && itensVinculo.length > 0
+                ? <DefinirTitular a={a} alunos={alunos} itens={itensVinculo} onFeito={onVinculoAlterado} />
+                : null}
+            />
+          </>
+        ))}
 
         {painel('jornada', <AlunoAbaJornada a={a} temPlaca={temPlaca} placaHist={placaHist} placaLoading={placaLoading} ciclos={ciclos} />)}
 
@@ -198,7 +222,7 @@ export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggl
 
 /** Pendências = só os sinais que a ficha já pinta de amarelo/vermelho (ver pendencias-aluno.ts).
  *  Cada linha leva à aba onde o sinal está. */
-function BlocoPendencias({ itens, onIr }: { itens: PendenciaAluno[]; onIr: (aba: 'programa' | 'jornada') => void }) {
+function BlocoPendencias({ itens, onIr }: { itens: PendenciaAluno[]; onIr: (aba: AbaPendencia) => void }) {
   return (
     <SectionCard title={<SecTitle icon="alert">Pendências ({itens.length})</SecTitle>}>
       <ul>
@@ -225,13 +249,15 @@ function BlocoPendencias({ itens, onIr }: { itens: PendenciaAluno[]; onIr: (aba:
  * apareciam em Renovação E em Acesso ao Curso; UCode em Hotmart E em Metadados; "Registrado no SIP"
  * aqui E no card do SIP (aba Jornada). Ficou uma ocorrência de cada.
  */
-function AbaPrograma({ a, sit, instr, espaco, vinculo, onAbrirAluno }: {
+function AbaPrograma({ a, sit, instr, espaco, vinculo, onAbrirAluno, definirTitular }: {
   a: Aluno360;
   sit: { label: string; cls: string } | null;
   instr: ReturnType<typeof parseInstrucao>;
   espaco: string | null;
   vinculo: VinculoSocio;
   onAbrirAluno?: (id: string) => void;
+  /** "Definir quem é o titular" (só para quem edita e só com item de vínculo da conciliação). */
+  definirTitular?: React.ReactNode;
 }) {
   const rs = renovacaoStatus(a.turma_codigo);
   const info = rs ? RENOVACAO_LABEL[rs] : null;
@@ -289,6 +315,7 @@ function AbaPrograma({ a, sit, instr, espaco, vinculo, onAbrirAluno }: {
             <Row k="Instrução" v={instr ? instr.label : a.instrucao} />
             <Row k="Espaço de instrução" v={espaco} />
             <VinculoSocios a={a} vinculo={vinculo} onAbrirAluno={onAbrirAluno} />
+            {definirTitular}
             {(a.cs_estagio || a.cs_responsavel || a.cs_observacoes) && (
               <>
                 <SubTitle>Acompanhamento CS</SubTitle>
