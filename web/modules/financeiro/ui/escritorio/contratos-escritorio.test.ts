@@ -74,6 +74,13 @@ describe('grade mês a mês', () => {
     expect(html).toContain('javascript:alert(1)</span>'); // vira texto
   });
 
+  it('1ª coluna fixa (sticky, fundo opaco) no cabeçalho, em cada linha e no rodapé', () => {
+    const html = render(true);
+    const fixas = html.match(/sticky left-0 z-\[2\]/g) ?? [];
+    expect(fixas.length).toBe(1 + 2 + 1); // th + 2 contratos + total
+    expect(html).toMatch(/<td class="[^"]*sticky left-0[^"]*bg-\[var\(--surface-2\)\][^"]*"><button type="button"/);
+  });
+
   it('concluir etapa: só para quem opera', () => {
     expect(render(true)).toContain('Concluir etapa');
     const leitura = render(false);

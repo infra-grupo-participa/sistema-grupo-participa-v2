@@ -334,9 +334,11 @@ export function Informados({ repo, canEdit, canVerDoc, onAlterado, inicial = nul
   );
 }
 
-export function FormularioInformado({ form, canVerDoc, ocupado, onMudar, onSalvar, onCancelar }: {
+export function FormularioInformado({ form, canVerDoc, ocupado, onMudar, onSalvar, onCancelar, tipoFixo = false }: {
   form: NonNullable<Form>; canVerDoc: boolean; ocupado: boolean;
   onMudar: (v: FormInformado) => void; onSalvar: () => void; onCancelar: () => void;
+  /** Tipo já decidido por quem chama (parcela nova na ficha do contrato HF): o seletor de tipo não aparece. Padrão: aparece. */
+  tipoFixo?: boolean;
 }) {
   const v = form.valores;
   const contrato = v.tipo === TIPO_CONTRATO;
@@ -366,7 +368,7 @@ export function FormularioInformado({ form, canVerDoc, ocupado, onMudar, onSalva
       <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
         {campo(CAMPOS_INFORMADO.dataPrevista, <input type="date" className={INPUT} value={v.data_prevista} onChange={(e) => set('data_prevista', e.target.value)} />)}
         {campo(CAMPOS_INFORMADO.cliente, <input type="text" className={INPUT} value={v.cliente} onChange={(e) => set('cliente', e.target.value)} />)}
-        {campo(CAMPOS_INFORMADO.tipo, (
+        {!tipoFixo && campo(CAMPOS_INFORMADO.tipo, (
           <select className={INPUT} value={v.tipo} onChange={(e) => set('tipo', e.target.value)}>
             <option value="">{CAMPOS_INFORMADO.selecione}</option>
             {TIPOS_INFORMADO.map((t) => <option key={t} value={t}>{rotuloTipoInformado(t)}</option>)}

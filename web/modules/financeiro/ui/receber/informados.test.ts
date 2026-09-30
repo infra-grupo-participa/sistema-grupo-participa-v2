@@ -155,6 +155,24 @@ describe('Colar da planilha — prévia', () => {
   });
 });
 
+describe('Formulário — tipoFixo (parcela nova na ficha do contrato HF)', () => {
+  const html = (tipoFixo?: boolean) => renderToStaticMarkup(createElement(FormularioInformado, {
+    form: { original: null, valores: { ...formDeInformado(null, false), tipo: 'contrato_holding_familiar' }, erros: [] },
+    canVerDoc: false, ocupado: false, onMudar: () => {}, onSalvar: () => {}, onCancelar: () => {}, tipoFixo,
+  }));
+  it('padrão (sem a prop): seletor de tipo aparece, como hoje', () => {
+    expect(html()).toContain('<span>Tipo</span>');
+    expect(html()).toContain('Renovação Aurum');
+    expect(html(false)).toContain('Renovação Aurum');
+  });
+  it('tipoFixo: sem seletor de tipo; campos do contrato seguem (parcela, assinado)', () => {
+    const h = html(true);
+    expect(h).not.toContain('Renovação Aurum');
+    expect(h).not.toContain('<span>Tipo</span>');
+    expect(h).toContain('Contrato assinado');
+  });
+});
+
 describe('Formulário — identificador conforme gp_pode_ver_cpf', () => {
   const orig = I({ id: 'a', via_hotmart: true, produtos: ['Aurum'], identificador1: '···7735', identificador2: null });
   const render = (canVerDoc: boolean, original: typeof orig | null) => renderToStaticMarkup(createElement(FormularioInformado, {

@@ -95,6 +95,73 @@ test.describe('Financeiro · Escritório › Contratos HF (somente leitura)', ()
     expect(escritas, 'o teste tentou escrever em produção').toEqual([]);
   });
 
+  // Geometria com DADOS SINTÉTICOS (rede do navegador forjada: nenhuma linha real, nada vai ao banco nas 2 RPCs da z93).
+  // Roda antes do apply: prova pintura e rolagem, não o conteúdo.
+  for (const largura of [1440, 1280]) {
+    test(`geometria a ${largura}px: página sem rolagem lateral; grade rola dentro; 1ª coluna fixa`, async ({ page }) => {
+      const escritas = await travarEscritas(page);
+      await page.setViewportSize({ width: largura, height: 900 });
+      const hoje = new Date();
+      const meses = Array.from({ length: 12 }, (_, i) => {
+        const d = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() - 5 + i, 1));
+        return d.toISOString().slice(0, 10);
+      });
+      const ficha = (i: number) => ({
+        contrato_id: `00000000-0000-0000-0000-00000000000${i}`, nome: `Cliente sintético ${i} com nome comprido para medir`,
+        email: `sintetico${i}@example.com`, telefone: null, cidade: 'Goiânia', uf: 'GO', cpf_final3: null, origem: 'planilha_drive',
+        transacao_sinal: null, data_assinatura: '2026-08-10', assinado: 'sim', fechado_em: '2026-08-12', valor_bruto: 44640,
+        valor_liquido: 40000, desconto_desc: null, entrada_valor: null, entrada_pct: null,
+        link_contrato: 'https://docs.google.com/document/d/sintetico/edit', observacao: null, arquivado_em: null,
+      });
+      const linhas = [1, 2, 3].flatMap((i) => [
+        ...meses.map((mes, k) => ({ ...ficha(i), mes, esperado: k % 3 ? 12052.8 : 0, caiu_manual: k % 4 ? 0 : 5000,
+          caiu_hotmart: k % 5 ? 0 : 12052.8, caiu_hotmart_liquido: 0, caiu: 0, a_receber_etapa: null,
+          situacao: k === 2 ? 'em_atraso_cobrar' : 'a_receber', parcelas: [] })),
+        { ...ficha(i), mes: null, esperado: null, caiu_manual: null, caiu_hotmart: null, caiu_hotmart_liquido: null, caiu: null,
+          a_receber_etapa: 13392, situacao: 'a_receber_etapa',
+          parcelas: [{ id: `p${i}`, parcela_n: 3, parcela_de: 3, valor: 13392, etapa: 'registros', situacao: 'a_receber_etapa' }] },
+      ]);
+      const pags = [{ transacao: 'HPSINTETICO', dia: meses[5], valor: 500, nome_hotmart: 'Sintético', email_hotmart: 's@example.com',
+        contrato_id: null, contrato_nome: null, situacao: 'fila', motivo: 'sem_contrato: nenhuma ficha viva deste comprador.',
+        informado_id: null, parcela_n: null, parcela_de: null, atualizado_em: null,
+        sync_ultima_em: new Date().toISOString(), sync_erros: 0, sync_mensagem: null }];
+      await page.route(/\/rest\/v1\/rpc\/fn_fin_contratos_hf_mensal/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(linhas) }));
+      await page.route(/\/rest\/v1\/rpc\/fn_fin_contratos_hf_pagamentos/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pags) }));
+
+      await page.goto(`${ROTA_FINANCEIRO}#escritorio?ver=contratos`);
+      await expect(page, 'sessão do robô caiu no login').not.toHaveURL(/\/login/);
+      const grade = page.locator('table').filter({ has: page.getByRole('columnheader', { name: 'A receber na etapa' }) });
+      await expect(grade).toBeVisible({ timeout: 90_000 });
+      await expect(page.getByRole('tab', { name: 'Contratos', exact: true })).toBeVisible();
+
+      const m = await grade.evaluate((tabela) => {
+        const caixa = tabela.parentElement as HTMLElement; // o div overflow-x-auto do DataTable
+        const doc = document.documentElement;
+        const antes = { pagina: doc.scrollWidth - doc.clientWidth, caixaSobra: caixa.scrollWidth - caixa.clientWidth };
+        caixa.scrollLeft = caixa.scrollWidth; // rola a grade até o fim
+        const cel = tabela.querySelector('tbody tr td') as HTMLElement;
+        const btn = cel.querySelector('button') as HTMLElement;
+        const rc = cel.getBoundingClientRect(); const rx = caixa.getBoundingClientRect(); const rb = btn.getBoundingClientRect();
+        const topo = document.elementFromPoint(rb.left + rb.width / 2, rb.top + rb.height / 2);
+        return {
+          ...antes, rolou: caixa.scrollLeft, desvioEsquerda: Math.round(rc.left - rx.left), visivel: cel.offsetParent !== null,
+          nomeNoTopo: !!topo && btn.contains(topo), paginaDepois: doc.scrollWidth - doc.clientWidth,
+        };
+      });
+      console.log(`[e2e] ${largura}px: ${JSON.stringify(m)}`);
+      expect(m.pagina, 'a grade empurrou a página para os lados').toBeLessThanOrEqual(0);
+      expect(m.paginaDepois).toBeLessThanOrEqual(0);
+      if (m.caixaSobra > 0) {
+        expect(m.rolou).toBeGreaterThan(0);
+        expect(Math.abs(m.desvioEsquerda), '1ª coluna saiu da borda ao rolar').toBeLessThanOrEqual(1);
+        expect(m.nomeNoTopo, 'mês pintado por cima do nome do cliente').toBe(true);
+      }
+      expect(m.visivel).toBe(true);
+      await page.screenshot({ path: path.join(__dirname, '.resultados', `contratos-hf-${largura}.png`), fullPage: false });
+      expect(escritas).toEqual([]);
+    });
+  }
+
   test('sem a z93 no banco: sub-aba escondida e o link ?ver=contratos cai no Funil', async ({ page }) => {
     const escritas = await travarEscritas(page);
     const rpc = contarRpc(page);
@@ -104,7 +171,7 @@ test.describe('Financeiro · Escritório › Contratos HF (somente leitura)', ()
 
     await page.goto(`${ROTA_FINANCEIRO}#escritorio?ver=contratos`);
     await expect(page, 'sessão do robô caiu no login').not.toHaveURL(/\/login/);
-    await expect(page.getByRole('columnheader', { name: '→ Croqui' })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole('columnheader', { name: '→ Croqui', exact: true })).toBeVisible({ timeout: 90_000 });
     await expect(page).toHaveURL(/#escritorio$/);
     await expect(page.getByRole('tab', { name: 'Contratos' })).toHaveCount(0);
     await expect(page.getByRole('tablist', { name: 'Escritório' })).toHaveCount(0);

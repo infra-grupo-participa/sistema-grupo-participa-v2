@@ -36,6 +36,10 @@ const INPUT = 'rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--sur
 /** Caiu na Hotmart × caiu à mão (Pix): cor + letra (a cor nunca é o único sinal). */
 const COR_HOTMART = 'text-[var(--cyan)]';
 const COR_MANUAL = 'text-[var(--purple)]';
+/** 1ª coluna fixa ao rolar a grade para o lado (o DataTable rola em x no próprio contêiner). Fundo opaco igual ao da
+ *  faixa (senão os meses passam por baixo aparecendo) e a divisa por sombra interna: com border-collapse a borda da
+ *  célula sticky não acompanha. O DataTable compartilhado não tem coluna fixa — só esta tabela usa. */
+const FIXA = 'sticky left-0 z-[2] min-w-[180px] max-w-[260px] shadow-[inset_-1px_0_0_var(--border)]';
 
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const fmtMes = (m: string) => `${MESES[Number(m.slice(5, 7)) - 1]}/${m.slice(2, 4)}`;
@@ -157,7 +161,7 @@ export function ContratosEscritorio({ cache, repo, canEdit, canVerDoc, onAlterad
         </p>
         <DataTable minWidth={760 + g.meses.length * 96}>
           <Thead>
-            <Th>Cliente</Th>
+            <Th className={`${FIXA} bg-[var(--surface-3)]`}>Cliente</Th>
             <Th className="text-right">Valor cheio</Th>
             <Th>Assinado</Th>
             <Th>Contrato</Th>
@@ -175,7 +179,8 @@ export function ContratosEscritorio({ cache, repo, canEdit, canVerDoc, onAlterad
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-[var(--border-strong)] font-semibold text-[var(--fg)]">
-              <td className="px-3 py-2" colSpan={4}>Total</td>
+              <td className={`px-3 py-2 ${FIXA} bg-[var(--surface-2)]`}>Total</td>
+              <td className="px-3 py-2" colSpan={3} />
               {g.meses.map((m) => <td key={m} className={`px-3 py-2 ${NUM}`}><Valores s={g.totalMes[m]} /></td>)}
               <td className={`px-3 py-2 ${NUM}`}>{g.totalEtapa > 0 ? fmtBRL(g.totalEtapa) : '—'}</td>
               <td className={`px-3 py-2 ${NUM}`}><Valores s={g.total} /></td>
@@ -231,7 +236,7 @@ function LinhaContrato({ c, meses, onAbrir, acoes }: { c: ContratoNaGrade; meses
   const f = c.ficha;
   return (
     <Tr>
-      <Td className="text-xs">
+      <Td className={`text-xs ${FIXA} bg-[var(--surface-2)]`}>
         {/* Só o nome abre a ficha: a linha tem link e botões próprios (linha inteira clicável mudaria o contrato deles). */}
         <button type="button" onClick={onAbrir} className="text-left font-medium text-[var(--fg)] underline-offset-2 hover:underline">
           {f.nome ?? '—'}
@@ -438,6 +443,7 @@ export function FichaContrato({ c, repo, canEdit, canVerDoc, ocupado, aviso, exe
 
         {canEdit && vivo && painel === 'nova' && (
           <FormularioInformado form={{ original: null, valores: nova.valores, erros: nova.erros }} canVerDoc={canVerDoc} ocupado={ocupado}
+            tipoFixo
             onMudar={(valores) => setNova({ valores: { ...valores, tipo: TIPO_CONTRATO }, erros: [] })}
             onCancelar={() => setPainel(null)}
             onSalvar={() => {
