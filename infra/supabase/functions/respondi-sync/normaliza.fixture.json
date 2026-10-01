@@ -1,0 +1,665 @@
+{
+ "_": "Fixture anonimizado (dados inventados) nas formas reais da API. esperado = saida de infra/scripts/respondi/carga.py para esta entrada.",
+ "entrada": [
+  {
+   "time": 160,
+   "form": {
+    "id": 9001,
+    "slug": "abc123",
+    "name": "Coleta de opinião [T07.1] Holding Masters",
+    "created_at": "2026-03-02T10:00:00.000000Z",
+    "respondents_count": 3,
+    "draft_of": null,
+    "fields": [
+     {
+      "slug": "f0",
+      "type": "welcome",
+      "value": "<p>Bem-vindo</p>"
+     },
+     {
+      "slug": "f1",
+      "type": "name",
+      "value": "Qual o seu <b>nome completo</b>?"
+     },
+     {
+      "slug": "f2",
+      "type": "email",
+      "value": "Seu E-mail"
+     },
+     {
+      "slug": "f3",
+      "type": "phone",
+      "value": "Telefone (WhatsApp)"
+     },
+     {
+      "slug": "f4",
+      "type": "cpf",
+      "value": "CPF"
+     },
+     {
+      "slug": "f5",
+      "type": "checkbox",
+      "value": "Qual a área de atuação?"
+     },
+     {
+      "slug": "f6",
+      "type": "select",
+      "value": "Em qual nível você está hoje?"
+     },
+     {
+      "slug": "f7",
+      "type": "select",
+      "value": "Espaço de instrução"
+     },
+     {
+      "slug": "f8",
+      "type": "text",
+      "value": "Estado (UF)"
+     },
+     {
+      "slug": "f9",
+      "type": "text",
+      "value": "Instagram"
+     },
+     {
+      "slug": "f10",
+      "type": "file",
+      "value": "Comprovante"
+     },
+     {
+      "slug": "f11",
+      "type": "number",
+      "value": "Sua idade"
+     },
+     {
+      "slug": "f12",
+      "type": "yesno",
+      "value": "Possui equipe?"
+     },
+     {
+      "slug": "f13",
+      "type": "text",
+      "value": "Turma"
+     },
+     {
+      "slug": "f14",
+      "type": "thankyou",
+      "value": "Obrigado"
+     }
+    ]
+   },
+   "respondents": [
+    {
+     "uuid": "11111111-1111-4111-8111-111111111111",
+     "created_at": "2026-03-03T12:00:00Z",
+     "updated_at": "2026-03-03T12:05:00Z",
+     "answers": [
+      {
+       "field_slug": "f0",
+       "field_type": "welcome",
+       "value": "x"
+      },
+      {
+       "field_slug": "f1",
+       "value": "  Fulana de Tal  "
+      },
+      {
+       "field_slug": "f2",
+       "value": " Fulana.Teste@Exemplo.com "
+      },
+      {
+       "field_slug": "f3",
+       "value": {
+        "country": "BR",
+        "number": "(11) 90000-0001",
+        "ddi": "+55"
+       }
+      },
+      {
+       "field_slug": "f4",
+       "value": "529.982.247-25"
+      },
+      {
+       "field_slug": "f5",
+       "value": "[\"Direito de Família\", \"Sucessões\"]"
+      },
+      {
+       "field_slug": "f6",
+       "value": "Nível Ouro - de R$ 50 mil a R$ 100 mil"
+      },
+      {
+       "field_slug": "f7",
+       "value": "Holding Masters Implementação"
+      },
+      {
+       "field_slug": "f8",
+       "value": "São Paulo"
+      },
+      {
+       "field_slug": "f9",
+       "value": "@fulana"
+      },
+      {
+       "field_slug": "f10",
+       "value": {
+        "url": "https://exemplo.com/arq.pdf",
+        "name": "arq.pdf"
+       }
+      },
+      {
+       "field_slug": "f11",
+       "value": 41
+      },
+      {
+       "field_slug": "f12",
+       "value": true
+      },
+      {
+       "field_slug": "f13",
+       "value": ""
+      },
+      {
+       "field_slug": "f14",
+       "value": "fim"
+      }
+     ]
+    },
+    {
+     "uuid": "22222222-2222-4222-8222-222222222222",
+     "created_at": "2026-03-04T09:00:00Z",
+     "updated_at": null,
+     "answers": [
+      {
+       "field_slug": "f1",
+       "field_title": "Nome",
+       "field_type": "name",
+       "value": "Beltrano"
+      },
+      {
+       "field_slug": "f3",
+       "value": "11 9000"
+      },
+      {
+       "field_slug": "f4",
+       "value": "111.111.111-11"
+      },
+      {
+       "field_slug": "f5",
+       "value": [
+        "A",
+        [
+         "B",
+         null
+        ]
+       ]
+      },
+      {
+       "field_slug": "f8",
+       "value": "mg"
+      },
+      {
+       "field_slug": "f13",
+       "value": " T12 "
+      },
+      {
+       "field_slug": "fx",
+       "value": {
+        "a": 1,
+        "b": [
+         true,
+         null
+        ],
+        "c": "ç\"q"
+       }
+      }
+     ]
+    },
+    {
+     "uuid": "33333333-3333-4333-8333-333333333333",
+     "created_at": "2026-03-05T09:00:00Z",
+     "answers": [
+      {
+       "field_slug": "f1",
+       "value": ""
+      },
+      {
+       "field_slug": "f0",
+       "field_type": "welcome",
+       "value": "oi"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "time": 162,
+   "form": {
+    "id": 9002,
+    "slug": "soc456",
+    "name": "Inclusão Sócios A3 Aurum",
+    "created_at": null,
+    "respondents_count": 1,
+    "draft_of": null,
+    "fields": [
+     {
+      "slug": "s1",
+      "type": "email",
+      "value": "E-mail do aluno titular"
+     },
+     {
+      "slug": "s2",
+      "type": "text",
+      "value": "Nome completo do sócio"
+     },
+     {
+      "slug": "s3",
+      "type": "email",
+      "value": "E-mail do sócio"
+     },
+     {
+      "slug": "s4",
+      "type": "text",
+      "value": "CPF do sócio"
+     },
+     {
+      "slug": "s5",
+      "type": "phone",
+      "value": "Telefone do sócio"
+     },
+     {
+      "slug": "s6",
+      "type": "text",
+      "value": "CEP"
+     },
+     {
+      "slug": "s7",
+      "type": "text",
+      "value": "Cidade"
+     },
+     {
+      "slug": "s8",
+      "type": "text",
+      "value": "Estado"
+     },
+     {
+      "slug": "s9",
+      "type": "text",
+      "value": "Você vai trazer um sócio?"
+     }
+    ]
+   },
+   "respondents": [
+    {
+     "uuid": "44444444-4444-4444-8444-444444444444",
+     "created_at": "2026-04-01T09:00:00Z",
+     "updated_at": "2026-04-01T09:10:00Z",
+     "answers": [
+      {
+       "field_slug": "s1",
+       "value": "TITULAR@exemplo.com"
+      },
+      {
+       "field_slug": "s2",
+       "value": "Sócia Exemplo"
+      },
+      {
+       "field_slug": "s3",
+       "value": "socia@exemplo.com"
+      },
+      {
+       "field_slug": "s4",
+       "value": "390.533.447-05"
+      },
+      {
+       "field_slug": "s5",
+       "value": {
+        "number": "+55 (21) 98888-7777"
+       }
+      },
+      {
+       "field_slug": "s6",
+       "value": "01001-000"
+      },
+      {
+       "field_slug": "s7",
+       "value": "Rio de Janeiro"
+      },
+      {
+       "field_slug": "s8",
+       "value": "Rio de Janeiro"
+      },
+      {
+       "field_slug": "s9",
+       "value": "Sim"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "esperado": {
+  "formularios": [
+   {
+    "slug": "abc123",
+    "form_id": 9001,
+    "workspace": "Holding Masters",
+    "nome": "Coleta de opinião [T07.1] Holding Masters",
+    "familia": "questionario_inicial",
+    "turma_codigo": "T07",
+    "criado_em": "2026-03-02",
+    "n_respostas": 3,
+    "campos": [
+     {
+      "slug": "f1",
+      "tipo": "name",
+      "pergunta": "Qual o seu nome completo?"
+     },
+     {
+      "slug": "f2",
+      "tipo": "email",
+      "pergunta": "Seu E-mail"
+     },
+     {
+      "slug": "f3",
+      "tipo": "phone",
+      "pergunta": "Telefone (WhatsApp)"
+     },
+     {
+      "slug": "f4",
+      "tipo": "cpf",
+      "pergunta": "CPF"
+     },
+     {
+      "slug": "f5",
+      "tipo": "checkbox",
+      "pergunta": "Qual a área de atuação?"
+     },
+     {
+      "slug": "f6",
+      "tipo": "select",
+      "pergunta": "Em qual nível você está hoje?"
+     },
+     {
+      "slug": "f7",
+      "tipo": "select",
+      "pergunta": "Espaço de instrução"
+     },
+     {
+      "slug": "f8",
+      "tipo": "text",
+      "pergunta": "Estado (UF)"
+     },
+     {
+      "slug": "f9",
+      "tipo": "text",
+      "pergunta": "Instagram"
+     },
+     {
+      "slug": "f10",
+      "tipo": "file",
+      "pergunta": "Comprovante"
+     },
+     {
+      "slug": "f11",
+      "tipo": "number",
+      "pergunta": "Sua idade"
+     },
+     {
+      "slug": "f12",
+      "tipo": "yesno",
+      "pergunta": "Possui equipe?"
+     },
+     {
+      "slug": "f13",
+      "tipo": "text",
+      "pergunta": "Turma"
+     }
+    ]
+   },
+   {
+    "slug": "soc456",
+    "form_id": 9002,
+    "workspace": "Aurum",
+    "nome": "Inclusão Sócios A3 Aurum",
+    "familia": "socios",
+    "turma_codigo": "A3",
+    "criado_em": null,
+    "n_respostas": 1,
+    "campos": [
+     {
+      "slug": "s1",
+      "tipo": "email",
+      "pergunta": "E-mail do aluno titular"
+     },
+     {
+      "slug": "s2",
+      "tipo": "text",
+      "pergunta": "Nome completo do sócio"
+     },
+     {
+      "slug": "s3",
+      "tipo": "email",
+      "pergunta": "E-mail do sócio"
+     },
+     {
+      "slug": "s4",
+      "tipo": "text",
+      "pergunta": "CPF do sócio"
+     },
+     {
+      "slug": "s5",
+      "tipo": "phone",
+      "pergunta": "Telefone do sócio"
+     },
+     {
+      "slug": "s6",
+      "tipo": "text",
+      "pergunta": "CEP"
+     },
+     {
+      "slug": "s7",
+      "tipo": "text",
+      "pergunta": "Cidade"
+     },
+     {
+      "slug": "s8",
+      "tipo": "text",
+      "pergunta": "Estado"
+     },
+     {
+      "slug": "s9",
+      "tipo": "text",
+      "pergunta": "Você vai trazer um sócio?"
+     }
+    ]
+   }
+  ],
+  "respostas": [
+   {
+    "uuid": "11111111-1111-4111-8111-111111111111",
+    "form_slug": "abc123",
+    "respondido_em": "2026-03-03T12:05:00Z",
+    "email": "fulana.teste@exemplo.com",
+    "cpf": "52998224725",
+    "telefone": "1190000000155",
+    "dados": {
+     "nome": "Fulana de Tal",
+     "email": "Fulana.Teste@Exemplo.com",
+     "telefone": "{\"country\": \"BR\", \"number\": \"(11) 90000-0001\", \"ddi\": \"+55\"}",
+     "cpf": "529.982.247-25",
+     "area": "Direito de Família, Sucessões",
+     "nivel": "Nível Ouro - de R$ 50 mil a R$ 100 mil",
+     "espaco": "Holding Masters Implementação",
+     "uf": "São Paulo",
+     "instagram": "@fulana",
+     "idade": "41",
+     "equipe": "True",
+     "uf_sigla": "SP",
+     "nivel_codigo": "ouro",
+     "espaco_codigo": "holding_masters_implementacao",
+     "turma_codigo": "T07",
+     "cpf_valido": true
+    },
+    "respostas": [
+     {
+      "p": "Qual o seu nome completo?",
+      "v": "Fulana de Tal"
+     },
+     {
+      "p": "Seu E-mail",
+      "v": "Fulana.Teste@Exemplo.com"
+     },
+     {
+      "p": "Telefone (WhatsApp)",
+      "v": "{\"country\": \"BR\", \"number\": \"(11) 90000-0001\", \"ddi\": \"+55\"}"
+     },
+     {
+      "p": "CPF",
+      "v": "529.982.247-25"
+     },
+     {
+      "p": "Qual a área de atuação?",
+      "v": "Direito de Família, Sucessões"
+     },
+     {
+      "p": "Em qual nível você está hoje?",
+      "v": "Nível Ouro - de R$ 50 mil a R$ 100 mil"
+     },
+     {
+      "p": "Espaço de instrução",
+      "v": "Holding Masters Implementação"
+     },
+     {
+      "p": "Estado (UF)",
+      "v": "São Paulo"
+     },
+     {
+      "p": "Instagram",
+      "v": "@fulana"
+     },
+     {
+      "p": "Comprovante",
+      "v": "https://exemplo.com/arq.pdf"
+     },
+     {
+      "p": "Sua idade",
+      "v": "41"
+     },
+     {
+      "p": "Possui equipe?",
+      "v": "True"
+     }
+    ]
+   },
+   {
+    "uuid": "22222222-2222-4222-8222-222222222222",
+    "form_slug": "abc123",
+    "respondido_em": "2026-03-04T09:00:00Z",
+    "email": "",
+    "cpf": "",
+    "telefone": "",
+    "dados": {
+     "nome": "Beltrano",
+     "telefone": "11 9000",
+     "cpf": "111.111.111-11",
+     "area": "A, B, ",
+     "uf": "mg",
+     "turma": "T12",
+     "uf_sigla": "MG",
+     "turma_codigo": "T12",
+     "cpf_valido": false
+    },
+    "respostas": [
+     {
+      "p": "Nome",
+      "v": "Beltrano"
+     },
+     {
+      "p": "Telefone (WhatsApp)",
+      "v": "11 9000"
+     },
+     {
+      "p": "CPF",
+      "v": "111.111.111-11"
+     },
+     {
+      "p": "Qual a área de atuação?",
+      "v": "A, B, "
+     },
+     {
+      "p": "Estado (UF)",
+      "v": "mg"
+     },
+     {
+      "p": "Turma",
+      "v": "T12"
+     },
+     {
+      "p": "",
+      "v": "{\"a\": 1, \"b\": [true, null], \"c\": \"ç\\\"q\"}"
+     }
+    ]
+   },
+   {
+    "uuid": "44444444-4444-4444-8444-444444444444",
+    "form_slug": "soc456",
+    "respondido_em": "2026-04-01T09:10:00Z",
+    "email": "titular@exemplo.com",
+    "cpf": "",
+    "telefone": "",
+    "dados": {
+     "email": "TITULAR@exemplo.com",
+     "socio_nome": "Sócia Exemplo",
+     "socio_email": "socia@exemplo.com",
+     "socio_cpf": "390.533.447-05",
+     "socio_telefone": "{\"number\": \"+55 (21) 98888-7777\"}",
+     "socio_cep": "01001-000",
+     "socio_cidade": "Rio de Janeiro",
+     "socio_uf": "Rio de Janeiro",
+     "traz_socio": "Sim",
+     "socio_uf_sigla": "RJ",
+     "turma_codigo": "A3",
+     "socio_cpf_valido": true
+    },
+    "respostas": [
+     {
+      "p": "E-mail do aluno titular",
+      "v": "TITULAR@exemplo.com"
+     },
+     {
+      "p": "Nome completo do sócio",
+      "v": "Sócia Exemplo"
+     },
+     {
+      "p": "E-mail do sócio",
+      "v": "socia@exemplo.com"
+     },
+     {
+      "p": "CPF do sócio",
+      "v": "390.533.447-05"
+     },
+     {
+      "p": "Telefone do sócio",
+      "v": "{\"number\": \"+55 (21) 98888-7777\"}"
+     },
+     {
+      "p": "CEP",
+      "v": "01001-000"
+     },
+     {
+      "p": "Cidade",
+      "v": "Rio de Janeiro"
+     },
+     {
+      "p": "Estado",
+      "v": "Rio de Janeiro"
+     },
+     {
+      "p": "Você vai trazer um sócio?",
+      "v": "Sim"
+     }
+    ]
+   }
+  ]
+ }
+}
