@@ -196,6 +196,26 @@ export async function loadTrajetoriaAluno(alunoId: string): Promise<LinhaTrajeto
   return normalizarLinhas((data as unknown[]) ?? []);
 }
 
+/** Resposta do Respondi ligada ao aluno (schema respondi, via RPC só de equipe). `respostas` = [{p: pergunta, v: valor}]. */
+export interface RespostaRespondi {
+  uuid: string;
+  familia: string;
+  formulario: string;
+  workspace: string;
+  turma_codigo: string | null;
+  respondido_em: string;
+  casado_por: string | null;
+  dados: Record<string, unknown> | null;
+  respostas: { p: string; v: string }[] | null;
+}
+
+export async function loadRespondiAluno(alunoId: string): Promise<RespostaRespondi[]> {
+  const { data, error } = await db().rpc('fn_aluno_respondi', { p_aluno_id: alunoId });
+  logQueryError('loadRespondiAluno', error);
+  if (error) throw new Error('Não foi possível carregar os formulários.');
+  return (data as RespostaRespondi[]) ?? [];
+}
+
 /** Cadastro manual em thb_alunos (RLS: policy thb_alunos_insert_editores). */
 export async function createAluno(fields: Record<string, unknown>): Promise<{ ok: boolean; id?: string; msg?: string }> {
   const { data, error } = await db()

@@ -21,10 +21,12 @@ import type { AbaFicha } from '../domain/ficha-aluno-abas';
 import { Badge, NivelBadge, Drawer, AvatarInicial, SectionCard, Button, KpiCard, ProgressBar, Tabs, idsAba } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtData } from '@/shared/ui/format';
+import { safeHttpUrl, HOSTS_REDE } from '@/shared/domain/url-segura';
 import { AlunoForm } from './AlunoForm';
 import { SecTitle, SubTitle, Section, Row } from './alunos-ui-bits';
 import { CorpoTrajetoria } from './TrajetoriaAluno';
 import { AlunoAbaJornada } from './AlunoAbaJornada';
+import { AlunoAbaFormularios } from './AlunoAbaFormularios';
 import { motivoSemVencimento, sitTone, tel, vinculoSocio, type VinculoSocio } from './alunos-ui-shared';
 
 // Trajetória do aluno: ligada por padrão; NEXT_PUBLIC_ALUNO_TRAJETORIA=off desliga (inlined no build).
@@ -37,9 +39,10 @@ const CURSO_TAB_ATIVA = false as boolean;
 const ABAS_DISPONIVEIS: AbaFicha[] = [
   'resumo', 'programa', 'jornada',
   ...(TRAJETORIA_ATIVA ? (['trajetoria'] as const) : []),
+  'formularios',
   ...(CURSO_TAB_ATIVA ? (['curso'] as const) : []),
 ];
-const ROTULO_ABA: Record<AbaFicha, string> = { resumo: 'Resumo', programa: 'Programa', jornada: 'Jornada', trajetoria: 'Trajetória', curso: 'Curso' };
+const ROTULO_ABA: Record<AbaFicha, string> = { resumo: 'Resumo', programa: 'Programa', jornada: 'Jornada', trajetoria: 'Trajetória', formularios: 'Formulários', curso: 'Curso' };
 
 /**
  * Ficha do aluno em abas. A moldura (cabeçalho, rodapé, abas) fica aqui; o corpo de cada aba
@@ -178,8 +181,8 @@ export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggl
                 {a.documento && <Row k={a.tipo_documento || 'CPF/CNPJ'} v={a.documento} />}
                 <Row k="Endereço" v={[a.endereco_logradouro, a.endereco_numero, a.bairro, a.cidade, a.estado].filter(Boolean).join(', ') || '—'} />
                 <div className="flex gap-2 flex-wrap mt-2">
-                  {[['Facebook', a.link_facebook], ['Instagram', a.instagram_url], ['YouTube', a.youtube_url], ['Site', a.site_profissional]].filter(([, u]) => u).map(([l, u]) => (
-                    <a key={l as string} href={u as string} target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--accent)] transition-colors hover:border-[var(--border-accent)] hover:bg-[var(--accent-subtle)]"><Icon name="arrow-up-right" size={11} />{l}</a>
+                  {([['Facebook', safeHttpUrl(a.link_facebook, HOSTS_REDE.facebook)], ['Instagram', safeHttpUrl(a.instagram_url, HOSTS_REDE.instagram)], ['YouTube', safeHttpUrl(a.youtube_url, HOSTS_REDE.youtube)], ['Site', safeHttpUrl(a.site_profissional)]] as const).filter(([, u]) => u).map(([l, u]) => (
+                    <a key={l as string} href={u as string} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--accent)] transition-colors hover:border-[var(--border-accent)] hover:bg-[var(--accent-subtle)]"><Icon name="arrow-up-right" size={11} />{l}</a>
                   ))}
                 </div>
               </Section>
@@ -202,6 +205,9 @@ export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggl
 
         {/* Trajetória: a RPC só sai quando a aba abre pela 1ª vez (fn_aluno_trajetoria, cache por aluno). */}
         {TRAJETORIA_ATIVA && painel('trajetoria', <CorpoTrajetoria alunoId={a.id} />)}
+
+        {/* Formulários: respostas do Respondi (fn_aluno_respondi), carregadas na 1ª abertura da aba. */}
+        {painel('formularios', <AlunoAbaFormularios alunoId={a.id} />)}
 
         {/* Curso: oculto até existir integração real — cursoDesempenhoMock é 100% zerado
             e exibir métricas falsas confunde a operação. Reativar via CURSO_TAB_ATIVA. */}

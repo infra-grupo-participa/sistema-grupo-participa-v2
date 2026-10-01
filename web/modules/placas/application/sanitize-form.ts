@@ -3,6 +3,7 @@
 
 import { onlyDigits, safeEmail, normalizeText, isSafeStorageUrl } from '@/shared/infrastructure/http/validation';
 import { FORM_NIVEIS } from '../domain/form-progress';
+import { safeHttpUrl } from '@/shared/domain/url-segura';
 
 export interface SanitizeResult {
   ok: boolean;
@@ -20,23 +21,6 @@ function safePhone(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   const d = onlyDigits(v);
   return d === '' ? null : d.slice(0, 20);
-}
-
-function safeHttpUrl(v: unknown, allowedHosts: string[] = []): string | null {
-  const raw = String(v ?? '').replace(/[\r\n]+/g, '').trim();
-  if (!raw) return null;
-  try {
-    const u = new URL(raw);
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
-    if (allowedHosts.length) {
-      const host = u.host.toLowerCase();
-      const ok = allowedHosts.some((h) => host === h || host.endsWith('.' + h));
-      if (!ok) return null;
-    }
-    return raw;
-  } catch {
-    return null;
-  }
 }
 
 const SOCIAL = {
