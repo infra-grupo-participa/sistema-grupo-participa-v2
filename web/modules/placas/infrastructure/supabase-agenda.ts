@@ -60,18 +60,39 @@ export class SupabaseAgenda {
     return !error;
   }
 
-  /** Confirma a entrevista: auditoria_step/step_index=2, status=docs_aprovados. */
+  /**
+   * Confirma a entrevista: auditoria_step/step_index=2, status=docs_aprovados.
+   * Zera `reminder_sent_at` (reagendar volta a ganhar lembrete). `zoom_meeting_id` só é gravado
+   * quando a chave vem em `fields` (chamador antigo não toca a coluna).
+   * `previousMeetingId`: sala Zoom da marcação ANTERIOR, para o chamador apagar — só vem quando
+   * ok=true e difere da nova (nunca aponta para a sala recém-gravada).
+   */
   async confirm(
     id: string,
-    fields: { entrevista_data: string; entrevista_hora: string; entrevista_link: string | null; meet_link: string | null },
-  ): Promise<{ ok: boolean; conflict: boolean }> {
+    fields: {
+      entrevista_data: string;
+      entrevista_hora: string;
+      entrevista_link: string | null;
+      meet_link: string | null;
+      zoom_meeting_id?: string | null;
+    },
+  ): Promise<{ ok: boolean; conflict: boolean; previousMeetingId: string | null }> {
+    const { data: prev } = await this.db
+      .from('thb_placas_solicitacoes')
+      .select('zoom_meeting_id')
+      .eq('id', id)
+      .maybeSingle();
+    const anterior = (prev as { zoom_meeting_id?: string | null } | null)?.zoom_meeting_id ?? null;
+
     const { error } = await this.db
       .from('thb_placas_solicitacoes')
-      .update({ ...fields, auditoria_step: 2, step_index: 2, status: 'docs_aprovados' })
+      .update({ ...fields, reminder_sent_at: null, auditoria_step: 2, step_index: 2, status: 'docs_aprovados' })
       .eq('id', id);
     // 23505 = índice único uq_entrevista_slot: outro candidato confirmou o mesmo slot
     // (garantia do banco para quando o slot-lock em memória não alcança — restart/multi-processo).
-    return { ok: !error, conflict: error?.code === '23505' };
+    const novo = 'zoom_meeting_id' in fields ? (fields.zoom_meeting_id ?? null) : anterior;
+    const previousMeetingId = !error && anterior && anterior !== novo ? String(anterior) : null;
+    return { ok: !error, conflict: error?.code === '23505', previousMeetingId };
   }
 
   /**

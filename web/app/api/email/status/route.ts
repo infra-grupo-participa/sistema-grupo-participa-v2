@@ -1,15 +1,12 @@
 import type { NextRequest } from 'next/server';
-import { jsonError, jsonOk } from '@/shared/infrastructure/http/security';
+import { jsonError, jsonOk, placaTrackingLink, publicAppBaseUrl } from '@/shared/infrastructure/http/security';
 import { rateLimitOk } from '@/shared/infrastructure/http/rate-limit';
 import { safeEmail, isUuid } from '@/shared/infrastructure/http/validation';
 import { getCurrentUser } from '@/shared/composition/server-container';
 import { ehAdminOuAcima, podeEditar } from '@/shared/domain/auth';
-import { getEmailContentByStatus, emailDynamicBoxes, type EmailTipo, type EmailExtra } from '@/modules/placas/application/email-content';
-import { readPlacasConfig } from '@/modules/placas/infrastructure/supabase-config';
-import { buildEmailTemplate } from '@/shared/infrastructure/email/template';
-import { sendMail } from '@/shared/infrastructure/email/mailer';
+import { linkZoomSeguro, type EmailTipo, type EmailExtra } from '@/modules/placas/application/email-content';
+import { enviarEmailPlaca } from '@/modules/placas/application/enviar-email-placa';
 
-const APP_BASE = process.env.NEXT_PUBLIC_APP_URL || 'https://grupoparticipa.app.br';
 const TIPOS: EmailTipo[] = [
   'solicitacao_recebida',
   'docs_aprovados',
@@ -24,12 +21,25 @@ const TIPOS: EmailTipo[] = [
   'solicitacao_rejeitada',
 ];
 
+/**
+ * CTA vindo do cliente: só caminho relativo ("/x", nunca "//host" nem "/\host") ou URL absoluta
+ * no host do próprio app (publicAppBaseUrl). Qualquer outra coisa → '' (cai no link de acompanhamento).
+ */
 function safeInternalLink(url: string): string {
   const u = String(url ?? '').trim();
   if (!u) return '';
+  // Barra invertida e caracteres de controle/espaço: o parser de URL normaliza "\" em "/" → host externo.
+  if (/[\\\s\u0000-\u001f\u007f]/.test(u)) return '';
+  const base = publicAppBaseUrl();
+  const relativo = u.startsWith('/');
+  if (relativo && u.startsWith('//')) return '';
   try {
-    const parsed = new URL(u, APP_BASE);
-    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : '';
+    const parsed = new URL(u, base);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+    if (parsed.username || parsed.password) return '';
+    if (parsed.origin !== new URL(base).origin) return '';
+    if (!relativo && !/^https?:\/\//i.test(u)) return '';
+    return parsed.toString();
   } catch {
     return '';
   }
@@ -57,7 +67,7 @@ export async function POST(request: NextRequest) {
   const token = String(body.token ?? '').trim();
   if (token && !isUuid(token)) return jsonError('Não foi possível concluir a operação.', 400);
 
-  const trackingLink = token ? `${APP_BASE}/solicitar-placa?token=${encodeURIComponent(token)}` : '';
+  const trackingLink = token ? placaTrackingLink(token) : '';
   const tokenLink = safeInternalLink(String(body.token_link ?? ''));
   let ctaLink = trackingLink;
   if ((tipo === 'docs_aprovados' || tipo === 'retorno_auditoria') && tokenLink) ctaLink = tokenLink;
@@ -66,24 +76,20 @@ export async function POST(request: NextRequest) {
   const extra: EmailExtra = {
     entrevista_data: body.entrevista_data ? String(body.entrevista_data) : undefined,
     entrevista_hora: body.entrevista_hora ? String(body.entrevista_hora) : undefined,
-    zoom_link: body.zoom_link ? String(body.zoom_link) : undefined,
+    // Sala só se for zoom.us em https; qualquer outra coisa é ignorada (não vira link no e-mail).
+    zoom_link: linkZoomSeguro(body.zoom_link ? String(body.zoom_link) : '') ?? undefined,
     codigo_rastreio: body.codigo_rastreio ? String(body.codigo_rastreio) : undefined,
     motivo_retorno: body.motivo_retorno ? String(body.motivo_retorno) : undefined,
   };
-  const content = getEmailContentByStatus(tipo, extra, ctaLink);
 
-  // Override editável pelo admin (thb_placas_config → email_templates).
-  const { email_templates } = await readPlacasConfig();
-  const ov = email_templates?.[tipo];
-  if (ov) {
-    if (ov.assunto?.trim()) content.assunto = ov.assunto.trim();
-    if (ov.introducao?.trim()) content.templateData.introducao = ov.introducao.trim();
-    // O corpo customizado substitui o texto estático, mas re-injetamos os blocos dinâmicos
-    // (entrevista/rastreio/motivo) para não perder o conteúdo variável do e-mail.
-    if (ov.corpo_extra?.trim()) content.templateData.corpo_extra = emailDynamicBoxes(tipo, extra) + ov.corpo_extra.trim();
-  }
-
-  const html = buildEmailTemplate({ ...content.templateData, nome: String(body.nome ?? 'Candidato') });
-  const sent = await sendMail({ to: email, subject: content.assunto, html });
-  return jsonOk({ ok: sent });
+  const r = await enviarEmailPlaca({
+    tipo,
+    to: email,
+    nome: String(body.nome ?? 'Candidato'),
+    token,
+    extra,
+    ctaLink,
+  });
+  // `ok` mantido: o painel (placas-admin-data.sendStatusEmail) lê `ok === true` como "enviado".
+  return jsonOk({ ok: r.sent, sent: r.sent });
 }

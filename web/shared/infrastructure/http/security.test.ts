@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { placaTrackingLink, publicAppBaseUrl, validateOrigin } from './security';
+import { clientIp, placaTrackingLink, publicAppBaseUrl, validateOrigin } from './security';
+import { rateLimitOk } from './rate-limit';
 
 const ORIGINAL = process.env.NEXT_PUBLIC_APP_URL;
 afterEach(() => {
@@ -62,5 +63,37 @@ describe('validateOrigin — GET sem Origin/Referer', () => {
   });
   it('POST com Origin oficial continua aceito', () => {
     expect(validateOrigin(req('POST', { origin: 'https://grupoparticipa.app.br' }))).toBe('https://grupoparticipa.app.br');
+  });
+});
+
+describe('clientIp (LiteSpeed sem Cloudflare)', () => {
+  it('ignora cf-connecting-ip forjado', () => {
+    const r = req('GET', { 'cf-connecting-ip': '6.6.6.6', 'x-forwarded-for': '200.1.2.3' });
+    expect(clientIp(r)).toBe('200.1.2.3');
+  });
+
+  it('usa o salto mais à direita (o que o proxy acrescentou), não o primeiro que o cliente manda', () => {
+    expect(clientIp(req('GET', { 'x-forwarded-for': '1.1.1.1, 200.1.2.3' }))).toBe('200.1.2.3');
+  });
+
+  it('pula saltos internos à direita', () => {
+    expect(clientIp(req('GET', { 'x-forwarded-for': '1.1.1.1, 200.1.2.3, 127.0.0.1, 10.0.0.5' }))).toBe('200.1.2.3');
+  });
+
+  it('sem XFF cai em x-real-ip, depois unknown', () => {
+    expect(clientIp(req('GET', { 'x-real-ip': '200.9.9.9' }))).toBe('200.9.9.9');
+    expect(clientIp(req('GET', {}))).toBe('unknown');
+  });
+
+  it('cf-connecting-ip e XFF da esquerda forjados não mudam a chave do rate limit', () => {
+    const prefixo = `gp_teste_ip_${Date.now()}_`;
+    const tentativa = (i: number) =>
+      rateLimitOk(
+        clientIp(req('POST', { 'cf-connecting-ip': `6.6.6.${i}`, 'x-forwarded-for': `9.9.9.${i}, 200.1.2.3` })),
+        prefixo,
+        3,
+        60,
+      );
+    expect([tentativa(1), tentativa(2), tentativa(3), tentativa(4), tentativa(5)]).toEqual([true, true, true, false, false]);
   });
 });

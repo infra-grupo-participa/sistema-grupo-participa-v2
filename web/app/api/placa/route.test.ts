@@ -4,10 +4,21 @@ import { NextRequest } from 'next/server';
 const URL_TOKEN = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const COOKIE_TOKEN = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const rows = new Map<string, Record<string, unknown>>();
+const updateByToken = vi.fn();
+const promoteToAluno = vi.fn();
+const logFunilPlacaSubmit = vi.fn();
+const enviarEmailPlaca = vi.fn();
 
 vi.mock('@/modules/placas/infrastructure/supabase-public-placa', () => ({
   maskDocsForPublic: (r: Record<string, unknown>) => r,
+  logFunilPlacaSubmit: (...a: unknown[]) => logFunilPlacaSubmit(...a),
   SupabasePublicPlaca: class {
+    updateByToken(...a: unknown[]) {
+      return updateByToken(...a);
+    }
+    promoteToAluno(...a: unknown[]) {
+      return promoteToAluno(...a);
+    }
     async loadByToken(t: string) {
       return rows.get(t) ?? null;
     }
@@ -22,8 +33,11 @@ vi.mock('@/modules/placas/infrastructure/supabase-public-placa', () => ({
     }
   },
 }));
-vi.mock('@/modules/placas/infrastructure/supabase-config', () => ({ readPlacasConfig: async () => ({}) }));
-vi.mock('@/shared/infrastructure/email/mailer', () => ({ sendMail: async () => true }));
+vi.mock('@/modules/placas/application/enviar-email-placa', () => ({
+  enviarEmailPlaca: (...a: unknown[]) => enviarEmailPlaca(...a),
+}));
+// Validação de progresso tem suíte própria; aqui interessa só o que a rota faz depois dela.
+vi.mock('@/modules/placas/domain/form-progress', () => ({ validateFormProgress: () => null }));
 
 const { GET, POST } = await import('./route');
 
@@ -41,6 +55,9 @@ function req(method: string, query: string | null, cookie: string | null, body?:
 const cookieApagado = (res: Response) => /gp_placa_session=;.*Max-Age=0/i.test(res.headers.get('set-cookie') ?? '');
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  updateByToken.mockResolvedValue({ ok: true });
+  enviarEmailPlaca.mockResolvedValue({ ok: true, sent: true });
   rows.clear();
   rows.set(COOKIE_TOKEN, { token: COOKIE_TOKEN, status: 'rascunho', step_index: 2 });
 });
@@ -84,5 +101,40 @@ describe('POST /api/placa save — sem fallback de escrita', () => {
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({ token_invalido: true, token_fonte: 'body', sessao_preservada: true });
     expect(cookieApagado(res)).toBe(false);
+  });
+});
+
+describe('POST /api/placa save — gravação e fecho do submit', () => {
+  const salvar = (extra: Record<string, unknown>) =>
+    POST(req('POST', null, COOKIE_TOKEN, { action: 'save', token: COOKIE_TOKEN, ...extra }));
+
+  it('updateByToken falhou → 502 ok:false, sem e-mail nem funil', async () => {
+    updateByToken.mockResolvedValue({ ok: false, error: { code: '23514', message: 'check' } });
+    const res = await salvar({ step_index: 6, status: 'enviado' });
+    expect(res.status).toBe(502);
+    const json = await res.json();
+    expect(json.ok).not.toBe(true);
+    expect(json.error).toMatch(/salvar/);
+    expect(promoteToAluno).not.toHaveBeenCalled();
+    expect(enviarEmailPlaca).not.toHaveBeenCalled();
+    expect(logFunilPlacaSubmit).not.toHaveBeenCalled();
+  });
+
+  it('envio final (enviado, etapa 6) → funil submit + e-mail solicitacao_recebida via enviarEmailPlaca', async () => {
+    rows.set(COOKIE_TOKEN, { id: 'sol-1', token: COOKIE_TOKEN, status: 'rascunho', step_index: 5, email: 'ana@x.com', nome: 'Ana' });
+    const res = await salvar({ step_index: 6, status: 'enviado' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, status: 'enviado' });
+    expect(logFunilPlacaSubmit).toHaveBeenCalledTimes(1);
+    expect(logFunilPlacaSubmit.mock.calls[0][0]).toMatchObject({ solicitacao_id: 'sol-1' });
+    expect(enviarEmailPlaca).toHaveBeenCalledWith({ tipo: 'solicitacao_recebida', to: 'ana@x.com', nome: 'Ana', token: COOKIE_TOKEN });
+  });
+
+  it('rascunho intermediário → grava, sem funil e sem e-mail', async () => {
+    const res = await salvar({ step_index: 3 });
+    expect(res.status).toBe(200);
+    expect(updateByToken).toHaveBeenCalledTimes(1);
+    expect(logFunilPlacaSubmit).not.toHaveBeenCalled();
+    expect(enviarEmailPlaca).not.toHaveBeenCalled();
   });
 });

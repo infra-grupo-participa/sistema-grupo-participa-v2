@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import type { Aluno360 } from '../domain/aluno-360';
 import { nivelLabel } from '@/shared/domain/nivel-resultado';
+import { placaCicloLabel, placaLembreteLabel, placaParadoInfo } from '../domain/placa-funil';
 import type { PlacaHistorico } from './alunos-data';
 import { AUDIT_STEPS } from '@/modules/placas/domain/auditoria';
 import { computeDisplayStatus, displayStatusTone } from '@/modules/placas/domain/solicitacao';
@@ -27,7 +28,7 @@ export function AlunoAbaJornada({ a, temPlaca, placaHist, placaLoading, ciclos }
   return (
     <SectionCard title={<SecTitle icon="check-circle">Jornada</SecTitle>}>
       <div className="grid sm:grid-cols-2 sm:gap-x-4">
-        <PlacaJornada on={temPlaca} hist={placaHist} loading={placaLoading} rastreioAluno={a.placa_rastreio} />
+        <PlacaJornada a={a} on={temPlaca} hist={placaHist} loading={placaLoading} rastreioAluno={a.placa_rastreio} />
         <JornadaCard label="Depoimento" on={!!a.tem_depoimento} extra={a.total_depoimentos ? `${a.total_depoimentos} depoimento(s)` : ''} href={a.tem_depoimento ? '/depoimentos' : undefined} />
         <SipJornada email={a.email} on={!!a.sip_registrado} />
       </div>
@@ -161,7 +162,34 @@ function SipJornada({ email, on }: { email: string | null; on: boolean }) {
 }
 
 // ── Placa de Resultado: card + histórico (solicitação + auditoria) ──
-function PlacaJornada({ on, hist, loading, rastreioAluno }: { on: boolean; hist: PlacaHistorico | null; loading: boolean; rastreioAluno?: string | null }) {
+/** Funil da placa vindo da ficha (fn_aluno_360_safe). Campo null = linha omitida. */
+function PlacaFunil({ a, entrevistaFallback }: { a: Aluno360; entrevistaFallback: { data: string; hora: string | null } | null }) {
+  const data = a.placa_entrevista_data || entrevistaFallback?.data || null;
+  const hora = a.placa_entrevista_hora || (a.placa_entrevista_data ? null : entrevistaFallback?.hora) || null;
+  const lembrete = placaLembreteLabel(a.placa_lembrete_em);
+  const ciclo = placaCicloLabel(a.placa_ciclo);
+  const nivel = a.placa_nivel_declarado ? nivelLabel(a.placa_nivel_declarado) || a.placa_nivel_declarado : null;
+  const parado = placaParadoInfo(a.placa_dias_parado);
+  const zoom = data && a.placa_tem_link_zoom != null ? (a.placa_tem_link_zoom ? 'Sala do Zoom criada' : 'Sem sala') : null;
+  // Lembrete só faz sentido com entrevista marcada; sem data não afirmamos "ainda não enviado".
+  const lembreteTxt = lembrete ? `Lembrete enviado em ${lembrete}` : data ? 'Lembrete ainda não enviado' : null;
+  if (!data && !ciclo && !nivel && !parado) return null;
+
+  return (
+    <div className="text-xs space-y-0.5 text-[var(--fg-3)] mt-2">
+      {data && <div>Entrevista: <span className="text-[var(--fg-2)] tabular">{fmtData(data)}{hora ? ` ${String(hora).slice(0, 5)}` : ''}</span></div>}
+      {zoom && <div>{zoom}</div>}
+      {lembreteTxt && <div>{lembreteTxt}</div>}
+      {ciclo && <div>{ciclo}</div>}
+      {nivel && <div>Nível declarado: <span className="text-[var(--fg-2)]">{nivel}</span></div>}
+      {parado && (parado.alerta
+        ? <div className="font-semibold text-[var(--red)]">{parado.label}</div>
+        : <div>{parado.label}</div>)}
+    </div>
+  );
+}
+
+function PlacaJornada({ a, on, hist, loading, rastreioAluno }: { a: Aluno360; on: boolean; hist: PlacaHistorico | null; loading: boolean; rastreioAluno?: string | null }) {
   const sol = hist?.solicitacao;
   const aud = hist?.auditoria;
   const stepIdx = aud?.step_index ?? sol?.auditoria_step ?? sol?.step_index ?? null;
@@ -179,6 +207,8 @@ function PlacaJornada({ on, hist, loading, rastreioAluno }: { on: boolean; hist:
       </div>
 
       {rastreio && <div className="mt-2"><CopyField label="Código de rastreio" value={rastreio} /></div>}
+
+      <PlacaFunil a={a} entrevistaFallback={sol?.entrevista_data ? { data: sol.entrevista_data, hora: sol.entrevista_hora ?? null } : null} />
 
       {on && loading && <div className="text-xs text-[var(--fg-3)] mt-2">Carregando histórico…</div>}
 
@@ -198,7 +228,6 @@ function PlacaJornada({ on, hist, loading, rastreioAluno }: { on: boolean; hist:
           <div className="text-xs space-y-0.5 text-[var(--fg-3)]">
             {aud?.protocolo && <div>Protocolo: <span className="text-[var(--fg-2)] tabular">{aud.protocolo}</span></div>}
             {(aud?.faturamento || sol?.faturamento_declarado) != null && <div>Faturamento: <span className="text-[var(--fg-2)] tabular">{fmtBRL(aud?.faturamento ?? sol?.faturamento_declarado ?? null)}</span></div>}
-            {sol?.entrevista_data && <div>Entrevista: <span className="text-[var(--fg-2)] tabular">{fmtData(sol.entrevista_data)}{sol.entrevista_hora ? ` ${String(sol.entrevista_hora).slice(0, 5)}` : ''}</span></div>}
             {sol?.motivo_retorno && (
               <div className="text-[var(--red)]">
                 {sol.status === 'rejeitado' ? 'Motivo da rejeição' : 'Motivo do retorno'}: {sol.motivo_retorno}

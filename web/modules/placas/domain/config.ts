@@ -156,6 +156,12 @@ export interface PlacasConfig {
   email_templates: EmailTemplatesConfig;
   nivel_faixas: Record<string, Partial<NivelFaixa>>;
   form_textos: FormTextos;
+  /**
+   * Cutucada ao candidato parado há ≥3 dias (cron placas-resumo). Default FALSE: só liga com a
+   * linha key='cutucada_ativa', value=true (jsonb) em thb_placas_config. Opcional no tipo para
+   * não exigir o campo de quem monta o bundle à mão (ConfigPanel); parsePlacasConfig sempre preenche.
+   */
+  cutucada_ativa?: boolean;
 }
 
 /** Normaliza o mapa key→value cru vindo do banco para PlacasConfig. */
@@ -166,5 +172,7 @@ export function parsePlacasConfig(raw: Record<string, unknown> | null | undefine
     email_templates: (r.email_templates as EmailTemplatesConfig) || {},
     nivel_faixas: (r.nivel_faixas as Record<string, Partial<NivelFaixa>>) || {},
     form_textos: (r.form_textos as FormTextos) || {},
+    // Só o booleano true liga (string "true", 1 etc. não contam): erro de digitação não dispara e-mail.
+    cutucada_ativa: r.cutucada_ativa === true,
   };
 }

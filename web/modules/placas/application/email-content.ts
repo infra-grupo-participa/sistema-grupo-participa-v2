@@ -15,7 +15,21 @@ export type EmailTipo =
   | 'nivel_registrado'
   | 'lembrete_entrevista'
   | 'nao_compareceu'
-  | 'solicitacao_rejeitada';
+  | 'solicitacao_rejeitada'
+  | 'cutucada';
+
+/**
+ * TEXTO DA CUTUCADA — lembrete único ao candidato com a solicitação parada há ≥3 dias
+ * (cron /api/cron/placas-resumo, atrás da flag cutucada_ativa). RASCUNHO: o texto final o Marcio aprova.
+ * Genérico de propósito: vale para rascunho, documentação aprovada sem agendamento e correção pendente.
+ */
+export const CUTUCADA_TEXTO = {
+  assunto: '[Holding Brasil] Sua solicitação de placa está esperando por você',
+  titulo: 'Falta pouco para a sua placa',
+  introducao: 'Notamos que a sua solicitação de placa está parada há alguns dias.',
+  corpo_extra: '<p>Pelo link abaixo você continua exatamente de onde parou.</p>',
+  cta_label: 'Continuar minha solicitação',
+} as const;
 
 export interface EmailTemplateData {
   nome?: string;
@@ -57,6 +71,22 @@ function trackingCodeHtml(codigo: string): string {
 function motivoBox(motivo: string): string {
   if (!motivo.trim()) return '';
   return `<div style="margin:18px 0;padding:16px;border-radius:10px;background:#fffbeb;border:1px solid #fcd34d;"><p style="margin:0 0 8px;font-size:12px;color:#92400e;text-transform:uppercase;letter-spacing:.04em;font-weight:700">O que precisa ser corrigido</p><p style="margin:0;font-size:14px;color:#78350f;line-height:1.6;white-space:pre-wrap;">${esc(motivo)}</p></div>`;
+}
+
+/** Aceita só https em zoom.us ou *.zoom.us (hostname já normalizado pelo WHATWG URL). */
+export function linkZoomSeguro(url: string | null | undefined): string | null {
+  const raw = String(url ?? '').trim();
+  if (!raw) return null;
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
+  const host = u.hostname.toLowerCase();
+  if (host !== 'zoom.us' && !host.endsWith('.zoom.us')) return null;
+  return u.toString();
 }
 
 export interface EmailExtra {
@@ -170,7 +200,7 @@ export function getEmailContentByStatus(tipo: EmailTipo, extra: EmailExtra, ctaL
     case 'entrevista_agendada': {
       // Link "Adicionar ao Google Agenda" no e-mail — o candidato salva o compromisso na hora.
       const gcal = extra.entrevista_data && extra.entrevista_hora
-        ? buildGcalLink('', extra.entrevista_data, extra.entrevista_hora, extra.zoom_link || null)
+        ? buildGcalLink('', extra.entrevista_data, extra.entrevista_hora, linkZoomSeguro(extra.zoom_link))
         : '';
       return {
         assunto: '[Holding Brasil] Entrevista agendada — link de acesso',
@@ -182,7 +212,7 @@ export function getEmailContentByStatus(tipo: EmailTipo, extra: EmailExtra, ctaL
           corpo_extra:
             entrevistaBox(extra.entrevista_data, extra.entrevista_hora) +
             '<p>Recomendamos entrar alguns minutos antes, em um local tranquilo e com boa conexão de internet.</p>',
-          cta_link: extra.zoom_link || ctaLink,
+          cta_link: linkZoomSeguro(extra.zoom_link) || ctaLink,
           cta_label: 'Acessar sala (Zoom)',
           cta_cor: '#2D8CFF',
           pos_cta: gcal
@@ -259,6 +289,10 @@ export function getEmailContentByStatus(tipo: EmailTipo, extra: EmailExtra, ctaL
     case 'lembrete_entrevista': {
       const dataFmt = extra.entrevista_data ? extra.entrevista_data.split('-').reverse().join('/') : '';
       const hora = (extra.entrevista_hora ?? '').slice(0, 5);
+      const zoom = linkZoomSeguro(extra.zoom_link);
+      const linkSala = zoom
+        ? `<p>Link da sala: <a href="${esc(zoom)}" target="_blank" style="color:#2D8CFF;text-decoration:underline;font-weight:600">${esc(zoom)}</a></p>`
+        : '<p>O link de acesso à sala foi enviado no e-mail de confirmação do agendamento.</p>';
       const dataLabel = dataFmt ? ` em ${dataFmt}` : '';
       const horario = hora ? ` às ${hora}` : '';
       return {
@@ -270,7 +304,7 @@ export function getEmailContentByStatus(tipo: EmailTipo, extra: EmailExtra, ctaL
           corpo_extra:
             entrevistaBox(extra.entrevista_data, extra.entrevista_hora) +
             '<p>Certifique-se de estar em um local tranquilo, com boa conexão de internet.</p>' +
-            '<p>O link de acesso à sala foi enviado no e-mail de confirmação do agendamento.</p>',
+            linkSala,
           cta_link: ctaLink,
           cta_label: 'Ver detalhes da entrevista',
           cta_cor: '#1e40af',
@@ -278,6 +312,19 @@ export function getEmailContentByStatus(tipo: EmailTipo, extra: EmailExtra, ctaL
         },
       };
     }
+    case 'cutucada':
+      return {
+        assunto: CUTUCADA_TEXTO.assunto,
+        templateData: {
+          titulo: CUTUCADA_TEXTO.titulo,
+          titulo_cor: '#F29725',
+          introducao: CUTUCADA_TEXTO.introducao,
+          corpo_extra: CUTUCADA_TEXTO.corpo_extra,
+          cta_link: ctaLink,
+          cta_label: CUTUCADA_TEXTO.cta_label,
+          nota: SECRETARIA_NOTA,
+        },
+      };
     case 'nao_compareceu':
       return {
         assunto: '[Holding Brasil] Entrevista não realizada — reagendamento disponível',

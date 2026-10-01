@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminSupabase } from '@/shared/infrastructure/supabase/admin-client';
+import { logSystemEvent, snippet } from '@/shared/infrastructure/observability/system-events';
+import { mascararEmails } from '@/shared/infrastructure/observability/pii';
 
 // Gateway do fluxo PÚBLICO de placa — porta de placa-public.php.
 // Usa service_role (token UUID é a fronteira de segurança), como no PHP legado.
@@ -8,6 +10,39 @@ const PUBLIC_FIELDS =
   'id,token,status,step_index,auditoria_step,nome,email,telefone,turma,profissao,telefone_profissional,youtube_url,site_profissional,instagram_url,facebook_url,interesse,espaco_instrucao,nivel,nivel_anterior,ciclo,faturamento_declarado,proof_url,declaracao_url,cep,logradouro,numero,complemento,bairro,cidade,estado_uf,pais,documento_nf,entrevista_data,entrevista_hora,entrevista_link,meet_link,codigo_rastreio,motivo_retorno,regularizacao_pendente';
 
 type Row = Record<string, unknown>;
+
+export type UpdateResult = { ok: true } | { ok: false; error: { code: string | null; message: string } };
+
+/** Etapas do funil de placa registradas como evento de negócio em thb_system_events. */
+export type FunilPlacaEtapa = 'submit' | 'aprovado' | 'agendado';
+
+export interface FunilPlacaCtx {
+  solicitacao_id: string;
+  aluno_id?: string | null;
+  /** Contexto extra (nível, data/hora da entrevista, origem admin/aluno...). */
+  detalhe?: Record<string, unknown>;
+}
+
+const FUNIL_TITULO: Record<FunilPlacaEtapa, string> = {
+  submit: 'Funil placa: solicitação enviada',
+  aprovado: 'Funil placa: documentação aprovada',
+  agendado: 'Funil placa: entrevista agendada',
+};
+
+/** Evento de negócio do funil (mesmo padrão do 'Espaço de instrução corrigido'). Best-effort, nunca lança. */
+export async function logFunilPlaca(etapa: FunilPlacaEtapa, ctx: FunilPlacaCtx): Promise<void> {
+  await logSystemEvent({
+    tipo: 'business',
+    fonte: 'funil_placa',
+    titulo: FUNIL_TITULO[etapa],
+    detalhe: { ...(ctx.detalhe ?? {}), etapa, solicitacao_id: ctx.solicitacao_id },
+    aluno_id: ctx.aluno_id ?? null,
+  });
+}
+
+export const logFunilPlacaSubmit = (ctx: FunilPlacaCtx) => logFunilPlaca('submit', ctx);
+export const logFunilPlacaAprovado = (ctx: FunilPlacaCtx) => logFunilPlaca('aprovado', ctx);
+export const logFunilPlacaAgendado = (ctx: FunilPlacaCtx) => logFunilPlaca('agendado', ctx);
 
 /** Escapa curingas de (i)like — o valor vem do usuário e deve casar literal. */
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&');
@@ -90,8 +125,34 @@ export class SupabasePublicPlaca {
     return (data as Row) ?? null;
   }
 
-  async updateByToken(token: string, payload: Row): Promise<void> {
-    await this.db.from('thb_placas_solicitacoes').update(payload).eq('token', token);
+  /**
+   * Grava o patch. Não lança: devolve o erro do banco para o chamador decidir a resposta
+   * (antes o erro era descartado e o aluno recebia ok com nada salvo). A falha também vira evento.
+   */
+  async updateByToken(token: string, payload: Row): Promise<UpdateResult> {
+    const { error } = await this.db.from('thb_placas_solicitacoes').update(payload).eq('token', token);
+    if (!error) return { ok: true };
+    const err = { code: error.code ?? null, message: String(error.message ?? '') };
+    // Trilha guarda o id da solicitação, nunca o token (token = acesso ao processo do candidato).
+    const solicitacaoId = await this.idPorToken(token);
+    await logSystemEvent({
+      tipo: 'error',
+      fonte: 'form_publico_placa',
+      titulo: 'Falha ao gravar a solicitação de placa (updateByToken)',
+      detalhe: { solicitacao_id: solicitacaoId, campos: Object.keys(payload), code: err.code, erro: snippet(mascararEmails(err.message)) },
+    });
+    return { ok: false, error: err };
+  }
+
+  /** Id da solicitação pelo token — só para a trilha de erro; null se não achar (nunca lança). */
+  private async idPorToken(token: string): Promise<string | null> {
+    try {
+      const { data } = await this.db.from('thb_placas_solicitacoes').select('id').eq('token', token).limit(1).maybeSingle();
+      const id = (data as Row | null)?.id;
+      return id ? String(id) : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Acende a notificação do admin (não-visto + topo da fila): ação relevante do aluno. */
@@ -183,9 +244,23 @@ export class SupabasePublicPlaca {
    * Promove dados da solicitação para thb_alunos (apenas no submit final).
    * Matching por e-mail OU documento; a central é fonte de verdade para espaco_instrucao
    * (corrige o que o aluno digitou errado no formulário). Campos de contato fluem
-   * solicitação→aluno só se atualizado_por IS NULL. Não-crítico: erros são engolidos.
+   * solicitação→aluno só se atualizado_por IS NULL. Não-crítico: falha não quebra o submit,
+   * mas toda falha de escrita/exceção vira evento em thb_system_events.
    */
   async promoteToAluno(token: string, payload: Row): Promise<void> {
+    // Falha de escrita não interrompe as etapas seguintes nem o submit, mas vira evento.
+    // Trilha com solicitacao_id (preenchido assim que a linha é lida), nunca o token.
+    let solicitacaoIdLog: string | null = null;
+    const falha = async (etapa: string, error: { code?: string | null; message?: string } | null, alunoId?: unknown) => {
+      if (!error) return;
+      await logSystemEvent({
+        tipo: 'error',
+        fonte: 'form_publico_placa',
+        titulo: `Falha ao promover solicitação para thb_alunos (${etapa})`,
+        detalhe: { solicitacao_id: solicitacaoIdLog, etapa, code: error.code ?? null, erro: snippet(mascararEmails(String(error.message ?? ''))) },
+        aluno_id: alunoId ? String(alunoId) : null,
+      });
+    };
     try {
       const email = String(payload.email ?? '').trim();
       const documento = String(payload.documento_nf ?? '').trim();
@@ -199,11 +274,13 @@ export class SupabasePublicPlaca {
         .maybeSingle();
       const solicitacaoId = (sol as Row)?.id;
       if (!solicitacaoId) return;
+      solicitacaoIdLog = String(solicitacaoId);
 
       const m = await this.centralMatch(email, documento);
       if (!m) {
         // Sem registro na base — pode se tratar de ex-aluno; o admin vê o alerta na fila.
-        await this.db.from('thb_placas_solicitacoes').update({ central_match: 'nenhum' }).eq('id', solicitacaoId);
+        const { error } = await this.db.from('thb_placas_solicitacoes').update({ central_match: 'nenhum' }).eq('id', solicitacaoId);
+        await falha('central_match_nenhum', error);
         return;
       }
 
@@ -221,7 +298,8 @@ export class SupabasePublicPlaca {
           aluno_id: m.aluno_id,
         });
       }
-      await this.db.from('thb_placas_solicitacoes').update(solPatch).eq('id', solicitacaoId);
+      const { error: solErr } = await this.db.from('thb_placas_solicitacoes').update(solPatch).eq('id', solicitacaoId);
+      await falha('vinculo_solicitacao', solErr, m.aluno_id);
 
       const { data: aluno } = await this.db
         .from('thb_alunos')
@@ -269,10 +347,20 @@ export class SupabasePublicPlaca {
         }
       }
 
-      await this.db.from('thb_alunos').update(updates).eq('id', a.id);
-      if (audit.length) await this.db.from('thb_alunos_audit_log').insert(audit);
-    } catch {
-      // silent — promote nunca quebra o submit
+      const { error: alunoErr } = await this.db.from('thb_alunos').update(updates).eq('id', a.id);
+      await falha('update_aluno', alunoErr, a.id);
+      if (audit.length) {
+        const { error: auditErr } = await this.db.from('thb_alunos_audit_log').insert(audit);
+        await falha('audit_log', auditErr, a.id);
+      }
+    } catch (err) {
+      // promote nunca quebra o submit — mas a exceção fica registrada.
+      await logSystemEvent({
+        tipo: 'error',
+        fonte: 'form_publico_placa',
+        titulo: 'Exceção ao promover solicitação para thb_alunos',
+        detalhe: { solicitacao_id: solicitacaoIdLog, erro: snippet(mascararEmails(err instanceof Error ? `${err.name}: ${err.message}` : String(err))) },
+      });
     }
   }
 }

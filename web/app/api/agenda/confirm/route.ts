@@ -1,5 +1,5 @@
-import type { NextRequest } from 'next/server';
-import { bootstrapPublic, clientIp, jsonError, jsonOk, placaTrackingLink } from '@/shared/infrastructure/http/security';
+import { after, type NextRequest } from 'next/server';
+import { bootstrapPublic, clientIp, jsonError, jsonOk } from '@/shared/infrastructure/http/security';
 import { rateLimitOk, sweepRateLimit } from '@/shared/infrastructure/http/rate-limit';
 import { isDateIso, isTimeHm, safeEmail } from '@/shared/infrastructure/http/validation';
 import { resolvePlacaToken } from '@/shared/infrastructure/http/session-cookie';
@@ -8,24 +8,31 @@ import { SupabaseAgenda } from '@/modules/placas/infrastructure/supabase-agenda'
 import { ZoomMeetingProvider } from '@/modules/placas/infrastructure/zoom-meeting';
 import { sendMail } from '@/shared/infrastructure/email/mailer';
 import { buildGcalLink, buildSlotStart, conflictsForSlot, rescheduleBlockReason } from '@/modules/placas/domain/agendamento';
-import { getEmailContentByStatus, emailDynamicBoxes, type EmailExtra } from '@/modules/placas/application/email-content';
-import { buildEmailTemplate } from '@/shared/infrastructure/email/template';
-import { readPlacasConfig } from '@/modules/placas/infrastructure/supabase-config';
+import { enviarEmailPlaca } from '@/modules/placas/application/enviar-email-placa';
+import { logFunilPlacaAgendado } from '@/modules/placas/infrastructure/supabase-public-placa';
 import { logSystemEvent } from '@/shared/infrastructure/observability/system-events';
 
-/** E-mail de confirmação ao CANDIDATO (template entrevista_agendada + override editável do admin). */
-async function emailCandidato(email: string, nome: string, data: string, hora: string, zoomLink: string | null, trackingLink: string): Promise<void> {
-  const extra: EmailExtra = { entrevista_data: data, entrevista_hora: hora, zoom_link: zoomLink || undefined };
-  const content = getEmailContentByStatus('entrevista_agendada', extra, trackingLink);
-  const { email_templates } = await readPlacasConfig();
-  const ov = email_templates?.['entrevista_agendada'];
-  if (ov) {
-    if (ov.assunto?.trim()) content.assunto = ov.assunto.trim();
-    if (ov.introducao?.trim()) content.templateData.introducao = ov.introducao.trim();
-    if (ov.corpo_extra?.trim()) content.templateData.corpo_extra = emailDynamicBoxes('entrevista_agendada', extra) + ov.corpo_extra.trim();
-  }
-  const html = buildEmailTemplate({ ...content.templateData, nome });
-  await sendMail({ to: email, subject: content.assunto, html });
+/**
+ * Apaga a sala Zoom DEPOIS da resposta (after): não segura a trava do slot nem o candidato/admin.
+ * deleteMeeting nunca lança e devolve false na falha — aí a sala órfã vira evento rastreável.
+ */
+function apagarSalaDepois(
+  zoom: ZoomMeetingProvider,
+  meetingId: string,
+  motivo: 'reagendamento' | 'conflito' | 'falha_gravacao',
+  ctx: { solicitacao_id: unknown; aluno_id: unknown; data: string; hora: string },
+): void {
+  after(async () => {
+    const ok = await zoom.deleteMeeting(meetingId).catch(() => false);
+    if (ok) return;
+    await logSystemEvent({
+      tipo: 'error',
+      fonte: 'agenda_confirm',
+      titulo: 'Sala Zoom órfã — falha ao apagar (apagar manualmente no Zoom)',
+      detalhe: { meeting_id: meetingId, motivo, solicitacao_id: ctx.solicitacao_id, data: ctx.data, hora: ctx.hora },
+      aluno_id: ctx.aluno_id ? String(ctx.aluno_id) : null,
+    });
+  });
 }
 
 const escapeHtml = (s: string) =>
@@ -77,19 +84,21 @@ export async function POST(request: NextRequest) {
       return jsonError('Não foi possível concluir a operação.', 409, { session_link: sessionLink });
     }
 
-    const meeting = await new ZoomMeetingProvider().createMeeting({
+    const zoom = new ZoomMeetingProvider();
+    const meeting = await zoom.createMeeting({
       topic: `Entrevista ${sol.nome ?? ''} - Time Holding Brasil`,
       startIso: `${data}T${slotHour}:00`,
       durationMin: 60,
     });
     const zoomLink = meeting?.joinUrl ?? null;
+    const meetingId = meeting?.meetingId ?? null;
     if (!zoomLink) {
       // Causa-raiz (HTTP/timeout) já foi logada pelo provider; aqui fica o contexto do candidato.
       await logSystemEvent({
         tipo: 'warn',
         fonte: 'agenda_confirm',
         titulo: 'Entrevista agendada SEM link Zoom — enviar link manualmente',
-        detalhe: { solicitacao_id: sol.id, candidato: sol.nome, email: sol.email, data, hora },
+        detalhe: { solicitacao_id: sol.id, data, hora }, // sem nome/e-mail: thb_system_events não guarda PII
         aluno_id: sol.aluno_id ? String(sol.aluno_id) : null,
       });
     }
@@ -99,19 +108,30 @@ export async function POST(request: NextRequest) {
       entrevista_hora: hora,
       entrevista_link: zoomLink,
       meet_link: zoomLink,
+      zoom_meeting_id: meetingId,
     });
+    const salaCtx = { solicitacao_id: sol.id, aluno_id: sol.aluno_id, data, hora };
+    // Gravação não aconteceu: a sala recém-criada ficaria órfã no Zoom.
+    if (!confirmed.ok && meetingId) apagarSalaDepois(zoom, meetingId, confirmed.conflict ? 'conflito' : 'falha_gravacao', salaCtx);
     if (confirmed.conflict) return jsonError('Este horário acabou de ser reservado por outra pessoa. Escolha outro.', 409, { session_link: sessionLink });
     if (!confirmed.ok) {
       await logSystemEvent({
         tipo: 'error',
         fonte: 'agenda_confirm',
         titulo: 'Falha ao salvar o agendamento no banco (HTTP 502 ao candidato)',
-        detalhe: { solicitacao_id: sol.id, candidato: sol.nome, email: sol.email, data, hora },
+        detalhe: { solicitacao_id: sol.id, data, hora }, // sem nome/e-mail: thb_system_events não guarda PII
         aluno_id: sol.aluno_id ? String(sol.aluno_id) : null,
       });
       return jsonError('Não foi possível concluir a operação.', 502);
     }
+    // Reagendamento: a sala da marcação anterior não é mais de ninguém.
+    if (confirmed.previousMeetingId) apagarSalaDepois(zoom, confirmed.previousMeetingId, 'reagendamento', salaCtx);
     if (sol.aluno_id) await agenda.syncAuditoriaStep(String(sol.aluno_id), 2, { data, hora });
+    await logFunilPlacaAgendado({
+      solicitacao_id: String(sol.id),
+      aluno_id: sol.aluno_id ? String(sol.aluno_id) : null,
+      detalhe: { data, hora, origem: 'aluno', zoom_pending: !zoomLink },
+    });
 
     // Notifica admin (melhor-esforço).
     const adminEmail = process.env.ADMIN_EMAIL || 'contato@grupoparticipa.app.br';
@@ -133,10 +153,20 @@ export async function POST(request: NextRequest) {
     }).catch(() => false);
 
     // Confirmação ao CANDIDATO (melhor-esforço) — o link do Zoom vai por e-mail além da tela.
+    // email_enviado: a tela só afirma "enviamos por e-mail" quando o envio foi confirmado.
     const candidatoEmail = safeEmail(String(sol.email ?? ''));
-    if (candidatoEmail) {
-      await emailCandidato(candidatoEmail, String(sol.nome ?? 'Candidato'), data, hora, zoomLink, placaTrackingLink(token)).catch(() => undefined);
-    }
+    const emailEnviado = candidatoEmail
+      ? (
+          await enviarEmailPlaca({
+            tipo: 'entrevista_agendada',
+            to: candidatoEmail,
+            solicitacaoId: String(sol.id),
+            nome: String(sol.nome ?? 'Candidato'),
+            token,
+            extra: { entrevista_data: data, entrevista_hora: hora, zoom_link: zoomLink || undefined },
+          })
+        ).sent
+      : false;
 
     return jsonOk({
       ok: true,
@@ -150,6 +180,7 @@ export async function POST(request: NextRequest) {
       auditoria_step: 2,
       workflow_state: 'entrevista_agendada',
       workflow_state_label: 'Entrevista Agendada',
+      email_enviado: emailEnviado,
     });
   });
 

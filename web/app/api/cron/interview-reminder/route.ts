@@ -1,12 +1,11 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { NextRequest } from 'next/server';
-import { jsonError, jsonOk, placaTrackingLink } from '@/shared/infrastructure/http/security';
+import { clientIp, jsonError, jsonOk } from '@/shared/infrastructure/http/security';
+import { rateLimitOk, sweepRateLimit } from '@/shared/infrastructure/http/rate-limit';
 import { createAdminSupabase } from '@/shared/infrastructure/supabase/admin-client';
 import { buildSlotStart } from '@/modules/placas/domain/agendamento';
-import { getEmailContentByStatus, emailDynamicBoxes, type EmailExtra } from '@/modules/placas/application/email-content';
-import { readPlacasConfig } from '@/modules/placas/infrastructure/supabase-config';
-import { buildEmailTemplate } from '@/shared/infrastructure/email/template';
-import { sendMail } from '@/shared/infrastructure/email/mailer';
+import type { EmailExtra } from '@/modules/placas/application/email-content';
+import { enviarEmailPlaca } from '@/modules/placas/application/enviar-email-placa';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +18,13 @@ export const dynamic = 'force-dynamic';
 // devolve reminder_sent_at a null (só se ainda for o carimbo desta execução) para a próxima passagem.
 const WINDOW_MIN_MS = 3.5 * 60 * 60 * 1000;
 const WINDOW_MAX_MS = 4.5 * 60 * 60 * 1000;
+const LOTE_MAX = 50;
+// Resend: 10 req/s. 120 ms entre envios deixa folga.
+const PAUSA_ENTRE_ENVIOS_MS = 120;
+// buildSlotStart ancora o horário em -03:00 fixo (Brasil sem horário de verão desde 2019).
+const OFFSET_SP_MS = -3 * 60 * 60 * 1000;
+
+const dormir = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // Comparação em tempo constante: a rota é chamada pela internet.
 function mesmoSegredo(recebido: string, esperado: string): boolean {
@@ -36,23 +42,46 @@ async function chaveDoBancoOk(admin: ReturnType<typeof createAdminSupabase>, aut
   return !error && data === true;
 }
 
+/** Data (YYYY-MM-DD) e hora (HH:MM) de um instante no fuso de buildSlotStart (-03:00). */
+function dataHoraSp(ms: number): { data: string; hora: string } {
+  const iso = new Date(ms + OFFSET_SP_MS).toISOString();
+  return { data: iso.slice(0, 10), hora: iso.slice(11, 16) };
+}
+
 async function handle(request: NextRequest) {
   const secret = process.env.CRON_SECRET || '';
   const auth = request.headers.get('authorization') || '';
-  const admin = createAdminSupabase();
   const porEnv = !!secret && mesmoSegredo(auth, `Bearer ${secret}`);
+  if (!porEnv) {
+    // Só quem não passou pela env chega à RPC — limita por IP para a internet não martelar o banco.
+    sweepRateLimit();
+    if (!rateLimitOk(clientIp(request), 'gp_cron_reminder_rate_', 10, 60)) {
+      return jsonError('Muitas requisições. Tente novamente em instantes.', 429);
+    }
+  }
+  const admin = createAdminSupabase();
   if (!porEnv && !(await chaveDoBancoOk(admin, auth))) return jsonError('Não autorizado.', 401);
 
+  // Corte grosso no SQL: só entrevistas cujo início pode cair na janela (no máximo hoje/amanhã em SP),
+  // com piso de hora no dia inicial para entrevistas já passadas não ocuparem o lote.
+  const now = Date.now();
+  const ini = dataHoraSp(now + WINDOW_MIN_MS);
+  const fim = dataHoraSp(now + WINDOW_MAX_MS);
   const { data, error } = await admin
     .from('thb_placas_solicitacoes')
-    .select('id, token, nome, email, entrevista_data, entrevista_hora, auditoria_step, reminder_sent_at')
+    .select('id, token, nome, email, entrevista_data, entrevista_hora, entrevista_link, auditoria_step, reminder_sent_at')
     .eq('auditoria_step', 2)
     .is('reminder_sent_at', null)
     .not('entrevista_data', 'is', null)
-    .not('entrevista_hora', 'is', null);
+    .not('entrevista_hora', 'is', null)
+    .gte('entrevista_data', ini.data)
+    .lte('entrevista_data', fim.data)
+    .or(`entrevista_data.gt.${ini.data},entrevista_hora.gte."${ini.hora}"`)
+    .order('entrevista_data', { ascending: true })
+    .order('entrevista_hora', { ascending: true })
+    .limit(LOTE_MAX);
   if (error) return jsonError('Não foi possível consultar as entrevistas.', 502);
 
-  const now = Date.now();
   const alvo = (data ?? []).filter((s) => {
     const start = buildSlotStart(String(s.entrevista_data), String(s.entrevista_hora));
     if (!start) return false;
@@ -60,10 +89,10 @@ async function handle(request: NextRequest) {
     return diff >= WINDOW_MIN_MS && diff <= WINDOW_MAX_MS;
   });
 
-  const { email_templates } = await readPlacasConfig();
   let enviados = 0;
   let falhas = 0;
   let jaReivindicados = 0;
+  let primeiroEnvio = true;
 
   for (const s of alvo) {
     const to = String(s.email ?? '').trim();
@@ -91,17 +120,18 @@ async function handle(request: NextRequest) {
     const extra: EmailExtra = {
       entrevista_data: String(s.entrevista_data).slice(0, 10),
       entrevista_hora: String(s.entrevista_hora).slice(0, 5),
+      zoom_link: s.entrevista_link ? String(s.entrevista_link) : undefined,
     };
-    const content = getEmailContentByStatus('lembrete_entrevista', extra, placaTrackingLink(String(s.token)));
-    const ov = email_templates?.['lembrete_entrevista'];
-    if (ov) {
-      if (ov.assunto?.trim()) content.assunto = ov.assunto.trim();
-      if (ov.introducao?.trim()) content.templateData.introducao = ov.introducao.trim();
-      if (ov.corpo_extra?.trim()) content.templateData.corpo_extra = emailDynamicBoxes('lembrete_entrevista', extra) + ov.corpo_extra.trim();
-    }
-    const html = buildEmailTemplate({ ...content.templateData, nome: String(s.nome ?? 'Candidato') });
-    const ok = await sendMail({ to, subject: content.assunto, html }).catch(() => false);
-    if (ok) {
+    if (!primeiroEnvio) await dormir(PAUSA_ENTRE_ENVIOS_MS);
+    primeiroEnvio = false;
+    const r = await enviarEmailPlaca({
+      tipo: 'lembrete_entrevista',
+      to,
+      nome: String(s.nome ?? 'Candidato'),
+      token: String(s.token),
+      extra,
+    });
+    if (r.sent) {
       enviados++;
     } else {
       falhas++;
@@ -114,7 +144,10 @@ async function handle(request: NextRequest) {
     }
   }
 
-  return jsonOk({ ok: true, candidatos: alvo.length, enviados, falhas, ja_reivindicados: jaReivindicados });
+  const corpo = { ok: !(falhas > 0 && enviados === 0), candidatos: alvo.length, enviados, falhas, ja_reivindicados: jaReivindicados };
+  // ops.cron_post só enxerga o status HTTP: tudo falhou → 500 para o vigia acusar.
+  if (falhas > 0 && enviados === 0) return jsonOk(corpo, 500);
+  return jsonOk(corpo);
 }
 
 export async function GET(request: NextRequest) {

@@ -58,7 +58,9 @@ export interface MeetingProvider {
     topic: string;
     startIso: string;
     durationMin: number;
-  }): Promise<{ joinUrl: string } | null>;
+  }): Promise<{ joinUrl: string; meetingId: string | null } | null>;
+  /** Apaga a sala (reagendamento ou gravação que falhou depois de criá-la). Nunca lança; 404 conta como ok. */
+  deleteMeeting(meetingId: string): Promise<boolean>;
 }
 
 /** Consulta de CEP (ViaCEP). */

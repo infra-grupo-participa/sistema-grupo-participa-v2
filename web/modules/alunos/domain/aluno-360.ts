@@ -98,6 +98,13 @@ export interface Aluno360 {
   placa_rastreio: string | null;
   placa_entrevista_data: string | null;
   placa_regularizacao_pendente: boolean | null;
+  // Funil da placa (fn_aluno_360_safe, migration 20261005e). Link do Zoom NÃO vem (LGPD): só o boolean.
+  placa_entrevista_hora?: string | null; // 'HH:MM'
+  placa_tem_link_zoom?: boolean | null;
+  placa_lembrete_em?: string | null; // timestamptz ISO
+  placa_ciclo?: number | null; // 1 = primeira placa; >1 = refez por subir de nível
+  placa_nivel_declarado?: string | null; // chave de nível
+  placa_dias_parado?: number | null; // null se concluido/rejeitado/cadastro_concluido
   tem_depoimento: boolean | null;
   total_depoimentos: number | null;
   // Card do funil de ativação (cs.contatos_hm) — a view traz UMA LINHA POR CARD.

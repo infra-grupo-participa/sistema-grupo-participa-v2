@@ -5,6 +5,8 @@ type Row = Record<string, unknown>;
 let table: Row[] = [];
 let sendResults: boolean[] = [];
 const sent: string[] = [];
+const extras: Array<Record<string, unknown> | undefined> = [];
+const queryLog: string[] = [];
 
 // Fake mínimo do query builder do supabase-js — simula UPDATE ... WHERE ... RETURNING por linha.
 function builder() {
@@ -21,6 +23,11 @@ function builder() {
     eq: (k: string, v: unknown) => (filters.push((r) => r[k] === v), b),
     is: (k: string, v: unknown) => (filters.push((r) => (r[k] ?? null) === v), b),
     not: (k: string) => (filters.push((r) => r[k] != null), b),
+    gte: (k: string, v: unknown) => (queryLog.push(`gte ${k} ${v}`), b),
+    lte: (k: string, v: unknown) => (queryLog.push(`lte ${k} ${v}`), b),
+    or: (v: string) => (queryLog.push(`or ${v}`), b),
+    order: () => b,
+    limit: (n: number) => (queryLog.push(`limit ${n}`), b),
     then: (res: (v: unknown) => unknown) => Promise.resolve(run()).then(res),
   };
   return b;
@@ -36,11 +43,12 @@ vi.mock('@/shared/infrastructure/supabase/admin-client', () => ({
     },
   }),
 }));
-vi.mock('@/modules/placas/infrastructure/supabase-config', () => ({ readPlacasConfig: async () => ({}) }));
-vi.mock('@/shared/infrastructure/email/mailer', () => ({
-  sendMail: async (m: { to: string }) => {
+vi.mock('@/modules/placas/application/enviar-email-placa', () => ({
+  enviarEmailPlaca: async (m: { to: string; extra?: Record<string, unknown> }) => {
     sent.push(m.to);
-    return sendResults.shift() ?? true;
+    extras.push(m.extra);
+    const ok = sendResults.shift() ?? true;
+    return { ok, sent: ok };
   },
 }));
 vi.mock('@/modules/placas/domain/agendamento', () => ({
@@ -49,14 +57,15 @@ vi.mock('@/modules/placas/domain/agendamento', () => ({
 
 const { GET, POST } = await import('./route');
 
-function req(method: 'GET' | 'POST', secret = 's3cr3t') {
+let ipSeq = 0;
+function req(method: 'GET' | 'POST', secret = 's3cr3t', ip = `10.0.0.${++ipSeq}`) {
   return new NextRequest('https://grupoparticipa.app.br/api/cron/interview-reminder', {
     method,
-    headers: { authorization: `Bearer ${secret}` },
+    headers: { authorization: `Bearer ${secret}`, 'x-forwarded-for': ip },
   });
 }
 function row(id: string): Row {
-  return { id, token: `${id}-tok`, nome: id, email: `${id}@x.com`, entrevista_data: '2026-10-01', entrevista_hora: '20:00', auditoria_step: 2, reminder_sent_at: null };
+  return { id, token: `${id}-tok`, nome: id, email: `${id}@x.com`, entrevista_data: '2026-10-01', entrevista_hora: '20:00', entrevista_link: `https://us02web.zoom.us/j/${id}`, auditoria_step: 2, reminder_sent_at: null };
 }
 
 beforeEach(() => {
@@ -64,6 +73,8 @@ beforeEach(() => {
   table = [row('a'), row('b')];
   sendResults = [];
   sent.length = 0;
+  extras.length = 0;
+  queryLog.length = 0;
   rpcCalls.length = 0;
 });
 
@@ -120,5 +131,37 @@ describe('cron interview-reminder', () => {
     expect(r).toMatchObject({ enviados: 1, falhas: 1 });
     expect(table.find((x) => x.id === 'a')?.reminder_sent_at).toBeNull();
     expect(table.find((x) => x.id === 'b')?.reminder_sent_at).toBeTruthy();
+  });
+
+  it('todas as tentativas falharam → HTTP 500 (vigia só vê o status)', async () => {
+    sendResults = [false, false];
+    const res = await GET(req('GET'));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ ok: false, enviados: 0, falhas: 2 });
+    expect(table.every((r) => r.reminder_sent_at === null)).toBe(true);
+  });
+
+  it('passa a sala (entrevista_link) como extra.zoom_link', async () => {
+    await GET(req('GET'));
+    expect(extras[0]).toMatchObject({ zoom_link: 'https://us02web.zoom.us/j/a', entrevista_hora: '20:00' });
+  });
+
+  it('corta no SQL por data (SP) e limita o lote a 50', async () => {
+    await GET(req('GET'));
+    expect(queryLog).toContain('limit 50');
+    expect(queryLog.some((q) => /^gte entrevista_data \d{4}-\d{2}-\d{2}$/.test(q))).toBe(true);
+    expect(queryLog.some((q) => /^lte entrevista_data \d{4}-\d{2}-\d{2}$/.test(q))).toBe(true);
+    expect(queryLog.some((q) => /^or entrevista_data\.gt\.[\d-]+,entrevista_hora\.gte\."\d{2}:\d{2}"$/.test(q))).toBe(true);
+  });
+
+  it('rate limit por IP antes da RPC; Bearer da env não é limitado', async () => {
+    delete process.env.CRON_SECRET;
+    const codes: number[] = [];
+    for (let i = 0; i < 12; i++) codes.push((await POST(req('POST', 'b'.repeat(64), '203.0.113.9'))).status);
+    expect(codes.slice(0, 10).every((c) => c === 401)).toBe(true);
+    expect(codes.slice(10)).toEqual([429, 429]);
+    expect(rpcCalls).toHaveLength(10);
+    process.env.CRON_SECRET = 's3cr3t';
+    for (let i = 0; i < 12; i++) expect((await POST(req('POST', 's3cr3t', '203.0.113.9'))).status).not.toBe(429);
   });
 });

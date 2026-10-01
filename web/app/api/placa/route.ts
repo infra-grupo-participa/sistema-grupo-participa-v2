@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { bootstrapPublic, clientIp, jsonError, jsonOk, placaTrackingLink } from '@/shared/infrastructure/http/security';
+import { bootstrapPublic, clientIp, jsonError, jsonOk } from '@/shared/infrastructure/http/security';
 import { rateLimitOk, sweepRateLimit } from '@/shared/infrastructure/http/rate-limit';
 import { onlyDigits, safeEmail } from '@/shared/infrastructure/http/validation';
 import {
@@ -9,14 +9,12 @@ import {
   setPlacaCookie,
   type ResolvedPlacaToken,
 } from '@/shared/infrastructure/http/session-cookie';
-import { SupabasePublicPlaca, maskDocsForPublic } from '@/modules/placas/infrastructure/supabase-public-placa';
+import { SupabasePublicPlaca, logFunilPlacaSubmit, maskDocsForPublic } from '@/modules/placas/infrastructure/supabase-public-placa';
 import { sanitizeFormPayload } from '@/modules/placas/application/sanitize-form';
 import { validateFormProgress } from '@/modules/placas/domain/form-progress';
 import { progressErrorMessage } from '@/modules/placas/application/progress-message';
-import { getEmailContentByStatus, emailDynamicBoxes, type EmailTipo } from '@/modules/placas/application/email-content';
-import { readPlacasConfig } from '@/modules/placas/infrastructure/supabase-config';
-import { buildEmailTemplate } from '@/shared/infrastructure/email/template';
-import { sendMail } from '@/shared/infrastructure/email/mailer';
+import type { EmailTipo } from '@/modules/placas/application/email-content';
+import { enviarEmailPlaca } from '@/modules/placas/application/enviar-email-placa';
 
 // Porta de app/api/placa-public.php — fluxo público (token UUID, service_role server-side).
 
@@ -26,22 +24,9 @@ function todaySaoPaulo(): string {
 }
 
 /** Fecho do submit: confirmação de recebimento ou de cadastro (melhor-esforço, com override do admin). */
-async function emailFechoSubmit(tipo: EmailTipo, email: string, nome: string, trackingLink: string): Promise<boolean> {
-  try {
-    const content = getEmailContentByStatus(tipo, {}, trackingLink);
-    const { email_templates } = await readPlacasConfig();
-    const ov = email_templates?.[tipo];
-    if (ov) {
-      if (ov.assunto?.trim()) content.assunto = ov.assunto.trim();
-      if (ov.introducao?.trim()) content.templateData.introducao = ov.introducao.trim();
-      if (ov.corpo_extra?.trim()) content.templateData.corpo_extra = emailDynamicBoxes(tipo, {}) + ov.corpo_extra.trim();
-    }
-    const html = buildEmailTemplate({ ...content.templateData, nome });
-    return await sendMail({ to: email, subject: content.assunto, html });
-  } catch {
-    /* e-mail é melhor-esforço — não bloqueia o submit; o chamador decide se avisa o candidato */
-    return false;
-  }
+async function emailFechoSubmit(tipo: EmailTipo, email: string, nome: string, token: string): Promise<boolean> {
+  // e-mail é melhor-esforço — não bloqueia o submit; enviarEmailPlaca nunca lança e registra a falha.
+  return (await enviarEmailPlaca({ tipo, to: email, nome, token })).sent;
 }
 
 /**
@@ -198,7 +183,7 @@ export async function POST(request: NextRequest) {
     const emailNovo = safeEmail(String(payload.email ?? ''));
     // email_enviado: a tela só afirma "enviamos o link" quando o envio foi confirmado.
     const emailEnviado = emailNovo
-      ? await emailFechoSubmit('link_acesso', emailNovo, String(payload.nome ?? 'Candidato'), placaTrackingLink(newToken))
+      ? await emailFechoSubmit('link_acesso', emailNovo, String(payload.nome ?? 'Candidato'), newToken)
       : false;
     return setPlacaCookie(
       jsonOk({ ok: true, token: newToken, status: created.status, step_index: created.step_index, email_enviado: emailEnviado }),
@@ -227,21 +212,29 @@ export async function POST(request: NextRequest) {
     payload.admin_attention_at = new Date().toISOString();
   }
 
-  await gateway.updateByToken(token, payload);
+  const gravado = await gateway.updateByToken(token, payload);
+  // Falha já virou evento no gateway; o candidato não pode receber ok com nada salvo.
+  if (!gravado.ok) return jsonError('Não conseguimos salvar seus dados agora. Tente novamente em instantes.', 502);
 
   const emailDestino = safeEmail(String(payload.email ?? existing.email ?? ''));
   const nomeDestino = String(payload.nome ?? existing.nome ?? 'Candidato');
-  // Link de e-mail: base fixa do app (NEXT_PUBLIC_APP_URL), nunca o Host/Origin da requisição.
-  const trackingLink = placaTrackingLink(token);
   const jaEnviado = String(existing.status ?? '');
 
   if (payload.status === 'enviado' && Number(payload.step_index) === 6) {
     await gateway.promoteToAluno(token, payload);
     // Confirmação de recebimento — o candidato saía do funil sem nenhum protocolo/registro.
-    if (emailDestino && jaEnviado !== 'enviado') await emailFechoSubmit('solicitacao_recebida', emailDestino, nomeDestino, trackingLink);
+    if (jaEnviado !== 'enviado') {
+      await logFunilPlacaSubmit({
+        solicitacao_id: String(existing.id ?? ''),
+        aluno_id: existing.aluno_id ? String(existing.aluno_id) : null,
+        detalhe: { origem: 'aluno', nivel: payload.nivel ?? existing.nivel ?? null },
+      });
+      // Link de e-mail: enviarEmailPlaca usa placaTrackingLink (NEXT_PUBLIC_APP_URL), nunca o Host da requisição.
+      if (emailDestino) await emailFechoSubmit('solicitacao_recebida', emailDestino, nomeDestino, token);
+    }
   } else if (payload.status === 'cadastro_concluido' && jaEnviado !== 'cadastro_concluido') {
     // Fecho do fluxo curto (nível abaixo de Ouro): registra o nível sem emissão de placa.
-    if (emailDestino) await emailFechoSubmit('nivel_registrado', emailDestino, nomeDestino, trackingLink);
+    if (emailDestino) await emailFechoSubmit('nivel_registrado', emailDestino, nomeDestino, token);
   }
 
   return setPlacaCookie(jsonOk({ ok: true, token, status: payload.status, step_index: payload.step_index }), token);

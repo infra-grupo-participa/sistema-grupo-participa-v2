@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import './solicitar-placa.css';
 import { placaGet } from './placa-api';
 import { agendaConfirm, agendaHold } from './agenda-api';
+import { EMAIL_CONFIRMADO_TEXTO, EMAIL_FALHOU_TEXTO, EMAIL_FALHOU_TITULO, emailConfirmado } from './agenda-email';
+import { Banner } from './solicitar-placa-parts';
 import { buildSlotStart, isSlotSelectable, rescheduleBlockReason } from '../domain/agendamento';
 import { Badge, Button, EmptyState, Loading } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
@@ -43,7 +45,7 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
   const [slots, setSlots] = useState<Slot[]>([]);
   const [booked, setBooked] = useState<Set<string>>(new Set());
   const [picked, setPicked] = useState<Slot | null>(null);
-  const [result, setResult] = useState<{ zoom_link?: string | null; gcal_link?: string } | null>(null);
+  const [result, setResult] = useState<{ zoom_link?: string | null; gcal_link?: string; email_enviado?: boolean } | null>(null);
   const [blockReason, setBlockReason] = useState<string>('');
   const [err, setErr] = useState('');
 
@@ -117,7 +119,7 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
       setView('calendar');
       return;
     }
-    setResult({ zoom_link: res.zoom_link, gcal_link: res.gcal_link });
+    setResult({ zoom_link: res.zoom_link, gcal_link: res.gcal_link, email_enviado: res.email_enviado });
     setView('success');
   }
 
@@ -264,7 +266,7 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
             <div className="sp-success-badge"><Icon name="calendar-days" size={26} /></div>
             <h1 style={{ color: 'var(--ink)' }}>Entrevista confirmada! 🎉</h1>
             <p style={{ color: 'rgba(15,23,42,.75)' /* hex-ok: --ink com 75% sobre âmbar */ }}>
-              Enviamos a confirmação com o link da sala para o seu e-mail.
+              {emailConfirmado(result) ? 'Enviamos a confirmação com o link da sala para o seu e-mail.' : 'Seu horário está reservado.'}
             </p>
           </div>
           <div className="sp-card-body">
@@ -277,19 +279,22 @@ export function AgendarEntrevistaClient({ initialToken }: { initialToken: string
               </div>
             )}
 
+            {!emailConfirmado(result) && (
+              <Banner tone="warn" title={EMAIL_FALHOU_TITULO}>
+                <p>{EMAIL_FALHOU_TEXTO}</p>
+              </Banner>
+            )}
             <div className="sp-decl-flow" style={{ marginBottom: 16 }}>
-              <div className="sp-decl-step">
-                <span className="n">1</span>
-                <div><b>Confirmação por e-mail</b><p>O link da sala e os detalhes já estão na sua caixa de entrada (confira o spam).</p></div>
-              </div>
-              <div className="sp-decl-step">
-                <span className="n">2</span>
-                <div><b>Lembrete automático</b><p>Você recebe um lembrete por e-mail ~4 horas antes da entrevista.</p></div>
-              </div>
-              <div className="sp-decl-step">
-                <span className="n">3</span>
-                <div><b>No dia</b><p>Entre alguns minutos antes, em um local tranquilo e com boa conexão.</p></div>
-              </div>
+              {[
+                ...(emailConfirmado(result) ? [{ t: 'Confirmação por e-mail', d: EMAIL_CONFIRMADO_TEXTO }] : []),
+                { t: 'Lembrete automático', d: 'Você recebe um lembrete por e-mail ~4 horas antes da entrevista.' },
+                { t: 'No dia', d: 'Entre alguns minutos antes, em um local tranquilo e com boa conexão.' },
+              ].map((p, i) => (
+                <div className="sp-decl-step" key={p.t}>
+                  <span className="n">{i + 1}</span>
+                  <div><b>{p.t}</b><p>{p.d}</p></div>
+                </div>
+              ))}
             </div>
 
             {result?.zoom_link ? (

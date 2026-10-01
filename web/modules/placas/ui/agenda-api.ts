@@ -20,6 +20,8 @@ export interface ConfirmResult {
   data?: string;
   hora?: string;
   session_link?: string;
+  /** true só se o Resend aceitou o e-mail. Ausente (resposta antiga) = não confirmado. */
+  email_enviado?: boolean;
   error?: string;
 }
 

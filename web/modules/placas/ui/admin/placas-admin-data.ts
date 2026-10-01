@@ -15,22 +15,35 @@ const nowBr = () => {
   return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 };
 
-async function sendStatusEmail(tipo: string, sol: Partial<Solicitacao>, extra: Record<string, string> = {}) {
+/**
+ * Dispara o e-mail de status. Devolve `true` só se o servidor confirmou o envio
+ * (`{ ok: sent }` de POST /api/email/status); erro de rede/HTTP/`ok` falso → `false`.
+ */
+async function sendStatusEmail(tipo: string, sol: Partial<Solicitacao>, extra: Record<string, string> = {}): Promise<boolean> {
   try {
-    await fetch('/api/email/status', {
+    const res = await fetch('/api/email/status', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tipo, email: sol.email, nome: sol.nome, token: sol.token, ...extra }),
     });
+    if (!res.ok) return false;
+    const json = (await res.json().catch(() => null)) as { ok?: boolean } | null;
+    return json?.ok === true;
   } catch {
-    /* e-mail é melhor-esforço */
+    return false;
   }
 }
 
+const EMAIL_NAO_ENVIADO = 'O e-mail ao aluno NÃO foi enviado.';
+
+/**
+ * Caminho relativo: a rota /api/email/status resolve contra APP_BASE no servidor
+ * (safeInternalLink), então o cliente não depende de window.location.origin.
+ */
 function agendarLink(token?: string | null): string {
   if (!token) return '';
-  return `${window.location.origin}/agendar-entrevista?token=${encodeURIComponent(token)}`;
+  return `/agendar-entrevista?token=${encodeURIComponent(token)}`;
 }
 
 export async function loadSolicitacoes(): Promise<Solicitacao[]> {
@@ -200,12 +213,14 @@ export async function avancarEtapa(sol: Solicitacao): Promise<{ ok: boolean; msg
       .eq('hora', String(sol.entrevista_hora).slice(0, 5));
   }
 
-  if (p.emailEvent === 'docs_aprovados') await sendStatusEmail('docs_aprovados', sol, { token_link: agendarLink(sol.token) });
-  else if (p.emailEvent === 'entrevista_finalizada') await sendStatusEmail('entrevista_finalizada', sol);
-  else if (p.emailEvent === 'placa_em_caminho') await sendStatusEmail('placa_em_caminho', sol, { codigo_rastreio: sol.codigo_rastreio || '' });
-  if (ehFinal) await sendStatusEmail('placa_recebida', sol);
+  let emailsOk = true;
+  if (p.emailEvent === 'docs_aprovados') emailsOk = await sendStatusEmail('docs_aprovados', sol, { token_link: agendarLink(sol.token) });
+  else if (p.emailEvent === 'entrevista_finalizada') emailsOk = await sendStatusEmail('entrevista_finalizada', sol);
+  else if (p.emailEvent === 'placa_em_caminho') emailsOk = await sendStatusEmail('placa_em_caminho', sol, { codigo_rastreio: sol.codigo_rastreio || '' });
+  if (ehFinal && !(await sendStatusEmail('placa_recebida', sol))) emailsOk = false;
 
-  return { ok: true, msg: `"${AUDIT_STEPS[stepAtual].name}" confirmada!` };
+  const nome = AUDIT_STEPS[stepAtual].name;
+  return { ok: true, msg: emailsOk ? `"${nome}" confirmada!` : `"${nome}" confirmada. ${EMAIL_NAO_ENVIADO}` };
 }
 
 /** Volta uma etapa (sem disparar e-mail). Porta de voltarEtapa. */
@@ -229,8 +244,8 @@ export async function voltarEtapa(sol: Solicitacao): Promise<boolean> {
 }
 
 /** Aprova reenvio após correção → DOCS_APROVADOS + e-mail de agendamento. */
-export async function aprovarReenvio(sol: Solicitacao): Promise<boolean> {
-  if (!sol.proof_url || !sol.declaracao_url) return false;
+export async function aprovarReenvio(sol: Solicitacao): Promise<{ ok: boolean; msg: string }> {
+  if (!sol.proof_url || !sol.declaracao_url) return { ok: false, msg: 'Falhou.' };
   let s = sol;
   if (!s.aluno_id) {
     await bootstrapAuditoria(s);
@@ -246,13 +261,13 @@ export async function aprovarReenvio(sol: Solicitacao): Promise<boolean> {
     .update({ auditoria_step: novoStep, step_index: novoStep, status: 'docs_aprovados', regularizacao_pendente: false, motivo_retorno: null, ...buildAdminSeenPatch(true) })
     .eq('id', s.id);
   logQueryError('aprovarReenvio:solicitacao', r2.error);
-  if (r2.error) return false; // antes retornava true mesmo com RLS negando — toast "Feito!" mentiroso
+  if (r2.error) return { ok: false, msg: 'Falhou.' }; // antes retornava true mesmo com RLS negando — toast "Feito!" mentiroso
   const r1 = await supabase
     .from('thb_placas_auditoria')
     .upsert({ aluno_id: s.aluno_id, step_index: novoStep, dates, encerrado: false }, { onConflict: 'aluno_id' });
   logQueryError('aprovarReenvio:auditoria', r1.error);
-  await sendStatusEmail('docs_aprovados', s, { token_link: agendarLink(s.token) });
-  return true;
+  const sent = await sendStatusEmail('docs_aprovados', s, { token_link: agendarLink(s.token) });
+  return { ok: true, msg: sent ? 'Feito!' : `Reenvio aprovado. ${EMAIL_NAO_ENVIADO} Use "Reenviar e-mail de agendamento" na ficha.` };
 }
 
 /**
@@ -271,8 +286,9 @@ export async function solicitarCorrecao(sol: Solicitacao, motivo: string): Promi
   // A RPC zera admin_seen_at; como quem acabou de agir foi o admin, marcamos como visto
   // (o item volta a chamar atenção só quando o aluno reenviar).
   await supabase.from('thb_placas_solicitacoes').update(buildAdminSeenPatch(true)).eq('id', sol.id);
-  await sendStatusEmail('retorno_auditoria', sol, { token_link: `${window.location.origin}/solicitar-placa?token=${sol.token}`, motivo_retorno: m });
-  return { ok: true, msg: 'Reprovação registrada e aluno notificado.' };
+  // Sem token_link: a rota monta /solicitar-placa?token=… no servidor a partir do token.
+  const sent = await sendStatusEmail('retorno_auditoria', sol, { motivo_retorno: m });
+  return { ok: true, msg: sent ? 'Reprovação registrada e aluno notificado.' : `Reprovação registrada. ${EMAIL_NAO_ENVIADO}` };
 }
 
 /** thb_placas_reprovacoes — histórico imutável de reprovações (uma linha por evento). */
@@ -375,9 +391,15 @@ export async function agendarEntrevistaManual(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: sol.id, data, hora, enviar_email: enviarEmail }),
     });
-    const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; zoom_pending?: boolean } | null;
+    const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; zoom_pending?: boolean; sent?: boolean } | null;
     if (!json?.ok) return { ok: false, msg: json?.error || 'Não foi possível agendar.' };
-    return { ok: true, msg: json.zoom_pending ? 'Entrevista agendada (link Zoom pendente — verifique a configuração).' : 'Entrevista agendada!' };
+    // enviarEmail pedido e servidor não confirmou (sent !== true) → não afirmar sucesso do e-mail.
+    // Os dois avisos se somam: Zoom e e-mail falhando juntos é o caso em que o aluno ficou sem nada.
+    const base = json.zoom_pending ? 'Entrevista agendada (link Zoom pendente — verifique a configuração).' : 'Entrevista agendada!';
+    if (enviarEmail && json.sent !== true) {
+      return { ok: true, msg: json.zoom_pending ? `${base} ${EMAIL_NAO_ENVIADO}` : `Entrevista agendada. ${EMAIL_NAO_ENVIADO}` };
+    }
+    return { ok: true, msg: base };
   } catch {
     return { ok: false, msg: 'Não foi possível agendar.' };
   }
@@ -442,21 +464,21 @@ export function dadosLogistica(sol: Solicitacao): string {
 }
 
 /** Não compareceu: reabre agendamento (volta para docs_aprovados, limpa entrevista) + e-mail. */
-export async function marcarNaoCompareceu(sol: Solicitacao): Promise<boolean> {
-  if (!sol.aluno_id) return false;
+export async function marcarNaoCompareceu(sol: Solicitacao): Promise<{ ok: boolean; msg: string }> {
+  if (!sol.aluno_id) return { ok: false, msg: 'Falhou.' };
   const supabase = db();
   const r2 = await supabase
     .from('thb_placas_solicitacoes')
     .update({ auditoria_step: AUDIT_STEP_INDEX.DOCS_APROVADOS, step_index: AUDIT_STEP_INDEX.DOCS_APROVADOS, status: 'docs_aprovados', entrevista_data: null, entrevista_hora: null, entrevista_link: null, meet_link: null })
     .eq('id', sol.id);
   logQueryError('marcarNaoCompareceu:solicitacao', r2.error);
-  if (r2.error) return false;
+  if (r2.error) return { ok: false, msg: 'Falhou.' };
   const r1 = await supabase
     .from('thb_placas_auditoria')
     .upsert({ aluno_id: sol.aluno_id, step_index: AUDIT_STEP_INDEX.DOCS_APROVADOS, encerrado: false }, { onConflict: 'aluno_id' });
   logQueryError('marcarNaoCompareceu:auditoria', r1.error);
-  await sendStatusEmail('nao_compareceu', sol, { token_link: agendarLink(sol.token) });
-  return true;
+  const sent = await sendStatusEmail('nao_compareceu', sol, { token_link: agendarLink(sol.token) });
+  return { ok: true, msg: sent ? 'Feito!' : `Agendamento reaberto. ${EMAIL_NAO_ENVIADO} Use "Reenviar e-mail de agendamento" na ficha.` };
 }
 
 /** Remanejamento rápido: posiciona a auditoria numa etapa específica (0–6). */
@@ -506,12 +528,12 @@ export async function excluirSolicitacao(sol: Solicitacao): Promise<boolean> {
 }
 
 /** Rejeição definitiva: mantém o registro, notifica o aluno. Reversível via Remanejamento. */
-export async function rejeitar(sol: Solicitacao, motivo?: string): Promise<boolean> {
+export async function rejeitar(sol: Solicitacao, motivo?: string): Promise<{ ok: boolean; msg: string }> {
   const supabase = db();
   const { error } = await supabase.from('thb_placas_solicitacoes').update({ status: 'rejeitado', motivo_retorno: motivo?.trim() || null, ...buildAdminSeenPatch(true) }).eq('id', sol.id);
   if (error) {
     logQueryError('rejeitar', error);
-    return false;
+    return { ok: false, msg: 'Falhou.' };
   }
   // Encerra a auditoria (paridade com encerrarSolicitacao do legado). O trigger de nível
   // não dispara aqui: fn_sync_placa_nivel exige solicitação 'concluido'.
@@ -519,8 +541,8 @@ export async function rejeitar(sol: Solicitacao, motivo?: string): Promise<boole
     const r = await supabase.from('thb_placas_auditoria').update({ encerrado: true }).eq('aluno_id', sol.aluno_id);
     logQueryError('rejeitar:auditoria', r.error);
   }
-  await sendStatusEmail('solicitacao_rejeitada', sol, motivo?.trim() ? { motivo_retorno: motivo.trim() } : {});
-  return true;
+  const sent = await sendStatusEmail('solicitacao_rejeitada', sol, motivo?.trim() ? { motivo_retorno: motivo.trim() } : {});
+  return { ok: true, msg: sent ? 'Feito!' : `Solicitação rejeitada. ${EMAIL_NAO_ENVIADO}` };
 }
 
 export async function salvarRastreio(sol: Solicitacao, codigo: string): Promise<boolean> {
