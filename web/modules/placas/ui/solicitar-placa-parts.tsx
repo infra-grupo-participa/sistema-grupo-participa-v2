@@ -2,6 +2,7 @@
 
 // Componentes de apresentação (folhas, sem estado do wizard) do formulário público de placa.
 
+import { useState } from 'react';
 import { Button, CopyField, Timeline, type TimelineEntry } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { getClientTrackingState, CLIENT_TRACKING_STEPS } from '../domain/client-tracking';
@@ -72,16 +73,63 @@ export function Section({ icon, title, subtitle, children }: { icon?: string; ti
   );
 }
 
-export function Field({ icon, label, req, children }: { icon?: string; label: string; req?: boolean; children: React.ReactNode }) {
+export function Field({
+  icon,
+  label,
+  req,
+  htmlFor,
+  error,
+  children,
+}: {
+  icon?: string;
+  label: string;
+  req?: boolean;
+  /** id do controle — liga o rótulo ao campo e a mensagem de erro (`${htmlFor}-err`). */
+  htmlFor?: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="sp-field">
-      <label>
+      <label htmlFor={htmlFor}>
         {icon && <Icon name={icon} size={14} className="sp-field-ic" />}
         <span>{label}</span>
         {req && <span className="req">*</span>}
       </label>
       {children}
+      {error && <FieldErr id={htmlFor ? `${htmlFor}-err` : undefined}>{error}</FieldErr>}
     </div>
+  );
+}
+
+/** Mensagem de erro junto ao campo (referenciada por aria-describedby do controle). */
+export function FieldErr({ id, children }: { id?: string; children: React.ReactNode }) {
+  return <p id={id} className="sp-field-err">{children}</p>;
+}
+
+/** Bloco recolhível de campos opcionais. Já nasce aberto se algum opcional estiver preenchido. */
+export function OpcionalBloco({ preenchidos, total, children }: { preenchidos: number; total: number; children: React.ReactNode }) {
+  const [open, setOpen] = useState(preenchidos > 0);
+  return (
+    <details className="sp-opt" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary>
+        <span>
+          Opcional <span className="sp-opt-sub">— profissão, telefone profissional, site e redes{preenchidos ? ` · ${preenchidos} de ${total} preenchidos` : ''}</span>
+        </span>
+        <span className="sp-opt-acao" aria-hidden="true">{open ? 'Ocultar' : 'Mostrar'}</span>
+      </summary>
+      <div className="sp-opt-body">{children}</div>
+    </details>
+  );
+}
+
+/** Botão de ajuda pelo WhatsApp da Secretaria. Sem link (número ausente) → não renderiza. */
+export function AjudaWhatsApp({ href, label = 'Falar com a Secretaria no WhatsApp' }: { href?: string | null; label?: string }) {
+  if (!href) return null;
+  return (
+    <a className="sp-help" href={href} target="_blank" rel="noopener noreferrer">
+      {label}
+    </a>
   );
 }
 
@@ -161,7 +209,7 @@ function fmtInterviewDate(iso: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function TrackingCard({ data, onRefazer, refazerBusy, error }: { data: Record<string, unknown>; onRefazer?: () => void; refazerBusy?: boolean; error?: string }) {
+export function TrackingCard({ data, onRefazer, refazerBusy, error, ajudaHref }: { data: Record<string, unknown>; onRefazer?: () => void; refazerBusy?: boolean; error?: string; ajudaHref?: string | null }) {
   const { activeIndex, rejected } = getClientTrackingState(data);
   const concluido = String(data.status ?? '') === 'concluido';
   // Só oferece refazer se houver nível elegível superior (topo = Diamante Vermelho não refaz).
@@ -189,6 +237,7 @@ export function TrackingCard({ data, onRefazer, refazerBusy, error }: { data: Re
             Se você acredita que houve um engano ou quer entender os critérios, fale com a nossa
             Secretaria — teremos prazer em orientar os próximos passos.
           </div>
+          <AjudaWhatsApp href={ajudaHref} />
         </div>
       </div>
     );

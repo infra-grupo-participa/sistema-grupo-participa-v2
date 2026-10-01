@@ -94,7 +94,7 @@ export const DEFAULT_NIVEL_FAIXAS: Record<string, NivelFaixa> = {
   em_formacao: { nm: 'Em Formação', fx: 'Estudando o curso' },
   pessoal: { nm: 'Pessoal', fx: 'Só minha holding' },
   profissional: { nm: 'Profissional', fx: 'Oferecendo a clientes' },
-  ouro: { nm: 'Ouro', fx: 'Primeiros R$ 50k faturado' },
+  ouro: { nm: 'Ouro', fx: 'Primeiros R$ 50 mil faturados (acumulado)' },
   platina: { nm: 'Platina', fx: 'R$ 500k em 12 meses' },
   diamante: { nm: 'Diamante', fx: 'R$ 1M em 12 meses' },
   diamante_vermelho: { nm: 'Diamante Vermelho', fx: 'R$ 5M em 12 meses' },

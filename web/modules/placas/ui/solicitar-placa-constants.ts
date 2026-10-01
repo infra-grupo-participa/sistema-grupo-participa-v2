@@ -1,11 +1,17 @@
 // Constantes e tipos do wizard público de solicitação de placa.
 
+import { NIVEL_MIN_FATURAMENTO } from '../domain/form-progress';
+import { DEFAULT_NIVEL_FAIXAS } from '../domain/config';
+
 export const TOTAL_STEPS = 6;
 export const STEP_NAMES = ['', 'Seus dados', 'Interesse', 'Seu nível', 'Comprovação', 'Declaração', 'Endereço'];
 export const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
 
-/** Turmas selecionáveis (T1..T38) — conjunto fechado para evitar divergência de preenchimento. */
-export const TURMAS = Array.from({ length: 38 }, (_, i) => `T${i + 1}`);
+/**
+ * Turmas de RESERVA (T1..T41). A lista real vem de public.thb_turmas (tipo='thb') lida no servidor
+ * (placa-public-config.ts); esta só entra se a leitura falhar.
+ */
+export const TURMAS = Array.from({ length: 41 }, (_, i) => `T${i + 1}`);
 
 /** Sugestões de profissão do autocomplete (dedupe preserva a ordem canônica do legado). */
 export const PROFISSOES = Array.from(
@@ -80,7 +86,7 @@ export const NIVEIS = [
   { v: 'em_formacao', ic: 'biblioteca', nm: 'Em Formação', fx: 'Estudando o curso' },
   { v: 'pessoal', ic: 'user', nm: 'Pessoal', fx: 'Só minha holding' },
   { v: 'profissional', ic: 'briefcase', nm: 'Profissional', fx: 'Oferecendo a clientes' },
-  { v: 'ouro', ic: 'medal', nm: 'Ouro', fx: 'Primeiros R$ 50k faturado' },
+  { v: 'ouro', ic: 'medal', nm: 'Ouro', fx: 'Primeiros R$ 50 mil faturados' },
   { v: 'platina', ic: 'coins', nm: 'Platina', fx: 'R$ 500k em 12 meses' },
   { v: 'diamante', ic: 'gem', nm: 'Diamante', fx: 'R$ 1M em 12 meses' },
   { v: 'diamante_vermelho', ic: 'gem', nm: 'Diamante Vermelho', fx: 'R$ 5M em 12 meses' },
@@ -93,4 +99,56 @@ export type View = 'loading' | 'form' | 'success' | 'cadastro' | 'tracking' | 'e
 export interface FormConfig {
   niveis: { v: string; ic: string; nm: string; fx: string }[];
   textos: { upload_info: string; cadastro_info: string; espacos: { v: string; l: string }[] };
+  /** Turmas THB (servidor, cache 1 h). Ausente → TURMAS. */
+  turmas?: string[];
+  /** wa.me da Secretaria com mensagem pronta. null/ausente → botão de ajuda não aparece. */
+  ajudaHref?: string | null;
+}
+
+// ── Upload: mesma regra do servidor (PLACA_MIME_MAP + 10 MB), checada antes de enviar ──
+export const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+export const UPLOAD_ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp';
+const UPLOAD_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+const UPLOAD_EXTS = ['pdf', 'jpg', 'jpeg', 'png', 'webp'];
+
+/** null = arquivo aceito; senão, a mensagem para o aluno. O servidor revalida pelo conteúdo. */
+export function validarArquivoUpload(file: { name: string; type: string; size: number }): string | null {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  const mime = (file.type || '').toLowerCase();
+  if (mime === 'image/heic' || mime === 'image/heif' || ext === 'heic' || ext === 'heif') {
+    return 'Foto do iPhone em HEIC não é aceita — envie em JPG ou PDF.';
+  }
+  const tipoOk = mime ? UPLOAD_MIMES.includes(mime) : UPLOAD_EXTS.includes(ext);
+  if (!tipoOk) return 'Formato não aceito. Envie PDF, JPG, PNG ou WEBP.';
+  if (file.size <= 0) return 'O arquivo está vazio. Escolha outro arquivo.';
+  if (file.size > UPLOAD_MAX_BYTES) return 'O arquivo passa do limite de 10 MB. Reduza a foto ou envie em PDF.';
+  return null;
+}
+
+/** Querystring do modelo de declaração: dados do aluno + texto e valor mínimo do nível (domínio). */
+export function queryDeclaracao(form: Form): string {
+  const qs = new URLSearchParams();
+  if (form.nome) qs.set('nome', form.nome);
+  if (form.profissao) qs.set('profissao', form.profissao);
+  if (form.cidade) qs.set('cidade', form.cidade);
+  if (form.estado_uf) qs.set('estado_uf', form.estado_uf);
+  const nivel = form.nivel || '';
+  qs.set('nivel', nivel);
+  const label = DEFAULT_NIVEL_FAIXAS[nivel]?.nm;
+  if (label) qs.set('nivel_label', label);
+  const min = NIVEL_MIN_FATURAMENTO[nivel];
+  if (min) qs.set('nivel_valor', `R$ ${min.toLocaleString('pt-BR')}`);
+  return qs.toString();
+}
+
+/** Mensagem que orienta, por status HTTP. 422 traz o motivo específico do servidor e é mantido. */
+export function mensagemErroServidor(status: number, msgServidor?: string, padrao = 'Não foi possível salvar. Confira os dados e tente de novo.'): string {
+  if (status === 0) return 'Sem conexão com a internet. Verifique o sinal e tente de novo.';
+  if (status === 403) return 'Não conseguimos validar este acesso. Recarregue a página e tente de novo.';
+  if (status === 404) return 'Não encontramos sua solicitação neste aparelho. Abra o link pessoal enviado ao seu e-mail ou use "Recuperar".';
+  if (status === 409) return 'Este processo já foi enviado e não pode mais ser alterado por aqui. Recarregue a página para ver o andamento.';
+  if (status === 429) return 'Muitas tentativas seguidas. Aguarde um minuto e tente de novo.';
+  if (status >= 500) return 'Tente de novo em instantes — nosso sistema não respondeu.';
+  if (status === 422 && msgServidor) return msgServidor;
+  return padrao;
 }

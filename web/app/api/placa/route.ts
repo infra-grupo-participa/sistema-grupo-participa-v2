@@ -1,8 +1,14 @@
 import type { NextRequest } from 'next/server';
-import { bootstrapPublic, clientIp, jsonError, jsonOk } from '@/shared/infrastructure/http/security';
+import { bootstrapPublic, clientIp, jsonError, jsonOk, placaTrackingLink } from '@/shared/infrastructure/http/security';
 import { rateLimitOk, sweepRateLimit } from '@/shared/infrastructure/http/rate-limit';
 import { onlyDigits, safeEmail } from '@/shared/infrastructure/http/validation';
-import { clearPlacaCookie, resolvePlacaToken, setPlacaCookie } from '@/shared/infrastructure/http/session-cookie';
+import {
+  clearPlacaCookie,
+  failedTokenIsCookie,
+  resolvePlacaTokenSource,
+  setPlacaCookie,
+  type ResolvedPlacaToken,
+} from '@/shared/infrastructure/http/session-cookie';
 import { SupabasePublicPlaca, maskDocsForPublic } from '@/modules/placas/infrastructure/supabase-public-placa';
 import { sanitizeFormPayload } from '@/modules/placas/application/sanitize-form';
 import { validateFormProgress } from '@/modules/placas/domain/form-progress';
@@ -20,7 +26,7 @@ function todaySaoPaulo(): string {
 }
 
 /** Fecho do submit: confirmação de recebimento ou de cadastro (melhor-esforço, com override do admin). */
-async function emailFechoSubmit(tipo: EmailTipo, email: string, nome: string, trackingLink: string): Promise<void> {
+async function emailFechoSubmit(tipo: EmailTipo, email: string, nome: string, trackingLink: string): Promise<boolean> {
   try {
     const content = getEmailContentByStatus(tipo, {}, trackingLink);
     const { email_templates } = await readPlacasConfig();
@@ -31,10 +37,30 @@ async function emailFechoSubmit(tipo: EmailTipo, email: string, nome: string, tr
       if (ov.corpo_extra?.trim()) content.templateData.corpo_extra = emailDynamicBoxes(tipo, {}) + ov.corpo_extra.trim();
     }
     const html = buildEmailTemplate({ ...content.templateData, nome });
-    await sendMail({ to: email, subject: content.assunto, html });
+    return await sendMail({ to: email, subject: content.assunto, html });
   } catch {
-    /* e-mail é melhor-esforço — não bloqueia o submit */
+    /* e-mail é melhor-esforço — não bloqueia o submit; o chamador decide se avisa o candidato */
+    return false;
   }
+}
+
+/**
+ * 404 de token inexistente. Contrato: { error, token_invalido: true, token_fonte, sessao_preservada }.
+ * O cookie só é apagado quando o token que falhou ERA o do cookie — UUID inválido vindo da
+ * URL/body não derruba a sessão válida guardada no cookie.
+ */
+function tokenNotFound(r: ResolvedPlacaToken, cookieTambemFalhou = false) {
+  const doCookie = cookieTambemFalhou || failedTokenIsCookie(r);
+  const res = jsonOk(
+    {
+      error: 'Não foi possível concluir a operação.',
+      token_invalido: true,
+      token_fonte: r.source,
+      sessao_preservada: !doCookie && r.cookieToken !== '',
+    },
+    404,
+  );
+  return doCookie ? clearPlacaCookie(res) : res;
 }
 
 export async function GET(request: NextRequest) {
@@ -43,14 +69,34 @@ export async function GET(request: NextRequest) {
   sweepRateLimit();
   if (!rateLimitOk(clientIp(request), 'gp_placa_public_rate_', 60, 300)) return jsonError('Tente novamente em instantes.', 429);
 
-  const token = resolvePlacaToken(request);
-  if (!token) return jsonError('Não foi possível concluir a operação.', 400);
+  const resolved = resolvePlacaTokenSource(request);
+  if (!resolved.token) return jsonError('Não foi possível concluir a operação.', 400);
 
   const gateway = new SupabasePublicPlaca();
-  const row = await gateway.loadByToken(token);
-  if (!row) return clearPlacaCookie(jsonError('Não foi possível concluir a operação.', 404));
+  let token = resolved.token;
+  let row = await gateway.loadByToken(token);
+  let urlInvalida = false;
+  if (!row && resolved.source === 'query' && resolved.cookieToken && resolved.cookieToken !== token) {
+    // Link com UUID inexistente + cookie de sessão: GET é só leitura, então cai para a
+    // sessão do cookie em vez de derrubá-la. O front recebe token_url_invalido + o token real.
+    const fromCookie = await gateway.loadByToken(resolved.cookieToken);
+    if (fromCookie) {
+      row = fromCookie;
+      token = resolved.cookieToken;
+      urlInvalida = true;
+    } else {
+      // Os dois falharam: o cookie também é lixo — pode limpar.
+      return tokenNotFound(resolved, true);
+    }
+  }
+  if (!row) return tokenNotFound(resolved);
 
   const payload: Record<string, unknown> = { ok: true, solicitacao: maskDocsForPublic(row) };
+  if (urlInvalida) {
+    payload.token_url_invalido = true;
+    payload.token_fonte = 'cookie';
+    payload.token = token;
+  }
 
   if (request.nextUrl.searchParams.get('include_slots') === '1') {
     const today = todaySaoPaulo();
@@ -78,7 +124,8 @@ export async function POST(request: NextRequest) {
   if (!body) return jsonError('Não foi possível concluir a operação.', 400);
 
   const action = String(body.action ?? 'save').trim();
-  const token = resolvePlacaToken(request, body);
+  const resolved = resolvePlacaTokenSource(request, body);
+  const token = resolved.token;
   const gateway = new SupabasePublicPlaca();
 
   // ── duplicate-check ──
@@ -116,7 +163,7 @@ export async function POST(request: NextRequest) {
     if (!res.ok) {
       if (res.reason === 'nao_refazivel') return jsonError('Esta solicitação ainda não pode ser refeita.', 409);
       if (res.reason === 'nivel_maximo') return jsonError('Você já está no nível máximo (Diamante Vermelho) — não há nível superior para refazer.', 409);
-      if (res.reason === 'nao_encontrada') return clearPlacaCookie(jsonError('Não foi possível concluir a operação.', 404));
+      if (res.reason === 'nao_encontrada') return tokenNotFound(resolved);
       return jsonError('Não foi possível iniciar o novo processo.', 502);
     }
     return setPlacaCookie(jsonOk({ ok: true, solicitacao: maskDocsForPublic(res.row) }), token);
@@ -149,17 +196,18 @@ export async function POST(request: NextRequest) {
     // Âncora multi-dispositivo: o link pessoal vai para o e-mail já na 1ª etapa —
     // o candidato pode continuar de qualquer aparelho mesmo sem o cookie desta sessão.
     const emailNovo = safeEmail(String(payload.email ?? ''));
-    if (emailNovo) {
-      await emailFechoSubmit('link_acesso', emailNovo, String(payload.nome ?? 'Candidato'), `${boot.origin.replace(/\/$/, '')}/solicitar-placa?token=${newToken}`);
-    }
+    // email_enviado: a tela só afirma "enviamos o link" quando o envio foi confirmado.
+    const emailEnviado = emailNovo
+      ? await emailFechoSubmit('link_acesso', emailNovo, String(payload.nome ?? 'Candidato'), placaTrackingLink(newToken))
+      : false;
     return setPlacaCookie(
-      jsonOk({ ok: true, token: newToken, status: created.status, step_index: created.step_index }),
+      jsonOk({ ok: true, token: newToken, status: created.status, step_index: created.step_index, email_enviado: emailEnviado }),
       newToken,
     );
   }
 
   const existing = await gateway.loadByToken(token);
-  if (!existing) return clearPlacaCookie(jsonError('Não foi possível concluir a operação.', 404));
+  if (!existing) return tokenNotFound(resolved);
   // Estados terminais só reabrem via RPC de refazer (fn_placas_refazer), que grava o piso
   // nivel_anterior. Bloquear a escrita direta aqui impede burlar o bloqueio de nível: sem
   // isso, uma chamada crua poderia re-salvar um cadastro_concluido sem passar pelo refazer.
@@ -183,7 +231,8 @@ export async function POST(request: NextRequest) {
 
   const emailDestino = safeEmail(String(payload.email ?? existing.email ?? ''));
   const nomeDestino = String(payload.nome ?? existing.nome ?? 'Candidato');
-  const trackingLink = `${boot.origin.replace(/\/$/, '')}/solicitar-placa?token=${token}`;
+  // Link de e-mail: base fixa do app (NEXT_PUBLIC_APP_URL), nunca o Host/Origin da requisição.
+  const trackingLink = placaTrackingLink(token);
   const jaEnviado = String(existing.status ?? '');
 
   if (payload.status === 'enviado' && Number(payload.step_index) === 6) {

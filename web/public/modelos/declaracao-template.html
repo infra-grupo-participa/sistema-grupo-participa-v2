@@ -149,11 +149,12 @@
     const params = new URLSearchParams(window.location.search);
     // Parâmetros vêm da URL (controlável por terceiros): sempre escapar antes de injetar em innerHTML.
     const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const limpaUrl = (v) => String(v || '').slice(0, 80);
     const nivel = params.get('nivel') || '';
-    const nome = escapeHtml(params.get('nome') || '_________________________');
-    const profissao = escapeHtml(params.get('profissao') || '___________________');
-    const cidade = escapeHtml(params.get('cidade') || '___________________');
-    const estado = escapeHtml(params.get('estado_uf') || '___');
+    const nome = escapeHtml(limpaUrl(params.get('nome')) || '_________________________');
+    const profissao = escapeHtml(limpaUrl(params.get('profissao')) || '___________________');
+    const cidade = escapeHtml(limpaUrl(params.get('cidade')) || '___________________');
+    const estado = escapeHtml(limpaUrl(params.get('estado_uf')) || '___');
 
     const dt = new Date();
     const meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -170,16 +171,19 @@
       'diamante_vermelho': { label: 'Diamante Vermelho', valor: 'R$ 5.000.000' }
     };
 
+    // Prioridade: nivel_label / nivel_valor da URL. NIVEL_MAP é só reserva para links antigos.
+    const MAX = 80;
+    const limpa = (v) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, MAX);
     const nivelNormalizado = nivel.toLowerCase().trim().replace(/\s+/g, '_');
-    const cfg = NIVEL_MAP[nivelNormalizado];
-    if (!cfg) {
-      document.getElementById('content').innerHTML = '<p style="color:red; text-align:center">Nível inválido para geração de declaração.</p>';
-      document.getElementById('dica').style.display = 'none';
-      return;
-    }
+    const reserva = NIVEL_MAP[nivelNormalizado];
+    const codigoFormatado = limpa(nivel).replace(/[_-]+/g, ' ').replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+    const labelNivel = limpa(params.get('nivel_label')) || (reserva && reserva.label) || codigoFormatado || '__________';
+    const valorNivel = limpa(params.get('nivel_valor')) || (reserva && reserva.valor) || '';
+    // Ouro = valor acumulado (decisão do dono); demais níveis mantêm a janela de 12 meses.
+    const ehOuro = nivelNormalizado === 'ouro' || labelNivel.toLowerCase() === 'ouro';
 
     const html = `
-      <p>Me chamo ${campoDestaque(nome)}, sou ${campoDestaque(profissao)}, inscrito na ${lacunaManual('órgão de classe')} sob o número ${lacunaManual('nº da inscrição')}, resido/atuo na cidade de ${campoDestaque(cidade)}/${campoDestaque(estado)} e declaro para todos os fins que me tornei profissional Nível ${campoDestaque(cfg.label)} por ter faturado mais de ${campoDestaque(cfg.valor)} nos últimos doze meses, trabalhando com Holding Familiar e implementando as técnicas específicas e de captação de clientes que me foram ensinadas pelo Professor Marcio Carvalho de Sá.</p>
+      <p>Me chamo ${campoDestaque(nome)}, sou ${campoDestaque(profissao)}, inscrito na ${lacunaManual('órgão de classe')} sob o número ${lacunaManual('nº da inscrição')}, resido/atuo na cidade de ${campoDestaque(cidade)}/${campoDestaque(estado)} e declaro para todos os fins que me tornei profissional Nível <strong id="slot-nivel"></strong> por ter faturado ${ehOuro ? 'os primeiros' : 'mais de'} ${valorNivel ? '<strong id="slot-valor"></strong>' : lacunaManual('valor mínimo')}${ehOuro ? ' (valor acumulado)' : ' nos últimos doze meses'}, trabalhando com Holding Familiar e implementando as técnicas específicas e de captação de clientes que me foram ensinadas pelo Professor Marcio Carvalho de Sá.</p>
 
       <p style="margin-top:40px">${campoDestaque(cidade)}, ${campoDestaque(dataHoje)}.</p>
 
@@ -191,8 +195,12 @@
       </div>
     `;
 
-    document.title = `Declaração Nível ${cfg.label} - ${params.get('nome') || ''}`;
+    document.title = `Declaração Nível ${labelNivel} - ${limpa(params.get('nome'))}`;
     document.getElementById('content').innerHTML = html;
+    // Valores vindos da URL entram só como texto (nunca innerHTML)
+    document.getElementById('slot-nivel').textContent = labelNivel;
+    const slotValor = document.getElementById('slot-valor');
+    if (slotValor) slotValor.textContent = valorNivel;
 
     // Higiene do contenteditable: sem quebras de linha e sem colar HTML formatado
     document.querySelectorAll('.lacuna').forEach((el) => {

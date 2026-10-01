@@ -704,6 +704,10 @@
   gap: 12px;
   margin-top: 24px;
 }
+/* Alvo de toque ≥ 44 px no celular (o Button padrão mede 38 px). */
+.sp-nav button {
+  min-height: 44px;
+}
 .sp-btn-next {
   background: linear-gradient(135deg, var(--orange), var(--orange-2));
   color: #fff; /* hex-ok: contraste sobre botão âmbar */
@@ -815,4 +819,106 @@
 }
 .sp-success .em {
   font-size: 48px;
+}
+
+/* Erro junto ao campo (aria-describedby do controle) */
+.sp-field input[aria-invalid='true'],
+.sp-field select[aria-invalid='true'] {
+  border-color: var(--red);
+}
+.sp-field-err {
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 500;
+  margin: 5px 0 0;
+}
+
+/* Bloco recolhível de campos opcionais (etapa 1) */
+.sp-opt {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  margin: 2px 0 15px;
+}
+.sp-opt > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 14px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  border-radius: 11px;
+}
+.sp-opt > summary::-webkit-details-marker {
+  display: none;
+}
+.sp-opt > summary:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+.sp-opt-sub {
+  font-weight: 400;
+  color: var(--muted);
+}
+.sp-opt-acao {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: underline;
+}
+.sp-opt-body {
+  padding: 4px 14px 0;
+}
+
+/* Estado do upload (nome + enviando/enviado) */
+.sp-up-status:empty {
+  display: none;
+}
+
+/* Ajuda: WhatsApp da Secretaria */
+.sp-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.sp-help:hover {
+  border-color: var(--faint);
+}
+.sp-help:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+.sp-help-foot {
+  max-width: 660px;
+  margin: 14px auto 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.sp-help-foot .sp-help {
+  margin-top: 0;
+  border-color: transparent;
+  background: transparent;
+  text-decoration: underline;
 }

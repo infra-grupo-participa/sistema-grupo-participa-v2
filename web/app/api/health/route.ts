@@ -24,6 +24,7 @@ export async function GET() {
       GROQ_API_KEY: has('GROQ_API_KEY'),
       ZOOM_CLIENT_ID: has('ZOOM_CLIENT_ID'),
       NEXT_PUBLIC_APP_URL: has('NEXT_PUBLIC_APP_URL'),
+      CRON_SECRET: has('CRON_SECRET'),
     },
     time: new Date().toISOString(),
   });

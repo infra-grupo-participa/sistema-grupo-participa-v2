@@ -29,7 +29,27 @@ export function allowedOrigins(): string[] {
   return Array.from(new Set([...LEGACY_ORIGINS, ...env.app.allowedOrigins].map((o) => originBase(o)).filter(Boolean)));
 }
 
-/** Origem do próprio deploy (proto+host), considerando proxies (Hostinger/Vercel). */
+const APP_URL_FALLBACK = 'https://grupoparticipa.app.br';
+
+/**
+ * Base pública do app para links que saem do servidor (e-mail, lembrete).
+ * Vem SÓ de NEXT_PUBLIC_APP_URL (fallback de produção) — nunca do Host/X-Forwarded-Host
+ * da requisição, que o cliente controla (host spoofing → link ?token= apontando para
+ * domínio do atacante). Sem barra final.
+ */
+export function publicAppBaseUrl(): string {
+  return originBase(process.env.NEXT_PUBLIC_APP_URL || '') || APP_URL_FALLBACK;
+}
+
+/** Link pessoal do candidato (?token=) — sempre ancorado em publicAppBaseUrl(). */
+export function placaTrackingLink(token: string): string {
+  return `${publicAppBaseUrl()}/solicitar-placa?token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * Origem do próprio deploy (proto+host), considerando proxies (Hostinger/Vercel).
+ * Usada SÓ para reconhecer requisição same-origin em validateOrigin — nunca para montar link.
+ */
 function selfOrigin(request: Request): string {
   const h = request.headers;
   const proto = (h.get('x-forwarded-proto') || '').split(',')[0].trim() || 'https';
@@ -42,11 +62,20 @@ function selfOrigin(request: Request): string {
  * Requisições same-origin (a origem bate com o próprio host do deploy) são sempre
  * aceitas — é o caso normal do formulário e não configura CSRF de terceiros. Isso
  * dispensa cadastrar domínios de preview/definitivos (ex.: *.hostingersite.com) na allowlist.
+ *
+ * GET sem Origin E sem Referer (alguns navegadores omitem ambos em fetch same-origin):
+ * aceito quando Sec-Fetch-Site é same-origin, none ou ausente. cross-site/same-site → null.
+ * POST sem Origin/Referer continua recusado.
  */
 export function validateOrigin(request: Request): string | null {
   const origin = request.headers.get('origin') || '';
   const referer = request.headers.get('referer') || '';
-  if (!origin && !referer) return null;
+  if (!origin && !referer) {
+    if (request.method !== 'GET') return null;
+    const site = (request.headers.get('sec-fetch-site') || '').trim().toLowerCase();
+    if (site === '' || site === 'same-origin' || site === 'none') return publicAppBaseUrl();
+    return null;
+  }
   const allow = allowedOrigins();
   const self = selfOrigin(request);
   for (const header of [origin, referer]) {

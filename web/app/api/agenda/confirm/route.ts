@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { bootstrapPublic, clientIp, jsonError, jsonOk } from '@/shared/infrastructure/http/security';
+import { bootstrapPublic, clientIp, jsonError, jsonOk, placaTrackingLink } from '@/shared/infrastructure/http/security';
 import { rateLimitOk, sweepRateLimit } from '@/shared/infrastructure/http/rate-limit';
 import { isDateIso, isTimeHm, safeEmail } from '@/shared/infrastructure/http/validation';
 import { resolvePlacaToken } from '@/shared/infrastructure/http/session-cookie';
@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
   const boot = bootstrapPublic(request, ['POST']);
   if (!boot.ok) return boot.response;
   const origin = boot.origin.replace(/\/$/, '');
+  // session_link volta só na resposta JSON ao próprio cliente (Origin já validado); o link
+  // de e-mail usa placaTrackingLink (NEXT_PUBLIC_APP_URL), nunca o Host da requisição.
   const sessionLink = `${origin}/solicitar-placa`;
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
@@ -133,7 +135,7 @@ export async function POST(request: NextRequest) {
     // Confirmação ao CANDIDATO (melhor-esforço) — o link do Zoom vai por e-mail além da tela.
     const candidatoEmail = safeEmail(String(sol.email ?? ''));
     if (candidatoEmail) {
-      await emailCandidato(candidatoEmail, String(sol.nome ?? 'Candidato'), data, hora, zoomLink, `${origin}/solicitar-placa?token=${token}`).catch(() => undefined);
+      await emailCandidato(candidatoEmail, String(sol.nome ?? 'Candidato'), data, hora, zoomLink, placaTrackingLink(token)).catch(() => undefined);
     }
 
     return jsonOk({
