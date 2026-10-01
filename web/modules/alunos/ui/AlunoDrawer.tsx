@@ -14,6 +14,7 @@ import { nivelLabel } from '@/shared/domain/nivel-resultado';
 import { loadPlacaHistorico, type Turma, type PlacaHistorico } from './alunos-data';
 import { loadCiclosByAluno, type Ciclo } from '@/modules/placas/ui/admin/placas-admin-data';
 import { cursoDesempenhoMock } from '../domain/curso-mock';
+import { textoPrazo, vigenciaPrograma, type TomVigencia, type Vigencia } from '../domain/vigencia-programa';
 import { pendenciasAluno, contarPorAba, type AbaPendencia, type PendenciaAluno } from '../domain/pendencias-aluno';
 import { TIPOS_VINCULO_TITULAR, type ItemConciliacao } from '../domain/conciliacao';
 import { DefinirTitular } from './DefinirTitular';
@@ -263,11 +264,28 @@ function AbaPrograma({ a, sit, instr, espaco, vinculo, onAbrirAluno, definirTitu
   const rs = renovacaoStatus(a.turma_codigo);
   const info = rs ? RENOVACAO_LABEL[rs] : null;
   const st = a.status_acesso ? STATUS_ACESSO[a.status_acesso] : null;
+  const hoje = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+  const inicio = a.data_compra_importada ? { data: a.data_compra_importada, rotulo: 'compra' } : a.data_entrada_thb ? { data: a.data_entrada_thb, rotulo: 'entrada no THB' } : null;
+  const vig = vigenciaPrograma(inicio?.data, a.data_expiracao, hoje);
+  const semVenc = motivoSemVencimento(a) || (a.situacao_acesso === 'acompanha_titular' ? 'Acompanha titular' : null);
   return (
     <>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <MiniStat label="Situação" tone={sit ? COR_SIT[sit.cls] : undefined} i={0}>{sit?.label || '—'}</MiniStat>
+        <MiniStat label="Vigência até" tone={vig ? COR_TOM[vig.tom] : undefined} i={1}>
+          <span className="tabular">{a.data_expiracao ? fmtData(a.data_expiracao) : (semVenc || '—')}</span>
+        </MiniStat>
+        <MiniStat label="Renovações" i={2}><span className="tabular">{a.num_renovacoes == null ? '—' : a.num_renovacoes}</span></MiniStat>
+        <MiniStat label="Acesso ao curso" i={3}>{st?.label || '—'}</MiniStat>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 items-start">
         <SectionCard title={<SecTitle icon="refresh">Renovação e vigência</SecTitle>}>
           <Section>
+            <BarraVigencia vig={vig} inicio={inicio} fim={a.data_expiracao} semVenc={semVenc} />
             {info ? (
               <div className={`p-2.5 rounded-[var(--r-md)] mb-2 text-xs ${rs === 'em_renovacao' ? 'bg-[var(--yellow-subtle)] text-[var(--yellow)]' : 'bg-[var(--red-subtle)] text-[var(--red)]'}`}>
                 <span className="inline-flex items-center gap-1.5">{rs === 'em_renovacao' ? <Icon name="refresh" size={12} /> : <Icon name="alert" size={12} />} {info.label}</span>
@@ -278,14 +296,14 @@ function AbaPrograma({ a, sit, instr, espaco, vinculo, onAbrirAluno, definirTitu
                 </div>
               </div>
             ) : <div className="text-xs text-[var(--fg-3)] mb-2">Sem turma THB definida — status de renovação indisponível.</div>}
+            <SubTitle>Turma e nível</SubTitle>
             <Row k="Turma THB" v={a.turma_codigo} />
             <Row k="Turma Aurum" v={a.turma_aurum_codigo} />
             {a.placa_aurum && <Row k="Placa Aurum" v={a.placa_aurum} />}
             <Row k="Nível de resultado" v={nivelLabel(a.nivel_resultado) || '—'} />
-            <Row k="Renovações" v={a.num_renovacoes == null ? '—' : String(a.num_renovacoes)} />
+            <SubTitle>Prazo de acesso</SubTitle>
             <Row k="Regra de acesso" v={a.regra_acesso} />
             <Row k="Tempo de acesso" v={a.tempo_acesso} />
-            <Row k="Vencimento" v={a.data_expiracao ? fmtData(a.data_expiracao) : (motivoSemVencimento(a) || (a.situacao_acesso === 'acompanha_titular' ? 'Acompanha titular' : '—'))} />
             {(a.mes_expiracao || a.ano_expiracao) && <Row k="Mês/Ano expiração" v={[a.mes_expiracao, a.ano_expiracao].filter(Boolean).join('/')} />}
             <Row k="Entrou no THB" v={a.data_entrada_thb ? fmtData(a.data_entrada_thb) : '—'} />
             <Row k="Data da compra" v={fmtData(a.data_compra_importada)} />
@@ -294,11 +312,8 @@ function AbaPrograma({ a, sit, instr, espaco, vinculo, onAbrirAluno, definirTitu
 
         <SectionCard title={<SecTitle icon="graduation">Acesso ao Curso</SecTitle>}>
           <Section>
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {sit && <Badge tone={sitTone(sit.cls)} dot>{sit.label}</Badge>}
-              {st && <Badge tone={st.cls === 'green' ? 'success' : st.cls === 'blue' ? 'info' : 'neutral'}>{st.label}</Badge>}
-              {a.status_acesso_central && <Badge tone="neutral">{a.status_acesso_central}</Badge>}
-            </div>
+            {/* Situação e status de acesso estão no topo da aba; aqui fica só o status da Central. */}
+            {a.status_acesso_central && <Row k="Status na Central" v={a.status_acesso_central} />}
             {a.tratamento_manual && <div className="mb-2 p-2 rounded bg-[var(--yellow-subtle)] text-[var(--yellow)] text-xs flex items-center gap-1.5"><Icon name="alert" size={13} /> {a.tratamento_manual}</div>}
             <SubTitle>Produto &amp; oferta</SubTitle>
             <Row k="Produto" v={a.produto} />
@@ -349,6 +364,48 @@ function AbaPrograma({ a, sit, instr, espaco, vinculo, onAbrirAluno, definirTitu
         </div>
       </SectionCard>
     </>
+  );
+}
+
+const COR_TOM: Record<TomVigencia, string> = { success: 'var(--green)', warning: 'var(--yellow)', danger: 'var(--red)' };
+const COR_SIT: Record<string, string> = { green: 'var(--green)', yellow: 'var(--yellow)', red: 'var(--red)' };
+
+/** Início → vencimento com o marcador de hoje; tom pela proximidade do vencimento (janela de 30 dias). */
+function BarraVigencia({ vig, inicio, fim, semVenc }: {
+  vig: Vigencia | null;
+  inicio: { data: string; rotulo: string } | null;
+  fim: string | null;
+  semVenc: string | null;
+}) {
+  if (!vig || !fim) {
+    return <div className="text-xs text-[var(--fg-3)] mb-2">{semVenc ? `${semVenc} — sem barra de vigência.` : 'Sem data de vencimento — vigência indisponível.'}</div>;
+  }
+  const cor = COR_TOM[vig.tom];
+  const prazo = textoPrazo(vig.diasRestantes);
+  return (
+    <div className="mb-2">
+      {vig.pct != null && inicio && (
+        <div
+          className="relative h-3 overflow-hidden"
+          role="progressbar"
+          aria-valuenow={Math.round(vig.pct)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuetext={`${Math.round(vig.pct)}% da vigência decorrida, ${prazo}`}
+          aria-label="Vigência do acesso"
+        >
+          <div className="absolute inset-x-0 top-[3px] h-1.5 rounded-[var(--r-pill)] bg-[var(--surface-4)]">
+            <div className="h-full rounded-[var(--r-pill)]" style={{ width: `${vig.pct}%`, background: cor }} />
+          </div>
+          <div className="absolute top-0 h-3 w-0.5 bg-[var(--fg)]" style={{ left: `clamp(0px, calc(${vig.pct}% - 1px), calc(100% - 2px))` }} title="Hoje" />
+        </div>
+      )}
+      <div className="mt-1 flex items-baseline justify-between gap-2 text-[11px] text-[var(--fg-3)] tabular">
+        <span>{vig.pct != null && inicio ? `${fmtData(inicio.data)} · ${inicio.rotulo}` : ''}</span>
+        <span className="font-semibold" style={{ color: cor }}>{prazo}</span>
+        <span>{fmtData(fim)} · vencimento</span>
+      </div>
+    </div>
   );
 }
 

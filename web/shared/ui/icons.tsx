@@ -13,7 +13,7 @@ import {
 const MAP: Record<string, LucideIcon> = {
   // navegação
   home: Home, alunos: Users, users: Users, user: User, placas: Trophy, trophy: Trophy,
-  depoimentos: MessageSquareQuote, biblioteca: Library, cursos: GraduationCap,
+  depoimentos: MessageSquareQuote, biblioteca: Library, cursos: GraduationCap, graduation: GraduationCap,
   tags: Tag, pen: PenLine, 'admin-dev': Wrench, wrench: Wrench, settings: Settings, config: Settings,
   solicitacoes: Mail, mail: Mail, inbox: Inbox, calendar: Calendar, 'calendar-days': CalendarDays,
   clipboard: ClipboardList,
