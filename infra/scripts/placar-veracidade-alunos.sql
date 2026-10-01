@@ -58,16 +58,28 @@ chk as (
   left join nsoc n on n.t=a.id
 ),
 u as (
-  select k, v from chk, lateral (values
+  select chk.id, k, v from chk, lateral (values
    ('nivel',c_nivel),('cpf_valido',c_cpf),('documento_unico',c_doc_unico),('telefone',c_telefone),('uf',c_uf),
    ('turma',c_turma),('socio_vinculo',c_socio_vinculo),('socio_mutuo',c_socio_mutuo),('num_socios',c_num_socios),
    ('valor',c_valor),('revogado',c_revogado),('vencimento',c_vencimento)) t(k,v)
+),
+-- falha explicada: a ficha tem observação da conciliação para aquela checagem ([conc:<checagem>];
+-- acesso×dinheiro explica revogado/vencimento; nível também aceita o texto das rodadas de nível)
+ux as (
+  select u.k, u.v, a.obs_central ~ ('\[conc:' || u.k || '\]')
+      or (u.k in ('revogado','vencimento') and a.obs_central ~ '\[conc:acesso\]')
+      or (u.k = 'nivel' and a.obs_central ~ '\[2026-\d\d-\d\d\] (Nível|Sem fonte)[^|]*a confirmar') explicada
+  from u join a using (id) where not u.v
 )
 select json_build_object(
   'ativos',(select count(*) from a),
   'score_pct',(select round(100.0*count(*) filter (where v)/nullif(count(*) filter (where v is not null),0),2) from u),
   'por_check',(select json_object_agg(k, json_build_object('ok',ok,'falha',f,'sem_fonte',s,'pct',round(100.0*ok/nullif(ok+f,0),1))) from
      (select k, count(*) filter (where v) ok, count(*) filter (where not v) f, count(*) filter (where v is null) s from u group by k) z),
+  'falhas',(select count(*) from ux),
+  'falhas_explicadas',(select count(*) filter (where explicada) from ux),
+  'score_com_explicadas_pct',(select round(100.0*(count(*) filter (where v) + (select count(*) filter (where explicada) from ux))/nullif(count(*) filter (where v is not null),0),2) from u),
+  'sem_explicacao_por_check',(select json_object_agg(k, n) from (select k, count(*) n from ux where not coalesce(explicada,false) group by k) z),
   'nivel_falha_explicada',(select count(*) from chk join a using(id) where not c_nivel and a.obs_central ~ '\[2026-\d\d-\d\d\] (Nível|Sem fonte)[^|]*a confirmar'),
   'nivel_falha_sem_obs',(select json_agg(chk.id) from chk join a using(id) where not c_nivel and coalesce(a.obs_central,'') !~ '\[2026-\d\d-\d\d\] (Nível|Sem fonte)[^|]*a confirmar'),
   'alunos_100',(select count(*) from chk where coalesce(c_nivel,true) and coalesce(c_cpf,true) and coalesce(c_doc_unico,true) and coalesce(c_telefone,true) and coalesce(c_uf,true) and coalesce(c_turma,true) and coalesce(c_socio_vinculo,true) and coalesce(c_socio_mutuo,true) and coalesce(c_num_socios,true) and coalesce(c_valor,true) and coalesce(c_revogado,true) and coalesce(c_vencimento,true))
