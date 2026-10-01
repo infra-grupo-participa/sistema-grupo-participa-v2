@@ -25,7 +25,17 @@ function builder() {
   };
   return b;
 }
-vi.mock('@/shared/infrastructure/supabase/admin-client', () => ({ createAdminSupabase: () => ({ from: () => builder() }) }));
+const CHAVE_BANCO = 'a'.repeat(64);
+const rpcCalls: string[] = [];
+vi.mock('@/shared/infrastructure/supabase/admin-client', () => ({
+  createAdminSupabase: () => ({
+    from: () => builder(),
+    rpc: async (_fn: string, args: { p_chave: string }) => {
+      rpcCalls.push(args.p_chave);
+      return { data: args.p_chave === CHAVE_BANCO, error: null };
+    },
+  }),
+}));
 vi.mock('@/modules/placas/infrastructure/supabase-config', () => ({ readPlacasConfig: async () => ({}) }));
 vi.mock('@/shared/infrastructure/email/mailer', () => ({
   sendMail: async (m: { to: string }) => {
@@ -54,12 +64,26 @@ beforeEach(() => {
   table = [row('a'), row('b')];
   sendResults = [];
   sent.length = 0;
+  rpcCalls.length = 0;
 });
 
 describe('cron interview-reminder', () => {
   it('POST existe, exige o mesmo Bearer', async () => {
     expect((await POST(req('POST', 'errado'))).status).toBe(401);
     expect((await POST(req('POST'))).status).toBe(200);
+  });
+
+  it('sem env CRON_SECRET, aceita a chave do Vault conferida no banco', async () => {
+    delete process.env.CRON_SECRET;
+    expect((await POST(req('POST', CHAVE_BANCO))).status).toBe(200);
+    expect((await POST(req('POST', 'b'.repeat(64)))).status).toBe(401);
+  });
+
+  it('lixo fora do formato não chega a consultar o banco', async () => {
+    delete process.env.CRON_SECRET;
+    expect((await GET(req('GET', 'qualquer'))).status).toBe(401);
+    expect((await GET(req('GET', ''))).status).toBe(401);
+    expect(rpcCalls).toHaveLength(0);
   });
 
   it('envia e marca; segunda passagem não reenvia', async () => {

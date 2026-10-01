@@ -27,12 +27,22 @@ function mesmoSegredo(recebido: string, esperado: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+// Chave do pg_cron: nasce no Vault (migration 20261005b) e só o banco a conhece — confere por RPC
+// (service_role). Formato fixo (64 hex) checado antes, para lixo da internet não virar consulta.
+async function chaveDoBancoOk(admin: ReturnType<typeof createAdminSupabase>, auth: string): Promise<boolean> {
+  const m = /^Bearer ([0-9a-f]{64})$/.exec(auth);
+  if (!m) return false;
+  const { data, error } = await admin.rpc('fn_placas_cron_chave_ok', { p_chave: m[1] });
+  return !error && data === true;
+}
+
 async function handle(request: NextRequest) {
   const secret = process.env.CRON_SECRET || '';
   const auth = request.headers.get('authorization') || '';
-  if (!secret || !mesmoSegredo(auth, `Bearer ${secret}`)) return jsonError('Não autorizado.', 401);
-
   const admin = createAdminSupabase();
+  const porEnv = !!secret && mesmoSegredo(auth, `Bearer ${secret}`);
+  if (!porEnv && !(await chaveDoBancoOk(admin, auth))) return jsonError('Não autorizado.', 401);
+
   const { data, error } = await admin
     .from('thb_placas_solicitacoes')
     .select('id, token, nome, email, entrevista_data, entrevista_hora, auditoria_step, reminder_sent_at')
