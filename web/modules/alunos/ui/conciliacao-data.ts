@@ -6,7 +6,7 @@
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import { bigintNum, normalizarItens, type DecisaoConciliacao, type ItemConciliacao } from '../domain/conciliacao';
-import { normalizarProgramas, type EvidenciaPrograma, type ProgramaAluno, type SeloNivel } from '../domain/programa-selo';
+import { normalizarProgramas, type ProgramaAluno, type SeloNivel } from '../domain/programa-selo';
 
 const db = () => createBrowserSupabase();
 
@@ -57,16 +57,6 @@ export async function loadProgramasSafe(): Promise<Resultado<ProgramaAluno[]>> {
 export async function loadNivelSelo(): Promise<Resultado<SeloNivel[]>> {
   const r = await rpcPaginada('fn_aluno_nivel_selo', {}, ['aluno_id'], 'loadNivelSelo');
   return r.ok ? { ok: true, data: r.data as SeloNivel[] } : r;
-}
-
-/** Evidências de 1 aluno — 1× por ficha, quando a aba Programa abre. */
-export async function loadEvidenciasPrograma(alunoId: string): Promise<Resultado<EvidenciaPrograma[]>> {
-  const { data, error } = await db().rpc('fn_aluno_programa_evidencias', { p_aluno: alunoId });
-  if (error) {
-    logQueryError('loadEvidenciasPrograma', error);
-    return { ok: false, erro: mensagemErro(error, 'Não foi possível carregar as evidências.') };
-  }
-  return { ok: true, data: (data as EvidenciaPrograma[]) ?? [] };
 }
 
 // ── Conciliação (20261003e/f) ──

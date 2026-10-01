@@ -1,34 +1,70 @@
-// Mapeamento puro: linha da RPC → item da LinhaDoTempo compartilhada. Separado do componente para ser testável.
-import { fmtBRL } from '@/shared/ui/format';
-import type { BadgeLinhaDoTempo, DimensaoLinhaDoTempo, ItemLinhaDoTempo } from '@/shared/ui/timeline/linha-do-tempo';
+// Mapeamento puro: marcos da trajetória do aluno → modelo visual da TrajetoriaMarcos compartilhada. Separado do
+// componente para ser testável.
+import { fmtBRL, fmtData } from '@/shared/ui/format';
+import type { MarcoVisual, PontoRegua } from '@/shared/ui/timeline';
+import { DIMENSOES_TRAJETORIA, ROTULO_DIMENSAO, type LinhaTrajetoriaAluno } from '../domain/trajetoria-aluno';
 import {
-  DIMENSOES_TRAJETORIA, ROTULO_DIMENSAO, TIPOS_ALERTA, TIPO_VOLTA, ordenarTrajetoria,
-  type LinhaTrajetoriaAluno,
-} from '../domain/trajetoria-aluno';
+  agruparEmMarcos, diasDeSaida, mesAno, posicaoNaRegua,
+  type CapituloTrajetoria, type MarcoTrajetoria, type TipoMarco,
+} from '../domain/trajetoria-marcos';
 
-export const DIMENSOES_CHIPS: DimensaoLinhaDoTempo[] = DIMENSOES_TRAJETORIA.map((d) => ({ chave: d, rotulo: ROTULO_DIMENSAO[d] }));
+export const OPCOES_DIMENSAO = DIMENSOES_TRAJETORIA.map((d) => ({ chave: d, rotulo: ROTULO_DIMENSAO[d] }));
 
-const ROTULO_TIPO: Record<string, string> = { saida: 'saída', estorno: 'estorno', cancelamento: 'cancelamento', volta: 'volta' };
+/** Ícone do nó: diz o tipo do marco (a cor diz só alerta/positivo/início). */
+const ICONE_TIPO: Record<Exclude<TipoMarco, 'capitulo'>, string> = {
+  entrada: 'user', compra: 'receipt', estorno: 'alert', saida: 'logout', volta: 'rotate',
+  troca: 'arrow-right', nivel: 'medal', placa: 'trophy', outro: 'circle',
+};
+const ICONE_CAPITULO: Record<CapituloTrajetoria, string> = {
+  central: 'cursos', gps: 'trending-up', card_hm: 'briefcase', grupos: 'users', socios: 'link', acesso: 'lock', eventos: 'calendar',
+};
 
-function badges(l: LinhaTrajetoriaAluno): BadgeLinhaDoTempo[] {
-  const out: BadgeLinhaDoTempo[] = [{ rotulo: ROTULO_DIMENSAO[l.dimensao] ?? l.dimensao, tom: 'neutral' }];
-  if (TIPOS_ALERTA.has(l.tipo)) out.push({ rotulo: ROTULO_TIPO[l.tipo], tom: 'danger' });
-  else if (l.tipo === TIPO_VOLTA) out.push({ rotulo: ROTULO_TIPO.volta, tom: 'success' });
-  if (l.situacao) out.push({ rotulo: l.situacao, tom: 'neutral' });
-  return out;
+const quando = (m: MarcoTrajetoria) => {
+  if (m.tipo !== 'capitulo') return fmtData(m.inicio);
+  const n = `${m.itens.length} ${m.itens.length === 1 ? 'registro' : 'registros'}`;
+  return m.inicio === m.fim ? `${fmtData(m.inicio)} · ${n}` : `${fmtData(m.inicio)} a ${fmtData(m.fim)} · ${n}`;
+};
+
+const nota = (l: LinhaTrajetoriaAluno) => [l.fonte, l.regra].filter(Boolean).join(' · ') || null;
+
+export function paraMarcosVisuais(marcos: MarcoTrajetoria[]): MarcoVisual[] {
+  return marcos.map((m) => ({
+    id: m.id,
+    titulo: m.titulo,
+    quando: quando(m),
+    resumo: m.resumo,
+    // valor null = nada na tela (quem não vê o financeiro recebe null da RPC).
+    valor: m.valor == null ? null : fmtBRL(m.valor),
+    tom: m.tom,
+    icone: m.capitulo ? ICONE_CAPITULO[m.capitulo] : ICONE_TIPO[m.tipo as Exclude<TipoMarco, 'capitulo'>],
+    capitulo: m.tipo === 'capitulo',
+    itens: m.itens.map((l, i) => ({
+      id: `${l.dia}|${l.dimensao}|${l.tipo}|${l.ref ?? ''}|${i}`,
+      quando: fmtData(l.dia),
+      titulo: l.titulo,
+      detalhe: l.detalhe,
+      valor: l.valor == null ? null : fmtBRL(l.valor),
+      situacao: l.situacao,
+      nota: nota(l),
+    })),
+  }));
 }
 
-/** Ordena do mais recente para o mais antigo e converte. `valor` null não gera nada na tela. */
-export function paraItensLinhaDoTempo(linhas: LinhaTrajetoriaAluno[]): ItemLinhaDoTempo[] {
-  return ordenarTrajetoria(linhas).map((l, i) => ({
-    id: `${l.dia}|${l.dimensao}|${l.tipo}|${l.ref ?? ''}|${i}`,
-    dia: l.dia,
-    titulo: l.titulo,
-    detalhe: l.detalhe ?? undefined,
-    nota: l.regra,
-    dimensao: l.dimensao,
-    badges: badges(l),
-    valor: l.valor == null ? undefined : fmtBRL(l.valor),
-    tom: TIPOS_ALERTA.has(l.tipo) ? 'danger' : l.tipo === TIPO_VOLTA ? 'success' : 'accent',
-  }));
+/** Régua: só marcos próprios (capítulos ficam fora para não poluir), de 1º marco até `ate`. */
+export function pontosDaRegua(marcos: MarcoTrajetoria[], ate: string): { pontos: PontoRegua[]; de: string; ate: string } | null {
+  const proprios = marcos.filter((m) => m.tipo !== 'capitulo');
+  if (!proprios.length) return null;
+  const de = marcos.reduce((min, m) => (m.inicio < min ? m.inicio : min), marcos[0].inicio);
+  const fim = marcos.reduce((max, m) => (m.fim > max ? m.fim : max), ate);
+  return {
+    de: mesAno(de),
+    ate: mesAno(fim),
+    pontos: proprios.map((m) => ({ id: m.id, pos: posicaoNaRegua(m.inicio, de, fim), tom: m.tom, rotulo: `${m.titulo} (${fmtData(m.inicio)})` })),
+  };
+}
+
+/** Filtro por dimensão no cliente, antes de agrupar (null = todas). */
+export function marcosFiltrados(linhas: LinhaTrajetoriaAluno[], dimensao: string | null): MarcoTrajetoria[] {
+  // Corte de capítulo pelas saídas da trajetória inteira: filtrar não junta "antes" e "depois" de sair.
+  return agruparEmMarcos(dimensao ? linhas.filter((l) => l.dimensao === dimensao) : linhas, diasDeSaida(linhas));
 }

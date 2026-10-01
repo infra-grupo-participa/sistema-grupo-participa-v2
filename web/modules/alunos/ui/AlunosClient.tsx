@@ -458,7 +458,6 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
           onSaved={async (msg) => { flash(msg); setEditMode(false); await reload(); invalidarTrajetoria(selected.id); conc.recarregar(); }}
           conciliacao={CONCILIACAO_ATIVA ? conc.porAluno.get(selected.id) ?? (conc.itens ? [] : null) : null}
           conciliacaoErro={conc.erro}
-          programa={prog.programas.get(selected.id)}
           onVinculoAlterado={async (msg) => { flash(msg); await reload(); conc.recarregar(); }}
         />
       )}

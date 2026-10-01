@@ -79,7 +79,7 @@ export const ROTULO_ACAO: Record<string, string> = {
   conferir_duplicado: 'Conferir se é a mesma pessoa (não unir cadastros)',
   revisar_identidade: 'Revisar a identidade no Financeiro',
   preencher_email: 'Preencher o e-mail',
-  ver_evidencias: 'Ver as evidências do programa',
+  ver_evidencias: 'Conferir as compras do aluno no Financeiro',
   confirmar_se_aluno: 'Confirmar se é aluno',
   alinhar_ao_gps: 'Alinhar o cadastro ao GPS',
   avisar_ativacao: 'Avisar a equipe de Ativação',

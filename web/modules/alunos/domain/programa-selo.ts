@@ -1,8 +1,9 @@
-// Programa do aluno e selo de nível comprovado: tradução de fn_aluno_programas_safe, fn_aluno_nivel_selo e
-// fn_aluno_programa_evidencias (20261002d/e). A regra é do SQL; aqui só rótulo, ordem e filtro.
+// Programa do aluno e selo de nível comprovado: tradução de fn_aluno_programas_safe e fn_aluno_nivel_selo
+// (20261002d/e). A regra é do SQL; aqui só rótulo, ordem e filtro. fn_aluno_programa_evidencias segue no banco,
+// sem consumidor na tela desde 30/09/2026 (bloco "Por que está no programa" removido da ficha a pedido do João).
 import { nivelLabel } from '@/shared/domain/nivel-resultado';
 
-// Ligado por padrão; NEXT_PUBLIC_ALUNO_PROGRAMA=off tira coluna, filtros e evidências (inlined no build).
+// Ligado por padrão; NEXT_PUBLIC_ALUNO_PROGRAMA=off tira coluna e filtros (inlined no build).
 export const PROGRAMA_ATIVO = process.env.NEXT_PUBLIC_ALUNO_PROGRAMA !== 'off';
 
 export interface ProgramaAluno {
@@ -19,15 +20,6 @@ export interface SeloNivel {
   comprovado_em: string | null;
   /** comprovado | nao_comprovado | outro_nivel | null (abaixo de ouro). */
   selo: string | null;
-}
-
-export interface EvidenciaPrograma {
-  programa: string | null;
-  fonte: string;
-  descricao: string;
-  data: string | null;
-  /** Só vem para quem vê o financeiro. */
-  valor: number | null;
 }
 
 export const PROGRAMA_ORDEM = ['implementacao', 'hm', 'aurum', 'mastermind_diamante', 'platina', 'diamante_vermelho'] as const;
@@ -58,20 +50,10 @@ export const ROTULO_MOTIVO: Record<string, string> = {
   mastermind_diamante_so_cadastro: 'Mastermind Diamante no cadastro, sem pagamento localizado',
 };
 
-export const ROTULO_FONTE: Record<string, string> = {
-  gps: 'GPS',
-  cadastro: 'Cadastro',
-  hotmart: 'Hotmart',
-  evento: 'Evento',
-  acelera: 'Acelera',
-  socio_de: 'Sócio',
-};
-
 const humano = (c: string) => c.replace(/_/g, ' ');
 export const rotuloPrograma = (p: string | null): string => (p ? ROTULO_PROGRAMA[p] ?? humano(p) : '—');
 export const rotuloStatusPrograma = (s: string): string => ROTULO_STATUS_PROGRAMA[s] ?? humano(s);
 export const rotuloMotivo = (m: string): string => ROTULO_MOTIVO[m] ?? humano(m);
-export const rotuloFonte = (f: string): string => ROTULO_FONTE[f] ?? humano(f);
 
 /** Programas na ordem fixa (Implementação primeiro); desconhecido vai para o fim. */
 export function ordenarProgramas(ps: string[]): string[] {

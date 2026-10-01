@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { normalizarLinhas, ordenarTrajetoria, resumirTrajetoriaAluno, type LinhaTrajetoriaAluno } from './trajetoria-aluno';
-import { DIMENSOES_CHIPS, paraItensLinhaDoTempo } from '../ui/trajetoria-aluno-itens';
-import { chipsDeDimensao, filtrarPorDimensao } from '@/shared/ui/timeline/linha-do-tempo';
 
 const l = (x: Partial<LinhaTrajetoriaAluno>): LinhaTrajetoriaAluno => ({
   dia: '2024-01-01', momento: null, dimensao: 'vinculo', tipo: 'x', titulo: 't', detalhe: null,
@@ -55,46 +53,5 @@ describe('normalizarLinhas', () => {
     expect(a.valor).toBe(1234.5);
     expect(a.dia).toBe('2024-01-02');
     expect(b.valor).toBeNull();
-  });
-});
-
-describe('paraItensLinhaDoTempo', () => {
-  const itens = paraItensLinhaDoTempo([
-    l({ dia: '2020-01-01', dimensao: 'compras', tipo: 'compra', valor: 997, regra: 'hotmart pago' }),
-    l({ dia: '2022-01-01', dimensao: 'vinculo', tipo: 'saida', valor: null }),
-    l({ dia: '2023-01-01', dimensao: 'vinculo', tipo: 'volta' }),
-    l({ dia: '2021-01-01', dimensao: 'compras', tipo: 'estorno', situacao: 'estornado' }),
-  ]);
-
-  it('ordem do mais recente para o mais antigo, ids únicos', () => {
-    expect(itens.map((i) => i.dia)).toEqual(['2023-01-01', '2022-01-01', '2021-01-01', '2020-01-01']);
-    expect(new Set(itens.map((i) => i.id)).size).toBe(4);
-  });
-  it('valor null não gera valor; valor numérico vem formatado em BRL', () => {
-    const [volta, saida, , compra] = itens;
-    expect(saida.valor).toBeUndefined();
-    expect(volta.valor).toBeUndefined();
-    expect(String(compra.valor)).toMatch(/R\$\s?997/);
-  });
-  it('saída/estorno com badge de alerta; volta com badge positivo; regra vira nota', () => {
-    const [volta, saida, estorno, compra] = itens;
-    expect(saida.badges).toContainEqual({ rotulo: 'saída', tom: 'danger' });
-    expect(saida.tom).toBe('danger');
-    expect(estorno.badges).toContainEqual({ rotulo: 'estorno', tom: 'danger' });
-    expect(estorno.badges).toContainEqual({ rotulo: 'estornado', tom: 'neutral' });
-    expect(volta.badges).toContainEqual({ rotulo: 'volta', tom: 'success' });
-    expect(volta.badges?.some((b) => b.tom === 'danger')).toBe(false);
-    expect(volta.tom).toBe('success');
-    expect(compra.tom).toBe('accent');
-    expect(compra.badges).toEqual([{ rotulo: 'Compras', tom: 'neutral' }]);
-    expect(compra.nota).toBe('hotmart pago');
-    expect(estorno.nota).toBeNull();
-  });
-  it('chips com os rótulos pt-BR e filtro no cliente por dimensão', () => {
-    const chips = chipsDeDimensao(itens, DIMENSOES_CHIPS);
-    expect(chips.map((c) => `${c.rotulo}:${c.total}`)).toEqual([
-      'Todas:4', 'Vínculo:2', 'Compras:2', 'Eventos:0', 'Turma:0', 'Sócios:0', 'Grupos:0', 'Atendimento:0',
-    ]);
-    expect(filtrarPorDimensao(itens, 'vinculo').map((i) => i.dia)).toEqual(['2023-01-01', '2022-01-01']);
   });
 });

@@ -16,8 +16,6 @@ import { loadCiclosByAluno, type Ciclo } from '@/modules/placas/ui/admin/placas-
 import { cursoDesempenhoMock } from '../domain/curso-mock';
 import { pendenciasAluno, contarPorAba, type AbaPendencia, type PendenciaAluno } from '../domain/pendencias-aluno';
 import { TIPOS_VINCULO_TITULAR, type ItemConciliacao } from '../domain/conciliacao';
-import { PROGRAMA_ATIVO, type ProgramaAluno } from '../domain/programa-selo';
-import { AlunoProgramaEvidencias } from './AlunoProgramaEvidencias';
 import { DefinirTitular } from './DefinirTitular';
 import type { AbaFicha } from '../domain/ficha-aluno-abas';
 import { Badge, NivelBadge, Drawer, AvatarInicial, SectionCard, Button, KpiCard, ProgressBar, Tabs, idsAba } from '@/shared/ui/components';
@@ -49,7 +47,7 @@ const ROTULO_ABA: Record<AbaFicha, string> = { resumo: 'Resumo', programa: 'Prog
  * (Trajetória, SIP expandido) nem perde o estado aberto dos blocos recolhíveis.
  * Placa e ciclos continuam carregando na abertura: as pendências do Resumo dependem deles.
  */
-export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggleEdit, onClose, onAbrirAluno, onSaved, abaInicial, onAbaChange, conciliacao = null, conciliacaoErro = null, programa, onVinculoAlterado }: {
+export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggleEdit, onClose, onAbrirAluno, onSaved, abaInicial, onAbaChange, conciliacao = null, conciliacaoErro = null, onVinculoAlterado }: {
   a: Aluno360;
   turmas: Turma[];
   /** Base carregada, usada para ligar o sócio ao titular e vice-versa. */
@@ -69,8 +67,6 @@ export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggl
   conciliacao?: ItemConciliacao[] | null;
   /** A carga da conciliação falhou: linha discreta no Resumo, o resto da ficha segue. */
   conciliacaoErro?: string | null;
-  /** Linha de fn_aluno_programas_safe deste aluno (carga única da lista). */
-  programa?: ProgramaAluno;
   /** Vínculo de sócio gravado por "Definir quem é o titular": quem abriu recarrega base e conciliação. */
   onVinculoAlterado?: (msg: string) => void;
 }) {
@@ -193,7 +189,6 @@ export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggl
 
         {painel('programa', (
           <>
-            {PROGRAMA_ATIVO && <AlunoProgramaEvidencias alunoId={a.id} programa={programa} />}
             <AbaPrograma
               a={a} sit={sit} instr={instr} espaco={espaco} vinculo={vinculo} onAbrirAluno={onAbrirAluno}
               definirTitular={canEdit && onVinculoAlterado && itensVinculo.length > 0
