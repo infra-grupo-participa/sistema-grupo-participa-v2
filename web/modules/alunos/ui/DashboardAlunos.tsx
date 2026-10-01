@@ -412,12 +412,15 @@ function StackedColumn({ data }: { data: AnoEspaco[] }) {
   return (
     <div className="flex items-end gap-2 h-40 pt-2">
       {data.map((d) => (
-        <div key={d.year} className="flex-1 flex flex-col items-center justify-end gap-1" title={d.segs.map((s) => `${ESPACO_LABEL[s.key] || s.key}: ${s.count}`).join(' · ')}>
-          <span className="text-[10px] text-[var(--fg-3)] tabular">{d.total}</span>
-          <div className="w-full rounded-t overflow-hidden flex flex-col-reverse" style={{ height: `${(d.total / max) * 100}%`, minHeight: 2 }}>
-            {d.segs.map((s) => <div key={s.key} style={{ height: `${(s.count / d.total) * 100}%`, background: s.color }} />)}
+        // h-full: sem altura definida na coluna, o height em % da barra resolve para 0 e só sobra o minHeight
+        <div key={d.year} className="flex-1 min-w-0 h-full flex flex-col items-center gap-1" title={d.segs.map((s) => `${ESPACO_LABEL[s.key] || s.key}: ${s.count}`).join(' · ')}>
+          <div className="flex-1 w-full flex flex-col justify-end items-center gap-1">
+            <span className="text-[10px] text-[var(--fg-3)] tabular">{d.total}</span>
+            <div className="w-full rounded-t overflow-hidden flex flex-col-reverse" style={{ height: `${(d.total / max) * 85}%`, minHeight: 2 }}>
+              {d.segs.map((s) => <div key={s.key} style={{ height: `${(s.count / d.total) * 100}%`, background: s.color }} />)}
+            </div>
           </div>
-          <span className="text-[10px] text-[var(--fg-3)]">{d.year}</span>
+          <span className="text-[10px] text-[var(--fg-3)] tabular">{d.year}</span>
         </div>
       ))}
     </div>
