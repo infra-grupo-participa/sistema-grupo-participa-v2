@@ -3,6 +3,7 @@
 // Campo vazio não entra; bloco sem campo some. Na família "socios" os campos `socio_*` viram
 // o bloco "Sócio declarado". Links de rede só saem com host da rede certa (safeHttpUrl).
 import { safeHttpUrl, HOSTS_REDE } from '@/shared/domain/url-segura';
+import { textoResposta } from './respondi-texto';
 
 export type TipoCampo = 'texto' | 'cpf' | 'nivel' | 'turma' | 'link';
 
@@ -27,10 +28,11 @@ export interface BlocoFicha {
 
 type Dados = Record<string, unknown> | null | undefined;
 
+// Telefone e moeda chegam como JSON em string (`{"country","phone"}`, `{"currency","value"}`).
+// Objeto de verdade (fora do contrato) continua ignorado.
 const txt = (d: Dados, k: string): string => {
   const v = d?.[k];
-  if (v == null || typeof v === 'object') return '';
-  return String(v).trim();
+  return v == null || typeof v === 'object' ? '' : textoResposta(v);
 };
 
 const digitos = (s: string) => s.replace(/\D/g, '');

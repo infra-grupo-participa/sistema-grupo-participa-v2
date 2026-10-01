@@ -18,8 +18,17 @@ describe('textoResposta', () => {
     expect(textoResposta('["T16"]')).toBe('T16');
     expect(textoResposta('["Ouro","Platina"]')).toBe('Ouro, Platina');
   });
-  it('objeto em string vira os valores', () => {
-    expect(textoResposta('{"country":"55","phone":"11999990000"}')).toBe('55 11999990000');
+  it('telefone em JSON sai formatado', () => {
+    expect(textoResposta('{"country":"55","phone":"11999990000"}')).toBe('+55 (11) 99999-0000');
+    expect(textoResposta('{"country":"55","phone":"1133330000"}')).toBe('+55 (11) 3333-0000');
+    expect(textoResposta('{"country":"351","phone":"912345678"}')).toBe('+351 912345678');
+    expect(textoResposta('{"country":"55","phone":""}')).toBe('');
+  });
+  it('moeda em JSON sai em reais', () => {
+    expect(textoResposta('{"currency":"BRL","value":150000}').replace(/\s/g, ' ')).toBe('R$ 150.000,00');
+  });
+  it('outro objeto em string vira os valores', () => {
+    expect(textoResposta('{"rua":"A","numero":"1"}')).toBe('A 1');
   });
   it('JSON quebrado fica como texto cru', () => {
     expect(textoResposta('{quebrado')).toBe('{quebrado');
@@ -37,7 +46,7 @@ describe('itensResposta', () => {
     expect(itensResposta(RESPOSTAS)).toEqual([
       { q: 'Nome completo', v: 'Fulana de Tal' },
       { q: 'E-mail', v: 'fulana@exemplo.com' },
-      { q: 'Telefone', v: '55 11999990000' },
+      { q: 'Telefone', v: '+55 (11) 99999-0000' },
       { q: 'Qual a sua turma?', v: 'T16' },
       { q: 'Em qual nível você está?', v: 'Ouro, Platina' },
       { q: 'Comprovante', v: '{quebrado' },

@@ -53,6 +53,10 @@ describe('urlRede', () => {
 });
 
 describe('fichaRespondi', () => {
+  it('telefone gravado como JSON sai formatado, não cru', () => {
+    const f = fichaRespondi({ telefone: '{"country":"55","phone":"11999990000"}', socio_telefone: '{"country":"55","phone":"1133330000"}' }, 'socios');
+    expect(f.flatMap((b) => b.campos).map((c) => c.valor)).toEqual(['+55 (11) 99999-0000', '+55 (11) 3333-0000']);
+  });
   it('blocos do respondente; campo vazio e bloco vazio somem', () => {
     const f = fichaRespondi(DADOS, 'nivel');
     expect(f.map((b) => b.k)).toEqual(['identificacao', 'programa', 'endereco', 'redes']);
