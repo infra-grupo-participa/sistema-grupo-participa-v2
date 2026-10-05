@@ -29,7 +29,7 @@ export function AlunoAbaJornada({ a, temPlaca, placaHist, placaLoading, ciclos }
     <SectionCard title={<SecTitle icon="check-circle">Jornada</SecTitle>}>
       <div className="grid sm:grid-cols-2 sm:gap-x-4">
         <PlacaJornada a={a} on={temPlaca} hist={placaHist} loading={placaLoading} rastreioAluno={a.placa_rastreio} />
-        <JornadaCard label="Depoimento" on={!!a.tem_depoimento} extra={a.total_depoimentos ? `${a.total_depoimentos} depoimento(s)` : ''} href={a.tem_depoimento ? '/depoimentos' : undefined} />
+        <JornadaCard label="Depoimento" on={!!a.tem_depoimento} extra={a.total_depoimentos ? `${a.total_depoimentos} depoimento(s)` : ''} href={a.tem_depoimento ? '/educacional/depoimentos' : undefined} />
         <SipJornada email={a.email} on={!!a.sip_registrado} />
       </div>
       <HistoricoNiveis ciclos={ciclos} />
@@ -293,7 +293,7 @@ function PlacaJornada({ a, on, hist, loading, rastreioAluno }: { a: Aluno360; on
           )}
 
           {aud?.obs && <div className="text-xs text-[var(--fg-3)] italic">“{aud.obs}”</div>}
-          <a href="/relatorios/placas#solicitacoes" className="inline-block text-xs text-[var(--accent)]">Abrir no Relatório de Placas →</a>
+          <a href="/educacional/placas#solicitacoes" className="inline-block text-xs text-[var(--accent)]">Abrir no Relatório de Placas →</a>
         </div>
       )}
 

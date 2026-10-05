@@ -8,6 +8,7 @@ import { podeVerFinanceiro } from '@/modules/financeiro/domain/acesso';
 import { podeVerRemocao } from '@/modules/remocao-acessos/domain/acesso';
 import { podePedirAlteracao } from '@/modules/alunos/domain/pedidos-alteracao';
 import { REPORTS, SYSTEM_NAV, type ReportGroup } from '@/shared/ui/nav/config';
+import { DEPARTAMENTOS, departamento, departamentoDaRota, podeVerDepartamento } from '@/shared/domain/departamentos';
 import { Icon } from '@/shared/ui/icons';
 import { chaveHashPadrao, itemHashAtivo } from './item-ativo';
 
@@ -84,6 +85,11 @@ export function Sidebar({ user }: { user: GpUser }) {
   };
 
   const cur = normalize(pathname);
+  // Departamento da rota atual: o menu dele só aparece dentro dele.
+  const depAtual = departamentoDaRota(cur);
+  // Victor, 05/10/2026: fora de departamento (Início, Usuários, Configurações) não mostra menu de departamento nenhum.
+  const mostraEducacional = depAtual === 'educacional';
+  const mostraMarketing = depAtual === 'marketing' && podeVerDepartamento(user, 'marketing');
 
   // O grupo aparece se o cargo permite E o usuário tem o setor.
   // Financeiro tem regra própria (visualizador NÃO vê dinheiro) — espelha
@@ -134,8 +140,48 @@ export function Sidebar({ user }: { user: GpUser }) {
 
       <Divider />
 
-      {/* Relatórios */}
-      <Group label="Relatórios" collapsed={!!groups.reports} onToggle={() => toggleGroup('reports')}>
+      {/* Seletor de departamento. Marketing some para quem não é admin/dev (mesma regra do layout /marketing). */}
+      <Group label="Departamentos" collapsed={!!groups.departamentos} onToggle={() => toggleGroup('departamentos')}>
+        {DEPARTAMENTOS.filter((d) => podeVerDepartamento(user, d.key)).map((d) => {
+          const active = depAtual === d.key;
+          return (
+            <Link key={d.key} href={d.path} className={itemCls(active)}>
+              <span className={iconBoxCls(active)}><Icon name={d.ico} /></span>
+              <span className="flex-1 truncate">{d.label}</span>
+              {d.status === 'em_breve' && <EmBreveTag />}
+            </Link>
+          );
+        })}
+      </Group>
+
+      <Divider />
+
+      {mostraMarketing && (
+        <>
+          <Group label="Marketing" collapsed={!!groups.marketing} onToggle={() => toggleGroup('marketing')}>
+            {departamento('marketing').areas.map((a) => {
+              const active = cur === a.path || cur.startsWith(a.path + '/');
+              return (
+                <Link key={a.key} href={a.path} className={itemCls(active)}>
+                  <span className={iconBoxCls(active)}><Icon name={a.ico} /></span>
+                  <span className="flex-1 truncate">{a.label}</span>
+                  {a.status === 'em_breve' && <EmBreveTag />}
+                </Link>
+              );
+            })}
+          </Group>
+          <Divider />
+        </>
+      )}
+
+      {/* Educacional: o menu que existia até 05/10/2026, com os mesmos filtros de acesso (podeVerGrupo). */}
+      {mostraEducacional && (
+      <>
+      <Group label="Educacional" collapsed={!!groups.reports} onToggle={() => toggleGroup('reports')}>
+        <Link href="/educacional" className={itemCls(cur === '/educacional')}>
+          <span className={iconBoxCls(cur === '/educacional')}><Icon name="graduation" /></span>
+          <span>Início do Educacional</span>
+        </Link>
         {REPORTS.filter(podeVerGrupo).map((group) => {
           const onGroup = normalize(group.path) === cur;
           const open = reports[group.key] ?? onGroup;
@@ -200,6 +246,8 @@ export function Sidebar({ user }: { user: GpUser }) {
       </Group>
 
       <Divider />
+      </>
+      )}
 
       {/* Sistema */}
       <Group label="Sistema" collapsed={!!groups.system} onToggle={() => toggleGroup('system')}>
@@ -242,6 +290,14 @@ function Group({
       </button>
       {!collapsed && <div className="flex flex-col gap-0.5">{children}</div>}
     </div>
+  );
+}
+
+function EmBreveTag() {
+  return (
+    <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-[var(--r-pill)] bg-[var(--surface-3)] text-[var(--fg-3)]">
+      Em breve
+    </span>
   );
 }
 

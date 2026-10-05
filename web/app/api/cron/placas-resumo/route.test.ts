@@ -162,7 +162,7 @@ describe('cron placas-resumo — resumo', () => {
     expect(resumos).toHaveLength(0);
   });
 
-  it('com pendência envia a ADMIN_EMAIL só com números + link /relatorios/placas', async () => {
+  it('com pendência envia a ADMIN_EMAIL só com números + link /educacional/placas', async () => {
     contagens = { ...ZERO, aguardando_analise: 3, entrevistas_hoje: 2, parados_rascunho: 5 };
     const r = await POST(req());
     const body = await r.json();
@@ -170,7 +170,7 @@ describe('cron placas-resumo — resumo', () => {
     expect(body).toMatchObject({ ok: true, enviado: true, contagens: { aguardando_analise: 3, entrevistas_hoje: 2 } });
     expect(resumos).toHaveLength(1);
     expect(resumos[0].to).toEqual(['equipe@grupoparticipa.app.br']);
-    expect(resumos[0].html).toContain('/relatorios/placas');
+    expect(resumos[0].html).toContain('/educacional/placas');
     expect(resumos[0].html).not.toMatch(/token=|@x\.com/);
     expect(rpcCalls.find((c) => c.fn === 'fn_placas_resumo_contagens')?.args).toEqual({ p_horas_novos: 24 });
   });

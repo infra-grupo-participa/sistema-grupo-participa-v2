@@ -96,7 +96,7 @@ test.describe('Financeiro · aba Escritório (somente leitura)', () => {
       ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
     await page.goto(`${ROTA_FINANCEIRO}#funis`);
     await expect(page, 'sessão do robô caiu no login').not.toHaveURL(/\/login/);
-    await expect(page.locator('a[href="/relatorios/financeiro#escritorio"]').first()).toBeAttached({ timeout: 90_000 });
+    await expect(page.locator('a[href="/educacional/financeiro#escritorio"]').first()).toBeAttached({ timeout: 90_000 });
     await page.getByRole('button', { name: 'Escritório', exact: true }).click();
     await page.getByRole('link', { name: /aba Escritório/ }).click();
     await expect(page).toHaveURL(/#escritorio$/);

@@ -7,7 +7,7 @@ import { DOMINIO_EQUIPE, ehEmailDaEquipe } from '../shared/domain/auth/gp-user';
 // Credenciais SÓ de .env.local (E2E_FIN_EMAIL / E2E_FIN_SENHA). Nunca logar, nunca gravar em arquivo versionado.
 // Uma sessão por destino: local (next dev) e produção têm cookies de domínios diferentes.
 export const ARQUIVO_SESSAO = path.join(__dirname, '.auth', process.env.E2E_BASE_URL ? 'fin-prod.json' : 'fin.json');
-export const ROTA_FINANCEIRO = '/relatorios/financeiro';
+export const ROTA_FINANCEIRO = '/educacional/financeiro';
 
 export const MOTIVO_SEM_CREDENCIAL =
   'E2E_FIN_EMAIL e E2E_FIN_SENHA ausentes em web/.env.local — teste que precisa de login foi pulado.';

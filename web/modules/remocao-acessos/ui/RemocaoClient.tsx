@@ -65,7 +65,7 @@ export function RemocaoClient() {
       if (!vivo) return;
       aplicar(r);
       // Todo mundo abre em "Em aberto": quem já fez a sua parte continua vendo o que falta dos outros.
-      // Link do Slack: /relatorios/remocoes?caso=<id> abre a ficha direto.
+      // Link do Slack: /relatorios/remocoes?caso=<id> (308 para /educacional/remocoes?caso=<id>) abre a ficha direto.
       const id = new URLSearchParams(window.location.search).get('caso');
       if (id) setAberto(id);
       if (window.location.hash === '#responsaveis') setAba('responsaveis');

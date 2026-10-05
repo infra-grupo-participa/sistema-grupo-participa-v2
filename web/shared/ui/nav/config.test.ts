@@ -16,7 +16,7 @@ describe('REPORTS — secao (título opcional acima do item na sidebar)', () => 
 
   it('defaultHref do Financeiro continua #board', () => {
     const financeiro = REPORTS.find((g) => g.key === 'financeiro');
-    expect(financeiro!.defaultHref).toBe('/relatorios/financeiro#board');
+    expect(financeiro!.defaultHref).toBe('/educacional/financeiro#board');
   });
 
   it('outros grupos: nenhum item usa secao (layout deles não muda)', () => {
