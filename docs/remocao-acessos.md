@@ -18,6 +18,8 @@ quem pede reembolso ou dá chargeback no **Holding Masters** (produtos 5064314 e
      O ajuste da Base é manual por decisão do Victor; `ra_casos` guarda as datas para automatizar depois.
 3. **Checklist** para o titular e cada sócio (`socio_de_aluno_id`, ou nome do titular quando o sócio não tem vínculo).
    Cada item tem um responsável (`ra_itens_catalogo`) e **só ele marca**. O triador pode corrigir
+   (e, desde 05/10/2026, quem está em `ra_marcadores` também: hoje a Isabela Teixeira, a pedido do Victor;
+   ela marca qualquer item mas não faz triagem)
    (`corrigido = true`, fica no histórico). O item do sistema do Programa de Implementação só entra
    se a pessoa é do programa (espaço `holding_masters_implementacao`, ajustável na triagem).
 4. Último item marcado → caso **concluído**. Desmarcar reabre.
