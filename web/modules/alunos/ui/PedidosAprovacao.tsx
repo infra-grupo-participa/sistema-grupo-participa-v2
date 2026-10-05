@@ -10,6 +10,8 @@ import { fmtDataHora } from '@/shared/ui/format';
 import {
   ROTULO_TIPO,
   campoAceitaAjusteTexto,
+  enderecoEmLinha,
+  formatarDocumento,
   rotuloCampo,
   type PedidoLinha,
 } from '../domain/pedidos-alteracao';
@@ -31,6 +33,28 @@ function Linha({ k, children }: { k: string; children: React.ReactNode }) {
     <div className="grid grid-cols-[110px_1fr] gap-2 py-1 text-sm">
       <span className="text-xs text-[var(--fg-3)] pt-0.5">{k}</span>
       <span className="text-[var(--fg)] break-words min-w-0">{children}</span>
+    </div>
+  );
+}
+
+/** Cadastro completo do sócio novo, como vai para thb_alunos ao aprovar (documento mascarado sem permissão de CPF). */
+function CadastroSocioNovo({ n }: { n: NonNullable<PedidoLinha['socio_entra_novo']> }) {
+  const doc = n.documento && !n.documento.includes('*') ? formatarDocumento(n.documento) : n.documento;
+  return (
+    <div className="mt-1 rounded-[var(--r-md)] bg-[var(--surface-3)] px-3 py-2">
+      <span className="block text-xs font-medium text-[var(--fg-2)] mb-1">Pessoa nova: cadastro que será criado</span>
+      <Linha k="E-mail">{n.email ?? '(vazio)'}</Linha>
+      <Linha k="Telefone">{n.telefone ?? '(vazio)'}</Linha>
+      <Linha k={n.tipo_documento ?? 'Documento'}>{doc ?? '(vazio)'}</Linha>
+      <Linha k="Profissão">{n.profissao ?? '(vazio)'}</Linha>
+      <Linha k="Endereço">
+        {n.endereco ? (enderecoEmLinha(n.endereco) ?? '(vazio)') : '(pedido antigo, sem endereço)'}
+        {n.endereco_mantido && (
+          <span className="block mt-1"><Badge tone="info">Endereço mantido do sócio que sai</Badge>
+            <span className="block text-xs text-[var(--fg-3)] mt-0.5">Copiado na hora do pedido. É isso que será gravado.</span>
+          </span>
+        )}
+      </Linha>
     </div>
   );
 }
@@ -75,11 +99,7 @@ function CartaoPedido({ p, onAprovar, onRecusar, onMarcar }: {
           </Linha>
           <Linha k="Entra">
             {p.socio_entra_nome}
-            {p.socio_entra_novo && (
-              <span className="block text-xs text-[var(--fg-3)]">
-                Pessoa nova: {[p.socio_entra_novo.email, p.socio_entra_novo.telefone, p.socio_entra_novo.documento].filter(Boolean).join(' · ')}
-              </span>
-            )}
+            {p.socio_entra_novo && <CadastroSocioNovo n={p.socio_entra_novo} />}
           </Linha>
           <p className="text-xs text-[var(--fg-3)] py-1">Ao aprovar: quem sai perde o vínculo e ganha um caso em Remoção de Acessos; quem entra recebe a instrução e o vencimento do titular.</p>
         </div>
@@ -241,7 +261,10 @@ export function PedidosAprovacao({ onCountChange }: { onCountChange?: (n: number
               <p className="text-[var(--fg-2)]">{rotuloCampo(aprovando.campo)}: {aprovando.de ?? '(vazio)'} → <strong>{aprovando.para ?? '(vazio)'}</strong></p>
             )}
             {aprovando.tipo === 'trocar_socio' && (
-              <p className="text-[var(--fg-2)]">Titular {aprovando.aluno_nome}: sai {aprovando.socio_sai_nome}, entra {aprovando.socio_entra_nome}. Abre caso em Remoção de Acessos para quem sai.</p>
+              <>
+                <p className="text-[var(--fg-2)]">Titular {aprovando.aluno_nome}: sai {aprovando.socio_sai_nome}, entra {aprovando.socio_entra_nome}. Abre caso em Remoção de Acessos para quem sai.</p>
+                {aprovando.socio_entra_novo && <CadastroSocioNovo n={aprovando.socio_entra_novo} />}
+              </>
             )}
             {aprovando.tipo === 'outro' && (
               <p className="text-[var(--fg-2)]">Pedido livre: aprovar só registra a decisão. Você faz a alteração e depois marca como aplicado.</p>

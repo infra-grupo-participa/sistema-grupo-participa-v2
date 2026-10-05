@@ -103,6 +103,163 @@ export function normalizarTelefone(v: unknown): Validacao {
   return { ok: true, valor: d };
 }
 
+// ── Documento, telefone e endereço (20261005k) ──
+
+/** As 27 UFs. Mesma lista de pa_ufs() (o teste confere contra a migration). */
+export const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE',
+  'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'] as const;
+
+/** Sugestões do campo país (texto livre: qualquer país é aceito). */
+export const PAISES_SUGERIDOS = ['Portugal', 'Estados Unidos', 'Espanha', 'Itália', 'França', 'Alemanha', 'Reino Unido',
+  'Irlanda', 'Suíça', 'Canadá', 'Argentina', 'Uruguai', 'Paraguai', 'Chile', 'México', 'Japão', 'Emirados Árabes Unidos'];
+
+const semAcento = (v: string) => v.normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+/** País vazio conta como Brasil (default da coluna). Espelho de pa_eh_brasil(). */
+export function ehBrasil(pais: unknown): boolean {
+  const p = semAcento(String(pais ?? '')).trim().toLowerCase().replace(/\s+/g, ' ');
+  return p === '' || p === 'brasil' || p === 'brazil' || p === 'br';
+}
+
+function dvCpf(d: string): boolean {
+  if (d.length !== 11 || d === d[0].repeat(11)) return false;
+  for (const n of [9, 10]) {
+    let s = 0;
+    for (let i = 0; i < n; i++) s += Number(d[i]) * (n + 1 - i);
+    let r = (s * 10) % 11;
+    if (r === 10) r = 0;
+    if (r !== Number(d[n])) return false;
+  }
+  return true;
+}
+
+function dvCnpj(d: string): boolean {
+  if (d.length !== 14 || d === d[0].repeat(14)) return false;
+  const pesos = [[5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2], [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]];
+  for (const w of pesos) {
+    let s = 0;
+    for (let i = 0; i < w.length; i++) s += Number(d[i]) * w[i];
+    const r = s % 11 < 2 ? 0 : 11 - (s % 11);
+    if (r !== Number(d[w.length])) return false;
+  }
+  return true;
+}
+
+/** CPF (11) ou CNPJ (14) com dígito verificador. Espelho de pa_doc_valido(). */
+export function documentoValido(v: unknown): boolean {
+  const d = digitos(v);
+  return d.length === 11 ? dvCpf(d) : d.length === 14 ? dvCnpj(d) : false;
+}
+
+/** Máscara de digitação: até 11 dígitos = CPF (000.000.000-00), até 14 = CNPJ (00.000.000/0000-00). */
+export function formatarDocumento(v: string): string {
+  const d = digitos(v).slice(0, 14);
+  if (d.length <= 11) {
+    return d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d{1,2})$/, '.$1-$2');
+  }
+  return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})$/, '$1.$2.$3/$4-$5').replace(/-$/, '');
+}
+
+/** Máscara de CEP brasileiro (00000-000). */
+export function formatarCep(v: string): string {
+  const d = digitos(v).slice(0, 8);
+  return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d;
+}
+
+/**
+ * Telefone de pessoa nova (obrigatório). Brasil: 55 + DDD + número (12 ou 13 dígitos). Exterior: código do país +
+ * número, de 8 a 15 dígitos. Espelho de pa_telefone_pessoa() (mesmas mensagens).
+ */
+export function normalizarTelefonePessoa(v: unknown, brasil: boolean): Validacao {
+  let d = digitos(v);
+  if (!d) return { ok: false, erro: 'Informe o telefone.' };
+  if (brasil) {
+    if (d.length === 10 || d.length === 11) d = '55' + d;
+    if (!/^55[1-9]\d{9,10}$/.test(d)) return { ok: false, erro: 'Telefone inválido: use DDD + número (ex.: 21 99999-9999).' };
+  } else if (d.length < 8 || d.length > 15) {
+    return { ok: false, erro: 'Telefone internacional inválido: código do país + número, de 8 a 15 dígitos.' };
+  }
+  return { ok: true, valor: d };
+}
+
+export type ParteEndereco = (typeof ENDERECO_PARTES)[number]['k'];
+export type EnderecoNorm = Record<ParteEndereco, string | null>;
+export type ValidacaoEndereco =
+  | { ok: true; valor: EnderecoNorm }
+  | { ok: false; erro: string; erros: Partial<Record<ParteEndereco, string>> };
+
+export const ENDERECO_VAZIO: Record<ParteEndereco, string> = {
+  cep: '', endereco_logradouro: '', endereco_numero: '', endereco_complemento: '', bairro: '', cidade: '', estado: '', pais: 'Brasil',
+};
+
+/** Obrigatórios do cadastro novo. Brasil: tudo menos complemento. Exterior: endereço e cidade. */
+const OBRIGATORIOS_BR: [ParteEndereco, string][] = [
+  ['cep', 'CEP'], ['endereco_logradouro', 'logradouro'], ['endereco_numero', 'número'], ['bairro', 'bairro'],
+  ['cidade', 'cidade'], ['estado', 'estado'],
+];
+const OBRIGATORIOS_EXT: [ParteEndereco, string][] = [['endereco_logradouro', 'endereço'], ['cidade', 'cidade']];
+
+/**
+ * Valida e normaliza um endereço. `completo` = cadastro de pessoa nova (obrigatórios); sem ele, "alterar dado"
+ * (pode vir parcial). Brasil: CEP com 8 dígitos e UF da lista; exterior: CEP e estado/província livres.
+ * Espelho de pa_endereco() (mesmas mensagens). `erros` traz a mensagem de cada campo, para mostrar ao lado dele.
+ */
+export function validarEndereco(valor: unknown, completo: boolean): ValidacaoEndereco {
+  if (!valor || typeof valor !== 'object') return { ok: false, erro: 'Endereço inválido.', erros: {} };
+  const e = valor as Record<string, unknown>;
+  let pais = txt(e.pais)?.slice(0, 100) ?? null;
+  const br = ehBrasil(pais);
+  if (br && (pais !== null || completo)) pais = 'Brasil';
+  const out = {} as EnderecoNorm;
+  const erros: Partial<Record<ParteEndereco, string>> = {};
+  let primeiro: string | null = null;
+  const falha = (k: ParteEndereco, m: string) => { erros[k] = m; primeiro ??= m; };
+  for (const { k } of ENDERECO_PARTES) {
+    let p = txt(String(e[k] ?? '').replace(/\s+/g, ' '));
+    if (p) p = p.slice(0, 200);
+    if (k === 'pais') p = pais;
+    else if (k === 'cep' && p) {
+      if (br) {
+        p = digitos(p);
+        if (p.length !== 8) falha(k, 'CEP deve ter 8 dígitos.');
+      } else p = p.slice(0, 20);
+    } else if (k === 'estado' && p) {
+      if (br) {
+        p = p.toUpperCase();
+        if (!(UFS as readonly string[]).includes(p)) falha(k, 'Estado inválido: escolha uma das 27 UFs (ex.: SP).');
+      } else p = p.slice(0, 100);
+    }
+    out[k] = p;
+  }
+  if (primeiro) return { ok: false, erro: primeiro, erros };
+  if (completo) {
+    const falta = (br ? OBRIGATORIOS_BR : OBRIGATORIOS_EXT).filter(([k]) => !out[k]);
+    if (falta.length) {
+      for (const [k] of falta) erros[k] = 'Obrigatório.';
+      return { ok: false, erro: `Endereço incompleto: falta ${falta.map(([, l]) => l).join(', ')}.`, erros };
+    }
+  }
+  return { ok: true, valor: out };
+}
+
+/** O endereço tem algum dado além do país? (o país vem 'Brasil' por padrão em quase todo cadastro) */
+export function enderecoTemDado(e: Endereco | null | undefined): boolean {
+  if (!e) return false;
+  return ENDERECO_PARTES.some(({ k }) => k !== 'pais' && !!txt(e[k]));
+}
+
+/** Endereço numa linha, para conferência (mesma ordem de pa_exibir). */
+export function enderecoEmLinha(e: Endereco | null | undefined): string | null {
+  if (!e) return null;
+  const t = (k: ParteEndereco) => txt(e[k]);
+  const cep = t('cep');
+  const cepFmt = cep && ehBrasil(e.pais) ? formatarCep(cep) : cep;
+  const linha = [t('endereco_logradouro'), t('endereco_numero'), t('endereco_complemento'), t('bairro'),
+    [t('cidade'), t('estado')].filter(Boolean).join('/') || null, cepFmt ? `CEP ${cepFmt}` : null, t('pais')]
+    .filter(Boolean).join(', ');
+  return linha || null;
+}
+
 /** Valida e normaliza o valor pedido. Espelho de pa_normalizar() (mesmas mensagens). */
 export function validarValor(campo: string, valor: unknown): Validacao {
   if (!CAMPOS_EDITAVEIS.some((c) => c.campo === campo)) return { ok: false, erro: 'Campo fora da lista de campos editáveis.' };
@@ -122,25 +279,12 @@ export function validarValor(campo: string, valor: unknown): Validacao {
     case 'documento': {
       const d = digitos(v);
       if (d.length !== 11 && d.length !== 14) return { ok: false, erro: 'Documento inválido: CPF com 11 dígitos ou CNPJ com 14.' };
+      if (!documentoValido(d)) return { ok: false, erro: 'CPF ou CNPJ inválido: confira os dígitos.' };
       return { ok: true, valor: d };
     }
     case 'endereco': {
-      if (!valor || typeof valor !== 'object') return { ok: false, erro: 'Endereço inválido.' };
-      const e = valor as Record<string, unknown>;
-      const out: Record<string, string | null> = {};
-      for (const { k } of ENDERECO_PARTES) {
-        let p = txt(e[k]);
-        if (p) p = p.slice(0, 200);
-        if (k === 'cep' && p) {
-          p = digitos(p);
-          if (p.length !== 8) return { ok: false, erro: 'CEP deve ter 8 dígitos.' };
-        } else if (k === 'estado' && p) {
-          p = p.toUpperCase();
-          if (!/^[A-Z]{2}$/.test(p)) return { ok: false, erro: 'Estado deve ser a sigla de 2 letras (ex.: SP).' };
-        }
-        out[k] = p;
-      }
-      return { ok: true, valor: out };
+      const r = validarEndereco(valor, false);
+      return r.ok ? { ok: true, valor: r.valor } : { ok: false, erro: r.erro };
     }
     case 'turma_id':
       if (!v || !/^\d{1,6}$/.test(v)) return { ok: false, erro: 'Turma inexistente.' };
@@ -200,7 +344,89 @@ export function instrucaoDoSocio(titular: { instrucao: string | null; espaco_ins
   return i ? `${i.nivel} - SÓCIO` : null;
 }
 
-export interface SocioNovo { nome: string; email: string; telefone: string; documento: string }
+/** Formulário da pessoa nova (tela). `endereco_mantido` = "mesmo endereço do sócio que sai". */
+export interface SocioNovo {
+  nome: string;
+  email: string;
+  telefone: string;
+  documento: string;
+  profissao: string;
+  endereco_mantido: boolean;
+  endereco: Record<ParteEndereco, string>;
+}
+
+export const SOCIO_NOVO_VAZIO: SocioNovo = {
+  nome: '', email: '', telefone: '', documento: '', profissao: '', endereco_mantido: false, endereco: { ...ENDERECO_VAZIO },
+};
+
+/** Dados da pessoa nova como vão no pedido (pa_criar). Com endereço mantido, o banco lê o endereço de quem sai. */
+export interface SocioNovoPayload {
+  nome: string;
+  email: string;
+  telefone: string;
+  documento: string;
+  profissao: string | null;
+  endereco_mantido: boolean;
+  endereco: EnderecoNorm | null;
+}
+
+/**
+ * Endereço que vale para a pessoa nova: o de quem sai (mantido) ou o digitado. Mantido só vale se quem sai tem
+ * endereço; o banco faz a mesma conta (e guarda a foto do endereço de quem sai no pedido).
+ */
+export function enderecoDoSocioNovo(novo: Pick<SocioNovo, 'endereco_mantido' | 'endereco'>, enderecoSai: Endereco | null): Endereco {
+  if (novo.endereco_mantido && enderecoTemDado(enderecoSai)) return { ...enderecoSai };
+  return novo.endereco;
+}
+
+export type ErrosSocioNovo = Partial<Record<'nome' | 'email' | 'telefone' | 'documento' | 'profissao' | 'endereco' | ParteEndereco, string>>;
+
+/**
+ * Valida a pessoa nova campo a campo (mensagens ao lado de cada campo). Espelho das recusas de pa_criar() para o
+ * sócio novo. `enderecoSai` = endereço atual de quem sai (pa_valor_atual), usado quando o endereço é mantido.
+ */
+export function validarSocioNovo(novo: SocioNovo, enderecoSai: Endereco | null): { erros: ErrosSocioNovo; payload: SocioNovoPayload | null } {
+  const erros: ErrosSocioNovo = {};
+  const nome = novo.nome.trim().replace(/\s+/g, ' ');
+  if (nome.length < 3 || nome.length > 200) erros.nome = 'Informe o nome completo do sócio novo.';
+  const email = novo.email.trim();
+  if (!EMAIL_RE.test(email) || email.length > 200) erros.email = 'E-mail inválido.';
+  const docDig = digitos(novo.documento);
+  if (!docDig) erros.documento = 'Informe o CPF ou CNPJ.';
+  else if (docDig.length !== 11 && docDig.length !== 14) erros.documento = 'Documento inválido: CPF com 11 dígitos ou CNPJ com 14.';
+  else if (!documentoValido(docDig)) erros.documento = 'CPF ou CNPJ inválido: confira os dígitos.';
+  const profissao = novo.profissao.trim();
+  if (profissao.length > 200) erros.profissao = 'Profissão com mais de 200 caracteres.';
+
+  let endereco: EnderecoNorm | null = null;
+  let paisTel: unknown = 'Brasil';
+  if (novo.endereco_mantido) {
+    if (!enderecoTemDado(enderecoSai)) erros.endereco = 'O sócio que sai não tem endereço cadastrado: preencha o endereço do sócio novo.';
+    paisTel = enderecoSai?.pais;
+  } else {
+    const r = validarEndereco(novo.endereco, true);
+    if (r.ok) endereco = r.valor;
+    else { erros.endereco = r.erro; Object.assign(erros, r.erros); }
+    paisTel = novo.endereco.pais;
+  }
+  const tel = normalizarTelefonePessoa(novo.telefone, ehBrasil(paisTel));
+  if (!tel.ok) erros.telefone = tel.erro;
+
+  if (Object.keys(erros).length) return { erros, payload: null };
+  return {
+    erros,
+    payload: {
+      nome, email, telefone: String((tel as { valor: string }).valor), documento: docDig, profissao: profissao || null,
+      endereco_mantido: novo.endereco_mantido, endereco: novo.endereco_mantido ? null : endereco,
+    },
+  };
+}
+
+/** Primeira mensagem de erro da pessoa nova, na ordem do formulário. */
+export function primeiroErroSocioNovo(erros: ErrosSocioNovo): string | null {
+  for (const k of ['nome', 'email', 'telefone', 'documento', 'profissao', 'endereco'] as const) if (erros[k]) return erros[k]!;
+  return null;
+}
 
 /**
  * Confere a troca antes de enviar. Espelho das recusas de pa_criar() para trocar_socio.
@@ -212,8 +438,10 @@ export function validarTrocaSocio(p: {
   socios: AlunoResumo[];
   entra: AlunoResumo | null;
   novo: SocioNovo | null;
+  /** Endereço atual de quem sai (para "mesmo endereço"). */
+  enderecoSai?: Endereco | null;
 }): string | null {
-  const { titular, sai, socios, entra, novo } = p;
+  const { titular, sai, socios, entra, novo, enderecoSai } = p;
   if (!titular) return 'Escolha o titular.';
   if (titular.eh_socio) return 'O aluno escolhido é sócio. Escolha o titular.';
   if (!sai) return 'Escolha o sócio que sai.';
@@ -225,15 +453,8 @@ export function validarTrocaSocio(p: {
     return null;
   }
   if (!novo) return 'Escolha o sócio que entra (existente ou novo).';
-  if (novo.nome.trim().replace(/\s+/g, ' ').length < 3) return 'Informe o nome completo do sócio novo.';
-  if (!EMAIL_RE.test(novo.email.trim())) return 'Sócio novo: E-mail inválido.';
-  const t = normalizarTelefone(novo.telefone);
-  if (!t.ok) return 'Sócio novo: ' + t.erro;
-  if (novo.documento.trim()) {
-    const d = validarValor('documento', novo.documento);
-    if (!d.ok) return 'Sócio novo: ' + d.erro;
-  }
-  return null;
+  const e = primeiroErroSocioNovo(validarSocioNovo(novo, enderecoSai ?? null).erros);
+  return e ? 'Sócio novo: ' + e : null;
 }
 
 /** Texto curto de distinção de um aluno na busca (instrução, sócio de, turma, contato parcial). */
@@ -270,7 +491,10 @@ export interface PedidoLinha {
   socio_sai_vinculado: boolean | null;
   socio_entra_id: string | null;
   socio_entra_nome: string | null;
-  socio_entra_novo: { nome?: string; email?: string; telefone?: string | null; documento?: string | null } | null;
+  socio_entra_novo: {
+    nome?: string; email?: string; telefone?: string | null; documento?: string | null; tipo_documento?: string | null;
+    profissao?: string | null; endereco_mantido?: boolean; endereco?: Endereco | null;
+  } | null;
   descricao: string | null;
   motivo: string;
   evidencia: string | null;
