@@ -104,6 +104,31 @@ APLICADA** (ensaio `20261005m_ensaio.sql`, explicação `20261005m.explain.md`).
 - **Ligações previstas:** campo 2 do nome de campanha = `mkt.projetos.sigla`; campo 5 = `mkt.paginas.codigo`
   (em minúsculas no banco); etiqueta do ClickUp = `mkt.projetos.etiqueta_clickup`.
 
+## Mensageria (etapa 2)
+
+Banco da área Mensageria: log central de disparos, controle de números e ferramentas. **Migration
+`infra/supabase/migrations/20261005n_mkt_mensageria.sql`, APLICADA em 05/10/2026** (ensaio `20261005n_ensaio.sql` em 3 blocos;
+contrato das funções e planos medidos em `20261005n.explain.md`). Depende da base compartilhada (20261005m).
+
+| Peça | Onde | O que é |
+|---|---|---|
+| Disparos | `mkt_mensageria.disparos` | Todo envio (API WhatsApp, e-mail, SMS, ligação, grupo), de qualquer ferramenta, apontando para `mkt.projetos`. Retorno (entregues, lidas, cliques, falhas) e custo: **nulo = não lançado, nunca 0**. Tipo (utility/marketing) só na API do WhatsApp. Arquivar com motivo, nunca apagar |
+| Números | `mkt_mensageria.numeros` | Número E.164, responsável, finalidade, ferramenta, capacidade/dia, status. **Consumo do dia vem do log** (soma das listas disparadas hoje), ninguém digita |
+| Ferramentas | `mkt_mensageria.ferramentas` | 13 cadastradas (SendFlow, Unichat, ActiveCampaign, n8n, Google Drive, Slack, ClickUp com API; Infobip, Clint, Ligue Lead, Encurtador, Respondi, ManyChat sem). Custo mensal ainda não lançado |
+| Importações | `mkt_mensageria.importacoes` | Planilha confirmada (até 2.000 linhas, tudo ou nada). Possível duplicata (já no registro ou repetida na planilha) trava a confirmação, salvo "importar mesmo assim" |
+| Histórico | `mkt_mensageria.historico` | Toda criação, edição e arquivamento das 3 tabelas, com antes/depois e quem fez |
+
+- **Funções (`public.mkt_msg_*`):** `disparos_listar` (período obrigatório, até 366 dias, 500 linhas, totais do
+  período e pendências `sem_custo`, `sem_retorno`, `conferir_zero_leitura`), `disparo_salvar`, `disparo_arquivar`,
+  `disparo_lancar_retorno`, `importar` (prévia e confirmação), `numeros_listar`, `numero_salvar`,
+  `ferramentas_listar`, `ferramenta_salvar`, `historico` e `anonimizar_disparo` (LGPD, só admin/dev: limpa copy e
+  lista do disparo e do histórico dele). Projetos: `mkt_projetos_listar` (da base compartilhada).
+- **Permanente:** nada se apaga nem se trunca; histórico e importações não se editam (única exceção: a anonimização).
+  Ferramenta desativada e número arquivado não entram em disparo novo ou editado.
+- **Acesso:** igual ao resto do Marketing: tabelas e schema fechados; as funções checam `mkt.pode_ver('mkt_mensageria')`,
+  hoje só admin/dev. Liberar operador/gestor da Mensageria = mudar só `mkt.pode_ver` (ver o explain).
+- **Não tocar:** `cs.disparos` e `cs.canais_disparo` são de outro sistema; a Mensageria não lê nem aponta para eles.
+
 ## Branches
 
 Uma branch por pessoa, criadas a partir da `main` em 05/10/2026: `victor`, `joao-pedro`, `arthur`. Cada um
@@ -118,3 +143,6 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
 - **05/10/2026:** base compartilhada do Marketing (migration 20261005m, NÃO APLICADA): `mkt.projetos`,
   `mkt.paginas`, listas e tradução do nome de campanha, schema `mkt_web` vazio, tela `/marketing/projetos`.
   Branch `victor`.
+- **05/10/2026:** Mensageria etapa 2, banco (migration 20261005n, APLICADA em 05/10/2026): schema `mkt_mensageria` com
+  disparos, números, ferramentas, importações e histórico; 11 funções `public.mkt_msg_*` (com a anonimização LGPD).
+  Branch `joao-pedro`.
