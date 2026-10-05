@@ -7,7 +7,7 @@ import { REPORTS } from './config';
 const APP = join(__dirname, '..', '..', '..', 'app');
 const paginaExiste = (rota: string) => existsSync(join(APP, '(admin)', ...rota.split('/').filter(Boolean), 'page.tsx'));
 
-describe('redirects do Educacional — cada rota antiga vai para a nova', () => {
+describe('redirects do Educacional: cada rota antiga vai para a nova', () => {
   const esperado: Record<string, string> = {
     '/sistema/alunos': '/educacional/alunos',
     '/sistema/pedidos-alteracao': '/educacional/pedidos-alteracao',

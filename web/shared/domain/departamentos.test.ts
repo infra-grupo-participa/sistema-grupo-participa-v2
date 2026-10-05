@@ -7,7 +7,7 @@ import { DEPARTAMENTOS, MODULO_DEPARTAMENTO, departamento, departamentoDaRota, p
 const user = (cargo: Cargo, setores: string[] = []): GpUser =>
   ({ id: 'u', email: 'x@advmais.com', nome: 'X', cargo, status: 'ativo', setores, funcoes: [], podeVerCpf: false, time: null, avatarUrl: null });
 
-describe('departamentos — registro', () => {
+describe('departamentos: registro', () => {
   it('os 5 departamentos da decisão de 05/10/2026, nesta ordem', () => {
     expect(DEPARTAMENTOS.map((d) => d.label)).toEqual(['Educacional', 'Marketing', 'Comercial', 'Financeiro', 'Infra']);
   });
@@ -42,7 +42,7 @@ describe('departamentos — registro', () => {
   });
 });
 
-describe('departamentos — Marketing bloqueado até os níveis de acesso serem desenhados', () => {
+describe('departamentos: Marketing bloqueado até os níveis de acesso serem desenhados', () => {
   it('admin e dev veem o Marketing', () => {
     expect(podeVerDepartamento(user('admin'), 'marketing')).toBe(true);
     expect(podeVerDepartamento(user('dev'), 'marketing')).toBe(true);
