@@ -24,6 +24,7 @@ export const ROTULO_TIPO: Record<TipoCaso, string> = {
   reembolso: 'Reembolso',
   chargeback: 'Chargeback',
   disputa: 'Disputa',
+  troca_socio: 'Troca de sócio',
 };
 
 export const ABERTOS: StatusCaso[] = ['aguardando_triagem', 'em_remocao', 'ajustando_acesso'];

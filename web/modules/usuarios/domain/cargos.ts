@@ -18,6 +18,7 @@ export const SETOR_META: Record<string, { label: string }> = {
   depoimentos: { label: 'Depoimentos' },
   centro_controle: { label: 'Centro de Controle' },
   remocao_acessos: { label: 'Remoção de Acessos' },
+  pedidos_alteracao: { label: 'Pedidos de alteração de cadastro' },
 };
 
 export const USER_STATUS = ['ativo', 'pendente', 'negado'] as const;
