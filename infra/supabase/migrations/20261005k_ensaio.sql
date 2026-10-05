@@ -45,7 +45,7 @@
 --                                 sala 2, Centro, Rio de Janeiro, RJ (veio "rj"), Brasil
 --   6.num_socios              = 2
 --   7.criar_exterior          = ok true;  7.aprovar_exterior = ok true
---   7.exterior                = telefone 351912345678, documento 30356546462 CPF, cep "1100-053", estado "Lisboa",
+--   7.exterior                = telefone 351912345678, documento 30356546462 CPF, cep "1100-053", estado null (província vai na cidade; aqui igual à cidade),
 --                               cidade Lisboa, pais Portugal, bairro null, vinculado true
 --   8.alterar_uf_invalida     = ok false, "Estado inválido: escolha uma das 27 UFs (ex.: SP)."
 --   8.alterar_exterior        = ok true
@@ -185,6 +185,16 @@ begin
     end if;
     v_out := v_out || jsonb_build_object(k, v);
   end loop;
+
+  -- thb_alunos.estado é character(2) em produção: fora do Brasil a província vai junto da cidade, "Cidade (Província)",
+  -- e o estado fica vazio. Nada se perde e o aprovador vê exatamente o que vai gravar (05/10/2026).
+  if not v_br and v_out ->> 'estado' is not null then
+    v_out := v_out || jsonb_build_object('cidade',
+               case when v_out ->> 'cidade' is null then v_out ->> 'estado'
+                    when lower(v_out ->> 'cidade') = lower(v_out ->> 'estado') then (v_out ->> 'cidade')
+                    else (v_out ->> 'cidade') || ' (' || (v_out ->> 'estado') || ')' end,
+               'estado', null);
+  end if;
 
   if p_completo then
     if v_br then

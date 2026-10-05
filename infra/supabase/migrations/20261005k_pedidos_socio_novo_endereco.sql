@@ -158,6 +158,16 @@ begin
     v_out := v_out || jsonb_build_object(k, v);
   end loop;
 
+  -- thb_alunos.estado é character(2) em produção: fora do Brasil a província vai junto da cidade, "Cidade (Província)",
+  -- e o estado fica vazio. Nada se perde e o aprovador vê exatamente o que vai gravar (05/10/2026).
+  if not v_br and v_out ->> 'estado' is not null then
+    v_out := v_out || jsonb_build_object('cidade',
+               case when v_out ->> 'cidade' is null then v_out ->> 'estado'
+                    when lower(v_out ->> 'cidade') = lower(v_out ->> 'estado') then (v_out ->> 'cidade')
+                    else (v_out ->> 'cidade') || ' (' || (v_out ->> 'estado') || ')' end,
+               'estado', null);
+  end if;
+
   if p_completo then
     if v_br then
       if v_out ->> 'cep' is null then v_falta := v_falta || 'CEP'::text; end if;
