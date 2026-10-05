@@ -63,7 +63,7 @@ export function DepoimentosClient({ canEdit }: { canEdit: boolean }) {
             onChange={(k) => { setTab(k as Tab); window.location.hash = k; }}
           />
         </div>
-        <a href="/depoimentos/biblioteca" className="px-4 py-2 text-sm text-[var(--accent)] whitespace-nowrap hover:underline">Para Copy →</a>
+        <a href="/educacional/depoimentos/biblioteca" className="px-4 py-2 text-sm text-[var(--accent)] whitespace-nowrap hover:underline">Para Copy →</a>
       </div>
 
       {tab === 'biblioteca' && (

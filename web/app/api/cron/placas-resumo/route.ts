@@ -89,7 +89,7 @@ function destinatariosAdmin(): string[] {
 }
 
 function montarEmailResumo(c: ContagensResumo, horasNovos: number): { subject: string; html: string } {
-  const link = `${publicAppBaseUrl()}/relatorios/placas`;
+  const link = `${publicAppBaseUrl()}/educacional/placas`;
   const linha = (rotulo: string, n: number) =>
     `<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">${rotulo}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:700">${n}</td></tr>`;
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Resumo de placas</title></head>

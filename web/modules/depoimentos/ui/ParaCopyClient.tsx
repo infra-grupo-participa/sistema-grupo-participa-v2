@@ -26,7 +26,7 @@ export function ParaCopyClient() {
     <div>
       <div className="flex items-center gap-3 mb-1">
         <h1 className="text-2xl font-bold text-[var(--fg)]">Para Copy</h1>
-        <a href="/depoimentos#biblioteca" className="text-sm text-[var(--accent)] hover:underline">← Biblioteca</a>
+        <a href="/educacional/depoimentos#biblioteca" className="text-sm text-[var(--accent)] hover:underline">← Biblioteca</a>
       </div>
       <p className="text-sm text-[var(--fg-3)] mb-4">Trechos prontos para posts, reels e anúncios. {loading && 'carregando…'}</p>
       <Toolbar className="mb-4">

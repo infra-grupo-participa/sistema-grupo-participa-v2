@@ -121,7 +121,7 @@ function CartaoPedido({ p, onAprovar, onRecusar, onMarcar }: {
       {p.decidido_em && <Linha k="Decidido">{p.decidido_por_nome} · {fmtDataHora(p.decidido_em)}{p.conflito_confirmado ? ' · conflito confirmado' : ''}</Linha>}
       {p.ra_caso_id && (
         <Linha k="Remoção">
-          <a href={`/relatorios/remocoes?caso=${p.ra_caso_id}`} className="text-[var(--accent)] hover:underline">Abrir o caso de remoção do sócio que saiu</a>
+          <a href={`/educacional/remocoes?caso=${p.ra_caso_id}`} className="text-[var(--accent)] hover:underline">Abrir o caso de remoção do sócio que saiu</a>
         </Linha>
       )}
 

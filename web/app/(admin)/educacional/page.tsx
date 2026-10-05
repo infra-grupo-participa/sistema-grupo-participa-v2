@@ -12,9 +12,9 @@ export default async function EducacionalPage() {
   const isDev = ehDev(user);
 
   const atalhos = [
-    { ico: 'trophy', label: 'Relatório de Placas', desc: 'Fila de solicitações, auditoria e agenda', href: '/relatorios/placas#solicitacoes', external: false, show: true },
-    { ico: 'users', label: 'Base de Alunos', desc: 'Ficha 360° do aluno e edição', href: '/sistema/alunos', external: false, show: isAdmin },
-    { ico: 'depoimentos', label: 'Depoimentos', desc: 'Biblioteca, highlights e copy', href: '/depoimentos#biblioteca', external: false, show: isAdmin },
+    { ico: 'trophy', label: 'Relatório de Placas', desc: 'Fila de solicitações, auditoria e agenda', href: '/educacional/placas#solicitacoes', external: false, show: true },
+    { ico: 'users', label: 'Base de Alunos', desc: 'Ficha 360° do aluno e edição', href: '/educacional/alunos', external: false, show: isAdmin },
+    { ico: 'depoimentos', label: 'Depoimentos', desc: 'Biblioteca, highlights e copy', href: '/educacional/depoimentos#biblioteca', external: false, show: isAdmin },
     { ico: 'user', label: 'Usuários', desc: 'Perfis, cargos e permissões', href: '/usuarios', external: false, show: isAdmin },
     { ico: 'check-circle', label: 'Ativação', desc: 'Sistema de ativação de acessos', href: 'https://ativacao.grupoparticipa.app.br/login', external: true, show: true },
     { ico: 'gem', label: 'Serviços Diamante', desc: 'Sistema de Serviços Diamante', href: 'https://diamantes.grupoparticipa.app.br/', external: true, show: true },
