@@ -69,6 +69,15 @@ export const DEPARTAMENTOS: Departamento[] = [
 ];
 
 /**
+ * Base compartilhada do Marketing (fase 1 da central de dados, 05/10/2026): não é área, é o cadastro que as áreas
+ * leem (tabela de projetos única e páginas). Banco: schema `mkt` (migration 20261005m). Código em
+ * `web/modules/marketing/projetos/`. Mesmo gate do Marketing (admin/dev).
+ */
+export const BASE_MARKETING: Omit<Area, 'status'>[] = [
+  { key: 'projetos', label: 'Projetos e páginas', path: '/marketing/projetos', ico: 'tags', descricao: 'Projetos (PB26, HT33…) e páginas de cada um' },
+];
+
+/**
  * A que departamento pertence cada módulo de `web/modules`. `sistema` = global (vale para a Central toda:
  * usuários, configurações). Módulo novo entra aqui; o teste `departamentos.test.ts` cobra.
  */

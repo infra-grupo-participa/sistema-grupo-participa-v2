@@ -2,7 +2,7 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Cargo, GpUser } from './auth';
-import { DEPARTAMENTOS, MODULO_DEPARTAMENTO, departamento, departamentoDaRota, podeVerDepartamento } from './departamentos';
+import { BASE_MARKETING, DEPARTAMENTOS, MODULO_DEPARTAMENTO, departamento, departamentoDaRota, podeVerDepartamento } from './departamentos';
 
 const user = (cargo: Cargo, setores: string[] = []): GpUser =>
   ({ id: 'u', email: 'x@advmais.com', nome: 'X', cargo, status: 'ativo', setores, funcoes: [], podeVerCpf: false, time: null, avatarUrl: null });
@@ -64,5 +64,13 @@ describe('departamentos: Marketing bloqueado até os níveis de acesso serem des
         expect(podeVerDepartamento(user(c), k)).toBe(true);
       }
     }
+  });
+});
+
+describe('departamentos: base compartilhada do Marketing (20261005m)', () => {
+  it('Projetos e páginas em /marketing/projetos, fora da lista de áreas', () => {
+    expect(BASE_MARKETING.map((b) => b.path)).toEqual(['/marketing/projetos']);
+    expect(departamento('marketing').areas.some((a) => a.path === '/marketing/projetos')).toBe(false);
+    expect(departamentoDaRota('/marketing/projetos')).toBe('marketing');
   });
 });
