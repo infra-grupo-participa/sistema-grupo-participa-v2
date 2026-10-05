@@ -4,7 +4,7 @@
 // As tabelas pa_* são fechadas; a trava (quem pede, quem aprova, máscara de documento) mora em cada função.
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import type { AlunoResumo, PapelPedidos, PedidoLinha, SocioNovo, TipoPedido } from '../domain/pedidos-alteracao';
+import type { AlunoResumo, PapelPedidos, PedidoLinha, SocioNovoPayload, TipoPedido } from '../domain/pedidos-alteracao';
 
 const db = () => createBrowserSupabase();
 
@@ -56,7 +56,7 @@ export interface NovoPedido {
   valor_novo?: unknown;
   socio_sai_id?: string;
   socio_entra_id?: string;
-  socio_entra_novo?: SocioNovo;
+  socio_entra_novo?: SocioNovoPayload;
   descricao?: string;
   motivo: string;
   evidencia?: string;
@@ -66,6 +66,28 @@ export async function criarPedido(p: NovoPedido): Promise<Resultado> {
   const { data, error } = await db().rpc('pa_criar', { p });
   logQueryError('pa_criar', error);
   return error ? ERRO_REDE : (data as Resultado);
+}
+
+/** Aluno já na base com este e-mail ou documento (pa_duplicata_pessoa). Mesmo resumo da busca, sem o CPF inteiro. */
+export type AlunoDuplicado = AlunoResumo & { cancelado: boolean };
+export async function duplicataPessoa(email: string, documento: string): Promise<{ email: AlunoDuplicado | null; documento: AlunoDuplicado | null } | null> {
+  const { data, error } = await db().rpc('pa_duplicata_pessoa', { p_email: email || null, p_documento: documento || null });
+  logQueryError('pa_duplicata_pessoa', error);
+  return error ? null : (data as { email: AlunoDuplicado | null; documento: AlunoDuplicado | null } | null);
+}
+
+/**
+ * Endereço pelo CEP (ViaCEP) pela rota do próprio app /api/cep (mesma da Placa: valida origem e limita por IP).
+ * A chamada sai do servidor, então a CSP do navegador não entra. Null = não achou ou falhou: a tela segue manual.
+ */
+export async function buscarCep(cep: string): Promise<{ logradouro: string; bairro: string; cidade: string; estado_uf: string } | null> {
+  try {
+    const r = await fetch(`/api/cep?cep=${encodeURIComponent(cep)}`, { credentials: 'same-origin', signal: AbortSignal.timeout(9000) });
+    if (!r.ok) return null;
+    return (await r.json()) as { logradouro: string; bairro: string; cidade: string; estado_uf: string };
+  } catch {
+    return null;
+  }
 }
 
 export async function meusPedidos(): Promise<PedidoLinha[]> {
