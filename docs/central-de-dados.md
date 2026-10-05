@@ -108,6 +108,8 @@ APLICADA** (ensaio `20261005m_ensaio.sql`, explicação `20261005m.explain.md`).
 
 ## Web (Marketing > Web: o Radar dentro da central)
 
+> **Quem chega para mexer na Web (Luiz) começa por [`web-guia-luiz.md`](web-guia-luiz.md)**: situação, decisões, o que falta e perguntas abertas.
+
 Fase 2 da central de dados (decisões de 05/10/2026, `area-web-radar.md` no cérebro): o Radar do Luiz Fernando (pacote
 `SistemaWEB/sistemas/radar/` de 05/10/2026) passou a ser do Grupo e mora aqui, no nosso Supabase. **Migration
 `infra/supabase/migrations/20261005n_mkt_web_coleta.sql`, NÃO APLICADA** (ensaio `20261005n_ensaio.sql`, explicação
