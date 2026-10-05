@@ -61,7 +61,8 @@ export const DEPARTAMENTOS: Departamento[] = [
       area('marketing', 'social-media', 'Social Media', 'share', 'Redes sociais'),
     ],
   },
-  { key: 'comercial', label: 'Comercial', path: '/comercial', descricao: 'CRM: ativação, vendas e recuperação', ico: 'handshake', status: 'em_breve', areas: [] },
+  // Comercial (20261005o): CRM e base única de pessoas. Não tem áreas (decisão do Victor, 05/10/2026). Só admin e dev.
+  { key: 'comercial', label: 'Comercial', path: '/comercial', descricao: 'CRM: ativação, vendas e recuperação', ico: 'handshake', status: 'ativo', areas: [] },
   // Departamento Financeiro (Em breve). NÃO confundir com o módulo "Financeiro" (Contas a Receber), que hoje
   // mora DENTRO do Educacional em /educacional/financeiro e mantém o nome por decisão do Victor (05/10/2026).
   { key: 'financeiro', label: 'Financeiro', path: '/financeiro', descricao: 'Departamento financeiro da empresa', ico: 'building', status: 'em_breve', areas: [] },
@@ -89,6 +90,7 @@ export const MODULO_DEPARTAMENTO: Record<string, DepartamentoKey | 'sistema'> = 
   'remocao-acessos': 'educacional',
   usuarios: 'sistema',
   marketing: 'marketing', // web/modules/marketing/<area>/
+  comercial: 'comercial', // CRM e base de pessoas (20261005o)
 };
 
 export function departamento(key: DepartamentoKey): Departamento {
@@ -103,11 +105,13 @@ export function departamento(key: DepartamentoKey): Departamento {
  * - Marketing: só admin e dev, até os níveis de acesso por departamento serem desenhados (decisão de 05/10/2026).
  *   Bloqueia o visualizador geral, gestor e operador. Ainda não há dado de Marketing no banco, então não
  *   existe regra de RLS correspondente: quando houver, ela precisa negar o visualizador do mesmo jeito.
- * - Comercial, Financeiro, Infra: só mostram "Em breve"; qualquer pessoa da equipe vê o aviso.
+ * - Comercial: só admin e dev, a mesma regra do Marketing (dado pessoal de lead e aluno; migration 20261005o). O banco
+ *   nega o resto em cada função (pessoas.pode_ver); o gancho para liberar uma área é pessoas.config.
+ * - Financeiro, Infra: só mostram "Em breve"; qualquer pessoa da equipe vê o aviso.
  */
 export function podeVerDepartamento(u: GpUser | null, key: DepartamentoKey): boolean {
   if (!u) return false;
-  if (key === 'marketing') return ehAdminOuAcima(u);
+  if (key === 'marketing' || key === 'comercial') return ehAdminOuAcima(u);
   return true;
 }
 

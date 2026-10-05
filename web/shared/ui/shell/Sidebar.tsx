@@ -140,7 +140,7 @@ export function Sidebar({ user }: { user: GpUser }) {
 
       <Divider />
 
-      {/* Seletor de departamento. Marketing some para quem não é admin/dev (mesma regra do layout /marketing). */}
+      {/* Seletor de departamento. Marketing e Comercial somem para quem não é admin/dev (mesma regra dos layouts). */}
       <Group label="Departamentos" collapsed={!!groups.departamentos} onToggle={() => toggleGroup('departamentos')}>
         {DEPARTAMENTOS.filter((d) => podeVerDepartamento(user, d.key)).map((d) => {
           const active = depAtual === d.key;

@@ -11,9 +11,9 @@ describe('departamentos: registro', () => {
   it('os 5 departamentos da decisão de 05/10/2026, nesta ordem', () => {
     expect(DEPARTAMENTOS.map((d) => d.label)).toEqual(['Educacional', 'Marketing', 'Comercial', 'Financeiro', 'Infra']);
   });
-  it('Comercial, Financeiro e Infra estão "Em breve"; Educacional e Marketing ativos', () => {
+  it('Financeiro e Infra estão "Em breve"; Educacional, Marketing e Comercial ativos', () => {
     const st = Object.fromEntries(DEPARTAMENTOS.map((d) => [d.key, d.status]));
-    expect(st).toEqual({ educacional: 'ativo', marketing: 'ativo', comercial: 'em_breve', financeiro: 'em_breve', infra: 'em_breve' });
+    expect(st).toEqual({ educacional: 'ativo', marketing: 'ativo', comercial: 'ativo', financeiro: 'em_breve', infra: 'em_breve' });
   });
   it('Marketing tem as 5 áreas em /marketing/<area>: Web ativa, as outras "Em breve"', () => {
     const mkt = departamento('marketing');
@@ -60,10 +60,20 @@ describe('departamentos: Marketing bloqueado até os níveis de acesso serem des
   });
   it('os demais departamentos abrem para qualquer cargo (Educacional mantém o gate de cada tela)', () => {
     for (const c of ['dev', 'admin', 'gestor', 'operador', 'visualizador'] as Cargo[]) {
-      for (const k of ['educacional', 'comercial', 'financeiro', 'infra'] as const) {
+      for (const k of ['educacional', 'financeiro', 'infra'] as const) {
         expect(podeVerDepartamento(user(c), k)).toBe(true);
       }
     }
+  });
+});
+
+describe('departamentos: Comercial (20261005o) com a mesma regra do Marketing', () => {
+  it('admin e dev veem o Comercial', () => {
+    expect(podeVerDepartamento(user('admin'), 'comercial')).toBe(true);
+    expect(podeVerDepartamento(user('dev'), 'comercial')).toBe(true);
+  });
+  it('visualizador, gestor e operador NÃO veem o Comercial (dado pessoal)', () => {
+    for (const c of ['visualizador', 'gestor', 'operador'] as Cargo[]) expect(podeVerDepartamento(user(c, ['comercial']), 'comercial')).toBe(false);
   });
 });
 
