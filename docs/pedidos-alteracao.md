@@ -77,6 +77,11 @@ Automação (n8n) que lê os pedidos com `planilha_status = 'pendente'`, escreve
 `ok`/`erro` (`planilha_em`, `planilha_erro`). Precisa de uma função de leitura e confirmação para o n8n (padrão
 `ra_slack_*`, com segredo), que ainda não existe.
 
+**Aviso de pedido novo para o aprovador (pedido do Victor, 05/10/2026, pendente):** automação que avisa o
+aprovador quando chega pedido (ex.: mensagem no Slack com quem pediu, tipo, aluno e link para a fila). Hoje a fila
+só aparece em Central de Alunos > aba "Pedidos de alteração", que o aprovador precisa abrir. Usar o mesmo padrão
+de aviso da Remoção de Acessos (gatilho, n8n, Slack).
+
 ## Banco
 
 Migration `infra/supabase/migrations/20261005j_pedidos_alteracao.sql` (ensaio `20261005j_ensaio.sql`, medições em
