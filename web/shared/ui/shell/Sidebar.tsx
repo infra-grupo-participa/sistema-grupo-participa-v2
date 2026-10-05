@@ -85,10 +85,10 @@ export function Sidebar({ user }: { user: GpUser }) {
   };
 
   const cur = normalize(pathname);
-  // Departamento da rota atual. Fora de departamento (Início, Usuários, Configurações) o menu do Educacional
-  // continua aparecendo, como sempre apareceu: é onde está tudo o que já existe.
+  // Departamento da rota atual: o menu dele só aparece dentro dele.
   const depAtual = departamentoDaRota(cur);
-  const mostraEducacional = depAtual === null || depAtual === 'educacional';
+  // Victor, 05/10/2026: fora de departamento (Início, Usuários, Configurações) não mostra menu de departamento nenhum.
+  const mostraEducacional = depAtual === 'educacional';
   const mostraMarketing = depAtual === 'marketing' && podeVerDepartamento(user, 'marketing');
 
   // O grupo aparece se o cargo permite E o usuário tem o setor.
