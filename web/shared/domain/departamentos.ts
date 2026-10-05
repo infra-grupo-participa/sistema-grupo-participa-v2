@@ -54,7 +54,7 @@ export const DEPARTAMENTOS: Departamento[] = [
     ico: 'megaphone',
     status: 'ativo',
     areas: [
-      area('marketing', 'web', 'Web', 'globe', 'Páginas e sites'),
+      { ...area('marketing', 'web', 'Web', 'globe', 'Páginas e sites'), status: 'ativo' }, // o Radar (20261005n)
       area('marketing', 'mensageria', 'Mensageria', 'message', 'Disparos e grupos'),
       area('marketing', 'trafego', 'Tráfego', 'trending-up', 'Mídia paga'),
       area('marketing', 'audiovisual', 'Audiovisual', 'video', 'Vídeo e foto'),
