@@ -113,6 +113,16 @@ export const REPORTS: ReportGroup[] = [
     setor: 'remocao_acessos',
     children: [],
   },
+  // Gate por setor: ver podePedirAlteracao(), espelho de pa_pode_pedir(). Quem pede não vê a Central.
+  {
+    key: 'pedidos-alteracao',
+    label: 'Pedidos de alteração',
+    path: '/sistema/pedidos-alteracao',
+    defaultHref: '/sistema/pedidos-alteracao',
+    ico: 'clipboard',
+    setor: 'pedidos_alteracao',
+    children: [],
+  },
 ];
 
 export const SYSTEM_NAV: SystemNavItem[] = [
