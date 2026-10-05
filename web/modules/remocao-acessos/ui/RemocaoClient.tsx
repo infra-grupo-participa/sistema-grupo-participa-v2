@@ -126,7 +126,7 @@ export function RemocaoClient() {
         <Button variant="ghost" size="sm" onClick={carregar}>Atualizar</Button>
       </div>
       <p className="text-sm text-[var(--fg-3)] mb-4 max-w-[70ch]">
-        Reembolso e chargeback do Holding Masters. Cada caso passa pela triagem e depois cada responsável marca o que removeu,
+        Reembolso e chargeback do Holding Masters, e sócio que saiu numa troca de sócio aprovada. Cada caso passa pela triagem e depois cada responsável marca o que removeu,
         para o titular e cada sócio. Prazo: 1 dia útil (9h às 18h, sem feriado).
         {papel && papel.meus_itens.length > 0 && <> Seus itens: <b className="text-[var(--fg-2)]">{papel.meus_itens.join(', ')}</b>.</>}
       </p>
@@ -156,7 +156,7 @@ export function RemocaoClient() {
           ) : !lista.length ? (
             <EmptyState
               title={filtro === 'meus' ? 'Nada pendente com você' : 'Nenhum caso aqui'}
-              hint="Os casos nascem sozinhos quando a Hotmart registra reembolso, chargeback ou disputa do Holding Masters."
+              hint="Os casos nascem sozinhos quando a Hotmart registra reembolso, chargeback ou disputa do Holding Masters, ou quando uma troca de sócio é aprovada."
               icon="inbox"
             />
           ) : (

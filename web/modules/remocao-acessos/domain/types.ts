@@ -1,7 +1,7 @@
 // Tipos do módulo Remoção de Acessos. Espelham o JSON das funções ra_* do banco
 // (migration 20260916_remocao_acessos.sql).
 
-export type TipoCaso = 'reembolso' | 'chargeback' | 'disputa';
+export type TipoCaso = 'reembolso' | 'chargeback' | 'disputa' | 'troca_socio';
 export type StatusCaso = 'alerta' | 'aguardando_triagem' | 'mantem_acesso' | 'em_remocao' | 'ajustando_acesso' | 'concluido';
 export type Decisao = 'remover' | 'manter';
 export type SituacaoItem = 'pendente' | 'feito' | 'nao_se_aplica';
@@ -30,7 +30,7 @@ export interface CasoFila {
   concluido_em: string | null;
   eh_programa: boolean;
   teste: boolean;
-  origem: 'compras' | 'webhook';
+  origem: 'compras' | 'webhook' | 'pedido_alteracao';
   decisao: Decisao | null;
   expiracao_antiga: string | null;
   recomendacao: Recomendacao | null;

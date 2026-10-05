@@ -11,7 +11,8 @@ export type Setor =
   | 'depoimentos'
   | 'centro_controle'
   | 'financeiro'
-  | 'remocao_acessos';
+  | 'remocao_acessos'
+  | 'pedidos_alteracao';
 
 /** Dados brutos de cargo vindos da tabela `perfis`. */
 export interface CargoSource {

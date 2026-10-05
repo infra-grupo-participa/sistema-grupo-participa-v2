@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { ehAdminOuAcima, ehDev, podeVer, type GpUser } from '@/shared/domain/auth';
 import { podeVerFinanceiro } from '@/modules/financeiro/domain/acesso';
 import { podeVerRemocao } from '@/modules/remocao-acessos/domain/acesso';
+import { podePedirAlteracao } from '@/modules/alunos/domain/pedidos-alteracao';
 import { REPORTS, SYSTEM_NAV, type ReportGroup } from '@/shared/ui/nav/config';
 import { Icon } from '@/shared/ui/icons';
 import { chaveHashPadrao, itemHashAtivo } from './item-ativo';
@@ -90,6 +91,7 @@ export function Sidebar({ user }: { user: GpUser }) {
   const podeVerGrupo = (g: ReportGroup) => {
     if (g.setor === 'financeiro') return podeVerFinanceiro(user);
     if (g.setor === 'remocao_acessos') return podeVerRemocao(user);
+    if (g.setor === 'pedidos_alteracao') return podePedirAlteracao(user);
     // Base de Alunos: mesma regra da página (admin+ ou módulo Centro de Controle);
     // visualizador global fica de fora (dado sensível).
     if (g.setor === 'centro_controle') {

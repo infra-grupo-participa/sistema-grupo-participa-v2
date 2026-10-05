@@ -31,6 +31,8 @@ import { CONCILIACAO_ATIVA, contarAbertosAlta } from '../domain/conciliacao';
 import { passaFiltroComprovacao, passaFiltroPrograma } from '../domain/programa-selo';
 import { ConciliacaoClient, useConciliacao } from './ConciliacaoClient';
 import { CelulaPrograma, FiltrosProgramaSelo, LinhaSelo, useProgramaSelo } from './programa-selo-ui';
+import { PedidosAprovacao } from './PedidosAprovacao';
+import { meuPapelPedidos } from './pedidos-alteracao-data';
 
 type SortCol = 'nome' | 'nivel' | 'instrucao' | 'turma' | 'vencimento' | 'canal';
 interface Filtros { status: string[]; espaco: string[]; instrucao: string[]; nivel: string[]; jornada: string[]; papel: string[]; turma: string[]; estado: string[]; anoEntrada: string[]; canal: string[]; programa: string[]; comprovacao: string[] }
@@ -87,8 +89,11 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
   const abrirFichaNaAba = useCallback((id: string, aba: AbaFicha) => { setSelectedId(id); setEditMode(false); setAbaInicial(aba); }, []);
   const [novoAluno, setNovoAluno] = useState(false);
   const { toast, flash } = useFlash();
-  const [topTab, setTopTab] = useState<'dashboard' | 'lista' | 'conciliacao' | 'acessoHm'>(onlyHm ? 'acessoHm' : 'dashboard');
+  const [topTab, setTopTab] = useState<'dashboard' | 'lista' | 'conciliacao' | 'acessoHm' | 'pedidos'>(onlyHm ? 'acessoHm' : 'dashboard');
   const [hmCount, setHmCount] = useState<number | null>(null);
+  // Pedidos de alteração: a aba só existe para quem aprova (pa_aprovadores); o contador vem do banco.
+  const [podeAprovarPedidos, setPodeAprovarPedidos] = useState(false);
+  const [pedidosCount, setPedidosCount] = useState<number | null>(null);
 
   const reload = useCallback(async () => setAlunos(await loadAlunos360()), []);
   // Segundo plano, depois da lista: conciliação 1× (a ficha reusa) e programa + selo 1×. Falha não trava a lista.
@@ -104,6 +109,10 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
         setLoading(false);
         return;
       }
+      meuPapelPedidos().then((p) => {
+        setPodeAprovarPedidos(!!p?.pode_aprovar);
+        setPedidosCount(p?.pendentes ?? null);
+      });
       const [a, t, c] = await Promise.all([loadAlunos360(), loadTurmas(), loadHmContagem()]);
       setAlunos(a);
       setTurmas(t);
@@ -285,12 +294,14 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
       <p className="text-sm text-[var(--fg-3)] mb-4">Centro de controle — ficha 360° do aluno. {loading && 'carregando…'}</p>
 
       <div className="flex gap-1 border-b border-[var(--border)] mb-5">
-        {(onlyHm
-          ? ([['acessoHm', 'Liberação Holding Masters']] as const)
-          : CONCILIACAO_ATIVA
-            ? ([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos'], ['conciliacao', 'Conciliação'], ['acessoHm', 'Liberação Holding Masters']] as const)
-            : ([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos'], ['acessoHm', 'Liberação Holding Masters']] as const)
-        ).map(([k, l]) => (
+        {([
+          ...(onlyHm
+            ? ([['acessoHm', 'Liberação Holding Masters']] as const)
+            : CONCILIACAO_ATIVA
+              ? ([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos'], ['conciliacao', 'Conciliação'], ['acessoHm', 'Liberação Holding Masters']] as const)
+              : ([['dashboard', 'Dashboard'], ['lista', 'Lista de alunos'], ['acessoHm', 'Liberação Holding Masters']] as const)),
+          ...(!onlyHm && podeAprovarPedidos ? ([['pedidos', 'Pedidos de alteração']] as const) : []),
+        ]).map(([k, l]) => (
           <button
             key={k}
             onClick={() => setTopTab(k)}
@@ -304,6 +315,9 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
             )}
             {k === 'acessoHm' && hmCount != null && hmCount > 0 && (
               <span className="min-w-[18px] rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[11px] font-semibold text-black tabular">{hmCount}</span>
+            )}
+            {k === 'pedidos' && pedidosCount != null && pedidosCount > 0 && (
+              <span aria-label={`${pedidosCount} ${pedidosCount === 1 ? 'pedido em aberto' : 'pedidos em aberto'}`} className="min-w-[18px] rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[11px] font-semibold text-black tabular">{pedidosCount}</span>
             )}
           </button>
         ))}
@@ -329,6 +343,8 @@ export function AlunosClient({ canEditBase, canLiberarHm, canManageTurmas = fals
           onCountChange={(c) => setHmCount(hmBadgeTotal(c))}
         />
       )}
+
+      {topTab === 'pedidos' && podeAprovarPedidos && <PedidosAprovacao onCountChange={setPedidosCount} />}
 
       {topTab === 'lista' && (
       <>

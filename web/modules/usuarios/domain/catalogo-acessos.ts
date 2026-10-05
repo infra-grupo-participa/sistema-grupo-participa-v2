@@ -72,6 +72,13 @@ export const MODULOS: ModuloAcesso[] = [
     verCodigo: '3.5.1', verLabel: 'Ver casos e marcar os próprios itens',
     acoes: [],
   },
+  // Para quem NÃO tem a Central (ex.: Sucesso do Cliente): pede alteração e vê só os próprios pedidos.
+  // Quem aprova não vem daqui: é a tabela pa_aprovadores no banco.
+  {
+    codigo: '3.6', setor: 'pedidos_alteracao', label: 'Pedidos de alteração de cadastro',
+    verCodigo: '3.6.1', verLabel: 'Pedir alteração e acompanhar os próprios pedidos',
+    acoes: [],
+  },
 ];
 
 export const LGPD_ACESSO = { codigo: '4.1', label: 'Ver CPF/documento completo (LGPD)' };
