@@ -1,5 +1,6 @@
 // Integrações do CRM do Comercial (aba #integracoes): o que entra, o que sai e o risco de cada uma.
 // Só dado: o status real vem do backend quando cada conexão existir.
+import { FERRAMENTAS } from '../../domain/mcp-ferramentas';
 
 export type StatusIntegracao = 'A conectar' | 'Em breve' | 'Entra com o backend';
 
@@ -20,16 +21,14 @@ export interface Integracao {
   ferramentas?: FerramentaMcp[];
 }
 
-/** Ferramentas do servidor MCP do Comercial (o Claude na nuvem lê e age no CRM com as mesmas regras da tela). */
-export const FERRAMENTAS_MCP: FerramentaMcp[] = [
-  { nome: 'buscar_pessoa', descricao: 'Acha o contato por nome, e-mail ou telefone.' },
-  { nome: 'ver_jornada', descricao: 'Inscrições, compras, grupos e conversas da pessoa.' },
-  { nome: 'ver_funil', descricao: 'Negócios por etapa, com prazo e dono.' },
-  { nome: 'criar_atividade', descricao: 'Agenda o próximo passo com data.' },
-  { nome: 'mover_etapa', descricao: 'Move o negócio, respeitando os campos obrigatórios.' },
-  { nome: 'registrar_nota', descricao: 'Anota na linha do tempo do contato.' },
-  { nome: 'fechamento_do_dia', descricao: 'Os números do dia com a definição exata.' },
-];
+/**
+ * Ferramentas do servidor MCP do Comercial (F7): as MESMAS de `domain/mcp-ferramentas.ts`, que é a fonte única.
+ * O Claude na nuvem lê e age no CRM com as mesmas regras da tela; as de escrita pedem o escopo "operar" no token.
+ */
+export const FERRAMENTAS_MCP: FerramentaMcp[] = FERRAMENTAS.map((f) => ({
+  nome: f.name,
+  descricao: f.escopo === 'operar' ? `${f.title} (escreve; token com "operar").` : `${f.title}.`,
+}));
 
 export const INTEGRACOES: Integracao[] = [
   {

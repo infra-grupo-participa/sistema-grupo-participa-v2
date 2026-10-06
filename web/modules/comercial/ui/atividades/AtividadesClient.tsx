@@ -11,6 +11,7 @@ import {
 import { Icon } from '@/shared/ui/icons';
 import { CADENCIA, ICONE_ATIVIDADE, ROTULO_ATIVIDADE, produto as produtoDe, rotuloMotivo } from '../../domain/catalogo';
 import { atividadeAtrasada } from '../../domain/regras';
+import { motivoSomenteLeitura, podeConcluirAtividade, podeMexerNoNegocio } from '../../domain/travas';
 import type { Atividade, Negocio, TipoAtividade } from '../../domain/types';
 import { EstadoErro, FaixaNumeros, PaginaComercial, useAbaHash, useEquipe } from '../comum';
 import { NegocioDrawer } from '../NegocioDrawer';
@@ -56,7 +57,7 @@ export function AtividadesClient() {
   const [aberto, setAberto] = useState<string | null>(null);
   const [verCadencia, setVerCadencia] = useState(false);
   const [nova, setNova] = useState(false);
-  const fluxo = useConcluirComProximo(flash);
+  const fluxo = useConcluirComProximo(flash, (n) => motivoSomenteLeitura(n, sessao, nomeDe));
 
   const eu = sessao?.vendedorId ?? null;
   const dono = escolhaDono && escolhaDono.sessao === eu ? escolhaDono.valor : gestor ? 'todos' : 'meus';
@@ -81,11 +82,11 @@ export function AtividadesClient() {
   const negocioDe = (a: Atividade): Negocio | undefined =>
     (a.negocioId ? negocioPorId.get(a.negocioId) : undefined) ?? negocioDoContato(negocios ?? [], a.contatoId, a.donoId) ?? undefined;
 
-  // Negócios abertos que a pessoa pode agendar (os dela; o gestor, todos).
+  // Negócios abertos que a pessoa pode agendar (os dela; o gestor, todos): mesma trava do banco (domain/travas).
   const opcoesNova = useMemo(() => (negocios ?? [])
-    .filter((n) => n.status === 'aberto' && (gestor || n.donoId === eu))
+    .filter((n) => n.status === 'aberto' && podeMexerNoNegocio(n, sessao))
     .map((n) => ({ id: n.id, contatoId: n.contatoId, rotulo: `${contatoPorId.get(n.contatoId)?.nome ?? '—'} · ${produtoDe(n.produto).nome} · ${n.etapaNome}` }))
-    .sort((a, b) => a.rotulo.localeCompare(b.rotulo, 'pt-BR')), [negocios, gestor, eu, contatoPorId]);
+    .sort((a, b) => a.rotulo.localeCompare(b.rotulo, 'pt-BR')), [negocios, sessao, contatoPorId]);
 
   const pronto = !!(atividades && negocios && contatos && sessao);
 
@@ -166,7 +167,6 @@ export function AtividadesClient() {
                     <Card as="ul" className="divide-y divide-[var(--border-faint)]">
                       {g.itens.map((a) => {
                         const n = negocioDe(a);
-                        const podeMexer = a.donoId === eu || gestor;
                         return (
                           <LinhaAgenda
                             key={a.id}
@@ -176,7 +176,7 @@ export function AtividadesClient() {
                             atrasada={atividadeAtrasada(a, agora)}
                             agora={agora}
                             onAbrir={n ? () => setAberto(n.id) : undefined}
-                            onConcluir={!a.concluidaEm && podeMexer ? (res) => fluxo.concluir(a, res, n) : undefined}
+                            onConcluir={podeConcluirAtividade(a, sessao) ? (res) => fluxo.concluir(a, res, n) : undefined}
                           />
                         );
                       })}

@@ -14,6 +14,7 @@ import { Icon } from '@/shared/ui/icons';
 import { ICONE_ATIVIDADE, ROTULO_STATUS_FICHA, produto as produtoDe } from '../../domain/catalogo';
 import { calcularFechamento, type LinhaFechamento } from '../../domain/fechamento';
 import { situacaoSla } from '../../domain/regras';
+import { motivoSomenteLeitura, podeConcluirAtividade } from '../../domain/travas';
 import type { Atividade, Contato, FichaDisparo, MetricaKey, Negocio, Vendedor } from '../../domain/types';
 import { EstadoErro, FaixaNumeros, PaginaComercial, Segmentado, useEquipe } from '../comum';
 import { InfoIndicador, type TextoIndicador } from '../InfoIndicador';
@@ -65,7 +66,7 @@ export function InicioClient() {
   const funis = funQ.dados, motivos = motQ.dados;
   const [aberto, setAberto] = useState<string | null>(null);
   const [ver, setVer] = useState<string>(VER_TIME);
-  const fluxo = useConcluirComProximo(flash);
+  const fluxo = useConcluirComProximo(flash, (n) => motivoSomenteLeitura(n, sessao, nomeDe));
 
   const eu = sessao?.vendedorId ?? null;
   const pronto = !!(sessao && negocios && contatos && atividades && eventos && conversas && fichas && funis && motivos);
@@ -132,7 +133,7 @@ export function InicioClient() {
       itens={agir} contatoPorId={contatoPorId} agora={agora} time={time} nomeDe={nomeDe} onAbrir={setAberto}
       titulo={time ? 'Agir agora · time' : p?.deOutro ? `Agir agora · ${nomeAlvo}` : 'Agir agora'}
       onConcluir={(a, n) => fluxo.pedirResultado(a, n)}
-      podeConcluir={(a) => gestor || a.donoId === eu}
+      podeConcluir={(a) => podeConcluirAtividade(a, sessao)}
     />
   );
 

@@ -5,7 +5,7 @@
 // pede os campos obrigatórios do funil. A tela usa estas funções para nem oferecer a ação; o banco continua mandando.
 import { ROTULO_CAMPO } from './catalogo';
 import { bloqueioMoverNoFunil, camposFaltandoNoFunil } from './funis';
-import type { CampoKey, Funil, Negocio, SessaoComercial } from './types';
+import type { Atividade, CampoKey, Contato, Funil, Negocio, SessaoComercial } from './types';
 
 type Quem = Pick<SessaoComercial, 'vendedorId' | 'papel'> | null | undefined;
 
@@ -27,6 +27,29 @@ export function motivoSomenteLeitura(n: Pick<Negocio, 'donoId'>, quem: Quem, nom
   if (!quem) return 'Carregando quem você é.';
   if (!n.donoId) return 'Negócio sem dono: o gestor define quem atende antes.';
   return `Negócio de ${nomeDe(n.donoId)}: só o dono ou o gestor altera.`;
+}
+
+/** Concluir atividade (espelho de `crm_concluir_atividade`): só o dono DA ATIVIDADE ou o gestor; já concluída, ninguém. */
+export function podeConcluirAtividade(a: Pick<Atividade, 'donoId' | 'concluidaEm'>, quem: Quem): boolean {
+  if (!quem || a.concluidaEm) return false;
+  return quem.papel === 'gestor' || (!!a.donoId && a.donoId === quem.vendedorId);
+}
+
+/**
+ * Abrir negócio novo para o contato (espelho de `crm_criar_negocio` → `crm.pode_ver_pessoa`): gestor sempre;
+ * vendedor se o contato é dele, está sem dono, ou se ele já é dono de algum negócio da pessoa.
+ */
+export function podeAbrirNegocioPara(c: Pick<Contato, 'donoId'>, negociosDaPessoa: Pick<Negocio, 'donoId'>[], quem: Quem): boolean {
+  if (!quem) return false;
+  if (quem.papel === 'gestor') return true;
+  return !c.donoId || c.donoId === quem.vendedorId || negociosDaPessoa.some((n) => !!n.donoId && n.donoId === quem.vendedorId);
+}
+
+/** Frase para a tela explicar por que não dá para abrir negócio para o contato. null = pode. */
+export function motivoSemNovoNegocio(c: Pick<Contato, 'donoId'>, negociosDaPessoa: Pick<Negocio, 'donoId'>[], quem: Quem, nomeDe: (id: string | null) => string): string | null {
+  if (podeAbrirNegocioPara(c, negociosDaPessoa, quem)) return null;
+  if (!quem) return 'Carregando quem você é.';
+  return `Contato de ${nomeDe(c.donoId)}: só o dono ou o gestor abre negócio.`;
 }
 
 export interface TravaMover {

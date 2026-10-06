@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MOTIVOS_PADRAO } from '../../domain/catalogo';
+import { FERRAMENTAS } from '../../domain/mcp-ferramentas';
 import type { MotivoPerdaConfig, PreferenciasNotificacao } from '../../domain/types';
 import { FERRAMENTAS_MCP, INTEGRACOES } from './integracoes';
 import { alternarAtivo, ordenarMotivos, previaChave, rascunhoMotivo, resumoMotivos, validarMotivo } from './motivos';
@@ -104,8 +105,11 @@ describe('integrações', () => {
     expect(INTEGRACOES.map((i) => i.nome)).toEqual(expect.arrayContaining(['Unnichat', 'Manychat', 'MCP do Comercial', 'Instagram / Social selling']));
   });
 
-  it('o MCP lista as 7 ferramentas', () => {
+  it('o MCP lista as 10 ferramentas reais da F7, na ordem do servidor', () => {
     expect(INTEGRACOES.find((i) => i.nome === 'MCP do Comercial')?.ferramentas).toBe(FERRAMENTAS_MCP);
-    expect(FERRAMENTAS_MCP).toHaveLength(7);
+    expect(FERRAMENTAS_MCP).toHaveLength(10);
+    expect(FERRAMENTAS_MCP.map((f) => f.nome)).toEqual(FERRAMENTAS.map((f) => f.name));
+    expect(FERRAMENTAS_MCP.filter((f) => f.descricao.includes('operar')).map((f) => f.nome))
+      .toEqual(['comercial_criar_atividade', 'comercial_adicionar_nota', 'comercial_mover_etapa']);
   });
 });

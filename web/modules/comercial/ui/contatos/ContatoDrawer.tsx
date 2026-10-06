@@ -9,6 +9,7 @@ import { AvatarInicial, Badge, Button, Drawer, Skeleton, Tabs, Toast, idsAba, us
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import { Icon } from '@/shared/ui/icons';
 import { fmtTelefone } from '../../domain/regras';
+import { motivoSemNovoNegocio } from '../../domain/travas';
 import type { Contato } from '../../domain/types';
 import type { TextoIndicador } from '../InfoIndicador';
 import {
@@ -73,7 +74,7 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
 }) {
   const agora = useAgora();
   const { toast, flash } = useFlash(4000);
-  const { nomeDe } = useEquipe();
+  const { nomeDe, sessao } = useEquipe();
   const cs = useDados(() => repo.contatos());
   const ns = useDados(() => repo.negocios());
   const fs = useDados(() => repo.funis());
@@ -130,9 +131,11 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
     resumo?.desde ? `${resumo.cliente ? 'Cliente' : 'Lead'} desde ${fmtData(resumo.desde)}` : null,
     c.donoId ? `Dono: ${nomeDe(c.donoId)}` : 'Sem dono',
   ].filter(Boolean).join(' · ');
+  // Mesma trava do banco (crm_criar_negocio → crm.pode_ver_pessoa): contato de outro dono não recebe negócio do vendedor.
   const bloqueioNovo = c.optOut
     ? 'Pediu para não receber contato: não abre negócio novo.'
-    : soLocal ? 'Contato só desta tela (demonstração): grave o cadastro antes de abrir negócio.' : undefined;
+    : soLocal ? 'Contato só desta tela (demonstração): grave o cadastro antes de abrir negócio.'
+    : motivoSemNovoNegocio(c, dele, sessao, nomeDe) ?? undefined;
   const podeConversar = !!c.telefone && !c.optOut;
 
   const botaoNovoNegocio = (

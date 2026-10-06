@@ -81,7 +81,11 @@ describe('argumentos (nomes p_* da migration 20261005t)', () => {
   });
   it('funil vai inteiro (o banco repete validarFunil)', () => {
     const f = { id: '', nome: 'X', etapas: [] } as unknown as Funil;
-    expect(argsEscrita.salvarFunil(f)).toEqual({ p_funil: f });
+    expect(argsEscrita.salvarFunil(f)).toEqual({ p_funil: { ...f, distribuicao: null } });
+    // chave `distribuicao` sempre no JSON (ausente quebrava o crm_salvar_funil antes da 20261006n)
+    expect(JSON.parse(JSON.stringify(argsEscrita.salvarFunil(f))).p_funil).toHaveProperty('distribuicao', null);
+    const comDist = { ...f, distribuicao: [{ vendedorId: U1, percentual: 100 }] } as Funil;
+    expect(argsEscrita.salvarFunil(comDist)).toEqual({ p_funil: comDist });
     expect(argsEscrita.criarAgrupador('Pasta', null)).toEqual({ p_nome: 'Pasta', p_linha: null });
     expect(argsEscrita.criarProjeto('seminario', 'Sem 05', U1, 'sv')).toEqual({ p_tipo: 'seminario', p_nome: 'Sem 05', p_agrupador: U1, p_linha: 'sv' });
     expect(argsEscrita.excluirDashboard(U1)).toEqual({ p_dashboard: U1 });

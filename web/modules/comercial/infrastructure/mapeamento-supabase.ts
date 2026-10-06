@@ -91,7 +91,7 @@ export function mapConfig(d: unknown): ConfigComercial {
   const o = obj(d, 'crm_config', 'configuração');
   return {
     horarioContato: str(o.horarioContato), limiteNegociosAbertos: numOuNull(o.limiteNegociosAbertos),
-    // A RPC ainda não expõe mcp_ligado: ausente = "não sei" (null), nunca "desligado".
+    // crm_config expõe mcpLigado a partir da 20261006n; antes dela (ou se vier fora do formato) = "não sei" (null), nunca "desligado".
     mcpLigado: typeof o.mcpLigado === 'boolean' ? o.mcpLigado : null,
   };
 }

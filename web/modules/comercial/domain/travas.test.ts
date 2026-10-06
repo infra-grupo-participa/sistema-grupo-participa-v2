@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { etapasPadrao } from './funis';
-import { motivoSomenteLeitura, podeMexerNoNegocio, podeTrocarDono, travaMover } from './travas';
+import {
+  motivoSemNovoNegocio, motivoSomenteLeitura, podeAbrirNegocioPara, podeConcluirAtividade, podeMexerNoNegocio, podeTrocarDono, travaMover,
+} from './travas';
 import type { Funil, Negocio, SessaoComercial } from './types';
 
 const funil: Funil = {
@@ -69,5 +71,35 @@ describe('travaMover', () => {
   it('dono vem antes de tudo: vendedor nem vê os campos do negócio alheio', () => {
     const t = travaMover(neg({ donoId: 'bia' }), funil, 'e-negociar', ana, nomeDe);
     expect(t).toEqual({ permitido: false, motivo: 'Negócio de Bia: só o dono ou o gestor altera.', faltam: [] });
+  });
+});
+
+describe('podeConcluirAtividade (espelho de "Esta atividade não é sua.")', () => {
+  it('dono da atividade conclui; o de outro, não; o gestor, qualquer uma', () => {
+    expect(podeConcluirAtividade({ donoId: 'ana', concluidaEm: null }, ana)).toBe(true);
+    expect(podeConcluirAtividade({ donoId: 'bia', concluidaEm: null }, ana)).toBe(false);
+    expect(podeConcluirAtividade({ donoId: 'bia', concluidaEm: null }, gestor)).toBe(true);
+  });
+  it('já concluída ou sem sessão: ninguém', () => {
+    expect(podeConcluirAtividade({ donoId: 'ana', concluidaEm: '2026-10-06T12:00:00Z' }, ana)).toBe(false);
+    expect(podeConcluirAtividade({ donoId: 'ana', concluidaEm: null }, null)).toBe(false);
+  });
+});
+
+describe('podeAbrirNegocioPara (espelho de crm.pode_ver_pessoa em crm_criar_negocio)', () => {
+  it('contato meu ou sem dono: abre', () => {
+    expect(podeAbrirNegocioPara({ donoId: 'ana' }, [], ana)).toBe(true);
+    expect(podeAbrirNegocioPara({ donoId: null }, [], ana)).toBe(true);
+  });
+  it('contato de outro: só se eu já tenho negócio da pessoa, ou sou gestor', () => {
+    expect(podeAbrirNegocioPara({ donoId: 'bia' }, [{ donoId: 'bia' }, { donoId: null }], ana)).toBe(false);
+    expect(podeAbrirNegocioPara({ donoId: 'bia' }, [{ donoId: 'ana' }], ana)).toBe(true);
+    expect(podeAbrirNegocioPara({ donoId: 'bia' }, [], gestor)).toBe(true);
+    expect(podeAbrirNegocioPara({ donoId: null }, [], null)).toBe(false);
+  });
+  it('motivo explica de quem é o contato', () => {
+    expect(motivoSemNovoNegocio({ donoId: 'bia' }, [], ana, nomeDe)).toBe('Contato de Bia: só o dono ou o gestor abre negócio.');
+    expect(motivoSemNovoNegocio({ donoId: 'ana' }, [], ana, nomeDe)).toBeNull();
+    expect(motivoSemNovoNegocio({ donoId: 'ana' }, [], null, nomeDe)).toBe('Carregando quem você é.');
   });
 });

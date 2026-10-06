@@ -44,7 +44,7 @@ function CardIntegracao({ i }: { i: Integracao }) {
       </dl>
       {i.ferramentas && (
         <div>
-          <div className="mb-1.5 text-xs font-medium text-[var(--fg-3)]">Ferramentas que o servidor MCP vai expor</div>
+          <div className="mb-1.5 text-xs font-medium text-[var(--fg-3)]">Ferramentas que o servidor MCP expõe</div>
           <ul className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2 xl:grid-cols-3">
             {i.ferramentas.map((f) => (
               <li key={f.nome} className="min-w-0 text-xs">

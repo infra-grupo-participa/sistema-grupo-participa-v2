@@ -159,7 +159,11 @@ export function ModalAgendar({ titulo, intro, inicial, negocio, opcoes, rotuloCa
  * "Agendar próximo passo" já preenchido (toque seguinte da cadência, amanhã 10h).
  * `pedirResultado` abre um modal com os resultados rápidos (para listas sem espaço inline, como o Início).
  */
-export function useConcluirComProximo(flash: (msg: string) => void) {
+export function useConcluirComProximo(
+  flash: (msg: string) => void,
+  /** Por que o negócio é só leitura para quem está logado (`motivoSomenteLeitura`). Texto = não oferece o próximo passo. */
+  leituraDe?: (n: Negocio) => string | null,
+) {
   const [proximo, setProximo] = useState<{ a: Atividade; resultado: string; negocioId: string | null } | null>(null);
   const [pedindo, setPedindo] = useState<{ a: Atividade; negocio?: Negocio } | null>(null);
 
@@ -167,8 +171,11 @@ export function useConcluirComProximo(flash: (msg: string) => void) {
     const r = await repo.concluirAtividade(a.id, resultado);
     if (!r.ok) { flash(r.msg || 'Não foi possível concluir.'); return false; }
     avisarMudanca();
-    // Negócio encerrado não pede próximo passo.
+    // Negócio encerrado não pede próximo passo. Negócio alheio (ou sem dono) também não: o banco recusaria
+    // "Este negócio não é seu." no crm_criar_atividade; quem agenda é o dono ou o gestor.
+    const leitura = negocio ? leituraDe?.(negocio) ?? null : null;
     if (negocio && negocio.status !== 'aberto') flash(r.msg || 'Atividade concluída.');
+    else if (leitura) flash(`Atividade concluída. ${leitura}`);
     else setProximo({ a, resultado, negocioId: negocio?.id ?? a.negocioId });
     return true;
   };
