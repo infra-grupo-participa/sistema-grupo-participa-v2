@@ -121,11 +121,15 @@ export const carregarAlertas = (): Promise<ResumoDia | null> =>
 export const listarProdutos = (projeto: number): Promise<ProdutoHotmart[] | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoProdutos(projeto)) : rpc<ProdutoHotmart[]>('trafego_produtos_listar', { p_projeto: projeto });
 
-export const listarProdutosVistos = (): Promise<ProdutoVisto[] | null> =>
-  MODO_DEMO ? Promise.resolve(demo.demoProdutosVistos()) : rpc<ProdutoVisto[]>('trafego_hotmart_produtos');
+/** Produtos já vendidos SÓ na conta da Hotmart da unidade do projeto (CSM = academy, Escritório = escritorio). */
+export const listarProdutosVistos = (projeto: number): Promise<ProdutoVisto[] | null> =>
+  MODO_DEMO ? Promise.resolve(demo.demoProdutosVistos(projeto)) : rpc<ProdutoVisto[]>('trafego_hotmart_produtos', { p_projeto: projeto });
 
 export interface ProdutoForm {
-  id?: number; projeto_id: number; conta: string; produto_id: string; oferta_codigo: string;
+  id?: number; projeto_id: number;
+  /** Só para mostrar: o banco usa a conta da unidade do projeto, nunca esta. */
+  conta: string;
+  produto_id: string; oferta_codigo: string;
   /** A oferta é exclusiva deste projeto (nível 1 da receita). Exige a oferta. */
   oferta_exclusiva: boolean;
   de: string; ate: string; obs: string;

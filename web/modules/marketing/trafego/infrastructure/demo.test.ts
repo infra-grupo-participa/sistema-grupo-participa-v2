@@ -55,31 +55,32 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
     expect(pb.connect_rate).not.toBeNull();
     expect(demoResumo().find((l) => l.sigla === 'HT33')!.connect_rate).toBeNull();
   });
-  it('receita por nível (decisão de 06/10/2026): PB26 com oferta exclusiva e SCK; o produto inteiro é estimada à parte', () => {
-    const pb = demoResumo().find((l) => l.sigla === 'PB26')!;
+  it('receita por nível (decisão de 06/10/2026): LPEXA26 (CSM, conta academy) com oferta exclusiva e SCK; estimada à parte', () => {
+    const lp = demoResumo().find((l) => l.sigla === 'LPEXA26')!;
     // receita do projeto = níveis 1 a 3 (12300 oferta exclusiva + 1990 SCK); a estimada (só produto + período) não soma
-    expect([pb.receita, pb.receita_liquida, pb.receita_oferta, pb.receita_sck, pb.receita_estimada]).toEqual([14290, 13590, 12300, 1990, 6150]);
-    expect([pb.receita_ofertas_exclusivas, pb.receita_disputa]).toEqual([1, 1]);
-    const rec = demoReceita(1)!;
-    expect([rec.sem_oferta_exclusiva, rec.disputas_total, rec.sck_chaves]).toEqual([false, 1, ['seminario-conjunto-2026-11', 'pb26']]);
-    // uma oferta só pode ser exclusiva de um projeto
-    const outra = demoSalvarProduto({ projeto_id: 4, conta: 'academy', produto_id: '0000001', oferta_codigo: 'ex0001', oferta_exclusiva: true, de: '', ate: '', obs: '' });
-    expect([outra.ok, outra.msg]).toEqual([false, expect.stringContaining('já é exclusiva de PB26')]);
-    expect(demoSalvarProduto({ projeto_id: 4, conta: 'academy', produto_id: '0000001', oferta_codigo: '', oferta_exclusiva: true, de: '', ate: '', obs: '' }).ok).toBe(false);
-    expect(demoProdutosVistos()[0].ofertas[0].exclusiva_de).toBe('PB26');
-    expect(demoResumo().find((l) => l.sigla === 'HT33')!.receita).toBeNull();
-    // sem conta: recusado (auditoria 06/10/2026: o vínculo leva a conta da Hotmart)
-    expect(demoSalvarProduto({ projeto_id: 2, produto_id: '0000002', oferta_codigo: '', de: '', ate: '', obs: '' }).ok).toBe(false);
-    const r = demoSalvarProduto({ projeto_id: 2, conta: 'escritorio', produto_id: '0000002', oferta_codigo: '', de: '', ate: '', obs: '' });
-    expect([r.ok, r.avisos]).toEqual([true, ['sem_periodo', 'sem_oferta_exclusiva']]);
-    expect(demoReceita(2)!.sem_oferta_exclusiva).toBe(true);
-    // o mesmo id em outra conta: sem venda nela
-    expect(demoSalvarProduto({ projeto_id: 2, conta: 'academy', produto_id: '0000002', oferta_codigo: '', de: '', ate: '', obs: '' }).avisos)
-      .toEqual(['sem_periodo', 'produto_sem_compras', 'sem_oferta_exclusiva']);
-    const ht = demoResumo().find((l) => l.sigla === 'HT33')!;
-    expect([ht.receita, ht.receita_vinculos, ht.receita_sem_periodo]).toEqual([null, 2, 2]);
-    for (const v of demoProdutos(2)) demoApagarProduto(v.id);
-    expect(demoSalvarProduto({ projeto_id: 1, conta: 'academy', produto_id: '0000001', oferta_codigo: '', de: '', ate: '', obs: '' }).ok).toBe(false);
+    expect([lp.receita, lp.receita_liquida, lp.receita_oferta, lp.receita_sck, lp.receita_estimada]).toEqual([14290, 13590, 12300, 1990, 6150]);
+    expect([lp.receita_ofertas_exclusivas, lp.receita_disputa, lp.receita_conta]).toEqual([1, 0, 'academy']);
+    const rec = demoReceita(7)!;
+    expect([rec.sem_oferta_exclusiva, rec.conta, rec.sck_chaves]).toEqual([false, 'academy', ['lancamento-pago-exemplo-2026-10', 'lpexa26']]);
+    // conta da Hotmart = unidade (decisão do Victor, 06/10/2026): o seletor só mostra a conta academy
+    expect(demoProdutosVistos(7).map((v) => v.conta)).toEqual(['academy']);
+    expect(demoProdutosVistos(7)[0].ofertas[0].exclusiva_de).toBe('LPEXA26');
+    // projeto real sem unidade e externo: não ligam produto, com o motivo; seletor vazio
+    const pb = demoSalvarProduto({ projeto_id: 1, produto_id: '0000001', oferta_codigo: '', de: '', ate: '', obs: '' });
+    expect([pb.ok, pb.msg]).toEqual([false, expect.stringContaining('Marque a unidade do projeto')]);
+    expect(demoProdutosVistos(1)).toEqual([]);
+    expect(demoResumo().find((l) => l.sigla === 'PB26')!.receita).toBeNull();
+    expect(demoSalvarProduto({ projeto_id: 5, produto_id: '0000001', oferta_codigo: '', de: '', ate: '', obs: '' }).msg).toContain('Projeto externo');
+    // uma oferta só pode ser exclusiva de um projeto; exclusiva sem oferta recusada
+    const outra = demoSalvarProduto({ projeto_id: 7, conta: 'escritorio', produto_id: '0000001', oferta_codigo: 'ex0001', oferta_exclusiva: true, de: '', ate: '', obs: '' });
+    expect([outra.ok, outra.msg]).toEqual([false, expect.stringContaining('já é exclusiva de LPEXA26')]);
+    expect(demoSalvarProduto({ projeto_id: 7, produto_id: '0000001', oferta_codigo: '', oferta_exclusiva: true, de: '', ate: '', obs: '' }).ok).toBe(false);
+    // a conta pedida é ignorada: vem da unidade (escritorio vira academy); produto sem venda na academy avisa
+    const r = demoSalvarProduto({ projeto_id: 7, conta: 'escritorio', produto_id: '0000002', oferta_codigo: '', de: '', ate: '', obs: '' });
+    expect([r.ok, r.avisos]).toEqual([true, ['produto_sem_compras']]);
+    expect(demoProdutos(7).find((v) => v.produto_id === '0000002')!.conta).toBe('academy');
+    for (const v of demoProdutos(7).filter((x) => x.produto_id === '0000002')) demoApagarProduto(v.id);
+    expect(demoSalvarProduto({ projeto_id: 7, produto_id: '0000001', oferta_codigo: '', de: '', ate: '', obs: '' }).ok).toBe(false);
   });
   it('cadastro (20261006j): reais sem unidade nem contas; fictícios com tipo, unidade, lançamento e especialista Exemplo', () => {
     const pb = demoCadastro(1)!;

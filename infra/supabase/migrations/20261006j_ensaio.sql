@@ -1311,8 +1311,9 @@ begin
     'linha do resumo com tipo, unidade, tipo de lançamento, especialista e contas');
   v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZS28'), 'conta', 'academy', 'produto_id', '9990601', 'de', '2026-01-01')));
   l := pg_temp.linha('ZS28');
-  perform pg_temp.ok('7.receita externo', (v ->> 'ok')::boolean and l -> 'receita' = 'null'::jsonb and l -> 'receita_liquida' = 'null'::jsonb and not (l ->> 'receita_aplica')::boolean
-    and l ->> 'tipo' = 'externo', 'externo com produto ligado: receita nula e "não se aplica"');
+  perform pg_temp.ok('7.receita externo', not (v ->> 'ok')::boolean and v ->> 'msg' like 'Projeto externo%' and l -> 'receita' = 'null'::jsonb
+    and l -> 'receita_liquida' = 'null'::jsonb and not (l ->> 'receita_aplica')::boolean and l ->> 'tipo' = 'externo' and l -> 'receita_conta' = 'null'::jsonb,
+    'externo não liga produto (a conta da Hotmart vem da unidade; decisão do Victor, 06/10/2026): receita nula e "não se aplica"');
   v := pg_temp.srv($$select public.trafego_clickup_etiquetas_receber('{"etiquetas":["zz-ensaio-b","ZZ-Ensaio-A","com espaço"," zz-ensaio-a"]}')$$);
   perform pg_temp.ok('7.etiquetas', (v ->> 'gravadas')::int = 2 and (v ->> 'fora_do_formato')::int = 1
     and pg_temp.adm('select public.trafego_cadastro_listas()') -> 'etiquetas_clickup' = '["zz-ensaio-a","zz-ensaio-b"]'::jsonb,

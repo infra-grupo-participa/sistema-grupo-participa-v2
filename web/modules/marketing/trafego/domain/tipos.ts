@@ -92,6 +92,10 @@ export interface LinhaResumo {
   receita_ofertas_exclusivas?: number;
   /** false = sem a base de pessoas neste banco: o nível 3 fica fora. */
   receita_base_pessoas?: boolean;
+  /** Conta da Hotmart que o projeto lê, pela unidade (CSM = academy, Escritório = escritorio). Nula = externo ou sem unidade. */
+  receita_conta?: string | null;
+  /** Vínculos de outra conta que não a da unidade (a unidade mudou depois de ligar): não somam. */
+  receita_vinculos_fora_conta?: number;
   /** Líquido do produtor das vendas dos níveis 1 a 3 (liquido_produtor, ou oferta − taxa quando a Hotmart não mandou). */
   receita_liquida?: number | null;
   /** Vendas em reais com o líquido estimado (sem liquido_produtor). */
@@ -297,6 +301,8 @@ export interface ProdutoHotmart {
   conta: string; produto_id: string; produto_nome?: string | null; oferta_codigo: string | null;
   /** A oferta é exclusiva deste projeto (nível 1 da receita, certa). Uma oferta só pode ser exclusiva de um projeto. */
   oferta_exclusiva?: boolean;
+  /** false = a conta do vínculo não é a da unidade do projeto: não soma. */
+  conta_ok?: boolean;
   de: string | null; ate: string | null; obs: string | null;
   /** O período que vale: "de" ou o início do projeto; "até" ou o fim do projeto (nulo = até hoje). */
   de_efetivo: string | null; ate_efetivo: string | null;
@@ -318,6 +324,20 @@ export const CONTAS_HOTMART: { codigo: string; nome: string }[] = [
   { codigo: 'escritorio', nome: 'escritorio' },
 ];
 export const nomeContaHotmart = (c: string) => CONTAS_HOTMART.find((x) => x.codigo === c)?.nome ?? c;
+
+/**
+ * Conta da Hotmart pela unidade do projeto (decisão do Victor, 06/10/2026; a mesma regra de mkt_trafego.conta_hotmart):
+ * CSM lê só a conta academy, Escritório só a escritorio. Outra unidade ou sem unidade: nenhuma (não liga produto).
+ */
+export const contaHotmartDaUnidade = (unidade: string | null | undefined): string | null =>
+  unidade === 'csm' ? 'academy' : unidade === 'escritorio' ? 'escritorio' : null;
+
+/** Por que o projeto não liga produto da Hotmart (nulo = liga). */
+export function motivoSemConta(l: { tipo?: string | null; unidade?: string | null }): string | null {
+  if (l.tipo === 'externo') return 'Projeto externo: a receita não entra por ora, não se liga produto da Hotmart.';
+  if (!contaHotmartDaUnidade(l.unidade)) return 'Marque a unidade do projeto (CSM ou Escritório) no cadastro: a conta da Hotmart vem dela (CSM = academy, Escritório = escritorio).';
+  return null;
+}
 
 export interface TarefaClickup {
   id: string; nome: string; status: string | null; criada_em: string | null; atualizada_em: string | null;
@@ -372,6 +392,8 @@ export interface ReceitaProjeto {
   /** O formato do SCK (decidido) e as chaves que valem para este projeto no campo campanha. */
   sck_formato: string;
   sck_chaves: string[];
+  /** Conta da Hotmart que o projeto lê (pela unidade). Nula = externo ou sem unidade. */
+  conta?: string | null;
   disputas_total: number;
   disputas: VendaDisputa[];
 }

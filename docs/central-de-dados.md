@@ -406,6 +406,27 @@ só BRL na soma (outra moeda é contada à parte), líquido do produtor ao lado.
 - **O vínculo continua** (conta + produto + oferta opcional + período) e ganhou a coluna `oferta_exclusiva`. Vínculo sem a
   marca alimenta os níveis 3 e 4; com a marca, o nível 1.
 
+**Conta da Hotmart = unidade do projeto (decisão do Victor, 06/10/2026).** Projeto da unidade **CSM** lê e lista só
+produtos e vendas da conta `academy`; projeto do **Escritório**, só da conta `escritorio`. A pessoa **não escolhe** a
+conta no vínculo: ela vem da unidade (`mkt_trafego.conta_hotmart`). Projeto **sem unidade** marcada ou **externo** não
+liga produto (a tela mostra o motivo: "Marque a unidade do projeto" ou "Projeto externo"); externo continua com a receita
+"não se aplica". O seletor de produto mostra só os produtos da conta da unidade. Todos os níveis olham só as vendas da
+conta do projeto, então a disputa também fica dentro da conta. Se a unidade mudar depois de ligar, o vínculo antigo
+(outra conta) aparece marcado "não é a conta da unidade: não soma" e precisa ser refeito. **Consequência hoje:** os
+projetos reais (PB26, HT33, SEMSET26, BF26) estão sem unidade no banco; até marcar CSM ou Escritório no cadastro, não
+ligam produto e ficam sem receita.
+
+**Trava do financeiro (em produção).** O financeiro tem o event trigger `fin.trava_conta_hotmart` (função
+`fin.trava_conta_hotmart_violacao`): toda citação de `fin.hotmart_transacoes` em função ou view, **inclusive dentro de
+texto de SQL dinâmico**, tem de estar na forma `(select * from fin.hotmart_transacoes where conta = '<conta literal>')`.
+A primeira tentativa de aplicar a 20261006i foi recusada por isso. Agora o Tráfego lê o espelho por um lugar só,
+`mkt_trafego.hotmart_fonte(conta)`, que devolve a leitura canônica **daquela** conta (nunca as duas misturadas); cada
+leitura roda uma vez por conta e troca o marcador `{fonte_hotmart}` por ela. A trava e a lista `v_aprovados` do
+financeiro **não foram mexidas**. Conta nova = acrescentar em `hotmart_fonte` e `conta_hotmart`. O EXPLAIN no banco real
+(06/10/2026) confirma que a forma canônica continua usando `hotmart_transacoes_produto_idx` (Index Scan, 5,7 ms para um
+produto com 400 vendas em 60 dias). O ensaio local roda com a trava copiada do banco real (event trigger ligado no
+PGlite) e uma conferência final em todas as funções.
+
 **Formato do SCK (DECIDIDO pelo Victor em 06/10/2026).** Os mesmos campos da UTM, na mesma ordem, separados por `|`:
 
 ```
@@ -468,7 +489,8 @@ fora e o resto funciona.
 **O que a operação precisa fazer (sem isso a receita do projeto fica zero e só a estimada aparece).**
 1. **Toda ação de venda** (evento, ATM, abertura de carrinho) ganha uma **oferta exclusiva na Hotmart**, criada antes de
    abrir as vendas, usada só no checkout daquela ação. Vale para todo produto, inclusive o HM.
-2. Na vida do projeto, **Ligar produto** → conta → produto → a oferta → marcar **"Oferta exclusiva deste projeto"**.
+2. No cadastro do projeto, marcar a **unidade** (CSM ou Escritório): é ela que diz a conta da Hotmart. Depois, na vida do
+   projeto, **Ligar produto** → produto → a oferta → marcar **"Oferta exclusiva deste projeto"**.
 3. **Links de checkout** (carrinho, API, grupo, SMS, e-mail, comercial) com o SCK no padrão
    `origem|meio|campanha|conteúdo|termo` e o projeto no campo campanha (chave ou sigla). Nada de prefixo (`sv-…`) no campo
    campanha. Padrão escrito no gp-operacoes, processo de UTM (`padronizar-utm-dos-links.md`).
@@ -479,8 +501,10 @@ fora e o resto funciona.
 **No banco (20261006i).** `mkt_trafego.produtos_hotmart.oferta_exclusiva` + o índice único; `mkt_trafego.chave_norm`,
 `sck_campanha` (o formato do SCK), `pessoas_disponivel`, `receita_vendas(p_projeto)` (cada venda já classificada: nível,
 disputa, projetos da disputa) e `receita(p_projeto)` (os totais: `receita`, `receita_liquida`, `receita_oferta`,
-`receita_sck`, `receita_lead`, `receita_estimada`, `receita_compras_*`, `receita_disputa`, `receita_ofertas_exclusivas`);
-`public.trafego_receita(p_projeto)` para a vida do projeto. A classificação usa sempre todos os projetos (a disputa
+`receita_sck`, `receita_lead`, `receita_estimada`, `receita_compras_*`, `receita_disputa`, `receita_ofertas_exclusivas`,
+`receita_vinculos_fora_conta`; no resumo, `receita_conta`); `conta_hotmart(projeto)` e `hotmart_fonte(conta)` (conta pela
+unidade e leitura canônica exigida pela trava); `public.trafego_receita(p_projeto)` para a vida do projeto;
+`public.trafego_hotmart_produtos(p_projeto)` (o seletor, só a conta da unidade). A classificação usa sempre todos os projetos (a disputa
 precisa ver os outros); `p_projeto` só filtra a saída. Ensaio: passo **3b** do `20261006i_ensaio.sql` (oferta exclusiva,
 uma oferta um projeto, SCK com chave e sigla, maiúscula e acento, sigla fora do campo campanha, disputa no nível 2 e no
 4, nível 3 por e-mail, documento e telefone, lead depois da compra, nível mais forte vence); passo 5 e 6 do
@@ -1157,3 +1181,7 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
   disputa. Central com "Receita" (1 a 3) e "Receita estimada"; vida do projeto com a quebra, as vendas em disputa e o
   aviso "sem oferta exclusiva"; item novo no checklist e regra `sem_oferta_exclusiva` no resumo do dia. Seção "Receita do
   projeto: oferta exclusiva e SCK". Branch `victor`.
+- **06/10/2026:** 20261006i recusada na aplicação pela **trava do financeiro** (`fin.trava_conta_hotmart`). Correção (ainda
+  NÃO APLICADA): toda leitura de `fin.hotmart_transacoes` na forma canônica, uma por conta (`mkt_trafego.hotmart_fonte`);
+  **conta da Hotmart = unidade do projeto** (decisão do Victor: CSM = academy, Escritório = escritorio; sem unidade ou
+  externo não liga produto); o seletor e o vínculo deixam de escolher a conta. Trava simulada no ensaio local.

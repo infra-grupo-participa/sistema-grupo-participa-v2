@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Badge, Button, ConfirmDialog, DataTable, EmptyState, FilterSelect, Input, Modal, Td, Th, Thead, Tr } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import {
-  CONTAS_HOTMART, ROTULO_AVISO_PRODUTO, ROTULO_NIVEL, nomeContaHotmart, type LinhaResumo, type ProdutoHotmart, type ProdutoVisto,
+  ROTULO_AVISO_PRODUTO, contaHotmartDaUnidade, motivoSemConta, ROTULO_NIVEL, nomeContaHotmart, type LinhaResumo, type ProdutoHotmart, type ProdutoVisto,
   type ReceitaProjeto, type Resposta,
 } from '../domain/tipos';
 import {
@@ -44,11 +44,11 @@ function ModalProduto({ inicial, onFechar, onSalvo }: { inicial: ProdutoForm; on
 
   useEffect(() => {
     let vivo = true;
-    listarProdutosVistos().then((v) => { if (vivo) setVistos(v); });
+    listarProdutosVistos(inicial.projeto_id).then((v) => { if (vivo) setVistos(v); });
     return () => { vivo = false; };
-  }, []);
+  }, [inicial.projeto_id]);
 
-  // produtos da conta escolhida (o que já vendeu nela); o do vínculo em edição entra mesmo se não estiver na lista
+  // produtos da conta da unidade do projeto (o banco já manda só eles); o do vínculo em edição entra mesmo se não estiver na lista
   const daConta = useMemo(() => (vistos ?? []).filter((v) => v.conta === f.conta), [vistos, f.conta]);
   const produto = daConta.find((v) => v.produto_id === f.produto_id) ?? null;
   const foraDaLista = f.produto_id !== '' && !produto;
@@ -57,7 +57,6 @@ function ModalProduto({ inicial, onFechar, onSalvo }: { inicial: ProdutoForm; on
   const donoDaOferta = ofertas.find((o) => o.codigo === f.oferta_codigo)?.exclusiva_de ?? null;
 
   async function salvar() {
-    if (!f.conta) { setErro('Escolha a conta da Hotmart.'); return; }
     if (!f.produto_id.trim()) { setErro('Escolha o produto.'); return; }
     if (f.oferta_exclusiva && !f.oferta_codigo) { setErro('Oferta exclusiva precisa da oferta: escolha a oferta criada na Hotmart só para este projeto.'); return; }
     setSalvando(true);
@@ -73,17 +72,13 @@ function ModalProduto({ inicial, onFechar, onSalvo }: { inicial: ProdutoForm; on
       <Button size="sm" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</Button>
     </>}>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Campo rotulo="Conta da Hotmart">
-          <FilterSelect className="w-full" value={f.conta} aria-label="Conta da Hotmart"
-            onChange={(e) => setF((x) => ({ ...x, conta: e.target.value, produto_id: '', oferta_codigo: '' }))}>
-            <option value="">Escolha a conta</option>
-            {CONTAS_HOTMART.map((c) => <option key={c.codigo} value={c.codigo}>{c.nome}</option>)}
-          </FilterSelect>
+        <Campo rotulo="Conta da Hotmart" dica="vem da unidade do projeto">
+          <div className="py-1.5 text-sm" title="CSM lê só a conta academy; Escritório só a escritorio (decisão do Victor, 06/10/2026). Para trocar, mude a unidade no cadastro do projeto.">{nomeContaHotmart(f.conta)}</div>
         </Campo>
         <Campo rotulo="Produto" dica={vistos === undefined ? 'carregando…' : 'os que já venderam nesta conta'}>
-          <FilterSelect className="w-full" value={f.produto_id} aria-label="Produto da Hotmart" disabled={!f.conta || vistos === undefined}
+          <FilterSelect className="w-full" value={f.produto_id} aria-label="Produto da Hotmart" disabled={vistos === undefined}
             onChange={(e) => setF((x) => ({ ...x, produto_id: e.target.value, oferta_codigo: '' }))}>
-            <option value="">{f.conta ? 'Escolha o produto' : 'Escolha a conta primeiro'}</option>
+            <option value="">Escolha o produto</option>
             {foraDaLista && <option value={f.produto_id}>{f.produto_id} (sem venda nesta conta)</option>}
             {daConta.map((v) => (
               <option key={v.produto_id} value={v.produto_id}>
@@ -229,15 +224,22 @@ export function ProdutosHotmart({ resumo, versao, flash, onMudou }: { resumo: Li
     return () => { vivo = false; };
   }, [resumo.projeto_id, versao]);
 
-  const novo = () => setEdit({ projeto_id: resumo.projeto_id, conta: '', produto_id: '', oferta_codigo: '', oferta_exclusiva: false, de: '', ate: '', obs: '' });
+  // conta da Hotmart = unidade do projeto (decisão do Victor, 06/10/2026); sem conta, não liga produto e mostra o motivo
+  const conta = resumo.receita_conta ?? contaHotmartDaUnidade(resumo.unidade);
+  const motivo = conta ? null : motivoSemConta(resumo) ?? 'Projeto sem conta da Hotmart.';
+  const novo = () => conta && setEdit({ projeto_id: resumo.projeto_id, conta, produto_id: '', oferta_codigo: '', oferta_exclusiva: false, de: '', ate: '', obs: '' });
   const salvo = (m: string) => { setEdit(null); flash(m); onMudou(); };
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1"><ReceitaNiveis resumo={resumo} rec={rec} /></div>
-        <Button size="sm" onClick={novo}><Icon name="plus" size={14} /> Ligar produto</Button>
+        <Button size="sm" onClick={novo} disabled={!conta} title={motivo ?? `Conta da Hotmart deste projeto: ${nomeContaHotmart(conta ?? '')}`}><Icon name="plus" size={14} /> Ligar produto</Button>
       </div>
+      {motivo
+        ? <p role="note" className="text-sm text-[var(--yellow)]">{motivo}</p>
+        : <p className="text-xs text-[var(--fg-3)]">Conta da Hotmart deste projeto: <strong>{nomeContaHotmart(conta ?? '')}</strong> (vem da unidade: CSM = academy, Escritório = escritorio).</p>}
+      {!!resumo.receita_vinculos_fora_conta && <p className="text-xs text-[var(--yellow)]">{inteiro(resumo.receita_vinculos_fora_conta)} vínculo(s) de outra conta (a unidade mudou depois): não somam. Apague e ligue de novo.</p>}
       {lista === undefined ? null : lista === null ? (
         <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar (sem conexão ou sem acesso). Recarregue a página; se continuar, avise quem cuida do sistema.</p>
       ) : lista.length === 0 ? (
@@ -248,7 +250,7 @@ export function ProdutosHotmart({ resumo, versao, flash, onMudou }: { resumo: Li
           <tbody>
             {lista.map((v) => (
               <Tr key={v.id}>
-                <Td>{nomeContaHotmart(v.conta)}</Td>
+                <Td>{nomeContaHotmart(v.conta)}{v.conta_ok === false && <div className="text-[11px] text-[var(--yellow)]">não é a conta da unidade: não soma</div>}</Td>
                 <Td>{v.produto_nome && <div>{v.produto_nome}</div>}<span className="font-mono text-xs text-[var(--fg-2)]">{v.produto_id}</span></Td>
                 <Td>{v.oferta_codigo ?? <span className="text-xs text-[var(--fg-3)]">todas</span>}
                   {v.oferta_exclusiva

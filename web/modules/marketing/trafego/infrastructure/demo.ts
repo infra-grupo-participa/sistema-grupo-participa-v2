@@ -23,7 +23,7 @@ import type {
   Campanha, Checklist, ClickupProjeto, ConfigTrafego, Conta, Dono, FaseProjeto, LinhaResumo, ProdutoHotmart, ProdutoVisto,
   ReceitaProjeto, Regra, Resposta, ResumoDia, Subarea, TarefaClickup, Tipo, VendaDisputa, VidaProjeto,
 } from '../domain/tipos';
-import { ordenarContas, unidadesDoDono } from '../domain/tipos';
+import { contaHotmartDaUnidade, ordenarContas, unidadesDoDono } from '../domain/tipos';
 
 const hoje = (n = 0) => {
   const d = new Date(Date.now() + n * 86400000);
@@ -330,9 +330,16 @@ interface ProdutoDemo {
   de: string | null; ate: string | null; obs: string | null;
 }
 let PRODUTOS: ProdutoDemo[] = [
-  { id: 1, projeto_id: 1, conta: 'academy', produto_id: '0000001', oferta_codigo: null, oferta_exclusiva: false, de: hoje(-25), ate: null, obs: 'Ingresso Exemplo' },
-  { id: 2, projeto_id: 1, conta: 'academy', produto_id: '0000001', oferta_codigo: 'ex0001', oferta_exclusiva: true, de: null, ate: null, obs: 'Oferta exclusiva Exemplo' },
+  // LPEXA26 é da unidade CSM: lê a conta academy (conta da Hotmart = unidade do projeto, decisão do Victor, 06/10/2026).
+  // Os projetos reais (PB26 etc.) estão sem unidade no demo: não ligam produto, e a tela mostra o motivo.
+  { id: 1, projeto_id: 7, conta: 'academy', produto_id: '0000001', oferta_codigo: null, oferta_exclusiva: false, de: hoje(-25), ate: null, obs: 'Ingresso Exemplo' },
+  { id: 2, projeto_id: 7, conta: 'academy', produto_id: '0000001', oferta_codigo: 'ex0001', oferta_exclusiva: true, de: null, ate: null, obs: 'Oferta exclusiva Exemplo' },
 ];
+/** Conta da Hotmart do projeto pela unidade (a mesma regra de mkt_trafego.conta_hotmart): CSM = academy, Escritório = escritorio. */
+export const contaDoProjeto = (id: number): string | null => {
+  const p = projeto(id);
+  return !p || p.tipo === 'externo' ? null : contaHotmartDaUnidade(p.unidade);
+};
 // Receita fictícia do modo de demonstração, por nível (decisão do Victor, 06/10/2026). Produto inteiro no período =
 // estimada (nível 4); oferta exclusiva = nível 1; SCK com o projeto = nível 2. Valores inventados, só para a tela.
 type Soma = { receita: number; liquida: number; compras: number };
@@ -340,12 +347,9 @@ const RECEITA_PRODUTO: Record<string, Soma> = {
   'academy/0000001': { receita: 6150, liquida: 5820, compras: 41 }, 'escritorio/0000002': { receita: 4200, liquida: 3990, compras: 6 },
 };
 const RECEITA_OFERTA: Record<string, Soma> = { 'academy/ex0001': { receita: 12300, liquida: 11700, compras: 82 } };
-const RECEITA_SCK = new Map<number, Soma>([[1, { receita: 1990, liquida: 1890, compras: 2 }]]);
-const DISPUTAS = new Map<number, VendaDisputa[]>([[1, [
-  { transacao: 'HPEXEMPLO0001', dia: hoje(-2), conta: 'academy', produto_id: '0000001', oferta_codigo: null, nivel: 2, valor: 997, moeda: 'BRL', projetos: ['LPEXA26', 'PB26'] },
-]], [7, [
-  { transacao: 'HPEXEMPLO0001', dia: hoje(-2), conta: 'academy', produto_id: '0000001', oferta_codigo: null, nivel: 2, valor: 997, moeda: 'BRL', projetos: ['LPEXA26', 'PB26'] },
-]]]);
+const RECEITA_SCK = new Map<number, Soma>([[7, { receita: 1990, liquida: 1890, compras: 2 }]]);
+// sem disputa no demo (um só projeto fictício da CSM); a lista aparece nos testes da tela com uma venda inventada
+const DISPUTAS = new Map<number, VendaDisputa[]>();
 const VISTOS: ProdutoVisto[] = [
   { conta: 'academy', produto_id: '0000001', nome: 'Ingresso Exemplo', aprovadas: 123, ultima: ONTEM,
     ofertas: [{ codigo: 'ex0001', pagas: 100, ultima: ONTEM }, { codigo: 'ex0002', pagas: 23, ultima: hoje(-4) }] },
@@ -355,9 +359,10 @@ const VISTOS: ProdutoVisto[] = [
 type CamposReceita = 'receita' | 'receita_liquida' | 'receita_liquido_estimado' | 'receita_compras' | 'receita_outras_moedas' | 'receita_sem_valor'
   | 'receita_vinculos' | 'receita_sem_periodo' | 'receita_fonte' | 'receita_oferta' | 'receita_sck' | 'receita_lead' | 'receita_estimada'
   | 'receita_compras_oferta' | 'receita_compras_sck' | 'receita_compras_lead' | 'receita_compras_estimada' | 'receita_disputa'
-  | 'receita_ofertas_exclusivas' | 'receita_base_pessoas';
+  | 'receita_ofertas_exclusivas' | 'receita_base_pessoas' | 'receita_conta' | 'receita_vinculos_fora_conta';
 function receitaDemo(projetoId: number): Pick<LinhaResumo, CamposReceita> {
-  const vs = PRODUTOS.filter((v) => v.projeto_id === projetoId);
+  const conta = contaDoProjeto(projetoId);
+  const vs = PRODUTOS.filter((v) => v.projeto_id === projetoId && v.conta === conta);
   const p = projeto(projetoId);
   const comPeriodo = vs.filter((v) => !v.oferta_exclusiva && (v.de != null || p?.captacao_inicio != null || p?.inicio != null)); // sem "de": captação até o fim do evento
   const exclusivas = vs.filter((v) => v.oferta_exclusiva);
@@ -377,6 +382,7 @@ function receitaDemo(projetoId: number): Pick<LinhaResumo, CamposReceita> {
     receita_disputa: disputa, receita_ofertas_exclusivas: exclusivas.length, receita_base_pessoas: true,
     receita_liquido_estimado: 0, receita_compras: n1.compras + n2.compras, receita_outras_moedas: 0, receita_sem_valor: 0,
     receita_vinculos: vs.length, receita_sem_periodo: vs.filter((v) => !v.oferta_exclusiva).length - comPeriodo.length, receita_fonte: true,
+    receita_conta: conta, receita_vinculos_fora_conta: PRODUTOS.filter((v) => v.projeto_id === projetoId && v.conta !== conta).length,
   };
 }
 
@@ -391,7 +397,7 @@ export function demoReceita(projetoId: number): ReceitaProjeto | null {
     projeto_id: projetoId, fonte: true, base_pessoas: true, receita: r.receita_vinculos || r.receita != null ? r : null,
     vinculos, ofertas_exclusivas: r.receita_ofertas_exclusivas ?? 0,
     sem_oferta_exclusiva: vinculos > 0 && !r.receita_ofertas_exclusivas,
-    sck_formato: 'origem|meio|campanha|conteúdo|termo',
+    sck_formato: 'origem|meio|campanha|conteúdo|termo', conta: contaDoProjeto(projetoId),
     sck_chaves: [p.etiqueta_clickup, p.sigla.toLowerCase()].filter((x): x is string => !!x),
     disputas_total: disputas.length, disputas,
   };
@@ -434,7 +440,7 @@ export function demoProdutos(projetoId: number): ProdutoHotmart[] {
   }));
 }
 
-export const demoProdutosVistos = (): ProdutoVisto[] => structuredClone(VISTOS).map((v) => ({
+export const demoProdutosVistos = (projetoId: number): ProdutoVisto[] => structuredClone(VISTOS).filter((v) => v.conta === contaDoProjeto(projetoId)).map((v) => ({
   ...v,
   ofertas: v.ofertas.map((o) => ({ ...o, exclusiva_de: (() => {
     const x = PRODUTOS.find((y) => y.oferta_exclusiva && y.conta === v.conta && y.oferta_codigo === o.codigo);
@@ -445,8 +451,12 @@ export const demoProdutosVistos = (): ProdutoVisto[] => structuredClone(VISTOS).
 export function demoSalvarProduto(p: Record<string, unknown>): Resposta {
   const pid = Number(p.projeto_id);
   if (!projeto(pid)) return { ok: false, msg: 'Projeto não encontrado.' };
-  const conta = String(p.conta ?? '').trim();
-  if (!['academy', 'escritorio'].includes(conta)) return { ok: false, msg: 'Escolha a conta da Hotmart.' };
+  // a conta não vem da tela: vem da unidade do projeto (decisão do Victor, 06/10/2026)
+  const conta = contaDoProjeto(pid);
+  if (!conta) {
+    return { ok: false, msg: projeto(pid)?.tipo === 'externo' ? 'Projeto externo: a receita não entra por ora, não se liga produto da Hotmart.'
+      : 'Marque a unidade do projeto (CSM ou Escritório) no cadastro: a conta da Hotmart vem dela (CSM = academy, Escritório = escritorio).' };
+  }
   const prod = String(p.produto_id ?? '').trim();
   if (!/^[A-Za-z0-9_-]{1,40}$/.test(prod)) return { ok: false, msg: 'Id do produto na Hotmart inválido (só letras, números, - e _).' };
   const v = { projeto_id: pid, conta, produto_id: prod, oferta_codigo: (p.oferta_codigo as string)?.trim() || null, oferta_exclusiva: p.oferta_exclusiva === true,

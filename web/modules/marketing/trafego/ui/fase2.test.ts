@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { demoAlertas, demoClickup, demoProjeto, demoReceita, demoResumo } from '../infrastructure/demo';
 import { tituloReceita } from './formato';
 import { ReceitaNiveis } from './ProdutosHotmart';
+import { contaHotmartDaUnidade, motivoSemConta } from '../domain/tipos';
 import { ClickupVista } from './ClickupPainel';
 import { ResumoDiaVista } from './ResumoDia';
 
@@ -48,29 +49,37 @@ describe('ClickUp na vida do projeto (demonstração)', () => {
 });
 
 describe('receita do projeto por nível (decisão do Victor, 06/10/2026; demonstração)', () => {
-  it('PB26: quebra por nível, estimada à parte, vendas em disputa e a explicação', () => {
-    const resumo = demoResumo().find((l) => l.sigla === 'PB26')!;
-    const h = html(createElement(ReceitaNiveis, { resumo, rec: demoReceita(1) }));
+  const disputa = { transacao: 'HPEXEMPLO0001', dia: '2026-10-04', conta: 'academy', produto_id: '0000001', oferta_codigo: null, nivel: 2 as const,
+    valor: 997, moeda: 'BRL', projetos: ['LPEXA26', 'PB26'] };
+  it('LPEXA26: quebra por nível, estimada à parte, vendas em disputa e a explicação', () => {
+    const resumo = demoResumo().find((l) => l.sigla === 'LPEXA26')!;
+    const h = html(createElement(ReceitaNiveis, { resumo, rec: { ...demoReceita(7)!, disputas: [disputa], disputas_total: 1 } }));
     expect(h).toContain('1. Oferta exclusiva (certa)');
     expect(h).toContain('2. SCK com o projeto (certa)');
     expect(h).toContain('3. Lead do projeto (provável)');
     expect(h).toContain('4. Estimada, só produto + período (à parte, não soma)');
     expect(h).toContain('Vendas em disputa (1)');
     expect(h).toContain('LPEXA26, PB26');
-    expect(h).toContain('seminario-conjunto-2026-11 ou pb26');
+    expect(h).toContain('lancamento-pago-exemplo-2026-10 ou lpexa26');
     expect(h).not.toContain('Sem oferta exclusiva, a receita é só estimada');
     expect(h).not.toMatch(/[—–]/);
   });
   it('produto ligado sem oferta exclusiva: o aviso grande', () => {
-    const resumo = demoResumo().find((l) => l.sigla === 'PB26')!;
-    const rec = { ...demoReceita(1)!, sem_oferta_exclusiva: true, ofertas_exclusivas: 0, disputas: [], disputas_total: 0 };
+    const resumo = demoResumo().find((l) => l.sigla === 'LPEXA26')!;
+    const rec = { ...demoReceita(7)!, sem_oferta_exclusiva: true, ofertas_exclusivas: 0, disputas: [], disputas_total: 0 };
     const h = html(createElement(ReceitaNiveis, { resumo, rec }));
     expect(h).toContain('Sem oferta exclusiva, a receita é só estimada');
     expect(h).toContain('criar na Hotmart uma oferta');
   });
   it('tooltip da coluna Receita da Central com a quebra', () => {
-    const t = tituloReceita(demoResumo().find((l) => l.sigla === 'PB26')!);
+    const t = tituloReceita({ ...demoResumo().find((l) => l.sigla === 'LPEXA26')!, receita_disputa: 1 });
     expect(t.split('\n')[0]).toBe('Receita do projeto = níveis 1 a 3.');
     expect(t).toContain('Em disputa com outro projeto (não somam): 1 venda(s)');
+  });
+  it('projeto sem unidade ou externo: o motivo de não ligar produto', () => {
+    expect(motivoSemConta({ tipo: 'interno', unidade: null })).toContain('Marque a unidade do projeto');
+    expect(motivoSemConta({ tipo: 'externo', unidade: 'aurum' })).toContain('Projeto externo');
+    expect([contaHotmartDaUnidade('csm'), contaHotmartDaUnidade('escritorio'), contaHotmartDaUnidade('aurum')]).toEqual(['academy', 'escritorio', null]);
+    expect(motivoSemConta({ tipo: 'interno', unidade: 'escritorio' })).toBeNull();
   });
 });
