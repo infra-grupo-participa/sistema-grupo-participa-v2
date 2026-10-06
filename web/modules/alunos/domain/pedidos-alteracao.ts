@@ -511,9 +511,35 @@ export interface PedidoLinha {
   planilha_erro: string | null;
   ra_caso_id: string | null;
   historico: EventoPedido[] | null;
+  /** Quem decidiu = quem pediu (pa_fila/pa_linha, etapa 2). Opcional: some antes da migration aplicada. */
+  autoaprovado?: boolean | null;
 }
 
 export interface PapelPedidos { pode_pedir: boolean; pode_aprovar: boolean; pode_ver_doc: boolean; pendentes: number | null }
+
+/** Abas da tela de pedidos. "Aprovar" só com pa_meu_papel().pode_aprovar === true (o banco trava de novo em pa_fila/pa_decidir). */
+export type AbaPedidos = 'pedir' | 'aprovar';
+export function abasPedidos(papel: Pick<PapelPedidos, 'pode_aprovar'> | null | undefined): AbaPedidos[] {
+  return papel?.pode_aprovar === true ? ['pedir', 'aprovar'] : ['pedir'];
+}
+
+/**
+ * Selo "aprovou o próprio pedido". `autoaprovado` é decidido_por = criado_por, o que também vale para a
+ * recusa do próprio pedido: por isso o selo só aparece quando a decisão foi aprovar (aprovado ou aplicado).
+ */
+export function aprovouProprioPedido(p: Pick<PedidoLinha, 'autoaprovado' | 'status'>): boolean {
+  return p.autoaprovado === true && (p.status === 'aprovado' || p.status === 'aplicado');
+}
+
+/** Linha de pa_historico_aluno(p_aluno): o texto já vem pronto do banco (nomes e documento mascarado lá). */
+export type PapelHistorico = 'titular' | 'sai' | 'entra' | 'aluno';
+export interface ItemHistoricoAluno { em: string; pedido_id: number; papel: PapelHistorico; texto: string }
+
+/** Mais recente primeiro; empate na data, o pedido de número maior primeiro. Data ilegível vai para o fim. */
+export function ordenarHistorico(itens: readonly ItemHistoricoAluno[]): ItemHistoricoAluno[] {
+  const t = (s: string) => { const n = Date.parse(s); return Number.isNaN(n) ? -Infinity : n; };
+  return [...itens].sort((a, b) => (t(b.em) - t(a.em)) || (b.pedido_id - a.pedido_id));
+}
 
 /** Resumo de uma linha em texto (lista do solicitante e cabeçalho do aprovador). */
 export function resumoPedido(p: Pick<PedidoLinha, 'tipo' | 'campo' | 'de' | 'para' | 'socio_sai_nome' | 'socio_entra_nome' | 'descricao'>): string {

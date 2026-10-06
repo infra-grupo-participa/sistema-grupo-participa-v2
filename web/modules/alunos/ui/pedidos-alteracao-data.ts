@@ -4,7 +4,7 @@
 // As tabelas pa_* são fechadas; a trava (quem pede, quem aprova, máscara de documento) mora em cada função.
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import type { AlunoResumo, PapelPedidos, PedidoLinha, SocioNovoPayload, TipoPedido } from '../domain/pedidos-alteracao';
+import { ordenarHistorico, type AlunoResumo, type ItemHistoricoAluno, type PapelPedidos, type PedidoLinha, type SocioNovoPayload, type TipoPedido } from '../domain/pedidos-alteracao';
 
 const db = () => createBrowserSupabase();
 
@@ -122,4 +122,18 @@ export async function marcarAplicado(id: number, obs: string): Promise<Resultado
   const { data, error } = await db().rpc('pa_marcar_aplicado', { p_pedido: id, p_obs: obs || null });
   logQueryError('pa_marcar_aplicado', error);
   return error ? ERRO_REDE : (data as Resultado);
+}
+
+/**
+ * Aba "Histórico" da ficha: alterações por pedido em que o aluno foi o alvo, o titular, quem saiu ou quem entrou
+ * (pa_historico_aluno, só equipe). Timeout de 15 s: sem ele a aba fica em "carregando" para sempre se a rede travar.
+ * Erro vira exceção (a tela mostra o erro), nunca lista vazia.
+ */
+export async function historicoAluno(alunoId: string): Promise<ItemHistoricoAluno[]> {
+  const { data, error } = await db()
+    .rpc('pa_historico_aluno', { p_aluno: alunoId })
+    .abortSignal(AbortSignal.timeout(15000));
+  logQueryError('pa_historico_aluno', error);
+  if (error) throw new Error('Não foi possível carregar o histórico de alterações.');
+  return ordenarHistorico((data as ItemHistoricoAluno[] | null) ?? []);
 }
