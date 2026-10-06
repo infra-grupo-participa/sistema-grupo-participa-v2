@@ -6,10 +6,12 @@
 // da 20261005p) e as listas da 20261005p (plataformas, status, fases, objetivo → fase). Todo o resto é ficção: projetos externos "… Exemplo", contas "Conta Exemplo",
 // ids 0000…, descrições de campanha "EXEMPLO", números gerados.
 import { traduzirCampanha } from '../../projetos/domain/campanha';
+import { calcularAlertas, type ProjetoEntrada } from '../domain/alertas';
 import { faseDaCampanha } from '../domain/fases';
 import { comKpis, tipoDaSubarea } from '../domain/kpis';
 import type {
-  Campanha, ConfigTrafego, Conta, Dono, FaseProjeto, LinhaResumo, Resposta, Subarea, VidaProjeto,
+  Campanha, ClickupProjeto, ConfigTrafego, Conta, Dono, FaseProjeto, LinhaResumo, ProdutoHotmart, ProdutoVisto, Regra, Resposta,
+  ResumoDia, Subarea, TarefaClickup, VidaProjeto,
 } from '../domain/tipos';
 
 const hoje = (n = 0) => {
@@ -145,7 +147,7 @@ function linha(p: ProjetoDemo): LinhaResumo {
     etiqueta_clickup: p.etiqueta_clickup, inicio: null, fim: null,
     status: pl?.status ?? null, status_nome: CONFIG.status.find((s) => s.codigo === pl?.status)?.nome ?? null,
     gestores: pl?.gestores ?? [], gestores_campanhas: [...new Set(cs.map((c) => c.gestor).filter((g): g is string => !!g))].sort(),
-    receita: null,
+    ...receitaDemo(p.id),
     investido: tem ? soma(dias.map((d) => d.gasto)) : null, por_plataforma: tem ? porPlat : null, moedas: [...new Set(cs.map((c) => c.moeda))],
     verba_maxima: pl?.verba_maxima ?? null, verba_diaria: pl?.verba_diaria ?? null,
     verba_fases: soma(fs.map((f) => f.verba ?? 0)), fases: fs.length,
@@ -249,4 +251,111 @@ export function demoAjustarCampanha(p: { id: number; projeto_id?: number | null;
   if ('projeto_id' in p) c.projeto_manual_id = p.projeto_id ?? null;
   if ('fase' in p) c.fase_manual = p.fase || null;
   return { ok: true, msg: `Campanha ajustada${NADA}.` };
+}
+
+// ─── Fase 2 (20261005r): resumo do dia, produtos da Hotmart e ClickUp. Tudo fictício ("Exemplo", ids 000…). ─────────
+// Os limiares são os mesmos valores iniciais da migration (mkt_trafego.alerta_regras).
+const REGRAS_DEMO: Regra[] = [
+  { codigo: 'acima_verba_diaria', nome: 'Acima da verba diária', ligada: true, limiar: 0, unidade: 'pct', gravidade: 'alta', descricao: 'Gasto de ontem acima da verba diária + limiar %.' },
+  { codigo: 'cpl_acima_meta', nome: 'CPL acima da meta', ligada: true, limiar: 0, unidade: 'pct', gravidade: 'alta', descricao: 'CPL acima da meta de CPL + limiar %.' },
+  { codigo: 'leads_abaixo_meta', nome: 'Abaixo da meta de leads para a data', ligada: true, limiar: 20, unidade: 'pct', gravidade: 'alta', descricao: 'Leads abaixo do esperado para ontem em mais de limiar %.' },
+  { codigo: 'ritmo_fase', nome: 'Ritmo da fase fora do planejado', ligada: true, limiar: 20, unidade: 'pct', gravidade: 'media', descricao: 'Gasto da fase em andamento fora do esperado em mais de limiar %.' },
+  { codigo: 'verba_perto_fim', nome: '% da verba perto do fim', ligada: true, limiar: 90, unidade: 'pct', gravidade: 'media', descricao: '% da verba máxima já investido maior ou igual ao limiar.' },
+  { codigo: 'fora_padrao', nome: 'Campanhas fora do padrão', ligada: true, limiar: 7, unidade: 'dias', gravidade: 'media', descricao: 'Campanhas fora do padrão que gastaram nos últimos limiar dias.' },
+  { codigo: 'sem_fase', nome: 'Campanhas sem fase', ligada: true, limiar: 7, unidade: 'dias', gravidade: 'media', descricao: 'Campanhas sem fase que gastaram nos últimos limiar dias.' },
+];
+
+interface ProdutoDemo { id: number; projeto_id: number; produto_id: string; oferta_codigo: string | null; de: string | null; ate: string | null; obs: string | null }
+let PRODUTOS: ProdutoDemo[] = [
+  { id: 1, projeto_id: 1, produto_id: '0000001', oferta_codigo: null, de: hoje(-25), ate: null, obs: 'Ingresso Exemplo' },
+];
+// receita fictícia de cada produto de exemplo no período
+const RECEITA_PRODUTO: Record<string, { receita: number; compras: number }> = { '0000001': { receita: 18450, compras: 123 }, '0000002': { receita: 4200, compras: 6 } };
+const VISTOS: ProdutoVisto[] = [
+  { produto_id: '0000001', nome: 'Ingresso Exemplo', aprovadas: 123, primeira: hoje(-25), ultima: ONTEM },
+  { produto_id: '0000002', nome: 'Produto Exemplo 2', aprovadas: 6, primeira: hoje(-40), ultima: hoje(-3) },
+];
+
+function receitaDemo(projetoId: number): Pick<LinhaResumo, 'receita' | 'receita_compras' | 'receita_outras_moedas' | 'receita_sem_valor' | 'receita_vinculos' | 'receita_sem_periodo' | 'receita_fonte'> {
+  const vs = PRODUTOS.filter((v) => v.projeto_id === projetoId);
+  const comPeriodo = vs.filter((v) => v.de != null); // os projetos do demo não têm data de início
+  const soma = (k: 'receita' | 'compras') => comPeriodo.reduce((a, v) => a + (RECEITA_PRODUTO[v.produto_id]?.[k] ?? 0), 0);
+  return {
+    receita: comPeriodo.length ? soma('receita') : null, receita_compras: vs.length ? soma('compras') : null,
+    receita_outras_moedas: vs.length ? 0 : null, receita_sem_valor: vs.length ? 0 : null,
+    receita_vinculos: vs.length, receita_sem_periodo: vs.length - comPeriodo.length, receita_fonte: true,
+  };
+}
+
+export function demoAlertas(): ResumoDia {
+  const cs = campanhas();
+  const ultimo = (id: number) => DIAS.filter((d) => d.campanha_id === id && d.gasto > 0).map((d) => d.dia).sort().at(-1) ?? null;
+  const ent = (c: Campanha) => ({ fora_padrao: c.fora_padrao, fase: c.fase, ultimoGasto: ultimo(c.id) });
+  const projetos: ProjetoEntrada[] = PROJETOS.map((p) => {
+    const doProj = cs.filter((c) => c.projeto_id === p.id);
+    const st = PLAN.get(p.id)?.status;
+    return {
+      linha: linha(p),
+      entra: p.ativo && st !== 'inativo' && st !== 'encerrado',
+      fases: FASES.filter((f) => f.projeto_id === p.id).map((f) => {
+        const ids = new Set(doProj.filter((c) => c.fase === f.fase).map((c) => c.id));
+        const g = DIAS.filter((d) => ids.has(d.campanha_id) && f.inicio != null && d.dia >= f.inicio && d.dia <= ONTEM).reduce((a, d) => a + d.gasto, 0);
+        return { fase: f.fase, nome: CONFIG.fases.find((x) => x.codigo === f.fase)?.nome ?? f.fase, verba: f.verba, inicio: f.inicio, fim: f.fim, gastoAteOntem: Math.round(g * 100) / 100 };
+      }),
+      campanhas: doProj.map(ent),
+    };
+  });
+  return {
+    dia: ONTEM, sem_coleta: false, base_pessoas: true, projetos_avaliados: projetos.filter((x) => x.entra).length,
+    alertas: calcularAlertas(ONTEM, REGRAS_DEMO, projetos, cs.filter((c) => c.projeto_id == null).map(ent)),
+    regras: structuredClone(REGRAS_DEMO), coletas: {},
+  };
+}
+
+export function demoProdutos(projetoId: number): ProdutoHotmart[] {
+  const p = projeto(projetoId);
+  return PRODUTOS.filter((v) => v.projeto_id === projetoId).map((v) => ({
+    ...v, projeto_sigla: p?.sigla ?? '', de_efetivo: v.de, ate_efetivo: v.ate,
+  }));
+}
+
+export const demoProdutosVistos = (): ProdutoVisto[] => structuredClone(VISTOS);
+
+export function demoSalvarProduto(p: Record<string, unknown>): Resposta {
+  const pid = Number(p.projeto_id);
+  if (!projeto(pid)) return { ok: false, msg: 'Projeto não encontrado.' };
+  const prod = String(p.produto_id ?? '').trim();
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(prod)) return { ok: false, msg: 'Id do produto na Hotmart inválido (só letras, números, - e _).' };
+  const v = { projeto_id: pid, produto_id: prod, oferta_codigo: (p.oferta_codigo as string)?.trim() || null, de: (p.de as string) || null, ate: (p.ate as string) || null, obs: (p.obs as string) || null };
+  if (v.de && v.ate && v.ate < v.de) return { ok: false, msg: 'O fim não pode ser antes do início.' };
+  if (PRODUTOS.some((x) => x.projeto_id === pid && x.produto_id === prod && x.oferta_codigo === v.oferta_codigo && x.id !== Number(p.id))) {
+    return { ok: false, msg: 'Este produto (e oferta) já está ligado a este projeto.' };
+  }
+  if (p.id) PRODUTOS = PRODUTOS.map((x) => (x.id === Number(p.id) ? { ...x, ...v } : x));
+  else PRODUTOS.push({ id: ++seq, ...v });
+  const avisos = [...(v.de ? [] : ['sem_periodo']), ...(VISTOS.some((x) => x.produto_id === prod) ? [] : ['produto_sem_compras'])];
+  return { ok: true, msg: `Produto ${prod} ligado${NADA}.`, avisos };
+}
+
+export function demoApagarProduto(id: number): Resposta {
+  PRODUTOS = PRODUTOS.filter((x) => x.id !== id);
+  return { ok: true, msg: `Vínculo apagado${NADA}.` };
+}
+
+const iso = (n: number, h = 15) => `${hoje(n)}T${String(h).padStart(2, '0')}:00:00.000Z`;
+const tarefa = (id: string, nome: string, status: string, x: Partial<TarefaClickup>): TarefaClickup =>
+  ({ id, nome, status, criada_em: null, atualizada_em: null, inicio: null, prazo: null, concluida_em: null, responsaveis: [], url: null, ...x });
+const TAREFAS: Record<number, TarefaClickup[]> = {
+  1: [
+    tarefa('demo4', 'Exemplo: revisar a verba da captação', 'em andamento', { criada_em: iso(-2), inicio: iso(-1), prazo: iso(2), responsaveis: ['Responsável Exemplo'] }),
+    tarefa('demo3', 'Exemplo: aumentar o orçamento do público frio', 'concluído', { criada_em: iso(-5), concluida_em: iso(-3), responsaveis: ['Responsável Exemplo'] }),
+    tarefa('demo2', 'Exemplo: trocar criativos do aquecimento', 'concluído', { criada_em: iso(-9), concluida_em: iso(-6) }),
+    tarefa('demo1', 'Exemplo: subir campanhas de captação', 'concluído', { criada_em: iso(-12), prazo: iso(-10), concluida_em: iso(-10), responsaveis: ['Outro Exemplo'] }),
+  ],
+};
+
+export function demoClickup(projetoId: number): ClickupProjeto | null {
+  const p = projeto(projetoId);
+  if (!p) return null;
+  return { etiqueta: p.etiqueta_clickup, configurado: true, ultima_coleta: null, tarefas: p.etiqueta_clickup ? structuredClone(TAREFAS[projetoId] ?? []) : [] };
 }

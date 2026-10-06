@@ -1,0 +1,11 @@
+{
+  "data": [
+    { "campaign_id": "900000000000202", "campaign_name": "CF | ZZ28 | REMARKETING | ENSAIO", "date_start": "2026-10-04", "date_stop": "2026-10-04",
+      "spend": "20", "impressions": "3000", "clicks": "15" },
+    { "campaign_id": "900000000000209", "campaign_name": "RS | ZZ28 | LEADS | ENSAIO APAGADA", "date_start": "2026-10-03", "date_stop": "2026-10-03",
+      "spend": "5.5", "impressions": "400", "inline_link_clicks": "3" },
+    { "campaign_id": "900000000000203", "campaign_name": "Campanha ENSAIO fora do padrão", "date_start": "2026-10-04", "date_stop": "2026-10-04",
+      "impressions": "10" }
+  ],
+  "paging": { "cursors": { "before": "MgZDZD", "after": "MwZDZD" } }
+}

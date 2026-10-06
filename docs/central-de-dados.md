@@ -375,6 +375,9 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 > branch `victor`. Migration `infra/supabase/migrations/20261005p_mkt_trafego.sql`, **NÃO APLICADA** (ensaio
 > `20261005p_ensaio.sql`; o que foi medido em `20261005p.explain.md`). Tela `/marketing/trafego`, código em
 > `web/modules/marketing/trafego/`.
+> **Fase 2** (05/10/2026, mesma branch): migration `20261005r_mkt_trafego_fase2.sql`, **NÃO APLICADA** (depende da
+> 20261005p; ensaio `20261005r_ensaio.sql`; o que foi medido em `20261005r.explain.md`). Resumo do dia, receita da
+> Hotmart, atividades do ClickUp e a coleta Meta Ads (Edge pronta, **desligada**). Detalhe em "Fase 2" abaixo.
 
 ### Situação
 
@@ -382,10 +385,12 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 |---|---|
 | Banco (schema `mkt_trafego`, 13 funções `public.trafego_*`) | escrito e ensaiado em Postgres local; **não aplicado** |
 | Tela `/marketing/trafego` (Projetos, Campanhas fora do padrão, Contas de anúncio, vida do projeto) | pronta; funciona de verdade só depois da migration; hoje dá para ver no modo demo |
-| Coleta Meta Ads e Google Ads | **não feita** (etapa 2). As funções de entrada existem (`trafego_campanhas_receber`, `trafego_desempenho_receber`, só `service_role`), ninguém as chama |
-| Receita (Hotmart) | **sem fonte**: a tela mostra "sem dado" |
+| Coleta Meta Ads | **Edge `trafego-meta` pronta e testada com respostas simuladas, DESLIGADA** (20261005r): falta o Victor decidir o token (conta centralizadora ou um por conta) e ligar o cron |
+| Coleta Google Ads | só o desenho e o esqueleto da conversão (`trafego-google/google.ts`); falta developer token, MCC e OAuth |
+| Resumo do dia ("o que está pegando fogo") | pronto no banco e na tela (20261005r, não aplicada); limiares iniciais **propostos**, a confirmar |
+| Receita (Hotmart) | ligada pelo vínculo produto → projeto, **cadastrado à mão** na vida do projeto (20261005r, não aplicada). Sem vínculo, "sem dado" |
 | Connect rate e conversão da página | **ligados** no banco à Web fase 2 (20261005q, a mesma conta de `public.mkt_web_connect`). Sem a 20261005q aplicada, "sem dado" com aviso na tela |
-| Atividades do ClickUp | lugar reservado na vida do projeto, sem integração |
+| Atividades do ClickUp | espelho pela etiqueta do projeto e linha do tempo junto do gasto diário (20261005r, não aplicada). Rotina `trafego-clickup` pronta, **DESLIGADA** (falta o token e o id do workspace) |
 
 ### Decisões que mandam aqui (Victor, 05/10/2026)
 
@@ -416,8 +421,9 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 - **Status do projeto marcado à mão.** Verba, fases e metas preenchidas por Arthur, Victor e Caio (no banco: admin/dev).
 - **Lead que conta é o da nossa base** (`pessoas.eventos`, 20261005o): pessoas distintas com evento `lead` no projeto, sem
   pessoa de teste nem mesclada. Os leads que a plataforma informa ficam só na campanha.
-- **"Quanto gerado" = receita** (Hotmart), ainda não ligada: nula.
-- **Atividades do ClickUp ficam na tela** (pela etiqueta do projeto); nesta etapa só o lugar.
+- **"Quanto gerado" = receita** (Hotmart). Na fase 2: soma das compras aprovadas dos produtos ligados à mão ao projeto
+  (ver "Fase 2"). Sem vínculo, nula.
+- **Atividades do ClickUp ficam na tela** (pela etiqueta do projeto). Na fase 2: lista e linha do tempo com o gasto.
 - **Nada duplicado:** projeto e página em `mkt`, lead em `pessoas`, visita em `mkt_web`.
 
 ### Modelo
@@ -452,10 +458,14 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
   da lista do banco; casa com um dos gestores do projeto ou com o de alguma campanha), situação (status) e projetos
   desativados.
   Cartões: investido, verba, projetos acima da verba diária ontem, campanhas fora do padrão.
+  **Resumo do dia** no topo (fase 2): os alertas de ontem, alta primeiro, com a sigla clicável (abre a vida do projeto),
+  a situação das coletas e "Ver as regras e os limiares".
 - **Vida do projeto** (clique na linha): investido × verba (por plataforma), ritmo de ontem, quanto deveria ter gasto
   pelas fases, KPIs × metas (com CPC e page views), fases planejado × gasto (uma linha por fase planejada ou com
   campanha nela, mais "sem fase"; criar, editar, apagar o planejamento), campanhas do projeto (fase "pelo objetivo" ou
-  "à mão"), lugar das atividades do ClickUp. Botão **Planejamento** (status, gestores, verbas, metas).
+  "à mão"), **receita gerada** com os produtos da Hotmart ligados (ligar, editar, apagar; o campo do id sugere os
+  produtos que já venderam) e **atividades do ClickUp** com a linha do tempo do gasto diário (fase 2). Botão
+  **Planejamento** (status, gestores, verbas, metas).
 - **Campanhas fora do padrão:** o nome exato, o que está fora, ligar à mão a um projeto, "Reler os nomes" (depois de
   cadastrar projeto ou página em Marketing > Projetos e páginas). Opção "só as sem projeto".
 - **Contas de anúncio:** cadastro e edição.
@@ -468,21 +478,87 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
    `/marketing/trafego`. Projetos da semente + 2 externos "Exemplo", contas "Conta Exemplo", campanhas "EXEMPLO", gasto e
    leads inventados, com a faixa "Dados de demonstração" (grava só em memória; recarregar volta ao começo). Em produção
    (`NODE_ENV=production`) o modo nunca liga.
-3. **Código:** `npx tsc --noEmit`, `npx vitest run` (`kpis.test.ts`, `fases.test.ts`, `demo.test.ts`), `npm run build`.
+3. **Código:** `npx tsc --noEmit`, `npx vitest run` (`kpis.test.ts`, `fases.test.ts`, `demo.test.ts`; fase 2:
+   `alertas.test.ts`, `linha-do-tempo.test.ts`, `coleta.test.ts`, `ui/fase2.test.ts`), `npm run build`.
+4. **Fase 2:** com a 20261005p aplicada, rodar `20261005r_ensaio.sql` inteiro (termina em rollback) e conferir que
+   nenhuma linha começa com `ERRADO` ("PULADO" é esperado onde falta Vault, pg_cron ou a 20261005o). No modo demo
+   aparecem o resumo do dia, a receita do PB26 (produto "Ingresso Exemplo", R$ 18.450 fictícios) e as atividades
+   "Exemplo: …" do ClickUp na vida do PB26. As Edges: `deno check infra/supabase/functions/trafego-meta/index.ts
+   infra/supabase/functions/trafego-clickup/index.ts`; a parte pura roda no vitest com respostas simuladas
+   (`infra/supabase/functions/_trafego-fixtures`), sem credencial e sem chamar API real.
 
 ### Para valer
 
 Victor ver a tela no modo demo e responder as perguntas abaixo; rodar o ensaio no SQL editor; aplicar a 20261005p; levar a
-`victor` para a `main`; cadastrar contas e planejamento. Nada disso foi feito.
+`victor` para a `main`; cadastrar contas e planejamento. Fase 2: rodar o ensaio da 20261005r, aplicar, ligar à mão os
+produtos da Hotmart de cada projeto e, quando decidir os tokens, ligar as rotinas (abaixo). Nada disso foi feito.
 
 ### O que falta (próximas etapas do plano)
 
-2. Coleta Meta + Google (depende da conta centralizadora e das credenciais): rotina diária chamando os dois `receber`.
-3. Ligar receita (Hotmart → projeto) e atividades do ClickUp. Connect rate e conversão já estão ligados; dependem da
-   Web fase 2 (20261005q) aplicada e com dado.
-4. Resumo do dia ("o que está pegando fogo") e alerta de nome fora do padrão.
-5. MCP da central com os dados do Tráfego.
-6. Importação do histórico (planilhas que o Victor escolher).
+2. Coleta Meta: **feita e desligada** (falta o token). Google: só desenho e esqueleto (falta developer token, MCC, OAuth).
+3. Receita e ClickUp: **feitos** (20261005r, não aplicada); faltam os vínculos de produto (à mão) e o token do ClickUp.
+   Connect rate e conversão já estão ligados; dependem da Web fase 2 (20261005q) aplicada e com dado.
+4. Resumo do dia: **feito** (20261005r, não aplicada), com limiares a confirmar. Alerta fora da tela (Slack, e-mail): não feito.
+5. MCP da central com os dados do Tráfego (fora desta fase).
+6. Importação do histórico (planilhas que o Victor escolher; fora desta fase).
+7. Externos (Aurum, Diamantes): fora desta fase, esperando a decisão.
+
+### Fase 2 (migration 20261005r, NÃO APLICADA)
+
+`infra/supabase/migrations/20261005r_mkt_trafego_fase2.sql` + `_ensaio.sql` + `20261005r.explain.md`. Depende da
+20261005p. Tudo o que não dependia de decisão em aberto; o que depende (tokens, limiares, bruto × líquido) ficou
+configurável e está nas perguntas.
+
+| Peça | Onde | Como funciona |
+|---|---|---|
+| Resumo do dia | `public.trafego_alertas`, `mkt_trafego.alertas`; `domain/alertas.ts`; `ui/ResumoDia.tsx` | Sobre ontem (São Paulo), só projetos ativos e com status que entra no resumo (`status_projeto.entra_no_resumo_dia`: inativo e encerrado ficam fora). 7 regras, limiar em `mkt_trafego.alerta_regras` (tabela abaixo). A mesma regra no front para o demo e os testes |
+| Receita | `mkt_trafego.produtos_hotmart` (vínculo à mão), `mkt_trafego.receita`, `public.trafego_produto_*`, `trafego_hotmart_produtos`; `ui/ProdutosHotmart.tsx` | Soma `public.compras.preco` das compras **APPROVED, COMPLETE ou COMPLETED** (a regra que o repo já usa em `public.compras`) dos produtos ligados, com data `coalesce(data_aprovacao, data_compra)` no período (do vínculo, senão o do projeto; sem fim = até hoje; sem início não soma). Oferta opcional. Só BRL na soma (outra moeda contada à parte). Compra que casa com dois vínculos conta uma vez. Nada é copiado: lido na hora |
+| Atividades do ClickUp | `mkt_trafego.clickup_tarefas` (espelho mínimo), `public.trafego_clickup`, `public.trafego_clickup_receber`; Edge `trafego-clickup`; `ui/ClickupPainel.tsx`, `domain/linha-do-tempo.ts` | A rotina lê (só GET) as tarefas de cada etiqueta de projeto ativo, todas as páginas, e grava o conjunto inteiro (quem não veio perde a etiqueta). Na vida do projeto: barras do gasto diário e bolinhas das atividades no dia (concluída, senão prazo, início ou criação) e a lista |
+| Coleta Meta Ads | Edge `trafego-meta` (`meta.ts` puro + `index.ts`); `mkt_trafego.meta_contas`, `coleta_config`, `coletas` | Para cada conta Meta ativa: campanhas (nome exato e status) e insights por campanha e dia (`spend`, `impressions`, `inline_link_clicks` = cliques no link, `clicks` = totais, ação `lead` = leads da plataforma) dos últimos `meta_dias` (3) dias completos e hoje; grava pelos `receber` da 20261005p (campanhas antes, upsert idempotente). Token só no header; falha por conta vira código curto em `mkt_trafego.coletas` |
+| Google Ads | `infra/supabase/functions/trafego-google/google.ts` | Só o esqueleto (GAQL e conversão de micros), sem `index.ts`. Desenho abaixo |
+
+**Limiares iniciais (proposta minha, a confirmar):**
+
+| Regra | Dispara quando | Limiar | Gravidade |
+|---|---|---|---|
+| Acima da verba diária | gasto de ontem > verba diária × (1 + limiar) | 0 % | alta |
+| CPL acima da meta | CPL > meta de CPL × (1 + limiar) | 0 % | alta |
+| Abaixo da meta de leads para a data | leads < esperado × (1 − limiar); esperado = meta × dias passados ÷ dias da captação planejada (senão do projeto) | 20 % | alta |
+| Ritmo da fase fora do planejado | fase em andamento: gasto desde o início fora de esperado × (1 ± limiar); esperado = verba × dias passados ÷ dias da fase | 20 % | média |
+| % da verba perto do fim | % da verba ≥ limiar | 90 % | média |
+| Campanhas fora do padrão | fora do padrão com gasto nos últimos N dias (inclui sem projeto) | 7 dias | média |
+| Campanhas sem fase | sem fase com gasto nos últimos N dias | 7 dias | média |
+
+Mudar: `update mkt_trafego.alerta_regras set limiar = 30 where codigo = 'ritmo_fase';` (ou `ligada = false`).
+
+**Ligar as rotinas (NÃO feito; decisão do Victor).** Ordem:
+1. Publicar as Edges: `supabase functions deploy trafego-meta` e `supabase functions deploy trafego-clickup`
+   (`verify_jwt = false` já está no `infra/supabase/config.toml`; elas conferem o header `x-sync-chave`, segredo
+   `trafego_coleta_chave` que a migration cria no Vault).
+2. Tokens no Vault, pelo SQL editor, **nunca no código nem no chat**:
+   - Meta, conta centralizadora: `select vault.create_secret('<token>', 'meta_ads_token', 'Token Meta Ads, leitura');`
+   - Meta, token por conta: `select vault.create_secret('<token>', 'meta_ads_token_<nome>', '…');` e
+     `update mkt_trafego.contas set token_vault = 'meta_ads_token_<nome>' where id = <id>;` (conta sem `token_vault`
+     usa o `meta_ads_token`). O token precisa ler insights (`ads_read`) das contas.
+   - ClickUp: `select vault.create_secret('<token>', 'clickup_api_token', 'Token ClickUp, só leitura');` e
+     `update mkt_trafego.coleta_config set valor = '<id do workspace>' where chave = 'clickup_team_id';`.
+     **O token do ClickUp é decisão do Victor** (de quem é, qual usuário: ele enxerga só o que esse usuário enxerga).
+3. Cadastrar as contas Meta em Marketing > Tráfego > Contas de anúncio.
+4. Testar uma vez à mão (SQL editor): `select ops.cron_post('trafego-meta', url := 'https://mbvybujpkwuorhtdzcde.supabase.co/functions/v1/trafego-meta', body := '{"so_hoje": true}'::jsonb, headers := jsonb_build_object('Content-Type','application/json','x-sync-chave',(select decrypted_secret from vault.decrypted_secrets where name='trafego_coleta_chave')), timeout_milliseconds := 150000);`
+   e ver `select * from mkt_trafego.coletas order by id desc limit 5;`.
+5. Agendar: o bloco **LIGAR AS ROTINAS** no fim da migration (`trafego-meta` 06:30 SP, `trafego-clickup` 07:00 SP,
+   opcional `trafego-meta-hoje` de 3 em 3 horas), sempre pelo `ops.cron_post` (regra 11 do CLAUDE.md).
+   Recarga de dias passados: corpo `{"de": "AAAA-MM-DD", "ate": "AAAA-MM-DD"}` (até 92 dias).
+   Desligar: `select cron.unschedule('trafego-meta'); select cron.unschedule('trafego-clickup');`.
+
+**Google Ads: desenho (não funciona).** Precisa de: (1) **developer token** da API do Google Ads, pedido na conta
+administradora e aprovado pelo Google (o nível "básico" basta para leitura); (2) **conta administradora (MCC)** com
+acesso às contas dos projetos (o id vai no header `login-customer-id`); (3) **OAuth 2.0**: client id e secret de um
+projeto do Google Cloud e um refresh token de um usuário com acesso à MCC. Tudo no Vault (`google_ads_developer_token`,
+`google_ads_client_id`, `google_ads_client_secret`, `google_ads_refresh_token`). A rotina troca o refresh token por um
+access token, chama `POST https://googleads.googleapis.com/<versão>/customers/<conta>/googleAds:searchStream` com a
+consulta de `consultaGaql` (campanha × dia: custo em micros, impressões, cliques) e grava pelos mesmos `receber`. Decisão
+pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); totais e leads ficam nulos.
 
 ### Perguntas (respondidas pelo Victor em 05/10/2026, salvo as em aberto)
 
@@ -498,6 +574,23 @@ Victor ver a tela no modo demo e responder as perguntas abaixo; rodar o ensaio n
    Qual sigla de campanha?
 6. **Conta centralizadora** (ideia do Caio): em aberto. É dela que a coleta lê.
 7. ~~Gestor do projeto~~ **Respondido:** vários gestores por projeto (`projeto_gestores`).
+
+**Fase 2 (em aberto):**
+
+8. **Token do Meta:** conta centralizadora (um `meta_ads_token`) ou um token por conta? As duas formas funcionam; falta
+   escolher e cadastrar.
+9. **Token do ClickUp:** de qual usuário (ele só lê o que esse usuário enxerga)? E qual o id do workspace?
+10. **Limiares do resumo do dia:** os iniciais são proposta minha (0 % verba diária, 0 % CPL, 20 % leads e ritmo da
+    fase, 90 % da verba, 7 dias para fora do padrão e sem fase). Servem? Inativo e encerrado fora do resumo, ok?
+11. **Receita bruta ou líquida?** Hoje soma `public.compras.preco` (o valor da compra que a Hotmart manda no webhook,
+    antes da taxa). O financeiro tem o líquido em `fin.hotmart_transacoes`.
+12. **Reembolso e chargeback:** a Hotmart troca o status da própria compra, então ela sai da receita (inclusive de dias
+    passados: a receita de um projeto encerrado pode cair depois). É isso que você quer, ou a receita deve ficar como no
+    dia da venda e o reembolso aparecer à parte?
+13. **Compra em outra moeda:** fica fora da soma (contada à parte). Ok?
+14. **Período da receita:** o do projeto (`mkt.projetos` início e fim) ou o de cada produto? Hoje vale o do vínculo se
+    preenchido, senão o do projeto. Os projetos da semente estão sem datas: sem data, o vínculo não soma.
+15. **Leads da plataforma no Meta:** a coleta usa a ação `lead`. Só informação (o lead da Central é o da base); serve?
 
 ## Branches
 
@@ -527,3 +620,6 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
   gestores por projeto,
   fase da campanha pelo objetivo do nome (com correção à mão), fases remarketing e abertura de carrinho, objetivos
   CARRINHO e AQUECIMENTO no padrão de nome.
+- **05/10/2026:** Tráfego fase 2 (migration 20261005r, NÃO APLICADA): resumo do dia com limiares em tabela, receita da
+  Hotmart pelo vínculo produto → projeto (cadastro à mão), atividades do ClickUp com linha do tempo do gasto, Edges
+  `trafego-meta` e `trafego-clickup` testadas com respostas simuladas e **desligadas**, esqueleto do Google Ads. Branch `victor`.

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { comKpis } from '../domain/kpis';
-import { demoAjustarCampanha, demoCampanhas, demoContas, demoProjeto, demoResumo, demoSalvarFase } from './demo';
+import {
+  demoAjustarCampanha, demoApagarProduto, demoCampanhas, demoContas, demoProdutos, demoProjeto, demoResumo, demoSalvarFase, demoSalvarProduto,
+} from './demo';
 
 describe('modo de demonstração do Tráfego (dados fictícios)', () => {
   it('projetos: os 4 da semente real + 2 externos marcados como Exemplo', () => {
@@ -41,5 +43,15 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
     expect(pb.cpc).not.toBeNull();
     expect(pb.connect_rate).not.toBeNull();
     expect(demoResumo().find((l) => l.sigla === 'HT33')!.connect_rate).toBeNull();
+  });
+  it('receita (fase 2): PB26 com o produto Exemplo ligado; sem vínculo = sem dado; vínculo sem período não soma', () => {
+    expect(demoResumo().find((l) => l.sigla === 'PB26')!.receita).toBe(18450);
+    expect(demoResumo().find((l) => l.sigla === 'HT33')!.receita).toBeNull();
+    const r = demoSalvarProduto({ projeto_id: 2, produto_id: '0000002', oferta_codigo: '', de: '', ate: '', obs: '' });
+    expect([r.ok, r.avisos]).toEqual([true, ['sem_periodo']]);
+    const ht = demoResumo().find((l) => l.sigla === 'HT33')!;
+    expect([ht.receita, ht.receita_vinculos, ht.receita_sem_periodo]).toEqual([null, 1, 1]);
+    demoApagarProduto(demoProdutos(2)[0].id);
+    expect(demoSalvarProduto({ projeto_id: 1, produto_id: '0000001', oferta_codigo: '', de: '', ate: '', obs: '' }).ok).toBe(false);
   });
 });

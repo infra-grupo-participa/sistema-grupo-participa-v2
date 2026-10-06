@@ -1,7 +1,8 @@
 'use client';
 
 // "A vida do projeto" (clique na linha da Central do Tráfego): investido × verba, ritmo, KPIs × metas, fases planejado ×
-// gasto, campanhas (e as fora do padrão), lugar das atividades do ClickUp. Cadastro de planejamento e fases aqui.
+// gasto, campanhas (e as fora do padrão), receita da Hotmart (vínculo de produto, 20261005r) e atividades do ClickUp com o
+// gasto diário (20261005r). Cadastro de planejamento, fases e produtos aqui.
 import { useEffect, useState } from 'react';
 import {
   Badge, Button, ConfirmDialog, DataTable, Drawer, EmptyState, FilterSelect, Input, Loading, Modal, ProgressBar, Row, SectionCard,
@@ -14,7 +15,9 @@ import { ROTULO_AVISO, ROTULO_SUBAREA, type ConfigTrafego, type FaseProjeto, typ
 import {
   ajustarCampanha, apagarFase, carregarProjeto, salvarFase, salvarPlanejamento, type FaseForm, type PlanejamentoForm,
 } from '../infrastructure/trafego-data';
+import { ClickupPainel } from './ClickupPainel';
 import { SEM_DADO, centavos, dataBR, inteiro, pct, reais } from './formato';
+import { ProdutosHotmart } from './ProdutosHotmart';
 
 type Flash = (msg: string) => void;
 
@@ -302,11 +305,12 @@ export function VidaProjeto({ id, config, versao, onFechar, flash, onMudou }: {
           <Campanhas vida={vida} config={config} flash={flash} onMudou={onMudou} />
         </SectionCard>
 
-        <SectionCard title="Atividades do ClickUp">
-          <p className="text-sm text-[var(--fg-2)]">
-            Lugar reservado: as tarefas do projeto vão aparecer aqui numa próxima etapa (decisão de 05/10/2026), puxadas pela etiqueta do projeto
-            {r.etiqueta_clickup ? <> <span className="font-mono text-[var(--fg)]">{r.etiqueta_clickup}</span>.</> : '. Este projeto ainda não tem etiqueta do ClickUp cadastrada (em Marketing > Projetos e páginas).'}
-          </p>
+        <SectionCard title="Receita gerada (Hotmart)" subtitle="Compras aprovadas dos produtos ligados a este projeto, no período. O vínculo é cadastrado à mão.">
+          <ProdutosHotmart resumo={r} versao={versao} flash={flash} onMudou={onMudou} />
+        </SectionCard>
+
+        <SectionCard title="Atividades do ClickUp e gasto diário" subtitle="O que a equipe fez (pela etiqueta do projeto) no mesmo eixo do gasto, para ver o efeito de cada ação.">
+          <ClickupPainel projetoId={r.projeto_id} serie={vida.serie} ate={config.dia_ontem} versao={versao} />
         </SectionCard>
       </div>
 

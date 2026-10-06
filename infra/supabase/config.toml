@@ -31,3 +31,11 @@ verify_jwt = false
 # x-sync-chave (Vault respondi_sync_chave), fail-closed.
 [functions.respondi-sync]
 verify_jwt = false
+
+# trafego-meta e trafego-clickup (migration 20261005r): chamadas pelo cron via ops.cron_post sem Authorization;
+# autenticam pelo header x-sync-chave (Vault trafego_coleta_chave), fail-closed. Nascem sem cron (desligadas).
+[functions.trafego-meta]
+verify_jwt = false
+
+[functions.trafego-clickup]
+verify_jwt = false

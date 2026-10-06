@@ -1,7 +1,8 @@
 'use client';
 
-// Marketing > Tráfego: a Central do Tráfego (etapa 1). Tabela de projetos com filtros, "a vida do projeto" no clique,
-// cadastro de contas e campanhas fora do padrão. Só admin/dev (gate no layout, na page e no banco). Migration 20261005p.
+// Marketing > Tráfego: a Central do Tráfego. Resumo do dia no topo (20261005r), tabela de projetos com filtros, "a vida do
+// projeto" no clique, cadastro de contas e campanhas fora do padrão. Só admin/dev (gate no layout, na page e no banco).
+// Migrations 20261005p e 20261005r.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Badge, DataTable, EmptyState, FilterSelect, KpiCard, Loading, SectionCard, Tabs, Td, Th, Thead, Toast, Toggle, Tr, useFlash,
@@ -11,6 +12,7 @@ import { ROTULO_SUBAREA, ROTULO_TIPO, type ConfigTrafego, type LinhaResumo, type
 import { MODO_DEMO, carregarConfig, carregarResumo } from '../infrastructure/trafego-data';
 import { CampanhasPainel } from './CampanhasPainel';
 import { ContasPainel } from './ContasPainel';
+import { ResumoDia } from './ResumoDia';
 import { SEM_DADO, centavos, inteiro, pct, reais } from './formato';
 import { VidaProjeto } from './VidaProjeto';
 
@@ -67,7 +69,7 @@ function TabelaCentral({ linhas, onAbrir }: { linhas: LinhaResumo[]; onAbrir: (i
                 <div className="text-xs text-[var(--fg-3)]">{l.nome}{l.subarea ? ` · ${ROTULO_SUBAREA[l.subarea]}` : ''}</div>
                 {l.campanhas_fora_padrao > 0 && <div className="mt-0.5 text-[11px] text-[var(--yellow)]">{l.campanhas_fora_padrao} campanha(s) fora do padrão</div>}
               </Td>
-              <Td><Kpi v={reais(l.receita)} titulo="Receita da Hotmart: ainda não ligada ao projeto" /></Td>
+              <Td><Kpi v={reais(l.receita)} titulo={l.receita_vinculos ? 'Vínculo sem período: ligue com data em "de" ou cadastre o início do projeto' : 'Sem produto da Hotmart ligado ao projeto (cadastre na vida do projeto)'} /></Td>
               <Td><Kpi v={reais(l.investido)} titulo="Sem gasto coletado (a coleta Meta/Google é a etapa 2)" />
                 {acima && <div className="text-[11px] text-[var(--red)]">ontem acima da diária</div>}</Td>
               <Td><Kpi v={reais(l.verba_maxima)} titulo="Verba não cadastrada" /></Td>
@@ -155,6 +157,7 @@ export function TrafegoClient() {
           <div role="tabpanel" id="trafego-panel" className="space-y-5">
             {aba === 'central' && (
               <>
+                <ResumoDia versao={versao} onAbrir={setAberto} />
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <KpiCard label="Investido (filtro)" value={reais(t.investido)} hint="Soma do gasto coletado das plataformas" />
                   <KpiCard label="Verba máxima (filtro)" value={reais(t.verba)} hint="Planejamento à mão" bar="purple" />

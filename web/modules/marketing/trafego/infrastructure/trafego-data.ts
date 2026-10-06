@@ -6,7 +6,9 @@
 // (NODE_ENV=production) ele nunca liga, mesmo com a variável.
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import type { Campanha, ConfigTrafego, Conta, LinhaResumo, Resposta, VidaProjeto } from '../domain/tipos';
+import type {
+  Campanha, ClickupProjeto, ConfigTrafego, Conta, LinhaResumo, ProdutoHotmart, ProdutoVisto, Resposta, ResumoDia, VidaProjeto,
+} from '../domain/tipos';
 import * as demo from './demo';
 
 export const MODO_DEMO = process.env.NEXT_PUBLIC_TRAFEGO_DEMO === '1' && process.env.NODE_ENV !== 'production';
@@ -78,3 +80,31 @@ export async function relerCampanhas(): Promise<Resposta> {
   if (MODO_DEMO) return { ok: true, msg: 'Modo de demonstração: nada a reler.' };
   return (await rpc<Resposta>('trafego_campanhas_reler')) ?? falha;
 }
+
+// ─── Fase 2 (migration 20261005r) ─────────────────────────────────────────────────────────────────────────────────────
+const falhaR: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261005r ainda não foi aplicada).' };
+
+/** Resumo do dia ("o que está pegando fogo"). null = sem acesso ou a 20261005r não aplicada. */
+export const carregarAlertas = (): Promise<ResumoDia | null> =>
+  MODO_DEMO ? Promise.resolve(demo.demoAlertas()) : rpc<ResumoDia>('trafego_alertas');
+
+export const listarProdutos = (projeto: number): Promise<ProdutoHotmart[] | null> =>
+  MODO_DEMO ? Promise.resolve(demo.demoProdutos(projeto)) : rpc<ProdutoHotmart[]>('trafego_produtos_listar', { p_projeto: projeto });
+
+export const listarProdutosVistos = (): Promise<ProdutoVisto[] | null> =>
+  MODO_DEMO ? Promise.resolve(demo.demoProdutosVistos()) : rpc<ProdutoVisto[]>('trafego_hotmart_produtos');
+
+export interface ProdutoForm { id?: number; projeto_id: number; produto_id: string; oferta_codigo: string; de: string; ate: string; obs: string }
+export async function salvarProduto(p: ProdutoForm): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoSalvarProduto({ ...p });
+  return (await rpc<Resposta>('trafego_produto_salvar', { p })) ?? falhaR;
+}
+
+export async function apagarProduto(id: number): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoApagarProduto(id);
+  return (await rpc<Resposta>('trafego_produto_apagar', { p_id: id })) ?? falhaR;
+}
+
+/** Atividades do ClickUp do projeto (espelho pela etiqueta). null = sem acesso ou a 20261005r não aplicada. */
+export const carregarClickup = (projeto: number): Promise<ClickupProjeto | null> =>
+  MODO_DEMO ? Promise.resolve(demo.demoClickup(projeto)) : rpc<ClickupProjeto>('trafego_clickup', { p_projeto: projeto });

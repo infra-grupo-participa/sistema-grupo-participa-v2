@@ -43,7 +43,19 @@ export interface LinhaResumo {
   gestores: string[];
   /** Gestores que aparecem no nome das campanhas do projeto. */
   gestores_campanhas: string[];
+  /** Receita gerada (Hotmart): soma de public.compras aprovadas dos produtos ligados ao projeto, no período. Nulo = sem vínculo. */
   receita: number | null;
+  /** Compras aprovadas que entraram (todas as moedas). Nulo = public.compras sem as colunas da Hotmart (banco local). */
+  receita_compras?: number | null;
+  /** Compras aprovadas em outra moeda (não entram na soma em reais). */
+  receita_outras_moedas?: number | null;
+  receita_sem_valor?: number | null;
+  /** Vínculos produto Hotmart → projeto cadastrados. */
+  receita_vinculos?: number;
+  /** Vínculos sem período (sem "de" e o projeto sem início): não somam. */
+  receita_sem_periodo?: number;
+  /** false = public.compras sem as colunas da Hotmart neste banco. */
+  receita_fonte?: boolean;
   investido: number | null;
   por_plataforma: Record<string, number> | null;
   moedas: string[];
@@ -157,4 +169,78 @@ export interface Resposta { ok: boolean; msg: string; id?: number; avisos?: stri
 export const ROTULO_AVISO: Record<string, string> = {
   fases_acima_da_verba: 'A soma das fases passou da verba máxima.',
   diaria_acima_da_maxima: 'A verba diária está acima da verba máxima.',
+};
+
+// ─── Fase 2 (migration 20261005r) ─────────────────────────────────────────────────────────────────────────────────────
+
+export type RegraAlerta =
+  | 'acima_verba_diaria' | 'cpl_acima_meta' | 'leads_abaixo_meta' | 'ritmo_fase' | 'verba_perto_fim' | 'fora_padrao' | 'sem_fase';
+
+/** Regra do resumo do dia, com o limiar da tabela mkt_trafego.alerta_regras. */
+export interface Regra {
+  codigo: RegraAlerta; nome: string; ligada: boolean; limiar: number; unidade: 'pct' | 'dias'; gravidade: 'alta' | 'media'; descricao: string;
+}
+
+/** Um alerta do resumo do dia ("o que está pegando fogo"). projeto_id nulo = campanhas sem projeto. */
+export interface Alerta {
+  regra: RegraAlerta;
+  nome: string;
+  gravidade: 'alta' | 'media';
+  limiar: number;
+  unidade: 'pct' | 'dias';
+  projeto_id: number | null;
+  sigla: string | null;
+  projeto_nome: string | null;
+  /** O número que disparou (gasto de ontem, CPL, leads, gasto da fase, % da verba, nº de campanhas). */
+  valor: number;
+  /** Contra o quê (verba diária, meta de CPL, leads esperados, gasto esperado da fase, limiar). */
+  referencia: number | null;
+  detalhe: {
+    pct?: number | null; fase?: string; fase_nome?: string; direcao?: 'acima' | 'abaixo'; verba?: number; inicio?: string; fim?: string;
+    meta?: number; periodo?: 'captacao' | 'projeto'; dias?: number; investido?: number; verba_maxima?: number;
+  };
+}
+
+export interface ColetaInfo { em: string; ok: boolean; erro: string | null }
+
+export interface ResumoDia {
+  /** Último dia completo (São Paulo) que os alertas olham. */
+  dia: string;
+  /** Nenhum gasto coletado ainda: verba, ritmo, CPL e % da verba não têm como disparar. */
+  sem_coleta: boolean;
+  base_pessoas: boolean;
+  projetos_avaliados: number;
+  alertas: Alerta[];
+  regras: Regra[];
+  coletas: Partial<Record<'meta' | 'google' | 'clickup', ColetaInfo>>;
+}
+
+/** Vínculo produto Hotmart → projeto (cadastro à mão). */
+export interface ProdutoHotmart {
+  id: number; projeto_id: number; projeto_sigla: string; produto_id: string; oferta_codigo: string | null;
+  de: string | null; ate: string | null; obs: string | null;
+  /** O período que vale: "de" ou o início do projeto; "até" ou o fim do projeto (nulo = até hoje). */
+  de_efetivo: string | null; ate_efetivo: string | null;
+}
+
+/** Produto que já apareceu em public.compras (para escolher no cadastro). */
+export interface ProdutoVisto { produto_id: string; nome: string | null; aprovadas: number; primeira: string | null; ultima: string | null }
+
+export interface TarefaClickup {
+  id: string; nome: string; status: string | null; criada_em: string | null; atualizada_em: string | null;
+  inicio: string | null; prazo: string | null; concluida_em: string | null; responsaveis: string[]; url: string | null;
+}
+
+export interface ClickupProjeto {
+  etiqueta: string | null;
+  /** O workspace do ClickUp está configurado (mkt_trafego.coleta_config clickup_team_id). */
+  configurado: boolean;
+  ultima_coleta: ColetaInfo | null;
+  tarefas: TarefaClickup[];
+}
+
+export const ROTULO_AVISO_PRODUTO: Record<string, string> = {
+  produto_em_outro_projeto: 'Este produto também está ligado a outro projeto num período que se cruza: a compra conta nos dois.',
+  sem_periodo: 'Sem "de" e o projeto sem data de início: este vínculo não soma até ter uma data.',
+  produto_sem_compras: 'Nenhuma compra deste produto apareceu ainda na Hotmart (confira o id).',
 };

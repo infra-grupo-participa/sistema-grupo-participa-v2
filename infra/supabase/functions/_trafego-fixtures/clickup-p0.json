@@ -1,0 +1,14 @@
+{
+  "tasks": [
+    { "id": "86ensaio1", "name": "Subir campanhas de captação (ENSAIO)", "status": { "status": "complete" },
+      "date_created": "1759000000000", "date_updated": "1759400000000", "date_done": "1759400000000", "date_closed": "1759400000000",
+      "start_date": null, "due_date": "1759395600000",
+      "assignees": [ { "id": 1, "username": "Responsável Ensaio", "email": "ensaio@exemplo.invalid" } ],
+      "tags": [ { "name": "zz-ensaio-r" } ], "url": "https://app.clickup.com/t/86ensaio1" },
+    { "id": "86ensaio2", "name": "Trocar criativo do remarketing (ENSAIO)", "status": { "status": "em andamento" },
+      "date_created": "1759100000000", "date_updated": "1759500000000", "date_done": null, "date_closed": null,
+      "start_date": "1759300000000", "due_date": "1759900000000",
+      "assignees": [], "tags": [ { "name": "zz-ensaio-r" }, { "name": "Outra-Etq" } ], "url": "https://app.clickup.com/t/86ensaio2" }
+  ],
+  "last_page": false
+}
