@@ -13,11 +13,11 @@ import {
 } from '../domain/modelos';
 import type { ConfigTrafego, Resposta } from '../domain/tipos';
 import { ativarModelo, duplicarModelo, listarModelos, salvarModelo } from '../infrastructure/trafego-data';
+import { CampoNumero } from './CampoNumero';
 
 type Flash = (msg: string) => void;
 const msg = (r: Resposta) => [r.msg, ...(r.avisos ?? []).map((a) => ROTULO_AVISO_CADASTRO[a] ?? a)].join(' ');
 const REFS = Object.keys(ROTULO_REF) as RefData[];
-const num = (s: string) => (s.trim() === '' ? null : Number(s.replace(',', '.')));
 
 function Rotulo({ children }: { children: React.ReactNode }) {
   return <span className="block text-xs font-medium text-[var(--fg-2)] mb-1">{children}</span>;
@@ -113,10 +113,10 @@ export function ModalModelo({ inicial, listas, config, onFechar, onSalvo }: {
             <Toggle checked={m.rascunho} onChange={(v) => set('rascunho', v)} label="Rascunho a validar" />
           </div>
           <label className="block w-36"><Rotulo>Meta de CPL (R$)</Rotulo>
-            <Input inputMode="decimal" value={m.meta_cpl ?? ''} onChange={(e) => set('meta_cpl', num(e.target.value))} placeholder="opcional" />
+            <CampoNumero valor={m.meta_cpl} onValor={(n) => set('meta_cpl', n)} placeholder="opcional" />
           </label>
           <label className="block w-36"><Rotulo>Meta de % MQL</Rotulo>
-            <Input inputMode="decimal" value={m.meta_pct_mql ?? ''} onChange={(e) => set('meta_pct_mql', num(e.target.value))} placeholder="opcional" />
+            <CampoNumero valor={m.meta_pct_mql} onValor={(n) => set('meta_pct_mql', n)} placeholder="opcional" />
           </label>
         </div>
 
@@ -137,8 +137,8 @@ export function ModalModelo({ inicial, listas, config, onFechar, onSalvo }: {
                     <div key={k}>
                       <Rotulo>{k === 'inicio' ? 'Início' : 'Fim'} <span className="font-normal text-[var(--fg-3)]">· {textoRelativo(f[`${k}_ref`], f[`${k}_dias`])}</span></Rotulo>
                       <div className="flex gap-1">
-                        <Input className="w-16" inputMode="numeric" aria-label={`Dias do ${k}`} value={String(f[`${k}_dias`])}
-                          onChange={(e) => setFase(i, { [`${k}_dias`]: Number(e.target.value.replace(/[^0-9-]/g, '')) || 0 } as Partial<ModeloFase>)} />
+                        <CampoNumero className="w-16" inteiro aria-label={`Dias do ${k === 'inicio' ? 'início' : 'fim'} (negativo = antes)`} valor={f[`${k}_dias`]}
+                          onValor={(n) => setFase(i, { [`${k}_dias`]: n ?? 0 } as Partial<ModeloFase>)} />
                         <FilterSelect value={f[`${k}_ref`] ?? ''} aria-label={`Referência do ${k}`}
                           onChange={(e) => setFase(i, { [`${k}_ref`]: (e.target.value || null) as RefData | null } as Partial<ModeloFase>)}>
                           <option value="">sem data</option>
@@ -148,11 +148,11 @@ export function ModalModelo({ inicial, listas, config, onFechar, onSalvo }: {
                     </div>
                   ))}
                   <label className="block"><Rotulo>% verba</Rotulo>
-                    <Input inputMode="decimal" value={f.pct_verba ?? ''} onChange={(e) => setFase(i, { pct_verba: num(e.target.value) })} />
+                    <CampoNumero valor={f.pct_verba} onValor={(n) => setFase(i, { pct_verba: n })} />
                   </label>
                   <div className="flex gap-1 pb-1">
-                    <Button size="sm" variant="ghost" aria-label="Subir" disabled={i === 0} onClick={() => set('fases', mover(m.fases, i, -1))}><Icon name="arrow-up" size={12} /></Button>
-                    <Button size="sm" variant="ghost" aria-label="Descer" disabled={i === m.fases.length - 1} onClick={() => set('fases', mover(m.fases, i, 1))}><Icon name="arrow-down" size={12} /></Button>
+                    <Button size="sm" variant="ghost" aria-label={`Subir a fase ${nomeFase(f.fase)}`} disabled={i === 0} onClick={() => set('fases', mover(m.fases, i, -1))}><Icon name="arrow-up" size={12} /></Button>
+                    <Button size="sm" variant="ghost" aria-label={`Descer a fase ${nomeFase(f.fase)}`} disabled={i === m.fases.length - 1} onClick={() => set('fases', mover(m.fases, i, 1))}><Icon name="arrow-down" size={12} /></Button>
                     <Button size="sm" variant="danger" aria-label={`Tirar a fase ${nomeFase(f.fase)}`} onClick={() => set('fases', m.fases.filter((_, j) => j !== i))}><Icon name="trash" size={12} /></Button>
                   </div>
                 </div>
@@ -186,7 +186,7 @@ export function ModalModelo({ inicial, listas, config, onFechar, onSalvo }: {
                       <Input value={c.descricao ?? ''} maxLength={120} onChange={(e) => setC({ descricao: e.target.value.toUpperCase() || null })} placeholder="TEASER | META" />
                     </label>
                     <label className="block"><Rotulo>Página</Rotulo>
-                      <Input value={c.pagina ?? ''} maxLength={6} onChange={(e) => setC({ pagina: e.target.value.toLowerCase() || null })} placeholder="ak1" />
+                      <Input value={c.pagina ?? ''} maxLength={7} onChange={(e) => setC({ pagina: e.target.value.toLowerCase() || null })} placeholder="ak1" />
                     </label>
                     <Button size="sm" variant="danger" aria-label="Tirar a campanha esperada" className="mb-1" onClick={() => set('campanhas', m.campanhas.filter((_, j) => j !== i))}><Icon name="trash" size={12} /></Button>
                   </div>
@@ -284,7 +284,7 @@ export function ModelosPainel({ listas, config, versao, flash, onMudou }: {
   const visiveis = useMemo(() => (modelos ?? []).filter((m) => (inativos || m.ativo) && (!tipo || m.tipo_lancamento === tipo)
     && (!unidade || m.unidades.some((u) => u.unidade === unidade))), [modelos, tipo, unidade, inativos]);
 
-  if (!listas) return <SectionCard title="Modelos de lançamento"><p className="text-sm text-[var(--fg-3)]">Indisponível (sem acesso, ou a migration 20261006j ainda não foi aplicada).</p></SectionCard>;
+  if (!listas) return <SectionCard title="Modelos de lançamento"><p className="text-sm text-[var(--fg-3)]">Não foi possível carregar (sem conexão ou sem acesso). Recarregue a página; se continuar, avise quem cuida do sistema.</p></SectionCard>;
   const feito = (r: Resposta) => { flash(msg(r)); if (r.ok) onMudou(); };
 
   return (
@@ -305,7 +305,7 @@ export function ModelosPainel({ listas, config, versao, flash, onMudou }: {
       </div>}
     >
       {modelos === undefined ? <Loading /> : modelos === null ? (
-        <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar os modelos (sem acesso, ou a migration 20261006l ainda não foi aplicada).</p>
+        <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar (sem conexão ou sem acesso). Recarregue a página; se continuar, avise quem cuida do sistema.</p>
       ) : (
         <>
           {modelos.some((m) => m.rascunho) && (

@@ -15,7 +15,7 @@ import { ROTULO_TIPO, type AcaoChecklist, type Checklist, type ConfigTrafego, ty
 import {
   ajustarCampanha, apagarEsperada, apagarItemProjeto, aplicarModelo, carregarChecklist, marcarItemProjeto, previasDoProjeto, salvarItemProjeto,
 } from '../infrastructure/trafego-data';
-import { SEM_DADO, dataBR, reais } from './formato';
+import { SEM_DADO, centavos, dataBR, pct, reais } from './formato';
 
 type Flash = (msg: string) => void;
 
@@ -81,21 +81,21 @@ export function PreviaVista({ p, objetivoFase }: { p: PreviaModelo; objetivoFase
       {p.avisos.map((a) => <p key={a} className="text-xs text-[var(--fg-3)]">{ROTULO_AVISO_PREVIA[a] ?? a}</p>)}
       <div>
         <div className="text-xs font-semibold text-[var(--fg-2)]">Fases ({n.novas} nova(s), {n.mudam} mudaria(m) só confirmando, {n.iguais} igual(is)) · verba máxima {reais(p.verba_maxima)}</div>
-        <table className="mt-1 w-full text-xs">
+        <div className="overflow-x-auto"><table className="mt-1 w-full min-w-[480px] text-xs">
           <thead><tr className="text-left text-[var(--fg-3)]"><th className="py-1">Fase</th><th>Período</th><th>Verba</th><th>No projeto</th></tr></thead>
           <tbody>
             {p.fases.map((f) => (
               <tr key={f.fase} className="border-t border-[var(--border)]">
-                <td className="py-1">{f.nome} <span className="text-[var(--fg-3)]">{f.pct_verba != null ? `${f.pct_verba}%` : ''}</span></td>
+                <td className="py-1">{f.nome} <span className="text-[var(--fg-3)]">{f.pct_verba != null ? pct(f.pct_verba) : ''}</span></td>
                 <td>{f.inicio || f.fim ? `${dataBR(f.inicio)} a ${dataBR(f.fim)}` : <span className="text-[var(--fg-3)]">{f.aviso === 'datas_invertidas' ? 'datas invertidas' : 'sem data'}</span>}</td>
                 <td className="tabular">{reais(f.verba)}</td>
                 <td>{!f.existe ? <Badge tone="success">nova</Badge> : f.muda
-                  ? <span className="text-[var(--yellow)]">hoje {reais(f.atual?.verba ?? null)}, {dataBR(f.atual?.inicio ?? null) || 'sem início'} a {dataBR(f.atual?.fim ?? null) || 'sem fim'}</span>
+                  ? <span className="text-[var(--yellow)]">hoje {reais(f.atual?.verba ?? null)}, {f.atual?.inicio ? dataBR(f.atual.inicio) : 'sem início'} a {f.atual?.fim ? dataBR(f.atual.fim) : 'sem fim'}</span>
                   : <span className="text-[var(--fg-3)]">igual</span>}</td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
       {p.campanhas.length > 0 && (
         <div>
@@ -118,7 +118,7 @@ export function PreviaVista({ p, objetivoFase }: { p: PreviaModelo; objetivoFase
         </div>
       )}
       {(p.metas.meta_cpl != null || p.metas.meta_pct_mql != null) && (
-        <p className="text-xs text-[var(--fg-2)]">Metas do modelo: CPL {reais(p.metas.meta_cpl)} · % MQL {p.metas.meta_pct_mql ?? SEM_DADO}. Só preenchem onde o projeto não tem meta (ou confirmando).</p>
+        <p className="text-xs text-[var(--fg-2)]">Metas do modelo: CPL {centavos(p.metas.meta_cpl)} · % MQL {pct(p.metas.meta_pct_mql)}. Só preenchem onde o projeto não tem meta (ou confirmando).</p>
       )}
     </div>
   );
@@ -146,7 +146,8 @@ export function ModalAplicarModelo({ projetoId, config, onFechar, onAplicado }: 
   const fase = (f: string | null) => (f ? config.fases.find((x) => x.codigo === f)?.nome ?? f : 'pelo objetivo');
 
   async function aplicar() {
-    if (!p) return;
+    if (!p || aplicando) return;
+    setConfirmar(false);
     setAplicando(true);
     const r = await aplicarModelo(projetoId, p.modelo.id, substituir);
     setAplicando(false);
@@ -163,7 +164,7 @@ export function ModalAplicarModelo({ projetoId, config, onFechar, onAplicado }: 
       </Button>
     </>}>
       {previas === undefined ? <Loading /> : previas === null ? (
-        <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar (sem acesso, ou a migration 20261006l ainda não foi aplicada).</p>
+        <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar (sem conexão ou sem acesso). Recarregue a página; se continuar, avise quem cuida do sistema.</p>
       ) : previas.length === 0 ? (
         <EmptyState title="Nenhum modelo ativo para este tipo de lançamento e unidade" hint="Crie ou ative um na aba Modelos de lançamento." />
       ) : (
@@ -213,11 +214,12 @@ export function ChecklistVista({ c, onMarcar, onAcao, onNovoItem, onApagarItem }
 }) {
   const [texto, setTexto] = useState('');
   const [momento, setMomento] = useState<Momento>('antes');
-  if (c === null) return <p className="text-sm text-[var(--fg-3)]">Indisponível (sem acesso, ou a migration 20261006j ainda não foi aplicada).</p>;
+  if (c === null) return <p className="text-sm text-[var(--fg-3)]">Não foi possível carregar (sem conexão ou sem acesso). Recarregue a página; se continuar, avise quem cuida do sistema.</p>;
   const pct = c.total ? Math.round((c.feitos / c.total) * 1000) / 10 : 0;
   const bola = (ok: boolean, aplica: boolean) => (
     <span className={`mt-0.5 inline-grid w-5 h-5 shrink-0 place-items-center rounded-full ${!aplica ? 'bg-[var(--surface-3)] text-[var(--fg-3)]' : ok ? 'bg-[var(--green)] text-black' : 'border border-[var(--border)] text-[var(--fg-3)]'}`}>
       {aplica && ok ? <Icon name="check" size={12} /> : null}
+      <span className="sr-only">{!aplica ? 'não se aplica' : ok ? 'pronto' : 'pendente'}</span>
     </span>
   );
   return (
@@ -326,6 +328,7 @@ export function GeradorCampanha({ sigla, listas, config, paginas, gestoresProjet
     { gestores: config.gestores.map((g) => g.sigla), objetivos: listas.objetivos });
   const utm = listas.utm.meta ?? [];
   const pronto = gestor && objetivo && descricao.trim();
+  const [tirar, setTirar] = useState<Esperada | null>(null);
   const usar = (e: Esperada) => { setObjetivo(e.objetivo); setDescricao(e.descricao ?? ''); setPagina(e.pagina && paginas.some((p) => p.codigo === e.pagina) ? e.pagina : ''); };
 
   return (
@@ -341,7 +344,7 @@ export function GeradorCampanha({ sigla, listas, config, paginas, gestoresProjet
                 </Button>
                 {flash && onMudou && (
                   <Button size="sm" variant="ghost" aria-label={`Tirar a campanha esperada ${e.objetivo}`}
-                    onClick={async () => { const x = await apagarEsperada(e.id); flash(x.msg); if (x.ok) onMudou(); }}><Icon name="x" size={12} /></Button>
+                    onClick={() => setTirar(e)}><Icon name="x" size={12} /></Button>
                 )}
               </li>
             ))}
@@ -381,7 +384,13 @@ export function GeradorCampanha({ sigla, listas, config, paginas, gestoresProjet
             posicionamento (padrão do gp-operacoes). O sistema cruza pelo id.
           </p>
         </div>
-      ) : <EmptyState title="Sem parâmetros de UTM cadastrados" hint="mkt_trafego.utm_parametros (migration 20261006j)." />}
+      ) : <EmptyState title="Sem parâmetros de UTM cadastrados" hint="A lista de parâmetros ainda não foi cadastrada." />}
+      {tirar && flash && onMudou && (
+        <ConfirmDialog title="Tirar campanha esperada" danger confirmLabel="Tirar"
+          message={`Tirar a campanha esperada ${tirar.objetivo}${tirar.descricao ? ` (${tirar.descricao})` : ''} deste projeto? O modelo não muda.`}
+          onCancel={() => setTirar(null)}
+          onConfirm={async () => { const id = tirar.id; setTirar(null); const x = await apagarEsperada(id); flash(x.msg); if (x.ok) onMudou(); }} />
+      )}
     </div>
   );
 }

@@ -26,10 +26,10 @@ describe('separarUtm: padrão do gp-operacoes (nome|id, id depois da última "|"
     expect(separarUtm(null)).toEqual({ nome: null, id: null });
     expect(separarUtm(undefined)).toEqual({ nome: null, id: null });
   });
-  it('a tradução do nome de campanha recebe só o NOME (com o id, o id viraria parte da descrição e a página se perderia)', () => {
+  it('a tradução lê o NOME: separado antes ou com o id no fim (descartado pela própria tradução desde a auditoria de 06/10)', () => {
     const listas = { gestores: ['RS'], objetivos: ['LEADS'], projetos: ['PB26'] };
     const bruto = 'RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1|120211234';
-    expect(traduzirCampanha(bruto, listas).pagina).toBeNull();
+    expect(traduzirCampanha(bruto, listas).pagina).toBe('ak1');
     const t = traduzirCampanha(separarUtm(bruto).nome, listas);
     expect(t.padrao).toBe(true);
     expect(t.pagina).toBe('ak1');

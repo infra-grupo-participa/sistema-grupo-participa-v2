@@ -218,7 +218,7 @@ function linha(p: ProjetoDemo): LinhaResumo {
   });
 }
 
-export const demoConfig = (): ConfigTrafego => structuredClone(CONFIG);
+export const demoConfig = (): ConfigTrafego => ({ ...structuredClone(CONFIG), campanhas_fora_padrao: campanhas().filter((c) => c.fora_padrao).length });
 export const demoResumo = (): LinhaResumo[] => PROJETOS.map(linha);
 export const demoContas = (): Conta[] => ordenarContas(CONTAS.map((c) => ({ ...c, campanhas: CAMPS.filter((x) => x.conta_id === c.id).length })));
 

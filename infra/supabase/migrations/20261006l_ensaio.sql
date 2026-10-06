@@ -41,6 +41,10 @@ begin
   if exists (select 1 from mkt_trafego.pacote_modelos) or exists (select 1 from mkt_trafego.checklist_marcas) then
     raise exception '20261006l: o pacote ou as marcas do checklist da 20261006j têm dado: migrar à mão antes (nada é apagado com dado)';
   end if;
+  if exists (select 1 from mkt_trafego.checklist_itens
+              where texto <> 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow') then
+    raise exception '20261006l: checklist_itens tem item além da semente da 20261006j: migrar à mão antes (nada é apagado com dado)';
+  end if;
 end
 $guarda$;
 
@@ -594,7 +598,7 @@ begin
     v_cpl := nullif(btrim(coalesce(p ->> 'meta_cpl', '')), '')::numeric;
     v_mql := nullif(btrim(coalesce(p ->> 'meta_pct_mql', '')), '')::numeric;
   exception when others then
-    return jsonb_build_object('ok', false, 'msg', 'Campo em formato inválido (números com ponto).');
+    return jsonb_build_object('ok', false, 'msg', 'Algum número do modelo está em formato inválido.');
   end;
   if v_id is not null and not exists (select 1 from mkt_trafego.modelos where id = v_id) then
     return jsonb_build_object('ok', false, 'msg', 'Modelo não encontrado.');
@@ -659,10 +663,11 @@ begin
       return jsonb_build_object('ok', false, 'msg', case when v_con like 'modelos_nome%' then 'Já existe modelo com este nome.'
                                                          when v_con like 'modelo_fases%' then 'A mesma fase duas vezes no modelo.'
                                                          when v_con like 'modelo_itens%' then 'O mesmo item duas vezes no modelo.'
-                                                         else 'Repetido (' || v_con || ').' end);
+                                                         else 'Há um valor repetido no modelo.' end);
     when check_violation or foreign_key_violation or not_null_violation or invalid_text_representation or numeric_value_out_of_range then
       get stacked diagnostics v_con = constraint_name;
-      return jsonb_build_object('ok', false, 'msg', 'Algum campo fora da regra' || coalesce(' (' || nullif(v_con, '') || ')', '')
+      raise log 'trafego_modelo_salvar: regra % recusou', v_con;
+      return jsonb_build_object('ok', false, 'msg', 'Algum campo fora da regra'
         || ': fase e objetivo da lista, página no formato AK1, % de 0 a 100, dias de -365 a 365, item de 3 a 200 letras.');
   end;
   return jsonb_build_object('ok', true, 'msg', 'Modelo salvo.', 'id', v_id, 'avisos', to_jsonb(v_avisos));
@@ -836,10 +841,10 @@ language plpgsql security definer set search_path = '' as $$
 begin
   if not mkt.pode_ver('mkt_trafego') then raise exception 'acesso negado' using errcode = '42501'; end if;
   update mkt_trafego.projeto_itens
-     set feito_em = case when p_feito then now() end, feito_por = case when p_feito then (select auth.uid()) end
+     set feito_em = case when coalesce(p_feito, false) then now() end, feito_por = case when coalesce(p_feito, false) then (select auth.uid()) end
    where id = p_item;
   if not found then return jsonb_build_object('ok', false, 'msg', 'Item não encontrado.'); end if;
-  return jsonb_build_object('ok', true, 'msg', case when p_feito then 'Item marcado como pronto.' else 'Item desmarcado.' end);
+  return jsonb_build_object('ok', true, 'msg', case when coalesce(p_feito, false) then 'Item marcado como pronto.' else 'Item desmarcado.' end);
 end
 $$;
 

@@ -198,6 +198,7 @@ create table mkt_trafego.campanhas (
 );
 create index campanhas_projeto_idx on mkt_trafego.campanhas (projeto_id);
 create index campanhas_conta_idx on mkt_trafego.campanhas (conta_id);
+create index campanhas_pagina_idx on mkt_trafego.campanhas (pagina_id) where pagina_id is not null;  -- FK para mkt.paginas
 comment on table mkt_trafego.campanhas is
   'Campanhas como estão na plataforma (nome EXATO). leitura = mkt.campanha_traduzir(nome); projeto, gestor, objetivo e '
   'página saem dela. projeto_manual = alguém ligou o projeto à mão (nome fora do padrão). Upsert por (plataforma, id).';
@@ -342,7 +343,7 @@ $$;
 --     base não existir. Pessoa distinta por projeto; pessoa mesclada conta como a que ficou (pessoas.atual); pessoa de
 --     teste não conta.
 --   receita: nula (Hotmart ainda não ligada ao projeto).
---   page views e leads da página: a MESMA regra de public.mkt_web_connect (20261006h; mudou lá, muda aqui): visitas
+--   page views e leads da página: a função única mkt_web.visitas_campanha (20261006h, também de public.mkt_web_connect): visitas
 --     (mkt_web.sessoes, sem teste) do projeto cuja campanha casa com uma campanha do Tráfego do projeto: pelo ID
 --     (campaign_id da URL ou o id do utm_campaign no formato nome|id do gp-operacoes = campanha_externa); sem id na
 --     visita, pelo NOME exato (a parte do nome do utm_campaign = nome); leitura de mkt_web.origem_ids (20261006f),
@@ -359,20 +360,14 @@ declare
   v_pv jsonb;
   v_res jsonb;
 begin
-  if to_regprocedure('public.mkt_web_connect(bigint,date,date)') is not null then
+  -- page views: a regra ÚNICA da Web fase 2 (mkt_web.visitas_campanha, 20261006h), a mesma de public.mkt_web_connect;
+  -- aqui a visita conta uma vez por projeto. Sem a 20261006h, "sem dado".
+  if to_regprocedure('mkt_web.visitas_campanha(bigint,date,date)') is not null then
     execute $q$
       select coalesce(jsonb_object_agg(x.projeto_id::text, jsonb_build_object('pv', x.pv, 'leads', x.leads)), '{}'::jsonb)
-        from (select c.projeto_id, count(distinct s.id) as pv, count(distinct s.id) filter (where s.lead) as leads
-                from mkt_trafego.campanhas c
-                join (select x.id, x.projeto_id, x.lead, oi.campanha_id, oi.campanha_nome
-                        from mkt_web.sessoes x
-                        cross join lateral mkt_web.origem_ids(x.utm_source, x.utm_medium, x.utm_campaign, x.utm_content,
-                                                              x.campaign_id, x.adset_id, x.ad_id) oi
-                       where not x.teste and ($1 is null or x.projeto_id = $1)) s
-                  on s.projeto_id = c.projeto_id
-                 and (s.campanha_id = c.campanha_externa or (s.campanha_id is null and s.campanha_nome = c.nome))
-               where c.projeto_id is not null and ($1 is null or c.projeto_id = $1)
-               group by c.projeto_id) x
+        from (select v.projeto_id, count(distinct v.sessao) as pv, count(distinct v.sessao) filter (where v.lead) as leads
+                from mkt_web.visitas_campanha($1, null, null) v
+               group by v.projeto_id) x
     $q$ into v_pv using p_projeto;
   end if;
 
@@ -493,7 +488,9 @@ begin
     'gestores', (select coalesce(jsonb_agg(jsonb_build_object('sigla', g.sigla, 'nome', g.nome) order by g.sigla), '[]'::jsonb)
                    from mkt.campanha_gestores g where g.ativo),
     'base_pessoas', to_regclass('pessoas.eventos') is not null,
-    'base_web', to_regprocedure('public.mkt_web_connect(bigint,date,date)') is not null,
+    'base_web', to_regprocedure('mkt_web.visitas_campanha(bigint,date,date)') is not null,
+    -- todas as fora do padrão, com ou sem projeto (o número da aba; a soma por projeto deixava as sem projeto de fora)
+    'campanhas_fora_padrao', (select count(*) from mkt_trafego.campanhas c where c.fora_padrao),
     'dia_ontem', mkt_trafego.ontem());
 end
 $$;
@@ -571,7 +568,8 @@ begin
       return jsonb_build_object('ok', false, 'msg', 'Esta conta (' || v_plat || ' ' || v_ext || ') já está cadastrada.');
     when check_violation then
       get stacked diagnostics v_con = constraint_name;
-      return jsonb_build_object('ok', false, 'msg', 'Valor fora da regra (' || v_con || ').');
+      raise log 'trafego_conta_salvar: regra % recusou', v_con;
+      return jsonb_build_object('ok', false, 'msg', 'Algum campo fora da regra: confira o id da conta (Meta só números, Google 123-456-7890), a moeda (3 letras) e o dono.');
   end;
 end
 $$;
@@ -602,7 +600,7 @@ begin
     v_mcpl := nullif(btrim(coalesce(p ->> 'meta_cpl', '')), '')::numeric;
     v_mmql := nullif(btrim(coalesce(p ->> 'meta_pct_mql', '')), '')::numeric;
   exception when others then
-    return jsonb_build_object('ok', false, 'msg', 'Número em formato inválido (use ponto para decimais).');
+    return jsonb_build_object('ok', false, 'msg', 'Número em formato inválido nas verbas ou metas.');
   end;
   select sigla into v_sigla from mkt.projetos where id = v_proj;
   if v_sigla is null then return jsonb_build_object('ok', false, 'msg', 'Projeto não encontrado.'); end if;

@@ -261,7 +261,7 @@ insert into mkt_web.config (chave, valor) values
 -- O contrato do funil de cada projeto (era radar.projetos.config). coleta = a chave que liga o projeto: sem ela, o
 -- pacote é recusado mesmo vindo de domínio cadastrado. funis = [{id, nome, etapas: [{nome, caminhos[] | eventos[]}]}]
 create table mkt_web.funis (
-  projeto_id           bigint primary key references mkt.projetos(id) on delete cascade,
+  projeto_id           bigint primary key references mkt.projetos(id) on delete restrict,
   coleta               boolean not null default false,
   eventos_lead         text[] not null default '{}',
   chaves_datalayer     text[] not null default '{pagina,motivo,origem,area,versao}',
@@ -276,7 +276,7 @@ comment on table mkt_web.funis is 'Contrato do funil por projeto (etapas, evento
 -- O navegador (id aleatório do gravador, 1 ano). lead_ref: referência opaca ao lead da base de pessoas (futura); nunca
 -- e-mail ou telefone. Vazia nesta fase.
 create table mkt_web.visitantes (
-  projeto_id   bigint not null references mkt.projetos(id) on delete cascade,
+  projeto_id   bigint not null references mkt.projetos(id) on delete restrict,
   id           text not null check (id ~ '^[A-Za-z0-9]{8,40}$'),
   primeira_vez timestamptz not null default now(),
   ultima_vez   timestamptz not null default now(),
@@ -288,7 +288,7 @@ create table mkt_web.visitantes (
 -- A visita: por aba, nova depois de 30 min parada ou com clique novo de anúncio. Contadores só com sinal de gente.
 create table mkt_web.sessoes (
   id               text primary key check (id ~ '^[A-Za-z0-9]{8,40}$'),
-  projeto_id       bigint not null references mkt.projetos(id) on delete cascade,
+  projeto_id       bigint not null references mkt.projetos(id) on delete restrict,
   visitante        text not null,
   dia              date not null,
   inicio           timestamptz not null,
@@ -323,6 +323,8 @@ create table mkt_web.sessoes (
 create index sessoes_projeto_dia on mkt_web.sessoes (projeto_id, dia);
 create index sessoes_visitante on mkt_web.sessoes (projeto_id, visitante);
 create index sessoes_recebido on mkt_web.sessoes (projeto_id, recebido_em desc);
+-- FK para mkt.paginas (on delete set null): sem índice, apagar uma página varreria todas as visitas
+create index sessoes_entrada_pagina on mkt_web.sessoes (entrada_pagina_id) where entrada_pagina_id is not null;
 comment on column mkt_web.sessoes.utm_content is 'O anúncio (criativo) no formato nome|id, padrão oficial do gp-operacoes (padronizar-utm-dos-links.md); o sistema cruza pelo id (ad_id). Aceita o formato antigo (só id ou só nome).';
 comment on column mkt_web.sessoes.utm_campaign is 'A campanha no formato nome|id (padrão do gp-operacoes; o nome tem " | " dentro, o id vem depois da última "|"); o sistema cruza pelo id (campaign_id). Google: só id.';
 comment on column mkt_web.sessoes.utm_medium is 'No Meta (utm_source=metaads), o conjunto de anúncios no formato nome|id; o id vai para adset_id.';
@@ -331,7 +333,7 @@ comment on column mkt_web.sessoes.campaign_id is 'Id da campanha: parâmetro cam
 create table mkt_web.visualizacoes (
   id          text primary key check (id ~ '^[A-Za-z0-9]{8,40}$'),
   sessao      text not null references mkt_web.sessoes(id) on delete cascade,
-  projeto_id  bigint not null references mkt.projetos(id) on delete cascade,
+  projeto_id  bigint not null references mkt.projetos(id) on delete restrict,
   pagina_id   bigint references mkt.paginas(id) on delete set null,
   dominio     text not null,
   caminho     text not null,
@@ -424,7 +426,7 @@ create table mkt_web.paginas_mapa (
 -- detalhe. Sempre recalculado por mkt_web.calcular_dia: a tela e o agendamento usam a mesma conta.
 create table mkt_web.resumo_dia (
   dia                date not null,
-  projeto_id         bigint not null references mkt.projetos(id) on delete cascade,
+  projeto_id         bigint not null references mkt.projetos(id) on delete restrict,
   dominio            text not null,
   caminho            text not null,
   dispositivo        text not null,
@@ -833,21 +835,22 @@ $$;
 
 -- ─── 4. Resumo diário, retenção e espaço ─────────────────────────────────────────────────────────────────────────────
 -- A conta do dia (sem visitas de teste), por domínio, caminho e aparelho. A mesma para o agendamento e para a tela.
-create function mkt_web.calcular_dia(p_dia date, p_projeto bigint default null) returns setof mkt_web.resumo_dia
+-- Projeto obrigatório: filtro por igualdade usa os índices (projeto_id, dia); o agregar passa projeto a projeto.
+create function mkt_web.calcular_dia(p_dia date, p_projeto bigint) returns setof mkt_web.resumo_dia
 language sql stable set search_path = '' as $$
   with pv as (
     select w.*, s.visitante, s.engajada, s.lead
       from mkt_web.visualizacoes w join mkt_web.sessoes s on s.id = w.sessao
-     where w.dia = p_dia and not s.teste and (p_projeto is null or w.projeto_id = p_projeto)
+     where w.projeto_id = p_projeto and w.dia = p_dia and not s.teste
   ), cl as (
     select c.visualizacao, count(*) as n, count(*) filter (where c.raiva) as r, count(*) filter (where c.morto) as m
       from mkt_web.cliques c
-     where c.dia = p_dia and not c.automatico and (p_projeto is null or c.projeto_id = p_projeto)
+     where c.projeto_id = p_projeto and c.dia = p_dia and not c.automatico
      group by c.visualizacao
   ), er as (
     select e.visualizacao, count(*) as n
       from mkt_web.erros e
-     where e.dia = p_dia and e.origem = 'pagina' and (p_projeto is null or e.projeto_id = p_projeto)
+     where e.projeto_id = p_projeto and e.dia = p_dia and e.origem = 'pagina'
      group by e.visualizacao
   )
   select p_dia, pv.projeto_id, pv.dominio, pv.caminho, pv.dispositivo, max(pv.pagina_id),
@@ -879,7 +882,7 @@ language plpgsql set search_path = '' as $$
 declare v_n int;
 begin
   delete from mkt_web.resumo_dia where dia = p_dia;
-  insert into mkt_web.resumo_dia select * from mkt_web.calcular_dia(p_dia, null);
+  insert into mkt_web.resumo_dia select c.* from mkt.projetos p cross join lateral mkt_web.calcular_dia(p_dia, p.id) c;
   get diagnostics v_n = row_count;
   return v_n;
 end
@@ -889,14 +892,21 @@ $$;
 create function mkt_web.manter() returns jsonb
 language plpgsql set search_path = '' as $$
 declare
-  v_sess int; v_det int; v_cl int; v_er int; v_pac int; v_rec int; v_fal int;
+  v_sess int := 0; v_det int := 0; v_cl int := 0; v_er int := 0; v_pac int; v_rec int; v_fal int; v_n int; v_p bigint;
   v_dias_s int := (select mkt_web.inteiro(c.valor, 395) from mkt_web.config c where c.chave = 'retencao_sessoes_dias');
   v_dias_d int := (select mkt_web.inteiro(c.valor, 90) from mkt_web.config c where c.chave = 'retencao_detalhe_dias');
 begin
-  delete from mkt_web.eventos where dia < mkt_web.hoje() - coalesce(v_dias_d, 90); get diagnostics v_det = row_count;
-  delete from mkt_web.cliques where dia < mkt_web.hoje() - coalesce(v_dias_d, 90); get diagnostics v_cl = row_count;
-  delete from mkt_web.erros where dia < mkt_web.hoje() - coalesce(v_dias_d, 90); get diagnostics v_er = row_count;
-  delete from mkt_web.sessoes where dia < mkt_web.hoje() - coalesce(v_dias_s, 395); get diagnostics v_sess = row_count;
+  -- projeto a projeto: o filtro (projeto_id, dia) usa os índices que já existem (sem índice só por dia)
+  for v_p in select p.id from mkt.projetos p loop
+    delete from mkt_web.eventos where projeto_id = v_p and dia < mkt_web.hoje() - coalesce(v_dias_d, 90);
+    get diagnostics v_n = row_count; v_det := v_det + v_n;
+    delete from mkt_web.cliques where projeto_id = v_p and dia < mkt_web.hoje() - coalesce(v_dias_d, 90);
+    get diagnostics v_n = row_count; v_cl := v_cl + v_n;
+    delete from mkt_web.erros where projeto_id = v_p and dia < mkt_web.hoje() - coalesce(v_dias_d, 90);
+    get diagnostics v_n = row_count; v_er := v_er + v_n;
+    delete from mkt_web.sessoes where projeto_id = v_p and dia < mkt_web.hoje() - coalesce(v_dias_s, 395);
+    get diagnostics v_n = row_count; v_sess := v_sess + v_n;
+  end loop;
   delete from mkt_web.visitantes v where v.ultima_vez < now() - make_interval(days => coalesce(v_dias_s, 395));
   delete from mkt_web.pacotes where dia < mkt_web.hoje() - 2; get diagnostics v_pac = row_count;
   delete from mkt_web.recusas where dia < mkt_web.hoje() - 90; get diagnostics v_rec = row_count;

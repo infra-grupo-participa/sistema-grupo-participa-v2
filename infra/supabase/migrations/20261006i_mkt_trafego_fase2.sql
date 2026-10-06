@@ -885,6 +885,7 @@ $confere$;
 --            mkt_trafego.coletas;
 -- alter table mkt_trafego.status_projeto drop column entra_no_resumo_dia;
 -- alter table mkt_trafego.contas drop column token_vault;
--- -- os segredos ficam no Vault (inofensivos sem as rotinas); para apagar:
--- -- delete from vault.secrets where name in ('trafego_coleta_chave', 'meta_ads_token', 'clickup_api_token');
+-- -- os segredos ficam no Vault (inofensivos sem as rotinas). Só o que esta migration criou pode sair:
+-- -- delete from vault.secrets where name = 'trafego_coleta_chave';
+-- -- (meta_ads_token e clickup_api_token foram cadastrados à mão: não apagar aqui)
 -- commit;

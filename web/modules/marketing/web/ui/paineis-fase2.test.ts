@@ -55,8 +55,8 @@ describe('estado vazio e sem as migrations vizinhas', () => {
   });
   it('sem a base de pessoas (20261005r_pessoas_e_crm_fundacao) e sem o Tráfego (20261006g) a tela explica e não quebra', () => {
     const l = html(createElement(SecaoLeads, { l: { base: false, pode_abrir: false, leads_web: 3, navegadores_lead: 3, com_ref: 0, pessoas: null, mql: null, nao_mql: null, lista: [] } }));
-    expect(l).toContain('20261005r_pessoas_e_crm_fundacao');
+    expect(l).toContain('base de pessoas do Comercial não está disponível');
     expect(l).not.toContain('/comercial?pessoa=');
-    expect(html(createElement(SecaoConnect, { c: { trafego: false, cliques_link: false, campanhas: [], sem_campanha: null, anuncios: [] } }))).toContain('20261006g');
+    expect(html(createElement(SecaoConnect, { c: { trafego: false, cliques_link: false, campanhas: [], sem_campanha: null, anuncios: [] } }))).toContain('quando o Tráfego estiver ligado');
   });
 });

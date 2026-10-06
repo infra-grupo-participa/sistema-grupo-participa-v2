@@ -4,9 +4,9 @@
 // projeto" no clique, cadastro de contas e campanhas fora do padrão. Só admin/dev (gate no layout, na page e no banco).
 // Migrations 20261006g e 20261006i. 20261006j: filtros por tipo e unidade, "Novo projeto" (cadastro do evento), progresso
 // do checklist de montagem. 20261006l: aba de modelos de lançamento (no lugar de pacotes e checklist).
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Badge, Button, DataTable, EmptyState, FilterSelect, KpiCard, Loading, SectionCard, Tabs, Td, Th, Thead, Toast, Toggle, Tr, useFlash,
+  Badge, Button, DataTable, EmptyState, FilterSelect, KpiCard, Loading, SectionCard, Tabs, Td, Th, Thead, Toast, Toggle, Tr, idsAba, useFlash,
 } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { PROJETO_FORM_VAZIO, type ListasCadastro } from '../domain/cadastro';
@@ -19,7 +19,7 @@ import { ProgressoMontagem } from './MontagemProjeto';
 import { ModelosPainel } from './ModelosPainel';
 import { ModalProjetoCadastro } from './ProjetoCadastro';
 import { ResumoDia } from './ResumoDia';
-import { SEM_DADO, centavos, inteiro, pct, reais } from './formato';
+import { SEM_DADO, centavos, inteiro, pct, reais, tomStatus } from './formato';
 import { VidaProjeto } from './VidaProjeto';
 
 type Aba = 'central' | 'campanhas' | 'contas' | 'modelos';
@@ -73,15 +73,16 @@ function TabelaCentral({ linhas, onAbrir }: { linhas: LinhaResumo[]; onAbrir: (i
           const acima = situacaoRitmo(l.ritmo_ontem) === 'acima';
           return (
             <Tr key={l.projeto_id} onClick={() => onAbrir(l.projeto_id)}>
-              <Td>{l.status_nome ? <Badge tone={l.status === 'ativo' ? 'success' : l.status === 'pausado' ? 'warning' : 'neutral'}>{l.status_nome}</Badge> : <Kpi v={SEM_DADO} titulo="Status não marcado" />}</Td>
+              <Td>{l.status_nome ? <Badge tone={tomStatus(l.status)}>{l.status_nome}</Badge> : <Kpi v={SEM_DADO} titulo="Status não marcado" />}</Td>
               <Td>
-                <div className="font-mono font-semibold">{l.sigla}</div>
+                <button type="button" className="font-mono font-semibold text-[var(--fg)] hover:underline focus-visible:underline" aria-label={`Abrir a vida do projeto ${l.sigla}`}
+                  onClick={(e) => { e.stopPropagation(); onAbrir(l.projeto_id); }}>{l.sigla}</button>
                 <div className="text-xs text-[var(--fg-3)]">{l.nome}{l.tipo ? ` · ${ROTULO_TIPO[l.tipo]}${l.unidade_nome ? ` ${l.unidade_nome}` : ''}` : ''}</div>
                 {l.tipo_lancamento_nome && <div className="text-[11px] text-[var(--fg-3)]">{l.tipo_lancamento_nome}</div>}
                 {l.campanhas_fora_padrao > 0 && <div className="mt-0.5 text-[11px] text-[var(--yellow)]">{l.campanhas_fora_padrao} campanha(s) fora do padrão</div>}
               </Td>
               <Td>{l.receita_aplica === false ? <span className="text-xs text-[var(--fg-3)]" title="Receita dos externos não entra por ora (Victor, 06/10/2026)">não se aplica</span> : <Kpi v={reais(l.receita)} titulo={l.receita_vinculos ? 'Vínculo sem período: ligue com data em "de" ou cadastre o início do projeto' : 'Sem produto da Hotmart ligado ao projeto (cadastre na vida do projeto)'} />}</Td>
-              <Td><Kpi v={reais(l.investido)} titulo="Sem gasto coletado (a coleta Meta/Google é a etapa 2)" />
+              <Td><Kpi v={reais(l.investido)} titulo="Sem gasto coletado das plataformas" />
                 {acima && <div className="text-[11px] text-[var(--red)]">ontem acima da diária</div>}</Td>
               <Td><Kpi v={reais(l.verba_maxima)} titulo="Verba não cadastrada" /></Td>
               <Td><Kpi v={pct(l.pct_verba)} /></Td>
@@ -123,9 +124,9 @@ export function TrafegoClient() {
 
   useEffect(() => {
     let vivo = true;
-    carregarConfig().then((c) => { if (vivo) setConfig(c); });
+    carregarConfig().then((c) => { if (vivo) setConfig((x) => (c ?? (x === undefined ? c : x))); });
     return () => { vivo = false; };
-  }, []);
+  }, [versao]);
 
   useEffect(() => {
     let vivo = true;
@@ -135,6 +136,14 @@ export function TrafegoClient() {
   }, [versao]);
 
   const mudou = useCallback(() => setVersao((v) => v + 1), []);
+  // salvar dentro da vida do projeto recarrega só a vida; a Central (resumo inteiro e alertas) recarrega ao fechar
+  const [versaoVida, setVersaoVida] = useState(0);
+  const centralDesatualizada = useRef(false);
+  const mudouNaVida = useCallback(() => { setVersaoVida((v) => v + 1); centralDesatualizada.current = true; }, []);
+  const fecharVida = useCallback(() => {
+    setAberto(null);
+    if (centralDesatualizada.current) { centralDesatualizada.current = false; mudou(); }
+  }, [mudou]);
   const visiveis = useMemo(() => filtrar(linhas ?? [], filtros), [linhas, filtros]);
   const t = useMemo(() => totais(visiveis), [visiveis]);
 
@@ -160,7 +169,7 @@ export function TrafegoClient() {
       {!config || !linhas ? (
         <SectionCard>
           <p role="alert" className="text-sm text-[var(--red)]">
-            Não foi possível carregar (erro de rede, sem acesso, ou a migration 20261006g ainda não foi aplicada).
+            Não foi possível carregar (sem conexão ou sem acesso). Recarregue a página; se continuar, avise quem cuida do sistema.
           </p>
         </SectionCard>
       ) : (
@@ -168,7 +177,7 @@ export function TrafegoClient() {
           <Tabs
             tabs={[
               { k: 'central', l: 'Projetos' },
-              { k: 'campanhas', l: 'Campanhas fora do padrão', n: linhas.reduce((a, l) => a + l.campanhas_fora_padrao, 0) || undefined },
+              { k: 'campanhas', l: 'Campanhas fora do padrão', n: (config.campanhas_fora_padrao ?? linhas.reduce((a, l) => a + l.campanhas_fora_padrao, 0)) || undefined },
               { k: 'contas', l: 'Contas de anúncio' },
               { k: 'modelos', l: 'Modelos de lançamento' },
             ]}
@@ -177,7 +186,7 @@ export function TrafegoClient() {
             idBase="trafego"
             label="Telas do Tráfego"
           />
-          <div role="tabpanel" id="trafego-panel" className="space-y-5">
+          <div role="tabpanel" id={idsAba('trafego', aba).panel} aria-labelledby={idsAba('trafego', aba).tab} className="space-y-5">
             {aba === 'central' && (
               <>
                 <ResumoDia versao={versao} onAbrir={setAberto} />
@@ -189,12 +198,12 @@ export function TrafegoClient() {
                 </div>
                 {!config.base_pessoas && (
                   <p className="text-xs text-[var(--fg-3)]">
-                    Leads, CPL e % MQL vêm da base de pessoas do Comercial (migration 20261005r_pessoas_e_crm_fundacao), que não existe neste banco: aparecem como &quot;sem dado&quot;.
+                    Leads, CPL e % MQL vêm da base de pessoas do Comercial, que não está disponível: aparecem como &quot;sem dado&quot;.
                   </p>
                 )}
                 {!config.base_web && (
                   <p className="text-xs text-[var(--fg-3)]">
-                    Connect rate e conversão da página usam as page views da Web fase 2 (migration 20261006h, a mesma conta da tela da Web), que ainda não existe neste banco: aparecem como &quot;sem dado&quot;.
+                    Connect rate e conversão da página usam as page views da Web (a mesma conta da tela da Web), que ainda não estão disponíveis: aparecem como &quot;sem dado&quot;.
                   </p>
                 )}
                 <SectionCard right={<div className="flex flex-wrap items-center gap-2">
@@ -213,11 +222,11 @@ export function TrafegoClient() {
       )}
 
       {aberto != null && config && (
-        <VidaProjeto id={aberto} config={config} listas={listas} contas={contas} versao={versao} onFechar={() => setAberto(null)} flash={flash} onMudou={mudou} />
+        <VidaProjeto key={aberto} id={aberto} config={config} listas={listas} contas={contas} versao={versao + versaoVida} onFechar={fecharVida} flash={flash} onMudou={mudouNaVida} />
       )}
       {novo && config && listas && (
         <ModalProjetoCadastro inicial={{ ...PROJETO_FORM_VAZIO }} listas={listas} config={config} contas={contas}
-          onFechar={() => setNovo(false)} onSalvo={(m) => { setNovo(false); flash(m); mudou(); }} />
+          onFechar={() => setNovo(false)} onSalvo={(m, id) => { setNovo(false); flash(m); mudou(); if (id != null) setAberto(id); }} />
       )}
       <Toast>{toast}</Toast>
     </div>

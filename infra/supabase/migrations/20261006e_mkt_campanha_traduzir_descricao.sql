@@ -70,6 +70,9 @@ begin
                               'descricao_partes', '[]'::jsonb, 'campos', 0);
   end if;
 
+  -- utm_campaign no formato nome|id (gp-operacoes): o id da plataforma no fim (só dígitos) não é parte do nome. Quem
+  -- manda o utm cru (ex.: pessoas.registrar) passa a ler a página e a descrição certas.
+  v_bruto := regexp_replace(v_bruto, '\|\s*[0-9]{6,}\s*$', '');
   v_partes := string_to_array(v_bruto, '|');
   v_n := coalesce(array_length(v_partes, 1), 0);
   for i in 1..v_n loop
@@ -179,6 +182,10 @@ begin
   r := mkt.campanha_traduzir('CF | BF26 | ANTECIPACAO | TEASER');
   if r ->> 'objetivo' <> 'ANTECIPAÇÃO' or (r -> 'erros') ? 'objetivo_desconhecido' then
     raise exception '20261006e: ANTECIPAÇÃO sem acento não foi reconhecida: %', r;
+  end if;
+  r := mkt.campanha_traduzir('RS | PB26 | LEADS | TESTE | AK1|120211234');
+  if r ->> 'pagina' is distinct from 'ak1' or r ->> 'descricao' <> 'TESTE' then
+    raise exception '20261006e: o id do utm_campaign (nome|id) não foi descartado: %', r;
   end if;
   r := mkt.campanha_traduzir('RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1');
   if not (r ->> 'padrao')::boolean or r ->> 'pagina' <> 'ak1' or r ->> 'descricao' <> 'TESTE DE ESCRITÓRIOS' then

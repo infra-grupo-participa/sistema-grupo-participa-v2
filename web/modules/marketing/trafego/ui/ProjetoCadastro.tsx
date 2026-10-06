@@ -37,7 +37,7 @@ function Grupo({ titulo, children }: { titulo: string; children: React.ReactNode
 
 export function ModalProjetoCadastro({ inicial, listas, config, contas, onFechar, onSalvo }: {
   inicial: ProjetoForm; listas: ListasCadastro; config: ConfigTrafego; contas: Conta[];
-  onFechar: () => void; onSalvo: (msg: string) => void;
+  onFechar: () => void; onSalvo: (msg: string, id?: number) => void;
 }) {
   const [f, setF] = useState<ProjetoForm>(() => ajustarForm(listas, inicial));
   const [erro, setErro] = useState<string | null>(null);
@@ -66,7 +66,7 @@ export function ModalProjetoCadastro({ inicial, listas, config, contas, onFechar
       ...(r.avisos ?? []).map((a) => ROTULO_AVISO_CADASTRO[a] ?? a),
       ...(r.campanhas_relidas ? [`${r.campanhas_relidas} campanha(s) religada(s) pela sigla.`] : []),
     ];
-    onSalvo([r.msg, ...extra].join(' '));
+    onSalvo([r.msg, ...extra].join(' '), r.id);
   }
 
   return (

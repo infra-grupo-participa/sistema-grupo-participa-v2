@@ -18,13 +18,31 @@ export const MODO_DEMO = process.env.NEXT_PUBLIC_TRAFEGO_DEMO === '1' && process
 
 const db = () => createBrowserSupabase();
 
-async function rpc<T>(nome: string, args?: Record<string, unknown>): Promise<T | null> {
+async function chamar<T>(nome: string, args?: Record<string, unknown>): Promise<{ data: T | null; code?: string }> {
   const { data, error } = await db().rpc(nome, args);
   logQueryError(nome, error);
-  return error ? null : (data as T);
+  return error ? { data: null, code: error.code } : { data: data as T };
 }
 
-const falha: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261006g ainda não foi aplicada).' };
+async function rpc<T>(nome: string, args?: Record<string, unknown>): Promise<T | null> {
+  return (await chamar<T>(nome, args)).data;
+}
+
+/** Mensagem para quem usa a tela, pelo código do erro (o erro técnico vai para o log). */
+export function falhaPor(code?: string): Resposta {
+  if (code === '42501') return { ok: false, msg: 'Sem acesso para salvar isto.' };
+  if (code === 'PGRST202') return { ok: false, msg: 'Esta função ainda não está no banco. Avise quem cuida do sistema.' };
+  return falha;
+}
+
+/** Chamada que grava: devolve a resposta da função ou a falha com mensagem de gente. */
+async function gravar<T extends Resposta>(nome: string, args?: Record<string, unknown>): Promise<T> {
+  const { data, code } = await chamar<T>(nome, args);
+  return data ?? (falhaPor(code) as T);
+}
+
+// Mensagem para quem usa a tela; o erro técnico vai para o log (logQueryError).
+const falha: Resposta = { ok: false, msg: 'Não foi possível salvar (sem conexão ou sem acesso). Tente de novo; se continuar, avise quem cuida do sistema.' };
 
 export const carregarConfig = (): Promise<ConfigTrafego | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoConfig()) : rpc<ConfigTrafego>('trafego_config');
@@ -50,18 +68,18 @@ export interface PlanejamentoForm {
 }
 export async function salvarPlanejamento(p: PlanejamentoForm): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoSalvarPlanejamento({ ...p });
-  return (await rpc<Resposta>('trafego_planejamento_salvar', { p })) ?? falha;
+  return await gravar<Resposta>('trafego_planejamento_salvar', { p });
 }
 
 export interface FaseForm { id?: number; projeto_id: number; fase: string; verba: string; inicio: string; fim: string; obs: string }
 export async function salvarFase(p: FaseForm): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoSalvarFase({ ...p });
-  return (await rpc<Resposta>('trafego_fase_salvar', { p })) ?? falha;
+  return await gravar<Resposta>('trafego_fase_salvar', { p });
 }
 
 export async function apagarFase(id: number): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoApagarFase(id);
-  return (await rpc<Resposta>('trafego_fase_apagar', { p_fase: id })) ?? falha;
+  return await gravar<Resposta>('trafego_fase_apagar', { p_fase: id });
 }
 
 export interface ContaForm {
@@ -72,11 +90,11 @@ export interface ContaForm {
 export async function salvarConta(p: ContaForm): Promise<Resposta> {
   const { unidade, principal, ...resto } = p;
   if (MODO_DEMO) return demo.demoSalvarConta({ ...p });
-  const r = (await rpc<Resposta>('trafego_conta_salvar', { p: resto })) ?? falha;
+  const r = await gravar<Resposta>('trafego_conta_salvar', { p: resto });
   if (!r.ok || r.id == null || (unidade === undefined && principal === undefined)) return r;
   const m = await rpc<Resposta>('trafego_conta_marcar', { p_conta: r.id, p_unidade: unidade ?? '', p_principal: !!principal });
-  if (!m) return { ok: false, msg: `${r.msg} A unidade e a principal não foram salvas (a migration 20261006k ainda não foi aplicada?).` };
-  return m.ok ? r : { ok: false, msg: `${r.msg} ${m.msg}` };
+  if (!m) return { ok: false, id: r.id, msg: `${r.msg} A unidade e a principal não foram salvas; tente de novo.` };
+  return m.ok ? r : { ok: false, id: r.id, msg: `${r.msg} ${m.msg}` };
 }
 
 /**
@@ -85,16 +103,15 @@ export async function salvarConta(p: ContaForm): Promise<Resposta> {
  */
 export async function ajustarCampanha(p: { id: number; projeto_id?: number | null; fase?: string | null }): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoAjustarCampanha(p);
-  return (await rpc<Resposta>('trafego_campanha_ajustar', { p })) ?? falha;
+  return await gravar<Resposta>('trafego_campanha_ajustar', { p });
 }
 
 export async function relerCampanhas(): Promise<Resposta> {
   if (MODO_DEMO) return { ok: true, msg: 'Modo de demonstração: nada a reler.' };
-  return (await rpc<Resposta>('trafego_campanhas_reler')) ?? falha;
+  return await gravar<Resposta>('trafego_campanhas_reler');
 }
 
 // ─── Fase 2 (migration 20261006i) ─────────────────────────────────────────────────────────────────────────────────────
-const falhaR: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261006i ainda não foi aplicada).' };
 
 /** Resumo do dia ("o que está pegando fogo"). null = sem acesso ou a 20261006i não aplicada. */
 export const carregarAlertas = (): Promise<ResumoDia | null> =>
@@ -109,12 +126,12 @@ export const listarProdutosVistos = (): Promise<ProdutoVisto[] | null> =>
 export interface ProdutoForm { id?: number; projeto_id: number; produto_id: string; oferta_codigo: string; de: string; ate: string; obs: string }
 export async function salvarProduto(p: ProdutoForm): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoSalvarProduto({ ...p });
-  return (await rpc<Resposta>('trafego_produto_salvar', { p })) ?? falhaR;
+  return await gravar<Resposta>('trafego_produto_salvar', { p });
 }
 
 export async function apagarProduto(id: number): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoApagarProduto(id);
-  return (await rpc<Resposta>('trafego_produto_apagar', { p_id: id })) ?? falhaR;
+  return await gravar<Resposta>('trafego_produto_apagar', { p_id: id });
 }
 
 /** Atividades do ClickUp do projeto (espelho pela etiqueta). null = sem acesso ou a 20261006i não aplicada. */
@@ -122,7 +139,6 @@ export const carregarClickup = (projeto: number): Promise<ClickupProjeto | null>
   MODO_DEMO ? Promise.resolve(demo.demoClickup(projeto)) : rpc<ClickupProjeto>('trafego_clickup', { p_projeto: projeto });
 
 // ─── Cadastro do projeto e checklist (migration 20261006j; modelos na 20261006l) ────────────────────────────────────────────────────
-const falhaA: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261006j ainda não foi aplicada).' };
 
 /** Listas do cadastro (unidades, tipos de lançamento e regras, especialistas, UTM, modelos, etiquetas). null = sem a 20261006j. */
 export const carregarListasCadastro = (): Promise<ListasCadastro | null> =>
@@ -140,14 +156,13 @@ export async function salvarProjetoCadastro(f: ProjetoForm): Promise<RespostaPro
   // sem "linha": a tela não pede mais (revisão de 06/10/2026); o banco grava o nome em projeto novo e não mexe na edição
   const p = { ...f, sigla: f.sigla.trim().toUpperCase(), etiqueta_clickup: f.etiqueta_clickup.trim().toLowerCase(), especialista_nome: f.especialista_nome.trim() };
   if (MODO_DEMO) return demo.demoSalvarCadastro(p);
-  return (await rpc<RespostaProjeto>('trafego_projeto_salvar', { p })) ?? falhaA;
+  return await gravar<RespostaProjeto>('trafego_projeto_salvar', { p });
 }
 
 export const carregarChecklist = (projeto: number): Promise<Checklist | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoChecklist(projeto)) : rpc<Checklist>('trafego_checklist', { p_projeto: projeto });
 
 // ─── Modelos de lançamento (migration 20261006l) ─────────────────────────────────────────────────────────────────────
-const falhaD: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261006l ainda não foi aplicada).' };
 
 /** Todos os modelos (ativos e inativos), com fases, campanhas e itens. null = sem acesso ou sem a 20261006l. */
 export const listarModelos = (): Promise<Modelo[] | null> =>
@@ -155,15 +170,15 @@ export const listarModelos = (): Promise<Modelo[] | null> =>
 
 export async function salvarModelo(m: Modelo): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoSalvarModelo(structuredClone(m));
-  return (await rpc<Resposta>('trafego_modelo_salvar', { p: paraSalvar(m) })) ?? falhaD;
+  return await gravar<Resposta>('trafego_modelo_salvar', { p: paraSalvar(m) });
 }
 export async function duplicarModelo(id: number): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoDuplicarModelo(id);
-  return (await rpc<Resposta>('trafego_modelo_duplicar', { p_id: id })) ?? falhaD;
+  return await gravar<Resposta>('trafego_modelo_duplicar', { p_id: id });
 }
 export async function ativarModelo(id: number, ativo: boolean): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoAtivarModelo(id, ativo);
-  return (await rpc<Resposta>('trafego_modelo_ativar', { p_id: id, p_ativo: ativo })) ?? falhaD;
+  return await gravar<Resposta>('trafego_modelo_ativar', { p_id: id, p_ativo: ativo });
 }
 /** Modelos que valem para o projeto (padrão primeiro), cada um com a prévia. null = sem a 20261006l. */
 export const previasDoProjeto = (projeto: number): Promise<PreviaModelo[] | null> =>
@@ -172,22 +187,22 @@ export const previasDoProjeto = (projeto: number): Promise<PreviaModelo[] | null
 export interface RespostaAplicar extends Resposta { criadas?: number; atualizadas?: number; mantidas?: number; esperadas?: number; itens?: number }
 export async function aplicarModelo(projeto: number, modelo: number, substituir: boolean): Promise<RespostaAplicar> {
   if (MODO_DEMO) return demo.demoAplicarModelo(projeto, modelo, substituir);
-  return (await rpc<RespostaAplicar>('trafego_modelo_aplicar', { p_projeto: projeto, p_modelo: modelo, p_substituir: substituir })) ?? falhaD;
+  return await gravar<RespostaAplicar>('trafego_modelo_aplicar', { p_projeto: projeto, p_modelo: modelo, p_substituir: substituir });
 }
 
 export async function marcarItemProjeto(item: number, feito: boolean): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoMarcarItem(item, feito);
-  return (await rpc<Resposta>('trafego_projeto_item_marcar', { p_item: item, p_feito: feito })) ?? falhaD;
+  return await gravar<Resposta>('trafego_projeto_item_marcar', { p_item: item, p_feito: feito });
 }
 export async function salvarItemProjeto(p: { id?: number; projeto_id: number; texto: string; momento: Momento }): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoSalvarItem({ ...p });
-  return (await rpc<Resposta>('trafego_projeto_item_salvar', { p })) ?? falhaD;
+  return await gravar<Resposta>('trafego_projeto_item_salvar', { p });
 }
 export async function apagarItemProjeto(item: number): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoApagarItem(item);
-  return (await rpc<Resposta>('trafego_projeto_item_apagar', { p_item: item })) ?? falhaD;
+  return await gravar<Resposta>('trafego_projeto_item_apagar', { p_item: item });
 }
 export async function apagarEsperada(id: number): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoApagarEsperada(id);
-  return (await rpc<Resposta>('trafego_projeto_esperada_apagar', { p_id: id })) ?? falhaD;
+  return await gravar<Resposta>('trafego_projeto_esperada_apagar', { p_id: id });
 }

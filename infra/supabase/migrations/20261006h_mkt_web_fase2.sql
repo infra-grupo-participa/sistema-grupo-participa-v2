@@ -239,11 +239,11 @@ m as (select coalesce(pm.secoes, '{}') as secoes, coalesce(pm.ctas, '{}') as cta
 b as materialized (
   select w.id, w.sessao, w.inicio, w.visivel_ms, w.secoes, w.ctas, w.form, s.dispositivo, s.lead, s.mql, s.unidade
     from mkt_web.visualizacoes w join s on s.id = w.sessao
-   where w.projeto_id = p_projeto and w.pagina_id = p_pagina and s.s_vis > 0),
+   where w.projeto_id = p_projeto and w.dia between p_de and p_ate and w.pagina_id = p_pagina and s.s_vis > 0),
 lead_ev as (
   select e.sessao, min(e.quando) as quando
     from mkt_web.eventos e join s on s.id = e.sessao cross join cfg
-   where e.projeto_id = p_projeto and e.nome = any (cfg.leads) group by e.sessao),
+   where e.projeto_id = p_projeto and e.dia between p_de and p_ate and e.nome = any (cfg.leads) group by e.sessao),
 sv as materialized (
   select b.id, b.lead, b.mql, e.key as secao, mkt_web.inteiro(e.value, 0) as seg,
          coalesce(array_position(m.secoes, e.key), 999) as ordem
@@ -261,7 +261,7 @@ cv as materialized (
 cl as materialized (
   select c.sessao, c.quando, substring(c.seletor from 'data-cta="([^"]+)"') as cta
     from mkt_web.cliques c join s on s.id = c.sessao
-   where c.projeto_id = p_projeto and c.pagina_id = p_pagina and c.seletor like '%data-cta=%' and not c.automatico),
+   where c.projeto_id = p_projeto and c.dia between p_de and p_ate and c.pagina_id = p_pagina and c.seletor like '%data-cta=%' and not c.automatico),
 ult as (
   select distinct on (cl.sessao) cl.sessao, cl.cta
     from cl join lead_ev le on le.sessao = cl.sessao cross join m
@@ -278,7 +278,7 @@ pc as (
 ab as (
   select distinct e.visualizacao as id
     from mkt_web.eventos e join s on s.id = e.sessao
-   where e.projeto_id = p_projeto and e.pagina_id = p_pagina
+   where e.projeto_id = p_projeto and e.dia between p_de and p_ate and e.pagina_id = p_pagina
      and e.nome in ('abriu_formulario', 'abriu_form', 'form_aberto', 'formulario_aberto')),
 fc0 as materialized (
   select b.id, c.key as campo, mkt_web.inteiro(c.value ->> 0, 0) as focos, mkt_web.inteiro(c.value ->> 1, 0) as seg,
@@ -377,7 +377,8 @@ begin
      where x.projeto_id = p_projeto and x.dia between p_de and p_ate and not x.teste),
   v as materialized (
     select w.id, w.sessao, w.pagina_id, w.ordem, w.lcp_ms
-      from mkt_web.visualizacoes w join s on s.id = w.sessao where w.projeto_id = p_projeto and w.pagina_id is not null),
+      from mkt_web.visualizacoes w join s on s.id = w.sessao
+     where w.projeto_id = p_projeto and w.dia between p_de and p_ate and w.pagina_id is not null),
   pass as (
     select v.pagina_id, count(*) as visitas, count(distinct v.sessao) as sessoes,
            count(distinct v.sessao) filter (where s.lead) as leads, count(distinct v.sessao) filter (where s.mql) as mql,
@@ -397,11 +398,11 @@ begin
   fr_cl as (
     select c.pagina_id, c.sessao, bool_or(c.raiva) as raiva
       from mkt_web.cliques c join s on s.id = c.sessao
-     where c.projeto_id = p_projeto and c.pagina_id is not null and (c.raiva or c.morto) and not c.automatico
+     where c.projeto_id = p_projeto and c.dia between p_de and p_ate and c.pagina_id is not null and (c.raiva or c.morto) and not c.automatico
      group by 1, 2),
   fr_er as (
     select distinct e.pagina_id, e.sessao from mkt_web.erros e join s on s.id = e.sessao
-     where e.projeto_id = p_projeto and e.pagina_id is not null and e.origem = 'pagina'),
+     where e.projeto_id = p_projeto and e.dia between p_de and p_ate and e.pagina_id is not null and e.origem = 'pagina'),
   fr as (
     select p.pagina_id, s.lead, coalesce(c.raiva, false) as raiva, (e.sessao is not null) as erro
       from (select distinct pagina_id, sessao from v) p
@@ -470,7 +471,7 @@ language sql stable set search_path = '' as $$
     select x.* from mkt_web.sessoes x where x.projeto_id = p_projeto and x.dia between p_de and p_ate and not x.teste
   ), pv as materialized (
     select w.* from mkt_web.visualizacoes w join s on s.id = w.sessao
-     where w.projeto_id = p_projeto and (p_pagina is null or w.pagina_id = p_pagina)
+     where w.projeto_id = p_projeto and w.dia between p_de and p_ate and (p_pagina is null or w.pagina_id = p_pagina)
   ), vs as materialized (
     select s.* from s where exists (select 1 from pv where pv.sessao = s.id)
   ), ent as (
@@ -511,7 +512,7 @@ begin
       select x.id, x.lead from mkt_web.sessoes x where x.projeto_id = p_projeto and x.dia between p_de and p_ate and not x.teste
     ), pv0 as (
       select w.sessao, w.ordem, w.caminho, s.lead, lag(w.caminho) over (partition by w.sessao order by w.ordem) as antes
-        from mkt_web.visualizacoes w join s on s.id = w.sessao where w.projeto_id = p_projeto
+        from mkt_web.visualizacoes w join s on s.id = w.sessao where w.projeto_id = p_projeto and w.dia between p_de and p_ate
     ), pv as materialized (
       select sessao, caminho, lead, row_number() over (partition by sessao order by ordem) as passo,
              lead(caminho) over (partition by sessao order by ordem) as prox
@@ -594,11 +595,11 @@ begin
        where x.projeto_id = p_projeto and x.dia between p_de and p_ate and not x.teste and x.dispositivo = p_dispositivo
     ), vv as materialized (
       select w.id, w.rolagem, w.largura, w.altura_doc from mkt_web.visualizacoes w join s on s.id = w.sessao
-       where w.projeto_id = p_projeto and w.pagina_id = p_pagina
+       where w.projeto_id = p_projeto and w.dia between p_de and p_ate and w.pagina_id = p_pagina
     ), cl as materialized (
       select c.id, c.x_pct, c.y_px, c.seletor, c.texto, c.raiva, c.morto, c.fixo, vv.altura_doc
         from mkt_web.cliques c join vv on vv.id = c.visualizacao
-       where c.projeto_id = p_projeto and not c.automatico
+       where c.projeto_id = p_projeto and c.dia between p_de and p_ate and not c.automatico
     ), des as materialized (
       select * from cl where not cl.fixo and cl.altura_doc > 0
     ), el as materialized (
@@ -713,8 +714,9 @@ begin
        order by x.pessoa_id, x.quando desc nulls last
     ), ev as (
       select pes.pessoa_id, bool_or(e.tipo = 'mql') as mql, bool_or(e.tipo = 'nao_mql') as nao_mql
-        from pes left join pessoas.eventos e on e.pessoa_id = any(pessoas.grupo(pes.pessoa_id)) and e.projeto_id = $1
-                                            and e.tipo in ('mql', 'nao_mql')
+        -- grupo() uma vez por pessoa (lateral) e junção por igualdade: usa eventos_pessoa_idx/eventos_projeto_idx
+        from pes left join lateral unnest(pessoas.grupo(pes.pessoa_id)) g(id) on true
+        left join pessoas.eventos e on e.pessoa_id = g.id and e.projeto_id = $1 and e.tipo in ('mql', 'nao_mql')
        group by pes.pessoa_id
     )
     select jsonb_build_object(
@@ -732,11 +734,41 @@ end
 $$;
 
 -- Connect rate (definição do Victor, 05/10/2026): page views ÷ cliques no link; conversão da página: leads ÷ page views.
+-- A REGRA ÚNICA do "page view da campanha" (auditoria de 06/10/2026: antes estava escrita duas vezes, aqui e em
+-- mkt_trafego.resumo). Uma linha por (visita, campanha do Tráfego) que ela casa, no mesmo projeto: pelo ID da campanha
+-- (campaign_id da URL, ou o id do utm_campaign nome|id, ou só id) ou, sem id na visita, pelo NOME exato. Visita de teste
+-- fora. Período e projeto opcionais (nulo = todos). Duas junções por igualdade em vez de um OR (que virava produto
+-- visitas × campanhas). Quem usa: public.mkt_web_connect (por campanha) e mkt_trafego.resumo (por projeto, visita
+-- contada uma vez). Interna, sem grant.
+create function mkt_web.visitas_campanha(p_projeto bigint, p_de date, p_ate date)
+returns table (sessao text, campanha bigint, projeto_id bigint, engajada boolean, lead boolean)
+-- plpgsql (e não sql) para poder ser criada antes da 20261006g: o corpo só é conferido na primeira chamada
+language plpgsql stable set search_path = '' as $$
+begin
+  return query
+  with s as materialized (
+    select x.id, x.projeto_id, x.engajada, x.lead, oi.campanha_id as cid, oi.campanha_nome as cnome
+      from mkt_web.sessoes x
+      cross join lateral mkt_web.origem_ids(x.utm_source, x.utm_medium, x.utm_campaign, x.utm_content,
+                                            x.campaign_id, x.adset_id, x.ad_id) oi
+     where not x.teste and (p_projeto is null or x.projeto_id = p_projeto)
+       and (p_de is null or x.dia >= p_de) and (p_ate is null or x.dia <= p_ate)
+       and coalesce(oi.campanha_id, oi.campanha_nome) is not null
+  )
+  select s.id, c.id, s.projeto_id, s.engajada, s.lead
+    from s join mkt_trafego.campanhas c on c.projeto_id = s.projeto_id and c.campanha_externa = s.cid
+  union all
+  select s.id, c.id, s.projeto_id, s.engajada, s.lead
+    from s join mkt_trafego.campanhas c on c.projeto_id = s.projeto_id and c.nome = s.cnome
+   where s.cid is null;
+end
+$$;
+
 -- Por campanha do Tráfego (20261006g) do projeto: gasto, impressões e cliques no link da plataforma no período contra as
 -- page views de ENTRADA da Web vindas da mesma campanha (a página de destino do anúncio; uma por visita). Casa pelo ID
 -- da campanha (campaign_id da URL, ou o id do utm_campaign no formato nome|id do gp-operacoes, ou utm_campaign só id);
--- sem id na visita, pelo NOME exato (a parte do nome do utm_campaign). Leitura de mkt_web.origem_ids (20261006f); a
--- mesma regra está em mkt_trafego.resumo (20261006g). A coluna de cliques no link é procurada pelo nome
+-- sem id na visita, pelo NOME exato (a parte do nome do utm_campaign). A regra está UMA vez, em mkt_web.visitas_campanha,
+-- que mkt_trafego.resumo (20261006g) também usa. A coluna de cliques no link é procurada pelo nome
 -- (cliques_link ou cliques_no_link); sem ela, connect rate fica nulo (nunca cai para "todos os cliques").
 -- Por anúncio (utm_content = o anúncio/criativo em nome|id; agrupado pelo id) só a Web: o Tráfego ainda não guarda
 -- clique por anúncio. Sem a 20261006g, "trafego": false.
@@ -776,15 +808,10 @@ begin
       select d.campanha_id, sum(d.gasto) as gasto, sum(d.impressoes) as impressoes, %s as cliques_link, count(*) as dias
         from mkt_trafego.desempenho_dia d join c on c.id = d.campanha_id
        where d.dia between $2 and $3 group by d.campanha_id
-    ), s as (
-      select x.id, oi.campanha_id, oi.campanha_nome, x.engajada, x.lead
-        from mkt_web.sessoes x
-        cross join lateral mkt_web.origem_ids(x.utm_source, x.utm_medium, x.utm_campaign, x.utm_content,
-                                              x.campaign_id, x.adset_id, x.ad_id) oi
-       where x.projeto_id = $1 and x.dia between $2 and $3 and not x.teste
     ), m as (
-      select c.id, count(s.id) as page_views, count(s.id) filter (where s.engajada) as engajadas, count(s.id) filter (where s.lead) as leads
-        from c left join s on s.campanha_id = c.campanha_externa or (s.campanha_id is null and s.campanha_nome = c.nome)
+      select c.id, count(v.sessao) as page_views, count(v.sessao) filter (where v.engajada) as engajadas,
+             count(v.sessao) filter (where v.lead) as leads
+        from c left join mkt_web.visitas_campanha($1, $2, $3) v on v.campanha = c.id
        group by c.id
     )
     select coalesce(jsonb_agg(jsonb_build_object(
@@ -800,14 +827,14 @@ begin
   into v_camp using p_projeto, p_de, p_ate;
   -- page views com campanha (id ou nome) que não casam com nenhuma campanha cadastrada no Tráfego
   execute $q$
+    with casadas as materialized (select distinct v.sessao from mkt_web.visitas_campanha($1, $2, $3) v)
     select jsonb_build_object('page_views', count(*), 'campanhas', count(distinct coalesce(oi.campanha_id, oi.campanha_nome)))
       from mkt_web.sessoes x
       cross join lateral mkt_web.origem_ids(x.utm_source, x.utm_medium, x.utm_campaign, x.utm_content,
                                             x.campaign_id, x.adset_id, x.ad_id) oi
+      left join casadas k on k.sessao = x.id
      where x.projeto_id = $1 and x.dia between $2 and $3 and not x.teste and coalesce(oi.campanha_id, oi.campanha_nome) is not null
-       and not exists (select 1 from mkt_trafego.campanhas c
-                        where c.projeto_id = $1 and (oi.campanha_id = c.campanha_externa
-                                                     or (oi.campanha_id is null and oi.campanha_nome = c.nome)))
+       and k.sessao is null
   $q$ into v_sem using p_projeto, p_de, p_ate;
   return jsonb_build_object('trafego', true, 'cliques_link', v_col is not null, 'campanhas', v_camp, 'sem_campanha', v_sem, 'anuncios', v_anun);
 end
@@ -820,7 +847,7 @@ begin
   for f in select p.oid::regprocedure from pg_proc p
             where (p.pronamespace = 'mkt_web'::regnamespace
                    and p.proname in ('melhorias_base', 'leitura_achados', 'comparar_bloco', 'pagespeed_fila',
-                                     'pagespeed_guardar', 'pagespeed_credenciais'))
+                                     'pagespeed_guardar', 'pagespeed_credenciais', 'visitas_campanha'))
                or (p.pronamespace = 'public'::regnamespace
                    and p.proname in ('mkt_web_fluxo', 'mkt_web_melhorias', 'mkt_web_comparar', 'mkt_web_calor',
                                      'mkt_web_lab', 'mkt_web_leads', 'mkt_web_connect')) loop
@@ -870,7 +897,7 @@ declare
   v_publicas text[] := array['mkt_web_fluxo', 'mkt_web_melhorias', 'mkt_web_comparar', 'mkt_web_calor', 'mkt_web_lab',
                              'mkt_web_leads', 'mkt_web_connect'];
   v_internas text[] := array['melhorias_base', 'leitura_achados', 'comparar_bloco', 'pagespeed_fila', 'pagespeed_guardar',
-                             'pagespeed_credenciais'];
+                             'pagespeed_credenciais', 'visitas_campanha'];
 begin
   foreach r in array array['anon', 'authenticated'] loop
     if has_schema_privilege(r, 'mkt_web', 'usage') then raise exception '20261006h: % tem acesso ao schema mkt_web', r; end if;
@@ -898,8 +925,8 @@ begin
     end if;
   end loop;
   if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = any (v_publicas)) <> 7
-     or (select count(*) from pg_proc p where p.pronamespace = 'mkt_web'::regnamespace and p.proname = any (v_internas)) <> 6 then
-    raise exception '20261006h: esperava 7 funções públicas e 6 internas';
+     or (select count(*) from pg_proc p where p.pronamespace = 'mkt_web'::regnamespace and p.proname = any (v_internas)) <> 7 then
+    raise exception '20261006h: esperava 7 funções públicas e 7 internas';
   end if;
 end
 $confere$;
@@ -913,7 +940,7 @@ $confere$;
 --             where (p.pronamespace = 'public'::regnamespace and p.proname in ('mkt_web_fluxo', 'mkt_web_melhorias',
 --                    'mkt_web_comparar', 'mkt_web_calor', 'mkt_web_lab', 'mkt_web_leads', 'mkt_web_connect'))
 --                or (p.pronamespace = 'mkt_web'::regnamespace and p.proname in ('melhorias_base', 'leitura_achados',
---                    'comparar_bloco', 'pagespeed_fila', 'pagespeed_guardar', 'pagespeed_credenciais'))
+--                    'comparar_bloco', 'pagespeed_fila', 'pagespeed_guardar', 'pagespeed_credenciais', 'visitas_campanha'))
 --   loop execute format('drop function %s', f); end loop; end $$;
 -- drop table mkt_web.velocidade_lab;
 -- delete from mkt_web.config where chave = 'pagespeed';

@@ -227,7 +227,7 @@ export function WebClient() {
 
       {falhou && !carregando && (
         <p role="alert" className="text-sm text-[var(--red)]">
-          Não foi possível carregar (erro de rede, sem acesso, ou a migration 20261006f ainda não foi aplicada).
+          Não foi possível carregar (sem conexão ou sem acesso). Recarregue a página; se continuar, avise quem cuida do sistema.
         </p>
       )}
       {projeto == null ? (

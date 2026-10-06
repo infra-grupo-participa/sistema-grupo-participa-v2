@@ -8,7 +8,7 @@ import { Badge, Button, DataTable, EmptyState, FilterSelect, Loading, SectionCar
 import { motivoErro } from '../../projetos/domain/campanha';
 import type { Campanha, LinhaResumo } from '../domain/tipos';
 import { ajustarCampanha, listarCampanhas, relerCampanhas } from '../infrastructure/trafego-data';
-import { SEM_DADO, reais } from './formato';
+import { reais, rotuloStatusPlataforma } from './formato';
 
 export function CampanhasPainel({ linhas, versao, flash, onMudou }: {
   linhas: LinhaResumo[]; versao: number; flash: (m: string) => void; onMudou: () => void;
@@ -56,7 +56,7 @@ export function CampanhasPainel({ linhas, versao, flash, onMudou }: {
             <tbody>
               {lista.map((c) => (
                 <Tr key={c.id}>
-                  <Td><div className="font-mono text-xs break-all">{c.nome}</div><div className="text-[11px] text-[var(--fg-3)]">{c.status_plataforma ?? ''}</div></Td>
+                  <Td><div className="font-mono text-xs break-all">{c.nome}</div><div className="text-[11px] text-[var(--fg-3)]">{rotuloStatusPlataforma(c.status_plataforma)}</div></Td>
                   <Td>{c.conta}</Td>
                   <Td>{c.fora_padrao
                     ? <ul className="text-xs text-[var(--yellow)]">{c.erros.map((e) => <li key={e}>{motivoErro(e, { ...c, projeto: c.projeto_lido })}</li>)}</ul>
@@ -65,7 +65,7 @@ export function CampanhasPainel({ linhas, versao, flash, onMudou }: {
                   <Td>
                     <FilterSelect value={c.projeto_manual ? (c.projeto_id ?? '') : ''} aria-label="Ligar a um projeto"
                       onChange={(e) => void ligar(c, e.target.value)}>
-                      <option value="">{c.projeto_sigla && !c.projeto_manual ? `Pelo nome: ${c.projeto_sigla}` : `Pelo nome (${c.projeto_sigla ?? SEM_DADO})`}</option>
+                      <option value="">{c.projeto_sigla && !c.projeto_manual ? `Pelo nome: ${c.projeto_sigla}` : 'Sem projeto'}</option>
                       {linhas.map((l) => <option key={l.projeto_id} value={l.projeto_id}>À mão: {l.sigla}</option>)}
                     </FilterSelect>
                   </Td>

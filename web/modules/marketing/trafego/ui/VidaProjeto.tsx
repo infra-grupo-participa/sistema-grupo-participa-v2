@@ -14,6 +14,7 @@ import { motivoErro } from '../../projetos/domain/campanha';
 import { comKpis, esperadoAte, situacaoRitmo } from '../domain/kpis';
 import { formDoCadastro, type ListasCadastro, type ProjetoCadastro } from '../domain/cadastro';
 import { marcarCriadas } from '../domain/modelos';
+import { numeroParaBanco, numeroParaCampo } from '../domain/numero';
 import { ROTULO_AVISO, ROTULO_TIPO, type AcaoChecklist, type ConfigTrafego, type Conta, type FaseProjeto, type Resposta, type VidaProjeto as Vida } from '../domain/tipos';
 import {
   ajustarCampanha, apagarFase, carregarCadastro, carregarProjeto, salvarFase, salvarPlanejamento, type FaseForm, type PlanejamentoForm,
@@ -21,12 +22,12 @@ import {
 import { CadastroResumo, ChecklistPainel, GeradorCampanha, ModalAplicarModelo } from './MontagemProjeto';
 import { ModalProjetoCadastro } from './ProjetoCadastro';
 import { ClickupPainel } from './ClickupPainel';
-import { SEM_DADO, centavos, dataBR, inteiro, pct, reais } from './formato';
+import { SEM_DADO, centavos, dataBR, inteiro, pct, reais, rotuloStatusPlataforma, tomStatus } from './formato';
 import { ProdutosHotmart } from './ProdutosHotmart';
 
 type Flash = (msg: string) => void;
 
-const txt = (n: number | null | undefined) => (n == null ? '' : String(n));
+const txt = numeroParaCampo;
 const msgAvisos = (r: Resposta) => [r.msg, ...(r.avisos ?? []).map((a) => ROTULO_AVISO[a] ?? a)].join(' ');
 
 function Campo({ rotulo, dica, children }: { rotulo: string; dica?: string; children: React.ReactNode }) {
@@ -40,6 +41,12 @@ function Campo({ rotulo, dica, children }: { rotulo: string; dica?: string; chil
   );
 }
 
+type CampoNumerico = 'verba_maxima' | 'verba_diaria' | 'meta_leads' | 'meta_receita' | 'meta_cpl' | 'meta_pct_mql';
+const ROTULO_NUMERO: Record<CampoNumerico, string> = {
+  verba_maxima: 'Verba máxima', verba_diaria: 'Verba diária', meta_leads: 'Meta de leads', meta_receita: 'Meta de receita',
+  meta_cpl: 'Meta de CPL', meta_pct_mql: 'Meta de % MQL',
+};
+
 function ModalPlanejamento({ vida, config, onFechar, onSalvo }: { vida: Vida; config: ConfigTrafego; onFechar: () => void; onSalvo: (m: string) => void }) {
   const r = vida.resumo;
   const [f, setF] = useState<PlanejamentoForm>({
@@ -52,13 +59,20 @@ function ModalPlanejamento({ vida, config, onFechar, onSalvo }: { vida: Vida; co
   const alternaGestor = (sigla: string) => setF((x) => ({
     ...x, gestores: x.gestores.includes(sigla) ? x.gestores.filter((g) => g !== sigla) : [...x.gestores, sigla],
   }));
-  const numero = (k: Exclude<keyof PlanejamentoForm, 'gestores' | 'projeto_id'>) => (
-    <Input inputMode="decimal" value={f[k] as string} onChange={(e) => set(k, e.target.value.replace(',', '.'))} />
+  const numero = (k: CampoNumerico) => (
+    <Input inputMode="decimal" value={f[k]} aria-label={ROTULO_NUMERO[k]} onChange={(e) => set(k, e.target.value)} />
   );
 
   async function salvar() {
+    if (salvando) return;
+    const p = { ...f };
+    for (const k of Object.keys(ROTULO_NUMERO) as CampoNumerico[]) {
+      const v = numeroParaBanco(f[k]);
+      if (v === null) { setErro(`${ROTULO_NUMERO[k]}: número inválido.`); return; }
+      p[k] = v;
+    }
     setSalvando(true);
-    const x = await salvarPlanejamento(f);
+    const x = await salvarPlanejamento(p);
     setSalvando(false);
     if (!x.ok) { setErro(x.msg); return; }
     onSalvo(msgAvisos(x));
@@ -97,7 +111,7 @@ function ModalPlanejamento({ vida, config, onFechar, onSalvo }: { vida: Vida; co
           <Campo rotulo="Observação"><Input value={f.obs} onChange={(e) => set('obs', e.target.value)} maxLength={1000} /></Campo>
         </div>
       </div>
-      <p className="mt-2 text-xs text-[var(--fg-3)]">Vazio = não definido. Use ponto ou vírgula para centavos.</p>
+      <p className="mt-2 text-xs text-[var(--fg-3)]">Vazio = não definido. Vírgula para centavos, ponto de milhar opcional (10.000 ou 10.000,50).</p>
       {erro && <p role="alert" className="mt-2 text-sm text-[var(--red)]">{erro}</p>}
     </Modal>
   );
@@ -114,9 +128,12 @@ function ModalFase({ inicial, config, captacao, onFechar, onSalvo }: {
     ? { ...x, fase: v, inicio: captacao.inicio, fim: captacao.fim ?? '' } : { ...x, [k]: v }));
 
   async function salvar() {
+    if (salvando) return;
     if (!f.fase) { setErro('Escolha a fase.'); return; }
+    const verba = numeroParaBanco(f.verba);
+    if (verba === null) { setErro('Verba planejada: número inválido.'); return; }
     setSalvando(true);
-    const x = await salvarFase(f);
+    const x = await salvarFase({ ...f, verba });
     setSalvando(false);
     if (!x.ok) { setErro(x.msg); return; }
     onSalvo(msgAvisos(x));
@@ -135,7 +152,7 @@ function ModalFase({ inicial, config, captacao, onFechar, onSalvo }: {
           </FilterSelect>
         </Campo>
         <Campo rotulo="Verba planejada (R$)">
-          <Input inputMode="decimal" value={f.verba} onChange={(e) => set('verba', e.target.value.replace(',', '.'))} />
+          <Input inputMode="decimal" value={f.verba} onChange={(e) => set('verba', e.target.value)} placeholder="10.000,00" />
         </Campo>
         <Campo rotulo="Início"><Input type="date" value={f.inicio} onChange={(e) => set('inicio', e.target.value)} /></Campo>
         <Campo rotulo="Fim"><Input type="date" value={f.fim} onChange={(e) => set('fim', e.target.value)} /></Campo>
@@ -150,7 +167,7 @@ function ModalFase({ inicial, config, captacao, onFechar, onSalvo }: {
 
 function Fases({ vida, onEditar, onApagar }: { vida: Vida; onEditar: (f: FaseProjeto) => void; onApagar: (f: FaseProjeto) => void }) {
   if (vida.fases.length === 0 && vida.campanhas_sem_fase === 0) {
-    return <EmptyState title="Nenhuma fase planejada" hint="Cadastre aquecimento, captação, lembrete, remarketing, abertura de carrinho com a verba e o período." />;
+    return <EmptyState title="Nenhuma fase planejada" hint="Cadastre as fases (aquecimento, antecipação, captação, lembrete, remarketing, abertura de carrinho) com a verba e o período, ou use Aplicar modelo." />;
   }
   return (
     <DataTable minWidth={720}>
@@ -187,7 +204,7 @@ function Fases({ vida, onEditar, onApagar }: { vida: Vida; onEditar: (f: FasePro
 
 function Campanhas({ vida, config, flash, onMudou }: { vida: Vida; config: ConfigTrafego; flash: Flash; onMudou: () => void }) {
   if (vida.campanhas.length === 0) {
-    return <EmptyState title="Nenhuma campanha ligada" hint="As campanhas chegam pela coleta Meta/Google (etapa 2) e se ligam ao projeto pelo nome." />;
+    return <EmptyState title="Nenhuma campanha ligada" hint="As campanhas chegam pela coleta das plataformas e se ligam ao projeto pela sigla no nome." />;
   }
   const nomeFase = (c: string | null) => config.fases.find((f) => f.codigo === c)?.nome ?? 'sem fase';
   async function trocarFase(id: number, fase: string) {
@@ -207,7 +224,7 @@ function Campanhas({ vida, config, flash, onMudou }: { vida: Vida; config: Confi
               {c.projeto_manual && <div className="text-[11px] text-[var(--fg-3)]">Projeto ligado à mão</div>}
             </Td>
             <Td>{c.plataforma === 'meta' ? 'Meta' : c.plataforma === 'google' ? 'Google' : c.plataforma}</Td>
-            <Td>{c.status_plataforma ?? SEM_DADO}</Td>
+            <Td>{c.status_plataforma ? rotuloStatusPlataforma(c.status_plataforma) : SEM_DADO}</Td>
             <Td>
               <FilterSelect value={c.fase_manual ?? ''} aria-label="Fase da campanha"
                 onChange={(e) => void trocarFase(c.id, e.target.value)}>
@@ -275,7 +292,7 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
       subtitle={[r.tipo ? `${ROTULO_TIPO[r.tipo]}${r.unidade_nome ? ` · ${r.unidade_nome}` : ' · unidade não marcada'}` : 'Tipo não marcado',
         r.tipo_lancamento_nome ?? null, r.gestores.length ? `Gestores ${r.gestores.join(', ')}` : null].filter(Boolean).join(' · ')}
       badges={<>
-        {r.status_nome ? <Badge tone={r.status === 'ativo' ? 'success' : 'neutral'}>{r.status_nome}</Badge> : <Badge>Sem status</Badge>}
+        {r.status_nome ? <Badge tone={tomStatus(r.status)}>{r.status_nome}</Badge> : <Badge>Sem status</Badge>}
         {r.campanhas_fora_padrao > 0 && <Badge tone="warning">{r.campanhas_fora_padrao} fora do padrão</Badge>}
       </>}
       actions={<div className="flex gap-2">
@@ -300,7 +317,7 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
               <div className="text-2xl font-bold tabular">{reais(r.investido)} <span className="text-sm font-normal text-[var(--fg-3)]">de {reais(r.verba_maxima)}</span></div>
               {r.pct_verba != null && <div className="mt-2"><ProgressBar value={r.pct_verba} tone={r.pct_verba > 100 ? 'red' : 'accent'} showLabel ariaLabel={`${pct(r.pct_verba)} da verba usada`} /></div>}
               <div className="mt-2 text-xs text-[var(--fg-3)]">
-                {plataformas.length ? plataformas.map(([p, v]) => `${p === 'meta' ? 'Meta' : p === 'google' ? 'Google' : p}: ${reais(v)}`).join(' · ') : 'Sem gasto coletado ainda (coleta Meta/Google é a etapa 2).'}
+                {plataformas.length ? plataformas.map(([p, v]) => `${p === 'meta' ? 'Meta' : p === 'google' ? 'Google' : p}: ${reais(v)}`).join(' · ') : 'Sem gasto coletado ainda.'}
                 {r.moedas.some((m) => m !== 'BRL') && <span className="text-[var(--yellow)]"> · Há conta em outra moeda: a soma mistura moedas.</span>}
               </div>
             </div>
@@ -378,7 +395,7 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
           confirmLabel="Apagar"
           danger
           onCancel={() => setApagar(null)}
-          onConfirm={async () => { const x = await apagarFase(apagar.id!); setApagar(null); flash(x.msg); if (x.ok) onMudou(); }}
+          onConfirm={async () => { const id = apagar.id!; setApagar(null); const x = await apagarFase(id); flash(x.msg); if (x.ok) onMudou(); }}
         />
       )}
     </Drawer>

@@ -217,7 +217,7 @@ export function SecaoLeads({ l }: { l: LeadsPessoas | null }) {
             <KpiCard label="Viraram MQL" value={l.base && l.mql != null ? num(l.mql) : '–'} hint={l.base && l.pessoas ? `${pct(l.mql ?? 0, l.pessoas)} das ${num(l.pessoas)} pessoas` : 'pela base de pessoas'} bar="green" />
             <KpiCard label="Não MQL" value={l.base && l.nao_mql != null ? num(l.nao_mql) : '–'} bar="gray" />
           </div>
-          {!l.base && <p className="text-xs text-[var(--fg-3)]">A base de pessoas do Comercial (migration 20261005r_pessoas_e_crm_fundacao) não está neste banco: MQL aparece depois.</p>}
+          {!l.base && <p className="text-xs text-[var(--fg-3)]">A base de pessoas do Comercial não está disponível: MQL aparece depois.</p>}
           {l.base && l.pode_abrir && l.lista.length > 0 && (
             <details className="text-sm">
               <summary className="cursor-pointer text-[var(--fg-2)]">Últimos leads do período ({l.lista.length})</summary>
@@ -248,7 +248,7 @@ export function SecaoConnect({ c }: { c: Connect | null }) {
     <SectionCard title="Connect rate (com o Tráfego)"
       subtitle="Connect rate = page views ÷ cliques no link da plataforma. Conversão da página = leads ÷ page views. Page view = a entrada na página vinda da campanha (uma por visita).">
       {!c.trafego ? (
-        <p className="text-sm text-[var(--fg-3)]">O cruzamento com gasto e cliques aparece quando a base do Tráfego (migration 20261006g) estiver aplicada e coletando.</p>
+        <p className="text-sm text-[var(--fg-3)]">O cruzamento com gasto e cliques aparece quando o Tráfego estiver ligado e coletando.</p>
       ) : !c.campanhas.length ? (
         <p className="text-sm text-[var(--fg-3)]">Nenhuma campanha do projeto com gasto ou visita no período.</p>
       ) : (

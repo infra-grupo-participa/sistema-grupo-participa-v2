@@ -61,8 +61,8 @@ function ModalProduto({ inicial, onFechar, onSalvo }: { inicial: ProdutoForm; on
         <Campo rotulo="Código da oferta" dica="vazio = todas as ofertas">
           <Input value={f.oferta_codigo} onChange={(e) => set('oferta_codigo', e.target.value.trim())} maxLength={40} />
         </Campo>
-        <Campo rotulo="De" dica="vazio = início do projeto"><Input type="date" value={f.de} onChange={(e) => set('de', e.target.value)} /></Campo>
-        <Campo rotulo="Até" dica="vazio = fim do projeto (ou hoje)"><Input type="date" value={f.ate} onChange={(e) => set('ate', e.target.value)} /></Campo>
+        <Campo rotulo="De" dica="vazio = início da captação"><Input type="date" value={f.de} onChange={(e) => set('de', e.target.value)} /></Campo>
+        <Campo rotulo="Até" dica="vazio = fim do evento (ou hoje)"><Input type="date" value={f.ate} onChange={(e) => set('ate', e.target.value)} /></Campo>
         <div className="sm:col-span-2">
           <Campo rotulo="Observação"><Input value={f.obs} onChange={(e) => set('obs', e.target.value)} maxLength={1000} /></Campo>
         </div>
@@ -105,7 +105,7 @@ export function ProdutosHotmart({ resumo, versao, flash, onMudou }: { resumo: Li
         <Button size="sm" onClick={novo}><Icon name="plus" size={14} /> Ligar produto</Button>
       </div>
       {lista === undefined ? null : lista === null ? (
-        <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar os produtos (sem acesso, ou a migration 20261006i ainda não foi aplicada).</p>
+        <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar (sem conexão ou sem acesso). Recarregue a página; se continuar, avise quem cuida do sistema.</p>
       ) : lista.length === 0 ? (
         <EmptyState title="Nenhum produto da Hotmart ligado a este projeto" hint="Ligue à mão o produto (e, se quiser, a oferta) que gera receita para o projeto." />
       ) : (
@@ -139,7 +139,7 @@ export function ProdutosHotmart({ resumo, versao, flash, onMudou }: { resumo: Li
           confirmLabel="Apagar"
           danger
           onCancel={() => setApagar(null)}
-          onConfirm={async () => { const r = await apagarProduto(apagar.id); setApagar(null); flash(r.msg); if (r.ok) onMudou(); }}
+          onConfirm={async () => { const id = apagar.id; setApagar(null); const r = await apagarProduto(id); flash(r.msg); if (r.ok) onMudou(); }}
         />
       )}
     </div>

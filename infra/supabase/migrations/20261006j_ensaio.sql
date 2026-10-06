@@ -604,7 +604,7 @@ begin
     end if;
   elsif v_esp_nome is not null then
     if v_tipo = 'interno' then
-      return jsonb_build_object('ok', false, 'msg', 'Especialista interno: escolha da lista (a lista muda por SQL em mkt.especialistas).');
+      return jsonb_build_object('ok', false, 'msg', 'Especialista interno: escolha da lista. Para incluir um nome novo, peça a quem cuida do sistema.');
     end if;
     if length(v_esp_nome) < 2 or length(v_esp_nome) > 120 then
       return jsonb_build_object('ok', false, 'msg', 'Nome do especialista: de 2 a 120 letras.');
@@ -670,7 +670,8 @@ begin
                                                          else 'Já existe projeto com a sigla ' || v_sigla || '.' end);
     when check_violation or foreign_key_violation then
       get stacked diagnostics v_con = constraint_name;
-      return jsonb_build_object('ok', false, 'msg', 'Combinação fora da regra (' || v_con || ').');
+      raise log 'trafego_projeto_salvar: regra % recusou', v_con;
+      return jsonb_build_object('ok', false, 'msg', 'Combinação fora da regra: confira tipo, unidade, tipo de lançamento, especialista e datas (fim depois do início).');
   end;
 
   if v_status is not null or exists (select 1 from mkt_trafego.planejamento where projeto_id = v_id) then
@@ -939,6 +940,10 @@ begin
          count(*) filter (where not (lower(btrim(x)) ~ '^[a-z0-9]+(-[a-z0-9]+)*$'))
     into v_lista, v_fora
     from jsonb_array_elements_text(p -> 'etiquetas') x;
+  -- resposta vazia (erro do ClickUp, token sem acesso) não pode apagar todas as etiquetas conhecidas
+  if cardinality(v_lista) = 0 then
+    return jsonb_build_object('ok', false, 'msg', 'Nenhuma etiqueta válida recebida: nada foi apagado.', 'fora_do_formato', v_fora);
+  end if;
   with apagar as (delete from mkt_trafego.clickup_etiquetas_vistas where etiqueta <> all (v_lista) returning 1)
   select count(*) into v_rem from apagar;
   insert into mkt_trafego.clickup_etiquetas_vistas (etiqueta, coletado_em) select e, now() from unnest(v_lista) e

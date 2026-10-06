@@ -19,6 +19,12 @@ describe('nome de campanha: válidos', () => {
       erros: [], avisos: [], nomeCanonico: 'RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1',
     });
   });
+  it('utm_campaign nome|id: o id da plataforma no fim é descartado (igual ao banco, 20261006e)', () => {
+    const r = t('RS | PB26 | LEADS | TESTE | AK1|120211234');
+    expect(r.pagina).toBe('ak1');
+    expect(r.descricao).toBe('TESTE');
+    expect(r.padrao).toBe(true);
+  });
   it('4 campos: página nula', () => {
     const r = t('CF | HT33 | VENDAS | ABERTURA DE CARRINHO');
     expect(r.padrao).toBe(true);

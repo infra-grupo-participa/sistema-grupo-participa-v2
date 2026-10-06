@@ -25,7 +25,7 @@ function LinhaDoTempo({ serie, dados, ate }: { serie: DiaSerie[]; dados: Clickup
           return (
             <div key={d.dia} className="relative flex h-full flex-1 flex-col justify-end" title={titulo}>
               {d.tarefas.length > 0 && (
-                <span className="absolute left-1/2 top-0 grid h-4 min-w-4 -translate-x-1/2 place-items-center rounded-full bg-[var(--purple)] px-1 text-[10px] font-semibold text-white">
+                <span className="absolute left-1/2 top-0 grid h-4 min-w-4 -translate-x-1/2 place-items-center rounded-full bg-[var(--purple)] px-1 text-[10px] font-semibold text-[var(--bg)]">
                   {d.tarefas.length}
                 </span>
               )}
@@ -59,10 +59,10 @@ export function ClickupPainel({ projetoId, serie, ate, versao }: { projetoId: nu
 /** O painel em si (sem carregar), para testar a renderização. */
 export function ClickupVista({ dados, serie, ate }: { dados: ClickupProjeto | null; serie: DiaSerie[]; ate: string }) {
   if (dados === null) {
-    return <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar as atividades (sem acesso, ou a migration 20261006i ainda não foi aplicada).</p>;
+    return <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar (sem conexão ou sem acesso). Recarregue a página; se continuar, avise quem cuida do sistema.</p>;
   }
   if (!dados.etiqueta) {
-    return <p className="text-sm text-[var(--fg-2)]">Este projeto não tem etiqueta do ClickUp cadastrada (em Marketing &gt; Projetos e páginas): sem atividades.</p>;
+    return <p className="text-sm text-[var(--fg-2)]">Este projeto não tem etiqueta do ClickUp: cadastre no botão Projeto, no alto desta tela.</p>;
   }
   return (
     <div>

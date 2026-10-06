@@ -23,10 +23,12 @@ function ModalConta({ inicial, config, onFechar, onSalvo }: { inicial: ContaForm
   async function salvar() {
     if (!f.conta_externa.trim()) { setErro('Informe o id da conta na plataforma.'); return; }
     if (f.nome.trim().length < 2) { setErro('Informe o nome da conta.'); return; }
+    if (salvando) return;
     setSalvando(true);
     const r = await salvarConta(f);
     setSalvando(false);
-    if (!r.ok) { setErro(r.msg); return; }
+    // a conta pode ter sido gravada e só a unidade/principal falhado: o próximo Salvar edita, não cria de novo
+    if (!r.ok) { if (r.id != null && f.id == null) set('id', r.id); setErro(r.msg); return; }
     onSalvo(r.msg);
   }
 
@@ -52,7 +54,7 @@ function ModalConta({ inicial, config, onFechar, onSalvo }: { inicial: ContaForm
           f.plataforma === 'google' ? 'ex.: 123-456-7890' : 'com ou sem act_')}
         {campo('Nome', <Input value={f.nome} onChange={(e) => set('nome', e.target.value)} maxLength={120} />, 'como aparece no gerenciador')}
         {campo('De quem é', (
-          <FilterSelect value={f.dono} onChange={(e) => set('dono', e.target.value as Dono)}>
+          <FilterSelect value={f.dono} onChange={(e) => { const d = e.target.value as Dono; setF((x) => ({ ...x, dono: d, unidade: unidadesDoDono(d).includes(x.unidade ?? '') ? x.unidade : '' })); }}>
             {DONOS.map((d) => <option key={d} value={d}>{ROTULO_DONO[d]}</option>)}
           </FilterSelect>
         ))}
@@ -87,12 +89,16 @@ export function ContasPainel({ config, flash, onMudou }: { config: ConfigTrafego
   }, [versao]);
 
   if (contas === undefined) return <Loading />;
+  const editar = (c: Conta) => setEdit({
+    id: c.id, plataforma: c.plataforma, conta_externa: c.conta_externa, nome: c.nome, dono: c.dono, cliente: c.cliente ?? '',
+    moeda: c.moeda, ativa: c.ativa, obs: c.obs ?? '', unidade: c.unidade ?? '', principal: !!c.principal,
+  });
   const plataforma = (c: string) => config.plataformas.find((p) => p.codigo === c)?.nome ?? c;
 
   return (
     <SectionCard
       title="Contas de anúncio"
-      subtitle="A coleta Meta/Google (próxima etapa) só traz campanha de conta cadastrada aqui."
+      subtitle="A coleta só traz campanha de conta cadastrada e ativa aqui. Clique na conta para editar."
       right={<Button size="sm" onClick={() => setEdit({ ...VAZIA })}><Icon name="plus" size={14} /> Nova conta</Button>}
     >
       {!contas ? <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar as contas.</p>
@@ -101,13 +107,11 @@ export function ContasPainel({ config, flash, onMudou }: { config: ConfigTrafego
             <Thead><Th>Plataforma</Th><Th>Id</Th><Th>Nome</Th><Th>Unidade</Th><Th>De quem é</Th><Th>Cliente</Th><Th>Moeda</Th><Th>Campanhas</Th><Th>Situação</Th></Thead>
             <tbody>
               {contas.map((c) => (
-                <Tr key={c.id} onClick={() => setEdit({
-                  id: c.id, plataforma: c.plataforma, conta_externa: c.conta_externa, nome: c.nome, dono: c.dono, cliente: c.cliente ?? '',
-                  moeda: c.moeda, ativa: c.ativa, obs: c.obs ?? '', unidade: c.unidade ?? '', principal: !!c.principal,
-                })}>
+                <Tr key={c.id} onClick={() => editar(c)}>
                   <Td>{plataforma(c.plataforma)}</Td>
                   <Td><span className="font-mono text-xs">{c.conta_externa}</span></Td>
-                  <Td>{c.nome}{c.principal && <> <Badge tone="info">principal</Badge></>}</Td>
+                  <Td><button type="button" className="text-left hover:underline focus-visible:underline" aria-label={`Editar a conta ${c.nome}`}
+                    onClick={(e) => { e.stopPropagation(); editar(c); }}>{c.nome}</button>{c.principal && <> <Badge tone="info">principal</Badge></>}</Td>
                   <Td>{c.unidade ? ROTULO_UNIDADE[c.unidade] ?? c.unidade : SEM_DADO}</Td>
                   <Td>{ROTULO_DONO[c.dono] ?? c.dono}</Td>
                   <Td>{c.cliente ?? (c.dono === 'grupo' ? '' : SEM_DADO)}</Td>

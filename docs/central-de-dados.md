@@ -842,7 +842,7 @@ estiver aplicada.
 pg_cron/Vault/`ops.cron_post` de mentira, `public.compras` da Hotmart, as tabelas e índices que a 20261005r do Arthur
 confere (com a expressão exata de produção) e `pg_trgm`; depois a **20261005m e a `20261005r_pessoas_e_crm_fundacao`
 reais da main** (com o índice pré-criado), e então a cadeia acima, cada ensaio no ponto dele e a migration em seguida.
-Resultado: todas aplicaram, **nenhuma `ERRADO`**; 343 `ok`; 2 PULADO esperados (7.tráfego da 20261006e e 6.web da
+Resultado: todas aplicaram, **nenhuma `ERRADO`**; 385 `ok` (rodada da auditoria de 06/10/2026); 2 PULADO esperados (7.tráfego da 20261006e e 6.web da
 20261006g, porque o que eles leem vem depois; provados em rodadas extras com a ordem trocada). A Mensageria e as F1 a F7
 do CRM **não rodaram no PGlite** (pedem vigia, pg_net, schema `arquivo`, pgcrypto); conferido no código que elas só
 alargam os `check` de `pessoas.eventos`/`identificadores` e não mexem em `pessoas.pessoas`, `atual`, `grupo`,
@@ -850,6 +850,54 @@ alargam os `check` de `pessoas.eventos`/`identificadores` e não mexem em `pesso
 SELECT): `pessoas.pessoas` com `ref`, `situacao`, `mesclada_em`, `teste`; `pessoas.registrar` grava
 `mkt_web.visitantes.lead_ref`; `mkt.campanha_traduzir` ainda com o corpo da 20261005m; `mkt_web` vazio; objetivos
 `DISTRIBUIÇÃO, LEADS, LEMBRETE, REMARKETING, VENDAS`.
+
+## Auditoria antes de publicar (06/10/2026, branch `victor`)
+
+Pedido do Victor: tudo funcional, performance, experiência de uso e banco do Marketing sem dado duplicado. Mudanças
+feitas nas migrations NÃO aplicadas (20261006e a 20261006l) e nas telas; cadeia de ensaios em PGlite sem `ERRADO`
+(385 `ok`; ordem inversa e "Web antes do Tráfego" também).
+
+**Banco (nossas, não aplicadas):**
+
+- **Page view da campanha numa função só:** `mkt_web.visitas_campanha(projeto, de, até)` (20261006h, interna) é a regra
+  única; `public.mkt_web_connect` e `mkt_trafego.resumo` (20261006g) usam ela. Antes a regra estava escrita duas vezes e
+  o casamento era por `OR` (visitas × campanhas); agora são duas junções por igualdade (id; sem id, nome exato).
+  `base_web` do `trafego_config` passa a olhar essa função.
+- **Período nas tabelas filhas da Web** (20261006h): visualizações, eventos, cliques e erros filtrados também por `dia`
+  (o `dia` é o da visita) em achados, melhorias, comparar, fluxo e calor: usa o índice (projeto, dia).
+- **MQL da Web** (`mkt_web_leads`): `pessoas.grupo` uma vez por pessoa (lateral) em vez de uma vez por par pessoa × evento.
+- **`mkt_web.calcular_dia` com projeto obrigatório** e o agregar passando projeto a projeto; **retenção (`manter`)
+  projeto a projeto**: os dois usam os índices (projeto, dia) em vez de varrer as tabelas.
+- **Índices de FK:** `mkt_web.sessoes (entrada_pagina_id)` e `mkt_trafego.campanhas (pagina_id)`.
+- **FKs da Web para `mkt.projetos`** passam a `on delete restrict` (era `cascade`), igual a todas as outras.
+- **Tradução do nome de campanha** (20261006e e `campanha.ts`): `nome|id` no fim (id só dígitos, 6 ou mais) é descartado
+  antes de ler. Quem manda o utm cru (`pessoas.registrar` do Arthur) passa a ler página e descrição certas.
+- **Aba "Campanhas fora do padrão":** o número vem de `trafego_config.campanhas_fora_padrao` (todas, com ou sem projeto).
+- **Mensagens:** sem nome técnico de regra (constraint) nem "por SQL" na tela; o detalhe vai para o log (`raise log`).
+- **Guardas e retornos:** `trafego_clickup_etiquetas_receber` com lista vazia não apaga as etiquetas; a 20261006l aborta
+  se `checklist_itens` tiver item além da semente; `trafego_projeto_item_marcar` com nulo não desmarca por engano.
+- **Reversão da 20261006i** não apaga mais `meta_ads_token` nem `clickup_api_token` (cadastrados à mão).
+
+**Telas (Tráfego e Projetos):**
+
+- Número no jeito brasileiro (`domain/numero.ts`): "10.000" era salvo como **10** na verba; agora 10.000 e 10.000,50
+  valem. Nos modelos dava para digitar vírgula e dia negativo (`ui/CampoNumero.tsx`).
+- Conta de anúncio: trocar "De quem é" limpa a unidade que não vale; se a unidade falhar depois de gravar a conta, o
+  próximo Salvar edita (não tenta criar de novo).
+- Projeto novo abre a vida do projeto logo depois de salvar. Salvar dentro da vida do projeto recarrega só a vida; a
+  Central (resumo inteiro e alertas) recarrega ao fechar.
+- Erro de rede, sem acesso e função ausente com mensagem de gente (sem nome de migration); proteção contra clique duplo
+  ao apagar; tirar campanha esperada pede confirmação; Esc na lista de etiquetas fecha só a lista.
+- Acessibilidade: sigla do projeto e nome da conta são botões (teclado); abas ligadas ao painel; checklist com texto
+  para leitor de tela; subir/descer fase dizem qual fase.
+- Textos: status do Meta em português, "Sem projeto" em vez de "Pelo nome (sem dado)", fase de antecipação na dica,
+  hint da Hotmart igual à regra (captação até o evento), etiqueta do ClickUp pelo botão Projeto, prévia do modelo com
+  centavos e %, tabela da prévia rola no celular; em Projetos e páginas, aviso de que início e fim saem da captação e do
+  evento.
+
+**Achados para decidir (não mexidos):** ver o relatório da auditoria (receita sem as vendas do Escritório em
+`public.compras`, coleta antiga do Meta em `controle.*`, MQL da Web × base de pessoas, leads 0 × "sem dado", timeout de
+150 s das rotinas HTTP, Esc do Modal/Drawer, duplicidades entre Mensageria e CRM).
 
 ## Branches
 

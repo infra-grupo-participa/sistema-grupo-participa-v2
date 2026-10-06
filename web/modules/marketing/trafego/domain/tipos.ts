@@ -13,6 +13,8 @@ export const DONOS: Dono[] = ['grupo', 'diamante', 'aurum'];
 export interface Codigo { codigo: string; nome: string }
 
 export interface ConfigTrafego {
+  /** todas as campanhas fora do padrão, com ou sem projeto (o número da aba). */
+  campanhas_fora_padrao?: number;
   plataformas: Codigo[];
   status: Codigo[];
   fases: Codigo[];

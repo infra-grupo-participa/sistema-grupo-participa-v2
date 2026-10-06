@@ -47,12 +47,12 @@ export function EtiquetaClickupCampo({ valor, onMudar }: { valor: string; onMuda
           if (e.key === 'ArrowDown') { e.preventDefault(); setAberto(true); setAtivo((i) => Math.min(i + 1, lista.length - 1)); }
           else if (e.key === 'ArrowUp') { e.preventDefault(); setAtivo((i) => Math.max(i - 1, 0)); }
           else if (e.key === 'Enter' && aberto && ativo >= 0 && lista[ativo]) { e.preventDefault(); escolher(lista[ativo].etiqueta); }
-          else if (e.key === 'Escape') setAberto(false);
+          else if (e.key === 'Escape' && aberto && lista.length > 0) { e.stopPropagation(); setAberto(false); } // só fecha a lista, não o cadastro
         }}
       />
       {aberto && lista.length > 0 && (
         <ul id={`${id}-lista`} role="listbox"
-          className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2,var(--card))] py-1 shadow-lg">
+          className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] py-1 shadow-[var(--shadow-lg)]">
           {lista.map((e, i) => (
             <li key={e.etiqueta} id={`${id}-${i}`} role="option" aria-selected={i === ativo}
               onMouseDown={(ev) => { ev.preventDefault(); if (fechar.current) clearTimeout(fechar.current); escolher(e.etiqueta); }}
@@ -64,7 +64,7 @@ export function EtiquetaClickupCampo({ valor, onMudar }: { valor: string; onMuda
         </ul>
       )}
       {naoAchou && <span className="mt-1 block text-[11px] text-[var(--yellow)]">Não encontrada no ClickUp. Confira se está escrita igual à etiqueta de lá (pode salvar assim mesmo).</span>}
-      {indisponivel && <span className="mt-1 block text-[11px] text-[var(--fg-3)]">Busca de etiquetas indisponível (a migration 20261006j ainda não foi aplicada?). Digite a etiqueta exata.</span>}
+      {indisponivel && <span className="mt-1 block text-[11px] text-[var(--fg-3)]">Busca de etiquetas indisponível agora. Digite a etiqueta exata.</span>}
     </div>
   );
 }

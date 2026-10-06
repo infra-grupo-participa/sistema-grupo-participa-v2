@@ -92,10 +92,10 @@ function ModalProjeto({ inicial, onFechar, onSalvo }: { inicial: ProjetoForm; on
         <div className="text-xs text-[var(--fg-3)] self-end pb-2">
           Tipo (interno/externo), unidade, tipo de lançamento, especialista, períodos e contas: em Marketing &gt; Tráfego, botão Projeto.
         </div>
-        <Campo rotulo="Início">
+        <Campo rotulo="Início" dica="com captação ou evento no Tráfego, sai deles">
           <Input type="date" value={f.inicio ?? ''} onChange={(e) => set('inicio', e.target.value || null)} />
         </Campo>
-        <Campo rotulo="Fim">
+        <Campo rotulo="Fim" dica="idem">
           <Input type="date" value={f.fim ?? ''} onChange={(e) => set('fim', e.target.value || null)} />
         </Campo>
         <div className="sm:col-span-2">

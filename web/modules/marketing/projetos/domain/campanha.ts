@@ -86,7 +86,8 @@ const SLUG_PAGINA = CODIGO_PAGINA_RE;
 
 export function traduzirCampanha(nome: string | null | undefined, listas: ListasCampanha): CampanhaTraduzida {
   const bruto = nome ?? '';
-  const partes = bruto.split('|').map(limpa);
+  // utm_campaign no formato nome|id (gp-operacoes): o id da plataforma no fim não é parte do nome (igual ao banco, 20261006e)
+  const partes = bruto.replace(/\|\s*[0-9]{6,}\s*$/, '').split('|').map(limpa);
   const vazio = (erro: ErroCampanha, campos: number): CampanhaTraduzida => ({
     padrao: false, gestor: null, projeto: null, objetivo: null, descricao: null, descricaoPartes: [], pagina: null, campos,
     erros: [erro], avisos: [], nomeCanonico: null,

@@ -26,7 +26,7 @@ describe('resumo do dia na Central (demonstração)', () => {
     expect(h).toContain('Nada pegando fogo ontem');
     expect(h).toContain('Ainda não há gasto coletado');
     expect(h).toContain('meta de leads e CPL não são avaliados');
-    expect(html(createElement(ResumoDiaVista, { r: null, onAbrir: () => {} }))).toContain('20261006i ainda não foi aplicada');
+    expect(html(createElement(ResumoDiaVista, { r: null, onAbrir: () => {} }))).toContain('Não foi possível carregar');
   });
 });
 
@@ -41,6 +41,6 @@ describe('ClickUp na vida do projeto (demonstração)', () => {
   });
   it('projeto sem etiqueta e sem a migration', () => {
     expect(html(createElement(ClickupVista, { dados: demoClickup(2), serie: [], ate: '2026-10-04' }))).toContain('não tem etiqueta do ClickUp');
-    expect(html(createElement(ClickupVista, { dados: null, serie: [], ate: '2026-10-04' }))).toContain('20261006i ainda não foi aplicada');
+    expect(html(createElement(ClickupVista, { dados: null, serie: [], ate: '2026-10-04' }))).toContain('Não foi possível carregar');
   });
 });
