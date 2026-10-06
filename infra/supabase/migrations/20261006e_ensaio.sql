@@ -12,13 +12,15 @@
 -- Dado fictício: o projeto ZZC28 "Projeto Ensaio Campanha" com a página zz1. Tudo some no rollback.
 --
 -- Esperado: NENHUMA linha começando com "ERRADO".
---   1 o exemplo da Black Friday: descrição de 5 partes, fora do padrão SÓ pelo objetivo (ANTECIPAÇÃO fora da lista)
---   2 se ANTECIPAÇÃO entrar na lista: no padrão, com ou sem acento
+--   1 ANTECIPAÇÃO na lista (decisão do Victor, 06/10/2026, semeada por esta migration) e o exemplo da Black Friday:
+--     descrição de 5 partes, objetivo reconhecido com ou sem acento
+--   2 ANTECIPAÇÃO no padrão, com ou sem acento
 --   3 página só no último campo e só com formato de slug (ak1, ak1-b, jt10); senão é descrição
 --   4 descrição de uma parte e o formato antigo (mesma resposta de antes, mais as chaves novas)
 --   5 motivos de fora do padrão: menos de 3 campos, só 3 campos, campo vazio, gestor, projeto, objetivo
 --   6 quem usa a função: chaves que pessoas/CRM (main) e o Tráfego leem; public.mkt_campanha_traduzir como admin
---   7 campanhas do Tráfego relidas (só se a 20261006g estiver aplicada)
+--   7 campanhas do Tráfego relidas e a fase antecipação logo antes da captação com o mapa ANTECIPAÇÃO → antecipação
+--     (só se a 20261006g estiver aplicada; na ordem normal ela vem DEPOIS desta e o passo fica PULADO)
 
 begin;
 set local lock_timeout = '3s';
@@ -141,6 +143,11 @@ end
 $$;
 revoke all on function mkt.campanha_traduzir(text) from public, anon, authenticated;
 
+-- ─── 1b. ANTECIPAÇÃO na lista de objetivos (Victor, 06/10/2026: vem antes da captação) ───────────────────────────────
+insert into mkt.campanha_objetivos (codigo) values ('ANTECIPAÇÃO') on conflict (codigo) do nothing;
+-- a fase "antecipação" (logo antes da captação) e o mapa ANTECIPAÇÃO → antecipação nascem na 20261006g, que cria
+-- mkt_trafego.fases e vem depois desta.
+
 -- ─── 2. Reler as campanhas guardadas do Tráfego (só se a 20261006g já estiver aplicada) ─────────────────────────────
 do $reler$
 declare v_n int := 0;
@@ -163,8 +170,12 @@ begin
   r := mkt.campanha_traduzir('CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ | ABO | THRUPLAY');
   if r ->> 'gestor' <> 'CF' or r ->> 'projeto' <> 'BF26' or r ->> 'objetivo' <> 'ANTECIPAÇÃO'
      or r ->> 'descricao' <> 'TEASER | META | PQ | ABO | THRUPLAY' or r ->> 'pagina' is not null or (r ->> 'campos')::int <> 8
-     or (not exists (select 1 from mkt.campanha_objetivos where codigo = 'ANTECIPAÇÃO' and ativo) and r -> 'erros' <> '["objetivo_desconhecido"]'::jsonb) then
+     or (r -> 'erros') ? 'objetivo_desconhecido' then
     raise exception '20261006e: o exemplo da Black Friday não foi lido como esperado: %', r;
+  end if;
+  r := mkt.campanha_traduzir('CF | BF26 | ANTECIPACAO | TEASER');
+  if r ->> 'objetivo' <> 'ANTECIPAÇÃO' or (r -> 'erros') ? 'objetivo_desconhecido' then
+    raise exception '20261006e: ANTECIPAÇÃO sem acento não foi reconhecida: %', r;
   end if;
   r := mkt.campanha_traduzir('RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1');
   if not (r ->> 'padrao')::boolean or r ->> 'pagina' <> 'ak1' or r ->> 'descricao' <> 'TESTE DE ESCRITÓRIOS' then
@@ -202,6 +213,7 @@ select id, 'zz1', 'Página Ensaio', 'exemplo.invalid', '/zz1/', 'captura' from m
 do $t$
 declare r jsonb; v_tem boolean := exists (select 1 from mkt.campanha_objetivos where codigo = 'ANTECIPAÇÃO' and ativo);
 begin
+  perform pg_temp.ok('1.lista', v_tem, 'ANTECIPAÇÃO na lista de objetivos (mkt.campanha_objetivos), ativa');
   -- 1. o exemplo do Victor
   r := pg_temp.t('CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ | ABO | THRUPLAY');
   perform pg_temp.ok('1.black friday', r ->> 'gestor' = 'CF' and r ->> 'projeto' = 'BF26' and r ->> 'objetivo' = 'ANTECIPAÇÃO'
@@ -215,7 +227,7 @@ begin
   perform pg_temp.ok('1.sem acento', r ->> 'descricao' = 'TEASER | META | PQ | ABO | THRUPLAY'
     and (v_tem or (r -> 'erros' = '["objetivo_desconhecido"]'::jsonb and r ->> 'objetivo' = 'ANTECIPACAO')),
     'ANTECIPACAO (sem acento): o mesmo, e a tela mostra o que foi escrito');
-  -- 2. se ANTECIPAÇÃO entrar na lista (pergunta ao Victor): no padrão
+  -- 2. ANTECIPAÇÃO na lista (decisão do Victor, 06/10/2026): no padrão
   insert into mkt.campanha_objetivos (codigo) values ('ANTECIPAÇÃO') on conflict (codigo) do update set ativo = true;
   r := pg_temp.t('CF | BF26 | ANTECIPACAO | TEASER | META | PQ | ABO | THRUPLAY');
   perform pg_temp.ok('2.com a lista', (r ->> 'padrao')::boolean and r ->> 'objetivo' = 'ANTECIPAÇÃO' and r -> 'avisos' ? 'sem_acento'
@@ -288,6 +300,12 @@ begin
   else
     perform pg_temp.ok('7.tráfego', not exists (select 1 from mkt_trafego.campanhas c where c.leitura is distinct from mkt.campanha_traduzir(c.nome)),
       'campanhas do Tráfego relidas: a leitura guardada é a da regra nova');
+    perform pg_temp.ok('7.antecipação',
+      (select ordem from mkt_trafego.fases where codigo = 'antecipacao') = (select ordem from mkt_trafego.fases where codigo = 'captacao') - 1
+      and (select count(*) from mkt_trafego.fases where codigo = 'antecipacao') = 1
+      and (select fase from mkt_trafego.objetivo_fase where objetivo = 'ANTECIPAÇÃO') = 'antecipacao'
+      and (select count(*) from mkt_trafego.fases f1 join mkt_trafego.fases f2 on f1.ordem = f2.ordem and f1.codigo < f2.codigo) = 0,
+      'fase antecipação logo antes da captação (ordem sem repetição) e mapa ANTECIPAÇÃO → antecipação');
   end if;
 end
 $t$;

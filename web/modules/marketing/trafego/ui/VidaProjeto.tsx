@@ -332,7 +332,7 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
         </SectionCard>
 
         <div id="vp-fases" />
-        <SectionCard title="Fases: planejado × gasto" subtitle="A fase da campanha sai do objetivo do nome (LEADS e VENDAS = captação; AQUECIMENTO; LEMBRETE; REMARKETING; CARRINHO = abertura de carrinho). A correção à mão na campanha prevalece. DISTRIBUIÇÃO fica sem fase até alguém marcar."
+        <SectionCard title="Fases: planejado × gasto" subtitle="A fase da campanha sai do objetivo do nome (LEADS e VENDAS = captação; AQUECIMENTO; ANTECIPAÇÃO, logo antes da captação; LEMBRETE; REMARKETING; CARRINHO = abertura de carrinho). A correção à mão na campanha prevalece. DISTRIBUIÇÃO fica sem fase até alguém marcar."
           right={<Button size="sm" onClick={() => setEditFase({ projeto_id: r.projeto_id, fase: '', verba: '', inicio: '', fim: '', obs: '' })}><Icon name="plus" size={14} /> Nova fase</Button>}>
           {r.captacao_inicio && <p className="mb-2 text-xs text-[var(--fg-3)]">Fase de captação sem data: vale o período de captação do projeto ({dataBR(r.captacao_inicio)} a {dataBR(r.captacao_fim)}) como padrão.</p>}
           <Fases vida={vida} onApagar={setApagar} onEditar={(f) => setEditFase({

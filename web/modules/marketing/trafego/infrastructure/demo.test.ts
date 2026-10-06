@@ -26,9 +26,13 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
   it('fora do padrão e sem projeto aparecem; fase fora da lista recusada', () => {
     expect(demoCampanhas(null, false, true).length).toBeGreaterThan(0);
     expect(demoCampanhas(null, true, false).map((c) => c.id)).toEqual([7, 8, 12, 15]);
-    const bf = demoCampanhas(null, false, true).find((c) => c.id === 13)!;
-    expect(bf.erros).toEqual(['objetivo_desconhecido']);
-    expect(motivoErro(bf.erros[0], { ...bf, projeto: bf.projeto_lido })).toBe('Objetivo ANTECIPAÇÃO não está na lista');
+    const bf = demoCampanhas(null, false, false).find((c) => c.id === 13)!;
+    expect(demoCampanhas(null, false, true).some((c) => c.id === 13)).toBe(false);
+    // ANTECIPAÇÃO entrou na lista (Victor, 06/10/2026): fase antecipação, logo antes da captação
+    expect(bf.erros).not.toContain('objetivo_desconhecido');
+    expect(bf.objetivo).toBe('ANTECIPAÇÃO');
+    expect(bf.fase).toBe('antecipacao');
+    expect(motivoErro('objetivo_desconhecido', { ...bf, objetivo: 'XYZ', projeto: bf.projeto_lido })).toBe('Objetivo XYZ não está na lista');
     expect(demoCampanhas(null, false, true).some((c) => c.id === 14)).toBe(false);
     expect(demoAjustarCampanha({ id: 4, fase: 'xyz' }).ok).toBe(false);
     expect(demoSalvarFase({ projeto_id: 1, fase: 'captacao', verba: '1' }).ok).toBe(false);
@@ -118,9 +122,25 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
     demoAtivarModelo(r.id!, false);
     expect(demoModelos().find((x) => x.id === r.id)!.unidades[0].padrao).toBe(false);
   });
+  it('SendFlow: grupo de leads onde há campanha LEADS, grupo de compradores onde há VENDAS (grupo é etapa do funil)', () => {
+    const LEADS = 'Automação de ingresso no grupo de leads configurada no SendFlow';
+    const COMPRADORES = 'Automação de ingresso no grupo de compradores configurada no SendFlow';
+    const ms = demoModelos().filter((m) => m.nome.startsWith('Exemplo: '));
+    expect(ms).toHaveLength(9);
+    for (const m of ms) {
+      const objs = m.campanhas.map((c) => c.objetivo);
+      const textos = m.itens.map((i) => i.texto);
+      expect(textos.includes(LEADS)).toBe(objs.includes('LEADS'));
+      expect(textos.includes(COMPRADORES)).toBe(objs.includes('VENDAS'));
+      expect(textos.some((t) => t.includes('grupo do WhatsApp'))).toBe(false);
+    }
+    expect(ms.find((m) => m.nome === 'Exemplo: Lançamento clássico CSM')!.itens.map((i) => i.texto)).toEqual([LEADS]);
+    expect(ms.find((m) => m.nome === 'Exemplo: Lançamento pago CSM')!.itens.map((i) => i.texto)).toEqual([COMPRADORES]);
+    expect(ms.find((m) => m.nome === 'Exemplo: ATM CSM')!.itens).toEqual([]);
+  });
   it('checklist por momento, item do modelo marcado, item à mão, alerta em captação', () => {
     const c = demoChecklist(7)!;
-    expect(c.manuais[0]).toMatchObject({ texto: 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow', ok: true, do_modelo: true, momento: 'antes' });
+    expect(c.manuais[0]).toMatchObject({ texto: 'Automação de ingresso no grupo de compradores configurada no SendFlow', ok: true, do_modelo: true, momento: 'antes' });
     expect(c.automaticos.find((i) => i.codigo === 'campanhas_esperadas')!.detalhe).toBe('1 de 5');
     expect(demoResumo().find((l) => l.sigla === 'LPEXA26')!.checklist_feitos).toBe(c.feitos);
     demoMarcarItem(c.manuais[0].id!, false);
@@ -129,7 +149,7 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
     expect(demoSalvarItem({ projeto_id: 7, texto: 'pixel conferido (EXEMPLO)', momento: 'antes' }).ok).toBe(false);
     expect(demoChecklist(6)!.automaticos.find((i) => i.codigo === 'hotmart')!.aplica).toBe(false);
     const a = demoAlertas().alertas.find((x) => x.regra === 'checklist_incompleto' && x.sigla === 'LPEXA26')!;
-    expect(a.detalhe.itens).toContain('Automação de ingresso no grupo do WhatsApp configurada no SendFlow');
+    expect(a.detalhe.itens).toContain('Automação de ingresso no grupo de compradores configurada no SendFlow');
   });
 });
 

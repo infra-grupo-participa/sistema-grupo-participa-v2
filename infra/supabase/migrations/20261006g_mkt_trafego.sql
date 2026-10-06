@@ -16,16 +16,16 @@
 --       Tráfego pelo id da campanha (campaign_id ou o id do utm_campaign nome|id, padrão do gp-operacoes); sem id, pelo
 --       nome exato. Sem a 20261006h: nulos.
 --     - Um projeto pode ter VÁRIOS gestores (projeto_gestores, das listas de mkt.campanha_gestores).
---     - Fases: aquecimento, captação, lembrete, remarketing, abertura de carrinho. A fase da campanha sai do OBJETIVO do
+--     - Fases: aquecimento, antecipação, captação, lembrete, remarketing, abertura de carrinho. A fase da campanha sai do OBJETIVO do
 --       nome (tabela objetivo_fase, configurável); a correção à mão por campanha (fase_manual) prevalece. Sem regra e
 --       sem correção = "sem fase". Mapa: LEADS → captação, VENDAS → captação (lançamento pago: vende o ingresso em vez
 --       de captar lead), LEMBRETE → lembrete, REMARKETING → remarketing, CARRINHO → abertura de carrinho, AQUECIMENTO →
---       aquecimento. DISTRIBUIÇÃO (de conteúdo) NÃO tem fase automática: pode ou não ser aquecimento; fica "sem fase"
+--       aquecimento, ANTECIPAÇÃO → antecipação (Victor, 06/10/2026: antes da captação). DISTRIBUIÇÃO (de conteúdo) NÃO tem fase automática: pode ou não ser aquecimento; fica "sem fase"
 --       até alguém marcar à mão na campanha.
 --     - Objetivos novos no padrão de nome: CARRINHO (anuncia o produto principal na abertura de carrinho, em lançamento
 --       pago ou gratuito) e AQUECIMENTO. Entram em mkt.campanha_objetivos (lista da 20261005m) por insert idempotente, e
 --       mkt.campanha_traduzir passa a reconhecer (ela lê a lista). Lista final: LEADS, VENDAS, REMARKETING, LEMBRETE,
---       DISTRIBUIÇÃO, CARRINHO, AQUECIMENTO.
+--       DISTRIBUIÇÃO, CARRINHO, AQUECIMENTO, ANTECIPAÇÃO (esta também na 20261006e).
 --     - Atividades do ClickUp ficam na tela (lugar reservado nesta etapa, sem integrar).
 --   Fontes: Projetos/sistema-unico/central-de-dados/{plano-trafego.md, area-de-trafego.md} no cérebro do Victor.
 --
@@ -122,7 +122,7 @@ create table mkt_trafego.fases (
   ordem  smallint not null,
   ativa  boolean not null default true
 );
-comment on table mkt_trafego.fases is 'Fases da verba de um projeto (aquecimento, captação, lembrete, remarketing, abertura de carrinho). Lista configurável.';
+comment on table mkt_trafego.fases is 'Fases da verba de um projeto (aquecimento, antecipação, captação, lembrete, remarketing, abertura de carrinho). Lista configurável.';
 
 create table mkt_trafego.objetivo_fase (
   objetivo text primary key references mkt.campanha_objetivos(codigo) on delete cascade,
@@ -269,15 +269,18 @@ insert into mkt_trafego.status_projeto (codigo, nome, ordem) values
   ('em_planejamento', 'Em planejamento', 1), ('ativo', 'Ativo', 2), ('pausado', 'Pausado', 3), ('inativo', 'Inativo', 4),
   ('encerrado', 'Encerrado', 5);
 -- Fases: Victor, 05/10/2026 ("aquecimento, captação, lembrete, remarketing e abertura de carrinho").
+-- Antecipação (Victor, 06/10/2026): vem ANTES da captação, logo antes dela na ordem.
 insert into mkt_trafego.fases (codigo, nome, ordem) values
-  ('aquecimento', 'Aquecimento', 1), ('captacao', 'Captação', 2), ('lembrete', 'Lembrete', 3),
-  ('remarketing', 'Remarketing', 4), ('abertura_carrinho', 'Abertura de carrinho', 5);
--- Objetivos CARRINHO e AQUECIMENTO no padrão de nome (Victor, 05/10/2026). A lista é da 20261005m; insert idempotente.
-insert into mkt.campanha_objetivos (codigo) values ('CARRINHO'), ('AQUECIMENTO') on conflict (codigo) do nothing;
+  ('aquecimento', 'Aquecimento', 1), ('antecipacao', 'Antecipação', 2), ('captacao', 'Captação', 3), ('lembrete', 'Lembrete', 4),
+  ('remarketing', 'Remarketing', 5), ('abertura_carrinho', 'Abertura de carrinho', 6);
+-- Objetivos CARRINHO e AQUECIMENTO no padrão de nome (Victor, 05/10/2026) e ANTECIPAÇÃO (Victor, 06/10/2026; também na
+-- 20261006e). A lista é da 20261005m; insert idempotente.
+insert into mkt.campanha_objetivos (codigo) values ('CARRINHO'), ('AQUECIMENTO'), ('ANTECIPAÇÃO') on conflict (codigo) do nothing;
 -- Objetivo → fase (Victor, 05/10/2026). DISTRIBUIÇÃO de propósito sem fase automática (marca-se à mão na campanha).
 insert into mkt_trafego.objetivo_fase (objetivo, fase)
 select o, f from (values ('LEADS', 'captacao'), ('VENDAS', 'captacao'), ('LEMBRETE', 'lembrete'),
-                         ('REMARKETING', 'remarketing'), ('CARRINHO', 'abertura_carrinho'), ('AQUECIMENTO', 'aquecimento')) v(o, f)
+                         ('REMARKETING', 'remarketing'), ('CARRINHO', 'abertura_carrinho'), ('AQUECIMENTO', 'aquecimento'),
+                         ('ANTECIPAÇÃO', 'antecipacao')) v(o, f)
  where exists (select 1 from mkt.campanha_objetivos co where co.codigo = v.o);
 
 -- ─── 5. Funções internas (sem grant para ninguém) ────────────────────────────────────────────────────────────────────
@@ -335,8 +338,9 @@ $$;
 -- Resumo por projeto: as colunas da Central do Tráfego. p_projeto nulo = todos os projetos de mkt.projetos.
 -- O que ainda não tem fonte volta NULO (nunca zero inventado):
 --   investido etc.: nulo enquanto não houver nenhuma linha de desempenho das campanhas do projeto (antes da coleta).
---   leads e mql: da base de pessoas (pessoas.eventos, 20261005r_pessoas_e_crm_fundacao); nulos se a base não existir. Pessoa de teste e
---     pessoa mesclada não contam.
+--   leads e mql: da base de pessoas do Arthur (pessoas.eventos, 20261005r_pessoas_e_crm_fundacao, aplicada); nulos se a
+--     base não existir. Pessoa distinta por projeto; pessoa mesclada conta como a que ficou (pessoas.atual); pessoa de
+--     teste não conta.
 --   receita: nula (Hotmart ainda não ligada ao projeto).
 --   page views e leads da página: a MESMA regra de public.mkt_web_connect (20261006h; mudou lá, muda aqui): visitas
 --     (mkt_web.sessoes, sem teste) do projeto cuja campanha casa com uma campanha do Tráfego do projeto: pelo ID
@@ -372,18 +376,21 @@ begin
     $q$ into v_pv using p_projeto;
   end if;
 
-  if to_regclass('pessoas.eventos') is not null and to_regclass('pessoas.pessoas') is not null then
+  -- base de pessoas do Arthur (20261005r_pessoas_e_crm_fundacao): pessoa mesclada conta como a que ficou (pessoas.atual)
+  if to_regclass('pessoas.eventos') is not null and to_regclass('pessoas.pessoas') is not null
+     and to_regprocedure('pessoas.atual(uuid)') is not null then
     execute $q$
       select coalesce(jsonb_object_agg(x.projeto_id::text, jsonb_build_object('leads', x.leads, 'mql', x.mql)), '{}'::jsonb)
-        from (select e.projeto_id,
-                     count(distinct e.pessoa_id) filter (where e.tipo = 'lead') as leads,
-                     count(distinct e.pessoa_id) filter (where e.tipo = 'mql') as mql
-                from pessoas.eventos e
-                join pessoas.pessoas p on p.id = e.pessoa_id
-               where e.projeto_id is not null and e.tipo in ('lead', 'mql')
-                 and not p.teste and p.situacao <> 'mesclada'
-                 and ($1 is null or e.projeto_id = $1)
-               group by e.projeto_id) x
+        from (select y.projeto_id,
+                     count(distinct y.pessoa_id) filter (where y.tipo = 'lead') as leads,
+                     count(distinct y.pessoa_id) filter (where y.tipo = 'mql') as mql
+                from (select e.projeto_id, e.tipo, pessoas.atual(e.pessoa_id) as pessoa_id
+                        from pessoas.eventos e
+                       where e.projeto_id is not null and e.tipo in ('lead', 'mql')
+                         and ($1 is null or e.projeto_id = $1)) y
+                join pessoas.pessoas p on p.id = y.pessoa_id
+               where not p.teste
+               group by y.projeto_id) x
     $q$ into v_leads using p_projeto;
   end if;
 
@@ -1043,14 +1050,15 @@ begin
     raise exception '20261006g: esperava 13 funções públicas trafego_*';
   end if;
   if not coalesce((mkt.campanha_traduzir('RS | PB26 | CARRINHO | ABERTURA') ->> 'objetivo') = 'CARRINHO'
-                  and (mkt.campanha_traduzir('RS | PB26 | AQUECIMENTO | X') ->> 'objetivo') = 'AQUECIMENTO', false) then
-    raise exception '20261006g: mkt.campanha_traduzir não reconhece CARRINHO ou AQUECIMENTO';
+                  and (mkt.campanha_traduzir('RS | PB26 | AQUECIMENTO | X') ->> 'objetivo') = 'AQUECIMENTO'
+                  and (mkt.campanha_traduzir('RS | PB26 | ANTECIPAÇÃO | X') ->> 'objetivo') = 'ANTECIPAÇÃO', false) then
+    raise exception '20261006g: mkt.campanha_traduzir não reconhece CARRINHO, AQUECIMENTO ou ANTECIPAÇÃO';
   end if;
   if (select count(*) from mkt_trafego.plataformas) <> 2 or (select count(*) from mkt_trafego.status_projeto) <> 5
-     or (select count(*) from mkt_trafego.fases) <> 5 or (select count(*) from mkt_trafego.objetivo_fase) <> 6 or (select count(*) from mkt_trafego.contas) <> 0
+     or (select count(*) from mkt_trafego.fases) <> 6 or (select count(*) from mkt_trafego.objetivo_fase) <> 7 or (select count(*) from mkt_trafego.contas) <> 0
      or (select count(*) from mkt_trafego.campanhas) <> 0 or (select count(*) from mkt_trafego.desempenho_dia) <> 0
      or (select count(*) from mkt_trafego.planejamento) <> 0 or (select count(*) from mkt_trafego.projeto_gestores) <> 0 then
-    raise exception '20261006g: semente diferente do esperado (2 plataformas, 5 status, 5 fases, 6 objetivo→fase, resto vazio)';
+    raise exception '20261006g: semente diferente do esperado (2 plataformas, 5 status, 6 fases, 7 objetivo→fase, resto vazio)';
   end if;
 end
 $confere$;
@@ -1063,4 +1071,5 @@ $confere$;
 --   loop execute format('drop function %s', f); end loop; end $$;
 -- drop schema mkt_trafego cascade;
 -- delete from mkt.campanha_objetivos where codigo in ('CARRINHO', 'AQUECIMENTO');  -- só se nenhuma campanha os usa
+-- (ANTECIPAÇÃO fica: é da 20261006e; a reversão dela diz como tirar)
 -- commit;

@@ -16,7 +16,7 @@ const L: ListasCadastro = {
   ],
   regras: { csm: ['lancamento_classico', 'lancamento_pago', 'lpsg', 'atm'], escritorio: ['lancamento_classico', 'atm'], aurum: ['palestra'], diamantes: ['lancamento_classico', 'lancamento_pago'] },
   especialistas: [{ id: 1, nome: 'Marcio Carvalho de Sá', tipo: 'interno', unidade: null }, { id: 9, nome: 'Especialista Exemplo', tipo: 'externo', unidade: 'aurum' }],
-  objetivos: ['AQUECIMENTO', 'CARRINHO', 'DISTRIBUIÇÃO', 'LEADS', 'LEMBRETE', 'REMARKETING', 'VENDAS'],
+  objetivos: ['ANTECIPAÇÃO', 'AQUECIMENTO', 'CARRINHO', 'DISTRIBUIÇÃO', 'LEADS', 'LEMBRETE', 'REMARKETING', 'VENDAS'],
   utm: { meta: [
     { parametro: 'utm_source', valor: 'metaads' }, { parametro: 'utm_campaign', valor: '{{campaign.name}}|{{campaign.id}}' },
     { parametro: 'utm_medium', valor: '{{adset.name}}|{{adset.id}}' }, { parametro: 'utm_content', valor: '{{ad.name}}|{{ad.id}}' },
@@ -82,7 +82,7 @@ describe('gerador de nome de campanha e UTM', () => {
       .toBe('CF | PB26 | DISTRIBUIÇÃO | VÍDEO');
   });
   it('descrição livre com várias partes (revisão de 06/10/2026)', () => {
-    const l = { ...listas, objetivos: [...listas.objetivos, 'ANTECIPAÇÃO'] };
+    const l = listas;
     expect(montarNomeCampanha({ gestor: 'CF', sigla: 'BF26', objetivo: 'ANTECIPAÇÃO', descricao: 'teaser | meta |pq| abo | thruplay', pagina: '' }, l).nome)
       .toBe('CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ | ABO | THRUPLAY');
     expect(montarNomeCampanha({ gestor: 'RS', sigla: 'PB26', objetivo: 'LEADS', descricao: 'teaser | meta', pagina: 'ak1' }, listas).nome)
@@ -107,13 +107,13 @@ describe('checklist de montagem (a mesma regra de mkt_trafego.checklist da 20261
   const base = { tipo: 'interno' as const, contas: 2, campanhas: 3, foraPadrao: 1, semFase: 1, produtosHotmart: 0, paginas: 0,
     etiqueta: null, verbaMaxima: null, fases: 0, metas: [null, null, null], modelo: null, esperadas: [],
     encontradas: [], status: null, eventoFim: null, hoje: '2026-10-06' };
-  const itens = [{ id: 1, texto: 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow', momento: 'antes' as const, feito_em: null, feito_por: null, do_modelo: true }];
+  const itens = [{ id: 1, texto: 'Automação de ingresso no grupo de leads configurada no SendFlow', momento: 'antes' as const, feito_em: null, feito_por: null, do_modelo: true }];
   it('sem modelo nem esperadas: 2 de 12 (contas e campanhas); cada item com momento e ação', () => {
     const c = montarChecklist(base, itens);
     expect([c.feitos, c.total]).toEqual([2, 12]);
     expect(c.automaticos.find((i) => i.codigo === 'modelo')).toMatchObject({ momento: 'antes', acao: 'modelo', ok: false });
     expect(porMomento(c).map((g) => g.itens.length)).toEqual([9, 4, 1]);
-    expect(c.pendentes_antes).toContain('Automação de ingresso no grupo do WhatsApp configurada no SendFlow');
+    expect(c.pendentes_antes).toContain('Automação de ingresso no grupo de leads configurada no SendFlow');
   });
   it('externo sem campanha: Hotmart, fora do padrão e fase não se aplicam', () => {
     const c = montarChecklist({ ...base, tipo: 'externo', campanhas: 0, foraPadrao: 0, semFase: 0 }, itens);

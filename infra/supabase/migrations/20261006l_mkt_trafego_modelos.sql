@@ -17,8 +17,11 @@
 --        ATM; Diamantes clássico, pago; Aurum palestra), nome "Exemplo: <tipo> <unidade>", RASCUNHO = true, padrão da
 --        combinação. Fases da lista existente com percentuais e datas GENÉRICOS DE EXEMPLO (não são decisão de ninguém;
 --        a tela mostra o selo "Rascunho a validar"). Campanha esperada: um objetivo por fase, pelo mapa objetivo → fase
---        que já existe (captação = LEADS; no lançamento pago e no LPSG = VENDAS, que vende o ingresso). Item manual:
---        o do SendFlow (o único que o Victor citou) nos modelos com fase de captação. Nenhuma meta semeada.
+--        que já existe (captação = LEADS; no lançamento pago e no LPSG = VENDAS, que vende o ingresso; antecipação =
+--        ANTECIPAÇÃO, se um modelo tiver essa fase). Itens manuais do SendFlow (Victor, 06/10/2026: o grupo é uma etapa
+--        do funil): "Automação de ingresso no grupo de leads configurada no SendFlow" nos modelos com campanha esperada
+--        LEADS e "Automação de ingresso no grupo de compradores configurada no SendFlow" nos com VENDAS (os dois quando
+--        houver ambos). Nenhuma meta semeada.
 --     4. No PROJETO: "Aplicar modelo" (só modelos ativos do tipo de lançamento e da unidade do projeto, padrão primeiro)
 --        com PRÉVIA: fases com datas calculadas e verba = % × verba máxima, campanhas esperadas, itens e metas. Aplicar
 --        cria o que falta; fase que já existe e ficaria diferente só muda com p_substituir = true (a tela pede
@@ -33,8 +36,8 @@
 --   SAI (não aplicado em lugar nenhum, sem dado): mkt_trafego.pacote_modelos, checklist_itens, checklist_marcas e as
 --   funções trafego_pacote_salvar/apagar/aplicar, trafego_checklist_marcar e trafego_checklist_item_salvar (20261006j). A
 --   guarda aborta se alguma dessas tabelas tiver dado.
---   Depende da 20261006j (e, por ela, da 20261006g e da 20261006i), todas NÃO aplicadas. Pode ir antes ou depois da
---   20261006k e da 20261006e.
+--   Depende da 20261006j (e, por ela, da 20261006g e da 20261006i), todas NÃO aplicadas. Ordem para aplicar: a última da
+--   cadeia, depois da 20261006k (docs/central-de-dados.md, "Ordem para aplicar em produção").
 --
 --   Padrão do repo: tabelas fechadas (RLS ligada, sem policy, revoke de anon/authenticated), acesso só por função
 --   public.trafego_* SECURITY DEFINER com search_path '' e a trava mkt.pode_ver('mkt_trafego') (admin/dev).
@@ -269,13 +272,16 @@ begin
       from mkt_trafego.modelo_fases mf
       cross join lateral (select case mf.fase
                                    when 'captacao' then case when r.tipo_lancamento in ('lancamento_pago', 'lpsg') then 'VENDAS' else 'LEADS' end
-                                   when 'aquecimento' then 'AQUECIMENTO' when 'lembrete' then 'LEMBRETE'
+                                   when 'aquecimento' then 'AQUECIMENTO' when 'antecipacao' then 'ANTECIPAÇÃO' when 'lembrete' then 'LEMBRETE'
                                    when 'remarketing' then 'REMARKETING' when 'abertura_carrinho' then 'CARRINHO' end as objetivo) o
      where mf.modelo_id = v_id and exists (select 1 from mkt.campanha_objetivos co where co.codigo = o.objetivo and co.ativo);
-    -- item manual: o do SendFlow (o único que o Victor citou), nos modelos com fase de captação
+    -- itens manuais do SendFlow (Victor, 06/10/2026: o grupo é uma etapa do funil; campanha de lead leva a pessoa a um
+    -- grupo de leads, campanha de venda a um grupo de compradores): pela campanha esperada LEADS e/ou VENDAS do modelo
     insert into mkt_trafego.modelo_itens (modelo_id, texto, momento, ordem)
-    select v_id, 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow', 'antes', 1
-     where exists (select 1 from mkt_trafego.modelo_fases mf where mf.modelo_id = v_id and mf.fase = 'captacao');
+    select v_id, i.texto, 'antes', i.ordem
+      from (values ('LEADS', 'Automação de ingresso no grupo de leads configurada no SendFlow', 1),
+                   ('VENDAS', 'Automação de ingresso no grupo de compradores configurada no SendFlow', 2)) i(objetivo, texto, ordem)
+     where exists (select 1 from mkt_trafego.modelo_campanhas mc where mc.modelo_id = v_id and mc.objetivo = i.objetivo);
   end loop;
 end
 $semente$;
@@ -963,6 +969,14 @@ begin
      or exists (select 1 from mkt_trafego.modelos m where (select sum(mf.pct_verba) from mkt_trafego.modelo_fases mf where mf.modelo_id = m.id) <> 100)
      or not exists (select 1 from mkt_trafego.alerta_regras where codigo = 'checklist_incompleto') then
     raise exception '20261006l: semente diferente do esperado (um exemplo rascunho e padrão por combinação, 100%% de verba em cada, nada nos projetos)';
+  end if;
+  -- SendFlow: grupo de leads onde há campanha esperada LEADS, grupo de compradores onde há VENDAS, nada genérico
+  if exists (select 1 from mkt_trafego.modelo_itens where texto ilike '%grupo do WhatsApp%')
+     or (select count(*) from mkt_trafego.modelo_itens where texto = 'Automação de ingresso no grupo de leads configurada no SendFlow')
+        <> (select count(distinct modelo_id) from mkt_trafego.modelo_campanhas where objetivo = 'LEADS')
+     or (select count(*) from mkt_trafego.modelo_itens where texto = 'Automação de ingresso no grupo de compradores configurada no SendFlow')
+        <> (select count(distinct modelo_id) from mkt_trafego.modelo_campanhas where objetivo = 'VENDAS') then
+    raise exception '20261006l: itens do SendFlow diferentes do esperado (grupo de leads com LEADS, grupo de compradores com VENDAS)';
   end if;
 end
 $confere$;

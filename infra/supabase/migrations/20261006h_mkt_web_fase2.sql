@@ -666,14 +666,16 @@ end
 $$;
 
 -- Lead ligado à pessoa: leads da Web (visitas com evento de lead) cujo navegador tem a referência da base de pessoas
--- (visitantes.lead_ref, gravada pela 20261005r_pessoas_e_crm_fundacao) e quantas dessas pessoas viraram MQL no projeto. Sem a 20261005r_pessoas_e_crm_fundacao, só os
+-- (visitantes.lead_ref = pessoas.pessoas.ref, gravada por pessoas.registrar da 20261005r_pessoas_e_crm_fundacao do Arthur
+-- quando o formulário manda o visitante) e quantas dessas pessoas viraram MQL no projeto. Sem a base de pessoas, só os
 -- números da Web ("base": false). A lista (referência opaca e o id da ficha) só para quem pode ver a base
 -- (pessoas.pode_ver(): hoje admin/dev). Nunca nome, e-mail ou telefone.
 create function public.mkt_web_leads(p_projeto bigint, p_de date, p_ate date) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 declare
   v_base boolean := to_regclass('pessoas.pessoas') is not null and to_regclass('pessoas.eventos') is not null
-                    and to_regprocedure('pessoas.pode_ver()') is not null;
+                    and to_regprocedure('pessoas.pode_ver()') is not null and to_regprocedure('pessoas.atual(uuid)') is not null
+                    and to_regprocedure('pessoas.grupo(uuid)') is not null;
   v_pode boolean := false;
   v_web jsonb;
   v_pes jsonb;
@@ -691,20 +693,28 @@ begin
     return v_web || jsonb_build_object('base', false, 'pode_abrir', false, 'pessoas', null, 'mql', null, 'nao_mql', null, 'lista', '[]'::jsonb);
   end if;
   execute 'select coalesce(pessoas.pode_ver(), false)' into v_pode;
-  -- pessoa mesclada segue para a que ficou; pessoa de teste fica fora
+  -- base do Arthur (20261005r_pessoas_e_crm_fundacao): pessoa mesclada segue para a que ficou no fim da cadeia
+  -- (pessoas.atual) e os eventos contam no grupo inteiro (pessoas.grupo: a atual + as que apontam para ela); pessoa de
+  -- teste (a que ficou) fica fora
   execute $q$
     with refs as (
       select vi.lead_ref, max(s.lead_em) as quando
         from mkt_web.sessoes s join mkt_web.visitantes vi on vi.projeto_id = s.projeto_id and vi.id = s.visitante
        where s.projeto_id = $1 and s.dia between $2 and $3 and not s.teste and s.lead and vi.lead_ref is not null
        group by vi.lead_ref
-    ), pes as (
-      select r.lead_ref, r.quando, coalesce(p.mesclada_em, p.id) as pessoa_id
+    ), pes0 as (
+      select r.lead_ref, r.quando, pessoas.atual(p.id) as pessoa_id
         from refs r join pessoas.pessoas p on p.ref = r.lead_ref
-       where not p.teste
+    ), pes as (
+      -- uma linha por pessoa atual (dois navegadores da mesma pessoa = uma pessoa), a referência mais recente
+      select distinct on (x.pessoa_id) x.lead_ref, max(x.quando) over (partition by x.pessoa_id) as quando, x.pessoa_id
+        from pes0 x join pessoas.pessoas a on a.id = x.pessoa_id
+       where not a.teste
+       order by x.pessoa_id, x.quando desc nulls last
     ), ev as (
       select pes.pessoa_id, bool_or(e.tipo = 'mql') as mql, bool_or(e.tipo = 'nao_mql') as nao_mql
-        from pes left join pessoas.eventos e on e.pessoa_id = pes.pessoa_id and e.projeto_id = $1 and e.tipo in ('mql', 'nao_mql')
+        from pes left join pessoas.eventos e on e.pessoa_id = any(pessoas.grupo(pes.pessoa_id)) and e.projeto_id = $1
+                                            and e.tipo in ('mql', 'nao_mql')
        group by pes.pessoa_id
     )
     select jsonb_build_object(

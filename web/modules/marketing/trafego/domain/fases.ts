@@ -3,7 +3,8 @@
 //   2. senão, a fase do OBJETIVO do nome (mapa mkt_trafego.objetivo_fase, configurável);
 //   3. senão, "sem fase".
 // O mapa mora no banco e chega por parâmetro (config.objetivo_fase). Hoje: LEADS e VENDAS → captação, LEMBRETE →
-// lembrete, REMARKETING → remarketing, CARRINHO → abertura de carrinho, AQUECIMENTO → aquecimento. DISTRIBUIÇÃO não tem
+// lembrete, REMARKETING → remarketing, CARRINHO → abertura de carrinho, AQUECIMENTO → aquecimento, ANTECIPAÇÃO → antecipação
+// (Victor, 06/10/2026: antes da captação). DISTRIBUIÇÃO não tem
 // fase automática (pode ou não ser aquecimento): fica sem fase até alguém marcar à mão.
 
 export function faseDaCampanha(objetivo: string | null, manual: string | null, mapa: Record<string, string>): string | null {

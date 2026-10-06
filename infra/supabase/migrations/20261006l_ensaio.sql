@@ -11,7 +11,8 @@
 -- as funções como a tela e como quem não pode (JWT simulado). Tudo some no rollback.
 --
 -- Esperado: NENHUMA linha começando com "ERRADO".
---   1 estrutura e mockups: um exemplo rascunho e padrão por combinação válida, 100% de verba, SendFlow onde há captação,
+--   1 estrutura e mockups: um exemplo rascunho e padrão por combinação válida, 100% de verba, SendFlow onde há captação
+--     (grupo de leads com campanha LEADS, grupo de compradores com VENDAS),
 --     pacote e checklist antigos fora
 --   2 salvar modelo: novo padrão tira o padrão do exemplo; recusas (LPSG no Escritório, nome repetido, fase repetida)
 --   3 duplicar e inativar
@@ -235,13 +236,16 @@ begin
       from mkt_trafego.modelo_fases mf
       cross join lateral (select case mf.fase
                                    when 'captacao' then case when r.tipo_lancamento in ('lancamento_pago', 'lpsg') then 'VENDAS' else 'LEADS' end
-                                   when 'aquecimento' then 'AQUECIMENTO' when 'lembrete' then 'LEMBRETE'
+                                   when 'aquecimento' then 'AQUECIMENTO' when 'antecipacao' then 'ANTECIPAÇÃO' when 'lembrete' then 'LEMBRETE'
                                    when 'remarketing' then 'REMARKETING' when 'abertura_carrinho' then 'CARRINHO' end as objetivo) o
      where mf.modelo_id = v_id and exists (select 1 from mkt.campanha_objetivos co where co.codigo = o.objetivo and co.ativo);
-    -- item manual: o do SendFlow (o único que o Victor citou), nos modelos com fase de captação
+    -- itens manuais do SendFlow (Victor, 06/10/2026: o grupo é uma etapa do funil; campanha de lead leva a pessoa a um
+    -- grupo de leads, campanha de venda a um grupo de compradores): pela campanha esperada LEADS e/ou VENDAS do modelo
     insert into mkt_trafego.modelo_itens (modelo_id, texto, momento, ordem)
-    select v_id, 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow', 'antes', 1
-     where exists (select 1 from mkt_trafego.modelo_fases mf where mf.modelo_id = v_id and mf.fase = 'captacao');
+    select v_id, i.texto, 'antes', i.ordem
+      from (values ('LEADS', 'Automação de ingresso no grupo de leads configurada no SendFlow', 1),
+                   ('VENDAS', 'Automação de ingresso no grupo de compradores configurada no SendFlow', 2)) i(objetivo, texto, ordem)
+     where exists (select 1 from mkt_trafego.modelo_campanhas mc where mc.modelo_id = v_id and mc.objetivo = i.objetivo);
   end loop;
 end
 $semente$;
@@ -930,6 +934,14 @@ begin
      or not exists (select 1 from mkt_trafego.alerta_regras where codigo = 'checklist_incompleto') then
     raise exception '20261006l: semente diferente do esperado (um exemplo rascunho e padrão por combinação, 100%% de verba em cada, nada nos projetos)';
   end if;
+  -- SendFlow: grupo de leads onde há campanha esperada LEADS, grupo de compradores onde há VENDAS, nada genérico
+  if exists (select 1 from mkt_trafego.modelo_itens where texto ilike '%grupo do WhatsApp%')
+     or (select count(*) from mkt_trafego.modelo_itens where texto = 'Automação de ingresso no grupo de leads configurada no SendFlow')
+        <> (select count(distinct modelo_id) from mkt_trafego.modelo_campanhas where objetivo = 'LEADS')
+     or (select count(*) from mkt_trafego.modelo_itens where texto = 'Automação de ingresso no grupo de compradores configurada no SendFlow')
+        <> (select count(distinct modelo_id) from mkt_trafego.modelo_campanhas where objetivo = 'VENDAS') then
+    raise exception '20261006l: itens do SendFlow diferentes do esperado (grupo de leads com LEADS, grupo de compradores com VENDAS)';
+  end if;
 end
 $confere$;
 
@@ -965,12 +977,19 @@ select pg_temp.ok('1.mockups', (select count(*) from mkt_trafego.modelos where r
 select pg_temp.ok('1.verba e itens', not exists (select 1 from mkt_trafego.modelos m
                                                    where (select sum(pct_verba) from mkt_trafego.modelo_fases f where f.modelo_id = m.id) <> 100)
   and (select count(*) from mkt_trafego.modelo_itens where texto like '%SendFlow%' and momento = 'antes') = 7
+  and (select string_agg(m.nome, ' / ' order by m.id) from mkt_trafego.modelo_itens i join mkt_trafego.modelos m on m.id = i.modelo_id
+        where i.texto = 'Automação de ingresso no grupo de leads configurada no SendFlow')
+      = 'Exemplo: Lançamento clássico CSM / Exemplo: Lançamento clássico Escritório / Exemplo: Palestra Aurum / Exemplo: Lançamento clássico Diamantes'
+  and (select string_agg(m.nome, ' / ' order by m.id) from mkt_trafego.modelo_itens i join mkt_trafego.modelos m on m.id = i.modelo_id
+        where i.texto = 'Automação de ingresso no grupo de compradores configurada no SendFlow')
+      = 'Exemplo: Lançamento pago CSM / Exemplo: Lançamento pago semanal gravado (LPSG) CSM / Exemplo: Lançamento pago Diamantes'
+  and not exists (select 1 from mkt_trafego.modelo_itens where texto ilike '%grupo do WhatsApp%')
   and not exists (select 1 from mkt_trafego.modelo_itens i join mkt_trafego.modelos m on m.id = i.modelo_id where m.tipo_lancamento = 'atm')
   and (select count(*) from mkt_trafego.modelo_campanhas) = (select count(*) from mkt_trafego.modelo_fases)
   and (select string_agg(c.objetivo, ',' order by c.ordem) from mkt_trafego.modelo_campanhas c where c.modelo_id = pg_temp.modelo('Exemplo: Lançamento pago CSM'))
       = 'AQUECIMENTO,VENDAS,LEMBRETE,REMARKETING,CARRINHO'
   and (select count(*) from mkt_trafego.modelos where meta_cpl is not null or meta_pct_mql is not null) = 0,
-  'cada exemplo soma 100% da verba; SendFlow nos 7 com captação (ATM fora); uma campanha esperada por fase (pago: VENDAS na captação); nenhuma meta semeada');
+  'cada exemplo soma 100% da verba; SendFlow nos 7 com captação (ATM fora): grupo de leads nos 4 com LEADS, grupo de compradores nos 3 com VENDAS; uma campanha esperada por fase (pago: VENDAS na captação); nenhuma meta semeada');
 select pg_temp.ok('1.antigos fora', to_regclass('mkt_trafego.pacote_modelos') is null and to_regclass('mkt_trafego.checklist_itens') is null
   and to_regprocedure('public.trafego_pacote_aplicar(bigint)') is null and to_regprocedure('public.trafego_checklist(bigint)') is not null,
   'pacote, itens globais e as funções antigas fora; trafego_checklist continua');
@@ -1109,7 +1128,7 @@ begin
   perform pg_temp.ok('5.marcar', (v ->> 'ok')::boolean
     and (select e ->> 'marcado_por' from jsonb_array_elements(c -> 'manuais') e where (e ->> 'id')::bigint = v_item) = 'Victor (local)'
     and (select (e ->> 'do_modelo')::boolean from jsonb_array_elements(c -> 'manuais') e where (e ->> 'id')::bigint = v_item)
-    and not (c -> 'pendentes_antes' ? 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow'),
+    and not (c -> 'pendentes_antes' ? 'Automação de ingresso no grupo de leads configurada no SendFlow'),
     'item do modelo marcado: quem e quando; sai dos pendentes de "antes"');
   v := pg_temp.adm(format('select public.trafego_projeto_item_salvar(%L::jsonb)', jsonb_build_object('projeto_id', v_p, 'texto', 'item ensaio FEITO À MÃO', 'momento', 'antes')));
   perform pg_temp.ok('5.item repetido', not (v ->> 'ok')::boolean, 'item repetido no projeto (sem diferença de maiúscula) recusado');

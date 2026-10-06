@@ -3,7 +3,7 @@
 // produção: trafego-data.ts só liga com NEXT_PUBLIC_TRAFEGO_DEMO=1 E NODE_ENV diferente de 'production', e a tela mostra
 // a faixa "Dados de demonstração". Recarregar a página volta ao começo.
 // O que vem da semente real: os 4 projetos e os gestores da 20261005m, os objetivos (20261005m + CARRINHO e AQUECIMENTO
-// da 20261006g) e as listas da 20261006g (plataformas, status, fases, objetivo → fase) e da 20261006j (unidades, tipos de
+// da 20261006g + ANTECIPAÇÃO da 20261006e) e as listas da 20261006g (plataformas, status, fases, objetivo → fase) e da 20261006j (unidades, tipos de
 // lançamento e regras, os 2 especialistas internos semeados, UTM do Meta) e da 20261006l (os 9 modelos de exemplo, rascunho). Todo o resto é
 // ficção: projetos "… Exemplo", contas "Conta Exemplo", "Especialista Exemplo", ids 0000…, descrições de campanha
 // "EXEMPLO", números gerados. Os projetos reais da semente ficam sem unidade, tipo de lançamento e contas (não estão em fonte).
@@ -34,16 +34,17 @@ const ONTEM = hoje(-1);
 const FORA_DO_RESUMO = new Set(['em_planejamento', 'inativo', 'encerrado']);
 
 const GESTORES = [{ sigla: 'CF', nome: 'Caio Fábio' }, { sigla: 'RS', nome: 'Renan Schwarz' }, { sigla: 'EF', nome: 'Emmanuel Fernandes' }];
-const OBJETIVOS = ['LEADS', 'VENDAS', 'REMARKETING', 'LEMBRETE', 'DISTRIBUIÇÃO', 'CARRINHO', 'AQUECIMENTO'];
+const OBJETIVOS = ['LEADS', 'VENDAS', 'REMARKETING', 'LEMBRETE', 'DISTRIBUIÇÃO', 'CARRINHO', 'AQUECIMENTO', 'ANTECIPAÇÃO'];
 const OBJETIVO_FASE: Record<string, string> = {
   LEADS: 'captacao', VENDAS: 'captacao', LEMBRETE: 'lembrete', REMARKETING: 'remarketing', CARRINHO: 'abertura_carrinho', AQUECIMENTO: 'aquecimento',
+  ANTECIPAÇÃO: 'antecipacao',
 };
 const CONFIG: ConfigTrafego = {
   plataformas: [{ codigo: 'meta', nome: 'Meta Ads' }, { codigo: 'google', nome: 'Google Ads' }],
   status: [{ codigo: 'em_planejamento', nome: 'Em planejamento' }, { codigo: 'ativo', nome: 'Ativo' }, { codigo: 'pausado', nome: 'Pausado' },
     { codigo: 'inativo', nome: 'Inativo' }, { codigo: 'encerrado', nome: 'Encerrado' }],
   fases: [
-    { codigo: 'aquecimento', nome: 'Aquecimento' }, { codigo: 'captacao', nome: 'Captação' }, { codigo: 'lembrete', nome: 'Lembrete' },
+    { codigo: 'aquecimento', nome: 'Aquecimento' }, { codigo: 'antecipacao', nome: 'Antecipação' }, { codigo: 'captacao', nome: 'Captação' }, { codigo: 'lembrete', nome: 'Lembrete' },
     { codigo: 'remarketing', nome: 'Remarketing' }, { codigo: 'abertura_carrinho', nome: 'Abertura de carrinho' },
   ],
   gestores: GESTORES,
@@ -123,7 +124,7 @@ const CAMPS: CampDemo[] = [
   camp(10, 'meta', 1, 'RS | LPEXA26 | VENDAS | EXEMPLO INGRESSO', 'ACTIVE'),
   camp(11, 'meta', 3, 'RS | LPEXA26 | VENDAS | EXEMPLO CONTA DE FORA', 'ACTIVE'),
   camp(12, 'meta', 1, 'lpexa26 exemplo remarketing sem padrão', 'PAUSED'),
-  // o exemplo de nome da revisão do Victor (06/10/2026): descrição de 5 partes; fora do padrão só pelo objetivo ANTECIPAÇÃO
+  // o exemplo de nome da revisão do Victor (06/10/2026): descrição de 5 partes; ANTECIPAÇÃO entrou na lista (fase antecipação)
   camp(13, 'meta', 1, 'CF | BF26 | ANTECIPAÇÃO | EXEMPLO TEASER | META | PQ | ABO | THRUPLAY', 'ACTIVE'),
   camp(14, 'meta', 1, 'CF | BF26 | LEADS | EXEMPLO | VÁRIAS PARTES', 'PAUSED'),
   camp(15, 'meta', 1, 'XX | EXEMPLO', 'PAUSED'),
@@ -463,10 +464,12 @@ const FASES_EXEMPLO: Record<string, FaseSemente[]> = {
     ['remarketing', 3, 'captacao_inicio', 0, 'evento_fim', 0, 10]],
 };
 const OBJ_DA_FASE = (fase: string, tipo: string) => ({
-  captacao: tipo === 'lancamento_pago' || tipo === 'lpsg' ? 'VENDAS' : 'LEADS', aquecimento: 'AQUECIMENTO', lembrete: 'LEMBRETE',
+  captacao: tipo === 'lancamento_pago' || tipo === 'lpsg' ? 'VENDAS' : 'LEADS', aquecimento: 'AQUECIMENTO', antecipacao: 'ANTECIPAÇÃO', lembrete: 'LEMBRETE',
   remarketing: 'REMARKETING', abertura_carrinho: 'CARRINHO',
 } as Record<string, string>)[fase];
-const SENDFLOW = 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow';
+// Grupo é uma etapa do funil (Victor, 06/10/2026): campanha de lead leva ao grupo de leads, de venda ao grupo de compradores.
+const SENDFLOW_LEADS = 'Automação de ingresso no grupo de leads configurada no SendFlow';
+const SENDFLOW_COMPRADORES = 'Automação de ingresso no grupo de compradores configurada no SendFlow';
 let MODELOS_D: Modelo[] = [];
 for (const u of ['csm', 'escritorio', 'aurum', 'diamantes']) {
   for (const t of REGRAS[u]) {
@@ -478,7 +481,10 @@ for (const u of ['csm', 'escritorio', 'aurum', 'diamantes']) {
       unidades: [{ unidade: u, padrao: true }],
       fases: fs.map(([fase, ordem, ir, id, fr, fd, pct]) => ({ fase, ordem, inicio_ref: ir, inicio_dias: id, fim_ref: fr, fim_dias: fd, pct_verba: pct, obs: null })),
       campanhas: fs.map(([fase, ordem]) => ({ objetivo: OBJ_DA_FASE(fase, t), fase, descricao: null, pagina: null, ordem })),
-      itens: fs.some(([f]) => f === 'captacao') ? [{ texto: SENDFLOW, momento: 'antes', ordem: 1 }] : [],
+      itens: [
+        ...(fs.some(([f]) => OBJ_DA_FASE(f, t) === 'LEADS') ? [{ texto: SENDFLOW_LEADS, momento: 'antes' as const, ordem: 1 }] : []),
+        ...(fs.some(([f]) => OBJ_DA_FASE(f, t) === 'VENDAS') ? [{ texto: SENDFLOW_COMPRADORES, momento: 'antes' as const, ordem: 2 }] : []),
+      ],
     });
   }
 }
@@ -676,10 +682,10 @@ export function demoApagarEsperada(id: number): Resposta {
   return { ok: true, msg: `Campanha esperada tirada do projeto${NADA}.` };
 }
 
-// O projeto fictício LPEXA26 já com o modelo de exemplo do lançamento pago na CSM aplicado e o SendFlow marcado.
+// O projeto fictício LPEXA26 já com o modelo de exemplo do lançamento pago na CSM aplicado e o SendFlow (grupo de compradores) marcado.
 {
   const m = MODELOS_D.find((x) => x.tipo_lancamento === 'lancamento_pago' && x.unidades.some((u) => u.unidade === 'csm'))!;
   demoAplicarModelo(7, m.id, false);
-  const i = ITENS_PROJ.find((x) => x.projeto_id === 7 && x.texto === SENDFLOW);
+  const i = ITENS_PROJ.find((x) => x.projeto_id === 7 && x.texto === SENDFLOW_COMPRADORES);
   if (i) { i.feito_em = `${hoje(-1)}T14:00:00.000Z`; i.feito_por = 'Pessoa Exemplo'; }
 }

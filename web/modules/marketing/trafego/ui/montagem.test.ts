@@ -13,7 +13,7 @@ describe('checklist de montagem e gerador (demonstração)', () => {
     const h = html(createElement(ChecklistVista, { c: demoChecklist(7), onMarcar: () => {} }));
     expect(h).toMatch(/\d+ de \d+ prontos/);
     expect(h).toContain('Contas de anúncio vinculadas');
-    expect(h).toContain('Automação de ingresso no grupo do WhatsApp configurada no SendFlow');
+    expect(h).toContain('Automação de ingresso no grupo de compradores configurada no SendFlow');
     expect(h).not.toMatch(/[—–]/);
     expect(html(createElement(ChecklistVista, { c: null }))).toContain('20261006j ainda não foi aplicada');
   });

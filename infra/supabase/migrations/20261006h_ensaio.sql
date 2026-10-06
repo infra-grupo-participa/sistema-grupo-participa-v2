@@ -23,7 +23,7 @@
 --   4  comparar: duas páginas no mesmo período e o projeto em dois períodos; página de outro projeto recusada
 --   5  mapa de calor: pontos (fixo e automático fora), contagem, alcance da rolagem, largura/altura medianas, captura
 --   6  laboratório do Google: guardar (recusas, 60 por página, captura só no último), fila, desligar, leitura da tela
---   7  lead ligado à pessoa   8  connect rate   8b UTM nome|id (gp-operacoes): por criativo, anúncios e Tráfego pelo id
+--   7  lead ligado à pessoa (base do Arthur; pessoa juntada segue para a que ficou)   8  connect rate   8b UTM nome|id (gp-operacoes): por criativo, anúncios e Tráfego pelo id
 --   9  período acima de 92 dias recusado
 --   10 sem perfil, operador (mesmo com a área mkt_web), visualizador e anon: recusa 42501 nas 7 funções e no select
 --   Qualquer ERRO no meio = a migration não serve como está: não aplicar.
@@ -650,14 +650,16 @@ end
 $$;
 
 -- Lead ligado à pessoa: leads da Web (visitas com evento de lead) cujo navegador tem a referência da base de pessoas
--- (visitantes.lead_ref, gravada pela 20261005r_pessoas_e_crm_fundacao) e quantas dessas pessoas viraram MQL no projeto. Sem a 20261005r_pessoas_e_crm_fundacao, só os
+-- (visitantes.lead_ref = pessoas.pessoas.ref, gravada por pessoas.registrar da 20261005r_pessoas_e_crm_fundacao do Arthur
+-- quando o formulário manda o visitante) e quantas dessas pessoas viraram MQL no projeto. Sem a base de pessoas, só os
 -- números da Web ("base": false). A lista (referência opaca e o id da ficha) só para quem pode ver a base
 -- (pessoas.pode_ver(): hoje admin/dev). Nunca nome, e-mail ou telefone.
 create function public.mkt_web_leads(p_projeto bigint, p_de date, p_ate date) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 declare
   v_base boolean := to_regclass('pessoas.pessoas') is not null and to_regclass('pessoas.eventos') is not null
-                    and to_regprocedure('pessoas.pode_ver()') is not null;
+                    and to_regprocedure('pessoas.pode_ver()') is not null and to_regprocedure('pessoas.atual(uuid)') is not null
+                    and to_regprocedure('pessoas.grupo(uuid)') is not null;
   v_pode boolean := false;
   v_web jsonb;
   v_pes jsonb;
@@ -675,20 +677,28 @@ begin
     return v_web || jsonb_build_object('base', false, 'pode_abrir', false, 'pessoas', null, 'mql', null, 'nao_mql', null, 'lista', '[]'::jsonb);
   end if;
   execute 'select coalesce(pessoas.pode_ver(), false)' into v_pode;
-  -- pessoa mesclada segue para a que ficou; pessoa de teste fica fora
+  -- base do Arthur (20261005r_pessoas_e_crm_fundacao): pessoa mesclada segue para a que ficou no fim da cadeia
+  -- (pessoas.atual) e os eventos contam no grupo inteiro (pessoas.grupo: a atual + as que apontam para ela); pessoa de
+  -- teste (a que ficou) fica fora
   execute $q$
     with refs as (
       select vi.lead_ref, max(s.lead_em) as quando
         from mkt_web.sessoes s join mkt_web.visitantes vi on vi.projeto_id = s.projeto_id and vi.id = s.visitante
        where s.projeto_id = $1 and s.dia between $2 and $3 and not s.teste and s.lead and vi.lead_ref is not null
        group by vi.lead_ref
-    ), pes as (
-      select r.lead_ref, r.quando, coalesce(p.mesclada_em, p.id) as pessoa_id
+    ), pes0 as (
+      select r.lead_ref, r.quando, pessoas.atual(p.id) as pessoa_id
         from refs r join pessoas.pessoas p on p.ref = r.lead_ref
-       where not p.teste
+    ), pes as (
+      -- uma linha por pessoa atual (dois navegadores da mesma pessoa = uma pessoa), a referência mais recente
+      select distinct on (x.pessoa_id) x.lead_ref, max(x.quando) over (partition by x.pessoa_id) as quando, x.pessoa_id
+        from pes0 x join pessoas.pessoas a on a.id = x.pessoa_id
+       where not a.teste
+       order by x.pessoa_id, x.quando desc nulls last
     ), ev as (
       select pes.pessoa_id, bool_or(e.tipo = 'mql') as mql, bool_or(e.tipo = 'nao_mql') as nao_mql
-        from pes left join pessoas.eventos e on e.pessoa_id = pes.pessoa_id and e.projeto_id = $1 and e.tipo in ('mql', 'nao_mql')
+        from pes left join pessoas.eventos e on e.pessoa_id = any(pessoas.grupo(pes.pessoa_id)) and e.projeto_id = $1
+                                            and e.tipo in ('mql', 'nao_mql')
        group by pes.pessoa_id
     )
     select jsonb_build_object(
@@ -1170,6 +1180,41 @@ begin
   perform pg_temp.ok('7.base', v ->> 'base' = 'true' and v ->> 'pode_abrir' = 'true' and v ->> 'pessoas' = '1' and v ->> 'mql' = '1'
                      and v -> 'lista' -> 0 ->> 'pessoa_id' = v_pid::text and not (v::text like '%Pessoa Ensaio%'),
                      'com a 20261005r_pessoas_e_crm_fundacao: 1 pessoa, 1 MQL, a ficha abre para o admin, sem nome na resposta');
+  -- mescla do Arthur (alias): o outro navegador de lead aponta para uma pessoa JUNTADA a esta, e o MQL fica só nela
+  execute 'insert into pessoas.pessoas (ref, nome, situacao, mesclada_em) values ($1, $2, ''mesclada'', $3)'
+    using 'pe_0000000000000000000000000000ab02', 'Pessoa Ensaio Web Juntada', v_pid;
+  update mkt_web.visitantes set lead_ref = 'pe_0000000000000000000000000000ab02'
+   where projeto_id = pg_temp.id('proj') and lead_ref is null
+     and id = (select s.visitante from mkt_web.sessoes s where s.projeto_id = pg_temp.id('proj') and s.lead and not s.teste and s.visitante <> 'zzvisit0001'
+                order by s.visitante limit 1);
+  execute 'delete from pessoas.eventos where pessoa_id = $1 and tipo = ''mql''' using v_pid;
+  execute 'insert into pessoas.eventos (pessoa_id, tipo, projeto_id, fonte)
+           select id, ''mql'', $1, ''sistema'' from pessoas.pessoas where ref = ''pe_0000000000000000000000000000ab02''' using pg_temp.id('proj');
+  v := pg_temp.adm(format('select public.mkt_web_leads(%s, %L, %L)', pg_temp.id('proj'), mkt_web.hoje(), mkt_web.hoje()));
+  perform pg_temp.ok('7.mescla', v ->> 'com_ref' = '2' and v ->> 'pessoas' = '1' and v ->> 'mql' = '1'
+                     and jsonb_array_length(v -> 'lista') = 1 and v -> 'lista' -> 0 ->> 'pessoa_id' = v_pid::text,
+                     'dois navegadores, um aponta para a pessoa juntada: conta 1 pessoa (a que ficou, pessoas.atual) e o MQL da juntada vale (pessoas.grupo): com_ref='
+                     || (v ->> 'com_ref') || ' pessoas=' || (v ->> 'pessoas') || ' mql=' || (v ->> 'mql') || ' lista=' || jsonb_array_length(v -> 'lista'));
+end $t$;
+
+-- 7.gravação: o formulário (service_role) chama a função do Arthur com o visitante do gravador; ela grava a referência
+-- em mkt_web.visitantes.lead_ref (só existe depois da 20261006f). Pessoa fictícia de TESTE (some no rollback).
+do $t$
+declare v jsonb;
+begin
+  if to_regprocedure('public.pessoas_registrar_lead(jsonb)') is null then
+    perform pg_temp.diz('7.gravacao', 'PULADO (sem public.pessoas_registrar_lead da 20261005r_pessoas_e_crm_fundacao)');
+    return;
+  end if;
+  perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
+  set local role service_role;
+  v := public.pessoas_registrar_lead(jsonb_build_object('nome', 'Pessoa Ensaio Formulario', 'email', 'formulario.ensaio@exemplo.invalid',
+         'telefone', '11 90000-0003', 'projeto', 'ZZWEB98', 'visitante', 'zzvisit0003', 'teste', true));
+  reset role;
+  perform pg_temp.ok('7.gravacao', (v ->> 'ok')::boolean and v ->> 'ref' ~ '^pe_[0-9a-f]{32}$'
+                     and (select lead_ref from mkt_web.visitantes where projeto_id = pg_temp.id('proj') and id = 'zzvisit0003') = v ->> 'ref'
+                     and not (v::text like '%exemplo.invalid%'),
+                     'public.pessoas_registrar_lead (Arthur, service_role) com o visitante grava a ref em visitantes.lead_ref; a resposta não traz e-mail');
 end $t$;
 
 -- 8. Connect rate (page views de entrada ÷ cliques no link; conversão = leads ÷ page views)

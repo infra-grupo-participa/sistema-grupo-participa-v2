@@ -12,12 +12,9 @@
 --        ANTECIPACAO; já era assim). Erros (motivo de "fora do padrão"): vazio, numero_de_campos (MENOS DE 3 campos),
 --        gestor_desconhecido, sigla_invalida, projeto_nao_cadastrado, objetivo_desconhecido, descricao_vazia (só 3 campos
 --        ou descrição em branco) e campo_vazio (parte da descrição em branco: "| |").
---     4. ANTECIPAÇÃO NÃO entra na lista de objetivos (pergunta ao Victor: entra? em qual fase?). Até lá a campanha do
---        exemplo fica fora do padrão SÓ pelo objetivo (erros = [objetivo_desconhecido], objetivo = ANTECIPAÇÃO); a tela
---        diz o motivo. Para ligar, quando o Victor responder (comentado de propósito):
---          -- insert into mkt.campanha_objetivos (codigo) values ('ANTECIPAÇÃO') on conflict (codigo) do nothing;
---          -- insert into mkt_trafego.objetivo_fase (objetivo, fase) values ('ANTECIPAÇÃO', '<fase>');  -- se tiver fase
---          -- e reler as campanhas: select public.trafego_campanhas_reler();
+--     4. ANTECIPAÇÃO ENTRA na lista de objetivos (decisão do Victor, 06/10/2026: vem antes da captação). Insert
+--        idempotente em mkt.campanha_objetivos (lista da 20261005m). A fase "antecipação" (ordenada logo antes de
+--        "captação") e o mapa ANTECIPAÇÃO → antecipação ficam na 20261006g, que cria mkt_trafego.fases (vem depois desta).
 --   A 20261005m (que criou a função) está APLICADA: esta só troca o corpo (create or replace), com a MESMA assinatura e
 --   o MESMO retorno (mesmas chaves do jsonb), acrescentando duas: descricao_partes (lista) e campos (quantos campos o nome
 --   tem). Quem já usa a função continua igual: public.mkt_campanha_traduzir (20261005m), a Web (20261006f), pessoas e CRM
@@ -149,6 +146,11 @@ end
 $$;
 revoke all on function mkt.campanha_traduzir(text) from public, anon, authenticated;
 
+-- ─── 1b. ANTECIPAÇÃO na lista de objetivos (Victor, 06/10/2026: vem antes da captação) ───────────────────────────────
+insert into mkt.campanha_objetivos (codigo) values ('ANTECIPAÇÃO') on conflict (codigo) do nothing;
+-- a fase "antecipação" (logo antes da captação) e o mapa ANTECIPAÇÃO → antecipação nascem na 20261006g, que cria
+-- mkt_trafego.fases e vem depois desta.
+
 -- ─── 2. Reler as campanhas guardadas do Tráfego (só se a 20261006g já estiver aplicada) ─────────────────────────────
 do $reler$
 declare v_n int := 0;
@@ -171,8 +173,12 @@ begin
   r := mkt.campanha_traduzir('CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ | ABO | THRUPLAY');
   if r ->> 'gestor' <> 'CF' or r ->> 'projeto' <> 'BF26' or r ->> 'objetivo' <> 'ANTECIPAÇÃO'
      or r ->> 'descricao' <> 'TEASER | META | PQ | ABO | THRUPLAY' or r ->> 'pagina' is not null or (r ->> 'campos')::int <> 8
-     or (not exists (select 1 from mkt.campanha_objetivos where codigo = 'ANTECIPAÇÃO' and ativo) and r -> 'erros' <> '["objetivo_desconhecido"]'::jsonb) then
+     or (r -> 'erros') ? 'objetivo_desconhecido' then
     raise exception '20261006e: o exemplo da Black Friday não foi lido como esperado: %', r;
+  end if;
+  r := mkt.campanha_traduzir('CF | BF26 | ANTECIPACAO | TEASER');
+  if r ->> 'objetivo' <> 'ANTECIPAÇÃO' or (r -> 'erros') ? 'objetivo_desconhecido' then
+    raise exception '20261006e: ANTECIPAÇÃO sem acento não foi reconhecida: %', r;
   end if;
   r := mkt.campanha_traduzir('RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1');
   if not (r ->> 'padrao')::boolean or r ->> 'pagina' <> 'ak1' or r ->> 'descricao' <> 'TESTE DE ESCRITÓRIOS' then
@@ -276,4 +282,7 @@ $confere$;
 -- $f$;
 -- -- se a 20261006g estiver aplicada: select public.trafego_campanhas_reler();  (como admin) ou, como postgres,
 -- -- select count(*) filter (where mkt_trafego.campanha_aplicar_leitura(c.id)) from mkt_trafego.campanhas c;
+-- -- ANTECIPAÇÃO: só se nenhuma campanha a usa (o mapa e a fase saem junto com a 20261006g, ou à mão):
+-- delete from mkt_trafego.objetivo_fase where objetivo = 'ANTECIPAÇÃO';   -- se a 20261006g existir (ou reverter a 20261006g antes)
+-- delete from mkt.campanha_objetivos where codigo = 'ANTECIPAÇÃO';
 -- commit;

@@ -54,7 +54,7 @@ describe('nome de campanha: válidos', () => {
 });
 
 describe('nome de campanha: descrição de várias partes (revisão de 06/10/2026)', () => {
-  it('o exemplo real da Black Friday do Caio: descrição de 5 partes, sem página, fora só pelo objetivo', () => {
+  it('o exemplo real da Black Friday do Caio: descrição de 5 partes, sem página; numa lista SEM ANTECIPAÇÃO, fora só pelo objetivo', () => {
     const r = t('CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ | ABO | THRUPLAY');
     expect(r).toMatchObject({
       gestor: 'CF', projeto: 'BF26', objetivo: 'ANTECIPAÇÃO', descricao: 'TEASER | META | PQ | ABO | THRUPLAY',
@@ -62,7 +62,7 @@ describe('nome de campanha: descrição de várias partes (revisão de 06/10/202
     });
     expect(motivoErro(r.erros[0], r)).toBe('Objetivo ANTECIPAÇÃO não está na lista');
   });
-  it('com ANTECIPAÇÃO na lista (pergunta ao Victor), entra no padrão com ou sem acento', () => {
+  it('com ANTECIPAÇÃO na lista (decisão do Victor, 06/10/2026: semente da 20261006e), entra no padrão com ou sem acento', () => {
     const l = { ...LISTAS, objetivos: [...LISTAS.objetivos, 'ANTECIPAÇÃO'] };
     const r = t('CF | BF26 | ANTECIPACAO | TEASER | META | PQ | ABO | THRUPLAY', l);
     expect(r.padrao).toBe(true);

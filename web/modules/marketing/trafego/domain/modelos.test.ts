@@ -15,7 +15,7 @@ const CLASSICO: Modelo = {
     { fase: 'abertura_carrinho', ordem: 5, inicio_ref: 'evento_fim', inicio_dias: 0, fim_ref: 'evento_fim', fim_dias: 3, pct_verba: 10, obs: null },
   ],
   campanhas: [{ objetivo: 'LEADS', fase: 'captacao', descricao: null, pagina: null }],
-  itens: [{ texto: 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow', momento: 'antes' }],
+  itens: [{ texto: 'Automação de ingresso no grupo de leads configurada no SendFlow', momento: 'antes' }],
 };
 const PROJ = { tipo_lancamento: 'lancamento_classico', unidade: 'csm', captacao_inicio: '2026-11-01', captacao_fim: '2026-11-20', evento_inicio: '2026-11-25', evento_fim: '2026-11-27' };
 const REGRAS = { csm: ['lancamento_classico', 'lancamento_pago', 'lpsg', 'atm'], escritorio: ['lancamento_classico', 'atm'] };
@@ -51,7 +51,7 @@ describe('prévia de aplicar (a mesma conta de mkt_trafego.modelo_previa)', () =
     const m = { ...CLASSICO, fases: [{ ...CLASSICO.fases[0], fim_ref: 'captacao_inicio' as const, fim_dias: -10 }] };
     expect(previaModelo(m, PROJ, 100, [], (f) => f).fases[0]).toMatchObject({ inicio: null, fim: null, aviso: 'datas_invertidas' });
     const p = previaModelo(CLASSICO, PROJ, 100, [], (f) => f, [{ objetivo: 'LEADS', fase: 'captacao', descricao: null, pagina: null }],
-      ['automação de ingresso no grupo do whatsapp configurada no sendflow']);
+      ['automação de ingresso no grupo de leads configurada no sendflow']);
     expect([p.campanhas[0].ja_existe, p.itens[0].ja_existe]).toEqual([true, true]);
   });
 });

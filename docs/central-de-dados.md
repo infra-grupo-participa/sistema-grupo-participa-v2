@@ -10,8 +10,8 @@
 | Departamento | Rota | Situação | Dentro |
 |---|---|---|---|
 | Educacional | `/educacional` | ativo | tudo o que existia no sistema até 05/10/2026 (sem áreas) |
-| Marketing | `/marketing` | ativo, **só admin e dev** | áreas **Web** e **Tráfego** ativas (ver "Web" e "Tráfego"); Mensageria, Audiovisual, Social Media "Em breve" |
-| Comercial | `/comercial` | ativo, **só admin e dev** | sem áreas: CRM e base única de pessoas (ver "Comercial e base de pessoas") |
+| Marketing | `/marketing` | ativo, **só admin e dev** | áreas **Web**, **Mensageria** e **Tráfego** ativas (ver "Web", "Mensageria" e "Tráfego"); Audiovisual, Social Media "Em breve"; Projetos e páginas em `/marketing/projetos` |
+| Comercial | `/comercial` | ativo (do Arthur): admin e dev; gestor/vendedor do Comercial com a flag `NEXT_PUBLIC_COMERCIAL_VENDEDORES` | telas do CRM (funil, conversas, atividades, contatos, recuperação, disparos, relatórios, produtos, registro, playbook, configurações); ver `docs/projetos/comercial/` |
 | Financeiro | `/financeiro` | Em breve | a mapear |
 | Infra | `/infra` | Em breve | IA e Dados |
 
@@ -103,14 +103,14 @@ Ex.: `RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1`. Lido por `mkt.campanha_t
 - **No padrão** = gestor, projeto e objetivo válidos + qualquer descrição. Objetivo com ou sem acento (`ANTECIPACAO` casa
   com `ANTECIPAÇÃO` se estiver na lista; aviso `sem_acento`).
 - **Motivos de "fora do padrão"** (a tela mostra cada um com o que foi escrito): menos de 3 campos (`numero_de_campos`),
-  gestor fora da lista, sigla fora do formato, projeto não cadastrado, objetivo fora da lista ("objetivo ANTECIPAÇÃO não
+  gestor fora da lista, sigla fora do formato, projeto não cadastrado, objetivo fora da lista ("Objetivo XYZ não
   está na lista"), sem descrição (só 3 campos) e parte vazia na descrição (`| |`). O erro antigo `pagina_invalida` deixou
   de existir.
 - O retorno de `mkt.campanha_traduzir` manteve as mesmas chaves (quem usa: Web, pessoas e CRM da main, Tráfego) e ganhou
   `descricao_partes` e `campos`.
-- **ANTECIPAÇÃO não está na lista de objetivos** (pergunta ao Victor abaixo). Até a resposta, a campanha do exemplo fica
-  fora do padrão só pelo objetivo. Para ligar: `insert into mkt.campanha_objetivos (codigo) values ('ANTECIPAÇÃO')`, a
-  fase em `mkt_trafego.objetivo_fase` (se tiver) e "Reler os nomes" na tela (comandos comentados na 20261006e).
+- **ANTECIPAÇÃO entra na lista de objetivos** (decisão do Victor, 06/10/2026: vem **antes da captação**). Insert
+  idempotente na 20261006e (e de novo na 20261006g); fase **antecipação**, ordenada logo antes de captação, e o mapa
+  ANTECIPAÇÃO → antecipação na 20261006g. O exemplo da Black Friday fica no padrão.
 
 | Campo | Valores (listas em `mkt.campanha_gestores`, `mkt.projetos`, `mkt.campanha_objetivos`) |
 |---|---|
@@ -388,10 +388,11 @@ link**. Quando a tela do Arthur aceitar um parâmetro, volta o link (`SecaoLeads
   padrão oficial do gp-operacoes; o sistema cruza pelo id) só a Web mostra, porque o
   Tráfego ainda não guarda clique por anúncio.
 - **Vários gestores por projeto** (Victor): tabela `projeto_gestores` (siglas da lista `mkt.campanha_gestores`).
-- **Fases:** aquecimento, captação, lembrete, remarketing, abertura de carrinho. A fase da campanha sai do **objetivo** do
+- **Fases:** aquecimento, **antecipação** (Victor, 06/10/2026: antes da captação), captação, lembrete, remarketing,
+  abertura de carrinho. A fase da campanha sai do **objetivo** do
   nome (mapa `objetivo_fase`, configurável por SQL); a **correção à mão** na campanha prevalece; sem regra e sem correção =
   "sem fase". Mapa (Victor): LEADS e VENDAS → captação (VENDAS = lançamento pago, a campanha vende o ingresso em vez de
-  captar lead), AQUECIMENTO → aquecimento, LEMBRETE → lembrete, REMARKETING → remarketing, CARRINHO → abertura de
+  captar lead), AQUECIMENTO → aquecimento, ANTECIPAÇÃO → antecipação, LEMBRETE → lembrete, REMARKETING → remarketing, CARRINHO → abertura de
   carrinho. **DISTRIBUIÇÃO** (distribuição de conteúdo) **não tem fase automática**: pode ou não ser aquecimento, fica
   "sem fase" até alguém marcar na campanha.
 - **Objetivos do nome de campanha** passam a ser 7: LEADS, VENDAS, REMARKETING, LEMBRETE, DISTRIBUIÇÃO, **CARRINHO**
@@ -413,7 +414,7 @@ link**. Quando a tela do Arthur aceitar um parâmetro, volta o link (`SecaoLeads
 
 | Tabela | O que guarda |
 |---|---|
-| `plataformas`, `status_projeto`, `fases` | listas (Meta Ads, Google Ads; ativo, pausado, inativo, encerrado; aquecimento, captação, lembrete, remarketing, abertura de carrinho). Mudam por SQL |
+| `plataformas`, `status_projeto`, `fases` | listas (Meta Ads, Google Ads; ativo, pausado, inativo, encerrado; aquecimento, antecipação, captação, lembrete, remarketing, abertura de carrinho). Mudam por SQL |
 | `objetivo_fase` | objetivo do nome → fase (ver Decisões). Muda por SQL |
 | `contas` | conta de anúncio: plataforma, id na plataforma (Meta sem `act_`, Google só dígitos), nome, de quem é (grupo, diamante, aurum), cliente, moeda |
 | `campanhas` | nome **exato** da plataforma + leitura pelo padrão `GESTOR \| PROJETO \| OBJETIVO \| DESCRIÇÃO \| PÁGINA` (`mkt.campanha_traduzir`): projeto, gestor, objetivo, página, fora do padrão. Projeto pode ser ligado à mão; `fase_manual` corrige a fase do objetivo |
@@ -641,7 +642,7 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 1. Banco: com a 20261006g e a 20261006i aplicadas (ou na mesma transação), rodar `20261006j_ensaio.sql` inteiro (termina
    em rollback) e conferir que nenhuma linha começa com `ERRADO`. Medido em Postgres local (PGlite): 69 `ok`.
 2. Tela: `NEXT_PUBLIC_TRAFEGO_DEMO=1` em `web/.env.local`, `npm run dev`, `/marketing/trafego`. Projeto fictício
-   **LPEXA26 "Lançamento Pago Exemplo"** (CSM, lançamento pago, captação e evento, conta Exemplo, item do SendFlow marcado
+   **LPEXA26 "Lançamento Pago Exemplo"** (CSM, lançamento pago, captação e evento, conta Exemplo, item do SendFlow (grupo de compradores) marcado
    por "Pessoa Exemplo", campanha sugerida, alerta de conta de fora), DEXA26 (Diamantes, lançamento clássico, "Especialista
    Exemplo", receita "não se aplica"), AEXA26 (Aurum, palestra). Botão "Novo projeto", aba "Modelos de lançamento".
 3. Código: `npx vitest run` (`domain/cadastro.test.ts`, `alertas.test.ts`, `infrastructure/demo.test.ts`,
@@ -661,7 +662,12 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
   campanhas, durante, encerramento) e **metas padrão** opcionais, só as que a Central mede por meta: CPL e % MQL.
 - **Mockups:** um "Exemplo: &lt;tipo&gt; &lt;unidade&gt;" por combinação (9), rascunho a validar e padrão. Fases da lista
   que já existe, **datas e percentuais genéricos de exemplo (não são decisão de ninguém)**; uma campanha esperada por
-  fase pelo mapa objetivo → fase (captação no pago e no LPSG = VENDAS); o item do SendFlow nos modelos com captação.
+  fase pelo mapa objetivo → fase (captação no pago e no LPSG = VENDAS; antecipação = ANTECIPAÇÃO). **Grupo é uma etapa
+  do funil** (Victor, 06/10/2026): campanha de lead leva a pessoa a um grupo de leads, campanha de venda a um grupo de
+  compradores. Por isso o item manual do SendFlow é "Automação de ingresso no grupo de leads configurada no SendFlow" nos
+  modelos com campanha esperada LEADS (clássico CSM, Escritório e Diamantes; palestra Aurum) e "Automação de ingresso no
+  grupo de compradores configurada no SendFlow" nos com VENDAS (pago CSM e Diamantes, LPSG CSM); os dois quando houver
+  ambos; ATM sem nenhum. Os exemplos não ganharam fase de antecipação (números seriam inventados).
   Tabela dos números em `20261006l.explain.md`.
 - **No projeto, "Aplicar modelo"** (cadastro do projeto e item do checklist): lista os modelos ativos do tipo de
   lançamento e da unidade do projeto (padrão primeiro), mostra a **prévia** (fases com datas calculadas e verba = % ×
@@ -684,8 +690,8 @@ lançamento" (9 exemplos), LPEXA26 já com o "Exemplo: Lançamento pago CSM" apl
 alerta de checklist incompleto em captação); código, `domain/modelos.test.ts`, `cadastro.test.ts`, `demo.test.ts`,
 `ui/montagem.test.ts`.
 
-**Perguntas (para o Victor):** os números dos exemplos (fases, datas e % por tipo) e quais modelos têm captação em grupo
-(hoje o SendFlow vai em todos com captação); metas padrão por modelo; mais itens manuais por tipo de lançamento.
+**Perguntas (para o Victor):** os números dos exemplos (fases, datas e % por tipo, e se algum leva fase de antecipação);
+metas padrão por modelo; mais itens manuais por tipo de lançamento.
 
 ### Contas de anúncio do Meta (migration 20261006k, NÃO APLICADA)
 
@@ -757,8 +763,9 @@ cadastra de forma idempotente (por plataforma e id): nome exato, id sem `act_`, 
   confirmar depois pelo Victor (trocar em `mkt_trafego.periodo_receita` e `periodoReceita`).
 - j) **Etiquetas do ClickUp:** ler as de todos os spaces do workspace (hoje) ou de um space só?
 - k) **Especialistas internos:** além de Marcio Carvalho de Sá e Elaine Montenegro, quem mais (entra por SQL)?
-- l) **ANTECIPAÇÃO entra na lista de objetivos? Em qual fase?** (exemplo `CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ |
-  ABO | THRUPLAY`). Hoje fica fora do padrão só por isso; ligar = os comandos comentados na 20261006e.
+- l) ~~ANTECIPAÇÃO entra na lista de objetivos?~~ **Decidido (06/10/2026):** entra, e vem antes da captação (fase
+  antecipação, logo antes de captação). Nas 20261006e e 20261006g.
+
 ## Mensageria (etapa 2)
 
 Banco da área Mensageria: log central de disparos, controle de números e ferramentas. **Migration
@@ -783,6 +790,66 @@ contrato das funções e planos medidos em `20261005n.explain.md`). Depende da b
 - **Acesso:** igual ao resto do Marketing: tabelas e schema fechados; as funções checam `mkt.pode_ver('mkt_mensageria')`,
   hoje só admin/dev. Liberar operador/gestor da Mensageria = mudar só `mkt.pode_ver` (ver o explain).
 - **Não tocar:** `cs.disparos` e `cs.canais_disparo` são de outro sistema; a Mensageria não lê nem aponta para eles.
+
+## Ordem para aplicar em produção (Marketing: Web e Tráfego)
+
+> Situação em 06/10/2026: **nenhuma destas está aplicada.** Já em produção (main, não mexer): 20261005m (base
+> compartilhada), Mensageria do João (`20261005n_mkt_mensageria`, `20261005o_mkt_mensageria_precos_integracoes`,
+> `20261006a_mkt_mensageria_sigla_normalizada`) e o Comercial do Arthur (`20261005r_pessoas_e_crm_fundacao` com
+> `_pre_indice_compradores`, `20261005s`, `20261005t`, `20261006043612` … `20261006103738`). As nossas foram
+> **renumeradas** em 06/10/2026 para não colidir com esses nomes e para ordenar depois de tudo que já foi aplicado
+> (`20261006e` > `20261006103738` na ordem dos nomes). A nossa base de pessoas (`20261005o_pessoas_crm_comercial`) foi
+> apagada: vale a do Arthur.
+
+Para cada uma: rodar o `_ensaio.sql` inteiro (termina em rollback), conferir que **nenhuma linha começa com `ERRADO`**,
+aplicar a migration e só então passar para a próxima. Cada migration tem guarda: aborta se a anterior faltar ou se já
+estiver aplicada.
+
+| # | Migration (nome novo) | Antes | Depende de | O que o ensaio confere |
+|---|---|---|---|---|
+| 1 | `20261006e_mkt_campanha_traduzir_descricao` | 20261006c | 20261005m (aplicada; a guarda exige o corpo original de `mkt.campanha_traduzir`) | descrição de várias partes, página só no último campo com formato de slug, motivos de "fora do padrão", **ANTECIPAÇÃO na lista** (com e sem acento), as chaves que `pessoas.registrar` do Arthur lê, grants |
+| 2 | `20261006f_mkt_web_coleta` | 20261005n | 20261005m | coleta da Web (`mkt_web`, 14 tabelas, 12 funções), recusas da porta, limites, resumo, retenção; agenda 3 rotinas SQL (`mkt-web-manter`, `mkt-web-agregar`, `mkt-web-ritmo`) |
+| 3 | `20261006g_mkt_trafego` | 20261005p | 20261005m; lê a base de pessoas do Arthur se existir (existe) | 6 fases (com **antecipação** logo antes de captação) e 7 objetivo → fase, contas, coleta, planejamento, resumo conferido à mão, **leads e MQL da base do Arthur** (pessoa juntada conta como a que ficou), grants e recusas 42501 |
+| 4 | `20261006h_mkt_web_fase2` | 20261005q | 20261006f e 20261005m; conversa com a base de pessoas e com a 20261006g | fluxo, melhorias, mapa de calor, laboratório do Google, connect rate com o Tráfego, **lead ligado à pessoa** pela `ref` do Arthur (pessoa juntada, MQL do grupo, e `public.pessoas_registrar_lead` gravando `visitantes.lead_ref`); agenda `mkt-web-pagespeed` |
+| 5 | `20261006i_mkt_trafego_fase2` | 20261005r (a nossa) | 20261006g | resumo do dia com limiares, receita Hotmart por vínculo, ClickUp, rotinas criadas **desligadas** (a conferência aborta se estiverem agendadas), segredo `trafego_coleta_chave` no Vault |
+| 6 | `20261006j_mkt_projetos_cadastro` | 20261006a | 20261006g e 20261006i | cadastro do projeto (tipo, unidade, tipo de lançamento com a regra no banco, especialista, períodos, contas), checklist, etiquetas do ClickUp |
+| 7 | `20261006k_mkt_trafego_contas_meta` | 20261006b | 20261006j | as 16 contas do Meta com unidade e principal; aborta se a coleta do Meta já estiver agendada |
+| 8 | `20261006l_mkt_trafego_modelos` | 20261006d | 20261006j (aborta se o pacote ou o checklist antigo tiverem dado) | 9 modelos de exemplo (rascunho), prévia e aplicar, checklist por momento, **SendFlow: grupo de leads onde há LEADS, grupo de compradores onde há VENDAS** |
+
+**Fora do SQL (na ordem):**
+
+1. **Antes da 4 (20261006h):** publicar a Edge `mkt-web-pagespeed` (`supabase functions deploy mkt-web-pagespeed`;
+   `verify_jwt = false` já está no `infra/supabase/config.toml`). A migration cria a chave do header no Vault
+   (`mkt_web_pagespeed_chave`) e agenda a rotina diária (09:40 UTC) que chama a Edge. Chave do Google opcional, à mão:
+   `vault.create_secret('<chave>', 'mkt_web_pagespeed_api_key')` (sem ela, a cota pública).
+2. **Depois da 5 (20261006i), quando o Victor decidir ligar a coleta:** publicar as Edges `trafego-meta` e
+   `trafego-clickup` (`verify_jwt = false` no `config.toml`), cadastrar no Vault `meta_ads_token` (ou um por conta,
+   `meta_ads_token_<nome>` + `mkt_trafego.contas.token_vault`) e `clickup_api_token`, e o `clickup_team_id` em
+   `mkt_trafego.coleta_config`.
+3. **O bloco que agenda a coleta do Meta** (e do ClickUp) é o "LIGAR AS ROTINAS", comentado no fim da
+   `20261006i_mkt_trafego_fase2.sql` (`cron.schedule('trafego-meta', '30 9 * * *', …)` e
+   `cron.schedule('trafego-clickup', '0 10 * * *', …)`). Rodar **só depois da 7 (20261006k)**: a conferência da 20261006k
+   aborta se encontrar `trafego-meta` agendada. Desligar: `cron.unschedule('trafego-meta')` e
+   `cron.unschedule('trafego-clickup')`.
+4. **Ligação Web → pessoa:** nada a mudar no banco do Arthur. Depois da 2 (20261006f), `pessoas.registrar` (chamada por
+   `public.pessoas_registrar_lead`, service_role) passa a gravar `mkt_web.visitantes.lead_ref` quando o formulário manda
+   o `visitante`. Falta o formulário mandar: ligar o `api/crm.php` do PB a `pessoas_registrar_lead` com o `visitante` do
+   gravador (`radar_v`), passo da virada da Web.
+5. **Telas:** as de `/marketing/web` e `/marketing/trafego` vão para produção quando a `victor` for para a `main` (push na
+   `main` publica). Fazer isso só com as migrations acima aplicadas.
+
+**Como foi ensaiado (06/10/2026, PGlite, Postgres 17):** prelúdio com papéis, `auth.uid()`, `perfis`, `gp_is_admin`,
+pg_cron/Vault/`ops.cron_post` de mentira, `public.compras` da Hotmart, as tabelas e índices que a 20261005r do Arthur
+confere (com a expressão exata de produção) e `pg_trgm`; depois a **20261005m e a `20261005r_pessoas_e_crm_fundacao`
+reais da main** (com o índice pré-criado), e então a cadeia acima, cada ensaio no ponto dele e a migration em seguida.
+Resultado: todas aplicaram, **nenhuma `ERRADO`**; 343 `ok`; 2 PULADO esperados (7.tráfego da 20261006e e 6.web da
+20261006g, porque o que eles leem vem depois; provados em rodadas extras com a ordem trocada). A Mensageria e as F1 a F7
+do CRM **não rodaram no PGlite** (pedem vigia, pg_net, schema `arquivo`, pgcrypto); conferido no código que elas só
+alargam os `check` de `pessoas.eventos`/`identificadores` e não mexem em `pessoas.pessoas`, `atual`, `grupo`,
+`pode_ver`, `registrar` nem em `mkt.campanha_traduzir`, que é o que a nossa cadeia lê. Conferido em produção (só
+SELECT): `pessoas.pessoas` com `ref`, `situacao`, `mesclada_em`, `teste`; `pessoas.registrar` grava
+`mkt_web.visitantes.lead_ref`; `mkt.campanha_traduzir` ainda com o corpo da 20261005m; `mkt_web` vazio; objetivos
+`DISTRIBUIÇÃO, LEADS, LEMBRETE, REMARKETING, VENDAS`.
 
 ## Branches
 
@@ -842,3 +909,12 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
 - **05/10/2026:** Mensageria etapa 2, banco (migration 20261005n, APLICADA em 05/10/2026): schema `mkt_mensageria` com
   disparos, números, ferramentas, importações e histórico; 11 funções `public.mkt_msg_*` (com a anonimização LGPD).
   Branch `joao-pedro`.
+- **06/10/2026:** `victor` sincronizada com a `main` (Mensageria do João e Comercial do Arthur, aplicados). O nosso
+  Comercial (20261005o, nunca aplicado, e `web/modules/comercial` nosso com o modo `NEXT_PUBLIC_COMERCIAL_DEMO`) saiu:
+  vale o do Arthur. Migrations do Marketing renumeradas: 6c → **20261006e**, 5n → **20261006f**, 5p → **20261006g**,
+  5q → **20261006h**, 5r → **20261006i**, 6a → **20261006j**, 6b → **20261006k**, 6d → **20261006l** (todas NÃO
+  APLICADAS; ordem e o que fazer fora do SQL em "Ordem para aplicar em produção"). Web e Tráfego leem a base de pessoas
+  do Arthur (pessoa juntada segue para a que ficou; `lead_ref` gravado pela função dele). Lead da Web sem link para a
+  ficha (a tela do Arthur não abre por URL). Decisões novas do Victor: **ANTECIPAÇÃO** na lista de objetivos, com a fase
+  antecipação logo antes da captação; **grupo é etapa do funil** (SendFlow: grupo de leads nos modelos com LEADS, grupo
+  de compradores nos com VENDAS). Branch `victor`.
