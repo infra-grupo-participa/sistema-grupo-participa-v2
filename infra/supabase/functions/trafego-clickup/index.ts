@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
   const [cred] = await sql`select token, team_id from mkt_trafego.clickup_credenciais()`;
   if (!cred?.token || !cred?.team_id) {
     const erro = !cred?.token ? 'sem_token' : 'sem_workspace';
-    await sql`select mkt_trafego.coleta_registrar('clickup', false, ${JSON.stringify({ etiquetas: [] })}::jsonb, ${erro})`;
+    await sql`select mkt_trafego.coleta_registrar('clickup', false, ${sql.json({ etiquetas: [] })}::jsonb, ${erro})`;
     return json({ ok: false, erro });
   }
   const etiquetas = (await sql`select e from mkt_trafego.clickup_etiquetas() e`).map((r) => String(r.e));
@@ -43,14 +43,14 @@ Deno.serve(async (req) => {
     buscar: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(20_000) }),
     token: String(cred.token),
     team: String(cred.team_id),
-    receber: async (p) => (await sql`select public.trafego_clickup_receber(${JSON.stringify(p)}::jsonb) as r`)[0].r,
+    receber: async (p) => (await sql`select public.trafego_clickup_receber(${sql.json(p)}::jsonb) as r`)[0].r,
   });
   // etiquetas reais dos spaces (20261006j), para a tela escolher a etiqueta do projeto; falha aqui não derruba as tarefas
   let espacos: { ok: boolean; erro?: string; gravadas?: number; fora_do_formato?: number };
   try {
     const todas = await lerEtiquetasDosSpaces((url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(20_000) }),
       String(cred.token), String(cred.team_id));
-    const r = (await sql`select public.trafego_clickup_etiquetas_receber(${JSON.stringify({ etiquetas: todas })}::jsonb) as r`)[0].r;
+    const r = (await sql`select public.trafego_clickup_etiquetas_receber(${sql.json({ etiquetas: todas })}::jsonb) as r`)[0].r;
     espacos = r?.ok === false ? { ok: false, erro: 'banco' } : { ok: true, gravadas: r?.gravadas, fora_do_formato: r?.fora_do_formato };
   } catch (e) {
     espacos = { ok: false, erro: e instanceof ErroClickup ? e.codigo : 'falha' };
@@ -58,6 +58,6 @@ Deno.serve(async (req) => {
   const ok = res.every((r) => r.ok) && espacos.ok;
   const erro = ok ? null : [...res.filter((r) => !r.ok).map((r) => `${r.etiqueta}: ${r.erro}`),
     ...(espacos.ok ? [] : [`etiquetas dos spaces: ${espacos.erro}`])].join('; ').slice(0, 480);
-  await sql`select mkt_trafego.coleta_registrar('clickup', ${ok}, ${JSON.stringify({ etiquetas: res, espacos })}::jsonb, ${erro})`;
+  await sql`select mkt_trafego.coleta_registrar('clickup', ${ok}, ${sql.json({ etiquetas: res, espacos })}::jsonb, ${erro})`;
   return json({ ok, etiquetas: res, espacos });
 });
