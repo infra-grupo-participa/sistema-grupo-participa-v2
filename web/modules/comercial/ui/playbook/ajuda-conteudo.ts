@@ -1199,7 +1199,7 @@ const SISTEMA: SecaoAjuda[] = [
       p('O sistema do Comercial está sendo ligado aos poucos. Por isso ele funciona de dois jeitos:'),
       ul([
         '**Demonstração:** aparece a faixa "Demonstração · dados fictícios". As pessoas são inventadas. Tudo funciona, mas **nada fica gravado**: ao recarregar, volta como era.',
-        '**Ligado ao banco real:** por enquanto, **só para consultar**. Ao tentar gravar, aparece "Escrita do CRM entra na Fase 2." Isso é esperado, não é erro seu.',
+        '**Ligado ao banco real:** a gravação só funciona depois que o gestor liberar o CRM para uso. Até lá, ao tentar gravar, aparece "CRM em manutenção: escrita desligada." Isso é esperado, não é erro seu.',
       ]),
       p('Na demonstração, o seletor **"Ver como"** troca a pessoa da tela. Serve para ver o sistema como vendedor ou como gestor. O "x" esconde a faixa nesta sessão.'),
       dicas(['Use a demonstração para treinar: mova, perca, agende e conclua à vontade.']),
@@ -1301,7 +1301,7 @@ const FAQ: SecaoAjuda[] = [
     parte: 'faq',
     icone: 'settings',
     blocos: [
-      pergunta('Apareceu "Escrita do CRM entra na Fase 2". Fiz algo errado?', 'Não. O sistema ligado ao banco real ainda é só para consulta. A gravação entra na próxima fase.'),
+      pergunta('Apareceu "CRM em manutenção: escrita desligada". Fiz algo errado?', 'Não. O CRM ainda não foi liberado para gravar. Quando o gestor liberar, salvar passa a funcionar normalmente.'),
       pergunta('Mudei algo e sumiu quando recarreguei.', 'Você está na demonstração (faixa "Demonstração · dados fictícios"). Nela nada fica gravado.'),
       pergunta('Quem pode entrar no Comercial?', 'Hoje, só administradores. Quando o sistema estiver ligado ao banco, o acesso passa a ser do time do Comercial (gestor e vendedores).'),
       pergunta('Como paro de receber aviso fora do horário?', 'Em Configurações › Notificações, ligue o horário de silêncio e salve.', TELAS.notificacoes),

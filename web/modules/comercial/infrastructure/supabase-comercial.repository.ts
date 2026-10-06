@@ -1,27 +1,30 @@
 'use client';
 
-// Adapter Supabase do Comercial (Fase 1: só LEITURA). Único lugar do módulo que chama `.rpc('crm_*')`.
-// As RPCs (migration 20261005s) devolvem jsonb em camelCase; o formato vira tipo do domínio em
-// `mapeamento-supabase.ts` (puro e testado). Permissão mora no banco (RLS + guarda nas RPCs definer):
-// quem não é do Comercial recebe erro 42501, que vira exceção aqui (nunca lista vazia).
-// Escrita entra na Fase 2 (RPCs definer de escrita); até lá todo método de escrita devolve `ok: false`.
+// Adapter Supabase do Comercial. Único lugar do módulo que chama `.rpc('crm_*')`.
+// Leitura (migration 20261005s, F1): jsonb em camelCase → tipo do domínio em `mapeamento-supabase.ts` (puro e testado).
+// Permissão mora no banco (RLS + guarda nas RPCs definer): quem não é do Comercial recebe erro 42501, que vira
+// exceção aqui (nunca lista vazia).
+// Escrita (migration 20261005t, F2): RPCs definer que devolvem `{ok, msg?, …ids}` com as MESMAS mensagens do mock
+// (`mapeamento-escrita.ts`). Enquanto `crm.config.escrita_ligada = false`, todas respondem "CRM em manutenção".
+// Métodos sem tabela no banco (conversa, ficha, fila, link) devolvem `ok:false` dizendo a fase.
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import type { ComercialRepository, Resultado } from '../application/ports';
+import type { ComercialRepository, NovaAtividade, NovaFicha, Resultado } from '../application/ports';
 import type {
-  Contato, Conversa, Dashboard, EventoTimeline, FichaDisparo, FilaRecuperacao, FiltroLog, LinkRastreavel, LogCrm,
-  Mensagem, Negocio, OfertaHotmart, PainelPessoa, PontoJornada, PreferenciasNotificacao, ProdutoHotmart, Template,
+  CampoKey, Contato, Conversa, Dashboard, EventoTimeline, FichaDisparo, FilaRecuperacao, FiltroLog, Funil, LinkRastreavel,
+  LogCrm, Mensagem, MotivoPerda, MotivoPerdaConfig, Negocio, OfertaHotmart, PainelPessoa, PontoJornada,
+  PreferenciasNotificacao, ProdutoHotmart, ProdutoKey, StatusFila, Template, TipoProjeto,
 } from '../domain/types';
 import {
   mapAgrupadores, mapAtividades, mapBuscaPorLink, mapConfig, mapPaginaContatos, mapDashboards, mapEventos, mapFunis, mapJornada,
   mapLog, mapMotivosPerda, mapNegocios, mapNotificacoes, mapOfertas, mapOfertasOrfas, mapPainel, mapPreferencias,
   mapProdutosHotmart, mapSessao, mapVendedores, mensagemErroRpc,
 } from './mapeamento-supabase';
+import {
+  argsEscrita, mapResultado, mapResultadoComId, mapResultadoNegocio, mapResultadoProjeto, mensagemErroEscrita, semTabela,
+} from './mapeamento-escrita';
 // Padrão de fábrica de quem nunca personalizou (o mesmo que a demonstração usa).
 import { painelPadrao, preferenciasPadrao } from './mock-dados';
-
-const SEM_ESCRITA: Resultado = { ok: false, msg: 'Escrita do CRM entra na Fase 2.' };
-const escrita = async (): Promise<Resultado> => SEM_ESCRITA;
 
 // Páginas das RPCs com offset. Teto de segurança: passou disso, é erro (não corta calado).
 const PAGINA_NEGOCIOS = 2000;
@@ -146,33 +149,100 @@ export class SupabaseComercialRepository implements ComercialRepository {
   async filas(): Promise<FilaRecuperacao[]> { return []; }
   async links(): Promise<LinkRastreavel[]> { return []; }
 
-  // ── Escrita (Fase 2) ──
-  salvarFunil = escrita;
-  arquivarFunil = escrita;
-  criarAgrupador = escrita;
-  criarProjeto = escrita;
-  salvarMotivoPerda = escrita;
-  moverEtapa = escrita;
-  salvarCampos = escrita;
-  marcarPerdido = escrita;
-  transferirDono = escrita;
-  criarNegocio = escrita;
-  atribuirContato = escrita;
-  criarAtividade = escrita;
-  concluirAtividade = escrita;
-  adicionarNota = escrita;
-  enviarMensagem = escrita;
-  marcarConversaLida = escrita;
-  atualizarItemFila = escrita;
-  salvarFicha = escrita;
-  decidirFicha = escrita;
-  salvarDistribuicao = escrita;
-  criarLink = escrita;
-  salvarPainel = escrita;
-  marcarNotificacoesLidas = escrita;
-  salvarPreferenciasNotificacao = escrita;
-  vincularProduto = escrita;
-  salvarOferta = escrita;
-  salvarDashboard = escrita;
-  excluirDashboard = escrita;
+  // ── Escrita (F2) ──
+  /**
+   * Chama a RPC de escrita. Erro de chamada (rede, função ausente, sem permissão) e formato fora do contrato viram
+   * `{ok:false, msg}` para a tela mostrar; nunca sucesso presumido.
+   */
+  private async escrever<T extends Resultado>(fn: string, args: Record<string, unknown>, mapa: (d: unknown) => T): Promise<T | Resultado> {
+    const { data, error } = await this.db().rpc(fn, args);
+    if (error) {
+      logQueryError(fn, error);
+      return { ok: false, msg: mensagemErroEscrita(fn, error) };
+    }
+    try {
+      return mapa(data);
+    } catch (e) {
+      return { ok: false, msg: e instanceof Error ? e.message : `Resposta inesperada do banco (${fn}).` };
+    }
+  }
+
+  private simples(fn: string, args: Record<string, unknown>) {
+    return this.escrever(fn, args, (d) => mapResultado(fn, d));
+  }
+
+  salvarFunil(f: Funil): Promise<Resultado & { funilId?: string }> {
+    return this.escrever('crm_salvar_funil', argsEscrita.salvarFunil(f), (d) => mapResultadoComId('crm_salvar_funil', d, 'funilId'));
+  }
+  arquivarFunil(funilId: string) { return this.simples('crm_arquivar_funil', argsEscrita.arquivarFunil(funilId)); }
+  criarAgrupador(nome: string, produto: ProdutoKey | null): Promise<Resultado & { agrupadorId?: string }> {
+    return this.escrever('crm_criar_agrupador', argsEscrita.criarAgrupador(nome, produto), (d) => mapResultadoComId('crm_criar_agrupador', d, 'agrupadorId'));
+  }
+  criarProjeto(tipo: TipoProjeto, nome: string, agrupadorId: string, produto: ProdutoKey): Promise<Resultado & { funilIds?: string[] }> {
+    return this.escrever('crm_criar_projeto', argsEscrita.criarProjeto(tipo, nome, agrupadorId, produto), mapResultadoProjeto);
+  }
+  salvarMotivoPerda(m: MotivoPerdaConfig) { return this.simples('crm_salvar_motivo_perda', argsEscrita.salvarMotivoPerda(m)); }
+
+  moverEtapa(negocioId: string, etapaId: string) { return this.simples('crm_mover_etapa', argsEscrita.moverEtapa(negocioId, etapaId)); }
+  salvarCampos(negocioId: string, campos: Partial<Record<CampoKey, string>>) {
+    return this.simples('crm_salvar_campos', argsEscrita.salvarCampos(negocioId, campos));
+  }
+  marcarPerdido(negocioId: string, motivo: MotivoPerda, nota: string) {
+    return this.simples('crm_marcar_perdido', argsEscrita.marcarPerdido(negocioId, motivo, nota));
+  }
+  transferirDono(negocioId: string, novoDonoId: string, motivo: string) {
+    return this.simples('crm_transferir_dono', argsEscrita.transferirDono(negocioId, novoDonoId, motivo));
+  }
+  criarNegocio(contatoId: string, funilId: string, campanhaId?: string | null): Promise<Resultado & { negocioId?: string; donoId?: string | null }> {
+    return this.escrever('crm_criar_negocio', argsEscrita.criarNegocio(contatoId, funilId, campanhaId), mapResultadoNegocio);
+  }
+  atribuirContato(contatoId: string, donoId: string, motivo: string) {
+    return this.simples('crm_atribuir_contato', argsEscrita.atribuirContato(contatoId, donoId, motivo));
+  }
+
+  criarAtividade(a: NovaAtividade) { return this.simples('crm_criar_atividade', argsEscrita.criarAtividade(a)); }
+  concluirAtividade(atividadeId: string, resultado: string) {
+    return this.simples('crm_concluir_atividade', argsEscrita.concluirAtividade(atividadeId, resultado));
+  }
+  adicionarNota(contatoId: string, negocioId: string | null, texto: string) {
+    return this.simples('crm_adicionar_nota', argsEscrita.adicionarNota(contatoId, negocioId, texto));
+  }
+
+  salvarDistribuicao(percentuais: Record<string, { percentual: number; ativo: boolean }>) {
+    return this.simples('crm_salvar_distribuicao', argsEscrita.salvarDistribuicao(percentuais));
+  }
+  salvarPainel(p: PainelPessoa) { return this.simples('crm_salvar_painel', argsEscrita.salvarPainel(p)); }
+  marcarNotificacoesLidas(ids?: string[]) { return this.simples('crm_marcar_notificacoes_lidas', argsEscrita.marcarNotificacoesLidas(ids)); }
+  salvarPreferenciasNotificacao(p: PreferenciasNotificacao) { return this.simples('crm_salvar_preferencias', argsEscrita.salvarPreferencias(p)); }
+  vincularProduto(p: Pick<ProdutoHotmart, 'produtoId' | 'noComercial' | 'nomeComercial' | 'produtoKey' | 'agrupadorId' | 'escada'>) {
+    return this.simples('crm_vincular_produto', argsEscrita.vincularProduto(p));
+  }
+  salvarOferta(o: Pick<OfertaHotmart, 'codigo' | 'vigente' | 'condicao' | 'validaAte' | 'uso'>) {
+    return this.simples('crm_salvar_oferta', argsEscrita.salvarOferta(o));
+  }
+  salvarDashboard(d: Dashboard): Promise<Resultado & { dashboardId?: string }> {
+    return this.escrever('crm_salvar_dashboard', argsEscrita.salvarDashboard(d), (x) => mapResultadoComId('crm_salvar_dashboard', x, 'dashboardId'));
+  }
+  /** "Excluir" na tela = arquivar no banco (nada se apaga). */
+  excluirDashboard(id: string) { return this.simples('crm_arquivar_dashboard', argsEscrita.excluirDashboard(id)); }
+
+  // ── Escrita sem tabela no banco ainda (backend-arquitetura.md §6) ──
+  async enviarMensagem(contatoId: string, texto: string, templateId?: string | null): Promise<Resultado> {
+    void contatoId; void texto; void templateId;
+    return semTabela('Envio de mensagem', 'Fase 4');
+  }
+  async marcarConversaLida(contatoId: string): Promise<Resultado> { void contatoId; return semTabela('Conversa', 'Fase 4'); }
+  async atualizarItemFila(filaId: string, itemId: string, status: StatusFila): Promise<Resultado> {
+    void filaId; void itemId; void status;
+    return semTabela('Fila de recuperação', 'próxima fase');
+  }
+  async salvarFicha(f: NovaFicha, enviarParaAprovacao: boolean): Promise<Resultado> {
+    void f; void enviarParaAprovacao;
+    return semTabela('Ficha de disparo', 'Fase 4');
+  }
+  async decidirFicha(fichaId: string, aprovar: boolean): Promise<Resultado> { void fichaId; void aprovar; return semTabela('Ficha de disparo', 'Fase 4'); }
+  async criarLink(vendedorId: string, produto: ProdutoKey, acao: string, canal: string): Promise<Resultado> {
+    void vendedorId; void produto; void acao; void canal;
+    return semTabela('Link rastreável', 'próxima fase');
+  }
 }
