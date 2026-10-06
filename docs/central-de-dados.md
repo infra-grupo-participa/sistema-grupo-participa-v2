@@ -488,7 +488,9 @@ Victor ver a tela no modo demo e responder as perguntas abaixo; rodar o ensaio n
 
 1. ~~Status~~ **Respondido:** ativo, pausado, inativo, encerrado (fica como está).
 2. ~~Connect rate e conversão~~ **Respondido:** connect rate = page views ÷ cliques no link; conversão da página = leads
-   ÷ page views. Ligado à mesma page view da Web fase 2 (ver Decisões).
+   ÷ page views. Ligado à mesma page view da Web fase 2 (ver Decisões). **Confirmado pelo Victor (05/10):** page view =
+   uma entrada por visita, como o Meta conta; o lead da conversão é o da Web (visitas da campanha que viraram lead), e o
+   lead da base fica na coluna de leads, no CPL e no % MQL.
 3. ~~Cliques~~ **Respondido:** cliques no link para CTR e CPC; totais guardados à parte.
 4. ~~Fase da campanha~~ **Respondido:** pelo objetivo do nome, com correção à mão prevalecendo; mapa e objetivos novos
    (CARRINHO, AQUECIMENTO) nas Decisões. DISTRIBUIÇÃO sem fase automática.
