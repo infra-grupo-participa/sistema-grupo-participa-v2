@@ -68,5 +68,7 @@ Regra de quem vê o quê e máscara de e-mail/telefone: **não mudaram** (moram 
 6. **Listas de negócios e atividades**: `negocios()` e `atividades()` também baixam tudo (3.666 negócios em 06/10,
    teto 50.000). Mesma lógica: filtro por funil e status no banco.
 7. Decisão de negócio pendente (D6): vendedor vê os 1.800 contatos sem dono, quase todos só compradores Hotmart.
+   **Decidido em 06/10/2026** (Victor): sem dono e sem negócio aberto sai da lista do vendedor e continua na busca;
+   os 2.640 ganhos retroativos saem. Ver `hotmart-sem-retroativo-2026-10-06.md` (migration 20261006191824).
 
 Diagnóstico completo: segundo cérebro, `Projetos/sistema-unico/central-de-dados/area-comercial-mapa.md`, seção (c).

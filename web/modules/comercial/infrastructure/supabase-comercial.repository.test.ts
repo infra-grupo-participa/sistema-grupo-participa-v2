@@ -56,3 +56,19 @@ describe('jornada(): uma pessoa por chamada', () => {
     expect(rpc).toHaveBeenCalledWith('crm_jornada', { p_pessoa: 'abc' });
   });
 });
+
+describe('buscarContatos(): busca no servidor (20261006191824)', () => {
+  it('manda o termo para crm_contatos numa chamada só, até 50', async () => {
+    const { r, rpc } = repoCom(3);
+    const achados = await r.buscarContatos('  maria  ');
+    expect(achados).toHaveLength(3);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('crm_contatos', { p_busca: 'maria', p_limite: 50, p_offset: 0 });
+  });
+
+  it('menos de 3 letras não chama o banco', async () => {
+    const { r, rpc } = repoCom(3);
+    expect(await r.buscarContatos('ma')).toEqual([]);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+});

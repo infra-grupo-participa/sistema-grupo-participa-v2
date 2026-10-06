@@ -34,6 +34,8 @@ import { painelPadrao, preferenciasPadrao } from './mock-dados';
 
 // Páginas das RPCs com offset. Teto de segurança: passou disso, é erro (não corta calado).
 const PAGINA_NEGOCIOS = 2000;
+// Busca de contatos no servidor: até 50 por termo (a tela mostra os primeiros; refinar o termo acha o resto).
+const LIMITE_BUSCA_CONTATOS = 50;
 // Contatos: 500 é o máximo que `crm_contatos` aceita por chamada. Teto próprio de 20 páginas (10.000 contatos):
 // a lista de um gestor (2.648 em 06/10/2026) cabe em 6 chamadas. Ajuste rápido; a correção definitiva é a lista
 // paginada no banco (docs/projetos/comercial/ajuste-rapido-2026-10-06.md).
@@ -91,6 +93,13 @@ export class SupabaseComercialRepository implements ComercialRepository {
     }
     const teto = (MAX_PAGINAS_CONTATOS * PAGINA_CONTATOS).toLocaleString('pt-BR');
     throw new Error(`Lista grande demais para carregar de uma vez (crm_contatos: mais de ${teto} contatos). Avise o time de dados.`);
+  }
+
+  /** Uma chamada só, com p_busca: a RPC aplica a regra da busca (vendedor acha qualquer sem dono). */
+  async buscarContatos(texto: string): Promise<Contato[]> {
+    const t = texto.trim();
+    if (t.length < 3) return [];
+    return mapPaginaContatos(await this.rpc('crm_contatos', { p_busca: t, p_limite: LIMITE_BUSCA_CONTATOS, p_offset: 0 })).itens;
   }
 
   async jornada(contatoId: string): Promise<PontoJornada[]> {

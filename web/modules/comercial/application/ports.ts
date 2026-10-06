@@ -76,6 +76,11 @@ export interface ComercialRepository {
 
   contatos(): Promise<Contato[]>;
   /**
+   * Busca no servidor por nome, e-mail ou telefone (mínimo 3 caracteres; até 50). Alcança contatos que não vêm na
+   * lista do vendedor (sem dono e sem negócio aberto, migration 20261006191824), com a mesma máscara de e-mail/telefone.
+   */
+  buscarContatos(texto: string): Promise<Contato[]>;
+  /**
    * Jornada completa da pessoa com a empresa: inscrições (cada uma com a UTM daquela entrada), listas, pesquisas,
    * grupos, presença, checkout, compras, reembolsos, negócios e conversas. Do mais recente para o mais antigo.
    */

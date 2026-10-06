@@ -1127,7 +1127,7 @@ O mock ganha os mesmos ajustes para a demonstração continuar fiel.
 | D5 | Admin (18 perfis) = gestor do CRM? | Marcio | Sim para dev/admin (mesma régua de `gp_pode_editar`), mas **logado** com nome; se preferir, só `cargo='gestor'` + área comercial |
 | D6 | Vendedor vê leads de colegas? | Jonathan/Marcio | **Não**: vê os seus + os sem dono (leitura). Ranking e totais do time via `crm_desempenho` (agregado) |
 | D7 | Qual evento Hotmart é "cartão recusado" (`PURCHASE_CANCELED` 4,4/dia, `PURCHASE_DELAYED` 0,9/dia) | Arthur (olhar payload) | Conferir `payload->'data'->'purchase'->>'status'` numa amostra antes da F3; não inventar |
-| D8 | Backfill Hotmart desde 15/07 | Arthur | Só jornada, sem negócio retroativo |
+| D8 | Backfill Hotmart desde 15/07 | Arthur | Só jornada, sem negócio retroativo. Em 06/10/2026 a carga desde 01/01 criou 2.640 ganhos; o Victor decidiu tirá-los e compra direta deixou de criar ganho (`hotmart-sem-retroativo-2026-10-06.md`, migration 20261006191824) |
 | D9 | Dono da WABA/número oficial: está na conta Clint? | Marcio | Descobrir antes da F4: se for da Clint, portar o número antes de desligar a Clint |
 | D10 | Schema `crm` não exposto (front só por RPC) | Arthur | Sim (seção 2.1) |
 | D11 | Mudança na `ingest-active` para múltiplas listas é de outro time e o código publicado não está neste repo | Arthur + marketing | Ler a versão publicada antes; mudança aditiva (`lista_id`), sem reescrever `lead_active` |

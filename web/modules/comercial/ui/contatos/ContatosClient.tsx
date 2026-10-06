@@ -3,7 +3,7 @@
 // Base de pessoas do CRM. Regra do playbook: se não está no CRM, não existe; antes de falar com alguém,
 // busque pelo telefone (tem dono, não é seu). Sem dono é meta zero; opt-out fica visível para ninguém abordar.
 // Sem rolagem horizontal: em tela larga, 5 colunas enxutas; em tela estreita, cartões. O detalhe mora na ficha.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Button, FilterSelect, MultiSelect, SearchInput, Toast, Toggle, Toolbar, useFlash,
 } from '@/shared/ui/components';
@@ -35,7 +35,7 @@ const INFO: Record<'total' | 'semDono' | 'optOut' | 'alunos' | 'lancamentos', Te
   semDono: {
     nome: 'Contatos sem dono',
     oQueE: 'Pessoas da base sem vendedor responsável.',
-    comoConta: 'Contato com dono vazio, inclusive quem pediu para não receber contato.',
+    comoConta: 'Contato com dono vazio, inclusive quem pediu para não receber contato. Para o vendedor, a lista traz só os sem dono com negócio aberto; quem só comprou na Hotmart aparece na busca.',
     paraQue: 'Contato sem dono vira abordagem dupla. O gestor distribui na hora.',
     meta: 'Zero.',
   },
@@ -81,6 +81,23 @@ export function ContatosClient() {
   const contatoAberto = aberto ?? paramContato;
 
   const lista = useMemo(() => [...locais, ...(cs.dados ?? [])], [cs.dados, locais]);
+
+  // Busca no servidor (a partir de 3 letras, 400 ms depois da última tecla): acha quem não vem na lista do vendedor
+  // (sem dono e sem negócio aberto, migration 20261006191824). Os achados entram só no resultado, não nos números.
+  const [termo, setTermo] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setTermo(busca.trim()), 400);
+    return () => clearTimeout(t);
+  }, [busca]);
+  const rb = useDados(
+    async () => ({ termo, itens: termo.length >= 3 ? await repo.buscarContatos(termo) : [] as Contato[] }),
+    [termo],
+  );
+  const daBusca = useMemo(() => {
+    if (!rb.dados || rb.dados.termo !== busca.trim()) return [] as Contato[];
+    const ids = new Set(lista.map((c) => c.id));
+    return rb.dados.itens.filter((c) => !ids.has(c.id));
+  }, [rb.dados, busca, lista]);
   const duplicados = useMemo(() => mapaDuplicados(lista), [lista]);
   const abertosPorContato = useMemo(() => {
     const m = new Map<string, Negocio[]>();
@@ -98,14 +115,16 @@ export function ContatosClient() {
   const tags = useMemo(() => [...new Set(lista.flatMap((c) => c.tags))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [lista]);
 
   const filtrados = useMemo(() => {
-    const res = lista.filter((c) => {
+    const idsBusca = new Set(daBusca.map((c) => c.id));
+    const res = [...lista, ...daBusca].filter((c) => {
       if (dono === 'sem_dono' ? !!c.donoId : dono !== 'todos' && c.donoId !== dono) return false;
       if (perfil === 'sem' ? !!c.perfil : perfil !== 'todos' && c.perfil !== perfil) return false;
       if (uf !== 'todas' && c.uf !== uf) return false;
       if (tagsSel.length && !tagsSel.some((t) => c.tags.includes(t))) return false;
       if (soOptOut && !c.optOut) return false;
       if (soAlunos && !c.ehAluno) return false;
-      return casaBusca(c, busca);
+      // o servidor já casou a busca (e-mail e telefone vêm mascarados, então não dá para casar de novo aqui)
+      return idsBusca.has(c.id) || casaBusca(c, busca);
     });
     const valor = (c: Contato): string | number => {
       switch (ordem.col) {
@@ -122,7 +141,7 @@ export function ContatosClient() {
       const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), 'pt-BR');
       return cmp * sinal || a.nome.localeCompare(b.nome, 'pt-BR');
     });
-  }, [lista, dono, perfil, uf, tagsSel, soOptOut, soAlunos, busca, ordem, nomeDe, abertosPorContato, indice]);
+  }, [lista, daBusca, dono, perfil, uf, tagsSel, soOptOut, soAlunos, busca, ordem, nomeDe, abertosPorContato, indice]);
 
   const numeros = {
     total: lista.length,
@@ -320,7 +339,8 @@ export function ContatosClient() {
         <ContatoDrawer
           key={contatoAberto}
           contatoId={contatoAberto}
-          contatoReserva={locais.find((c) => c.id === contatoAberto)}
+          contatoReserva={locais.find((c) => c.id === contatoAberto) ?? daBusca.find((c) => c.id === contatoAberto)}
+          reservaDaBusca={!locais.some((c) => c.id === contatoAberto)}
           onAbrirContato={abrir}
           onClose={() => {
             setAberto(null);
