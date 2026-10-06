@@ -1383,7 +1383,7 @@ begin
   v := pg_temp.adm(format('select public.trafego_checklist_marcar(%s, %s, true)', pg_temp.proj('ZR28'), v_item));
   c := pg_temp.adm(format('select public.trafego_checklist(%s)', pg_temp.proj('ZR28')));
   perform pg_temp.ok('10.marcar', (v ->> 'ok')::boolean and (c ->> 'feitos')::int = 3
-    and (c -> 'manuais' -> 0 ->> 'marcado_por') = 'Victor (local)' and c -> 'manuais' -> 0 ->> 'marcado_em' is not null
+    and (c -> 'manuais' -> 0 ->> 'marcado_por') = (select nome from public.perfis where id = '81d2eaee-cce1-4058-8714-439b0fc6f970') and c -> 'manuais' -> 0 ->> 'marcado_em' is not null
     and (pg_temp.linha('ZR28') ->> 'checklist_feitos')::int = 3 and (pg_temp.linha('ZR28') ->> 'checklist_total')::int = 11,
     'item manual marcado: quem e quando guardados; 3 de 11 também no resumo');
   v := pg_temp.adm(format('select public.trafego_checklist_marcar(%s, %s, false)', pg_temp.proj('ZR28'), v_item));
