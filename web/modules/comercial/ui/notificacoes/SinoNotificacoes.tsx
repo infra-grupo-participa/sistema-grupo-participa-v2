@@ -11,7 +11,8 @@ import { fmtRelativo } from '@/shared/ui/format';
 import { Icon } from '@/shared/ui/icons';
 import type { GatilhoNotificacao } from '../../domain/types';
 import { avisarMudanca, repo, useDados } from '../repositorio';
-import { deveAvisarNoDesktop } from './regras-notificacao';
+import { AvisosNaTela, mostrarAvisoNaTela } from './avisos-na-tela';
+import { deveAvisarNaTela, deveAvisarNoDesktop } from './regras-notificacao';
 
 const ICONE: Record<GatilhoNotificacao, string> = {
   lead_novo: 'user', lead_respondeu: 'message', prazo_estourado: 'clock', venda_aprovada: 'check-circle',
@@ -44,17 +45,25 @@ export function SinoNotificacoes() {
     return () => clearInterval(t);
   }, [recarregar]);
 
-  // Aviso no desktop para o que é novo (não repete o que já avisou nesta sessão do navegador).
+  // Aviso do que é novo (não repete o que já avisou nesta sessão do navegador). Na 1ª carga só marca como
+  // visto, para não despejar o acumulado. Com permissão: aviso do sistema operacional; sem: aviso na tela.
   useEffect(() => {
-    if (!notificacoes || !prefs || permissaoDesktop() !== 'granted') return;
-    let avisadas: string[] = [];
-    try { avisadas = JSON.parse(sessionStorage.getItem(CHAVE_AVISADAS) || '[]'); } catch { /* sem storage */ }
+    if (!notificacoes || !prefs) return;
+    let avisadas: string[] | null = null;
+    try { const bruto = sessionStorage.getItem(CHAVE_AVISADAS); avisadas = bruto ? JSON.parse(bruto) : null; } catch { /* sem storage */ }
     const agora = new Date();
-    const novas = notificacoes.filter((n) => !n.lida && !avisadas.includes(n.id) && deveAvisarNoDesktop(prefs, n.gatilho, agora));
+    const primeira = avisadas === null;
+    const novas = primeira ? [] : notificacoes.filter((n) => !n.lida && !avisadas!.includes(n.id));
+    const doSistema = permissaoDesktop() === 'granted';
     for (const n of novas.slice(0, 3)) {
-      const aviso = new Notification(n.titulo, { body: n.corpo, tag: n.id });
-      aviso.onclick = () => { window.focus(); router.push(n.href); aviso.close(); };
+      if (doSistema && deveAvisarNoDesktop(prefs, n.gatilho, agora)) {
+        const aviso = new Notification(n.titulo, { body: n.corpo, tag: n.id });
+        aviso.onclick = () => { window.focus(); router.push(n.href); aviso.close(); };
+      } else if (deveAvisarNaTela(prefs, n.gatilho, agora)) {
+        mostrarAvisoNaTela({ id: n.id, titulo: n.titulo, corpo: n.corpo, href: n.href });
+      }
     }
+    avisadas ??= [];
     try { sessionStorage.setItem(CHAVE_AVISADAS, JSON.stringify([...avisadas, ...notificacoes.map((n) => n.id)].slice(-300))); } catch { /* sem storage */ }
   }, [notificacoes, prefs, router]);
 
@@ -69,6 +78,7 @@ export function SinoNotificacoes() {
 
   return (
     <div ref={ref} className="relative">
+      <AvisosNaTela />
       <button
         type="button"
         aria-label={`Notificações${naoLidas.length ? `: ${naoLidas.length} não lidas` : ''}`}

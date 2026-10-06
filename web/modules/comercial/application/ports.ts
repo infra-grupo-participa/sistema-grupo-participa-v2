@@ -6,7 +6,7 @@
 // só pelo gestor, ficha aprovada antes do disparo) precisam ser repetidas no banco (RPC SECURITY DEFINER).
 import type {
   Agrupador, Atividade, CampoKey, ConfigComercial, Contato, Conversa, EventoTimeline, FichaDisparo, FilaRecuperacao,
-  Funil, LinkRastreavel, Mensagem, MotivoPerda, MotivoPerdaConfig, Negocio, Notificacao, PainelPessoa, PontoJornada,
+  Dashboard, FiltroLog, Funil, LinkRastreavel, LogCrm, OfertaHotmart, OfertaOrfa, ProdutoHotmart, Mensagem, MotivoPerda, MotivoPerdaConfig, Negocio, Notificacao, PainelPessoa, PontoJornada,
   PreferenciasNotificacao, ProdutoKey, SessaoComercial, StatusFila, Template, TipoAtividade, TipoProjeto, Vendedor,
 } from '../domain/types';
 
@@ -114,6 +114,30 @@ export interface ComercialRepository {
   marcarNotificacoesLidas(ids?: string[]): Promise<Resultado>;
   preferenciasNotificacao(): Promise<PreferenciasNotificacao>;
   salvarPreferenciasNotificacao(p: PreferenciasNotificacao): Promise<Resultado>;
+
+  // ── Produtos e ofertas (espelho da Hotmart) ──
+  /** Produtos sincronizados da Hotmart (vinculados ou não ao comercial). */
+  produtosHotmart(): Promise<ProdutoHotmart[]>;
+  /** Ofertas da Hotmart, de um produto ou todas. */
+  ofertas(produtoId?: string): Promise<OfertaHotmart[]>;
+  /** Códigos de oferta vendidos que não estão no catálogo. */
+  ofertasOrfas(): Promise<OfertaOrfa[]>;
+  /** Acha produto e oferta a partir do link de checkout ou do código colado (pay.hotmart.com/X?off=Y). */
+  buscarPorLinkHotmart(linkOuCodigo: string): Promise<{ produto: ProdutoHotmart | null; oferta: OfertaHotmart | null; codigo: string | null }>;
+  /** Vincula (ou atualiza) o produto ao comercial. Só o gestor. */
+  vincularProduto(p: Pick<ProdutoHotmart, 'produtoId' | 'noComercial' | 'nomeComercial' | 'produtoKey' | 'agrupadorId' | 'escada'>): Promise<Resultado>;
+  /** Dados do comercial na oferta (vigente, condição, validade, uso). Só o gestor. */
+  salvarOferta(o: Pick<OfertaHotmart, 'codigo' | 'vigente' | 'condicao' | 'validaAte' | 'uso'>): Promise<Resultado>;
+
+  // ── Dashboards (Relatórios) ──
+  /** Dashboards meus + compartilhados. */
+  dashboards(): Promise<Dashboard[]>;
+  salvarDashboard(d: Dashboard): Promise<Resultado & { dashboardId?: string }>;
+  excluirDashboard(id: string): Promise<Resultado>;
+
+  // ── Registro do CRM ──
+  /** Log de toda manipulação (mais recente primeiro). O backend grava por trigger; a tela só lê. */
+  log(filtro?: FiltroLog): Promise<LogCrm[]>;
 
   /** Só para a demonstração: trocar quem está olhando. O backend real ignora (vem do login). */
   verComo?(vendedorId: string): Promise<void>;

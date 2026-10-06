@@ -1,7 +1,7 @@
 'use client';
 
-// Relatórios do Comercial: fechamento do dia (playbook, seção 12) e indicadores de funil e equipe (seção 14).
-// Toda agregação mora em indicadores.ts / domain/fechamento.ts; aqui só apresentação.
+// Relatórios do Comercial: dashboards (arrasta e solta), fechamento do dia (playbook, seção 12), funil e
+// performance da equipe (seção 14). Agregações em indicadores.ts, domain/fechamento.ts e equipe/performance.ts.
 import { useMemo, useState } from 'react';
 import {
   Button, Card, FilterSelect, Input, ProgressBar, SectionCard, SectionTitle, Tabs, Toast, Toolbar, idsAba, useFlash,
@@ -21,13 +21,15 @@ import {
 import { InfoIndicador, type TextoIndicador } from '../InfoIndicador';
 import { repo, useAgora, useDados } from '../repositorio';
 import {
-  conversaoPorEtapa, fmtDuracao, instanteDoDia, ordenarEquipe, perdidosPorMotivo, rankingEquipe, tempoMedioPorEtapa,
-  textoFechamentoSlack, vendasDoDia, ymdLocal, type ColunaEquipe, type OpcaoDia,
+  conversaoPorEtapa, fmtDuracao, instanteDoDia, perdidosPorMotivo, tempoMedioPorEtapa, textoFechamentoSlack, vendasDoDia, ymdLocal,
+  type OpcaoDia,
 } from './indicadores';
+import { DashboardsRelatorios } from '../dashboards/DashboardsRelatorios';
+import { PerformanceEquipe } from '../equipe/PerformanceEquipe';
 import { GradeIndicadores, type ColunaGrade } from './GradeIndicadores';
 
-type Aba = 'fechamento' | 'funil' | 'equipe';
-const ABAS: readonly Aba[] = ['fechamento', 'funil', 'equipe'];
+type Aba = 'dashboards' | 'fechamento' | 'funil' | 'equipe';
+const ABAS: readonly Aba[] = ['dashboards', 'fechamento', 'funil', 'equipe'];
 const ID_ABAS = 'relatorios-comercial';
 
 /** Definição dos números desta tela que não estão em domain/metricas.ts (fonte do (i)). */
@@ -44,12 +46,6 @@ const INFO = {
     comoConta: 'Média de (agora − entrada na etapa) dos negócios abertos de venda ativa. Estimativa: o tempo real de passagem entra com o backend.',
     paraQue: 'Média acima do prazo crítico pede mutirão naquela etapa.',
   },
-  concluidas: {
-    nome: 'Atividades concluídas',
-    oQueE: 'Atividades que o vendedor concluiu no período.',
-    comoConta: 'Data de conclusão dentro do período, do dono da atividade.',
-    paraQue: 'Disciplina e esforço. Leia junto com a conversão: muito toque e pouca venda pede revisar abordagem.',
-  },
 } satisfies Record<string, TextoIndicador>;
 
 const FALHA_DISTRIBUICAO: MotivoPerda = 'ja_atendido_outro_vendedor';
@@ -62,27 +58,29 @@ export function RelatoriosClient() {
   const rEventos = useDados(() => repo.eventos());
   const rMotivos = useDados(() => repo.motivosPerda());
   const carga = combinarDados(rNegocios, rAtividades, rEventos, rMotivos);
-  const [aba, setAba] = useAbaHash<Aba>(ABAS, 'fechamento');
+  const [aba, setAba] = useAbaHash<Aba>(ABAS, 'dashboards');
 
   return (
-    <PaginaComercial titulo="Relatórios" subtitulo="Fechamento do dia, conversão do funil e desempenho da equipe, com definição exata.">
+    <PaginaComercial titulo="Relatórios" subtitulo="Dashboards montados por você, fechamento do dia, conversão do funil e performance da equipe, com definição exata.">
       <Tabs
         idBase={ID_ABAS}
         label="Relatórios do Comercial"
         active={aba}
         onChange={(k) => setAba(k as Aba)}
-        tabs={[{ k: 'fechamento', l: 'Fechamento do dia' }, { k: 'funil', l: 'Funil' }, { k: 'equipe', l: 'Equipe' }]}
+        tabs={[{ k: 'dashboards', l: 'Dashboards' }, { k: 'fechamento', l: 'Fechamento do dia' }, { k: 'funil', l: 'Funil' }, { k: 'equipe', l: 'Equipe' }]}
       />
       <div role="tabpanel" id={idsAba(ID_ABAS, aba).panel} aria-labelledby={idsAba(ID_ABAS, aba).tab}>
+        {aba === 'dashboards' ? <DashboardsRelatorios /> : (
         <Carregando dados={carga.dados} erro={carga.erro} onTentar={carga.onTentar} esqueleto={<EsqueletoRelatorio />}>
           {([negocios, atividades, eventos, motivos]) => aba === 'fechamento' ? (
             <Fechamento negocios={negocios} atividades={atividades} eventos={eventos} motivos={motivos} vendedores={vendedores} nomeDe={nomeDe} agora={agora} />
           ) : aba === 'funil' ? (
             <Funil negocios={negocios} motivos={motivos} agora={agora} />
           ) : (
-            <Equipe negocios={negocios} atividades={atividades} vendedores={vendedores} nomeDe={nomeDe} agora={agora} />
+            <PerformanceEquipe negocios={negocios} atividades={atividades} eventos={eventos} motivos={motivos} vendedores={vendedores} nomeDe={nomeDe} agora={agora} />
           )}
         </Carregando>
+        )}
       </div>
     </PaginaComercial>
   );
@@ -397,113 +395,6 @@ function Funil({ negocios, motivos: cadastro, agora }: { negocios: Negocio[]; mo
           </Card>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ── #equipe ──
-
-const PERIODOS: { k: string; l: string; dias: number | null }[] = [
-  { k: '7', l: 'Últimos 7 dias', dias: 7 },
-  { k: '30', l: 'Últimos 30 dias', dias: 30 },
-  { k: 'tudo', l: 'Todo o histórico', dias: null },
-];
-
-const COLUNAS: { k: Exclude<ColunaEquipe, 'nome'>; l: string; dir: 'asc' | 'desc'; metrica?: MetricaKey; info?: TextoIndicador }[] = [
-  { k: 'vendas', l: 'Vendas', dir: 'desc', metrica: 'vendas' },
-  { k: 'receita', l: 'Receita', dir: 'desc', metrica: 'receita' },
-  { k: 'conversao', l: 'Conversão', dir: 'desc', metrica: 'conversao' },
-  { k: 'abertos', l: 'Abertos', dir: 'desc', metrica: 'abertos' },
-  { k: 'concluidas', l: 'Concluídas', dir: 'desc', info: INFO.concluidas },
-  { k: 'atrasadas', l: 'Atrasadas', dir: 'desc', metrica: 'atrasadas' },
-];
-
-/** Destaque discreto (ícone com title), sem Badge dentro da linha. */
-function Destaque({ rotulo }: { rotulo: string }) {
-  return (
-    <span className="ml-1.5 inline-flex align-middle text-[var(--fg-2)]" title={rotulo}>
-      <Icon name="trending-up" size={13} />
-      <span className="sr-only">{rotulo}</span>
-    </span>
-  );
-}
-
-function Equipe({ negocios, atividades, vendedores, nomeDe, agora }: {
-  negocios: Negocio[]; atividades: Atividade[]; vendedores: Vendedor[]; nomeDe: (id: string | null) => string; agora: Date;
-}) {
-  const [periodo, setPeriodo] = useState('30');
-  const [col, setCol] = useState<ColunaEquipe>('vendas');
-  const [dir, setDir] = useState<'asc' | 'desc'>('desc');
-  const dias = PERIODOS.find((p) => p.k === periodo)?.dias ?? null;
-  const linhas = useMemo(() => {
-    const desde = dias == null ? null : new Date(agora.getTime() - dias * 24 * 3600_000);
-    return rankingEquipe(vendedores, negocios, atividades, agora, desde)
-      .filter((l) => vendedores.find((v) => v.id === l.vendedorId)?.papel === 'vendedor' || l.vendas || l.abertos || l.concluidas);
-  }, [vendedores, negocios, atividades, agora, dias]);
-  const ordenadas = ordenarEquipe(linhas, col, dir, (id) => nomeDe(id));
-  const melhorConv = Math.max(...linhas.map((l) => l.conversao ?? -1));
-  const maisVendas = Math.max(...linhas.map((l) => l.vendas));
-  const ehMaisVendas = (n: number) => n > 0 && n === maisVendas;
-  const ehMelhorConv = (c: number | null) => c != null && c === melhorConv;
-
-  function ordenar(k: ColunaEquipe, padrao: 'asc' | 'desc') {
-    if (k === col) setDir(dir === 'asc' ? 'desc' : 'asc');
-    else { setCol(k); setDir(padrao); }
-  }
-
-  const colunas: ColunaGrade[] = COLUNAS.map((c) => ({
-    k: c.k, rotulo: c.l, metrica: c.metrica, info: c.info, ativa: col === c.k, dir, onOrdenar: () => ordenar(c.k, c.dir),
-  }));
-
-  return (
-    <div className="space-y-4">
-      <Toolbar>
-        <FilterSelect value={periodo} onChange={(e) => setPeriodo(e.target.value)} aria-label="Período">
-          {PERIODOS.map((p) => <option key={p.k} value={p.k}>{p.l}</option>)}
-        </FilterSelect>
-        {/* Em tela estreita não há cabeçalho clicável: a ordenação vem para cá. */}
-        <FilterSelect
-          value={`${col}:${dir}`}
-          onChange={(e) => { const [k, d] = e.target.value.split(':'); setCol(k as ColunaEquipe); setDir(d as 'asc' | 'desc'); }}
-          aria-label="Ordenar por"
-          className="lg:hidden"
-        >
-          <option value="nome:asc">Ordenar: Vendedor</option>
-          {COLUNAS.map((c) => <option key={c.k} value={`${c.k}:${c.dir}`}>Ordenar: {c.l}</option>)}
-        </FilterSelect>
-        <span className="text-xs text-[var(--fg-3)]">Leia a conversão junto com a carga (abertos) e a disciplina (atrasadas).</span>
-      </Toolbar>
-
-      {ordenadas.length ? (
-        <GradeIndicadores
-          rotulo="Ranking da equipe"
-          primeira="Vendedor"
-          colunas={colunas}
-          linhas={ordenadas.map((l) => ({
-            id: l.vendedorId,
-            cabeca: <Pessoa nome={nomeDe(l.vendedorId)} size={24} />,
-            celulas: [
-              { valor: <>{l.vendas}{ehMaisVendas(l.vendas) && <Destaque rotulo="Mais vendas no período" />}</> },
-              { valor: fmtBRL(l.receita) },
-              {
-                valor: <>{l.conversao == null ? <span className="text-[var(--fg-3)]">—</span> : `${Math.round(l.conversao)}%`}{ehMelhorConv(l.conversao) && <Destaque rotulo="Melhor conversão no período" />}</>,
-                sub: l.encerrados > 0 ? `${l.ganhos} de ${l.encerrados}` : undefined,
-              },
-              { valor: l.abertos },
-              { valor: l.concluidas },
-              { valor: l.atrasadas, alerta: l.atrasadas > 0 },
-            ],
-          }))}
-        />
-      ) : (
-        <Card>
-          <Vazio
-            titulo="Nenhum vendedor com dado no período"
-            icone="users"
-            acao={periodo !== 'tudo' ? <Button size="sm" variant="ghost" onClick={() => setPeriodo('tudo')}>Ver todo o histórico</Button> : undefined}
-          />
-        </Card>
-      )}
     </div>
   );
 }

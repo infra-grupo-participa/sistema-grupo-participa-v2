@@ -2,6 +2,7 @@
 
 // Aba #notificacoes: preferências de quem está logado (cada pessoa edita só as suas).
 // Aviso no desktop depende de duas chaves: a preferência aqui e a permissão do navegador neste computador.
+import { mostrarAvisoNaTela } from '../notificacoes/avisos-na-tela';
 import { useState, useSyncExternalStore } from 'react';
 import { Button, Card, Input, Loading, SectionCard, Toggle } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
@@ -55,11 +56,13 @@ function Preferencias({ salvo, flash }: { salvo: PreferenciasNotificacao; flash:
   }
 
   function testar() {
+    // Aviso na tela sempre aparece; o do sistema operacional só com a permissão do navegador.
+    mostrarAvisoNaTela({ id: `teste-${Date.now()}`, titulo: 'Comercial: notificação de teste', corpo: est.liberada ? 'Aviso na tela funcionando. O aviso do sistema também foi enviado.' : 'Aviso na tela funcionando. O aviso do sistema está bloqueado neste navegador.' });
     if (!est.liberada) { flash(est.explicacao); return; }
     try {
       const n = new Notification('Comercial: notificação de teste', { body: 'Se você está lendo isto, os avisos no desktop funcionam neste computador.', tag: 'gp-comercial-teste' });
       n.onclick = () => { window.focus(); n.close(); };
-      flash('Notificação de teste enviada.');
+      flash('Notificação de teste enviada. Se não apareceu, libere o navegador nas notificações do sistema operacional.');
     } catch {
       flash('O navegador não deixou mostrar o aviso. Confira as notificações do sistema operacional.');
     }

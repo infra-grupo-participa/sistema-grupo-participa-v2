@@ -28,7 +28,7 @@ describe('departamentos: registro', () => {
   });
   it('Comercial: as telas do CRM em /comercial/<tela>; só Social selling "Em breve"', () => {
     const com = departamento('comercial');
-    expect(com.areas.map((a) => a.key)).toEqual(['funil', 'conversas', 'atividades', 'contatos', 'recuperacao', 'disparos', 'relatorios', 'playbook', 'social-selling', 'configuracoes']);
+    expect(com.areas.map((a) => a.key)).toEqual(['funil', 'conversas', 'atividades', 'contatos', 'recuperacao', 'disparos', 'relatorios', 'produtos', 'registro', 'playbook', 'social-selling', 'configuracoes']);
     for (const a of com.areas) {
       expect(a.status).toBe(a.key === 'social-selling' ? 'em_breve' : 'ativo');
       expect(a.path).toBe(`/comercial/${a.key}`);

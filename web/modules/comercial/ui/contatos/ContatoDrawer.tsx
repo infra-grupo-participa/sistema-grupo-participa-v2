@@ -20,10 +20,11 @@ import { avisarMudanca, repo, useAgora, useDados } from '../repositorio';
 import { AbaConversa, AbaDados } from './AbaDados';
 import { AbaJornada } from './AbaJornada';
 import { AbaNegocios } from './AbaNegocios';
+import { HistoricoAlteracoes } from '../registro/HistoricoAlteracoes';
 import { resumoFicha } from './ficha-contato';
 import { mapaDuplicados } from './regras-contatos';
 
-type Aba = 'jornada' | 'negocios' | 'dados' | 'conversa';
+type Aba = 'jornada' | 'negocios' | 'dados' | 'conversa' | 'alteracoes';
 const ID_ABAS = 'ficha-contato';
 
 /** Definições do resumo da ficha (não estão em domain/metricas.ts: são da pessoa, não da operação). */
@@ -193,6 +194,7 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
             { k: 'negocios', l: 'Negócios', n: dele.length || undefined },
             { k: 'dados', l: 'Dados' },
             { k: 'conversa', l: 'Conversa' },
+            { k: 'alteracoes', l: 'Alterações' },
           ]}
         />
 
@@ -241,6 +243,12 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
         {aba === 'conversa' && (
           <div {...painel('conversa')}>
             <AbaConversa c={c} nomeDe={nomeDe} />
+          </div>
+        )}
+
+        {aba === 'alteracoes' && (
+          <div {...painel('alteracoes')}>
+            <HistoricoAlteracoes contatoId={c.id} />
           </div>
         )}
       </Drawer>

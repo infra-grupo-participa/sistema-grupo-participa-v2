@@ -30,3 +30,8 @@ export function emSilencio(p: Pick<PreferenciasNotificacao, 'silencioInicio' | '
 export function deveAvisarNoDesktop(p: PreferenciasNotificacao, gatilho: GatilhoNotificacao, agora: Date): boolean {
   return p.desktop && !!p.gatilhos[gatilho] && !emSilencio(p, agora);
 }
+
+/** Aviso dentro da tela: vale o gatilho e o silêncio, independente do aviso no desktop estar ligado. */
+export function deveAvisarNaTela(p: PreferenciasNotificacao, gatilho: GatilhoNotificacao, agora: Date): boolean {
+  return !!p.gatilhos[gatilho] && !emSilencio(p, agora);
+}

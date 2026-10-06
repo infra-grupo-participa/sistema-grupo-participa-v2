@@ -52,7 +52,7 @@ export function estadoPermissao(p: PermissaoNavegador): EstadoPermissao {
     case 'denied':
       return {
         rotulo: 'Bloqueado pelo navegador',
-        explicacao: 'Para liberar: clique no cadeado ao lado do endereço, em Notificações escolha Permitir e recarregue a página.',
+        explicacao: 'Para liberar: clique no cadeado ao lado do endereço, em Notificações escolha Permitir e recarregue a página. No navegador embutido do app do Claude não dá para liberar: use o Chrome. No Mac, confira também Ajustes do Sistema › Notificações › Google Chrome. Enquanto isso, os avisos aparecem dentro da tela.',
         podePedir: false, liberada: false,
       };
     case 'default':

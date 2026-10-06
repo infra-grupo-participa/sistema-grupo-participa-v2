@@ -548,3 +548,110 @@ export interface Notificacao {
   em: string;
   lida: boolean;
 }
+
+// ── Produtos e ofertas (espelho da Hotmart: nada nasce no CRM) ──
+// O produto e a oferta são criados NA HOTMART. O CRM só vincula o que a sincronização trouxe (fin.produtos e
+// fin.ofertas no banco) e acrescenta o que é do comercial: nome comercial, agrupador, oferta vigente, condição.
+
+export type ContaHotmart = 'academy' | 'escritorio';
+
+export interface ProdutoHotmart {
+  /** Id do produto na Hotmart. */
+  produtoId: string;
+  nomeHotmart: string;
+  conta: ContaHotmart;
+  familia: string | null;
+  /** Vinculado ao comercial (aparece em funis, ofertas e relatórios). */
+  noComercial: boolean;
+  nomeComercial: string | null;
+  produtoKey: ProdutoKey | null;
+  agrupadorId: string | null;
+  escada: Escada | null;
+  sincronizadoEm: string;
+}
+
+export type ModoOferta =
+  | 'UNIQUE_PAYMENT' | 'SUBSCRIPTION' | 'PAY_IN_FULL' | 'HOTMART_INSTALLMENTS_UNIQUE_LINK' | 'MULTIPLE_PAYMENTS'
+  | 'FINANCED_BILLET' | 'BILLET_INSTALLMENT';
+
+export interface OfertaHotmart {
+  /** Código da oferta na Hotmart (o `off=` do link). */
+  codigo: string;
+  produtoId: string;
+  nomeHotmart: string | null;
+  preco: number | null;
+  moeda: string;
+  modo: ModoOferta | string;
+  principal: boolean;
+  /** Link de checkout montado a partir do produto e da oferta. */
+  linkCheckout: string;
+  // ── do comercial ──
+  /** Oferta que o vendedor pode oferecer hoje (inegociável 8: nada fora da oferta vigente). */
+  vigente: boolean;
+  /** Condição em texto (ex.: 12x de R$ 1.461; reserva de R$ 300). */
+  condicao: string | null;
+  validaAte: string | null;
+  /** Para que é usada (ex.: "carrinho Imersão SET26", "downsell"). */
+  uso: string | null;
+  transacoes: number;
+  ultimaVendaEm: string | null;
+  vistaEm: string;
+}
+
+/** Código de oferta que aparece em transação mas não está no catálogo: venda que não vira pagamento no sistema. */
+export interface OfertaOrfa {
+  codigo: string;
+  produtoId: string | null;
+  transacoes: number;
+  ultimaEm: string;
+}
+
+// ── Dashboards (Relatórios): vários por pessoa, montados arrastando widgets ──
+
+export interface Dashboard {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  donoId: string;
+  /** Compartilhado com o time (todos veem; só o dono e o gestor editam). */
+  compartilhado: boolean;
+  widgets: WidgetPainel[];
+  criadoEm: string;
+  atualizadoEm: string;
+}
+
+// ── Registro do CRM (log de toda manipulação) ──
+
+export type AcaoLog =
+  | 'criou' | 'editou' | 'moveu_etapa' | 'trocou_dono' | 'marcou_perdido' | 'marcou_ganho' | 'arquivou' | 'excluiu'
+  | 'concluiu' | 'agendou' | 'atribuiu' | 'enviou' | 'aprovou' | 'reprovou' | 'vinculou' | 'desvinculou' | 'importou';
+
+export type EntidadeLog =
+  | 'negocio' | 'contato' | 'atividade' | 'mensagem' | 'nota' | 'funil' | 'agrupador' | 'projeto' | 'motivo' | 'ficha'
+  | 'fila' | 'produto' | 'oferta' | 'distribuicao' | 'link' | 'dashboard' | 'painel' | 'preferencias';
+
+export interface LogCrm {
+  id: string;
+  em: string;
+  /** Quem fez (vendedor) ou null quando foi o sistema (integração, cron). */
+  autorId: string | null;
+  acao: AcaoLog;
+  entidade: EntidadeLog;
+  entidadeId: string;
+  /** Contato afetado, quando houver (para o histórico da pessoa). */
+  contatoId: string | null;
+  /** Frase pronta para a tela: "Moveu Ana Barros de Qualificar para Negociar". */
+  resumo: string;
+  /** Campos alterados: valor antes → depois. */
+  mudancas: { campo: string; antes: string | null; depois: string | null }[];
+}
+
+export interface FiltroLog {
+  autorId?: string | null;
+  entidade?: EntidadeLog;
+  entidadeId?: string;
+  contatoId?: string;
+  desde?: string;
+  ate?: string;
+  limite?: number;
+}

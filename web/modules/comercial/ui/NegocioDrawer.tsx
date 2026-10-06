@@ -24,8 +24,9 @@ import {
   SlaTag, useEquipe,
 } from './comum';
 import { avisarMudanca, repo, useAgora, useDados } from './repositorio';
+import { HistoricoAlteracoes } from './registro/HistoricoAlteracoes';
 
-type Aba = 'resumo' | 'atividades' | 'historico' | 'conversa';
+type Aba = 'resumo' | 'atividades' | 'historico' | 'conversa' | 'alteracoes';
 
 const TOM_EVENTO: Partial<Record<EventoTimeline['tipo'], TimelineEntry['tone']>> = {
   ganho: 'green', perdido: 'red', etapa: 'accent', dono: 'purple', checkout: 'yellow', mensagem: 'info', compra: 'green',
@@ -153,6 +154,7 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
             { k: 'atividades', l: 'Atividades', n: abertas.filter((a) => atividadeAtrasada(a, agora)).length },
             { k: 'historico', l: 'Linha do tempo' },
             { k: 'conversa', l: 'Conversa' },
+            { k: 'alteracoes', l: 'Alterações' },
           ]}
           active={aba}
           onChange={(k) => setAba(k as Aba)}
@@ -293,6 +295,8 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
             </div>
           </div>
         )}
+
+        {aba === 'alteracoes' && <HistoricoAlteracoes entidadeId={n.id} />}
       </Drawer>
 
       {perder && (

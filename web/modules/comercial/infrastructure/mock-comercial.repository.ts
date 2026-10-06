@@ -14,6 +14,11 @@ import { situacaoSla } from '../domain/regras';
 import type {
   MotivoPerdaConfig, Notificacao, PainelPessoa, PontoJornada, PreferenciasNotificacao, TipoPontoJornada, TipoProjeto,
 } from '../domain/types';
+import { extrairCodigoOferta } from '../domain/hotmart';
+import type {
+  AcaoLog, Dashboard, EntidadeLog, FiltroLog, LogCrm, OfertaHotmart, OfertaOrfa, ProdutoHotmart,
+} from '../domain/types';
+import { OFERTAS_DEMO, ORFAS_DEMO, PRODUTOS_DEMO } from './mock-catalogo';
 import { gerarBaseDemo, painelPadrao, preferenciasPadrao, type BaseDemo } from './mock-dados';
 
 const LATENCIA_MS = 120;
@@ -27,6 +32,30 @@ export class MockComercialRepository implements ComercialRepository {
 
   constructor() {
     this.db = gerarBaseDemo();
+    // Registro inicial a partir do histórico da demonstração (o que o backend teria gravado).
+    const acao: Partial<Record<EventoTimeline['tipo'], AcaoLog>> = { criado: 'criou', etapa: 'moveu_etapa', dono: 'trocou_dono', perdido: 'marcou_perdido', ganho: 'marcou_ganho', nota: 'criou' };
+    this.logDb = this.db.eventos.filter((e) => acao[e.tipo] && e.negocioId).map((e) => ({
+      id: `log-${e.id}`, em: e.em, autorId: e.tipo === 'ganho' ? null : e.autorId, acao: acao[e.tipo]!, entidade: 'negocio' as const,
+      entidadeId: e.negocioId!, contatoId: e.contatoId, resumo: `${e.titulo} · ${this.db.contatos.find((c) => c.id === e.contatoId)?.nome ?? ''}`, mudancas: [],
+    }));
+  }
+
+  private produtos: ProdutoHotmart[] = structuredClone(PRODUTOS_DEMO);
+  private ofertasDb: OfertaHotmart[] = structuredClone(OFERTAS_DEMO);
+  private dashboardsDb: Dashboard[] = [];
+  private logDb: LogCrm[] = [];
+
+  /** Toda manipulação vira uma linha no registro do CRM (no backend: trigger grava, a tela só lê). */
+  private registrar(acao: AcaoLog, entidade: EntidadeLog, entidadeId: string, resumo: string, contatoId: string | null = null, mudancas: LogCrm['mudancas'] = []) {
+    this.logDb.push({ id: this.novoId('log'), em: agoraIso(), autorId: this.eu.vendedorId, acao, entidade, entidadeId, contatoId, resumo, mudancas });
+  }
+
+  private nomeContato(id: string | null | undefined) {
+    return this.db.contatos.find((c) => c.id === id)?.nome ?? 'contato';
+  }
+
+  private nomeVendedor(id: string | null | undefined) {
+    return id ? this.db.vendedores.find((v) => v.id === id)?.nome ?? id : 'sem dono';
   }
 
   private novoId(p: string) {
@@ -114,7 +143,9 @@ export class MockComercialRepository implements ComercialRepository {
       return espera({ ok: false, msg: `Preencha antes: ${faltam}.` });
     }
     const e = etapaDoFunil(f, etapaId)!;
+    const de = n.etapaNome;
     this.aplicarEtapa(n, e);
+    this.registrar('moveu_etapa', 'negocio', n.id, `Moveu ${this.nomeContato(n.contatoId)} de ${de} para ${e.nome}`, n.contatoId, [{ campo: 'etapa', antes: de, depois: e.nome }]);
     n.ultimaInteracaoEm = agoraIso();
     this.evento({ contatoId: n.contatoId, negocioId, tipo: 'etapa', titulo: `Moveu para ${e.nome}`, detalhe: e.papel });
     return espera({ ok: true });
@@ -141,6 +172,7 @@ export class MockComercialRepository implements ComercialRepository {
         const e = etapaDoFunil(atual, n.etapaId);
         if (e) { const desde = n.etapaDesde; this.aplicarEtapa(n, e); n.etapaDesde = desde; }
       }
+      this.registrar('editou', 'funil', f.id, `Editou o funil ${f.nome}`);
       return espera({ ok: true, msg: 'Funil atualizado.', funilId: f.id });
     }
     const id = this.novoId('f');
@@ -150,6 +182,7 @@ export class MockComercialRepository implements ComercialRepository {
       campanhas: f.campanhas.map((c) => ({ ...c, id: c.id || this.novoId('cp'), criadoEm: c.criadoEm || agoraIso() })),
     };
     this.db.funis.push(comIds);
+    this.registrar('criou', 'funil', id, `Criou o funil ${f.nome} (${f.etapas.length} etapas)`);
     return espera({ ok: true, msg: 'Funil criado.', funilId: id });
   }
 
@@ -159,6 +192,7 @@ export class MockComercialRepository implements ComercialRepository {
     if (!f) return espera({ ok: false, msg: 'Funil não encontrado.' });
     if (this.db.negocios.some((n) => n.funilId === funilId && n.status === 'aberto')) return espera({ ok: false, msg: 'Funil com negócio aberto não pode ser arquivado.' });
     f.ativo = false;
+    this.registrar('arquivou', 'funil', funilId, `Arquivou o funil ${f.nome}`);
     return espera({ ok: true, msg: 'Funil arquivado.' });
   }
 
@@ -168,13 +202,18 @@ export class MockComercialRepository implements ComercialRepository {
     if (this.db.agrupadores.some((a) => a.nome.trim().toLowerCase() === nome.trim().toLowerCase())) return espera({ ok: false, msg: 'Já existe um agrupador com esse nome.' });
     const id = this.novoId('ag');
     this.db.agrupadores.push({ id, nome: nome.trim(), produto, ordem: this.db.agrupadores.length + 1 });
+    this.registrar('criou', 'agrupador', id, `Criou o agrupador ${nome.trim()}`);
     return espera({ ok: true, agrupadorId: id });
   }
 
   async salvarCampos(negocioId: string, campos: Partial<Record<CampoKey, string>>): Promise<Resultado> {
     const n = this.negocio(negocioId);
     if (!n) return espera({ ok: false, msg: 'Negócio não encontrado.' });
+    const mudancas = Object.entries(campos)
+      .filter(([k, v]) => (n.campos[k as CampoKey] ?? '') !== (v ?? ''))
+      .map(([k, v]) => ({ campo: ROTULO_CAMPO[k as CampoKey] ?? k, antes: n.campos[k as CampoKey] ?? null, depois: v ?? null }));
     n.campos = { ...n.campos, ...campos };
+    if (mudancas.length) this.registrar('editou', 'negocio', n.id, `Editou ${mudancas.length} campo(s) de ${this.nomeContato(n.contatoId)}`, n.contatoId, mudancas);
     return espera({ ok: true });
   }
 
@@ -193,6 +232,7 @@ export class MockComercialRepository implements ComercialRepository {
       if (c) c.optOut = true;
     }
     this.evento({ contatoId: n.contatoId, negocioId, tipo: 'perdido', titulo: 'Marcado como perdido', detalhe: nota ? `${motivo} · ${nota}` : motivo });
+    this.registrar('marcou_perdido', 'negocio', n.id, `Marcou ${this.nomeContato(n.contatoId)} como perdido: ${cfg.label}`, n.contatoId, [{ campo: 'status', antes: 'aberto', depois: 'perdido' }, { campo: 'motivo', antes: null, depois: cfg.label }]);
     return espera({ ok: true });
   }
 
@@ -208,6 +248,7 @@ export class MockComercialRepository implements ComercialRepository {
     if (c) c.donoId = novoDonoId;
     this.db.atividades.filter((a) => a.negocioId === negocioId && !a.concluidaEm).forEach((a) => { a.donoId = novoDonoId; });
     this.evento({ contatoId: n.contatoId, negocioId, tipo: 'dono', titulo: `Dono: ${de} → ${para}`, detalhe: motivo });
+    this.registrar('trocou_dono', 'negocio', n.id, `Trocou o dono de ${this.nomeContato(n.contatoId)}: ${de} → ${para}`, n.contatoId, [{ campo: 'dono', antes: de, depois: para }, { campo: 'motivo', antes: null, depois: motivo }]);
     return espera({ ok: true });
   }
 
@@ -239,6 +280,7 @@ export class MockComercialRepository implements ComercialRepository {
     this.db.negocios.push(n);
     if (dono && !c.donoId) c.donoId = dono;
     this.evento({ contatoId, negocioId: id, tipo: 'criado', titulo: `Negócio criado em ${f.nome}`, detalhe: null });
+    this.registrar('criou', 'negocio', id, `Criou negócio de ${c.nome} em ${f.nome} (dono: ${this.nomeVendedor(dono)})`, contatoId);
     return espera({ ok: true, negocioId: id, donoId: dono });
   }
 
@@ -251,12 +293,15 @@ export class MockComercialRepository implements ComercialRepository {
     this.db.negocios.filter((n) => n.contatoId === contatoId && n.status === 'aberto' && !n.donoId).forEach((n) => { n.donoId = donoId; });
     const para = this.db.vendedores.find((v) => v.id === donoId)?.nome ?? donoId;
     this.evento({ contatoId, negocioId: null, tipo: 'dono', titulo: `Dono definido: ${para}`, detalhe: motivo });
+    this.registrar('atribuiu', 'contato', contatoId, `Definiu ${para} como dono de ${c.nome}`, contatoId, [{ campo: 'dono', antes: null, depois: para }]);
     return espera({ ok: true });
   }
 
   async criarAtividade(a: NovaAtividade): Promise<Resultado> {
     const dono = (a.negocioId && this.negocio(a.negocioId)?.donoId) || this.eu.vendedorId;
-    this.db.atividades.push({ id: this.novoId('a'), ...a, donoId: dono, concluidaEm: null, resultado: null, cadenciaDia: null });
+    const aid = this.novoId('a');
+    this.db.atividades.push({ id: aid, ...a, donoId: dono, concluidaEm: null, resultado: null, cadenciaDia: null });
+    this.registrar('agendou', 'atividade', aid, `Agendou "${a.titulo}" para ${this.nomeContato(a.contatoId)}`, a.contatoId);
     this.atualizarProxima(a.negocioId);
     return espera({ ok: true });
   }
@@ -266,6 +311,7 @@ export class MockComercialRepository implements ComercialRepository {
     if (!a || a.concluidaEm) return espera({ ok: false, msg: 'Atividade não encontrada ou já concluída.' });
     a.concluidaEm = agoraIso();
     a.resultado = resultado || 'Feito';
+    this.registrar('concluiu', 'atividade', a.id, `Concluiu "${a.titulo}" (${a.resultado}) de ${this.nomeContato(a.contatoId)}`, a.contatoId);
     this.atualizarProxima(a.negocioId);
     const n = a.negocioId ? this.negocio(a.negocioId) : undefined;
     if (n) n.ultimaInteracaoEm = agoraIso();
@@ -279,6 +325,7 @@ export class MockComercialRepository implements ComercialRepository {
   async adicionarNota(contatoId: string, negocioId: string | null, texto: string): Promise<Resultado> {
     if (!texto.trim()) return espera({ ok: false, msg: 'Nota vazia.' });
     this.evento({ contatoId, negocioId, tipo: 'nota', titulo: 'Nota interna', detalhe: texto.trim() });
+    this.registrar('criou', 'nota', negocioId ?? contatoId, `Registrou nota em ${this.nomeContato(contatoId)}`, contatoId);
     return espera({ ok: true });
   }
 
@@ -293,6 +340,7 @@ export class MockComercialRepository implements ComercialRepository {
     this.db.mensagens.filter((m) => m.contatoId === contatoId && m.direcao === 'entrada' && !m.status).forEach((m) => { m.status = 'lida'; });
     const n = this.db.negocios.find((x) => x.contatoId === contatoId && x.status === 'aberto');
     this.evento({ contatoId, negocioId: n?.id ?? null, tipo: 'mensagem', titulo: 'Mensagem enviada no WhatsApp', detalhe: texto.trim().slice(0, 140) });
+    this.registrar('enviou', 'mensagem', contatoId, `Enviou ${templateId ? 'template' : 'mensagem'} para ${this.nomeContato(contatoId)}`, contatoId);
     return espera({ ok: true });
   }
 
@@ -304,7 +352,9 @@ export class MockComercialRepository implements ComercialRepository {
   async atualizarItemFila(filaId: string, itemId: string, status: StatusFila): Promise<Resultado> {
     const it = this.db.filas.find((f) => f.id === filaId)?.itens.find((i) => i.id === itemId);
     if (!it) return espera({ ok: false, msg: 'Item não encontrado.' });
+    const antes = it.status;
     it.status = status;
+    this.registrar('editou', 'fila', it.id, `Mudou ${this.nomeContato(it.contatoId)} na fila: ${antes} → ${status}`, it.contatoId, [{ campo: 'status', antes, depois: status }]);
     it.alteradoPor = this.eu.vendedorId;
     it.alteradoEm = agoraIso();
     return espera({ ok: true });
@@ -322,6 +372,7 @@ export class MockComercialRepository implements ComercialRepository {
       id: this.novoId('d'), codigo, ...f, supressoes: ['em_negociacao', 'disparo_48h', 'opt_out', 'ja_comprou'],
       operadorId: this.eu.vendedorId, status, aprovadoPor: status === 'aprovada' ? this.eu.vendedorId : null, criadoEm: agoraIso(), resultado: null,
     });
+    this.registrar('criou', 'ficha', codigo, `Criou a ficha de disparo ${codigo} (${status})`);
     return espera({ ok: true, msg: status === 'aguardando_aprovacao' ? 'Ficha enviada para aprovação do gestor.' : status === 'aprovada' ? 'Ficha registrada e aprovada.' : 'Rascunho salvo.' });
   }
 
@@ -330,6 +381,7 @@ export class MockComercialRepository implements ComercialRepository {
     const f = this.db.fichas.find((x) => x.id === fichaId);
     if (!f || f.status !== 'aguardando_aprovacao') return espera({ ok: false, msg: 'Ficha não está aguardando aprovação.' });
     f.status = aprovar ? 'aprovada' : 'reprovada';
+    this.registrar(aprovar ? 'aprovou' : 'reprovou', 'ficha', f.id, `${aprovar ? 'Aprovou' : 'Reprovou'} a ficha ${f.codigo}`);
     f.aprovadoPor = this.eu.vendedorId;
     return espera({ ok: true });
   }
@@ -338,7 +390,10 @@ export class MockComercialRepository implements ComercialRepository {
     if (this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o gestor define a distribuição.' });
     const novo = this.db.vendedores.map((v) => ({ ...v, ...(percentuais[v.id] ?? {}) }));
     if (somaPercentuais(novo) !== 100) return espera({ ok: false, msg: 'A soma dos percentuais dos ativos precisa dar 100%.' });
+    const mudancas = novo.filter((v) => { const a = this.db.vendedores.find((x) => x.id === v.id)!; return a.percentual !== v.percentual || a.ativo !== v.ativo; })
+      .map((v) => { const a = this.db.vendedores.find((x) => x.id === v.id)!; return { campo: v.nome, antes: `${a.ativo ? '' : 'inativo · '}${a.percentual}%`, depois: `${v.ativo ? '' : 'inativo · '}${v.percentual}%` }; });
     this.db.vendedores = novo;
+    this.registrar('editou', 'distribuicao', 'geral', 'Alterou a distribuição de leads', null, mudancas);
     return espera({ ok: true });
   }
 
@@ -349,6 +404,7 @@ export class MockComercialRepository implements ComercialRepository {
     const sck = montarSck(produto, acao, new Date(), canal, v.sigla);
     if (this.db.links.some((l) => l.sck === sck)) return espera({ ok: false, msg: 'Este link já existe.' });
     this.db.links.push({ id: this.novoId('l'), vendedorId, produto, acao: acao.trim(), sck, url: `https://pay.hotmart.com/EXEMPLO?sck=${sck}` });
+    this.registrar('criou', 'link', sck, `Criou link rastreável ${sck}`);
     return espera({ ok: true });
   }
 
@@ -363,6 +419,7 @@ export class MockComercialRepository implements ComercialRepository {
       // De fábrica: só nota e ativo mudam (a regra do playbook não se reescreve pela tela).
       atual.nota = m.nota;
       atual.ativo = m.ativo;
+      this.registrar('editou', 'motivo', m.key, `Editou o motivo de perda "${atual.label}"`);
       return espera({ ok: true, msg: 'Motivo atualizado.' });
     }
     if (!atual && this.db.motivos.some((x) => x.label.trim().toLowerCase() === m.label.trim().toLowerCase())) {
@@ -370,6 +427,7 @@ export class MockComercialRepository implements ComercialRepository {
     }
     if (atual) Object.assign(atual, { ...m, sistema: false });
     else this.db.motivos.push({ ...m, label: m.label.trim(), sistema: false });
+    this.registrar(atual ? 'editou' : 'criou', 'motivo', m.key, `${atual ? 'Editou' : 'Criou'} o motivo de perda "${m.label.trim()}"`);
     return espera({ ok: true, msg: atual ? 'Motivo atualizado.' : 'Motivo criado.' });
   }
 
@@ -411,6 +469,7 @@ export class MockComercialRepository implements ComercialRepository {
       ids.push(fid);
       this.db.funis.push({ ...f, id: fid, criadoEm: agoraIso(), campanhas: f.campanhas.map((c) => ({ ...c, criadoEm: agoraIso() })) });
     }
+    this.registrar('criou', 'projeto', ids[0], `Começou o projeto ${nome.trim()} (${ids.length} funis)`);
     return espera({ ok: true, msg: `${ids.length} funis criados para ${nome.trim()}.`, funilIds: ids });
   }
 
@@ -424,6 +483,7 @@ export class MockComercialRepository implements ComercialRepository {
     // Cada um personaliza o próprio painel; o gestor também pode montar o de um vendedor.
     if (p.vendedorId !== this.eu.vendedorId && this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Você só edita o seu painel.' });
     this.db.paineis = [...this.db.paineis.filter((x) => x.vendedorId !== p.vendedorId), structuredClone(p)];
+    this.registrar('editou', 'painel', p.vendedorId, `Personalizou o painel de ${this.nomeVendedor(p.vendedorId)} (${p.widgets.length} widgets)`);
     return espera({ ok: true, msg: 'Painel salvo.' });
   }
 
@@ -478,6 +538,87 @@ export class MockComercialRepository implements ComercialRepository {
     if (p.vendedorId !== this.eu.vendedorId) return espera({ ok: false, msg: 'Você só edita as suas notificações.' });
     this.db.preferencias = [...this.db.preferencias.filter((x) => x.vendedorId !== p.vendedorId), structuredClone(p)];
     return espera({ ok: true, msg: 'Preferências salvas.' });
+  }
+
+  // ── Produtos e ofertas (espelho da Hotmart) ──
+  produtosHotmart() { return espera([...this.produtos].sort((a, b) => Number(b.noComercial) - Number(a.noComercial) || a.nomeHotmart.localeCompare(b.nomeHotmart))); }
+
+  ofertas(produtoId?: string) {
+    return espera(this.ofertasDb.filter((o) => !produtoId || o.produtoId === produtoId).sort((a, b) => Number(b.vigente) - Number(a.vigente) || b.transacoes - a.transacoes));
+  }
+
+  ofertasOrfas(): Promise<OfertaOrfa[]> { return espera(ORFAS_DEMO); }
+
+  async buscarPorLinkHotmart(linkOuCodigo: string) {
+    const codigo = extrairCodigoOferta(linkOuCodigo);
+    const oferta = codigo ? this.ofertasDb.find((o) => o.codigo === codigo) ?? null : null;
+    const produto = oferta ? this.produtos.find((p) => p.produtoId === oferta.produtoId) ?? null : null;
+    return espera({ produto, oferta, codigo });
+  }
+
+  async vincularProduto(p: Pick<ProdutoHotmart, 'produtoId' | 'noComercial' | 'nomeComercial' | 'produtoKey' | 'agrupadorId' | 'escada'>): Promise<Resultado> {
+    if (this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o gestor vincula produtos.' });
+    const atual = this.produtos.find((x) => x.produtoId === p.produtoId);
+    if (!atual) return espera({ ok: false, msg: 'Produto não veio da Hotmart. Crie o produto na Hotmart; ele aparece aqui depois da sincronização.' });
+    if (p.noComercial && (!p.nomeComercial?.trim() || !p.escada)) return espera({ ok: false, msg: 'Para vincular, dê o nome comercial e a escada (A ou B).' });
+    const antes = atual.noComercial;
+    Object.assign(atual, { ...p, nomeComercial: p.nomeComercial?.trim() || null });
+    this.registrar(p.noComercial ? (antes ? 'editou' : 'vinculou') : 'desvinculou', 'produto', p.produtoId, `${p.noComercial ? (antes ? 'Editou' : 'Vinculou ao comercial') : 'Desvinculou'} o produto ${atual.nomeHotmart}`);
+    return espera({ ok: true, msg: p.noComercial ? 'Produto vinculado ao comercial.' : 'Produto desvinculado.' });
+  }
+
+  async salvarOferta(o: Pick<OfertaHotmart, 'codigo' | 'vigente' | 'condicao' | 'validaAte' | 'uso'>): Promise<Resultado> {
+    if (this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o gestor define a oferta vigente.' });
+    const atual = this.ofertasDb.find((x) => x.codigo === o.codigo);
+    if (!atual) return espera({ ok: false, msg: 'Oferta não está no catálogo da Hotmart.' });
+    if (o.vigente && !this.produtos.find((p) => p.produtoId === atual.produtoId)?.noComercial) return espera({ ok: false, msg: 'Vincule o produto ao comercial antes de marcar oferta vigente.' });
+    const mudancas = (['vigente', 'condicao', 'validaAte', 'uso'] as const)
+      .filter((k) => String(atual[k] ?? '') !== String(o[k] ?? ''))
+      .map((k) => ({ campo: k, antes: atual[k] == null ? null : String(atual[k]), depois: o[k] == null ? null : String(o[k]) }));
+    Object.assign(atual, o);
+    this.registrar('editou', 'oferta', o.codigo, `Editou a oferta ${o.codigo}${o.vigente ? ' (vigente)' : ''}`, null, mudancas);
+    return espera({ ok: true, msg: 'Oferta salva.' });
+  }
+
+  // ── Dashboards ──
+  dashboards() {
+    return espera(this.dashboardsDb.filter((d) => d.donoId === this.eu.vendedorId || d.compartilhado).sort((a, b) => b.atualizadoEm.localeCompare(a.atualizadoEm)));
+  }
+
+  async salvarDashboard(d: Dashboard): Promise<Resultado & { dashboardId?: string }> {
+    if (!d.nome.trim()) return espera({ ok: false, msg: 'Dê um nome ao dashboard.' });
+    const atual = d.id ? this.dashboardsDb.find((x) => x.id === d.id) : undefined;
+    if (atual && atual.donoId !== this.eu.vendedorId && this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o dono e o gestor editam este dashboard.' });
+    if (atual) {
+      Object.assign(atual, structuredClone(d), { atualizadoEm: agoraIso() });
+      this.registrar('editou', 'dashboard', d.id, `Editou o dashboard ${d.nome}`);
+      return espera({ ok: true, msg: 'Dashboard salvo.', dashboardId: d.id });
+    }
+    const id = this.novoId('dash');
+    this.dashboardsDb.push({ ...structuredClone(d), id, donoId: this.eu.vendedorId, criadoEm: agoraIso(), atualizadoEm: agoraIso() });
+    this.registrar('criou', 'dashboard', id, `Criou o dashboard ${d.nome}`);
+    return espera({ ok: true, msg: 'Dashboard criado.', dashboardId: id });
+  }
+
+  async excluirDashboard(id: string): Promise<Resultado> {
+    const d = this.dashboardsDb.find((x) => x.id === id);
+    if (!d) return espera({ ok: false, msg: 'Dashboard não encontrado.' });
+    if (d.donoId !== this.eu.vendedorId && this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o dono e o gestor excluem.' });
+    this.dashboardsDb = this.dashboardsDb.filter((x) => x.id !== id);
+    this.registrar('excluiu', 'dashboard', id, `Excluiu o dashboard ${d.nome}`);
+    return espera({ ok: true, msg: 'Dashboard excluído.' });
+  }
+
+  // ── Registro do CRM ──
+  log(filtro: FiltroLog = {}): Promise<LogCrm[]> {
+    const l = this.logDb.filter((x) =>
+      (filtro.autorId === undefined || x.autorId === filtro.autorId)
+      && (!filtro.entidade || x.entidade === filtro.entidade)
+      && (!filtro.entidadeId || x.entidadeId === filtro.entidadeId)
+      && (!filtro.contatoId || x.contatoId === filtro.contatoId)
+      && (!filtro.desde || x.em >= filtro.desde)
+      && (!filtro.ate || x.em <= filtro.ate));
+    return espera([...l].sort((a, b) => b.em.localeCompare(a.em)).slice(0, filtro.limite ?? 500));
   }
 
   async verComo(vendedorId: string) {
