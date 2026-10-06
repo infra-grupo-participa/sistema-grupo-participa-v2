@@ -19,10 +19,26 @@ export type Bloco =
   /** Trecho em validação ou a definir, com quem decide. */
   | { tipo: 'alerta'; status: StatusTrecho; texto: string; quem?: string }
   /** Mensagem pronta para copiar. `{Chave}` é o que o vendedor troca. */
-  | { tipo: 'script'; titulo: string; texto: string; nota?: string };
+  | { tipo: 'script'; titulo: string; texto: string; nota?: string }
+  // ── Blocos da central de ajuda (ajuda-conteudo.ts) ──
+  /** Passo a passo numerado, desenhado como trilha. */
+  | { tipo: 'passos'; titulo?: string; itens: string[] }
+  /** Dicas de quem já usa (caixa verde). */
+  | { tipo: 'dicas'; titulo?: string; itens: string[] }
+  /** Erros comuns e como evitar (caixa amarela). */
+  | { tipo: 'cuidados'; titulo?: string; itens: string[] }
+  /** Função que ainda não existe no sistema: fica escrita como "em breve", nunca como pronta. */
+  | { tipo: 'em_breve'; titulo: string; texto: string }
+  /** Pergunta frequente (sanfona). */
+  | { tipo: 'pergunta'; pergunta: string; resposta: string; link?: LinkFerramenta }
+  /** Cartões de atalho para telas (href /comercial/...) ou seções da ajuda (href #id). */
+  | { tipo: 'atalhos'; itens: Atalho[] };
 
 /** Tela do sistema onde a regra vira ferramenta. */
 export interface LinkFerramenta { rotulo: string; href: string }
+
+/** Cartão de atalho: tela do sistema ou seção da ajuda. */
+export interface Atalho { rotulo: string; href: string; texto: string; icone: string }
 
 export interface Secao {
   id: string;

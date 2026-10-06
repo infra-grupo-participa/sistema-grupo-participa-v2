@@ -2,11 +2,12 @@
 
 // Peças de leitura do playbook: texto com negrito e destaque da busca, tabela que vira cartões no celular
 // (nunca rolagem horizontal), regra inegociável, trecho a definir e script com botão de copiar.
-import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Badge, type Tone } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
-import { segmentar, textoLimpo } from './busca';
-import { ROTULO_STATUS, type Bloco, type StatusTrecho } from './conteudo';
+import { acharPalavras, palavrasDaBusca, segmentar, textoLimpo } from './busca';
+import { ROTULO_STATUS, type Atalho, type Bloco, type LinkFerramenta, type StatusTrecho } from './conteudo';
 
 /** Texto com **negrito** e o termo da busca destacado. */
 export function TextoRico({ texto, termo }: { texto: string; termo: string }) {
@@ -22,12 +23,16 @@ export function TextoRico({ texto, termo }: { texto: string; termo: string }) {
   );
 }
 
-export function BlocoPlaybook({ bloco, termo }: { bloco: Bloco; termo: string }) {
+/**
+ * Desenha um bloco. `onLinkInterno` recebe os links "#secao" (atalhos e perguntas) e devolve true se tratou
+ * (a central troca de parte e rola); sem ele, o link segue o navegador.
+ */
+export function BlocoPlaybook({ bloco, termo, onLinkInterno }: { bloco: Bloco; termo: string; onLinkInterno?: (href: string) => boolean }) {
   switch (bloco.tipo) {
     case 'paragrafo':
       return <p className="text-sm leading-relaxed text-[var(--fg-2)]"><TextoRico texto={bloco.texto} termo={termo} /></p>;
     case 'subtitulo':
-      return <h3 className="pt-2 text-sm font-semibold text-[var(--fg)]"><TextoRico texto={bloco.texto} termo={termo} /></h3>;
+      return <h4 className="pt-2 text-sm font-semibold text-[var(--fg)]"><TextoRico texto={bloco.texto} termo={termo} /></h4>;
     case 'lista':
       return <Lista bloco={bloco} termo={termo} />;
     case 'tabela':
@@ -38,7 +43,146 @@ export function BlocoPlaybook({ bloco, termo }: { bloco: Bloco; termo: string })
       return <TrechoAberto status={bloco.status} texto={bloco.texto} quem={bloco.quem} termo={termo} />;
     case 'script':
       return <Script titulo={bloco.titulo} texto={bloco.texto} nota={bloco.nota} termo={termo} />;
+    case 'passos':
+      return <Passos titulo={bloco.titulo} itens={bloco.itens} termo={termo} />;
+    case 'dicas':
+      return <Caixa tipo="dicas" titulo={bloco.titulo} itens={bloco.itens} termo={termo} />;
+    case 'cuidados':
+      return <Caixa tipo="cuidados" titulo={bloco.titulo} itens={bloco.itens} termo={termo} />;
+    case 'em_breve':
+      return <EmBreve titulo={bloco.titulo} texto={bloco.texto} termo={termo} />;
+    case 'pergunta':
+      return <Pergunta pergunta={bloco.pergunta} resposta={bloco.resposta} link={bloco.link} termo={termo} />;
+    case 'atalhos':
+      return <Atalhos itens={bloco.itens} termo={termo} onLinkInterno={onLinkInterno} />;
   }
+}
+
+/** Passo a passo: trilha numerada, um passo por linha. */
+function Passos({ titulo, itens, termo }: { titulo?: string; itens: string[]; termo: string }) {
+  return (
+    <div>
+      {titulo && <p className="mb-2 text-sm font-semibold text-[var(--fg)]"><TextoRico texto={titulo} termo={termo} /></p>}
+      <ol className="space-y-0">
+        {itens.map((it, i) => (
+          <li key={i} className="relative flex gap-3 pb-2.5 last:pb-0">
+            {/* Linha que liga os passos (decorativa). */}
+            {i < itens.length - 1 && <span aria-hidden className="absolute left-[11px] top-6 bottom-0 w-px bg-[var(--border)]" />}
+            <span aria-hidden className="relative grid h-6 w-6 shrink-0 place-items-center rounded-full border border-[var(--border-strong)] bg-[var(--surface-2)] text-[11px] font-semibold tabular text-[var(--fg)]">{i + 1}</span>
+            <span className="min-w-0 pt-0.5 text-sm leading-relaxed text-[var(--fg-2)]"><span className="sr-only">Passo {i + 1}: </span><TextoRico texto={it} termo={termo} /></span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+const CAIXA = {
+  dicas: { rotulo: 'Dicas', icone: 'star', caixa: 'border-[var(--green-border)] bg-[var(--green-subtle)]', cor: 'text-[var(--green)]' },
+  cuidados: { rotulo: 'Erros comuns', icone: 'alert', caixa: 'border-[var(--yellow-border)] bg-[var(--yellow-subtle)]', cor: 'text-[var(--yellow)]' },
+} as const;
+
+/** Dicas (verde) ou erros comuns (amarelo): título com ícone e texto, nunca só cor. */
+function Caixa({ tipo, titulo, itens, termo }: { tipo: keyof typeof CAIXA; titulo?: string; itens: string[]; termo: string }) {
+  const c = CAIXA[tipo];
+  return (
+    <div className={`rounded-[var(--r-md)] border px-3 py-2.5 ${c.caixa}`}>
+      <p className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-[var(--fg)]">
+        <Icon name={c.icone} size={14} className={`shrink-0 ${c.cor}`} />
+        <TextoRico texto={titulo ?? c.rotulo} termo={termo} />
+      </p>
+      <ul className="space-y-1 text-sm leading-relaxed text-[var(--fg-2)]">
+        {itens.map((it, i) => (
+          <li key={i} className="flex gap-2">
+            <span aria-hidden className="shrink-0 text-[var(--fg-3)]">·</span>
+            <span className="min-w-0"><TextoRico texto={it} termo={termo} /></span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Função que ainda não existe: selo escrito "Em breve" + o que vai fazer. */
+function EmBreve({ titulo, texto, termo }: { titulo: string; texto: string; termo: string }) {
+  return (
+    <div className="flex gap-3 rounded-[var(--r-md)] border border-dashed border-[var(--border-strong)] px-3 py-2.5 text-sm leading-relaxed">
+      <Icon name="hourglass" size={15} className="mt-0.5 shrink-0 text-[var(--fg-3)]" />
+      <div className="min-w-0">
+        <p className="flex flex-wrap items-center gap-2 font-semibold text-[var(--fg)]">
+          <TextoRico texto={titulo} termo={termo} />
+          <Badge tone="info">Em breve</Badge>
+        </p>
+        <p className="mt-0.5 text-[var(--fg-2)]"><TextoRico texto={texto} termo={termo} /></p>
+      </div>
+    </div>
+  );
+}
+
+/** Pergunta frequente em sanfona. Abre sozinha quando a palavra destacada está nela. */
+function Pergunta({ pergunta, resposta, link, termo }: { pergunta: string; resposta: string; link?: LinkFerramenta; termo: string }) {
+  const palavras = palavrasDaBusca(termo);
+  const temTermo = palavras.length > 0 && acharPalavras(`${pergunta} ${resposta}`, palavras).length > 0;
+  const [aberta, setAberta] = useState(temTermo);
+  const [termoVisto, setTermoVisto] = useState(termo);
+  // Novo destaque: reabre a pergunta que tem o termo (ajuste de estado no render, sem efeito).
+  if (termo !== termoVisto) {
+    setTermoVisto(termo);
+    if (temTermo) setAberta(true);
+  }
+  const id = `pergunta-${useId()}`;
+  return (
+    <div className="rounded-[var(--r-md)] border border-[var(--border)]">
+      <h4 className="m-0">
+        <button
+          type="button"
+          aria-expanded={aberta}
+          aria-controls={id}
+          onClick={() => setAberta((a) => !a)}
+          className="flex w-full items-start justify-between gap-3 rounded-[var(--r-md)] px-3 py-2.5 text-left text-sm font-semibold text-[var(--fg)] transition-colors hover:bg-[var(--surface-2)]"
+        >
+          <span className="min-w-0"><TextoRico texto={pergunta} termo={termo} /></span>
+          <Icon name={aberta ? 'chevron-up' : 'chevron-down'} size={15} className="mt-0.5 shrink-0 text-[var(--fg-3)]" />
+        </button>
+      </h4>
+      <div id={id} hidden={!aberta} className="border-t border-[var(--border-faint)] px-3 pb-3 pt-2 text-sm leading-relaxed text-[var(--fg-2)]">
+        <p><TextoRico texto={resposta} termo={termo} /></p>
+        {link && (
+          <Link href={link.href} className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--fg-2)] underline-offset-2 hover:text-[var(--fg)] hover:underline">
+            Abrir {link.rotulo} <Icon name="arrow-up-right" size={12} />
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Cartões de atalho: tela do sistema (Link) ou seção da ajuda (#id, tratada pela central). */
+function Atalhos({ itens, termo, onLinkInterno }: { itens: Atalho[]; termo: string; onLinkInterno?: (href: string) => boolean }) {
+  const classe = 'group flex h-full items-start gap-3 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2.5 transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)]';
+  const miolo = (a: Atalho) => (
+    <>
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--r-md)] bg-[var(--surface-3)] text-[var(--fg-2)]"><Icon name={a.icone} size={15} /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-[var(--fg)]"><TextoRico texto={a.rotulo} termo={termo} /></span>
+        <span className="block text-xs leading-relaxed text-[var(--fg-3)]"><TextoRico texto={a.texto} termo={termo} /></span>
+      </span>
+      <Icon name={a.href.startsWith('#') ? 'arrow-right' : 'arrow-up-right'} size={13} className="mt-1 shrink-0 text-[var(--fg-3)] transition-transform group-hover:translate-x-0.5" />
+    </>
+  );
+  return (
+    <ul className="grid gap-2 sm:grid-cols-2">
+      {itens.map((a) => (
+        <li key={a.href + a.rotulo} className="min-w-0">
+          {a.href.startsWith('#') ? (
+            <a href={a.href} className={classe} onClick={(e) => { if (onLinkInterno?.(a.href)) e.preventDefault(); }}>{miolo(a)}</a>
+          ) : (
+            <Link href={a.href} className={classe}>{miolo(a)}</Link>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function Lista({ bloco, termo }: { bloco: Extract<Bloco, { tipo: 'lista' }>; termo: string }) {

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { acharTrechos, ocorrencias, resultadosBusca, resumoConteudo, segmentar, separarNegrito, textoLimpo } from './busca';
+import {
+  acharPalavras, acharTrechos, buscarSecoes, ocorrencias, palavrasDaBusca, recortar, resultadosBusca, resumoConteudo,
+  segmentar, separarNegrito, textoLimpo, type Pesquisavel,
+} from './busca';
 import { GRUPOS, SECOES, type Secao } from './conteudo';
 
 describe('busca no playbook', () => {
@@ -83,5 +86,62 @@ describe('conteúdo do playbook', () => {
     expect(r.scripts).toBeGreaterThan(10);
     expect(r.emAberto).toBeGreaterThan(10);
     expect(r.pendencias).toBeGreaterThan(0);
+  });
+});
+
+describe('busca da central de ajuda (várias palavras)', () => {
+  const secoes: Pesquisavel[] = [
+    { id: 'funil', titulo: 'Funil de vendas', resumo: 'Negócios por etapa.', sinonimos: ['kanban'], blocos: [{ tipo: 'paragrafo', texto: 'Arraste o card para **mover** o negócio de etapa.' }] },
+    { id: 'ficha', titulo: 'Ficha do negócio', blocos: [{ tipo: 'passos', itens: ['Preencha os campos.', 'Clique em Mover para a próxima etapa.'] }] },
+    { id: 'faq', titulo: 'Perguntas', blocos: [{ tipo: 'pergunta', pergunta: 'Por que não consigo mover?', resposta: 'Falta campo obrigatório na etapa.' }] },
+    { id: 'outra', titulo: 'Disparos', blocos: [{ tipo: 'em_breve', titulo: 'Envio', texto: 'WhatsApp oficial conectado.' }] },
+  ];
+
+  it('tira acento, caixa e palavras vazias da busca', () => {
+    expect(palavrasDaBusca('  Como MOVER o Negócio  ')).toEqual(['mover', 'negocio']);
+    expect(palavrasDaBusca('de')).toEqual(['de']); // só palavra vazia: usa o que veio
+    expect(palavrasDaBusca('a')).toEqual([]);
+  });
+
+  it('acha e junta as posições de várias palavras no texto original', () => {
+    expect(acharPalavras('Negócio no funil', ['negocio', 'funil'])).toEqual([[0, 7], [11, 16]]);
+    expect(acharPalavras('abcd', ['abc', 'bcd'])).toEqual([[0, 4]]);
+  });
+
+  it('exige todas as palavras e ignora acento e maiúscula', () => {
+    expect(buscarSecoes(secoes, 'MOVER ETAPA').map((r) => r.secao.id)).toEqual(['funil', 'ficha', 'faq']);
+    expect(buscarSecoes(secoes, 'mover whatsapp')).toEqual([]);
+    expect(buscarSecoes(secoes, 'conexão').length).toBe(0);
+    expect(buscarSecoes(secoes, 'whatsapp').map((r) => r.secao.id)).toEqual(['outra']);
+  });
+
+  it('título e sinônimo pesam mais que o corpo', () => {
+    expect(buscarSecoes(secoes, 'negocio')[0].secao.id).toBe('ficha');
+    expect(buscarSecoes(secoes, 'kanban').map((r) => r.secao.id)).toEqual(['funil']);
+  });
+
+  it('traz o trecho do corpo onde a busca aparece, sem asteriscos', () => {
+    const [r] = buscarSecoes(secoes, 'arraste');
+    expect(r.trecho).toBe('Arraste o card para mover o negócio de etapa.');
+    expect(buscarSecoes(secoes, 'kanban')[0].trecho).toBe('Negócios por etapa.');
+  });
+
+  it('recorta texto longo em volta da palavra, com reticências', () => {
+    const longo = `${'palavra '.repeat(40)}alvo ${'fim '.repeat(40)}`;
+    const t = recortar(longo, ['alvo'], 60);
+    expect(t.startsWith('… ')).toBe(true);
+    expect(t.endsWith(' …')).toBe(true);
+    expect(t).toContain('alvo');
+    expect(t.length).toBeLessThanOrEqual(66);
+  });
+
+  it('destaca cada palavra da busca, não só a frase inteira', () => {
+    const s = segmentar('Mover o negócio', 'negocio mover');
+    expect(s.filter((x) => x.destaque).map((x) => x.texto)).toEqual(['Mover', 'negócio']);
+  });
+
+  it('busca vazia ou curta não devolve nada', () => {
+    expect(buscarSecoes(secoes, '')).toEqual([]);
+    expect(buscarSecoes(secoes, ' x ')).toEqual([]);
   });
 });
