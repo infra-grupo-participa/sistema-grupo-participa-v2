@@ -167,7 +167,7 @@ export function RemocaoClient() {
       </div>
       <p className="text-sm text-[var(--fg-3)] mb-4 max-w-[70ch]">
         {aba === 'fila' && <>
-          Reembolso e chargeback do Holding Masters, e sócio que saiu numa troca de sócio aprovada. Cada caso passa pela triagem e depois cada responsável marca o que removeu,
+          Reembolso e chargeback do Holding Masters, e sócio que saiu numa troca de sócio aprovada. Reembolso e chargeback passam pela triagem; o sócio que saiu sem compra própria já entra em remoção. Depois cada responsável marca o que removeu,
           para o titular e cada sócio. Prazo: 1 dia útil (9h às 18h, sem feriado).
         </>}
         {aba === 'acelera' && <>

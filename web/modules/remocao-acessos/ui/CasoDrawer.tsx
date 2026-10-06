@@ -159,7 +159,9 @@ export function CasoDrawer({ id, repo, onClose, onMudou, onCarregou, flash }: {
   const sug = c?.sugestao;
   // Acelera Holding: sem triagem e sem sócios. Nada de triar, desfazer triagem, sugestão de triagem nem sócio na tela.
   const ehAcelera = !!c && linhaDoCaso(c) === 'acelera';
-  const podeDesfazer = !!c && !ehAcelera && (['em_remocao', 'mantem_acesso', 'ajustando_acesso', 'concluido'] as const).some((s) => s === c.status);
+  // Troca de sócio sem compra própria nasce em remoção (sem triagem): não há triagem para desfazer (o banco também recusa).
+  const ehTrocaDireta = !!c && c.tipo === 'troca_socio' && sug?.direto_remocao === true;
+  const podeDesfazer = !!c && !ehAcelera && !ehTrocaDireta && (['em_remocao', 'mantem_acesso', 'ajustando_acesso', 'concluido'] as const).some((s) => s === c.status);
   const pessoas = d ? (ehAcelera ? d.pessoas.filter((p) => p.papel === 'titular') : d.pessoas) : [];
 
   return (
