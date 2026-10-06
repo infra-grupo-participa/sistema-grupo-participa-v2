@@ -55,7 +55,7 @@ export const DEPARTAMENTOS: Departamento[] = [
     status: 'ativo',
     areas: [
       area('marketing', 'web', 'Web', 'globe', 'Páginas e sites'),
-      area('marketing', 'mensageria', 'Mensageria', 'message', 'Disparos e grupos'),
+      { ...area('marketing', 'mensageria', 'Mensageria', 'message', 'Disparos e grupos'), status: 'ativo' }, // migration 20261005n
       area('marketing', 'trafego', 'Tráfego', 'trending-up', 'Mídia paga'),
       area('marketing', 'audiovisual', 'Audiovisual', 'video', 'Vídeo e foto'),
       area('marketing', 'social-media', 'Social Media', 'share', 'Redes sociais'),
