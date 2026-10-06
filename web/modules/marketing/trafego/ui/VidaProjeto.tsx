@@ -1,0 +1,310 @@
+'use client';
+
+// "A vida do projeto" (clique na linha da Central do Tráfego): investido × verba, ritmo, KPIs × metas, fases planejado ×
+// gasto, campanhas (e as fora do padrão), lugar das atividades do ClickUp. Cadastro de planejamento e fases aqui.
+import { useEffect, useState } from 'react';
+import {
+  Badge, Button, ConfirmDialog, DataTable, Drawer, EmptyState, FilterSelect, Input, Loading, Modal, ProgressBar, Row, SectionCard,
+  Td, Th, Thead, Tr,
+} from '@/shared/ui/components';
+import { Icon } from '@/shared/ui/icons';
+import { ROTULO_ERRO, type ErroCampanha } from '../../projetos/domain/campanha';
+import { comKpis, esperadoAte, situacaoRitmo } from '../domain/kpis';
+import { ROTULO_AVISO, ROTULO_SUBAREA, type ConfigTrafego, type FaseProjeto, type Resposta, type VidaProjeto as Vida } from '../domain/tipos';
+import {
+  ajustarCampanha, apagarFase, carregarProjeto, salvarFase, salvarPlanejamento, type FaseForm, type PlanejamentoForm,
+} from '../infrastructure/trafego-data';
+import { SEM_DADO, centavos, dataBR, inteiro, pct, reais } from './formato';
+
+type Flash = (msg: string) => void;
+
+const txt = (n: number | null | undefined) => (n == null ? '' : String(n));
+const msgAvisos = (r: Resposta) => [r.msg, ...(r.avisos ?? []).map((a) => ROTULO_AVISO[a] ?? a)].join(' ');
+
+function Campo({ rotulo, dica, children }: { rotulo: string; dica?: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="block text-xs font-medium text-[var(--fg-2)] mb-1">
+        {rotulo}{dica && <span className="font-normal text-[var(--fg-3)]"> · {dica}</span>}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function ModalPlanejamento({ vida, config, onFechar, onSalvo }: { vida: Vida; config: ConfigTrafego; onFechar: () => void; onSalvo: (m: string) => void }) {
+  const r = vida.resumo;
+  const [f, setF] = useState<PlanejamentoForm>({
+    projeto_id: r.projeto_id, status: r.status ?? '', gestor: r.gestor ?? '', verba_maxima: txt(r.verba_maxima), verba_diaria: txt(r.verba_diaria),
+    meta_leads: txt(r.meta_leads), meta_receita: txt(r.meta_receita), meta_cpl: txt(r.meta_cpl), meta_pct_mql: txt(r.meta_pct_mql), obs: r.obs ?? '',
+  });
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const set = (k: keyof PlanejamentoForm, v: string) => setF((x) => ({ ...x, [k]: v }));
+  const numero = (k: keyof PlanejamentoForm) => (
+    <Input inputMode="decimal" value={f[k] as string} onChange={(e) => set(k, e.target.value.replace(',', '.'))} />
+  );
+
+  async function salvar() {
+    setSalvando(true);
+    const x = await salvarPlanejamento(f);
+    setSalvando(false);
+    if (!x.ok) { setErro(x.msg); return; }
+    onSalvo(msgAvisos(x));
+  }
+
+  return (
+    <Modal onClose={onFechar} title={`Planejamento de ${r.sigla}`} width="max-w-2xl" footer={<>
+      <Button variant="ghost" size="sm" onClick={onFechar}>Cancelar</Button>
+      <Button size="sm" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</Button>
+    </>}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Campo rotulo="Status" dica="marcado à mão">
+          <FilterSelect value={f.status} onChange={(e) => set('status', e.target.value)}>
+            <option value="">Sem status</option>
+            {config.status.map((s) => <option key={s.codigo} value={s.codigo}>{s.nome}</option>)}
+          </FilterSelect>
+        </Campo>
+        <Campo rotulo="Gestor responsável">
+          <FilterSelect value={f.gestor} onChange={(e) => set('gestor', e.target.value)}>
+            <option value="">Não marcado</option>
+            {config.gestores.map((g) => <option key={g.sigla} value={g.sigla}>{g.sigla} · {g.nome}</option>)}
+          </FilterSelect>
+        </Campo>
+        <Campo rotulo="Verba máxima (R$)">{numero('verba_maxima')}</Campo>
+        <Campo rotulo="Verba diária (R$)">{numero('verba_diaria')}</Campo>
+        <Campo rotulo="Meta de leads">{numero('meta_leads')}</Campo>
+        <Campo rotulo="Meta de receita (R$)">{numero('meta_receita')}</Campo>
+        <Campo rotulo="Meta de CPL (R$)" dica="teto">{numero('meta_cpl')}</Campo>
+        <Campo rotulo="Meta de % MQL">{numero('meta_pct_mql')}</Campo>
+        <div className="sm:col-span-2">
+          <Campo rotulo="Observação"><Input value={f.obs} onChange={(e) => set('obs', e.target.value)} maxLength={1000} /></Campo>
+        </div>
+      </div>
+      <p className="mt-2 text-xs text-[var(--fg-3)]">Vazio = não definido. Use ponto ou vírgula para centavos.</p>
+      {erro && <p role="alert" className="mt-2 text-sm text-[var(--red)]">{erro}</p>}
+    </Modal>
+  );
+}
+
+function ModalFase({ inicial, config, onFechar, onSalvo }: { inicial: FaseForm; config: ConfigTrafego; onFechar: () => void; onSalvo: (m: string) => void }) {
+  const [f, setF] = useState<FaseForm>(inicial);
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const set = (k: keyof FaseForm, v: string) => setF((x) => ({ ...x, [k]: v }));
+
+  async function salvar() {
+    if (!f.fase) { setErro('Escolha a fase.'); return; }
+    setSalvando(true);
+    const x = await salvarFase(f);
+    setSalvando(false);
+    if (!x.ok) { setErro(x.msg); return; }
+    onSalvo(msgAvisos(x));
+  }
+
+  return (
+    <Modal onClose={onFechar} title={f.id ? 'Editar fase' : 'Nova fase'} width="max-w-xl" footer={<>
+      <Button variant="ghost" size="sm" onClick={onFechar}>Cancelar</Button>
+      <Button size="sm" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</Button>
+    </>}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Campo rotulo="Fase">
+          <FilterSelect value={f.fase} onChange={(e) => set('fase', e.target.value)}>
+            <option value="">Escolha</option>
+            {config.fases.map((x) => <option key={x.codigo} value={x.codigo}>{x.nome}</option>)}
+          </FilterSelect>
+        </Campo>
+        <Campo rotulo="Verba planejada (R$)">
+          <Input inputMode="decimal" value={f.verba} onChange={(e) => set('verba', e.target.value.replace(',', '.'))} />
+        </Campo>
+        <Campo rotulo="Início"><Input type="date" value={f.inicio} onChange={(e) => set('inicio', e.target.value)} /></Campo>
+        <Campo rotulo="Fim"><Input type="date" value={f.fim} onChange={(e) => set('fim', e.target.value)} /></Campo>
+        <div className="sm:col-span-2">
+          <Campo rotulo="Observação"><Input value={f.obs} onChange={(e) => set('obs', e.target.value)} maxLength={1000} /></Campo>
+        </div>
+      </div>
+      {erro && <p role="alert" className="mt-2 text-sm text-[var(--red)]">{erro}</p>}
+    </Modal>
+  );
+}
+
+function Fases({ vida, onEditar, onApagar }: { vida: Vida; onEditar: (f: FaseProjeto) => void; onApagar: (f: FaseProjeto) => void }) {
+  if (vida.fases.length === 0) return <EmptyState title="Nenhuma fase cadastrada" hint="Cadastre aquecimento, captação, lembrete… com a verba e o período." />;
+  return (
+    <DataTable minWidth={720}>
+      <Thead><Th>Fase</Th><Th>Período</Th><Th>Planejado</Th><Th>Gasto</Th><Th>% da fase</Th><Th>Campanhas</Th><Th> </Th></Thead>
+      <tbody>
+        {vida.fases.map((f) => {
+          const p = f.gasto != null && f.verba ? Math.round((f.gasto / f.verba) * 1000) / 10 : null;
+          return (
+            <Tr key={f.id}>
+              <Td><b>{f.nome}</b></Td>
+              <Td>{f.inicio || f.fim ? `${dataBR(f.inicio)} a ${dataBR(f.fim)}` : SEM_DADO}</Td>
+              <Td>{reais(f.verba)}</Td>
+              <Td>{reais(f.gasto)}</Td>
+              <Td>{p == null ? SEM_DADO : <div className="w-28"><ProgressBar value={p} tone={p > 100 ? 'red' : 'accent'} showLabel ariaLabel={`${pct(p)} da verba da fase`} /></div>}</Td>
+              <Td>{f.campanhas}</Td>
+              <Td>
+                <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" onClick={() => onEditar(f)} aria-label={`Editar ${f.nome}`}><Icon name="pencil" size={12} /></Button>
+                  <Button size="sm" variant="danger" onClick={() => onApagar(f)} aria-label={`Apagar ${f.nome}`}><Icon name="trash" size={12} /></Button>
+                </div>
+              </Td>
+            </Tr>
+          );
+        })}
+        <Tr>
+          <Td><span className="text-[var(--fg-3)]">Sem fase</span></Td><Td> </Td><Td> </Td><Td>{reais(vida.gasto_sem_fase)}</Td><Td> </Td><Td> </Td><Td> </Td>
+        </Tr>
+      </tbody>
+    </DataTable>
+  );
+}
+
+function Campanhas({ vida, flash, onMudou }: { vida: Vida; flash: Flash; onMudou: () => void }) {
+  if (vida.campanhas.length === 0) {
+    return <EmptyState title="Nenhuma campanha ligada" hint="As campanhas chegam pela coleta Meta/Google (etapa 2) e se ligam ao projeto pelo nome." />;
+  }
+  async function trocarFase(id: number, projetoManual: number | null, fase: string) {
+    const r = await ajustarCampanha({ id, projeto_id: projetoManual, fase_id: fase ? Number(fase) : null });
+    flash(r.msg);
+    if (r.ok) onMudou();
+  }
+  return (
+    <DataTable minWidth={980}>
+      <Thead><Th>Campanha</Th><Th>Plataforma</Th><Th>Status</Th><Th>Fase</Th><Th>Gasto</Th><Th>Impressões</Th><Th>Cliques</Th><Th>Leads (plataforma)</Th></Thead>
+      <tbody>
+        {vida.campanhas.map((c) => (
+          <Tr key={c.id}>
+            <Td>
+              <div className="font-mono text-xs break-all">{c.nome}</div>
+              {c.fora_padrao && <div className="mt-0.5 text-[11px] text-[var(--yellow)]">Fora do padrão: {c.erros.map((e) => ROTULO_ERRO[e as ErroCampanha] ?? e).join(', ')}</div>}
+              {c.projeto_manual && <div className="text-[11px] text-[var(--fg-3)]">Projeto ligado à mão</div>}
+            </Td>
+            <Td>{c.plataforma === 'meta' ? 'Meta' : c.plataforma === 'google' ? 'Google' : c.plataforma}</Td>
+            <Td>{c.status_plataforma ?? SEM_DADO}</Td>
+            <Td>
+              <FilterSelect value={c.fase_id ?? ''} aria-label="Fase da campanha"
+                onChange={(e) => void trocarFase(c.id, c.projeto_manual ? c.projeto_id : null, e.target.value)}>
+                <option value="">Sem fase</option>
+                {vida.fases.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+              </FilterSelect>
+            </Td>
+            <Td>{reais(c.gasto)}</Td>
+            <Td>{inteiro(c.impressoes)}</Td>
+            <Td>{inteiro(c.cliques)}</Td>
+            <Td>{inteiro(c.leads_plataforma)}</Td>
+          </Tr>
+        ))}
+      </tbody>
+    </DataTable>
+  );
+}
+
+export function VidaProjeto({ id, config, versao, onFechar, flash, onMudou }: {
+  id: number; config: ConfigTrafego; versao: number; onFechar: () => void; flash: Flash; onMudou: () => void;
+}) {
+  const [vida, setVida] = useState<Vida | null | undefined>(undefined);
+  const [editPlan, setEditPlan] = useState(false);
+  const [editFase, setEditFase] = useState<FaseForm | null>(null);
+  const [apagar, setApagar] = useState<FaseProjeto | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    carregarProjeto(id).then((v) => { if (vivo) setVida(v ? { ...v, resumo: comKpis(v.resumo) } : null); });
+    return () => { vivo = false; };
+  }, [id, versao]);
+
+  const salvo = (msg: string) => { setEditPlan(false); setEditFase(null); flash(msg); onMudou(); };
+
+  if (vida === undefined) return <Drawer onClose={onFechar} title="Carregando…"><Loading /></Drawer>;
+  if (vida === null) {
+    return <Drawer onClose={onFechar} title="Projeto"><p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar o projeto.</p></Drawer>;
+  }
+
+  const r = vida.resumo;
+  const esperado = esperadoAte(vida.fases, config.dia_ontem);
+  const acima = situacaoRitmo(r.ritmo_ontem) === 'acima';
+  const plataformas = r.por_plataforma ? Object.entries(r.por_plataforma) : [];
+
+  return (
+    <Drawer
+      onClose={onFechar}
+      width="max-w-5xl"
+      title={<span><span className="font-mono">{r.sigla}</span> · {r.nome}</span>}
+      subtitle={[r.subarea ? ROTULO_SUBAREA[r.subarea] : 'Subárea não marcada', r.gestor ? `Gestor ${r.gestor}` : null].filter(Boolean).join(' · ')}
+      badges={<>
+        {r.status_nome ? <Badge tone={r.status === 'ativo' ? 'success' : 'neutral'}>{r.status_nome}</Badge> : <Badge>Sem status</Badge>}
+        {r.campanhas_fora_padrao > 0 && <Badge tone="warning">{r.campanhas_fora_padrao} fora do padrão</Badge>}
+      </>}
+      actions={<Button size="sm" variant="subtle" onClick={() => setEditPlan(true)}><Icon name="pencil" size={12} /> Planejamento</Button>}
+    >
+      <div className="space-y-5">
+        <SectionCard title="Investido × verba">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <div className="text-2xl font-bold tabular">{reais(r.investido)} <span className="text-sm font-normal text-[var(--fg-3)]">de {reais(r.verba_maxima)}</span></div>
+              {r.pct_verba != null && <div className="mt-2"><ProgressBar value={r.pct_verba} tone={r.pct_verba > 100 ? 'red' : 'accent'} showLabel ariaLabel={`${pct(r.pct_verba)} da verba usada`} /></div>}
+              <div className="mt-2 text-xs text-[var(--fg-3)]">
+                {plataformas.length ? plataformas.map(([p, v]) => `${p === 'meta' ? 'Meta' : p === 'google' ? 'Google' : p}: ${reais(v)}`).join(' · ') : 'Sem gasto coletado ainda (coleta Meta/Google é a etapa 2).'}
+                {r.moedas.some((m) => m !== 'BRL') && <span className="text-[var(--yellow)]"> · Há conta em outra moeda: a soma mistura moedas.</span>}
+              </div>
+            </div>
+            <div>
+              <Row k={`Gasto ontem (${dataBR(config.dia_ontem)})`} v={reais(r.gasto_ontem)} />
+              <Row k="Verba diária" v={reais(r.verba_diaria)} />
+              <Row k="Ritmo de ontem" v={<span className={acima ? 'text-[var(--red)] font-semibold' : ''}>{pct(r.ritmo_ontem)}{acima ? ' (acima da diária)' : ''}</span>} />
+              <Row k="Deveria ter gasto até ontem (pelas fases)" v={reais(esperado.valor)} />
+              {esperado.semPeriodo > 0 && <p className="text-[11px] text-[var(--fg-3)]">{esperado.semPeriodo} fase(s) com verba e sem período ficaram fora da conta.</p>}
+              <Row k="Soma das fases" v={`${reais(r.verba_fases)}${r.verba_maxima != null && r.verba_fases > r.verba_maxima ? ' (acima da verba máxima)' : ''}`} />
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Indicadores × metas" subtitle="Lead = lead da nossa base de pessoas. Leads da plataforma ficam só nas campanhas.">
+          <div className="grid gap-x-6 sm:grid-cols-2">
+            <Row k="Receita gerada" v={`${reais(r.receita)} · meta ${reais(r.meta_receita)}`} />
+            <Row k="Leads" v={`${inteiro(r.leads)} · meta ${inteiro(r.meta_leads)}`} />
+            <Row k="CPL" v={`${centavos(r.cpl)} · meta ${centavos(r.meta_cpl)}`} />
+            <Row k="% MQL" v={`${pct(r.pct_mql)} · meta ${pct(r.meta_pct_mql)}`} />
+            <Row k="CTR" v={pct(r.ctr, 2)} />
+            <Row k="CPM" v={centavos(r.cpm)} />
+            <Row k="Connect rate" v={pct(r.connect_rate)} />
+            <Row k="Conversão da página" v={pct(r.conversao_pagina)} />
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Fases: planejado × gasto" subtitle="O gasto de uma campanha conta na fase marcada nela (o nome da campanha não diz a fase)."
+          right={<Button size="sm" onClick={() => setEditFase({ projeto_id: r.projeto_id, fase: '', verba: '', inicio: '', fim: '', obs: '' })}><Icon name="plus" size={14} /> Nova fase</Button>}>
+          <Fases vida={vida} onApagar={setApagar} onEditar={(f) => setEditFase({
+            id: f.id, projeto_id: r.projeto_id, fase: f.fase, verba: txt(f.verba), inicio: f.inicio ?? '', fim: f.fim ?? '', obs: f.obs ?? '',
+          })} />
+        </SectionCard>
+
+        <SectionCard title="Campanhas do projeto" subtitle={`${vida.campanhas.length} campanha(s); as fora do padrão aparecem marcadas.`}>
+          <Campanhas vida={vida} flash={flash} onMudou={onMudou} />
+        </SectionCard>
+
+        <SectionCard title="Atividades do ClickUp">
+          <p className="text-sm text-[var(--fg-2)]">
+            Lugar reservado: as tarefas do projeto vão aparecer aqui numa próxima etapa (decisão de 05/10/2026), puxadas pela etiqueta do projeto
+            {r.etiqueta_clickup ? <> <span className="font-mono text-[var(--fg)]">{r.etiqueta_clickup}</span>.</> : '. Este projeto ainda não tem etiqueta do ClickUp cadastrada (em Marketing > Projetos e páginas).'}
+          </p>
+        </SectionCard>
+      </div>
+
+      {editPlan && <ModalPlanejamento vida={vida} config={config} onFechar={() => setEditPlan(false)} onSalvo={salvo} />}
+      {editFase && <ModalFase inicial={editFase} config={config} onFechar={() => setEditFase(null)} onSalvo={salvo} />}
+      {apagar && (
+        <ConfirmDialog
+          title="Apagar fase"
+          message={`Apagar a fase ${apagar.nome}? As campanhas ligadas a ela ficam sem fase (o gasto continua no projeto).`}
+          confirmLabel="Apagar"
+          danger
+          onCancel={() => setApagar(null)}
+          onConfirm={async () => { const x = await apagarFase(apagar.id); setApagar(null); flash(x.msg); if (x.ok) onMudou(); }}
+        />
+      )}
+    </Drawer>
+  );
+}

@@ -10,7 +10,7 @@
 | Departamento | Rota | Situação | Dentro |
 |---|---|---|---|
 | Educacional | `/educacional` | ativo | tudo o que existia no sistema até 05/10/2026 (sem áreas) |
-| Marketing | `/marketing` | ativo, **só admin e dev** | área **Web ativa** (ver "Web"); Mensageria, Tráfego, Audiovisual, Social Media "Em breve" |
+| Marketing | `/marketing` | ativo, **só admin e dev** | áreas **Web** e **Tráfego** ativas (ver "Web" e "Tráfego"); Mensageria, Audiovisual, Social Media "Em breve" |
 | Comercial | `/comercial` | ativo, **só admin e dev** | sem áreas: CRM e base única de pessoas (ver "Comercial e base de pessoas") |
 | Financeiro | `/financeiro` | Em breve | a mapear |
 | Infra | `/infra` | Em breve | IA e Dados |
@@ -327,6 +327,103 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 13. **Nome compatível = mesmo primeiro nome.** Serve, ou quer uma regra mais rígida (nome completo) para documento e
     telefone?
 
+## Tráfego (Marketing > Tráfego: a Central do Tráfego)
+
+> **Etapa 1 de 6** do plano (`Projetos/sistema-unico/central-de-dados/plano-trafego.md` no cérebro do Victor), 05/10/2026,
+> branch `victor`. Migration `infra/supabase/migrations/20261005p_mkt_trafego.sql`, **NÃO APLICADA** (ensaio
+> `20261005p_ensaio.sql`; o que foi medido em `20261005p.explain.md`). Tela `/marketing/trafego`, código em
+> `web/modules/marketing/trafego/`.
+
+### Situação
+
+| Peça | Situação |
+|---|---|
+| Banco (schema `mkt_trafego`, 13 funções `public.trafego_*`) | escrito e ensaiado em Postgres local; **não aplicado** |
+| Tela `/marketing/trafego` (Projetos, Campanhas fora do padrão, Contas de anúncio, vida do projeto) | pronta; funciona de verdade só depois da migration; hoje dá para ver no modo demo |
+| Coleta Meta Ads e Google Ads | **não feita** (etapa 2). As funções de entrada existem (`trafego_campanhas_receber`, `trafego_desempenho_receber`, só `service_role`), ninguém as chama |
+| Receita (Hotmart), connect rate, conversão da página | **sem fonte**: a tela mostra "sem dado" |
+| Atividades do ClickUp | lugar reservado na vida do projeto, sem integração |
+
+### Decisões que mandam aqui (Victor, 05/10/2026)
+
+- **KPIs da tabela:** CPL, leads, CTR, CPM, connect rate, conversão da página, % MQL. Mais status, projeto, receita gerada,
+  investimento realizado, investimento máximo, % da verba e gestor.
+- **Status do projeto marcado à mão.** Verba, fases e metas preenchidas por Arthur, Victor e Caio (no banco: admin/dev).
+- **Lead que conta é o da nossa base** (`pessoas.eventos`, 20261005o): pessoas distintas com evento `lead` no projeto, sem
+  pessoa de teste nem mesclada. Os leads que a plataforma informa ficam só na campanha.
+- **"Quanto gerado" = receita** (Hotmart), ainda não ligada: nula.
+- **Atividades do ClickUp ficam na tela** (pela etiqueta do projeto); nesta etapa só o lugar.
+- **Nada duplicado:** projeto e página em `mkt`, lead em `pessoas`, visita em `mkt_web`.
+
+### Modelo
+
+| Tabela | O que guarda |
+|---|---|
+| `plataformas`, `status_projeto`, `fases` | listas (Meta Ads, Google Ads; ativo, pausado, inativo, encerrado; aquecimento, captação, lembrete). Mudam por SQL |
+| `contas` | conta de anúncio: plataforma, id na plataforma (Meta sem `act_`, Google só dígitos), nome, de quem é (grupo, diamante, aurum), cliente, moeda |
+| `campanhas` | nome **exato** da plataforma + leitura pelo padrão `GESTOR \| PROJETO \| OBJETIVO \| DESCRIÇÃO \| PÁGINA` (`mkt.campanha_traduzir`): projeto, gestor, objetivo, página, fora do padrão. Projeto pode ser ligado à mão; fase só à mão |
+| `desempenho_dia` | gasto, impressões, cliques, leads da plataforma por campanha e dia (vazia até a coleta) |
+| `planejamento` | por projeto: status, gestor, verba máxima e diária, metas de leads, receita, CPL e % MQL |
+| `projeto_fases` | verba planejada e período de cada fase |
+
+Fórmulas (banco em `mkt_trafego.resumo`, front em `web/modules/marketing/trafego/domain/kpis.ts`, as duas testadas com os
+mesmos números): % da verba = investido ÷ verba máxima; CPL = investido ÷ leads; CTR = cliques ÷ impressões; CPM =
+investido ÷ impressões × 1000; % MQL = MQL ÷ leads; ritmo = gasto de ontem ÷ verba diária; "deveria ter gasto" = verba
+de cada fase distribuída por igual nos dias dela. **Sem fonte = nulo, nunca zero** (projeto sem gasto coletado mostra
+"sem dado", não R$ 0).
+
+### Acesso
+
+Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt_trafego')` = hoje só admin e dev. Os dois
+`receber` só `service_role`. O ensaio confere a recusa (42501) para sem perfil, operador (mesmo com a área
+`mkt_trafego`), visualizador e anon.
+
+### Telas (`/marketing/trafego`, só admin e dev)
+
+- **Projetos:** a tabela da Central com os filtros interno/externo, subárea (Interno, Aurum, Diamantes), gestor (CF, RS, EF,
+  da lista do banco; casa com o gestor do planejamento ou de alguma campanha), situação (status) e projetos desativados.
+  Cartões: investido, verba, projetos acima da verba diária ontem, campanhas fora do padrão.
+- **Vida do projeto** (clique na linha): investido × verba (por plataforma), ritmo de ontem, quanto deveria ter gasto
+  pelas fases, KPIs × metas, fases planejado × gasto (criar, editar, apagar), campanhas do projeto (marcar a fase),
+  lugar das atividades do ClickUp. Botão **Planejamento** (status, gestor, verbas, metas).
+- **Campanhas fora do padrão:** o nome exato, o que está fora, ligar à mão a um projeto, "Reler os nomes" (depois de
+  cadastrar projeto ou página em Marketing > Projetos e páginas). Opção "só as sem projeto".
+- **Contas de anúncio:** cadastro e edição.
+
+### Testar localmente
+
+1. **Ensaio do banco:** rodar `infra/supabase/migrations/20261005p_ensaio.sql` inteiro (termina em rollback) e conferir
+   que nenhuma linha começa com `ERRADO` (o cabeçalho explica cada passo). Só dados fictícios.
+2. **Telas sem banco:** em `web/.env.local`, `NEXT_PUBLIC_TRAFEGO_DEMO=1`; `npm run dev`; entrar como admin/dev e abrir
+   `/marketing/trafego`. Projetos da semente + 2 externos "Exemplo", contas "Conta Exemplo", campanhas "EXEMPLO", gasto e
+   leads inventados, com a faixa "Dados de demonstração" (grava só em memória; recarregar volta ao começo). Em produção
+   (`NODE_ENV=production`) o modo nunca liga.
+3. **Código:** `npx tsc --noEmit`, `npx vitest run` (`kpis.test.ts`, `demo.test.ts`), `npm run build`.
+
+### Para valer
+
+Victor ver a tela no modo demo e responder as perguntas abaixo; rodar o ensaio no SQL editor; aplicar a 20261005p; levar a
+`victor` para a `main`; cadastrar contas e planejamento. Nada disso foi feito.
+
+### O que falta (próximas etapas do plano)
+
+2. Coleta Meta + Google (depende da conta centralizadora e das credenciais): rotina diária chamando os dois `receber`.
+3. Ligar receita (Hotmart → projeto), connect rate e conversão da página (Web), atividades do ClickUp.
+4. Resumo do dia ("o que está pegando fogo") e alerta de nome fora do padrão.
+5. MCP da central com os dados do Tráfego.
+6. Importação do histórico (planilhas que o Victor escolher).
+
+### Perguntas abertas (para o Victor)
+
+1. **Status:** a lista fica ativo, pausado, inativo, encerrado? (A conversa termina em "Pronto, ativo e inativo".)
+2. **Connect rate e conversão da página:** qual a fórmula? Proposta: connect rate = visitas na página de captura vindas
+   do anúncio ÷ cliques no link; conversão = leads ÷ entradas na página de captura (dados da Web).
+3. **Cliques:** CTR com cliques no link ou todos os cliques? Decide o que a coleta grava.
+4. **Fase da campanha:** marcar à mão basta, ou a fase entra no nome (campo novo ou objetivo `LEMBRETE`)?
+5. **Externos (Aurum, Diamantes):** cada cliente vira um projeto em `mkt.projetos`? Qual sigla de campanha?
+6. **Conta centralizadora** (ideia do Caio): vai existir? É dela que a coleta lê.
+7. **Gestor do projeto:** um só (como está) ou vários?
+
 ## Branches
 
 Uma branch por pessoa, criadas a partir da `main` em 05/10/2026: `victor`, `joao-pedro`, `arthur`. Cada um
@@ -348,3 +445,5 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
   por identidade, cascata da casa, aluno e comprador por referência, origem, eventos, revisão, registro de acesso,
   máscara no SQL) e `crm` (4 pipelines, etapas configuráveis, negócios, histórico); telas em `/comercial` (só admin e
   dev) com modo de demonstração local. Perguntas abertas na seção "Comercial e base de pessoas". Branch `victor`.
+- **05/10/2026:** Tráfego etapa 1 (migration 20261005p, NÃO APLICADA): contas, campanhas, desempenho diário, planejamento
+  (status, verba, fases, metas) e a Central do Tráfego em `/marketing/trafego` (área ativa), com modo demo. Branch `victor`.
