@@ -31,3 +31,8 @@ verify_jwt = false
 # x-sync-chave (Vault respondi_sync_chave), fail-closed.
 [functions.respondi-sync]
 verify_jwt = false
+
+# crm-integracao-webhook (F5 do CRM, migration 20261006c — NÃO publicada): webhooks de ActiveCampaign/Unnichat/SendFlow.
+# Autentica pelo header x-webhook-secret conferido no banco contra o Vault (crm_webhook_<fonte>), fail-closed.
+[functions.crm-integracao-webhook]
+verify_jwt = false
