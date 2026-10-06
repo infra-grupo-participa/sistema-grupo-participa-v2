@@ -1,4 +1,4 @@
-// crm-integracao-webhook — F5 do CRM Comercial (migration 20261006c). NÃO publicada: deploy só depois do ok do Arthur.
+// crm-integracao-webhook — F5 do CRM Comercial (migration 20261006044653). Publicada em 06/10/2026 (verify_jwt=false).
 //
 // Rotas (POST): /crm-integracao-webhook/activecampaign | /unnichat | /sendflow
 // Faz só três coisas: lê o corpo, normaliza o MÍNIMO (funções abaixo, num arquivo só como as outras Edges) e chama public.crm_integracao_receber.
@@ -123,7 +123,7 @@ export function sendflow(body: Obj): EventoNormalizado | null {
 // ─── Handler ───
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const TOKEN_NA_URL = (Deno.env.get("CRM_WEBHOOK_TOKEN_NA_URL") ?? "") === "sim";
+const TOKEN_NA_URL = ["sim", "true", "1", "on"].includes((Deno.env.get("CRM_WEBHOOK_TOKEN_NA_URL") ?? "").trim().toLowerCase());
 const AC_FUSO = Deno.env.get("AC_FUSO") ?? "-03:00";
 const MAX_BYTES = 64_000;
 

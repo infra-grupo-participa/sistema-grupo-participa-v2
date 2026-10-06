@@ -308,3 +308,37 @@ aparece depois de confirmar os mapas.
 | Notas de importação | 960 (1 por negócio) |
 | Erros | 0 |
 | Duplicidade com a Hotmart | 0 transações repetidas, 0 no mesmo funil; 3 abertos hm de pessoas que também têm aberto hm vindo da Hotmart (funis diferentes) |
+
+## 10. Curso Nacional (linha acelera) e distribuição dos abertos (06/10/2026)
+
+**Curso Nacional.** As duas origens do grupo "Curso Nacional de Formação em Holding Familiar" entraram na linha
+`acelera`, com `importar = true` e `confirmado = true`:
+- **Etapas.** BASE e "Leads Frios" viram primeiro_contato; "Confirmado Reunião Zoom" vira apresentar_oferta;
+  "Pré Checkout Não Finalizado" vira negociar; "Fechado" vira fechado; o resto vira qualificar.
+- **Etapas removidas na Clint.** 48 negócios estavam em 4 etapas que já não existem na origem (os nomes eram de
+  pessoas da equipe). Foram mapeados como `tipo_clint = 'REMOVIDA'` para a etapa base do funil (primeiro_contato),
+  e o nome original fica na nota de importação.
+- **Reprocessamento.** Os resultados `ignorado` dos 60 negócios abertos/perdidos e dos 56 contatos foram apagados
+  para que a carga os processasse.
+- **Ensaio e carga.** O ensaio foi feito em `begin … rollback`, e a carga real rodou com o kill-switch ligado e
+  desligado na mesma transação.
+- **Resultado.** 2 funis "Clint · …" (acelera) e 60 negócios: 28 abertos e 32 perdidos. Entraram 54 contatos:
+  39 casados por e-mail, 3 casados por telefone, 8 criados e 4 em revisão. 0 erros, 0 duplicados, 0 pendentes,
+  `clint_import_ligado = false`.
+
+**Distribuição dos abertos sem dono.**
+- **Escopo:** 920 negócios abertos sem dono (Clint e Hotmart), de 805 pessoas.
+- **Regra:** dono único por pessoa. As 4 pessoas que já tinham dono (vendedor ativo) ficaram com ele; as outras
+  foram alternadas Marcos Paulo/Ronan na ordem do `criado_em` mais antigo da pessoa.
+- **Como:** RPC `crm_transferir_dono`, com as claims do perfil admin do Arthur, motivo "Distribuição inicial após
+  migração da Clint". O ensaio foi feito em `begin … rollback` antes.
+- **Notificações:** as 920 `lead_novo` geradas nesta operação foram marcadas como lidas (`lida_em`).
+
+| Prova | Resultado |
+|---|---|
+| Abertos sem dono | 0 |
+| Marcos Paulo | 505 abertos, 447 pessoas (incluindo os 46 que já tinha) |
+| Ronan | 461 abertos, 401 pessoas |
+| Pessoa com abertos em dois vendedores | 0 |
+| `crm.log` com autor Arthur e esse motivo | 920 trocas de dono (1.722 linhas no total, contando o dono do contato) |
+| Notificações não lidas | 0 |

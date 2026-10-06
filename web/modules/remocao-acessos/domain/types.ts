@@ -6,16 +6,26 @@ export type StatusCaso = 'alerta' | 'aguardando_triagem' | 'mantem_acesso' | 'em
 export type Decisao = 'remover' | 'manter';
 export type SituacaoItem = 'pendente' | 'feito' | 'nao_se_aplica';
 export type Recomendacao = 'remover' | 'verificar';
+/** Linha de produto do caso: Holding Masters (com triagem e sócios) ou Acelera Holding (sem os dois). */
+export type Linha = 'hm' | 'acelera';
+export type OrigemCaso = 'compras' | 'webhook' | 'pedido_alteracao' | 'carga';
+
+/** Item do catálogo sob a responsabilidade de quem está logado. A chave (`item`) é o que separa
+ *  dois itens com o mesmo rótulo em linhas diferentes (o "Obvio" do HM e o do Acelera).
+ *  `string` é o formato antigo do banco (só o rótulo), aceito até a migration nova estar aplicada. */
+export type MeuItem = string | { item: string; rotulo: string; linha?: Linha | null };
 
 export interface MeuPapel {
   pode_ver: boolean;
   pode_triar: boolean;
   pode_configurar: boolean;
-  meus_itens: string[];
+  meus_itens: MeuItem[];
 }
 
 export interface CasoFila {
   id: string;
+  /** Ausente só enquanto o banco não tiver a migration do Acelera: lida como 'hm'. */
+  linha?: Linha | null;
   tipo: TipoCaso;
   status: StatusCaso;
   nome: string | null;
@@ -26,11 +36,12 @@ export interface CasoFila {
   valor: number | null;
   hotmart_transaction: string;
   ocorrido_em: string;
-  prazo_em: string | null;
+  /** Nulo nos casos da carga (importados): sem prazo, nunca atrasado. */
+  prazo_em?: string | null;
   concluido_em: string | null;
   eh_programa: boolean;
   teste: boolean;
-  origem: 'compras' | 'webhook' | 'pedido_alteracao';
+  origem: OrigemCaso;
   decisao: Decisao | null;
   expiracao_antiga: string | null;
   recomendacao: Recomendacao | null;
@@ -114,6 +125,7 @@ export interface CasoDetalhe {
 
 export interface ItemCatalogo {
   item: string;
+  linha?: Linha | null;
   rotulo: string;
   ordem: number;
   so_programa: boolean;
