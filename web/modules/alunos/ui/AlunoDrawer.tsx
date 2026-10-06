@@ -28,6 +28,7 @@ import { SecTitle, SubTitle, Section, Row } from './alunos-ui-bits';
 import { CorpoTrajetoria } from './TrajetoriaAluno';
 import { AlunoAbaJornada } from './AlunoAbaJornada';
 import { AlunoAbaFormularios } from './AlunoAbaFormularios';
+import { HistoricoAluno } from './HistoricoAluno';
 import { motivoSemVencimento, sitTone, tel, vinculoSocio, type VinculoSocio } from './alunos-ui-shared';
 
 // Trajetória do aluno: ligada por padrão; NEXT_PUBLIC_ALUNO_TRAJETORIA=off desliga (inlined no build).
@@ -41,9 +42,10 @@ const ABAS_DISPONIVEIS: AbaFicha[] = [
   'resumo', 'programa', 'jornada',
   ...(TRAJETORIA_ATIVA ? (['trajetoria'] as const) : []),
   'formularios',
+  'historico',
   ...(CURSO_TAB_ATIVA ? (['curso'] as const) : []),
 ];
-const ROTULO_ABA: Record<AbaFicha, string> = { resumo: 'Resumo', programa: 'Programa', jornada: 'Jornada', trajetoria: 'Trajetória', formularios: 'Formulários', curso: 'Curso' };
+const ROTULO_ABA: Record<AbaFicha, string> = { resumo: 'Resumo', programa: 'Programa', jornada: 'Jornada', trajetoria: 'Trajetória', formularios: 'Formulários', historico: 'Histórico', curso: 'Curso' };
 
 /**
  * Ficha do aluno em abas. A moldura (cabeçalho, rodapé, abas) fica aqui; o corpo de cada aba
@@ -209,6 +211,9 @@ export function AlunoDrawer({ a, turmas, alunos = [], canEdit, editMode, onToggl
 
         {/* Formulários: respostas do Respondi (fn_aluno_respondi), carregadas na 1ª abertura da aba. */}
         {painel('formularios', <AlunoAbaFormularios alunoId={a.id} />)}
+
+        {/* Histórico: alterações por pedido aprovado (pa_historico_aluno), carregadas na 1ª abertura da aba. */}
+        {painel('historico', <HistoricoAluno alunoId={a.id} />)}
 
         {/* Curso: oculto até existir integração real — cursoDesempenhoMock é 100% zerado
             e exibir métricas falsas confunde a operação. Reativar via CURSO_TAB_ATIVA. */}

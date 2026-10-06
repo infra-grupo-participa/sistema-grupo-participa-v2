@@ -13,4 +13,8 @@ describe('hash da ficha do aluno', () => {
     expect(lerHashFicha('#aluno=abc&aba=<script>')).toEqual({ alunoId: 'abc', aba: null });
     expect(lerHashFicha('#aluno=abc')).toEqual({ alunoId: 'abc', aba: null });
   });
+  it('aba Histórico (pedidos de alteração) entra no link', () => {
+    expect(montarHashFicha('abc', 'historico')).toBe('#aluno=abc&aba=historico');
+    expect(lerHashFicha('#aluno=abc&aba=historico')).toEqual({ alunoId: 'abc', aba: 'historico' });
+  });
 });

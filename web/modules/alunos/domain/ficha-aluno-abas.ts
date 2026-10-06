@@ -1,8 +1,8 @@
 // Abas da ficha do aluno e o estado delas na URL (`#aluno=<id>&aba=<k>`).
 // Estado puro de UI: vai no hash por `history.replaceState` (sem navegação do Next, 0 request).
 
-export type AbaFicha = 'resumo' | 'programa' | 'jornada' | 'trajetoria' | 'formularios' | 'curso';
-export const ABAS_FICHA: readonly AbaFicha[] = ['resumo', 'programa', 'jornada', 'trajetoria', 'formularios', 'curso'];
+export type AbaFicha = 'resumo' | 'programa' | 'jornada' | 'trajetoria' | 'formularios' | 'historico' | 'curso';
+export const ABAS_FICHA: readonly AbaFicha[] = ['resumo', 'programa', 'jornada', 'trajetoria', 'formularios', 'historico', 'curso'];
 
 export function ehAbaFicha(k: unknown): k is AbaFicha {
   return typeof k === 'string' && (ABAS_FICHA as readonly string[]).includes(k);
