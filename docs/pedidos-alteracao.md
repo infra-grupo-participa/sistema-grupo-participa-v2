@@ -170,10 +170,40 @@ não pode ver). Todos terminam em "(pedido nº N, aprovado por <nome> em dd/mm/a
 160403 já carrega a 160402). Esperado nenhuma linha `ERRADO`. Depois de aplicar: abrir a fila como Isabela (aba
 "Aprovar"), aprovar um pedido dela e ver o selo; abrir o histórico de um aluno com troca aplicada.
 
-**O que falta:** criar os workflows `[Central] Pedidos de alteração
-— Slack` e `[Central] Pedidos de alteração — planilha` no n8n (desligados, rodada 15 min, tokens em credencial),
-gravar `n8n_webhook_url`, ligar `ligado_em`; gravar `planilha_id` da CÓPIA, aprovar o nº 9 e o nº 10, conferir a cópia
-e só então a planilha real.
+**Situação em 06/10/2026 (fim da tarde): LIGADO em produção.**
+
+- Workflows no n8n, os dois **ativos**:
+  - `[Central] Pedidos de alteração — Slack` (id `1DpgHdRu1ZWTOmMi`): a cada 5 min e pelo webhook
+    `/webhook/pedidos-alteracao-slack`, que o gatilho do banco chama a cada pedido novo. `pa_slack_reservar` →
+    `chat.postMessage` no privado de cada `slack_destinos` (hoje só o Victor) → `pa_slack_confirmar`.
+  - `[Central] Pedidos de alteração — planilha` (id `5TjNSftUfJuj1wXo`): a cada 15 min (e "Rodar agora", manual).
+    Reservar → Abas → Ler texto → Ler fórmulas → Planejar → Escrever (`values:batchUpdate`, USER_ENTERED) →
+    Apagar linhas (`deleteDimension`, de baixo para cima) → Confirmar. Falha do Google vira erro do pedido, sem nova
+    tentativa sozinha. Credencial Google `googleSheetsOAuth2Api` do n8n.
+  - Cópia dos dois em `infra/n8n/pedidos-alteracao-slack.json` e `infra/n8n/pedidos-alteracao-planilha.json`, com
+    `<SEGREDO_N8N>`, `<SUPABASE_ANON_KEY>` e `<SLACK_BOT_TOKEN_REMOCAO>` no lugar dos valores. **No n8n os três estão
+    escritos dentro dos nodes Code** (mesmo padrão do fluxo de Remoção de Acessos), não em credencial: quem edita o
+    workflow vê. O mesmo segredo serve aos dois fluxos.
+- `pa_config`: `planilha_id` = planilha real da Central (`15ugo5vRMVgJes8ZrT9pu-DtNKaOEAe72U3SPlJipddo`),
+  `n8n_webhook_url` gravada, `ligado_em` = 06/10/2026 20:00 UTC, `slack_destinos` = só o Victor.
+- **Teste na cópia** (`1_8S3XCtMgabkOXI9Ge1rBhFnm3Wr9aPTqJEhRmXU5Nc`, execução 118803): pedidos 9 e 10 aprovados e
+  escritos. Conferência célula a célula contra o ensaio: 82 de 82 iguais, 1 linha apagada (quem saiu no 9 já tinha
+  linha de quem entra), 2 linhas novas em `Removidos — Histórico`, nenhuma outra linha mudou.
+- **Teste do Slack:** pedido nº 103 ("outro", no cadastro de teste "Marcio Teste 2") criado, aviso entregue no privado
+  do Victor (execução 118809) e o pedido recusado em seguida.
+- **Planilha real:** o ensaio na real deu o mesmo plano da cópia (mesmas linhas). 9 e 10 voltaram para
+  `planilha_status = 'pendente'`. Primeira rodada na real (execução 118837, 20:15 UTC): 9 e 10 com `planilha_status = ok`;
+  conferência célula a célula: 82 de 82 iguais ao ensaio, 1 linha apagada (Central foi de 1.728 para 1.727 linhas), 2 linhas
+  novas em `Removidos — Histórico` (7 e 8), nenhuma outra linha mudou.
+
+**Como conferir depois de uma rodada:** `pa_pedidos.planilha_status` (`ok` ou `erro` com `planilha_erro`),
+`pa_historico` (`planilha_ok`/`planilha_erro`) e a execução no n8n. O node Planejar nunca escreve se não achar a
+linha com certeza (0 ou mais de 1 por e-mail/documento, ou cabeçalho mudado): o pedido fica com erro e a planilha
+intacta.
+
+**Riscos conhecidos:** alguém editando a planilha entre a leitura e a escrita (segundos) pode deslocar linhas; o
+fluxo não trava a planilha. Pedido com erro na planilha não é refeito sozinho: corrigir e voltar
+`planilha_status` para `pendente`.
 
 ## Banco
 

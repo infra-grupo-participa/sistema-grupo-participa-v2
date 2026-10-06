@@ -1,0 +1,407 @@
+{
+  "name": "[Central] Pedidos de alteração — planilha",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all"
+  },
+  "nodes": [
+    {
+      "id": "d3a13829-777b-42a6-a3ec-0e70f977eff7",
+      "name": "A cada 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "45fbbaef-4242-4533-8b22-3b29c7a488df",
+      "name": "Rodar agora",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "56cd5333-8b36-4949-9ed1-949764cd23e6",
+      "name": "Reservar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Pedidos de alteração → planilha da Central. Reserva até 5 pedidos aprovados com planilha pendente.\n// Sem pedido, não devolve nada e o fluxo para aqui.\nconst URL = 'https://mbvybujpkwuorhtdzcde.supabase.co/rest/v1/rpc/';\nconst H = { apikey: '<SUPABASE_ANON_KEY>', Authorization: 'Bearer <SUPABASE_ANON_KEY>', 'Content-Type': 'application/json' };\nconst SEG = '<SEGREDO_N8N>';\nconst rpc = (fn, body) => this.helpers.httpRequest({ method: 'POST', url: URL + fn, headers: H, body, json: true });\nconst r = await rpc('pa_planilha_reservar', { p_segredo: SEG });\nif (!r || !r.ok) throw new Error('pa_planilha_reservar recusou (segredo?)');\nif (!r.planilha_id || !(r.pedidos || []).length) return [];\nconst base = 'https://sheets.googleapis.com/v4/spreadsheets/' + r.planilha_id;\nconst rg = [r.abas.central, r.abas.removidos].map(a => 'ranges=' + encodeURIComponent(\"'\" + a.replace(/'/g, \"''\") + \"'\")).join('&');\nreturn [{ json: { ...r, base,\n  url_abas: base + '?fields=' + encodeURIComponent('sheets.properties(sheetId,title)'),\n  url_texto: base + '/values:batchGet?' + rg + '&valueRenderOption=FORMATTED_VALUE',\n  url_formula: base + '/values:batchGet?' + rg + '&valueRenderOption=FORMULA' } }];\n"
+      }
+    },
+    {
+      "id": "0f1da070-ca1f-44d4-b189-4c1eb895f293",
+      "name": "Abas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Reservar').first().json.url_abas }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YImDWpHFwfCqQA29",
+          "name": "Google Sheets · victorhugo@advmais (vendas)"
+        }
+      }
+    },
+    {
+      "id": "ef3ba708-3ae4-4473-8f84-58a1c2c37fc0",
+      "name": "Ler texto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Reservar').first().json.url_texto }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YImDWpHFwfCqQA29",
+          "name": "Google Sheets · victorhugo@advmais (vendas)"
+        }
+      }
+    },
+    {
+      "id": "bd1b3805-a59f-4573-9653-ccc54d467695",
+      "name": "Ler fórmulas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Reservar').first().json.url_formula }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YImDWpHFwfCqQA29",
+          "name": "Google Sheets · victorhugo@advmais (vendas)"
+        }
+      }
+    },
+    {
+      "id": "f007de4d-a37f-477e-b727-bc39126b17f8",
+      "name": "Planejar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Planeja a escrita dos pedidos de alteração na planilha da Central (corpo do node \"Planejar\" do n8n).\n// Entrada: res = resposta de pa_planilha_reservar; fmt/fml = valueRanges (Central, Removidos) em FORMATTED_VALUE e FORMULA;\n// sheets = [{sheetId,title}]. Saída: {dados (values.batchUpdate), apagar (deleteDimension), resultados [{pedido,ok,erro,detalhe}]}.\n// Nada é escrito se a linha não for achada com certeza; detalhe leva só linha, coluna e aba, nunca valor de célula.\nfunction planejar(res, fmt, fml, sheets) {\n  const ABA_C = res.abas.central, ABA_R = res.abas.removidos;\n  const CAB_C = res.cabecalhos[ABA_C], CAB_R = res.cabecalhos[ABA_R];\n  const col2i = (l) => [...l].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;\n  const i2col = (i) => { let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };\n  const q = (aba) => \"'\" + aba.replace(/'/g, \"''\") + \"'\";\n  const C = (fmt[0].values || []).map((r) => r.slice());\n  const F = (fml[0].values || []);\n  const R = (fmt[1].values || []);\n  const norm = (v) => String(v ?? '').trim().replace(/\\s+/g, ' ').toLowerCase();\n  const dig = (v) => String(v ?? '').replace(/\\D/g, '');\n  const docN = (v) => { const d = dig(v); return d.length === 10 ? '0' + d : d; };\n\n  // 1. Cabeçalhos: qualquer diferença trava a rodada inteira.\n  const confere = (linha1, mapa, aba) => Object.entries(mapa)\n    .filter(([cab, l]) => String((linha1 || [])[col2i(l)] ?? '').trim() !== cab)\n    .map(([cab, l]) => aba + '!' + l + ' (esperado \"' + cab + '\")');\n  const difs = [...confere(C[0], CAB_C, ABA_C), ...confere(R[0], CAB_R, ABA_R)];\n  if (difs.length) {\n    return { dados: [], apagar: [], resultados: res.pedidos.map((p) => ({ pedido: p.pedido, ok: false,\n      erro: 'Cabeçalho da planilha mudou: ' + difs.join('; ').slice(0, 400), detalhe: { cabecalho: difs } })) };\n  }\n  const largura = Math.max(...Object.values(CAB_C).map(col2i)) + 1;\n  const ultimaCol = Math.max(largura, ...C.map((r) => r.length), ...F.map((r) => r.length));\n  const ic = (cab) => col2i(CAB_C[cab]);\n  const apagadas = new Set();\n\n  // Linhas (1-based) cujo e-mail (qualquer parte de \"novo / antigo\") ou documento bate com as chaves.\n  const achar = (ch) => {\n    const em = new Set((ch?.emails || []).map(norm)), dc = new Set((ch?.documentos || []).map(docN));\n    const out = [];\n    for (let r = 1; r < C.length; r++) {\n      if (apagadas.has(r + 1)) continue;\n      const row = C[r] || [];\n      const emails = String(row[ic('Email')] ?? '').split('/').map(norm).filter(Boolean);\n      const doc = docN(row[ic('Documento')]);\n      if (emails.some((e) => em.has(e)) || (doc.length >= 11 && dc.has(doc))) out.push(r + 1);\n    }\n    return out;\n  };\n  const cel = (linha, cab) => String((C[linha - 1] || [])[ic(cab)] ?? '');\n  const ehFormula = (linha, i) => String((F[linha - 1] || [])[i] ?? '').startsWith('=');\n  // Texto para USER_ENTERED: nunca vira fórmula; número longo (documento, telefone, CEP) fica texto.\n  const val = (cab, v) => {\n    v = String(v ?? '');\n    if (/^[=+\\-@]/.test(v)) return \"'\" + v;\n    if (['Documento', 'Telefone', 'CEP'].includes(cab) && /^\\d+$/.test(v)) return \"'\" + v;\n    return v;\n  };\n  const igual = (cab, planilha, esperado) => {\n    if (cab === 'Documento') return docN(planilha) === docN(esperado);\n    if (cab === 'Telefone') { const a = dig(planilha), b = dig(esperado); return a === b || (a && b && (a.endsWith(b) || b.endsWith(a))); }\n    if (cab === 'Email') return norm(String(planilha).split('/')[0]) === norm(esperado);\n    return norm(planilha) === norm(esperado);\n  };\n\n  const dados = [], apagar = [], resultados = [];\n  let proxRem = R.length + 1; // primeira linha vazia de Removidos\n  while (proxRem > 2 && !(R[proxRem - 2] || []).some((x) => String(x).trim())) proxRem--;\n  const escreve = (linha, cab, v, cols) => {\n    const i = ic(cab); const vv = val(cab, v);\n    (C[linha - 1] = C[linha - 1] || [])[i] = String(v ?? '');\n    dados.push({ range: q(ABA_C) + '!' + CAB_C[cab] + linha, values: [[vv]] }); cols.push(CAB_C[cab]);\n  };\n  const umaLinha = (ch, quem) => {\n    const l = achar(ch);\n    if (l.length !== 1) throw new Error(l.length + ' linhas para ' + quem + ' (e-mail/documento)');\n    return l[0];\n  };\n\n  for (const p of res.pedidos) {\n    const base = dados.length;\n    try {\n      if (p.erro) throw new Error(p.erro);\n      if (p.tipo === 'alterar_dado') {\n        if (p.sem_coluna) { resultados.push({ pedido: p.pedido, ok: true, erro: null, detalhe: { sem_coluna: true, campo: p.campo } }); continue; }\n        const linha = umaLinha(p.aluno.chaves, 'o aluno');\n        const dif = Object.entries(p.esperado_antes).filter(([cab, v]) => !igual(cab, cel(linha, cab), v)).map(([cab]) => CAB_C[cab]);\n        if (dif.length) throw new Error('Célula diferente do valor antigo na linha ' + linha + ', coluna ' + dif.join(', '));\n        const cols = [];\n        for (const [cab, v] of Object.entries(p.escrever)) escreve(linha, cab, v, cols);\n        resultados.push({ pedido: p.pedido, ok: true, erro: null, detalhe: { aba: ABA_C, linha, colunas: cols } });\n        continue;\n      }\n      // trocar_socio\n      const lt = umaLinha(p.titular.chaves, 'o titular');\n      const ls = umaLinha(p.sai.chaves, 'quem sai');\n      const le = achar(p.entra.chaves);\n      if (le.length > 1) throw new Error(le.length + ' linhas para quem entra (e-mail/documento)');\n      if (le[0] === ls || ls === lt || le[0] === lt) throw new Error('Titular, quem sai e quem entra caem na mesma linha');\n      const entra = le[0] || null;\n      if (!entra && !p.entra.chaves.emails.length && !p.entra.chaves.documentos.length) throw new Error('Quem entra sem e-mail nem documento no sistema');\n      if (!entra) { // sem chave igual, mas com o mesmo nome: pode ser a mesma pessoa com outro e-mail; conferência humana\n        const mesmoNome = [];\n        for (let r = 1; r < C.length; r++) if (!apagadas.has(r + 1) && norm((C[r] || [])[ic('Nome')]) === norm(p.entra.nome)) mesmoNome.push(r + 1);\n        if (mesmoNome.length) throw new Error('Quem entra não casa por e-mail/documento, mas a linha ' + mesmoNome.join(', ') + ' tem o mesmo nome: conferir');\n      }\n\n      // Removidos: copia a linha de quem sai antes de mexer nela.\n      const rem = [];\n      for (const [cab, l] of Object.entries(CAB_R)) {\n        let v = '';\n        if (cab === 'Linha na Central') v = String(ls);\n        else if (p.copiar_para_removidos[cab]) v = cel(ls, p.copiar_para_removidos[cab]);\n        else if (cab in p.removidos) v = p.removidos[cab];\n        rem[col2i(l)] = val(cab === 'E-mail' ? 'Email' : cab, v);\n      }\n      const linhaRem = proxRem++;\n      dados.push({ range: q(ABA_R) + '!A' + linhaRem + ':' + i2col(rem.length - 1) + linhaRem, values: [Array.from(rem, (x) => x ?? '')] });\n\n      const cols = [];\n      const tit = {}; for (const cab of Object.keys(CAB_C)) tit[cab] = cel(lt, cab);\n      let acao, alvo;\n      if (!entra) {\n        acao = 'sobrescreveu a linha de quem sai'; alvo = ls;\n        const esc = { ...p.se_entra_sem_linha.escrever };\n        for (const cab of p.se_entra_sem_linha.copiar_do_titular) esc[cab] = tit[cab];\n        // Demais colunas vazias, sem tocar em fórmula.\n        const usadas = new Set(Object.keys(esc).map(ic));\n        for (const [cab, v] of Object.entries(esc)) escreve(ls, cab, v, cols);\n        const vazias = [];\n        for (let i = 0; i < ultimaCol; i++) {\n          if (usadas.has(i) || ehFormula(ls, i)) continue;\n          if (String((C[ls - 1] || [])[i] ?? '') === '' ) continue;\n          (C[ls - 1])[i] = ''; vazias.push(i2col(i));\n          dados.push({ range: q(ABA_C) + '!' + i2col(i) + ls, values: [['']] });\n        }\n        if (vazias.length) cols.push('limpou:' + vazias.join(','));\n      } else {\n        acao = 'apagou a linha de quem sai'; alvo = entra;\n        const esc = { ...p.se_entra_com_linha.escrever };\n        for (const cab of p.se_entra_com_linha.copiar_do_titular) esc[cab] = tit[cab];\n        for (const [cab, v] of Object.entries(esc)) escreve(entra, cab, v, cols);\n        apagadas.add(ls); apagar.push(ls);\n      }\n      for (const [cab, v] of Object.entries(p.titular.escrever)) escreve(lt, cab, v, []);\n      resultados.push({ pedido: p.pedido, ok: true, erro: null, detalhe: {\n        aba: ABA_C, acao, linha_titular: lt, linha_sai: ls, linha_entra: entra, linha_alvo: alvo,\n        removidos_linha: linhaRem, colunas: cols } });\n    } catch (e) {\n      dados.splice(base); // nada do pedido com erro é escrito\n      resultados.push({ pedido: p.pedido, ok: false, erro: String(e.message || e).slice(0, 400), detalhe: null });\n    }\n  }\n  // Apagar por último, de baixo para cima (as escritas acima usam a numeração de antes).\n  const sid = sheets.find((s) => s.title === ABA_C).sheetId;\n  const apagarReq = [...new Set(apagar)].sort((a, b) => b - a)\n    .map((l) => ({ deleteDimension: { range: { sheetId: sid, dimension: 'ROWS', startIndex: l - 1, endIndex: l } } }));\n  return { dados, apagar: apagarReq, resultados };\n}\n\n\nconst res = $('Reservar').first().json;\nconst sheets = $('Abas').first().json.sheets.map(s => s.properties);\nconst out = planejar(res, $('Ler texto').first().json.valueRanges, $('Ler fórmulas').first().json.valueRanges, sheets);\nreturn [{ json: { ...out, tem_escrita: out.dados.length > 0, tem_apagar: out.apagar.length > 0 } }];\n"
+      }
+    },
+    {
+      "id": "7da297c2-d177-4be0-8b83-86916725ca59",
+      "name": "Tem escrita?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "bfd2c53b-9f27-4829-bc3a-57f3af0e90f8",
+              "leftValue": "={{ $('Planejar').first().json.tem_escrita }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "48677ea4-b675-48b4-b0a7-70d34f02a67a",
+      "name": "Escrever",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Reservar').first().json.base + '/values:batchUpdate' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ valueInputOption: 'USER_ENTERED', data: $('Planejar').first().json.dados }) }}"
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YImDWpHFwfCqQA29",
+          "name": "Google Sheets · victorhugo@advmais (vendas)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c42fc11e-3dd4-409a-8b88-becf4bf129b5",
+      "name": "Tem linha para apagar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "391fffd9-bd3a-4c65-802c-577a7b780730",
+              "leftValue": "={{ $('Planejar').first().json.tem_apagar }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "61f56d0a-8915-427f-99ab-f78ef2303977",
+      "name": "Apagar linhas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Reservar').first().json.base + ':batchUpdate' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requests: $('Planejar').first().json.apagar }) }}"
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YImDWpHFwfCqQA29",
+          "name": "Google Sheets · victorhugo@advmais (vendas)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "8b9e085a-fa68-4714-b3f2-417030697d60",
+      "name": "Confirmar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Devolve ao banco o resultado de cada pedido. Falha do Google vira erro do pedido (conferência humana), nunca nova tentativa:\n// uma segunda rodada repetiria a linha em Removidos.\nconst URL = 'https://mbvybujpkwuorhtdzcde.supabase.co/rest/v1/rpc/';\nconst H = { apikey: '<SUPABASE_ANON_KEY>', Authorization: 'Bearer <SUPABASE_ANON_KEY>', 'Content-Type': 'application/json' };\nconst SEG = '<SEGREDO_N8N>';\nconst rpc = (fn, body) => this.helpers.httpRequest({ method: 'POST', url: URL + fn, headers: H, body, json: true });\nconst plano = $('Planejar').first().json;\nconst falha = (no) => { try { if (!$(no).isExecuted) return null; const j = $(no).first().json; return j.error ? String(j.error.message || JSON.stringify(j.error)).slice(0, 200) : null; } catch (e) { return null; } };\nconst fEsc = falha('Escrever'), fApg = falha('Apagar linhas');\nconst out = [];\nfor (const r of plano.resultados) {\n  let ok = r.ok, erro = r.erro, det = r.detalhe;\n  if (ok && det && (det.linha_titular !== undefined || det.linha !== undefined)) {\n    if (fEsc) { ok = false; erro = 'O Google recusou a escrita, nada foi gravado: ' + fEsc; }\n    else if (fApg && det.acao === 'apagou a linha de quem sai') { ok = false; erro = 'Escreveu, mas não apagou a linha ' + det.linha_sai + ' de quem sai: apagar à mão. ' + fApg; }\n  }\n  const c = await rpc('pa_planilha_confirmar', { p_segredo: SEG, p_pedido: r.pedido, p_ok: ok, p_erro: erro, p_detalhe: det });\n  out.push({ pedido: r.pedido, ok, erro, confirmado: !!(c && c.ok) });\n}\nreturn [{ json: { pedidos: out } }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "A cada 15 min": {
+      "main": [
+        [
+          {
+            "node": "Reservar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rodar agora": {
+      "main": [
+        [
+          {
+            "node": "Reservar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reservar": {
+      "main": [
+        [
+          {
+            "node": "Abas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Abas": {
+      "main": [
+        [
+          {
+            "node": "Ler texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler texto": {
+      "main": [
+        [
+          {
+            "node": "Ler fórmulas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler fórmulas": {
+      "main": [
+        [
+          {
+            "node": "Planejar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Planejar": {
+      "main": [
+        [
+          {
+            "node": "Tem escrita?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escrever": {
+      "main": [
+        [
+          {
+            "node": "Tem linha para apagar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apagar linhas": {
+      "main": [
+        [
+          {
+            "node": "Confirmar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem escrita?": {
+      "main": [
+        [
+          {
+            "node": "Escrever",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Confirmar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem linha para apagar?": {
+      "main": [
+        [
+          {
+            "node": "Apagar linhas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Confirmar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
