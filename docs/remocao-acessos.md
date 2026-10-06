@@ -64,7 +64,8 @@ Deploy: `verify_jwt = false`. Migration: `20260916_remocao_acessos_webhook.sql`.
 
 ## Acelera Holding (produto Hotmart 8381847)
 
-> **Situação (06/10/2026): NÃO APLICADO.** Migrations `20261006134133_ra_acelera_holding.sql` (estrutura, funções,
+> **Situação (06/10/2026): APLICADO no banco e publicado na main.** Conferido: 41 casos importados `em_remocao`, sem prazo
+> e sem Slack, 123 itens do Thomas. Migrations `20261006134133_ra_acelera_holding.sql` (estrutura, funções,
 > reprocessamento) e `20261006134134_ra_acelera_carga.sql` (carga das 41), nessa ordem, ensaiadas em `begin … rollback`
 > sem sobra. Detalhe, ensaio, `explain` e reversão nos `.explain.md` de cada uma.
 
