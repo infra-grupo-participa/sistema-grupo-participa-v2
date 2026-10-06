@@ -1,6 +1,6 @@
 // Regras de apresentação do caso — puras, testáveis.
 import type { Tone } from '@/shared/ui/components';
-import type { CasoFila, StatusCaso, Sugestao, TipoCaso } from './types';
+import type { CasoFila, Linha, MeuItem, OrigemCaso, StatusCaso, Sugestao, TipoCaso } from './types';
 
 export const ROTULO_STATUS: Record<StatusCaso, string> = {
   alerta: 'Disputa (alerta)',
@@ -27,11 +27,55 @@ export const ROTULO_TIPO: Record<TipoCaso, string> = {
   troca_socio: 'Troca de sócio',
 };
 
+export const ROTULO_LINHA: Record<Linha, string> = {
+  hm: 'Holding Masters',
+  acelera: 'Acelera Holding',
+};
+
+/** Caso sem `linha` (banco antes da migration do Acelera) é do Holding Masters, a única linha que existia. */
+export function linhaDoCaso(c: Pick<CasoFila, 'linha'>): Linha {
+  return c.linha === 'acelera' ? 'acelera' : 'hm';
+}
+
+export function filtrarLinha<T extends Pick<CasoFila, 'linha'>>(casos: T[], linha: Linha): T[] {
+  return casos.filter((c) => linhaDoCaso(c) === linha);
+}
+
+/** No HM, "alerta" é sempre disputa. No Acelera também cobre o reembolso de quem ainda tem outra
+ *  compra válida, então o rótulo não pode dizer "Disputa". */
+export function rotuloStatus(c: Pick<CasoFila, 'status' | 'linha'>): string {
+  if (c.status === 'alerta' && linhaDoCaso(c) === 'acelera') return 'Alerta';
+  return ROTULO_STATUS[c.status];
+}
+
+export const ROTULO_ORIGEM: Record<OrigemCaso, string> = {
+  compras: 'compra no sistema',
+  webhook: 'webhook da remoção',
+  pedido_alteracao: 'pedido de alteração',
+  carga: 'carga de casos antigos',
+};
+
+/** Linha de um item do catálogo: a que o banco mandar; sem ela, pela chave (`acelera_*` é do Acelera). */
+export function linhaDoItem(i: { item: string; linha?: Linha | null }): Linha {
+  if (i.linha === 'acelera' || i.linha === 'hm') return i.linha;
+  return i.item.startsWith('acelera_') ? 'acelera' : 'hm';
+}
+
+/** Itens de quem está logado que são da linha pedida. Separa pela chave, não pelo rótulo
+ *  (há "Obvio" no HM e no Acelera). O formato antigo (só rótulo) é todo do HM. */
+export function meusItensDaLinha(itens: MeuItem[] | null | undefined, linha: Linha): string[] {
+  return (itens ?? []).flatMap((i) => {
+    if (typeof i === 'string') return linha === 'hm' ? [i] : [];
+    return linhaDoItem(i) === linha ? [i.rotulo] : [];
+  });
+}
+
 export const ABERTOS: StatusCaso[] = ['aguardando_triagem', 'em_remocao', 'ajustando_acesso'];
 
 export type SituacaoPrazo = 'sem_prazo' | 'no_prazo' | 'vence_hoje' | 'atrasado' | 'encerrado';
 
-/** Situação do prazo de 1 dia útil. Caso encerrado não tem mais prazo correndo. */
+/** Situação do prazo de 1 dia útil. Caso encerrado não tem mais prazo correndo.
+ *  Prazo nulo ou ausente (casos da carga) = sem prazo, nunca atrasado. */
 export function situacaoPrazo(c: Pick<CasoFila, 'status' | 'prazo_em'>, agora: Date): SituacaoPrazo {
   if (!ABERTOS.includes(c.status)) return 'encerrado';
   if (!c.prazo_em) return 'sem_prazo';
@@ -44,7 +88,10 @@ export function situacaoPrazo(c: Pick<CasoFila, 'status' | 'prazo_em'>, agora: D
 
 export type Filtro = 'abertos' | 'meus' | 'alertas' | 'encerrados' | 'todos';
 
-export function filtrarCasos(casos: CasoFila[], filtro: Filtro): CasoFila[] {
+/** Filtro da fila. Com `linha`, considera só os casos daquela linha. "Meus" vem do banco
+ *  (`meus_pendentes`, contado pelo responsável de cada item), não do rótulo do item. */
+export function filtrarCasos(todos: CasoFila[], filtro: Filtro, linha?: Linha): CasoFila[] {
+  const casos = linha ? filtrarLinha(todos, linha) : todos;
   switch (filtro) {
     case 'abertos': return casos.filter((c) => ABERTOS.includes(c.status));
     case 'meus': return casos.filter((c) => c.meus_pendentes > 0);

@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Drawer, Input, Loading, Row, SectionCard, Textarea, Toggle } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData, fmtDataHora } from '@/shared/ui/format';
-import { ROTULO_STATUS, ROTULO_TIPO, sugestaoAjuste, TOM_STATUS } from '../domain/caso';
-import type { CasoDetalhe, ItemCaso, SituacaoItem } from '../domain/types';
+import { linhaDoCaso, ROTULO_LINHA, ROTULO_ORIGEM, ROTULO_TIPO, rotuloStatus, sugestaoAjuste, TOM_STATUS } from '../domain/caso';
+import type { CasoDetalhe, ItemCaso, Linha, OrigemCaso, SituacaoItem } from '../domain/types';
 import type { SupabaseRemocaoRepository } from '../infrastructure/supabase-remocao.repository';
 
 const ROTULO_ACAO: Record<string, string> = {
@@ -29,7 +29,7 @@ function descreverEvento(acao: string, d: Record<string, unknown>): string {
     return `${String(d.item)}: ${sit}${d.correcao ? ' (correção)' : ''}${d.obs ? ` · ${String(d.obs)}` : ''}`;
   }
   if (acao === 'aberto') {
-    const via = d.origem === 'webhook' ? 'webhook da remoção' : 'compra no sistema';
+    const via = typeof d.origem === 'string' ? ROTULO_ORIGEM[d.origem as OrigemCaso] ?? d.origem : '';
     return [via, d.evento ? String(d.evento) : '', d.teste ? 'teste' : ''].filter(Boolean).join(' · ');
   }
   return '';
@@ -71,11 +71,13 @@ function LinhaItem({ it, ocupado, onMarcar }: {
   );
 }
 
-export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
+export function CasoDrawer({ id, repo, onClose, onMudou, onCarregou, flash }: {
   id: string;
   repo: SupabaseRemocaoRepository;
   onClose: () => void;
   onMudou: () => void;
+  /** Avisa a linha do caso quando ele abre (o link do Slack escolhe a aba por aqui). */
+  onCarregou?: (linha: Linha) => void;
   flash: (m: string) => void;
 }) {
   const [d, setD] = useState<CasoDetalhe | null>(null);
@@ -104,7 +106,8 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
     setExpAntiga(s.expiracao);
     setInstAntiga(s.instrucao);
     setErro(null);
-  }, []);
+    onCarregou?.(linhaDoCaso(r.d.caso));
+  }, [onCarregou]);
 
   const carregar = useCallback(async () => aplicar(await buscar()), [aplicar, buscar]);
 
@@ -154,7 +157,10 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
 
   const c = d?.caso;
   const sug = c?.sugestao;
-  const podeDesfazer = !!c && (['em_remocao', 'mantem_acesso', 'ajustando_acesso', 'concluido'] as const).some((s) => s === c.status);
+  // Acelera Holding: sem triagem e sem sócios. Nada de triar, desfazer triagem, sugestão de triagem nem sócio na tela.
+  const ehAcelera = !!c && linhaDoCaso(c) === 'acelera';
+  const podeDesfazer = !!c && !ehAcelera && (['em_remocao', 'mantem_acesso', 'ajustando_acesso', 'concluido'] as const).some((s) => s === c.status);
+  const pessoas = d ? (ehAcelera ? d.pessoas.filter((p) => p.papel === 'titular') : d.pessoas) : [];
 
   return (
     <Drawer
@@ -174,7 +180,8 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
       badges={c && (
         <>
           <Badge tone={c.tipo === 'disputa' ? 'info' : 'danger'}>{ROTULO_TIPO[c.tipo]}</Badge>
-          <Badge tone={TOM_STATUS[c.status]}>{ROTULO_STATUS[c.status]}</Badge>
+          {ehAcelera && <Badge tone="neutral">{ROTULO_LINHA.acelera}</Badge>}
+          <Badge tone={TOM_STATUS[c.status]}>{rotuloStatus(c)}</Badge>
           {c.eh_programa && <Badge tone="accent">Programa de Implementação</Badge>}
           {c.teste && <Badge tone="info">Teste</Badge>}
         </>
@@ -196,13 +203,33 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
             <Row k="Telefone" v={c.telefone || 'sem dado'} />
           </SectionCard>
 
-          {c.status === 'alerta' && (
-            <SectionCard title="Disputa aberta" subtitle="Ainda não é reembolso nem chargeback. Nada a remover por enquanto: se a disputa virar chargeback, o caso de remoção nasce sozinho." >
+          {c.status === 'alerta' && ehAcelera && c.tipo !== 'disputa' && (
+            <SectionCard title="Alerta" subtitle={sug?.motivo || 'Reembolso de quem ainda tem outra compra válida.'}>
+              {sug?.compras_anteriores?.length ? (
+                <div>
+                  <div className="text-xs font-semibold text-[var(--fg-2)] mb-1">Outras compras</div>
+                  {sug.compras_anteriores.map((p) => (
+                    <div key={p.transacao} className="text-xs text-[var(--fg-2)] tabular">
+                      {p.data ? fmtData(p.data) : 'sem data'} · {p.produto} · {p.oferta} · {p.valor != null ? fmtBRL(p.valor) : 'sem valor'} · {p.status}
+                    </div>
+                  ))}
+                </div>
+              ) : <span />}
+            </SectionCard>
+          )}
+
+          {c.status === 'alerta' && (!ehAcelera || c.tipo === 'disputa') && (
+            <SectionCard
+              title="Disputa aberta"
+              subtitle={ehAcelera
+                ? 'Ainda não é reembolso nem chargeback. Nada a remover por enquanto.'
+                : 'Ainda não é reembolso nem chargeback. Nada a remover por enquanto: se a disputa virar chargeback, o caso de remoção nasce sozinho.'}
+            >
               <span />
             </SectionCard>
           )}
 
-          {c.tipo !== 'disputa' && sug && (
+          {!ehAcelera && c.tipo !== 'disputa' && sug && (
             <SectionCard
               title={`Sugestão: ${sug.recomendacao === 'verificar' ? 'verificar acesso antigo' : 'remover acessos'}`}
               subtitle={sug.motivo}
@@ -242,7 +269,7 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
             </SectionCard>
           )}
 
-          {c.status === 'aguardando_triagem' && (
+          {!ehAcelera && c.status === 'aguardando_triagem' && (
             <SectionCard
               title="Triagem"
               subtitle={d.pode_triar ? 'Confira o acesso antigo antes de decidir. Mantendo, atualize a Central com o vencimento e a instrução antigos.' : 'Aguardando a triagem. Os itens de remoção aparecem aqui quando ela for feita.'}
@@ -277,7 +304,7 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
             </SectionCard>
           )}
 
-          {c.decisao === 'manter' && c.expiracao_antiga && (
+          {!ehAcelera && c.decisao === 'manter' && c.expiracao_antiga && (
             <SectionCard title="Não remover: ajustar acesso" subtitle={`${c.triado_por_nome ?? ''} em ${fmtDataHora(c.triado_em)}`}>
               <Row k="Expiração" v={`${c.expiracao_atual ? fmtData(c.expiracao_atual) : 'data atual'} → ${fmtData(c.expiracao_antiga)}`} />
               {c.instrucao_antiga && c.instrucao_antiga !== c.instrucao_atual && (
@@ -287,16 +314,16 @@ export function CasoDrawer({ id, repo, onClose, onMudou, flash }: {
             </SectionCard>
           )}
 
-          {c.status === 'mantem_acesso' && (
+          {!ehAcelera && c.status === 'mantem_acesso' && (
             <SectionCard title="Mantém o acesso antigo" subtitle={`${c.triado_por_nome ?? ''} em ${fmtDataHora(c.triado_em)}`}>
               <p className="text-sm text-[var(--fg-2)]">{c.decisao_obs || 'sem observação'}</p>
             </SectionCard>
           )}
 
-          {d.pessoas.some((p) => p.itens.length > 0) && d.pessoas.map((p) => (
+          {pessoas.some((p) => p.itens.length > 0) && pessoas.map((p) => (
             <SectionCard
               key={p.id}
-              title={`${p.nome || 'sem nome'} · ${p.papel === 'titular' ? 'titular' : 'sócio'}`}
+              title={ehAcelera ? p.nome || 'sem nome' : `${p.nome || 'sem nome'} · ${p.papel === 'titular' ? 'titular' : 'sócio'}`}
               subtitle={`${p.email || 'sem e-mail'} · ${p.itens.filter((i) => i.situacao !== 'pendente').length}/${p.itens.length} feitos`}
             >
               {p.itens.map((it) => <LinhaItem key={it.id} it={it} ocupado={ocupado} onMarcar={marcar} />)}
