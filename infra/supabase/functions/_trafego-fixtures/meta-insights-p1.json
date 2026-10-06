@@ -1,0 +1,14 @@
+{
+  "data": [
+    { "campaign_id": "900000000000201", "campaign_name": "RS | ZZ28 | LEADS | ENSAIO PÚBLICO FRIO | AK1", "date_start": "2026-10-03", "date_stop": "2026-10-03",
+      "spend": "150.25", "impressions": "12000", "clicks": "260", "inline_link_clicks": "180",
+      "actions": [ { "action_type": "link_click", "value": "180" }, { "action_type": "lead", "value": "12" }, { "action_type": "landing_page_view", "value": "130" } ] },
+    { "campaign_id": "900000000000201", "campaign_name": "RS | ZZ28 | LEADS | ENSAIO PÚBLICO FRIO | AK1", "date_start": "2026-10-04", "date_stop": "2026-10-04",
+      "spend": "149.75", "impressions": "11000", "clicks": "240", "inline_link_clicks": "170",
+      "actions": [ { "action_type": "lead", "value": "9" } ] }
+  ],
+  "paging": {
+    "cursors": { "before": "MAZDZD", "after": "MQZDZD" },
+    "next": "https://graph.facebook.com/v23.0/act_000555/insights?level=campaign&after=MQZDZD"
+  }
+}

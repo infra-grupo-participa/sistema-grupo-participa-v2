@@ -1,0 +1,10 @@
+{
+  "data": [
+    { "id": "900000000000201", "name": "RS | ZZ28 | LEADS | ENSAIO PÚBLICO FRIO | AK1", "effective_status": "ACTIVE" },
+    { "id": "900000000000202", "name": "CF | ZZ28 | REMARKETING | ENSAIO", "effective_status": "PAUSED" }
+  ],
+  "paging": {
+    "cursors": { "before": "QVFI", "after": "QVFJ" },
+    "next": "https://graph.facebook.com/v23.0/act_000555/campaigns?fields=id%2Cname%2Ceffective_status&limit=500&after=QVFJ"
+  }
+}

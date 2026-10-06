@@ -1,0 +1,6 @@
+{
+  "data": [
+    { "id": "900000000000203", "name": "Campanha ENSAIO fora do padrão", "effective_status": "ACTIVE" }
+  ],
+  "paging": { "cursors": { "before": "QVFK", "after": "QVFL" } }
+}

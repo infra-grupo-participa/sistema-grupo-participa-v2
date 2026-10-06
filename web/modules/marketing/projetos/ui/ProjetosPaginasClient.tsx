@@ -1,16 +1,18 @@
 'use client';
 
 // Marketing > Projetos e páginas: a base compartilhada (tabela de projetos única + páginas de cada projeto).
-// Listar, cadastrar, editar e testar um nome de campanha. Só admin/dev (gate no layout, na page e no banco).
+// Listar, editar e testar um nome de campanha. Só admin/dev (gate no layout, na page e no banco). Projeto NOVO nasce no
+// cadastro completo do Tráfego (tipo, unidade, períodos, contas): o botão "Novo projeto" leva para lá (auditoria 06/10/2026).
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Badge, Button, DataTable, EmptyState, FilterSelect, Input, Loading, Modal, SectionCard, Td, Th, Thead, Toast, Toggle, Tr, useFlash,
 } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { ROTULO_ERRO } from '../domain/campanha';
 import {
-  FUNCOES_PAGINA, ROTULO_FUNCAO, ROTULO_SUBAREA, SUBAREAS, normalizarSigla, validarCodigoPagina, validarProjeto,
-  type FuncaoPagina, type Pagina, type Projeto, type SubareaTrafego,
+  FUNCOES_PAGINA, ROTULO_FUNCAO, ROTULO_TIPO_SUBAREA, normalizarSigla, validarCodigoPagina, validarProjeto,
+  type FuncaoPagina, type Pagina, type Projeto,
 } from '../domain/projetos';
 import {
   listarPaginas, listarProjetos, salvarPagina, salvarProjeto, traduzirNoBanco,
@@ -36,10 +38,8 @@ function Erro({ msg }: { msg: string | null }) {
 }
 
 // ─── Projeto ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-const PROJETO_VAZIO: ProjetoForm = {
-  sigla: '', nome: '', linha: '', edicao: null, ano: null, etiqueta_clickup: null, subarea_trafego: null,
-  inicio: null, fim: null, ativo: true, obs: null,
-};
+// O Tráfego abre o cadastro completo ao ver ?novo=1 (TrafegoClient).
+const NOVO_PROJETO_URL = '/marketing/trafego?novo=1';
 
 function ModalProjeto({ inicial, onFechar, onSalvo }: { inicial: ProjetoForm; onFechar: () => void; onSalvo: (msg: string) => void }) {
   const [f, setF] = useState<ProjetoForm>(inicial);
@@ -89,16 +89,13 @@ function ModalProjeto({ inicial, onFechar, onSalvo }: { inicial: ProjetoForm; on
         <Campo rotulo="Etiqueta do ClickUp" dica="texto exato; vazio se não houver">
           <Input value={f.etiqueta_clickup ?? ''} onChange={(e) => set('etiqueta_clickup', txt(e.target.value))} maxLength={80} />
         </Campo>
-        <Campo rotulo="Subárea do Tráfego">
-          <FilterSelect value={f.subarea_trafego ?? ''} onChange={(e) => set('subarea_trafego', (e.target.value || null) as SubareaTrafego | null)}>
-            <option value="">Não se aplica</option>
-            {SUBAREAS.map((s) => <option key={s} value={s}>{ROTULO_SUBAREA[s]}</option>)}
-          </FilterSelect>
-        </Campo>
-        <Campo rotulo="Início">
+        <div className="text-xs text-[var(--fg-3)] self-end pb-2">
+          Tipo (interno/externo), unidade, tipo de lançamento, especialista, períodos e contas: em Marketing &gt; Tráfego, botão Projeto.
+        </div>
+        <Campo rotulo="Início" dica="com captação ou evento no Tráfego, sai deles">
           <Input type="date" value={f.inicio ?? ''} onChange={(e) => set('inicio', e.target.value || null)} />
         </Campo>
-        <Campo rotulo="Fim">
+        <Campo rotulo="Fim" dica="idem">
           <Input type="date" value={f.fim ?? ''} onChange={(e) => set('fim', e.target.value || null)} />
         </Campo>
         <div className="sm:col-span-2">
@@ -220,6 +217,7 @@ function TestarCampanha() {
 
 // ─── Tela ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 export function ProjetosPaginasClient() {
+  const router = useRouter();
   const [projetos, setProjetos] = useState<Projeto[] | null>(null);
   const [paginas, setPaginas] = useState<Pagina[] | null>(null);
   const [falhou, setFalhou] = useState(false);
@@ -265,12 +263,13 @@ export function ProjetosPaginasClient() {
       <SectionCard
         title="Projetos"
         subtitle={`${projetos.length} cadastrado(s)`}
-        right={<Button size="sm" onClick={() => setEditProjeto({ ...PROJETO_VAZIO })}><Icon name="plus" size={14} /> Novo projeto</Button>}
+        right={<Button size="sm" title="Abre o cadastro completo do projeto no Tráfego (tipo, unidade, períodos e contas)"
+          onClick={() => router.push(NOVO_PROJETO_URL)}><Icon name="plus" size={14} /> Novo projeto</Button>}
       >
         {projetos.length === 0 ? <EmptyState title="Nenhum projeto" /> : (
           <DataTable minWidth={900}>
             <Thead>
-              <Th>Sigla</Th><Th>Nome</Th><Th>Tipo/linha</Th><Th>Edição/ano</Th><Th>Etiqueta do ClickUp</Th><Th>Subárea</Th><Th>Período</Th><Th>Páginas</Th><Th>Situação</Th>
+              <Th>Sigla</Th><Th>Nome</Th><Th>Tipo/linha</Th><Th>Edição/ano</Th><Th>Etiqueta do ClickUp</Th><Th>Tipo</Th><Th>Período</Th><Th>Páginas</Th><Th>Situação</Th>
             </Thead>
             <tbody>
               {projetos.map((p) => (
@@ -280,7 +279,7 @@ export function ProjetosPaginasClient() {
                   <Td>{p.linha}</Td>
                   <Td>{[p.edicao, p.ano].filter(Boolean).join(' / ') || '—'}</Td>
                   <Td>{p.etiqueta_clickup ? <span className="font-mono text-xs">{p.etiqueta_clickup}</span> : '—'}</Td>
-                  <Td>{p.subarea_trafego ? ROTULO_SUBAREA[p.subarea_trafego] : '—'}</Td>
+                  <Td>{p.subarea_trafego ? ROTULO_TIPO_SUBAREA[p.subarea_trafego] : '—'}</Td>
                   <Td>{p.inicio || p.fim ? `${dataBR(p.inicio) ?? '?'} a ${dataBR(p.fim) ?? '?'}` : '—'}</Td>
                   <Td>{p.paginas}</Td>
                   <Td><Badge tone={p.ativo ? 'success' : 'neutral'}>{p.ativo ? 'Ativo' : 'Inativo'}</Badge></Td>

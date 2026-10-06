@@ -1,0 +1,8 @@
+[
+  { "results": [
+      { "campaign": { "resourceName": "customers/0000000001/campaigns/700001", "id": "700001", "name": "CF | ZZ28 | LEADS | ENSAIO PESQUISA", "status": "ENABLED" },
+        "segments": { "date": "2026-10-04" }, "metrics": { "costMicros": "45670000", "impressions": "1500", "clicks": "60" } },
+      { "campaign": { "resourceName": "customers/0000000001/campaigns/700001", "id": "700001", "name": "CF | ZZ28 | LEADS | ENSAIO PESQUISA", "status": "ENABLED" },
+        "segments": { "date": "2026-10-03" }, "metrics": { "costMicros": "1000000", "impressions": "90" } }
+    ], "fieldMask": "campaign.id,campaign.name,campaign.status,segments.date,metrics.costMicros,metrics.impressions,metrics.clicks" }
+]

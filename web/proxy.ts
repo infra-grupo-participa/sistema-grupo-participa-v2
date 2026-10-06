@@ -8,7 +8,9 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Tudo exceto assets estáticos, otimização de imagem e a rota de health (diagnóstico).
-    '/((?!_next/static|_next/image|favicon.ico|api/health|assets/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    // Tudo exceto assets estáticos, otimização de imagem, a rota de health (diagnóstico) e a coleta da Web
+    // (o gravador das páginas, /web/radar-*.js, e a porta /api/web/coletar: públicos, sem sessão, 1 pacote a cada 3 s
+    // por visitante; passar pelo Proxy custaria um getUser() no Supabase por pacote).
+    '/((?!_next/static|_next/image|favicon.ico|api/health|api/web/coletar|web/radar-|assets/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };
