@@ -88,14 +88,23 @@ function destinatariosAdmin(): string[] {
     .filter((s) => /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(s));
 }
 
+// E-mail HTML: clientes de e-mail não leem CSS variables, então a cor vai crua (mesma regra do template.ts).
+const COR_EMAIL = {
+  borda: '#eee', // hex-ok: e-mail
+  fundo: '#f5f5f5', // hex-ok: e-mail
+  texto: '#333', // hex-ok: e-mail
+  branco: '#fff', // hex-ok: e-mail
+  marca: '#F29725', // hex-ok: e-mail
+} as const;
+
 function montarEmailResumo(c: ContagensResumo, horasNovos: number): { subject: string; html: string } {
   const link = `${publicAppBaseUrl()}/educacional/placas`;
   const linha = (rotulo: string, n: number) =>
-    `<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">${rotulo}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:700">${n}</td></tr>`;
+    `<tr><td style="padding:6px 12px;border-bottom:1px solid ${COR_EMAIL.borda}">${rotulo}</td><td style="padding:6px 12px;border-bottom:1px solid ${COR_EMAIL.borda};text-align:right;font-weight:700">${n}</td></tr>`;
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Resumo de placas</title></head>
-<body style="margin:0;padding:24px;background:#f5f5f5;font-family:Arial,sans-serif;color:#333">
-<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:8px;padding:24px">
-<h2 style="margin:0 0 16px;color:#F29725">Placas — resumo do dia</h2>
+<body style="margin:0;padding:24px;background:${COR_EMAIL.fundo};font-family:Arial,sans-serif;color:${COR_EMAIL.texto}">
+<div style="max-width:560px;margin:0 auto;background:${COR_EMAIL.branco};border-radius:8px;padding:24px">
+<h2 style="margin:0 0 16px;color:${COR_EMAIL.marca}">Placas — resumo do dia</h2>
 <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:14px">
 ${linha('Aguardando análise da documentação', c.aguardando_analise)}
 ${linha(`Novos envios (últimas ${horasNovos}h)`, c.novos)}
@@ -108,7 +117,7 @@ ${linha('Parados há 3+ dias — documentação aprovada', c.parados_docs_aprova
 ${linha('Parados há 3+ dias — placa postada', c.parados_placa_postada)}
 ${linha('Rascunhos parados há 3+ dias (do aluno)', c.parados_rascunho)}
 </table>
-<p style="text-align:center;margin:24px 0 0"><a href="${link}" target="_blank" style="background:#F29725;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:bold;display:inline-block">Abrir relatório de placas</a></p>
+<p style="text-align:center;margin:24px 0 0"><a href="${link}" target="_blank" style="background:${COR_EMAIL.marca};color:${COR_EMAIL.branco};text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:bold;display:inline-block">Abrir relatório de placas</a></p>
 </div></body></html>`;
   return { subject: `[Placas] Resumo do dia — ${c.aguardando_analise} aguardando análise, ${c.entrevistas_hoje} entrevista(s) hoje`, html };
 }

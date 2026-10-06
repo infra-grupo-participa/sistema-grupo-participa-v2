@@ -58,6 +58,9 @@ const programa = ts.createProgram(arquivos, {
   strict: true,
   skipLibCheck: true,
   noResolve: true, // não tenta baixar https:// — o filtro acima cuida do ruído
+  // Deno EXIGE a extensão em import relativo (`./normaliza.ts`); sem ela o bundle do
+  // `supabase functions deploy` falha. O checker aceita a convenção do Deno.
+  allowImportingTsExtensions: true,
 });
 
 const diagnosticos = ts
