@@ -283,10 +283,11 @@ export function VidaProjeto({ id, config, versao, onFechar, flash, onMudou }: {
             <Row k="% MQL" v={`${pct(r.pct_mql)} · meta ${pct(r.meta_pct_mql)}`} />
             <Row k="CTR (cliques no link)" v={pct(r.ctr, 2)} />
             <Row k="CPC (cliques no link)" v={centavos(r.cpc)} />
-            <Row k="Page views (páginas de captura)" v={inteiro(r.page_views)} />
+            <Row k="Page views (visitas vindas das campanhas, Web)" v={inteiro(r.page_views)} />
+            <Row k="Leads da página (dessas visitas)" v={inteiro(r.leads_pagina)} />
             <Row k="CPM" v={centavos(r.cpm)} />
             <Row k="Connect rate (page views ÷ cliques no link)" v={pct(r.connect_rate)} />
-            <Row k="Conversão da página (leads ÷ page views)" v={pct(r.conversao_pagina)} />
+            <Row k="Conversão da página (leads da página ÷ page views)" v={pct(r.conversao_pagina)} />
           </div>
         </SectionCard>
 

@@ -384,7 +384,7 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 | Tela `/marketing/trafego` (Projetos, Campanhas fora do padrão, Contas de anúncio, vida do projeto) | pronta; funciona de verdade só depois da migration; hoje dá para ver no modo demo |
 | Coleta Meta Ads e Google Ads | **não feita** (etapa 2). As funções de entrada existem (`trafego_campanhas_receber`, `trafego_desempenho_receber`, só `service_role`), ninguém as chama |
 | Receita (Hotmart) | **sem fonte**: a tela mostra "sem dado" |
-| Connect rate e conversão da página | **ligados** no banco (page views da Web, `mkt_web.resumo_dia`, 20261005n; leads da base, 20261005o). Enquanto essas migrations não estiverem aplicadas e com dado, "sem dado" |
+| Connect rate e conversão da página | **ligados** no banco à Web fase 2 (20261005q, a mesma conta de `public.mkt_web_connect`). Sem a 20261005q aplicada, "sem dado" com aviso na tela |
 | Atividades do ClickUp | lugar reservado na vida do projeto, sem integração |
 
 ### Decisões que mandam aqui (Victor, 05/10/2026)
@@ -393,9 +393,14 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
   investimento realizado, investimento máximo, % da verba e gestores.
 - **Cliques no link** (Victor): CTR = cliques no link ÷ impressões; CPC = investido ÷ cliques no link. O gasto diário
   guarda cliques no link e cliques totais **separados**; os totais são só informação.
-- **Connect rate = page views ÷ cliques no link; conversão da página = leads ÷ page views** (Victor). Page views = as das
-  páginas de **captura** do projeto (`mkt.paginas.funcao = 'captura'`), da Web; leads = os da base de pessoas. Limite: o
-  resumo diário da Web não separa a visita que veio de anúncio, então as page views incluem tráfego orgânico.
+- **Connect rate = page views ÷ cliques no link; conversão da página = leads ÷ page views** (Victor). Para não ter dois
+  números para o mesmo indicador, a page view é **a mesma da Web fase 2** (`public.mkt_web_connect`, 20261005q): a
+  entrada na página vinda da campanha, **uma por visita** (`mkt_web.sessoes`, sem visita de teste), casada com a campanha
+  do Tráfego por `campaign_id` = id da campanha, ou `utm_campaign` = nome exato ou id. Orgânico e campanha que não está no
+  Tráfego não entram. O lead da conversão também é o da Web: dessas visitas, as que viraram lead. O ensaio confere que o
+  resumo do Tráfego e o `mkt_web_connect` dão o mesmo número. Projeto com campanha e sem visita = 0 page views (connect
+  rate 0%); sem campanha no Tráfego = "sem dado". Por anúncio (`utm_content` = id do anúncio) só a Web mostra, porque o
+  Tráfego ainda não guarda clique por anúncio.
 - **Vários gestores por projeto** (Victor): tabela `projeto_gestores` (siglas da lista `mkt.campanha_gestores`).
 - **Fases:** aquecimento, captação, lembrete, remarketing, abertura de carrinho. A fase da campanha sai do **objetivo** do
   nome (mapa `objetivo_fase`, configurável por SQL); a **correção à mão** na campanha prevalece; sem regra e sem correção =
@@ -431,7 +436,7 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 Fórmulas (banco em `mkt_trafego.resumo`, front em `web/modules/marketing/trafego/domain/kpis.ts`, as duas testadas com os
 mesmos números): % da verba = investido ÷ verba máxima; CPL = investido ÷ leads; CTR = cliques no link ÷ impressões;
 CPC = investido ÷ cliques no link; CPM = investido ÷ impressões × 1000; % MQL = MQL ÷ leads; connect rate = page views ÷
-cliques no link; conversão da página = leads ÷ page views; ritmo = gasto de ontem ÷ verba diária; "deveria ter gasto" = verba
+cliques no link; conversão da página = leads da página ÷ page views (as duas com a page view da Web fase 2); ritmo = gasto de ontem ÷ verba diária; "deveria ter gasto" = verba
 de cada fase distribuída por igual nos dias dela. **Sem fonte = nulo, nunca zero** (projeto sem gasto coletado mostra
 "sem dado", não R$ 0).
 
@@ -474,7 +479,7 @@ Victor ver a tela no modo demo e responder as perguntas abaixo; rodar o ensaio n
 
 2. Coleta Meta + Google (depende da conta centralizadora e das credenciais): rotina diária chamando os dois `receber`.
 3. Ligar receita (Hotmart → projeto) e atividades do ClickUp. Connect rate e conversão já estão ligados; dependem da
-   Web (20261005n) e da base de pessoas (20261005o) aplicadas e com dado.
+   Web fase 2 (20261005q) aplicada e com dado.
 4. Resumo do dia ("o que está pegando fogo") e alerta de nome fora do padrão.
 5. MCP da central com os dados do Tráfego.
 6. Importação do histórico (planilhas que o Victor escolher).
@@ -483,7 +488,7 @@ Victor ver a tela no modo demo e responder as perguntas abaixo; rodar o ensaio n
 
 1. ~~Status~~ **Respondido:** ativo, pausado, inativo, encerrado (fica como está).
 2. ~~Connect rate e conversão~~ **Respondido:** connect rate = page views ÷ cliques no link; conversão da página = leads
-   ÷ page views. Ligado (ver Decisões).
+   ÷ page views. Ligado à mesma page view da Web fase 2 (ver Decisões).
 3. ~~Cliques~~ **Respondido:** cliques no link para CTR e CPC; totais guardados à parte.
 4. ~~Fase da campanha~~ **Respondido:** pelo objetivo do nome, com correção à mão prevalecendo; mapa e objetivos novos
    (CARRINHO, AQUECIMENTO) nas Decisões. DISTRIBUIÇÃO sem fase automática.
@@ -516,6 +521,7 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
 - **05/10/2026:** Tráfego etapa 1 (migration 20261005p, NÃO APLICADA): contas, campanhas, desempenho diário, planejamento
   (status, verba, fases, metas) e a Central do Tráfego em `/marketing/trafego` (área ativa), com modo demo. Branch `victor`.
 - **05/10/2026:** Tráfego, respostas do Victor na própria 20261005p (ainda NÃO APLICADA): cliques no link separados dos
-  totais (CTR, CPC), connect rate e conversão da página ligados à Web e à base de pessoas, vários gestores por projeto,
+  totais (CTR, CPC), connect rate e conversão da página com a mesma page view da Web fase 2 (`mkt_web_connect`), vários
+  gestores por projeto,
   fase da campanha pelo objetivo do nome (com correção à mão), fases remarketing e abertura de carrinho, objetivos
   CARRINHO e AQUECIMENTO no padrão de nome.

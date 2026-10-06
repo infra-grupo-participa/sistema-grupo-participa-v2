@@ -11,7 +11,9 @@
 --     - KPIs da tabela: CPL, leads, CTR, CPM, connect rate, conversão da página, % MQL. O lead que conta é o DA NOSSA
 --       BASE (pessoas.eventos). Receita gerada = receita (Hotmart), ainda sem ligação: volta nula.
 --     - CTR e CPC usam CLIQUES NO LINK (guardados separados dos cliques totais). Connect rate = page views ÷ cliques no
---       link; conversão da página = leads ÷ page views. Page views vêm da Web (mkt_web.resumo_dia, 20261005n).
+--       link; conversão da página = leads ÷ page views. Page view = a MESMA da Web fase 2 (public.mkt_web_connect,
+--       20261005q): entrada na página vinda da campanha, uma por visita (mkt_web.sessoes), casada com a campanha do
+--       Tráfego por campaign_id = id da campanha ou utm_campaign = nome exato ou id. Sem a 20261005q: nulos.
 --     - Um projeto pode ter VÁRIOS gestores (projeto_gestores, das listas de mkt.campanha_gestores).
 --     - Fases: aquecimento, captação, lembrete, remarketing, abertura de carrinho. A fase da campanha sai do OBJETIVO do
 --       nome (tabela objetivo_fase, configurável); a correção à mão por campanha (fase_manual) prevalece. Sem regra e
@@ -333,9 +335,12 @@ $$;
 --   leads e mql: da base de pessoas (pessoas.eventos, 20261005o); nulos se a base não existir. Pessoa de teste e
 --     pessoa mesclada não contam.
 --   receita: nula (Hotmart ainda não ligada ao projeto).
---   page views: soma de mkt_web.resumo_dia.visualizacoes nas páginas de CAPTURA do projeto (mkt.paginas.funcao =
---     'captura'), a página para onde o anúncio manda; nulas se a Web (20261005n) não existir ou se o projeto não tiver
---     nenhuma linha lá. connect rate = page views ÷ cliques no link; conversão da página = leads ÷ page views.
+--   page views e leads da página: a MESMA regra de public.mkt_web_connect (20261005q; mudou lá, muda aqui): visitas
+--     (mkt_web.sessoes, sem teste) do projeto cuja campanha casa com uma campanha do Tráfego do projeto (campaign_id =
+--     campanha_externa, ou utm_campaign = nome exato, ou utm_campaign = campanha_externa); uma por visita. leads da
+--     página = dessas visitas, as que viraram lead (sessoes.lead), o mesmo numerador da conversão da Web.
+--     connect rate = page views ÷ cliques no link; conversão da página = leads da página ÷ page views.
+--     Nulos se a 20261005q não estiver aplicada ou se o projeto não tiver campanha no Tráfego.
 -- As fórmulas são as mesmas de web/modules/marketing/trafego/domain/kpis.ts (testes em kpis.test.ts).
 create function mkt_trafego.resumo(p_projeto bigint default null) returns jsonb
 language plpgsql stable set search_path = '' as $$
@@ -345,14 +350,16 @@ declare
   v_pv jsonb;
   v_res jsonb;
 begin
-  if to_regclass('mkt_web.resumo_dia') is not null then
+  if to_regprocedure('public.mkt_web_connect(bigint,date,date)') is not null then
     execute $q$
-      select coalesce(jsonb_object_agg(x.projeto_id::text, x.pv), '{}'::jsonb)
-        from (select r.projeto_id, sum(r.visualizacoes) as pv
-                from mkt_web.resumo_dia r
-                join mkt.paginas pg on pg.id = r.pagina_id and pg.funcao = 'captura'
-               where ($1 is null or r.projeto_id = $1)
-               group by r.projeto_id) x
+      select coalesce(jsonb_object_agg(x.projeto_id::text, jsonb_build_object('pv', x.pv, 'leads', x.leads)), '{}'::jsonb)
+        from (select c.projeto_id, count(distinct s.id) as pv, count(distinct s.id) filter (where s.lead) as leads
+                from mkt_trafego.campanhas c
+                join mkt_web.sessoes s
+                  on s.projeto_id = c.projeto_id and not s.teste
+                 and (s.campaign_id = c.campanha_externa or s.utm_campaign = c.nome or s.utm_campaign = c.campanha_externa)
+               where c.projeto_id is not null and ($1 is null or c.projeto_id = $1)
+               group by c.projeto_id) x
     $q$ into v_pv using p_projeto;
   end if;
 
@@ -404,7 +411,10 @@ begin
                       where pgs.projeto_id = p.id), '{}') as gestores_projeto,
            pl.meta_leads, pl.meta_receita, pl.meta_cpl, pl.meta_pct_mql, pl.obs,
            g.gasto, g.impressoes, g.cliques_link, g.cliques_total, g.leads_plataforma,
-           case when v_pv is null then null else (v_pv ->> p.id::text)::bigint end as page_views, g.gasto_ontem, g.ultimo_dia, g.por_plataforma,
+           case when v_pv is null or cp.campanhas is null then null
+                else coalesce((v_pv -> p.id::text ->> 'pv')::bigint, 0) end as page_views,
+           case when v_pv is null or cp.campanhas is null then null
+                else coalesce((v_pv -> p.id::text ->> 'leads')::bigint, 0) end as leads_pagina, g.gasto_ontem, g.ultimo_dia, g.por_plataforma,
            coalesce(cp.campanhas, 0) as campanhas, coalesce(cp.fora_padrao, 0) as fora_padrao,
            coalesce(cp.gestores, '{}') as gestores, coalesce(cp.moedas, '{}') as moedas,
            case when v_leads is null then null else coalesce((v_leads -> p.id::text ->> 'leads')::bigint, 0) end as leads,
@@ -429,7 +439,7 @@ begin
            'verba_maxima', b.verba_maxima, 'verba_diaria', b.verba_diaria, 'verba_fases', b.verba_fases, 'fases', b.fases,
            'pct_verba', case when b.gasto is not null and b.verba_maxima > 0 then round(b.gasto / b.verba_maxima * 100, 1) end,
            'impressoes', b.impressoes, 'cliques_link', b.cliques_link, 'cliques_total', b.cliques_total,
-           'leads_plataforma', b.leads_plataforma, 'page_views', b.page_views,
+           'leads_plataforma', b.leads_plataforma, 'page_views', b.page_views, 'leads_pagina', b.leads_pagina,
            'leads', b.leads, 'mql', b.mql,
            'cpl', case when b.gasto is not null and b.leads > 0 then round(b.gasto / b.leads, 2) end,
            'ctr', case when b.impressoes > 0 then round(b.cliques_link::numeric / b.impressoes * 100, 2) end,
@@ -438,8 +448,7 @@ begin
            'pct_mql', case when b.leads > 0 then round(b.mql::numeric / b.leads * 100, 1) end,
            'connect_rate', case when b.page_views is not null and b.cliques_link > 0
                                 then round(b.page_views::numeric / b.cliques_link * 100, 1) end,
-           'conversao_pagina', case when b.page_views > 0 and b.leads is not null
-                                    then round(b.leads::numeric / b.page_views * 100, 1) end,
+           'conversao_pagina', case when b.page_views > 0 then round(b.leads_pagina::numeric / b.page_views * 100, 1) end,
            'gasto_ontem', case when b.gasto is not null then b.gasto_ontem end, 'dia_ontem', v_ontem,
            'ritmo_ontem', case when b.gasto is not null and b.verba_diaria > 0 then round(b.gasto_ontem / b.verba_diaria * 100, 1) end,
            'ultimo_dia', b.ultimo_dia,
@@ -468,7 +477,7 @@ begin
     'gestores', (select coalesce(jsonb_agg(jsonb_build_object('sigla', g.sigla, 'nome', g.nome) order by g.sigla), '[]'::jsonb)
                    from mkt.campanha_gestores g where g.ativo),
     'base_pessoas', to_regclass('pessoas.eventos') is not null,
-    'base_web', to_regclass('mkt_web.resumo_dia') is not null,
+    'base_web', to_regprocedure('public.mkt_web_connect(bigint,date,date)') is not null,
     'dia_ontem', mkt_trafego.ontem());
 end
 $$;

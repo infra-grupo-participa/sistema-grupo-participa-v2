@@ -18,7 +18,7 @@ export interface ConfigTrafego {
   gestores: { sigla: string; nome: string }[];
   /** true = a base de pessoas (20261005o) existe e os leads da Central vêm dela. */
   base_pessoas: boolean;
-  /** true = a Web (20261005n) existe e as page views vêm dela. */
+  /** true = a Web fase 2 (20261005q, public.mkt_web_connect) existe e as page views vêm dela. */
   base_web: boolean;
   /** Objetivo do nome de campanha → fase (mkt_trafego.objetivo_fase). Objetivo ausente = sem fase automática. */
   objetivo_fase: Record<string, string>;
@@ -58,8 +58,10 @@ export interface LinhaResumo {
   /** Todos os cliques (só informação). */
   cliques_total: number | null;
   leads_plataforma: number | null;
-  /** Page views das páginas de captura do projeto (Web). */
+  /** Page views da Web fase 2: visitas vindas das campanhas do projeto, uma por visita (a mesma de mkt_web_connect). */
   page_views: number | null;
+  /** Dessas visitas, as que viraram lead (o numerador da conversão da página, como na Web). */
+  leads_pagina: number | null;
   leads: number | null;
   mql: number | null;
   cpl: number | null;

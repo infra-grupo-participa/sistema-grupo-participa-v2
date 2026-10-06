@@ -8,8 +8,10 @@
 //   CPC          = investido ÷ cliques no link               (2 casas)
 //   CPM          = investido ÷ impressões × 1000             (2 casas)
 //   % MQL        = MQL ÷ leads × 100                         (1 casa)
-//   connect rate = page views ÷ cliques no link × 100        (1 casa) (page views das páginas de captura, Web)
-//   conversão    = leads ÷ page views × 100                  (1 casa)
+//   connect rate = page views ÷ cliques no link × 100        (1 casa)
+//   conversão    = leads da página ÷ page views × 100        (1 casa)
+//   page view = a mesma da Web fase 2 (public.mkt_web_connect, 20261005q): visita vinda da campanha, uma por visita;
+//   leads da página = dessas visitas, as que viraram lead. Assim o Tráfego e a Web mostram o mesmo número.
 //   ritmo        = gasto do dia ÷ verba diária × 100         (1 casa)
 //   esperado até = soma, por fase, da verba proporcional aos dias já passados da fase
 
@@ -34,7 +36,7 @@ export const cpl = (investido: number | null, leads: number | null) => razao(inv
 export const ctr = (cliquesLink: number | null, impressoes: number | null) => razao(cliquesLink, impressoes, 100, 2);
 export const cpc = (investido: number | null, cliquesLink: number | null) => razao(investido, cliquesLink, 1, 2);
 export const connectRate = (pageViews: number | null, cliquesLink: number | null) => razao(pageViews, cliquesLink, 100, 1);
-export const conversaoPagina = (leads: number | null, pageViews: number | null) => razao(leads, pageViews, 100, 1);
+export const conversaoPagina = (leadsPagina: number | null, pageViews: number | null) => razao(leadsPagina, pageViews, 100, 1);
 export const cpm = (investido: number | null, impressoes: number | null) => razao(investido, impressoes, 1000, 2);
 export const pctMql = (mql: number | null, leads: number | null) => razao(mql, leads, 100, 1);
 export const ritmo = (gastoDia: number | null, verbaDiaria: number | null) => razao(gastoDia, verbaDiaria, 100, 1);
@@ -82,7 +84,7 @@ export function esperadoAte(
 }
 
 /** Recalcula os KPIs de uma linha a partir dos totais (o modo de demonstração usa isto; o banco faz o mesmo). */
-type Totais = 'investido' | 'verba_maxima' | 'impressoes' | 'cliques_link' | 'page_views' | 'leads' | 'mql' | 'gasto_ontem' | 'verba_diaria';
+type Totais = 'investido' | 'verba_maxima' | 'impressoes' | 'cliques_link' | 'page_views' | 'leads_pagina' | 'leads' | 'mql' | 'gasto_ontem' | 'verba_diaria';
 type Kpis = 'pct_verba' | 'cpl' | 'ctr' | 'cpc' | 'cpm' | 'pct_mql' | 'connect_rate' | 'conversao_pagina' | 'ritmo_ontem';
 export function comKpis<T extends Pick<LinhaResumo, Totais>>(l: T): T & Pick<LinhaResumo, Kpis> {
   return {
@@ -94,7 +96,7 @@ export function comKpis<T extends Pick<LinhaResumo, Totais>>(l: T): T & Pick<Lin
     cpm: cpm(l.investido, l.impressoes),
     pct_mql: pctMql(l.mql, l.leads),
     connect_rate: connectRate(l.page_views, l.cliques_link),
-    conversao_pagina: conversaoPagina(l.leads, l.page_views),
+    conversao_pagina: conversaoPagina(l.leads_pagina, l.page_views),
     ritmo_ontem: l.investido == null ? null : ritmo(l.gasto_ontem, l.verba_diaria),
   };
 }

@@ -23,10 +23,12 @@ describe('KPIs da Central do Tráfego (mesmas fórmulas de mkt_trafego.resumo)',
   });
   it('connect rate: page views ÷ cliques no link × 100, 1 casa', () => {
     expect(connectRate(175, 350)).toBe(50);
+    expect(connectRate(4, 350)).toBe(1.1);
     expect(connectRate(null, 350)).toBeNull();
     expect(connectRate(175, 0)).toBeNull();
   });
-  it('conversão da página: leads ÷ page views × 100, 1 casa', () => {
+  it('conversão da página: leads da página ÷ page views × 100, 1 casa', () => {
+    expect(conversaoPagina(1, 4)).toBe(25);
     expect(conversaoPagina(2, 175)).toBe(1.1);
     expect(conversaoPagina(null, 175)).toBeNull();
     expect(conversaoPagina(2, 0)).toBeNull();
@@ -95,7 +97,7 @@ function linha(p: Partial<LinhaResumo>): LinhaResumo {
     projeto_id: 1, sigla: 'XX26', nome: 'X', subarea: 'interno', tipo: 'interno', projeto_ativo: true, etiqueta_clickup: null,
     inicio: null, fim: null, status: null, status_nome: null, gestores: [], gestores_campanhas: [], receita: null,
     investido: null, por_plataforma: null, moedas: [], verba_maxima: null, verba_diaria: null, verba_fases: 0, fases: 0,
-    pct_verba: null, impressoes: null, cliques_link: null, cliques_total: null, leads_plataforma: null, page_views: null,
+    pct_verba: null, impressoes: null, cliques_link: null, cliques_total: null, leads_plataforma: null, page_views: null, leads_pagina: null,
     leads: null, mql: null, cpl: null, ctr: null, cpc: null, cpm: null, pct_mql: null, connect_rate: null, conversao_pagina: null, gasto_ontem: null, dia_ontem: '2026-10-04',
     ritmo_ontem: null, ultimo_dia: null, meta_leads: null, meta_receita: null, meta_cpl: null, meta_pct_mql: null, obs: null,
     campanhas: 0, campanhas_fora_padrao: 0, ...p,
@@ -104,9 +106,9 @@ function linha(p: Partial<LinhaResumo>): LinhaResumo {
 
 describe('comKpis: a linha inteira, como o banco devolve', () => {
   it('caso PB26 do ensaio', () => {
-    const l = comKpis(linha({ investido: 250, verba_maxima: 1000, verba_diaria: 100, impressoes: 25000, cliques_link: 350, cliques_total: 400, page_views: 175, leads: 2, mql: 1, gasto_ontem: 150.5 }));
+    const l = comKpis(linha({ investido: 250, verba_maxima: 1000, verba_diaria: 100, impressoes: 25000, cliques_link: 350, cliques_total: 400, page_views: 4, leads_pagina: 1, leads: 2, mql: 1, gasto_ontem: 150.5 }));
     expect([l.pct_verba, l.cpl, l.ctr, l.cpc, l.cpm, l.pct_mql, l.connect_rate, l.conversao_pagina, l.ritmo_ontem])
-      .toEqual([25, 125, 1.4, 0.71, 10, 50, 50, 1.1, 150.5]);
+      .toEqual([25, 125, 1.4, 0.71, 10, 50, 1.1, 25, 150.5]);
   });
   it('projeto sem coleta: tudo null, mesmo com verba', () => {
     const l = comKpis(linha({ verba_maxima: 1000, verba_diaria: 100, gasto_ontem: 0 }));

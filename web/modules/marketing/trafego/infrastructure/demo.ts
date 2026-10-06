@@ -88,7 +88,8 @@ const PERFIL: Record<number, [number, number, number, number, number]> = {
   1: [10, 420, 18, 1.4, 9], 2: [15, 160, 12, 0.9, 5], 3: [12, 90, 40, 3.1, 6], 4: [20, 380, 22, 1.1, 0],
   5: [8, 60, 15, 0.7, 0], 6: [12, 140, 14, 1.2, 10], 7: [5, 50, 20, 1, 4], 9: [6, 40, 9, 0.8, 0],
 };
-// page views das páginas de captura (fictício: ~72% dos cliques no link), só dos projetos com "Web"
+// page views da Web (visitas vindas da campanha; fictício: ~72% dos cliques no link) e ~30% delas viram lead,
+// só dos projetos com "Web"
 const COM_WEB = new Set([1, 5]);
 // leads e MQL da "base de pessoas" (fictícios)
 const LEADS: Record<number, { leads: number; mql: number }> = { 1: { leads: 640, mql: 170 }, 2: { leads: 0, mql: 0 }, 4: { leads: 35, mql: 4 }, 5: { leads: 140, mql: 22 } };
@@ -151,6 +152,7 @@ function linha(p: ProjetoDemo): LinhaResumo {
     impressoes: tem ? soma(dias.map((d) => d.impressoes)) : null,
     cliques_link: tem ? soma(dias.map((d) => d.cliques_link)) : null, cliques_total: tem ? soma(dias.map((d) => d.cliques_total)) : null,
     page_views: tem && COM_WEB.has(p.id) ? Math.round(soma(dias.map((d) => d.cliques_link)) * 0.72) : null,
+    leads_pagina: tem && COM_WEB.has(p.id) ? Math.round(soma(dias.map((d) => d.cliques_link)) * 0.72 * 0.3) : null,
     leads_plataforma: tem && dias.some((d) => d.leads != null) ? soma(dias.map((d) => d.leads ?? 0)) : null,
     leads: l?.leads ?? 0, mql: l?.mql ?? 0,
     gasto_ontem: tem ? soma(dias.filter((d) => d.dia === ONTEM).map((d) => d.gasto)) : null, dia_ontem: ONTEM,

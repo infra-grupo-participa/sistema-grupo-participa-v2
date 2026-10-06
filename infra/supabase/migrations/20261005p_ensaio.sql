@@ -12,8 +12,8 @@
 -- é lido para a saída. Tudo some no rollback.
 --
 -- Esperado: NENHUMA linha começando com "ERRADO". Cada linha diz o que conferiu. O passo 6.base só roda com a 20261005o
--- aplicada e o 6.web só com a 20261005n (senão "PULADO", e o 6 confere que leads, CPL, % MQL, page views, connect rate
--- e conversão ficam nulos).
+-- aplicada e o 6.web só com a 20261005q (Web fase 2) (senão "PULADO", e o 6 confere que leads, CPL, % MQL, page views,
+-- connect rate e conversão ficam nulos).
 --   1  estrutura: 10 tabelas, 13 funções; sementes (meta/google; ativo, pausado, inativo, encerrado; aquecimento,
 --      captação, lembrete, remarketing, abertura de carrinho; objetivo→fase LEADS e VENDAS → captação,
 --      LEMBRETE, REMARKETING, CARRINHO, AQUECIMENTO; DISTRIBUIÇÃO sem fase); objetivos CARRINHO e AQUECIMENTO novos na
@@ -28,7 +28,8 @@
 --      ligar à mão e voltar ao nome, reler depois de cadastrar projeto, apagar o planejamento da fase
 --   6  resumo: números conferidos à mão (investido 250, 25,0% da verba, CTR 1,40% e CPC 0,71 com cliques no link, CPM
 --      10,00, ritmo 150,5%), sem fonte = nulo (receita, leads sem base, page views sem Web), projeto sem dado = nulo e
---      não zero; 6.base leads e MQL da base; 6.web page views da captura, connect rate e conversão da página
+--      não zero; 6.base leads e MQL da base; 6.web page views da Web fase 2 (visita vinda da campanha), connect rate e
+--      conversão da página, conferidos contra public.mkt_web_connect (o mesmo número)
 --   7  o banco recusa sozinho: gasto negativo (23514), fase fora da lista (23503), conta de outra plataforma (23503)
 --   8  grants: tabelas e schema fechados; anon nada; authenticated só as 11 da tela; receber só service_role
 --   9  sem perfil, operador (mesmo com a área), visualizador e anon: 14 recusas 42501 cada (13 funções + select direto)
@@ -319,9 +320,12 @@ $$;
 --   leads e mql: da base de pessoas (pessoas.eventos, 20261005o); nulos se a base não existir. Pessoa de teste e
 --     pessoa mesclada não contam.
 --   receita: nula (Hotmart ainda não ligada ao projeto).
---   page views: soma de mkt_web.resumo_dia.visualizacoes nas páginas de CAPTURA do projeto (mkt.paginas.funcao =
---     'captura'), a página para onde o anúncio manda; nulas se a Web (20261005n) não existir ou se o projeto não tiver
---     nenhuma linha lá. connect rate = page views ÷ cliques no link; conversão da página = leads ÷ page views.
+--   page views e leads da página: a MESMA regra de public.mkt_web_connect (20261005q; mudou lá, muda aqui): visitas
+--     (mkt_web.sessoes, sem teste) do projeto cuja campanha casa com uma campanha do Tráfego do projeto (campaign_id =
+--     campanha_externa, ou utm_campaign = nome exato, ou utm_campaign = campanha_externa); uma por visita. leads da
+--     página = dessas visitas, as que viraram lead (sessoes.lead), o mesmo numerador da conversão da Web.
+--     connect rate = page views ÷ cliques no link; conversão da página = leads da página ÷ page views.
+--     Nulos se a 20261005q não estiver aplicada ou se o projeto não tiver campanha no Tráfego.
 -- As fórmulas são as mesmas de web/modules/marketing/trafego/domain/kpis.ts (testes em kpis.test.ts).
 create function mkt_trafego.resumo(p_projeto bigint default null) returns jsonb
 language plpgsql stable set search_path = '' as $$
@@ -331,14 +335,16 @@ declare
   v_pv jsonb;
   v_res jsonb;
 begin
-  if to_regclass('mkt_web.resumo_dia') is not null then
+  if to_regprocedure('public.mkt_web_connect(bigint,date,date)') is not null then
     execute $q$
-      select coalesce(jsonb_object_agg(x.projeto_id::text, x.pv), '{}'::jsonb)
-        from (select r.projeto_id, sum(r.visualizacoes) as pv
-                from mkt_web.resumo_dia r
-                join mkt.paginas pg on pg.id = r.pagina_id and pg.funcao = 'captura'
-               where ($1 is null or r.projeto_id = $1)
-               group by r.projeto_id) x
+      select coalesce(jsonb_object_agg(x.projeto_id::text, jsonb_build_object('pv', x.pv, 'leads', x.leads)), '{}'::jsonb)
+        from (select c.projeto_id, count(distinct s.id) as pv, count(distinct s.id) filter (where s.lead) as leads
+                from mkt_trafego.campanhas c
+                join mkt_web.sessoes s
+                  on s.projeto_id = c.projeto_id and not s.teste
+                 and (s.campaign_id = c.campanha_externa or s.utm_campaign = c.nome or s.utm_campaign = c.campanha_externa)
+               where c.projeto_id is not null and ($1 is null or c.projeto_id = $1)
+               group by c.projeto_id) x
     $q$ into v_pv using p_projeto;
   end if;
 
@@ -390,7 +396,10 @@ begin
                       where pgs.projeto_id = p.id), '{}') as gestores_projeto,
            pl.meta_leads, pl.meta_receita, pl.meta_cpl, pl.meta_pct_mql, pl.obs,
            g.gasto, g.impressoes, g.cliques_link, g.cliques_total, g.leads_plataforma,
-           case when v_pv is null then null else (v_pv ->> p.id::text)::bigint end as page_views, g.gasto_ontem, g.ultimo_dia, g.por_plataforma,
+           case when v_pv is null or cp.campanhas is null then null
+                else coalesce((v_pv -> p.id::text ->> 'pv')::bigint, 0) end as page_views,
+           case when v_pv is null or cp.campanhas is null then null
+                else coalesce((v_pv -> p.id::text ->> 'leads')::bigint, 0) end as leads_pagina, g.gasto_ontem, g.ultimo_dia, g.por_plataforma,
            coalesce(cp.campanhas, 0) as campanhas, coalesce(cp.fora_padrao, 0) as fora_padrao,
            coalesce(cp.gestores, '{}') as gestores, coalesce(cp.moedas, '{}') as moedas,
            case when v_leads is null then null else coalesce((v_leads -> p.id::text ->> 'leads')::bigint, 0) end as leads,
@@ -415,7 +424,7 @@ begin
            'verba_maxima', b.verba_maxima, 'verba_diaria', b.verba_diaria, 'verba_fases', b.verba_fases, 'fases', b.fases,
            'pct_verba', case when b.gasto is not null and b.verba_maxima > 0 then round(b.gasto / b.verba_maxima * 100, 1) end,
            'impressoes', b.impressoes, 'cliques_link', b.cliques_link, 'cliques_total', b.cliques_total,
-           'leads_plataforma', b.leads_plataforma, 'page_views', b.page_views,
+           'leads_plataforma', b.leads_plataforma, 'page_views', b.page_views, 'leads_pagina', b.leads_pagina,
            'leads', b.leads, 'mql', b.mql,
            'cpl', case when b.gasto is not null and b.leads > 0 then round(b.gasto / b.leads, 2) end,
            'ctr', case when b.impressoes > 0 then round(b.cliques_link::numeric / b.impressoes * 100, 2) end,
@@ -424,8 +433,7 @@ begin
            'pct_mql', case when b.leads > 0 then round(b.mql::numeric / b.leads * 100, 1) end,
            'connect_rate', case when b.page_views is not null and b.cliques_link > 0
                                 then round(b.page_views::numeric / b.cliques_link * 100, 1) end,
-           'conversao_pagina', case when b.page_views > 0 and b.leads is not null
-                                    then round(b.leads::numeric / b.page_views * 100, 1) end,
+           'conversao_pagina', case when b.page_views > 0 then round(b.leads_pagina::numeric / b.page_views * 100, 1) end,
            'gasto_ontem', case when b.gasto is not null then b.gasto_ontem end, 'dia_ontem', v_ontem,
            'ritmo_ontem', case when b.gasto is not null and b.verba_diaria > 0 then round(b.gasto_ontem / b.verba_diaria * 100, 1) end,
            'ultimo_dia', b.ultimo_dia,
@@ -454,7 +462,7 @@ begin
     'gestores', (select coalesce(jsonb_agg(jsonb_build_object('sigla', g.sigla, 'nome', g.nome) order by g.sigla), '[]'::jsonb)
                    from mkt.campanha_gestores g where g.ativo),
     'base_pessoas', to_regclass('pessoas.eventos') is not null,
-    'base_web', to_regclass('mkt_web.resumo_dia') is not null,
+    'base_web', to_regprocedure('public.mkt_web_connect(bigint,date,date)') is not null,
     'dia_ontem', mkt_trafego.ontem());
 end
 $$;
@@ -1287,9 +1295,15 @@ begin
   perform pg_temp.ok('6.PB26 cadastro', r ->> 'status' = 'ativo' and r -> 'gestores' = '["RS"]'::jsonb and r ->> 'tipo' = 'interno'
                      and r -> 'gestores_campanhas' = '["CF", "RS"]'::jsonb and (r ->> 'campanhas')::int = 2
                      and (r ->> 'campanhas_fora_padrao')::int = 0, 'status ativo, gestores do projeto [RS], interno, gestores das campanhas CF e RS');
-  perform pg_temp.ok('6.sem fonte', r -> 'receita' = 'null'::jsonb and r -> 'page_views' = 'null'::jsonb
-                     and r -> 'connect_rate' = 'null'::jsonb and r -> 'conversao_pagina' = 'null'::jsonb,
-                     'receita nula; sem page view da Web: page views, connect rate e conversão da página = nulo');
+  if to_regprocedure('public.mkt_web_connect(bigint,date,date)') is null then
+    perform pg_temp.ok('6.sem fonte', r -> 'receita' = 'null'::jsonb and r -> 'page_views' = 'null'::jsonb
+                       and r -> 'connect_rate' = 'null'::jsonb and r -> 'conversao_pagina' = 'null'::jsonb,
+                       'receita nula; sem a Web fase 2 (20261005q): page views, connect rate e conversão da página = nulo');
+  else
+    perform pg_temp.ok('6.sem fonte', r -> 'receita' = 'null'::jsonb and (r ->> 'page_views')::int = 0
+                       and (r ->> 'connect_rate')::numeric = 0 and r -> 'conversao_pagina' = 'null'::jsonb,
+                       'receita nula; Web fase 2 aplicada e nenhuma visita de campanha: 0 page views, connect rate 0,0%, conversão nula');
+  end if;
   if v_tem_base then
     perform pg_temp.ok('6.leads base vazia', (r ->> 'leads')::int = 0 and r -> 'cpl' = 'null'::jsonb and r -> 'pct_mql' = 'null'::jsonb,
                        'base de pessoas existe e não tem lead do PB26: leads 0, CPL e % MQL nulos (sem divisão por zero)');
@@ -1331,31 +1345,46 @@ begin
 end
 $t$;
 
--- 6.web: page views da Web (só com a 20261005n aplicada; senão PULADO)
+-- 6.web: page views da Web fase 2 (só com a 20261005q aplicada; senão PULADO). A mesma regra de public.mkt_web_connect.
 do $t$
-declare r jsonb; v_pb bigint := pg_temp.proj('PB26');
+declare r jsonb; v_web jsonb; v_pb bigint := pg_temp.proj('PB26'); v_pv_web int; v_leads_web int;
 begin
-  if to_regclass('mkt_web.resumo_dia') is null then
-    perform pg_temp.diz('6.web', 'PULADO (20261005n não aplicada: page views, connect rate e conversão ficam nulos)');
+  if to_regprocedure('public.mkt_web_connect(bigint,date,date)') is null then
+    perform pg_temp.diz('6.web', 'PULADO (20261005q não aplicada: page views, connect rate e conversão ficam nulos)');
     return;
   end if;
   execute $q$
-    insert into mkt_web.resumo_dia (dia, projeto_id, dominio, caminho, dispositivo, pagina_id, visualizacoes, sessoes, visitantes,
-      entradas, entradas_engajadas, entradas_lead, sessoes_lead, saidas_rapidas, rolagem_soma, rolagem_75, visivel_ms_soma, vitais_n,
-      cliques, raiva, mortos, erros)
-    select d, $1, 'patrimoniobrasil.com.br', pg.caminho, 'mobile', pg.id, v, v, v, v, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-      from (values ('2020-01-01'::date, '/ak1/', 100), ('2020-01-02'::date, '/ak1/', 75), ('2020-01-01'::date, '/obrigado/', 50)) x(d, c, v)
-      join mkt.paginas pg on pg.projeto_id = $1 and pg.caminho = x.c
+    insert into mkt_web.sessoes (id, projeto_id, visitante, dia, inicio, fim, dispositivo, teste, utm_campaign, utm_content,
+                                 campaign_id, entrada_caminho, saida_caminho, lead)
+    select x.id, $1, 'visitanteEnsaio1', current_date, now(), now(), 'mobile', x.teste, x.utm, x.anuncio, x.cid, '/ak1/', '/ak1/', x.lead
+      from (values
+        ('ensaioSessao01', false, null::text, '000000000000001', '900000000000001', true),
+        ('ensaioSessao02', false, 'RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1', '000000000000001', null, false),
+        ('ensaioSessao03', false, '900000000000002', null, null, false),
+        ('ensaioSessao04', false, 'outra campanha qualquer', null, null, false),
+        ('ensaioSessao05', false, null, null, null, false),
+        ('ensaioSessao06', true, null, null, '900000000000001', true),
+        ('ensaioSessao07', false, 'RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1', null, '900000000000001', false)
+      ) x(id, teste, utm, anuncio, cid, lead)
   $q$ using v_pb;
   r := pg_temp.linha('PB26');
-  perform pg_temp.ok('6.web', (r ->> 'page_views')::int = 175 and (r ->> 'connect_rate')::numeric = 50.0
-                     and case when to_regclass('pessoas.eventos') is null then r -> 'conversao_pagina' = 'null'::jsonb
-                              else (r ->> 'conversao_pagina')::numeric = 1.1 end,
-                     'page views só da captura (/ak1/ 175; /obrigado/ fora); connect rate 175 ÷ 350 cliques no link = 50,0%; '
-                     || 'conversão = leads ÷ page views (2 ÷ 175 = 1,1% com a base de pessoas; nula sem ela): ' || coalesce(r ->> 'conversao_pagina', 'nula'));
+  perform pg_temp.ok('6.web', (r ->> 'page_views')::int = 4 and (r ->> 'leads_pagina')::int = 1
+                     and (r ->> 'connect_rate')::numeric = 1.1 and (r ->> 'conversao_pagina')::numeric = 25.0,
+                     'page views = visitas vindas das campanhas do PB26 (por campaign_id, nome exato ou id; uma por visita): 4 '
+                     || '(fora: outra campanha, orgânica, teste); connect rate 4 ÷ 350 = 1,1%; conversão 1 lead ÷ 4 = 25,0%');
+  v_web := pg_temp.adm(format('select public.mkt_web_connect(%s, current_date - 30, current_date)', v_pb));
+  select sum((c ->> 'page_views')::int), sum((c ->> 'leads')::int) into v_pv_web, v_leads_web
+    from jsonb_array_elements(v_web -> 'campanhas') c;
+  perform pg_temp.ok('6.web = Web', v_pv_web = (r ->> 'page_views')::int and v_leads_web = (r ->> 'leads_pagina')::int
+                     and (v_web ->> 'cliques_link')::boolean,
+                     'mesmo número da Web: public.mkt_web_connect soma ' || v_pv_web || ' page views e ' || v_leads_web
+                     || ' lead(s) nas campanhas do PB26, e acha a coluna cliques_link');
   r := pg_temp.linha('HT33');
-  perform pg_temp.ok('6.web sem visita', r -> 'page_views' = 'null'::jsonb and r -> 'connect_rate' = 'null'::jsonb,
-                     'HT33 sem linha na Web: page views e connect rate nulos (não zero)');
+  perform pg_temp.ok('6.web sem visita', (r ->> 'page_views')::int = 0 and r -> 'connect_rate' = 'null'::jsonb
+                     and r -> 'conversao_pagina' = 'null'::jsonb,
+                     'HT33 sem visita de campanha e sem clique no link: 0 page views, connect rate e conversão nulos (sem divisão por zero)');
+  r := pg_temp.linha('SEMSET26');
+  perform pg_temp.ok('6.web sem campanha', r -> 'page_views' = 'null'::jsonb, 'SEMSET26 sem campanha no Tráfego: page views nulas');
 end
 $t$;
 
