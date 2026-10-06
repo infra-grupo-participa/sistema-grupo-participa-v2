@@ -4,7 +4,7 @@
 // dias), e uma aba por pergunta: visão geral, páginas, funil, fluxo, origem, velocidade, rolagem e leitura, mapa de calor,
 // cliques e erros, formulário, melhorias, instalação. Só admin/dev (gate no layout, na page e no banco:
 // mkt.pode_ver('mkt_web')). Fluxo, mapa de calor, melhorias, laboratório do Google, leads na base de pessoas e connect
-// rate são da fase 2 (migration 20261005q).
+// rate são da fase 2 (migration 20261006h).
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { FilterSelect, Input, Loading, SectionCard, Tabs, Toast, useFlash } from '@/shared/ui/components';
@@ -106,7 +106,7 @@ export function WebClient() {
     let vivo = true;
     const { de, ate } = periodo;
     // as seções da fase 2 dentro das abas antigas (leads, connect rate, laboratório) não derrubam a aba se falharem
-    // (migration 20261005q não aplicada): voltam nulas e somem da tela
+    // (migration 20261006h não aplicada): voltam nulas e somem da tela
     const p: Promise<Dados | null> =
       aba === 'visao' ? Promise.all([carregar.visao(projeto, de, ate), carregar.leads(projeto, de, ate)]).then(([v, leads]) => v && { aba, v, leads })
       : aba === 'paginas' ? carregar.paginas(projeto, de, ate).then((v) => v && { aba, v })
@@ -227,7 +227,7 @@ export function WebClient() {
 
       {falhou && !carregando && (
         <p role="alert" className="text-sm text-[var(--red)]">
-          Não foi possível carregar (erro de rede, sem acesso, ou a migration 20261005n ainda não foi aplicada).
+          Não foi possível carregar (erro de rede, sem acesso, ou a migration 20261006f ainda não foi aplicada).
         </p>
       )}
       {projeto == null ? (

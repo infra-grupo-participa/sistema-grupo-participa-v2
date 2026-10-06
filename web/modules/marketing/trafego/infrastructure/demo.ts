@@ -3,8 +3,8 @@
 // produção: trafego-data.ts só liga com NEXT_PUBLIC_TRAFEGO_DEMO=1 E NODE_ENV diferente de 'production', e a tela mostra
 // a faixa "Dados de demonstração". Recarregar a página volta ao começo.
 // O que vem da semente real: os 4 projetos e os gestores da 20261005m, os objetivos (20261005m + CARRINHO e AQUECIMENTO
-// da 20261005p) e as listas da 20261005p (plataformas, status, fases, objetivo → fase) e da 20261006a (unidades, tipos de
-// lançamento e regras, os 2 especialistas internos semeados, UTM do Meta) e da 20261006d (os 9 modelos de exemplo, rascunho). Todo o resto é
+// da 20261006g) e as listas da 20261006g (plataformas, status, fases, objetivo → fase) e da 20261006j (unidades, tipos de
+// lançamento e regras, os 2 especialistas internos semeados, UTM do Meta) e da 20261006l (os 9 modelos de exemplo, rascunho). Todo o resto é
 // ficção: projetos "… Exemplo", contas "Conta Exemplo", "Especialista Exemplo", ids 0000…, descrições de campanha
 // "EXEMPLO", números gerados. Os projetos reais da semente ficam sem unidade, tipo de lançamento e contas (não estão em fonte).
 import { traduzirCampanha } from '../../projetos/domain/campanha';
@@ -30,7 +30,7 @@ const hoje = (n = 0) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 const ONTEM = hoje(-1);
-// status que não entram no resumo do dia (mkt_trafego.status_projeto.entra_no_resumo_dia = false, 20261005r)
+// status que não entram no resumo do dia (mkt_trafego.status_projeto.entra_no_resumo_dia = false, 20261006i)
 const FORA_DO_RESUMO = new Set(['em_planejamento', 'inativo', 'encerrado']);
 
 const GESTORES = [{ sigla: 'CF', nome: 'Caio Fábio' }, { sigla: 'RS', nome: 'Renan Schwarz' }, { sigla: 'EF', nome: 'Emmanuel Fernandes' }];
@@ -307,8 +307,8 @@ export function demoAjustarCampanha(p: { id: number; projeto_id?: number | null;
   return { ok: true, msg: `Campanha ajustada${NADA}.` };
 }
 
-// ─── Fase 2 (20261005r): resumo do dia, produtos da Hotmart e ClickUp. Tudo fictício ("Exemplo", ids 000…). ─────────
-// Os limiares são os mesmos da migration (mkt_trafego.alerta_regras; confirmados pelo Victor em 06/10/2026; a 8ª regra é da 20261006a).
+// ─── Fase 2 (20261006i): resumo do dia, produtos da Hotmart e ClickUp. Tudo fictício ("Exemplo", ids 000…). ─────────
+// Os limiares são os mesmos da migration (mkt_trafego.alerta_regras; confirmados pelo Victor em 06/10/2026; a 8ª regra é da 20261006j).
 const REGRAS_DEMO: Regra[] = [
   { codigo: 'acima_verba_diaria', nome: 'Acima da verba diária', ligada: true, limiar: 0, unidade: 'pct', gravidade: 'alta', descricao: 'Gasto de ontem acima da verba diária + limiar %.' },
   { codigo: 'cpl_acima_meta', nome: 'CPL acima da meta', ligada: true, limiar: 0, unidade: 'pct', gravidade: 'alta', descricao: 'CPL acima da meta de CPL + limiar %.' },
@@ -421,7 +421,7 @@ export function demoClickup(projetoId: number): ClickupProjeto | null {
   return { etiqueta: p.etiqueta_clickup, configurado: true, ultima_coleta: null, tarefas: p.etiqueta_clickup ? structuredClone(TAREFAS[projetoId] ?? []) : [] };
 }
 
-// ─── Cadastro do projeto, modelos e checklist (20261006a e 20261006d). Listas = as sementes da migration; o resto fictício. ────────
+// ─── Cadastro do projeto, modelos e checklist (20261006j e 20261006l). Listas = as sementes da migration; o resto fictício. ────────
 const UNIDADES = [
   { codigo: 'csm', tipo: 'interno' as const, nome: 'CSM', descricao: 'CSM Academy (o educacional)' },
   { codigo: 'escritorio', tipo: 'interno' as const, nome: 'Escritório', descricao: 'Escritório de advocacia' },
@@ -446,7 +446,7 @@ const UTM_META = [
   { parametro: 'utm_medium', valor: '{{adset.name}}|{{adset.id}}' }, { parametro: 'utm_content', valor: '{{ad.name}}|{{ad.id}}' },
   { parametro: 'utm_term', valor: '{{placement}}' },
 ];
-// Modelos de lançamento (20261006d): os 9 exemplos da semente (rascunho, números genéricos), gerados da mesma tabela.
+// Modelos de lançamento (20261006l): os 9 exemplos da semente (rascunho, números genéricos), gerados da mesma tabela.
 type FaseSemente = [string, number, RefData, number, RefData, number, number];
 const FASES_EXEMPLO: Record<string, FaseSemente[]> = {
   lancamento_classico: [['aquecimento', 1, 'captacao_inicio', -7, 'captacao_inicio', -1, 10], ['captacao', 2, 'captacao_inicio', 0, 'captacao_fim', 0, 60],
@@ -552,7 +552,7 @@ export function demoSalvarCadastro(f: ProjetoForm): Resposta & { tipo_lancamento
   return { ok: true, msg: `Projeto ${v.sigla} salvo${NADA}.`, id: v.id, tipo_lancamento: v.tipo_lancamento, avisos };
 }
 
-// ─── Modelos de lançamento (20261006d) ───────────────────────────────────────────────────────────────────────────────
+// ─── Modelos de lançamento (20261006l) ───────────────────────────────────────────────────────────────────────────────
 export const demoModelos = (): Modelo[] => structuredClone(MODELOS_D);
 
 export function demoSalvarModelo(m: Modelo): Resposta {

@@ -1,4 +1,4 @@
-// Marketing > Web: o formato do que as funções public.mkt_web_* devolvem (migration 20261005n). O modo de
+// Marketing > Web: o formato do que as funções public.mkt_web_* devolvem (migration 20261006f). O modo de
 // demonstração devolve o mesmo formato.
 
 export interface Visao {
@@ -96,7 +96,7 @@ export const MOTIVO_RECUSA: Record<string, string> = {
   limite_sessao: 'Excesso de envios da mesma visita',
 };
 
-// ─── Fase 2 (migration 20261005q) ────────────────────────────────────────────────────────────────────────────────────
+// ─── Fase 2 (migration 20261006h) ────────────────────────────────────────────────────────────────────────────────────
 /** mkt_web_fluxo: a visita como sequência de caminhos (recarregar não é passo) */
 export interface Fluxo {
   sessoes: number; uma_pagina: number; passos_medio: number;

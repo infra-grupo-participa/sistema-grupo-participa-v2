@@ -1,4 +1,4 @@
-// trafego-meta: a parte pura da coleta Meta Ads (migration 20261005r). Sem Deno, sem banco: testada no vitest com
+// trafego-meta: a parte pura da coleta Meta Ads (migration 20261006i). Sem Deno, sem banco: testada no vitest com
 // respostas simuladas (web/modules/marketing/trafego/infrastructure/coleta.test.ts, fixtures em
 // infra/supabase/functions/_trafego-fixtures). O index.ts liga isto ao banco e ao Deno.serve.
 //
@@ -6,7 +6,7 @@
 //   GET /act_<conta>/campaigns?fields=id,name,effective_status        (nome EXATO e status de cada campanha)
 //   GET /act_<conta>/insights?level=campaign&time_increment=1&time_range={since,until}
 //       &fields=campaign_id,campaign_name,date_start,spend,impressions,clicks,inline_link_clicks,actions
-// e grava pelas funções de entrada da 20261005p, no formato delas:
+// e grava pelas funções de entrada da 20261006g, no formato delas:
 //   trafego_campanhas_receber   [{plataforma, conta, id, nome, status}]
 //   trafego_desempenho_receber  [{plataforma, campanha, dia, gasto, impressoes, cliques_link, cliques_total, leads}]
 // cliques_link = inline_link_clicks (o clique do CTR, do CPC e do connect rate, decisão do Victor); cliques_total =

@@ -124,7 +124,7 @@ export function Comparar({ paginas, periodo, carregar }: {
           </div>
         </div>
       </SectionCard>
-      {r === null && <p role="alert" className="text-sm text-[var(--red)]">Não foi possível comparar (erro de rede, sem acesso, ou a migration 20261005q ainda não foi aplicada).</p>}
+      {r === null && <p role="alert" className="text-sm text-[var(--red)]">Não foi possível comparar (erro de rede, sem acesso, ou a migration 20261006h ainda não foi aplicada).</p>}
       {r && <VereditoComparar r={r} />}
     </div>
   );

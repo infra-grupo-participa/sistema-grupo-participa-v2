@@ -1,9 +1,9 @@
 'use client';
 
 // "A vida do projeto" (clique na linha da Central do Tráfego): investido × verba, ritmo, KPIs × metas, fases planejado ×
-// gasto, campanhas (e as fora do padrão), receita da Hotmart (vínculo de produto, 20261005r) e atividades do ClickUp com o
-// gasto diário (20261005r). Cadastro de planejamento, fases e produtos aqui. 20261006a: cadastro do projeto (editar),
-// campanhas sugeridas, modelo de lançamento (20261006d), checklist de montagem por momento e gerador de nome de campanha e UTM.
+// gasto, campanhas (e as fora do padrão), receita da Hotmart (vínculo de produto, 20261006i) e atividades do ClickUp com o
+// gasto diário (20261006i). Cadastro de planejamento, fases e produtos aqui. 20261006j: cadastro do projeto (editar),
+// campanhas sugeridas, modelo de lançamento (20261006l), checklist de montagem por momento e gerador de nome de campanha e UTM.
 import { useEffect, useState } from 'react';
 import {
   Badge, Button, ConfirmDialog, DataTable, Drawer, EmptyState, FilterSelect, Input, Loading, Modal, ProgressBar, Row, SectionCard,
@@ -109,7 +109,7 @@ function ModalFase({ inicial, config, captacao, onFechar, onSalvo }: {
   const [f, setF] = useState<FaseForm>(inicial);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  // a fase de captação nova vem com o período de captação do projeto (20261006a); dá para mudar
+  // a fase de captação nova vem com o período de captação do projeto (20261006j); dá para mudar
   const set = (k: keyof FaseForm, v: string) => setF((x) => (k === 'fase' && v === 'captacao' && !x.id && !x.inicio && !x.fim && captacao?.inicio
     ? { ...x, fase: v, inicio: captacao.inicio, fim: captacao.fim ?? '' } : { ...x, [k]: v }));
 

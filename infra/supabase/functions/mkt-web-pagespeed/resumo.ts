@@ -1,5 +1,5 @@
 // mkt-web-pagespeed: o resumo da resposta do Google PageSpeed Insights (v5) que fica guardado em mkt_web.velocidade_lab
-// (migration 20261005q). Puro (sem Deno, sem rede): testado em web/modules/marketing/web/domain/pagespeed-resumo.test.ts.
+// (migration 20261006h). Puro (sem Deno, sem rede): testado em web/modules/marketing/web/domain/pagespeed-resumo.test.ts.
 // O que sai: as notas das 4 categorias (0 a 100), as métricas de laboratório (LCP, FCP, TBT, Speed Index, CLS), até 5
 // oportunidades (o que mais economiza tempo, como o Radar mostrava) e a captura da página inteira (o fundo do mapa de
 // calor), quando o Google manda.

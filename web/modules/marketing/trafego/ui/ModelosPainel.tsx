@@ -1,6 +1,6 @@
 'use client';
 
-// Aba "Modelos de lançamento" da Central do Tráfego (migration 20261006d; substitui "Pacotes e checklist"). Cada modelo:
+// Aba "Modelos de lançamento" da Central do Tráfego (migration 20261006l; substitui "Pacotes e checklist"). Cada modelo:
 // nome, tipo de lançamento, unidades (com o padrão), fases com datas relativas e % da verba, campanhas esperadas, itens
 // do checklist por momento e metas padrão. Os "Exemplo: …" são rascunhos com números genéricos, para editar e validar.
 import { useEffect, useMemo, useState } from 'react';
@@ -284,7 +284,7 @@ export function ModelosPainel({ listas, config, versao, flash, onMudou }: {
   const visiveis = useMemo(() => (modelos ?? []).filter((m) => (inativos || m.ativo) && (!tipo || m.tipo_lancamento === tipo)
     && (!unidade || m.unidades.some((u) => u.unidade === unidade))), [modelos, tipo, unidade, inativos]);
 
-  if (!listas) return <SectionCard title="Modelos de lançamento"><p className="text-sm text-[var(--fg-3)]">Indisponível (sem acesso, ou a migration 20261006a ainda não foi aplicada).</p></SectionCard>;
+  if (!listas) return <SectionCard title="Modelos de lançamento"><p className="text-sm text-[var(--fg-3)]">Indisponível (sem acesso, ou a migration 20261006j ainda não foi aplicada).</p></SectionCard>;
   const feito = (r: Resposta) => { flash(msg(r)); if (r.ok) onMudou(); };
 
   return (
@@ -305,7 +305,7 @@ export function ModelosPainel({ listas, config, versao, flash, onMudou }: {
       </div>}
     >
       {modelos === undefined ? <Loading /> : modelos === null ? (
-        <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar os modelos (sem acesso, ou a migration 20261006d ainda não foi aplicada).</p>
+        <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar os modelos (sem acesso, ou a migration 20261006l ainda não foi aplicada).</p>
       ) : (
         <>
           {modelos.some((m) => m.rascunho) && (

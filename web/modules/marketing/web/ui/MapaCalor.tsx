@@ -6,7 +6,7 @@
 //      rodam, mas o <noscript> do pixel do Meta pode contar uma visita, e a página pode recusar ser aberta num quadro
 //      (X-Frame-Options); por isso não é o padrão;
 //   3. sem fundo (só a camada, na proporção da página).
-// O ponto vem do banco como x % e y como fração da altura da página vista (migration 20261005q), então cai no lugar
+// O ponto vem do banco como x % e y como fração da altura da página vista (migration 20261006h), então cai no lugar
 // certo sobre qualquer fundo da mesma largura. Pintura portada do calor.ts do Radar do Luiz.
 import { useEffect, useRef, useState } from 'react';
 import { DataTable, EmptyState, KpiCard, SectionCard, Td, Th, Thead, Tr } from '@/shared/ui/components';

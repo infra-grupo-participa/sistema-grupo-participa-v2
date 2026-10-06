@@ -1,4 +1,4 @@
-// Marketing > Tráfego: MODELOS DE LANÇAMENTO (migration 20261006d). Domínio puro: sem Next, sem Supabase.
+// Marketing > Tráfego: MODELOS DE LANÇAMENTO (migration 20261006l). Domínio puro: sem Next, sem Supabase.
 //
 // Um modelo tem nome livre, tipo de lançamento, as unidades a que se aplica (com um "padrão" por tipo + unidade), fases
 // com datas RELATIVAS às do projeto e % da verba máxima, campanhas esperadas, itens do checklist (com o momento) e metas

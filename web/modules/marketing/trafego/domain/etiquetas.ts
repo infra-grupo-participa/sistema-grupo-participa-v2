@@ -1,6 +1,6 @@
 // Busca de etiqueta do ClickUp no cadastro do projeto (revisão do Victor, 06/10/2026). Domínio puro.
 //
-// A MESMA regra de public.trafego_clickup_etiquetas_buscar (migration 20261006a): casa por "contém", sem acento e sem
+// A MESMA regra de public.trafego_clickup_etiquetas_buscar (migration 20261006j): casa por "contém", sem acento e sem
 // diferença de maiúscula; só etiquetas no formato da chave (minúsculas, números e hífen); ordem: igual ao digitado,
 // depois as que começam com ele, depois alfabética. O banco junta as fontes (kpi.medicao_tarefa e o espelho do ClickUp
 // do Tráfego); aqui a lista chega pronta. O modo de demonstração usa filtrarEtiquetas sobre uma lista em memória.

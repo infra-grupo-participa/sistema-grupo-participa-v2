@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { origemIds, rotuloUtm, separarUtm } from './utm';
 import { traduzirCampanha } from './campanha';
 
-// Os mesmos casos do passo 6b do ensaio da 20261005n (mkt.utm_separar e mkt_web.origem_ids).
+// Os mesmos casos do passo 6b do ensaio da 20261006f (mkt.utm_separar e mkt_web.origem_ids).
 describe('separarUtm: padrão do gp-operacoes (nome|id, id depois da última "|")', () => {
   it('campanha nome|id com " | " dentro do nome', () => {
     expect(separarUtm('RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1|120211234')).toEqual({

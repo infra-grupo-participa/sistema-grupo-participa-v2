@@ -1,6 +1,6 @@
-// trafego-clickup: espelho mínimo das tarefas do ClickUp por etiqueta de projeto (migration 20261005r). NASCE
+// trafego-clickup: espelho mínimo das tarefas do ClickUp por etiqueta de projeto (migration 20261006i). NASCE
 // DESLIGADA: nenhum cron chama esta Edge até o Victor decidir o token (como ligar: bloco LIGAR da migration e
-// docs/central-de-dados.md, seção Tráfego). SÓ LEITURA no ClickUp. Desde a 20261006a também lê as etiquetas dos spaces
+// docs/central-de-dados.md, seção Tráfego). SÓ LEITURA no ClickUp. Desde a 20261006j também lê as etiquetas dos spaces
 // (public.trafego_clickup_etiquetas_receber), para a tela escolher a etiqueta do projeto.
 // Quem chama: o cron trafego-clickup, pelo ops.cron_post, com o header x-sync-chave (= Vault trafego_coleta_chave).
 // Entra no banco como postgres (SUPABASE_DB_URL): token (Vault clickup_api_token) e workspace
@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
     team: String(cred.team_id),
     receber: async (p) => (await sql`select public.trafego_clickup_receber(${JSON.stringify(p)}::jsonb) as r`)[0].r,
   });
-  // etiquetas reais dos spaces (20261006a), para a tela escolher a etiqueta do projeto; falha aqui não derruba as tarefas
+  // etiquetas reais dos spaces (20261006j), para a tela escolher a etiqueta do projeto; falha aqui não derruba as tarefas
   let espacos: { ok: boolean; erro?: string; gravadas?: number; fora_do_formato?: number };
   try {
     const todas = await lerEtiquetasDosSpaces((url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(20_000) }),

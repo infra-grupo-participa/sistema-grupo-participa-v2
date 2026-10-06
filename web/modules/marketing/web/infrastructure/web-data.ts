@@ -1,6 +1,6 @@
 'use client';
 
-// Adapter Supabase da área Web: único lugar que chama as funções public.mkt_web_* (migration 20261005n). As tabelas
+// Adapter Supabase da área Web: único lugar que chama as funções public.mkt_web_* (migration 20261006f). As tabelas
 // (schema mkt_web) são fechadas; a trava (só admin/dev por ora) mora em cada função (mkt.pode_ver('mkt_web')).
 // Modo de demonstração (só desenvolvimento): NEXT_PUBLIC_WEB_DEMO=1 em web/.env.local e `npm run dev`. Em produção
 // (NODE_ENV=production) ele nunca liga, mesmo com a variável.
@@ -50,7 +50,7 @@ export const carregar = {
   formulario: (p: number, pagina: number, de: string, ate: string) =>
     (MODO_DEMO ? Promise.resolve(demo.demoFormulario()) : rpc<Formulario>('mkt_web_formulario', { ...periodo(p, de, ate), p_pagina: pagina })),
   instalacao: () => (MODO_DEMO ? Promise.resolve(demo.demoInstalacao()) : rpc<Instalacao>('mkt_web_instalacao')),
-  // fase 2 (migration 20261005q)
+  // fase 2 (migration 20261006h)
   fluxo: (p: number, de: string, ate: string) => (MODO_DEMO ? Promise.resolve(demo.demoFluxo(de, ate)) : rpc<Fluxo>('mkt_web_fluxo', periodo(p, de, ate))),
   melhorias: (p: number, de: string, ate: string) =>
     (MODO_DEMO ? Promise.resolve(demo.demoMelhorias(de, ate)) : rpc<Melhorias>('mkt_web_melhorias', periodo(p, de, ate))),

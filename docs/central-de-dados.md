@@ -89,9 +89,9 @@ resumo que o sistema usa; **se divergir, vale o gp-operacoes** (e este resumo pr
 
 **Nome de campanha:** `GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA`, com a página opcional (só em teste de página).
 Ex.: `RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1`. Lido por `mkt.campanha_traduzir` e
-`web/modules/marketing/projetos/domain/campanha.ts` (a mesma regra nos dois; a do banco é a da migration 20261006c).
+`web/modules/marketing/projetos/domain/campanha.ts` (a mesma regra nos dois; a do banco é a da migration 20261006e).
 
-**Revisão do Victor (06/10/2026), migration 20261006c (NÃO APLICADA):**
+**Revisão do Victor (06/10/2026), migration 20261006e (NÃO APLICADA):**
 
 - A **DESCRIÇÃO é tudo o que vem depois do OBJETIVO** e pode ter várias partes separadas por ` | `. Ex. real (Black
   Friday do Caio): `CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ | ABO | THRUPLAY` → gestor `CF`, projeto `BF26`,
@@ -110,7 +110,7 @@ Ex.: `RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1`. Lido por `mkt.campanha_t
   `descricao_partes` e `campos`.
 - **ANTECIPAÇÃO não está na lista de objetivos** (pergunta ao Victor abaixo). Até a resposta, a campanha do exemplo fica
   fora do padrão só pelo objetivo. Para ligar: `insert into mkt.campanha_objetivos (codigo) values ('ANTECIPAÇÃO')`, a
-  fase em `mkt_trafego.objetivo_fase` (se tiver) e "Reler os nomes" na tela (comandos comentados na 20261006c).
+  fase em `mkt_trafego.objetivo_fase` (se tiver) e "Reler os nomes" na tela (comandos comentados na 20261006e).
 
 | Campo | Valores (listas em `mkt.campanha_gestores`, `mkt.projetos`, `mkt.campanha_objetivos`) |
 |---|---|
@@ -119,7 +119,7 @@ Ex.: `RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1`. Lido por `mkt.campanha_t
 | Objetivo → fase do Tráfego | `LEADS` → captação; `VENDAS` → captação (lançamento pago); `AQUECIMENTO` → aquecimento; `LEMBRETE` → lembrete; `REMARKETING` → remarketing; `CARRINHO` → abertura de carrinho; `DISTRIBUIÇÃO` → sem fase automática (marcar na campanha) |
 | Página | código da casa (`AK1`, `BL2`, `AK1-B`), igual a `mkt.paginas.codigo` |
 
-`CARRINHO` e `AQUECIMENTO` entram na lista pela 20261005p (ver "Tráfego").
+`CARRINHO` e `AQUECIMENTO` entram na lista pela 20261006g (ver "Tráfego").
 
 **UTM do tráfego pago** (confirmado pelo Victor em 06/10/2026):
 
@@ -135,7 +135,7 @@ Ex.: `utm_campaign=RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1|120211234`. C
 dentro, **o id é o que vem depois da última `|`** (só se for número). Sem `|`: número é id, senão é nome (formato antigo,
 dado histórico, continua valendo).
 
-**Como o sistema lê:** uma função só, `mkt.utm_separar(texto)` → (nome, id) no banco (migration 20261005n) e
+**Como o sistema lê:** uma função só, `mkt.utm_separar(texto)` → (nome, id) no banco (migration 20261006f) e
 `separarUtm` em `web/modules/marketing/projetos/domain/utm.ts` (testes em `utm.test.ts`); `mkt_web.origem_ids` junta
 campanha, conjunto (só com `utm_source=metaads`) e anúncio. **O cruzamento é sempre pelo id** (campanha do Tráfego,
 anúncio); o nome só serve de reserva quando a visita não tem id, e é só o NOME que vai para a tradução do padrão de nome.
@@ -147,15 +147,15 @@ primeiro). Usam essa leitura: aba Origem, achados por criativo, connect rate (`m
 Fase 1 da central de dados (decisões de 05/10/2026, `area-web-radar.md` no cérebro). É o cadastro que Web, Tráfego
 e Mensageria leem; não é área. **Migration `infra/supabase/migrations/20261005m_mkt_base_compartilhada.sql`, JÁ
 APLICADA** (ensaio `20261005m_ensaio.sql`, explicação `20261005m.explain.md`). Não se edita mais: mudança nela vai numa
-migration nova (a 20261006a acrescenta tipo, unidade, tipo de lançamento, especialista e períodos em `mkt.projetos`).
+migration nova (a 20261006j acrescenta tipo, unidade, tipo de lançamento, especialista e períodos em `mkt.projetos`).
 
 | Peça | Onde | O que é |
 |---|---|---|
-| Projetos | `mkt.projetos` | Tabela de projetos ÚNICA. **Projeto = edição**; chave = sigla do nome de campanha (`PB26`, `HT33`, `SEMSET26`, `BF26`). Nome (livre), tipo/linha, edição, ano, etiqueta do ClickUp (texto exato, a chave única do gp-operacoes), início/fim, ativo. Desde a 20261006a: tipo (interno/externo), unidade, tipo de lançamento, especialista, períodos de captação e do evento; a subárea (interno/aurum/diamante) virou derivada |
+| Projetos | `mkt.projetos` | Tabela de projetos ÚNICA. **Projeto = edição**; chave = sigla do nome de campanha (`PB26`, `HT33`, `SEMSET26`, `BF26`). Nome (livre), tipo/linha, edição, ano, etiqueta do ClickUp (texto exato, a chave única do gp-operacoes), início/fim, ativo. Desde a 20261006j: tipo (interno/externo), unidade, tipo de lançamento, especialista, períodos de captação e do evento; a subárea (interno/aurum/diamante) virou derivada |
 | Páginas | `mkt.paginas` | Páginas de cada projeto: código da casa (`ak1`, `bl2`, `ak1-b`; opcional), domínio + caminho, função (captura, obrigado, quase_la, pesquisa, venda, outra), funil (texto curto), ativa |
 | Listas do nome de campanha | `mkt.campanha_gestores`, `mkt.campanha_objetivos` | Gestores `CF`, `RS`, `EF`; objetivos `LEADS`, `VENDAS`, `REMARKETING`, `LEMBRETE`, `DISTRIBUIÇÃO` |
 | Tradução do nome de campanha | `mkt.campanha_traduzir(text)` e `web/modules/marketing/projetos/domain/campanha.ts` | `GESTOR \| PROJETO \| OBJETIVO \| DESCRIÇÃO \| PÁGINA` → campos + erros ("fora do padrão") + avisos. A mesma regra nos dois lados |
-| Web | schema `mkt_web` | Coleta do Radar (migration 20261005n, ver a seção "Web"), tudo apontando para `mkt.projetos`/`mkt.paginas`, sem dado pessoal |
+| Web | schema `mkt_web` | Coleta do Radar (migration 20261006f, ver a seção "Web"), tudo apontando para `mkt.projetos`/`mkt.paginas`, sem dado pessoal |
 | Tela | `/marketing/projetos` | Listar, cadastrar e editar projetos e páginas; testar um nome de campanha |
 
 - **Acesso:** tabelas e schemas fechados (sem USAGE para anon/authenticated). Tudo pelas funções `public.mkt_*`
@@ -175,8 +175,8 @@ migration nova (a 20261006a acrescenta tipo, unidade, tipo de lançamento, espec
 
 Fase 2 da central de dados (decisões de 05/10/2026, `area-web-radar.md` no cérebro): o Radar do Luiz Fernando (pacote
 `SistemaWEB/sistemas/radar/` de 05/10/2026) passou a ser do Grupo e mora aqui, no nosso Supabase. **Migration
-`infra/supabase/migrations/20261005n_mkt_web_coleta.sql`, NÃO APLICADA** (ensaio `20261005n_ensaio.sql`, explicação
-`20261005n.explain.md`). Depende da 20261005m (aplicada).
+`infra/supabase/migrations/20261006f_mkt_web_coleta.sql`, NÃO APLICADA** (ensaio `20261006f_ensaio.sql`, explicação
+`20261006f.explain.md`). Depende da 20261005m (aplicada).
 
 ### Como o dado chega
 
@@ -227,9 +227,9 @@ Código em `web/modules/marketing/web/` (`domain`, `application`, `infrastructur
 Sem visita no período, cada aba diz **"Sem dados ainda: a coleta começa na virada."** Regras de análise portadas do
 Radar em `domain/analise.ts` (teste de duas proporções, maior perda do funil, apelido de seção, origem, régua do Google).
 
-### Fase 2 (migration 20261005q, NÃO APLICADA)
+### Fase 2 (migration 20261006h, NÃO APLICADA)
 
-`infra/supabase/migrations/20261005q_mkt_web_fase2.sql` + `_ensaio.sql` + `20261005q.explain.md`. Depende da 20261005n.
+`infra/supabase/migrations/20261006h_mkt_web_fase2.sql` + `_ensaio.sql` + `20261006h.explain.md`. Depende da 20261006f.
 Tudo sobre o que o gravador `radar-v1.js` já grava (não mudou: sem `radar-v2.js`).
 
 | Peça | Onde | Como funciona |
@@ -241,11 +241,11 @@ Tudo sobre o que o gravador `radar-v1.js` já grava (não mudou: sem `radar-v2.j
 | Mapa de calor sobre a página | `mkt_web_calor`, `domain/calor.ts`, `ui/MapaCalor.tsx` | Ponto = x % da largura e y como fração da altura da página vista. Fundo padrão = captura de página inteira do último teste do Google do mesmo aparelho; opção "página ao vivo" (iframe sem JavaScript, com aviso: o `<noscript>` do pixel do Meta pode contar visita, e a página pode recusar o quadro); opção sem fundo. Pintura portada do `calor.ts` do Luiz |
 | PageSpeed de laboratório | `mkt_web.velocidade_lab`, Edge `infra/supabase/functions/mkt-web-pagespeed`, cron `mkt-web-pagespeed` (06:40 SP, pelo `ops.cron_post`) | Páginas ativas de projeto com a coleta ligada, celular e computador, 1 vez por dia (máx. 12 por chamada; o resto no dia seguinte). Guarda notas, LCP, FCP, TBT, Speed Index, CLS, 5 oportunidades, a captura e a falha. Chave do Google **opcional** no Vault (`mkt_web_pagespeed_api_key`); sem ela, a cota pública. A Edge confere o header `x-sync-chave` sozinha e está no `infra/supabase/config.toml` com `verify_jwt = false` (sem isso o cron recebe 401). `mkt_web.config` `pagespeed = desligado` para |
 | Lead ligado à pessoa | `mkt_web_leads` | Leads da Web cujo navegador tem `visitantes.lead_ref` (gravado pela 20261005o) e quantos viraram MQL no projeto. Referência e link `/comercial?pessoa=<id>` (abre a ficha) só para `pessoas.pode_ver()` (admin/dev). Sem a 20261005o: só os números da Web |
-| Connect rate | `mkt_web_connect` | Definição do Victor: **page views ÷ cliques no link**; conversão da página = **leads ÷ page views**. Por campanha do Tráfego, casada **pelo id** (`campaign_id` da URL ou o id do `utm_campaign` em `nome\|id`; Google só id); sem id na visita, pelo nome exato. Cliques no link = coluna `cliques_link`/`cliques_no_link` de `mkt_trafego.desempenho_dia`; sem ela, connect rate em branco (nunca o total de cliques). Por anúncio, só a Web (o Tráfego não guarda clique por anúncio). Sem a 20261005p: só as page views por anúncio |
-| Páginas do PB26 | a própria migration | As que faltam das 11 do `patrimonio-brasil.json` (`obs = '20261005q: …'`); o passo 3 da virada fica feito ao aplicar |
+| Connect rate | `mkt_web_connect` | Definição do Victor: **page views ÷ cliques no link**; conversão da página = **leads ÷ page views**. Por campanha do Tráfego, casada **pelo id** (`campaign_id` da URL ou o id do `utm_campaign` em `nome\|id`; Google só id); sem id na visita, pelo nome exato. Cliques no link = coluna `cliques_link`/`cliques_no_link` de `mkt_trafego.desempenho_dia`; sem ela, connect rate em branco (nunca o total de cliques). Por anúncio, só a Web (o Tráfego não guarda clique por anúncio). Sem a 20261006g: só as page views por anúncio |
+| Páginas do PB26 | a própria migration | As que faltam das 11 do `patrimonio-brasil.json` (`obs = '20261006h: …'`); o passo 3 da virada fica feito ao aplicar |
 
-**Aplicar:** 20261005n → ensaio da 20261005q (nenhum `ERRADO`) → publicar a Edge (`supabase functions deploy
-mkt-web-pagespeed`) → 20261005q. A chave do Google, se o Victor quiser (sem ela vale a cota pública):
+**Aplicar:** 20261006f → ensaio da 20261006h (nenhum `ERRADO`) → publicar a Edge (`supabase functions deploy
+mkt-web-pagespeed`) → 20261006h. A chave do Google, se o Victor quiser (sem ela vale a cota pública):
 `select vault.create_secret('<chave>', 'mkt_web_pagespeed_api_key');` no SQL editor, nunca no código.
 
 **Ferramentas da Web para o MCP da central** (não existe MCP da central no repo; não foi criado servidor). Só leitura,
@@ -273,20 +273,20 @@ porta do Luiz, estudo seção 5.5).
   seções novas da Visão geral, Origem e Velocidade aparecem com números inventados (a página "AK1 B (demonstração)" só
   existe no modo de demonstração, para mostrar um teste A/B). O mapa de calor de demonstração não tem captura (fundo
   "Sem fundo").
-- **Ensaio da 20261005q:** com a 20261005n aplicada, rodar `20261005q_ensaio.sql` inteiro (termina em rollback) e
+- **Ensaio da 20261006h:** com a 20261006f aplicada, rodar `20261006h_ensaio.sql` inteiro (termina em rollback) e
   conferir que nenhuma linha começa com `ERRADO`.
 
 ### Virada (trocar o gravador do PB para o nosso). NÃO feita; fazer fora da semana do evento (09 a 11/11)
 
 O FTP das páginas do PB é do Luiz (publicação pelo `scripts/deploy.py` dele). Passo a passo, com data combinada com ele:
 
-1. **Aplicar a 20261005n** em produção: rodar antes o `20261005n_ensaio.sql` e conferir os esperados; depois a
+1. **Aplicar a 20261006f** em produção: rodar antes o `20261006f_ensaio.sql` e conferir os esperados; depois a
    migration. Conferir `select jobname, schedule from cron.job where jobname like 'mkt-web-%'` (3 rotinas).
 2. **Publicar** a branch (merge na `main`). Conferir `https://grupoparticipa.app.br/web/radar-v1.js` (200, JavaScript)
    e que `POST /api/web/coletar` sem origem responde `dominio` (403).
-3. **Cadastrar as páginas** do PB26 que faltam: **a 20261005q faz isso** (as 11 do `patrimonio-brasil.json` do Luiz:
+3. **Cadastrar as páginas** do PB26 que faltam: **a 20261006h faz isso** (as 11 do `patrimonio-brasil.json` do Luiz:
    `/`, `/ak1/`, `/bl2/`, `/bl2-otimizacao/`, `/quase-la/`, `/pesquisa/`, `/obrigado/`, `/inscricao-recebida/`,
-   `/profissionais/`, `/profissionais/advogados/`, `/profissionais/contadores/`, só as que faltam). Sem a 20261005q,
+   `/profissionais/`, `/profissionais/advogados/`, `/profissionais/contadores/`, só as que faltam). Sem a 20261006h,
    cadastrar em Marketing > Projetos e páginas. Caminho não cadastrado é gravado mesmo assim (sem página), mas o domínio
    precisa de ao menos uma página ativa.
 4. **Ligar a coleta do PB26:** Marketing > Web > Instalação > Ligar (ou `mkt_web_coleta_ligar`). Sem isso o coletor
@@ -310,7 +310,7 @@ Gravação/replay das visitas (vídeo), Diário com IA, publicações/deploys (e
 publicação"), CRM do Luiz, Pesquisas, reenvio ao ActiveCampaign, o **servidor** MCP da central (as ferramentas da Web
 estão descritas acima), a área `mkt_web` para o Luiz e o Iromar (entra em `mkt.pode_ver`), importação do histórico do
 Radar, teste A/B cadastrado (com início, fim, hipótese e trava, como o Radar), clique no link por anúncio (depende do
-Tráfego). Saíram desta lista com a fase 2 (20261005q, não aplicada): mapa de calor sobre a página, Melhorias (achados,
+Tráfego). Saíram desta lista com a fase 2 (20261006h, não aplicada): mapa de calor sobre a página, Melhorias (achados,
 testes A/B, comparar), PageSpeed de laboratório, referência ao lead, Fluxo (caminho entre páginas) e connect rate.
 
 ## Comercial e base de pessoas
@@ -361,7 +361,7 @@ só no aluno). Regras:
 
 `pessoas.pessoas.ref` (`pe_` + 32 hex aleatórios, não deriva de e-mail nem telefone). O servidor do formulário chama
 `public.pessoas_registrar_lead` (só `service_role`) com nome, e-mail, telefone, projeto, campanha, UTMs e o
-`visitante` do gravador; a função devolve só `ref`, `como` e `revisao` e, se a 20261005n estiver aplicada, grava a `ref`
+`visitante` do gravador; a função devolve só `ref`, `como` e `revisao` e, se a 20261006f estiver aplicada, grava a `ref`
 em `mkt_web.visitantes.lead_ref`. A Web nunca recebe e-mail ou telefone. Ligar o `api/crm.php` do PB a essa função é
 passo da virada da Web, **não feito**.
 
@@ -435,14 +435,14 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 ## Tráfego (Marketing > Tráfego: a Central do Tráfego)
 
 > **Etapa 1 de 6** do plano (`Projetos/sistema-unico/central-de-dados/plano-trafego.md` no cérebro do Victor), 05/10/2026,
-> branch `victor`. Migration `infra/supabase/migrations/20261005p_mkt_trafego.sql`, **NÃO APLICADA** (ensaio
-> `20261005p_ensaio.sql`; o que foi medido em `20261005p.explain.md`). Tela `/marketing/trafego`, código em
+> branch `victor`. Migration `infra/supabase/migrations/20261006g_mkt_trafego.sql`, **NÃO APLICADA** (ensaio
+> `20261006g_ensaio.sql`; o que foi medido em `20261006g.explain.md`). Tela `/marketing/trafego`, código em
 > `web/modules/marketing/trafego/`.
-> **Fase 2** (05/10/2026, mesma branch): migration `20261005r_mkt_trafego_fase2.sql`, **NÃO APLICADA** (depende da
-> 20261005p; ensaio `20261005r_ensaio.sql`; o que foi medido em `20261005r.explain.md`). Resumo do dia, receita da
+> **Fase 2** (05/10/2026, mesma branch): migration `20261006i_mkt_trafego_fase2.sql`, **NÃO APLICADA** (depende da
+> 20261006g; ensaio `20261006i_ensaio.sql`; o que foi medido em `20261006i.explain.md`). Resumo do dia, receita da
 > Hotmart, atividades do ClickUp e a coleta Meta Ads (Edge pronta, **desligada**). Detalhe em "Fase 2" abaixo.
-> **Cadastro do projeto** (06/10/2026, mesma branch): migration `20261006a_mkt_projetos_cadastro.sql`, **NÃO APLICADA**
-> (depende da 20261005p e da 20261005r; ensaio `20261006a_ensaio.sql`; o que foi medido em `20261006a.explain.md`). Tipo e
+> **Cadastro do projeto** (06/10/2026, mesma branch): migration `20261006j_mkt_projetos_cadastro.sql`, **NÃO APLICADA**
+> (depende da 20261006g e da 20261006i; ensaio `20261006j_ensaio.sql`; o que foi medido em `20261006j.explain.md`). Tipo e
 > unidade, tipo de lançamento, especialista, contas do projeto, períodos, pacote, checklist de montagem e gerador de nome
 > e UTM. Detalhe em "Cadastro do projeto" abaixo.
 
@@ -452,14 +452,14 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 |---|---|
 | Banco (schema `mkt_trafego`, 13 funções `public.trafego_*`) | escrito e ensaiado em Postgres local; **não aplicado** |
 | Tela `/marketing/trafego` (Projetos, Campanhas fora do padrão, Contas de anúncio, vida do projeto) | pronta; funciona de verdade só depois da migration; hoje dá para ver no modo demo |
-| Coleta Meta Ads | **Edge `trafego-meta` pronta e testada com respostas simuladas, DESLIGADA** (20261005r): falta o Victor decidir o token (conta centralizadora ou um por conta) e ligar o cron |
+| Coleta Meta Ads | **Edge `trafego-meta` pronta e testada com respostas simuladas, DESLIGADA** (20261006i): falta o Victor decidir o token (conta centralizadora ou um por conta) e ligar o cron |
 | Coleta Google Ads | só o desenho e o esqueleto da conversão (`trafego-google/google.ts`); falta developer token, MCC e OAuth |
-| Resumo do dia ("o que está pegando fogo") | pronto no banco e na tela (20261005r, não aplicada); limiares iniciais **propostos**, a confirmar |
-| Receita (Hotmart) | ligada pelo vínculo produto → projeto, **cadastrado à mão** na vida do projeto (20261005r, não aplicada). Sem vínculo, "sem dado" |
-| Connect rate e conversão da página | **ligados** no banco à Web fase 2 (20261005q, a mesma conta de `public.mkt_web_connect`). Sem a 20261005q aplicada, "sem dado" com aviso na tela |
-| Atividades do ClickUp | espelho pela etiqueta do projeto e linha do tempo junto do gasto diário (20261005r, não aplicada). Rotina `trafego-clickup` pronta, **DESLIGADA** (falta o token e o id do workspace) |
-| Contas de anúncio do Meta | as 16 que o token do sistema enxerga, com unidade e principal (20261006b, **não aplicada**); CA - Tutorial inativa. Token já salvo em produção; coleta **desligada** |
-| Cadastro do projeto (evento) | tela pronta na Central (botão "Novo projeto" e "Projeto" na vida do projeto), banco escrito e ensaiado (20261006a, **não aplicada**); hoje dá para ver no modo demo |
+| Resumo do dia ("o que está pegando fogo") | pronto no banco e na tela (20261006i, não aplicada); limiares iniciais **propostos**, a confirmar |
+| Receita (Hotmart) | ligada pelo vínculo produto → projeto, **cadastrado à mão** na vida do projeto (20261006i, não aplicada). Sem vínculo, "sem dado" |
+| Connect rate e conversão da página | **ligados** no banco à Web fase 2 (20261006h, a mesma conta de `public.mkt_web_connect`). Sem a 20261006h aplicada, "sem dado" com aviso na tela |
+| Atividades do ClickUp | espelho pela etiqueta do projeto e linha do tempo junto do gasto diário (20261006i, não aplicada). Rotina `trafego-clickup` pronta, **DESLIGADA** (falta o token e o id do workspace) |
+| Contas de anúncio do Meta | as 16 que o token do sistema enxerga, com unidade e principal (20261006k, **não aplicada**); CA - Tutorial inativa. Token já salvo em produção; coleta **desligada** |
+| Cadastro do projeto (evento) | tela pronta na Central (botão "Novo projeto" e "Projeto" na vida do projeto), banco escrito e ensaiado (20261006j, **não aplicada**); hoje dá para ver no modo demo |
 
 ### Decisões que mandam aqui (Victor, 05/10/2026)
 
@@ -468,7 +468,7 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 - **Cliques no link** (Victor): CTR = cliques no link ÷ impressões; CPC = investido ÷ cliques no link. O gasto diário
   guarda cliques no link e cliques totais **separados**; os totais são só informação.
 - **Connect rate = page views ÷ cliques no link; conversão da página = leads ÷ page views** (Victor). Para não ter dois
-  números para o mesmo indicador, a page view é **a mesma da Web fase 2** (`public.mkt_web_connect`, 20261005q): a
+  números para o mesmo indicador, a page view é **a mesma da Web fase 2** (`public.mkt_web_connect`, 20261006h): a
   entrada na página vinda da campanha, **uma por visita** (`mkt_web.sessoes`, sem visita de teste), casada com a campanha
   do Tráfego **pelo id** (`campaign_id` da URL, ou o id do `utm_campaign` no formato `nome|id` do gp-operacoes, ou só id);
   sem id na visita, pelo nome exato (ver "Padrões de nome de campanha e UTM"). Orgânico e campanha que não está no
@@ -486,9 +486,9 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
   "sem fase" até alguém marcar na campanha.
 - **Objetivos do nome de campanha** passam a ser 7: LEADS, VENDAS, REMARKETING, LEMBRETE, DISTRIBUIÇÃO, **CARRINHO**
   (anuncia o produto principal na abertura de carrinho, em lançamento pago ou gratuito) e **AQUECIMENTO**. Os dois novos
-  entram em `mkt.campanha_objetivos` (lista da 20261005m) pela 20261005p, com insert idempotente; o tradutor
+  entram em `mkt.campanha_objetivos` (lista da 20261005m) pela 20261006g, com insert idempotente; o tradutor
   `mkt.campanha_traduzir` reconhece porque lê a lista. Na tela "Testar nome de campanha" (Marketing > Projetos e páginas)
-  passam a valer depois de aplicar a 20261005p.
+  passam a valer depois de aplicar a 20261006g.
 - **Status do projeto marcado à mão.** Verba, fases e metas preenchidas por Arthur, Victor e Caio (no banco: admin/dev).
   **Pendente (06/10/2026):** gestores e Arthur editam verba, fases e metas, depende do novo modelo de acesso do sistema
   (o Victor vai redefinir os níveis de acesso do sistema inteiro). Por ora, só admin/dev.
@@ -527,7 +527,7 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
 
 ### Telas (`/marketing/trafego`, só admin e dev)
 
-- **Projetos:** a tabela da Central com os filtros interno/externo, unidade (CSM, Escritório, Aurum, Diamantes, "sem unidade"; 20261006a), gestor (CF, RS, EF,
+- **Projetos:** a tabela da Central com os filtros interno/externo, unidade (CSM, Escritório, Aurum, Diamantes, "sem unidade"; 20261006j), gestor (CF, RS, EF,
   da lista do banco; casa com um dos gestores do projeto ou com o de alguma campanha), situação (status) e projetos
   desativados.
   Cartões: investido, verba, projetos acima da verba diária ontem, campanhas fora do padrão.
@@ -542,14 +542,14 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
 - **Campanhas fora do padrão:** o nome exato, o que está fora, ligar à mão a um projeto, "Reler os nomes" (depois de
   cadastrar projeto ou página em Marketing > Projetos e páginas). Opção "só as sem projeto".
 - **Contas de anúncio:** cadastro e edição.
-- **Novo projeto / Projeto (20261006a):** o cadastro do evento (ver "Cadastro do projeto"). Na tabela, coluna Montagem (x
+- **Novo projeto / Projeto (20261006j):** o cadastro do evento (ver "Cadastro do projeto"). Na tabela, coluna Montagem (x
   de y itens do checklist prontos); na vida do projeto, cadastro, campanhas sugeridas, checklist e gerador de nome e UTM.
-- **Modelos de lançamento (20261006d, no lugar de "Pacotes e checklist"):** lista com filtro por tipo e unidade, editar,
+- **Modelos de lançamento (20261006l, no lugar de "Pacotes e checklist"):** lista com filtro por tipo e unidade, editar,
   duplicar, ativar/inativar; os "Exemplo: …" com o selo "Rascunho a validar". Ver a seção "Modelos de lançamento".
 
 ### Testar localmente
 
-1. **Ensaio do banco:** rodar `infra/supabase/migrations/20261005p_ensaio.sql` inteiro (termina em rollback) e conferir
+1. **Ensaio do banco:** rodar `infra/supabase/migrations/20261006g_ensaio.sql` inteiro (termina em rollback) e conferir
    que nenhuma linha começa com `ERRADO` (o cabeçalho explica cada passo). Só dados fictícios.
 2. **Telas sem banco:** em `web/.env.local`, `NEXT_PUBLIC_TRAFEGO_DEMO=1`; `npm run dev`; entrar como admin/dev e abrir
    `/marketing/trafego`. Projetos da semente + 2 externos "Exemplo", contas "Conta Exemplo", campanhas "EXEMPLO", gasto e
@@ -557,7 +557,7 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
    (`NODE_ENV=production`) o modo nunca liga.
 3. **Código:** `npx tsc --noEmit`, `npx vitest run` (`kpis.test.ts`, `fases.test.ts`, `demo.test.ts`; fase 2:
    `alertas.test.ts`, `linha-do-tempo.test.ts`, `coleta.test.ts`, `ui/fase2.test.ts`), `npm run build`.
-4. **Fase 2:** com a 20261005p aplicada, rodar `20261005r_ensaio.sql` inteiro (termina em rollback) e conferir que
+4. **Fase 2:** com a 20261006g aplicada, rodar `20261006i_ensaio.sql` inteiro (termina em rollback) e conferir que
    nenhuma linha começa com `ERRADO` ("PULADO" é esperado onde falta Vault, pg_cron ou a 20261005o). No modo demo
    aparecem o resumo do dia, a receita do PB26 (produto "Ingresso Exemplo", R$ 18.450 fictícios) e as atividades
    "Exemplo: …" do ClickUp na vida do PB26. As Edges: `deno check infra/supabase/functions/trafego-meta/index.ts
@@ -566,25 +566,25 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
 
 ### Para valer
 
-Victor ver a tela no modo demo e responder as perguntas abaixo; rodar o ensaio no SQL editor; aplicar a 20261005p; levar a
-`victor` para a `main`; cadastrar contas e planejamento. Fase 2: rodar o ensaio da 20261005r, aplicar, ligar à mão os
+Victor ver a tela no modo demo e responder as perguntas abaixo; rodar o ensaio no SQL editor; aplicar a 20261006g; levar a
+`victor` para a `main`; cadastrar contas e planejamento. Fase 2: rodar o ensaio da 20261006i, aplicar, ligar à mão os
 produtos da Hotmart de cada projeto e, quando decidir os tokens, ligar as rotinas (abaixo). Nada disso foi feito.
 
 ### O que falta (próximas etapas do plano)
 
 2. Coleta Meta: **feita e desligada** (falta o token). Google: só desenho e esqueleto (falta developer token, MCC, OAuth).
-3. Receita e ClickUp: **feitos** (20261005r, não aplicada); faltam os vínculos de produto (à mão) e o token do ClickUp.
-   Connect rate e conversão já estão ligados; dependem da Web fase 2 (20261005q) aplicada e com dado.
-4. Resumo do dia: **feito** (20261005r, não aplicada), com limiares a confirmar. Alerta fora da tela (Slack, e-mail): não feito.
+3. Receita e ClickUp: **feitos** (20261006i, não aplicada); faltam os vínculos de produto (à mão) e o token do ClickUp.
+   Connect rate e conversão já estão ligados; dependem da Web fase 2 (20261006h) aplicada e com dado.
+4. Resumo do dia: **feito** (20261006i, não aplicada), com limiares a confirmar. Alerta fora da tela (Slack, e-mail): não feito.
 5. MCP da central com os dados do Tráfego (fora desta fase).
 6. Importação do histórico (planilhas que o Victor escolher; fora desta fase).
 7. Externos (Aurum, Diamantes): estrutura decidida em 06/10/2026 (tipo externo, unidade Aurum ou Diamantes) e no
-   cadastro (20261006a); a sigla deles no nome de campanha segue em aberto.
+   cadastro (20261006j); a sigla deles no nome de campanha segue em aberto.
 
-### Fase 2 (migration 20261005r, NÃO APLICADA)
+### Fase 2 (migration 20261006i, NÃO APLICADA)
 
-`infra/supabase/migrations/20261005r_mkt_trafego_fase2.sql` + `_ensaio.sql` + `20261005r.explain.md`. Depende da
-20261005p. Tudo o que não dependia de decisão em aberto; o que depende (tokens, limiares, bruto × líquido) ficou
+`infra/supabase/migrations/20261006i_mkt_trafego_fase2.sql` + `_ensaio.sql` + `20261006i.explain.md`. Depende da
+20261006g. Tudo o que não dependia de decisão em aberto; o que depende (tokens, limiares, bruto × líquido) ficou
 configurável e está nas perguntas.
 
 | Peça | Onde | Como funciona |
@@ -592,7 +592,7 @@ configurável e está nas perguntas.
 | Resumo do dia | `public.trafego_alertas`, `mkt_trafego.alertas`; `domain/alertas.ts`; `ui/ResumoDia.tsx` | Sobre ontem (São Paulo), só projetos ativos e com status que entra no resumo (`status_projeto.entra_no_resumo_dia`: inativo e encerrado ficam fora). 7 regras, limiar em `mkt_trafego.alerta_regras` (tabela abaixo). A mesma regra no front para o demo e os testes |
 | Receita | `mkt_trafego.produtos_hotmart` (vínculo à mão), `mkt_trafego.receita`, `public.trafego_produto_*`, `trafego_hotmart_produtos`; `ui/ProdutosHotmart.tsx` | Soma `public.compras.preco` das compras **APPROVED, COMPLETE ou COMPLETED** (a regra que o repo já usa em `public.compras`) dos produtos ligados, com data `coalesce(data_aprovacao, data_compra)` no período (do vínculo, senão o do projeto; sem fim = até hoje; sem início não soma). Oferta opcional. Só BRL na soma (outra moeda contada à parte). Compra que casa com dois vínculos conta uma vez. Nada é copiado: lido na hora |
 | Atividades do ClickUp | `mkt_trafego.clickup_tarefas` (espelho mínimo), `public.trafego_clickup`, `public.trafego_clickup_receber`; Edge `trafego-clickup`; `ui/ClickupPainel.tsx`, `domain/linha-do-tempo.ts` | A rotina lê (só GET) as tarefas de cada etiqueta de projeto ativo, todas as páginas, e grava o conjunto inteiro (quem não veio perde a etiqueta). Na vida do projeto: barras do gasto diário e bolinhas das atividades no dia (concluída, senão prazo, início ou criação) e a lista |
-| Coleta Meta Ads | Edge `trafego-meta` (`meta.ts` puro + `index.ts`); `mkt_trafego.meta_contas`, `coleta_config`, `coletas` | Para cada conta Meta ativa: campanhas (nome exato e status) e insights por campanha e dia (`spend`, `impressions`, `inline_link_clicks` = cliques no link, `clicks` = totais, ação `lead` = leads da plataforma) dos últimos `meta_dias` (3) dias completos e hoje; grava pelos `receber` da 20261005p (campanhas antes, upsert idempotente). Token só no header; falha por conta vira código curto em `mkt_trafego.coletas` |
+| Coleta Meta Ads | Edge `trafego-meta` (`meta.ts` puro + `index.ts`); `mkt_trafego.meta_contas`, `coleta_config`, `coletas` | Para cada conta Meta ativa: campanhas (nome exato e status) e insights por campanha e dia (`spend`, `impressions`, `inline_link_clicks` = cliques no link, `clicks` = totais, ação `lead` = leads da plataforma) dos últimos `meta_dias` (3) dias completos e hoje; grava pelos `receber` da 20261006g (campanhas antes, upsert idempotente). Token só no header; falha por conta vira código curto em `mkt_trafego.coletas` |
 | Google Ads | `infra/supabase/functions/trafego-google/google.ts` | Só o esqueleto (GAQL e conversão de micros), sem `index.ts`. Desenho abaixo |
 
 **Limiares (confirmados pelo Victor em 06/10/2026: verba diária, CPL, ritmo da fase e 90 % da verba; os avisos de leads
@@ -607,7 +607,7 @@ abaixo da meta e de campanha fora do padrão/sem fase ficam ligados, e o Victor 
 | % da verba perto do fim | % da verba ≥ limiar | 90 % | média |
 | Campanhas fora do padrão | fora do padrão com gasto nos últimos N dias (inclui sem projeto) | 7 dias | média |
 | Campanhas sem fase | sem fase com gasto nos últimos N dias | 7 dias | média |
-| Campanha do projeto em conta de fora (20261006a) | campanha com a sigla do projeto gastando nos últimos N dias numa conta que não é do projeto; só avalia projeto com conta ligada | 7 dias | média |
+| Campanha do projeto em conta de fora (20261006j) | campanha com a sigla do projeto gastando nos últimos N dias numa conta que não é do projeto; só avalia projeto com conta ligada | 7 dias | média |
 
 Mudar: `update mkt_trafego.alerta_regras set limiar = 30 where codigo = 'ritmo_fase';` (ou `ligada = false`).
 
@@ -640,10 +640,10 @@ access token, chama `POST https://googleads.googleapis.com/<versão>/customers/<
 consulta de `consultaGaql` (campanha × dia: custo em micros, impressões, cliques) e grava pelos mesmos `receber`. Decisão
 pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); totais e leads ficam nulos.
 
-### Cadastro do projeto (migration 20261006a, NÃO APLICADA)
+### Cadastro do projeto (migration 20261006j, NÃO APLICADA)
 
-`infra/supabase/migrations/20261006a_mkt_projetos_cadastro.sql` + `_ensaio.sql` + `20261006a.explain.md`. Depende da
-20261005p e da 20261005r (aplicar m, p, r e só então esta). A 20261005m já aplicada não foi editada: as colunas novas de
+`infra/supabase/migrations/20261006j_mkt_projetos_cadastro.sql` + `_ensaio.sql` + `20261006j.explain.md`. Depende da
+20261006g e da 20261006i (aplicar m, p, r e só então esta). A 20261005m já aplicada não foi editada: as colunas novas de
 `mkt.projetos` entram por `alter table` e um gatilho.
 
 **Decisões do Victor (06/10/2026):**
@@ -652,7 +652,7 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
   **Escritório** (escritório de advocacia). Externo: **Aurum** ou **Diamantes**. Substitui a subárea plana; os filtros
   da Central são tipo e unidade. Migração sem perda: subárea interno → interno sem unidade (CSM ou Escritório não está em
   fonte nenhuma; quem sabe marca na tela); aurum → externo Aurum; diamante → externo Diamantes; sem subárea → sem tipo.
-  A subárea continua na tabela, derivada de tipo e unidade (a tela `/marketing/projetos` e o resumo da 20261005p a leem).
+  A subárea continua na tabela, derivada de tipo e unidade (a tela `/marketing/projetos` e o resumo da 20261006g a leem).
 - **Tipos de lançamento** (tabela `mkt.tipos_lancamento`, regras em `mkt.lancamento_regras`; o banco recusa combinação
   fora da regra, a tela só oferece o que vale):
 
@@ -675,8 +675,8 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
     obrigatória) e ficou: projeto novo pelo Tráfego grava o nome nela; na edição ela não muda. A tela
     `/marketing/projetos` (função `mkt_projeto_salvar`, aplicada) ainda pede a linha; tirar de lá pede migration nova.
   - **Status "Em planejamento"** antes de Ativo (lista: em planejamento, ativo, pausado, inativo, encerrado). Em
-    planejamento fica **fora do resumo do dia**, como inativo e encerrado (`entra_no_resumo_dia = false`; 20261005p e
-    20261005r editadas no lugar).
+    planejamento fica **fora do resumo do dia**, como inativo e encerrado (`entra_no_resumo_dia = false`; 20261006g e
+    20261006i editadas no lugar).
   - **Etiqueta do ClickUp com busca:** a pessoa digita "seminario" e aparecem as etiquetas que contêm isso, sem acento e
     sem diferença de maiúscula (`public.trafego_clickup_etiquetas_buscar(busca, limite)`, admin/dev; tela
     `ui/EtiquetaClickupCampo.tsx`, regra em `domain/etiquetas.ts`). Fontes, juntas e sem repetição: as etiquetas que o
@@ -698,7 +698,7 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
   captação (pacote, "Nova fase" na tela, meta de leads do resumo do dia): `mkt_trafego.periodo_padrao`.
 - **Receita sem período próprio do produto** (Victor, 06/10/2026): conta do **início da captação até o fim do período do
   evento**, para pegar a abertura de carrinho. **PROVISÓRIO, a confirmar depois pelo Victor.** A regra mora num lugar só:
-  `mkt_trafego.periodo_receita` (criada na 20261005r, trocada pela 20261006a) e `periodoReceita` em
+  `mkt_trafego.periodo_receita` (criada na 20261006i, trocada pela 20261006j) e `periodoReceita` em
   `web/modules/marketing/trafego/domain/cadastro.ts`. Sem captação: começa no evento; sem período novo: início e fim do
   projeto, como antes.
 - **Contas de anúncio do projeto** (`mkt_trafego.projeto_contas`): sugerem campanhas da conta com a sigla no nome (palavra
@@ -707,7 +707,7 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
   projeto (regra `conta_fora_projeto`, 7 dias, média).
 - **Gestores:** CF, RS e EF; qualquer gestor opera interno ou externo (sem restrição).
 - **Receita dos externos não entra** por ora: projeto externo mostra "não se aplica".
-- **Pacote da campanha:** substituído pelos **modelos de lançamento** (20261006d, seção própria abaixo).
+- **Pacote da campanha:** substituído pelos **modelos de lançamento** (20261006l, seção própria abaixo).
 - **Gerador de nome de campanha e UTM** (vida do projeto): gestor, objetivo, descrição e página opcional →
   `GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA` (conferido pela mesma tradução do banco) e a linha de parâmetros do
   Meta, com botão de copiar. Parâmetros em `mkt_trafego.utm_parametros` (muda por SQL):
@@ -717,7 +717,7 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 - **Checklist de montagem** (vida do projeto e coluna Montagem na Central, x de y): itens **automáticos** que o banco
   confere (contas de anúncio vinculadas; campanhas com a sigla; nenhuma fora do padrão e fase de cada campanha, quando há
   campanha; produtos da Hotmart, não se aplica a externo; páginas cadastradas; etiqueta do ClickUp; verba máxima; fases
-  planejadas; metas de leads, receita ou CPL) e itens **manuais**. Desde a 20261006d os manuais são do projeto (vêm do
+  planejadas; metas de leads, receita ou CPL) e itens **manuais**. Desde a 20261006l os manuais são do projeto (vêm do
   modelo ou são criados na hora), tudo agrupado por momento e com o caminho para resolver (seção "Modelos de lançamento").
 - **Onde mora a tela:** na Central do Tráfego (botão "Novo projeto" e "Projeto" na vida do projeto), porque os campos são
   do Tráfego e o resto da montagem está lá; grava na tabela de projetos única (`mkt.projetos`). `/marketing/projetos`
@@ -728,7 +728,7 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 
 **Como testar:**
 
-1. Banco: com a 20261005p e a 20261005r aplicadas (ou na mesma transação), rodar `20261006a_ensaio.sql` inteiro (termina
+1. Banco: com a 20261006g e a 20261006i aplicadas (ou na mesma transação), rodar `20261006j_ensaio.sql` inteiro (termina
    em rollback) e conferir que nenhuma linha começa com `ERRADO`. Medido em Postgres local (PGlite): 69 `ok`.
 2. Tela: `NEXT_PUBLIC_TRAFEGO_DEMO=1` em `web/.env.local`, `npm run dev`, `/marketing/trafego`. Projeto fictício
    **LPEXA26 "Lançamento Pago Exemplo"** (CSM, lançamento pago, captação e evento, conta Exemplo, item do SendFlow marcado
@@ -737,10 +737,10 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 3. Código: `npx vitest run` (`domain/cadastro.test.ts`, `alertas.test.ts`, `infrastructure/demo.test.ts`,
    `ui/montagem.test.ts`, `coleta.test.ts`), `npx tsc --noEmit`, `npm run build`.
 
-### Modelos de lançamento (migration 20261006d, NÃO APLICADA)
+### Modelos de lançamento (migration 20261006l, NÃO APLICADA)
 
-`infra/supabase/migrations/20261006d_mkt_trafego_modelos.sql` + `_ensaio.sql` + `20261006d.explain.md`. Depende da
-20261006a. Pedido do Victor (06/10/2026): substitui o "pacote" e organiza o checklist.
+`infra/supabase/migrations/20261006l_mkt_trafego_modelos.sql` + `_ensaio.sql` + `20261006l.explain.md`. Depende da
+20261006j. Pedido do Victor (06/10/2026): substitui o "pacote" e organiza o checklist.
 
 - **Modelo** (`mkt_trafego.modelos`): nome livre (ex.: "LPSG padrão CSM"), tipo de lançamento, **unidades** (uma ou mais,
   só nas combinações que valem: o banco recusa), ativo/inativo, **rascunho**, e um **padrão** por tipo + unidade. Vários
@@ -752,7 +752,7 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 - **Mockups:** um "Exemplo: &lt;tipo&gt; &lt;unidade&gt;" por combinação (9), rascunho a validar e padrão. Fases da lista
   que já existe, **datas e percentuais genéricos de exemplo (não são decisão de ninguém)**; uma campanha esperada por
   fase pelo mapa objetivo → fase (captação no pago e no LPSG = VENDAS); o item do SendFlow nos modelos com captação.
-  Tabela dos números em `20261006d.explain.md`.
+  Tabela dos números em `20261006l.explain.md`.
 - **No projeto, "Aplicar modelo"** (cadastro do projeto e item do checklist): lista os modelos ativos do tipo de
   lançamento e da unidade do projeto (padrão primeiro), mostra a **prévia** (fases com datas calculadas e verba = % ×
   verba máxima, o que é novo, o que mudaria e o que fica igual; campanhas esperadas; itens; metas) e aplica: cria o que
@@ -767,9 +767,9 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 - **Resumo do dia:** regra nova `checklist_incompleto` (média, limiar 0 dias): projeto em captação com item de "antes de
   subir as campanhas" pendente.
 - **Sai:** `pacote_modelos`, `checklist_itens`, `checklist_marcas` e as funções do pacote e do checklist manual global
-  (20261006a, nunca aplicada, sem dado).
+  (20261006j, nunca aplicada, sem dado).
 
-**Como testar:** banco, `20261006d_ensaio.sql` depois da 20261006a (nenhuma `ERRADO`); tela, modo demo: aba "Modelos de
+**Como testar:** banco, `20261006l_ensaio.sql` depois da 20261006j (nenhuma `ERRADO`); tela, modo demo: aba "Modelos de
 lançamento" (9 exemplos), LPEXA26 já com o "Exemplo: Lançamento pago CSM" aplicado (fases, esperadas, SendFlow marcado,
 alerta de checklist incompleto em captação); código, `domain/modelos.test.ts`, `cadastro.test.ts`, `demo.test.ts`,
 `ui/montagem.test.ts`.
@@ -777,10 +777,10 @@ alerta de checklist incompleto em captação); código, `domain/modelos.test.ts`
 **Perguntas (para o Victor):** os números dos exemplos (fases, datas e % por tipo) e quais modelos têm captação em grupo
 (hoje o SendFlow vai em todos com captação); metas padrão por modelo; mais itens manuais por tipo de lançamento.
 
-### Contas de anúncio do Meta (migration 20261006b, NÃO APLICADA)
+### Contas de anúncio do Meta (migration 20261006k, NÃO APLICADA)
 
-`infra/supabase/migrations/20261006b_mkt_trafego_contas_meta.sql` + `_ensaio.sql` + `20261006b.explain.md` (a tabela das
-16 contas está lá). Depende da 20261006a. O token do Meta (Vault `meta_ads_token`, usuário do sistema do portfólio Grupo
+`infra/supabase/migrations/20261006k_mkt_trafego_contas_meta.sql` + `_ensaio.sql` + `20261006k.explain.md` (a tabela das
+16 contas está lá). Depende da 20261006j. O token do Meta (Vault `meta_ads_token`, usuário do sistema do portfólio Grupo
 Participa) **já está salvo em produção** e enxerga 16 contas (`/me/adaccounts`, lidas em 06/10/2026). A migration as
 cadastra de forma idempotente (por plataforma e id): nome exato, id sem `act_`, Meta, BRL, internas (dono grupo), com
 **unidade** e **principal** (colunas novas em `mkt_trafego.contas`).
@@ -793,8 +793,8 @@ cadastra de forma idempotente (por plataforma e id): nome exato, id sem `act_`, 
   seleção do projeto e da coleta (`mkt_trafego.meta_contas` só lê ativas); dá para reativar em Contas de anúncio.
 - **Tela:** Contas de anúncio mostra unidade e "principal" e permite mudar (unidade precisa combinar com o dono: Grupo =
   CSM ou Escritório); no cadastro do projeto as principais vêm primeiro (★).
-- **A coleta continua DESLIGADA** (nenhum cron). Ligar: bloco LIGAR da 20261005r, depois de aplicar p, r, 20261006a e
-  20261006b.
+- **A coleta continua DESLIGADA** (nenhum cron). Ligar: bloco LIGAR da 20261006i, depois de aplicar p, r, 20261006j e
+  20261006k.
 
 ### Perguntas (respondidas pelo Victor em 05/10/2026, salvo as em aberto)
 
@@ -829,13 +829,13 @@ cadastra de forma idempotente (por plataforma e id): nome exato, id sem `act_`, 
     preenchido, senão o do projeto. Os projetos da semente estão sem datas: sem data, o vínculo não soma.
 15. ~~Leads da plataforma no Meta~~ **Decidido (06/10/2026):** fica a ação `lead` por enquanto (provavelmente muda depois).
 
-**Cadastro do projeto (20261006a, em aberto):**
+**Cadastro do projeto (20261006j, em aberto):**
 
 - a) **Projeto só de distribuição de conteúdo** (contínuo, sem fim, métricas separadas): ideia a definir. Como modelar
   (tipo de projeto próprio? sem período?) e quais métricas.
 - b) **Sigla do projeto externo** no nome da campanha (Aurum, Diamantes): qual padrão?
 - c) ~~Receita dos externos~~ **Decidido (06/10/2026):** não entra por ora.
-- d) ~~Conteúdo do pacote~~ **Virou modelos de lançamento (20261006d):** os 9 exemplos são rascunho a validar (fases,
+- d) ~~Conteúdo do pacote~~ **Virou modelos de lançamento (20261006l):** os 9 exemplos são rascunho a validar (fases,
   datas e % genéricos).
 - e) **Acesso:** gestores e Arthur editam verba, fases e metas, depende do novo modelo de acesso do sistema (pendente).
 - f) ~~LPSG no Escritório~~ **Decidido (06/10/2026):** LPSG é só da CSM; o Escritório fica com lançamento clássico e ATM.
@@ -848,7 +848,7 @@ cadastra de forma idempotente (por plataforma e id): nome exato, id sem `act_`, 
 - j) **Etiquetas do ClickUp:** ler as de todos os spaces do workspace (hoje) ou de um space só?
 - k) **Especialistas internos:** além de Marcio Carvalho de Sá e Elaine Montenegro, quem mais (entra por SQL)?
 - l) **ANTECIPAÇÃO entra na lista de objetivos? Em qual fase?** (exemplo `CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ |
-  ABO | THRUPLAY`). Hoje fica fora do padrão só por isso; ligar = os comandos comentados na 20261006c.
+  ABO | THRUPLAY`). Hoje fica fora do padrão só por isso; ligar = os comandos comentados na 20261006e.
 
 ## Branches
 
@@ -864,48 +864,48 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
 - **05/10/2026:** base compartilhada do Marketing (migration 20261005m, NÃO APLICADA): `mkt.projetos`,
   `mkt.paginas`, listas e tradução do nome de campanha, schema `mkt_web` vazio, tela `/marketing/projetos`.
   Branch `victor`.
-- **05/10/2026:** Marketing > Web (o Radar do Luiz, sem vídeo): migration 20261005n (NÃO APLICADA) com a coleta em
+- **05/10/2026:** Marketing > Web (o Radar do Luiz, sem vídeo): migration 20261006f (NÃO APLICADA) com a coleta em
   `mkt_web`, rota pública `/api/web/coletar` com limite por IP e por sessão, gravador `/web/radar-v1.js`, telas em
   `/marketing/web`, modo de demonstração local e seed de dev. Virada documentada, não feita. Branch `victor`.
 - **05/10/2026:** Comercial e base de pessoas: migration 20261005o (NÃO APLICADA) com os schemas `pessoas` (uma pessoa
   por identidade, cascata da casa, aluno e comprador por referência, origem, eventos, revisão, registro de acesso,
   máscara no SQL) e `crm` (4 pipelines, etapas configuráveis, negócios, histórico); telas em `/comercial` (só admin e
   dev) com modo de demonstração local. Perguntas abertas na seção "Comercial e base de pessoas". Branch `victor`.
-- **05/10/2026:** Tráfego etapa 1 (migration 20261005p, NÃO APLICADA): contas, campanhas, desempenho diário, planejamento
+- **05/10/2026:** Tráfego etapa 1 (migration 20261006g, NÃO APLICADA): contas, campanhas, desempenho diário, planejamento
   (status, verba, fases, metas) e a Central do Tráfego em `/marketing/trafego` (área ativa), com modo demo. Branch `victor`.
-- **05/10/2026:** Tráfego, respostas do Victor na própria 20261005p (ainda NÃO APLICADA): cliques no link separados dos
+- **05/10/2026:** Tráfego, respostas do Victor na própria 20261006g (ainda NÃO APLICADA): cliques no link separados dos
   totais (CTR, CPC), connect rate e conversão da página com a mesma page view da Web fase 2 (`mkt_web_connect`), vários
   gestores por projeto,
   fase da campanha pelo objetivo do nome (com correção à mão), fases remarketing e abertura de carrinho, objetivos
   CARRINHO e AQUECIMENTO no padrão de nome.
-- **05/10/2026:** Tráfego fase 2 (migration 20261005r, NÃO APLICADA): resumo do dia com limiares em tabela, receita da
+- **05/10/2026:** Tráfego fase 2 (migration 20261006i, NÃO APLICADA): resumo do dia com limiares em tabela, receita da
   Hotmart pelo vínculo produto → projeto (cadastro à mão), atividades do ClickUp com linha do tempo do gasto, Edges
   `trafego-meta` e `trafego-clickup` testadas com respostas simuladas e **desligadas**, esqueleto do Google Ads. Branch `victor`.
 - **06/10/2026:** UTM no padrão oficial do gp-operacoes (`nome|id` para campanha, conjunto e anúncio no Meta; Google só
-  id), confirmado pelo Victor. Leitura única `mkt.utm_separar` / `mkt_web.origem_ids` (20261005n) e `separarUtm`
-  (`projetos/domain/utm.ts`); aba Origem, achados por criativo, `mkt_web_connect` (20261005q) e resumo do Tráfego
-  (20261005p) cruzam pelo id, nome só como reserva; formato antigo continua valendo. Seção "Padrões de nome de campanha e
+  id), confirmado pelo Victor. Leitura única `mkt.utm_separar` / `mkt_web.origem_ids` (20261006f) e `separarUtm`
+  (`projetos/domain/utm.ts`); aba Origem, achados por criativo, `mkt_web_connect` (20261006h) e resumo do Tráfego
+  (20261006g) cruzam pelo id, nome só como reserva; formato antigo continua valendo. Seção "Padrões de nome de campanha e
   UTM" nesta doc. Migrations editadas no lugar (todas ainda NÃO APLICADAS). Branch `victor`.
-- **06/10/2026:** Tráfego, cadastro do projeto (migration 20261006a, NÃO APLICADA): tipo interno/externo e unidade (CSM,
+- **06/10/2026:** Tráfego, cadastro do projeto (migration 20261006j, NÃO APLICADA): tipo interno/externo e unidade (CSM,
   Escritório, Aurum, Diamantes) no lugar da subárea, tipos de lançamento por unidade com a regra no banco (lançamento
   pago só na CSM; Aurum palestra fixo; ATM; perpétuo fora), especialista, períodos de captação e do evento (captação como
-  padrão da receita e da fase de captação; `periodo_padrao` acrescentada na 20261005r, ainda não aplicada), contas de
+  padrão da receita e da fase de captação; `periodo_padrao` acrescentada na 20261006i, ainda não aplicada), contas de
   anúncio do projeto (sugestões e alerta de conta de fora), etiqueta do ClickUp como chave (com as etiquetas reais dos
   spaces pela rotina), pacote da campanha (vazio), checklist de montagem e gerador de nome de campanha e UTM. Receita dos
   externos fora. Tela na Central do Tráfego, modo demo. Branch `victor`.
-- **06/10/2026:** Tráfego, respostas do Victor na própria 20261006a (ainda NÃO APLICADA): LPSG só na CSM (Escritório com
+- **06/10/2026:** Tráfego, respostas do Victor na própria 20261006j (ainda NÃO APLICADA): LPSG só na CSM (Escritório com
   clássico e ATM, recusado também no banco); receita sem período próprio do produto do início da captação ao fim do evento
-  (provisório, a confirmar; regra só em `mkt_trafego.periodo_receita`, acrescentada na 20261005r, e `periodoReceita`).
-- **06/10/2026:** Tráfego, contas do Meta (migration 20261006b, NÃO APLICADA): as 16 contas que o token do sistema enxerga,
+  (provisório, a confirmar; regra só em `mkt_trafego.periodo_receita`, acrescentada na 20261006i, e `periodoReceita`).
+- **06/10/2026:** Tráfego, contas do Meta (migration 20261006k, NÃO APLICADA): as 16 contas que o token do sistema enxerga,
   com unidade (CSM 11, Escritório 5) e principal (5), CA - Tutorial inativa; unidade e principal na tela de contas e na
   seleção do projeto. Coleta continua desligada. Branch `victor`.
 - **06/10/2026:** revisão do Victor no Tráfego: nome de campanha com descrição de várias partes e página só no último
-  campo com formato de slug (migration **20261006c**, NÃO APLICADA, troca só o corpo de `mkt.campanha_traduzir` com as
+  campo com formato de slug (migration **20261006e**, NÃO APLICADA, troca só o corpo de `mkt.campanha_traduzir` com as
   mesmas chaves de retorno), motivo exato de cada campanha fora do padrão na tela, campo "Linha" fora do cadastro, status
   "em planejamento" (fora do resumo do dia), etiqueta do ClickUp com busca (`trafego_clickup_etiquetas_buscar`, fonte
-  `kpi.medicao_tarefa`). ANTECIPAÇÃO ficou como pergunta. 20261005p, 20261005r e 20261006a editadas no lugar (não
+  `kpi.medicao_tarefa`). ANTECIPAÇÃO ficou como pergunta. 20261006g, 20261006i e 20261006j editadas no lugar (não
   aplicadas). Branch `victor`.
-- **06/10/2026:** Tráfego, modelos de lançamento (migration **20261006d**, NÃO APLICADA): no lugar do pacote; modelo com
+- **06/10/2026:** Tráfego, modelos de lançamento (migration **20261006l**, NÃO APLICADA): no lugar do pacote; modelo com
   unidades e padrão, fases com datas relativas e % da verba, campanhas esperadas, checklist por momento e metas padrão;
   9 exemplos rascunho; "Aplicar modelo" com prévia no projeto (nada apagado; fase existente só confirmando); checklist
   com o caminho para resolver, "campanhas esperadas criadas" e alerta de checklist incompleto em captação. Branch `victor`.

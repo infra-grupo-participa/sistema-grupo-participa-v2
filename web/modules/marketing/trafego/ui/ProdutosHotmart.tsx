@@ -1,7 +1,7 @@
 'use client';
 
 // Receita da Hotmart na vida do projeto: o vínculo produto Hotmart → projeto (CADASTRO À MÃO, nada pré-preenchido) e o
-// que a receita está somando. Migration 20261005r: public.trafego_produtos_listar / produto_salvar / produto_apagar /
+// que a receita está somando. Migration 20261006i: public.trafego_produtos_listar / produto_salvar / produto_apagar /
 // hotmart_produtos. A receita em si é lida de public.compras pelo banco (a Hotmart manda no dinheiro).
 import { useEffect, useState } from 'react';
 import { Button, ConfirmDialog, DataTable, EmptyState, Input, Modal, Td, Th, Thead, Tr } from '@/shared/ui/components';
@@ -105,7 +105,7 @@ export function ProdutosHotmart({ resumo, versao, flash, onMudou }: { resumo: Li
         <Button size="sm" onClick={novo}><Icon name="plus" size={14} /> Ligar produto</Button>
       </div>
       {lista === undefined ? null : lista === null ? (
-        <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar os produtos (sem acesso, ou a migration 20261005r ainda não foi aplicada).</p>
+        <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar os produtos (sem acesso, ou a migration 20261006i ainda não foi aplicada).</p>
       ) : lista.length === 0 ? (
         <EmptyState title="Nenhum produto da Hotmart ligado a este projeto" hint="Ligue à mão o produto (e, se quiser, a oferta) que gera receita para o projeto." />
       ) : (

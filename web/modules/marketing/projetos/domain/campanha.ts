@@ -8,7 +8,7 @@
 // ÚLTIMO campo, com pelo menos uma parte de descrição antes, e só no formato do slug da casa (ak1, bl2, jt10, ak1-b);
 // senão o último campo é parte da descrição.
 //
-// A MESMA regra existe no banco (mkt.campanha_traduzir, migration 20261006c, que trocou a da 20261005m). Mudou aqui,
+// A MESMA regra existe no banco (mkt.campanha_traduzir, migration 20261006e, que trocou a da 20261005m). Mudou aqui,
 // muda lá (e o contrário). As listas (gestores, objetivos, projetos) moram no banco (mkt.campanha_gestores,
 // mkt.campanha_objetivos, mkt.projetos) e chegam por parâmetro: este arquivo não guarda cópia delas.
 

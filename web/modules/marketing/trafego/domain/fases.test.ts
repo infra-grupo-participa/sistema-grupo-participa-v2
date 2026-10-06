@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { faseDaCampanha, origemDaFase } from './fases';
 
-// O mapa abaixo é a semente da 20261005p (mkt_trafego.objetivo_fase).
+// O mapa abaixo é a semente da 20261006g (mkt_trafego.objetivo_fase).
 const MAPA = { LEADS: 'captacao', VENDAS: 'captacao', LEMBRETE: 'lembrete', REMARKETING: 'remarketing', CARRINHO: 'abertura_carrinho', AQUECIMENTO: 'aquecimento' };
 
 describe('fase da campanha (mesma regra de mkt_trafego.fase_efetiva)', () => {

@@ -1,6 +1,6 @@
 'use client';
 
-// Adapter Supabase do Tráfego: único lugar que chama as funções public.trafego_* (migration 20261005p). As tabelas
+// Adapter Supabase do Tráfego: único lugar que chama as funções public.trafego_* (migration 20261006g). As tabelas
 // (schema mkt_trafego) são fechadas; a trava (hoje só admin/dev) mora em cada função (mkt.pode_ver('mkt_trafego')).
 // Modo de demonstração (só desenvolvimento): NEXT_PUBLIC_TRAFEGO_DEMO=1 em web/.env.local e `npm run dev`. Em produção
 // (NODE_ENV=production) ele nunca liga, mesmo com a variável.
@@ -24,7 +24,7 @@ async function rpc<T>(nome: string, args?: Record<string, unknown>): Promise<T |
   return error ? null : (data as T);
 }
 
-const falha: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261005p ainda não foi aplicada).' };
+const falha: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261006g ainda não foi aplicada).' };
 
 export const carregarConfig = (): Promise<ConfigTrafego | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoConfig()) : rpc<ConfigTrafego>('trafego_config');
@@ -66,7 +66,7 @@ export async function apagarFase(id: number): Promise<Resposta> {
 
 export interface ContaForm {
   id?: number; plataforma: string; conta_externa: string; nome: string; dono: string; cliente: string; moeda: string; ativa: boolean; obs: string;
-  /** 20261006b: gravados à parte, por public.trafego_conta_marcar, depois de salvar a conta. */
+  /** 20261006k: gravados à parte, por public.trafego_conta_marcar, depois de salvar a conta. */
   unidade?: string; principal?: boolean;
 }
 export async function salvarConta(p: ContaForm): Promise<Resposta> {
@@ -75,7 +75,7 @@ export async function salvarConta(p: ContaForm): Promise<Resposta> {
   const r = (await rpc<Resposta>('trafego_conta_salvar', { p: resto })) ?? falha;
   if (!r.ok || r.id == null || (unidade === undefined && principal === undefined)) return r;
   const m = await rpc<Resposta>('trafego_conta_marcar', { p_conta: r.id, p_unidade: unidade ?? '', p_principal: !!principal });
-  if (!m) return { ok: false, msg: `${r.msg} A unidade e a principal não foram salvas (a migration 20261006b ainda não foi aplicada?).` };
+  if (!m) return { ok: false, msg: `${r.msg} A unidade e a principal não foram salvas (a migration 20261006k ainda não foi aplicada?).` };
   return m.ok ? r : { ok: false, msg: `${r.msg} ${m.msg}` };
 }
 
@@ -93,10 +93,10 @@ export async function relerCampanhas(): Promise<Resposta> {
   return (await rpc<Resposta>('trafego_campanhas_reler')) ?? falha;
 }
 
-// ─── Fase 2 (migration 20261005r) ─────────────────────────────────────────────────────────────────────────────────────
-const falhaR: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261005r ainda não foi aplicada).' };
+// ─── Fase 2 (migration 20261006i) ─────────────────────────────────────────────────────────────────────────────────────
+const falhaR: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261006i ainda não foi aplicada).' };
 
-/** Resumo do dia ("o que está pegando fogo"). null = sem acesso ou a 20261005r não aplicada. */
+/** Resumo do dia ("o que está pegando fogo"). null = sem acesso ou a 20261006i não aplicada. */
 export const carregarAlertas = (): Promise<ResumoDia | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoAlertas()) : rpc<ResumoDia>('trafego_alertas');
 
@@ -117,18 +117,18 @@ export async function apagarProduto(id: number): Promise<Resposta> {
   return (await rpc<Resposta>('trafego_produto_apagar', { p_id: id })) ?? falhaR;
 }
 
-/** Atividades do ClickUp do projeto (espelho pela etiqueta). null = sem acesso ou a 20261005r não aplicada. */
+/** Atividades do ClickUp do projeto (espelho pela etiqueta). null = sem acesso ou a 20261006i não aplicada. */
 export const carregarClickup = (projeto: number): Promise<ClickupProjeto | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoClickup(projeto)) : rpc<ClickupProjeto>('trafego_clickup', { p_projeto: projeto });
 
-// ─── Cadastro do projeto e checklist (migration 20261006a; modelos na 20261006d) ────────────────────────────────────────────────────
-const falhaA: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261006a ainda não foi aplicada).' };
+// ─── Cadastro do projeto e checklist (migration 20261006j; modelos na 20261006l) ────────────────────────────────────────────────────
+const falhaA: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261006j ainda não foi aplicada).' };
 
-/** Listas do cadastro (unidades, tipos de lançamento e regras, especialistas, UTM, modelos, etiquetas). null = sem a 20261006a. */
+/** Listas do cadastro (unidades, tipos de lançamento e regras, especialistas, UTM, modelos, etiquetas). null = sem a 20261006j. */
 export const carregarListasCadastro = (): Promise<ListasCadastro | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoListasCadastro()) : rpc<ListasCadastro>('trafego_cadastro_listas');
 
-/** Etiquetas do ClickUp que contêm o texto (sem acento, sem maiúscula). null = sem acesso ou sem a 20261006a. */
+/** Etiquetas do ClickUp que contêm o texto (sem acento, sem maiúscula). null = sem acesso ou sem a 20261006j. */
 export const buscarEtiquetasClickup = (busca: string): Promise<BuscaEtiquetas | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoBuscarEtiquetas(busca)) : rpc<BuscaEtiquetas>('trafego_clickup_etiquetas_buscar', { p_busca: busca, p_limite: 30 });
 
@@ -146,10 +146,10 @@ export async function salvarProjetoCadastro(f: ProjetoForm): Promise<RespostaPro
 export const carregarChecklist = (projeto: number): Promise<Checklist | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoChecklist(projeto)) : rpc<Checklist>('trafego_checklist', { p_projeto: projeto });
 
-// ─── Modelos de lançamento (migration 20261006d) ─────────────────────────────────────────────────────────────────────
-const falhaD: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261006d ainda não foi aplicada).' };
+// ─── Modelos de lançamento (migration 20261006l) ─────────────────────────────────────────────────────────────────────
+const falhaD: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261006l ainda não foi aplicada).' };
 
-/** Todos os modelos (ativos e inativos), com fases, campanhas e itens. null = sem acesso ou sem a 20261006d. */
+/** Todos os modelos (ativos e inativos), com fases, campanhas e itens. null = sem acesso ou sem a 20261006l. */
 export const listarModelos = (): Promise<Modelo[] | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoModelos()) : rpc<Modelo[]>('trafego_modelos_listar');
 
@@ -165,7 +165,7 @@ export async function ativarModelo(id: number, ativo: boolean): Promise<Resposta
   if (MODO_DEMO) return demo.demoAtivarModelo(id, ativo);
   return (await rpc<Resposta>('trafego_modelo_ativar', { p_id: id, p_ativo: ativo })) ?? falhaD;
 }
-/** Modelos que valem para o projeto (padrão primeiro), cada um com a prévia. null = sem a 20261006d. */
+/** Modelos que valem para o projeto (padrão primeiro), cada um com a prévia. null = sem a 20261006l. */
 export const previasDoProjeto = (projeto: number): Promise<PreviaModelo[] | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoPrevias(projeto)) : rpc<PreviaModelo[]>('trafego_modelo_previa', { p_projeto: projeto, p_modelo: null });
 

@@ -1,7 +1,7 @@
 // Marketing > Web > Mapa de calor: a conta do desenho (pura). Porte de sistemas/radar/_interface/src/lib/calor.ts do
 // Luiz: a mesma escala do frio ao quente, o mesmo raio e a mesma força por quantidade de pontos. O ponto chega do banco
 // como x em % da largura e y como FRAÇÃO da altura da página vista (o gravador manda y em px do documento e a altura do
-// documento; a 20261005q divide): assim ele cai no lugar certo sobre qualquer fundo (captura do Google ou a página).
+// documento; a 20261006h divide): assim ele cai no lugar certo sobre qualquer fundo (captura do Google ou a página).
 // O desenho no canvas fica em ui/MapaCalor.tsx.
 
 /** escala do frio ao quente: azul, ciano, verde, amarelo, laranja, vermelho (ESCALA do calor.ts) */

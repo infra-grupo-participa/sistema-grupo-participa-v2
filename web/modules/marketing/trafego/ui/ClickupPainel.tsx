@@ -1,7 +1,7 @@
 'use client';
 
 // Atividades do ClickUp na vida do projeto (decisão de 05/10/2026: ficam na tela), pela etiqueta do projeto, junto do
-// gasto diário numa linha do tempo. Lê public.trafego_clickup (migration 20261005r), o espelho que a rotina
+// gasto diário numa linha do tempo. Lê public.trafego_clickup (migration 20261006i), o espelho que a rotina
 // trafego-clickup grava (só leitura no ClickUp).
 import { useEffect, useState } from 'react';
 import { Badge, DataTable, EmptyState, Td, Th, Thead, Tr } from '@/shared/ui/components';
@@ -59,7 +59,7 @@ export function ClickupPainel({ projetoId, serie, ate, versao }: { projetoId: nu
 /** O painel em si (sem carregar), para testar a renderização. */
 export function ClickupVista({ dados, serie, ate }: { dados: ClickupProjeto | null; serie: DiaSerie[]; ate: string }) {
   if (dados === null) {
-    return <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar as atividades (sem acesso, ou a migration 20261005r ainda não foi aplicada).</p>;
+    return <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar as atividades (sem acesso, ou a migration 20261006i ainda não foi aplicada).</p>;
   }
   if (!dados.etiqueta) {
     return <p className="text-sm text-[var(--fg-2)]">Este projeto não tem etiqueta do ClickUp cadastrada (em Marketing &gt; Projetos e páginas): sem atividades.</p>;

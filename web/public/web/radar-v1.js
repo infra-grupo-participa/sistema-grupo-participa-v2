@@ -13,7 +13,7 @@
      fbclid ou gclid (só sim/não) e o site de onde veio (só o domínio). utm_content = o anúncio (criativo) no formato
      nome|id, padrão oficial do gp-operacoes (departamentos/dados/areas/infraestrutura/processos/
      padronizar-utm-dos-links.md); no Meta campanha e conjunto também vêm em nome|id. O gravador manda o texto como
-     veio; o banco separa e cruza pelo id (mkt.utm_separar, migration 20261005n);
+     veio; o banco separa e cruza pelo id (mkt.utm_separar, migration 20261006f);
    - sistema, navegador e app (Instagram, Facebook...) e o lugar aproximado quando a página já tem a VisitorAPI;
    - velocidade real (LCP, INP, CLS, FCP, TTFB, carga, peso e rede), só números;
    - leitura: segundos em cada seção (<section> ou data-secao), botões (data-cta) que apareceram, rolagem nos primeiros

@@ -4,7 +4,7 @@ import {
   type Modelo,
 } from './modelos';
 
-// Os mesmos números do ensaio da 20261006d (projeto ZD28: captação 01 a 20/11, evento 25 a 27/11, verba 10.000).
+// Os mesmos números do ensaio da 20261006l (projeto ZD28: captação 01 a 20/11, evento 25 a 27/11, verba 10.000).
 const CLASSICO: Modelo = {
   ...MODELO_VAZIO('lancamento_classico'), id: 1, nome: 'Exemplo: Lançamento clássico CSM', rascunho: true, unidades: [{ unidade: 'csm', padrao: true }],
   fases: [

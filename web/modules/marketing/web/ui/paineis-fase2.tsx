@@ -1,7 +1,6 @@
-// Marketing > Web: os painéis da fase 2 (migration 20261005q): Fluxo, Melhorias (achados, testes A/B), laboratório do
+// Marketing > Web: os painéis da fase 2 (migration 20261006h): Fluxo, Melhorias (achados, testes A/B), laboratório do
 // Google (na aba Velocidade), leads na base de pessoas (na Visão geral) e connect rate (na aba Origem). Só desenham o
 // que recebem; o mapa de calor (canvas) e o Comparar (escolhas) ficam em MapaCalor.tsx e Comparar.tsx.
-import Link from 'next/link';
 import { Badge, DataTable, EmptyState, KpiCard, ProgressBar, SectionCard, Td, Th, Thead, Tr, type Tone } from '@/shared/ui/components';
 import { codigoCurto, faixaVital, msVital, num, pct, ROTULO_NIVEL, taxa, type Nivel } from '../domain/analise';
 import { analisar, NOME_TIPO, textoGanho, type AbaWeb, type Achado } from '../domain/achados';
@@ -218,17 +217,16 @@ export function SecaoLeads({ l }: { l: LeadsPessoas | null }) {
             <KpiCard label="Viraram MQL" value={l.base && l.mql != null ? num(l.mql) : '–'} hint={l.base && l.pessoas ? `${pct(l.mql ?? 0, l.pessoas)} das ${num(l.pessoas)} pessoas` : 'pela base de pessoas'} bar="green" />
             <KpiCard label="Não MQL" value={l.base && l.nao_mql != null ? num(l.nao_mql) : '–'} bar="gray" />
           </div>
-          {!l.base && <p className="text-xs text-[var(--fg-3)]">A base de pessoas (migration 20261005o) ainda não está aplicada: MQL e fichas aparecem depois.</p>}
+          {!l.base && <p className="text-xs text-[var(--fg-3)]">A base de pessoas do Comercial (migration 20261005r_pessoas_e_crm_fundacao) não está neste banco: MQL aparece depois.</p>}
           {l.base && l.pode_abrir && l.lista.length > 0 && (
             <details className="text-sm">
-              <summary className="cursor-pointer text-[var(--fg-2)]">Últimos leads do período ({l.lista.length}): abrir a ficha no Comercial</summary>
-              <DataTable minWidth={520}>
-                <Thead><Th>Referência</Th><Th>Resultado</Th><Th>Ficha</Th></Thead>
+              <summary className="cursor-pointer text-[var(--fg-2)]">Últimos leads do período ({l.lista.length})</summary>
+              <DataTable minWidth={360}>
+                <Thead><Th>Referência</Th><Th>Resultado</Th></Thead>
                 <tbody>{l.lista.map((p) => (
                   <Tr key={p.ref}>
                     <Td><span className="font-mono text-xs">{p.ref.slice(0, 11)}…</span></Td>
                     <Td>{p.mql ? <Badge tone="success">MQL</Badge> : p.nao_mql ? <Badge tone="neutral">Não MQL</Badge> : '–'}</Td>
-                    <Td><Link href={`/comercial?pessoa=${encodeURIComponent(p.pessoa_id)}`} className="text-xs font-semibold text-[var(--accent)] hover:underline">Abrir ficha</Link></Td>
                   </Tr>
                 ))}</tbody>
               </DataTable>
@@ -250,7 +248,7 @@ export function SecaoConnect({ c }: { c: Connect | null }) {
     <SectionCard title="Connect rate (com o Tráfego)"
       subtitle="Connect rate = page views ÷ cliques no link da plataforma. Conversão da página = leads ÷ page views. Page view = a entrada na página vinda da campanha (uma por visita).">
       {!c.trafego ? (
-        <p className="text-sm text-[var(--fg-3)]">O cruzamento com gasto e cliques aparece quando a base do Tráfego (migration 20261005p) estiver aplicada e coletando.</p>
+        <p className="text-sm text-[var(--fg-3)]">O cruzamento com gasto e cliques aparece quando a base do Tráfego (migration 20261006g) estiver aplicada e coletando.</p>
       ) : !c.campanhas.length ? (
         <p className="text-sm text-[var(--fg-3)]">Nenhuma campanha do projeto com gasto ou visita no período.</p>
       ) : (

@@ -1,6 +1,6 @@
 // Marketing > Web > Melhorias: os ACHADOS AUTOMÁTICOS, portados do Radar do Luiz (pacote de 05/10/2026,
 // sistemas/radar/_interface/src/lib/oportunidades.ts, compilado em sistemas/radar/rotina/regras.mjs). Mesmas regras e
-// mesmos limiares; cada função cita a regra de origem. Os números vêm de public.mkt_web_melhorias (migration 20261005q),
+// mesmos limiares; cada função cita a regra de origem. Os números vêm de public.mkt_web_melhorias (migration 20261006h),
 // no mesmo formato do radar.api_oportunidades / radar.api_leitura.
 // O que NÃO veio: a regra "publicacoes" (antes e depois de cada publicação): as publicações/deploys do FTP do Luiz não
 // entram nesta fase (decisão do Victor). Os "provas" do Radar (links para gravações, sessões) viraram abas da Web;

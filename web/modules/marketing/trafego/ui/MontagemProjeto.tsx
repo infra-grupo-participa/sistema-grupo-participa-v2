@@ -1,6 +1,6 @@
 'use client';
 
-// Na vida do projeto (migrations 20261006a e 20261006d): o cadastro (tipo, unidade, lançamento, especialista, períodos,
+// Na vida do projeto (migrations 20261006j e 20261006l): o cadastro (tipo, unidade, lançamento, especialista, períodos,
 // contas), as campanhas sugeridas pela conta e sigla, o MODELO DE LANÇAMENTO (aplicar com prévia), o checklist de montagem
 // agrupado por momento e com o caminho para resolver cada item, e o gerador de nome de campanha e UTM (com as campanhas
 // esperadas do modelo). Leitura e gravação pelas funções public.trafego_* (admin/dev).
@@ -163,7 +163,7 @@ export function ModalAplicarModelo({ projetoId, config, onFechar, onAplicado }: 
       </Button>
     </>}>
       {previas === undefined ? <Loading /> : previas === null ? (
-        <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar (sem acesso, ou a migration 20261006d ainda não foi aplicada).</p>
+        <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar (sem acesso, ou a migration 20261006l ainda não foi aplicada).</p>
       ) : previas.length === 0 ? (
         <EmptyState title="Nenhum modelo ativo para este tipo de lançamento e unidade" hint="Crie ou ative um na aba Modelos de lançamento." />
       ) : (
@@ -213,7 +213,7 @@ export function ChecklistVista({ c, onMarcar, onAcao, onNovoItem, onApagarItem }
 }) {
   const [texto, setTexto] = useState('');
   const [momento, setMomento] = useState<Momento>('antes');
-  if (c === null) return <p className="text-sm text-[var(--fg-3)]">Indisponível (sem acesso, ou a migration 20261006a ainda não foi aplicada).</p>;
+  if (c === null) return <p className="text-sm text-[var(--fg-3)]">Indisponível (sem acesso, ou a migration 20261006j ainda não foi aplicada).</p>;
   const pct = c.total ? Math.round((c.feitos / c.total) * 1000) / 10 : 0;
   const bola = (ok: boolean, aplica: boolean) => (
     <span className={`mt-0.5 inline-grid w-5 h-5 shrink-0 place-items-center rounded-full ${!aplica ? 'bg-[var(--surface-3)] text-[var(--fg-3)]' : ok ? 'bg-[var(--green)] text-black' : 'border border-[var(--border)] text-[var(--fg-3)]'}`}>
@@ -381,7 +381,7 @@ export function GeradorCampanha({ sigla, listas, config, paginas, gestoresProjet
             posicionamento (padrão do gp-operacoes). O sistema cruza pelo id.
           </p>
         </div>
-      ) : <EmptyState title="Sem parâmetros de UTM cadastrados" hint="mkt_trafego.utm_parametros (migration 20261006a)." />}
+      ) : <EmptyState title="Sem parâmetros de UTM cadastrados" hint="mkt_trafego.utm_parametros (migration 20261006j)." />}
     </div>
   );
 }

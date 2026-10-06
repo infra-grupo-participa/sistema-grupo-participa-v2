@@ -1,5 +1,5 @@
 // mkt-web-pagespeed: teste de laboratório do Google (PageSpeed Insights) das páginas da Web, 1 vez por dia
-// (migration 20261005q). Quem chama: o cron mkt-web-pagespeed, pelo ops.cron_post, com o header x-sync-chave
+// (migration 20261006h). Quem chama: o cron mkt-web-pagespeed, pelo ops.cron_post, com o header x-sync-chave
 // (= Vault mkt_web_pagespeed_chave). A Edge entra no banco como postgres (SUPABASE_DB_URL), pede a fila
 // (mkt_web.pagespeed_fila: páginas ativas de projeto com a coleta ligada, sem teste nas últimas 20 h), roda o Google
 // 3 de cada vez e guarda cada resultado (mkt_web.pagespeed_guardar), inclusive a falha (ex.: HTTP 429 da cota pública).

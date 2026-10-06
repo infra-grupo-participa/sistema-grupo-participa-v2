@@ -1,4 +1,4 @@
-// Fase da campanha (Victor, 05/10/2026). Domínio puro; a mesma regra do banco (mkt_trafego.fase_efetiva, 20261005p).
+// Fase da campanha (Victor, 05/10/2026). Domínio puro; a mesma regra do banco (mkt_trafego.fase_efetiva, 20261006g).
 //   1. a correção à mão na campanha prevalece;
 //   2. senão, a fase do OBJETIVO do nome (mapa mkt_trafego.objetivo_fase, configurável);
 //   3. senão, "sem fase".

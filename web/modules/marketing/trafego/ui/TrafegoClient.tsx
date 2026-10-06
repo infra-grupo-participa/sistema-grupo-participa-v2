@@ -1,9 +1,9 @@
 'use client';
 
-// Marketing > Tráfego: a Central do Tráfego. Resumo do dia no topo (20261005r), tabela de projetos com filtros, "a vida do
+// Marketing > Tráfego: a Central do Tráfego. Resumo do dia no topo (20261006i), tabela de projetos com filtros, "a vida do
 // projeto" no clique, cadastro de contas e campanhas fora do padrão. Só admin/dev (gate no layout, na page e no banco).
-// Migrations 20261005p e 20261005r. 20261006a: filtros por tipo e unidade, "Novo projeto" (cadastro do evento), progresso
-// do checklist de montagem. 20261006d: aba de modelos de lançamento (no lugar de pacotes e checklist).
+// Migrations 20261006g e 20261006i. 20261006j: filtros por tipo e unidade, "Novo projeto" (cadastro do evento), progresso
+// do checklist de montagem. 20261006l: aba de modelos de lançamento (no lugar de pacotes e checklist).
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Badge, Button, DataTable, EmptyState, FilterSelect, KpiCard, Loading, SectionCard, Tabs, Td, Th, Thead, Toast, Toggle, Tr, useFlash,
@@ -160,7 +160,7 @@ export function TrafegoClient() {
       {!config || !linhas ? (
         <SectionCard>
           <p role="alert" className="text-sm text-[var(--red)]">
-            Não foi possível carregar (erro de rede, sem acesso, ou a migration 20261005p ainda não foi aplicada).
+            Não foi possível carregar (erro de rede, sem acesso, ou a migration 20261006g ainda não foi aplicada).
           </p>
         </SectionCard>
       ) : (
@@ -189,12 +189,12 @@ export function TrafegoClient() {
                 </div>
                 {!config.base_pessoas && (
                   <p className="text-xs text-[var(--fg-3)]">
-                    Leads, CPL e % MQL vêm da base de pessoas (migration 20261005o), que ainda não existe neste banco: aparecem como &quot;sem dado&quot;.
+                    Leads, CPL e % MQL vêm da base de pessoas do Comercial (migration 20261005r_pessoas_e_crm_fundacao), que não existe neste banco: aparecem como &quot;sem dado&quot;.
                   </p>
                 )}
                 {!config.base_web && (
                   <p className="text-xs text-[var(--fg-3)]">
-                    Connect rate e conversão da página usam as page views da Web fase 2 (migration 20261005q, a mesma conta da tela da Web), que ainda não existe neste banco: aparecem como &quot;sem dado&quot;.
+                    Connect rate e conversão da página usam as page views da Web fase 2 (migration 20261006h, a mesma conta da tela da Web), que ainda não existe neste banco: aparecem como &quot;sem dado&quot;.
                   </p>
                 )}
                 <SectionCard right={<div className="flex flex-wrap items-center gap-2">

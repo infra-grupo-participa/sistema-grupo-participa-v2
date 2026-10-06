@@ -1,9 +1,9 @@
-// trafego-meta: coleta diária do Meta Ads da Central do Tráfego (migration 20261005r). NASCE DESLIGADA: nenhum cron
+// trafego-meta: coleta diária do Meta Ads da Central do Tráfego (migration 20261006i). NASCE DESLIGADA: nenhum cron
 // chama esta Edge até o Victor decidir (como ligar: bloco LIGAR da migration e docs/central-de-dados.md, seção Tráfego).
 // Quem chama: o cron trafego-meta, pelo ops.cron_post (regra 11 do CLAUDE.md), com o header x-sync-chave
 // (= Vault trafego_coleta_chave). A Edge entra no banco como postgres (SUPABASE_DB_URL), pega as contas Meta ativas e o
 // token de cada uma (mkt_trafego.meta_contas: Vault meta_ads_token ou o segredo da conta em contas.token_vault), lê a
-// Graph API (só leitura) e grava pelas funções de entrada da 20261005p (upsert idempotente: rodar de novo não duplica).
+// Graph API (só leitura) e grava pelas funções de entrada da 20261006g (upsert idempotente: rodar de novo não duplica).
 // Corpo opcional: {"dias": n} (dias completos para trás além de hoje; padrão mkt_trafego.coleta_config meta_dias),
 // {"so_hoje": true}, ou {"de": "AAAA-MM-DD", "ate": "AAAA-MM-DD"} (recarga, até 92 dias).
 // Nunca registra token nem URL; a falha de cada conta vai para mkt_trafego.coletas com um código curto.

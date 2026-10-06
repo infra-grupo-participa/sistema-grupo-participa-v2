@@ -64,7 +64,7 @@ export function EtiquetaClickupCampo({ valor, onMudar }: { valor: string; onMuda
         </ul>
       )}
       {naoAchou && <span className="mt-1 block text-[11px] text-[var(--yellow)]">Não encontrada no ClickUp. Confira se está escrita igual à etiqueta de lá (pode salvar assim mesmo).</span>}
-      {indisponivel && <span className="mt-1 block text-[11px] text-[var(--fg-3)]">Busca de etiquetas indisponível (a migration 20261006a ainda não foi aplicada?). Digite a etiqueta exata.</span>}
+      {indisponivel && <span className="mt-1 block text-[11px] text-[var(--fg-3)]">Busca de etiquetas indisponível (a migration 20261006j ainda não foi aplicada?). Digite a etiqueta exata.</span>}
     </div>
   );
 }

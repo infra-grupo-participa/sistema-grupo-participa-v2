@@ -1,4 +1,4 @@
-// Rotinas de coleta do Tráfego (migration 20261005r) testadas SEM credencial e SEM API real: as respostas do Meta, do
+// Rotinas de coleta do Tráfego (migration 20261006i) testadas SEM credencial e SEM API real: as respostas do Meta, do
 // ClickUp e do Google são simuladas (fixtures inventadas, marcadas "ENSAIO", em infra/supabase/functions/_trafego-fixtures,
 // no formato documentado de cada API). O que se confere: o que a Edge manda para as funções de entrada do banco.
 import { describe, expect, it } from 'vitest';
@@ -179,7 +179,7 @@ describe('leitura do ClickUp (respostas simuladas, só leitura)', () => {
     expect(pedidos.every((p) => p.startsWith('pk_ficticio|https://api.clickup.com/api/v2/team/9000001/task?'))).toBe(true);
   });
 
-  it('20261006a: etiquetas reais dos spaces (só GET), minúsculas, sem repetição; falha = erro', async () => {
+  it('20261006j: etiquetas reais dos spaces (só GET), minúsculas, sem repetição; falha = erro', async () => {
     const pedidos: string[] = [];
     const buscar = async (url: string) => {
       pedidos.push(url);

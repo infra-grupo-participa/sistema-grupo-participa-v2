@@ -5,7 +5,7 @@ import {
 } from './kpis';
 import type { LinhaResumo } from './tipos';
 
-// Os números do caso PB26 são os mesmos do ensaio da migration (20261005p_ensaio.sql, passo 6): o banco e o
+// Os números do caso PB26 são os mesmos do ensaio da migration (20261006g_ensaio.sql, passo 6): o banco e o
 // TypeScript têm de chegar ao mesmo resultado.
 describe('KPIs da Central do Tráfego (mesmas fórmulas de mkt_trafego.resumo)', () => {
   it('% da verba: investido ÷ verba máxima, 1 casa', () => {
@@ -152,7 +152,7 @@ describe('filtros e totais', () => {
   });
 });
 
-describe('contas (20261006b)', () => {
+describe('contas (20261006k)', () => {
   it('unidade combina com o dono; ordem igual à do banco', async () => {
     const { unidadesDoDono, ordenarContas } = await import('./tipos');
     expect(unidadesDoDono('grupo')).toEqual(['csm', 'escritorio']);

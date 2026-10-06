@@ -1,4 +1,4 @@
-// Resumo do dia: os mesmos números do ensaio da 20261005r (passo 2), com ontem = 2026-10-04 (O).
+// Resumo do dia: os mesmos números do ensaio da 20261006i (passo 2), com ontem = 2026-10-04 (O).
 import { describe, expect, it } from 'vitest';
 import { calcularAlertas, textoAlerta as texto, textoRegra, type ProjetoEntrada } from './alertas';
 import type { Regra } from './tipos';
@@ -10,7 +10,7 @@ const d = (n: number) => {
   return x.toISOString().slice(0, 10);
 };
 
-// Os limiares propostos da 20261005r (tabela mkt_trafego.alerta_regras).
+// Os limiares propostos da 20261006i (tabela mkt_trafego.alerta_regras).
 const REGRAS: Regra[] = [
   { codigo: 'acima_verba_diaria', nome: 'Acima da verba diária', ligada: true, limiar: 0, unidade: 'pct', gravidade: 'alta', descricao: '' },
   { codigo: 'cpl_acima_meta', nome: 'CPL acima da meta', ligada: true, limiar: 0, unidade: 'pct', gravidade: 'alta', descricao: '' },
@@ -97,7 +97,7 @@ describe('resumo do dia (mesmas regras do banco)', () => {
   });
 });
 
-describe('20261006a: campanha do projeto em conta de fora e período de captação', () => {
+describe('20261006j: campanha do projeto em conta de fora e período de captação', () => {
   const REGRA: Regra = { codigo: 'conta_fora_projeto', nome: 'Campanha do projeto em conta de fora', ligada: true, limiar: 7, unidade: 'dias', gravidade: 'media', descricao: '' };
   const ZR28: ProjetoEntrada = {
     linha: { projeto_id: 9, sigla: 'ZR28', nome: 'Projeto Ensaio Contas', investido: 60, verba_maxima: null, verba_diaria: null, gasto_ontem: 60,
@@ -110,7 +110,7 @@ describe('20261006a: campanha do projeto em conta de fora e período de captaç�
       { fora_padrao: true, fase: null, ultimoGasto: d(-30), conta_id: 2, conta: 'Conta Ensaio B' },
     ],
   };
-  it('1 campanha gastando na Conta Ensaio B (os mesmos números do ensaio da 20261006a)', () => {
+  it('1 campanha gastando na Conta Ensaio B (os mesmos números do ensaio da 20261006j)', () => {
     const a = calcularAlertas(O, [REGRA], [ZR28], []);
     expect(a.map((x) => [x.regra, x.valor, x.detalhe.contas])).toEqual([['conta_fora_projeto', 1, ['Conta Ensaio B']]]);
     expect(texto(a[0])).toContain('em conta que não é do projeto (Conta Ensaio B)');

@@ -17,8 +17,8 @@ Grupo**, com as mesmas regras de análise. Nada aqui conecta no Supabase, no dom
 | Código das telas e da coleta | `web/modules/marketing/web/` (`domain`, `application`, `infrastructure`, `ui`) |
 | Rota que recebe os pacotes | `web/app/api/web/coletar/route.ts` |
 | Gravador (adaptado do `radar-051026-0007.js`, sem vídeo) | `web/public/web/radar-v1.js` |
-| Banco (schema `mkt_web`, 14 tabelas) | `infra/supabase/migrations/20261005n_mkt_web_coleta.sql` + `_ensaio.sql` + `.explain.md` |
-| Fase 2 (Fluxo, mapa de calor, Melhorias, teste do Google, lead ligado à pessoa, connect rate) | `infra/supabase/migrations/20261005q_mkt_web_fase2.sql` + `_ensaio.sql` + `.explain.md` e `infra/supabase/functions/mkt-web-pagespeed/` |
+| Banco (schema `mkt_web`, 14 tabelas) | `infra/supabase/migrations/20261006f_mkt_web_coleta.sql` + `_ensaio.sql` + `.explain.md` |
+| Fase 2 (Fluxo, mapa de calor, Melhorias, teste do Google, lead ligado à pessoa, connect rate) | `infra/supabase/migrations/20261006h_mkt_web_fase2.sql` + `_ensaio.sql` + `.explain.md` e `infra/supabase/functions/mkt-web-pagespeed/` |
 | Regras de achados e testes A/B (porte do `oportunidades.ts` e do `testes.ts` do Radar) | `web/modules/marketing/web/domain/achados.ts` e `testes-ab.ts` |
 | Base compartilhada (projetos, páginas, padrão de nome de campanha) | `infra/supabase/migrations/20261005m_*` (**já aplicada em produção**) |
 | Base única de pessoas (lead) e CRM do Comercial | `infra/supabase/migrations/20261005o_*` e `web/modules/comercial/` |
@@ -29,10 +29,10 @@ Grupo**, com as mesmas regras de análise. Nada aqui conecta no Supabase, no dom
 | Peça | Situação |
 |---|---|
 | Base compartilhada (`mkt.projetos`, `mkt.paginas`, tradutor do nome de campanha) | **No ar** (migration 20261005m aplicada, tela Marketing > Projetos) |
-| Coleta + 9 abas da Web | **Pronta na branch `victor`, não publicada.** Migration 20261005n **não aplicada** (ensaio rodado em produção com rollback: 113 linhas, 0 erro) |
+| Coleta + 9 abas da Web | **Pronta na branch `victor`, não publicada.** Migration 20261006f **não aplicada** (ensaio rodado em produção com rollback: 113 linhas, 0 erro) |
 | Gravador nas páginas do PB | **Ainda é o do Luiz.** A troca ("virada") não foi feita |
 | Base de pessoas e CRM do Comercial | Pronta na branch `victor`, **não aplicada**. Já grava a referência do lead em `mkt_web.visitantes.lead_ref` |
-| Fase 2 da Web (Fluxo, mapa de calor sobre a página, Melhorias, teste do Google, leads na base de pessoas, connect rate, páginas do PB26) | **Pronta na branch `victor`, não aplicada** (migration 20261005q, depende da 20261005n; ensaio local sem erro). O gravador não mudou |
+| Fase 2 da Web (Fluxo, mapa de calor sobre a página, Melhorias, teste do Google, leads na base de pessoas, connect rate, páginas do PB26) | **Pronta na branch `victor`, não aplicada** (migration 20261006h, depende da 20261006f; ensaio local sem erro). O gravador não mudou |
 | Publicação | Só depois de o Victor ver as telas. **Nada vai para a `main` sem ok do Victor** |
 
 ## 4. Decisões já tomadas (não reabrir sem falar com o Victor)
@@ -68,7 +68,7 @@ Grupo**, com as mesmas regras de análise. Nada aqui conecta no Supabase, no dom
 ## 6. O que falta (em ordem)
 
 1. **Virada**, com data combinada com o Luiz: passo a passo completo em
-   [`central-de-dados.md`, "Virada"](central-de-dados.md). Resumo: aplicar a 20261005n, aplicar a 20261005q (já cadastra
+   [`central-de-dados.md`, "Virada"](central-de-dados.md). Resumo: aplicar a 20261006f, aplicar a 20261006h (já cadastra
    as 11 páginas do PB26; antes, publicar a Edge `mkt-web-pagespeed`), publicar, ligar a coleta, rodar um dia em
    paralelo numa página, trocar a linha do gravador nas páginas.
 2. **Importar o histórico do banco do Luiz** (feito pelo Luiz, na branch dele, revisado por Victor/João):
@@ -78,7 +78,7 @@ Grupo**, com as mesmas regras de análise. Nada aqui conecta no Supabase, no dom
      contagens antes e depois;
    - CRM: só depois da revisão LGPD, por canal seguro, fora do git.
 3. **Depois da virada:** desligar o Supabase e o domínio pessoais do Luiz.
-4. **Segunda fase, o que ainda falta** (o resto da segunda fase está na 20261005q, não aplicada): gravação/replay,
+4. **Segunda fase, o que ainda falta** (o resto da segunda fase está na 20261006h, não aplicada): gravação/replay,
    Diário com IA, publicações (e o achado "antes e depois da publicação"), Pesquisas, reenvio ao ActiveCampaign, o
    servidor MCP da central (as ferramentas da Web estão descritas em `central-de-dados.md`), área `mkt_web` para o Luiz
    e o Iromar, teste A/B cadastrado (início, fim, hipótese, trava) e clique no link por anúncio (depende do Tráfego).
@@ -114,6 +114,6 @@ Grupo**, com as mesmas regras de análise. Nada aqui conecta no Supabase, no dom
 
 | Data | Quem | O quê |
 |---|---|---|
-| 05/10/2026 | Victor + Claude | Estudo do pacote do Radar; base compartilhada aplicada (20261005m); coleta e 9 abas na branch `victor` (20261005n, não aplicada); este guia |
-| 05/10/2026 | Victor + Claude | Fase 2 na branch `victor` (20261005q, não aplicada): abas Fluxo, Mapa de calor (sobre a captura do Google) e Melhorias (achados automáticos com as regras do `oportunidades.ts`, testes A/B por `ak1`/`ak1-b`, Comparar); teste diário do Google (Edge `mkt-web-pagespeed`); leads na base de pessoas com link para a ficha (admin/dev); connect rate (page views ÷ cliques no link) com o Tráfego; as 11 páginas do PB26. Gravador sem mudança |
-| 06/10/2026 | Victor + Claude | UTM no padrão do gp-operacoes (`nome\|id`): leitura única `mkt.utm_separar`/`mkt_web.origem_ids` (20261005n), Origem, achados por criativo e connect rate cruzam pelo id; a coleta guarda os ids em `campaign_id`/`adset_id`/`ad_id`; UTM guardado até 300 caracteres no servidor. Gravador sem mudança de comportamento (ver o risco do corte em 120 caracteres na seção 6) |
+| 05/10/2026 | Victor + Claude | Estudo do pacote do Radar; base compartilhada aplicada (20261005m); coleta e 9 abas na branch `victor` (20261006f, não aplicada); este guia |
+| 05/10/2026 | Victor + Claude | Fase 2 na branch `victor` (20261006h, não aplicada): abas Fluxo, Mapa de calor (sobre a captura do Google) e Melhorias (achados automáticos com as regras do `oportunidades.ts`, testes A/B por `ak1`/`ak1-b`, Comparar); teste diário do Google (Edge `mkt-web-pagespeed`); leads na base de pessoas com link para a ficha (admin/dev); connect rate (page views ÷ cliques no link) com o Tráfego; as 11 páginas do PB26. Gravador sem mudança |
+| 06/10/2026 | Victor + Claude | UTM no padrão do gp-operacoes (`nome\|id`): leitura única `mkt.utm_separar`/`mkt_web.origem_ids` (20261006f), Origem, achados por criativo e connect rate cruzam pelo id; a coleta guarda os ids em `campaign_id`/`adset_id`/`ad_id`; UTM guardado até 300 caracteres no servidor. Gravador sem mudança de comportamento (ver o risco do corte em 120 caracteres na seção 6) |

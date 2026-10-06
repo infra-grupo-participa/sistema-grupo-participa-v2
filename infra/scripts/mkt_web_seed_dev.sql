@@ -1,7 +1,7 @@
 -- Marketing > Web: SEED DE DESENVOLVIMENTO. NUNCA RODAR EM PRODUÇÃO.
 --
 -- Para quê: encher mkt_web com visitas INVENTADAS do PB26 (14 dias) num banco LOCAL (PGlite, Postgres local ou um
--- Supabase de teste) que já tenha as migrations 20261005m e 20261005n, e ver as RPCs public.mkt_web_* e as telas
+-- Supabase de teste) que já tenha as migrations 20261005m e 20261006f, e ver as RPCs public.mkt_web_* e as telas
 -- com números. Tudo que este script cria tem id começando por "dev" e sai com o bloco LIMPAR do fim.
 --
 -- Trava: só roda depois de

@@ -1,5 +1,5 @@
 // Marketing > Web > Fluxo: rótulos e contas do caminho entre páginas (puro). Os números vêm de public.mkt_web_fluxo
-// (migration 20261005q): a visita vira uma sequência de caminhos (recarregar a mesma página não é passo).
+// (migration 20261006h): a visita vira uma sequência de caminhos (recarregar a mesma página não é passo).
 import type { Fluxo } from './tipos';
 
 export const SAIU = '(saiu)';

@@ -198,7 +198,7 @@ export function demoInstalacao(): Instalacao {
   };
 }
 
-// ─── Fase 2 (migration 20261005q): tudo inventado ────────────────────────────────────────────────────────────────────
+// ─── Fase 2 (migration 20261006h): tudo inventado ────────────────────────────────────────────────────────────────────
 const NOMES_DEMO: Record<string, string> = Object.fromEntries(DEMO_PAGINAS.map((p) => [p.caminho, p.nome]));
 
 export function demoFluxo(de: string, ate: string): Fluxo {

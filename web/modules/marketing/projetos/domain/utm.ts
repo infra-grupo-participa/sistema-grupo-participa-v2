@@ -9,7 +9,7 @@
 // O nome da campanha também tem " | " dentro, então o id é o que vem DEPOIS DA ÚLTIMA "|", e só se for número.
 // Sem "|": número = id, senão nome (formato antigo, dado histórico). O sistema cruza pelo id; nome só como reserva.
 //
-// A MESMA regra existe no banco (mkt.utm_separar e mkt_web.origem_ids, migration 20261005n). Mudou aqui, muda lá.
+// A MESMA regra existe no banco (mkt.utm_separar e mkt_web.origem_ids, migration 20261006f). Mudou aqui, muda lá.
 
 export interface UtmSeparado {
   /** A parte do nome, sem o id (aparada). Nula quando só veio id. */

@@ -61,7 +61,7 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
     demoApagarProduto(demoProdutos(2)[0].id);
     expect(demoSalvarProduto({ projeto_id: 1, produto_id: '0000001', oferta_codigo: '', de: '', ate: '', obs: '' }).ok).toBe(false);
   });
-  it('cadastro (20261006a): reais sem unidade nem contas; fictícios com tipo, unidade, lançamento e especialista Exemplo', () => {
+  it('cadastro (20261006j): reais sem unidade nem contas; fictícios com tipo, unidade, lançamento e especialista Exemplo', () => {
     const pb = demoCadastro(1)!;
     expect([pb.tipo, pb.unidade, pb.tipo_lancamento, pb.contas]).toEqual(['interno', null, null, []]);
     const dexa = demoResumo().find((l) => l.sigla === 'DEXA26')!;
@@ -85,7 +85,7 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
     const r = demoSalvarCadastro({ ...base, tipo: 'externo', unidade: 'aurum', tipo_lancamento: '', especialista_nome: 'Pessoa Exemplo Nova' });
     expect([r.ok, r.tipo_lancamento, r.avisos]).toEqual([true, 'palestra', ['especialista_cadastrado']]);
   });
-  it('modelos (20261006d): 9 exemplos rascunho; LPEXA26 já com o do lançamento pago aplicado', () => {
+  it('modelos (20261006l): 9 exemplos rascunho; LPEXA26 já com o do lançamento pago aplicado', () => {
     const ms = demoModelos();
     expect(ms.map((m) => m.nome)).toContain('Exemplo: Lançamento pago semanal gravado (LPSG) CSM');
     expect(ms.every((m) => m.rascunho && somaPct(m.fases) === 100)).toBe(true);
@@ -133,7 +133,7 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
   });
 });
 
-describe('contas (20261006b): unidade, principal e inativa', () => {
+describe('contas (20261006k): unidade, principal e inativa', () => {
   it('lista: ativas, principais primeiro; a inativa por último', () => {
     const cs = demoContas();
     expect(cs.slice(0, 2).every((c) => c.principal && c.ativa)).toBe(true);

@@ -1,4 +1,4 @@
-// trafego-clickup: a parte pura da leitura do ClickUp (migration 20261005r). Sem Deno, sem banco: testada no vitest com
+// trafego-clickup: a parte pura da leitura do ClickUp (migration 20261006i). Sem Deno, sem banco: testada no vitest com
 // respostas simuladas (web/modules/marketing/trafego/infrastructure/coleta.test.ts, fixtures em
 // infra/supabase/functions/_trafego-fixtures). SÓ LEITURA no ClickUp: um único endpoint GET, nunca escrita.
 //
@@ -114,7 +114,7 @@ export async function coletarClickup(etiquetas: string[], d: DepsClickup): Promi
   return res;
 }
 
-// ─── Etiquetas reais dos spaces (20261006a): para a tela escolher a etiqueta do projeto em vez de digitar ──────────
+// ─── Etiquetas reais dos spaces (20261006j): para a tela escolher a etiqueta do projeto em vez de digitar ──────────
 //   GET https://api.clickup.com/api/v2/team/<workspace>/space?archived=false   → { spaces: [{ id }] }
 //   GET https://api.clickup.com/api/v2/space/<space>/tag                        → { tags: [{ name }] }
 // Só leitura. Uma falha em qualquer chamada = erro (a lista no banco fica como estava).

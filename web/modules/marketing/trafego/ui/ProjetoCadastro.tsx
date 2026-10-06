@@ -1,6 +1,6 @@
 'use client';
 
-// Criar/editar o projeto (evento) na Central do Tráfego (migration 20261006a): sigla, nome, tipo e unidade, tipo de
+// Criar/editar o projeto (evento) na Central do Tráfego (migration 20261006j): sigla, nome, tipo e unidade, tipo de
 // lançamento (só os da unidade; Aurum fica em palestra sozinho), especialista, períodos de captação e do evento, etiqueta
 // do ClickUp (a chave única, com busca), status, gestores e contas de anúncio. Sem o campo "Linha" (revisão do Victor,
 // 06/10/2026: o nome basta; o banco grava o nome na coluna antiga). Mora no Tráfego porque os campos são de Tráfego e o

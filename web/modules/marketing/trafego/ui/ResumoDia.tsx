@@ -1,7 +1,7 @@
 'use client';
 
 // Resumo do dia ("o que está pegando fogo"), no topo da Central do Tráfego. Lê public.trafego_alertas (migration
-// 20261005r). Os limiares vêm da tabela mkt_trafego.alerta_regras; a tela só mostra.
+// 20261006i). Os limiares vêm da tabela mkt_trafego.alerta_regras; a tela só mostra.
 import { useEffect, useState } from 'react';
 import { Badge, SectionCard } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
@@ -38,7 +38,7 @@ export function ResumoDiaVista({ r, onAbrir }: { r: Resumo | null; onAbrir: (id:
   if (r === null) {
     return (
       <SectionCard title="Resumo do dia">
-        <p className="text-sm text-[var(--fg-3)]">Indisponível (sem acesso, ou a migration 20261005r ainda não foi aplicada).</p>
+        <p className="text-sm text-[var(--fg-3)]">Indisponível (sem acesso, ou a migration 20261006i ainda não foi aplicada).</p>
       </SectionCard>
     );
   }
@@ -72,7 +72,7 @@ export function ResumoDiaVista({ r, onAbrir }: { r: Resumo | null; onAbrir: (id:
       )}
       <div className="mt-3 space-y-1 text-xs text-[var(--fg-3)]">
         {r.sem_coleta && <p>Ainda não há gasto coletado: verba diária, ritmo das fases, % da verba e CPL não têm como disparar.</p>}
-        {!r.base_pessoas && <p>Sem a base de pessoas (migration 20261005o): meta de leads e CPL não são avaliados.</p>}
+        {!r.base_pessoas && <p>Sem a base de pessoas do Comercial (migration 20261005r_pessoas_e_crm_fundacao): meta de leads e CPL não são avaliados.</p>}
         <p>Coletas: {(['meta', 'clickup'] as const).map((f) => `${ROTULO_FONTE[f]} ${quando(r.coletas[f])}`).join(' · ')}.</p>
         <button type="button" className="underline" onClick={() => setRegras((v) => !v)} aria-expanded={regras}>
           {regras ? 'Esconder as regras' : 'Ver as regras e os limiares'}

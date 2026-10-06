@@ -1,7 +1,7 @@
-// trafego-google: ESQUELETO da leitura do Google Ads (migration 20261005r). NÃO FUNCIONA AINDA e não tem index.ts:
+// trafego-google: ESQUELETO da leitura do Google Ads (migration 20261006i). NÃO FUNCIONA AINDA e não tem index.ts:
 // falta credencial e decisão (docs/central-de-dados.md, seção Tráfego, "Google Ads: desenho"). O que está aqui é a
 // parte pura, testada no vitest com resposta simulada: a consulta GAQL e a conversão para o formato das funções de
-// entrada da 20261005p (trafego_campanhas_receber e trafego_desempenho_receber).
+// entrada da 20261006g (trafego_campanhas_receber e trafego_desempenho_receber).
 //
 // O que vai precisar (nada disso existe ainda):
 //   - developer token da API do Google Ads (pedido na conta administradora, aprovado pelo Google);

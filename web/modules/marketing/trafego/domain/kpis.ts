@@ -1,6 +1,6 @@
 // Marketing > Tráfego: os cálculos da Central do Tráfego. Domínio puro (sem Next, sem Supabase).
 //
-// As MESMAS fórmulas estão no banco (mkt_trafego.resumo, migration 20261005p). Mudou aqui, muda lá (e o contrário).
+// As MESMAS fórmulas estão no banco (mkt_trafego.resumo, migration 20261006g). Mudou aqui, muda lá (e o contrário).
 // Regra da casa: sem fonte ou sem base para a conta = null ("sem dado"), nunca zero inventado.
 //   % da verba   = investido ÷ verba máxima × 100           (1 casa)
 //   CPL          = investido ÷ leads da nossa base           (2 casas) (lead da base, decisão do Victor 05/10/2026)
@@ -10,7 +10,7 @@
 //   % MQL        = MQL ÷ leads × 100                         (1 casa)
 //   connect rate = page views ÷ cliques no link × 100        (1 casa)
 //   conversão    = leads da página ÷ page views × 100        (1 casa)
-//   page view = a mesma da Web fase 2 (public.mkt_web_connect, 20261005q): visita vinda da campanha, uma por visita;
+//   page view = a mesma da Web fase 2 (public.mkt_web_connect, 20261006h): visita vinda da campanha, uma por visita;
 //   leads da página = dessas visitas, as que viraram lead. Assim o Tráfego e a Web mostram o mesmo número.
 //   ritmo        = gasto do dia ÷ verba diária × 100         (1 casa)
 //   esperado até = soma, por fase, da verba proporcional aos dias já passados da fase

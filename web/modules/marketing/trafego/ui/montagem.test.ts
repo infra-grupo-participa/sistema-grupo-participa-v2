@@ -1,4 +1,4 @@
-// Telas da 20261006a renderizadas em HTML estático com os dados do modo de demonstração (fictícios). Prova conteúdo.
+// Telas da 20261006j renderizadas em HTML estático com os dados do modo de demonstração (fictícios). Prova conteúdo.
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -15,7 +15,7 @@ describe('checklist de montagem e gerador (demonstração)', () => {
     expect(h).toContain('Contas de anúncio vinculadas');
     expect(h).toContain('Automação de ingresso no grupo do WhatsApp configurada no SendFlow');
     expect(h).not.toMatch(/[—–]/);
-    expect(html(createElement(ChecklistVista, { c: null }))).toContain('20261006a ainda não foi aplicada');
+    expect(html(createElement(ChecklistVista, { c: null }))).toContain('20261006j ainda não foi aplicada');
   });
   it('gerador mostra a linha de UTM do Meta com as macros', () => {
     const h = html(createElement(GeradorCampanha, { sigla: 'LPEXA26', listas: demoListasCadastro(), config: demoConfig(), paginas: [], gestoresProjeto: ['RS'] }));

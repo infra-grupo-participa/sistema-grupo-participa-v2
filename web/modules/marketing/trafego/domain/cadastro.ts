@@ -1,6 +1,6 @@
 // Marketing > Tráfego: cadastro do projeto (evento) e gerador de nome de campanha e UTM. Domínio puro.
 //
-// O banco é quem manda (migration 20261006a): mkt.unidades, mkt.tipos_lancamento, mkt.lancamento_regras,
+// O banco é quem manda (migration 20261006j): mkt.unidades, mkt.tipos_lancamento, mkt.lancamento_regras,
 // mkt.especialistas, mkt_trafego.utm_parametros. As listas chegam por parâmetro (trafego_cadastro_listas); aqui ficam as
 // regras da tela, as mesmas do banco:
 //   - tipo interno ou externo; unidade do tipo (interno: CSM ou Escritório; externo: Aurum ou Diamantes);
@@ -32,7 +32,7 @@ export interface ListasCadastro {
   objetivos: string[];
   /** plataforma → parâmetros de URL (Meta: as macros oficiais). */
   utm: Record<string, ParametroUtm[]>;
-  /** Modelos de lançamento (20261006d): para o "Aplicar modelo" e a aba de modelos. */
+  /** Modelos de lançamento (20261006l): para o "Aplicar modelo" e a aba de modelos. */
   modelos: ModeloResumo[];
   /** Etiquetas reais dos spaces do ClickUp (vazia = sem coleta: a tela pede texto). */
   etiquetas_clickup: string[];
@@ -48,7 +48,7 @@ export interface ProjetoCadastro {
   ativo: boolean; tipo: Tipo | null; unidade: string | null; tipo_lancamento: string | null; especialista_id: number | null;
   especialista_nome: string | null; status: string | null; gestores: string[]; contas: number[];
   paginas: { codigo: string; nome: string }[]; sugestoes: SugestaoCampanha[]; fases_planejadas: number;
-  /** Modelo aplicado (20261006d); nulo = nenhum. */
+  /** Modelo aplicado (20261006l); nulo = nenhum. */
   modelo: { id: number | null; nome: string; aplicado_em: string } | null;
   /** Quantos modelos ativos valem para o tipo de lançamento e a unidade do projeto. */
   modelos_disponiveis: number;
@@ -185,7 +185,7 @@ export function nomeTemSigla(nome: string, sigla: string): boolean {
   return new RegExp(`(^|[^A-Z0-9])${sigla}([^A-Z0-9]|$)`).test(n);
 }
 
-/** O período do projeto inteiro que o banco grava (gatilho da 20261006a): do começo mais cedo ao fim mais tarde. */
+/** O período do projeto inteiro que o banco grava (gatilho da 20261006j): do começo mais cedo ao fim mais tarde. */
 export function periodoProjeto(f: Pick<ProjetoForm, 'inicio' | 'fim' | 'captacao_inicio' | 'captacao_fim' | 'evento_inicio' | 'evento_fim'>): { inicio: string; fim: string } {
   const ini = [f.captacao_inicio, f.evento_inicio].filter(Boolean).sort();
   const fim = [f.captacao_fim, f.evento_fim].filter(Boolean).sort();
@@ -193,7 +193,7 @@ export function periodoProjeto(f: Pick<ProjetoForm, 'inicio' | 'fim' | 'captacao
   return { inicio: novo && ini.length ? ini[0] : f.inicio, fim: novo && fim.length ? fim[fim.length - 1] : f.fim };
 }
 
-// ─── Checklist de montagem (a mesma regra de mkt_trafego.checklist da 20261006d; o demo e os testes usam isto) ─────
+// ─── Checklist de montagem (a mesma regra de mkt_trafego.checklist da 20261006l; o demo e os testes usam isto) ─────
 export interface ItemProjeto { id: number; texto: string; momento: Momento; feito_em: string | null; feito_por: string | null; do_modelo: boolean }
 export interface EntradaChecklist {
   tipo: Tipo | null;
@@ -252,7 +252,7 @@ export function porMomento(c: Checklist): { momento: Momento; itens: ItemCheckli
 type Periodos = { inicio: string | null; fim: string | null; captacao_inicio: string | null; captacao_fim: string | null; evento_inicio: string | null; evento_fim: string | null };
 /**
  * Período padrão da RECEITA quando o produto da Hotmart não tem período próprio (a mesma regra de
- * mkt_trafego.periodo_receita, 20261006a): do início da captação até o fim do evento, para pegar a abertura de carrinho.
+ * mkt_trafego.periodo_receita, 20261006j): do início da captação até o fim do evento, para pegar a abertura de carrinho.
  * PROVISÓRIO (Victor, 06/10/2026, a confirmar depois): trocar aqui e na função do banco.
  */
 export function periodoReceita(p: Periodos): { inicio: string | null; fim: string | null } {

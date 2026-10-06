@@ -4,7 +4,7 @@ import {
   nomeTemSigla, periodoProjeto, periodoReceita, validarCadastro, type ListasCadastro,
 } from './cadastro';
 
-// As listas são as sementes da migration 20261006a (unidades, tipos e regras, especialistas internos, UTM do Meta).
+// As listas são as sementes da migration 20261006j (unidades, tipos e regras, especialistas internos, UTM do Meta).
 const L: ListasCadastro = {
   unidades: [
     { codigo: 'csm', tipo: 'interno', nome: 'CSM', descricao: null }, { codigo: 'escritorio', tipo: 'interno', nome: 'Escritório', descricao: null },
@@ -103,7 +103,7 @@ describe('gerador de nome de campanha e UTM', () => {
   });
 });
 
-describe('checklist de montagem (a mesma regra de mkt_trafego.checklist da 20261006d)', () => {
+describe('checklist de montagem (a mesma regra de mkt_trafego.checklist da 20261006l)', () => {
   const base = { tipo: 'interno' as const, contas: 2, campanhas: 3, foraPadrao: 1, semFase: 1, produtosHotmart: 0, paginas: 0,
     etiqueta: null, verbaMaxima: null, fases: 0, metas: [null, null, null], modelo: null, esperadas: [],
     encontradas: [], status: null, eventoFim: null, hoje: '2026-10-06' };

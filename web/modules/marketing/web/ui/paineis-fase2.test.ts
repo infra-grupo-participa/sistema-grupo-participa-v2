@@ -35,7 +35,8 @@ describe('telas da fase 2 com os dados de demonstração', () => {
     expect(c).toContain('Sem fundo');
     expect(html(createElement(SecaoLab, { lab: demo.demoLab() }))).toContain('falhou (HTTP 429)');
     const l = html(createElement(SecaoLeads, { l: demo.demoLeads() }));
-    expect(l).toContain('/comercial?pessoa=');
+    expect(l).toContain('Últimos leads do período');
+    expect(l).not.toContain('/comercial?pessoa=');
     expect(l).not.toContain('@');
     expect(html(createElement(SecaoConnect, { c: demo.demoConnect(DE, ATE) }))).toContain('Connect rate');
   });
@@ -52,10 +53,10 @@ describe('estado vazio e sem as migrations vizinhas', () => {
       html(createElement(PainelCalor, { c: { ...demo.demoCalor('mobile'), visitas: 0 }, camada: 'cliques' })),
     ]) expect(t).toContain(SEM_DADOS);
   });
-  it('sem a base de pessoas (20261005o) e sem o Tráfego (20261005p) a tela explica e não quebra', () => {
+  it('sem a base de pessoas (20261005r_pessoas_e_crm_fundacao) e sem o Tráfego (20261006g) a tela explica e não quebra', () => {
     const l = html(createElement(SecaoLeads, { l: { base: false, pode_abrir: false, leads_web: 3, navegadores_lead: 3, com_ref: 0, pessoas: null, mql: null, nao_mql: null, lista: [] } }));
-    expect(l).toContain('20261005o');
+    expect(l).toContain('20261005r_pessoas_e_crm_fundacao');
     expect(l).not.toContain('/comercial?pessoa=');
-    expect(html(createElement(SecaoConnect, { c: { trafego: false, cliques_link: false, campanhas: [], sem_campanha: null, anuncios: [] } }))).toContain('20261005p');
+    expect(html(createElement(SecaoConnect, { c: { trafego: false, cliques_link: false, campanhas: [], sem_campanha: null, anuncios: [] } }))).toContain('20261006g');
   });
 });

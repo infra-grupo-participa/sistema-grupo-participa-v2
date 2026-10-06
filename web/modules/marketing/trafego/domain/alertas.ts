@@ -1,9 +1,9 @@
 // Resumo do dia da Central do Tráfego ("o que está pegando fogo"). Domínio puro.
 //
-// O banco é quem decide (mkt_trafego.alertas, migration 20261005r); aqui ficam:
+// O banco é quem decide (mkt_trafego.alertas, migration 20261006i); aqui ficam:
 //   - textoAlerta: a frase que a tela mostra para cada alerta;
 //   - calcularAlertas: as MESMAS regras, para o modo de demonstração e para os testes (alertas.test.ts confere os
-//     mesmos números do ensaio da 20261005r). Mudou lá, muda aqui.
+//     mesmos números do ensaio da 20261006i). Mudou lá, muda aqui.
 // Limiares: tabela mkt_trafego.alerta_regras (chegam por parâmetro; nada de número fixo aqui).
 //   acima_verba_diaria  gasto de ontem > verba diária × (1 + limiar%)
 //   cpl_acima_meta      CPL > meta de CPL × (1 + limiar%)
@@ -14,11 +14,11 @@
 //   verba_perto_fim     % da verba ≥ limiar
 //   fora_padrao         campanhas fora do padrão com gasto nos últimos `limiar` dias (inclui as sem projeto)
 //   sem_fase            campanhas do projeto sem fase com gasto nos últimos `limiar` dias
-//   conta_fora_projeto  (20261006a) campanhas com a sigla do projeto no nome gastando nos últimos `limiar` dias numa conta
+//   conta_fora_projeto  (20261006j) campanhas com a sigla do projeto no nome gastando nos últimos `limiar` dias numa conta
 //                       que não é do projeto; só avalia projeto com conta ligada
-//   checklist_incompleto (20261006d) projeto em captação (ontem entre início e fim da captação) com item do checklist de
+//   checklist_incompleto (20261006l) projeto em captação (ontem entre início e fim da captação) com item do checklist de
 //                       "antes de subir as campanhas" pendente, a partir de `limiar` dias do início da captação
-// Período da meta de leads: a fase de captação planejada com datas; senão o período padrão do projeto (20261006a: a
+// Período da meta de leads: a fase de captação planejada com datas; senão o período padrão do projeto (20261006j: a
 // captação do projeto, senão início e fim), como mkt_trafego.periodo_padrao.
 
 import { arredondar } from './kpis';
@@ -37,11 +37,11 @@ export interface ProjetoEntrada {
   entra: boolean;
   fases: FaseEntrada[];
   campanhas: CampanhaEntrada[];
-  /** Contas de anúncio do projeto (20261006a). Vazio = a regra conta_fora_projeto não avalia. */
+  /** Contas de anúncio do projeto (20261006j). Vazio = a regra conta_fora_projeto não avalia. */
   contasProjeto?: number[];
   /** Campanhas com a sigla do projeto no nome (ligadas a ele ou não), com a conta. */
   campanhasDaSigla?: CampanhaEntrada[];
-  /** Itens do checklist de "antes" ainda pendentes (20261006d). */
+  /** Itens do checklist de "antes" ainda pendentes (20261006l). */
   pendentesAntes?: string[];
 }
 

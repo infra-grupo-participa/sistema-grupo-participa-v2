@@ -1,10 +1,10 @@
-// Marketing > Tráfego: tipos do que as funções public.trafego_* devolvem (migration 20261005p). Domínio puro.
+// Marketing > Tráfego: tipos do que as funções public.trafego_* devolvem (migration 20261006g). Domínio puro.
 
 export type Subarea = 'interno' | 'aurum' | 'diamante';
 export type Tipo = 'interno' | 'externo';
 export type Dono = 'grupo' | 'diamante' | 'aurum';
 
-/** Subárea antiga (mkt.projetos.subarea_trafego): desde a 20261006a é derivada de tipo e unidade. A tela filtra por tipo e unidade. */
+/** Subárea antiga (mkt.projetos.subarea_trafego): desde a 20261006j é derivada de tipo e unidade. A tela filtra por tipo e unidade. */
 export const ROTULO_SUBAREA: Record<Subarea, string> = { interno: 'Interno', aurum: 'Aurum', diamante: 'Diamantes' };
 export const ROTULO_TIPO: Record<Tipo, string> = { interno: 'Interno', externo: 'Externo' };
 export const ROTULO_DONO: Record<Dono, string> = { grupo: 'Grupo Participa', diamante: 'Diamante', aurum: 'Aluno Aurum' };
@@ -17,9 +17,9 @@ export interface ConfigTrafego {
   status: Codigo[];
   fases: Codigo[];
   gestores: { sigla: string; nome: string }[];
-  /** true = a base de pessoas (20261005o) existe e os leads da Central vêm dela. */
+  /** true = a base de pessoas do Comercial (20261005r_pessoas_e_crm_fundacao) existe e os leads da Central vêm dela. */
   base_pessoas: boolean;
-  /** true = a Web fase 2 (20261005q, public.mkt_web_connect) existe e as page views vêm dela. */
+  /** true = a Web fase 2 (20261006h, public.mkt_web_connect) existe e as page views vêm dela. */
   base_web: boolean;
   /** Objetivo do nome de campanha → fase (mkt_trafego.objetivo_fase). Objetivo ausente = sem fase automática. */
   objetivo_fase: Record<string, string>;
@@ -33,9 +33,9 @@ export interface LinhaResumo {
   sigla: string;
   nome: string;
   subarea: Subarea | null;
-  /** Interno ou externo (mkt.projetos.tipo, 20261006a). */
+  /** Interno ou externo (mkt.projetos.tipo, 20261006j). */
   tipo: Tipo | null;
-  /** Unidade dentro do tipo (csm, escritorio, aurum, diamantes; 20261006a). Nulo = não marcada. */
+  /** Unidade dentro do tipo (csm, escritorio, aurum, diamantes; 20261006j). Nulo = não marcada. */
   unidade?: string | null;
   unidade_nome?: string | null;
   tipo_lancamento?: string | null;
@@ -45,12 +45,12 @@ export interface LinhaResumo {
   contas_projeto?: number[];
   /** false = projeto externo: a receita não entra por ora (Victor, 06/10/2026). */
   receita_aplica?: boolean;
-  /** Período de captação e do evento (20261006a). A captação é o padrão da receita e da meta de leads. */
+  /** Período de captação e do evento (20261006j). A captação é o padrão da receita e da meta de leads. */
   captacao_inicio?: string | null;
   captacao_fim?: string | null;
   evento_inicio?: string | null;
   evento_fim?: string | null;
-  /** Checklist de montagem: itens prontos e itens que se aplicam (20261006a). */
+  /** Checklist de montagem: itens prontos e itens que se aplicam (20261006j). */
   checklist_feitos?: number | null;
   checklist_total?: number | null;
   projeto_ativo: boolean;
@@ -127,9 +127,9 @@ export interface Conta {
   ativa: boolean;
   obs: string | null;
   campanhas: number;
-  /** Unidade da conta (csm, escritorio, aurum, diamantes; 20261006b). Nulo = não classificada. */
+  /** Unidade da conta (csm, escritorio, aurum, diamantes; 20261006k). Nulo = não classificada. */
   unidade?: string | null;
-  /** Conta principal: aparece primeiro na seleção (20261006b). */
+  /** Conta principal: aparece primeiro na seleção (20261006k). */
   principal?: boolean;
 }
 
@@ -160,7 +160,7 @@ export interface Campanha {
   objetivo: string | null;
   descricao: string | null;
   pagina: string | null;
-  /** O projeto como está escrito no nome (2º campo), mesmo sem cadastro. 20261005p. */
+  /** O projeto como está escrito no nome (2º campo), mesmo sem cadastro. 20261006g. */
   projeto_lido?: string | null;
   /** Quantos campos o nome tem (para o motivo "menos de 3 campos"). */
   campos?: number | null;
@@ -210,7 +210,7 @@ export const ROTULO_AVISO: Record<string, string> = {
   diaria_acima_da_maxima: 'A verba diária está acima da verba máxima.',
 };
 
-// ─── Fase 2 (migration 20261005r) ─────────────────────────────────────────────────────────────────────────────────────
+// ─── Fase 2 (migration 20261006i) ─────────────────────────────────────────────────────────────────────────────────────
 
 export type RegraAlerta =
   | 'acima_verba_diaria' | 'cpl_acima_meta' | 'leads_abaixo_meta' | 'ritmo_fase' | 'verba_perto_fim' | 'fora_padrao' | 'sem_fase'
@@ -289,17 +289,17 @@ export const ROTULO_AVISO_PRODUTO: Record<string, string> = {
   produto_sem_compras: 'Nenhuma compra deste produto apareceu ainda na Hotmart (confira o id).',
 };
 
-// ─── Cadastro do projeto (migration 20261006a) ───────────────────────────────────────────────────────────────────────
+// ─── Cadastro do projeto (migration 20261006j) ───────────────────────────────────────────────────────────────────────
 
-/** Onde se resolve um item automático do checklist (a tela leva até lá). 20261006d. */
+/** Onde se resolve um item automático do checklist (a tela leva até lá). 20261006l. */
 export type AcaoChecklist = 'projeto' | 'paginas' | 'hotmart' | 'modelo' | 'planejamento' | 'fases' | 'gerador' | 'campanhas';
 
-/** Item do checklist de montagem. Automático: o banco confere (codigo). Manual: alguém marca (id; item do projeto, 20261006d). */
+/** Item do checklist de montagem. Automático: o banco confere (codigo). Manual: alguém marca (id; item do projeto, 20261006l). */
 export interface ItemChecklist {
   codigo?: string;
   id?: number;
   texto: string;
-  /** Antes de subir as campanhas, durante, encerramento (20261006d). */
+  /** Antes de subir as campanhas, durante, encerramento (20261006l). */
   momento?: 'antes' | 'durante' | 'encerramento';
   acao?: AcaoChecklist;
   /** Item manual que veio do modelo aplicado. */
@@ -315,7 +315,7 @@ export interface ItemChecklist {
 
 export interface Checklist {
   automaticos: ItemChecklist[]; manuais: ItemChecklist[]; feitos: number; total: number;
-  /** Campanhas esperadas do projeto (do modelo), com "criada" (20261006d). */
+  /** Campanhas esperadas do projeto (do modelo), com "criada" (20261006l). */
   esperadas?: { id: number; objetivo: string; fase: string | null; descricao: string | null; pagina: string | null; criada: boolean }[];
   /** Modelo aplicado (nulo = nenhum). */
   modelo?: { id: number | null; nome: string; aplicado_em: string } | null;
