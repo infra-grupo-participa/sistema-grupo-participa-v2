@@ -1,5 +1,6 @@
 import { getCurrentUser } from '@/shared/composition/server-container';
 import { DEPARTAMENTOS, podeVerDepartamento } from '@/shared/domain/departamentos';
+import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { CartaoModulo } from '@/shared/ui/departamentos/CartaoModulo';
 import { Icon } from '@/shared/ui/icons';
 
@@ -40,7 +41,7 @@ export default async function HomePage() {
             descricao={d.descricao}
             ico={d.ico}
             emBreve={d.status === 'em_breve'}
-            bloqueado={!podeVerDepartamento(user, d.key)}
+            bloqueado={!podeVerDepartamento(user, d.key, ACESSO_DEPARTAMENTOS)}
             indice={i}
           />
         ))}

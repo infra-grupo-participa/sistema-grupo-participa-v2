@@ -1,0 +1,145 @@
+'use client';
+
+// Marketing > Mensageria: monta as 5 abas (Disparos · Por projeto · Números · Ferramentas · Integrações).
+// Projetos carregam uma vez. Depois de gravar, recarrega só o que a gravação mudou (ver `RECARGA`). As abas ficam montadas (escondidas
+// com `hidden`): trocar de aba não refaz consulta e não perde o filtro. A lista de disparos só recarrega na
+// aba visível (prop `ativo`, ver useListaDisparos). Preços (dentro de Ferramentas) e Integrações só buscam quando a aba
+// é aberta (useCargaVisivel). Identidade e "hoje" vêm do servidor, por prop.
+// Foco: o globals.css zera o outline fora de @layer (ganha de qualquer utility); aqui o contorno vai com ! para
+// valer, e o anel fraco do --ring (accent-border a 22% no escuro) ganha um contorno de 2px em --accent-dim.
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Loading, Tabs, Toast, idsAba, useFlash } from '@/shared/ui/components';
+import { Icon } from '@/shared/ui/icons';
+import type { Projeto } from '@/modules/marketing/projetos/domain/projetos';
+import type { Ferramenta, Numero } from '../domain/mensageria';
+import { listarFerramentas, listarNumeros, listarProjetos } from './mensageria-data';
+import { AbaDisparos } from './AbaDisparos';
+import { AbaPorProjeto } from './AbaPorProjeto';
+import { AbaNumeros } from './AbaNumeros';
+import { AbaFerramentas } from './AbaFerramentas';
+import { AbaIntegracoes } from './AbaIntegracoes';
+import { ErroCarga, corLink } from './pecas';
+
+type Aba = 'disparos' | 'projeto' | 'numeros' | 'ferramentas' | 'integracoes';
+
+/**
+ * O que cada gravação manda recarregar. `lista` = lista de disparos (só a aba visível busca; a escondida busca uma vez
+ * ao voltar). Disparo muda o consumo de hoje dos números. Número e ferramenta aparecem pelo nome na lista de disparos;
+ * ferramenta também aparece pelo nome em Números e em Preços. Preço muda o custo estimado da lista.
+ */
+type Gravacao = 'disparo' | 'numero' | 'ferramenta' | 'preco';
+const RECARGA: Record<Gravacao, { numeros: boolean; ferramentas: boolean; lista: boolean; precos: boolean }> = {
+  disparo: { numeros: true, ferramentas: false, lista: true, precos: false },
+  numero: { numeros: true, ferramentas: false, lista: true, precos: false },
+  ferramenta: { numeros: true, ferramentas: true, lista: true, precos: true },
+  preco: { numeros: false, ferramentas: false, lista: true, precos: true },
+};
+const ABAS: { k: Aba; l: string }[] = [
+  { k: 'disparos', l: 'Disparos' },
+  { k: 'projeto', l: 'Por projeto' },
+  { k: 'numeros', l: 'Números' },
+  { k: 'ferramentas', l: 'Ferramentas' },
+  { k: 'integracoes', l: 'Integrações' },
+];
+const ID_BASE = 'mensageria';
+
+/** undefined = carregando; null = falhou (rede ou sem acesso); array = carregado (pode ser vazio). */
+type Carga<T> = T[] | null | undefined;
+
+export function MensageriaClient({ hoje, nomeUsuario }: { hoje: string; nomeUsuario: string }) {
+  const [aba, setAba] = useState<Aba>('disparos');
+  const [projetos, setProjetos] = useState<Carga<Projeto>>(undefined);
+  const [ferramentas, setFerramentas] = useState<Carga<Ferramenta>>(undefined);
+  const [numeros, setNumeros] = useState<Carga<Numero>>(undefined);
+  const [vLista, setVLista] = useState(0);
+  const [vNumeros, setVNumeros] = useState(0);
+  const [vFerramentas, setVFerramentas] = useState(0);
+  const [vPrecos, setVPrecos] = useState(0);
+  const { toast, flash } = useFlash();
+
+  useEffect(() => {
+    let vivo = true;
+    listarProjetos().then((p) => { if (vivo) setProjetos(p); });
+    return () => { vivo = false; };
+  }, []);
+
+  // Na recarga a lista anterior continua na tela até a nova chegar (sem piscar "Carregando").
+  useEffect(() => {
+    let vivo = true;
+    listarFerramentas().then((f) => { if (vivo) setFerramentas(f); });
+    return () => { vivo = false; };
+  }, [vFerramentas]);
+  useEffect(() => {
+    let vivo = true;
+    listarNumeros().then((n) => { if (vivo) setNumeros(n); });
+    return () => { vivo = false; };
+  }, [vNumeros]);
+
+  const gravou = (g: Gravacao) => (msg: string) => {
+    flash(msg);
+    const o = RECARGA[g];
+    if (o.numeros) setVNumeros((v) => v + 1);
+    if (o.ferramentas) setVFerramentas((v) => v + 1);
+    if (o.lista) setVLista((v) => v + 1);
+    if (o.precos) setVPrecos((v) => v + 1);
+  };
+
+  if (projetos === undefined || ferramentas === undefined || numeros === undefined) return <Loading />;
+
+  const listaProjetos = projetos ?? [];
+  const listaFerramentas = ferramentas ?? [];
+  const listaNumeros = numeros ?? [];
+
+  return (
+    <div className="min-w-0 max-w-7xl space-y-4 [&_:focus-visible]:!outline-solid [&_:focus-visible]:!outline-2 [&_:focus-visible]:!outline-offset-2 [&_:focus-visible]:!outline-[var(--accent-dim)]">
+      <Link href="/marketing" className={`inline-flex min-h-11 items-center gap-1.5 text-sm hover:underline ${corLink}`}>
+        <Icon name="arrow-left" size={14} /> Voltar para Marketing
+      </Link>
+      <div>
+        <div className={`text-xs font-semibold uppercase tracking-wide ${corLink}`}>Marketing · Mensageria</div>
+        <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">Mensageria</h1>
+        <p className="mt-1 text-sm text-[var(--fg-2)]">
+          Registro dos disparos de WhatsApp, e-mail, SMS, ligação e grupos, com o retorno e o custo de cada um.
+        </p>
+      </div>
+
+      {projetos === null && <ErroCarga oque="os projetos (as listas de projeto ficam vazias)" />}
+
+      <Tabs tabs={ABAS} active={aba} onChange={(k) => setAba(k as Aba)} idBase={ID_BASE} label="Mensageria" />
+
+      <Painel k="disparos" aba={aba}>
+        <AbaDisparos
+          hoje={hoje} nomeUsuario={nomeUsuario} projetos={listaProjetos} ferramentas={listaFerramentas} numeros={listaNumeros}
+          ativo={aba === 'disparos'} versao={vLista} onGravou={gravou('disparo')}
+        />
+      </Painel>
+      <Painel k="projeto" aba={aba}>
+        <AbaPorProjeto hoje={hoje} projetos={listaProjetos} ativo={aba === 'projeto'} versao={vLista} />
+      </Painel>
+      <Painel k="numeros" aba={aba}>
+        <AbaNumeros numeros={listaNumeros} falhou={numeros === null} projetos={listaProjetos} ferramentas={listaFerramentas} onGravou={gravou('numero')} />
+      </Painel>
+      <Painel k="ferramentas" aba={aba}>
+        <AbaFerramentas
+          ferramentas={listaFerramentas} falhou={ferramentas === null} onGravou={gravou('ferramenta')}
+          ativo={aba === 'ferramentas'} versaoPrecos={vPrecos} onGravouPreco={gravou('preco')}
+        />
+      </Painel>
+      <Painel k="integracoes" aba={aba}>
+        <AbaIntegracoes ativo={aba === 'integracoes'} />
+      </Painel>
+
+      <Toast>{toast}</Toast>
+    </div>
+  );
+}
+
+function Painel({ k, aba, children }: { k: Aba; aba: Aba; children: React.ReactNode }) {
+  const ids = idsAba(ID_BASE, k);
+  return (
+    <div role="tabpanel" id={ids.panel} aria-labelledby={ids.tab} hidden={aba !== k} tabIndex={0}>
+      {children}
+    </div>
+  );
+}

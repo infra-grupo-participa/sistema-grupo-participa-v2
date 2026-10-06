@@ -9,6 +9,7 @@ import { podeVerRemocao } from '@/modules/remocao-acessos/domain/acesso';
 import { podePedirAlteracao } from '@/modules/alunos/domain/pedidos-alteracao';
 import { REPORTS, SYSTEM_NAV, type ReportGroup } from '@/shared/ui/nav/config';
 import { BASE_MARKETING, DEPARTAMENTOS, departamento, departamentoDaRota, podeVerDepartamento } from '@/shared/domain/departamentos';
+import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { Icon } from '@/shared/ui/icons';
 import { chaveHashPadrao, itemHashAtivo } from './item-ativo';
 
@@ -90,6 +91,7 @@ export function Sidebar({ user }: { user: GpUser }) {
   // Victor, 05/10/2026: fora de departamento (Início, Usuários, Configurações) não mostra menu de departamento nenhum.
   const mostraEducacional = depAtual === 'educacional';
   const mostraMarketing = depAtual === 'marketing' && podeVerDepartamento(user, 'marketing');
+  const mostraComercial = depAtual === 'comercial' && podeVerDepartamento(user, 'comercial', ACESSO_DEPARTAMENTOS);
 
   // O grupo aparece se o cargo permite E o usuário tem o setor.
   // Financeiro tem regra própria (visualizador NÃO vê dinheiro) — espelha
@@ -140,9 +142,9 @@ export function Sidebar({ user }: { user: GpUser }) {
 
       <Divider />
 
-      {/* Seletor de departamento. Marketing e Comercial somem para quem não é admin/dev (mesma regra dos layouts). */}
+      {/* Seletor de departamento. Marketing some para quem não é admin/dev (mesma regra do layout /marketing). */}
       <Group label="Departamentos" collapsed={!!groups.departamentos} onToggle={() => toggleGroup('departamentos')}>
-        {DEPARTAMENTOS.filter((d) => podeVerDepartamento(user, d.key)).map((d) => {
+        {DEPARTAMENTOS.filter((d) => podeVerDepartamento(user, d.key, ACESSO_DEPARTAMENTOS)).map((d) => {
           const active = depAtual === d.key;
           return (
             <Link key={d.key} href={d.path} className={itemCls(active)}>
@@ -175,6 +177,28 @@ export function Sidebar({ user }: { user: GpUser }) {
                 <Link key={b.key} href={b.path} className={itemCls(active)}>
                   <span className={iconBoxCls(active)}><Icon name={b.ico} /></span>
                   <span className="flex-1 truncate">{b.label}</span>
+                </Link>
+              );
+            })}
+          </Group>
+          <Divider />
+        </>
+      )}
+
+      {mostraComercial && (
+        <>
+          <Group label="Comercial" collapsed={!!groups.comercial} onToggle={() => toggleGroup('comercial')}>
+            <Link href="/comercial" className={itemCls(cur === '/comercial')}>
+              <span className={iconBoxCls(cur === '/comercial')}><Icon name="handshake" /></span>
+              <span>Início do Comercial</span>
+            </Link>
+            {departamento('comercial').areas.map((a) => {
+              const active = cur === a.path || cur.startsWith(a.path + '/');
+              return (
+                <Link key={a.key} href={a.path} className={itemCls(active)}>
+                  <span className={iconBoxCls(active)}><Icon name={a.ico} /></span>
+                  <span className="flex-1 truncate">{a.label}</span>
+                  {a.status === 'em_breve' && <EmBreveTag />}
                 </Link>
               );
             })}

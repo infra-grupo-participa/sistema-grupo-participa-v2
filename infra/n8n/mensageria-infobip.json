@@ -1,0 +1,166 @@
+{
+ "_nota": "Exportado do n8n Infra CSM em 06/10/2026. Credenciais por ID (valores ficam só no n8n). Fonte da verdade: o n8n.",
+ "id": "LIr53T0xVCves3yg",
+ "name": "Mensageria v2 — Infobip SMS → log de disparos",
+ "active": true,
+ "nodes": [
+  {
+   "id": "i1",
+   "name": "A cada 2 horas",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "hours",
+       "hoursInterval": 2,
+       "triggerAtMinute": 17
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "i2",
+   "name": "Logs de SMS (48 h)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    240,
+    0
+   ],
+   "notes": "A Infobip guarda log só por 48 h: rodar a cada 2 h deixa folga para falha do n8n.",
+   "parameters": {
+    "method": "GET",
+    "url": "https://api.infobip.com/sms/3/logs",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendQuery": true,
+    "queryParameters": {
+     "parameters": [
+      {
+       "name": "limit",
+       "value": "1000"
+      },
+      {
+       "name": "sentSince",
+       "value": "={{ new Date(Date.now() - 48*3600*1000).toISOString().replace('Z','+0000') }}"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "I3NObEQ6IG6QxMPt",
+     "name": "Infobip (Mensageria)"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 10000
+  },
+  {
+   "id": "i3",
+   "name": "Agrupar por lote",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    480,
+    0
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "jsCode": "// Um disparo = um bulkId (mensagem avulsa: o próprio messageId). Custo REAL vem da Infobip (pricePerMessage).\n// LGPD: não importa destinatário nem texto (SMS personalizado traria nome). Só lote, remetente, contagens e custo.\n// Lote iniciado há mais de 46 h não é reenviado: parte dele já saiu da janela de 48 h e a contagem cairia.\nconst corte = Date.now() - 46 * 3600 * 1000;\nconst grupos = {};\nfor (const it of $input.all()) {\n  for (const m of (it.json.results || [])) {\n    const k = m.bulkId || m.messageId; if (!k) continue;\n    const g = grupos[k] = grupos[k] || { k, ini: null, n: 0, ent: 0, fal: 0, custo: 0, moeda: null, sender: m.sender || m.from || '', ref: m.campaignReferenceId || null };\n    const t = m.sentAt || m.doneAt; if (t && (!g.ini || t < g.ini)) g.ini = t;\n    const qtd = Number(m.messageCount || 1);\n    g.n += 1;\n    const st = (m.status && m.status.groupName) || '';\n    if (st === 'DELIVERED') g.ent += 1;\n    if (['UNDELIVERABLE', 'REJECTED', 'EXPIRED'].includes(st)) g.fal += 1;\n    if (m.price && m.price.pricePerMessage != null) { g.custo += Number(m.price.pricePerMessage) * qtd; g.moeda = m.price.currency || g.moeda; }\n  }\n}\nconst lote = [];\nfor (const g of Object.values(grupos)) {\n  if (!g.ini || Date.parse(g.ini.replace(/([+-]\\d{2})(\\d{2})$/, '$1:$2')) < corte) continue;\n  const item = {\n    id_externo: String(g.k),\n    campanha: g.ref,\n    enviado_em: g.ini.replace(/([+-]\\d{2})(\\d{2})$/, '$1:$2'),\n    canal: 'sms',\n    copy_texto: `SMS enviado pela Infobip${g.sender ? ' (remetente ' + g.sender + ')' : ''}. Texto não importado.`,\n    copy_link: 'https://portal.infobip.com/analyze/logs',\n    publico_lista: `Infobip — lote ${String(g.k).slice(0, 60)}`,\n    tamanho_lista: g.n,\n    entregues: g.ent,\n    falhas: g.fal,\n  };\n  if (g.moeda === 'BRL') item.custo_centavos = Math.round(g.custo * 100);\n  lote.push(item);\n}\nreturn [{ json: { total: lote.length, lote: lote.slice(0, 1000) } }];"
+   }
+  },
+  {
+   "id": "i4",
+   "name": "Enviar ao log (v2)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    720,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://grupoparticipa.app.br/api/mensageria/receber",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-mensageria-fonte",
+       "value": "infobip"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ lote: $json.lote }) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "uIdSOwe710daQ1Dv",
+     "name": "Mensageria v2 - fonte infobip"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 10000
+  }
+ ],
+ "connections": {
+  "A cada 2 horas": {
+   "main": [
+    [
+     {
+      "node": "Logs de SMS (48 h)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Logs de SMS (48 h)": {
+   "main": [
+    [
+     {
+      "node": "Agrupar por lote",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Agrupar por lote": {
+   "main": [
+    [
+     {
+      "node": "Enviar ao log (v2)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Sao_Paulo",
+  "saveDataErrorExecution": "all",
+  "saveDataSuccessExecution": "all"
+ }
+}

@@ -240,7 +240,7 @@ Tudo sobre o que o gravador `radar-v1.js` já grava (não mudou: sem `radar-v2.j
 | Comparar | `mkt_web_comparar`, `ui/Comparar.tsx` | Duas páginas no mesmo período, ou a mesma página (ou o projeto) em dois períodos; veredito pela taxa de lead sobre quem viu a página, lado a lado, por aparelho e por origem |
 | Mapa de calor sobre a página | `mkt_web_calor`, `domain/calor.ts`, `ui/MapaCalor.tsx` | Ponto = x % da largura e y como fração da altura da página vista. Fundo padrão = captura de página inteira do último teste do Google do mesmo aparelho; opção "página ao vivo" (iframe sem JavaScript, com aviso: o `<noscript>` do pixel do Meta pode contar visita, e a página pode recusar o quadro); opção sem fundo. Pintura portada do `calor.ts` do Luiz |
 | PageSpeed de laboratório | `mkt_web.velocidade_lab`, Edge `infra/supabase/functions/mkt-web-pagespeed`, cron `mkt-web-pagespeed` (06:40 SP, pelo `ops.cron_post`) | Páginas ativas de projeto com a coleta ligada, celular e computador, 1 vez por dia (máx. 12 por chamada; o resto no dia seguinte). Guarda notas, LCP, FCP, TBT, Speed Index, CLS, 5 oportunidades, a captura e a falha. Chave do Google **opcional** no Vault (`mkt_web_pagespeed_api_key`); sem ela, a cota pública. A Edge confere o header `x-sync-chave` sozinha e está no `infra/supabase/config.toml` com `verify_jwt = false` (sem isso o cron recebe 401). `mkt_web.config` `pagespeed = desligado` para |
-| Lead ligado à pessoa | `mkt_web_leads` | Leads da Web cujo navegador tem `visitantes.lead_ref` (gravado pela 20261005o) e quantos viraram MQL no projeto. Referência e link `/comercial?pessoa=<id>` (abre a ficha) só para `pessoas.pode_ver()` (admin/dev). Sem a 20261005o: só os números da Web |
+| Lead ligado à pessoa | `mkt_web_leads` | Leads da Web cujo navegador tem `visitantes.lead_ref` (gravado por `pessoas.registrar`, da 20261005r_pessoas_e_crm_fundacao do Arthur) e quantos viraram MQL no projeto. Referência (sem link: a tela do Arthur não abre ficha por URL) só para `pessoas.pode_ver()` (admin/dev). Sem a base de pessoas: só os números da Web |
 | Connect rate | `mkt_web_connect` | Definição do Victor: **page views ÷ cliques no link**; conversão da página = **leads ÷ page views**. Por campanha do Tráfego, casada **pelo id** (`campaign_id` da URL ou o id do `utm_campaign` em `nome\|id`; Google só id); sem id na visita, pelo nome exato. Cliques no link = coluna `cliques_link`/`cliques_no_link` de `mkt_trafego.desempenho_dia`; sem ela, connect rate em branco (nunca o total de cliques). Por anúncio, só a Web (o Tráfego não guarda clique por anúncio). Sem a 20261006g: só as page views por anúncio |
 | Páginas do PB26 | a própria migration | As que faltam das 11 do `patrimonio-brasil.json` (`obs = '20261006h: …'`); o passo 3 da virada fica feito ao aplicar |
 
@@ -315,122 +315,32 @@ testes A/B, comparar), PageSpeed de laboratório, referência ao lead, Fluxo (ca
 
 ## Comercial e base de pessoas
 
-> Migration `20261005o_pessoas_crm_comercial.sql`, **NÃO APLICADA** (05/10/2026, branch `victor`). Ensaio
-> `20261005o_ensaio.sql`; o que foi medido em `20261005o.explain.md`. Telas em `/comercial`, código em
-> `web/modules/comercial/`.
+O Comercial que vale é o do **Arthur** (main): base única de pessoas e CRM em `20261005r_pessoas_e_crm_fundacao.sql`
+e nas seguintes (`20261005s`, `20261005t`, `20261006043612` … `20261006103738`), **todas APLICADAS**; telas em
+`/comercial`, código em `web/modules/comercial/`, docs em `docs/projetos/comercial/`. A nossa proposta
+(`20261005o_pessoas_crm_comercial`, nunca aplicada) foi apagada da `victor` em 06/10/2026 (decisão do Victor); o que o
+Arthur aproveitou dela está em `docs/projetos/comercial/convergencia-pessoas-crm.md`.
 
-Regras do Victor que mandam aqui (05/10/2026): **o mesmo dado não se duplica; se o aluno já existe, tudo se liga a
-ele**; Comercial não tem áreas; CRM com **ativação, vendas, recuperação de carrinho e recuperação de venda**;
-ativação = contato **sem intenção de vender** (ensinar a entrar na área de membros ou no evento); o lead do Marketing
-mora numa base única de pessoas e a Web guarda **só uma referência opaca**; o CRM do Luiz **não migra agora** (LGPD).
+### O que o Marketing lê da base de pessoas (sem alterar nada do Arthur)
 
-### Modelo
+| Quem lê | O quê | Como |
+|---|---|---|
+| Web fase 2 (`public.mkt_web_leads`, 20261006h) | leads da Web ligados a uma pessoa e quantos viraram MQL | `mkt_web.visitantes.lead_ref` = `pessoas.pessoas.ref` (`pe_` + 32 hex); pessoa mesclada segue para a atual (`pessoas.atual`), eventos `mql`/`nao_mql` do grupo inteiro (`pessoas.grupo`) no projeto; pessoa de teste fora. Lista (referência, sem nome, e-mail ou telefone) só para `pessoas.pode_ver()` |
+| Tráfego (`mkt_trafego.resumo`, 20261006g) | leads e MQL por projeto (CPL, % MQL, meta de leads do resumo do dia) | `pessoas.eventos` tipo `lead`/`mql` com `projeto_id`, contados por pessoa atual (`pessoas.atual`), sem pessoa de teste |
 
-| Schema | Tabela | O que guarda | Dado próprio ou referência |
-|---|---|---|---|
-| `pessoas` | `pessoas` | uma linha por pessoa; `ref` opaca; `situacao` (ativa, revisar, mesclada) | **referência** a `thb_alunos.id` e `compradores.id` (únicas); `nome` só de quem não é aluno nem comprador |
-| | `identificadores` | documento, telefone, e-mail, nome+CEP **normalizados** | **próprio**: só o que a pessoa informou e que o aluno/comprador ligado **não** tem |
-| | `origens` | projeto (`mkt.projetos`), página (`mkt.paginas`), campanha no padrão `GESTOR \| PROJETO \| OBJETIVO \| DESCRIÇÃO \| PÁGINA` (traduzida por `mkt.campanha_traduzir`), UTMs, "de anúncio" | próprio (não existe em outro lugar) |
-| | `eventos` | entrou como lead, virou MQL, não MQL, cadastro, ativada, CRM, ligada a aluno, juntada, revisão | próprio; `ref_tipo`/`ref_id` apontam (negócio, compra, aluno), nunca copiam |
-| | `revisao` | dúvida de identidade para uma pessoa decidir | próprio (só o tipo do identificador, nunca o valor) |
-| | `acessos` | quem buscou, abriu ficha, cadastrou, revisou, mexeu no CRM | próprio (a busca guarda o tamanho do termo, não o termo) |
-| | `config` | `areas_leitura`, `areas_edicao`, `areas_contato` (vazias) | gancho dos níveis de acesso |
-| `crm` | `pipelines`, `etapas`, `motivos_perda` | 4 pipelines; etapas **proposta** e configuráveis; motivos vazios | próprio |
-| | `negocios`, `historico` | o card: pessoa, projeto, etapa, responsável, próximo passo, motivo de perda; histórico de cada mudança | próprio; `externo_tipo`/`externo_id` = gancho para o card do `cs.contatos_hm` |
+**Quem grava `lead_ref`:** a função do Arthur, `pessoas.registrar` (chamada por `public.pessoas_registrar_lead`, só
+`service_role`, o servidor do formulário). Quando o formulário manda `visitante` (o id do gravador, `radar_v` no
+navegador, formato `^[A-Za-z0-9]{8,40}$`) e o projeto, ela faz `update mkt_web.visitantes set lead_ref = <ref> where
+projeto_id = <projeto> and id = <visitante> and lead_ref is null`, **se a tabela existir**. Hoje `mkt_web` está vazio
+em produção, então nada é gravado; aplicando a 20261006f a ligação passa a funcionar sozinha, sem mexer na função do
+Arthur (o `check` de `visitantes.lead_ref`, `^[A-Za-z0-9_-]{8,80}$`, aceita a `ref` dele). A tela do CRM do Arthur
+(`public.pessoas_cadastrar`) tira o `visitante` de propósito: só o formulário liga navegador e pessoa. Ligar o
+`api/crm.php` do PB a `pessoas_registrar_lead` mandando o `visitante` é passo da virada da Web, **não feito**.
 
-**Lido na hora, nunca copiado:** nome, e-mail, telefone, documento e turma do aluno (`thb_alunos`); nome, e-mail,
-telefone e documento do comprador (`compradores`); compras (`public.compras`: a Hotmart manda no dinheiro, esta base
-não grava valor). Hierarquia do `disparos-thb`: Hotmart manda no dinheiro, `thb_alunos` na matrícula, `cs.contatos_hm`
-na operação; quando as fontes discordam, marcar para conferência humana (aqui: a revisão de identidade).
-
-### Identidade (cascata da casa)
-
-Documento (CPF/CNPJ com dígito verificador; zeros à esquerda devolvidos) → telefone (**DDD + 8 últimos**) → e-mail →
-**nome + CEP** (nome de 2 palavras ou mais). Procura na base de pessoas, em `thb_alunos` e em `compradores` (nome + CEP
-só no aluno). Regras:
-
-- Documento ou telefone que batem com **nome diferente** (primeiro nome) **não fundem**: a pessoa nasce em revisão.
-- **Só o nome bate** → pessoa nova em revisão. **Mais de uma pessoa possível** → revisão.
-- Liga sozinho só sem dúvida: o lead sem aluno que bate com um aluno (o lead que virou aluno) ganha o vínculo.
-- Juntar (mesclar) é sempre decisão humana em **Revisão de identidade**; leva identificadores, origens, eventos e
-  negócios; não junta dois alunos nem dois compradores diferentes (isso se confere na Central de Alunos).
-- A mesma regra existe em `web/modules/comercial/domain/identidade.ts` (testes e modo de demonstração); o banco é quem
-  decide.
-
-### Referência opaca para a Web
-
-`pessoas.pessoas.ref` (`pe_` + 32 hex aleatórios, não deriva de e-mail nem telefone). O servidor do formulário chama
-`public.pessoas_registrar_lead` (só `service_role`) com nome, e-mail, telefone, projeto, campanha, UTMs e o
-`visitante` do gravador; a função devolve só `ref`, `como` e `revisao` e, se a 20261006f estiver aplicada, grava a `ref`
-em `mkt_web.visitantes.lead_ref`. A Web nunca recebe e-mail ou telefone. Ligar o `api/crm.php` do PB a essa função é
-passo da virada da Web, **não feito**.
-
-### Acesso e LGPD
-
-- Tabelas fechadas (RLS ligada, sem policy, sem USAGE). Só `public.pessoas_*` e `public.crm_*`, com a permissão no corpo.
-- Hoje **só admin e dev** (`gp_is_admin`). Gancho: pôr uma área em `pessoas.config` (`areas_leitura`,
-  `areas_edicao`, `areas_contato`) libera gestor/operador ativo dessa área sem mexer em função.
-- Documento sem máscara só com `gp_pode_ver_cpf()` (padrão `podeVerCpf`). E-mail e telefone completos só admin/dev ou
-  `areas_contato`. A máscara é feita **no SQL** (a da tela seria cosmética, como mostrou a 20260819g).
-- Lista do quadro **sem** e-mail e telefone (minimização); contato só na ficha.
-- Toda busca, ficha aberta, cadastro, revisão e mudança no CRM vai para `pessoas.acessos`.
-
-### Telas (`/comercial`, só admin e dev)
-
-- **CRM:** um pipeline por vez; **quadro** (kanban por etapa) ou **lista**; filtros por projeto, responsável (ou "sem
-  responsável") e situação (em andamento, ganhos, perdidos). O negócio abre com mover etapa (perda pede motivo;
-  fechado só reabre), próximo passo, data, responsável, projeto e histórico. "Novo negócio" a partir de uma pessoa.
-- **Pessoas:** busca por nome, e-mail, telefone ou documento, ou todos de um projeto; cadastro (o banco decide se já
-  existe); aluno que ainda não está na base aparece com "Trazer para a base" (cria só a referência).
-- **Revisão de identidade:** cada dúvida com o cadastro novo e os candidatos; "É a mesma" ou "São pessoas diferentes".
-- **Ficha:** dados (mascarados pelo banco conforme a permissão), origem, histórico (eventos + compras da Hotmart),
-  compras, negócios, dúvida de identidade.
-
-### Testar localmente
-
-1. **Ensaio do banco:** rodar `infra/supabase/migrations/20261005o_ensaio.sql` inteiro (termina em rollback) e conferir
-   que nenhuma linha começa com `ERRADO` (o cabeçalho explica cada passo). Usa só dados fictícios.
-2. **Telas sem banco:** em `web/.env.local`, `NEXT_PUBLIC_COMERCIAL_DEMO=1`; `npm run dev`; entrar como admin/dev e abrir
-   `/comercial`. Pessoas e negócios inventados, em memória, com a faixa "Dados de demonstração" (nada é gravado;
-   recarregar volta ao começo). Em produção (`NODE_ENV=production`) o modo nunca liga.
-3. **Código:** `npx tsc --noEmit`, `npx vitest run` (cascata, normalização, transições, demonstração), `npm run build`.
-
-### Para valer
-
-Victor ver as telas no modo de demonstração e responder as perguntas abaixo; rodar o ensaio no SQL editor; aplicar a
-20261005o; levar a `victor` para a `main`. Nada disso foi feito.
-
-### Perguntas abertas (para o Victor)
-
-**LGPD e acesso**
-1. Quem do Comercial vai ver a base de pessoas, e quem vê **e-mail e telefone completos**? (Hoje só admin e dev; o
-   gancho é `pessoas.config`.) Quem pode **juntar** pessoas na revisão?
-2. **Retenção:** lead que nunca comprou fica para sempre? Por quanto tempo guardar `pessoas.acessos`? (Não há
-   retenção nesta migration.)
-3. Base legal e aviso de privacidade nas páginas de captura cobrem guardar o lead nesta base (e cruzar com aluno)?
-4. Pedido de exclusão (titular pede para apagar): apagar a pessoa e os eventos, ou anonimizar? (Não há rotina ainda.)
-
-**Convivência com o `disparos-thb`**
-5. O HM continua inteiro no `disparos-thb` (`cs.contatos_hm`, esteiras Comercial e Ativação)? Proposta: **sim**; o CRM
-   daqui serve aos outros produtos e, quando o Victor decidir, **mostra o card do HM só para leitura** (pelo gancho
-   `externo_tipo = 'cs.contatos_hm'`), sem copiar etapa nem dinheiro. Alternativas: espelhar as etapas do HM aqui, ou
-   migrar o HM para cá (mexe no sistema do João e no `disparos_app`).
-6. A ativação daqui (contato sem intenção de vender, ex.: ingresso do HT) é a mesma coisa que a esteira **Ativação** do
-   HM (onboarding de quem quitou), ou são processos diferentes com o mesmo nome?
-
-**Regras de etapa e do CRM**
-7. As **etapas** de cada pipeline (hoje proposta genérica: A contatar, Em contato, Ativado/Não ativado; Novo, Em contato,
-   Negociação, Ganho, Perdido; A contatar, Em contato, Recuperado/Não recuperado). Quais são as de verdade?
-8. **Motivos de perda** de cada pipeline (a lista nasce vazia; hoje vale texto livre).
-9. **"Recuperação de venda"** é o quê exatamente (boleto/Pix não pago, cancelamento, reembolso, chargeback)? E
-   "recuperação de carrinho" vem de qual evento da Hotmart?
-10. **Ganho** em vendas/recuperação deve **exigir compra** na Hotmart (como o "lastro" do HM), ou o comercial marca na
-    mão? Hoje: marca na mão; a compra aparece na ficha pela referência.
-11. Quem pode ser **responsável** (hoje: admin/dev ativos, e as áreas de `areas_edicao` quando liberadas)?
-12. Os negócios devem nascer **sozinhos** (lead novo → vendas; carrinho abandonado → recuperação; compra do ingresso →
-    ativação)? Nesta fase nascem só à mão.
-13. **Nome compatível = mesmo primeiro nome.** Serve, ou quer uma regra mais rígida (nome completo) para documento e
-    telefone?
+**Link para a ficha:** a tela do Arthur não abre ficha por parâmetro na URL (nem `/comercial?pessoa=<id>`, nem em
+`/comercial/contatos`). Por isso a lista "Últimos leads do período" da Web mostra só a referência e o resultado, **sem
+link**. Quando a tela do Arthur aceitar um parâmetro, volta o link (`SecaoLeads` em
+`web/modules/marketing/web/ui/paineis-fase2.tsx`; a função já devolve `pessoa_id`).
 
 ## Tráfego (Marketing > Tráfego: a Central do Tráfego)
 
@@ -492,8 +402,8 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 - **Status do projeto marcado à mão.** Verba, fases e metas preenchidas por Arthur, Victor e Caio (no banco: admin/dev).
   **Pendente (06/10/2026):** gestores e Arthur editam verba, fases e metas, depende do novo modelo de acesso do sistema
   (o Victor vai redefinir os níveis de acesso do sistema inteiro). Por ora, só admin/dev.
-- **Lead que conta é o da nossa base** (`pessoas.eventos`, 20261005o): pessoas distintas com evento `lead` no projeto, sem
-  pessoa de teste nem mesclada. Os leads que a plataforma informa ficam só na campanha.
+- **Lead que conta é o da nossa base** (`pessoas.eventos`, 20261005r_pessoas_e_crm_fundacao do Arthur, aplicada): pessoas distintas com evento `lead` no projeto (pessoa
+  mesclada conta como a pessoa que ficou, `pessoas.atual`), sem pessoa de teste. Os leads que a plataforma informa ficam só na campanha.
 - **"Quanto gerado" = receita** (Hotmart). Na fase 2: soma das compras aprovadas dos produtos ligados à mão ao projeto
   (ver "Fase 2"). Sem vínculo, nula.
 - **Atividades do ClickUp ficam na tela** (pela etiqueta do projeto). Na fase 2: lista e linha do tempo com o gasto.
@@ -558,7 +468,7 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
 3. **Código:** `npx tsc --noEmit`, `npx vitest run` (`kpis.test.ts`, `fases.test.ts`, `demo.test.ts`; fase 2:
    `alertas.test.ts`, `linha-do-tempo.test.ts`, `coleta.test.ts`, `ui/fase2.test.ts`), `npm run build`.
 4. **Fase 2:** com a 20261006g aplicada, rodar `20261006i_ensaio.sql` inteiro (termina em rollback) e conferir que
-   nenhuma linha começa com `ERRADO` ("PULADO" é esperado onde falta Vault, pg_cron ou a 20261005o). No modo demo
+   nenhuma linha começa com `ERRADO` ("PULADO" é esperado onde falta Vault, pg_cron ou a base de pessoas). No modo demo
    aparecem o resumo do dia, a receita do PB26 (produto "Ingresso Exemplo", R$ 18.450 fictícios) e as atividades
    "Exemplo: …" do ClickUp na vida do PB26. As Edges: `deno check infra/supabase/functions/trafego-meta/index.ts
    infra/supabase/functions/trafego-clickup/index.ts`; a parte pura roda no vitest com respostas simuladas
@@ -849,6 +759,30 @@ cadastra de forma idempotente (por plataforma e id): nome exato, id sem `act_`, 
 - k) **Especialistas internos:** além de Marcio Carvalho de Sá e Elaine Montenegro, quem mais (entra por SQL)?
 - l) **ANTECIPAÇÃO entra na lista de objetivos? Em qual fase?** (exemplo `CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ |
   ABO | THRUPLAY`). Hoje fica fora do padrão só por isso; ligar = os comandos comentados na 20261006e.
+## Mensageria (etapa 2)
+
+Banco da área Mensageria: log central de disparos, controle de números e ferramentas. **Migration
+`infra/supabase/migrations/20261005n_mkt_mensageria.sql`, APLICADA em 05/10/2026** (ensaio `20261005n_ensaio.sql` em 3 blocos;
+contrato das funções e planos medidos em `20261005n.explain.md`). Depende da base compartilhada (20261005m).
+
+| Peça | Onde | O que é |
+|---|---|---|
+| Disparos | `mkt_mensageria.disparos` | Todo envio (API WhatsApp, e-mail, SMS, ligação, grupo), de qualquer ferramenta, apontando para `mkt.projetos`. Retorno (entregues, lidas, cliques, falhas) e custo: **nulo = não lançado, nunca 0**. Tipo (utility/marketing) só na API do WhatsApp. Arquivar com motivo, nunca apagar |
+| Números | `mkt_mensageria.numeros` | Número E.164, responsável, finalidade, ferramenta, capacidade/dia, status. **Consumo do dia vem do log** (soma das listas disparadas hoje), ninguém digita |
+| Ferramentas | `mkt_mensageria.ferramentas` | 13 cadastradas (SendFlow, Unichat, ActiveCampaign, n8n, Google Drive, Slack, ClickUp com API; Infobip, Clint, Ligue Lead, Encurtador, Respondi, ManyChat sem). Custo mensal ainda não lançado |
+| Importações | `mkt_mensageria.importacoes` | Planilha confirmada (até 2.000 linhas, tudo ou nada). Possível duplicata (já no registro ou repetida na planilha) trava a confirmação, salvo "importar mesmo assim" |
+| Histórico | `mkt_mensageria.historico` | Toda criação, edição e arquivamento das 3 tabelas, com antes/depois e quem fez |
+
+- **Funções (`public.mkt_msg_*`):** `disparos_listar` (período obrigatório, até 366 dias, 500 linhas, totais do
+  período e pendências `sem_custo`, `sem_retorno`, `conferir_zero_leitura`), `disparo_salvar`, `disparo_arquivar`,
+  `disparo_lancar_retorno`, `importar` (prévia e confirmação), `numeros_listar`, `numero_salvar`,
+  `ferramentas_listar`, `ferramenta_salvar`, `historico` e `anonimizar_disparo` (LGPD, só admin/dev: limpa copy e
+  lista do disparo e do histórico dele). Projetos: `mkt_projetos_listar` (da base compartilhada).
+- **Permanente:** nada se apaga nem se trunca; histórico e importações não se editam (única exceção: a anonimização).
+  Ferramenta desativada e número arquivado não entram em disparo novo ou editado.
+- **Acesso:** igual ao resto do Marketing: tabelas e schema fechados; as funções checam `mkt.pode_ver('mkt_mensageria')`,
+  hoje só admin/dev. Liberar operador/gestor da Mensageria = mudar só `mkt.pode_ver` (ver o explain).
+- **Não tocar:** `cs.disparos` e `cs.canais_disparo` são de outro sistema; a Mensageria não lê nem aponta para eles.
 
 ## Branches
 
@@ -867,10 +801,6 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
 - **05/10/2026:** Marketing > Web (o Radar do Luiz, sem vídeo): migration 20261006f (NÃO APLICADA) com a coleta em
   `mkt_web`, rota pública `/api/web/coletar` com limite por IP e por sessão, gravador `/web/radar-v1.js`, telas em
   `/marketing/web`, modo de demonstração local e seed de dev. Virada documentada, não feita. Branch `victor`.
-- **05/10/2026:** Comercial e base de pessoas: migration 20261005o (NÃO APLICADA) com os schemas `pessoas` (uma pessoa
-  por identidade, cascata da casa, aluno e comprador por referência, origem, eventos, revisão, registro de acesso,
-  máscara no SQL) e `crm` (4 pipelines, etapas configuráveis, negócios, histórico); telas em `/comercial` (só admin e
-  dev) com modo de demonstração local. Perguntas abertas na seção "Comercial e base de pessoas". Branch `victor`.
 - **05/10/2026:** Tráfego etapa 1 (migration 20261006g, NÃO APLICADA): contas, campanhas, desempenho diário, planejamento
   (status, verba, fases, metas) e a Central do Tráfego em `/marketing/trafego` (área ativa), com modo demo. Branch `victor`.
 - **05/10/2026:** Tráfego, respostas do Victor na própria 20261006g (ainda NÃO APLICADA): cliques no link separados dos
@@ -909,3 +839,6 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
   unidades e padrão, fases com datas relativas e % da verba, campanhas esperadas, checklist por momento e metas padrão;
   9 exemplos rascunho; "Aplicar modelo" com prévia no projeto (nada apagado; fase existente só confirmando); checklist
   com o caminho para resolver, "campanhas esperadas criadas" e alerta de checklist incompleto em captação. Branch `victor`.
+- **05/10/2026:** Mensageria etapa 2, banco (migration 20261005n, APLICADA em 05/10/2026): schema `mkt_mensageria` com
+  disparos, números, ferramentas, importações e histórico; 11 funções `public.mkt_msg_*` (com a anonimização LGPD).
+  Branch `joao-pedro`.

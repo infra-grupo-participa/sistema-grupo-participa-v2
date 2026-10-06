@@ -44,3 +44,8 @@ verify_jwt = false
 # na própria Edge, fail-closed. Sem isto, um deploy sem --no-verify-jwt devolve 401 ao cron.
 [functions.mkt-web-pagespeed]
 verify_jwt = false
+
+# crm-integracao-webhook (F5 do CRM, migration 20261006c — NÃO publicada): webhooks de ActiveCampaign/Unnichat/SendFlow.
+# Autentica pelo header x-webhook-secret conferido no banco contra o Vault (crm_webhook_<fonte>), fail-closed.
+[functions.crm-integracao-webhook]
+verify_jwt = false

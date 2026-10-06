@@ -1,0 +1,245 @@
+{
+ "_nota": "Exportado do n8n Infra CSM em 06/10/2026. Credenciais por ID (valores ficam só no n8n). Fonte da verdade: o n8n.",
+ "id": "Ksgwo37SsLtqgTZC",
+ "name": "Mensageria v2 — Unnichat → log de disparos",
+ "active": true,
+ "nodes": [
+  {
+   "id": "u1",
+   "name": "A cada 30 min",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes",
+       "minutesInterval": 30
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "u2",
+   "name": "Disparos Seminário/HM/CNHF",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    240,
+    0
+   ],
+   "alwaysOutputData": true,
+   "parameters": {
+    "method": "GET",
+    "url": "https://unnichat.com.br/api/broadcasts",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendQuery": true,
+    "queryParameters": {
+     "parameters": [
+      {
+       "name": "perPage",
+       "value": "20"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 30000,
+     "pagination": {
+      "pagination": {
+       "parameters": {
+        "parameters": [
+         {
+          "type": "qs",
+          "name": "cursor",
+          "value": "={{ $response.body.metadata.nextCursor }}"
+         }
+        ]
+       },
+       "paginationCompleteWhen": "other",
+       "completeExpression": "={{ !$response.body.metadata || !$response.body.metadata.hasNext || ((($response.body.data || []).slice(-1)[0] || {}).sendAt || '') < '2026-10-01' }}",
+       "limitPagesFetched": true,
+       "maxRequests": 15
+      }
+     }
+    }
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "qK5MgMgbVtyzIIQ1",
+     "name": "Unnichat - Seminario/HM/CNHF (Mensageria)"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 10000
+  },
+  {
+   "id": "u3",
+   "name": "Disparos HT (Marcio CSM)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    480,
+    0
+   ],
+   "alwaysOutputData": true,
+   "executeOnce": true,
+   "parameters": {
+    "method": "GET",
+    "url": "https://unnichat.com.br/api/broadcasts",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendQuery": true,
+    "queryParameters": {
+     "parameters": [
+      {
+       "name": "perPage",
+       "value": "20"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 30000,
+     "pagination": {
+      "pagination": {
+       "parameters": {
+        "parameters": [
+         {
+          "type": "qs",
+          "name": "cursor",
+          "value": "={{ $response.body.metadata.nextCursor }}"
+         }
+        ]
+       },
+       "paginationCompleteWhen": "other",
+       "completeExpression": "={{ !$response.body.metadata || !$response.body.metadata.hasNext || ((($response.body.data || []).slice(-1)[0] || {}).sendAt || '') < '2026-10-01' }}",
+       "limitPagesFetched": true,
+       "maxRequests": 15
+      }
+     }
+    }
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "c99mgPD8Tm0s2vwf",
+     "name": "Unnichat - HT Marcio CSM (Mensageria)"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 10000
+  },
+  {
+   "id": "u4",
+   "name": "Montar lote",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    720,
+    0
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "jsCode": "// Decisões do João (06/10/2026): desde 01/10; tipo padrão 'marketing' (operador corrige na tela).\n// A API do Unnichat não devolve entregues/lidos: só contatos. Retorno fica 'não lançado' (pendência visível).\n// Disparo com 'teste' no nome não entra (envio de teste para 1-2 números da equipe).\nconst INICIO = '2026-10-01';\nconst contas = [['Disparos Seminário/HM/CNHF', 'Unnichat — Seminário/HM/CNHF'], ['Disparos HT (Marcio CSM)', 'Unnichat — HT (Marcio CSM)']];\nconst lote = [], visto = new Set();\nfor (const [no, conta] of contas) {\n  let itens = [];\n  try { itens = $(no).all(); } catch (e) { itens = []; }\n  for (const it of itens) {\n    for (const b of (it.json.data || [])) {\n      if (!b || !b.id || visto.has(b.id)) continue; visto.add(b.id);\n      const quando = b.sendAt || b.startedAt; if (!quando || quando < INICIO) continue;\n      if (/teste/i.test(b.name || '')) continue;\n      if (!['success', 'finished', 'completed', 'sending', 'running'].includes(String(b.status || '').toLowerCase())) continue;\n      lote.push({\n        id_externo: String(b.id),\n        campanha: b.name,\n        enviado_em: quando,\n        canal: 'whatsapp_api',\n        tipo: 'marketing',\n        copy_texto: `Template ${b.templateId || 'não informado'} (Unnichat)`,\n        publico_lista: conta,\n        tamanho_lista: Number(b.contactsAmount || 0),\n      });\n    }\n  }\n}\nreturn [{ json: { total: lote.length, lote: lote.slice(0, 1000) } }];"
+   }
+  },
+  {
+   "id": "u5",
+   "name": "Enviar ao log (v2)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    960,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://grupoparticipa.app.br/api/mensageria/receber",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-mensageria-fonte",
+       "value": "unichat"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ lote: $json.lote }) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "muJujk6lCKE9F4gJ",
+     "name": "Mensageria v2 - fonte unichat"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 10000
+  }
+ ],
+ "connections": {
+  "A cada 30 min": {
+   "main": [
+    [
+     {
+      "node": "Disparos Seminário/HM/CNHF",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Disparos Seminário/HM/CNHF": {
+   "main": [
+    [
+     {
+      "node": "Disparos HT (Marcio CSM)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Disparos HT (Marcio CSM)": {
+   "main": [
+    [
+     {
+      "node": "Montar lote",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Montar lote": {
+   "main": [
+    [
+     {
+      "node": "Enviar ao log (v2)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Sao_Paulo",
+  "saveDataErrorExecution": "all",
+  "saveDataSuccessExecution": "all"
+ }
+}

@@ -32,8 +32,8 @@ export interface Departamento {
   areas: Area[];
 }
 
-const area = (dep: DepartamentoKey, key: string, label: string, ico: string, descricao: string): Area => ({
-  key, label, path: `/${dep}/${key}`, descricao, ico, status: 'em_breve',
+const area = (dep: DepartamentoKey, key: string, label: string, ico: string, descricao: string, status: Status = 'em_breve'): Area => ({
+  key, label, path: `/${dep}/${key}`, descricao, ico, status,
 });
 
 export const DEPARTAMENTOS: Departamento[] = [
@@ -55,14 +55,37 @@ export const DEPARTAMENTOS: Departamento[] = [
     status: 'ativo',
     areas: [
       { ...area('marketing', 'web', 'Web', 'globe', 'Páginas e sites'), status: 'ativo' }, // o Radar (20261006f)
-      area('marketing', 'mensageria', 'Mensageria', 'message', 'Disparos e grupos'),
+      { ...area('marketing', 'mensageria', 'Mensageria', 'message', 'Disparos e grupos'), status: 'ativo' }, // migration 20261005n
       { ...area('marketing', 'trafego', 'Tráfego', 'trending-up', 'Mídia paga'), status: 'ativo' }, // Central do Tráfego (20261006g)
       area('marketing', 'audiovisual', 'Audiovisual', 'video', 'Vídeo e foto'),
       area('marketing', 'social-media', 'Social Media', 'share', 'Redes sociais'),
     ],
   },
-  // Comercial (20261005o): CRM e base única de pessoas. Não tem áreas (decisão do Victor, 05/10/2026). Só admin e dev.
-  { key: 'comercial', label: 'Comercial', path: '/comercial', descricao: 'CRM: ativação, vendas e recuperação', ico: 'handshake', status: 'ativo', areas: [] },
+  {
+    key: 'comercial',
+    label: 'Comercial',
+    path: '/comercial',
+    descricao: 'CRM: ativação, vendas e recuperação',
+    ico: 'handshake',
+    status: 'ativo',
+    // As "áreas" do Comercial são as telas do CRM (o playbook divide o time em Atendimento, Prospecção e
+    // Fechamento, mas todos trabalham no mesmo funil). Front pronto com dados de demonstração (05/10/2026);
+    // o backend entra por trás de `modules/comercial/application/ports.ts`.
+    areas: [
+      area('comercial', 'funil', 'Funil de vendas', 'kanban', 'Venda ativa e origens da Hotmart, por produto', 'ativo'),
+      area('comercial', 'conversas', 'Conversas', 'message', 'WhatsApp oficial, atribuído ao dono do lead', 'ativo'),
+      area('comercial', 'atividades', 'Atividades', 'list-checks', 'Agenda do dia, cadência e atrasadas', 'ativo'),
+      area('comercial', 'contatos', 'Contatos', 'contact', 'Pessoas, dono e histórico completo', 'ativo'),
+      area('comercial', 'recuperacao', 'Recuperação', 'target', 'Filas pós-lançamento com score A a D', 'ativo'),
+      area('comercial', 'disparos', 'Disparos', 'send', 'Ficha, aprovação, supressões e log', 'ativo'),
+      area('comercial', 'relatorios', 'Relatórios', 'chart', 'Fechamento do dia e indicadores', 'ativo'),
+      area('comercial', 'produtos', 'Produtos e ofertas', 'wallet', 'Catálogo da Hotmart e oferta vigente', 'ativo'),
+      area('comercial', 'registro', 'Registro', 'clipboard', 'Log de tudo que foi feito no CRM', 'ativo'),
+      area('comercial', 'playbook', 'Playbook', 'notebook', 'O playbook completo do Comercial', 'ativo'),
+      area('comercial', 'social-selling', 'Social selling', 'share', 'Comentários do Instagram viram lead', 'em_breve'),
+      area('comercial', 'configuracoes', 'Configurações', 'sliders', 'Distribuição, etapas, motivos e links', 'ativo'),
+    ],
+  },
   // Departamento Financeiro (Em breve). NÃO confundir com o módulo "Financeiro" (Contas a Receber), que hoje
   // mora DENTRO do Educacional em /educacional/financeiro e mantém o nome por decisão do Victor (05/10/2026).
   { key: 'financeiro', label: 'Financeiro', path: '/financeiro', descricao: 'Departamento financeiro da empresa', ico: 'building', status: 'em_breve', areas: [] },
@@ -90,7 +113,7 @@ export const MODULO_DEPARTAMENTO: Record<string, DepartamentoKey | 'sistema'> = 
   'remocao-acessos': 'educacional',
   usuarios: 'sistema',
   marketing: 'marketing', // web/modules/marketing/<area>/
-  comercial: 'comercial', // CRM e base de pessoas (20261005o)
+  comercial: 'comercial', // CRM: web/modules/comercial/
 };
 
 export function departamento(key: DepartamentoKey): Departamento {
@@ -100,18 +123,45 @@ export function departamento(key: DepartamentoKey): Departamento {
 }
 
 /**
+ * Opções de acesso que dependem de configuração (flag de env). O domínio não lê env: quem chama passa
+ * (`shared/composition/acesso-departamentos.ts` monta a partir de `publicEnv`). Ausente = tudo desligado.
+ */
+export interface OpcoesAcessoDepartamento {
+  /** NEXT_PUBLIC_COMERCIAL_VENDEDORES: libera o Comercial para gestor/vendedor do Comercial (não só admin/dev). */
+  comercialVendedores?: boolean;
+}
+
+/**
+ * É do Comercial? Espelha `crm.eh_comercial()` do banco (= `crm.eh_gestor()` OU `crm.eh_vendedor()`, migration
+ * 20261005r), sem a parte que só o banco sabe:
+ * - gestor: status ativo e (cargo dev/admin, ou cargo `gestor` com área `comercial`);
+ * - vendedor: status ativo, área `comercial` e função `comercial.vender` (o banco exige também a linha ATIVA em
+ *   `crm.vendedor`; quem passar aqui sem ela entra na tela, mas as RPCs devolvem "Sem acesso ao Comercial." — a
+ *   fronteira de dado é a RLS, isto é só a porta).
+ */
+export function ehDoComercial(u: GpUser | null): boolean {
+  if (!u || (u.status ?? 'ativo') !== 'ativo') return false;
+  if (ehAdminOuAcima(u)) return true;
+  const temArea = (u.setores || []).includes('comercial');
+  if (u.cargo === 'gestor' && temArea) return true;
+  return temArea && (u.funcoes || []).includes('comercial.vender');
+}
+
+/**
  * Pode ENTRAR no departamento?
  * - Educacional: qualquer pessoa da equipe logada; cada tela dentro mantém o próprio gate (igual a antes).
  * - Marketing: só admin e dev, até os níveis de acesso por departamento serem desenhados (decisão de 05/10/2026).
  *   Bloqueia o visualizador geral, gestor e operador. Ainda não há dado de Marketing no banco, então não
  *   existe regra de RLS correspondente: quando houver, ela precisa negar o visualizador do mesmo jeito.
- * - Comercial: só admin e dev, a mesma regra do Marketing (dado pessoal de lead e aluno; migration 20261005o). O banco
- *   nega o resto em cada função (pessoas.pode_ver); o gancho para liberar uma área é pessoas.config.
+ * - Comercial: só admin e dev por padrão. Com `opcoes.comercialVendedores` (flag NEXT_PUBLIC_COMERCIAL_VENDEDORES),
+ *   também quem é do Comercial (`ehDoComercial`: gestor com área comercial, vendedor com área + `comercial.vender`).
+ *   Visualizador e equipe fora do Comercial continuam fora (e a RLS do schema crm também os nega).
  * - Financeiro, Infra: só mostram "Em breve"; qualquer pessoa da equipe vê o aviso.
  */
-export function podeVerDepartamento(u: GpUser | null, key: DepartamentoKey): boolean {
+export function podeVerDepartamento(u: GpUser | null, key: DepartamentoKey, opcoes: OpcoesAcessoDepartamento = {}): boolean {
   if (!u) return false;
-  if (key === 'marketing' || key === 'comercial') return ehAdminOuAcima(u);
+  if (key === 'marketing') return ehAdminOuAcima(u);
+  if (key === 'comercial') return ehAdminOuAcima(u) || (opcoes.comercialVendedores === true && ehDoComercial(u));
   return true;
 }
 

@@ -21,7 +21,7 @@ Grupo**, com as mesmas regras de análise. Nada aqui conecta no Supabase, no dom
 | Fase 2 (Fluxo, mapa de calor, Melhorias, teste do Google, lead ligado à pessoa, connect rate) | `infra/supabase/migrations/20261006h_mkt_web_fase2.sql` + `_ensaio.sql` + `.explain.md` e `infra/supabase/functions/mkt-web-pagespeed/` |
 | Regras de achados e testes A/B (porte do `oportunidades.ts` e do `testes.ts` do Radar) | `web/modules/marketing/web/domain/achados.ts` e `testes-ab.ts` |
 | Base compartilhada (projetos, páginas, padrão de nome de campanha) | `infra/supabase/migrations/20261005m_*` (**já aplicada em produção**) |
-| Base única de pessoas (lead) e CRM do Comercial | `infra/supabase/migrations/20261005o_*` e `web/modules/comercial/` |
+| Base única de pessoas (lead) e CRM do Comercial (do Arthur) | `infra/supabase/migrations/20261005r_pessoas_e_crm_fundacao.sql` e seguintes, `web/modules/comercial/` e `docs/projetos/comercial/` |
 | Dados inventados para testar sem banco | `web/modules/marketing/web/infrastructure/demo.ts` e `infra/scripts/mkt_web_seed_dev.sql` |
 
 ## 3. Situação em 05/10/2026
@@ -31,7 +31,7 @@ Grupo**, com as mesmas regras de análise. Nada aqui conecta no Supabase, no dom
 | Base compartilhada (`mkt.projetos`, `mkt.paginas`, tradutor do nome de campanha) | **No ar** (migration 20261005m aplicada, tela Marketing > Projetos) |
 | Coleta + 9 abas da Web | **Pronta na branch `victor`, não publicada.** Migration 20261006f **não aplicada** (ensaio rodado em produção com rollback: 113 linhas, 0 erro) |
 | Gravador nas páginas do PB | **Ainda é o do Luiz.** A troca ("virada") não foi feita |
-| Base de pessoas e CRM do Comercial | Pronta na branch `victor`, **não aplicada**. Já grava a referência do lead em `mkt_web.visitantes.lead_ref` |
+| Base de pessoas e CRM do Comercial (do Arthur) | **No ar** (20261005r_pessoas_e_crm_fundacao e seguintes, aplicadas). `pessoas.registrar` grava a referência do lead em `mkt_web.visitantes.lead_ref` quando o formulário manda o `visitante`; só passa a gravar depois que a 20261006f criar a tabela |
 | Fase 2 da Web (Fluxo, mapa de calor sobre a página, Melhorias, teste do Google, leads na base de pessoas, connect rate, páginas do PB26) | **Pronta na branch `victor`, não aplicada** (migration 20261006h, depende da 20261006f; ensaio local sem erro). O gravador não mudou |
 | Publicação | Só depois de o Victor ver as telas. **Nada vai para a `main` sem ok do Victor** |
 

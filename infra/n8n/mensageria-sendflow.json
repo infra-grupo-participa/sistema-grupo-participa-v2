@@ -1,0 +1,490 @@
+{
+ "_nota": "Exportado do n8n Infra CSM em 06/10/2026. Credenciais por ID (valores ficam só no n8n). Fonte da verdade: o n8n.",
+ "id": "t3yyoaUvb3HxqT9W",
+ "name": "Mensageria v2 — SendFlow (grupos) → log de disparos",
+ "active": true,
+ "nodes": [
+  {
+   "id": "s1",
+   "name": "A cada 2 horas",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "hours",
+       "hoursInterval": 2,
+       "triggerAtMinute": 27
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "s2",
+   "name": "Campanhas",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    200,
+    0
+   ],
+   "notes": "SendAPI aceita 1 chamada por minuto: cada chamada é separada por espera de 65 s.",
+   "parameters": {
+    "method": "GET",
+    "url": "https://sendflow.pro/sendapi/releases",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "options": {
+     "timeout": 60000
+    }
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "VX0tx2MKabnUkPab",
+     "name": "SendFlow SendAPI (Victor)"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 65000
+  },
+  {
+   "id": "s3",
+   "name": "Espera 1",
+   "type": "n8n-nodes-base.wait",
+   "typeVersion": 1.1,
+   "position": [
+    400,
+    0
+   ],
+   "parameters": {
+    "amount": 65,
+    "unit": "seconds"
+   },
+   "webhookId": "mensageria-sf-espera-1",
+   "executeOnce": true
+  },
+  {
+   "id": "s4",
+   "name": "Contas",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    600,
+    0
+   ],
+   "executeOnce": true,
+   "parameters": {
+    "method": "GET",
+    "url": "https://sendflow.pro/sendapi/accounts",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "options": {
+     "timeout": 60000
+    }
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "VX0tx2MKabnUkPab",
+     "name": "SendFlow SendAPI (Victor)"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 65000
+  },
+  {
+   "id": "s5",
+   "name": "Espera 2",
+   "type": "n8n-nodes-base.wait",
+   "typeVersion": 1.1,
+   "position": [
+    800,
+    0
+   ],
+   "parameters": {
+    "amount": 65,
+    "unit": "seconds"
+   },
+   "webhookId": "mensageria-sf-espera-2"
+  },
+  {
+   "id": "s6",
+   "name": "Envios por conta",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1000,
+    0
+   ],
+   "alwaysOutputData": true,
+   "parameters": {
+    "method": "GET",
+    "url": "https://sendflow.pro/sendapi/actions",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendQuery": true,
+    "queryParameters": {
+     "parameters": [
+      {
+       "name": "accountId",
+       "value": "={{ $json.id }}"
+      },
+      {
+       "name": "type",
+       "value": "sendMessages"
+      },
+      {
+       "name": "rootOnly",
+       "value": "true"
+      },
+      {
+       "name": "limit",
+       "value": "100"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 60000,
+     "batching": {
+      "batch": {
+       "batchSize": 1,
+       "batchInterval": 65000
+      }
+     }
+    }
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "VX0tx2MKabnUkPab",
+     "name": "SendFlow SendAPI (Victor)"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 65000
+  },
+  {
+   "id": "s7",
+   "name": "Envios desde 01/10",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1200,
+    0
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "jsCode": "// Um disparo = uma ação raiz sendMessages com sucesso, desde 01/10/2026 (decisão do João).\n// Sai um item por campanha (release) com envios; nenhum envio = item {vazio:true} (o log registra execução ok).\nconst INICIO = '2026-10-01';\nconst nomes = {};\nfor (const it of $('Campanhas').all()) { const r = it.json; if (r && r.id) nomes[r.id] = r.name || (r.group && r.group.name) || r.id; }\nconst porRelease = {}, visto = new Set();\nfor (const it of $input.all()) {\n  for (const a of (it.json.actions || [])) {\n    if (!a || visto.has(a.id) || a.type !== 'sendMessages' || a.success !== true) continue; visto.add(a.id);\n    const quando = a.startedAt || a.scheduledTo || a.createdAt; if (!quando || quando < INICIO) continue;\n    const rel = a.releaseId || 'sem-campanha';\n    (porRelease[rel] = porRelease[rel] || []).push({ id: a.id, quando });\n  }\n}\nconst out = Object.entries(porRelease).map(([releaseId, envios]) => ({ json: { releaseId, nome: nomes[releaseId] || releaseId, envios } }));\nreturn out.length ? out : [{ json: { vazio: true } }];"
+   }
+  },
+  {
+   "id": "s8",
+   "name": "Teve envio?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    1400,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.vazio === true }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "notEquals"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "s9",
+   "name": "Espera 3",
+   "type": "n8n-nodes-base.wait",
+   "typeVersion": 1.1,
+   "position": [
+    1600,
+    -120
+   ],
+   "parameters": {
+    "amount": 65,
+    "unit": "seconds"
+   },
+   "webhookId": "mensageria-sf-espera-3"
+  },
+  {
+   "id": "s10",
+   "name": "Participantes da campanha",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1800,
+    -120
+   ],
+   "parameters": {
+    "method": "GET",
+    "url": "=https://sendflow.pro/sendapi/releases/{{ $json.releaseId }}/analytics",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "options": {
+     "timeout": 60000,
+     "batching": {
+      "batch": {
+       "batchSize": 1,
+       "batchInterval": 65000
+      }
+     },
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "VX0tx2MKabnUkPab",
+     "name": "SendFlow SendAPI (Victor)"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 2,
+   "waitBetweenTries": 65000
+  },
+  {
+   "id": "s11",
+   "name": "Montar lote",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2000,
+    -120
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "jsCode": "// Tamanho da lista = participantes atuais dos grupos da campanha (entradas − saídas do analytics).\n// A SendAPI não expõe o texto nem quantos grupos receberam: canal 'grupo', sem retorno (dispensado para grupo).\nconst campanhas = $('Envios desde 01/10').all();\nconst analises = $input.all();\nconst lote = [];\ncampanhas.forEach((c, i) => {\n  const an = (analises[i] && analises[i].json) || {};\n  const part = Math.max(Number(an?.add?.total || 0) - Number(an?.remove?.total || 0), 0);\n  for (const e of c.json.envios) {\n    lote.push({\n      id_externo: String(e.id),\n      campanha: c.json.nome,\n      enviado_em: e.quando,\n      canal: 'grupo',\n      copy_texto: 'Mensagem enviada aos grupos pelo SendFlow (a API não expõe o texto).',\n      publico_lista: `Grupos da campanha ${c.json.nome}`.slice(0, 200),\n      tamanho_lista: part > 0 ? part : null,\n    });\n  }\n});\nreturn [{ json: { total: lote.length, lote: lote.slice(0, 1000) } }];"
+   }
+  },
+  {
+   "id": "s12",
+   "name": "Lote vazio",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1600,
+    120
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "jsCode": "return [{ json: { total: 0, lote: [] } }];"
+   }
+  },
+  {
+   "id": "s13",
+   "name": "Enviar ao log (v2)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    2200,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://grupoparticipa.app.br/api/mensageria/receber",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-mensageria-fonte",
+       "value": "sendflow"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ lote: $json.lote }) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "s5Rna1mWvVUgbdRw",
+     "name": "Mensageria v2 - fonte sendflow"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 10000
+  }
+ ],
+ "connections": {
+  "A cada 2 horas": {
+   "main": [
+    [
+     {
+      "node": "Campanhas",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Campanhas": {
+   "main": [
+    [
+     {
+      "node": "Espera 1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Espera 1": {
+   "main": [
+    [
+     {
+      "node": "Contas",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Contas": {
+   "main": [
+    [
+     {
+      "node": "Espera 2",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Espera 2": {
+   "main": [
+    [
+     {
+      "node": "Envios por conta",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Envios por conta": {
+   "main": [
+    [
+     {
+      "node": "Envios desde 01/10",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Envios desde 01/10": {
+   "main": [
+    [
+     {
+      "node": "Teve envio?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Teve envio?": {
+   "main": [
+    [
+     {
+      "node": "Espera 3",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Lote vazio",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Espera 3": {
+   "main": [
+    [
+     {
+      "node": "Participantes da campanha",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Participantes da campanha": {
+   "main": [
+    [
+     {
+      "node": "Montar lote",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Montar lote": {
+   "main": [
+    [
+     {
+      "node": "Enviar ao log (v2)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Lote vazio": {
+   "main": [
+    [
+     {
+      "node": "Enviar ao log (v2)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Sao_Paulo",
+  "saveDataErrorExecution": "all",
+  "saveDataSuccessExecution": "all",
+  "executionTimeout": 1800
+ }
+}

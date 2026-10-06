@@ -2,7 +2,7 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Cargo, GpUser } from './auth';
-import { BASE_MARKETING, DEPARTAMENTOS, MODULO_DEPARTAMENTO, departamento, departamentoDaRota, podeVerDepartamento } from './departamentos';
+import { BASE_MARKETING, DEPARTAMENTOS, MODULO_DEPARTAMENTO, departamento, departamentoDaRota, ehDoComercial, podeVerDepartamento } from './departamentos';
 
 const user = (cargo: Cargo, setores: string[] = []): GpUser =>
   ({ id: 'u', email: 'x@advmais.com', nome: 'X', cargo, status: 'ativo', setores, funcoes: [], podeVerCpf: false, time: null, avatarUrl: null });
@@ -15,17 +15,24 @@ describe('departamentos: registro', () => {
     const st = Object.fromEntries(DEPARTAMENTOS.map((d) => [d.key, d.status]));
     expect(st).toEqual({ educacional: 'ativo', marketing: 'ativo', comercial: 'ativo', financeiro: 'em_breve', infra: 'em_breve' });
   });
-  it('Marketing tem as 5 áreas em /marketing/<area>: Web e Tráfego ativas, as outras "Em breve"', () => {
+  it('Marketing tem as 5 áreas em /marketing/<area>: Web, Mensageria e Tráfego ativas, as outras "Em breve"', () => {
     const mkt = departamento('marketing');
     expect(mkt.areas.map((a) => a.label)).toEqual(['Web', 'Mensageria', 'Tráfego', 'Audiovisual', 'Social Media']);
     for (const a of mkt.areas) {
-      expect(a.status).toBe(a.key === 'web' || a.key === 'trafego' ? 'ativo' : 'em_breve');
+      expect(a.status).toBe(['web', 'mensageria', 'trafego'].includes(a.key) ? 'ativo' : 'em_breve');
       expect(a.path).toBe(`/marketing/${a.key}`);
     }
   });
-  it('Educacional e Comercial não têm áreas', () => {
+  it('Educacional não tem áreas', () => {
     expect(departamento('educacional').areas).toEqual([]);
-    expect(departamento('comercial').areas).toEqual([]);
+  });
+  it('Comercial: as telas do CRM em /comercial/<tela>; só Social selling "Em breve"', () => {
+    const com = departamento('comercial');
+    expect(com.areas.map((a) => a.key)).toEqual(['funil', 'conversas', 'atividades', 'contatos', 'recuperacao', 'disparos', 'relatorios', 'produtos', 'registro', 'playbook', 'social-selling', 'configuracoes']);
+    for (const a of com.areas) {
+      expect(a.status).toBe(a.key === 'social-selling' ? 'em_breve' : 'ativo');
+      expect(a.path).toBe(`/comercial/${a.key}`);
+    }
   });
   it('cada pasta de web/modules tem departamento declarado', () => {
     const pastas = readdirSync(join(__dirname, '..', '..', 'modules'), { withFileTypes: true })
@@ -39,6 +46,47 @@ describe('departamentos: registro', () => {
     expect(departamentoDaRota('/')).toBeNull();
     expect(departamentoDaRota('/usuarios')).toBeNull();
     expect(departamentoDaRota('/educacionalx')).toBeNull();
+  });
+});
+
+describe('departamentos: Comercial (flag NEXT_PUBLIC_COMERCIAL_VENDEDORES)', () => {
+  const com = (cargo: Cargo, setores: string[], funcoes: string[], status: string | null = 'ativo'): GpUser =>
+    ({ ...user(cargo, setores), funcoes, status });
+  const vendedor = com('operador', ['comercial'], ['comercial.vender']);
+  const gestorCom = com('gestor', ['comercial'], []);
+  const LIGADA = { comercialVendedores: true };
+
+  it('flag desligada (padrão): só admin e dev; gestor, operador e visualizador não', () => {
+    expect(podeVerDepartamento(user('admin'), 'comercial')).toBe(true);
+    expect(podeVerDepartamento(user('dev'), 'comercial')).toBe(true);
+    for (const c of ['gestor', 'operador', 'visualizador'] as Cargo[]) expect(podeVerDepartamento(user(c), 'comercial')).toBe(false);
+    expect(podeVerDepartamento(vendedor, 'comercial')).toBe(false);
+    expect(podeVerDepartamento(gestorCom, 'comercial', { comercialVendedores: false })).toBe(false);
+  });
+  it('flag ligada: vendedor (área comercial + comercial.vender) e gestor com área comercial entram; admin/dev seguem', () => {
+    expect(podeVerDepartamento(vendedor, 'comercial', LIGADA)).toBe(true);
+    expect(podeVerDepartamento(gestorCom, 'comercial', LIGADA)).toBe(true);
+    expect(podeVerDepartamento(user('admin'), 'comercial', LIGADA)).toBe(true);
+    expect(podeVerDepartamento(user('dev'), 'comercial', LIGADA)).toBe(true);
+  });
+  it('flag ligada: quem não é do Comercial continua fora (espelha crm.eh_comercial)', () => {
+    expect(podeVerDepartamento(com('operador', ['comercial'], []), 'comercial', LIGADA)).toBe(false);          // sem a função
+    expect(podeVerDepartamento(com('operador', ['placas'], ['comercial.vender']), 'comercial', LIGADA)).toBe(false); // sem a área
+    expect(podeVerDepartamento(com('gestor', ['placas'], []), 'comercial', LIGADA)).toBe(false);              // gestor de outro setor
+    expect(podeVerDepartamento(user('visualizador', ['comercial']), 'comercial', LIGADA)).toBe(false);
+    expect(podeVerDepartamento(com('operador', ['comercial'], ['comercial.vender'], 'pendente'), 'comercial', LIGADA)).toBe(false);
+    expect(podeVerDepartamento(null, 'comercial', LIGADA)).toBe(false);
+  });
+  it('a flag não abre o Marketing', () => {
+    expect(podeVerDepartamento(vendedor, 'marketing', LIGADA)).toBe(false);
+    expect(podeVerDepartamento(gestorCom, 'marketing', LIGADA)).toBe(false);
+  });
+  it('ehDoComercial = régua do banco (gestor: dev/admin ou gestor+área; vendedor: área + comercial.vender)', () => {
+    expect(ehDoComercial(user('admin'))).toBe(true);
+    expect(ehDoComercial(gestorCom)).toBe(true);
+    expect(ehDoComercial(vendedor)).toBe(true);
+    expect(ehDoComercial(user('operador', ['comercial']))).toBe(false);
+    expect(ehDoComercial(null)).toBe(false);
   });
 });
 
@@ -64,16 +112,6 @@ describe('departamentos: Marketing bloqueado até os níveis de acesso serem des
         expect(podeVerDepartamento(user(c), k)).toBe(true);
       }
     }
-  });
-});
-
-describe('departamentos: Comercial (20261005o) com a mesma regra do Marketing', () => {
-  it('admin e dev veem o Comercial', () => {
-    expect(podeVerDepartamento(user('admin'), 'comercial')).toBe(true);
-    expect(podeVerDepartamento(user('dev'), 'comercial')).toBe(true);
-  });
-  it('visualizador, gestor e operador NÃO veem o Comercial (dado pessoal)', () => {
-    for (const c of ['visualizador', 'gestor', 'operador'] as Cargo[]) expect(podeVerDepartamento(user(c, ['comercial']), 'comercial')).toBe(false);
   });
 });
 
