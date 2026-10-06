@@ -39,3 +39,8 @@ verify_jwt = false
 
 [functions.trafego-clickup]
 verify_jwt = false
+
+# mkt-web-pagespeed (20261005q): o cron chama com o header x-sync-chave (Vault mkt_web_pagespeed_chave), conferido
+# na própria Edge, fail-closed. Sem isto, um deploy sem --no-verify-jwt devolve 401 ao cron.
+[functions.mkt-web-pagespeed]
+verify_jwt = false
