@@ -3,9 +3,10 @@
 Pedido do Victor (05/10/2026). Quem não tem acesso à Central de Alunos (ex.: Isabela Teixeira, Head de Sucesso do
 Cliente) passa a **pedir** a alteração numa tela própria; o aprovador decide na Central e o sistema aplica.
 
-**Status (05/10/2026): etapa 1 no ar** (migration `20261005j` aplicada, merge `e20aaab`). **Sócio novo com cadastro
-completo** (migration `20261005k`) **NÃO APLICADA**: front na branch `feat/pedidos-socio-novo-endereco`, só vai para a
-`main` depois de a migration estar no banco.
+**Status (06/10/2026): etapa 1 no ar** (migration `20261005j` aplicada, merge `e20aaab`). **Sócio novo com cadastro
+completo** (migration `20261005k`) **APLICADA** (commit `002535a`, na `main`).
+**Troca de sócio direto em remoção** (`20261006144912`) e **sócio novo herda entrada e turma** (`20261006144913`):
+**NÃO APLICADAS**, branch `victor-pedidos` (ensaio OK em 06/10/2026). Ver "Banco".
 
 ## Telas
 
@@ -48,8 +49,14 @@ completo** (migration `20261005k`) **NÃO APLICADA**: front na branch `feat/pedi
 - **E-mail:** o antigo fica no audit e no pedido (a regra da Central de manter o antigo ao lado vale na planilha).
 - **Troca de sócio:** quem sai só perde o vínculo; quem entra recebe vínculo, instrução `<NÍVEL> - SÓCIO`,
   espaço, vencimento e `Acompanha titular`; `num_socios` do titular é recontado. Abre um caso em
-  **Remoção de Acessos** (tipo "Troca de sócio", aguardando triagem, prazo de 1 dia útil) para quem saiu: a
-  retirada dos acessos segue o checklist do módulo (Victor, JP, Thomas, Ana Camila).
+  **Remoção de Acessos** (tipo "Troca de sócio", prazo de 1 dia útil) para quem saiu: a retirada dos acessos segue o
+  checklist do módulo (Victor, JP, Thomas, Ana Camila).
+  **Com a `20261006144912` (NÃO APLICADA; decisão do Victor, 06/10/2026):** quem sai **sem compra própria** entra
+  **direto em remoção** (sem triagem, itens já criados, Slack marca quem remove); **com compra própria** de Holding
+  Masters ou Aurum (em `public.compras` ou no financeiro da Hotmart, conta academy) cai em **aguardando triagem**, com as
+  compras na ficha. Antes dela, todo caso de troca cai em aguardando triagem. Regra completa em `remocao-acessos.md`.
+- **Sócio novo herda do titular (`20261006144913`, NÃO APLICADA; decisão do Victor, 06/10/2026):** pessoa nova recebe
+  `data_entrada_thb` e `turma_id` do titular, com auditoria. Sócio que entra já existente mantém os dele.
 - **"Outro":** aprovar só registra; o aprovador faz à mão e marca como aplicado.
 - **Sócio novo (20261005k):** grava em `thb_alunos` nome, e-mail, telefone, documento, `tipo_documento` (CPF/CNPJ),
   profissão e as 8 colunas de endereço (`cep`, `endereco_logradouro`, `endereco_numero`, `endereco_complemento`,
@@ -88,10 +95,22 @@ Migration `infra/supabase/migrations/20261005j_pedidos_alteracao.sql` (ensaio `2
 `20261005j.explain.md`). **Aplicada em 05/10/2026.**
 
 Migration `20261005k_pedidos_socio_novo_endereco.sql` (ensaio `20261005k_ensaio.sql`, medições em `20261005k.explain.md`):
-sócio novo completo. **Status: NÃO APLICADA** (branch `feat/pedidos-socio-novo-endereco`; a tela nova só vai para a
-`main` junto com a migration, porque manda campos que a `pa_criar` da j recusa sem endereço). Funções novas:
+sócio novo completo. **Status: APLICADA** (commit `002535a`, na `main`). Funções novas:
 `pa_ufs`, `pa_doc_valido`, `pa_eh_brasil`, `pa_endereco`, `pa_telefone_pessoa` (internas) e `pa_duplicata_pessoa`
-(tela). Substituídas: `pa_normalizar`, `pa_criar`, `pa_decidir`. Tabelas `pa_pedidos`, `pa_historico`, `pa_aprovadores`, fechadas. Funções da tela:
+(tela). Substituídas: `pa_normalizar`, `pa_criar`, `pa_decidir`.
+
+Migrations de 06/10/2026, **NÃO APLICADAS** (branch `victor-pedidos`), independentes entre si:
+
+- `20261006144912_pa_troca_socio_direto_remocao.sql`: `pa_abrir_caso_remocao` (direto em remoção sem compra própria),
+  `ra_slack_pendentes_base` (aviso próprio da troca direta, título legível da troca em triagem) e
+  `ra_desfazer_triagem` (recusa a troca direta). A tela (`CasoDrawer.tsx`) esconde "Desfazer triagem" nesse caso.
+- `20261006144913_pa_socio_novo_entrada.sql`: `pa_decidir` com a herança de `data_entrada_thb` e `turma_id`.
+
+**Como testar:** `python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio infra/supabase/migrations/<ts>_ensaio.sql`
+(roda em `begin … rollback`; esperado nenhuma linha `ERRADO`). Depois de aplicar: aprovar um pedido de troca e conferir
+em `/educacional/remocoes` o status do caso ("Em remoção" sem compra própria, "Aguardando triagem" com compra) e, no
+aluno novo, a entrada e a turma iguais às do titular. Saída do ensaio, `explain (analyze)` e reversão nos `.explain.md`.
+Atenção: cada ensaio consome números da sequência de `pa_pedidos` (o rollback não devolve). Tabelas `pa_pedidos`, `pa_historico`, `pa_aprovadores`, fechadas. Funções da tela:
 `pa_meu_papel`, `pa_buscar_alunos`, `pa_socios_do_titular`, `pa_valor_atual`, `pa_turmas`, `pa_criar`,
 `pa_meus_pedidos`, `pa_fila`, `pa_decidir`, `pa_marcar_aplicado`.
 

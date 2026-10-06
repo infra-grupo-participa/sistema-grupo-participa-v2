@@ -62,6 +62,31 @@ como rede de segurança, e os dois caminhos viram um caso só.
 reenviar a mesma transação recria o caso). Em `producao`, só Holding Masters e Acelera Holding, e nada é teste.
 Deploy: `verify_jwt = false`. Migration: `20260916_remocao_acessos_webhook.sql`.
 
+## Troca de sócio (pedido de alteração)
+
+> **Situação (06/10/2026): NÃO APLICADA** (migration `20261006144912_pa_troca_socio_direto_remocao.sql`, branch
+> `victor-pedidos`; ensaio em `begin … rollback` sem sobra; detalhe em `20261006144912.explain.md`). Até ser aplicada,
+> toda troca de sócio cai em aguardando triagem.
+
+O caso `tipo = 'troca_socio'` nasce quando a `pa_decidir` aplica uma troca de sócio (`hotmart_transaction =
+'PEDIDO-ALTERACAO-<nº>'`, `origem = 'pedido_alteracao'`, linha `hm`, prazo de 1 dia útil). Decisão do Victor (06/10/2026):
+**quem sai entra direto em remoção, salvo se tiver compra própria.**
+
+**Compra própria** = a regra de "Outras compras que dão acesso" da triagem (`ra_montar_sugestao`): produtos 5064314
+(Holding Masters), 3507214 (Holding - Holding Masters) e 3094405 (Aurum), status APPROVED/COMPLETED/COMPLETE, mesma
+pessoa por e-mail ou documento, em `public.compras`; **mais** o mesmo filtro em `fin.hotmart_transacoes` (conta academy),
+porque `public.compras` só tem HM desde 14/03/2026 e o financeiro guarda desde 2023.
+
+- **Sem compra própria:** status **Em remoção**, `decisao = remover`, sem triagem (`triado_em` nulo). Itens criados na
+  hora com o filtro do `ra_triar`: Searchie e Obvio (Thomas), Grupo de informes e Comunidade no Facebook (Ana Camila),
+  Central de Alunos (planilha) e Base de Alunos (sistema) (Victor) e, se for Programa de Implementação, Sistema do
+  Programa de Implementação. Histórico: "direto em remoção pelo pedido nº N".
+  Slack (aviso `novo`, um só): ":scissors: *Troca de sócio no HM: remover acessos*", prazo, a pessoa "(sócio de
+  <titular>)", cada responsável marcado com os itens dele, "Pedido de alteração nº N" e o link. Não sai `liberado`;
+  `concluido` sai quando todos marcam. **Não tem "Desfazer triagem"** (o botão some e o banco recusa).
+- **Com compra própria:** **Aguardando triagem** como os outros casos do HM, sugestão "verificar" com as compras em
+  "Outras compras que dão acesso". Slack: ":rotating_light: *Troca de sócio no HM, triagem pendente*", marca o triador.
+
 ## Acelera Holding (produto Hotmart 8381847)
 
 > **Situação (06/10/2026): APLICADO no banco e publicado na main.** Conferido: 41 casos importados `em_remocao`, sem prazo

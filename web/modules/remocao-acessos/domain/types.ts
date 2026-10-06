@@ -75,6 +75,12 @@ export interface Sugestao {
   } | null;
   historico_expiracao?: { de: string | null; para: string | null; origem: string | null; em: string }[];
   aviso?: string;
+  /** Troca de sócio (pedido de alteração): true = quem saiu não tinha compra própria e o caso nasceu em remoção, sem triagem. */
+  direto_remocao?: boolean;
+  /** Nº do pedido de alteração que abriu a troca de sócio. */
+  pedido?: number;
+  /** Nome do titular de quem o sócio saiu. */
+  titular?: string | null;
 }
 
 export interface ItemCaso {
