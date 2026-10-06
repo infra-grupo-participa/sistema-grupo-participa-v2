@@ -31,8 +31,16 @@ const FALLBACK_SUPABASE_URL = 'https://mbvybujpkwuorhtdzcde.supabase.co';
 const FALLBACK_SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1idnlidWpwa3d1b3JodGR6Y2RlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2Nzk5MjYsImV4cCI6MjA4NzI1NTkyNn0.02UmV0FaJ4O8AaUOEjkKWlVfWKt1y0Nr8afcKRmUE0I';
 
+/** Fonte de dados do CRM Comercial: demonstração em memória ou banco real. Valor ausente/inválido = 'mock'. */
+export type ComercialFonte = 'mock' | 'supabase';
+export function lerComercialFonte(v: string | undefined): ComercialFonte {
+  return v?.trim().toLowerCase() === 'supabase' ? 'supabase' : 'mock';
+}
+
 // Para uso no browser (apenas chaves públicas NEXT_PUBLIC_*, com fallback de produção).
+// NEXT_PUBLIC_* é embutido no build: mudar pede rebuild.
 export const publicEnv = {
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || FALLBACK_SUPABASE_URL,
   supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY,
+  comercialFonte: lerComercialFonte(process.env.NEXT_PUBLIC_COMERCIAL_FONTE),
 } as const;

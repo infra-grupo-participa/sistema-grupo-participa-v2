@@ -4,7 +4,7 @@ import {
 } from './regras-contatos';
 
 describe('mapaDuplicados', () => {
-  it('liga contatos com os mesmos últimos 8 dígitos, com ou sem DDI', () => {
+  it('liga contatos com o mesmo DDD + últimos 8 dígitos, com ou sem DDI', () => {
     const m = mapaDuplicados([
       { id: 'a', telefone: '5511987654321' },
       { id: 'b', telefone: '(11) 98765-4321' },
@@ -29,9 +29,11 @@ describe('mapaDuplicados', () => {
     const m = mapaDuplicados([
       { id: 'a', telefone: '5511987654321' },
       { id: 'b', telefone: '11987654321' },
-      { id: 'c', telefone: '987654321' },
+      { id: 'c', telefone: '551187654321' }, // sem o 9
+      { id: 'd', telefone: '987654321' },    // sem DDD: sem chave
     ]);
     expect(m.get('c')).toEqual(['a', 'b']);
+    expect(m.has('d')).toBe(false);
   });
 });
 
@@ -47,7 +49,8 @@ describe('casaBusca', () => {
   it('acha por telefone em qualquer formato', () => {
     expect(casaBusca(c, '(11) 98765-4321')).toBe(true);
     expect(casaBusca(c, '4321')).toBe(true);
-    expect(casaBusca(c, '+55 21 9 8765-4321')).toBe(true); // mesmos últimos 8
+    expect(casaBusca(c, '+55 11 8765-4321')).toBe(true);   // mesmo DDD + últimos 8, sem o 9
+    expect(casaBusca(c, '+55 21 9 8765-4321')).toBe(false); // DDD diferente não junta
     expect(casaBusca(c, '1111-2222')).toBe(false);
   });
 

@@ -3,8 +3,8 @@ import { chaveTelefone } from '../../domain/regras';
 import type { Contato, Utm } from '../../domain/types';
 
 /**
- * Possíveis duplicados: contatos que dividem os mesmos últimos 8 dígitos do telefone
- * (mesma pessoa que comprou com outro e-mail ou com/sem DDI). Devolve id → ids dos outros.
+ * Possíveis duplicados: contatos com a mesma chave de telefone (DDD + últimos 8 dígitos, `chaveTelefone`)
+ * (mesma pessoa que comprou com outro e-mail, com/sem DDI ou com/sem o 9). Devolve id → ids dos outros.
  */
 export function mapaDuplicados(contatos: Pick<Contato, 'id' | 'telefone'>[]): Map<string, string[]> {
   const porChave = new Map<string, string[]>();
@@ -21,7 +21,7 @@ export function mapaDuplicados(contatos: Pick<Contato, 'id' | 'telefone'>[]): Ma
   return mapa;
 }
 
-/** Busca por nome, e-mail ou telefone (aceita qualquer formatação e compara pelos últimos 8 dígitos). */
+/** Busca por nome, e-mail ou telefone (aceita qualquer formatação e compara pela chave DDD + últimos 8 dígitos). */
 export function casaBusca(c: Pick<Contato, 'nome' | 'email' | 'telefone'>, termo: string): boolean {
   const q = termo.trim().toLowerCase();
   if (!q) return true;

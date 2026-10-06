@@ -30,7 +30,7 @@ const INFO: Record<'total' | 'semDono' | 'optOut' | 'alunos' | 'lancamentos', Te
   total: {
     nome: 'Contatos',
     oQueE: 'Pessoas únicas na base do CRM.',
-    comoConta: 'Uma pessoa por identidade: e-mail OU últimos 8 dígitos do telefone. Possíveis duplicados ainda contam separados até a mescla.',
+    comoConta: 'Uma pessoa por identidade: e-mail OU DDD + últimos 8 dígitos do telefone. Possíveis duplicados ainda contam separados até a mescla.',
   },
   semDono: {
     nome: 'Contatos sem dono',

@@ -121,7 +121,7 @@ export interface Utm {
   sck?: string | null;
 }
 
-/** Pessoa única do CRM. Chave de identidade: e-mail OU últimos 8 dígitos do telefone. */
+/** Pessoa única do CRM. Chave de identidade: e-mail OU DDD + últimos 8 dígitos do telefone (`chaveTelefone`). */
 export interface Contato {
   id: string;
   nome: string;

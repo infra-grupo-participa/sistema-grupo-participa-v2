@@ -1,16 +1,19 @@
 'use client';
 
-// Ponto único de troca da fonte de dados do Comercial.
-// HOJE: dados de demonstração em memória. Quando o backend existir, trocar a linha abaixo por
-// `new SupabaseComercialRepository()` (mesmo contrato `ComercialRepository`). Nenhuma tela muda.
+// Ponto único de troca da fonte de dados do Comercial (mesmo contrato `ComercialRepository`; nenhuma tela muda).
+// NEXT_PUBLIC_COMERCIAL_FONTE=supabase → banco real (F1: só leitura). Ausente/inválido → demonstração em memória.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { publicEnv } from '@/shared/infrastructure/config/env';
 import type { ComercialRepository } from '../application/ports';
 import { MockComercialRepository } from '../infrastructure/mock-comercial.repository';
+import { SupabaseComercialRepository } from '../infrastructure/supabase-comercial.repository';
 
-export const repo: ComercialRepository = new MockComercialRepository();
+export const repo: ComercialRepository = publicEnv.comercialFonte === 'supabase'
+  ? new SupabaseComercialRepository()
+  : new MockComercialRepository();
 
 /** true enquanto a fonte for a de demonstração (mostra o aviso nas telas). */
-export const MODO_DEMONSTRACAO = true;
+export const MODO_DEMONSTRACAO = publicEnv.comercialFonte === 'mock';
 
 // Aviso de mudança: depois de uma escrita, toda tela aberta recarrega o que mostra.
 const ouvintes = new Set<() => void>();

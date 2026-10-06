@@ -90,7 +90,7 @@ export function DetalheFicha({ f, templates, nomeDe, gestor, onDecidir, onClose 
       </Item>
       <Item n={3} titulo="Lista">
         {f.filtro || '—'}
-        <span className="block text-xs text-[var(--fg-3)]">{f.quantidade.toLocaleString('pt-BR')} contatos, deduplicada por e-mail ou últimos 8 dígitos do telefone.</span>
+        <span className="block text-xs text-[var(--fg-3)]">{f.quantidade.toLocaleString('pt-BR')} contatos, deduplicada por e-mail ou DDD + últimos 8 dígitos do telefone.</span>
       </Item>
       <Item n={4} titulo="Supressões aplicadas">
         <ul className="space-y-1">
@@ -249,7 +249,7 @@ export function NovaFichaModal({ eu, gestor, contatos, negocios, templates, fich
           </Secao>
 
           <Secao n={2} titulo="Lista">
-            <Campo rotulo="Filtro da lista" dica="Como a lista foi tirada no CRM. Deduplicada por e-mail ou últimos 8 dígitos do telefone.">
+            <Campo rotulo="Filtro da lista" dica="Como a lista foi tirada no CRM. Deduplicada por e-mail ou DDD + últimos 8 dígitos do telefone.">
               <Textarea rows={2} value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Ex.: Fila Imersão SET26 · faixas A e B · status A abordar" />
             </Campo>
             <Campo rotulo="Quantidade">

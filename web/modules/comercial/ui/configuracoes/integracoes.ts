@@ -36,7 +36,7 @@ export const INTEGRACOES: Integracao[] = [
     nome: 'Hotmart', icone: 'wallet', papel: 'Webhook de compra e abandono', status: 'A conectar',
     entra: 'Compra aprovada, boleto/Pix em aberto, cartão recusado, carrinho abandonado, expirada e reembolso.',
     sai: 'Nada: a Hotmart só informa. Cria as origens automáticas e fecha o negócio como ganho no pagamento aprovado.',
-    risco: 'Casar comprador com contato pelo e-mail ou pelos últimos 8 dígitos do telefone; SCK precisa chegar no checkout.',
+    risco: 'Casar comprador com contato pelo e-mail ou pelo DDD + últimos 8 dígitos do telefone; SCK precisa chegar no checkout.',
   },
   {
     nome: 'Infobip', icone: 'phone', papel: 'WhatsApp oficial e voz', status: 'A conectar',

@@ -121,9 +121,19 @@ describe('rastreabilidade e telefone', () => {
   it('SCK no padrão produto-acao-data-canal-sigla', () => {
     expect(montarSck('hm', 'Recuperação', new Date(2026, 9, 5), 'WhatsApp', 'MP')).toBe('hm-recuperacao-20261005-whatsapp-mp');
   });
-  it('chave por últimos 8 dígitos', () => {
-    expect(chaveTelefone('+55 (11) 98765-4321')).toBe('87654321');
+  it('chave = controle.fone_key: DDD + últimos 8 dígitos', () => {
+    expect(chaveTelefone('+55 (11) 98765-4321')).toBe('1187654321'); // 13 com 55
+    expect(chaveTelefone('551187654321')).toBe('1187654321');        // 12 com 55 (sem o 9)
+    expect(chaveTelefone('(11) 98765-4321')).toBe('1187654321');     // 11
+    expect(chaveTelefone('1187654321')).toBe('1187654321');          // 10
+    expect(chaveTelefone('5521987654321')).not.toBe(chaveTelefone('5511987654321')); // DDD diferente não junta
+  });
+  it('chave: curto demais é null; outro tamanho usa os 10 últimos', () => {
     expect(chaveTelefone('1234')).toBeNull();
+    expect(chaveTelefone('987654321')).toBeNull();                   // 9 dígitos
+    expect(chaveTelefone(null)).toBeNull();
+    expect(chaveTelefone('441187654321')).toBe('1187654321');        // 12 sem 55
+    expect(chaveTelefone('00551187654321')).toBe('1187654321');      // 14
   });
   it('formata celular e fixo', () => {
     expect(fmtTelefone('5511987654321')).toBe('(11) 98765-4321');

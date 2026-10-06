@@ -149,10 +149,18 @@ export function montarSck(produto: ProdutoKey, acao: string, data: Date, canal: 
 
 // ── Telefone ──
 
-/** Chave de identidade por telefone: últimos 8 dígitos (pega quem compra com e-mail diferente). */
+/**
+ * Chave de identidade por telefone = regra de `controle.fone_key` do banco (decisão D2): DDD + últimos 8 dígitos.
+ * Junta celular com/sem o 9 e com/sem DDI 55 (pega quem compra com e-mail diferente), sem juntar DDDs diferentes.
+ * Só dígitos; menos de 10 → null; 12/13 começando com 55 → DDD após o 55 + 8 últimos; 10/11 → 2 primeiros + 8
+ * últimos; outro tamanho → 10 últimos.
+ */
 export function chaveTelefone(tel: string | null | undefined): string | null {
   const d = String(tel ?? '').replace(/\D/g, '');
-  return d.length >= 8 ? d.slice(-8) : null;
+  if (d.length < 10) return null;
+  if ((d.length === 12 || d.length === 13) && d.startsWith('55')) return d.slice(2, 4) + d.slice(-8);
+  if (d.length === 10 || d.length === 11) return d.slice(0, 2) + d.slice(-8);
+  return d.slice(-10);
 }
 
 /** +55 (11) 98765-4321 a partir de dígitos E.164 ou nacionais. */
