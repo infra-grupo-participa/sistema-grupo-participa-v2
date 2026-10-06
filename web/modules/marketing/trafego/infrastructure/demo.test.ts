@@ -18,11 +18,28 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
     expect([sem.investido, sem.pct_verba, sem.ctr]).toEqual([null, null, null]);
     expect(demoResumo().find((l) => l.sigla === 'PB26')!.investido).toBeGreaterThan(0);
   });
-  it('fora do padrão e sem projeto aparecem; fase só do projeto da campanha', () => {
+  it('fora do padrão e sem projeto aparecem; fase fora da lista recusada', () => {
     expect(demoCampanhas(null, false, true).length).toBeGreaterThan(0);
     expect(demoCampanhas(null, true, false).map((c) => c.id)).toEqual([7, 8]);
-    expect(demoAjustarCampanha({ id: 4, projeto_id: null, fase_id: 1 }).ok).toBe(false);
+    expect(demoAjustarCampanha({ id: 4, fase: 'xyz' }).ok).toBe(false);
     expect(demoSalvarFase({ projeto_id: 1, fase: 'captacao', verba: '1' }).ok).toBe(false);
     expect(demoProjeto(1)!.fases.map((f) => f.fase)).toEqual(['aquecimento', 'captacao', 'lembrete']);
+  });
+  it('fase pelo objetivo, DISTRIBUIÇÃO em "sem fase", correção à mão prevalece', () => {
+    const fase = (id: number) => demoCampanhas(null, false, false).find((c) => c.id === id)!.fase;
+    expect([fase(1), fase(2), fase(4), fase(5), fase(9)]).toEqual(['captacao', 'aquecimento', 'captacao', 'remarketing', null]);
+    expect(demoProjeto(1)!.campanhas_sem_fase).toBe(1);
+    expect(demoAjustarCampanha({ id: 9, fase: 'aquecimento' }).ok).toBe(true);
+    expect(fase(9)).toBe('aquecimento');
+    expect(demoProjeto(1)!.campanhas_sem_fase).toBe(0);
+    demoAjustarCampanha({ id: 9, fase: null });
+    expect(fase(9)).toBeNull();
+  });
+  it('vários gestores por projeto; KPIs com cliques no link e page views', () => {
+    const pb = demoResumo().find((l) => l.sigla === 'PB26')!;
+    expect(pb.gestores).toEqual(['RS', 'CF']);
+    expect(pb.cpc).not.toBeNull();
+    expect(pb.connect_rate).not.toBeNull();
+    expect(demoResumo().find((l) => l.sigla === 'HT33')!.connect_rate).toBeNull();
   });
 });

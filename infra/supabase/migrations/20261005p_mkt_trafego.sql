@@ -10,6 +10,19 @@
 --     - Status do projeto MARCADO À MÃO; verba, fases e metas preenchidas por Arthur, Victor e Caio (admin/dev).
 --     - KPIs da tabela: CPL, leads, CTR, CPM, connect rate, conversão da página, % MQL. O lead que conta é o DA NOSSA
 --       BASE (pessoas.eventos). Receita gerada = receita (Hotmart), ainda sem ligação: volta nula.
+--     - CTR e CPC usam CLIQUES NO LINK (guardados separados dos cliques totais). Connect rate = page views ÷ cliques no
+--       link; conversão da página = leads ÷ page views. Page views vêm da Web (mkt_web.resumo_dia, 20261005n).
+--     - Um projeto pode ter VÁRIOS gestores (projeto_gestores, das listas de mkt.campanha_gestores).
+--     - Fases: aquecimento, captação, lembrete, remarketing, abertura de carrinho. A fase da campanha sai do OBJETIVO do
+--       nome (tabela objetivo_fase, configurável); a correção à mão por campanha (fase_manual) prevalece. Sem regra e
+--       sem correção = "sem fase". Mapa: LEADS → captação, VENDAS → captação (lançamento pago: vende o ingresso em vez
+--       de captar lead), LEMBRETE → lembrete, REMARKETING → remarketing, CARRINHO → abertura de carrinho, AQUECIMENTO →
+--       aquecimento. DISTRIBUIÇÃO (de conteúdo) NÃO tem fase automática: pode ou não ser aquecimento; fica "sem fase"
+--       até alguém marcar à mão na campanha.
+--     - Objetivos novos no padrão de nome: CARRINHO (anuncia o produto principal na abertura de carrinho, em lançamento
+--       pago ou gratuito) e AQUECIMENTO. Entram em mkt.campanha_objetivos (lista da 20261005m) por insert idempotente, e
+--       mkt.campanha_traduzir passa a reconhecer (ela lê a lista). Lista final: LEADS, VENDAS, REMARKETING, LEMBRETE,
+--       DISTRIBUIÇÃO, CARRINHO, AQUECIMENTO.
 --     - Atividades do ClickUp ficam na tela (lugar reservado nesta etapa, sem integrar).
 --   Fontes: Projetos/sistema-unico/central-de-dados/{plano-trafego.md, area-de-trafego.md} no cérebro do Victor.
 --
@@ -20,8 +33,9 @@
 --
 -- O QUE CRIA
 --   schema mkt_trafego  plataformas, status_projeto, fases (listas configuráveis), contas, campanhas, desempenho_dia,
---                       planejamento, projeto_fases
---                       conta_normalizar(text,text), campanha_aplicar_leitura(bigint), ontem(), resumo(bigint)
+--                       planejamento, projeto_gestores (projeto × gestor, N:N), projeto_fases, objetivo_fase
+--                       conta_normalizar(text,text), campanha_aplicar_leitura(bigint), ontem(), resumo(bigint),
+--                       fase_efetiva(text,text)
 --   public.trafego_*    config, contas_listar, conta_salvar, planejamento_salvar, fase_salvar, fase_apagar,
 --                       campanhas_listar, campanha_ajustar, campanhas_reler, resumo, projeto (authenticated)
 --                       campanhas_receber, desempenho_receber (service_role)
@@ -29,7 +43,7 @@
 -- AS 5 PERGUNTAS
 --   escala: dezenas de projetos e contas, centenas de campanhas por ano; desempenho_dia = campanhas × dias, na ordem de
 --     dezenas de milhares de linhas por ano.
---   índice: PK (campanha_id, dia) em desempenho_dia; únicos (plataforma, conta_externa) e (plataforma, campanha_externa);
+--   índice: PK (campanha_id, dia) em desempenho_dia; PK (projeto_id, gestor) em projeto_gestores; únicos (plataforma, conta_externa) e (plataforma, campanha_externa);
 --     campanhas(projeto_id), campanhas(conta_id); projeto_fases único (projeto_id, fase).
 --   frequência: a tela chama trafego_resumo ao abrir e trafego_projeto ao clicar; a coleta (etapa 2) chama os receber
 --     uma vez por dia (mais algumas leituras do dia corrente).
@@ -55,6 +69,9 @@ begin
      or to_regclass('mkt.campanha_gestores') is null
      or to_regprocedure('mkt.campanha_traduzir(text)') is null or to_regprocedure('mkt.pode_ver(text)') is null then
     raise exception '20261005p: falta a 20261005m (mkt.projetos, mkt.paginas, mkt.campanha_gestores, mkt.campanha_traduzir, mkt.pode_ver)';
+  end if;
+  if to_regclass('mkt.campanha_objetivos') is null then
+    raise exception '20261005p: mkt.campanha_objetivos ausente (20261005m)';
   end if;
   if to_regprocedure('public.gp_is_admin()') is null then
     raise exception '20261005p: public.gp_is_admin() ausente';
@@ -101,7 +118,15 @@ create table mkt_trafego.fases (
   ordem  smallint not null,
   ativa  boolean not null default true
 );
-comment on table mkt_trafego.fases is 'Fases da verba de um projeto (aquecimento, captação, lembrete…). Lista configurável.';
+comment on table mkt_trafego.fases is 'Fases da verba de um projeto (aquecimento, captação, lembrete, remarketing, abertura de carrinho). Lista configurável.';
+
+create table mkt_trafego.objetivo_fase (
+  objetivo text primary key references mkt.campanha_objetivos(codigo) on delete cascade,
+  fase     text not null references mkt_trafego.fases(codigo) on delete restrict
+);
+comment on table mkt_trafego.objetivo_fase is
+  'Fase de uma campanha pelo OBJETIVO do nome (campo 3). Configurável por SQL. Objetivo sem linha aqui = campanha sem fase '
+  '(a não ser que alguém marque à mão). Sementes só as óbvias (Victor, 05/10/2026).';
 
 -- ─── 3. Contas, campanhas e desempenho ───────────────────────────────────────────────────────────────────────────────
 create table mkt_trafego.contas (
@@ -139,7 +164,6 @@ create table mkt_trafego.projeto_fases (
   atualizado_em  timestamptz not null default now(),
   atualizado_por uuid references public.perfis(id) on delete set null,
   constraint projeto_fases_unica unique (projeto_id, fase),
-  constraint projeto_fases_id_projeto unique (id, projeto_id),
   constraint projeto_fases_datas_check check (fim is null or inicio is null or fim >= inicio)
 );
 create index projeto_fases_projeto_idx on mkt_trafego.projeto_fases (projeto_id);
@@ -159,15 +183,13 @@ create table mkt_trafego.campanhas (
   pagina_id         bigint references mkt.paginas(id) on delete set null,
   projeto_id        bigint references mkt.projetos(id) on delete restrict,
   projeto_manual    boolean not null default false,
-  fase_id           bigint,
+  fase_manual       text references mkt_trafego.fases(codigo) on delete restrict,
   primeira_coleta   timestamptz not null default now(),
   ultima_coleta     timestamptz not null default now(),
   atualizado_em     timestamptz not null default now(),
   atualizado_por    uuid references public.perfis(id) on delete set null,
   constraint campanhas_externa_unica unique (plataforma, campanha_externa),
   constraint campanhas_conta_fk foreign key (conta_id, plataforma) references mkt_trafego.contas(id, plataforma) on delete restrict,
-  constraint campanhas_fase_fk foreign key (fase_id, projeto_id) references mkt_trafego.projeto_fases(id, projeto_id),
-  constraint campanhas_fase_check check (fase_id is null or projeto_id is not null),
   constraint campanhas_manual_check check (not projeto_manual or projeto_id is not null)
 );
 create index campanhas_projeto_idx on mkt_trafego.campanhas (projeto_id);
@@ -175,14 +197,16 @@ create index campanhas_conta_idx on mkt_trafego.campanhas (conta_id);
 comment on table mkt_trafego.campanhas is
   'Campanhas como estão na plataforma (nome EXATO). leitura = mkt.campanha_traduzir(nome); projeto, gestor, objetivo e '
   'página saem dela. projeto_manual = alguém ligou o projeto à mão (nome fora do padrão). Upsert por (plataforma, id).';
-comment on column mkt_trafego.campanhas.fase_id is 'Fase do projeto à qual o gasto da campanha conta. À mão (o nome da campanha não diz a fase).';
+comment on column mkt_trafego.campanhas.fase_manual is
+  'Correção à mão da fase. Nulo = vale a fase do objetivo (objetivo_fase). Fase efetiva = mkt_trafego.fase_efetiva(objetivo, fase_manual).';
 
 create table mkt_trafego.desempenho_dia (
   campanha_id      bigint not null references mkt_trafego.campanhas(id) on delete cascade,
   dia              date not null,
   gasto            numeric(14,2) not null check (gasto >= 0),
   impressoes       bigint not null check (impressoes >= 0),
-  cliques          bigint not null check (cliques >= 0),
+  cliques_link     bigint not null check (cliques_link >= 0),
+  cliques_total    bigint check (cliques_total is null or cliques_total >= 0),
   leads_plataforma integer check (leads_plataforma is null or leads_plataforma >= 0),
   coletado_em      timestamptz not null default now(),
   primary key (campanha_id, dia)
@@ -190,13 +214,13 @@ create table mkt_trafego.desempenho_dia (
 comment on table mkt_trafego.desempenho_dia is
   'Gasto e desempenho por campanha e dia, como a plataforma informa. VAZIA até a coleta (etapa 2). Reenvio do mesmo dia '
   'sobrescreve (idempotente). Moeda = a da conta.';
-comment on column mkt_trafego.desempenho_dia.cliques is 'Cliques como a coleta definir (todos ou no link: pergunta em aberto, ver 20261005p.explain.md).';
+comment on column mkt_trafego.desempenho_dia.cliques_link is 'Cliques no link (Meta: inline_link_clicks). É o clique do CTR, do CPC e do connect rate (Victor, 05/10/2026).';
+comment on column mkt_trafego.desempenho_dia.cliques_total is 'Todos os cliques (Meta: clicks). Só informação; nenhum KPI usa. Nulo = a plataforma não informou.';
 comment on column mkt_trafego.desempenho_dia.leads_plataforma is 'Leads que a plataforma atribui. NÃO é o lead da Central (o da nossa base).';
 
 create table mkt_trafego.planejamento (
   projeto_id     bigint primary key references mkt.projetos(id) on delete restrict,
   status         text references mkt_trafego.status_projeto(codigo) on delete restrict,
-  gestor         text references mkt.campanha_gestores(sigla) on delete restrict,
   verba_maxima   numeric(14,2) check (verba_maxima is null or verba_maxima > 0),
   verba_diaria   numeric(14,2) check (verba_diaria is null or verba_diaria > 0),
   meta_leads     integer check (meta_leads is null or meta_leads > 0),
@@ -208,17 +232,29 @@ create table mkt_trafego.planejamento (
   atualizado_por uuid references public.perfis(id) on delete set null
 );
 comment on table mkt_trafego.planejamento is
-  'Planejamento do projeto no Tráfego, à mão: status, gestor responsável, verba máxima e diária, metas. Uma linha por '
-  'projeto de mkt.projetos (criada quando alguém salva).';
+  'Planejamento do projeto no Tráfego, à mão: status, verba máxima e diária, metas. Uma linha por projeto de '
+  'mkt.projetos (criada quando alguém salva). Os gestores ficam em projeto_gestores (vários por projeto).';
+
+create table mkt_trafego.projeto_gestores (
+  projeto_id     bigint not null references mkt.projetos(id) on delete restrict,
+  gestor         text not null references mkt.campanha_gestores(sigla) on delete restrict,
+  atualizado_em  timestamptz not null default now(),
+  atualizado_por uuid references public.perfis(id) on delete set null,
+  primary key (projeto_id, gestor)
+);
+comment on table mkt_trafego.projeto_gestores is
+  'Gestores do projeto (Victor, 05/10/2026: um projeto pode ter vários). Sigla da lista mkt.campanha_gestores (CF, RS, EF). À mão.';
 
 alter table mkt_trafego.plataformas enable row level security;
 alter table mkt_trafego.status_projeto enable row level security;
 alter table mkt_trafego.fases enable row level security;
+alter table mkt_trafego.objetivo_fase enable row level security;
 alter table mkt_trafego.contas enable row level security;
 alter table mkt_trafego.projeto_fases enable row level security;
 alter table mkt_trafego.campanhas enable row level security;
 alter table mkt_trafego.desempenho_dia enable row level security;
 alter table mkt_trafego.planejamento enable row level security;
+alter table mkt_trafego.projeto_gestores enable row level security;
 revoke all on all tables in schema mkt_trafego from public, anon, authenticated;
 
 -- ─── 4. Sementes (só o que está nas fontes) ──────────────────────────────────────────────────────────────────────────
@@ -227,9 +263,17 @@ insert into mkt_trafego.plataformas (codigo, nome) values ('meta', 'Meta Ads'), 
 -- Status: as palavras da conversa (area-de-trafego.md, 2.1).
 insert into mkt_trafego.status_projeto (codigo, nome, ordem) values
   ('ativo', 'Ativo', 1), ('pausado', 'Pausado', 2), ('inativo', 'Inativo', 3), ('encerrado', 'Encerrado', 4);
--- Fases: os exemplos do plano (plano-trafego.md, 3.1: "aquecimento, captação, lembrete…").
+-- Fases: Victor, 05/10/2026 ("aquecimento, captação, lembrete, remarketing e abertura de carrinho").
 insert into mkt_trafego.fases (codigo, nome, ordem) values
-  ('aquecimento', 'Aquecimento', 1), ('captacao', 'Captação', 2), ('lembrete', 'Lembrete', 3);
+  ('aquecimento', 'Aquecimento', 1), ('captacao', 'Captação', 2), ('lembrete', 'Lembrete', 3),
+  ('remarketing', 'Remarketing', 4), ('abertura_carrinho', 'Abertura de carrinho', 5);
+-- Objetivos CARRINHO e AQUECIMENTO no padrão de nome (Victor, 05/10/2026). A lista é da 20261005m; insert idempotente.
+insert into mkt.campanha_objetivos (codigo) values ('CARRINHO'), ('AQUECIMENTO') on conflict (codigo) do nothing;
+-- Objetivo → fase (Victor, 05/10/2026). DISTRIBUIÇÃO de propósito sem fase automática (marca-se à mão na campanha).
+insert into mkt_trafego.objetivo_fase (objetivo, fase)
+select o, f from (values ('LEADS', 'captacao'), ('VENDAS', 'captacao'), ('LEMBRETE', 'lembrete'),
+                         ('REMARKETING', 'remarketing'), ('CARRINHO', 'abertura_carrinho'), ('AQUECIMENTO', 'aquecimento')) v(o, f)
+ where exists (select 1 from mkt.campanha_objetivos co where co.codigo = v.o);
 
 -- ─── 5. Funções internas (sem grant para ninguém) ────────────────────────────────────────────────────────────────────
 -- Id da conta normalizado: Meta sem "act_", Google só dígitos. Nulo se fora do formato.
@@ -245,6 +289,12 @@ language sql immutable set search_path = '' as $$
                    else btrim(coalesce(p_id, '')) end as v) x;
 $$;
 
+-- Fase efetiva da campanha: a correção à mão prevalece; senão a do objetivo; senão nula ("sem fase").
+create function mkt_trafego.fase_efetiva(p_objetivo text, p_manual text) returns text
+language sql stable set search_path = '' as $$
+  select coalesce(p_manual, (select o.fase from mkt_trafego.objetivo_fase o where o.objetivo = p_objetivo));
+$$;
+
 -- "Ontem" no fuso de São Paulo: último dia completo (o dia corrente ainda está acontecendo na plataforma).
 create function mkt_trafego.ontem() returns date
 language sql stable set search_path = '' as $$
@@ -252,7 +302,6 @@ language sql stable set search_path = '' as $$
 $$;
 
 -- Relê o nome da campanha pelo padrão da casa e aplica: projeto (se não foi ligado à mão), gestor, objetivo, página.
--- Se o projeto muda, a fase (que era do projeto antigo) é solta.
 create function mkt_trafego.campanha_aplicar_leitura(p_campanha bigint) returns boolean
 language plpgsql set search_path = '' as $$
 declare
@@ -272,7 +321,6 @@ begin
          objetivo = v_l ->> 'objetivo',
          pagina_id = nullif(v_l ->> 'pagina_id', '')::bigint,
          projeto_id = v_proj,
-         fase_id = case when v_proj is not distinct from c.projeto_id then c.fase_id end,
          atualizado_em = now()
    where id = p_campanha;
   return true;
@@ -284,16 +332,30 @@ $$;
 --   investido etc.: nulo enquanto não houver nenhuma linha de desempenho das campanhas do projeto (antes da coleta).
 --   leads e mql: da base de pessoas (pessoas.eventos, 20261005o); nulos se a base não existir. Pessoa de teste e
 --     pessoa mesclada não contam.
---   receita: nula (Hotmart ainda não ligada ao projeto). connect rate e conversão da página: nulos (dependem da Web
---     ligada e da fórmula a confirmar).
+--   receita: nula (Hotmart ainda não ligada ao projeto).
+--   page views: soma de mkt_web.resumo_dia.visualizacoes nas páginas de CAPTURA do projeto (mkt.paginas.funcao =
+--     'captura'), a página para onde o anúncio manda; nulas se a Web (20261005n) não existir ou se o projeto não tiver
+--     nenhuma linha lá. connect rate = page views ÷ cliques no link; conversão da página = leads ÷ page views.
 -- As fórmulas são as mesmas de web/modules/marketing/trafego/domain/kpis.ts (testes em kpis.test.ts).
 create function mkt_trafego.resumo(p_projeto bigint default null) returns jsonb
 language plpgsql stable set search_path = '' as $$
 declare
   v_ontem date := mkt_trafego.ontem();
   v_leads jsonb;
+  v_pv jsonb;
   v_res jsonb;
 begin
+  if to_regclass('mkt_web.resumo_dia') is not null then
+    execute $q$
+      select coalesce(jsonb_object_agg(x.projeto_id::text, x.pv), '{}'::jsonb)
+        from (select r.projeto_id, sum(r.visualizacoes) as pv
+                from mkt_web.resumo_dia r
+                join mkt.paginas pg on pg.id = r.pagina_id and pg.funcao = 'captura'
+               where ($1 is null or r.projeto_id = $1)
+               group by r.projeto_id) x
+    $q$ into v_pv using p_projeto;
+  end if;
+
   if to_regclass('pessoas.eventos') is not null and to_regclass('pessoas.pessoas') is not null then
     execute $q$
       select coalesce(jsonb_object_agg(x.projeto_id::text, jsonb_build_object('leads', x.leads, 'mql', x.mql)), '{}'::jsonb)
@@ -311,7 +373,8 @@ begin
 
   with d as (
     select c.projeto_id, c.plataforma,
-           sum(dd.gasto) as gasto, sum(dd.impressoes) as impressoes, sum(dd.cliques) as cliques,
+           sum(dd.gasto) as gasto, sum(dd.impressoes) as impressoes, sum(dd.cliques_link) as cliques_link,
+           sum(dd.cliques_total) as cliques_total,
            sum(dd.leads_plataforma) as leads_plataforma,
            sum(dd.gasto) filter (where dd.dia = v_ontem) as gasto_ontem,
            max(dd.dia) as ultimo_dia
@@ -320,7 +383,8 @@ begin
      where c.projeto_id is not null and (p_projeto is null or c.projeto_id = p_projeto)
      group by c.projeto_id, c.plataforma
   ), g as (
-    select d.projeto_id, sum(d.gasto) as gasto, sum(d.impressoes) as impressoes, sum(d.cliques) as cliques,
+    select d.projeto_id, sum(d.gasto) as gasto, sum(d.impressoes) as impressoes, sum(d.cliques_link) as cliques_link,
+           sum(d.cliques_total) as cliques_total,
            sum(d.leads_plataforma) as leads_plataforma, coalesce(sum(d.gasto_ontem), 0) as gasto_ontem,
            max(d.ultimo_dia) as ultimo_dia,
            jsonb_object_agg(d.plataforma, d.gasto) as por_plataforma
@@ -335,9 +399,12 @@ begin
      group by c.projeto_id
   ), base as (
     select p.id, p.sigla, p.nome, p.subarea_trafego, p.ativo, p.etiqueta_clickup, p.inicio, p.fim,
-           pl.status, sp.nome as status_nome, pl.gestor, pl.verba_maxima, pl.verba_diaria,
+           pl.status, sp.nome as status_nome, pl.verba_maxima, pl.verba_diaria,
+           coalesce((select array_agg(pgs.gestor order by pgs.gestor) from mkt_trafego.projeto_gestores pgs
+                      where pgs.projeto_id = p.id), '{}') as gestores_projeto,
            pl.meta_leads, pl.meta_receita, pl.meta_cpl, pl.meta_pct_mql, pl.obs,
-           g.gasto, g.impressoes, g.cliques, g.leads_plataforma, g.gasto_ontem, g.ultimo_dia, g.por_plataforma,
+           g.gasto, g.impressoes, g.cliques_link, g.cliques_total, g.leads_plataforma,
+           case when v_pv is null then null else (v_pv ->> p.id::text)::bigint end as page_views, g.gasto_ontem, g.ultimo_dia, g.por_plataforma,
            coalesce(cp.campanhas, 0) as campanhas, coalesce(cp.fora_padrao, 0) as fora_padrao,
            coalesce(cp.gestores, '{}') as gestores, coalesce(cp.moedas, '{}') as moedas,
            case when v_leads is null then null else coalesce((v_leads -> p.id::text ->> 'leads')::bigint, 0) end as leads,
@@ -355,18 +422,24 @@ begin
            'projeto_id', b.id, 'sigla', b.sigla, 'nome', b.nome, 'subarea', b.subarea_trafego,
            'tipo', case when b.subarea_trafego is null then null when b.subarea_trafego = 'interno' then 'interno' else 'externo' end,
            'projeto_ativo', b.ativo, 'etiqueta_clickup', b.etiqueta_clickup, 'inicio', b.inicio, 'fim', b.fim,
-           'status', b.status, 'status_nome', b.status_nome, 'gestor', b.gestor, 'gestores_campanhas', to_jsonb(b.gestores),
+           'status', b.status, 'status_nome', b.status_nome, 'gestores', to_jsonb(b.gestores_projeto),
+           'gestores_campanhas', to_jsonb(b.gestores),
            'receita', null,
            'investido', b.gasto, 'por_plataforma', b.por_plataforma, 'moedas', to_jsonb(b.moedas),
            'verba_maxima', b.verba_maxima, 'verba_diaria', b.verba_diaria, 'verba_fases', b.verba_fases, 'fases', b.fases,
            'pct_verba', case when b.gasto is not null and b.verba_maxima > 0 then round(b.gasto / b.verba_maxima * 100, 1) end,
-           'impressoes', b.impressoes, 'cliques', b.cliques, 'leads_plataforma', b.leads_plataforma,
+           'impressoes', b.impressoes, 'cliques_link', b.cliques_link, 'cliques_total', b.cliques_total,
+           'leads_plataforma', b.leads_plataforma, 'page_views', b.page_views,
            'leads', b.leads, 'mql', b.mql,
            'cpl', case when b.gasto is not null and b.leads > 0 then round(b.gasto / b.leads, 2) end,
-           'ctr', case when b.impressoes > 0 then round(b.cliques::numeric / b.impressoes * 100, 2) end,
+           'ctr', case when b.impressoes > 0 then round(b.cliques_link::numeric / b.impressoes * 100, 2) end,
+           'cpc', case when b.cliques_link > 0 then round(b.gasto / b.cliques_link, 2) end,
            'cpm', case when b.impressoes > 0 then round(b.gasto / b.impressoes * 1000, 2) end,
            'pct_mql', case when b.leads > 0 then round(b.mql::numeric / b.leads * 100, 1) end,
-           'connect_rate', null, 'conversao_pagina', null,
+           'connect_rate', case when b.page_views is not null and b.cliques_link > 0
+                                then round(b.page_views::numeric / b.cliques_link * 100, 1) end,
+           'conversao_pagina', case when b.page_views > 0 and b.leads is not null
+                                    then round(b.leads::numeric / b.page_views * 100, 1) end,
            'gasto_ontem', case when b.gasto is not null then b.gasto_ontem end, 'dia_ontem', v_ontem,
            'ritmo_ontem', case when b.gasto is not null and b.verba_diaria > 0 then round(b.gasto_ontem / b.verba_diaria * 100, 1) end,
            'ultimo_dia', b.ultimo_dia,
@@ -391,9 +464,11 @@ begin
                  from mkt_trafego.status_projeto x where x.ativo),
     'fases', (select coalesce(jsonb_agg(jsonb_build_object('codigo', x.codigo, 'nome', x.nome) order by x.ordem), '[]'::jsonb)
                 from mkt_trafego.fases x where x.ativa),
+    'objetivo_fase', (select coalesce(jsonb_object_agg(o.objetivo, o.fase), '{}'::jsonb) from mkt_trafego.objetivo_fase o),
     'gestores', (select coalesce(jsonb_agg(jsonb_build_object('sigla', g.sigla, 'nome', g.nome) order by g.sigla), '[]'::jsonb)
                    from mkt.campanha_gestores g where g.ativo),
     'base_pessoas', to_regclass('pessoas.eventos') is not null,
+    'base_web', to_regclass('mkt_web.resumo_dia') is not null,
     'dia_ontem', mkt_trafego.ontem());
 end
 $$;
@@ -476,8 +551,9 @@ begin
 end
 $$;
 
--- Planejamento do projeto (upsert por projeto_id). Campos: projeto_id, status, gestor, verba_maxima, verba_diaria,
--- meta_leads, meta_receita, meta_cpl, meta_pct_mql, obs. Vazio vira nulo. Retorna {ok, msg, avisos}.
+-- Planejamento do projeto (upsert por projeto_id). Campos: projeto_id, status, gestores (lista de siglas; a lista
+-- inteira substitui a anterior; ausente = não mexe), verba_maxima, verba_diaria, meta_leads, meta_receita, meta_cpl,
+-- meta_pct_mql, obs. Vazio vira nulo. Retorna {ok, msg, avisos}.
 create function public.trafego_planejamento_salvar(p jsonb) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -485,7 +561,7 @@ declare
   v_proj bigint;
   v_sigla text;
   v_status text := nullif(lower(btrim(coalesce(p ->> 'status', ''))), '');
-  v_gestor text := nullif(upper(btrim(coalesce(p ->> 'gestor', ''))), '');
+  v_gestores text[];
   v_vmax numeric; v_vdia numeric; v_mleads integer; v_mrec numeric; v_mcpl numeric; v_mmql numeric;
   v_obs text := nullif(btrim(coalesce(p ->> 'obs', '')), '');
   v_fases numeric;
@@ -508,8 +584,16 @@ begin
   if v_status is not null and not exists (select 1 from mkt_trafego.status_projeto where codigo = v_status and ativo) then
     return jsonb_build_object('ok', false, 'msg', 'Status fora da lista.');
   end if;
-  if v_gestor is not null and not exists (select 1 from mkt.campanha_gestores where sigla = v_gestor and ativo) then
-    return jsonb_build_object('ok', false, 'msg', 'Gestor fora da lista.');
+  if p ? 'gestores' then
+    if jsonb_typeof(p -> 'gestores') is distinct from 'array' then
+      return jsonb_build_object('ok', false, 'msg', 'Gestores: uma lista de siglas.');
+    end if;
+    select coalesce(array_agg(distinct upper(btrim(x))), '{}') into v_gestores
+      from jsonb_array_elements_text(p -> 'gestores') x where btrim(x) <> '';
+    if exists (select 1 from unnest(v_gestores) g
+                where not exists (select 1 from mkt.campanha_gestores cg where cg.sigla = g and cg.ativo)) then
+      return jsonb_build_object('ok', false, 'msg', 'Gestor fora da lista.');
+    end if;
   end if;
   if coalesce(v_vmax, 1) <= 0 or coalesce(v_vdia, 1) <= 0 or coalesce(v_mleads, 1) <= 0 or coalesce(v_mrec, 1) <= 0
      or coalesce(v_mcpl, 1) <= 0 then
@@ -522,14 +606,21 @@ begin
     return jsonb_build_object('ok', false, 'msg', 'Valor grande demais.');
   end if;
 
-  insert into mkt_trafego.planejamento as pl (projeto_id, status, gestor, verba_maxima, verba_diaria, meta_leads, meta_receita,
+  insert into mkt_trafego.planejamento as pl (projeto_id, status, verba_maxima, verba_diaria, meta_leads, meta_receita,
                                               meta_cpl, meta_pct_mql, obs, atualizado_por)
-  values (v_proj, v_status, v_gestor, v_vmax, v_vdia, v_mleads, v_mrec, v_mcpl, v_mmql, v_obs, v_uid)
+  values (v_proj, v_status, v_vmax, v_vdia, v_mleads, v_mrec, v_mcpl, v_mmql, v_obs, v_uid)
   on conflict (projeto_id) do update
-     set status = excluded.status, gestor = excluded.gestor, verba_maxima = excluded.verba_maxima,
+     set status = excluded.status, verba_maxima = excluded.verba_maxima,
          verba_diaria = excluded.verba_diaria, meta_leads = excluded.meta_leads, meta_receita = excluded.meta_receita,
          meta_cpl = excluded.meta_cpl, meta_pct_mql = excluded.meta_pct_mql, obs = excluded.obs,
          atualizado_em = now(), atualizado_por = excluded.atualizado_por;
+
+  if v_gestores is not null then
+    delete from mkt_trafego.projeto_gestores where projeto_id = v_proj and gestor <> all (v_gestores);
+    insert into mkt_trafego.projeto_gestores (projeto_id, gestor, atualizado_por)
+    select v_proj, g, v_uid from unnest(v_gestores) g
+    on conflict (projeto_id, gestor) do nothing;
+  end if;
 
   select sum(verba) into v_fases from mkt_trafego.projeto_fases where projeto_id = v_proj;
   if v_vmax is not null and v_fases > v_vmax then v_avisos := array_append(v_avisos, 'fases_acima_da_verba'); end if;
@@ -599,20 +690,17 @@ begin
 end
 $$;
 
--- Apaga a fase. As campanhas ligadas a ela ficam sem fase (o gasto continua no projeto).
+-- Apaga o planejamento de uma fase do projeto. As campanhas continuam na fase delas (pelo objetivo ou à mão): o gasto
+-- aparece na fase, sem verba planejada.
 create function public.trafego_fase_apagar(p_fase bigint) returns jsonb
 language plpgsql security definer set search_path = '' as $$
-declare v_n int;
 begin
   if not mkt.pode_ver('mkt_trafego') then raise exception 'acesso negado' using errcode = '42501'; end if;
   if not exists (select 1 from mkt_trafego.projeto_fases where id = p_fase) then
     return jsonb_build_object('ok', false, 'msg', 'Fase não encontrada.');
   end if;
-  update mkt_trafego.campanhas set fase_id = null, atualizado_em = now(), atualizado_por = (select auth.uid())
-   where fase_id = p_fase;
-  get diagnostics v_n = row_count;
   delete from mkt_trafego.projeto_fases where id = p_fase;
-  return jsonb_build_object('ok', true, 'msg', 'Fase apagada' || case when v_n > 0 then '; ' || v_n || ' campanha(s) ficaram sem fase.' else '.' end);
+  return jsonb_build_object('ok', true, 'msg', 'Planejamento da fase apagado. As campanhas dela continuam contando nela, sem verba planejada.');
 end
 $$;
 
@@ -629,15 +717,17 @@ begin
             'avisos', coalesce(c.leitura -> 'avisos', '[]'::jsonb),
             'gestor', c.gestor, 'objetivo', c.objetivo, 'descricao', c.leitura ->> 'descricao', 'pagina', c.leitura ->> 'pagina',
             'pagina_id', c.pagina_id, 'projeto_id', c.projeto_id, 'projeto_sigla', pr.sigla, 'projeto_manual', c.projeto_manual,
-            'fase_id', c.fase_id, 'fase', pf.fase,
-            'gasto', s.gasto, 'impressoes', s.impressoes, 'cliques', s.cliques, 'leads_plataforma', s.leads_plataforma,
+            'fase', mkt_trafego.fase_efetiva(c.objetivo, c.fase_manual), 'fase_manual', c.fase_manual,
+            'fase_objetivo', (select o.fase from mkt_trafego.objetivo_fase o where o.objetivo = c.objetivo),
+            'gasto', s.gasto, 'impressoes', s.impressoes, 'cliques_link', s.cliques_link, 'cliques_total', s.cliques_total,
+            'leads_plataforma', s.leads_plataforma,
             'ultimo_dia', s.ultimo_dia, 'ultima_coleta', c.ultima_coleta)
           order by c.fora_padrao desc, s.gasto desc nulls last, c.nome), '[]'::jsonb)
             from mkt_trafego.campanhas c
             join mkt_trafego.contas ct on ct.id = c.conta_id
             left join mkt.projetos pr on pr.id = c.projeto_id
-            left join mkt_trafego.projeto_fases pf on pf.id = c.fase_id
-            left join lateral (select sum(d.gasto) as gasto, sum(d.impressoes) as impressoes, sum(d.cliques) as cliques,
+            left join lateral (select sum(d.gasto) as gasto, sum(d.impressoes) as impressoes, sum(d.cliques_link) as cliques_link,
+                                      sum(d.cliques_total) as cliques_total,
                                       sum(d.leads_plataforma) as leads_plataforma, max(d.dia) as ultimo_dia
                                  from mkt_trafego.desempenho_dia d where d.campanha_id = c.id) s on true
            where (p_projeto is null or c.projeto_id = p_projeto)
@@ -646,18 +736,19 @@ begin
 end
 $$;
 
--- Ajuste à mão da campanha. Campos: id; projeto_id (número = liga à mão; nulo = volta a valer o nome); fase_id.
+-- Ajuste à mão da campanha. Campos: id; projeto_id (só se a chave vier: número = liga à mão; nulo = volta a valer o
+-- nome); fase (só se a chave vier: código = correção à mão; nulo ou vazio = volta a valer o objetivo).
 create function public.trafego_campanha_ajustar(p jsonb) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
-  v_id bigint; v_proj bigint; v_fase bigint;
+  v_id bigint; v_proj bigint;
+  v_fase text := nullif(lower(btrim(coalesce(p ->> 'fase', ''))), '');
   c mkt_trafego.campanhas%rowtype;
 begin
   if not mkt.pode_ver('mkt_trafego') then raise exception 'acesso negado' using errcode = '42501'; end if;
   begin
     v_id := nullif(p ->> 'id', '')::bigint;
     v_proj := nullif(p ->> 'projeto_id', '')::bigint;
-    v_fase := nullif(p ->> 'fase_id', '')::bigint;
   exception when others then
     return jsonb_build_object('ok', false, 'msg', 'Campo em formato inválido.');
   end;
@@ -666,25 +757,27 @@ begin
   if v_proj is not null and not exists (select 1 from mkt.projetos where id = v_proj) then
     return jsonb_build_object('ok', false, 'msg', 'Projeto não encontrado.');
   end if;
-
-  if v_proj is not null then
-    update mkt_trafego.campanhas
-       set projeto_id = v_proj, projeto_manual = true,
-           fase_id = case when v_proj = c.projeto_id then fase_id end, atualizado_em = now(), atualizado_por = (select auth.uid())
-     where id = v_id;
-  else
-    update mkt_trafego.campanhas set projeto_manual = false, atualizado_por = (select auth.uid()) where id = v_id;
-    perform mkt_trafego.campanha_aplicar_leitura(v_id);
+  if p ? 'fase' and v_fase is not null and not exists (select 1 from mkt_trafego.fases where codigo = v_fase and ativa) then
+    return jsonb_build_object('ok', false, 'msg', 'Fase fora da lista.');
   end if;
-  select * into c from mkt_trafego.campanhas where id = v_id;
 
-  if v_fase is not null then
-    if c.projeto_id is null or not exists (select 1 from mkt_trafego.projeto_fases where id = v_fase and projeto_id = c.projeto_id) then
-      return jsonb_build_object('ok', false, 'msg', 'A fase precisa ser do projeto da campanha.');
+  if p ? 'projeto_id' then
+    if v_proj is not null then
+      update mkt_trafego.campanhas
+         set projeto_id = v_proj, projeto_manual = true, atualizado_em = now(), atualizado_por = (select auth.uid())
+       where id = v_id;
+    else
+      update mkt_trafego.campanhas set projeto_manual = false, atualizado_por = (select auth.uid()) where id = v_id;
+      perform mkt_trafego.campanha_aplicar_leitura(v_id);
     end if;
   end if;
-  update mkt_trafego.campanhas set fase_id = v_fase, atualizado_em = now() where id = v_id;
-  return jsonb_build_object('ok', true, 'msg', 'Campanha ajustada.', 'projeto_id', c.projeto_id, 'fase_id', v_fase);
+  if p ? 'fase' then
+    update mkt_trafego.campanhas set fase_manual = v_fase, atualizado_em = now(), atualizado_por = (select auth.uid())
+     where id = v_id;
+  end if;
+  select * into c from mkt_trafego.campanhas where id = v_id;
+  return jsonb_build_object('ok', true, 'msg', 'Campanha ajustada.', 'projeto_id', c.projeto_id,
+                            'fase', mkt_trafego.fase_efetiva(c.objetivo, c.fase_manual));
 end
 $$;
 
@@ -720,20 +813,29 @@ begin
   v_r := mkt_trafego.resumo(p_projeto) -> 0;
   return jsonb_build_object(
     'resumo', v_r,
-    'fases', (select coalesce(jsonb_agg(jsonb_build_object(
-                'id', f.id, 'fase', f.fase, 'nome', fs.nome, 'verba', f.verba, 'inicio', f.inicio, 'fim', f.fim, 'obs', f.obs,
-                'gasto', (select sum(d.gasto) from mkt_trafego.desempenho_dia d join mkt_trafego.campanhas c on c.id = d.campanha_id
-                           where c.fase_id = f.id),
-                'campanhas', (select count(*) from mkt_trafego.campanhas c where c.fase_id = f.id))
-              order by fs.ordem), '[]'::jsonb)
-                from mkt_trafego.projeto_fases f join mkt_trafego.fases fs on fs.codigo = f.fase
-               where f.projeto_id = p_projeto),
+    -- uma linha por fase planejada OU com campanha do projeto nela (pelo objetivo ou à mão); id nulo = sem planejamento
+    'fases', (with cf as (select c.id, mkt_trafego.fase_efetiva(c.objetivo, c.fase_manual) as fase
+                            from mkt_trafego.campanhas c where c.projeto_id = p_projeto),
+                   g as (select cf.fase, count(*) as campanhas,
+                                (select sum(d.gasto) from mkt_trafego.desempenho_dia d
+                                  where d.campanha_id in (select x.id from cf x where x.fase = cf.fase)) as gasto
+                           from cf where cf.fase is not null group by cf.fase)
+              select coalesce(jsonb_agg(jsonb_build_object(
+                       'id', f.id, 'fase', fs.codigo, 'nome', fs.nome, 'verba', f.verba, 'inicio', f.inicio, 'fim', f.fim,
+                       'obs', f.obs, 'gasto', g.gasto, 'campanhas', coalesce(g.campanhas, 0))
+                     order by fs.ordem), '[]'::jsonb)
+                from mkt_trafego.fases fs
+                left join mkt_trafego.projeto_fases f on f.fase = fs.codigo and f.projeto_id = p_projeto
+                left join g on g.fase = fs.codigo
+               where f.id is not null or g.fase is not null),
+    'campanhas_sem_fase', (select count(*) from mkt_trafego.campanhas c
+                            where c.projeto_id = p_projeto and mkt_trafego.fase_efetiva(c.objetivo, c.fase_manual) is null),
     'gasto_sem_fase', (select sum(d.gasto) from mkt_trafego.desempenho_dia d join mkt_trafego.campanhas c on c.id = d.campanha_id
-                        where c.projeto_id = p_projeto and c.fase_id is null),
+                        where c.projeto_id = p_projeto and mkt_trafego.fase_efetiva(c.objetivo, c.fase_manual) is null),
     'serie', (select coalesce(jsonb_agg(jsonb_build_object('dia', x.dia, 'gasto', x.gasto, 'impressoes', x.impressoes,
-                                                           'cliques', x.cliques, 'leads_plataforma', x.leads_plataforma)
+                                                           'cliques_link', x.cliques_link, 'leads_plataforma', x.leads_plataforma)
                                         order by x.dia), '[]'::jsonb)
-                from (select d.dia, sum(d.gasto) as gasto, sum(d.impressoes) as impressoes, sum(d.cliques) as cliques,
+                from (select d.dia, sum(d.gasto) as gasto, sum(d.impressoes) as impressoes, sum(d.cliques_link) as cliques_link,
                              sum(d.leads_plataforma) as leads_plataforma
                         from mkt_trafego.desempenho_dia d join mkt_trafego.campanhas c on c.id = d.campanha_id
                        where c.projeto_id = p_projeto
@@ -791,13 +893,14 @@ begin
 end
 $$;
 
--- p = lista de {plataforma, campanha, dia, gasto, impressoes, cliques, leads}. Upsert por (campanha, dia): reenviar o
+-- p = lista de {plataforma, campanha, dia, gasto, impressoes, cliques_link, cliques_total, leads}. cliques_link = cliques
+-- no link (Meta inline_link_clicks), o do CTR; cliques_total = todos (opcional). Upsert por (campanha, dia): reenviar o
 -- mesmo dia sobrescreve (idempotente). Campanha desconhecida → recusa (receber a campanha antes).
 create function public.trafego_desempenho_receber(p jsonb) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
   e jsonb;
-  v_camp bigint; v_dia date; v_gasto numeric; v_imp bigint; v_cli bigint; v_leads integer;
+  v_camp bigint; v_dia date; v_gasto numeric; v_imp bigint; v_cli bigint; v_tot bigint; v_leads integer;
   v_n int := 0;
   v_recusas jsonb := '[]'::jsonb;
 begin
@@ -818,21 +921,23 @@ begin
       v_dia := (e ->> 'dia')::date;
       v_gasto := coalesce((e ->> 'gasto')::numeric, 0);
       v_imp := coalesce((e ->> 'impressoes')::bigint, 0);
-      v_cli := coalesce((e ->> 'cliques')::bigint, 0);
+      v_cli := coalesce((e ->> 'cliques_link')::bigint, 0);
+      v_tot := (e ->> 'cliques_total')::bigint;
       v_leads := (e ->> 'leads')::integer;
     exception when others then
       v_recusas := v_recusas || jsonb_build_object('campanha', e ->> 'campanha', 'dia', e ->> 'dia', 'motivo', 'formato_invalido');
       continue;
     end;
-    if v_dia is null or v_dia > mkt_trafego.ontem() + 1 or v_gasto < 0 or v_imp < 0 or v_cli < 0 or v_leads < 0
+    if v_dia is null or v_dia > mkt_trafego.ontem() + 1 or v_gasto < 0 or v_imp < 0 or v_cli < 0 or v_tot < 0 or v_leads < 0
        or v_gasto >= 1e12 then
       v_recusas := v_recusas || jsonb_build_object('campanha', e ->> 'campanha', 'dia', e ->> 'dia', 'motivo', 'valor_invalido');
       continue;
     end if;
-    insert into mkt_trafego.desempenho_dia (campanha_id, dia, gasto, impressoes, cliques, leads_plataforma, coletado_em)
-    values (v_camp, v_dia, round(v_gasto, 2), v_imp, v_cli, v_leads, now())
+    insert into mkt_trafego.desempenho_dia (campanha_id, dia, gasto, impressoes, cliques_link, cliques_total, leads_plataforma, coletado_em)
+    values (v_camp, v_dia, round(v_gasto, 2), v_imp, v_cli, v_tot, v_leads, now())
     on conflict (campanha_id, dia) do update
-       set gasto = excluded.gasto, impressoes = excluded.impressoes, cliques = excluded.cliques,
+       set gasto = excluded.gasto, impressoes = excluded.impressoes, cliques_link = excluded.cliques_link,
+           cliques_total = excluded.cliques_total,
            leads_plataforma = excluded.leads_plataforma, coletado_em = now();
     v_n := v_n + 1;
   end loop;
@@ -885,8 +990,8 @@ begin
     end loop;
     if not t.relrowsecurity then raise exception '20261005p: RLS desligada em mkt_trafego.%', t.relname; end if;
   end loop;
-  if (select count(*) from pg_class c where c.relnamespace = 'mkt_trafego'::regnamespace and c.relkind = 'r') <> 8 then
-    raise exception '20261005p: esperava 8 tabelas em mkt_trafego';
+  if (select count(*) from pg_class c where c.relnamespace = 'mkt_trafego'::regnamespace and c.relkind = 'r') <> 10 then
+    raise exception '20261005p: esperava 10 tabelas em mkt_trafego';
   end if;
 
   for f in select p.oid::regprocedure as sig, p.proname, p.pronamespace, p.prosecdef, p.proconfig, p.proacl
@@ -918,11 +1023,15 @@ begin
   if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%') <> 13 then
     raise exception '20261005p: esperava 13 funções públicas trafego_*';
   end if;
+  if not coalesce((mkt.campanha_traduzir('RS | PB26 | CARRINHO | ABERTURA') ->> 'objetivo') = 'CARRINHO'
+                  and (mkt.campanha_traduzir('RS | PB26 | AQUECIMENTO | X') ->> 'objetivo') = 'AQUECIMENTO', false) then
+    raise exception '20261005p: mkt.campanha_traduzir não reconhece CARRINHO ou AQUECIMENTO';
+  end if;
   if (select count(*) from mkt_trafego.plataformas) <> 2 or (select count(*) from mkt_trafego.status_projeto) <> 4
-     or (select count(*) from mkt_trafego.fases) <> 3 or (select count(*) from mkt_trafego.contas) <> 0
+     or (select count(*) from mkt_trafego.fases) <> 5 or (select count(*) from mkt_trafego.objetivo_fase) <> 6 or (select count(*) from mkt_trafego.contas) <> 0
      or (select count(*) from mkt_trafego.campanhas) <> 0 or (select count(*) from mkt_trafego.desempenho_dia) <> 0
-     or (select count(*) from mkt_trafego.planejamento) <> 0 then
-    raise exception '20261005p: semente diferente do esperado (2 plataformas, 4 status, 3 fases, resto vazio)';
+     or (select count(*) from mkt_trafego.planejamento) <> 0 or (select count(*) from mkt_trafego.projeto_gestores) <> 0 then
+    raise exception '20261005p: semente diferente do esperado (2 plataformas, 4 status, 5 fases, 6 objetivo→fase, resto vazio)';
   end if;
 end
 $confere$;
@@ -934,4 +1043,5 @@ $confere$;
 --   for f in select p.oid::regprocedure from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%'
 --   loop execute format('drop function %s', f); end loop; end $$;
 -- drop schema mkt_trafego cascade;
+-- delete from mkt.campanha_objetivos where codigo in ('CARRINHO', 'AQUECIMENTO');  -- só se nenhuma campanha os usa
 -- commit;

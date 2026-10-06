@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FILTROS_INICIAIS, arredondar, comKpis, cpl, cpm, ctr, esperadoAte, filtrar, pctMql, pctVerba, ritmo, situacaoRitmo,
+  FILTROS_INICIAIS, arredondar, comKpis, connectRate, conversaoPagina, cpc, cpl, cpm, ctr, esperadoAte, filtrar, pctMql, pctVerba, ritmo, situacaoRitmo,
   tipoDaSubarea, totais,
 } from './kpis';
 import type { LinhaResumo } from './tipos';
@@ -17,7 +17,21 @@ describe('KPIs da Central do Tráfego (mesmas fórmulas de mkt_trafego.resumo)',
     expect(cpl(250, 2)).toBe(125);
     expect(cpl(100, 3)).toBe(33.33);
   });
-  it('CTR: cliques ÷ impressões × 100, 2 casas', () => {
+  it('CPC: investido ÷ cliques no link, 2 casas', () => {
+    expect(cpc(250, 350)).toBe(0.71);
+    expect(cpc(250, 0)).toBeNull();
+  });
+  it('connect rate: page views ÷ cliques no link × 100, 1 casa', () => {
+    expect(connectRate(175, 350)).toBe(50);
+    expect(connectRate(null, 350)).toBeNull();
+    expect(connectRate(175, 0)).toBeNull();
+  });
+  it('conversão da página: leads ÷ page views × 100, 1 casa', () => {
+    expect(conversaoPagina(2, 175)).toBe(1.1);
+    expect(conversaoPagina(null, 175)).toBeNull();
+    expect(conversaoPagina(2, 0)).toBeNull();
+  });
+  it('CTR: cliques no link ÷ impressões × 100, 2 casas', () => {
     expect(ctr(350, 25000)).toBe(1.4);
     expect(ctr(1, 3)).toBe(33.33);
   });
@@ -79,10 +93,10 @@ describe('esperado até (ritmo pelas fases)', () => {
 function linha(p: Partial<LinhaResumo>): LinhaResumo {
   return {
     projeto_id: 1, sigla: 'XX26', nome: 'X', subarea: 'interno', tipo: 'interno', projeto_ativo: true, etiqueta_clickup: null,
-    inicio: null, fim: null, status: null, status_nome: null, gestor: null, gestores_campanhas: [], receita: null,
+    inicio: null, fim: null, status: null, status_nome: null, gestores: [], gestores_campanhas: [], receita: null,
     investido: null, por_plataforma: null, moedas: [], verba_maxima: null, verba_diaria: null, verba_fases: 0, fases: 0,
-    pct_verba: null, impressoes: null, cliques: null, leads_plataforma: null, leads: null, mql: null, cpl: null, ctr: null,
-    cpm: null, pct_mql: null, connect_rate: null, conversao_pagina: null, gasto_ontem: null, dia_ontem: '2026-10-04',
+    pct_verba: null, impressoes: null, cliques_link: null, cliques_total: null, leads_plataforma: null, page_views: null,
+    leads: null, mql: null, cpl: null, ctr: null, cpc: null, cpm: null, pct_mql: null, connect_rate: null, conversao_pagina: null, gasto_ontem: null, dia_ontem: '2026-10-04',
     ritmo_ontem: null, ultimo_dia: null, meta_leads: null, meta_receita: null, meta_cpl: null, meta_pct_mql: null, obs: null,
     campanhas: 0, campanhas_fora_padrao: 0, ...p,
   };
@@ -90,20 +104,22 @@ function linha(p: Partial<LinhaResumo>): LinhaResumo {
 
 describe('comKpis: a linha inteira, como o banco devolve', () => {
   it('caso PB26 do ensaio', () => {
-    const l = comKpis(linha({ investido: 250, verba_maxima: 1000, verba_diaria: 100, impressoes: 25000, cliques: 350, leads: 2, mql: 1, gasto_ontem: 150.5 }));
-    expect([l.pct_verba, l.cpl, l.ctr, l.cpm, l.pct_mql, l.ritmo_ontem]).toEqual([25, 125, 1.4, 10, 50, 150.5]);
+    const l = comKpis(linha({ investido: 250, verba_maxima: 1000, verba_diaria: 100, impressoes: 25000, cliques_link: 350, cliques_total: 400, page_views: 175, leads: 2, mql: 1, gasto_ontem: 150.5 }));
+    expect([l.pct_verba, l.cpl, l.ctr, l.cpc, l.cpm, l.pct_mql, l.connect_rate, l.conversao_pagina, l.ritmo_ontem])
+      .toEqual([25, 125, 1.4, 0.71, 10, 50, 50, 1.1, 150.5]);
   });
   it('projeto sem coleta: tudo null, mesmo com verba', () => {
     const l = comKpis(linha({ verba_maxima: 1000, verba_diaria: 100, gasto_ontem: 0 }));
-    expect([l.pct_verba, l.cpl, l.ctr, l.cpm, l.pct_mql, l.ritmo_ontem]).toEqual([null, null, null, null, null, null]);
+    expect([l.pct_verba, l.cpl, l.ctr, l.cpc, l.cpm, l.pct_mql, l.connect_rate, l.conversao_pagina, l.ritmo_ontem])
+      .toEqual([null, null, null, null, null, null, null, null, null]);
   });
 });
 
 describe('filtros e totais', () => {
   const ls = [
-    linha({ projeto_id: 1, sigla: 'PB26', subarea: 'interno', tipo: 'interno', gestor: 'RS', status: 'ativo', investido: 100, verba_maxima: 1000, ritmo_ontem: 150, campanhas_fora_padrao: 1 }),
+    linha({ projeto_id: 1, sigla: 'PB26', subarea: 'interno', tipo: 'interno', gestores: ['RS', 'CF'], status: 'ativo', investido: 100, verba_maxima: 1000, ritmo_ontem: 150, campanhas_fora_padrao: 1 }),
     linha({ projeto_id: 2, sigla: 'DIA26', subarea: 'diamante', tipo: 'externo', gestores_campanhas: ['EF'], status: 'pausado', investido: 50 }),
-    linha({ projeto_id: 3, sigla: 'AUR26', subarea: 'aurum', tipo: 'externo', gestor: 'CF', status: null }),
+    linha({ projeto_id: 3, sigla: 'AUR26', subarea: 'aurum', tipo: 'externo', gestores: ['CF'], status: null }),
     linha({ projeto_id: 4, sigla: 'OLD25', projeto_ativo: false, status: 'encerrado' }),
   ];
   const siglas = (xs: LinhaResumo[]) => xs.map((x) => x.sigla);
@@ -111,11 +127,12 @@ describe('filtros e totais', () => {
     expect(siglas(filtrar(ls, FILTROS_INICIAIS))).toEqual(['PB26', 'DIA26', 'AUR26']);
     expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, inativos: true }))).toHaveLength(4);
   });
-  it('interno/externo, subárea, gestor (planejamento ou campanha), status e "sem status"', () => {
+  it('interno/externo, subárea, gestor (um dos vários do projeto, ou de campanha), status e "sem status"', () => {
     expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, tipo: 'externo' }))).toEqual(['DIA26', 'AUR26']);
     expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, subarea: 'aurum' }))).toEqual(['AUR26']);
     expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, gestor: 'EF' }))).toEqual(['DIA26']);
     expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, gestor: 'RS' }))).toEqual(['PB26']);
+    expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, gestor: 'CF' }))).toEqual(['PB26', 'AUR26']);
     expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, status: 'pausado' }))).toEqual(['DIA26']);
     expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, status: 'sem' }))).toEqual(['AUR26']);
   });

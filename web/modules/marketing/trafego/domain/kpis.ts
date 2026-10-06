@@ -4,9 +4,12 @@
 // Regra da casa: sem fonte ou sem base para a conta = null ("sem dado"), nunca zero inventado.
 //   % da verba   = investido ÷ verba máxima × 100           (1 casa)
 //   CPL          = investido ÷ leads da nossa base           (2 casas) (lead da base, decisão do Victor 05/10/2026)
-//   CTR          = cliques ÷ impressões × 100                (2 casas)
+//   CTR          = cliques no link ÷ impressões × 100        (2 casas) (cliques no link, Victor 05/10/2026)
+//   CPC          = investido ÷ cliques no link               (2 casas)
 //   CPM          = investido ÷ impressões × 1000             (2 casas)
 //   % MQL        = MQL ÷ leads × 100                         (1 casa)
+//   connect rate = page views ÷ cliques no link × 100        (1 casa) (page views das páginas de captura, Web)
+//   conversão    = leads ÷ page views × 100                  (1 casa)
 //   ritmo        = gasto do dia ÷ verba diária × 100         (1 casa)
 //   esperado até = soma, por fase, da verba proporcional aos dias já passados da fase
 
@@ -28,7 +31,10 @@ function razao(a: number | null | undefined, b: number | null | undefined, vezes
 
 export const pctVerba = (investido: number | null, verbaMaxima: number | null) => razao(investido, verbaMaxima, 100, 1);
 export const cpl = (investido: number | null, leads: number | null) => razao(investido, leads, 1, 2);
-export const ctr = (cliques: number | null, impressoes: number | null) => razao(cliques, impressoes, 100, 2);
+export const ctr = (cliquesLink: number | null, impressoes: number | null) => razao(cliquesLink, impressoes, 100, 2);
+export const cpc = (investido: number | null, cliquesLink: number | null) => razao(investido, cliquesLink, 1, 2);
+export const connectRate = (pageViews: number | null, cliquesLink: number | null) => razao(pageViews, cliquesLink, 100, 1);
+export const conversaoPagina = (leads: number | null, pageViews: number | null) => razao(leads, pageViews, 100, 1);
 export const cpm = (investido: number | null, impressoes: number | null) => razao(investido, impressoes, 1000, 2);
 export const pctMql = (mql: number | null, leads: number | null) => razao(mql, leads, 100, 1);
 export const ritmo = (gastoDia: number | null, verbaDiaria: number | null) => razao(gastoDia, verbaDiaria, 100, 1);
@@ -76,15 +82,19 @@ export function esperadoAte(
 }
 
 /** Recalcula os KPIs de uma linha a partir dos totais (o modo de demonstração usa isto; o banco faz o mesmo). */
-export function comKpis<T extends Pick<LinhaResumo, 'investido' | 'verba_maxima' | 'impressoes' | 'cliques' | 'leads' | 'mql' | 'gasto_ontem' | 'verba_diaria'>>(l: T):
-  T & Pick<LinhaResumo, 'pct_verba' | 'cpl' | 'ctr' | 'cpm' | 'pct_mql' | 'ritmo_ontem'> {
+type Totais = 'investido' | 'verba_maxima' | 'impressoes' | 'cliques_link' | 'page_views' | 'leads' | 'mql' | 'gasto_ontem' | 'verba_diaria';
+type Kpis = 'pct_verba' | 'cpl' | 'ctr' | 'cpc' | 'cpm' | 'pct_mql' | 'connect_rate' | 'conversao_pagina' | 'ritmo_ontem';
+export function comKpis<T extends Pick<LinhaResumo, Totais>>(l: T): T & Pick<LinhaResumo, Kpis> {
   return {
     ...l,
     pct_verba: pctVerba(l.investido, l.verba_maxima),
     cpl: cpl(l.investido, l.leads),
-    ctr: ctr(l.cliques, l.impressoes),
+    ctr: ctr(l.cliques_link, l.impressoes),
+    cpc: cpc(l.investido, l.cliques_link),
     cpm: cpm(l.investido, l.impressoes),
     pct_mql: pctMql(l.mql, l.leads),
+    connect_rate: connectRate(l.page_views, l.cliques_link),
+    conversao_pagina: conversaoPagina(l.leads, l.page_views),
     ritmo_ontem: l.investido == null ? null : ritmo(l.gasto_ontem, l.verba_diaria),
   };
 }
@@ -92,7 +102,7 @@ export function comKpis<T extends Pick<LinhaResumo, 'investido' | 'verba_maxima'
 export interface FiltrosCentral {
   tipo: '' | Tipo;
   subarea: '' | Subarea;
-  /** Sigla do gestor (CF, RS, EF): casa com o gestor do planejamento OU com o de alguma campanha do projeto. */
+  /** Sigla do gestor (CF, RS, EF): casa com um dos gestores do projeto OU com o de alguma campanha do projeto. */
   gestor: string;
   /** Código do status; 'sem' = sem status marcado. */
   status: string;
@@ -107,7 +117,7 @@ export function filtrar(linhas: LinhaResumo[], f: FiltrosCentral): LinhaResumo[]
     if (!f.inativos && !l.projeto_ativo) return false;
     if (f.tipo && l.tipo !== f.tipo) return false;
     if (f.subarea && l.subarea !== f.subarea) return false;
-    if (f.gestor && l.gestor !== f.gestor && !l.gestores_campanhas.includes(f.gestor)) return false;
+    if (f.gestor && !l.gestores.includes(f.gestor) && !l.gestores_campanhas.includes(f.gestor)) return false;
     if (f.status === 'sem' ? l.status !== null : f.status && l.status !== f.status) return false;
     return true;
   });

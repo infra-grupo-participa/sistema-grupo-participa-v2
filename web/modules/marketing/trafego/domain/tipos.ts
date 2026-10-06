@@ -18,6 +18,10 @@ export interface ConfigTrafego {
   gestores: { sigla: string; nome: string }[];
   /** true = a base de pessoas (20261005o) existe e os leads da Central vêm dela. */
   base_pessoas: boolean;
+  /** true = a Web (20261005n) existe e as page views vêm dela. */
+  base_web: boolean;
+  /** Objetivo do nome de campanha → fase (mkt_trafego.objetivo_fase). Objetivo ausente = sem fase automática. */
+  objetivo_fase: Record<string, string>;
   /** Último dia completo (São Paulo), AAAA-MM-DD. */
   dia_ontem: string;
 }
@@ -35,7 +39,9 @@ export interface LinhaResumo {
   fim: string | null;
   status: string | null;
   status_nome: string | null;
-  gestor: string | null;
+  /** Gestores do projeto (vários; marcados à mão). */
+  gestores: string[];
+  /** Gestores que aparecem no nome das campanhas do projeto. */
   gestores_campanhas: string[];
   receita: number | null;
   investido: number | null;
@@ -47,12 +53,18 @@ export interface LinhaResumo {
   fases: number;
   pct_verba: number | null;
   impressoes: number | null;
-  cliques: number | null;
+  /** Cliques no link: o clique do CTR, do CPC e do connect rate. */
+  cliques_link: number | null;
+  /** Todos os cliques (só informação). */
+  cliques_total: number | null;
   leads_plataforma: number | null;
+  /** Page views das páginas de captura do projeto (Web). */
+  page_views: number | null;
   leads: number | null;
   mql: number | null;
   cpl: number | null;
   ctr: number | null;
+  cpc: number | null;
   cpm: number | null;
   pct_mql: number | null;
   connect_rate: number | null;
@@ -102,17 +114,21 @@ export interface Campanha {
   projeto_id: number | null;
   projeto_sigla: string | null;
   projeto_manual: boolean;
-  fase_id: number | null;
+  /** Fase efetiva: a marcada à mão, senão a do objetivo, senão null ("sem fase"). */
   fase: string | null;
+  fase_manual: string | null;
+  fase_objetivo: string | null;
   gasto: number | null;
   impressoes: number | null;
-  cliques: number | null;
+  cliques_link: number | null;
+  cliques_total: number | null;
   leads_plataforma: number | null;
   ultimo_dia: string | null;
 }
 
+/** Linha do quadro planejado × gasto: fase planejada (id) ou só com campanhas nela (id null = sem planejamento). */
 export interface FaseProjeto {
-  id: number;
+  id: number | null;
   fase: string;
   nome: string;
   verba: number | null;
@@ -123,12 +139,13 @@ export interface FaseProjeto {
   campanhas: number;
 }
 
-export interface DiaSerie { dia: string; gasto: number; impressoes: number; cliques: number; leads_plataforma: number | null }
+export interface DiaSerie { dia: string; gasto: number; impressoes: number; cliques_link: number; leads_plataforma: number | null }
 
 export interface VidaProjeto {
   resumo: LinhaResumo;
   fases: FaseProjeto[];
   gasto_sem_fase: number | null;
+  campanhas_sem_fase: number;
   serie: DiaSerie[];
   campanhas: Campanha[];
 }

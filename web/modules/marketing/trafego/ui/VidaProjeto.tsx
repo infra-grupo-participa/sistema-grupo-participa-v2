@@ -35,13 +35,16 @@ function Campo({ rotulo, dica, children }: { rotulo: string; dica?: string; chil
 function ModalPlanejamento({ vida, config, onFechar, onSalvo }: { vida: Vida; config: ConfigTrafego; onFechar: () => void; onSalvo: (m: string) => void }) {
   const r = vida.resumo;
   const [f, setF] = useState<PlanejamentoForm>({
-    projeto_id: r.projeto_id, status: r.status ?? '', gestor: r.gestor ?? '', verba_maxima: txt(r.verba_maxima), verba_diaria: txt(r.verba_diaria),
+    projeto_id: r.projeto_id, status: r.status ?? '', gestores: [...r.gestores], verba_maxima: txt(r.verba_maxima), verba_diaria: txt(r.verba_diaria),
     meta_leads: txt(r.meta_leads), meta_receita: txt(r.meta_receita), meta_cpl: txt(r.meta_cpl), meta_pct_mql: txt(r.meta_pct_mql), obs: r.obs ?? '',
   });
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const set = (k: keyof PlanejamentoForm, v: string) => setF((x) => ({ ...x, [k]: v }));
-  const numero = (k: keyof PlanejamentoForm) => (
+  const set = (k: Exclude<keyof PlanejamentoForm, 'gestores' | 'projeto_id'>, v: string) => setF((x) => ({ ...x, [k]: v }));
+  const alternaGestor = (sigla: string) => setF((x) => ({
+    ...x, gestores: x.gestores.includes(sigla) ? x.gestores.filter((g) => g !== sigla) : [...x.gestores, sigla],
+  }));
+  const numero = (k: Exclude<keyof PlanejamentoForm, 'gestores' | 'projeto_id'>) => (
     <Input inputMode="decimal" value={f[k] as string} onChange={(e) => set(k, e.target.value.replace(',', '.'))} />
   );
 
@@ -65,12 +68,17 @@ function ModalPlanejamento({ vida, config, onFechar, onSalvo }: { vida: Vida; co
             {config.status.map((s) => <option key={s.codigo} value={s.codigo}>{s.nome}</option>)}
           </FilterSelect>
         </Campo>
-        <Campo rotulo="Gestor responsável">
-          <FilterSelect value={f.gestor} onChange={(e) => set('gestor', e.target.value)}>
-            <option value="">Não marcado</option>
-            {config.gestores.map((g) => <option key={g.sigla} value={g.sigla}>{g.sigla} · {g.nome}</option>)}
-          </FilterSelect>
-        </Campo>
+        <fieldset>
+          <legend className="block text-xs font-medium text-[var(--fg-2)] mb-1">Gestores <span className="font-normal text-[var(--fg-3)]"> · um ou mais</span></legend>
+          <div className="flex flex-wrap gap-3 pt-1">
+            {config.gestores.map((g) => (
+              <label key={g.sigla} className="inline-flex items-center gap-1.5 text-sm text-[var(--fg-2)] cursor-pointer">
+                <input type="checkbox" checked={f.gestores.includes(g.sigla)} onChange={() => alternaGestor(g.sigla)} />
+                <span title={g.nome}>{g.sigla}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <Campo rotulo="Verba máxima (R$)">{numero('verba_maxima')}</Campo>
         <Campo rotulo="Verba diária (R$)">{numero('verba_diaria')}</Campo>
         <Campo rotulo="Meta de leads">{numero('meta_leads')}</Campo>
@@ -129,7 +137,9 @@ function ModalFase({ inicial, config, onFechar, onSalvo }: { inicial: FaseForm; 
 }
 
 function Fases({ vida, onEditar, onApagar }: { vida: Vida; onEditar: (f: FaseProjeto) => void; onApagar: (f: FaseProjeto) => void }) {
-  if (vida.fases.length === 0) return <EmptyState title="Nenhuma fase cadastrada" hint="Cadastre aquecimento, captação, lembrete… com a verba e o período." />;
+  if (vida.fases.length === 0 && vida.campanhas_sem_fase === 0) {
+    return <EmptyState title="Nenhuma fase planejada" hint="Cadastre aquecimento, captação, lembrete, remarketing, abertura de carrinho com a verba e o período." />;
+  }
   return (
     <DataTable minWidth={720}>
       <Thead><Th>Fase</Th><Th>Período</Th><Th>Planejado</Th><Th>Gasto</Th><Th>% da fase</Th><Th>Campanhas</Th><Th> </Th></Thead>
@@ -137,42 +147,45 @@ function Fases({ vida, onEditar, onApagar }: { vida: Vida; onEditar: (f: FasePro
         {vida.fases.map((f) => {
           const p = f.gasto != null && f.verba ? Math.round((f.gasto / f.verba) * 1000) / 10 : null;
           return (
-            <Tr key={f.id}>
-              <Td><b>{f.nome}</b></Td>
+            <Tr key={f.fase}>
+              <Td><b>{f.nome}</b>{f.id == null && <div className="text-[11px] text-[var(--yellow)]">sem planejamento</div>}</Td>
               <Td>{f.inicio || f.fim ? `${dataBR(f.inicio)} a ${dataBR(f.fim)}` : SEM_DADO}</Td>
-              <Td>{reais(f.verba)}</Td>
+              <Td>{f.id == null ? <span className="text-xs text-[var(--fg-3)]">não planejado</span> : reais(f.verba)}</Td>
               <Td>{reais(f.gasto)}</Td>
               <Td>{p == null ? SEM_DADO : <div className="w-28"><ProgressBar value={p} tone={p > 100 ? 'red' : 'accent'} showLabel ariaLabel={`${pct(p)} da verba da fase`} /></div>}</Td>
               <Td>{f.campanhas}</Td>
               <Td>
                 <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => onEditar(f)} aria-label={`Editar ${f.nome}`}><Icon name="pencil" size={12} /></Button>
-                  <Button size="sm" variant="danger" onClick={() => onApagar(f)} aria-label={`Apagar ${f.nome}`}><Icon name="trash" size={12} /></Button>
+                  <Button size="sm" variant="ghost" onClick={() => onEditar(f)} aria-label={f.id == null ? `Planejar ${f.nome}` : `Editar ${f.nome}`}>
+                    <Icon name={f.id == null ? 'plus' : 'pencil'} size={12} />
+                  </Button>
+                  {f.id != null && <Button size="sm" variant="danger" onClick={() => onApagar(f)} aria-label={`Apagar ${f.nome}`}><Icon name="trash" size={12} /></Button>}
                 </div>
               </Td>
             </Tr>
           );
         })}
         <Tr>
-          <Td><span className="text-[var(--fg-3)]">Sem fase</span></Td><Td> </Td><Td> </Td><Td>{reais(vida.gasto_sem_fase)}</Td><Td> </Td><Td> </Td><Td> </Td>
+          <Td><span className="text-[var(--fg-3)]">Sem fase</span></Td><Td> </Td><Td> </Td><Td>{reais(vida.gasto_sem_fase)}</Td><Td> </Td><Td>{vida.campanhas_sem_fase}</Td><Td> </Td>
         </Tr>
       </tbody>
     </DataTable>
   );
 }
 
-function Campanhas({ vida, flash, onMudou }: { vida: Vida; flash: Flash; onMudou: () => void }) {
+function Campanhas({ vida, config, flash, onMudou }: { vida: Vida; config: ConfigTrafego; flash: Flash; onMudou: () => void }) {
   if (vida.campanhas.length === 0) {
     return <EmptyState title="Nenhuma campanha ligada" hint="As campanhas chegam pela coleta Meta/Google (etapa 2) e se ligam ao projeto pelo nome." />;
   }
-  async function trocarFase(id: number, projetoManual: number | null, fase: string) {
-    const r = await ajustarCampanha({ id, projeto_id: projetoManual, fase_id: fase ? Number(fase) : null });
+  const nomeFase = (c: string | null) => config.fases.find((f) => f.codigo === c)?.nome ?? 'sem fase';
+  async function trocarFase(id: number, fase: string) {
+    const r = await ajustarCampanha({ id, fase: fase || null });
     flash(r.msg);
     if (r.ok) onMudou();
   }
   return (
     <DataTable minWidth={980}>
-      <Thead><Th>Campanha</Th><Th>Plataforma</Th><Th>Status</Th><Th>Fase</Th><Th>Gasto</Th><Th>Impressões</Th><Th>Cliques</Th><Th>Leads (plataforma)</Th></Thead>
+      <Thead><Th>Campanha</Th><Th>Plataforma</Th><Th>Status</Th><Th>Fase</Th><Th>Gasto</Th><Th>Impressões</Th><Th>Cliques no link</Th><Th>Leads (plataforma)</Th></Thead>
       <tbody>
         {vida.campanhas.map((c) => (
           <Tr key={c.id}>
@@ -184,15 +197,16 @@ function Campanhas({ vida, flash, onMudou }: { vida: Vida; flash: Flash; onMudou
             <Td>{c.plataforma === 'meta' ? 'Meta' : c.plataforma === 'google' ? 'Google' : c.plataforma}</Td>
             <Td>{c.status_plataforma ?? SEM_DADO}</Td>
             <Td>
-              <FilterSelect value={c.fase_id ?? ''} aria-label="Fase da campanha"
-                onChange={(e) => void trocarFase(c.id, c.projeto_manual ? c.projeto_id : null, e.target.value)}>
-                <option value="">Sem fase</option>
-                {vida.fases.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+              <FilterSelect value={c.fase_manual ?? ''} aria-label="Fase da campanha"
+                onChange={(e) => void trocarFase(c.id, e.target.value)}>
+                <option value="">Pelo objetivo ({nomeFase(c.fase_objetivo)})</option>
+                {config.fases.map((f) => <option key={f.codigo} value={f.codigo}>À mão: {f.nome}</option>)}
               </FilterSelect>
+              {c.fase == null && <div className="mt-0.5 text-[11px] text-[var(--yellow)]">sem fase</div>}
             </Td>
             <Td>{reais(c.gasto)}</Td>
             <Td>{inteiro(c.impressoes)}</Td>
-            <Td>{inteiro(c.cliques)}</Td>
+            <Td>{inteiro(c.cliques_link)}</Td>
             <Td>{inteiro(c.leads_plataforma)}</Td>
           </Tr>
         ))}
@@ -232,7 +246,7 @@ export function VidaProjeto({ id, config, versao, onFechar, flash, onMudou }: {
       onClose={onFechar}
       width="max-w-5xl"
       title={<span><span className="font-mono">{r.sigla}</span> · {r.nome}</span>}
-      subtitle={[r.subarea ? ROTULO_SUBAREA[r.subarea] : 'Subárea não marcada', r.gestor ? `Gestor ${r.gestor}` : null].filter(Boolean).join(' · ')}
+      subtitle={[r.subarea ? ROTULO_SUBAREA[r.subarea] : 'Subárea não marcada', r.gestores.length ? `Gestores ${r.gestores.join(', ')}` : null].filter(Boolean).join(' · ')}
       badges={<>
         {r.status_nome ? <Badge tone={r.status === 'ativo' ? 'success' : 'neutral'}>{r.status_nome}</Badge> : <Badge>Sem status</Badge>}
         {r.campanhas_fora_padrao > 0 && <Badge tone="warning">{r.campanhas_fora_padrao} fora do padrão</Badge>}
@@ -267,22 +281,24 @@ export function VidaProjeto({ id, config, versao, onFechar, flash, onMudou }: {
             <Row k="Leads" v={`${inteiro(r.leads)} · meta ${inteiro(r.meta_leads)}`} />
             <Row k="CPL" v={`${centavos(r.cpl)} · meta ${centavos(r.meta_cpl)}`} />
             <Row k="% MQL" v={`${pct(r.pct_mql)} · meta ${pct(r.meta_pct_mql)}`} />
-            <Row k="CTR" v={pct(r.ctr, 2)} />
+            <Row k="CTR (cliques no link)" v={pct(r.ctr, 2)} />
+            <Row k="CPC (cliques no link)" v={centavos(r.cpc)} />
+            <Row k="Page views (páginas de captura)" v={inteiro(r.page_views)} />
             <Row k="CPM" v={centavos(r.cpm)} />
-            <Row k="Connect rate" v={pct(r.connect_rate)} />
-            <Row k="Conversão da página" v={pct(r.conversao_pagina)} />
+            <Row k="Connect rate (page views ÷ cliques no link)" v={pct(r.connect_rate)} />
+            <Row k="Conversão da página (leads ÷ page views)" v={pct(r.conversao_pagina)} />
           </div>
         </SectionCard>
 
-        <SectionCard title="Fases: planejado × gasto" subtitle="O gasto de uma campanha conta na fase marcada nela (o nome da campanha não diz a fase)."
+        <SectionCard title="Fases: planejado × gasto" subtitle="A fase da campanha sai do objetivo do nome (LEADS e VENDAS = captação; AQUECIMENTO; LEMBRETE; REMARKETING; CARRINHO = abertura de carrinho). A correção à mão na campanha prevalece. DISTRIBUIÇÃO fica sem fase até alguém marcar."
           right={<Button size="sm" onClick={() => setEditFase({ projeto_id: r.projeto_id, fase: '', verba: '', inicio: '', fim: '', obs: '' })}><Icon name="plus" size={14} /> Nova fase</Button>}>
           <Fases vida={vida} onApagar={setApagar} onEditar={(f) => setEditFase({
-            id: f.id, projeto_id: r.projeto_id, fase: f.fase, verba: txt(f.verba), inicio: f.inicio ?? '', fim: f.fim ?? '', obs: f.obs ?? '',
+            id: f.id ?? undefined, projeto_id: r.projeto_id, fase: f.fase, verba: txt(f.verba), inicio: f.inicio ?? '', fim: f.fim ?? '', obs: f.obs ?? '',
           })} />
         </SectionCard>
 
         <SectionCard title="Campanhas do projeto" subtitle={`${vida.campanhas.length} campanha(s); as fora do padrão aparecem marcadas.`}>
-          <Campanhas vida={vida} flash={flash} onMudou={onMudou} />
+          <Campanhas vida={vida} config={config} flash={flash} onMudou={onMudou} />
         </SectionCard>
 
         <SectionCard title="Atividades do ClickUp">
@@ -295,14 +311,14 @@ export function VidaProjeto({ id, config, versao, onFechar, flash, onMudou }: {
 
       {editPlan && <ModalPlanejamento vida={vida} config={config} onFechar={() => setEditPlan(false)} onSalvo={salvo} />}
       {editFase && <ModalFase inicial={editFase} config={config} onFechar={() => setEditFase(null)} onSalvo={salvo} />}
-      {apagar && (
+      {apagar && apagar.id != null && (
         <ConfirmDialog
           title="Apagar fase"
-          message={`Apagar a fase ${apagar.nome}? As campanhas ligadas a ela ficam sem fase (o gasto continua no projeto).`}
+          message={`Apagar o planejamento da fase ${apagar.nome}? As campanhas continuam nela (pelo objetivo ou à mão), sem verba planejada.`}
           confirmLabel="Apagar"
           danger
           onCancel={() => setApagar(null)}
-          onConfirm={async () => { const x = await apagarFase(apagar.id); setApagar(null); flash(x.msg); if (x.ok) onMudou(); }}
+          onConfirm={async () => { const x = await apagarFase(apagar.id!); setApagar(null); flash(x.msg); if (x.ok) onMudou(); }}
         />
       )}
     </Drawer>

@@ -76,10 +76,10 @@ function TabelaCentral({ linhas, onAbrir }: { linhas: LinhaResumo[]; onAbrir: (i
               <Td><Kpi v={inteiro(l.leads)} titulo="Leads da nossa base (base de pessoas)" /></Td>
               <Td><Kpi v={pct(l.ctr, 2)} /></Td>
               <Td><Kpi v={centavos(l.cpm)} /></Td>
-              <Td><Kpi v={pct(l.connect_rate)} titulo="Depende da Web ligada e da fórmula a confirmar" /></Td>
-              <Td><Kpi v={pct(l.conversao_pagina)} titulo="Depende da Web ligada e da fórmula a confirmar" /></Td>
+              <Td><Kpi v={pct(l.connect_rate)} titulo="Precisa da Web (page views das páginas de captura) e de cliques no link" /></Td>
+              <Td><Kpi v={pct(l.conversao_pagina)} titulo="Precisa da Web (page views) e dos leads da base" /></Td>
               <Td><Kpi v={pct(l.pct_mql)} /></Td>
-              <Td>{l.gestor ?? (l.gestores_campanhas.length ? <span className="text-[var(--fg-2)]" title="Gestores das campanhas">{l.gestores_campanhas.join(', ')}</span> : <Kpi v={SEM_DADO} titulo="Gestor não marcado" />)}</Td>
+              <Td>{l.gestores.length ? l.gestores.join(', ') : (l.gestores_campanhas.length ? <span className="text-[var(--fg-2)]" title="Gestores das campanhas">{l.gestores_campanhas.join(', ')}</span> : <Kpi v={SEM_DADO} titulo="Gestor não marcado" />)}</Td>
             </Tr>
           );
         })}
@@ -163,7 +163,12 @@ export function TrafegoClient() {
                 </div>
                 {!config.base_pessoas && (
                   <p className="text-xs text-[var(--fg-3)]">
-                    Leads, CPL e % MQL vêm da base de pessoas (migration 20261005o), que ainda não existe neste banco: aparecem como &quot;sem dado&quot;.
+                    Leads, CPL, % MQL e conversão da página vêm da base de pessoas (migration 20261005o), que ainda não existe neste banco: aparecem como &quot;sem dado&quot;.
+                  </p>
+                )}
+                {!config.base_web && (
+                  <p className="text-xs text-[var(--fg-3)]">
+                    Connect rate e conversão da página usam as page views da Web (migration 20261005n), que ainda não existe neste banco: aparecem como &quot;sem dado&quot;.
                   </p>
                 )}
                 <SectionCard right={<Filtros f={filtros} set={setFiltros} config={config} />} title="Projetos" subtitle={`${visiveis.length} de ${linhas.length}`}>

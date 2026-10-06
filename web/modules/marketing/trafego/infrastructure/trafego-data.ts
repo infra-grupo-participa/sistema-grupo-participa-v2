@@ -39,7 +39,8 @@ export const listarCampanhas = (projeto: number | null, semProjeto: boolean, for
     : rpc<Campanha[]>('trafego_campanhas_listar', { p_projeto: projeto, p_sem_projeto: semProjeto, p_fora_padrao: foraPadrao });
 
 export interface PlanejamentoForm {
-  projeto_id: number; status: string; gestor: string; verba_maxima: string; verba_diaria: string;
+  /** gestores: a lista inteira (substitui a anterior no banco). */
+  projeto_id: number; status: string; gestores: string[]; verba_maxima: string; verba_diaria: string;
   meta_leads: string; meta_receita: string; meta_cpl: string; meta_pct_mql: string; obs: string;
 }
 export async function salvarPlanejamento(p: PlanejamentoForm): Promise<Resposta> {
@@ -64,8 +65,11 @@ export async function salvarConta(p: ContaForm): Promise<Resposta> {
   return (await rpc<Resposta>('trafego_conta_salvar', { p })) ?? falha;
 }
 
-/** projeto_id nulo = volta a valer o nome da campanha. */
-export async function ajustarCampanha(p: { id: number; projeto_id: number | null; fase_id: number | null }): Promise<Resposta> {
+/**
+ * Só o que vier é mexido. projeto_id: número = liga à mão; null = volta a valer o nome.
+ * fase: código = correção à mão; null = volta a valer o objetivo do nome.
+ */
+export async function ajustarCampanha(p: { id: number; projeto_id?: number | null; fase?: string | null }): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoAjustarCampanha(p);
   return (await rpc<Resposta>('trafego_campanha_ajustar', { p })) ?? falha;
 }

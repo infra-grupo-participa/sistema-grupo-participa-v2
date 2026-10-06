@@ -25,7 +25,7 @@ export function CampanhasPainel({ linhas, versao, flash, onMudou }: {
   }, [versao, semProjeto]);
 
   async function ligar(c: Campanha, projeto: string) {
-    const r = await ajustarCampanha({ id: c.id, projeto_id: projeto ? Number(projeto) : null, fase_id: null });
+    const r = await ajustarCampanha({ id: c.id, projeto_id: projeto ? Number(projeto) : null });
     flash(r.msg);
     if (r.ok) onMudou();
   }

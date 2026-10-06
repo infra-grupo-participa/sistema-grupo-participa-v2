@@ -383,13 +383,31 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 | Banco (schema `mkt_trafego`, 13 funções `public.trafego_*`) | escrito e ensaiado em Postgres local; **não aplicado** |
 | Tela `/marketing/trafego` (Projetos, Campanhas fora do padrão, Contas de anúncio, vida do projeto) | pronta; funciona de verdade só depois da migration; hoje dá para ver no modo demo |
 | Coleta Meta Ads e Google Ads | **não feita** (etapa 2). As funções de entrada existem (`trafego_campanhas_receber`, `trafego_desempenho_receber`, só `service_role`), ninguém as chama |
-| Receita (Hotmart), connect rate, conversão da página | **sem fonte**: a tela mostra "sem dado" |
+| Receita (Hotmart) | **sem fonte**: a tela mostra "sem dado" |
+| Connect rate e conversão da página | **ligados** no banco (page views da Web, `mkt_web.resumo_dia`, 20261005n; leads da base, 20261005o). Enquanto essas migrations não estiverem aplicadas e com dado, "sem dado" |
 | Atividades do ClickUp | lugar reservado na vida do projeto, sem integração |
 
 ### Decisões que mandam aqui (Victor, 05/10/2026)
 
 - **KPIs da tabela:** CPL, leads, CTR, CPM, connect rate, conversão da página, % MQL. Mais status, projeto, receita gerada,
-  investimento realizado, investimento máximo, % da verba e gestor.
+  investimento realizado, investimento máximo, % da verba e gestores.
+- **Cliques no link** (Victor): CTR = cliques no link ÷ impressões; CPC = investido ÷ cliques no link. O gasto diário
+  guarda cliques no link e cliques totais **separados**; os totais são só informação.
+- **Connect rate = page views ÷ cliques no link; conversão da página = leads ÷ page views** (Victor). Page views = as das
+  páginas de **captura** do projeto (`mkt.paginas.funcao = 'captura'`), da Web; leads = os da base de pessoas. Limite: o
+  resumo diário da Web não separa a visita que veio de anúncio, então as page views incluem tráfego orgânico.
+- **Vários gestores por projeto** (Victor): tabela `projeto_gestores` (siglas da lista `mkt.campanha_gestores`).
+- **Fases:** aquecimento, captação, lembrete, remarketing, abertura de carrinho. A fase da campanha sai do **objetivo** do
+  nome (mapa `objetivo_fase`, configurável por SQL); a **correção à mão** na campanha prevalece; sem regra e sem correção =
+  "sem fase". Mapa (Victor): LEADS e VENDAS → captação (VENDAS = lançamento pago, a campanha vende o ingresso em vez de
+  captar lead), AQUECIMENTO → aquecimento, LEMBRETE → lembrete, REMARKETING → remarketing, CARRINHO → abertura de
+  carrinho. **DISTRIBUIÇÃO** (distribuição de conteúdo) **não tem fase automática**: pode ou não ser aquecimento, fica
+  "sem fase" até alguém marcar na campanha.
+- **Objetivos do nome de campanha** passam a ser 7: LEADS, VENDAS, REMARKETING, LEMBRETE, DISTRIBUIÇÃO, **CARRINHO**
+  (anuncia o produto principal na abertura de carrinho, em lançamento pago ou gratuito) e **AQUECIMENTO**. Os dois novos
+  entram em `mkt.campanha_objetivos` (lista da 20261005m) pela 20261005p, com insert idempotente; o tradutor
+  `mkt.campanha_traduzir` reconhece porque lê a lista. Na tela "Testar nome de campanha" (Marketing > Projetos e páginas)
+  passam a valer depois de aplicar a 20261005p.
 - **Status do projeto marcado à mão.** Verba, fases e metas preenchidas por Arthur, Victor e Caio (no banco: admin/dev).
 - **Lead que conta é o da nossa base** (`pessoas.eventos`, 20261005o): pessoas distintas com evento `lead` no projeto, sem
   pessoa de teste nem mesclada. Os leads que a plataforma informa ficam só na campanha.
@@ -401,16 +419,19 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 
 | Tabela | O que guarda |
 |---|---|
-| `plataformas`, `status_projeto`, `fases` | listas (Meta Ads, Google Ads; ativo, pausado, inativo, encerrado; aquecimento, captação, lembrete). Mudam por SQL |
+| `plataformas`, `status_projeto`, `fases` | listas (Meta Ads, Google Ads; ativo, pausado, inativo, encerrado; aquecimento, captação, lembrete, remarketing, abertura de carrinho). Mudam por SQL |
+| `objetivo_fase` | objetivo do nome → fase (ver Decisões). Muda por SQL |
 | `contas` | conta de anúncio: plataforma, id na plataforma (Meta sem `act_`, Google só dígitos), nome, de quem é (grupo, diamante, aurum), cliente, moeda |
-| `campanhas` | nome **exato** da plataforma + leitura pelo padrão `GESTOR \| PROJETO \| OBJETIVO \| DESCRIÇÃO \| PÁGINA` (`mkt.campanha_traduzir`): projeto, gestor, objetivo, página, fora do padrão. Projeto pode ser ligado à mão; fase só à mão |
-| `desempenho_dia` | gasto, impressões, cliques, leads da plataforma por campanha e dia (vazia até a coleta) |
-| `planejamento` | por projeto: status, gestor, verba máxima e diária, metas de leads, receita, CPL e % MQL |
+| `campanhas` | nome **exato** da plataforma + leitura pelo padrão `GESTOR \| PROJETO \| OBJETIVO \| DESCRIÇÃO \| PÁGINA` (`mkt.campanha_traduzir`): projeto, gestor, objetivo, página, fora do padrão. Projeto pode ser ligado à mão; `fase_manual` corrige a fase do objetivo |
+| `desempenho_dia` | gasto, impressões, cliques no link, cliques totais, leads da plataforma por campanha e dia (vazia até a coleta) |
+| `planejamento` | por projeto: status, verba máxima e diária, metas de leads, receita, CPL e % MQL |
+| `projeto_gestores` | gestores do projeto (vários) |
 | `projeto_fases` | verba planejada e período de cada fase |
 
 Fórmulas (banco em `mkt_trafego.resumo`, front em `web/modules/marketing/trafego/domain/kpis.ts`, as duas testadas com os
-mesmos números): % da verba = investido ÷ verba máxima; CPL = investido ÷ leads; CTR = cliques ÷ impressões; CPM =
-investido ÷ impressões × 1000; % MQL = MQL ÷ leads; ritmo = gasto de ontem ÷ verba diária; "deveria ter gasto" = verba
+mesmos números): % da verba = investido ÷ verba máxima; CPL = investido ÷ leads; CTR = cliques no link ÷ impressões;
+CPC = investido ÷ cliques no link; CPM = investido ÷ impressões × 1000; % MQL = MQL ÷ leads; connect rate = page views ÷
+cliques no link; conversão da página = leads ÷ page views; ritmo = gasto de ontem ÷ verba diária; "deveria ter gasto" = verba
 de cada fase distribuída por igual nos dias dela. **Sem fonte = nulo, nunca zero** (projeto sem gasto coletado mostra
 "sem dado", não R$ 0).
 
@@ -423,11 +444,13 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
 ### Telas (`/marketing/trafego`, só admin e dev)
 
 - **Projetos:** a tabela da Central com os filtros interno/externo, subárea (Interno, Aurum, Diamantes), gestor (CF, RS, EF,
-  da lista do banco; casa com o gestor do planejamento ou de alguma campanha), situação (status) e projetos desativados.
+  da lista do banco; casa com um dos gestores do projeto ou com o de alguma campanha), situação (status) e projetos
+  desativados.
   Cartões: investido, verba, projetos acima da verba diária ontem, campanhas fora do padrão.
 - **Vida do projeto** (clique na linha): investido × verba (por plataforma), ritmo de ontem, quanto deveria ter gasto
-  pelas fases, KPIs × metas, fases planejado × gasto (criar, editar, apagar), campanhas do projeto (marcar a fase),
-  lugar das atividades do ClickUp. Botão **Planejamento** (status, gestor, verbas, metas).
+  pelas fases, KPIs × metas (com CPC e page views), fases planejado × gasto (uma linha por fase planejada ou com
+  campanha nela, mais "sem fase"; criar, editar, apagar o planejamento), campanhas do projeto (fase "pelo objetivo" ou
+  "à mão"), lugar das atividades do ClickUp. Botão **Planejamento** (status, gestores, verbas, metas).
 - **Campanhas fora do padrão:** o nome exato, o que está fora, ligar à mão a um projeto, "Reler os nomes" (depois de
   cadastrar projeto ou página em Marketing > Projetos e páginas). Opção "só as sem projeto".
 - **Contas de anúncio:** cadastro e edição.
@@ -440,7 +463,7 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
    `/marketing/trafego`. Projetos da semente + 2 externos "Exemplo", contas "Conta Exemplo", campanhas "EXEMPLO", gasto e
    leads inventados, com a faixa "Dados de demonstração" (grava só em memória; recarregar volta ao começo). Em produção
    (`NODE_ENV=production`) o modo nunca liga.
-3. **Código:** `npx tsc --noEmit`, `npx vitest run` (`kpis.test.ts`, `demo.test.ts`), `npm run build`.
+3. **Código:** `npx tsc --noEmit`, `npx vitest run` (`kpis.test.ts`, `fases.test.ts`, `demo.test.ts`), `npm run build`.
 
 ### Para valer
 
@@ -450,21 +473,24 @@ Victor ver a tela no modo demo e responder as perguntas abaixo; rodar o ensaio n
 ### O que falta (próximas etapas do plano)
 
 2. Coleta Meta + Google (depende da conta centralizadora e das credenciais): rotina diária chamando os dois `receber`.
-3. Ligar receita (Hotmart → projeto), connect rate e conversão da página (Web), atividades do ClickUp.
+3. Ligar receita (Hotmart → projeto) e atividades do ClickUp. Connect rate e conversão já estão ligados; dependem da
+   Web (20261005n) e da base de pessoas (20261005o) aplicadas e com dado.
 4. Resumo do dia ("o que está pegando fogo") e alerta de nome fora do padrão.
 5. MCP da central com os dados do Tráfego.
 6. Importação do histórico (planilhas que o Victor escolher).
 
-### Perguntas abertas (para o Victor)
+### Perguntas (respondidas pelo Victor em 05/10/2026, salvo as em aberto)
 
-1. **Status:** a lista fica ativo, pausado, inativo, encerrado? (A conversa termina em "Pronto, ativo e inativo".)
-2. **Connect rate e conversão da página:** qual a fórmula? Proposta: connect rate = visitas na página de captura vindas
-   do anúncio ÷ cliques no link; conversão = leads ÷ entradas na página de captura (dados da Web).
-3. **Cliques:** CTR com cliques no link ou todos os cliques? Decide o que a coleta grava.
-4. **Fase da campanha:** marcar à mão basta, ou a fase entra no nome (campo novo ou objetivo `LEMBRETE`)?
-5. **Externos (Aurum, Diamantes):** cada cliente vira um projeto em `mkt.projetos`? Qual sigla de campanha?
-6. **Conta centralizadora** (ideia do Caio): vai existir? É dela que a coleta lê.
-7. **Gestor do projeto:** um só (como está) ou vários?
+1. ~~Status~~ **Respondido:** ativo, pausado, inativo, encerrado (fica como está).
+2. ~~Connect rate e conversão~~ **Respondido:** connect rate = page views ÷ cliques no link; conversão da página = leads
+   ÷ page views. Ligado (ver Decisões).
+3. ~~Cliques~~ **Respondido:** cliques no link para CTR e CPC; totais guardados à parte.
+4. ~~Fase da campanha~~ **Respondido:** pelo objetivo do nome, com correção à mão prevalecendo; mapa e objetivos novos
+   (CARRINHO, AQUECIMENTO) nas Decisões. DISTRIBUIÇÃO sem fase automática.
+5. **Externos (Aurum, Diamantes):** em aberto (Victor vai ver com o Caio). Cada cliente vira um projeto em `mkt.projetos`?
+   Qual sigla de campanha?
+6. **Conta centralizadora** (ideia do Caio): em aberto. É dela que a coleta lê.
+7. ~~Gestor do projeto~~ **Respondido:** vários gestores por projeto (`projeto_gestores`).
 
 ## Branches
 
@@ -489,3 +515,7 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
   dev) com modo de demonstração local. Perguntas abertas na seção "Comercial e base de pessoas". Branch `victor`.
 - **05/10/2026:** Tráfego etapa 1 (migration 20261005p, NÃO APLICADA): contas, campanhas, desempenho diário, planejamento
   (status, verba, fases, metas) e a Central do Tráfego em `/marketing/trafego` (área ativa), com modo demo. Branch `victor`.
+- **05/10/2026:** Tráfego, respostas do Victor na própria 20261005p (ainda NÃO APLICADA): cliques no link separados dos
+  totais (CTR, CPC), connect rate e conversão da página ligados à Web e à base de pessoas, vários gestores por projeto,
+  fase da campanha pelo objetivo do nome (com correção à mão), fases remarketing e abertura de carrinho, objetivos
+  CARRINHO e AQUECIMENTO no padrão de nome.
