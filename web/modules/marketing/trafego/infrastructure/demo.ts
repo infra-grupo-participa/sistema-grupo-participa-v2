@@ -3,15 +3,21 @@
 // produção: trafego-data.ts só liga com NEXT_PUBLIC_TRAFEGO_DEMO=1 E NODE_ENV diferente de 'production', e a tela mostra
 // a faixa "Dados de demonstração". Recarregar a página volta ao começo.
 // O que vem da semente real: os 4 projetos e os gestores da 20261005m, os objetivos (20261005m + CARRINHO e AQUECIMENTO
-// da 20261005p) e as listas da 20261005p (plataformas, status, fases, objetivo → fase). Todo o resto é ficção: projetos externos "… Exemplo", contas "Conta Exemplo",
-// ids 0000…, descrições de campanha "EXEMPLO", números gerados.
+// da 20261005p) e as listas da 20261005p (plataformas, status, fases, objetivo → fase) e da 20261006a (unidades, tipos de
+// lançamento e regras, os 2 especialistas internos semeados, UTM do Meta, o item manual do checklist). Todo o resto é
+// ficção: projetos "… Exemplo", contas "Conta Exemplo", "Especialista Exemplo", ids 0000…, descrições de campanha
+// "EXEMPLO", números gerados. Os projetos reais da semente ficam sem unidade, tipo de lançamento e contas (não estão em fonte).
 import { traduzirCampanha } from '../../projetos/domain/campanha';
 import { calcularAlertas, type ProjetoEntrada } from '../domain/alertas';
+import {
+  PROJETO_FORM_VAZIO, lancamentoAutomatico, montarChecklist, nomeTemSigla, periodoProjeto, validarCadastro,
+  type Especialista, type ListasCadastro, type ModeloPacote, type ProjetoCadastro, type ProjetoForm,
+} from '../domain/cadastro';
 import { faseDaCampanha } from '../domain/fases';
-import { comKpis, tipoDaSubarea } from '../domain/kpis';
+import { comKpis } from '../domain/kpis';
 import type {
-  Campanha, ClickupProjeto, ConfigTrafego, Conta, Dono, FaseProjeto, LinhaResumo, ProdutoHotmart, ProdutoVisto, Regra, Resposta,
-  ResumoDia, Subarea, TarefaClickup, VidaProjeto,
+  Campanha, Checklist, ClickupProjeto, ConfigTrafego, Conta, Dono, FaseProjeto, ItemChecklistConfig, LinhaResumo, ProdutoHotmart, ProdutoVisto,
+  Regra, Resposta, ResumoDia, Subarea, TarefaClickup, Tipo, VidaProjeto,
 } from '../domain/tipos';
 
 const hoje = (n = 0) => {
@@ -39,15 +45,33 @@ const CONFIG: ConfigTrafego = {
   dia_ontem: ONTEM,
 };
 
-interface ProjetoDemo { id: number; sigla: string; nome: string; subarea: Subarea | null; ativo: boolean; etiqueta_clickup: string | null }
+interface ProjetoDemo {
+  id: number; sigla: string; nome: string; linha: string; ativo: boolean; etiqueta_clickup: string | null;
+  tipo: Tipo | null; unidade: string | null; tipo_lancamento: string | null; especialista_id: number | null;
+  inicio: string | null; fim: string | null; captacao_inicio: string | null; captacao_fim: string | null; evento_inicio: string | null; evento_fim: string | null;
+}
+const pd = (x: Partial<ProjetoDemo> & Pick<ProjetoDemo, 'id' | 'sigla' | 'nome' | 'linha'>): ProjetoDemo => ({
+  ativo: true, etiqueta_clickup: null, tipo: null, unidade: null, tipo_lancamento: null, especialista_id: null,
+  inicio: null, fim: null, captacao_inicio: null, captacao_fim: null, evento_inicio: null, evento_fim: null, ...x,
+});
 const PROJETOS: ProjetoDemo[] = [
-  { id: 1, sigla: 'PB26', nome: 'Patrimônio Brasil 2026', subarea: 'interno', ativo: true, etiqueta_clickup: 'seminario-conjunto-2026-11' },
-  { id: 2, sigla: 'HT33', nome: 'Holding Total 33', subarea: 'interno', ativo: true, etiqueta_clickup: null },
-  { id: 3, sigla: 'SEMSET26', nome: 'Seminário setembro 2026', subarea: null, ativo: true, etiqueta_clickup: 'sem-set-2026' },
-  { id: 4, sigla: 'BF26', nome: 'Black Friday 2026', subarea: 'interno', ativo: true, etiqueta_clickup: 'black-friday-2026-10' },
-  { id: 5, sigla: 'DEXA26', nome: 'Seminário Diamante Exemplo', subarea: 'diamante', ativo: true, etiqueta_clickup: null },
-  { id: 6, sigla: 'AEXA26', nome: 'Palestra Aurum Exemplo', subarea: 'aurum', ativo: true, etiqueta_clickup: null },
+  // semente real (20261005m): interno sem unidade (CSM ou Escritório não está em fonte); SEMSET26 sem tipo
+  pd({ id: 1, sigla: 'PB26', nome: 'Patrimônio Brasil 2026', linha: 'Patrimônio Brasil', etiqueta_clickup: 'seminario-conjunto-2026-11', tipo: 'interno' }),
+  pd({ id: 2, sigla: 'HT33', nome: 'Holding Total 33', linha: 'Holding Total', tipo: 'interno' }),
+  pd({ id: 3, sigla: 'SEMSET26', nome: 'Seminário setembro 2026', linha: 'Seminário', etiqueta_clickup: 'sem-set-2026' }),
+  pd({ id: 4, sigla: 'BF26', nome: 'Black Friday 2026', linha: 'Black Friday', etiqueta_clickup: 'black-friday-2026-10', tipo: 'interno' }),
+  // fictícios
+  pd({ id: 5, sigla: 'DEXA26', nome: 'Seminário Diamante Exemplo', linha: 'Exemplo', tipo: 'externo', unidade: 'diamantes', tipo_lancamento: 'lancamento_classico', especialista_id: 3 }),
+  pd({ id: 6, sigla: 'AEXA26', nome: 'Palestra Aurum Exemplo', linha: 'Exemplo', tipo: 'externo', unidade: 'aurum', tipo_lancamento: 'palestra' }),
+  pd({ id: 7, sigla: 'LPEXA26', nome: 'Lançamento Pago Exemplo', linha: 'Exemplo', etiqueta_clickup: 'lancamento-pago-exemplo-2026-10', tipo: 'interno', unidade: 'csm',
+    tipo_lancamento: 'lancamento_pago', captacao_inicio: hoje(-8), captacao_fim: hoje(12), evento_inicio: hoje(15), evento_fim: hoje(17), inicio: hoje(-8), fim: hoje(17) }),
 ];
+const subareaDe = (p: ProjetoDemo): Subarea | null => (p.tipo === 'interno' ? 'interno' : p.unidade === 'aurum' ? 'aurum' : p.unidade === 'diamantes' ? 'diamante' : null);
+// contas de anúncio dos projetos fictícios (os reais ficam sem)
+const PROJETO_CONTAS = new Map<number, number[]>([[5, [3]], [7, [1]]]);
+// páginas: as 4 do PB26 da semente real
+const PAGINAS = new Map<number, { codigo: string; nome: string }[]>([[1, [{ codigo: 'ak1', nome: 'AK1' }]]]);
+const N_PAGINAS: Record<number, number> = { 1: 4 };
 
 interface Plan { status: string | null; gestores: string[]; verba_maxima: number | null; verba_diaria: number | null; meta_leads: number | null; meta_receita: number | null; meta_cpl: number | null; meta_pct_mql: number | null; obs: string | null }
 const PLAN = new Map<number, Plan>([
@@ -55,6 +79,7 @@ const PLAN = new Map<number, Plan>([
   [2, { status: 'ativo', gestores: ['CF'], verba_maxima: 15000, verba_diaria: 400, meta_leads: null, meta_receita: 60000, meta_cpl: null, meta_pct_mql: null, obs: null }],
   [4, { status: 'pausado', gestores: ['CF'], verba_maxima: 8000, verba_diaria: null, meta_leads: 500, meta_receita: null, meta_cpl: null, meta_pct_mql: null, obs: null }],
   [5, { status: 'ativo', gestores: ['EF'], verba_maxima: 3000, verba_diaria: 100, meta_leads: 300, meta_receita: null, meta_cpl: 8, meta_pct_mql: null, obs: 'Projeto fictício do modo de demonstração.' }],
+  [7, { status: 'ativo', gestores: ['RS'], verba_maxima: 9000, verba_diaria: 300, meta_leads: null, meta_receita: null, meta_cpl: null, meta_pct_mql: null, obs: 'Projeto fictício do modo de demonstração.' }],
 ]);
 
 interface FaseDemo { id: number; projeto_id: number; fase: string; verba: number | null; inicio: string | null; fim: string | null; obs: string | null }
@@ -84,11 +109,15 @@ const CAMPS: CampDemo[] = [
   camp(7, 'meta', 1, 'Campanha exemplo fora do padrão', 'ACTIVE'),
   camp(8, 'meta', 3, 'EF | XYZ26 | LEADS | EXEMPLO PROJETO SEM CADASTRO', 'ACTIVE'),
   camp(9, 'meta', 1, 'CF | PB26 | DISTRIBUIÇÃO | EXEMPLO CONTEÚDO', 'ACTIVE'),
+  camp(10, 'meta', 1, 'RS | LPEXA26 | VENDAS | EXEMPLO INGRESSO', 'ACTIVE'),
+  camp(11, 'meta', 3, 'RS | LPEXA26 | VENDAS | EXEMPLO CONTA DE FORA', 'ACTIVE'),
+  camp(12, 'meta', 1, 'lpexa26 exemplo remarketing sem padrão', 'PAUSED'),
 ];
 // por campanha: [dias para trás, gasto base por dia, CPM base, CTR base em %, leads da plataforma por 100 reais]
 const PERFIL: Record<number, [number, number, number, number, number]> = {
   1: [10, 420, 18, 1.4, 9], 2: [15, 160, 12, 0.9, 5], 3: [12, 90, 40, 3.1, 6], 4: [20, 380, 22, 1.1, 0],
   5: [8, 60, 15, 0.7, 0], 6: [12, 140, 14, 1.2, 10], 7: [5, 50, 20, 1, 4], 9: [6, 40, 9, 0.8, 0],
+  10: [8, 250, 16, 1.3, 0], 11: [3, 30, 18, 1, 0],
 };
 // page views da Web (visitas vindas da campanha; fictício: ~72% dos cliques no link) e ~30% delas viram lead,
 // só dos projetos com "Web"
@@ -112,7 +141,7 @@ let seq = 100;
 const projeto = (id: number | null) => PROJETOS.find((p) => p.id === id) ?? null;
 
 function lerCampanha(c: CampDemo): Campanha {
-  const t = traduzirCampanha(c.nome, { gestores: GESTORES.map((g) => g.sigla), objetivos: OBJETIVOS, projetos: PROJETOS.map((p) => p.sigla) });
+  const t = traduzir(c.nome);
   const pNome = PROJETOS.find((p) => p.sigla === t.projeto)?.id ?? null;
   const pid = c.projeto_manual_id ?? pNome;
   const dias = DIAS.filter((d) => d.campanha_id === c.id);
@@ -130,6 +159,7 @@ function lerCampanha(c: CampDemo): Campanha {
 }
 
 const campanhas = () => CAMPS.map(lerCampanha);
+const traduzir = (nome: string) => traduzirCampanha(nome, { gestores: GESTORES.map((g) => g.sigla), objetivos: OBJETIVOS, projetos: PROJETOS.map((p) => p.sigla) });
 
 function linha(p: ProjetoDemo): LinhaResumo {
   const cs = campanhas().filter((c) => c.projeto_id === p.id);
@@ -142,12 +172,19 @@ function linha(p: ProjetoDemo): LinhaResumo {
   for (const c of cs) if (c.gasto != null) porPlat[c.plataforma] = soma([porPlat[c.plataforma] ?? 0, c.gasto]);
   const fs = FASES.filter((f) => f.projeto_id === p.id);
   const l = LEADS[p.id];
+  const ck = demoChecklist(p.id);
   return comKpis({
-    projeto_id: p.id, sigla: p.sigla, nome: p.nome, subarea: p.subarea, tipo: tipoDaSubarea(p.subarea), projeto_ativo: p.ativo,
-    etiqueta_clickup: p.etiqueta_clickup, inicio: null, fim: null,
+    projeto_id: p.id, sigla: p.sigla, nome: p.nome, subarea: subareaDe(p), tipo: p.tipo, projeto_ativo: p.ativo,
+    etiqueta_clickup: p.etiqueta_clickup, inicio: p.inicio, fim: p.fim,
+    unidade: p.unidade, unidade_nome: UNIDADES.find((u) => u.codigo === p.unidade)?.nome ?? null, tipo_lancamento: p.tipo_lancamento,
+    tipo_lancamento_nome: TIPOS.find((t) => t.codigo === p.tipo_lancamento)?.nome ?? null,
+    especialista: ESPECIALISTAS.find((e) => e.id === p.especialista_id)?.nome ?? null, contas_projeto: PROJETO_CONTAS.get(p.id) ?? [],
+    captacao_inicio: p.captacao_inicio, captacao_fim: p.captacao_fim, evento_inicio: p.evento_inicio, evento_fim: p.evento_fim,
+    checklist_feitos: ck?.feitos ?? null, checklist_total: ck?.total ?? null,
     status: pl?.status ?? null, status_nome: CONFIG.status.find((s) => s.codigo === pl?.status)?.nome ?? null,
     gestores: pl?.gestores ?? [], gestores_campanhas: [...new Set(cs.map((c) => c.gestor).filter((g): g is string => !!g))].sort(),
-    ...receitaDemo(p.id),
+    ...receitaDemo(p.id), receita_aplica: p.tipo !== 'externo',
+    ...(p.tipo === 'externo' ? { receita: null, receita_compras: null, receita_outras_moedas: null, receita_sem_valor: null } : {}),
     investido: tem ? soma(dias.map((d) => d.gasto)) : null, por_plataforma: tem ? porPlat : null, moedas: [...new Set(cs.map((c) => c.moeda))],
     verba_maxima: pl?.verba_maxima ?? null, verba_diaria: pl?.verba_diaria ?? null,
     verba_fases: soma(fs.map((f) => f.verba ?? 0)), fases: fs.length,
@@ -254,7 +291,7 @@ export function demoAjustarCampanha(p: { id: number; projeto_id?: number | null;
 }
 
 // ─── Fase 2 (20261005r): resumo do dia, produtos da Hotmart e ClickUp. Tudo fictício ("Exemplo", ids 000…). ─────────
-// Os limiares são os mesmos valores iniciais da migration (mkt_trafego.alerta_regras).
+// Os limiares são os mesmos da migration (mkt_trafego.alerta_regras; confirmados pelo Victor em 06/10/2026; a 8ª regra é da 20261006a).
 const REGRAS_DEMO: Regra[] = [
   { codigo: 'acima_verba_diaria', nome: 'Acima da verba diária', ligada: true, limiar: 0, unidade: 'pct', gravidade: 'alta', descricao: 'Gasto de ontem acima da verba diária + limiar %.' },
   { codigo: 'cpl_acima_meta', nome: 'CPL acima da meta', ligada: true, limiar: 0, unidade: 'pct', gravidade: 'alta', descricao: 'CPL acima da meta de CPL + limiar %.' },
@@ -263,6 +300,7 @@ const REGRAS_DEMO: Regra[] = [
   { codigo: 'verba_perto_fim', nome: '% da verba perto do fim', ligada: true, limiar: 90, unidade: 'pct', gravidade: 'media', descricao: '% da verba máxima já investido maior ou igual ao limiar.' },
   { codigo: 'fora_padrao', nome: 'Campanhas fora do padrão', ligada: true, limiar: 7, unidade: 'dias', gravidade: 'media', descricao: 'Campanhas fora do padrão que gastaram nos últimos limiar dias.' },
   { codigo: 'sem_fase', nome: 'Campanhas sem fase', ligada: true, limiar: 7, unidade: 'dias', gravidade: 'media', descricao: 'Campanhas sem fase que gastaram nos últimos limiar dias.' },
+  { codigo: 'conta_fora_projeto', nome: 'Campanha do projeto em conta de fora', ligada: true, limiar: 7, unidade: 'dias', gravidade: 'media', descricao: 'Campanha com a sigla do projeto que gastou nos últimos limiar dias numa conta que não é do projeto.' },
 ];
 
 interface ProdutoDemo { id: number; projeto_id: number; produto_id: string; oferta_codigo: string | null; de: string | null; ate: string | null; obs: string | null }
@@ -278,7 +316,8 @@ const VISTOS: ProdutoVisto[] = [
 
 function receitaDemo(projetoId: number): Pick<LinhaResumo, 'receita' | 'receita_compras' | 'receita_outras_moedas' | 'receita_sem_valor' | 'receita_vinculos' | 'receita_sem_periodo' | 'receita_fonte'> {
   const vs = PRODUTOS.filter((v) => v.projeto_id === projetoId);
-  const comPeriodo = vs.filter((v) => v.de != null); // os projetos do demo não têm data de início
+  const p = projeto(projetoId);
+  const comPeriodo = vs.filter((v) => v.de != null || p?.captacao_inicio != null || p?.inicio != null); // vínculo sem "de" usa a captação
   const soma = (k: 'receita' | 'compras') => comPeriodo.reduce((a, v) => a + (RECEITA_PRODUTO[v.produto_id]?.[k] ?? 0), 0);
   return {
     receita: comPeriodo.length ? soma('receita') : null, receita_compras: vs.length ? soma('compras') : null,
@@ -303,6 +342,8 @@ export function demoAlertas(): ResumoDia {
         return { fase: f.fase, nome: CONFIG.fases.find((x) => x.codigo === f.fase)?.nome ?? f.fase, verba: f.verba, inicio: f.inicio, fim: f.fim, gastoAteOntem: Math.round(g * 100) / 100 };
       }),
       campanhas: doProj.map(ent),
+      contasProjeto: PROJETO_CONTAS.get(p.id) ?? [],
+      campanhasDaSigla: cs.filter((c) => traduzir(c.nome).projeto === p.sigla).map((c) => ({ ...ent(c), conta_id: c.conta_id, conta: c.conta })),
     };
   });
   return {
@@ -333,7 +374,7 @@ export function demoSalvarProduto(p: Record<string, unknown>): Resposta {
   }
   if (p.id) PRODUTOS = PRODUTOS.map((x) => (x.id === Number(p.id) ? { ...x, ...v } : x));
   else PRODUTOS.push({ id: ++seq, ...v });
-  const avisos = [...(v.de ? [] : ['sem_periodo']), ...(VISTOS.some((x) => x.produto_id === prod) ? [] : ['produto_sem_compras'])];
+  const avisos = [...(v.de || projeto(pid)?.captacao_inicio || projeto(pid)?.inicio ? [] : ['sem_periodo']), ...(VISTOS.some((x) => x.produto_id === prod) ? [] : ['produto_sem_compras'])];
   return { ok: true, msg: `Produto ${prod} ligado${NADA}.`, avisos };
 }
 
@@ -358,4 +399,150 @@ export function demoClickup(projetoId: number): ClickupProjeto | null {
   const p = projeto(projetoId);
   if (!p) return null;
   return { etiqueta: p.etiqueta_clickup, configurado: true, ultima_coleta: null, tarefas: p.etiqueta_clickup ? structuredClone(TAREFAS[projetoId] ?? []) : [] };
+}
+
+// ─── Cadastro do projeto, pacote e checklist (20261006a). Listas = as sementes da migration; o resto fictício. ────────
+const UNIDADES = [
+  { codigo: 'csm', tipo: 'interno' as const, nome: 'CSM', descricao: 'CSM Academy (o educacional)' },
+  { codigo: 'escritorio', tipo: 'interno' as const, nome: 'Escritório', descricao: 'Escritório de advocacia' },
+  { codigo: 'aurum', tipo: 'externo' as const, nome: 'Aurum', descricao: null },
+  { codigo: 'diamantes', tipo: 'externo' as const, nome: 'Diamantes', descricao: null },
+];
+const TIPOS = [
+  { codigo: 'lancamento_classico', nome: 'Lançamento clássico' }, { codigo: 'lancamento_pago', nome: 'Lançamento pago' },
+  { codigo: 'lpsg', nome: 'Lançamento pago semanal gravado (LPSG)' }, { codigo: 'atm', nome: 'ATM' }, { codigo: 'palestra', nome: 'Palestra' },
+];
+const REGRAS: Record<string, string[]> = {
+  csm: ['lancamento_classico', 'lancamento_pago', 'lpsg', 'atm'], escritorio: ['lancamento_classico', 'lpsg', 'atm'],
+  aurum: ['palestra'], diamantes: ['lancamento_classico', 'lancamento_pago'],
+};
+const ESPECIALISTAS: Especialista[] = [
+  { id: 1, nome: 'Marcio Carvalho de Sá', tipo: 'interno', unidade: null },
+  { id: 2, nome: 'Elaine Montenegro', tipo: 'interno', unidade: null },
+  { id: 3, nome: 'Especialista Exemplo', tipo: 'externo', unidade: 'diamantes' },
+];
+const UTM_META = [
+  { parametro: 'utm_source', valor: 'metaads' }, { parametro: 'utm_campaign', valor: '{{campaign.name}}|{{campaign.id}}' },
+  { parametro: 'utm_medium', valor: '{{adset.name}}|{{adset.id}}' }, { parametro: 'utm_content', valor: '{{ad.name}}|{{ad.id}}' },
+  { parametro: 'utm_term', valor: '{{placement}}' },
+];
+let MODELOS: ModeloPacote[] = []; // o conteúdo do pacote não foi definido (pergunta ao Victor): nasce vazio, como no banco
+const ITENS: ItemChecklistConfig[] = [
+  { id: 1, texto: 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow', tipo_lancamento: null, ordem: 1, ativo: true },
+];
+const MARCAS = new Map<string, { em: string; por: string | null }>([['7:1', { em: `${hoje(-1)}T14:00:00.000Z`, por: 'Pessoa Exemplo' }]]);
+
+export function demoListasCadastro(): ListasCadastro {
+  return structuredClone({
+    unidades: UNIDADES, tipos_lancamento: TIPOS, regras: REGRAS, especialistas: ESPECIALISTAS, objetivos: [...OBJETIVOS].sort(),
+    utm: { meta: UTM_META }, pacotes: MODELOS, etiquetas_clickup: [], checklist_itens: ITENS,
+  });
+}
+
+export function demoCadastro(id: number): ProjetoCadastro | null {
+  const p = projeto(id);
+  if (!p) return null;
+  const contas = PROJETO_CONTAS.get(id) ?? [];
+  const pl = PLAN.get(id);
+  return {
+    id: p.id, sigla: p.sigla, nome: p.nome, linha: p.linha, etiqueta_clickup: p.etiqueta_clickup, inicio: p.inicio, fim: p.fim,
+    captacao_inicio: p.captacao_inicio, captacao_fim: p.captacao_fim, evento_inicio: p.evento_inicio, evento_fim: p.evento_fim, ativo: p.ativo,
+    tipo: p.tipo, unidade: p.unidade, tipo_lancamento: p.tipo_lancamento, especialista_id: p.especialista_id,
+    especialista_nome: ESPECIALISTAS.find((e) => e.id === p.especialista_id)?.nome ?? null, status: pl?.status ?? null, gestores: [...(pl?.gestores ?? [])],
+    contas: [...contas], paginas: structuredClone(PAGINAS.get(id) ?? []),
+    sugestoes: CAMPS.map(lerCampanha).filter((c) => c.projeto_id == null && contas.includes(c.conta_id) && nomeTemSigla(c.nome, p.sigla))
+      .map((c) => ({ id: c.id, nome: c.nome, plataforma: c.plataforma, conta_id: c.conta_id, conta: c.conta, status_plataforma: c.status_plataforma })),
+    pacote_fases: MODELOS.filter((m) => m.tipo_lancamento === p.tipo_lancamento).length,
+    fases_planejadas: FASES.filter((f) => f.projeto_id === id).length,
+  };
+}
+
+export function demoSalvarCadastro(f: ProjetoForm): Resposta & { tipo_lancamento?: string | null } {
+  const l = demoListasCadastro();
+  const erro = validarCadastro(l, { ...PROJETO_FORM_VAZIO, ...f });
+  if (erro) return { ok: false, msg: erro };
+  if (PROJETOS.some((p) => p.sigla === f.sigla && p.id !== f.id)) return { ok: false, msg: `Já existe projeto com a sigla ${f.sigla}.` };
+  const avisos: string[] = [];
+  let esp = f.especialista_id;
+  if (esp == null && f.especialista_nome && f.tipo === 'externo') {
+    esp = ESPECIALISTAS.find((e) => e.tipo === 'externo' && e.nome.toLowerCase() === f.especialista_nome.toLowerCase())?.id ?? null;
+    if (esp == null) { esp = ++seq; ESPECIALISTAS.push({ id: esp, nome: f.especialista_nome, tipo: 'externo', unidade: f.unidade }); avisos.push('especialista_cadastrado'); }
+  }
+  const periodo = periodoProjeto(f);
+  const v: ProjetoDemo = {
+    id: f.id ?? ++seq, sigla: f.sigla, nome: f.nome, linha: f.linha, ativo: f.ativo, etiqueta_clickup: f.etiqueta_clickup || null,
+    tipo: f.tipo || null, unidade: f.unidade || null, tipo_lancamento: f.tipo_lancamento || lancamentoAutomatico(l, f.unidade), especialista_id: esp,
+    inicio: periodo.inicio || null, fim: periodo.fim || null, captacao_inicio: f.captacao_inicio || null, captacao_fim: f.captacao_fim || null,
+    evento_inicio: f.evento_inicio || null, evento_fim: f.evento_fim || null,
+  };
+  const i = PROJETOS.findIndex((p) => p.id === v.id);
+  if (i >= 0) PROJETOS[i] = v; else PROJETOS.push(v);
+  const pl = PLAN.get(v.id);
+  PLAN.set(v.id, { status: f.status || null, gestores: [...f.gestores], verba_maxima: pl?.verba_maxima ?? null, verba_diaria: pl?.verba_diaria ?? null,
+    meta_leads: pl?.meta_leads ?? null, meta_receita: pl?.meta_receita ?? null, meta_cpl: pl?.meta_cpl ?? null, meta_pct_mql: pl?.meta_pct_mql ?? null, obs: pl?.obs ?? null });
+  PROJETO_CONTAS.set(v.id, [...f.contas]);
+  return { ok: true, msg: `Projeto ${v.sigla} salvo${NADA}.`, id: v.id, tipo_lancamento: v.tipo_lancamento, avisos };
+}
+
+export function demoSalvarPacote(p: Record<string, unknown>): Resposta {
+  const tipo = String(p.tipo_lancamento ?? ''), fase = String(p.fase ?? '');
+  if (!TIPOS.some((t) => t.codigo === tipo)) return { ok: false, msg: 'Tipo de lançamento fora da lista.' };
+  if (!CONFIG.fases.some((f) => f.codigo === fase)) return { ok: false, msg: 'Fase fora da lista.' };
+  if (MODELOS.some((m) => m.tipo_lancamento === tipo && m.fase === fase && m.id !== Number(p.id))) return { ok: false, msg: 'Este pacote já tem esta fase.' };
+  const n = (k: string) => (p[k] === '' || p[k] == null ? null : Number(p[k]));
+  const v = { tipo_lancamento: tipo, fase, ordem: n('ordem') ?? 1, objetivos: (p.objetivos as string[]) ?? [], pct_verba: n('pct_verba'), dias: n('dias'), obs: (p.obs as string) || null };
+  if (p.id) MODELOS = MODELOS.map((m) => (m.id === Number(p.id) ? { ...m, ...v } : m)); else MODELOS.push({ id: ++seq, ...v });
+  return { ok: true, msg: `Fase do pacote salva${NADA}.`, avisos: [] };
+}
+export function demoApagarPacote(id: number): Resposta { MODELOS = MODELOS.filter((m) => m.id !== id); return { ok: true, msg: `Fase do pacote apagada${NADA}.` }; }
+export function demoAplicarPacote(id: number): Resposta {
+  const p = projeto(id);
+  if (!p) return { ok: false, msg: 'Projeto não encontrado.' };
+  if (!p.tipo_lancamento) return { ok: false, msg: 'Escolha o tipo de lançamento do projeto antes.' };
+  const ms = MODELOS.filter((m) => m.tipo_lancamento === p.tipo_lancamento);
+  if (ms.length === 0) return { ok: false, msg: 'O pacote deste tipo de lançamento ainda não tem conteúdo (modelo vazio).' };
+  const vmax = PLAN.get(id)?.verba_maxima ?? null;
+  let n = 0;
+  for (const m of ms) {
+    if (FASES.some((f) => f.projeto_id === id && f.fase === m.fase)) continue;
+    FASES.push({ id: ++seq, projeto_id: id, fase: m.fase, verba: m.pct_verba != null && vmax != null ? Math.round(vmax * m.pct_verba) / 100 : null,
+      inicio: m.fase === 'captacao' ? p.captacao_inicio : null, fim: m.fase === 'captacao' ? p.captacao_fim : null, obs: 'Do pacote' });
+    n++;
+  }
+  return { ok: true, msg: `${n} fase(s) criada(s) a partir do pacote${NADA}.` };
+}
+
+export function demoChecklist(id: number): Checklist | null {
+  const p = projeto(id);
+  if (!p) return null;
+  const cs = CAMPS.map(lerCampanha).filter((c) => c.projeto_id === id);
+  const pl = PLAN.get(id);
+  const marcas = new Map([...MARCAS].filter(([k]) => k.startsWith(`${id}:`)).map(([k, v]) => [Number(k.split(':')[1]), v]));
+  return montarChecklist({
+    tipo: p.tipo, tipo_lancamento: p.tipo_lancamento, contas: (PROJETO_CONTAS.get(id) ?? []).length, campanhas: cs.length,
+    foraPadrao: cs.filter((c) => c.fora_padrao).length, semFase: cs.filter((c) => c.fase == null).length,
+    produtosHotmart: PRODUTOS.filter((v) => v.projeto_id === id).length, paginas: N_PAGINAS[id] ?? 0, etiqueta: p.etiqueta_clickup,
+    verbaMaxima: pl?.verba_maxima ?? null, fases: FASES.filter((f) => f.projeto_id === id).length,
+    metas: [pl?.meta_leads ?? null, pl?.meta_receita ?? null, pl?.meta_cpl ?? null],
+  }, ITENS, marcas);
+}
+
+export function demoMarcarChecklist(projetoId: number, item: number, feito: boolean): Resposta {
+  const p = projeto(projetoId);
+  const i = ITENS.find((x) => x.id === item && x.ativo && (x.tipo_lancamento == null || x.tipo_lancamento === p?.tipo_lancamento));
+  if (!p || !i) return { ok: false, msg: 'Item do checklist não vale para este projeto.' };
+  if (feito) MARCAS.set(`${projetoId}:${item}`, { em: new Date().toISOString(), por: 'Você (demonstração)' }); else MARCAS.delete(`${projetoId}:${item}`);
+  return { ok: true, msg: `${feito ? 'Item marcado como pronto' : 'Item desmarcado'}${NADA}.` };
+}
+
+export function demoSalvarItemChecklist(p: Record<string, unknown>): Resposta {
+  const texto = String(p.texto ?? '').trim().replace(/\s+/g, ' ');
+  if (texto.length < 3) return { ok: false, msg: 'Texto do item: de 3 a 200 letras.' };
+  const tl = (p.tipo_lancamento as string) || null;
+  if (ITENS.some((x) => x.id !== Number(p.id) && (x.tipo_lancamento ?? '') === (tl ?? '') && x.texto.toLowerCase() === texto.toLowerCase())) {
+    return { ok: false, msg: 'Já existe este item para este tipo de lançamento.' };
+  }
+  const v = { texto, tipo_lancamento: tl, ordem: Number(p.ordem) || 1, ativo: p.ativo !== false };
+  if (p.id) Object.assign(ITENS.find((x) => x.id === Number(p.id))!, v); else ITENS.push({ id: ++seq, ...v });
+  return { ok: true, msg: `Item do checklist salvo${NADA}.` };
 }

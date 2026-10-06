@@ -14,6 +14,10 @@
 //   verba_perto_fim     % da verba ≥ limiar
 //   fora_padrao         campanhas fora do padrão com gasto nos últimos `limiar` dias (inclui as sem projeto)
 //   sem_fase            campanhas do projeto sem fase com gasto nos últimos `limiar` dias
+//   conta_fora_projeto  (20261006a) campanhas com a sigla do projeto no nome gastando nos últimos `limiar` dias numa conta
+//                       que não é do projeto; só avalia projeto com conta ligada
+// Período da meta de leads: a fase de captação planejada com datas; senão o período padrão do projeto (20261006a: a
+// captação do projeto, senão início e fim), como mkt_trafego.periodo_padrao.
 
 import { arredondar } from './kpis';
 import type { Alerta, LinhaResumo, Regra, RegraAlerta } from './tipos';
@@ -23,17 +27,22 @@ const dia = (ymd: string) => Date.UTC(Number(ymd.slice(0, 4)), Number(ymd.slice(
 const dias = (de: string, ate: string) => Math.round((dia(ate) - dia(de)) / DIA_MS);
 
 export interface FaseEntrada { fase: string; nome: string; verba: number | null; inicio: string | null; fim: string | null; gastoAteOntem: number }
-export interface CampanhaEntrada { fora_padrao: boolean; fase: string | null; ultimoGasto: string | null }
+export interface CampanhaEntrada { fora_padrao: boolean; fase: string | null; ultimoGasto: string | null; conta_id?: number; conta?: string }
 export interface ProjetoEntrada {
   linha: Pick<LinhaResumo, 'projeto_id' | 'sigla' | 'nome' | 'investido' | 'verba_maxima' | 'verba_diaria' | 'gasto_ontem' | 'ritmo_ontem'
-    | 'pct_verba' | 'leads' | 'meta_leads' | 'cpl' | 'meta_cpl' | 'inicio' | 'fim'>;
+    | 'pct_verba' | 'leads' | 'meta_leads' | 'cpl' | 'meta_cpl' | 'inicio' | 'fim'> & Pick<Partial<LinhaResumo>, 'captacao_inicio' | 'captacao_fim'>;
   /** Projeto ativo em mkt.projetos e com status que entra no resumo do dia. */
   entra: boolean;
   fases: FaseEntrada[];
   campanhas: CampanhaEntrada[];
+  /** Contas de anúncio do projeto (20261006a). Vazio = a regra conta_fora_projeto não avalia. */
+  contasProjeto?: number[];
+  /** Campanhas com a sigla do projeto no nome (ligadas a ele ou não), com a conta. */
+  campanhasDaSigla?: CampanhaEntrada[];
 }
 
-const ORDEM: RegraAlerta[] = ['acima_verba_diaria', 'cpl_acima_meta', 'leads_abaixo_meta', 'ritmo_fase', 'verba_perto_fim', 'fora_padrao', 'sem_fase'];
+const ORDEM: RegraAlerta[] = ['acima_verba_diaria', 'cpl_acima_meta', 'leads_abaixo_meta', 'ritmo_fase', 'verba_perto_fim', 'fora_padrao', 'sem_fase',
+  'conta_fora_projeto'];
 
 export function calcularAlertas(ontem: string, regras: Regra[], projetos: ProjetoEntrada[], semProjeto: CampanhaEntrada[]): Alerta[] {
   const rg = new Map(regras.filter((r) => r.ligada).map((r) => [r.codigo, r]));
@@ -45,7 +54,7 @@ export function calcularAlertas(ontem: string, regras: Regra[], projetos: Projet
   };
   const recente = (ultimo: string | null, n: number) => ultimo != null && dias(ultimo, ontem) < n;
 
-  for (const { linha: l, entra, fases, campanhas } of projetos) {
+  for (const { linha: l, entra, fases, campanhas, contasProjeto, campanhasDaSigla } of projetos) {
     if (!entra) continue;
     let r = rg.get('acima_verba_diaria');
     if (r && l.investido != null && l.verba_diaria != null && l.verba_diaria > 0 && l.gasto_ontem != null
@@ -59,8 +68,9 @@ export function calcularAlertas(ontem: string, regras: Regra[], projetos: Projet
     r = rg.get('leads_abaixo_meta');
     if (r && l.leads != null && l.meta_leads != null && l.meta_leads > 0) {
       const cap = fases.find((f) => f.fase === 'captacao' && f.inicio && f.fim);
-      const ini = cap ? cap.inicio! : l.inicio;
-      const fim = cap ? cap.fim! : l.fim;
+      const padrao = l.captacao_inicio ? { ini: l.captacao_inicio, fim: l.captacao_fim ?? null } : { ini: l.inicio, fim: l.fim };
+      const ini = cap ? cap.inicio! : padrao.ini;
+      const fim = cap ? cap.fim! : padrao.fim;
       if (ini && fim && ini <= ontem) {
         const esperado = arredondar(l.meta_leads * Math.min(1, (dias(ini, ontem) + 1) / (dias(ini, fim) + 1)), 0);
         if (esperado > 0 && l.leads < esperado * (1 - r.limiar / 100)) {
@@ -93,6 +103,13 @@ export function calcularAlertas(ontem: string, regras: Regra[], projetos: Projet
     if (r) {
       const n = campanhas.filter((c) => c.fase == null && recente(c.ultimoGasto, r!.limiar)).length;
       if (n > 0) add('sem_fase', l, n, null, { dias: r.limiar });
+    }
+    r = rg.get('conta_fora_projeto');
+    if (r && contasProjeto && contasProjeto.length > 0) {
+      const fora = (campanhasDaSigla ?? []).filter((c) => c.conta_id != null && !contasProjeto.includes(c.conta_id) && recente(c.ultimoGasto, r!.limiar));
+      if (fora.length > 0) {
+        add('conta_fora_projeto', l, fora.length, null, { dias: r.limiar, contas: [...new Set(fora.map((c) => c.conta ?? String(c.conta_id)))].sort() });
+      }
     }
   }
   const rf = rg.get('fora_padrao');
@@ -127,6 +144,8 @@ export function textoAlerta(a: Alerta): string {
       return `${pct(a.valor)} da verba máxima já investido${a.valor > 100 ? ' (passou da verba)' : ''}.`;
     case 'fora_padrao':
       return `${int(a.valor)} campanha(s) com nome fora do padrão gastando nos últimos ${int(d.dias)} dias${a.projeto_id == null ? ', sem projeto ligado' : ''}.`;
+    case 'conta_fora_projeto':
+      return `${int(a.valor)} campanha(s) com a sigla do projeto gastando nos últimos ${int(d.dias)} dias em conta que não é do projeto (${(d.contas ?? []).join(', ')}).`;
     case 'sem_fase':
       return `${int(a.valor)} campanha(s) sem fase gastando nos últimos ${int(d.dias)} dias (marque a fase na campanha).`;
     default:

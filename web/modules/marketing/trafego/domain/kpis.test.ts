@@ -119,9 +119,9 @@ describe('comKpis: a linha inteira, como o banco devolve', () => {
 
 describe('filtros e totais', () => {
   const ls = [
-    linha({ projeto_id: 1, sigla: 'PB26', subarea: 'interno', tipo: 'interno', gestores: ['RS', 'CF'], status: 'ativo', investido: 100, verba_maxima: 1000, ritmo_ontem: 150, campanhas_fora_padrao: 1 }),
-    linha({ projeto_id: 2, sigla: 'DIA26', subarea: 'diamante', tipo: 'externo', gestores_campanhas: ['EF'], status: 'pausado', investido: 50 }),
-    linha({ projeto_id: 3, sigla: 'AUR26', subarea: 'aurum', tipo: 'externo', gestores: ['CF'], status: null }),
+    linha({ projeto_id: 1, sigla: 'PB26', subarea: 'interno', tipo: 'interno', unidade: 'csm', gestores: ['RS', 'CF'], status: 'ativo', investido: 100, verba_maxima: 1000, ritmo_ontem: 150, campanhas_fora_padrao: 1 }),
+    linha({ projeto_id: 2, sigla: 'DIA26', subarea: 'diamante', tipo: 'externo', unidade: 'diamantes', gestores_campanhas: ['EF'], status: 'pausado', investido: 50 }),
+    linha({ projeto_id: 3, sigla: 'AUR26', subarea: 'aurum', tipo: 'externo', unidade: 'aurum', gestores: ['CF'], status: null }),
     linha({ projeto_id: 4, sigla: 'OLD25', projeto_ativo: false, status: 'encerrado' }),
   ];
   const siglas = (xs: LinhaResumo[]) => xs.map((x) => x.sigla);
@@ -129,9 +129,11 @@ describe('filtros e totais', () => {
     expect(siglas(filtrar(ls, FILTROS_INICIAIS))).toEqual(['PB26', 'DIA26', 'AUR26']);
     expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, inativos: true }))).toHaveLength(4);
   });
-  it('interno/externo, subárea, gestor (um dos vários do projeto, ou de campanha), status e "sem status"', () => {
+  it('interno/externo, unidade (e "sem unidade"), gestor (um dos vários do projeto, ou de campanha), status e "sem status"', () => {
     expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, tipo: 'externo' }))).toEqual(['DIA26', 'AUR26']);
-    expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, subarea: 'aurum' }))).toEqual(['AUR26']);
+    expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, unidade: 'aurum' }))).toEqual(['AUR26']);
+    expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, unidade: 'csm' }))).toEqual(['PB26']);
+    expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, unidade: 'sem', inativos: true }))).toEqual(['OLD25']);
     expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, gestor: 'EF' }))).toEqual(['DIA26']);
     expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, gestor: 'RS' }))).toEqual(['PB26']);
     expect(siglas(filtrar(ls, { ...FILTROS_INICIAIS, gestor: 'CF' }))).toEqual(['PB26', 'AUR26']);

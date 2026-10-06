@@ -6,8 +6,9 @@
 // (NODE_ENV=production) ele nunca liga, mesmo com a variável.
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
+import type { ListasCadastro, ProjetoCadastro, ProjetoForm } from '../domain/cadastro';
 import type {
-  Campanha, ClickupProjeto, ConfigTrafego, Conta, LinhaResumo, ProdutoHotmart, ProdutoVisto, Resposta, ResumoDia, VidaProjeto,
+  Campanha, Checklist, ClickupProjeto, ConfigTrafego, Conta, LinhaResumo, ProdutoHotmart, ProdutoVisto, Resposta, ResumoDia, VidaProjeto,
 } from '../domain/tipos';
 import * as demo from './demo';
 
@@ -108,3 +109,48 @@ export async function apagarProduto(id: number): Promise<Resposta> {
 /** Atividades do ClickUp do projeto (espelho pela etiqueta). null = sem acesso ou a 20261005r não aplicada. */
 export const carregarClickup = (projeto: number): Promise<ClickupProjeto | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoClickup(projeto)) : rpc<ClickupProjeto>('trafego_clickup', { p_projeto: projeto });
+
+// ─── Cadastro do projeto, pacote e checklist (migration 20261006a) ────────────────────────────────────────────────────
+const falhaA: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261006a ainda não foi aplicada).' };
+
+/** Listas do cadastro (unidades, tipos de lançamento e regras, especialistas, UTM, pacote, etiquetas, checklist). null = sem a 20261006a. */
+export const carregarListasCadastro = (): Promise<ListasCadastro | null> =>
+  MODO_DEMO ? Promise.resolve(demo.demoListasCadastro()) : rpc<ListasCadastro>('trafego_cadastro_listas');
+
+export const carregarCadastro = (projeto: number): Promise<ProjetoCadastro | null> =>
+  MODO_DEMO ? Promise.resolve(demo.demoCadastro(projeto)) : rpc<ProjetoCadastro>('trafego_projeto_cadastro', { p_projeto: projeto });
+
+export interface RespostaProjeto extends Resposta { tipo_lancamento?: string | null; campanhas_relidas?: number }
+export async function salvarProjetoCadastro(f: ProjetoForm): Promise<RespostaProjeto> {
+  const p = { ...f, sigla: f.sigla.trim().toUpperCase(), etiqueta_clickup: f.etiqueta_clickup.trim().toLowerCase(), especialista_nome: f.especialista_nome.trim() };
+  if (MODO_DEMO) return demo.demoSalvarCadastro(p);
+  return (await rpc<RespostaProjeto>('trafego_projeto_salvar', { p })) ?? falhaA;
+}
+
+export interface PacoteForm { id?: number; tipo_lancamento: string; fase: string; ordem: string; objetivos: string[]; pct_verba: string; dias: string; obs: string }
+export async function salvarPacote(p: PacoteForm): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoSalvarPacote({ ...p });
+  return (await rpc<Resposta>('trafego_pacote_salvar', { p })) ?? falhaA;
+}
+export async function apagarPacote(id: number): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoApagarPacote(id);
+  return (await rpc<Resposta>('trafego_pacote_apagar', { p_id: id })) ?? falhaA;
+}
+export async function aplicarPacote(projeto: number): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoAplicarPacote(projeto);
+  return (await rpc<Resposta>('trafego_pacote_aplicar', { p_projeto: projeto })) ?? falhaA;
+}
+
+export const carregarChecklist = (projeto: number): Promise<Checklist | null> =>
+  MODO_DEMO ? Promise.resolve(demo.demoChecklist(projeto)) : rpc<Checklist>('trafego_checklist', { p_projeto: projeto });
+
+export async function marcarChecklist(projeto: number, item: number, feito: boolean): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoMarcarChecklist(projeto, item, feito);
+  return (await rpc<Resposta>('trafego_checklist_marcar', { p_projeto: projeto, p_item: item, p_feito: feito })) ?? falhaA;
+}
+
+export interface ItemChecklistForm { id?: number; texto: string; tipo_lancamento: string; ordem: string; ativo: boolean }
+export async function salvarItemChecklist(p: ItemChecklistForm): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoSalvarItemChecklist({ ...p });
+  return (await rpc<Resposta>('trafego_checklist_item_salvar', { p })) ?? falhaA;
+}

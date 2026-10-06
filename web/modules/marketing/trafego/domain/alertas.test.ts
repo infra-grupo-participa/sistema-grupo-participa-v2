@@ -96,3 +96,34 @@ describe('resumo do dia (mesmas regras do banco)', () => {
     for (const y of a) expect(textoAlerta(y)).not.toMatch(/[—–]/);
   });
 });
+
+describe('20261006a: campanha do projeto em conta de fora e período de captação', () => {
+  const REGRA: Regra = { codigo: 'conta_fora_projeto', nome: 'Campanha do projeto em conta de fora', ligada: true, limiar: 7, unidade: 'dias', gravidade: 'media', descricao: '' };
+  const ZR28: ProjetoEntrada = {
+    linha: { projeto_id: 9, sigla: 'ZR28', nome: 'Projeto Ensaio Contas', investido: 60, verba_maxima: null, verba_diaria: null, gasto_ontem: 60,
+      ritmo_ontem: null, pct_verba: null, leads: null, meta_leads: null, cpl: null, meta_cpl: null, inicio: null, fim: null },
+    entra: true, fases: [], campanhas: [],
+    contasProjeto: [1],
+    campanhasDaSigla: [
+      { fora_padrao: false, fase: 'captacao', ultimoGasto: O, conta_id: 1, conta: 'Conta Ensaio A' },
+      { fora_padrao: false, fase: 'captacao', ultimoGasto: O, conta_id: 2, conta: 'Conta Ensaio B' },
+      { fora_padrao: true, fase: null, ultimoGasto: d(-30), conta_id: 2, conta: 'Conta Ensaio B' },
+    ],
+  };
+  it('1 campanha gastando na Conta Ensaio B (os mesmos números do ensaio da 20261006a)', () => {
+    const a = calcularAlertas(O, [REGRA], [ZR28], []);
+    expect(a.map((x) => [x.regra, x.valor, x.detalhe.contas])).toEqual([['conta_fora_projeto', 1, ['Conta Ensaio B']]]);
+    expect(texto(a[0])).toContain('em conta que não é do projeto (Conta Ensaio B)');
+  });
+  it('sem conta ligada ou com as duas contas: não avalia / não dispara', () => {
+    expect(calcularAlertas(O, [REGRA], [{ ...ZR28, contasProjeto: [] }], [])).toEqual([]);
+    expect(calcularAlertas(O, [REGRA], [{ ...ZR28, contasProjeto: [1, 2] }], [])).toEqual([]);
+  });
+  it('meta de leads sem fase de captação planejada: vale o período de captação do projeto', () => {
+    const leads = REGRAS.find((r) => r.codigo === 'leads_abaixo_meta')!;
+    const p: ProjetoEntrada = { ...ZZ28, fases: [], linha: { ...ZZ28.linha, inicio: d(-30), fim: d(30), captacao_inicio: d(-9), captacao_fim: d(10) } };
+    const a = calcularAlertas(O, [leads], [p], []);
+    expect(a[0].detalhe).toMatchObject({ periodo: 'projeto', inicio: d(-9), fim: d(10) });
+    expect(a[0].referencia).toBe(50);
+  });
+});

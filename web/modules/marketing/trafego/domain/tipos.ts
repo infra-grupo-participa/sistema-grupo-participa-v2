@@ -4,6 +4,7 @@ export type Subarea = 'interno' | 'aurum' | 'diamante';
 export type Tipo = 'interno' | 'externo';
 export type Dono = 'grupo' | 'diamante' | 'aurum';
 
+/** Subárea antiga (mkt.projetos.subarea_trafego): desde a 20261006a é derivada de tipo e unidade. A tela filtra por tipo e unidade. */
 export const ROTULO_SUBAREA: Record<Subarea, string> = { interno: 'Interno', aurum: 'Aurum', diamante: 'Diamantes' };
 export const ROTULO_TIPO: Record<Tipo, string> = { interno: 'Interno', externo: 'Externo' };
 export const ROTULO_DONO: Record<Dono, string> = { grupo: 'Grupo Participa', diamante: 'Diamante', aurum: 'Aluno Aurum' };
@@ -32,7 +33,26 @@ export interface LinhaResumo {
   sigla: string;
   nome: string;
   subarea: Subarea | null;
+  /** Interno ou externo (mkt.projetos.tipo, 20261006a). */
   tipo: Tipo | null;
+  /** Unidade dentro do tipo (csm, escritorio, aurum, diamantes; 20261006a). Nulo = não marcada. */
+  unidade?: string | null;
+  unidade_nome?: string | null;
+  tipo_lancamento?: string | null;
+  tipo_lancamento_nome?: string | null;
+  especialista?: string | null;
+  /** Contas de anúncio ligadas ao projeto (ids de mkt_trafego.contas). */
+  contas_projeto?: number[];
+  /** false = projeto externo: a receita não entra por ora (Victor, 06/10/2026). */
+  receita_aplica?: boolean;
+  /** Período de captação e do evento (20261006a). A captação é o padrão da receita e da meta de leads. */
+  captacao_inicio?: string | null;
+  captacao_fim?: string | null;
+  evento_inicio?: string | null;
+  evento_fim?: string | null;
+  /** Checklist de montagem: itens prontos e itens que se aplicam (20261006a). */
+  checklist_feitos?: number | null;
+  checklist_total?: number | null;
   projeto_ativo: boolean;
   etiqueta_clickup: string | null;
   inicio: string | null;
@@ -174,7 +194,8 @@ export const ROTULO_AVISO: Record<string, string> = {
 // ─── Fase 2 (migration 20261005r) ─────────────────────────────────────────────────────────────────────────────────────
 
 export type RegraAlerta =
-  | 'acima_verba_diaria' | 'cpl_acima_meta' | 'leads_abaixo_meta' | 'ritmo_fase' | 'verba_perto_fim' | 'fora_padrao' | 'sem_fase';
+  | 'acima_verba_diaria' | 'cpl_acima_meta' | 'leads_abaixo_meta' | 'ritmo_fase' | 'verba_perto_fim' | 'fora_padrao' | 'sem_fase'
+  | 'conta_fora_projeto';
 
 /** Regra do resumo do dia, com o limiar da tabela mkt_trafego.alerta_regras. */
 export interface Regra {
@@ -198,6 +219,8 @@ export interface Alerta {
   detalhe: {
     pct?: number | null; fase?: string; fase_nome?: string; direcao?: 'acima' | 'abaixo'; verba?: number; inicio?: string; fim?: string;
     meta?: number; periodo?: 'captacao' | 'projeto'; dias?: number; investido?: number; verba_maxima?: number;
+    /** conta_fora_projeto: nomes das contas de fora onde as campanhas gastaram. */
+    contas?: string[];
   };
 }
 
@@ -244,3 +267,23 @@ export const ROTULO_AVISO_PRODUTO: Record<string, string> = {
   sem_periodo: 'Sem "de" e o projeto sem data de início: este vínculo não soma até ter uma data.',
   produto_sem_compras: 'Nenhuma compra deste produto apareceu ainda na Hotmart (confira o id).',
 };
+
+// ─── Cadastro do projeto (migration 20261006a) ───────────────────────────────────────────────────────────────────────
+
+/** Item do checklist de montagem. Automático: o banco confere (codigo). Manual: alguém marca (id). */
+export interface ItemChecklist {
+  codigo?: string;
+  id?: number;
+  texto: string;
+  /** false = não se aplica a este projeto (fica fora da conta). */
+  aplica: boolean;
+  ok: boolean;
+  detalhe?: string | null;
+  tipo_lancamento?: string | null;
+  marcado_em?: string | null;
+  marcado_por?: string | null;
+}
+
+export interface Checklist { automaticos: ItemChecklist[]; manuais: ItemChecklist[]; feitos: number; total: number }
+
+export interface ItemChecklistConfig { id: number; texto: string; tipo_lancamento: string | null; ordem: number; ativo: boolean }

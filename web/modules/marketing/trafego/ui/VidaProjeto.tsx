@@ -2,7 +2,8 @@
 
 // "A vida do projeto" (clique na linha da Central do Tráfego): investido × verba, ritmo, KPIs × metas, fases planejado ×
 // gasto, campanhas (e as fora do padrão), receita da Hotmart (vínculo de produto, 20261005r) e atividades do ClickUp com o
-// gasto diário (20261005r). Cadastro de planejamento, fases e produtos aqui.
+// gasto diário (20261005r). Cadastro de planejamento, fases e produtos aqui. 20261006a: cadastro do projeto (editar),
+// campanhas sugeridas, pacote, checklist de montagem e gerador de nome de campanha e UTM.
 import { useEffect, useState } from 'react';
 import {
   Badge, Button, ConfirmDialog, DataTable, Drawer, EmptyState, FilterSelect, Input, Loading, Modal, ProgressBar, Row, SectionCard,
@@ -11,10 +12,13 @@ import {
 import { Icon } from '@/shared/ui/icons';
 import { ROTULO_ERRO, type ErroCampanha } from '../../projetos/domain/campanha';
 import { comKpis, esperadoAte, situacaoRitmo } from '../domain/kpis';
-import { ROTULO_AVISO, ROTULO_SUBAREA, type ConfigTrafego, type FaseProjeto, type Resposta, type VidaProjeto as Vida } from '../domain/tipos';
+import { formDoCadastro, type ListasCadastro, type ProjetoCadastro } from '../domain/cadastro';
+import { ROTULO_AVISO, ROTULO_TIPO, type ConfigTrafego, type Conta, type FaseProjeto, type Resposta, type VidaProjeto as Vida } from '../domain/tipos';
 import {
-  ajustarCampanha, apagarFase, carregarProjeto, salvarFase, salvarPlanejamento, type FaseForm, type PlanejamentoForm,
+  ajustarCampanha, apagarFase, carregarCadastro, carregarProjeto, salvarFase, salvarPlanejamento, type FaseForm, type PlanejamentoForm,
 } from '../infrastructure/trafego-data';
+import { CadastroResumo, ChecklistPainel, GeradorCampanha } from './MontagemProjeto';
+import { ModalProjetoCadastro } from './ProjetoCadastro';
 import { ClickupPainel } from './ClickupPainel';
 import { SEM_DADO, centavos, dataBR, inteiro, pct, reais } from './formato';
 import { ProdutosHotmart } from './ProdutosHotmart';
@@ -98,11 +102,15 @@ function ModalPlanejamento({ vida, config, onFechar, onSalvo }: { vida: Vida; co
   );
 }
 
-function ModalFase({ inicial, config, onFechar, onSalvo }: { inicial: FaseForm; config: ConfigTrafego; onFechar: () => void; onSalvo: (m: string) => void }) {
+function ModalFase({ inicial, config, captacao, onFechar, onSalvo }: {
+  inicial: FaseForm; config: ConfigTrafego; captacao?: { inicio: string | null; fim: string | null }; onFechar: () => void; onSalvo: (m: string) => void;
+}) {
   const [f, setF] = useState<FaseForm>(inicial);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const set = (k: keyof FaseForm, v: string) => setF((x) => ({ ...x, [k]: v }));
+  // a fase de captação nova vem com o período de captação do projeto (20261006a); dá para mudar
+  const set = (k: keyof FaseForm, v: string) => setF((x) => (k === 'fase' && v === 'captacao' && !x.id && !x.inicio && !x.fim && captacao?.inicio
+    ? { ...x, fase: v, inicio: captacao.inicio, fim: captacao.fim ?? '' } : { ...x, [k]: v }));
 
   async function salvar() {
     if (!f.fase) { setErro('Escolha a fase.'); return; }
@@ -218,10 +226,12 @@ function Campanhas({ vida, config, flash, onMudou }: { vida: Vida; config: Confi
   );
 }
 
-export function VidaProjeto({ id, config, versao, onFechar, flash, onMudou }: {
-  id: number; config: ConfigTrafego; versao: number; onFechar: () => void; flash: Flash; onMudou: () => void;
+export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flash, onMudou }: {
+  id: number; config: ConfigTrafego; listas: ListasCadastro | null; contas: Conta[]; versao: number; onFechar: () => void; flash: Flash; onMudou: () => void;
 }) {
   const [vida, setVida] = useState<Vida | null | undefined>(undefined);
+  const [cad, setCad] = useState<ProjetoCadastro | null>(null);
+  const [editProjeto, setEditProjeto] = useState(false);
   const [editPlan, setEditPlan] = useState(false);
   const [editFase, setEditFase] = useState<FaseForm | null>(null);
   const [apagar, setApagar] = useState<FaseProjeto | null>(null);
@@ -229,10 +239,11 @@ export function VidaProjeto({ id, config, versao, onFechar, flash, onMudou }: {
   useEffect(() => {
     let vivo = true;
     carregarProjeto(id).then((v) => { if (vivo) setVida(v ? { ...v, resumo: comKpis(v.resumo) } : null); });
+    carregarCadastro(id).then((c) => { if (vivo) setCad(c); });
     return () => { vivo = false; };
   }, [id, versao]);
 
-  const salvo = (msg: string) => { setEditPlan(false); setEditFase(null); flash(msg); onMudou(); };
+  const salvo = (msg: string) => { setEditPlan(false); setEditFase(null); setEditProjeto(false); flash(msg); onMudou(); };
 
   if (vida === undefined) return <Drawer onClose={onFechar} title="Carregando…"><Loading /></Drawer>;
   if (vida === null) {
@@ -249,14 +260,28 @@ export function VidaProjeto({ id, config, versao, onFechar, flash, onMudou }: {
       onClose={onFechar}
       width="max-w-5xl"
       title={<span><span className="font-mono">{r.sigla}</span> · {r.nome}</span>}
-      subtitle={[r.subarea ? ROTULO_SUBAREA[r.subarea] : 'Subárea não marcada', r.gestores.length ? `Gestores ${r.gestores.join(', ')}` : null].filter(Boolean).join(' · ')}
+      subtitle={[r.tipo ? `${ROTULO_TIPO[r.tipo]}${r.unidade_nome ? ` · ${r.unidade_nome}` : ' · unidade não marcada'}` : 'Tipo não marcado',
+        r.tipo_lancamento_nome ?? null, r.gestores.length ? `Gestores ${r.gestores.join(', ')}` : null].filter(Boolean).join(' · ')}
       badges={<>
         {r.status_nome ? <Badge tone={r.status === 'ativo' ? 'success' : 'neutral'}>{r.status_nome}</Badge> : <Badge>Sem status</Badge>}
         {r.campanhas_fora_padrao > 0 && <Badge tone="warning">{r.campanhas_fora_padrao} fora do padrão</Badge>}
       </>}
-      actions={<Button size="sm" variant="subtle" onClick={() => setEditPlan(true)}><Icon name="pencil" size={12} /> Planejamento</Button>}
+      actions={<div className="flex gap-2">
+        {cad && listas && <Button size="sm" variant="subtle" onClick={() => setEditProjeto(true)}><Icon name="pencil" size={12} /> Projeto</Button>}
+        <Button size="sm" variant="subtle" onClick={() => setEditPlan(true)}><Icon name="pencil" size={12} /> Planejamento</Button>
+      </div>}
     >
       <div className="space-y-5">
+        {cad && listas && (
+          <SectionCard title="Cadastro do projeto" subtitle="Tipo, unidade, lançamento, especialista, períodos e contas de anúncio. Editar no botão Projeto.">
+            <CadastroResumo cad={cad} listas={listas} contas={contas} flash={flash} onMudou={onMudou} />
+          </SectionCard>
+        )}
+        {listas && (
+          <SectionCard title="Checklist de montagem" subtitle="O que falta para o projeto ficar pronto: o sistema confere os automáticos; os manuais alguém marca.">
+            <ChecklistPainel projetoId={r.projeto_id} versao={versao} flash={flash} onMudou={onMudou} />
+          </SectionCard>
+        )}
         <SectionCard title="Investido × verba">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -280,7 +305,7 @@ export function VidaProjeto({ id, config, versao, onFechar, flash, onMudou }: {
 
         <SectionCard title="Indicadores × metas" subtitle="Lead = lead da nossa base de pessoas. Leads da plataforma ficam só nas campanhas.">
           <div className="grid gap-x-6 sm:grid-cols-2">
-            <Row k="Receita gerada" v={`${reais(r.receita)} · meta ${reais(r.meta_receita)}`} />
+            <Row k="Receita gerada" v={r.receita_aplica === false ? 'não se aplica (externo)' : `${reais(r.receita)} · meta ${reais(r.meta_receita)}`} />
             <Row k="Leads" v={`${inteiro(r.leads)} · meta ${inteiro(r.meta_leads)}`} />
             <Row k="CPL" v={`${centavos(r.cpl)} · meta ${centavos(r.meta_cpl)}`} />
             <Row k="% MQL" v={`${pct(r.pct_mql)} · meta ${pct(r.meta_pct_mql)}`} />
@@ -296,6 +321,7 @@ export function VidaProjeto({ id, config, versao, onFechar, flash, onMudou }: {
 
         <SectionCard title="Fases: planejado × gasto" subtitle="A fase da campanha sai do objetivo do nome (LEADS e VENDAS = captação; AQUECIMENTO; LEMBRETE; REMARKETING; CARRINHO = abertura de carrinho). A correção à mão na campanha prevalece. DISTRIBUIÇÃO fica sem fase até alguém marcar."
           right={<Button size="sm" onClick={() => setEditFase({ projeto_id: r.projeto_id, fase: '', verba: '', inicio: '', fim: '', obs: '' })}><Icon name="plus" size={14} /> Nova fase</Button>}>
+          {r.captacao_inicio && <p className="mb-2 text-xs text-[var(--fg-3)]">Fase de captação sem data: vale o período de captação do projeto ({dataBR(r.captacao_inicio)} a {dataBR(r.captacao_fim)}) como padrão.</p>}
           <Fases vida={vida} onApagar={setApagar} onEditar={(f) => setEditFase({
             id: f.id ?? undefined, projeto_id: r.projeto_id, fase: f.fase, verba: txt(f.verba), inicio: f.inicio ?? '', fim: f.fim ?? '', obs: f.obs ?? '',
           })} />
@@ -305,9 +331,19 @@ export function VidaProjeto({ id, config, versao, onFechar, flash, onMudou }: {
           <Campanhas vida={vida} config={config} flash={flash} onMudou={onMudou} />
         </SectionCard>
 
-        <SectionCard title="Receita gerada (Hotmart)" subtitle="Compras aprovadas dos produtos ligados a este projeto, no período. O vínculo é cadastrado à mão.">
-          <ProdutosHotmart resumo={r} versao={versao} flash={flash} onMudou={onMudou} />
-        </SectionCard>
+        {listas && cad && (
+          <SectionCard title="Gerador de nome de campanha e UTM" subtitle="Monta o nome no padrão GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA e a linha de parâmetros do Meta.">
+            <GeradorCampanha sigla={r.sigla} listas={listas} config={config} paginas={cad.paginas} gestoresProjeto={r.gestores} />
+          </SectionCard>
+        )}
+
+        {r.receita_aplica === false ? (
+          <SectionCard title="Receita gerada (Hotmart)"><p className="text-sm text-[var(--fg-3)]">Não se aplica: a receita dos projetos externos não entra por ora (Victor, 06/10/2026).</p></SectionCard>
+        ) : (
+          <SectionCard title="Receita gerada (Hotmart)" subtitle="Compras aprovadas dos produtos ligados a este projeto, no período (sem período no vínculo: a captação do projeto). O vínculo é cadastrado à mão.">
+            <ProdutosHotmart resumo={r} versao={versao} flash={flash} onMudou={onMudou} />
+          </SectionCard>
+        )}
 
         <SectionCard title="Atividades do ClickUp e gasto diário" subtitle="O que a equipe fez (pela etiqueta do projeto) no mesmo eixo do gasto, para ver o efeito de cada ação.">
           <ClickupPainel projetoId={r.projeto_id} serie={vida.serie} ate={config.dia_ontem} versao={versao} />
@@ -315,7 +351,10 @@ export function VidaProjeto({ id, config, versao, onFechar, flash, onMudou }: {
       </div>
 
       {editPlan && <ModalPlanejamento vida={vida} config={config} onFechar={() => setEditPlan(false)} onSalvo={salvo} />}
-      {editFase && <ModalFase inicial={editFase} config={config} onFechar={() => setEditFase(null)} onSalvo={salvo} />}
+      {editFase && <ModalFase inicial={editFase} config={config} captacao={{ inicio: r.captacao_inicio ?? null, fim: r.captacao_fim ?? null }} onFechar={() => setEditFase(null)} onSalvo={salvo} />}
+      {editProjeto && cad && listas && (
+        <ModalProjetoCadastro inicial={formDoCadastro(cad)} listas={listas} config={config} contas={contas} onFechar={() => setEditProjeto(false)} onSalvo={salvo} />
+      )}
       {apagar && apagar.id != null && (
         <ConfirmDialog
           title="Apagar fase"

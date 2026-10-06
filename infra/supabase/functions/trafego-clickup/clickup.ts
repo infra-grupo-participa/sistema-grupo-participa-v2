@@ -113,3 +113,41 @@ export async function coletarClickup(etiquetas: string[], d: DepsClickup): Promi
   }
   return res;
 }
+
+// ─── Etiquetas reais dos spaces (20261006a): para a tela escolher a etiqueta do projeto em vez de digitar ──────────
+//   GET https://api.clickup.com/api/v2/team/<workspace>/space?archived=false   → { spaces: [{ id }] }
+//   GET https://api.clickup.com/api/v2/space/<space>/tag                        → { tags: [{ name }] }
+// Só leitura. Uma falha em qualquer chamada = erro (a lista no banco fica como estava).
+
+export const urlSpaces = (team: string) => `${BASE}/team/${encodeURIComponent(team)}/space?archived=false`;
+export const urlTagsSpace = (space: string) => `${BASE}/space/${encodeURIComponent(space)}/tag`;
+
+async function getJson(buscar: Buscar, token: string, url: string): Promise<unknown> {
+  let r;
+  try {
+    r = await buscar(url, { headers: { Authorization: token } });
+  } catch {
+    throw new ErroClickup('rede');
+  }
+  if (!r.ok) throw new ErroClickup(`http_${r.status}`);
+  try {
+    return await r.json();
+  } catch {
+    throw new ErroClickup('json');
+  }
+}
+
+/** Todas as etiquetas (em minúsculas, sem repetição, em ordem) dos spaces não arquivados do workspace. */
+export async function lerEtiquetasDosSpaces(buscar: Buscar, token: string, team: string): Promise<string[]> {
+  const sp = (await getJson(buscar, token, urlSpaces(team))) as { spaces?: { id?: string | number }[] };
+  const nomes = new Set<string>();
+  for (const s of sp.spaces ?? []) {
+    if (s?.id == null) continue;
+    const tg = (await getJson(buscar, token, urlTagsSpace(String(s.id)))) as { tags?: { name?: string }[] };
+    for (const t of tg.tags ?? []) {
+      const n = (t?.name ?? '').trim().toLowerCase();
+      if (n) nomes.add(n);
+    }
+  }
+  return [...nomes].sort();
+}

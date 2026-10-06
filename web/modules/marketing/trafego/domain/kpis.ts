@@ -103,7 +103,8 @@ export function comKpis<T extends Pick<LinhaResumo, Totais>>(l: T): T & Pick<Lin
 
 export interface FiltrosCentral {
   tipo: '' | Tipo;
-  subarea: '' | Subarea;
+  /** Código da unidade (csm, escritorio, aurum, diamantes); 'sem' = sem unidade marcada. */
+  unidade: string;
   /** Sigla do gestor (CF, RS, EF): casa com um dos gestores do projeto OU com o de alguma campanha do projeto. */
   gestor: string;
   /** Código do status; 'sem' = sem status marcado. */
@@ -112,13 +113,13 @@ export interface FiltrosCentral {
   inativos: boolean;
 }
 
-export const FILTROS_INICIAIS: FiltrosCentral = { tipo: '', subarea: '', gestor: '', status: '', inativos: false };
+export const FILTROS_INICIAIS: FiltrosCentral = { tipo: '', unidade: '', gestor: '', status: '', inativos: false };
 
 export function filtrar(linhas: LinhaResumo[], f: FiltrosCentral): LinhaResumo[] {
   return linhas.filter((l) => {
     if (!f.inativos && !l.projeto_ativo) return false;
     if (f.tipo && l.tipo !== f.tipo) return false;
-    if (f.subarea && l.subarea !== f.subarea) return false;
+    if (f.unidade === 'sem' ? (l.unidade ?? null) !== null : f.unidade && l.unidade !== f.unidade) return false;
     if (f.gestor && !l.gestores.includes(f.gestor) && !l.gestores_campanhas.includes(f.gestor)) return false;
     if (f.status === 'sem' ? l.status !== null : f.status && l.status !== f.status) return false;
     return true;

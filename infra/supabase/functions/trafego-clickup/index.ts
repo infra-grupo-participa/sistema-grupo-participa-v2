@@ -1,12 +1,13 @@
 // trafego-clickup: espelho mínimo das tarefas do ClickUp por etiqueta de projeto (migration 20261005r). NASCE
 // DESLIGADA: nenhum cron chama esta Edge até o Victor decidir o token (como ligar: bloco LIGAR da migration e
-// docs/central-de-dados.md, seção Tráfego). SÓ LEITURA no ClickUp.
+// docs/central-de-dados.md, seção Tráfego). SÓ LEITURA no ClickUp. Desde a 20261006a também lê as etiquetas dos spaces
+// (public.trafego_clickup_etiquetas_receber), para a tela escolher a etiqueta do projeto.
 // Quem chama: o cron trafego-clickup, pelo ops.cron_post, com o header x-sync-chave (= Vault trafego_coleta_chave).
 // Entra no banco como postgres (SUPABASE_DB_URL): token (Vault clickup_api_token) e workspace
 // (mkt_trafego.coleta_config clickup_team_id) por mkt_trafego.clickup_credenciais; etiquetas dos projetos ativos por
 // mkt_trafego.clickup_etiquetas; grava por public.trafego_clickup_receber. Nunca registra o token.
 import postgres from 'npm:postgres@3.4.4';
-import { coletarClickup } from './clickup.ts';
+import { ErroClickup, coletarClickup, lerEtiquetasDosSpaces } from './clickup.ts';
 
 const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 2, prepare: false, idle_timeout: 20 });
 
@@ -44,8 +45,19 @@ Deno.serve(async (req) => {
     team: String(cred.team_id),
     receber: async (p) => (await sql`select public.trafego_clickup_receber(${JSON.stringify(p)}::jsonb) as r`)[0].r,
   });
-  const ok = res.every((r) => r.ok);
-  const erro = ok ? null : res.filter((r) => !r.ok).map((r) => `${r.etiqueta}: ${r.erro}`).join('; ').slice(0, 480);
-  await sql`select mkt_trafego.coleta_registrar('clickup', ${ok}, ${JSON.stringify({ etiquetas: res })}::jsonb, ${erro})`;
-  return json({ ok, etiquetas: res });
+  // etiquetas reais dos spaces (20261006a), para a tela escolher a etiqueta do projeto; falha aqui não derruba as tarefas
+  let espacos: { ok: boolean; erro?: string; gravadas?: number; fora_do_formato?: number };
+  try {
+    const todas = await lerEtiquetasDosSpaces((url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(20_000) }),
+      String(cred.token), String(cred.team_id));
+    const r = (await sql`select public.trafego_clickup_etiquetas_receber(${JSON.stringify({ etiquetas: todas })}::jsonb) as r`)[0].r;
+    espacos = r?.ok === false ? { ok: false, erro: 'banco' } : { ok: true, gravadas: r?.gravadas, fora_do_formato: r?.fora_do_formato };
+  } catch (e) {
+    espacos = { ok: false, erro: e instanceof ErroClickup ? e.codigo : 'falha' };
+  }
+  const ok = res.every((r) => r.ok) && espacos.ok;
+  const erro = ok ? null : [...res.filter((r) => !r.ok).map((r) => `${r.etiqueta}: ${r.erro}`),
+    ...(espacos.ok ? [] : [`etiquetas dos spaces: ${espacos.erro}`])].join('; ').slice(0, 480);
+  await sql`select mkt_trafego.coleta_registrar('clickup', ${ok}, ${JSON.stringify({ etiquetas: res, espacos })}::jsonb, ${erro})`;
+  return json({ ok, etiquetas: res, espacos });
 });

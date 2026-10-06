@@ -6,7 +6,7 @@ import {
   coletarConta, coletarMeta, hojeSaoPaulo, leadsDasAcoes, lerPaginas, paraCampanhas, paraDesempenho, periodo, urlInsights,
   type ContaMeta, type LinhaCampanha, type LinhaDesempenho,
 } from '../../../../../infra/supabase/functions/trafego-meta/meta';
-import { coletarClickup, msParaIso, paraEspelho, urlTarefas, type TarefaEspelho } from '../../../../../infra/supabase/functions/trafego-clickup/clickup';
+import { coletarClickup, lerEtiquetasDosSpaces, msParaIso, paraEspelho, urlTarefas, type TarefaEspelho } from '../../../../../infra/supabase/functions/trafego-clickup/clickup';
 import { consultaGaql, paraEntrada } from '../../../../../infra/supabase/functions/trafego-google/google';
 import campanhasP1 from '../../../../../infra/supabase/functions/_trafego-fixtures/meta-campanhas-p1.json';
 import campanhasP2 from '../../../../../infra/supabase/functions/_trafego-fixtures/meta-campanhas-p2.json';
@@ -177,6 +177,23 @@ describe('leitura do ClickUp (respostas simuladas, só leitura)', () => {
     ]);
     expect(gravados.map((g) => [g.etiqueta, g.tarefas.map((t) => t.id)])).toEqual([['zz-ensaio-r', ['86ensaio1', '86ensaio2', '86ensaio3']]]);
     expect(pedidos.every((p) => p.startsWith('pk_ficticio|https://api.clickup.com/api/v2/team/9000001/task?'))).toBe(true);
+  });
+
+  it('20261006a: etiquetas reais dos spaces (só GET), minúsculas, sem repetição; falha = erro', async () => {
+    const pedidos: string[] = [];
+    const buscar = async (url: string) => {
+      pedidos.push(url);
+      if (url.endsWith('/team/9000001/space?archived=false')) return resp({ spaces: [{ id: '901' }, { id: 902 }] });
+      if (url.endsWith('/space/901/tag')) return resp({ tags: [{ name: 'zz-ensaio-b' }, { name: 'ZZ-Ensaio-A' }] });
+      if (url.endsWith('/space/902/tag')) return resp({ tags: [{ name: 'zz-ensaio-a' }, { name: '' }] });
+      return resp({}, 404);
+    };
+    expect(await lerEtiquetasDosSpaces(buscar, 'pk_ficticio', '9000001')).toEqual(['zz-ensaio-a', 'zz-ensaio-b']);
+    expect(pedidos).toEqual([
+      'https://api.clickup.com/api/v2/team/9000001/space?archived=false',
+      'https://api.clickup.com/api/v2/space/901/tag', 'https://api.clickup.com/api/v2/space/902/tag',
+    ]);
+    await expect(lerEtiquetasDosSpaces(async () => resp({}, 401), 'pk_ficticio', '9000001')).rejects.toThrow('http_401');
   });
 });
 

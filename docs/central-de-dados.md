@@ -124,12 +124,13 @@ primeiro). Usam essa leitura: aba Origem, achados por criativo, connect rate (`m
 ## Base compartilhada (Marketing)
 
 Fase 1 da central de dados (decisões de 05/10/2026, `area-web-radar.md` no cérebro). É o cadastro que Web, Tráfego
-e Mensageria leem; não é área. **Migration `infra/supabase/migrations/20261005m_mkt_base_compartilhada.sql`, NÃO
-APLICADA** (ensaio `20261005m_ensaio.sql`, explicação `20261005m.explain.md`).
+e Mensageria leem; não é área. **Migration `infra/supabase/migrations/20261005m_mkt_base_compartilhada.sql`, JÁ
+APLICADA** (ensaio `20261005m_ensaio.sql`, explicação `20261005m.explain.md`). Não se edita mais: mudança nela vai numa
+migration nova (a 20261006a acrescenta tipo, unidade, tipo de lançamento, especialista e períodos em `mkt.projetos`).
 
 | Peça | Onde | O que é |
 |---|---|---|
-| Projetos | `mkt.projetos` | Tabela de projetos ÚNICA. **Projeto = edição**; chave = sigla do nome de campanha (`PB26`, `HT33`, `SEMSET26`, `BF26`). Nome, tipo/linha, edição, ano, etiqueta do ClickUp (texto exato), subárea do Tráfego (interno/aurum/diamante), início/fim, ativo |
+| Projetos | `mkt.projetos` | Tabela de projetos ÚNICA. **Projeto = edição**; chave = sigla do nome de campanha (`PB26`, `HT33`, `SEMSET26`, `BF26`). Nome (livre), tipo/linha, edição, ano, etiqueta do ClickUp (texto exato, a chave única do gp-operacoes), início/fim, ativo. Desde a 20261006a: tipo (interno/externo), unidade, tipo de lançamento, especialista, períodos de captação e do evento; a subárea (interno/aurum/diamante) virou derivada |
 | Páginas | `mkt.paginas` | Páginas de cada projeto: código da casa (`ak1`, `bl2`, `ak1-b`; opcional), domínio + caminho, função (captura, obrigado, quase_la, pesquisa, venda, outra), funil (texto curto), ativa |
 | Listas do nome de campanha | `mkt.campanha_gestores`, `mkt.campanha_objetivos` | Gestores `CF`, `RS`, `EF`; objetivos `LEADS`, `VENDAS`, `REMARKETING`, `LEMBRETE`, `DISTRIBUIÇÃO` |
 | Tradução do nome de campanha | `mkt.campanha_traduzir(text)` e `web/modules/marketing/projetos/domain/campanha.ts` | `GESTOR \| PROJETO \| OBJETIVO \| DESCRIÇÃO \| PÁGINA` → campos + erros ("fora do padrão") + avisos. A mesma regra nos dois lados |
@@ -419,6 +420,10 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 > **Fase 2** (05/10/2026, mesma branch): migration `20261005r_mkt_trafego_fase2.sql`, **NÃO APLICADA** (depende da
 > 20261005p; ensaio `20261005r_ensaio.sql`; o que foi medido em `20261005r.explain.md`). Resumo do dia, receita da
 > Hotmart, atividades do ClickUp e a coleta Meta Ads (Edge pronta, **desligada**). Detalhe em "Fase 2" abaixo.
+> **Cadastro do projeto** (06/10/2026, mesma branch): migration `20261006a_mkt_projetos_cadastro.sql`, **NÃO APLICADA**
+> (depende da 20261005p e da 20261005r; ensaio `20261006a_ensaio.sql`; o que foi medido em `20261006a.explain.md`). Tipo e
+> unidade, tipo de lançamento, especialista, contas do projeto, períodos, pacote, checklist de montagem e gerador de nome
+> e UTM. Detalhe em "Cadastro do projeto" abaixo.
 
 ### Situação
 
@@ -432,6 +437,7 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 | Receita (Hotmart) | ligada pelo vínculo produto → projeto, **cadastrado à mão** na vida do projeto (20261005r, não aplicada). Sem vínculo, "sem dado" |
 | Connect rate e conversão da página | **ligados** no banco à Web fase 2 (20261005q, a mesma conta de `public.mkt_web_connect`). Sem a 20261005q aplicada, "sem dado" com aviso na tela |
 | Atividades do ClickUp | espelho pela etiqueta do projeto e linha do tempo junto do gasto diário (20261005r, não aplicada). Rotina `trafego-clickup` pronta, **DESLIGADA** (falta o token e o id do workspace) |
+| Cadastro do projeto (evento) | tela pronta na Central (botão "Novo projeto" e "Projeto" na vida do projeto), banco escrito e ensaiado (20261006a, **não aplicada**); hoje dá para ver no modo demo |
 
 ### Decisões que mandam aqui (Victor, 05/10/2026)
 
@@ -462,6 +468,8 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
   `mkt.campanha_traduzir` reconhece porque lê a lista. Na tela "Testar nome de campanha" (Marketing > Projetos e páginas)
   passam a valer depois de aplicar a 20261005p.
 - **Status do projeto marcado à mão.** Verba, fases e metas preenchidas por Arthur, Victor e Caio (no banco: admin/dev).
+  **Pendente (06/10/2026):** gestores e Arthur editam verba, fases e metas, depende do novo modelo de acesso do sistema
+  (o Victor vai redefinir os níveis de acesso do sistema inteiro). Por ora, só admin/dev.
 - **Lead que conta é o da nossa base** (`pessoas.eventos`, 20261005o): pessoas distintas com evento `lead` no projeto, sem
   pessoa de teste nem mesclada. Os leads que a plataforma informa ficam só na campanha.
 - **"Quanto gerado" = receita** (Hotmart). Na fase 2: soma das compras aprovadas dos produtos ligados à mão ao projeto
@@ -497,7 +505,7 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
 
 ### Telas (`/marketing/trafego`, só admin e dev)
 
-- **Projetos:** a tabela da Central com os filtros interno/externo, subárea (Interno, Aurum, Diamantes), gestor (CF, RS, EF,
+- **Projetos:** a tabela da Central com os filtros interno/externo, unidade (CSM, Escritório, Aurum, Diamantes, "sem unidade"; 20261006a), gestor (CF, RS, EF,
   da lista do banco; casa com um dos gestores do projeto ou com o de alguma campanha), situação (status) e projetos
   desativados.
   Cartões: investido, verba, projetos acima da verba diária ontem, campanhas fora do padrão.
@@ -512,6 +520,9 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
 - **Campanhas fora do padrão:** o nome exato, o que está fora, ligar à mão a um projeto, "Reler os nomes" (depois de
   cadastrar projeto ou página em Marketing > Projetos e páginas). Opção "só as sem projeto".
 - **Contas de anúncio:** cadastro e edição.
+- **Novo projeto / Projeto (20261006a):** o cadastro do evento (ver "Cadastro do projeto"). Na tabela, coluna Montagem (x
+  de y itens do checklist prontos); na vida do projeto, cadastro, campanhas sugeridas, checklist e gerador de nome e UTM.
+- **Pacotes e checklist (20261006a):** o modelo de fases por tipo de lançamento (vazio) e os itens manuais do checklist.
 
 ### Testar localmente
 
@@ -544,7 +555,8 @@ produtos da Hotmart de cada projeto e, quando decidir os tokens, ligar as rotina
 4. Resumo do dia: **feito** (20261005r, não aplicada), com limiares a confirmar. Alerta fora da tela (Slack, e-mail): não feito.
 5. MCP da central com os dados do Tráfego (fora desta fase).
 6. Importação do histórico (planilhas que o Victor escolher; fora desta fase).
-7. Externos (Aurum, Diamantes): fora desta fase, esperando a decisão.
+7. Externos (Aurum, Diamantes): estrutura decidida em 06/10/2026 (tipo externo, unidade Aurum ou Diamantes) e no
+   cadastro (20261006a); a sigla deles no nome de campanha segue em aberto.
 
 ### Fase 2 (migration 20261005r, NÃO APLICADA)
 
@@ -560,7 +572,8 @@ configurável e está nas perguntas.
 | Coleta Meta Ads | Edge `trafego-meta` (`meta.ts` puro + `index.ts`); `mkt_trafego.meta_contas`, `coleta_config`, `coletas` | Para cada conta Meta ativa: campanhas (nome exato e status) e insights por campanha e dia (`spend`, `impressions`, `inline_link_clicks` = cliques no link, `clicks` = totais, ação `lead` = leads da plataforma) dos últimos `meta_dias` (3) dias completos e hoje; grava pelos `receber` da 20261005p (campanhas antes, upsert idempotente). Token só no header; falha por conta vira código curto em `mkt_trafego.coletas` |
 | Google Ads | `infra/supabase/functions/trafego-google/google.ts` | Só o esqueleto (GAQL e conversão de micros), sem `index.ts`. Desenho abaixo |
 
-**Limiares iniciais (proposta minha, a confirmar):**
+**Limiares (confirmados pelo Victor em 06/10/2026: verba diária, CPL, ritmo da fase e 90 % da verba; os avisos de leads
+abaixo da meta e de campanha fora do padrão/sem fase ficam ligados, e o Victor não comentou esses dois):**
 
 | Regra | Dispara quando | Limiar | Gravidade |
 |---|---|---|---|
@@ -571,6 +584,7 @@ configurável e está nas perguntas.
 | % da verba perto do fim | % da verba ≥ limiar | 90 % | média |
 | Campanhas fora do padrão | fora do padrão com gasto nos últimos N dias (inclui sem projeto) | 7 dias | média |
 | Campanhas sem fase | sem fase com gasto nos últimos N dias | 7 dias | média |
+| Campanha do projeto em conta de fora (20261006a) | campanha com a sigla do projeto gastando nos últimos N dias numa conta que não é do projeto; só avalia projeto com conta ligada | 7 dias | média |
 
 Mudar: `update mkt_trafego.alerta_regras set limiar = 30 where codigo = 'ritmo_fase';` (ou `ligada = false`).
 
@@ -603,6 +617,86 @@ access token, chama `POST https://googleads.googleapis.com/<versão>/customers/<
 consulta de `consultaGaql` (campanha × dia: custo em micros, impressões, cliques) e grava pelos mesmos `receber`. Decisão
 pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); totais e leads ficam nulos.
 
+### Cadastro do projeto (migration 20261006a, NÃO APLICADA)
+
+`infra/supabase/migrations/20261006a_mkt_projetos_cadastro.sql` + `_ensaio.sql` + `20261006a.explain.md`. Depende da
+20261005p e da 20261005r (aplicar m, p, r e só então esta). A 20261005m já aplicada não foi editada: as colunas novas de
+`mkt.projetos` entram por `alter table` e um gatilho.
+
+**Decisões do Victor (06/10/2026):**
+
+- **Estrutura:** projeto **interno** ou **externo**. Interno: unidade **CSM** (CSM Academy, o educacional) ou
+  **Escritório** (escritório de advocacia). Externo: **Aurum** ou **Diamantes**. Substitui a subárea plana; os filtros
+  da Central são tipo e unidade. Migração sem perda: subárea interno → interno sem unidade (CSM ou Escritório não está em
+  fonte nenhuma; quem sabe marca na tela); aurum → externo Aurum; diamante → externo Diamantes; sem subárea → sem tipo.
+  A subárea continua na tabela, derivada de tipo e unidade (a tela `/marketing/projetos` e o resumo da 20261005p a leem).
+- **Tipos de lançamento** (tabela `mkt.tipos_lancamento`, regras em `mkt.lancamento_regras`; o banco recusa combinação
+  fora da regra, a tela só oferece o que vale):
+
+  | Unidade | Tipos de lançamento |
+  |---|---|
+  | CSM | Lançamento clássico, Lançamento pago, Lançamento pago semanal gravado (LPSG), ATM |
+  | Escritório | Lançamento clássico, LPSG, ATM (**lançamento pago só existe na CSM**) |
+  | Diamantes | Lançamento clássico, Lançamento pago |
+  | Aurum | Palestra (fixo, preenchido sozinho) |
+
+  "Lançamento gratuito" = lançamento clássico. **Perpétuo saiu** do interno (Victor, 06/10). **ATM** = ação curta para a
+  base antiga/existente, sem captação nova (por ora é só ter o tipo). Projeto só de distribuição de conteúdo NÃO é tipo
+  de lançamento (pergunta abaixo); campanha de distribuição dentro de um projeto já existe (objetivo DISTRIBUIÇÃO).
+- **Especialista** (`mkt.especialistas`): interno = lista (semente: Marcio Carvalho de Sá e Elaine Montenegro; mais por
+  SQL); externo = a pessoa/cliente do Aurum ou Diamantes, cadastrada na hora pela tela (nada semeado).
+- **Nome do projeto é livre** (ex.: Seminário de setembro, Patrimônio Brasil, Seminário Conjunto, Black Friday, HT
+  Delegado). Nenhum projeto novo semeado.
+- **Etiqueta do ClickUp = o projeto** (a chave única do gp-operacoes, `modus-operandi/padronizacao-de-repositorio.md`:
+  minúsculo, sem acento, hífen, ano-mês no fim quando é edição datada; a mesma string na pasta, na etiqueta, no canal e
+  no `utm_campaign` dos disparos). A tela valida o formato (recusa fora dele; edição com data sem `-aaaa-mm` só avisa).
+  Quando a rotina `trafego-clickup` tiver token e rodar, ela também lê as etiquetas reais dos spaces do workspace (só
+  leitura: `GET /team/{id}/space` e `GET /space/{id}/tag`) para `mkt_trafego.clickup_etiquetas_vistas`, e a tela passa a
+  oferecer a escolha entre elas; sem isso, texto.
+- **Períodos:** período de **captação** e período do **evento**, separados. O início/fim de antes continua como o período
+  do projeto inteiro: o gatilho calcula do começo mais cedo ao fim mais tarde quando algum período novo é preenchido; sem
+  período novo, a data de antes fica (não se sabe se era de captação ou de evento). A captação é o **padrão** da fase de
+  captação (pacote, "Nova fase" na tela, meta de leads do resumo do dia) e da receita quando o vínculo de produto não tem
+  período (`mkt_trafego.periodo_padrao`, criada na 20261005r e trocada pela 20261006a).
+- **Contas de anúncio do projeto** (`mkt_trafego.projeto_contas`): sugerem campanhas da conta com a sigla no nome (palavra
+  inteira) e sem projeto, para ligar com um clique; criar o projeto (ou trocar a sigla) relê as campanhas e liga as que
+  estão no padrão com a sigla; e o resumo do dia avisa quando uma campanha com a sigla gasta numa conta que não é do
+  projeto (regra `conta_fora_projeto`, 7 dias, média).
+- **Gestores:** CF, RS e EF; qualquer gestor opera interno ou externo (sem restrição).
+- **Receita dos externos não entra** por ora: projeto externo mostra "não se aplica".
+- **Pacote da campanha:** só o mecanismo, **vazio** (`mkt_trafego.pacote_modelos`: fases, objetivos esperados, % da
+  verba, dias por tipo de lançamento; aba "Pacotes e checklist"). "Montar fases do pacote" cria no planejamento as fases
+  que faltam (captação com o período de captação).
+- **Gerador de nome de campanha e UTM** (vida do projeto): gestor, objetivo, descrição e página opcional →
+  `GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA` (conferido pela mesma tradução do banco) e a linha de parâmetros do
+  Meta, com botão de copiar. Parâmetros em `mkt_trafego.utm_parametros` (muda por SQL):
+  `utm_source=metaads&utm_campaign={{campaign.name}}|{{campaign.id}}&utm_medium={{adset.name}}|{{adset.id}}&utm_content={{ad.name}}|{{ad.id}}&utm_term={{placement}}`.
+  Macros conferidas na documentação do Meta (parâmetros de URL dinâmicos) e em guias que a citam; a página oficial não
+  abriu fora do navegador, então a tabela é configurável. Google: sem linha (fica como está). UTM: nada mudou.
+- **Checklist de montagem** (vida do projeto e coluna Montagem na Central, x de y): itens **automáticos** que o banco
+  confere (contas de anúncio vinculadas; campanhas com a sigla; nenhuma fora do padrão e fase de cada campanha, quando há
+  campanha; produtos da Hotmart, não se aplica a externo; páginas cadastradas; etiqueta do ClickUp; verba máxima; fases
+  planejadas; metas de leads, receita ou CPL) e itens **manuais** (`mkt_trafego.checklist_itens`, por tipo de lançamento
+  ou para todos; a pessoa marca e desmarca, guardando quem e quando). Semente manual: só "Automação de ingresso no grupo
+  do WhatsApp configurada no SendFlow" (para todos os tipos).
+- **Onde mora a tela:** na Central do Tráfego (botão "Novo projeto" e "Projeto" na vida do projeto), porque os campos são
+  do Tráfego e o resto da montagem está lá; grava na tabela de projetos única (`mkt.projetos`). `/marketing/projetos`
+  continua para páginas e dados gerais e mostra o tipo derivado.
+- **Leads do Meta:** fica a ação `lead` por enquanto. **Google:** sem token, fica como está. **Conta centralizadora do
+  Infra:** já decidida (ver Perguntas, item 6).
+- **Acesso:** sem mudança (admin/dev). Permissão para gestores e Arthur: pendente do novo modelo de acesso.
+
+**Como testar:**
+
+1. Banco: com a 20261005p e a 20261005r aplicadas (ou na mesma transação), rodar `20261006a_ensaio.sql` inteiro (termina
+   em rollback) e conferir que nenhuma linha começa com `ERRADO`. Medido em Postgres local (PGlite): 68 `ok`.
+2. Tela: `NEXT_PUBLIC_TRAFEGO_DEMO=1` em `web/.env.local`, `npm run dev`, `/marketing/trafego`. Projeto fictício
+   **LPEXA26 "Lançamento Pago Exemplo"** (CSM, lançamento pago, captação e evento, conta Exemplo, item do SendFlow marcado
+   por "Pessoa Exemplo", campanha sugerida, alerta de conta de fora), DEXA26 (Diamantes, lançamento clássico, "Especialista
+   Exemplo", receita "não se aplica"), AEXA26 (Aurum, palestra). Botão "Novo projeto", aba "Pacotes e checklist".
+3. Código: `npx vitest run` (`domain/cadastro.test.ts`, `alertas.test.ts`, `infrastructure/demo.test.ts`,
+   `ui/montagem.test.ts`, `coleta.test.ts`), `npx tsc --noEmit`, `npm run build`.
+
 ### Perguntas (respondidas pelo Victor em 05/10/2026, salvo as em aberto)
 
 1. ~~Status~~ **Respondido:** ativo, pausado, inativo, encerrado (fica como está).
@@ -613,8 +707,8 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 3. ~~Cliques~~ **Respondido:** cliques no link para CTR e CPC; totais guardados à parte.
 4. ~~Fase da campanha~~ **Respondido:** pelo objetivo do nome, com correção à mão prevalecendo; mapa e objetivos novos
    (CARRINHO, AQUECIMENTO) nas Decisões. DISTRIBUIÇÃO sem fase automática.
-5. **Externos (Aurum, Diamantes):** em aberto (Victor vai ver com o Caio). Cada cliente vira um projeto em `mkt.projetos`?
-   Qual sigla de campanha?
+5. ~~Externos (Aurum, Diamantes)~~ **Estrutura decidida (06/10/2026):** cada um é projeto em `mkt.projetos`, tipo externo,
+   unidade Aurum ou Diamantes. A sigla de campanha segue em aberto (pergunta b abaixo).
 6. ~~Conta centralizadora~~ **Decidido (Victor, 06/10/2026):** uma conta centralizadora **do Infra**, com acesso às contas de anúncio internas e externas ligadas a ela, gera o token de API que a coleta usa. Recomendação: token de **usuário do sistema** no Business Manager do Grupo (não expira e não depende de uma pessoa), com permissão `ads_read`. Conta nova não pede token novo: basta atribuí-la ao usuário do sistema e cadastrá-la em Contas de anúncio.
 7. ~~Gestor do projeto~~ **Respondido:** vários gestores por projeto (`projeto_gestores`).
 
@@ -622,7 +716,8 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 
 8. ~~Token do Meta~~ **Decidido (06/10):** conta centralizadora, um `meta_ads_token` no Vault. Falta gerar e cadastrar.
 9. **Token do ClickUp:** de qual usuário (ele só lê o que esse usuário enxerga)? E qual o id do workspace?
-10. **Limiares do resumo do dia:** os iniciais são proposta minha (0 % verba diária, 0 % CPL, 20 % leads e ritmo da
+10. ~~Limiares do resumo do dia~~ **Confirmados (06/10/2026)** verba diária, CPL, ritmo e 90 %; leads abaixo da meta e
+    fora do padrão/sem fase ficam ligados (o Victor não comentou esses dois). Texto original: os iniciais eram proposta minha (0 % verba diária, 0 % CPL, 20 % leads e ritmo da
     fase, 90 % da verba, 7 dias para fora do padrão e sem fase). Servem? Inativo e encerrado fora do resumo, ok?
 11. **Receita bruta ou líquida?** Hoje soma `public.compras.preco` (o valor da compra que a Hotmart manda no webhook,
     antes da taxa). O financeiro tem o líquido em `fin.hotmart_transacoes`.
@@ -632,7 +727,25 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 13. **Compra em outra moeda:** fica fora da soma (contada à parte). Ok?
 14. **Período da receita:** o do projeto (`mkt.projetos` início e fim) ou o de cada produto? Hoje vale o do vínculo se
     preenchido, senão o do projeto. Os projetos da semente estão sem datas: sem data, o vínculo não soma.
-15. **Leads da plataforma no Meta:** a coleta usa a ação `lead`. Só informação (o lead da Central é o da base); serve?
+15. ~~Leads da plataforma no Meta~~ **Decidido (06/10/2026):** fica a ação `lead` por enquanto (provavelmente muda depois).
+
+**Cadastro do projeto (20261006a, em aberto):**
+
+- a) **Projeto só de distribuição de conteúdo** (contínuo, sem fim, métricas separadas): ideia a definir. Como modelar
+  (tipo de projeto próprio? sem período?) e quais métricas.
+- b) **Sigla do projeto externo** no nome da campanha (Aurum, Diamantes): qual padrão?
+- c) ~~Receita dos externos~~ **Decidido (06/10/2026):** não entra por ora.
+- d) **Conteúdo do pacote** de cada tipo de lançamento: fases, objetivos e verba por fase (o mecanismo está pronto e vazio).
+- e) **Acesso:** gestores e Arthur editam verba, fases e metas, depende do novo modelo de acesso do sistema (pendente).
+- f) **LPSG no Escritório:** a regra "lançamento pago só na CSM" vale também para o LPSG (lançamento pago semanal gravado)?
+  Hoje o Escritório tem LPSG. E o **ATM** vale nas duas unidades internas (hoje sim)?
+- g) **Unidade dos projetos que já existem:** PB26, HT33 e BF26 são CSM ou Escritório? SEMSET26 é interno ou externo?
+  (ficaram sem unidade/tipo; marcar na tela).
+- h) **Itens manuais do checklist** além do SendFlow, e para quais tipos de lançamento.
+- i) **Período padrão da receita = captação:** venda que acontece depois da captação (abertura de carrinho) fica fora quando
+  o vínculo do produto não tem período próprio. É isso, ou a receita deve ir até o fim do evento?
+- j) **Etiquetas do ClickUp:** ler as de todos os spaces do workspace (hoje) ou de um space só?
+- k) **Especialistas internos:** além de Marcio Carvalho de Sá e Elaine Montenegro, quem mais (entra por SQL)?
 
 ## Branches
 
@@ -670,3 +783,10 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
   (`projetos/domain/utm.ts`); aba Origem, achados por criativo, `mkt_web_connect` (20261005q) e resumo do Tráfego
   (20261005p) cruzam pelo id, nome só como reserva; formato antigo continua valendo. Seção "Padrões de nome de campanha e
   UTM" nesta doc. Migrations editadas no lugar (todas ainda NÃO APLICADAS). Branch `victor`.
+- **06/10/2026:** Tráfego, cadastro do projeto (migration 20261006a, NÃO APLICADA): tipo interno/externo e unidade (CSM,
+  Escritório, Aurum, Diamantes) no lugar da subárea, tipos de lançamento por unidade com a regra no banco (lançamento
+  pago só na CSM; Aurum palestra fixo; ATM; perpétuo fora), especialista, períodos de captação e do evento (captação como
+  padrão da receita e da fase de captação; `periodo_padrao` acrescentada na 20261005r, ainda não aplicada), contas de
+  anúncio do projeto (sugestões e alerta de conta de fora), etiqueta do ClickUp como chave (com as etiquetas reais dos
+  spaces pela rotina), pacote da campanha (vazio), checklist de montagem e gerador de nome de campanha e UTM. Receita dos
+  externos fora. Tela na Central do Tráfego, modo demo. Branch `victor`.

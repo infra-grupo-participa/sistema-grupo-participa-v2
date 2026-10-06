@@ -38,7 +38,7 @@
 --   tabelas   mkt_trafego.alerta_regras, produtos_hotmart, clickup_tarefas, coleta_config, coletas
 --   colunas   mkt_trafego.status_projeto.entra_no_resumo_dia, mkt_trafego.contas.token_vault
 --   internas  mkt_trafego.resumo(bigint) NOVA (a da 20261005p vira resumo_base e esta acrescenta a receita),
---             receita(bigint), hotmart_disponivel(), alertas(), coleta_chave(), meta_contas(), clickup_credenciais(),
+--             receita(bigint), periodo_padrao(bigint), hotmart_disponivel(), alertas(), coleta_chave(), meta_contas(), clickup_credenciais(),
 --             clickup_etiquetas(), coleta_parametros(), coleta_registrar(text,boolean,jsonb,text)
 --   public    trafego_alertas, trafego_produtos_listar, trafego_produto_salvar, trafego_produto_apagar,
 --             trafego_hotmart_produtos, trafego_clickup (authenticated); trafego_clickup_receber (service_role)
@@ -215,6 +215,14 @@ language sql stable set search_path = '' as $$
      and column_name in ('produto_id', 'oferta_codigo', 'status', 'preco', 'moeda', 'data_compra', 'data_aprovacao');
 $$;
 
+-- Período padrão do projeto: vale para a receita (vínculo sem "de"/"até") e para a meta de leads (sem fase de captação
+-- planejada com datas). Aqui: início e fim do projeto. A 20261006a troca para o período de captação (Victor, 06/10/2026),
+-- com o início e fim do projeto como reserva. Mudar a regra = só esta função.
+create function mkt_trafego.periodo_padrao(p_projeto bigint, out inicio date, out fim date)
+language sql stable set search_path = '' as $$
+  select p.inicio, p.fim from mkt.projetos p where p.id = p_projeto;
+$$;
+
 -- Receita por projeto: {"<projeto_id>": {receita, receita_compras, receita_outras_moedas, receita_sem_valor,
 -- receita_vinculos, receita_sem_periodo}}. Projeto sem vínculo não aparece (a tela mostra "sem dado").
 --   receita nula = sem vínculo com período, ou public.compras sem as colunas (banco local).
@@ -227,8 +235,8 @@ declare
 begin
   select coalesce(jsonb_object_agg(x.projeto_id::text, jsonb_build_object('vinculos', x.vinculos, 'sem_periodo', x.sem_periodo)), '{}'::jsonb)
     into v_vin
-    from (select v.projeto_id, count(*) as vinculos, count(*) filter (where coalesce(v.de, p.inicio) is null) as sem_periodo
-            from mkt_trafego.produtos_hotmart v join mkt.projetos p on p.id = v.projeto_id
+    from (select v.projeto_id, count(*) as vinculos, count(*) filter (where coalesce(v.de, pp.inicio) is null) as sem_periodo
+            from mkt_trafego.produtos_hotmart v cross join lateral mkt_trafego.periodo_padrao(v.projeto_id) pp
            where p_projeto is null or v.projeto_id = p_projeto
            group by v.projeto_id) x;
   if v_vin = '{}'::jsonb then return '{}'::jsonb; end if;
@@ -237,10 +245,10 @@ begin
     -- SQL dinâmico: public.compras pode não ter as colunas num banco local (a função compila mesmo assim).
     execute $q$
       with vv as (
-        select v.projeto_id, v.produto_id, v.oferta_codigo, coalesce(v.de, p.inicio) as de,
-               coalesce(v.ate, p.fim, (now() at time zone 'America/Sao_Paulo')::date) as ate
-          from mkt_trafego.produtos_hotmart v join mkt.projetos p on p.id = v.projeto_id
-         where coalesce(v.de, p.inicio) is not null and ($1 is null or v.projeto_id = $1)
+        select v.projeto_id, v.produto_id, v.oferta_codigo, coalesce(v.de, pp.inicio) as de,
+               coalesce(v.ate, pp.fim, (now() at time zone 'America/Sao_Paulo')::date) as ate
+          from mkt_trafego.produtos_hotmart v cross join lateral mkt_trafego.periodo_padrao(v.projeto_id) pp
+         where coalesce(v.de, pp.inicio) is not null and ($1 is null or v.projeto_id = $1)
       ), m as (
         select distinct vv.projeto_id, c.id, c.preco, coalesce(c.moeda, 'BRL') as moeda
           from public.compras c
@@ -325,10 +333,11 @@ begin
   -- 3. abaixo da meta de leads para a data
   pl as (
     select a.projeto_id, a.leads, a.meta_leads,
-           case when cap.inicio is not null and cap.fim is not null then cap.inicio else a.inicio end as ini,
-           case when cap.inicio is not null and cap.fim is not null then cap.fim else a.fim end as fim,
+           case when cap.inicio is not null and cap.fim is not null then cap.inicio else pp.inicio end as ini,
+           case when cap.inicio is not null and cap.fim is not null then cap.fim else pp.fim end as fim,
            case when cap.inicio is not null and cap.fim is not null then 'captacao' else 'projeto' end as periodo
       from alvo a
+      cross join lateral mkt_trafego.periodo_padrao(a.projeto_id) pp
       left join mkt_trafego.projeto_fases cap on cap.projeto_id = a.projeto_id and cap.fase = 'captacao'
      where a.leads is not null and a.meta_leads > 0
   ), pl2 as (
@@ -488,7 +497,8 @@ begin
   return (select coalesce(jsonb_agg(jsonb_build_object(
             'id', v.id, 'projeto_id', v.projeto_id, 'projeto_sigla', p.sigla, 'produto_id', v.produto_id,
             'oferta_codigo', v.oferta_codigo, 'de', v.de, 'ate', v.ate, 'obs', v.obs,
-            'de_efetivo', coalesce(v.de, p.inicio), 'ate_efetivo', coalesce(v.ate, p.fim),
+            'de_efetivo', coalesce(v.de, (mkt_trafego.periodo_padrao(p.id)).inicio),
+            'ate_efetivo', coalesce(v.ate, (mkt_trafego.periodo_padrao(p.id)).fim),
             'atualizado_em', v.atualizado_em)
           order by p.sigla, v.produto_id, v.oferta_codigo nulls first), '[]'::jsonb)
             from mkt_trafego.produtos_hotmart v join mkt.projetos p on p.id = v.projeto_id
@@ -510,6 +520,7 @@ declare
   v_obs text := nullif(btrim(coalesce(p ->> 'obs', '')), '');
   v_pr mkt.projetos%rowtype;
   v_atual mkt_trafego.produtos_hotmart%rowtype;
+  v_pp record;
   v_avisos text[] := '{}';
   v_tem boolean;
 begin
@@ -551,14 +562,15 @@ begin
     return jsonb_build_object('ok', false, 'msg', 'Este produto (e oferta) já está ligado a este projeto.');
   end;
 
-  if exists (select 1 from mkt_trafego.produtos_hotmart o join mkt.projetos op on op.id = o.projeto_id
+  select * into v_pp from mkt_trafego.periodo_padrao(v_proj);
+  if exists (select 1 from mkt_trafego.produtos_hotmart o cross join lateral mkt_trafego.periodo_padrao(o.projeto_id) op
               where o.produto_id = v_prod and o.projeto_id <> v_proj
                 and (o.oferta_codigo is null or v_oferta is null or o.oferta_codigo = v_oferta)
-                and coalesce(o.de, op.inicio, '-infinity'::date) <= coalesce(v_ate, v_pr.fim, 'infinity'::date)
-                and coalesce(v_de, v_pr.inicio, '-infinity'::date) <= coalesce(o.ate, op.fim, 'infinity'::date)) then
+                and coalesce(o.de, op.inicio, '-infinity'::date) <= coalesce(v_ate, v_pp.fim, 'infinity'::date)
+                and coalesce(v_de, v_pp.inicio, '-infinity'::date) <= coalesce(o.ate, op.fim, 'infinity'::date)) then
     v_avisos := array_append(v_avisos, 'produto_em_outro_projeto');
   end if;
-  if coalesce(v_de, v_pr.inicio) is null then v_avisos := array_append(v_avisos, 'sem_periodo'); end if;
+  if coalesce(v_de, v_pp.inicio) is null then v_avisos := array_append(v_avisos, 'sem_periodo'); end if;
   if mkt_trafego.hotmart_disponivel() then
     execute 'select exists (select 1 from public.compras c where c.produto_id::text = $1)' into v_tem using v_prod;
     if not v_tem then v_avisos := array_append(v_avisos, 'produto_sem_compras'); end if;
@@ -717,7 +729,7 @@ begin
   for f in select p.oid::regprocedure from pg_proc p
             where (p.pronamespace = 'mkt_trafego'::regnamespace
                    and p.proname in ('resumo', 'receita', 'hotmart_disponivel', 'alertas', 'segredo', 'coleta_chave', 'meta_contas',
-                                     'clickup_credenciais', 'clickup_etiquetas', 'coleta_parametros', 'coleta_registrar'))
+                                     'clickup_credenciais', 'clickup_etiquetas', 'coleta_parametros', 'coleta_registrar', 'periodo_padrao'))
                or (p.pronamespace = 'public'::regnamespace
                    and p.proname in ('trafego_alertas', 'trafego_produtos_listar', 'trafego_produto_salvar', 'trafego_produto_apagar',
                                      'trafego_hotmart_produtos', 'trafego_clickup', 'trafego_clickup_receber')) loop
@@ -756,7 +768,8 @@ declare
                          'trafego_hotmart_produtos', 'trafego_clickup'];
   v_novas text[] := v_tela || array['trafego_clickup_receber'];
   v_internas text[] := array['resumo', 'resumo_base', 'receita', 'hotmart_disponivel', 'alertas', 'segredo', 'coleta_chave',
-                             'meta_contas', 'clickup_credenciais', 'clickup_etiquetas', 'coleta_parametros', 'coleta_registrar'];
+                             'meta_contas', 'clickup_credenciais', 'clickup_etiquetas', 'coleta_parametros', 'coleta_registrar',
+                             'periodo_padrao'];
 begin
   foreach r in array array['anon', 'authenticated'] loop
     if has_schema_privilege(r, 'mkt_trafego', 'usage') then raise exception '20261005r: % tem acesso ao schema mkt_trafego', r; end if;
@@ -799,8 +812,8 @@ begin
   if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%') <> 20 then
     raise exception '20261005r: esperava 20 funções public.trafego_* (13 da 20261005p + 7)';
   end if;
-  if (select count(*) from pg_proc p where p.pronamespace = 'mkt_trafego'::regnamespace and p.proname = any (v_internas)) <> 12 then
-    raise exception '20261005r: esperava 12 funções internas novas ou renomeadas';
+  if (select count(*) from pg_proc p where p.pronamespace = 'mkt_trafego'::regnamespace and p.proname = any (v_internas)) <> 13 then
+    raise exception '20261005r: esperava 13 funções internas novas ou renomeadas';
   end if;
   if (select count(*) from mkt_trafego.alerta_regras) <> 7 or (select count(*) from mkt_trafego.produtos_hotmart) <> 0
      or (select count(*) from mkt_trafego.clickup_tarefas) <> 0
@@ -857,7 +870,7 @@ $confere$;
 --                    'trafego_clickup_receber'))
 --                or (p.pronamespace = 'mkt_trafego'::regnamespace and p.proname in ('resumo', 'receita', 'hotmart_disponivel',
 --                    'alertas', 'segredo', 'coleta_chave', 'meta_contas', 'clickup_credenciais', 'clickup_etiquetas',
---                    'coleta_parametros', 'coleta_registrar'))
+--                    'coleta_parametros', 'coleta_registrar', 'periodo_padrao'))
 --   loop execute format('drop function %s', f); end loop; end $$;
 -- alter function mkt_trafego.resumo_base(bigint) rename to resumo;
 -- drop table mkt_trafego.alerta_regras, mkt_trafego.produtos_hotmart, mkt_trafego.clickup_tarefas, mkt_trafego.coleta_config,
