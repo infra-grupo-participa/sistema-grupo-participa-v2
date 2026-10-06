@@ -81,15 +81,24 @@ Disputa (protesto) vira só **alerta**, como no HM.
 
 **Regra de recompra.** Se a pessoa tem **outra** compra do 8381847 `APPROVED`/`COMPLETE`/`COMPLETED`
 (`fin.hotmart_transacoes` da conta `academy` ou `public.compras`), casando por e-mail, documento ou telefone (com ou
-sem 55), o reembolso não abre checklist: vira **alerta**, com `sugestao.motivo` explicando e `sugestao.compras_validas`
-com as transações. Função única para o webhook e a carga: `ra_acelera_compras_validas`.
+sem 55), o reembolso não abre checklist: vira **alerta**, com `sugestao.motivo` explicando e
+`sugestao.compras_anteriores` com as compras (mesmo formato do HM: transacao, produto, oferta, valor, status, data). A regra é uma função só para
+o webhook e a carga: `ra_acelera_compras_validas`.
+
+**Transação de outro produto.** Se a transação já existe no financeiro (qualquer conta) ou em `public.compras` com outro
+produto, o caso do Acelera nasce **alerta**, sem itens, com a chave `<transação> (conflito de produto)`, para não ocupar
+o lugar do caso do HM.
 
 **Slack.** O aviso `novo` sai com o título "Reembolso/Chargeback no Acelera Holding: remover do Grupo de informes, da
 Área de membros (Hotmart) e do Obvio", marcando o Thomas; não há aviso `liberado`; `concluido` responde na thread.
 Caso com `avisar_slack = false` fica fora do Slack, do lembrete e da chamada ao n8n. O n8n não muda.
+Nome, e-mail e produto passam por `ra_slack_esc` (`&`, `<`, `>` viram `&amp;`, `&lt;`, `&gt;`) em todas as mensagens,
+HM incluído: texto vindo da Hotmart não vira `<!channel>` nem link.
 
 **Webhook.** O mesmo do HM: `https://mbvybujpkwuorhtdzcde.supabase.co/functions/v1/remocao-acessos-webhook`, cadastrado
-no produto 8381847 com os eventos `PURCHASE_REFUNDED`, `PURCHASE_CHARGEBACK` e `PURCHASE_PROTEST` e o mesmo hottok.
+no produto 8381847 com os eventos `PURCHASE_REFUNDED`, `PURCHASE_CHARGEBACK` e `PURCHASE_PROTEST`. A função confere um
+hottok só (`HOTMART_HOTTOK`); que o da conta do Acelera é o mesmo **não foi conferido**: conferir no primeiro evento do
+8381847 em `ra_webhook_eventos` (recusado por hottok = é outro).
 A venda do Acelera **não** entra em `public.compras`; o webhook é o único caminho automático. Eventos do 8381847 que
 chegaram antes da migration (`ignorado: produto não é Holding Masters`) são reprocessados por ela, com Slack normal.
 

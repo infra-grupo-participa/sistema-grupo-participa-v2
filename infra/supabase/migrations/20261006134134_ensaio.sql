@@ -79,7 +79,8 @@ declare
     "public.ra_slack_pendentes_base(text)": "3673f901dfbe9dcc61cd7842fbbfe477",
     "public.ra_slack_pendentes(text)": "36ac0451649303344242d27f86890445",
     "public.ra_slack_lembrete(text)": "bf6110bf8f2d005085240304cf50c492",
-    "public.ra_fn_avisar_n8n()": "ae11798179fc50696cf98ab85d879454"
+    "public.ra_fn_avisar_n8n()": "ae11798179fc50696cf98ab85d879454",
+    "public.ra_slack_pessoas(uuid)": "1b01a277be62a8b4f23d871dac68d5bf"
   }';
   k text; v text;
 begin
@@ -160,6 +161,9 @@ declare
   v_com_prazo boolean := coalesce((p->>'com_prazo')::boolean, true);
   v_teste boolean := coalesce((p->>'teste')::boolean, false);
   v_validas text[] := '{}';
+  v_anteriores jsonb := '[]'::jsonb;
+  v_outro_produto text;
+  v_chave text;
   v_status text;
   v_decisao text;
   v_prazo timestamptz;
@@ -174,21 +178,60 @@ begin
     raise exception 'ra_criar_caso_acelera: transação vazia';
   end if;
 
-  if v_tipo = 'disputa' then
+  v_chave := v_transacao;
+
+  -- A transação já existe na Hotmart com OUTRO produto (financeiro das duas contas ou public.compras): o evento não
+  -- bate com o Acelera. Vira só alerta, sem checklist, e com chave própria para não ocupar o lugar do caso do HM
+  -- (unique hotmart_transaction + tipo).
+  select string_agg(distinct x.produto_id, ', ') into v_outro_produto
+    from (select h.produto_id from (select * from fin.hotmart_transacoes where conta = 'academy') h
+           where h.transacao = v_transacao and h.produto_id is distinct from '8381847'
+          union all
+          select h.produto_id from (select * from fin.hotmart_transacoes where conta = 'escritorio') h
+           where h.transacao = v_transacao and h.produto_id is distinct from '8381847'
+          union all
+          select c.produto_id::text from public.compras c
+           where c.hotmart_transaction = v_transacao and c.produto_id is distinct from '8381847') x;
+
+  if v_outro_produto is not null then
+    v_status := 'alerta';
+    v_chave := v_transacao || ' (conflito de produto)';
+    v_sugestao := jsonb_build_object(
+      'motivo', 'Chegou como Acelera Holding, mas a transação ' || v_transacao || ' já existe na Hotmart com outro produto ('
+                || v_outro_produto || '). Não abrimos o checklist de remoção: confira na Hotmart antes de mexer em qualquer acesso.',
+      'conflito_produto', true,
+      'compras_anteriores', '[]'::jsonb);
+  elsif v_tipo = 'disputa' then
     v_status := 'alerta';
     v_sugestao := jsonb_build_object(
       'motivo', 'Disputa aberta na Hotmart no Acelera Holding. Ainda não é reembolso nem chargeback: nada a remover por enquanto.',
-      'compras_validas', '[]'::jsonb);
+      'compras_anteriores', '[]'::jsonb);
   else
     v_validas := public.ra_acelera_compras_validas(v_transacao, p->>'email', p->>'documento', p->>'telefone');
     if cardinality(v_validas) > 0 then
+      -- Mesmo formato do HM (ra_montar_sugestao), que a ficha da tela lê: transacao, produto, oferta, valor, status, data.
+      select coalesce(jsonb_agg(jsonb_build_object('transacao', t.transacao, 'produto', t.produto, 'oferta', t.oferta,
+                                                   'valor', t.valor, 'status', t.status, 'data', t.data)
+                                order by t.data desc nulls last, t.transacao), '[]'::jsonb)
+        into v_anteriores
+        from (select distinct on (y.transacao) y.*
+                from (select h.transacao, h.produto_nome as produto, h.oferta_codigo as oferta, h.valor_cobrado as valor,
+                             h.status, coalesce(h.aprovado_em, h.pedido_em) as data, 1 as pri, h.atualizado_em
+                        from (select * from fin.hotmart_transacoes where conta = 'academy') h
+                       where h.transacao = any (v_validas)
+                      union all
+                      select c.hotmart_transaction::text, c.produto_nome::text, c.oferta_codigo::text, c.preco,
+                             c.status::text, coalesce(c.data_aprovacao, c.data_compra), 2, c.atualizado_em
+                        from public.compras c
+                       where c.hotmart_transaction = any (v_validas)) y
+               order by y.transacao, y.pri, y.atualizado_em desc nulls last) t;
       v_status := 'alerta';
       v_sugestao := jsonb_build_object(
         'motivo', initcap(v_tipo) || ' no Acelera Holding, mas a pessoa ainda tem outra compra válida do Acelera Holding '
                   || '(aprovada ou completa): ' || array_to_string(v_validas, ', ')
                   || '. Não abrimos o checklist de remoção: confira antes de remover qualquer acesso.',
         'recompra', true,
-        'compras_validas', to_jsonb(v_validas));
+        'compras_anteriores', v_anteriores);
     else
       v_status := 'em_remocao';
       v_decisao := 'remover';
@@ -198,7 +241,7 @@ begin
         'motivo', coalesce(nullif(p->>'motivo', ''),
                            initcap(v_tipo) || ' no Acelera Holding sem outra compra válida do Acelera: remover do Grupo de informes, '
                            || 'da Área de membros (Hotmart) e do Obvio.'),
-        'compras_validas', '[]'::jsonb);
+        'compras_anteriores', '[]'::jsonb);
     end if;
   end if;
 
@@ -207,7 +250,7 @@ begin
     comprador_id, aluno_id, nome, email, telefone, documento, ocorrido_em, prazo_em,
     eh_programa, sugestao, teste, origem, decisao, linha, avisar_slack)
   values (
-    null, v_transacao, v_tipo, v_status, coalesce(nullif(p->>'produto_nome', ''), 'Acelera Holding'),
+    null, v_chave, v_tipo, v_status, coalesce(nullif(p->>'produto_nome', ''), 'Acelera Holding'),
     nullif(p->>'oferta', ''), nullif(p->>'valor', '')::numeric,
     null, null, nullif(trim(coalesce(p->>'nome', '')), ''), nullif(trim(coalesce(p->>'email', '')), ''),
     nullif(trim(coalesce(p->>'telefone', '')), ''), nullif(trim(coalesce(p->>'documento', '')), ''),
@@ -233,7 +276,8 @@ begin
   values (v_caso, 'aberto', coalesce(p->'detalhe', '{}'::jsonb)
                             || jsonb_build_object('tipo', v_tipo, 'origem', v_origem, 'teste', v_teste, 'linha', 'acelera',
                                                   'status_inicial', v_status, 'avisar_slack', v_avisar,
-                                                  'compras_validas', to_jsonb(v_validas)));
+                                                  'compras_validas', to_jsonb(v_validas),
+                                                  'transacao', v_transacao, 'conflito_produto', v_outro_produto));
   return v_caso;
 end $$;
 
@@ -317,7 +361,8 @@ begin
     -- vira caso de teste (e reenviar recria), igual ao HM.
     v_teste := v_modo = 'teste' and not exists (select 1 from fin.hotmart_transacoes where conta = 'academy' and transacao = v_transacao);
     if v_teste then
-      delete from public.ra_casos where hotmart_transaction = v_transacao and tipo = v_tipo and teste;
+      delete from public.ra_casos where hotmart_transaction in (v_transacao, v_transacao || ' (conflito de produto)')
+                                    and tipo = v_tipo and teste;
     end if;
     v_caso := public.ra_acelera_de_payload(p_payload, v_teste, now());
     v_resultado := case when v_caso is null then 'já existia caso para esta transação'
@@ -591,6 +636,30 @@ AS $function$
 $function$;
 
 -- ═══ 8. Slack ═══
+-- Texto vindo de fora (nome, e-mail e produto do payload da Hotmart) não pode virar marcação do Slack
+-- (<!channel>, <url|texto>, <@U…>). Escapa &, < e > nessa ordem, como pede a documentação do Slack.
+-- Texto comum (acentos, ·, parênteses) sai igual.
+create or replace function public.ra_slack_esc(p text)
+returns text language sql immutable set search_path to 'public' as $$
+  select replace(replace(replace(p, '&', '&amp;'), '<', '&lt;'), '>', '&gt;');
+$$;
+revoke all on function public.ra_slack_esc(text) from public, anon, authenticated;
+grant execute on function public.ra_slack_esc(text) to service_role;
+
+-- Pessoas do caso (corpo de 20260916_remocao_acessos_mensagens.sql, igual ao vivo; só o escape é novo).
+-- create or replace mantém o dono e os grants (postgres e service_role).
+CREATE OR REPLACE FUNCTION public.ra_slack_pessoas(p_caso uuid)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select string_agg('• ' || public.ra_slack_esc(coalesce(p.nome, 'sem nome')) || ' · ' || public.ra_slack_esc(coalesce(nullif(p.email, ''), 'sem e-mail'))
+                    || case when p.papel = 'titular' then ' (titular)' else ' (sócio)' end,
+                    E'\n' order by p.ordem)
+    from public.ra_pessoas p where p.caso_id = p_caso;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.ra_slack_pendentes_base(p_segredo text)
  RETURNS json
  LANGUAGE plpgsql
@@ -616,7 +685,7 @@ begin
     select b.id as caso_id, 'alerta' as aviso, null::text as thread_ts, 1 as ordem,
            ':warning: *Disputa aberta no HM*' || E'\n' || public.ra_slack_marca(v_triador) || E'\n\n'
            || '*Pessoas*' || E'\n' || public.ra_slack_pessoas(b.id) || E'\n\n'
-           || '*Compra*' || E'\n' || coalesce(b.produto_nome, '') || ' · ' || public.ra_brl(b.valor) || ' · ' || b.quando || E'\n\n'
+           || '*Compra*' || E'\n' || public.ra_slack_esc(coalesce(b.produto_nome, '')) || ' · ' || public.ra_brl(b.valor) || ' · ' || b.quando || E'\n\n'
            || 'Ainda não é reembolso nem chargeback.' || E'\n' || b.link as texto
       from base b where b.linha = 'hm' and b.tipo = 'disputa' and not (b.slack_avisos ? 'alerta')
     union all
@@ -624,14 +693,19 @@ begin
     select b.id, 'alerta', null, 1,
            case when b.tipo = 'disputa'
                 then ':warning: *Disputa aberta no Acelera Holding*'
+                when b.sugestao ? 'conflito_produto'
+                then ':warning: *' || initcap(b.tipo) || ' chegou como Acelera Holding, mas a transação é de outro produto*'
                 else ':warning: *' || initcap(b.tipo) || ' no Acelera Holding: a pessoa ainda tem outra compra válida do Acelera Holding*' end
            || E'\n' || public.ra_slack_marca(v_triador) || E'\n\n'
            || '*Pessoas*' || E'\n' || public.ra_slack_pessoas(b.id) || E'\n\n'
-           || '*Compra*' || E'\n' || coalesce(b.produto_nome, '') || ' · ' || public.ra_brl(b.valor) || ' · ' || b.quando || E'\n\n'
+           || '*Compra*' || E'\n' || public.ra_slack_esc(coalesce(b.produto_nome, '')) || ' · ' || public.ra_brl(b.valor) || ' · ' || b.quando || E'\n\n'
            || case when b.tipo = 'disputa'
                    then 'Ainda não é reembolso nem chargeback.'
+                   when b.sugestao ? 'conflito_produto'
+                   then public.ra_slack_esc(coalesce(b.sugestao->>'motivo', ''))
                    else 'Outras compras válidas: '
-                        || coalesce((select string_agg(v, ', ') from jsonb_array_elements_text(b.sugestao->'compras_validas') v), 'sem detalhe')
+                        || coalesce((select public.ra_slack_esc(string_agg(v->>'transacao', ', '))
+                                       from jsonb_array_elements(b.sugestao->'compras_anteriores') v), 'sem detalhe')
                         || E'\n' || 'Não abrimos o checklist de remoção: confira antes de remover qualquer acesso.' end
            || E'\n' || b.link
       from base b where b.linha = 'acelera' and b.status = 'alerta' and not (b.slack_avisos ? 'alerta')
@@ -641,7 +715,7 @@ begin
            ':rotating_light: *' || initcap(b.tipo) || ' no HM, triagem pendente*' || E'\n'
            || public.ra_slack_marca(v_triador) || E'\n\n'
            || '*Pessoas*' || E'\n' || public.ra_slack_pessoas(b.id) || E'\n\n'
-           || '*Compra*' || E'\n' || coalesce(b.produto_nome, '') || ' · ' || public.ra_brl(b.valor) || ' · ' || b.quando
+           || '*Compra*' || E'\n' || public.ra_slack_esc(coalesce(b.produto_nome, '')) || ' · ' || public.ra_brl(b.valor) || ' · ' || b.quando
            || case when b.eh_programa then E'\n' || 'Programa de Implementação' else '' end || E'\n\n'
            || '*Sugestão:* ' || coalesce(b.sugestao->>'recomendacao', 'sem sugestão') || E'\n' || coalesce(b.sugestao->>'motivo', '') || E'\n\n'
            || '*Prazo:* ' || coalesce(b.prazo, 'sem prazo') || E'\n' || b.link
@@ -652,7 +726,7 @@ begin
            ':scissors: *Reembolso/Chargeback no Acelera Holding: remover do Grupo de informes, da Área de membros (Hotmart) e do Obvio*'
            || E'\n' || '*Prazo:* ' || coalesce(b.prazo, 'sem prazo') || E'\n\n'
            || '*Pessoas*' || E'\n' || public.ra_slack_pessoas(b.id) || E'\n\n'
-           || '*Compra*' || E'\n' || initcap(b.tipo) || ' · ' || coalesce(b.produto_nome, '') || ' · ' || public.ra_brl(b.valor) || ' · ' || b.quando || E'\n\n'
+           || '*Compra*' || E'\n' || initcap(b.tipo) || ' · ' || public.ra_slack_esc(coalesce(b.produto_nome, '')) || ' · ' || public.ra_brl(b.valor) || ' · ' || b.quando || E'\n\n'
            || coalesce(public.ra_slack_responsaveis(b.id, false), 'Nenhum item.') || E'\n\n'
            || 'Marque no sistema quando remover.' || E'\n' || b.link
       from base b where b.linha = 'acelera' and b.status in ('em_remocao', 'concluido') and not (b.slack_avisos ? 'novo')
@@ -781,7 +855,7 @@ begin
       from public.ra_casos c where c.status = 'aguardando_triagem' and c.avisar_slack
   ), linhas as (
     select responsavel_id, prazo_em, caso_id, pordem, kordem,
-           '• <' || v_url || '/educacional/remocoes?caso=' || caso_id || '|' || pessoa || '>: '
+           '• <' || v_url || '/educacional/remocoes?caso=' || caso_id || '|' || public.ra_slack_esc(pessoa) || '>: '
            || regexp_replace(itens, ', ([^,]*)$', ' e \1')
            || case when linha_prod = 'acelera' then ' · Acelera Holding' else '' end
            || case when prazo_em < now() then ' · :red_circle: atrasado'
@@ -866,7 +940,9 @@ begin
       n_existentes := n_existentes + 1;
       update public.ra_webhook_eventos
          set resultado = 'reprocessado em 20261006134133: já existia caso para esta transação',
-             caso_id = (select c.id from public.ra_casos c where c.hotmart_transaction = r.transacao and c.tipo = v_tipo)
+             caso_id = (select c.id from public.ra_casos c
+                         where c.hotmart_transaction in (r.transacao, r.transacao || ' (conflito de produto)') and c.tipo = v_tipo
+                         limit 1)
        where id = r.id;
     end if;
   end loop;
@@ -885,6 +961,10 @@ begin
   end if;
   if exists (select 1 from public.ra_itens_catalogo where linha <> 'hm' and item not like 'acelera\_%') then
     raise exception '20261006134133: item do HM mudou de linha';
+  end if;
+  if public.ra_slack_esc('<!channel> & <https://x|y>') <> '&lt;!channel&gt; &amp; &lt;https://x|y&gt;'
+     or public.ra_slack_esc('José Ávila · joão (sócio)') <> 'José Ávila · joão (sócio)' then
+    raise exception '20261006134133: ra_slack_esc não escapa como esperado';
   end if;
   if has_function_privilege('anon', 'public.ra_criar_caso_acelera(jsonb)', 'execute')
      or has_function_privilege('authenticated', 'public.ra_criar_caso_acelera(jsonb)', 'execute')
