@@ -1,15 +1,18 @@
 'use client';
 
 // Tela de quem PEDE alteração de cadastro (sem acesso à Central): novo pedido + "Meus pedidos".
-import { useCallback, useEffect, useState } from 'react';
+// Quem aprova (pa_meu_papel().pode_aprovar) ganha a aba "Aprovar" com a mesma fila da Central (PedidosAprovacao):
+// é por aqui que aprova quem não tem acesso à Central.
+import { useCallback, useEffect, useId, useState } from 'react';
 import {
-  Badge, Button, Checkbox, DataTable, EmptyState, Loading, SectionCard, Td, Textarea, Th, Thead, Toast, Tr, useFlash, Input,
+  Badge, Button, Checkbox, DataTable, EmptyState, Loading, SectionCard, Tabs, Td, Textarea, Th, Thead, Toast, Tr, useFlash, Input, idsAba,
 } from '@/shared/ui/components';
 import { fmtDataHora } from '@/shared/ui/format';
 import { ESPACO_LABEL } from '../domain/aluno-360';
 import {
   CAMPOS_EDITAVEIS,
   INSTRUCOES,
+  abasPedidos,
   ROTULO_TIPO,
   SOCIO_NOVO_VAZIO,
   documentoValido,
@@ -23,15 +26,18 @@ import {
   validarSocioNovo,
   validarTrocaSocio,
   validarValor,
+  type AbaPedidos,
   type AlunoResumo,
   type Endereco,
+  type PapelPedidos,
   type PedidoLinha,
   type SocioNovo,
   type TipoPedido,
 } from '../domain/pedidos-alteracao';
 import {
-  criarPedido, duplicataPessoa, meusPedidos, sociosDoTitular, turmasPedido, valorAtual, type AlunoDuplicado, type NovoPedido,
+  criarPedido, duplicataPessoa, meuPapelPedidos, meusPedidos, sociosDoTitular, turmasPedido, valorAtual, type AlunoDuplicado, type NovoPedido,
 } from './pedidos-alteracao-data';
+import { PedidosAprovacao } from './PedidosAprovacao';
 import { AlunoDistincao, BuscaAluno, FIELD_CLS, Rotulo, StatusPedido, rotuloInstrucao } from './pedidos-alteracao-ui';
 import { EnderecoCampos, ErroCampo } from './pedidos-endereco-ui';
 
@@ -441,10 +447,18 @@ function MeusPedidos({ pedidos, erro }: { pedidos: PedidoLinha[] | null; erro: s
   );
 }
 
+const ROTULO_ABA_PEDIDOS: Record<AbaPedidos, string> = { pedir: 'Pedir alteração', aprovar: 'Aprovar' };
+
 export function PedidosAlteracaoClient() {
   const { toast, flash } = useFlash(4000);
   const [pedidos, setPedidos] = useState<PedidoLinha[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  // undefined = conferindo; null = a conferência falhou (avisa, não esconde calado).
+  const [papel, setPapel] = useState<PapelPedidos | null | undefined>(undefined);
+  const [pendentes, setPendentes] = useState<number | null>(null);
+  const [aba, setAba] = useState<AbaPedidos>('pedir');
+  const [visitouAprovar, setVisitouAprovar] = useState(false);
+  const idBase = `pedidos-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
   const carregar = useCallback(async () => {
     try { setPedidos(await meusPedidos()); setErro(null); }
@@ -454,8 +468,28 @@ export function PedidosAlteracaoClient() {
   useEffect(() => {
     let vivo = true;
     meusPedidos().then((p) => { if (vivo) setPedidos(p); }).catch((e) => { if (vivo) setErro(e.message); });
+    meuPapelPedidos()
+      .then((p) => { if (vivo) { setPapel(p); setPendentes(p?.pendentes ?? null); } })
+      .catch(() => { if (vivo) setPapel(null); });
     return () => { vivo = false; };
   }, []);
+
+  const abas = abasPedidos(papel);
+  const comAbas = abas.length > 1;
+  const trocarAba = (k: AbaPedidos) => {
+    setAba(k);
+    if (k === 'aprovar') setVisitouAprovar(true);
+    // Quem aprova o próprio pedido volta e vê a situação nova em "Meus pedidos".
+    if (k === 'pedir' && visitouAprovar) carregar();
+  };
+  const painelPedir = (
+    <>
+      <NovoPedido onCriado={(msg) => { flash(msg); carregar(); }} />
+      <SectionCard title="Meus pedidos" right={<Button variant="ghost" size="sm" onClick={carregar}>Atualizar</Button>}>
+        <MeusPedidos pedidos={pedidos} erro={erro} />
+      </SectionCard>
+    </>
+  );
 
   return (
     <div className="space-y-5">
@@ -464,11 +498,34 @@ export function PedidosAlteracaoClient() {
         <p className="text-sm text-[var(--fg-3)] max-w-[70ch]">
           Peça a correção de um dado do aluno ou a troca de um sócio. Cada pedido passa pela aprovação antes de mudar a base.
         </p>
+        {papel === null && (
+          <p className="mt-1 text-xs text-[var(--fg-3)]" role="status">
+            Não foi possível conferir se você aprova pedidos. Atualize a página para ver a aba Aprovar, se tiver essa permissão.
+          </p>
+        )}
       </div>
-      <NovoPedido onCriado={(msg) => { flash(msg); carregar(); }} />
-      <SectionCard title="Meus pedidos" right={<Button variant="ghost" size="sm" onClick={carregar}>Atualizar</Button>}>
-        <MeusPedidos pedidos={pedidos} erro={erro} />
-      </SectionCard>
+      {comAbas ? (
+        <div>
+          <Tabs
+            tabs={abas.map((k) => ({ k, l: ROTULO_ABA_PEDIDOS[k], n: k === 'aprovar' ? pendentes ?? undefined : undefined }))}
+            active={aba}
+            onChange={(k) => trocarAba(k as AbaPedidos)}
+            idBase={idBase}
+            label="Pedidos de alteração"
+          />
+          <div role="tabpanel" id={idsAba(idBase, 'pedir').panel} aria-labelledby={idsAba(idBase, 'pedir').tab} tabIndex={0}
+            hidden={aba !== 'pedir'} className="space-y-5">
+            {painelPedir}
+          </div>
+          {/* Monta na 1ª visita (pa_fila só sai quando a aba abre) e depois só esconde. */}
+          {visitouAprovar && (
+            <div role="tabpanel" id={idsAba(idBase, 'aprovar').panel} aria-labelledby={idsAba(idBase, 'aprovar').tab} tabIndex={0}
+              hidden={aba !== 'aprovar'}>
+              <PedidosAprovacao onCountChange={setPendentes} />
+            </div>
+          )}
+        </div>
+      ) : painelPedir}
       <Toast>{toast}</Toast>
     </div>
   );

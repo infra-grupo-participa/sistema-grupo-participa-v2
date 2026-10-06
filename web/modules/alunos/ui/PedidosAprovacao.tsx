@@ -1,7 +1,9 @@
 'use client';
 
-// Aba "Pedidos de alteração" da Central, para o aprovador (pa_aprovadores): antes/depois, conflito,
-// aprovar (com ajuste opcional) ou recusar (com motivo). Aprovar aplica na hora no banco (pa_decidir).
+// Fila do aprovador (pa_aprovadores): antes/depois, conflito, aprovar (com ajuste opcional) ou recusar
+// (com motivo). Aprovar aplica na hora no banco (pa_decidir). Monta em dois lugares: a aba "Pedidos de
+// alteração" da Central e a aba "Aprovar" da tela de pedidos (quem aprova sem acesso à Central). Por isso
+// nenhum texto daqui pressupõe estar na Central.
 import { useCallback, useEffect, useState } from 'react';
 import {
   Badge, Button, Checkbox, EmptyState, Input, Loading, Modal, SectionCard, Textarea, Toast, useFlash,
@@ -9,6 +11,7 @@ import {
 import { fmtDataHora } from '@/shared/ui/format';
 import {
   ROTULO_TIPO,
+  aprovouProprioPedido,
   campoAceitaAjusteTexto,
   enderecoEmLinha,
   formatarDocumento,
@@ -16,6 +19,7 @@ import {
   type PedidoLinha,
 } from '../domain/pedidos-alteracao';
 import { decidirPedido, filaPedidos, marcarAplicado } from './pedidos-alteracao-data';
+import { limparHistoricoAluno } from './HistoricoAluno';
 import { AlunoDistincao, Rotulo, StatusPedido } from './pedidos-alteracao-ui';
 
 const ROTULO_ACAO: Record<string, string> = {
@@ -72,6 +76,7 @@ function CartaoPedido({ p, onAprovar, onRecusar, onMarcar }: {
           <Badge>{ROTULO_TIPO[p.tipo]}</Badge>
           <StatusPedido p={p} />
           {p.conflito && aberto && <Badge tone="danger">Conflito</Badge>}
+          {aprovouProprioPedido(p) && <Badge tone="warning">Aprovou o próprio pedido</Badge>}
         </div>
         <span className="text-xs text-[var(--fg-3)]">
           {p.solicitado_por_nome ?? 'sem nome'} · {fmtDataHora(p.solicitado_em)}
@@ -194,6 +199,7 @@ export function PedidosAprovacao({ onCountChange }: { onCountChange?: (n: number
     if (r.conflito) { setConflitoAgora(r.agora ?? '(vazio)'); flash(r.msg); return; }
     flash(r.msg);
     if (!r.ok) return;
+    limparHistoricoAluno();
     setAprovando(null);
     carregar(todos);
   }
@@ -217,6 +223,7 @@ export function PedidosAprovacao({ onCountChange }: { onCountChange?: (n: number
     setBusy(false);
     flash(r.msg);
     if (!r.ok) return;
+    limparHistoricoAluno();
     setMarcando(null); setTexto('');
     carregar(todos);
   }
@@ -224,8 +231,8 @@ export function PedidosAprovacao({ onCountChange }: { onCountChange?: (n: number
   return (
     <div className="space-y-4">
       <SectionCard
-        title="Pedidos de alteração de cadastro"
-        subtitle="Aprovar aplica na base na hora, com registro no histórico do aluno. A planilha da Central é atualizada depois (status de planilha)."
+        title="Pedidos para aprovar"
+        subtitle="Aprovar aplica a alteração no cadastro do aluno na hora e registra no histórico dele. A planilha de acessos é atualizada depois: o selo de planilha de cada pedido mostra o andamento."
         right={(
           <div className="flex gap-2">
             <Button size="sm" variant={todos ? 'ghost' : 'subtle'} onClick={() => setTodos(false)}>Em aberto</Button>
@@ -235,7 +242,7 @@ export function PedidosAprovacao({ onCountChange }: { onCountChange?: (n: number
         )}
       >
         {erro ? <EmptyState title={erro} /> : !pedidos ? <Loading /> : pedidos.length === 0 ? (
-          <EmptyState title="Nenhum pedido em aberto." hint="Quem tem a permissão de pedir envia pela tela Pedidos de alteração." />
+          <EmptyState title={todos ? 'Nenhum pedido nos últimos 90 dias.' : 'Nenhum pedido em aberto.'} hint="Os pedidos novos aparecem aqui assim que alguém envia." />
         ) : (
           <div className="space-y-3">
             {pedidos.map((p) => (
