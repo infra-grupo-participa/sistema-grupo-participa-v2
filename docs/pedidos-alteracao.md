@@ -148,6 +148,17 @@ quem sai "<X> saiu como sócio de <titular>", quem entra "<Y> entrou como sócio
 Alterar dado: "<Rótulo> alterado/alterada de <antes> para <depois>", com `pa_exibir` (documento mascarado para quem
 não pode ver). Todos terminam em "(pedido nº N, aprovado por <nome> em dd/mm/aaaa)". "Outro" fica de fora.
 
+**Telas da etapa 2** (`web/modules/alunos/`):
+
+- `PedidosAlteracaoClient.tsx`: aba **Aprovar** para quem tem `pode_aprovar` em `pa_meu_papel()` (Victor e Isabela),
+  montando `PedidosAprovacao.tsx`. Pedido em que quem aprovou é quem pediu mostra o selo "aprovou o próprio pedido"
+  (campo `autoaprovado` de `pa_fila`/`pa_linha`).
+- `PedidosAprovacao.tsx`: histórico do pedido com rótulo para `planilha_ok` ("Planilha da Central atualizada") e
+  `planilha_erro` ("Erro ao atualizar a planilha da Central"); o selo `ROTULO_PLANILHA` mostra pendente, atualizada ou erro.
+- `HistoricoAluno.tsx` + aba **Histórico** da ficha (`AlunoDrawer.tsx`, `ficha-aluno-abas.ts`): lê
+  `pa_historico_aluno` e lista os textos acima, mais recente primeiro.
+- Regras puras e testes: `domain/pedidos-alteracao.ts` e `domain/pedidos-alteracao-etapa2.test.ts`.
+
 **Como testar:** os 4 ensaios (`aplica_sql.py ensaio infra/supabase/migrations/2026100616040<n>_ensaio.sql`; o da
 160403 já carrega a 160402). Esperado nenhuma linha `ERRADO`. Depois de aplicar: abrir a fila como Isabela (aba
 "Aprovar"), aprovar um pedido dela e ver o selo; abrir o histórico de um aluno com troca aplicada.
@@ -155,8 +166,7 @@ não pode ver). Todos terminam em "(pedido nº N, aprovado por <nome> em dd/mm/a
 **O que falta:** pentester e orquestrador; ok do Victor e aplicar; criar os workflows `[Central] Pedidos de alteração
 — Slack` e `[Central] Pedidos de alteração — planilha` no n8n (desligados, rodada 15 min, tokens em credencial),
 gravar `n8n_webhook_url`, ligar `ligado_em`; gravar `planilha_id` da CÓPIA, aprovar o nº 9 e o nº 10, conferir a cópia
-e só então a planilha real. A tela precisa de rótulo para as ações `planilha_ok` e `planilha_erro` no histórico do
-pedido.
+e só então a planilha real.
 
 ## Banco
 

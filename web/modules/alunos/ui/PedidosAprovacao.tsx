@@ -30,6 +30,8 @@ const ROTULO_ACAO: Record<string, string> = {
   erro: 'Erro ao aplicar',
   caso_remocao_aberto: 'Caso de Remoção de Acessos aberto',
   marcado_aplicado: 'Marcado como aplicado',
+  planilha_ok: 'Planilha da Central atualizada',
+  planilha_erro: 'Erro ao atualizar a planilha da Central',
 };
 
 function Linha({ k, children }: { k: string; children: React.ReactNode }) {
