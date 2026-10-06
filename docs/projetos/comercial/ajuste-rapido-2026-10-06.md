@@ -72,3 +72,12 @@ Regra de quem vê o quê e máscara de e-mail/telefone: **não mudaram** (moram 
    os 2.640 ganhos retroativos saem. Ver `hotmart-sem-retroativo-2026-10-06.md` (migration 20261006191824).
 
 Diagnóstico completo: segundo cérebro, `Projetos/sistema-unico/central-de-dados/area-comercial-mapa.md`, seção (c).
+
+## Passo 2: preparado (06/10/2026), migration 20261006m NÃO APLICADA
+
+Migration `infra/supabase/migrations/20261006m_crm_desempenho.sql` (+ `_ensaio.sql` e `.explain.md`), ensaiada em
+`begin … rollback` com JWT real de gestor e vendedores: lista, máscara e totais iguais aos de `crm_contatos`, nada
+persistiu. Front em `web/modules/comercial` já usa as RPCs novas e volta sozinho ao caminho antigo enquanto elas não
+existem. Itens 1 a 6 acima: feitos (5: nenhum índice novo, os necessários já existem; 6: `crm_negocios` já filtrava,
+o front passou a usar `p_pessoa` na ficha). Ficam no caminho antigo, por precisarem da base toda: Disparos e
+Performance da equipe. Números e decisões: `20261006m.explain.md`.

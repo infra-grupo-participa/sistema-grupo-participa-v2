@@ -3,7 +3,9 @@
 // Base de pessoas do CRM. Regra do playbook: se não está no CRM, não existe; antes de falar com alguém,
 // busque pelo telefone (tem dono, não é seu). Sem dono é meta zero; opt-out fica visível para ninguém abordar.
 // Sem rolagem horizontal: em tela larga, 5 colunas enxutas; em tela estreita, cartões. O detalhe mora na ficha.
-import { useEffect, useMemo, useState } from 'react';
+// Paginada no servidor (crm_contatos_pagina + crm_contatos_resumo, migration 20261006m): a tela não baixa a base
+// inteira nem a lista de negócios. Sem a migration aplicada, o repositório cai no caminho antigo sozinho.
+import { useEffect, useState } from 'react';
 import {
   Button, FilterSelect, MultiSelect, SearchInput, Toast, Toggle, Toolbar, useFlash,
 } from '@/shared/ui/components';
@@ -11,22 +13,30 @@ import { fmtRelativo } from '@/shared/ui/format';
 import { Icon } from '@/shared/ui/icons';
 import { produto, ROTULO_PERFIL } from '../../domain/catalogo';
 import { fmtTelefone } from '../../domain/regras';
-import type { Contato, Negocio, PerfilProfissional } from '../../domain/types';
+import {
+  linhasContatos, passaFiltro, type ContatoLinha, type FiltroContatos, type NegocioAbertoLinha,
+} from '../../domain/contatos';
+import type { Contato, PerfilProfissional } from '../../domain/types';
 import { Campo, EsqueletoLista, EstadoErro, FaixaNumeros, PaginaComercial, Pessoa, Vazio, useEquipe, useParamUrl } from '../comum';
 import { InfoIndicador, type TextoIndicador } from '../InfoIndicador';
 import { repo, useDados } from '../repositorio';
 import { ContatoDrawer } from './ContatoDrawer';
-import { indiceContatos, type IndiceContato } from './ficha-contato';
 import { ModalNovoContato } from './ModalNovoContato';
 import { DonoLinha, FlagsContato, PopoverFiltros } from './pecas';
-import { casaBusca, mapaDuplicados, resumoAbertos } from './regras-contatos';
+import { resumoAbertos } from './regras-contatos';
 
 type Coluna = 'nome' | 'dono' | 'negocios' | 'lancamentos' | 'ultima';
-const PAGINA = 100;
+// Página do servidor (crm_contatos_pagina, migration 20261006m): filtro, ordem e contagem no banco.
+const PAGINA = 50;
 /** Mesmo molde de colunas no cabeçalho e nas linhas (só em tela larga). Proporcionais: nunca passam do contêiner. */
 const GRADE = 'grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,0.8fr)_minmax(0,1fr)] items-center gap-3 px-3';
 
-const INFO: Record<'total' | 'semDono' | 'optOut' | 'alunos' | 'lancamentos', TextoIndicador> = {
+const INFO: Record<'total' | 'semDono' | 'optOut' | 'alunos' | 'lancamentos' | 'ultima', TextoIndicador> = {
+  ultima: {
+    nome: 'Última interação',
+    oQueE: 'O registro mais recente da pessoa com a casa.',
+    comoConta: 'O mais recente entre inscrições, MQL, compras e checkouts da Hotmart, eventos de integração, negócios (criação, mudanças e última conversa), atividades concluídas e notas, calculado no banco. A ficha mostra a jornada completa, que também casa listas, grupos e pesquisas pelo e-mail ou telefone.',
+  },
   total: {
     nome: 'Contatos',
     oQueE: 'Pessoas únicas na base do CRM.',
@@ -54,15 +64,13 @@ const INFO: Record<'total' | 'semDono' | 'optOut' | 'alunos' | 'lancamentos', Te
   lancamentos: {
     nome: 'Lançamentos',
     oQueE: 'Em quantos lançamentos ou captações diferentes a pessoa já entrou.',
-    comoConta: 'Chaves de lançamento distintas na jornada da pessoa. Por enquanto aparece só na ficha (aba Jornada), que busca o histórico de uma pessoa por vez.',
+    comoConta: 'Chaves de lançamento distintas na jornada da pessoa (inscrições, MQL e funis dos negócios), calculadas no banco para a página inteira. O detalhe de cada lançamento fica na ficha (aba Jornada).',
   },
 };
 
 export function ContatosClient() {
   const { vendedores, nomeDe } = useEquipe();
   const { toast, flash } = useFlash(5000);
-  const cs = useDados(() => repo.contatos());
-  const ns = useDados(() => repo.negocios());
 
   const [busca, setBusca] = useState('');
   const [dono, setDono] = useState<string>('todos');
@@ -72,7 +80,7 @@ export function ContatosClient() {
   const [soOptOut, setSoOptOut] = useState(false);
   const [soAlunos, setSoAlunos] = useState(false);
   const [ordem, setOrdem] = useState<{ col: Coluna; dir: 'asc' | 'desc' }>({ col: 'ultima', dir: 'desc' });
-  const [limite, setLimite] = useState(PAGINA);
+  const [pagina, setPagina] = useState(0);
   const [aberto, setAberto] = useState<string | null>(null);
   const [novo, setNovo] = useState(false);
   // Contatos cadastrados nesta tela enquanto a fonte não grava contato (demonstração).
@@ -80,87 +88,49 @@ export function ContatosClient() {
   const paramContato = useParamUrl('contato');
   const contatoAberto = aberto ?? paramContato;
 
-  const lista = useMemo(() => [...locais, ...(cs.dados ?? [])], [cs.dados, locais]);
-
-  // Busca no servidor (a partir de 3 letras, 400 ms depois da última tecla): acha quem não vem na lista do vendedor
-  // (sem dono e sem negócio aberto, migration 20261006191824). Os achados entram só no resultado, não nos números.
+  // Busca no servidor: 400 ms depois da última tecla; abaixo de 3 letras não filtra (o servidor exige 3).
   const [termo, setTermo] = useState('');
   useEffect(() => {
-    const t = setTimeout(() => setTermo(busca.trim()), 400);
+    const t = setTimeout(() => setTermo(busca.trim().length >= 3 ? busca.trim() : ''), 400);
     return () => clearTimeout(t);
   }, [busca]);
-  const rb = useDados(
-    async () => ({ termo, itens: termo.length >= 3 ? await repo.buscarContatos(termo) : [] as Contato[] }),
-    [termo],
-  );
-  const daBusca = useMemo(() => {
-    if (!rb.dados || rb.dados.termo !== busca.trim()) return [] as Contato[];
-    const ids = new Set(lista.map((c) => c.id));
-    return rb.dados.itens.filter((c) => !ids.has(c.id));
-  }, [rb.dados, busca, lista]);
-  const duplicados = useMemo(() => mapaDuplicados(lista), [lista]);
-  const abertosPorContato = useMemo(() => {
-    const m = new Map<string, Negocio[]>();
-    (ns.dados ?? []).filter((n) => n.status === 'aberto').forEach((n) => m.set(n.contatoId, [...(m.get(n.contatoId) ?? []), n]));
-    return m;
-  }, [ns.dados]);
 
-  // A lista NÃO busca a jornada de cada pessoa (era uma chamada por contato, todas em paralelo: milhares de
-  // consultas por abertura da tela). O histórico só é buscado ao abrir a ficha, uma pessoa por vez.
-  // "Última interação" sai dos negócios já carregados; "Lançamentos" fica para a RPC paginada com cálculo em lote
-  // (docs/projetos/comercial/ajuste-rapido-2026-10-06.md).
-  const indice = useMemo(() => indiceContatos(new Map(), ns.dados ?? []), [ns.dados]);
-
-  const ufs = useMemo(() => [...new Set(lista.map((c) => c.uf).filter((x): x is string => !!x))].sort(), [lista]);
-  const tags = useMemo(() => [...new Set(lista.flatMap((c) => c.tags))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [lista]);
-
-  const filtrados = useMemo(() => {
-    const idsBusca = new Set(daBusca.map((c) => c.id));
-    const res = [...lista, ...daBusca].filter((c) => {
-      if (dono === 'sem_dono' ? !!c.donoId : dono !== 'todos' && c.donoId !== dono) return false;
-      if (perfil === 'sem' ? !!c.perfil : perfil !== 'todos' && c.perfil !== perfil) return false;
-      if (uf !== 'todas' && c.uf !== uf) return false;
-      if (tagsSel.length && !tagsSel.some((t) => c.tags.includes(t))) return false;
-      if (soOptOut && !c.optOut) return false;
-      if (soAlunos && !c.ehAluno) return false;
-      // o servidor já casou a busca (e-mail e telefone vêm mascarados, então não dá para casar de novo aqui)
-      return idsBusca.has(c.id) || casaBusca(c, busca);
-    });
-    const valor = (c: Contato): string | number => {
-      switch (ordem.col) {
-        case 'nome': return c.nome.toLowerCase();
-        case 'dono': return c.donoId ? nomeDe(c.donoId) : '';
-        case 'negocios': return abertosPorContato.get(c.id)?.length ?? 0;
-        case 'lancamentos': return 0; // sem dado na lista (ver comentário do índice acima)
-        case 'ultima': return indice.get(c.id)?.ultimaEm ?? '';
-      }
-    };
-    const sinal = ordem.dir === 'asc' ? 1 : -1;
-    return res.sort((a, b) => {
-      const va = valor(a), vb = valor(b);
-      const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), 'pt-BR');
-      return cmp * sinal || a.nome.localeCompare(b.nome, 'pt-BR');
-    });
-  }, [lista, daBusca, dono, perfil, uf, tagsSel, soOptOut, soAlunos, busca, ordem, nomeDe, abertosPorContato, indice]);
-
-  const numeros = {
-    total: lista.length,
-    semDono: lista.filter((c) => !c.donoId).length,
-    optOut: lista.filter((c) => c.optOut).length,
-    alunos: lista.filter((c) => c.ehAluno).length,
+  // Filtro, ordem e página vão ao banco (crm_contatos_pagina): a tela recebe só a página, com lançamentos,
+  // última interação e negócios abertos já calculados em lote. Nada de lista inteira nem histórico por pessoa.
+  const filtro: FiltroContatos = {
+    busca: termo || undefined, dono, perfil, uf, tags: tagsSel, optOut: soOptOut, soAlunos,
+    ordem: ordem.col, dir: ordem.dir, limite: PAGINA, offset: pagina * PAGINA,
   };
+  const pg = useDados(() => repo.contatosPagina(filtro), [filtro]);
+  const rs = useDados(() => repo.contatosResumo());
 
-  const ordenar = (col: Coluna) => setOrdem((o) => ({ col, dir: o.col === col && o.dir === 'asc' ? 'desc' : 'asc' }));
+  // Os cadastrados nesta tela (demonstração) aparecem no topo da 1ª página, se passarem nos filtros.
+  const locaisVisiveis = pagina === 0 && locais.length
+    ? linhasContatos(locais, []).filter((c) => passaFiltro(c, { ...filtro, busca: busca.trim() || undefined }))
+    : [];
+  const itens: ContatoLinha[] = [...locaisVisiveis, ...(pg.dados?.itens ?? [])];
+  const total = (pg.dados?.total ?? 0) + locaisVisiveis.length;
+  const paginas = Math.max(1, Math.ceil((pg.dados?.total ?? 0) / PAGINA));
+
+  const numeros = rs.dados
+    ? { ...rs.dados, total: rs.dados.total + locais.length, semDono: rs.dados.semDono + locais.filter((c) => !c.donoId).length }
+    : null;
+
+  const ordenar = (col: Coluna) => {
+    setOrdem((o) => ({ col, dir: o.col === col && o.dir === 'asc' ? 'desc' : 'asc' }));
+    setPagina(0);
+  };
   // Filtros escondidos no popover (o contador do botão mostra quantos estão valendo).
   const noPopover = [perfil !== 'todos', uf !== 'todas', tagsSel.length > 0, soOptOut, soAlunos].filter(Boolean).length;
   const filtrosAtivos = !!busca || dono !== 'todos' || noPopover > 0;
   const limpar = () => {
     setBusca(''); setDono('todos'); setPerfil('todos'); setUf('todas'); setTagsSel([]); setSoOptOut(false); setSoAlunos(false);
-    setLimite(PAGINA);
+    setPagina(0);
   };
   const abrir = (id: string) => setAberto(id);
-  const carregando = !cs.dados || !ns.dados;
-  const erro = cs.erro ?? ns.erro;
+  const carregando = !pg.dados;
+  const erro = pg.erro;
+  const buscaCurta = busca.trim().length > 0 && busca.trim().length < 3;
 
   const botaoNovo = (
     <Button size="sm" onClick={() => setNovo(true)}><Icon name="plus" size={14} /> Novo contato</Button>
@@ -171,23 +141,23 @@ export function ContatosClient() {
       titulo="Contatos"
       subtitulo="Base única de pessoas do CRM. Antes de abordar, busque pelo nome ou final do telefone."
       acoes={botaoNovo}
-      meta={carregando ? undefined : (
+      meta={!numeros ? undefined : (
         <FaixaNumeros
           itens={[
             { rotulo: 'Contatos', valor: numeros.total.toLocaleString('pt-BR'), info: INFO.total },
             {
               rotulo: 'Sem dono', valor: numeros.semDono.toLocaleString('pt-BR'), alerta: numeros.semDono > 0, ativo: dono === 'sem_dono',
               title: 'Meta: zero. Todo lead tem um dono só.', info: INFO.semDono,
-              onClick: () => { setDono((d) => (d === 'sem_dono' ? 'todos' : 'sem_dono')); setLimite(PAGINA); },
+              onClick: () => { setDono((d) => (d === 'sem_dono' ? 'todos' : 'sem_dono')); setPagina(0); },
             },
             {
               rotulo: 'Não querem contato', valor: numeros.optOut.toLocaleString('pt-BR'), ativo: soOptOut,
               title: 'Opt-out: lista de bloqueio, fora de disparos e abordagens.', info: INFO.optOut,
-              onClick: () => { setSoOptOut((v) => !v); setLimite(PAGINA); },
+              onClick: () => { setSoOptOut((v) => !v); setPagina(0); },
             },
             {
               rotulo: 'Já são alunos', valor: numeros.alunos.toLocaleString('pt-BR'), ativo: soAlunos, info: INFO.alunos,
-              onClick: () => { setSoAlunos((v) => !v); setLimite(PAGINA); },
+              onClick: () => { setSoAlunos((v) => !v); setPagina(0); },
             },
           ]}
         />
@@ -195,7 +165,7 @@ export function ContatosClient() {
     >
       <div className="space-y-4">
         {erro && carregando ? (
-          <EstadoErro mensagem={erro} onTentar={() => { cs.recarregar(); ns.recarregar(); }} />
+          <EstadoErro mensagem={erro} onTentar={() => { pg.recarregar(); rs.recarregar(); }} />
         ) : (
           <>
             <Toolbar>
@@ -203,47 +173,47 @@ export function ContatosClient() {
                 placeholder="Nome, e-mail ou final do telefone"
                 aria-label="Buscar contato"
                 value={busca}
-                onChange={(e) => { setBusca(e.target.value); setLimite(PAGINA); }}
-                onLimpar={() => setBusca('')}
+                onChange={(e) => { setBusca(e.target.value); setPagina(0); }}
+                onLimpar={() => { setBusca(''); setPagina(0); }}
                 className="w-full"
               />
               <div className="flex w-full items-center gap-2 sm:w-auto">
-                <FilterSelect value={dono} onChange={(e) => { setDono(e.target.value); setLimite(PAGINA); }} aria-label="Dono" className="min-w-0 flex-1 sm:flex-none">
+                <FilterSelect value={dono} onChange={(e) => { setDono(e.target.value); setPagina(0); }} aria-label="Dono" className="min-w-0 flex-1 sm:flex-none">
                   <option value="todos">Todos os donos</option>
                   <option value="sem_dono">Sem dono</option>
                   {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
                 </FilterSelect>
                 <PopoverFiltros ativos={noPopover}>
                   <Campo rotulo="Perfil">
-                    <FilterSelect value={perfil} onChange={(e) => setPerfil(e.target.value as typeof perfil)}>
+                    <FilterSelect value={perfil} onChange={(e) => { setPerfil(e.target.value as typeof perfil); setPagina(0); }}>
                       <option value="todos">Todos os perfis</option>
                       {(Object.keys(ROTULO_PERFIL) as PerfilProfissional[]).map((p) => <option key={p} value={p}>{ROTULO_PERFIL[p]}</option>)}
                       <option value="sem">Sem perfil</option>
                     </FilterSelect>
                   </Campo>
                   <Campo rotulo="UF">
-                    <FilterSelect value={uf} onChange={(e) => setUf(e.target.value)}>
+                    <FilterSelect value={uf} onChange={(e) => { setUf(e.target.value); setPagina(0); }}>
                       <option value="todas">Todas as UFs</option>
-                      {ufs.map((u) => <option key={u} value={u}>{u}</option>)}
+                      {(rs.dados?.ufs ?? []).map((u) => <option key={u} value={u}>{u}</option>)}
                     </FilterSelect>
                   </Campo>
                   <Campo rotulo="Tags">
                     <MultiSelect
                       values={tagsSel}
-                      onChange={(v) => { setTagsSel(v); setLimite(PAGINA); }}
+                      onChange={(v) => { setTagsSel(v); setPagina(0); }}
                       placeholder="Todas as tags"
-                      options={tags.map((t) => ({ value: t, label: t }))}
+                      options={(rs.dados?.tags ?? []).map((t) => ({ value: t, label: t }))}
                     />
                   </Campo>
                   <div className="flex flex-col gap-3">
-                    <Toggle checked={soOptOut} onChange={setSoOptOut} label="Só quem não quer contato" />
-                    <Toggle checked={soAlunos} onChange={setSoAlunos} label="Só quem já é aluno" />
+                    <Toggle checked={soOptOut} onChange={(v) => { setSoOptOut(v); setPagina(0); }} label="Só quem não quer contato" />
+                    <Toggle checked={soAlunos} onChange={(v) => { setSoAlunos(v); setPagina(0); }} label="Só quem já é aluno" />
                   </div>
                 </PopoverFiltros>
               </div>
               <div className="ml-auto flex items-center gap-2">
                 <span className="text-xs text-[var(--fg-3)] tabular" aria-live="polite">
-                  {carregando ? 'Carregando…' : `${filtrados.length.toLocaleString('pt-BR')} de ${lista.length.toLocaleString('pt-BR')}`}
+                  {carregando ? 'Carregando…' : buscaCurta ? 'Busca a partir de 3 letras' : `${total.toLocaleString('pt-BR')} contato${total === 1 ? '' : 's'}`}
                 </span>
                 {filtrosAtivos && <Button size="sm" variant="ghost" onClick={limpar}>Limpar</Button>}
               </div>
@@ -251,8 +221,8 @@ export function ContatosClient() {
 
             {carregando ? (
               <EsqueletoLista linhas={8} />
-            ) : filtrados.length === 0 ? (
-              lista.length === 0 ? (
+            ) : itens.length === 0 ? (
+              !filtrosAtivos ? (
                 <Vazio
                   titulo="Nenhum contato no CRM"
                   hint="Se a pessoa não está no CRM, ela não existe para o Comercial: cadastre antes de conversar."
@@ -265,7 +235,7 @@ export function ContatosClient() {
                   hint="Confira a busca ou os filtros. Se a pessoa não está no CRM, cadastre antes de conversar."
                   icone="contact"
                   acao={<>
-                    {filtrosAtivos && <Button size="sm" variant="ghost" onClick={limpar}>Limpar filtros</Button>}
+                    <Button size="sm" variant="ghost" onClick={limpar}>Limpar filtros</Button>
                     <Button size="sm" variant="ghost" onClick={() => setNovo(true)}><Icon name="plus" size={14} /> Novo contato</Button>
                   </>}
                 />
@@ -276,39 +246,29 @@ export function ContatosClient() {
                 <div className="hidden overflow-visible rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] lg:block">
                   <Cabecalho ordem={ordem} onOrdenar={ordenar} />
                   <ul aria-label="Contatos">
-                    {filtrados.slice(0, limite).map((c) => (
-                      <LinhaContato
-                        key={c.id}
-                        c={c}
-                        abertos={abertosPorContato.get(c.id) ?? []}
-                        indice={indice.get(c.id)}
-                        duplicado={duplicados.has(c.id)}
-                        nomeDe={nomeDe}
-                        onAbrir={() => abrir(c.id)}
-                      />
+                    {itens.map((c) => (
+                      <LinhaContato key={c.id} c={c} nomeDe={nomeDe} onAbrir={() => abrir(c.id)} />
                     ))}
                   </ul>
                 </div>
                 {/* Telas estreitas: cartões empilhados. */}
                 <ul className="space-y-2 lg:hidden" aria-label="Contatos">
-                  {filtrados.slice(0, limite).map((c) => (
-                    <CartaoContato
-                      key={c.id}
-                      c={c}
-                      abertos={abertosPorContato.get(c.id) ?? []}
-                      indice={indice.get(c.id)}
-                      duplicado={duplicados.has(c.id)}
-                      nomeDe={nomeDe}
-                      onAbrir={() => abrir(c.id)}
-                    />
+                  {itens.map((c) => (
+                    <CartaoContato key={c.id} c={c} nomeDe={nomeDe} onAbrir={() => abrir(c.id)} />
                   ))}
                 </ul>
-                {filtrados.length > limite && (
-                  <div className="text-center">
-                    <Button size="sm" variant="ghost" onClick={() => setLimite((l) => l + PAGINA)}>
-                      Mostrar mais ({(filtrados.length - limite).toLocaleString('pt-BR')} restantes)
+                {paginas > 1 && (
+                  <nav aria-label="Páginas de contatos" className="flex items-center justify-center gap-3">
+                    <Button size="sm" variant="ghost" disabled={pagina === 0} onClick={() => setPagina((p) => Math.max(0, p - 1))}>
+                      <Icon name="chevron-left" size={14} /> Anterior
                     </Button>
-                  </div>
+                    <span className="text-xs text-[var(--fg-3)] tabular">
+                      {(pagina * PAGINA + 1).toLocaleString('pt-BR')}–{Math.min((pagina + 1) * PAGINA, pg.dados?.total ?? 0).toLocaleString('pt-BR')} de {(pg.dados?.total ?? 0).toLocaleString('pt-BR')}
+                    </span>
+                    <Button size="sm" variant="ghost" disabled={pagina + 1 >= paginas} onClick={() => setPagina((p) => p + 1)}>
+                      Próxima <Icon name="chevron-right" size={14} />
+                    </Button>
+                  </nav>
                 )}
               </>
             )}
@@ -318,7 +278,7 @@ export function ContatosClient() {
 
       {novo && (
         <ModalNovoContato
-          contatos={lista}
+          contatosLocais={locais}
           nomeDe={nomeDe}
           onClose={() => setNovo(false)}
           onAbrirContato={(id) => { setNovo(false); abrir(id); }}
@@ -339,7 +299,7 @@ export function ContatosClient() {
         <ContatoDrawer
           key={contatoAberto}
           contatoId={contatoAberto}
-          contatoReserva={locais.find((c) => c.id === contatoAberto) ?? daBusca.find((c) => c.id === contatoAberto)}
+          contatoReserva={locais.find((c) => c.id === contatoAberto) ?? itens.find((c) => c.id === contatoAberto)}
           reservaDaBusca={!locais.some((c) => c.id === contatoAberto)}
           onAbrirContato={abrir}
           onClose={() => {
@@ -388,13 +348,13 @@ function Cabecalho({ ordem, onOrdenar }: {
       {col('nome', 'Pessoa')}
       {col('dono', 'Dono')}
       {col('negocios', 'Negócios abertos')}
-      {col('lancamentos', 'Lançamentos', INFO.lancamentos, true, false)}
-      {col('ultima', 'Última interação')}
+      {col('lancamentos', 'Lançamentos', INFO.lancamentos, true)}
+      {col('ultima', 'Última interação', INFO.ultima)}
     </div>
   );
 }
 
-function NegociosAbertos({ abertos }: { abertos: Negocio[] }) {
+function NegociosAbertos({ abertos }: { abertos: NegocioAbertoLinha[] }) {
   const r = resumoAbertos(abertos.map((n) => ({ produtoNome: produto(n.produto).nome, etapaNome: n.etapaNome })));
   if (!r) return <span className="text-sm text-[var(--fg-3)]">—</span>;
   const todos = abertos.map((n) => `${produto(n.produto).nome} · ${n.etapaNome}`).join('\n');
@@ -406,15 +366,16 @@ function NegociosAbertos({ abertos }: { abertos: Negocio[] }) {
   );
 }
 
-// Última interação: a mais recente registrada nos negócios da pessoa (a jornada completa fica na ficha).
+// Última interação: a mais recente, calculada no banco para a página (a jornada completa fica na ficha).
 function UltimaInteracao({ em }: { em: string | null | undefined }) {
   const r = fmtRelativo(em);
   return <span className="block truncate text-sm tabular text-[var(--fg-2)]" title={r.title || undefined}>{r.label}</span>;
 }
 
-function LinhaContato({ c, abertos, indice, duplicado, nomeDe, onAbrir }: {
-  c: Contato; abertos: Negocio[]; indice: IndiceContato | undefined; duplicado: boolean;
-  nomeDe: (id: string | null) => string; onAbrir: () => void;
+// O aviso de possível duplicado fica na ficha (o banco compara o telefone inteiro); a lista paginada não tem a base
+// toda para comparar.
+function LinhaContato({ c, nomeDe, onAbrir }: {
+  c: ContatoLinha; nomeDe: (id: string | null) => string; onAbrir: () => void;
 }) {
   return (
     // O nome (Pessoa) é o alvo de teclado; o clique na linha inteira é atalho de mouse.
@@ -426,24 +387,24 @@ function LinhaContato({ c, abertos, indice, duplicado, nomeDe, onAbrir }: {
         <Pessoa
           nome={c.nome}
           sub={<span className="tabular">{c.telefone ? fmtTelefone(c.telefone) : (c.email ?? 'sem telefone')}</span>}
-          flags={<FlagsContato duplicado={duplicado} optOut={c.optOut} aluno={c.ehAluno} />}
+          flags={<FlagsContato duplicado={false} optOut={c.optOut} aluno={c.ehAluno} />}
           onClick={onAbrir}
           rotuloAcao={`Abrir ficha de ${c.nome}`}
         />
       </div>
       <DonoLinha c={c} nomeDe={nomeDe} />
-      <NegociosAbertos abertos={abertos} />
-      <span className="text-right text-sm tabular text-[var(--fg-3)]" title="Abra a ficha para ver os lançamentos">—</span>
-      <UltimaInteracao em={indice?.ultimaEm} />
+      <NegociosAbertos abertos={c.abertos} />
+      <span className="text-right text-sm tabular text-[var(--fg-2)]">{c.lancamentos ? c.lancamentos.toLocaleString('pt-BR') : '—'}</span>
+      <UltimaInteracao em={c.ultimaInteracaoEm} />
     </li>
   );
 }
 
-function CartaoContato({ c, abertos, indice, duplicado, nomeDe, onAbrir }: {
-  c: Contato; abertos: Negocio[]; indice: IndiceContato | undefined; duplicado: boolean;
-  nomeDe: (id: string | null) => string; onAbrir: () => void;
+function CartaoContato({ c, nomeDe, onAbrir }: {
+  c: ContatoLinha; nomeDe: (id: string | null) => string; onAbrir: () => void;
 }) {
-  const ultima = fmtRelativo(indice?.ultimaEm);
+  const ultima = fmtRelativo(c.ultimaInteracaoEm);
+  const abertos = c.abertos;
   return (
     <li>
       <button
@@ -454,7 +415,7 @@ function CartaoContato({ c, abertos, indice, duplicado, nomeDe, onAbrir }: {
         <div className="flex min-w-0 items-center justify-between gap-3">
           <span className="flex min-w-0 items-center gap-1.5">
             <span className="truncate text-sm font-medium text-[var(--fg)]">{c.nome}</span>
-            <span className="inline-flex shrink-0 items-center gap-1"><FlagsContato duplicado={duplicado} optOut={c.optOut} aluno={c.ehAluno} /></span>
+            <span className="inline-flex shrink-0 items-center gap-1"><FlagsContato duplicado={false} optOut={c.optOut} aluno={c.ehAluno} /></span>
           </span>
           <DonoLinha c={c} nomeDe={nomeDe} className="max-w-[40%] shrink-0 text-right" />
         </div>
@@ -467,7 +428,7 @@ function CartaoContato({ c, abertos, indice, duplicado, nomeDe, onAbrir }: {
           </span>
         </div>
         <div className="mt-1 truncate text-xs text-[var(--fg-3)] tabular">
-          Última interação {ultima.label}
+          Última interação {ultima.label}{c.lancamentos ? ` · ${c.lancamentos} lançamento${c.lancamentos > 1 ? 's' : ''}` : ''}
         </div>
       </button>
     </li>

@@ -3,7 +3,7 @@
 // Novo negócio: escolhe o contato (se ainda não veio), o funil e a campanha de entrada.
 // Usado pelo Funil e pela ficha do contato. Quem vira dono é a distribuição (do funil ou a geral).
 // Na busca, telefone e dono à vista: é assim que o vendedor separa homônimos e vê que "tem dono, não é seu".
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button, FilterSelect, Modal, SearchInput } from '@/shared/ui/components';
 import { fmtTelefone } from '../domain/regras';
 import type { Agrupador, Contato, Funil, Negocio } from '../domain/types';
@@ -15,6 +15,7 @@ const MAX_RESULTADOS = 8;
 export function ModalNovoNegocio({ contatoFixo, contatos, funilInicial, onClose, onCriado }: {
   /** Contato já escolhido (ficha do contato). Sem ele, o modal pede a busca. */
   contatoFixo?: Contato;
+  /** Base para a busca. Sem ela, a busca vai ao servidor (a partir de 3 letras), sem baixar a lista inteira. */
   contatos?: Contato[];
   funilInicial?: string;
   onClose: () => void;
@@ -22,10 +23,19 @@ export function ModalNovoNegocio({ contatoFixo, contatos, funilInicial, onClose,
 }) {
   const { dados: funis } = useDados(() => repo.funis());
   const { dados: agrupadores } = useDados(() => repo.agrupadores());
-  const { dados: negocios } = useDados(() => repo.negocios());
   const { nomeDe } = useEquipe();
   const [busca, setBusca] = useState('');
   const [contatoId, setContatoId] = useState<string | null>(contatoFixo?.id ?? null);
+  // Busca no servidor (sem lista inteira na tela): 400 ms depois da última tecla, a partir de 3 letras.
+  const [termoServidor, setTermoServidor] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setTermoServidor(busca.trim()), 400);
+    return () => clearTimeout(t);
+  }, [busca]);
+  const { dados: achados } = useDados(
+    async () => (contatos || contatoFixo || termoServidor.length < 3 ? [] as Contato[] : repo.buscarContatos(termoServidor)),
+    [termoServidor],
+  );
   const [funilId, setFunilId] = useState<string>(funilInicial ?? '');
   const [campanhaId, setCampanhaId] = useState<string>('');
   const [erro, setErro] = useState<string | null>(null);
@@ -34,13 +44,20 @@ export function ModalNovoNegocio({ contatoFixo, contatos, funilInicial, onClose,
   // Só funis manuais: os automáticos nascem dos eventos da Hotmart.
   const manuais = useMemo(() => (funis ?? []).filter((f) => f.tipo === 'manual'), [funis]);
   const funil = manuais.find((f) => f.id === funilId) ?? null;
-  const contato = contatoFixo ?? contatos?.find((c) => c.id === contatoId) ?? null;
+  const base = contatos ?? achados ?? [];
+  const contato = contatoFixo ?? base.find((c) => c.id === contatoId) ?? null;
+  // Negócios só da pessoa escolhida (filtro no banco), para marcar o funil em que ela já tem negócio aberto.
+  const { dados: negocios } = useDados(
+    async () => (contato ? repo.negocios({ contatoId: contato.id, status: 'aberto' }) : [] as Negocio[]),
+    [contato?.id ?? null],
+  );
   const jaTem = (f: Funil) => (negocios ?? []).some((n: Negocio) => n.contatoId === contato?.id && n.funilId === f.id && n.status === 'aberto');
 
   // Busca também pelo telefone só com dígitos ("11 9…" acha "+55 11 9…").
   const termo = busca.trim().toLowerCase();
   const digitos = termo.replace(/\D/g, '');
-  const filtrados = (contatos ?? []).filter((c) =>
+  // Achados do servidor já casaram a busca (e-mail/telefone podem vir mascarados): só a base local é filtrada aqui.
+  const filtrados = !contatos ? base : base.filter((c) =>
     `${c.nome} ${c.email ?? ''} ${c.telefone ?? ''}`.toLowerCase().includes(termo)
     || (digitos.length >= 4 && (c.telefone ?? '').replace(/\D/g, '').includes(digitos)));
   const lista = filtrados.slice(0, MAX_RESULTADOS);
@@ -91,7 +108,9 @@ export function ModalNovoNegocio({ contatoFixo, contatos, funilInicial, onClose,
             </Campo>
             <div role="listbox" aria-label="Contatos encontrados" className="mt-2 max-h-56 overflow-y-auto rounded-[var(--r-md)] border border-[var(--border)]">
               {lista.length === 0 && (
-                <div className="px-3 py-4 text-center text-xs text-[var(--fg-3)]">Nenhum contato com “{busca.trim()}”.</div>
+                <div className="px-3 py-4 text-center text-xs text-[var(--fg-3)]">
+                  {!contatos && busca.trim().length < 3 ? 'Digite ao menos 3 letras do nome, o e-mail ou o telefone.' : `Nenhum contato com “${busca.trim()}”.`}
+                </div>
               )}
               {lista.map((c) => {
                 const sel = contatoId === c.id;

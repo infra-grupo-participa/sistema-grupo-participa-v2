@@ -11,8 +11,12 @@
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type {
-  ComercialRepository, NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink, ResultadoTokenMcp,
+  ComercialRepository, FiltroNegocios, NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink, ResultadoTokenMcp,
 } from '../application/ports';
+import {
+  casaBusca, linhasContatos, mapaDuplicados, paginarContatos, resumirContatos,
+  type FiltroContatos, type PaginaContatos, type ResumoContatos,
+} from '../domain/contatos';
 import type {
   CampoKey, Contato, Conversa, Dashboard, EscopoMcp, PainelHotmart, TokenMcp, EventoTimeline, FichaDisparo, FilaRecuperacao, FiltroLog, Funil, LinkRastreavel,
   LogCrm, Mensagem, MotivoPerda, MotivoPerdaConfig, Negocio, OfertaHotmart, PainelPessoa, PontoJornada,
@@ -23,6 +27,7 @@ import {
   mapFichas, mapFilas, mapFunis, mapJornada, mapLinks, mapLog, mapMensagens, mapMotivosPerda, mapNegocios, mapNotificacoes,
   mapOfertas, mapOfertasOrfas, mapPainel, mapPreferencias, mapProdutosHotmart, mapSessao, mapTemplates, mapVendedores,
   mapPainelHotmart, mapTokensMcp, mapWhatsappStatus, mensagemErroRpc,
+  mapContatosPorIds, mapPaginaServidor, mapResumoContatos, rpcAusente, type ErroRpc,
 } from './mapeamento-supabase';
 import {
   argsEscrita, mapResultado, mapResultadoComId, mapResultadoFicha, mapResultadoLink, mapResultadoNegocio, mapResultadoProjeto,
@@ -43,6 +48,11 @@ const PAGINA_CONTATOS = 500;
 const MAX_PAGINAS_CONTATOS = 20;
 const PAGINA_ATIVIDADES = 2000;
 const MAX_PAGINAS = 25;
+// crm_contatos_por_ids aceita até 1.000 ids por chamada.
+const LOTE_POR_IDS = 1000;
+// Caminho antigo (RPC nova ainda não aplicada): a lista inteira fica 30 s em memória para trocar de página/filtro
+// sem baixar tudo de novo a cada clique.
+const VALIDADE_BASE_ANTIGA_MS = 30_000;
 
 export class SupabaseComercialRepository implements ComercialRepository {
   private cliente: ReturnType<typeof createBrowserSupabase> | null = null;
@@ -53,13 +63,50 @@ export class SupabaseComercialRepository implements ComercialRepository {
     return this.cliente;
   }
 
-  private async rpc(fn: string, args?: Record<string, unknown>): Promise<unknown> {
+  /** Chamada crua (ponto único que fala com o Supabase; os testes trocam por um falso). */
+  private async bruto(fn: string, args?: Record<string, unknown>): Promise<{ data: unknown; error: ErroRpc | null }> {
     const { data, error } = await this.db().rpc(fn, args);
+    return { data, error };
+  }
+
+  private async rpc(fn: string, args?: Record<string, unknown>): Promise<unknown> {
+    const { data, error } = await this.bruto(fn, args);
     if (error) {
       logQueryError(fn, error);
       throw new Error(mensagemErroRpc(fn, error));
     }
     return data;
+  }
+
+  // RPCs da migration 20261006m que o banco ainda não tem: depois da 1ª resposta 42883/PGRST202, nem tenta de novo.
+  private ausentes = new Set<string>();
+
+  /** RPC nova: devolve null se ela ainda não existe no banco (o chamador usa o caminho antigo). Outro erro lança. */
+  private async rpcNova(fn: string, args: Record<string, unknown>): Promise<unknown | null> {
+    if (this.ausentes.has(fn)) return null;
+    const { data, error } = await this.bruto(fn, args);
+    if (error) {
+      if (rpcAusente(error)) {
+        this.ausentes.add(fn);
+        return null;
+      }
+      logQueryError(fn, error);
+      throw new Error(mensagemErroRpc(fn, error));
+    }
+    return data;
+  }
+
+  private baseAntiga: { em: number; dados: Promise<{ contatos: Contato[]; negocios: Negocio[] }> } | null = null;
+
+  /** Caminho antigo: lista inteira de contatos + negócios, reaproveitada por 30 s. */
+  private carregarBaseAntiga() {
+    const agora = Date.now();
+    if (!this.baseAntiga || agora - this.baseAntiga.em > VALIDADE_BASE_ANTIGA_MS) {
+      const dados = Promise.all([this.contatos(), this.negocios()]).then(([contatos, negocios]) => ({ contatos, negocios }));
+      this.baseAntiga = { em: agora, dados };
+      dados.catch(() => { this.baseAntiga = null; });
+    }
+    return this.baseAntiga.dados;
   }
 
   /**
@@ -102,12 +149,71 @@ export class SupabaseComercialRepository implements ComercialRepository {
     return mapPaginaContatos(await this.rpc('crm_contatos', { p_busca: t, p_limite: LIMITE_BUSCA_CONTATOS, p_offset: 0 })).itens;
   }
 
+  /** Página da tela Contatos no servidor. Sem a RPC (migration 20261006m não aplicada): lista inteira, filtrada aqui. */
+  async contatosPagina(f: FiltroContatos): Promise<PaginaContatos> {
+    const busca = f.busca?.trim() ?? '';
+    const d = await this.rpcNova('crm_contatos_pagina', {
+      p_busca: busca || null, p_dono: f.dono ?? null, p_perfil: f.perfil ?? null, p_uf: f.uf ?? null,
+      p_tags: f.tags?.length ? f.tags : null, p_opt_out: !!f.optOut, p_so_alunos: !!f.soAlunos,
+      p_ordem: f.ordem ?? 'criado', p_dir: f.dir ?? 'desc', p_limite: f.limite ?? 50, p_offset: f.offset ?? 0,
+    });
+    if (d !== null) return mapPaginaServidor(d);
+    const [{ contatos, negocios }, vendedores, achados] = await Promise.all([
+      this.carregarBaseAntiga(), this.vendedores(), busca.length >= 3 ? this.buscarContatos(busca) : Promise.resolve([] as Contato[]),
+    ]);
+    // a busca do servidor alcança quem não está na lista do vendedor; e-mail/telefone mascarados não casam aqui
+    const ids = new Set(contatos.map((c) => c.id));
+    const daBusca = new Set(achados.map((c) => c.id));
+    const base = [...contatos, ...achados.filter((c) => !ids.has(c.id))]
+      .filter((c) => !busca || daBusca.has(c.id) || casaBusca(c, busca));
+    const nomes = new Map(vendedores.map((v) => [v.id, v.nome]));
+    return paginarContatos(linhasContatos(base, negocios), { ...f, busca: undefined }, (id) => (id ? nomes.get(id) ?? '' : ''));
+  }
+
+  async contatosResumo(): Promise<ResumoContatos> {
+    const d = await this.rpcNova('crm_contatos_resumo', {});
+    if (d !== null) return mapResumoContatos(d);
+    return resumirContatos((await this.carregarBaseAntiga()).contatos);
+  }
+
+  /** Em lotes de 1.000. Sem a RPC: filtra a lista inteira (quem não está nela fica de fora, como antes). */
+  async contatosPorIds(ids: string[]): Promise<Contato[]> {
+    const unicos = [...new Set(ids.filter(Boolean))];
+    if (!unicos.length) return [];
+    const achados: Contato[] = [];
+    for (let i = 0; i < unicos.length; i += LOTE_POR_IDS) {
+      const d = await this.rpcNova('crm_contatos_por_ids', { p_ids: unicos.slice(i, i + LOTE_POR_IDS) });
+      if (d === null) {
+        const pedidos = new Set(unicos);
+        return (await this.carregarBaseAntiga()).contatos.filter((c) => pedidos.has(c.id));
+      }
+      achados.push(...mapContatosPorIds(d).contatos);
+    }
+    return achados;
+  }
+
+  async duplicadosDe(contatoId: string): Promise<Contato[]> {
+    const d = await this.rpcNova('crm_contatos_por_ids', { p_ids: [contatoId], p_duplicados: true });
+    if (d === null) {
+      const lista = (await this.carregarBaseAntiga()).contatos;
+      const ids = mapaDuplicados(lista).get(contatoId) ?? [];
+      return lista.filter((c) => ids.includes(c.id));
+    }
+    const dup = mapContatosPorIds(d).duplicados.get(contatoId) ?? [];
+    return dup.length ? this.contatosPorIds(dup) : [];
+  }
+
   async jornada(contatoId: string): Promise<PontoJornada[]> {
     return mapJornada(await this.rpc('crm_jornada', { p_pessoa: contatoId }));
   }
 
-  negocios(): Promise<Negocio[]> {
-    return this.todasPaginas('crm_negocios', PAGINA_NEGOCIOS, mapNegocios);
+  /** Filtro opcional no banco (p_pessoa resolve o grupo de alias; p_funil; p_status). */
+  negocios(filtro: FiltroNegocios = {}): Promise<Negocio[]> {
+    const args: Record<string, unknown> = {};
+    if (filtro.contatoId) args.p_pessoa = filtro.contatoId;
+    if (filtro.funilId) args.p_funil = filtro.funilId;
+    if (filtro.status) args.p_status = filtro.status;
+    return this.todasPaginas('crm_negocios', PAGINA_NEGOCIOS, mapNegocios, args);
   }
 
   /** Abertas + concluídas nos últimos 30 dias (p_desde padrão da RPC), paginadas por p_offset. */

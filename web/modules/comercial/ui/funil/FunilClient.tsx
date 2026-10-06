@@ -14,7 +14,7 @@ import type { Funil, Negocio } from '../../domain/types';
 import { Aviso, EstadoErro, FaixaNumeros, PaginaComercial, useEquipe, useParamUrl, Vazio } from '../comum';
 import { ModalNovoNegocio } from '../ModalNovoNegocio';
 import { ModalAtividade, NegocioDrawer } from '../NegocioDrawer';
-import { avisarMudanca, repo, useAgora, useDados } from '../repositorio';
+import { avisarMudanca, repo, useAgora, useContatosPorIds, useDados } from '../repositorio';
 import { iconeDoFunil } from './assistente';
 import { AssistenteFunil } from './AssistenteFunil';
 import { EditorFunil } from './EditorFunil';
@@ -33,7 +33,8 @@ export function FunilClient() {
   const qFunis = useDados(() => repo.funis());
   const qAgrupadores = useDados(() => repo.agrupadores());
   const qNegocios = useDados(() => repo.negocios());
-  const qContatos = useDados(() => repo.contatos());
+  // Só os contatos dos negócios carregados (não a base inteira).
+  const qContatos = useContatosPorIds(qNegocios.dados?.map((n) => n.contatoId));
   const funis = qFunis.dados;
   const agrupadores = qAgrupadores.dados;
   const negocios = qNegocios.dados;
@@ -260,7 +261,6 @@ export function FunilClient() {
       )}
       {novoNegocio && funil && (
         <ModalNovoNegocio
-          contatos={contatos ?? []}
           funilInicial={funil.id}
           onClose={() => setNovoNegocio(false)}
           onCriado={({ negocioId, donoId }) => {

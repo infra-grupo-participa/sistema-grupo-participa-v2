@@ -15,7 +15,7 @@ import { motivoSomenteLeitura, podeConcluirAtividade, podeMexerNoNegocio } from 
 import type { Atividade, Negocio, TipoAtividade } from '../../domain/types';
 import { EstadoErro, FaixaNumeros, PaginaComercial, useAbaHash, useEquipe } from '../comum';
 import { NegocioDrawer } from '../NegocioDrawer';
-import { repo, useAgora, useDados } from '../repositorio';
+import { repo, useAgora, useContatosPorIds, useDados } from '../repositorio';
 import { negocioDoContato } from '../inicio/painel';
 import { INFO_AGENDA } from './indicadores';
 import { ABAS_AGENDA, agruparAgenda, contadoresAgenda, naAba, type AbaAgenda } from './agenda';
@@ -41,7 +41,9 @@ export function AtividadesClient() {
   const { sessao, vendedores, nomeDe, gestor } = useEquipe();
   const atvQ = useDados(() => repo.atividades());
   const negQ = useDados(() => repo.negocios());
-  const conQ = useDados(() => repo.contatos());
+  // Só os contatos das atividades e dos negócios carregados (não a base inteira).
+  const conQ = useContatosPorIds(atvQ.dados && negQ.dados
+    ? [...atvQ.dados.map((a) => a.contatoId), ...negQ.dados.map((n) => n.contatoId)] : null);
   // Cadastro de motivos de perda (fábrica + criados pelo gestor): rótulo do motivo nos negócios perdidos.
   const { dados: motivos } = useDados(() => repo.motivosPerda());
   const atividades = atvQ.dados;

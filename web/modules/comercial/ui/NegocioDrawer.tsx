@@ -26,7 +26,7 @@ import {
   Aviso, BotaoConversa, BotaoCopiar, Campo, Chip, Dono, EsqueletoLista, EstadoErro, NotaRodape, ProdutoTag, RodapeAcoes,
   SlaTag, useEquipe,
 } from './comum';
-import { avisarMudanca, repo, useAgora, useDados } from './repositorio';
+import { avisarMudanca, repo, useAgora, useContatosPorIds, useDados } from './repositorio';
 import { HistoricoAlteracoes } from './registro/HistoricoAlteracoes';
 
 type Aba = 'resumo' | 'atividades' | 'historico' | 'conversa' | 'alteracoes';
@@ -49,10 +49,11 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
   const { sessao, vendedores, nomeDe } = useEquipe();
   const [aba, setAba] = useState<Aba>('resumo');
   const rNegocios = useDados(() => repo.negocios());
-  const rContatos = useDados(() => repo.contatos());
   const rFunis = useDados(() => repo.funis());
   const negocios = rNegocios.dados;
   const n = negocios?.find((x) => x.id === negocioId) ?? null;
+  // Só o contato deste negócio (uma chamada pequena), não a base inteira.
+  const rContatos = useContatosPorIds(negocios ? (n ? [n.contatoId] : []) : null);
   const c = rContatos.dados?.find((x) => x.id === n?.contatoId) ?? null;
   const { dados: atividades } = useDados(() => repo.atividades());
   const { dados: eventos } = useDados(() => (n ? repo.eventos(n.contatoId) : Promise.resolve([])), [n?.contatoId]);

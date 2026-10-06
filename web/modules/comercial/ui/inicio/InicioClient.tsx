@@ -19,7 +19,7 @@ import type { Atividade, Contato, FichaDisparo, MetricaKey, Negocio, Vendedor } 
 import { EstadoErro, FaixaNumeros, PaginaComercial, Segmentado, useEquipe } from '../comum';
 import { InfoIndicador, type TextoIndicador } from '../InfoIndicador';
 import { NegocioDrawer } from '../NegocioDrawer';
-import { repo, useAgora, useDados } from '../repositorio';
+import { repo, useAgora, useContatosPorIds, useDados } from '../repositorio';
 import { tempoDesde } from '../atividades/agenda';
 import { useConcluirComProximo } from '../atividades/ProximoPasso';
 import { NumerosDoDia } from './FaixaNumeros';
@@ -53,10 +53,14 @@ export function InicioClient() {
   const { toast, flash } = useFlash();
   const { sessao, vendedores, nomeDe, gestor } = useEquipe();
   const negQ = useDados(() => repo.negocios());
-  const conQ = useDados(() => repo.contatos());
   const atvQ = useDados(() => repo.atividades());
   const evtQ = useDados(() => repo.eventos());
   const cvsQ = useDados(() => repo.conversas());
+  // Só os contatos que o início mostra (negócios, atividades, conversas e eventos), não a base inteira.
+  const conQ = useContatosPorIds(negQ.dados && atvQ.dados && cvsQ.dados && evtQ.dados
+    ? [...negQ.dados.map((n) => n.contatoId), ...atvQ.dados.map((a) => a.contatoId),
+       ...cvsQ.dados.map((c) => c.contatoId), ...evtQ.dados.map((e) => e.contatoId)]
+    : null);
   const fchQ = useDados(() => repo.fichas());
   const funQ = useDados(() => repo.funis());
   const motQ = useDados(() => repo.motivosPerda());

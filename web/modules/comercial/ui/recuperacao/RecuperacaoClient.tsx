@@ -14,7 +14,7 @@ import type { Contato, FaixaScore, FilaRecuperacao, ItemFila, SinalRecuperacao, 
 import { Aviso, EsqueletoLista, EstadoErro, FaixaNumeros, PaginaComercial, Pessoa, Segmentado, Vazio, useEquipe } from '../comum';
 import { InfoIndicador } from '../InfoIndicador';
 import { ContatoDrawer } from '../contatos/ContatoDrawer';
-import { avisarMudanca, repo, useDados } from '../repositorio';
+import { avisarMudanca, repo, useContatosPorIds, useDados } from '../repositorio';
 import { INFO_FILA } from './indicadores';
 import { FAIXAS, numerosFila } from './numeros-fila';
 import { encerrado, GRUPOS_ORDEM, grupoPrioridade, ordenarFila, pendentesAB } from './ordem-fila';
@@ -26,7 +26,8 @@ const TRAVA_CD = 'Travada: ninguém toca em C e D antes de A e B estarem zeradas
 export function RecuperacaoClient() {
   const { sessao, vendedores, nomeDe, gestor } = useEquipe();
   const { dados: filas, erro: erroFilas, recarregar: recFilas } = useDados(() => repo.filas());
-  const { dados: contatos, erro: erroContatos, recarregar: recContatos } = useDados(() => repo.contatos());
+  // Só os contatos dos itens das filas (não a base inteira).
+  const { dados: contatos, erro: erroContatos, recarregar: recContatos } = useContatosPorIds(filas?.flatMap((f) => f.itens.map((i) => i.contatoId)));
   const { toast, flash } = useFlash();
 
   const [filaId, setFilaId] = useState<string | null>(null);

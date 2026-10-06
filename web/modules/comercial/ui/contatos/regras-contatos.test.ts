@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  casaBusca, conflitosCadastro, mapaDuplicados, resumoAbertos, utmEmLinha, validarNovoContato,
+  casaBusca, conflitosCadastro, conflitosDaBusca, mapaDuplicados, resumoAbertos, termosConflito, utmEmLinha, validarNovoContato,
 } from './regras-contatos';
 
 describe('mapaDuplicados', () => {
@@ -104,5 +104,32 @@ describe('conflitosCadastro', () => {
   });
   it('sem dados não acusa nada', () => {
     expect(conflitosCadastro({ email: '', telefone: '' }, base)).toEqual({ mesmoEmail: [], mesmoTelefone: [] });
+  });
+});
+
+describe('conflitos pela busca no servidor (20261006m)', () => {
+  const c = (id: string, email: string | null, telefone: string | null) => ({ id, email, telefone });
+
+  it('quem a busca por e-mail achou é a mesma pessoa, mesmo com e-mail mascarado', () => {
+    const r = conflitosDaBusca({ email: 'ana@x.com', telefone: '' }, [c('a', 'a***@x.com', null)], []);
+    expect(r.mesmoEmail.map((x) => x.id)).toEqual(['a']);
+    expect(r.mesmoTelefone).toEqual([]);
+  });
+
+  it('achado pelo telefone é possível duplicado; quem já é mesmo e-mail não repete', () => {
+    const r = conflitosDaBusca({ email: 'ana@x.com', telefone: '11987654321' },
+      [c('a', 'a***@x.com', null)], [c('a', null, '*******4321'), c('b', null, '*******4321')]);
+    expect(r.mesmoEmail.map((x) => x.id)).toEqual(['a']);
+    expect(r.mesmoTelefone.map((x) => x.id)).toEqual(['b']);
+  });
+
+  it('soma os cadastrados só nesta tela (demonstração)', () => {
+    const r = conflitosDaBusca({ email: '', telefone: '(11) 98765-4321' }, [], [], [c('l', null, '5511987654321')]);
+    expect(r.mesmoTelefone.map((x) => x.id)).toEqual(['l']);
+  });
+
+  it('termos: só e-mail completo e telefone com DDD vão ao servidor', () => {
+    expect(termosConflito({ email: ' Ana@X.com ', telefone: '(11) 98765-4321' })).toEqual({ email: 'ana@x.com', telefone: '11987654321' });
+    expect(termosConflito({ email: 'ana@', telefone: '98765' })).toEqual({ email: null, telefone: null });
   });
 });

@@ -5,6 +5,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { publicEnv } from '@/shared/infrastructure/config/env';
 import type { ComercialRepository } from '../application/ports';
+import { idsUnicos } from '../domain/contatos';
+import type { Contato } from '../domain/types';
 import { MockComercialRepository } from '../infrastructure/mock-comercial.repository';
 import { SupabaseComercialRepository } from '../infrastructure/supabase-comercial.repository';
 
@@ -52,6 +54,15 @@ export function useDados<T>(carregar: () => Promise<T>, deps: unknown[] = []) {
   }, [recarregar, chave]);
 
   return { dados, erro, recarregar };
+}
+
+/**
+ * Só os contatos que a tela mostra (ids dos negócios, atividades, conversas…), numa chamada (`crm_contatos_por_ids`),
+ * em vez da lista inteira. `ids` nulo = a fonte dos ids ainda está carregando (fica carregando também).
+ */
+export function useContatosPorIds(ids: (string | null | undefined)[] | null | undefined) {
+  const chave = ids ? idsUnicos(ids).sort() : null;
+  return useDados<Contato[] | null>(async () => (chave ? repo.contatosPorIds(chave) : null), [chave]);
 }
 
 /** Relógio que anda a cada 30 s: os alertas de tempo mudam sem recarregar a página. */

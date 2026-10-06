@@ -9,6 +9,7 @@ import type {
   Dashboard, EscopoMcp, FiltroLog, PainelHotmart, TokenMcp, Funil, LinkRastreavel, LogCrm, OfertaHotmart, OfertaOrfa, ProdutoHotmart, Mensagem, MotivoPerda, MotivoPerdaConfig, Negocio, Notificacao, PainelPessoa, PontoJornada,
   PreferenciasNotificacao, ProdutoKey, SessaoComercial, StatusFila, StatusWhatsapp, Template, TipoAtividade, TipoProjeto, Vendedor,
 } from '../domain/types';
+import type { FiltroContatos, PaginaContatos, ResumoContatos } from '../domain/contatos';
 
 export interface Resultado {
   ok: boolean;
@@ -61,6 +62,12 @@ export interface NovaFicha {
   link: string;
 }
 
+export interface FiltroNegocios {
+  contatoId?: string;
+  funilId?: string;
+  status?: Negocio['status'];
+}
+
 export interface ComercialRepository {
   /** Quem está usando a tela (vendedor + papel). */
   sessao(): Promise<SessaoComercial>;
@@ -74,7 +81,22 @@ export interface ComercialRepository {
   /** Cadastro de motivos de perda (9 de fábrica + os criados pelo gestor). */
   motivosPerda(): Promise<MotivoPerdaConfig[]>;
 
+  /**
+   * Lista INTEIRA de contatos visíveis. Pesada (lotes de 500): só para telas que precisam da base toda (Disparos,
+   * Performance da equipe). Lista da tela Contatos: `contatosPagina`; nome dos contatos mostrados: `contatosPorIds`.
+   */
   contatos(): Promise<Contato[]>;
+  /** Uma página da tela Contatos, com filtros e ordem no servidor (`crm_contatos_pagina`, migration 20261006m). */
+  contatosPagina(filtro: FiltroContatos): Promise<PaginaContatos>;
+  /** Números do topo da tela Contatos e opções de UF/tags (`crm_contatos_resumo`). */
+  contatosResumo(): Promise<ResumoContatos>;
+  /**
+   * Contatos pelo id, com a visibilidade e a máscara da busca (`crm_contatos_por_ids`). O que a pessoa não vê não
+   * volta. Para fichas e telas que só precisam dos contatos dos negócios/atividades/conversas que mostram.
+   */
+  contatosPorIds(ids: string[]): Promise<Contato[]>;
+  /** Outros contatos com a mesma chave de telefone (DDD + últimos 8 dígitos), para o aviso da ficha. */
+  duplicadosDe(contatoId: string): Promise<Contato[]>;
   /**
    * Busca no servidor por nome, e-mail ou telefone (mínimo 3 caracteres; até 50). Alcança contatos que não vêm na
    * lista do vendedor (sem dono e sem negócio aberto, migration 20261006191824), com a mesma máscara de e-mail/telefone.
@@ -85,7 +107,8 @@ export interface ComercialRepository {
    * grupos, presença, checkout, compras, reembolsos, negócios e conversas. Do mais recente para o mais antigo.
    */
   jornada(contatoId: string): Promise<PontoJornada[]>;
-  negocios(): Promise<Negocio[]>;
+  /** Sem filtro: todos os visíveis. `contatoId`/`funilId`/`status` filtram no banco (`crm_negocios`). */
+  negocios(filtro?: FiltroNegocios): Promise<Negocio[]>;
   atividades(): Promise<Atividade[]>;
   /** Linha do tempo de um contato (todos os negócios dele). Sem id: todos os eventos (fechamento do dia). */
   eventos(contatoId?: string): Promise<EventoTimeline[]>;

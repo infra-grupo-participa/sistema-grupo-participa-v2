@@ -9,6 +9,7 @@ import type {
   SessaoComercial, SinalRecuperacao, StatusFicha, StatusFila, StatusMensagem, StatusWhatsapp, Supressao, Template, Utm,
   Vendedor, WidgetPainel,
 } from '../domain/types';
+import type { ContatoLinha, PaginaContatos, ResumoContatos } from '../domain/contatos';
 
 type Obj = Record<string, unknown>;
 
@@ -75,6 +76,14 @@ export function mensagemErroRpc(rpc: string, e: ErroRpc): string {
   }
   if (e.code === '22023') return e.message || 'Parâmetro inválido.';
   return `Não foi possível carregar do banco (${rpc})${e.message ? `: ${e.message}` : ''}.`;
+}
+
+/**
+ * A RPC ainda não existe no banco (migration não aplicada): PostgREST responde PGRST202; o Postgres, 42883.
+ * O repositório usa isto para cair no caminho antigo, sem erro na tela.
+ */
+export function rpcAusente(e: ErroRpc | null | undefined): boolean {
+  return !!e && (e.code === 'PGRST202' || e.code === '42883');
 }
 
 // ── Leituras ──
@@ -177,6 +186,51 @@ export function mapContatos(d: unknown): Contato[] {
       ehAluno: bool(o.ehAluno), optOut: bool(o.optOut), criadoEm: str(o.criadoEm),
     };
   });
+}
+
+/** crm_contatos_pagina (20261006m) devolve { itens, total }; cada item = contato + lancamentos, ultimaInteracaoEm, abertos. */
+export function mapPaginaServidor(d: unknown): PaginaContatos {
+  const rpc = 'crm_contatos_pagina';
+  const o = obj(d, rpc);
+  const itens = lista(o.itens, rpc);
+  const base = mapContatos(itens);
+  return {
+    total: num(o.total),
+    itens: base.map((c, i): ContatoLinha => {
+      const x = obj(itens[i], rpc);
+      return {
+        ...c,
+        lancamentos: num(x.lancamentos),
+        ultimaInteracaoEm: strOuNull(x.ultimaInteracaoEm),
+        abertos: (Array.isArray(x.abertos) ? x.abertos : []).map((a) => {
+          const n = obj(a, rpc, 'negócio aberto');
+          return { id: str(n.id), produto: str(n.produto) as ProdutoKey, etapaNome: str(n.etapaNome) };
+        }),
+      };
+    }),
+  };
+}
+
+/** crm_contatos_resumo (20261006m). */
+export function mapResumoContatos(d: unknown): ResumoContatos {
+  const o = obj(d, 'crm_contatos_resumo');
+  return {
+    total: num(o.total), semDono: num(o.semDono), optOut: num(o.optOut), alunos: num(o.alunos),
+    ufs: strs(o.ufs), tags: strs(o.tags),
+  };
+}
+
+/** crm_contatos_por_ids (20261006m) devolve { itens }; com duplicados, cada item traz `duplicados` (ids). */
+export function mapContatosPorIds(d: unknown): { contatos: Contato[]; duplicados: Map<string, string[]> } {
+  const o = obj(d, 'crm_contatos_por_ids');
+  const itens = lista(o.itens, 'crm_contatos_por_ids');
+  const contatos = mapContatos(itens);
+  const duplicados = new Map<string, string[]>();
+  itens.forEach((x, i) => {
+    const dup = (x as Obj).duplicados;
+    if (Array.isArray(dup)) duplicados.set(contatos[i].id, strs(dup));
+  });
+  return { contatos, duplicados };
 }
 
 export function mapNegocios(d: unknown): Negocio[] {

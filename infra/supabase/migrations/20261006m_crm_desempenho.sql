@@ -201,8 +201,11 @@ $$;
 
 -- Lista visível com os filtros da tela e as chaves de ordenação (nome e dono em minúsculas).
 --   p_dono_sem: só sem dono; p_dono: só deste dono; p_perfil: 'sem' = sem perfil; p_uf: sigla; p_tags: qualquer uma.
+--   p_com_dados: monta nome/aluno/UF (crm.dados_lote, ~115 ms para 2.649). Sem ele (ordem por criação, sem filtro de
+--   UF/aluno), b_nome/b_uf vêm nulos e b_aluno falso: os dados só são montados para a página (crm.contatos_itens).
 create function crm.contatos_base(
-  p_ids uuid[], p_dono_sem boolean, p_dono uuid, p_perfil text, p_uf text, p_tags text[], p_opt_out boolean, p_so_alunos boolean)
+  p_ids uuid[], p_dono_sem boolean, p_dono uuid, p_perfil text, p_uf text, p_tags text[], p_opt_out boolean, p_so_alunos boolean,
+  p_com_dados boolean)
 returns table(b_pid uuid, b_atual uuid, b_criado timestamptz, b_nome text, b_dono text, b_dono_nulo boolean,
               b_opt_out boolean, b_aluno boolean, b_uf text, b_tags text[])
 language sql stable
@@ -217,9 +220,10 @@ as $$
        and (p_perfil is null or (p_perfil = 'sem' and nullif(pc.perfil, '') is null) or pc.perfil = p_perfil)
        and (p_tags is null or cardinality(p_tags) = 0 or pc.tags && p_tags)
        and (not coalesce(p_opt_out, false) or coalesce(pc.opt_out, false))),
-  d as (select dl.* from crm.dados_lote(array(select distinct b0.atual from b0)) dl)
+  d as (select dl.* from crm.dados_lote(case when p_com_dados or p_uf is not null or coalesce(p_so_alunos, false)
+                                              then array(select distinct b0.atual from b0) else '{}'::uuid[] end) dl)
   select b0.pid, b0.atual, b0.criado_em,
-         lower(coalesce(d.d_nome, '(sem nome)')), lower(coalesce(pf.nome, '')), b0.dono_id is null,
+         case when d.d_pessoa is not null then lower(coalesce(d.d_nome, '(sem nome)')) end, lower(coalesce(pf.nome, '')), b0.dono_id is null,
          coalesce(b0.opt_out, false), d.d_aluno_id is not null, u.uf, coalesce(b0.tags, '{}'::text[])
     from b0
     left join d on d.d_pessoa = b0.atual
@@ -387,7 +391,7 @@ declare
   v_dono text := nullif(nullif(btrim(coalesce(p_dono, '')), ''), 'todos');
   v_perfil text := nullif(nullif(btrim(coalesce(p_perfil, '')), ''), 'todos');
   v_uf text := nullif(nullif(upper(btrim(coalesce(p_uf, ''))), ''), 'TODAS');
-  v_asc boolean; v_dono_id uuid; v_ids uuid[]; v_total int; v_pids uuid[];
+  v_asc boolean; v_dono_id uuid; v_ids uuid[]; v_total int; v_pids uuid[]; v_com_dados boolean;
 begin
   perform crm.exige_comercial();
   if v_ordem not in ('criado', 'nome', 'dono', 'negocios', 'lancamentos', 'ultima') then
@@ -395,6 +399,8 @@ begin
   end if;
   if v_dir not in ('asc', 'desc') then raise exception 'Direção inválida.' using errcode = '22023'; end if;
   v_asc := v_dir = 'asc';
+  -- nome/aluno/UF de toda a lista só quando a ordem ou o filtro precisa (ordem por criação: só a página)
+  v_com_dados := v_ordem <> 'criado';
   if v_dono is not null and v_dono <> 'sem_dono' then
     begin
       v_dono_id := v_dono::uuid;
@@ -409,7 +415,7 @@ begin
 
   if v_ordem in ('negocios', 'lancamentos', 'ultima') then
     -- ordem por métrica: calcula as métricas de todos os que passam no filtro (em lote) e pagina
-    with b as (select * from crm.contatos_base(v_ids, v_dono = 'sem_dono', v_dono_id, v_perfil, v_uf, p_tags, p_opt_out, p_so_alunos)),
+    with b as (select * from crm.contatos_base(v_ids, v_dono = 'sem_dono', v_dono_id, v_perfil, v_uf, p_tags, p_opt_out, p_so_alunos, v_com_dados)),
     m as (select * from crm.contatos_metricas(array(select distinct b.b_atual from b)))
     select count(*)::int,
            (array_agg(b.b_pid order by
@@ -434,7 +440,7 @@ begin
               case when v_ordem = 'criado' then b.b_pid end,
               b.b_nome collate "pt-BR-x-icu", b.b_pid))[v_off + 1 : v_off + v_lim]
       into v_total, v_pids
-      from crm.contatos_base(v_ids, v_dono = 'sem_dono', v_dono_id, v_perfil, v_uf, p_tags, p_opt_out, p_so_alunos) b;
+      from crm.contatos_base(v_ids, v_dono = 'sem_dono', v_dono_id, v_perfil, v_uf, p_tags, p_opt_out, p_so_alunos, v_com_dados) b;
   end if;
 
   return jsonb_build_object('itens', crm.contatos_itens(coalesce(v_pids, '{}'::uuid[]), true), 'total', coalesce(v_total, 0));
@@ -450,7 +456,7 @@ as $$
 declare v jsonb;
 begin
   perform crm.exige_comercial();
-  with b as (select * from crm.contatos_base(null, false, null, null, null, null, false, false))
+  with b as (select * from crm.contatos_base(null, false, null, null, null, null, false, false, true))
   select jsonb_build_object(
            'total', count(*), 'semDono', count(*) filter (where b.b_dono_nulo),
            'optOut', count(*) filter (where b.b_opt_out), 'alunos', count(*) filter (where b.b_aluno),
@@ -500,7 +506,7 @@ revoke all on function crm.grupo_lote(uuid[]) from public, anon, authenticated, 
 revoke all on function crm.dados_lote(uuid[]) from public, anon, authenticated, service_role;
 revoke all on function crm.contatos_candidatos(text) from public, anon, authenticated, service_role;
 revoke all on function crm.contatos_visiveis(uuid[]) from public, anon, authenticated, service_role;
-revoke all on function crm.contatos_base(uuid[], boolean, uuid, text, text, text[], boolean, boolean) from public, anon, authenticated, service_role;
+revoke all on function crm.contatos_base(uuid[], boolean, uuid, text, text, text[], boolean, boolean, boolean) from public, anon, authenticated, service_role;
 revoke all on function crm.contatos_metricas(uuid[]) from public, anon, authenticated, service_role;
 revoke all on function crm.contatos_itens(uuid[], boolean) from public, anon, authenticated, service_role;
 
@@ -519,7 +525,7 @@ notify pgrst, 'reload schema';
 -- drop function public.crm_contatos_por_ids(uuid[], boolean);
 -- drop function crm.contatos_itens(uuid[], boolean);
 -- drop function crm.contatos_metricas(uuid[]);
--- drop function crm.contatos_base(uuid[], boolean, uuid, text, text, text[], boolean, boolean);
+-- drop function crm.contatos_base(uuid[], boolean, uuid, text, text, text[], boolean, boolean, boolean);
 -- drop function crm.contatos_visiveis(uuid[]);
 -- drop function crm.contatos_candidatos(text);
 -- drop function crm.dados_lote(uuid[]);

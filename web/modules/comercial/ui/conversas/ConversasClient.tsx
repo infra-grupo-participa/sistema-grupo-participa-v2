@@ -20,7 +20,7 @@ import { InfoIndicador } from '../InfoIndicador';
 import { ContatoDrawer } from '../contatos/ContatoDrawer';
 import { CardNegocio } from '../funil/CardNegocio';
 import { ModalAtividade, NegocioDrawer } from '../NegocioDrawer';
-import { avisarMudanca, repo, useAgora, useDados } from '../repositorio';
+import { avisarMudanca, repo, useAgora, useContatosPorIds, useDados } from '../repositorio';
 import { INFO_CAIXA } from './indicadores';
 import { ModalAtribuir } from './ModalAtribuir';
 import { MenuRespostas, useAlturaDisponivel } from './pecas';
@@ -55,8 +55,9 @@ export function ConversasClient() {
   const { toast, flash } = useFlash(4000);
   const { sessao, vendedores, nomeDe, gestor } = useEquipe();
   const rConversas = useDados(() => repo.conversas());
-  const rContatos = useDados(() => repo.contatos());
   const rNegocios = useDados(() => repo.negocios());
+  // Só os contatos das conversas (não a base inteira).
+  const rContatos = useContatosPorIds(rConversas.dados?.map((c) => c.contatoId));
   const rTemplates = useDados(() => repo.templates());
   const { dados: funis } = useDados(() => repo.funis());
   const conversas = rConversas.dados;

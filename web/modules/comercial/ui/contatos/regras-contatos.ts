@@ -2,38 +2,8 @@
 import { chaveTelefone } from '../../domain/regras';
 import type { Contato, Utm } from '../../domain/types';
 
-/**
- * Possíveis duplicados: contatos com a mesma chave de telefone (DDD + últimos 8 dígitos, `chaveTelefone`)
- * (mesma pessoa que comprou com outro e-mail, com/sem DDI ou com/sem o 9). Devolve id → ids dos outros.
- */
-export function mapaDuplicados(contatos: Pick<Contato, 'id' | 'telefone'>[]): Map<string, string[]> {
-  const porChave = new Map<string, string[]>();
-  for (const c of contatos) {
-    const k = chaveTelefone(c.telefone);
-    if (!k) continue;
-    porChave.set(k, [...(porChave.get(k) ?? []), c.id]);
-  }
-  const mapa = new Map<string, string[]>();
-  for (const ids of porChave.values()) {
-    if (ids.length < 2) continue;
-    for (const id of ids) mapa.set(id, ids.filter((x) => x !== id));
-  }
-  return mapa;
-}
-
-/** Busca por nome, e-mail ou telefone (aceita qualquer formatação e compara pela chave DDD + últimos 8 dígitos). */
-export function casaBusca(c: Pick<Contato, 'nome' | 'email' | 'telefone'>, termo: string): boolean {
-  const q = termo.trim().toLowerCase();
-  if (!q) return true;
-  const sem = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
-  if (sem(`${c.nome} ${c.email ?? ''}`.toLowerCase()).includes(sem(q))) return true;
-  const digitos = q.replace(/\D/g, '');
-  if (digitos.length < 4) return false;
-  const tel = String(c.telefone ?? '').replace(/\D/g, '');
-  if (tel.includes(digitos)) return true;
-  const k = chaveTelefone(digitos);
-  return !!k && k === chaveTelefone(tel);
-}
+// Duplicidade e busca moraram aqui; passaram para o domínio (usadas também pelo repositório). Reexportadas.
+export { casaBusca, mapaDuplicados } from '../../domain/contatos';
 
 /** Origem numa linha só: "instagram / cpc / ht33-meteorico". Sem UTM nenhuma: "direto". */
 export function utmEmLinha(utm: Pick<Utm, 'source' | 'medium' | 'campaign'>): string {
@@ -79,4 +49,30 @@ export function conflitosCadastro<T extends Pick<Contato, 'id' | 'email' | 'tele
     ? contatos.filter((c) => chaveTelefone(c.telefone) === k && !mesmoEmail.includes(c))
     : [];
   return { mesmoEmail, mesmoTelefone };
+}
+
+/**
+ * Conflitos a partir da busca no servidor (a tela não tem mais a base inteira): quem a busca pelo e-mail achou é a
+ * mesma pessoa (o banco casa o e-mail exato, mesmo que a tela o mostre mascarado); quem a busca pelo telefone achou
+ * é possível duplicado. Somam-se os cadastrados só nesta tela (demonstração), pela regra local.
+ */
+export function conflitosDaBusca<T extends Pick<Contato, 'id' | 'email' | 'telefone'>>(
+  r: Pick<RascunhoContato, 'telefone' | 'email'>, porEmail: T[], porTelefone: T[], locais: T[] = [],
+): { mesmoEmail: T[]; mesmoTelefone: T[] } {
+  const local = conflitosCadastro(r, locais);
+  const unicos = (xs: T[]) => xs.filter((x, i) => xs.findIndex((y) => y.id === x.id) === i);
+  const mesmoEmail = unicos([...porEmail, ...local.mesmoEmail]);
+  const ids = new Set(mesmoEmail.map((c) => c.id));
+  const mesmoTelefone = unicos([...porTelefone, ...local.mesmoTelefone]).filter((c) => !ids.has(c.id));
+  return { mesmoEmail, mesmoTelefone };
+}
+
+/** Termos que valem a busca de conflito no servidor: e-mail completo e telefone com DDD (10+ dígitos). */
+export function termosConflito(r: Pick<RascunhoContato, 'telefone' | 'email'>): { email: string | null; telefone: string | null } {
+  const email = r.email.trim().toLowerCase();
+  const digitos = r.telefone.replace(/\D/g, '');
+  return {
+    email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null,
+    telefone: digitos.length >= 10 ? digitos : null,
+  };
 }

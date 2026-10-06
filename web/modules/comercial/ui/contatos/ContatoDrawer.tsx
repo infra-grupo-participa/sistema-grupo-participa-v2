@@ -23,7 +23,6 @@ import { AbaJornada } from './AbaJornada';
 import { AbaNegocios } from './AbaNegocios';
 import { HistoricoAlteracoes } from '../registro/HistoricoAlteracoes';
 import { resumoFicha } from './ficha-contato';
-import { mapaDuplicados } from './regras-contatos';
 
 type Aba = 'jornada' | 'negocios' | 'dados' | 'conversa' | 'alteracoes';
 const ID_ABAS = 'ficha-contato';
@@ -75,8 +74,10 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
   const agora = useAgora();
   const { toast, flash } = useFlash(4000);
   const { nomeDe, sessao } = useEquipe();
-  const cs = useDados(() => repo.contatos());
-  const ns = useDados(() => repo.negocios());
+  // Só esta pessoa (crm_contatos_por_ids) e os negócios dela (crm_negocios com p_pessoa): nada de base inteira.
+  const cs = useDados(() => repo.contatosPorIds([contatoId]), [contatoId]);
+  const ds = useDados(() => repo.duplicadosDe(contatoId), [contatoId]);
+  const ns = useDados(() => repo.negocios({ contatoId }), [contatoId]);
   const fs = useDados(() => repo.funis());
   const ms = useDados(() => repo.motivosPerda());
   const jor = useDados(() => repo.jornada(contatoId), [contatoId]);
@@ -90,11 +91,8 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
   );
   const c = contatos?.find((x) => x.id === contatoId) ?? null;
   const soLocal = !!contatoReserva && !reservaDaBusca && c?.id === contatoReserva.id;
-  const duplicados = useMemo(() => {
-    if (!contatos) return [];
-    const ids = mapaDuplicados(contatos).get(contatoId) ?? [];
-    return contatos.filter((x) => ids.includes(x.id));
-  }, [contatos, contatoId]);
+  // Possíveis duplicados (mesma chave de telefone): o banco compara com o telefone inteiro, mesmo mascarado na tela.
+  const duplicados = ds.dados ?? [];
   const dele = useMemo(() => (ns.dados ?? []).filter((n) => n.contatoId === contatoId), [ns.dados, contatoId]);
 
   // A ficha do negócio substitui esta enquanto estiver aberta (uma gaveta por vez: Esc fecha só a de cima).

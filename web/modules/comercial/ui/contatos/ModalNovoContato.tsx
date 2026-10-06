@@ -2,22 +2,23 @@
 
 // Cadastro rápido de contato: nome, telefone e e-mail. Antes de salvar confere a identidade do CRM
 // (e-mail igual = mesma pessoa, bloqueia; mesmo final de telefone = possível duplicado, pede confirmação).
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button, Checkbox, Input, Modal } from '@/shared/ui/components';
 import { fmtTelefone } from '../../domain/regras';
 import type { Contato } from '../../domain/types';
 import type { ComercialRepository, Resultado } from '../../application/ports';
-import { avisarMudanca, repo } from '../repositorio';
+import { avisarMudanca, repo, useDados } from '../repositorio';
 import { Aviso, Campo, RodapeAcoes } from '../comum';
-import { conflitosCadastro, validarNovoContato, type RascunhoContato } from './regras-contatos';
+import { conflitosDaBusca, termosConflito, validarNovoContato, type RascunhoContato } from './regras-contatos';
 
 /** Escrita que o contrato ainda não tem. Quando `criarContato` entrar em ports.ts, este tipo some. */
 type ComCadastro = ComercialRepository & {
   criarContato?: (c: RascunhoContato) => Promise<Resultado & { contatoId?: string }>;
 };
 
-export function ModalNovoContato({ contatos, nomeDe, onClose, onAbrirContato, onCriado }: {
-  contatos: Contato[];
+export function ModalNovoContato({ contatosLocais = [], nomeDe, onClose, onAbrirContato, onCriado }: {
+  /** Cadastrados só nesta tela (demonstração). O resto é conferido no servidor, pela busca. */
+  contatosLocais?: Contato[];
   nomeDe: (id: string | null) => string;
   onClose: () => void;
   onAbrirContato: (id: string) => void;
@@ -31,7 +32,22 @@ export function ModalNovoContato({ contatos, nomeDe, onClose, onAbrirContato, on
   const [erro, setErro] = useState<string | null>(null);
 
   const invalido = validarNovoContato(r);
-  const { mesmoEmail, mesmoTelefone } = useMemo(() => conflitosCadastro(r, contatos), [r, contatos]);
+  // Conferência no servidor (a tela não tem a base inteira): e-mail exato e chave de telefone, 400 ms depois de digitar.
+  const [termos, setTermos] = useState(() => termosConflito(r));
+  useEffect(() => {
+    const t = setTimeout(() => setTermos(termosConflito(r)), 400);
+    return () => clearTimeout(t);
+  }, [r]);
+  const porEmail = useDados(async () => (termos.email ? repo.buscarContatos(termos.email) : [] as Contato[]), [termos.email]);
+  const porTelefone = useDados(async () => (termos.telefone ? repo.buscarContatos(termos.telefone) : [] as Contato[]), [termos.telefone]);
+  const { mesmoEmail, mesmoTelefone } = useMemo(
+    () => conflitosDaBusca(r, porEmail.dados ?? [], porTelefone.dados ?? [], contatosLocais),
+    [r, porEmail.dados, porTelefone.dados, contatosLocais],
+  );
+  // Conferência ainda não terminou (debounce ou busca em curso): não salva antes de saber se já existe.
+  const atuais = termosConflito(r);
+  const conferindo = atuais.email !== termos.email || atuais.telefone !== termos.telefone
+    || (!!termos.email && !porEmail.dados) || (!!termos.telefone && !porTelefone.dados);
   const bloqueado = mesmoEmail.length > 0;
   const pedeConfirmacao = mesmoTelefone.length > 0 && !confirmaOutra;
 
@@ -43,7 +59,7 @@ export function ModalNovoContato({ contatos, nomeDe, onClose, onAbrirContato, on
 
   const salvar = async () => {
     setTentou(true);
-    if (invalido || bloqueado || pedeConfirmacao) return;
+    if (invalido || bloqueado || pedeConfirmacao || conferindo) return;
     setSalvando(true);
     const fonte = repo as ComCadastro;
     if (fonte.criarContato) {
@@ -78,8 +94,8 @@ export function ModalNovoContato({ contatos, nomeDe, onClose, onAbrirContato, on
         <RodapeAcoes
           secundario={<Button size="sm" variant="ghost" onClick={onClose}>Cancelar</Button>}
           primario={(
-            <Button size="sm" onClick={salvar} disabled={salvando || bloqueado}>
-              {salvando ? 'Salvando…' : 'Salvar contato'}
+            <Button size="sm" onClick={salvar} disabled={salvando || bloqueado || conferindo}>
+              {salvando ? 'Salvando…' : conferindo ? 'Conferindo…' : 'Salvar contato'}
             </Button>
           )}
         />

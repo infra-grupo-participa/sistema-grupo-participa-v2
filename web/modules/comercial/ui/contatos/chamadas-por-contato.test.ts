@@ -54,3 +54,29 @@ describe('todas as telas do Comercial', () => {
     expect(suspeitas).toEqual([]);
   });
 });
+
+// Passo 2 (migration 20261006m): só as telas que precisam da base inteira por natureza leem a lista inteira.
+describe('lista inteira de contatos', () => {
+  const PODEM = ['disparos/DisparosClient.tsx', 'equipe/PerformanceEquipe.tsx'];
+
+  it('só Disparos e Performance da equipe chamam repo.contatos(); o resto usa página ou por id', () => {
+    const chamam = telas()
+      .filter((arq) => /repo\s*\.\s*contatos\s*\(\s*\)/.test(semComentarios(readFileSync(arq, 'utf8'))))
+      .map((arq) => path.relative(UI, arq)).sort();
+    expect(chamam).toEqual(PODEM);
+  });
+
+  it('a tela Contatos pagina no servidor e não baixa a lista de negócios', () => {
+    const fonte = semComentarios(ler('contatos/ContatosClient.tsx'));
+    expect(fonte).toMatch(/repo\s*\.\s*contatosPagina\s*\(/);
+    expect(fonte).toMatch(/repo\s*\.\s*contatosResumo\s*\(/);
+    expect(fonte).not.toMatch(/repo\s*\.\s*negocios\s*\(/);
+  });
+
+  it('a ficha do contato pede só a pessoa, os duplicados dela e os negócios dela', () => {
+    const fonte = semComentarios(ler('contatos/ContatoDrawer.tsx'));
+    expect(fonte).toMatch(/repo\s*\.\s*contatosPorIds\(\[contatoId\]\)/);
+    expect(fonte).toMatch(/repo\s*\.\s*duplicadosDe\(contatoId\)/);
+    expect(fonte).toMatch(/repo\s*\.\s*negocios\(\{\s*contatoId\s*\}\)/);
+  });
+});

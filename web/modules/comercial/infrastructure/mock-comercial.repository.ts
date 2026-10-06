@@ -2,8 +2,9 @@
 // O estado vive enquanto a aba estiver aberta (recarregar a página volta à base inicial).
 // Aplica as mesmas regras de domínio que o backend vai aplicar, para a tela se comportar como a real.
 import type {
-  ComercialRepository, NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink, ResultadoTokenMcp,
+  ComercialRepository, FiltroNegocios, NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink, ResultadoTokenMcp,
 } from '../application/ports';
+import { linhasContatos, mapaDuplicados, paginarContatos, resumirContatos, type FiltroContatos } from '../domain/contatos';
 import { produto as produtoDe, ROTULO_CAMPO } from '../domain/catalogo';
 import { bloqueioMoverNoFunil, camposFaltandoNoFunil, etapaDoFunil, etapaInicial, validarFunil } from '../domain/funis';
 import { escolherDono, montarSck, somaPercentuais } from '../domain/regras';
@@ -98,7 +99,24 @@ export class MockComercialRepository implements ComercialRepository {
     return espera(this.db.contatos.filter((c) => `${c.nome} ${c.email ?? ''}`.toLowerCase().includes(q)
       || (dig.length >= 4 && String(c.telefone ?? '').replace(/\D/g, '').includes(dig))).slice(0, 50));
   }
-  negocios() { return espera(this.db.negocios); }
+  /** Mesmas regras de crm_contatos_pagina (filtro, ordem, página), em memória. Lançamentos saem da jornada demo. */
+  contatosPagina(f: FiltroContatos) {
+    const linhas = linhasContatos(this.db.contatos, this.db.negocios, this.db.jornada);
+    return espera(paginarContatos(linhas, f, (id) => (id ? this.nomeVendedor(id) : '')));
+  }
+  contatosResumo() { return espera(resumirContatos(this.db.contatos)); }
+  contatosPorIds(ids: string[]) {
+    const pedidos = new Set(ids);
+    return espera(this.db.contatos.filter((c) => pedidos.has(c.id)));
+  }
+  duplicadosDe(contatoId: string) {
+    const ids = mapaDuplicados(this.db.contatos).get(contatoId) ?? [];
+    return espera(this.db.contatos.filter((c) => ids.includes(c.id)));
+  }
+  negocios(filtro: FiltroNegocios = {}) {
+    return espera(this.db.negocios.filter((n) => (!filtro.contatoId || n.contatoId === filtro.contatoId)
+      && (!filtro.funilId || n.funilId === filtro.funilId) && (!filtro.status || n.status === filtro.status)));
+  }
   atividades() { return espera(this.db.atividades); }
   eventos(contatoId?: string) {
     const lista = contatoId ? this.db.eventos.filter((e) => e.contatoId === contatoId) : this.db.eventos;

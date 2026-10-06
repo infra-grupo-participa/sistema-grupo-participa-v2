@@ -5,7 +5,7 @@ import {
   mapFunis, mapJornada, mapLog, mapMotivosPerda, mapNegocios, mapNotificacoes, mapOfertas, mapOfertasOrfas, mapPainel,
   mapPreferencias, mapProdutosHotmart, mapSessao, mapVendedores, mensagemErroRpc,
   mapConversas, mapFichas, mapFilas, mapLinks, mapMensagens, mapTemplates, mapWhatsappStatus,
-  mapPainelHotmart, mapTokensMcp,
+  mapPainelHotmart, mapTokensMcp, mapContatosPorIds, mapPaginaServidor, mapResumoContatos, rpcAusente,
 } from './mapeamento-supabase';
 import type { PreferenciasNotificacao } from '../domain/types';
 
@@ -306,5 +306,54 @@ describe('MCP (F7, crm_mcp_tokens)', () => {
   it('não é lista ou token sem id: erro', () => {
     expect(() => mapTokensMcp(null)).toThrow(FormatoInesperado);
     expect(() => mapTokensMcp([{ nome: 'x' }])).toThrow(FormatoInesperado);
+  });
+});
+
+describe('20261006m: página, resumo, por ids e RPC ausente', () => {
+  const item = {
+    id: 'p1', nome: 'Ana', email: 'a***@x.com', telefone: '*******4321', cidade: null, uf: 'SP', perfil: null,
+    atuaComHolding: null, donoId: null, tags: ['t'], utm: {}, score: null, ehAluno: true, optOut: false, criadoEm: '2026-10-01T00:00:00Z',
+  };
+
+  it('crm_contatos_pagina: contato + lançamentos, última interação e abertos; total', () => {
+    const p = mapPaginaServidor({
+      total: 2649,
+      itens: [{ ...item, lancamentos: 2, ultimaInteracaoEm: '2026-10-05T10:00:00Z', abertos: [{ id: 'n1', produto: 'ht', etapaNome: 'Novo' }] }],
+    });
+    expect(p.total).toBe(2649);
+    expect(p.itens[0]).toMatchObject({ id: 'p1', email: 'a***@x.com', lancamentos: 2, ultimaInteracaoEm: '2026-10-05T10:00:00Z',
+      abertos: [{ id: 'n1', produto: 'ht', etapaNome: 'Novo' }] });
+  });
+
+  it('crm_contatos_pagina sem última interação: null (nunca data inventada)', () => {
+    const p = mapPaginaServidor({ total: 1, itens: [{ ...item, lancamentos: 0, ultimaInteracaoEm: null, abertos: [] }] });
+    expect(p.itens[0].ultimaInteracaoEm).toBeNull();
+  });
+
+  it('formato fora do contrato vira erro', () => {
+    expect(() => mapPaginaServidor({ total: 1 })).toThrow('crm_contatos_pagina');
+    expect(() => mapPaginaServidor(null)).toThrow('crm_contatos_pagina');
+    expect(() => mapContatosPorIds([])).toThrow('crm_contatos_por_ids');
+    expect(() => mapResumoContatos('x')).toThrow('crm_contatos_resumo');
+  });
+
+  it('crm_contatos_resumo', () => {
+    expect(mapResumoContatos({ total: 3, semDono: 1, optOut: 0, alunos: 2, ufs: ['SP'], tags: ['a'] }))
+      .toEqual({ total: 3, semDono: 1, optOut: 0, alunos: 2, ufs: ['SP'], tags: ['a'] });
+  });
+
+  it('crm_contatos_por_ids: contatos e, quando pedido, os duplicados de cada um', () => {
+    const r = mapContatosPorIds({ itens: [{ ...item, duplicados: ['p2', 'p3'] }, { ...item, id: 'p9' }] });
+    expect(r.contatos.map((c) => c.id)).toEqual(['p1', 'p9']);
+    expect(r.duplicados.get('p1')).toEqual(['p2', 'p3']);
+    expect(r.duplicados.has('p9')).toBe(false);
+  });
+
+  it('rpcAusente: só função inexistente (PGRST202/42883) leva ao caminho antigo', () => {
+    expect(rpcAusente({ code: 'PGRST202' })).toBe(true);
+    expect(rpcAusente({ code: '42883' })).toBe(true);
+    expect(rpcAusente({ code: '42501' })).toBe(false);
+    expect(rpcAusente({ code: '22023' })).toBe(false);
+    expect(rpcAusente(null)).toBe(false);
   });
 });
