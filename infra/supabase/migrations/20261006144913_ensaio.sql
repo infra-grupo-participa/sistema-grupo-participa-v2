@@ -7,7 +7,7 @@
 -- O corpo da migration está copiado abaixo SEM mudança (gerado de 20261006144913_pa_socio_novo_entrada.sql; se a
 -- migration mudar, gerar de novo). Depois do corpo: titular ZZ (entrada 10/01/2025, turma 54) com dois sócios; dois
 -- pedidos de troca aprovados pela pa_decidir como o Victor (JWT simulado):
---   n1 entra PESSOA NOVA (CPF de teste válido, e-mail @exemplo.invalid) -> herda entrada e turma do titular
+--   n1 entra PESSOA NOVA (CPF que falha no dígito verificador, e-mail @exemplo.invalid) -> herda entrada e turma do titular
 --   n2 entra pessoa EXISTENTE com entrada e turma próprias              -> não muda (controle)
 --
 -- Esperado: nenhuma linha começando com "ERRADO".

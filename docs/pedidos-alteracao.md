@@ -97,7 +97,9 @@ Migration `infra/supabase/migrations/20261005j_pedidos_alteracao.sql` (ensaio `2
 Migration `20261005k_pedidos_socio_novo_endereco.sql` (ensaio `20261005k_ensaio.sql`, medições em `20261005k.explain.md`):
 sócio novo completo. **Status: APLICADA** (commit `002535a`, na `main`). Funções novas:
 `pa_ufs`, `pa_doc_valido`, `pa_eh_brasil`, `pa_endereco`, `pa_telefone_pessoa` (internas) e `pa_duplicata_pessoa`
-(tela). Substituídas: `pa_normalizar`, `pa_criar`, `pa_decidir`.
+(tela). Substituídas: `pa_normalizar`, `pa_criar`, `pa_decidir`. Tabelas `pa_pedidos`, `pa_historico`, `pa_aprovadores`, fechadas. Funções da tela:
+`pa_meu_papel`, `pa_buscar_alunos`, `pa_socios_do_titular`, `pa_valor_atual`, `pa_turmas`, `pa_criar`,
+`pa_meus_pedidos`, `pa_fila`, `pa_decidir`, `pa_marcar_aplicado`.
 
 Migrations de 06/10/2026, **NÃO APLICADAS** (branch `victor-pedidos`), independentes entre si:
 
@@ -110,9 +112,7 @@ Migrations de 06/10/2026, **NÃO APLICADAS** (branch `victor-pedidos`), independ
 (roda em `begin … rollback`; esperado nenhuma linha `ERRADO`). Depois de aplicar: aprovar um pedido de troca e conferir
 em `/educacional/remocoes` o status do caso ("Em remoção" sem compra própria, "Aguardando triagem" com compra) e, no
 aluno novo, a entrada e a turma iguais às do titular. Saída do ensaio, `explain (analyze)` e reversão nos `.explain.md`.
-Atenção: cada ensaio consome números da sequência de `pa_pedidos` (o rollback não devolve). Tabelas `pa_pedidos`, `pa_historico`, `pa_aprovadores`, fechadas. Funções da tela:
-`pa_meu_papel`, `pa_buscar_alunos`, `pa_socios_do_titular`, `pa_valor_atual`, `pa_turmas`, `pa_criar`,
-`pa_meus_pedidos`, `pa_fila`, `pa_decidir`, `pa_marcar_aplicado`.
+Atenção: cada ensaio consome números da sequência de `pa_pedidos` (o rollback não devolve).
 
 Código: `web/modules/alunos/domain/pedidos-alteracao.ts` (regras e testes),
 `web/modules/alunos/ui/PedidosAlteracaoClient.tsx`, `PedidosAprovacao.tsx`, `pedidos-alteracao-data.ts`,
