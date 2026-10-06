@@ -49,6 +49,7 @@ Grupo**, com as mesmas regras de análise. Nada aqui conecta no Supabase, no dom
 | Padrão de nome de campanha | `GESTOR \| PROJETO \| OBJETIVO \| DESCRIÇÃO \| PÁGINA(opcional)`, ex.: `RS \| PB26 \| LEADS \| TESTE DE ESCRITÓRIOS \| AK1` |
 | FTP das páginas do PB | É do Luiz; o do Grupo vem depois. A virada usa o dele por ora |
 | Data da virada | **Fora da semana do PB26 (09 a 11/11/2026)** |
+| Page view no connect rate | **Uma entrada na página por visita vinda da campanha**, como o Meta conta (Victor, 05/10). Connect rate = page views ÷ cliques no link; conversão = leads ÷ page views. Mesma regra na Web e no Tráfego |
 
 ## 5. Como trabalhar neste repositório
 
@@ -81,9 +82,12 @@ Grupo**, com as mesmas regras de análise. Nada aqui conecta no Supabase, no dom
    Diário com IA, publicações (e o achado "antes e depois da publicação"), Pesquisas, reenvio ao ActiveCampaign, o
    servidor MCP da central (as ferramentas da Web estão descritas em `central-de-dados.md`), área `mkt_web` para o Luiz
    e o Iromar, teste A/B cadastrado (início, fim, hipótese, trava) e clique no link por anúncio (depende do Tráfego).
-5. **Conferir depois da virada:** o tempo de `mkt_web_melhorias` com 30 dias de dado; se as páginas do PB aceitam ser
-   abertas num quadro (fundo "página ao vivo" do mapa de calor); se a cota pública do Google basta (senão, a chave no
-   Vault `mkt_web_pagespeed_api_key`).
+5. **Tarefa do Luiz: chave do PageSpeed.** Decisão do Victor (05/10): o sistema fica sem chave por ora e o Luiz
+   cadastra. Criar uma chave da API PageSpeed Insights num projeto Google do Grupo e gravar no Vault do Supabase com o
+   nome `mkt_web_pagespeed_api_key` (nunca no código nem no git). Sem ela, a rotina usa a cota pública e o Google pode
+   recusar parte dos pedidos (a falha aparece na aba Velocidade).
+6. **Conferir depois da virada:** o tempo de `mkt_web_melhorias` com 30 dias de dado; se as páginas do PB aceitam ser
+   abertas num quadro (fundo "página ao vivo" do mapa de calor).
 
 ## 7. Perguntas para o Luiz (abertas em 05/10/2026)
 
