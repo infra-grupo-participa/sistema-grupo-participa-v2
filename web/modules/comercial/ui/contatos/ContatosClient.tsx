@@ -3,15 +3,15 @@
 // Base de pessoas do CRM. Regra do playbook: se não está no CRM, não existe; antes de falar com alguém,
 // busque pelo telefone (tem dono, não é seu). Sem dono é meta zero; opt-out fica visível para ninguém abordar.
 // Sem rolagem horizontal: em tela larga, 5 colunas enxutas; em tela estreita, cartões. O detalhe mora na ficha.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Button, FilterSelect, MultiSelect, SearchInput, Skeleton, Toast, Toggle, Toolbar, useFlash,
+  Button, FilterSelect, MultiSelect, SearchInput, Toast, Toggle, Toolbar, useFlash,
 } from '@/shared/ui/components';
 import { fmtRelativo } from '@/shared/ui/format';
 import { Icon } from '@/shared/ui/icons';
 import { produto, ROTULO_PERFIL } from '../../domain/catalogo';
 import { fmtTelefone } from '../../domain/regras';
-import type { Contato, Negocio, PerfilProfissional, PontoJornada } from '../../domain/types';
+import type { Contato, Negocio, PerfilProfissional } from '../../domain/types';
 import { Campo, EsqueletoLista, EstadoErro, FaixaNumeros, PaginaComercial, Pessoa, Vazio, useEquipe, useParamUrl } from '../comum';
 import { InfoIndicador, type TextoIndicador } from '../InfoIndicador';
 import { repo, useDados } from '../repositorio';
@@ -35,7 +35,7 @@ const INFO: Record<'total' | 'semDono' | 'optOut' | 'alunos' | 'lancamentos', Te
   semDono: {
     nome: 'Contatos sem dono',
     oQueE: 'Pessoas da base sem vendedor responsável.',
-    comoConta: 'Contato com dono vazio, inclusive quem pediu para não receber contato.',
+    comoConta: 'Contato com dono vazio, inclusive quem pediu para não receber contato. Para o vendedor, a lista traz só os sem dono com negócio aberto; quem só comprou na Hotmart aparece na busca.',
     paraQue: 'Contato sem dono vira abordagem dupla. O gestor distribui na hora.',
     meta: 'Zero.',
   },
@@ -54,7 +54,7 @@ const INFO: Record<'total' | 'semDono' | 'optOut' | 'alunos' | 'lancamentos', Te
   lancamentos: {
     nome: 'Lançamentos',
     oQueE: 'Em quantos lançamentos ou captações diferentes a pessoa já entrou.',
-    comoConta: 'Chaves de lançamento distintas na jornada da pessoa.',
+    comoConta: 'Chaves de lançamento distintas na jornada da pessoa. Por enquanto aparece só na ficha (aba Jornada), que busca o histórico de uma pessoa por vez.',
   },
 };
 
@@ -81,6 +81,23 @@ export function ContatosClient() {
   const contatoAberto = aberto ?? paramContato;
 
   const lista = useMemo(() => [...locais, ...(cs.dados ?? [])], [cs.dados, locais]);
+
+  // Busca no servidor (a partir de 3 letras, 400 ms depois da última tecla): acha quem não vem na lista do vendedor
+  // (sem dono e sem negócio aberto, migration 20261006191824). Os achados entram só no resultado, não nos números.
+  const [termo, setTermo] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setTermo(busca.trim()), 400);
+    return () => clearTimeout(t);
+  }, [busca]);
+  const rb = useDados(
+    async () => ({ termo, itens: termo.length >= 3 ? await repo.buscarContatos(termo) : [] as Contato[] }),
+    [termo],
+  );
+  const daBusca = useMemo(() => {
+    if (!rb.dados || rb.dados.termo !== busca.trim()) return [] as Contato[];
+    const ids = new Set(lista.map((c) => c.id));
+    return rb.dados.itens.filter((c) => !ids.has(c.id));
+  }, [rb.dados, busca, lista]);
   const duplicados = useMemo(() => mapaDuplicados(lista), [lista]);
   const abertosPorContato = useMemo(() => {
     const m = new Map<string, Negocio[]>();
@@ -88,35 +105,33 @@ export function ContatosClient() {
     return m;
   }, [ns.dados]);
 
-  // Jornada de cada pessoa para "Lançamentos" e "Última interação". Com o backend, isto vira uma visão agregada
-  // (uma consulta só); aqui são consultas paralelas à fonte de demonstração.
-  const ids = useMemo(() => (cs.dados ?? []).map((c) => c.id), [cs.dados]);
-  const js = useDados(
-    async () => new Map<string, PontoJornada[]>(await Promise.all(ids.map(async (id) => [id, await repo.jornada(id)] as const))),
-    [ids],
-  );
-  const indice = useMemo(() => indiceContatos(js.dados ?? new Map(), ns.dados ?? []), [js.dados, ns.dados]);
-  const jornadaPronta = !!js.dados;
+  // A lista NÃO busca a jornada de cada pessoa (era uma chamada por contato, todas em paralelo: milhares de
+  // consultas por abertura da tela). O histórico só é buscado ao abrir a ficha, uma pessoa por vez.
+  // "Última interação" sai dos negócios já carregados; "Lançamentos" fica para a RPC paginada com cálculo em lote
+  // (docs/projetos/comercial/ajuste-rapido-2026-10-06.md).
+  const indice = useMemo(() => indiceContatos(new Map(), ns.dados ?? []), [ns.dados]);
 
   const ufs = useMemo(() => [...new Set(lista.map((c) => c.uf).filter((x): x is string => !!x))].sort(), [lista]);
   const tags = useMemo(() => [...new Set(lista.flatMap((c) => c.tags))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [lista]);
 
   const filtrados = useMemo(() => {
-    const res = lista.filter((c) => {
+    const idsBusca = new Set(daBusca.map((c) => c.id));
+    const res = [...lista, ...daBusca].filter((c) => {
       if (dono === 'sem_dono' ? !!c.donoId : dono !== 'todos' && c.donoId !== dono) return false;
       if (perfil === 'sem' ? !!c.perfil : perfil !== 'todos' && c.perfil !== perfil) return false;
       if (uf !== 'todas' && c.uf !== uf) return false;
       if (tagsSel.length && !tagsSel.some((t) => c.tags.includes(t))) return false;
       if (soOptOut && !c.optOut) return false;
       if (soAlunos && !c.ehAluno) return false;
-      return casaBusca(c, busca);
+      // o servidor já casou a busca (e-mail e telefone vêm mascarados, então não dá para casar de novo aqui)
+      return idsBusca.has(c.id) || casaBusca(c, busca);
     });
     const valor = (c: Contato): string | number => {
       switch (ordem.col) {
         case 'nome': return c.nome.toLowerCase();
         case 'dono': return c.donoId ? nomeDe(c.donoId) : '';
         case 'negocios': return abertosPorContato.get(c.id)?.length ?? 0;
-        case 'lancamentos': return indice.get(c.id)?.lancamentos ?? 0;
+        case 'lancamentos': return 0; // sem dado na lista (ver comentário do índice acima)
         case 'ultima': return indice.get(c.id)?.ultimaEm ?? '';
       }
     };
@@ -126,7 +141,7 @@ export function ContatosClient() {
       const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), 'pt-BR');
       return cmp * sinal || a.nome.localeCompare(b.nome, 'pt-BR');
     });
-  }, [lista, dono, perfil, uf, tagsSel, soOptOut, soAlunos, busca, ordem, nomeDe, abertosPorContato, indice]);
+  }, [lista, daBusca, dono, perfil, uf, tagsSel, soOptOut, soAlunos, busca, ordem, nomeDe, abertosPorContato, indice]);
 
   const numeros = {
     total: lista.length,
@@ -267,7 +282,6 @@ export function ContatosClient() {
                         c={c}
                         abertos={abertosPorContato.get(c.id) ?? []}
                         indice={indice.get(c.id)}
-                        jornadaPronta={jornadaPronta}
                         duplicado={duplicados.has(c.id)}
                         nomeDe={nomeDe}
                         onAbrir={() => abrir(c.id)}
@@ -325,7 +339,8 @@ export function ContatosClient() {
         <ContatoDrawer
           key={contatoAberto}
           contatoId={contatoAberto}
-          contatoReserva={locais.find((c) => c.id === contatoAberto)}
+          contatoReserva={locais.find((c) => c.id === contatoAberto) ?? daBusca.find((c) => c.id === contatoAberto)}
+          reservaDaBusca={!locais.some((c) => c.id === contatoAberto)}
           onAbrirContato={abrir}
           onClose={() => {
             setAberto(null);
@@ -341,8 +356,16 @@ export function ContatosClient() {
 function Cabecalho({ ordem, onOrdenar }: {
   ordem: { col: Coluna; dir: 'asc' | 'desc' }; onOrdenar: (col: Coluna) => void;
 }) {
-  const col = (k: Coluna, rotulo: string, info?: TextoIndicador, direita = false) => {
+  const col = (k: Coluna, rotulo: string, info?: TextoIndicador, direita = false, ordenavel = true) => {
     const ativo = ordem.col === k;
+    if (!ordenavel) {
+      return (
+        <div className={`flex min-w-0 items-center gap-0.5 ${direita ? 'justify-end' : ''}`}>
+          <span className="truncate text-[11px] font-semibold uppercase tracking-wide">{rotulo}</span>
+          {info && <InfoIndicador texto={info} />}
+        </div>
+      );
+    }
     return (
       <div className={`flex min-w-0 items-center gap-0.5 ${direita ? 'justify-end' : ''}`}>
         <button
@@ -365,7 +388,7 @@ function Cabecalho({ ordem, onOrdenar }: {
       {col('nome', 'Pessoa')}
       {col('dono', 'Dono')}
       {col('negocios', 'Negócios abertos')}
-      {col('lancamentos', 'Lançamentos', INFO.lancamentos, true)}
+      {col('lancamentos', 'Lançamentos', INFO.lancamentos, true, false)}
       {col('ultima', 'Última interação')}
     </div>
   );
@@ -383,14 +406,14 @@ function NegociosAbertos({ abertos }: { abertos: Negocio[] }) {
   );
 }
 
-// Última interação: o mais recente entre o último ponto da jornada e a última interação dos negócios.
+// Última interação: a mais recente registrada nos negócios da pessoa (a jornada completa fica na ficha).
 function UltimaInteracao({ em }: { em: string | null | undefined }) {
   const r = fmtRelativo(em);
   return <span className="block truncate text-sm tabular text-[var(--fg-2)]" title={r.title || undefined}>{r.label}</span>;
 }
 
-function LinhaContato({ c, abertos, indice, jornadaPronta, duplicado, nomeDe, onAbrir }: {
-  c: Contato; abertos: Negocio[]; indice: IndiceContato | undefined; jornadaPronta: boolean; duplicado: boolean;
+function LinhaContato({ c, abertos, indice, duplicado, nomeDe, onAbrir }: {
+  c: Contato; abertos: Negocio[]; indice: IndiceContato | undefined; duplicado: boolean;
   nomeDe: (id: string | null) => string; onAbrir: () => void;
 }) {
   return (
@@ -410,9 +433,7 @@ function LinhaContato({ c, abertos, indice, jornadaPronta, duplicado, nomeDe, on
       </div>
       <DonoLinha c={c} nomeDe={nomeDe} />
       <NegociosAbertos abertos={abertos} />
-      <span className="text-right text-sm tabular text-[var(--fg)]">
-        {jornadaPronta ? (indice?.lancamentos ?? 0) : <Skeleton w={20} h={12} className="ml-auto" />}
-      </span>
+      <span className="text-right text-sm tabular text-[var(--fg-3)]" title="Abra a ficha para ver os lançamentos">—</span>
       <UltimaInteracao em={indice?.ultimaEm} />
     </li>
   );
@@ -422,7 +443,6 @@ function CartaoContato({ c, abertos, indice, duplicado, nomeDe, onAbrir }: {
   c: Contato; abertos: Negocio[]; indice: IndiceContato | undefined; duplicado: boolean;
   nomeDe: (id: string | null) => string; onAbrir: () => void;
 }) {
-  const lancs = indice?.lancamentos ?? 0;
   const ultima = fmtRelativo(indice?.ultimaEm);
   return (
     <li>
@@ -447,7 +467,7 @@ function CartaoContato({ c, abertos, indice, duplicado, nomeDe, onAbrir }: {
           </span>
         </div>
         <div className="mt-1 truncate text-xs text-[var(--fg-3)] tabular">
-          {lancs} lançamento{lancs === 1 ? '' : 's'} · última interação {ultima.label}
+          Última interação {ultima.label}
         </div>
       </button>
     </li>

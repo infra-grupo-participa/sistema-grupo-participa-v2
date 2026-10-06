@@ -162,6 +162,18 @@ describe('proxy — o candidato alcança o modelo da declaração', () => {
     expect(matcher.test('/logo.png')).toBe(false);
   });
 
+  it('a coleta da Web fica FORA do Proxy (pública, sem sessão), e só ela', () => {
+    const proxy = readFileSync(join(__dirname, '..', '..', '..', 'proxy.ts'), 'utf8');
+    const m = proxy.slice(proxy.indexOf('matcher:')).match(/'([^']+)'/);
+    const matcher = new RegExp('^' + m![1].split('\\\\').join('\\') + '$');
+    expect(matcher.test('/api/web/coletar')).toBe(false);
+    expect(matcher.test('/web/radar-v1.js')).toBe(false);
+    // as telas da Web e o resto da API continuam passando pelo Proxy (login)
+    expect(matcher.test('/marketing/web')).toBe(true);
+    expect(matcher.test('/api/web/outra')).toBe(true);
+    expect(matcher.test('/web/outro.html')).toBe(true);
+  });
+
   it('a rota do candidato aceita /modelos e o arquivo dentro dele', () => {
     const ROTAS = ['/solicitar-placa', '/agendar-entrevista', '/modelos', '/api/cep', '/api/placa', '/api/agenda'];
     const ehRota = (p: string) => ROTAS.some((r) => p === r || p.startsWith(r + '/'));

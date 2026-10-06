@@ -15,11 +15,11 @@ describe('departamentos: registro', () => {
     const st = Object.fromEntries(DEPARTAMENTOS.map((d) => [d.key, d.status]));
     expect(st).toEqual({ educacional: 'ativo', marketing: 'ativo', comercial: 'ativo', financeiro: 'em_breve', infra: 'em_breve' });
   });
-  it('Marketing tem as 5 áreas em /marketing/<area>; só Mensageria ativa, o resto "Em breve"', () => {
+  it('Marketing tem as 5 áreas em /marketing/<area>: Web, Mensageria e Tráfego ativas, as outras "Em breve"', () => {
     const mkt = departamento('marketing');
     expect(mkt.areas.map((a) => a.label)).toEqual(['Web', 'Mensageria', 'Tráfego', 'Audiovisual', 'Social Media']);
     for (const a of mkt.areas) {
-      expect(a.status).toBe(a.key === 'mensageria' ? 'ativo' : 'em_breve');
+      expect(a.status).toBe(['web', 'mensageria', 'trafego'].includes(a.key) ? 'ativo' : 'em_breve');
       expect(a.path).toBe(`/marketing/${a.key}`);
     }
   });

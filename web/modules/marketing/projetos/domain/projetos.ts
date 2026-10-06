@@ -24,6 +24,9 @@ export const ROTULO_FUNCAO: Record<FuncaoPagina, string> = {
 };
 
 export const ROTULO_SUBAREA: Record<SubareaTrafego, string> = { interno: 'Interno', aurum: 'Aurum', diamante: 'Diamante' };
+/** Desde a 20261006j a subárea é derivada de tipo e unidade (Interno; Externo Aurum; Externo Diamantes). A unidade interna
+ *  (CSM ou Escritório) e o resto do cadastro do evento ficam na Central do Tráfego. */
+export const ROTULO_TIPO_SUBAREA: Record<SubareaTrafego, string> = { interno: 'Interno', aurum: 'Externo · Aurum', diamante: 'Externo · Diamantes' };
 
 export interface Projeto {
   id: number;

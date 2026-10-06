@@ -9,7 +9,7 @@ import { bloqueioMoverNoFunil, camposFaltandoNoFunil, etapaDoFunil, etapaInicial
 import { escolherDono, montarSck, somaPercentuais } from '../domain/regras';
 import { podeMexerNoNegocio } from '../domain/travas';
 import type {
-  CampoKey, Conversa, EscopoMcp, EtapaFunil, EventoTimeline, Funil, MotivoPerda, Negocio, PainelHotmart, ProdutoKey,
+  CampoKey, Contato, Conversa, EscopoMcp, EtapaFunil, EventoTimeline, Funil, MotivoPerda, Negocio, PainelHotmart, ProdutoKey,
   SessaoComercial, StatusFila, StatusWhatsapp, TokenMcp, Vendedor,
 } from '../domain/types';
 import { funisDoProjeto } from '../domain/modelos';
@@ -90,6 +90,14 @@ export class MockComercialRepository implements ComercialRepository {
   vendedores() { return espera(this.db.vendedores); }
   config() { return espera(this.db.config); }
   contatos() { return espera(this.db.contatos); }
+  /** Demonstração: a lista já tem todo mundo; a busca filtra por nome, e-mail ou dígitos do telefone. */
+  buscarContatos(texto: string) {
+    const q = texto.trim().toLowerCase();
+    if (q.length < 3) return espera([] as Contato[]);
+    const dig = q.replace(/\D/g, '');
+    return espera(this.db.contatos.filter((c) => `${c.nome} ${c.email ?? ''}`.toLowerCase().includes(q)
+      || (dig.length >= 4 && String(c.telefone ?? '').replace(/\D/g, '').includes(dig))).slice(0, 50));
+  }
   negocios() { return espera(this.db.negocios); }
   atividades() { return espera(this.db.atividades); }
   eventos(contatoId?: string) {

@@ -61,13 +61,15 @@ const INFO: Record<'lancamentos' | 'compras' | 'pago' | 'reembolsos' | 'abertos'
   },
 };
 
-export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReserva }: {
+export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReserva, reservaDaBusca }: {
   contatoId: string;
   onClose: () => void;
   /** Troca a ficha para outro contato (usado no aviso de duplicidade). */
   onAbrirContato?: (id: string) => void;
   /** Contato cadastrado só na tela (demonstração): usado quando a fonte não o devolve. */
   contatoReserva?: Contato;
+  /** A reserva veio da busca no servidor (contato real fora da lista do vendedor), não do cadastro de demonstração. */
+  reservaDaBusca?: boolean;
 }) {
   const agora = useAgora();
   const { toast, flash } = useFlash(4000);
@@ -86,7 +88,7 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
     [cs.dados, contatoReserva],
   );
   const c = contatos?.find((x) => x.id === contatoId) ?? null;
-  const soLocal = !!contatoReserva && c?.id === contatoReserva.id;
+  const soLocal = !!contatoReserva && !reservaDaBusca && c?.id === contatoReserva.id;
   const duplicados = useMemo(() => {
     if (!contatos) return [];
     const ids = mapaDuplicados(contatos).get(contatoId) ?? [];

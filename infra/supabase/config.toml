@@ -32,6 +32,19 @@ verify_jwt = false
 [functions.respondi-sync]
 verify_jwt = false
 
+# trafego-meta e trafego-clickup (migration 20261006i): chamadas pelo cron via ops.cron_post sem Authorization;
+# autenticam pelo header x-sync-chave (Vault trafego_coleta_chave), fail-closed. Nascem sem cron (desligadas).
+[functions.trafego-meta]
+verify_jwt = false
+
+[functions.trafego-clickup]
+verify_jwt = false
+
+# mkt-web-pagespeed (20261006h): o cron chama com o header x-sync-chave (Vault mkt_web_pagespeed_chave), conferido
+# na própria Edge, fail-closed. Sem isto, um deploy sem --no-verify-jwt devolve 401 ao cron.
+[functions.mkt-web-pagespeed]
+verify_jwt = false
+
 # crm-integracao-webhook (F5 do CRM, migration 20261006c — NÃO publicada): webhooks de ActiveCampaign/Unnichat/SendFlow.
 # Autentica pelo header x-webhook-secret conferido no banco contra o Vault (crm_webhook_<fonte>), fail-closed.
 [functions.crm-integracao-webhook]
