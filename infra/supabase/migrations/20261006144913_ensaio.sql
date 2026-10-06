@@ -301,14 +301,28 @@ update public.thb_alunos set eh_socio = true, socio_de_aluno_id = 'e0000000-0000
  where id in ('e0000000-0000-4000-8000-0000000144c1', 'e0000000-0000-4000-8000-0000000144c2');
 
 create temp table _p (k text primary key, criar jsonb, decidir jsonb) on commit drop;
+-- n1 (pessoa nova) é gravado direto em pa_pedidos, no mesmo formato da pa_criar (mesmas funções de normalização),
+-- porque o documento do sócio novo é um CPF que FALHA no dígito verificador (484.621.880-58): assim o ensaio nunca usa
+-- CPF que possa ser de alguém, e a pa_criar recusaria esse CPF. A pa_decidir só confere duplicidade de documento.
+with ins as (
+  insert into public.pa_pedidos (tipo, aluno_id, aluno_nome, campo, valor_atual, valor_novo, socio_sai_id, socio_sai_nome,
+                                 socio_entra_id, socio_entra_nome, socio_entra_novo, descricao, motivo, evidencia, solicitado_por)
+  select 'trocar_socio', t.id, t.nome, null, jsonb_build_object('socio_sai_vinculado', true, 'num_socios', t.num_socios), null,
+         s.id, s.nome, null, 'ZZ Ensaio 144913 Novo',
+         jsonb_build_object('nome', 'ZZ Ensaio 144913 Novo', 'email', 'zz.144913.novo@exemplo.invalid',
+           'telefone', public.pa_telefone_pessoa('(21) 97777-0013', true), 'documento', '48462188058', 'tipo_documento', 'CPF',
+           'profissao', 'Contadora', 'endereco_mantido', false,
+           'endereco', public.pa_endereco('{"pais":"Brasil","cep":"20040-020","endereco_logradouro":"Av. Ensaio",
+             "endereco_numero":"1","bairro":"Centro","cidade":"Rio de Janeiro","estado":"RJ"}'::jsonb, true)),
+         null, 'ensaio da migration 20261006144913', null, '81d2eaee-cce1-4058-8714-439b0fc6f970'
+    from public.thb_alunos t, public.thb_alunos s
+   where t.id = 'e0000000-0000-4000-8000-0000000144c0' and s.id = 'e0000000-0000-4000-8000-0000000144c1'
+  returning id),
+hist as (
+  insert into public.pa_historico (pedido_id, acao, por, detalhe)
+  select id, 'criado', '81d2eaee-cce1-4058-8714-439b0fc6f970', '{"tipo":"trocar_socio","campo":null}'::jsonb from ins)
+insert into _p (k, criar) select 'n1', jsonb_build_object('ok', true, 'numero', id) from ins;
 insert into _p (k, criar) values
- ('n1', pg_temp.chamar('81d2eaee-cce1-4058-8714-439b0fc6f970', 'select public.pa_criar(''{"tipo":"trocar_socio",
-   "aluno_id":"e0000000-0000-4000-8000-0000000144c0","socio_sai_id":"e0000000-0000-4000-8000-0000000144c1",
-   "socio_entra_novo":{"nome":"ZZ Ensaio 144913 Novo","email":"zz.144913.novo@exemplo.invalid","telefone":"(21) 97777-0013",
-     "documento":"484.621.880-59","profissao":"Contadora","endereco_mantido":false,
-     "endereco":{"pais":"Brasil","cep":"20040-020","endereco_logradouro":"Av. Ensaio","endereco_numero":"1",
-                 "bairro":"Centro","cidade":"Rio de Janeiro","estado":"RJ"}},
-   "motivo":"ensaio da migration 20261006144913"}''::jsonb)::jsonb')),
  ('n2', pg_temp.chamar('81d2eaee-cce1-4058-8714-439b0fc6f970', 'select public.pa_criar(''{"tipo":"trocar_socio",
    "aluno_id":"e0000000-0000-4000-8000-0000000144c0","socio_sai_id":"e0000000-0000-4000-8000-0000000144c2",
    "socio_entra_id":"e0000000-0000-4000-8000-0000000144d2","motivo":"ensaio da migration 20261006144913"}''::jsonb)::jsonb'));

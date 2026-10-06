@@ -54,7 +54,7 @@ completo** (migration `20261005k`) **APLICADA** (commit `002535a`, na `main`).
   **Com a `20261006144912` (NÃO APLICADA; decisão do Victor, 06/10/2026):** quem sai **sem compra própria** entra
   **direto em remoção** (sem triagem, itens já criados, Slack marca quem remove); **com compra própria** de Holding
   Masters ou Aurum (em `public.compras` ou no financeiro da Hotmart, conta academy) cai em **aguardando triagem**, com as
-  compras na ficha. Antes dela, todo caso de troca cai em aguardando triagem. Regra completa em `remocao-acessos.md`.
+  compras na ficha; quem sai **sem e-mail e sem documento** também cai em triagem (não dá para checar). Antes dela, todo caso de troca cai em aguardando triagem. Regra completa em `remocao-acessos.md`.
 - **Sócio novo herda do titular (`20261006144913`, NÃO APLICADA; decisão do Victor, 06/10/2026):** pessoa nova recebe
   `data_entrada_thb` e `turma_id` do titular, com auditoria. Sócio que entra já existente mantém os dele.
 - **"Outro":** aprovar só registra; o aprovador faz à mão e marca como aplicado.

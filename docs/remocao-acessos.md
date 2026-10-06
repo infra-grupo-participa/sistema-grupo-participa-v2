@@ -86,6 +86,8 @@ porque `public.compras` só tem HM desde 14/03/2026 e o financeiro guarda desde 
   `concluido` sai quando todos marcam. **Não tem "Desfazer triagem"** (o botão some e o banco recusa).
 - **Com compra própria:** **Aguardando triagem** como os outros casos do HM, sugestão "verificar" com as compras em
   "Outras compras que dão acesso". Slack: ":rotating_light: *Troca de sócio no HM, triagem pendente*", marca o triador.
+- **Sem e-mail e sem documento (11+ dígitos):** não dá para checar compra própria, então também **Aguardando triagem**,
+  sugestão "verificar", motivo "Sem e-mail/documento para checar compra própria: conferir antes de remover."
 
 ## Acelera Holding (produto Hotmart 8381847)
 

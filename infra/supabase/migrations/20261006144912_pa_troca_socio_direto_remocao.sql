@@ -12,6 +12,8 @@
 --        (ativo and fluxo = 'remocao' and linha = 'hm' and (not so_programa or eh_programa), on conflict do nothing).
 --        triado_em e triado_por ficam nulos, como em ra_criar_caso_acelera. Histórico 'aberto' com
 --        evento "direto em remoção pelo pedido nº N" (a ficha mostra o `evento` do 'aberto').
+--      - SEM e-mail e SEM documento com 11+ dígitos: não dá para checar, vai para `aguardando_triagem` com sugestão
+--        'verificar' e motivo "Sem e-mail/documento para checar compra própria".
 --      - COM compra própria: igual a hoje (`aguardando_triagem`, triagem do Victor), mas a sugestão passa a
 --        'verificar' com as compras listadas em `compras_anteriores` (a ficha já mostra "Outras compras que dão acesso").
 --      - Compra própria = a regra da triagem (ra_montar_sugestao: produtos 5064314 Holding Masters, 3507214
@@ -23,7 +25,7 @@
 --   2. ra_slack_pendentes_base: aviso `novo` próprio da troca direta (":scissors: *Troca de sócio no HM: remover
 --      acessos*", Prazo, Pessoas com "sócio de <titular>", responsáveis via ra_slack_responsaveis, "Pedido de alteração
 --      nº N", sem bloco Compra). A troca em triagem segue no ramo de sempre, com o título "Troca de sócio no HM,
---      triagem pendente" (antes saía initcap('troca_socio')). `liberado` nunca sai para a troca direta; `concluido`
+--      triagem pendente" (antes saía initcap('troca_socio')), com o motivo escapado por ra_slack_esc. `liberado` nunca sai para a troca direta; `concluido`
 --      sai depois do `novo`, como no Acelera. Nada muda para reembolso, chargeback, disputa e Acelera.
 --   3. ra_desfazer_triagem recusa a troca que nasceu em remoção.
 --
@@ -79,6 +81,7 @@ declare
   v_programa boolean;
   v_titular text := coalesce(p_titular_nome, 'o titular');
   v_pessoa uuid;
+  v_sem_id boolean;
 begin
   select * into v_s from public.thb_alunos where id = p_socio;
   select t.codigo into v_turma from public.thb_turmas t where t.id = v_s.turma_id;
@@ -100,7 +103,9 @@ begin
      and ((v_email <> '' and lower(trim(h.comprador_email)) = v_email)
           or (length(v_doc) >= 11 and regexp_replace(coalesce(h.comprador_documento, ''), '\D', '', 'g') = v_doc))
      and not exists (select 1 from jsonb_array_elements(v_compras) x where x ->> 'transacao' = h.transacao);
-  v_direto := jsonb_array_length(v_compras) = 0;
+  -- Sem e-mail e sem documento (11+ dígitos) não dá para checar compra própria: vai para a triagem.
+  v_sem_id := v_email = '' and length(v_doc) < 11;
+  v_direto := jsonb_array_length(v_compras) = 0 and not v_sem_id;
 
   insert into public.ra_casos (
     compra_id, hotmart_transaction, tipo, status, produto_nome, aluno_id, nome, email, telefone, documento,
@@ -116,6 +121,8 @@ begin
       'motivo', 'Troca de sócio, pedido nº ' || p_pedido || ': saiu do vínculo com ' || v_titular || '. '
                 || case when v_direto
                         then 'Sem compra própria de Holding Masters ou Aurum: entrou direto em remoção, sem triagem.'
+                        when v_sem_id
+                        then 'Sem e-mail/documento para checar compra própria: conferir antes de remover.'
                         else 'Tem compra própria de Holding Masters ou Aurum: conferir se o acesso dela ainda vale antes de remover.' end,
       'compras_anteriores', v_compras,
       'aluno', jsonb_build_object('instrucao', v_s.instrucao, 'espaco', v_s.espaco_instrucao, 'turma', v_turma,
@@ -158,6 +165,8 @@ begin
                              'compras_proprias', jsonb_array_length(v_compras),
                              'evento', case when v_direto
                                             then 'direto em remoção pelo pedido nº ' || p_pedido
+                                            when v_sem_id
+                                            then 'triagem: sem e-mail/documento para checar compra própria (pedido nº ' || p_pedido || ')'
                                             else 'triagem: tem compra própria (pedido nº ' || p_pedido || ')' end));
   return v_caso;
 end
@@ -165,7 +174,7 @@ $function$;
 
 -- ═══ 2. ra_slack_pendentes_base: aviso próprio da troca que nasceu em remoção ═══
 -- Corpo vivo + 4 mudanças, todas marcadas com 20261006144912:
---   a) ramo `novo` do HM (triagem) ignora a troca direta e dá título legível à troca em triagem;
+--   a) ramo `novo` do HM (triagem) ignora a troca direta, dá título legível à troca em triagem e escapa o motivo;
 --   b) ramo `novo` novo para a troca direta (marca quem remove, sem bloco Compra);
 --   c) `liberado` nunca sai para a troca direta (ela já avisou no `novo`);
 --   d) `concluido` da troca direta sai depois do `novo`, como no Acelera.
@@ -231,7 +240,7 @@ begin
            || '*Pessoas*' || E'\n' || public.ra_slack_pessoas(b.id) || E'\n\n'
            || '*Compra*' || E'\n' || public.ra_slack_esc(coalesce(b.produto_nome, '')) || ' · ' || public.ra_brl(b.valor) || ' · ' || b.quando
            || case when b.eh_programa then E'\n' || 'Programa de Implementação' else '' end || E'\n\n'
-           || '*Sugestão:* ' || coalesce(b.sugestao->>'recomendacao', 'sem sugestão') || E'\n' || coalesce(b.sugestao->>'motivo', '') || E'\n\n'
+           || '*Sugestão:* ' || coalesce(b.sugestao->>'recomendacao', 'sem sugestão') || E'\n' || public.ra_slack_esc(coalesce(b.sugestao->>'motivo', '')) || E'\n\n'  -- 20261006144912: escape
            || '*Prazo:* ' || coalesce(b.prazo, 'sem prazo') || E'\n' || b.link
       from base b where b.linha = 'hm' and b.tipo <> 'disputa' and not b.direta and not (b.slack_avisos ? 'novo')
     union all
@@ -385,7 +394,8 @@ $confere$;
 
 -- ═══ REVERSÃO (não rodar junto com a migration) ═══
 -- Volta as três funções ao corpo vivo lido em 06/10/2026. Antes, conferir as trocas que nasceram em remoção: com o corpo
--- antigo elas passam a sair no ramo `novo` da triagem do Slack (se ainda não postaram) e o desfazer volta a aceitá-las:
+-- antigo elas passam a sair no ramo `novo` da triagem do Slack (se ainda não postaram), as que JÁ postaram o `novo` passam
+-- a postar também o `liberado` (o corpo antigo não exclui a troca direta desse ramo) e o desfazer volta a aceitá-las:
 --   select id, status, slack_avisos from public.ra_casos where tipo = 'troca_socio' and (sugestao ->> 'direto_remocao')::boolean;
 -- Para reverter: tirar o "-- " das linhas abaixo e rodar o bloco inteiro numa transação.
 

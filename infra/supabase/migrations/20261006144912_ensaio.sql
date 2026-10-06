@@ -101,6 +101,7 @@ declare
   v_programa boolean;
   v_titular text := coalesce(p_titular_nome, 'o titular');
   v_pessoa uuid;
+  v_sem_id boolean;
 begin
   select * into v_s from public.thb_alunos where id = p_socio;
   select t.codigo into v_turma from public.thb_turmas t where t.id = v_s.turma_id;
@@ -122,7 +123,9 @@ begin
      and ((v_email <> '' and lower(trim(h.comprador_email)) = v_email)
           or (length(v_doc) >= 11 and regexp_replace(coalesce(h.comprador_documento, ''), '\D', '', 'g') = v_doc))
      and not exists (select 1 from jsonb_array_elements(v_compras) x where x ->> 'transacao' = h.transacao);
-  v_direto := jsonb_array_length(v_compras) = 0;
+  -- Sem e-mail e sem documento (11+ dígitos) não dá para checar compra própria: vai para a triagem.
+  v_sem_id := v_email = '' and length(v_doc) < 11;
+  v_direto := jsonb_array_length(v_compras) = 0 and not v_sem_id;
 
   insert into public.ra_casos (
     compra_id, hotmart_transaction, tipo, status, produto_nome, aluno_id, nome, email, telefone, documento,
@@ -138,6 +141,8 @@ begin
       'motivo', 'Troca de sócio, pedido nº ' || p_pedido || ': saiu do vínculo com ' || v_titular || '. '
                 || case when v_direto
                         then 'Sem compra própria de Holding Masters ou Aurum: entrou direto em remoção, sem triagem.'
+                        when v_sem_id
+                        then 'Sem e-mail/documento para checar compra própria: conferir antes de remover.'
                         else 'Tem compra própria de Holding Masters ou Aurum: conferir se o acesso dela ainda vale antes de remover.' end,
       'compras_anteriores', v_compras,
       'aluno', jsonb_build_object('instrucao', v_s.instrucao, 'espaco', v_s.espaco_instrucao, 'turma', v_turma,
@@ -180,6 +185,8 @@ begin
                              'compras_proprias', jsonb_array_length(v_compras),
                              'evento', case when v_direto
                                             then 'direto em remoção pelo pedido nº ' || p_pedido
+                                            when v_sem_id
+                                            then 'triagem: sem e-mail/documento para checar compra própria (pedido nº ' || p_pedido || ')'
                                             else 'triagem: tem compra própria (pedido nº ' || p_pedido || ')' end));
   return v_caso;
 end
@@ -187,7 +194,7 @@ $function$;
 
 -- ═══ 2. ra_slack_pendentes_base: aviso próprio da troca que nasceu em remoção ═══
 -- Corpo vivo + 4 mudanças, todas marcadas com 20261006144912:
---   a) ramo `novo` do HM (triagem) ignora a troca direta e dá título legível à troca em triagem;
+--   a) ramo `novo` do HM (triagem) ignora a troca direta, dá título legível à troca em triagem e escapa o motivo;
 --   b) ramo `novo` novo para a troca direta (marca quem remove, sem bloco Compra);
 --   c) `liberado` nunca sai para a troca direta (ela já avisou no `novo`);
 --   d) `concluido` da troca direta sai depois do `novo`, como no Acelera.
@@ -253,7 +260,7 @@ begin
            || '*Pessoas*' || E'\n' || public.ra_slack_pessoas(b.id) || E'\n\n'
            || '*Compra*' || E'\n' || public.ra_slack_esc(coalesce(b.produto_nome, '')) || ' · ' || public.ra_brl(b.valor) || ' · ' || b.quando
            || case when b.eh_programa then E'\n' || 'Programa de Implementação' else '' end || E'\n\n'
-           || '*Sugestão:* ' || coalesce(b.sugestao->>'recomendacao', 'sem sugestão') || E'\n' || coalesce(b.sugestao->>'motivo', '') || E'\n\n'
+           || '*Sugestão:* ' || coalesce(b.sugestao->>'recomendacao', 'sem sugestão') || E'\n' || public.ra_slack_esc(coalesce(b.sugestao->>'motivo', '')) || E'\n\n'  -- 20261006144912: escape
            || '*Prazo:* ' || coalesce(b.prazo, 'sem prazo') || E'\n' || b.link
       from base b where b.linha = 'hm' and b.tipo <> 'disputa' and not b.direta and not (b.slack_avisos ? 'novo')
     union all
@@ -405,6 +412,7 @@ begin
 end
 $confere$;
 
+
 -- ═══ ENSAIO: testes ════════════════════════════════════════════════════════════════════════════════════════════════
 create function pg_temp.msgs(p_caso uuid) returns jsonb language sql as $$
   select coalesce(jsonb_agg(m), '[]'::jsonb) from jsonb_array_elements(pg_temp.pend()) m where (m ->> 'caso_id')::uuid = p_caso $$;
@@ -424,6 +432,10 @@ values ('e0000000-0000-4000-8000-0000000144a0', 'ZZ Ensaio 144912 Titular', 'zz.
         'THB IMPLEMENTAÇÃO - SÓCIO', 'holding_masters_implementacao', '2027-03-31', 3, 2027, null, 'ensaio_20261006144912', '2025-01-10', 54),
        ('e0000000-0000-4000-8000-0000000144a3', 'ZZ Ensaio 144912 Sai Compra Sistema', 'zz.144912.sai3@exemplo.invalid',
         'THB IMPLEMENTAÇÃO - SÓCIO', 'holding_masters_implementacao', '2027-03-31', 3, 2027, null, 'ensaio_20261006144912', '2025-01-10', 54),
+       ('e0000000-0000-4000-8000-0000000144a4', 'ZZ Ensaio 144912 Sai Sem Email Nem Doc', null,
+        'THB IMPLEMENTAÇÃO - SÓCIO', 'holding_masters_implementacao', '2027-03-31', 3, 2027, null, 'ensaio_20261006144912', '2025-01-10', 54),
+       ('e0000000-0000-4000-8000-0000000144b4', 'ZZ Ensaio 144912 Entra 4', 'zz.144912.entra4@exemplo.invalid',
+        null, null, null, null, null, null, 'ensaio_20261006144912', null, null),
        ('e0000000-0000-4000-8000-0000000144b1', 'ZZ Ensaio 144912 Entra 1', 'zz.144912.entra1@exemplo.invalid',
         null, null, null, null, null, null, 'ensaio_20261006144912', null, null),
        ('e0000000-0000-4000-8000-0000000144b2', 'ZZ Ensaio 144912 Entra 2', 'zz.144912.entra2@exemplo.invalid',
@@ -432,7 +444,8 @@ values ('e0000000-0000-4000-8000-0000000144a0', 'ZZ Ensaio 144912 Titular', 'zz.
         null, null, null, null, null, null, 'ensaio_20261006144912', null, null);
 update public.thb_alunos set eh_socio = true, socio_de_aluno_id = 'e0000000-0000-4000-8000-0000000144a0',
        socio_de_nome = 'ZZ Ensaio 144912 Titular'
- where id in ('e0000000-0000-4000-8000-0000000144a1', 'e0000000-0000-4000-8000-0000000144a2', 'e0000000-0000-4000-8000-0000000144a3');
+ where id in ('e0000000-0000-4000-8000-0000000144a1', 'e0000000-0000-4000-8000-0000000144a2', 'e0000000-0000-4000-8000-0000000144a3',
+              'e0000000-0000-4000-8000-0000000144a4');
 
 -- Sócio de p2: compra própria SÓ no financeiro (Aurum 3094405 COMPLETE, transação falsa ZZ).
 insert into fin.hotmart_transacoes (transacao, produto_id, produto_nome, status, comprador_email, aprovado_em, bruto_json, conta)
@@ -449,8 +462,8 @@ create temp table _real on commit drop as
    order by c.data_compra desc nulls last limit 1;
 update public.thb_alunos set email = (select e from _real) where id = 'e0000000-0000-4000-8000-0000000144a3';
 select pg_temp.ok('0.cenario',
-  (select count(*) from public.thb_alunos where fonte = 'ensaio_20261006144912') = 7 and (select count(*) from _real) = 1,
-  '7 alunos ZZ; sócio de p3 com e-mail de comprador real de HM (não impresso)');
+  (select count(*) from public.thb_alunos where fonte = 'ensaio_20261006144912') = 9 and (select count(*) from _real) = 1,
+  '9 alunos ZZ; sócio de p3 com e-mail de comprador real de HM (não impresso)');
 
 -- 1. Como o Victor (pede e aprova): três pedidos de troca, aprovados pela pa_decidir.
 create temp table _p (k text primary key, criar jsonb, decidir jsonb) on commit drop;
@@ -461,7 +474,7 @@ select 'p' || x.n, pg_temp.chamar('81d2eaee-cce1-4058-8714-439b0fc6f970',
            'socio_sai_id', 'e0000000-0000-4000-8000-0000000144a' || x.n,
            'socio_entra_id', 'e0000000-0000-4000-8000-0000000144b' || x.n,
            'motivo', 'ensaio da migration 20261006144912')))
-  from (values (1), (2), (3)) x(n);
+  from (values (1), (2), (3), (4)) x(n);
 update _p set decidir = pg_temp.chamar('81d2eaee-cce1-4058-8714-439b0fc6f970',
          format('select public.pa_decidir(%s, ''aprovar'')::jsonb', (criar ->> 'numero')::bigint))
  where k = 'p1';
@@ -471,6 +484,9 @@ update _p set decidir = pg_temp.chamar('81d2eaee-cce1-4058-8714-439b0fc6f970',
 update _p set decidir = pg_temp.chamar('81d2eaee-cce1-4058-8714-439b0fc6f970',
          format('select public.pa_decidir(%s, ''aprovar'')::jsonb', (criar ->> 'numero')::bigint))
  where k = 'p3';
+update _p set decidir = pg_temp.chamar('81d2eaee-cce1-4058-8714-439b0fc6f970',
+         format('select public.pa_decidir(%s, ''aprovar'')::jsonb', (criar ->> 'numero')::bigint))
+ where k = 'p4';
 select pg_temp.ok('1.pedido_' || k,
   (decidir ->> 'ok')::boolean and (decidir ->> 'ra_caso_id') is not null
   and (select ra_caso_id from public.pa_pedidos where id = (criar ->> 'numero')::bigint) = (decidir ->> 'ra_caso_id')::uuid,
@@ -538,6 +554,25 @@ select pg_temp.ok('5.caso_triagem_sistema',
   and (select count(*) = count(distinct x ->> 'transacao') from jsonb_array_elements(c.sugestao -> 'compras_anteriores') x),
   'status=' || c.status || ' compras=' || jsonb_array_length(c.sugestao -> 'compras_anteriores') || ', sem repetida (transações não impressas)')
   from public.ra_casos c where c.id = pg_temp.caso('p3');
+
+-- 5b. Sem e-mail e sem documento: não dá para checar compra própria, vai para a triagem.
+select pg_temp.ok('5b.caso_sem_identificador',
+  c.status = 'aguardando_triagem' and c.decisao is null and c.sugestao ->> 'recomendacao' = 'verificar'
+  and not (c.sugestao ->> 'direto_remocao')::boolean
+  and c.sugestao ->> 'motivo' like '%Sem e-mail/documento para checar compra própria%'
+  and not exists (select 1 from public.ra_itens where caso_id = c.id)
+  and (select h.detalhe ->> 'evento' from public.ra_historico h where h.caso_id = c.id and h.acao = 'aberto')
+      = 'triagem: sem e-mail/documento para checar compra própria (pedido nº ' || pg_temp.num('p4') || ')',
+  'status=' || c.status || ' | motivo: ' || (c.sugestao ->> 'motivo'))
+  from public.ra_casos c where c.id = pg_temp.caso('p4');
+
+-- 5c. Escape do motivo no aviso de triagem: & < > viram entidades (mesmo ra_slack_esc do resto do texto).
+update public.ra_casos set sugestao = jsonb_set(sugestao, '{motivo}', '"ZZ <b>teste</b> & <@U000> motivo"')
+ where id = pg_temp.caso('p4');
+select pg_temp.ok('5c.motivo_escapado',
+  pg_temp.msg(pg_temp.caso('p4'), 'novo') like '%ZZ &lt;b&gt;teste&lt;/b&gt; &amp; &lt;@U000&gt; motivo%'
+  and pg_temp.msg(pg_temp.caso('p4'), 'novo') not like '%<b>teste%',
+  (select l from regexp_split_to_table(pg_temp.msg(pg_temp.caso('p4'), 'novo'), E'\n') l where l like 'ZZ %'));
 
 -- 6. Desfazer: recusa a troca direta; a troca triada continua podendo desfazer.
 create temp table _r (k text primary key, r jsonb) on commit drop;
