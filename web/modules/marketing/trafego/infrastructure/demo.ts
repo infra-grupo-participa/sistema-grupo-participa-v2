@@ -4,20 +4,23 @@
 // a faixa "Dados de demonstração". Recarregar a página volta ao começo.
 // O que vem da semente real: os 4 projetos e os gestores da 20261005m, os objetivos (20261005m + CARRINHO e AQUECIMENTO
 // da 20261005p) e as listas da 20261005p (plataformas, status, fases, objetivo → fase) e da 20261006a (unidades, tipos de
-// lançamento e regras, os 2 especialistas internos semeados, UTM do Meta, o item manual do checklist). Todo o resto é
+// lançamento e regras, os 2 especialistas internos semeados, UTM do Meta) e da 20261006d (os 9 modelos de exemplo, rascunho). Todo o resto é
 // ficção: projetos "… Exemplo", contas "Conta Exemplo", "Especialista Exemplo", ids 0000…, descrições de campanha
 // "EXEMPLO", números gerados. Os projetos reais da semente ficam sem unidade, tipo de lançamento e contas (não estão em fonte).
 import { traduzirCampanha } from '../../projetos/domain/campanha';
 import { calcularAlertas, type ProjetoEntrada } from '../domain/alertas';
 import {
   PROJETO_FORM_VAZIO, lancamentoAutomatico, montarChecklist, nomeTemSigla, periodoProjeto, periodoReceita, validarCadastro,
-  type Especialista, type ListasCadastro, type ModeloPacote, type ProjetoCadastro, type ProjetoForm,
+  type Especialista, type ItemProjeto, type ListasCadastro, type ProjetoCadastro, type ProjetoForm,
 } from '../domain/cadastro';
 import { filtrarEtiquetas, type BuscaEtiquetas, type EtiquetaClickup } from '../domain/etiquetas';
 import { faseDaCampanha } from '../domain/fases';
+import {
+  modelosDoProjeto, previaModelo, somaPct, validarModelo, type Esperada, type Modelo, type Momento, type PreviaModelo, type RefData,
+} from '../domain/modelos';
 import { comKpis } from '../domain/kpis';
 import type {
-  Campanha, Checklist, ClickupProjeto, ConfigTrafego, Conta, Dono, FaseProjeto, ItemChecklistConfig, LinhaResumo, ProdutoHotmart, ProdutoVisto,
+  Campanha, Checklist, ClickupProjeto, ConfigTrafego, Conta, Dono, FaseProjeto, LinhaResumo, ProdutoHotmart, ProdutoVisto,
   Regra, Resposta, ResumoDia, Subarea, TarefaClickup, Tipo, VidaProjeto,
 } from '../domain/tipos';
 import { ordenarContas, unidadesDoDono } from '../domain/tipos';
@@ -315,6 +318,7 @@ const REGRAS_DEMO: Regra[] = [
   { codigo: 'fora_padrao', nome: 'Campanhas fora do padrão', ligada: true, limiar: 7, unidade: 'dias', gravidade: 'media', descricao: 'Campanhas fora do padrão que gastaram nos últimos limiar dias.' },
   { codigo: 'sem_fase', nome: 'Campanhas sem fase', ligada: true, limiar: 7, unidade: 'dias', gravidade: 'media', descricao: 'Campanhas sem fase que gastaram nos últimos limiar dias.' },
   { codigo: 'conta_fora_projeto', nome: 'Campanha do projeto em conta de fora', ligada: true, limiar: 7, unidade: 'dias', gravidade: 'media', descricao: 'Campanha com a sigla do projeto que gastou nos últimos limiar dias numa conta que não é do projeto.' },
+  { codigo: 'checklist_incompleto', nome: 'Em captação com checklist incompleto', ligada: true, limiar: 0, unidade: 'dias', gravidade: 'media', descricao: 'Projeto em captação com item do checklist de "antes de subir as campanhas" pendente, a partir de limiar dias do início da captação.' },
 ];
 
 interface ProdutoDemo { id: number; projeto_id: number; produto_id: string; oferta_codigo: string | null; de: string | null; ate: string | null; obs: string | null }
@@ -358,6 +362,7 @@ export function demoAlertas(): ResumoDia {
       campanhas: doProj.map(ent),
       contasProjeto: PROJETO_CONTAS.get(p.id) ?? [],
       campanhasDaSigla: cs.filter((c) => traduzir(c.nome).projeto === p.sigla).map((c) => ({ ...ent(c), conta_id: c.conta_id, conta: c.conta })),
+      pendentesAntes: demoChecklist(p.id)?.pendentes_antes ?? [],
     };
   });
   return {
@@ -416,7 +421,7 @@ export function demoClickup(projetoId: number): ClickupProjeto | null {
   return { etiqueta: p.etiqueta_clickup, configurado: true, ultima_coleta: null, tarefas: p.etiqueta_clickup ? structuredClone(TAREFAS[projetoId] ?? []) : [] };
 }
 
-// ─── Cadastro do projeto, pacote e checklist (20261006a). Listas = as sementes da migration; o resto fictício. ────────
+// ─── Cadastro do projeto, modelos e checklist (20261006a e 20261006d). Listas = as sementes da migration; o resto fictício. ────────
 const UNIDADES = [
   { codigo: 'csm', tipo: 'interno' as const, nome: 'CSM', descricao: 'CSM Academy (o educacional)' },
   { codigo: 'escritorio', tipo: 'interno' as const, nome: 'Escritório', descricao: 'Escritório de advocacia' },
@@ -441,16 +446,51 @@ const UTM_META = [
   { parametro: 'utm_medium', valor: '{{adset.name}}|{{adset.id}}' }, { parametro: 'utm_content', valor: '{{ad.name}}|{{ad.id}}' },
   { parametro: 'utm_term', valor: '{{placement}}' },
 ];
-let MODELOS: ModeloPacote[] = []; // o conteúdo do pacote não foi definido (pergunta ao Victor): nasce vazio, como no banco
-const ITENS: ItemChecklistConfig[] = [
-  { id: 1, texto: 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow', tipo_lancamento: null, ordem: 1, ativo: true },
-];
-const MARCAS = new Map<string, { em: string; por: string | null }>([['7:1', { em: `${hoje(-1)}T14:00:00.000Z`, por: 'Pessoa Exemplo' }]]);
+// Modelos de lançamento (20261006d): os 9 exemplos da semente (rascunho, números genéricos), gerados da mesma tabela.
+type FaseSemente = [string, number, RefData, number, RefData, number, number];
+const FASES_EXEMPLO: Record<string, FaseSemente[]> = {
+  lancamento_classico: [['aquecimento', 1, 'captacao_inicio', -7, 'captacao_inicio', -1, 10], ['captacao', 2, 'captacao_inicio', 0, 'captacao_fim', 0, 60],
+    ['lembrete', 3, 'evento_inicio', -2, 'evento_inicio', 0, 10], ['remarketing', 4, 'captacao_inicio', 0, 'evento_fim', 0, 10],
+    ['abertura_carrinho', 5, 'evento_fim', 0, 'evento_fim', 3, 10]],
+  lancamento_pago: [['aquecimento', 1, 'captacao_inicio', -7, 'captacao_inicio', -1, 10], ['captacao', 2, 'captacao_inicio', 0, 'captacao_fim', 0, 60],
+    ['lembrete', 3, 'evento_inicio', -2, 'evento_inicio', 0, 10], ['remarketing', 4, 'captacao_inicio', 0, 'evento_fim', 0, 10],
+    ['abertura_carrinho', 5, 'evento_fim', 0, 'evento_fim', 3, 10]],
+  lpsg: [['captacao', 1, 'captacao_inicio', 0, 'captacao_fim', 0, 70], ['lembrete', 2, 'evento_inicio', -2, 'evento_inicio', 0, 10],
+    ['remarketing', 3, 'captacao_inicio', 0, 'evento_fim', 0, 10], ['abertura_carrinho', 4, 'evento_fim', 0, 'evento_fim', 3, 10]],
+  atm: [['aquecimento', 1, 'evento_inicio', -7, 'evento_inicio', -1, 30], ['abertura_carrinho', 2, 'evento_inicio', 0, 'evento_fim', 0, 50],
+    ['remarketing', 3, 'evento_inicio', 0, 'evento_fim', 0, 20]],
+  palestra: [['captacao', 1, 'captacao_inicio', 0, 'captacao_fim', 0, 70], ['lembrete', 2, 'evento_inicio', -2, 'evento_inicio', 0, 20],
+    ['remarketing', 3, 'captacao_inicio', 0, 'evento_fim', 0, 10]],
+};
+const OBJ_DA_FASE = (fase: string, tipo: string) => ({
+  captacao: tipo === 'lancamento_pago' || tipo === 'lpsg' ? 'VENDAS' : 'LEADS', aquecimento: 'AQUECIMENTO', lembrete: 'LEMBRETE',
+  remarketing: 'REMARKETING', abertura_carrinho: 'CARRINHO',
+} as Record<string, string>)[fase];
+const SENDFLOW = 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow';
+let MODELOS_D: Modelo[] = [];
+for (const u of ['csm', 'escritorio', 'aurum', 'diamantes']) {
+  for (const t of REGRAS[u]) {
+    const fs = FASES_EXEMPLO[t];
+    MODELOS_D.push({
+      id: MODELOS_D.length + 1, nome: `Exemplo: ${TIPOS.find((x) => x.codigo === t)!.nome} ${UNIDADES.find((x) => x.codigo === u)!.nome}`, tipo_lancamento: t,
+      tipo_lancamento_nome: TIPOS.find((x) => x.codigo === t)!.nome, ativo: true, rascunho: true, meta_cpl: null, meta_pct_mql: null,
+      obs: 'Modelo de EXEMPLO para editar: fases, datas e percentuais genéricos, não são decisão de ninguém. Validar antes de usar.',
+      unidades: [{ unidade: u, padrao: true }],
+      fases: fs.map(([fase, ordem, ir, id, fr, fd, pct]) => ({ fase, ordem, inicio_ref: ir, inicio_dias: id, fim_ref: fr, fim_dias: fd, pct_verba: pct, obs: null })),
+      campanhas: fs.map(([fase, ordem]) => ({ objetivo: OBJ_DA_FASE(fase, t), fase, descricao: null, pagina: null, ordem })),
+      itens: fs.some(([f]) => f === 'captacao') ? [{ texto: SENDFLOW, momento: 'antes', ordem: 1 }] : [],
+    });
+  }
+}
+const PROJETO_MODELO = new Map<number, { id: number | null; nome: string; aplicado_em: string }>();
+let ESPERADAS: (Esperada & { projeto_id: number })[] = [];
+let ITENS_PROJ: (ItemProjeto & { projeto_id: number })[] = [];
 
 export function demoListasCadastro(): ListasCadastro {
   return structuredClone({
     unidades: UNIDADES, tipos_lancamento: TIPOS, regras: REGRAS, especialistas: ESPECIALISTAS, objetivos: [...OBJETIVOS].sort(),
-    utm: { meta: UTM_META }, pacotes: MODELOS, etiquetas_clickup: [], checklist_itens: ITENS,
+    utm: { meta: UTM_META }, etiquetas_clickup: [],
+    modelos: MODELOS_D.map(({ id, nome, tipo_lancamento, ativo, rascunho, unidades }) => ({ id, nome, tipo_lancamento, ativo, rascunho, unidades })),
   });
 }
 
@@ -478,7 +518,9 @@ export function demoCadastro(id: number): ProjetoCadastro | null {
     contas: [...contas], paginas: structuredClone(PAGINAS.get(id) ?? []),
     sugestoes: CAMPS.map(lerCampanha).filter((c) => c.projeto_id == null && contas.includes(c.conta_id) && nomeTemSigla(c.nome, p.sigla))
       .map((c) => ({ id: c.id, nome: c.nome, plataforma: c.plataforma, conta_id: c.conta_id, conta: c.conta, status_plataforma: c.status_plataforma })),
-    pacote_fases: MODELOS.filter((m) => m.tipo_lancamento === p.tipo_lancamento).length,
+    modelo: PROJETO_MODELO.get(id) ?? null,
+    modelos_disponiveis: modelosDoProjeto(MODELOS_D, p.tipo_lancamento, p.unidade).length,
+    esperadas: ESPERADAS.filter((e) => e.projeto_id === id).map((e) => ({ id: e.id, objetivo: e.objetivo, fase: e.fase, descricao: e.descricao, pagina: e.pagina })),
     fases_planejadas: FASES.filter((f) => f.projeto_id === id).length,
   };
 }
@@ -510,32 +552,81 @@ export function demoSalvarCadastro(f: ProjetoForm): Resposta & { tipo_lancamento
   return { ok: true, msg: `Projeto ${v.sigla} salvo${NADA}.`, id: v.id, tipo_lancamento: v.tipo_lancamento, avisos };
 }
 
-export function demoSalvarPacote(p: Record<string, unknown>): Resposta {
-  const tipo = String(p.tipo_lancamento ?? ''), fase = String(p.fase ?? '');
-  if (!TIPOS.some((t) => t.codigo === tipo)) return { ok: false, msg: 'Tipo de lançamento fora da lista.' };
-  if (!CONFIG.fases.some((f) => f.codigo === fase)) return { ok: false, msg: 'Fase fora da lista.' };
-  if (MODELOS.some((m) => m.tipo_lancamento === tipo && m.fase === fase && m.id !== Number(p.id))) return { ok: false, msg: 'Este pacote já tem esta fase.' };
-  const n = (k: string) => (p[k] === '' || p[k] == null ? null : Number(p[k]));
-  const v = { tipo_lancamento: tipo, fase, ordem: n('ordem') ?? 1, objetivos: (p.objetivos as string[]) ?? [], pct_verba: n('pct_verba'), dias: n('dias'), obs: (p.obs as string) || null };
-  if (p.id) MODELOS = MODELOS.map((m) => (m.id === Number(p.id) ? { ...m, ...v } : m)); else MODELOS.push({ id: ++seq, ...v });
-  return { ok: true, msg: `Fase do pacote salva${NADA}.`, avisos: [] };
-}
-export function demoApagarPacote(id: number): Resposta { MODELOS = MODELOS.filter((m) => m.id !== id); return { ok: true, msg: `Fase do pacote apagada${NADA}.` }; }
-export function demoAplicarPacote(id: number): Resposta {
-  const p = projeto(id);
-  if (!p) return { ok: false, msg: 'Projeto não encontrado.' };
-  if (!p.tipo_lancamento) return { ok: false, msg: 'Escolha o tipo de lançamento do projeto antes.' };
-  const ms = MODELOS.filter((m) => m.tipo_lancamento === p.tipo_lancamento);
-  if (ms.length === 0) return { ok: false, msg: 'O pacote deste tipo de lançamento ainda não tem conteúdo (modelo vazio).' };
-  const vmax = PLAN.get(id)?.verba_maxima ?? null;
-  let n = 0;
-  for (const m of ms) {
-    if (FASES.some((f) => f.projeto_id === id && f.fase === m.fase)) continue;
-    FASES.push({ id: ++seq, projeto_id: id, fase: m.fase, verba: m.pct_verba != null && vmax != null ? Math.round(vmax * m.pct_verba) / 100 : null,
-      inicio: m.fase === 'captacao' ? p.captacao_inicio : null, fim: m.fase === 'captacao' ? p.captacao_fim : null, obs: 'Do pacote' });
-    n++;
+// ─── Modelos de lançamento (20261006d) ───────────────────────────────────────────────────────────────────────────────
+export const demoModelos = (): Modelo[] => structuredClone(MODELOS_D);
+
+export function demoSalvarModelo(m: Modelo): Resposta {
+  const erro = validarModelo(m, REGRAS, OBJETIVOS);
+  if (erro) return { ok: false, msg: erro };
+  if (MODELOS_D.some((x) => x.id !== m.id && x.nome.trim().toLowerCase() === m.nome.trim().toLowerCase())) return { ok: false, msg: 'Já existe modelo com este nome.' };
+  const id = m.id || ++seq;
+  const v: Modelo = { ...m, id, nome: m.nome.trim(), tipo_lancamento_nome: TIPOS.find((t) => t.codigo === m.tipo_lancamento)?.nome,
+    unidades: m.unidades.map((u) => ({ ...u, padrao: m.ativo && u.padrao })) };
+  for (const u of v.unidades.filter((x) => x.padrao)) {
+    for (const o of MODELOS_D) if (o.id !== id && o.tipo_lancamento === v.tipo_lancamento) o.unidades = o.unidades.map((x) => (x.unidade === u.unidade ? { ...x, padrao: false } : x));
   }
-  return { ok: true, msg: `${n} fase(s) criada(s) a partir do pacote${NADA}.` };
+  MODELOS_D = m.id ? MODELOS_D.map((x) => (x.id === id ? v : x)) : [...MODELOS_D, v];
+  return { ok: true, msg: `Modelo salvo${NADA}.`, id, avisos: somaPct(v.fases) > 100 ? ['fases_acima_de_100'] : [] };
+}
+
+export function demoDuplicarModelo(id: number): Resposta {
+  const m = MODELOS_D.find((x) => x.id === id);
+  if (!m) return { ok: false, msg: 'Modelo não encontrado.' };
+  let nome = `${m.nome.slice(0, 70)} (cópia)`;
+  for (let n = 2; MODELOS_D.some((x) => x.nome.toLowerCase() === nome.toLowerCase()); n++) nome = `${m.nome.slice(0, 66)} (cópia ${n})`;
+  const v: Modelo = { ...structuredClone(m), id: ++seq, nome, ativo: true, unidades: m.unidades.map((u) => ({ ...u, padrao: false })) };
+  MODELOS_D.push(v);
+  return { ok: true, msg: `Modelo duplicado: ${nome}${NADA}.`, id: v.id };
+}
+
+export function demoAtivarModelo(id: number, ativo: boolean): Resposta {
+  const m = MODELOS_D.find((x) => x.id === id);
+  if (!m) return { ok: false, msg: 'Modelo não encontrado.' };
+  m.ativo = ativo;
+  if (!ativo) m.unidades = m.unidades.map((u) => ({ ...u, padrao: false }));
+  return { ok: true, msg: `${ativo ? 'Modelo ativado' : 'Modelo inativado (deixou de ser padrão)'}${NADA}.` };
+}
+
+function previaDemo(p: ProjetoDemo, m: Modelo): PreviaModelo {
+  const fases = FASES.filter((f) => f.projeto_id === p.id).map((f) => ({ fase: f.fase, verba: f.verba, inicio: f.inicio, fim: f.fim }));
+  const pl = PLAN.get(p.id);
+  return previaModelo(m, p, pl?.verba_maxima ?? null, fases, (f) => CONFIG.fases.find((x) => x.codigo === f)?.nome ?? f,
+    ESPERADAS.filter((e) => e.projeto_id === p.id), ITENS_PROJ.filter((i) => i.projeto_id === p.id).map((i) => i.texto),
+    { meta_cpl: pl?.meta_cpl ?? null, meta_pct_mql: pl?.meta_pct_mql ?? null });
+}
+
+export function demoPrevias(id: number): PreviaModelo[] | null {
+  const p = projeto(id);
+  if (!p) return null;
+  return modelosDoProjeto(MODELOS_D, p.tipo_lancamento, p.unidade).map((m) => ({ ...previaDemo(p, m), padrao: m.padrao }));
+}
+
+export function demoAplicarModelo(id: number, modeloId: number, substituir: boolean): Resposta & Record<string, unknown> {
+  const p = projeto(id);
+  const m = MODELOS_D.find((x) => x.id === modeloId);
+  if (!p || !m) return { ok: false, msg: 'Projeto ou modelo não encontrado.' };
+  const v = previaDemo(p, m);
+  if (!v.pode_aplicar) return { ok: false, msg: 'Este modelo não vale para o projeto (tipo de lançamento, unidade ou modelo inativo).' };
+  let criadas = 0, atualizadas = 0, mantidas = 0;
+  for (const f of v.fases) {
+    if (!f.existe) { FASES.push({ id: ++seq, projeto_id: id, fase: f.fase, verba: f.verba, inicio: f.inicio, fim: f.fim, obs: `Do modelo ${m.nome}` }); criadas++; }
+    else if (f.muda && substituir) {
+      FASES = FASES.map((x) => (x.projeto_id === id && x.fase === f.fase ? { ...x, verba: f.verba ?? x.verba, inicio: f.inicio ?? x.inicio, fim: f.fim ?? x.fim } : x));
+      atualizadas++;
+    } else mantidas++;
+  }
+  const novasEsp = v.campanhas.filter((c) => !c.ja_existe);
+  ESPERADAS.push(...novasEsp.map((c) => ({ id: ++seq, projeto_id: id, objetivo: c.objetivo, fase: c.fase, descricao: c.descricao, pagina: c.pagina })));
+  const novosItens = v.itens.filter((i) => !i.ja_existe);
+  ITENS_PROJ.push(...novosItens.map((i) => ({ id: ++seq, projeto_id: id, texto: i.texto, momento: i.momento, feito_em: null, feito_por: null, do_modelo: true })));
+  if (m.meta_cpl != null || m.meta_pct_mql != null) {
+    const pl = PLAN.get(id) ?? { status: null, gestores: [], verba_maxima: null, verba_diaria: null, meta_leads: null, meta_receita: null, meta_cpl: null, meta_pct_mql: null, obs: null };
+    PLAN.set(id, { ...pl, meta_cpl: substituir ? (m.meta_cpl ?? pl.meta_cpl) : (pl.meta_cpl ?? m.meta_cpl),
+      meta_pct_mql: substituir ? (m.meta_pct_mql ?? pl.meta_pct_mql) : (pl.meta_pct_mql ?? m.meta_pct_mql) });
+  }
+  PROJETO_MODELO.set(id, { id: m.id, nome: m.nome, aplicado_em: new Date().toISOString() });
+  return { ok: true, criadas, atualizadas, mantidas, esperadas: novasEsp.length, itens: novosItens.length,
+    msg: `Modelo ${m.nome} aplicado: ${criadas} fase(s) criada(s), ${atualizadas} atualizada(s), ${mantidas} mantida(s) como estavam; ${novasEsp.length} campanha(s) esperada(s) e ${novosItens.length} item(ns) do checklist acrescentado(s)${NADA}.` };
 }
 
 export function demoChecklist(id: number): Checklist | null {
@@ -543,32 +634,52 @@ export function demoChecklist(id: number): Checklist | null {
   if (!p) return null;
   const cs = CAMPS.map(lerCampanha).filter((c) => c.projeto_id === id);
   const pl = PLAN.get(id);
-  const marcas = new Map([...MARCAS].filter(([k]) => k.startsWith(`${id}:`)).map(([k, v]) => [Number(k.split(':')[1]), v]));
   return montarChecklist({
-    tipo: p.tipo, tipo_lancamento: p.tipo_lancamento, contas: (PROJETO_CONTAS.get(id) ?? []).length, campanhas: cs.length,
+    tipo: p.tipo, contas: (PROJETO_CONTAS.get(id) ?? []).length, campanhas: cs.length,
     foraPadrao: cs.filter((c) => c.fora_padrao).length, semFase: cs.filter((c) => c.fase == null).length,
     produtosHotmart: PRODUTOS.filter((v) => v.projeto_id === id).length, paginas: N_PAGINAS[id] ?? 0, etiqueta: p.etiqueta_clickup,
     verbaMaxima: pl?.verba_maxima ?? null, fases: FASES.filter((f) => f.projeto_id === id).length,
     metas: [pl?.meta_leads ?? null, pl?.meta_receita ?? null, pl?.meta_cpl ?? null],
-  }, ITENS, marcas);
+    modelo: PROJETO_MODELO.get(id)?.nome ?? null, esperadas: ESPERADAS.filter((e) => e.projeto_id === id),
+    encontradas: cs.map((c) => ({ objetivo: c.objetivo, pagina: c.pagina })), status: pl?.status ?? null, eventoFim: p.evento_fim, hoje: hoje(),
+  }, ITENS_PROJ.filter((i) => i.projeto_id === id));
 }
 
-export function demoMarcarChecklist(projetoId: number, item: number, feito: boolean): Resposta {
-  const p = projeto(projetoId);
-  const i = ITENS.find((x) => x.id === item && x.ativo && (x.tipo_lancamento == null || x.tipo_lancamento === p?.tipo_lancamento));
-  if (!p || !i) return { ok: false, msg: 'Item do checklist não vale para este projeto.' };
-  if (feito) MARCAS.set(`${projetoId}:${item}`, { em: new Date().toISOString(), por: 'Você (demonstração)' }); else MARCAS.delete(`${projetoId}:${item}`);
+export function demoMarcarItem(item: number, feito: boolean): Resposta {
+  const i = ITENS_PROJ.find((x) => x.id === item);
+  if (!i) return { ok: false, msg: 'Item não encontrado.' };
+  i.feito_em = feito ? new Date().toISOString() : null;
+  i.feito_por = feito ? 'Você (demonstração)' : null;
   return { ok: true, msg: `${feito ? 'Item marcado como pronto' : 'Item desmarcado'}${NADA}.` };
 }
 
-export function demoSalvarItemChecklist(p: Record<string, unknown>): Resposta {
-  const texto = String(p.texto ?? '').trim().replace(/\s+/g, ' ');
-  if (texto.length < 3) return { ok: false, msg: 'Texto do item: de 3 a 200 letras.' };
-  const tl = (p.tipo_lancamento as string) || null;
-  if (ITENS.some((x) => x.id !== Number(p.id) && (x.tipo_lancamento ?? '') === (tl ?? '') && x.texto.toLowerCase() === texto.toLowerCase())) {
-    return { ok: false, msg: 'Já existe este item para este tipo de lançamento.' };
+export function demoSalvarItem(p: { id?: number; projeto_id: number; texto: string; momento: Momento }): Resposta {
+  const texto = p.texto.trim().replace(/\s+/g, ' ');
+  if (texto.length < 3 || texto.length > 200) return { ok: false, msg: 'Texto do item: de 3 a 200 letras.' };
+  if (ITENS_PROJ.some((x) => x.projeto_id === p.projeto_id && x.id !== p.id && x.texto.toLowerCase() === texto.toLowerCase())) {
+    return { ok: false, msg: 'Este item já está no checklist do projeto.' };
   }
-  const v = { texto, tipo_lancamento: tl, ordem: Number(p.ordem) || 1, ativo: p.ativo !== false };
-  if (p.id) Object.assign(ITENS.find((x) => x.id === Number(p.id))!, v); else ITENS.push({ id: ++seq, ...v });
+  if (p.id) Object.assign(ITENS_PROJ.find((x) => x.id === p.id)!, { texto, momento: p.momento });
+  else ITENS_PROJ.push({ id: ++seq, projeto_id: p.projeto_id, texto, momento: p.momento, feito_em: null, feito_por: null, do_modelo: false });
   return { ok: true, msg: `Item do checklist salvo${NADA}.` };
+}
+
+export function demoApagarItem(item: number): Resposta {
+  if (!ITENS_PROJ.some((x) => x.id === item)) return { ok: false, msg: 'Item não encontrado.' };
+  ITENS_PROJ = ITENS_PROJ.filter((x) => x.id !== item);
+  return { ok: true, msg: `Item tirado do checklist do projeto${NADA}.` };
+}
+
+export function demoApagarEsperada(id: number): Resposta {
+  if (!ESPERADAS.some((x) => x.id === id)) return { ok: false, msg: 'Campanha esperada não encontrada.' };
+  ESPERADAS = ESPERADAS.filter((x) => x.id !== id);
+  return { ok: true, msg: `Campanha esperada tirada do projeto${NADA}.` };
+}
+
+// O projeto fictício LPEXA26 já com o modelo de exemplo do lançamento pago na CSM aplicado e o SendFlow marcado.
+{
+  const m = MODELOS_D.find((x) => x.tipo_lancamento === 'lancamento_pago' && x.unidades.some((u) => u.unidade === 'csm'))!;
+  demoAplicarModelo(7, m.id, false);
+  const i = ITENS_PROJ.find((x) => x.projeto_id === 7 && x.texto === SENDFLOW);
+  if (i) { i.feito_em = `${hoje(-1)}T14:00:00.000Z`; i.feito_por = 'Pessoa Exemplo'; }
 }

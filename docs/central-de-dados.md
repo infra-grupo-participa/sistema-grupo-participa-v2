@@ -544,7 +544,8 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
 - **Contas de anúncio:** cadastro e edição.
 - **Novo projeto / Projeto (20261006a):** o cadastro do evento (ver "Cadastro do projeto"). Na tabela, coluna Montagem (x
   de y itens do checklist prontos); na vida do projeto, cadastro, campanhas sugeridas, checklist e gerador de nome e UTM.
-- **Pacotes e checklist (20261006a):** o modelo de fases por tipo de lançamento (vazio) e os itens manuais do checklist.
+- **Modelos de lançamento (20261006d, no lugar de "Pacotes e checklist"):** lista com filtro por tipo e unidade, editar,
+  duplicar, ativar/inativar; os "Exemplo: …" com o selo "Rascunho a validar". Ver a seção "Modelos de lançamento".
 
 ### Testar localmente
 
@@ -706,9 +707,7 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
   projeto (regra `conta_fora_projeto`, 7 dias, média).
 - **Gestores:** CF, RS e EF; qualquer gestor opera interno ou externo (sem restrição).
 - **Receita dos externos não entra** por ora: projeto externo mostra "não se aplica".
-- **Pacote da campanha:** só o mecanismo, **vazio** (`mkt_trafego.pacote_modelos`: fases, objetivos esperados, % da
-  verba, dias por tipo de lançamento; aba "Pacotes e checklist"). "Montar fases do pacote" cria no planejamento as fases
-  que faltam (captação com o período de captação).
+- **Pacote da campanha:** substituído pelos **modelos de lançamento** (20261006d, seção própria abaixo).
 - **Gerador de nome de campanha e UTM** (vida do projeto): gestor, objetivo, descrição e página opcional →
   `GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA` (conferido pela mesma tradução do banco) e a linha de parâmetros do
   Meta, com botão de copiar. Parâmetros em `mkt_trafego.utm_parametros` (muda por SQL):
@@ -718,9 +717,8 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 - **Checklist de montagem** (vida do projeto e coluna Montagem na Central, x de y): itens **automáticos** que o banco
   confere (contas de anúncio vinculadas; campanhas com a sigla; nenhuma fora do padrão e fase de cada campanha, quando há
   campanha; produtos da Hotmart, não se aplica a externo; páginas cadastradas; etiqueta do ClickUp; verba máxima; fases
-  planejadas; metas de leads, receita ou CPL) e itens **manuais** (`mkt_trafego.checklist_itens`, por tipo de lançamento
-  ou para todos; a pessoa marca e desmarca, guardando quem e quando). Semente manual: só "Automação de ingresso no grupo
-  do WhatsApp configurada no SendFlow" (para todos os tipos).
+  planejadas; metas de leads, receita ou CPL) e itens **manuais**. Desde a 20261006d os manuais são do projeto (vêm do
+  modelo ou são criados na hora), tudo agrupado por momento e com o caminho para resolver (seção "Modelos de lançamento").
 - **Onde mora a tela:** na Central do Tráfego (botão "Novo projeto" e "Projeto" na vida do projeto), porque os campos são
   do Tráfego e o resto da montagem está lá; grava na tabela de projetos única (`mkt.projetos`). `/marketing/projetos`
   continua para páginas e dados gerais e mostra o tipo derivado.
@@ -735,9 +733,49 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 2. Tela: `NEXT_PUBLIC_TRAFEGO_DEMO=1` em `web/.env.local`, `npm run dev`, `/marketing/trafego`. Projeto fictício
    **LPEXA26 "Lançamento Pago Exemplo"** (CSM, lançamento pago, captação e evento, conta Exemplo, item do SendFlow marcado
    por "Pessoa Exemplo", campanha sugerida, alerta de conta de fora), DEXA26 (Diamantes, lançamento clássico, "Especialista
-   Exemplo", receita "não se aplica"), AEXA26 (Aurum, palestra). Botão "Novo projeto", aba "Pacotes e checklist".
+   Exemplo", receita "não se aplica"), AEXA26 (Aurum, palestra). Botão "Novo projeto", aba "Modelos de lançamento".
 3. Código: `npx vitest run` (`domain/cadastro.test.ts`, `alertas.test.ts`, `infrastructure/demo.test.ts`,
    `ui/montagem.test.ts`, `coleta.test.ts`), `npx tsc --noEmit`, `npm run build`.
+
+### Modelos de lançamento (migration 20261006d, NÃO APLICADA)
+
+`infra/supabase/migrations/20261006d_mkt_trafego_modelos.sql` + `_ensaio.sql` + `20261006d.explain.md`. Depende da
+20261006a. Pedido do Victor (06/10/2026): substitui o "pacote" e organiza o checklist.
+
+- **Modelo** (`mkt_trafego.modelos`): nome livre (ex.: "LPSG padrão CSM"), tipo de lançamento, **unidades** (uma ou mais,
+  só nas combinações que valem: o banco recusa), ativo/inativo, **rascunho**, e um **padrão** por tipo + unidade. Vários
+  modelos por tipo; sempre editável; **duplicar**.
+- **Dentro do modelo:** **fases** (da lista, ordem, início e fim relativos às datas do projeto: "7 dias antes do início
+  da captação", "no fim da captação", "2 dias antes do início do evento"; % da verba máxima), **campanhas esperadas**
+  (objetivo, fase, descrição sugerida, página opcional), **checklist manual** (texto e momento: antes de subir as
+  campanhas, durante, encerramento) e **metas padrão** opcionais, só as que a Central mede por meta: CPL e % MQL.
+- **Mockups:** um "Exemplo: &lt;tipo&gt; &lt;unidade&gt;" por combinação (9), rascunho a validar e padrão. Fases da lista
+  que já existe, **datas e percentuais genéricos de exemplo (não são decisão de ninguém)**; uma campanha esperada por
+  fase pelo mapa objetivo → fase (captação no pago e no LPSG = VENDAS); o item do SendFlow nos modelos com captação.
+  Tabela dos números em `20261006d.explain.md`.
+- **No projeto, "Aplicar modelo"** (cadastro do projeto e item do checklist): lista os modelos ativos do tipo de
+  lançamento e da unidade do projeto (padrão primeiro), mostra a **prévia** (fases com datas calculadas e verba = % ×
+  verba máxima, o que é novo, o que mudaria e o que fica igual; campanhas esperadas; itens; metas) e aplica: cria o que
+  falta; **fase que já existe só muda marcando "substituir" e confirmando**; meta só onde o projeto não tem (ou
+  confirmando). **Nunca apaga nada.** Fica guardado qual modelo foi aplicado.
+- **Checklist que leva à ação:** agrupado por momento; cada item automático pendente tem o link para onde se resolve
+  (editar projeto, planejamento, fases, páginas, Hotmart, aplicar modelo, gerador, campanhas). Itens novos: "modelo
+  aplicado", "campanhas esperadas criadas" (compara por objetivo e página as esperadas com as campanhas do projeto) e,
+  no encerramento, "status encerrado depois do fim do evento". Item manual pode ser criado só para o projeto, marcado
+  (quem e quando) e tirado.
+- **Gerador de nome:** mostra as campanhas esperadas do modelo; um clique preenche objetivo, descrição e página.
+- **Resumo do dia:** regra nova `checklist_incompleto` (média, limiar 0 dias): projeto em captação com item de "antes de
+  subir as campanhas" pendente.
+- **Sai:** `pacote_modelos`, `checklist_itens`, `checklist_marcas` e as funções do pacote e do checklist manual global
+  (20261006a, nunca aplicada, sem dado).
+
+**Como testar:** banco, `20261006d_ensaio.sql` depois da 20261006a (nenhuma `ERRADO`); tela, modo demo: aba "Modelos de
+lançamento" (9 exemplos), LPEXA26 já com o "Exemplo: Lançamento pago CSM" aplicado (fases, esperadas, SendFlow marcado,
+alerta de checklist incompleto em captação); código, `domain/modelos.test.ts`, `cadastro.test.ts`, `demo.test.ts`,
+`ui/montagem.test.ts`.
+
+**Perguntas (para o Victor):** os números dos exemplos (fases, datas e % por tipo) e quais modelos têm captação em grupo
+(hoje o SendFlow vai em todos com captação); metas padrão por modelo; mais itens manuais por tipo de lançamento.
 
 ### Contas de anúncio do Meta (migration 20261006b, NÃO APLICADA)
 
@@ -797,13 +835,14 @@ cadastra de forma idempotente (por plataforma e id): nome exato, id sem `act_`, 
   (tipo de projeto próprio? sem período?) e quais métricas.
 - b) **Sigla do projeto externo** no nome da campanha (Aurum, Diamantes): qual padrão?
 - c) ~~Receita dos externos~~ **Decidido (06/10/2026):** não entra por ora.
-- d) **Conteúdo do pacote** de cada tipo de lançamento: fases, objetivos e verba por fase (o mecanismo está pronto e vazio).
+- d) ~~Conteúdo do pacote~~ **Virou modelos de lançamento (20261006d):** os 9 exemplos são rascunho a validar (fases,
+  datas e % genéricos).
 - e) **Acesso:** gestores e Arthur editam verba, fases e metas, depende do novo modelo de acesso do sistema (pendente).
 - f) ~~LPSG no Escritório~~ **Decidido (06/10/2026):** LPSG é só da CSM; o Escritório fica com lançamento clássico e ATM.
   (ATM vale nas duas unidades internas.)
 - g) **Unidade dos projetos que já existem:** PB26, HT33 e BF26 são CSM ou Escritório? SEMSET26 é interno ou externo?
   (ficaram sem unidade/tipo; marcar na tela).
-- h) **Itens manuais do checklist** além do SendFlow, e para quais tipos de lançamento.
+- h) **Itens manuais do checklist** além do SendFlow, e para quais modelos (agora ficam no modelo, com o momento).
 - i) ~~Período padrão da receita~~ **Respondido, provisório (06/10/2026):** do início da captação ao fim do evento. A
   confirmar depois pelo Victor (trocar em `mkt_trafego.periodo_receita` e `periodoReceita`).
 - j) **Etiquetas do ClickUp:** ler as de todos os spaces do workspace (hoje) ou de um space só?
@@ -866,3 +905,7 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
   "em planejamento" (fora do resumo do dia), etiqueta do ClickUp com busca (`trafego_clickup_etiquetas_buscar`, fonte
   `kpi.medicao_tarefa`). ANTECIPAÇÃO ficou como pergunta. 20261005p, 20261005r e 20261006a editadas no lugar (não
   aplicadas). Branch `victor`.
+- **06/10/2026:** Tráfego, modelos de lançamento (migration **20261006d**, NÃO APLICADA): no lugar do pacote; modelo com
+  unidades e padrão, fases com datas relativas e % da verba, campanhas esperadas, checklist por momento e metas padrão;
+  9 exemplos rascunho; "Aplicar modelo" com prévia no projeto (nada apagado; fase existente só confirmando); checklist
+  com o caminho para resolver, "campanhas esperadas criadas" e alerta de checklist incompleto em captação. Branch `victor`.

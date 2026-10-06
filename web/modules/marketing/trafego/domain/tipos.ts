@@ -214,7 +214,7 @@ export const ROTULO_AVISO: Record<string, string> = {
 
 export type RegraAlerta =
   | 'acima_verba_diaria' | 'cpl_acima_meta' | 'leads_abaixo_meta' | 'ritmo_fase' | 'verba_perto_fim' | 'fora_padrao' | 'sem_fase'
-  | 'conta_fora_projeto';
+  | 'conta_fora_projeto' | 'checklist_incompleto';
 
 /** Regra do resumo do dia, com o limiar da tabela mkt_trafego.alerta_regras. */
 export interface Regra {
@@ -240,6 +240,8 @@ export interface Alerta {
     meta?: number; periodo?: 'captacao' | 'projeto'; dias?: number; investido?: number; verba_maxima?: number;
     /** conta_fora_projeto: nomes das contas de fora onde as campanhas gastaram. */
     contas?: string[];
+    /** checklist_incompleto: os itens de "antes" pendentes. */
+    itens?: string[];
   };
 }
 
@@ -289,11 +291,19 @@ export const ROTULO_AVISO_PRODUTO: Record<string, string> = {
 
 // ─── Cadastro do projeto (migration 20261006a) ───────────────────────────────────────────────────────────────────────
 
-/** Item do checklist de montagem. Automático: o banco confere (codigo). Manual: alguém marca (id). */
+/** Onde se resolve um item automático do checklist (a tela leva até lá). 20261006d. */
+export type AcaoChecklist = 'projeto' | 'paginas' | 'hotmart' | 'modelo' | 'planejamento' | 'fases' | 'gerador' | 'campanhas';
+
+/** Item do checklist de montagem. Automático: o banco confere (codigo). Manual: alguém marca (id; item do projeto, 20261006d). */
 export interface ItemChecklist {
   codigo?: string;
   id?: number;
   texto: string;
+  /** Antes de subir as campanhas, durante, encerramento (20261006d). */
+  momento?: 'antes' | 'durante' | 'encerramento';
+  acao?: AcaoChecklist;
+  /** Item manual que veio do modelo aplicado. */
+  do_modelo?: boolean;
   /** false = não se aplica a este projeto (fica fora da conta). */
   aplica: boolean;
   ok: boolean;
@@ -303,6 +313,12 @@ export interface ItemChecklist {
   marcado_por?: string | null;
 }
 
-export interface Checklist { automaticos: ItemChecklist[]; manuais: ItemChecklist[]; feitos: number; total: number }
-
-export interface ItemChecklistConfig { id: number; texto: string; tipo_lancamento: string | null; ordem: number; ativo: boolean }
+export interface Checklist {
+  automaticos: ItemChecklist[]; manuais: ItemChecklist[]; feitos: number; total: number;
+  /** Campanhas esperadas do projeto (do modelo), com "criada" (20261006d). */
+  esperadas?: { id: number; objetivo: string; fase: string | null; descricao: string | null; pagina: string | null; criada: boolean }[];
+  /** Modelo aplicado (nulo = nenhum). */
+  modelo?: { id: number | null; nome: string; aplicado_em: string } | null;
+  /** Textos dos itens de "antes" ainda pendentes (o resumo do dia avisa em captação). */
+  pendentes_antes?: string[];
+}

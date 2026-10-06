@@ -14,15 +14,13 @@
 
 import { traduzirCampanha, type ListasCampanha } from '../../projetos/domain/campanha';
 import { CODIGO_PAGINA_RE, ETIQUETA_RE, SIGLA_RE, normalizarSigla } from '../../projetos/domain/projetos';
-import type { Checklist, ItemChecklist, ItemChecklistConfig, Tipo } from './tipos';
+import { marcarCriadas, type Esperada, type ModeloResumo, type Momento } from './modelos';
+import type { AcaoChecklist, Checklist, ItemChecklist, Tipo } from './tipos';
 
 export interface Unidade { codigo: string; tipo: Tipo; nome: string; descricao: string | null }
 export interface TipoLancamento { codigo: string; nome: string }
 export interface Especialista { id: number; nome: string; tipo: Tipo; unidade: string | null }
 export interface ParametroUtm { parametro: string; valor: string }
-export interface ModeloPacote {
-  id: number; tipo_lancamento: string; fase: string; ordem: number; objetivos: string[]; pct_verba: number | null; dias: number | null; obs: string | null;
-}
 
 /** O que public.trafego_cadastro_listas devolve. */
 export interface ListasCadastro {
@@ -34,11 +32,10 @@ export interface ListasCadastro {
   objetivos: string[];
   /** plataforma → parâmetros de URL (Meta: as macros oficiais). */
   utm: Record<string, ParametroUtm[]>;
-  pacotes: ModeloPacote[];
+  /** Modelos de lançamento (20261006d): para o "Aplicar modelo" e a aba de modelos. */
+  modelos: ModeloResumo[];
   /** Etiquetas reais dos spaces do ClickUp (vazia = sem coleta: a tela pede texto). */
   etiquetas_clickup: string[];
-  /** Itens manuais do checklist de montagem (todos, inclusive desativados). */
-  checklist_itens: ItemChecklistConfig[];
 }
 
 export interface SugestaoCampanha { id: number; nome: string; plataforma: string; conta_id: number; conta: string; status_plataforma: string | null }
@@ -50,7 +47,13 @@ export interface ProjetoCadastro {
   captacao_inicio: string | null; captacao_fim: string | null; evento_inicio: string | null; evento_fim: string | null;
   ativo: boolean; tipo: Tipo | null; unidade: string | null; tipo_lancamento: string | null; especialista_id: number | null;
   especialista_nome: string | null; status: string | null; gestores: string[]; contas: number[];
-  paginas: { codigo: string; nome: string }[]; sugestoes: SugestaoCampanha[]; pacote_fases: number; fases_planejadas: number;
+  paginas: { codigo: string; nome: string }[]; sugestoes: SugestaoCampanha[]; fases_planejadas: number;
+  /** Modelo aplicado (20261006d); nulo = nenhum. */
+  modelo: { id: number | null; nome: string; aplicado_em: string } | null;
+  /** Quantos modelos ativos valem para o tipo de lançamento e a unidade do projeto. */
+  modelos_disponiveis: number;
+  /** Campanhas esperadas do projeto (vieram do modelo). O gerador oferece. */
+  esperadas: Esperada[];
 }
 
 /** O formulário da tela (texto; vazio = sem valor). */
@@ -138,7 +141,7 @@ export const etiquetaSemAnoMes = (etiqueta: string, fim: string) =>
 export const ROTULO_AVISO_CADASTRO: Record<string, string> = {
   etiqueta_sem_ano_mes: 'A etiqueta não termina em -aaaa-mm (a chave única de uma edição com data termina no ano-mês).',
   especialista_cadastrado: 'Especialista novo cadastrado.',
-  pacote_acima_de_100: 'A soma do % da verba do pacote passou de 100.',
+  fases_acima_de_100: 'A soma do % da verba das fases do modelo passou de 100.',
 };
 
 // ─── Gerador de nome de campanha e UTM ──────────────────────────────────────────────────────────────────────────────
@@ -190,38 +193,60 @@ export function periodoProjeto(f: Pick<ProjetoForm, 'inicio' | 'fim' | 'captacao
   return { inicio: novo && ini.length ? ini[0] : f.inicio, fim: novo && fim.length ? fim[fim.length - 1] : f.fim };
 }
 
-// ─── Checklist de montagem (a mesma regra de mkt_trafego.checklist; o demo e os testes usam isto) ──────────────────
+// ─── Checklist de montagem (a mesma regra de mkt_trafego.checklist da 20261006d; o demo e os testes usam isto) ─────
+export interface ItemProjeto { id: number; texto: string; momento: Momento; feito_em: string | null; feito_por: string | null; do_modelo: boolean }
 export interface EntradaChecklist {
-  tipo: Tipo | null; tipo_lancamento: string | null;
+  tipo: Tipo | null;
   contas: number; campanhas: number; foraPadrao: number; semFase: number; produtosHotmart: number; paginas: number;
   etiqueta: string | null; verbaMaxima: number | null; fases: number; metas: (number | null)[];
+  /** Nome do modelo aplicado (nulo = nenhum). */
+  modelo: string | null;
+  esperadas: Esperada[];
+  /** Campanhas do projeto: objetivo e código da página. */
+  encontradas: { objetivo: string | null; pagina: string | null }[];
+  status: string | null; eventoFim: string | null; hoje: string;
 }
 
-export function montarChecklist(e: EntradaChecklist, itens: ItemChecklistConfig[], marcas: Map<number, { em: string; por: string | null }>): Checklist {
+const ORDEM_MOMENTO: Record<Momento, number> = { antes: 1, durante: 2, encerramento: 3 };
+
+export function montarChecklist(e: EntradaChecklist, itens: ItemProjeto[]): Checklist {
   const comCamp = e.campanhas > 0;
-  const a = (codigo: string, texto: string, aplica: boolean, ok: boolean, detalhe: string | null = null): ItemChecklist =>
-    ({ codigo, texto, aplica, ok: aplica && ok, detalhe });
+  const esperadas = marcarCriadas(e.esperadas, e.encontradas);
+  const criadas = esperadas.filter((x) => x.criada).length;
+  const a = (codigo: string, texto: string, momento: Momento, acao: AcaoChecklist, aplica: boolean, ok: boolean, detalhe: string | null = null): ItemChecklist =>
+    ({ codigo, texto, momento, acao, aplica, ok: aplica && ok, detalhe });
   const automaticos = [
-    a('contas', 'Contas de anúncio vinculadas', true, e.contas > 0),
-    a('campanhas', 'Campanhas com a sigla encontradas', true, comCamp, `${e.campanhas} campanha(s)`),
-    a('fora_padrao', 'Nenhuma campanha fora do padrão', comCamp, e.foraPadrao === 0, e.foraPadrao > 0 ? `${e.foraPadrao} fora do padrão` : null),
-    a('fases_campanhas', 'Fase de cada campanha definida', comCamp, e.semFase === 0, e.semFase > 0 ? `${e.semFase} sem fase` : null),
-    a('hotmart', 'Produtos da Hotmart vinculados', e.tipo !== 'externo', e.produtosHotmart > 0),
-    a('paginas', 'Páginas do projeto cadastradas', true, e.paginas > 0),
-    a('etiqueta', 'Etiqueta do ClickUp preenchida', true, !!e.etiqueta),
-    a('verba', 'Verba máxima preenchida', true, e.verbaMaxima != null),
-    a('fases', 'Fases planejadas', true, e.fases > 0),
-    a('metas', 'Metas preenchidas (leads, receita ou CPL)', true, e.metas.some((m) => m != null)),
+    a('contas', 'Contas de anúncio vinculadas', 'antes', 'projeto', true, e.contas > 0),
+    a('etiqueta', 'Etiqueta do ClickUp preenchida', 'antes', 'projeto', true, !!e.etiqueta),
+    a('paginas', 'Páginas do projeto cadastradas', 'antes', 'paginas', true, e.paginas > 0),
+    a('hotmart', 'Produtos da Hotmart vinculados', 'antes', 'hotmart', e.tipo !== 'externo', e.produtosHotmart > 0),
+    a('modelo', 'Modelo de lançamento aplicado', 'antes', 'modelo', true, !!e.modelo, e.modelo),
+    a('verba', 'Verba máxima preenchida', 'antes', 'planejamento', true, e.verbaMaxima != null),
+    a('fases', 'Fases planejadas', 'antes', 'fases', true, e.fases > 0),
+    a('metas', 'Metas preenchidas (leads, receita ou CPL)', 'antes', 'planejamento', true, e.metas.some((m) => m != null)),
+    a('campanhas', 'Campanhas com a sigla encontradas', 'durante', 'gerador', true, comCamp, `${e.campanhas} campanha(s)`),
+    a('campanhas_esperadas', 'Campanhas esperadas criadas', 'durante', 'gerador', esperadas.length > 0, criadas === esperadas.length, `${criadas} de ${esperadas.length}`),
+    a('fora_padrao', 'Nenhuma campanha fora do padrão', 'durante', 'campanhas', comCamp, e.foraPadrao === 0, e.foraPadrao > 0 ? `${e.foraPadrao} fora do padrão` : null),
+    a('fases_campanhas', 'Fase de cada campanha definida', 'durante', 'campanhas', comCamp, e.semFase === 0, e.semFase > 0 ? `${e.semFase} sem fase` : null),
+    a('encerrado', 'Status encerrado depois do fim do evento', 'encerramento', 'planejamento', !!e.eventoFim && e.eventoFim < e.hoje,
+      e.status === 'encerrado' || e.status === 'inativo'),
   ];
-  const manuais: ItemChecklist[] = itens
-    .filter((i) => i.ativo && (i.tipo_lancamento == null || i.tipo_lancamento === e.tipo_lancamento))
-    .sort((x, y) => x.ordem - y.ordem || x.id - y.id)
-    .map((i) => {
-      const m = marcas.get(i.id);
-      return { id: i.id, texto: i.texto, tipo_lancamento: i.tipo_lancamento, aplica: true, ok: !!m, marcado_em: m?.em ?? null, marcado_por: m?.por ?? null };
-    });
+  const manuais: ItemChecklist[] = [...itens]
+    .sort((x, y) => ORDEM_MOMENTO[x.momento] - ORDEM_MOMENTO[y.momento] || x.id - y.id)
+    .map((i) => ({ id: i.id, texto: i.texto, momento: i.momento, aplica: true, ok: !!i.feito_em, marcado_em: i.feito_em, marcado_por: i.feito_por, do_modelo: i.do_modelo }));
   const todos = [...automaticos, ...manuais];
-  return { automaticos, manuais, feitos: todos.filter((x) => x.aplica && x.ok).length, total: todos.filter((x) => x.aplica).length };
+  return {
+    automaticos, manuais, feitos: todos.filter((x) => x.aplica && x.ok).length, total: todos.filter((x) => x.aplica).length,
+    esperadas: esperadas.map((x) => ({ ...x, criada: !!x.criada })), modelo: e.modelo ? { id: null, nome: e.modelo, aplicado_em: '' } : null,
+    pendentes_antes: todos.filter((x) => x.aplica && !x.ok && x.momento === 'antes').map((x) => x.texto),
+  };
+}
+
+/** Itens do checklist agrupados por momento (a tela mostra nessa ordem). */
+export function porMomento(c: Checklist): { momento: Momento; itens: ItemChecklist[] }[] {
+  return (['antes', 'durante', 'encerramento'] as Momento[]).map((m) => ({
+    momento: m, itens: [...c.automaticos, ...c.manuais].filter((i) => (i.momento ?? 'antes') === m),
+  }));
 }
 
 type Periodos = { inicio: string | null; fim: string | null; captacao_inicio: string | null; captacao_fim: string | null; evento_inicio: string | null; evento_fim: string | null };

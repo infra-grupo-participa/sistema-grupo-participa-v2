@@ -8,6 +8,7 @@ import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type { ListasCadastro, ProjetoCadastro, ProjetoForm } from '../domain/cadastro';
 import type { BuscaEtiquetas } from '../domain/etiquetas';
+import { paraSalvar, type Modelo, type Momento, type PreviaModelo } from '../domain/modelos';
 import type {
   Campanha, Checklist, ClickupProjeto, ConfigTrafego, Conta, LinhaResumo, ProdutoHotmart, ProdutoVisto, Resposta, ResumoDia, VidaProjeto,
 } from '../domain/tipos';
@@ -120,10 +121,10 @@ export async function apagarProduto(id: number): Promise<Resposta> {
 export const carregarClickup = (projeto: number): Promise<ClickupProjeto | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoClickup(projeto)) : rpc<ClickupProjeto>('trafego_clickup', { p_projeto: projeto });
 
-// ─── Cadastro do projeto, pacote e checklist (migration 20261006a) ────────────────────────────────────────────────────
+// ─── Cadastro do projeto e checklist (migration 20261006a; modelos na 20261006d) ────────────────────────────────────────────────────
 const falhaA: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261006a ainda não foi aplicada).' };
 
-/** Listas do cadastro (unidades, tipos de lançamento e regras, especialistas, UTM, pacote, etiquetas, checklist). null = sem a 20261006a. */
+/** Listas do cadastro (unidades, tipos de lançamento e regras, especialistas, UTM, modelos, etiquetas). null = sem a 20261006a. */
 export const carregarListasCadastro = (): Promise<ListasCadastro | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoListasCadastro()) : rpc<ListasCadastro>('trafego_cadastro_listas');
 
@@ -142,30 +143,51 @@ export async function salvarProjetoCadastro(f: ProjetoForm): Promise<RespostaPro
   return (await rpc<RespostaProjeto>('trafego_projeto_salvar', { p })) ?? falhaA;
 }
 
-export interface PacoteForm { id?: number; tipo_lancamento: string; fase: string; ordem: string; objetivos: string[]; pct_verba: string; dias: string; obs: string }
-export async function salvarPacote(p: PacoteForm): Promise<Resposta> {
-  if (MODO_DEMO) return demo.demoSalvarPacote({ ...p });
-  return (await rpc<Resposta>('trafego_pacote_salvar', { p })) ?? falhaA;
-}
-export async function apagarPacote(id: number): Promise<Resposta> {
-  if (MODO_DEMO) return demo.demoApagarPacote(id);
-  return (await rpc<Resposta>('trafego_pacote_apagar', { p_id: id })) ?? falhaA;
-}
-export async function aplicarPacote(projeto: number): Promise<Resposta> {
-  if (MODO_DEMO) return demo.demoAplicarPacote(projeto);
-  return (await rpc<Resposta>('trafego_pacote_aplicar', { p_projeto: projeto })) ?? falhaA;
-}
-
 export const carregarChecklist = (projeto: number): Promise<Checklist | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoChecklist(projeto)) : rpc<Checklist>('trafego_checklist', { p_projeto: projeto });
 
-export async function marcarChecklist(projeto: number, item: number, feito: boolean): Promise<Resposta> {
-  if (MODO_DEMO) return demo.demoMarcarChecklist(projeto, item, feito);
-  return (await rpc<Resposta>('trafego_checklist_marcar', { p_projeto: projeto, p_item: item, p_feito: feito })) ?? falhaA;
+// ─── Modelos de lançamento (migration 20261006d) ─────────────────────────────────────────────────────────────────────
+const falhaD: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de rede, sem acesso, ou a migration 20261006d ainda não foi aplicada).' };
+
+/** Todos os modelos (ativos e inativos), com fases, campanhas e itens. null = sem acesso ou sem a 20261006d. */
+export const listarModelos = (): Promise<Modelo[] | null> =>
+  MODO_DEMO ? Promise.resolve(demo.demoModelos()) : rpc<Modelo[]>('trafego_modelos_listar');
+
+export async function salvarModelo(m: Modelo): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoSalvarModelo(structuredClone(m));
+  return (await rpc<Resposta>('trafego_modelo_salvar', { p: paraSalvar(m) })) ?? falhaD;
+}
+export async function duplicarModelo(id: number): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoDuplicarModelo(id);
+  return (await rpc<Resposta>('trafego_modelo_duplicar', { p_id: id })) ?? falhaD;
+}
+export async function ativarModelo(id: number, ativo: boolean): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoAtivarModelo(id, ativo);
+  return (await rpc<Resposta>('trafego_modelo_ativar', { p_id: id, p_ativo: ativo })) ?? falhaD;
+}
+/** Modelos que valem para o projeto (padrão primeiro), cada um com a prévia. null = sem a 20261006d. */
+export const previasDoProjeto = (projeto: number): Promise<PreviaModelo[] | null> =>
+  MODO_DEMO ? Promise.resolve(demo.demoPrevias(projeto)) : rpc<PreviaModelo[]>('trafego_modelo_previa', { p_projeto: projeto, p_modelo: null });
+
+export interface RespostaAplicar extends Resposta { criadas?: number; atualizadas?: number; mantidas?: number; esperadas?: number; itens?: number }
+export async function aplicarModelo(projeto: number, modelo: number, substituir: boolean): Promise<RespostaAplicar> {
+  if (MODO_DEMO) return demo.demoAplicarModelo(projeto, modelo, substituir);
+  return (await rpc<RespostaAplicar>('trafego_modelo_aplicar', { p_projeto: projeto, p_modelo: modelo, p_substituir: substituir })) ?? falhaD;
 }
 
-export interface ItemChecklistForm { id?: number; texto: string; tipo_lancamento: string; ordem: string; ativo: boolean }
-export async function salvarItemChecklist(p: ItemChecklistForm): Promise<Resposta> {
-  if (MODO_DEMO) return demo.demoSalvarItemChecklist({ ...p });
-  return (await rpc<Resposta>('trafego_checklist_item_salvar', { p })) ?? falhaA;
+export async function marcarItemProjeto(item: number, feito: boolean): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoMarcarItem(item, feito);
+  return (await rpc<Resposta>('trafego_projeto_item_marcar', { p_item: item, p_feito: feito })) ?? falhaD;
+}
+export async function salvarItemProjeto(p: { id?: number; projeto_id: number; texto: string; momento: Momento }): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoSalvarItem({ ...p });
+  return (await rpc<Resposta>('trafego_projeto_item_salvar', { p })) ?? falhaD;
+}
+export async function apagarItemProjeto(item: number): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoApagarItem(item);
+  return (await rpc<Resposta>('trafego_projeto_item_apagar', { p_item: item })) ?? falhaD;
+}
+export async function apagarEsperada(id: number): Promise<Resposta> {
+  if (MODO_DEMO) return demo.demoApagarEsperada(id);
+  return (await rpc<Resposta>('trafego_projeto_esperada_apagar', { p_id: id })) ?? falhaD;
 }

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { motivoErro } from '../../projetos/domain/campanha';
 import { comKpis } from '../domain/kpis';
+import { somaPct } from '../domain/modelos';
 import {
-  demoAlertas, demoAplicarPacote, demoCadastro, demoChecklist, demoListasCadastro, demoMarcarChecklist, demoSalvarCadastro, demoSalvarPacote,
+  demoAlertas, demoAplicarModelo, demoAtivarModelo, demoDuplicarModelo, demoMarcarItem, demoModelos, demoPrevias, demoSalvarItem, demoSalvarModelo, demoCadastro, demoChecklist, demoListasCadastro, demoSalvarCadastro, 
   demoAjustarCampanha, demoApagarProduto, demoSalvarConta, demoCampanhas, demoContas, demoProdutos, demoProjeto, demoResumo, demoSalvarFase, demoSalvarProduto,
 } from './demo';
 
@@ -70,7 +71,7 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
     const l = demoListasCadastro();
     expect(l.regras.escritorio).toEqual(['lancamento_classico', 'atm']);
     expect(l.especialistas.filter((e) => e.tipo === 'interno').map((e) => e.nome)).toEqual(['Marcio Carvalho de Sá', 'Elaine Montenegro']);
-    expect(l.pacotes).toEqual([]);
+    expect(l.modelos.filter((m) => m.rascunho)).toHaveLength(9);
   });
   it('sugestão pela conta e sigla; alerta de conta de fora', () => {
     expect(demoCadastro(7)!.sugestoes.map((x) => x.id)).toEqual([12]);
@@ -84,20 +85,51 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
     const r = demoSalvarCadastro({ ...base, tipo: 'externo', unidade: 'aurum', tipo_lancamento: '', especialista_nome: 'Pessoa Exemplo Nova' });
     expect([r.ok, r.tipo_lancamento, r.avisos]).toEqual([true, 'palestra', ['especialista_cadastrado']]);
   });
-  it('pacote vazio; aplicar cria a captação com o período de captação', () => {
-    expect(demoAplicarPacote(7).ok).toBe(false);
-    demoSalvarPacote({ tipo_lancamento: 'lancamento_pago', fase: 'captacao', ordem: '1', objetivos: ['VENDAS'], pct_verba: '50', dias: '', obs: '' });
-    expect(demoAplicarPacote(7).ok).toBe(true);
-    const f = demoProjeto(7)!.fases.find((x) => x.fase === 'captacao')!;
-    expect([f.verba, f.inicio]).toEqual([4500, demoCadastro(7)!.captacao_inicio]);
+  it('modelos (20261006d): 9 exemplos rascunho; LPEXA26 já com o do lançamento pago aplicado', () => {
+    const ms = demoModelos();
+    expect(ms.map((m) => m.nome)).toContain('Exemplo: Lançamento pago semanal gravado (LPSG) CSM');
+    expect(ms.every((m) => m.rascunho && somaPct(m.fases) === 100)).toBe(true);
+    const cad = demoCadastro(7)!;
+    expect(cad.modelo?.nome).toBe('Exemplo: Lançamento pago CSM');
+    expect(cad.esperadas.map((e) => e.objetivo)).toEqual(['AQUECIMENTO', 'VENDAS', 'LEMBRETE', 'REMARKETING', 'CARRINHO']);
+    const cap = demoProjeto(7)!.fases.find((x) => x.fase === 'captacao')!;
+    expect([cap.verba, cap.inicio, cap.fim]).toEqual([5400, cad.captacao_inicio, cad.captacao_fim]);
   });
-  it('checklist: automáticos + manual marcado por alguém; progresso no resumo', () => {
+  it('aplicar de novo não duplica; confirmar substitui a fase editada; outra unidade recusada', () => {
+    const m = demoModelos().find((x) => x.nome === 'Exemplo: Lançamento pago CSM')!;
+    demoSalvarFase({ id: demoProjeto(7)!.fases.find((x) => x.fase === 'captacao')!.id!, projeto_id: 7, fase: 'captacao', verba: '1000', inicio: '', fim: '', obs: '' });
+    const p = demoPrevias(7)![0];
+    expect(p.fases.find((f) => f.fase === 'captacao')).toMatchObject({ existe: true, muda: true });
+    expect(demoAplicarModelo(7, m.id, false)).toMatchObject({ ok: true, criadas: 0, atualizadas: 0, esperadas: 0, itens: 0 });
+    expect(demoProjeto(7)!.fases.find((x) => x.fase === 'captacao')!.verba).toBe(1000);
+    expect(demoAplicarModelo(7, m.id, true)).toMatchObject({ ok: true, atualizadas: 1 });
+    expect(demoProjeto(7)!.fases.find((x) => x.fase === 'captacao')!.verba).toBe(5400);
+    const atm = demoModelos().find((x) => x.nome === 'Exemplo: ATM Escritório')!;
+    expect(demoAplicarModelo(7, atm.id, false).ok).toBe(false);
+  });
+  it('salvar, duplicar e inativar modelo', () => {
+    const base = demoModelos().find((x) => x.nome === 'Exemplo: ATM CSM')!;
+    expect(demoSalvarModelo({ ...base, id: 0, nome: 'Modelo Exemplo LPSG', tipo_lancamento: 'lpsg', unidades: [{ unidade: 'escritorio', padrao: false }] }).ok).toBe(false);
+    const r = demoSalvarModelo({ ...base, id: 0, nome: 'Modelo Exemplo ATM', unidades: [{ unidade: 'csm', padrao: true }] });
+    expect(r.ok).toBe(true);
+    expect(demoModelos().find((x) => x.id === base.id)!.unidades[0].padrao).toBe(false);
+    const d = demoDuplicarModelo(r.id!);
+    expect(demoModelos().find((x) => x.id === d.id)!.nome).toBe('Modelo Exemplo ATM (cópia)');
+    demoAtivarModelo(r.id!, false);
+    expect(demoModelos().find((x) => x.id === r.id)!.unidades[0].padrao).toBe(false);
+  });
+  it('checklist por momento, item do modelo marcado, item à mão, alerta em captação', () => {
     const c = demoChecklist(7)!;
-    expect(c.manuais[0]).toMatchObject({ texto: 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow', ok: true });
+    expect(c.manuais[0]).toMatchObject({ texto: 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow', ok: true, do_modelo: true, momento: 'antes' });
+    expect(c.automaticos.find((i) => i.codigo === 'campanhas_esperadas')!.detalhe).toBe('1 de 5');
     expect(demoResumo().find((l) => l.sigla === 'LPEXA26')!.checklist_feitos).toBe(c.feitos);
-    demoMarcarChecklist(7, 1, false);
+    demoMarcarItem(c.manuais[0].id!, false);
     expect(demoChecklist(7)!.feitos).toBe(c.feitos - 1);
+    expect(demoSalvarItem({ projeto_id: 7, texto: 'Pixel conferido (exemplo)', momento: 'durante' }).ok).toBe(true);
+    expect(demoSalvarItem({ projeto_id: 7, texto: 'pixel conferido (EXEMPLO)', momento: 'antes' }).ok).toBe(false);
     expect(demoChecklist(6)!.automaticos.find((i) => i.codigo === 'hotmart')!.aplica).toBe(false);
+    const a = demoAlertas().alertas.find((x) => x.regra === 'checklist_incompleto' && x.sigla === 'LPEXA26')!;
+    expect(a.detalhe.itens).toContain('Automação de ingresso no grupo do WhatsApp configurada no SendFlow');
   });
 });
 

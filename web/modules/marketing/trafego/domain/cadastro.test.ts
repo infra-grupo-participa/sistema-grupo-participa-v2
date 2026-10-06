@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PROJETO_FORM_VAZIO, ajustarForm, etiquetaSemAnoMes, lancamentoAutomatico, lancamentosDaUnidade, linhaUtm, montarChecklist, montarNomeCampanha,
+  PROJETO_FORM_VAZIO, ajustarForm, etiquetaSemAnoMes, lancamentoAutomatico, lancamentosDaUnidade, linhaUtm, montarChecklist, montarNomeCampanha, porMomento,
   nomeTemSigla, periodoProjeto, periodoReceita, validarCadastro, type ListasCadastro,
 } from './cadastro';
 
@@ -22,7 +22,7 @@ const L: ListasCadastro = {
     { parametro: 'utm_medium', valor: '{{adset.name}}|{{adset.id}}' }, { parametro: 'utm_content', valor: '{{ad.name}}|{{ad.id}}' },
     { parametro: 'utm_term', valor: '{{placement}}' },
   ] },
-  pacotes: [], etiquetas_clickup: [], checklist_itens: [],
+  modelos: [], etiquetas_clickup: [],
 };
 const F = { ...PROJETO_FORM_VAZIO, sigla: 'zz28', nome: 'Exemplo' };
 
@@ -103,22 +103,30 @@ describe('gerador de nome de campanha e UTM', () => {
   });
 });
 
-describe('checklist de montagem (a mesma regra de mkt_trafego.checklist; números do ensaio)', () => {
-  const base = { tipo: 'interno' as const, tipo_lancamento: null, contas: 2, campanhas: 3, foraPadrao: 1, semFase: 1, produtosHotmart: 0, paginas: 0,
-    etiqueta: null, verbaMaxima: null, fases: 0, metas: [null, null, null] };
-  const itens = [{ id: 1, texto: 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow', tipo_lancamento: null, ordem: 1, ativo: true },
-    { id: 2, texto: 'Item Exemplo do pago', tipo_lancamento: 'lancamento_pago', ordem: 2, ativo: true }];
-  it('ZR28 do ensaio: 2 de 11', () => {
-    const c = montarChecklist(base, itens, new Map());
-    expect([c.feitos, c.total]).toEqual([2, 11]);
+describe('checklist de montagem (a mesma regra de mkt_trafego.checklist da 20261006d)', () => {
+  const base = { tipo: 'interno' as const, contas: 2, campanhas: 3, foraPadrao: 1, semFase: 1, produtosHotmart: 0, paginas: 0,
+    etiqueta: null, verbaMaxima: null, fases: 0, metas: [null, null, null], modelo: null, esperadas: [],
+    encontradas: [], status: null, eventoFim: null, hoje: '2026-10-06' };
+  const itens = [{ id: 1, texto: 'Automação de ingresso no grupo do WhatsApp configurada no SendFlow', momento: 'antes' as const, feito_em: null, feito_por: null, do_modelo: true }];
+  it('sem modelo nem esperadas: 2 de 12 (contas e campanhas); cada item com momento e ação', () => {
+    const c = montarChecklist(base, itens);
+    expect([c.feitos, c.total]).toEqual([2, 12]);
+    expect(c.automaticos.find((i) => i.codigo === 'modelo')).toMatchObject({ momento: 'antes', acao: 'modelo', ok: false });
+    expect(porMomento(c).map((g) => g.itens.length)).toEqual([9, 4, 1]);
+    expect(c.pendentes_antes).toContain('Automação de ingresso no grupo do WhatsApp configurada no SendFlow');
   });
-  it('externo sem campanha: Hotmart, fora do padrão e fase não se aplicam (8)', () => {
-    const c = montarChecklist({ ...base, tipo: 'externo', campanhas: 0, foraPadrao: 0, semFase: 0 }, itens, new Map());
-    expect(c.total).toBe(8);
+  it('externo sem campanha: Hotmart, fora do padrão e fase não se aplicam', () => {
+    const c = montarChecklist({ ...base, tipo: 'externo', campanhas: 0, foraPadrao: 0, semFase: 0 }, itens);
+    expect(c.total).toBe(9);
   });
-  it('manual marcado conta e guarda quem; item de outro tipo não aparece', () => {
-    const c = montarChecklist(base, itens, new Map([[1, { em: '2026-10-06T10:00:00Z', por: 'Pessoa Exemplo' }]]));
-    expect([c.feitos, c.manuais.length, c.manuais[0].marcado_por]).toEqual([3, 1, 'Pessoa Exemplo']);
-    expect(montarChecklist({ ...base, tipo_lancamento: 'lancamento_pago' }, itens, new Map()).manuais).toHaveLength(2);
+  it('campanhas esperadas × encontradas e encerramento depois do evento', () => {
+    const esperadas = [{ id: 1, objetivo: 'LEADS', fase: 'captacao', descricao: null, pagina: null }, { id: 2, objetivo: 'LEADS', fase: 'captacao', descricao: null, pagina: 'ak1' },
+      { id: 3, objetivo: 'LEMBRETE', fase: 'lembrete', descricao: null, pagina: null }];
+    const c = montarChecklist({ ...base, modelo: 'Modelo Exemplo', esperadas, encontradas: [{ objetivo: 'LEADS', pagina: null }, { objetivo: 'LEADS', pagina: 'ak1' }],
+      eventoFim: '2026-10-01', status: 'ativo' }, [{ ...itens[0], feito_em: '2026-10-05T10:00:00Z', feito_por: 'Pessoa Exemplo' }]);
+    expect(c.automaticos.find((i) => i.codigo === 'campanhas_esperadas')!.detalhe).toBe('2 de 3');
+    expect(c.esperadas!.map((e) => e.criada)).toEqual([true, true, false]);
+    expect(c.automaticos.find((i) => i.codigo === 'encerrado')).toMatchObject({ aplica: true, ok: false });
+    expect(c.manuais[0].marcado_por).toBe('Pessoa Exemplo');
   });
 });

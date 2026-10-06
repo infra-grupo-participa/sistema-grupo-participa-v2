@@ -47,7 +47,7 @@ export function ResumoDiaVista({ r, onAbrir }: { r: Resumo | null; onAbrir: (id:
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-2"><Icon name="alert" size={16} /> Resumo do dia: o que está pegando fogo</span>}
-      subtitle={`Sobre ontem (${dataBR(r.dia)}), ${r.projetos_avaliados} projeto(s) avaliado(s). Projetos desativados, inativos ou encerrados ficam fora.`}
+      subtitle={`Sobre ontem (${dataBR(r.dia)}), ${r.projetos_avaliados} projeto(s) avaliado(s). Projetos desativados, em planejamento, inativos ou encerrados ficam fora.`}
       right={<div className="flex gap-2">
         {altas > 0 && <Badge tone="danger">{altas} alta(s)</Badge>}
         {r.alertas.length - altas > 0 && <Badge tone="warning">{r.alertas.length - altas} média(s)</Badge>}

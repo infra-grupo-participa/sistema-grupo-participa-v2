@@ -3,7 +3,7 @@
 // "A vida do projeto" (clique na linha da Central do Tráfego): investido × verba, ritmo, KPIs × metas, fases planejado ×
 // gasto, campanhas (e as fora do padrão), receita da Hotmart (vínculo de produto, 20261005r) e atividades do ClickUp com o
 // gasto diário (20261005r). Cadastro de planejamento, fases e produtos aqui. 20261006a: cadastro do projeto (editar),
-// campanhas sugeridas, pacote, checklist de montagem e gerador de nome de campanha e UTM.
+// campanhas sugeridas, modelo de lançamento (20261006d), checklist de montagem por momento e gerador de nome de campanha e UTM.
 import { useEffect, useState } from 'react';
 import {
   Badge, Button, ConfirmDialog, DataTable, Drawer, EmptyState, FilterSelect, Input, Loading, Modal, ProgressBar, Row, SectionCard,
@@ -13,11 +13,12 @@ import { Icon } from '@/shared/ui/icons';
 import { motivoErro } from '../../projetos/domain/campanha';
 import { comKpis, esperadoAte, situacaoRitmo } from '../domain/kpis';
 import { formDoCadastro, type ListasCadastro, type ProjetoCadastro } from '../domain/cadastro';
-import { ROTULO_AVISO, ROTULO_TIPO, type ConfigTrafego, type Conta, type FaseProjeto, type Resposta, type VidaProjeto as Vida } from '../domain/tipos';
+import { marcarCriadas } from '../domain/modelos';
+import { ROTULO_AVISO, ROTULO_TIPO, type AcaoChecklist, type ConfigTrafego, type Conta, type FaseProjeto, type Resposta, type VidaProjeto as Vida } from '../domain/tipos';
 import {
   ajustarCampanha, apagarFase, carregarCadastro, carregarProjeto, salvarFase, salvarPlanejamento, type FaseForm, type PlanejamentoForm,
 } from '../infrastructure/trafego-data';
-import { CadastroResumo, ChecklistPainel, GeradorCampanha } from './MontagemProjeto';
+import { CadastroResumo, ChecklistPainel, GeradorCampanha, ModalAplicarModelo } from './MontagemProjeto';
 import { ModalProjetoCadastro } from './ProjetoCadastro';
 import { ClickupPainel } from './ClickupPainel';
 import { SEM_DADO, centavos, dataBR, inteiro, pct, reais } from './formato';
@@ -235,6 +236,7 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
   const [editPlan, setEditPlan] = useState(false);
   const [editFase, setEditFase] = useState<FaseForm | null>(null);
   const [apagar, setApagar] = useState<FaseProjeto | null>(null);
+  const [aplicar, setAplicar] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -254,6 +256,16 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
   const esperado = esperadoAte(vida.fases, config.dia_ontem);
   const acima = situacaoRitmo(r.ritmo_ontem) === 'acima';
   const plataformas = r.por_plataforma ? Object.entries(r.por_plataforma) : [];
+  const irPara = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // checklist que leva à ação: cada item pendente abre o lugar onde se resolve
+  const acao = (a: AcaoChecklist) => {
+    if (a === 'projeto') setEditProjeto(true);
+    else if (a === 'planejamento') setEditPlan(true);
+    else if (a === 'modelo') setAplicar(true);
+    else if (a === 'paginas') window.open('/marketing/projetos', '_blank', 'noopener');
+    else irPara({ fases: 'vp-fases', gerador: 'vp-gerador', campanhas: 'vp-campanhas', hotmart: 'vp-hotmart' }[a]);
+  };
+  const esperadas = cad ? marcarCriadas(cad.esperadas ?? [], vida.campanhas.map((c) => ({ objetivo: c.objetivo, pagina: c.pagina }))) : [];
 
   return (
     <Drawer
@@ -274,12 +286,12 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
       <div className="space-y-5">
         {cad && listas && (
           <SectionCard title="Cadastro do projeto" subtitle="Tipo, unidade, lançamento, especialista, períodos e contas de anúncio. Editar no botão Projeto.">
-            <CadastroResumo cad={cad} listas={listas} contas={contas} flash={flash} onMudou={onMudou} />
+            <CadastroResumo cad={cad} listas={listas} contas={contas} flash={flash} onMudou={onMudou} onAplicarModelo={() => setAplicar(true)} />
           </SectionCard>
         )}
         {listas && (
-          <SectionCard title="Checklist de montagem" subtitle="O que falta para o projeto ficar pronto: o sistema confere os automáticos; os manuais alguém marca.">
-            <ChecklistPainel projetoId={r.projeto_id} versao={versao} flash={flash} onMudou={onMudou} />
+          <SectionCard title="Checklist de montagem" subtitle="Por momento: antes de subir as campanhas, durante e encerramento. O sistema confere os automáticos (o link leva até onde se resolve); os manuais alguém marca.">
+            <ChecklistPainel projetoId={r.projeto_id} versao={versao} flash={flash} onMudou={onMudou} onAcao={acao} />
           </SectionCard>
         )}
         <SectionCard title="Investido × verba">
@@ -319,6 +331,7 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
           </div>
         </SectionCard>
 
+        <div id="vp-fases" />
         <SectionCard title="Fases: planejado × gasto" subtitle="A fase da campanha sai do objetivo do nome (LEADS e VENDAS = captação; AQUECIMENTO; LEMBRETE; REMARKETING; CARRINHO = abertura de carrinho). A correção à mão na campanha prevalece. DISTRIBUIÇÃO fica sem fase até alguém marcar."
           right={<Button size="sm" onClick={() => setEditFase({ projeto_id: r.projeto_id, fase: '', verba: '', inicio: '', fim: '', obs: '' })}><Icon name="plus" size={14} /> Nova fase</Button>}>
           {r.captacao_inicio && <p className="mb-2 text-xs text-[var(--fg-3)]">Fase de captação sem data: vale o período de captação do projeto ({dataBR(r.captacao_inicio)} a {dataBR(r.captacao_fim)}) como padrão.</p>}
@@ -327,16 +340,18 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
           })} />
         </SectionCard>
 
+        <div id="vp-campanhas" />
         <SectionCard title="Campanhas do projeto" subtitle={`${vida.campanhas.length} campanha(s); as fora do padrão aparecem marcadas.`}>
           <Campanhas vida={vida} config={config} flash={flash} onMudou={onMudou} />
         </SectionCard>
 
         {listas && cad && (
-          <SectionCard title="Gerador de nome de campanha e UTM" subtitle="Monta o nome no padrão GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA e a linha de parâmetros do Meta.">
-            <GeradorCampanha sigla={r.sigla} listas={listas} config={config} paginas={cad.paginas} gestoresProjeto={r.gestores} />
-          </SectionCard>
+          <div id="vp-gerador"><SectionCard title="Gerador de nome de campanha e UTM" subtitle="Monta o nome no padrão GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA e a linha de parâmetros do Meta.">
+            <GeradorCampanha sigla={r.sigla} listas={listas} config={config} paginas={cad.paginas} gestoresProjeto={r.gestores} esperadas={esperadas} flash={flash} onMudou={onMudou} />
+          </SectionCard></div>
         )}
 
+        <div id="vp-hotmart" />
         {r.receita_aplica === false ? (
           <SectionCard title="Receita gerada (Hotmart)"><p className="text-sm text-[var(--fg-3)]">Não se aplica: a receita dos projetos externos não entra por ora (Victor, 06/10/2026).</p></SectionCard>
         ) : (
@@ -355,6 +370,7 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
       {editProjeto && cad && listas && (
         <ModalProjetoCadastro inicial={formDoCadastro(cad)} listas={listas} config={config} contas={contas} onFechar={() => setEditProjeto(false)} onSalvo={salvo} />
       )}
+      {aplicar && <ModalAplicarModelo projetoId={r.projeto_id} config={config} onFechar={() => setAplicar(false)} onAplicado={(m) => { setAplicar(false); flash(m); onMudou(); }} />}
       {apagar && apagar.id != null && (
         <ConfirmDialog
           title="Apagar fase"

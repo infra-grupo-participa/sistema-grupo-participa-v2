@@ -16,6 +16,8 @@
 //   sem_fase            campanhas do projeto sem fase com gasto nos últimos `limiar` dias
 //   conta_fora_projeto  (20261006a) campanhas com a sigla do projeto no nome gastando nos últimos `limiar` dias numa conta
 //                       que não é do projeto; só avalia projeto com conta ligada
+//   checklist_incompleto (20261006d) projeto em captação (ontem entre início e fim da captação) com item do checklist de
+//                       "antes de subir as campanhas" pendente, a partir de `limiar` dias do início da captação
 // Período da meta de leads: a fase de captação planejada com datas; senão o período padrão do projeto (20261006a: a
 // captação do projeto, senão início e fim), como mkt_trafego.periodo_padrao.
 
@@ -39,10 +41,12 @@ export interface ProjetoEntrada {
   contasProjeto?: number[];
   /** Campanhas com a sigla do projeto no nome (ligadas a ele ou não), com a conta. */
   campanhasDaSigla?: CampanhaEntrada[];
+  /** Itens do checklist de "antes" ainda pendentes (20261006d). */
+  pendentesAntes?: string[];
 }
 
 const ORDEM: RegraAlerta[] = ['acima_verba_diaria', 'cpl_acima_meta', 'leads_abaixo_meta', 'ritmo_fase', 'verba_perto_fim', 'fora_padrao', 'sem_fase',
-  'conta_fora_projeto'];
+  'conta_fora_projeto', 'checklist_incompleto'];
 
 export function calcularAlertas(ontem: string, regras: Regra[], projetos: ProjetoEntrada[], semProjeto: CampanhaEntrada[]): Alerta[] {
   const rg = new Map(regras.filter((r) => r.ligada).map((r) => [r.codigo, r]));
@@ -54,7 +58,7 @@ export function calcularAlertas(ontem: string, regras: Regra[], projetos: Projet
   };
   const recente = (ultimo: string | null, n: number) => ultimo != null && dias(ultimo, ontem) < n;
 
-  for (const { linha: l, entra, fases, campanhas, contasProjeto, campanhasDaSigla } of projetos) {
+  for (const { linha: l, entra, fases, campanhas, contasProjeto, campanhasDaSigla, pendentesAntes } of projetos) {
     if (!entra) continue;
     let r = rg.get('acima_verba_diaria');
     if (r && l.investido != null && l.verba_diaria != null && l.verba_diaria > 0 && l.gasto_ontem != null
@@ -111,6 +115,11 @@ export function calcularAlertas(ontem: string, regras: Regra[], projetos: Projet
         add('conta_fora_projeto', l, fora.length, null, { dias: r.limiar, contas: [...new Set(fora.map((c) => c.conta ?? String(c.conta_id)))].sort() });
       }
     }
+    r = rg.get('checklist_incompleto');
+    if (r && l.captacao_inicio && l.captacao_inicio <= ontem && (l.captacao_fim ?? ontem) >= ontem && pendentesAntes && pendentesAntes.length > 0) {
+      const d = dias(l.captacao_inicio, ontem);
+      if (d >= r.limiar) add('checklist_incompleto', l, pendentesAntes.length, null, { dias: d, itens: pendentesAntes });
+    }
   }
   const rf = rg.get('fora_padrao');
   if (rf) {
@@ -146,6 +155,8 @@ export function textoAlerta(a: Alerta): string {
       return `${int(a.valor)} campanha(s) com nome fora do padrão gastando nos últimos ${int(d.dias)} dias${a.projeto_id == null ? ', sem projeto ligado' : ''}.`;
     case 'conta_fora_projeto':
       return `${int(a.valor)} campanha(s) com a sigla do projeto gastando nos últimos ${int(d.dias)} dias em conta que não é do projeto (${(d.contas ?? []).join(', ')}).`;
+    case 'checklist_incompleto':
+      return `Em captação há ${int(d.dias)} dia(s) com ${int(a.valor)} item(ns) de "antes de subir as campanhas" pendente(s): ${(d.itens ?? []).join('; ')}.`;
     case 'sem_fase':
       return `${int(a.valor)} campanha(s) sem fase gastando nos últimos ${int(d.dias)} dias (marque a fase na campanha).`;
     default:

@@ -3,7 +3,7 @@
 // Marketing > Tráfego: a Central do Tráfego. Resumo do dia no topo (20261005r), tabela de projetos com filtros, "a vida do
 // projeto" no clique, cadastro de contas e campanhas fora do padrão. Só admin/dev (gate no layout, na page e no banco).
 // Migrations 20261005p e 20261005r. 20261006a: filtros por tipo e unidade, "Novo projeto" (cadastro do evento), progresso
-// do checklist de montagem e a aba de pacotes e checklist.
+// do checklist de montagem. 20261006d: aba de modelos de lançamento (no lugar de pacotes e checklist).
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Badge, Button, DataTable, EmptyState, FilterSelect, KpiCard, Loading, SectionCard, Tabs, Td, Th, Thead, Toast, Toggle, Tr, useFlash,
@@ -16,13 +16,13 @@ import { MODO_DEMO, carregarConfig, carregarListasCadastro, carregarResumo, list
 import { CampanhasPainel } from './CampanhasPainel';
 import { ContasPainel } from './ContasPainel';
 import { ProgressoMontagem } from './MontagemProjeto';
-import { PacoteChecklistPainel } from './PacoteChecklistPainel';
+import { ModelosPainel } from './ModelosPainel';
 import { ModalProjetoCadastro } from './ProjetoCadastro';
 import { ResumoDia } from './ResumoDia';
 import { SEM_DADO, centavos, inteiro, pct, reais } from './formato';
 import { VidaProjeto } from './VidaProjeto';
 
-type Aba = 'central' | 'campanhas' | 'contas' | 'pacotes';
+type Aba = 'central' | 'campanhas' | 'contas' | 'modelos';
 
 /** Célula de KPI: "sem dado" discreto quando não há fonte. */
 function Kpi({ v, titulo }: { v: string; titulo?: string }) {
@@ -170,7 +170,7 @@ export function TrafegoClient() {
               { k: 'central', l: 'Projetos' },
               { k: 'campanhas', l: 'Campanhas fora do padrão', n: linhas.reduce((a, l) => a + l.campanhas_fora_padrao, 0) || undefined },
               { k: 'contas', l: 'Contas de anúncio' },
-              { k: 'pacotes', l: 'Pacotes e checklist' },
+              { k: 'modelos', l: 'Modelos de lançamento' },
             ]}
             active={aba}
             onChange={(k) => setAba(k as Aba)}
@@ -207,7 +207,7 @@ export function TrafegoClient() {
             )}
             {aba === 'campanhas' && <CampanhasPainel linhas={linhas} versao={versao} flash={flash} onMudou={mudou} />}
             {aba === 'contas' && <ContasPainel config={config} flash={flash} onMudou={mudou} />}
-            {aba === 'pacotes' && <PacoteChecklistPainel listas={listas} config={config} flash={flash} onMudou={mudou} />}
+            {aba === 'modelos' && <ModelosPainel listas={listas} config={config} versao={versao} flash={flash} onMudou={mudou} />}
           </div>
         </>
       )}
