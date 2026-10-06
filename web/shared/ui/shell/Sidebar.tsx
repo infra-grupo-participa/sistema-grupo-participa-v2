@@ -90,6 +90,7 @@ export function Sidebar({ user }: { user: GpUser }) {
   // Victor, 05/10/2026: fora de departamento (Início, Usuários, Configurações) não mostra menu de departamento nenhum.
   const mostraEducacional = depAtual === 'educacional';
   const mostraMarketing = depAtual === 'marketing' && podeVerDepartamento(user, 'marketing');
+  const mostraComercial = depAtual === 'comercial' && podeVerDepartamento(user, 'comercial');
 
   // O grupo aparece se o cargo permite E o usuário tem o setor.
   // Financeiro tem regra própria (visualizador NÃO vê dinheiro) — espelha
@@ -160,6 +161,28 @@ export function Sidebar({ user }: { user: GpUser }) {
         <>
           <Group label="Marketing" collapsed={!!groups.marketing} onToggle={() => toggleGroup('marketing')}>
             {departamento('marketing').areas.map((a) => {
+              const active = cur === a.path || cur.startsWith(a.path + '/');
+              return (
+                <Link key={a.key} href={a.path} className={itemCls(active)}>
+                  <span className={iconBoxCls(active)}><Icon name={a.ico} /></span>
+                  <span className="flex-1 truncate">{a.label}</span>
+                  {a.status === 'em_breve' && <EmBreveTag />}
+                </Link>
+              );
+            })}
+          </Group>
+          <Divider />
+        </>
+      )}
+
+      {mostraComercial && (
+        <>
+          <Group label="Comercial" collapsed={!!groups.comercial} onToggle={() => toggleGroup('comercial')}>
+            <Link href="/comercial" className={itemCls(cur === '/comercial')}>
+              <span className={iconBoxCls(cur === '/comercial')}><Icon name="handshake" /></span>
+              <span>Início do Comercial</span>
+            </Link>
+            {departamento('comercial').areas.map((a) => {
               const active = cur === a.path || cur.startsWith(a.path + '/');
               return (
                 <Link key={a.key} href={a.path} className={itemCls(active)}>

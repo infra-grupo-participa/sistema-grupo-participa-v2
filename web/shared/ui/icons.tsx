@@ -8,7 +8,8 @@ import {
   Briefcase, Medal, Coins, Gem, LogOut, Plus, Trash2, Pencil, Inbox, Copy,
   PanelLeftClose, PanelLeftOpen, Wallet, Receipt, TrendingUp, Banknote,
   LayoutDashboard, CircleDollarSign, Eye, EyeOff, UserX,
-  Megaphone, Handshake, Server, Globe, MessageCircle, Video, Share2, Hourglass, Building2, type LucideIcon,
+  Megaphone, Handshake, Server, Globe, MessageCircle, Video, Share2, Hourglass, Building2,
+  Phone, Send, Columns3, ChartColumn, Target, Zap, Contact, ListChecks, SlidersHorizontal, UserCheck, Flame, Clock, type LucideIcon,
 } from 'lucide-react';
 
 const MAP: Record<string, LucideIcon> = {
@@ -43,6 +44,9 @@ const MAP: Record<string, LucideIcon> = {
   // departamentos e áreas da Central
   megaphone: Megaphone, handshake: Handshake, server: Server, building: Building2, globe: Globe,
   message: MessageCircle, video: Video, share: Share2, hourglass: Hourglass,
+  // comercial (CRM)
+  phone: Phone, send: Send, kanban: Columns3, chart: ChartColumn, target: Target, zap: Zap, contact: Contact,
+  'list-checks': ListChecks, sliders: SlidersHorizontal, 'user-check': UserCheck, flame: Flame, clock: Clock,
 };
 
 export function Icon({ name, size = 16, className, strokeWidth = 2, style }: {

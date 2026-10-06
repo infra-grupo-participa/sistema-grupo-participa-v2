@@ -32,8 +32,8 @@ export interface Departamento {
   areas: Area[];
 }
 
-const area = (dep: DepartamentoKey, key: string, label: string, ico: string, descricao: string): Area => ({
-  key, label, path: `/${dep}/${key}`, descricao, ico, status: 'em_breve',
+const area = (dep: DepartamentoKey, key: string, label: string, ico: string, descricao: string, status: Status = 'em_breve'): Area => ({
+  key, label, path: `/${dep}/${key}`, descricao, ico, status,
 });
 
 export const DEPARTAMENTOS: Departamento[] = [
@@ -61,7 +61,29 @@ export const DEPARTAMENTOS: Departamento[] = [
       area('marketing', 'social-media', 'Social Media', 'share', 'Redes sociais'),
     ],
   },
-  { key: 'comercial', label: 'Comercial', path: '/comercial', descricao: 'CRM: ativação, vendas e recuperação', ico: 'handshake', status: 'em_breve', areas: [] },
+  {
+    key: 'comercial',
+    label: 'Comercial',
+    path: '/comercial',
+    descricao: 'CRM: ativação, vendas e recuperação',
+    ico: 'handshake',
+    status: 'ativo',
+    // As "áreas" do Comercial são as telas do CRM (o playbook divide o time em Atendimento, Prospecção e
+    // Fechamento, mas todos trabalham no mesmo funil). Front pronto com dados de demonstração (05/10/2026);
+    // o backend entra por trás de `modules/comercial/application/ports.ts`.
+    areas: [
+      area('comercial', 'funil', 'Funil de vendas', 'kanban', 'Venda ativa e origens da Hotmart, por produto', 'ativo'),
+      area('comercial', 'conversas', 'Conversas', 'message', 'WhatsApp oficial, atribuído ao dono do lead', 'ativo'),
+      area('comercial', 'atividades', 'Atividades', 'list-checks', 'Agenda do dia, cadência e atrasadas', 'ativo'),
+      area('comercial', 'contatos', 'Contatos', 'contact', 'Pessoas, dono e histórico completo', 'ativo'),
+      area('comercial', 'recuperacao', 'Recuperação', 'target', 'Filas pós-lançamento com score A a D', 'ativo'),
+      area('comercial', 'disparos', 'Disparos', 'send', 'Ficha, aprovação, supressões e log', 'ativo'),
+      area('comercial', 'relatorios', 'Relatórios', 'chart', 'Fechamento do dia e indicadores', 'ativo'),
+      area('comercial', 'playbook', 'Playbook', 'notebook', 'O playbook completo do Comercial', 'ativo'),
+      area('comercial', 'social-selling', 'Social selling', 'share', 'Comentários do Instagram viram lead', 'em_breve'),
+      area('comercial', 'configuracoes', 'Configurações', 'sliders', 'Distribuição, etapas, motivos e links', 'ativo'),
+    ],
+  },
   // Departamento Financeiro (Em breve). NÃO confundir com o módulo "Financeiro" (Contas a Receber), que hoje
   // mora DENTRO do Educacional em /educacional/financeiro e mantém o nome por decisão do Victor (05/10/2026).
   { key: 'financeiro', label: 'Financeiro', path: '/financeiro', descricao: 'Departamento financeiro da empresa', ico: 'building', status: 'em_breve', areas: [] },
@@ -80,6 +102,7 @@ export const MODULO_DEPARTAMENTO: Record<string, DepartamentoKey | 'sistema'> = 
   'remocao-acessos': 'educacional',
   usuarios: 'sistema',
   marketing: 'marketing', // web/modules/marketing/<area>/
+  comercial: 'comercial', // CRM: web/modules/comercial/
 };
 
 export function departamento(key: DepartamentoKey): Departamento {
@@ -94,11 +117,13 @@ export function departamento(key: DepartamentoKey): Departamento {
  * - Marketing: só admin e dev, até os níveis de acesso por departamento serem desenhados (decisão de 05/10/2026).
  *   Bloqueia o visualizador geral, gestor e operador. Ainda não há dado de Marketing no banco, então não
  *   existe regra de RLS correspondente: quando houver, ela precisa negar o visualizador do mesmo jeito.
- * - Comercial, Financeiro, Infra: só mostram "Em breve"; qualquer pessoa da equipe vê o aviso.
+ * - Comercial: só admin e dev enquanto o CRM roda com dados de demonstração (05/10/2026). Quando o backend
+ *   entrar, o acesso passa a ser por setor (gestor e vendedores do Comercial) e a RLS nega o visualizador.
+ * - Financeiro, Infra: só mostram "Em breve"; qualquer pessoa da equipe vê o aviso.
  */
 export function podeVerDepartamento(u: GpUser | null, key: DepartamentoKey): boolean {
   if (!u) return false;
-  if (key === 'marketing') return ehAdminOuAcima(u);
+  if (key === 'marketing' || key === 'comercial') return ehAdminOuAcima(u);
   return true;
 }
 
