@@ -1173,7 +1173,7 @@ begin
   v := pg_temp.adm(format('select public.trafego_projeto_item_marcar(%s, true)', v_item));
   c := pg_temp.adm(format('select public.trafego_checklist(%s)', v_p));
   perform pg_temp.ok('5.marcar', (v ->> 'ok')::boolean
-    and (select e ->> 'marcado_por' from jsonb_array_elements(c -> 'manuais') e where (e ->> 'id')::bigint = v_item) = 'Victor (local)'
+    and (select e ->> 'marcado_por' from jsonb_array_elements(c -> 'manuais') e where (e ->> 'id')::bigint = v_item) = (select nome from public.perfis where id = '81d2eaee-cce1-4058-8714-439b0fc6f970')
     and (select (e ->> 'do_modelo')::boolean from jsonb_array_elements(c -> 'manuais') e where (e ->> 'id')::bigint = v_item)
     and not (c -> 'pendentes_antes' ? 'Automação de ingresso no grupo de leads configurada no SendFlow'),
     'item do modelo marcado: quem e quando; sai dos pendentes de "antes"');
