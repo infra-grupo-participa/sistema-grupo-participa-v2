@@ -1,16 +1,19 @@
 # Pedidos de alteração de cadastro
 
-Pedido do Victor (05/10/2026). Quem não tem acesso à Central de Alunos (ex.: Isabela Teixeira, Head de Sucesso do
-Cliente) passa a **pedir** a alteração numa tela própria; o aprovador decide na Central e o sistema aplica.
+Pedido do Victor (05/10/2026). Quem precisa mudar um cadastro da Central de Alunos passa a **pedir** a alteração
+numa tela própria; o aprovador decide e o sistema aplica. Quem pede não ganha acesso à Central por isso (a área
+`pedidos_alteracao` é só a tela de pedidos).
 
 **Status (06/10/2026): etapa 1 no ar** (migration `20261005j` aplicada, merge `e20aaab`). **Sócio novo com cadastro
 completo** (migration `20261005k`) **APLICADA** (commit `002535a`, na `main`).
 **Troca de sócio direto em remoção** (`20261006144912`) e **sócio novo herda entrada e turma** (`20261006144913`):
 **APLICADAS em 06/10/2026** (ensaio OK antes; pentester e orquestrador aprovaram). Ver "Banco".
+**Etapa 2, parte do banco** (migrations `20261006160401` a `20261006160404`, branch `victor-pedidos`): **NÃO
+APLICADAS**, ensaio OK em `begin … rollback`. Falta pentester, orquestrador e ok do Victor. Ver "Etapa 2".
 
 ## Telas
 
-- **`/sistema/pedidos-alteracao`** (menu "Pedidos de alteração"): para quem pede. Novo pedido + "Meus pedidos"
+- **`/educacional/pedidos-alteracao`** (menu "Pedidos de alteração"): para quem pede. Novo pedido + "Meus pedidos"
   com o andamento. Não mostra a lista da Central.
   - Busca do aluno a partir de 3 letras, com o mínimo para distinguir homônimos: instrução, "sócio de {titular}",
     turma, e-mail mascarado (`is***@gmail.com`), final do telefone e do documento. Filtros opcionais por
@@ -37,8 +40,12 @@ completo** (migration `20261005k`) **APLICADA** (commit `002535a`, na `main`).
 
 - **Quem pede:** dev/admin, ou gestor/operador com a área **`pedidos_alteracao`** (catálogo de acessos **3.6** na
   tela de Usuários). Não dá acesso à Central. Espelho: `pa_pode_pedir()` e `podePedirAlteracao()`.
-- **Quem aprova:** quem está em `public.pa_aprovadores` (hoje o Victor). Incluir outro:
-  `insert into public.pa_aprovadores (perfil_id) values ('<uuid do perfil>');`
+- **Quem aprova:** quem está em `public.pa_aprovadores`: o Victor e, desde 06/10/2026 19:08 UTC, a **Isabela
+  Teixeira** (inserida em produção por pedido direto do Victor; a `20261006160401` repete o insert sem efeito). Incluir
+  outro: `insert into public.pa_aprovadores (perfil_id) values ('<uuid do perfil>') on conflict do nothing;`
+  **Decisão do Victor (06/10/2026):** a Isabela aprova pela tela de pedidos (aba "Aprovar"), pode aprovar o próprio
+  pedido (fica registrado e a tela mostra o selo "aprovou o próprio pedido") e **mantém os acessos que já tem** (é
+  admin, vê a Central no sistema e edita a planilha). Nada foi fechado para ela. Ela não recebe aviso no Slack.
 - **Campos editáveis (lista fechada, `pa_campos()`):** nome, e-mail, telefone, telefone profissional, documento,
   endereço (CEP, logradouro, número, complemento, bairro, cidade, UF, país), profissão, turma, instrução, espaço de
   instrução, observação da Central. **Nunca** dinheiro, compra ou Hotmart.
@@ -78,16 +85,78 @@ completo** (migration `20261005k`) **APLICADA** (commit `002535a`, na `main`).
 `pendente` → `aplicado` (ou `recusado`). `aprovado` = "outro" aprovado, falta aplicar. `erro` = falhou ao aplicar.
 `planilha_status = pendente` em todo pedido aplicado (menos "outro"): é a fila da **etapa 2**.
 
-## Etapa 2 (fora desta entrega)
+## Etapa 2 (banco pronto, NÃO aplicado; n8n não existe ainda)
 
-Automação (n8n) que lê os pedidos com `planilha_status = 'pendente'`, escreve na planilha da Central e marca
-`ok`/`erro` (`planilha_em`, `planilha_erro`). Precisa de uma função de leitura e confirmação para o n8n (padrão
-`ra_slack_*`, com segredo), que ainda não existe.
+Decisões do Victor de 06/10/2026 (noite). Quatro migrations, cada uma com `_ensaio.sql` e `.explain.md` (saída do
+ensaio, `explain (analyze)`, as 5 perguntas e a reversão):
 
-**Aviso de pedido novo para o aprovador (pedido do Victor, 05/10/2026, pendente):** automação que avisa o
-aprovador quando chega pedido (ex.: mensagem no Slack com quem pediu, tipo, aluno e link para a fila). Hoje a fila
-só aparece em Central de Alunos > aba "Pedidos de alteração", que o aprovador precisa abrir. Usar o mesmo padrão
-de aviso da Remoção de Acessos (gatilho, n8n, Slack).
+| Migration | O que faz | Depende de |
+|---|---|---|
+| `20261006160401_pa_aprovador_isabela.sql` | Isabela em `pa_aprovadores` (idempotente); `pa_linha`, e por ela `pa_fila` e `pa_meus_pedidos`, devolvem `autoaprovado` = aprovado/aplicado **e** `decidido_por = solicitado_por` | nada |
+| `20261006160402_pa_slack_dm.sql` | `pa_config` e `pa_avisos` (fechadas), `pa_slack_reservar`, `pa_slack_confirmar`, gatilho `trg_pa_avisar_n8n` (pg_net, nunca derruba o insert) | nada |
+| `20261006160403_pa_planilha.sql` | `pa_planilha_reservas` (fechada), `pa_planilha_reservar`, `pa_planilha_confirmar` | 160402 |
+| `20261006160404_pa_historico_aluno.sql` | `pa_historico_aluno(p_aluno)` + 3 índices parciais em `pa_pedidos` (aluno, sai, entra) | nada |
+
+Ordem de aplicar: 160401, 160402, 160403, 160404 (só a 160403 exige outra antes). Comando:
+`python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py aplicar infra/supabase/migrations/<arquivo>.sql`.
+
+**Aviso de pedido novo (DM no Slack, só para o Victor).** Texto: `:memo: Solicitaram uma alteração do aluno *<nome>*:
+<tipo>, pedido por <quem pediu>. <https://grupoparticipa.app.br/educacional/pedidos-alteracao|Abrir a fila>` (nomes
+escapados com `ra_slack_esc`). Destinatário em `pa_config.slack_destinos` (`{U0AQ4H2GZ0T}`), não "todo aprovador".
+
+**`pa_config` nasce desligada.** Uma linha só, fechada (só se lê no banco, pelo SQL editor ou pelo `aplica_sql.py`):
+
+- `segredo`: 64 caracteres gerados na migration. Ler com `select segredo from public.pa_config;` e guardar só na
+  credencial do n8n. Nunca em código, commit ou chat.
+- `n8n_webhook_url`: nula. Enquanto for nula o gatilho não chama nada. Gravar a URL do webhook do workflow do Slack.
+- `ligado_em`: nula = aviso desligado. Ligar: `update public.pa_config set ligado_em = now();`. Só pedido criado
+  **depois** disso vira DM (o nº 9 e o nº 10 não geram aviso retroativo). Pedido decidido antes da rodada não gera DM.
+- `planilha_id`: nula = a reserva da planilha devolve `{"ok": true, "planilha_id": null, "pedidos": []}`. Gravar
+  primeiro o id da **CÓPIA** da planilha. A reserva da planilha **não** olha `ligado_em`.
+
+**Contrato com o n8n** (PostgREST como anon, padrão `ra_slack_*`; segredo inválido devolve só `{"ok": false}`):
+
+- `pa_slack_reservar(p_segredo)` → `{ok, mensagens: [{pedido, slack_id, texto}]}`; reserva de 2 min, até 20.
+  Depois de mandar (`chat.postMessage`, `channel = slack_id`, bot `remocaoacessos`):
+  `pa_slack_confirmar(p_segredo, p_pedido, p_slack_id, p_ts)`. Sem confirmar, volta na rodada seguinte.
+- Gatilho: a cada pedido novo, `POST n8n_webhook_url` com `{"pedido": <nº>}` (sem segredo, só acorda o workflow).
+- `pa_planilha_reservar(p_segredo)` → `{ok, planilha_id, abas, cabecalhos, reserva_minutos: 10, pedidos: [...]}`: até
+  5 pedidos `aplicado` com `planilha_status = 'pendente'` (alterar dado e troca de sócio), em ordem de nº. Cada pedido
+  traz as chaves para achar a linha (`emails` em minúsculas, `documentos` só dígitos) e os valores **por nome de
+  cabeçalho** (`escrever`, `esperado_antes`, datas dd/mm/aaaa, turma pelo código). Troca de sócio traz `titular`
+  (Sócio e Nº de sócios), `sai`, `entra`, `removidos` (J, K, M, N com os textos decididos e A = data da decisão),
+  `copiar_para_removidos` e os dois caminhos `se_entra_sem_linha` / `se_entra_com_linha`.
+- `pa_planilha_confirmar(p_segredo, p_pedido, p_ok, p_erro, p_detalhe)`: grava `planilha_status` ok/erro,
+  `planilha_em`, `planilha_erro` e uma linha em `pa_historico` (`planilha_ok` / `planilha_erro`). Só aceita pedido
+  reservado e pendente (não confirma duas vezes).
+
+**O que o workflow da planilha tem que respeitar** (regra de casar linha fica no n8n):
+
+1. Conferir a linha 1 contra `cabecalhos` antes de escrever. Os nomes são exatos e diferenciam maiúscula (`Obs`).
+2. Achar a linha só por e-mail (as duas partes de `novo / antigo` da coluna Email) ou documento; nunca por nome. 0 ou
+   mais de 1 linha, ou célula diferente do `esperado_antes` = `p_ok = false` com o motivo, sem escrever nada.
+   Documento na planilha com 10 dígitos (zero à esquerda perdido) compara completando com zero.
+3. Ordem na troca: achar todas as linhas, acrescentar quem sai em "Removidos — Histórico", escrever, e **apagar por
+   último** (quando quem entra já tem linha).
+4. Escrever Documento como texto (valor cru, sem virar número).
+5. `planilha_status = 'erro'` não volta sozinho para a fila: corrigir a planilha à mão e marcar, ou ajustar no banco.
+
+**Histórico no card do aluno.** `pa_historico_aluno(p_aluno uuid) returns table(em, pedido_id, papel, texto)`, só para
+a equipe (`gp_eh_equipe()`), mais recente primeiro. Lê pedidos `aplicado` de troca e de alterar dado (sem tabela nova,
+sem backfill). Uma troca vira 3 textos, um para cada pessoa: titular "<titular> trocou o sócio <X> pelo sócio <Y>",
+quem sai "<X> saiu como sócio de <titular>", quem entra "<Y> entrou como sócio de <titular>" (+ " (cadastro novo)").
+Alterar dado: "<Rótulo> alterado/alterada de <antes> para <depois>", com `pa_exibir` (documento mascarado para quem
+não pode ver). Todos terminam em "(pedido nº N, aprovado por <nome> em dd/mm/aaaa)". "Outro" fica de fora.
+
+**Como testar:** os 4 ensaios (`aplica_sql.py ensaio infra/supabase/migrations/2026100616040<n>_ensaio.sql`; o da
+160403 já carrega a 160402). Esperado nenhuma linha `ERRADO`. Depois de aplicar: abrir a fila como Isabela (aba
+"Aprovar"), aprovar um pedido dela e ver o selo; abrir o histórico de um aluno com troca aplicada.
+
+**O que falta:** pentester e orquestrador; ok do Victor e aplicar; criar os workflows `[Central] Pedidos de alteração
+— Slack` e `[Central] Pedidos de alteração — planilha` no n8n (desligados, rodada 15 min, tokens em credencial),
+gravar `n8n_webhook_url`, ligar `ligado_em`; gravar `planilha_id` da CÓPIA, aprovar o nº 9 e o nº 10, conferir a cópia
+e só então a planilha real. A tela precisa de rótulo para as ações `planilha_ok` e `planilha_erro` no histórico do
+pedido.
 
 ## Banco
 
@@ -108,11 +177,14 @@ Migrations de 06/10/2026, **APLICADAS em 06/10/2026**, independentes entre si:
   `ra_desfazer_triagem` (recusa a troca direta). A tela (`CasoDrawer.tsx`) esconde "Desfazer triagem" nesse caso.
 - `20261006144913_pa_socio_novo_entrada.sql`: `pa_decidir` com a herança de `data_entrada_thb` e `turma_id`.
 
+Migrations da etapa 2 (`20261006160401` a `20261006160404`): **NÃO APLICADAS**, ver "Etapa 2".
+
 **Como testar:** `python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio infra/supabase/migrations/<ts>_ensaio.sql`
 (roda em `begin … rollback`; esperado nenhuma linha `ERRADO`). Depois de aplicar: aprovar um pedido de troca e conferir
 em `/educacional/remocoes` o status do caso ("Em remoção" sem compra própria, "Aguardando triagem" com compra) e, no
 aluno novo, a entrada e a turma iguais às do titular. Saída do ensaio, `explain (analyze)` e reversão nos `.explain.md`.
-Atenção: cada ensaio consome números da sequência de `pa_pedidos` (o rollback não devolve).
+Atenção: cada ensaio consome números da sequência de `pa_pedidos` (o rollback não devolve). Até 06/10/2026 os ensaios
+já gastaram até o nº 75; o maior pedido real é o nº 10, então o próximo pedido real terá número maior que 75.
 
 Código: `web/modules/alunos/domain/pedidos-alteracao.ts` (regras e testes),
 `web/modules/alunos/ui/PedidosAlteracaoClient.tsx`, `PedidosAprovacao.tsx`, `pedidos-alteracao-data.ts`,
