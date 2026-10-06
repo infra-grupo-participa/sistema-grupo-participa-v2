@@ -39,15 +39,18 @@ const FALLBACK_SUPABASE_URL = 'https://mbvybujpkwuorhtdzcde.supabase.co';
 const FALLBACK_SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1idnlidWpwa3d1b3JodGR6Y2RlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2Nzk5MjYsImV4cCI6MjA4NzI1NTkyNn0.02UmV0FaJ4O8AaUOEjkKWlVfWKt1y0Nr8afcKRmUE0I';
 
-/** Fonte de dados do CRM Comercial: demonstração em memória ou banco real. Valor ausente/inválido = 'mock'. */
+/** Fonte de dados do CRM Comercial: banco real (padrão) ou demonstração em memória (só com valor 'mock'). */
 export type ComercialFonte = 'mock' | 'supabase';
 export function lerComercialFonte(v: string | undefined): ComercialFonte {
-  return v?.trim().toLowerCase() === 'supabase' ? 'supabase' : 'mock';
+  return v?.trim().toLowerCase() === 'mock' ? 'mock' : 'supabase';
 }
 
-/** Flag booleana de env: só 'true', '1', 'sim' ou 'on' ligam. Ausente/qualquer outro valor = desligada. */
-export function lerFlag(v: string | undefined): boolean {
-  return ['true', '1', 'sim', 'on'].includes(v?.trim().toLowerCase() ?? '');
+/** Flag booleana de env: só 'true', '1', 'sim' ou 'on' ligam. Ausente/qualquer outro valor = `padrao`. */
+export function lerFlag(v: string | undefined, padrao = false): boolean {
+  const t = v?.trim().toLowerCase() ?? '';
+  if (['true', '1', 'sim', 'on'].includes(t)) return true;
+  if (['false', '0', 'nao', 'não', 'off'].includes(t)) return false;
+  return padrao;
 }
 
 // Para uso no browser (apenas chaves públicas NEXT_PUBLIC_*, com fallback de produção).
@@ -58,8 +61,8 @@ export const publicEnv = {
   comercialFonte: lerComercialFonte(process.env.NEXT_PUBLIC_COMERCIAL_FONTE),
   /**
    * Libera o departamento Comercial para quem é do Comercial (gestor com área `comercial` e vendedor com área
-   * `comercial` + função `comercial.vender`), além de admin/dev. Padrão DESLIGADO (só admin/dev entram).
-   * Ligar só com NEXT_PUBLIC_COMERCIAL_FONTE=supabase (no modo demonstração o vendedor veria dados fictícios).
+   * `comercial` + função `comercial.vender`), além de admin/dev. Padrão LIGADO desde 06/10/2026 (CRM no ar);
+   * NEXT_PUBLIC_COMERCIAL_VENDEDORES=false volta a só admin/dev.
    */
-  comercialVendedores: lerFlag(process.env.NEXT_PUBLIC_COMERCIAL_VENDEDORES),
+  comercialVendedores: lerFlag(process.env.NEXT_PUBLIC_COMERCIAL_VENDEDORES, true),
 } as const;
