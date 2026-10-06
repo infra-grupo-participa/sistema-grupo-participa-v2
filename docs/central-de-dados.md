@@ -5,6 +5,30 @@
 > Mapeamento e proposta de origem: `Projetos/sistema-unico/central-de-dados/modularizacao-educacional.md` no
 > cérebro do Victor.
 
+## Onde estamos (atualizado em 06/10/2026, noite)
+
+| Área | Situação | Migrations |
+|---|---|---|
+| Base compartilhada (`mkt`) | No ar | 20261005m, 20261006e |
+| Web (`mkt_web`) | No ar, **coleta das páginas desligada** até a virada do PB26 | 20261006f, 20261006h + Edge `mkt-web-pagespeed` |
+| Tráfego (`mkt_trafego`) | No ar; coleta do Meta diária às 06h30 SP (cron `trafego-meta`), conferida contra o Meta | 20261006g, i, j, k, l + Edges `trafego-meta`, `trafego-clickup` (ClickUp sem token) |
+| Comercial (`crm`, `pessoas`) | No ar (Arthur); ajuste rápido das telas e retroativos da Hotmart tirados | do Arthur + 20261006191824 |
+| Mensageria (`mkt_mensageria`) | No ar (João) | do João |
+
+**Fluxo de trabalho:** branch `victor` → testes (tsc, vitest, build) → ensaio da migration no banco real
+(termina em rollback) → aplicar → merge na `main` → conferir em produção → se quebrar, reverter (bloco
+REVERSÃO de cada migration ou revert do commit) e corrigir.
+
+**Lições que valem para quem mexer aqui:**
+- Edge com postgres.js manda JSON com `sql.json(x)`, nunca `${JSON.stringify(x)}::jsonb` (o banco recebe texto).
+- Toda leitura de `fin.hotmart_transacoes` passa pela trava do financeiro: forma canônica com a conta literal.
+- Ensaio compara com o dado do banco, nunca com nome fixo de ambiente local.
+- Tela não baixa lista inteira nem faz uma chamada por linha: paginar e filtrar no banco.
+- Antes de ligar integração com carga (ex.: Hotmart no CRM), conferir a data de corte e o volume.
+- Antes de criar área nova, olhar a `main` (nomes de migration e trabalho de outras pessoas).
+
+O painel completo, com o que falta e as decisões, fica no cérebro do Victor: `Projetos/sistema-unico/central-de-dados/STATUS.md`.
+
 ## Estrutura
 
 | Departamento | Rota | Situação | Dentro |

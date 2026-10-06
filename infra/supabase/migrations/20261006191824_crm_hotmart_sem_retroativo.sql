@@ -1,7 +1,7 @@
 -- 20261006191824: CRM Comercial: tira os negócios "ganhos" retroativos da carga Hotmart, compra direta não cria
 -- ganho daqui para frente e a lista do vendedor deixa de mostrar contato sem dono e sem negócio aberto.
 --
--- STATUS: NÃO APLICADA. Decidida pelo Victor em 06/10/2026. Ensaio: 20261006191824_ensaio.sql (begin … rollback).
+-- STATUS: APLICADA em 06/10/2026 (ensaio no banco real antes: 24 OK; depois: 1.026 negócios, 0 ganhos, 2.648 contatos, backup 2.640). Decidida pelo Victor em 06/10/2026. Ensaio: 20261006191824_ensaio.sql (begin … rollback).
 -- Notas: 20261006191824.explain.md. Doc: docs/projetos/comercial/hotmart-sem-retroativo-2026-10-06.md.
 --
 -- O PROBLEMA: em 06/10/2026 12:39:07 UTC (09:39 Brasília) a config passou a hotmart_ligado = true com
