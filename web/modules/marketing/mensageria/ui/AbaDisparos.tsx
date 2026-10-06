@@ -7,7 +7,7 @@ import { Button, FilterSelect, Input, Loading } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import type { Projeto } from '@/modules/marketing/projetos/domain/projetos';
 import {
-  CANAIS, DIAS_PADRAO, LIMITE_DIAS, ROTULO_CANAL, fmtCentavos, fmtNum, linhaDaApi, periodoPadrao, resumoCusto, rotuloCanal,
+  CANAIS, DIAS_PADRAO, LIMITE_DIAS, ROTULO_CANAL, dataHoraSP, fmtCentavos, fmtNum, linhaDaApi, periodoPadrao, resumoCusto, rotuloCanal,
   rotuloPendencia,
   type Disparo, type Ferramenta, type ListaDisparos, type Pendencia, type Totais, type TotalCanal,
 } from '../domain/mensageria';
@@ -16,7 +16,7 @@ import { ModalArquivar, ModalHistorico, ModalRetorno } from './ModaisLinha';
 import { ModalDisparo } from './ModalDisparo';
 import { ModalImportar } from './ModalImportar';
 import type { Numero } from '../domain/mensageria';
-import { Campo, Erro, FaltaLancar, NaoLancado, TabelaDisparos } from './pecas';
+import { BotaoLink, Campo, Erro, ErroCarga, FaltaLancar, Faixa, NaoLancado, Quadro, TabelaDisparos, TituloBloco, botaoTopo } from './pecas';
 
 /**
  * Carrega a lista do período. Recarrega quando o filtro muda ou quando `versao` sobe (alguém gravou disparo)
@@ -40,20 +40,14 @@ export function useListaDisparos(filtro: FiltroDisparos | null, versao: number, 
   return res && res.pedido === pedido ? res.r : undefined;
 }
 
-function Quadro({ rotulo, valor, nota }: { rotulo: string; valor: React.ReactNode; nota?: React.ReactNode }) {
-  return (
-    <div className="min-w-0 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
-      <div className="text-sm text-[var(--fg-2)]">{rotulo}</div>
-      <div className="text-lg font-bold tabular text-[var(--fg)]">{valor}</div>
-      {nota && <div className="text-sm text-[var(--fg-2)]">{nota}</div>}
-    </div>
-  );
-}
-
-/** "R$ 1.200,00 estimado em 4 disparos" (só quando há estimado no período). */
-function notaEstimado(estimado: number | null, qtd?: number) {
+/**
+ * "R$ 1.200,00 estimado em 4 disparos" (só quando há estimado no período). Quando o estimado é o total inteiro,
+ * "todo estimado" em vez de repetir o mesmo valor do número grande.
+ */
+function notaEstimado(estimado: number | null, total: number | null, qtd?: number) {
   if (estimado == null || estimado <= 0) return null;
-  return `${fmtCentavos(estimado)} estimado${qtd ? ` em ${fmtNum(qtd)} disparo(s)` : ''}`;
+  const quanto = estimado === total ? 'todo estimado' : `${fmtCentavos(estimado)} estimado`;
+  return `${quanto}${qtd ? ` em ${fmtNum(qtd)} disparo(s)` : ''}`;
 }
 
 /**
@@ -64,14 +58,16 @@ export function QuadrosDoPeriodo({ totais, porCanal }: { totais: Totais; porCana
   const { total, estimado } = resumoCusto(totais);
   const custo = fmtCentavos(total);
   const notas = [
-    notaEstimado(estimado, totais.com_estimativa),
+    notaEstimado(estimado, total, totais.com_estimativa),
     totais.sem_custo > 0 && custo ? `fora ${fmtNum(totais.sem_custo)} sem custo` : null,
   ].filter(Boolean);
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+    <section aria-labelledby="mensageria-no-periodo">
+    <TituloBloco id="mensageria-no-periodo" extra="período inteiro, mesmo além das linhas da tabela">No período</TituloBloco>
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(11rem,1fr))]">
       <Quadro rotulo="Disparos" valor={fmtNum(totais.qtd)} nota={totais.tamanho != null ? `${fmtNum(totais.tamanho)} pessoas` : undefined} />
       <Quadro
-        rotulo="Custo total R$"
+        rotulo="Custo total"
         valor={custo ?? <NaoLancado />}
         nota={notas.length ? notas.map((n) => <div key={n as string}>{n}</div>) : undefined}
       />
@@ -84,12 +80,13 @@ export function QuadrosDoPeriodo({ totais, porCanal }: { totais: Totais; porCana
             valor={fmtNum(c.qtd)}
             nota={<>
               <div>{fmtCentavos(rc.total) ?? 'sem custo lançado'}</div>
-              {rc.total != null && notaEstimado(rc.estimado) && <div>{notaEstimado(rc.estimado)}</div>}
+              {rc.total != null && notaEstimado(rc.estimado, rc.total) && <div>{notaEstimado(rc.estimado, rc.total)}</div>}
             </>}
           />
         );
       })}
     </div>
+    </section>
   );
 }
 
@@ -113,12 +110,12 @@ export function AbaDisparos({ hoje, nomeUsuario, projetos, ferramentas, numeros,
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => setModal({ tipo: 'registrar' })}><Icon name="plus" size={16} /> Registrar disparo</Button>
-        <Button variant="ghost" onClick={() => setModal({ tipo: 'importar' })}><Icon name="file" size={16} /> Importar planilha</Button>
+        <Button className={botaoTopo} onClick={() => setModal({ tipo: 'registrar' })}><Icon name="plus" size={16} /> Registrar disparo</Button>
+        <Button className={botaoTopo} variant="ghost" onClick={() => setModal({ tipo: 'importar' })}><Icon name="file" size={16} /> Importar planilha</Button>
       </div>
 
       {r === undefined ? <Loading minHeight={120} /> : r === null ? (
-        <Erro msg="Não foi possível carregar os disparos (erro de rede ou sem acesso)." />
+        <ErroCarga oque="os disparos" />
       ) : !r.ok ? null : <FaltaLancar totais={r.totais} escolhida={pend} onEscolher={setPend} />}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Filtros">
@@ -150,30 +147,35 @@ export function AbaDisparos({ hoje, nomeUsuario, projetos, ferramentas, numeros,
         <>
           <QuadrosDoPeriodo totais={r.totais} porCanal={r.por_canal} />
           {r.truncado && (
-            <p role="status" className="rounded-[var(--r-md)] border border-[var(--yellow-border)] px-3 py-2 text-sm text-[var(--fg)]">
+            <Faixa tom="aviso">
               Este período tem mais de {fmtNum(r.limite)} disparos. A tabela mostra os {fmtNum(r.limite)} mais recentes; os números acima contam todos. Encurte o período para ver o resto.
-            </p>
+            </Faixa>
           )}
           {pend && (
-            <p role="status" className="flex flex-wrap items-center gap-2 rounded-[var(--r-md)] border border-[var(--accent)] px-3 py-2 text-sm text-[var(--fg)]">
-              Mostrando só: <strong>{rotuloPendencia(pend)}</strong> · {fmtNum(linhas.length)} de {fmtNum(r.linhas.length)} linha(s) da tabela
-              {r.truncado && ' (a tabela tem só os mais recentes; encurte o período para ver todas)'}
-              <Button variant="link" onClick={() => setPend(null)}>Mostrar todas</Button>
-            </p>
+            <Faixa tom="filtro">
+              <span>Mostrando só: <strong>{rotuloPendencia(pend)}</strong> · {fmtNum(linhas.length)} de {fmtNum(r.linhas.length)} linha(s) da tabela
+              {r.truncado && ' (a tabela tem só os mais recentes; encurte o período para ver todas)'}</span>
+              <BotaoLink onClick={() => setPend(null)}>Mostrar todas</BotaoLink>
+            </Faixa>
           )}
           <TabelaDisparos
             linhas={linhas}
             vazio={pend ? 'Nenhuma linha da tabela com essa pendência' : undefined}
-            acoes={(d) => (
-              <div className="grid grid-cols-[auto_auto] justify-start gap-x-3 gap-y-1">
-                {linhaDaApi(d)
-                  ? <span className="text-sm text-[var(--fg-2)]" title="O retorno vem da integração">Retorno automático</span>
-                  : <Button variant="link" onClick={() => setModal({ tipo: 'retorno', d })}>Lançar retorno</Button>}
-                <Button variant="link" onClick={() => setModal({ tipo: 'editar', d })}>Editar</Button>
-                <Button variant="link" onClick={() => setModal({ tipo: 'historico', d })}>Ver histórico</Button>
-                <Button variant="link" onClick={() => setModal({ tipo: 'arquivar', d })}>Arquivar</Button>
-              </div>
-            )}
+            dicaVazio={pend ? 'Clique em "Mostrar todas" para voltar à lista inteira.' : 'Mude as datas acima ou clique em "Registrar disparo".'}
+            onClassificar={(d) => setModal({ tipo: 'editar', d })}
+            acoes={(d) => {
+              const quando = dataHoraSP(d.enviado_em);
+              return (
+                <div className="grid grid-cols-1 items-center justify-start justify-items-start gap-x-4 sm:grid-cols-[auto_auto]">
+                  {linhaDaApi(d)
+                    ? <span className="text-sm text-[var(--fg-2)]" title="O retorno vem da integração">Retorno automático</span>
+                    : <BotaoLink onClick={() => setModal({ tipo: 'retorno', d })} aria-label={`Lançar retorno do disparo de ${quando}`}>Lançar retorno</BotaoLink>}
+                  <BotaoLink onClick={() => setModal({ tipo: 'editar', d })} aria-label={`Editar o disparo de ${quando}`}>Editar</BotaoLink>
+                  <BotaoLink onClick={() => setModal({ tipo: 'historico', d })} aria-label={`Ver histórico do disparo de ${quando}`}>Ver histórico</BotaoLink>
+                  <BotaoLink onClick={() => setModal({ tipo: 'arquivar', d })} aria-label={`Arquivar o disparo de ${quando}`}>Arquivar</BotaoLink>
+                </div>
+              );
+            }}
           />
         </>
       )}

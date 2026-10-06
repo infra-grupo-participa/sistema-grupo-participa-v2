@@ -4,15 +4,17 @@
 // Preço não se edita nem se apaga: errou, anula com motivo e cadastra outro. O custo estimado dos disparos é calculado
 // pelo banco com o preço vigente no dia do envio. Busca só quando a aba Ferramentas é aberta (useCargaVisivel).
 import { useState } from 'react';
-import { Button, DataTable, EmptyState, FilterSelect, Input, Loading, Modal, Td, Textarea, Th, Thead, Tr } from '@/shared/ui/components';
+import { Button, DataTable, FilterSelect, Input, Loading, Modal, Td, Textarea, Th, Thead, Tr } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import {
   BASES_COBRANCA, CANAIS, ROTULO_BASE, ROTULO_CANAL, ROTULO_TIPO, TIPOS, dataBR, dataHoraSP, fmtPrecoCentavos,
   precoReaisParaCentavos, rotuloBase, rotuloCanal, rotuloSituacaoPreco, situacaoPreco,
-  type Ferramenta, type Preco, type Resultado, type TipoMensagem,
+  type Ferramenta, type Preco, type Resultado, type SituacaoPreco, type TipoMensagem,
 } from '../domain/mensageria';
 import { anularPreco, listarPrecos, salvarPreco } from './mensageria-data';
-import { Campo, Erro, ErrosDoBanco, thCls } from './pecas';
+import { BotaoLink, Campo, Erro, ErroCarga, ErrosDoBanco, Selo, Vazio, botaoTopo, thCls, thNum, type TomSelo } from './pecas';
+
+const TOM_PRECO: Record<SituacaoPreco, TomSelo> = { vigente: 'ok', futuro: 'neutro', substituido: 'apagado', anulado: 'apagado' };
 import { useCargaVisivel } from './useCargaVisivel';
 
 const POR_BASE: Record<string, string> = { entregues: 'por entregue', tamanho_lista: 'por pessoa', mensalidade: '' };
@@ -147,32 +149,32 @@ export function SecaoPrecos({ ferramentas, ativo, versao, onGravou }: {
   const salvo = (msg: string) => { setModal(null); onGravou(msg); };
 
   return (
-    <section aria-label="Preços" className="space-y-3 pt-4">
-      <h2 className="text-base font-semibold text-[var(--fg)]">Preços por mensagem</h2>
+    <section aria-labelledby="mensageria-precos" className="space-y-3 border-t border-[var(--border)] pt-4">
+      <h2 id="mensageria-precos" className="text-base font-semibold text-[var(--fg)]">Preços por mensagem</h2>
       <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={() => setModal({ tipo: 'novo' })}><Icon name="plus" size={16} /> Novo preço</Button>
+        <Button className={botaoTopo} onClick={() => setModal({ tipo: 'novo' })}><Icon name="plus" size={16} /> Novo preço</Button>
         <span className="text-sm text-[var(--fg-2)]">Usados para estimar o custo quando o real não foi lançado. Preço não se edita: anule e cadastre outro.</span>
       </div>
       {dados === undefined ? <Loading minHeight={80} /> : dados === null ? (
-        <Erro msg="Não foi possível carregar os preços (erro de rede ou sem acesso)." />
-      ) : dados.precos.length === 0 ? <EmptyState title="Nenhum preço cadastrado" /> : (
+        <ErroCarga oque="os preços" />
+      ) : dados.precos.length === 0 ? <Vazio titulo="Nenhum preço cadastrado" dica='Sem preço, o custo não é estimado. Clique em "Novo preço".' /> : (
         <DataTable minWidth={1100}>
           <Thead>
-            {['Ferramenta', 'Canal', 'Tipo', 'Como cobra', 'Preço', 'Vale a partir de', 'Situação', 'Cadastrado por', 'Observação', 'Ações'].map((c) => <Th key={c} className={thCls}>{c}</Th>)}
+            {['Ferramenta', 'Canal', 'Tipo', 'Como cobra', 'Preço', 'Vale a partir de', 'Situação', 'Cadastrado por', 'Observação', 'Ações'].map((c) => <Th key={c} className={c === 'Preço' ? thNum : thCls}>{c}</Th>)}
           </Thead>
           <tbody>
             {dados.precos.map((p) => {
               const sit = situacaoPreco(p, dados.hoje);
               return (
-                <Tr key={p.id} className={sit === 'anulado' || sit === 'substituido' ? 'opacity-60' : ''}>
+                <Tr key={p.id}>
                   <Td className="whitespace-nowrap font-semibold">{p.ferramenta}</Td>
                   <Td className="whitespace-nowrap">{rotuloCanal(p.canal)}</Td>
                   <Td>{p.tipo ? (ROTULO_TIPO[p.tipo as TipoMensagem] ?? p.tipo) : <span className="text-[var(--fg-2)]">—</span>}</Td>
                   <Td className="whitespace-nowrap">{rotuloBase(p.base_cobranca)}</Td>
-                  <Td className="whitespace-nowrap tabular">{fmtPrecoCentavos(p.preco_centavos)}</Td>
+                  <Td className="whitespace-nowrap text-right tabular">{fmtPrecoCentavos(p.preco_centavos)}</Td>
                   <Td className="whitespace-nowrap tabular">{dataBR(p.vigente_desde)}</Td>
                   <Td>
-                    <div className={`whitespace-nowrap ${sit === 'vigente' ? 'font-semibold' : ''}`}>{rotuloSituacaoPreco(p, dados.hoje)}</div>
+                    <Selo tom={TOM_PRECO[sit]}>{rotuloSituacaoPreco(p, dados.hoje)}</Selo>
                     {p.anulado_em && (
                       <div className="max-w-[260px] break-words text-sm text-[var(--fg-2)]">
                         {dataHoraSP(p.anulado_em)} · {p.anulado_por_nome ?? 'sem autor'} · {p.anulado_motivo}
@@ -183,8 +185,8 @@ export function SecaoPrecos({ ferramentas, ativo, versao, onGravou }: {
                     <div className="whitespace-nowrap">{p.criado_por_nome ?? 'carga inicial'}</div>
                     <div className="whitespace-nowrap text-sm text-[var(--fg-2)]">{dataHoraSP(p.criado_em)}</div>
                   </Td>
-                  <Td className="max-w-[240px]"><span className="line-clamp-2 break-words">{p.obs ?? ''}</span></Td>
-                  <Td>{p.anulado_em ? null : <Button variant="link" onClick={() => setModal({ tipo: 'anular', p })}>Anular</Button>}</Td>
+                  <Td className="max-w-[240px]"><span className="line-clamp-2 break-words text-[var(--fg-2)]">{p.obs ?? ''}</span></Td>
+                  <Td>{p.anulado_em ? null : <BotaoLink onClick={() => setModal({ tipo: 'anular', p })} aria-label={`Anular o preço ${descricaoPreco(p)}`}>Anular</BotaoLink>}</Td>
                 </Tr>
               );
             })}

@@ -4,14 +4,14 @@
 // Ferramenta não se apaga: desativa (ativa=false). Gravação via mkt_msg_ferramenta_salvar.
 // Abaixo, a seção Preços (20261005o), que só busca quando esta aba é aberta.
 import { useState } from 'react';
-import { Button, DataTable, EmptyState, FilterSelect, Input, Modal, Td, Th, Thead, Toggle, Tr } from '@/shared/ui/components';
+import { Button, DataTable, FilterSelect, Input, Modal, Td, Th, Thead, Toggle, Tr } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import {
   API_FERRAMENTA, ROTULO_API, centavosParaCampo, reaisParaCentavos,
   type ApiFerramenta, type Ferramenta,
 } from '../domain/mensageria';
 import { salvarFerramenta } from './mensageria-data';
-import { Campo, Custo, Erro, thCls } from './pecas';
+import { BotaoLink, Campo, Custo, Erro, ErroCarga, Selo, Vazio, botaoTopo, tdNum, thCls, thNum } from './pecas';
 import { SecaoPrecos } from './SecaoPrecos';
 
 function ModalFerramenta({ inicial, onFechar, onSalvo }: { inicial: Ferramenta | null; onFechar: () => void; onSalvo: (msg: string) => void }) {
@@ -77,25 +77,25 @@ export function AbaFerramentas({ ferramentas, falhou, onGravou, ativo, versaoPre
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={() => setEditar('nova')}><Icon name="plus" size={16} /> Cadastrar ferramenta</Button>
+        <Button className={botaoTopo} onClick={() => setEditar('nova')}><Icon name="plus" size={16} /> Cadastrar ferramenta</Button>
         <span className="text-sm text-[var(--fg-2)]">Ferramenta não se apaga. Para tirar de uso, desative.</span>
       </div>
-      {falhou && <Erro msg="Não foi possível carregar as ferramentas (erro de rede ou sem acesso)." />}
-      {!falhou && (ferramentas.length === 0 ? <EmptyState title="Nenhuma ferramenta cadastrada" /> : (
+      {falhou && <ErroCarga oque="as ferramentas" />}
+      {!falhou && (ferramentas.length === 0 ? <Vazio titulo="Nenhuma ferramenta cadastrada" dica='Clique em "Cadastrar ferramenta" para incluir a primeira.' /> : (
         <DataTable minWidth={860}>
           <Thead>
-            {['Ferramenta', 'API', 'Custo mensal', 'Responsável', 'Situação', 'Observação', 'Ações'].map((c) => <Th key={c} className={thCls}>{c}</Th>)}
+            {['Ferramenta', 'API', 'Custo mensal', 'Responsável', 'Situação', 'Observação', 'Ações'].map((c) => <Th key={c} className={c === 'Custo mensal' ? thNum : thCls}>{c}</Th>)}
           </Thead>
           <tbody>
             {ferramentas.map((x) => (
-              <Tr key={x.id} className={x.ativa ? '' : 'opacity-60'}>
+              <Tr key={x.id}>
                 <Td className="whitespace-nowrap font-semibold">{x.nome}</Td>
                 <Td className="whitespace-nowrap">{ROTULO_API[x.api as ApiFerramenta] ?? x.api}</Td>
-                <Td><Custo c={x.custo_mensal_centavos} /></Td>
+                <Td className={tdNum}><Custo c={x.custo_mensal_centavos} /></Td>
                 <Td>{x.responsavel ?? <span className="text-[var(--fg-2)]">—</span>}</Td>
-                <Td>{x.ativa ? 'Ativa' : 'Desativada'}</Td>
-                <Td className="max-w-[280px]"><span className="line-clamp-2 break-words">{x.obs ?? ''}</span></Td>
-                <Td><Button variant="link" onClick={() => setEditar(x)}>Editar</Button></Td>
+                <Td>{x.ativa ? <Selo tom="ok">Ativa</Selo> : <Selo tom="apagado">Desativada</Selo>}</Td>
+                <Td className="max-w-[280px]"><span className="line-clamp-2 break-words text-[var(--fg-2)]">{x.obs ?? ''}</span></Td>
+                <Td><BotaoLink onClick={() => setEditar(x)} aria-label={`Editar ${x.nome}`}>Editar</BotaoLink></Td>
               </Tr>
             ))}
           </tbody>

@@ -7,7 +7,7 @@ import { FilterSelect, Input, Loading } from '@/shared/ui/components';
 import type { Projeto } from '@/modules/marketing/projetos/domain/projetos';
 import { fmtNum, periodoPadrao } from '../domain/mensageria';
 import { useListaDisparos } from './AbaDisparos';
-import { Campo, Erro, FaltaLancar, TabelaDisparos, TabelaPorCanal } from './pecas';
+import { Campo, Erro, ErroCarga, FaltaLancar, Faixa, TabelaDisparos, TabelaPorCanal, TituloBloco, Vazio } from './pecas';
 
 export function AbaPorProjeto({ hoje, projetos, ativo, versao }: { hoje: string; projetos: Projeto[]; ativo: boolean; versao: number }) {
   const [sigla, setSigla] = useState('');
@@ -17,9 +17,7 @@ export function AbaPorProjeto({ hoje, projetos, ativo, versao }: { hoje: string;
 
   return (
     <div className="space-y-4">
-      <p role="note" className="rounded-[var(--r-md)] border border-[var(--border)] px-3 py-2 text-sm text-[var(--fg)]">
-        Esta visão vem do log. Não se digita aqui. Para lançar ou corrigir, use a aba Disparos.
-      </p>
+      <Faixa>Esta visão vem do log. Não se digita aqui. Para lançar ou corrigir, use a aba Disparos.</Faixa>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="col-span-2 sm:col-span-2">
           <Campo rotulo="Projeto">
@@ -34,22 +32,22 @@ export function AbaPorProjeto({ hoje, projetos, ativo, versao }: { hoje: string;
       </div>
 
       {!filtro ? (
-        <p className="text-sm text-[var(--fg-2)]">Escolha o projeto para ver os disparos dele.</p>
+        <Vazio titulo="Escolha um projeto" dica="Os disparos e os totais dele aparecem aqui." />
       ) : r === undefined ? <Loading minHeight={120} /> : r === null ? (
-        <Erro msg="Não foi possível carregar os disparos (erro de rede ou sem acesso)." />
+        <ErroCarga oque="os disparos" />
       ) : !r.ok ? <Erro msg={r.msg} /> : (
         <>
-          <FaltaLancar totais={r.totais} />
-          <section aria-label="Totais por canal" className="space-y-2">
-            <h2 className="text-sm font-semibold text-[var(--fg)]">Totais por canal <span className="font-normal text-[var(--fg-2)]">· {fmtNum(r.totais.qtd)} disparo(s) no período</span></h2>
+          <FaltaLancar totais={r.totais} idTitulo="mensageria-projeto-falta-lancar" />
+          <section aria-labelledby="mensageria-projeto-canal">
+            <TituloBloco id="mensageria-projeto-canal" extra={`${fmtNum(r.totais.qtd)} disparo(s) no período`}>Totais por canal</TituloBloco>
             <TabelaPorCanal porCanal={r.por_canal} />
           </section>
           {r.truncado && (
-            <p role="status" className="rounded-[var(--r-md)] border border-[var(--yellow-border)] px-3 py-2 text-sm text-[var(--fg)]">
+            <Faixa tom="aviso">
               Este período tem mais de {fmtNum(r.limite)} disparos. A tabela mostra os {fmtNum(r.limite)} mais recentes; os totais contam todos. Encurte o período para ver o resto.
-            </p>
+            </Faixa>
           )}
-          <TabelaDisparos linhas={r.linhas} />
+          <TabelaDisparos linhas={r.linhas} vazio="Nenhum disparo deste projeto no período" dicaVazio="Mude as datas acima para ver outro período." />
         </>
       )}
     </div>

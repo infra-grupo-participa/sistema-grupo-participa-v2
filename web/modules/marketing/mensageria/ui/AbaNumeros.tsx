@@ -3,7 +3,7 @@
 // Aba Números: consumo de hoje (soma do log, feita pelo banco), status, finalidade, ferramenta e responsável.
 // Cadastrar, editar e arquivar via mkt_msg_numero_salvar. A faixa 30–50/dia é só aviso de tela.
 import { useState } from 'react';
-import { Button, DataTable, EmptyState, FilterSelect, Input, Modal, ProgressBar, Td, Th, Thead, Toggle, Tr } from '@/shared/ui/components';
+import { Button, DataTable, FilterSelect, Input, Modal, ProgressBar, Td, Th, Thead, Toggle, Tr } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import type { Projeto } from '@/modules/marketing/projetos/domain/projetos';
 import {
@@ -12,7 +12,9 @@ import {
   type Ferramenta, type Finalidade, type Numero, type Resultado, type StatusNumero,
 } from '../domain/mensageria';
 import { salvarNumero, type NumeroForm } from './mensageria-data';
-import { Campo, Erro, thCls } from './pecas';
+import { BotaoLink, Campo, Erro, ErroCarga, Selo, Vazio, botaoTopo, corAlerta, thCls, type TomSelo } from './pecas';
+
+const TOM_STATUS: Record<StatusNumero, TomSelo> = { ativo: 'ok', aquecendo: 'aviso', restrito: 'alerta', disponivel: 'neutro' };
 
 type Form = { id?: number; numero: string; projeto: string; frente: string; responsavel: string; finalidade: string; ferramenta_id: string; capacidade_dia: string; status: string; arquivado: boolean };
 
@@ -102,7 +104,7 @@ function Consumo({ n }: { n: Numero }) {
   }
   return (
     <div className="min-w-[160px]">
-      <div className={`text-sm tabular ${n.acima_da_capacidade ? 'font-semibold text-[var(--red)]' : 'text-[var(--fg)]'}`}>
+      <div className={`text-sm tabular ${n.acima_da_capacidade ? `font-semibold ${corAlerta}` : 'text-[var(--fg)]'}`}>
         {fmtNum(n.consumo_hoje)} de {fmtNum(n.capacidade_dia)}{n.acima_da_capacidade && ' · acima da capacidade'}
       </div>
       <ProgressBar
@@ -135,37 +137,37 @@ export function AbaNumeros({ numeros, falhou, projetos, ferramentas, onGravou }:
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={() => setEditar('novo')}><Icon name="plus" size={16} /> Cadastrar número</Button>
+        <Button className={botaoTopo} onClick={() => setEditar('novo')}><Icon name="plus" size={16} /> Cadastrar número</Button>
         <span className="text-sm text-[var(--fg-2)]">Consumo de hoje = soma das listas dos disparos de hoje deste número, no log.</span>
       </div>
-      {falhou && <Erro msg="Não foi possível carregar os números (erro de rede ou sem acesso)." />}
+      {falhou && <ErroCarga oque="os números" />}
       <Erro msg={erroArq} />
-      {!falhou && (numeros.length === 0 ? <EmptyState title="Nenhum número cadastrado" /> : (
+      {!falhou && (numeros.length === 0 ? <Vazio titulo="Nenhum número cadastrado" dica='Clique em "Cadastrar número" para incluir o primeiro.' /> : (
         <DataTable minWidth={1200}>
           <Thead>
             {['Número', 'Projeto / frente', 'Consumo hoje', 'Capacidade', 'Status', 'Finalidade', 'Ferramenta', 'Responsável', 'Ações'].map((c) => <Th key={c} className={thCls}>{c}</Th>)}
           </Thead>
           <tbody>
             {numeros.map((n) => (
-              <Tr key={n.id} className={n.arquivado_em ? 'opacity-60' : ''}>
-                <Td className="whitespace-nowrap font-mono">{n.numero}{n.arquivado_em && <div className="font-sans text-sm text-[var(--fg-2)]">arquivado</div>}</Td>
+              <Tr key={n.id}>
+                <Td className="whitespace-nowrap font-mono">{n.numero}{n.arquivado_em && <div className="font-sans"><Selo tom="apagado">arquivado</Selo></div>}</Td>
                 <Td>{[n.projeto, n.frente].filter(Boolean).join(' · ') || <span className="text-[var(--fg-2)]">—</span>}</Td>
                 <Td><Consumo n={n} /></Td>
                 <Td className="whitespace-nowrap">
                   {n.capacidade_dia == null ? <span className="text-[var(--fg-2)]">não definida</span> : <span className="tabular">{fmtNum(n.capacidade_dia)}/dia</span>}
-                  {capacidadeForaDaFaixa(n.capacidade_dia) && <div className="text-sm text-[var(--fg)]">fora de {CAPACIDADE_MIN}–{CAPACIDADE_MAX}</div>}
+                  {capacidadeForaDaFaixa(n.capacidade_dia) && <div><Selo tom="aviso">fora de {CAPACIDADE_MIN}–{CAPACIDADE_MAX}</Selo></div>}
                 </Td>
                 <Td className="whitespace-nowrap">
-                  {ROTULO_STATUS_NUMERO[n.status as StatusNumero] ?? n.status}
+                  <Selo tom={TOM_STATUS[n.status as StatusNumero] ?? 'neutro'}>{ROTULO_STATUS_NUMERO[n.status as StatusNumero] ?? n.status}</Selo>
                   <div className="text-sm text-[var(--fg-2)]">desde {dataBR(partesSP(n.status_desde).data)}</div>
                 </Td>
                 <Td>{ROTULO_FINALIDADE[n.finalidade as Finalidade] ?? n.finalidade}</Td>
                 <Td>{n.ferramenta ?? <span className="text-[var(--fg-2)]">—</span>}</Td>
                 <Td>{n.responsavel}</Td>
                 <Td className="whitespace-nowrap">
-                  <div className="flex gap-3">
-                    <Button variant="link" onClick={() => setEditar(n)}>Editar</Button>
-                    <Button variant="link" onClick={() => setArquivar(n)}>{n.arquivado_em ? 'Desarquivar' : 'Arquivar'}</Button>
+                  <div className="flex gap-4">
+                    <BotaoLink onClick={() => setEditar(n)} aria-label={`Editar ${n.numero}`}>Editar</BotaoLink>
+                    <BotaoLink onClick={() => setArquivar(n)} aria-label={`${n.arquivado_em ? 'Desarquivar' : 'Arquivar'} ${n.numero}`}>{n.arquivado_em ? 'Desarquivar' : 'Arquivar'}</BotaoLink>
                   </div>
                 </Td>
               </Tr>

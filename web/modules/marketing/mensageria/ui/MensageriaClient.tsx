@@ -5,6 +5,8 @@
 // com `hidden`): trocar de aba não refaz consulta e não perde o filtro. A lista de disparos só recarrega na
 // aba visível (prop `ativo`, ver useListaDisparos). Preços (dentro de Ferramentas) e Integrações só buscam quando a aba
 // é aberta (useCargaVisivel). Identidade e "hoje" vêm do servidor, por prop.
+// Foco: o globals.css zera o outline fora de @layer (ganha de qualquer utility); aqui o contorno vai com ! para
+// valer, e o anel fraco do --ring (accent-border a 22% no escuro) ganha um contorno de 2px em --accent-dim.
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Loading, Tabs, Toast, idsAba, useFlash } from '@/shared/ui/components';
@@ -17,7 +19,7 @@ import { AbaPorProjeto } from './AbaPorProjeto';
 import { AbaNumeros } from './AbaNumeros';
 import { AbaFerramentas } from './AbaFerramentas';
 import { AbaIntegracoes } from './AbaIntegracoes';
-import { Erro } from './pecas';
+import { ErroCarga, corLink } from './pecas';
 
 type Aba = 'disparos' | 'projeto' | 'numeros' | 'ferramentas' | 'integracoes';
 
@@ -90,19 +92,19 @@ export function MensageriaClient({ hoje, nomeUsuario }: { hoje: string; nomeUsua
   const listaNumeros = numeros ?? [];
 
   return (
-    <div className="max-w-7xl space-y-4">
-      <Link href="/marketing" className="inline-flex items-center gap-1.5 text-sm text-[var(--accent)] hover:underline">
+    <div className="min-w-0 max-w-7xl space-y-4 [&_:focus-visible]:!outline-solid [&_:focus-visible]:!outline-2 [&_:focus-visible]:!outline-offset-2 [&_:focus-visible]:!outline-[var(--accent-dim)]">
+      <Link href="/marketing" className={`inline-flex min-h-11 items-center gap-1.5 text-sm hover:underline ${corLink}`}>
         <Icon name="arrow-left" size={14} /> Voltar para Marketing
       </Link>
       <div>
-        <div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Marketing · Mensageria</div>
+        <div className={`text-xs font-semibold uppercase tracking-wide ${corLink}`}>Marketing · Mensageria</div>
         <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">Mensageria</h1>
         <p className="mt-1 text-sm text-[var(--fg-2)]">
           Registro dos disparos de WhatsApp, e-mail, SMS, ligação e grupos, com o retorno e o custo de cada um.
         </p>
       </div>
 
-      {projetos === null && <Erro msg="Não foi possível carregar os projetos (erro de rede ou sem acesso). As listas de projeto ficam vazias." />}
+      {projetos === null && <ErroCarga oque="os projetos (as listas de projeto ficam vazias)" />}
 
       <Tabs tabs={ABAS} active={aba} onChange={(k) => setAba(k as Aba)} idBase={ID_BASE} label="Mensageria" />
 
