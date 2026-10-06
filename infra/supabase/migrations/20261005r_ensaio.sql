@@ -195,10 +195,16 @@ language sql stable set search_path = '' as $$
      and column_name in ('produto_id', 'oferta_codigo', 'status', 'preco', 'moeda', 'data_compra', 'data_aprovacao');
 $$;
 
--- Período padrão do projeto: vale para a receita (vínculo sem "de"/"até") e para a meta de leads (sem fase de captação
--- planejada com datas). Aqui: início e fim do projeto. A 20261006a troca para o período de captação (Victor, 06/10/2026),
--- com o início e fim do projeto como reserva. Mudar a regra = só esta função.
+-- Período padrão do projeto para a meta de leads (sem fase de captação planejada com datas). Aqui: início e fim do
+-- projeto. A 20261006a troca para o período de captação (Victor, 06/10/2026). Mudar a regra = só esta função.
 create function mkt_trafego.periodo_padrao(p_projeto bigint, out inicio date, out fim date)
+language sql stable set search_path = '' as $$
+  select p.inicio, p.fim from mkt.projetos p where p.id = p_projeto;
+$$;
+
+-- Período padrão da RECEITA (vínculo de produto sem "de"/"até"). Aqui: início e fim do projeto. A 20261006a troca para
+-- início da captação até o fim do evento (Victor, 06/10/2026, PROVISÓRIO). Mudar a regra = só esta função.
+create function mkt_trafego.periodo_receita(p_projeto bigint, out inicio date, out fim date)
 language sql stable set search_path = '' as $$
   select p.inicio, p.fim from mkt.projetos p where p.id = p_projeto;
 $$;
@@ -216,7 +222,7 @@ begin
   select coalesce(jsonb_object_agg(x.projeto_id::text, jsonb_build_object('vinculos', x.vinculos, 'sem_periodo', x.sem_periodo)), '{}'::jsonb)
     into v_vin
     from (select v.projeto_id, count(*) as vinculos, count(*) filter (where coalesce(v.de, pp.inicio) is null) as sem_periodo
-            from mkt_trafego.produtos_hotmart v cross join lateral mkt_trafego.periodo_padrao(v.projeto_id) pp
+            from mkt_trafego.produtos_hotmart v cross join lateral mkt_trafego.periodo_receita(v.projeto_id) pp
            where p_projeto is null or v.projeto_id = p_projeto
            group by v.projeto_id) x;
   if v_vin = '{}'::jsonb then return '{}'::jsonb; end if;
@@ -227,7 +233,7 @@ begin
       with vv as (
         select v.projeto_id, v.produto_id, v.oferta_codigo, coalesce(v.de, pp.inicio) as de,
                coalesce(v.ate, pp.fim, (now() at time zone 'America/Sao_Paulo')::date) as ate
-          from mkt_trafego.produtos_hotmart v cross join lateral mkt_trafego.periodo_padrao(v.projeto_id) pp
+          from mkt_trafego.produtos_hotmart v cross join lateral mkt_trafego.periodo_receita(v.projeto_id) pp
          where coalesce(v.de, pp.inicio) is not null and ($1 is null or v.projeto_id = $1)
       ), m as (
         select distinct vv.projeto_id, c.id, c.preco, coalesce(c.moeda, 'BRL') as moeda
@@ -477,8 +483,8 @@ begin
   return (select coalesce(jsonb_agg(jsonb_build_object(
             'id', v.id, 'projeto_id', v.projeto_id, 'projeto_sigla', p.sigla, 'produto_id', v.produto_id,
             'oferta_codigo', v.oferta_codigo, 'de', v.de, 'ate', v.ate, 'obs', v.obs,
-            'de_efetivo', coalesce(v.de, (mkt_trafego.periodo_padrao(p.id)).inicio),
-            'ate_efetivo', coalesce(v.ate, (mkt_trafego.periodo_padrao(p.id)).fim),
+            'de_efetivo', coalesce(v.de, (mkt_trafego.periodo_receita(p.id)).inicio),
+            'ate_efetivo', coalesce(v.ate, (mkt_trafego.periodo_receita(p.id)).fim),
             'atualizado_em', v.atualizado_em)
           order by p.sigla, v.produto_id, v.oferta_codigo nulls first), '[]'::jsonb)
             from mkt_trafego.produtos_hotmart v join mkt.projetos p on p.id = v.projeto_id
@@ -542,8 +548,8 @@ begin
     return jsonb_build_object('ok', false, 'msg', 'Este produto (e oferta) já está ligado a este projeto.');
   end;
 
-  select * into v_pp from mkt_trafego.periodo_padrao(v_proj);
-  if exists (select 1 from mkt_trafego.produtos_hotmart o cross join lateral mkt_trafego.periodo_padrao(o.projeto_id) op
+  select * into v_pp from mkt_trafego.periodo_receita(v_proj);
+  if exists (select 1 from mkt_trafego.produtos_hotmart o cross join lateral mkt_trafego.periodo_receita(o.projeto_id) op
               where o.produto_id = v_prod and o.projeto_id <> v_proj
                 and (o.oferta_codigo is null or v_oferta is null or o.oferta_codigo = v_oferta)
                 and coalesce(o.de, op.inicio, '-infinity'::date) <= coalesce(v_ate, v_pp.fim, 'infinity'::date)
@@ -709,7 +715,7 @@ begin
   for f in select p.oid::regprocedure from pg_proc p
             where (p.pronamespace = 'mkt_trafego'::regnamespace
                    and p.proname in ('resumo', 'receita', 'hotmart_disponivel', 'alertas', 'segredo', 'coleta_chave', 'meta_contas',
-                                     'clickup_credenciais', 'clickup_etiquetas', 'coleta_parametros', 'coleta_registrar', 'periodo_padrao'))
+                                     'clickup_credenciais', 'clickup_etiquetas', 'coleta_parametros', 'coleta_registrar', 'periodo_padrao', 'periodo_receita'))
                or (p.pronamespace = 'public'::regnamespace
                    and p.proname in ('trafego_alertas', 'trafego_produtos_listar', 'trafego_produto_salvar', 'trafego_produto_apagar',
                                      'trafego_hotmart_produtos', 'trafego_clickup', 'trafego_clickup_receber')) loop
@@ -749,7 +755,7 @@ declare
   v_novas text[] := v_tela || array['trafego_clickup_receber'];
   v_internas text[] := array['resumo', 'resumo_base', 'receita', 'hotmart_disponivel', 'alertas', 'segredo', 'coleta_chave',
                              'meta_contas', 'clickup_credenciais', 'clickup_etiquetas', 'coleta_parametros', 'coleta_registrar',
-                             'periodo_padrao'];
+                             'periodo_padrao', 'periodo_receita'];
 begin
   foreach r in array array['anon', 'authenticated'] loop
     if has_schema_privilege(r, 'mkt_trafego', 'usage') then raise exception '20261005r: % tem acesso ao schema mkt_trafego', r; end if;
@@ -792,8 +798,8 @@ begin
   if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%') <> 20 then
     raise exception '20261005r: esperava 20 funções public.trafego_* (13 da 20261005p + 7)';
   end if;
-  if (select count(*) from pg_proc p where p.pronamespace = 'mkt_trafego'::regnamespace and p.proname = any (v_internas)) <> 13 then
-    raise exception '20261005r: esperava 13 funções internas novas ou renomeadas';
+  if (select count(*) from pg_proc p where p.pronamespace = 'mkt_trafego'::regnamespace and p.proname = any (v_internas)) <> 14 then
+    raise exception '20261005r: esperava 14 funções internas novas ou renomeadas';
   end if;
   if (select count(*) from mkt_trafego.alerta_regras) <> 7 or (select count(*) from mkt_trafego.produtos_hotmart) <> 0
      or (select count(*) from mkt_trafego.clickup_tarefas) <> 0

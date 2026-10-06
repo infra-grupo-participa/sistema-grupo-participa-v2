@@ -10,7 +10,7 @@
 import { traduzirCampanha } from '../../projetos/domain/campanha';
 import { calcularAlertas, type ProjetoEntrada } from '../domain/alertas';
 import {
-  PROJETO_FORM_VAZIO, lancamentoAutomatico, montarChecklist, nomeTemSigla, periodoProjeto, validarCadastro,
+  PROJETO_FORM_VAZIO, lancamentoAutomatico, montarChecklist, nomeTemSigla, periodoProjeto, periodoReceita, validarCadastro,
   type Especialista, type ListasCadastro, type ModeloPacote, type ProjetoCadastro, type ProjetoForm,
 } from '../domain/cadastro';
 import { faseDaCampanha } from '../domain/fases';
@@ -317,7 +317,7 @@ const VISTOS: ProdutoVisto[] = [
 function receitaDemo(projetoId: number): Pick<LinhaResumo, 'receita' | 'receita_compras' | 'receita_outras_moedas' | 'receita_sem_valor' | 'receita_vinculos' | 'receita_sem_periodo' | 'receita_fonte'> {
   const vs = PRODUTOS.filter((v) => v.projeto_id === projetoId);
   const p = projeto(projetoId);
-  const comPeriodo = vs.filter((v) => v.de != null || p?.captacao_inicio != null || p?.inicio != null); // vínculo sem "de" usa a captação
+  const comPeriodo = vs.filter((v) => v.de != null || p?.captacao_inicio != null || p?.inicio != null); // vínculo sem "de" usa a captação até o fim do evento
   const soma = (k: 'receita' | 'compras') => comPeriodo.reduce((a, v) => a + (RECEITA_PRODUTO[v.produto_id]?.[k] ?? 0), 0);
   return {
     receita: comPeriodo.length ? soma('receita') : null, receita_compras: vs.length ? soma('compras') : null,
@@ -355,8 +355,9 @@ export function demoAlertas(): ResumoDia {
 
 export function demoProdutos(projetoId: number): ProdutoHotmart[] {
   const p = projeto(projetoId);
+  const pr = p ? periodoReceita(p) : { inicio: null, fim: null };
   return PRODUTOS.filter((v) => v.projeto_id === projetoId).map((v) => ({
-    ...v, projeto_sigla: p?.sigla ?? '', de_efetivo: v.de, ate_efetivo: v.ate,
+    ...v, projeto_sigla: p?.sigla ?? '', de_efetivo: v.de ?? pr.inicio, ate_efetivo: v.ate ?? pr.fim,
   }));
 }
 
@@ -413,7 +414,7 @@ const TIPOS = [
   { codigo: 'lpsg', nome: 'Lançamento pago semanal gravado (LPSG)' }, { codigo: 'atm', nome: 'ATM' }, { codigo: 'palestra', nome: 'Palestra' },
 ];
 const REGRAS: Record<string, string[]> = {
-  csm: ['lancamento_classico', 'lancamento_pago', 'lpsg', 'atm'], escritorio: ['lancamento_classico', 'lpsg', 'atm'],
+  csm: ['lancamento_classico', 'lancamento_pago', 'lpsg', 'atm'], escritorio: ['lancamento_classico', 'atm'],
   aurum: ['palestra'], diamantes: ['lancamento_classico', 'lancamento_pago'],
 };
 const ESPECIALISTAS: Especialista[] = [

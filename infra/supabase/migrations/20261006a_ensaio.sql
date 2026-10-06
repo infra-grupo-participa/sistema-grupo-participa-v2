@@ -61,8 +61,8 @@ begin
                                   'evento_inicio', 'evento_fim')) then
     raise exception '20261006a: mkt.projetos já tem as colunas desta migration';
   end if;
-  if to_regprocedure('mkt_trafego.periodo_padrao(bigint)') is null then
-    raise exception '20261006a: falta mkt_trafego.periodo_padrao (20261005r atualizada em 06/10/2026)';
+  if to_regprocedure('mkt_trafego.periodo_padrao(bigint)') is null or to_regprocedure('mkt_trafego.periodo_receita(bigint)') is null then
+    raise exception '20261006a: falta mkt_trafego.periodo_padrao/periodo_receita (20261005r atualizada em 06/10/2026)';
   end if;
 end
 $guarda$;
@@ -97,7 +97,7 @@ create table mkt.lancamento_regras (
   primary key (unidade, tipo_lancamento)
 );
 comment on table mkt.lancamento_regras is
-  'Combinações válidas unidade × tipo de lançamento (lançamento pago no interno só na CSM). O banco recusa projeto fora '
+  'Combinações válidas unidade × tipo de lançamento (lançamento pago e LPSG no interno só na CSM). O banco recusa projeto fora '
   'daqui (FK composta em mkt.projetos). '
   'Unidade com um tipo só (Aurum: palestra) = o gatilho preenche sozinho. Configurável por SQL. 20261006a.';
 
@@ -135,7 +135,7 @@ insert into mkt.tipos_lancamento (codigo, nome, ordem) values
   ('palestra', 'Palestra', 5);
 insert into mkt.lancamento_regras (unidade, tipo_lancamento) values
   ('csm', 'lancamento_classico'), ('csm', 'lancamento_pago'), ('csm', 'lpsg'), ('csm', 'atm'),
-  ('escritorio', 'lancamento_classico'), ('escritorio', 'lpsg'), ('escritorio', 'atm'),
+  ('escritorio', 'lancamento_classico'), ('escritorio', 'atm'),
   ('aurum', 'palestra'),
   ('diamantes', 'lancamento_classico'), ('diamantes', 'lancamento_pago');
 insert into mkt.especialistas (nome, tipo) values ('Marcio Carvalho de Sá', 'interno'), ('Elaine Montenegro', 'interno');
@@ -368,12 +368,22 @@ begin
 end
 $$;
 
--- Período padrão (receita sem período no vínculo, meta de leads sem fase de captação planejada): a captação do projeto;
--- sem captação preenchida, início e fim do projeto (a regra da 20261005r).
+-- Período padrão da meta de leads (sem fase de captação planejada) e da fase de captação: a captação do projeto; sem
+-- captação preenchida, início e fim do projeto (a regra da 20261005r).
 create or replace function mkt_trafego.periodo_padrao(p_projeto bigint, out inicio date, out fim date)
 language sql stable set search_path = '' as $$
   select case when p.captacao_inicio is not null then p.captacao_inicio else p.inicio end,
          case when p.captacao_inicio is not null then p.captacao_fim else p.fim end
+    from mkt.projetos p where p.id = p_projeto;
+$$;
+
+-- Período padrão da RECEITA (vínculo de produto sem período próprio): do início da captação até o fim do EVENTO, para
+-- pegar a abertura de carrinho (Victor, 06/10/2026). PROVISÓRIO, a confirmar depois pelo Victor: trocar = só esta
+-- função. Sem captação: o início do evento, senão o do projeto; sem evento: o fim da captação, senão o do projeto.
+create or replace function mkt_trafego.periodo_receita(p_projeto bigint, out inicio date, out fim date)
+language sql stable set search_path = '' as $$
+  select coalesce(p.captacao_inicio, p.evento_inicio, p.inicio),
+         case when num_nonnulls(p.captacao_inicio, p.evento_inicio) > 0 then coalesce(p.evento_fim, p.captacao_fim) else p.fim end
     from mkt.projetos p where p.id = p_projeto;
 $$;
 
@@ -939,7 +949,7 @@ begin
   for f in select p.oid::regprocedure as sig, p.proname, p.pronamespace, p.prosecdef, p.proconfig, p.proacl
              from pg_proc p
             where (p.pronamespace = 'public'::regnamespace and p.proname = any (v_novas))
-               or (p.pronamespace = 'mkt_trafego'::regnamespace and p.proname in ('resumo', 'resumo_receita', 'alertas', 'alertas_base', 'checklist', 'periodo_padrao'))
+               or (p.pronamespace = 'mkt_trafego'::regnamespace and p.proname in ('resumo', 'resumo_receita', 'alertas', 'alertas_base', 'checklist', 'periodo_padrao', 'periodo_receita'))
                or (p.pronamespace = 'mkt'::regnamespace and p.proname = 'projetos_tipo_unidade') loop
     if not (f.proconfig @> array['search_path=""']) then raise exception '20261006a: % sem search_path vazio', f.sig; end if;
     if has_function_privilege('anon', f.sig, 'execute') then raise exception '20261006a: anon executa %', f.sig; end if;
@@ -964,11 +974,11 @@ begin
     raise exception '20261006a: esperava 30 funções public.trafego_* (20 da 20261005p/r + 10)';
   end if;
   if (select count(*) from mkt.unidades) <> 4 or (select count(*) from mkt.tipos_lancamento) <> 5
-     or (select count(*) from mkt.lancamento_regras) <> 10 or (select count(*) from mkt.especialistas) <> 2
+     or (select count(*) from mkt.lancamento_regras) <> 9 or (select count(*) from mkt.especialistas) <> 2
      or (select count(*) from mkt_trafego.utm_parametros) <> 5 or (select count(*) from mkt_trafego.pacote_modelos) <> 0
      or (select count(*) from mkt_trafego.projeto_contas) <> 0 or (select count(*) from mkt_trafego.alerta_regras) <> 8
      or (select count(*) from mkt_trafego.checklist_itens) <> 1 or (select count(*) from mkt_trafego.checklist_marcas) <> 0 then
-    raise exception '20261006a: semente diferente do esperado (4 unidades, 5 tipos, 10 regras, 2 especialistas, 5 UTM, pacote e contas vazios, 8 regras, 1 item manual)';
+    raise exception '20261006a: semente diferente do esperado (4 unidades, 5 tipos, 9 regras, 2 especialistas, 5 UTM, pacote e contas vazios, 8 regras, 1 item manual)';
   end if;
   -- migração sem perda: a subárea de todo projeto bate com o tipo/unidade derivados
   if exists (select 1 from mkt.projetos p
@@ -1025,16 +1035,16 @@ create function pg_temp.camp(p_ext text) returns bigint language sql stable as $
 -- ─── 1. Estrutura, sementes e a migração da subárea ──────────────────────────────────────────────────────────────────
 select pg_temp.ok('1.sementes',
   (select count(*) from mkt.unidades) = 4 and (select count(*) from mkt.tipos_lancamento) = 5
-  and (select count(*) from mkt.lancamento_regras) = 10 and (select count(*) from mkt_trafego.pacote_modelos) = 0
+  and (select count(*) from mkt.lancamento_regras) = 9 and (select count(*) from mkt_trafego.pacote_modelos) = 0
   and (select count(*) from mkt_trafego.checklist_itens) = 1
   and (select string_agg(nome, ', ' order by nome) from mkt.especialistas) = 'Elaine Montenegro, Marcio Carvalho de Sá'
   and (select string_agg(nome, ', ' order by ordem) from mkt.unidades) = 'CSM, Escritório, Aurum, Diamantes',
-  '4 unidades (CSM, Escritório, Aurum, Diamantes), 5 tipos, 10 regras, 2 especialistas internos, pacote vazio');
+  '4 unidades (CSM, Escritório, Aurum, Diamantes), 5 tipos, 9 regras, 2 especialistas internos, pacote vazio');
 select pg_temp.ok('1.regras por unidade',
   (select string_agg(unidade || '=' || tipos, ' ' order by unidade) from (select r.unidade, string_agg(r.tipo_lancamento, ',' order by t.ordem) tipos
      from mkt.lancamento_regras r join mkt.tipos_lancamento t on t.codigo = r.tipo_lancamento group by r.unidade) x)
-  = 'aurum=palestra csm=lancamento_classico,lancamento_pago,lpsg,atm diamantes=lancamento_classico,lancamento_pago escritorio=lancamento_classico,lpsg,atm',
-  'CSM: clássico, pago, LPSG, ATM; Escritório: clássico, LPSG, ATM (sem pago); Diamantes: clássico, pago; Aurum: palestra');
+  = 'aurum=palestra csm=lancamento_classico,lancamento_pago,lpsg,atm diamantes=lancamento_classico,lancamento_pago escritorio=lancamento_classico,atm',
+  'CSM: clássico, pago, LPSG, ATM; Escritório: clássico, ATM (sem pago nem LPSG); Diamantes: clássico, pago; Aurum: palestra');
 select pg_temp.ok('1.utm meta',
   (select string_agg(parametro || '=' || valor, '&' order by ordem) from mkt_trafego.utm_parametros where plataforma = 'meta')
   = 'utm_source=metaads&utm_campaign={{campaign.name}}|{{campaign.id}}&utm_medium={{adset.name}}|{{adset.id}}&utm_content={{ad.name}}|{{ad.id}}&utm_term={{placement}}',
@@ -1060,13 +1070,16 @@ begin
     and (select subarea_trafego from mkt.projetos where sigla = 'ZW28') = 'interno', 'ZW28 criado (CSM, lançamento pago, gestores CF e RS, status ativo, subárea derivada)');
   v := pg_temp.salvar('{"sigla":"ZV28","nome":"Projeto Ensaio Escritório","linha":"Ensaio","tipo":"interno","unidade":"escritorio","tipo_lancamento":"lancamento_pago"}');
   perform pg_temp.ok('2.escritório pago', not (v ->> 'ok')::boolean and v ->> 'msg' like '%não vale%', 'Escritório com lançamento pago recusado: ' || (v ->> 'msg'));
+  v := pg_temp.salvar('{"sigla":"ZV28","nome":"Projeto Ensaio Escritório","linha":"Ensaio","tipo":"interno","unidade":"escritorio","tipo_lancamento":"lpsg"}');
+  perform pg_temp.ok('2.escritório lpsg', not (v ->> 'ok')::boolean, 'Escritório com LPSG recusado (LPSG só na CSM)');
   v := pg_temp.salvar('{"sigla":"ZV28","nome":"Projeto Ensaio Escritório","linha":"Ensaio","tipo":"interno","unidade":"escritorio","tipo_lancamento":"atm"}');
   perform pg_temp.ok('2.escritório atm', (v ->> 'ok')::boolean, 'Escritório com ATM aceito');
   perform pg_temp.ok('2.banco recusa', pg_temp.erro($$update mkt.projetos set tipo_lancamento = 'lancamento_pago' where sigla = 'ZV28'$$) = '23503'
+    and pg_temp.erro($$update mkt.projetos set tipo_lancamento = 'lpsg' where sigla = 'ZV28'$$) = '23503'
     and pg_temp.erro($$update mkt.projetos set tipo_lancamento = 'palestra' where sigla = 'ZW28'$$) = '23503'
     and pg_temp.erro($$update mkt.projetos set tipo = 'externo' where sigla = 'ZW28'$$) = '23503'
     and pg_temp.erro($$insert into mkt.projetos (sigla, nome, linha, tipo, tipo_lancamento) values ('ZQ28', 'Ensaio', 'Ensaio', 'interno', 'atm')$$) = '23514',
-    'SQL direto também recusa: pago no Escritório e palestra na CSM (23503), CSM em projeto externo (23503), tipo sem unidade (23514)');
+    'SQL direto também recusa: pago e LPSG no Escritório e palestra na CSM (23503), CSM em projeto externo (23503), tipo sem unidade (23514)');
   v := pg_temp.salvar('{"sigla":"ZU28","nome":"Palestra Ensaio","linha":"Ensaio","tipo":"externo","unidade":"aurum"}');
   perform pg_temp.ok('2.aurum sozinho', (v ->> 'ok')::boolean and v ->> 'tipo_lancamento' = 'palestra', 'Aurum sem escolher: palestra preenchida sozinha');
   insert into mkt.projetos (sigla, nome, linha, tipo, unidade) values ('ZT28', 'Palestra Ensaio Direta', 'Ensaio', 'externo', 'aurum');
@@ -1246,7 +1259,7 @@ begin
   v := pg_temp.salvar('{"sigla":"ZN28","nome":"Ensaio","linha":"Ensaio","tipo":"interno","unidade":"csm","etiqueta_clickup":"zz-ensaio-sem-data","fim":"2026-12-31"}');
   perform pg_temp.ok('7.etiqueta sem ano-mês', (v ->> 'ok')::boolean and v -> 'avisos' ? 'etiqueta_sem_ano_mes', 'edição com fim e etiqueta sem -aaaa-mm: aceita com aviso');
   v := pg_temp.adm('select public.trafego_cadastro_listas()');
-  perform pg_temp.ok('7.listas', jsonb_array_length(v -> 'unidades') = 4 and v -> 'regras' -> 'escritorio' = '["lancamento_classico","lpsg","atm"]'::jsonb
+  perform pg_temp.ok('7.listas', jsonb_array_length(v -> 'unidades') = 4 and v -> 'regras' -> 'escritorio' = '["lancamento_classico","atm"]'::jsonb
     and jsonb_array_length(v -> 'utm' -> 'meta') = 5 and jsonb_array_length(v -> 'pacotes') = 2
     and jsonb_array_length(pg_temp.adm('select public.trafego_alertas()') -> 'regras') = 8, 'listas da tela (unidades, regras, UTM, pacote) e 8 regras no resumo do dia');
 end
@@ -1272,7 +1285,9 @@ begin
   v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZM28'), 'produto_id', '9990602')));
   x := pg_temp.adm(format('select public.trafego_produtos_listar(%s)', pg_temp.proj('ZM28'))) -> 0;
   perform pg_temp.ok('9.receita padrão', (v ->> 'ok')::boolean and not (v -> 'avisos' ? 'sem_periodo')
-    and x ->> 'de_efetivo' = '2026-11-01' and x ->> 'ate_efetivo' = '2026-11-20', 'produto sem período: vale a captação (01 a 20/11)');
+    and x ->> 'de_efetivo' = '2026-11-01' and x ->> 'ate_efetivo' = '2026-11-27'
+    and (select inicio || '/' || fim from mkt_trafego.periodo_receita(pg_temp.proj('ZL28'))) = '2026-03-01/2026-03-31',
+    'produto sem período: do início da captação (01/11) ao fim do evento (27/11); projeto só com datas antigas usa as antigas');
   v := pg_temp.adm(format('select public.trafego_pacote_aplicar(%s)', pg_temp.proj('ZM28')));
   perform pg_temp.ok('9.fase de captação', (v ->> 'criadas')::int = 2
     and (select inicio || '/' || fim from mkt_trafego.projeto_fases where projeto_id = pg_temp.proj('ZM28') and fase = 'captacao') = '2026-11-01/2026-11-20'

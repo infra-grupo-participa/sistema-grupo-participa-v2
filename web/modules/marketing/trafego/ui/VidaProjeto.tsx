@@ -340,7 +340,7 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
         {r.receita_aplica === false ? (
           <SectionCard title="Receita gerada (Hotmart)"><p className="text-sm text-[var(--fg-3)]">Não se aplica: a receita dos projetos externos não entra por ora (Victor, 06/10/2026).</p></SectionCard>
         ) : (
-          <SectionCard title="Receita gerada (Hotmart)" subtitle="Compras aprovadas dos produtos ligados a este projeto, no período (sem período no vínculo: a captação do projeto). O vínculo é cadastrado à mão.">
+          <SectionCard title="Receita gerada (Hotmart)" subtitle="Compras aprovadas dos produtos ligados a este projeto, no período (sem período no vínculo: do início da captação ao fim do evento, regra provisória). O vínculo é cadastrado à mão.">
             <ProdutosHotmart resumo={r} versao={versao} flash={flash} onMudou={onMudou} />
           </SectionCard>
         )}

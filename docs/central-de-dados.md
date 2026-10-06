@@ -636,7 +636,7 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
   | Unidade | Tipos de lançamento |
   |---|---|
   | CSM | Lançamento clássico, Lançamento pago, Lançamento pago semanal gravado (LPSG), ATM |
-  | Escritório | Lançamento clássico, LPSG, ATM (**lançamento pago só existe na CSM**) |
+  | Escritório | Lançamento clássico, ATM (**lançamento pago e LPSG só existem na CSM**; Victor, 06/10/2026) |
   | Diamantes | Lançamento clássico, Lançamento pago |
   | Aurum | Palestra (fixo, preenchido sozinho) |
 
@@ -656,8 +656,12 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 - **Períodos:** período de **captação** e período do **evento**, separados. O início/fim de antes continua como o período
   do projeto inteiro: o gatilho calcula do começo mais cedo ao fim mais tarde quando algum período novo é preenchido; sem
   período novo, a data de antes fica (não se sabe se era de captação ou de evento). A captação é o **padrão** da fase de
-  captação (pacote, "Nova fase" na tela, meta de leads do resumo do dia) e da receita quando o vínculo de produto não tem
-  período (`mkt_trafego.periodo_padrao`, criada na 20261005r e trocada pela 20261006a).
+  captação (pacote, "Nova fase" na tela, meta de leads do resumo do dia): `mkt_trafego.periodo_padrao`.
+- **Receita sem período próprio do produto** (Victor, 06/10/2026): conta do **início da captação até o fim do período do
+  evento**, para pegar a abertura de carrinho. **PROVISÓRIO, a confirmar depois pelo Victor.** A regra mora num lugar só:
+  `mkt_trafego.periodo_receita` (criada na 20261005r, trocada pela 20261006a) e `periodoReceita` em
+  `web/modules/marketing/trafego/domain/cadastro.ts`. Sem captação: começa no evento; sem período novo: início e fim do
+  projeto, como antes.
 - **Contas de anúncio do projeto** (`mkt_trafego.projeto_contas`): sugerem campanhas da conta com a sigla no nome (palavra
   inteira) e sem projeto, para ligar com um clique; criar o projeto (ou trocar a sigla) relê as campanhas e liga as que
   estão no padrão com a sigla; e o resumo do dia avisa quando uma campanha com a sigla gasta numa conta que não é do
@@ -689,7 +693,7 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 **Como testar:**
 
 1. Banco: com a 20261005p e a 20261005r aplicadas (ou na mesma transação), rodar `20261006a_ensaio.sql` inteiro (termina
-   em rollback) e conferir que nenhuma linha começa com `ERRADO`. Medido em Postgres local (PGlite): 68 `ok`.
+   em rollback) e conferir que nenhuma linha começa com `ERRADO`. Medido em Postgres local (PGlite): 69 `ok`.
 2. Tela: `NEXT_PUBLIC_TRAFEGO_DEMO=1` em `web/.env.local`, `npm run dev`, `/marketing/trafego`. Projeto fictício
    **LPEXA26 "Lançamento Pago Exemplo"** (CSM, lançamento pago, captação e evento, conta Exemplo, item do SendFlow marcado
    por "Pessoa Exemplo", campanha sugerida, alerta de conta de fora), DEXA26 (Diamantes, lançamento clássico, "Especialista
@@ -737,13 +741,13 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 - c) ~~Receita dos externos~~ **Decidido (06/10/2026):** não entra por ora.
 - d) **Conteúdo do pacote** de cada tipo de lançamento: fases, objetivos e verba por fase (o mecanismo está pronto e vazio).
 - e) **Acesso:** gestores e Arthur editam verba, fases e metas, depende do novo modelo de acesso do sistema (pendente).
-- f) **LPSG no Escritório:** a regra "lançamento pago só na CSM" vale também para o LPSG (lançamento pago semanal gravado)?
-  Hoje o Escritório tem LPSG. E o **ATM** vale nas duas unidades internas (hoje sim)?
+- f) ~~LPSG no Escritório~~ **Decidido (06/10/2026):** LPSG é só da CSM; o Escritório fica com lançamento clássico e ATM.
+  (ATM vale nas duas unidades internas.)
 - g) **Unidade dos projetos que já existem:** PB26, HT33 e BF26 são CSM ou Escritório? SEMSET26 é interno ou externo?
   (ficaram sem unidade/tipo; marcar na tela).
 - h) **Itens manuais do checklist** além do SendFlow, e para quais tipos de lançamento.
-- i) **Período padrão da receita = captação:** venda que acontece depois da captação (abertura de carrinho) fica fora quando
-  o vínculo do produto não tem período próprio. É isso, ou a receita deve ir até o fim do evento?
+- i) ~~Período padrão da receita~~ **Respondido, provisório (06/10/2026):** do início da captação ao fim do evento. A
+  confirmar depois pelo Victor (trocar em `mkt_trafego.periodo_receita` e `periodoReceita`).
 - j) **Etiquetas do ClickUp:** ler as de todos os spaces do workspace (hoje) ou de um space só?
 - k) **Especialistas internos:** além de Marcio Carvalho de Sá e Elaine Montenegro, quem mais (entra por SQL)?
 
@@ -790,3 +794,6 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
   anúncio do projeto (sugestões e alerta de conta de fora), etiqueta do ClickUp como chave (com as etiquetas reais dos
   spaces pela rotina), pacote da campanha (vazio), checklist de montagem e gerador de nome de campanha e UTM. Receita dos
   externos fora. Tela na Central do Tráfego, modo demo. Branch `victor`.
+- **06/10/2026:** Tráfego, respostas do Victor na própria 20261006a (ainda NÃO APLICADA): LPSG só na CSM (Escritório com
+  clássico e ATM, recusado também no banco); receita sem período próprio do produto do início da captação ao fim do evento
+  (provisório, a confirmar; regra só em `mkt_trafego.periodo_receita`, acrescentada na 20261005r, e `periodoReceita`).

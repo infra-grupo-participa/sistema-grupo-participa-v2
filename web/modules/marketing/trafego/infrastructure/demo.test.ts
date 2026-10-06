@@ -63,7 +63,7 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
       ['externo', 'Diamantes', 'Lançamento clássico', 'Especialista Exemplo', false]);
     expect(demoResumo().find((l) => l.sigla === 'AEXA26')!.tipo_lancamento).toBe('palestra');
     const l = demoListasCadastro();
-    expect(l.regras.escritorio).toEqual(['lancamento_classico', 'lpsg', 'atm']);
+    expect(l.regras.escritorio).toEqual(['lancamento_classico', 'atm']);
     expect(l.especialistas.filter((e) => e.tipo === 'interno').map((e) => e.nome)).toEqual(['Marcio Carvalho de Sá', 'Elaine Montenegro']);
     expect(l.pacotes).toEqual([]);
   });

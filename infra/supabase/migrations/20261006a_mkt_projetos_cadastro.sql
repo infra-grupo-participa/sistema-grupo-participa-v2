@@ -13,7 +13,7 @@
 --        Aurum; diamante → externo Diamantes; sem subárea → sem tipo.
 --     2. Tipo de lançamento por unidade, em tabela (mkt.tipos_lancamento + mkt.lancamento_regras): interno = lançamento
 --        clássico, lançamento pago, lançamento pago semanal gravado (LPSG) e ATM (ação curta para a base existente, sem
---        captação nova), com LANÇAMENTO PAGO SÓ NA CSM (o Escritório não faz lançamento pago); Diamantes =
+--        captação nova), com LANÇAMENTO PAGO E LPSG SÓ NA CSM (o Escritório fica com clássico e ATM); Diamantes =
 --        lançamento clássico ou lançamento pago; Aurum = palestra (fixo: o gatilho preenche sozinho quando a unidade tem
 --        um tipo só). O BANCO RECUSA combinação inválida (chave estrangeira composta (unidade, tipo_lancamento)).
 --        Perpétuo saiu da lista (Victor, 06/10). Projeto só de distribuição de conteúdo: ideia a definir, NÃO é tipo.
@@ -33,8 +33,9 @@
 --        que já existem (inicio/fim) continuam: viram o período do projeto inteiro, derivado pelo gatilho (do começo da
 --        captação ou do evento até o fim mais tarde) quando algum período novo é preenchido; sem período novo, ficam como
 --        estão (nada é perdido nem chutado: não se sabe se uma data antiga era de captação ou de evento). O período de
---        captação é o PADRÃO da fase de captação (pacote, meta de leads) e da receita quando o vínculo de produto não tem
---        período: mkt_trafego.periodo_padrao (da 20261005r) passa a devolver a captação, com início/fim do projeto de reserva.
+--        captação é o PADRÃO da fase de captação (pacote, meta de leads): mkt_trafego.periodo_padrao (da 20261005r). A
+--        receita sem período próprio do produto vai do início da captação ao fim do evento (abertura de carrinho):
+--        mkt_trafego.periodo_receita (da 20261005r). PROVISÓRIO, a confirmar depois pelo Victor.
 --    10. Checklist de montagem do projeto: itens AUTOMÁTICOS (o banco confere: contas ligadas, campanhas com a sigla, nenhuma
 --        fora do padrão, todas com fase, produto da Hotmart (não se aplica a externo), páginas, etiqueta do ClickUp, verba,
 --        fases e metas) e itens MANUAIS (mkt_trafego.checklist_itens, por tipo de lançamento ou para todos; a pessoa marca e
@@ -97,8 +98,8 @@ begin
                                   'evento_inicio', 'evento_fim')) then
     raise exception '20261006a: mkt.projetos já tem as colunas desta migration';
   end if;
-  if to_regprocedure('mkt_trafego.periodo_padrao(bigint)') is null then
-    raise exception '20261006a: falta mkt_trafego.periodo_padrao (20261005r atualizada em 06/10/2026)';
+  if to_regprocedure('mkt_trafego.periodo_padrao(bigint)') is null or to_regprocedure('mkt_trafego.periodo_receita(bigint)') is null then
+    raise exception '20261006a: falta mkt_trafego.periodo_padrao/periodo_receita (20261005r atualizada em 06/10/2026)';
   end if;
 end
 $guarda$;
@@ -133,7 +134,7 @@ create table mkt.lancamento_regras (
   primary key (unidade, tipo_lancamento)
 );
 comment on table mkt.lancamento_regras is
-  'Combinações válidas unidade × tipo de lançamento (lançamento pago no interno só na CSM). O banco recusa projeto fora '
+  'Combinações válidas unidade × tipo de lançamento (lançamento pago e LPSG no interno só na CSM). O banco recusa projeto fora '
   'daqui (FK composta em mkt.projetos). '
   'Unidade com um tipo só (Aurum: palestra) = o gatilho preenche sozinho. Configurável por SQL. 20261006a.';
 
@@ -171,7 +172,7 @@ insert into mkt.tipos_lancamento (codigo, nome, ordem) values
   ('palestra', 'Palestra', 5);
 insert into mkt.lancamento_regras (unidade, tipo_lancamento) values
   ('csm', 'lancamento_classico'), ('csm', 'lancamento_pago'), ('csm', 'lpsg'), ('csm', 'atm'),
-  ('escritorio', 'lancamento_classico'), ('escritorio', 'lpsg'), ('escritorio', 'atm'),
+  ('escritorio', 'lancamento_classico'), ('escritorio', 'atm'),
   ('aurum', 'palestra'),
   ('diamantes', 'lancamento_classico'), ('diamantes', 'lancamento_pago');
 insert into mkt.especialistas (nome, tipo) values ('Marcio Carvalho de Sá', 'interno'), ('Elaine Montenegro', 'interno');
@@ -404,12 +405,22 @@ begin
 end
 $$;
 
--- Período padrão (receita sem período no vínculo, meta de leads sem fase de captação planejada): a captação do projeto;
--- sem captação preenchida, início e fim do projeto (a regra da 20261005r).
+-- Período padrão da meta de leads (sem fase de captação planejada) e da fase de captação: a captação do projeto; sem
+-- captação preenchida, início e fim do projeto (a regra da 20261005r).
 create or replace function mkt_trafego.periodo_padrao(p_projeto bigint, out inicio date, out fim date)
 language sql stable set search_path = '' as $$
   select case when p.captacao_inicio is not null then p.captacao_inicio else p.inicio end,
          case when p.captacao_inicio is not null then p.captacao_fim else p.fim end
+    from mkt.projetos p where p.id = p_projeto;
+$$;
+
+-- Período padrão da RECEITA (vínculo de produto sem período próprio): do início da captação até o fim do EVENTO, para
+-- pegar a abertura de carrinho (Victor, 06/10/2026). PROVISÓRIO, a confirmar depois pelo Victor: trocar = só esta
+-- função. Sem captação: o início do evento, senão o do projeto; sem evento: o fim da captação, senão o do projeto.
+create or replace function mkt_trafego.periodo_receita(p_projeto bigint, out inicio date, out fim date)
+language sql stable set search_path = '' as $$
+  select coalesce(p.captacao_inicio, p.evento_inicio, p.inicio),
+         case when num_nonnulls(p.captacao_inicio, p.evento_inicio) > 0 then coalesce(p.evento_fim, p.captacao_fim) else p.fim end
     from mkt.projetos p where p.id = p_projeto;
 $$;
 
@@ -975,7 +986,7 @@ begin
   for f in select p.oid::regprocedure as sig, p.proname, p.pronamespace, p.prosecdef, p.proconfig, p.proacl
              from pg_proc p
             where (p.pronamespace = 'public'::regnamespace and p.proname = any (v_novas))
-               or (p.pronamespace = 'mkt_trafego'::regnamespace and p.proname in ('resumo', 'resumo_receita', 'alertas', 'alertas_base', 'checklist', 'periodo_padrao'))
+               or (p.pronamespace = 'mkt_trafego'::regnamespace and p.proname in ('resumo', 'resumo_receita', 'alertas', 'alertas_base', 'checklist', 'periodo_padrao', 'periodo_receita'))
                or (p.pronamespace = 'mkt'::regnamespace and p.proname = 'projetos_tipo_unidade') loop
     if not (f.proconfig @> array['search_path=""']) then raise exception '20261006a: % sem search_path vazio', f.sig; end if;
     if has_function_privilege('anon', f.sig, 'execute') then raise exception '20261006a: anon executa %', f.sig; end if;
@@ -1000,11 +1011,11 @@ begin
     raise exception '20261006a: esperava 30 funções public.trafego_* (20 da 20261005p/r + 10)';
   end if;
   if (select count(*) from mkt.unidades) <> 4 or (select count(*) from mkt.tipos_lancamento) <> 5
-     or (select count(*) from mkt.lancamento_regras) <> 10 or (select count(*) from mkt.especialistas) <> 2
+     or (select count(*) from mkt.lancamento_regras) <> 9 or (select count(*) from mkt.especialistas) <> 2
      or (select count(*) from mkt_trafego.utm_parametros) <> 5 or (select count(*) from mkt_trafego.pacote_modelos) <> 0
      or (select count(*) from mkt_trafego.projeto_contas) <> 0 or (select count(*) from mkt_trafego.alerta_regras) <> 8
      or (select count(*) from mkt_trafego.checklist_itens) <> 1 or (select count(*) from mkt_trafego.checklist_marcas) <> 0 then
-    raise exception '20261006a: semente diferente do esperado (4 unidades, 5 tipos, 10 regras, 2 especialistas, 5 UTM, pacote e contas vazios, 8 regras, 1 item manual)';
+    raise exception '20261006a: semente diferente do esperado (4 unidades, 5 tipos, 9 regras, 2 especialistas, 5 UTM, pacote e contas vazios, 8 regras, 1 item manual)';
   end if;
   -- migração sem perda: a subárea de todo projeto bate com o tipo/unidade derivados
   if exists (select 1 from mkt.projetos p
@@ -1036,6 +1047,8 @@ $confere$;
 -- drop table mkt_trafego.projeto_contas, mkt_trafego.pacote_modelos, mkt_trafego.utm_parametros, mkt_trafego.clickup_etiquetas_vistas,
 --   mkt_trafego.checklist_marcas, mkt_trafego.checklist_itens;
 -- create or replace function mkt_trafego.periodo_padrao(p_projeto bigint, out inicio date, out fim date)
+-- language sql stable set search_path = '' as $f$ select p.inicio, p.fim from mkt.projetos p where p.id = p_projeto; $f$;
+-- create or replace function mkt_trafego.periodo_receita(p_projeto bigint, out inicio date, out fim date)
 -- language sql stable set search_path = '' as $f$ select p.inicio, p.fim from mkt.projetos p where p.id = p_projeto; $f$;
 -- drop trigger projetos_tipo_unidade on mkt.projetos;
 -- drop function mkt.projetos_tipo_unidade();

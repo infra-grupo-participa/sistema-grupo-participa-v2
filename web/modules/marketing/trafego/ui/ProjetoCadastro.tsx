@@ -132,7 +132,7 @@ export function ModalProjetoCadastro({ inicial, listas, config, contas, onFechar
           <Campo rotulo="Evento: início"><Input type="date" value={f.evento_inicio} onChange={(e) => set('evento_inicio', e.target.value)} /></Campo>
           <Campo rotulo="Evento: fim"><Input type="date" value={f.evento_fim} onChange={(e) => set('evento_fim', e.target.value)} /></Campo>
           <p className="sm:col-span-2 text-xs text-[var(--fg-3)]">
-            A captação é o padrão da fase de captação e da receita quando o produto da Hotmart não tem período próprio.
+            A captação é o padrão da fase de captação. A receita sem período próprio do produto conta do início da captação ao fim do evento (provisório).
             {datasAntigas ? ` Datas de antes (sem separação): ${f.inicio || '?'} a ${f.fim || '?'}; ficam até preencher os períodos.` : ''}
           </p>
         </Grupo>

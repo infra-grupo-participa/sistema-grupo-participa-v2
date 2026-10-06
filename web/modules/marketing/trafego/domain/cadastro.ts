@@ -7,7 +7,8 @@
 //   - tipo de lançamento só entre os que valem para a unidade; unidade com um só (Aurum: palestra) preenche sozinho;
 //   - especialista interno da lista; externo cadastrado na hora pelo nome;
 //   - período de captação e do evento, cada um com início e fim (ou nenhum); o projeto inteiro vai do começo mais cedo ao
-//     fim mais tarde; a captação é o padrão da fase de captação e da receita;
+//     fim mais tarde; a captação é o padrão da fase de captação; a receita sem período próprio do produto vai do início
+//     da captação ao fim do evento (periodoReceita; PROVISÓRIO, a confirmar pelo Victor);
 //   - etiqueta do ClickUp no formato da chave única do gp-operacoes (minúsculas, números e hífen; edição com data termina
 //     em -aaaa-mm: aviso, não recusa).
 
@@ -212,4 +213,18 @@ export function montarChecklist(e: EntradaChecklist, itens: ItemChecklistConfig[
     });
   const todos = [...automaticos, ...manuais];
   return { automaticos, manuais, feitos: todos.filter((x) => x.aplica && x.ok).length, total: todos.filter((x) => x.aplica).length };
+}
+
+type Periodos = { inicio: string | null; fim: string | null; captacao_inicio: string | null; captacao_fim: string | null; evento_inicio: string | null; evento_fim: string | null };
+/**
+ * Período padrão da RECEITA quando o produto da Hotmart não tem período próprio (a mesma regra de
+ * mkt_trafego.periodo_receita, 20261006a): do início da captação até o fim do evento, para pegar a abertura de carrinho.
+ * PROVISÓRIO (Victor, 06/10/2026, a confirmar depois): trocar aqui e na função do banco.
+ */
+export function periodoReceita(p: Periodos): { inicio: string | null; fim: string | null } {
+  const temNovo = !!(p.captacao_inicio || p.evento_inicio);
+  return {
+    inicio: p.captacao_inicio || p.evento_inicio || p.inicio,
+    fim: temNovo ? (p.evento_fim || p.captacao_fim) : p.fim,
+  };
 }

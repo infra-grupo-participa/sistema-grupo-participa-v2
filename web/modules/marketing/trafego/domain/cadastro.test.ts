@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PROJETO_FORM_VAZIO, ajustarForm, etiquetaSemAnoMes, lancamentoAutomatico, lancamentosDaUnidade, linhaUtm, montarChecklist, montarNomeCampanha,
-  nomeTemSigla, periodoProjeto, validarCadastro, type ListasCadastro,
+  nomeTemSigla, periodoProjeto, periodoReceita, validarCadastro, type ListasCadastro,
 } from './cadastro';
 
 // As listas são as sementes da migration 20261006a (unidades, tipos e regras, especialistas internos, UTM do Meta).
@@ -14,7 +14,7 @@ const L: ListasCadastro = {
     { codigo: 'lancamento_classico', nome: 'Lançamento clássico' }, { codigo: 'lancamento_pago', nome: 'Lançamento pago' },
     { codigo: 'lpsg', nome: 'Lançamento pago semanal gravado (LPSG)' }, { codigo: 'atm', nome: 'ATM' }, { codigo: 'palestra', nome: 'Palestra' },
   ],
-  regras: { csm: ['lancamento_classico', 'lancamento_pago', 'lpsg', 'atm'], escritorio: ['lancamento_classico', 'lpsg', 'atm'], aurum: ['palestra'], diamantes: ['lancamento_classico', 'lancamento_pago'] },
+  regras: { csm: ['lancamento_classico', 'lancamento_pago', 'lpsg', 'atm'], escritorio: ['lancamento_classico', 'atm'], aurum: ['palestra'], diamantes: ['lancamento_classico', 'lancamento_pago'] },
   especialistas: [{ id: 1, nome: 'Marcio Carvalho de Sá', tipo: 'interno', unidade: null }, { id: 9, nome: 'Especialista Exemplo', tipo: 'externo', unidade: 'aurum' }],
   objetivos: ['AQUECIMENTO', 'CARRINHO', 'DISTRIBUIÇÃO', 'LEADS', 'LEMBRETE', 'REMARKETING', 'VENDAS'],
   utm: { meta: [
@@ -27,8 +27,10 @@ const L: ListasCadastro = {
 const F = { ...PROJETO_FORM_VAZIO, sigla: 'zz28', nome: 'Exemplo', linha: 'Exemplo' };
 
 describe('cadastro do projeto (as regras do banco na tela)', () => {
-  it('tipo de lançamento por unidade; pago só na CSM; Aurum fixo em palestra', () => {
-    expect(lancamentosDaUnidade(L, 'escritorio').map((t) => t.codigo)).toEqual(['lancamento_classico', 'lpsg', 'atm']);
+  it('tipo de lançamento por unidade; pago e LPSG só na CSM; Aurum fixo em palestra', () => {
+    expect(lancamentosDaUnidade(L, 'escritorio').map((t) => t.codigo)).toEqual(['lancamento_classico', 'atm']);
+    expect(validarCadastro(L, { ...F, tipo: 'interno', unidade: 'escritorio', tipo_lancamento: 'lpsg' })).toMatch(/não vale/);
+    expect(validarCadastro(L, { ...F, tipo: 'interno', unidade: 'csm', tipo_lancamento: 'lpsg' })).toBeNull();
     expect(lancamentoAutomatico(L, 'aurum')).toBe('palestra');
     expect(lancamentoAutomatico(L, 'diamantes')).toBeNull();
     expect(validarCadastro(L, { ...F, tipo: 'interno', unidade: 'escritorio', tipo_lancamento: 'lancamento_pago' })).toMatch(/não vale/);
@@ -54,6 +56,14 @@ describe('cadastro do projeto (as regras do banco na tela)', () => {
     expect(periodoProjeto({ ...p, captacao_inicio: '2026-11-01', captacao_fim: '2026-11-20', evento_inicio: '2026-11-25', evento_fim: '2026-11-27' }))
       .toEqual({ inicio: '2026-11-01', fim: '2026-11-27' });
     expect(periodoProjeto({ ...p, inicio: '2026-03-01', fim: '2026-03-31' })).toEqual({ inicio: '2026-03-01', fim: '2026-03-31' });
+  });
+  it('período da receita (provisório): do início da captação ao fim do evento; os números do ensaio', () => {
+    expect(periodoReceita({ inicio: '2026-11-01', fim: '2026-11-27', captacao_inicio: '2026-11-01', captacao_fim: '2026-11-20', evento_inicio: '2026-11-25', evento_fim: '2026-11-27' }))
+      .toEqual({ inicio: '2026-11-01', fim: '2026-11-27' });
+    expect(periodoReceita({ inicio: '2026-03-01', fim: '2026-03-31', captacao_inicio: null, captacao_fim: null, evento_inicio: null, evento_fim: null }))
+      .toEqual({ inicio: '2026-03-01', fim: '2026-03-31' });
+    expect(periodoReceita({ inicio: '2026-11-01', fim: '2026-11-20', captacao_inicio: '2026-11-01', captacao_fim: '2026-11-20', evento_inicio: null, evento_fim: null }))
+      .toEqual({ inicio: '2026-11-01', fim: '2026-11-20' });
   });
   it('etiqueta: formato da chave; edição com data sem -aaaa-mm só avisa', () => {
     expect(validarCadastro(L, { ...F, tipo: 'interno', unidade: 'csm', etiqueta_clickup: 'Etiqueta Errada' })).toMatch(/chave/);
