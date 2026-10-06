@@ -130,6 +130,11 @@ describe('nome de campanha: fora do padrão', () => {
     expect(r.erros).toEqual(['objetivo_desconhecido']);
     expect(r.objetivo).toBe('TOPO');
   });
+  it('RMKT (campanhas reais do Seminário de setembro) segue fora do padrão, com o motivo claro', () => {
+    const r = t('RS | SEMSET26 | RMKT | CONVITE');
+    expect([r.padrao, r.erros]).toEqual([false, ['objetivo_desconhecido']]);
+    expect(motivoErro(r.erros[0], r)).toBe('Objetivo RMKT não está na lista; o padrão é REMARKETING');
+  });
   it('gestor fora da lista, com o motivo exato', () => {
     const r = t('XX | PB26 | LEADS | TESTE');
     expect(r.erros).toEqual(['gestor_desconhecido']);

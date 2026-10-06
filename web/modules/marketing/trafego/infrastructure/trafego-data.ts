@@ -62,8 +62,8 @@ export const listarCampanhas = (projeto: number | null, semProjeto: boolean, for
     : rpc<Campanha[]>('trafego_campanhas_listar', { p_projeto: projeto, p_sem_projeto: semProjeto, p_fora_padrao: foraPadrao });
 
 export interface PlanejamentoForm {
-  /** gestores: a lista inteira (substitui a anterior no banco). */
-  projeto_id: number; status: string; gestores: string[]; verba_maxima: string; verba_diaria: string;
+  /** Status e gestores NÃO vão daqui: se editam no cadastro do projeto (auditoria 06/10/2026; sem a chave, o banco não mexe). */
+  projeto_id: number; verba_maxima: string; verba_diaria: string;
   meta_leads: string; meta_receita: string; meta_cpl: string; meta_pct_mql: string; obs: string;
 }
 export async function salvarPlanejamento(p: PlanejamentoForm): Promise<Resposta> {
@@ -123,7 +123,7 @@ export const listarProdutos = (projeto: number): Promise<ProdutoHotmart[] | null
 export const listarProdutosVistos = (): Promise<ProdutoVisto[] | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoProdutosVistos()) : rpc<ProdutoVisto[]>('trafego_hotmart_produtos');
 
-export interface ProdutoForm { id?: number; projeto_id: number; produto_id: string; oferta_codigo: string; de: string; ate: string; obs: string }
+export interface ProdutoForm { id?: number; projeto_id: number; conta: string; produto_id: string; oferta_codigo: string; de: string; ate: string; obs: string }
 export async function salvarProduto(p: ProdutoForm): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoSalvarProduto({ ...p });
   return await gravar<Resposta>('trafego_produto_salvar', { p });

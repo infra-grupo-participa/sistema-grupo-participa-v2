@@ -340,8 +340,10 @@ $$;
 -- O que ainda não tem fonte volta NULO (nunca zero inventado):
 --   investido etc.: nulo enquanto não houver nenhuma linha de desempenho das campanhas do projeto (antes da coleta).
 --   leads e mql: da base de pessoas do Arthur (pessoas.eventos, 20261005r_pessoas_e_crm_fundacao, aplicada); nulos se a
---     base não existir. Pessoa distinta por projeto; pessoa mesclada conta como a que ficou (pessoas.atual); pessoa de
---     teste não conta.
+--     base não existir OU se o projeto ainda não tiver nenhum lead na base (evento 'lead' de pessoa que não é teste):
+--     "sem dado", nunca zero (Victor, 06/10/2026, auditoria). Com isso CPL e % MQL também ficam nulos e o alerta "abaixo
+--     da meta de leads" não dispara. Pessoa distinta por projeto; pessoa mesclada conta como a que ficou
+--     (pessoas.atual); pessoa de teste não conta.
 --   receita: nula (Hotmart ainda não ligada ao projeto).
 --   page views e leads da página: a função única mkt_web.visitas_campanha (20261006h, também de public.mkt_web_connect): visitas
 --     (mkt_web.sessoes, sem teste) do projeto cuja campanha casa com uma campanha do Tráfego do projeto: pelo ID
@@ -428,8 +430,11 @@ begin
                 else coalesce((v_pv -> p.id::text ->> 'leads')::bigint, 0) end as leads_pagina, g.gasto_ontem, g.ultimo_dia, g.por_plataforma,
            coalesce(cp.campanhas, 0) as campanhas, coalesce(cp.fora_padrao, 0) as fora_padrao,
            coalesce(cp.gestores, '{}') as gestores, coalesce(cp.moedas, '{}') as moedas,
-           case when v_leads is null then null else coalesce((v_leads -> p.id::text ->> 'leads')::bigint, 0) end as leads,
-           case when v_leads is null then null else coalesce((v_leads -> p.id::text ->> 'mql')::bigint, 0) end as mql,
+           -- sem nenhum lead do projeto na base = "sem dado" (nulo), não zero: o evento de lead ainda não está ligado ao
+           -- projeto (Victor, 06/10/2026). Leads nulos deixam CPL, % MQL, mql e o alerta de leads abaixo da meta nulos.
+           nullif(coalesce((v_leads -> p.id::text ->> 'leads')::bigint, 0), 0) as leads,
+           case when coalesce((v_leads -> p.id::text ->> 'leads')::bigint, 0) = 0 then null
+                else coalesce((v_leads -> p.id::text ->> 'mql')::bigint, 0) end as mql,
            (select coalesce(sum(f.verba), 0) from mkt_trafego.projeto_fases f where f.projeto_id = p.id) as verba_fases,
            (select count(*) from mkt_trafego.projeto_fases f where f.projeto_id = p.id) as fases
       from mkt.projetos p
@@ -574,8 +579,8 @@ begin
 end
 $$;
 
--- Planejamento do projeto (upsert por projeto_id). Campos: projeto_id, status, gestores (lista de siglas; a lista
--- inteira substitui a anterior; ausente = não mexe), verba_maxima, verba_diaria, meta_leads, meta_receita, meta_cpl,
+-- Planejamento do projeto (upsert por projeto_id). Campos: projeto_id, status (ausente = não mexe), gestores (lista de
+-- siglas; a lista inteira substitui a anterior; ausente = não mexe), verba_maxima, verba_diaria, meta_leads, meta_receita, meta_cpl,
 -- meta_pct_mql, obs. Vazio vira nulo. Retorna {ok, msg, avisos}.
 create function public.trafego_planejamento_salvar(p jsonb) returns jsonb
 language plpgsql security definer set search_path = '' as $$
@@ -584,6 +589,8 @@ declare
   v_proj bigint;
   v_sigla text;
   v_status text := nullif(lower(btrim(coalesce(p ->> 'status', ''))), '');
+  -- status e gestores se editam no cadastro do projeto (auditoria 06/10/2026); a tela do planejamento não manda os dois
+  v_tem_status boolean := p ? 'status';
   v_gestores text[];
   v_vmax numeric; v_vdia numeric; v_mleads integer; v_mrec numeric; v_mcpl numeric; v_mmql numeric;
   v_obs text := nullif(btrim(coalesce(p ->> 'obs', '')), '');
@@ -633,7 +640,7 @@ begin
                                               meta_cpl, meta_pct_mql, obs, atualizado_por)
   values (v_proj, v_status, v_vmax, v_vdia, v_mleads, v_mrec, v_mcpl, v_mmql, v_obs, v_uid)
   on conflict (projeto_id) do update
-     set status = excluded.status, verba_maxima = excluded.verba_maxima,
+     set status = case when v_tem_status then excluded.status else pl.status end, verba_maxima = excluded.verba_maxima,
          verba_diaria = excluded.verba_diaria, meta_leads = excluded.meta_leads, meta_receita = excluded.meta_receita,
          meta_cpl = excluded.meta_cpl, meta_pct_mql = excluded.meta_pct_mql, obs = excluded.obs,
          atualizado_em = now(), atualizado_por = excluded.atualizado_por;

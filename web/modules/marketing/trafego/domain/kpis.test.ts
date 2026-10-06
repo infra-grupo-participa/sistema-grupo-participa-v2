@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FILTROS_INICIAIS, arredondar, comKpis, connectRate, conversaoPagina, cpc, cpl, cpm, ctr, esperadoAte, filtrar, pctMql, pctVerba, ritmo, situacaoRitmo,
-  tipoDaSubarea, totais,
+  FILTROS_INICIAIS, ORDEM_INICIAL, alternarOrdem, arredondar, buscarLinhas, comKpis, connectRate, conversaoPagina, cpc, cpl, cpm, ctr,
+  escreverEstadoUrl, esperadoAte, filtrar, lerEstadoUrl, ordenarLinhas, pctMql, pctVerba, ritmo, situacaoRitmo, tipoDaSubarea, totais,
 } from './kpis';
 import type { LinhaResumo } from './tipos';
 
@@ -114,6 +114,50 @@ describe('comKpis: a linha inteira, como o banco devolve', () => {
     const l = comKpis(linha({ verba_maxima: 1000, verba_diaria: 100, gasto_ontem: 0 }));
     expect([l.pct_verba, l.cpl, l.ctr, l.cpc, l.cpm, l.pct_mql, l.connect_rate, l.conversao_pagina, l.ritmo_ontem])
       .toEqual([null, null, null, null, null, null, null, null, null]);
+  });
+});
+
+describe('leads "sem dado" (auditoria 06/10/2026)', () => {
+  it('nenhum lead na base: leads, MQL, CPL e % MQL nulos, nunca 0', () => {
+    const l = comKpis(linha({ investido: 500, leads: 0, mql: 0 }));
+    expect([l.leads, l.mql, l.cpl, l.pct_mql]).toEqual([null, null, null, null]);
+  });
+});
+
+describe('busca e ordenação da Central', () => {
+  const ls = [
+    linha({ projeto_id: 1, sigla: 'PB26', nome: 'Planejamento Brasil', investido: 100, leads: 10, status_nome: 'Ativo', gestores: ['RS'] }),
+    linha({ projeto_id: 2, sigla: 'SEMSET26', nome: 'Seminário de Setembro', investido: null, status_nome: null, gestores_campanhas: ['CF'] }),
+    linha({ projeto_id: 3, sigla: 'HT33', nome: 'Holding Total', investido: 300, leads: 5, status_nome: 'Pausado', receita: 900, receita_aplica: false }),
+    linha({ projeto_id: 4, sigla: 'AUR26', nome: 'Aurum', investido: 200, receita: 50, checklist_feitos: 1, checklist_total: 4 }),
+  ];
+  const siglas = (x: LinhaResumo[]) => x.map((l) => l.sigla);
+  it('busca por sigla ou nome, sem acento e sem maiúscula', () => {
+    expect(siglas(buscarLinhas(ls, 'seminario'))).toEqual(['SEMSET26']);
+    expect(siglas(buscarLinhas(ls, 'ht3'))).toEqual(['HT33']);
+    expect(siglas(buscarLinhas(ls, '  '))).toEqual(['PB26', 'SEMSET26', 'HT33', 'AUR26']);
+  });
+  it('ordena número e texto; "sem dado" sempre no fim', () => {
+    expect(siglas(ordenarLinhas(ls, { coluna: 'investido', dir: 'asc' }))).toEqual(['PB26', 'AUR26', 'HT33', 'SEMSET26']);
+    expect(siglas(ordenarLinhas(ls, { coluna: 'investido', dir: 'desc' }))).toEqual(['HT33', 'AUR26', 'PB26', 'SEMSET26']);
+    expect(siglas(ordenarLinhas(ls, { coluna: 'projeto', dir: 'asc' }))).toEqual(['AUR26', 'HT33', 'PB26', 'SEMSET26']);
+    expect(siglas(ordenarLinhas(ls, { coluna: 'status', dir: 'desc' }))).toEqual(['HT33', 'PB26', 'SEMSET26', 'AUR26']);
+    // receita do externo é "não se aplica": vai para o fim como sem dado
+    expect(siglas(ordenarLinhas(ls, { coluna: 'receita', dir: 'desc' }))).toEqual(['AUR26', 'PB26', 'SEMSET26', 'HT33']);
+    expect(siglas(ordenarLinhas(ls, { coluna: 'gestor', dir: 'asc' }))).toEqual(['SEMSET26', 'PB26', 'HT33', 'AUR26']);
+    expect(siglas(ordenarLinhas(ls, ORDEM_INICIAL))).toEqual(['PB26', 'SEMSET26', 'HT33', 'AUR26']);
+  });
+  it('clique no cabeçalho: crescente, decrescente, volta à ordem do banco', () => {
+    const a = alternarOrdem(ORDEM_INICIAL, 'cpl');
+    const b = alternarOrdem(a, 'cpl');
+    expect([a, b, alternarOrdem(b, 'cpl'), alternarOrdem(b, 'leads')]).toEqual([
+      { coluna: 'cpl', dir: 'asc' }, { coluna: 'cpl', dir: 'desc' }, ORDEM_INICIAL, { coluna: 'leads', dir: 'asc' }]);
+  });
+  it('estado na URL: lê e escreve sem perder outros parâmetros; coluna desconhecida ignorada', () => {
+    expect(lerEstadoUrl('?q=pb&ordem=investido&dir=desc')).toEqual({ q: 'pb', ordem: { coluna: 'investido', dir: 'desc' } });
+    expect(lerEstadoUrl('?ordem=drop&dir=desc')).toEqual({ q: '', ordem: ORDEM_INICIAL });
+    expect(escreverEstadoUrl('?x=1', ' pb ', { coluna: 'leads', dir: 'asc' })).toBe('?x=1&q=pb&ordem=leads&dir=asc');
+    expect(escreverEstadoUrl('?q=pb&ordem=leads&dir=asc', '', ORDEM_INICIAL)).toBe('');
   });
 });
 

@@ -1,8 +1,10 @@
 'use client';
 
 // Marketing > Projetos e páginas: a base compartilhada (tabela de projetos única + páginas de cada projeto).
-// Listar, cadastrar, editar e testar um nome de campanha. Só admin/dev (gate no layout, na page e no banco).
+// Listar, editar e testar um nome de campanha. Só admin/dev (gate no layout, na page e no banco). Projeto NOVO nasce no
+// cadastro completo do Tráfego (tipo, unidade, períodos, contas): o botão "Novo projeto" leva para lá (auditoria 06/10/2026).
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Badge, Button, DataTable, EmptyState, FilterSelect, Input, Loading, Modal, SectionCard, Td, Th, Thead, Toast, Toggle, Tr, useFlash,
 } from '@/shared/ui/components';
@@ -36,10 +38,8 @@ function Erro({ msg }: { msg: string | null }) {
 }
 
 // ─── Projeto ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-const PROJETO_VAZIO: ProjetoForm = {
-  sigla: '', nome: '', linha: '', edicao: null, ano: null, etiqueta_clickup: null, subarea_trafego: null,
-  inicio: null, fim: null, ativo: true, obs: null,
-};
+// O Tráfego abre o cadastro completo ao ver ?novo=1 (TrafegoClient).
+const NOVO_PROJETO_URL = '/marketing/trafego?novo=1';
 
 function ModalProjeto({ inicial, onFechar, onSalvo }: { inicial: ProjetoForm; onFechar: () => void; onSalvo: (msg: string) => void }) {
   const [f, setF] = useState<ProjetoForm>(inicial);
@@ -217,6 +217,7 @@ function TestarCampanha() {
 
 // ─── Tela ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 export function ProjetosPaginasClient() {
+  const router = useRouter();
   const [projetos, setProjetos] = useState<Projeto[] | null>(null);
   const [paginas, setPaginas] = useState<Pagina[] | null>(null);
   const [falhou, setFalhou] = useState(false);
@@ -262,7 +263,8 @@ export function ProjetosPaginasClient() {
       <SectionCard
         title="Projetos"
         subtitle={`${projetos.length} cadastrado(s)`}
-        right={<Button size="sm" onClick={() => setEditProjeto({ ...PROJETO_VAZIO })}><Icon name="plus" size={14} /> Novo projeto</Button>}
+        right={<Button size="sm" title="Abre o cadastro completo do projeto no Tráfego (tipo, unidade, períodos e contas)"
+          onClick={() => router.push(NOVO_PROJETO_URL)}><Icon name="plus" size={14} /> Novo projeto</Button>}
       >
         {projetos.length === 0 ? <EmptyState title="Nenhum projeto" /> : (
           <DataTable minWidth={900}>

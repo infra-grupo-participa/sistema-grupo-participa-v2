@@ -2,11 +2,15 @@
 
 // Receita da Hotmart na vida do projeto: o vínculo produto Hotmart → projeto (CADASTRO À MÃO, nada pré-preenchido) e o
 // que a receita está somando. Migration 20261006i: public.trafego_produtos_listar / produto_salvar / produto_apagar /
-// hotmart_produtos. A receita em si é lida de public.compras pelo banco (a Hotmart manda no dinheiro).
-import { useEffect, useState } from 'react';
-import { Button, ConfirmDialog, DataTable, EmptyState, Input, Modal, Td, Th, Thead, Tr } from '@/shared/ui/components';
+// hotmart_produtos. A receita em si é lida pelo banco de fin.hotmart_transacoes (o espelho da Hotmart do financeiro, as
+// duas contas): bruto = valor da oferta das vendas pagas (APPROVED/COMPLETE), líquido à parte. Auditoria 06/10/2026: o
+// vínculo leva a conta e o produto é escolhido numa lista (por conta), não digitado.
+import { useEffect, useMemo, useState } from 'react';
+import { Button, ConfirmDialog, DataTable, EmptyState, FilterSelect, Input, Modal, Td, Th, Thead, Tr } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
-import { ROTULO_AVISO_PRODUTO, type LinhaResumo, type ProdutoHotmart, type ProdutoVisto, type Resposta } from '../domain/tipos';
+import {
+  CONTAS_HOTMART, ROTULO_AVISO_PRODUTO, nomeContaHotmart, type LinhaResumo, type ProdutoHotmart, type ProdutoVisto, type Resposta,
+} from '../domain/tipos';
 import { apagarProduto, listarProdutos, listarProdutosVistos, salvarProduto, type ProdutoForm } from '../infrastructure/trafego-data';
 import { SEM_DADO, dataBR, inteiro, reais } from './formato';
 
@@ -26,19 +30,27 @@ function Campo({ rotulo, dica, children }: { rotulo: string; dica?: string; chil
 
 function ModalProduto({ inicial, onFechar, onSalvo }: { inicial: ProdutoForm; onFechar: () => void; onSalvo: (m: string) => void }) {
   const [f, setF] = useState<ProdutoForm>(inicial);
-  const [vistos, setVistos] = useState<ProdutoVisto[] | null>(null);
+  const [vistos, setVistos] = useState<ProdutoVisto[] | null | undefined>(undefined);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const set = (k: keyof ProdutoForm, v: string) => setF((x) => ({ ...x, [k]: v }));
 
   useEffect(() => {
     let vivo = true;
-    listarProdutosVistos().then((v) => { if (vivo) setVistos(v ?? []); });
+    listarProdutosVistos().then((v) => { if (vivo) setVistos(v); });
     return () => { vivo = false; };
   }, []);
 
+  // produtos da conta escolhida (o que já vendeu nela); o do vínculo em edição entra mesmo se não estiver na lista
+  const daConta = useMemo(() => (vistos ?? []).filter((v) => v.conta === f.conta), [vistos, f.conta]);
+  const produto = daConta.find((v) => v.produto_id === f.produto_id) ?? null;
+  const foraDaLista = f.produto_id !== '' && !produto;
+  const ofertas = produto?.ofertas ?? [];
+  const ofertaForaDaLista = f.oferta_codigo !== '' && !ofertas.some((o) => o.codigo === f.oferta_codigo);
+
   async function salvar() {
-    if (!f.produto_id.trim()) { setErro('Informe o id do produto na Hotmart.'); return; }
+    if (!f.conta) { setErro('Escolha a conta da Hotmart.'); return; }
+    if (!f.produto_id.trim()) { setErro('Escolha o produto.'); return; }
     setSalvando(true);
     const r = await salvarProduto(f);
     setSalvando(false);
@@ -52,15 +64,36 @@ function ModalProduto({ inicial, onFechar, onSalvo }: { inicial: ProdutoForm; on
       <Button size="sm" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</Button>
     </>}>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Campo rotulo="Id do produto na Hotmart" dica="como em public.compras">
-          <Input value={f.produto_id} onChange={(e) => set('produto_id', e.target.value.trim())} list="produtos-hotmart-vistos" maxLength={40} />
-          <datalist id="produtos-hotmart-vistos">
-            {(vistos ?? []).map((v) => <option key={v.produto_id} value={v.produto_id}>{`${v.nome ?? 'sem nome'} · ${v.aprovadas} aprovadas · última ${dataBR(v.ultima)}`}</option>)}
-          </datalist>
+        <Campo rotulo="Conta da Hotmart">
+          <FilterSelect className="w-full" value={f.conta} aria-label="Conta da Hotmart"
+            onChange={(e) => setF((x) => ({ ...x, conta: e.target.value, produto_id: '', oferta_codigo: '' }))}>
+            <option value="">Escolha a conta</option>
+            {CONTAS_HOTMART.map((c) => <option key={c.codigo} value={c.codigo}>{c.nome}</option>)}
+          </FilterSelect>
         </Campo>
-        <Campo rotulo="Código da oferta" dica="vazio = todas as ofertas">
-          <Input value={f.oferta_codigo} onChange={(e) => set('oferta_codigo', e.target.value.trim())} maxLength={40} />
+        <Campo rotulo="Produto" dica={vistos === undefined ? 'carregando…' : 'os que já venderam nesta conta'}>
+          <FilterSelect className="w-full" value={f.produto_id} aria-label="Produto da Hotmart" disabled={!f.conta || vistos === undefined}
+            onChange={(e) => setF((x) => ({ ...x, produto_id: e.target.value, oferta_codigo: '' }))}>
+            <option value="">{f.conta ? 'Escolha o produto' : 'Escolha a conta primeiro'}</option>
+            {foraDaLista && <option value={f.produto_id}>{f.produto_id} (sem venda nesta conta)</option>}
+            {daConta.map((v) => (
+              <option key={v.produto_id} value={v.produto_id}>
+                {`${v.nome ?? 'sem nome'} · ${v.produto_id} · ${inteiro(v.aprovadas)} paga(s)${v.ultima ? ` · última ${dataBR(v.ultima)}` : ''}`}
+              </option>
+            ))}
+          </FilterSelect>
         </Campo>
+        <Campo rotulo="Oferta" dica="vazio = todas as ofertas">
+          <FilterSelect className="w-full" value={f.oferta_codigo} aria-label="Oferta" disabled={!f.produto_id}
+            onChange={(e) => set('oferta_codigo', e.target.value)}>
+            <option value="">Todas as ofertas</option>
+            {ofertaForaDaLista && <option value={f.oferta_codigo}>{f.oferta_codigo} (sem venda)</option>}
+            {ofertas.map((o) => (
+              <option key={o.codigo} value={o.codigo}>{`${o.codigo} · ${inteiro(o.pagas)} paga(s)${o.ultima ? ` · última ${dataBR(o.ultima)}` : ''}`}</option>
+            ))}
+          </FilterSelect>
+        </Campo>
+        <div />
         <Campo rotulo="De" dica="vazio = início da captação"><Input type="date" value={f.de} onChange={(e) => set('de', e.target.value)} /></Campo>
         <Campo rotulo="Até" dica="vazio = fim do evento (ou hoje)"><Input type="date" value={f.ate} onChange={(e) => set('ate', e.target.value)} /></Campo>
         <div className="sm:col-span-2">
@@ -68,10 +101,11 @@ function ModalProduto({ inicial, onFechar, onSalvo }: { inicial: ProdutoForm; on
         </div>
       </div>
       <p className="mt-2 text-xs text-[var(--fg-3)]">
-        Soma o valor das compras aprovadas (APPROVED, COMPLETE, COMPLETED) deste produto no período. Reembolso e chargeback saem
-        sozinhos (a Hotmart troca o status da compra). Só reais entram na soma.
-        {vistos && vistos.length > 0 && ' O campo do id sugere os produtos que já venderam.'}
+        Soma o valor da oferta (bruto, sem os juros do parcelamento) das vendas pagas (APPROVED, COMPLETE) deste produto, nesta
+        conta, no período, como o financeiro conta. Reembolso e chargeback saem sozinhos (a Hotmart troca o status da venda).
+        Só reais entram na soma. O líquido do produtor aparece ao lado.
       </p>
+      {vistos === null && <p role="alert" className="mt-2 text-sm text-[var(--red)]">Não foi possível carregar a lista de produtos da Hotmart.</p>}
       {erro && <p role="alert" className="mt-2 text-sm text-[var(--red)]">{erro}</p>}
     </Modal>
   );
@@ -88,7 +122,7 @@ export function ProdutosHotmart({ resumo, versao, flash, onMudou }: { resumo: Li
     return () => { vivo = false; };
   }, [resumo.projeto_id, versao]);
 
-  const novo = () => setEdit({ projeto_id: resumo.projeto_id, produto_id: '', oferta_codigo: '', de: '', ate: '', obs: '' });
+  const novo = () => setEdit({ projeto_id: resumo.projeto_id, conta: '', produto_id: '', oferta_codigo: '', de: '', ate: '', obs: '' });
   const salvo = (m: string) => { setEdit(null); flash(m); onMudou(); };
 
   return (
@@ -97,9 +131,12 @@ export function ProdutosHotmart({ resumo, versao, flash, onMudou }: { resumo: Li
         <div>
           <div className="text-2xl font-bold tabular">{reais(resumo.receita)}</div>
           <div className="text-xs text-[var(--fg-3)]">
-            {resumo.receita_fonte === false ? 'Este banco não tem as colunas da Hotmart em public.compras: receita sem fonte.'
+            {resumo.receita_fonte === false ? 'Este banco não tem o espelho da Hotmart do financeiro (fin.hotmart_transacoes): receita sem fonte.'
               : resumo.receita == null ? (resumo.receita_vinculos ? 'Vínculo sem período (projeto sem data de início e sem "de"): ainda não soma.' : 'Sem produto ligado: sem dado.')
-              : `${inteiro(resumo.receita_compras)} compra(s) aprovada(s) no período${resumo.receita_outras_moedas ? `; ${resumo.receita_outras_moedas} em outra moeda, fora da soma` : ''}${resumo.receita_sem_valor ? `; ${resumo.receita_sem_valor} sem valor` : ''}.`}
+              : `Bruto (valor da oferta). ${inteiro(resumo.receita_compras)} venda(s) paga(s) no período${resumo.receita_outras_moedas ? `; ${resumo.receita_outras_moedas} em outra moeda, fora da soma` : ''}${resumo.receita_sem_valor ? `; ${resumo.receita_sem_valor} sem valor` : ''}.`}
+          </div>
+          <div className="text-xs text-[var(--fg-2)]">
+            {resumo.receita != null && resumo.receita_liquida != null && <>Líquido do produtor: <span className="tabular">{reais(resumo.receita_liquida)}</span>{resumo.receita_liquido_estimado ? ` (${resumo.receita_liquido_estimado} venda(s) com o líquido estimado: oferta menos a taxa)` : ''}</>}
           </div>
         </div>
         <Button size="sm" onClick={novo}><Icon name="plus" size={14} /> Ligar produto</Button>
@@ -109,19 +146,20 @@ export function ProdutosHotmart({ resumo, versao, flash, onMudou }: { resumo: Li
       ) : lista.length === 0 ? (
         <EmptyState title="Nenhum produto da Hotmart ligado a este projeto" hint="Ligue à mão o produto (e, se quiser, a oferta) que gera receita para o projeto." />
       ) : (
-        <DataTable minWidth={640}>
-          <Thead><Th>Produto</Th><Th>Oferta</Th><Th>Período que conta</Th><Th>Observação</Th><Th> </Th></Thead>
+        <DataTable minWidth={760}>
+          <Thead><Th>Conta</Th><Th>Produto</Th><Th>Oferta</Th><Th>Período que conta</Th><Th>Observação</Th><Th> </Th></Thead>
           <tbody>
             {lista.map((v) => (
               <Tr key={v.id}>
-                <Td><span className="font-mono">{v.produto_id}</span></Td>
+                <Td>{nomeContaHotmart(v.conta)}</Td>
+                <Td>{v.produto_nome && <div>{v.produto_nome}</div>}<span className="font-mono text-xs text-[var(--fg-2)]">{v.produto_id}</span></Td>
                 <Td>{v.oferta_codigo ?? <span className="text-xs text-[var(--fg-3)]">todas</span>}</Td>
                 <Td>{v.de_efetivo ? `${dataBR(v.de_efetivo)} a ${v.ate_efetivo ? dataBR(v.ate_efetivo) : 'hoje'}` : <span className="text-xs text-[var(--yellow)]">sem início: não soma</span>}</Td>
                 <Td>{v.obs ?? SEM_DADO}</Td>
                 <Td>
                   <div className="flex gap-1">
                     <Button size="sm" variant="ghost" aria-label={`Editar ${v.produto_id}`} onClick={() => setEdit({
-                      id: v.id, projeto_id: v.projeto_id, produto_id: v.produto_id, oferta_codigo: v.oferta_codigo ?? '', de: v.de ?? '', ate: v.ate ?? '', obs: v.obs ?? '',
+                      id: v.id, projeto_id: v.projeto_id, conta: v.conta, produto_id: v.produto_id, oferta_codigo: v.oferta_codigo ?? '', de: v.de ?? '', ate: v.ate ?? '', obs: v.obs ?? '',
                     })}><Icon name="pencil" size={12} /></Button>
                     <Button size="sm" variant="danger" aria-label={`Apagar ${v.produto_id}`} onClick={() => setApagar(v)}><Icon name="trash" size={12} /></Button>
                   </div>
@@ -135,7 +173,7 @@ export function ProdutosHotmart({ resumo, versao, flash, onMudou }: { resumo: Li
       {apagar && (
         <ConfirmDialog
           title="Apagar vínculo"
-          message={`Tirar o produto ${apagar.produto_id}${apagar.oferta_codigo ? ` (oferta ${apagar.oferta_codigo})` : ''} da receita de ${resumo.sigla}? As compras continuam na Hotmart; só deixam de contar aqui.`}
+          message={`Tirar o produto ${apagar.produto_nome ?? apagar.produto_id} (${nomeContaHotmart(apagar.conta)})${apagar.oferta_codigo ? ` (oferta ${apagar.oferta_codigo})` : ''} da receita de ${resumo.sigla}? As compras continuam na Hotmart; só deixam de contar aqui.`}
           confirmLabel="Apagar"
           danger
           onCancel={() => setApagar(null)}

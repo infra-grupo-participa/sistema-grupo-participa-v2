@@ -65,18 +65,25 @@ export interface LinhaResumo {
   gestores: string[];
   /** Gestores que aparecem no nome das campanhas do projeto. */
   gestores_campanhas: string[];
-  /** Receita gerada (Hotmart): soma de public.compras aprovadas dos produtos ligados ao projeto, no período. Nulo = sem vínculo. */
+  /**
+   * Receita gerada (Hotmart), BRUTO: valor da oferta das vendas pagas (APPROVED/COMPLETE) dos produtos ligados ao projeto,
+   * no período, lido de fin.hotmart_transacoes (o espelho do financeiro, as duas contas). Nulo = sem vínculo.
+   */
   receita: number | null;
-  /** Compras aprovadas que entraram (todas as moedas). Nulo = public.compras sem as colunas da Hotmart (banco local). */
+  /** Líquido do produtor das mesmas vendas (liquido_produtor, ou oferta − taxa quando a Hotmart não mandou). */
+  receita_liquida?: number | null;
+  /** Vendas em reais com o líquido estimado (sem liquido_produtor). */
+  receita_liquido_estimado?: number | null;
+  /** Vendas pagas que entraram (todas as moedas). Nulo = sem fin.hotmart_transacoes neste banco. */
   receita_compras?: number | null;
-  /** Compras aprovadas em outra moeda (não entram na soma em reais). */
+  /** Vendas pagas em outra moeda (não entram na soma em reais). */
   receita_outras_moedas?: number | null;
   receita_sem_valor?: number | null;
   /** Vínculos produto Hotmart → projeto cadastrados. */
   receita_vinculos?: number;
   /** Vínculos sem período (sem "de" e o projeto sem início): não somam. */
   receita_sem_periodo?: number;
-  /** false = public.compras sem as colunas da Hotmart neste banco. */
+  /** false = sem fin.hotmart_transacoes (espelho da Hotmart do financeiro) neste banco. */
   receita_fonte?: boolean;
   investido: number | null;
   por_plataforma: Record<string, number> | null;
@@ -263,14 +270,26 @@ export interface ResumoDia {
 
 /** Vínculo produto Hotmart → projeto (cadastro à mão). */
 export interface ProdutoHotmart {
-  id: number; projeto_id: number; projeto_sigla: string; produto_id: string; oferta_codigo: string | null;
+  id: number; projeto_id: number; projeto_sigla: string;
+  /** Conta da Hotmart (fin.hotmart_transacoes.conta): academy (CSM) ou escritorio. */
+  conta: string; produto_id: string; produto_nome?: string | null; oferta_codigo: string | null;
   de: string | null; ate: string | null; obs: string | null;
   /** O período que vale: "de" ou o início do projeto; "até" ou o fim do projeto (nulo = até hoje). */
   de_efetivo: string | null; ate_efetivo: string | null;
 }
 
-/** Produto que já apareceu em public.compras (para escolher no cadastro). */
-export interface ProdutoVisto { produto_id: string; nome: string | null; aprovadas: number; primeira: string | null; ultima: string | null }
+/** Produto que já apareceu em fin.hotmart_transacoes, por conta (o seletor do cadastro). */
+export interface OfertaVista { codigo: string; pagas: number; ultima: string | null }
+export interface ProdutoVisto {
+  conta: string; produto_id: string; nome: string | null; aprovadas: number; ultima: string | null; ofertas: OfertaVista[];
+}
+
+/** Contas da Hotmart do espelho do financeiro (fin.hotmart_contas). */
+export const CONTAS_HOTMART: { codigo: string; nome: string }[] = [
+  { codigo: 'academy', nome: 'academy (CSM)' },
+  { codigo: 'escritorio', nome: 'escritorio' },
+];
+export const nomeContaHotmart = (c: string) => CONTAS_HOTMART.find((x) => x.codigo === c)?.nome ?? c;
 
 export interface TarefaClickup {
   id: string; nome: string; status: string | null; criada_em: string | null; atualizada_em: string | null;
@@ -286,9 +305,9 @@ export interface ClickupProjeto {
 }
 
 export const ROTULO_AVISO_PRODUTO: Record<string, string> = {
-  produto_em_outro_projeto: 'Este produto também está ligado a outro projeto num período que se cruza: a compra conta nos dois.',
+  produto_em_outro_projeto: 'Este produto (mesma conta) também está ligado a outro projeto num período que se cruza: a venda conta nos dois.',
   sem_periodo: 'Sem "de" e o projeto sem data de início: este vínculo não soma até ter uma data.',
-  produto_sem_compras: 'Nenhuma compra deste produto apareceu ainda na Hotmart (confira o id).',
+  produto_sem_compras: 'Nenhuma venda deste produto apareceu ainda nesta conta da Hotmart (confira a conta e o id).',
 };
 
 // ─── Cadastro do projeto (migration 20261006j) ───────────────────────────────────────────────────────────────────────

@@ -65,13 +65,24 @@ export const ROTULO_ERRO: Record<ErroCampanha, string> = {
   campo_vazio: 'Campo vazio entre | (ex.: "| |")',
 };
 
+/**
+ * Abreviações de objetivo vistas em campanhas reais e o objetivo do padrão que elas querem dizer. NÃO viram objetivo
+ * válido (a campanha continua fora do padrão); só deixam o motivo claro. RMKT: campanhas do Seminário de setembro
+ * (RS | SEMSET26 | RMKT | …), auditoria 06/10/2026. Aceitar RMKT como sinônimo é pergunta aberta ao Victor.
+ */
+export const OBJETIVO_PADRAO_DE: Record<string, string> = { RMKT: 'REMARKETING' };
+
 /** O motivo exato de cada erro, com o que foi escrito (para a tela de campanhas fora do padrão). */
 export function motivoErro(erro: string, c: { gestor?: string | null; projeto?: string | null; objetivo?: string | null; campos?: number | null }): string {
   switch (erro) {
     case 'gestor_desconhecido': return c.gestor ? `Gestor ${c.gestor} não está na lista` : 'Gestor vazio';
     case 'sigla_invalida': return c.projeto ? `Projeto ${c.projeto} fora do formato da sigla (ex.: PB26)` : 'Projeto vazio';
     case 'projeto_nao_cadastrado': return c.projeto ? `Projeto ${c.projeto} não cadastrado` : 'Projeto não cadastrado';
-    case 'objetivo_desconhecido': return c.objetivo ? `Objetivo ${c.objetivo} não está na lista` : 'Objetivo vazio';
+    case 'objetivo_desconhecido': {
+      if (!c.objetivo) return 'Objetivo vazio';
+      const padrao = OBJETIVO_PADRAO_DE[c.objetivo.toUpperCase()];
+      return padrao ? `Objetivo ${c.objetivo} não está na lista; o padrão é ${padrao}` : `Objetivo ${c.objetivo} não está na lista`;
+    }
     case 'numero_de_campos': return c.campos != null ? `Menos de 3 campos (tem ${c.campos})` : ROTULO_ERRO.numero_de_campos;
     case 'descricao_vazia': return 'Sem descrição (só gestor, projeto e objetivo)';
     case 'pagina_invalida': return 'Código de página fora do padrão (leitura antiga)';

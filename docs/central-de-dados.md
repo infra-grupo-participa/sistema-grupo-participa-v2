@@ -405,8 +405,9 @@ link**. Quando a tela do Arthur aceitar um parâmetro, volta o link (`SecaoLeads
   (o Victor vai redefinir os níveis de acesso do sistema inteiro). Por ora, só admin/dev.
 - **Lead que conta é o da nossa base** (`pessoas.eventos`, 20261005r_pessoas_e_crm_fundacao do Arthur, aplicada): pessoas distintas com evento `lead` no projeto (pessoa
   mesclada conta como a pessoa que ficou, `pessoas.atual`), sem pessoa de teste. Os leads que a plataforma informa ficam só na campanha.
-- **"Quanto gerado" = receita** (Hotmart). Na fase 2: soma das compras aprovadas dos produtos ligados à mão ao projeto
-  (ver "Fase 2"). Sem vínculo, nula.
+- **"Quanto gerado" = receita** (Hotmart). Na fase 2: bruto (valor da oferta) das vendas pagas dos produtos ligados à
+  mão ao projeto, lido de `fin.hotmart_transacoes` (o espelho do financeiro, as duas contas), com o líquido ao lado (ver
+  "Fase 2" e "Auditoria"). Sem vínculo, nula.
 - **Atividades do ClickUp ficam na tela** (pela etiqueta do projeto). Na fase 2: lista e linha do tempo com o gasto.
 - **Nada duplicado:** projeto e página em `mkt`, lead em `pessoas`, visita em `mkt_web`.
 
@@ -447,9 +448,10 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
 - **Vida do projeto** (clique na linha): investido × verba (por plataforma), ritmo de ontem, quanto deveria ter gasto
   pelas fases, KPIs × metas (com CPC e page views), fases planejado × gasto (uma linha por fase planejada ou com
   campanha nela, mais "sem fase"; criar, editar, apagar o planejamento), campanhas do projeto (fase "pelo objetivo" ou
-  "à mão"), **receita gerada** com os produtos da Hotmart ligados (ligar, editar, apagar; o campo do id sugere os
-  produtos que já venderam) e **atividades do ClickUp** com a linha do tempo do gasto diário (fase 2). Botão
-  **Planejamento** (status, gestores, verbas, metas).
+  "à mão"), **receita gerada** com os produtos da Hotmart ligados (ligar, editar, apagar; conta da Hotmart e produto
+  escolhidos numa lista dos que já venderam naquela conta) e **atividades do ClickUp** com a linha do tempo do gasto
+  diário (fase 2). Botão **Planejamento** (verbas e metas; status e gestores aparecem só para leitura, com "Editar no
+  projeto"). Status e gestores se editam no botão **Projeto** (cadastro).
 - **Campanhas fora do padrão:** o nome exato, o que está fora, ligar à mão a um projeto, "Reler os nomes" (depois de
   cadastrar projeto ou página em Marketing > Projetos e páginas). Opção "só as sem projeto".
 - **Contas de anúncio:** cadastro e edição.
@@ -501,7 +503,7 @@ configurável e está nas perguntas.
 | Peça | Onde | Como funciona |
 |---|---|---|
 | Resumo do dia | `public.trafego_alertas`, `mkt_trafego.alertas`; `domain/alertas.ts`; `ui/ResumoDia.tsx` | Sobre ontem (São Paulo), só projetos ativos e com status que entra no resumo (`status_projeto.entra_no_resumo_dia`: inativo e encerrado ficam fora). 7 regras, limiar em `mkt_trafego.alerta_regras` (tabela abaixo). A mesma regra no front para o demo e os testes |
-| Receita | `mkt_trafego.produtos_hotmart` (vínculo à mão), `mkt_trafego.receita`, `public.trafego_produto_*`, `trafego_hotmart_produtos`; `ui/ProdutosHotmart.tsx` | Soma `public.compras.preco` das compras **APPROVED, COMPLETE ou COMPLETED** (a regra que o repo já usa em `public.compras`) dos produtos ligados, com data `coalesce(data_aprovacao, data_compra)` no período (do vínculo, senão o do projeto; sem fim = até hoje; sem início não soma). Oferta opcional. Só BRL na soma (outra moeda contada à parte). Compra que casa com dois vínculos conta uma vez. Nada é copiado: lido na hora |
+| Receita | `mkt_trafego.produtos_hotmart` (vínculo à mão: **conta** + produto + oferta opcional), `mkt_trafego.receita`, `public.trafego_produto_*`, `trafego_hotmart_produtos` (seletor por conta); `ui/ProdutosHotmart.tsx` | Lê `fin.hotmart_transacoes` (espelho da Hotmart do financeiro, contas `academy` e `escritorio`) casando por conta + produto (+ oferta). Paga = **APPROVED ou COMPLETE** (a regra do financeiro em `fin.vw_transacoes`); data = `aprovado_em` (dia de São Paulo); **bruto = valor da oferta** (`valor_base`, sem os juros do parcelamento) e líquido do produtor à parte. Período do vínculo, senão o padrão da receita; sem início não soma. Só BRL na soma. Venda que casa com dois vínculos conta uma vez. Nada é copiado: lido na hora |
 | Atividades do ClickUp | `mkt_trafego.clickup_tarefas` (espelho mínimo), `public.trafego_clickup`, `public.trafego_clickup_receber`; Edge `trafego-clickup`; `ui/ClickupPainel.tsx`, `domain/linha-do-tempo.ts` | A rotina lê (só GET) as tarefas de cada etiqueta de projeto ativo, todas as páginas, e grava o conjunto inteiro (quem não veio perde a etiqueta). Na vida do projeto: barras do gasto diário e bolinhas das atividades no dia (concluída, senão prazo, início ou criação) e a lista |
 | Coleta Meta Ads | Edge `trafego-meta` (`meta.ts` puro + `index.ts`); `mkt_trafego.meta_contas`, `coleta_config`, `coletas` | Para cada conta Meta ativa: campanhas (nome exato e status) e insights por campanha e dia (`spend`, `impressions`, `inline_link_clicks` = cliques no link, `clicks` = totais, ação `lead` = leads da plataforma) dos últimos `meta_dias` (3) dias completos e hoje; grava pelos `receber` da 20261006g (campanhas antes, upsert idempotente). Token só no header; falha por conta vira código curto em `mkt_trafego.coletas` |
 | Google Ads | `infra/supabase/functions/trafego-google/google.ts` | Só o esqueleto (GAQL e conversão de micros), sem `index.ts`. Desenho abaixo |
@@ -735,8 +737,8 @@ cadastra de forma idempotente (por plataforma e id): nome exato, id sem `act_`, 
 10. ~~Limiares do resumo do dia~~ **Confirmados (06/10/2026)** verba diária, CPL, ritmo e 90 %; leads abaixo da meta e
     fora do padrão/sem fase ficam ligados (o Victor não comentou esses dois). Texto original: os iniciais eram proposta minha (0 % verba diária, 0 % CPL, 20 % leads e ritmo da
     fase, 90 % da verba, 7 dias para fora do padrão e sem fase). Servem? Inativo e encerrado fora do resumo, ok?
-11. **Receita bruta ou líquida?** Hoje soma `public.compras.preco` (o valor da compra que a Hotmart manda no webhook,
-    antes da taxa). O financeiro tem o líquido em `fin.hotmart_transacoes`.
+11. ~~Receita bruta ou líquida?~~ **Decidido (auditoria, 06/10/2026):** a fonte passa a ser `fin.hotmart_transacoes`;
+    a tela mostra o **bruto** (valor da oferta, o "bruto do negócio" do financeiro) e o **líquido** do produtor ao lado.
 12. **Reembolso e chargeback:** a Hotmart troca o status da própria compra, então ela sai da receita (inclusive de dias
     passados: a receita de um projeto encerrado pode cair depois). É isso que você quer, ou a receita deve ficar como no
     dia da venda e o reembolso aparecer à parte?
@@ -811,7 +813,7 @@ estiver aplicada.
 | 2 | `20261006f_mkt_web_coleta` | 20261005n | 20261005m | coleta da Web (`mkt_web`, 14 tabelas, 12 funções), recusas da porta, limites, resumo, retenção; agenda 3 rotinas SQL (`mkt-web-manter`, `mkt-web-agregar`, `mkt-web-ritmo`) |
 | 3 | `20261006g_mkt_trafego` | 20261005p | 20261005m; lê a base de pessoas do Arthur se existir (existe) | 6 fases (com **antecipação** logo antes de captação) e 7 objetivo → fase, contas, coleta, planejamento, resumo conferido à mão, **leads e MQL da base do Arthur** (pessoa juntada conta como a que ficou), grants e recusas 42501 |
 | 4 | `20261006h_mkt_web_fase2` | 20261005q | 20261006f e 20261005m; conversa com a base de pessoas e com a 20261006g | fluxo, melhorias, mapa de calor, laboratório do Google, connect rate com o Tráfego, **lead ligado à pessoa** pela `ref` do Arthur (pessoa juntada, MQL do grupo, e `public.pessoas_registrar_lead` gravando `visitantes.lead_ref`); agenda `mkt-web-pagespeed` |
-| 5 | `20261006i_mkt_trafego_fase2` | 20261005r (a nossa) | 20261006g | resumo do dia com limiares, receita Hotmart por vínculo, ClickUp, rotinas criadas **desligadas** (a conferência aborta se estiverem agendadas), segredo `trafego_coleta_chave` no Vault |
+| 5 | `20261006i_mkt_trafego_fase2` | 20261005r (a nossa) | 20261006g (lê `fin.hotmart_transacoes` e `fin.hotmart_contas`, do financeiro, já em produção) | resumo do dia com limiares, receita Hotmart por vínculo (conta + produto), ClickUp, rotinas criadas **desligadas** (a conferência aborta se estiverem agendadas), segredo `trafego_coleta_chave` no Vault |
 | 6 | `20261006j_mkt_projetos_cadastro` | 20261006a | 20261006g e 20261006i | cadastro do projeto (tipo, unidade, tipo de lançamento com a regra no banco, especialista, períodos, contas), checklist, etiquetas do ClickUp |
 | 7 | `20261006k_mkt_trafego_contas_meta` | 20261006b | 20261006j | as 16 contas do Meta com unidade e principal; aborta se a coleta do Meta já estiver agendada |
 | 8 | `20261006l_mkt_trafego_modelos` | 20261006d | 20261006j (aborta se o pacote ou o checklist antigo tiverem dado) | 9 modelos de exemplo (rascunho), prévia e aplicar, checklist por momento, **SendFlow: grupo de leads onde há LEADS, grupo de compradores onde há VENDAS** |
@@ -839,10 +841,12 @@ estiver aplicada.
    `main` publica). Fazer isso só com as migrations acima aplicadas.
 
 **Como foi ensaiado (06/10/2026, PGlite, Postgres 17):** prelúdio com papéis, `auth.uid()`, `perfis`, `gp_is_admin`,
-pg_cron/Vault/`ops.cron_post` de mentira, `public.compras` da Hotmart, as tabelas e índices que a 20261005r do Arthur
+pg_cron/Vault/`ops.cron_post` de mentira, `public.compras` da Hotmart, um `fin.hotmart_transacoes` local (colunas reais,
+`conta` com FK, sem o gatilho do CRM), as tabelas e índices que a 20261005r do Arthur
 confere (com a expressão exata de produção) e `pg_trgm`; depois a **20261005m e a `20261005r_pessoas_e_crm_fundacao`
 reais da main** (com o índice pré-criado), e então a cadeia acima, cada ensaio no ponto dele e a migration em seguida.
-Resultado: todas aplicaram, **nenhuma `ERRADO`**; 385 `ok` (rodada da auditoria de 06/10/2026); 2 PULADO esperados (7.tráfego da 20261006e e 6.web da
+Resultado: todas aplicaram, **nenhuma `ERRADO`**; 385 `ok` (rodada da auditoria de 06/10/2026; na segunda rodada, 340
+linhas `ok:` contadas com `grep -c "| ok:"`, mais `3.financeiro` PULADO, que só roda no Supabase); 2 PULADO esperados (7.tráfego da 20261006e e 6.web da
 20261006g, porque o que eles leem vem depois; provados em rodadas extras com a ordem trocada). A Mensageria e as F1 a F7
 do CRM **não rodaram no PGlite** (pedem vigia, pg_net, schema `arquivo`, pgcrypto); conferido no código que elas só
 alargam os `check` de `pessoas.eventos`/`identificadores` e não mexem em `pessoas.pessoas`, `atual`, `grupo`,
@@ -852,6 +856,55 @@ SELECT): `pessoas.pessoas` com `ref`, `situacao`, `mesclada_em`, `teste`; `pesso
 `DISTRIBUIÇÃO, LEADS, LEMBRETE, REMARKETING, VENDAS`.
 
 ## Auditoria antes de publicar (06/10/2026, branch `victor`)
+
+### Segunda rodada: itens aprovados pelo Victor (06/10/2026)
+
+Tudo nas migrations NÃO aplicadas (20261006g, 20261006i, 20261006j editadas no lugar) e nas telas. Nada aplicado em
+produção; no banco real, só SELECT. Cadeia de ensaios em PGlite sem `ERRADO` (340 linhas `ok:`; `3.financeiro` PULADO
+no local, roda só no Supabase).
+
+1. **Receita lê `fin.hotmart_transacoes`** (era `public.compras`). É o espelho da Hotmart do financeiro (20260927, em
+   produção) e tem as duas contas (`conta` = `academy`, a CSM, e `escritorio`). O vínculo produto → projeto
+   (`mkt_trafego.produtos_hotmart`) ganhou a coluna **`conta`** (tem de existir em `fin.hotmart_contas`), e o casamento
+   é por conta + produto_id (+ oferta, opcional). Regras, todas copiadas do financeiro (`fin.vw_transacoes`, 20260927b):
+   - **paga** = `status` `APPROVED` ou `COMPLETE` (o grupo `pago`). Valores reais de `status` (SELECT de 06/10/2026):
+     COMPLETE, CANCELLED, EXPIRED, OVERDUE, REFUNDED, STARTED, CHARGEBACK, APPROVED, PROTESTED, PRINTED_BILLET,
+     PARTIALLY_REFUNDED, WAITING_PAYMENT. Moedas: BRL, USD, EUR, CHF, GBP (só BRL soma; as outras contadas à parte).
+   - **data** = `aprovado_em`, dia de São Paulo (o `dia_aprovado` do faturamento do financeiro).
+   - **bruto** (o número da tela) = valor da oferta = `coalesce(valor_base, bruto_json purchase.hotmart_fee.base,
+     valor_cobrado)`, o `valor_oferta` que a 20260927b chama de "BRUTO do negócio". Não é `valor_cobrado`, que soma os
+     juros do parcelamento pagos à Hotmart.
+   - **líquido** = `coalesce(liquido_produtor, oferta − taxa_hotmart)` (o `liquido` da view), coluna extra
+     `receita_liquida` no resumo, com `receita_liquido_estimado` (quantas vendas sem a comissão da Hotmart).
+   - Conferido no banco real (SELECT): para o produto de maior venda da academy nos últimos 60 dias, a nossa conta e
+     `fin.vw_transacoes` dão o mesmo valor (840.819,12).
+   - **Índice:** a receita usa o índice do financeiro `hotmart_transacoes_produto_idx (produto_id, aprovado_em)` (EXPLAIN
+     no banco real: Index Scan; conta e status viram filtro). Não falta índice; nenhum foi criado na tabela do financeiro.
+   - **Seletor** na tela de ligar produto: escolhe a conta e depois o produto numa lista dos que já venderam nela
+     (`public.trafego_hotmart_produtos`, admin/dev: nome mais recente, pagas, última venda e as ofertas vistas), em vez
+     de digitar o id. A oferta também é escolhida na lista.
+   - O ensaio da 20261006i não insere transação fictícia em produção: `fin.hotmart_transacoes` tem o gatilho do CRM do
+     Arthur (`zz_crm_hotmart_sync_ins`). Lá ele só confere um produto real contra `fin.vw_transacoes`.
+2. **Leads "sem dado"** enquanto o projeto não tiver nenhum lead na base de pessoas (antes mostrava 0). Com isso MQL,
+   % MQL e CPL também ficam "sem dado", e o alerta "abaixo da meta de leads" (e o de CPL) não dispara
+   (`mkt_trafego.resumo`, 20261006g; `comKpis` no front, para o modo de demonstração).
+3. **Status e gestores só no cadastro do projeto** (botão Projeto). O Planejamento mostra os dois só para leitura, com
+   "Editar no projeto". `public.trafego_planejamento_salvar` passa a não mexer no status quando a chave não vem (como já
+   fazia com os gestores).
+4. **Busca e ordenação na tabela da Central:** busca por sigla ou nome (sem acento, sem maiúscula); clique no cabeçalho
+   ordena por qualquer coluna (setinha; de novo inverte; a terceira volta à ordem padrão). "Sem dado" fica sempre no fim.
+   Busca e ordem ficam na URL (`?q=…&ordem=…&dir=…`). Regras em `trafego/domain/kpis.ts` (com testes).
+5. **"Novo projeto" em Marketing > Projetos e páginas** leva ao cadastro completo do Tráfego
+   (`/marketing/trafego?novo=1` abre o cadastro com tipo, unidade, períodos e contas). Editar projeto existente continua
+   na tela de Projetos.
+6. **Objetivo RMKT:** campanhas reais do Seminário de setembro usam `RS | SEMSET26 | RMKT | …`. RMKT **não** entrou na
+   lista: a campanha segue fora do padrão, agora com o motivo "Objetivo RMKT não está na lista; o padrão é REMARKETING"
+   (`OBJETIVO_PADRAO_DE` em `projetos/domain/campanha.ts`, só para o motivo).
+
+**Pergunta ao Victor:** aceitar **RMKT como sinônimo de REMARKETING** (a campanha passaria a ser do padrão e a cair na fase
+remarketing)? Hoje não aceita.
+
+### Primeira rodada
 
 Pedido do Victor: tudo funcional, performance, experiência de uso e banco do Marketing sem dado duplicado. Mudanças
 feitas nas migrations NÃO aplicadas (20261006e a 20261006l) e nas telas; cadeia de ensaios em PGlite sem `ERRADO`
@@ -896,7 +949,7 @@ feitas nas migrations NÃO aplicadas (20261006e a 20261006l) e nas telas; cadeia
   evento.
 
 **Achados para decidir (não mexidos):** ver o relatório da auditoria (receita sem as vendas do Escritório em
-`public.compras`, coleta antiga do Meta em `controle.*`, MQL da Web × base de pessoas, leads 0 × "sem dado", timeout de
+`public.compras` e leads 0 × "sem dado": resolvidos na segunda rodada, acima; coleta antiga do Meta em `controle.*`, MQL da Web × base de pessoas, timeout de
 150 s das rotinas HTTP, Esc do Modal/Drawer, duplicidades entre Mensageria e CRM).
 
 ## Branches
@@ -966,3 +1019,8 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
   ficha (a tela do Arthur não abre por URL). Decisões novas do Victor: **ANTECIPAÇÃO** na lista de objetivos, com a fase
   antecipação logo antes da captação; **grupo é etapa do funil** (SendFlow: grupo de leads nos modelos com LEADS, grupo
   de compradores nos com VENDAS). Branch `victor`.
+- **06/10/2026:** auditoria, segunda rodada (itens aprovados pelo Victor; migrations 20261006g, 20261006i e 20261006j
+  editadas, ainda NÃO APLICADAS): receita lida de `fin.hotmart_transacoes` (as duas contas, bruto com líquido ao lado,
+  regra de paga do financeiro) com vínculo por conta e seletor de produto; leads "sem dado" sem lead na base; status e
+  gestores só no cadastro do projeto; busca e ordenação na Central (na URL); "Novo projeto" de Projetos e páginas leva
+  ao cadastro do Tráfego; RMKT fora do padrão com o motivo claro. Branch `victor`.

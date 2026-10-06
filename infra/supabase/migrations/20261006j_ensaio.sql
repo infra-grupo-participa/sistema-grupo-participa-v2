@@ -408,7 +408,8 @@ begin
              'receita_aplica', p.tipo is distinct from 'externo',
              'checklist_feitos', (ck.c ->> 'feitos')::int, 'checklist_total', (ck.c ->> 'total')::int)
            -- receita dos externos não entra por ora (Victor, 06/10/2026)
-           || case when p.tipo = 'externo' then jsonb_build_object('receita', null, 'receita_compras', null,
+           || case when p.tipo = 'externo' then jsonb_build_object('receita', null, 'receita_liquida', null,
+                                                                   'receita_liquido_estimado', null, 'receita_compras', null,
                                                                    'receita_outras_moedas', null, 'receita_sem_valor', null)
                    else '{}'::jsonb end
            order by x.o), '[]'::jsonb)
@@ -1304,9 +1305,9 @@ begin
     and l ->> 'especialista' = 'Marcio Carvalho de Sá' and (l ->> 'receita_aplica')::boolean and l ->> 'subarea' = 'interno'
     and pg_temp.linha('ZR28') -> 'contas_projeto' = (select jsonb_agg(conta_id order by conta_id) from mkt_trafego.projeto_contas where projeto_id = pg_temp.proj('ZR28')),
     'linha do resumo com tipo, unidade, tipo de lançamento, especialista e contas');
-  v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZS28'), 'produto_id', '9990601', 'de', '2026-01-01')));
+  v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZS28'), 'conta', 'academy', 'produto_id', '9990601', 'de', '2026-01-01')));
   l := pg_temp.linha('ZS28');
-  perform pg_temp.ok('7.receita externo', (v ->> 'ok')::boolean and l -> 'receita' = 'null'::jsonb and not (l ->> 'receita_aplica')::boolean
+  perform pg_temp.ok('7.receita externo', (v ->> 'ok')::boolean and l -> 'receita' = 'null'::jsonb and l -> 'receita_liquida' = 'null'::jsonb and not (l ->> 'receita_aplica')::boolean
     and l ->> 'tipo' = 'externo', 'externo com produto ligado: receita nula e "não se aplica"');
   v := pg_temp.srv($$select public.trafego_clickup_etiquetas_receber('{"etiquetas":["zz-ensaio-b","ZZ-Ensaio-A","com espaço"," zz-ensaio-a"]}')$$);
   perform pg_temp.ok('7.etiquetas', (v ->> 'gravadas')::int = 2 and (v ->> 'fora_do_formato')::int = 1
@@ -1342,7 +1343,7 @@ begin
   perform pg_temp.ok('9.período pela metade', not (v ->> 'ok')::boolean, 'captação só com início recusada');
   v := pg_temp.salvar('{"sigla":"ZK28","nome":"Ensaio","linha":"Ensaio","tipo":"interno","unidade":"csm","evento_inicio":"2026-11-10","evento_fim":"2026-11-01"}');
   perform pg_temp.ok('9.evento invertido', not (v ->> 'ok')::boolean, 'evento com fim antes do início recusado');
-  v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZM28'), 'produto_id', '9990602')));
+  v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZM28'), 'conta', 'academy', 'produto_id', '9990602')));
   x := pg_temp.adm(format('select public.trafego_produtos_listar(%s)', pg_temp.proj('ZM28'))) -> 0;
   perform pg_temp.ok('9.receita padrão', (v ->> 'ok')::boolean and not (v -> 'avisos' ? 'sem_periodo')
     and x ->> 'de_efetivo' = '2026-11-01' and x ->> 'ate_efetivo' = '2026-11-27'

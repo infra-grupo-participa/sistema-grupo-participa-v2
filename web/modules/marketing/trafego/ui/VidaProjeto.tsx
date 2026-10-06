@@ -47,18 +47,17 @@ const ROTULO_NUMERO: Record<CampoNumerico, string> = {
   meta_cpl: 'Meta de CPL', meta_pct_mql: 'Meta de % MQL',
 };
 
-function ModalPlanejamento({ vida, config, onFechar, onSalvo }: { vida: Vida; config: ConfigTrafego; onFechar: () => void; onSalvo: (m: string) => void }) {
+function ModalPlanejamento({ vida, onFechar, onSalvo, onEditarProjeto }: {
+  vida: Vida; onFechar: () => void; onSalvo: (m: string) => void; onEditarProjeto?: () => void;
+}) {
   const r = vida.resumo;
   const [f, setF] = useState<PlanejamentoForm>({
-    projeto_id: r.projeto_id, status: r.status ?? '', gestores: [...r.gestores], verba_maxima: txt(r.verba_maxima), verba_diaria: txt(r.verba_diaria),
+    projeto_id: r.projeto_id, verba_maxima: txt(r.verba_maxima), verba_diaria: txt(r.verba_diaria),
     meta_leads: txt(r.meta_leads), meta_receita: txt(r.meta_receita), meta_cpl: txt(r.meta_cpl), meta_pct_mql: txt(r.meta_pct_mql), obs: r.obs ?? '',
   });
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const set = (k: Exclude<keyof PlanejamentoForm, 'gestores' | 'projeto_id'>, v: string) => setF((x) => ({ ...x, [k]: v }));
-  const alternaGestor = (sigla: string) => setF((x) => ({
-    ...x, gestores: x.gestores.includes(sigla) ? x.gestores.filter((g) => g !== sigla) : [...x.gestores, sigla],
-  }));
+  const set = (k: Exclude<keyof PlanejamentoForm, 'projeto_id'>, v: string) => setF((x) => ({ ...x, [k]: v }));
   const numero = (k: CampoNumerico) => (
     <Input inputMode="decimal" value={f[k]} aria-label={ROTULO_NUMERO[k]} onChange={(e) => set(k, e.target.value)} />
   );
@@ -83,24 +82,17 @@ function ModalPlanejamento({ vida, config, onFechar, onSalvo }: { vida: Vida; co
       <Button variant="ghost" size="sm" onClick={onFechar}>Cancelar</Button>
       <Button size="sm" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</Button>
     </>}>
+      {/* status e gestores se editam só no cadastro do projeto (auditoria 06/10/2026); aqui, só leitura */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2 text-sm">
+        <span><span className="text-xs text-[var(--fg-3)]">Status </span>{r.status_nome ? <Badge tone={tomStatus(r.status)}>{r.status_nome}</Badge> : <span className="text-[var(--fg-3)]">sem status</span>}</span>
+        <span><span className="text-xs text-[var(--fg-3)]">Gestores </span>{r.gestores.length ? r.gestores.join(', ') : <span className="text-[var(--fg-3)]">nenhum</span>}</span>
+        {onEditarProjeto && (
+          <button type="button" className="ml-auto text-xs font-semibold text-[var(--accent)] hover:underline focus-visible:underline" onClick={onEditarProjeto}>
+            Editar no projeto
+          </button>
+        )}
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Campo rotulo="Status" dica="marcado à mão">
-          <FilterSelect value={f.status} onChange={(e) => set('status', e.target.value)}>
-            <option value="">Sem status</option>
-            {config.status.map((s) => <option key={s.codigo} value={s.codigo}>{s.nome}</option>)}
-          </FilterSelect>
-        </Campo>
-        <fieldset>
-          <legend className="block text-xs font-medium text-[var(--fg-2)] mb-1">Gestores <span className="font-normal text-[var(--fg-3)]"> · um ou mais</span></legend>
-          <div className="flex flex-wrap gap-3 pt-1">
-            {config.gestores.map((g) => (
-              <label key={g.sigla} className="inline-flex items-center gap-1.5 text-sm text-[var(--fg-2)] cursor-pointer">
-                <input type="checkbox" checked={f.gestores.includes(g.sigla)} onChange={() => alternaGestor(g.sigla)} />
-                <span title={g.nome}>{g.sigla}</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
         <Campo rotulo="Verba máxima (R$)">{numero('verba_maxima')}</Campo>
         <Campo rotulo="Verba diária (R$)">{numero('verba_diaria')}</Campo>
         <Campo rotulo="Meta de leads">{numero('meta_leads')}</Campo>
@@ -382,7 +374,8 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
         </SectionCard>
       </div>
 
-      {editPlan && <ModalPlanejamento vida={vida} config={config} onFechar={() => setEditPlan(false)} onSalvo={salvo} />}
+      {editPlan && <ModalPlanejamento vida={vida} onFechar={() => setEditPlan(false)} onSalvo={salvo}
+        onEditarProjeto={cad && listas ? () => { setEditPlan(false); setEditProjeto(true); } : undefined} />}
       {editFase && <ModalFase inicial={editFase} config={config} captacao={{ inicio: r.captacao_inicio ?? null, fim: r.captacao_fim ?? null }} onFechar={() => setEditFase(null)} onSalvo={salvo} />}
       {editProjeto && cad && listas && (
         <ModalProjetoCadastro inicial={formDoCadastro(cad)} listas={listas} config={config} contas={contas} onFechar={() => setEditProjeto(false)} onSalvo={salvo} />

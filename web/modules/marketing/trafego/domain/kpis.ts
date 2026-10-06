@@ -4,6 +4,7 @@
 // Regra da casa: sem fonte ou sem base para a conta = null ("sem dado"), nunca zero inventado.
 //   % da verba   = investido ÷ verba máxima × 100           (1 casa)
 //   CPL          = investido ÷ leads da nossa base           (2 casas) (lead da base, decisão do Victor 05/10/2026)
+//   leads        = nulo ("sem dado") enquanto o projeto não tiver nenhum lead na base; com isso CPL e % MQL também
 //   CTR          = cliques no link ÷ impressões × 100        (2 casas) (cliques no link, Victor 05/10/2026)
 //   CPC          = investido ÷ cliques no link               (2 casas)
 //   CPM          = investido ÷ impressões × 1000             (2 casas)
@@ -87,14 +88,19 @@ export function esperadoAte(
 type Totais = 'investido' | 'verba_maxima' | 'impressoes' | 'cliques_link' | 'page_views' | 'leads_pagina' | 'leads' | 'mql' | 'gasto_ontem' | 'verba_diaria';
 type Kpis = 'pct_verba' | 'cpl' | 'ctr' | 'cpc' | 'cpm' | 'pct_mql' | 'connect_rate' | 'conversao_pagina' | 'ritmo_ontem';
 export function comKpis<T extends Pick<LinhaResumo, Totais>>(l: T): T & Pick<LinhaResumo, Kpis> {
+  // nenhum lead do projeto na base = "sem dado", não zero (auditoria 06/10/2026; o banco faz o mesmo em mkt_trafego.resumo)
+  const leads = num(l.leads) && l.leads > 0 ? l.leads : null;
+  const mql = leads === null ? null : l.mql;
   return {
     ...l,
+    leads,
+    mql,
     pct_verba: pctVerba(l.investido, l.verba_maxima),
-    cpl: cpl(l.investido, l.leads),
+    cpl: cpl(l.investido, leads),
     ctr: ctr(l.cliques_link, l.impressoes),
     cpc: cpc(l.investido, l.cliques_link),
     cpm: cpm(l.investido, l.impressoes),
-    pct_mql: pctMql(l.mql, l.leads),
+    pct_mql: pctMql(mql, leads),
     connect_rate: connectRate(l.page_views, l.cliques_link),
     conversao_pagina: conversaoPagina(l.leads_pagina, l.page_views),
     ritmo_ontem: l.investido == null ? null : ritmo(l.gasto_ontem, l.verba_diaria),
@@ -135,4 +141,77 @@ export function totais(linhas: LinhaResumo[]): { investido: number | null; verba
     foraPadrao: linhas.reduce((a, l) => a + l.campanhas_fora_padrao, 0),
     acimaRitmo: linhas.filter((l) => situacaoRitmo(l.ritmo_ontem) === 'acima').length,
   };
+}
+
+// ─── Busca e ordenação da tabela da Central (auditoria 06/10/2026). Estado na URL: ?q=…&ordem=coluna&dir=asc|desc ──
+
+export const COLUNAS_CENTRAL = [
+  'status', 'projeto', 'receita', 'investido', 'verba_maxima', 'pct_verba', 'cpl', 'leads', 'ctr', 'cpm', 'connect_rate',
+  'conversao_pagina', 'pct_mql', 'gestor', 'montagem',
+] as const;
+export type ColunaCentral = (typeof COLUNAS_CENTRAL)[number];
+export type Direcao = 'asc' | 'desc';
+export interface OrdemCentral { coluna: ColunaCentral | null; dir: Direcao }
+export const ORDEM_INICIAL: OrdemCentral = { coluna: null, dir: 'asc' };
+
+const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+/** Busca por sigla ou nome do projeto (sem diferença de maiúscula nem acento). Vazio = todas. */
+export function buscarLinhas(linhas: LinhaResumo[], q: string): LinhaResumo[] {
+  const t = semAcento(q);
+  if (!t) return linhas;
+  return linhas.filter((l) => semAcento(l.sigla).includes(t) || semAcento(l.nome ?? '').includes(t));
+}
+
+/** O valor que a coluna mostra (o que ordena). null = "sem dado" (vai sempre para o fim, nas duas direções). */
+function valorColuna(l: LinhaResumo, c: ColunaCentral): number | string | null {
+  switch (c) {
+    case 'status': return l.status_nome ?? null;
+    case 'projeto': return l.sigla;
+    case 'receita': return l.receita_aplica === false ? null : l.receita;
+    case 'gestor': {
+      const g = l.gestores.length ? l.gestores : l.gestores_campanhas;
+      return g.length ? g.join(', ') : null;
+    }
+    case 'montagem': return l.checklist_total ? (l.checklist_feitos ?? 0) / l.checklist_total : null;
+    default: return l[c] ?? null;
+  }
+}
+
+/** Ordena pela coluna; empate e "sem dado" ficam na ordem original (o banco já manda ativos primeiro e por sigla). */
+export function ordenarLinhas(linhas: LinhaResumo[], o: OrdemCentral): LinhaResumo[] {
+  if (!o.coluna) return linhas;
+  const c = o.coluna;
+  const sinal = o.dir === 'asc' ? 1 : -1;
+  return linhas
+    .map((l, i) => ({ l, i, v: valorColuna(l, c) }))
+    .sort((a, b) => {
+      if (a.v === null || b.v === null) return a.v === b.v ? a.i - b.i : a.v === null ? 1 : -1;
+      const d = typeof a.v === 'number' && typeof b.v === 'number' ? a.v - b.v : String(a.v).localeCompare(String(b.v), 'pt-BR');
+      return d !== 0 ? d * sinal : a.i - b.i;
+    })
+    .map((x) => x.l);
+}
+
+/** Clique no cabeçalho: coluna nova começa crescente; a mesma alterna; a terceira vez volta à ordem do banco. */
+export function alternarOrdem(atual: OrdemCentral, c: ColunaCentral): OrdemCentral {
+  if (atual.coluna !== c) return { coluna: c, dir: 'asc' };
+  return atual.dir === 'asc' ? { coluna: c, dir: 'desc' } : ORDEM_INICIAL;
+}
+
+/** Lê busca e ordem da URL (valores fora da lista são ignorados). */
+export function lerEstadoUrl(qs: string): { q: string; ordem: OrdemCentral } {
+  const p = new URLSearchParams(qs);
+  const col = p.get('ordem');
+  const coluna = (COLUNAS_CENTRAL as readonly string[]).includes(col ?? '') ? (col as ColunaCentral) : null;
+  return { q: (p.get('q') ?? '').slice(0, 80), ordem: coluna ? { coluna, dir: p.get('dir') === 'desc' ? 'desc' : 'asc' } : ORDEM_INICIAL };
+}
+
+/** Escreve busca e ordem na query string atual, sem tocar nos outros parâmetros. */
+export function escreverEstadoUrl(qs: string, q: string, o: OrdemCentral): string {
+  const p = new URLSearchParams(qs);
+  if (q.trim()) p.set('q', q.trim()); else p.delete('q');
+  if (o.coluna) { p.set('ordem', o.coluna); p.set('dir', o.dir); } else { p.delete('ordem'); p.delete('dir'); }
+  const s = p.toString();
+  return s ? `?${s}` : '';
 }

@@ -56,14 +56,20 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
     expect(demoResumo().find((l) => l.sigla === 'HT33')!.connect_rate).toBeNull();
   });
   it('receita (fase 2): PB26 com o produto Exemplo ligado; sem vínculo = sem dado; vínculo sem período não soma', () => {
-    expect(demoResumo().find((l) => l.sigla === 'PB26')!.receita).toBe(18450);
+    const pb = demoResumo().find((l) => l.sigla === 'PB26')!;
+    expect([pb.receita, pb.receita_liquida]).toEqual([18450, 17520]);
     expect(demoResumo().find((l) => l.sigla === 'HT33')!.receita).toBeNull();
-    const r = demoSalvarProduto({ projeto_id: 2, produto_id: '0000002', oferta_codigo: '', de: '', ate: '', obs: '' });
+    // sem conta: recusado (auditoria 06/10/2026: o vínculo leva a conta da Hotmart)
+    expect(demoSalvarProduto({ projeto_id: 2, produto_id: '0000002', oferta_codigo: '', de: '', ate: '', obs: '' }).ok).toBe(false);
+    const r = demoSalvarProduto({ projeto_id: 2, conta: 'escritorio', produto_id: '0000002', oferta_codigo: '', de: '', ate: '', obs: '' });
     expect([r.ok, r.avisos]).toEqual([true, ['sem_periodo']]);
+    // o mesmo id em outra conta: sem venda nela
+    expect(demoSalvarProduto({ projeto_id: 2, conta: 'academy', produto_id: '0000002', oferta_codigo: '', de: '', ate: '', obs: '' }).avisos)
+      .toEqual(['sem_periodo', 'produto_sem_compras']);
     const ht = demoResumo().find((l) => l.sigla === 'HT33')!;
-    expect([ht.receita, ht.receita_vinculos, ht.receita_sem_periodo]).toEqual([null, 1, 1]);
-    demoApagarProduto(demoProdutos(2)[0].id);
-    expect(demoSalvarProduto({ projeto_id: 1, produto_id: '0000001', oferta_codigo: '', de: '', ate: '', obs: '' }).ok).toBe(false);
+    expect([ht.receita, ht.receita_vinculos, ht.receita_sem_periodo]).toEqual([null, 2, 2]);
+    for (const v of demoProdutos(2)) demoApagarProduto(v.id);
+    expect(demoSalvarProduto({ projeto_id: 1, conta: 'academy', produto_id: '0000001', oferta_codigo: '', de: '', ate: '', obs: '' }).ok).toBe(false);
   });
   it('cadastro (20261006j): reais sem unidade nem contas; fictícios com tipo, unidade, lançamento e especialista Exemplo', () => {
     const pb = demoCadastro(1)!;

@@ -447,7 +447,8 @@ begin
              'receita_aplica', p.tipo is distinct from 'externo',
              'checklist_feitos', (ck.c ->> 'feitos')::int, 'checklist_total', (ck.c ->> 'total')::int)
            -- receita dos externos não entra por ora (Victor, 06/10/2026)
-           || case when p.tipo = 'externo' then jsonb_build_object('receita', null, 'receita_compras', null,
+           || case when p.tipo = 'externo' then jsonb_build_object('receita', null, 'receita_liquida', null,
+                                                                   'receita_liquido_estimado', null, 'receita_compras', null,
                                                                    'receita_outras_moedas', null, 'receita_sem_valor', null)
                    else '{}'::jsonb end
            order by x.o), '[]'::jsonb)

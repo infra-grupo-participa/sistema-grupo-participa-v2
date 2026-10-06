@@ -3,14 +3,18 @@
 // Marketing > Tráfego: a Central do Tráfego. Resumo do dia no topo (20261006i), tabela de projetos com filtros, "a vida do
 // projeto" no clique, cadastro de contas e campanhas fora do padrão. Só admin/dev (gate no layout, na page e no banco).
 // Migrations 20261006g e 20261006i. 20261006j: filtros por tipo e unidade, "Novo projeto" (cadastro do evento), progresso
-// do checklist de montagem. 20261006l: aba de modelos de lançamento (no lugar de pacotes e checklist).
+// do checklist de montagem. 20261006l: aba de modelos de lançamento (no lugar de pacotes e checklist). Auditoria 06/10/2026:
+// busca por sigla/nome e ordenação por qualquer coluna (setinha no cabeçalho), as duas na URL (?q=…&ordem=…&dir=…).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Badge, Button, DataTable, EmptyState, FilterSelect, KpiCard, Loading, SectionCard, Tabs, Td, Th, Thead, Toast, Toggle, Tr, idsAba, useFlash,
+  Badge, Button, DataTable, EmptyState, FilterSelect, KpiCard, Loading, SearchInput, SectionCard, Tabs, Td, Th, Thead, Toast, Toggle, Tr, idsAba, useFlash,
 } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { PROJETO_FORM_VAZIO, type ListasCadastro } from '../domain/cadastro';
-import { FILTROS_INICIAIS, comKpis, filtrar, situacaoRitmo, totais, type FiltrosCentral } from '../domain/kpis';
+import {
+  FILTROS_INICIAIS, ORDEM_INICIAL, alternarOrdem, buscarLinhas, comKpis, escreverEstadoUrl, filtrar, lerEstadoUrl, ordenarLinhas, situacaoRitmo, totais,
+  type ColunaCentral, type FiltrosCentral, type OrdemCentral,
+} from '../domain/kpis';
 import { ROTULO_TIPO, type ConfigTrafego, type Conta, type LinhaResumo, type Tipo } from '../domain/tipos';
 import { MODO_DEMO, carregarConfig, carregarListasCadastro, carregarResumo, listarContas } from '../infrastructure/trafego-data';
 import { CampanhasPainel } from './CampanhasPainel';
@@ -60,13 +64,24 @@ function Filtros({ f, set, config, listas }: { f: FiltrosCentral; set: (f: Filtr
   );
 }
 
-function TabelaCentral({ linhas, onAbrir }: { linhas: LinhaResumo[]; onAbrir: (id: number) => void }) {
+const CABECALHO: [ColunaCentral, string][] = [
+  ['status', 'Status'], ['projeto', 'Projeto'], ['receita', 'Receita gerada'], ['investido', 'Investido'], ['verba_maxima', 'Verba máxima'],
+  ['pct_verba', '% da verba'], ['cpl', 'CPL'], ['leads', 'Leads'], ['ctr', 'CTR'], ['cpm', 'CPM'], ['connect_rate', 'Connect rate'],
+  ['conversao_pagina', 'Conversão da página'], ['pct_mql', '% MQL'], ['gestor', 'Gestor'], ['montagem', 'Montagem'],
+];
+
+function TabelaCentral({ linhas, ordem, onOrdenar, onAbrir }: {
+  linhas: LinhaResumo[]; ordem: OrdemCentral; onOrdenar: (c: ColunaCentral) => void; onAbrir: (id: number) => void;
+}) {
   if (linhas.length === 0) return <EmptyState title="Nenhum projeto com esses filtros" />;
   return (
     <DataTable minWidth={1500}>
       <Thead>
-        <Th>Status</Th><Th>Projeto</Th><Th>Receita gerada</Th><Th>Investido</Th><Th>Verba máxima</Th><Th>% da verba</Th>
-        <Th>CPL</Th><Th>Leads</Th><Th>CTR</Th><Th>CPM</Th><Th>Connect rate</Th><Th>Conversão da página</Th><Th>% MQL</Th><Th>Gestor</Th><Th>Montagem</Th>
+        {CABECALHO.map(([c, rotulo]) => (
+          <Th key={c} sortable active={ordem.coluna === c} dir={ordem.dir} onClick={() => onOrdenar(c)}>
+            <span title={`Ordenar por ${rotulo.toLowerCase()} (de novo inverte; a terceira vez volta à ordem padrão)`}>{rotulo}</span>
+          </Th>
+        ))}
       </Thead>
       <tbody>
         {linhas.map((l) => {
@@ -81,13 +96,14 @@ function TabelaCentral({ linhas, onAbrir }: { linhas: LinhaResumo[]; onAbrir: (i
                 {l.tipo_lancamento_nome && <div className="text-[11px] text-[var(--fg-3)]">{l.tipo_lancamento_nome}</div>}
                 {l.campanhas_fora_padrao > 0 && <div className="mt-0.5 text-[11px] text-[var(--yellow)]">{l.campanhas_fora_padrao} campanha(s) fora do padrão</div>}
               </Td>
-              <Td>{l.receita_aplica === false ? <span className="text-xs text-[var(--fg-3)]" title="Receita dos externos não entra por ora (Victor, 06/10/2026)">não se aplica</span> : <Kpi v={reais(l.receita)} titulo={l.receita_vinculos ? 'Vínculo sem período: ligue com data em "de" ou cadastre o início do projeto' : 'Sem produto da Hotmart ligado ao projeto (cadastre na vida do projeto)'} />}</Td>
+              <Td>{l.receita_aplica === false ? <span className="text-xs text-[var(--fg-3)]" title="Receita dos externos não entra por ora (Victor, 06/10/2026)">não se aplica</span> : <Kpi v={reais(l.receita)} titulo={l.receita_vinculos ? 'Vínculo sem período: ligue com data em "de" ou cadastre o início do projeto' : 'Sem produto da Hotmart ligado ao projeto (cadastre na vida do projeto)'} />}
+                {l.receita != null && l.receita_aplica !== false && <div className="text-[11px] text-[var(--fg-3)]" title="Líquido do produtor das mesmas vendas">líquido {reais(l.receita_liquida ?? null)}</div>}</Td>
               <Td><Kpi v={reais(l.investido)} titulo="Sem gasto coletado das plataformas" />
                 {acima && <div className="text-[11px] text-[var(--red)]">ontem acima da diária</div>}</Td>
               <Td><Kpi v={reais(l.verba_maxima)} titulo="Verba não cadastrada" /></Td>
               <Td><Kpi v={pct(l.pct_verba)} /></Td>
               <Td><Kpi v={centavos(l.cpl)} titulo="Precisa de gasto e de leads da base" /></Td>
-              <Td><Kpi v={inteiro(l.leads)} titulo="Leads da nossa base (base de pessoas)" /></Td>
+              <Td><Kpi v={inteiro(l.leads)} titulo="Leads da nossa base (base de pessoas). Sem dado enquanto o projeto não tiver nenhum lead na base" /></Td>
               <Td><Kpi v={pct(l.ctr, 2)} /></Td>
               <Td><Kpi v={centavos(l.cpm)} /></Td>
               <Td><Kpi v={pct(l.connect_rate)} titulo="Page views da Web fase 2 (visitas vindas das campanhas) ÷ cliques no link" /></Td>
@@ -108,6 +124,12 @@ export function TrafegoClient() {
   const [linhas, setLinhas] = useState<LinhaResumo[] | null | undefined>(undefined);
   const [aba, setAba] = useState<Aba>('central');
   const [filtros, setFiltros] = useState<FiltrosCentral>(FILTROS_INICIAIS);
+  // busca e ordem vêm da URL (link compartilhável). Ler no estado inicial não muda o HTML do servidor: a primeira
+  // renderização é o "carregando" (a tabela só aparece depois dos dados).
+  const [busca, setBusca] = useState(() => (typeof window === 'undefined' ? '' : lerEstadoUrl(window.location.search).q));
+  const [ordem, setOrdem] = useState<OrdemCentral>(() => (typeof window === 'undefined' ? ORDEM_INICIAL : lerEstadoUrl(window.location.search).ordem));
+  // ?novo=1 (botão "Novo projeto" de Marketing > Projetos e páginas): abre o cadastro completo assim que as listas chegam
+  const pedirNovo = useRef(typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('novo') === '1');
   const [aberto, setAberto] = useState<number | null>(null);
   const [versao, setVersao] = useState(0);
   const [listas, setListas] = useState<ListasCadastro | null>(null);
@@ -144,7 +166,17 @@ export function TrafegoClient() {
     setAberto(null);
     if (centralDesatualizada.current) { centralDesatualizada.current = false; mudou(); }
   }, [mudou]);
-  const visiveis = useMemo(() => filtrar(linhas ?? [], filtros), [linhas, filtros]);
+  useEffect(() => {
+    if (pedirNovo.current && listas && config) { pedirNovo.current = false; setNovo(true); }
+  }, [listas, config]);
+  // busca e ordem voltam para a URL sem criar entrada no histórico (e o ?novo=1 sai depois de lido)
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    p.delete('novo');
+    const qs = escreverEstadoUrl(p.toString(), busca, ordem);
+    if (qs !== window.location.search) window.history.replaceState(window.history.state, '', `${window.location.pathname}${qs}${window.location.hash}`);
+  }, [busca, ordem]);
+  const visiveis = useMemo(() => ordenarLinhas(buscarLinhas(filtrar(linhas ?? [], filtros), busca), ordem), [linhas, filtros, busca, ordem]);
   const t = useMemo(() => totais(visiveis), [visiveis]);
 
   if (config === undefined || linhas === undefined) return <Loading />;
@@ -207,10 +239,12 @@ export function TrafegoClient() {
                   </p>
                 )}
                 <SectionCard right={<div className="flex flex-wrap items-center gap-2">
+                  <div className="w-56"><SearchInput value={busca} onChange={(e) => setBusca(e.target.value)} onLimpar={() => setBusca('')}
+                    placeholder="Buscar sigla ou nome" aria-label="Buscar projeto por sigla ou nome" maxLength={80} /></div>
                   <Filtros f={filtros} set={setFiltros} config={config} listas={listas} />
                   {listas && <Button size="sm" onClick={() => setNovo(true)}><Icon name="plus" size={14} /> Novo projeto</Button>}
                 </div>} title="Projetos" subtitle={`${visiveis.length} de ${linhas.length}`}>
-                  <TabelaCentral linhas={visiveis} onAbrir={setAberto} />
+                  <TabelaCentral linhas={visiveis} ordem={ordem} onOrdenar={(c) => setOrdem((o) => alternarOrdem(o, c))} onAbrir={setAberto} />
                 </SectionCard>
               </>
             )}

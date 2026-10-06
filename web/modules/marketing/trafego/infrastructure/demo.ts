@@ -200,7 +200,7 @@ function linha(p: ProjetoDemo): LinhaResumo {
     status: pl?.status ?? null, status_nome: CONFIG.status.find((s) => s.codigo === pl?.status)?.nome ?? null,
     gestores: pl?.gestores ?? [], gestores_campanhas: [...new Set(cs.map((c) => c.gestor).filter((g): g is string => !!g))].sort(),
     ...receitaDemo(p.id), receita_aplica: p.tipo !== 'externo',
-    ...(p.tipo === 'externo' ? { receita: null, receita_compras: null, receita_outras_moedas: null, receita_sem_valor: null } : {}),
+    ...(p.tipo === 'externo' ? { receita: null, receita_liquida: null, receita_liquido_estimado: null, receita_compras: null, receita_outras_moedas: null, receita_sem_valor: null } : {}),
     investido: tem ? soma(dias.map((d) => d.gasto)) : null, por_plataforma: tem ? porPlat : null, moedas: [...new Set(cs.map((c) => c.moeda))],
     verba_maxima: pl?.verba_maxima ?? null, verba_diaria: pl?.verba_diaria ?? null,
     verba_fases: soma(fs.map((f) => f.verba ?? 0)), fases: fs.length,
@@ -265,7 +265,7 @@ export function demoSalvarPlanejamento(p: Record<string, unknown>): Resposta {
   if (!projeto(id)) return { ok: false, msg: 'Projeto não encontrado.' };
   const n = (k: string) => (p[k] === '' || p[k] == null ? null : Number(p[k]));
   PLAN.set(id, {
-    status: (p.status as string) || null,
+    status: 'status' in p ? (p.status as string) || null : PLAN.get(id)?.status ?? null,
     gestores: Array.isArray(p.gestores) ? (p.gestores as string[]) : PLAN.get(id)?.gestores ?? [], verba_maxima: n('verba_maxima'), verba_diaria: n('verba_diaria'),
     meta_leads: n('meta_leads'), meta_receita: n('meta_receita'), meta_cpl: n('meta_cpl'), meta_pct_mql: n('meta_pct_mql'), obs: (p.obs as string) || null,
   });
@@ -322,24 +322,28 @@ const REGRAS_DEMO: Regra[] = [
   { codigo: 'checklist_incompleto', nome: 'Em captação com checklist incompleto', ligada: true, limiar: 0, unidade: 'dias', gravidade: 'media', descricao: 'Projeto em captação com item do checklist de "antes de subir as campanhas" pendente, a partir de limiar dias do início da captação.' },
 ];
 
-interface ProdutoDemo { id: number; projeto_id: number; produto_id: string; oferta_codigo: string | null; de: string | null; ate: string | null; obs: string | null }
+interface ProdutoDemo { id: number; projeto_id: number; conta: string; produto_id: string; oferta_codigo: string | null; de: string | null; ate: string | null; obs: string | null }
 let PRODUTOS: ProdutoDemo[] = [
-  { id: 1, projeto_id: 1, produto_id: '0000001', oferta_codigo: null, de: hoje(-25), ate: null, obs: 'Ingresso Exemplo' },
+  { id: 1, projeto_id: 1, conta: 'academy', produto_id: '0000001', oferta_codigo: null, de: hoje(-25), ate: null, obs: 'Ingresso Exemplo' },
 ];
 // receita fictícia de cada produto de exemplo no período
-const RECEITA_PRODUTO: Record<string, { receita: number; compras: number }> = { '0000001': { receita: 18450, compras: 123 }, '0000002': { receita: 4200, compras: 6 } };
+const RECEITA_PRODUTO: Record<string, { receita: number; liquida: number; compras: number }> = {
+  'academy/0000001': { receita: 18450, liquida: 17520, compras: 123 }, 'escritorio/0000002': { receita: 4200, liquida: 3990, compras: 6 },
+};
 const VISTOS: ProdutoVisto[] = [
-  { produto_id: '0000001', nome: 'Ingresso Exemplo', aprovadas: 123, primeira: hoje(-25), ultima: ONTEM },
-  { produto_id: '0000002', nome: 'Produto Exemplo 2', aprovadas: 6, primeira: hoje(-40), ultima: hoje(-3) },
+  { conta: 'academy', produto_id: '0000001', nome: 'Ingresso Exemplo', aprovadas: 123, ultima: ONTEM,
+    ofertas: [{ codigo: 'ex0001', pagas: 100, ultima: ONTEM }, { codigo: 'ex0002', pagas: 23, ultima: hoje(-4) }] },
+  { conta: 'escritorio', produto_id: '0000002', nome: 'Produto Exemplo 2', aprovadas: 6, ultima: hoje(-3), ofertas: [{ codigo: 'ex0003', pagas: 6, ultima: hoje(-3) }] },
 ];
 
-function receitaDemo(projetoId: number): Pick<LinhaResumo, 'receita' | 'receita_compras' | 'receita_outras_moedas' | 'receita_sem_valor' | 'receita_vinculos' | 'receita_sem_periodo' | 'receita_fonte'> {
+function receitaDemo(projetoId: number): Pick<LinhaResumo, 'receita' | 'receita_liquida' | 'receita_liquido_estimado' | 'receita_compras' | 'receita_outras_moedas' | 'receita_sem_valor' | 'receita_vinculos' | 'receita_sem_periodo' | 'receita_fonte'> {
   const vs = PRODUTOS.filter((v) => v.projeto_id === projetoId);
   const p = projeto(projetoId);
   const comPeriodo = vs.filter((v) => v.de != null || p?.captacao_inicio != null || p?.inicio != null); // vínculo sem "de" usa a captação até o fim do evento
-  const soma = (k: 'receita' | 'compras') => comPeriodo.reduce((a, v) => a + (RECEITA_PRODUTO[v.produto_id]?.[k] ?? 0), 0);
+  const soma = (k: 'receita' | 'liquida' | 'compras') => comPeriodo.reduce((a, v) => a + (RECEITA_PRODUTO[`${v.conta}/${v.produto_id}`]?.[k] ?? 0), 0);
   return {
-    receita: comPeriodo.length ? soma('receita') : null, receita_compras: vs.length ? soma('compras') : null,
+    receita: comPeriodo.length ? soma('receita') : null, receita_liquida: comPeriodo.length ? soma('liquida') : null,
+    receita_liquido_estimado: vs.length ? 0 : null, receita_compras: vs.length ? soma('compras') : null,
     receita_outras_moedas: vs.length ? 0 : null, receita_sem_valor: vs.length ? 0 : null,
     receita_vinculos: vs.length, receita_sem_periodo: vs.length - comPeriodo.length, receita_fonte: true,
   };
@@ -377,7 +381,7 @@ export function demoProdutos(projetoId: number): ProdutoHotmart[] {
   const p = projeto(projetoId);
   const pr = p ? periodoReceita(p) : { inicio: null, fim: null };
   return PRODUTOS.filter((v) => v.projeto_id === projetoId).map((v) => ({
-    ...v, projeto_sigla: p?.sigla ?? '', de_efetivo: v.de ?? pr.inicio, ate_efetivo: v.ate ?? pr.fim,
+    ...v, projeto_sigla: p?.sigla ?? '', produto_nome: VISTOS.find((x) => x.conta === v.conta && x.produto_id === v.produto_id)?.nome ?? null, de_efetivo: v.de ?? pr.inicio, ate_efetivo: v.ate ?? pr.fim,
   }));
 }
 
@@ -386,16 +390,18 @@ export const demoProdutosVistos = (): ProdutoVisto[] => structuredClone(VISTOS);
 export function demoSalvarProduto(p: Record<string, unknown>): Resposta {
   const pid = Number(p.projeto_id);
   if (!projeto(pid)) return { ok: false, msg: 'Projeto não encontrado.' };
+  const conta = String(p.conta ?? '').trim();
+  if (!['academy', 'escritorio'].includes(conta)) return { ok: false, msg: 'Escolha a conta da Hotmart.' };
   const prod = String(p.produto_id ?? '').trim();
   if (!/^[A-Za-z0-9_-]{1,40}$/.test(prod)) return { ok: false, msg: 'Id do produto na Hotmart inválido (só letras, números, - e _).' };
-  const v = { projeto_id: pid, produto_id: prod, oferta_codigo: (p.oferta_codigo as string)?.trim() || null, de: (p.de as string) || null, ate: (p.ate as string) || null, obs: (p.obs as string) || null };
+  const v = { projeto_id: pid, conta, produto_id: prod, oferta_codigo: (p.oferta_codigo as string)?.trim() || null, de: (p.de as string) || null, ate: (p.ate as string) || null, obs: (p.obs as string) || null };
   if (v.de && v.ate && v.ate < v.de) return { ok: false, msg: 'O fim não pode ser antes do início.' };
-  if (PRODUTOS.some((x) => x.projeto_id === pid && x.produto_id === prod && x.oferta_codigo === v.oferta_codigo && x.id !== Number(p.id))) {
-    return { ok: false, msg: 'Este produto (e oferta) já está ligado a este projeto.' };
+  if (PRODUTOS.some((x) => x.projeto_id === pid && x.conta === conta && x.produto_id === prod && x.oferta_codigo === v.oferta_codigo && x.id !== Number(p.id))) {
+    return { ok: false, msg: 'Este produto (conta e oferta) já está ligado a este projeto.' };
   }
   if (p.id) PRODUTOS = PRODUTOS.map((x) => (x.id === Number(p.id) ? { ...x, ...v } : x));
   else PRODUTOS.push({ id: ++seq, ...v });
-  const avisos = [...(v.de || projeto(pid)?.captacao_inicio || projeto(pid)?.inicio ? [] : ['sem_periodo']), ...(VISTOS.some((x) => x.produto_id === prod) ? [] : ['produto_sem_compras'])];
+  const avisos = [...(v.de || projeto(pid)?.captacao_inicio || projeto(pid)?.inicio ? [] : ['sem_periodo']), ...(VISTOS.some((x) => x.conta === conta && x.produto_id === prod) ? [] : ['produto_sem_compras'])];
   return { ok: true, msg: `Produto ${prod} ligado${NADA}.`, avisos };
 }
 
