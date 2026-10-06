@@ -7,6 +7,15 @@ import type {
   Melhorias, Origem, PaginaMelhorias, Problemas, Velocidade, Visao,
 } from '../domain/tipos';
 import { diasEntre, somaDias } from '../domain/periodo';
+import { separarUtm } from '../../projetos/domain/utm';
+
+// UTMs de demonstração no padrão do gp-operacoes (nome|id; Google só id), lidos pela mesma regra do banco (separarUtm).
+const UTM_CAMPANHA_A = 'RS | PB26 | LEADS | DEMONSTRAÇÃO A | AK1|120200000000000100';
+const UTM_CAMPANHA_B = 'CF | PB26 | LEADS | DEMONSTRAÇÃO B|120200000000000200';
+const UTM_CAMPANHA_GOOGLE = '22000000000';
+const UTM_ANUNCIOS = ['CRIATIVO VÍDEO DEPOIMENTO|120200000000000001', 'CRIATIVO CARROSSEL ESCRITÓRIO|120200000000000002', 'CRIATIVO ESTÁTICO PRAZO|120200000000000003'];
+const campanhaDemo = (utm: string) => { const u = separarUtm(utm); return { campanha: u.nome ?? u.id ?? '', campanha_id: u.id }; };
+const anuncioDemo = (utm: string) => { const u = separarUtm(utm); return { anuncio: u.nome ?? u.id ?? '', anuncio_id: u.id }; };
 
 export const DEMO_PROJETOS = [{ id: 1, sigla: 'PB26', nome: 'Patrimônio Brasil 2026' }];
 export const DEMO_PAGINAS = [
@@ -91,14 +100,15 @@ export function demoOrigem(de: string, ate: string): Origem {
       { fonte: 'google', meio: 'cpc', ...c(Math.round(v * 0.02), Math.round(v * 0.002)) },
     ],
     campanhas: [
-      { campanha: 'RS | PB26 | LEADS | DEMONSTRAÇÃO A | AK1', ...c(Math.round(v * 0.55), Math.round(v * 0.06)), padrao: true, pagina: 'ak1', projeto: 'PB26' },
-      { campanha: 'CF | PB26 | LEADS | DEMONSTRAÇÃO B', ...c(Math.round(v * 0.3), Math.round(v * 0.03)), padrao: true, pagina: null, projeto: 'PB26' },
-      { campanha: 'campanha_fora_do_padrao_demo', ...c(Math.round(v * 0.04), 3), padrao: false, pagina: null, projeto: null },
+      { ...campanhaDemo(UTM_CAMPANHA_A), ...c(Math.round(v * 0.55), Math.round(v * 0.06)), padrao: true, pagina: 'ak1', projeto: 'PB26' },
+      { ...campanhaDemo(UTM_CAMPANHA_B), ...c(Math.round(v * 0.3), Math.round(v * 0.03)), padrao: true, pagina: null, projeto: 'PB26' },
+      { ...campanhaDemo('campanha_fora_do_padrao_demo'), ...c(Math.round(v * 0.04), 3), padrao: false, pagina: null, projeto: null },
+      { ...campanhaDemo(UTM_CAMPANHA_GOOGLE), ...c(Math.round(v * 0.02), 1), padrao: null, pagina: null, projeto: null },
     ],
     anuncios: [
-      { anuncio: '120200000000000001', campanha: 'RS | PB26 | LEADS | DEMONSTRAÇÃO A | AK1', ...c(Math.round(v * 0.3), Math.round(v * 0.04)) },
-      { anuncio: '120200000000000002', campanha: 'RS | PB26 | LEADS | DEMONSTRAÇÃO A | AK1', ...c(Math.round(v * 0.25), Math.round(v * 0.02)) },
-      { anuncio: '120200000000000003', campanha: 'CF | PB26 | LEADS | DEMONSTRAÇÃO B', ...c(Math.round(v * 0.3), Math.round(v * 0.03)) },
+      { ...anuncioDemo(UTM_ANUNCIOS[0]), campanha: campanhaDemo(UTM_CAMPANHA_A).campanha, ...c(Math.round(v * 0.3), Math.round(v * 0.04)) },
+      { ...anuncioDemo(UTM_ANUNCIOS[1]), campanha: campanhaDemo(UTM_CAMPANHA_A).campanha, ...c(Math.round(v * 0.25), Math.round(v * 0.02)) },
+      { ...anuncioDemo(UTM_ANUNCIOS[2]), campanha: campanhaDemo(UTM_CAMPANHA_B).campanha, ...c(Math.round(v * 0.3), Math.round(v * 0.03)) },
     ],
     sites: [{ site: 'l.instagram.com', sessoes: Math.round(v * 0.4) }, { site: 'm.facebook.com', sessoes: Math.round(v * 0.2) }],
   };
@@ -233,8 +243,8 @@ function paginaDemo(p: Partial<PaginaMelhorias> & { pagina_id: number; codigo: s
       { dispositivo: 'desktop', entradas: Math.round(entradas * 0.15), rejeicoes: Math.round(entradas * 0.15 * 0.3), leads: Math.round(leads * 0.2) },
     ],
     por_criativo: [
-      { campanha: 'RS | PB26 | LEADS | DEMONSTRAÇÃO A | AK1', criativo: '120200000000000001', entradas: Math.round(entradas * 0.5), rejeicoes: Math.round(entradas * 0.5 * 0.4), leads: Math.round(leads * 0.6) },
-      { campanha: 'RS | PB26 | LEADS | DEMONSTRAÇÃO A | AK1', criativo: '120200000000000002', entradas: Math.round(entradas * 0.3), rejeicoes: Math.round(entradas * 0.3 * 0.62), leads: Math.round(leads * 0.2) },
+      { campanha: campanhaDemo(UTM_CAMPANHA_A).campanha, criativo: anuncioDemo(UTM_ANUNCIOS[0]).anuncio, criativo_id: anuncioDemo(UTM_ANUNCIOS[0]).anuncio_id, entradas: Math.round(entradas * 0.5), rejeicoes: Math.round(entradas * 0.5 * 0.4), leads: Math.round(leads * 0.6) },
+      { campanha: campanhaDemo(UTM_CAMPANHA_A).campanha, criativo: anuncioDemo(UTM_ANUNCIOS[1]).anuncio, criativo_id: anuncioDemo(UTM_ANUNCIOS[1]).anuncio_id, entradas: Math.round(entradas * 0.3), rejeicoes: Math.round(entradas * 0.3 * 0.62), leads: Math.round(leads * 0.2) },
     ],
     friccao: { com_raiva: 40, com_erro: 12, com_friccao: 50, friccao_leads: 3, sem_friccao: Math.round(entradas * 0.5), sem_leads: Math.round(leads * 0.9) },
     lcp: [
@@ -353,14 +363,14 @@ export function demoConnect(de: string, ate: string): Connect {
   return {
     trafego: true, cliques_link: true,
     campanhas: [
-      { campanha: 'RS | PB26 | LEADS | DEMONSTRAÇÃO A | AK1', campanha_externa: '120200000000000100', plataforma: 'meta', pagina: 'ak1', gasto: 8200, impressoes: 410000,
+      { campanha: campanhaDemo(UTM_CAMPANHA_A).campanha, campanha_externa: campanhaDemo(UTM_CAMPANHA_A).campanha_id ?? '', plataforma: 'meta', pagina: 'ak1', gasto: 8200, impressoes: 410000,
         cliques_link: Math.round(v * 0.75), dias_com_gasto: diasEntre(de, ate) + 1, page_views: Math.round(v * 0.55), engajadas: Math.round(v * 0.3), leads: Math.round(v * 0.06),
         connect_rate: 0.733, conversao: 0.109 },
-      { campanha: 'CF | PB26 | LEADS | DEMONSTRAÇÃO B', campanha_externa: '120200000000000200', plataforma: 'meta', pagina: null, gasto: 4100, impressoes: 260000,
+      { campanha: campanhaDemo(UTM_CAMPANHA_B).campanha, campanha_externa: campanhaDemo(UTM_CAMPANHA_B).campanha_id ?? '', plataforma: 'meta', pagina: null, gasto: 4100, impressoes: 260000,
         cliques_link: Math.round(v * 0.5), dias_com_gasto: diasEntre(de, ate) + 1, page_views: Math.round(v * 0.3), engajadas: Math.round(v * 0.15), leads: Math.round(v * 0.03),
         connect_rate: 0.6, conversao: 0.1 },
     ],
     sem_campanha: { page_views: Math.round(v * 0.04), campanhas: 1 },
-    anuncios: demoOrigem(de, ate).anuncios.map((a) => ({ anuncio: a.anuncio, campanha: a.campanha, page_views: a.sessoes, engajadas: a.engajadas, leads: a.leads })),
+    anuncios: demoOrigem(de, ate).anuncios.map((a) => ({ anuncio: a.anuncio, anuncio_id: a.anuncio_id, campanha: a.campanha, page_views: a.sessoes, engajadas: a.engajadas, leads: a.leads })),
   };
 }

@@ -29,7 +29,8 @@
 --   6  resumo: números conferidos à mão (investido 250, 25,0% da verba, CTR 1,40% e CPC 0,71 com cliques no link, CPM
 --      10,00, ritmo 150,5%), sem fonte = nulo (receita, leads sem base, page views sem Web), projeto sem dado = nulo e
 --      não zero; 6.base leads e MQL da base; 6.web page views da Web fase 2 (visita vinda da campanha), connect rate e
---      conversão da página, conferidos contra public.mkt_web_connect (o mesmo número)
+--      conversão da página, conferidos contra public.mkt_web_connect (o mesmo número); UTM no formato nome|id do
+--      gp-operacoes casa pelo id (nome só na falta de id), formato antigo (só id ou só nome) continua casando
 --   7  o banco recusa sozinho: gasto negativo (23514), fase fora da lista (23503), conta de outra plataforma (23503)
 --   8  grants: tabelas e schema fechados; anon nada; authenticated só as 11 da tela; receber só service_role
 --   9  sem perfil, operador (mesmo com a área), visualizador e anon: 14 recusas 42501 cada (13 funções + select direto)
@@ -321,8 +322,10 @@ $$;
 --     pessoa mesclada não contam.
 --   receita: nula (Hotmart ainda não ligada ao projeto).
 --   page views e leads da página: a MESMA regra de public.mkt_web_connect (20261005q; mudou lá, muda aqui): visitas
---     (mkt_web.sessoes, sem teste) do projeto cuja campanha casa com uma campanha do Tráfego do projeto (campaign_id =
---     campanha_externa, ou utm_campaign = nome exato, ou utm_campaign = campanha_externa); uma por visita. leads da
+--     (mkt_web.sessoes, sem teste) do projeto cuja campanha casa com uma campanha do Tráfego do projeto: pelo ID
+--     (campaign_id da URL ou o id do utm_campaign no formato nome|id do gp-operacoes = campanha_externa); sem id na
+--     visita, pelo NOME exato (a parte do nome do utm_campaign = nome); leitura de mkt_web.origem_ids (20261005n),
+--     a mesma da Web. Uma por visita. leads da
 --     página = dessas visitas, as que viraram lead (sessoes.lead), o mesmo numerador da conversão da Web.
 --     connect rate = page views ÷ cliques no link; conversão da página = leads da página ÷ page views.
 --     Nulos se a 20261005q não estiver aplicada ou se o projeto não tiver campanha no Tráfego.
@@ -340,9 +343,13 @@ begin
       select coalesce(jsonb_object_agg(x.projeto_id::text, jsonb_build_object('pv', x.pv, 'leads', x.leads)), '{}'::jsonb)
         from (select c.projeto_id, count(distinct s.id) as pv, count(distinct s.id) filter (where s.lead) as leads
                 from mkt_trafego.campanhas c
-                join mkt_web.sessoes s
-                  on s.projeto_id = c.projeto_id and not s.teste
-                 and (s.campaign_id = c.campanha_externa or s.utm_campaign = c.nome or s.utm_campaign = c.campanha_externa)
+                join (select x.id, x.projeto_id, x.lead, oi.campanha_id, oi.campanha_nome
+                        from mkt_web.sessoes x
+                        cross join lateral mkt_web.origem_ids(x.utm_source, x.utm_medium, x.utm_campaign, x.utm_content,
+                                                              x.campaign_id, x.adset_id, x.ad_id) oi
+                       where not x.teste and ($1 is null or x.projeto_id = $1)) s
+                  on s.projeto_id = c.projeto_id
+                 and (s.campanha_id = c.campanha_externa or (s.campanha_id is null and s.campanha_nome = c.nome))
                where c.projeto_id is not null and ($1 is null or c.projeto_id = $1)
                group by c.projeto_id) x
     $q$ into v_pv using p_projeto;
@@ -1364,14 +1371,20 @@ begin
         ('ensaioSessao04', false, 'outra campanha qualquer', null, null, false),
         ('ensaioSessao05', false, null, null, null, false),
         ('ensaioSessao06', true, null, null, '900000000000001', true),
-        ('ensaioSessao07', false, 'RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1', null, '900000000000001', false)
+        ('ensaioSessao07', false, 'RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1', null, '900000000000001', false),
+        -- UTM no padrão do gp-operacoes (nome|id): casa pelo id; nome antigo com id certo casa; nome certo com id de
+        -- outra campanha NÃO casa (o id manda, nome só na falta de id)
+        ('ensaioSessao08', false, 'RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1|900000000000001', 'CRIATIVO 01|120200000000001', null, true),
+        ('ensaioSessao09', false, 'NOME ANTIGO DA CAMPANHA|900000000000002', null, null, false),
+        ('ensaioSessao10', false, 'RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1|900000000009999', null, null, false)
       ) x(id, teste, utm, anuncio, cid, lead)
   $q$ using v_pb;
   r := pg_temp.linha('PB26');
-  perform pg_temp.ok('6.web', (r ->> 'page_views')::int = 4 and (r ->> 'leads_pagina')::int = 1
-                     and (r ->> 'connect_rate')::numeric = 1.1 and (r ->> 'conversao_pagina')::numeric = 25.0,
-                     'page views = visitas vindas das campanhas do PB26 (por campaign_id, nome exato ou id; uma por visita): 4 '
-                     || '(fora: outra campanha, orgânica, teste); connect rate 4 ÷ 350 = 1,1%; conversão 1 lead ÷ 4 = 25,0%');
+  perform pg_temp.ok('6.web', (r ->> 'page_views')::int = 6 and (r ->> 'leads_pagina')::int = 2
+                     and (r ->> 'connect_rate')::numeric = 1.7 and (r ->> 'conversao_pagina')::numeric = 33.3,
+                     'page views = visitas vindas das campanhas do PB26 (pelo id: campaign_id, só id ou nome|id; sem id, pelo '
+                     || 'nome exato; uma por visita): 6 (fora: outra campanha, orgânica, teste, nome certo com id de outra '
+                     || 'campanha); connect rate 6 ÷ 350 = 1,7%; conversão 2 leads ÷ 6 = 33,3%');
   v_web := pg_temp.adm(format('select public.mkt_web_connect(%s, current_date - 30, current_date)', v_pb));
   select sum((c ->> 'page_views')::int), sum((c ->> 'leads')::int) into v_pv_web, v_leads_web
     from jsonb_array_elements(v_web -> 'campanhas') c;

@@ -13,7 +13,8 @@
 --     - CTR e CPC usam CLIQUES NO LINK (guardados separados dos cliques totais). Connect rate = page views ÷ cliques no
 --       link; conversão da página = leads ÷ page views. Page view = a MESMA da Web fase 2 (public.mkt_web_connect,
 --       20261005q): entrada na página vinda da campanha, uma por visita (mkt_web.sessoes), casada com a campanha do
---       Tráfego por campaign_id = id da campanha ou utm_campaign = nome exato ou id. Sem a 20261005q: nulos.
+--       Tráfego pelo id da campanha (campaign_id ou o id do utm_campaign nome|id, padrão do gp-operacoes); sem id, pelo
+--       nome exato. Sem a 20261005q: nulos.
 --     - Um projeto pode ter VÁRIOS gestores (projeto_gestores, das listas de mkt.campanha_gestores).
 --     - Fases: aquecimento, captação, lembrete, remarketing, abertura de carrinho. A fase da campanha sai do OBJETIVO do
 --       nome (tabela objetivo_fase, configurável); a correção à mão por campanha (fase_manual) prevalece. Sem regra e
@@ -336,8 +337,10 @@ $$;
 --     pessoa mesclada não contam.
 --   receita: nula (Hotmart ainda não ligada ao projeto).
 --   page views e leads da página: a MESMA regra de public.mkt_web_connect (20261005q; mudou lá, muda aqui): visitas
---     (mkt_web.sessoes, sem teste) do projeto cuja campanha casa com uma campanha do Tráfego do projeto (campaign_id =
---     campanha_externa, ou utm_campaign = nome exato, ou utm_campaign = campanha_externa); uma por visita. leads da
+--     (mkt_web.sessoes, sem teste) do projeto cuja campanha casa com uma campanha do Tráfego do projeto: pelo ID
+--     (campaign_id da URL ou o id do utm_campaign no formato nome|id do gp-operacoes = campanha_externa); sem id na
+--     visita, pelo NOME exato (a parte do nome do utm_campaign = nome); leitura de mkt_web.origem_ids (20261005n),
+--     a mesma da Web. Uma por visita. leads da
 --     página = dessas visitas, as que viraram lead (sessoes.lead), o mesmo numerador da conversão da Web.
 --     connect rate = page views ÷ cliques no link; conversão da página = leads da página ÷ page views.
 --     Nulos se a 20261005q não estiver aplicada ou se o projeto não tiver campanha no Tráfego.
@@ -355,9 +358,13 @@ begin
       select coalesce(jsonb_object_agg(x.projeto_id::text, jsonb_build_object('pv', x.pv, 'leads', x.leads)), '{}'::jsonb)
         from (select c.projeto_id, count(distinct s.id) as pv, count(distinct s.id) filter (where s.lead) as leads
                 from mkt_trafego.campanhas c
-                join mkt_web.sessoes s
-                  on s.projeto_id = c.projeto_id and not s.teste
-                 and (s.campaign_id = c.campanha_externa or s.utm_campaign = c.nome or s.utm_campaign = c.campanha_externa)
+                join (select x.id, x.projeto_id, x.lead, oi.campanha_id, oi.campanha_nome
+                        from mkt_web.sessoes x
+                        cross join lateral mkt_web.origem_ids(x.utm_source, x.utm_medium, x.utm_campaign, x.utm_content,
+                                                              x.campaign_id, x.adset_id, x.ad_id) oi
+                       where not x.teste and ($1 is null or x.projeto_id = $1)) s
+                  on s.projeto_id = c.projeto_id
+                 and (s.campanha_id = c.campanha_externa or (s.campanha_id is null and s.campanha_nome = c.nome))
                where c.projeto_id is not null and ($1 is null or c.projeto_id = $1)
                group by c.projeto_id) x
     $q$ into v_pv using p_projeto;

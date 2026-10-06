@@ -56,8 +56,9 @@ set local statement_timeout = '60s';
 do $guarda$
 begin
   if to_regclass('mkt_web.sessoes') is null or to_regclass('mkt_web.visualizacoes') is null
-     or to_regclass('mkt_web.paginas_mapa') is null or to_regprocedure('mkt_web.periodo_ok(date,date)') is null then
-    raise exception '20261005q: falta a 20261005n (mkt_web.sessoes, visualizacoes, paginas_mapa, periodo_ok)';
+     or to_regclass('mkt_web.paginas_mapa') is null or to_regprocedure('mkt_web.periodo_ok(date,date)') is null
+     or to_regprocedure('mkt_web.origem_ids(text,text,text,text,text,text,text)') is null then
+    raise exception '20261005q: falta a 20261005n (mkt_web.sessoes, visualizacoes, paginas_mapa, periodo_ok, origem_ids)';
   end if;
   if to_regclass('mkt.paginas') is null or to_regprocedure('mkt.pode_ver(text)') is null then
     raise exception '20261005q: falta a 20261005m (mkt.paginas, mkt.pode_ver)';
@@ -227,8 +228,11 @@ language sql stable set search_path = '' as $$
 with
 s as materialized (
   select x.id, x.lead, (x.resultado = 'mql') is true as mql, x.dispositivo, x.visivel_ms as s_vis,
-         x.visitante || '|' || coalesce(nullif(x.ad_id, ''), nullif(x.utm_content, ''), '') as unidade
-    from mkt_web.sessoes x where x.projeto_id = p_projeto and x.dia between p_de and p_ate and not x.teste),
+         x.visitante || '|' || coalesce(oi.anuncio_id, oi.anuncio_nome, '') as unidade
+    from mkt_web.sessoes x
+    cross join lateral mkt_web.origem_ids(x.utm_source, x.utm_medium, x.utm_campaign, x.utm_content,
+                                          x.campaign_id, x.adset_id, x.ad_id) oi
+   where x.projeto_id = p_projeto and x.dia between p_de and p_ate and not x.teste),
 cfg as (select coalesce(f.eventos_lead, '{}') as leads from (select 1) um left join mkt_web.funis f on f.projeto_id = p_projeto),
 m as (select coalesce(pm.secoes, '{}') as secoes, coalesce(pm.ctas, '{}') as ctas, coalesce(pm.campos, '{}') as campos
         from (select 1) um left join mkt_web.paginas_mapa pm on pm.pagina_id = p_pagina),
@@ -364,10 +368,13 @@ begin
   with
   s as materialized (
     select x.id, x.dia, x.dispositivo, x.lead, x.engajada, (x.resultado = 'mql') is true as mql, x.entrada_pagina_id,
-           x.utm_campaign, x.utm_content,
+           oi.campanha_id, oi.campanha_nome, oi.anuncio_id, oi.anuncio_nome,
            (x.engajada or x.recebido_em < now() - interval '30 minutes') as conta,
            (not x.engajada and x.recebido_em < now() - interval '30 minutes') as rejeitou
-      from mkt_web.sessoes x where x.projeto_id = p_projeto and x.dia between p_de and p_ate and not x.teste),
+      from mkt_web.sessoes x
+      cross join lateral mkt_web.origem_ids(x.utm_source, x.utm_medium, x.utm_campaign, x.utm_content,
+                                            x.campaign_id, x.adset_id, x.ad_id) oi
+     where x.projeto_id = p_projeto and x.dia between p_de and p_ate and not x.teste),
   v as materialized (
     select w.id, w.sessao, w.pagina_id, w.ordem, w.lcp_ms
       from mkt_web.visualizacoes w join s on s.id = w.sessao where w.projeto_id = p_projeto and w.pagina_id is not null),
@@ -378,7 +385,10 @@ begin
       from v join s on s.id = v.sessao group by v.pagina_id),
   ent as materialized (
     select s.entrada_pagina_id as pagina_id, s.id, s.dia, s.dispositivo, s.lead, s.mql, s.conta, s.rejeitou,
-           coalesce(s.utm_campaign, '(sem campanha)') as campanha, coalesce(s.utm_content, '') as criativo
+           -- campanha e criativo (anúncio) no formato nome|id do gp-operacoes: agrupados pelo id; mostram o nome
+           coalesce(s.campanha_id, s.campanha_nome) as campanha_k, coalesce(s.campanha_nome, s.campanha_id, '(sem campanha)') as campanha,
+           coalesce(s.anuncio_id, s.anuncio_nome) as criativo_k, coalesce(s.anuncio_nome, s.anuncio_id, '') as criativo,
+           s.anuncio_id as criativo_id
       from s where s.entrada_pagina_id is not null),
   ent_pg as (
     select pagina_id, count(*) filter (where conta) as entradas, count(*) filter (where rejeitou) as rejeicoes,
@@ -420,10 +430,13 @@ begin
                                  count(*) filter (where ent.conta and ent.lead) as l
                             from ent where ent.pagina_id = p.pagina_id group by 1) x where x.n > 0), '[]'::jsonb),
                'por_criativo', coalesce((
-                  select jsonb_agg(jsonb_build_object('campanha', x.campanha, 'criativo', x.criativo, 'entradas', x.n, 'rejeicoes', x.r, 'leads', x.l) order by x.n desc)
-                    from (select ent.campanha, ent.criativo, count(*) filter (where ent.conta) as n, count(*) filter (where ent.rejeitou) as r,
+                  select jsonb_agg(jsonb_build_object('campanha', x.campanha, 'criativo', x.criativo, 'criativo_id', x.criativo_id,
+                                                      'entradas', x.n, 'rejeicoes', x.r, 'leads', x.l) order by x.n desc)
+                    from (select max(ent.campanha) as campanha, max(ent.criativo) as criativo, max(ent.criativo_id) as criativo_id,
+                                 count(*) filter (where ent.conta) as n, count(*) filter (where ent.rejeitou) as r,
                                  count(*) filter (where ent.conta and ent.lead) as l
-                            from ent where ent.pagina_id = p.pagina_id group by 1, 2 order by 3 desc limit 10) x where x.n > 0), '[]'::jsonb),
+                            from ent where ent.pagina_id = p.pagina_id group by ent.campanha_k, ent.criativo_k
+                           order by 4 desc limit 10) x where x.n > 0), '[]'::jsonb),
                'friccao', (select to_jsonb(fp) - 'pagina_id' from fr_pg fp where fp.pagina_id = p.pagina_id),
                'lcp', coalesce((
                   select jsonb_agg(jsonb_build_object('faixa', x.faixa, 'entradas', x.n, 'rejeicoes', x.r, 'leads', x.l) order by x.faixa)
@@ -710,11 +723,13 @@ $$;
 
 -- Connect rate (definição do Victor, 05/10/2026): page views ÷ cliques no link; conversão da página: leads ÷ page views.
 -- Por campanha do Tráfego (20261005p) do projeto: gasto, impressões e cliques no link da plataforma no período contra as
--- page views de ENTRADA da Web vindas da mesma campanha (a página de destino do anúncio; uma por visita: campaign_id = id
--- da campanha, ou utm_campaign = nome exato ou id). A coluna de cliques no link é procurada pelo nome
+-- page views de ENTRADA da Web vindas da mesma campanha (a página de destino do anúncio; uma por visita). Casa pelo ID
+-- da campanha (campaign_id da URL, ou o id do utm_campaign no formato nome|id do gp-operacoes, ou utm_campaign só id);
+-- sem id na visita, pelo NOME exato (a parte do nome do utm_campaign). Leitura de mkt_web.origem_ids (20261005n); a
+-- mesma regra está em mkt_trafego.resumo (20261005p). A coluna de cliques no link é procurada pelo nome
 -- (cliques_link ou cliques_no_link); sem ela, connect rate fica nulo (nunca cai para "todos os cliques").
--- Por anúncio (utm_content = id do anúncio) só a Web: o Tráfego ainda não guarda clique por anúncio. Sem a 20261005p,
--- "trafego": false.
+-- Por anúncio (utm_content = o anúncio/criativo em nome|id; agrupado pelo id) só a Web: o Tráfego ainda não guarda
+-- clique por anúncio. Sem a 20261005p, "trafego": false.
 create function public.mkt_web_connect(p_projeto bigint, p_de date, p_ate date) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 declare
@@ -726,12 +741,17 @@ declare
 begin
   if not mkt.pode_ver('mkt_web') then raise exception 'acesso negado' using errcode = '42501'; end if;
   perform mkt_web.periodo_ok(p_de, p_ate);
-  select coalesce(jsonb_agg(jsonb_build_object('anuncio', t.a, 'campanha', t.c, 'page_views', t.n, 'engajadas', t.e, 'leads', t.l) order by t.n desc), '[]'::jsonb)
+  select coalesce(jsonb_agg(jsonb_build_object('anuncio', coalesce(t.nome, t.aid), 'anuncio_id', t.aid, 'campanha', t.c,
+                                                'page_views', t.n, 'engajadas', t.e, 'leads', t.l) order by t.n desc), '[]'::jsonb)
     into v_anun
-    from (select s.utm_content a, min(s.utm_campaign) c, count(*) n, count(*) filter (where s.engajada) e, count(*) filter (where s.lead) l
+    from (select max(oi.anuncio_id) aid, max(oi.anuncio_nome) nome, coalesce(min(oi.campanha_nome), min(oi.campanha_id)) c,
+                 count(*) n, count(*) filter (where s.engajada) e, count(*) filter (where s.lead) l
             from mkt_web.sessoes s
-           where s.projeto_id = p_projeto and s.dia between p_de and p_ate and not s.teste and s.utm_content is not null
-           group by 1 order by 3 desc limit 30) t;
+            cross join lateral mkt_web.origem_ids(s.utm_source, s.utm_medium, s.utm_campaign, s.utm_content,
+                                                  s.campaign_id, s.adset_id, s.ad_id) oi
+           where s.projeto_id = p_projeto and s.dia between p_de and p_ate and not s.teste
+             and coalesce(oi.anuncio_id, oi.anuncio_nome) is not null
+           group by coalesce(oi.anuncio_id, oi.anuncio_nome) order by 4 desc limit 30) t;
   if not v_trafego then
     return jsonb_build_object('trafego', false, 'cliques_link', false, 'campanhas', '[]'::jsonb, 'sem_campanha', null, 'anuncios', v_anun);
   end if;
@@ -747,11 +767,14 @@ begin
         from mkt_trafego.desempenho_dia d join c on c.id = d.campanha_id
        where d.dia between $2 and $3 group by d.campanha_id
     ), s as (
-      select x.id, x.campaign_id, x.utm_campaign, x.engajada, x.lead
-        from mkt_web.sessoes x where x.projeto_id = $1 and x.dia between $2 and $3 and not x.teste
+      select x.id, oi.campanha_id, oi.campanha_nome, x.engajada, x.lead
+        from mkt_web.sessoes x
+        cross join lateral mkt_web.origem_ids(x.utm_source, x.utm_medium, x.utm_campaign, x.utm_content,
+                                              x.campaign_id, x.adset_id, x.ad_id) oi
+       where x.projeto_id = $1 and x.dia between $2 and $3 and not x.teste
     ), m as (
       select c.id, count(s.id) as page_views, count(s.id) filter (where s.engajada) as engajadas, count(s.id) filter (where s.lead) as leads
-        from c left join s on s.campaign_id = c.campanha_externa or s.utm_campaign = c.nome or s.utm_campaign = c.campanha_externa
+        from c left join s on s.campanha_id = c.campanha_externa or (s.campanha_id is null and s.campanha_nome = c.nome)
        group by c.id
     )
     select coalesce(jsonb_agg(jsonb_build_object(
@@ -765,14 +788,16 @@ begin
      where d.campanha_id is not null or m.page_views > 0
   $q$, case when v_col is null then 'null::bigint' else format('sum(d.%I)', v_col) end)
   into v_camp using p_projeto, p_de, p_ate;
-  -- page views com utm_campaign que não casam com nenhuma campanha cadastrada no Tráfego
+  -- page views com campanha (id ou nome) que não casam com nenhuma campanha cadastrada no Tráfego
   execute $q$
-    select jsonb_build_object('page_views', count(*), 'campanhas', count(distinct x.utm_campaign))
+    select jsonb_build_object('page_views', count(*), 'campanhas', count(distinct coalesce(oi.campanha_id, oi.campanha_nome)))
       from mkt_web.sessoes x
-     where x.projeto_id = $1 and x.dia between $2 and $3 and not x.teste and x.utm_campaign is not null
+      cross join lateral mkt_web.origem_ids(x.utm_source, x.utm_medium, x.utm_campaign, x.utm_content,
+                                            x.campaign_id, x.adset_id, x.ad_id) oi
+     where x.projeto_id = $1 and x.dia between $2 and $3 and not x.teste and coalesce(oi.campanha_id, oi.campanha_nome) is not null
        and not exists (select 1 from mkt_trafego.campanhas c
-                        where c.projeto_id = $1 and (x.campaign_id = c.campanha_externa or x.utm_campaign = c.nome
-                                                     or x.utm_campaign = c.campanha_externa))
+                        where c.projeto_id = $1 and (oi.campanha_id = c.campanha_externa
+                                                     or (oi.campanha_id is null and oi.campanha_nome = c.nome)))
   $q$ into v_sem using p_projeto, p_de, p_ate;
   return jsonb_build_object('trafego', true, 'cliques_link', v_col is not null, 'campanhas', v_camp, 'sem_campanha', v_sem, 'anuncios', v_anun);
 end

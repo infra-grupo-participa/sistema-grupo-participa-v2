@@ -9,8 +9,11 @@
    O que faz, em cada visita (100% das visitas):
    - página vista, cliques (posição, elemento, clique de raiva, clique morto), rolagem máxima, tempo visível e ativo,
      vai e vem da rolagem, erros de JavaScript e os eventos do funil que a página já empurra no dataLayer;
-   - origem: utm_source, utm_medium, utm_campaign, utm_content (id do anúncio), utm_term, campaign_id, adset_id, ad_id,
-     se veio com fbclid ou gclid (só sim/não) e o site de onde veio (só o domínio);
+   - origem: utm_source, utm_medium, utm_campaign, utm_content, utm_term, campaign_id, adset_id, ad_id, se veio com
+     fbclid ou gclid (só sim/não) e o site de onde veio (só o domínio). utm_content = o anúncio (criativo) no formato
+     nome|id, padrão oficial do gp-operacoes (departamentos/dados/areas/infraestrutura/processos/
+     padronizar-utm-dos-links.md); no Meta campanha e conjunto também vêm em nome|id. O gravador manda o texto como
+     veio; o banco separa e cruza pelo id (mkt.utm_separar, migration 20261005n);
    - sistema, navegador e app (Instagram, Facebook...) e o lugar aproximado quando a página já tem a VisitorAPI;
    - velocidade real (LCP, INP, CLS, FCP, TTFB, carga, peso e rede), só números;
    - leitura: segundos em cada seção (<section> ou data-secao), botões (data-cta) que apareceram, rolagem nos primeiros
@@ -87,7 +90,9 @@
     gravar(daAba, 'radar_t', String(agora()));
     gravarBiscoito('radar_s', sessao + '.' + agora(), 1800);
 
-    /* origem: a primeira da sessao vale para a sessao toda (utm e ids do anuncio) */
+    /* origem: a primeira da sessao vale para a sessao toda (utm e ids do anuncio). Cada valor vai cortado em 120
+       caracteres; no formato nome|id o id fica no fim, entao nome muito longo perde o id (o banco cai na reserva pelo
+       nome). Mantido assim no v1; o v2 deve guardar o fim do texto. */
     var CHAVES_ORIGEM = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'campaign_id', 'adset_id', 'ad_id'];
     var origem = {};
     try { origem = JSON.parse(ler(daAba, 'radar_o') || 'null') || null; } catch (e) { origem = null; }

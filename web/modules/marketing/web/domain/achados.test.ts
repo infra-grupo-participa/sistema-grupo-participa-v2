@@ -47,6 +47,14 @@ describe('achados automáticos (regras do Radar)', () => {
     expect(t).toContain('promessa');
     expect(t).toContain('velocidade');
   });
+  it('promessa do criativo no formato nome|id (gp-operacoes): título com o nome, dica com nome e id', () => {
+    const pg = pagina({
+      por_criativo: [{ campanha: 'RS | PB26 | LEADS | X | AK1', criativo: 'CRIATIVO VÍDEO 01', criativo_id: '120200000000000001', entradas: 300, rejeicoes: 210, leads: 10 }],
+    });
+    const p = analisar(base([pg]), null, 'p').oportunidades.find((x) => x.tipo === 'promessa');
+    expect(p?.titulo).toContain('“CRIATIVO VÍDEO 01”');
+    expect(p?.dica).toBe('Anúncio (utm_content): CRIATIVO VÍDEO 01 · 120200000000000001; campanha: RS | PB26 | LEADS | X | AK1');
+  });
   it('botão que ninguém vê (régua de 60%) e fricção', () => {
     const l = leitura({
       primeiro_cta: [{ dispositivo: 'mobile', medidas: 500, viram: 200, ficaram: 300, ficaram_sem_ver: 150, leads_de_quem_viu: 30 }],

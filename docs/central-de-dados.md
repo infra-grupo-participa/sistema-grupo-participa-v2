@@ -80,6 +80,47 @@ existe como página, menu só aponta para rotas novas).
 5. Departamento novo: entrada em `DEPARTAMENTOS`, pasta em `web/app/(admin)/<departamento>/`, e o teste de
    registro atualizado.
 
+## Padrões de nome de campanha e UTM
+
+Fonte oficial: o repositório **gp-operacoes**, processos
+`departamentos/dados/areas/infraestrutura/processos/padronizar-utm-dos-links.md` (UTM) e
+`departamentos/marketing/areas/trafego/processos/nomear-campanhas-e-ler-relatorio.md` (nome de campanha). Aqui fica só o
+resumo que o sistema usa; **se divergir, vale o gp-operacoes** (e este resumo precisa ser corrigido).
+
+**Nome de campanha:** `GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA`, com a página opcional (só em teste de página).
+Ex.: `RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1`. Lido por `mkt.campanha_traduzir` e
+`web/modules/marketing/projetos/domain/campanha.ts`.
+
+| Campo | Valores (listas em `mkt.campanha_gestores`, `mkt.projetos`, `mkt.campanha_objetivos`) |
+|---|---|
+| Gestor | `CF`, `RS`, `EF` |
+| Projeto (sigla) | `HT33`, `SEMSET26`, `PB26`, `BF26` |
+| Objetivo → fase do Tráfego | `LEADS` → captação; `VENDAS` → captação (lançamento pago); `AQUECIMENTO` → aquecimento; `LEMBRETE` → lembrete; `REMARKETING` → remarketing; `CARRINHO` → abertura de carrinho; `DISTRIBUIÇÃO` → sem fase automática (marcar na campanha) |
+| Página | código da casa (`AK1`, `BL2`, `AK1-B`), igual a `mkt.paginas.codigo` |
+
+`CARRINHO` e `AQUECIMENTO` entram na lista pela 20261005p (ver "Tráfego").
+
+**UTM do tráfego pago** (confirmado pelo Victor em 06/10/2026):
+
+| Parâmetro | Meta | Google |
+|---|---|---|
+| `utm_source` | `metaads` | (ver o processo do gp-operacoes) |
+| `utm_campaign` | a campanha, `nome\|id` | só o id (não existe macro de nome) |
+| `utm_medium` | o conjunto de anúncios, `nome\|id` | (ver o processo do gp-operacoes) |
+| `utm_content` | o anúncio (criativo), `nome\|id` | só o id |
+| `utm_term` | o posicionamento | (ver o processo do gp-operacoes) |
+
+Ex.: `utm_campaign=RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1|120211234`. Como o nome da campanha já tem ` | `
+dentro, **o id é o que vem depois da última `|`** (só se for número). Sem `|`: número é id, senão é nome (formato antigo,
+dado histórico, continua valendo).
+
+**Como o sistema lê:** uma função só, `mkt.utm_separar(texto)` → (nome, id) no banco (migration 20261005n) e
+`separarUtm` em `web/modules/marketing/projetos/domain/utm.ts` (testes em `utm.test.ts`); `mkt_web.origem_ids` junta
+campanha, conjunto (só com `utm_source=metaads`) e anúncio. **O cruzamento é sempre pelo id** (campanha do Tráfego,
+anúncio); o nome só serve de reserva quando a visita não tem id, e é só o NOME que vai para a tradução do padrão de nome.
+A coleta da Web guarda os ids em `mkt_web.sessoes.campaign_id`, `adset_id` e `ad_id` (o parâmetro explícito da URL vale
+primeiro). Usam essa leitura: aba Origem, achados por criativo, connect rate (`mkt_web_connect`) e o resumo do Tráfego.
+
 ## Base compartilhada (Marketing)
 
 Fase 1 da central de dados (decisões de 05/10/2026, `area-web-radar.md` no cérebro). É o cadastro que Web, Tráfego
@@ -150,7 +191,7 @@ Código em `web/modules/marketing/web/` (`domain`, `application`, `infrastructur
 | Visão geral | `mkt_web_visao` | Visitas, navegadores, engajamento e rejeição, leads e taxa, tempo, % de anúncio, raiva, erro, resultados (MQL), visitas e leads por dia |
 | Páginas | `mkt_web_paginas` | Por caminho: vistas, entradas, rejeição, lead por entrada, saída rápida, rolagem, tempo, LCP p75; comparação das duas melhores com o selo forte/provável/pode ser acaso |
 | Funil | `mkt_web_funil` | As etapas do contrato, cada uma com as visitas que cumpriram ela e as anteriores, e a maior perda |
-| Origem e UTMs | `mkt_web_origem` | Plataforma (`utm_source`), campanha traduzida pelo padrão de nome (campo 5 = página), anúncio (`utm_content`), fbclid/gclid, site de origem |
+| Origem e UTMs | `mkt_web_origem` | Plataforma (`utm_source`), campanha (`utm_campaign` em `nome\|id`, contada pelo id; só o nome é traduzido pelo padrão de nome, campo 5 = página), anúncio (`utm_content` = o anúncio/criativo em `nome\|id`, contado pelo id), fbclid/gclid, site de origem. Ver "Padrões de nome de campanha e UTM" |
 | Velocidade | `mkt_web_velocidade` | p75 de LCP, INP, CLS, FCP, TTFB por página e aparelho, na régua do Google, e LCP por dia |
 | Rolagem e leitura | `mkt_web_leitura` | Até onde rolam, segundos por seção (apelido de gente), botões vistos e clicados |
 | Cliques e erros | `mkt_web_problemas` | Raiva, mortos, mais clicados, erros da página e o ruído de fora (app do Facebook, extensões) |
@@ -178,7 +219,7 @@ Tudo sobre o que o gravador `radar-v1.js` já grava (não mudou: sem `radar-v2.j
 | Mapa de calor sobre a página | `mkt_web_calor`, `domain/calor.ts`, `ui/MapaCalor.tsx` | Ponto = x % da largura e y como fração da altura da página vista. Fundo padrão = captura de página inteira do último teste do Google do mesmo aparelho; opção "página ao vivo" (iframe sem JavaScript, com aviso: o `<noscript>` do pixel do Meta pode contar visita, e a página pode recusar o quadro); opção sem fundo. Pintura portada do `calor.ts` do Luiz |
 | PageSpeed de laboratório | `mkt_web.velocidade_lab`, Edge `infra/supabase/functions/mkt-web-pagespeed`, cron `mkt-web-pagespeed` (06:40 SP, pelo `ops.cron_post`) | Páginas ativas de projeto com a coleta ligada, celular e computador, 1 vez por dia (máx. 12 por chamada; o resto no dia seguinte). Guarda notas, LCP, FCP, TBT, Speed Index, CLS, 5 oportunidades, a captura e a falha. Chave do Google **opcional** no Vault (`mkt_web_pagespeed_api_key`); sem ela, a cota pública. A Edge confere o header `x-sync-chave` sozinha e está no `infra/supabase/config.toml` com `verify_jwt = false` (sem isso o cron recebe 401). `mkt_web.config` `pagespeed = desligado` para |
 | Lead ligado à pessoa | `mkt_web_leads` | Leads da Web cujo navegador tem `visitantes.lead_ref` (gravado pela 20261005o) e quantos viraram MQL no projeto. Referência e link `/comercial?pessoa=<id>` (abre a ficha) só para `pessoas.pode_ver()` (admin/dev). Sem a 20261005o: só os números da Web |
-| Connect rate | `mkt_web_connect` | Definição do Victor: **page views ÷ cliques no link**; conversão da página = **leads ÷ page views**. Por campanha do Tráfego (`campaign_id` = id, ou `utm_campaign` = nome exato ou id). Cliques no link = coluna `cliques_link`/`cliques_no_link` de `mkt_trafego.desempenho_dia`; sem ela, connect rate em branco (nunca o total de cliques). Por anúncio, só a Web (o Tráfego não guarda clique por anúncio). Sem a 20261005p: só as page views por anúncio |
+| Connect rate | `mkt_web_connect` | Definição do Victor: **page views ÷ cliques no link**; conversão da página = **leads ÷ page views**. Por campanha do Tráfego, casada **pelo id** (`campaign_id` da URL ou o id do `utm_campaign` em `nome\|id`; Google só id); sem id na visita, pelo nome exato. Cliques no link = coluna `cliques_link`/`cliques_no_link` de `mkt_trafego.desempenho_dia`; sem ela, connect rate em branco (nunca o total de cliques). Por anúncio, só a Web (o Tráfego não guarda clique por anúncio). Sem a 20261005p: só as page views por anúncio |
 | Páginas do PB26 | a própria migration | As que faltam das 11 do `patrimonio-brasil.json` (`obs = '20261005q: …'`); o passo 3 da virada fica feito ao aplicar |
 
 **Aplicar:** 20261005n → ensaio da 20261005q (nenhum `ERRADO`) → publicar a Edge (`supabase functions deploy
@@ -401,10 +442,12 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 - **Connect rate = page views ÷ cliques no link; conversão da página = leads ÷ page views** (Victor). Para não ter dois
   números para o mesmo indicador, a page view é **a mesma da Web fase 2** (`public.mkt_web_connect`, 20261005q): a
   entrada na página vinda da campanha, **uma por visita** (`mkt_web.sessoes`, sem visita de teste), casada com a campanha
-  do Tráfego por `campaign_id` = id da campanha, ou `utm_campaign` = nome exato ou id. Orgânico e campanha que não está no
+  do Tráfego **pelo id** (`campaign_id` da URL, ou o id do `utm_campaign` no formato `nome|id` do gp-operacoes, ou só id);
+  sem id na visita, pelo nome exato (ver "Padrões de nome de campanha e UTM"). Orgânico e campanha que não está no
   Tráfego não entram. O lead da conversão também é o da Web: dessas visitas, as que viraram lead. O ensaio confere que o
   resumo do Tráfego e o `mkt_web_connect` dão o mesmo número. Projeto com campanha e sem visita = 0 page views (connect
-  rate 0%); sem campanha no Tráfego = "sem dado". Por anúncio (`utm_content` = id do anúncio) só a Web mostra, porque o
+  rate 0%); sem campanha no Tráfego = "sem dado". Por anúncio (`utm_content` = o anúncio (criativo) no formato `nome|id`,
+  padrão oficial do gp-operacoes; o sistema cruza pelo id) só a Web mostra, porque o
   Tráfego ainda não guarda clique por anúncio.
 - **Vários gestores por projeto** (Victor): tabela `projeto_gestores` (siglas da lista `mkt.campanha_gestores`).
 - **Fases:** aquecimento, captação, lembrete, remarketing, abertura de carrinho. A fase da campanha sai do **objetivo** do
@@ -623,3 +666,8 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
 - **05/10/2026:** Tráfego fase 2 (migration 20261005r, NÃO APLICADA): resumo do dia com limiares em tabela, receita da
   Hotmart pelo vínculo produto → projeto (cadastro à mão), atividades do ClickUp com linha do tempo do gasto, Edges
   `trafego-meta` e `trafego-clickup` testadas com respostas simuladas e **desligadas**, esqueleto do Google Ads. Branch `victor`.
+- **06/10/2026:** UTM no padrão oficial do gp-operacoes (`nome|id` para campanha, conjunto e anúncio no Meta; Google só
+  id), confirmado pelo Victor. Leitura única `mkt.utm_separar` / `mkt_web.origem_ids` (20261005n) e `separarUtm`
+  (`projetos/domain/utm.ts`); aba Origem, achados por criativo, `mkt_web_connect` (20261005q) e resumo do Tráfego
+  (20261005p) cruzam pelo id, nome só como reserva; formato antigo continua valendo. Seção "Padrões de nome de campanha e
+  UTM" nesta doc. Migrations editadas no lugar (todas ainda NÃO APLICADAS). Branch `victor`.

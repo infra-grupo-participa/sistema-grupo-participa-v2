@@ -45,7 +45,7 @@ Grupo**, com as mesmas regras de análise. Nada aqui conecta no Supabase, no dom
 | CRM do Radar (nome, e-mail, telefone) | **Não migra na primeira fase** (LGPD) |
 | Gravação de visita (replay) | **Fica para uma segunda fase** (dado mais pesado e mais sensível) |
 | Quem vê a Web | Por ora só admin e dev. Depois, a área `mkt_web` para o Luiz e o Iromar |
-| `utm_content` | **= id do anúncio.** A página vai no nome da campanha (campo 5 do padrão) |
+| UTM (`utm_content` e demais) | **`utm_content` = o anúncio (criativo) no formato `nome\|id`, padrão oficial do gp-operacoes; o sistema cruza pelo id.** No Meta, `utm_source=metaads`, `utm_campaign` = campanha `nome\|id`, `utm_medium` = conjunto `nome\|id`, `utm_term` = posicionamento; no Google só id. Fonte: gp-operacoes, `departamentos/dados/areas/infraestrutura/processos/padronizar-utm-dos-links.md` (Victor, 06/10/2026); resumo em `docs/central-de-dados.md`, "Padrões de nome de campanha e UTM". A página vai no nome da campanha (campo 5 do padrão) |
 | Padrão de nome de campanha | `GESTOR \| PROJETO \| OBJETIVO \| DESCRIÇÃO \| PÁGINA(opcional)`, ex.: `RS \| PB26 \| LEADS \| TESTE DE ESCRITÓRIOS \| AK1` |
 | FTP das páginas do PB | É do Luiz; o do Grupo vem depois. A virada usa o dele por ora |
 | Data da virada | **Fora da semana do PB26 (09 a 11/11/2026)** |
@@ -88,6 +88,9 @@ Grupo**, com as mesmas regras de análise. Nada aqui conecta no Supabase, no dom
    recusar parte dos pedidos (a falha aparece na aba Velocidade).
 6. **Conferir depois da virada:** o tempo de `mkt_web_melhorias` com 30 dias de dado; se as páginas do PB aceitam ser
    abertas num quadro (fundo "página ao vivo" do mapa de calor).
+7. **UTM longo no gravador v1:** o `radar-v1.js` corta cada UTM em 120 caracteres (comportamento mantido de propósito).
+   No formato `nome|id` o id fica no FIM; nome de campanha muito longo perde o id no corte e a visita cai na reserva
+   pelo nome. Ao fazer o `radar-v2.js`, guardar o fim do texto (ou subir o limite para 300, como o servidor já aceita).
 
 ## 7. Perguntas para o Luiz (abertas em 05/10/2026)
 
@@ -96,7 +99,8 @@ Grupo**, com as mesmas regras de análise. Nada aqui conecta no Supabase, no dom
 2. O `radar-active-fila` está ativo? Há rotina fora das listadas na PASSAGEM?
 3. Quais páginas estão com qual gravador (011026-0251 ou 051026-0007)? A 3.15 foi publicada?
 4. A FTP do PB (`PB_FTP_*`) e a do `api/crm.php` são contas do Grupo ou suas?
-5. O que vai no `utm_campaign` dos anúncios do Meta: nome ou id da campanha?
+5. ~~O que vai no `utm_campaign` dos anúncios do Meta: nome ou id da campanha?~~ Respondida pelo Victor em 06/10/2026:
+   `nome|id` (padrão do gp-operacoes; ver a seção 4).
 6. O que do CRM você considera indispensável levar?
 7. Prefere adaptar você as migrações do Radar para o schema `mkt_web` ou que a gente faça?
 8. Quem mais tem login no Radar hoje?
@@ -112,3 +116,4 @@ Grupo**, com as mesmas regras de análise. Nada aqui conecta no Supabase, no dom
 |---|---|---|
 | 05/10/2026 | Victor + Claude | Estudo do pacote do Radar; base compartilhada aplicada (20261005m); coleta e 9 abas na branch `victor` (20261005n, não aplicada); este guia |
 | 05/10/2026 | Victor + Claude | Fase 2 na branch `victor` (20261005q, não aplicada): abas Fluxo, Mapa de calor (sobre a captura do Google) e Melhorias (achados automáticos com as regras do `oportunidades.ts`, testes A/B por `ak1`/`ak1-b`, Comparar); teste diário do Google (Edge `mkt-web-pagespeed`); leads na base de pessoas com link para a ficha (admin/dev); connect rate (page views ÷ cliques no link) com o Tráfego; as 11 páginas do PB26. Gravador sem mudança |
+| 06/10/2026 | Victor + Claude | UTM no padrão do gp-operacoes (`nome\|id`): leitura única `mkt.utm_separar`/`mkt_web.origem_ids` (20261005n), Origem, achados por criativo e connect rate cruzam pelo id; a coleta guarda os ids em `campaign_id`/`adset_id`/`ad_id`; UTM guardado até 300 caracteres no servidor. Gravador sem mudança de comportamento (ver o risco do corte em 120 caracteres na seção 6) |

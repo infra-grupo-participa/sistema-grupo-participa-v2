@@ -8,6 +8,7 @@
 // Domínio puro: sem React, sem Supabase.
 import { compararComRegua, compararTaxas, maisFraco, apelidoSecao, type Nivel } from './analise';
 import type { BaseMelhorias, LeituraMelhorias, PaginaMelhorias } from './tipos';
+import { rotuloUtm } from '../../projetos/domain/utm';
 
 export type TipoAchado = 'dobra' | 'promessa' | 'botao' | 'secao' | 'formulario' | 'friccao' | 'velocidade' | 'mql_le' | 'botao_converte';
 
@@ -77,7 +78,8 @@ function dobra(c: Ctx): Achado[] {
 }
 
 // ─── promessa (oportunidades.ts: promessa) ───────────────────────────────────────────────────────────────────────────
-// por criativo (utm_content) ou campanha: 30+ entradas dele e das outras, rejeição 12 pontos acima das outras, não fraco.
+// por criativo (utm_content = o anúncio em nome|id, agrupado pelo id) ou campanha: 30+ entradas dele e das outras,
+// rejeição 12 pontos acima das outras, não fraco.
 function promessa(c: Ctx): Achado[] {
   const out: Achado[] = [];
   for (const cr of c.pg.por_criativo ?? []) {
@@ -88,8 +90,8 @@ function promessa(c: Ctx): Achado[] {
     if (t.b - t.a < 0.12 || t.nivel === 'fraco') continue;
     const rotulo = cr.criativo || cr.campanha;
     out.push({
-      id: id(c, 'promessa-' + cr.campanha + '-' + cr.criativo), tipo: 'promessa', pagina_id: c.pg.pagina_id, confianca: t.nivel, base: c.base,
-      dica: cr.criativo ? `Código do anúncio (utm_content): ${cr.criativo}; campanha: ${cr.campanha}` : undefined,
+      id: id(c, 'promessa-' + cr.campanha + '-' + (cr.criativo_id || cr.criativo)), tipo: 'promessa', pagina_id: c.pg.pagina_id, confianca: t.nivel, base: c.base,
+      dica: cr.criativo ? `Anúncio (utm_content): ${rotuloUtm(cr.criativo === cr.criativo_id ? null : cr.criativo, cr.criativo_id)}; campanha: ${cr.campanha}` : undefined,
       titulo: `A promessa do criativo “${rotulo}” não casa com a ${c.nome}: ${pctDe(t.b, 0)} saem sem se engajar (as outras entradas, ${pctDe(t.a, 0)})`,
       numeros: `${fmtN(n(cr.rejeicoes))} de ${fmtN(e)} entradas por esse criativo contra ${fmtN(restoR)} de ${fmtN(restoE)} das outras, ${c.periodo}. Lead: ${pctDe(taxa(n(cr.leads), e))} contra ${pctDe(taxa(restoL, restoE))}.`,
       fazer: 'Fazer o título da página repetir a promessa do anúncio, ou dar a esse criativo uma página dele. Se ele traz o público errado, o conserto é no anúncio.',

@@ -270,15 +270,15 @@ export function SecaoConnect({ c }: { c: Connect | null }) {
         </>
       )}
       {c.sem_campanha && c.sem_campanha.page_views > 0 && (
-        <p className="mt-2 text-xs text-[var(--fg-3)]">{num(c.sem_campanha.page_views)} page views de {num(c.sem_campanha.campanhas)} utm_campaign que não casam com campanha cadastrada no Tráfego.</p>
+        <p className="mt-2 text-xs text-[var(--fg-3)]">{num(c.sem_campanha.page_views)} page views de {num(c.sem_campanha.campanhas)} campanhas (pelo id do utm_campaign; sem id, pelo nome) que não casam com campanha cadastrada no Tráfego.</p>
       )}
       {c.anuncios.length > 0 && (
         <details className="mt-3 text-sm">
-          <summary className="cursor-pointer text-[var(--fg-2)]">Por anúncio (utm_content): só a Web, o Tráfego ainda não guarda clique por anúncio</summary>
+          <summary className="cursor-pointer text-[var(--fg-2)]">Por anúncio (utm_content = criativo nome|id, contado pelo id): só a Web, o Tráfego ainda não guarda clique por anúncio</summary>
           <DataTable minWidth={600}>
             <Thead><Th>Anúncio</Th><Th>Page views</Th><Th>Leads</Th><Th>Conversão</Th></Thead>
             <tbody>{c.anuncios.map((a) => (
-              <Tr key={a.anuncio}><Td><span className="font-mono text-xs" title={a.anuncio}>{codigoCurto(a.anuncio)}</span></Td><Td>{num(a.page_views)}</Td><Td>{num(a.leads)}</Td><Td>{pct(a.leads, a.page_views)}</Td></Tr>
+              <Tr key={(a.anuncio_id ?? '') + '|' + a.anuncio}><Td><span className="font-mono text-xs" title={a.anuncio_id ?? a.anuncio}>{codigoCurto(a.anuncio)}</span></Td><Td>{num(a.page_views)}</Td><Td>{num(a.leads)}</Td><Td>{pct(a.leads, a.page_views)}</Td></Tr>
             ))}</tbody>
           </DataTable>
         </details>

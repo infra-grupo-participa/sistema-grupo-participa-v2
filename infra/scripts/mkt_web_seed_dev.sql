@@ -48,8 +48,11 @@ insert into mkt_web.sessoes (id, projeto_id, visitante, dia, inicio, fim, dispos
                              mortos, eventos_funil, visivel_ms, engajada, engajou_por, lead, sistema, navegador, app)
 select d.sid, d.projeto_id, d.vis, d.dia, d.dia + time '10:00' + (d.r1 * interval '12 hours'), d.dia + time '10:01' + (d.r1 * interval '12 hours'),
        d.disp, d.fonte, case when d.fonte is null then null when d.fonte = 'google' then 'cpc' else 'paid' end,
-       case when d.fonte in ('ig', 'fb') then case when d.r4 < 0.6 then 'RS | PB26 | LEADS | DEV A | AK1' else 'CF | PB26 | LEADS | DEV B' end end,
-       case when d.fonte in ('ig', 'fb') then '12020000000000000' || (1 + (d.n % 4)) end,
+       -- UTM no padrão do gp-operacoes: Meta em nome|id (o id depois da última "|"), Google só id
+       case when d.fonte in ('ig', 'fb') then case when d.r4 < 0.6 then 'RS | PB26 | LEADS | DEV A | AK1|120200000000000100' else 'CF | PB26 | LEADS | DEV B|120200000000000200' end
+            when d.fonte = 'google' then '22000000000' end,
+       case when d.fonte in ('ig', 'fb') then 'CRIATIVO DEV ' || (1 + (d.n % 4)) || '|12020000000000000' || (1 + (d.n % 4))
+            when d.fonte = 'google' then '700000000001' end,
        coalesce(d.fonte in ('ig', 'fb'), false), coalesce(d.fonte = 'google', false),
        (select pg.id from mkt.paginas pg where pg.projeto_id = d.projeto_id and pg.caminho = '/ak1/'), '/ak1/',
        case when d.lead then '/obrigado/' else '/ak1/' end, case when d.lead then 2 else 1 end,

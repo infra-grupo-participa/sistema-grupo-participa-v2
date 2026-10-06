@@ -24,8 +24,10 @@ export interface Funil {
 export interface Origem {
   total: number; cliques_meta: number; cliques_google: number;
   fontes: { fonte: string; meio: string | null; sessoes: number; engajadas: number; leads: number }[];
-  campanhas: { campanha: string; sessoes: number; engajadas: number; leads: number; padrao: boolean; pagina: string | null; projeto: string | null }[];
-  anuncios: { anuncio: string; campanha: string | null; sessoes: number; engajadas: number; leads: number }[];
+  /** Campanha e anúncio no formato nome|id (padrão do gp-operacoes), agrupados pelo id. campanha/anuncio = o nome (o id
+   *  quando só veio id, como no Google); padrao nulo sem nome. */
+  campanhas: { campanha: string; campanha_id?: string | null; sessoes: number; engajadas: number; leads: number; padrao: boolean | null; pagina: string | null; projeto: string | null }[];
+  anuncios: { anuncio: string; anuncio_id?: string | null; campanha: string | null; sessoes: number; engajadas: number; leads: number }[];
   sites: { site: string; sessoes: number }[];
 }
 
@@ -110,7 +112,8 @@ export interface PaginaMelhorias {
   visitas: number; sessoes: number; leads: number; mql: number; dias: number;
   entradas: number; rejeicoes: number; leads_entrada: number; mql_entrada: number;
   por_aparelho?: { dispositivo: string; entradas: number; rejeicoes: number; leads: number }[];
-  por_criativo?: { campanha: string; criativo: string; entradas: number; rejeicoes: number; leads: number }[];
+  /** criativo = o nome do anúncio (o id quando só veio id); agrupado pelo id (criativo_id) */
+  por_criativo?: { campanha: string; criativo: string; criativo_id?: string | null; entradas: number; rejeicoes: number; leads: number }[];
   friccao?: { com_raiva: number; com_erro: number; com_friccao: number; friccao_leads: number; sem_friccao: number; sem_leads: number } | null;
   lcp?: { faixa: 'bom' | 'medio' | 'ruim'; entradas: number; rejeicoes: number; leads: number }[];
   por_dia?: { dia: string; entradas: number }[];
@@ -175,5 +178,5 @@ export interface Connect {
     impressoes: number | null; cliques_link: number | null; dias_com_gasto: number; page_views: number; engajadas: number; leads: number;
     connect_rate: number | null; conversao: number | null }[];
   sem_campanha: { page_views: number; campanhas: number } | null;
-  anuncios: { anuncio: string; campanha: string | null; page_views: number; engajadas: number; leads: number }[];
+  anuncios: { anuncio: string; anuncio_id?: string | null; campanha: string | null; page_views: number; engajadas: number; leads: number }[];
 }

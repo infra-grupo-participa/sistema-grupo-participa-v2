@@ -170,14 +170,17 @@ export function PainelOrigem({ o }: { o: Origem }) {
           ))}</tbody>
         </DataTable>
       </SectionCard>
-      <SectionCard title="Campanha (utm_campaign)" subtitle="Traduzida pelo padrão GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA (campo 5 = página).">
+      <SectionCard title="Campanha (utm_campaign)" subtitle="UTM no formato nome|id (padrão do gp-operacoes), contada pelo id. O nome é traduzido pelo padrão GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA (campo 5 = página).">
         {!o.campanhas.length ? <EmptyState title="Nenhuma visita com utm_campaign no período." /> : (
           <DataTable minWidth={760}>
             <Thead><Th>Campanha</Th><Th>Padrão</Th><Th>Página</Th><Th>Visitas</Th><Th>Leads</Th><Th>Taxa</Th></Thead>
             <tbody>{o.campanhas.map((c) => (
-              <Tr key={c.campanha}>
-                <Td><span className="font-mono text-xs break-all">{c.campanha}</span></Td>
-                <Td><Badge tone={c.padrao ? 'success' : 'warning'}>{c.padrao ? 'No padrão' : 'Fora do padrão'}</Badge></Td>
+              <Tr key={(c.campanha_id ?? '') + '|' + c.campanha}>
+                <Td>
+                  <span className="font-mono text-xs break-all">{c.campanha}</span>
+                  {c.campanha_id && c.campanha_id !== c.campanha && <span className="block font-mono text-[11px] text-[var(--fg-3)]" title={c.campanha_id}>id {codigoCurto(c.campanha_id)}</span>}
+                </Td>
+                <Td>{c.padrao == null ? <Badge tone="neutral">Só id</Badge> : <Badge tone={c.padrao ? 'success' : 'warning'}>{c.padrao ? 'No padrão' : 'Fora do padrão'}</Badge>}</Td>
                 <Td>{c.pagina ? <span className="font-mono">{c.pagina}</span> : '–'}</Td>
                 <Td>{num(c.sessoes)}</Td><Td>{num(c.leads)}</Td><Td>{pct(c.leads, c.sessoes)}</Td>
               </Tr>
@@ -185,13 +188,16 @@ export function PainelOrigem({ o }: { o: Origem }) {
           </DataTable>
         )}
       </SectionCard>
-      <SectionCard title="Anúncio (utm_content = id do anúncio)">
+      <SectionCard title="Anúncio (utm_content)" subtitle="O anúncio (criativo) no formato nome|id, padrão do gp-operacoes; contado pelo id.">
         {!o.anuncios.length ? <EmptyState title="Nenhuma visita com utm_content no período." /> : (
           <DataTable minWidth={680}>
             <Thead><Th>Anúncio</Th><Th>Campanha</Th><Th>Visitas</Th><Th>Leads</Th><Th>Taxa</Th></Thead>
             <tbody>{o.anuncios.map((a) => (
-              <Tr key={a.anuncio}>
-                <Td><span className="font-mono text-xs" title={a.anuncio}>{codigoCurto(a.anuncio)}</span></Td>
+              <Tr key={(a.anuncio_id ?? '') + '|' + a.anuncio}>
+                <Td>
+                  <span className="font-mono text-xs break-all" title={a.anuncio}>{codigoCurto(a.anuncio)}</span>
+                  {a.anuncio_id && a.anuncio_id !== a.anuncio && <span className="block font-mono text-[11px] text-[var(--fg-3)]" title={a.anuncio_id}>id {codigoCurto(a.anuncio_id)}</span>}
+                </Td>
                 <Td><span className="font-mono text-xs break-all">{a.campanha ?? '–'}</span></Td>
                 <Td>{num(a.sessoes)}</Td><Td>{num(a.leads)}</Td><Td>{pct(a.leads, a.sessoes)}</Td>
               </Tr>

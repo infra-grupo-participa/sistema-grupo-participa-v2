@@ -40,7 +40,7 @@
 --   4.visao_serie_hoje = {"dia": "<hoje>", "leads": 1, "sessoes": 3, "engajadas": 1, "visualizacoes": 4}
 --   4.funil = Entrou na ZZ1=2 > Abriu o formulário=1 > Lead=1 > Viu o obrigado=1
 --   4.origem = total=3 meta=1 fontes=[(direto) 2 sessões, ig/paid 1 sessão 1 lead] campanha=RS | ZZWEB99 | LEADS | TESTE | ZZ1
---              com padrao=true pagina=zz1 projeto=ZZWEB99
+--              com padrao=true pagina=zz1 projeto=ZZWEB99 campanha_id=null (formato antigo: só nome, sem id)
 --   4.velocidade = /obrigado-zz/ mobile lcp=- ; /x/ desktop lcp=- ; /zz1/ desktop lcp=- ; /zz1/ mobile lcp=2000
 --   4.leitura = rolagem media=50 chegou_25/50/75=1 chegou_100=0 media_30s=40 vaivem_medio=2.00; secoes topo(1)=5 s,
 --               oferta(2)=7 s; ctas inscrever viram=1 cliques=1
@@ -55,6 +55,7 @@
 --   5.funcoes = anon=0 auth=(as 10 de leitura) servico=mkt_web_coletar,mkt_web_dominios
 --   6.sem_perfil / 6.operador_mkt_web / 6.visualizador / 6.anon = "42501 ok" nas 13 chamadas de cada um (as 10 de leitura,
 --     a coleta, os domínios e o select direto em mkt_web.sessoes)
+--   6b.* = todas as linhas começam com "ok:" (UTM nome|id: separar, ids da origem, gravação, aba Origem por id)
 --   7.manter = 1   7.sessao_velha = 0   7.espaco_ok = ok   7.ritmo_velho = 0
 --   7.espaco_teto = pausada   7.coleta_depois_do_teto = pausada   7.falha_registrada = 1
 --   Qualquer ERRO no meio = a migration não serve como está: não aplicar.
@@ -113,6 +114,39 @@ $$;
 create function mkt_web.opcional(t text, maximo bigint) returns bigint
 language sql immutable set search_path = '' as $$
   select case when t ~ '^[0-9]{1,15}$' then least(t::bigint, maximo) end
+$$;
+
+-- UTM no padrão oficial do gp-operacoes (departamentos/dados/areas/infraestrutura/processos/padronizar-utm-dos-links.md,
+-- confirmado pelo Victor em 06/10/2026): no Meta, campanha, conjunto e anúncio vão como "nome|id"; o nome da campanha
+-- também tem " | " dentro (GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA). O id é o que vem DEPOIS DA ÚLTIMA "|",
+-- só se for número. Sem "|": número = id, senão nome (formato antigo: só id ou só nome; o Google só tem macro de id).
+-- A LEITURA ÚNICA de utm_campaign, utm_medium e utm_content é esta; a mesma regra em TypeScript:
+-- web/modules/marketing/projetos/domain/utm.ts (testes em utm.test.ts). Mudou aqui, muda lá.
+create function mkt.utm_separar(p_texto text, out nome text, out id text)
+language sql immutable parallel safe set search_path = '' as $$
+  with t as (select nullif(btrim(p_texto), '') as v),
+  p as (select t.v, btrim(substring(t.v from '\|([^|]*)$')) as fim, nullif(btrim(substring(t.v from '^(.*)\|[^|]*$')), '') as ini
+          from t)
+  select case when p.fim ~ '^[0-9]+$' then p.ini when p.v ~ '^[0-9]+$' then null else p.v end,
+         case when p.fim ~ '^[0-9]+$' then p.fim when p.v ~ '^[0-9]+$' then p.v end
+    from p
+$$;
+revoke all on function mkt.utm_separar(text) from public, anon, authenticated;
+
+-- Os ids da origem de uma visita: o parâmetro explícito (campaign_id, adset_id, ad_id) vale primeiro; senão o id que vem
+-- no UTM (campanha em utm_campaign, anúncio/criativo em utm_content, conjunto em utm_medium só com utm_source=metaads,
+-- padrão do gp-operacoes). Nomes: a parte do nome do UTM, sem o id. Cruzar SEMPRE pelo id; nome só na falta dele.
+-- A gravação (mkt_web.ingerir) guarda os ids em sessoes.campaign_id/adset_id/ad_id; as leituras chamam esta função de
+-- novo para valer também em visita gravada sem passar pela coleta (ensaio, carga de dado antigo).
+create function mkt_web.origem_ids(p_source text, p_medium text, p_campanha text, p_conteudo text,
+                                   p_campaign_id text, p_adset_id text, p_ad_id text,
+                                   out campanha_id text, out campanha_nome text, out conjunto_id text,
+                                   out anuncio_id text, out anuncio_nome text)
+language sql immutable parallel safe set search_path = '' as $$
+  select coalesce(nullif(btrim(p_campaign_id), ''), c.id), c.nome,
+         coalesce(nullif(btrim(p_adset_id), ''), case when lower(btrim(p_source)) = 'metaads' then m.id end),
+         coalesce(nullif(btrim(p_ad_id), ''), a.id), a.nome
+    from mkt.utm_separar(p_campanha) c, mkt.utm_separar(p_medium) m, mkt.utm_separar(p_conteudo) a
 $$;
 
 -- nome técnico de seção, botão ou campo (igual radar.nome_curto)
@@ -289,7 +323,10 @@ create table mkt_web.sessoes (
 create index sessoes_projeto_dia on mkt_web.sessoes (projeto_id, dia);
 create index sessoes_visitante on mkt_web.sessoes (projeto_id, visitante);
 create index sessoes_recebido on mkt_web.sessoes (projeto_id, recebido_em desc);
-comment on column mkt_web.sessoes.utm_content is 'Id do anúncio (decisão 05/10/2026). A página vem do caminho e do campo 5 do nome de campanha (utm_campaign).';
+comment on column mkt_web.sessoes.utm_content is 'O anúncio (criativo) no formato nome|id, padrão oficial do gp-operacoes (padronizar-utm-dos-links.md); o sistema cruza pelo id (ad_id). Aceita o formato antigo (só id ou só nome).';
+comment on column mkt_web.sessoes.utm_campaign is 'A campanha no formato nome|id (padrão do gp-operacoes; o nome tem " | " dentro, o id vem depois da última "|"); o sistema cruza pelo id (campaign_id). Google: só id.';
+comment on column mkt_web.sessoes.utm_medium is 'No Meta (utm_source=metaads), o conjunto de anúncios no formato nome|id; o id vai para adset_id.';
+comment on column mkt_web.sessoes.campaign_id is 'Id da campanha: parâmetro campaign_id da URL ou, na falta dele, o id do utm_campaign (mkt_web.origem_ids). Mesma lógica em adset_id (utm_medium do Meta) e ad_id (utm_content).';
 
 create table mkt_web.visualizacoes (
   id          text primary key check (id ~ '^[A-Za-z0-9]{8,40}$'),
@@ -548,6 +585,7 @@ declare
   v_nova     boolean;
   v_sess     mkt_web.sessoes;
   v_disp     text;
+  v_ids      record;
   e          jsonb;
   r          jsonb;
   v_dados    jsonb;
@@ -587,15 +625,18 @@ begin
   v_pag := mkt_web.pagina_do_caminho(v_proj.id, p_host, v_caminho);
   v_disp := case when s ->> 'dispositivo' in ('mobile', 'tablet', 'desktop') then s ->> 'dispositivo' else 'desktop' end;
 
-  -- sessão: a primeira página e a origem valem para a visita toda
+  -- sessão: a primeira página e a origem valem para a visita toda. Os ids da origem (campanha, conjunto, anúncio) saem
+  -- do parâmetro explícito ou do UTM no formato nome|id (mkt_web.origem_ids) e ficam guardados para o cruzamento.
+  select * into v_ids from mkt_web.origem_ids(o ->> 'utm_source', o ->> 'utm_medium', o ->> 'utm_campaign', o ->> 'utm_content',
+                                              o ->> 'campaign_id', o ->> 'adset_id', o ->> 'ad_id');
   insert into mkt_web.sessoes (id, projeto_id, visitante, dia, inicio, fim, recebido_em, dispositivo, teste,
                                utm_source, utm_medium, utm_campaign, utm_content, utm_term, campaign_id, adset_id, ad_id,
                                fbclid, gclid, referrer, entrada_pagina_id, entrada_caminho, saida_caminho)
   values (v_sid, v_proj.id, v_vis, (v_ini at time zone 'America/Sao_Paulo')::date, v_ini, v_fim, v_agora, v_disp,
           mkt_web.sim(s ->> 'teste'),
-          left(nullif(o ->> 'utm_source', ''), 120), left(nullif(o ->> 'utm_medium', ''), 120), left(nullif(o ->> 'utm_campaign', ''), 160),
-          left(nullif(o ->> 'utm_content', ''), 120), left(nullif(o ->> 'utm_term', ''), 120),
-          left(nullif(o ->> 'campaign_id', ''), 60), left(nullif(o ->> 'adset_id', ''), 60), left(nullif(o ->> 'ad_id', ''), 60),
+          left(nullif(o ->> 'utm_source', ''), 120), left(nullif(o ->> 'utm_medium', ''), 300), left(nullif(o ->> 'utm_campaign', ''), 300),
+          left(nullif(o ->> 'utm_content', ''), 300), left(nullif(o ->> 'utm_term', ''), 120),
+          left(v_ids.campanha_id, 60), left(v_ids.conjunto_id, 60), left(v_ids.anuncio_id, 60),
           mkt_web.sim(o ->> 'fbclid'), mkt_web.sim(o ->> 'gclid'), left(nullif(o ->> 'referrer', ''), 120),
           v_pag, v_caminho, v_caminho)
   on conflict (id) do nothing;
@@ -1005,7 +1046,9 @@ begin
 end
 $$;
 
--- Origem: plataforma (utm_source), campanha (traduzida pelo padrão de nome), anúncio (utm_content), site de origem
+-- Origem: plataforma (utm_source), campanha (o NOME traduzido pelo padrão de nome), anúncio/criativo (utm_content), site
+-- de origem. Campanha e anúncio no formato nome|id (padrão do gp-operacoes): agrupados pelo id (mkt_web.origem_ids);
+-- sem id, pelo nome. "campanha"/"anuncio" = o nome (o id quando só há id, como no Google); "padrao" nulo sem nome.
 create function public.mkt_web_origem(p_projeto bigint, p_de date, p_ate date) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 begin
@@ -1013,7 +1056,11 @@ begin
   perform mkt_web.periodo_ok(p_de, p_ate);
   return (
     with s as (
-      select * from mkt_web.sessoes x where x.projeto_id = p_projeto and x.dia between p_de and p_ate and not x.teste
+      select x.*, oi.campanha_id as c_id, oi.campanha_nome as c_nome, oi.anuncio_id as a_id, oi.anuncio_nome as a_nome
+        from mkt_web.sessoes x
+        cross join lateral mkt_web.origem_ids(x.utm_source, x.utm_medium, x.utm_campaign, x.utm_content,
+                                              x.campaign_id, x.adset_id, x.ad_id) oi
+       where x.projeto_id = p_projeto and x.dia between p_de and p_ate and not x.teste
     )
     select jsonb_build_object(
       'total', (select count(*) from s),
@@ -1023,18 +1070,22 @@ begin
                             from (select coalesce(s.utm_source, '(direto)') f, s.utm_medium m, count(*) n,
                                          count(*) filter (where s.engajada) e, count(*) filter (where s.lead) l
                                     from s group by 1, 2 order by 3 desc limit 50) t), '[]'::jsonb),
-      'campanhas', coalesce((select jsonb_agg(jsonb_build_object('campanha', t.c, 'sessoes', t.n, 'engajadas', t.e, 'leads', t.l,
-                                    'padrao', (mkt.campanha_traduzir(t.c) ->> 'padrao')::boolean,
-                                    'pagina', mkt.campanha_traduzir(t.c) ->> 'pagina',
-                                    'projeto', mkt.campanha_traduzir(t.c) ->> 'projeto') order by t.n desc)
-                               from (select s.utm_campaign c, count(*) n, count(*) filter (where s.engajada) e,
+      'campanhas', coalesce((select jsonb_agg(jsonb_build_object('campanha', coalesce(t.nome, t.cid), 'campanha_id', t.cid,
+                                    'sessoes', t.n, 'engajadas', t.e, 'leads', t.l,
+                                    'padrao', case when t.nome is not null then (tr.v ->> 'padrao')::boolean end,
+                                    'pagina', tr.v ->> 'pagina', 'projeto', tr.v ->> 'projeto') order by t.n desc)
+                               from (select max(s.c_id) cid, max(s.c_nome) nome, count(*) n, count(*) filter (where s.engajada) e,
                                             count(*) filter (where s.lead) l
-                                       from s where s.utm_campaign is not null group by 1 order by 2 desc limit 50) t), '[]'::jsonb),
-      'anuncios', coalesce((select jsonb_agg(jsonb_build_object('anuncio', t.a, 'campanha', t.c, 'sessoes', t.n, 'engajadas', t.e, 'leads', t.l)
+                                       from s where coalesce(s.c_id, s.c_nome) is not null
+                                      group by coalesce(s.c_id, s.c_nome) order by 3 desc limit 50) t
+                               cross join lateral (select case when t.nome is not null then mkt.campanha_traduzir(t.nome) end as v) tr), '[]'::jsonb),
+      'anuncios', coalesce((select jsonb_agg(jsonb_build_object('anuncio', coalesce(t.nome, t.aid), 'anuncio_id', t.aid, 'campanha', t.c,
+                                                                'sessoes', t.n, 'engajadas', t.e, 'leads', t.l)
                                   order by t.n desc)
-                              from (select s.utm_content a, min(s.utm_campaign) c, count(*) n, count(*) filter (where s.engajada) e,
-                                           count(*) filter (where s.lead) l
-                                      from s where s.utm_content is not null group by 1 order by 3 desc limit 50) t), '[]'::jsonb),
+                              from (select max(s.a_id) aid, max(s.a_nome) nome, coalesce(min(s.c_nome), min(s.c_id)) c, count(*) n,
+                                           count(*) filter (where s.engajada) e, count(*) filter (where s.lead) l
+                                      from s where coalesce(s.a_id, s.a_nome) is not null
+                                     group by coalesce(s.a_id, s.a_nome) order by 4 desc limit 50) t), '[]'::jsonb),
       'sites', coalesce((select jsonb_agg(jsonb_build_object('site', t.r, 'sessoes', t.n) order by t.n desc)
                            from (select s.referrer r, count(*) n from s where s.referrer is not null group by 1 order by 2 desc limit 20) t), '[]'::jsonb)));
 end
@@ -1562,6 +1613,75 @@ begin
   end loop;
 end
 $t$;
+
+-- 6b. UTM no padrão do gp-operacoes (nome|id; o id é o que vem depois da última "|"). Linha "ok:" ou "ERRADO:".
+insert into pg_temp._z_out (passo, linha)
+select '6b.utm_separar', case when x.nome is not distinct from x.n_esp and x.id is not distinct from x.i_esp then 'ok: ' else 'ERRADO: ' end
+       || x.caso || ' -> nome=' || coalesce(x.nome, '(nulo)') || ' id=' || coalesce(x.id, '(nulo)')
+  from (select c.caso, c.n_esp, c.i_esp, u.nome, u.id
+          from (values ('nome|id com " | " no nome', 'RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1|120211234', 'RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1', '120211234'),
+                       ('anúncio nome|id com espaços', '  CRIATIVO 01 | 120200000000009 ', 'CRIATIVO 01', '120200000000009'),
+                       ('só id (formato antigo, Google)', '120200000000001', null, '120200000000001'),
+                       ('só nome com " | " (último campo não é número)', 'RS | ZZWEB99 | LEADS | TESTE | ZZ1', 'RS | ZZWEB99 | LEADS | TESTE | ZZ1', null),
+                       ('só nome sem "|"', 'aula ao vivo', 'aula ao vivo', null),
+                       ('vazio', '   ', null, null),
+                       ('nulo', null, null, null)) c(caso, texto, n_esp, i_esp)
+          cross join lateral mkt.utm_separar(c.texto) u) x;
+insert into pg_temp._z_out (passo, linha)
+select '6b.origem_ids', case when (o.campanha_id, o.conjunto_id, o.anuncio_id) is not distinct from (x.c, x.j, x.a) then 'ok: ' else 'ERRADO: ' end
+       || x.caso || ' -> campanha=' || coalesce(o.campanha_id, '-') || ' conjunto=' || coalesce(o.conjunto_id, '-') || ' anuncio=' || coalesce(o.anuncio_id, '-')
+  from (values ('Meta nome|id: conjunto do utm_medium', 'metaads', 'CONJ|120300000000001', 'C|120100000000001', 'A|120200000000001', null, null, null,
+                '120100000000001', '120300000000001', '120200000000001'),
+               ('utm_medium fora do Meta não vira conjunto', 'ig', 'paid|123', 'C|120100000000001', 'A|120200000000001', null, null, null,
+                '120100000000001', null, '120200000000001'),
+               ('parâmetro explícito vale primeiro', 'metaads', null, 'C|120100000000001', 'A|120200000000001', '999', '888', '777',
+                '999', '888', '777'),
+               ('Google só id', 'google', 'cpc', '22000000001', '700000000001', null, null, null, '22000000001', null, '700000000001'))
+       x(caso, src, med, camp, cont, cid, sid, aid, c, j, a)
+  cross join lateral mkt_web.origem_ids(x.src, x.med, x.camp, x.cont, x.cid, x.sid, x.aid) o;
+-- gravação: Meta no padrão (nome|id) e Google (só id); a coleta do ZZWEB99 volta a ligar (o passo 4 desligou)
+update mkt_web.funis set coleta = true where projeto_id = (select id from pg_temp._z_ids where k = 'proj');
+set local role service_role;
+insert into pg_temp._z_out (passo, linha) values
+  ('6b.coleta_meta', public.mkt_web_coletar(pg_temp.pk('ZZWEB99', 'zzsessaoUTM1', 'zzpvUTM00001', 0, '/zz1/', 'mobile', 0,
+     '{"utm_source":"metaads","utm_medium":"CONJUNTO ZZ|120300000000077","utm_campaign":"RS | ZZWEB99 | LEADS | TESTE | ZZ1|120100000000077","utm_content":"CRIATIVO ZZ 01|120200000000077","utm_term":"instagram_stories","fbclid":1}',
+     null, null), 'https://exemplo.invalid', 'ffffffffffffffff')),
+  ('6b.coleta_google', public.mkt_web_coletar(pg_temp.pk('ZZWEB99', 'zzsessaoUTM2', 'zzpvUTM00002', 0, '/zz1/', 'desktop', 0,
+     '{"utm_source":"google","utm_medium":"cpc","utm_campaign":"22000000077","utm_content":"700000000077","gclid":1}',
+     null, null), 'https://exemplo.invalid', 'ffffffffffffffff'));
+reset role;
+insert into pg_temp._z_out (passo, linha)
+select '6b.sessao_ids', case when string_agg(s.id || '=' || coalesce(s.campaign_id, '-') || '/' || coalesce(s.adset_id, '-') || '/' || coalesce(s.ad_id, '-'), ' ; ' order by s.id)
+                                = 'zzsessaoUTM1=120100000000077/120300000000077/120200000000077 ; zzsessaoUTM2=22000000077/-/700000000077'
+                              then 'ok: ' else 'ERRADO: ' end
+       || string_agg(s.id || '=' || coalesce(s.campaign_id, '-') || '/' || coalesce(s.adset_id, '-') || '/' || coalesce(s.ad_id, '-'), ' ; ' order by s.id)
+       || ' (utm_campaign guardado inteiro: ' || max(s.utm_campaign) filter (where s.id = 'zzsessaoUTM1') || ')'
+  from mkt_web.sessoes s where s.id in ('zzsessaoUTM1', 'zzsessaoUTM2');
+select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated"}', true);
+insert into pg_temp._z_out (passo, linha)
+select '6b.origem_campanhas',
+       case when (select count(*) from jsonb_array_elements(x -> 'campanhas') e
+                   where e ->> 'campanha_id' = '120100000000077' and e ->> 'campanha' = 'RS | ZZWEB99 | LEADS | TESTE | ZZ1'
+                     and e ->> 'padrao' = 'true' and e ->> 'pagina' = 'zz1') = 1
+             and (select count(*) from jsonb_array_elements(x -> 'campanhas') e
+                   where e ->> 'campanha_id' = '22000000077' and e ->> 'campanha' = '22000000077' and e -> 'padrao' = 'null'::jsonb) = 1
+             and (select count(*) from jsonb_array_elements(x -> 'campanhas') e
+                   where e -> 'campanha_id' = 'null'::jsonb and e ->> 'campanha' = 'RS | ZZWEB99 | LEADS | TESTE | ZZ1') = 1
+            then 'ok: ' else 'ERRADO: ' end
+       || 'Meta nome|id traduzido só pelo NOME (padrão, página zz1) e agrupado pelo id; Google só id (padrao nulo); formato antigo (só nome) à parte: '
+       || (x -> 'campanhas')::text
+  from public.mkt_web_origem((select id from pg_temp._z_ids where k = 'proj'), (select d from pg_temp._z_hoje), (select d from pg_temp._z_hoje)) x;
+insert into pg_temp._z_out (passo, linha)
+select '6b.origem_anuncios',
+       case when (select count(*) from jsonb_array_elements(x -> 'anuncios') e
+                   where e ->> 'anuncio_id' = '120200000000077' and e ->> 'anuncio' = 'CRIATIVO ZZ 01'
+                     and e ->> 'campanha' = 'RS | ZZWEB99 | LEADS | TESTE | ZZ1') = 1
+             and (select count(*) from jsonb_array_elements(x -> 'anuncios') e
+                   where e ->> 'anuncio_id' = '120200000000001' and e ->> 'anuncio' = '120200000000001') = 1
+             and (select count(*) from jsonb_array_elements(x -> 'anuncios') e where e ->> 'anuncio_id' = '700000000077') = 1
+            then 'ok: ' else 'ERRADO: ' end
+       || 'anúncio pelo id com o nome do criativo; só id (formato antigo e Google) mostra o id: ' || (x -> 'anuncios')::text
+  from public.mkt_web_origem((select id from pg_temp._z_ids where k = 'proj'), (select d from pg_temp._z_hoje), (select d from pg_temp._z_hoje)) x;
 
 -- 7. Retenção e espaço
 insert into mkt_web.sessoes (id, projeto_id, visitante, dia, inicio, fim, dispositivo, entrada_caminho, saida_caminho)
