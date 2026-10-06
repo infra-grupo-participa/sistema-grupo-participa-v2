@@ -14,6 +14,8 @@ const BASE = REMOTO ?? `http://localhost:${PORTA}`;
 export default defineConfig({
   testDir: './e2e',
   testMatch: '**/*.spec.ts',
+  // Spec estático (sem servidor nem login): roda pelo playwright.estatico.config.ts.
+  testIgnore: '**/mensageria-geometria.spec.ts',
   outputDir: './e2e/.resultados/artefatos',
   globalSetup: './e2e/global-setup.ts',
   // Produção é compartilhada: 1 worker, sem paralelismo, sem retry que mascare espera errada.

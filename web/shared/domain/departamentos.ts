@@ -55,7 +55,7 @@ export const DEPARTAMENTOS: Departamento[] = [
     status: 'ativo',
     areas: [
       area('marketing', 'web', 'Web', 'globe', 'Páginas e sites'),
-      area('marketing', 'mensageria', 'Mensageria', 'message', 'Disparos e grupos'),
+      { ...area('marketing', 'mensageria', 'Mensageria', 'message', 'Disparos e grupos'), status: 'ativo' }, // migration 20261005n
       area('marketing', 'trafego', 'Tráfego', 'trending-up', 'Mídia paga'),
       area('marketing', 'audiovisual', 'Audiovisual', 'video', 'Vídeo e foto'),
       area('marketing', 'social-media', 'Social Media', 'share', 'Redes sociais'),
@@ -90,6 +90,15 @@ export const DEPARTAMENTOS: Departamento[] = [
   // mora DENTRO do Educacional em /educacional/financeiro e mantém o nome por decisão do Victor (05/10/2026).
   { key: 'financeiro', label: 'Financeiro', path: '/financeiro', descricao: 'Departamento financeiro da empresa', ico: 'building', status: 'em_breve', areas: [] },
   { key: 'infra', label: 'Infra', path: '/infra', descricao: 'IA e Dados', ico: 'server', status: 'em_breve', areas: [] },
+];
+
+/**
+ * Base compartilhada do Marketing (fase 1 da central de dados, 05/10/2026): não é área, é o cadastro que as áreas
+ * leem (tabela de projetos única e páginas). Banco: schema `mkt` (migration 20261005m). Código em
+ * `web/modules/marketing/projetos/`. Mesmo gate do Marketing (admin/dev).
+ */
+export const BASE_MARKETING: Omit<Area, 'status'>[] = [
+  { key: 'projetos', label: 'Projetos e páginas', path: '/marketing/projetos', ico: 'tags', descricao: 'Projetos (PB26, HT33…) e páginas de cada um' },
 ];
 
 /**

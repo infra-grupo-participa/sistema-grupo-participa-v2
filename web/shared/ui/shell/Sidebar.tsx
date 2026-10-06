@@ -8,7 +8,7 @@ import { podeVerFinanceiro } from '@/modules/financeiro/domain/acesso';
 import { podeVerRemocao } from '@/modules/remocao-acessos/domain/acesso';
 import { podePedirAlteracao } from '@/modules/alunos/domain/pedidos-alteracao';
 import { REPORTS, SYSTEM_NAV, type ReportGroup } from '@/shared/ui/nav/config';
-import { DEPARTAMENTOS, departamento, departamentoDaRota, podeVerDepartamento } from '@/shared/domain/departamentos';
+import { BASE_MARKETING, DEPARTAMENTOS, departamento, departamentoDaRota, podeVerDepartamento } from '@/shared/domain/departamentos';
 import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { Icon } from '@/shared/ui/icons';
 import { chaveHashPadrao, itemHashAtivo } from './item-ativo';
@@ -168,6 +168,15 @@ export function Sidebar({ user }: { user: GpUser }) {
                   <span className={iconBoxCls(active)}><Icon name={a.ico} /></span>
                   <span className="flex-1 truncate">{a.label}</span>
                   {a.status === 'em_breve' && <EmBreveTag />}
+                </Link>
+              );
+            })}
+            {BASE_MARKETING.map((b) => {
+              const active = cur === b.path || cur.startsWith(b.path + '/');
+              return (
+                <Link key={b.key} href={b.path} className={itemCls(active)}>
+                  <span className={iconBoxCls(active)}><Icon name={b.ico} /></span>
+                  <span className="flex-1 truncate">{b.label}</span>
                 </Link>
               );
             })}

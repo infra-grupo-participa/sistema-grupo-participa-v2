@@ -2,7 +2,7 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Cargo, GpUser } from './auth';
-import { DEPARTAMENTOS, MODULO_DEPARTAMENTO, departamento, departamentoDaRota, ehDoComercial, podeVerDepartamento } from './departamentos';
+import { BASE_MARKETING, DEPARTAMENTOS, MODULO_DEPARTAMENTO, departamento, departamentoDaRota, ehDoComercial, podeVerDepartamento } from './departamentos';
 
 const user = (cargo: Cargo, setores: string[] = []): GpUser =>
   ({ id: 'u', email: 'x@advmais.com', nome: 'X', cargo, status: 'ativo', setores, funcoes: [], podeVerCpf: false, time: null, avatarUrl: null });
@@ -15,11 +15,11 @@ describe('departamentos: registro', () => {
     const st = Object.fromEntries(DEPARTAMENTOS.map((d) => [d.key, d.status]));
     expect(st).toEqual({ educacional: 'ativo', marketing: 'ativo', comercial: 'ativo', financeiro: 'em_breve', infra: 'em_breve' });
   });
-  it('Marketing tem as 5 áreas, todas "Em breve", em /marketing/<area>', () => {
+  it('Marketing tem as 5 áreas em /marketing/<area>; só Mensageria ativa, o resto "Em breve"', () => {
     const mkt = departamento('marketing');
     expect(mkt.areas.map((a) => a.label)).toEqual(['Web', 'Mensageria', 'Tráfego', 'Audiovisual', 'Social Media']);
     for (const a of mkt.areas) {
-      expect(a.status).toBe('em_breve');
+      expect(a.status).toBe(a.key === 'mensageria' ? 'ativo' : 'em_breve');
       expect(a.path).toBe(`/marketing/${a.key}`);
     }
   });
@@ -112,5 +112,13 @@ describe('departamentos: Marketing bloqueado até os níveis de acesso serem des
         expect(podeVerDepartamento(user(c), k)).toBe(true);
       }
     }
+  });
+});
+
+describe('departamentos: base compartilhada do Marketing (20261005m)', () => {
+  it('Projetos e páginas em /marketing/projetos, fora da lista de áreas', () => {
+    expect(BASE_MARKETING.map((b) => b.path)).toEqual(['/marketing/projetos']);
+    expect(departamento('marketing').areas.some((a) => a.path === '/marketing/projetos')).toBe(false);
+    expect(departamentoDaRota('/marketing/projetos')).toBe('marketing');
   });
 });

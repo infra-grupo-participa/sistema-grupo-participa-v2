@@ -1,0 +1,187 @@
+{
+ "_nota": "Exportado do n8n Infra CSM em 06/10/2026. Credenciais por ID (valores ficam só no n8n). Fonte da verdade: o n8n.",
+ "id": "TdA97xr65dWzb5Ku",
+ "name": "Mensageria v2 — ActiveCampaign → log de disparos",
+ "active": true,
+ "nodes": [
+  {
+   "id": "a1",
+   "name": "A cada hora",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "hours",
+       "hoursInterval": 1,
+       "triggerAtMinute": 7
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "a2",
+   "name": "Campanhas do AC",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    240,
+    0
+   ],
+   "notes": "Ordena pelo último envio; pagina até a campanha mais antiga com envio antes de 01/10/2026.",
+   "parameters": {
+    "method": "GET",
+    "url": "https://drmarciosa79109.api-us1.com/api/3/campaigns",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "activeCampaignApi",
+    "sendQuery": true,
+    "queryParameters": {
+     "parameters": [
+      {
+       "name": "limit",
+       "value": "100"
+      },
+      {
+       "name": "orders[ldate]",
+       "value": "DESC"
+      },
+      {
+       "name": "include",
+       "value": "campaignMessage,campaignLists"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 30000,
+     "pagination": {
+      "pagination": {
+       "parameters": {
+        "parameters": [
+         {
+          "type": "qs",
+          "name": "offset",
+          "value": "={{ $pageCount * 100 }}"
+         }
+        ]
+       },
+       "paginationCompleteWhen": "other",
+       "completeExpression": "={{ !$response.body.campaigns || $response.body.campaigns.length < 100 || (($response.body.campaigns.slice(-1)[0].ldate || $response.body.campaigns.slice(-1)[0].sdate || '') < '2026-10-01') }}",
+       "limitPagesFetched": true,
+       "maxRequests": 10
+      }
+     }
+    }
+   },
+   "credentials": {
+    "activeCampaignApi": {
+     "id": "V4Y2j016ax6dbLPw",
+     "name": "ActiveCampaign (Mensageria)"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 5000
+  },
+  {
+   "id": "a3",
+   "name": "Montar lote",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    480,
+    0
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "jsCode": "// Decisões do João (06/10/2026): só campanhas com envio desde 01/10; automação contínua = 1 linha, números acumulados.\n// Sem dado pessoal: assunto, nome da lista e totais. Projeto sai da [SIGLA] no nome (casado no banco).\nconst INICIO = '2026-10-01';\nconst camps = [], assunto = {}, listas = {};\nfor (const it of $input.all()) {\n  const b = it.json || {};\n  for (const c of b.campaigns || []) camps.push(c);\n  for (const m of b.campaignMessages || []) { const k = String(m.campaign); if (!(k in assunto)) assunto[k] = m.subject; }\n  for (const l of b.campaignLists || []) { const k = String(l.campaign); (listas[k] = listas[k] || []).push(l.name || ('lista ' + l.list)); }\n}\nconst n = (v) => { const x = parseInt(v, 10); return Number.isFinite(x) ? x : 0; };\nconst visto = new Set(), lote = [];\nfor (const c of camps) {\n  if (visto.has(c.id)) continue; visto.add(c.id);\n  if (!['1', '2', '5'].includes(String(c.status)) || !c.sdate) continue;\n  if ((c.ldate || '') < INICIO && c.sdate < INICIO) continue;\n  const env = n(c.send_amt); if (env <= 0) continue;\n  const fal = n(c.hardbounces) + n(c.softbounces);\n  lote.push({\n    id_externo: String(c.id),\n    campanha: c.name,\n    enviado_em: c.sdate,\n    canal: 'email',\n    copy_texto: String(assunto[c.id] || c.name).slice(0, 2000),\n    copy_link: `https://drmarciosa79109.activehosted.com/report/#/campaign/${c.id}/overview`,\n    publico_lista: ((listas[c.id] || []).join(', ') || 'lista não informada pelo AC').slice(0, 200),\n    tamanho_lista: env,\n    entregues: Math.max(env - fal, 0),\n    lidas: n(c.uniqueopens),\n    cliques: n(c.uniquelinkclicks),\n    falhas: fal,\n  });\n}\nreturn [{ json: { total: lote.length, lote: lote.slice(0, 1000) } }];"
+   }
+  },
+  {
+   "id": "a4",
+   "name": "Enviar ao log (v2)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    720,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://grupoparticipa.app.br/api/mensageria/receber",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-mensageria-fonte",
+       "value": "activecampaign"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ lote: $json.lote }) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "Csp7iqjKWqlNTWzu",
+     "name": "Mensageria v2 - fonte activecampaign"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 10000
+  }
+ ],
+ "connections": {
+  "A cada hora": {
+   "main": [
+    [
+     {
+      "node": "Campanhas do AC",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Campanhas do AC": {
+   "main": [
+    [
+     {
+      "node": "Montar lote",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Montar lote": {
+   "main": [
+    [
+     {
+      "node": "Enviar ao log (v2)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Sao_Paulo",
+  "saveDataErrorExecution": "all",
+  "saveDataSuccessExecution": "all"
+ }
+}
