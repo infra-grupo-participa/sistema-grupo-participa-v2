@@ -615,13 +615,12 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
    (CARRINHO, AQUECIMENTO) nas Decisões. DISTRIBUIÇÃO sem fase automática.
 5. **Externos (Aurum, Diamantes):** em aberto (Victor vai ver com o Caio). Cada cliente vira um projeto em `mkt.projetos`?
    Qual sigla de campanha?
-6. **Conta centralizadora** (ideia do Caio): em aberto. É dela que a coleta lê.
+6. ~~Conta centralizadora~~ **Decidido (Victor, 06/10/2026):** uma conta centralizadora **do Infra**, com acesso às contas de anúncio internas e externas ligadas a ela, gera o token de API que a coleta usa. Recomendação: token de **usuário do sistema** no Business Manager do Grupo (não expira e não depende de uma pessoa), com permissão `ads_read`. Conta nova não pede token novo: basta atribuí-la ao usuário do sistema e cadastrá-la em Contas de anúncio.
 7. ~~Gestor do projeto~~ **Respondido:** vários gestores por projeto (`projeto_gestores`).
 
 **Fase 2 (em aberto):**
 
-8. **Token do Meta:** conta centralizadora (um `meta_ads_token`) ou um token por conta? As duas formas funcionam; falta
-   escolher e cadastrar.
+8. ~~Token do Meta~~ **Decidido (06/10):** conta centralizadora, um `meta_ads_token` no Vault. Falta gerar e cadastrar.
 9. **Token do ClickUp:** de qual usuário (ele só lê o que esse usuário enxerga)? E qual o id do workspace?
 10. **Limiares do resumo do dia:** os iniciais são proposta minha (0 % verba diária, 0 % CPL, 20 % leads e ritmo da
     fase, 90 % da verba, 7 dias para fora do padrão e sem fase). Servem? Inativo e encerrado fora do resumo, ok?
