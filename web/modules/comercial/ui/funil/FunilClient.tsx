@@ -9,6 +9,7 @@ import { Button, FilterSelect, SearchInput, Skeleton, Toast, useFlash } from '@/
 import { fmtBRL } from '@/shared/ui/format';
 import { Icon } from '@/shared/ui/icons';
 import { ROTULO_ORIGEM } from '../../domain/catalogo';
+import { motivoSomenteLeitura, travaMover } from '../../domain/travas';
 import type { Funil, Negocio } from '../../domain/types';
 import { Aviso, EstadoErro, FaixaNumeros, PaginaComercial, useEquipe, useParamUrl, Vazio } from '../comum';
 import { ModalNovoNegocio } from '../ModalNovoNegocio';
@@ -90,7 +91,21 @@ export function FunilClient() {
   const limparFiltros = () => { setDono('todos'); setBusca(''); setAlerta(null); };
   const alternar = (a: Exclude<FiltroAlerta, null>) => setAlerta((x) => (x === a ? null : a));
 
+  const leituraDe = (n: Negocio) => motivoSomenteLeitura(n, sessao, nomeDe);
+  const travaPara = (n: Negocio, etapaId: string) => {
+    const f = funis?.find((x) => x.id === n.funilId);
+    return f ? travaMover(n, f, etapaId, sessao, nomeDe) : { permitido: false, motivo: 'Funil do negócio não encontrado.', faltam: [] };
+  };
+
   const mover = async (negocioId: string, etapaId: string) => {
+    // A mesma trava do banco antes de chamar: sem ida e volta para ouvir "não".
+    const n = negocios?.find((x) => x.id === negocioId);
+    const t = n ? travaPara(n, etapaId) : null;
+    if (t && !t.permitido) {
+      flash(t.motivo ?? 'Não dá para mover.');
+      if (t.faltam.length) setAberto(negocioId);
+      return;
+    }
     const r = await repo.moverEtapa(negocioId, etapaId);
     if (!r.ok) { flash(r.msg ?? 'Não foi possível mover.'); setAberto(negocioId); return; }
     avisarMudanca();
@@ -203,6 +218,8 @@ export function FunilClient() {
               nomeDe={nomeDe}
               altura={alturaKanban}
               ocultarGanho={alerta !== null}
+              leituraDe={leituraDe}
+              travaPara={travaPara}
               onAbrir={setAberto}
               onMover={mover}
               onAgendar={setAgendando}

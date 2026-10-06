@@ -442,6 +442,6 @@ export function gerarBaseDemo(agora = new Date()): BaseDemo {
     filas,
     fichas,
     links,
-    config: { horarioContato: 'Seg a sex, 8h às 20h · sáb, 9h às 13h (proposta, a definir)', limiteNegociosAbertos: null },
+    config: { horarioContato: 'Seg a sex, 8h às 20h · sáb, 9h às 13h (proposta, a definir)', limiteNegociosAbertos: null, mcpLigado: true },
   };
 }

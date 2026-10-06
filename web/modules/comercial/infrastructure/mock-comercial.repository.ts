@@ -1,13 +1,16 @@
 // Repositório de DEMONSTRAÇÃO: cumpre o contrato `ComercialRepository` em memória, sem banco.
 // O estado vive enquanto a aba estiver aberta (recarregar a página volta à base inicial).
 // Aplica as mesmas regras de domínio que o backend vai aplicar, para a tela se comportar como a real.
-import type { ComercialRepository, NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink } from '../application/ports';
+import type {
+  ComercialRepository, NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink, ResultadoTokenMcp,
+} from '../application/ports';
 import { produto as produtoDe, ROTULO_CAMPO } from '../domain/catalogo';
 import { bloqueioMoverNoFunil, camposFaltandoNoFunil, etapaDoFunil, etapaInicial, validarFunil } from '../domain/funis';
 import { escolherDono, montarSck, somaPercentuais } from '../domain/regras';
+import { podeMexerNoNegocio } from '../domain/travas';
 import type {
-  CampoKey, Conversa, EtapaFunil, EventoTimeline, Funil, MotivoPerda, Negocio, ProdutoKey, SessaoComercial, StatusFila,
-  StatusWhatsapp, Vendedor,
+  CampoKey, Conversa, EscopoMcp, EtapaFunil, EventoTimeline, Funil, MotivoPerda, Negocio, PainelHotmart, ProdutoKey,
+  SessaoComercial, StatusFila, StatusWhatsapp, TokenMcp, Vendedor,
 } from '../domain/types';
 import { funisDoProjeto } from '../domain/modelos';
 import { situacaoSla } from '../domain/regras';
@@ -140,6 +143,7 @@ export class MockComercialRepository implements ComercialRepository {
   async moverEtapa(negocioId: string, etapaId: string): Promise<Resultado> {
     const n = this.negocio(negocioId);
     if (!n) return espera({ ok: false, msg: 'Negócio não encontrado.' });
+    if (!podeMexerNoNegocio(n, this.eu)) return espera({ ok: false, msg: 'Este negócio não é seu.' });
     const f = this.db.funis.find((x) => x.id === n.funilId);
     if (!f) return espera({ ok: false, msg: 'Funil do negócio não encontrado.' });
     if (n.etapaId === etapaId) return espera({ ok: true });
@@ -218,6 +222,7 @@ export class MockComercialRepository implements ComercialRepository {
   async salvarCampos(negocioId: string, campos: Partial<Record<CampoKey, string>>): Promise<Resultado> {
     const n = this.negocio(negocioId);
     if (!n) return espera({ ok: false, msg: 'Negócio não encontrado.' });
+    if (!podeMexerNoNegocio(n, this.eu)) return espera({ ok: false, msg: 'Este negócio não é seu.' });
     const mudancas = Object.entries(campos)
       .filter(([k, v]) => (n.campos[k as CampoKey] ?? '') !== (v ?? ''))
       .map(([k, v]) => ({ campo: ROTULO_CAMPO[k as CampoKey] ?? k, antes: n.campos[k as CampoKey] ?? null, depois: v ?? null }));
@@ -228,7 +233,9 @@ export class MockComercialRepository implements ComercialRepository {
 
   async marcarPerdido(negocioId: string, motivo: MotivoPerda, nota: string): Promise<Resultado> {
     const n = this.negocio(negocioId);
-    if (!n || n.status !== 'aberto') return espera({ ok: false, msg: 'Só negócio aberto pode ser perdido.' });
+    if (!n) return espera({ ok: false, msg: 'Só negócio aberto pode ser perdido.' });
+    if (!podeMexerNoNegocio(n, this.eu)) return espera({ ok: false, msg: 'Este negócio não é seu.' });
+    if (n.status !== 'aberto') return espera({ ok: false, msg: 'Só negócio aberto pode ser perdido.' });
     const cfg = this.db.motivos.find((m) => m.key === motivo && m.ativo);
     if (!cfg) return espera({ ok: false, msg: 'Motivo fora do cadastro não existe.' });
     n.status = 'perdido';
@@ -307,6 +314,9 @@ export class MockComercialRepository implements ComercialRepository {
   }
 
   async criarAtividade(a: NovaAtividade): Promise<Resultado> {
+    const alvo = a.negocioId ? this.negocio(a.negocioId) : undefined;
+    if (a.negocioId && !alvo) return espera({ ok: false, msg: 'Negócio não encontrado.' });
+    if (alvo && !podeMexerNoNegocio(alvo, this.eu)) return espera({ ok: false, msg: 'Este negócio não é seu.' });
     const dono = (a.negocioId && this.negocio(a.negocioId)?.donoId) || this.eu.vendedorId;
     const aid = this.novoId('a');
     this.db.atividades.push({ id: aid, ...a, donoId: dono, concluidaEm: null, resultado: null, cadenciaDia: null });
@@ -333,6 +343,9 @@ export class MockComercialRepository implements ComercialRepository {
 
   async adicionarNota(contatoId: string, negocioId: string | null, texto: string): Promise<Resultado> {
     if (!texto.trim()) return espera({ ok: false, msg: 'Nota vazia.' });
+    const alvo = negocioId ? this.negocio(negocioId) : undefined;
+    if (negocioId && !alvo) return espera({ ok: false, msg: 'Negócio não encontrado.' });
+    if (alvo && !podeMexerNoNegocio(alvo, this.eu)) return espera({ ok: false, msg: 'Este negócio não é seu.' });
     this.evento({ contatoId, negocioId, tipo: 'nota', titulo: 'Nota interna', detalhe: texto.trim() });
     this.registrar('criou', 'nota', negocioId ?? contatoId, `Registrou nota em ${this.nomeContato(contatoId)}`, contatoId);
     return espera({ ok: true });
@@ -648,5 +661,82 @@ export class MockComercialRepository implements ComercialRepository {
   async verComo(vendedorId: string) {
     const v = this.db.vendedores.find((x) => x.id === vendedorId);
     if (v) this.eu = { vendedorId: v.id, papel: v.papel };
+  }
+
+  // ── Integração Hotmart (F3): painel de demonstração ──
+  private hotmartErros: PainelHotmart['erros'] = [
+    { chave: 'demo-ev-1042', classe: 'cartao_recusado', resultado: 'erro: telefone e e-mail não casam com nenhum contato', em: new Date(Date.now() - 3 * 3600_000).toISOString(), tentativas: 1 },
+    { chave: 'demo-ev-1017', classe: 'carrinho_abandonado', resultado: 'erro: oferta sem produto vinculado', em: new Date(Date.now() - 26 * 3600_000).toISOString(), tentativas: 2 },
+  ];
+
+  async hotmartPainel(dias: number): Promise<PainelHotmart> {
+    if (this.eu.papel !== 'gestor') throw new Error('Só o gestor do Comercial vê a integração.');
+    const d = Math.min(Math.max(Math.round(dias) || 7, 1), 90);
+    const k = d / 7;
+    return espera({
+      hotmartLigado: true, slackLigado: false, desde: '2026-10-06T09:00:00.000Z',
+      ultimoProcessadoEm: new Date(Date.now() - 12 * 60_000).toISOString(),
+      porResultado: [
+        { fonte: 'webhook', classe: 'compra_aprovada', resultado: 'ganho', n: Math.round(18 * k) },
+        { fonte: 'webhook', classe: 'carrinho_abandonado', resultado: 'negocio_criado', n: Math.round(41 * k) },
+        { fonte: 'webhook', classe: 'cartao_recusado', resultado: 'negocio_criado', n: Math.round(9 * k) },
+        { fonte: 'sync', classe: 'compra_aprovada', resultado: 'duplicado', n: Math.round(16 * k) },
+        { fonte: 'webhook', classe: 'carrinho_abandonado', resultado: 'jornada', n: Math.round(7 * k) },
+        { fonte: 'webhook', classe: 'cartao_recusado', resultado: 'erro', n: this.hotmartErros.length },
+      ].filter((x) => x.n > 0),
+      erros: this.hotmartErros,
+      ofertasOrfas: ['demo1x2y'],
+      slack: { pendentes: 0, enviados: 0, descartados: 0 },
+    });
+  }
+
+  async reprocessarHotmart(chave: string): Promise<Resultado> {
+    if (this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o gestor do Comercial reprocessa.' });
+    const i = this.hotmartErros.findIndex((e) => e.chave === chave);
+    if (i < 0) return espera({ ok: false, msg: 'Evento não encontrado.' });
+    this.hotmartErros.splice(i, 1);
+    return espera({ ok: true, msg: 'negocio_criado' });
+  }
+
+  // ── MCP (F7): tokens de demonstração (nenhum funciona fora desta tela) ──
+  private tokensDb: TokenMcp[] = [];
+
+  tokensMcp(): Promise<TokenMcp[]> {
+    const agora = Date.now();
+    const vistos = this.tokensDb
+      .filter((t) => this.eu.papel === 'gestor' || t.perfilId === this.eu.vendedorId)
+      .map((t) => ({ ...t, ativo: !t.revogadoEm && new Date(t.expiraEm).getTime() > agora }));
+    return espera([...vistos].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm)));
+  }
+
+  async criarTokenMcp(nome: string, escopos: EscopoMcp[], dias: number): Promise<ResultadoTokenMcp> {
+    if (this.db.config.mcpLigado === false) return espera({ ok: false, msg: 'MCP do Comercial desligado.' });
+    const n = nome.trim();
+    if (n.length < 1 || n.length > 60) return espera({ ok: false, msg: 'Dê um nome ao token (até 60 caracteres).' });
+    if (!escopos.length || escopos.some((e) => e !== 'ler' && e !== 'operar')) return espera({ ok: false, msg: 'Escopo inválido: use ler e/ou operar.' });
+    if (!Number.isInteger(dias) || dias < 1 || dias > 180) return espera({ ok: false, msg: 'Validade entre 1 e 180 dias.' });
+    const agora = Date.now();
+    const ativos = this.tokensDb.filter((t) => t.perfilId === this.eu.vendedorId && !t.revogadoEm && new Date(t.expiraEm).getTime() > agora);
+    if (ativos.length >= 5) return espera({ ok: false, msg: 'Limite de 5 tokens ativos: revogue um antes.' });
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const token = `gpc_${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`;
+    const esc: EscopoMcp[] = escopos.includes('operar') ? ['ler', 'operar'] : ['ler'];
+    const t: TokenMcp = {
+      id: this.novoId('tok'), nome: n, prefixo: token.slice(0, 12), escopos: esc, perfilId: this.eu.vendedorId,
+      perfilNome: this.nomeVendedor(this.eu.vendedorId), criadoEm: agoraIso(),
+      expiraEm: new Date(agora + dias * 86400_000).toISOString(), revogadoEm: null, ultimoUsoEm: null, ativo: true,
+    };
+    this.tokensDb.push(t);
+    return espera({ ok: true, id: t.id, token, prefixo: t.prefixo, escopos: esc, expiraEm: t.expiraEm, msg: 'Copie agora: o token não aparece de novo.' });
+  }
+
+  async revogarTokenMcp(id: string): Promise<Resultado> {
+    const t = this.tokensDb.find((x) => x.id === id);
+    if (!t) return espera({ ok: false, msg: 'Token não encontrado.' });
+    if (t.perfilId !== this.eu.vendedorId && this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Este token não é seu.' });
+    if (t.revogadoEm) return espera({ ok: true, msg: 'Já estava revogado.' });
+    t.revogadoEm = agoraIso();
+    return espera({ ok: true });
   }
 }

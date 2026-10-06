@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   argsEscrita, mapResultado, mapResultadoComId, mapResultadoNegocio, mapResultadoProjeto, mensagemErroEscrita,
-  mapResultadoFicha, mapResultadoLink,
+  mapResultadoFicha, mapResultadoLink, mapResultadoTokenMcp,
 } from './mapeamento-escrita';
 import { FormatoInesperado } from './mapeamento-supabase';
 import type { Funil, PainelPessoa } from '../domain/types';
@@ -135,5 +135,24 @@ describe('filas e links (F5, migration 20261006044653)', () => {
     expect(mapResultadoLink({ ok: true, linkId: U1, sck: 'hm-x', url: 'https://pay.hotmart.com?off=a&sck=hm-x' }))
       .toEqual({ ok: true, linkId: U1, sck: 'hm-x', url: 'https://pay.hotmart.com?off=a&sck=hm-x' });
     expect(mapResultadoLink({ ok: false, msg: 'Este link já existe.', url: 'x' })).toEqual({ ok: false, msg: 'Este link já existe.' });
+  });
+});
+
+describe('Hotmart e MCP (F3 20261006043612, F7 20261006050132)', () => {
+  it('argumentos conferidos em pg_proc', () => {
+    expect(argsEscrita.reprocessarHotmart('ev:1')).toEqual({ p_chave: 'ev:1' });
+    expect(argsEscrita.criarTokenMcp('  Notebook ', ['ler', 'operar'], 30)).toEqual({ p_nome: 'Notebook', p_escopos: ['ler', 'operar'], p_dias: 30 });
+    expect(argsEscrita.revogarTokenMcp(U1)).toEqual({ p_id: U1 });
+  });
+  it('token criado volta inteiro, uma vez', () => {
+    const tok = `gpc_${'a'.repeat(64)}`;
+    const r = mapResultadoTokenMcp({ ok: true, id: U1, token: tok, prefixo: tok.slice(0, 12), escopos: ['ler'], expiraEm: '2027-01-04T10:00:00+00:00', msg: 'Copie agora: o token não aparece de novo.' });
+    expect(r).toMatchObject({ ok: true, id: U1, token: tok, escopos: ['ler'] });
+  });
+  it('MCP desligado vem como ok:false com a mensagem do banco', () => {
+    expect(mapResultadoTokenMcp({ ok: false, msg: 'MCP do Comercial desligado.' })).toEqual({ ok: false, msg: 'MCP do Comercial desligado.' });
+  });
+  it('ok sem token é formato inesperado', () => {
+    expect(() => mapResultadoTokenMcp({ ok: true, id: U1 })).toThrow(FormatoInesperado);
   });
 });

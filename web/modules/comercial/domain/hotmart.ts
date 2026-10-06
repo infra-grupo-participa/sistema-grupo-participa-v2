@@ -10,7 +10,7 @@ export function extrairCodigoOferta(texto: string): string | null {
   return null;
 }
 
-/** Link de checkout a partir do produto e da oferta. */
-export function linkCheckout(produtoId: string, codigo: string): string {
-  return `https://pay.hotmart.com/${produtoId}?off=${codigo}`;
+/** Link de checkout da oferta (mesmo formato que a Hotmart devolve: pay.hotmart.com?off=<código>). */
+export function linkCheckout(codigo: string): string {
+  return `https://pay.hotmart.com?off=${codigo}`;
 }

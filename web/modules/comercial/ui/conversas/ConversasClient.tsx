@@ -14,6 +14,7 @@ import { Icon } from '@/shared/ui/icons';
 import { ROTULO_ATUA, ROTULO_PERFIL, produto as produtoDe } from '../../domain/catalogo';
 import { fmtTelefone } from '../../domain/regras';
 import type { Contato, Conversa, EtapaFunil, Mensagem, Negocio, SessaoComercial, StatusMensagem, Template } from '../../domain/types';
+import { motivoSomenteLeitura, podeTrocarDono, travaMover, type TravaMover } from '../../domain/travas';
 import { BotaoPlaybook, Dono, EstadoErro, FaixaNumeros, PaginaComercial, Segmentado, Vazio, useEquipe, useParamUrl } from '../comum';
 import { InfoIndicador } from '../InfoIndicador';
 import { ContatoDrawer } from '../contatos/ContatoDrawer';
@@ -140,6 +141,11 @@ export function ConversasClient() {
       agora={agora}
       nomeDe={nomeDe}
       etapasDe={(n) => funis?.find((f) => f.id === n.funilId)?.etapas ?? []}
+      leituraDe={(n) => motivoSomenteLeitura(n, sessao, nomeDe)}
+      travaPara={(n, etapaId) => {
+        const f = funis?.find((x) => x.id === n.funilId);
+        return f ? travaMover(n, f, etapaId, sessao, nomeDe) : { permitido: false, motivo: 'Funil do negócio não encontrado.', faltam: [] };
+      }}
       onAbrirNegocio={setNegocioAberto}
       onAgendar={setAgendar}
       onMover={async (n, etapaId) => {
@@ -418,7 +424,7 @@ function PainelConversa({ contato, conversa, negocio, templates, sessao, gestor,
   const janela = janelaRestante(conversa?.janelaAteEm ?? null, agora);
   const podeAgendar = !!negocio && (gestor || negocio.donoId === sessao.vendedorId);
   // Conversa sem dono: só o gestor define quem atende (playbook: ninguém responde lead sem dono).
-  const podeAtribuir = gestor && !dono;
+  const podeAtribuir = podeTrocarDono(sessao) && !dono;
 
   // Quem pode escrever: lead que não é seu não se toca (gestor pode).
   const bloqueio: string | null = contato.optOut
@@ -713,9 +719,11 @@ function Envio({ contato, negocio, janelaAberta, templates, remetente, flash }: 
 
 // ── Painel do contato ──
 
-function PainelContato({ c, negocios, agora, nomeDe, etapasDe, onAbrirNegocio, onAgendar, onMover, onCopiarTelefone, onAbrirFicha }: {
+function PainelContato({ c, negocios, agora, nomeDe, etapasDe, leituraDe, travaPara, onAbrirNegocio, onAgendar, onMover, onCopiarTelefone, onAbrirFicha }: {
   c: Contato; negocios: Negocio[]; agora: Date; nomeDe: (id: string | null) => string;
   etapasDe: (n: Negocio) => EtapaFunil[];
+  leituraDe: (n: Negocio) => string | null;
+  travaPara: (n: Negocio, etapaId: string) => TravaMover;
   onAbrirNegocio: (id: string) => void; onAgendar: (n: Negocio) => void; onMover: (n: Negocio, etapaId: string) => void;
   onCopiarTelefone: (tel: string) => void; onAbrirFicha: () => void;
 }) {
@@ -755,6 +763,8 @@ function PainelContato({ c, negocios, agora, nomeDe, etapasDe, onAbrirNegocio, o
                   agora={agora}
                   nomeDe={nomeDe}
                   etapas={etapasDe(n)}
+                  leitura={leituraDe(n)}
+                  travaPara={(etapaId) => travaPara(n, etapaId)}
                   onAbrir={() => onAbrirNegocio(n.id)}
                   onAgendar={() => onAgendar(n)}
                   onMover={(etapaId) => onMover(n, etapaId)}

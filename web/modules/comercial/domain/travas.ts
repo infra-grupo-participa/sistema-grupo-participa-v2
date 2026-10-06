@@ -1,0 +1,61 @@
+// Travas de escrita no negócio, puras e testáveis. ESPELHO das guardas da F2 (migration 20261005t):
+// `crm_mover_etapa`, `crm_salvar_campos`, `crm_marcar_perdido`, `crm_criar_atividade` e `crm_adicionar_nota` (com
+// negócio) recusam com "Este negócio não é seu." quando quem chama não é gestor e não é o dono — inclusive negócio
+// SEM dono (dono null ≠ eu); `crm_transferir_dono` só aceita gestor; `crm_mover_etapa` recusa a etapa de ganho e
+// pede os campos obrigatórios do funil. A tela usa estas funções para nem oferecer a ação; o banco continua mandando.
+import { ROTULO_CAMPO } from './catalogo';
+import { bloqueioMoverNoFunil, camposFaltandoNoFunil } from './funis';
+import type { CampoKey, Funil, Negocio, SessaoComercial } from './types';
+
+type Quem = Pick<SessaoComercial, 'vendedorId' | 'papel'> | null | undefined;
+
+/** Gestor mexe em qualquer negócio; vendedor só no que é dele. Sem sessão: não mexe. */
+export function podeMexerNoNegocio(n: Pick<Negocio, 'donoId'>, quem: Quem): boolean {
+  if (!quem) return false;
+  if (quem.papel === 'gestor') return true;
+  return !!n.donoId && n.donoId === quem.vendedorId;
+}
+
+/** Trocar o dono do negócio (ou definir o dono do contato) é só do gestor. */
+export function podeTrocarDono(quem: Quem): boolean {
+  return quem?.papel === 'gestor';
+}
+
+/** Frase para a tela explicar por que o negócio está só para leitura. null = pode mexer. */
+export function motivoSomenteLeitura(n: Pick<Negocio, 'donoId'>, quem: Quem, nomeDe: (id: string | null) => string): string | null {
+  if (podeMexerNoNegocio(n, quem)) return null;
+  if (!quem) return 'Carregando quem você é.';
+  if (!n.donoId) return 'Negócio sem dono: o gestor define quem atende antes.';
+  return `Negócio de ${nomeDe(n.donoId)}: só o dono ou o gestor altera.`;
+}
+
+export interface TravaMover {
+  permitido: boolean;
+  /** Texto curto para title/aviso. null quando permitido. */
+  motivo: string | null;
+  /** Campos obrigatórios que faltam para entrar na etapa (rótulos). */
+  faltam: string[];
+}
+
+/**
+ * Pode mover o negócio para a etapa destino? Ordem das recusas = ordem do banco: dono, etapa atual, encerrado,
+ * etapa inexistente, ganho, campos obrigatórios.
+ */
+export function travaMover(n: Pick<Negocio, 'donoId' | 'campos' | 'status' | 'etapaId'>, funil: Funil, destinoId: string, quem: Quem, nomeDe: (id: string | null) => string): TravaMover {
+  const leitura = motivoSomenteLeitura(n, quem, nomeDe);
+  if (leitura) return { permitido: false, motivo: leitura, faltam: [] };
+  if (n.etapaId === destinoId) return { permitido: false, motivo: 'Etapa atual.', faltam: [] };
+  const b = bloqueioMoverNoFunil(n, funil, destinoId);
+  if (b === 'negocio_encerrado') return { permitido: false, motivo: 'Negócio encerrado não muda de etapa.', faltam: [] };
+  if (b === 'etapa_inexistente') return { permitido: false, motivo: 'Etapa não existe neste funil.', faltam: [] };
+  if (b === 'ganho_so_com_pagamento') return { permitido: false, motivo: 'Ganho só com pagamento aprovado na Hotmart.', faltam: [] };
+  if (b === 'campos_faltando') {
+    const faltam = rotulosCampos(camposFaltandoNoFunil(n, funil, destinoId));
+    return { permitido: false, motivo: `Falta preencher: ${faltam.join(', ')}.`, faltam };
+  }
+  return { permitido: true, motivo: null, faltam: [] };
+}
+
+export function rotulosCampos(campos: CampoKey[]): string[] {
+  return campos.map((c) => ROTULO_CAMPO[c]);
+}

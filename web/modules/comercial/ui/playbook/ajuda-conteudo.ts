@@ -74,6 +74,8 @@ export const TELAS = {
   motivos: { rotulo: 'Motivos de perda', href: '/comercial/configuracoes#motivos' },
   links: { rotulo: 'Links rastreáveis', href: '/comercial/configuracoes#links' },
   notificacoes: { rotulo: 'Preferências de aviso', href: '/comercial/configuracoes#notificacoes' },
+  integracoes: { rotulo: 'Integrações', href: '/comercial/configuracoes#integracoes' },
+  claude: { rotulo: 'Conectar ao Claude', href: '/comercial/configuracoes#mcp' },
   socialSelling: { rotulo: 'Social selling', href: '/comercial/social-selling' },
 } satisfies Record<string, LinkFerramenta>;
 
@@ -202,7 +204,7 @@ const MODULOS: SecaoAjuda[] = [
         titulo: 'Como mover um negócio de etapa',
         itens: [
           'Arraste o card para a coluna da etapa nova. Ou use o menu ⋯ do card, em **"Mover para"**.',
-          'Se faltar um campo obrigatório, o sistema avisa e abre a ficha do negócio. Preencha e salve.',
+          'Etapa que pede campo vazio aparece com cadeado no menu, e a coluna não aceita o card (fica apagada enquanto você arrasta). Abra a ficha, preencha e salve.',
           'Mova de novo. Os campos das etapas anteriores também contam, mesmo se você pular etapa.',
           'Pode voltar uma etapa, se os campos até ela estiverem preenchidos.',
         ],
@@ -241,7 +243,7 @@ const MODULOS: SecaoAjuda[] = [
     cuidados: [
       'Ninguém move para **Fechado** à mão. Ganho é pagamento aprovado na Hotmart.',
       'Negócio perdido não aparece no quadro. Procure pela ficha do contato.',
-      'Lead que não é seu não se toca. O quadro deixa abrir o card de outro dono, mas a regra vale.',
+      'Lead que não é seu não se toca, e o quadro trava: o card de outro dono mostra um cadeado, não arrasta, não agenda e não tem "Mover para". Negócio sem dono também fica travado para o vendedor até o gestor definir quem atende.',
       'Um contato só tem um negócio aberto por funil. Se já existe, o funil aparece desativado na criação.',
     ],
     emBreve: [
@@ -275,7 +277,7 @@ const MODULOS: SecaoAjuda[] = [
           'Na aba Resumo, veja "Campos do negócio". Os exigidos aparecem abertos.',
           'Vermelho "obrigatório" quer dizer que já devia estar preenchido. Amarelo "para <etapa>" é o que a próxima etapa pede.',
           'Preencha e clique em **"Salvar campos"**.',
-          'Clique em **"Mover para <próxima etapa>"**. Passe o mouse no botão para ver o que falta.',
+          'Clique em **"Mover para <próxima etapa>"**. Enquanto faltar campo, o botão fica desligado e o que falta aparece escrito ao lado dele.',
         ],
       },
       {
@@ -306,7 +308,7 @@ const MODULOS: SecaoAjuda[] = [
       },
     ],
     soGestor: [
-      '**Trocar dono:** no bloco "Negócio", clique em "Trocar". Novo dono e motivo são obrigatórios. O contato e as atividades abertas vão junto.',
+      '**Trocar dono:** no bloco "Negócio", clique em "Trocar" (o botão só aparece para o gestor). Novo dono e motivo são obrigatórios. O contato e as atividades abertas vão junto.',
     ],
     dicas: [
       'Ao concluir uma atividade, use **"Concluir e agendar próxima"**. É o jeito mais rápido de nunca ficar sem próximo passo.',
@@ -317,6 +319,7 @@ const MODULOS: SecaoAjuda[] = [
       'Aviso vermelho "Sem próxima atividade com data" é violação do inegociável 4. Agende na hora.',
       'O sistema não marca perdido sozinho. Se o lead esgotou, marque você, com o motivo certo.',
       '"Já atendido por outro vendedor" é falha de distribuição. Só use quando for verdade: o gestor é avisado.',
+      'Negócio de outro vendedor abre só para leitura: sem mover, editar campos, agendar, concluir, anotar ou perder. O mesmo vale, para o vendedor, no negócio sem dono. Peça ao gestor para transferir.',
     ],
   }),
   modulo({
@@ -799,18 +802,19 @@ const MODULOS: SecaoAjuda[] = [
     id: 'modulo-configuracoes',
     titulo: 'Configurações',
     icone: 'sliders',
-    resumo: 'Distribuição, modelo do funil, motivos de perda, links rastreáveis, integrações e avisos.',
-    telas: [TELAS.configuracoes, TELAS.distribuicao, TELAS.motivos, TELAS.links],
-    sinonimos: ['configuração', 'distribuição', 'percentual', 'motivo', 'link rastreável', 'sck', 'utm', 'integração', 'ajustes'],
+    resumo: 'Distribuição, modelo do funil, motivos de perda, links rastreáveis, integrações, conexão com o Claude e avisos.',
+    telas: [TELAS.configuracoes, TELAS.distribuicao, TELAS.motivos, TELAS.links, TELAS.integracoes, TELAS.claude],
+    sinonimos: ['configuração', 'distribuição', 'percentual', 'motivo', 'link rastreável', 'sck', 'utm', 'integração', 'ajustes', 'hotmart', 'reprocessar', 'claude', 'mcp', 'token'],
     paraQue: [
-      'Onde o gestor ajusta as regras do Comercial. O vendedor vê tudo, só para ler (menos as próprias preferências de aviso).',
+      'Onde o gestor ajusta as regras do Comercial. O vendedor vê tudo, só para ler (menos as próprias preferências de aviso e os próprios tokens do Claude).',
     ],
     naTela: [
       '**Distribuição:** quem recebe lead e o percentual de cada um. Simulador dos próximos 10 leads sem dono.',
       '**Modelo do funil:** etapas, prazos, critérios e campos obrigatórios. "Editar funis" leva ao Funil.',
       '**Motivos de perda:** os 9 de fábrica e os criados pelo gestor.',
       '**Links rastreáveis:** os links de cada vendedor, com o código de rastreio.',
-      '**Integrações:** o que cada uma traz e leva, e a situação dela.',
+      '**Integrações:** o que cada uma traz e leva, e a situação dela. O gestor vê também o painel da Hotmart: ligada ou não, último evento, o que aconteceu com cada evento, os erros e as ofertas vendidas fora do catálogo.',
+      '**Conectar ao Claude:** gere um token pessoal e conecte o Claude Code ou o Claude Desktop ao CRM. O Claude vê o que você vê, com as mesmas regras da tela.',
       '**Notificações:** os seus avisos (cada pessoa ajusta os próprios).',
     ],
     comoFazer: [
@@ -823,11 +827,23 @@ const MODULOS: SecaoAjuda[] = [
           'Use o botão **"Copiar"** na lista. Cada vendedor usa os próprios links.',
         ],
       },
+      {
+        titulo: 'Como conectar o Claude ao CRM',
+        itens: [
+          'Abra **Configurações › Conectar ao Claude**.',
+          'Em "Novo token", dê um nome (ex.: "Claude Code notebook"), escolha "Só leitura" ou "Ler e operar" e a validade.',
+          'Clique em **"Gerar token"** e copie na hora: ele não aparece de novo.',
+          'Em "Como conectar", copie o comando do Claude Code ou o trecho do Claude Desktop (já vem com o seu token).',
+          'Teste pedindo ao Claude: "liste os funis do comercial". Token que não usa mais: **"Revogar"**.',
+        ],
+      },
     ],
     soGestor: [
       '**Distribuição:** ligue ou desligue quem recebe e ajuste os percentuais. A soma dos ativos tem de dar 100%. Clique em "Salvar".',
       '**Motivos:** "Novo motivo", editar, desativar e reativar. Cada motivo pode voltar para reativação, mandar para a lista de bloqueio ou avisar o gestor. Nos 9 de fábrica, só a nota e o ativo mudam.',
       'O gestor cria link para qualquer vendedor.',
+      '**Hotmart:** escolha o período (24 h a 90 dias). Em cada erro, **"Reprocessar"** refaz o evento com a regra atual. Só funciona com a integração ligada.',
+      '**Tokens do time:** o gestor vê os tokens de todos e revoga qualquer um.',
     ],
     dicas: [
       'Motivo desativado sai da lista de escolha, mas o histórico continua com ele.',
@@ -836,9 +852,11 @@ const MODULOS: SecaoAjuda[] = [
     cuidados: [
       'Contato com dono mantém o dono. A distribuição só vale para quem não tem.',
       'Troca de dono é só pelo gestor, sempre com motivo.',
+      'Token do Claude é como senha: quem tem age no CRM como você. Não mande no Slack. Perdeu? Revogue e gere outro.',
+      'Aviso "O MCP do Comercial está desligado": nenhum token conecta e não dá para gerar novo. Quem liga é o responsável pelo sistema.',
     ],
     emBreve: [
-      { titulo: 'Integrações ligadas', texto: 'Hotmart, WhatsApp oficial (Infobip, Unnichat), Manychat, ActiveCampaign, SendFlow e Slack aparecem como "a conectar". O Clint entra só para a migração. Instagram (social selling) e o assistente de IA do Comercial vêm depois.' },
+      { titulo: 'Integrações ligadas', texto: 'WhatsApp oficial (Infobip, Unnichat), Manychat, ActiveCampaign, SendFlow e Slack aparecem como "a conectar". A Hotmart já tem painel, mas só cria negócio quando for ligada. O Clint entra só para a migração. Instagram (social selling) vem depois, e o assistente de IA no navegador (claude.ai) e no celular também: hoje ele conecta pelo Claude Code e pelo Claude Desktop.' },
     ],
   }),
   modulo({
@@ -1155,11 +1173,13 @@ const SISTEMA: SecaoAjuda[] = [
         ['Início', '"Meu dia", com os próprios números', '"Visão do time", Controle das 9h e o painel de cada vendedor'],
         ['Conversas', 'Escreve só nas próprias', 'Escreve em qualquer uma e atribui dono'],
         ['Atividades', 'Conclui só as próprias', 'Conclui qualquer uma'],
-        ['Dono do negócio', 'Não troca', 'Troca, com motivo'],
+        ['Negócio de outro vendedor', 'Só lê: a ficha abre sem ações e o card não arrasta', 'Mexe em qualquer um'],
+        ['Dono do negócio', 'Não troca (o botão nem aparece)', 'Troca, com motivo'],
         ['Funis', 'Usa', 'Cria, edita, arquiva e começa projeto novo'],
         ['Disparos', 'Envia ficha para aprovação (se opera disparo)', 'Aprova, reprova e registra direto'],
         ['Produtos', 'Consulta e copia links', 'Vincula e marca a oferta vigente'],
-        ['Configurações', 'Só leitura (menos os próprios avisos)', 'Ajusta tudo'],
+        ['Configurações', 'Só leitura (menos os próprios avisos e tokens do Claude)', 'Ajusta tudo e vê o painel da Hotmart'],
+        ['Conectar ao Claude', 'Gera e revoga os próprios tokens', 'Vê e revoga os tokens do time'],
         ['Registro', 'O que fez e o que tocou a carteira dele', 'Tudo'],
         ['Dashboards', 'Vê os próprios números', 'Filtra por vendedor e edita qualquer um'],
       ]),

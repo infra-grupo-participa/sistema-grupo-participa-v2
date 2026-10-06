@@ -2,12 +2,12 @@
 // da RPC, e o jsonb `{ok, msg?, …ids}` → `Resultado`. Sem Supabase, sem React.
 // Regra violada volta como `{ok:false, msg}` (mesmas mensagens do mock); erro de transporte/banco vira `ok:false`
 // com mensagem clara (a tela mostra o toast), nunca exceção solta nem sucesso falso.
-import type { NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink } from '../application/ports';
+import type { NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink, ResultadoTokenMcp } from '../application/ports';
 import type {
-  CampoKey, Dashboard, Funil, MotivoPerda, MotivoPerdaConfig, OfertaHotmart, PainelPessoa, PreferenciasNotificacao,
+  CampoKey, Dashboard, EscopoMcp, Funil, MotivoPerda, MotivoPerdaConfig, OfertaHotmart, PainelPessoa, PreferenciasNotificacao,
   ProdutoHotmart, ProdutoKey, StatusFila, TipoProjeto,
 } from '../domain/types';
-import { FormatoInesperado, type ErroRpc } from './mapeamento-supabase';
+import { FormatoInesperado, escoposMcp, type ErroRpc } from './mapeamento-supabase';
 
 type Obj = Record<string, unknown>;
 
@@ -79,9 +79,27 @@ export function mapResultadoLink(d: unknown): ResultadoLink {
   return r;
 }
 
+/** criarTokenMcp: o token completo só existe nesta resposta (o banco guarda o sha-256). */
+export function mapResultadoTokenMcp(d: unknown): ResultadoTokenMcp {
+  const r: ResultadoTokenMcp = mapResultadoComId('crm_mcp_criar_token', d, 'id');
+  if (r.ok) {
+    const o = d as Obj;
+    if (typeof o.token !== 'string' || !o.token.startsWith('gpc_')) throw new FormatoInesperado('crm_mcp_criar_token', 'token ausente');
+    r.token = o.token;
+    if (typeof o.prefixo === 'string') r.prefixo = o.prefixo;
+    r.escopos = escoposMcp(o.escopos);
+    if (typeof o.expiraEm === 'string') r.expiraEm = o.expiraEm;
+  }
+  return r;
+}
+
 // ── Argumentos de cada RPC (nomes p_* = assinatura da migration 20261005t) ──
 
 export const argsEscrita = {
+  // F3 e F7 (assinaturas conferidas em pg_proc em 06/10/2026)
+  reprocessarHotmart: (chave: string) => ({ p_chave: chave }),
+  criarTokenMcp: (nome: string, escopos: EscopoMcp[], dias: number) => ({ p_nome: nome.trim(), p_escopos: escopos, p_dias: dias }),
+  revogarTokenMcp: (id: string) => ({ p_id: id }),
   moverEtapa: (negocioId: string, etapaId: string) => ({ p_negocio: negocioId, p_etapa: etapaId }),
   salvarCampos: (negocioId: string, campos: Partial<Record<CampoKey, string>>) => ({ p_negocio: negocioId, p_campos: campos }),
   marcarPerdido: (negocioId: string, motivo: MotivoPerda, nota: string) => ({ p_negocio: negocioId, p_motivo: motivo, p_nota: nota }),

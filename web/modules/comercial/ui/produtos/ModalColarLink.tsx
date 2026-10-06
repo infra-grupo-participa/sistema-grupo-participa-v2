@@ -70,7 +70,7 @@ export function ModalColarLink({ gestor, onFechar, onAbrir, onVincular }: {
         </p>
 
         <form onSubmit={procurar}>
-          <Campo rotulo="Link de checkout ou código da oferta" dica="Ex.: https://pay.hotmart.com/4120577?off=hm30k12x ou só hm30k12x">
+          <Campo rotulo="Link de checkout ou código da oferta" dica="Ex.: https://pay.hotmart.com?off=hm30k12x ou só hm30k12x">
             <Input
               value={texto}
               onChange={(e) => { setTexto(e.target.value); if (busca.estado !== 'vazio') setBusca({ estado: 'vazio' }); }}

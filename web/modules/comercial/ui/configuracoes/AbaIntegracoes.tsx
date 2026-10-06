@@ -1,16 +1,22 @@
 'use client';
 
-// Aba #integracoes: um card por sistema (o que entra, o que sai, status e risco). Grade de cards, nada de tabela.
+// Aba #integracoes: painel real da Hotmart (só gestor) e um card por sistema (o que entra, o que sai, status e risco).
+// Grade de cards, nada de tabela.
 import { Badge, Card } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { Aviso } from '../comum';
+import { MODO_DEMONSTRACAO } from '../repositorio';
 import { INTEGRACOES, type Integracao } from './integracoes';
+import { PainelHotmart } from './PainelHotmart';
 
-export function AbaIntegracoes() {
+export function AbaIntegracoes({ gestor, flash }: { gestor: boolean; flash: (m: string) => void }) {
   return (
     <div className="space-y-4">
+      {gestor && <PainelHotmart gestor={gestor} flash={flash} />}
       <Aviso tom="neutral" icone="lock">
-        Modo demonstração: nenhuma integração está ligada. O status real aparece quando o backend conectar cada uma.
+        {MODO_DEMONSTRACAO
+          ? `Modo demonstração: nenhuma integração está ligada${gestor ? ' e os números da Hotmart acima são fictícios' : ''}.`
+          : 'Mapa das integrações. O estado real da Hotmart fica no painel do gestor; a conexão com o Claude, na aba "Conectar ao Claude".'}
       </Aviso>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {INTEGRACOES.map((i) => <CardIntegracao key={i.nome} i={i} />)}

@@ -2,12 +2,14 @@
 
 // Kanban do funil: uma coluna por etapa, largura fixa e rolagem horizontal (nome não corta).
 // Arrastar um card para outra coluna move o negócio; pelo teclado ou no celular, o menu "Mover para…" do card.
-// As regras (campos obrigatórios, ganho só com pagamento) são as do repositório, e o erro volta no toast.
+// As travas do banco (dono, campos obrigatórios, ganho só com pagamento) vêm de domain/travas.ts: a coluna que não
+// aceita o card arrastado não vira alvo (cursor de proibido) e o card de outro dono nem arrasta.
 // No celular (< md) aparece uma coluna por vez, escolhida no segmentado de etapas.
 import { useState } from 'react';
 import { Icon } from '@/shared/ui/icons';
 import { COR_ETAPA, fmtMinutos } from '../../domain/funis';
 import { situacaoSla } from '../../domain/regras';
+import type { TravaMover } from '../../domain/travas';
 import type { Contato, EtapaFunil, Funil, Negocio } from '../../domain/types';
 import { CardNegocio, fmtValorCurto } from './CardNegocio';
 import { Segmentado } from '../comum';
@@ -16,7 +18,7 @@ import { ordenarPorUrgencia } from './regras-funil';
 /** Cards por vez em cada coluna; o resto vem no "Mostrar mais". */
 const LOTE = 20;
 
-export function KanbanFunil({ funil, negocios, contatoPorId, agora, nomeDe, altura, ocultarGanho, onAbrir, onMover, onAgendar, onCopiarTelefone }: {
+export function KanbanFunil({ funil, negocios, contatoPorId, agora, nomeDe, altura, ocultarGanho, leituraDe, travaPara, onAbrir, onMover, onAgendar, onCopiarTelefone }: {
   funil: Funil;
   negocios: Negocio[];
   contatoPorId: Map<string, Contato>;
@@ -26,12 +28,17 @@ export function KanbanFunil({ funil, negocios, contatoPorId, agora, nomeDe, altu
   altura: number | null;
   /** Com filtro de alerta ativo a coluna de ganho não tem o que mostrar. */
   ocultarGanho?: boolean;
+  /** Motivo de só leitura do negócio para quem está na tela (null = pode mexer). */
+  leituraDe: (n: Negocio) => string | null;
+  travaPara: (n: Negocio, etapaId: string) => TravaMover;
   onAbrir: (negocioId: string) => void;
   onMover: (negocioId: string, etapaId: string) => void;
   onAgendar: (negocio: Negocio) => void;
   onCopiarTelefone: (tel: string) => void;
 }) {
   const [sobre, setSobre] = useState<string | null>(null);
+  const [arrastandoId, setArrastandoId] = useState<string | null>(null);
+  const arrastando = arrastandoId ? negocios.find((n) => n.id === arrastandoId) ?? null : null;
   const [limite, setLimite] = useState<Record<string, number>>({});
   const etapas = ocultarGanho ? funil.etapas.filter((e) => e.papel !== 'fechado') : funil.etapas;
   const [etapaMovel, setEtapaMovel] = useState<string>(etapas[0]?.id ?? '');
@@ -63,22 +70,27 @@ export function KanbanFunil({ funil, negocios, contatoPorId, agora, nomeDe, altu
       <div className="md:overflow-x-auto md:h-[var(--kanban-h,auto)] pb-1">
         <div className="flex gap-3 md:min-w-max md:h-full items-start">
           {colunas.map(({ e, ganho, itens, total, criticos }) => {
-            const alvo = sobre === e.id && !ganho;
+            // Enquanto arrasta: a coluna só aceita se a trava permitir (campos, ganho, dono).
+            const aceita = !ganho && (!arrastando || arrastando.etapaId === e.id || travaPara(arrastando, e.id).permitido);
+            const recusa = !!arrastando && !aceita && arrastando.etapaId !== e.id;
+            const alvo = sobre === e.id && aceita;
             const max = limite[e.id] ?? LOTE;
             const visiveis = itens.slice(0, max);
             return (
               <section
                 key={e.id}
                 aria-label={`${e.nome}: ${itens.length} ${itens.length === 1 ? 'negócio' : 'negócios'}`}
-                onDragOver={(ev) => { if (!ganho) { ev.preventDefault(); setSobre(e.id); } }}
+                onDragOver={(ev) => { if (aceita) { ev.preventDefault(); setSobre(e.id); } }}
                 onDragLeave={(ev) => { if (!ev.currentTarget.contains(ev.relatedTarget as Node)) setSobre((s) => (s === e.id ? null : s)); }}
                 onDrop={(ev) => {
                   ev.preventDefault();
                   setSobre(null);
+                  setArrastandoId(null);
                   const id = ev.dataTransfer.getData('text/negocio');
-                  if (id && !ganho) onMover(id, e.id);
+                  if (id && aceita) onMover(id, e.id);
                 }}
-                className={`${e.id === ativaMovel ? 'flex' : 'hidden'} md:flex w-full md:w-[272px] shrink-0 flex-col md:max-h-full rounded-[var(--r-lg)] border transition-colors ${alvo ? 'border-[var(--border-accent)] bg-[var(--accent-subtle)]' : 'border-[var(--border)] bg-[var(--surface-1)]'}`}
+                className={`${e.id === ativaMovel ? 'flex' : 'hidden'} md:flex w-full md:w-[272px] shrink-0 flex-col md:max-h-full rounded-[var(--r-lg)] border transition-colors ${alvo ? 'border-[var(--border-accent)] bg-[var(--accent-subtle)]' : 'border-[var(--border)] bg-[var(--surface-1)]'} ${recusa ? 'opacity-60' : ''}`}
+                title={recusa && arrastando ? travaPara(arrastando, e.id).motivo ?? undefined : undefined}
               >
                 <CabecalhoColuna e={e} ganho={ganho} qtd={itens.length} total={total} criticos={criticos} />
                 <div className="flex flex-col gap-2 p-2 min-h-[120px] md:min-h-0 md:overflow-y-auto">
@@ -90,6 +102,9 @@ export function KanbanFunil({ funil, negocios, contatoPorId, agora, nomeDe, altu
                       agora={agora}
                       nomeDe={nomeDe}
                       etapas={funil.etapas}
+                      leitura={leituraDe(n)}
+                      travaPara={(etapaId) => travaPara(n, etapaId)}
+                      onArrastar={setArrastandoId}
                       onAbrir={() => onAbrir(n.id)}
                       onAgendar={() => onAgendar(n)}
                       onMover={(etapaId) => onMover(n.id, etapaId)}

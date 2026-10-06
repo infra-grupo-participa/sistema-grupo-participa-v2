@@ -3,7 +3,7 @@
 // Sem Supabase, sem React: recebe o `data` cru e devolve o tipo, ou lança erro com mensagem clara.
 // "É zero ≠ não sei": formato inesperado vira exceção, nunca lista vazia.
 import type {
-  Agrupador, Atividade, Campanha, ConfigComercial, Contato, Conversa, Dashboard, EtapaFunil, EventoTimeline, FaixaScore,
+  Agrupador, Atividade, Campanha, ConfigComercial, EscopoMcp, PainelHotmart, TokenMcp, Contato, Conversa, Dashboard, EtapaFunil, EventoTimeline, FaixaScore,
   FichaDisparo, FilaRecuperacao, Funil, ItemFila, LinkRastreavel, LogCrm, Mensagem, MotivoPerdaConfig, Negocio, Notificacao,
   OfertaHotmart, OfertaOrfa, PainelPessoa, PontoJornada, PreferenciasNotificacao, ProdutoHotmart, ProdutoKey,
   SessaoComercial, SinalRecuperacao, StatusFicha, StatusFila, StatusMensagem, StatusWhatsapp, Supressao, Template, Utm,
@@ -89,7 +89,11 @@ export function mapSessao(d: unknown): SessaoComercial {
 export function mapConfig(d: unknown): ConfigComercial {
   // crm.config sem linha → null: é "não sei", não "vazio".
   const o = obj(d, 'crm_config', 'configuração');
-  return { horarioContato: str(o.horarioContato), limiteNegociosAbertos: numOuNull(o.limiteNegociosAbertos) };
+  return {
+    horarioContato: str(o.horarioContato), limiteNegociosAbertos: numOuNull(o.limiteNegociosAbertos),
+    // A RPC ainda não expõe mcp_ligado: ausente = "não sei" (null), nunca "desligado".
+    mcpLigado: typeof o.mcpLigado === 'boolean' ? o.mcpLigado : null,
+  };
 }
 
 export function mapVendedores(d: unknown): Vendedor[] {
@@ -456,6 +460,51 @@ export function mapLinks(d: unknown): LinkRastreavel[] {
       id: str(o.id), vendedorId: str(o.vendedorId), produto: str(o.produto) as ProdutoKey, acao: str(o.acao), url: str(o.url),
       sck: str(o.sck), canal: str(o.canal), ofertaCodigo: strOuNull(o.ofertaCodigo), projeto: strOuNull(o.projeto),
       conteudo: strOuNull(o.conteudo), criadoEm: str(o.criadoEm), arquivadoEm: strOuNull(o.arquivadoEm),
+    };
+  });
+}
+
+// ── Integração Hotmart (F3, migration 20261006043612) ──
+
+export function mapPainelHotmart(d: unknown): PainelHotmart {
+  const rpc = 'crm_hotmart_painel';
+  const o = obj(d, rpc, 'painel');
+  if (typeof o.hotmartLigado !== 'boolean') throw new FormatoInesperado(rpc, 'sem hotmartLigado');
+  const sl = o.slack && typeof o.slack === 'object' ? (o.slack as Obj) : {};
+  return {
+    hotmartLigado: o.hotmartLigado,
+    slackLigado: bool(o.slackLigado),
+    desde: strOuNull(o.desde),
+    ultimoProcessadoEm: strOuNull(o.ultimoProcessadoEm),
+    porResultado: lista(o.porResultado ?? [], rpc).map((x) => {
+      const r = obj(x, rpc, 'contagem');
+      return { fonte: str(r.fonte), classe: str(r.classe), resultado: str(r.resultado), n: num(r.n) };
+    }),
+    erros: lista(o.erros ?? [], rpc).map((x) => {
+      const r = obj(x, rpc, 'erro');
+      if (!r.chave) throw new FormatoInesperado(rpc, 'erro sem chave');
+      return { chave: str(r.chave), classe: str(r.classe), resultado: str(r.resultado), em: str(r.em), tentativas: num(r.tentativas) };
+    }),
+    ofertasOrfas: strs(o.ofertasOrfas),
+    slack: { pendentes: num(sl.pendentes), enviados: num(sl.enviados), descartados: num(sl.descartados) },
+  };
+}
+
+// ── MCP (F7, migration 20261006050132) ──
+
+export function escoposMcp(v: unknown): EscopoMcp[] {
+  return strs(v).filter((e): e is EscopoMcp => e === 'ler' || e === 'operar');
+}
+
+export function mapTokensMcp(d: unknown): TokenMcp[] {
+  const rpc = 'crm_mcp_tokens';
+  return lista(d, rpc).map((x) => {
+    const o = obj(x, rpc, 'token');
+    if (!o.id) throw new FormatoInesperado(rpc, 'token sem id');
+    return {
+      id: str(o.id), nome: str(o.nome), prefixo: str(o.prefixo), escopos: escoposMcp(o.escopos),
+      perfilId: str(o.perfilId), perfilNome: str(o.perfilNome), criadoEm: str(o.criadoEm), expiraEm: str(o.expiraEm),
+      revogadoEm: strOuNull(o.revogadoEm), ultimoUsoEm: strOuNull(o.ultimoUsoEm), ativo: bool(o.ativo),
     };
   });
 }

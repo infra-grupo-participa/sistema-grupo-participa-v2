@@ -15,6 +15,6 @@ describe('extrairCodigoOferta', () => {
     expect(extrairCodigoOferta('isso não é código')).toBeNull();
   });
   it('monta o link', () => {
-    expect(linkCheckout('1', 'a')).toBe('https://pay.hotmart.com/1?off=a');
+    expect(linkCheckout('a')).toBe('https://pay.hotmart.com?off=a');
   });
 });

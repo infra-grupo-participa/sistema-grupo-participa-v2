@@ -14,7 +14,7 @@ const prod = (produtoId: string, extra: Partial<ProdutoHotmart> = {}): ProdutoHo
 
 const of = (codigo: string, produtoId: string, extra: Partial<OfertaHotmart> = {}): OfertaHotmart => ({
   codigo, produtoId, nomeHotmart: `Oferta ${codigo}`, preco: 100, moeda: 'BRL', modo: 'UNIQUE_PAYMENT', principal: false,
-  linkCheckout: `https://pay.hotmart.com/${produtoId}?off=${codigo}`, vigente: false, condicao: null, validaAte: null, uso: null,
+  linkCheckout: `https://pay.hotmart.com?off=${codigo}`, vigente: false, condicao: null, validaAte: null, uso: null,
   transacoes: 0, ultimaVendaEm: null, vistaEm: '2026-10-05T10:00:00Z', ...extra,
 });
 

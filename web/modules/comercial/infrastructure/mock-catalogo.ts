@@ -26,7 +26,7 @@ export const PRODUTOS_DEMO: ProdutoHotmart[] = [
 ];
 
 const O = (codigo: string, produtoId: string, nomeHotmart: string, preco: number, modo: string, extra: Partial<OfertaHotmart> = {}): OfertaHotmart => ({
-  codigo, produtoId, nomeHotmart, preco, moeda: 'BRL', modo, principal: false, linkCheckout: link(produtoId, codigo),
+  codigo, produtoId, nomeHotmart, preco, moeda: 'BRL', modo, principal: false, linkCheckout: link(codigo),
   vigente: false, condicao: null, validaAte: null, uso: null, transacoes: 0, ultimaVendaEm: null, vistaEm: diasAtras(0.2), ...extra,
 });
 

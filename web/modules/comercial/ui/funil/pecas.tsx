@@ -82,6 +82,8 @@ export interface ItemMenu {
   rotulo: string;
   icone?: string;
   dica?: string;
+  /** Texto completo no title (ex.: a lista de campos que faltam). */
+  titulo?: string;
   desativado?: boolean;
   ativo?: boolean;
   onEscolher?: () => void;
@@ -144,6 +146,7 @@ export function Menu({ rotulo, itens, gatilho, classeGatilho = '', largura = 232
               type="button"
               role="menuitem"
               disabled={it.desativado}
+              title={it.titulo}
               aria-current={it.ativo ? 'true' : undefined}
               tabIndex={-1}
               onClick={() => { setAberto(false); botao.current?.focus(); it.onEscolher?.(); }}

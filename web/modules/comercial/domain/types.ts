@@ -462,6 +462,66 @@ export interface ConfigComercial {
   horarioContato: string;
   /** Limite de negócios abertos por vendedor (a definir depois de 30 dias de dado). */
   limiteNegociosAbertos: number | null;
+  /**
+   * Interruptor do MCP (crm.config.mcp_ligado). Ausente/null = a tela não sabe (a RPC de config ainda não expõe):
+   * o aviso aparece quando criar token responde "MCP do Comercial desligado.".
+   */
+  mcpLigado?: boolean | null;
+}
+
+// ── Integração Hotmart (F3): painel do gestor ──
+
+/** Contagem de eventos processados no período, por fonte (webhook/sync), classe e resultado. */
+export interface ContagemHotmart {
+  fonte: string;
+  classe: string;
+  /** Primeira parte do resultado gravado (ganho, negocio_criado, jornada, ignorado, duplicado, erro…). */
+  resultado: string;
+  n: number;
+}
+
+export interface ErroHotmart {
+  /** Chave do evento (usada para reprocessar). */
+  chave: string;
+  classe: string;
+  /** Texto do erro gravado pelo banco. */
+  resultado: string;
+  em: string;
+  tentativas: number;
+}
+
+export interface PainelHotmart {
+  hotmartLigado: boolean;
+  slackLigado: boolean;
+  /** Desde quando a integração lê eventos (null = nunca ligada). */
+  desde: string | null;
+  ultimoProcessadoEm: string | null;
+  porResultado: ContagemHotmart[];
+  /** Até 50, mais recentes primeiro. */
+  erros: ErroHotmart[];
+  /** Códigos de oferta vendidos que não estão no catálogo. */
+  ofertasOrfas: string[];
+  slack: { pendentes: number; enviados: number; descartados: number };
+}
+
+// ── MCP (F7): tokens pessoais para conectar o Claude ──
+
+export type EscopoMcp = 'ler' | 'operar';
+
+export interface TokenMcp {
+  id: string;
+  nome: string;
+  /** Começo do token (gpc_ + 8), para reconhecer sem expor. */
+  prefixo: string;
+  escopos: EscopoMcp[];
+  perfilId: string;
+  perfilNome: string;
+  criadoEm: string;
+  expiraEm: string;
+  revogadoEm: string | null;
+  ultimoUsoEm: string | null;
+  /** Não revogado e dentro da validade (calculado pelo banco). */
+  ativo: boolean;
 }
 
 /** Quem está olhando a tela: decide o que aparece como "meu". */

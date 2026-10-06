@@ -11,10 +11,10 @@
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type {
-  ComercialRepository, NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink,
+  ComercialRepository, NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink, ResultadoTokenMcp,
 } from '../application/ports';
 import type {
-  CampoKey, Contato, Conversa, Dashboard, EventoTimeline, FichaDisparo, FilaRecuperacao, FiltroLog, Funil, LinkRastreavel,
+  CampoKey, Contato, Conversa, Dashboard, EscopoMcp, PainelHotmart, TokenMcp, EventoTimeline, FichaDisparo, FilaRecuperacao, FiltroLog, Funil, LinkRastreavel,
   LogCrm, Mensagem, MotivoPerda, MotivoPerdaConfig, Negocio, OfertaHotmart, PainelPessoa, PontoJornada,
   PreferenciasNotificacao, ProdutoHotmart, ProdutoKey, StatusFila, StatusWhatsapp, Template, TipoProjeto,
 } from '../domain/types';
@@ -22,10 +22,11 @@ import {
   mapAgrupadores, mapAtividades, mapBuscaPorLink, mapConfig, mapConversas, mapPaginaContatos, mapDashboards, mapEventos,
   mapFichas, mapFilas, mapFunis, mapJornada, mapLinks, mapLog, mapMensagens, mapMotivosPerda, mapNegocios, mapNotificacoes,
   mapOfertas, mapOfertasOrfas, mapPainel, mapPreferencias, mapProdutosHotmart, mapSessao, mapTemplates, mapVendedores,
-  mapWhatsappStatus, mensagemErroRpc,
+  mapPainelHotmart, mapTokensMcp, mapWhatsappStatus, mensagemErroRpc,
 } from './mapeamento-supabase';
 import {
   argsEscrita, mapResultado, mapResultadoComId, mapResultadoFicha, mapResultadoLink, mapResultadoNegocio, mapResultadoProjeto,
+  mapResultadoTokenMcp,
   mensagemErroEscrita,
 } from './mapeamento-escrita';
 // Padrão de fábrica de quem nunca personalizou (o mesmo que a demonstração usa).
@@ -255,4 +256,18 @@ export class SupabaseComercialRepository implements ComercialRepository {
   criarLink(vendedorId: string, produto: ProdutoKey, acao: string, canal: string): Promise<ResultadoLink> {
     return this.escrever('crm_criar_link', argsEscrita.criarLink(vendedorId, produto, acao, canal), mapResultadoLink);
   }
+
+  // ── Integração Hotmart (F3) ──
+  /** 42501 (não é gestor) vira exceção: a tela mostra o erro, nunca um painel zerado. */
+  async hotmartPainel(dias: number): Promise<PainelHotmart> {
+    return mapPainelHotmart(await this.rpc('crm_hotmart_painel', { p_dias: dias }));
+  }
+  reprocessarHotmart(chave: string) { return this.simples('crm_hotmart_reprocessar', argsEscrita.reprocessarHotmart(chave)); }
+
+  // ── MCP (F7) ──
+  async tokensMcp(): Promise<TokenMcp[]> { return mapTokensMcp(await this.rpc('crm_mcp_tokens')); }
+  criarTokenMcp(nome: string, escopos: EscopoMcp[], dias: number): Promise<ResultadoTokenMcp> {
+    return this.escrever('crm_mcp_criar_token', argsEscrita.criarTokenMcp(nome, escopos, dias), mapResultadoTokenMcp);
+  }
+  revogarTokenMcp(id: string) { return this.simples('crm_mcp_revogar_token', argsEscrita.revogarTokenMcp(id)); }
 }

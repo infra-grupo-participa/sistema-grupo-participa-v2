@@ -4,32 +4,42 @@
 // Urgência num canal só: faixa lateral (vermelha ou amarela) + UM texto escrito. O resto fica neutro.
 // A raiz é um <article> arrastável com um botão esticado que abre a ficha; as ações rápidas (conversa,
 // agendar, mover) ficam por cima, sem botão dentro de botão. "Mover para…" é a alternativa ao arrastar.
+// Travas espelhadas do banco (domain/travas.ts): negócio de outro dono fica só para leitura (sem arrastar, agendar
+// nem mover) e a etapa que pede campo vazio aparece desativada com o que falta.
 import Link from 'next/link';
 import { AvatarInicial } from '@/shared/ui/components';
 import { fmtBRL, fmtRelativo } from '@/shared/ui/format';
 import { Icon } from '@/shared/ui/icons';
 import { ICONE_ATIVIDADE, ROTULO_ATIVIDADE, produto } from '../../domain/catalogo';
 import { tempoNaEtapa } from '../../domain/regras';
+import type { TravaMover } from '../../domain/travas';
 import type { Contato, EtapaFunil, Negocio } from '../../domain/types';
 import { Menu, type ItemMenu } from './pecas';
 import { quandoCurto, urgenciaDoNegocio } from './regras-funil';
 
 const BOTAO_ACAO = 'grid place-items-center w-7 h-7 [@media(hover:none)]:w-8 [@media(hover:none)]:h-8 rounded-[var(--r-sm)] text-[var(--fg-2)] hover:text-[var(--fg)] hover:bg-[var(--surface-4)]';
 
-export function CardNegocio({ n, c, agora, nomeDe, etapas, onAbrir, onAgendar, onMover, onCopiarTelefone, arrastavel }: {
+export function CardNegocio({ n, c, agora, nomeDe, etapas, leitura, travaPara, onAbrir, onAgendar, onMover, onCopiarTelefone, arrastavel, onArrastar }: {
   n: Negocio;
   c: Contato | undefined;
   agora: Date;
   nomeDe: (id: string | null) => string;
   /** Etapas do funil, para o menu "Mover para…". */
   etapas: EtapaFunil[];
+  /** Motivo de só leitura (negócio de outro dono / sem dono para vendedor). null = pode mexer. */
+  leitura: string | null;
+  /** Trava de cada etapa destino (dono, ganho, campos obrigatórios). */
+  travaPara: (etapaId: string) => TravaMover;
   onAbrir: () => void;
   onAgendar: () => void;
   onMover: (etapaId: string) => void;
   onCopiarTelefone: (tel: string) => void;
   arrastavel: boolean;
+  /** Avisa o kanban do card que está sendo arrastado (null ao soltar). */
+  onArrastar?: (negocioId: string | null) => void;
 }) {
   const aberto = n.status === 'aberto';
+  const mexe = aberto && !leitura;
   const prox = n.proximaAtividade;
   const urg = urgenciaDoNegocio(n, agora);
   const corUrg = urg ? (urg.tom === 'red' ? 'var(--red)' : 'var(--yellow)') : null;
@@ -39,15 +49,23 @@ export function CardNegocio({ n, c, agora, nomeDe, etapas, onAbrir, onAgendar, o
   const itensMenu: ItemMenu[] = [
     { rotulo: 'Abrir ficha', icone: 'file', onEscolher: onAbrir },
     ...(c?.telefone ? [{ rotulo: 'Copiar telefone', icone: 'copy', onEscolher: () => onCopiarTelefone(c.telefone!) }] : []),
-    ...(aberto ? [
+    ...(mexe ? [
       { rotulo: 'Mover para', grupo: true },
-      ...etapas.map((e): ItemMenu => ({
-        rotulo: e.nome,
-        ativo: e.id === n.etapaId,
-        desativado: e.id === n.etapaId || e.papel === 'fechado',
-        dica: e.papel === 'fechado' ? 'só pela Hotmart' : undefined,
-        onEscolher: () => onMover(e.id),
-      })),
+      ...etapas.map((e): ItemMenu => {
+        const t = travaPara(e.id);
+        return {
+          rotulo: e.nome,
+          ativo: e.id === n.etapaId,
+          desativado: !t.permitido,
+          dica: e.papel === 'fechado' ? 'só pela Hotmart' : t.faltam.length ? `falta ${t.faltam.length === 1 ? t.faltam[0] : `${t.faltam.length} campos`}` : undefined,
+          titulo: t.faltam.length ? t.motivo ?? undefined : undefined,
+          icone: t.faltam.length ? 'lock' : undefined,
+          onEscolher: () => onMover(e.id),
+        };
+      }),
+    ] : aberto && leitura ? [
+      { rotulo: 'Somente leitura', grupo: true },
+      { rotulo: 'Só o dono ou o gestor mexe', icone: 'lock', desativado: true, titulo: leitura },
     ] : []),
   ];
 
@@ -58,13 +76,15 @@ export function CardNegocio({ n, c, agora, nomeDe, etapas, onAbrir, onAgendar, o
 
   return (
     <article
-      draggable={arrastavel}
+      draggable={arrastavel && mexe}
       onDragStart={(e) => {
         e.dataTransfer.setData('text/negocio', n.id);
         e.dataTransfer.effectAllowed = 'move';
+        onArrastar?.(n.id);
       }}
+      onDragEnd={() => onArrastar?.(null)}
       aria-label={`${nome}, ${fmtValorCurto(n.valor)}${urg ? `, ${urg.texto}` : ''}`}
-      className={`group relative rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] focus-within:border-[var(--border-strong)] ${arrastavel ? 'md:cursor-grab md:active:cursor-grabbing' : ''}`}
+      className={`group relative rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] focus-within:border-[var(--border-strong)] ${arrastavel && mexe ? 'md:cursor-grab md:active:cursor-grabbing' : ''}`}
       style={{ boxShadow: corUrg ? `inset 3px 0 0 0 ${corUrg}, var(--shadow-sm)` : 'var(--shadow-sm)' }}
     >
       {/* Alvo principal: o card inteiro abre a ficha (teclado: Tab chega aqui, Enter abre). */}
@@ -102,6 +122,9 @@ export function CardNegocio({ n, c, agora, nomeDe, etapas, onAbrir, onAgendar, o
           )}
 
           <span className="flex items-center gap-1.5 shrink-0">
+            {aberto && leitura && (
+              <span title={leitura} className="inline-flex text-[var(--fg-3)]"><Icon name="lock" size={12} /><span className="sr-only">Somente leitura: {leitura}</span></span>
+            )}
             {urg?.motivo === 'sem_dono' && <span className="font-medium text-[var(--red)]">Sem dono</span>}
             {dono ? (
               <span title={`Dono: ${dono}`} className="inline-flex"><AvatarInicial nome={dono} size={20} /><span className="sr-only">Dono: {dono}</span></span>
@@ -118,7 +141,7 @@ export function CardNegocio({ n, c, agora, nomeDe, etapas, onAbrir, onAgendar, o
               <Icon name="message" size={14} />
             </Link>
           )}
-          {aberto && (
+          {mexe && (
             <button type="button" draggable={false} onClick={onAgendar} aria-label={`Agendar próximo passo de ${nome}`} title="Agendar próximo passo" className={BOTAO_ACAO}>
               <Icon name="calendar" size={14} />
             </button>

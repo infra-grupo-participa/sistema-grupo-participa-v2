@@ -5,6 +5,7 @@ import {
   mapFunis, mapJornada, mapLog, mapMotivosPerda, mapNegocios, mapNotificacoes, mapOfertas, mapOfertasOrfas, mapPainel,
   mapPreferencias, mapProdutosHotmart, mapSessao, mapVendedores, mensagemErroRpc,
   mapConversas, mapFichas, mapFilas, mapLinks, mapMensagens, mapTemplates, mapWhatsappStatus,
+  mapPainelHotmart, mapTokensMcp,
 } from './mapeamento-supabase';
 import type { PreferenciasNotificacao } from '../domain/types';
 
@@ -38,7 +39,11 @@ describe('sessão, config, vendedores, agrupadores, motivos', () => {
   });
   it('crm_config descarta escritaLigada e mantém limite null', () => {
     expect(mapConfig({ horarioContato: '', limiteNegociosAbertos: null, escritaLigada: false }))
-      .toEqual({ horarioContato: '', limiteNegociosAbertos: null });
+      .toEqual({ horarioContato: '', limiteNegociosAbertos: null, mcpLigado: null });
+  });
+  it('crm_config: mcpLigado só quando o banco manda boolean (ausente = não sei)', () => {
+    expect(mapConfig({ horarioContato: '', mcpLigado: false }).mcpLigado).toBe(false);
+    expect(mapConfig({ horarioContato: '', mcpLigado: 'false' }).mcpLigado).toBeNull();
   });
   it('crm_vendedores', () => {
     expect(mapVendedores([{ id: U1, nome: 'Jonathan', sigla: 'JO', papel: 'gestor', ativo: true, percentual: 40, disparaApi: false }]))
@@ -263,5 +268,43 @@ describe('filas e links (F5)', () => {
     const l = { id: U1, vendedorId: U2, produto: 'hm', acao: 'disparo', url: 'https://pay.hotmart.com?off=a&sck=s', sck: 's', canal: 'whatsapp', ofertaCodigo: 'a', projeto: null, conteudo: null, criadoEm: '2026-10-06T10:00:00+00:00', arquivadoEm: null };
     expect(mapLinks([{ ...l, vendas: null, receita: null }])).toEqual([l]);
     expect(() => mapLinks({})).toThrow(/crm_links/);
+  });
+});
+
+describe('Hotmart (F3, crm_hotmart_painel)', () => {
+  const painel = {
+    hotmartLigado: true, slackLigado: false, desde: '2026-10-06T09:00:00+00:00', ultimoProcessadoEm: null,
+    porResultado: [{ fonte: 'webhook', classe: 'carrinho_abandonado', resultado: 'negocio_criado', n: 3 }],
+    erros: [{ chave: 'ev:1', classe: 'cartao_recusado', resultado: 'erro: 22003', em: '2026-10-06T10:00:00+00:00', tentativas: 2 }],
+    ofertasOrfas: ['abc123'], slack: { pendentes: 1, enviados: 4, descartados: 0 },
+  };
+  it('mapeia o painel inteiro', () => {
+    const p = mapPainelHotmart(painel);
+    expect(p.hotmartLigado).toBe(true);
+    expect(p.ultimoProcessadoEm).toBeNull();
+    expect(p.porResultado[0]).toEqual({ fonte: 'webhook', classe: 'carrinho_abandonado', resultado: 'negocio_criado', n: 3 });
+    expect(p.erros[0].chave).toBe('ev:1');
+    expect(p.slack).toEqual({ pendentes: 1, enviados: 4, descartados: 0 });
+  });
+  it('sem o interruptor ou erro sem chave é formato inesperado (nunca painel zerado)', () => {
+    expect(() => mapPainelHotmart({ ...painel, hotmartLigado: null })).toThrow(FormatoInesperado);
+    expect(() => mapPainelHotmart({ ...painel, erros: [{ classe: 'x' }] })).toThrow(FormatoInesperado);
+    expect(() => mapPainelHotmart(null)).toThrow(FormatoInesperado);
+  });
+});
+
+describe('MCP (F7, crm_mcp_tokens)', () => {
+  it('mapeia a lista e filtra escopo desconhecido', () => {
+    const [t] = mapTokensMcp([{
+      id: U1, nome: 'Claude Code', prefixo: 'gpc_12345678', escopos: ['ler', 'operar', 'admin'], perfilId: U2, perfilNome: 'Ana',
+      criadoEm: '2026-10-06T10:00:00+00:00', expiraEm: '2027-01-04T10:00:00+00:00', revogadoEm: null, ultimoUsoEm: null, ativo: true,
+    }]);
+    expect(t.escopos).toEqual(['ler', 'operar']);
+    expect(t.ativo).toBe(true);
+    expect(t.revogadoEm).toBeNull();
+  });
+  it('não é lista ou token sem id: erro', () => {
+    expect(() => mapTokensMcp(null)).toThrow(FormatoInesperado);
+    expect(() => mapTokensMcp([{ nome: 'x' }])).toThrow(FormatoInesperado);
   });
 });

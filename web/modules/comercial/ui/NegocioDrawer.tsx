@@ -3,6 +3,8 @@
 // Ficha do negócio: tudo que o vendedor precisa para agir sem sair da tela.
 // Abre do funil, da lista de contatos, das atividades e do início. Regras do playbook à vista:
 // campos obrigatórios por etapa, ganho só com pagamento, troca de dono só pelo gestor, motivo de perda da lista.
+// Travas espelhadas do banco (domain/travas.ts): negócio de outro dono (ou sem dono, para vendedor) abre só para
+// leitura; "Mover para" fica desabilitado com a lista do que falta; "Trocar" dono só aparece para o gestor.
 // Anatomia igual à ficha do contato: cabeçalho (≤ 3 status) · ações rápidas · abas · rodapé com 1 primário à direita.
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
@@ -18,6 +20,7 @@ import {
 } from '../domain/catalogo';
 import { COR_ETAPA, bloqueioMoverNoFunil, camposFaltandoNoFunil } from '../domain/funis';
 import { atividadeAtrasada, fmtTelefone, situacaoSla } from '../domain/regras';
+import { motivoSomenteLeitura, podeTrocarDono, travaMover } from '../domain/travas';
 import type { CampoKey, EventoTimeline, Funil, MotivoPerda, TipoAtividade } from '../domain/types';
 import {
   Aviso, BotaoConversa, BotaoCopiar, Campo, Chip, Dono, EsqueletoLista, EstadoErro, NotaRodape, ProdutoTag, RodapeAcoes,
@@ -43,7 +46,7 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
   const agora = useAgora();
   const local = useFlash();
   const flash = flashPagina ?? local.flash;
-  const { vendedores, nomeDe, gestor } = useEquipe();
+  const { sessao, vendedores, nomeDe } = useEquipe();
   const [aba, setAba] = useState<Aba>('resumo');
   const rNegocios = useDados(() => repo.negocios());
   const rContatos = useDados(() => repo.contatos());
@@ -90,9 +93,13 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
 
   const idx = funil.etapas.findIndex((e) => e.id === n.etapaId);
   const proxima = funil.etapas[idx + 1];
-  const podeAvancar = !!proxima && proxima.papel !== 'fechado';
-  const faltamProxima = podeAvancar ? camposFaltandoNoFunil(n, funil, proxima.id).map((k) => ROTULO_CAMPO[k]) : [];
   const aberto = n.status === 'aberto';
+  const leitura = motivoSomenteLeitura(n, sessao, nomeDe);
+  // "Mexe" = aberto e meu (ou sou gestor). Sem isso, nenhuma ação de escrita aparece.
+  const mexe = aberto && !leitura;
+  const podeAvancar = !!proxima && proxima.papel !== 'fechado';
+  const travaProxima = podeAvancar ? travaMover(n, funil, proxima.id, sessao, nomeDe) : null;
+  const faltamProxima = travaProxima?.faltam ?? [];
   const atvProxima = n.proximaAtividade ? minhas.find((a) => a.id === n.proximaAtividade!.id) ?? null : null;
 
   const executar = async (p: Promise<{ ok: boolean; msg?: string }>, ok: string) => {
@@ -111,10 +118,24 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
   const subtitulo = [fmtTelefone(c.telefone), produto(n.produto).nome, ROTULO_ORIGEM[n.origem], n.donoId ? `dono ${nomeDe(n.donoId)}` : 'sem dono'].join(' · ');
 
   // Primário único: avançar etapa; sem etapa para avançar, agendar vira o primário.
+  // Com campo faltando, o botão fica desabilitado e a lista do que falta aparece ao lado (não só no title).
   const primario = podeAvancar ? (
-    <Button size="sm" onClick={() => mover(proxima.id)} title={faltamProxima.length ? `Falta preencher: ${faltamProxima.join(', ')}` : proxima.criterio ? `Critério: ${proxima.criterio}` : undefined}>
-      Mover para {proxima.nome} <Icon name="arrow-right" size={14} />
-    </Button>
+    <span className="inline-flex flex-wrap items-center justify-end gap-2">
+      {faltamProxima.length > 0 && (
+        <span id="falta-proxima" className="inline-flex items-center gap-1 text-xs text-[var(--fg-2)]">
+          <Icon name="lock" size={12} className="shrink-0 text-[var(--fg-3)]" /> Falta: {faltamProxima.join(', ')}
+        </span>
+      )}
+      <Button
+        size="sm"
+        disabled={!travaProxima?.permitido}
+        aria-describedby={faltamProxima.length ? 'falta-proxima' : undefined}
+        onClick={() => mover(proxima.id)}
+        title={travaProxima?.motivo ?? (proxima.criterio ? `Critério: ${proxima.criterio}` : undefined)}
+      >
+        Mover para {proxima.nome} <Icon name="arrow-right" size={14} />
+      </Button>
+    </span>
   ) : (
     <Button size="sm" onClick={() => setNovaAtv(true)}><Icon name="plus" size={14} /> Próxima atividade</Button>
   );
@@ -138,12 +159,14 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
           {c.optOut && <Badge tone="danger">Não quer contato</Badge>}
           {c.ehAluno && <Badge>Já é aluno</Badge>}
         </> : undefined}
-        footer={aberto ? (
+        footer={mexe ? (
           <RodapeAcoes
             perigo={<Button size="sm" variant="danger" onClick={() => setPerder(true)}>Marcar como perdido</Button>}
             secundario={podeAvancar ? <Button size="sm" variant="ghost" onClick={() => setNovaAtv(true)}><Icon name="plus" size={14} /> Próxima atividade</Button> : undefined}
             primario={primario}
           />
+        ) : aberto ? (
+          <span className="inline-flex items-center gap-1.5 text-xs text-[var(--fg-3)]"><Icon name="lock" size={12} /> Somente leitura. {leitura}</span>
         ) : (
           <span className="text-xs text-[var(--fg-3)]">Negócio encerrado em {fmtDataHora(n.fechadoEm)}.</span>
         )}
@@ -163,9 +186,12 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
 
         {aba === 'resumo' && (
           <div className="space-y-6">
+            {aberto && leitura && (
+              <Aviso tom="neutral" icone="lock">{leitura} Peça ao gestor se precisar transferir.</Aviso>
+            )}
             {aberto && (
               <section>
-                <SectionTitle right={n.proximaAtividade ? <Button size="sm" variant="link" onClick={() => setNovaAtv(true)}>Nova atividade</Button> : undefined}>
+                <SectionTitle right={n.proximaAtividade && mexe ? <Button size="sm" variant="link" onClick={() => setNovaAtv(true)}>Nova atividade</Button> : undefined}>
                   Próximo passo
                 </SectionTitle>
                 {n.proximaAtividade ? (
@@ -177,13 +203,13 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
                     resultado={null}
                     atrasada={atvProxima ? atividadeAtrasada(atvProxima, agora) : new Date(n.proximaAtividade.venceEm) < agora}
                     destaque
-                    onConcluir={(res) => concluir(n.proximaAtividade!.id, res)}
-                    onAgendarProxima={() => setNovaAtv(true)}
+                    onConcluir={mexe ? (res) => concluir(n.proximaAtividade!.id, res) : undefined}
+                    onAgendarProxima={mexe ? () => setNovaAtv(true) : undefined}
                   />
                 ) : (
                   <Aviso
                     tom="danger"
-                    acao={<Button size="sm" variant="ghost" onClick={() => setNovaAtv(true)}><Icon name="calendar" size={14} /> Agendar agora</Button>}
+                    acao={mexe ? <Button size="sm" variant="ghost" onClick={() => setNovaAtv(true)}><Icon name="calendar" size={14} /> Agendar agora</Button> : undefined}
                   >
                     Sem próxima atividade com data. Pelo playbook, negócio sem próximo passo vira perdido.
                   </Aviso>
@@ -193,11 +219,11 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
 
             <section>
               <SectionTitle right={<span className="text-xs text-[var(--fg-3)] truncate">{funil.nome}</span>}>Etapa</SectionTitle>
-              <Funilzinho funil={funil} atual={n.etapaId} status={n.status} onMover={aberto ? mover : undefined} campos={n.campos} />
+              <Funilzinho funil={funil} atual={n.etapaId} status={n.status} onMover={mexe ? mover : undefined} campos={n.campos} />
             </section>
 
             <CamposNegocio
-              funil={funil} negocioId={n.id} campos={n.campos} etapaAtual={n.etapaId} editavel={aberto}
+              funil={funil} negocioId={n.id} campos={n.campos} etapaAtual={n.etapaId} editavel={mexe}
               onSalvo={() => { flash('Campos salvos.'); avisarMudanca(); }}
               onErro={(m) => flash(m)}
             />
@@ -211,7 +237,7 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
                 <Row k="Dono" v={
                   <span className="inline-flex items-center gap-2">
                     <Dono id={n.donoId} nomeDe={nomeDe} />
-                    {gestor && aberto && <Button size="sm" variant="link" onClick={() => setTransferir(true)}>Trocar</Button>}
+                    {podeTrocarDono(sessao) && aberto && <Button size="sm" variant="link" onClick={() => setTransferir(true)}>Trocar</Button>}
                   </span>
                 } />
                 <Row k="Criado" v={fmtDataHora(n.criadoEm)} />
@@ -248,13 +274,13 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
 
         {aba === 'atividades' && (
           <div className="space-y-2">
-            {aberto && minhas.length > 0 && (
+            {mexe && minhas.length > 0 && (
               <div className="flex justify-end"><Button size="sm" variant="ghost" onClick={() => setNovaAtv(true)}><Icon name="plus" size={14} /> Nova atividade</Button></div>
             )}
             {minhas.length === 0 && (
               <div>
                 <EmptyState title="Nenhuma atividade" hint="Todo negócio aberto precisa de uma próxima atividade com data." icon="clipboard" />
-                {aberto && (
+                {mexe && (
                   <div className="-mt-8 pb-12 flex justify-center">
                     <Button size="sm" variant="ghost" onClick={() => setNovaAtv(true)}><Icon name="calendar" size={14} /> Agendar atividade</Button>
                   </div>
@@ -266,15 +292,15 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
                 key={a.id}
                 tipo={a.tipo} titulo={a.titulo} venceEm={a.venceEm} concluidaEm={a.concluidaEm} resultado={a.resultado}
                 atrasada={atividadeAtrasada(a, agora)}
-                onConcluir={aberto && !a.concluidaEm ? (res) => concluir(a.id, res) : undefined}
-                onAgendarProxima={aberto ? () => setNovaAtv(true) : undefined}
+                onConcluir={mexe && !a.concluidaEm ? (res) => concluir(a.id, res) : undefined}
+                onAgendarProxima={mexe ? () => setNovaAtv(true) : undefined}
               />
             ))}
           </div>
         )}
 
         {aba === 'historico' && (
-          <Historico eventos={eventos ?? []} nomeDe={nomeDe} onNota={(t) => executar(repo.adicionarNota(c.id, n.id, t), 'Nota registrada.')} />
+          <Historico eventos={eventos ?? []} nomeDe={nomeDe} onNota={!leitura ? (t) => executar(repo.adicionarNota(c.id, n.id, t), 'Nota registrada.') : undefined} />
         )}
 
         {aba === 'conversa' && (
@@ -530,7 +556,8 @@ export function LinhaAtividade({ tipo, titulo, venceEm, concluidaEm, resultado, 
   );
 }
 
-function Historico({ eventos, nomeDe, onNota }: { eventos: EventoTimeline[]; nomeDe: (id: string | null) => string; onNota: (t: string) => Promise<boolean> }) {
+/** Sem `onNota` (negócio de outro dono): só leitura, sem a caixa de nota. */
+function Historico({ eventos, nomeDe, onNota }: { eventos: EventoTimeline[]; nomeDe: (id: string | null) => string; onNota?: (t: string) => Promise<boolean> }) {
   const [nota, setNota] = useState('');
   const itens: TimelineEntry[] = eventos.map((e) => ({
     tone: TOM_EVENTO[e.tipo] ?? 'base',
@@ -541,10 +568,12 @@ function Historico({ eventos, nomeDe, onNota }: { eventos: EventoTimeline[]; nom
   }));
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
-        <Textarea aria-label="Nota interna" rows={2} placeholder="Nota interna (objeção, combinado, contexto)…" value={nota} onChange={(e) => setNota(e.target.value)} />
-        <Button size="sm" variant="subtle" className="self-end" disabled={!nota.trim()} onClick={async () => { if (await onNota(nota)) setNota(''); }}>Registrar</Button>
-      </div>
+      {onNota && (
+        <div className="flex gap-2">
+          <Textarea aria-label="Nota interna" rows={2} placeholder="Nota interna (objeção, combinado, contexto)…" value={nota} onChange={(e) => setNota(e.target.value)} />
+          <Button size="sm" variant="subtle" className="self-end" disabled={!nota.trim()} onClick={async () => { if (await onNota(nota)) setNota(''); }}>Registrar</Button>
+        </div>
+      )}
       {itens.length ? <Timeline items={itens} /> : <EmptyState title="Sem histórico" icon="clock" />}
     </div>
   );

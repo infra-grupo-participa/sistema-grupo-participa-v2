@@ -6,7 +6,7 @@
 // só pelo gestor, ficha aprovada antes do disparo) precisam ser repetidas no banco (RPC SECURITY DEFINER).
 import type {
   Agrupador, Atividade, CampoKey, ConfigComercial, Contato, Conversa, EventoTimeline, FichaDisparo, FilaRecuperacao,
-  Dashboard, FiltroLog, Funil, LinkRastreavel, LogCrm, OfertaHotmart, OfertaOrfa, ProdutoHotmart, Mensagem, MotivoPerda, MotivoPerdaConfig, Negocio, Notificacao, PainelPessoa, PontoJornada,
+  Dashboard, EscopoMcp, FiltroLog, PainelHotmart, TokenMcp, Funil, LinkRastreavel, LogCrm, OfertaHotmart, OfertaOrfa, ProdutoHotmart, Mensagem, MotivoPerda, MotivoPerdaConfig, Negocio, Notificacao, PainelPessoa, PontoJornada,
   PreferenciasNotificacao, ProdutoKey, SessaoComercial, StatusFila, StatusWhatsapp, Template, TipoAtividade, TipoProjeto, Vendedor,
 } from '../domain/types';
 
@@ -26,6 +26,15 @@ export interface ResultadoLink extends Resultado {
   linkId?: string;
   sck?: string;
   url?: string;
+}
+
+/** Token novo do MCP: o texto completo (`token`) só vem nesta resposta e nunca mais. */
+export interface ResultadoTokenMcp extends Resultado {
+  id?: string;
+  token?: string;
+  prefixo?: string;
+  escopos?: EscopoMcp[];
+  expiraEm?: string;
 }
 
 export interface NovaAtividade {
@@ -160,6 +169,20 @@ export interface ComercialRepository {
   // ── Registro do CRM ──
   /** Log de toda manipulação (mais recente primeiro). O backend grava por trigger; a tela só lê. */
   log(filtro?: FiltroLog): Promise<LogCrm[]>;
+
+  // ── Integração Hotmart (F3) — só o gestor ──
+  /** Painel da integração nos últimos `dias` (1 a 90). Quem não é gestor recebe erro (nunca painel zerado). */
+  hotmartPainel(dias: number): Promise<PainelHotmart>;
+  /** Refaz um evento que deu erro (só com a integração ligada). */
+  reprocessarHotmart(chave: string): Promise<Resultado>;
+
+  // ── MCP (F7): tokens pessoais para conectar o Claude ──
+  /** Os meus tokens (gestor: os do time todo). */
+  tokensMcp(): Promise<TokenMcp[]>;
+  /** Cria token para quem está na sessão. `ler` é sempre incluído; validade de 1 a 180 dias. */
+  criarTokenMcp(nome: string, escopos: EscopoMcp[], dias: number): Promise<ResultadoTokenMcp>;
+  /** Revoga (o próprio ou, para o gestor, qualquer um). Funciona com o MCP desligado. */
+  revogarTokenMcp(id: string): Promise<Resultado>;
 
   /** Só para a demonstração: trocar quem está olhando. O backend real ignora (vem do login). */
   verComo?(vendedorId: string): Promise<void>;
