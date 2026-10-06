@@ -21,6 +21,7 @@ const PUBLIC_PREFIXES = [
   '/api/placa',
   '/api/agenda',
   '/api/cron', // autenticação própria via Bearer CRON_SECRET (cron não tem sessão)
+  '/api/mcp', // MCP do Comercial: autenticação própria por token pessoal (Bearer gpc_…), sem cookie
 ];
 
 function isPublic(pathname: string): boolean {

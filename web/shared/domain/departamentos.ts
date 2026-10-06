@@ -114,18 +114,45 @@ export function departamento(key: DepartamentoKey): Departamento {
 }
 
 /**
+ * Opções de acesso que dependem de configuração (flag de env). O domínio não lê env: quem chama passa
+ * (`shared/composition/acesso-departamentos.ts` monta a partir de `publicEnv`). Ausente = tudo desligado.
+ */
+export interface OpcoesAcessoDepartamento {
+  /** NEXT_PUBLIC_COMERCIAL_VENDEDORES: libera o Comercial para gestor/vendedor do Comercial (não só admin/dev). */
+  comercialVendedores?: boolean;
+}
+
+/**
+ * É do Comercial? Espelha `crm.eh_comercial()` do banco (= `crm.eh_gestor()` OU `crm.eh_vendedor()`, migration
+ * 20261005r), sem a parte que só o banco sabe:
+ * - gestor: status ativo e (cargo dev/admin, ou cargo `gestor` com área `comercial`);
+ * - vendedor: status ativo, área `comercial` e função `comercial.vender` (o banco exige também a linha ATIVA em
+ *   `crm.vendedor`; quem passar aqui sem ela entra na tela, mas as RPCs devolvem "Sem acesso ao Comercial." — a
+ *   fronteira de dado é a RLS, isto é só a porta).
+ */
+export function ehDoComercial(u: GpUser | null): boolean {
+  if (!u || (u.status ?? 'ativo') !== 'ativo') return false;
+  if (ehAdminOuAcima(u)) return true;
+  const temArea = (u.setores || []).includes('comercial');
+  if (u.cargo === 'gestor' && temArea) return true;
+  return temArea && (u.funcoes || []).includes('comercial.vender');
+}
+
+/**
  * Pode ENTRAR no departamento?
  * - Educacional: qualquer pessoa da equipe logada; cada tela dentro mantém o próprio gate (igual a antes).
  * - Marketing: só admin e dev, até os níveis de acesso por departamento serem desenhados (decisão de 05/10/2026).
  *   Bloqueia o visualizador geral, gestor e operador. Ainda não há dado de Marketing no banco, então não
  *   existe regra de RLS correspondente: quando houver, ela precisa negar o visualizador do mesmo jeito.
- * - Comercial: só admin e dev enquanto o CRM roda com dados de demonstração (05/10/2026). Quando o backend
- *   entrar, o acesso passa a ser por setor (gestor e vendedores do Comercial) e a RLS nega o visualizador.
+ * - Comercial: só admin e dev por padrão. Com `opcoes.comercialVendedores` (flag NEXT_PUBLIC_COMERCIAL_VENDEDORES),
+ *   também quem é do Comercial (`ehDoComercial`: gestor com área comercial, vendedor com área + `comercial.vender`).
+ *   Visualizador e equipe fora do Comercial continuam fora (e a RLS do schema crm também os nega).
  * - Financeiro, Infra: só mostram "Em breve"; qualquer pessoa da equipe vê o aviso.
  */
-export function podeVerDepartamento(u: GpUser | null, key: DepartamentoKey): boolean {
+export function podeVerDepartamento(u: GpUser | null, key: DepartamentoKey, opcoes: OpcoesAcessoDepartamento = {}): boolean {
   if (!u) return false;
-  if (key === 'marketing' || key === 'comercial') return ehAdminOuAcima(u);
+  if (key === 'marketing') return ehAdminOuAcima(u);
+  if (key === 'comercial') return ehAdminOuAcima(u) || (opcoes.comercialVendedores === true && ehDoComercial(u));
   return true;
 }
 

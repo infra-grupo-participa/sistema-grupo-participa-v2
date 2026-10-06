@@ -1029,6 +1029,10 @@ pendente** (SQL decide antes do HTTP). Não duplicar o aviso de compra (já exis
 
 ### 5.9 MCP do Comercial (F7)
 
+> **Atualizado em 06/10/2026:** implementado como Route Handler no Next (`/api/mcp`) chamando as MESMAS RPCs
+> `public.crm_*` com um JWT curto do dono do token (sem núcleos `crm._*` nem service role para agir). A tabela abaixo é o
+> desenho original; o vigente está em `docs/projetos/comercial/mcp.md` e `infra/supabase/migrations/20261006050132.explain.md`.
+
 | | |
 |---|---|
 | Forma | Edge Function `crm-mcp` (MCP over HTTP) |

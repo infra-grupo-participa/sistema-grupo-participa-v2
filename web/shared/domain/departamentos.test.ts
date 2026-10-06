@@ -2,7 +2,7 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Cargo, GpUser } from './auth';
-import { DEPARTAMENTOS, MODULO_DEPARTAMENTO, departamento, departamentoDaRota, podeVerDepartamento } from './departamentos';
+import { DEPARTAMENTOS, MODULO_DEPARTAMENTO, departamento, departamentoDaRota, ehDoComercial, podeVerDepartamento } from './departamentos';
 
 const user = (cargo: Cargo, setores: string[] = []): GpUser =>
   ({ id: 'u', email: 'x@advmais.com', nome: 'X', cargo, status: 'ativo', setores, funcoes: [], podeVerCpf: false, time: null, avatarUrl: null });
@@ -49,11 +49,44 @@ describe('departamentos: registro', () => {
   });
 });
 
-describe('departamentos: Comercial só admin/dev enquanto roda com dados de demonstração', () => {
-  it('admin e dev veem; gestor, operador e visualizador não', () => {
+describe('departamentos: Comercial (flag NEXT_PUBLIC_COMERCIAL_VENDEDORES)', () => {
+  const com = (cargo: Cargo, setores: string[], funcoes: string[], status: string | null = 'ativo'): GpUser =>
+    ({ ...user(cargo, setores), funcoes, status });
+  const vendedor = com('operador', ['comercial'], ['comercial.vender']);
+  const gestorCom = com('gestor', ['comercial'], []);
+  const LIGADA = { comercialVendedores: true };
+
+  it('flag desligada (padrão): só admin e dev; gestor, operador e visualizador não', () => {
     expect(podeVerDepartamento(user('admin'), 'comercial')).toBe(true);
     expect(podeVerDepartamento(user('dev'), 'comercial')).toBe(true);
     for (const c of ['gestor', 'operador', 'visualizador'] as Cargo[]) expect(podeVerDepartamento(user(c), 'comercial')).toBe(false);
+    expect(podeVerDepartamento(vendedor, 'comercial')).toBe(false);
+    expect(podeVerDepartamento(gestorCom, 'comercial', { comercialVendedores: false })).toBe(false);
+  });
+  it('flag ligada: vendedor (área comercial + comercial.vender) e gestor com área comercial entram; admin/dev seguem', () => {
+    expect(podeVerDepartamento(vendedor, 'comercial', LIGADA)).toBe(true);
+    expect(podeVerDepartamento(gestorCom, 'comercial', LIGADA)).toBe(true);
+    expect(podeVerDepartamento(user('admin'), 'comercial', LIGADA)).toBe(true);
+    expect(podeVerDepartamento(user('dev'), 'comercial', LIGADA)).toBe(true);
+  });
+  it('flag ligada: quem não é do Comercial continua fora (espelha crm.eh_comercial)', () => {
+    expect(podeVerDepartamento(com('operador', ['comercial'], []), 'comercial', LIGADA)).toBe(false);          // sem a função
+    expect(podeVerDepartamento(com('operador', ['placas'], ['comercial.vender']), 'comercial', LIGADA)).toBe(false); // sem a área
+    expect(podeVerDepartamento(com('gestor', ['placas'], []), 'comercial', LIGADA)).toBe(false);              // gestor de outro setor
+    expect(podeVerDepartamento(user('visualizador', ['comercial']), 'comercial', LIGADA)).toBe(false);
+    expect(podeVerDepartamento(com('operador', ['comercial'], ['comercial.vender'], 'pendente'), 'comercial', LIGADA)).toBe(false);
+    expect(podeVerDepartamento(null, 'comercial', LIGADA)).toBe(false);
+  });
+  it('a flag não abre o Marketing', () => {
+    expect(podeVerDepartamento(vendedor, 'marketing', LIGADA)).toBe(false);
+    expect(podeVerDepartamento(gestorCom, 'marketing', LIGADA)).toBe(false);
+  });
+  it('ehDoComercial = régua do banco (gestor: dev/admin ou gestor+área; vendedor: área + comercial.vender)', () => {
+    expect(ehDoComercial(user('admin'))).toBe(true);
+    expect(ehDoComercial(gestorCom)).toBe(true);
+    expect(ehDoComercial(vendedor)).toBe(true);
+    expect(ehDoComercial(user('operador', ['comercial']))).toBe(false);
+    expect(ehDoComercial(null)).toBe(false);
   });
 });
 

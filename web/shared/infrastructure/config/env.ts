@@ -13,6 +13,14 @@ export const env = {
     get serviceRoleKey() {
       return required('SUPABASE_SERVICE_ROLE_KEY', process.env.SUPABASE_SERVICE_ROLE_KEY);
     },
+    /**
+     * Segredo JWT (HS256, "legacy JWT secret" do projeto) — SÓ servidor. Usado apenas pelo MCP do Comercial
+     * (`/api/mcp`) para assinar um JWT curto (5 min) do PRÓPRIO dono do token, para chamar as RPCs crm_* sob RLS.
+     * Ausente = o MCP responde 503 (o resto do app não usa).
+     */
+    get jwtSecret() {
+      return required('SUPABASE_JWT_SECRET', process.env.SUPABASE_JWT_SECRET);
+    },
   },
   app: {
     environment: process.env.APP_ENV ?? 'development',
@@ -37,10 +45,21 @@ export function lerComercialFonte(v: string | undefined): ComercialFonte {
   return v?.trim().toLowerCase() === 'supabase' ? 'supabase' : 'mock';
 }
 
+/** Flag booleana de env: só 'true', '1', 'sim' ou 'on' ligam. Ausente/qualquer outro valor = desligada. */
+export function lerFlag(v: string | undefined): boolean {
+  return ['true', '1', 'sim', 'on'].includes(v?.trim().toLowerCase() ?? '');
+}
+
 // Para uso no browser (apenas chaves públicas NEXT_PUBLIC_*, com fallback de produção).
 // NEXT_PUBLIC_* é embutido no build: mudar pede rebuild.
 export const publicEnv = {
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || FALLBACK_SUPABASE_URL,
   supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY,
   comercialFonte: lerComercialFonte(process.env.NEXT_PUBLIC_COMERCIAL_FONTE),
+  /**
+   * Libera o departamento Comercial para quem é do Comercial (gestor com área `comercial` e vendedor com área
+   * `comercial` + função `comercial.vender`), além de admin/dev. Padrão DESLIGADO (só admin/dev entram).
+   * Ligar só com NEXT_PUBLIC_COMERCIAL_FONTE=supabase (no modo demonstração o vendedor veria dados fictícios).
+   */
+  comercialVendedores: lerFlag(process.env.NEXT_PUBLIC_COMERCIAL_VENDEDORES),
 } as const;
