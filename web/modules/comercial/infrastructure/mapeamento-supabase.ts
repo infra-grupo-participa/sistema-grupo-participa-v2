@@ -1,10 +1,13 @@
-// Mapeamento PURO do jsonb das RPCs `public.crm_*` (migration 20261005s, F1) para os tipos do domínio.
+// Mapeamento PURO do jsonb das RPCs `public.crm_*` de leitura para os tipos do domínio: F1 (migration 20261005s),
+// WhatsApp/F4 (20261006051434: conversas, mensagens, templates, fichas, status) e F5 (20261006044653: filas, links).
 // Sem Supabase, sem React: recebe o `data` cru e devolve o tipo, ou lança erro com mensagem clara.
 // "É zero ≠ não sei": formato inesperado vira exceção, nunca lista vazia.
 import type {
-  Agrupador, Atividade, Campanha, ConfigComercial, Contato, Dashboard, EtapaFunil, EventoTimeline, Funil, LogCrm,
-  MotivoPerdaConfig, Negocio, Notificacao, OfertaHotmart, OfertaOrfa, PainelPessoa, PontoJornada,
-  PreferenciasNotificacao, ProdutoHotmart, SessaoComercial, Utm, Vendedor, WidgetPainel,
+  Agrupador, Atividade, Campanha, ConfigComercial, Contato, Conversa, Dashboard, EtapaFunil, EventoTimeline, FaixaScore,
+  FichaDisparo, FilaRecuperacao, Funil, ItemFila, LinkRastreavel, LogCrm, Mensagem, MotivoPerdaConfig, Negocio, Notificacao,
+  OfertaHotmart, OfertaOrfa, PainelPessoa, PontoJornada, PreferenciasNotificacao, ProdutoHotmart, ProdutoKey,
+  SessaoComercial, SinalRecuperacao, StatusFicha, StatusFila, StatusMensagem, StatusWhatsapp, Supressao, Template, Utm,
+  Vendedor, WidgetPainel,
 } from '../domain/types';
 
 type Obj = Record<string, unknown>;
@@ -68,7 +71,7 @@ export interface ErroRpc {
 export function mensagemErroRpc(rpc: string, e: ErroRpc): string {
   if (e.code === '42501') return e.message || 'Sem acesso ao Comercial.';
   if (e.code === 'PGRST202' || e.code === '42883') {
-    return `O banco ainda não tem a função ${rpc} (migration da Fase 1 do CRM não aplicada).`;
+    return `O banco ainda não tem a função ${rpc} (migration do CRM não aplicada).`;
   }
   if (e.code === '22023') return e.message || 'Parâmetro inválido.';
   return `Não foi possível carregar do banco (${rpc})${e.message ? `: ${e.message}` : ''}.`;
@@ -347,4 +350,112 @@ export function mapBuscaPorLink(d: unknown): { produto: ProdutoHotmart | null; o
     oferta: o.oferta ? mapOferta(o.oferta, 'crm_buscar_por_link') : null,
     codigo: strOuNull(o.codigo),
   };
+}
+
+// ── WhatsApp (F4, migration 20261006051434) ──
+
+const STATUS_MENSAGEM: readonly StatusMensagem[] = ['enviada', 'entregue', 'lida', 'falhou'];
+
+function mapMensagem(x: unknown, rpc: string): Mensagem {
+  const o = obj(x, rpc, 'mensagem');
+  if (o.direcao !== 'entrada' && o.direcao !== 'saida') throw new FormatoInesperado(rpc, 'mensagem sem direção');
+  const status = STATUS_MENSAGEM.includes(o.status as StatusMensagem) ? (o.status as StatusMensagem) : null;
+  const envio = o.envio === 'na_fila' || o.envio === 'enviando' ? o.envio : null;
+  return {
+    id: str(o.id), contatoId: str(o.contatoId), canal: o.canal === 'email' || o.canal === 'nota' ? o.canal : 'whatsapp',
+    direcao: o.direcao, texto: str(o.texto), em: str(o.em), status, autorId: strOuNull(o.autorId),
+    templateId: strOuNull(o.templateId), envio, erro: strOuNull(o.erro), tipo: str(o.tipo) || 'texto', fichaId: strOuNull(o.fichaId),
+  };
+}
+
+export function mapConversas(d: unknown): Conversa[] {
+  return lista(d, 'crm_conversas').map((x) => {
+    const o = obj(x, 'crm_conversas');
+    if (!o.ultimaMensagem) throw new FormatoInesperado('crm_conversas', 'conversa sem última mensagem');
+    return {
+      contatoId: str(o.contatoId), ultimaMensagem: mapMensagem(o.ultimaMensagem, 'crm_conversas'), naoLidas: num(o.naoLidas),
+      janelaAteEm: strOuNull(o.janelaAteEm), atribuidaA: strOuNull(o.atribuidaA),
+    };
+  });
+}
+
+/** Ordem cronológica (a RPC já devolve assim). */
+export function mapMensagens(d: unknown): Mensagem[] {
+  return lista(d, 'crm_mensagens').map((x) => mapMensagem(x, 'crm_mensagens'));
+}
+
+export function mapTemplates(d: unknown): Template[] {
+  return lista(d, 'crm_templates').map((x) => {
+    const o = obj(x, 'crm_templates', 'template');
+    return {
+      id: str(o.id), nome: str(o.nome), categoria: o.categoria === 'utility' ? 'utility' : 'marketing', texto: str(o.texto),
+      aprovado: bool(o.aprovado), idioma: str(o.idioma), variaveis: num(o.variaveis),
+    };
+  });
+}
+
+const STATUS_FICHA: readonly StatusFicha[] = ['rascunho', 'aguardando_aprovacao', 'aprovada', 'reprovada', 'enviada'];
+
+export function mapFichas(d: unknown): FichaDisparo[] {
+  return lista(d, 'crm_fichas').map((x) => {
+    const o = obj(x, 'crm_fichas', 'ficha');
+    if (!STATUS_FICHA.includes(o.status as StatusFicha)) throw new FormatoInesperado('crm_fichas', `status de ficha desconhecido (${str(o.status)})`);
+    const r = o.resultado && typeof o.resultado === 'object' ? (o.resultado as Obj) : null;
+    return {
+      id: str(o.id), codigo: str(o.codigo), objetivo: str(o.objetivo), produto: str(o.produto) as ProdutoKey, filtro: str(o.filtro),
+      quantidade: num(o.quantidade), supressoes: strs(o.supressoes) as Supressao[], suprimidos: num(o.suprimidos),
+      templateId: str(o.templateId), numeroEnvio: str(o.numeroEnvio), agendadoPara: str(o.agendadoPara),
+      operadorId: str(o.operadorId), link: str(o.link), status: o.status as StatusFicha, aprovadoPor: strOuNull(o.aprovadoPor),
+      criadoEm: str(o.criadoEm), motivoStatus: strOuNull(o.motivoStatus),
+      resultado: r ? { entregues: num(r.entregues), lidas: num(r.lidas), respostas: num(r.respostas), falhas: num(r.falhas), naFila: num(r.naFila) } : null,
+    };
+  });
+}
+
+export function mapWhatsappStatus(d: unknown): StatusWhatsapp {
+  // crm.config sem linha → null: "não sei", não "desligado".
+  const o = obj(d, 'crm_whatsapp_status', 'status');
+  const n = o.numero && typeof o.numero === 'object' ? (o.numero as Obj) : null;
+  return {
+    whatsappLigado: bool(o.whatsappLigado), envioLigado: bool(o.envioLigado), escritaLigada: bool(o.escritaLigada),
+    numero: n ? { id: str(n.id), nome: str(n.nome), final: str(n.final), ativo: bool(n.ativo) } : null,
+    templatesAprovados: num(o.templatesAprovados), naFila: num(o.naFila), falhasHoje: num(o.falhasHoje),
+    janelaHoras: num(o.janelaHoras) || 24, maxDestinatarios: num(o.maxDestinatarios),
+  };
+}
+
+// ── Filas de recuperação e links (F5, migration 20261006044653) ──
+
+const FAIXAS: readonly FaixaScore[] = ['A', 'B', 'C', 'D'];
+
+function mapItemFila(x: unknown): ItemFila {
+  const o = obj(x, 'crm_filas', 'item da fila');
+  if (!FAIXAS.includes(o.faixa as FaixaScore)) throw new FormatoInesperado('crm_filas', `faixa desconhecida (${str(o.faixa)})`);
+  return {
+    id: str(o.id), contatoId: str(o.contatoId), score: num(o.score), faixa: o.faixa as FaixaScore,
+    sinais: strs(o.sinais) as SinalRecuperacao[], status: str(o.status) as StatusFila, responsavelId: strOuNull(o.responsavelId),
+    alteradoPor: strOuNull(o.alteradoPor), alteradoEm: strOuNull(o.alteradoEm),
+  };
+}
+
+export function mapFilas(d: unknown): FilaRecuperacao[] {
+  return lista(d, 'crm_filas').map((x) => {
+    const o = obj(x, 'crm_filas', 'fila');
+    return {
+      id: str(o.id), nome: str(o.nome), produto: str(o.produto) as ProdutoKey, criadaEm: str(o.criadaEm),
+      ofertaVigente: strOuNull(o.ofertaVigente), itens: lista(o.itens, 'crm_filas').map(mapItemFila),
+      ofertaCodigo: strOuNull(o.ofertaCodigo), projeto: strOuNull(o.projeto), encerradaEm: strOuNull(o.encerradaEm),
+    };
+  });
+}
+
+export function mapLinks(d: unknown): LinkRastreavel[] {
+  return lista(d, 'crm_links').map((x) => {
+    const o = obj(x, 'crm_links', 'link');
+    return {
+      id: str(o.id), vendedorId: str(o.vendedorId), produto: str(o.produto) as ProdutoKey, acao: str(o.acao), url: str(o.url),
+      sck: str(o.sck), canal: str(o.canal), ofertaCodigo: strOuNull(o.ofertaCodigo), projeto: strOuNull(o.projeto),
+      conteudo: strOuNull(o.conteudo), criadoEm: str(o.criadoEm), arquivadoEm: strOuNull(o.arquivadoEm),
+    };
+  });
 }

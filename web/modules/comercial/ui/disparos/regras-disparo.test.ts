@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { FichaDisparo } from '../../domain/types';
 import {
-  conflitosCom, diasDaAgenda, fichasEmConflito, partesTemplate, resumoDisparos, simularSupressoes, taxasResultado,
+  conflitosCom, descreverFiltro, diasDaAgenda, fichasEmConflito, montarLista, partesTemplate, resumoDisparos, simularSupressoes,
+  taxasResultado, type FiltroLista,
 } from './regras-disparo';
 
 const agora = new Date('2026-10-05T12:00:00');
@@ -84,5 +85,43 @@ describe('resumoDisparos', () => {
   });
   it('sem resultado, taxas nulas', () => {
     expect(resumoDisparos([], agora)).toMatchObject({ entregues: 0, leitura: null, resposta: null });
+  });
+});
+
+describe('lista da ficha (filtro → ids)', () => {
+  const contatos = [
+    { id: 'c1', telefone: '11 99999-0001', tags: ['imersao'], donoId: 'v1' },
+    { id: 'c2', telefone: '11 99999-0002', tags: [], donoId: 'v2' },
+    { id: 'c3', telefone: null, tags: ['imersao'], donoId: 'v1' },
+    { id: 'c4', telefone: '11 99999-0004', tags: ['imersao'], donoId: null },
+    { id: 'c5', telefone: '  ', tags: [], donoId: 'v1' },
+  ];
+  const negocios = [
+    { contatoId: 'c1', status: 'perdido' as const, produto: 'hm' as const },
+    { contatoId: 'c1', status: 'aberto' as const, produto: 'ht' as const },
+    { contatoId: 'c2', status: 'aberto' as const, produto: 'hm' as const },
+    { contatoId: 'c3', status: 'perdido' as const, produto: 'hm' as const },
+  ];
+  const base: FiltroLista = { produto: 'qualquer', situacao: 'qualquer', tag: null, apenasMeus: false };
+
+  it('sem filtro: todos com telefone (sem telefone fica de fora)', () => {
+    expect(montarLista(contatos, negocios, base, 'v1')).toEqual(['c1', 'c2', 'c4']);
+  });
+  it('situação e produto do negócio', () => {
+    expect(montarLista(contatos, negocios, { ...base, produto: 'hm', situacao: 'perdido' }, 'v1')).toEqual(['c1']);
+    expect(montarLista(contatos, negocios, { ...base, situacao: 'aberto' }, 'v1')).toEqual(['c1', 'c2']);
+    expect(montarLista(contatos, negocios, { ...base, produto: 'hm' }, 'v1')).toEqual(['c1', 'c2']);
+    expect(montarLista(contatos, negocios, { ...base, situacao: 'sem_negocio' }, 'v1')).toEqual(['c4']);
+  });
+  it('tag e só meus', () => {
+    expect(montarLista(contatos, negocios, { ...base, tag: 'imersao' }, 'v1')).toEqual(['c1', 'c4']);
+    expect(montarLista(contatos, negocios, { ...base, apenasMeus: true }, 'v1')).toEqual(['c1']);
+  });
+  it('descrição legível', () => {
+    const nome = (p: string) => p.toUpperCase();
+    expect(descreverFiltro({ ...base, produto: 'hm', situacao: 'perdido', tag: 'imersao' }, nome))
+      .toBe('Negócio perdido de HM · tag imersao · com WhatsApp');
+    expect(descreverFiltro({ ...base, apenasMeus: true }, nome)).toBe('Todos os contatos · só meus contatos · com WhatsApp');
+    expect(descreverFiltro({ ...base, situacao: 'sem_negocio' }, nome)).toBe('Contatos sem negócio · com WhatsApp');
   });
 });

@@ -1,13 +1,13 @@
 // Repositório de DEMONSTRAÇÃO: cumpre o contrato `ComercialRepository` em memória, sem banco.
 // O estado vive enquanto a aba estiver aberta (recarregar a página volta à base inicial).
 // Aplica as mesmas regras de domínio que o backend vai aplicar, para a tela se comportar como a real.
-import type { ComercialRepository, NovaAtividade, NovaFicha, Resultado } from '../application/ports';
+import type { ComercialRepository, NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink } from '../application/ports';
 import { produto as produtoDe, ROTULO_CAMPO } from '../domain/catalogo';
 import { bloqueioMoverNoFunil, camposFaltandoNoFunil, etapaDoFunil, etapaInicial, validarFunil } from '../domain/funis';
 import { escolherDono, montarSck, somaPercentuais } from '../domain/regras';
 import type {
   CampoKey, Conversa, EtapaFunil, EventoTimeline, Funil, MotivoPerda, Negocio, ProdutoKey, SessaoComercial, StatusFila,
-  Vendedor,
+  StatusWhatsapp, Vendedor,
 } from '../domain/types';
 import { funisDoProjeto } from '../domain/modelos';
 import { situacaoSla } from '../domain/regras';
@@ -94,6 +94,15 @@ export class MockComercialRepository implements ComercialRepository {
     return espera([...lista].sort((a, b) => b.em.localeCompare(a.em)));
   }
   templates() { return espera(this.db.templates); }
+  /** Demonstração: tudo ligado, número fictício. */
+  whatsappStatus(): Promise<StatusWhatsapp> {
+    return espera({
+      whatsappLigado: true, envioLigado: true, escritaLigada: true,
+      numero: { id: 'n-demo', nome: 'Comercial oficial (API)', final: '0000', ativo: true },
+      templatesAprovados: this.db.templates.filter((t) => t.aprovado).length,
+      naFila: 0, falhasHoje: 0, janelaHoras: 24, maxDestinatarios: 5000,
+    });
+  }
   filas() { return espera(this.db.filas); }
   fichas() { return espera([...this.db.fichas].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))); }
   links() { return espera(this.db.links); }
@@ -360,20 +369,33 @@ export class MockComercialRepository implements ComercialRepository {
     return espera({ ok: true });
   }
 
-  async salvarFicha(f: NovaFicha, enviarParaAprovacao: boolean): Promise<Resultado> {
+  async salvarFicha(f: NovaFicha, enviarParaAprovacao: boolean): Promise<ResultadoFicha> {
     const v = this.db.vendedores.find((x) => x.id === this.eu.vendedorId);
     if (!v?.disparaApi) return espera({ ok: false, msg: 'Seu usuário não opera disparo por API.' });
     const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const n = this.db.fichas.filter((x) => x.codigo.includes(ymd)).length + 1;
     const codigo = `${f.produto.toUpperCase()}-${ymd}-${String(n).padStart(2, '0')}`;
     // O gestor dispara com a ficha registrada; o vendedor precisa do ok do gestor.
+    const destinatarios = [...new Set(f.destinatarios)];
+    // Como no banco: sem lista, a ficha só fica como rascunho.
+    if (enviarParaAprovacao && !destinatarios.length) {
+      return espera({ ok: false, msg: 'Ficha sem destinatários: monte a lista antes de enviar para aprovação.' });
+    }
     const status = !enviarParaAprovacao ? 'rascunho' : this.eu.papel === 'gestor' ? 'aprovada' : 'aguardando_aprovacao';
+    const id = this.novoId('d');
+    const { destinatarios: _lista, ...resto } = f;
+    void _lista;
+    const quantidade = destinatarios.length;
+    const suprimidos = Math.min(f.suprimidos, quantidade);
     this.db.fichas.push({
-      id: this.novoId('d'), codigo, ...f, supressoes: ['em_negociacao', 'disparo_48h', 'opt_out', 'ja_comprou'],
+      id, codigo, ...resto, quantidade, suprimidos, supressoes: ['em_negociacao', 'disparo_48h', 'opt_out', 'ja_comprou'],
       operadorId: this.eu.vendedorId, status, aprovadoPor: status === 'aprovada' ? this.eu.vendedorId : null, criadoEm: agoraIso(), resultado: null,
     });
     this.registrar('criou', 'ficha', codigo, `Criou a ficha de disparo ${codigo} (${status})`);
-    return espera({ ok: true, msg: status === 'aguardando_aprovacao' ? 'Ficha enviada para aprovação do gestor.' : status === 'aprovada' ? 'Ficha registrada e aprovada.' : 'Rascunho salvo.' });
+    return espera({
+      ok: true, msg: status === 'aguardando_aprovacao' ? 'Ficha enviada para aprovação do gestor.' : status === 'aprovada' ? 'Ficha registrada e aprovada.' : 'Rascunho salvo.',
+      fichaId: id, codigo, quantidade, suprimidos,
+    });
   }
 
   async decidirFicha(fichaId: string, aprovar: boolean): Promise<Resultado> {
@@ -397,15 +419,17 @@ export class MockComercialRepository implements ComercialRepository {
     return espera({ ok: true });
   }
 
-  async criarLink(vendedorId: string, produto: ProdutoKey, acao: string, canal: string): Promise<Resultado> {
+  async criarLink(vendedorId: string, produto: ProdutoKey, acao: string, canal: string): Promise<ResultadoLink> {
     const v = this.db.vendedores.find((x) => x.id === vendedorId);
     if (!v || !acao.trim()) return espera({ ok: false, msg: 'Informe vendedor e ação.' });
     if (this.eu.papel !== 'gestor' && vendedorId !== this.eu.vendedorId) return espera({ ok: false, msg: 'Vendedor só cria link para si mesmo.' });
     const sck = montarSck(produto, acao, new Date(), canal, v.sigla);
     if (this.db.links.some((l) => l.sck === sck)) return espera({ ok: false, msg: 'Este link já existe.' });
-    this.db.links.push({ id: this.novoId('l'), vendedorId, produto, acao: acao.trim(), sck, url: `https://pay.hotmart.com/EXEMPLO?sck=${sck}` });
+    const id = this.novoId('l');
+    const url = `https://pay.hotmart.com/EXEMPLO?sck=${sck}`;
+    this.db.links.push({ id, vendedorId, produto, acao: acao.trim(), sck, url, canal, criadoEm: agoraIso() });
     this.registrar('criou', 'link', sck, `Criou link rastreável ${sck}`);
-    return espera({ ok: true });
+    return espera({ ok: true, linkId: id, sck, url });
   }
 
   // ── Motivos de perda ──

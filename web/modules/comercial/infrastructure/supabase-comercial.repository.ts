@@ -6,22 +6,27 @@
 // exceção aqui (nunca lista vazia).
 // Escrita (migration 20261005t, F2): RPCs definer que devolvem `{ok, msg?, …ids}` com as MESMAS mensagens do mock
 // (`mapeamento-escrita.ts`). Enquanto `crm.config.escrita_ligada = false`, todas respondem "CRM em manutenção".
-// Métodos sem tabela no banco (conversa, ficha, fila, link) devolvem `ok:false` dizendo a fase.
+// WhatsApp (F4, 20261006051434) e filas/links (F5, 20261006044653): mesmas regras; com os interruptores desligados
+// (`whatsapp_ligado`, `envio_ligado`), a leitura vem vazia de verdade e a escrita responde a mensagem do banco.
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import type { ComercialRepository, NovaAtividade, NovaFicha, Resultado } from '../application/ports';
+import type {
+  ComercialRepository, NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink,
+} from '../application/ports';
 import type {
   CampoKey, Contato, Conversa, Dashboard, EventoTimeline, FichaDisparo, FilaRecuperacao, FiltroLog, Funil, LinkRastreavel,
   LogCrm, Mensagem, MotivoPerda, MotivoPerdaConfig, Negocio, OfertaHotmart, PainelPessoa, PontoJornada,
-  PreferenciasNotificacao, ProdutoHotmart, ProdutoKey, StatusFila, Template, TipoProjeto,
+  PreferenciasNotificacao, ProdutoHotmart, ProdutoKey, StatusFila, StatusWhatsapp, Template, TipoProjeto,
 } from '../domain/types';
 import {
-  mapAgrupadores, mapAtividades, mapBuscaPorLink, mapConfig, mapPaginaContatos, mapDashboards, mapEventos, mapFunis, mapJornada,
-  mapLog, mapMotivosPerda, mapNegocios, mapNotificacoes, mapOfertas, mapOfertasOrfas, mapPainel, mapPreferencias,
-  mapProdutosHotmart, mapSessao, mapVendedores, mensagemErroRpc,
+  mapAgrupadores, mapAtividades, mapBuscaPorLink, mapConfig, mapConversas, mapPaginaContatos, mapDashboards, mapEventos,
+  mapFichas, mapFilas, mapFunis, mapJornada, mapLinks, mapLog, mapMensagens, mapMotivosPerda, mapNegocios, mapNotificacoes,
+  mapOfertas, mapOfertasOrfas, mapPainel, mapPreferencias, mapProdutosHotmart, mapSessao, mapTemplates, mapVendedores,
+  mapWhatsappStatus, mensagemErroRpc,
 } from './mapeamento-supabase';
 import {
-  argsEscrita, mapResultado, mapResultadoComId, mapResultadoNegocio, mapResultadoProjeto, mensagemErroEscrita, semTabela,
+  argsEscrita, mapResultado, mapResultadoComId, mapResultadoFicha, mapResultadoLink, mapResultadoNegocio, mapResultadoProjeto,
+  mensagemErroEscrita,
 } from './mapeamento-escrita';
 // Padrão de fábrica de quem nunca personalizou (o mesmo que a demonstração usa).
 import { painelPadrao, preferenciasPadrao } from './mock-dados';
@@ -139,15 +144,21 @@ export class SupabaseComercialRepository implements ComercialRepository {
     }));
   }
 
-  // ── Leitura que a F1 não cobre (backend-arquitetura.md §6) ──
-  // Lista vazia é o estado verdadeiro: sem a fase, o sistema não tem nenhum desses registros.
-  // Erro aqui derrubaria telas inteiras (o Início junta todas as leituras).
-  async conversas(): Promise<Conversa[]> { return []; }
-  async mensagens(contatoId: string): Promise<Mensagem[]> { void contatoId; return []; }
-  async templates(): Promise<Template[]> { return []; }
-  async fichas(): Promise<FichaDisparo[]> { return []; }
-  async filas(): Promise<FilaRecuperacao[]> { return []; }
-  async links(): Promise<LinkRastreavel[]> { return []; }
+  // ── WhatsApp (F4) ──
+  async conversas(): Promise<Conversa[]> { return mapConversas(await this.rpc('crm_conversas', { p_limite: 300 })); }
+  async mensagens(contatoId: string): Promise<Mensagem[]> {
+    return mapMensagens(await this.rpc('crm_mensagens', { p_pessoa: contatoId, p_limite: 500 }));
+  }
+  async templates(): Promise<Template[]> { return mapTemplates(await this.rpc('crm_templates')); }
+  async fichas(): Promise<FichaDisparo[]> { return mapFichas(await this.rpc('crm_fichas', { p_limite: 200 })); }
+  async whatsappStatus(): Promise<StatusWhatsapp> { return mapWhatsappStatus(await this.rpc('crm_whatsapp_status')); }
+
+  // ── Filas de recuperação e links (F5) ──
+  /** Só as abertas. Vendas por link (`p_vendas`) custam 2 Seq Scans: ficam para pedido explícito. */
+  async filas(): Promise<FilaRecuperacao[]> { return mapFilas(await this.rpc('crm_filas', { p_incluir_encerradas: false })); }
+  async links(): Promise<LinkRastreavel[]> {
+    return mapLinks(await this.rpc('crm_links', { p_vendas: false, p_incluir_arquivados: false }));
+  }
 
   // ── Escrita (F2) ──
   /**
@@ -226,23 +237,22 @@ export class SupabaseComercialRepository implements ComercialRepository {
   /** "Excluir" na tela = arquivar no banco (nada se apaga). */
   excluirDashboard(id: string) { return this.simples('crm_arquivar_dashboard', argsEscrita.excluirDashboard(id)); }
 
-  // ── Escrita sem tabela no banco ainda (backend-arquitetura.md §6) ──
-  async enviarMensagem(contatoId: string, texto: string, templateId?: string | null): Promise<Resultado> {
-    void contatoId; void texto; void templateId;
-    return semTabela('Envio de mensagem', 'Fase 4');
+  // ── Escrita WhatsApp (F4) ──
+  enviarMensagem(contatoId: string, texto: string, templateId?: string | null): Promise<Resultado & { mensagemId?: string }> {
+    return this.escrever('crm_enviar_mensagem', argsEscrita.enviarMensagem(contatoId, texto, templateId),
+      (d) => mapResultadoComId('crm_enviar_mensagem', d, 'mensagemId'));
   }
-  async marcarConversaLida(contatoId: string): Promise<Resultado> { void contatoId; return semTabela('Conversa', 'Fase 4'); }
-  async atualizarItemFila(filaId: string, itemId: string, status: StatusFila): Promise<Resultado> {
-    void filaId; void itemId; void status;
-    return semTabela('Fila de recuperação', 'próxima fase');
+  marcarConversaLida(contatoId: string) { return this.simples('crm_marcar_conversa_lida', argsEscrita.marcarConversaLida(contatoId)); }
+  salvarFicha(f: NovaFicha, enviarParaAprovacao: boolean): Promise<ResultadoFicha> {
+    return this.escrever('crm_salvar_ficha', argsEscrita.salvarFicha(f, enviarParaAprovacao), mapResultadoFicha);
   }
-  async salvarFicha(f: NovaFicha, enviarParaAprovacao: boolean): Promise<Resultado> {
-    void f; void enviarParaAprovacao;
-    return semTabela('Ficha de disparo', 'Fase 4');
+  decidirFicha(fichaId: string, aprovar: boolean) { return this.simples('crm_decidir_ficha', argsEscrita.decidirFicha(fichaId, aprovar)); }
+
+  // ── Escrita filas e links (F5) ──
+  atualizarItemFila(filaId: string, itemId: string, status: StatusFila) {
+    return this.simples('crm_atualizar_item_fila', argsEscrita.atualizarItemFila(filaId, itemId, status));
   }
-  async decidirFicha(fichaId: string, aprovar: boolean): Promise<Resultado> { void fichaId; void aprovar; return semTabela('Ficha de disparo', 'Fase 4'); }
-  async criarLink(vendedorId: string, produto: ProdutoKey, acao: string, canal: string): Promise<Resultado> {
-    void vendedorId; void produto; void acao; void canal;
-    return semTabela('Link rastreável', 'próxima fase');
+  criarLink(vendedorId: string, produto: ProdutoKey, acao: string, canal: string): Promise<ResultadoLink> {
+    return this.escrever('crm_criar_link', argsEscrita.criarLink(vendedorId, produto, acao, canal), mapResultadoLink);
   }
 }

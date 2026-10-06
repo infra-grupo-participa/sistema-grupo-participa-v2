@@ -1,4 +1,5 @@
-// Regras puras da tela de disparos: simulador de supressões, conflito de agenda (48 h) e taxas do resultado.
+// Regras puras da tela de disparos: lista da ficha (filtro → ids), simulador de supressões, conflito de agenda (48 h)
+// e taxas do resultado.
 import { motivoSupressao } from '../../domain/regras';
 import type { Contato, FichaDisparo, Negocio, ProdutoKey, Supressao } from '../../domain/types';
 
@@ -138,4 +139,78 @@ export function resumoDisparos(fichas: Pick<FichaDisparo, 'id' | 'produto' | 'ag
     leitura: pct(soma('lidas')),
     resposta: pct(soma('respostas')),
   };
+}
+
+// ── Lista da ficha: o filtro vira a lista de contatos (ids) que o banco grava ──
+
+export type SituacaoNegocioFiltro = 'qualquer' | 'aberto' | 'ganho' | 'perdido' | 'sem_negocio';
+
+export interface FiltroLista {
+  /** Produto do negócio do contato. 'qualquer' = qualquer produto. Ignorado em 'sem_negocio'. */
+  produto: ProdutoKey | 'qualquer';
+  situacao: SituacaoNegocioFiltro;
+  /** Tag do contato (null = qualquer). */
+  tag: string | null;
+  /** Só contatos de que eu sou dono. */
+  apenasMeus: boolean;
+}
+
+export const ROTULO_SITUACAO_FILTRO: Record<SituacaoNegocioFiltro, string> = {
+  qualquer: 'Qualquer situação',
+  aberto: 'Negócio aberto',
+  ganho: 'Negócio ganho',
+  perdido: 'Negócio perdido',
+  sem_negocio: 'Sem negócio',
+};
+
+/**
+ * Contatos (ids) que entram na lista: com telefone (o disparo é por WhatsApp), batendo tag, dono e situação do negócio.
+ * Ordem da base; sem repetidos. As supressões NÃO saem aqui: o banco aplica e conta na hora de salvar.
+ */
+export function montarLista(
+  contatos: Pick<Contato, 'id' | 'telefone' | 'tags' | 'donoId'>[],
+  negocios: Pick<Negocio, 'contatoId' | 'status' | 'produto'>[],
+  filtro: FiltroLista,
+  euId: string,
+): string[] {
+  const porContato = new Map<string, Pick<Negocio, 'contatoId' | 'status' | 'produto'>[]>();
+  for (const n of negocios) {
+    const l = porContato.get(n.contatoId) ?? [];
+    l.push(n);
+    porContato.set(n.contatoId, l);
+  }
+  const ids = new Set<string>();
+  for (const c of contatos) {
+    if (!c.telefone || !c.telefone.replace(/\D/g, '')) continue;
+    if (filtro.tag && !c.tags.includes(filtro.tag)) continue;
+    if (filtro.apenasMeus && c.donoId !== euId) continue;
+    const ns = porContato.get(c.id) ?? [];
+    if (filtro.situacao === 'sem_negocio') {
+      if (ns.length) continue;
+    } else {
+      const doProduto = ns.filter((n) => filtro.produto === 'qualquer' || n.produto === filtro.produto);
+      const bate = filtro.situacao === 'qualquer'
+        ? (filtro.produto === 'qualquer' || doProduto.length > 0)
+        : doProduto.some((n) => n.status === filtro.situacao);
+      if (!bate) continue;
+    }
+    ids.add(c.id);
+  }
+  return [...ids];
+}
+
+/** Descrição legível do filtro (vai para a ficha e o log). */
+export function descreverFiltro(filtro: FiltroLista, nomeProduto: (p: ProdutoKey) => string): string {
+  const partes: string[] = [];
+  if (filtro.situacao === 'sem_negocio') partes.push('Contatos sem negócio');
+  else if (filtro.situacao === 'qualquer') {
+    partes.push(filtro.produto === 'qualquer' ? 'Todos os contatos' : `Com negócio de ${nomeProduto(filtro.produto)}`);
+  } else {
+    const s = ROTULO_SITUACAO_FILTRO[filtro.situacao];
+    partes.push(filtro.produto === 'qualquer' ? s : `${s} de ${nomeProduto(filtro.produto)}`);
+  }
+  if (filtro.tag) partes.push(`tag ${filtro.tag}`);
+  if (filtro.apenasMeus) partes.push('só meus contatos');
+  partes.push('com WhatsApp');
+  return partes.join(' · ');
 }

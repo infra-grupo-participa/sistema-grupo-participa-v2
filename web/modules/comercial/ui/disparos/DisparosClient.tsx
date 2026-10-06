@@ -7,7 +7,8 @@ import { fmtDataHora } from '@/shared/ui/format';
 import { Icon } from '@/shared/ui/icons';
 import type { NovaFicha } from '../../application/ports';
 import { produto as produtoDe, ROTULO_STATUS_FICHA, TOM_STATUS_FICHA } from '../../domain/catalogo';
-import type { FichaDisparo, Template } from '../../domain/types';
+import { montarSck } from '../../domain/regras';
+import type { FichaDisparo, ProdutoKey, Template } from '../../domain/types';
 import { EstadoErro, FaixaNumeros, PaginaComercial, useAbaHash, useEquipe, Vazio } from '../comum';
 import { InfoIndicador } from '../InfoIndicador';
 import { avisarMudanca, repo, useAgora, useDados } from '../repositorio';
@@ -25,6 +26,8 @@ export function DisparosClient() {
   const templatesQ = useDados(() => repo.templates());
   const contatosQ = useDados(() => repo.contatos());
   const negociosQ = useDados(() => repo.negocios());
+  // Só o teto de destinatários; se falhar, a ficha segue (o banco confere o limite ao salvar).
+  const { dados: whatsapp } = useDados(() => repo.whatsappStatus());
   const { dados: fichas } = fichasQ;
   const { dados: templates } = templatesQ;
   const { dados: contatos } = contatosQ;
@@ -50,10 +53,28 @@ export function DisparosClient() {
   async function salvar(f: NovaFicha, enviar: boolean): Promise<string | null> {
     const r = await repo.salvarFicha(f, enviar);
     if (!r.ok) return r.msg ?? 'Não foi possível salvar.';
-    flash(r.msg ?? 'Ficha salva.');
+    const conta = r.quantidade !== undefined ? ` ${r.quantidade.toLocaleString('pt-BR')} contatos, ${(r.suprimidos ?? 0).toLocaleString('pt-BR')} suprimidos.` : '';
+    flash(`${r.msg ?? 'Ficha salva.'}${conta}`);
     setNova(false);
     avisarMudanca();
     return null;
+  }
+
+  /** Link da ficha pelo banco (oferta vigente + SCK). Já existindo o mesmo SCK hoje, reaproveita. */
+  async function gerarLink(produto: ProdutoKey, acao: string): Promise<{ url: string } | { erro: string }> {
+    if (!eu) return { erro: 'Sessão sem vendedor.' };
+    const r = await repo.criarLink(eu.id, produto, acao, 'whatsapp');
+    if (r.ok && r.url) { avisarMudanca(); return { url: r.url }; }
+    if (r.msg === 'Este link já existe.') {
+      const sck = montarSck(produto, acao, agora, 'whatsapp', eu.sigla);
+      try {
+        const existente = (await repo.links()).find((l) => l.sck === sck && l.vendedorId === eu.id);
+        if (existente) return { url: existente.url };
+      } catch (e) {
+        return { erro: e instanceof Error ? e.message : 'Não foi possível ler os links.' };
+      }
+    }
+    return { erro: r.msg ?? 'Não foi possível gerar o link.' };
   }
 
   const carregando = !fichas || !templates || !contatos || !negocios || !sessao;
@@ -124,7 +145,8 @@ export function DisparosClient() {
       {nova && eu && podeDisparar && contatos && negocios && templates && fichas && (
         <NovaFichaModal
           eu={eu} gestor={gestor} contatos={contatos} negocios={negocios} templates={templates} fichas={fichas} agora={agora}
-          onSalvar={salvar} onClose={() => setNova(false)}
+          maxDestinatarios={whatsapp?.maxDestinatarios ?? null}
+          onSalvar={salvar} onGerarLink={gerarLink} onClose={() => setNova(false)}
         />
       )}
       <Toast>{toast}</Toast>

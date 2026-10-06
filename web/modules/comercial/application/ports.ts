@@ -7,12 +7,25 @@
 import type {
   Agrupador, Atividade, CampoKey, ConfigComercial, Contato, Conversa, EventoTimeline, FichaDisparo, FilaRecuperacao,
   Dashboard, FiltroLog, Funil, LinkRastreavel, LogCrm, OfertaHotmart, OfertaOrfa, ProdutoHotmart, Mensagem, MotivoPerda, MotivoPerdaConfig, Negocio, Notificacao, PainelPessoa, PontoJornada,
-  PreferenciasNotificacao, ProdutoKey, SessaoComercial, StatusFila, Template, TipoAtividade, TipoProjeto, Vendedor,
+  PreferenciasNotificacao, ProdutoKey, SessaoComercial, StatusFila, StatusWhatsapp, Template, TipoAtividade, TipoProjeto, Vendedor,
 } from '../domain/types';
 
 export interface Resultado {
   ok: boolean;
   msg?: string;
+}
+
+export interface ResultadoFicha extends Resultado {
+  fichaId?: string;
+  codigo?: string;
+  quantidade?: number;
+  suprimidos?: number;
+}
+
+export interface ResultadoLink extends Resultado {
+  linkId?: string;
+  sck?: string;
+  url?: string;
 }
 
 export interface NovaAtividade {
@@ -26,7 +39,11 @@ export interface NovaAtividade {
 export interface NovaFicha {
   objetivo: string;
   produto: ProdutoKey;
+  /** Descrição legível do filtro (vai para a ficha e o log). */
   filtro: string;
+  /** Contatos (ids) que o filtro devolveu: é a lista que o banco grava e conta. */
+  destinatarios: string[];
+  /** Calculados na tela só para mostrar; o banco recalcula (supressões no momento de salvar). */
   quantidade: number;
   suprimidos: number;
   templateId: string;
@@ -62,6 +79,8 @@ export interface ComercialRepository {
   conversas(): Promise<Conversa[]>;
   mensagens(contatoId: string): Promise<Mensagem[]>;
   templates(): Promise<Template[]>;
+  /** Interruptores e limites do WhatsApp (sem dado de pessoa). */
+  whatsappStatus(): Promise<StatusWhatsapp>;
 
   filas(): Promise<FilaRecuperacao[]>;
   fichas(): Promise<FichaDisparo[]>;
@@ -93,16 +112,19 @@ export interface ComercialRepository {
   concluirAtividade(atividadeId: string, resultado: string): Promise<Resultado>;
   adicionarNota(contatoId: string, negocioId: string | null, texto: string): Promise<Resultado>;
 
-  enviarMensagem(contatoId: string, texto: string, templateId?: string | null): Promise<Resultado>;
+  /** Com template, o texto é montado no banco ({{1}} = primeiro nome) e `texto` é ignorado. */
+  enviarMensagem(contatoId: string, texto: string, templateId?: string | null): Promise<Resultado & { mensagemId?: string }>;
   marcarConversaLida(contatoId: string): Promise<Resultado>;
 
   atualizarItemFila(filaId: string, itemId: string, status: StatusFila): Promise<Resultado>;
 
-  salvarFicha(f: NovaFicha, enviarParaAprovacao: boolean): Promise<Resultado>;
+  /** Quantidade e suprimidos voltam contados pelo banco. */
+  salvarFicha(f: NovaFicha, enviarParaAprovacao: boolean): Promise<ResultadoFicha>;
   decidirFicha(fichaId: string, aprovar: boolean): Promise<Resultado>;
 
   salvarDistribuicao(percentuais: Record<string, { percentual: number; ativo: boolean }>): Promise<Resultado>;
-  criarLink(vendedorId: string, produto: ProdutoKey, acao: string, canal: string): Promise<Resultado>;
+  /** Devolve o link pronto (oferta vigente + sck + UTMs). */
+  criarLink(vendedorId: string, produto: ProdutoKey, acao: string, canal: string): Promise<ResultadoLink>;
 
   // ── Painel personalizável (por pessoa) ──
   painel(vendedorId: string): Promise<PainelPessoa>;

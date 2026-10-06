@@ -4,6 +4,7 @@ import {
   FormatoInesperado, mapAgrupadores, mapAtividades, mapBuscaPorLink, mapConfig, mapContatos, mapDashboards, mapEventos,
   mapFunis, mapJornada, mapLog, mapMotivosPerda, mapNegocios, mapNotificacoes, mapOfertas, mapOfertasOrfas, mapPainel,
   mapPreferencias, mapProdutosHotmart, mapSessao, mapVendedores, mensagemErroRpc,
+  mapConversas, mapFichas, mapFilas, mapLinks, mapMensagens, mapTemplates, mapWhatsappStatus,
 } from './mapeamento-supabase';
 import type { PreferenciasNotificacao } from '../domain/types';
 
@@ -15,7 +16,7 @@ describe('erros e formato', () => {
     expect(mensagemErroRpc('crm_negocios', { code: '42501', message: 'Sem acesso ao Comercial.' })).toBe('Sem acesso ao Comercial.');
   });
   it('função inexistente explica que a migration não foi aplicada', () => {
-    expect(mensagemErroRpc('crm_funis', { code: 'PGRST202', message: 'Could not find the function' })).toMatch(/crm_funis.*Fase 1/);
+    expect(mensagemErroRpc('crm_funis', { code: 'PGRST202', message: 'Could not find the function' })).toMatch(/crm_funis.*migration/);
   });
   it('erro genérico cita a RPC', () => {
     expect(mensagemErroRpc('crm_log', { message: 'timeout' })).toBe('Não foi possível carregar do banco (crm_log): timeout.');
@@ -209,5 +210,58 @@ describe('mapPaginaContatos', () => {
     const pg = mapPaginaContatos({ itens: [], temMais: true });
     expect(pg).toEqual({ itens: [], temMais: true });
     expect(() => mapPaginaContatos(null)).toThrow();
+  });
+});
+
+// Payloads no formato de crm.mensagem_json / crm_conversas / crm_fichas (20261006051434) e crm_filas / crm_links (20261006044653).
+describe('WhatsApp (F4)', () => {
+  const entrada = { id: U1, contatoId: U2, canal: 'whatsapp', direcao: 'entrada', tipo: 'texto', texto: 'Oi', em: '2026-10-06T10:00:00+00:00', status: null, envio: null, erro: null, autorId: null, templateId: null, fichaId: null };
+  const naFila = { ...entrada, id: 'm2', direcao: 'saida', texto: 'Olá', status: null, envio: 'na_fila', autorId: U1 };
+  const falhou = { ...entrada, id: 'm3', direcao: 'saida', tipo: 'template', status: 'falhou', erro: 'Número inválido', templateId: U1 };
+  it('crm_mensagens: entrada não lida, saída na fila e falha com erro', () => {
+    const [a, b, c] = mapMensagens([entrada, naFila, falhou]);
+    expect(a).toEqual({ ...entrada, envio: null });
+    expect(b).toMatchObject({ direcao: 'saida', status: null, envio: 'na_fila' });
+    expect(c).toMatchObject({ status: 'falhou', erro: 'Número inválido', tipo: 'template', templateId: U1 });
+    expect(() => mapMensagens([{ ...entrada, direcao: 'x' }])).toThrow(/crm_mensagens/);
+    expect(() => mapMensagens(null)).toThrow(FormatoInesperado);
+  });
+  it('crm_conversas', () => {
+    const [c] = mapConversas([{ contatoId: U2, ultimaMensagem: entrada, naoLidas: 2, janelaAteEm: '2026-10-07T10:00:00+00:00', atribuidaA: null }]);
+    expect(c).toMatchObject({ contatoId: U2, naoLidas: 2, janelaAteEm: '2026-10-07T10:00:00+00:00', atribuidaA: null });
+    expect(c.ultimaMensagem.id).toBe(U1);
+    expect(() => mapConversas([{ contatoId: U2, ultimaMensagem: null }])).toThrow(/última mensagem/);
+    expect(mapConversas([])).toEqual([]);
+  });
+  it('crm_templates', () => {
+    expect(mapTemplates([{ id: U1, nome: 'boas_vindas', categoria: 'utility', texto: 'Oi {{1}}', aprovado: true, idioma: 'pt_BR', variaveis: 1 }]))
+      .toEqual([{ id: U1, nome: 'boas_vindas', categoria: 'utility', texto: 'Oi {{1}}', aprovado: true, idioma: 'pt_BR', variaveis: 1 }]);
+  });
+  it('crm_fichas: resultado só na enviada, com naFila', () => {
+    const base = { id: U1, codigo: 'HM-20261006-01', objetivo: 'X', produto: 'hm', filtro: 'F', quantidade: 10, supressoes: ['em_negociacao', 'disparo_48h', 'opt_out', 'ja_comprou'], suprimidos: 2, templateId: U2, numeroEnvio: '5511999990000', agendadoPara: '2026-10-07T13:00:00+00:00', operadorId: U1, link: 'https://x', status: 'rascunho', aprovadoPor: null, criadoEm: '2026-10-06T10:00:00+00:00', motivoStatus: null, resultado: null };
+    expect(mapFichas([base])).toEqual([base]);
+    const [e] = mapFichas([{ ...base, status: 'enviada', resultado: { entregues: 8, lidas: 5, respostas: 1, falhas: 0, naFila: 2 } }]);
+    expect(e.resultado).toEqual({ entregues: 8, lidas: 5, respostas: 1, falhas: 0, naFila: 2 });
+    expect(() => mapFichas([{ ...base, status: 'outro' }])).toThrow(/crm_fichas/);
+  });
+  it('crm_whatsapp_status (desligado, sem número)', () => {
+    expect(mapWhatsappStatus({ whatsappLigado: false, envioLigado: false, escritaLigada: true, numero: null, templatesAprovados: 0, naFila: 0, falhasHoje: 0, janelaHoras: 24, maxDestinatarios: 2000 }))
+      .toEqual({ whatsappLigado: false, envioLigado: false, escritaLigada: true, numero: null, templatesAprovados: 0, naFila: 0, falhasHoje: 0, janelaHoras: 24, maxDestinatarios: 2000 });
+    expect(() => mapWhatsappStatus(null)).toThrow(FormatoInesperado);
+  });
+});
+
+describe('filas e links (F5)', () => {
+  const item = { id: U2, contatoId: U1, score: 80, faixa: 'A', sinais: ['carrinho'], status: 'a_abordar', responsavelId: null, alteradoPor: null, alteradoEm: null };
+  const fila = { id: U1, nome: 'Imersão SET26', produto: 'hm', criadaEm: '2026-10-01T10:00:00+00:00', ofertaVigente: '12x de 297', ofertaCodigo: 'abc', projeto: 'imersao-set26', encerradaEm: null, itens: [item] };
+  it('crm_filas', () => {
+    expect(mapFilas([fila])).toEqual([fila]);
+    expect(() => mapFilas([{ ...fila, itens: null }])).toThrow(/crm_filas/);
+    expect(() => mapFilas([{ ...fila, itens: [{ ...item, faixa: 'Z' }] }])).toThrow(/faixa/);
+  });
+  it('crm_links', () => {
+    const l = { id: U1, vendedorId: U2, produto: 'hm', acao: 'disparo', url: 'https://pay.hotmart.com?off=a&sck=s', sck: 's', canal: 'whatsapp', ofertaCodigo: 'a', projeto: null, conteudo: null, criadoEm: '2026-10-06T10:00:00+00:00', arquivadoEm: null };
+    expect(mapLinks([{ ...l, vendas: null, receita: null }])).toEqual([l]);
+    expect(() => mapLinks({})).toThrow(/crm_links/);
   });
 });

@@ -14,7 +14,10 @@ import type { Contato, FichaDisparo, Negocio, ProdutoKey, Template, Vendedor } f
 import { Aviso, Campo, FaixaNumeros } from '../comum';
 import { InfoIndicador, type TextoIndicador } from '../InfoIndicador';
 import { INFO_DISPARO } from './indicadores';
-import { conflitosCom, partesTemplate, simularSupressoes, taxasResultado } from './regras-disparo';
+import {
+  conflitosCom, descreverFiltro, montarLista, partesTemplate, ROTULO_SITUACAO_FILTRO, simularSupressoes, taxasResultado,
+  type FiltroLista, type SituacaoNegocioFiltro,
+} from './regras-disparo';
 
 export const NUMERO_OFICIAL = 'Comercial oficial (API)';
 
@@ -144,15 +147,22 @@ function Secao({ n, titulo, children }: { n: number; titulo: string; children: R
   );
 }
 
-export function NovaFichaModal({ eu, gestor, contatos, negocios, templates, fichas, agora, onSalvar, onClose }: {
+export function NovaFichaModal({ eu, gestor, contatos, negocios, templates, fichas, agora, maxDestinatarios, onSalvar, onGerarLink, onClose }: {
   eu: Vendedor; gestor: boolean; contatos: Contato[]; negocios: Negocio[]; templates: Template[]; fichas: FichaDisparo[];
-  agora: Date; onSalvar: (f: NovaFicha, enviar: boolean) => Promise<string | null>; onClose: () => void;
+  agora: Date;
+  /** Teto de contatos por ficha (crm_whatsapp_status). null = não sei (o banco confere ao salvar). */
+  maxDestinatarios: number | null;
+  onSalvar: (f: NovaFicha, enviar: boolean) => Promise<string | null>;
+  /** Cria (ou reaproveita) o link rastreável no banco: devolve a URL pronta ou a mensagem de erro. */
+  onGerarLink: (produto: ProdutoKey, acao: string) => Promise<{ url: string } | { erro: string }>;
+  onClose: () => void;
 }) {
   const amanha10 = useMemo(() => { const d = new Date(agora); d.setDate(d.getDate() + 1); d.setHours(10, 0, 0, 0); return d; }, [agora]);
   const [objetivo, setObjetivo] = useState('');
   const [prod, setProd] = useState<ProdutoKey>('hm');
+  // Filtro da lista: vira os ids dos destinatários. A descrição sai sozinha e pode ser reescrita.
+  const [lista, setLista] = useState<FiltroLista>({ produto: 'qualquer', situacao: 'qualquer', tag: null, apenasMeus: !gestor });
   const [filtro, setFiltro] = useState('');
-  const [qtd, setQtd] = useState('');
   const aprovados = templates.filter((t) => t.aprovado);
   const [templateId, setTemplateId] = useState(aprovados[0]?.id ?? '');
   const [quando, setQuando] = useState(paraInputLocal(amanha10));
@@ -160,21 +170,28 @@ export function NovaFichaModal({ eu, gestor, contatos, negocios, templates, fich
   const [link, setLink] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [gerandoLink, setGerandoLink] = useState(false);
 
-  const sim = useMemo(() => simularSupressoes(contatos, negocios, prod, agora), [contatos, negocios, prod, agora]);
+  const tags = useMemo(() => [...new Set(contatos.flatMap((c) => c.tags))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [contatos]);
+  const destinatarios = useMemo(() => montarLista(contatos, negocios, lista, eu.id), [contatos, negocios, lista, eu.id]);
+  const selecionados = useMemo(() => { const ids = new Set(destinatarios); return contatos.filter((c) => ids.has(c.id)); }, [contatos, destinatarios]);
+  const filtroAuto = descreverFiltro(lista, (p) => produtoDe(p).nome);
+  const descricaoFiltro = filtro.trim() || filtroAuto;
+  const sim = useMemo(() => simularSupressoes(selecionados, negocios, prod, agora), [selecionados, negocios, prod, agora]);
   const dataEnvio = new Date(quando);
   const quandoValido = !Number.isNaN(dataEnvio.getTime());
-  const sck = montarSck(prod, acao || 'disparo', quandoValido ? dataEnvio : agora, 'whatsapp', eu.sigla);
-  const linkSugerido = `https://pay.hotmart.com/EXEMPLO?sck=${sck}`;
+  // O banco data o SCK no dia em que o link é criado (hoje), não no dia do disparo.
+  const sck = montarSck(prod, acao || 'disparo', agora, 'whatsapp', eu.sigla);
   const conflitos = quandoValido ? conflitosCom(fichas, prod, dataEnvio.toISOString()) : [];
   const t = aprovados.find((x) => x.id === templateId);
-  const quantidade = Number(qtd);
-  const recebem = Math.max(0, (quantidade || 0) - sim.suprimidos);
+  const quantidade = destinatarios.length;
+  const acimaDoLimite = maxDestinatarios !== null && maxDestinatarios > 0 && quantidade > maxDestinatarios;
+  const recebem = Math.max(0, quantidade - sim.suprimidos);
 
   const faltaParaEnviar = [
     !objetivo.trim() && 'objetivo',
-    !filtro.trim() && 'filtro da lista',
-    !(quantidade > 0) && 'quantidade',
+    !(quantidade > 0) && 'contatos na lista',
+    acimaDoLimite && `lista até ${maxDestinatarios?.toLocaleString('pt-BR')} contatos`,
     !templateId && 'template aprovado',
     !quandoValido && 'data e hora',
     !link.trim() && 'link rastreável',
@@ -185,23 +202,30 @@ export function NovaFichaModal({ eu, gestor, contatos, negocios, templates, fich
     if (enviar && faltaParaEnviar.length) { setErro(`Falta: ${faltaParaEnviar.join(', ')}.`); return; }
     setSalvando(true);
     const msg = await onSalvar({
-      objetivo: objetivo.trim(), produto: prod, filtro: filtro.trim(), quantidade: quantidade || 0, suprimidos: sim.suprimidos,
+      objetivo: objetivo.trim(), produto: prod, filtro: descricaoFiltro, destinatarios, quantidade, suprimidos: sim.suprimidos,
       templateId, numeroEnvio: NUMERO_OFICIAL, agendadoPara: quandoValido ? dataEnvio.toISOString() : amanha10.toISOString(), link: link.trim(),
     }, enviar);
     setSalvando(false);
     if (msg) setErro(msg);
   }
 
+  async function gerarLink() {
+    setGerandoLink(true);
+    const r = await onGerarLink(prod, acao.trim() || 'disparo');
+    setGerandoLink(false);
+    if ('url' in r) { setLink(r.url); setErro(null); } else setErro(r.erro);
+  }
+
   const resumo = (
     <div className="space-y-3 text-xs">
       <SectionTitle>Resumo</SectionTitle>
       <dl className="space-y-2">
-        <LinhaResumo k="Na lista" v={quantidade > 0 ? quantidade.toLocaleString('pt-BR') : '—'} />
+        <LinhaResumo k="Na lista" v={quantidade > 0 ? <span className={acimaDoLimite ? 'font-semibold text-[var(--red)]' : ''}>{quantidade.toLocaleString('pt-BR')}</span> : '—'} />
         <LinhaResumo k="Suprimidos" v={sim.suprimidos.toLocaleString('pt-BR')} info={INFO_DISPARO.simulador} />
         <LinhaResumo
           k="Recebem"
           info={INFO_DISPARO.recebem}
-          v={<span title={`${(quantidade || 0).toLocaleString('pt-BR')} na lista − ${sim.suprimidos.toLocaleString('pt-BR')} suprimidos`} className="font-semibold">{recebem.toLocaleString('pt-BR')}</span>}
+          v={<span title={`${quantidade.toLocaleString('pt-BR')} na lista − ${sim.suprimidos.toLocaleString('pt-BR')} suprimidos`} className="font-semibold">{recebem.toLocaleString('pt-BR')}</span>}
         />
         <LinhaResumo
           k="Conflitos 48 h"
@@ -249,11 +273,32 @@ export function NovaFichaModal({ eu, gestor, contatos, negocios, templates, fich
           </Secao>
 
           <Secao n={2} titulo="Lista">
-            <Campo rotulo="Filtro da lista" dica="Como a lista foi tirada no CRM. Deduplicada por e-mail ou DDD + últimos 8 dígitos do telefone.">
-              <Textarea rows={2} value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Ex.: Fila Imersão SET26 · faixas A e B · status A abordar" />
-            </Campo>
-            <Campo rotulo="Quantidade">
-              <Input type="number" min={1} inputMode="numeric" value={qtd} onChange={(e) => setQtd(e.target.value)} placeholder="0" className="max-w-[160px]" />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Campo rotulo="Negócio do produto">
+                <FilterSelect value={lista.produto} onChange={(e) => setLista((l) => ({ ...l, produto: e.target.value as FiltroLista['produto'] }))} className="w-full" disabled={lista.situacao === 'sem_negocio'}>
+                  <option value="qualquer">Qualquer produto</option>
+                  {PRODUTOS.map((p) => <option key={p.key} value={p.key}>{p.nome}</option>)}
+                </FilterSelect>
+              </Campo>
+              <Campo rotulo="Situação do negócio">
+                <FilterSelect value={lista.situacao} onChange={(e) => setLista((l) => ({ ...l, situacao: e.target.value as SituacaoNegocioFiltro }))} className="w-full">
+                  {(Object.keys(ROTULO_SITUACAO_FILTRO) as SituacaoNegocioFiltro[]).map((k) => <option key={k} value={k}>{ROTULO_SITUACAO_FILTRO[k]}</option>)}
+                </FilterSelect>
+              </Campo>
+              <Campo rotulo="Tag">
+                <FilterSelect value={lista.tag ?? ''} onChange={(e) => setLista((l) => ({ ...l, tag: e.target.value || null }))} className="w-full">
+                  <option value="">Qualquer tag</option>
+                  {tags.map((x) => <option key={x} value={x}>{x}</option>)}
+                </FilterSelect>
+              </Campo>
+            </div>
+            <Checkbox checked={lista.apenasMeus} onChange={(v) => setLista((l) => ({ ...l, apenasMeus: v }))} label="Só contatos em que sou dono" />
+            <p className="text-xs text-[var(--fg-2)] tabular" aria-live="polite">
+              <span className="font-semibold text-[var(--fg)]">{quantidade.toLocaleString('pt-BR')}</span> {quantidade === 1 ? 'contato' : 'contatos'} com WhatsApp na lista.
+              {acimaDoLimite && <span className="text-[var(--red)]"> Acima do limite de {maxDestinatarios?.toLocaleString('pt-BR')} por ficha.</span>}
+            </p>
+            <Campo rotulo="Descrição do filtro" dica="Vai para a ficha e o log. Em branco, usa a descrição automática.">
+              <Textarea rows={2} value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder={filtroAuto} />
             </Campo>
           </Secao>
 
@@ -270,9 +315,9 @@ export function NovaFichaModal({ eu, gestor, contatos, negocios, templates, fich
               ))}
             </ul>
             <p className="text-xs leading-relaxed text-[var(--fg-2)]">
-              Simulador ({produtoDe(prod).nome}): na base de {sim.base.toLocaleString('pt-BR')} contatos, {sim.suprimidos.toLocaleString('pt-BR')} saem pelas
+              Simulador ({produtoDe(prod).nome}): na lista de {sim.base.toLocaleString('pt-BR')} contatos, {sim.suprimidos.toLocaleString('pt-BR')} saem pelas
               supressões e {sim.elegiveis.toLocaleString('pt-BR')} podem receber.
-              <span className="text-[var(--fg-3)]"> Sem log de disparo na demonstração, a regra de 48 h aparece zerada.</span>
+              <span className="text-[var(--fg-3)]"> A regra de 48 h só o banco conhece: a contagem final vem ao salvar.</span>
               <InfoIndicador texto={INFO_DISPARO.simulador} className="ml-1" />
             </p>
           </Secao>
@@ -306,8 +351,8 @@ export function NovaFichaModal({ eu, gestor, contatos, negocios, templates, fich
               <Input value={acao} onChange={(e) => setAcao(e.target.value)} className="max-w-[240px]" />
             </Campo>
             <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--fg-2)]">
-              <span>Sugestão: <code className="tabular text-[var(--fg)] break-all">{sck}</code></span>
-              <Button size="sm" variant="ghost" type="button" onClick={() => setLink(linkSugerido)}>Usar sugestão</Button>
+              <span>SCK: <code className="tabular text-[var(--fg)] break-all">{sck}</code></span>
+              <Button size="sm" variant="ghost" type="button" disabled={gerandoLink} onClick={gerarLink}>{gerandoLink ? 'Gerando…' : 'Gerar link'}</Button>
             </div>
             <Campo rotulo="Link">
               <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…?sck=…" />

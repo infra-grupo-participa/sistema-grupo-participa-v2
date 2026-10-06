@@ -1,7 +1,8 @@
 // Payloads no formato exato que as RPCs de escrita da migration 20261005t devolvem (crm.res: {ok, msg?, …ids}).
 import { describe, expect, it } from 'vitest';
 import {
-  argsEscrita, mapResultado, mapResultadoComId, mapResultadoNegocio, mapResultadoProjeto, mensagemErroEscrita, semTabela,
+  argsEscrita, mapResultado, mapResultadoComId, mapResultadoNegocio, mapResultadoProjeto, mensagemErroEscrita,
+  mapResultadoFicha, mapResultadoLink,
 } from './mapeamento-escrita';
 import { FormatoInesperado } from './mapeamento-supabase';
 import type { Funil, PainelPessoa } from '../domain/types';
@@ -44,18 +45,15 @@ describe('resultado das RPCs de escrita', () => {
   });
 });
 
-describe('erro de chamada e métodos sem tabela', () => {
-  it('função ausente explica que a F2 não foi aplicada', () => {
-    expect(mensagemErroEscrita('crm_mover_etapa', { code: 'PGRST202', message: 'Could not find' })).toMatch(/crm_mover_etapa.*Fase 2/);
+describe('erro de chamada', () => {
+  it('função ausente explica que a migration não foi aplicada', () => {
+    expect(mensagemErroEscrita('crm_mover_etapa', { code: 'PGRST202', message: 'Could not find' })).toMatch(/crm_mover_etapa.*migration/);
   });
   it('sem permissão mostra a mensagem do banco', () => {
     expect(mensagemErroEscrita('crm_mover_etapa', { code: '42501', message: 'permission denied' })).toBe('permission denied');
   });
   it('erro genérico cita a RPC', () => {
     expect(mensagemErroEscrita('crm_salvar_funil', { message: 'timeout' })).toBe('Não foi possível salvar no banco (crm_salvar_funil): timeout.');
-  });
-  it('método sem tabela não finge que gravou', () => {
-    expect(semTabela('Ficha de disparo', 'Fase 4')).toEqual({ ok: false, msg: 'Ficha de disparo ainda não está no banco (entra na Fase 4 do CRM).' });
   });
 });
 
@@ -87,5 +85,55 @@ describe('argumentos (nomes p_* da migration 20261005t)', () => {
     expect(argsEscrita.criarAgrupador('Pasta', null)).toEqual({ p_nome: 'Pasta', p_linha: null });
     expect(argsEscrita.criarProjeto('seminario', 'Sem 05', U1, 'sv')).toEqual({ p_tipo: 'seminario', p_nome: 'Sem 05', p_agrupador: U1, p_linha: 'sv' });
     expect(argsEscrita.excluirDashboard(U1)).toEqual({ p_dashboard: U1 });
+  });
+});
+
+describe('WhatsApp (F4, migration 20261006051434)', () => {
+  it('enviarMensagem: template vai como uuid ou null', () => {
+    expect(argsEscrita.enviarMensagem(U1, 'oi', null)).toEqual({ p_pessoa: U1, p_texto: 'oi', p_template: null });
+    expect(argsEscrita.enviarMensagem(U1, '', U2)).toEqual({ p_pessoa: U1, p_texto: '', p_template: U2 });
+    expect(argsEscrita.enviarMensagem(U1, 'oi', '')).toEqual({ p_pessoa: U1, p_texto: 'oi', p_template: null });
+    expect(mapResultadoComId('crm_enviar_mensagem', { ok: true, msg: 'Mensagem na fila de envio.', mensagemId: U2 }, 'mensagemId'))
+      .toEqual({ ok: true, msg: 'Mensagem na fila de envio.', mensagemId: U2 });
+    expect(mapResultado('crm_enviar_mensagem', { ok: false, msg: 'Envio de WhatsApp desligado.' })).toEqual({ ok: false, msg: 'Envio de WhatsApp desligado.' });
+  });
+  it('conversa lida e decisão da ficha', () => {
+    expect(argsEscrita.marcarConversaLida(U1)).toEqual({ p_pessoa: U1 });
+    expect(argsEscrita.decidirFicha(U1, false)).toEqual({ p_ficha: U1, p_aprovar: false });
+    expect(mapResultado('crm_marcar_conversa_lida', { ok: true, marcadas: 3 })).toEqual({ ok: true });
+  });
+  it('salvarFicha manda a lista de ids (sem repetidos), sem quantidade/suprimidos, número só em dígitos', () => {
+    const f = {
+      objetivo: 'Recuperar', produto: 'hm' as const, filtro: 'Negócio perdido de HM · com WhatsApp', destinatarios: [U1, U2, U1],
+      quantidade: 3, suprimidos: 1, templateId: U2, numeroEnvio: 'Comercial oficial (API)', agendadoPara: '2026-10-07T13:00:00.000Z',
+      link: 'https://pay.hotmart.com/X?off=a&sck=hm-disparo-20261006-whatsapp-jo',
+    };
+    expect(argsEscrita.salvarFicha(f, true)).toEqual({
+      p_ficha: {
+        objetivo: 'Recuperar', produto: 'hm', filtro: 'Negócio perdido de HM · com WhatsApp', templateId: U2, numeroEnvio: '',
+        agendadoPara: '2026-10-07T13:00:00.000Z', link: f.link, destinatarios: [U1, U2],
+      },
+      p_enviar_para_aprovacao: true,
+    });
+    expect(argsEscrita.salvarFicha({ ...f, id: U1, numeroEnvio: '+55 (11) 99999-0000' }, false).p_ficha)
+      .toMatchObject({ id: U1, numeroEnvio: '5511999990000' });
+  });
+  it('resultado da ficha traz a contagem do banco', () => {
+    expect(mapResultadoFicha({ ok: true, msg: 'Rascunho salvo.', fichaId: U1, codigo: 'HM-20261006-01', quantidade: 120, suprimidos: 7 }))
+      .toEqual({ ok: true, msg: 'Rascunho salvo.', fichaId: U1, codigo: 'HM-20261006-01', quantidade: 120, suprimidos: 7 });
+    expect(mapResultadoFicha({ ok: false, msg: 'Seu usuário não opera disparo por API.' })).toEqual({ ok: false, msg: 'Seu usuário não opera disparo por API.' });
+    expect(() => mapResultadoFicha(null)).toThrow(/crm_salvar_ficha/);
+  });
+});
+
+describe('filas e links (F5, migration 20261006044653)', () => {
+  it('atualizarItemFila e criarLink', () => {
+    expect(argsEscrita.atualizarItemFila(U1, U2, 'em_conversa')).toEqual({ p_fila: U1, p_item: U2, p_status: 'em_conversa' });
+    expect(argsEscrita.criarLink(U1, 'hm', 'disparo', 'whatsapp')).toEqual({ p_vendedor: U1, p_produto: 'hm', p_acao: 'disparo', p_canal: 'whatsapp' });
+  });
+  it('resultado do link traz url e sck só com ok', () => {
+    expect(mapResultadoLink({ ok: true, linkId: U1, sck: 'hm-x', url: 'https://pay.hotmart.com?off=a&sck=hm-x' }))
+      .toEqual({ ok: true, linkId: U1, sck: 'hm-x', url: 'https://pay.hotmart.com?off=a&sck=hm-x' });
+    expect(mapResultadoLink({ ok: false, msg: 'Este link já existe.', url: 'x' })).toEqual({ ok: false, msg: 'Este link já existe.' });
   });
 });

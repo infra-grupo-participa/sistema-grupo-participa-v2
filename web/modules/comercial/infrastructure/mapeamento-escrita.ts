@@ -1,11 +1,11 @@
-// Mapeamento PURO das RPCs de ESCRITA `public.crm_*` (migration 20261005t, F2): argumentos do port → parâmetros
+// Mapeamento PURO das RPCs de ESCRITA `public.crm_*` (F2 20261005t, WhatsApp/F4 20261006051434, F5 20261006044653): argumentos do port → parâmetros
 // da RPC, e o jsonb `{ok, msg?, …ids}` → `Resultado`. Sem Supabase, sem React.
 // Regra violada volta como `{ok:false, msg}` (mesmas mensagens do mock); erro de transporte/banco vira `ok:false`
 // com mensagem clara (a tela mostra o toast), nunca exceção solta nem sucesso falso.
-import type { NovaAtividade, Resultado } from '../application/ports';
+import type { NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink } from '../application/ports';
 import type {
   CampoKey, Dashboard, Funil, MotivoPerda, MotivoPerdaConfig, OfertaHotmart, PainelPessoa, PreferenciasNotificacao,
-  ProdutoHotmart, ProdutoKey, TipoProjeto,
+  ProdutoHotmart, ProdutoKey, StatusFila, TipoProjeto,
 } from '../domain/types';
 import { FormatoInesperado, type ErroRpc } from './mapeamento-supabase';
 
@@ -51,14 +51,32 @@ export function mapResultadoProjeto(d: unknown): Resultado & { funilIds?: string
 export function mensagemErroEscrita(rpc: string, e: ErroRpc): string {
   if (e.code === '42501') return e.message || 'Sem acesso ao Comercial.';
   if (e.code === 'PGRST202' || e.code === '42883') {
-    return `O banco ainda não tem a função ${rpc} (migration da Fase 2 do CRM não aplicada).`;
+    return `O banco ainda não tem a função ${rpc} (migration do CRM não aplicada).`;
   }
   return `Não foi possível salvar no banco (${rpc})${e.message ? `: ${e.message}` : ''}.`;
 }
 
-/** Método do port sem tabela no banco ainda: resposta honesta, sem fingir que gravou. */
-export function semTabela(oQue: string, fase: string): Resultado {
-  return { ok: false, msg: `${oQue} ainda não está no banco (entra na ${fase} do CRM).` };
+/** salvarFicha: id, código e a contagem feita pelo banco (quantidade e suprimidos). */
+export function mapResultadoFicha(d: unknown): ResultadoFicha {
+  const r: ResultadoFicha = mapResultadoComId('crm_salvar_ficha', d, 'fichaId');
+  if (r.ok) {
+    const o = d as Obj;
+    if (typeof o.codigo === 'string' && o.codigo) r.codigo = o.codigo;
+    if (typeof o.quantidade === 'number') r.quantidade = o.quantidade;
+    if (typeof o.suprimidos === 'number') r.suprimidos = o.suprimidos;
+  }
+  return r;
+}
+
+/** criarLink: id, sck e a URL pronta (oferta vigente + sck + UTMs). */
+export function mapResultadoLink(d: unknown): ResultadoLink {
+  const r: ResultadoLink = mapResultadoComId('crm_criar_link', d, 'linkId');
+  if (r.ok) {
+    const o = d as Obj;
+    if (typeof o.sck === 'string' && o.sck) r.sck = o.sck;
+    if (typeof o.url === 'string' && o.url) r.url = o.url;
+  }
+  return r;
 }
 
 // ── Argumentos de cada RPC (nomes p_* = assinatura da migration 20261005t) ──
@@ -89,6 +107,30 @@ export const argsEscrita = {
   excluirDashboard: (id: string) => ({ p_dashboard: id }),
   salvarPainel: (p: PainelPessoa) => ({ p_perfil: p.vendedorId, p_widgets: p.widgets }),
   salvarPreferencias: (p: PreferenciasNotificacao) => ({ p_preferencias: p }),
+  // WhatsApp (F4). Com template, o banco monta o texto e ignora p_texto.
+  enviarMensagem: (contatoId: string, texto: string, templateId?: string | null) => ({ p_pessoa: contatoId, p_texto: texto, p_template: templateId || null }),
+  marcarConversaLida: (contatoId: string) => ({ p_pessoa: contatoId }),
+  /**
+   * Ficha: `destinatarios` (contatoIds) é a lista que o banco grava. quantidade/suprimidos não vão (o banco conta).
+   * `numeroEnvio` vazio = número padrão; só dígitos quando vier (o rótulo da tela não é número).
+   */
+  salvarFicha: (f: NovaFicha & { id?: string }, enviarParaAprovacao: boolean) => {
+    const digitos = f.numeroEnvio.replace(/\D/g, '');
+    return {
+      p_ficha: {
+        ...(f.id ? { id: f.id } : {}),
+        objetivo: f.objetivo, produto: f.produto, filtro: f.filtro, templateId: f.templateId, numeroEnvio: digitos,
+        agendadoPara: f.agendadoPara, link: f.link, destinatarios: [...new Set(f.destinatarios)],
+      },
+      p_enviar_para_aprovacao: enviarParaAprovacao,
+    };
+  },
+  decidirFicha: (fichaId: string, aprovar: boolean) => ({ p_ficha: fichaId, p_aprovar: aprovar }),
+  // Filas e links (F5).
+  atualizarItemFila: (filaId: string, itemId: string, status: StatusFila) => ({ p_fila: filaId, p_item: itemId, p_status: status }),
+  criarLink: (vendedorId: string, produto: ProdutoKey, acao: string, canal: string) => ({
+    p_vendedor: vendedorId, p_produto: produto, p_acao: acao, p_canal: canal,
+  }),
   /** Sem ids = todas as minhas; lista vazia = nenhuma (como o mock). */
   marcarNotificacoesLidas: (ids?: string[]) => ({ p_ids: ids === undefined ? null : ids }),
 };

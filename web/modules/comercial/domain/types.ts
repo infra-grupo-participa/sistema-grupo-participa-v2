@@ -217,6 +217,31 @@ export interface Mensagem {
   autorId: string | null;
   /** Template aprovado usado (fora da janela de 24h só sai template). */
   templateId: string | null;
+  /** Saída ainda não aceita pelo provedor (`status` vem null enquanto isso). Só no banco (F4). */
+  envio?: EnvioMensagem | null;
+  /** Motivo da falha informado pelo provedor. */
+  erro?: string | null;
+  /** 'texto' | 'template' | mídia (o banco guarda o tipo da Infobip). */
+  tipo?: string;
+  /** Ficha de disparo que gerou a mensagem. */
+  fichaId?: string | null;
+}
+
+export type EnvioMensagem = 'na_fila' | 'enviando';
+
+/** Estado do WhatsApp para a tela (interruptores, número mascarado, fila). Sem dado de pessoa. */
+export interface StatusWhatsapp {
+  whatsappLigado: boolean;
+  envioLigado: boolean;
+  escritaLigada: boolean;
+  /** Número de envio padrão (só os 4 últimos dígitos). null = não configurado. */
+  numero: { id: string; nome: string; final: string; ativo: boolean } | null;
+  templatesAprovados: number;
+  naFila: number;
+  falhasHoje: number;
+  janelaHoras: number;
+  /** Teto de destinatários por ficha de disparo. */
+  maxDestinatarios: number;
 }
 
 export interface Conversa {
@@ -368,6 +393,10 @@ export interface FilaRecuperacao {
   /** Oferta disponível hoje: sem ela, não se aborda (fechamento/playbook.md, seção 3). */
   ofertaVigente: string | null;
   itens: ItemFila[];
+  ofertaCodigo?: string | null;
+  /** Chave do projeto (utm_campaign). */
+  projeto?: string | null;
+  encerradaEm?: string | null;
 }
 
 // ── Disparo por API (playbook, seção 7) ──
@@ -382,6 +411,9 @@ export interface Template {
   categoria: 'marketing' | 'utility';
   texto: string;
   aprovado: boolean;
+  idioma?: string;
+  /** Quantidade de variáveis {{n}} do template. */
+  variaveis?: number;
 }
 
 export interface FichaDisparo {
@@ -403,7 +435,9 @@ export interface FichaDisparo {
   status: StatusFicha;
   aprovadoPor: string | null;
   criadoEm: string;
-  resultado: { entregues: number; lidas: number; respostas: number; falhas: number } | null;
+  resultado: { entregues: number; lidas: number; respostas: number; falhas: number; naFila?: number } | null;
+  /** Por que está no status atual (ex.: cancelada pelo gestor antes do disparo). */
+  motivoStatus?: string | null;
 }
 
 // ── Configuração ──
@@ -415,6 +449,12 @@ export interface LinkRastreavel {
   acao: string;
   url: string;
   sck: string;
+  canal?: string;
+  ofertaCodigo?: string | null;
+  projeto?: string | null;
+  conteudo?: string | null;
+  criadoEm?: string;
+  arquivadoEm?: string | null;
 }
 
 export interface ConfigComercial {

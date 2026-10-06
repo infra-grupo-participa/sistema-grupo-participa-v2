@@ -545,9 +545,11 @@ function PainelConversa({ contato, conversa, negocio, templates, sessao, gestor,
 
 const ROTULO_STATUS: Record<StatusMensagem, string> = { enviada: 'Enviada', entregue: 'Entregue', lida: 'Lida', falhou: 'Falhou' };
 
-function StatusEnvio({ s }: { s: StatusMensagem | null }) {
+function StatusEnvio({ s, envio, erro }: { s: StatusMensagem | null; envio?: Mensagem['envio']; erro?: string | null }) {
+  // Saída ainda não aceita pelo provedor: o banco devolve status null + envio.
+  if (!s && envio) return <span className="inline-flex items-center gap-1"><Icon name="clock" size={12} /> {envio === 'enviando' ? 'Enviando' : 'Na fila'}</span>;
   if (!s) return null;
-  if (s === 'falhou') return <span className="inline-flex items-center gap-1 font-semibold text-[var(--red)]"><Icon name="alert" size={12} /> Falhou</span>;
+  if (s === 'falhou') return <span className="inline-flex items-center gap-1 font-semibold text-[var(--red)]" title={erro ?? undefined}><Icon name="alert" size={12} /> Falhou{erro ? `: ${erro}` : ''}</span>;
   const duplo = s === 'entregue' || s === 'lida';
   return (
     <span className="inline-flex items-center" title={ROTULO_STATUS[s]} style={{ color: s === 'lida' ? 'var(--info)' : 'var(--fg-3)' }}>
@@ -580,7 +582,7 @@ function Bolha({ m, nomeTemplate, autor }: { m: Mensagem; nomeTemplate: (id: str
         <div className="mt-1 flex items-center justify-end gap-1.5 text-[11px] text-[var(--fg-3)] tabular">
           {saida && autor && <span className="truncate">{primeiroNome(autor)}</span>}
           <span>{hora}</span>
-          {saida && <StatusEnvio s={m.status} />}
+          {saida && <StatusEnvio s={m.status} envio={m.envio} erro={m.erro} />}
         </div>
       </div>
     </div>
