@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { comKpis } from '../domain/kpis';
 import {
   demoAlertas, demoAplicarPacote, demoCadastro, demoChecklist, demoListasCadastro, demoMarcarChecklist, demoSalvarCadastro, demoSalvarPacote,
-  demoAjustarCampanha, demoApagarProduto, demoCampanhas, demoContas, demoProdutos, demoProjeto, demoResumo, demoSalvarFase, demoSalvarProduto,
+  demoAjustarCampanha, demoApagarProduto, demoSalvarConta, demoCampanhas, demoContas, demoProdutos, demoProjeto, demoResumo, demoSalvarFase, demoSalvarProduto,
 } from './demo';
 
 describe('modo de demonstração do Tráfego (dados fictícios)', () => {
@@ -93,5 +93,17 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
     demoMarcarChecklist(7, 1, false);
     expect(demoChecklist(7)!.feitos).toBe(c.feitos - 1);
     expect(demoChecklist(6)!.automaticos.find((i) => i.codigo === 'hotmart')!.aplica).toBe(false);
+  });
+});
+
+describe('contas (20261006b): unidade, principal e inativa', () => {
+  it('lista: ativas, principais primeiro; a inativa por último', () => {
+    const cs = demoContas();
+    expect(cs.slice(0, 2).every((c) => c.principal && c.ativa)).toBe(true);
+    expect(cs.at(-1)!.ativa).toBe(false);
+  });
+  it('unidade precisa combinar com o dono', () => {
+    expect(demoSalvarConta({ plataforma: 'meta', conta_externa: '000000000000009', nome: 'Conta Exemplo Nova', dono: 'grupo', unidade: 'aurum' }).ok).toBe(false);
+    expect(demoSalvarConta({ plataforma: 'meta', conta_externa: '000000000000009', nome: 'Conta Exemplo Nova', dono: 'grupo', unidade: 'escritorio', principal: true }).ok).toBe(true);
   });
 });

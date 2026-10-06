@@ -151,3 +151,16 @@ describe('filtros e totais', () => {
     expect(tipoDaSubarea(null)).toBeNull();
   });
 });
+
+describe('contas (20261006b)', () => {
+  it('unidade combina com o dono; ordem igual à do banco', async () => {
+    const { unidadesDoDono, ordenarContas } = await import('./tipos');
+    expect(unidadesDoDono('grupo')).toEqual(['csm', 'escritorio']);
+    expect(unidadesDoDono('diamante')).toEqual(['diamantes']);
+    const o = ordenarContas([
+      { nome: 'B', plataforma: 'meta', ativa: true, principal: false }, { nome: 'Z', plataforma: 'meta', ativa: false, principal: true },
+      { nome: 'C', plataforma: 'meta', ativa: true, principal: true }, { nome: 'A', plataforma: 'meta', ativa: true },
+    ]);
+    expect(o.map((c) => c.nome)).toEqual(['C', 'A', 'B', 'Z']);
+  });
+});

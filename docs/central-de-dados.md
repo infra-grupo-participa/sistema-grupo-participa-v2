@@ -437,6 +437,7 @@ Victor ver as telas no modo de demonstração e responder as perguntas abaixo; r
 | Receita (Hotmart) | ligada pelo vínculo produto → projeto, **cadastrado à mão** na vida do projeto (20261005r, não aplicada). Sem vínculo, "sem dado" |
 | Connect rate e conversão da página | **ligados** no banco à Web fase 2 (20261005q, a mesma conta de `public.mkt_web_connect`). Sem a 20261005q aplicada, "sem dado" com aviso na tela |
 | Atividades do ClickUp | espelho pela etiqueta do projeto e linha do tempo junto do gasto diário (20261005r, não aplicada). Rotina `trafego-clickup` pronta, **DESLIGADA** (falta o token e o id do workspace) |
+| Contas de anúncio do Meta | as 16 que o token do sistema enxerga, com unidade e principal (20261006b, **não aplicada**); CA - Tutorial inativa. Token já salvo em produção; coleta **desligada** |
 | Cadastro do projeto (evento) | tela pronta na Central (botão "Novo projeto" e "Projeto" na vida do projeto), banco escrito e ensaiado (20261006a, **não aplicada**); hoje dá para ver no modo demo |
 
 ### Decisões que mandam aqui (Victor, 05/10/2026)
@@ -701,6 +702,25 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
 3. Código: `npx vitest run` (`domain/cadastro.test.ts`, `alertas.test.ts`, `infrastructure/demo.test.ts`,
    `ui/montagem.test.ts`, `coleta.test.ts`), `npx tsc --noEmit`, `npm run build`.
 
+### Contas de anúncio do Meta (migration 20261006b, NÃO APLICADA)
+
+`infra/supabase/migrations/20261006b_mkt_trafego_contas_meta.sql` + `_ensaio.sql` + `20261006b.explain.md` (a tabela das
+16 contas está lá). Depende da 20261006a. O token do Meta (Vault `meta_ads_token`, usuário do sistema do portfólio Grupo
+Participa) **já está salvo em produção** e enxerga 16 contas (`/me/adaccounts`, lidas em 06/10/2026). A migration as
+cadastra de forma idempotente (por plataforma e id): nome exato, id sem `act_`, Meta, BRL, internas (dono grupo), com
+**unidade** e **principal** (colunas novas em `mkt_trafego.contas`).
+
+- **Regra do Victor (06/10/2026):** Escritório = contas com "Seminário" ou "Aurum" no nome (5); CSM = Marcio, Holding
+  Total, CNF, Imersões, THB, Treinamento (10).
+- **Principais** (aparecem primeiro na seleção; todas continuam selecionáveis): 1º Holding Total 2.0, CNF Holding Familiar,
+  THB - Ads, Treinamento Participa, Seminários - Leads. "1º Holding Total 2.0" confirmada pelo Victor (06/10/2026).
+- **CA - Tutorial:** CSM por enquanto, mas **não vai ser usada** (Victor, 06/10/2026): cadastrada **inativa**, fora da
+  seleção do projeto e da coleta (`mkt_trafego.meta_contas` só lê ativas); dá para reativar em Contas de anúncio.
+- **Tela:** Contas de anúncio mostra unidade e "principal" e permite mudar (unidade precisa combinar com o dono: Grupo =
+  CSM ou Escritório); no cadastro do projeto as principais vêm primeiro (★).
+- **A coleta continua DESLIGADA** (nenhum cron). Ligar: bloco LIGAR da 20261005r, depois de aplicar p, r, 20261006a e
+  20261006b.
+
 ### Perguntas (respondidas pelo Victor em 05/10/2026, salvo as em aberto)
 
 1. ~~Status~~ **Respondido:** ativo, pausado, inativo, encerrado (fica como está).
@@ -797,3 +817,6 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
 - **06/10/2026:** Tráfego, respostas do Victor na própria 20261006a (ainda NÃO APLICADA): LPSG só na CSM (Escritório com
   clássico e ATM, recusado também no banco); receita sem período próprio do produto do início da captação ao fim do evento
   (provisório, a confirmar; regra só em `mkt_trafego.periodo_receita`, acrescentada na 20261005r, e `periodoReceita`).
+- **06/10/2026:** Tráfego, contas do Meta (migration 20261006b, NÃO APLICADA): as 16 contas que o token do sistema enxerga,
+  com unidade (CSM 11, Escritório 5) e principal (5), CA - Tutorial inativa; unidade e principal na tela de contas e na
+  seleção do projeto. Coleta continua desligada. Branch `victor`.

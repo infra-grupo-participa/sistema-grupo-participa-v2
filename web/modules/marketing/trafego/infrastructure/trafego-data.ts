@@ -62,10 +62,19 @@ export async function apagarFase(id: number): Promise<Resposta> {
   return (await rpc<Resposta>('trafego_fase_apagar', { p_fase: id })) ?? falha;
 }
 
-export interface ContaForm { id?: number; plataforma: string; conta_externa: string; nome: string; dono: string; cliente: string; moeda: string; ativa: boolean; obs: string }
+export interface ContaForm {
+  id?: number; plataforma: string; conta_externa: string; nome: string; dono: string; cliente: string; moeda: string; ativa: boolean; obs: string;
+  /** 20261006b: gravados à parte, por public.trafego_conta_marcar, depois de salvar a conta. */
+  unidade?: string; principal?: boolean;
+}
 export async function salvarConta(p: ContaForm): Promise<Resposta> {
+  const { unidade, principal, ...resto } = p;
   if (MODO_DEMO) return demo.demoSalvarConta({ ...p });
-  return (await rpc<Resposta>('trafego_conta_salvar', { p })) ?? falha;
+  const r = (await rpc<Resposta>('trafego_conta_salvar', { p: resto })) ?? falha;
+  if (!r.ok || r.id == null || (unidade === undefined && principal === undefined)) return r;
+  const m = await rpc<Resposta>('trafego_conta_marcar', { p_conta: r.id, p_unidade: unidade ?? '', p_principal: !!principal });
+  if (!m) return { ok: false, msg: `${r.msg} A unidade e a principal não foram salvas (a migration 20261006b ainda não foi aplicada?).` };
+  return m.ok ? r : { ok: false, msg: `${r.msg} ${m.msg}` };
 }
 
 /**

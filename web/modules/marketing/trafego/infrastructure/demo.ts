@@ -19,6 +19,7 @@ import type {
   Campanha, Checklist, ClickupProjeto, ConfigTrafego, Conta, Dono, FaseProjeto, ItemChecklistConfig, LinhaResumo, ProdutoHotmart, ProdutoVisto,
   Regra, Resposta, ResumoDia, Subarea, TarefaClickup, Tipo, VidaProjeto,
 } from '../domain/tipos';
+import { ordenarContas, unidadesDoDono } from '../domain/tipos';
 
 const hoje = (n = 0) => {
   const d = new Date(Date.now() + n * 86400000);
@@ -91,9 +92,11 @@ let FASES: FaseDemo[] = [
 ];
 
 const CONTAS: Conta[] = [
-  { id: 1, plataforma: 'meta', conta_externa: '000000000000001', nome: 'Conta Exemplo Grupo (Meta)', dono: 'grupo', cliente: null, moeda: 'BRL', ativa: true, obs: null, campanhas: 0 },
-  { id: 2, plataforma: 'google', conta_externa: '0000000001', nome: 'Conta Exemplo Grupo (Google)', dono: 'grupo', cliente: null, moeda: 'BRL', ativa: true, obs: null, campanhas: 0 },
-  { id: 3, plataforma: 'meta', conta_externa: '000000000000002', nome: 'Conta Exemplo Diamante', dono: 'diamante', cliente: 'Diamante Exemplo', moeda: 'BRL', ativa: true, obs: null, campanhas: 0 },
+  { id: 1, plataforma: 'meta', conta_externa: '000000000000001', nome: 'Conta Exemplo Grupo (Meta)', dono: 'grupo', cliente: null, moeda: 'BRL', ativa: true, obs: null, campanhas: 0, unidade: 'csm', principal: true },
+  { id: 2, plataforma: 'google', conta_externa: '0000000001', nome: 'Conta Exemplo Grupo (Google)', dono: 'grupo', cliente: null, moeda: 'BRL', ativa: true, obs: null, campanhas: 0, unidade: 'csm', principal: false },
+  { id: 3, plataforma: 'meta', conta_externa: '000000000000002', nome: 'Conta Exemplo Diamante', dono: 'diamante', cliente: 'Diamante Exemplo', moeda: 'BRL', ativa: true, obs: null, campanhas: 0, unidade: 'diamantes', principal: false },
+  { id: 4, plataforma: 'meta', conta_externa: '000000000000003', nome: 'Conta Exemplo Escritório', dono: 'grupo', cliente: null, moeda: 'BRL', ativa: true, obs: null, campanhas: 0, unidade: 'escritorio', principal: true },
+  { id: 5, plataforma: 'meta', conta_externa: '000000000000004', nome: 'Conta Exemplo Inativa', dono: 'grupo', cliente: null, moeda: 'BRL', ativa: false, obs: 'Exemplo de conta cadastrada e inativa (fora da seleção e da coleta).', campanhas: 0, unidade: 'csm', principal: false },
 ];
 
 interface CampDemo { id: number; plataforma: string; conta_id: number; nome: string; status: string; projeto_manual_id: number | null; fase_manual: string | null }
@@ -204,7 +207,7 @@ function linha(p: ProjetoDemo): LinhaResumo {
 
 export const demoConfig = (): ConfigTrafego => structuredClone(CONFIG);
 export const demoResumo = (): LinhaResumo[] => PROJETOS.map(linha);
-export const demoContas = (): Conta[] => CONTAS.map((c) => ({ ...c, campanhas: CAMPS.filter((x) => x.conta_id === c.id).length }));
+export const demoContas = (): Conta[] => ordenarContas(CONTAS.map((c) => ({ ...c, campanhas: CAMPS.filter((x) => x.conta_id === c.id).length })));
 
 export function demoCampanhas(projetoId: number | null, semProjeto: boolean, foraPadrao: boolean): Campanha[] {
   return campanhas().filter((c) => (projetoId == null || c.projeto_id === projetoId) && (!semProjeto || c.projeto_id == null) && (!foraPadrao || c.fora_padrao));
@@ -273,7 +276,9 @@ export function demoApagarFase(id: number): Resposta {
 }
 
 export function demoSalvarConta(p: Record<string, unknown>): Resposta {
-  const v = { plataforma: String(p.plataforma), conta_externa: String(p.conta_externa ?? '').replace(/^act_/i, ''), nome: String(p.nome ?? ''), dono: p.dono as Dono, cliente: (p.cliente as string) || null, moeda: String(p.moeda || 'BRL'), ativa: p.ativa !== false, obs: (p.obs as string) || null };
+  const v = { plataforma: String(p.plataforma), conta_externa: String(p.conta_externa ?? '').replace(/^act_/i, ''), nome: String(p.nome ?? ''), dono: p.dono as Dono, cliente: (p.cliente as string) || null, moeda: String(p.moeda || 'BRL'), ativa: p.ativa !== false, obs: (p.obs as string) || null,
+    unidade: (p.unidade as string) || null, principal: !!p.principal };
+  if (v.unidade && !unidadesDoDono(v.dono).includes(v.unidade)) return { ok: false, msg: 'Unidade não combina com o dono da conta (Grupo: CSM ou Escritório; Aurum; Diamantes).' };
   if (v.nome.trim().length < 2) return { ok: false, msg: 'Informe o nome da conta.' };
   if (CONTAS.some((c) => c.plataforma === v.plataforma && c.conta_externa === v.conta_externa && c.id !== Number(p.id))) return { ok: false, msg: 'Esta conta já está cadastrada.' };
   if (p.id) Object.assign(CONTAS.find((c) => c.id === Number(p.id))!, v);

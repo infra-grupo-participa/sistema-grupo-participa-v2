@@ -10,7 +10,7 @@ import {
   ROTULO_AVISO_CADASTRO, ajustarForm, etiquetaSemAnoMes, lancamentoAutomatico, lancamentosDaUnidade, unidadesDoTipo, validarCadastro,
   type ListasCadastro, type ProjetoForm,
 } from '../domain/cadastro';
-import { ROTULO_TIPO, type ConfigTrafego, type Conta, type Tipo } from '../domain/tipos';
+import { ROTULO_TIPO, ordenarContas, type ConfigTrafego, type Conta, type Tipo } from '../domain/tipos';
 import { salvarProjetoCadastro } from '../infrastructure/trafego-data';
 
 function Campo({ rotulo, dica, children }: { rotulo: string; dica?: string; children: React.ReactNode }) {
@@ -163,13 +163,13 @@ export function ModalProjetoCadastro({ inicial, listas, config, contas, onFechar
           </div>
         </fieldset>
         <fieldset>
-          <legend className="block text-xs font-medium text-[var(--fg-2)] mb-1">Contas de anúncio do projeto</legend>
+          <legend className="block text-xs font-medium text-[var(--fg-2)] mb-1">Contas de anúncio do projeto <span className="font-normal text-[var(--fg-3)]"> · ★ principais primeiro</span></legend>
           {contas.length === 0 ? <p className="text-xs text-[var(--fg-3)]">Nenhuma conta cadastrada (aba Contas de anúncio).</p> : (
             <div className="flex flex-col gap-1 pt-1">
-              {contas.filter((c) => c.ativa || f.contas.includes(c.id)).map((c) => (
+              {ordenarContas(contas.filter((c) => c.ativa || f.contas.includes(c.id))).map((c) => (
                 <label key={c.id} className="inline-flex items-center gap-1.5 text-sm text-[var(--fg-2)] cursor-pointer">
                   <input type="checkbox" checked={f.contas.includes(c.id)} onChange={() => alterna('contas', c.id)} />
-                  <span>{c.nome} <span className="text-[var(--fg-3)]">({c.plataforma === 'meta' ? 'Meta' : c.plataforma === 'google' ? 'Google' : c.plataforma})</span></span>
+                  <span>{c.principal && <b className="text-[var(--accent)]">★ </b>}{c.nome} <span className="text-[var(--fg-3)]">({c.plataforma === 'meta' ? 'Meta' : c.plataforma === 'google' ? 'Google' : c.plataforma})</span></span>
                 </label>
               ))}
             </div>

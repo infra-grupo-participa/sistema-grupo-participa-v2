@@ -7,11 +7,12 @@ import {
   Badge, Button, DataTable, EmptyState, FilterSelect, Input, Loading, Modal, SectionCard, Td, Th, Thead, Toggle, Tr,
 } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
-import { DONOS, ROTULO_DONO, type ConfigTrafego, type Conta, type Dono } from '../domain/tipos';
+import { DONOS, ROTULO_DONO, unidadesDoDono, type ConfigTrafego, type Conta, type Dono } from '../domain/tipos';
 import { listarContas, salvarConta, type ContaForm } from '../infrastructure/trafego-data';
 import { SEM_DADO } from './formato';
 
-const VAZIA: ContaForm = { plataforma: 'meta', conta_externa: '', nome: '', dono: 'grupo', cliente: '', moeda: 'BRL', ativa: true, obs: '' };
+const VAZIA: ContaForm = { plataforma: 'meta', conta_externa: '', nome: '', dono: 'grupo', cliente: '', moeda: 'BRL', ativa: true, obs: '', unidade: '', principal: false };
+const ROTULO_UNIDADE: Record<string, string> = { csm: 'CSM', escritorio: 'Escritório', aurum: 'Aurum', diamantes: 'Diamantes' };
 
 function ModalConta({ inicial, config, onFechar, onSalvo }: { inicial: ContaForm; config: ConfigTrafego; onFechar: () => void; onSalvo: (m: string) => void }) {
   const [f, setF] = useState<ContaForm>(inicial);
@@ -58,7 +59,16 @@ function ModalConta({ inicial, config, onFechar, onSalvo }: { inicial: ContaForm
         {f.dono !== 'grupo' && campo('Cliente', <Input value={f.cliente} onChange={(e) => set('cliente', e.target.value)} maxLength={120} />, 'nome do Diamante ou aluno Aurum')}
         {campo('Moeda', <Input value={f.moeda} onChange={(e) => set('moeda', e.target.value.toUpperCase())} maxLength={3} />, 'BRL')}
         <div className="sm:col-span-2">{campo('Observação', <Input value={f.obs} onChange={(e) => set('obs', e.target.value)} maxLength={1000} />)}</div>
-        <Toggle checked={f.ativa} onChange={(v) => set('ativa', v)} label="Ativa" />
+        {campo('Unidade', (
+          <FilterSelect value={unidadesDoDono(f.dono as Dono).includes(f.unidade ?? '') ? f.unidade : ''} onChange={(e) => set('unidade', e.target.value)}>
+            <option value="">Não classificada</option>
+            {unidadesDoDono(f.dono as Dono).map((u) => <option key={u} value={u}>{ROTULO_UNIDADE[u] ?? u}</option>)}
+          </FilterSelect>
+        ), 'Grupo: CSM ou Escritório')}
+        <div className="flex flex-col gap-2">
+          <Toggle checked={!!f.principal} onChange={(v) => set('principal', v)} label="Principal (aparece primeiro na seleção)" />
+          <Toggle checked={f.ativa} onChange={(v) => set('ativa', v)} label="Ativa (inativa sai da seleção e da coleta)" />
+        </div>
       </div>
       {erro && <p role="alert" className="mt-2 text-sm text-[var(--red)]">{erro}</p>}
     </Modal>
@@ -88,16 +98,17 @@ export function ContasPainel({ config, flash, onMudou }: { config: ConfigTrafego
       {!contas ? <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar as contas.</p>
         : contas.length === 0 ? <EmptyState title="Nenhuma conta cadastrada" /> : (
           <DataTable minWidth={820}>
-            <Thead><Th>Plataforma</Th><Th>Id</Th><Th>Nome</Th><Th>De quem é</Th><Th>Cliente</Th><Th>Moeda</Th><Th>Campanhas</Th><Th>Situação</Th></Thead>
+            <Thead><Th>Plataforma</Th><Th>Id</Th><Th>Nome</Th><Th>Unidade</Th><Th>De quem é</Th><Th>Cliente</Th><Th>Moeda</Th><Th>Campanhas</Th><Th>Situação</Th></Thead>
             <tbody>
               {contas.map((c) => (
                 <Tr key={c.id} onClick={() => setEdit({
                   id: c.id, plataforma: c.plataforma, conta_externa: c.conta_externa, nome: c.nome, dono: c.dono, cliente: c.cliente ?? '',
-                  moeda: c.moeda, ativa: c.ativa, obs: c.obs ?? '',
+                  moeda: c.moeda, ativa: c.ativa, obs: c.obs ?? '', unidade: c.unidade ?? '', principal: !!c.principal,
                 })}>
                   <Td>{plataforma(c.plataforma)}</Td>
                   <Td><span className="font-mono text-xs">{c.conta_externa}</span></Td>
-                  <Td>{c.nome}</Td>
+                  <Td>{c.nome}{c.principal && <> <Badge tone="info">principal</Badge></>}</Td>
+                  <Td>{c.unidade ? ROTULO_UNIDADE[c.unidade] ?? c.unidade : SEM_DADO}</Td>
                   <Td>{ROTULO_DONO[c.dono] ?? c.dono}</Td>
                   <Td>{c.cliente ?? (c.dono === 'grupo' ? '' : SEM_DADO)}</Td>
                   <Td>{c.moeda}</Td>

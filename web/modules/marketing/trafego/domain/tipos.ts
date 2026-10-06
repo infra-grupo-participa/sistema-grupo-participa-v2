@@ -127,6 +127,21 @@ export interface Conta {
   ativa: boolean;
   obs: string | null;
   campanhas: number;
+  /** Unidade da conta (csm, escritorio, aurum, diamantes; 20261006b). Nulo = não classificada. */
+  unidade?: string | null;
+  /** Conta principal: aparece primeiro na seleção (20261006b). */
+  principal?: boolean;
+}
+
+/** Unidade que combina com o dono da conta (a mesma regra de public.trafego_conta_marcar). */
+export function unidadesDoDono(dono: Dono): string[] {
+  return dono === 'grupo' ? ['csm', 'escritorio'] : dono === 'aurum' ? ['aurum'] : ['diamantes'];
+}
+
+/** Ordem da lista de contas (a mesma do banco): ativas, principais, plataforma, nome. */
+export function ordenarContas<T extends Pick<Conta, 'ativa' | 'plataforma' | 'nome'> & { principal?: boolean }>(cs: T[]): T[] {
+  return [...cs].sort((a, b) => Number(b.ativa) - Number(a.ativa) || Number(!!b.principal) - Number(!!a.principal)
+    || a.plataforma.localeCompare(b.plataforma) || a.nome.localeCompare(b.nome));
 }
 
 export interface Campanha {
