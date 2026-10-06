@@ -10,7 +10,7 @@ import {
 import { arquivarDisparo, historico, lancarRetorno } from './mensageria-data';
 import { Campo, Erro } from './pecas';
 
-const resumo = (d: Disparo) => `${dataHoraSP(d.enviado_em)} · ${d.projeto} · ${d.publico_lista}`;
+const resumo = (d: Disparo) => `${dataHoraSP(d.enviado_em)} · ${d.projeto ?? 'sem projeto'} · ${d.publico_lista}`;
 
 export function ModalRetorno({ d, onFechar, onSalvo }: { d: Disparo; onFechar: () => void; onSalvo: (msg: string) => void }) {
   const ini = (v: number | null) => (v == null ? '' : String(v));

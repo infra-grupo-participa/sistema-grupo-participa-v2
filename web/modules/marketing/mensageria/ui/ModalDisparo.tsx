@@ -1,11 +1,14 @@
 'use client';
 
 // Registrar ou editar um disparo (mkt_msg_disparo_salvar). O banco valida tudo; o erro dele aparece como veio.
+// Linha da integração (origem 'api', 20261005o): o banco só aceita mudar projeto, tipo e custo; o resto fica travado
+// aqui e nem vai no payload. Arquivar continua pela ação da linha.
 import { useState } from 'react';
 import { Button, FilterSelect, Input, Modal, Textarea } from '@/shared/ui/components';
 import type { Projeto } from '@/modules/marketing/projetos/domain/projetos';
 import {
-  CANAIS, ROTULO_CANAL, ROTULO_TIPO, TIPOS, centavosParaCampo, dataBR, inteiroDigitado, partesSP, reaisParaCentavos,
+  CANAIS, ROTULO_CANAL, ROTULO_TIPO, TIPOS, centavosParaCampo, dataBR, inteiroDigitado, linhaDaApi, partesSP, reaisParaCentavos,
+  rotuloFonte,
   type Disparo, type Ferramenta, type Numero, type Resultado,
 } from '../domain/mensageria';
 import { salvarDisparo } from './mensageria-data';
@@ -29,7 +32,7 @@ function formInicial(d: Disparo | null, hoje: string, nomeUsuario: string): Form
   }
   const { data, hora } = partesSP(d.enviado_em);
   return {
-    data, hora, projeto: d.projeto, canal: d.canal, tipo: s(d.tipo), ferramenta_id: s(d.ferramenta_id), numero_id: s(d.numero_id),
+    data, hora, projeto: d.projeto ?? '', canal: d.canal, tipo: s(d.tipo), ferramenta_id: s(d.ferramenta_id), numero_id: s(d.numero_id),
     copy_texto: s(d.copy_texto), copy_link: s(d.copy_link), publico_lista: d.publico_lista, publico_origem: s(d.publico_origem),
     tamanho_lista: s(d.tamanho_lista), entregues: s(d.entregues), lidas: s(d.lidas), cliques: s(d.cliques), falhas: s(d.falhas),
     custo: centavosParaCampo(d.custo_centavos), disparado_por: d.disparado_por,
@@ -48,14 +51,21 @@ export function ModalDisparo({ inicial, hoje, nomeUsuario, projetos, ferramentas
   const [salvando, setSalvando] = useState(false);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
   const comTipo = f.canal === 'whatsapp_api';
+  /** Linha da integração: só projeto, tipo e custo ficam habilitados. */
+  const trava = inicial != null && linhaDaApi(inicial);
 
   const ferrOpcoes = ferramentas.filter((x) => x.ativa || String(x.id) === f.ferramenta_id);
   const numOpcoes = numeros.filter((x) => !x.arquivado_em || String(x.id) === f.numero_id);
 
   async function salvar() {
     const custo = reaisParaCentavos(f.custo);
+    const custoBanco = custo === undefined ? f.custo.trim() : custo;
+    // Na linha da integração o banco só lê centavos inteiros e responderia "valor ≥ 0": a mensagem em reais sai daqui.
+    if (trava && custo === undefined) { setRes({ ok: false, msg: 'Custo: use reais, como 1.234,56, ou deixe vazio.' }); return; }
     setSalvando(true);
-    const r = await salvarDisparo({
+    const r = await salvarDisparo(trava ? {
+      id: inicial.id, projeto: f.projeto, tipo: comTipo ? f.tipo || null : null, custo_centavos: custoBanco,
+    } : {
       ...(inicial ? { id: inicial.id } : {}),
       enviado_em: f.data && f.hora ? `${f.data}T${f.hora}` : '',
       projeto: f.projeto,
@@ -72,7 +82,7 @@ export function ModalDisparo({ inicial, hoje, nomeUsuario, projetos, ferramentas
       lidas: inteiroOuCru(f.lidas),
       cliques: inteiroOuCru(f.cliques),
       falhas: inteiroOuCru(f.falhas),
-      custo_centavos: custo === undefined ? f.custo.trim() : custo,
+      custo_centavos: custoBanco,
       disparado_por: f.disparado_por,
     });
     setSalvando(false);
@@ -82,25 +92,32 @@ export function ModalDisparo({ inicial, hoje, nomeUsuario, projetos, ferramentas
 
   const num = (k: keyof Form, rotulo: string, dica?: string) => (
     <Campo rotulo={rotulo} dica={dica}>
-      <Input value={f[k]} onChange={(e) => set(k, e.target.value)} inputMode="numeric" />
+      <Input value={f[k]} onChange={(e) => set(k, e.target.value)} inputMode="numeric" disabled={trava} />
     </Campo>
   );
 
   return (
     <Modal
       onClose={onFechar}
-      title={inicial ? `Editar disparo de ${dataBR(partesSP(inicial.enviado_em).data)}` : 'Registrar disparo'}
+      title={inicial ? `Editar disparo${trava ? ' automático' : ''} de ${dataBR(partesSP(inicial.enviado_em).data)}` : 'Registrar disparo'}
       width="max-w-3xl"
       footer={<>
         <Button variant="ghost" onClick={onFechar}>Cancelar</Button>
         <Button onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : inicial ? 'Salvar' : 'Registrar'}</Button>
       </>}
     >
-      <p className="mb-3 text-sm text-[var(--fg-2)]">Não sabe ainda? Deixe vazio. Vazio = não lançado. Use 0 só se foi zero.</p>
+      {trava ? (
+        <p role="note" className="mb-3 rounded-[var(--r-md)] border border-[var(--border)] px-3 py-2 text-sm text-[var(--fg)]">
+          Este disparo veio de {rotuloFonte(inicial.origem_sistema)}. Aqui você muda só projeto, tipo e custo. O resto vem de lá.
+          {inicial.campanha && <span className="block text-[var(--fg-2)]">Campanha: {inicial.campanha}</span>}
+        </p>
+      ) : (
+        <p className="mb-3 text-sm text-[var(--fg-2)]">Não sabe ainda? Deixe vazio. Vazio = não lançado. Use 0 só se foi zero.</p>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="grid grid-cols-2 gap-3">
-          <Campo rotulo="Data do envio"><Input type="date" value={f.data} onChange={(e) => set('data', e.target.value)} /></Campo>
-          <Campo rotulo="Hora"><Input type="time" value={f.hora} onChange={(e) => set('hora', e.target.value)} /></Campo>
+          <Campo rotulo="Data do envio"><Input type="date" value={f.data} onChange={(e) => set('data', e.target.value)} disabled={trava} /></Campo>
+          <Campo rotulo="Hora"><Input type="time" value={f.hora} onChange={(e) => set('hora', e.target.value)} disabled={trava} /></Campo>
         </div>
         <Campo rotulo="Projeto">
           <FilterSelect value={f.projeto} onChange={(e) => set('projeto', e.target.value)}>
@@ -109,7 +126,7 @@ export function ModalDisparo({ inicial, hoje, nomeUsuario, projetos, ferramentas
           </FilterSelect>
         </Campo>
         <Campo rotulo="Canal">
-          <FilterSelect value={f.canal} onChange={(e) => { set('canal', e.target.value); if (e.target.value !== 'whatsapp_api') set('tipo', ''); }}>
+          <FilterSelect value={f.canal} disabled={trava} onChange={(e) => { set('canal', e.target.value); if (e.target.value !== 'whatsapp_api') set('tipo', ''); }}>
             {CANAIS.map((c) => <option key={c} value={c}>{ROTULO_CANAL[c]}</option>)}
           </FilterSelect>
         </Campo>
@@ -122,13 +139,13 @@ export function ModalDisparo({ inicial, hoje, nomeUsuario, projetos, ferramentas
           </Campo>
         ) : <div className="hidden sm:block" />}
         <Campo rotulo="Ferramenta">
-          <FilterSelect value={f.ferramenta_id} onChange={(e) => set('ferramenta_id', e.target.value)}>
+          <FilterSelect value={f.ferramenta_id} disabled={trava} onChange={(e) => set('ferramenta_id', e.target.value)}>
             <option value="">Escolha</option>
             {ferrOpcoes.map((x) => <option key={x.id} value={x.id}>{x.nome}{x.ativa ? '' : ' (desativada)'}</option>)}
           </FilterSelect>
         </Campo>
         <Campo rotulo="Número" dica="se houver">
-          <FilterSelect value={f.numero_id} onChange={(e) => set('numero_id', e.target.value)}>
+          <FilterSelect value={f.numero_id} disabled={trava} onChange={(e) => set('numero_id', e.target.value)}>
             <option value="">Nenhum</option>
             {numOpcoes.map((n) => <option key={n.id} value={n.id}>{n.numero}{n.projeto ? ` · ${n.projeto}` : ''}{n.arquivado_em ? ' (arquivado)' : ''}</option>)}
           </FilterSelect>
@@ -136,17 +153,17 @@ export function ModalDisparo({ inicial, hoje, nomeUsuario, projetos, ferramentas
 
         <div className="sm:col-span-2">
           <Campo rotulo="Copy: texto curto" dica="preencha o texto, o link, ou os dois">
-            <Textarea rows={2} value={f.copy_texto} onChange={(e) => set('copy_texto', e.target.value)} maxLength={4000} />
+            <Textarea rows={2} value={f.copy_texto} onChange={(e) => set('copy_texto', e.target.value)} maxLength={4000} disabled={trava} />
           </Campo>
         </div>
         <div className="sm:col-span-2">
           <Campo rotulo="Copy: link">
-            <Input type="url" value={f.copy_link} onChange={(e) => set('copy_link', e.target.value)} placeholder="https://" maxLength={2000} />
+            <Input type="url" value={f.copy_link} onChange={(e) => set('copy_link', e.target.value)} placeholder="https://" maxLength={2000} disabled={trava} />
           </Campo>
         </div>
 
-        <Campo rotulo="Lista" dica="para quem foi"><Input value={f.publico_lista} onChange={(e) => set('publico_lista', e.target.value)} placeholder="ex.: Inscritos PB26" maxLength={200} /></Campo>
-        <Campo rotulo="Origem da lista"><Input value={f.publico_origem} onChange={(e) => set('publico_origem', e.target.value)} placeholder="ex.: Página ak1" maxLength={200} /></Campo>
+        <Campo rotulo="Lista" dica="para quem foi"><Input value={f.publico_lista} onChange={(e) => set('publico_lista', e.target.value)} placeholder="ex.: Inscritos PB26" maxLength={200} disabled={trava} /></Campo>
+        <Campo rotulo="Origem da lista"><Input value={f.publico_origem} onChange={(e) => set('publico_origem', e.target.value)} placeholder="ex.: Página ak1" maxLength={200} disabled={trava} /></Campo>
 
         <div className="grid grid-cols-2 gap-3 sm:col-span-2 sm:grid-cols-6">
           {num('tamanho_lista', 'Tamanho')}
@@ -159,7 +176,7 @@ export function ModalDisparo({ inicial, hoje, nomeUsuario, projetos, ferramentas
           </Campo>
         </div>
 
-        <Campo rotulo="Quem disparou"><Input value={f.disparado_por} onChange={(e) => set('disparado_por', e.target.value)} maxLength={80} /></Campo>
+        <Campo rotulo="Quem disparou"><Input value={f.disparado_por} onChange={(e) => set('disparado_por', e.target.value)} maxLength={80} disabled={trava} /></Campo>
       </div>
       <div className="mt-3">
         <Erro msg={res?.msg} />

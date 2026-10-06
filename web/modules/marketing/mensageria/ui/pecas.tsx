@@ -4,8 +4,9 @@
 // Vazio (null) = selo "não lançado", tracejado e com texto, para nunca ser lido como 0.
 import { DataTable, EmptyState, Td, Th, Thead, Tr } from '@/shared/ui/components';
 import {
-  PENDENCIAS, ROTULO_TIPO, fmtCentavos, fmtNum, dataHoraSP, rotuloCanal, rotuloPendencia,
-  type Disparo, type Totais, type TotalCanal, type TipoMensagem,
+  PENDENCIAS, ROTULO_TIPO, custoExibido, fmtCentavos, fmtNum, dataHoraSP, linhaDaApi, resumoCusto, rotuloCanal, rotuloFonte,
+  rotuloPendencia,
+  type Disparo, type Pendencia, type Totais, type TotalCanal, type TipoMensagem,
 } from '../domain/mensageria';
 
 /** Cabeçalho de tabela em 14px (o Th padrão é 11px em maiúsculas). */
@@ -54,6 +55,48 @@ export function Custo({ c }: { c: number | null | undefined }) {
   return t == null ? <NaoLancado /> : <span className="tabular whitespace-nowrap">{t}</span>;
 }
 
+/** Selo neutro (texto + borda), para "estimado" e "automático · fonte". */
+export function Selo({ children, title }: { children: React.ReactNode; title?: string }) {
+  return (
+    <span title={title} className="inline-block whitespace-nowrap rounded-[var(--r-sm)] border border-[var(--border-strong)] px-1.5 text-sm text-[var(--fg-2)]">
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Custo de uma linha: real; só estimado = valor + selo "estimado"; sem preço = "sem preço" (nunca 0);
+ * preço por entregue sem entregues lançado = "falta entregues".
+ */
+export function CustoLinha({ d }: { d: Disparo }) {
+  const c = custoExibido(d);
+  if (c.k === 'real') return <Custo c={c.c} />;
+  if (c.k === 'estimado') {
+    return (
+      <span className="inline-flex flex-col items-start gap-0.5">
+        <span className="tabular whitespace-nowrap">{fmtCentavos(c.c)}</span>
+        <Selo title="Calculado pelo preço cadastrado. Lance o custo real para substituir.">estimado</Selo>
+      </span>
+    );
+  }
+  if (c.k === 'sem_preco') return <NaoLancado texto="sem preço" />;
+  if (c.k === 'falta_entregues') return <NaoLancado texto="falta entregues" />;
+  return <NaoLancado />;
+}
+
+/** Custo do período: total (real + estimado) e, embaixo, quanto dele é estimado. */
+export function CustoPeriodo({ t }: { t: Pick<Totais, 'custo_centavos' | 'custo_estimado_centavos' | 'custo_total_centavos'> }) {
+  const { total, estimado } = resumoCusto(t);
+  return (
+    <>
+      <Custo c={total} />
+      {total != null && estimado != null && estimado > 0 && (
+        <div className="text-sm text-[var(--fg-2)]">{fmtCentavos(estimado)} estimado</div>
+      )}
+    </>
+  );
+}
+
 export function SeloPendencia({ p }: { p: string }) {
   const alerta = p === 'conferir_zero_leitura';
   return (
@@ -64,18 +107,39 @@ export function SeloPendencia({ p }: { p: string }) {
   );
 }
 
-/** "Falta lançar": contagem das 3 pendências do período inteiro (vem pronta do banco). */
-export function FaltaLancar({ totais }: { totais: Totais }) {
+/**
+ * "Falta lançar": contagem das pendências do período inteiro (vem pronta do banco). Com `onEscolher`, cada item vira
+ * botão que filtra a tabela abaixo (só as linhas carregadas). Pendência que o banco ainda não manda conta 0.
+ */
+export function FaltaLancar({ totais, escolhida, onEscolher }: {
+  totais: Totais; escolhida?: Pendencia | null; onEscolher?: (p: Pendencia | null) => void;
+}) {
   return (
     <section aria-label="Falta lançar" className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] p-3">
-      <h2 className="mb-2 text-sm font-semibold text-[var(--fg)]">Falta lançar <span className="font-normal text-[var(--fg-2)]">· no período</span></h2>
-      <ul className="grid gap-2 sm:grid-cols-3">
+      <h2 className="mb-2 text-sm font-semibold text-[var(--fg)]">
+        Falta lançar <span className="font-normal text-[var(--fg-2)]">· no período{onEscolher ? ' · clique para ver as linhas' : ''}</span>
+      </h2>
+      <ul className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {PENDENCIAS.map((p) => {
-          const n = totais[p];
-          return (
-            <li key={p} className="flex items-baseline gap-2 text-sm">
+          const n = totais[p] ?? 0;
+          const conteudo = (
+            <>
               <span className={`text-lg font-bold tabular ${n > 0 ? 'text-[var(--fg)]' : 'text-[var(--fg-2)]'}`}>{fmtNum(n)}</span>
               {n > 0 ? <SeloPendencia p={p} /> : <span className="text-[var(--fg-2)]">{rotuloPendencia(p)}</span>}
+            </>
+          );
+          return (
+            <li key={p} className="text-sm">
+              {onEscolher && n > 0 ? (
+                <button
+                  type="button"
+                  aria-pressed={escolhida === p}
+                  onClick={() => onEscolher(escolhida === p ? null : p)}
+                  className={`flex items-baseline gap-2 rounded-[var(--r-sm)] px-1 text-left hover:underline ${escolhida === p ? 'outline outline-2 outline-[var(--accent)]' : ''}`}
+                >
+                  {conteudo}
+                </button>
+              ) : <div className="flex items-baseline gap-2 px-1">{conteudo}</div>}
             </li>
           );
         })}
@@ -103,8 +167,8 @@ export function TabelaPorCanal({ porCanal }: { porCanal: TotalCanal[] }) {
             <Td><Num v={c.cliques} /></Td>
             <Td><Num v={c.falhas} /></Td>
             <Td>
-              <Custo c={c.custo_centavos} />
-              {c.sem_custo > 0 && c.custo_centavos != null && (
+              <CustoPeriodo t={c} />
+              {c.sem_custo > 0 && resumoCusto(c).total != null && (
                 <div className="text-sm text-[var(--fg-2)]">{fmtNum(c.sem_custo)} sem custo</div>
               )}
             </Td>
@@ -123,8 +187,10 @@ export function TabelaPorCanal({ porCanal }: { porCanal: TotalCanal[] }) {
 const acoesFixasTh = 'sticky right-0 z-[2] bg-[var(--surface-3)] shadow-[-1px_0_0_var(--border)]';
 const acoesFixasTd = 'sticky right-0 z-[1] bg-[var(--surface-2)] shadow-[-1px_0_0_var(--border)]';
 
-export function TabelaDisparos({ linhas, acoes }: { linhas: Disparo[]; acoes?: (d: Disparo) => React.ReactNode }) {
-  if (linhas.length === 0) return <EmptyState title="Nenhum disparo neste período" />;
+export function TabelaDisparos({ linhas, acoes, vazio = 'Nenhum disparo neste período' }: {
+  linhas: Disparo[]; acoes?: (d: Disparo) => React.ReactNode; vazio?: string;
+}) {
+  if (linhas.length === 0) return <EmptyState title={vazio} />;
   const cols = ['Envio', 'Projeto', 'Canal', 'Ferramenta', 'Tipo', 'Copy', 'Público', 'Tamanho', 'Entregues', 'Lidas', 'Cliques', 'Falhas', 'Custo', 'Quem disparou', 'Pendências'];
   return (
     <DataTable minWidth={acoes ? 1900 : 1760}>
@@ -135,8 +201,11 @@ export function TabelaDisparos({ linhas, acoes }: { linhas: Disparo[]; acoes?: (
       <tbody>
         {linhas.map((d) => (
           <Tr key={d.id}>
-            <Td className="whitespace-nowrap tabular">{dataHoraSP(d.enviado_em)}</Td>
-            <Td><span className="font-mono font-semibold">{d.projeto}</span></Td>
+            <Td>
+              <div className="whitespace-nowrap tabular">{dataHoraSP(d.enviado_em)}</div>
+              {linhaDaApi(d) && <Selo title="Veio pela integração. Aqui só mudam projeto, tipo e custo.">automático · {rotuloFonte(d.origem_sistema)}</Selo>}
+            </Td>
+            <Td>{d.projeto ? <span className="font-mono font-semibold">{d.projeto}</span> : <NaoLancado texto="sem projeto" />}</Td>
             <Td className="whitespace-nowrap">{rotuloCanal(d.canal)}</Td>
             <Td>
               <div className="whitespace-nowrap">{d.ferramenta}</div>
@@ -144,6 +213,7 @@ export function TabelaDisparos({ linhas, acoes }: { linhas: Disparo[]; acoes?: (
             </Td>
             <Td>{d.tipo ? (ROTULO_TIPO[d.tipo as TipoMensagem] ?? d.tipo) : <span className="text-[var(--fg-2)]" title="Só na API WhatsApp">—</span>}</Td>
             <Td className="max-w-[260px]">
+              {d.campanha && <div className="line-clamp-2 break-words text-[var(--fg-2)]" title={d.campanha}>Campanha: {d.campanha}</div>}
               {d.copy_texto && <span className="line-clamp-2 break-words" title={d.copy_texto}>{d.copy_texto}</span>}
               {d.copy_link && (
                 <a href={d.copy_link} target="_blank" rel="noopener noreferrer" className="block truncate text-[var(--accent)] underline" title={d.copy_link}>
@@ -160,7 +230,7 @@ export function TabelaDisparos({ linhas, acoes }: { linhas: Disparo[]; acoes?: (
             <Td><Num v={d.lidas} /></Td>
             <Td><Num v={d.cliques} /></Td>
             <Td><Num v={d.falhas} /></Td>
-            <Td><Custo c={d.custo_centavos} /></Td>
+            <Td><CustoLinha d={d} /></Td>
             <Td className="whitespace-nowrap">{d.disparado_por}</Td>
             <Td>
               {d.pendencias.length === 0

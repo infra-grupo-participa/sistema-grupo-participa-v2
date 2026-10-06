@@ -1,14 +1,15 @@
 'use client';
 
 // Adapter Supabase da Mensageria: único lugar que chama as funções public.mkt_msg_* (contrato em
-// infra/supabase/migrations/20261005n.explain.md). Cliente do usuário logado (sessão por cookie), nunca service_role.
+// infra/supabase/migrations/20261005n.explain.md e 20261005o.explain.md). Cliente do usuário logado (sessão por cookie), nunca service_role.
 // As tabelas (schema mkt_mensageria) são fechadas; a trava de acesso mora em cada função (mkt.pode_ver).
 // Leitura: devolve null quando falha (rede ou sem acesso), separado de lista vazia.
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type { Projeto } from '@/modules/marketing/projetos/domain/projetos';
 import type {
-  Ferramenta, ItemHistorico, LinhaPlanilha, ListaDisparos, Numero, Resultado, ResultadoImportacao,
+  Ferramenta, ItemHistorico, LinhaPlanilha, ListaDisparos, ListaPrecos, Numero, Resultado, ResultadoImportacao,
+  SaudeIntegracoes,
 } from '../domain/mensageria';
 
 const db = () => createBrowserSupabase();
@@ -71,4 +72,29 @@ export async function salvarFerramenta(p: FerramentaForm): Promise<Resultado> {
 
 export async function historico(tabela: 'disparos' | 'numeros' | 'ferramentas', id: number): Promise<{ ok: boolean; msg?: string; itens?: ItemHistorico[] } | null> {
   return rpc('mkt_msg_historico', { p_tabela: tabela, p_id: String(id) });
+}
+
+// ─── 20261005o: preços e saúde das integrações ──────────────────────────────────────────────────────────────────────
+
+export async function listarPrecos(): Promise<ListaPrecos | null> {
+  const r = await rpc<ListaPrecos | { ok: false }>('mkt_msg_precos_listar');
+  return r?.ok ? r : null;
+}
+
+/** Nova vigência. preco_centavos em texto ("8", "6.5"): o banco aceita até 4 casas. Sem "id": preço não se edita. */
+export interface PrecoForm {
+  ferramenta_id: string; canal: string; tipo: string | null; base_cobranca: string;
+  preco_centavos: string; vigente_desde: string; obs: string | null;
+}
+export async function salvarPreco(p: PrecoForm): Promise<Resultado> {
+  return (await rpc<Resultado>('mkt_msg_preco_salvar', { p })) ?? ERRO_REDE;
+}
+
+export async function anularPreco(id: number, motivo: string): Promise<Resultado> {
+  return (await rpc<Resultado>('mkt_msg_preco_anular', { p_id: id, p_motivo: motivo })) ?? ERRO_REDE;
+}
+
+export async function saudeIntegracoes(): Promise<SaudeIntegracoes | null> {
+  const r = await rpc<SaudeIntegracoes | { ok: false }>('mkt_msg_integracoes_saude');
+  return r?.ok ? r : null;
 }

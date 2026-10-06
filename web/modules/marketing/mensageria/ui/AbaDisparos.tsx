@@ -7,8 +7,9 @@ import { Button, FilterSelect, Input, Loading } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import type { Projeto } from '@/modules/marketing/projetos/domain/projetos';
 import {
-  CANAIS, DIAS_PADRAO, LIMITE_DIAS, ROTULO_CANAL, fmtCentavos, fmtNum, periodoPadrao, rotuloCanal,
-  type Disparo, type Ferramenta, type ListaDisparos, type Totais, type TotalCanal,
+  CANAIS, DIAS_PADRAO, LIMITE_DIAS, ROTULO_CANAL, fmtCentavos, fmtNum, linhaDaApi, periodoPadrao, resumoCusto, rotuloCanal,
+  rotuloPendencia,
+  type Disparo, type Ferramenta, type ListaDisparos, type Pendencia, type Totais, type TotalCanal,
 } from '../domain/mensageria';
 import { listarDisparos, type FiltroDisparos } from './mensageria-data';
 import { ModalArquivar, ModalHistorico, ModalRetorno } from './ModaisLinha';
@@ -49,25 +50,45 @@ function Quadro({ rotulo, valor, nota }: { rotulo: string; valor: React.ReactNod
   );
 }
 
-/** Números do período: disparos, custo e um quadro por canal. Tudo do período inteiro (não só das 500 linhas). */
+/** "R$ 1.200,00 estimado em 4 disparos" (só quando há estimado no período). */
+function notaEstimado(estimado: number | null, qtd?: number) {
+  if (estimado == null || estimado <= 0) return null;
+  return `${fmtCentavos(estimado)} estimado${qtd ? ` em ${fmtNum(qtd)} disparo(s)` : ''}`;
+}
+
+/**
+ * Números do período: disparos, custo total (real + estimado, com o estimado separado) e um quadro por canal.
+ * Tudo do período inteiro (não só das 500 linhas).
+ */
 export function QuadrosDoPeriodo({ totais, porCanal }: { totais: Totais; porCanal: TotalCanal[] }) {
-  const custo = fmtCentavos(totais.custo_centavos);
+  const { total, estimado } = resumoCusto(totais);
+  const custo = fmtCentavos(total);
+  const notas = [
+    notaEstimado(estimado, totais.com_estimativa),
+    totais.sem_custo > 0 && custo ? `fora ${fmtNum(totais.sem_custo)} sem custo` : null,
+  ].filter(Boolean);
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
       <Quadro rotulo="Disparos" valor={fmtNum(totais.qtd)} nota={totais.tamanho != null ? `${fmtNum(totais.tamanho)} pessoas` : undefined} />
       <Quadro
-        rotulo="Custo R$"
+        rotulo="Custo total R$"
         valor={custo ?? <NaoLancado />}
-        nota={totais.sem_custo > 0 && custo ? `fora ${fmtNum(totais.sem_custo)} sem custo` : undefined}
+        nota={notas.length ? notas.map((n) => <div key={n as string}>{n}</div>) : undefined}
       />
-      {porCanal.map((c) => (
-        <Quadro
-          key={c.canal}
-          rotulo={rotuloCanal(c.canal)}
-          valor={fmtNum(c.qtd)}
-          nota={fmtCentavos(c.custo_centavos) ?? 'sem custo lançado'}
-        />
-      ))}
+      {porCanal.map((c) => {
+        const rc = resumoCusto(c);
+        return (
+          <Quadro
+            key={c.canal}
+            rotulo={rotuloCanal(c.canal)}
+            valor={fmtNum(c.qtd)}
+            nota={<>
+              <div>{fmtCentavos(rc.total) ?? 'sem custo lançado'}</div>
+              {rc.total != null && notaEstimado(rc.estimado) && <div>{notaEstimado(rc.estimado)}</div>}
+            </>}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -82,8 +103,11 @@ export function AbaDisparos({ hoje, nomeUsuario, projetos, ferramentas, numeros,
 }) {
   const [filtro, setFiltro] = useState<FiltroDisparos>(() => ({ ...periodoPadrao(hoje), projeto: null, canal: null, ferramenta: null }));
   const [modal, setModal] = useState<Modal | null>(null);
+  // Filtro de tela por pendência (clique em "Falta lançar"). Vale só sobre as linhas carregadas.
+  const [pend, setPend] = useState<Pendencia | null>(null);
   const r = useListaDisparos(filtro.de && filtro.ate ? filtro : null, versao, ativo);
   const set = <K extends keyof FiltroDisparos>(k: K, v: FiltroDisparos[K]) => setFiltro((f) => ({ ...f, [k]: v }));
+  const linhas = r && r.ok ? (pend ? r.linhas.filter((d) => d.pendencias.includes(pend)) : r.linhas) : [];
   const gravou = (msg: string) => { setModal(null); onGravou(msg); };
 
   return (
@@ -95,7 +119,7 @@ export function AbaDisparos({ hoje, nomeUsuario, projetos, ferramentas, numeros,
 
       {r === undefined ? <Loading minHeight={120} /> : r === null ? (
         <Erro msg="Não foi possível carregar os disparos (erro de rede ou sem acesso)." />
-      ) : !r.ok ? null : <FaltaLancar totais={r.totais} />}
+      ) : !r.ok ? null : <FaltaLancar totais={r.totais} escolhida={pend} onEscolher={setPend} />}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Filtros">
         <Campo rotulo="De"><Input type="date" value={filtro.de} max={filtro.ate || undefined} onChange={(e) => set('de', e.target.value)} /></Campo>
@@ -130,11 +154,21 @@ export function AbaDisparos({ hoje, nomeUsuario, projetos, ferramentas, numeros,
               Este período tem mais de {fmtNum(r.limite)} disparos. A tabela mostra os {fmtNum(r.limite)} mais recentes; os números acima contam todos. Encurte o período para ver o resto.
             </p>
           )}
+          {pend && (
+            <p role="status" className="flex flex-wrap items-center gap-2 rounded-[var(--r-md)] border border-[var(--accent)] px-3 py-2 text-sm text-[var(--fg)]">
+              Mostrando só: <strong>{rotuloPendencia(pend)}</strong> · {fmtNum(linhas.length)} de {fmtNum(r.linhas.length)} linha(s) da tabela
+              {r.truncado && ' (a tabela tem só os mais recentes; encurte o período para ver todas)'}
+              <Button variant="link" onClick={() => setPend(null)}>Mostrar todas</Button>
+            </p>
+          )}
           <TabelaDisparos
-            linhas={r.linhas}
+            linhas={linhas}
+            vazio={pend ? 'Nenhuma linha da tabela com essa pendência' : undefined}
             acoes={(d) => (
               <div className="grid grid-cols-[auto_auto] justify-start gap-x-3 gap-y-1">
-                <Button variant="link" onClick={() => setModal({ tipo: 'retorno', d })}>Lançar retorno</Button>
+                {linhaDaApi(d)
+                  ? <span className="text-sm text-[var(--fg-2)]" title="O retorno vem da integração">Retorno automático</span>
+                  : <Button variant="link" onClick={() => setModal({ tipo: 'retorno', d })}>Lançar retorno</Button>}
                 <Button variant="link" onClick={() => setModal({ tipo: 'editar', d })}>Editar</Button>
                 <Button variant="link" onClick={() => setModal({ tipo: 'historico', d })}>Ver histórico</Button>
                 <Button variant="link" onClick={() => setModal({ tipo: 'arquivar', d })}>Arquivar</Button>
@@ -154,7 +188,7 @@ export function AbaDisparos({ hoje, nomeUsuario, projetos, ferramentas, numeros,
       {modal?.tipo === 'retorno' && <ModalRetorno d={modal.d} onFechar={() => setModal(null)} onSalvo={gravou} />}
       {modal?.tipo === 'arquivar' && <ModalArquivar d={modal.d} onFechar={() => setModal(null)} onSalvo={gravou} />}
       {modal?.tipo === 'historico' && (
-        <ModalHistorico tabela="disparos" id={modal.d.id} titulo={`disparo de ${modal.d.projeto}`} onFechar={() => setModal(null)} />
+        <ModalHistorico tabela="disparos" id={modal.d.id} titulo={`disparo de ${modal.d.projeto ?? 'sem projeto'}`} onFechar={() => setModal(null)} />
       )}
     </div>
   );

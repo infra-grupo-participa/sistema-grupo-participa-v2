@@ -1,5 +1,5 @@
 // Marketing > Mensageria: tipos do contrato do banco e formatação. Domínio puro (sem Next, sem Supabase).
-// Contrato: infra/supabase/migrations/20261005n.explain.md. O banco é a fonte da verdade: regra de negócio,
+// Contrato: infra/supabase/migrations/20261005n.explain.md + 20261005o.explain.md (preços, custo estimado, integrações). O banco é a fonte da verdade: regra de negócio,
 // validação e pendências ficam no SQL. Aqui só rótulo, formatação e a leitura (separar colunas) da planilha.
 // Retorno e custo são `number | null`: null = "não lançado". NUNCA tratar null como 0.
 
@@ -35,13 +35,18 @@ export const API_FERRAMENTA = ['sim', 'futura', 'nao'] as const;
 export type ApiFerramenta = (typeof API_FERRAMENTA)[number];
 export const ROTULO_API: Record<ApiFerramenta, string> = { sim: 'Sim', futura: 'Em breve', nao: 'Não, registro manual' };
 
-/** Pendências calculadas pelo banco (mkt_mensageria.pendencias). */
-export const PENDENCIAS = ['sem_custo', 'sem_retorno', 'conferir_zero_leitura'] as const;
+/**
+ * Pendências calculadas pelo banco (mkt_mensageria.pendencias_v2, 20261005o), na ordem dele.
+ * sem_custo mudou de sentido na 20261005o: nem custo real nem estimado (antes: só custo real vazio).
+ */
+export const PENDENCIAS = ['sem_custo', 'sem_retorno', 'conferir_zero_leitura', 'sem_preco', 'sem_projeto'] as const;
 export type Pendencia = (typeof PENDENCIAS)[number];
 export const ROTULO_PENDENCIA: Record<Pendencia, string> = {
-  sem_custo: 'Sem custo',
+  sem_custo: 'Sem custo, nem estimado',
   sem_retorno: 'Sem retorno',
   conferir_zero_leitura: '0 lidas com custo: conferir',
+  sem_preco: 'Sem preço cadastrado',
+  sem_projeto: 'Sem projeto — classificar',
 };
 /** Rótulo da pendência; valor novo que o banco passe a mandar aparece cru, nunca some. */
 export const rotuloPendencia = (p: string) => ROTULO_PENDENCIA[p as Pendencia] ?? p;
@@ -61,8 +66,9 @@ export interface Resultado { ok: boolean; msg: string; id?: number; erros?: { ca
 export interface Disparo {
   id: number;
   enviado_em: string;
-  projeto_id: number;
-  projeto: string;
+  /** null só em linha da integração sem [SIGLA] cadastrada na campanha (pendência sem_projeto). */
+  projeto_id: number | null;
+  projeto: string | null;
   canal: string;
   ferramenta_id: number;
   ferramenta: string;
@@ -87,7 +93,16 @@ export interface Disparo {
   importacao_id: number | null;
   atualizado_em: string;
   pendencias: string[];
+  /** 20261005o. Nome da campanha na origem (integração). */
+  campanha?: string | null;
+  /** 20261005o. Custo pelo preço vigente no dia do envio; vem mesmo quando há custo real. */
+  custo_estimado_centavos?: number | null;
+  /** 20261005o. Ausente = banco ainda na 20261005n. */
+  custo_fonte?: CustoFonte | null;
 }
+
+/** real = lançado (prevalece) · estimado = pelo preço · sem_preco = sem real e sem preço · null = falta entregues. */
+export type CustoFonte = 'real' | 'estimado' | 'sem_preco';
 
 export interface Totais {
   qtd: number;
@@ -101,6 +116,12 @@ export interface Totais {
   sem_custo: number;
   sem_retorno: number;
   conferir_zero_leitura: number;
+  // 20261005o (opcionais: o banco na 20261005n não manda)
+  custo_estimado_centavos?: number | null;
+  com_estimativa?: number;
+  custo_total_centavos?: number | null;
+  sem_preco?: number;
+  sem_projeto?: number;
 }
 
 export interface TotalCanal {
@@ -113,6 +134,10 @@ export interface TotalCanal {
   falhas: number | null;
   custo_centavos: number | null;
   sem_custo: number;
+  custo_estimado_centavos?: number | null;
+  custo_total_centavos?: number | null;
+  sem_preco?: number;
+  sem_projeto?: number;
 }
 
 export type ListaDisparos =
@@ -155,6 +180,8 @@ export interface ItemHistorico {
   em: string;
   por: string | null;
   por_nome: string | null;
+  /** 20261005o: 'api:<fonte>' quando a mudança veio da integração. */
+  por_api?: string | null;
   antes: Record<string, unknown> | null;
   depois: Record<string, unknown> | null;
 }
@@ -372,3 +399,167 @@ export function lerPlanilha(texto: string): PlanilhaLida {
     linhaNoArquivo: linhas.slice(1).map((l) => l.n),
   };
 }
+
+// ─── Custo exibido (20261005o) ──────────────────────────────────────────────────────────────────────────────────────
+// O banco decide real/estimado/sem preço (custo_fonte). A tela só escolhe o texto. Nunca vira 0.
+
+export type CustoExibido =
+  | { k: 'real'; c: number }
+  | { k: 'estimado'; c: number }
+  | { k: 'sem_preco' }
+  /** Há preço por entregue, mas entregues não foi lançado (a pendência sem_retorno explica). */
+  | { k: 'falta_entregues' }
+  /** Banco ainda sem custo estimado (20261005n): só o real, vazio = não lançado. */
+  | { k: 'nao_lancado' };
+
+export function custoExibido(d: Pick<Disparo, 'custo_centavos' | 'custo_estimado_centavos' | 'custo_fonte'>): CustoExibido {
+  if (d.custo_centavos != null) return { k: 'real', c: d.custo_centavos };
+  if (d.custo_fonte === 'estimado' && d.custo_estimado_centavos != null) return { k: 'estimado', c: d.custo_estimado_centavos };
+  if (d.custo_fonte === 'sem_preco') return { k: 'sem_preco' };
+  if (d.custo_fonte === null) return { k: 'falta_entregues' };
+  return { k: 'nao_lancado' };
+}
+
+/** Custo do período (totais ou um canal): total = real + estimado. Banco na 20261005n: total = real, estimado nulo. */
+export function resumoCusto(t: Pick<Totais, 'custo_centavos' | 'custo_estimado_centavos' | 'custo_total_centavos'>) {
+  const total = t.custo_total_centavos === undefined ? t.custo_centavos : t.custo_total_centavos;
+  return { total, estimado: t.custo_estimado_centavos ?? null };
+}
+
+// ─── Integrações (origem 'api') ─────────────────────────────────────────────────────────────────────────────────────
+
+/** Fontes cadastradas na 20261005o (mkt_mensageria.fontes.chave). Chave nova aparece crua, nunca some. */
+export const ROTULO_FONTE: Record<string, string> = {
+  activecampaign: 'ActiveCampaign', unichat: 'Unichat', infobip: 'Infobip', sendflow: 'SendFlow', cs_disparos: 'CS Disparos',
+};
+export const rotuloFonte = (chave: string | null | undefined) => (chave ? ROTULO_FONTE[chave] ?? chave : 'integração');
+
+export const linhaDaApi = (d: Pick<Disparo, 'origem'>) => d.origem === 'api';
+
+/** O que mkt_msg_disparo_salvar aceita mudar numa linha da integração (o resto o banco ignora). */
+export const CAMPOS_EDITAVEIS_API = ['projeto', 'tipo', 'custo_centavos'] as const;
+
+// ─── Preços (20261005o) ─────────────────────────────────────────────────────────────────────────────────────────────
+
+export const BASES_COBRANCA = ['entregues', 'tamanho_lista', 'mensalidade'] as const;
+export type BaseCobranca = (typeof BASES_COBRANCA)[number];
+export const ROTULO_BASE: Record<BaseCobranca, string> = {
+  entregues: 'Por mensagem entregue',
+  tamanho_lista: 'Por pessoa da lista',
+  mensalidade: 'Mensalidade (0 por disparo)',
+};
+export const rotuloBase = (b: string) => ROTULO_BASE[b as BaseCobranca] ?? b;
+
+export interface Preco {
+  id: number;
+  ferramenta_id: number;
+  ferramenta: string;
+  canal: string;
+  tipo: string | null;
+  base_cobranca: string;
+  /** Centavos com até 4 casas (numeric(12,4)). */
+  preco_centavos: number | string;
+  vigente_desde: string;
+  obs: string | null;
+  criado_em: string;
+  criado_por_nome: string | null;
+  anulado_em: string | null;
+  anulado_por_nome: string | null;
+  anulado_motivo: string | null;
+  vigente_hoje: boolean;
+}
+export interface ListaPrecos { ok: true; hoje: string; precos: Preco[] }
+
+const BRL_PRECO = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 6 });
+
+/** Centavos com 4 casas → reais legível: 8 → "R$ 0,08"; 6,5 → "R$ 0,065"; 0,36 → "R$ 0,0036". */
+export function fmtPrecoCentavos(c: number | string | null | undefined): string | null {
+  if (c == null || c === '') return null;
+  const n = typeof c === 'number' ? c : Number(String(c).replace(',', '.'));
+  return Number.isFinite(n) ? BRL_PRECO.format(n / 100) : null;
+}
+
+/**
+ * Preço digitado em REAIS ("0,08", "R$ 0,065", "1.5") → centavos em texto, sem conta de ponto flutuante
+ * ("8", "6.5"). Vazio → null. Fora do formato (até 4 dígitos inteiros e 6 decimais) → undefined.
+ */
+export function precoReaisParaCentavos(s: string | null | undefined): string | null | undefined {
+  const v = (s ?? '').trim().replace(/^R\$\s*/i, '');
+  if (v === '') return null;
+  const m = v.match(/^(\d{1,4})(?:[.,](\d{1,6}))?$/);
+  if (!m) return undefined;
+  const frac = m[2] ?? '';
+  const inteiro = Number(m[1]) * 100 + Number(frac.padEnd(2, '0').slice(0, 2));
+  const resto = frac.slice(2).replace(/0+$/, '');
+  return resto ? `${inteiro}.${resto}` : String(inteiro);
+}
+
+export type SituacaoPreco = 'vigente' | 'futuro' | 'substituido' | 'anulado';
+export function situacaoPreco(p: Pick<Preco, 'anulado_em' | 'vigente_hoje' | 'vigente_desde'>, hoje: string): SituacaoPreco {
+  if (p.anulado_em) return 'anulado';
+  if (p.vigente_hoje) return 'vigente';
+  return p.vigente_desde > hoje ? 'futuro' : 'substituido';
+}
+export function rotuloSituacaoPreco(p: Pick<Preco, 'anulado_em' | 'vigente_hoje' | 'vigente_desde'>, hoje: string): string {
+  const s = situacaoPreco(p, hoje);
+  if (s === 'anulado') return 'Anulado';
+  if (s === 'vigente') return 'Em vigor';
+  return s === 'futuro' ? `Começa em ${dataBR(p.vigente_desde)}` : 'Substituído';
+}
+
+// ─── Saúde das integrações (20261005o) ──────────────────────────────────────────────────────────────────────────────
+
+export interface FonteSaude {
+  chave: string;
+  nome: string;
+  ferramenta_id: number | null;
+  ferramenta: string | null;
+  ativa: boolean;
+  ativa_desde: string | null;
+  intervalo_minutos: number;
+  ultima_execucao_em: string | null;
+  ultima_execucao_status: string | null;
+  ultima_ok_em: string | null;
+  atraso_minutos: number | null;
+  atrasada: boolean;
+  execucoes_7d: number;
+  recusas_7d: number;
+  inconsistentes_7d: number;
+  negadas_7d: number;
+  chave_no_vault: boolean;
+  vigia_jobname: string;
+  ultima_reconciliacao: { dia: string; contagem_fonte: number; contagem_log: number; faltantes_total: number; em: string } | null;
+}
+export interface SaudeIntegracoes { ok: true; agora: string; fontes: FonteSaude[] }
+
+export const ROTULO_STATUS_EXECUCAO: Record<string, string> = {
+  ok: 'deu certo',
+  inconsistente: 'chegou com diferença',
+  fonte_inativa: 'recusada: integração desligada',
+  lote_invalido: 'recusada: formato errado',
+};
+export const rotuloStatusExecucao = (s: string | null) => (s ? ROTULO_STATUS_EXECUCAO[s] ?? s : '');
+
+/** Minutos → "45 min", "2 h", "3 dias" (arredonda para baixo). */
+export function fmtDuracao(min: number): string {
+  if (min < 60) return `${Math.max(0, Math.floor(min))} min`;
+  if (min < 48 * 60) return `${Math.floor(min / 60)} h`;
+  return `${Math.floor(min / 1440)} dias`;
+}
+
+/** Tempo entre `em` e `agora` (relógio do servidor), em linguagem leiga: "há 2 h". Vazio → null. */
+export function haQuanto(em: string | null | undefined, agora: string): string | null {
+  if (!em) return null;
+  const min = (new Date(agora).getTime() - new Date(em).getTime()) / 60000;
+  return min < 1 ? 'agora há pouco' : `há ${fmtDuracao(min)}`;
+}
+
+export type SituacaoFonte = 'desligada' | 'atrasada' | 'aguardando' | 'em_dia';
+export function situacaoFonte(f: Pick<FonteSaude, 'ativa' | 'atrasada' | 'ultima_ok_em'>): SituacaoFonte {
+  if (!f.ativa) return 'desligada';
+  if (f.atrasada) return 'atrasada';
+  return f.ultima_ok_em ? 'em_dia' : 'aguardando';
+}
+export const ROTULO_SITUACAO_FONTE: Record<SituacaoFonte, string> = {
+  desligada: 'Desligada', atrasada: 'Atrasada', aguardando: 'Ligada, sem atualização ainda', em_dia: 'Em dia',
+};

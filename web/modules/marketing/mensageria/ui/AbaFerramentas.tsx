@@ -2,6 +2,7 @@
 
 // Aba Ferramentas: API (Sim / Em breve / Não, registro manual), custo mensal, responsável e se está ativa.
 // Ferramenta não se apaga: desativa (ativa=false). Gravação via mkt_msg_ferramenta_salvar.
+// Abaixo, a seção Preços (20261005o), que só busca quando esta aba é aberta.
 import { useState } from 'react';
 import { Button, DataTable, EmptyState, FilterSelect, Input, Modal, Td, Th, Thead, Toggle, Tr } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
@@ -11,6 +12,7 @@ import {
 } from '../domain/mensageria';
 import { salvarFerramenta } from './mensageria-data';
 import { Campo, Custo, Erro, thCls } from './pecas';
+import { SecaoPrecos } from './SecaoPrecos';
 
 function ModalFerramenta({ inicial, onFechar, onSalvo }: { inicial: Ferramenta | null; onFechar: () => void; onSalvo: (msg: string) => void }) {
   const [f, setF] = useState(() => ({
@@ -65,7 +67,10 @@ function ModalFerramenta({ inicial, onFechar, onSalvo }: { inicial: Ferramenta |
   );
 }
 
-export function AbaFerramentas({ ferramentas, falhou, onGravou }: { ferramentas: Ferramenta[]; falhou: boolean; onGravou: (msg: string) => void }) {
+export function AbaFerramentas({ ferramentas, falhou, onGravou, ativo, versaoPrecos, onGravouPreco }: {
+  ferramentas: Ferramenta[]; falhou: boolean; onGravou: (msg: string) => void;
+  ativo: boolean; versaoPrecos: number; onGravouPreco: (msg: string) => void;
+}) {
   const [editar, setEditar] = useState<Ferramenta | null | 'nova'>(null);
   const salvo = (msg: string) => { setEditar(null); onGravou(msg); };
 
@@ -97,6 +102,7 @@ export function AbaFerramentas({ ferramentas, falhou, onGravou }: { ferramentas:
         </DataTable>
       ))}
       {editar && <ModalFerramenta inicial={editar === 'nova' ? null : editar} onFechar={() => setEditar(null)} onSalvo={salvo} />}
+      <SecaoPrecos ferramentas={ferramentas} ativo={ativo} versao={versaoPrecos} onGravou={onGravouPreco} />
     </div>
   );
 }

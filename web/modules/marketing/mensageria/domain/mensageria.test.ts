@@ -3,25 +3,29 @@ import {
   API_FERRAMENTA, CANAIS, COLUNAS_PLANILHA, FINALIDADES, PENDENCIAS, ROTULO_API, ROTULO_CANAL, ROTULO_FINALIDADE,
   ROTULO_PENDENCIA, ROTULO_STATUS_NUMERO, ROTULO_TIPO, STATUS_NUMERO, TIPOS,
   camposAlterados, capacidadeForaDaFaixa, centavosParaCampo, dataHoraSP, fmtCentavos, hojeSP, inteiroDigitado,
+  BASES_COBRANCA, ROTULO_BASE, custoExibido, fmtDuracao, fmtPrecoCentavos, haQuanto, linhaDaApi, precoReaisParaCentavos,
+  resumoCusto, rotuloFonte, rotuloSituacaoPreco, situacaoFonte, situacaoPreco,
   FORMATO_COLUNA, lerPlanilha, modeloCsv, partesSP, periodoPadrao, reaisParaCentavos, rotuloPendencia, separarCsv, somarDias,
 } from './mensageria';
 
 // Intl usa espaço inseparável entre "R$" e o número.
 const sp = (s: string | null) => (s == null ? s : s.replace(/ /g, ' '));
 
-describe('listas iguais aos CHECKs do banco (20261005n)', () => {
+describe('listas iguais aos CHECKs do banco (20261005n + 20261005o)', () => {
   it('valores exatos', () => {
     expect(CANAIS).toEqual(['whatsapp_api', 'email', 'sms', 'ligacao', 'grupo']);
     expect(TIPOS).toEqual(['utility', 'marketing']);
     expect(FINALIDADES).toEqual(['mensageria', 'comercial', 'financeiro', 'suporte']);
     expect(STATUS_NUMERO).toEqual(['ativo', 'aquecendo', 'restrito', 'disponivel']);
     expect(API_FERRAMENTA).toEqual(['sim', 'futura', 'nao']);
-    expect(PENDENCIAS).toEqual(['sem_custo', 'sem_retorno', 'conferir_zero_leitura']);
+    expect(PENDENCIAS).toEqual(['sem_custo', 'sem_retorno', 'conferir_zero_leitura', 'sem_preco', 'sem_projeto']);
+    expect(BASES_COBRANCA).toEqual(['entregues', 'tamanho_lista', 'mensalidade']);
   });
   it('todo valor tem rótulo não vazio', () => {
     const pares: [readonly string[], Record<string, string>][] = [
       [CANAIS, ROTULO_CANAL], [TIPOS, ROTULO_TIPO], [FINALIDADES, ROTULO_FINALIDADE],
       [STATUS_NUMERO, ROTULO_STATUS_NUMERO], [API_FERRAMENTA, ROTULO_API], [PENDENCIAS, ROTULO_PENDENCIA],
+      [BASES_COBRANCA, ROTULO_BASE],
     ];
     for (const [lista, rot] of pares) {
       expect(Object.keys(rot).sort()).toEqual([...lista].sort());
@@ -35,8 +39,10 @@ describe('listas iguais aos CHECKs do banco (20261005n)', () => {
 });
 
 describe('rótulo de pendência', () => {
-  it('as 3 do contrato', () => {
-    expect(rotuloPendencia('sem_custo')).toBe('Sem custo');
+  it('as 5 do contrato (sem_custo agora = nem real nem estimado)', () => {
+    expect(rotuloPendencia('sem_custo')).toBe('Sem custo, nem estimado');
+    expect(rotuloPendencia('sem_preco')).toBe('Sem preço cadastrado');
+    expect(rotuloPendencia('sem_projeto')).toBe('Sem projeto — classificar');
     expect(rotuloPendencia('sem_retorno')).toBe('Sem retorno');
     expect(rotuloPendencia('conferir_zero_leitura')).toBe('0 lidas com custo: conferir');
   });
@@ -193,5 +199,116 @@ describe('planilha: separar colunas', () => {
     const r = lerPlanilha('');
     expect(r.linhas).toEqual([]);
     expect(r.faltando).toHaveLength(COLUNAS_PLANILHA.length);
+  });
+});
+
+describe('preço (centavos com 4 casas) → reais legível', () => {
+  it('seed da 20261005o', () => {
+    expect(sp(fmtPrecoCentavos(8))).toBe('R$ 0,08');
+    expect(sp(fmtPrecoCentavos(36))).toBe('R$ 0,36');
+    expect(sp(fmtPrecoCentavos(6.5))).toBe('R$ 0,065');
+    expect(sp(fmtPrecoCentavos(0))).toBe('R$ 0,00');
+  });
+  it('4 casas e texto do numeric', () => {
+    expect(sp(fmtPrecoCentavos(0.36))).toBe('R$ 0,0036');
+    expect(sp(fmtPrecoCentavos('8.1234'))).toBe('R$ 0,081234');
+    expect(sp(fmtPrecoCentavos(100000))).toBe('R$ 1.000,00');
+  });
+  it('vazio é null', () => {
+    expect(fmtPrecoCentavos(null)).toBeNull();
+    expect(fmtPrecoCentavos('')).toBeNull();
+  });
+});
+
+describe('preço digitado em reais → centavos (texto, sem ponto flutuante)', () => {
+  it('formatos aceitos', () => {
+    expect(precoReaisParaCentavos('0,08')).toBe('8');
+    expect(precoReaisParaCentavos('0,065')).toBe('6.5');
+    expect(precoReaisParaCentavos('R$ 0,36')).toBe('36');
+    expect(precoReaisParaCentavos('0.0036')).toBe('0.36');
+    expect(precoReaisParaCentavos('1,5')).toBe('150');
+    expect(precoReaisParaCentavos('0,081234')).toBe('8.1234');
+    expect(precoReaisParaCentavos('0,1')).toBe('10');
+    expect(precoReaisParaCentavos('0')).toBe('0');
+  });
+  it('vazio = null; fora do formato = undefined', () => {
+    expect(precoReaisParaCentavos('  ')).toBeNull();
+    expect(precoReaisParaCentavos('0,0000001')).toBeUndefined();
+    expect(precoReaisParaCentavos('abc')).toBeUndefined();
+    expect(precoReaisParaCentavos('1.000,00')).toBeUndefined();
+    expect(precoReaisParaCentavos('-1')).toBeUndefined();
+  });
+  it('ida e volta', () => {
+    for (const r of ['0,08', '0,065', '0,36', '0,0036']) expect(sp(fmtPrecoCentavos(precoReaisParaCentavos(r)))).toBe('R$ ' + r);
+  });
+});
+
+describe('custo exibido na linha', () => {
+  it('real prevalece, mesmo com estimado', () => {
+    expect(custoExibido({ custo_centavos: 9600, custo_estimado_centavos: 9200, custo_fonte: 'real' })).toEqual({ k: 'real', c: 9600 });
+    expect(custoExibido({ custo_centavos: 0, custo_estimado_centavos: 500, custo_fonte: 'real' })).toEqual({ k: 'real', c: 0 });
+  });
+  it('só estimado', () => {
+    expect(custoExibido({ custo_centavos: null, custo_estimado_centavos: 9200, custo_fonte: 'estimado' })).toEqual({ k: 'estimado', c: 9200 });
+  });
+  it('sem preço nunca vira 0', () => {
+    const c = custoExibido({ custo_centavos: null, custo_estimado_centavos: null, custo_fonte: 'sem_preco' });
+    expect(c).toEqual({ k: 'sem_preco' });
+    expect('c' in c).toBe(false);
+  });
+  it('custo_fonte null = preço por entregue sem entregues lançado', () => {
+    expect(custoExibido({ custo_centavos: null, custo_estimado_centavos: null, custo_fonte: null })).toEqual({ k: 'falta_entregues' });
+  });
+  it('banco ainda na 20261005n (campo ausente) = não lançado', () => {
+    expect(custoExibido({ custo_centavos: null })).toEqual({ k: 'nao_lancado' });
+  });
+});
+
+describe('custo do período', () => {
+  it('total = real + estimado; estimado à parte', () => {
+    expect(resumoCusto({ custo_centavos: 1000, custo_estimado_centavos: 500, custo_total_centavos: 1500 })).toEqual({ total: 1500, estimado: 500 });
+  });
+  it('sem nada lançado: null, não 0', () => {
+    expect(resumoCusto({ custo_centavos: null, custo_estimado_centavos: null, custo_total_centavos: null })).toEqual({ total: null, estimado: null });
+  });
+  it('banco na 20261005n: total = real', () => {
+    expect(resumoCusto({ custo_centavos: 1000 })).toEqual({ total: 1000, estimado: null });
+  });
+});
+
+describe('integração', () => {
+  it('linha da API e rótulo da fonte', () => {
+    expect(linhaDaApi({ origem: 'api' })).toBe(true);
+    expect(linhaDaApi({ origem: 'manual' })).toBe(false);
+    expect(rotuloFonte('unichat')).toBe('Unichat');
+    expect(rotuloFonte('cs_disparos')).toBe('CS Disparos');
+    expect(rotuloFonte('nova_fonte')).toBe('nova_fonte');
+    expect(rotuloFonte(null)).toBe('integração');
+  });
+  it('tempo em linguagem leiga, pelo relógio do banco', () => {
+    const agora = '2026-10-05T15:00:00-03:00';
+    expect(haQuanto('2026-10-05T13:00:00-03:00', agora)).toBe('há 2 h');
+    expect(haQuanto('2026-10-05T14:59:40-03:00', agora)).toBe('agora há pouco');
+    expect(haQuanto('2026-10-05T14:15:00-03:00', agora)).toBe('há 45 min');
+    expect(haQuanto('2026-10-02T15:00:00-03:00', agora)).toBe('há 3 dias');
+    expect(haQuanto(null, agora)).toBeNull();
+    expect(fmtDuracao(60)).toBe('1 h');
+  });
+  it('situação da fonte', () => {
+    expect(situacaoFonte({ ativa: false, atrasada: false, ultima_ok_em: null })).toBe('desligada');
+    expect(situacaoFonte({ ativa: true, atrasada: true, ultima_ok_em: '2026-10-05T10:00:00Z' })).toBe('atrasada');
+    expect(situacaoFonte({ ativa: true, atrasada: false, ultima_ok_em: null })).toBe('aguardando');
+    expect(situacaoFonte({ ativa: true, atrasada: false, ultima_ok_em: '2026-10-05T10:00:00Z' })).toBe('em_dia');
+  });
+});
+
+describe('situação do preço', () => {
+  const hoje = '2026-10-05';
+  it('anulado, vigente, futuro, substituído', () => {
+    expect(situacaoPreco({ anulado_em: '2026-10-01T10:00:00Z', vigente_hoje: false, vigente_desde: '2026-07-01' }, hoje)).toBe('anulado');
+    expect(situacaoPreco({ anulado_em: null, vigente_hoje: true, vigente_desde: '2026-07-24' }, hoje)).toBe('vigente');
+    expect(situacaoPreco({ anulado_em: null, vigente_hoje: false, vigente_desde: '2026-11-01' }, hoje)).toBe('futuro');
+    expect(situacaoPreco({ anulado_em: null, vigente_hoje: false, vigente_desde: '2026-07-01' }, hoje)).toBe('substituido');
+    expect(rotuloSituacaoPreco({ anulado_em: null, vigente_hoje: false, vigente_desde: '2026-11-01' }, hoje)).toBe('Começa em 01/11/2026');
   });
 });

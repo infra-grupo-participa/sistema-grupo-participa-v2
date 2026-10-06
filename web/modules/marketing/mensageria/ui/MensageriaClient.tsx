@@ -1,9 +1,10 @@
 'use client';
 
-// Marketing > Mensageria: monta as 4 abas (Disparos · Por projeto · Números · Ferramentas).
+// Marketing > Mensageria: monta as 5 abas (Disparos · Por projeto · Números · Ferramentas · Integrações).
 // Projetos carregam uma vez. Depois de gravar, recarrega só o que a gravação mudou (ver `RECARGA`). As abas ficam montadas (escondidas
 // com `hidden`): trocar de aba não refaz consulta e não perde o filtro. A lista de disparos só recarrega na
-// aba visível (prop `ativo`, ver useListaDisparos). Identidade e "hoje" vêm do servidor, por prop.
+// aba visível (prop `ativo`, ver useListaDisparos). Preços (dentro de Ferramentas) e Integrações só buscam quando a aba
+// é aberta (useCargaVisivel). Identidade e "hoje" vêm do servidor, por prop.
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Loading, Tabs, Toast, idsAba, useFlash } from '@/shared/ui/components';
@@ -15,26 +16,29 @@ import { AbaDisparos } from './AbaDisparos';
 import { AbaPorProjeto } from './AbaPorProjeto';
 import { AbaNumeros } from './AbaNumeros';
 import { AbaFerramentas } from './AbaFerramentas';
+import { AbaIntegracoes } from './AbaIntegracoes';
 import { Erro } from './pecas';
 
-type Aba = 'disparos' | 'projeto' | 'numeros' | 'ferramentas';
+type Aba = 'disparos' | 'projeto' | 'numeros' | 'ferramentas' | 'integracoes';
 
 /**
  * O que cada gravação manda recarregar. `lista` = lista de disparos (só a aba visível busca; a escondida busca uma vez
  * ao voltar). Disparo muda o consumo de hoje dos números. Número e ferramenta aparecem pelo nome na lista de disparos;
- * ferramenta também aparece pelo nome em Números.
+ * ferramenta também aparece pelo nome em Números e em Preços. Preço muda o custo estimado da lista.
  */
-type Gravacao = 'disparo' | 'numero' | 'ferramenta';
-const RECARGA: Record<Gravacao, { numeros: boolean; ferramentas: boolean; lista: boolean }> = {
-  disparo: { numeros: true, ferramentas: false, lista: true },
-  numero: { numeros: true, ferramentas: false, lista: true },
-  ferramenta: { numeros: true, ferramentas: true, lista: true },
+type Gravacao = 'disparo' | 'numero' | 'ferramenta' | 'preco';
+const RECARGA: Record<Gravacao, { numeros: boolean; ferramentas: boolean; lista: boolean; precos: boolean }> = {
+  disparo: { numeros: true, ferramentas: false, lista: true, precos: false },
+  numero: { numeros: true, ferramentas: false, lista: true, precos: false },
+  ferramenta: { numeros: true, ferramentas: true, lista: true, precos: true },
+  preco: { numeros: false, ferramentas: false, lista: true, precos: true },
 };
 const ABAS: { k: Aba; l: string }[] = [
   { k: 'disparos', l: 'Disparos' },
   { k: 'projeto', l: 'Por projeto' },
   { k: 'numeros', l: 'Números' },
   { k: 'ferramentas', l: 'Ferramentas' },
+  { k: 'integracoes', l: 'Integrações' },
 ];
 const ID_BASE = 'mensageria';
 
@@ -49,6 +53,7 @@ export function MensageriaClient({ hoje, nomeUsuario }: { hoje: string; nomeUsua
   const [vLista, setVLista] = useState(0);
   const [vNumeros, setVNumeros] = useState(0);
   const [vFerramentas, setVFerramentas] = useState(0);
+  const [vPrecos, setVPrecos] = useState(0);
   const { toast, flash } = useFlash();
 
   useEffect(() => {
@@ -75,6 +80,7 @@ export function MensageriaClient({ hoje, nomeUsuario }: { hoje: string; nomeUsua
     if (o.numeros) setVNumeros((v) => v + 1);
     if (o.ferramentas) setVFerramentas((v) => v + 1);
     if (o.lista) setVLista((v) => v + 1);
+    if (o.precos) setVPrecos((v) => v + 1);
   };
 
   if (projetos === undefined || ferramentas === undefined || numeros === undefined) return <Loading />;
@@ -113,7 +119,13 @@ export function MensageriaClient({ hoje, nomeUsuario }: { hoje: string; nomeUsua
         <AbaNumeros numeros={listaNumeros} falhou={numeros === null} projetos={listaProjetos} ferramentas={listaFerramentas} onGravou={gravou('numero')} />
       </Painel>
       <Painel k="ferramentas" aba={aba}>
-        <AbaFerramentas ferramentas={listaFerramentas} falhou={ferramentas === null} onGravou={gravou('ferramenta')} />
+        <AbaFerramentas
+          ferramentas={listaFerramentas} falhou={ferramentas === null} onGravou={gravou('ferramenta')}
+          ativo={aba === 'ferramentas'} versaoPrecos={vPrecos} onGravouPreco={gravou('preco')}
+        />
+      </Painel>
+      <Painel k="integracoes" aba={aba}>
+        <AbaIntegracoes ativo={aba === 'integracoes'} />
       </Painel>
 
       <Toast>{toast}</Toast>
