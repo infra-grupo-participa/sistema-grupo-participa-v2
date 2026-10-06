@@ -6,7 +6,7 @@ Cliente) passa a **pedir** a alteração numa tela própria; o aprovador decide 
 **Status (06/10/2026): etapa 1 no ar** (migration `20261005j` aplicada, merge `e20aaab`). **Sócio novo com cadastro
 completo** (migration `20261005k`) **APLICADA** (commit `002535a`, na `main`).
 **Troca de sócio direto em remoção** (`20261006144912`) e **sócio novo herda entrada e turma** (`20261006144913`):
-**NÃO APLICADAS**, branch `victor-pedidos` (ensaio OK em 06/10/2026). Ver "Banco".
+**APLICADAS em 06/10/2026** (ensaio OK antes; pentester e orquestrador aprovaram). Ver "Banco".
 
 ## Telas
 
@@ -51,11 +51,11 @@ completo** (migration `20261005k`) **APLICADA** (commit `002535a`, na `main`).
   espaço, vencimento e `Acompanha titular`; `num_socios` do titular é recontado. Abre um caso em
   **Remoção de Acessos** (tipo "Troca de sócio", prazo de 1 dia útil) para quem saiu: a retirada dos acessos segue o
   checklist do módulo (Victor, JP, Thomas, Ana Camila).
-  **Com a `20261006144912` (NÃO APLICADA; decisão do Victor, 06/10/2026):** quem sai **sem compra própria** entra
+  **Com a `20261006144912` (APLICADA em 06/10/2026; decisão do Victor, 06/10/2026):** quem sai **sem compra própria** entra
   **direto em remoção** (sem triagem, itens já criados, Slack marca quem remove); **com compra própria** de Holding
   Masters ou Aurum (em `public.compras` ou no financeiro da Hotmart, conta academy) cai em **aguardando triagem**, com as
   compras na ficha; quem sai **sem e-mail e sem documento** também cai em triagem (não dá para checar). Antes dela, todo caso de troca cai em aguardando triagem. Regra completa em `remocao-acessos.md`.
-- **Sócio novo herda do titular (`20261006144913`, NÃO APLICADA; decisão do Victor, 06/10/2026):** pessoa nova recebe
+- **Sócio novo herda do titular (`20261006144913`, APLICADA em 06/10/2026; decisão do Victor, 06/10/2026):** pessoa nova recebe
   `data_entrada_thb` e `turma_id` do titular, com auditoria. Sócio que entra já existente mantém os dele.
 - **"Outro":** aprovar só registra; o aprovador faz à mão e marca como aplicado.
 - **Sócio novo (20261005k):** grava em `thb_alunos` nome, e-mail, telefone, documento, `tipo_documento` (CPF/CNPJ),
@@ -101,7 +101,7 @@ sócio novo completo. **Status: APLICADA** (commit `002535a`, na `main`). Funç�
 `pa_meu_papel`, `pa_buscar_alunos`, `pa_socios_do_titular`, `pa_valor_atual`, `pa_turmas`, `pa_criar`,
 `pa_meus_pedidos`, `pa_fila`, `pa_decidir`, `pa_marcar_aplicado`.
 
-Migrations de 06/10/2026, **NÃO APLICADAS** (branch `victor-pedidos`), independentes entre si:
+Migrations de 06/10/2026, **APLICADAS em 06/10/2026**, independentes entre si:
 
 - `20261006144912_pa_troca_socio_direto_remocao.sql`: `pa_abrir_caso_remocao` (direto em remoção sem compra própria),
   `ra_slack_pendentes_base` (aviso próprio da troca direta, título legível da troca em triagem) e

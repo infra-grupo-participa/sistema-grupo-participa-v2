@@ -64,9 +64,9 @@ Deploy: `verify_jwt = false`. Migration: `20260916_remocao_acessos_webhook.sql`.
 
 ## Troca de sócio (pedido de alteração)
 
-> **Situação (06/10/2026): NÃO APLICADA** (migration `20261006144912_pa_troca_socio_direto_remocao.sql`, branch
-> `victor-pedidos`; ensaio em `begin … rollback` sem sobra; detalhe em `20261006144912.explain.md`). Até ser aplicada,
-> toda troca de sócio cai em aguardando triagem.
+> **Situação: APLICADA em 06/10/2026** (migration `20261006144912_pa_troca_socio_direto_remocao.sql`; ensaio em
+> `begin … rollback` sem sobra antes; detalhe em `20261006144912.explain.md`). Trocas aprovadas antes disso caíram em
+> aguardando triagem.
 
 O caso `tipo = 'troca_socio'` nasce quando a `pa_decidir` aplica uma troca de sócio (`hotmart_transaction =
 'PEDIDO-ALTERACAO-<nº>'`, `origem = 'pedido_alteracao'`, linha `hm`, prazo de 1 dia útil). Decisão do Victor (06/10/2026):
