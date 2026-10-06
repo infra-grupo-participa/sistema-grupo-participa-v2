@@ -12,14 +12,32 @@
 
 ## 1. Volume
 
-**Não medido.** O token da Clint não está no Vault (`vault.secrets` não tem nenhum segredo com "clint") e, como
-combinado, não foi pedido nem procurado. Para medir sem gravar nada:
+Medido em 06/10/2026 (token no Vault como `clint_api_token`; só GET): 141.002 contatos, 162.114 abertos, 5.121 ganhos,
+529 perdidos, 730 origens, 18.278 atividades (17.607 de negócio aberto).
+
+Abertos por `updated_at_start` (filtro documentado de `GET /v1/deals`; há também `created_at_*` e `updated_stage_at_*`):
+
+| Janela | Abertos mexidos |
+|---|---|
+| 7 dias | 531 |
+| 14 dias | 2.189 |
+| 30 dias | 4.495 |
+| 45 dias | 150.373 |
+| 90 dias | 156.108 |
+| 180 dias | 162.103 |
+
+O salto entre 30 e 45 dias é uma **importação em massa**: ~144 mil abertos foram criados (e atualizados) entre
+27 e 29/08/2026. Por isso a janela de 90 dias pega ~96% dos abertos.
+
+Escopo escolhido pelo Arthur: **recentes** (`--escopo recentes --dias 90`): abertos da janela + todos os ganhos e
+perdidos; só os contatos, origens/grupos e atividades desses negócios; usuários, motivos, tags e campos inteiros.
+O negócio já traz o contato embutido (`id`, `name`, `email`, `phone`, `ddi`, `instagram`); `tags`/`fields` do contato
+só vêm de `/v1/contacts`. Varrer `/v1/contacts` (142 páginas de 1000) sai muito mais barato que 1 GET por contato
+(~0,45 s cada). Histórico: ~0,7 s por negócio → desligado por padrão (`--com-historico`).
 
 ```bash
-CLINT_TOKEN=... python3 infra/scripts/clint_extrair.py --contar   # 1 GET por recurso (limit=1), imprime só totalCount
+CLINT_TOKEN=... python3 infra/scripts/clint_extrair.py --contar   # totais + abertos mexidos em 30/90/180 dias
 ```
-
-Com os números em mãos, ajustar `--rps` e `--historico` (o histórico custa ≥ 1 requisição por negócio).
 
 ## 2. O que a API da Clint entrega (documentação pública, `https://clint-api.readme.io`)
 
