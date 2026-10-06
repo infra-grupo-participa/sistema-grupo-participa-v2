@@ -365,11 +365,135 @@ link**. Quando a tela do Arthur aceitar um parâmetro, volta o link (`SecaoLeads
 | Coleta Meta Ads | **Edge `trafego-meta` pronta e testada com respostas simuladas, DESLIGADA** (20261006i): falta o Victor decidir o token (conta centralizadora ou um por conta) e ligar o cron |
 | Coleta Google Ads | só o desenho e o esqueleto da conversão (`trafego-google/google.ts`); falta developer token, MCC e OAuth |
 | Resumo do dia ("o que está pegando fogo") | pronto no banco e na tela (20261006i, não aplicada); limiares iniciais **propostos**, a confirmar |
-| Receita (Hotmart) | ligada pelo vínculo produto → projeto, **cadastrado à mão** na vida do projeto (20261006i, não aplicada). Sem vínculo, "sem dado" |
+| Receita (Hotmart) | por **nível de certeza** (decisão de 06/10/2026): oferta exclusiva, SCK com o projeto, lead do projeto; a estimada (só produto + período) à parte. Vínculo **cadastrado à mão** na vida do projeto (20261006i, não aplicada). Ver "Receita do projeto: oferta exclusiva e SCK" |
 | Connect rate e conversão da página | **ligados** no banco à Web fase 2 (20261006h, a mesma conta de `public.mkt_web_connect`). Sem a 20261006h aplicada, "sem dado" com aviso na tela |
 | Atividades do ClickUp | espelho pela etiqueta do projeto e linha do tempo junto do gasto diário (20261006i, não aplicada). Rotina `trafego-clickup` pronta, **DESLIGADA** (falta o token e o id do workspace) |
 | Contas de anúncio do Meta | as 16 que o token do sistema enxerga, com unidade e principal (20261006k, **não aplicada**); CA - Tutorial inativa. Token já salvo em produção; coleta **desligada** |
 | Cadastro do projeto (evento) | tela pronta na Central (botão "Novo projeto" e "Projeto" na vida do projeto), banco escrito e ensaiado (20261006j, **não aplicada**); hoje dá para ver no modo demo |
+
+### Receita do projeto: oferta exclusiva e SCK
+
+> ⛔ **Não esquecer.** Decisão do Victor em 06/10/2026, com pedido explícito: *"precisa estar muito bem documentado para
+> que a gente não esqueça"*. Fonte: `_contexto/decisoes/2026-10-receita-do-projeto-por-oferta-e-sck.md` no cérebro do
+> Victor. Implementado na branch `victor` dentro das migrations **20261006i** (receita, vínculo, tela), **20261006j**
+> (resumo dos externos) e **20261006l** (checklist e resumo do dia), todas **NÃO APLICADAS**.
+
+**O problema.** Ligar um produto da Hotmart ao projeto e somar as vendas do período **não garante** que a venda veio do
+projeto: o mesmo produto (ex.: Holding Masters) é vendido ao mesmo tempo pelo comercial, pela recuperação e por outros
+lançamentos, e projetos podem ter janelas que se cruzam. Receita errada distorce o ROAS e a decisão de verba.
+
+**A regra.** Cada venda paga entra **uma vez só**, no **nível mais forte** que atingir. Venda paga = a regra do
+financeiro, sem mudança: `fin.hotmart_transacoes`, status `APPROVED` ou `COMPLETE`, data = `aprovado_em` no dia de São
+Paulo, bruto = valor da oferta (`valor_base`; sem ele, `hotmart_fee.base` do `bruto_json`, senão `valor_cobrado`),
+só BRL na soma (outra moeda é contada à parte), líquido do produtor ao lado.
+
+| Nível | Quando a venda é do projeto | Certeza | Entra na "Receita"? |
+|---|---|---|---|
+| 1. Oferta exclusiva | a venda é de uma **oferta** (`oferta_codigo`, por conta da Hotmart) ligada ao projeto com a marca **"oferta exclusiva deste projeto"**. Vale em **qualquer data**; só o De/Até **do próprio vínculo**, se preenchido, limita | certa | sim |
+| 2. SCK com o projeto | o `origem_sck` da venda traz o projeto no **campo campanha** (formato abaixo). **Qualquer produto, qualquer data** | certa | sim |
+| 3. Lead do projeto | o comprador (e-mail, documento ou telefone) tem evento `lead` do projeto na base de pessoas do Arthur **antes** da compra, **e** a compra é de produto ligado ao projeto, dentro do período do vínculo | provável | sim |
+| 4. Estimada | só produto ligado + período (a regra antiga) | estimada | **não**: mostrada à parte, nunca somada |
+
+- **Receita do projeto = níveis 1 a 3.** É a coluna "Receita" da Central e a base de **qualquer** conta com receita
+  (ROAS, meta de receita, o que vier). Hoje a Central não calcula ROAS; quando calcular, usa `receita` (nunca
+  `receita_estimada`).
+- **Disputa.** Venda que atinge o **mesmo** nível mais forte em mais de um projeto **não soma em nenhum**: vira "venda em
+  disputa" e aparece na vida de cada projeto envolvido. Projeto que só alcança um nível mais fraco perde a venda para o
+  mais forte (ex.: a oferta exclusiva de A vence a estimada de B; o SCK de A vence o lead de B).
+- **Uma oferta só pode ser exclusiva de um projeto.** O banco recusa a segunda (índice único
+  `mkt_trafego.produtos_hotmart_oferta_exclusiva_unica (conta, oferta_codigo) where oferta_exclusiva`); a tela diz de qual
+  projeto ela já é. Oferta exclusiva exige a oferta (não vale para "todas as ofertas").
+- **O vínculo continua** (conta + produto + oferta opcional + período) e ganhou a coluna `oferta_exclusiva`. Vínculo sem a
+  marca alimenta os níveis 3 e 4; com a marca, o nível 1.
+
+**Formato do SCK (DECIDIDO pelo Victor em 06/10/2026).** Os mesmos campos da UTM, na mesma ordem, separados por `|`:
+
+```
+origem|meio|campanha|conteúdo|termo
+```
+
+No campo **campanha** (o 3º) vai a **chave do projeto** (`mkt.projetos.etiqueta_clickup`, ex. `seminario-conjunto-2026-11`)
+**ou a sigla** (ex. `pb26`). O sistema aceita os dois, sem diferença de maiúscula, acento ou espaço nas pontas. Vale para
+checkout de abertura de carrinho, API, grupo, SMS, e-mail e comercial. **Tráfego pago fica de fora**: o checkout não
+recebe o sck do anúncio; ali valem a UTM (nome|id) e a oferta exclusiva. A leitura do SCK mora num lugar só:
+`mkt_trafego.sck_campanha(text)` (mudar o formato = só essa função).
+
+Exemplos:
+
+| `origem_sck` | Resultado |
+|---|---|
+| `sendflow\|grupo\|seminario-conjunto-2026-11\|\|` | nível 2 do PB26 (chave) |
+| `email\|disparo\|PB26\|convite-3\|` | nível 2 do PB26 (sigla, maiúscula não importa) |
+| `comercial\|whatsapp\|pb26\|\|marcos` | nível 2 do PB26 |
+| `pb26\|grupo\|outra\|\|` | **não** é do PB26 (a sigla está no 1º campo, não no campo campanha) |
+| `\|comercial\|sv-sem-set-2026\|marcos\|` | **não** casa com o SEMSET26 (o campo campanha é `sv-sem-set-2026`, não a chave `sem-set-2026`) |
+| `youtube\|live\|sem-set-2026\|\|cpl-3` | nível 2 do SEMSET26 |
+
+Outros exemplos da regra: venda da oferta exclusiva do ATM do HM feita 3 dias depois do evento = nível 1 do ATM (oferta
+exclusiva vale em qualquer data). Venda do HM na oferta normal, no período do ATM, sem SCK, de alguém que nunca foi lead do
+ATM = estimada do ATM (não entra). A mesma venda com o SCK `comercial|whatsapp|bf26||` = nível 2 da BF26.
+
+**Como estava o SCK no banco real em 06/10/2026** (SELECT em `fin.hotmart_transacoes`, 57.877 transações): 20.206 têm
+algum sck; 3.157 têm `|` (2.266 delas pagas). **Só 8 transações** trazem um projeto no campo campanha (todas do SEMSET26,
+`youtube|live|sem-set-2026||cpl-3`), **2 pagas** (R$ 6.000,00 de bruto). Mais 16 (4 pagas) usam `sv-sem-set-2026` no
+campo campanha, que **não** casa com a regra (prefixo `sv-`). Ou seja: hoje o nível 2 quase não existe; passa a valer
+quando os links seguirem o padrão.
+
+**Nível 3 (lead do projeto), como casa.** Só leitura na base do Arthur (nada dele foi alterado). Para cada projeto, as
+pessoas com evento `lead` (`pessoas.eventos`, tipo `lead`, `projeto_id` do projeto), juntadas pela pessoa que ficou
+(`pessoas.atual` e `pessoas.grupo`), com a data do primeiro lead. As chaves da pessoa: e-mail e telefone dos
+`pessoas.identificadores`, e e-mail, documento (só dígitos) e telefone do comprador (`public.compradores`) e do aluno
+(`public.thb_alunos`) ligados a ela. Do lado da venda: `comprador_email` (minúsculo, sem espaço), `comprador_documento` e
+`comprador_telefone` (pela mesma chave de telefone da base, `pessoas.chave_telefone`). Casa se a chave bate e o primeiro
+lead é **antes** de `aprovado_em`. Em 06/10/2026 a base tem 3.486 pessoas e **nenhum** evento ligado a projeto: o nível 3
+dá zero, e tudo bem (passa a contar quando os leads entrarem com projeto). Sem a base de pessoas no banco, o nível 3 fica
+fora e o resto funciona.
+
+**Na tela.**
+- **Central:** coluna **Receita** = níveis 1 a 3 (passe o mouse para ver a quebra por nível e as vendas em disputa;
+  marcas "sem oferta exclusiva" e "N em disputa" embaixo do valor). Coluna **Receita estimada** à parte (nível 4), com a
+  ajuda no cabeçalho. As duas ordenam.
+- **Vida do projeto**, "Receita do projeto (Hotmart)": o número que conta, a quebra por nível, a estimada à parte, a
+  lista **"Vendas em disputa"** (dia, transação, produto e oferta, nível, valor, projetos; sem dado do comprador) e o
+  **aviso grande** quando o projeto tem produto ligado e **nenhuma oferta exclusiva**: "Sem oferta exclusiva, a receita é
+  só estimada". O modal de ligar produto tem a caixa **"Oferta exclusiva deste projeto"** e mostra, na lista de ofertas,
+  de quem cada uma já é exclusiva.
+- **Checklist de montagem:** item automático novo **"Oferta exclusiva cadastrada na Hotmart e ligada ao projeto"**, momento
+  "antes de subir as campanhas", leva à área da Hotmart; vale para os projetos internos (a receita dos externos não entra
+  por ora).
+- **Resumo do dia:** regra nova **`sem_oferta_exclusiva`** (gravidade alta): projeto interno em captação ou com o carrinho
+  aberto (ontem dentro da captação, do evento ou da fase "abertura de carrinho" planejada) sem nenhuma oferta exclusiva.
+  Limiar em dias a partir do início do período (0 = desde o primeiro dia), configurável em `mkt_trafego.alerta_regras`.
+
+**O que a operação precisa fazer (sem isso a receita do projeto fica zero e só a estimada aparece).**
+1. **Toda ação de venda** (evento, ATM, abertura de carrinho) ganha uma **oferta exclusiva na Hotmart**, criada antes de
+   abrir as vendas, usada só no checkout daquela ação. Vale para todo produto, inclusive o HM.
+2. Na vida do projeto, **Ligar produto** → conta → produto → a oferta → marcar **"Oferta exclusiva deste projeto"**.
+3. **Links de checkout** (carrinho, API, grupo, SMS, e-mail, comercial) com o SCK no padrão
+   `origem|meio|campanha|conteúdo|termo` e o projeto no campo campanha (chave ou sigla). Nada de prefixo (`sv-…`) no campo
+   campanha. Padrão escrito no gp-operacoes, processo de UTM (`padronizar-utm-dos-links.md`).
+4. Pendências da decisão (no cérebro): oferta exclusiva do **ATM do HM** (previsto para 14/10/2026, a confirmar) e da
+   **abertura de carrinho do HM na Black Friday** (ligar ao BF26); conversar com quem monta os links de checkout.
+5. Ver a lista **"Vendas em disputa"** de cada projeto e resolver na origem (oferta exclusiva ou SCK).
+
+**No banco (20261006i).** `mkt_trafego.produtos_hotmart.oferta_exclusiva` + o índice único; `mkt_trafego.chave_norm`,
+`sck_campanha` (o formato do SCK), `pessoas_disponivel`, `receita_vendas(p_projeto)` (cada venda já classificada: nível,
+disputa, projetos da disputa) e `receita(p_projeto)` (os totais: `receita`, `receita_liquida`, `receita_oferta`,
+`receita_sck`, `receita_lead`, `receita_estimada`, `receita_compras_*`, `receita_disputa`, `receita_ofertas_exclusivas`);
+`public.trafego_receita(p_projeto)` para a vida do projeto. A classificação usa sempre todos os projetos (a disputa
+precisa ver os outros); `p_projeto` só filtra a saída. Ensaio: passo **3b** do `20261006i_ensaio.sql` (oferta exclusiva,
+uma oferta um projeto, SCK com chave e sigla, maiúscula e acento, sigla fora do campo campanha, disputa no nível 2 e no
+4, nível 3 por e-mail, documento e telefone, lead depois da compra, nível mais forte vence); passo 5 e 6 do
+`20261006l_ensaio.sql` (checklist e resumo do dia). Tela: `ui/ProdutosHotmart.tsx` (`ReceitaNiveis`), `ui/TrafegoClient.tsx`,
+`ui/formato.ts` (`quebraReceita`, `tituloReceita`), regra espelhada em `domain/alertas.ts` e `domain/cadastro.ts`.
+
+**Desempenho.** Níveis 1, 3 e 4 usam o índice do financeiro `hotmart_transacoes_produto_idx (produto_id, aprovado_em)`.
+O nível 2 precisa olhar todas as vendas pagas com `|` no sck (qualquer produto): no banco real, 06/10/2026, **123 a 176 ms
+com cache quente e 7,4 s frio** (EXPLAIN ANALYZE, 11.435 blocos; a tabela tem 114 MB por causa do `bruto_json`). A
+Central chama uma vez por carga; a vida do projeto, duas. **Nenhum índice novo foi criado na tabela do financeiro** (não
+é nossa). **Recomendação** para o dono do `fin` avaliar, se o tempo incomodar:
+`create index hotmart_transacoes_sck_pago_idx on fin.hotmart_transacoes (transacao) include (origem_sck, aprovado_em) where status in ('APPROVED', 'COMPLETE') and origem_sck like '%|%';`
+(cerca de 2,3 mil linhas; permite ler o nível 2 sem tocar a tabela). Detalhe em `20261006i.explain.md`.
 
 ### Decisões que mandam aqui (Victor, 05/10/2026)
 
@@ -405,9 +529,10 @@ link**. Quando a tela do Arthur aceitar um parâmetro, volta o link (`SecaoLeads
   (o Victor vai redefinir os níveis de acesso do sistema inteiro). Por ora, só admin/dev.
 - **Lead que conta é o da nossa base** (`pessoas.eventos`, 20261005r_pessoas_e_crm_fundacao do Arthur, aplicada): pessoas distintas com evento `lead` no projeto (pessoa
   mesclada conta como a pessoa que ficou, `pessoas.atual`), sem pessoa de teste. Os leads que a plataforma informa ficam só na campanha.
-- **"Quanto gerado" = receita** (Hotmart). Na fase 2: bruto (valor da oferta) das vendas pagas dos produtos ligados à
-  mão ao projeto, lido de `fin.hotmart_transacoes` (o espelho do financeiro, as duas contas), com o líquido ao lado (ver
-  "Fase 2" e "Auditoria"). Sem vínculo, nula.
+- **"Quanto gerado" = receita** (Hotmart). Bruto (valor da oferta) das vendas pagas, lido de `fin.hotmart_transacoes`
+  (o espelho do financeiro, as duas contas), com o líquido ao lado. **Desde 06/10/2026 só as vendas de origem certa ou
+  provável** (oferta exclusiva, SCK com o projeto, lead do projeto); produto + período vira "estimada", à parte. Ver
+  "Receita do projeto: oferta exclusiva e SCK".
 - **Atividades do ClickUp ficam na tela** (pela etiqueta do projeto). Na fase 2: lista e linha do tempo com o gasto.
 - **Nada duplicado:** projeto e página em `mkt`, lead em `pessoas`, visita em `mkt_web`.
 
@@ -472,7 +597,8 @@ Igual ao resto do Marketing: tabelas fechadas, só funções; `mkt.pode_ver('mkt
    `alertas.test.ts`, `linha-do-tempo.test.ts`, `coleta.test.ts`, `ui/fase2.test.ts`), `npm run build`.
 4. **Fase 2:** com a 20261006g aplicada, rodar `20261006i_ensaio.sql` inteiro (termina em rollback) e conferir que
    nenhuma linha começa com `ERRADO` ("PULADO" é esperado onde falta Vault, pg_cron ou a base de pessoas). No modo demo
-   aparecem o resumo do dia, a receita do PB26 (produto "Ingresso Exemplo", R$ 18.450 fictícios) e as atividades
+   aparecem o resumo do dia, a receita do PB26 por nível (oferta exclusiva "ex0001" R$ 12.300 e SCK R$ 1.990, estimada
+   R$ 6.150 à parte, 1 venda em disputa com o LPEXA26, tudo fictício) e as atividades
    "Exemplo: …" do ClickUp na vida do PB26. As Edges: `deno check infra/supabase/functions/trafego-meta/index.ts
    infra/supabase/functions/trafego-clickup/index.ts`; a parte pura roda no vitest com respostas simuladas
    (`infra/supabase/functions/_trafego-fixtures`), sem credencial e sem chamar API real.
@@ -503,7 +629,7 @@ configurável e está nas perguntas.
 | Peça | Onde | Como funciona |
 |---|---|---|
 | Resumo do dia | `public.trafego_alertas`, `mkt_trafego.alertas`; `domain/alertas.ts`; `ui/ResumoDia.tsx` | Sobre ontem (São Paulo), só projetos ativos e com status que entra no resumo (`status_projeto.entra_no_resumo_dia`: inativo e encerrado ficam fora). 7 regras, limiar em `mkt_trafego.alerta_regras` (tabela abaixo). A mesma regra no front para o demo e os testes |
-| Receita | `mkt_trafego.produtos_hotmart` (vínculo à mão: **conta** + produto + oferta opcional), `mkt_trafego.receita`, `public.trafego_produto_*`, `trafego_hotmart_produtos` (seletor por conta); `ui/ProdutosHotmart.tsx` | Lê `fin.hotmart_transacoes` (espelho da Hotmart do financeiro, contas `academy` e `escritorio`) casando por conta + produto (+ oferta). Paga = **APPROVED ou COMPLETE** (a regra do financeiro em `fin.vw_transacoes`); data = `aprovado_em` (dia de São Paulo); **bruto = valor da oferta** (`valor_base`, sem os juros do parcelamento) e líquido do produtor à parte. Período do vínculo, senão o padrão da receita; sem início não soma. Só BRL na soma. Venda que casa com dois vínculos conta uma vez. Nada é copiado: lido na hora |
+| Receita | `mkt_trafego.produtos_hotmart` (vínculo à mão: **conta** + produto + oferta opcional), `mkt_trafego.receita`, `public.trafego_produto_*`, `trafego_hotmart_produtos` (seletor por conta); `ui/ProdutosHotmart.tsx` | Lê `fin.hotmart_transacoes` (espelho da Hotmart do financeiro, contas `academy` e `escritorio`) casando por conta + produto (+ oferta). Paga = **APPROVED ou COMPLETE** (a regra do financeiro em `fin.vw_transacoes`); data = `aprovado_em` (dia de São Paulo); **bruto = valor da oferta** (`valor_base`, sem os juros do parcelamento) e líquido do produtor à parte. Período do vínculo, senão o padrão da receita; sem início não soma. Só BRL na soma. Venda que casa com dois vínculos conta uma vez. Nada é copiado: lido na hora. **Desde 06/10/2026 por nível de certeza** (`receita_vendas`, `public.trafego_receita`, marca `oferta_exclusiva` no vínculo): ver "Receita do projeto: oferta exclusiva e SCK" |
 | Atividades do ClickUp | `mkt_trafego.clickup_tarefas` (espelho mínimo), `public.trafego_clickup`, `public.trafego_clickup_receber`; Edge `trafego-clickup`; `ui/ClickupPainel.tsx`, `domain/linha-do-tempo.ts` | A rotina lê (só GET) as tarefas de cada etiqueta de projeto ativo, todas as páginas, e grava o conjunto inteiro (quem não veio perde a etiqueta). Na vida do projeto: barras do gasto diário e bolinhas das atividades no dia (concluída, senão prazo, início ou criação) e a lista |
 | Coleta Meta Ads | Edge `trafego-meta` (`meta.ts` puro + `index.ts`); `mkt_trafego.meta_contas`, `coleta_config`, `coletas` | Para cada conta Meta ativa: campanhas (nome exato e status) e insights por campanha e dia (`spend`, `impressions`, `inline_link_clicks` = cliques no link, `clicks` = totais, ação `lead` = leads da plataforma) dos últimos `meta_dias` (3) dias completos e hoje; grava pelos `receber` da 20261006g (campanhas antes, upsert idempotente). Token só no header; falha por conta vira código curto em `mkt_trafego.coletas` |
 | Google Ads | `infra/supabase/functions/trafego-google/google.ts` | Só o esqueleto (GAQL e conversão de micros), sem `index.ts`. Desenho abaixo |
@@ -813,7 +939,7 @@ estiver aplicada.
 | 2 | `20261006f_mkt_web_coleta` | 20261005n | 20261005m | coleta da Web (`mkt_web`, 14 tabelas, 12 funções), recusas da porta, limites, resumo, retenção; agenda 3 rotinas SQL (`mkt-web-manter`, `mkt-web-agregar`, `mkt-web-ritmo`) |
 | 3 | `20261006g_mkt_trafego` | 20261005p | 20261005m; lê a base de pessoas do Arthur se existir (existe) | 6 fases (com **antecipação** logo antes de captação) e 7 objetivo → fase, contas, coleta, planejamento, resumo conferido à mão, **leads e MQL da base do Arthur** (pessoa juntada conta como a que ficou), grants e recusas 42501 |
 | 4 | `20261006h_mkt_web_fase2` | 20261005q | 20261006f e 20261005m; conversa com a base de pessoas e com a 20261006g | fluxo, melhorias, mapa de calor, laboratório do Google, connect rate com o Tráfego, **lead ligado à pessoa** pela `ref` do Arthur (pessoa juntada, MQL do grupo, e `public.pessoas_registrar_lead` gravando `visitantes.lead_ref`); agenda `mkt-web-pagespeed` |
-| 5 | `20261006i_mkt_trafego_fase2` | 20261005r (a nossa) | 20261006g (lê `fin.hotmart_transacoes` e `fin.hotmart_contas`, do financeiro, já em produção) | resumo do dia com limiares, receita Hotmart por vínculo (conta + produto), ClickUp, rotinas criadas **desligadas** (a conferência aborta se estiverem agendadas), segredo `trafego_coleta_chave` no Vault |
+| 5 | `20261006i_mkt_trafego_fase2` | 20261005r (a nossa) | 20261006g (lê `fin.hotmart_transacoes` e `fin.hotmart_contas`, do financeiro, já em produção; o nível 3 da receita lê a base de pessoas do Arthur, só leitura) | resumo do dia com limiares, receita Hotmart por vínculo (conta + produto) **por nível de certeza (oferta exclusiva, SCK, lead do projeto; estimada à parte)**, ClickUp, rotinas criadas **desligadas** (a conferência aborta se estiverem agendadas), segredo `trafego_coleta_chave` no Vault |
 | 6 | `20261006j_mkt_projetos_cadastro` | 20261006a | 20261006g e 20261006i | cadastro do projeto (tipo, unidade, tipo de lançamento com a regra no banco, especialista, períodos, contas), checklist, etiquetas do ClickUp |
 | 7 | `20261006k_mkt_trafego_contas_meta` | 20261006b | 20261006j | as 16 contas do Meta com unidade e principal; aborta se a coleta do Meta já estiver agendada |
 | 8 | `20261006l_mkt_trafego_modelos` | 20261006d | 20261006j (aborta se o pacote ou o checklist antigo tiverem dado) | 9 modelos de exemplo (rascunho), prévia e aplicar, checklist por momento, **SendFlow: grupo de leads onde há LEADS, grupo de compradores onde há VENDAS** |
@@ -1024,3 +1150,10 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
   regra de paga do financeiro) com vínculo por conta e seletor de produto; leads "sem dado" sem lead na base; status e
   gestores só no cadastro do projeto; busca e ordenação na Central (na URL); "Novo projeto" de Projetos e páginas leva
   ao cadastro do Tráfego; RMKT fora do padrão com o motivo claro. Branch `victor`.
+- **06/10/2026:** **receita do projeto por nível de certeza** (decisão do Victor; migrations 20261006i, 20261006j e
+  20261006l editadas, ainda NÃO APLICADAS): oferta exclusiva (marca no vínculo, uma oferta por projeto, o banco recusa a
+  segunda), SCK com o projeto no campo campanha (formato decidido `origem|meio|campanha|conteúdo|termo`), comprador que foi
+  lead do projeto; produto + período vira "estimada", à parte; venda que casa com dois projetos no mesmo nível fica em
+  disputa. Central com "Receita" (1 a 3) e "Receita estimada"; vida do projeto com a quebra, as vendas em disputa e o
+  aviso "sem oferta exclusiva"; item novo no checklist e regra `sem_oferta_exclusiva` no resumo do dia. Seção "Receita do
+  projeto: oferta exclusiva e SCK". Branch `victor`.

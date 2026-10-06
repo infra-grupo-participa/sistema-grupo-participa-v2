@@ -18,6 +18,9 @@
 //                       que não é do projeto; só avalia projeto com conta ligada
 //   checklist_incompleto (20261006l) projeto em captação (ontem entre início e fim da captação) com item do checklist de
 //                       "antes de subir as campanhas" pendente, a partir de `limiar` dias do início da captação
+//   sem_oferta_exclusiva (20261006l, decisão do Victor de 06/10/2026) projeto interno em captação ou com o carrinho aberto
+//                       (ontem dentro da captação, do evento ou da fase abertura de carrinho) sem nenhuma oferta
+//                       exclusiva ligada: a receita dele é só estimada. A partir de `limiar` dias do início do período
 // Período da meta de leads: a fase de captação planejada com datas; senão o período padrão do projeto (20261006j: a
 // captação do projeto, senão início e fim), como mkt_trafego.periodo_padrao.
 
@@ -32,7 +35,8 @@ export interface FaseEntrada { fase: string; nome: string; verba: number | null;
 export interface CampanhaEntrada { fora_padrao: boolean; fase: string | null; ultimoGasto: string | null; conta_id?: number; conta?: string }
 export interface ProjetoEntrada {
   linha: Pick<LinhaResumo, 'projeto_id' | 'sigla' | 'nome' | 'investido' | 'verba_maxima' | 'verba_diaria' | 'gasto_ontem' | 'ritmo_ontem'
-    | 'pct_verba' | 'leads' | 'meta_leads' | 'cpl' | 'meta_cpl' | 'inicio' | 'fim'> & Pick<Partial<LinhaResumo>, 'captacao_inicio' | 'captacao_fim'>;
+    | 'pct_verba' | 'leads' | 'meta_leads' | 'cpl' | 'meta_cpl' | 'inicio' | 'fim'>
+    & Pick<Partial<LinhaResumo>, 'captacao_inicio' | 'captacao_fim' | 'evento_inicio' | 'evento_fim' | 'tipo'>;
   /** Projeto ativo em mkt.projetos e com status que entra no resumo do dia. */
   entra: boolean;
   fases: FaseEntrada[];
@@ -43,10 +47,12 @@ export interface ProjetoEntrada {
   campanhasDaSigla?: CampanhaEntrada[];
   /** Itens do checklist de "antes" ainda pendentes (20261006l). */
   pendentesAntes?: string[];
+  /** Ofertas exclusivas ligadas ao projeto. Ausente = a regra sem_oferta_exclusiva não avalia. */
+  ofertasExclusivas?: number;
 }
 
 const ORDEM: RegraAlerta[] = ['acima_verba_diaria', 'cpl_acima_meta', 'leads_abaixo_meta', 'ritmo_fase', 'verba_perto_fim', 'fora_padrao', 'sem_fase',
-  'conta_fora_projeto', 'checklist_incompleto'];
+  'conta_fora_projeto', 'checklist_incompleto', 'sem_oferta_exclusiva'];
 
 export function calcularAlertas(ontem: string, regras: Regra[], projetos: ProjetoEntrada[], semProjeto: CampanhaEntrada[]): Alerta[] {
   const rg = new Map(regras.filter((r) => r.ligada).map((r) => [r.codigo, r]));
@@ -58,7 +64,7 @@ export function calcularAlertas(ontem: string, regras: Regra[], projetos: Projet
   };
   const recente = (ultimo: string | null, n: number) => ultimo != null && dias(ultimo, ontem) < n;
 
-  for (const { linha: l, entra, fases, campanhas, contasProjeto, campanhasDaSigla, pendentesAntes } of projetos) {
+  for (const { linha: l, entra, fases, campanhas, contasProjeto, campanhasDaSigla, pendentesAntes, ofertasExclusivas } of projetos) {
     if (!entra) continue;
     let r = rg.get('acima_verba_diaria');
     if (r && l.investido != null && l.verba_diaria != null && l.verba_diaria > 0 && l.gasto_ontem != null
@@ -120,6 +126,19 @@ export function calcularAlertas(ontem: string, regras: Regra[], projetos: Projet
       const d = dias(l.captacao_inicio, ontem);
       if (d >= r.limiar) add('checklist_incompleto', l, pendentesAntes.length, null, { dias: d, itens: pendentesAntes });
     }
+    r = rg.get('sem_oferta_exclusiva');
+    if (r && ofertasExclusivas === 0 && l.tipo !== 'externo') {
+      const dentro = (ini: string | null | undefined, fim: string | null | undefined) => !!ini && ini <= ontem && (fim ?? ini) >= ontem;
+      const emCaptacao = !!l.captacao_inicio && l.captacao_inicio <= ontem && (l.captacao_fim ?? ontem) >= ontem;
+      const carrinho = fases.filter((f) => f.fase === 'abertura_carrinho' && f.inicio && f.fim && f.inicio <= ontem && f.fim >= ontem)
+        .map((f) => f.inicio!).sort()[0];
+      const evento = dentro(l.evento_inicio, l.evento_fim) ? l.evento_inicio! : undefined;
+      const ini = emCaptacao ? l.captacao_inicio! : [evento, carrinho].filter((x): x is string => !!x).sort()[0];
+      if (ini) {
+        const d = dias(ini, ontem);
+        if (d >= r.limiar) add('sem_oferta_exclusiva', l, 0, null, { fase: emCaptacao ? 'captacao' : 'abertura_carrinho', inicio: ini, dias: d });
+      }
+    }
   }
   const rf = rg.get('fora_padrao');
   if (rf) {
@@ -157,6 +176,8 @@ export function textoAlerta(a: Alerta): string {
       return `${int(a.valor)} campanha(s) com a sigla do projeto gastando nos últimos ${int(d.dias)} dias em conta que não é do projeto (${(d.contas ?? []).join(', ')}).`;
     case 'checklist_incompleto':
       return `Em captação há ${int(d.dias)} dia(s) com ${int(a.valor)} item(ns) de "antes de subir as campanhas" pendente(s): ${(d.itens ?? []).join('; ')}.`;
+    case 'sem_oferta_exclusiva':
+      return `${d.fase === 'captacao' ? 'Em captação' : 'Com o carrinho aberto'} há ${int(d.dias)} dia(s) sem oferta exclusiva ligada: a receita do projeto é só estimada. Crie na Hotmart uma oferta só para este projeto e ligue na vida do projeto marcando "oferta exclusiva".`;
     case 'sem_fase':
       return `${int(a.valor)} campanha(s) sem fase gastando nos últimos ${int(d.dias)} dias (marque a fase na campanha).`;
     default:

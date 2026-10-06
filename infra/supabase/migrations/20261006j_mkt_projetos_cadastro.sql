@@ -32,6 +32,7 @@
 --        (mkt_trafego.clickup_etiquetas_vistas e mkt_trafego.clickup_tarefas, quando a rotina trafego-clickup rodar).
 --        Etiqueta fora da lista continua aceita (a tela avisa "não encontrada no ClickUp"); o formato é conferido.
 --     8. Receita dos externos não entra por ora: no resumo, projeto externo vem com receita nula e receita_aplica false.
+--        (Com a receita por nível da 20261006i, decisão de 06/10/2026, os campos por nível e a estimada também vêm nulos.)
 --     9. Período de CAPTAÇÃO e período do EVENTO, separados (mkt.projetos.captacao_inicio/fim, evento_inicio/fim). As datas
 --        que já existem (inicio/fim) continuam: viram o período do projeto inteiro, derivado pelo gatilho (do começo da
 --        captação ou do evento até o fim mais tarde) quando algum período novo é preenchido; sem período novo, ficam como
@@ -449,7 +450,11 @@ begin
            -- receita dos externos não entra por ora (Victor, 06/10/2026)
            || case when p.tipo = 'externo' then jsonb_build_object('receita', null, 'receita_liquida', null,
                                                                    'receita_liquido_estimado', null, 'receita_compras', null,
-                                                                   'receita_outras_moedas', null, 'receita_sem_valor', null)
+                                                                   'receita_outras_moedas', null, 'receita_sem_valor', null,
+                                                                   'receita_oferta', null, 'receita_sck', null, 'receita_lead', null,
+                                                                   'receita_estimada', null, 'receita_compras_oferta', null,
+                                                                   'receita_compras_sck', null, 'receita_compras_lead', null,
+                                                                   'receita_compras_estimada', null, 'receita_disputa', null)
                    else '{}'::jsonb end
            order by x.o), '[]'::jsonb)
             from jsonb_array_elements(v_base) with ordinality x(e, o)
@@ -1070,8 +1075,8 @@ begin
      or has_function_privilege('authenticated', 'public.trafego_clickup_etiquetas_receber(jsonb)', 'execute') then
     raise exception '20261006j: grant de trafego_clickup_etiquetas_receber errado';
   end if;
-  if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%') <> 31 then
-    raise exception '20261006j: esperava 31 funções public.trafego_* (20 da 20261006g/r + 11)';
+  if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%') <> 32 then
+    raise exception '20261006j: esperava 32 funções public.trafego_* (21 da 20261006g/i + 11)';
   end if;
   if (select count(*) from mkt.unidades) <> 4 or (select count(*) from mkt.tipos_lancamento) <> 5
      or (select count(*) from mkt.lancamento_regras) <> 9 or (select count(*) from mkt.especialistas) <> 2

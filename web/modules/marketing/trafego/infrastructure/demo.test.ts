@@ -4,7 +4,7 @@ import { comKpis } from '../domain/kpis';
 import { somaPct } from '../domain/modelos';
 import {
   demoAlertas, demoAplicarModelo, demoAtivarModelo, demoDuplicarModelo, demoMarcarItem, demoModelos, demoPrevias, demoSalvarItem, demoSalvarModelo, demoCadastro, demoChecklist, demoListasCadastro, demoSalvarCadastro, 
-  demoAjustarCampanha, demoApagarProduto, demoSalvarConta, demoCampanhas, demoContas, demoProdutos, demoProjeto, demoResumo, demoSalvarFase, demoSalvarProduto,
+  demoAjustarCampanha, demoApagarProduto, demoProdutosVistos, demoReceita, demoSalvarConta, demoCampanhas, demoContas, demoProdutos, demoProjeto, demoResumo, demoSalvarFase, demoSalvarProduto,
 } from './demo';
 
 describe('modo de demonstração do Tráfego (dados fictícios)', () => {
@@ -55,17 +55,27 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
     expect(pb.connect_rate).not.toBeNull();
     expect(demoResumo().find((l) => l.sigla === 'HT33')!.connect_rate).toBeNull();
   });
-  it('receita (fase 2): PB26 com o produto Exemplo ligado; sem vínculo = sem dado; vínculo sem período não soma', () => {
+  it('receita por nível (decisão de 06/10/2026): PB26 com oferta exclusiva e SCK; o produto inteiro é estimada à parte', () => {
     const pb = demoResumo().find((l) => l.sigla === 'PB26')!;
-    expect([pb.receita, pb.receita_liquida]).toEqual([18450, 17520]);
+    // receita do projeto = níveis 1 a 3 (12300 oferta exclusiva + 1990 SCK); a estimada (só produto + período) não soma
+    expect([pb.receita, pb.receita_liquida, pb.receita_oferta, pb.receita_sck, pb.receita_estimada]).toEqual([14290, 13590, 12300, 1990, 6150]);
+    expect([pb.receita_ofertas_exclusivas, pb.receita_disputa]).toEqual([1, 1]);
+    const rec = demoReceita(1)!;
+    expect([rec.sem_oferta_exclusiva, rec.disputas_total, rec.sck_chaves]).toEqual([false, 1, ['seminario-conjunto-2026-11', 'pb26']]);
+    // uma oferta só pode ser exclusiva de um projeto
+    const outra = demoSalvarProduto({ projeto_id: 4, conta: 'academy', produto_id: '0000001', oferta_codigo: 'ex0001', oferta_exclusiva: true, de: '', ate: '', obs: '' });
+    expect([outra.ok, outra.msg]).toEqual([false, expect.stringContaining('já é exclusiva de PB26')]);
+    expect(demoSalvarProduto({ projeto_id: 4, conta: 'academy', produto_id: '0000001', oferta_codigo: '', oferta_exclusiva: true, de: '', ate: '', obs: '' }).ok).toBe(false);
+    expect(demoProdutosVistos()[0].ofertas[0].exclusiva_de).toBe('PB26');
     expect(demoResumo().find((l) => l.sigla === 'HT33')!.receita).toBeNull();
     // sem conta: recusado (auditoria 06/10/2026: o vínculo leva a conta da Hotmart)
     expect(demoSalvarProduto({ projeto_id: 2, produto_id: '0000002', oferta_codigo: '', de: '', ate: '', obs: '' }).ok).toBe(false);
     const r = demoSalvarProduto({ projeto_id: 2, conta: 'escritorio', produto_id: '0000002', oferta_codigo: '', de: '', ate: '', obs: '' });
-    expect([r.ok, r.avisos]).toEqual([true, ['sem_periodo']]);
+    expect([r.ok, r.avisos]).toEqual([true, ['sem_periodo', 'sem_oferta_exclusiva']]);
+    expect(demoReceita(2)!.sem_oferta_exclusiva).toBe(true);
     // o mesmo id em outra conta: sem venda nela
     expect(demoSalvarProduto({ projeto_id: 2, conta: 'academy', produto_id: '0000002', oferta_codigo: '', de: '', ate: '', obs: '' }).avisos)
-      .toEqual(['sem_periodo', 'produto_sem_compras']);
+      .toEqual(['sem_periodo', 'produto_sem_compras', 'sem_oferta_exclusiva']);
     const ht = demoResumo().find((l) => l.sigla === 'HT33')!;
     expect([ht.receita, ht.receita_vinculos, ht.receita_sem_periodo]).toEqual([null, 2, 2]);
     for (const v of demoProdutos(2)) demoApagarProduto(v.id);

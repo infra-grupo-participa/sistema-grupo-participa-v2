@@ -66,15 +66,37 @@ export interface LinhaResumo {
   /** Gestores que aparecem no nome das campanhas do projeto. */
   gestores_campanhas: string[];
   /**
-   * Receita gerada (Hotmart), BRUTO: valor da oferta das vendas pagas (APPROVED/COMPLETE) dos produtos ligados ao projeto,
-   * no período, lido de fin.hotmart_transacoes (o espelho do financeiro, as duas contas). Nulo = sem vínculo.
+   * RECEITA DO PROJETO (Hotmart), BRUTO = valor da oferta das vendas pagas (APPROVED/COMPLETE), lido de
+   * fin.hotmart_transacoes (o espelho do financeiro, as duas contas). Desde a decisão do Victor de 06/10/2026 só entram
+   * os níveis CERTOS e PROVÁVEL (1 oferta exclusiva, 2 SCK com o projeto, 3 comprador que foi lead do projeto); o
+   * nível 4 (só produto + período) é `receita_estimada`, à parte, e nunca soma aqui. Toda conta com receita (ROAS etc.)
+   * usa ESTE campo. Nulo = sem vínculo com período, sem oferta exclusiva e sem venda certa (ou sem a fonte).
+   * Regra completa: docs/central-de-dados.md, "Receita do projeto: oferta exclusiva e SCK".
    */
   receita: number | null;
-  /** Líquido do produtor das mesmas vendas (liquido_produtor, ou oferta − taxa quando a Hotmart não mandou). */
+  /** Nível 1: vendas de oferta exclusiva do projeto (certa). */
+  receita_oferta?: number | null;
+  /** Nível 2: vendas com o SCK trazendo o projeto no campo campanha (certa). */
+  receita_sck?: number | null;
+  /** Nível 3: comprador que foi lead do projeto antes de comprar, produto ligado, no período (provável). */
+  receita_lead?: number | null;
+  /** Nível 4: só produto ligado + período (estimada). À PARTE: nunca entra em `receita`. Nulo = sem vínculo com período. */
+  receita_estimada?: number | null;
+  receita_compras_oferta?: number | null;
+  receita_compras_sck?: number | null;
+  receita_compras_lead?: number | null;
+  receita_compras_estimada?: number | null;
+  /** Vendas em disputa: casam com outro projeto no mesmo nível mais forte; não somam em nenhum. */
+  receita_disputa?: number | null;
+  /** Ofertas exclusivas ligadas ao projeto. 0 com produto ligado = a receita é só estimada. */
+  receita_ofertas_exclusivas?: number;
+  /** false = sem a base de pessoas neste banco: o nível 3 fica fora. */
+  receita_base_pessoas?: boolean;
+  /** Líquido do produtor das vendas dos níveis 1 a 3 (liquido_produtor, ou oferta − taxa quando a Hotmart não mandou). */
   receita_liquida?: number | null;
   /** Vendas em reais com o líquido estimado (sem liquido_produtor). */
   receita_liquido_estimado?: number | null;
-  /** Vendas pagas que entraram (todas as moedas). Nulo = sem fin.hotmart_transacoes neste banco. */
+  /** Vendas pagas dos níveis 1 a 3 (todas as moedas). Nulo = sem fin.hotmart_transacoes neste banco. */
   receita_compras?: number | null;
   /** Vendas pagas em outra moeda (não entram na soma em reais). */
   receita_outras_moedas?: number | null;
@@ -223,7 +245,7 @@ export const ROTULO_AVISO: Record<string, string> = {
 
 export type RegraAlerta =
   | 'acima_verba_diaria' | 'cpl_acima_meta' | 'leads_abaixo_meta' | 'ritmo_fase' | 'verba_perto_fim' | 'fora_padrao' | 'sem_fase'
-  | 'conta_fora_projeto' | 'checklist_incompleto';
+  | 'conta_fora_projeto' | 'checklist_incompleto' | 'sem_oferta_exclusiva';
 
 /** Regra do resumo do dia, com o limiar da tabela mkt_trafego.alerta_regras. */
 export interface Regra {
@@ -273,13 +295,19 @@ export interface ProdutoHotmart {
   id: number; projeto_id: number; projeto_sigla: string;
   /** Conta da Hotmart (fin.hotmart_transacoes.conta): academy (CSM) ou escritorio. */
   conta: string; produto_id: string; produto_nome?: string | null; oferta_codigo: string | null;
+  /** A oferta é exclusiva deste projeto (nível 1 da receita, certa). Uma oferta só pode ser exclusiva de um projeto. */
+  oferta_exclusiva?: boolean;
   de: string | null; ate: string | null; obs: string | null;
   /** O período que vale: "de" ou o início do projeto; "até" ou o fim do projeto (nulo = até hoje). */
   de_efetivo: string | null; ate_efetivo: string | null;
 }
 
 /** Produto que já apareceu em fin.hotmart_transacoes, por conta (o seletor do cadastro). */
-export interface OfertaVista { codigo: string; pagas: number; ultima: string | null }
+export interface OfertaVista {
+  codigo: string; pagas: number; ultima: string | null;
+  /** Sigla do projeto de quem esta oferta já é exclusiva (nulo = de ninguém). */
+  exclusiva_de?: string | null;
+}
 export interface ProdutoVisto {
   conta: string; produto_id: string; nome: string | null; aprovadas: number; ultima: string | null; ofertas: OfertaVista[];
 }
@@ -305,10 +333,48 @@ export interface ClickupProjeto {
 }
 
 export const ROTULO_AVISO_PRODUTO: Record<string, string> = {
-  produto_em_outro_projeto: 'Este produto (mesma conta) também está ligado a outro projeto num período que se cruza: a venda conta nos dois.',
-  sem_periodo: 'Sem "de" e o projeto sem data de início: este vínculo não soma até ter uma data.',
+  produto_em_outro_projeto: 'Este produto (mesma conta) também está ligado a outro projeto num período que se cruza: a venda que casar com os dois no mesmo nível fica em disputa e não soma em nenhum. Use oferta exclusiva.',
+  sem_oferta_exclusiva: 'Este projeto ainda não tem oferta exclusiva: a receita dele é só estimada. Crie na Hotmart uma oferta só para o projeto e ligue aqui marcando "oferta exclusiva".',
+  sem_periodo: 'Sem "de" e o projeto sem data de início: este vínculo não soma até ter uma data (a oferta exclusiva soma mesmo assim).',
   produto_sem_compras: 'Nenhuma venda deste produto apareceu ainda nesta conta da Hotmart (confira a conta e o id).',
 };
+
+/** Os níveis de certeza da receita (decisão do Victor, 06/10/2026). */
+export type NivelReceita = 1 | 2 | 3 | 4;
+export const ROTULO_NIVEL: Record<NivelReceita, { nome: string; certeza: string; regra: string }> = {
+  1: { nome: 'Oferta exclusiva', certeza: 'certa', regra: 'Venda de uma oferta da Hotmart criada só para este projeto e ligada aqui como exclusiva.' },
+  2: { nome: 'SCK com o projeto', certeza: 'certa', regra: 'O link de checkout levava o projeto no campo campanha do SCK (origem|meio|campanha|conteúdo|termo).' },
+  3: { nome: 'Lead do projeto', certeza: 'provável', regra: 'O comprador (e-mail, documento ou telefone) foi lead deste projeto antes de comprar, e comprou produto ligado, no período.' },
+  4: { nome: 'Estimada', certeza: 'estimada', regra: 'Só produto ligado + período. Fica à parte: não entra na receita do projeto nem no ROAS.' },
+};
+
+/** Venda que casa com mais de um projeto no mesmo nível mais forte: não soma em nenhum. Sem dado do comprador. */
+export interface VendaDisputa {
+  transacao: string; dia: string; conta: string; produto_id: string; oferta_codigo: string | null;
+  nivel: NivelReceita; valor: number | null; moeda: string;
+  /** Siglas dos projetos em disputa (inclui este). */
+  projetos: string[];
+}
+
+/** public.trafego_receita(p_projeto): a receita do projeto por nível, para a vida do projeto (20261006i). */
+export interface ReceitaProjeto {
+  projeto_id: number;
+  /** false = sem fin.hotmart_transacoes neste banco. */
+  fonte: boolean;
+  /** false = sem a base de pessoas: o nível 3 fica fora. */
+  base_pessoas: boolean;
+  /** Os campos receita_* do projeto (os mesmos da linha da Central). Nulo = nenhum vínculo nem venda certa. */
+  receita: Partial<LinhaResumo> | null;
+  vinculos: number;
+  ofertas_exclusivas: number;
+  /** Produto ligado e nenhuma oferta exclusiva: a receita é só estimada (o aviso grande). */
+  sem_oferta_exclusiva: boolean;
+  /** O formato do SCK (decidido) e as chaves que valem para este projeto no campo campanha. */
+  sck_formato: string;
+  sck_chaves: string[];
+  disputas_total: number;
+  disputas: VendaDisputa[];
+}
 
 // ─── Cadastro do projeto (migration 20261006j) ───────────────────────────────────────────────────────────────────────
 

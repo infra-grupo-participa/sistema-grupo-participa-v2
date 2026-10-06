@@ -198,6 +198,8 @@ export interface ItemProjeto { id: number; texto: string; momento: Momento; feit
 export interface EntradaChecklist {
   tipo: Tipo | null;
   contas: number; campanhas: number; foraPadrao: number; semFase: number; produtosHotmart: number; paginas: number;
+  /** Códigos das ofertas exclusivas ligadas ao projeto (decisão do Victor, 06/10/2026). Ausente = nenhuma. */
+  ofertasExclusivas?: string[];
   etiqueta: string | null; verbaMaxima: number | null; fases: number; metas: (number | null)[];
   /** Nome do modelo aplicado (nulo = nenhum). */
   modelo: string | null;
@@ -220,6 +222,9 @@ export function montarChecklist(e: EntradaChecklist, itens: ItemProjeto[]): Chec
     a('etiqueta', 'Etiqueta do ClickUp preenchida', 'antes', 'projeto', true, !!e.etiqueta),
     a('paginas', 'Páginas do projeto cadastradas', 'antes', 'paginas', true, e.paginas > 0),
     a('hotmart', 'Produtos da Hotmart vinculados', 'antes', 'hotmart', e.tipo !== 'externo', e.produtosHotmart > 0),
+    // sem oferta exclusiva a receita do projeto é só estimada (decisão do Victor, 06/10/2026)
+    a('oferta_exclusiva', 'Oferta exclusiva cadastrada na Hotmart e ligada ao projeto', 'antes', 'hotmart', e.tipo !== 'externo',
+      (e.ofertasExclusivas ?? []).length > 0, (e.ofertasExclusivas ?? []).length ? [...(e.ofertasExclusivas ?? [])].sort().join(', ') : null),
     a('modelo', 'Modelo de lançamento aplicado', 'antes', 'modelo', true, !!e.modelo, e.modelo),
     a('verba', 'Verba máxima preenchida', 'antes', 'planejamento', true, e.verbaMaxima != null),
     a('fases', 'Fases planejadas', 'antes', 'fases', true, e.fases > 0),

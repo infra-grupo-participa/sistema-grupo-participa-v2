@@ -410,7 +410,11 @@ begin
            -- receita dos externos não entra por ora (Victor, 06/10/2026)
            || case when p.tipo = 'externo' then jsonb_build_object('receita', null, 'receita_liquida', null,
                                                                    'receita_liquido_estimado', null, 'receita_compras', null,
-                                                                   'receita_outras_moedas', null, 'receita_sem_valor', null)
+                                                                   'receita_outras_moedas', null, 'receita_sem_valor', null,
+                                                                   'receita_oferta', null, 'receita_sck', null, 'receita_lead', null,
+                                                                   'receita_estimada', null, 'receita_compras_oferta', null,
+                                                                   'receita_compras_sck', null, 'receita_compras_lead', null,
+                                                                   'receita_compras_estimada', null, 'receita_disputa', null)
                    else '{}'::jsonb end
            order by x.o), '[]'::jsonb)
             from jsonb_array_elements(v_base) with ordinality x(e, o)
@@ -1031,8 +1035,8 @@ begin
      or has_function_privilege('authenticated', 'public.trafego_clickup_etiquetas_receber(jsonb)', 'execute') then
     raise exception '20261006j: grant de trafego_clickup_etiquetas_receber errado';
   end if;
-  if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%') <> 31 then
-    raise exception '20261006j: esperava 31 funções public.trafego_* (20 da 20261006g/r + 11)';
+  if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%') <> 32 then
+    raise exception '20261006j: esperava 32 funções public.trafego_* (21 da 20261006g/i + 11)';
   end if;
   if (select count(*) from mkt.unidades) <> 4 or (select count(*) from mkt.tipos_lancamento) <> 5
      or (select count(*) from mkt.lancamento_regras) <> 9 or (select count(*) from mkt.especialistas) <> 2

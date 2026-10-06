@@ -10,7 +10,8 @@ import type { ListasCadastro, ProjetoCadastro, ProjetoForm } from '../domain/cad
 import type { BuscaEtiquetas } from '../domain/etiquetas';
 import { paraSalvar, type Modelo, type Momento, type PreviaModelo } from '../domain/modelos';
 import type {
-  Campanha, Checklist, ClickupProjeto, ConfigTrafego, Conta, LinhaResumo, ProdutoHotmart, ProdutoVisto, Resposta, ResumoDia, VidaProjeto,
+  Campanha, Checklist, ClickupProjeto, ConfigTrafego, Conta, LinhaResumo, ProdutoHotmart, ProdutoVisto, ReceitaProjeto, Resposta, ResumoDia,
+  VidaProjeto,
 } from '../domain/tipos';
 import * as demo from './demo';
 
@@ -123,7 +124,12 @@ export const listarProdutos = (projeto: number): Promise<ProdutoHotmart[] | null
 export const listarProdutosVistos = (): Promise<ProdutoVisto[] | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoProdutosVistos()) : rpc<ProdutoVisto[]>('trafego_hotmart_produtos');
 
-export interface ProdutoForm { id?: number; projeto_id: number; conta: string; produto_id: string; oferta_codigo: string; de: string; ate: string; obs: string }
+export interface ProdutoForm {
+  id?: number; projeto_id: number; conta: string; produto_id: string; oferta_codigo: string;
+  /** A oferta é exclusiva deste projeto (nível 1 da receita). Exige a oferta. */
+  oferta_exclusiva: boolean;
+  de: string; ate: string; obs: string;
+}
 export async function salvarProduto(p: ProdutoForm): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoSalvarProduto({ ...p });
   return await gravar<Resposta>('trafego_produto_salvar', { p });
@@ -133,6 +139,10 @@ export async function apagarProduto(id: number): Promise<Resposta> {
   if (MODO_DEMO) return demo.demoApagarProduto(id);
   return await gravar<Resposta>('trafego_produto_apagar', { p_id: id });
 }
+
+/** Receita do projeto por nível de certeza e vendas em disputa (public.trafego_receita). null = sem acesso ou sem a função. */
+export const carregarReceita = (projeto: number): Promise<ReceitaProjeto | null> =>
+  MODO_DEMO ? Promise.resolve(demo.demoReceita(projeto)) : rpc<ReceitaProjeto>('trafego_receita', { p_projeto: projeto });
 
 /** Atividades do ClickUp do projeto (espelho pela etiqueta). null = sem acesso ou a 20261006i não aplicada. */
 export const carregarClickup = (projeto: number): Promise<ClickupProjeto | null> =>

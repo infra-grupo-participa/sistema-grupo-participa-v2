@@ -21,7 +21,7 @@ import {
 import { comKpis } from '../domain/kpis';
 import type {
   Campanha, Checklist, ClickupProjeto, ConfigTrafego, Conta, Dono, FaseProjeto, LinhaResumo, ProdutoHotmart, ProdutoVisto,
-  Regra, Resposta, ResumoDia, Subarea, TarefaClickup, Tipo, VidaProjeto,
+  ReceitaProjeto, Regra, Resposta, ResumoDia, Subarea, TarefaClickup, Tipo, VendaDisputa, VidaProjeto,
 } from '../domain/tipos';
 import { ordenarContas, unidadesDoDono } from '../domain/tipos';
 
@@ -200,7 +200,9 @@ function linha(p: ProjetoDemo): LinhaResumo {
     status: pl?.status ?? null, status_nome: CONFIG.status.find((s) => s.codigo === pl?.status)?.nome ?? null,
     gestores: pl?.gestores ?? [], gestores_campanhas: [...new Set(cs.map((c) => c.gestor).filter((g): g is string => !!g))].sort(),
     ...receitaDemo(p.id), receita_aplica: p.tipo !== 'externo',
-    ...(p.tipo === 'externo' ? { receita: null, receita_liquida: null, receita_liquido_estimado: null, receita_compras: null, receita_outras_moedas: null, receita_sem_valor: null } : {}),
+    ...(p.tipo === 'externo' ? { receita: null, receita_liquida: null, receita_liquido_estimado: null, receita_compras: null, receita_outras_moedas: null, receita_sem_valor: null,
+      receita_oferta: null, receita_sck: null, receita_lead: null, receita_estimada: null, receita_compras_oferta: null, receita_compras_sck: null,
+      receita_compras_lead: null, receita_compras_estimada: null, receita_disputa: null } : {}),
     investido: tem ? soma(dias.map((d) => d.gasto)) : null, por_plataforma: tem ? porPlat : null, moedas: [...new Set(cs.map((c) => c.moeda))],
     verba_maxima: pl?.verba_maxima ?? null, verba_diaria: pl?.verba_diaria ?? null,
     verba_fases: soma(fs.map((f) => f.verba ?? 0)), fases: fs.length,
@@ -320,32 +322,78 @@ const REGRAS_DEMO: Regra[] = [
   { codigo: 'sem_fase', nome: 'Campanhas sem fase', ligada: true, limiar: 7, unidade: 'dias', gravidade: 'media', descricao: 'Campanhas sem fase que gastaram nos últimos limiar dias.' },
   { codigo: 'conta_fora_projeto', nome: 'Campanha do projeto em conta de fora', ligada: true, limiar: 7, unidade: 'dias', gravidade: 'media', descricao: 'Campanha com a sigla do projeto que gastou nos últimos limiar dias numa conta que não é do projeto.' },
   { codigo: 'checklist_incompleto', nome: 'Em captação com checklist incompleto', ligada: true, limiar: 0, unidade: 'dias', gravidade: 'media', descricao: 'Projeto em captação com item do checklist de "antes de subir as campanhas" pendente, a partir de limiar dias do início da captação.' },
+  { codigo: 'sem_oferta_exclusiva', nome: 'Sem oferta exclusiva em captação ou carrinho', ligada: true, limiar: 0, unidade: 'dias', gravidade: 'alta', descricao: 'Projeto interno em captação ou com o carrinho aberto sem nenhuma oferta exclusiva ligada: a receita dele é só estimada.' },
 ];
 
-interface ProdutoDemo { id: number; projeto_id: number; conta: string; produto_id: string; oferta_codigo: string | null; de: string | null; ate: string | null; obs: string | null }
+interface ProdutoDemo {
+  id: number; projeto_id: number; conta: string; produto_id: string; oferta_codigo: string | null; oferta_exclusiva: boolean;
+  de: string | null; ate: string | null; obs: string | null;
+}
 let PRODUTOS: ProdutoDemo[] = [
-  { id: 1, projeto_id: 1, conta: 'academy', produto_id: '0000001', oferta_codigo: null, de: hoje(-25), ate: null, obs: 'Ingresso Exemplo' },
+  { id: 1, projeto_id: 1, conta: 'academy', produto_id: '0000001', oferta_codigo: null, oferta_exclusiva: false, de: hoje(-25), ate: null, obs: 'Ingresso Exemplo' },
+  { id: 2, projeto_id: 1, conta: 'academy', produto_id: '0000001', oferta_codigo: 'ex0001', oferta_exclusiva: true, de: null, ate: null, obs: 'Oferta exclusiva Exemplo' },
 ];
-// receita fictícia de cada produto de exemplo no período
-const RECEITA_PRODUTO: Record<string, { receita: number; liquida: number; compras: number }> = {
-  'academy/0000001': { receita: 18450, liquida: 17520, compras: 123 }, 'escritorio/0000002': { receita: 4200, liquida: 3990, compras: 6 },
+// Receita fictícia do modo de demonstração, por nível (decisão do Victor, 06/10/2026). Produto inteiro no período =
+// estimada (nível 4); oferta exclusiva = nível 1; SCK com o projeto = nível 2. Valores inventados, só para a tela.
+type Soma = { receita: number; liquida: number; compras: number };
+const RECEITA_PRODUTO: Record<string, Soma> = {
+  'academy/0000001': { receita: 6150, liquida: 5820, compras: 41 }, 'escritorio/0000002': { receita: 4200, liquida: 3990, compras: 6 },
 };
+const RECEITA_OFERTA: Record<string, Soma> = { 'academy/ex0001': { receita: 12300, liquida: 11700, compras: 82 } };
+const RECEITA_SCK = new Map<number, Soma>([[1, { receita: 1990, liquida: 1890, compras: 2 }]]);
+const DISPUTAS = new Map<number, VendaDisputa[]>([[1, [
+  { transacao: 'HPEXEMPLO0001', dia: hoje(-2), conta: 'academy', produto_id: '0000001', oferta_codigo: null, nivel: 2, valor: 997, moeda: 'BRL', projetos: ['LPEXA26', 'PB26'] },
+]], [7, [
+  { transacao: 'HPEXEMPLO0001', dia: hoje(-2), conta: 'academy', produto_id: '0000001', oferta_codigo: null, nivel: 2, valor: 997, moeda: 'BRL', projetos: ['LPEXA26', 'PB26'] },
+]]]);
 const VISTOS: ProdutoVisto[] = [
   { conta: 'academy', produto_id: '0000001', nome: 'Ingresso Exemplo', aprovadas: 123, ultima: ONTEM,
     ofertas: [{ codigo: 'ex0001', pagas: 100, ultima: ONTEM }, { codigo: 'ex0002', pagas: 23, ultima: hoje(-4) }] },
   { conta: 'escritorio', produto_id: '0000002', nome: 'Produto Exemplo 2', aprovadas: 6, ultima: hoje(-3), ofertas: [{ codigo: 'ex0003', pagas: 6, ultima: hoje(-3) }] },
 ];
 
-function receitaDemo(projetoId: number): Pick<LinhaResumo, 'receita' | 'receita_liquida' | 'receita_liquido_estimado' | 'receita_compras' | 'receita_outras_moedas' | 'receita_sem_valor' | 'receita_vinculos' | 'receita_sem_periodo' | 'receita_fonte'> {
+type CamposReceita = 'receita' | 'receita_liquida' | 'receita_liquido_estimado' | 'receita_compras' | 'receita_outras_moedas' | 'receita_sem_valor'
+  | 'receita_vinculos' | 'receita_sem_periodo' | 'receita_fonte' | 'receita_oferta' | 'receita_sck' | 'receita_lead' | 'receita_estimada'
+  | 'receita_compras_oferta' | 'receita_compras_sck' | 'receita_compras_lead' | 'receita_compras_estimada' | 'receita_disputa'
+  | 'receita_ofertas_exclusivas' | 'receita_base_pessoas';
+function receitaDemo(projetoId: number): Pick<LinhaResumo, CamposReceita> {
   const vs = PRODUTOS.filter((v) => v.projeto_id === projetoId);
   const p = projeto(projetoId);
-  const comPeriodo = vs.filter((v) => v.de != null || p?.captacao_inicio != null || p?.inicio != null); // vínculo sem "de" usa a captação até o fim do evento
-  const soma = (k: 'receita' | 'liquida' | 'compras') => comPeriodo.reduce((a, v) => a + (RECEITA_PRODUTO[`${v.conta}/${v.produto_id}`]?.[k] ?? 0), 0);
+  const comPeriodo = vs.filter((v) => !v.oferta_exclusiva && (v.de != null || p?.captacao_inicio != null || p?.inicio != null)); // sem "de": captação até o fim do evento
+  const exclusivas = vs.filter((v) => v.oferta_exclusiva);
+  const zero: Soma = { receita: 0, liquida: 0, compras: 0 };
+  const somar = (xs: (Soma | undefined)[]): Soma => xs.reduce<Soma>((a, x) => ({ receita: a.receita + (x?.receita ?? 0), liquida: a.liquida + (x?.liquida ?? 0), compras: a.compras + (x?.compras ?? 0) }), zero);
+  const n1 = somar(exclusivas.map((v) => RECEITA_OFERTA[`${v.conta}/${v.oferta_codigo}`]));
+  const n2 = RECEITA_SCK.get(projetoId) ?? zero;
+  const n4 = somar(comPeriodo.map((v) => RECEITA_PRODUTO[`${v.conta}/${v.produto_id}`]));
+  const disputa = (DISPUTAS.get(projetoId) ?? []).length;
+  const tem = comPeriodo.length > 0 || exclusivas.length > 0 || n2.compras > 0 || disputa > 0;
+  const certa = (x: number) => (tem ? x : null);
   return {
-    receita: comPeriodo.length ? soma('receita') : null, receita_liquida: comPeriodo.length ? soma('liquida') : null,
-    receita_liquido_estimado: vs.length ? 0 : null, receita_compras: vs.length ? soma('compras') : null,
-    receita_outras_moedas: vs.length ? 0 : null, receita_sem_valor: vs.length ? 0 : null,
-    receita_vinculos: vs.length, receita_sem_periodo: vs.length - comPeriodo.length, receita_fonte: true,
+    receita: certa(n1.receita + n2.receita), receita_liquida: certa(n1.liquida + n2.liquida),
+    receita_oferta: certa(n1.receita), receita_sck: certa(n2.receita), receita_lead: certa(0),
+    receita_estimada: comPeriodo.length ? n4.receita : null,
+    receita_compras_oferta: n1.compras, receita_compras_sck: n2.compras, receita_compras_lead: 0, receita_compras_estimada: n4.compras,
+    receita_disputa: disputa, receita_ofertas_exclusivas: exclusivas.length, receita_base_pessoas: true,
+    receita_liquido_estimado: 0, receita_compras: n1.compras + n2.compras, receita_outras_moedas: 0, receita_sem_valor: 0,
+    receita_vinculos: vs.length, receita_sem_periodo: vs.filter((v) => !v.oferta_exclusiva).length - comPeriodo.length, receita_fonte: true,
+  };
+}
+
+/** A receita do projeto por nível, como public.trafego_receita (modo de demonstração). */
+export function demoReceita(projetoId: number): ReceitaProjeto | null {
+  const p = projeto(projetoId);
+  if (!p) return null;
+  const r = receitaDemo(projetoId);
+  const vinculos = PRODUTOS.filter((v) => v.projeto_id === projetoId).length;
+  const disputas = structuredClone(DISPUTAS.get(projetoId) ?? []);
+  return {
+    projeto_id: projetoId, fonte: true, base_pessoas: true, receita: r.receita_vinculos || r.receita != null ? r : null,
+    vinculos, ofertas_exclusivas: r.receita_ofertas_exclusivas ?? 0,
+    sem_oferta_exclusiva: vinculos > 0 && !r.receita_ofertas_exclusivas,
+    sck_formato: 'origem|meio|campanha|conteúdo|termo',
+    sck_chaves: [p.etiqueta_clickup, p.sigla.toLowerCase()].filter((x): x is string => !!x),
+    disputas_total: disputas.length, disputas,
   };
 }
 
@@ -368,6 +416,7 @@ export function demoAlertas(): ResumoDia {
       contasProjeto: PROJETO_CONTAS.get(p.id) ?? [],
       campanhasDaSigla: cs.filter((c) => traduzir(c.nome).projeto === p.sigla).map((c) => ({ ...ent(c), conta_id: c.conta_id, conta: c.conta })),
       pendentesAntes: demoChecklist(p.id)?.pendentes_antes ?? [],
+      ofertasExclusivas: PRODUTOS.filter((v) => v.projeto_id === p.id && v.oferta_exclusiva).length,
     };
   });
   return {
@@ -385,7 +434,13 @@ export function demoProdutos(projetoId: number): ProdutoHotmart[] {
   }));
 }
 
-export const demoProdutosVistos = (): ProdutoVisto[] => structuredClone(VISTOS);
+export const demoProdutosVistos = (): ProdutoVisto[] => structuredClone(VISTOS).map((v) => ({
+  ...v,
+  ofertas: v.ofertas.map((o) => ({ ...o, exclusiva_de: (() => {
+    const x = PRODUTOS.find((y) => y.oferta_exclusiva && y.conta === v.conta && y.oferta_codigo === o.codigo);
+    return x ? projeto(x.projeto_id)?.sigla ?? null : null;
+  })() })),
+}));
 
 export function demoSalvarProduto(p: Record<string, unknown>): Resposta {
   const pid = Number(p.projeto_id);
@@ -394,14 +449,21 @@ export function demoSalvarProduto(p: Record<string, unknown>): Resposta {
   if (!['academy', 'escritorio'].includes(conta)) return { ok: false, msg: 'Escolha a conta da Hotmart.' };
   const prod = String(p.produto_id ?? '').trim();
   if (!/^[A-Za-z0-9_-]{1,40}$/.test(prod)) return { ok: false, msg: 'Id do produto na Hotmart inválido (só letras, números, - e _).' };
-  const v = { projeto_id: pid, conta, produto_id: prod, oferta_codigo: (p.oferta_codigo as string)?.trim() || null, de: (p.de as string) || null, ate: (p.ate as string) || null, obs: (p.obs as string) || null };
+  const v = { projeto_id: pid, conta, produto_id: prod, oferta_codigo: (p.oferta_codigo as string)?.trim() || null, oferta_exclusiva: p.oferta_exclusiva === true,
+    de: (p.de as string) || null, ate: (p.ate as string) || null, obs: (p.obs as string) || null };
   if (v.de && v.ate && v.ate < v.de) return { ok: false, msg: 'O fim não pode ser antes do início.' };
+  if (v.oferta_exclusiva && !v.oferta_codigo) return { ok: false, msg: 'Oferta exclusiva precisa da oferta: escolha a oferta criada na Hotmart só para este projeto.' };
+  const dono = v.oferta_exclusiva ? PRODUTOS.find((x) => x.oferta_exclusiva && x.conta === conta && x.oferta_codigo === v.oferta_codigo && x.id !== Number(p.id)) : undefined;
+  if (dono) {
+    return { ok: false, msg: `A oferta ${v.oferta_codigo} (${conta}) já é exclusiva de ${projeto(dono.projeto_id)?.sigla}. Uma oferta só pode ser exclusiva de um projeto: crie outra oferta na Hotmart.` };
+  }
   if (PRODUTOS.some((x) => x.projeto_id === pid && x.conta === conta && x.produto_id === prod && x.oferta_codigo === v.oferta_codigo && x.id !== Number(p.id))) {
     return { ok: false, msg: 'Este produto (conta e oferta) já está ligado a este projeto.' };
   }
   if (p.id) PRODUTOS = PRODUTOS.map((x) => (x.id === Number(p.id) ? { ...x, ...v } : x));
   else PRODUTOS.push({ id: ++seq, ...v });
-  const avisos = [...(v.de || projeto(pid)?.captacao_inicio || projeto(pid)?.inicio ? [] : ['sem_periodo']), ...(VISTOS.some((x) => x.conta === conta && x.produto_id === prod) ? [] : ['produto_sem_compras'])];
+  const avisos = [...(v.de || projeto(pid)?.captacao_inicio || projeto(pid)?.inicio ? [] : ['sem_periodo']), ...(VISTOS.some((x) => x.conta === conta && x.produto_id === prod) ? [] : ['produto_sem_compras']),
+    ...(PRODUTOS.some((x) => x.projeto_id === pid && x.oferta_exclusiva) ? [] : ['sem_oferta_exclusiva'])];
   return { ok: true, msg: `Produto ${prod} ligado${NADA}.`, avisos };
 }
 
@@ -650,6 +712,7 @@ export function demoChecklist(id: number): Checklist | null {
     tipo: p.tipo, contas: (PROJETO_CONTAS.get(id) ?? []).length, campanhas: cs.length,
     foraPadrao: cs.filter((c) => c.fora_padrao).length, semFase: cs.filter((c) => c.fase == null).length,
     produtosHotmart: PRODUTOS.filter((v) => v.projeto_id === id).length, paginas: N_PAGINAS[id] ?? 0, etiqueta: p.etiqueta_clickup,
+    ofertasExclusivas: PRODUTOS.filter((v) => v.projeto_id === id && v.oferta_exclusiva).map((v) => v.oferta_codigo ?? ''),
     verbaMaxima: pl?.verba_maxima ?? null, fases: FASES.filter((f) => f.projeto_id === id).length,
     metas: [pl?.meta_leads ?? null, pl?.meta_receita ?? null, pl?.meta_cpl ?? null],
     modelo: PROJETO_MODELO.get(id)?.nome ?? null, esperadas: ESPERADAS.filter((e) => e.projeto_id === id),

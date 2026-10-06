@@ -29,6 +29,11 @@
 --      o mesmo id de produto, oferta, outra moeda à parte, venda contada uma vez só; avisos (produto em outro projeto,
 --      sem período, sem vendas na conta) e recusas (sem conta, conta desconhecida); seletor por conta sem dado de
 --      comprador; no Supabase, a mesma soma de fin.vw_transacoes para um produto real
+--   3b receita por NÍVEL DE CERTEZA (decisão do Victor, 06/10/2026): produto + período vira estimada (à parte); oferta
+--      exclusiva (nível 1, qualquer data, uma oferta um projeto: tela e índice único), SCK com o projeto no campo campanha
+--      (nível 2, chave ou sigla, sem maiúscula e acento), comprador que foi lead do projeto antes da compra (nível 3: e-mail,
+--      documento, telefone), nível mais forte vence, disputa no mesmo nível (não soma em nenhum), vendas em disputa e aviso
+--      sem oferta exclusiva em public.trafego_receita. Só no banco local (transações fictícias)
 --   4  ClickUp: espelho pela etiqueta, recusas, quem sumiu perde a etiqueta, lista na vida do projeto
 --   5  credenciais das rotinas (conta centralizadora × token por conta), registro das coletas (200 por fonte)
 --   6  o formato que a Edge trafego-meta manda (saída das fixtures do vitest) é aceito e é idempotente
@@ -58,7 +63,7 @@ begin
   end if;
   if exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace
               and p.proname in ('trafego_alertas', 'trafego_produtos_listar', 'trafego_produto_salvar', 'trafego_produto_apagar',
-                                'trafego_hotmart_produtos', 'trafego_clickup', 'trafego_clickup_receber')) then
+                                'trafego_hotmart_produtos', 'trafego_clickup', 'trafego_clickup_receber', 'trafego_receita')) then
     raise exception '20261006i: já existem funções public.trafego_* desta migration';
   end if;
   if not exists (select 1 from information_schema.columns
@@ -118,14 +123,18 @@ create table mkt_trafego.produtos_hotmart (
   de             date,
   ate            date,
   obs            text check (obs is null or length(obs) <= 1000),
+  oferta_exclusiva boolean not null default false,
   criado_em      timestamptz not null default now(),
   criado_por     uuid references public.perfis(id) on delete set null,
   atualizado_em  timestamptz not null default now(),
   atualizado_por uuid references public.perfis(id) on delete set null,
-  constraint produtos_hotmart_datas_check check (ate is null or de is null or ate >= de)
+  constraint produtos_hotmart_datas_check check (ate is null or de is null or ate >= de),
+  constraint produtos_hotmart_exclusiva_check check (not oferta_exclusiva or oferta_codigo is not null)
 );
 create unique index produtos_hotmart_unico on mkt_trafego.produtos_hotmart (projeto_id, conta, produto_id, coalesce(oferta_codigo, ''));
 create index produtos_hotmart_produto_idx on mkt_trafego.produtos_hotmart (conta, produto_id);
+-- Uma oferta (por conta da Hotmart) só pode ser exclusiva de UM projeto: o banco recusa a segunda (decisão do Victor, 06/10/2026).
+create unique index produtos_hotmart_oferta_exclusiva_unica on mkt_trafego.produtos_hotmart (conta, oferta_codigo) where oferta_exclusiva;
 comment on table mkt_trafego.produtos_hotmart is
   'Produto (e, se quiser, oferta) da Hotmart, de uma das contas, que gera receita para o projeto. CADASTRO À MÃO na tela '
   '(nada pré-preenchido). A receita é lida de fin.hotmart_transacoes (espelho do financeiro) na hora; aqui só o vínculo. 20261006i.';
@@ -135,6 +144,11 @@ comment on column mkt_trafego.produtos_hotmart.produto_id is 'Id do produto na H
 comment on column mkt_trafego.produtos_hotmart.oferta_codigo is 'Código da oferta (fin.hotmart_transacoes.oferta_codigo). Nulo = todas as ofertas do produto.';
 comment on column mkt_trafego.produtos_hotmart.de is 'Início do período que conta para este projeto. Nulo = início do projeto (mkt.projetos.inicio).';
 comment on column mkt_trafego.produtos_hotmart.ate is 'Fim do período. Nulo = fim do projeto (mkt.projetos.fim), e sem fim = até hoje.';
+comment on column mkt_trafego.produtos_hotmart.oferta_exclusiva is
+  'true = esta OFERTA (oferta_codigo, obrigatório) é exclusiva do projeto: toda venda paga dela é do projeto, nível 1 da receita '
+  '(certa), em qualquer data; só o de/até PRÓPRIO do vínculo limita (o período padrão não). Uma oferta, por conta, é exclusiva de um '
+  'projeto só (índice produtos_hotmart_oferta_exclusiva_unica). Decisão do Victor, 06/10/2026: docs/central-de-dados.md, seção '
+  '"Receita do projeto: oferta exclusiva e SCK".';
 
 -- ─── 3. ClickUp: espelho mínimo das tarefas pela etiqueta do projeto ─────────────────────────────────────────────────
 create table mkt_trafego.clickup_tarefas (
@@ -218,10 +232,186 @@ language sql stable set search_path = '' as $$
   select p.inicio, p.fim from mkt.projetos p where p.id = p_projeto;
 $$;
 
--- Receita por projeto: {"<projeto_id>": {receita, receita_liquida, receita_liquido_estimado, receita_compras,
--- receita_outras_moedas, receita_sem_valor, receita_vinculos, receita_sem_periodo}}. Projeto sem vínculo não aparece (a
--- tela mostra "sem dado"). receita = BRUTO (valor da oferta) e receita_liquida = líquido do produtor, as duas só BRL,
--- pela regra do financeiro (cabeçalho, item 2). receita nula = sem vínculo com período, ou sem fin.hotmart_transacoes.
+-- ─── 4b. Receita do projeto por NÍVEL DE CERTEZA (decisão do Victor, 06/10/2026) ────────────────────────────────────
+-- Produto + período não garante que a venda veio do projeto (o mesmo produto é vendido pelo comercial, pela recuperação
+-- e por outros lançamentos ao mesmo tempo). Cada venda paga (regra do financeiro: status APPROVED ou COMPLETE, data =
+-- aprovado_em, bruto = valor da oferta, só BRL na soma) conta UMA vez, no nível mais forte que atingir:
+--   1 oferta exclusiva   a venda é de uma oferta marcada como exclusiva do projeto (produtos_hotmart.oferta_exclusiva).
+--                        Certa. Qualquer data; só o de/até PRÓPRIO do vínculo limita.
+--   2 SCK com o projeto  o campo campanha do origem_sck é a chave do projeto (etiqueta do ClickUp) ou a sigla. Certa.
+--                        Qualquer produto, qualquer data.
+--   3 lead do projeto    o comprador (e-mail, documento ou telefone, pela base de pessoas do Arthur, só leitura) tem
+--                        evento 'lead' do projeto ANTES da compra, e a compra é de produto ligado ao projeto, no período
+--                        do vínculo. Provável.
+--   4 estimada           só produto ligado + período (a regra antiga). Mostrada À PARTE, nunca somada na receita.
+-- Receita do projeto (coluna "Receita" da Central, e qualquer conta com receita, como ROAS) = níveis 1 a 3.
+-- Venda que atinge o MESMO nível mais forte em mais de um projeto = DISPUTA: não soma em nenhum, aparece na lista
+-- "vendas em disputa" da vida de cada projeto envolvido. Projeto que perdeu a venda para um nível mais forte de outro
+-- projeto não conta a venda.
+
+-- Texto normalizado para comparar chaves (sem diferença de maiúscula, acento e espaço nas pontas). Vazio = nulo.
+create function mkt_trafego.chave_norm(p text) returns text
+language sql immutable set search_path = '' as $$
+  select nullif(lower(mkt.sem_acento(btrim(coalesce(p, '')))), '');
+$$;
+
+-- FORMATO DO SCK (DECIDIDO pelo Victor, 06/10/2026): os mesmos campos da UTM, na mesma ordem, separados por "|":
+--   origem|meio|campanha|conteúdo|termo
+-- e o campo CAMPANHA (o 3º) leva a chave do projeto (mkt.projetos.etiqueta_clickup, ex. seminario-conjunto-2026-11) ou
+-- a sigla (ex. pb26). Vale para checkout de abertura de carrinho, API, grupo, SMS, e-mail e comercial; o tráfego pago
+-- fica de fora (o checkout não recebe o sck do anúncio: ali valem a UTM e a oferta exclusiva). ESTE É O ÚNICO LUGAR
+-- QUE LÊ O SCK: mudar o formato = só esta função. Devolve o campo campanha normalizado (nulo se o sck não tem "|").
+create function mkt_trafego.sck_campanha(p_sck text) returns text
+language sql immutable set search_path = '' as $$
+  select case when position('|' in coalesce(p_sck, '')) > 0 then mkt_trafego.chave_norm(split_part(p_sck, '|', 3)) end;
+$$;
+
+-- A base de pessoas do Arthur (20261005r_pessoas_e_crm_fundacao) e as colunas do comprador no espelho da Hotmart
+-- (20260927c2) existem? Sem elas o nível 3 não roda (fica zero) e o resto funciona.
+create function mkt_trafego.pessoas_disponivel() returns boolean
+language sql stable set search_path = '' as $$
+  select to_regclass('pessoas.eventos') is not null and to_regclass('pessoas.identificadores') is not null
+     and to_regclass('pessoas.pessoas') is not null and to_regprocedure('pessoas.atual(uuid)') is not null
+     and to_regprocedure('pessoas.grupo(uuid)') is not null and to_regprocedure('pessoas.chave_telefone(text)') is not null
+     and to_regclass('public.compradores') is not null and to_regclass('public.thb_alunos') is not null
+     and (select count(*) = 3 from information_schema.columns
+           where table_schema = 'fin' and table_name = 'hotmart_transacoes'
+             and column_name in ('comprador_email', 'comprador_documento', 'comprador_telefone'));
+$$;
+
+-- Cada venda paga ligada a um projeto, já classificada: uma linha por (projeto, transação) no nível mais forte da
+-- venda. disputa = o mesmo nível mais forte em mais de um projeto (projetos_disputa = todos eles). p_projeto filtra a
+-- SAÍDA; a classificação é sempre feita com todos os projetos (a disputa precisa ver os outros). Vazia sem a fonte.
+create function mkt_trafego.receita_vendas(p_projeto bigint default null)
+returns table (projeto_id bigint, transacao text, nivel smallint, disputa boolean, projetos_disputa bigint[], conta text,
+               produto_id text, oferta_codigo text, aprovado_em timestamptz, moeda text, bruto numeric, liquido numeric,
+               liquido_estimado boolean)
+language plpgsql stable set search_path = '' as $$
+declare
+  v_sql text;
+  v_n3 text;
+begin
+  if not mkt_trafego.hotmart_disponivel() then return; end if;
+  if mkt_trafego.pessoas_disponivel() then
+    -- nível 3: chaves (e-mail, documento só dígitos, telefone pela chave da base) de quem foi lead do projeto, com a data
+    -- do primeiro lead; a pessoa vale com as mescladas a ela (pessoas.atual + pessoas.grupo), e as chaves vêm dos
+    -- identificadores e do comprador/aluno ligado. Só leitura na base do Arthur.
+    v_n3 := $n3$
+      with ld as (
+        select e.projeto_id, pessoas.atual(e.pessoa_id) as pessoa, min(e.quando) as primeiro
+          from pessoas.eventos e
+         where e.tipo = 'lead' and e.projeto_id in (select c.projeto_id from cand c)
+         group by 1, 2
+      ), gp as (
+        select ld.projeto_id, min(ld.primeiro) as primeiro, g.id as pid
+          from ld cross join lateral unnest(pessoas.grupo(ld.pessoa)) g(id) group by 1, 3
+      ), lp as (
+        select gp.projeto_id, gp.primeiro, k.tipo, k.chave
+          from gp
+          join pessoas.pessoas p on p.id = gp.pid
+          left join public.compradores co on co.id = p.comprador_id
+          left join public.thb_alunos al on al.id = p.aluno_id
+          cross join lateral (
+            select i.tipo, i.chave from pessoas.identificadores i where i.pessoa_id = gp.pid and i.tipo in ('email', 'telefone')
+            union all select 'email', lower(btrim(co.email::text))
+            union all select 'documento', nullif(regexp_replace(coalesce(co.documento, ''), '[^0-9]', '', 'g'), '')
+            union all select 'telefone', pessoas.chave_telefone(co.telefone::text)
+            union all select 'email', lower(btrim(al.email))
+            union all select 'documento', nullif(regexp_replace(coalesce(al.documento, ''), '[^0-9]', '', 'g'), '')
+            union all select 'telefone', pessoas.chave_telefone(coalesce(al.telefone_e164, al.telefone))) k(tipo, chave)
+         where k.chave is not null and k.chave <> ''
+      )
+      select distinct c.projeto_id, c.transacao
+        from cand c
+        cross join lateral (values ('email', lower(btrim(c.comprador_email))),
+                                   ('documento', nullif(regexp_replace(coalesce(c.comprador_documento, ''), '[^0-9]', '', 'g'), '')),
+                                   ('telefone', pessoas.chave_telefone(c.comprador_telefone))) k(tipo, chave)
+        join lp on lp.projeto_id = c.projeto_id and lp.tipo = k.tipo and lp.chave = k.chave and lp.primeiro < c.aprovado_em
+    $n3$;
+  else
+    v_n3 := 'select null::bigint as projeto_id, null::text as transacao where false';
+  end if;
+
+  -- SQL dinâmico: fin.hotmart_transacoes (e a base de pessoas) podem não existir num banco local. As faixas de
+  -- aprovado_em viram timestamptz (meia-noite de São Paulo) para usar o índice (produto_id, aprovado_em) do financeiro.
+  v_sql := $q$
+    with vv as (
+      select v.projeto_id, v.conta, v.produto_id, v.oferta_codigo, v.oferta_exclusiva,
+             (coalesce(v.de, pp.inicio)::timestamp at time zone 'America/Sao_Paulo') as de_ts,
+             ((coalesce(v.ate, pp.fim, (now() at time zone 'America/Sao_Paulo')::date) + 1)::timestamp
+               at time zone 'America/Sao_Paulo') as ate_ts,
+             (v.de::timestamp at time zone 'America/Sao_Paulo') as de_proprio_ts,
+             ((v.ate + 1)::timestamp at time zone 'America/Sao_Paulo') as ate_proprio_ts
+        from mkt_trafego.produtos_hotmart v cross join lateral mkt_trafego.periodo_receita(v.projeto_id) pp
+    ), n1 as (
+      -- nível 1: oferta exclusiva (qualquer data; só o de/até próprio do vínculo limita)
+      select vv.projeto_id, t.transacao
+        from vv join fin.hotmart_transacoes t
+          on t.produto_id = vv.produto_id and t.conta = vv.conta and t.oferta_codigo = vv.oferta_codigo
+       where vv.oferta_exclusiva and t.status in ('APPROVED', 'COMPLETE') and t.aprovado_em is not null
+         and (vv.de_proprio_ts is null or t.aprovado_em >= vv.de_proprio_ts)
+         and (vv.ate_proprio_ts is null or t.aprovado_em < vv.ate_proprio_ts)
+    ), chaves as (
+      select p.id as projeto_id, k.chave
+        from mkt.projetos p
+        cross join lateral (values (mkt_trafego.chave_norm(p.sigla)), (mkt_trafego.chave_norm(p.etiqueta_clickup))) k(chave)
+       where k.chave is not null
+    ), n2 as (
+      -- nível 2: SCK com o projeto (campo campanha = chave ou sigla), qualquer produto e data
+      select distinct ch.projeto_id, t.transacao
+        from fin.hotmart_transacoes t
+        join chaves ch on ch.chave = mkt_trafego.sck_campanha(t.origem_sck)
+       where t.status in ('APPROVED', 'COMPLETE') and t.aprovado_em is not null and t.origem_sck like '%|%'
+    ), cand as (
+      -- candidatos dos níveis 3 e 4: produto ligado ao projeto (oferta, se o vínculo tiver), dentro do período do vínculo
+      select distinct vv.projeto_id, t.transacao, t.aprovado_em, t.comprador_email, t.comprador_documento, t.comprador_telefone
+        from vv join fin.hotmart_transacoes t
+          on t.produto_id = vv.produto_id and t.conta = vv.conta
+         and (vv.oferta_codigo is null or t.oferta_codigo = vv.oferta_codigo)
+         and t.aprovado_em >= vv.de_ts and t.aprovado_em < vv.ate_ts
+       where vv.de_ts is not null and t.status in ('APPROVED', 'COMPLETE')
+    ), n3 as (
+      /*NIVEL3*/
+    ), niv as (
+      select n1.projeto_id, n1.transacao, 1 as nivel from n1
+      union all select n2.projeto_id, n2.transacao, 2 from n2
+      union all select n3.projeto_id, n3.transacao, 3 from n3
+      union all select cand.projeto_id, cand.transacao, 4 from cand
+    ), por_projeto as (
+      -- o nível mais forte da venda em cada projeto (a mesma venda por dois vínculos do projeto conta 1 vez)
+      select niv.projeto_id, niv.transacao, min(niv.nivel) as nivel from niv group by 1, 2
+    ), vencedores as (
+      -- a venda fica só com o(s) projeto(s) do nível mais forte dela
+      select x.projeto_id, x.transacao, x.nivel,
+             count(*) over (partition by x.transacao) as n,
+             array_agg(x.projeto_id) over (partition by x.transacao) as projs
+        from (select pp.*, min(pp.nivel) over (partition by pp.transacao) as melhor from por_projeto pp) x
+       where x.nivel = x.melhor
+    )
+    select w.projeto_id, w.transacao, w.nivel::smallint, w.n > 1,
+           case when w.n > 1 then (select array_agg(distinct z order by z) from unnest(w.projs) z) end,
+           t.conta, t.produto_id, t.oferta_codigo, t.aprovado_em, coalesce(t.moeda, 'BRL'),
+           b.bruto, coalesce(t.liquido_produtor, b.bruto - coalesce(t.taxa_hotmart, 0)), t.liquido_produtor is null
+      from vencedores w
+      join fin.hotmart_transacoes t on t.transacao = w.transacao
+      cross join lateral (select coalesce(t.valor_base, nullif(t.bruto_json #>> '{purchase,hotmart_fee,base}', '')::numeric,
+                                          t.valor_cobrado) as bruto) b
+     where $1 is null or w.projeto_id = $1
+  $q$;
+  return query execute replace(v_sql, '/*NIVEL3*/', v_n3) using p_projeto;
+end
+$$;
+
+-- Receita por projeto: {"<projeto_id>": {...}}. Projeto sem vínculo e sem venda certa não aparece (a tela mostra "sem
+-- dado"). Campos (bruto = valor da oferta, só BRL na soma; líquido = líquido do produtor):
+--   receita, receita_liquida            níveis 1 a 3 (A RECEITA DO PROJETO). Nula = sem fonte, ou sem vínculo com
+--                                       período, sem oferta exclusiva e sem venda certa.
+--   receita_oferta/_sck/_lead           a quebra por nível (1, 2, 3); receita_compras_oferta/_sck/_lead as vendas
+--   receita_estimada                    nível 4 (só produto + período), À PARTE; nula = sem vínculo com período
+--   receita_compras                     vendas dos níveis 1 a 3 (todas as moedas); receita_compras_estimada as do nível 4
+--   receita_disputa                     vendas em disputa com outro projeto (qualquer nível; não somam em nenhum)
+--   receita_ofertas_exclusivas          ofertas exclusivas ligadas; receita_vinculos, receita_sem_periodo como antes
+--   receita_liquido_estimado, receita_outras_moedas, receita_sem_valor: dos níveis 1 a 3
 create function mkt_trafego.receita(p_projeto bigint default null) returns jsonb
 language plpgsql stable set search_path = '' as $$
 declare
@@ -229,61 +419,63 @@ declare
   v_som jsonb := '{}'::jsonb;
   v_fonte boolean := mkt_trafego.hotmart_disponivel();
 begin
-  select coalesce(jsonb_object_agg(x.projeto_id::text, jsonb_build_object('vinculos', x.vinculos, 'sem_periodo', x.sem_periodo)), '{}'::jsonb)
+  select coalesce(jsonb_object_agg(x.projeto_id::text, jsonb_build_object('vinculos', x.vinculos, 'sem_periodo', x.sem_periodo,
+                                                                          'exclusivas', x.exclusivas)), '{}'::jsonb)
     into v_vin
-    from (select v.projeto_id, count(*) as vinculos, count(*) filter (where coalesce(v.de, pp.inicio) is null) as sem_periodo
+    from (select v.projeto_id, count(*) as vinculos, count(*) filter (where coalesce(v.de, pp.inicio) is null) as sem_periodo,
+                 count(*) filter (where v.oferta_exclusiva) as exclusivas
             from mkt_trafego.produtos_hotmart v cross join lateral mkt_trafego.periodo_receita(v.projeto_id) pp
            where p_projeto is null or v.projeto_id = p_projeto
            group by v.projeto_id) x;
-  if v_vin = '{}'::jsonb then return '{}'::jsonb; end if;
 
   if v_fonte then
-    -- SQL dinâmico: fin.hotmart_transacoes pode não existir num banco local (a função compila mesmo assim). A faixa de
-    -- aprovado_em vira timestamptz (meia-noite de São Paulo) para usar o índice (produto_id, aprovado_em) do financeiro.
-    execute $q$
-      with vv as (
-        select v.projeto_id, v.conta, v.produto_id, v.oferta_codigo,
-               (coalesce(v.de, pp.inicio)::timestamp at time zone 'America/Sao_Paulo') as de_ts,
-               ((coalesce(v.ate, pp.fim, (now() at time zone 'America/Sao_Paulo')::date) + 1)::timestamp
-                 at time zone 'America/Sao_Paulo') as ate_ts
-          from mkt_trafego.produtos_hotmart v cross join lateral mkt_trafego.periodo_receita(v.projeto_id) pp
-         where coalesce(v.de, pp.inicio) is not null and ($1 is null or v.projeto_id = $1)
-      ), m as (
-        -- distinct: a mesma transação casada por dois vínculos do mesmo projeto (produto inteiro e uma oferta) conta 1 vez
-        select distinct vv.projeto_id, t.transacao, coalesce(t.moeda, 'BRL') as moeda,
-               coalesce(t.valor_base, nullif(t.bruto_json #>> '{purchase,hotmart_fee,base}', '')::numeric, t.valor_cobrado) as bruto,
-               t.liquido_produtor, t.taxa_hotmart
-          from fin.hotmart_transacoes t
-          join vv on t.produto_id = vv.produto_id and t.conta = vv.conta
-                 and (vv.oferta_codigo is null or t.oferta_codigo = vv.oferta_codigo)
-                 and t.aprovado_em >= vv.de_ts and t.aprovado_em < vv.ate_ts
-         where t.status in ('APPROVED', 'COMPLETE')
-      )
-      select coalesce(jsonb_object_agg(x.projeto_id::text, jsonb_build_object(
-               'receita', x.receita, 'liquida', x.liquida, 'estimado', x.estimado, 'compras', x.compras, 'outras', x.outras,
-               'sem_valor', x.sem_valor)), '{}'::jsonb)
-        from (select m.projeto_id,
-                     coalesce(sum(m.bruto) filter (where m.moeda = 'BRL'), 0) as receita,
-                     coalesce(sum(coalesce(m.liquido_produtor, m.bruto - coalesce(m.taxa_hotmart, 0))) filter (where m.moeda = 'BRL'), 0) as liquida,
-                     count(*) filter (where m.moeda = 'BRL' and m.liquido_produtor is null) as estimado,
-                     count(*) as compras, count(*) filter (where m.moeda <> 'BRL') as outras,
-                     count(*) filter (where m.bruto is null) as sem_valor
-                from m group by m.projeto_id) x
-    $q$ into v_som using p_projeto;
+    select coalesce(jsonb_object_agg(x.projeto_id::text, to_jsonb(x) - 'projeto_id'), '{}'::jsonb)
+      into v_som
+      from (select m.projeto_id,
+                   coalesce(sum(m.bruto) filter (where not m.disputa and m.nivel <= 3 and m.moeda = 'BRL'), 0) as certa,
+                   coalesce(sum(m.liquido) filter (where not m.disputa and m.nivel <= 3 and m.moeda = 'BRL'), 0) as liquida,
+                   coalesce(sum(m.bruto) filter (where not m.disputa and m.nivel = 1 and m.moeda = 'BRL'), 0) as n1,
+                   coalesce(sum(m.bruto) filter (where not m.disputa and m.nivel = 2 and m.moeda = 'BRL'), 0) as n2,
+                   coalesce(sum(m.bruto) filter (where not m.disputa and m.nivel = 3 and m.moeda = 'BRL'), 0) as n3,
+                   coalesce(sum(m.bruto) filter (where not m.disputa and m.nivel = 4 and m.moeda = 'BRL'), 0) as n4,
+                   count(*) filter (where not m.disputa and m.nivel = 1) as c1,
+                   count(*) filter (where not m.disputa and m.nivel = 2) as c2,
+                   count(*) filter (where not m.disputa and m.nivel = 3) as c3,
+                   count(*) filter (where not m.disputa and m.nivel = 4) as c4,
+                   count(*) filter (where not m.disputa and m.nivel <= 3) as compras,
+                   count(*) filter (where not m.disputa and m.nivel <= 3 and m.moeda = 'BRL' and m.liquido_estimado) as estimado,
+                   count(*) filter (where not m.disputa and m.nivel <= 3 and m.moeda <> 'BRL') as outras,
+                   count(*) filter (where not m.disputa and m.nivel <= 3 and m.bruto is null) as sem_valor,
+                   count(*) filter (where m.disputa) as disputa
+              from mkt_trafego.receita_vendas(p_projeto) m
+             group by m.projeto_id) x;
   end if;
 
-  return (select jsonb_object_agg(k, jsonb_build_object(
-            'receita', case when not v_fonte or (v_vin -> k ->> 'vinculos')::int = (v_vin -> k ->> 'sem_periodo')::int then null
-                            else round(coalesce((v_som -> k ->> 'receita')::numeric, 0), 2) end,
-            'receita_liquida', case when not v_fonte or (v_vin -> k ->> 'vinculos')::int = (v_vin -> k ->> 'sem_periodo')::int then null
-                                    else round(coalesce((v_som -> k ->> 'liquida')::numeric, 0), 2) end,
-            'receita_liquido_estimado', case when v_fonte then coalesce((v_som -> k ->> 'estimado')::int, 0) end,
-            'receita_compras', case when v_fonte then coalesce((v_som -> k ->> 'compras')::int, 0) end,
-            'receita_outras_moedas', case when v_fonte then coalesce((v_som -> k ->> 'outras')::int, 0) end,
-            'receita_sem_valor', case when v_fonte then coalesce((v_som -> k ->> 'sem_valor')::int, 0) end,
-            'receita_vinculos', (v_vin -> k ->> 'vinculos')::int,
-            'receita_sem_periodo', (v_vin -> k ->> 'sem_periodo')::int))
-            from jsonb_object_keys(v_vin) k);
+  return (select coalesce(jsonb_object_agg(k.k, jsonb_build_object(
+            'receita', case when k.tem then round(coalesce((v_som -> k.k ->> 'certa')::numeric, 0), 2) end,
+            'receita_liquida', case when k.tem then round(coalesce((v_som -> k.k ->> 'liquida')::numeric, 0), 2) end,
+            'receita_oferta', case when k.tem then round(coalesce((v_som -> k.k ->> 'n1')::numeric, 0), 2) end,
+            'receita_sck', case when k.tem then round(coalesce((v_som -> k.k ->> 'n2')::numeric, 0), 2) end,
+            'receita_lead', case when k.tem then round(coalesce((v_som -> k.k ->> 'n3')::numeric, 0), 2) end,
+            'receita_estimada', case when v_fonte and k.com_periodo > 0 then round(coalesce((v_som -> k.k ->> 'n4')::numeric, 0), 2) end,
+            'receita_compras_oferta', case when v_fonte then coalesce((v_som -> k.k ->> 'c1')::int, 0) end,
+            'receita_compras_sck', case when v_fonte then coalesce((v_som -> k.k ->> 'c2')::int, 0) end,
+            'receita_compras_lead', case when v_fonte then coalesce((v_som -> k.k ->> 'c3')::int, 0) end,
+            'receita_compras_estimada', case when v_fonte then coalesce((v_som -> k.k ->> 'c4')::int, 0) end,
+            'receita_disputa', case when v_fonte then coalesce((v_som -> k.k ->> 'disputa')::int, 0) end,
+            'receita_liquido_estimado', case when v_fonte then coalesce((v_som -> k.k ->> 'estimado')::int, 0) end,
+            'receita_compras', case when v_fonte then coalesce((v_som -> k.k ->> 'compras')::int, 0) end,
+            'receita_outras_moedas', case when v_fonte then coalesce((v_som -> k.k ->> 'outras')::int, 0) end,
+            'receita_sem_valor', case when v_fonte then coalesce((v_som -> k.k ->> 'sem_valor')::int, 0) end,
+            'receita_vinculos', coalesce((v_vin -> k.k ->> 'vinculos')::int, 0),
+            'receita_sem_periodo', coalesce((v_vin -> k.k ->> 'sem_periodo')::int, 0),
+            'receita_ofertas_exclusivas', coalesce((v_vin -> k.k ->> 'exclusivas')::int, 0))), '{}'::jsonb)
+            from (select y.k, y.com_periodo,
+                         v_fonte and (y.com_periodo > 0 or coalesce((v_vin -> y.k ->> 'exclusivas')::int, 0) > 0
+                                      or coalesce((v_som -> y.k ->> 'compras')::int, 0) > 0
+                                      or coalesce((v_som -> y.k ->> 'disputa')::int, 0) > 0) as tem
+                    from (select z.k, coalesce((v_vin -> z.k ->> 'vinculos')::int, 0) - coalesce((v_vin -> z.k ->> 'sem_periodo')::int, 0) as com_periodo
+                            from (select jsonb_object_keys(v_vin) as k union select jsonb_object_keys(v_som)) z) y) k);
 end
 $$;
 
@@ -296,10 +488,15 @@ declare
   v_base jsonb := mkt_trafego.resumo_base(p_projeto);
   v_rec jsonb := mkt_trafego.receita(p_projeto);
   v_fonte boolean := mkt_trafego.hotmart_disponivel();
+  v_pessoas boolean := mkt_trafego.pessoas_disponivel();
 begin
   return (select coalesce(jsonb_agg(x.e || coalesce(v_rec -> (x.e ->> 'projeto_id'), jsonb_build_object(
                     'receita', null, 'receita_liquida', null, 'receita_liquido_estimado', null, 'receita_compras', null,
-                    'receita_outras_moedas', null, 'receita_sem_valor', null, 'receita_vinculos', 0, 'receita_sem_periodo', 0)) || jsonb_build_object('receita_fonte', v_fonte)
+                    'receita_outras_moedas', null, 'receita_sem_valor', null, 'receita_vinculos', 0, 'receita_sem_periodo', 0,
+                    'receita_oferta', null, 'receita_sck', null, 'receita_lead', null, 'receita_estimada', null,
+                    'receita_compras_oferta', null, 'receita_compras_sck', null, 'receita_compras_lead', null,
+                    'receita_compras_estimada', null, 'receita_disputa', null, 'receita_ofertas_exclusivas', 0))
+                  || jsonb_build_object('receita_fonte', v_fonte, 'receita_base_pessoas', v_pessoas)
                   order by x.o), '[]'::jsonb)
             from jsonb_array_elements(v_base) with ordinality x(e, o));
 end
@@ -519,7 +716,7 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object(
             'id', v.id, 'projeto_id', v.projeto_id, 'projeto_sigla', p.sigla, 'conta', v.conta, 'produto_id', v.produto_id,
             'produto_nome', v_nomes ->> (v.conta || '/' || v.produto_id),
-            'oferta_codigo', v.oferta_codigo, 'de', v.de, 'ate', v.ate, 'obs', v.obs,
+            'oferta_codigo', v.oferta_codigo, 'oferta_exclusiva', v.oferta_exclusiva, 'de', v.de, 'ate', v.ate, 'obs', v.obs,
             'de_efetivo', coalesce(v.de, (mkt_trafego.periodo_receita(p.id)).inicio),
             'ate_efetivo', coalesce(v.ate, (mkt_trafego.periodo_receita(p.id)).fim),
             'atualizado_em', v.atualizado_em)
@@ -531,11 +728,14 @@ begin
 end
 $$;
 
--- Cria (sem "id") ou edita (com "id"). Campos: projeto_id, conta, produto_id, oferta_codigo, de, ate, obs. Retorna
--- {ok, msg, id, avisos}. Conta: tem de existir em fin.hotmart_contas (o cadastro de contas do financeiro); sem o
--- financeiro neste banco, só o formato. Avisos: produto_em_outro_projeto (a mesma conta e produto ligados a outro projeto
--- com período que se cruza: a venda conta nos dois), produto_sem_compras (nenhuma transação desta conta e produto em
--- fin.hotmart_transacoes), sem_periodo (sem "de" e o projeto sem início: não soma até ter data).
+-- Cria (sem "id") ou edita (com "id"). Campos: projeto_id, conta, produto_id, oferta_codigo, oferta_exclusiva (true/false),
+-- de, ate, obs. Retorna {ok, msg, id, avisos}. Conta: tem de existir em fin.hotmart_contas (o cadastro de contas do
+-- financeiro); sem o financeiro neste banco, só o formato. Oferta exclusiva: exige a oferta, e a oferta (por conta) não
+-- pode ser exclusiva de outro projeto (recusa com a sigla dele; o índice único garante). Avisos: produto_em_outro_projeto
+-- (a mesma conta e produto ligados a outro projeto com período que se cruza: a venda que casar com os dois no mesmo
+-- nível fica em disputa e não soma em nenhum), produto_sem_compras (nenhuma transação desta conta e produto em
+-- fin.hotmart_transacoes), sem_periodo (sem "de" e o projeto sem início: não soma até ter data; a oferta exclusiva soma
+-- mesmo assim), sem_oferta_exclusiva (o projeto ainda não tem nenhuma oferta exclusiva: a receita dele é só estimada).
 create function public.trafego_produto_salvar(p jsonb) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -544,6 +744,9 @@ declare
   v_conta text := btrim(coalesce(p ->> 'conta', ''));
   v_prod text := btrim(coalesce(p ->> 'produto_id', ''));
   v_oferta text := nullif(btrim(coalesce(p ->> 'oferta_codigo', '')), '');
+  v_exclusiva boolean;
+  v_dono text;
+  v_restricao text;
   v_obs text := nullif(btrim(coalesce(p ->> 'obs', '')), '');
   v_pr mkt.projetos%rowtype;
   v_atual mkt_trafego.produtos_hotmart%rowtype;
@@ -557,8 +760,9 @@ begin
     v_proj := nullif(p ->> 'projeto_id', '')::bigint;
     v_de := nullif(btrim(coalesce(p ->> 'de', '')), '')::date;
     v_ate := nullif(btrim(coalesce(p ->> 'ate', '')), '')::date;
+    v_exclusiva := coalesce(nullif(btrim(coalesce(p ->> 'oferta_exclusiva', '')), '')::boolean, false);
   exception when others then
-    return jsonb_build_object('ok', false, 'msg', 'Campo em formato inválido (datas AAAA-MM-DD).');
+    return jsonb_build_object('ok', false, 'msg', 'Campo em formato inválido (datas AAAA-MM-DD; oferta exclusiva true ou false).');
   end;
   select * into v_pr from mkt.projetos where id = v_proj;
   if not found then return jsonb_build_object('ok', false, 'msg', 'Projeto não encontrado.'); end if;
@@ -578,21 +782,39 @@ begin
   if v_de is not null and v_ate is not null and v_ate < v_de then
     return jsonb_build_object('ok', false, 'msg', 'O fim não pode ser antes do início.');
   end if;
+  if v_exclusiva and v_oferta is null then
+    return jsonb_build_object('ok', false, 'msg', 'Oferta exclusiva precisa da oferta: escolha a oferta criada na Hotmart só para este projeto.');
+  end if;
+  if v_exclusiva then
+    select pr.sigla into v_dono
+      from mkt_trafego.produtos_hotmart o join mkt.projetos pr on pr.id = o.projeto_id
+     where o.oferta_exclusiva and o.conta = v_conta and o.oferta_codigo = v_oferta and o.id is distinct from v_id
+     limit 1;
+    if v_dono is not null then
+      return jsonb_build_object('ok', false, 'msg', 'A oferta ' || v_oferta || ' (' || v_conta || ') já é exclusiva de ' || v_dono
+                                || '. Uma oferta só pode ser exclusiva de um projeto: crie outra oferta na Hotmart.');
+    end if;
+  end if;
 
   begin
     if v_id is null then
-      insert into mkt_trafego.produtos_hotmart (projeto_id, conta, produto_id, oferta_codigo, de, ate, obs, criado_por, atualizado_por)
-      values (v_proj, v_conta, v_prod, v_oferta, v_de, v_ate, v_obs, v_uid, v_uid) returning id into v_id;
+      insert into mkt_trafego.produtos_hotmart (projeto_id, conta, produto_id, oferta_codigo, oferta_exclusiva, de, ate, obs, criado_por, atualizado_por)
+      values (v_proj, v_conta, v_prod, v_oferta, v_exclusiva, v_de, v_ate, v_obs, v_uid, v_uid) returning id into v_id;
     else
       select * into v_atual from mkt_trafego.produtos_hotmart where id = v_id for update;
       if not found then return jsonb_build_object('ok', false, 'msg', 'Vínculo não encontrado.'); end if;
       if v_atual.projeto_id <> v_proj then return jsonb_build_object('ok', false, 'msg', 'O vínculo é de outro projeto.'); end if;
       update mkt_trafego.produtos_hotmart
-         set conta = v_conta, produto_id = v_prod, oferta_codigo = v_oferta, de = v_de, ate = v_ate, obs = v_obs,
-             atualizado_em = now(), atualizado_por = v_uid
+         set conta = v_conta, produto_id = v_prod, oferta_codigo = v_oferta, oferta_exclusiva = v_exclusiva, de = v_de, ate = v_ate,
+             obs = v_obs, atualizado_em = now(), atualizado_por = v_uid
        where id = v_id;
     end if;
   exception when unique_violation then
+    get stacked diagnostics v_restricao = constraint_name;
+    if v_restricao = 'produtos_hotmart_oferta_exclusiva_unica' then
+      return jsonb_build_object('ok', false, 'msg', 'A oferta ' || v_oferta || ' (' || v_conta || ') já é exclusiva de outro projeto. '
+                                || 'Uma oferta só pode ser exclusiva de um projeto.');
+    end if;
     return jsonb_build_object('ok', false, 'msg', 'Este produto (conta e oferta) já está ligado a este projeto.');
   end;
 
@@ -609,7 +831,11 @@ begin
     execute 'select exists (select 1 from fin.hotmart_transacoes t where t.produto_id = $1 and t.conta = $2)' into v_tem using v_prod, v_conta;
     if not v_tem then v_avisos := array_append(v_avisos, 'produto_sem_compras'); end if;
   end if;
-  return jsonb_build_object('ok', true, 'msg', 'Produto ' || v_prod || ' (' || v_conta || ') ligado a ' || v_pr.sigla || '.', 'id', v_id,
+  if not exists (select 1 from mkt_trafego.produtos_hotmart o where o.projeto_id = v_proj and o.oferta_exclusiva) then
+    v_avisos := array_append(v_avisos, 'sem_oferta_exclusiva');
+  end if;
+  return jsonb_build_object('ok', true, 'msg', 'Produto ' || v_prod || ' (' || v_conta || ') ligado a ' || v_pr.sigla
+                            || case when v_exclusiva then ' como oferta exclusiva (' || v_oferta || ')' else '' end || '.', 'id', v_id,
                             'avisos', to_jsonb(v_avisos));
 end
 $$;
@@ -626,8 +852,52 @@ begin
 end
 $$;
 
+-- Receita do projeto por nível de certeza, para a vida do projeto: a quebra (oferta exclusiva, SCK, lead do projeto,
+-- estimada à parte), as vendas em disputa (até 200, as mais recentes; sem dado do comprador) e o que falta para a
+-- receita deixar de ser só estimada. Regra: seção 4b (mkt_trafego.receita_vendas). Nulo = projeto não existe.
+create function public.trafego_receita(p_projeto bigint) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_p mkt.projetos%rowtype;
+  v_r jsonb;
+  v_disp jsonb := '[]'::jsonb;
+  v_ndisp int := 0;
+  v_vinc int; v_excl int;
+begin
+  if not mkt.pode_ver('mkt_trafego') then raise exception 'acesso negado' using errcode = '42501'; end if;
+  select * into v_p from mkt.projetos where id = p_projeto;
+  if not found then return null; end if;
+  v_r := mkt_trafego.receita(p_projeto) -> p_projeto::text;
+  select count(*), count(*) filter (where v.oferta_exclusiva) into v_vinc, v_excl
+    from mkt_trafego.produtos_hotmart v where v.projeto_id = p_projeto;
+  select count(*), coalesce(jsonb_agg(jsonb_build_object(
+           'transacao', d.transacao, 'dia', (d.aprovado_em at time zone 'America/Sao_Paulo')::date, 'conta', d.conta,
+           'produto_id', d.produto_id, 'oferta_codigo', d.oferta_codigo, 'nivel', d.nivel, 'valor', d.bruto, 'moeda', d.moeda,
+           'projetos', (select coalesce(jsonb_agg(pr.sigla order by pr.sigla), '[]'::jsonb) from mkt.projetos pr
+                         where pr.id = any (d.projetos_disputa)))
+           order by d.aprovado_em desc, d.transacao) filter (where d.ordem <= 200), '[]'::jsonb)
+    into v_ndisp, v_disp
+    from (select m.*, row_number() over (order by m.aprovado_em desc, m.transacao) as ordem
+            from mkt_trafego.receita_vendas(p_projeto) m where m.disputa) d;
+  return jsonb_build_object(
+    'projeto_id', p_projeto,
+    'fonte', mkt_trafego.hotmart_disponivel(),
+    'base_pessoas', mkt_trafego.pessoas_disponivel(),
+    'receita', v_r,
+    'vinculos', v_vinc,
+    'ofertas_exclusivas', v_excl,
+    -- o aviso grande da vida do projeto: tem produto ligado e nenhuma oferta exclusiva = a receita é só estimada
+    'sem_oferta_exclusiva', v_vinc > 0 and v_excl = 0,
+    'sck_formato', 'origem|meio|campanha|conteúdo|termo',
+    'sck_chaves', to_jsonb(array_remove(array[lower(v_p.etiqueta_clickup), lower(v_p.sigla)], null)),
+    'disputas_total', v_ndisp,
+    'disputas', v_disp);
+end
+$$;
+
 -- Produtos que já apareceram em fin.hotmart_transacoes, por conta, para o seletor do cadastro (nada é ligado sozinho).
--- Cada produto traz as ofertas vistas (até 60, as mais recentes). Sem dado pessoal. Pagas = APPROVED ou COMPLETE.
+-- Cada produto traz as ofertas vistas (até 60, as mais recentes), com exclusiva_de = sigla do projeto de quem a oferta
+-- já é exclusiva (nulo = de ninguém). Sem dado pessoal. Pagas = APPROVED ou COMPLETE.
 create function public.trafego_hotmart_produtos() returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 declare v jsonb;
@@ -651,7 +921,11 @@ begin
       select o.conta, o.produto_id, sum(o.pagas) as pagas,
              (max(o.ultima_ts) at time zone 'America/Sao_Paulo')::date as ultima,
              coalesce(jsonb_agg(jsonb_build_object('codigo', o.oferta_codigo, 'pagas', o.pagas,
-                                                   'ultima', (o.ultima_ts at time zone 'America/Sao_Paulo')::date)
+                                                   'ultima', (o.ultima_ts at time zone 'America/Sao_Paulo')::date,
+                                                   'exclusiva_de', (select pr.sigla from mkt_trafego.produtos_hotmart x
+                                                                      join mkt.projetos pr on pr.id = x.projeto_id
+                                                                     where x.oferta_exclusiva and x.conta = o.conta
+                                                                       and x.oferta_codigo = o.oferta_codigo))
                                 order by o.ultima_ts desc nulls last) filter (where o.oferta_codigo is not null), '[]'::jsonb) as ofertas
         from o group by o.conta, o.produto_id
     )
@@ -775,17 +1049,19 @@ begin
   for f in select p.oid::regprocedure from pg_proc p
             where (p.pronamespace = 'mkt_trafego'::regnamespace
                    and p.proname in ('resumo', 'receita', 'hotmart_disponivel', 'alertas', 'segredo', 'coleta_chave', 'meta_contas',
-                                     'clickup_credenciais', 'clickup_etiquetas', 'coleta_parametros', 'coleta_registrar', 'periodo_padrao', 'periodo_receita'))
+                                     'clickup_credenciais', 'clickup_etiquetas', 'coleta_parametros', 'coleta_registrar', 'periodo_padrao', 'periodo_receita',
+                                     'chave_norm', 'sck_campanha', 'pessoas_disponivel', 'receita_vendas'))
                or (p.pronamespace = 'public'::regnamespace
                    and p.proname in ('trafego_alertas', 'trafego_produtos_listar', 'trafego_produto_salvar', 'trafego_produto_apagar',
-                                     'trafego_hotmart_produtos', 'trafego_clickup', 'trafego_clickup_receber')) loop
+                                     'trafego_hotmart_produtos', 'trafego_clickup', 'trafego_clickup_receber', 'trafego_receita')) loop
     execute format('revoke all on function %s from public, anon, authenticated, service_role', f);
   end loop;
 end
 $grants$;
 grant execute on function
   public.trafego_alertas(), public.trafego_produtos_listar(bigint), public.trafego_produto_salvar(jsonb),
-  public.trafego_produto_apagar(bigint), public.trafego_hotmart_produtos(), public.trafego_clickup(bigint)
+  public.trafego_produto_apagar(bigint), public.trafego_hotmart_produtos(), public.trafego_clickup(bigint),
+  public.trafego_receita(bigint)
   to authenticated;
 grant execute on function public.trafego_clickup_receber(jsonb) to service_role;
 
@@ -811,11 +1087,11 @@ declare
   t record;
   f record;
   v_tela text[] := array['trafego_alertas', 'trafego_produtos_listar', 'trafego_produto_salvar', 'trafego_produto_apagar',
-                         'trafego_hotmart_produtos', 'trafego_clickup'];
+                         'trafego_hotmart_produtos', 'trafego_clickup', 'trafego_receita'];
   v_novas text[] := v_tela || array['trafego_clickup_receber'];
   v_internas text[] := array['resumo', 'resumo_base', 'receita', 'hotmart_disponivel', 'alertas', 'segredo', 'coleta_chave',
                              'meta_contas', 'clickup_credenciais', 'clickup_etiquetas', 'coleta_parametros', 'coleta_registrar',
-                             'periodo_padrao', 'periodo_receita'];
+                             'periodo_padrao', 'periodo_receita', 'chave_norm', 'sck_campanha', 'pessoas_disponivel', 'receita_vendas'];
 begin
   foreach r in array array['anon', 'authenticated'] loop
     if has_schema_privilege(r, 'mkt_trafego', 'usage') then raise exception '20261006i: % tem acesso ao schema mkt_trafego', r; end if;
@@ -855,11 +1131,14 @@ begin
      or has_function_privilege('authenticated', 'public.trafego_clickup_receber(jsonb)', 'execute') then
     raise exception '20261006i: grant de trafego_clickup_receber errado';
   end if;
-  if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%') <> 20 then
-    raise exception '20261006i: esperava 20 funções public.trafego_* (13 da 20261006g + 7)';
+  if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%') <> 21 then
+    raise exception '20261006i: esperava 21 funções public.trafego_* (13 da 20261006g + 8)';
   end if;
-  if (select count(*) from pg_proc p where p.pronamespace = 'mkt_trafego'::regnamespace and p.proname = any (v_internas)) <> 14 then
-    raise exception '20261006i: esperava 14 funções internas novas ou renomeadas';
+  if (select count(*) from pg_proc p where p.pronamespace = 'mkt_trafego'::regnamespace and p.proname = any (v_internas)) <> 18 then
+    raise exception '20261006i: esperava 18 funções internas novas ou renomeadas';
+  end if;
+  if to_regclass('mkt_trafego.produtos_hotmart_oferta_exclusiva_unica') is null then
+    raise exception '20261006i: falta o índice único da oferta exclusiva (uma oferta, um projeto)';
   end if;
   if (select count(*) from mkt_trafego.alerta_regras) <> 7 or (select count(*) from mkt_trafego.produtos_hotmart) <> 0
      or (select count(*) from mkt_trafego.clickup_tarefas) <> 0
@@ -966,9 +1245,11 @@ $t$;
 -- ─── 1. Estrutura e semente ──────────────────────────────────────────────────────────────────────────────────────────
 select pg_temp.ok('1.estrutura',
   (select count(*) from pg_class c where c.relnamespace = 'mkt_trafego'::regnamespace and c.relkind = 'r') = 15
-  and (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%') = 20
-  and to_regprocedure('mkt_trafego.resumo_base(bigint)') is not null and to_regprocedure('mkt_trafego.resumo(bigint)') is not null,
-  '15 tabelas em mkt_trafego, 20 funções public.trafego_*, resumo da 20261006g guardado como resumo_base');
+  and (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%') = 21
+  and to_regprocedure('mkt_trafego.resumo_base(bigint)') is not null and to_regprocedure('mkt_trafego.resumo(bigint)') is not null
+  and to_regclass('mkt_trafego.produtos_hotmart_oferta_exclusiva_unica') is not null,
+  '15 tabelas em mkt_trafego, 21 funções public.trafego_* (com trafego_receita), resumo da 20261006g guardado como resumo_base, '
+  || 'índice único da oferta exclusiva');
 select pg_temp.ok('1.semente',
   (select string_agg(codigo || '=' || limiar::int || unidade, ',' order by ordem) from mkt_trafego.alerta_regras)
     = 'acima_verba_diaria=0pct,cpl_acima_meta=0pct,leads_abaixo_meta=20pct,ritmo_fase=20pct,verba_perto_fim=90pct,fora_padrao=7dias,sem_fase=7dias'
@@ -1073,6 +1354,7 @@ $t$;
 do $t$
 declare v jsonb; r jsonb; o date := mkt_trafego.ontem(); v_id bigint; v_gatilho boolean;
   v_conta text; v_prod text; v_esperado numeric; v_esperado_liq numeric;
+  v_soma numeric; v_soma_liq numeric;
 begin
   -- sem vínculo = sem dado
   r := pg_temp.linha('ZZ28');
@@ -1122,9 +1404,21 @@ begin
                   where w.grupo = 'pago' and w.produto_id = $1 and w.conta = $2 and coalesce(t.moeda, 'BRL') = 'BRL'
                     and w.dia_aprovado between $3 - 59 and $3$q$ into v_esperado, v_esperado_liq using v_prod, v_conta, o;
       r := pg_temp.linha('ZW28');
-      perform pg_temp.ok('3.financeiro', (v ->> 'ok')::boolean and (r ->> 'receita')::numeric = round(v_esperado, 2)
-                         and (r ->> 'receita_liquida')::numeric = round(v_esperado_liq, 2),
-                         'produto real de maior venda da academy nos últimos 60 dias: receita bruta e líquida iguais às de fin.vw_transacoes (valor_oferta e liquido, grupo pago) no período');
+      -- desde a decisão de 06/10/2026 (receita por nível) o vínculo sem oferta exclusiva dá ESTIMADA; vendas do mesmo
+      -- produto com SCK de um projeto real (nível 2) ficam com ele. Estimada de ZW28 + essas = a soma do financeiro.
+      select coalesce(sum(m.bruto) filter (where m.projeto_id = pg_temp.proj('ZW28') and m.nivel = 4), 0)
+               + coalesce(sum(m.bruto) filter (where m.projeto_id <> pg_temp.proj('ZW28')), 0),
+             coalesce(sum(m.liquido) filter (where m.projeto_id = pg_temp.proj('ZW28') and m.nivel = 4), 0)
+               + coalesce(sum(m.liquido) filter (where m.projeto_id <> pg_temp.proj('ZW28')), 0)
+        into v_soma, v_soma_liq
+        from mkt_trafego.receita_vendas(null) m
+       where m.produto_id = v_prod and m.conta = v_conta and m.moeda = 'BRL' and not m.disputa
+         and (m.aprovado_em at time zone 'America/Sao_Paulo')::date between o - 59 and o;
+      perform pg_temp.ok('3.financeiro', (v ->> 'ok')::boolean and round(v_soma, 2) = round(v_esperado, 2)
+                         and round(v_soma_liq, 2) = round(v_esperado_liq, 2)
+                         and (r ->> 'receita_estimada')::numeric <= round(v_esperado, 2),
+                         'produto real de maior venda da academy nos últimos 60 dias: estimada de ZW28 + as vendas que o SCK dá a um projeto '
+                         || 'real = bruto e líquido de fin.vw_transacoes (valor_oferta e liquido, grupo pago) no período');
     end if;
   end if;
 
@@ -1165,32 +1459,37 @@ begin
   end;
 
   v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZZ28'), 'conta', 'academy', 'produto_id', '9990001')));
-  perform pg_temp.ok('3.vínculo', (v ->> 'ok')::boolean and v -> 'avisos' = '[]'::jsonb, 'ZZ28 ← academy/9990001 (todas as ofertas, período do projeto), sem aviso');
+  perform pg_temp.ok('3.vínculo', (v ->> 'ok')::boolean and v -> 'avisos' = '["sem_oferta_exclusiva"]'::jsonb,
+                     'ZZ28 ← academy/9990001 (todas as ofertas, período do projeto), só o aviso sem_oferta_exclusiva');
   r := pg_temp.linha('ZZ28');
-  perform pg_temp.ok('3.receita', (r ->> 'receita')::numeric = 360 and (r ->> 'receita_compras')::int = 4
-                     and (r ->> 'receita_outras_moedas')::int = 1 and (r ->> 'receita_fonte')::boolean,
-                     'bruto 360,00 = 100 (APPROVED, valor da oferta e não os 110 cobrados) + 200 (COMPLETE) + 60 (sem valor_base: '
-                     || 'hotmart_fee.base do bruto_json); REFUNDED, a de antes do início, a sem aprovado_em e a do escritório fora; '
-                     || 'a de USD contada à parte (4 transações, 1 em outra moeda)');
-  perform pg_temp.ok('3.líquido', (r ->> 'receita_liquida')::numeric = 336 and (r ->> 'receita_liquido_estimado')::int = 1,
-                     'líquido 336,00 = 90 + 191 (sem liquido_produtor: 200 − taxa 9, estimado) + 55; 1 estimado');
+  -- produto + período = nível 4 (ESTIMADA, à parte): a receita do projeto (níveis 1 a 3) fica 0, não nula (tem vínculo)
+  perform pg_temp.ok('3.estimada', (r ->> 'receita_estimada')::numeric = 360 and (r ->> 'receita_compras_estimada')::int = 4
+                     and (r ->> 'receita')::numeric = 0 and (r ->> 'receita_compras')::int = 0 and (r ->> 'receita_fonte')::boolean,
+                     'só produto + período: estimada 360,00 = 100 (APPROVED, valor da oferta e não os 110 cobrados) + 200 (COMPLETE) + '
+                     || '60 (sem valor_base: hotmart_fee.base do bruto_json); REFUNDED, a de antes do início, a sem aprovado_em e a do '
+                     || 'escritório fora; a de USD contada mas fora da soma (4 vendas); a receita do projeto (níveis 1 a 3) fica 0,00');
   v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZZ28'), 'conta', 'escritorio', 'produto_id', '9990001')));
   r := pg_temp.linha('ZZ28');
-  perform pg_temp.ok('3.conta', (v ->> 'ok')::boolean and (r ->> 'receita')::numeric = 1360,
-                     'mesmo id de produto na conta escritorio é outro vínculo: + 1000 = 1360,00 (a conta separa)');
+  perform pg_temp.ok('3.conta', (v ->> 'ok')::boolean and (r ->> 'receita_estimada')::numeric = 1360,
+                     'mesmo id de produto na conta escritorio é outro vínculo: + 1000 = 1360,00 estimada (a conta separa)');
   v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZZ28'), 'conta', 'academy', 'produto_id', '9990003', 'oferta_codigo', 'OFZ1', 'de', o - 1)));
   v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZZ28'), 'conta', 'academy', 'produto_id', '9990001', 'oferta_codigo', 'OFX')));
   r := pg_temp.linha('ZZ28');
-  perform pg_temp.ok('3.oferta e período', (r ->> 'receita')::numeric = 1430 and (r ->> 'receita_vinculos')::int = 4,
+  perform pg_temp.ok('3.oferta e período', (r ->> 'receita_estimada')::numeric = 1430 and (r ->> 'receita_vinculos')::int = 4,
                      'bruto 1430,00: + 70 da oferta OFZ1 a partir de O-1 (a OFZ2 e a OFZ1 de O-4 fora); o vínculo 9990001/OFX não conta a mesma venda duas vezes');
   r := pg_temp.adm(format('select public.trafego_projeto(%s)', pg_temp.proj('ZZ28')));
-  perform pg_temp.ok('3.vida do projeto', (r -> 'resumo' ->> 'receita')::numeric = 1430, 'a vida do projeto mostra a mesma receita');
+  perform pg_temp.ok('3.vida do projeto', (r -> 'resumo' ->> 'receita_estimada')::numeric = 1430, 'a vida do projeto mostra a mesma estimada');
   -- avisos
   v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZY28'), 'conta', 'academy', 'produto_id', '9990001')));
   perform pg_temp.ok('3.outro projeto', (v ->> 'ok')::boolean and v -> 'avisos' ? 'produto_em_outro_projeto',
                      'mesma conta e produto em ZY28 com período que se cruza: salva, com aviso');
   r := pg_temp.linha('ZY28');
-  perform pg_temp.ok('3.ZY28', (r ->> 'receita')::numeric = 760, 'ZY28 (O-30 a O+5): 400 + 100 + 200 + 60 = 760,00');
+  perform pg_temp.ok('3.ZY28', (r ->> 'receita_estimada')::numeric = 400 and (r ->> 'receita_disputa')::int = 4,
+                     'ZY28 (O-30 a O+5): as 4 vendas que também casam com ZZ28 no mesmo nível (estimada) ficam em DISPUTA e não somam '
+                     || 'em nenhum; sobra a de O-30 = 400,00');
+  r := pg_temp.linha('ZZ28');
+  perform pg_temp.ok('3.disputa', (r ->> 'receita_estimada')::numeric = 1070 and (r ->> 'receita_disputa')::int = 4,
+                     'ZZ28 perde as mesmas 4 para a disputa: 1430 − 360 = 1070,00 estimada (escritório 1000 + OFZ1 70)');
   v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZY28'), 'conta', 'escritorio', 'produto_id', '9990002')));
   perform pg_temp.ok('3.sem compras na conta', (v ->> 'ok')::boolean and v -> 'avisos' ? 'produto_sem_compras',
                      '9990002 só vendeu na academy: ligado pelo escritório, salva com aviso produto_sem_compras');
@@ -1217,7 +1516,160 @@ begin
   select id into v_id from mkt_trafego.produtos_hotmart where produto_id = '9990003';
   v := pg_temp.adm(format('select public.trafego_produto_apagar(%s)', v_id));
   r := pg_temp.linha('ZZ28');
-  perform pg_temp.ok('3.apagar', (v ->> 'ok')::boolean and (r ->> 'receita')::numeric = 1360, 'apagar o vínculo 9990003: receita volta a 1360,00');
+  perform pg_temp.ok('3.apagar', (v ->> 'ok')::boolean and (r ->> 'receita_estimada')::numeric = 1000, 'apagar o vínculo 9990003: estimada volta a 1000,00');
+end
+$t$;
+
+-- ─── 3b. Receita por nível de certeza (decisão do Victor, 06/10/2026): oferta exclusiva, SCK, lead do projeto, disputa ─
+-- Continua do passo 3 (só no banco local, com as transações fictícias). Estado de partida: ZZ28 com academy/9990001
+-- (todas), escritorio/9990001 e academy/9990001/OFX; ZY28 com academy/9990001 e escritorio/9990002. Transações novas
+-- HPENSAIO13…20 (fictícias) e, com a base de pessoas, 4 pessoas "Comprador Ensaio Nivel3 …" e 1 comprador fictício.
+do $t$
+declare v jsonb; r jsonb; o date := mkt_trafego.ontem(); v_id bigint; v_p uuid; v_falhou boolean;
+begin
+  if not mkt_trafego.hotmart_disponivel() then
+    perform pg_temp.diz('3b.níveis', 'PULADO (fin.hotmart_transacoes, o espelho do financeiro, não existe neste banco)');
+    return;
+  end if;
+  if not exists (select 1 from fin.hotmart_transacoes where transacao = 'HPENSAIO1') then
+    perform pg_temp.diz('3b.níveis', 'PULADO (sem as transações fictícias do passo 3: só no banco local)');
+    return;
+  end if;
+  perform pg_temp.ok('3b.sck formato', mkt_trafego.sck_campanha('sendflow|grupo|Seminário-Conjunto-2026-11||') = 'seminario-conjunto-2026-11'
+                     and mkt_trafego.sck_campanha(' a | b | PB26 |c|d') = 'pb26' and mkt_trafego.sck_campanha('pb26') is null
+                     and mkt_trafego.sck_campanha('a|b') is null,
+                     'leitura do SCK num lugar só: 3º campo (campanha), sem maiúscula, acento nem espaço; sem "|" ou sem 3º campo = nada');
+
+  -- recusas da oferta exclusiva
+  v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZY28'),
+         'conta', 'academy', 'produto_id', '9990002', 'oferta_exclusiva', true)));
+  perform pg_temp.ok('3b.exclusiva sem oferta', not (v ->> 'ok')::boolean, 'oferta exclusiva sem oferta recusada: ' || (v ->> 'msg'));
+  perform pg_temp.ok('3b.check', (select count(*) from mkt_trafego.produtos_hotmart where oferta_exclusiva) = 0, 'nada gravado');
+
+  -- nível 1: o vínculo OFX de ZZ28 vira oferta exclusiva
+  select id into v_id from mkt_trafego.produtos_hotmart where projeto_id = pg_temp.proj('ZZ28') and oferta_codigo = 'OFX';
+  v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('id', v_id, 'projeto_id', pg_temp.proj('ZZ28'),
+         'conta', 'academy', 'produto_id', '9990001', 'oferta_codigo', 'OFX', 'oferta_exclusiva', true)));
+  r := pg_temp.linha('ZZ28');
+  perform pg_temp.ok('3b.nível 1', (v ->> 'ok')::boolean and not (v -> 'avisos' ? 'sem_oferta_exclusiva')
+                     and (r ->> 'receita_oferta')::numeric = 100 and (r ->> 'receita')::numeric = 100
+                     and (r ->> 'receita_liquida')::numeric = 90 and (r ->> 'receita_compras_oferta')::int = 1
+                     and (r ->> 'receita_estimada')::numeric = 1000 and (r ->> 'receita_disputa')::int = 3
+                     and (r ->> 'receita_ofertas_exclusivas')::int = 1,
+                     'OFX exclusiva de ZZ28: a venda de 100,00 (que estava em disputa no nível estimado com ZY28) é CERTA de ZZ28 '
+                     || '(nível 1 vence o 4): receita 100,00, líquido 90,00; estimada 1000,00; 3 em disputa');
+  r := pg_temp.linha('ZY28');
+  perform pg_temp.ok('3b.perde para o nível 1', (r ->> 'receita_estimada')::numeric = 400 and (r ->> 'receita_disputa')::int = 3
+                     and (r ->> 'receita')::numeric = 0,
+                     'ZY28 não conta a venda da OFX (outro projeto tem nível mais forte): estimada 400,00, 3 em disputa, receita 0,00');
+
+  -- uma oferta, um projeto: pela tela (mensagem com a sigla) e direto na tabela (o banco recusa)
+  v := pg_temp.adm(format('select public.trafego_produto_salvar(%L::jsonb)', jsonb_build_object('projeto_id', pg_temp.proj('ZY28'),
+         'conta', 'academy', 'produto_id', '9990001', 'oferta_codigo', 'OFX', 'oferta_exclusiva', true)));
+  perform pg_temp.ok('3b.uma oferta, um projeto', not (v ->> 'ok')::boolean and v ->> 'msg' like '%ZZ28%',
+                     'a mesma oferta exclusiva em ZY28 recusada: ' || (v ->> 'msg'));
+  begin
+    insert into mkt_trafego.produtos_hotmart (projeto_id, conta, produto_id, oferta_codigo, oferta_exclusiva)
+    values (pg_temp.proj('ZY28'), 'academy', '9990001', 'OFX', true);
+    v_falhou := false;
+  exception when unique_violation then v_falhou := true;
+  end;
+  perform pg_temp.ok('3b.índice', v_falhou, 'insert direto da segunda oferta exclusiva recusado pelo banco (índice único)');
+  v := pg_temp.adm(format('select public.trafego_hotmart_produtos()'));
+  perform pg_temp.ok('3b.seletor', exists (select 1 from jsonb_array_elements(v) e, jsonb_array_elements(e -> 'ofertas') x
+                                            where e ->> 'produto_id' = '9990001' and e ->> 'conta' = 'academy'
+                                              and x ->> 'codigo' = 'OFX' and x ->> 'exclusiva_de' = 'ZZ28'),
+                     'o seletor de ofertas mostra que a OFX já é exclusiva de ZZ28');
+  v := pg_temp.adm(format('select public.trafego_produtos_listar(%s)', pg_temp.proj('ZZ28')));
+  perform pg_temp.ok('3b.listar', exists (select 1 from jsonb_array_elements(v) e where e ->> 'oferta_codigo' = 'OFX' and (e ->> 'oferta_exclusiva')::boolean),
+                     'a lista de vínculos traz a marca oferta_exclusiva');
+
+  -- transações novas: 13 = OFX fora do período padrão (O-60); 14 e 15 = SCK com o projeto; 16 = sigla fora do campo campanha
+  insert into fin.hotmart_transacoes (transacao, conta, produto_id, produto_nome, oferta_codigo, status, moeda, valor_base, valor_cobrado,
+                                      taxa_hotmart, liquido_produtor, pedido_em, aprovado_em, origem_sck, bruto_json)
+  select 'HPENSAIO' || x.n, 'academy', x.prod, 'Produto Ensaio', x.oferta, 'APPROVED', 'BRL', x.base, x.base, 0, x.base,
+         (o - x.k) + time '11:00', ((o - x.k) + time '12:00') at time zone 'America/Sao_Paulo', x.sck, '{}'::jsonb
+    from (values (13, '9990001', 'OFX', 300, 60, null),
+                 (14, '9990002', null, 250, 3, 'sendflow|grupo|ZZ-ENSÁIO-R||'),
+                 (15, '9990001', null, 120, 2, 'youtube|live|zz28||cpl-1'),
+                 (16, '9990002', null, 999, 2, 'zz28|grupo|outra||')) x(n, prod, oferta, base, k, sck);
+  r := pg_temp.linha('ZZ28');
+  perform pg_temp.ok('3b.nível 1 sem período', (r ->> 'receita_oferta')::numeric = 400,
+                     'venda da oferta exclusiva antes do período padrão (O-60) conta: oferta exclusiva vale em qualquer data');
+  perform pg_temp.ok('3b.nível 2', (r ->> 'receita_sck')::numeric = 370 and (r ->> 'receita_compras_sck')::int = 2
+                     and (r ->> 'receita')::numeric = 770 and (r ->> 'receita_estimada')::numeric = 1000,
+                     'SCK com a chave (ZZ-ENSÁIO-R, maiúscula e acento) em produto NÃO ligado (250) e com a sigla (zz28) em produto que '
+                     || 'ZY28 estimava (120; nível 2 vence o 4): SCK 370,00; receita = 400 + 370 = 770,00; a sigla fora do campo '
+                     || 'campanha não conta');
+  perform pg_temp.ok('3b.ninguém', not exists (select 1 from mkt_trafego.receita_vendas(null) m where m.transacao = 'HPENSAIO16'),
+                     'zz28 no 1º campo do SCK (não é o campo campanha) e produto sem vínculo naquela conta: a venda não é de ninguém');
+  r := pg_temp.linha('ZY28');
+  perform pg_temp.ok('3b.ZY28 sem a do SCK', (r ->> 'receita_estimada')::numeric = 400, 'ZY28 não estima a venda que tem SCK de ZZ28');
+
+  -- disputa no nível 2: ZV28 com a etiqueta "zz28" (igual à sigla de ZZ28)
+  insert into mkt.projetos (sigla, nome, linha, etiqueta_clickup, subarea_trafego, inicio, fim) values ('ZV28', 'Projeto Ensaio Disputa', 'Ensaio', 'zz28', 'interno', o - 9, o);
+  r := pg_temp.linha('ZZ28');
+  perform pg_temp.ok('3b.disputa nível 2', (r ->> 'receita_sck')::numeric = 250 and (r ->> 'receita')::numeric = 650
+                     and (r ->> 'receita_disputa')::int = 4 and (pg_temp.linha('ZV28') ->> 'receita')::numeric = 0
+                     and (pg_temp.linha('ZV28') ->> 'receita_disputa')::int = 1,
+                     'o SCK "zz28" casa com ZZ28 (sigla) e ZV28 (etiqueta) no mesmo nível: a venda de 120 não soma em nenhum '
+                     || '(ZZ28 650,00; ZV28 0,00 com 1 em disputa)');
+  v := pg_temp.adm(format('select public.trafego_receita(%s)', pg_temp.proj('ZZ28')));
+  perform pg_temp.ok('3b.vendas em disputa', (v ->> 'disputas_total')::int = 4
+                     and exists (select 1 from jsonb_array_elements(v -> 'disputas') d where d ->> 'transacao' = 'HPENSAIO15'
+                                   and (d ->> 'nivel')::int = 2 and d -> 'projetos' = '["ZV28", "ZZ28"]'::jsonb)
+                     and exists (select 1 from jsonb_array_elements(v -> 'disputas') d where d ->> 'transacao' = 'HPENSAIO2'
+                                   and (d ->> 'nivel')::int = 4 and d -> 'projetos' = '["ZY28", "ZZ28"]'::jsonb)
+                     and not (v -> 'disputas' -> 0 ? 'email') and not (v ->> 'sem_oferta_exclusiva')::boolean
+                     and v -> 'sck_chaves' = '["zz-ensaio-r", "zz28"]'::jsonb and (v -> 'receita' ->> 'receita')::numeric = 650,
+                     'vida do projeto: 4 vendas em disputa (a do SCK com ZV28 no nível 2, as estimadas com ZY28 no nível 4), sem dado '
+                     || 'do comprador; com oferta exclusiva, sem o aviso; as chaves aceitas no SCK');
+  v := pg_temp.adm(format('select public.trafego_receita(%s)', pg_temp.proj('ZY28')));
+  perform pg_temp.ok('3b.aviso sem oferta exclusiva', (v ->> 'sem_oferta_exclusiva')::boolean and (v ->> 'ofertas_exclusivas')::int = 0,
+                     'ZY28 tem produto ligado e nenhuma oferta exclusiva: aviso "sem oferta exclusiva, a receita é só estimada"');
+  update mkt.projetos set etiqueta_clickup = null where sigla = 'ZV28';
+  perform pg_temp.ok('3b.fim da disputa', (pg_temp.linha('ZZ28') ->> 'receita')::numeric = 770, 'sem a etiqueta repetida, ZZ28 volta a 770,00');
+
+  -- nível 3: comprador que foi lead do projeto ANTES da compra (base de pessoas do Arthur, só leitura nas funções)
+  if not mkt_trafego.pessoas_disponivel() then
+    perform pg_temp.diz('3b.nível 3', 'PULADO (sem a base de pessoas 20261005r ou sem as colunas do comprador em fin.hotmart_transacoes)');
+    return;
+  end if;
+  -- pessoa A: e-mail nos identificadores, lead de ZY28 em O-20, compra em O-10 (fora do período de ZZ28)
+  insert into pessoas.pessoas (nome) values ('Comprador Ensaio Nivel3 A') returning id into v_p;
+  insert into pessoas.identificadores (pessoa_id, tipo, valor, chave, origem) values (v_p, 'email', 'comprador.ensaio3@exemplo.invalid', 'comprador.ensaio3@exemplo.invalid', 'formulario');
+  insert into pessoas.eventos (pessoa_id, tipo, projeto_id, fonte, quando) values (v_p, 'lead', pg_temp.proj('ZY28'), 'formulario', (o - 20) + time '10:00');
+  -- pessoa B: telefone, lead de ZY28 DEPOIS da compra (O vs O-12): não vale
+  insert into pessoas.pessoas (nome) values ('Comprador Ensaio Nivel3 B') returning id into v_p;
+  insert into pessoas.identificadores (pessoa_id, tipo, valor, chave, origem) values (v_p, 'telefone', '11988887777', pessoas.chave_telefone('11988887777'), 'formulario');
+  insert into pessoas.eventos (pessoa_id, tipo, projeto_id, fonte, quando) values (v_p, 'lead', pg_temp.proj('ZY28'), 'formulario', o + time '10:00');
+  -- pessoa C: comprador ligado (documento com máscara), lead de ZY28 em O-25, compra em O-8 (dentro dos DOIS períodos)
+  insert into public.compradores (nome, email, documento) values ('Comprador Ensaio Nivel3 C', 'comprador.c@exemplo.invalid', '123.456.789-01');
+  insert into pessoas.pessoas (comprador_id) select id from public.compradores where email = 'comprador.c@exemplo.invalid' returning id into v_p;
+  insert into pessoas.eventos (pessoa_id, tipo, projeto_id, fonte, quando) values (v_p, 'lead', pg_temp.proj('ZY28'), 'formulario', (o - 25) + time '10:00');
+  -- pessoa D: telefone nos identificadores, lead de ZY28 em O-15, compra em O-6 com o telefone noutro formato
+  insert into pessoas.pessoas (nome) values ('Comprador Ensaio Nivel3 D') returning id into v_p;
+  insert into pessoas.identificadores (pessoa_id, tipo, valor, chave, origem) values (v_p, 'telefone', '21997776655', pessoas.chave_telefone('21997776655'), 'formulario');
+  insert into pessoas.eventos (pessoa_id, tipo, projeto_id, fonte, quando) values (v_p, 'lead', pg_temp.proj('ZY28'), 'formulario', (o - 15) + time '10:00');
+  insert into fin.hotmart_transacoes (transacao, conta, produto_id, produto_nome, status, moeda, valor_base, valor_cobrado, taxa_hotmart,
+                                      liquido_produtor, pedido_em, aprovado_em, comprador_email, comprador_telefone, comprador_documento, bruto_json)
+  select 'HPENSAIO' || x.n, 'academy', '9990001', 'Produto Ensaio', 'APPROVED', 'BRL', x.base, x.base, 0, x.base,
+         (o - x.k) + time '11:00', ((o - x.k) + time '12:00') at time zone 'America/Sao_Paulo', x.em, x.tel, x.doc, '{}'::jsonb
+    from (values (17, 330, 10, ' Comprador.Ensaio3@Exemplo.invalid ', null, null),
+                 (18, 440, 12, null, '5511988887777', null),
+                 (19, 210, 8, null, null, '12345678901'),
+                 (20, 150, 6, null, '+55 (21) 99777-6655', null)) x(n, base, k, em, tel, doc);
+  r := pg_temp.linha('ZY28');
+  perform pg_temp.ok('3b.nível 3', (r ->> 'receita_lead')::numeric = 690 and (r ->> 'receita_compras_lead')::int = 3
+                     and (r ->> 'receita')::numeric = 690 and (r ->> 'receita_estimada')::numeric = 840
+                     and (r ->> 'receita_base_pessoas')::boolean,
+                     'ZY28: lead antes da compra pelo e-mail (330, maiúscula e espaço), pelo documento do comprador ligado (210) e pelo '
+                     || 'telefone noutro formato (150) = nível 3, 690,00; o lead DEPOIS da compra (440, telefone) fica só estimada: '
+                     || '400 + 440 = 840,00');
+  r := pg_temp.linha('ZZ28');
+  perform pg_temp.ok('3b.nível 3 vence o 4', (r ->> 'receita_estimada')::numeric = 1000 and (r ->> 'receita')::numeric = 770,
+                     'as compras de 210 (O-8) e 150 (O-6) também caem no período de ZZ28, mas lá são só estimadas: ficam com ZY28 '
+                     || '(nível 3), ZZ28 não muda');
 end
 $t$;
 
@@ -1331,6 +1783,7 @@ select pg_temp.ok('7.funcoes',
          from pg_proc p where p.pronamespace = 'mkt_trafego'::regnamespace)
   and has_function_privilege('authenticated', 'public.trafego_alertas()', 'execute')
   and has_function_privilege('authenticated', 'public.trafego_clickup(bigint)', 'execute')
+  and has_function_privilege('authenticated', 'public.trafego_receita(bigint)', 'execute')
   and not has_function_privilege('authenticated', 'public.trafego_clickup_receber(jsonb)', 'execute')
   and has_function_privilege('service_role', 'public.trafego_clickup_receber(jsonb)', 'execute'),
   'anon nada; internas (inclusive as que leem o Vault) fechadas até para service_role; tela authenticated; clickup_receber só service_role');
@@ -1346,6 +1799,7 @@ declare
     'select public.trafego_produto_apagar(1)',
     'select public.trafego_hotmart_produtos()',
     'select public.trafego_clickup(1)',
+    'select public.trafego_receita(1)',
     'select public.trafego_clickup_receber(''{}'')',
     'select count(*) from mkt_trafego.meta_contas()'];
   v_ok int; v_errado text;

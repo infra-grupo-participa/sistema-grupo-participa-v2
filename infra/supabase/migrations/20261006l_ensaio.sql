@@ -258,7 +258,11 @@ $semente$;
 insert into mkt_trafego.alerta_regras (codigo, nome, ordem, limiar, unidade, gravidade, descricao) values
   ('checklist_incompleto', 'Em captação com checklist incompleto', 9, 0, 'dias', 'media',
    'Projeto em captação (hoje entre o início e o fim da captação) com item do checklist de "antes de subir as campanhas" '
-   'ainda pendente, a partir de limiar dias do início da captação (0 = desde o primeiro dia).');
+   'ainda pendente, a partir de limiar dias do início da captação (0 = desde o primeiro dia).'),
+  ('sem_oferta_exclusiva', 'Sem oferta exclusiva em captação ou carrinho', 10, 0, 'dias', 'alta',
+   'Projeto interno em captação ou com o carrinho aberto (ontem entre o início e o fim da captação, do evento ou da fase '
+   'abertura de carrinho) sem nenhuma oferta exclusiva ligada: a receita dele é só estimada. A partir de limiar dias do '
+   'início do período (0 = desde o primeiro dia). Decisão do Victor, 06/10/2026.');
 
 -- ─── 5. Funções internas ─────────────────────────────────────────────────────────────────────────────────────────────
 -- Data de referência do projeto + dias. Nula se a referência não estiver preenchida.
@@ -405,20 +409,27 @@ begin
           exists (select 1 from mkt.paginas pg where pg.projeto_id = p_projeto and pg.ativa), null),
       (4, 'hotmart', 'Produtos da Hotmart vinculados', 'antes', 'hotmart', v_p.tipo is distinct from 'externo',
           exists (select 1 from mkt_trafego.produtos_hotmart h where h.projeto_id = p_projeto), null),
-      (5, 'modelo', 'Modelo de lançamento aplicado', 'antes', 'modelo', true, v_modelo is not null, v_modelo ->> 'nome'),
-      (6, 'verba', 'Verba máxima preenchida', 'antes', 'planejamento', true, v_pl.verba_maxima is not null, null),
-      (7, 'fases', 'Fases planejadas', 'antes', 'fases', true,
+      -- oferta exclusiva (decisão do Victor, 06/10/2026): sem ela a receita do projeto é só estimada. Vale para os tipos
+      -- com venda que a Central conta (todos os internos; a receita dos externos não entra por ora).
+      (5, 'oferta_exclusiva', 'Oferta exclusiva cadastrada na Hotmart e ligada ao projeto', 'antes', 'hotmart',
+          v_p.tipo is distinct from 'externo',
+          exists (select 1 from mkt_trafego.produtos_hotmart h where h.projeto_id = p_projeto and h.oferta_exclusiva),
+          (select string_agg(h.oferta_codigo, ', ' order by h.oferta_codigo) from mkt_trafego.produtos_hotmart h
+            where h.projeto_id = p_projeto and h.oferta_exclusiva)),
+      (6, 'modelo', 'Modelo de lançamento aplicado', 'antes', 'modelo', true, v_modelo is not null, v_modelo ->> 'nome'),
+      (7, 'verba', 'Verba máxima preenchida', 'antes', 'planejamento', true, v_pl.verba_maxima is not null, null),
+      (8, 'fases', 'Fases planejadas', 'antes', 'fases', true,
           exists (select 1 from mkt_trafego.projeto_fases f where f.projeto_id = p_projeto), null),
-      (8, 'metas', 'Metas preenchidas (leads, receita ou CPL)', 'antes', 'planejamento', true,
+      (9, 'metas', 'Metas preenchidas (leads, receita ou CPL)', 'antes', 'planejamento', true,
            coalesce(v_pl.meta_leads, v_pl.meta_receita, v_pl.meta_cpl) is not null, null),
-      (9, 'campanhas', 'Campanhas com a sigla encontradas', 'durante', 'gerador', true, v_camp > 0, v_camp || ' campanha(s)'),
-      (10, 'campanhas_esperadas', 'Campanhas esperadas criadas', 'durante', 'gerador', v_esp > 0, v_criadas = v_esp,
+      (10, 'campanhas', 'Campanhas com a sigla encontradas', 'durante', 'gerador', true, v_camp > 0, v_camp || ' campanha(s)'),
+      (11, 'campanhas_esperadas', 'Campanhas esperadas criadas', 'durante', 'gerador', v_esp > 0, v_criadas = v_esp,
            v_criadas || ' de ' || v_esp),
-      (11, 'fora_padrao', 'Nenhuma campanha fora do padrão', 'durante', 'campanhas', v_camp > 0, v_fora = 0,
+      (12, 'fora_padrao', 'Nenhuma campanha fora do padrão', 'durante', 'campanhas', v_camp > 0, v_fora = 0,
            case when v_fora > 0 then v_fora || ' fora do padrão' end),
-      (12, 'fases_campanhas', 'Fase de cada campanha definida', 'durante', 'campanhas', v_camp > 0, v_semfase = 0,
+      (13, 'fases_campanhas', 'Fase de cada campanha definida', 'durante', 'campanhas', v_camp > 0, v_semfase = 0,
            case when v_semfase > 0 then v_semfase || ' sem fase' end),
-      (13, 'encerrado', 'Status encerrado depois do fim do evento', 'encerramento', 'planejamento',
+      (14, 'encerrado', 'Status encerrado depois do fim do evento', 'encerramento', 'planejamento',
            v_p.evento_fim is not null and v_p.evento_fim < v_hoje, v_pl.status in ('encerrado', 'inativo'), null)
     ) x(ordem, codigo, texto, momento, acao, aplica, ok, detalhe);
 
@@ -437,7 +448,7 @@ begin
 end
 $$;
 
--- Resumo do dia (refeita): a da 20261006j (conta_fora_projeto) mais checklist_incompleto.
+-- Resumo do dia (refeita): a da 20261006j (conta_fora_projeto) mais checklist_incompleto e sem_oferta_exclusiva.
 create or replace function mkt_trafego.alertas() returns jsonb
 language plpgsql stable set search_path = '' as $$
 declare
@@ -445,6 +456,7 @@ declare
   v_ontem date := mkt_trafego.ontem();
   v_extra jsonb;
   v_ck jsonb;
+  v_ox jsonb;
 begin
   -- conta_fora_projeto (igual à 20261006j)
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -486,10 +498,39 @@ begin
          and v_ontem - p.captacao_inicio >= rg.limiar::int) y
    where rg.codigo = 'checklist_incompleto' and rg.ligada and jsonb_array_length(y.ck -> 'pendentes_antes') > 0;
 
+  -- sem_oferta_exclusiva: interno em captação ou carrinho (ontem dentro da captação, do evento ou da fase abertura de
+  -- carrinho planejada) sem nenhuma oferta exclusiva ligada (a receita é só estimada; decisão do Victor, 06/10/2026).
+  -- valor = 0 (ofertas exclusivas); a mesma regra em web/modules/marketing/trafego/domain/alertas.ts
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'regra', 'sem_oferta_exclusiva', 'nome', rg.nome, 'gravidade', rg.gravidade, 'limiar', rg.limiar, 'unidade', rg.unidade,
+           'projeto_id', z.id, 'sigla', z.sigla, 'projeto_nome', z.nome, 'valor', 0, 'referencia', null,
+           'detalhe', jsonb_build_object('fase', z.fase, 'inicio', z.ini, 'dias', v_ontem - z.ini))), '[]'::jsonb)
+    into v_ox
+    from mkt_trafego.alerta_regras rg
+    cross join lateral (
+      select y.* from (
+        select p.id, p.sigla, p.nome,
+               case when p.captacao_inicio <= v_ontem and coalesce(p.captacao_fim, v_ontem) >= v_ontem then 'captacao'
+                    when (p.evento_inicio <= v_ontem and coalesce(p.evento_fim, p.evento_inicio) >= v_ontem) or fc.inicio is not null
+                      then 'abertura_carrinho' end as fase,
+               case when p.captacao_inicio <= v_ontem and coalesce(p.captacao_fim, v_ontem) >= v_ontem then p.captacao_inicio
+                    else least(case when p.evento_inicio <= v_ontem and coalesce(p.evento_fim, p.evento_inicio) >= v_ontem then p.evento_inicio end,
+                               fc.inicio) end as ini
+          from mkt.projetos p
+          left join mkt_trafego.planejamento pl on pl.projeto_id = p.id
+          left join mkt_trafego.status_projeto s on s.codigo = pl.status
+          left join lateral (select min(f.inicio) as inicio from mkt_trafego.projeto_fases f
+                              where f.projeto_id = p.id and f.fase = 'abertura_carrinho'
+                                and f.inicio <= v_ontem and f.fim >= v_ontem) fc on true
+         where p.ativo and coalesce(s.entra_no_resumo_dia, true) and p.tipo is distinct from 'externo'
+           and not exists (select 1 from mkt_trafego.produtos_hotmart h where h.projeto_id = p.id and h.oferta_exclusiva)) y
+       where y.fase is not null and v_ontem - y.ini >= rg.limiar::int) z
+   where rg.codigo = 'sem_oferta_exclusiva' and rg.ligada;
+
   return v || jsonb_build_object('alertas', (
     select coalesce(jsonb_agg(a.e order by case a.e ->> 'gravidade' when 'alta' then 0 else 1 end, coalesce(rg.ordem, 99),
                                            a.e ->> 'sigla' nulls last, a.o), '[]'::jsonb)
-      from jsonb_array_elements(coalesce(v -> 'alertas', '[]'::jsonb) || v_extra || v_ck) with ordinality a(e, o)
+      from jsonb_array_elements(coalesce(v -> 'alertas', '[]'::jsonb) || v_extra || v_ck || v_ox) with ordinality a(e, o)
       left join mkt_trafego.alerta_regras rg on rg.codigo = a.e ->> 'regra'));
 end
 $$;
@@ -936,7 +977,8 @@ begin
      or (select count(*) from mkt_trafego.modelo_unidades where padrao) <> (select count(*) from mkt.lancamento_regras)
      or (select count(*) from mkt_trafego.projeto_itens) <> 0 or (select count(*) from mkt_trafego.projeto_modelo) <> 0
      or exists (select 1 from mkt_trafego.modelos m where (select sum(mf.pct_verba) from mkt_trafego.modelo_fases mf where mf.modelo_id = m.id) <> 100)
-     or not exists (select 1 from mkt_trafego.alerta_regras where codigo = 'checklist_incompleto') then
+     or not exists (select 1 from mkt_trafego.alerta_regras where codigo = 'checklist_incompleto')
+     or not exists (select 1 from mkt_trafego.alerta_regras where codigo = 'sem_oferta_exclusiva') then
     raise exception '20261006l: semente diferente do esperado (um exemplo rascunho e padrão por combinação, 100%% de verba em cada, nada nos projetos)';
   end if;
   -- SendFlow: grupo de leads onde há campanha esperada LEADS, grupo de compradores onde há VENDAS, nada genérico
@@ -1119,7 +1161,7 @@ begin
                                             from jsonb_array_elements(c -> 'automaticos') e)
       = 'campanhas:durante:gerador,campanhas_esperadas:durante:gerador,contas:antes:projeto,encerrado:encerramento:planejamento,etiqueta:antes:projeto,'
         || 'fases:antes:fases,fases_campanhas:durante:campanhas,fora_padrao:durante:campanhas,hotmart:antes:hotmart,metas:antes:planejamento,'
-        || 'modelo:antes:modelo,paginas:antes:paginas,verba:antes:planejamento',
+        || 'modelo:antes:modelo,oferta_exclusiva:antes:hotmart,paginas:antes:paginas,verba:antes:planejamento',
     'cada item automático diz o momento e onde se resolve');
   perform pg_temp.ok('5.esperadas', (select e ->> 'detalhe' from jsonb_array_elements(c -> 'automaticos') e where e ->> 'codigo' = 'campanhas_esperadas') = '2 de 5'
     and (select string_agg(e ->> 'objetivo' || '=' || (e ->> 'criada'), ',' order by (e ->> 'id')::bigint) from jsonb_array_elements(c -> 'esperadas') e)
@@ -1155,8 +1197,30 @@ begin
   a := (select e from jsonb_array_elements(v -> 'alertas') e where e ->> 'regra' = 'checklist_incompleto' and e ->> 'sigla' = 'ZD28');
   perform pg_temp.ok('6.alerta', a is not null and (a ->> 'valor')::int = jsonb_array_length(a -> 'detalhe' -> 'itens')
     and (a -> 'detalhe' ->> 'dias')::int = 2 and a -> 'detalhe' -> 'itens' ? 'Etiqueta do ClickUp preenchida'
-    and jsonb_array_length(v -> 'regras') = 9,
-    'em captação há 2 dias com ' || coalesce(a ->> 'valor', '?') || ' pendente(s) de "antes": alerta; 9 regras no resumo');
+    and a -> 'detalhe' -> 'itens' ? 'Oferta exclusiva cadastrada na Hotmart e ligada ao projeto'
+    and jsonb_array_length(v -> 'regras') = 10,
+    'em captação há 2 dias com ' || coalesce(a ->> 'valor', '?') || ' pendente(s) de "antes" (inclusive a oferta exclusiva): alerta; 10 regras no resumo');
+  -- oferta exclusiva (decisão do Victor, 06/10/2026): interno em captação sem nenhuma oferta exclusiva = alerta
+  a := (select e from jsonb_array_elements(v -> 'alertas') e where e ->> 'regra' = 'sem_oferta_exclusiva' and e ->> 'sigla' = 'ZD28');
+  perform pg_temp.ok('6.sem oferta exclusiva', a is not null and a ->> 'gravidade' = 'alta' and a -> 'detalhe' ->> 'fase' = 'captacao'
+    and (a -> 'detalhe' ->> 'dias')::int = 2,
+    'ZD28 em captação há 2 dias sem oferta exclusiva: alerta alto "Sem oferta exclusiva em captação ou carrinho"');
+  update mkt.projetos set captacao_inicio = mkt_trafego.ontem() - 12, captacao_fim = mkt_trafego.ontem() - 3,
+                          evento_inicio = mkt_trafego.ontem() - 1, evento_fim = mkt_trafego.ontem() + 1 where id = v_p;
+  v := pg_temp.adm('select public.trafego_alertas()');
+  a := (select e from jsonb_array_elements(v -> 'alertas') e where e ->> 'regra' = 'sem_oferta_exclusiva' and e ->> 'sigla' = 'ZD28');
+  perform pg_temp.ok('6.carrinho', a is not null and a -> 'detalhe' ->> 'fase' = 'abertura_carrinho' and (a -> 'detalhe' ->> 'dias')::int = 1,
+    'com a captação encerrada e o evento (carrinho) em andamento, o alerta continua, como abertura de carrinho');
+  insert into mkt_trafego.produtos_hotmart (projeto_id, conta, produto_id, oferta_codigo, oferta_exclusiva)
+  values (v_p, 'academy', '9990801', 'OFZD28', true);
+  v := pg_temp.adm('select public.trafego_alertas()');
+  perform pg_temp.ok('6.com oferta exclusiva', not exists (select 1 from jsonb_array_elements(v -> 'alertas') e
+                                                            where e ->> 'regra' = 'sem_oferta_exclusiva' and e ->> 'sigla' = 'ZD28')
+    and exists (select 1 from jsonb_array_elements(pg_temp.adm(format('select public.trafego_checklist(%s)', v_p)) -> 'automaticos') e
+                 where e ->> 'codigo' = 'oferta_exclusiva' and (e ->> 'ok')::boolean and e ->> 'detalhe' = 'OFZD28'),
+    'com a oferta exclusiva ligada: o alerta some e o item do checklist fica pronto (detalhe = a oferta)');
+  update mkt.projetos set captacao_inicio = mkt_trafego.ontem() - 2, captacao_fim = mkt_trafego.ontem() + 5,
+                          evento_inicio = mkt_trafego.ontem() + 8, evento_fim = mkt_trafego.ontem() + 9 where id = v_p;
   update mkt_trafego.planejamento set status = 'em_planejamento' where projeto_id = v_p;
   v := pg_temp.adm('select public.trafego_alertas()');
   perform pg_temp.ok('6.em planejamento', not exists (select 1 from jsonb_array_elements(v -> 'alertas') e where e ->> 'sigla' = 'ZD28'),

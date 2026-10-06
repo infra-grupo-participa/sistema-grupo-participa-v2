@@ -108,16 +108,22 @@ describe('checklist de montagem (a mesma regra de mkt_trafego.checklist da 20261
     etiqueta: null, verbaMaxima: null, fases: 0, metas: [null, null, null], modelo: null, esperadas: [],
     encontradas: [], status: null, eventoFim: null, hoje: '2026-10-06' };
   const itens = [{ id: 1, texto: 'Automação de ingresso no grupo de leads configurada no SendFlow', momento: 'antes' as const, feito_em: null, feito_por: null, do_modelo: true }];
-  it('sem modelo nem esperadas: 2 de 12 (contas e campanhas); cada item com momento e ação', () => {
+  it('sem modelo nem esperadas: 2 de 13 (contas e campanhas); cada item com momento e ação', () => {
     const c = montarChecklist(base, itens);
-    expect([c.feitos, c.total]).toEqual([2, 12]);
+    expect([c.feitos, c.total]).toEqual([2, 13]);
     expect(c.automaticos.find((i) => i.codigo === 'modelo')).toMatchObject({ momento: 'antes', acao: 'modelo', ok: false });
-    expect(porMomento(c).map((g) => g.itens.length)).toEqual([9, 4, 1]);
+    expect(porMomento(c).map((g) => g.itens.length)).toEqual([10, 4, 1]);
+    expect(c.pendentes_antes).toContain('Oferta exclusiva cadastrada na Hotmart e ligada ao projeto');
     expect(c.pendentes_antes).toContain('Automação de ingresso no grupo de leads configurada no SendFlow');
   });
-  it('externo sem campanha: Hotmart, fora do padrão e fase não se aplicam', () => {
+  it('externo sem campanha: Hotmart, oferta exclusiva, fora do padrão e fase não se aplicam', () => {
     const c = montarChecklist({ ...base, tipo: 'externo', campanhas: 0, foraPadrao: 0, semFase: 0 }, itens);
     expect(c.total).toBe(9);
+  });
+  it('oferta exclusiva ligada: o item fica pronto e mostra as ofertas (vai para a área da Hotmart)', () => {
+    const c = montarChecklist({ ...base, produtosHotmart: 2, ofertasExclusivas: ['ofz2', 'ofa1'] }, itens);
+    expect(c.automaticos.find((i) => i.codigo === 'oferta_exclusiva')).toMatchObject({ ok: true, acao: 'hotmart', momento: 'antes', detalhe: 'ofa1, ofz2' });
+    expect(c.pendentes_antes).not.toContain('Oferta exclusiva cadastrada na Hotmart e ligada ao projeto');
   });
   it('campanhas esperadas × encontradas e encerramento depois do evento', () => {
     const esperadas = [{ id: 1, objetivo: 'LEADS', fase: 'captacao', descricao: null, pagina: null }, { id: 2, objetivo: 'LEADS', fase: 'captacao', descricao: null, pagina: 'ak1' },

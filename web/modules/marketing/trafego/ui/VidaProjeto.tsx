@@ -326,7 +326,7 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
 
         <SectionCard title="Indicadores × metas" subtitle="Lead = lead da nossa base de pessoas. Leads da plataforma ficam só nas campanhas.">
           <div className="grid gap-x-6 sm:grid-cols-2">
-            <Row k="Receita gerada" v={r.receita_aplica === false ? 'não se aplica (externo)' : `${reais(r.receita)} · meta ${reais(r.meta_receita)}`} />
+            <Row k="Receita (níveis 1 a 3)" v={r.receita_aplica === false ? 'não se aplica (externo)' : `${reais(r.receita)} · meta ${reais(r.meta_receita)}${r.receita_estimada != null ? ` · estimada à parte ${reais(r.receita_estimada)}` : ''}`} />
             <Row k="Leads" v={`${inteiro(r.leads)} · meta ${inteiro(r.meta_leads)}`} />
             <Row k="CPL" v={`${centavos(r.cpl)} · meta ${centavos(r.meta_cpl)}`} />
             <Row k="% MQL" v={`${pct(r.pct_mql)} · meta ${pct(r.meta_pct_mql)}`} />
@@ -362,9 +362,9 @@ export function VidaProjeto({ id, config, listas, contas, versao, onFechar, flas
 
         <div id="vp-hotmart" />
         {r.receita_aplica === false ? (
-          <SectionCard title="Receita gerada (Hotmart)"><p className="text-sm text-[var(--fg-3)]">Não se aplica: a receita dos projetos externos não entra por ora (Victor, 06/10/2026).</p></SectionCard>
+          <SectionCard title="Receita do projeto (Hotmart)"><p className="text-sm text-[var(--fg-3)]">Não se aplica: a receita dos projetos externos não entra por ora (Victor, 06/10/2026).</p></SectionCard>
         ) : (
-          <SectionCard title="Receita gerada (Hotmart)" subtitle="Compras aprovadas dos produtos ligados a este projeto, no período (sem período no vínculo: do início da captação ao fim do evento, regra provisória). O vínculo é cadastrado à mão.">
+          <SectionCard title="Receita do projeto (Hotmart)" subtitle="Por nível de certeza (decisão de 06/10/2026): 1 oferta exclusiva e 2 SCK com o projeto (certas), 3 comprador que foi lead do projeto (provável). A estimada (só produto + período; sem período no vínculo: do início da captação ao fim do evento) fica à parte e não soma. Cada venda conta uma vez, no nível mais forte.">
             <ProdutosHotmart resumo={r} versao={versao} flash={flash} onMudou={onMudou} />
           </SectionCard>
         )}

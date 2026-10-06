@@ -144,6 +144,9 @@ describe('busca e ordenação da Central', () => {
     expect(siglas(ordenarLinhas(ls, { coluna: 'status', dir: 'desc' }))).toEqual(['HT33', 'PB26', 'SEMSET26', 'AUR26']);
     // receita do externo é "não se aplica": vai para o fim como sem dado
     expect(siglas(ordenarLinhas(ls, { coluna: 'receita', dir: 'desc' }))).toEqual(['AUR26', 'PB26', 'SEMSET26', 'HT33']);
+    // receita estimada (só produto + período) é outra coluna: ordena por ela sem mexer na receita do projeto
+    const est = [{ ...ls[0], receita_estimada: 500 }, { ...ls[1], receita_estimada: 2000 }, ls[2], { ...ls[3], receita_estimada: null }];
+    expect(siglas(ordenarLinhas(est, { coluna: 'receita_estimada', dir: 'desc' }))).toEqual(['SEMSET26', 'PB26', 'HT33', 'AUR26']);
     expect(siglas(ordenarLinhas(ls, { coluna: 'gestor', dir: 'asc' }))).toEqual(['SEMSET26', 'PB26', 'HT33', 'AUR26']);
     expect(siglas(ordenarLinhas(ls, ORDEM_INICIAL))).toEqual(['PB26', 'SEMSET26', 'HT33', 'AUR26']);
   });

@@ -25,3 +25,28 @@ export const pct = (n: number | null | undefined, casas = 1) =>
 export const inteiro = (n: number | null | undefined) => (n == null ? SEM_DADO : Number(n).toLocaleString('pt-BR'));
 
 export const dataBR = (ymd: string | null | undefined) => (ymd ? ymd.slice(0, 10).split('-').reverse().join('/') : SEM_DADO);
+
+/**
+ * Quebra da receita do projeto por nível de certeza (decisão do Victor, 06/10/2026), para o tooltip da Central e o
+ * detalhe da vida do projeto. A receita do projeto = níveis 1 a 3; a estimada (nível 4) vem à parte e não soma.
+ */
+export interface LinhaQuebra { rotulo: string; valor: number | null | undefined; vendas: number | null | undefined }
+export function quebraReceita(l: {
+  receita_oferta?: number | null; receita_sck?: number | null; receita_lead?: number | null; receita_estimada?: number | null;
+  receita_compras_oferta?: number | null; receita_compras_sck?: number | null; receita_compras_lead?: number | null;
+  receita_compras_estimada?: number | null;
+}): LinhaQuebra[] {
+  return [
+    { rotulo: '1. Oferta exclusiva (certa)', valor: l.receita_oferta, vendas: l.receita_compras_oferta },
+    { rotulo: '2. SCK com o projeto (certa)', valor: l.receita_sck, vendas: l.receita_compras_sck },
+    { rotulo: '3. Lead do projeto (provável)', valor: l.receita_lead, vendas: l.receita_compras_lead },
+    { rotulo: '4. Estimada, só produto + período (à parte, não soma)', valor: l.receita_estimada, vendas: l.receita_compras_estimada },
+  ];
+}
+
+/** O texto do tooltip da coluna Receita: a quebra por nível e as vendas em disputa. */
+export function tituloReceita(l: Parameters<typeof quebraReceita>[0] & { receita_disputa?: number | null }): string {
+  const linhas = quebraReceita(l).map((q) => `${q.rotulo}: ${reais(q.valor)}${q.vendas ? ` (${inteiro(q.vendas)} venda(s))` : ''}`);
+  if (l.receita_disputa) linhas.push(`Em disputa com outro projeto (não somam): ${inteiro(l.receita_disputa)} venda(s)`);
+  return ['Receita do projeto = níveis 1 a 3.', ...linhas].join('\n');
+}

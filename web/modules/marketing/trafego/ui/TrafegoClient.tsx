@@ -23,7 +23,7 @@ import { ProgressoMontagem } from './MontagemProjeto';
 import { ModelosPainel } from './ModelosPainel';
 import { ModalProjetoCadastro } from './ProjetoCadastro';
 import { ResumoDia } from './ResumoDia';
-import { SEM_DADO, centavos, inteiro, pct, reais, tomStatus } from './formato';
+import { SEM_DADO, centavos, inteiro, pct, reais, tituloReceita, tomStatus } from './formato';
 import { VidaProjeto } from './VidaProjeto';
 
 type Aba = 'central' | 'campanhas' | 'contas' | 'modelos';
@@ -65,21 +65,30 @@ function Filtros({ f, set, config, listas }: { f: FiltrosCentral; set: (f: Filtr
 }
 
 const CABECALHO: [ColunaCentral, string][] = [
-  ['status', 'Status'], ['projeto', 'Projeto'], ['receita', 'Receita gerada'], ['investido', 'Investido'], ['verba_maxima', 'Verba máxima'],
+  ['status', 'Status'], ['projeto', 'Projeto'], ['receita', 'Receita'], ['receita_estimada', 'Receita estimada'], ['investido', 'Investido'], ['verba_maxima', 'Verba máxima'],
   ['pct_verba', '% da verba'], ['cpl', 'CPL'], ['leads', 'Leads'], ['ctr', 'CTR'], ['cpm', 'CPM'], ['connect_rate', 'Connect rate'],
   ['conversao_pagina', 'Conversão da página'], ['pct_mql', '% MQL'], ['gestor', 'Gestor'], ['montagem', 'Montagem'],
 ];
+
+// Ajuda do cabeçalho das colunas de receita (decisão do Victor, 06/10/2026: receita por nível de certeza).
+const AJUDA_COLUNA: Partial<Record<ColunaCentral, string>> = {
+  receita: 'Receita do projeto: vendas pagas da Hotmart (bruto, valor da oferta) com origem certa ou provável. '
+    + 'Nível 1 oferta exclusiva do projeto; nível 2 SCK com o projeto no campo campanha; nível 3 comprador que foi lead do projeto antes de comprar. '
+    + 'Cada venda conta uma vez, no nível mais forte. É esta a receita de qualquer conta (ROAS). Passe o mouse no valor para ver a quebra.',
+  receita_estimada: 'Nível 4: só produto ligado + período (a regra antiga). Não garante que a venda veio do projeto '
+    + '(o mesmo produto é vendido pelo comercial e por outros lançamentos). Fica à parte e nunca entra na Receita nem no ROAS.',
+};
 
 function TabelaCentral({ linhas, ordem, onOrdenar, onAbrir }: {
   linhas: LinhaResumo[]; ordem: OrdemCentral; onOrdenar: (c: ColunaCentral) => void; onAbrir: (id: number) => void;
 }) {
   if (linhas.length === 0) return <EmptyState title="Nenhum projeto com esses filtros" />;
   return (
-    <DataTable minWidth={1500}>
+    <DataTable minWidth={1620}>
       <Thead>
         {CABECALHO.map(([c, rotulo]) => (
           <Th key={c} sortable active={ordem.coluna === c} dir={ordem.dir} onClick={() => onOrdenar(c)}>
-            <span title={`Ordenar por ${rotulo.toLowerCase()} (de novo inverte; a terceira vez volta à ordem padrão)`}>{rotulo}</span>
+            <span title={`${AJUDA_COLUNA[c] ? `${AJUDA_COLUNA[c]}\n\n` : ''}Ordenar por ${rotulo.toLowerCase()} (de novo inverte; a terceira vez volta à ordem padrão)`}>{rotulo}</span>
           </Th>
         ))}
       </Thead>
@@ -96,8 +105,15 @@ function TabelaCentral({ linhas, ordem, onOrdenar, onAbrir }: {
                 {l.tipo_lancamento_nome && <div className="text-[11px] text-[var(--fg-3)]">{l.tipo_lancamento_nome}</div>}
                 {l.campanhas_fora_padrao > 0 && <div className="mt-0.5 text-[11px] text-[var(--yellow)]">{l.campanhas_fora_padrao} campanha(s) fora do padrão</div>}
               </Td>
-              <Td>{l.receita_aplica === false ? <span className="text-xs text-[var(--fg-3)]" title="Receita dos externos não entra por ora (Victor, 06/10/2026)">não se aplica</span> : <Kpi v={reais(l.receita)} titulo={l.receita_vinculos ? 'Vínculo sem período: ligue com data em "de" ou cadastre o início do projeto' : 'Sem produto da Hotmart ligado ao projeto (cadastre na vida do projeto)'} />}
-                {l.receita != null && l.receita_aplica !== false && <div className="text-[11px] text-[var(--fg-3)]" title="Líquido do produtor das mesmas vendas">líquido {reais(l.receita_liquida ?? null)}</div>}</Td>
+              <Td>{l.receita_aplica === false ? <span className="text-xs text-[var(--fg-3)]" title="Receita dos externos não entra por ora (Victor, 06/10/2026)">não se aplica</span>
+                : l.receita == null ? <Kpi v={SEM_DADO} titulo={l.receita_vinculos ? 'Vínculo sem período: ligue com data em "de" ou cadastre o início do projeto' : 'Sem produto da Hotmart ligado ao projeto e sem venda com o SCK do projeto (cadastre na vida do projeto)'} />
+                : <span className="tabular" title={tituloReceita(l)}>{reais(l.receita)}</span>}
+                {l.receita != null && l.receita_aplica !== false && <div className="text-[11px] text-[var(--fg-3)]" title="Líquido do produtor das mesmas vendas (níveis 1 a 3)">líquido {reais(l.receita_liquida ?? null)}</div>}
+                {l.receita_aplica !== false && !!l.receita_vinculos && !l.receita_ofertas_exclusivas && <div className="text-[11px] text-[var(--yellow)]" title="Sem oferta exclusiva ligada: a receita do projeto é só estimada. Crie na Hotmart uma oferta só para o projeto e ligue na vida do projeto.">sem oferta exclusiva</div>}
+                {l.receita_aplica !== false && !!l.receita_disputa && <div className="text-[11px] text-[var(--yellow)]" title="Vendas que casam com outro projeto no mesmo nível: não somam em nenhum. Veja a lista na vida do projeto.">{inteiro(l.receita_disputa)} em disputa</div>}</Td>
+              <Td>{l.receita_aplica === false ? <span className="text-xs text-[var(--fg-3)]">não se aplica</span>
+                : <Kpi v={reais(l.receita_estimada ?? null)} titulo="Sem produto ligado com período: sem estimada" />}
+                {l.receita_estimada != null && l.receita_aplica !== false && <div className="text-[11px] text-[var(--fg-3)]" title="Só produto + período: à parte, não soma na Receita">à parte</div>}</Td>
               <Td><Kpi v={reais(l.investido)} titulo="Sem gasto coletado das plataformas" />
                 {acima && <div className="text-[11px] text-[var(--red)]">ontem acima da diária</div>}</Td>
               <Td><Kpi v={reais(l.verba_maxima)} titulo="Verba não cadastrada" /></Td>

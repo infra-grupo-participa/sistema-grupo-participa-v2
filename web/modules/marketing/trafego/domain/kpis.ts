@@ -146,7 +146,7 @@ export function totais(linhas: LinhaResumo[]): { investido: number | null; verba
 // ─── Busca e ordenação da tabela da Central (auditoria 06/10/2026). Estado na URL: ?q=…&ordem=coluna&dir=asc|desc ──
 
 export const COLUNAS_CENTRAL = [
-  'status', 'projeto', 'receita', 'investido', 'verba_maxima', 'pct_verba', 'cpl', 'leads', 'ctr', 'cpm', 'connect_rate',
+  'status', 'projeto', 'receita', 'receita_estimada', 'investido', 'verba_maxima', 'pct_verba', 'cpl', 'leads', 'ctr', 'cpm', 'connect_rate',
   'conversao_pagina', 'pct_mql', 'gestor', 'montagem',
 ] as const;
 export type ColunaCentral = (typeof COLUNAS_CENTRAL)[number];
@@ -168,7 +168,9 @@ function valorColuna(l: LinhaResumo, c: ColunaCentral): number | string | null {
   switch (c) {
     case 'status': return l.status_nome ?? null;
     case 'projeto': return l.sigla;
+    // receita = níveis 1 a 3 (oferta exclusiva, SCK, lead do projeto); a estimada (só produto + período) é outra coluna
     case 'receita': return l.receita_aplica === false ? null : l.receita;
+    case 'receita_estimada': return l.receita_aplica === false ? null : (l.receita_estimada ?? null);
     case 'gestor': {
       const g = l.gestores.length ? l.gestores : l.gestores_campanhas;
       return g.length ? g.join(', ') : null;

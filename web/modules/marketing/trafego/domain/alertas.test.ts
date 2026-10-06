@@ -127,3 +127,29 @@ describe('20261006j: campanha do projeto em conta de fora e período de captaç�
     expect(a[0].referencia).toBe(50);
   });
 });
+
+describe('sem oferta exclusiva em captação ou carrinho (a mesma regra da 20261006l; decisão do Victor, 06/10/2026)', () => {
+  const regra: Regra = { codigo: 'sem_oferta_exclusiva', nome: 'Sem oferta exclusiva em captação ou carrinho', ligada: true, limiar: 0, unidade: 'dias', gravidade: 'alta', descricao: '' };
+  const base: ProjetoEntrada = {
+    linha: { projeto_id: 9, sigla: 'ZD28', nome: 'Projeto Ensaio Modelo', investido: null, verba_maxima: null, verba_diaria: null, gasto_ontem: null,
+      ritmo_ontem: null, pct_verba: null, leads: null, meta_leads: null, cpl: null, meta_cpl: null, inicio: null, fim: null,
+      captacao_inicio: d(-2), captacao_fim: d(5), evento_inicio: d(8), evento_fim: d(9), tipo: 'interno' },
+    entra: true, fases: [], campanhas: [], ofertasExclusivas: 0,
+  };
+  it('em captação há 2 dias sem oferta exclusiva: alerta alto, com o texto do que fazer', () => {
+    const [a] = calcularAlertas(O, [regra], [base], []);
+    expect(a).toMatchObject({ regra: 'sem_oferta_exclusiva', gravidade: 'alta', valor: 0, detalhe: { fase: 'captacao', dias: 2 } });
+    expect(texto(a)).toContain('a receita do projeto é só estimada');
+    expect(texto(a)).not.toMatch(/[—–]/);
+  });
+  it('carrinho aberto (evento em andamento ou fase abertura de carrinho), externo e com oferta exclusiva', () => {
+    const carrinho = { ...base, linha: { ...base.linha, captacao_inicio: d(-12), captacao_fim: d(-3), evento_inicio: d(-1), evento_fim: d(1) } };
+    expect(calcularAlertas(O, [regra], [carrinho], [])[0].detalhe).toMatchObject({ fase: 'abertura_carrinho', dias: 1 });
+    const fase = { ...base, linha: { ...base.linha, captacao_inicio: null, captacao_fim: null, evento_inicio: null, evento_fim: null },
+      fases: [{ fase: 'abertura_carrinho', nome: 'Abertura de carrinho', verba: null, inicio: d(-3), fim: d(2), gastoAteOntem: 0 }] };
+    expect(calcularAlertas(O, [regra], [fase], [])[0].detalhe).toMatchObject({ fase: 'abertura_carrinho', dias: 3 });
+    expect(calcularAlertas(O, [regra], [{ ...base, linha: { ...base.linha, tipo: 'externo' } }], [])).toEqual([]);
+    expect(calcularAlertas(O, [regra], [{ ...base, ofertasExclusivas: 1 }], [])).toEqual([]);
+    expect(calcularAlertas(O, [regra], [{ ...base, linha: { ...base.linha, captacao_inicio: d(1), captacao_fim: d(5), evento_inicio: d(8), evento_fim: d(9) } }], [])).toEqual([]);
+  });
+});
