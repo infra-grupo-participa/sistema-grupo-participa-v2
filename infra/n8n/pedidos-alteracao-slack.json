@@ -1,0 +1,85 @@
+{
+  "name": "[Central] Pedidos de alteração — Slack",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all"
+  },
+  "nodes": [
+    {
+      "id": "bce18d55-da3e-4cbb-b25a-a75599fba3bd",
+      "name": "A cada 5 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7f621f37-4e86-4456-ac4f-7df175ab88e4",
+      "name": "Na hora (banco)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "webhookId": "a66f1138-f99f-470d-bbfc-90cbc8802492",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pedidos-alteracao-slack",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "343faf99-1c69-4d57-a88f-56d16c0c96fb",
+      "name": "Fila → Slack",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Pedidos de alteração → aviso em privado no Slack (só para quem está em pa_config.slack_destinos).\n// Reserva antes de mandar: o webhook imediato e a rodada de 5 min nunca mandam a mesma mensagem.\nconst URL = 'https://mbvybujpkwuorhtdzcde.supabase.co/rest/v1/rpc/';\nconst H = { apikey: '<SUPABASE_ANON_KEY>', Authorization: 'Bearer <SUPABASE_ANON_KEY>', 'Content-Type': 'application/json' };\nconst SEG = '<SEGREDO_N8N>';\nconst rpc = (fn, body) => this.helpers.httpRequest({ method: 'POST', url: URL + fn, headers: H, body, json: true });\nconst SLACK = '<SLACK_BOT_TOKEN_REMOCAO>';\nconst out = [];\nconst p = await rpc('pa_slack_reservar', { p_segredo: SEG });\nif (!p || !p.ok) throw new Error('pa_slack_reservar recusou (segredo?)');\nfor (const m of (p.mensagens || [])) {\n  try {\n    const r = await this.helpers.httpRequest({\n      method: 'POST', url: 'https://slack.com/api/chat.postMessage',\n      headers: { Authorization: 'Bearer ' + SLACK, 'Content-Type': 'application/json; charset=utf-8' },\n      body: { channel: m.slack_id, text: m.texto, unfurl_links: false, unfurl_media: false }, json: true,\n    });\n    if (!r.ok) throw new Error('Slack: ' + r.error);\n    await rpc('pa_slack_confirmar', { p_segredo: SEG, p_pedido: m.pedido, p_slack_id: m.slack_id, p_ts: r.ts });\n    out.push({ pedido: m.pedido, ok: true });\n  } catch (e) {\n    out.push({ pedido: m.pedido, ok: false, erro: String(e.message || e).slice(0, 160) });\n  }\n}\nreturn [{ json: { enviados: out.filter(o => o.ok).length, detalhe: out } }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "A cada 5 min": {
+      "main": [
+        [
+          {
+            "node": "Fila → Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Na hora (banco)": {
+      "main": [
+        [
+          {
+            "node": "Fila → Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
