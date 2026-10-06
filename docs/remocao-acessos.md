@@ -110,6 +110,8 @@ planilha divergirem. Quem já tem caso do Acelera não ganha outro; rodar de nov
 **Contrato com a tela.** `ra_fila`, `ra_caso` (caso e itens) e `ra_responsaveis` (por item) devolvem `linha`;
 `ra_meu_papel.meus_itens` é `[{item, rotulo, linha}]`; `prazo_em` pode vir nulo; `origem` pode ser `carga`.
 
+**Data nos casos importados.** Em `origem = 'carga'` o `ocorrido_em` é a data da compra (o financeiro não guarda a do reembolso): a ficha mostra "Compra em" (`rotuloDataCaso` em `domain/caso.ts`), a fila acrescenta "data da compra" sob a data e a descrição da aba Acelera avisa.
+
 **Conferência depois de aplicar:**
 
 ```sql

@@ -7,7 +7,7 @@ import {
 import { fmtBRL, fmtDataHora } from '@/shared/ui/format';
 import { SupabaseRemocaoRepository } from '../infrastructure/supabase-remocao.repository';
 import {
-  ABERTOS, filtrarCasos, filtrarLinha, linhaDoCaso, linhaDoItem, meusItensDaLinha, ROTULO_LINHA, ROTULO_TIPO, rotuloStatus, situacaoPrazo, TOM_STATUS,
+  ABERTOS, filtrarCasos, filtrarLinha, linhaDoCaso, linhaDoItem, meusItensDaLinha, ROTULO_LINHA, ROTULO_TIPO, rotuloDataCaso, rotuloStatus, situacaoPrazo, TOM_STATUS,
   type Filtro,
 } from '../domain/caso';
 import type { CasoFila, ItemCatalogo, Linha, MeuPapel } from '../domain/types';
@@ -172,7 +172,7 @@ export function RemocaoClient() {
         </>}
         {aba === 'acelera' && <>
           Reembolso e chargeback do Acelera Holding. Sem triagem e sem sócios: o caso já nasce com os itens de remoção, e cada responsável marca o que removeu.
-          Disputa, e reembolso de quem ainda tem outra compra válida, ficam só como alerta. Os casos antigos importados não têm prazo.
+          Disputa, e reembolso de quem ainda tem outra compra válida, ficam só como alerta. Os casos antigos importados não têm prazo. Nos casos importados a data é a da compra: o financeiro não guarda a data do reembolso.
         </>}
         {aba === 'responsaveis' && <>Quem marca cada item de remoção, por linha.</>}
         {aba !== 'responsaveis' && meusItens.length > 0 && <> Seus itens: <b className="text-[var(--fg-2)]">{meusItens.join(', ')}</b>.</>}
@@ -261,7 +261,10 @@ export function RemocaoClient() {
                       ) : <span className="text-[var(--fg-3)]">{ABERTOS.includes(c.status) && !ehAcelera ? 'após triagem' : 'não se aplica'}</span>}
                     </Td>
                     <Td><Prazo c={c} agora={agora} /></Td>
-                    <Td className="tabular text-[var(--fg-2)]">{fmtDataHora(c.ocorrido_em)}</Td>
+                    <Td className="tabular text-[var(--fg-2)]">
+                      {fmtDataHora(c.ocorrido_em)}
+                      {c.origem === 'carga' && <span className="block text-[11px] text-[var(--fg-3)]">data da compra</span>}
+                    </Td>
                     <Td className="tabular text-[var(--fg-2)]">{c.valor != null ? fmtBRL(c.valor) : 'sem valor'}</Td>
                   </Tr>
                 ))}

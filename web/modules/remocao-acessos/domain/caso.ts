@@ -55,6 +55,11 @@ export const ROTULO_ORIGEM: Record<OrigemCaso, string> = {
   carga: 'carga de casos antigos',
 };
 
+/** Rótulo da data do caso: nos importados (carga) o financeiro só guarda a data da compra, não a do reembolso. */
+export function rotuloDataCaso(c: { origem?: OrigemCaso | string | null }): 'Compra em' | 'Ocorreu em' {
+  return c.origem === 'carga' ? 'Compra em' : 'Ocorreu em';
+}
+
 /** Linha de um item do catálogo: a que o banco mandar; sem ela, pela chave (`acelera_*` é do Acelera). */
 export function linhaDoItem(i: { item: string; linha?: Linha | null }): Linha {
   if (i.linha === 'acelera' || i.linha === 'hm') return i.linha;

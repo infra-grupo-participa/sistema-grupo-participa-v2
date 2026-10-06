@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Drawer, Input, Loading, Row, SectionCard, Textarea, Toggle } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { fmtBRL, fmtData, fmtDataHora } from '@/shared/ui/format';
-import { linhaDoCaso, ROTULO_LINHA, ROTULO_ORIGEM, ROTULO_TIPO, rotuloStatus, sugestaoAjuste, TOM_STATUS } from '../domain/caso';
+import { linhaDoCaso, ROTULO_LINHA, ROTULO_ORIGEM, ROTULO_TIPO, rotuloDataCaso, rotuloStatus, sugestaoAjuste, TOM_STATUS } from '../domain/caso';
 import type { CasoDetalhe, ItemCaso, Linha, OrigemCaso, SituacaoItem } from '../domain/types';
 import type { SupabaseRemocaoRepository } from '../infrastructure/supabase-remocao.repository';
 
@@ -197,7 +197,7 @@ export function CasoDrawer({ id, repo, onClose, onMudou, onCarregou, flash }: {
             <Row k="Produto" v={c.produto_nome || 'sem dado'} />
             <Row k="Oferta" v={c.oferta_codigo || 'sem dado'} />
             <Row k="Valor" v={c.valor != null ? fmtBRL(c.valor) : 'sem valor'} />
-            <Row k="Ocorreu em" v={fmtDataHora(c.ocorrido_em)} />
+            <Row k={rotuloDataCaso(c)} v={fmtDataHora(c.ocorrido_em)} />
             <Row k="Prazo" v={c.prazo_em ? fmtDataHora(c.prazo_em) : 'sem prazo'} />
             <Row k="Documento" v={c.documento || 'sem dado'} />
             <Row k="Telefone" v={c.telefone || 'sem dado'} />

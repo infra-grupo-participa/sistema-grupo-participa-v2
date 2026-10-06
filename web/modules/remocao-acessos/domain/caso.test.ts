@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filtrarCasos, filtrarLinha, linhaDoCaso, linhaDoItem, meusItensDaLinha, rotuloStatus, situacaoPrazo, sugestaoAjuste } from './caso';
+import { filtrarCasos, filtrarLinha, linhaDoCaso, linhaDoItem, meusItensDaLinha, rotuloDataCaso, rotuloStatus, situacaoPrazo, sugestaoAjuste } from './caso';
 import type { CasoFila } from './types';
 
 const agora = new Date('2026-09-16T15:00:00-03:00');
@@ -131,5 +131,16 @@ describe('sugestaoAjuste', () => {
   it('sem histórico que bata, não inventa data', () => {
     expect(sugestaoAjuste({ aluno: { ...aluno, instrucao: 'THB' }, historico_expiracao: [] })).toEqual({ expiracao: '', instrucao: '' });
     expect(sugestaoAjuste(null)).toEqual({ expiracao: '', instrucao: '' });
+  });
+});
+
+describe('rotuloDataCaso', () => {
+  it('caso importado mostra a data da compra', () => {
+    expect(rotuloDataCaso({ origem: 'carga' })).toBe('Compra em');
+  });
+  it('demais origens mostram quando ocorreu', () => {
+    expect(rotuloDataCaso({ origem: 'webhook' })).toBe('Ocorreu em');
+    expect(rotuloDataCaso({ origem: 'compras' })).toBe('Ocorreu em');
+    expect(rotuloDataCaso({})).toBe('Ocorreu em');
   });
 });
