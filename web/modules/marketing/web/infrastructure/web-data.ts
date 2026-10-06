@@ -6,7 +6,10 @@
 // (NODE_ENV=production) ele nunca liga, mesmo com a variável.
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import type { Formulario, Funil, Instalacao, Leitura, LinhaPagina, Origem, Problemas, Velocidade, Visao } from '../domain/tipos';
+import type {
+  Calor, Comparacao2, Connect, Formulario, Fluxo, Funil, Instalacao, Lab, LeadsPessoas, Leitura, LinhaPagina, Melhorias, Origem, Problemas,
+  Velocidade, Visao,
+} from '../domain/tipos';
 import * as demo from './demo';
 
 export const MODO_DEMO = process.env.NEXT_PUBLIC_WEB_DEMO === '1' && process.env.NODE_ENV !== 'production';
@@ -47,6 +50,18 @@ export const carregar = {
   formulario: (p: number, pagina: number, de: string, ate: string) =>
     (MODO_DEMO ? Promise.resolve(demo.demoFormulario()) : rpc<Formulario>('mkt_web_formulario', { ...periodo(p, de, ate), p_pagina: pagina })),
   instalacao: () => (MODO_DEMO ? Promise.resolve(demo.demoInstalacao()) : rpc<Instalacao>('mkt_web_instalacao')),
+  // fase 2 (migration 20261005q)
+  fluxo: (p: number, de: string, ate: string) => (MODO_DEMO ? Promise.resolve(demo.demoFluxo(de, ate)) : rpc<Fluxo>('mkt_web_fluxo', periodo(p, de, ate))),
+  melhorias: (p: number, de: string, ate: string) =>
+    (MODO_DEMO ? Promise.resolve(demo.demoMelhorias(de, ate)) : rpc<Melhorias>('mkt_web_melhorias', periodo(p, de, ate))),
+  comparar: (p: number, a: { pagina: number | null; de: string; ate: string; nome: string | null }, b: { pagina: number | null; de: string; ate: string; nome: string | null }) =>
+    (MODO_DEMO ? Promise.resolve(demo.demoComparar(a.nome, a.de, a.ate, b.nome, b.de, b.ate))
+      : rpc<Comparacao2>('mkt_web_comparar', { p_projeto: p, p_pagina_a: a.pagina, p_de_a: a.de, p_ate_a: a.ate, p_pagina_b: b.pagina, p_de_b: b.de, p_ate_b: b.ate })),
+  calor: (p: number, pagina: number, dispositivo: string, de: string, ate: string) =>
+    (MODO_DEMO ? Promise.resolve(demo.demoCalor(dispositivo)) : rpc<Calor>('mkt_web_calor', { ...periodo(p, de, ate), p_pagina: pagina, p_dispositivo: dispositivo })),
+  lab: (p: number) => (MODO_DEMO ? Promise.resolve(demo.demoLab()) : rpc<Lab>('mkt_web_lab', { p_projeto: p })),
+  leads: (p: number, de: string, ate: string) => (MODO_DEMO ? Promise.resolve(demo.demoLeads()) : rpc<LeadsPessoas>('mkt_web_leads', periodo(p, de, ate))),
+  connect: (p: number, de: string, ate: string) => (MODO_DEMO ? Promise.resolve(demo.demoConnect(de, ate)) : rpc<Connect>('mkt_web_connect', periodo(p, de, ate))),
 };
 
 export async function ligarColeta(projeto: number, ligada: boolean): Promise<{ ok: boolean; msg: string }> {

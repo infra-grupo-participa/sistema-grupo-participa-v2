@@ -2,7 +2,9 @@
 
 // Comercial: CRM (ativação, vendas, recuperação de carrinho e de venda), base única de pessoas e revisão de identidade.
 // Só admin/dev por ora (gate no layout, na page e no banco: pessoas.pode_ver()). Migration 20261005o.
+// /comercial?pessoa=<id> abre a ficha direto (link da Web: Marketing > Web > Visão geral > Leads na base de pessoas).
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Loading, SectionCard, Tabs, Toast, useFlash } from '@/shared/ui/components';
 import type { ConfigCrm } from '../domain/crm';
 import { carregarConfig, listarRevisoes, MODO_DEMO } from '../infrastructure/comercial-data';
@@ -16,7 +18,11 @@ type Aba = 'crm' | 'pessoas' | 'revisao';
 export function ComercialClient() {
   const [config, setConfig] = useState<ConfigCrm | null | undefined>(undefined);
   const [aba, setAba] = useState<Aba>('crm');
-  const [ficha, setFicha] = useState<string | null>(null);
+  const busca = useSearchParams();
+  const [ficha, setFicha] = useState<string | null>(() => {
+    const p = busca.get('pessoa');
+    return p && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(p) ? p : null;
+  });
   const [pendentes, setPendentes] = useState<number | null>(null);
   const [versao, setVersao] = useState(0);
   const { toast, flash } = useFlash();

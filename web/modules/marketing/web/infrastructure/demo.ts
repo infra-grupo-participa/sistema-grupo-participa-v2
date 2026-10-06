@@ -2,7 +2,10 @@
 // semente fixa, para ver as telas antes da virada. Nunca é usado em produção: web-data.ts só liga com
 // NEXT_PUBLIC_WEB_DEMO=1 E NODE_ENV diferente de 'production', e a tela mostra a faixa "Dados de demonstração".
 // O cadastro (PB26, páginas /ak1/, /obrigado/, /quase-la/, /pesquisa/) é o da migration 20261005m; o resto é ficção.
-import type { Formulario, Funil, Instalacao, Leitura, LinhaPagina, Origem, Problemas, Velocidade, Visao } from '../domain/tipos';
+import type {
+  BaseMelhorias, Calor, Comparacao2, Connect, Formulario, Fluxo, Funil, Instalacao, Lab, LadoComparar, LeadsPessoas, Leitura, LinhaPagina,
+  Melhorias, Origem, PaginaMelhorias, Problemas, Velocidade, Visao,
+} from '../domain/tipos';
 import { diasEntre, somaDias } from '../domain/periodo';
 
 export const DEMO_PROJETOS = [{ id: 1, sigla: 'PB26', nome: 'Patrimônio Brasil 2026' }];
@@ -11,6 +14,8 @@ export const DEMO_PAGINAS = [
   { id: 12, projeto_id: 1, codigo: null, nome: 'Obrigado', dominio: 'patrimoniobrasil.com.br', caminho: '/obrigado/', funcao: 'obrigado' },
   { id: 13, projeto_id: 1, codigo: null, nome: 'Pesquisa da BL2', dominio: 'patrimoniobrasil.com.br', caminho: '/quase-la/', funcao: 'pesquisa' },
   { id: 14, projeto_id: 1, codigo: null, nome: 'Pesquisa pelo link', dominio: 'patrimoniobrasil.com.br', caminho: '/pesquisa/', funcao: 'pesquisa' },
+  // variação INVENTADA (não existe no cadastro): só para ver a tela de testes A/B no modo de demonstração
+  { id: 15, projeto_id: 1, codigo: 'ak1-b', nome: 'AK1 B (demonstração)', dominio: 'patrimoniobrasil.com.br', caminho: '/ak1-b/', funcao: 'captura' },
 ];
 
 /** sorteio com semente (mulberry32): o mesmo período dá sempre os mesmos números */
@@ -180,5 +185,182 @@ export function demoInstalacao(): Instalacao {
     }],
     recusas_7d: [],
     falhas_7d: 0,
+  };
+}
+
+// ─── Fase 2 (migration 20261005q): tudo inventado ────────────────────────────────────────────────────────────────────
+const NOMES_DEMO: Record<string, string> = Object.fromEntries(DEMO_PAGINAS.map((p) => [p.caminho, p.nome]));
+
+export function demoFluxo(de: string, ate: string): Fluxo {
+  const v = demoVisao(de, ate).kpis.sessoes;
+  const r = (f: number) => Math.round(v * f);
+  return {
+    sessoes: v, uma_pagina: r(0.78), passos_medio: 1.31, nomes: NOMES_DEMO,
+    paginas: [
+      { caminho: '/ak1/', vistas: r(0.82), entradas: r(0.8), saidas: r(0.72), leads: r(0.09) },
+      { caminho: '/ak1-b/', vistas: r(0.15), entradas: r(0.15), saidas: r(0.13), leads: r(0.015) },
+      { caminho: '/obrigado/', vistas: r(0.1), entradas: r(0.005), saidas: r(0.07), leads: r(0.098) },
+      { caminho: '/quase-la/', vistas: r(0.05), entradas: 3, saidas: r(0.045), leads: r(0.04) },
+    ],
+    passagens: [
+      { de: '/ak1/', para: '(saiu)', n: r(0.72), leads: r(0.005) },
+      { de: '/ak1/', para: '/obrigado/', n: r(0.085), leads: r(0.085) },
+      { de: '/ak1-b/', para: '(saiu)', n: r(0.13), leads: 2 },
+      { de: '/ak1-b/', para: '/obrigado/', n: r(0.013), leads: r(0.013) },
+      { de: '/obrigado/', para: '(saiu)', n: r(0.07), leads: r(0.07) },
+      { de: '/obrigado/', para: '/quase-la/', n: r(0.03), leads: r(0.03) },
+      { de: '/quase-la/', para: '(saiu)', n: r(0.045), leads: r(0.04) },
+    ],
+    caminhos: [
+      { passos: ['/ak1/'], mais: false, n: r(0.7), leads: r(0.004) },
+      { passos: ['/ak1-b/'], mais: false, n: r(0.12), leads: 2 },
+      { passos: ['/ak1/', '/obrigado/'], mais: false, n: r(0.06), leads: r(0.06) },
+      { passos: ['/ak1/', '/obrigado/', '/quase-la/'], mais: false, n: r(0.025), leads: r(0.025) },
+    ],
+  };
+}
+
+function diasDe(de: string, ate: string) { return Array.from({ length: diasEntre(de, ate) + 1 }, (_, i) => somaDias(de, i)); }
+
+function paginaDemo(p: Partial<PaginaMelhorias> & { pagina_id: number; codigo: string | null; nome: string; caminho: string }, de: string, ate: string, fator: number): PaginaMelhorias {
+  const entradas = Math.round(1400 * fator * (diasEntre(de, ate) + 1) / 7);
+  const rej = Math.round(entradas * 0.46), leads = Math.round(entradas * 0.1);
+  return {
+    funcao: 'captura', visitas: Math.round(entradas * 1.05), sessoes: entradas, leads, mql: Math.round(leads * 0.3), dias: diasEntre(de, ate) + 1,
+    entradas, rejeicoes: rej, leads_entrada: leads, mql_entrada: Math.round(leads * 0.3),
+    por_aparelho: [
+      { dispositivo: 'mobile', entradas: Math.round(entradas * 0.85), rejeicoes: Math.round(entradas * 0.85 * 0.5), leads: Math.round(leads * 0.8) },
+      { dispositivo: 'desktop', entradas: Math.round(entradas * 0.15), rejeicoes: Math.round(entradas * 0.15 * 0.3), leads: Math.round(leads * 0.2) },
+    ],
+    por_criativo: [
+      { campanha: 'RS | PB26 | LEADS | DEMONSTRAÇÃO A | AK1', criativo: '120200000000000001', entradas: Math.round(entradas * 0.5), rejeicoes: Math.round(entradas * 0.5 * 0.4), leads: Math.round(leads * 0.6) },
+      { campanha: 'RS | PB26 | LEADS | DEMONSTRAÇÃO A | AK1', criativo: '120200000000000002', entradas: Math.round(entradas * 0.3), rejeicoes: Math.round(entradas * 0.3 * 0.62), leads: Math.round(leads * 0.2) },
+    ],
+    friccao: { com_raiva: 40, com_erro: 12, com_friccao: 50, friccao_leads: 3, sem_friccao: Math.round(entradas * 0.5), sem_leads: Math.round(leads * 0.9) },
+    lcp: [
+      { faixa: 'bom', entradas: Math.round(entradas * 0.6), rejeicoes: Math.round(entradas * 0.6 * 0.38), leads: Math.round(leads * 0.7) },
+      { faixa: 'medio', entradas: Math.round(entradas * 0.3), rejeicoes: Math.round(entradas * 0.3 * 0.55), leads: Math.round(leads * 0.25) },
+      { faixa: 'ruim', entradas: Math.round(entradas * 0.1), rejeicoes: Math.round(entradas * 0.1 * 0.7), leads: Math.round(leads * 0.05) },
+    ],
+    por_dia: diasDe(de, ate).map((dia) => ({ dia, entradas: Math.round(entradas / (diasEntre(de, ate) + 1)) })),
+    ...p,
+  };
+}
+
+export function demoMelhorias(de: string, ate: string): Melhorias {
+  const n = diasEntre(de, ate) + 1;
+  const ak1 = paginaDemo({ pagina_id: 11, codigo: 'ak1', nome: 'AK1', caminho: '/ak1/' }, de, ate, 1);
+  const ak1b = paginaDemo({ pagina_id: 15, codigo: 'ak1-b', nome: 'AK1 B (demonstração)', caminho: '/ak1-b/' }, de, ate, 0.9);
+  ak1b.leads_entrada = Math.round(ak1b.entradas * 0.125);
+  const m = ak1.visitas;
+  const atual: BaseMelhorias = {
+    sessoes: ak1.sessoes + ak1b.sessoes, leads: ak1.leads + ak1b.leads, dias: n, paginas: [ak1, ak1b],
+    leituras: [{
+      pagina_id: 11, visitas: m, medidas: m, medidas_lead: Math.round(m * 0.1), medidas_mql: Math.round(m * 0.03),
+      secoes: [
+        { secao: 'topo', ordem: 1, viram: m, chegaram: m, viram_lead: Math.round(m * 0.1), viram_mql: Math.round(m * 0.03) },
+        { secao: 'padrao', ordem: 2, viram: Math.round(m * 0.7), chegaram: Math.round(m * 0.7), viram_lead: Math.round(m * 0.09), viram_mql: Math.round(m * 0.028) },
+        { secao: 'caminho', ordem: 3, viram: Math.round(m * 0.62), chegaram: Math.round(m * 0.62), viram_lead: Math.round(m * 0.085), viram_mql: Math.round(m * 0.027) },
+        { secao: 'especialistas', ordem: 4, viram: Math.round(m * 0.3), chegaram: Math.round(m * 0.3), viram_lead: Math.round(m * 0.07), viram_mql: Math.round(m * 0.026) },
+        { secao: 'faq', ordem: 5, viram: Math.round(m * 0.25), chegaram: Math.round(m * 0.25), viram_lead: Math.round(m * 0.05), viram_mql: Math.round(m * 0.02) },
+      ],
+      primeiro_cta: [
+        { dispositivo: 'mobile', medidas: Math.round(m * 0.85), viram: Math.round(m * 0.85 * 0.45), ficaram: Math.round(m * 0.85 * 0.6), ficaram_sem_ver: Math.round(m * 0.85 * 0.25), leads_de_quem_viu: Math.round(m * 0.07) },
+        { dispositivo: 'desktop', medidas: Math.round(m * 0.15), viram: Math.round(m * 0.15 * 0.9), ficaram: Math.round(m * 0.15 * 0.7), ficaram_sem_ver: 5, leads_de_quem_viu: Math.round(m * 0.02) },
+      ],
+      ctas: [
+        { cta: 'topo', ordem: 1, medidas: m, viram: Math.round(m * 0.5), clicaram: Math.round(m * 0.15), leads: Math.round(m * 0.06) },
+        { cta: 'virada', ordem: 2, medidas: m, viram: Math.round(m * 0.4), clicaram: Math.round(m * 0.05), leads: Math.round(m * 0.03) },
+      ],
+      leads_com_botao: Math.round(m * 0.09),
+      form: { viram: Math.round(m * 0.6), abriram: Math.round(m * 0.3), comecaram: Math.round(m * 0.2), enviaram: Math.round(m * 0.1),
+        campos: [
+          { campo: 'nome', ordem: 1, tocaram: Math.round(m * 0.2), focaram: Math.round(m * 0.2), com_erro: 3, pararam: Math.round(m * 0.02) },
+          { campo: 'telefone', ordem: 2, tocaram: Math.round(m * 0.17), focaram: Math.round(m * 0.18), com_erro: 60, pararam: Math.round(m * 0.06) },
+        ] },
+    }],
+  };
+  const antes = { sessoes: atual.sessoes, leads: atual.leads, dias: n,
+    paginas: [{ ...ak1, rejeicoes: Math.round(ak1.entradas * 0.36) }, ak1b] };
+  return { de, ate, antes_de: somaDias(de, -n), antes_ate: somaDias(de, -1), atual, antes };
+}
+
+function ladoDemo(nome: string | null, caminho: string | null, de: string, ate: string, fator: number, taxaLead: number): LadoComparar {
+  const visitas = Math.round(1300 * fator * (diasEntre(de, ate) + 1) / 7);
+  const leads = Math.round(visitas * taxaLead);
+  return {
+    pagina_id: null, de, ate, nome, caminho, visitas, leads, mql: Math.round(leads * 0.3), entradas: Math.round(visitas * 0.95),
+    rejeicoes: Math.round(visitas * 0.44), leads_entrada: leads, vistas: Math.round(visitas * 1.05), rolagem_media: 55, visivel_ms_medio: 40000,
+    lcp_p75: 2400, dias: diasEntre(de, ate) + 1,
+    por_aparelho: [{ chave: 'mobile', visitas: Math.round(visitas * 0.86), leads: Math.round(leads * 0.8) }, { chave: 'desktop', visitas: Math.round(visitas * 0.14), leads: Math.round(leads * 0.2) }],
+    por_origem: [{ chave: 'ig', visitas: Math.round(visitas * 0.65), leads: Math.round(leads * 0.7) }, { chave: 'fb', visitas: Math.round(visitas * 0.3), leads: Math.round(leads * 0.25) }],
+  };
+}
+
+export function demoComparar(pa: string | null, deA: string, ateA: string, pb: string | null, deB: string, ateB: string): Comparacao2 {
+  return { a: ladoDemo(pa, null, deA, ateA, 1, 0.1), b: ladoDemo(pb, null, deB, ateB, 0.9, 0.12) };
+}
+
+export function demoCalor(dispositivo: string): Calor {
+  const r = sorteio('calor' + dispositivo);
+  const pontos: [number, number, number, number][] = [];
+  for (let i = 0; i < 900; i++) {
+    const quente = r() < 0.5;
+    pontos.push([quente ? 40 + r() * 20 : r() * 100, quente ? 0.08 + r() * 0.04 : r(), r() < 0.03 ? 1 : r() < 0.08 ? 2 : 0, quente ? 0 : 1]);
+  }
+  return {
+    url: 'https://patrimoniobrasil.com.br/ak1/', visitas: 15200, largura: dispositivo === 'desktop' ? 1366 : 390, altura_doc: dispositivo === 'desktop' ? 5200 : 9800,
+    pontos, amostra: false, elementos: [['button[data-cta="topo"]', 'Quero participar'], ['img.foto-especialista', '']],
+    contagem: { cliques: 21400, raiva: 160, mortos: 1450, fixos: 900 },
+    alcance: Array.from({ length: 21 }, (_, i) => Math.round(15200 * Math.max(0.2, 1 - i * 0.04))),
+    top: [{ sel: 'button[data-cta="topo"]', txt: 'Quero participar', n: 2900, raiva: 41, morto: 0, fixo: false },
+      { sel: 'div.janela-formulario', txt: '', n: 900, raiva: 0, morto: 0, fixo: true }],
+    captura: null,
+  };
+}
+
+export function demoLab(): Lab {
+  const t = (nota: number, lcp: number) => ({
+    medido_em: new Date().toISOString(), nota, notas: { desempenho: nota, acessibilidade: 88, praticas: 96, seo: 92 },
+    lcp_ms: lcp, fcp_ms: Math.round(lcp * 0.55), tbt_ms: 310, si_ms: Math.round(lcp * 0.9), cls: 0.04,
+    oportunidades: [{ id: 'render-blocking-resources', titulo: 'Elimine recursos que bloqueiam a renderização (demonstração)', ms: 1200 },
+      { id: 'uses-optimized-images', titulo: 'Codifique as imagens de forma eficiente (demonstração)', ms: 640 }],
+    erro: null,
+  });
+  const serie = (base: number) => Array.from({ length: 10 }, (_, i) => ({ quando: somaDias('2026-09-26', i) + 'T09:40:00Z', nota: base + (i % 3) * 2, lcp_ms: 3000 - i * 40 }));
+  return {
+    ligado: true, coleta: true,
+    paginas: [
+      { pagina_id: 11, nome: 'AK1', caminho: '/ak1/', estrategia: 'mobile', ultimo: t(54, 4100), anterior_nota: 58, serie: serie(52) },
+      { pagina_id: 11, nome: 'AK1', caminho: '/ak1/', estrategia: 'desktop', ultimo: t(86, 1500), anterior_nota: 85, serie: serie(84) },
+      { pagina_id: 12, nome: 'Obrigado', caminho: '/obrigado/', estrategia: 'mobile', ultimo: { ...t(0, 0), nota: null, lcp_ms: null, fcp_ms: null, si_ms: null, notas: null, oportunidades: [], erro: 'HTTP 429' }, anterior_nota: 71, serie: serie(70) },
+    ],
+  };
+}
+
+export function demoLeads(): LeadsPessoas {
+  return {
+    base: true, pode_abrir: true, leads_web: 1510, navegadores_lead: 1480, com_ref: 1320, pessoas: 1290, mql: 410, nao_mql: 650,
+    lista: [
+      { ref: 'pe_00000000000000000000000000demo01', pessoa_id: '00000000-0000-4000-8000-00000000de01', quando: new Date().toISOString(), mql: true, nao_mql: false },
+      { ref: 'pe_00000000000000000000000000demo02', pessoa_id: '00000000-0000-4000-8000-00000000de02', quando: new Date().toISOString(), mql: false, nao_mql: true },
+    ],
+  };
+}
+
+export function demoConnect(de: string, ate: string): Connect {
+  const v = demoVisao(de, ate).kpis.sessoes;
+  return {
+    trafego: true, cliques_link: true,
+    campanhas: [
+      { campanha: 'RS | PB26 | LEADS | DEMONSTRAÇÃO A | AK1', campanha_externa: '120200000000000100', plataforma: 'meta', pagina: 'ak1', gasto: 8200, impressoes: 410000,
+        cliques_link: Math.round(v * 0.75), dias_com_gasto: diasEntre(de, ate) + 1, page_views: Math.round(v * 0.55), engajadas: Math.round(v * 0.3), leads: Math.round(v * 0.06),
+        connect_rate: 0.733, conversao: 0.109 },
+      { campanha: 'CF | PB26 | LEADS | DEMONSTRAÇÃO B', campanha_externa: '120200000000000200', plataforma: 'meta', pagina: null, gasto: 4100, impressoes: 260000,
+        cliques_link: Math.round(v * 0.5), dias_com_gasto: diasEntre(de, ate) + 1, page_views: Math.round(v * 0.3), engajadas: Math.round(v * 0.15), leads: Math.round(v * 0.03),
+        connect_rate: 0.6, conversao: 0.1 },
+    ],
+    sem_campanha: { page_views: Math.round(v * 0.04), campanhas: 1 },
+    anuncios: demoOrigem(de, ate).anuncios.map((a) => ({ anuncio: a.anuncio, campanha: a.campanha, page_views: a.sessoes, engajadas: a.engajadas, leads: a.leads })),
   };
 }

@@ -1,36 +1,50 @@
 'use client';
 
 // Marketing > Web: o Radar dentro da central. Filtro por projeto (mkt.projetos, projeto = edição) e período (até 92
-// dias), e uma aba por pergunta: visão geral, páginas, funil, origem, velocidade, rolagem e leitura, cliques e erros,
-// formulário, instalação. Só admin/dev (gate no layout, na page e no banco: mkt.pode_ver('mkt_web')).
+// dias), e uma aba por pergunta: visão geral, páginas, funil, fluxo, origem, velocidade, rolagem e leitura, mapa de calor,
+// cliques e erros, formulário, melhorias, instalação. Só admin/dev (gate no layout, na page e no banco:
+// mkt.pode_ver('mkt_web')). Fluxo, mapa de calor, melhorias, laboratório do Google, leads na base de pessoas e connect
+// rate são da fase 2 (migration 20261005q).
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { FilterSelect, Input, Loading, SectionCard, Tabs, Toast, useFlash } from '@/shared/ui/components';
 import { ultimosDias, validarPeriodo, type Periodo } from '../domain/periodo';
-import type { Formulario, Funil, Instalacao, Leitura, LinhaPagina, Origem, Problemas, Velocidade, Visao } from '../domain/tipos';
+import type {
+  Calor, Connect, Formulario, Fluxo, Funil, Instalacao, Lab, LeadsPessoas, Leitura, LinhaPagina, Melhorias, Origem, Problemas, Velocidade, Visao,
+} from '../domain/tipos';
+import { diaSP } from '../domain/periodo';
 import { carregar, ligarColeta, listarPaginas, listarProjetos, MODO_DEMO, type PaginaWeb, type ProjetoWeb } from '../infrastructure/web-data';
 import {
   PainelFormulario, PainelFunil, PainelInstalacao, PainelLeitura, PainelOrigem, PainelPaginas, PainelProblemas, PainelVelocidade, PainelVisao,
 } from './paineis';
+import { PainelAchados, PainelFluxo, PainelTestesAB, SecaoConnect, SecaoLab, SecaoLeads } from './paineis-fase2';
+import { PainelCalor, type Camada } from './MapaCalor';
+import { Comparar } from './Comparar';
 
 const ABAS = [
   { k: 'visao', l: 'Visão geral' },
   { k: 'paginas', l: 'Páginas' },
   { k: 'funil', l: 'Funil' },
+  { k: 'fluxo', l: 'Fluxo' },
   { k: 'origem', l: 'Origem e UTMs' },
   { k: 'velocidade', l: 'Velocidade' },
   { k: 'leitura', l: 'Rolagem e leitura' },
+  { k: 'calor', l: 'Mapa de calor' },
   { k: 'problemas', l: 'Cliques e erros' },
   { k: 'formulario', l: 'Formulário' },
+  { k: 'melhorias', l: 'Melhorias' },
   { k: 'instalacao', l: 'Instalação' },
 ] as const;
 type Aba = (typeof ABAS)[number]['k'];
-const PRECISA_PAGINA: ReadonlySet<Aba> = new Set(['leitura', 'formulario']);
+const PRECISA_PAGINA: ReadonlySet<Aba> = new Set(['leitura', 'formulario', 'calor']);
 
 type Dados =
-  | { aba: 'visao'; v: Visao } | { aba: 'paginas'; v: LinhaPagina[] } | { aba: 'funil'; v: Funil[] } | { aba: 'origem'; v: Origem }
-  | { aba: 'velocidade'; v: Velocidade } | { aba: 'leitura'; v: Leitura } | { aba: 'problemas'; v: Problemas }
-  | { aba: 'formulario'; v: Formulario } | { aba: 'instalacao'; v: Instalacao };
+  | { aba: 'visao'; v: Visao; leads: LeadsPessoas | null } | { aba: 'paginas'; v: LinhaPagina[] } | { aba: 'funil'; v: Funil[] }
+  | { aba: 'origem'; v: Origem; connect: Connect | null } | { aba: 'velocidade'; v: Velocidade; lab: Lab | null } | { aba: 'leitura'; v: Leitura }
+  | { aba: 'problemas'; v: Problemas } | { aba: 'formulario'; v: Formulario } | { aba: 'instalacao'; v: Instalacao }
+  | { aba: 'fluxo'; v: Fluxo } | { aba: 'calor'; v: Calor } | { aba: 'melhorias'; v: Melhorias };
+type VistaMelhorias = 'achados' | 'testes' | 'comparar';
+const DISPOSITIVOS = [{ k: 'mobile', l: 'Celular' }, { k: 'desktop', l: 'Computador' }, { k: 'tablet', l: 'Tablet' }] as const;
 
 const abaValida = (a: string | null): Aba => (ABAS.find((x) => x.k === a)?.k ?? 'visao') as Aba;
 
@@ -47,6 +61,9 @@ export function WebClient() {
   const [falhouProjetos, setFalhouProjetos] = useState(false);
   const [versao, setVersao] = useState(0);
   const [ocupado, setOcupado] = useState(false);
+  const [dispositivo, setDispositivo] = useState<string>('mobile');
+  const [camada, setCamada] = useState<Camada>('cliques');
+  const [vista, setVista] = useState<VistaMelhorias>('achados');
   const { toast, flash } = useFlash();
 
   const trocarAba = (k: string) => {
@@ -81,26 +98,31 @@ export function WebClient() {
   }, [projeto]);
 
   const erroPeriodo = validarPeriodo(periodo);
-  const chave = [aba, projeto, periodo.de, periodo.ate, pagina, versao].join('|');
+  const chave = [aba, projeto, periodo.de, periodo.ate, pagina, versao, aba === 'calor' ? dispositivo : ''].join('|');
 
   useEffect(() => {
     if (projeto == null || erroPeriodo) return;
     if (PRECISA_PAGINA.has(aba) && pagina == null) return;
     let vivo = true;
     const { de, ate } = periodo;
+    // as seções da fase 2 dentro das abas antigas (leads, connect rate, laboratório) não derrubam a aba se falharem
+    // (migration 20261005q não aplicada): voltam nulas e somem da tela
     const p: Promise<Dados | null> =
-      aba === 'visao' ? carregar.visao(projeto, de, ate).then((v) => v && { aba, v })
+      aba === 'visao' ? Promise.all([carregar.visao(projeto, de, ate), carregar.leads(projeto, de, ate)]).then(([v, leads]) => v && { aba, v, leads })
       : aba === 'paginas' ? carregar.paginas(projeto, de, ate).then((v) => v && { aba, v })
       : aba === 'funil' ? carregar.funil(projeto, de, ate).then((v) => v && { aba, v })
-      : aba === 'origem' ? carregar.origem(projeto, de, ate).then((v) => v && { aba, v })
-      : aba === 'velocidade' ? carregar.velocidade(projeto, de, ate).then((v) => v && { aba, v })
+      : aba === 'fluxo' ? carregar.fluxo(projeto, de, ate).then((v) => v && { aba, v })
+      : aba === 'origem' ? Promise.all([carregar.origem(projeto, de, ate), carregar.connect(projeto, de, ate)]).then(([v, connect]) => v && { aba, v, connect })
+      : aba === 'velocidade' ? Promise.all([carregar.velocidade(projeto, de, ate), carregar.lab(projeto)]).then(([v, lab]) => v && { aba, v, lab })
+      : aba === 'calor' ? carregar.calor(projeto, pagina!, dispositivo, de, ate).then((v) => v && { aba, v })
+      : aba === 'melhorias' ? carregar.melhorias(projeto, de, ate).then((v) => v && { aba, v })
       : aba === 'leitura' ? carregar.leitura(projeto, pagina!, de, ate).then((v) => v && { aba, v })
       : aba === 'problemas' ? carregar.problemas(projeto, pagina, de, ate).then((v) => v && { aba, v })
       : aba === 'formulario' ? carregar.formulario(projeto, pagina!, de, ate).then((v) => v && { aba, v })
       : carregar.instalacao().then((v) => v && { aba: 'instalacao' as const, v });
     p.then((d) => { if (vivo) setResultado({ chave, dados: d }); });
     return () => { vivo = false; };
-  }, [projeto, periodo, aba, pagina, erroPeriodo, chave]);
+  }, [projeto, periodo, aba, pagina, erroPeriodo, chave, dispositivo]);
 
   const atual = resultado?.chave === chave ? resultado : null;
   const carregando = !atual;
@@ -119,7 +141,7 @@ export function WebClient() {
 
   if (!projetos) return <Loading />;
 
-  const mostraPagina = aba === 'leitura' || aba === 'formulario' || aba === 'problemas';
+  const mostraPagina = aba === 'leitura' || aba === 'formulario' || aba === 'problemas' || aba === 'calor';
   const mostraFiltros = aba !== 'instalacao';
 
   return (
@@ -169,6 +191,24 @@ export function WebClient() {
               </label>
             </>
           )}
+          {aba === 'calor' && (
+            <label className="block">
+              <span className="block text-xs font-medium text-[var(--fg-2)] mb-1">Aparelho</span>
+              <FilterSelect value={dispositivo} onChange={(e) => setDispositivo(e.target.value)} aria-label="Aparelho">
+                {DISPOSITIVOS.map((d) => <option key={d.k} value={d.k}>{d.l}</option>)}
+              </FilterSelect>
+            </label>
+          )}
+          {aba === 'melhorias' && (
+            <label className="block">
+              <span className="block text-xs font-medium text-[var(--fg-2)] mb-1">Ver</span>
+              <FilterSelect value={vista} onChange={(e) => setVista(e.target.value as VistaMelhorias)} aria-label="Melhorias">
+                <option value="achados">Achados automáticos</option>
+                <option value="testes">Testes A/B</option>
+                <option value="comparar">Comparar</option>
+              </FilterSelect>
+            </label>
+          )}
           {mostraPagina && (
             <label className="block">
               <span className="block text-xs font-medium text-[var(--fg-2)] mb-1">Página</span>
@@ -198,11 +238,17 @@ export function WebClient() {
         falhou ? null : <Loading />
       ) : (
         <div role="tabpanel" id="web-panel" aria-label={ABAS.find((a) => a.k === aba)?.l}>
-          {dados.aba === 'visao' && <PainelVisao v={dados.v} />}
+          {dados.aba === 'visao' && <div className="space-y-4"><PainelVisao v={dados.v} /><SecaoLeads l={dados.leads} /></div>}
           {dados.aba === 'paginas' && <PainelPaginas linhas={dados.v} />}
           {dados.aba === 'funil' && <PainelFunil funis={dados.v} />}
-          {dados.aba === 'origem' && <PainelOrigem o={dados.v} />}
-          {dados.aba === 'velocidade' && <PainelVelocidade v={dados.v} />}
+          {dados.aba === 'fluxo' && <PainelFluxo f={dados.v} />}
+          {dados.aba === 'origem' && <div className="space-y-4"><PainelOrigem o={dados.v} /><SecaoConnect c={dados.connect} /></div>}
+          {dados.aba === 'velocidade' && <div className="space-y-4"><PainelVelocidade v={dados.v} /><SecaoLab lab={dados.lab} /></div>}
+          {dados.aba === 'calor' && <PainelCalor key={chave} c={dados.v} camada={camada} onCamada={setCamada} />}
+          {dados.aba === 'melhorias' && (vista === 'achados' ? <PainelAchados m={dados.v} />
+            : vista === 'testes' ? <PainelTestesAB m={dados.v} hoje={diaSP(new Date())} />
+            : <Comparar key={projeto} paginas={paginas} periodo={periodo}
+                carregar={(a, b) => carregar.comparar(projeto, a, b)} />)}
           {dados.aba === 'leitura' && <PainelLeitura l={dados.v} />}
           {dados.aba === 'problemas' && <PainelProblemas p={dados.v} />}
           {dados.aba === 'formulario' && <PainelFormulario f={dados.v} />}

@@ -93,3 +93,87 @@ export const MOTIVO_RECUSA: Record<string, string> = {
   limite_ip: 'Excesso de envios do mesmo IP',
   limite_sessao: 'Excesso de envios da mesma visita',
 };
+
+// ─── Fase 2 (migration 20261005q) ────────────────────────────────────────────────────────────────────────────────────
+/** mkt_web_fluxo: a visita como sequência de caminhos (recarregar não é passo) */
+export interface Fluxo {
+  sessoes: number; uma_pagina: number; passos_medio: number;
+  nomes: Record<string, string>;
+  paginas: { caminho: string; vistas: number; entradas: number; saidas: number; leads: number }[];
+  passagens: { de: string; para: string; n: number; leads: number }[];
+  caminhos: { passos: string[]; mais: boolean; n: number; leads: number }[];
+}
+
+/** os números de uma página que as regras de achados leem (formato do api_oportunidades do Radar) */
+export interface PaginaMelhorias {
+  pagina_id: number; codigo: string | null; nome: string; funcao: string; caminho: string;
+  visitas: number; sessoes: number; leads: number; mql: number; dias: number;
+  entradas: number; rejeicoes: number; leads_entrada: number; mql_entrada: number;
+  por_aparelho?: { dispositivo: string; entradas: number; rejeicoes: number; leads: number }[];
+  por_criativo?: { campanha: string; criativo: string; entradas: number; rejeicoes: number; leads: number }[];
+  friccao?: { com_raiva: number; com_erro: number; com_friccao: number; friccao_leads: number; sem_friccao: number; sem_leads: number } | null;
+  lcp?: { faixa: 'bom' | 'medio' | 'ruim'; entradas: number; rejeicoes: number; leads: number }[];
+  por_dia?: { dia: string; entradas: number }[];
+}
+
+/** a leitura de uma página (formato do api_leitura do Radar) */
+export interface LeituraMelhorias {
+  pagina_id: number; visitas: number; medidas: number; medidas_lead: number; medidas_mql: number;
+  secoes: { secao: string; ordem: number; viram: number; chegaram: number; viram_lead: number; viram_mql: number }[];
+  primeiro_cta: { dispositivo: string; medidas: number; viram: number; ficaram: number; ficaram_sem_ver: number; leads_de_quem_viu: number }[];
+  ctas: { cta: string; ordem: number; medidas: number; viram: number; clicaram: number; leads: number }[];
+  leads_com_botao: number;
+  form: { viram: number; abriram: number; comecaram: number; enviaram: number;
+    campos: { campo: string; ordem: number; tocaram: number; focaram: number; com_erro: number; pararam: number }[] };
+}
+
+export interface BaseMelhorias { sessoes: number; leads: number; dias: number; paginas: PaginaMelhorias[]; leituras?: LeituraMelhorias[] }
+export interface Melhorias { de: string; ate: string; antes_de: string; antes_ate: string; atual: BaseMelhorias; antes: BaseMelhorias }
+
+/** mkt_web_comparar: um lado (página ou projeto inteiro, num período) */
+export interface LadoComparar {
+  pagina_id: number | null; de: string; ate: string; nome: string | null; caminho: string | null;
+  visitas: number; leads: number; mql: number; entradas: number; rejeicoes: number; leads_entrada: number; vistas: number;
+  rolagem_media: number; visivel_ms_medio: number; lcp_p75: number | null; dias: number;
+  por_aparelho: { chave: string; visitas: number; leads: number }[];
+  por_origem: { chave: string; visitas: number; leads: number }[];
+}
+export interface Comparacao2 { a: LadoComparar; b: LadoComparar }
+
+/** mkt_web_calor: ponto = [x %, y como fração da altura, tipo (0 clique, 1 raiva, 2 morto, 3 os dois), índice do elemento] */
+export interface Calor {
+  url: string | null; visitas: number; largura: number | null; altura_doc: number | null;
+  pontos: [number, number, number, number][]; amostra: boolean; elementos: [string, string][];
+  contagem: { cliques: number; raiva: number; mortos: number; fixos: number } | null;
+  alcance: number[] | null;
+  top: { sel: string; txt: string; n: number; raiva: number; morto: number; fixo: boolean }[];
+  captura: { img: string; largura: number; altura: number; medido_em: string } | null;
+}
+
+export interface TesteLab {
+  medido_em: string; nota: number | null; notas: { desempenho?: number; acessibilidade?: number; praticas?: number; seo?: number } | null;
+  lcp_ms: number | null; fcp_ms: number | null; tbt_ms: number | null; si_ms: number | null; cls: number | null;
+  oportunidades: { id: string; titulo: string; ms: number }[]; erro: string | null;
+}
+export interface Lab {
+  ligado: boolean; coleta: boolean;
+  paginas: { pagina_id: number; nome: string; caminho: string; estrategia: 'mobile' | 'desktop'; ultimo: TesteLab | null;
+    anterior_nota: number | null; serie: { quando: string; nota: number; lcp_ms: number | null }[] }[];
+}
+
+/** mkt_web_leads: lead da Web ligado à base de pessoas (sem dado pessoal: só a referência opaca e o id da ficha) */
+export interface LeadsPessoas {
+  base: boolean; pode_abrir: boolean; leads_web: number; navegadores_lead: number; com_ref: number;
+  pessoas: number | null; mql: number | null; nao_mql: number | null;
+  lista: { ref: string; pessoa_id: string; quando: string | null; mql: boolean; nao_mql: boolean }[];
+}
+
+/** mkt_web_connect: connect rate = page views ÷ cliques no link; conversão = leads ÷ page views */
+export interface Connect {
+  trafego: boolean; cliques_link: boolean;
+  campanhas: { campanha: string; campanha_externa: string; plataforma: string; pagina: string | null; gasto: number | null;
+    impressoes: number | null; cliques_link: number | null; dias_com_gasto: number; page_views: number; engajadas: number; leads: number;
+    connect_rate: number | null; conversao: number | null }[];
+  sem_campanha: { page_views: number; campanhas: number } | null;
+  anuncios: { anuncio: string; campanha: string | null; page_views: number; engajadas: number; leads: number }[];
+}

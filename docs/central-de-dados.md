@@ -156,9 +156,43 @@ Código em `web/modules/marketing/web/` (`domain`, `application`, `infrastructur
 | Cliques e erros | `mkt_web_problemas` | Raiva, mortos, mais clicados, erros da página e o ruído de fora (app do Facebook, extensões) |
 | Formulário | `mkt_web_formulario` | Viram, começaram, enviaram, campo a campo (focos, tempo, preenchido, erro) e onde param |
 | Instalação | `mkt_web_instalacao`, `mkt_web_coleta_ligar` | Linha do gravador, domínios aceitos, contrato, último pacote, ligar/desligar a coleta, recusas dos últimos 7 dias |
+| Fluxo (fase 2) | `mkt_web_fluxo` | Caminho entre páginas na mesma visita: entradas e saídas por página, de onde para onde (com "saiu do site"), caminhos mais comuns (até 5 páginas). Recarregar a mesma página não é passo |
+| Mapa de calor (fase 2) | `mkt_web_calor` | Cliques (ou raiva e mortos, ou rolagem) desenhados sobre a página, por aparelho; fundo = captura do teste do Google; mais clicados; elemento fixo contado à parte |
+| Melhorias (fase 2) | `mkt_web_melhorias`, `mkt_web_comparar` | Achados automáticos (regras do Radar), testes A/B entre variações (`ak1` x `ak1-b`) e Comparar (duas páginas ou dois períodos) |
+| Dentro das abas antigas (fase 2) | `mkt_web_leads`, `mkt_web_connect`, `mkt_web_lab` | Visão geral: leads na base de pessoas e MQL (ficha só admin/dev). Origem: connect rate com o Tráfego. Velocidade: teste do Google (laboratório) |
 
 Sem visita no período, cada aba diz **"Sem dados ainda: a coleta começa na virada."** Regras de análise portadas do
 Radar em `domain/analise.ts` (teste de duas proporções, maior perda do funil, apelido de seção, origem, régua do Google).
+
+### Fase 2 (migration 20261005q, NÃO APLICADA)
+
+`infra/supabase/migrations/20261005q_mkt_web_fase2.sql` + `_ensaio.sql` + `20261005q.explain.md`. Depende da 20261005n.
+Tudo sobre o que o gravador `radar-v1.js` já grava (não mudou: sem `radar-v2.js`).
+
+| Peça | Onde | Como funciona |
+|---|---|---|
+| Fluxo | `mkt_web_fluxo`, `domain/fluxo.ts`, `ui/paineis-fase2.tsx` | A visita vira a sequência de caminhos de `mkt_web.visualizacoes`. Não é o Fluxo do Radar (pessoas do CRM, pesquisa), que segue fora da Web |
+| Achados automáticos | `domain/achados.ts` (regras), `mkt_web_melhorias` (somas) | Porte de `oportunidades.ts` do Luiz com os mesmos limiares: primeira dobra (celular x desktop, rejeição que subiu), promessa do criativo, botão que ninguém vê, seção onde a leitura morre, campo do formulário, fricção, velocidade; aprendizados "o que o MQL lê" e "qual botão converte". Cada regra cita a origem no código. Ganho = teto de leads por semana. A regra de publicações não veio (publicações fora de escopo) |
+| Testes A/B | `domain/testes-ab.ts` | Grupo pelo código da casa: `ak1` (original) x `ak1-b`, `ak1-c`. Conta quem entrou por cada versão. Teste de duas proporções, amostra para enxergar 20% (fator 7,85), veredito só com a amostra e 7 dias, aviso de divisão desigual (porte de `testes.ts` do Luiz). O teste não é cadastrado: vale o período da tela |
+| Comparar | `mkt_web_comparar`, `ui/Comparar.tsx` | Duas páginas no mesmo período, ou a mesma página (ou o projeto) em dois períodos; veredito pela taxa de lead sobre quem viu a página, lado a lado, por aparelho e por origem |
+| Mapa de calor sobre a página | `mkt_web_calor`, `domain/calor.ts`, `ui/MapaCalor.tsx` | Ponto = x % da largura e y como fração da altura da página vista. Fundo padrão = captura de página inteira do último teste do Google do mesmo aparelho; opção "página ao vivo" (iframe sem JavaScript, com aviso: o `<noscript>` do pixel do Meta pode contar visita, e a página pode recusar o quadro); opção sem fundo. Pintura portada do `calor.ts` do Luiz |
+| PageSpeed de laboratório | `mkt_web.velocidade_lab`, Edge `infra/supabase/functions/mkt-web-pagespeed`, cron `mkt-web-pagespeed` (06:40 SP, pelo `ops.cron_post`) | Páginas ativas de projeto com a coleta ligada, celular e computador, 1 vez por dia (máx. 12 por chamada; o resto no dia seguinte). Guarda notas, LCP, FCP, TBT, Speed Index, CLS, 5 oportunidades, a captura e a falha. Chave do Google **opcional** no Vault (`mkt_web_pagespeed_api_key`); sem ela, a cota pública. `mkt_web.config` `pagespeed = desligado` para |
+| Lead ligado à pessoa | `mkt_web_leads` | Leads da Web cujo navegador tem `visitantes.lead_ref` (gravado pela 20261005o) e quantos viraram MQL no projeto. Referência e link `/comercial?pessoa=<id>` (abre a ficha) só para `pessoas.pode_ver()` (admin/dev). Sem a 20261005o: só os números da Web |
+| Connect rate | `mkt_web_connect` | Definição do Victor: **page views ÷ cliques no link**; conversão da página = **leads ÷ page views**. Por campanha do Tráfego (`campaign_id` = id, ou `utm_campaign` = nome exato ou id). Cliques no link = coluna `cliques_link`/`cliques_no_link` de `mkt_trafego.desempenho_dia`; sem ela, connect rate em branco (nunca o total de cliques). Por anúncio, só a Web (o Tráfego não guarda clique por anúncio). Sem a 20261005p: só as page views por anúncio |
+| Páginas do PB26 | a própria migration | As que faltam das 11 do `patrimonio-brasil.json` (`obs = '20261005q: …'`); o passo 3 da virada fica feito ao aplicar |
+
+**Aplicar:** 20261005n → ensaio da 20261005q (nenhum `ERRADO`) → publicar a Edge (`supabase functions deploy
+mkt-web-pagespeed`) → 20261005q. A chave do Google, se o Victor quiser (sem ela vale a cota pública):
+`select vault.create_secret('<chave>', 'mkt_web_pagespeed_api_key');` no SQL editor, nunca no código.
+
+**Ferramentas da Web para o MCP da central** (não existe MCP da central no repo; não foi criado servidor). Só leitura,
+por projeto e página, sem dado pessoal e sem vídeo, cada uma chamando a função que a tela já usa: `web_resumo`
+(`mkt_web_visao`), `web_paginas` (`mkt_web_paginas`), `web_funil` (`mkt_web_funil`), `web_fluxo` (`mkt_web_fluxo`),
+`web_origem` (`mkt_web_origem` + `mkt_web_connect`), `web_velocidade` (`mkt_web_velocidade` + `mkt_web_lab`),
+`web_leitura` (`mkt_web_leitura`), `web_calor_contagem` (`mkt_web_calor` sem a imagem), `web_problemas`,
+`web_formulario`, `web_achados` (`mkt_web_melhorias` + as regras de `domain/achados.ts`), `web_testes_ab`,
+`web_comparar`, `web_instalacao`. Porta: chave só com hash, limite por minuto e por dia e registro de uso (o desenho da
+porta do Luiz, estudo seção 5.5).
 
 ### Testar localmente (antes da virada)
 
@@ -169,8 +203,15 @@ Radar em `domain/analise.ts` (teste de duas proporções, maior perda do funil, 
 - **Banco local com as migrations:** `infra/scripts/mkt_web_seed_dev.sql` põe 4.200 visitas inventadas do PB26 (ids
   `dev…`). Trava: só roda depois de `select set_config('app.mkt_web_seed', 'sou-banco-de-dev', false);` e aborta se já
   houver coleta de verdade. **Nunca rodar em produção.** O bloco LIMPAR no fim apaga só o que é `dev`.
-- Testes: `npx vitest run modules/marketing/web` (regras, rota, telas renderizando, estado vazio) e
+- Testes: `npx vitest run modules/marketing/web` (regras, rota, telas renderizando, estado vazio; na fase 2, achados,
+  testes A/B, mapa de calor, fluxo, o resumo do Google da Edge e as telas novas) e
   `shared/infrastructure/supabase/proxy-dominio.test.ts` (a coleta fica fora do Proxy).
+- **Fase 2 no modo de demonstração:** as abas Fluxo, Mapa de calor e Melhorias (Ver: Achados, Testes A/B, Comparar) e as
+  seções novas da Visão geral, Origem e Velocidade aparecem com números inventados (a página "AK1 B (demonstração)" só
+  existe no modo de demonstração, para mostrar um teste A/B). O mapa de calor de demonstração não tem captura (fundo
+  "Sem fundo").
+- **Ensaio da 20261005q:** com a 20261005n aplicada, rodar `20261005q_ensaio.sql` inteiro (termina em rollback) e
+  conferir que nenhuma linha começa com `ERRADO`.
 
 ### Virada (trocar o gravador do PB para o nosso). NÃO feita; fazer fora da semana do evento (09 a 11/11)
 
@@ -180,11 +221,11 @@ O FTP das páginas do PB é do Luiz (publicação pelo `scripts/deploy.py` dele)
    migration. Conferir `select jobname, schedule from cron.job where jobname like 'mkt-web-%'` (3 rotinas).
 2. **Publicar** a branch (merge na `main`). Conferir `https://grupoparticipa.app.br/web/radar-v1.js` (200, JavaScript)
    e que `POST /api/web/coletar` sem origem responde `dominio` (403).
-3. **Cadastrar as páginas** do PB26 que faltam em Marketing > Projetos e páginas (hoje só `/ak1/`, `/obrigado/`,
-   `/quase-la/`, `/pesquisa/`). O `patrimonio-brasil.json` do Luiz lista 11: `/`, `/ak1/`, `/bl2/`,
-   `/bl2-otimizacao/`, `/quase-la/`, `/pesquisa/`, `/obrigado/`, `/inscricao-recebida/`, `/profissionais/`,
-   `/profissionais/advogados/`, `/profissionais/contadores/`. Caminho não cadastrado é gravado mesmo assim (sem página),
-   mas o domínio precisa de ao menos uma página ativa.
+3. **Cadastrar as páginas** do PB26 que faltam: **a 20261005q faz isso** (as 11 do `patrimonio-brasil.json` do Luiz:
+   `/`, `/ak1/`, `/bl2/`, `/bl2-otimizacao/`, `/quase-la/`, `/pesquisa/`, `/obrigado/`, `/inscricao-recebida/`,
+   `/profissionais/`, `/profissionais/advogados/`, `/profissionais/contadores/`, só as que faltam). Sem a 20261005q,
+   cadastrar em Marketing > Projetos e páginas. Caminho não cadastrado é gravado mesmo assim (sem página), mas o domínio
+   precisa de ao menos uma página ativa.
 4. **Ligar a coleta do PB26:** Marketing > Web > Instalação > Ligar (ou `mkt_web_coleta_ligar`). Sem isso o coletor
    responde `projeto` e o gravador para por 60 min.
 5. **Rodar em paralelo um dia** numa página só (sugestão: `/obrigado/`): o Luiz acrescenta a nossa linha **sem tirar** a
@@ -202,11 +243,12 @@ O FTP das páginas do PB é do Luiz (publicação pelo `scripts/deploy.py` dele)
 
 ### O que ficou para depois
 
-Gravação/replay das visitas (vídeo), mapa de calor desenhado sobre a página (hoje: elementos mais clicados), Melhorias
-(achados automáticos, testes A/B, comparar), Diário com IA, PageSpeed de laboratório, publicações/deploys, CRM do Luiz
-e a referência ao lead (`visitantes.lead_ref`, quando a base de pessoas existir), Fluxo e Pesquisas, Meta/Google/Hotmart e
-reenvio ao ActiveCampaign, connect rate com o Tráfego, ferramentas da Web no MCP, a área `mkt_web` para o Luiz e o
-Iromar (entra em `mkt.pode_ver`), importação do histórico do Radar.
+Gravação/replay das visitas (vídeo), Diário com IA, publicações/deploys (e a regra de achados "antes e depois da
+publicação"), CRM do Luiz, Pesquisas, reenvio ao ActiveCampaign, o **servidor** MCP da central (as ferramentas da Web
+estão descritas acima), a área `mkt_web` para o Luiz e o Iromar (entra em `mkt.pode_ver`), importação do histórico do
+Radar, teste A/B cadastrado (com início, fim, hipótese e trava, como o Radar), clique no link por anúncio (depende do
+Tráfego). Saíram desta lista com a fase 2 (20261005q, não aplicada): mapa de calor sobre a página, Melhorias (achados,
+testes A/B, comparar), PageSpeed de laboratório, referência ao lead, Fluxo (caminho entre páginas) e connect rate.
 
 ## Comercial e base de pessoas
 

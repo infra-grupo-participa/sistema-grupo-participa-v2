@@ -38,6 +38,15 @@ export function compararTaxas(sucessosA: number, totalA: number, sucessosB: numb
   };
 }
 
+/** Uma proporção contra uma régua fixa ("só 40% veem o botão", contra a régua de 60%): teste de uma proporção.
+ *  z > 0 quando a proporção passa da régua; o selo não olha o lado (quem chama confere a direção). (estatistica.ts) */
+export function compararComRegua(sucessos: number, total: number, regua: number): { p: number; z: number; nivel: Nivel } {
+  const p = total ? sucessos / total : 0;
+  const r = Math.min(0.99, Math.max(0.01, regua));
+  const z = total ? (p - r) / Math.sqrt((r * (1 - r)) / total) : 0;
+  return { p, z, nivel: nivelDe(z, total) };
+}
+
 export const ROTULO_NIVEL: Record<Nivel, string> = { forte: 'Diferença forte', provavel: 'Diferença provável', fraco: 'Pode ser acaso' };
 
 // ─── Funil (funil.ts) ────────────────────────────────────────────────────────────────────────────────────────────────
