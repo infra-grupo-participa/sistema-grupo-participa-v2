@@ -69,7 +69,7 @@ end $$;
 -- ═══ CORPO DA MIGRATION 20261006160402_pa_slack_dm.sql (cópia sem mudança) ═══
 -- 20261006160402: Pedidos de alteração (etapa 2), aviso de pedido novo por DM no Slack (só para o Victor)
 --
--- STATUS: NÃO APLICADA. Ensaio: 20261006160402_ensaio.sql (begin … rollback). Notas: 20261006160402.explain.md.
+-- STATUS: APLICADA em 06/10/2026 (pentester aprovou). Ensaio: 20261006160402_ensaio.sql (begin … rollback). Notas: 20261006160402.explain.md.
 -- Pré-requisito de: 20261006160403 (planilha usa pa_config e pa_n8n_valido). Independente da 160401 e da 160404.
 --
 -- DECISÃO DO VICTOR (06/10/2026, noite): aviso de pedido novo SÓ para o Victor, por DM (chat.postMessage com
@@ -161,7 +161,9 @@ revoke all on table public.pa_config, public.pa_avisos from public, anon, authen
 create function public.pa_n8n_valido(p_segredo text)
 returns boolean language sql stable security definer set search_path = '' as $$
   select coalesce(p_segredo, '') <> ''
-     and exists (select 1 from public.pa_config c where c.id and c.segredo = p_segredo);
+     -- Compara os hashes (tamanho fixo) e não o texto: não vaza por tempo de resposta quantos caracteres batem.
+     and exists (select 1 from public.pa_config c
+                  where c.id and extensions.digest(c.segredo, 'sha256') = extensions.digest(p_segredo, 'sha256'));
 $$;
 
 -- Rótulo do tipo (espelho de ROTULO_TIPO em web/modules/alunos/domain/pedidos-alteracao.ts).
@@ -293,7 +295,7 @@ $confere$;
 -- ═══ CORPO DA MIGRATION 20261006160403_pa_planilha.sql (cópia sem mudança) ═══
 -- 20261006160403: Pedidos de alteração (etapa 2), o n8n leva o pedido aplicado para a planilha da Central
 --
--- STATUS: NÃO APLICADA. Ensaio: 20261006160403_ensaio.sql (begin … rollback). Notas: 20261006160403.explain.md.
+-- STATUS: APLICADA em 06/10/2026 (pentester aprovou). Ensaio: 20261006160403_ensaio.sql (begin … rollback). Notas: 20261006160403.explain.md.
 -- Depende da 20261006160402 (pa_config, pa_n8n_valido). Independente da 160401 e da 160404.
 --
 -- O banco NÃO escreve na planilha. Ele entrega ao n8n, com segredo, o que escrever e onde achar a linha; o n8n escreve

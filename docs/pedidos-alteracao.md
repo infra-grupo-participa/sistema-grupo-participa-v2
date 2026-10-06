@@ -8,8 +8,9 @@ numa tela própria; o aprovador decide e o sistema aplica. Quem pede não ganha 
 completo** (migration `20261005k`) **APLICADA** (commit `002535a`, na `main`).
 **Troca de sócio direto em remoção** (`20261006144912`) e **sócio novo herda entrada e turma** (`20261006144913`):
 **APLICADAS em 06/10/2026** (ensaio OK antes; pentester e orquestrador aprovaram). Ver "Banco".
-**Etapa 2, parte do banco** (migrations `20261006160401` a `20261006160404`, branch `victor-pedidos`): **NÃO
-APLICADAS**, ensaio OK em `begin … rollback`. Falta pentester, orquestrador e ok do Victor. Ver "Etapa 2".
+**Etapa 2, parte do banco** (migrations `20261006160401` a `20261006160404`): **APLICADAS em 06/10/2026**, com
+ensaio OK, pentester aprovado e ok do Victor. Os ensaios gastaram números da sequência: o próximo pedido real sai com
+nº 103 (os 11 a 102 não existem). Ver "Etapa 2".
 
 ## Telas
 
@@ -85,7 +86,7 @@ APLICADAS**, ensaio OK em `begin … rollback`. Falta pentester, orquestrador e 
 `pendente` → `aplicado` (ou `recusado`). `aprovado` = "outro" aprovado, falta aplicar. `erro` = falhou ao aplicar.
 `planilha_status = pendente` em todo pedido aplicado (menos "outro"): é a fila da **etapa 2**.
 
-## Etapa 2 (banco pronto, NÃO aplicado; n8n não existe ainda)
+## Etapa 2 (banco aplicado em 06/10/2026)
 
 Decisões do Victor de 06/10/2026 (noite). Quatro migrations, cada uma com `_ensaio.sql` e `.explain.md` (saída do
 ensaio, `explain (analyze)`, as 5 perguntas e a reversão):
@@ -106,8 +107,9 @@ escapados com `ra_slack_esc`). Destinatário em `pa_config.slack_destinos` (`{U0
 
 **`pa_config` nasce desligada.** Uma linha só, fechada (só se lê no banco, pelo SQL editor ou pelo `aplica_sql.py`):
 
-- `segredo`: 64 caracteres gerados na migration. Ler com `select segredo from public.pa_config;` e guardar só na
-  credencial do n8n. Nunca em código, commit ou chat.
+- `segredo`: 64 caracteres gerados na migration, comparado por hash sha256 (`pa_n8n_valido`). Ler só pelo SQL editor
+  do Supabase (o `aplica_sql.py consulta` imprime no terminal e, rodado por agente, cai no chat) e guardar só no
+  n8n. Nunca em commit ou chat.
 - `n8n_webhook_url`: nula. Enquanto for nula o gatilho não chama nada. Gravar a URL do webhook do workflow do Slack.
 - `ligado_em`: nula = aviso desligado. Ligar: `update public.pa_config set ligado_em = now();`. Só pedido criado
   **depois** disso vira DM (o nº 9 e o nº 10 não geram aviso retroativo). Pedido decidido antes da rodada não gera DM.
@@ -139,7 +141,12 @@ escapados com `ra_slack_esc`). Destinatário em `pa_config.slack_destinos` (`{U0
 3. Ordem na troca: achar todas as linhas, acrescentar quem sai em "Removidos — Histórico", escrever, e **apagar por
    último** (quando quem entra já tem linha).
 4. Escrever Documento como texto (valor cru, sem virar número).
-5. `planilha_status = 'erro'` não volta sozinho para a fila: corrigir a planilha à mão e marcar, ou ajustar no banco.
+   Valor de texto que comece com `=`, `+`, `-` ou `@` vai com `'` na frente: texto livre aprovado (Obs, Nome,
+   Profissão, Motivo) não pode virar fórmula (`IMPORTXML`/`IMAGE` mandariam dado da planilha para fora). Pentester,
+   06/10/2026.
+5. `p_detalhe` leva só número de linha, coluna e aba, nunca valor de célula: ele volta sem máscara no histórico do
+   pedido para os aprovadores.
+6. `planilha_status = 'erro'` não volta sozinho para a fila: corrigir a planilha à mão e marcar, ou ajustar no banco.
 
 **Histórico no card do aluno.** `pa_historico_aluno(p_aluno uuid) returns table(em, pedido_id, papel, texto)`, só para
 a equipe (`gp_eh_equipe()`), mais recente primeiro. Lê pedidos `aplicado` de troca e de alterar dado (sem tabela nova,
@@ -163,7 +170,7 @@ não pode ver). Todos terminam em "(pedido nº N, aprovado por <nome> em dd/mm/a
 160403 já carrega a 160402). Esperado nenhuma linha `ERRADO`. Depois de aplicar: abrir a fila como Isabela (aba
 "Aprovar"), aprovar um pedido dela e ver o selo; abrir o histórico de um aluno com troca aplicada.
 
-**O que falta:** pentester e orquestrador; ok do Victor e aplicar; criar os workflows `[Central] Pedidos de alteração
+**O que falta:** criar os workflows `[Central] Pedidos de alteração
 — Slack` e `[Central] Pedidos de alteração — planilha` no n8n (desligados, rodada 15 min, tokens em credencial),
 gravar `n8n_webhook_url`, ligar `ligado_em`; gravar `planilha_id` da CÓPIA, aprovar o nº 9 e o nº 10, conferir a cópia
 e só então a planilha real.
@@ -187,7 +194,7 @@ Migrations de 06/10/2026, **APLICADAS em 06/10/2026**, independentes entre si:
   `ra_desfazer_triagem` (recusa a troca direta). A tela (`CasoDrawer.tsx`) esconde "Desfazer triagem" nesse caso.
 - `20261006144913_pa_socio_novo_entrada.sql`: `pa_decidir` com a herança de `data_entrada_thb` e `turma_id`.
 
-Migrations da etapa 2 (`20261006160401` a `20261006160404`): **NÃO APLICADAS**, ver "Etapa 2".
+Migrations da etapa 2 (`20261006160401` a `20261006160404`): **APLICADAS em 06/10/2026**, ver "Etapa 2".
 
 **Como testar:** `python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio infra/supabase/migrations/<ts>_ensaio.sql`
 (roda em `begin … rollback`; esperado nenhuma linha `ERRADO`). Depois de aplicar: aprovar um pedido de troca e conferir

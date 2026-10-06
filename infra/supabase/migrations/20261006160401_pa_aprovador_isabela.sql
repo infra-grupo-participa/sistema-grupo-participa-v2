@@ -1,6 +1,6 @@
 -- 20261006160401: Pedidos de alteração (etapa 2), a Isabela aprova pela tela de pedidos e o pedido marca "autoaprovado"
 --
--- STATUS: NÃO APLICADA. Ensaio: 20261006160401_ensaio.sql (begin … rollback). Notas: 20261006160401.explain.md.
+-- STATUS: APLICADA em 06/10/2026 (pentester aprovou). Ensaio: 20261006160401_ensaio.sql (begin … rollback). Notas: 20261006160401.explain.md.
 -- Independente das 20261006160402/03/04.
 --
 -- DECISÃO DO VICTOR (06/10/2026, noite): a Isabela Teixeira APROVA pela tela de pedidos (aba "Aprovar"), sem aviso no

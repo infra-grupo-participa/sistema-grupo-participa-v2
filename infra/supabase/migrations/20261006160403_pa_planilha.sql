@@ -1,6 +1,6 @@
 -- 20261006160403: Pedidos de alteração (etapa 2), o n8n leva o pedido aplicado para a planilha da Central
 --
--- STATUS: NÃO APLICADA. Ensaio: 20261006160403_ensaio.sql (begin … rollback). Notas: 20261006160403.explain.md.
+-- STATUS: APLICADA em 06/10/2026 (pentester aprovou). Ensaio: 20261006160403_ensaio.sql (begin … rollback). Notas: 20261006160403.explain.md.
 -- Depende da 20261006160402 (pa_config, pa_n8n_valido). Independente da 160401 e da 160404.
 --
 -- O banco NÃO escreve na planilha. Ele entrega ao n8n, com segredo, o que escrever e onde achar a linha; o n8n escreve

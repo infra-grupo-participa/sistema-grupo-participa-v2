@@ -1,6 +1,6 @@
 -- 20261006160404: Pedidos de alteração (etapa 2), histórico de pedidos no card do aluno
 --
--- STATUS: NÃO APLICADA. Ensaio: 20261006160404_ensaio.sql (begin … rollback). Notas: 20261006160404.explain.md.
+-- STATUS: APLICADA em 06/10/2026 (pentester aprovou). Ensaio: 20261006160404_ensaio.sql (begin … rollback). Notas: 20261006160404.explain.md.
 -- Independente das 20261006160401/02/03.
 --
 -- DECISÃO DO VICTOR (06/10/2026, noite): o histórico no card é lido de pa_pedidos aplicados (sem tabela nova, sem
