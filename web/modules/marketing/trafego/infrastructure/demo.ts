@@ -13,6 +13,7 @@ import {
   PROJETO_FORM_VAZIO, lancamentoAutomatico, montarChecklist, nomeTemSigla, periodoProjeto, periodoReceita, validarCadastro,
   type Especialista, type ListasCadastro, type ModeloPacote, type ProjetoCadastro, type ProjetoForm,
 } from '../domain/cadastro';
+import { filtrarEtiquetas, type BuscaEtiquetas, type EtiquetaClickup } from '../domain/etiquetas';
 import { faseDaCampanha } from '../domain/fases';
 import { comKpis } from '../domain/kpis';
 import type {
@@ -26,6 +27,8 @@ const hoje = (n = 0) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 const ONTEM = hoje(-1);
+// status que não entram no resumo do dia (mkt_trafego.status_projeto.entra_no_resumo_dia = false, 20261005r)
+const FORA_DO_RESUMO = new Set(['em_planejamento', 'inativo', 'encerrado']);
 
 const GESTORES = [{ sigla: 'CF', nome: 'Caio Fábio' }, { sigla: 'RS', nome: 'Renan Schwarz' }, { sigla: 'EF', nome: 'Emmanuel Fernandes' }];
 const OBJETIVOS = ['LEADS', 'VENDAS', 'REMARKETING', 'LEMBRETE', 'DISTRIBUIÇÃO', 'CARRINHO', 'AQUECIMENTO'];
@@ -34,7 +37,8 @@ const OBJETIVO_FASE: Record<string, string> = {
 };
 const CONFIG: ConfigTrafego = {
   plataformas: [{ codigo: 'meta', nome: 'Meta Ads' }, { codigo: 'google', nome: 'Google Ads' }],
-  status: [{ codigo: 'ativo', nome: 'Ativo' }, { codigo: 'pausado', nome: 'Pausado' }, { codigo: 'inativo', nome: 'Inativo' }, { codigo: 'encerrado', nome: 'Encerrado' }],
+  status: [{ codigo: 'em_planejamento', nome: 'Em planejamento' }, { codigo: 'ativo', nome: 'Ativo' }, { codigo: 'pausado', nome: 'Pausado' },
+    { codigo: 'inativo', nome: 'Inativo' }, { codigo: 'encerrado', nome: 'Encerrado' }],
   fases: [
     { codigo: 'aquecimento', nome: 'Aquecimento' }, { codigo: 'captacao', nome: 'Captação' }, { codigo: 'lembrete', nome: 'Lembrete' },
     { codigo: 'remarketing', nome: 'Remarketing' }, { codigo: 'abertura_carrinho', nome: 'Abertura de carrinho' },
@@ -79,6 +83,7 @@ const PLAN = new Map<number, Plan>([
   [1, { status: 'ativo', gestores: ['RS', 'CF'], verba_maxima: 20000, verba_diaria: 500, meta_leads: 2000, meta_receita: null, meta_cpl: 10, meta_pct_mql: 30, obs: null }],
   [2, { status: 'ativo', gestores: ['CF'], verba_maxima: 15000, verba_diaria: 400, meta_leads: null, meta_receita: 60000, meta_cpl: null, meta_pct_mql: null, obs: null }],
   [4, { status: 'pausado', gestores: ['CF'], verba_maxima: 8000, verba_diaria: null, meta_leads: 500, meta_receita: null, meta_cpl: null, meta_pct_mql: null, obs: null }],
+  [6, { status: 'em_planejamento', gestores: ['EF'], verba_maxima: null, verba_diaria: null, meta_leads: null, meta_receita: null, meta_cpl: null, meta_pct_mql: null, obs: 'Projeto fictício em planejamento: fica fora do resumo do dia.' }],
   [5, { status: 'ativo', gestores: ['EF'], verba_maxima: 3000, verba_diaria: 100, meta_leads: 300, meta_receita: null, meta_cpl: 8, meta_pct_mql: null, obs: 'Projeto fictício do modo de demonstração.' }],
   [7, { status: 'ativo', gestores: ['RS'], verba_maxima: 9000, verba_diaria: 300, meta_leads: null, meta_receita: null, meta_cpl: null, meta_pct_mql: null, obs: 'Projeto fictício do modo de demonstração.' }],
 ]);
@@ -115,6 +120,10 @@ const CAMPS: CampDemo[] = [
   camp(10, 'meta', 1, 'RS | LPEXA26 | VENDAS | EXEMPLO INGRESSO', 'ACTIVE'),
   camp(11, 'meta', 3, 'RS | LPEXA26 | VENDAS | EXEMPLO CONTA DE FORA', 'ACTIVE'),
   camp(12, 'meta', 1, 'lpexa26 exemplo remarketing sem padrão', 'PAUSED'),
+  // o exemplo de nome da revisão do Victor (06/10/2026): descrição de 5 partes; fora do padrão só pelo objetivo ANTECIPAÇÃO
+  camp(13, 'meta', 1, 'CF | BF26 | ANTECIPAÇÃO | EXEMPLO TEASER | META | PQ | ABO | THRUPLAY', 'ACTIVE'),
+  camp(14, 'meta', 1, 'CF | BF26 | LEADS | EXEMPLO | VÁRIAS PARTES', 'PAUSED'),
+  camp(15, 'meta', 1, 'XX | EXEMPLO', 'PAUSED'),
 ];
 // por campanha: [dias para trás, gasto base por dia, CPM base, CTR base em %, leads da plataforma por 100 reais]
 const PERFIL: Record<number, [number, number, number, number, number]> = {
@@ -153,7 +162,7 @@ function lerCampanha(c: CampDemo): Campanha {
   return {
     id: c.id, plataforma: c.plataforma, conta_id: c.conta_id, conta: conta.nome, moeda: conta.moeda, campanha_externa: `00000000000${c.id}`,
     nome: c.nome, status_plataforma: c.status, fora_padrao: !t.padrao, erros: t.erros, avisos: t.avisos, gestor: t.gestor, objetivo: t.objetivo,
-    descricao: t.descricao, pagina: t.pagina, projeto_id: pid, projeto_sigla: projeto(pid)?.sigla ?? null, projeto_manual: c.projeto_manual_id != null,
+    descricao: t.descricao, pagina: t.pagina, projeto_lido: t.projeto, campos: t.campos, projeto_id: pid, projeto_sigla: projeto(pid)?.sigla ?? null, projeto_manual: c.projeto_manual_id != null,
     fase: faseDaCampanha(t.objetivo, c.fase_manual, OBJETIVO_FASE), fase_manual: c.fase_manual, fase_objetivo: faseDaCampanha(t.objetivo, null, OBJETIVO_FASE),
     gasto: soma('gasto'), impressoes: soma('impressoes'), cliques_link: soma('cliques_link'), cliques_total: soma('cliques_total'),
     leads_plataforma: dias.some((d) => d.leads != null) ? dias.reduce((a, d) => a + (d.leads ?? 0), 0) : null,
@@ -340,7 +349,7 @@ export function demoAlertas(): ResumoDia {
     const st = PLAN.get(p.id)?.status;
     return {
       linha: linha(p),
-      entra: p.ativo && st !== 'inativo' && st !== 'encerrado',
+      entra: p.ativo && !FORA_DO_RESUMO.has(st ?? ''),
       fases: FASES.filter((f) => f.projeto_id === p.id).map((f) => {
         const ids = new Set(doProj.filter((c) => c.fase === f.fase).map((c) => c.id));
         const g = DIAS.filter((d) => ids.has(d.campanha_id) && f.inicio != null && d.dia >= f.inicio && d.dia <= ONTEM).reduce((a, d) => a + d.gasto, 0);
@@ -445,6 +454,17 @@ export function demoListasCadastro(): ListasCadastro {
   });
 }
 
+// Etiquetas do ClickUp da demonstração: as 4 citadas na revisão do Victor (vistas no painel de KPIs) e as dos projetos da
+// semente; as fontes são de exemplo.
+const ETIQUETAS_DEMO: EtiquetaClickup[] = [
+  ...['seminario-atm', 'seminario-conjunto', 'seminario-conjunto-2026-11', 'seminario-zanella'].map((etiqueta) => ({ etiqueta, fontes: ['kpi'] })),
+  { etiqueta: 'seminario-conjunto-2026-11', fontes: ['trafego'] }, { etiqueta: 'black-friday-2026-10', fontes: ['trafego'] },
+  { etiqueta: 'sem-set-2026', fontes: ['kpi'] },
+];
+export function demoBuscarEtiquetas(busca: string): BuscaEtiquetas {
+  return { etiquetas: filtrarEtiquetas(ETIQUETAS_DEMO, busca), fonte_kpi: true };
+}
+
 export function demoCadastro(id: number): ProjetoCadastro | null {
   const p = projeto(id);
   if (!p) return null;
@@ -476,7 +496,7 @@ export function demoSalvarCadastro(f: ProjetoForm): Resposta & { tipo_lancamento
   }
   const periodo = periodoProjeto(f);
   const v: ProjetoDemo = {
-    id: f.id ?? ++seq, sigla: f.sigla, nome: f.nome, linha: f.linha, ativo: f.ativo, etiqueta_clickup: f.etiqueta_clickup || null,
+    id: f.id ?? ++seq, sigla: f.sigla, nome: f.nome, linha: projeto(f.id ?? null)?.linha ?? f.nome.slice(0, 60), ativo: f.ativo, etiqueta_clickup: f.etiqueta_clickup || null,
     tipo: f.tipo || null, unidade: f.unidade || null, tipo_lancamento: f.tipo_lancamento || lancamentoAutomatico(l, f.unidade), especialista_id: esp,
     inicio: periodo.inicio || null, fim: periodo.fim || null, captacao_inicio: f.captacao_inicio || null, captacao_fim: f.captacao_fim || null,
     evento_inicio: f.evento_inicio || null, evento_fim: f.evento_fim || null,

@@ -24,7 +24,7 @@ const L: ListasCadastro = {
   ] },
   pacotes: [], etiquetas_clickup: [], checklist_itens: [],
 };
-const F = { ...PROJETO_FORM_VAZIO, sigla: 'zz28', nome: 'Exemplo', linha: 'Exemplo' };
+const F = { ...PROJETO_FORM_VAZIO, sigla: 'zz28', nome: 'Exemplo' };
 
 describe('cadastro do projeto (as regras do banco na tela)', () => {
   it('tipo de lançamento por unidade; pago e LPSG só na CSM; Aurum fixo em palestra', () => {
@@ -81,8 +81,16 @@ describe('gerador de nome de campanha e UTM', () => {
     expect(montarNomeCampanha({ gestor: 'CF', sigla: 'PB26', objetivo: 'DISTRIBUIÇÃO', descricao: 'Vídeo', pagina: '' }, listas).nome)
       .toBe('CF | PB26 | DISTRIBUIÇÃO | VÍDEO');
   });
-  it('recusa barra na descrição e campo faltando', () => {
-    expect(montarNomeCampanha({ gestor: 'RS', sigla: 'PB26', objetivo: 'LEADS', descricao: 'A | B', pagina: '' }, listas).erros[0]).toMatch(/"\|"/);
+  it('descrição livre com várias partes (revisão de 06/10/2026)', () => {
+    const l = { ...listas, objetivos: [...listas.objetivos, 'ANTECIPAÇÃO'] };
+    expect(montarNomeCampanha({ gestor: 'CF', sigla: 'BF26', objetivo: 'ANTECIPAÇÃO', descricao: 'teaser | meta |pq| abo | thruplay', pagina: '' }, l).nome)
+      .toBe('CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ | ABO | THRUPLAY');
+    expect(montarNomeCampanha({ gestor: 'RS', sigla: 'PB26', objetivo: 'LEADS', descricao: 'teaser | meta', pagina: 'ak1' }, listas).nome)
+      .toBe('RS | PB26 | LEADS | TEASER | META | AK1');
+  });
+  it('recusa parte vazia, última parte com cara de página sem página escolhida, e campo faltando', () => {
+    expect(montarNomeCampanha({ gestor: 'RS', sigla: 'PB26', objetivo: 'LEADS', descricao: 'A || B', pagina: '' }, listas).erros[0]).toMatch(/parte vazia/);
+    expect(montarNomeCampanha({ gestor: 'RS', sigla: 'PB26', objetivo: 'LEADS', descricao: 'TESTE | AK1', pagina: '' }, listas).erros[0]).toMatch(/código de página/);
     expect(montarNomeCampanha({ gestor: '', sigla: 'PB26', objetivo: 'LEADS', descricao: 'X', pagina: '' }, listas).nome).toBeNull();
   });
   it('linha de UTM do Meta com as macros oficiais, na ordem da tabela', () => {

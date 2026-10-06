@@ -1,8 +1,9 @@
 'use client';
 
-// Criar/editar o projeto (evento) na Central do Tráfego (migration 20261006a): sigla, nome, linha, tipo e unidade, tipo de
+// Criar/editar o projeto (evento) na Central do Tráfego (migration 20261006a): sigla, nome, tipo e unidade, tipo de
 // lançamento (só os da unidade; Aurum fica em palestra sozinho), especialista, períodos de captação e do evento, etiqueta
-// do ClickUp (a chave única), status, gestores e contas de anúncio. Mora no Tráfego porque os campos são de Tráfego e o
+// do ClickUp (a chave única, com busca), status, gestores e contas de anúncio. Sem o campo "Linha" (revisão do Victor,
+// 06/10/2026: o nome basta; o banco grava o nome na coluna antiga). Mora no Tráfego porque os campos são de Tráfego e o
 // cadastro grava na tabela de projetos única (mkt.projetos), que a Web e a Mensageria também leem.
 import { useState } from 'react';
 import { Button, FilterSelect, Input, Modal, Toggle } from '@/shared/ui/components';
@@ -12,6 +13,7 @@ import {
 } from '../domain/cadastro';
 import { ROTULO_TIPO, ordenarContas, type ConfigTrafego, type Conta, type Tipo } from '../domain/tipos';
 import { salvarProjetoCadastro } from '../infrastructure/trafego-data';
+import { EtiquetaClickupCampo } from './EtiquetaClickupCampo';
 
 function Campo({ rotulo, dica, children }: { rotulo: string; dica?: string; children: React.ReactNode }) {
   return (
@@ -50,7 +52,6 @@ export function ModalProjetoCadastro({ inicial, listas, config, contas, onFechar
   const lancamentos = lancamentosDaUnidade(listas, f.unidade);
   const automatico = lancamentoAutomatico(listas, f.unidade);
   const especialistas = listas.especialistas.filter((e) => e.tipo === f.tipo);
-  const etiquetas = listas.etiquetas_clickup;
   const avisoEtq = etiquetaSemAnoMes(f.etiqueta_clickup, f.captacao_fim || f.evento_fim || f.fim);
   const datasAntigas = !f.captacao_inicio && !f.evento_inicio && (f.inicio || f.fim);
 
@@ -80,10 +81,7 @@ export function ModalProjetoCadastro({ inicial, listas, config, contas, onFechar
         <Campo rotulo="Nome" dica="livre (ex.: Seminário Conjunto)">
           <Input value={f.nome} onChange={(e) => set('nome', e.target.value)} maxLength={120} />
         </Campo>
-        <Campo rotulo="Linha" dica="ex.: Patrimônio Brasil, Holding Total">
-          <Input value={f.linha} onChange={(e) => set('linha', e.target.value)} maxLength={60} />
-        </Campo>
-        <Campo rotulo="Status" dica="marcado à mão">
+        <Campo rotulo="Status" dica="marcado à mão; em planejamento fica fora do resumo do dia">
           <FilterSelect value={f.status} onChange={(e) => set('status', e.target.value)}>
             <option value="">Sem status</option>
             {config.status.map((s) => <option key={s.codigo} value={s.codigo}>{s.nome}</option>)}
@@ -137,16 +135,8 @@ export function ModalProjetoCadastro({ inicial, listas, config, contas, onFechar
           </p>
         </Grupo>
 
-        <Campo rotulo="Etiqueta do ClickUp" dica="a chave do projeto, exata (ex.: black-friday-2026-10)">
-          {etiquetas.length > 0 ? (
-            <FilterSelect value={f.etiqueta_clickup} onChange={(e) => set('etiqueta_clickup', e.target.value)}>
-              <option value="">Sem etiqueta</option>
-              {f.etiqueta_clickup && !etiquetas.includes(f.etiqueta_clickup) && <option value={f.etiqueta_clickup}>{f.etiqueta_clickup} (não está no ClickUp)</option>}
-              {etiquetas.map((x) => <option key={x} value={x}>{x}</option>)}
-            </FilterSelect>
-          ) : (
-            <Input value={f.etiqueta_clickup} onChange={(e) => set('etiqueta_clickup', e.target.value.toLowerCase())} maxLength={80} placeholder="nome-curto-aaaa-mm" />
-          )}
+        <Campo rotulo="Etiqueta do ClickUp" dica="a chave do projeto; digite para buscar (ex.: seminario)">
+          <EtiquetaClickupCampo valor={f.etiqueta_clickup} onMudar={(v) => set('etiqueta_clickup', v)} />
           {avisoEtq && <span className="mt-1 block text-[11px] text-[var(--yellow)]">{ROTULO_AVISO_CADASTRO.etiqueta_sem_ano_mes}</span>}
         </Campo>
         <div className="flex items-end"><Toggle checked={f.ativo} onChange={(v) => set('ativo', v)} label="Projeto ativo" /></div>

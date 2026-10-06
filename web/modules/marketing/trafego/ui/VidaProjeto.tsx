@@ -10,7 +10,7 @@ import {
   Td, Th, Thead, Tr,
 } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
-import { ROTULO_ERRO, type ErroCampanha } from '../../projetos/domain/campanha';
+import { motivoErro } from '../../projetos/domain/campanha';
 import { comKpis, esperadoAte, situacaoRitmo } from '../domain/kpis';
 import { formDoCadastro, type ListasCadastro, type ProjetoCadastro } from '../domain/cadastro';
 import { ROTULO_AVISO, ROTULO_TIPO, type ConfigTrafego, type Conta, type FaseProjeto, type Resposta, type VidaProjeto as Vida } from '../domain/tipos';
@@ -202,7 +202,7 @@ function Campanhas({ vida, config, flash, onMudou }: { vida: Vida; config: Confi
           <Tr key={c.id}>
             <Td>
               <div className="font-mono text-xs break-all">{c.nome}</div>
-              {c.fora_padrao && <div className="mt-0.5 text-[11px] text-[var(--yellow)]">Fora do padrão: {c.erros.map((e) => ROTULO_ERRO[e as ErroCampanha] ?? e).join(', ')}</div>}
+              {c.fora_padrao && <div className="mt-0.5 text-[11px] text-[var(--yellow)]">Fora do padrão: {c.erros.map((e) => motivoErro(e, { ...c, projeto: c.projeto_lido })).join('; ')}</div>}
               {c.projeto_manual && <div className="text-[11px] text-[var(--fg-3)]">Projeto ligado à mão</div>}
             </Td>
             <Td>{c.plataforma === 'meta' ? 'Meta' : c.plataforma === 'google' ? 'Google' : c.plataforma}</Td>

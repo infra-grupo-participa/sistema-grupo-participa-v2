@@ -101,8 +101,9 @@ insert into mkt_trafego.alerta_regras (codigo, nome, ordem, limiar, unidade, gra
 
 alter table mkt_trafego.status_projeto add column entra_no_resumo_dia boolean not null default true;
 comment on column mkt_trafego.status_projeto.entra_no_resumo_dia is
-  'false = projeto com este status não aparece no resumo do dia. Semente da 20261005r: inativo e encerrado ficam fora (proposta).';
-update mkt_trafego.status_projeto set entra_no_resumo_dia = false where codigo in ('inativo', 'encerrado');
+  'false = projeto com este status não aparece no resumo do dia. Semente da 20261005r: em planejamento (Victor, 06/10/2026), '
+  'inativo e encerrado ficam fora (proposta).';
+update mkt_trafego.status_projeto set entra_no_resumo_dia = false where codigo in ('em_planejamento', 'inativo', 'encerrado');
 
 -- ─── 2. Receita: vínculo produto Hotmart → projeto (cadastro à mão) ─────────────────────────────────────────────────
 create table mkt_trafego.produtos_hotmart (
@@ -803,8 +804,8 @@ begin
   end if;
   if (select count(*) from mkt_trafego.alerta_regras) <> 7 or (select count(*) from mkt_trafego.produtos_hotmart) <> 0
      or (select count(*) from mkt_trafego.clickup_tarefas) <> 0
-     or (select count(*) from mkt_trafego.status_projeto where not entra_no_resumo_dia) <> 2 then
-    raise exception '20261005r: semente diferente do esperado (7 regras, 2 status fora do resumo, vínculos e tarefas vazios)';
+     or (select count(*) from mkt_trafego.status_projeto where not entra_no_resumo_dia) <> 3 then
+    raise exception '20261005r: semente diferente do esperado (7 regras, 3 status fora do resumo, vínculos e tarefas vazios)';
   end if;
   -- sem pg_cron (banco local) a checagem da rotina não se aplica
   if to_regclass('cron.job') is not null then
@@ -912,10 +913,10 @@ select pg_temp.ok('1.estrutura',
 select pg_temp.ok('1.semente',
   (select string_agg(codigo || '=' || limiar::int || unidade, ',' order by ordem) from mkt_trafego.alerta_regras)
     = 'acima_verba_diaria=0pct,cpl_acima_meta=0pct,leads_abaixo_meta=20pct,ritmo_fase=20pct,verba_perto_fim=90pct,fora_padrao=7dias,sem_fase=7dias'
-  and (select string_agg(codigo, ',' order by ordem) from mkt_trafego.status_projeto where not entra_no_resumo_dia) = 'inativo,encerrado'
+  and (select string_agg(codigo, ',' order by ordem) from mkt_trafego.status_projeto where not entra_no_resumo_dia) = 'em_planejamento,inativo,encerrado'
   and (select string_agg(chave || '=' || coalesce(valor, 'nulo'), ',' order by chave) from mkt_trafego.coleta_config)
     = 'clickup_team_id=nulo,meta_api_versao=nulo,meta_dias=3',
-  '7 regras com os limiares propostos; inativo e encerrado fora do resumo do dia; coleta_config sem workspace do ClickUp');
+  '7 regras com os limiares propostos; em planejamento, inativo e encerrado fora do resumo do dia; coleta_config sem workspace do ClickUp');
 do $t$
 begin
   if to_regclass('cron.job') is null then

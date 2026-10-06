@@ -7,7 +7,8 @@
 --        planejado, abaixo da meta de leads para a data, CPL acima da meta, % da verba perto do fim, campanhas fora do
 --        padrão e campanhas sem fase. Os limiares ficam na tabela mkt_trafego.alerta_regras (nada de número mágico no
 --        código); os valores iniciais são PROPOSTA, para o Victor confirmar. Projetos desativados em mkt.projetos ou
---        com status que não entra no resumo (inativo, encerrado: coluna status_projeto.entra_no_resumo_dia) ficam fora.
+--        com status que não entra no resumo (em planejamento, inativo, encerrado: coluna status_projeto.entra_no_resumo_dia)
+--        ficam fora.
 --     2. Receita gerada (Hotmart): vínculo produto Hotmart → projeto (mkt_trafego.produtos_hotmart), CADASTRO À MÃO
 --        (nada pré-preenchido). O resumo do projeto soma public.compras.preco das compras APROVADAS desses produtos no
 --        período do projeto. "Aprovada" = a regra que o repo já usa em public.compras: status APPROVED, COMPLETE ou
@@ -121,8 +122,9 @@ insert into mkt_trafego.alerta_regras (codigo, nome, ordem, limiar, unidade, gra
 
 alter table mkt_trafego.status_projeto add column entra_no_resumo_dia boolean not null default true;
 comment on column mkt_trafego.status_projeto.entra_no_resumo_dia is
-  'false = projeto com este status não aparece no resumo do dia. Semente da 20261005r: inativo e encerrado ficam fora (proposta).';
-update mkt_trafego.status_projeto set entra_no_resumo_dia = false where codigo in ('inativo', 'encerrado');
+  'false = projeto com este status não aparece no resumo do dia. Semente da 20261005r: em planejamento (Victor, 06/10/2026), '
+  'inativo e encerrado ficam fora (proposta).';
+update mkt_trafego.status_projeto set entra_no_resumo_dia = false where codigo in ('em_planejamento', 'inativo', 'encerrado');
 
 -- ─── 2. Receita: vínculo produto Hotmart → projeto (cadastro à mão) ─────────────────────────────────────────────────
 create table mkt_trafego.produtos_hotmart (
@@ -823,8 +825,8 @@ begin
   end if;
   if (select count(*) from mkt_trafego.alerta_regras) <> 7 or (select count(*) from mkt_trafego.produtos_hotmart) <> 0
      or (select count(*) from mkt_trafego.clickup_tarefas) <> 0
-     or (select count(*) from mkt_trafego.status_projeto where not entra_no_resumo_dia) <> 2 then
-    raise exception '20261005r: semente diferente do esperado (7 regras, 2 status fora do resumo, vínculos e tarefas vazios)';
+     or (select count(*) from mkt_trafego.status_projeto where not entra_no_resumo_dia) <> 3 then
+    raise exception '20261005r: semente diferente do esperado (7 regras, 3 status fora do resumo, vínculos e tarefas vazios)';
   end if;
   -- sem pg_cron (banco local) a checagem da rotina não se aplica
   if to_regclass('cron.job') is not null then

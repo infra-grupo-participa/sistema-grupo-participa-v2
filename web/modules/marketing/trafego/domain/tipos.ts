@@ -160,6 +160,10 @@ export interface Campanha {
   objetivo: string | null;
   descricao: string | null;
   pagina: string | null;
+  /** O projeto como está escrito no nome (2º campo), mesmo sem cadastro. 20261005p. */
+  projeto_lido?: string | null;
+  /** Quantos campos o nome tem (para o motivo "menos de 3 campos"). */
+  campos?: number | null;
   projeto_id: number | null;
   projeto_sigla: string | null;
   projeto_manual: boolean;

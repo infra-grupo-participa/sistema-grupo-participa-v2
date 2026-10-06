@@ -26,10 +26,10 @@ describe('separarUtm: padrão do gp-operacoes (nome|id, id depois da última "|"
     expect(separarUtm(null)).toEqual({ nome: null, id: null });
     expect(separarUtm(undefined)).toEqual({ nome: null, id: null });
   });
-  it('a tradução do nome de campanha recebe só o NOME (com o id ela sairia do padrão)', () => {
+  it('a tradução do nome de campanha recebe só o NOME (com o id, o id viraria parte da descrição e a página se perderia)', () => {
     const listas = { gestores: ['RS'], objetivos: ['LEADS'], projetos: ['PB26'] };
     const bruto = 'RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1|120211234';
-    expect(traduzirCampanha(bruto, listas).padrao).toBe(false);
+    expect(traduzirCampanha(bruto, listas).pagina).toBeNull();
     const t = traduzirCampanha(separarUtm(bruto).nome, listas);
     expect(t.padrao).toBe(true);
     expect(t.pagina).toBe('ak1');

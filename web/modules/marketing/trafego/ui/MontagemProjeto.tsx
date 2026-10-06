@@ -161,8 +161,8 @@ export function GeradorCampanha({ sigla, listas, config, paginas, gestoresProjet
             {listas.objetivos.map((o) => <option key={o} value={o}>{o}</option>)}
           </FilterSelect>
         </label>
-        <label className="block"><span className="block text-xs font-medium text-[var(--fg-2)] mb-1">Descrição</span>
-          <Input value={descricao} onChange={(e) => setDescricao(e.target.value.toUpperCase())} maxLength={120} placeholder="TESTE DE ESCRITÓRIOS" />
+        <label className="block"><span className="block text-xs font-medium text-[var(--fg-2)] mb-1">Descrição <span className="font-normal text-[var(--fg-3)]">· livre; partes separadas por |</span></span>
+          <Input value={descricao} onChange={(e) => setDescricao(e.target.value.toUpperCase())} maxLength={160} placeholder="TEASER | META | PQ | ABO" />
         </label>
         <label className="block"><span className="block text-xs font-medium text-[var(--fg-2)] mb-1">Página (só teste de página)</span>
           <FilterSelect value={pagina} onChange={(e) => setPagina(e.target.value)}>

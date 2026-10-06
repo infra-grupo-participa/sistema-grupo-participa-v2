@@ -24,6 +24,10 @@
 --   9  períodos de captação e evento: projeto inteiro derivado, datas antigas mantidas, captação como padrão da receita e
 --      da fase de captação
 --   10 checklist de montagem: automáticos, externo, marcar/desmarcar com quem e quando, itens por tipo de lançamento
+--   11 revisão de 06/10: linha opcional (projeto novo grava o nome; edição sem linha não mexe) e busca de etiqueta do
+--      ClickUp (sem acento, sem maiúscula, as duas fontes, só no formato, igual ao digitado primeiro). Se kpi.medicao_tarefa
+--      NÃO existe (banco local), o teste cria uma de mentira com etiquetas zz-ensaio-*; se existe (produção), só lê e
+--      confere a forma da resposta (nenhuma etiqueta real vai para a saída, só contagens)
 --   8  grants e recusa 42501 para sem perfil, operador (mesmo com a área), visualizador e anon
 --   Qualquer ERRO no meio = a migration não serve como está: não aplicar.
 
@@ -53,7 +57,8 @@ begin
   if exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace
               and p.proname in ('trafego_cadastro_listas', 'trafego_projeto_cadastro', 'trafego_projeto_salvar', 'trafego_pacote_salvar',
                                 'trafego_pacote_apagar', 'trafego_pacote_aplicar', 'trafego_clickup_etiquetas_receber',
-                                'trafego_checklist', 'trafego_checklist_marcar', 'trafego_checklist_item_salvar')) then
+                                'trafego_checklist', 'trafego_checklist_marcar', 'trafego_checklist_item_salvar',
+                                'trafego_clickup_etiquetas_buscar')) then
     raise exception '20261006a: já existem funções public.trafego_* desta migration';
   end if;
   if exists (select 1 from information_schema.columns where table_schema = 'mkt' and table_name = 'projetos'
@@ -515,7 +520,8 @@ begin
 end
 $$;
 
--- Cria (sem "id") ou edita (com "id") o projeto pela Central do Tráfego. Campos: sigla, nome, linha, etiqueta_clickup,
+-- Cria (sem "id") ou edita (com "id") o projeto pela Central do Tráfego. Campos: sigla, nome, linha (OPCIONAL: a tela não
+-- pede mais; projeto novo sem linha grava o nome, edição sem linha não mexe), etiqueta_clickup,
 -- captacao_inicio, captacao_fim, evento_inicio, evento_fim, inicio e fim (só os de antes, sem período novo), ativo, tipo, unidade, tipo_lancamento, especialista_id OU especialista_nome (só externo: acha pelo nome ou
 -- cadastra), status, gestores (lista; ausente = não mexe), contas (lista de ids; ausente = não mexe). Projeto novo ou
 -- sigla nova: relê as campanhas com a sigla (ligam pelo nome). Retorna {ok, msg, id, tipo_lancamento, campanhas_relidas, avisos}.
@@ -527,7 +533,7 @@ declare
   v_ci date; v_cf date; v_ei date; v_ef date;
   v_sigla text := upper(btrim(coalesce(p ->> 'sigla', '')));
   v_nome text := btrim(coalesce(p ->> 'nome', ''));
-  v_linha text := btrim(coalesce(p ->> 'linha', ''));
+  v_linha text := nullif(btrim(coalesce(p ->> 'linha', '')), '');
   v_etq text := nullif(lower(btrim(coalesce(p ->> 'etiqueta_clickup', ''))), '');
   v_tipo text := nullif(lower(btrim(coalesce(p ->> 'tipo', ''))), '');
   v_uni text := nullif(lower(btrim(coalesce(p ->> 'unidade', ''))), '');
@@ -560,7 +566,9 @@ begin
     return jsonb_build_object('ok', false, 'msg', 'Sigla inválida: letras maiúsculas seguidas de 2 a 4 dígitos (ex.: PB26, HT33, SEMSET26).');
   end if;
   if length(v_nome) < 2 or length(v_nome) > 120 then return jsonb_build_object('ok', false, 'msg', 'Informe o nome do projeto.'); end if;
-  if length(v_linha) < 2 or length(v_linha) > 60 then return jsonb_build_object('ok', false, 'msg', 'Informe a linha (ex.: Patrimônio Brasil).'); end if;
+  if v_linha is not null and (length(v_linha) < 2 or length(v_linha) > 60) then
+    return jsonb_build_object('ok', false, 'msg', 'Linha: de 2 a 60 letras (campo opcional).');
+  end if;
   if v_inicio is not null and v_fim is not null and v_fim < v_inicio then
     return jsonb_build_object('ok', false, 'msg', 'O fim não pode ser antes do início.');
   end if;
@@ -643,12 +651,12 @@ begin
     if v_novo then
       insert into mkt.projetos (sigla, nome, linha, etiqueta_clickup, tipo, unidade, tipo_lancamento, especialista_id, inicio, fim,
                                 captacao_inicio, captacao_fim, evento_inicio, evento_fim, ativo, criado_por, atualizado_por)
-      values (v_sigla, v_nome, v_linha, v_etq, v_tipo, v_uni, v_lanc, v_esp, v_inicio, v_fim, v_ci, v_cf, v_ei, v_ef, v_ativo, v_uid, v_uid)
+      values (v_sigla, v_nome, coalesce(v_linha, btrim(left(v_nome, 60))), v_etq, v_tipo, v_uni, v_lanc, v_esp, v_inicio, v_fim, v_ci, v_cf, v_ei, v_ef, v_ativo, v_uid, v_uid)
       returning id into v_id;
     else
       select sigla into v_sigla_antiga from mkt.projetos where id = v_id for update;
       update mkt.projetos
-         set sigla = v_sigla, nome = v_nome, linha = v_linha, etiqueta_clickup = v_etq, tipo = v_tipo, unidade = v_uni,
+         set sigla = v_sigla, nome = v_nome, linha = coalesce(v_linha, linha), etiqueta_clickup = v_etq, tipo = v_tipo, unidade = v_uni,
              tipo_lancamento = v_lanc, especialista_id = v_esp, inicio = v_inicio, fim = v_fim, captacao_inicio = v_ci,
              captacao_fim = v_cf, evento_inicio = v_ei, evento_fim = v_ef, ativo = v_ativo,
              atualizado_em = now(), atualizado_por = v_uid
@@ -866,6 +874,51 @@ begin
 end
 $$;
 
+-- Busca de etiqueta do ClickUp para o cadastro do projeto (revisão do Victor, 06/10/2026). p_busca vazio = todas (até o
+-- limite). Casa por "contém", sem acento e sem diferença de maiúscula. Só etiquetas no formato da chave (minúsculas,
+-- números e hífen): as outras não podem ser gravadas no projeto. Fontes, juntas e sem repetição:
+--   kpi      kpi.medicao_tarefa.etiquetas (o que o painel de KPIs já grava; lida só se a tabela e a coluna text[] existirem)
+--   trafego  mkt_trafego.clickup_etiquetas_vistas e mkt_trafego.clickup_tarefas.etiquetas (rotina trafego-clickup)
+-- Ordem: igual ao digitado, depois as que começam com ele, depois alfabética. Retorna {etiquetas: [{etiqueta, fontes}],
+-- fonte_kpi: bool}.
+create function public.trafego_clickup_etiquetas_buscar(p_busca text default null, p_limite integer default 30) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_b text := lower(mkt.sem_acento(left(btrim(coalesce(p_busca, '')), 80)));
+  v_lim int := least(greatest(coalesce(p_limite, 30), 1), 200);
+  v_kpi boolean;
+  v_fontes text := 'select e.etiqueta, ''trafego''::text from mkt_trafego.clickup_etiquetas_vistas e '
+                   'union all select x, ''trafego'' from mkt_trafego.clickup_tarefas t cross join lateral unnest(t.etiquetas) x';
+  v_sql text;
+  v_res jsonb;
+begin
+  if not mkt.pode_ver('mkt_trafego') then raise exception 'acesso negado' using errcode = '42501'; end if;
+  v_kpi := exists (select 1 from pg_attribute a
+                    where a.attrelid = to_regclass('kpi.medicao_tarefa') and a.attname = 'etiquetas' and not a.attisdropped
+                      and a.atttypid = 'text[]'::regtype);
+  v_sql := $q$
+    select coalesce(jsonb_agg(jsonb_build_object('etiqueta', y.etiqueta, 'fontes', to_jsonb(y.fontes))
+                              order by y.etiqueta = $1 desc, starts_with(y.etiqueta, $1) desc, y.etiqueta), '[]'::jsonb)
+      from (select z.etiqueta, array_agg(distinct z.fonte order by z.fonte) as fontes
+              from (select lower(btrim(f.etiqueta)) as etiqueta, f.fonte from (%s) f(etiqueta, fonte)) z
+             where z.etiqueta ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and strpos(z.etiqueta, $1) > 0
+             group by z.etiqueta
+             order by z.etiqueta = $1 desc, starts_with(z.etiqueta, $1) desc, z.etiqueta
+             limit $2) y
+  $q$;
+  if v_kpi then
+    begin
+      execute format(v_sql, v_fontes || ' union all select x, ''kpi'' from kpi.medicao_tarefa m cross join lateral unnest(m.etiquetas) x')
+        into v_res using v_b, v_lim;
+    exception when insufficient_privilege or undefined_table or undefined_column then
+      v_kpi := false;   -- sem acesso à fonte do KPI: segue só com a do Tráfego
+    end;
+  end if;
+  if not v_kpi then execute format(v_sql, v_fontes) into v_res using v_b, v_lim; end if;
+  return jsonb_build_object('etiquetas', v_res, 'fonte_kpi', v_kpi);
+end
+$$;
+
 -- ─── 6. Entrada da rotina do ClickUp: etiquetas reais dos spaces (só service_role) ─────────────────────────────────
 -- p = {"etiquetas": ["…"]} com TODAS as etiquetas dos spaces do workspace. Grava as que estão no formato da chave (o
 -- resto é contado em "fora_do_formato"); quem não veio sai. Retorna {ok, gravadas, removidas, fora_do_formato}.
@@ -904,7 +957,8 @@ begin
                or (p.pronamespace = 'public'::regnamespace
                    and p.proname in ('trafego_cadastro_listas', 'trafego_projeto_cadastro', 'trafego_projeto_salvar', 'trafego_pacote_salvar',
                                      'trafego_pacote_apagar', 'trafego_pacote_aplicar', 'trafego_clickup_etiquetas_receber',
-                                     'trafego_checklist', 'trafego_checklist_marcar', 'trafego_checklist_item_salvar')) loop
+                                     'trafego_checklist', 'trafego_checklist_marcar', 'trafego_checklist_item_salvar',
+                                     'trafego_clickup_etiquetas_buscar')) loop
     execute format('revoke all on function %s from public, anon, authenticated, service_role', f);
   end loop;
 end
@@ -912,7 +966,8 @@ $grants$;
 grant execute on function
   public.trafego_cadastro_listas(), public.trafego_projeto_cadastro(bigint), public.trafego_projeto_salvar(jsonb),
   public.trafego_pacote_salvar(jsonb), public.trafego_pacote_apagar(bigint), public.trafego_pacote_aplicar(bigint),
-  public.trafego_checklist(bigint), public.trafego_checklist_marcar(bigint, bigint, boolean), public.trafego_checklist_item_salvar(jsonb)
+  public.trafego_checklist(bigint), public.trafego_checklist_marcar(bigint, bigint, boolean), public.trafego_checklist_item_salvar(jsonb),
+  public.trafego_clickup_etiquetas_buscar(text, integer)
   to authenticated;
 grant execute on function public.trafego_clickup_etiquetas_receber(jsonb) to service_role;
 
@@ -924,7 +979,7 @@ declare
   f record;
   v_tela text[] := array['trafego_cadastro_listas', 'trafego_projeto_cadastro', 'trafego_projeto_salvar', 'trafego_pacote_salvar',
                          'trafego_pacote_apagar', 'trafego_pacote_aplicar', 'trafego_checklist', 'trafego_checklist_marcar',
-                         'trafego_checklist_item_salvar'];
+                         'trafego_checklist_item_salvar', 'trafego_clickup_etiquetas_buscar'];
   v_novas text[] := v_tela || array['trafego_clickup_etiquetas_receber'];
 begin
   foreach r in array array['anon', 'authenticated'] loop
@@ -970,8 +1025,8 @@ begin
      or has_function_privilege('authenticated', 'public.trafego_clickup_etiquetas_receber(jsonb)', 'execute') then
     raise exception '20261006a: grant de trafego_clickup_etiquetas_receber errado';
   end if;
-  if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%') <> 30 then
-    raise exception '20261006a: esperava 30 funções public.trafego_* (20 da 20261005p/r + 10)';
+  if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'trafego\_%') <> 31 then
+    raise exception '20261006a: esperava 31 funções public.trafego_* (20 da 20261005p/r + 11)';
   end if;
   if (select count(*) from mkt.unidades) <> 4 or (select count(*) from mkt.tipos_lancamento) <> 5
      or (select count(*) from mkt.lancamento_regras) <> 9 or (select count(*) from mkt.especialistas) <> 2
@@ -1339,6 +1394,48 @@ begin
 end
 $t$;
 
+-- ─── 11. Revisão de 06/10: linha opcional e busca de etiqueta do ClickUp ────────────────────────────────────────────
+do $t$
+declare v jsonb; v_real boolean := to_regclass('kpi.medicao_tarefa') is not null;
+begin
+  v := pg_temp.salvar('{"sigla":"ZJ28","nome":"Projeto Ensaio Sem Linha","tipo":"interno","unidade":"csm"}');
+  perform pg_temp.ok('11.sem linha', (v ->> 'ok')::boolean and (select linha from mkt.projetos where sigla = 'ZJ28') = 'Projeto Ensaio Sem Linha',
+    'projeto novo sem linha: aceito, a linha (obrigatória na 20261005m) grava o nome');
+  update mkt.projetos set linha = 'Linha Ensaio' where sigla = 'ZJ28';
+  v := pg_temp.salvar(jsonb_build_object('id', pg_temp.proj('ZJ28'), 'sigla', 'ZJ28', 'nome', 'Projeto Ensaio Renomeado', 'tipo', 'interno', 'unidade', 'csm'));
+  perform pg_temp.ok('11.edição sem linha', (v ->> 'ok')::boolean and (select linha || '/' || nome from mkt.projetos where sigla = 'ZJ28') = 'Linha Ensaio/Projeto Ensaio Renomeado',
+    'edição sem linha: a linha de antes fica');
+  v := pg_temp.salvar('{"sigla":"ZI28","nome":"Ensaio","linha":"X","tipo":"interno","unidade":"csm"}');
+  perform pg_temp.ok('11.linha curta', not (v ->> 'ok')::boolean, 'linha mandada com 1 letra: recusada (quem ainda manda, manda certo)');
+
+  if not v_real then
+    create schema if not exists kpi;
+    create table kpi.medicao_tarefa (id int, etiquetas text[]);
+    insert into kpi.medicao_tarefa values (1, array['zz-ensaio-seminario-atm', 'zz-ensaio-seminario-conjunto']),
+      (2, array['zz-ensaio-seminario-conjunto', 'ZZ-Ensaio-Seminario-Zanella', 'zz ensaio fora do formato']), (3, '{}');
+  end if;
+  insert into mkt_trafego.clickup_etiquetas_vistas (etiqueta) values ('zz-ensaio-seminario-conjunto'), ('zz-ensaio-so-trafego')
+  on conflict do nothing;
+  v := pg_temp.adm($$select public.trafego_clickup_etiquetas_buscar('ZZ-Ensaio-SEMINÁRIO')$$);
+  perform pg_temp.ok('11.busca', (v ->> 'fonte_kpi')::boolean
+    and not exists (select 1 from jsonb_array_elements(v -> 'etiquetas') e
+                     where strpos(e ->> 'etiqueta', 'zz-ensaio-seminario') = 0 or e ->> 'etiqueta' !~ '^[a-z0-9]+(-[a-z0-9]+)*$')
+    and (v_real or (select string_agg(e ->> 'etiqueta' || ':' || (e -> 'fontes')::text, ' ' order by o)
+                      from jsonb_array_elements(v -> 'etiquetas') with ordinality x(e, o))
+                   = 'zz-ensaio-seminario-atm:["kpi"] zz-ensaio-seminario-conjunto:["kpi", "trafego"] zz-ensaio-seminario-zanella:["kpi"]'),
+    '"ZZ-Ensaio-SEMINÁRIO" acha as que contêm, sem acento e sem maiúscula, das duas fontes, sem repetir; fora do formato não entra'
+    || case when v_real then ' (kpi.medicao_tarefa real: ' || jsonb_array_length(v -> 'etiquetas') || ' achadas)' else '' end);
+  v := pg_temp.adm($$select public.trafego_clickup_etiquetas_buscar('zz-ensaio-seminario-conjunto')$$);
+  perform pg_temp.ok('11.igual primeiro', v -> 'etiquetas' -> 0 ->> 'etiqueta' = 'zz-ensaio-seminario-conjunto', 'a igual ao digitado vem primeiro');
+  v := pg_temp.adm($$select public.trafego_clickup_etiquetas_buscar('zz-ensaio-nao-existe')$$);
+  perform pg_temp.ok('11.não achou', v -> 'etiquetas' = '[]'::jsonb, 'etiqueta que não está no ClickUp: lista vazia (a tela avisa e deixa salvar)');
+  v := pg_temp.adm($$select public.trafego_clickup_etiquetas_buscar('', 2)$$);
+  perform pg_temp.ok('11.limite', jsonb_array_length(v -> 'etiquetas') <= 2, 'busca vazia respeita o limite');
+  v := pg_temp.adm($$select public.trafego_clickup_etiquetas_buscar('zz-ensaio-so-trafego')$$);
+  perform pg_temp.ok('11.só tráfego', v -> 'etiquetas' -> 0 -> 'fontes' = '["trafego"]'::jsonb, 'a do espelho do ClickUp do Tráfego também entra');
+end
+$t$;
+
 -- ─── 8. Grants e recusas ─────────────────────────────────────────────────────────────────────────────────────────────
 select pg_temp.ok('8.grants',
   not has_function_privilege('anon', 'public.trafego_projeto_salvar(jsonb)', 'execute')
@@ -1362,6 +1459,7 @@ declare
     'select public.trafego_checklist(1)',
     'select public.trafego_checklist_marcar(1, 1, true)',
     'select public.trafego_checklist_item_salvar(''{}'')',
+    'select public.trafego_clickup_etiquetas_buscar(''seminario'')',
     'select count(*) from mkt_trafego.checklist_marcas',
     'select count(*) from mkt.unidades',
     'select count(*) from mkt.especialistas',

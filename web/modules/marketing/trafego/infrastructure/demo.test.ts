@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { motivoErro } from '../../projetos/domain/campanha';
 import { comKpis } from '../domain/kpis';
 import {
   demoAlertas, demoAplicarPacote, demoCadastro, demoChecklist, demoListasCadastro, demoMarcarChecklist, demoSalvarCadastro, demoSalvarPacote,
@@ -23,7 +24,11 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
   });
   it('fora do padrão e sem projeto aparecem; fase fora da lista recusada', () => {
     expect(demoCampanhas(null, false, true).length).toBeGreaterThan(0);
-    expect(demoCampanhas(null, true, false).map((c) => c.id)).toEqual([7, 8, 12]);
+    expect(demoCampanhas(null, true, false).map((c) => c.id)).toEqual([7, 8, 12, 15]);
+    const bf = demoCampanhas(null, false, true).find((c) => c.id === 13)!;
+    expect(bf.erros).toEqual(['objetivo_desconhecido']);
+    expect(motivoErro(bf.erros[0], { ...bf, projeto: bf.projeto_lido })).toBe('Objetivo ANTECIPAÇÃO não está na lista');
+    expect(demoCampanhas(null, false, true).some((c) => c.id === 14)).toBe(false);
     expect(demoAjustarCampanha({ id: 4, fase: 'xyz' }).ok).toBe(false);
     expect(demoSalvarFase({ projeto_id: 1, fase: 'captacao', verba: '1' }).ok).toBe(false);
     expect(demoProjeto(1)!.fases.map((f) => f.fase)).toEqual(['aquecimento', 'captacao', 'lembrete']);
@@ -73,7 +78,7 @@ describe('modo de demonstração do Tráfego (dados fictícios)', () => {
     expect([a.sigla, a.valor, a.detalhe.contas]).toEqual(['LPEXA26', 1, ['Conta Exemplo Diamante']]);
   });
   it('salvar: regra da unidade, Aurum sozinho, especialista externo novo', () => {
-    const base = { sigla: 'ZZEX26', nome: 'Teste Exemplo', linha: 'Exemplo', etiqueta_clickup: '', inicio: '', fim: '', captacao_inicio: '', captacao_fim: '',
+    const base = { sigla: 'ZZEX26', nome: 'Teste Exemplo', etiqueta_clickup: '', inicio: '', fim: '', captacao_inicio: '', captacao_fim: '',
       evento_inicio: '', evento_fim: '', ativo: true, especialista_id: null, especialista_nome: '', status: '', gestores: [], contas: [] };
     expect(demoSalvarCadastro({ ...base, tipo: 'interno', unidade: 'escritorio', tipo_lancamento: 'lancamento_pago' }).ok).toBe(false);
     const r = demoSalvarCadastro({ ...base, tipo: 'externo', unidade: 'aurum', tipo_lancamento: '', especialista_nome: 'Pessoa Exemplo Nova' });

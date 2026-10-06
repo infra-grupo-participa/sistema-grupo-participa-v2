@@ -7,6 +7,7 @@
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type { ListasCadastro, ProjetoCadastro, ProjetoForm } from '../domain/cadastro';
+import type { BuscaEtiquetas } from '../domain/etiquetas';
 import type {
   Campanha, Checklist, ClickupProjeto, ConfigTrafego, Conta, LinhaResumo, ProdutoHotmart, ProdutoVisto, Resposta, ResumoDia, VidaProjeto,
 } from '../domain/tipos';
@@ -126,11 +127,16 @@ const falhaA: Resposta = { ok: false, msg: 'Não foi possível salvar (erro de r
 export const carregarListasCadastro = (): Promise<ListasCadastro | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoListasCadastro()) : rpc<ListasCadastro>('trafego_cadastro_listas');
 
+/** Etiquetas do ClickUp que contêm o texto (sem acento, sem maiúscula). null = sem acesso ou sem a 20261006a. */
+export const buscarEtiquetasClickup = (busca: string): Promise<BuscaEtiquetas | null> =>
+  MODO_DEMO ? Promise.resolve(demo.demoBuscarEtiquetas(busca)) : rpc<BuscaEtiquetas>('trafego_clickup_etiquetas_buscar', { p_busca: busca, p_limite: 30 });
+
 export const carregarCadastro = (projeto: number): Promise<ProjetoCadastro | null> =>
   MODO_DEMO ? Promise.resolve(demo.demoCadastro(projeto)) : rpc<ProjetoCadastro>('trafego_projeto_cadastro', { p_projeto: projeto });
 
 export interface RespostaProjeto extends Resposta { tipo_lancamento?: string | null; campanhas_relidas?: number }
 export async function salvarProjetoCadastro(f: ProjetoForm): Promise<RespostaProjeto> {
+  // sem "linha": a tela não pede mais (revisão de 06/10/2026); o banco grava o nome em projeto novo e não mexe na edição
   const p = { ...f, sigla: f.sigla.trim().toUpperCase(), etiqueta_clickup: f.etiqueta_clickup.trim().toLowerCase(), especialista_nome: f.especialista_nome.trim() };
   if (MODO_DEMO) return demo.demoSalvarCadastro(p);
   return (await rpc<RespostaProjeto>('trafego_projeto_salvar', { p })) ?? falhaA;

@@ -89,7 +89,28 @@ resumo que o sistema usa; **se divergir, vale o gp-operacoes** (e este resumo pr
 
 **Nome de campanha:** `GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA`, com a página opcional (só em teste de página).
 Ex.: `RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1`. Lido por `mkt.campanha_traduzir` e
-`web/modules/marketing/projetos/domain/campanha.ts`.
+`web/modules/marketing/projetos/domain/campanha.ts` (a mesma regra nos dois; a do banco é a da migration 20261006c).
+
+**Revisão do Victor (06/10/2026), migration 20261006c (NÃO APLICADA):**
+
+- A **DESCRIÇÃO é tudo o que vem depois do OBJETIVO** e pode ter várias partes separadas por ` | `. Ex. real (Black
+  Friday do Caio): `CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ | ABO | THRUPLAY` → gestor `CF`, projeto `BF26`,
+  objetivo `ANTECIPAÇÃO`, descrição `TEASER | META | PQ | ABO | THRUPLAY`, sem página.
+- A **PÁGINA** só é lida no **último** campo, com pelo menos uma parte de descrição antes, e só se tiver o formato do slug
+  da casa (2 letras + número, sufixo opcional `-letra`: `ak1`, `bl2`, `jt10`, `ak1-b`; sem diferença de maiúscula).
+  Senão o último campo é descrição (`RS | PB26 | LEADS | TESTE | OBRIGADO` está no padrão, descrição `TESTE | OBRIGADO`).
+  Com 4 campos o quarto é sempre a descrição.
+- **No padrão** = gestor, projeto e objetivo válidos + qualquer descrição. Objetivo com ou sem acento (`ANTECIPACAO` casa
+  com `ANTECIPAÇÃO` se estiver na lista; aviso `sem_acento`).
+- **Motivos de "fora do padrão"** (a tela mostra cada um com o que foi escrito): menos de 3 campos (`numero_de_campos`),
+  gestor fora da lista, sigla fora do formato, projeto não cadastrado, objetivo fora da lista ("objetivo ANTECIPAÇÃO não
+  está na lista"), sem descrição (só 3 campos) e parte vazia na descrição (`| |`). O erro antigo `pagina_invalida` deixou
+  de existir.
+- O retorno de `mkt.campanha_traduzir` manteve as mesmas chaves (quem usa: Web, pessoas e CRM da main, Tráfego) e ganhou
+  `descricao_partes` e `campos`.
+- **ANTECIPAÇÃO não está na lista de objetivos** (pergunta ao Victor abaixo). Até a resposta, a campanha do exemplo fica
+  fora do padrão só pelo objetivo. Para ligar: `insert into mkt.campanha_objetivos (codigo) values ('ANTECIPAÇÃO')`, a
+  fase em `mkt_trafego.objetivo_fase` (se tiver) e "Reler os nomes" na tela (comandos comentados na 20261006c).
 
 | Campo | Valores (listas em `mkt.campanha_gestores`, `mkt.projetos`, `mkt.campanha_objetivos`) |
 |---|---|
@@ -648,6 +669,22 @@ pendente: no Google, "cliques no link" = `metrics.clicks` (clique no anúncio); 
   SQL); externo = a pessoa/cliente do Aurum ou Diamantes, cadastrada na hora pela tela (nada semeado).
 - **Nome do projeto é livre** (ex.: Seminário de setembro, Patrimônio Brasil, Seminário Conjunto, Black Friday, HT
   Delegado). Nenhum projeto novo semeado.
+- **Revisão do Victor (06/10/2026):**
+  - **Campo "Linha" saiu** do cadastro (o nome basta). A coluna `mkt.projetos.linha` é da 20261005m (aplicada e
+    obrigatória) e ficou: projeto novo pelo Tráfego grava o nome nela; na edição ela não muda. A tela
+    `/marketing/projetos` (função `mkt_projeto_salvar`, aplicada) ainda pede a linha; tirar de lá pede migration nova.
+  - **Status "Em planejamento"** antes de Ativo (lista: em planejamento, ativo, pausado, inativo, encerrado). Em
+    planejamento fica **fora do resumo do dia**, como inativo e encerrado (`entra_no_resumo_dia = false`; 20261005p e
+    20261005r editadas no lugar).
+  - **Etiqueta do ClickUp com busca:** a pessoa digita "seminario" e aparecem as etiquetas que contêm isso, sem acento e
+    sem diferença de maiúscula (`public.trafego_clickup_etiquetas_buscar(busca, limite)`, admin/dev; tela
+    `ui/EtiquetaClickupCampo.tsx`, regra em `domain/etiquetas.ts`). Fontes, juntas e sem repetição: as etiquetas que o
+    painel de KPIs já grava (`kpi.medicao_tarefa.etiquetas`, sem token novo; lida só se a tabela existir e der acesso) e o
+    espelho do ClickUp do Tráfego (`mkt_trafego.clickup_etiquetas_vistas` e `clickup_tarefas`, quando a rotina rodar).
+    Só entram etiquetas no formato da chave. Etiqueta que não está na lista continua aceita, com o aviso "não encontrada
+    no ClickUp".
+  - **Gerador de nome:** descrição livre com várias partes (`TEASER | META | PQ`); sem página escolhida, a última parte
+    não pode ter cara de código de página (o nome seria lido com página).
 - **Etiqueta do ClickUp = o projeto** (a chave única do gp-operacoes, `modus-operandi/padronizacao-de-repositorio.md`:
   minúsculo, sem acento, hífen, ano-mês no fim quando é edição datada; a mesma string na pasta, na etiqueta, no canal e
   no `utm_campaign` dos disparos). A tela valida o formato (recusa fora dele; edição com data sem `-aaaa-mm` só avisa).
@@ -723,7 +760,8 @@ cadastra de forma idempotente (por plataforma e id): nome exato, id sem `act_`, 
 
 ### Perguntas (respondidas pelo Victor em 05/10/2026, salvo as em aberto)
 
-1. ~~Status~~ **Respondido:** ativo, pausado, inativo, encerrado (fica como está).
+1. ~~Status~~ **Respondido:** ativo, pausado, inativo, encerrado; **em planejamento** acrescentado em 06/10/2026 (fora do
+   resumo do dia).
 2. ~~Connect rate e conversão~~ **Respondido:** connect rate = page views ÷ cliques no link; conversão da página = leads
    ÷ page views. Ligado à mesma page view da Web fase 2 (ver Decisões). **Confirmado pelo Victor (05/10):** page view =
    uma entrada por visita, como o Meta conta; o lead da conversão é o da Web (visitas da campanha que viraram lead), e o
@@ -770,6 +808,8 @@ cadastra de forma idempotente (por plataforma e id): nome exato, id sem `act_`, 
   confirmar depois pelo Victor (trocar em `mkt_trafego.periodo_receita` e `periodoReceita`).
 - j) **Etiquetas do ClickUp:** ler as de todos os spaces do workspace (hoje) ou de um space só?
 - k) **Especialistas internos:** além de Marcio Carvalho de Sá e Elaine Montenegro, quem mais (entra por SQL)?
+- l) **ANTECIPAÇÃO entra na lista de objetivos? Em qual fase?** (exemplo `CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ |
+  ABO | THRUPLAY`). Hoje fica fora do padrão só por isso; ligar = os comandos comentados na 20261006c.
 
 ## Branches
 
@@ -820,3 +860,9 @@ trabalha na sua. **Push na `main` publica em produção** (Hostinger): levar par
 - **06/10/2026:** Tráfego, contas do Meta (migration 20261006b, NÃO APLICADA): as 16 contas que o token do sistema enxerga,
   com unidade (CSM 11, Escritório 5) e principal (5), CA - Tutorial inativa; unidade e principal na tela de contas e na
   seleção do projeto. Coleta continua desligada. Branch `victor`.
+- **06/10/2026:** revisão do Victor no Tráfego: nome de campanha com descrição de várias partes e página só no último
+  campo com formato de slug (migration **20261006c**, NÃO APLICADA, troca só o corpo de `mkt.campanha_traduzir` com as
+  mesmas chaves de retorno), motivo exato de cada campanha fora do padrão na tela, campo "Linha" fora do cadastro, status
+  "em planejamento" (fora do resumo do dia), etiqueta do ClickUp com busca (`trafego_clickup_etiquetas_buscar`, fonte
+  `kpi.medicao_tarefa`). ANTECIPAÇÃO ficou como pergunta. 20261005p, 20261005r e 20261006a editadas no lugar (não
+  aplicadas). Branch `victor`.

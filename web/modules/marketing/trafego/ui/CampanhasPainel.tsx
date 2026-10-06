@@ -5,7 +5,7 @@
 // projeto ou uma página.
 import { useEffect, useState } from 'react';
 import { Badge, Button, DataTable, EmptyState, FilterSelect, Loading, SectionCard, Td, Th, Thead, Toggle, Tr } from '@/shared/ui/components';
-import { ROTULO_ERRO, type ErroCampanha } from '../../projetos/domain/campanha';
+import { motivoErro } from '../../projetos/domain/campanha';
 import type { Campanha, LinhaResumo } from '../domain/tipos';
 import { ajustarCampanha, listarCampanhas, relerCampanhas } from '../infrastructure/trafego-data';
 import { SEM_DADO, reais } from './formato';
@@ -41,7 +41,7 @@ export function CampanhasPainel({ linhas, versao, flash, onMudou }: {
   return (
     <SectionCard
       title={semProjeto ? 'Campanhas sem projeto' : 'Campanhas fora do padrão'}
-      subtitle="Padrão: GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA (a página só em teste de página). O certo é corrigir o nome no gerenciador; ligar à mão é o remendo até lá."
+      subtitle="Padrão: GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA. A descrição é tudo depois do objetivo (pode ter várias partes com |); a página é opcional, só no último campo e só no formato AK1, BL2, AK1-B. Cada linha diz o motivo. O certo é corrigir o nome no gerenciador; ligar à mão é o remendo até lá."
       right={
         <div className="flex flex-wrap items-center gap-2">
           <Toggle checked={semProjeto} onChange={setSemProjeto} label="Só as sem projeto" />
@@ -52,14 +52,14 @@ export function CampanhasPainel({ linhas, versao, flash, onMudou }: {
       {lista === undefined ? <Loading /> : !lista ? <p role="alert" className="text-sm text-[var(--red)]">Não foi possível carregar as campanhas.</p>
         : lista.length === 0 ? <EmptyState title="Nenhuma campanha aqui" hint="Ou está tudo no padrão, ou a coleta ainda não trouxe campanhas." /> : (
           <DataTable minWidth={1000}>
-            <Thead><Th>Campanha (nome exato)</Th><Th>Conta</Th><Th>O que está fora</Th><Th>Gasto</Th><Th>Projeto</Th></Thead>
+            <Thead><Th>Campanha (nome exato)</Th><Th>Conta</Th><Th>Motivo</Th><Th>Gasto</Th><Th>Projeto</Th></Thead>
             <tbody>
               {lista.map((c) => (
                 <Tr key={c.id}>
                   <Td><div className="font-mono text-xs break-all">{c.nome}</div><div className="text-[11px] text-[var(--fg-3)]">{c.status_plataforma ?? ''}</div></Td>
                   <Td>{c.conta}</Td>
                   <Td>{c.fora_padrao
-                    ? <span className="text-xs text-[var(--yellow)]">{c.erros.map((e) => ROTULO_ERRO[e as ErroCampanha] ?? e).join(', ')}</span>
+                    ? <ul className="text-xs text-[var(--yellow)]">{c.erros.map((e) => <li key={e}>{motivoErro(e, { ...c, projeto: c.projeto_lido })}</li>)}</ul>
                     : <Badge tone="success">No padrão</Badge>}</Td>
                   <Td>{reais(c.gasto)}</Td>
                   <Td>

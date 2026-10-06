@@ -13,7 +13,7 @@
 //     em -aaaa-mm: aviso, não recusa).
 
 import { traduzirCampanha, type ListasCampanha } from '../../projetos/domain/campanha';
-import { ETIQUETA_RE, SIGLA_RE, normalizarSigla } from '../../projetos/domain/projetos';
+import { CODIGO_PAGINA_RE, ETIQUETA_RE, SIGLA_RE, normalizarSigla } from '../../projetos/domain/projetos';
 import type { Checklist, ItemChecklist, ItemChecklistConfig, Tipo } from './tipos';
 
 export interface Unidade { codigo: string; tipo: Tipo; nome: string; descricao: string | null }
@@ -43,7 +43,8 @@ export interface ListasCadastro {
 
 export interface SugestaoCampanha { id: number; nome: string; plataforma: string; conta_id: number; conta: string; status_plataforma: string | null }
 
-/** O que public.trafego_projeto_cadastro devolve. */
+/** O que public.trafego_projeto_cadastro devolve. "linha" (20261005m) continua vindo, mas a tela não mostra nem pede mais
+ *  (revisão do Victor, 06/10/2026: o nome do projeto basta). */
 export interface ProjetoCadastro {
   id: number; sigla: string; nome: string; linha: string; etiqueta_clickup: string | null; inicio: string | null; fim: string | null;
   captacao_inicio: string | null; captacao_fim: string | null; evento_inicio: string | null; evento_fim: string | null;
@@ -54,7 +55,7 @@ export interface ProjetoCadastro {
 
 /** O formulário da tela (texto; vazio = sem valor). */
 export interface ProjetoForm {
-  id?: number; sigla: string; nome: string; linha: string; etiqueta_clickup: string;
+  id?: number; sigla: string; nome: string; etiqueta_clickup: string;
   /** Início e fim de antes (sem separação). Só reenviados; com período novo, o banco recalcula. */
   inicio: string; fim: string;
   captacao_inicio: string; captacao_fim: string; evento_inicio: string; evento_fim: string; ativo: boolean;
@@ -63,14 +64,14 @@ export interface ProjetoForm {
 }
 
 export const PROJETO_FORM_VAZIO: ProjetoForm = {
-  sigla: '', nome: '', linha: '', etiqueta_clickup: '', inicio: '', fim: '', captacao_inicio: '', captacao_fim: '', evento_inicio: '',
+  sigla: '', nome: '', etiqueta_clickup: '', inicio: '', fim: '', captacao_inicio: '', captacao_fim: '', evento_inicio: '',
   evento_fim: '', ativo: true, tipo: '', unidade: '', tipo_lancamento: '',
   especialista_id: null, especialista_nome: '', status: '', gestores: [], contas: [],
 };
 
 export function formDoCadastro(c: ProjetoCadastro): ProjetoForm {
   return {
-    id: c.id, sigla: c.sigla, nome: c.nome, linha: c.linha, etiqueta_clickup: c.etiqueta_clickup ?? '', inicio: c.inicio ?? '',
+    id: c.id, sigla: c.sigla, nome: c.nome, etiqueta_clickup: c.etiqueta_clickup ?? '', inicio: c.inicio ?? '',
     fim: c.fim ?? '', captacao_inicio: c.captacao_inicio ?? '', captacao_fim: c.captacao_fim ?? '', evento_inicio: c.evento_inicio ?? '',
     evento_fim: c.evento_fim ?? '', ativo: c.ativo, tipo: c.tipo ?? '', unidade: c.unidade ?? '', tipo_lancamento: c.tipo_lancamento ?? '',
     especialista_id: c.especialista_id, especialista_nome: '', status: c.status ?? '', gestores: [...c.gestores], contas: [...c.contas],
@@ -108,7 +109,6 @@ export function ajustarForm(l: ListasCadastro, f: ProjetoForm): ProjetoForm {
 export function validarCadastro(l: ListasCadastro, f: ProjetoForm): string | null {
   if (!SIGLA_RE.test(normalizarSigla(f.sigla))) return 'Sigla inválida: letras maiúsculas seguidas de 2 a 4 dígitos (ex.: PB26, HT33, SEMSET26).';
   if (f.nome.trim().length < 2) return 'Informe o nome do projeto.';
-  if (f.linha.trim().length < 2) return 'Informe a linha (ex.: Patrimônio Brasil).';
   if (f.inicio && f.fim && f.fim < f.inicio) return 'O fim não pode ser antes do início.';
   if (!!f.captacao_inicio !== !!f.captacao_fim || !!f.evento_inicio !== !!f.evento_fim) {
     return 'Preencha início e fim do período (captação e evento), ou deixe os dois em branco.';
@@ -144,18 +144,27 @@ export const ROTULO_AVISO_CADASTRO: Record<string, string> = {
 // ─── Gerador de nome de campanha e UTM ──────────────────────────────────────────────────────────────────────────────
 export interface NomeCampanhaEntrada { gestor: string; sigla: string; objetivo: string; descricao: string; pagina: string }
 
+/** As partes da descrição livre: separadas por "|", aparadas, em maiúsculas (ex.: "teaser | meta | pq" → TEASER, META, PQ). */
+export const partesDescricao = (descricao: string) => descricao.split('|').map((x) => x.replace(/\s+/g, ' ').trim().toUpperCase());
+
 /**
  * Monta o nome no padrão GESTOR | PROJETO | OBJETIVO | DESCRIÇÃO | PÁGINA (página opcional) e confere pela mesma tradução
- * do banco. Descrição não pode ter "|" (é o separador). Retorna o nome canônico ou os erros.
+ * do banco. A DESCRIÇÃO pode ter várias partes separadas por "|" (revisão de 06/10/2026), ex.: TEASER | META | PQ | ABO.
+ * Sem página escolhida, a última parte da descrição não pode ter cara de código de página (AK1), senão o nome seria lido
+ * com página. Retorna o nome canônico ou os erros.
  */
 export function montarNomeCampanha(e: NomeCampanhaEntrada, listas: ListasCampanha): { nome: string | null; erros: string[] } {
-  if (e.descricao.includes('|')) return { nome: null, erros: ['A descrição não pode ter "|" (é o separador).'] };
-  const partes = [e.gestor, e.sigla, e.objetivo, e.descricao, ...(e.pagina.trim() ? [e.pagina] : [])].map((x) => x.trim());
+  const desc = partesDescricao(e.descricao);
+  if (desc.some((x) => x === '')) return { nome: null, erros: ['Descrição com parte vazia entre "|".'] };
+  if (!e.pagina.trim() && desc.length > 0 && CODIGO_PAGINA_RE.test(desc[desc.length - 1].toLowerCase())) {
+    return { nome: null, erros: [`A última parte da descrição (${desc[desc.length - 1]}) tem formato de código de página: escolha em "Página" ou mude o texto.`] };
+  }
+  const partes = [e.gestor.trim(), e.sigla.trim(), e.objetivo.trim(), ...desc, ...(e.pagina.trim() ? [e.pagina.trim()] : [])];
   const t = traduzirCampanha(partes.join(' | '), listas);
   if (!t.padrao) {
     const rotulo: Record<string, string> = {
       gestor_desconhecido: 'Escolha o gestor.', sigla_invalida: 'Sigla do projeto inválida.', projeto_nao_cadastrado: 'Projeto não cadastrado.',
-      objetivo_desconhecido: 'Escolha o objetivo.', descricao_vazia: 'Escreva a descrição.', pagina_invalida: 'Código de página fora do padrão.',
+      objetivo_desconhecido: 'Escolha o objetivo.', descricao_vazia: 'Escreva a descrição.', campo_vazio: 'Descrição com parte vazia entre "|".',
       numero_de_campos: 'Preencha os campos.', vazio: 'Preencha os campos.',
     };
     return { nome: null, erros: t.erros.map((x) => rotulo[x] ?? x) };

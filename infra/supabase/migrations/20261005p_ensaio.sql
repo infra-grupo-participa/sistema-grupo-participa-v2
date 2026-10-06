@@ -98,7 +98,8 @@ create table mkt_trafego.status_projeto (
 );
 comment on table mkt_trafego.status_projeto is
   'Status do projeto na Central do Tráfego, marcado à mão (Victor, 05/10/2026). Semente = as palavras da conversa '
-  'Caio × Arthur ("ativo, pausado ou inativo. Ou encerrado"); a lista final é pergunta em aberto.';
+  'Caio × Arthur ("ativo, pausado ou inativo. Ou encerrado"), mais "em planejamento" antes do ativo (Victor, revisão de '
+  '06/10/2026).';
 
 create table mkt_trafego.fases (
   codigo text primary key check (codigo ~ '^[a-z][a-z_]{1,29}$'),
@@ -248,9 +249,10 @@ revoke all on all tables in schema mkt_trafego from public, anon, authenticated;
 -- ─── 4. Sementes (só o que está nas fontes) ──────────────────────────────────────────────────────────────────────────
 -- Plataformas: Meta Ads e Google Ads (area-de-trafego.md, 3.2). ChatGPT Ads está "pendente" lá: não entra.
 insert into mkt_trafego.plataformas (codigo, nome) values ('meta', 'Meta Ads'), ('google', 'Google Ads');
--- Status: as palavras da conversa (area-de-trafego.md, 2.1).
+-- Status: as palavras da conversa (area-de-trafego.md, 2.1) e "em planejamento" antes do ativo (Victor, 06/10/2026).
 insert into mkt_trafego.status_projeto (codigo, nome, ordem) values
-  ('ativo', 'Ativo', 1), ('pausado', 'Pausado', 2), ('inativo', 'Inativo', 3), ('encerrado', 'Encerrado', 4);
+  ('em_planejamento', 'Em planejamento', 1), ('ativo', 'Ativo', 2), ('pausado', 'Pausado', 3), ('inativo', 'Inativo', 4),
+  ('encerrado', 'Encerrado', 5);
 -- Fases: Victor, 05/10/2026 ("aquecimento, captação, lembrete, remarketing e abertura de carrinho").
 insert into mkt_trafego.fases (codigo, nome, ordem) values
   ('aquecimento', 'Aquecimento', 1), ('captacao', 'Captação', 2), ('lembrete', 'Lembrete', 3),
@@ -717,6 +719,7 @@ begin
             'fora_padrao', c.fora_padrao, 'erros', coalesce(c.leitura -> 'erros', '[]'::jsonb),
             'avisos', coalesce(c.leitura -> 'avisos', '[]'::jsonb),
             'gestor', c.gestor, 'objetivo', c.objetivo, 'descricao', c.leitura ->> 'descricao', 'pagina', c.leitura ->> 'pagina',
+            'projeto_lido', c.leitura ->> 'projeto', 'campos', (c.leitura ->> 'campos')::int,
             'pagina_id', c.pagina_id, 'projeto_id', c.projeto_id, 'projeto_sigla', pr.sigla, 'projeto_manual', c.projeto_manual,
             'fase', mkt_trafego.fase_efetiva(c.objetivo, c.fase_manual), 'fase_manual', c.fase_manual,
             'fase_objetivo', (select o.fase from mkt_trafego.objetivo_fase o where o.objetivo = c.objetivo),
@@ -1028,11 +1031,11 @@ begin
                   and (mkt.campanha_traduzir('RS | PB26 | AQUECIMENTO | X') ->> 'objetivo') = 'AQUECIMENTO', false) then
     raise exception '20261005p: mkt.campanha_traduzir não reconhece CARRINHO ou AQUECIMENTO';
   end if;
-  if (select count(*) from mkt_trafego.plataformas) <> 2 or (select count(*) from mkt_trafego.status_projeto) <> 4
+  if (select count(*) from mkt_trafego.plataformas) <> 2 or (select count(*) from mkt_trafego.status_projeto) <> 5
      or (select count(*) from mkt_trafego.fases) <> 5 or (select count(*) from mkt_trafego.objetivo_fase) <> 6 or (select count(*) from mkt_trafego.contas) <> 0
      or (select count(*) from mkt_trafego.campanhas) <> 0 or (select count(*) from mkt_trafego.desempenho_dia) <> 0
      or (select count(*) from mkt_trafego.planejamento) <> 0 or (select count(*) from mkt_trafego.projeto_gestores) <> 0 then
-    raise exception '20261005p: semente diferente do esperado (2 plataformas, 4 status, 5 fases, 6 objetivo→fase, resto vazio)';
+    raise exception '20261005p: semente diferente do esperado (2 plataformas, 5 status, 5 fases, 6 objetivo→fase, resto vazio)';
   end if;
 end
 $confere$;
@@ -1080,13 +1083,13 @@ select pg_temp.ok('1.estrutura',
   '10 tabelas em mkt_trafego, 13 funções public.trafego_*');
 select pg_temp.ok('1.semente',
   (select string_agg(codigo, ',' order by codigo) from mkt_trafego.plataformas) = 'google,meta'
-  and (select string_agg(codigo, ',' order by ordem) from mkt_trafego.status_projeto) = 'ativo,pausado,inativo,encerrado'
+  and (select string_agg(codigo, ',' order by ordem) from mkt_trafego.status_projeto) = 'em_planejamento,ativo,pausado,inativo,encerrado'
   and (select string_agg(codigo, ',' order by ordem) from mkt_trafego.fases) = 'aquecimento,captacao,lembrete,remarketing,abertura_carrinho'
   and (select string_agg(objetivo || '>' || fase, ',' order by objetivo) from mkt_trafego.objetivo_fase) = 'AQUECIMENTO>aquecimento,CARRINHO>abertura_carrinho,LEADS>captacao,LEMBRETE>lembrete,REMARKETING>remarketing,VENDAS>captacao'
   and (select count(*) from mkt_trafego.contas) + (select count(*) from mkt_trafego.campanhas)
       + (select count(*) from mkt_trafego.desempenho_dia) + (select count(*) from mkt_trafego.planejamento)
       + (select count(*) from mkt_trafego.projeto_gestores) = 0,
-  'plataformas meta/google; status ativo,pausado,inativo,encerrado; fases aquecimento,captacao,lembrete,remarketing,abertura_carrinho; objetivo→fase LEADS e VENDAS → captação, LEMBRETE, REMARKETING, CARRINHO, AQUECIMENTO; DISTRIBUIÇÃO sem fase; resto vazio');
+  'plataformas meta/google; status em_planejamento,ativo,pausado,inativo,encerrado; fases aquecimento,captacao,lembrete,remarketing,abertura_carrinho; objetivo→fase LEADS e VENDAS → captação, LEMBRETE, REMARKETING, CARRINHO, AQUECIMENTO; DISTRIBUIÇÃO sem fase; resto vazio');
 
 select pg_temp.ok('1.objetivos', (select string_agg(codigo, ',' order by codigo) from mkt.campanha_objetivos where ativo)
                     = 'AQUECIMENTO,CARRINHO,DISTRIBUIÇÃO,LEADS,LEMBRETE,REMARKETING,VENDAS'
@@ -1109,10 +1112,10 @@ do $t$
 declare v jsonb;
 begin
   v := pg_temp.adm('select public.trafego_config()');
-  perform pg_temp.ok('3.config', jsonb_array_length(v -> 'plataformas') = 2 and jsonb_array_length(v -> 'status') = 4
+  perform pg_temp.ok('3.config', jsonb_array_length(v -> 'plataformas') = 2 and jsonb_array_length(v -> 'status') = 5
                      and jsonb_array_length(v -> 'fases') = 5 and (v -> 'objetivo_fase' ->> 'LEADS') = 'captacao' and jsonb_array_length(v -> 'gestores') = 3
                      and (v ->> 'dia_ontem')::date = mkt_trafego.ontem(),
-                     'config: 2 plataformas, 4 status, 5 fases, objetivo→fase, 3 gestores (de mkt), ontem; base_pessoas=' || (v ->> 'base_pessoas') || ' base_web=' || (v ->> 'base_web'));
+                     'config: 2 plataformas, 5 status, 5 fases, objetivo→fase, 3 gestores (de mkt), ontem; base_pessoas=' || (v ->> 'base_pessoas') || ' base_web=' || (v ->> 'base_web'));
   v := pg_temp.adm($$select public.trafego_conta_salvar('{"plataforma":"meta","conta_externa":"act_000111","nome":"Conta Ensaio Grupo","dono":"grupo"}')$$);
   perform pg_temp.ok('3.conta meta', (v ->> 'ok')::boolean and exists (select 1 from mkt_trafego.contas where conta_externa = '000111'
                      and criado_por = '81d2eaee-cce1-4058-8714-439b0fc6f970'), 'criada, id sem act_, criado_por = quem salvou');
