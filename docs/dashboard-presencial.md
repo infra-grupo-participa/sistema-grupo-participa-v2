@@ -121,7 +121,7 @@ clique_pct numeric`
 | `20261007161809` | `dados_dashboard_presencial` | schema `dados`, cadastro, gate e as 5 funções |
 | `20261007162432` | `mkt_trafego_clinica_miami_oferta` | projeto 68 `interno/csm` e oferta `mjzv4v0s` exclusiva do projeto no Tráfego (`conta_hotmart(68)` = academy) |
 | `20261007162557` | `pessoas_registrar_lead_projeto_por_chave` | a fachada da captura resolve o projeto pela chave da casa (lead da página grava `projeto_id` 68) |
-| `20261007o` (NÃO APLICADA) | `crm_lista_614_todos` | regra 42 com `para_todos`: quem entra na lista 614 vira contato comercial e é catalogado na Clínica. Ensaiada (0 erro); aplicação negada pela permissão da sessão do agente em 07/10 |
+| `20261007171902` (APLICADA 07/10) | `crm_lista_614_todos` | regra 42 com `para_todos`: quem entra na lista 614 vira contato comercial e é catalogado na Clínica. Ensaio refeito antes da aplicação, igual ao esperado |
 
 Cada uma tem `.explain.md` com ensaio, explain e reversão.
 
@@ -148,10 +148,8 @@ Hoje a tela expõe 1 lead e 1 pedido, ambos teste interno; o risco cresce quando
 
 ## 5. O que falta
 
-- Aplicar `20261007o_crm_lista_614_todos` (aplicação negada à sessão do agente; comando em `docs/captura-de-lead.md`,
-  "Como aplicar"). Enquanto não entrar, o pré-checkout do dashboard já conta quem entra na 614 (lê
-  `crm.evento_jornada` direto), mas o Comercial não cataloga quem não é contato.
-- Efeito da `20261007o` a saber: quem entra na 614 sem ser contato passa a aparecer no Comercial, sem dono e sem negócio.
+- ~~Aplicar `crm_lista_614_todos`~~: aplicada em 07/10/2026, versão `20261007171902`.
+- Efeito da `20261007171902` a saber: quem entra na 614 sem ser contato passa a aparecer no Comercial, sem dono e sem negócio.
 - Webhook (`hotmart-events-webhook`): em produção roda a cópia do disparos-thb; o produto 6489980 não está mapeado
   (evento iria para `PRODUTO_NAO_MAPEADO`, sem `cs.compras`); 0 eventos dele recebidos até 07/10.
   `PURCHASE_OUT_OF_SHOPPING_CART` chega para outros produtos (fonte possível de abandonos se a oferta for mapeada).
