@@ -233,11 +233,11 @@ export class MockComercialRepository implements ComercialRepository {
     return espera({ ok: true, msg: 'Funil criado.', funilId: id });
   }
 
-  async arquivarFunil(funilId: string): Promise<Resultado> {
+  async arquivarFunil(funilId: string, comAbertos = false): Promise<Resultado> {
     if (this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o gestor arquiva funis.' });
     const f = this.db.funis.find((x) => x.id === funilId);
     if (!f) return espera({ ok: false, msg: 'Funil não encontrado.' });
-    if (this.db.negocios.some((n) => n.funilId === funilId && n.status === 'aberto')) return espera({ ok: false, msg: 'Funil com negócio aberto não pode ser arquivado.' });
+    if (!comAbertos && this.db.negocios.some((n) => n.funilId === funilId && n.status === 'aberto')) return espera({ ok: false, msg: 'Funil com negócio aberto: confirme para arquivar mesmo assim.' });
     f.ativo = false;
     this.registrar('arquivou', 'funil', funilId, `Arquivou o funil ${f.nome}`);
     return espera({ ok: true, msg: 'Funil arquivado.' });
