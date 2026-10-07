@@ -11,6 +11,7 @@ export type LeadPresencial = {
   email: string; nome: string | null; telefone: string | null; primeiro_em: string; fonte: string;
   utm_source: string | null; utm_medium: string | null; utm_campaign: string | null;
   utm_content: string | null; utm_term: string | null; instrucao: string | null; turma: string | null; comprou: boolean;
+  pessoa_id?: string | null; teste?: boolean;
 };
 export type VendaPresencial = {
   transacao: string; status_grupo: string; status_hotmart: string; dia_pedido: string | null; dia_aprovado: string | null;

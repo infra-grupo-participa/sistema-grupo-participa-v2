@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Tabs } from '@/shared/ui/components';
-import { carregarDisparos, carregarLeads, carregarPagamentos, carregarPendencias, carregarPerfilCompradores, carregarPessoasPendencias, carregarResumo, carregarSerieDiaria, carregarSerieVendas, carregarVendas, carregarVendasPorHora, type Resultado } from '../infrastructure/presencial-data';
+import { carregarDisparos, carregarLeads, carregarPagamentos, carregarPendencias, carregarPerfilCompradores, carregarPessoasPendencias, carregarResumo, carregarSerieDiaria, carregarSerieVendas, carregarVendas, carregarVendasPorHora, marcarLeadTeste, type Resultado } from '../infrastructure/presencial-data';
 import type { DiaPresencial, DisparoPresencial, GrupoPendencia, LeadPresencial, PagamentoPresencial, PendenciaPresencial, PerfilCompradorPresencial, PessoaPendenciaPresencial, ResumoPresencial, SerieVendasPresencial, VendaHoraPresencial, VendaPresencial } from '../domain/presencial';
 import { CardsResumo } from './CardsResumo';
 import { AbaDisparos } from './AbaDisparos';
@@ -19,7 +19,7 @@ const inicial = <T,>(): EstadoLeitura<T> => ({ resultado: null, carregando: true
 const ocioso = <T,>(): EstadoLeitura<T> => ({ resultado: null, carregando: false });
 const falha = <T,>(lido: PromiseSettledResult<Resultado<T>>): Resultado<T> => lido.status === 'fulfilled' ? lido.value : { data: null, erro: 'Não foi possível carregar agora.' };
 
-export function DashboardPresencialClient({ chave }: { chave: string }) {
+export function DashboardPresencialClient({ chave, isMaster = false }: { chave: string; isMaster?: boolean }) {
   const [resumo, setResumo] = useState<EstadoLeitura<ResumoPresencial>>(inicial);
   const [serie, setSerie] = useState<EstadoLeitura<DiaPresencial[]>>(inicial);
   const [pagamentos, setPagamentos] = useState<EstadoLeitura<PagamentoPresencial[]>>(inicial);
@@ -95,6 +95,14 @@ export function DashboardPresencialClient({ chave }: { chave: string }) {
     setLeads({ resultado: null, carregando: true });
     carregarLeads(chave).then((r) => setLeads({ resultado: r, carregando: false }));
   }, [chave, leads]);
+  const alternarTeste = useCallback(async (pessoaId: string, teste: boolean): Promise<string | null> => {
+    const r = await marcarLeadTeste(chave, pessoaId, teste);
+    if (r.erro) return r.erro;
+    const lidos = await carregarLeads(chave);
+    setLeads((anterior) => ({ resultado: manterUltimoDado(anterior.resultado, lidos), carregando: false }));
+    atualizarLevesRef.current();
+    return null;
+  }, [chave]);
   const abrirVendas = useCallback(() => {
     setModal('vendas');
     if (!deveCarregar(vendas)) return;
@@ -126,7 +134,7 @@ export function DashboardPresencialClient({ chave }: { chave: string }) {
     <section><Tabs tabs={[{ k: 'disparos', l: 'Visão de disparos' }, { k: 'vendas', l: 'Visão geral de vendas' }]} active={aba} onChange={setAba} label="Visões do dashboard" />
       {aba === 'disparos' ? <AbaDisparos linhas={disparos.resultado?.data ?? null} erro={disparos.resultado?.erro ?? null} carregando={disparos.carregando} /> : <AbaVisaoVendas dias={serie} pagamentos={pagamentos} perfil={perfil} pendencias={pendencias} serieVendas={serieVendas} porHora={porHora} abrirPendencias={abrirPendencias} />}
     </section>
-    {modal === 'leads' && <ModalPreCheckout linhas={leads.resultado?.data ?? null} erro={leads.resultado?.erro ?? null} carregando={leads.carregando} onClose={() => setModal(null)} />}
+    {modal === 'leads' && <ModalPreCheckout linhas={leads.resultado?.data ?? null} erro={leads.resultado?.erro ?? null} carregando={leads.carregando} onClose={() => setModal(null)} isMaster={isMaster} onToggleTeste={alternarTeste} />}
     {modal === 'vendas' && <ModalVendas linhas={vendas.resultado?.data ?? null} erro={vendas.resultado?.erro ?? null} carregando={vendas.carregando} onClose={() => setModal(null)} />}
     {modalPendencias && <ModalPendencias key={modalPendencias} grupo={modalPendencias} linhas={pessoasPendencias[modalPendencias].resultado?.data ?? null} erro={pessoasPendencias[modalPendencias].resultado?.erro ?? null} carregando={pessoasPendencias[modalPendencias].carregando} onClose={() => setModalPendencias(null)} />}
   </div>;

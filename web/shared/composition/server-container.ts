@@ -4,6 +4,7 @@ import { SupabaseAuthGateway } from '@/shared/infrastructure/auth/supabase-auth.
 import { SupabaseProfileRepository } from '@/shared/infrastructure/auth/supabase-profile.repository';
 import { GetCurrentUser } from '@/shared/application/auth/get-current-user';
 import type { GpUser } from '@/shared/domain/auth';
+import { acessoValido, type AcessoV2 } from '@/shared/domain/auth';
 
 /**
  * Composition root do contexto server. Monta casos de uso com adapters concretos.
@@ -27,6 +28,17 @@ export const getCurrentUser = cache(async (): Promise<GpUser | null> => {
   try {
     const { getCurrentUser } = await serverContainer();
     return await getCurrentUser.execute();
+  } catch {
+    return null;
+  }
+});
+
+/** Leitura explícita de gp_meu_acesso para telas que precisam de master legado com a flag v2 desligada. */
+export const getCurrentUserAccess = cache(async (): Promise<AcessoV2 | null> => {
+  try {
+    const { supabase } = await serverContainer();
+    const { data, error } = await supabase.rpc('gp_meu_acesso');
+    return error ? null : acessoValido(data);
   } catch {
     return null;
   }
