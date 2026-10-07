@@ -1,5 +1,5 @@
 import { getCurrentUser } from '@/shared/composition/server-container';
-import { DEPARTAMENTOS, podeVerDepartamento } from '@/shared/domain/departamentos';
+import { DEPARTAMENTOS, acessoComercial, podeVerDepartamento } from '@/shared/domain/departamentos';
 import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { CartaoModulo } from '@/shared/ui/departamentos/CartaoModulo';
 import { Icon } from '@/shared/ui/icons';
@@ -40,12 +40,13 @@ export default async function HomePage() {
         {DEPARTAMENTOS.map((d, i) => (
           <CartaoModulo
             key={d.key}
-            href={d.path}
+            // Quem só pede estratégia entra direto em /comercial/estrategias.
+            href={d.key === 'comercial' && acessoComercial(user, ACESSO_DEPARTAMENTOS) === 'estrategias' ? '/comercial/estrategias' : d.path}
             label={d.label}
             descricao={d.descricao}
             ico={d.ico}
             emBreve={d.status === 'em_breve'}
-            bloqueado={!podeVerDepartamento(user, d.key, ACESSO_DEPARTAMENTOS)}
+            bloqueado={d.key === 'comercial' ? !acessoComercial(user, ACESSO_DEPARTAMENTOS) : !podeVerDepartamento(user, d.key, ACESSO_DEPARTAMENTOS)}
             indice={i}
           />
         ))}

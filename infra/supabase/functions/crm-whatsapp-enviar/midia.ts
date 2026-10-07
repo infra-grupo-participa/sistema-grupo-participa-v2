@@ -74,10 +74,23 @@ export function mb(bytes: number): string {
 
 export type SaidaMidia = { tipo: string; de: string; para: string; mensagem_id: string; legenda: string | null; midia_nome: string | null };
 
-/** Chamada da Infobip para imagem/documento: caminho da API e corpo (mediaUrl = URL assinada do Storage). */
+/** Tipos de mensagem de saída que levam arquivo do bucket crm-midia. */
+export const TIPOS_SAIDA_COM_ARQUIVO = ["imagem", "documento", "audio"] as const;
+
+export function saidaComArquivo(tipo: string): boolean {
+  return (TIPOS_SAIDA_COM_ARQUIVO as readonly string[]).includes(tipo);
+}
+
+/**
+ * Chamada da Infobip para imagem/documento/áudio: caminho da API e corpo (mediaUrl = URL assinada do Storage).
+ * Áudio (migration 20261007s) não tem legenda; ogg/opus chega como nota de voz, m4a/aac/mp3 como áudio comum.
+ */
 export function pedidoMidiaInfobip(m: SaidaMidia, mediaUrl: string): { caminho: string; corpo: Record<string, unknown> } {
   const legenda = m.legenda?.trim() ? m.legenda.trim().slice(0, 1024) : undefined;
   const base = { from: m.de, to: m.para, messageId: m.mensagem_id, callbackData: m.mensagem_id };
+  if (m.tipo === "audio") {
+    return { caminho: "/whatsapp/1/message/audio", corpo: { ...base, content: { mediaUrl } } };
+  }
   if (m.tipo === "imagem") {
     return { caminho: "/whatsapp/1/message/image", corpo: { ...base, content: { mediaUrl, ...(legenda ? { caption: legenda } : {}) } } };
   }

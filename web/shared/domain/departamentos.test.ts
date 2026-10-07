@@ -2,7 +2,10 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Cargo, GpUser } from './auth';
-import { BASE_MARKETING, DEPARTAMENTOS, MODULO_DEPARTAMENTO, departamento, departamentoDaRota, ehDoComercial, podeVerDepartamento } from './departamentos';
+import {
+  BASE_MARKETING, DEPARTAMENTOS, MODULO_DEPARTAMENTO, acessoComercial, departamento, departamentoDaRota, ehDoComercial,
+  podeSolicitarEstrategia, podeVerDepartamento,
+} from './departamentos';
 
 const user = (cargo: Cargo, setores: string[] = []): GpUser =>
   ({ id: 'u', email: 'x@advmais.com', nome: 'X', cargo, status: 'ativo', setores, funcoes: [], podeVerCpf: false, time: null, avatarUrl: null });
@@ -28,7 +31,7 @@ describe('departamentos: registro', () => {
   });
   it('Comercial: as telas do CRM em /comercial/<tela>; só Social selling "Em breve"', () => {
     const com = departamento('comercial');
-    expect(com.areas.map((a) => a.key)).toEqual(['funil', 'conversas', 'atividades', 'contatos', 'recuperacao', 'disparos', 'relatorios', 'produtos', 'registro', 'playbook', 'social-selling', 'configuracoes']);
+    expect(com.areas.map((a) => a.key)).toEqual(['funil', 'conversas', 'atividades', 'contatos', 'estrategias', 'disparos', 'relatorios', 'produtos', 'registro', 'playbook', 'social-selling', 'configuracoes']);
     for (const a of com.areas) {
       expect(a.status).toBe(a.key === 'social-selling' ? 'em_breve' : 'ativo');
       expect(a.path).toBe(`/comercial/${a.key}`);
@@ -120,5 +123,32 @@ describe('departamentos: base compartilhada do Marketing (20261005m)', () => {
     expect(BASE_MARKETING.map((b) => b.path)).toEqual(['/marketing/projetos']);
     expect(departamento('marketing').areas.some((a) => a.path === '/marketing/projetos')).toBe(false);
     expect(departamentoDaRota('/marketing/projetos')).toBe('marketing');
+  });
+});
+
+describe('departamentos: solicitante de estratégia (função comercial.solicitar_estrategia)', () => {
+  const comFuncao = (cargo: Cargo, funcoes: string[], status: string | null = 'ativo', setores: string[] = []): GpUser =>
+    ({ ...user(cargo, setores), funcoes, status });
+  const SOLICITAR = ['comercial.solicitar_estrategia'];
+
+  it('vale pela função, não pelo cargo: dev/admin sem a função não pedem; operador com a função pede', () => {
+    expect(podeSolicitarEstrategia(comFuncao('dev', []))).toBe(false);
+    expect(podeSolicitarEstrategia(comFuncao('admin', []))).toBe(false);
+    expect(podeSolicitarEstrategia(comFuncao('dev', SOLICITAR))).toBe(true);
+    expect(podeSolicitarEstrategia(comFuncao('operador', SOLICITAR))).toBe(true);
+    expect(podeSolicitarEstrategia(comFuncao('visualizador', SOLICITAR))).toBe(true);
+  });
+  it('perfil não ativo ou sem login não pede', () => {
+    expect(podeSolicitarEstrategia(comFuncao('operador', SOLICITAR, 'pendente'))).toBe(false);
+    expect(podeSolicitarEstrategia(comFuncao('operador', SOLICITAR, 'negado'))).toBe(false);
+    expect(podeSolicitarEstrategia(null)).toBe(false);
+  });
+  it('acessoComercial: CRM inteiro para quem vê o departamento; só Estratégias para o solicitante; nada para os outros', () => {
+    expect(acessoComercial(comFuncao('admin', []))).toBe('completo');
+    expect(acessoComercial(comFuncao('dev', SOLICITAR))).toBe('completo');
+    expect(acessoComercial(comFuncao('operador', SOLICITAR))).toBe('estrategias');
+    expect(acessoComercial(comFuncao('visualizador', []))).toBeNull();
+    expect(acessoComercial(comFuncao('operador', ['comercial.vender'], 'ativo', ['comercial']))).toBeNull();
+    expect(acessoComercial(comFuncao('operador', ['comercial.vender'], 'ativo', ['comercial']), { comercialVendedores: true })).toBe('completo');
   });
 });

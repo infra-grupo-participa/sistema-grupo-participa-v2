@@ -42,3 +42,10 @@ describe('argsEscrita.enviarAnexo', () => {
       .toEqual({ p_pessoa: 'p1', p_texto: null, p_template: null, p_midia: 'envio/u/x.pdf', p_midia_nome: 'Proposta.pdf' });
   });
 });
+
+describe('argsEscrita.enviarAudio', () => {
+  it('sem legenda, sem nome, sem template', () => {
+    expect(argsEscrita.enviarAudio('p1', 'envio/u/x.ogg'))
+      .toEqual({ p_pessoa: 'p1', p_texto: null, p_template: null, p_midia: 'envio/u/x.ogg', p_midia_nome: null });
+  });
+});

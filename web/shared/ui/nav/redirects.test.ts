@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { REDIRECTS_EDUCACIONAL, destinoDaRotaAntiga, redirectsNext } from './redirects';
+import { REDIRECTS_COMERCIAL, REDIRECTS_EDUCACIONAL, destinoDaRotaAntiga, redirectsNext } from './redirects';
+import { departamento } from '../../domain/departamentos';
 import { REPORTS } from './config';
 
 const APP = join(__dirname, '..', '..', '..', 'app');
@@ -67,5 +68,30 @@ describe('redirects do Educacional: cada rota antiga vai para a nova', () => {
         expect(antigos).not.toContain(href.split(/[?#]/)[0]);
       }
     }
+  });
+});
+
+describe('redirects do Comercial', () => {
+  it('a tabela é exatamente esta (entrada nunca sai)', () => {
+    expect(Object.fromEntries(REDIRECTS_COMERCIAL.map((r) => [r.de, r.para]))).toEqual({
+      '/comercial/recuperacao': '/comercial/estrategias',
+    });
+  });
+
+  it('destino existe como página, a antiga não, e o Next recebe a entrada como 308', () => {
+    for (const r of REDIRECTS_COMERCIAL) {
+      expect(paginaExiste(r.para), `falta a página ${r.para}`).toBe(true);
+      expect(paginaExiste(r.de), `a página antiga ${r.de} ainda existe`).toBe(false);
+      expect(redirectsNext()).toContainEqual({ source: r.de, destination: r.para, permanent: true });
+    }
+  });
+
+  it('mantém query e hash (link de aviso com ?pedido=)', () => {
+    expect(destinoDaRotaAntiga('/comercial/recuperacao?fila=abc#x')).toBe('/comercial/estrategias?fila=abc#x');
+  });
+
+  it('o menu do Comercial não aponta para rota antiga', () => {
+    const antigos = REDIRECTS_COMERCIAL.map((r) => r.de);
+    for (const a of departamento('comercial').areas) expect(antigos).not.toContain(a.path);
   });
 });

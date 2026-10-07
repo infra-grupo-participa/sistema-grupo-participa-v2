@@ -26,7 +26,7 @@ import {
   Aviso, BotaoConversa, BotaoCopiar, Campo, Chip, Dono, EsqueletoLista, EstadoErro, NotaRodape, ProdutoTag, RodapeAcoes,
   SlaTag, useEquipe,
 } from './comum';
-import { avisarMudanca, repo, useAgora, useContatosPorIds, useDados } from './repositorio';
+import { avisarMudanca, repo, useAgora, useAtualizacaoPeriodica, useContatosPorIds, useDados } from './repositorio';
 import { HistoricoAlteracoes } from './registro/HistoricoAlteracoes';
 import { MidiaMensagem } from './conversas/MidiaMensagem';
 import { legendaDaMensagem } from '../domain/midia';
@@ -59,7 +59,10 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
   const c = rContatos.dados?.find((x) => x.id === n?.contatoId) ?? null;
   const { dados: atividades } = useDados(() => repo.atividades());
   const { dados: eventos } = useDados(() => (n ? repo.eventos(n.contatoId) : Promise.resolve([])), [n?.contatoId]);
-  const { dados: mensagens } = useDados(() => (n ? repo.mensagens(n.contatoId) : Promise.resolve([])), [n?.contatoId]);
+  const rMensagens = useDados(() => (n ? repo.mensagens(n.contatoId) : Promise.resolve([])), [n?.contatoId]);
+  const mensagens = rMensagens.dados;
+  // Aba Conversa aberta: atualiza sozinha (mensagem nova, mídia, status).
+  useAtualizacaoPeriodica(rMensagens.recarregar, 'conversaAberta', aba === 'conversa' && !!n);
 
   const [perder, setPerder] = useState(false);
   const [transferir, setTransferir] = useState(false);

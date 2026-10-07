@@ -153,6 +153,9 @@ export const argsEscrita = {
   marcarConversaLida: (contatoId: string) => ({ p_pessoa: contatoId }),
   enviarAnexo: (contatoId: string, caminho: string, legenda: string, nome: string | null) =>
     ({ p_pessoa: contatoId, p_texto: legenda.trim() || null, p_template: null, p_midia: caminho, p_midia_nome: nome }),
+  /** Áudio (20261007s): sem legenda nem nome; o banco grava "[áudio]". */
+  enviarAudio: (contatoId: string, caminho: string) =>
+    ({ p_pessoa: contatoId, p_texto: null, p_template: null, p_midia: caminho, p_midia_nome: null }),
   /**
    * Ficha: `destinatarios` (contatoIds) é a lista que o banco grava. quantidade/suprimidos não vão (o banco conta).
    * `numeroEnvio` vazio = número padrão; só dígitos quando vier (o rótulo da tela não é número).

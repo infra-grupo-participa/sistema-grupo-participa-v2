@@ -23,7 +23,8 @@ import { ScriptAbordagem } from './ScriptAbordagem';
 type FiltroStatus = StatusFila | 'todos' | 'em_trabalho';
 const TRAVA_CD = 'Travada: ninguém toca em C e D antes de A e B estarem zeradas.';
 
-export function RecuperacaoClient() {
+/** `embutido`: dentro da tela Estratégias (aba "Filas de recuperação"), sem o cabeçalho de página próprio. */
+export function RecuperacaoClient({ embutido = false }: { embutido?: boolean } = {}) {
   const { sessao, vendedores, nomeDe, gestor } = useEquipe();
   const { dados: filas, erro: erroFilas, recarregar: recFilas } = useDados(() => repo.filas());
   // Só os contatos dos itens das filas (não a base inteira).
@@ -115,16 +116,13 @@ export function RecuperacaoClient() {
     return { it, c, liberado, travaMotivo };
   });
 
-  return (
-    <PaginaComercial
-      titulo="Recuperação"
-      subtitulo="Filas pós-lançamento, na ordem do playbook: quem respondeu sem retorno vem primeiro."
-      acoes={
-        <Button size="sm" variant={script ? 'subtle' : 'ghost'} aria-pressed={script} onClick={() => setScript((s) => !s)}>
-          <Icon name="message" size={14} /> Script de abordagem
-        </Button>
-      }
-    >
+  const botaoScript = (
+    <Button size="sm" variant={script ? 'subtle' : 'ghost'} aria-pressed={script} onClick={() => setScript((s) => !s)}>
+      <Icon name="message" size={14} /> Script de abordagem
+    </Button>
+  );
+  const corpo = (
+    <>
       {erro && (!filas || !contatos) ? (
         <EstadoErro mensagem={erro} onTentar={() => { recFilas(); recContatos(); }} />
       ) : !filas || !contatos ? (
@@ -288,6 +286,27 @@ export function RecuperacaoClient() {
       )}
       {contatoAberto && <ContatoDrawer contatoId={contatoAberto} onClose={() => setContatoAberto(null)} onAbrirContato={setContatoAberto} />}
       <Toast>{toast}</Toast>
+    </>
+  );
+
+  if (embutido) {
+    return (
+      <div className="min-w-0 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-[var(--fg-3)]">Filas pós-lançamento, na ordem do playbook: quem respondeu sem retorno vem primeiro.</p>
+          {botaoScript}
+        </div>
+        {corpo}
+      </div>
+    );
+  }
+  return (
+    <PaginaComercial
+      titulo="Filas de recuperação"
+      subtitulo="Filas pós-lançamento, na ordem do playbook: quem respondeu sem retorno vem primeiro."
+      acoes={botaoScript}
+    >
+      {corpo}
     </PaginaComercial>
   );
 }

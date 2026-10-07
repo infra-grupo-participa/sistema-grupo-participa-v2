@@ -3,7 +3,7 @@ import { textosDaSecao } from './busca';
 import { SECOES } from './conteudo';
 import { CENTRAL, PARTES, PRIMEIRO_DIA, TELAS, secoesDaParte } from './ajuda-conteudo';
 
-const ROTAS = new Set(['/comercial', ...['funil', 'conversas', 'atividades', 'contatos', 'recuperacao', 'disparos', 'relatorios',
+const ROTAS = new Set(['/comercial', ...['funil', 'conversas', 'atividades', 'contatos', 'estrategias', 'disparos', 'relatorios',
   'produtos', 'registro', 'playbook', 'social-selling', 'configuracoes'].map((r) => `/comercial/${r}`)]);
 const ids = new Set(CENTRAL.map((s) => s.id));
 const ancoras = new Set(PARTES.map((p) => p.ancora));
@@ -28,7 +28,7 @@ describe('central de ajuda: estrutura', () => {
 
   it('tem uma seção por tela do Comercial, com âncora #modulo-*', () => {
     const modulos = secoesDaParte('modulos').map((s) => s.id);
-    for (const id of ['inicio', 'funil', 'ficha-negocio', 'conversas', 'atividades', 'contatos', 'recuperacao', 'disparos',
+    for (const id of ['inicio', 'funil', 'ficha-negocio', 'conversas', 'atividades', 'contatos', 'estrategias', 'disparos',
       'relatorios', 'dashboards', 'equipe', 'produtos', 'registro', 'configuracoes', 'notificacoes', 'social-selling']) {
       expect(modulos).toContain(`modulo-${id}`);
     }

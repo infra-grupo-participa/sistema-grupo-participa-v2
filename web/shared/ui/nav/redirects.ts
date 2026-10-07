@@ -1,4 +1,4 @@
-// Rotas antigas do Educacional → rotas novas (modularização por departamento, 05/10/2026).
+// Rotas antigas → rotas novas (modularização por departamento, 05/10/2026; Comercial, 07/10/2026).
 //
 // 🔴 NUNCA APAGAR uma entrada. Mensagens de Slack já enviadas pela Remoção de Acessos apontam para
 // `/relatorios/remocoes?caso=<id>` (montadas no banco a partir de `ra_config.app_url`, ver
@@ -25,9 +25,20 @@ export const REDIRECTS_EDUCACIONAL: RotaAntiga[] = [
   { de: '/depoimentos/biblioteca', para: '/educacional/depoimentos/biblioteca' },
 ];
 
+/**
+ * Comercial. 🔴 NUNCA APAGAR uma entrada: avisos e links já enviados apontam para as rotas antigas.
+ * - /comercial/recuperacao → /comercial/estrategias (07/10/2026: a tela virou "Estratégias"; as filas de recuperação moram lá).
+ */
+export const REDIRECTS_COMERCIAL: RotaAntiga[] = [
+  { de: '/comercial/recuperacao', para: '/comercial/estrategias' },
+];
+
+/** Todas as rotas antigas, de todos os departamentos. */
+export const REDIRECTS: RotaAntiga[] = [...REDIRECTS_EDUCACIONAL, ...REDIRECTS_COMERCIAL];
+
 /** Formato do `redirects()` do Next. `permanent: true` = 308. */
 export function redirectsNext() {
-  return REDIRECTS_EDUCACIONAL.map((r) => ({ source: r.de, destination: r.para, permanent: true as const }));
+  return REDIRECTS.map((r) => ({ source: r.de, destination: r.para, permanent: true as const }));
 }
 
 /**
@@ -38,6 +49,6 @@ export function destinoDaRotaAntiga(url: string): string | null {
   const m = url.match(/^([^?#]*)(.*)$/);
   const caminho = (m?.[1] || '/').replace(/\/$/, '') || '/';
   const resto = m?.[2] || '';
-  const r = REDIRECTS_EDUCACIONAL.find((x) => x.de === caminho);
+  const r = REDIRECTS.find((x) => x.de === caminho);
   return r ? r.para + resto : null;
 }

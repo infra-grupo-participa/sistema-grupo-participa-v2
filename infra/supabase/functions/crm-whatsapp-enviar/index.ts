@@ -13,7 +13,9 @@
 //   O que não coube no prazo volta para a fila sem custo (não saiu).
 //   imagem/documento (migration 20261007140044): o arquivo está no bucket privado crm-midia; a Edge assina uma URL de 1 h
 //   (service role) e manda /whatsapp/1/message/image|document com mediaUrl — a Infobip baixa dali. Sem assinatura = volta
-//   para a fila (não saiu).
+//   para a fila (não saiu). Áudio gravado no CRM (migration 20261007s): /whatsapp/1/message/audio, mesmo fluxo.
+//   Envio na hora (20261007s): crm_enviar_mensagem chama crm.whatsapp_disparar_envio() → ops.cron_post para esta Edge
+//   logo depois do COMMIT; o cron de 1 min continua como reserva (SKIP LOCKED: os dois nunca pegam a mesma mensagem).
 // templates: GET /whatsapp/2/senders/{remetente}/templates → crm.whatsapp_templates_sincronizar.
 // midia: baixa a mídia RECEBIDA (crm.whatsapp_midia_pegar → GET na Infobip com a chave, só no host configurado → Storage
 //   crm-midia/<conversa>/<mensagem>.<ext> → crm.whatsapp_midia_resultado). Acima de crm.config.midia_limite_bytes não
@@ -23,7 +25,7 @@
 // (só o dono executa; conexão SUPABASE_DB_URL). Base URL vem de crm.config.infobip_base_url e é conferida aqui contra
 // *.api(-xx).infobip.com (nada do corpo da requisição vira URL). Fail-closed: sem chave/remetente → 503 sem pegar fila.
 import postgres from "npm:postgres@3.4.4";
-import { caminhoRecebido, mb, mimeBase, mimeSeguro, nomeDoContentDisposition, pedidoMidiaInfobip, urlDownloadInfobip } from "./midia.ts";
+import { caminhoRecebido, mb, mimeBase, mimeSeguro, nomeDoContentDisposition, pedidoMidiaInfobip, saidaComArquivo, urlDownloadInfobip } from "./midia.ts";
 
 const sql = postgres(Deno.env.get("SUPABASE_DB_URL")!, { max: 2, prepare: false, idle_timeout: 20 });
 const PRAZO_MS = 45_000;          // o cron chama com timeout de 60 s; sobra folga para gravar o resultado
@@ -148,7 +150,7 @@ async function subir(caminho: string, mime: string, dados: Uint8Array): Promise<
 
 async function enviarUma(cred: Cred, m: Fila): Promise<string> {
   const vars = Array.isArray(m.variaveis) ? (m.variaveis as unknown[]).map(String) : [];
-  if (m.tipo === "imagem" || m.tipo === "documento") {
+  if (saidaComArquivo(m.tipo)) {
     const url = m.midia_caminho ? await assinar(m.midia_caminho, ASSINATURA_ENVIO_S) : null;
     if (!url) {
       // não saiu: volta para a fila (até 5 tentativas; o banco conta)

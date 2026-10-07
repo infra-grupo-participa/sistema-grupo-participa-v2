@@ -4,7 +4,7 @@
 // Regras do playbook no ponto onde bloqueiam: só pelo número oficial, lead que não é seu não se toca,
 // fora da janela de 24 h só sai template aprovado, mensagem curta pelo nome do lead e sem emoji,
 // toda conversa termina com próximo passo.
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type UIEvent } from 'react';
 import {
   AvatarInicial, Badge, Button, Card, Drawer, FilterSelect, Row, SearchInput, SectionTitle, Skeleton,
   Spinner, Textarea, Toast, useFlash,
@@ -20,10 +20,12 @@ import { InfoIndicador } from '../InfoIndicador';
 import { ContatoDrawer } from '../contatos/ContatoDrawer';
 import { CardNegocio } from '../funil/CardNegocio';
 import { ModalAtividade, NegocioDrawer } from '../NegocioDrawer';
-import { avisarMudanca, repo, useAgora, useContatosPorIds, useDados } from '../repositorio';
+import { avisarMudanca, repo, useAgora, useAtualizacaoPeriodica, useContatosPorIds, useDados } from '../repositorio';
+import { estaNoFim } from '../atualizacao';
 import { INFO_CAIXA } from './indicadores';
 import { ModalAtribuir } from './ModalAtribuir';
 import { BotaoAnexar } from './Anexar';
+import { BotaoGravarAudio } from './GravarAudio';
 import { MidiaMensagem } from './MidiaMensagem';
 import { legendaDaMensagem } from '../../domain/midia';
 import { MenuRespostas, useAlturaDisponivel } from './pecas';
@@ -69,6 +71,8 @@ export function ConversasClient() {
   const templates = rTemplates.dados;
   const erro = rConversas.erro ?? rContatos.erro ?? rNegocios.erro ?? rTemplates.erro;
   const recarregar = () => { rConversas.recarregar(); rContatos.recarregar(); rNegocios.recarregar(); rTemplates.recarregar(); };
+  // Lista sozinha: mensagem nova sobe a conversa, muda a prévia/status e o contador de não lidas (sem F5).
+  useAtualizacaoPeriodica(rConversas.recarregar, 'listaConversas');
 
   // Padrão: vendedor vê as dele, gestor vê todas. A escolha vale enquanto a sessão não mudar ("Ver como").
   const [escolha, setEscolha] = useState<{ de: string; f: Filtro } | null>(null);
@@ -88,12 +92,18 @@ export function ConversasClient() {
 
   // Abrir a conversa marca como lida, mas só para o dono (ou o gestor, em conversa sem dono):
   // quem só espia a conversa de outro não pode sumir com o aviso de não lida do dono.
-  const donoAtivo = conversas?.find((c) => c.contatoId === ativo)?.atribuidaA ?? null;
+  // Mensagem que chega com a conversa aberta (pela atualização periódica) também é marcada como lida.
+  const cvAtiva = conversas?.find((c) => c.contatoId === ativo);
+  const donoAtivo = cvAtiva?.atribuidaA ?? null;
+  const temNaoLida = (cvAtiva?.naoLidas ?? 0) > 0;
   const podeMarcarLida = !!ativo && !!sessao && (donoAtivo === sessao.vendedorId || (!donoAtivo && gestor));
+  const marcadaPara = useRef<string | null>(null);
   useEffect(() => {
     if (!ativo || !podeMarcarLida) return;
+    if (marcadaPara.current === ativo && !temNaoLida) return;
+    marcadaPara.current = ativo;
     repo.marcarConversaLida(ativo).then((r) => { if (r.ok) avisarMudanca(); });
-  }, [ativo, podeMarcarLida]);
+  }, [ativo, podeMarcarLida, temNaoLida]);
 
   const contatoPorId = useMemo(() => new Map((contatos ?? []).map((c) => [c.id, c])), [contatos]);
   const lista = useMemo(() => conversas ?? [], [conversas]);
@@ -420,9 +430,20 @@ function PainelConversa({ contato, conversa, negocio, templates, sessao, gestor,
   onAbrirNegocio: (id: string) => void; onAgendar: (n: Negocio) => void; onDetalhes: () => void; onAtribuir: () => void;
 }) {
   const { dados, erro, recarregar } = useDados(() => repo.mensagens(contato.id), [contato.id]);
+  // Conversa aberta sozinha: mensagem nova, mídia que sai de "pendente" e status (enviada → entregue → lida).
+  useAtualizacaoPeriodica(recarregar, 'conversaAberta');
   const mensagens = useMemo(() => (dados ?? []).filter((m) => m.contatoId === contato.id && m.canal === 'whatsapp'), [dados, contato.id]);
   const fim = useRef<HTMLDivElement>(null);
-  useEffect(() => { fim.current?.scrollIntoView({ block: 'end' }); }, [mensagens.length]);
+  // Rola para o fim ao abrir e quando chega mensagem, mas só se o vendedor já estava no fim (lendo o histórico, fica onde está).
+  const noFim = useRef(true);
+  const aoRolar = (e: UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    noFim.current = estaNoFim(el.scrollTop, el.scrollHeight, el.clientHeight);
+  };
+  const ultimaId = mensagens.at(-1)?.id;
+  useEffect(() => {
+    if (noFim.current) fim.current?.scrollIntoView({ block: 'end' });
+  }, [mensagens.length, ultimaId]);
 
   const dono = conversa?.atribuidaA ?? contato.donoId;
   const janela = janelaRestante(conversa?.janelaAteEm ?? null, agora);
@@ -497,7 +518,7 @@ function PainelConversa({ contato, conversa, negocio, templates, sessao, gestor,
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 bg-[var(--surface-1)]" aria-live="polite" aria-label={`Mensagens com ${contato.nome}`} role="log">
+      <div onScroll={aoRolar} className="flex-1 overflow-y-auto px-4 py-3 bg-[var(--surface-1)]" aria-live="polite" aria-label={`Mensagens com ${contato.nome}`} role="log">
         {erro && !dados ? (
           <EstadoErro mensagem={erro} onTentar={recarregar} />
         ) : !dados ? (
@@ -698,6 +719,7 @@ function Envio({ contato, negocio, janelaAberta, templates, remetente, flash }: 
           className="!resize-none"
         />
         <BotaoAnexar contatoId={contato.id} nomeContato={nome || contato.nome} desabilitado={enviando} flash={flash} />
+        <BotaoGravarAudio contatoId={contato.id} nomeContato={nome || contato.nome} desabilitado={enviando} flash={flash} />
         <Button
           ref={botaoMenu}
           variant="ghost"

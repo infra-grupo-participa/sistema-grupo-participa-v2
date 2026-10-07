@@ -65,7 +65,7 @@ export const DEPARTAMENTOS: Departamento[] = [
     key: 'comercial',
     label: 'Comercial',
     path: '/comercial',
-    descricao: 'CRM: ativação, vendas e recuperação',
+    descricao: 'CRM: ativação, vendas e estratégias',
     ico: 'handshake',
     status: 'ativo',
     // As "áreas" do Comercial são as telas do CRM (o playbook divide o time em Atendimento, Prospecção e
@@ -76,7 +76,8 @@ export const DEPARTAMENTOS: Departamento[] = [
       area('comercial', 'conversas', 'Conversas', 'message', 'WhatsApp oficial, atribuído ao dono do lead', 'ativo'),
       area('comercial', 'atividades', 'Atividades', 'list-checks', 'Agenda do dia, cadência e atrasadas', 'ativo'),
       area('comercial', 'contatos', 'Contatos', 'contact', 'Pessoas, dono e histórico completo', 'ativo'),
-      area('comercial', 'recuperacao', 'Recuperação', 'target', 'Filas pós-lançamento com score A a D', 'ativo'),
+      // Ex-"Recuperação" (07/10/2026): pedidos de estratégia + as filas de recuperação. /comercial/recuperacao → 308 aqui.
+      area('comercial', 'estrategias', 'Estratégias', 'target', 'Pedidos de estratégia e filas de recuperação', 'ativo'),
       area('comercial', 'disparos', 'Disparos', 'send', 'Ficha, aprovação, supressões e log', 'ativo'),
       area('comercial', 'relatorios', 'Relatórios', 'chart', 'Fechamento do dia e indicadores', 'ativo'),
       area('comercial', 'produtos', 'Produtos e ofertas', 'wallet', 'Catálogo da Hotmart e oferta vigente', 'ativo'),
@@ -164,6 +165,32 @@ export function podeVerDepartamento(u: GpUser | null, key: DepartamentoKey, opco
   if (key === 'marketing') return ehAdminOuAcima(u);
   if (key === 'comercial') return ehAdminOuAcima(u) || (opcoes.comercialVendedores === true && ehDoComercial(u));
   return true;
+}
+
+/** Função que libera pedir estratégia ao Comercial (vale pela FUNÇÃO, não pelo cargo; espelho de `crm.pode_solicitar_estrategia()`). */
+export const FUNCAO_SOLICITAR_ESTRATEGIA = 'comercial.solicitar_estrategia';
+
+/**
+ * Pode pedir estratégia ao Comercial? Status ativo e a função `comercial.solicitar_estrategia` em `funcoes`.
+ * Dev/admin SEM a função não pedem (de propósito: a permissão é da função, para poder liberar a quem não é admin).
+ */
+export function podeSolicitarEstrategia(u: GpUser | null): boolean {
+  if (!u || (u.status ?? 'ativo') !== 'ativo') return false;
+  return (u.funcoes || []).includes(FUNCAO_SOLICITAR_ESTRATEGIA);
+}
+
+/**
+ * O que a pessoa abre no Comercial:
+ * - 'completo': o CRM inteiro (`podeVerDepartamento`);
+ * - 'estrategias': só a tela de Estratégias (quem pede estratégia e não é do Comercial vê os próprios pedidos e o placar);
+ * - null: nada.
+ * Usado pelo layout de /comercial, pela página de Estratégias, pela sidebar e pelo cartão da home. As outras páginas do
+ * Comercial continuam exigindo `podeVerDepartamento` (cada page repete a regra). A fronteira de dado é o banco.
+ */
+export type AcessoComercial = 'completo' | 'estrategias' | null;
+export function acessoComercial(u: GpUser | null, opcoes: OpcoesAcessoDepartamento = {}): AcessoComercial {
+  if (podeVerDepartamento(u, 'comercial', opcoes)) return 'completo';
+  return podeSolicitarEstrategia(u) ? 'estrategias' : null;
 }
 
 /** Departamento dono de uma rota (`/educacional/placas` → educacional). Fora dos departamentos: null. */
