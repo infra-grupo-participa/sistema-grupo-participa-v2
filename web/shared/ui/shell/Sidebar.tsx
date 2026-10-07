@@ -117,14 +117,14 @@ export function Sidebar({ user }: { user: GpUser }) {
   };
 
   const itemCls = (active: boolean) =>
-    `group/item relative flex items-center gap-2.5 pl-3 pr-2 py-2 rounded-[var(--r-md)] text-sm cursor-pointer transition-colors duration-150 ${
+    `group/item relative flex items-center gap-2.5 pl-3 pr-2 py-2 rounded-[var(--r-md)] text-sm cursor-pointer transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] ${
       active
-        ? 'bg-[var(--accent-subtle)] text-[var(--fg)] font-medium before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-4 before:w-[3px] before:rounded-full before:bg-[var(--accent)]'
-        : 'text-[var(--fg-2)] hover:bg-[var(--surface-3)] hover:text-[var(--fg)]'
+        ? 'bg-[var(--accent-subtle)] text-[var(--fg)] font-medium shadow-[inset_0_0_0_1px_var(--accent-subtle)] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-4 before:w-[3px] before:rounded-full before:bg-[var(--accent)]'
+        : 'text-[var(--fg-2)] hover:bg-[var(--surface-3)] hover:text-[var(--fg)] active:bg-[var(--surface-4)]'
     }`;
   // Ícone: âmbar no item ativo (assinatura da marca) e no hover; herda a cor do texto no repouso.
   const iconBoxCls = (active: boolean) =>
-    `grid place-items-center w-6 h-6 rounded-[var(--r-sm)] text-[13px] shrink-0 transition-colors duration-150 ${
+    `grid place-items-center w-6 h-6 rounded-[var(--r-sm)] text-[13px] shrink-0 transition-colors duration-[var(--dur-fast)] ${
       active ? 'text-[var(--accent)]' : 'text-[var(--fg-3)] group-hover/item:text-[var(--accent)]'
     }`;
 
@@ -243,9 +243,10 @@ export function Sidebar({ user }: { user: GpUser }) {
                       toggleReport(group.key);
                     }}
                     aria-label="Alternar subtópicos"
-                    className="text-[var(--fg-3)] px-1"
+                    aria-expanded={open}
+                    className="grid place-items-center w-6 h-6 rounded-[var(--r-sm)] text-[var(--fg-3)] hover:text-[var(--fg)] hover:bg-[var(--surface-4)]"
                   >
-                    <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
+                    <Icon name="chevron-right" size={14} className={`transition-[rotate] duration-[var(--dur-mid)] ease-[var(--ease-out)] ${open ? 'rotate-90' : ''}`} />
                   </button>
                 )}
               </div>
@@ -325,10 +326,11 @@ function Group({
       <button
         type="button"
         onClick={onToggle}
-        className="group/grp w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)] hover:text-[var(--fg-2)] transition-colors rounded-[var(--r-sm)]"
+        aria-expanded={!collapsed}
+        className="group/grp w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--fg-3)] hover:text-[var(--fg-2)] transition-colors duration-[var(--dur-fast)] rounded-[var(--r-sm)]"
       >
         <span>{label}</span>
-        <Icon name={collapsed ? 'chevron-up' : 'chevron-down'} size={14} className="text-[var(--fg-4)] group-hover/grp:text-[var(--fg-2)] transition-colors" />
+        <Icon name="chevron-down" size={14} className={`text-[var(--fg-4)] group-hover/grp:text-[var(--fg-2)] transition-[color,rotate] duration-[var(--dur-mid)] ease-[var(--ease-out)] ${collapsed ? 'rotate-180' : ''}`} />
       </button>
       {!collapsed && <div className="flex flex-col gap-0.5">{children}</div>}
     </div>

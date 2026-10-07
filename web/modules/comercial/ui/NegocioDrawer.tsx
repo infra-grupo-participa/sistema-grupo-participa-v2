@@ -82,9 +82,9 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
       <Drawer
         onClose={onClose}
         width="max-w-4xl"
-        title={erro || carregou ? 'Negócio' : <span className="block w-[180px] h-4 rounded bg-[var(--surface-3)] animate-pulse" aria-label="Carregando" />}
-        subtitle={erro || carregou ? undefined : <span className="block w-[240px] max-w-full h-2.5 mt-1.5 rounded bg-[var(--surface-3)] animate-pulse" />}
-        avatar={<span className="block w-11 h-11 rounded-full bg-[var(--surface-3)] animate-pulse" />}
+        title={erro || carregou ? 'Negócio' : <span className="gp-skeleton block w-[180px] h-4 rounded-[var(--r-sm)]" aria-label="Carregando" />}
+        subtitle={erro || carregou ? undefined : <span className="gp-skeleton block w-[240px] max-w-full h-2.5 mt-1.5 rounded-[var(--r-sm)]" />}
+        avatar={<span className="gp-skeleton block w-11 h-11 rounded-full" />}
       >
         {erro ? (
           <EstadoErro mensagem={erro} onTentar={() => { void rNegocios.recarregar(); void rContatos.recarregar(); void rFunis.recarregar(); }} />

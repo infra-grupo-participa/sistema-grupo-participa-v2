@@ -39,16 +39,19 @@ export function AppShell({ user, children }: { user: GpUser; children: React.Rea
         onToggleCollapse={toggleCollapse}
       />
       <div className="flex flex-1 min-h-0">
-        {/* Sidebar desktop — recolhível (anima a largura para liberar área de trabalho) */}
+        {/* Sidebar desktop — recolhível (anima a largura para liberar área de trabalho).
+            Largura é a exceção à regra "só transform/opacity": não há transform que
+            devolva o espaço ao conteúdo. Fica curta (240ms) e com a curva forte de
+            movimento na tela (ease-in-out da casa), não a ease-in-out mole do CSS. */}
         <div
-          className={`hidden md:block shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out ${collapsed ? 'w-0' : 'w-[var(--sidebar-width)]'}`}
+          className={`hidden md:block shrink-0 overflow-hidden transition-[width] duration-[var(--dur-modal)] ease-[var(--ease-in-out)] ${collapsed ? 'w-0' : 'w-[var(--sidebar-width)]'}`}
         >
           <Sidebar user={user} />
         </div>
 
         {/* Sidebar mobile — drawer sobreposto */}
         <div
-          className={`${mobileOpen ? 'fixed inset-y-0 left-0 z-50 pt-[var(--header-height)]' : 'hidden'} md:hidden`}
+          className={`${mobileOpen ? 'fixed inset-y-0 left-0 z-50 pt-[var(--header-height)] gp-drawer-left-in shadow-[var(--shadow-overlay)]' : 'hidden'} md:hidden`}
         >
           <Sidebar user={user} />
         </div>
@@ -57,7 +60,7 @@ export function AppShell({ user, children }: { user: GpUser; children: React.Rea
             type="button"
             aria-label="Fechar navegação"
             onClick={() => setMobileOpen(false)}
-            className="fixed inset-0 z-40 bg-black/45 md:hidden"
+            className="fixed inset-0 z-40 bg-[var(--scrim)] backdrop-blur-[2px] md:hidden gp-overlay-in"
           />
         )}
         {/* `--gp-main-pad` publica o padding horizontal desta área de scroll

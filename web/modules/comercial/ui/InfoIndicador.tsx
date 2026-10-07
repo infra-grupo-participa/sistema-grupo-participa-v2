@@ -68,7 +68,7 @@ export function InfoIndicador({ metrica, texto, className = '' }: { metrica?: Me
           role="dialog"
           aria-label={def.nome}
           onClick={(e) => e.stopPropagation()}
-          className="absolute left-1/2 top-full z-40 mt-1.5 w-[min(300px,calc(100vw-32px))] -translate-x-1/2 rounded-[var(--r-md)] border border-[var(--border-strong)] bg-[var(--surface-2)] p-3 text-left shadow-[var(--shadow-lg)] gp-fade-in"
+          className="absolute left-1/2 top-full z-40 mt-1.5 w-[min(300px,calc(100vw-32px))] -translate-x-1/2 rounded-[var(--r-md)] border border-[var(--border-strong)] bg-[var(--surface-2)] p-3 text-left shadow-[var(--highlight-surface),var(--shadow-lg)] gp-pop-in origin-top"
         >
           <span className="block text-[13px] font-semibold text-[var(--fg)]">{def.nome}</span>
           <span className="mt-1 block text-xs leading-relaxed text-[var(--fg-2)]">{def.oQueE}</span>

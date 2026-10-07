@@ -18,7 +18,7 @@ const DOT: Record<Tone, string> = {
 // max-w-full + texto em span com truncate: em célula estreita (table-fixed) o chip
 // encolhe com reticências em vez de ser decepado no meio da moldura.
 const CHIP =
-  'inline-flex max-w-full items-center gap-1.5 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-xs font-medium text-[var(--fg-2)] whitespace-nowrap';
+  'inline-flex max-w-full items-center gap-1.5 rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-xs font-medium leading-[1.4] text-[var(--fg-2)] whitespace-nowrap';
 
 /** Chip de status corporativo — cor só no ponto, texto/fundo neutros.
  *  `dotColor` sobrepõe a cor do ponto (ex.: cor por espaço/valor). */
@@ -26,7 +26,7 @@ export function Badge({ children, tone = 'neutral', dot = false, dotColor }: { c
   const showDot = dot || tone !== 'neutral' || !!dotColor;
   return (
     <span className={CHIP} title={typeof children === 'string' ? children : undefined}>
-      {showDot && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor || DOT[tone] }} />}
+      {showDot && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor || DOT[tone], boxShadow: `0 0 0 2px color-mix(in srgb, ${dotColor || DOT[tone]} 18%, transparent)` }} />}
       <span className="truncate">{children}</span>
     </span>
   );

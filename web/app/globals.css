@@ -57,10 +57,19 @@
   /* Raio */
   --r-sm:6px; --r-md:10px; --r-lg:14px; --r-xl:18px; --r-pill:999px;
 
-  /* Sombras */
-  --shadow-sm:0 1px 3px rgba(0,0,0,.3);
-  --shadow-md:0 2px 8px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.3);
-  --shadow-lg:0 8px 24px rgba(0,0,0,.5);
+  /* Sombras — escala em camadas (2026-10-07, princípios de emilkowalski/skills):
+     sombra curta e nítida + sombra longa e difusa lê como objeto real; uma
+     sombra só, chapada, lê como recorte. --shadow-overlay = modais/gavetas. */
+  --shadow-xs:0 1px 1px rgba(0,0,0,.25);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.3),0 1px 3px rgba(0,0,0,.15);
+  --shadow-md:0 1px 2px rgba(0,0,0,.3),0 4px 12px -2px rgba(0,0,0,.35);
+  --shadow-lg:0 2px 4px rgba(0,0,0,.25),0 12px 32px -4px rgba(0,0,0,.5);
+  --shadow-overlay:0 0 0 1px rgba(255,255,255,.04),0 24px 64px -12px rgba(0,0,0,.7),0 8px 20px -6px rgba(0,0,0,.4);
+  /* Brilho de topo em botões cheios (luz batendo na borda) e em superfícies flutuantes. */
+  --highlight-inset:inset 0 1px 0 rgba(255,255,255,.18);
+  --highlight-surface:inset 0 1px 0 rgba(255,255,255,.04);
+  /* Véu dos modais/gavetas e o "material" translúcido de toasts. */
+  --scrim:rgba(0,0,0,.6);
 
   /* Layout */
   --header-height:60px; --sidebar-width:264px;
@@ -83,7 +92,20 @@
 
   /* Interação */
   --ring:0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent-border);
-  --t-fast:120ms cubic-bezier(.4,0,.2,1); --t-mid:200ms cubic-bezier(.4,0,.2,1);
+  /* Anel de foco: outline (segue o raio do elemento e não briga com box-shadow). */
+  --focus-ring:color-mix(in srgb, var(--accent) 75%, transparent);
+  /* Halo de campo em foco (input/select/textarea). */
+  --field-halo:0 0 0 3px var(--accent-subtle);
+
+  /* Movimento (2026-10-07, princípios de emilkowalski/skills):
+     - entrar/sair = ease-out forte (começa rápido, responde na hora); nunca ease-in em UI;
+     - mover/transformar na tela = ease-in-out forte; gaveta = curva estilo iOS;
+     - UI fica abaixo de 300ms: toque 140ms, hover/popover 160ms, menu 200ms, modal 240ms. */
+  --ease-out:cubic-bezier(.23,1,.32,1);
+  --ease-in-out:cubic-bezier(.77,0,.175,1);
+  --ease-drawer:cubic-bezier(.32,.72,0,1);
+  --dur-press:140ms; --dur-fast:160ms; --dur-mid:200ms; --dur-modal:240ms; --dur-drawer:320ms;
+  --t-fast:var(--dur-fast) var(--ease-out); --t-mid:var(--dur-mid) var(--ease-out);
 }
 
 /* ── Tokens — tema claro ──
@@ -129,8 +151,18 @@
 
   --fg:#0f172a; --fg-2:#475569; --fg-3:#64748b; --fg-4:#94a3b8;
 
-  /* Profundidade por borda — sombras zeradas no claro (fiel ao legado) */
-  --shadow-sm:none; --shadow-md:none; --shadow-lg:none;
+  /* Profundidade continua vindo da BORDA no claro; a sombra entra só como
+     sussurro (alpha .04-.08, tom slate, não preto) para o card descolar do
+     fundo cinza. Revisão de 2026-10-07 (pedido premium do Arthur) — antes era
+     `none` (fiel ao legado). Para voltar ao legado, zere estes tokens. */
+  --shadow-xs:0 1px 1px rgba(15,23,42,.04);
+  --shadow-sm:0 1px 2px rgba(15,23,42,.05),0 1px 3px rgba(15,23,42,.04);
+  --shadow-md:0 1px 2px rgba(15,23,42,.05),0 4px 12px -2px rgba(15,23,42,.08);
+  --shadow-lg:0 2px 4px rgba(15,23,42,.04),0 12px 32px -4px rgba(15,23,42,.14);
+  --shadow-overlay:0 0 0 1px rgba(15,23,42,.06),0 24px 64px -12px rgba(15,23,42,.28),0 8px 20px -6px rgba(15,23,42,.1);
+  --highlight-inset:inset 0 1px 0 rgba(255,255,255,.28);
+  --highlight-surface:inset 0 1px 0 rgba(255,255,255,.6);
+  --scrim:rgba(15,23,42,.42);
 }
 
 /* ── Mapa Tailwind v4 (utilities) ──
@@ -210,7 +242,28 @@ body {
   color: var(--fg);
   font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   font-feature-settings: 'cv11', 'ss01';
+  /* Toque: sem o flash cinza/azul do WebKit ao tocar em links e botões. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Tipografia: tracking por tamanho (título grande aperta, corpo fica em 0) e
+   quebra equilibrada nos títulos. Em @layer base para utility do Tailwind
+   (tracking-wide nos rótulos em caixa-alta) continuar vencendo. */
+@layer base {
+  h1 { letter-spacing: -0.02em; text-wrap: balance; }
+  h2, h3 { letter-spacing: -0.01em; text-wrap: balance; }
+  p { text-wrap: pretty; }
+  /* Toque sem o atraso de duplo-toque; texto de controle não seleciona no long-press. */
+  a, button, [role='button'], [role='tab'], label, summary { touch-action: manipulation; }
+  button, [role='tab'] { -webkit-user-select: none; user-select: none; }
+}
+
+/* Celular: campo com fonte < 16px faz o iOS dar zoom na página ao focar. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']), select, textarea { font-size: max(16px, 1em); }
 }
 
 /* Números tabulares para dados (alinhamento em tabelas/KPIs) */
@@ -222,27 +275,95 @@ body {
 *::-webkit-scrollbar-thumb { background: var(--surface-4); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
 *::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
-/* Foco visível consistente (acessibilidade + craft) */
-:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--r-sm); }
+/* Foco visível consistente (acessibilidade + craft).
+   Outline em vez de box-shadow (2026-10-07): segue o raio do próprio elemento
+   (antes o foco forçava r-sm e "quadrava" botões e campos de r-md) e não é
+   apagado por quem usa shadow-* no componente. Campo de texto ganha halo
+   suave em vez do anel deslocado. */
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+:is(input:not([type='checkbox']):not([type='radio']), textarea, select):focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: var(--field-halo);
+}
 ::selection { background: var(--accent-subtle); }
 
-/* Animações utilitárias */
+/* Animações utilitárias.
+   Regras (emilkowalski/skills): nada nasce de scale(0) — parte de .95-.97 com
+   opacidade; popover cresce a partir do gatilho (transform-origin), modal fica
+   centrado; só transform/opacity (GPU), nunca largura/altura/top. */
 @keyframes gp-fade { from { opacity: 0 } to { opacity: 1 } }
-@keyframes gp-slide-in { from { transform: translateX(16px); opacity: .4 } to { transform: translateX(0); opacity: 1 } }
-@keyframes gp-slide-up { from { transform: translateY(12px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
-@keyframes gp-rise { from { transform: translateY(10px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+@keyframes gp-slide-in { from { transform: translateX(16px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+@keyframes gp-slide-up { from { transform: translateY(8px) scale(.97); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes gp-rise { from { transform: translateY(8px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+@keyframes gp-pop { from { transform: scale(.96) translateY(-2px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes gp-drawer-left { from { transform: translateX(-100%) } to { transform: translateX(0) } }
 @keyframes gp-spin { to { transform: rotate(360deg) } }
-.gp-overlay-in { animation: gp-fade var(--t-mid); }
-.gp-panel-in { animation: gp-slide-in var(--t-mid); }
-.gp-modal-in { animation: gp-slide-up var(--t-mid); }
-.gp-fade-in { animation: gp-fade var(--t-fast); }
+@keyframes gp-shimmer { from { transform: translateX(-100%) } to { transform: translateX(100%) } }
+.gp-overlay-in { animation: gp-fade var(--dur-mid) var(--ease-out); }
+.gp-panel-in { animation: gp-slide-in var(--dur-modal) var(--ease-out); }
+/* Modal: centrado (exceção à regra do gatilho), sobe 8px e cresce de .97. */
+.gp-modal-in { animation: gp-slide-up var(--dur-modal) var(--ease-out); transform-origin: center; }
+.gp-fade-in { animation: gp-fade var(--dur-fast) var(--ease-out); }
+/* Popover/menu/dropdown: cresce do gatilho. O canto vem de origin-* no componente
+   (padrão: topo). Usa `transform`, então convive com translate-* do Tailwind. */
+.gp-pop-in { animation: gp-pop var(--dur-fast) var(--ease-out); transform-origin: top; }
+/* Gaveta lateral (menu no celular): curva estilo iOS. */
+.gp-drawer-left-in { animation: gp-drawer-left var(--dur-drawer) var(--ease-drawer); }
 
 /* Entrada de listas/grids — stagger sutil (delay aplicado por índice via style inline).
    Reveal informacional discreto (sem overshoot), fiel ao painel operacional. */
-.gp-rise { animation: gp-rise 320ms cubic-bezier(.22,.61,.36,1) both; }
+.gp-rise { animation: gp-rise 280ms var(--ease-out) both; }
+
+/* Pressionar: o elemento afunda 3% — confirma que a interface ouviu o clique.
+   Aplica-se a qualquer coisa clicável que não seja texto corrido. */
+.gp-press { transition-property: scale, background-color, border-color, color, box-shadow, filter, opacity; transition-duration: var(--dur-press); transition-timing-function: var(--ease-out); }
+.gp-press:active:not(:disabled):not([aria-disabled='true']) { scale: .97; }
+
+/* Skeleton com brilho que passa (transform no pseudo-elemento: GPU, sem repintar). */
+.gp-skeleton { position: relative; overflow: hidden; background: var(--surface-3); }
+.gp-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--fg) 6%, transparent), transparent);
+  animation: gp-shimmer 1.4s var(--ease-in-out) infinite;
+}
+
+/* Toast: material translúcido, entra de baixo com @starting-style (transição,
+   não keyframe — retoma do ponto atual se outro toast chegar no meio). */
+.gp-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--surface-4) 88%, transparent);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  backdrop-filter: blur(12px) saturate(160%);
+  box-shadow: var(--highlight-surface), var(--shadow-lg);
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 500;
+  transform: translateX(-50%);
+  opacity: 1;
+  transition: opacity 360ms ease, transform 360ms ease;
+}
+@starting-style {
+  .gp-toast { opacity: 0; transform: translateX(-50%) translateY(16px) scale(.98); }
+}
 
 /* Respeita quem pediu menos movimento (checklist de acessibilidade).
-   Zera animações e transições, mantendo o estado final visível. */
+   "Menos movimento" não é "nenhuma resposta": some tudo que DESLOCA (slide,
+   escala, brilho do skeleton, afundar no clique); entradas viram fade curto,
+   que ajuda a entender o que apareceu sem mexer nada de lugar. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .001ms !important;
@@ -250,6 +371,13 @@ body {
     transition-duration: .001ms !important;
     scroll-behavior: auto !important;
   }
+  .gp-overlay-in, .gp-modal-in, .gp-panel-in, .gp-pop-in, .gp-fade-in, .gp-rise, .gp-drawer-left-in {
+    animation-name: gp-fade !important;
+    animation-duration: 150ms !important;
+  }
+  .gp-press:active:not(:disabled):not([aria-disabled='true']) { scale: none; }
+  .gp-skeleton::after { animation: none; display: none; }
+  .gp-toast { transition-property: opacity; transition-duration: 150ms !important; }
 }
 
 /* Logo Grupo Participa — troca por tema (sem flicker: data-theme vem do script inline).
@@ -500,7 +628,7 @@ input[type='search']::-webkit-search-decoration {
     --border-faint:rgba(15,23,42,.06); --border:rgba(15,23,42,.12);
     --border-strong:rgba(15,23,42,.22); --border-accent:rgba(224,127,16,.42);
     --fg:#0f172a; --fg-2:#475569; --fg-3:#64748b; --fg-4:#94a3b8;
-    --shadow-sm:none; --shadow-md:none; --shadow-lg:none;
+    --shadow-xs:none; --shadow-sm:none; --shadow-md:none; --shadow-lg:none; --shadow-overlay:none;
   }
 
   body { background: #fff; color: var(--fg); }

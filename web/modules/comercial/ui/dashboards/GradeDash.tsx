@@ -318,7 +318,7 @@ function MenuWidget({ w, primeiro, ultimo, acoes }: { w: WidgetDash; primeiro: b
       {aberto && (
         <div
           ref={caixa} role="menu" aria-label={`Ações de ${w.titulo || 'widget'}`} onKeyDown={navegar}
-          className="absolute right-0 top-8 z-30 w-48 rounded-[var(--r-md)] border border-[var(--border-strong)] bg-[var(--surface-2)] p-1 shadow-[var(--shadow-lg)]"
+          className="gp-pop-in origin-top-right absolute right-0 top-8 z-30 w-48 rounded-[var(--r-lg)] border border-[var(--border-strong)] bg-[var(--surface-2)] p-1 shadow-[var(--highlight-surface),var(--shadow-lg)]"
         >
           {item('Editar propriedades', 'pencil', () => acoes.selecionar(w.id))}
           {item('Duplicar', 'copy', () => acoes.duplicar(w.id))}

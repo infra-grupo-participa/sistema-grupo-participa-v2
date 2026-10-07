@@ -341,7 +341,7 @@ function EsqueletoCaixa() {
         </div>
         {Array.from({ length: 7 }).map((_, i) => (
           <div key={i} className="flex gap-3 px-3 py-3 border-b border-[var(--border-faint)]">
-            <span className="w-9 h-9 rounded-full bg-[var(--surface-3)] animate-pulse shrink-0" />
+            <span className="gp-skeleton w-9 h-9 rounded-full shrink-0" />
             <div className="flex-1 space-y-2 pt-0.5">
               <Skeleton w="60%" h={12} />
               <Skeleton w="85%" h={10} />

@@ -96,7 +96,7 @@ export function SolicitacaoDrawer({
             {maisOpen && (
               <>
                 <div className="fixed inset-0 z-[1000]" onClick={() => setMaisOpen(false)} />
-                <div className="absolute right-0 bottom-full mb-1 z-[1001] min-w-[200px] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-1 shadow-[var(--shadow-lg)]">
+                <div className="gp-pop-in origin-bottom-right absolute right-0 bottom-full mb-1 z-[1001] min-w-[200px] rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] p-1 shadow-[var(--highlight-surface),var(--shadow-lg)]">
                   {sol.status !== 'rejeitado' && sol.status !== 'concluido' && (
                     <button type="button" onClick={() => { setMaisOpen(false); setConfirmRejeitar(true); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--fg-2)] rounded-[var(--r-sm)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="x" size={14} /> Rejeitar solicitação</button>
                   )}

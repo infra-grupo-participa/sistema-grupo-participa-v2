@@ -30,13 +30,13 @@ export function Header({
   const inicial = (user.nome || 'U').charAt(0).toUpperCase();
 
   return (
-    <header className="h-[var(--header-height)] shrink-0 flex items-center gap-3 px-4 bg-[var(--surface-1)] border-b border-[var(--border)]">
+    <header className="relative z-[60] h-[var(--header-height)] shrink-0 flex items-center gap-3 px-4 bg-[var(--surface-1)] border-b border-[var(--border)] shadow-[var(--shadow-xs)]">
       {onToggleSidebar && (
         <button
           type="button"
           onClick={onToggleSidebar}
           aria-label="Alternar navegação"
-          className="md:hidden w-9 h-9 grid place-items-center rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg)]"
+          className="gp-press md:hidden w-9 h-9 grid place-items-center rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg)] active:bg-[var(--surface-3)]"
         >
           <Icon name="menu" size={18} />
         </button>
@@ -47,7 +47,7 @@ export function Header({
           onClick={onToggleCollapse}
           aria-label={collapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
           title={collapsed ? 'Expandir menu' : 'Recolher menu'}
-          className="hidden md:grid w-9 h-9 place-items-center rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--accent)] hover:border-[var(--border-accent)] hover:bg-[var(--accent-subtle)] transition-colors"
+          className="gp-press hidden md:grid w-9 h-9 place-items-center rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--accent)] hover:border-[var(--border-accent)] hover:bg-[var(--accent-subtle)]"
         >
           <Icon name={collapsed ? 'panel-open' : 'panel-close'} size={18} />
         </button>
@@ -62,13 +62,13 @@ export function Header({
       </div>
 
       <div className="ml-auto flex items-center gap-3">
-        <span className="text-xs px-2 py-1 rounded-[var(--r-pill)] bg-[var(--surface-3)] text-[var(--fg-2)] capitalize">
+        <span className="text-[11px] font-medium px-2 py-0.5 rounded-[var(--r-pill)] border border-[var(--border)] bg-[var(--surface-3)] text-[var(--fg-2)] capitalize">
           {user.cargo}
         </span>
-        <span className="text-sm text-[var(--fg)] max-w-[200px] truncate hidden sm:inline">
+        <span className="text-sm font-medium text-[var(--fg)] max-w-[200px] truncate hidden sm:inline">
           {user.nome || 'Usuário'}
         </span>
-        <div className="w-8 h-8 grid place-items-center rounded-full bg-[var(--accent)] text-black font-semibold text-sm ring-1 ring-[var(--border-accent)] select-none">
+        <div className="w-8 h-8 grid place-items-center rounded-full bg-[var(--accent)] text-black font-semibold text-sm shadow-[var(--highlight-inset),var(--shadow-sm)] ring-2 ring-[var(--accent-subtle)] select-none">
           {inicial}
         </div>
         <button
@@ -76,14 +76,14 @@ export function Header({
           onClick={toggle}
           aria-label="Alternar tema"
           title="Alternar tema claro/escuro"
-          className="w-8 h-8 grid place-items-center rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--accent)] hover:border-[var(--border-accent)] hover:bg-[var(--accent-subtle)] transition-colors"
+          className="gp-press w-8 h-8 grid place-items-center rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--accent)] hover:border-[var(--border-accent)] hover:bg-[var(--accent-subtle)]"
         >
           <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
         </button>
         <button
           type="button"
           onClick={logout}
-          className="text-sm px-3 py-1.5 rounded-[var(--r-sm)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors"
+          className="gp-press text-sm font-medium px-3 py-1.5 rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)]"
         >
           Sair
         </button>

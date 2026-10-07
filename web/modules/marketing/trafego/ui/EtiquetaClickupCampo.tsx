@@ -52,7 +52,7 @@ export function EtiquetaClickupCampo({ valor, onMudar }: { valor: string; onMuda
       />
       {aberto && lista.length > 0 && (
         <ul id={`${id}-lista`} role="listbox"
-          className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] py-1 shadow-[var(--shadow-lg)]">
+          className="gp-pop-in absolute z-20 mt-1 max-h-56 w-full overflow-auto overscroll-contain rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] py-1 shadow-[var(--highlight-surface),var(--shadow-lg)]">
           {lista.map((e, i) => (
             <li key={e.etiqueta} id={`${id}-${i}`} role="option" aria-selected={i === ativo}
               onMouseDown={(ev) => { ev.preventDefault(); if (fechar.current) clearTimeout(fechar.current); escolher(e.etiqueta); }}

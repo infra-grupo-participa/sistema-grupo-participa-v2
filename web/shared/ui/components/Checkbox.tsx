@@ -11,7 +11,7 @@ export function Checkbox({ checked, onChange, label, disabled, className = '' }:
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        className="w-4 h-4 rounded-[var(--r-sm)] accent-[var(--accent)] cursor-pointer disabled:cursor-not-allowed"
+        className="gp-press w-4 h-4 rounded-[var(--r-sm)] accent-[var(--accent)] cursor-pointer disabled:cursor-not-allowed"
       />
       {label && <span className="text-sm text-[var(--fg-2)]">{label}</span>}
     </label>

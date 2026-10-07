@@ -17,16 +17,16 @@ export function Modal({ open = true, onClose, title, children, footer, width = '
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/55 backdrop-blur-[1px] gp-overlay-in" />
-      <div className={`relative w-full ${width} max-h-[90vh] overflow-y-auto rounded-[var(--r-xl)] border border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[var(--shadow-lg)] gp-modal-in`}>
+      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-[2px] gp-overlay-in" />
+      <div className={`relative w-full ${width} max-h-[90vh] overflow-y-auto rounded-[var(--r-xl)] border border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[var(--highlight-surface),var(--shadow-overlay)] gp-modal-in overscroll-contain`}>
         {title && (
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-2)] px-5 py-3.5">
-            <h2 className="text-base font-bold text-[var(--fg)]">{title}</h2>
-            <button onClick={onClose} aria-label="Fechar" className="w-8 h-8 grid place-items-center rounded-[var(--r-md)] text-[var(--fg-3)] hover:text-[var(--fg)] hover:bg-[var(--surface-3)] transition-colors"><Icon name="x" /></button>
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-2)_88%,transparent)] backdrop-blur-md px-5 py-3.5">
+            <h2 className="text-base font-semibold text-[var(--fg)]">{title}</h2>
+            <button onClick={onClose} aria-label="Fechar" className="gp-press w-8 h-8 grid place-items-center rounded-[var(--r-md)] text-[var(--fg-3)] hover:text-[var(--fg)] hover:bg-[var(--surface-3)]"><Icon name="x" /></button>
           </div>
         )}
         <div className="p-5">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-3.5">{footer}</div>}
+        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] bg-[var(--surface-1)]/40 px-5 py-3.5 rounded-b-[var(--r-xl)]">{footer}</div>}
       </div>
     </div>
   );

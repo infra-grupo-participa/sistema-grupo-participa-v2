@@ -107,7 +107,7 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
         width="max-w-3xl"
         title={contatos ? 'Contato não encontrado' : erro ? 'Contato' : <Skeleton w={200} h={18} />}
         subtitle={!contatos && !erro ? <Skeleton w={160} h={10} className="mt-1" /> : undefined}
-        avatar={!contatos && !erro ? <span className="block h-11 w-11 animate-pulse rounded-full bg-[var(--surface-3)]" /> : undefined}
+        avatar={!contatos && !erro ? <span className="gp-skeleton block h-11 w-11 rounded-full" /> : undefined}
       >
         {erro ? (
           <EstadoErro mensagem={erro} onTentar={cs.recarregar} />

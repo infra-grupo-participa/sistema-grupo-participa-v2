@@ -18,11 +18,13 @@ export function useFlash(duracaoMs = 3000): { toast: string; flash: (msg: string
   return { toast, flash };
 }
 
-/** Balão fixo do useFlash. Renderiza nada quando a mensagem está vazia. */
+/** Balão fixo do useFlash. Renderiza nada quando a mensagem está vazia.
+ *  Visual e entrada em `.gp-toast` (globals.css): material translúcido que sobe
+ *  de baixo via @starting-style — transição, não keyframe, como no Sonner. */
 export function Toast({ children }: { children: React.ReactNode }) {
   if (!children) return null;
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface-4)] text-[var(--fg)] px-4 py-2 rounded-[var(--r-md)] shadow-[var(--shadow-lg)] text-sm z-[1100]" role="status">
+    <div className="gp-toast" role="status">
       {children}
     </div>
   );

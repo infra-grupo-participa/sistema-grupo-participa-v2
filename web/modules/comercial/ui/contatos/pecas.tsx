@@ -67,7 +67,7 @@ export function PopoverFiltros({ ativos, children }: { ativos: number; children:
         <div
           role="dialog"
           aria-label="Filtros"
-          className="absolute right-0 z-30 mt-1 w-[min(320px,calc(100vw-32px))] space-y-4 rounded-[var(--r-md)] border border-[var(--border-strong)] bg-[var(--surface-2)] p-4 shadow-[var(--shadow-lg)]"
+          className="gp-pop-in origin-top-right absolute right-0 z-30 mt-1 w-[min(320px,calc(100vw-32px))] space-y-4 rounded-[var(--r-lg)] border border-[var(--border-strong)] bg-[var(--surface-2)] p-4 shadow-[var(--highlight-surface),var(--shadow-lg)]"
         >
           {children}
         </div>

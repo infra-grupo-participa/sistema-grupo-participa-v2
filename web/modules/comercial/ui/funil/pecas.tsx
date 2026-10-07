@@ -69,7 +69,7 @@ export function Popover({ ancora, aberto, onFechar, alinhar = 'direita', largura
       role={role}
       aria-label={rotulo}
       style={{ ...pos, width: largura, maxWidth: 'calc(100vw - 16px)' }}
-      className="fixed z-[950] max-h-[min(70vh,480px)] overflow-y-auto rounded-[var(--r-lg)] border border-[var(--border-strong)] bg-[var(--surface-2)] p-1 shadow-[var(--shadow-lg)] gp-fade-in"
+      className="fixed z-[950] max-h-[min(70vh,480px)] overflow-y-auto overscroll-contain rounded-[var(--r-lg)] border border-[var(--border-strong)] bg-[var(--surface-2)] p-1 shadow-[var(--highlight-surface),var(--shadow-lg)] gp-pop-in"
     >
       {children}
     </div>

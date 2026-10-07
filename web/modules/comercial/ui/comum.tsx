@@ -87,7 +87,7 @@ function AvisoDemonstracao() {
     );
   }
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1 text-xs text-[var(--fg-3)] min-h-9">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1 text-xs text-[var(--fg-3)] min-h-9 shadow-[var(--highlight-surface)]">
       <span className="inline-flex items-center gap-2 min-w-0">
         <Icon name="eye" size={14} className="shrink-0 text-[var(--fg-3)]" />
         <span className="truncate" title="Pessoas fictícias; nada aqui grava no banco. O backend entra depois.">
@@ -139,7 +139,7 @@ export function BotaoPlaybook({ regras, titulo = 'Playbook' }: { regras: React.R
         <Icon name="notebook" size={14} /> {titulo}
       </Button>
       {aberto && (
-        <div role="dialog" aria-label={titulo} className="absolute right-0 z-30 mt-1 w-[min(320px,calc(100vw-32px))] rounded-[var(--r-md)] border border-[var(--border-strong)] bg-[var(--surface-2)] p-3 shadow-[var(--shadow-lg)]">
+        <div role="dialog" aria-label={titulo} className="gp-pop-in origin-top-right absolute right-0 z-30 mt-1 w-[min(320px,calc(100vw-32px))] rounded-[var(--r-lg)] border border-[var(--border-strong)] bg-[var(--surface-2)] p-3 shadow-[var(--highlight-surface),var(--shadow-lg)]">
           <ul className="space-y-2 text-xs leading-relaxed text-[var(--fg-2)]">
             {regras.map((r, i) => (
               <li key={i} className="flex gap-2">
@@ -186,7 +186,7 @@ export function FaixaNumeros({ itens, rotulo, onLimpar, discreta = false, classN
   const algumAtivo = itens.some((i) => i.ativo);
   const caixa = discreta ? '' : 'min-h-10 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)]';
   return (
-    <div role="group" aria-label={rotulo} className={`flex flex-wrap items-stretch ${caixa} ${className}`}>
+    <div role="group" aria-label={rotulo} className={`flex flex-wrap items-stretch ${caixa} ${discreta ? '' : 'shadow-[var(--highlight-surface),var(--shadow-xs)]'} ${className}`}>
       {itens.slice(0, 5).map((it, i) => {
         const conteudo = (
           <>
@@ -341,8 +341,8 @@ export function Segmentado<T extends string>({ opcoes, valor, onChange, rotulo, 
             title={o.title}
             onClick={() => onChange(o.valor)}
             onKeyDown={(e) => teclar(e, i)}
-            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-[var(--r-sm)] px-3 min-h-8 text-xs transition-colors ${
-              sel ? 'bg-[var(--surface-4)] text-[var(--fg)] font-semibold' : 'text-[var(--fg-3)] hover:text-[var(--fg-2)]'
+            className={`gp-press inline-flex items-center gap-1.5 whitespace-nowrap rounded-[var(--r-sm)] px-3 min-h-8 text-xs ${
+              sel ? 'bg-[var(--surface-4)] text-[var(--fg)] font-semibold shadow-[var(--highlight-surface),var(--shadow-xs)]' : 'text-[var(--fg-3)] hover:text-[var(--fg-2)] hover:bg-[var(--surface-3)]'
             }`}
           >
             {o.rotulo}
@@ -365,8 +365,8 @@ export function Chip({ ativo, onClick, children, icone, disabled, title, classNa
       disabled={disabled}
       title={title}
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-[var(--r-pill)] border px-3 min-h-8 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-        ativo ? 'border-[var(--border-accent)] bg-[var(--surface-3)] text-[var(--fg)] font-medium' : 'border-[var(--border)] text-[var(--fg-2)] hover:bg-[var(--surface-3)]'
+      className={`gp-press inline-flex items-center gap-1.5 rounded-[var(--r-pill)] border px-3 min-h-8 text-xs disabled:opacity-50 disabled:cursor-not-allowed ${
+        ativo ? 'border-[var(--border-accent)] bg-[var(--surface-3)] text-[var(--fg)] font-medium' : 'border-[var(--border)] text-[var(--fg-2)] hover:bg-[var(--surface-3)] hover:border-[var(--border-strong)] hover:text-[var(--fg)]'
       } ${className}`}
     >
       {icone && <Icon name={icone} size={13} />}
@@ -409,7 +409,7 @@ export function EsqueletoLista({ linhas = 5, avatar = true }: { linhas?: number;
     <div className="space-y-2" aria-busy="true" aria-label="Carregando">
       {Array.from({ length: linhas }).map((_, i) => (
         <div key={i} className="flex items-center gap-3 rounded-[var(--r-md)] border border-[var(--border-faint)] px-3 py-2">
-          {avatar && <span className="w-7 h-7 rounded-full bg-[var(--surface-3)] animate-pulse shrink-0" />}
+          {avatar && <span className="gp-skeleton w-7 h-7 rounded-full shrink-0" />}
           <div className="flex-1 space-y-1.5">
             <Skeleton w="40%" h={12} />
             <Skeleton w="25%" h={10} />

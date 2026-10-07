@@ -90,7 +90,7 @@ export function SinoNotificacoes() {
         )}
       </button>
       {aberto && (
-        <div role="dialog" aria-label="Notificações" className="absolute right-0 z-40 mt-1.5 w-[min(360px,calc(100vw-32px))] rounded-[var(--r-lg)] border border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[var(--shadow-lg)]">
+        <div role="dialog" aria-label="Notificações" className="gp-pop-in origin-top-right absolute right-0 z-40 mt-1.5 w-[min(360px,calc(100vw-32px))] rounded-[var(--r-lg)] border border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[var(--highlight-surface),var(--shadow-lg)]">
           <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[var(--border)]">
             <span className="text-sm font-semibold text-[var(--fg)]">Notificações</span>
             <span className="flex items-center gap-3">

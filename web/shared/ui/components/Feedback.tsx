@@ -7,7 +7,7 @@ export function Spinner({ size = 24 }: { size?: number }) {
         width: size, height: size,
         border: `${Math.max(2, size / 10)}px solid var(--surface-4)`,
         borderTopColor: 'var(--accent)',
-        animation: 'gp-spin .75s linear infinite',
+        animation: 'gp-spin .6s linear infinite',
       }}
       aria-label="Carregando"
       role="status"
@@ -19,7 +19,7 @@ export function Spinner({ size = 24 }: { size?: number }) {
 export function Loading({ label = 'Carregando…', minHeight = 240 }: { label?: string; minHeight?: number }) {
   return (
     <div
-      className="flex items-center justify-center gap-3 rounded-[var(--r-xl)] border border-[var(--border)] bg-[var(--surface-2)] text-[var(--fg-3)] text-sm"
+      className="flex items-center justify-center gap-3 rounded-[var(--r-xl)] border border-[var(--border)] bg-[var(--surface-2)] text-[var(--fg-3)] text-sm gp-fade-in"
       style={{ minHeight }}
     >
       <Spinner /> {label}
@@ -29,7 +29,7 @@ export function Loading({ label = 'Carregando…', minHeight = 240 }: { label?: 
 
 /** Barra de skeleton pulsante — bloco de construção para placeholders de carga. */
 export function Skeleton({ w, h = 12, className = '' }: { w?: number | string; h?: number; className?: string }) {
-  return <div className={`rounded bg-[var(--surface-3)] animate-pulse ${className}`} style={{ width: w, height: h }} aria-hidden />;
+  return <div className={`gp-skeleton rounded-[var(--r-sm)] ${className}`} style={{ width: w, height: h }} aria-hidden />;
 }
 
 /**
@@ -46,7 +46,7 @@ export function SkeletonRows({ rows = 6, cols = [64, 80, 96, 40, 56], avatar = t
           {avatar && (
             <td className="px-3 py-2.5">
               <div className="flex items-center gap-2.5">
-                <span className="w-8 h-8 rounded-full bg-[var(--surface-3)] animate-pulse shrink-0" />
+                <span className="gp-skeleton w-8 h-8 rounded-full shrink-0" />
                 <div className="space-y-1.5">
                   <Skeleton w={144} h={12} />
                   <Skeleton w={176} h={10} />
@@ -94,7 +94,7 @@ export function ProgressBar({
         aria-valuemax={valueMax ?? 100}
         aria-label={ariaLabel}
       >
-        <div className="h-full rounded-[var(--r-pill)] transition-[width] duration-300" style={{ width: `${pct}%`, background: FILL[tone] }} />
+        <div className="h-full rounded-[var(--r-pill)] transition-[width] duration-[var(--dur-modal)] ease-[var(--ease-out)]" style={{ width: `${pct}%`, background: FILL[tone] }} />
       </div>
       {showLabel && <span className="text-[11px] tabular text-[var(--fg-3)] w-9 text-right">{Math.round(pct)}%</span>}
     </div>

@@ -8,9 +8,12 @@ export function Toolbar({ children, className = '' }: { children: React.ReactNod
   return <div className={`flex flex-wrap items-center gap-2 ${className}`}>{children}</div>;
 }
 
+// Foco: borda âmbar + halo suave vêm do globals.css (:focus-visible em campos).
+// Transição só de cor/borda/sombra, com a curva da casa (nada de `transition-all`).
 const inputCls =
-  'w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] text-[var(--fg)] placeholder:text-[var(--fg-3)] ' +
-  'px-3 py-2 text-sm transition-colors focus:border-[var(--border-accent)] disabled:opacity-50';
+  'w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] text-[var(--fg)] placeholder:text-[var(--fg-3)] shadow-[var(--shadow-xs)] ' +
+  'px-3 py-2 text-sm transition-[border-color,box-shadow,background-color,color] duration-[var(--dur-fast)] ease-[var(--ease-out)] ' +
+  'hover:border-[var(--border-strong)] focus:border-[var(--border-accent)] focus:shadow-[var(--field-halo)] disabled:opacity-50 disabled:hover:border-[var(--border)]';
 
 /** Filtro de múltipla seleção (checkboxes). Recebe/retorna array de valores. */
 export function MultiSelect({ values, onChange, placeholder, options, className = '' }: {
@@ -36,10 +39,10 @@ export function MultiSelect({ values, onChange, placeholder, options, className 
     <div ref={ref} className={`relative ${className}`}>
       <button type="button" onClick={() => setOpen((o) => !o)} className={`${inputCls} flex items-center justify-between gap-2 min-w-[160px] cursor-pointer ${values.length ? '!text-[var(--fg)]' : '!text-[var(--fg-2)]'}`}>
         <span className="truncate">{texto}</span>
-        <span className="shrink-0 text-[var(--fg-3)]"><Icon name="chevron-down" size={14} /></span>
+        <span className={`shrink-0 text-[var(--fg-3)] transition-[rotate] duration-[var(--dur-mid)] ease-[var(--ease-out)] ${open ? 'rotate-180' : ''}`}><Icon name="chevron-down" size={14} /></span>
       </button>
       {open && (
-        <div className="absolute left-0 z-30 mt-1 w-max min-w-full max-w-[280px] max-h-64 overflow-auto rounded-[var(--r-md)] border border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[var(--shadow-lg)] p-1">
+        <div className="gp-pop-in origin-top-left absolute left-0 z-30 mt-1 w-max min-w-full max-w-[280px] max-h-64 overflow-auto overscroll-contain rounded-[var(--r-lg)] border border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[var(--highlight-surface),var(--shadow-lg)] p-1">
           {options.length > 0 && (
             <div className="flex items-center gap-3 px-2 py-1">
               {!allSelected && (
@@ -52,7 +55,7 @@ export function MultiSelect({ values, onChange, placeholder, options, className 
           )}
           {options.length === 0 && <div className="px-2 py-1.5 text-sm text-[var(--fg-3)]">Sem opções</div>}
           {options.map((o) => (
-            <label key={o.value} className="flex items-center gap-2 px-2 py-1.5 rounded-[var(--r-sm)] text-sm text-[var(--fg-2)] hover:bg-[var(--surface-3)] cursor-pointer">
+            <label key={o.value} className="flex items-center gap-2 px-2 py-1.5 rounded-[var(--r-sm)] text-sm text-[var(--fg-2)] hover:bg-[var(--surface-3)] hover:text-[var(--fg)] transition-colors duration-[var(--dur-fast)] cursor-pointer">
               <input type="checkbox" checked={values.includes(o.value)} onChange={() => toggle(o.value)} className="accent-[var(--accent)]" />
               <span className="truncate">{o.label}</span>
             </label>
@@ -198,11 +201,11 @@ export function Toggle({ checked, onChange, label, disabled }: {
         aria-checked={checked}
         disabled={disabled}
         onClick={() => !disabled && onChange(!checked)}
-        className="relative inline-flex shrink-0 rounded-[var(--r-pill)] transition-colors duration-150"
+        className="gp-press relative inline-flex shrink-0 rounded-[var(--r-pill)] shadow-[inset_0_1px_2px_rgba(0,0,0,.18)]"
         style={{ width: 38, height: 21, background: checked ? 'var(--accent)' : 'var(--surface-4)' }}
       >
         <span
-          className="absolute top-0.5 rounded-full bg-white transition-transform duration-150"
+          className="absolute top-0.5 rounded-full bg-white shadow-[var(--shadow-sm)] transition-transform duration-[var(--dur-mid)] ease-[var(--ease-out)]"
           style={{ width: 17, height: 17, left: 2, transform: checked ? 'translateX(17px)' : 'translateX(0)' }}
         />
       </button>

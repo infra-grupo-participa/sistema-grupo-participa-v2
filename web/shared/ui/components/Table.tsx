@@ -7,7 +7,7 @@ import { Icon } from '@/shared/ui/icons';
  *  em vez de alargar a tabela, eliminando o scroll horizontal. */
 export function DataTable({ children, className = '', fixed = false, minWidth }: { children: React.ReactNode; className?: string; fixed?: boolean; minWidth?: number }) {
   return (
-    <div className={`rounded-[var(--r-lg)] border border-[var(--border)] overflow-hidden bg-[var(--surface-2)] shadow-[var(--shadow-sm)] ${className}`}>
+    <div className={`rounded-[var(--r-lg)] border border-[var(--border)] overflow-hidden bg-[var(--surface-2)] shadow-[var(--highlight-surface),var(--shadow-sm)] ${className}`}>
       {/* Com muitas colunas, `minWidth` mantém as larguras e deixa a tabela ROLAR
           na horizontal em telas estreitas, em vez de espremer a 1ª coluna (o nome)
           até sumir. Sem minWidth, table-fixed + w-full comprime tudo no container. */}
@@ -20,7 +20,7 @@ export function DataTable({ children, className = '', fixed = false, minWidth }:
 
 export function Thead({ children }: { children: React.ReactNode }) {
   return (
-    <thead className="sticky top-0 z-[1] bg-[var(--surface-3)] text-[var(--fg-3)]">
+    <thead className="sticky top-0 z-[1] bg-[color-mix(in_srgb,var(--surface-3)_92%,transparent)] backdrop-blur-sm text-[var(--fg-3)] shadow-[inset_0_-1px_0_var(--border)]">
       <tr>{children}</tr>
     </thead>
   );
@@ -44,7 +44,7 @@ export function Th({
   return (
     <th
       onClick={onClick}
-      className={`text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap overflow-hidden ${sortable ? 'cursor-pointer select-none hover:text-[var(--fg)]' : ''} ${active ? 'text-[var(--fg)]' : ''} ${className}`}
+      className={`text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] whitespace-nowrap overflow-hidden transition-colors duration-[var(--dur-fast)] ${sortable ? 'cursor-pointer select-none hover:text-[var(--fg)]' : ''} ${active ? 'text-[var(--fg)]' : ''} ${className}`}
     >
       <span className="inline-flex max-w-full items-center gap-1">
         <span className="truncate">{children}</span>
@@ -59,7 +59,7 @@ export function Tr({ children, onClick, className = '', style }: { children: Rea
     <tr
       onClick={onClick}
       style={style}
-      className={`border-t border-[var(--border-faint)] transition-colors ${onClick ? 'cursor-pointer hover:bg-[var(--surface-3)]' : ''} ${className}`}
+      className={`border-t border-[var(--border-faint)] transition-colors duration-[var(--dur-fast)] ${onClick ? 'cursor-pointer hover:bg-[var(--surface-3)] active:bg-[var(--surface-4)]' : ''} ${className}`}
     >
       {children}
     </tr>
