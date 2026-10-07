@@ -10,7 +10,7 @@ async function chamar<T>(nome: string, chave: string): Promise<Resultado<T>> {
   try {
     const { data, error } = await createBrowserSupabase().rpc(nome, { p_chave: chave });
     if (error) {
-      logQueryError(nome, { message: error.code });
+      logQueryError(nome, { message: error.code || 'SEM_CODIGO' });
       return { data: null, erro: mensagemErro(error.code) };
     }
     return { data: data as T, erro: null };

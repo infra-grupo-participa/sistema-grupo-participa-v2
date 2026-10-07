@@ -159,7 +159,8 @@ export function ehDoComercial(u: GpUser | null): boolean {
  * - Comercial: só admin e dev por padrão. Com `opcoes.comercialVendedores` (flag NEXT_PUBLIC_COMERCIAL_VENDEDORES),
  *   também quem é do Comercial (`ehDoComercial`: gestor com área comercial, vendedor com área + `comercial.vender`).
  *   Visualizador e equipe fora do Comercial continuam fora (e a RLS do schema crm também os nega).
- * - Financeiro, Infra: só mostram "Em breve"; qualquer pessoa da equipe vê o aviso.
+ * - Financeiro: só mostra "Em breve"; qualquer pessoa da equipe vê o aviso.
+ * - Infra: área Dados (dashboards por modelo), qualquer pessoa da equipe; o dado é travado por `dados.pode_ver`.
  */
 export function podeVerDepartamento(u: GpUser | null, key: DepartamentoKey, opcoes: OpcoesAcessoDepartamento = {}): boolean {
   if (!u) return false;
