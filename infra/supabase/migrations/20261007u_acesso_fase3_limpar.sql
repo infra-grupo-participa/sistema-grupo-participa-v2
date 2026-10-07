@@ -1,29 +1,41 @@
 -- 20261007u: níveis de acesso, fase 3 (limpar). Tira o "velho" das guardas: gp_is_admin() passa a ser só o master
 -- (acesso.master) e as guardas de financeiro, CPF, Marketing e Comercial deixam de aceitar o cargo admin/dev.
 --
--- STATUS: NÃO APLICADA. SÓ DEPOIS DA FASE 2 (20261007t) APLICADA E VALIDADA PELO VICTOR HUGO. Ensaio junto com a fase
---   2 em 20261007t_ensaio.sql (rollback). Relatório: 20261007u.explain.md.
+-- STATUS: NÃO APLICADA. Versão 2, com as correções do pentester (relatório
+--   .maestri/entregas/niveis-de-acesso/pentester.md no cérebro, fase 3 REPROVADA na versão 1). Só aplicar depois de o
+--   pentester aprovar esta versão e o Maestro mandar. Ensaio: 20261007u_ensaio.sql (rollback). Relatório: 20261007u.explain.md.
 --
 -- POR QUE
---   Depois da fase 2 só os 3 masters têm cargo admin/dev, então o "velho" já não abre nada a mais; esta fase tira o
---   atalho para que um cargo admin dado por engano (tela de Usuários, cadastro) não volte a abrir o sistema inteiro.
+--   Depois da fase 2 (20261007182928, aplicada) só os 3 masters têm cargo admin/dev. Esta fase fecha o caminho de volta:
+--   (a) gp_is_admin() e as guardas centrais deixam de aceitar o cargo; (b) o cargo admin/dev só pode existir em quem está
+--   em acesso.master: um gatilho em public.perfis recusa dar admin/dev a quem não é master, venha da tela de Usuários
+--   (/api/admin/usuarios, service_role), do cadastro (handle_new_user/garantir_perfil) ou de SQL. Assim as 20 funções
+--   que ainda leem cargo admin/dev inline (lista no explain, correção do pentester) passam a valer só para master, sem
+--   reescrever uma a uma: a dívida fica registrada e neutralizada na origem; (c) CPF completo vira só a capacidade
+--   cpf.ver (com log); a coluna perfis.pode_ver_cpf_completo deixa de abrir CPF e não pode mais ser ligada.
 --
 -- O QUE FAZ (corpo anterior de cada função guardado em acesso.corpo_antes, migration 20261007u)
---   - gp_is_admin()               = acesso.eh_master()
---   - gp_pode_ver_financeiro()    = acesso.tem('financeiro.ver')
---   - gp_pode_operar_financeiro() = acesso.tem('financeiro.operar')
---   - gp_pode_ver_cpf()           = acesso.tem('cpf.ver') ou perfis.pode_ver_cpf_completo
---   - gp_pode_editar(setor)       = gestor/operador com setor (e função, no operador), como antes, sem o ramo admin/dev,
---                                   OR a regra de acesso.* da fase 1
---   - crm.eh_gestor()             = master ou responsável do comercial, ou gestor com a área comercial (sem admin/dev)
---   - ra_pode_ver(), pa_pode_pedir(): sem o ramo admin/dev
---   - mkt.pode_ver/pode_editar    = só acesso.pode_ver/pode_editar
---   Ficam como estão (já valem só para master depois da fase 2, porque leem cargo admin/dev): crm.pode_catalogar,
---   pessoas.pode_*, e todas as funções/policies que a fase 1 deixou com "(gp_is_admin() OR editar <depto>)".
+--   1. Guardas sem o atalho do cargo: gp_is_admin() = acesso.eh_master(); gp_pode_ver_financeiro() =
+--      tem('financeiro.ver'); gp_pode_operar_financeiro() = tem('financeiro.operar'); gp_pode_ver_cpf() = tem('cpf.ver');
+--      gp_pode_editar(setor), crm.eh_gestor(), ra_pode_ver(), pa_pode_pedir() sem o ramo admin/dev (os ramos de
+--      gestor/operador com função fina ficam: o usuário não consegue mudar o próprio cargo, áreas nem funções, só nome,
+--      avatar e atualizado_em); mkt.pode_ver/pode_editar só pela regra nova.
+--   2. CPF: quem tem pode_ver_cpf_completo = true e está ativo ganha a capacidade cpf.ver (hoje: Fernanda Tavares #8c37);
+--      a coluna inteira vira false (foto em acesso.cpf_coluna_antes_20261007).
+--   3. Gatilho acesso_guarda em public.perfis (BEFORE INSERT OR UPDATE):
+--      - cargo admin/dev em quem não está em acesso.master → 42501;
+--      - ligar pode_ver_cpf_completo → 42501 (CPF é acesso_capacidade_definir, só master, com log);
+--      - o próprio usuário (não master) trocar o próprio nome → 42501 (correção BAIXA do pentester);
+--      - toda mudança de cargo, status, áreas, funções ou CPF vai para acesso.log (sem e-mail).
+--   Ficam lendo cargo (já valem só para master depois da fase 2, e o gatilho impede que volte): crm.pode_catalogar,
+--   pessoas.pode_*, as 20 funções da lista do pentester e as funções/policies "(gp_is_admin() OR editar <depto>)".
 --
 -- AS 5 PERGUNTAS
---   escala: 10 funções. índice: o de acesso.* (fase 0). frequência: toda RPC. repetição: nenhuma.
---   reversão: recriar os corpos de acesso.corpo_antes (migration 20261007u).
+--   escala: 10 funções, 1 gatilho, ~1 capacidade nova. índice: o de acesso.* e PK de acesso.master. frequência: o
+--   gatilho roda em cada insert/update de perfis (raro). repetição: nenhuma.
+--   reversão: bloco REVERSÃO no fim (drop do gatilho, corpos de acesso.corpo_antes, coluna pela foto).
+--
+-- IDEMPOTENTE: foto e capacidade com on conflict; create or replace; drop trigger if exists antes de criar.
 
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
@@ -67,12 +79,24 @@ as $function$
   select coalesce(acesso.tem('financeiro.operar'), false);  -- 20261007u
 $function$;
 
+-- CPF: a coluna vira a capacidade cpf.ver antes de a guarda deixar de ler a coluna
+create table if not exists acesso.cpf_coluna_antes_20261007 (
+  id uuid primary key, nome text, status text, pode_ver_cpf_completo boolean, foto_em timestamptz not null default now()
+);
+alter table acesso.cpf_coluna_antes_20261007 enable row level security;
+revoke all on acesso.cpf_coluna_antes_20261007 from public, anon, authenticated;
+insert into acesso.cpf_coluna_antes_20261007 (id, nome, status, pode_ver_cpf_completo)
+select p.id, p.nome, p.status, p.pode_ver_cpf_completo from public.perfis p where p.pode_ver_cpf_completo
+on conflict (id) do nothing;
+insert into acesso.capacidade (perfil_id, chave)
+select f.id, 'cpf.ver' from acesso.cpf_coluna_antes_20261007 f where f.status = 'ativo'
+on conflict do nothing;
+update public.perfis set pode_ver_cpf_completo = false, atualizado_em = now() where pode_ver_cpf_completo;
+
 create or replace function public.gp_pode_ver_cpf()
  returns boolean language sql stable security definer set search_path to 'public'
 as $function$
-  select coalesce(acesso.tem('cpf.ver'), false)
-      or exists (select 1 from public.perfis p where p.id = (select auth.uid()) and p.status = 'ativo'
-                   and p.email ilike '%@advmais.com' and p.pode_ver_cpf_completo is true);  -- 20261007u
+  select coalesce(acesso.tem('cpf.ver'), false);  -- 20261007u: CPF completo é só a capacidade cpf.ver
 $function$;
 
 create or replace function public.gp_pode_editar(p_setor text)
@@ -138,15 +162,66 @@ as $function$
   select coalesce(acesso.pode_editar('marketing', acesso.area_mkt(p_area)), false);  -- 20261007u
 $function$;
 
+-- Gatilho em public.perfis: cargo admin/dev só master; CPF só pela capacidade; nome próprio; log
+create or replace function acesso.tg_perfis_guarda() returns trigger
+language plpgsql security definer set search_path = '' as $f$
+declare
+  v_uid uuid := (select auth.uid());
+begin
+  if new.cargo in ('admin', 'dev')
+     and (tg_op = 'INSERT' or old.cargo is distinct from new.cargo)
+     and not exists (select 1 from acesso.master m where m.perfil_id = new.id) then
+    raise exception 'Cargo % é só de master (acesso.master). Dê acesso por departamento/área (acesso_vincular).', new.cargo
+      using errcode = '42501';
+  end if;
+  if coalesce(new.pode_ver_cpf_completo, false)
+     and (tg_op = 'INSERT' or not coalesce(old.pode_ver_cpf_completo, false)) then
+    raise exception 'CPF completo agora é a capacidade cpf.ver (acesso_capacidade_definir, só master).' using errcode = '42501';
+  end if;
+  if tg_op = 'UPDATE' and new.nome is distinct from old.nome and v_uid is not null and v_uid = new.id
+     and not exists (select 1 from acesso.master m where m.perfil_id = v_uid) then
+    raise exception 'O nome só muda pela gestão de usuários.' using errcode = '42501';
+  end if;
+  if tg_op = 'INSERT'
+     or (old.cargo, old.status, old.areas, old.funcoes, old.pode_ver_cpf_completo)
+        is distinct from (new.cargo, new.status, new.areas, new.funcoes, new.pode_ver_cpf_completo) then
+    insert into acesso.log (autor, tabela, acao, perfil_id, antes, depois)
+    values (v_uid, 'perfis', lower(tg_op), new.id,
+            case when tg_op = 'UPDATE' then jsonb_build_object('cargo', old.cargo, 'status', old.status, 'areas', old.areas,
+                                                               'funcoes', old.funcoes, 'cpf', old.pode_ver_cpf_completo) end,
+            jsonb_build_object('cargo', new.cargo, 'status', new.status, 'areas', new.areas, 'funcoes', new.funcoes,
+                               'cpf', new.pode_ver_cpf_completo));
+  end if;
+  return new;
+end
+$f$;
+revoke all on function acesso.tg_perfis_guarda() from public, anon, authenticated;
+drop trigger if exists acesso_guarda on public.perfis;
+create trigger acesso_guarda before insert or update on public.perfis for each row execute function acesso.tg_perfis_guarda();
+
 do $c$
 begin
   if (select prosrc from pg_proc where oid = 'public.gp_is_admin()'::regprocedure) !~ 'acesso\.eh_master' then
     raise exception '20261007u: gp_is_admin não virou master';
   end if;
+  if exists (select 1 from public.perfis where pode_ver_cpf_completo) then
+    raise exception '20261007u: sobrou pode_ver_cpf_completo ligado';
+  end if;
+  if exists (select 1 from acesso.cpf_coluna_antes_20261007 f where f.status = 'ativo'
+              and not exists (select 1 from acesso.capacidade c where c.perfil_id = f.id and c.chave = 'cpf.ver')) then
+    raise exception '20261007u: quem tinha CPF pela coluna não ganhou cpf.ver';
+  end if;
+  if not exists (select 1 from pg_trigger where tgrelid = 'public.perfis'::regclass and tgname = 'acesso_guarda' and tgenabled = 'O') then
+    raise exception '20261007u: gatilho acesso_guarda não ficou ligado';
+  end if;
 end
 $c$;
 
--- REVERSÃO (numa transação):
+-- REVERSÃO (numa transação; antes de reverter a fase 2, reverter esta, porque o gatilho recusa devolver admin):
+-- drop trigger if exists acesso_guarda on public.perfis;
+-- update public.perfis p set pode_ver_cpf_completo = f.pode_ver_cpf_completo from acesso.cpf_coluna_antes_20261007 f where f.id = p.id;
+-- delete from acesso.capacidade c using acesso.cpf_coluna_antes_20261007 f where f.id = c.perfil_id and c.chave = 'cpf.ver'
+--   and c.criado_em >= '<hora da aplicação>';
 -- do $v$ declare r record; begin
 --   for r in select * from acesso.corpo_antes where migration = '20261007u' and tipo = 'funcao' loop execute r.definicao; end loop;
 -- end $v$;
