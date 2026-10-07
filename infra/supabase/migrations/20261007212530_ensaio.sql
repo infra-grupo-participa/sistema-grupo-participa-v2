@@ -1,4 +1,4 @@
--- Ensaio de 20261007gr (gráficos da Visão geral de vendas): 2 passadas, grants, gate, foto da Clínica, simulação
+-- Ensaio de 20261007gr (refeito depois do pentester: cast das parcelas e pós-condição) (gráficos da Visão geral de vendas): 2 passadas, grants, gate, foto da Clínica, simulação
 -- com eventos fictícios (CRM desligado só aqui) e teste em volume com outra oferta. Transação desfeita.
 begin;
 set local lock_timeout = '5s';
@@ -100,7 +100,8 @@ begin
          nullif(regexp_replace(coalesce(w.d #>> '{buyer,document}', ''), '\D', '', 'g'), ''),
          w.d #>> '{purchase,payment,type}',
          case when w.d #>> '{purchase,payment,type}' in ('PIX', 'BILLET') then w.d #>> '{purchase,payment,type}' end,
-         nullif(w.d #>> '{purchase,payment,installments_number}', '')::int
+         case when w.d #>> '{purchase,payment,installments_number}' ~ '^[0-9]{1,4}$'   -- valor não numérico vira null
+              then (w.d #>> '{purchase,payment,installments_number}')::int end
     from (select distinct on (e.transacao) e.transacao, e.payload -> 'data' as d
             from cs.hotmart_eventos e
            where v_conta = 'academy'
@@ -372,6 +373,32 @@ grant execute on function public.dados_presencial_pagamentos(text), public.dados
   public.dados_presencial_pendencias(text), public.dados_presencial_pendencias_pessoas(text, text),
   public.dados_presencial_serie_vendas(text), public.dados_presencial_vendas_por_hora(text)
   to authenticated, service_role;
+
+-- Pós-condição: permissões como o esperado (aborta a transação se não)
+do $c$
+declare
+  f text;
+begin
+  foreach f in array array['public.dados_presencial_pagamentos(text)', 'public.dados_presencial_compradores_perfil(text)',
+                           'public.dados_presencial_pendencias(text)', 'public.dados_presencial_pendencias_pessoas(text,text)',
+                           'public.dados_presencial_serie_vendas(text)', 'public.dados_presencial_vendas_por_hora(text)'] loop
+    if not has_function_privilege('authenticated', f, 'execute') or not has_function_privilege('service_role', f, 'execute')
+       or has_function_privilege('anon', f, 'execute')
+       or not (select p.prosecdef and p.proconfig @> array['search_path=""'] from pg_proc p where p.oid = f::regprocedure) then
+      raise exception '20261007gr: permissão ou definição errada em %', f;
+    end if;
+  end loop;
+  foreach f in array array['dados.transacoes_extra(text,text)', 'dados.pendencias(text,text)'] loop
+    if has_function_privilege('anon', f, 'execute') or has_function_privilege('authenticated', f, 'execute')
+       or has_function_privilege('service_role', f, 'execute') then
+      raise exception '20261007gr: ajudante interno exposto: %', f;
+    end if;
+  end loop;
+  if has_schema_privilege('anon', 'dados', 'usage') or has_schema_privilege('authenticated', 'dados', 'usage') then
+    raise exception '20261007gr: schema dados exposto';
+  end if;
+end
+$c$;
 
 -- passada 2
 -- 20261007gr: gráficos novos da aba "Visão geral de vendas" do dashboard presencial (Clínica de Miami).
@@ -468,7 +495,8 @@ begin
          nullif(regexp_replace(coalesce(w.d #>> '{buyer,document}', ''), '\D', '', 'g'), ''),
          w.d #>> '{purchase,payment,type}',
          case when w.d #>> '{purchase,payment,type}' in ('PIX', 'BILLET') then w.d #>> '{purchase,payment,type}' end,
-         nullif(w.d #>> '{purchase,payment,installments_number}', '')::int
+         case when w.d #>> '{purchase,payment,installments_number}' ~ '^[0-9]{1,4}$'   -- valor não numérico vira null
+              then (w.d #>> '{purchase,payment,installments_number}')::int end
     from (select distinct on (e.transacao) e.transacao, e.payload -> 'data' as d
             from cs.hotmart_eventos e
            where v_conta = 'academy'
@@ -740,6 +768,32 @@ grant execute on function public.dados_presencial_pagamentos(text), public.dados
   public.dados_presencial_pendencias(text), public.dados_presencial_pendencias_pessoas(text, text),
   public.dados_presencial_serie_vendas(text), public.dados_presencial_vendas_por_hora(text)
   to authenticated, service_role;
+
+-- Pós-condição: permissões como o esperado (aborta a transação se não)
+do $c$
+declare
+  f text;
+begin
+  foreach f in array array['public.dados_presencial_pagamentos(text)', 'public.dados_presencial_compradores_perfil(text)',
+                           'public.dados_presencial_pendencias(text)', 'public.dados_presencial_pendencias_pessoas(text,text)',
+                           'public.dados_presencial_serie_vendas(text)', 'public.dados_presencial_vendas_por_hora(text)'] loop
+    if not has_function_privilege('authenticated', f, 'execute') or not has_function_privilege('service_role', f, 'execute')
+       or has_function_privilege('anon', f, 'execute')
+       or not (select p.prosecdef and p.proconfig @> array['search_path=""'] from pg_proc p where p.oid = f::regprocedure) then
+      raise exception '20261007gr: permissão ou definição errada em %', f;
+    end if;
+  end loop;
+  foreach f in array array['dados.transacoes_extra(text,text)', 'dados.pendencias(text,text)'] loop
+    if has_function_privilege('anon', f, 'execute') or has_function_privilege('authenticated', f, 'execute')
+       or has_function_privilege('service_role', f, 'execute') then
+      raise exception '20261007gr: ajudante interno exposto: %', f;
+    end if;
+  end loop;
+  if has_schema_privilege('anon', 'dados', 'usage') or has_schema_privilege('authenticated', 'dados', 'usage') then
+    raise exception '20261007gr: schema dados exposto';
+  end if;
+end
+$c$;
 
 insert into pg_temp._z_out (passo, linha) select 'grants', (select jsonb_object_agg(f, jsonb_build_object('anon', has_function_privilege('anon', f, 'execute'), 'auth', has_function_privilege('authenticated', f, 'execute'), 'service', has_function_privilege('service_role', f, 'execute'), 'public_acl', coalesce((select array_to_string(proacl, ',') from pg_proc where oid = f::regprocedure), ''))) from unnest(array['public.dados_presencial_pagamentos(text)','public.dados_presencial_compradores_perfil(text)','public.dados_presencial_pendencias(text)','public.dados_presencial_pendencias_pessoas(text,text)','public.dados_presencial_serie_vendas(text)','public.dados_presencial_vendas_por_hora(text)','dados.transacoes_extra(text,text)','dados.pendencias(text,text)']) f)::text;
 insert into pg_temp._z_out (passo, linha) select 'trava conta', coalesce(fin.trava_conta_hotmart_violacao('pg_catalog.pg_proc'::regclass, 'dados.transacoes_extra(text,text)'::regprocedure), 'ok');
@@ -837,6 +891,38 @@ select clock_timestamp() + interval '6 seconds', 'PURCHASE_CANCELED', 'HPZZGR_E1
 
 select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated"}', true);
 insert into pg_temp._z_out (passo, linha) select '2 com eventos fictícios', (select jsonb_build_object(
+  'resumo', (select jsonb_build_object('vendas', r.vendas, 'compradores', r.compradores, 'bruta', r.receita_bruta) from public.dados_presencial_resumo('clinica-miami-2026-12') r),
+  'pagamentos', (select jsonb_agg(to_jsonb(x)) from public.dados_presencial_pagamentos('clinica-miami-2026-12') x),
+  'perfil', (select jsonb_agg(x.dimensao || ':' || x.valor || '=' || x.compradores) from public.dados_presencial_compradores_perfil('clinica-miami-2026-12') x),
+  'pendencias', (select jsonb_agg(x.grupo || ':' || x.categoria || '=' || x.pessoas || '/' || x.transacoes) from public.dados_presencial_pendencias('clinica-miami-2026-12') x),
+  'lista_nao_pago', (select count(*) from public.dados_presencial_pendencias_pessoas('clinica-miami-2026-12', 'nao_pago')),
+  'lista_cancelada', (select count(*) from public.dados_presencial_pendencias_pessoas('clinica-miami-2026-12', 'cancelada')),
+  'serie', (select jsonb_agg(jsonb_build_object('dia', s.dia, 'pc', s.pre_checkout, 'v', s.vendas, 'r', s.receita_bruta, 'va', s.vendas_acumuladas, 'ra', s.receita_acumulada, 'conv', s.conversao_pct)) from public.dados_presencial_serie_vendas('clinica-miami-2026-12') s where s.pre_checkout > 0 or s.vendas > 0),
+  'hora', (select jsonb_agg(h.hora || 'h=' || h.vendas || '/' || h.receita_bruta) from public.dados_presencial_vendas_por_hora('clinica-miami-2026-12') h where h.vendas > 0 or h.receita_bruta > 0),
+  'horas_linhas', (select count(*) from public.dados_presencial_vendas_por_hora('clinica-miami-2026-12')),
+  'confere', jsonb_build_object(
+     'acum_vendas=resumo', (select max(s.vendas_acumuladas) from public.dados_presencial_serie_vendas('clinica-miami-2026-12') s) = (select r.vendas from public.dados_presencial_resumo('clinica-miami-2026-12') r),
+     'acum_receita=resumo', (select max(s.receita_acumulada) from public.dados_presencial_serie_vendas('clinica-miami-2026-12') s) = (select r.receita_bruta from public.dados_presencial_resumo('clinica-miami-2026-12') r),
+     'hora=resumo', (select sum(h.vendas) from public.dados_presencial_vendas_por_hora('clinica-miami-2026-12') h) = (select r.vendas from public.dados_presencial_resumo('clinica-miami-2026-12') r),
+     'pagamentos=resumo', (select coalesce(sum(x.vendas),0) from public.dados_presencial_pagamentos('clinica-miami-2026-12') x) = (select r.vendas from public.dados_presencial_resumo('clinica-miami-2026-12') r),
+     'pag_receita=resumo', (select coalesce(sum(x.receita_bruta),0) from public.dados_presencial_pagamentos('clinica-miami-2026-12') x) = (select r.receita_bruta from public.dados_presencial_resumo('clinica-miami-2026-12') r),
+     'perfil_turma=compradores', (select coalesce(sum(x.compradores),0) from public.dados_presencial_compradores_perfil('clinica-miami-2026-12') x where x.dimensao='turma') = (select r.compradores from public.dados_presencial_resumo('clinica-miami-2026-12') r),
+     'perfil_instr=compradores', (select coalesce(sum(x.compradores),0) from public.dados_presencial_compradores_perfil('clinica-miami-2026-12') x where x.dimensao='instrucao') = (select r.compradores from public.dados_presencial_resumo('clinica-miami-2026-12') r),
+     'lista_np=total', (select count(*) from public.dados_presencial_pendencias_pessoas('clinica-miami-2026-12', 'nao_pago')) = (select x.pessoas from public.dados_presencial_pendencias('clinica-miami-2026-12') x where x.grupo='nao_pago' and x.categoria='total'),
+     'lista_ca=total', (select count(*) from public.dados_presencial_pendencias_pessoas('clinica-miami-2026-12', 'cancelada')) = (select x.pessoas from public.dados_presencial_pendencias('clinica-miami-2026-12') x where x.grupo='cancelada' and x.categoria='total'))
+))::text;
+select set_config('request.jwt.claims', '{}', true);
+
+insert into cs.hotmart_eventos (recebido_em, evento, transacao, email, payload)
+select clock_timestamp() + interval '7 seconds', 'PURCHASE_APPROVED', 'HPZZGR_F1', 'f@ensaio.invalid', jsonb_build_object('event', 'PURCHASE_APPROVED', 'data', jsonb_build_object(
+  'buyer', jsonb_build_object('email', 'f@ensaio.invalid', 'name', 'Ensaio', 'document', '99999999970'),
+  'purchase', jsonb_build_object('status', 'APPROVED', 'transaction', 'HPZZGR_F1', 'offer', jsonb_build_object('code', 'sju5pawn'), 'recurrence_number', 1,
+     'payment', jsonb_build_object('type', 'CREDIT_CARD', 'installments_number', 'doze'),
+     'order_date', (extract(epoch from now()) * 1000)::bigint, 'approved_date', (extract(epoch from now() - interval '7 hours') * 1000)::bigint,
+     'price', jsonb_build_object('value', 5014.2, 'currency_value', 'BRL'))));
+
+select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated"}', true);
+insert into pg_temp._z_out (passo, linha) select '2b parcelas não numéricas no webhook', (select jsonb_build_object(
   'resumo', (select jsonb_build_object('vendas', r.vendas, 'compradores', r.compradores, 'bruta', r.receita_bruta) from public.dados_presencial_resumo('clinica-miami-2026-12') r),
   'pagamentos', (select jsonb_agg(to_jsonb(x)) from public.dados_presencial_pagamentos('clinica-miami-2026-12') x),
   'perfil', (select jsonb_agg(x.dimensao || ':' || x.valor || '=' || x.compradores) from public.dados_presencial_compradores_perfil('clinica-miami-2026-12') x),

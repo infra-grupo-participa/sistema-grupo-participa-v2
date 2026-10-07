@@ -1,6 +1,9 @@
 -- 20261007gr: gráficos novos da aba "Visão geral de vendas" do dashboard presencial (Clínica de Miami).
 --
--- STATUS: NÃO APLICADA. Cria função e GRANT: só aplica depois do pentester e da ordem do Maestro.
+-- STATUS: APLICADA em produção em 07/10/2026 às 21:25 UTC, versão 20261007212530 (nome dashboard_graficos_vendas, era
+-- 20261007gr), depois da aprovação do pentester (.maestri/entregas/clinica-miami/pentester-graficos.md), com a linha em
+-- supabase_migrations.schema_migrations na mesma transação; md5 gravado = 15749dd3afd89ceac9dac8f1b95e465a = este arquivo
+-- antes desta troca de STATUS. Ensaio: 20261007212530_ensaio.sql. Relatório: 20261007212530.explain.md.
 --
 -- POR QUE
 --   Pedido do Victor Hugo (07/10/2026, noite): forma de pagamento, turma e instrução de quem comprou, boleto/pix gerado e
@@ -92,7 +95,8 @@ begin
          nullif(regexp_replace(coalesce(w.d #>> '{buyer,document}', ''), '\D', '', 'g'), ''),
          w.d #>> '{purchase,payment,type}',
          case when w.d #>> '{purchase,payment,type}' in ('PIX', 'BILLET') then w.d #>> '{purchase,payment,type}' end,
-         nullif(w.d #>> '{purchase,payment,installments_number}', '')::int
+         case when w.d #>> '{purchase,payment,installments_number}' ~ '^[0-9]{1,4}$'   -- valor não numérico vira null
+              then (w.d #>> '{purchase,payment,installments_number}')::int end
     from (select distinct on (e.transacao) e.transacao, e.payload -> 'data' as d
             from cs.hotmart_eventos e
            where v_conta = 'academy'
@@ -364,3 +368,29 @@ grant execute on function public.dados_presencial_pagamentos(text), public.dados
   public.dados_presencial_pendencias(text), public.dados_presencial_pendencias_pessoas(text, text),
   public.dados_presencial_serie_vendas(text), public.dados_presencial_vendas_por_hora(text)
   to authenticated, service_role;
+
+-- Pós-condição: permissões como o esperado (aborta a transação se não)
+do $c$
+declare
+  f text;
+begin
+  foreach f in array array['public.dados_presencial_pagamentos(text)', 'public.dados_presencial_compradores_perfil(text)',
+                           'public.dados_presencial_pendencias(text)', 'public.dados_presencial_pendencias_pessoas(text,text)',
+                           'public.dados_presencial_serie_vendas(text)', 'public.dados_presencial_vendas_por_hora(text)'] loop
+    if not has_function_privilege('authenticated', f, 'execute') or not has_function_privilege('service_role', f, 'execute')
+       or has_function_privilege('anon', f, 'execute')
+       or not (select p.prosecdef and p.proconfig @> array['search_path=""'] from pg_proc p where p.oid = f::regprocedure) then
+      raise exception '20261007gr: permissão ou definição errada em %', f;
+    end if;
+  end loop;
+  foreach f in array array['dados.transacoes_extra(text,text)', 'dados.pendencias(text,text)'] loop
+    if has_function_privilege('anon', f, 'execute') or has_function_privilege('authenticated', f, 'execute')
+       or has_function_privilege('service_role', f, 'execute') then
+      raise exception '20261007gr: ajudante interno exposto: %', f;
+    end if;
+  end loop;
+  if has_schema_privilege('anon', 'dados', 'usage') or has_schema_privilege('authenticated', 'dados', 'usage') then
+    raise exception '20261007gr: schema dados exposto';
+  end if;
+end
+$c$;
