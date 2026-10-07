@@ -19,6 +19,7 @@ import { iconeDoFunil } from './assistente';
 import { AssistenteFunil } from './AssistenteFunil';
 import { EditorFunil } from './EditorFunil';
 import { ModalNovoProjeto } from './ModalNovoProjeto';
+import { PainelAtivacao } from './PainelAtivacao';
 import { KanbanFunil } from './KanbanFunil';
 import { useAlturaRestante } from './pecas';
 import { filtrarNegocios, resumoFunil, type FiltroAlerta, type FiltroDono } from './regras-funil';
@@ -33,6 +34,8 @@ export function FunilClient() {
   const qFunis = useDados(() => repo.funis());
   const qAgrupadores = useDados(() => repo.agrupadores());
   const qNegocios = useDados(() => repo.negocios());
+  // Ativação (20261007135415): sem a migration no banco, a faixa só não aparece (o kanban segue).
+  const qAtivacao = useDados(() => repo.ativacao());
   // Só os contatos dos negócios carregados (não a base inteira).
   const qContatos = useContatosPorIds(qNegocios.dados?.map((n) => n.contatoId));
   const funis = qFunis.dados;
@@ -203,6 +206,18 @@ export function FunilClient() {
               <SearchInput placeholder="Buscar nome, e-mail ou telefone" aria-label="Buscar negócio" value={busca} onChange={(e) => setBusca(e.target.value)} onLimpar={() => setBusca('')} />
             </div>
           </div>
+
+          {funil.projeto && qAtivacao.dados && (
+            <PainelAtivacao
+              funil={funil}
+              painel={qAtivacao.dados}
+              gestor={gestor}
+              eu={sessao?.vendedorId ?? null}
+              nomeDe={nomeDe}
+              onFlash={flash}
+              onAbrirFunil={escolher}
+            />
+          )}
 
           {filtrando && filtrados.length === 0 && (
             <Aviso acao={<Button size="sm" variant="ghost" onClick={limparFiltros}>Limpar filtros</Button>}>

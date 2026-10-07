@@ -24,6 +24,9 @@ import type {
 } from '../domain/types';
 import { OFERTAS_DEMO, ORFAS_DEMO, PRODUTOS_DEMO } from './mock-catalogo';
 import { gerarBaseDemo, painelPadrao, preferenciasPadrao, type BaseDemo } from './mock-dados';
+import { validarAtivacao, type EdicaoAtivacao, type PainelAtivacao } from '../domain/ativacao';
+import { modeloFunil } from '../domain/modelos';
+import { cadastroVazio, ehFunilAtivacao, painelAtivacaoDemo, SUFIXO_ATIVACAO, toquesDoNegocio, type CadastroAtivacao } from './mock-ativacao';
 
 const LATENCIA_MS = 120;
 const espera = <T,>(v: T): Promise<T> => new Promise((ok) => setTimeout(() => ok(structuredClone(v)), LATENCIA_MS));
@@ -36,6 +39,7 @@ export class MockComercialRepository implements ComercialRepository {
 
   constructor() {
     this.db = gerarBaseDemo();
+    this.semearAtivacao();
     // Registro inicial a partir do histórico da demonstração (o que o backend teria gravado).
     const acao: Partial<Record<EventoTimeline['tipo'], AcaoLog>> = { criado: 'criou', etapa: 'moveu_etapa', dono: 'trocou_dono', perdido: 'marcou_perdido', ganho: 'marcou_ganho', nota: 'criou' };
     this.logDb = this.db.eventos.filter((e) => acao[e.tipo] && e.negocioId).map((e) => ({
@@ -534,6 +538,114 @@ export class MockComercialRepository implements ComercialRepository {
     }
     this.registrar('criou', 'projeto', ids[0], `Começou o projeto ${nome.trim()} (${ids.length} funis)`);
     return espera({ ok: true, msg: `${ids.length} funis criados para ${nome.trim()}.`, funilIds: ids });
+  }
+
+  // ── Ativação padrão (20261007135415) ──
+  private cadastrosAtivacao = new Map<string, CadastroAtivacao>();
+
+  /** Demonstração: o projeto ATM da base ganha datas e três negócios de ativação com os toques agendados. */
+  private semearAtivacao() {
+    const f = this.db.funis.find((x) => ehFunilAtivacao(x));
+    if (!f?.projeto) return;
+    const ini = new Date(Date.now() + 9 * 86400000).toISOString().slice(0, 10);
+    const fim = new Date(Date.now() + 11 * 86400000).toISOString().slice(0, 10);
+    const c: CadastroAtivacao = { ...cadastroVazio(), eventoInicio: ini, eventoFim: fim, eventoHora: '19:00', carrinhoFim: new Date(Date.now() + 13 * 86400000).toISOString().slice(0, 10), hotmartOferta: ['5064314'] };
+    this.cadastrosAtivacao.set(f.projeto, c);
+    const vendedores = this.db.vendedores.filter((v) => v.ativo && v.papel === 'vendedor');
+    const e0 = f.etapas[0];
+    const contatos = this.db.contatos.filter((ct) => !ct.optOut).slice(0, 3);
+    contatos.forEach((ct, i) => {
+      const agora = new Date(Date.now() - i * 40 * 60000);
+      const n: Negocio = {
+        id: `n-ativ-demo-${i + 1}`, contatoId: ct.id, produto: f.produto, origem: 'venda_ativa', funilId: f.id, campanhaId: f.campanhas[0]?.id ?? null,
+        etapaId: e0.id, etapaNome: e0.nome, etapa: e0.papel, sla: { atencaoMin: e0.slaAtencaoMin!, criticoMin: e0.slaCriticoMin! },
+        status: 'aberto', donoId: vendedores[i % Math.max(1, vendedores.length)]?.id ?? null, valor: 0,
+        campos: { origem: i === 2 ? 'Ativação · ingresso comprado na Hotmart' : 'Ativação · inscrição no ActiveCampaign' },
+        motivoPerda: null, criadoEm: agora.toISOString(), etapaDesde: agora.toISOString(), fechadoEm: null, proximaAtividade: null, ultimaInteracaoEm: null,
+      };
+      this.db.negocios.push(n);
+      this.db.atividades.push(...toquesDoNegocio(n, c, agora, () => this.novoId('a')));
+      this.atualizarProxima(n.id);
+    });
+  }
+
+  ativacao(): Promise<PainelAtivacao> {
+    return espera(painelAtivacaoDemo({
+      funis: this.db.funis, negocios: this.db.negocios, atividades: this.db.atividades, cadastros: this.cadastrosAtivacao,
+      eu: this.eu, agora: new Date(),
+    }));
+  }
+
+  async salvarAtivacao(e: EdicaoAtivacao): Promise<Resultado> {
+    if (this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o gestor configura a ativação.' });
+    const f = this.db.funis.find((x) => x.ativo && x.projeto === e.projeto && ehFunilAtivacao(x));
+    if (!f) return espera({ ok: false, msg: 'Projeto sem ativação.' });
+    const atual = this.cadastrosAtivacao.get(e.projeto) ?? cadastroVazio();
+    if (atual.encerradoEm) return espera({ ok: false, msg: 'Ativação encerrada não muda.' });
+    const erro = validarAtivacao(e);
+    if (erro) return espera({ ok: false, msg: erro });
+    const c: CadastroAtivacao = { ...atual, eventoInicio: e.eventoInicio, eventoFim: e.eventoFim, eventoHora: e.eventoHora, carrinhoFim: e.carrinhoFim, hotmartOferta: [...e.hotmartOferta], ligado: e.ligado };
+    this.cadastrosAtivacao.set(e.projeto, c);
+    // reagenda os toques 2/3 abertos (o toque 1 e o que já foi feito ficam)
+    const abertos = this.db.negocios.filter((n) => n.funilId === f.id && n.status === 'aberto' && n.donoId);
+    for (const n of abertos) {
+      this.db.atividades = this.db.atividades.filter((a) => !(a.negocioId === n.id && !a.concluidaEm && /^Toque [23]/.test(a.titulo)));
+      const novos = toquesDoNegocio(n, c, new Date(), () => this.novoId('a')).filter((a) => !a.titulo.startsWith('Toque 1:'))
+        .filter((a) => !this.db.atividades.some((x) => x.negocioId === n.id && x.titulo === a.titulo));
+      this.db.atividades.push(...novos);
+      this.atualizarProxima(n.id);
+    }
+    const nome = f.nome.slice(0, -SUFIXO_ATIVACAO.length);
+    this.registrar('editou', 'projeto', f.id, `Configurou a ativação de ${nome}`);
+    return espera({ ok: true, msg: `Ativação de ${nome} salva.${abertos.length ? ` Toques de ${abertos.length} negócio(s) reagendados.` : ''}` });
+  }
+
+  async garantirAtivacao(projeto: string): Promise<Resultado & { funilId?: string }> {
+    if (this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o gestor acrescenta a ativação.' });
+    const ja = this.db.funis.find((x) => x.ativo && x.projeto === projeto && ehFunilAtivacao(x));
+    if (ja) return espera({ ok: true, msg: 'Este projeto já tem a Ativação.', funilId: ja.id });
+    const base = this.db.funis.filter((x) => x.ativo && x.projeto === projeto).sort((a, b) => a.criadoEm.localeCompare(b.criadoEm))[0];
+    if (!base) return espera({ ok: false, msg: 'Projeto não encontrado.' });
+    const m = modeloFunil('ativacao')!;
+    const nome = base.nome.split(' · ')[0].trim();
+    const id = this.novoId('f');
+    this.db.funis.push({
+      id, nome: `${nome}${SUFIXO_ATIVACAO}`, icone: m.icone, projeto, agrupadorId: base.agrupadorId, produto: base.produto, tipo: m.tipo,
+      eventosHotmart: [], etapas: m.etapas.map((e, i) => ({ ...e, camposObrigatorios: [...e.camposObrigatorios], id: `${id}-e${i + 1}` })),
+      campanhas: m.campanhas.map((c, i) => ({ ...c, nome: c.nome.replaceAll('{chave}', projeto), regra: c.regra.replaceAll('{chave}', projeto), id: `${id}-c${i + 1}`, criadoEm: agoraIso() })),
+      distribuicao: null, ativo: true, criadoEm: agoraIso(),
+    });
+    this.registrar('criou', 'funil', id, `Acrescentou a Ativação ao projeto ${nome}`);
+    return espera({ ok: true, msg: `Funil de Ativação criado para ${nome}.`, funilId: id });
+  }
+
+  async encerrarAtivacao(projeto: string): Promise<Resultado> {
+    if (this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o gestor encerra a ativação.' });
+    const f = this.db.funis.find((x) => x.projeto === projeto && ehFunilAtivacao(x));
+    if (!f) return espera({ ok: false, msg: 'Projeto sem ativação.' });
+    const c = this.cadastrosAtivacao.get(projeto) ?? cadastroVazio();
+    if (c.encerradoEm) return espera({ ok: false, msg: 'Esta ativação já foi encerrada.' });
+    const nome = f.nome.slice(0, -SUFIXO_ATIVACAO.length);
+    const abertos = this.db.negocios.filter((n) => n.funilId === f.id && n.status === 'aberto');
+    const filaId = this.novoId('fila');
+    // a fila de recuperação do projeto, com o MESMO dono como responsável de cada contato
+    this.db.filas.push({
+      id: filaId, nome: `Recuperação · ${nome}`, produto: f.produto, ofertaVigente: null, ofertaCodigo: null, projeto, criadaEm: agoraIso(), encerradaEm: null,
+      itens: abertos.filter((n) => !this.db.contatos.find((ct) => ct.id === n.contatoId)?.optOut).map((n, i) => ({
+        id: `${filaId}-i${i + 1}`, contatoId: n.contatoId, score: 0, faixa: 'D' as const, sinais: [], status: 'a_abordar' as const,
+        responsavelId: n.donoId, alteradoPor: null, alteradoEm: null,
+      })),
+    });
+    for (const n of abertos) {
+      n.status = 'perdido';
+      n.motivoPerda = 'evento_sem_compra';
+      n.fechadoEm = agoraIso();
+      this.db.atividades.filter((a) => a.negocioId === n.id && !a.concluidaEm).forEach((a) => { a.concluidaEm = agoraIso(); a.resultado = 'Encerrada: carrinho fechou'; });
+      n.proximaAtividade = null;
+    }
+    this.cadastrosAtivacao.set(projeto, { ...c, encerradoEm: agoraIso(), filaId });
+    this.registrar('editou', 'projeto', f.id, `Encerrou a ativação de ${nome}`);
+    return espera({ ok: true, msg: `Ativação encerrada: ${abertos.length} sem compra, ${abertos.length} na fila de recuperação com o mesmo dono.` });
   }
 
   // ── Painel ──

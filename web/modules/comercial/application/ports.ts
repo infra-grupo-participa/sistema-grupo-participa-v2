@@ -10,6 +10,7 @@ import type {
   PreferenciasNotificacao, ProdutoKey, SessaoComercial, StatusFila, StatusWhatsapp, Template, TipoAtividade, TipoProjeto, Vendedor,
 } from '../domain/types';
 import type { FiltroContatos, PaginaContatos, ResumoContatos } from '../domain/contatos';
+import type { EdicaoAtivacao, PainelAtivacao } from '../domain/ativacao';
 
 export interface Resultado {
   ok: boolean;
@@ -131,6 +132,18 @@ export interface ComercialRepository {
   criarAgrupador(nome: string, produto: ProdutoKey | null): Promise<Resultado & { agrupadorId?: string }>;
   /** "Comecei um novo projeto": cria de uma vez os funis do tipo de projeto, com a chave nas campanhas. Só o gestor. */
   criarProjeto(tipo: TipoProjeto, nome: string, agrupadorId: string, produto: ProdutoKey): Promise<Resultado & { funilIds?: string[] }>;
+  // ── Ativação padrão (migration 20261007135415) ──
+  /** Projetos com a ativação: cadastro, negócios por etapa (vendedor: só os dele), carga do dia e avisos. */
+  ativacao(): Promise<PainelAtivacao>;
+  /** Datas do evento e as entradas (listas/tags do AC, ingresso e oferta da Hotmart, formulário). Só o gestor. Reagenda os toques. */
+  salvarAtivacao(e: EdicaoAtivacao): Promise<Resultado>;
+  /** Acrescenta o funil de Ativação a um projeto criado antes dela. Só o gestor. */
+  garantirAtivacao(projeto: string): Promise<Resultado & { funilId?: string }>;
+  /** Encerra a ativação: quem não comprou vira perdido "Evento encerrado sem compra" e vai para a fila de recuperação com o mesmo dono. Só o gestor. */
+  encerrarAtivacao(projeto: string): Promise<Resultado>;
+  /** Cria ou edita um motivo de perda. Os de fábrica só mudam nota e ativo. Só o gestor. */
+  salvarMotivoPerda(m: MotivoPerdaConfig): Promise<Resultado>;
+
   /** Cria ou edita um motivo de perda. Os de fábrica só mudam nota e ativo. Só o gestor. */
   salvarMotivoPerda(m: MotivoPerdaConfig): Promise<Resultado>;
 

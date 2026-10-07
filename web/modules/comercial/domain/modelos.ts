@@ -1,6 +1,7 @@
 // Modelos de funil prontos e tipos de projeto ("Comecei um novo projeto").
 // Um projeto cria de uma vez os funis certos, com a chave do projeto nas campanhas (a mesma chave do
 // ClickUp, do Drive e do utm_campaign — padrão da casa).
+import { MODELO_ATIVACAO } from './ativacao';
 import { etapasPadrao } from './funis';
 import type { Agrupador, EtapaFunil, Funil, ModeloFunil, ModeloProjeto, ProdutoKey, TipoProjeto } from './types';
 
@@ -14,6 +15,8 @@ const vendaAtiva = (): Omit<EtapaFunil, 'id'>[] =>
   etapasPadrao('x').map((et) => ({ nome: et.nome, papel: et.papel, cor: et.cor, slaAtencaoMin: et.slaAtencaoMin, slaCriticoMin: et.slaCriticoMin, criterio: et.criterio, camposObrigatorios: et.camposObrigatorios }));
 
 export const MODELOS_FUNIL: ModeloFunil[] = [
+  // Padrão de todo projeto (migration 20261007135415): entra sozinho em "Comecei um novo projeto", qualquer que seja o tipo.
+  MODELO_ATIVACAO,
   {
     id: 'venda_ativa', nome: 'Venda ativa', icone: 'kanban', tipo: 'manual', eventosHotmart: [],
     descricao: 'As 6 etapas do playbook. Onde o comercial trabalha lead que pediu contato ou veio de lista.',
@@ -181,7 +184,8 @@ export const MODELOS_PROJETO: ModeloProjeto[] = [
   {
     tipo: 'lancamento_classico', nome: 'Lançamento clássico', icone: 'megaphone',
     descricao: 'Captação, CPLs, carrinho aberto e recuperação.',
-    funis: ['captacao_mql', 'venda_ativa', 'checkout', 'pos_carrinho'],
+    // 20261007135415: a Ativação (padrão de todo projeto) substitui "Captação e MQL", que fazia o mesmo acompanhamento.
+    funis: ['venda_ativa', 'checkout', 'pos_carrinho'],
     checklist: [
       'Oferta vigente definida (preço, forma de pagamento e prazo) antes de abrir o carrinho',
       'Links rastreáveis por vendedor criados (SCK com a sigla)',
@@ -209,7 +213,7 @@ export const MODELOS_PROJETO: ModeloProjeto[] = [
   {
     tipo: 'seminario', nome: 'Seminário (Escada A)', icone: 'calendar',
     descricao: 'Cliente final: Sessão de Viabilidade, croqui e implantação.',
-    funis: ['captacao_mql', 'sessao_viabilidade', 'croqui_implantacao', 'checkout'],
+    funis: ['sessao_viabilidade', 'croqui_implantacao', 'checkout'],
     checklist: [
       'Critério de MQL escrito (patrimônio, idade) antes da captação',
       'Agenda de sessões com capacidade por escritório',
@@ -258,12 +262,16 @@ export function funilDoModelo(m: ModeloFunil, opts: { nome?: string; agrupadorId
   };
 }
 
+/** Ids dos modelos que um projeto do tipo cria: a Ativação sempre primeiro (padrão de todo projeto), depois os do tipo. */
+export function funisDoTipo(tipo: TipoProjeto): string[] {
+  const p = MODELOS_PROJETO.find((x) => x.tipo === tipo);
+  return p ? [MODELO_ATIVACAO.id, ...p.funis.filter((id) => id !== MODELO_ATIVACAO.id)] : [];
+}
+
 /** Os funis de um projeto novo, na ordem do modelo, com o nome do projeto na frente. */
 export function funisDoProjeto(tipo: TipoProjeto, nomeProjeto: string, agrupador: Agrupador, produto: ProdutoKey): Funil[] {
-  const p = MODELOS_PROJETO.find((x) => x.tipo === tipo);
-  if (!p) return [];
   const chave = chaveProjeto(nomeProjeto);
-  return p.funis
+  return funisDoTipo(tipo)
     .map((id) => modeloFunil(id))
     .filter((m): m is ModeloFunil => !!m)
     .map((m, i) => funilDoModelo(m, { nome: `${nomeProjeto} · ${m.nome}`, agrupadorId: agrupador.id, produto, chave, prefixoId: `${chave}-${i + 1}` }));

@@ -34,6 +34,8 @@ import {
   mapResultadoNegocio, mapResultadoProjeto, mapResultadoTokenMcp,
   mensagemErroEscrita,
 } from './mapeamento-escrita';
+import type { EdicaoAtivacao, PainelAtivacao } from '../domain/ativacao';
+import { argsSalvarAtivacao, mapPainelAtivacao } from './mapeamento-ativacao';
 // Padrão de fábrica de quem nunca personalizou (o mesmo que a demonstração usa).
 import { painelPadrao, preferenciasPadrao } from './mock-dados';
 
@@ -314,6 +316,14 @@ export class SupabaseComercialRepository implements ComercialRepository {
     return this.escrever('crm_criar_projeto', argsEscrita.criarProjeto(tipo, nome, agrupadorId, produto), mapResultadoProjeto);
   }
   salvarMotivoPerda(m: MotivoPerdaConfig) { return this.simples('crm_salvar_motivo_perda', argsEscrita.salvarMotivoPerda(m)); }
+
+  // Ativação padrão (migration 20261007135415). Sem a migration aplicada, a leitura dá erro claro (nunca painel vazio).
+  async ativacao(): Promise<PainelAtivacao> { return mapPainelAtivacao(await this.rpc('crm_ativacao_painel')); }
+  salvarAtivacao(e: EdicaoAtivacao) { return this.simples('crm_ativacao_salvar', argsSalvarAtivacao(e)); }
+  garantirAtivacao(projeto: string): Promise<Resultado & { funilId?: string }> {
+    return this.escrever('crm_ativacao_garantir', { p_projeto: projeto }, (d) => mapResultadoComId('crm_ativacao_garantir', d, 'funilId'));
+  }
+  encerrarAtivacao(projeto: string) { return this.simples('crm_ativacao_encerrar', { p_projeto: projeto }); }
 
   moverEtapa(negocioId: string, etapaId: string) { return this.simples('crm_mover_etapa', argsEscrita.moverEtapa(negocioId, etapaId)); }
   salvarCampos(negocioId: string, campos: Partial<Record<CampoKey, string>>) {

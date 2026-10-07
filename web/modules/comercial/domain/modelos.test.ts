@@ -22,7 +22,7 @@ describe('modelos de funil', () => {
   it('projeto cria os funis com a chave nas campanhas', () => {
     const fs = funisDoProjeto('lancamento_classico', 'Black Friday 26', { id: 'ag', nome: 'HT', produto: 'ht', ordem: 1 }, 'ht');
     expect(fs.map((f) => f.nome)).toEqual([
-      'Black Friday 26 · Captação e MQL', 'Black Friday 26 · Venda ativa', 'Black Friday 26 · Checkout e recuperação', 'Black Friday 26 · Recuperação pós-carrinho',
+      'Black Friday 26 · Ativação', 'Black Friday 26 · Venda ativa', 'Black Friday 26 · Checkout e recuperação', 'Black Friday 26 · Recuperação pós-carrinho',
     ]);
     expect(fs.every((f) => f.projeto === 'black-friday-26')).toBe(true);
     expect(fs[1].campanhas[0].regra).toBe('utm_campaign = black-friday-26');
@@ -33,9 +33,10 @@ describe('modelos de funil', () => {
 describe('projeto ATM (aula ao vivo de entrada)', () => {
   it('cria a ativação comercial (pré-checkout) e o fechamento da live, com a chave nas campanhas', () => {
     const fs = funisDoProjeto('atm', 'ATM HT out26', AG_HT, 'ht');
-    expect(fs.map((f) => f.nome)).toEqual(['ATM HT out26 · Ativação comercial (pré-checkout)', 'ATM HT out26 · Fechamento da live']);
+    // 20261007135415: a Ativação padrão vem primeiro em todo projeto
+    expect(fs.map((f) => f.nome)).toEqual(['ATM HT out26 · Ativação', 'ATM HT out26 · Ativação comercial (pré-checkout)', 'ATM HT out26 · Fechamento da live']);
     expect(fs.every((f) => f.projeto === 'atm-ht-out26' && f.produto === 'ht')).toBe(true);
-    const [ativ, fech] = fs;
+    const [, ativ, fech] = fs;
     expect(ativ.tipo).toBe('manual');
     expect(ativ.etapas.map((e) => `${e.nome}:${e.papel}`)).toEqual([
       'Lista recebida:primeiro_contato', 'Contato feito:qualificar', 'Convidado para a live:qualificar', 'Presença confirmada:apresentar_oferta',

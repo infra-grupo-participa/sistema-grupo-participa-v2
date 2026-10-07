@@ -6,8 +6,9 @@ import { useMemo, useState } from 'react';
 import { Button, FilterSelect, Input, Modal } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { produto as produtoDe, PRODUTOS } from '../../domain/catalogo';
-import { chaveProjeto, funisDoProjeto, MODELOS_FUNIL, MODELOS_PROJETO, produtoDoTipo } from '../../domain/modelos';
+import { chaveProjeto, funisDoProjeto, funisDoTipo, MODELOS_FUNIL, MODELOS_PROJETO, produtoDoTipo } from '../../domain/modelos';
 import type { Agrupador, ProdutoKey, TipoProjeto } from '../../domain/types';
+import { validarAtivacao, type EdicaoAtivacao } from '../../domain/ativacao';
 import { Campo } from '../comum';
 import { avisarMudanca, repo } from '../repositorio';
 import { cadeiaEtapas } from './assistente';
@@ -26,6 +27,8 @@ export function ModalNovoProjeto({ agrupadores, agrupadorInicial, onClose, onCri
   const [novoAgrupador, setNovoAgrupador] = useState<string | null>(null);
   const [produto, setProduto] = useState<ProdutoKey>(agrupadorInicial?.produto ?? 'ht');
   const [salvando, setSalvando] = useState(false);
+  // Data do evento: é dela que a Ativação tira a ligação da sexta anterior e o link de cada dia (20261007135415)
+  const [evento, setEvento] = useState<{ inicio: string; fim: string; hora: string }>({ inicio: '', fim: '', hora: '' });
   const [erro, setErro] = useState<string | null>(null);
 
   const modelo = MODELOS_PROJETO.find((m) => m.tipo === tipo)!;
@@ -34,7 +37,8 @@ export function ModalNovoProjeto({ agrupadores, agrupadorInicial, onClose, onCri
   const faltando = !nome.trim() ? 'Dê um nome ao projeto.'
     : !chave ? 'O nome precisa ter letras ou números para virar chave.'
       : novoAgrupador !== null ? (!novoAgrupador.trim() ? 'Dê um nome ao agrupador novo.' : null)
-        : !agrupadorId ? 'Escolha o agrupador.' : null;
+        : !agrupadorId ? 'Escolha o agrupador.'
+          : (evento.inicio || evento.fim) ? validarAtivacao(edicaoEvento(chave, evento)) : null;
 
   const escolherAgrupador = (id: string) => {
     setAgrupadorId(id);
@@ -58,8 +62,13 @@ export function ModalNovoProjeto({ agrupadores, agrupadorInicial, onClose, onCri
     const r = await repo.criarProjeto(tipo, nome.trim(), ag, produto);
     setSalvando(false);
     if (!r.ok || !r.funilIds?.length) { setErro(r.msg ?? 'Não foi possível criar o projeto.'); return; }
+    let msg = r.msg ?? `${r.funilIds.length} funis criados.`;
+    if (evento.inicio) {
+      const a = await repo.salvarAtivacao(edicaoEvento(chave, evento));
+      msg = a.ok ? `${msg} Data do evento salva na Ativação.` : `${msg} A data do evento não foi salva: ${a.msg ?? 'erro'}. Configure na Ativação.`;
+    }
     avisarMudanca();
-    onCriado(r.funilIds, r.msg ?? `${r.funilIds.length} funis criados.`);
+    onCriado(r.funilIds, msg);
   };
 
   const escolherTipo = (t: TipoProjeto) => {
@@ -97,7 +106,7 @@ export function ModalNovoProjeto({ agrupadores, agrupadorInicial, onClose, onCri
           <div role="radiogroup" aria-labelledby="projeto-tipo" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {MODELOS_PROJETO.map((m, i) => {
               const sel = m.tipo === tipo;
-              const nomesFunis = m.funis.map((id) => MODELOS_FUNIL.find((x) => x.id === id)?.nome ?? id).join(', ');
+              const nomesFunis = funisDoTipo(m.tipo).map((id) => MODELOS_FUNIL.find((x) => x.id === id)?.nome ?? id).join(', ');
               return (
                 <button key={m.tipo} type="button" role="radio" aria-checked={sel} tabIndex={sel ? 0 : -1}
                   onClick={() => escolherTipo(m.tipo)} onKeyDown={(ev) => onKeyDownTipo(ev, i)}
@@ -143,6 +152,18 @@ export function ModalNovoProjeto({ agrupadores, agrupadorInicial, onClose, onCri
           </Campo>
         </div>
 
+        <div className="grid gap-4 md:grid-cols-3">
+          <Campo rotulo="Início do evento" dica="Para a Ativação: ligação na sexta anterior e link em cada dia.">
+            <Input type="date" value={evento.inicio} onChange={(e) => setEvento((v) => ({ ...v, inicio: e.target.value, fim: v.fim || e.target.value }))} />
+          </Campo>
+          <Campo rotulo="Fim do evento">
+            <Input type="date" value={evento.fim} onChange={(e) => setEvento((v) => ({ ...v, fim: e.target.value }))} />
+          </Campo>
+          <Campo rotulo="Hora (Brasília)" dica="Opcional. Pode preencher depois.">
+            <Input type="time" value={evento.hora} onChange={(e) => setEvento((v) => ({ ...v, hora: e.target.value }))} />
+          </Campo>
+        </div>
+
         <section aria-labelledby="projeto-previa" className="space-y-2">
           <h3 id="projeto-previa" className="text-sm font-semibold text-[var(--fg)]">O que vai ser criado</h3>
           <ul className="rounded-[var(--r-lg)] border border-[var(--border)] divide-y divide-[var(--border-faint)]">
@@ -177,4 +198,12 @@ export function ModalNovoProjeto({ agrupadores, agrupadorInicial, onClose, onCri
       </div>
     </Modal>
   );
+}
+
+/** Edição da Ativação a partir das datas digitadas no assistente (sem data = desligada até configurar). */
+function edicaoEvento(projeto: string, ev: { inicio: string; fim: string; hora: string }): EdicaoAtivacao {
+  return {
+    projeto, eventoInicio: ev.inicio || null, eventoFim: ev.fim || ev.inicio || null, eventoHora: ev.hora || null, carrinhoFim: null,
+    hotmartOferta: [], ligado: !!ev.inicio,
+  };
 }
