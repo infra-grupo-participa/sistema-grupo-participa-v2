@@ -3,14 +3,14 @@
 // Sino do Comercial: lista das notificações de quem está na sessão + aviso no desktop (Notification API do
 // navegador). Busca a cada 30 s; o que for novo e passar nas preferências (gatilho ligado, fora do silêncio)
 // vira notificação do sistema operacional. Clicar leva para o negócio/conversa.
-// Backend futuro: trocar a busca periódica por Supabase Realtime; o resto fica igual.
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { fmtRelativo } from '@/shared/ui/format';
 import { Icon } from '@/shared/ui/icons';
 import type { GatilhoNotificacao } from '../../domain/types';
-import { avisarMudanca, repo, useDados } from '../repositorio';
+import { INTERVALO } from '../atualizacao';
+import { avisarMudanca, repo, useAtualizacaoPeriodica, useDados } from '../repositorio';
 import { AvisosNaTela, mostrarAvisoNaTela } from './avisos-na-tela';
 import { deveAvisarNaTela, deveAvisarNoDesktop } from './regras-notificacao';
 
@@ -39,11 +39,8 @@ export function SinoNotificacoes() {
   const { dados: prefs } = useDados(() => repo.preferenciasNotificacao());
   const naoLidas = (notificacoes ?? []).filter((n) => !n.lida);
 
-  // Busca periódica.
-  useEffect(() => {
-    const t = setInterval(recarregar, 30_000);
-    return () => clearInterval(t);
-  }, [recarregar]);
+  // Busca periódica (pausa com a aba oculta; ao voltar busca na hora).
+  useAtualizacaoPeriodica(recarregar, INTERVALO.sino);
 
   // Aviso do que é novo (não repete o que já avisou nesta sessão do navegador). Na 1ª carga só marca como
   // visto, para não despejar o acumulado. Com permissão: aviso do sistema operacional; sem: aviso na tela.

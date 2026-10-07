@@ -7,6 +7,7 @@ import { publicEnv } from '@/shared/infrastructure/config/env';
 import type { ComercialRepository } from '../application/ports';
 import { idsUnicos } from '../domain/contatos';
 import type { Contato } from '../domain/types';
+import { ambienteNavegador, criarAtualizador, reaproveitar, type Atualizador } from './atualizacao';
 import { MockComercialRepository } from '../infrastructure/mock-comercial.repository';
 import { SupabaseComercialRepository } from '../infrastructure/supabase-comercial.repository';
 
@@ -39,7 +40,8 @@ export function useDados<T>(carregar: () => Promise<T>, deps: unknown[] = []) {
   const recarregar = useCallback(async () => {
     try {
       const d = await fnRef.current();
-      if (vivo.current) { setDados(d); setErro(null); }
+      // O que não mudou mantém a referência: a busca periódica não pisca a tela nem remonta bolha/mídia.
+      if (vivo.current) { setDados((antes) => reaproveitar(antes, d)); setErro(null); }
     } catch (e) {
       if (vivo.current) setErro(e instanceof Error ? e.message : 'Não foi possível carregar.');
     }
@@ -54,6 +56,28 @@ export function useDados<T>(carregar: () => Promise<T>, deps: unknown[] = []) {
   }, [recarregar, chave]);
 
   return { dados, erro, recarregar };
+}
+
+// Atualizadores periódicos montados (o aviso do Realtime cutuca todos de uma vez).
+const atualizadores = new Set<Atualizador>();
+/** Antecipa a busca de toda tela com atualização periódica (ex.: aviso do banco pelo Realtime). */
+export function cutucarAtualizacoes() {
+  atualizadores.forEach((a) => a.cutucar());
+}
+
+/**
+ * Chama `executar` a cada `intervaloMs` enquanto `ativo` e a aba do navegador estiver visível (oculta = pausa;
+ * ao voltar o foco busca na hora). Não sobrepõe chamadas. Regras em `atualizacao.ts`.
+ */
+export function useAtualizacaoPeriodica(executar: () => Promise<unknown> | unknown, intervaloMs: number, ativo = true) {
+  const fnRef = useRef(executar);
+  useEffect(() => { fnRef.current = executar; });
+  useEffect(() => {
+    if (!ativo) return;
+    const a = criarAtualizador(() => fnRef.current(), intervaloMs, ambienteNavegador());
+    atualizadores.add(a);
+    return () => { atualizadores.delete(a); a.parar(); };
+  }, [intervaloMs, ativo]);
 }
 
 /**

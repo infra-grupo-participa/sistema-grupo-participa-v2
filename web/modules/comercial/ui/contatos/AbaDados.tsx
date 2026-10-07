@@ -11,7 +11,8 @@ import type { Contato } from '../../domain/types';
 import { BotaoConversa, Dono, EstadoErro, Vazio } from '../comum';
 import { InfoIndicador } from '../InfoIndicador';
 import { INFO_FILA } from '../recuperacao/indicadores';
-import { repo, useDados } from '../repositorio';
+import { INTERVALO } from '../atualizacao';
+import { repo, useAtualizacaoPeriodica, useDados } from '../repositorio';
 import { utmEmLinha } from './regras-contatos';
 import { MidiaMensagem } from '../conversas/MidiaMensagem';
 import { legendaDaMensagem } from '../../domain/midia';
@@ -106,6 +107,8 @@ export function AbaDados({ c, duplicados, nomeDe, onAbrirContato }: {
 /** Últimas mensagens e o atalho para a caixa de Conversas (onde se responde). */
 export function AbaConversa({ c, nomeDe, flash }: { c: Contato; nomeDe: (id: string | null) => string; flash?: (m: string) => void }) {
   const ms = useDados(() => repo.mensagens(c.id), [c.id]);
+  // Aba aberta = conversa à vista: atualiza sozinha (mensagem nova, mídia, status).
+  useAtualizacaoPeriodica(ms.recarregar, INTERVALO.conversaAberta, !c.optOut && !!c.telefone);
   if (c.optOut) {
     return <Vazio titulo="Sem conversa" hint="Pediu para não receber contato: ninguém aborda esta pessoa." icone="lock" />;
   }
