@@ -99,3 +99,5 @@ O projeto do evento fica vazio: a função só liga projeto pela sigla de `mkt.p
 6. Sigla da Clínica em `mkt.projetos` (para o evento ganhar projeto) e decidir se pré-checkout conta em algum painel.
 7. Conferir a regra da lista 614 do ActiveCampaign na catalogação do CRM (`20261007141044`): ela leva "Clínica
    Internacional Diamante Dez/26" para `miami-2026-12`, e a Clínica é `clinica-miami-2026-12`.
+   Correção escrita na migration `20261007j_crm_regra_lista_614_clinica_miami` (decisão do Victor, 07/10): **NÃO
+   APLICADA**, ensaio não rodado; ver `infra/supabase/migrations/20261007j.explain.md`.
