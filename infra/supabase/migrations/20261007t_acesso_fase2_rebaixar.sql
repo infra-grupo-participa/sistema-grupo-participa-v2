@@ -1,8 +1,8 @@
 -- 20261007t: níveis de acesso, fase 2 (rebaixar). Quem não é master deixa de ser admin/dev e passa a valer só pelos
 -- vínculos e capacidades de acesso.*, com os ajustes que o Victor Hugo decidiu sobre o relatório (07/10/2026).
 --
--- STATUS: NÃO APLICADA. Fase 2 aprovada pelo Victor Hugo em 07/10/2026 com os ajustes abaixo; só aplicar depois que o
---   pentester aprovar e o Maestro mandar. Relatório: .maestri/entregas/niveis-de-acesso/ensaio-fase2.md (cérebro);
+-- STATUS: NÃO APLICADA. Fase 2 aprovada pelo Victor Hugo (07/10/2026, ajustes abaixo, versão 3) e pelo pentester;
+--   só aplicar quando o Maestro mandar. Relatório: .maestri/entregas/niveis-de-acesso/ensaio-fase2.md (cérebro);
 --   resumo em 20261007t.explain.md. Ensaio: 20261007t_ensaio.sql (rollback).
 --
 -- POR QUE
@@ -16,17 +16,19 @@
 --   3. Decisões do Victor Hugo (07/10/2026) sobre o relatório:
 --      - Thomas Henrique e Ana Camila: membro do Educacional;
 --      - Jusy: membro do Comercial;
---      - Fernanda Tavares: RESPONSÁVEL do Financeiro, no perfil em uso (#8c37, último login no Auth 21/07/2026, contra
---        15/07/2026 do #00b1). O responsável ganha financeiro.ver e financeiro.operar. O outro perfil (#00b1) vira leitor:
+--      - Fernanda Tavares: RESPONSÁVEL do Financeiro no perfil #8c37 (a conta do Financeiro, confirmada pelo Maestro no
+--        Auth em 07/10/2026). O responsável ganha financeiro.ver e financeiro.operar. O outro perfil (#00b1) vira leitor:
 --        perde as capacidades financeiras e o pode_ver_cpf_completo (na foto, reversível). Nenhum perfil é apagado;
---      - Cristiane, Eduardo Vinicius Silva, Gabriel Sales e Marco: acesso ao sistema DESATIVADO (status negado, o único
---        valor fora de ativo/pendente que o CHECK de perfis aceita). Não apaga perfil, usuário do Auth nem histórico;
+--      - Marco e Cristiane (Escritório, só precisam ver informação de venda; decisão do Victor sobre a v2): continuam
+--        ativos, visualizador, só leitura, sem vínculo de edição, sem capacidade financeira e sem CPF;
+--      - Eduardo Vinicius Silva e Gabriel Sales: acesso ao sistema DESATIVADO (status negado, o único valor fora de
+--        ativo/pendente que o CHECK de perfis aceita). Não apaga perfil, usuário do Auth nem histórico;
 --      - guilherme e matheusvasconcellos: entram (ativo), SÓ LEITURA: o vínculo de edição em marketing/audiovisual é
 --        encerrado (vigente_ate), porque a área ainda não existe.
 --   4. Ativa os pendentes que entram: renan, emmanuel, jessica (com vínculo), guilherme e matheusvasconcellos (leitores).
 --
 -- AS 5 PERGUNTAS
---   escala: ~25 updates em perfis, 4 vínculos novos, 2 encerrados, 4 linhas de capacidade. índice: PK.
+--   escala: ~23 updates em perfis, 4 vínculos novos, 2 encerrados, 4 linhas de capacidade. índice: PK.
 --   frequência: uma vez. repetição: nenhuma. reversão: bloco REVERSÃO no fim (pelas fotos e pela vigência).
 --
 -- IDEMPOTENTE: fotos só uma vez (on conflict do nothing); vínculos e capacidades com where not exists / on conflict;
@@ -58,8 +60,8 @@ create temp table _t_pessoas (id uuid primary key, nome text not null, papel tex
 insert into _t_pessoas (id, nome, papel)
 select p.id, p.nome, x.papel
   from (values ('Thomas Henrique', 'educacional'), ('Ana Camila', 'educacional'), ('Jusy', 'comercial'),
-               ('Cristiane', 'desativar'), ('Eduardo Vinicius Silva', 'desativar'), ('Gabriel Sales', 'desativar'),
-               ('Marco', 'desativar'), ('guilherme', 'leitor'), ('matheusvasconcellos', 'leitor')) x(nome, papel)
+               ('Cristiane', 'leitor_escritorio'), ('Eduardo Vinicius Silva', 'desativar'), ('Gabriel Sales', 'desativar'),
+               ('Marco', 'leitor_escritorio'), ('guilherme', 'leitor'), ('matheusvasconcellos', 'leitor')) x(nome, papel)
   join public.perfis p on p.nome = x.nome;
 insert into _t_pessoas (id, nome, papel) values
   ('8c37c683-a430-4bdd-9295-57bc92fb98db', 'Fernanda Tavares', 'financeiro_responsavel'),
@@ -149,6 +151,13 @@ begin
               where (t.papel = 'desativar' and p.status <> 'negado') or (t.papel <> 'desativar' and p.status <> 'ativo')) then
     raise exception '20261007t: status das pessoas das decisões diferente do esperado';
   end if;
+  if exists (select 1 from _t_pessoas t join public.perfis p on p.id = t.id
+              where t.papel = 'leitor_escritorio'
+                and (p.cargo <> 'visualizador' or p.pode_ver_cpf_completo
+                     or exists (select 1 from acesso.vinculo v where v.perfil_id = t.id and v.vigente_ate is null)
+                     or exists (select 1 from acesso.capacidade c where c.perfil_id = t.id))) then
+    raise exception '20261007t: Marco ou Cristiane com edição, financeiro ou CPF (devem ser só leitores)';
+  end if;
   if exists (select 1 from acesso.vinculo v join _t_pessoas t on t.id = v.perfil_id
               where t.papel = 'leitor' and v.vigente_ate is null) then
     raise exception '20261007t: guilherme ou matheusvasconcellos ficou com vínculo de edição';
@@ -177,6 +186,6 @@ $c$;
 --   and departamento in ('educacional', 'comercial', 'financeiro') and area is null;
 -- insert into acesso.vinculo (perfil_id, departamento, area, papel)
 -- select perfil_id, departamento, area, papel from acesso.vinculo where area = 'audiovisual' and vigente_ate >= '<hora da aplicação>';
--- Só a desativação dos 4 (Cristiane, Eduardo Vinicius Silva, Gabriel Sales, Marco):
+-- Só a desativação dos 2 (Eduardo Vinicius Silva, Gabriel Sales):
 -- update public.perfis p set status = 'ativo', atualizado_em = now() from acesso.perfis_antes_20261007 f
---  where f.id = p.id and f.status = 'ativo' and p.status = 'negado' and p.nome in ('Cristiane', 'Eduardo Vinicius Silva', 'Gabriel Sales', 'Marco');
+--  where f.id = p.id and f.status = 'ativo' and p.status = 'negado' and p.nome in ('Eduardo Vinicius Silva', 'Gabriel Sales');
