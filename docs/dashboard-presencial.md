@@ -113,6 +113,15 @@ clique_pct numeric`
 | `P0002` | chave fora de `dados.dashboards` ativa |
 | `PGRST202` | função não existe no banco (PostgREST) |
 
+## 2.7 Oferta nova da Clínica de Miami (07/10/2026)
+
+A Clínica vende em duas ofertas: `sju5pawn` ("Clínica de Holding Familiar - Miami", produto `5682989`, conta academy,
+5014.2 BRL), a principal desde 07/10/2026, e `mjzv4v0s` (produto `6489980`), a antiga, com 1 pedido de teste.
+`dados.dashboards` ganhou `ofertas_extra text[]`: as funções `dados_presencial_*` somam a `oferta_codigo` e as extras
+(mesma conta). Contrato da tela sem mudança (o `resumo.oferta_codigo` passa a ser `sju5pawn`). Para um evento com mais de
+uma oferta: `update dados.dashboards set ofertas_extra = array['<oferta>'] where chave = '<chave>'`. Migration
+`20261007203803`.
+
 ## 3. Migrations (ordem e versão gravada)
 
 | Versão | Nome | O quê |
@@ -121,6 +130,7 @@ clique_pct numeric`
 | `20261007161809` | `dados_dashboard_presencial` | schema `dados`, cadastro, gate e as 5 funções |
 | `20261007162432` | `mkt_trafego_clinica_miami_oferta` | projeto 68 `interno/csm` e oferta `mjzv4v0s` exclusiva do projeto no Tráfego (`conta_hotmart(68)` = academy) |
 | `20261007162557` | `pessoas_registrar_lead_projeto_por_chave` | a fachada da captura resolve o projeto pela chave da casa (lead da página grava `projeto_id` 68) |
+| `20261007203803` | `clinica_miami_oferta_nova` | oferta `sju5pawn` (produto 5682989) na Clínica: Financeiro, Tráfego e dashboard; `ofertas_extra` |
 | `20261007171902` (APLICADA 07/10) | `crm_lista_614_todos` | regra 42 com `para_todos`: quem entra na lista 614 vira contato comercial e é catalogado na Clínica. Ensaio refeito antes da aplicação, igual ao esperado |
 
 Cada uma tem `.explain.md` com ensaio, explain e reversão.
