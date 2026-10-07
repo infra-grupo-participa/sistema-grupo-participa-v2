@@ -1,3 +1,42 @@
+-- Ensaio do ROLLBACK da fase 3: aplica a fase 3 e o rollback (.maestri/entregas/niveis-de-acesso/rollback-fase3.sql, copiado
+-- aqui) e confere que cada perfil volta exatamente ao estado de antes. Transação desfeita: nada persiste.
+begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '120s';
+create temp table _z_out (em bigserial, passo text, linha text) on commit drop;
+grant all on pg_temp._z_out to service_role, authenticated, anon; grant all on sequence pg_temp._z_out_em_seq to service_role, authenticated, anon;
+create function pg_temp.sonda(p_id uuid) returns jsonb language plpgsql as $s$
+declare j jsonb; k text; a record;
+begin
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', p_id, 'role', 'authenticated')::text, true);
+  j := jsonb_build_object(
+    'equipe', public.gp_eh_equipe(), 'admin', public.gp_is_admin(),
+    'fin_ver', public.gp_pode_ver_financeiro(), 'fin_operar', public.gp_pode_operar_financeiro(), 'cpf', public.gp_pode_ver_cpf(),
+    'crm_gestor', crm.eh_gestor(), 'crm_comercial', crm.eh_comercial(), 'crm_catalogar', crm.pode_catalogar(),
+    'remocao', public.ra_pode_ver(), 'pedidos', public.pa_pode_pedir(), 'placas', public.gp_pode_editar('placas'),
+    'base_pessoas', pessoas.pode_ver(), 'gps_eh_equipe', gps.eh_equipe(),
+    'mkt_ver', mkt.pode_ver('mkt_trafego'), 'ed_trafego', mkt.pode_editar('mkt_trafego'), 'ed_web', mkt.pode_editar('mkt_web'),
+    'ed_mensageria', mkt.pode_editar('mkt_mensageria'),
+    'gps', public.gp_is_admin() or coalesce(public.gp_acesso_pode_editar('educacional', null), false),
+    'ver_financeiro', public.gp_acesso_pode_ver('financeiro', null));
+  for a in select d.key as dep, null::text as ar from acesso.departamento d union all select ar2.departamento, ar2.key from acesso.area ar2 loop
+    j := j || jsonb_build_object('ed:' || a.dep || coalesce('/' || a.ar, ''), public.gp_acesso_pode_editar(a.dep, a.ar));
+  end loop;
+  return j;
+end $s$;
+create function pg_temp.tenta(p_id uuid, p_sql text) returns text language plpgsql as $t$
+declare v text;
+begin
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', p_id, 'role', 'authenticated')::text, true);
+  execute p_sql into v;
+  return 'passou: ' || left(coalesce(v, 'null'), 100);
+exception when others then return sqlstate || ' ' || sqlerrm;
+end $t$;
+grant execute on function pg_temp.sonda(uuid), pg_temp.tenta(uuid, text) to authenticated;
+insert into pg_temp._z_out (passo, linha) select '1 antes', jsonb_object_agg(p.nome || ' #' || left(p.id::text, 4), jsonb_build_object('cargo', p.cargo, 'cpf_col', p.pode_ver_cpf_completo, 's', pg_temp.sonda(p.id))) from public.perfis p where p.status = 'ativo';
+insert into pg_temp._z_out (passo, linha) select '1 capacidades', (select jsonb_agg(left(perfil_id::text,4)||':'||chave order by 1) from acesso.capacidade)::text;
+
+-- ===== FASE 3 =====
 -- 20261007u: níveis de acesso, fase 3 (limpar). Tira o "velho" das guardas: gp_is_admin() passa a ser só o master
 -- (acesso.master) e as guardas de financeiro, CPF, Marketing e Comercial deixam de aceitar o cargo admin/dev.
 --
@@ -302,3 +341,46 @@ $c$;
 --   for r in select * from acesso.corpo_antes where migration = '20261007u' and tipo = 'funcao' loop execute r.definicao; end loop;
 -- end $v$;
 -- drop function if exists acesso.eh_admin();
+
+insert into pg_temp._z_out (passo, linha) select '2 com fase 3', jsonb_object_agg(p.nome || ' #' || left(p.id::text, 4), jsonb_build_object('cargo', p.cargo, 'cpf_col', p.pode_ver_cpf_completo, 's', pg_temp.sonda(p.id))) from public.perfis p where p.status = 'ativo';
+insert into pg_temp._z_out (passo, linha) select '2 capacidades', (select jsonb_agg(left(perfil_id::text,4)||':'||chave order by 1) from acesso.capacidade)::text;
+
+-- ===== ROLLBACK =====
+-- Rollback da fase 3 de níveis de acesso (migration 20261007u_acesso_fase3_limpar). Rodar numa transação
+-- (aplica_sql.py aplicar). Volta as guardas aos corpos de antes da fase 3 (acesso.corpo_antes, migration 20261007u),
+-- tira o gatilho acesso_guarda, devolve a coluna de CPF pela foto e tira os cpf.ver que a fase 3 criou a partir da
+-- coluna. A tabela acesso.excecao_admin e as fotos ficam (registro). A blindagem exige a autorização na mesma transação.
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
+do $bl$ begin
+  if to_regprocedure('blindagem.autorizar_guarda(text)') is not null then
+    perform blindagem.autorizar_guarda('rollback da fase 3 de níveis de acesso (20261007u), volta as guardas de antes');
+  end if;
+end $bl$;
+drop trigger if exists acesso_guarda on public.perfis;
+update public.perfis p set pode_ver_cpf_completo = f.pode_ver_cpf_completo, atualizado_em = now()
+  from acesso.cpf_coluna_antes_20261007 f where f.id = p.id and p.pode_ver_cpf_completo is distinct from f.pode_ver_cpf_completo;
+delete from acesso.capacidade c using acesso.cpf_coluna_antes_20261007 f
+ where f.id = c.perfil_id and c.chave = 'cpf.ver'
+   and not exists (select 1 from acesso.capacidade_antes_20261007 a where a.perfil_id = c.perfil_id and a.chave = 'cpf.ver');
+do $v$ declare r record; begin
+  for r in select * from acesso.corpo_antes where migration = '20261007u' and tipo = 'funcao' loop execute r.definicao; end loop;
+end $v$;
+drop function if exists acesso.tg_perfis_guarda();
+drop function if exists acesso.eh_admin();
+do $c$ begin
+  if (select prosrc from pg_proc where oid = 'public.gp_is_admin()'::regprocedure) ~ 'acesso\.eh_admin' then
+    raise exception 'rollback fase 3: gp_is_admin não voltou';
+  end if;
+  if exists (select 1 from pg_trigger where tgrelid = 'public.perfis'::regclass and tgname = 'acesso_guarda') then
+    raise exception 'rollback fase 3: gatilho acesso_guarda ainda existe';
+  end if;
+end $c$;
+
+insert into pg_temp._z_out (passo, linha) select '3 depois do rollback', jsonb_object_agg(p.nome || ' #' || left(p.id::text, 4), jsonb_build_object('cargo', p.cargo, 'cpf_col', p.pode_ver_cpf_completo, 's', pg_temp.sonda(p.id))) from public.perfis p where p.status = 'ativo';
+insert into pg_temp._z_out (passo, linha) select '3 capacidades', (select jsonb_agg(left(perfil_id::text,4)||':'||chave order by 1) from acesso.capacidade)::text;
+insert into pg_temp._z_out (passo, linha) select 'volta igual', ((select linha from pg_temp._z_out where passo = '1 antes') = (select linha from pg_temp._z_out where passo = '3 depois do rollback'))::text;
+insert into pg_temp._z_out (passo, linha) select 'capacidades iguais', ((select linha from pg_temp._z_out where passo = '1 capacidades') = (select linha from pg_temp._z_out where passo = '3 capacidades'))::text;
+insert into pg_temp._z_out (passo, linha) select 'gatilho acesso_guarda', count(*)::text from pg_trigger where tgrelid = 'public.perfis'::regclass and tgname = 'acesso_guarda';
+select passo, linha from pg_temp._z_out order by em, passo;
+rollback;

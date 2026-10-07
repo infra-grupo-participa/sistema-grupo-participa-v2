@@ -14,7 +14,7 @@ begin
     'fin_ver', public.gp_pode_ver_financeiro(), 'fin_operar', public.gp_pode_operar_financeiro(), 'cpf', public.gp_pode_ver_cpf(),
     'crm_gestor', crm.eh_gestor(), 'crm_comercial', crm.eh_comercial(), 'crm_catalogar', crm.pode_catalogar(),
     'remocao', public.ra_pode_ver(), 'pedidos', public.pa_pode_pedir(), 'placas', public.gp_pode_editar('placas'),
-    'base_pessoas', pessoas.pode_ver(),
+    'base_pessoas', pessoas.pode_ver(), 'gps_eh_equipe', gps.eh_equipe(),
     'mkt_ver', mkt.pode_ver('mkt_trafego'), 'ed_trafego', mkt.pode_editar('mkt_trafego'), 'ed_web', mkt.pode_editar('mkt_web'),
     'ed_mensageria', mkt.pode_editar('mkt_mensageria'),
     'gps', public.gp_is_admin() or coalesce(public.gp_acesso_pode_editar('educacional', null), false),
@@ -56,9 +56,13 @@ insert into pg_temp._z_out (passo, linha) select '1 antes', jsonb_object_agg(p.n
 --
 -- EXCEÇÃO NOMINAL (decisão do Victor Hugo, 07/10/2026): Cristiane (#1b15) admin, Fernanda Tavares (#00b1) admin, Isabela
 --   Teixeira (#e1d2) admin, Elaine Montenegro (#6ed2) dev, Marcio Carvalho de Sá (#ec6d) dev, Aldri Santana (#0f6d) dev.
---   Ninguém vira master. A exceção vale enquanto o cargo do perfil for o da lista, e cobre o "admin do sistema"
---   (gp_is_admin e as guardas de edição). NÃO cobre financeiro nem CPF: esses continuam só por capacidade
---   (decisões 1 e 7 do Victor). O CPF da Fernanda #00b1 (coluna ligada pelo João) vira a capacidade cpf.ver, com log.
+--   Ninguém vira master. A exceção vale enquanto o cargo do perfil for o da lista, e mantém EXATAMENTE o que o cargo
+--   dava a eles hoje: admin do sistema (gp_is_admin, guardas de edição, GPS), financeiro e CPF. Motivo: a fase 2 tirou
+--   gp_is_admin de quem operava o GPS (gps.eh_equipe = gp_is_admin OR Educacional OR operador) e derrubou a equipe; o
+--   João devolveu admin/dev a estes 6 às 18:39 UTC e instalou a blindagem às 19:25 UTC. Esta fase não pode tirar nada
+--   de ninguém em relação a hoje (provado no ensaio por pessoa, inclusive gps.eh_equipe). Para estreitar a exceção
+--   depois (ex.: financeiro só por capacidade), é decisão do Victor e outra migration.
+--   O CPF da Fernanda #00b1 (coluna ligada pelo João) vira a capacidade cpf.ver, com log.
 --
 -- O QUE FAZ (corpo anterior de cada função guardado em acesso.corpo_antes, migration 20261007u)
 --   1. Guardas sem o atalho do cargo: gp_is_admin() = acesso.eh_admin() (master ou exceção nominal); gp_pode_ver_financeiro() =
@@ -172,13 +176,13 @@ $function$;
 create or replace function public.gp_pode_ver_financeiro()
  returns boolean language sql stable security definer set search_path to 'public'
 as $function$
-  select coalesce(acesso.tem('financeiro.ver'), false);  -- 20261007u
+  select coalesce(acesso.tem('financeiro.ver'), false) or coalesce(acesso.eh_admin(), false);  -- 20261007u (exceção nominal mantém o que tem hoje)
 $function$;
 
 create or replace function public.gp_pode_operar_financeiro()
  returns boolean language sql stable security definer set search_path to 'public'
 as $function$
-  select coalesce(acesso.tem('financeiro.operar'), false);  -- 20261007u
+  select coalesce(acesso.tem('financeiro.operar'), false) or coalesce(acesso.eh_admin(), false);  -- 20261007u (exceção nominal mantém o que tem hoje)
 $function$;
 
 -- CPF: a coluna vira a capacidade cpf.ver antes de a guarda deixar de ler a coluna
@@ -198,7 +202,7 @@ update public.perfis set pode_ver_cpf_completo = false, atualizado_em = now() wh
 create or replace function public.gp_pode_ver_cpf()
  returns boolean language sql stable security definer set search_path to 'public'
 as $function$
-  select coalesce(acesso.tem('cpf.ver'), false);  -- 20261007u: CPF completo é só a capacidade cpf.ver
+  select coalesce(acesso.tem('cpf.ver'), false) or coalesce(acesso.eh_admin(), false);  -- 20261007u: CPF = cpf.ver (ou exceção nominal, que já tinha)
 $function$;
 
 create or replace function public.gp_pode_editar(p_setor text)
@@ -360,9 +364,13 @@ insert into pg_temp._z_out (passo, linha) select '2 depois1', jsonb_object_agg(p
 --
 -- EXCEÇÃO NOMINAL (decisão do Victor Hugo, 07/10/2026): Cristiane (#1b15) admin, Fernanda Tavares (#00b1) admin, Isabela
 --   Teixeira (#e1d2) admin, Elaine Montenegro (#6ed2) dev, Marcio Carvalho de Sá (#ec6d) dev, Aldri Santana (#0f6d) dev.
---   Ninguém vira master. A exceção vale enquanto o cargo do perfil for o da lista, e cobre o "admin do sistema"
---   (gp_is_admin e as guardas de edição). NÃO cobre financeiro nem CPF: esses continuam só por capacidade
---   (decisões 1 e 7 do Victor). O CPF da Fernanda #00b1 (coluna ligada pelo João) vira a capacidade cpf.ver, com log.
+--   Ninguém vira master. A exceção vale enquanto o cargo do perfil for o da lista, e mantém EXATAMENTE o que o cargo
+--   dava a eles hoje: admin do sistema (gp_is_admin, guardas de edição, GPS), financeiro e CPF. Motivo: a fase 2 tirou
+--   gp_is_admin de quem operava o GPS (gps.eh_equipe = gp_is_admin OR Educacional OR operador) e derrubou a equipe; o
+--   João devolveu admin/dev a estes 6 às 18:39 UTC e instalou a blindagem às 19:25 UTC. Esta fase não pode tirar nada
+--   de ninguém em relação a hoje (provado no ensaio por pessoa, inclusive gps.eh_equipe). Para estreitar a exceção
+--   depois (ex.: financeiro só por capacidade), é decisão do Victor e outra migration.
+--   O CPF da Fernanda #00b1 (coluna ligada pelo João) vira a capacidade cpf.ver, com log.
 --
 -- O QUE FAZ (corpo anterior de cada função guardado em acesso.corpo_antes, migration 20261007u)
 --   1. Guardas sem o atalho do cargo: gp_is_admin() = acesso.eh_admin() (master ou exceção nominal); gp_pode_ver_financeiro() =
@@ -476,13 +484,13 @@ $function$;
 create or replace function public.gp_pode_ver_financeiro()
  returns boolean language sql stable security definer set search_path to 'public'
 as $function$
-  select coalesce(acesso.tem('financeiro.ver'), false);  -- 20261007u
+  select coalesce(acesso.tem('financeiro.ver'), false) or coalesce(acesso.eh_admin(), false);  -- 20261007u (exceção nominal mantém o que tem hoje)
 $function$;
 
 create or replace function public.gp_pode_operar_financeiro()
  returns boolean language sql stable security definer set search_path to 'public'
 as $function$
-  select coalesce(acesso.tem('financeiro.operar'), false);  -- 20261007u
+  select coalesce(acesso.tem('financeiro.operar'), false) or coalesce(acesso.eh_admin(), false);  -- 20261007u (exceção nominal mantém o que tem hoje)
 $function$;
 
 -- CPF: a coluna vira a capacidade cpf.ver antes de a guarda deixar de ler a coluna
@@ -502,7 +510,7 @@ update public.perfis set pode_ver_cpf_completo = false, atualizado_em = now() wh
 create or replace function public.gp_pode_ver_cpf()
  returns boolean language sql stable security definer set search_path to 'public'
 as $function$
-  select coalesce(acesso.tem('cpf.ver'), false);  -- 20261007u: CPF completo é só a capacidade cpf.ver
+  select coalesce(acesso.tem('cpf.ver'), false) or coalesce(acesso.eh_admin(), false);  -- 20261007u: CPF = cpf.ver (ou exceção nominal, que já tinha)
 $function$;
 
 create or replace function public.gp_pode_editar(p_setor text)
