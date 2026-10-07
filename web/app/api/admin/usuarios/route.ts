@@ -20,13 +20,9 @@ function podeGerirUsuarios(user: Awaited<ReturnType<typeof getCurrentUser>>): bo
 
 type ResultadoAtualizacao = { ok: true } | { ok: false; code: string };
 
-/** A RPC registra o autor no log. Até a migração 20261007y existir, preserva o update antigo. */
+/** A RPC registra o autor no log. A migração 20261007204017 já está aplicada. */
 async function atualizarPerfil(admin: ReturnType<typeof createAdminSupabase>, autor: string, id: string, patch: Record<string, unknown>): Promise<ResultadoAtualizacao> {
   const { data, error } = await admin.rpc('acesso_perfil_atualizar_como', { p_autor: autor, p_id: id, p_patch: patch });
-  if (error?.code === 'PGRST202') {
-    const antigo = await admin.from('perfis').update({ ...patch, atualizado_em: new Date().toISOString() }).eq('id', id);
-    return antigo.error ? { ok: false, code: antigo.error.code || 'ERRO' } : { ok: true };
-  }
   if (error) return { ok: false, code: error.code || 'ERRO' };
   const resposta = data as { ok?: unknown; id?: unknown } | null;
   return resposta?.ok === true && resposta.id === id ? { ok: true } : { ok: false, code: 'RESPOSTA_INVALIDA' };
@@ -36,6 +32,7 @@ function erroAtualizacao(code: string, convite = false) {
   if (code === '42501') return jsonError('Sem direito de gerir este perfil ou alteração bloqueada pelo banco. Cargo admin/dev é restrito a master ou exceção nominal; acesso a CPF deve ser concedido pela capacidade cpf.ver.', 403);
   if (code === '22023') return jsonError('Campos do perfil inválidos. Revise a alteração.', 400);
   if (code === 'P0002') return jsonError('Usuário não encontrado.', 404);
+  if (code === 'PGRST202') return jsonError('A função de atualização de usuários não está disponível no banco. Tente novamente mais tarde.', 503);
   return jsonError(convite ? 'Não foi possível salvar o perfil do convite.' : 'Não foi possível salvar o perfil.', 502);
 }
 

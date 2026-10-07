@@ -144,6 +144,7 @@ function CatalogoAcessos({
 export function UsuariosClient({ meuCargo, acessoV2 = false }: { meuCargo: Cargo; acessoV2?: boolean }) {
   const [users, setUsers] = useState<PerfilRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erroLista, setErroLista] = useState('');
   const [q, setQ] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -153,7 +154,12 @@ export function UsuariosClient({ meuCargo, acessoV2 = false }: { meuCargo: Cargo
 
   const reload = useCallback(async () => {
     const r = await fetchJson<{ usuarios?: PerfilRow[] }>('/api/admin/usuarios', { credentials: 'include' });
-    setUsers(r.json?.usuarios ?? []);
+    if (r.json?.usuarios && Array.isArray(r.json.usuarios)) {
+      setUsers(r.json.usuarios);
+      setErroLista('');
+    } else {
+      setErroLista('Não foi possível carregar os usuários. Recarregue a página ou avise quem cuida do sistema.');
+    }
   }, []);
   useEffect(() => { (async () => { await reload(); setLoading(false); })(); }, [reload]);
 
@@ -177,6 +183,7 @@ export function UsuariosClient({ meuCargo, acessoV2 = false }: { meuCargo: Cargo
       <Toolbar className="mb-3">
         <SearchInput value={q} onChange={(e) => setQ(e.target.value)} onLimpar={() => setQ('')} placeholder="Buscar nome ou e-mail…" />
       </Toolbar>
+      {erroLista && <p role="alert" className="mb-3 text-sm text-[var(--red)]">{erroLista}</p>}
 
       <DataTable>
         <Thead>
@@ -200,7 +207,7 @@ export function UsuariosClient({ meuCargo, acessoV2 = false }: { meuCargo: Cargo
               </Tr>
             );
           })}
-          {!filtered.length && !loading && (
+          {!filtered.length && !loading && !erroLista && (
             <tr><td colSpan={4} className="p-0"><EmptyState title="Nenhum usuário." /></td></tr>
           )}
         </tbody>

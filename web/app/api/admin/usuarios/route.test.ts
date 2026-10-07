@@ -44,11 +44,11 @@ describe('B2 na rota de Usuários', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it('usa o update legado só enquanto a RPC não existe', async () => {
+  it('não grava sem autor quando a RPC não está visível', async () => {
     rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } });
     const res = await PATCH(request('PATCH', { id: ALVO, fields: { status: 'pendente' } }));
-    expect(res.status).toBe(200);
-    expect(update).toHaveBeenCalledWith(expect.objectContaining({ status: 'pendente', atualizado_em: expect.any(String) }));
+    expect(res.status).toBe(503);
+    expect(update).not.toHaveBeenCalled();
   });
 
   it.each([['42501', 403], ['22023', 400], ['P0002', 404]])('traduz %s em HTTP %i sem fallback', async (code, status) => {
