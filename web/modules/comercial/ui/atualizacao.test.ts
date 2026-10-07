@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { chamadasPorMinuto, criarAtualizador, estaNoFim, INTERVALO, reaproveitar, type AmbienteAtualizacao } from './atualizacao';
+import { chamadasPorMinuto, criarAtualizador, estaNoFim, INTERVALO, INTERVALO_COM_AVISO, reaproveitar, type AmbienteAtualizacao } from './atualizacao';
 
 function ambiente() {
   let visivel = true;
@@ -83,6 +83,22 @@ describe('criarAtualizador', () => {
     a.parar();
   });
 
+  it('intervalo dinâmico: afrouxa quando o aviso do banco conecta, aperta quando cai', async () => {
+    const f = vi.fn();
+    let conectado = false;
+    const a = criarAtualizador(f, () => (conectado ? INTERVALO_COM_AVISO.conversaAberta : INTERVALO.conversaAberta), ambiente().amb);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(f).toHaveBeenCalledTimes(1);
+    conectado = true; // vale a partir do próximo agendamento (já marcado para +3 s)
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(f).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(f).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(f).toHaveBeenCalledTimes(3);
+    a.parar();
+  });
+
   it('erro na busca não para o laço', async () => {
     const f = vi.fn().mockRejectedValueOnce(new Error('rede')).mockResolvedValue(undefined);
     const a = criarAtualizador(f, 1_000, ambiente().amb);
@@ -106,6 +122,9 @@ describe('criarAtualizador', () => {
 describe('carga', () => {
   it('caixa aberta: 20 + 6 + 2 = 28 chamadas/min por pessoa', () => {
     expect(chamadasPorMinuto([INTERVALO.conversaAberta, INTERVALO.listaConversas, INTERVALO.sino])).toBe(28);
+  });
+  it('com o aviso do banco conectado: 4 + 2 + 2 = 8 chamadas/min de reserva', () => {
+    expect(chamadasPorMinuto([INTERVALO_COM_AVISO.conversaAberta, INTERVALO_COM_AVISO.listaConversas, INTERVALO_COM_AVISO.sino])).toBe(8);
   });
 });
 

@@ -9,7 +9,6 @@ import { useEffect, useRef, useState } from 'react';
 import { fmtRelativo } from '@/shared/ui/format';
 import { Icon } from '@/shared/ui/icons';
 import type { GatilhoNotificacao } from '../../domain/types';
-import { INTERVALO } from '../atualizacao';
 import { avisarMudanca, repo, useAtualizacaoPeriodica, useDados } from '../repositorio';
 import { AvisosNaTela, mostrarAvisoNaTela } from './avisos-na-tela';
 import { deveAvisarNaTela, deveAvisarNoDesktop } from './regras-notificacao';
@@ -40,7 +39,7 @@ export function SinoNotificacoes() {
   const naoLidas = (notificacoes ?? []).filter((n) => !n.lida);
 
   // Busca periódica (pausa com a aba oculta; ao voltar busca na hora).
-  useAtualizacaoPeriodica(recarregar, INTERVALO.sino);
+  useAtualizacaoPeriodica(recarregar, 'sino');
 
   // Aviso do que é novo (não repete o que já avisou nesta sessão do navegador). Na 1ª carga só marca como
   // visto, para não despejar o acumulado. Com permissão: aviso do sistema operacional; sem: aviso na tela.

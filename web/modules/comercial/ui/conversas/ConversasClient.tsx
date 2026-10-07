@@ -21,7 +21,7 @@ import { ContatoDrawer } from '../contatos/ContatoDrawer';
 import { CardNegocio } from '../funil/CardNegocio';
 import { ModalAtividade, NegocioDrawer } from '../NegocioDrawer';
 import { avisarMudanca, repo, useAgora, useAtualizacaoPeriodica, useContatosPorIds, useDados } from '../repositorio';
-import { estaNoFim, INTERVALO } from '../atualizacao';
+import { estaNoFim } from '../atualizacao';
 import { INFO_CAIXA } from './indicadores';
 import { ModalAtribuir } from './ModalAtribuir';
 import { BotaoAnexar } from './Anexar';
@@ -72,7 +72,7 @@ export function ConversasClient() {
   const erro = rConversas.erro ?? rContatos.erro ?? rNegocios.erro ?? rTemplates.erro;
   const recarregar = () => { rConversas.recarregar(); rContatos.recarregar(); rNegocios.recarregar(); rTemplates.recarregar(); };
   // Lista sozinha: mensagem nova sobe a conversa, muda a prévia/status e o contador de não lidas (sem F5).
-  useAtualizacaoPeriodica(rConversas.recarregar, INTERVALO.listaConversas);
+  useAtualizacaoPeriodica(rConversas.recarregar, 'listaConversas');
 
   // Padrão: vendedor vê as dele, gestor vê todas. A escolha vale enquanto a sessão não mudar ("Ver como").
   const [escolha, setEscolha] = useState<{ de: string; f: Filtro } | null>(null);
@@ -431,7 +431,7 @@ function PainelConversa({ contato, conversa, negocio, templates, sessao, gestor,
 }) {
   const { dados, erro, recarregar } = useDados(() => repo.mensagens(contato.id), [contato.id]);
   // Conversa aberta sozinha: mensagem nova, mídia que sai de "pendente" e status (enviada → entregue → lida).
-  useAtualizacaoPeriodica(recarregar, INTERVALO.conversaAberta);
+  useAtualizacaoPeriodica(recarregar, 'conversaAberta');
   const mensagens = useMemo(() => (dados ?? []).filter((m) => m.contatoId === contato.id && m.canal === 'whatsapp'), [dados, contato.id]);
   const fim = useRef<HTMLDivElement>(null);
   // Rola para o fim ao abrir e quando chega mensagem, mas só se o vendedor já estava no fim (lendo o histórico, fica onde está).

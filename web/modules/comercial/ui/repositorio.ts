@@ -7,7 +7,8 @@ import { publicEnv } from '@/shared/infrastructure/config/env';
 import type { ComercialRepository } from '../application/ports';
 import { idsUnicos } from '../domain/contatos';
 import type { Contato } from '../domain/types';
-import { ambienteNavegador, criarAtualizador, reaproveitar, type Atualizador } from './atualizacao';
+import { ambienteNavegador, criarAtualizador, INTERVALO, INTERVALO_COM_AVISO, JUNTAR_AVISOS_MS, reaproveitar, type Atualizador } from './atualizacao';
+import { assinarAvisosCaixa } from '../infrastructure/supabase-avisos-caixa';
 import { MockComercialRepository } from '../infrastructure/mock-comercial.repository';
 import { SupabaseComercialRepository } from '../infrastructure/supabase-comercial.repository';
 
@@ -58,26 +59,52 @@ export function useDados<T>(carregar: () => Promise<T>, deps: unknown[] = []) {
   return { dados, erro, recarregar };
 }
 
-// Atualizadores periódicos montados (o aviso do Realtime cutuca todos de uma vez).
+// Atualizadores montados. O aviso do banco (Realtime) cutuca todos de uma vez; o canal só fica aberto enquanto
+// houver algum (refcount), e só com o banco real.
 const atualizadores = new Set<Atualizador>();
-/** Antecipa a busca de toda tela com atualização periódica (ex.: aviso do banco pelo Realtime). */
+let avisoConectado = false;
+let desligarAvisos: (() => void) | null = null;
+let juntar: ReturnType<typeof setTimeout> | undefined;
+
+/** Antecipa a busca de toda tela com atualização periódica. */
 export function cutucarAtualizacoes() {
   atualizadores.forEach((a) => a.cutucar());
 }
 
+function ligarAvisos() {
+  if (desligarAvisos || MODO_DEMONSTRACAO) return;
+  try {
+    desligarAvisos = assinarAvisosCaixa(
+      () => { clearTimeout(juntar); juntar = setTimeout(cutucarAtualizacoes, JUNTAR_AVISOS_MS); },
+      (ok) => {
+        // (Re)conectou: busca já, para não perder o que mudou enquanto o canal estava fora.
+        if (ok && !avisoConectado) cutucarAtualizacoes();
+        avisoConectado = ok;
+      },
+    );
+  } catch { desligarAvisos = null; avisoConectado = false; /* fica só a busca periódica */ }
+}
+
 /**
- * Chama `executar` a cada `intervaloMs` enquanto `ativo` e a aba do navegador estiver visível (oculta = pausa;
- * ao voltar o foco busca na hora). Não sobrepõe chamadas. Regras em `atualizacao.ts`.
+ * Atualiza sozinho: busca na hora quando o banco avisa (Realtime) e, de reserva, a cada intervalo do `tipo`
+ * (mais curto quando o aviso está fora). Só com `ativo` e a aba visível (oculta = pausa; ao voltar busca na hora).
+ * Não sobrepõe chamadas. Regras e carga em `atualizacao.ts`.
  */
-export function useAtualizacaoPeriodica(executar: () => Promise<unknown> | unknown, intervaloMs: number, ativo = true) {
+export function useAtualizacaoPeriodica(executar: () => Promise<unknown> | unknown, tipo: keyof typeof INTERVALO, ativo = true) {
   const fnRef = useRef(executar);
   useEffect(() => { fnRef.current = executar; });
   useEffect(() => {
     if (!ativo) return;
-    const a = criarAtualizador(() => fnRef.current(), intervaloMs, ambienteNavegador());
+    const intervalo = () => (avisoConectado ? INTERVALO_COM_AVISO[tipo] : INTERVALO[tipo]);
+    const a = criarAtualizador(() => fnRef.current(), intervalo, ambienteNavegador());
     atualizadores.add(a);
-    return () => { atualizadores.delete(a); a.parar(); };
-  }, [intervaloMs, ativo]);
+    ligarAvisos();
+    return () => {
+      atualizadores.delete(a);
+      a.parar();
+      if (atualizadores.size === 0 && desligarAvisos) { const d = desligarAvisos; desligarAvisos = null; d(); }
+    };
+  }, [tipo, ativo]);
 }
 
 /**

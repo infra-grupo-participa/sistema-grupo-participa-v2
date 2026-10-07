@@ -26,7 +26,6 @@ import {
   Aviso, BotaoConversa, BotaoCopiar, Campo, Chip, Dono, EsqueletoLista, EstadoErro, NotaRodape, ProdutoTag, RodapeAcoes,
   SlaTag, useEquipe,
 } from './comum';
-import { INTERVALO } from './atualizacao';
 import { avisarMudanca, repo, useAgora, useAtualizacaoPeriodica, useContatosPorIds, useDados } from './repositorio';
 import { HistoricoAlteracoes } from './registro/HistoricoAlteracoes';
 import { MidiaMensagem } from './conversas/MidiaMensagem';
@@ -63,7 +62,7 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
   const rMensagens = useDados(() => (n ? repo.mensagens(n.contatoId) : Promise.resolve([])), [n?.contatoId]);
   const mensagens = rMensagens.dados;
   // Aba Conversa aberta: atualiza sozinha (mensagem nova, mídia, status).
-  useAtualizacaoPeriodica(rMensagens.recarregar, INTERVALO.conversaAberta, aba === 'conversa' && !!n);
+  useAtualizacaoPeriodica(rMensagens.recarregar, 'conversaAberta', aba === 'conversa' && !!n);
 
   const [perder, setPerder] = useState(false);
   const [transferir, setTransferir] = useState(false);

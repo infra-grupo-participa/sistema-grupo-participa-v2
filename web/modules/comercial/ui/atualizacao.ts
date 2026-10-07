@@ -1,17 +1,33 @@
 // Atualização sozinha das telas do WhatsApp do CRM (sem F5): lógica pura, testável sem React nem navegador.
 //
-// Intervalos (só com a aba do navegador visível; oculta = pausa; ao voltar o foco busca na hora):
-//   conversa aberta 3 s · lista de conversas 10 s · sino 30 s.
-// Carga por pessoa com a caixa aberta: 20 crm_mensagens + 6 crm_conversas + 2 crm_notificacoes = 28 chamadas/min.
-// 2 vendedores + 3 gestores com a caixa aberta o dia todo ≈ 140 chamadas/min (≈ 2,3/s), cada uma uma RPC STABLE
-// pequena (≤ 500 mensagens de UMA pessoa; ≤ 300 conversas). Aba oculta = zero.
-// Com o Realtime (Broadcast) ligado, o aviso do banco antecipa a busca; o intervalo continua de reserva.
+// Dois caminhos:
+// 1. Aviso do banco (Realtime Broadcast, canal privado "crm:caixa", migration 20261007153421): mudou mensagem ou
+//    conversa → as telas abertas buscam na hora (≈ 0,3 s de espera para juntar rajadas).
+// 2. Busca periódica de reserva, só com a aba do navegador visível (oculta = pausa; ao voltar o foco busca na hora).
+//    Sem o canal (caiu, bloqueado): conversa aberta 3 s · lista 10 s · sino 30 s.
+//    Com o canal conectado o aviso já traz a novidade; a reserva afrouxa: 15 s · 30 s · 30 s.
+//
+// Carga por pessoa com a caixa aberta:
+//   sem canal  20 crm_mensagens + 6 crm_conversas + 2 crm_notificacoes = 28 chamadas/min
+//   com canal   4 + 2 + 2 = 8/min + 3 chamadas por mudança real (lista, conversa, sino)
+// 2 vendedores + 3 gestores com a caixa aberta: ≈ 140/min sem canal; ≈ 40/min + avisos com canal. Aba oculta = zero.
+// Cada chamada é uma RPC STABLE pequena (≤ 500 mensagens de UMA pessoa; ≤ 300 conversas).
 
 export const INTERVALO = {
   conversaAberta: 3_000,
   listaConversas: 10_000,
   sino: 30_000,
 } as const;
+
+/** Reserva quando o aviso do banco (Realtime) está conectado. */
+export const INTERVALO_COM_AVISO: Record<keyof typeof INTERVALO, number> = {
+  conversaAberta: 15_000,
+  listaConversas: 30_000,
+  sino: 30_000,
+};
+
+/** Espera para juntar uma rajada de avisos (lote de status, mídia que chega) numa busca só. */
+export const JUNTAR_AVISOS_MS = 300;
 
 /** Chamadas por minuto de uma pessoa, dados os intervalos ativos (ms). Para a conta de carga. */
 export function chamadasPorMinuto(intervalosMs: number[]): number {
@@ -44,7 +60,7 @@ export interface Atualizador {
  */
 export function criarAtualizador(
   executar: () => Promise<unknown> | unknown,
-  intervaloMs: number,
+  intervaloMs: number | (() => number),
   amb: AmbienteAtualizacao,
   folgaMs = 1_000,
 ): Atualizador {
@@ -58,7 +74,7 @@ export function criarAtualizador(
   const agendar = () => {
     limpar();
     if (parado || !amb.visivel()) return;
-    timer = amb.setTimeout(rodar, intervaloMs);
+    timer = amb.setTimeout(rodar, typeof intervaloMs === 'function' ? intervaloMs() : intervaloMs);
   };
   async function rodar() {
     timer = null;
