@@ -36,6 +36,7 @@ export function EditorFunil({ inicial, agrupadores, vendedores, negociosDoFunil,
   const { abertas, alternar } = useEtapasAbertas();
   const problemas = useMemo(() => validarFunil(f, vendedores), [f, vendedores]);
   const doCampo = (campos: string[]) => problemas.filter((p) => campos.includes(p.campo));
+  const abertosDoFunil = negociosDoFunil.filter((n) => n.status === 'aberto').length;
 
   const set = (p: Partial<Funil>) => setF((x) => ({ ...x, ...p }));
   /** Leva ao campo do problema: troca de aba, abre a etapa citada e põe o foco no campo. */
@@ -113,12 +114,14 @@ export function EditorFunil({ inicial, agrupadores, vendedores, negociosDoFunil,
       {arquivar && (
         <ConfirmDialog
           title="Arquivar funil"
-          message={negociosDoFunil.some((n) => n.status === 'aberto') ? 'Este funil tem negócio aberto. Mova ou encerre os negócios antes de arquivar.' : 'O funil some da lista. Negócios encerrados continuam no histórico dos contatos.'}
+          message={abertosDoFunil > 0
+            ? `Este funil tem ${abertosDoFunil} negócio(s) aberto(s). Eles ficam ocultos (Funil, Início, Atividades, Relatórios e avisos) até o funil ser desarquivado. Nada é apagado.`
+            : 'O funil some da lista. Negócios encerrados continuam guardados e voltam se o funil for desarquivado.'}
           confirmLabel="Arquivar"
           danger
           onCancel={() => setArquivar(false)}
           onConfirm={async () => {
-            const r = await repo.arquivarFunil(inicial.id);
+            const r = await repo.arquivarFunil(inicial.id, abertosDoFunil > 0);
             setArquivar(false);
             if (!r.ok) { setErro(r.msg ?? 'Não foi possível arquivar.'); return; }
             avisarMudanca();

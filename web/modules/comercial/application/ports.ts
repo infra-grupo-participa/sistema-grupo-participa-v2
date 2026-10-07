@@ -128,8 +128,8 @@ export interface ComercialRepository {
   // ── Escrita ──
   /** Cria ou atualiza um funil (id vazio = novo). Valida com `validarFunil`. Só o gestor. */
   salvarFunil(f: Funil): Promise<Resultado & { funilId?: string }>;
-  /** Arquiva (some da lista; negócios encerrados ficam no histórico). Bloqueia se houver negócio aberto. */
-  arquivarFunil(funilId: string): Promise<Resultado>;
+  /** Arquiva (some da lista). Com negócio aberto, só com `comAbertos`: os negócios ficam ocultos até desarquivar. */
+  arquivarFunil(funilId: string, comAbertos?: boolean): Promise<Resultado>;
   criarAgrupador(nome: string, produto: ProdutoKey | null): Promise<Resultado & { agrupadorId?: string }>;
   /** "Comecei um novo projeto": cria de uma vez os funis do tipo de projeto, com a chave nas campanhas. Só o gestor. */
   criarProjeto(tipo: TipoProjeto, nome: string, agrupadorId: string, produto: ProdutoKey): Promise<Resultado & { funilIds?: string[] }>;

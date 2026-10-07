@@ -315,7 +315,7 @@ export class SupabaseComercialRepository implements ComercialRepository {
   salvarFunil(f: Funil): Promise<Resultado & { funilId?: string }> {
     return this.escrever('crm_salvar_funil', argsEscrita.salvarFunil(f), (d) => mapResultadoComId('crm_salvar_funil', d, 'funilId'));
   }
-  arquivarFunil(funilId: string) { return this.simples('crm_arquivar_funil', argsEscrita.arquivarFunil(funilId)); }
+  arquivarFunil(funilId: string, comAbertos = false) { return this.simples('crm_arquivar_funil', argsEscrita.arquivarFunil(funilId, comAbertos)); }
   criarAgrupador(nome: string, produto: ProdutoKey | null): Promise<Resultado & { agrupadorId?: string }> {
     return this.escrever('crm_criar_agrupador', argsEscrita.criarAgrupador(nome, produto), (d) => mapResultadoComId('crm_criar_agrupador', d, 'agrupadorId'));
   }

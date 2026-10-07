@@ -135,7 +135,7 @@ export const argsEscrita = {
   // `distribuicao` sempre presente (null = sem distribuição própria): até a 20261006n, chave AUSENTE no payload virava
   // "Campo obrigatório vazio." no crm_salvar_funil (jsonb_typeof(NULL) → distribuicao_propria NULL).
   salvarFunil: (f: Funil) => ({ p_funil: { ...f, distribuicao: f.distribuicao ?? null } }),
-  arquivarFunil: (funilId: string) => ({ p_funil: funilId }),
+  arquivarFunil: (funilId: string, comAbertos = false) => ({ p_funil: funilId, p_com_abertos: comAbertos }),
   criarAgrupador: (nome: string, produto: ProdutoKey | null) => ({ p_nome: nome, p_linha: produto ?? null }),
   criarProjeto: (tipo: TipoProjeto, nome: string, agrupadorId: string, produto: ProdutoKey) => ({
     p_tipo: tipo, p_nome: nome, p_agrupador: agrupadorId, p_linha: produto,
