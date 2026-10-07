@@ -132,8 +132,21 @@ tem. Quando o sync traz a transação, vale a linha do espelho: nada conta duas 
 - Vale para a conta **academy** (a única que o webhook recebe). Pedido aguardando pagamento (Pix/boleto) não gera evento
   e continua vindo pelo sync.
 - Nome, telefone e UF da linha do webhook vêm do checkout e podem mudar quando o sync passar.
-- **A tela não se atualiza sozinha:** só no botão Atualizar. Ver a venda cair sem clicar depende de atualização automática
-  no front (`DashboardPresencialClient.tsx`).
+- A tela refaz resumo e série diária a cada 60 s enquanto a aba do navegador está visível. Ao voltar para a aba,
+  atualiza imediatamente. Assim a venda recebida pelo webhook aparece sem clique, depois da próxima leitura da tela.
+  O polling não chama disparos, leads ou vendas, que são consultas mais pesadas. Uma leitura só começa depois de a
+  anterior terminar. Em caso de falha, cada bloco mantém seu último dado válido e mostra aviso. O horário
+  "Atualizado às HH:MM:SS" indica a última leitura em que resumo e série responderam com sucesso.
+
+### Testar a atualização da tela
+
+No repo, entrar em `web` e rodar `npm run dev -- -p 3001`. Abrir `/infra/dados/dashboards/clinica-miami-2026-12`
+com uma conta autorizada. Conferir o horário, esperar 60 s com a aba visível e conferir novo horário sem piscar os
+cards. Deixar a aba oculta por mais de 60 s: não deve haver leitura periódica; ao voltar, resumo e série devem
+atualizar. No painel de rede, `dados_presencial_disparos`, `dados_presencial_leads` e `dados_presencial_vendas` não
+devem aparecer por causa do polling. Em falha de uma leitura, os dados anteriores daquele bloco devem continuar
+visíveis com aviso; não substituir ausência por zero. O botão Atualizar continua permitindo recarregar também as abas
+sob demanda.
 
 Detalhe, tradução de status e ensaio: `infra/supabase/migrations/20261007205017.explain.md`.
 
@@ -190,7 +203,7 @@ Hoje a tela expõe 1 lead e 1 pedido, ambos teste interno; o risco cresce quando
 
 ## 5. O que falta
 
-- Atualização automática da tela (hoje só no botão Atualizar), para a venda em tempo real aparecer sem clicar.
+- Confirmar uma venda real da Clínica atravessando webhook, banco e próxima leitura automática da tela.
 - ~~Aplicar `crm_lista_614_todos`~~: aplicada em 07/10/2026, versão `20261007171902`.
 - Efeito da `20261007171902` a saber: quem entra na 614 sem ser contato passa a aparecer no Comercial, sem dono e sem negócio.
 - Webhook (`hotmart-events-webhook`): em produção roda a cópia do disparos-thb; o produto 6489980 não está mapeado

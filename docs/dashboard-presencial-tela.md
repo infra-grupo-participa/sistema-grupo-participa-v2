@@ -10,7 +10,7 @@ Para acrescentar outro dashboard do mesmo modelo, cadastre a chave, o título de
 
 ## Leitura e estados
 
-Ao abrir, a tela chama resumo e série diária. A aba de disparos, os modais de leads e vendas chamam suas funções na primeira abertura. O botão Atualizar invalida todos os resultados locais. Cada chamada guarda erro e dados separadamente. Erro em uma função aparece só no bloco que depende dela; uma resposta vazia mostra estado vazio, não zero. `42501`, `PGRST202` e `P0002` têm textos próprios; outros erros mostram mensagem genérica. O log recebe apenas o código.
+Ao abrir, a tela chama resumo e série diária. Depois, refaz essas duas leituras a cada 60 s com a aba visível e ao voltar para ela. Nunca inicia nova leitura enquanto a anterior não terminou. O horário exibido é o da última leitura bem-sucedida dos dois blocos. A aba de disparos, os modais de leads e vendas chamam suas funções na primeira abertura; o polling não os recarrega. O botão Atualizar recarrega também os blocos sob demanda, sem apagar resumo e série durante a leitura. Cada chamada guarda erro e dados separadamente. Falha de leitura mantém o último dado válido do bloco e mostra aviso; uma resposta vazia mostra estado vazio, não zero. `42501`, `PGRST202` e `P0002` têm textos próprios; outros erros mostram mensagem genérica. O log recebe apenas o código.
 
 `numeric` do PostgREST é convertido em um só módulo. `null` continua `null`: custo não lançado, ausência de instrução, grupo sem fonte e abandonos sem fonte não viram zero. O filtro das vendas começa em `pago`. Os gráficos de barras filtram entre si e filtram a tabela. O gráfico diário mostra pré-checkout, pedidos e vendas; pedidos incluem qualquer status e abandonos seguem sem fonte.
 
