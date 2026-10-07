@@ -125,7 +125,7 @@ clique_pct numeric`
 
 Cada uma tem `.explain.md` com ensaio, explain e reversão.
 
-## 3.1 Segurança: achado CRÍTICO em aberto (pentester, 07/10/2026)
+## 3.1 Segurança: achado CRÍTICO (pentester, 07/10/2026), corrigido no banco
 
 O gate `public.gp_eh_equipe()` (perfil ativo `@advmais.com`) **pode ser contornado** fora desta mudança: o cadastro do
 Supabase Auth está aberto (`disable_signup = false`, `mailer_autoconfirm = true`, sem captcha) e o gatilho
@@ -136,6 +136,22 @@ domínio. A correção mora no Auth e no `handle_new_user` (dono do `perfis`: v2
 nas funções `dados_presencial_*`. Desligar o dashboard na hora, se o Victor decidir:
 `update dados.dashboards set ativo = false where chave = 'clinica-miami-2026-12'` (as funções passam a dar P0002).
 Hoje a tela expõe 1 lead e 1 pedido, ambos teste interno; o risco cresce quando a captação começar.
+
+**Correção APLICADA em 07/10/2026** (versão `20261007174525`, conferida no banco depois; reteste do pentester na sequência): migration `infra/supabase/migrations/20261007174525_auth_perfil_sem_autodeclaracao.sql`
+(ensaio `20261007174525_ensaio.sql`, relatório e comando de aplicação em `20261007174525.explain.md`).
+- `handle_new_user` passa a criar todo perfil novo como `pendente`/`visualizador`; ativar e dar cargo fica só com o
+  admin (tela Usuários, `/api/admin/usuarios`, que já faz isso depois do convite).
+- `gp_is_admin` passa a exigir `@advmais.com`, como o `gp_eh_equipe` (o ensaio mostrou que um cadastro forjado de
+  **qualquer** domínio virava admin). Nenhum admin/dev ativo perde acesso (22 antes, 22 depois).
+- `perfis`: `anon` perde todos os grants; `authenticated` perde INSERT, DELETE, TRUNCATE, REFERENCES e TRIGGER.
+- Ensaio em produção com rollback, 2 rodadas iguais: cadastro forjado (dentro e fora do domínio) nasce pendente e
+  todas as portas (`gp_eh_equipe`, `gp_is_admin`, `gp_pode_ver_cpf`, `crm.pode_catalogar`) dão false; convite ativado
+  pelo admin continua entrando.
+- **Não mexido:** configuração do Auth (o cadastro público é usado por outros sistemas do mesmo projeto; fechar ou
+  exigir confirmação de e-mail quebraria esses cadastros) e a policy `todos_auth_podem_ler` (há leitura de perfis de
+  terceiros por usuário autenticado de origem não identificada).
+- **Resta (aberto):** com `mailer_autoconfirm = true`, alguém ainda cria conta pendente com um e-mail
+  `@advmais.com` que não é dele. O admin não deve ativar conta que não veio de convite.
 
 ## 4. Provisório (decisões reversíveis do Maestro, 07/10/2026, para o Victor revisar)
 
