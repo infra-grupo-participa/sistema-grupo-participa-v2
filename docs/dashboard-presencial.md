@@ -264,9 +264,24 @@ Hoje a tela expõe 1 lead e 1 pedido, ambos teste interno; o risco cresce quando
 - Receita só BRL; a tela avisa quantas vendas ficaram fora.
 - Grupo: sem fonte.
 
+## 4.1 Subida para a main (07/10/2026, pedido do Victor)
+
+- A branch `victor-captura-pre-checkout` foi levada inteira para a `main` (merge `--no-ff`), porque o dashboard
+  depende de `departamentos.ts` e da `Sidebar.tsx`, que os commits de acesso também mexem. Antes, a `main` foi
+  trazida para a branch sem conflito.
+- Checklist de `subir-para-a-main`: `npx tsc --noEmit` ok, `npx vitest run` ok (2403 passaram, 2 pulados),
+  `npm run build` ok.
+- Push na `main` = deploy automático da Hostinger.
+- **Não aplicada junto:** a migration `y2` (autor no log de acesso). Ela só pode ir depois que o código da `main`
+  manda `p_autor`, ou seja, depois deste merge e do deploy.
+- O front novo de acesso continua atrás de `NEXT_PUBLIC_ACESSO_V2` (padrão desligado). O valor dela na Hostinger
+  não foi conferido.
+- `/api/captura/lead` responde 503 enquanto `CAPTURA_LEAD_SECRET` não estiver configurada (estado seguro).
+
 ## 5. O que falta
 
-- Tela dos gráficos da Visão geral de vendas (JP), sobre as funções já aplicadas (§2.9).
+- ~~Tela dos gráficos da Visão geral de vendas~~: feita (commit `a876bd5`).
+- Conferir os números dos gráficos novos contra a produção e abrir o modal de pendências com dado real.
 - Confirmar uma venda real da Clínica atravessando webhook, banco e próxima leitura automática da tela.
 - ~~Aplicar `crm_lista_614_todos`~~: aplicada em 07/10/2026, versão `20261007171902`.
 - Efeito da `20261007171902` a saber: quem entra na 614 sem ser contato passa a aparecer no Comercial, sem dono e sem negócio.
