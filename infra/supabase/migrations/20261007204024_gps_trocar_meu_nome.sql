@@ -2,8 +2,9 @@
 -- é master. A parte do aluno (public.thb_alunos) funciona para todo mundo; o nome de EQUIPE (public.perfis) só muda
 -- quando quem chama é master (regra do gatilho acesso_guarda da fase 3).
 --
--- STATUS: NÃO APLICADA. Ensaio: 20261007zz_ensaio.sql (2 passadas, sonda de 32 guardas, provas, rollback).
---   Relatório: 20261007zz.explain.md.
+-- STATUS: APLICADA em produção em 07/10/2026, versão 20261007204024 (nome gps_trocar_meu_nome, era 20261007zz), com o ok do pentester (rodada 4)
+--   e do Victor, pelo aplica_sql.py aplicar + insert em supabase_migrations.schema_migrations na mesma transação; md5
+--   gravado = a63c62b56089d4ec4b585d8b769b9b51 = este arquivo antes desta troca de STATUS. Ensaio: 20261007204024_ensaio.sql. Relatório: 20261007204024.explain.md.
 --
 -- POR QUE
 --   O corpo atual faz primeiro "update public.perfis set nome …" e depois o update do aluno. Desde a fase 3

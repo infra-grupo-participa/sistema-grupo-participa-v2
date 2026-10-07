@@ -50,7 +50,7 @@ insert into pg_temp._z_out (passo, linha) select '1 antes', jsonb_object_agg(p.n
 -- O QUE FAZ
 --   1. public.acesso_perfil_atualizar_como(p_autor uuid, p_id uuid, p_patch jsonb): RPC só para service_role (a rota).
 --      Confere que p_autor é perfil ativo da equipe com direito de gerir usuários hoje (master, ou exceção nominal com o
---      mesmo cargo: os mesmos que a rota deixa entrar), grava p_autor na transação (set_config local
+--      mesmo cargo: os mesmos que a rota deixa entrar); perfil de master só muda por autor master (pentester, rodada 4), grava p_autor na transação (set_config local
 --      'acesso.autor') e faz o update dos campos que vierem em p_patch (nome, status, time, cargo, areas, funcoes,
 --      pode_ver_cpf_completo). As travas do gatilho continuam valendo (cargo admin/dev, CPF pela coluna).
 --   2. acesso.tg_perfis_guarda (corpo vivo + 2 mudanças):
@@ -80,7 +80,7 @@ $bl$;
 do $g$
 begin
   if (select md5(prosrc) from pg_proc where oid = to_regprocedure('acesso.tg_perfis_guarda()')) is distinct from 'c4373344c650f5573d5c475ca705881d'
-     and (select prosrc from pg_proc where oid = to_regprocedure('acesso.tg_perfis_guarda()')) !~ '20261007y' then
+     and (select prosrc from pg_proc where oid = to_regprocedure('acesso.tg_perfis_guarda()')) !~ '20261007y([^0-9a-z]|$)' then
     raise exception '20261007y: corpo vivo de acesso.tg_perfis_guarda mudou (nem o da fase 3 nem o desta migration). Reler.';
   end if;
 end
@@ -104,6 +104,11 @@ begin
           and (exists (select 1 from acesso.master m where m.perfil_id = a.id)
                or exists (select 1 from acesso.excecao_admin e where e.perfil_id = a.id and e.cargo = a.cargo))) then
     raise exception 'Autor sem direito de gerir usuários.' using errcode = '42501';
+  end if;
+  -- pentester rodada 4 (MÉDIO): perfil de master só muda por autor master (a exceção nominal não mexe em master)
+  if exists (select 1 from acesso.master m where m.perfil_id = p_id)
+     and not exists (select 1 from acesso.master m where m.perfil_id = p_autor) then
+    raise exception 'Só um master altera o perfil de outro master.' using errcode = '42501';
   end if;
   if p_patch is null or jsonb_typeof(p_patch) <> 'object' then
     raise exception 'Alteração inválida.' using errcode = '22023';
@@ -183,7 +188,7 @@ begin
      or not has_function_privilege('service_role', 'public.acesso_perfil_atualizar_como(uuid,uuid,jsonb)', 'execute') then
     raise exception '20261007y: permissão errada em acesso_perfil_atualizar_como';
   end if;
-  if (select prosrc from pg_proc where oid = 'acesso.tg_perfis_guarda()'::regprocedure) !~ '20261007y' then
+  if (select prosrc from pg_proc where oid = 'acesso.tg_perfis_guarda()'::regprocedure) !~ '20261007y([^0-9a-z]|$)' then
     raise exception '20261007y: gatilho não foi recriado';
   end if;
 end
@@ -211,7 +216,7 @@ $c$;
 -- O QUE FAZ
 --   1. public.acesso_perfil_atualizar_como(p_autor uuid, p_id uuid, p_patch jsonb): RPC só para service_role (a rota).
 --      Confere que p_autor é perfil ativo da equipe com direito de gerir usuários hoje (master, ou exceção nominal com o
---      mesmo cargo: os mesmos que a rota deixa entrar), grava p_autor na transação (set_config local
+--      mesmo cargo: os mesmos que a rota deixa entrar); perfil de master só muda por autor master (pentester, rodada 4), grava p_autor na transação (set_config local
 --      'acesso.autor') e faz o update dos campos que vierem em p_patch (nome, status, time, cargo, areas, funcoes,
 --      pode_ver_cpf_completo). As travas do gatilho continuam valendo (cargo admin/dev, CPF pela coluna).
 --   2. acesso.tg_perfis_guarda (corpo vivo + 2 mudanças):
@@ -241,7 +246,7 @@ $bl$;
 do $g$
 begin
   if (select md5(prosrc) from pg_proc where oid = to_regprocedure('acesso.tg_perfis_guarda()')) is distinct from 'c4373344c650f5573d5c475ca705881d'
-     and (select prosrc from pg_proc where oid = to_regprocedure('acesso.tg_perfis_guarda()')) !~ '20261007y' then
+     and (select prosrc from pg_proc where oid = to_regprocedure('acesso.tg_perfis_guarda()')) !~ '20261007y([^0-9a-z]|$)' then
     raise exception '20261007y: corpo vivo de acesso.tg_perfis_guarda mudou (nem o da fase 3 nem o desta migration). Reler.';
   end if;
 end
@@ -265,6 +270,11 @@ begin
           and (exists (select 1 from acesso.master m where m.perfil_id = a.id)
                or exists (select 1 from acesso.excecao_admin e where e.perfil_id = a.id and e.cargo = a.cargo))) then
     raise exception 'Autor sem direito de gerir usuários.' using errcode = '42501';
+  end if;
+  -- pentester rodada 4 (MÉDIO): perfil de master só muda por autor master (a exceção nominal não mexe em master)
+  if exists (select 1 from acesso.master m where m.perfil_id = p_id)
+     and not exists (select 1 from acesso.master m where m.perfil_id = p_autor) then
+    raise exception 'Só um master altera o perfil de outro master.' using errcode = '42501';
   end if;
   if p_patch is null or jsonb_typeof(p_patch) <> 'object' then
     raise exception 'Alteração inválida.' using errcode = '22023';
@@ -344,7 +354,7 @@ begin
      or not has_function_privilege('service_role', 'public.acesso_perfil_atualizar_como(uuid,uuid,jsonb)', 'execute') then
     raise exception '20261007y: permissão errada em acesso_perfil_atualizar_como';
   end if;
-  if (select prosrc from pg_proc where oid = 'acesso.tg_perfis_guarda()'::regprocedure) !~ '20261007y' then
+  if (select prosrc from pg_proc where oid = 'acesso.tg_perfis_guarda()'::regprocedure) !~ '20261007y([^0-9a-z]|$)' then
     raise exception '20261007y: gatilho não foi recriado';
   end if;
 end
@@ -375,6 +385,10 @@ exception when others then insert into pg_temp._z_out (passo, linha) values ('b2
 insert into pg_temp._z_out (passo, linha) select 'b2 RPC autor Victor muda áreas do Luis', public.acesso_perfil_atualizar_como('81d2eaee-cce1-4058-8714-439b0fc6f970', '9d5fb8e7-f61e-459d-be04-d103ec783c08', '{"areas":["ativacao","social_media","ensaio2"]}')::text;
 insert into pg_temp._z_out (passo, linha) select 'b2 log: autor é o Victor', (select jsonb_build_object('autor_victor', autor = '81d2eaee-cce1-4058-8714-439b0fc6f970', 'via', depois ->> 'via') from acesso.log where tabela = 'perfis' and perfil_id = '9d5fb8e7-f61e-459d-be04-d103ec783c08' order by id desc limit 1)::text;
 insert into pg_temp._z_out (passo, linha) select 'b2 RPC autor Isabela (exceção) muda status do guilherme', public.acesso_perfil_atualizar_como('e1d2863d-c975-46bd-b35f-45b1039328e3', '46b36c51-06a6-4062-9e8f-41d2579b50c8', '{"status":"ativo","time":"Audiovisual"}')::text;
+do $t$ begin perform public.acesso_perfil_atualizar_como('e1d2863d-c975-46bd-b35f-45b1039328e3', '3bd183e5-34bf-4d4a-9ee9-b9cae2ed4975', '{"time":"Ensaio"}');
+  insert into pg_temp._z_out (passo, linha) values ('b2 RPC autor Isabela (exceção) muda perfil do Arthur (master)', 'ERRO DO ENSAIO: passou');
+exception when others then insert into pg_temp._z_out (passo, linha) values ('b2 RPC autor Isabela (exceção) muda perfil do Arthur (master)', sqlstate || ' ' || sqlerrm); end $t$;
+insert into pg_temp._z_out (passo, linha) select 'b2 RPC autor Victor (master) muda perfil do Arthur (master)', public.acesso_perfil_atualizar_como('81d2eaee-cce1-4058-8714-439b0fc6f970', '3bd183e5-34bf-4d4a-9ee9-b9cae2ed4975', jsonb_build_object('time', (select "time" from public.perfis where id = '3bd183e5-34bf-4d4a-9ee9-b9cae2ed4975')))::text;
 do $t$ begin perform public.acesso_perfil_atualizar_como('9d5fb8e7-f61e-459d-be04-d103ec783c08', '46b36c51-06a6-4062-9e8f-41d2579b50c8', '{"status":"negado"}');
   insert into pg_temp._z_out (passo, linha) values ('b2 RPC autor Luis (não master)', 'ERRO DO ENSAIO: passou');
 exception when others then insert into pg_temp._z_out (passo, linha) values ('b2 RPC autor Luis (não master)', sqlstate || ' ' || sqlerrm); end $t$;

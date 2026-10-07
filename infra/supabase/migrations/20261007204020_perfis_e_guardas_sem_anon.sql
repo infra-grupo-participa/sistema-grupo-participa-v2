@@ -1,7 +1,8 @@
 -- 20261007z: níveis de acesso, card 17tya50fkgz: permissões abertas em public.perfis e nas guardas.
 --
--- STATUS: NÃO APLICADA. Ensaio: 20261007z_ensaio.sql (2 passadas, sonda de 32 guardas, varredura como anon, rollback).
---   Relatório: 20261007z.explain.md.
+-- STATUS: APLICADA em produção em 07/10/2026, versão 20261007204020 (nome perfis_e_guardas_sem_anon, era 20261007z), com o ok do pentester (rodada 4)
+--   e do Victor, pelo aplica_sql.py aplicar + insert em supabase_migrations.schema_migrations na mesma transação; md5
+--   gravado = d2400f9fb88dac7db645e562762a49cc = este arquivo antes desta troca de STATUS. Ensaio: 20261007204020_ensaio.sql. Relatório: 20261007204020.explain.md.
 --
 -- POR QUE (achado do pentester, "fora do escopo" na fase 3; inventário em 07/10/2026 no explain)
 --   (a) INSERT em public.perfis para anon/authenticated: JÁ NÃO EXISTE (conferido: perfis só dá SELECT por coluna e

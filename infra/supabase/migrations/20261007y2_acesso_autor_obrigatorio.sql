@@ -1,8 +1,8 @@
 -- 20261007y2: níveis de acesso, B2 parte 2: a service_role não muda acesso em public.perfis sem dizer o autor.
 --
 -- STATUS: NÃO APLICADA. SÓ APLICAR DEPOIS que a rota web/app/api/admin/usuarios/route.ts estiver em produção (main) usando
---   public.acesso_perfil_atualizar_como (20261007y). Antes disso, a tela de Usuários que está no ar passaria a receber 42501
---   ao mudar status de usuário. Ensaio: 20261007y2_ensaio.sql. Relatório: 20261007y.explain.md §2.
+--   public.acesso_perfil_atualizar_como (20261007204017, aplicada). Antes disso, a tela de Usuários que está no ar passaria a receber 42501
+--   ao mudar status de usuário. Ensaio: 20261007y2_ensaio.sql. Relatório: 20261007204017.explain.md §2.
 --
 -- O QUE FAZ: recria acesso.tg_perfis_guarda (corpo da 20261007y) acrescentando a recusa: mudança de cargo, status,
 --   áreas, funções ou CPF com papel service_role e sem autor (nem auth.uid() nem 'acesso.autor') → 42501. O cadastro
@@ -41,7 +41,7 @@ create or replace function acesso.tg_perfis_guarda()
  set search_path to ''
 as $function$
 declare
-  -- 20261007y: o autor é o usuário logado ou, pela rota (service_role), o master que a RPC acesso_perfil_atualizar_como gravou
+  -- 20261007y (20261007204017): o autor é o usuário logado ou, pela rota (service_role), o master que a RPC acesso_perfil_atualizar_como gravou
   v_uid uuid := coalesce((select auth.uid()), nullif(current_setting('acesso.autor', true), '')::uuid);
   v_papel text := coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role', current_user);
 begin

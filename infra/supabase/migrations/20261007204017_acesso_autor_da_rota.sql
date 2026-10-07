@@ -1,7 +1,9 @@
 -- 20261007y: níveis de acesso, B2 do pentester (card 17tya50fkgx): mudança de acesso feita pela rota /api/admin/usuarios
 -- (service_role) passa a gravar em acesso.log QUAL master fez, e a rota não consegue mais mudar acesso sem dizer o autor.
 --
--- STATUS: NÃO APLICADA. Ensaio: 20261007y_ensaio.sql (2 passadas, sonda de 32 guardas, rollback). Relatório: 20261007y.explain.md.
+-- STATUS: APLICADA em produção em 07/10/2026, versão 20261007204017 (nome acesso_autor_da_rota, era 20261007y), com o ok do pentester (rodada 4)
+--   e do Victor, pelo aplica_sql.py aplicar + insert em supabase_migrations.schema_migrations na mesma transação; md5
+--   gravado = 16b2303239617dab95791b09f3db603f = este arquivo antes desta troca de STATUS. Ensaio: 20261007204017_ensaio.sql. Relatório: 20261007204017.explain.md.
 --
 -- POR QUE
 --   A rota de Usuários grava em public.perfis com a chave service_role (createAdminSupabase): auth.uid() é nulo, e o
@@ -11,7 +13,7 @@
 -- O QUE FAZ
 --   1. public.acesso_perfil_atualizar_como(p_autor uuid, p_id uuid, p_patch jsonb): RPC só para service_role (a rota).
 --      Confere que p_autor é perfil ativo da equipe com direito de gerir usuários hoje (master, ou exceção nominal com o
---      mesmo cargo: os mesmos que a rota deixa entrar), grava p_autor na transação (set_config local
+--      mesmo cargo: os mesmos que a rota deixa entrar); perfil de master só muda por autor master (pentester, rodada 4), grava p_autor na transação (set_config local
 --      'acesso.autor') e faz o update dos campos que vierem em p_patch (nome, status, time, cargo, areas, funcoes,
 --      pode_ver_cpf_completo). As travas do gatilho continuam valendo (cargo admin/dev, CPF pela coluna).
 --   2. acesso.tg_perfis_guarda (corpo vivo + 2 mudanças):
@@ -41,7 +43,7 @@ $bl$;
 do $g$
 begin
   if (select md5(prosrc) from pg_proc where oid = to_regprocedure('acesso.tg_perfis_guarda()')) is distinct from 'c4373344c650f5573d5c475ca705881d'
-     and (select prosrc from pg_proc where oid = to_regprocedure('acesso.tg_perfis_guarda()')) !~ '20261007y' then
+     and (select prosrc from pg_proc where oid = to_regprocedure('acesso.tg_perfis_guarda()')) !~ '20261007y([^0-9a-z]|$)' then
     raise exception '20261007y: corpo vivo de acesso.tg_perfis_guarda mudou (nem o da fase 3 nem o desta migration). Reler.';
   end if;
 end
@@ -65,6 +67,11 @@ begin
           and (exists (select 1 from acesso.master m where m.perfil_id = a.id)
                or exists (select 1 from acesso.excecao_admin e where e.perfil_id = a.id and e.cargo = a.cargo))) then
     raise exception 'Autor sem direito de gerir usuários.' using errcode = '42501';
+  end if;
+  -- pentester rodada 4 (MÉDIO): perfil de master só muda por autor master (a exceção nominal não mexe em master)
+  if exists (select 1 from acesso.master m where m.perfil_id = p_id)
+     and not exists (select 1 from acesso.master m where m.perfil_id = p_autor) then
+    raise exception 'Só um master altera o perfil de outro master.' using errcode = '42501';
   end if;
   if p_patch is null or jsonb_typeof(p_patch) <> 'object' then
     raise exception 'Alteração inválida.' using errcode = '22023';
@@ -144,7 +151,7 @@ begin
      or not has_function_privilege('service_role', 'public.acesso_perfil_atualizar_como(uuid,uuid,jsonb)', 'execute') then
     raise exception '20261007y: permissão errada em acesso_perfil_atualizar_como';
   end if;
-  if (select prosrc from pg_proc where oid = 'acesso.tg_perfis_guarda()'::regprocedure) !~ '20261007y' then
+  if (select prosrc from pg_proc where oid = 'acesso.tg_perfis_guarda()'::regprocedure) !~ '20261007y([^0-9a-z]|$)' then
     raise exception '20261007y: gatilho não foi recriado';
   end if;
 end
