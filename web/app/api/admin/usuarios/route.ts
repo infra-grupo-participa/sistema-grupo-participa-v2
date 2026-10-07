@@ -18,6 +18,27 @@ function podeGerirUsuarios(user: Awaited<ReturnType<typeof getCurrentUser>>): bo
   return !!user && (acessoV2 ? user.acesso?.master === true : ehAdminOuAcima(user));
 }
 
+type ResultadoAtualizacao = { ok: true } | { ok: false; code: string };
+
+/** A RPC registra o autor no log. Até a migração 20261007y existir, preserva o update antigo. */
+async function atualizarPerfil(admin: ReturnType<typeof createAdminSupabase>, autor: string, id: string, patch: Record<string, unknown>): Promise<ResultadoAtualizacao> {
+  const { data, error } = await admin.rpc('acesso_perfil_atualizar_como', { p_autor: autor, p_id: id, p_patch: patch });
+  if (error?.code === 'PGRST202') {
+    const antigo = await admin.from('perfis').update({ ...patch, atualizado_em: new Date().toISOString() }).eq('id', id);
+    return antigo.error ? { ok: false, code: antigo.error.code || 'ERRO' } : { ok: true };
+  }
+  if (error) return { ok: false, code: error.code || 'ERRO' };
+  const resposta = data as { ok?: unknown; id?: unknown } | null;
+  return resposta?.ok === true && resposta.id === id ? { ok: true } : { ok: false, code: 'RESPOSTA_INVALIDA' };
+}
+
+function erroAtualizacao(code: string, convite = false) {
+  if (code === '42501') return jsonError('Sem direito de gerir este perfil ou alteração bloqueada pelo banco. Cargo admin/dev é restrito a master ou exceção nominal; acesso a CPF deve ser concedido pela capacidade cpf.ver.', 403);
+  if (code === '22023') return jsonError('Campos do perfil inválidos. Revise a alteração.', 400);
+  if (code === 'P0002') return jsonError('Usuário não encontrado.', 404);
+  return jsonError(convite ? 'Não foi possível salvar o perfil do convite.' : 'Não foi possível salvar o perfil.', 502);
+}
+
 // Gestão de perfis: no acesso v2, só master; permissões são geridas pelas RPCs de acesso.
 export async function GET() {
   const user = await getCurrentUser();
@@ -62,10 +83,8 @@ export async function PATCH(request: NextRequest) {
     patch.cargo = novo;
   }
 
-  patch.atualizado_em = new Date().toISOString();
-  const { error } = await admin.from('perfis').update(patch).eq('id', id);
-  if (error?.code === '42501') return jsonError('O banco recusou esta alteração. Cargo admin/dev é restrito a master ou exceção nominal; acesso a CPF deve ser concedido pela capacidade cpf.ver.', 403);
-  return error ? jsonError('Não foi possível salvar o perfil.', 502) : jsonOk({ ok: true });
+  const resultado = await atualizarPerfil(admin, user.id, id, patch);
+  return resultado.ok ? jsonOk({ ok: true }) : erroAtualizacao(resultado.code);
 }
 
 export async function POST(request: NextRequest) {
@@ -101,12 +120,9 @@ export async function POST(request: NextRequest) {
   }
 
   // O trigger handle_new_user cria o perfil; no v2, vínculos e capacidades são definidos pelas RPCs.
-  const { error: perfilErr } = await admin
-    .from('perfis')
-    .update(acessoV2 ? {
+  const perfilPatch = acessoV2 ? {
       nome: nome || null,
       status: 'ativo',
-      atualizado_em: new Date().toISOString(),
     } : {
       nome: nome || null,
       cargo,
@@ -114,11 +130,9 @@ export async function POST(request: NextRequest) {
       areas,
       funcoes,
       pode_ver_cpf_completo: podeVerCpf,
-      atualizado_em: new Date().toISOString(),
-    })
-    .eq('id', gen.user.id);
-  if (perfilErr?.code === '42501') return jsonError('O banco recusou o perfil do convite. Cargo admin/dev é restrito a master ou exceção nominal; use vínculos e capacidades para conceder acesso.', 403);
-  if (perfilErr) return jsonError('Não foi possível salvar o perfil do convite.', 502);
+    };
+  const resultado = await atualizarPerfil(admin, user.id, gen.user.id, perfilPatch);
+  if (!resultado.ok) return erroAtualizacao(resultado.code, true);
 
   const link = buildAccessLink(origin, gen.properties.hashed_token, 'invite');
   return jsonOk({ ok: true, id: gen.user.id, link });
