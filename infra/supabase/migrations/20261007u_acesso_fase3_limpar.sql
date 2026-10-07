@@ -1,21 +1,29 @@
 -- 20261007u: níveis de acesso, fase 3 (limpar). Tira o "velho" das guardas: gp_is_admin() passa a ser só o master
 -- (acesso.master) e as guardas de financeiro, CPF, Marketing e Comercial deixam de aceitar o cargo admin/dev.
 --
--- STATUS: NÃO APLICADA. Versão 2, com as correções do pentester (relatório
---   .maestri/entregas/niveis-de-acesso/pentester.md no cérebro, fase 3 REPROVADA na versão 1). Só aplicar depois de o
---   pentester aprovar esta versão e o Maestro mandar. Ensaio: 20261007u_ensaio.sql (rollback). Relatório: 20261007u.explain.md.
+-- STATUS: NÃO APLICADA. Versão 3: correções do pentester das rodadas 1 e 2 (.maestri/entregas/niveis-de-acesso/
+--   pentester.md no cérebro) e a EXCEÇÃO NOMINAL decidida pelo Victor Hugo em 07/10/2026 (noite) para os 6 não masters
+--   a quem o João Pedro Alves devolveu admin/dev às 18:39:06 UTC (registro: migration 20261007184603). Só aplicar depois
+--   de o pentester aprovar (rodada 3) e o Maestro mandar. Ensaio: 20261007u_ensaio.sql (rollback). Relatório: 20261007u.explain.md.
 --
 -- POR QUE
 --   Depois da fase 2 (20261007182928, aplicada) só os 3 masters têm cargo admin/dev. Esta fase fecha o caminho de volta:
 --   (a) gp_is_admin() e as guardas centrais deixam de aceitar o cargo; (b) o cargo admin/dev só pode existir em quem está
---   em acesso.master: um gatilho em public.perfis recusa dar admin/dev a quem não é master, venha da tela de Usuários
+--   em acesso.master OU na exceção nominal acesso.excecao_admin (lista fechada de 6 ids, com o cargo de cada um, só
+--   muda por migration): um gatilho em public.perfis recusa dar admin/dev a quem não está em nenhuma, venha da tela de Usuários
 --   (/api/admin/usuarios, service_role), do cadastro (handle_new_user/garantir_perfil) ou de SQL. Assim as 20 funções
 --   que ainda leem cargo admin/dev inline (lista no explain, correção do pentester) passam a valer só para master, sem
 --   reescrever uma a uma: a dívida fica registrada e neutralizada na origem; (c) CPF completo vira só a capacidade
 --   cpf.ver (com log); a coluna perfis.pode_ver_cpf_completo deixa de abrir CPF e não pode mais ser ligada.
 --
+-- EXCEÇÃO NOMINAL (decisão do Victor Hugo, 07/10/2026): Cristiane (#1b15) admin, Fernanda Tavares (#00b1) admin, Isabela
+--   Teixeira (#e1d2) admin, Elaine Montenegro (#6ed2) dev, Marcio Carvalho de Sá (#ec6d) dev, Aldri Santana (#0f6d) dev.
+--   Ninguém vira master. A exceção vale enquanto o cargo do perfil for o da lista, e cobre o "admin do sistema"
+--   (gp_is_admin e as guardas de edição). NÃO cobre financeiro nem CPF: esses continuam só por capacidade
+--   (decisões 1 e 7 do Victor). O CPF da Fernanda #00b1 (coluna ligada pelo João) vira a capacidade cpf.ver, com log.
+--
 -- O QUE FAZ (corpo anterior de cada função guardado em acesso.corpo_antes, migration 20261007u)
---   1. Guardas sem o atalho do cargo: gp_is_admin() = acesso.eh_master(); gp_pode_ver_financeiro() =
+--   1. Guardas sem o atalho do cargo: gp_is_admin() = acesso.eh_admin() (master ou exceção nominal); gp_pode_ver_financeiro() =
 --      tem('financeiro.ver'); gp_pode_operar_financeiro() = tem('financeiro.operar'); gp_pode_ver_cpf() = tem('cpf.ver');
 --      gp_pode_editar(setor), crm.eh_gestor(), ra_pode_ver(), pa_pode_pedir() sem o ramo admin/dev (os ramos de
 --      gestor/operador com função fina ficam: o usuário não consegue mudar o próprio cargo, áreas nem funções, só nome,
@@ -45,11 +53,54 @@ begin
   if to_regclass('acesso.perfis_antes_20261007') is null then
     raise exception '20261007u: a fase 2 (20261007t) não foi aplicada';
   end if;
-  if (select count(*) from public.perfis where status = 'ativo' and cargo in ('admin', 'dev')) <> 3 then
-    raise exception '20261007u: tem perfil admin/dev além dos 3 masters. Conferir antes de limpar.';
+  if (select count(*) from acesso.master) <> 3 then
+    raise exception '20261007u: esperava os 3 masters (Victor Hugo, Arthur Galvão, João Pedro Alves)';
   end if;
 end
 $g$;
+
+-- Exceção nominal: lista FECHADA (só muda por migration; não há RPC para ela)
+create table if not exists acesso.excecao_admin (
+  perfil_id     uuid primary key references public.perfis(id) on delete cascade,
+  cargo         text not null check (cargo in ('admin', 'dev')),
+  motivo        text not null,
+  autorizado_por text not null,
+  registrado_em timestamptz not null default now()
+);
+alter table acesso.excecao_admin enable row level security;
+revoke all on acesso.excecao_admin from public, anon, authenticated;
+insert into acesso.excecao_admin (perfil_id, cargo, motivo, autorizado_por) values
+  ('1b153c6d-6287-43ae-9e02-6caf6e6f9c33', 'admin', 'devolução manual de admin/dev, decisão do Victor 07/10', 'Victor Hugo; feito por João Pedro Alves 18:39:06 UTC'),  -- Cristiane
+  ('00b177e0-3c8b-4e55-8f64-f57560bbbd74', 'admin', 'devolução manual de admin/dev, decisão do Victor 07/10', 'Victor Hugo; feito por João Pedro Alves 18:39:06 UTC'),  -- Fernanda Tavares #00b1
+  ('e1d2863d-c975-46bd-b35f-45b1039328e3', 'admin', 'devolução manual de admin/dev, decisão do Victor 07/10', 'Victor Hugo; feito por João Pedro Alves 18:39:06 UTC'),  -- Isabela Teixeira
+  ('6ed2bfc4-1d69-458d-9954-77a03902c56a', 'dev',   'devolução manual de admin/dev, decisão do Victor 07/10', 'Victor Hugo; feito por João Pedro Alves 18:39:06 UTC'),  -- Elaine Montenegro
+  ('ec6d1905-200e-4efd-a172-8546f293a4bd', 'dev',   'devolução manual de admin/dev, decisão do Victor 07/10', 'Victor Hugo; feito por João Pedro Alves 18:39:06 UTC'),  -- Marcio Carvalho de Sá
+  ('0f6dd53c-6d1a-4f6b-af00-dc05e6284f68', 'dev',   'devolução manual de admin/dev, decisão do Victor 07/10', 'Victor Hugo; feito por João Pedro Alves 18:39:06 UTC')   -- Aldri Santana
+on conflict (perfil_id) do nothing;
+
+-- Pré-condição (B1 do pentester: TODOS os status, não só ativo): todo perfil com admin/dev é master ou está na exceção
+-- com esse mesmo cargo. Qualquer outro aborta.
+do $b1$
+declare v text;
+begin
+  select string_agg(p.nome || ' #' || left(p.id::text, 4) || ' (' || p.cargo || ', ' || p.status || ')', ', ') into v
+    from public.perfis p
+   where p.cargo in ('admin', 'dev')
+     and not exists (select 1 from acesso.master m where m.perfil_id = p.id)
+     and not exists (select 1 from acesso.excecao_admin e where e.perfil_id = p.id and e.cargo = p.cargo);
+  if v is not null then
+    raise exception '20261007u: admin/dev fora dos masters e da exceção nominal: %. Conferir antes de limpar.', v;
+  end if;
+end
+$b1$;
+
+create or replace function acesso.eh_admin() returns boolean
+language sql stable security definer set search_path = '' as $f$
+  select coalesce(acesso.eh_master(), false)
+      or exists (select 1 from acesso.excecao_admin e join public.perfis p on p.id = e.perfil_id
+                  where e.perfil_id = acesso.eu() and p.cargo = e.cargo)
+$f$;
+revoke all on function acesso.eh_admin() from public, anon, authenticated;
 
 insert into acesso.corpo_antes (tipo, alvo, md5, definicao, migration)
 select 'funcao', p.oid::regprocedure::text, md5(p.prosrc), pg_get_functiondef(p.oid), '20261007u'
@@ -64,7 +115,7 @@ on conflict do nothing;
 create or replace function public.gp_is_admin()
  returns boolean language sql stable security definer set search_path to 'public'
 as $function$
-  select coalesce(acesso.eh_master(), false);  -- 20261007u: admin do sistema = master
+  select coalesce(acesso.eh_admin(), false);  -- 20261007u: admin do sistema = master ou exceção nominal
 $function$;
 
 create or replace function public.gp_pode_ver_financeiro()
@@ -111,7 +162,7 @@ as $function$
         OR (p.cargo = 'operador' AND p_setor = ANY(coalesce(p.areas,'{}'))
             AND EXISTS (SELECT 1 FROM unnest(coalesce(p.funcoes,'{}')) f WHERE f LIKE p_setor || '.%'))
       )
-  ) OR coalesce(acesso.eh_master(), false) OR coalesce(case  -- 20261007u
+  ) OR coalesce(acesso.eh_admin(), false) OR coalesce(case  -- 20261007u
          when p_setor in ('ativacao', 'placas', 'depoimentos', 'centro_controle', 'remocao_acessos', 'pedidos_alteracao')
            then acesso.pode_editar('educacional')
          when p_setor = 'social_media' then acesso.pode_editar('marketing', 'social-media')
@@ -123,7 +174,7 @@ $function$;
 create or replace function crm.eh_gestor()
  returns boolean language sql stable security definer set search_path to ''
 as $function$
-  select coalesce(acesso.eh_master(), false)  -- 20261007u
+  select coalesce(acesso.eh_admin(), false)  -- 20261007u
       or exists (select 1 from acesso.vinculo v where v.perfil_id = acesso.eu() and v.vigente_ate is null
                    and v.departamento = 'comercial' and v.area is null and v.papel = 'responsavel')
       or coalesce((select p.status = 'ativo' and p.cargo = 'gestor' and 'comercial' = any(coalesce(p.areas, '{}'))
@@ -137,7 +188,7 @@ as $function$
     select 1 from public.perfis p
     where p.id = (select auth.uid()) and p.status = 'ativo'
       and p.cargo in ('gestor', 'operador') and 'remocao_acessos' = any(coalesce(p.areas, '{}'))
-  ) or coalesce(acesso.pode_editar('educacional'), false);  -- 20261007u
+  ) or coalesce(acesso.pode_editar('educacional'), false) or coalesce(acesso.eh_admin(), false);  -- 20261007u
 $function$;
 
 create or replace function public.pa_pode_pedir()
@@ -147,19 +198,19 @@ as $function$
     select 1 from public.perfis p
      where p.id = (select auth.uid()) and p.status = 'ativo'
        and p.cargo in ('gestor', 'operador') and 'pedidos_alteracao' = any(coalesce(p.areas, '{}')))
-    or coalesce(acesso.pode_editar('educacional'), false));  -- 20261007u
+    or coalesce(acesso.pode_editar('educacional'), false) or coalesce(acesso.eh_admin(), false));  -- 20261007u
 $function$;
 
 create or replace function mkt.pode_ver(p_area text default null)
  returns boolean language sql stable security definer set search_path to ''
 as $function$
-  select coalesce(acesso.pode_ver('marketing', acesso.area_mkt(p_area)), false);  -- 20261007u
+  select coalesce(acesso.pode_ver('marketing', acesso.area_mkt(p_area)), false) or coalesce(acesso.eh_admin(), false);  -- 20261007u
 $function$;
 
 create or replace function mkt.pode_editar(p_area text default null)
  returns boolean language sql stable security definer set search_path to ''
 as $function$
-  select coalesce(acesso.pode_editar('marketing', acesso.area_mkt(p_area)), false);  -- 20261007u
+  select coalesce(acesso.pode_editar('marketing', acesso.area_mkt(p_area)), false) or coalesce(acesso.eh_admin(), false);  -- 20261007u
 $function$;
 
 -- Gatilho em public.perfis: cargo admin/dev só master; CPF só pela capacidade; nome próprio; log
@@ -168,10 +219,12 @@ language plpgsql security definer set search_path = '' as $f$
 declare
   v_uid uuid := (select auth.uid());
 begin
+  -- B1: confere também quando só o status muda (pendente/negado com admin voltando a ativo)
   if new.cargo in ('admin', 'dev')
-     and (tg_op = 'INSERT' or old.cargo is distinct from new.cargo)
-     and not exists (select 1 from acesso.master m where m.perfil_id = new.id) then
-    raise exception 'Cargo % é só de master (acesso.master). Dê acesso por departamento/área (acesso_vincular).', new.cargo
+     and (tg_op = 'INSERT' or old.cargo is distinct from new.cargo or old.status is distinct from new.status)
+     and not exists (select 1 from acesso.master m where m.perfil_id = new.id)
+     and not exists (select 1 from acesso.excecao_admin e where e.perfil_id = new.id and e.cargo = new.cargo) then
+    raise exception 'Cargo % é só de master (acesso.master) ou da exceção nominal. Dê acesso por departamento/área (acesso_vincular).', new.cargo
       using errcode = '42501';
   end if;
   if coalesce(new.pode_ver_cpf_completo, false)
@@ -190,7 +243,9 @@ begin
             case when tg_op = 'UPDATE' then jsonb_build_object('cargo', old.cargo, 'status', old.status, 'areas', old.areas,
                                                                'funcoes', old.funcoes, 'cpf', old.pode_ver_cpf_completo) end,
             jsonb_build_object('cargo', new.cargo, 'status', new.status, 'areas', new.areas, 'funcoes', new.funcoes,
-                               'cpf', new.pode_ver_cpf_completo));
+                               'cpf', new.pode_ver_cpf_completo,
+                               -- B2: sem auth.uid() (rota com service_role, SQL), diz ao menos por onde entrou
+                               'via', coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role', current_user)));
   end if;
   return new;
 end
@@ -201,8 +256,11 @@ create trigger acesso_guarda before insert or update on public.perfis for each r
 
 do $c$
 begin
-  if (select prosrc from pg_proc where oid = 'public.gp_is_admin()'::regprocedure) !~ 'acesso\.eh_master' then
-    raise exception '20261007u: gp_is_admin não virou master';
+  if (select prosrc from pg_proc where oid = 'public.gp_is_admin()'::regprocedure) !~ 'acesso\.eh_admin' then
+    raise exception '20261007u: gp_is_admin não virou master ou exceção (acesso.eh_admin)';
+  end if;
+  if (select count(*) from acesso.excecao_admin) <> 6 then
+    raise exception '20261007u: a exceção nominal tem de ter exatamente os 6 perfis decididos';
   end if;
   if exists (select 1 from public.perfis where pode_ver_cpf_completo) then
     raise exception '20261007u: sobrou pode_ver_cpf_completo ligado';
@@ -219,9 +277,11 @@ $c$;
 
 -- REVERSÃO (numa transação; antes de reverter a fase 2, reverter esta, porque o gatilho recusa devolver admin):
 -- drop trigger if exists acesso_guarda on public.perfis;
+-- (a tabela acesso.excecao_admin fica, como registro; acesso.eh_admin() sai depois de recriar os corpos)
 -- update public.perfis p set pode_ver_cpf_completo = f.pode_ver_cpf_completo from acesso.cpf_coluna_antes_20261007 f where f.id = p.id;
 -- delete from acesso.capacidade c using acesso.cpf_coluna_antes_20261007 f where f.id = c.perfil_id and c.chave = 'cpf.ver'
 --   and c.criado_em >= '<hora da aplicação>';
 -- do $v$ declare r record; begin
 --   for r in select * from acesso.corpo_antes where migration = '20261007u' and tipo = 'funcao' loop execute r.definicao; end loop;
 -- end $v$;
+-- drop function if exists acesso.eh_admin();
