@@ -3,12 +3,16 @@ import { DEPARTAMENTOS, podeVerDepartamento } from '@/shared/domain/departamento
 import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { CartaoModulo } from '@/shared/ui/departamentos/CartaoModulo';
 import { Icon } from '@/shared/ui/icons';
+import { podeVerCalendario } from '@/modules/calendario/domain/acesso';
+import { CalendarioEmpresa } from '@/modules/calendario/ui/CalendarioEmpresa';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * Home da Central: os departamentos (decisão do Victor, 05/10/2026). Os atalhos que eram a home até então
  * estão no Início do Educacional (/educacional). Marketing aparece bloqueado para quem não é admin/dev.
+ * Embaixo, o calendário da empresa (Arthur, 07/10/2026) para toda a equipe — a page confere a regra também
+ * (layout e page renderizam em paralelo) e o banco confere de novo em public.calendario_eventos.
  */
 export default async function HomePage() {
   const user = await getCurrentUser();
@@ -46,6 +50,12 @@ export default async function HomePage() {
           />
         ))}
       </div>
+
+      {podeVerCalendario(user) && (
+        <div className="mt-6">
+          <CalendarioEmpresa />
+        </div>
+      )}
     </div>
   );
 }

@@ -112,6 +112,7 @@ export const MODULO_DEPARTAMENTO: Record<string, DepartamentoKey | 'sistema'> = 
   financeiro: 'educacional', // o módulo Contas a Receber, não o departamento Financeiro
   'remocao-acessos': 'educacional',
   usuarios: 'sistema',
+  calendario: 'sistema', // home (/): calendário da empresa, toda a equipe
   marketing: 'marketing', // web/modules/marketing/<area>/
   comercial: 'comercial', // CRM: web/modules/comercial/
 };
