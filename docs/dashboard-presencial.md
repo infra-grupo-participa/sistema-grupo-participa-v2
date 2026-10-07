@@ -70,8 +70,8 @@ utm_campaign text, utm_content text, utm_term text, instrucao text, turma text, 
 - `comprou`: tem venda paga da oferta.
 - Fica de fora quem é teste: `pessoas.pessoas.teste = true` ou e-mail `@exemplo.invalid`. Teste interno feito sem
   essas marcas (ex.: colaborador entrando na lista 614 com o próprio e-mail) **conta**.
-- **Depois da `20261007te` (NÃO APLICADA, §2.10):** a lista passa a trazer também quem é teste, com duas colunas novas
-  no fim, `pessoa_id uuid, teste boolean`; os números continuam sem eles.
+- **Desde a `20261007220043` (§2.10):** a lista traz também quem é teste, com duas colunas novas no fim,
+  `pessoa_id uuid, teste boolean`; os números continuam sem eles.
 
 ### 2.3 `dados_presencial_vendas` (1 linha por transação, `coalesce(dia_aprovado, dia_pedido) desc`)
 
@@ -214,7 +214,7 @@ conversao_pct numeric`
 
 - Hora da aprovação no fuso de São Paulo.
 
-## 2.10 Marcar lead do pré-checkout como teste (migration `20261007te`, NÃO APLICADA: espera pentester)
+## 2.10 Marcar lead do pré-checkout como teste (migration `20261007220043`, APLICADA em 07/10/2026)
 
 Card `17tya50fkx9`. Usa `pessoas.pessoas.teste` (o campo do sistema inteiro: quem é teste também sai das estratégias de
 disparo do CRM e do resumo do Tráfego, que já liam esse campo).
@@ -228,6 +228,8 @@ Mesmas 13 colunas, mesma ordem, mais duas no fim: `pessoa_id uuid, teste boolean
 - `pessoa_id`: o id que a RPC recebe. `null` quando o lead não tem pessoa ligada (só pode acontecer com quem entrou pela
   lista do ActiveCampaign sem cadastro de pessoa): sem botão.
 - `teste`: alguma pessoa ligada àquele e-mail está marcada.
+- Pessoa mesclada: a lista devolve a pessoa final (`pessoas.atual`), e a RPC marca e loga sempre a final, mesmo recebendo o
+  id antigo. A resposta da RPC traz o `pessoa_id` final.
 
 ### 2.10.2 `dados_presencial_marcar_teste(p_chave text, p_pessoa_id uuid, p_teste boolean)` (novo)
 
@@ -258,7 +260,7 @@ Retorna 1 linha: `pessoa_id uuid, teste boolean, alterado boolean`.
 | `20261007203803` | `clinica_miami_oferta_nova` | oferta `sju5pawn` (produto 5682989) na Clínica: Financeiro, Tráfego e dashboard; `ofertas_extra` |
 | `20261007205017` | `dashboard_vendas_tempo_real` | `dados.transacoes` soma o que o webhook da Hotmart já recebeu e o sync ainda não trouxe (venda em segundos, academy) |
 | `20261007212530` | `dashboard_graficos_vendas` | as 6 funções dos gráficos da Visão geral de vendas (§2.9), aprovadas pelo pentester |
-| `20261007te` (NÃO APLICADA) | `dashboard_lead_teste` | marcar/desmarcar lead do pré-checkout como teste (§2.10); espera pentester |
+| `20261007220043` | `dashboard_lead_teste` | marcar/desmarcar lead do pré-checkout como teste (§2.10), aprovada pelo pentester |
 | `20261007171902` (APLICADA 07/10) | `crm_lista_614_todos` | regra 42 com `para_todos`: quem entra na lista 614 vira contato comercial e é catalogado na Clínica. Ensaio refeito antes da aplicação, igual ao esperado |
 
 Cada uma tem `.explain.md` com ensaio, explain e reversão.
@@ -316,7 +318,7 @@ Hoje a tela expõe 1 lead e 1 pedido, ambos teste interno; o risco cresce quando
 
 ## 5. O que falta
 
-- Pentester e aplicação da `20261007te` (lead de teste); depois, o botão no modal de pré-checkout (JP).
+- Botão de teste no modal de pré-checkout (JP), sobre a RPC já aplicada (§2.10).
 - ~~Tela dos gráficos da Visão geral de vendas~~: feita (commit `a876bd5`).
 - Conferir os números dos gráficos novos contra a produção e abrir o modal de pendências com dado real.
 - Confirmar uma venda real da Clínica atravessando webhook, banco e próxima leitura automática da tela.

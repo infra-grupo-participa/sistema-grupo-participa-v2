@@ -1,6 +1,9 @@
 -- 20261007te: marcar/desmarcar lead do pré-checkout como TESTE pelo dashboard presencial (card 17tya50fkx9).
 --
--- STATUS: NÃO APLICADA. Cria RPC com GRANT e escreve em pessoas.pessoas: só aplica depois do pentester e da ordem do Maestro.
+-- STATUS: APLICADA em produção em 07/10/2026 às 22:00 UTC, versão 20261007220043 (nome dashboard_lead_teste, era
+-- 20261007te), depois da aprovação do pentester e dos ajustes dele, com a linha em supabase_migrations.schema_migrations na
+-- mesma transação; md5 gravado = 7c94ffd507ab723430c72d063f459c6c = este arquivo antes desta troca de STATUS.
+-- Ensaio: 20261007220043_ensaio.sql. Relatório: 20261007220043.explain.md.
 --
 -- POR QUE
 --   Pedido do Victor Hugo (07/10/2026, noite): no modal de pré-checkout da Clínica de Miami, marcar a pessoa como teste
@@ -27,6 +30,8 @@
 --
 -- AS 5 PERGUNTAS
 --   escala: 1 linha por clique. índice: pessoas.pessoas pela PK; prova de pertença pelas mesmas tabelas do pré-checkout.
+--   AJUSTES DO PENTESTER (07/10, antes de aplicar): pessoas.atual() nos dois joins do pré-checkout e na RPC (pessoa
+--   mesclada: marca, loga e lista na pessoa final); prova de pertença do ActiveCampaign com os filtros da lista.
 --   frequência: clique manual de master. repetição: idempotente (mesmo valor não grava nem loga). reversão: desmarcar pela
 --   própria RPC; a migration volta pelo rollback-teste.sql.
 --
@@ -71,11 +76,11 @@ as $function$
            o.utm_source, o.utm_medium, o.utm_campaign, o.utm_content, o.utm_term,
            p.id as pessoa_id, coalesce(p.teste, false) as teste
       from pessoas.eventos e
-      join pessoas.pessoas p on p.id = e.pessoa_id
+      join pessoas.pessoas p on p.id = pessoas.atual(e.pessoa_id)   -- pessoa final, se foi mesclada
       cross join lateral (select i.chave from pessoas.identificadores i
-                           where i.pessoa_id = e.pessoa_id and i.tipo = 'email' order by i.criado_em desc limit 1) em
+                           where i.pessoa_id in (e.pessoa_id, p.id) and i.tipo = 'email' order by i.criado_em desc limit 1) em
       left join lateral (select i.valor from pessoas.identificadores i
-                          where i.pessoa_id = e.pessoa_id and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
+                          where i.pessoa_id in (e.pessoa_id, p.id) and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
       left join pessoas.origens o on o.id = e.origem_id
      where e.tipo = 'pre_checkout'
        and (e.projeto_id = p_projeto_id or e.detalhe ->> 'chave_evento' = p_chave)
@@ -85,9 +90,9 @@ as $function$
            null, null, null, null, null,
            p.id, coalesce(p.teste, false)
       from crm.evento_jornada j
-      left join pessoas.pessoas p on p.id = j.pessoa_id
+      left join pessoas.pessoas p on p.id = pessoas.atual(j.pessoa_id)   -- pessoa final, se foi mesclada
       left join lateral (select i.valor from pessoas.identificadores i
-                          where i.pessoa_id = j.pessoa_id and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
+                          where i.pessoa_id in (j.pessoa_id, p.id) and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
      where p_lista is not null and j.lista = p_lista and j.email_norm is not null
   ), limpo as (
     select lower(btrim(x.email)) as email, nullif(btrim(x.nome), '') as nome, nullif(btrim(x.telefone), '') as telefone,
@@ -170,6 +175,7 @@ declare
   v_autor uuid := acesso.eu();
   d dados.dashboards;
   v_antes boolean;
+  v_pessoa uuid;
 begin
   if v_autor is null or not coalesce(acesso.eh_master(), false) then
     raise exception 'sem acesso' using errcode = '42501';
@@ -181,30 +187,35 @@ begin
   if not found then
     raise exception 'dashboard não cadastrado' using errcode = 'P0002';
   end if;
-  -- a pessoa tem de ser um pré-checkout deste dashboard (mesmas duas fontes de dados.pre_checkout_todos)
+  v_pessoa := pessoas.atual(p_pessoa_id);   -- marca e loga na pessoa final, se foi mesclada
+  -- a pessoa tem de ser um pré-checkout deste dashboard (mesmas duas fontes e filtros de dados.pre_checkout_todos)
   if not exists (select 1 from pessoas.eventos e
-                  where e.pessoa_id = p_pessoa_id and e.tipo = 'pre_checkout'
-                    and (e.projeto_id = d.projeto_id or e.detalhe ->> 'chave_evento' = d.chave))
+                  where e.tipo = 'pre_checkout'
+                    and (e.projeto_id = d.projeto_id or e.detalhe ->> 'chave_evento' = d.chave)
+                    and pessoas.atual(e.pessoa_id) = v_pessoa)
      and not exists (select 1 from crm.evento_jornada j
-                      where j.pessoa_id = p_pessoa_id and d.lista_ac is not null and j.lista = d.lista_ac) then
+                      where d.lista_ac is not null and j.lista = d.lista_ac
+                        and j.email_norm is not null and nullif(btrim(j.email_norm), '') is not null
+                        and lower(btrim(j.email_norm)) not like '%@exemplo.invalid'
+                        and pessoas.atual(j.pessoa_id) = v_pessoa) then
     raise exception 'pessoa não é pré-checkout deste dashboard' using errcode = 'P0002';
   end if;
 
-  select p.teste into v_antes from pessoas.pessoas p where p.id = p_pessoa_id for update;
+  select p.teste into v_antes from pessoas.pessoas p where p.id = v_pessoa for update;
   if not found then
     raise exception 'pessoa não encontrada' using errcode = 'P0002';
   end if;
   if coalesce(v_antes, false) = p_teste then
-    return query select p_pessoa_id, p_teste, false;
+    return query select v_pessoa, p_teste, false;
     return;
   end if;
 
-  update pessoas.pessoas p set teste = p_teste, atualizado_em = now() where p.id = p_pessoa_id;
+  update pessoas.pessoas p set teste = p_teste, atualizado_em = now() where p.id = v_pessoa;
   insert into acesso.log (autor, tabela, acao, perfil_id, antes, depois)
   values (v_autor, 'pessoas.pessoas', case when p_teste then 'marcar_teste' else 'desmarcar_teste' end, null,
-          jsonb_build_object('pessoa_id', p_pessoa_id, 'teste', coalesce(v_antes, false)),
-          jsonb_build_object('pessoa_id', p_pessoa_id, 'teste', p_teste, 'dashboard', d.chave, 'via', 'dados_presencial_marcar_teste'));
-  return query select p_pessoa_id, p_teste, true;
+          jsonb_build_object('pessoa_id', v_pessoa, 'teste', coalesce(v_antes, false)),
+          jsonb_build_object('pessoa_id', v_pessoa, 'pessoa_id_recebido', p_pessoa_id, 'teste', p_teste, 'dashboard', d.chave, 'via', 'dados_presencial_marcar_teste'));
+  return query select v_pessoa, p_teste, true;
 end
 $function$;
 revoke all on function public.dados_presencial_marcar_teste(text, uuid, boolean) from public, anon, service_role;

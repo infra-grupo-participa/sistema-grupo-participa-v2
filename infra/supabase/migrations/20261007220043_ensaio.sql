@@ -48,6 +48,8 @@ select set_config('request.jwt.claims', '{}', true);
 --
 -- AS 5 PERGUNTAS
 --   escala: 1 linha por clique. índice: pessoas.pessoas pela PK; prova de pertença pelas mesmas tabelas do pré-checkout.
+--   AJUSTES DO PENTESTER (07/10, antes de aplicar): pessoas.atual() nos dois joins do pré-checkout e na RPC (pessoa
+--   mesclada: marca, loga e lista na pessoa final); prova de pertença do ActiveCampaign com os filtros da lista.
 --   frequência: clique manual de master. repetição: idempotente (mesmo valor não grava nem loga). reversão: desmarcar pela
 --   própria RPC; a migration volta pelo rollback-teste.sql.
 --
@@ -92,11 +94,11 @@ as $function$
            o.utm_source, o.utm_medium, o.utm_campaign, o.utm_content, o.utm_term,
            p.id as pessoa_id, coalesce(p.teste, false) as teste
       from pessoas.eventos e
-      join pessoas.pessoas p on p.id = e.pessoa_id
+      join pessoas.pessoas p on p.id = pessoas.atual(e.pessoa_id)   -- pessoa final, se foi mesclada
       cross join lateral (select i.chave from pessoas.identificadores i
-                           where i.pessoa_id = e.pessoa_id and i.tipo = 'email' order by i.criado_em desc limit 1) em
+                           where i.pessoa_id in (e.pessoa_id, p.id) and i.tipo = 'email' order by i.criado_em desc limit 1) em
       left join lateral (select i.valor from pessoas.identificadores i
-                          where i.pessoa_id = e.pessoa_id and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
+                          where i.pessoa_id in (e.pessoa_id, p.id) and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
       left join pessoas.origens o on o.id = e.origem_id
      where e.tipo = 'pre_checkout'
        and (e.projeto_id = p_projeto_id or e.detalhe ->> 'chave_evento' = p_chave)
@@ -106,9 +108,9 @@ as $function$
            null, null, null, null, null,
            p.id, coalesce(p.teste, false)
       from crm.evento_jornada j
-      left join pessoas.pessoas p on p.id = j.pessoa_id
+      left join pessoas.pessoas p on p.id = pessoas.atual(j.pessoa_id)   -- pessoa final, se foi mesclada
       left join lateral (select i.valor from pessoas.identificadores i
-                          where i.pessoa_id = j.pessoa_id and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
+                          where i.pessoa_id in (j.pessoa_id, p.id) and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
      where p_lista is not null and j.lista = p_lista and j.email_norm is not null
   ), limpo as (
     select lower(btrim(x.email)) as email, nullif(btrim(x.nome), '') as nome, nullif(btrim(x.telefone), '') as telefone,
@@ -191,6 +193,7 @@ declare
   v_autor uuid := acesso.eu();
   d dados.dashboards;
   v_antes boolean;
+  v_pessoa uuid;
 begin
   if v_autor is null or not coalesce(acesso.eh_master(), false) then
     raise exception 'sem acesso' using errcode = '42501';
@@ -202,30 +205,35 @@ begin
   if not found then
     raise exception 'dashboard não cadastrado' using errcode = 'P0002';
   end if;
-  -- a pessoa tem de ser um pré-checkout deste dashboard (mesmas duas fontes de dados.pre_checkout_todos)
+  v_pessoa := pessoas.atual(p_pessoa_id);   -- marca e loga na pessoa final, se foi mesclada
+  -- a pessoa tem de ser um pré-checkout deste dashboard (mesmas duas fontes e filtros de dados.pre_checkout_todos)
   if not exists (select 1 from pessoas.eventos e
-                  where e.pessoa_id = p_pessoa_id and e.tipo = 'pre_checkout'
-                    and (e.projeto_id = d.projeto_id or e.detalhe ->> 'chave_evento' = d.chave))
+                  where e.tipo = 'pre_checkout'
+                    and (e.projeto_id = d.projeto_id or e.detalhe ->> 'chave_evento' = d.chave)
+                    and pessoas.atual(e.pessoa_id) = v_pessoa)
      and not exists (select 1 from crm.evento_jornada j
-                      where j.pessoa_id = p_pessoa_id and d.lista_ac is not null and j.lista = d.lista_ac) then
+                      where d.lista_ac is not null and j.lista = d.lista_ac
+                        and j.email_norm is not null and nullif(btrim(j.email_norm), '') is not null
+                        and lower(btrim(j.email_norm)) not like '%@exemplo.invalid'
+                        and pessoas.atual(j.pessoa_id) = v_pessoa) then
     raise exception 'pessoa não é pré-checkout deste dashboard' using errcode = 'P0002';
   end if;
 
-  select p.teste into v_antes from pessoas.pessoas p where p.id = p_pessoa_id for update;
+  select p.teste into v_antes from pessoas.pessoas p where p.id = v_pessoa for update;
   if not found then
     raise exception 'pessoa não encontrada' using errcode = 'P0002';
   end if;
   if coalesce(v_antes, false) = p_teste then
-    return query select p_pessoa_id, p_teste, false;
+    return query select v_pessoa, p_teste, false;
     return;
   end if;
 
-  update pessoas.pessoas p set teste = p_teste, atualizado_em = now() where p.id = p_pessoa_id;
+  update pessoas.pessoas p set teste = p_teste, atualizado_em = now() where p.id = v_pessoa;
   insert into acesso.log (autor, tabela, acao, perfil_id, antes, depois)
   values (v_autor, 'pessoas.pessoas', case when p_teste then 'marcar_teste' else 'desmarcar_teste' end, null,
-          jsonb_build_object('pessoa_id', p_pessoa_id, 'teste', coalesce(v_antes, false)),
-          jsonb_build_object('pessoa_id', p_pessoa_id, 'teste', p_teste, 'dashboard', d.chave, 'via', 'dados_presencial_marcar_teste'));
-  return query select p_pessoa_id, p_teste, true;
+          jsonb_build_object('pessoa_id', v_pessoa, 'teste', coalesce(v_antes, false)),
+          jsonb_build_object('pessoa_id', v_pessoa, 'pessoa_id_recebido', p_pessoa_id, 'teste', p_teste, 'dashboard', d.chave, 'via', 'dados_presencial_marcar_teste'));
+  return query select v_pessoa, p_teste, true;
 end
 $function$;
 revoke all on function public.dados_presencial_marcar_teste(text, uuid, boolean) from public, anon, service_role;
@@ -281,6 +289,8 @@ $c$;
 --
 -- AS 5 PERGUNTAS
 --   escala: 1 linha por clique. índice: pessoas.pessoas pela PK; prova de pertença pelas mesmas tabelas do pré-checkout.
+--   AJUSTES DO PENTESTER (07/10, antes de aplicar): pessoas.atual() nos dois joins do pré-checkout e na RPC (pessoa
+--   mesclada: marca, loga e lista na pessoa final); prova de pertença do ActiveCampaign com os filtros da lista.
 --   frequência: clique manual de master. repetição: idempotente (mesmo valor não grava nem loga). reversão: desmarcar pela
 --   própria RPC; a migration volta pelo rollback-teste.sql.
 --
@@ -325,11 +335,11 @@ as $function$
            o.utm_source, o.utm_medium, o.utm_campaign, o.utm_content, o.utm_term,
            p.id as pessoa_id, coalesce(p.teste, false) as teste
       from pessoas.eventos e
-      join pessoas.pessoas p on p.id = e.pessoa_id
+      join pessoas.pessoas p on p.id = pessoas.atual(e.pessoa_id)   -- pessoa final, se foi mesclada
       cross join lateral (select i.chave from pessoas.identificadores i
-                           where i.pessoa_id = e.pessoa_id and i.tipo = 'email' order by i.criado_em desc limit 1) em
+                           where i.pessoa_id in (e.pessoa_id, p.id) and i.tipo = 'email' order by i.criado_em desc limit 1) em
       left join lateral (select i.valor from pessoas.identificadores i
-                          where i.pessoa_id = e.pessoa_id and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
+                          where i.pessoa_id in (e.pessoa_id, p.id) and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
       left join pessoas.origens o on o.id = e.origem_id
      where e.tipo = 'pre_checkout'
        and (e.projeto_id = p_projeto_id or e.detalhe ->> 'chave_evento' = p_chave)
@@ -339,9 +349,9 @@ as $function$
            null, null, null, null, null,
            p.id, coalesce(p.teste, false)
       from crm.evento_jornada j
-      left join pessoas.pessoas p on p.id = j.pessoa_id
+      left join pessoas.pessoas p on p.id = pessoas.atual(j.pessoa_id)   -- pessoa final, se foi mesclada
       left join lateral (select i.valor from pessoas.identificadores i
-                          where i.pessoa_id = j.pessoa_id and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
+                          where i.pessoa_id in (j.pessoa_id, p.id) and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
      where p_lista is not null and j.lista = p_lista and j.email_norm is not null
   ), limpo as (
     select lower(btrim(x.email)) as email, nullif(btrim(x.nome), '') as nome, nullif(btrim(x.telefone), '') as telefone,
@@ -424,6 +434,7 @@ declare
   v_autor uuid := acesso.eu();
   d dados.dashboards;
   v_antes boolean;
+  v_pessoa uuid;
 begin
   if v_autor is null or not coalesce(acesso.eh_master(), false) then
     raise exception 'sem acesso' using errcode = '42501';
@@ -435,30 +446,35 @@ begin
   if not found then
     raise exception 'dashboard não cadastrado' using errcode = 'P0002';
   end if;
-  -- a pessoa tem de ser um pré-checkout deste dashboard (mesmas duas fontes de dados.pre_checkout_todos)
+  v_pessoa := pessoas.atual(p_pessoa_id);   -- marca e loga na pessoa final, se foi mesclada
+  -- a pessoa tem de ser um pré-checkout deste dashboard (mesmas duas fontes e filtros de dados.pre_checkout_todos)
   if not exists (select 1 from pessoas.eventos e
-                  where e.pessoa_id = p_pessoa_id and e.tipo = 'pre_checkout'
-                    and (e.projeto_id = d.projeto_id or e.detalhe ->> 'chave_evento' = d.chave))
+                  where e.tipo = 'pre_checkout'
+                    and (e.projeto_id = d.projeto_id or e.detalhe ->> 'chave_evento' = d.chave)
+                    and pessoas.atual(e.pessoa_id) = v_pessoa)
      and not exists (select 1 from crm.evento_jornada j
-                      where j.pessoa_id = p_pessoa_id and d.lista_ac is not null and j.lista = d.lista_ac) then
+                      where d.lista_ac is not null and j.lista = d.lista_ac
+                        and j.email_norm is not null and nullif(btrim(j.email_norm), '') is not null
+                        and lower(btrim(j.email_norm)) not like '%@exemplo.invalid'
+                        and pessoas.atual(j.pessoa_id) = v_pessoa) then
     raise exception 'pessoa não é pré-checkout deste dashboard' using errcode = 'P0002';
   end if;
 
-  select p.teste into v_antes from pessoas.pessoas p where p.id = p_pessoa_id for update;
+  select p.teste into v_antes from pessoas.pessoas p where p.id = v_pessoa for update;
   if not found then
     raise exception 'pessoa não encontrada' using errcode = 'P0002';
   end if;
   if coalesce(v_antes, false) = p_teste then
-    return query select p_pessoa_id, p_teste, false;
+    return query select v_pessoa, p_teste, false;
     return;
   end if;
 
-  update pessoas.pessoas p set teste = p_teste, atualizado_em = now() where p.id = p_pessoa_id;
+  update pessoas.pessoas p set teste = p_teste, atualizado_em = now() where p.id = v_pessoa;
   insert into acesso.log (autor, tabela, acao, perfil_id, antes, depois)
   values (v_autor, 'pessoas.pessoas', case when p_teste then 'marcar_teste' else 'desmarcar_teste' end, null,
-          jsonb_build_object('pessoa_id', p_pessoa_id, 'teste', coalesce(v_antes, false)),
-          jsonb_build_object('pessoa_id', p_pessoa_id, 'teste', p_teste, 'dashboard', d.chave, 'via', 'dados_presencial_marcar_teste'));
-  return query select p_pessoa_id, p_teste, true;
+          jsonb_build_object('pessoa_id', v_pessoa, 'teste', coalesce(v_antes, false)),
+          jsonb_build_object('pessoa_id', v_pessoa, 'pessoa_id_recebido', p_pessoa_id, 'teste', p_teste, 'dashboard', d.chave, 'via', 'dados_presencial_marcar_teste'));
+  return query select v_pessoa, p_teste, true;
 end
 $function$;
 revoke all on function public.dados_presencial_marcar_teste(text, uuid, boolean) from public, anon, service_role;
@@ -588,6 +604,42 @@ select set_config('request.jwt.claims', '{}', true);
 
 insert into pg_temp._z_out (passo, linha) select 'desmarcar volta igual (menos o log)', ((select linha::jsonb - 'log' from pg_temp._z_out where passo='2 depois (ninguém marcado)') = (select linha::jsonb - 'log' from pg_temp._z_out where passo='11 depois de desmarcar'))::text;
 insert into pg_temp._z_out (passo, linha) select 'acoes no log', (select jsonb_agg(acao order by id) from acesso.log where tabela='pessoas.pessoas')::text;
+-- mescla simulada: a pessoa do lead mais recente é mesclada numa pessoa nova (só nesta transação)
+create temp table _z_m (orig uuid, final uuid, sit text) on commit drop;
+select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated"}', true); insert into _z_m (orig) select x.pessoa_id from public.dados_presencial_leads('clinica-miami-2026-12') x order by x.primeiro_em desc limit 1; select set_config('request.jwt.claims', '{}', true);
+with n as (insert into pessoas.pessoas (nome, situacao) values ('Ensaio Mescla', 'ativa') returning id) update _z_m set final = (select id from n);
+update _z_m set sit = (select situacao from pessoas.pessoas where id = (select orig from _z_m));
+update pessoas.pessoas set situacao = 'mesclada', mesclada_em = (select final from _z_m) where id = (select orig from _z_m);
+grant all on pg_temp._z_m to authenticated, anon;
+select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated"}', true);
+insert into pg_temp._z_out (passo, linha) select 'M1 lista devolve a pessoa final', (select count(*) filter (where x.pessoa_id = (select final from pg_temp._z_m))::text || ' linha(s) com a final, ' || count(*) filter (where x.pessoa_id = (select orig from pg_temp._z_m))::text || ' com a mesclada' from public.dados_presencial_leads('clinica-miami-2026-12') x);
+set local role authenticated;
+insert into pg_temp._z_out (passo, linha) select 'M2 marcar pelo id mesclado', (select jsonb_build_object('devolveu_final', x.pessoa_id = (select final from pg_temp._z_m), 'teste', x.teste, 'alterado', x.alterado) from public.dados_presencial_marcar_teste('clinica-miami-2026-12', (select orig from pg_temp._z_m), true) x)::text;
+reset role;
+select set_config('request.jwt.claims', '{}', true);
+insert into pg_temp._z_out (passo, linha) select 'M3 quem ficou marcada', (select jsonb_build_object('final', (select teste from pessoas.pessoas where id = (select final from _z_m)), 'mesclada', (select teste from pessoas.pessoas where id = (select orig from _z_m)), 'log_na_final', (select (l.depois->>'pessoa_id')::uuid = (select final from _z_m) from acesso.log l where l.tabela='pessoas.pessoas' order by l.id desc limit 1)))::text;
+select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated"}', true);
+insert into pg_temp._z_out (passo, linha) select 'M4 com a mesclada marcada', jsonb_build_object(
+  'resumo_pc', (select r.pre_checkout_pessoas from public.dados_presencial_resumo('clinica-miami-2026-12') r),
+  'resumo_conv', (select r.conversao_pct from public.dados_presencial_resumo('clinica-miami-2026-12') r),
+  'leads', (select count(*) from public.dados_presencial_leads('clinica-miami-2026-12')),
+  'leads_cols', (select md5(string_agg((to_jsonb(x) - 'pessoa_id' - 'teste')::text, '|' order by x.email)) from public.dados_presencial_leads('clinica-miami-2026-12') x),
+  'leads_teste', (select count(*) filter (where x.teste) from public.dados_presencial_leads('clinica-miami-2026-12') x),
+  'leads_com_pessoa', (select count(x.pessoa_id) from public.dados_presencial_leads('clinica-miami-2026-12') x),
+  'serie_vendas_pc', (select jsonb_agg(s.dia || ':' || s.pre_checkout || ':' || coalesce(s.conversao_pct::text, 'null')) from public.dados_presencial_serie_vendas('clinica-miami-2026-12') s where s.pre_checkout > 0),
+  'serie_pc', (select jsonb_agg(s.dia || ':' || s.pre_checkout) from public.dados_presencial_serie_diaria('clinica-miami-2026-12') s where s.pre_checkout > 0),
+  'vendas_no_pc', (select count(*) filter (where v.no_pre_checkout) from public.dados_presencial_vendas('clinica-miami-2026-12') v),
+  'log', (select count(*) from acesso.log where tabela = 'pessoas.pessoas'),
+  'pessoas_teste', (select count(*) from pessoas.pessoas where teste))::text;
+select set_config('request.jwt.claims', '{}', true);
+
+select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated"}', true);
+set local role authenticated;
+insert into pg_temp._z_out (passo, linha) select 'M5 desmarcar pela final', (select jsonb_build_object('teste', x.teste, 'alterado', x.alterado) from public.dados_presencial_marcar_teste('clinica-miami-2026-12', (select final from pg_temp._z_m), false) x)::text;
+reset role;
+select set_config('request.jwt.claims', '{}', true);
+update pessoas.pessoas set situacao = (select sit from _z_m), mesclada_em = null where id = (select orig from _z_m);
+delete from pessoas.pessoas where id = (select final from _z_m);
 -- reversão da migration
 -- o log é só acréscimo (acesso.tg_log_imutavel): as linhas de marcação ficam como histórico
 do $r$ begin
