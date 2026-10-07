@@ -2,13 +2,13 @@
 
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import { normalizarNumericos, type ResumoPresencial, type LeadPresencial, type VendaPresencial, type DisparoPresencial, type DiaPresencial } from '../domain/presencial';
+import { normalizarNumericos, type ResumoPresencial, type LeadPresencial, type VendaPresencial, type DisparoPresencial, type DiaPresencial, type PagamentoPresencial, type PerfilCompradorPresencial, type PendenciaPresencial, type PessoaPendenciaPresencial, type SerieVendasPresencial, type VendaHoraPresencial, type GrupoPendencia } from '../domain/presencial';
 
 export type Resultado<T> = { data: T | null; erro: string | null };
 
-async function chamar<T>(nome: string, chave: string): Promise<Resultado<T>> {
+async function chamar<T>(nome: string, chave: string, adicionais: Record<string, string> = {}): Promise<Resultado<T>> {
   try {
-    const { data, error } = await createBrowserSupabase().rpc(nome, { p_chave: chave });
+    const { data, error } = await createBrowserSupabase().rpc(nome, { p_chave: chave, ...adicionais });
     if (error) {
       logQueryError(nome, { message: error.code || 'SEM_CODIGO' });
       return { data: null, erro: mensagemErro(error.code) };
@@ -24,6 +24,7 @@ export function mensagemErro(code?: string): string {
   if (code === '42501') return 'Você não tem acesso a este dashboard.';
   if (code === 'PGRST202') return 'Esta função ainda não está no banco. Avise quem cuida do sistema.';
   if (code === 'P0002') return 'Dashboard não cadastrado no banco.';
+  if (code === '22023') return 'Grupo de pendências inválido.';
   return 'Não foi possível carregar agora.';
 }
 
@@ -41,3 +42,21 @@ export async function carregarDisparos(chave: string): Promise<Resultado<Disparo
   return { ...r, data: r.data?.map((v) => normalizarNumericos(v, ['custo_centavos', 'entrega_pct', 'leitura_pct', 'clique_pct'])) ?? null };
 }
 export const carregarSerieDiaria = (chave: string) => chamar<DiaPresencial[]>('dados_presencial_serie_diaria', chave);
+export async function carregarPagamentos(chave: string): Promise<Resultado<PagamentoPresencial[]>> {
+  const r = await chamar<PagamentoPresencial[]>('dados_presencial_pagamentos', chave);
+  return { ...r, data: r.data?.map((v) => normalizarNumericos(v, ['receita_bruta'])) ?? null };
+}
+export const carregarPerfilCompradores = (chave: string) => chamar<PerfilCompradorPresencial[]>('dados_presencial_compradores_perfil', chave);
+export const carregarPendencias = (chave: string) => chamar<PendenciaPresencial[]>('dados_presencial_pendencias', chave);
+export async function carregarPessoasPendencias(chave: string, grupo: GrupoPendencia): Promise<Resultado<PessoaPendenciaPresencial[]>> {
+  const r = await chamar<PessoaPendenciaPresencial[]>('dados_presencial_pendencias_pessoas', chave, { p_grupo: grupo });
+  return { ...r, data: r.data?.map((v) => normalizarNumericos(v, ['valor_bruto'])) ?? null };
+}
+export async function carregarSerieVendas(chave: string): Promise<Resultado<SerieVendasPresencial[]>> {
+  const r = await chamar<SerieVendasPresencial[]>('dados_presencial_serie_vendas', chave);
+  return { ...r, data: r.data?.map((v) => normalizarNumericos(v, ['receita_bruta', 'receita_acumulada', 'conversao_pct'])) ?? null };
+}
+export async function carregarVendasPorHora(chave: string): Promise<Resultado<VendaHoraPresencial[]>> {
+  const r = await chamar<VendaHoraPresencial[]>('dados_presencial_vendas_por_hora', chave);
+  return { ...r, data: r.data?.map((v) => normalizarNumericos(v, ['receita_bruta'])) ?? null };
+}

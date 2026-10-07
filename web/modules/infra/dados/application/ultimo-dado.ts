@@ -1,5 +1,7 @@
 import type { Resultado } from '../infrastructure/presencial-data';
 
+export type EstadoLeitura<T> = { resultado: Resultado<T> | null; carregando: boolean };
+
 /** Uma falha de leitura não apaga o último dado válido do bloco. */
 export function manterUltimoDado<T>(anterior: Resultado<T> | null, atual: Resultado<T>): Resultado<T> {
   if (atual.data !== null && !atual.erro) return atual;

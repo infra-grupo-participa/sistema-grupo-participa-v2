@@ -24,6 +24,13 @@ export type DisparoPresencial = {
   custo_centavos: Numerico; entrega_pct: Numerico; leitura_pct: Numerico; clique_pct: Numerico;
 };
 export type DiaPresencial = { dia: string; pre_checkout: number; pedidos: number; vendas: number; abandonos: number | null };
+export type PagamentoPresencial = { forma: string; forma_nome: string; parcelas: number | null; vendas: number; receita_bruta: Numerico };
+export type PerfilCompradorPresencial = { dimensao: 'turma' | 'instrucao' | 'casamento'; valor: string; compradores: number };
+export type PendenciaPresencial = { grupo: 'nao_pago' | 'cancelada'; categoria: string; pessoas: number; transacoes: number };
+export type GrupoPendencia = PendenciaPresencial['grupo'];
+export type PessoaPendenciaPresencial = { email: string; nome: string | null; telefone: string | null; categorias: string; transacoes: number; valor_bruto: Numerico; ultimo_em: string };
+export type SerieVendasPresencial = { dia: string; pre_checkout: number; vendas: number; receita_bruta: Numerico; vendas_acumuladas: number; receita_acumulada: Numerico; conversao_pct: Numerico };
+export type VendaHoraPresencial = { hora: number; vendas: number; receita_bruta: Numerico };
 
 export function numero(valor: Numerico | undefined): number | null {
   if (valor === null || valor === undefined || valor === '') return null;

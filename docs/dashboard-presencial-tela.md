@@ -16,6 +16,16 @@ Ao abrir, a tela chama resumo e série diária. Depois, refaz essas duas leitura
 
 Leads e vendas começam ociosos e só são buscados quando o modal abre; a guarda `deveCarregar` (`application/carga-sob-demanda.ts`) impede uma segunda busca enquanto a primeira carrega ou depois que já há resultado. Instrução vazia aparece como "Sem registro de aluno ativo", porque a ausência na base de alunos ativos não prova que a pessoa nunca foi aluna. A última coluna da Visão de disparos é a taxa de clique.
 
+## Gráficos da Visão geral de vendas
+
+Contrato em `docs/dashboard-presencial.md` §2.9. A aba mostra formas de pagamento por forma e parcelas, roscas de turma e instrução, pendências por pessoa única, vendas e receita acumuladas, conversão diária e vendas por hora. A legenda das roscas explicita o casamento por e-mail, documento e telefone e a quantidade sem aluno. `null` continua "sem dado"; dia sem pré-checkout não ganha ponto de conversão. Gráficos sem linhas usam `EmptyState`.
+
+As cinco funções agregadas novas (`dados_presencial_pagamentos`, `dados_presencial_compradores_perfil`, `dados_presencial_pendencias`, `dados_presencial_serie_vendas`, `dados_presencial_vendas_por_hora`) entram no polling de 60 s junto de resumo e série diária. O Galego mediu 31 a 113 ms para essas leituras. Cada bloco conserva seu último resultado bom e mostra erro próprio. A função `dados_presencial_pendencias_pessoas`, que traz dados pessoais, é chamada só quando alguém abre o modal de não pagos ou canceladas; o modal usa as abas Pessoas e Resumo. O total dos cards vem da linha `categoria = total`, pois uma pessoa pode aparecer em mais de uma categoria.
+
+As seis funções constam como aplicadas no banco na migration `20261007212530` (commit `91e4c31`). Se alguma não estiver visível ao PostgREST, só seu bloco mostra `PGRST202`; resumo e série anteriores continuam disponíveis. A conferência numérica ponta a ponta da tela fica para o aviso do Maestro. Não usar números sintéticos na tela publicada.
+
 ## Verificação
 
 Na pasta `web`, rodar `npm run lint`, `npx tsc --noEmit`, `npm test` e `npm run build`. Para abrir localmente, rodar `npm run dev -- -p 3001` e entrar em `/infra/dados/dashboards/clinica-miami-2026-12` com uma conta da equipe. Sem as funções aplicadas, a tela deve exibir a mensagem de função ausente no bloco correspondente. Depois da aplicação, conferir cada número diretamente na fonte antes de usar o dashboard para decisão.
+
+Após a aplicação das funções do §2.9, comparar o total de vendas dos pagamentos, o total das roscas e o último ponto de vendas acumuladas com `resumo.vendas`; comparar receita acumulada final com `resumo.receita_bruta`. Nos cards, conferir que o total de pessoas não é a soma das categorias quando há sobreposição. Abrir cada modal e conferir a contagem de linhas com a linha `total` do grupo. Na aba visível, observar a segunda leitura após 60 s; disparos e a lista dos modais não devem ser chamados pelo polling. Repetir com a aba oculta e simular falha de uma função para confirmar que só seu bloco mostra aviso e mantém os dados anteriores.
