@@ -6,7 +6,7 @@ import { useTheme } from '@/shared/ui/shell/use-theme';
 import type { GpUser } from '@/shared/domain/auth';
 import { SectionCard, Input, Button, Toggle, Badge, Toast, useFlash } from '@/shared/ui/components';
 
-export function ConfiguracoesClient({ user }: { user: GpUser }) {
+export function ConfiguracoesClient({ user, podeEditarNome }: { user: GpUser; podeEditarNome: boolean }) {
   const { theme, toggle } = useTheme();
   const [nome, setNome] = useState(user.nome);
   const [avatar, setAvatar] = useState(user.avatarUrl || '');
@@ -16,7 +16,10 @@ export function ConfiguracoesClient({ user }: { user: GpUser }) {
   async function salvar() {
     setBusy(true);
     const supabase = createBrowserSupabase();
-    const { error } = await supabase.from('perfis').update({ nome: nome.trim(), avatar_url: avatar.trim() || null, atualizado_em: new Date().toISOString() }).eq('id', user.id);
+    const alteracoes = podeEditarNome
+      ? { nome: nome.trim(), avatar_url: avatar.trim() || null, atualizado_em: new Date().toISOString() }
+      : { avatar_url: avatar.trim() || null, atualizado_em: new Date().toISOString() };
+    const { error } = await supabase.from('perfis').update(alteracoes).eq('id', user.id);
     setBusy(false);
     flash(error ? 'Erro ao salvar.' : 'Perfil atualizado!');
   }
@@ -28,10 +31,10 @@ export function ConfiguracoesClient({ user }: { user: GpUser }) {
 
       <SectionCard title="Meu perfil" className="gp-rise">
         <div className="space-y-3">
-          <label className="block">
+          {podeEditarNome && <label className="block">
             <span className="text-xs font-medium text-[var(--fg-2)]">Nome</span>
             <Input value={nome} onChange={(e) => setNome(e.target.value)} className="mt-1" />
-          </label>
+          </label>}
           <label className="block">
             <span className="text-xs font-medium text-[var(--fg-2)]">Avatar (URL)</span>
             <Input value={avatar} onChange={(e) => setAvatar(e.target.value)} className="mt-1" />
