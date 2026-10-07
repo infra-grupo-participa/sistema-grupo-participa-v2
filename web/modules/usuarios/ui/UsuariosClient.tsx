@@ -181,7 +181,7 @@ export function UsuariosClient({ meuCargo, acessoV2 = false }: { meuCargo: Cargo
       <DataTable>
         <Thead>
           <Th>Usuário</Th>
-          <Th>Cargo</Th>
+          <Th>{acessoV2 ? 'Cargo legado' : 'Cargo'}</Th>
           <Th>Status</Th>
           <Th> </Th>
         </Thead>
@@ -235,6 +235,7 @@ function EditDrawer({ u, meuCargo, acessoV2, abrirAcessos, onClose, onSaved }: {
   const [linking, setLinking] = useState(false);
   const [accessLink, setAccessLink] = useState('');
   const [linkErr, setLinkErr] = useState('');
+  const [erroSalvar, setErroSalvar] = useState('');
 
   async function gerarLink() {
     setLinking(true); setLinkErr(''); setAccessLink('');
@@ -248,6 +249,7 @@ function EditDrawer({ u, meuCargo, acessoV2, abrirAcessos, onClose, onSaved }: {
   }
 
   async function save() {
+    setErroSalvar('');
     setBusy(true);
     const campos = acessoV2 ? null : perfilDoEstado({ base, areas, funcoes, lgpd }, { areas: u.areas, funcoes: u.funcoes });
     const fields: Record<string, unknown> = acessoV2 ? { status } : {
@@ -259,7 +261,8 @@ function EditDrawer({ u, meuCargo, acessoV2, abrirAcessos, onClose, onSaved }: {
       body: JSON.stringify({ id: u.id, fields }),
     });
     setBusy(false);
-    onSaved(r.json?.ok ? 'Usuário atualizado!' : (r.json?.error || (r.status === 0 ? 'Sem conexão — tente novamente.' : 'Falhou.')));
+    if (r.json?.ok) onSaved('Usuário atualizado!');
+    else setErroSalvar(r.json?.error || (r.status === 0 ? 'Sem conexão. Tente novamente.' : 'Não foi possível salvar o perfil.'));
   }
 
   return (
@@ -292,6 +295,7 @@ function EditDrawer({ u, meuCargo, acessoV2, abrirAcessos, onClose, onSaved }: {
         </label>
 
         <Button onClick={save} disabled={busy} className="w-full">{busy ? 'Salvando…' : 'Salvar'}</Button>
+        {erroSalvar && <p role="alert" className="text-sm text-[var(--red)]">{erroSalvar}</p>}
 
         <div className="pt-3 border-t border-[var(--border)] space-y-2">
           <p className="text-xs text-[var(--fg-3)]">Acesso: gere um link para a pessoa criar/redefinir a senha e entrar.</p>

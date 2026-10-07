@@ -64,7 +64,8 @@ export async function PATCH(request: NextRequest) {
 
   patch.atualizado_em = new Date().toISOString();
   const { error } = await admin.from('perfis').update(patch).eq('id', id);
-  return error ? jsonError('Não foi possível salvar.', 502) : jsonOk({ ok: true });
+  if (error?.code === '42501') return jsonError('O banco recusou esta alteração. Cargo admin/dev é restrito a master ou exceção nominal; acesso a CPF deve ser concedido pela capacidade cpf.ver.', 403);
+  return error ? jsonError('Não foi possível salvar o perfil.', 502) : jsonOk({ ok: true });
 }
 
 export async function POST(request: NextRequest) {
@@ -116,6 +117,7 @@ export async function POST(request: NextRequest) {
       atualizado_em: new Date().toISOString(),
     })
     .eq('id', gen.user.id);
+  if (perfilErr?.code === '42501') return jsonError('O banco recusou o perfil do convite. Cargo admin/dev é restrito a master ou exceção nominal; use vínculos e capacidades para conceder acesso.', 403);
   if (perfilErr) return jsonError('Não foi possível salvar o perfil do convite.', 502);
 
   const link = buildAccessLink(origin, gen.properties.hashed_token, 'invite');
