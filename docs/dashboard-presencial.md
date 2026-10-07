@@ -150,6 +150,68 @@ sob demanda.
 
 Detalhe, tradução de status e ensaio: `infra/supabase/migrations/20261007205017.explain.md`.
 
+## 2.9 Gráficos da "Visão geral de vendas" (migration `20261007gr`, NÃO APLICADA: espera pentester)
+
+Seis funções novas, todas `p_chave text` (mais `p_grupo` no modal), mesmo gate e mesmos erros do §2.6 (42501 sem acesso,
+P0002 chave fora do cadastro). As 5 de antes não mudam. Consideram as ofertas do dashboard (`oferta_codigo` +
+`ofertas_extra`) e o caminho em tempo real do §2.8. Venda = paga e primeira cobrança; receita = bruto pago em BRL (iguais ao
+resumo: os totais de cada gráfico batem com `dados_presencial_resumo`).
+
+### 2.9.1 `dados_presencial_pagamentos(p_chave)` (1 linha por forma + parcelas, mais vendas primeiro)
+
+`forma text, forma_nome text, parcelas integer, vendas integer, receita_bruta numeric`
+
+- `forma`: nome da Hotmart (`CREDIT_CARD`, `PIX`, `BILLET`, `HOTMART_INSTALLMENTS`, `FINANCED_BILLET`, `HYBRID`, `WALLET`,
+  `APPLE_PAY`, `GOOGLE_PAY`, `SAMSUNG_PAY`, `PAYPAL`, `DIRECT_DEBIT`, `CASH_PAYMENT`; sem dado: `NAO_INFORMADO`).
+- `forma_nome`: Cartão de crédito, Pix, Boleto, Parcelado Hotmart, Boleto financiado, Híbrido, Saldo Hotmart, Apple Pay,
+  Google Pay, Samsung Pay, PayPal, Débito em conta, Pagamento em dinheiro, Não informado; forma nova sai com o nome da Hotmart.
+- Rosca por forma = somar `vendas` por `forma`; `parcelas` serve para o detalhe (ex.: cartão em 12x).
+
+### 2.9.2 `dados_presencial_compradores_perfil(p_chave)` (roscas de turma e instrução)
+
+`dimensao text, valor text, compradores integer`
+
+- `dimensao = 'turma'`: `valor` = código da turma (`T41`...), `Aluno sem turma` ou `Não é aluno`.
+- `dimensao = 'instrucao'`: `valor` = `thb_alunos.instrucao` como está na base (THB, THB - SÓCIO, AURUM...), `Aluno sem
+  instrução` ou `Não é aluno`. É o programa do aluno, não escolaridade (escolaridade não existe em nenhuma fonte).
+- `dimensao = 'casamento'`: `email`, `documento`, `telefone` ou `nao_casou` (para mostrar como a base foi casada).
+- Comprador único por e-mail. Casa com `public.thb_alunos` por e-mail, senão documento, senão telefone. A coluna
+  `turma`/`instrucao` de `dados_presencial_vendas` casa só por e-mail: pode diferir para quem casou por documento ou telefone.
+
+### 2.9.3 `dados_presencial_pendencias(p_chave)` (cards de não pago e canceladas)
+
+`grupo text, categoria text, pessoas integer, transacoes integer`
+
+- `grupo = 'nao_pago'` (boleto/pix gerado e não pago: `PRINTED_BILLET`, `WAITING_PAYMENT`): `categoria` `boleto`, `pix`,
+  `outro` e `total`.
+- `grupo = 'cancelada'` (`CANCELLED`, `REFUNDED`, `PARTIALLY_REFUNDED`, `CHARGEBACK`, `EXPIRED`): `categoria` = o status
+  da Hotmart e `total`.
+- Sempre vêm as duas linhas `total`, mesmo zeradas. `pessoas` = e-mails únicos; use a linha `total` no card (a mesma pessoa
+  pode estar em duas categorias).
+- Regra do Victor: quem pagou outra transação das ofertas do dashboard (mesmo e-mail ou mesmo documento) não entra.
+
+### 2.9.4 `dados_presencial_pendencias_pessoas(p_chave, p_grupo)` (modal; único com dado pessoal)
+
+`email text, nome text, telefone text, categorias text, transacoes integer, valor_bruto numeric, ultimo_em timestamptz`
+
+- `p_grupo`: `'nao_pago'` ou `'cancelada'`; outro valor dá 22023. 1 linha por pessoa, mais recente primeiro.
+- `categorias`: as categorias da pessoa separadas por vírgula; `valor_bruto` e `nome`/`telefone`: da transação mais
+  recente. Número de linhas = `pessoas` da linha `total` do grupo.
+
+### 2.9.5 `dados_presencial_serie_vendas(p_chave)` (1 linha por dia, mesmo intervalo da série diária)
+
+`dia date, pre_checkout integer, vendas integer, receita_bruta numeric, vendas_acumuladas integer, receita_acumulada numeric,
+conversao_pct numeric`
+
+- `conversao_pct` = vendas do dia ÷ pré-checkout do dia × 100, 2 casas; `null` quando o dia não teve pré-checkout.
+- Último `vendas_acumuladas` = `resumo.vendas`; último `receita_acumulada` = `resumo.receita_bruta`.
+
+### 2.9.6 `dados_presencial_vendas_por_hora(p_chave)` (sempre 24 linhas, hora 0 a 23)
+
+`hora integer, vendas integer, receita_bruta numeric`
+
+- Hora da aprovação no fuso de São Paulo.
+
 ## 3. Migrations (ordem e versão gravada)
 
 | Versão | Nome | O quê |
@@ -160,6 +222,7 @@ Detalhe, tradução de status e ensaio: `infra/supabase/migrations/2026100720501
 | `20261007162557` | `pessoas_registrar_lead_projeto_por_chave` | a fachada da captura resolve o projeto pela chave da casa (lead da página grava `projeto_id` 68) |
 | `20261007203803` | `clinica_miami_oferta_nova` | oferta `sju5pawn` (produto 5682989) na Clínica: Financeiro, Tráfego e dashboard; `ofertas_extra` |
 | `20261007205017` | `dashboard_vendas_tempo_real` | `dados.transacoes` soma o que o webhook da Hotmart já recebeu e o sync ainda não trouxe (venda em segundos, academy) |
+| `20261007gr` (NÃO APLICADA) | `dashboard_graficos_vendas` | as 6 funções dos gráficos da Visão geral de vendas (§2.9); espera pentester |
 | `20261007171902` (APLICADA 07/10) | `crm_lista_614_todos` | regra 42 com `para_todos`: quem entra na lista 614 vira contato comercial e é catalogado na Clínica. Ensaio refeito antes da aplicação, igual ao esperado |
 
 Cada uma tem `.explain.md` com ensaio, explain e reversão.
@@ -203,6 +266,7 @@ Hoje a tela expõe 1 lead e 1 pedido, ambos teste interno; o risco cresce quando
 
 ## 5. O que falta
 
+- Pentester e aplicação da `20261007gr` (gráficos da Visão geral de vendas); depois, a tela (JP).
 - Confirmar uma venda real da Clínica atravessando webhook, banco e próxima leitura automática da tela.
 - ~~Aplicar `crm_lista_614_todos`~~: aplicada em 07/10/2026, versão `20261007171902`.
 - Efeito da `20261007171902` a saber: quem entra na 614 sem ser contato passa a aparecer no Comercial, sem dono e sem negócio.
