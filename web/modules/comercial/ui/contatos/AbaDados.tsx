@@ -16,6 +16,8 @@ import { utmEmLinha } from './regras-contatos';
 import { MidiaMensagem } from '../conversas/MidiaMensagem';
 import { legendaDaMensagem } from '../../domain/midia';
 import { ComoEntrou } from './ComoEntrou';
+import { BotaoGravarAudio } from '../conversas/GravarAudio';
+import { janelaRestante } from '../conversas/regras-conversas';
 
 export function AbaDados({ c, duplicados, nomeDe, onAbrirContato }: {
   c: Contato;
@@ -102,7 +104,7 @@ export function AbaDados({ c, duplicados, nomeDe, onAbrirContato }: {
 }
 
 /** Últimas mensagens e o atalho para a caixa de Conversas (onde se responde). */
-export function AbaConversa({ c, nomeDe }: { c: Contato; nomeDe: (id: string | null) => string }) {
+export function AbaConversa({ c, nomeDe, flash }: { c: Contato; nomeDe: (id: string | null) => string; flash?: (m: string) => void }) {
   const ms = useDados(() => repo.mensagens(c.id), [c.id]);
   if (c.optOut) {
     return <Vazio titulo="Sem conversa" hint="Pediu para não receber contato: ninguém aborda esta pessoa." icone="lock" />;
@@ -115,6 +117,9 @@ export function AbaConversa({ c, nomeDe }: { c: Contato; nomeDe: (id: string | n
     return <div className="space-y-3" aria-busy="true">{[0, 1, 2].map((i) => <Skeleton key={i} h={14} w={`${80 - i * 10}%`} />)}</div>;
   }
   const ultimas = [...ms.dados].sort((a, b) => b.em.localeCompare(a.em)).slice(0, 5);
+  // janela de 24 h pela última mensagem recebida: com ela aberta dá para mandar áudio daqui (o banco confere de novo)
+  const ultimaEntrada = ms.dados.filter((m) => m.direcao === 'entrada' && m.canal !== 'nota').reduce<string | null>((x, m) => (!x || m.em > x ? m.em : x), null);
+  const janela = ultimaEntrada ? janelaRestante(new Date(new Date(ultimaEntrada).getTime() + 86_400_000).toISOString(), new Date()) : null;
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -123,7 +128,10 @@ export function AbaConversa({ c, nomeDe }: { c: Contato; nomeDe: (id: string | n
             ? `${ms.dados.length} mensage${ms.dados.length > 1 ? 'ns' : 'm'} no histórico. Responda pela caixa de Conversas.`
             : 'Nenhuma mensagem ainda. Comece pela caixa de Conversas.'}
         </p>
-        <BotaoConversa contatoId={c.id} />
+        <div className="flex shrink-0 items-center gap-2">
+          {janela && flash && <BotaoGravarAudio contatoId={c.id} nomeContato={c.nome.split(' ')[0] || c.nome} flash={flash} />}
+          <BotaoConversa contatoId={c.id} />
+        </div>
       </div>
       {ultimas.length > 0 && (
         <ul className="space-y-2">

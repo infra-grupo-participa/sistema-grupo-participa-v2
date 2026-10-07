@@ -1,7 +1,7 @@
 // Regras puras da Edge crm-whatsapp-enviar (download da mídia recebida e envio de anexo). Sem rede.
 import { describe, expect, it } from 'vitest';
 import {
-  caminhoRecebido, extensaoDoMime, mimeBase, mimeSeguro, nomeDoContentDisposition, pedidoMidiaInfobip, urlDownloadInfobip,
+  caminhoRecebido, extensaoDoMime, mimeBase, mimeSeguro, nomeDoContentDisposition, pedidoMidiaInfobip, saidaComArquivo, urlDownloadInfobip,
 } from '../../../../infra/supabase/functions/crm-whatsapp-enviar/midia';
 
 const BASE = 'https://8k6q23.api-us.infobip.com';
@@ -60,5 +60,15 @@ describe('pedidoMidiaInfobip', () => {
     const p = pedidoMidiaInfobip({ ...base, tipo: 'documento', legenda: null, midia_nome: 'Proposta.pdf' }, 'https://s/y');
     expect(p.caminho).toBe('/whatsapp/1/message/document');
     expect(p.corpo.content).toEqual({ mediaUrl: 'https://s/y', filename: 'Proposta.pdf' });
+  });
+  it('áudio (20261007s) vai para /message/audio, sem legenda', () => {
+    const p = pedidoMidiaInfobip({ ...base, tipo: 'audio', legenda: 'ignorada', midia_nome: null }, 'https://s/z.ogg');
+    expect(p).toEqual({
+      caminho: '/whatsapp/1/message/audio',
+      corpo: { from: '5521987545211', to: '5521999990001', messageId: 'm1', callbackData: 'm1', content: { mediaUrl: 'https://s/z.ogg' } },
+    });
+  });
+  it('só imagem, documento e áudio levam arquivo na saída', () => {
+    expect(['imagem', 'documento', 'audio', 'texto', 'template', 'video'].map(saidaComArquivo)).toEqual([true, true, true, false, false, false]);
   });
 });

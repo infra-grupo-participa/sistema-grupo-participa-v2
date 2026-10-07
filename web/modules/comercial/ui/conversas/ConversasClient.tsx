@@ -24,6 +24,7 @@ import { avisarMudanca, repo, useAgora, useContatosPorIds, useDados } from '../r
 import { INFO_CAIXA } from './indicadores';
 import { ModalAtribuir } from './ModalAtribuir';
 import { BotaoAnexar } from './Anexar';
+import { BotaoGravarAudio } from './GravarAudio';
 import { MidiaMensagem } from './MidiaMensagem';
 import { legendaDaMensagem } from '../../domain/midia';
 import { MenuRespostas, useAlturaDisponivel } from './pecas';
@@ -698,6 +699,7 @@ function Envio({ contato, negocio, janelaAberta, templates, remetente, flash }: 
           className="!resize-none"
         />
         <BotaoAnexar contatoId={contato.id} nomeContato={nome || contato.nome} desabilitado={enviando} flash={flash} />
+        <BotaoGravarAudio contatoId={contato.id} nomeContato={nome || contato.nome} desabilitado={enviando} flash={flash} />
         <Button
           ref={botaoMenu}
           variant="ghost"

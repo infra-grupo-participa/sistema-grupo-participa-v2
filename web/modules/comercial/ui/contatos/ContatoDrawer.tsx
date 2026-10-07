@@ -245,7 +245,7 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
 
         {aba === 'conversa' && (
           <div {...painel('conversa')}>
-            <AbaConversa c={c} nomeDe={nomeDe} />
+            <AbaConversa c={c} nomeDe={nomeDe} flash={flash} />
           </div>
         )}
 

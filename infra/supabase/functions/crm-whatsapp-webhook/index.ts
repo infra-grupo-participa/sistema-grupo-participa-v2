@@ -14,6 +14,8 @@
 // Respostas: 200 quando o banco gravou (inclusive "ignorado"/"duplicado": a Infobip não deve reenviar);
 // 500 quando o banco falhou (a Infobip reenvia; o reenvio é idempotente). Log nunca leva corpo, telefone ou chave.
 //
+// Recusas (401/400/413/405) vão para o log com status e motivo (migration 20261007s), sem corpo nem chave.
+//
 // Mídia (migration 20261007140044): a mensagem de imagem/áudio/documento/vídeo fica com midia_status='pendente'. Depois de
 // responder, em segundo plano (EdgeRuntime.waitUntil), esta Edge chama a crm-whatsapp-enviar {"acao":"midia"} com o header
 // x-crm-chave (Vault crm_whatsapp_envio_chave), que baixa da Infobip para o Storage. Se falhar, o cron
@@ -38,6 +40,15 @@ export function semSegredo(v: unknown): string {
 
 const json = (corpo: unknown, status = 200) =>
   new Response(JSON.stringify(corpo), { status, headers: { "Content-Type": "application/json" } });
+
+// Recusa com rastro no log (status, motivo, tamanho e user-agent; nada de corpo ou chave). O function_edge_logs perde
+// chamadas (07/10: 3 de 4 chamadas da Infobip não apareceram lá); este log é a prova de que a Infobip bateu e foi recusada.
+function recusa(req: Request, status: number, msg: string): Response {
+  console.warn("crm-whatsapp-webhook: recusado", JSON.stringify({
+    status, msg, tamanho: req.headers.get("content-length"), ua: (req.headers.get("user-agent") ?? "").slice(0, 40),
+  }));
+  return json({ ok: false, msg }, status);
+}
 
 // comparação em tempo constante (não vaza o tamanho do prefixo certo)
 function igual(a: string, b: string): boolean {
@@ -98,7 +109,7 @@ function senhaRecebida(req: Request): string | null {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method !== "POST") return json({ ok: false, msg: "Método não permitido." }, 405);
+  if (req.method !== "POST") return recusa(req, 405, "Método não permitido.");
 
   let chave: string;
   try {
@@ -109,22 +120,22 @@ Deno.serve(async (req: Request) => {
   }
   if (!chave) return json({ ok: false, msg: "Webhook não configurado." }, 503); // fail-closed
   const senha = senhaRecebida(req);
-  if (!senha || !igual(senha, chave)) return json({ ok: false, msg: "Não autorizado." }, 401);
+  if (!senha || !igual(senha, chave)) return recusa(req, 401, "Não autorizado.");
 
   const tamanho = Number(req.headers.get("content-length") ?? "0");
-  if (tamanho > LIMITE_BYTES) return json({ ok: false, msg: "Corpo grande demais." }, 413);
+  if (tamanho > LIMITE_BYTES) return recusa(req, 413, "Corpo grande demais.");
   const texto = await req.text();
-  if (texto.length > LIMITE_BYTES) return json({ ok: false, msg: "Corpo grande demais." }, 413);
+  if (texto.length > LIMITE_BYTES) return recusa(req, 413, "Corpo grande demais.");
 
   let corpo: Obj;
   try {
     const p = JSON.parse(texto);
     if (!p || typeof p !== "object" || !Array.isArray((p as Obj).results)) {
-      return json({ ok: false, msg: "Formato inesperado." }, 400);
+      return recusa(req, 400, "Formato inesperado.");
     }
     corpo = p as Obj;
   } catch {
-    return json({ ok: false, msg: "JSON inválido." }, 400);
+    return recusa(req, 400, "JSON inválido.");
   }
 
   try {

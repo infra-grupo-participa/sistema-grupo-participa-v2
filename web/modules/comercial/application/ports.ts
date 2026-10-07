@@ -182,6 +182,11 @@ export interface ComercialRepository {
    * (janela de 24 h aberta; o banco valida dono, tipo e tamanho de novo).
    */
   enviarAnexo(contatoId: string, arquivo: File, legenda: string): Promise<Resultado & { mensagemId?: string }>;
+  /**
+   * Áudio gravado no navegador (20261007s), já no formato final (ogg/opus = nota de voz; m4a/aac/mp3 = áudio comum):
+   * sobe para o bucket privado e enfileira sem legenda (janela de 24 h aberta; o banco valida dono, tipo e tamanho).
+   */
+  enviarAudio(contatoId: string, audio: Blob, formato: { mime: string; ext: string }): Promise<Resultado & { mensagemId?: string }>;
   /** URL assinada de curta duração (10 min) do arquivo de uma mensagem; null = sem acesso ou indisponível. */
   urlMidia(caminho: string): Promise<string | null>;
 

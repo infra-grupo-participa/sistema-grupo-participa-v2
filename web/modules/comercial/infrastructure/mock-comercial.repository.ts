@@ -404,6 +404,10 @@ export class MockComercialRepository implements ComercialRepository {
     return espera({ ok: false, msg: 'Anexo só funciona com o banco real (modo demonstração).' });
   }
 
+  async enviarAudio(): Promise<Resultado> {
+    return espera({ ok: false, msg: 'Áudio só funciona com o banco real (modo demonstração).' });
+  }
+
   async urlMidia(): Promise<string | null> {
     return null;
   }
