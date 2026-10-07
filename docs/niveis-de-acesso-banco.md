@@ -10,6 +10,10 @@ falta. Detalhe e provas de cada passo no `.explain.md` da migration.
   testar a tela, ver `20261007204002`), `acesso.vinculo` (departamento/área, papel
   responsável ou membro, com vigência), `acesso.capacidade` (`financeiro.ver`, `financeiro.operar`, `cpf.ver`,
   `contato.ver`), `acesso.excecao_admin` (6 não masters com admin/dev, decisão do Victor), `acesso.log` (só acréscimo).
+- Contas de teste para a tela (sem pessoa real): QA Sessoes (`qa.sessoes@advmais.com`, master) e QA Tráfego
+  (`qa.trafego@advmais.com`, membro do Tráfego, sem financeiro nem master, desde 07/10, ver `20261007204700`). Perfil para
+  alterar e reverter na tela de Usuários: o Robô de teste E2E (Financeiro), sem tocar no `financeiro.ver` dele
+  (`20261007204700.explain.md` §6).
 - Regra: todo perfil ativo da equipe vê tudo, menos o Financeiro; edita o que o vínculo dá; capacidades nunca vêm de
   "vê o resto". `gp_is_admin()` = master ou exceção nominal.
 - O app lê `public.gp_meu_acesso()` (uma vez por request). Gestão só master: `acesso_listar`, `acesso_vincular`,
@@ -34,6 +38,7 @@ falta. Detalhe e provas de cada passo no `.explain.md` da migration.
 | `20261007y2` | B2 parte 2: recusa mudança de acesso pela service_role sem autor | não aplicada; **só depois da rota nova na main** |
 | `20261007204020` | anon sem execute nas 4 guardas; sem MAINTAIN em perfis | aplicada |
 | `20261007204024` | B3: `gps.trocar_meu_nome` não derruba a parte do aluno | aplicada |
+| `20261007204700` | conta de teste QA Tráfego (`qa.trafego@advmais.com`) membro do Tráfego, sem financeiro, para o JP (reversão no explain) | aplicada |
 
 ## Pendências
 
