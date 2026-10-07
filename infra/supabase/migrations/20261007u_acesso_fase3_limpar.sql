@@ -14,7 +14,8 @@
 --   (/api/admin/usuarios, service_role), do cadastro (handle_new_user/garantir_perfil) ou de SQL. Assim as 20 funções
 --   que ainda leem cargo admin/dev inline (lista no explain, correção do pentester) passam a valer só para master, sem
 --   reescrever uma a uma: a dívida fica registrada e neutralizada na origem; (c) CPF completo vira só a capacidade
---   cpf.ver (com log); a coluna perfis.pode_ver_cpf_completo deixa de abrir CPF e não pode mais ser ligada.
+--   cpf.ver (com log); a coluna perfis.pode_ver_cpf_completo fica como está (quem tem ligada hoje continua, porque
+--   pa_pode_ver_doc e o front canVerDoc leem a coluna) e não pode mais ser LIGADA de novo (só a capacidade, com log).
 --
 -- EXCEÇÃO NOMINAL (decisão do Victor Hugo, 07/10/2026): Cristiane (#1b15) admin, Fernanda Tavares (#00b1) admin, Isabela
 --   Teixeira (#e1d2) admin, Elaine Montenegro (#6ed2) dev, Marcio Carvalho de Sá (#ec6d) dev, Aldri Santana (#0f6d) dev.
@@ -32,11 +33,13 @@
 --      gp_pode_editar(setor), crm.eh_gestor(), ra_pode_ver(), pa_pode_pedir() sem o ramo admin/dev (os ramos de
 --      gestor/operador com função fina ficam: o usuário não consegue mudar o próprio cargo, áreas nem funções, só nome,
 --      avatar e atualizado_em); mkt.pode_ver/pode_editar só pela regra nova.
---   2. CPF: quem tem pode_ver_cpf_completo = true e está ativo ganha a capacidade cpf.ver (hoje: Fernanda Tavares #8c37);
---      a coluna inteira vira false (foto em acesso.cpf_coluna_antes_20261007).
+--   2. CPF: quem tem pode_ver_cpf_completo = true e está ativo ganha também a capacidade cpf.ver (hoje: Fernanda Tavares
+--      #8c37 e #00b1), com log. A coluna NÃO é desligada nesta fase (rodada 3 do pentester: desligar tirava documento de
+--      quem lê a coluna em pa_pode_ver_doc e no front, e esbarrava no limite de 3 linhas da blindagem). Foto em
+--      acesso.cpf_coluna_antes_20261007.
 --   3. Gatilho acesso_guarda em public.perfis (BEFORE INSERT OR UPDATE):
 --      - cargo admin/dev em quem não está em acesso.master → 42501;
---      - ligar pode_ver_cpf_completo → 42501 (CPF é acesso_capacidade_definir, só master, com log);
+--      - LIGAR pode_ver_cpf_completo em quem não tem → 42501 (CPF novo é acesso_capacidade_definir, só master, com log);
 --      - o próprio usuário (não master) trocar o próprio nome → 42501 (correção BAIXA do pentester);
 --      - toda mudança de cargo, status, áreas, funções ou CPF vai para acesso.log (sem e-mail).
 --   Ficam lendo cargo (já valem só para master depois da fase 2, e o gatilho impede que volte): crm.pode_catalogar,
@@ -45,7 +48,7 @@
 -- AS 5 PERGUNTAS
 --   escala: 10 funções, 1 gatilho, ~1 capacidade nova. índice: o de acesso.* e PK de acesso.master. frequência: o
 --   gatilho roda em cada insert/update de perfis (raro). repetição: nenhuma.
---   reversão: bloco REVERSÃO no fim (drop do gatilho, corpos de acesso.corpo_antes, coluna pela foto).
+--   reversão: .maestri/entregas/niveis-de-acesso/rollback-fase3.sql (cérebro), ensaiado em 20261007u_ensaio_rollback.sql.
 --
 -- IDEMPOTENTE: foto e capacidade com on conflict; create or replace; drop trigger if exists antes de criar.
 --
@@ -159,7 +162,6 @@ on conflict (id) do nothing;
 insert into acesso.capacidade (perfil_id, chave)
 select f.id, 'cpf.ver' from acesso.cpf_coluna_antes_20261007 f where f.status = 'ativo'
 on conflict do nothing;
-update public.perfis set pode_ver_cpf_completo = false, atualizado_em = now() where pode_ver_cpf_completo;
 
 create or replace function public.gp_pode_ver_cpf()
  returns boolean language sql stable security definer set search_path to 'public'
@@ -279,9 +281,6 @@ begin
   if (select count(*) from acesso.excecao_admin) <> 6 then
     raise exception '20261007u: a exceção nominal tem de ter exatamente os 6 perfis decididos';
   end if;
-  if exists (select 1 from public.perfis where pode_ver_cpf_completo) then
-    raise exception '20261007u: sobrou pode_ver_cpf_completo ligado';
-  end if;
   if exists (select 1 from acesso.cpf_coluna_antes_20261007 f where f.status = 'ativo'
               and not exists (select 1 from acesso.capacidade c where c.perfil_id = f.id and c.chave = 'cpf.ver')) then
     raise exception '20261007u: quem tinha CPF pela coluna não ganhou cpf.ver';
@@ -292,13 +291,14 @@ begin
 end
 $c$;
 
--- REVERSÃO (numa transação; antes de reverter a fase 2, reverter esta, porque o gatilho recusa devolver admin):
+-- REVERSÃO: usar o script pronto e ensaiado .maestri/entregas/niveis-de-acesso/rollback-fase3.sql (cérebro do Victor;
+-- cópia executada em 20261007u_ensaio_rollback.sql). Resumo, numa transação; a blindagem exige a autorização primeiro:
+-- select blindagem.autorizar_guarda('rollback da fase 3 de níveis de acesso (20261007u)');
 -- drop trigger if exists acesso_guarda on public.perfis;
--- (a tabela acesso.excecao_admin fica, como registro; acesso.eh_admin() sai depois de recriar os corpos)
--- update public.perfis p set pode_ver_cpf_completo = f.pode_ver_cpf_completo from acesso.cpf_coluna_antes_20261007 f where f.id = p.id;
 -- delete from acesso.capacidade c using acesso.cpf_coluna_antes_20261007 f where f.id = c.perfil_id and c.chave = 'cpf.ver'
---   and c.criado_em >= '<hora da aplicação>';
+--   and not exists (select 1 from acesso.capacidade_antes_20261007 a where a.perfil_id = c.perfil_id and a.chave = 'cpf.ver');
 -- do $v$ declare r record; begin
 --   for r in select * from acesso.corpo_antes where migration = '20261007u' and tipo = 'funcao' loop execute r.definicao; end loop;
 -- end $v$;
--- drop function if exists acesso.eh_admin();
+-- drop function if exists acesso.tg_perfis_guarda(); drop function if exists acesso.eh_admin();
+-- (antes de reverter a fase 2, reverter esta, porque o gatilho recusa devolver admin a quem não é master nem exceção)
