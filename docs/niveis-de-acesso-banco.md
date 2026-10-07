@@ -6,7 +6,8 @@ falta. Detalhe e provas de cada passo no `.explain.md` da migration.
 
 ## Modelo (schema `acesso`)
 
-- `acesso.master` (Victor Hugo, Arthur Galvão, João Pedro Alves), `acesso.vinculo` (departamento/área, papel
+- `acesso.master` (Victor Hugo, Arthur Galvão, João Pedro Alves; e a conta de teste QA Sessoes desde 07/10, para o JP
+  testar a tela, ver `20261007204002`), `acesso.vinculo` (departamento/área, papel
   responsável ou membro, com vigência), `acesso.capacidade` (`financeiro.ver`, `financeiro.operar`, `cpf.ver`,
   `contato.ver`), `acesso.excecao_admin` (6 não masters com admin/dev, decisão do Victor), `acesso.log` (só acréscimo).
 - Regra: todo perfil ativo da equipe vê tudo, menos o Financeiro; edita o que o vínculo dá; capacidades nunca vêm de
@@ -28,6 +29,7 @@ falta. Detalhe e provas de cada passo no `.explain.md` da migration.
 | `20261007184603` | registro da devolução manual de admin/dev das 18:39 | aplicada |
 | `20261007193801`, `20261007194917` | registros da Jusy e do Marcos Paulo | aplicadas |
 | `20261007195738` | fase 3: tira o atalho do cargo, exceção nominal, gatilho | aplicada |
+| `20261007204002` | conta de teste QA Sessoes (`qa.sessoes@advmais.com`) vira master para o JP testar a tela (temporário; reversão no explain) | aplicada |
 | `20261007y` | B2 parte 1: RPC `acesso_perfil_atualizar_como`, log com o autor da rota | não aplicada (pentester) |
 | `20261007y2` | B2 parte 2: recusa mudança de acesso pela service_role sem autor | não aplicada; **só depois da rota nova na main** |
 | `20261007z` | anon sem execute nas 4 guardas; sem MAINTAIN em perfis | não aplicada (pentester) |
