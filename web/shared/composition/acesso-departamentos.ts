@@ -7,4 +7,5 @@ import type { OpcoesAcessoDepartamento } from '@/shared/domain/departamentos';
  */
 export const ACESSO_DEPARTAMENTOS: OpcoesAcessoDepartamento = {
   comercialVendedores: publicEnv.comercialVendedores,
+  acessoV2: publicEnv.acessoV2,
 };

@@ -1,4 +1,4 @@
-import type { PerfilData } from '@/shared/domain/auth';
+import type { AcessoV2, PerfilData } from '@/shared/domain/auth';
 
 /** Identidade autenticada mínima (vinda do provedor de auth). */
 export interface AuthUser {
@@ -14,4 +14,5 @@ export interface AuthGateway {
 /** Port: leitura de perfis (implementado por adapter Supabase). */
 export interface ProfileRepository {
   findById(id: string): Promise<PerfilData | null>;
+  findMyAccess?(): Promise<AcessoV2 | null>;
 }

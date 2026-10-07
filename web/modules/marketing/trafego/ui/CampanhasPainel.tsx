@@ -11,7 +11,7 @@ import { ajustarCampanha, listarCampanhas, relerCampanhas } from '../infrastruct
 import { reais, rotuloStatusPlataforma } from './formato';
 
 export function CampanhasPainel({ linhas, versao, flash, onMudou }: {
-  linhas: LinhaResumo[]; versao: number; flash: (m: string) => void; onMudou: () => void;
+  linhas: Pick<LinhaResumo, 'projeto_id' | 'sigla'>[]; versao: number; flash: (m: string) => void; onMudou: () => void;
 }) {
   const [lista, setLista] = useState<Campanha[] | null | undefined>(undefined);
   const [semProjeto, setSemProjeto] = useState(false);

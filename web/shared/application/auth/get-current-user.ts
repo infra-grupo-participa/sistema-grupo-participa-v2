@@ -1,5 +1,6 @@
 import { buildGpUser, ehEmailDaEquipe, type GpUser } from '@/shared/domain/auth';
 import type { AuthGateway, ProfileRepository } from './ports';
+import { publicEnv } from '@/shared/infrastructure/config/env';
 
 /**
  * Caso de uso: resolve o usuário canônico autenticado.
@@ -24,6 +25,11 @@ export class GetCurrentUser {
     if (!ehEmailDaEquipe(perfil.email)) return null;
     // Perfil existe mas ainda não foi liberado por um admin.
     if (perfil.status !== 'ativo') return null;
-    return buildGpUser(perfil);
+    const user = buildGpUser(perfil);
+    if (publicEnv.acessoV2) {
+      user.acesso = await this.profiles.findMyAccess?.() ?? null;
+      if (user.acesso?.equipe !== true) return null;
+    }
+    return user;
   }
 }

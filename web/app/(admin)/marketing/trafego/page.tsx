@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/shared/composition/server-container';
-import { podeVerDepartamento } from '@/shared/domain/departamentos';
+import { podeEditarArea, podeVerDepartamento, temCapacidade } from '@/shared/domain/departamentos';
+import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { TrafegoClient } from '@/modules/marketing/trafego/ui/TrafegoClient';
+import { TrafegoSemFinanceiro } from '@/modules/marketing/trafego/ui/TrafegoSemFinanceiro';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +14,8 @@ export const dynamic = 'force-dynamic';
  */
 export default async function TrafegoPage() {
   const user = await getCurrentUser();
-  if (!podeVerDepartamento(user, 'marketing')) redirect('/');
-  return <TrafegoClient />;
+  if (!podeVerDepartamento(user, 'marketing', ACESSO_DEPARTAMENTOS)) redirect('/');
+  const canEdit = podeEditarArea(user, 'marketing', 'trafego', ACESSO_DEPARTAMENTOS);
+  if (ACESSO_DEPARTAMENTOS.acessoV2 && !temCapacidade(user, 'financeiro.ver', ACESSO_DEPARTAMENTOS)) return <TrafegoSemFinanceiro canEdit={canEdit} />;
+  return <TrafegoClient canEdit={canEdit} />;
 }

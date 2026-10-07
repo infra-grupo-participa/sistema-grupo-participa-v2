@@ -29,9 +29,11 @@ import {
   Toast,
   Toolbar,
   Tr,
+  Tabs,
   useFlash,
 } from '@/shared/ui/components';
 import { fetchJson } from '@/shared/ui/fetch-json';
+import { AcessosV2Client } from './AcessosV2Client';
 
 interface PerfilRow {
   id: string; nome: string | null; email: string | null; cargo: string | null; status: string | null;
@@ -139,18 +141,25 @@ function CatalogoAcessos({
   );
 }
 
-export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
+export function UsuariosClient({ meuCargo, acessoV2 = false }: { meuCargo: Cargo; acessoV2?: boolean }) {
   const [users, setUsers] = useState<PerfilRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erroLista, setErroLista] = useState('');
   const [q, setQ] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [aba, setAba] = useState('usuarios');
   const { toast, flash } = useFlash();
   const grantaveis = cargosGrantaveis(meuCargo);
 
   const reload = useCallback(async () => {
     const r = await fetchJson<{ usuarios?: PerfilRow[] }>('/api/admin/usuarios', { credentials: 'include' });
-    setUsers(r.json?.usuarios ?? []);
+    if (r.json?.usuarios && Array.isArray(r.json.usuarios)) {
+      setUsers(r.json.usuarios);
+      setErroLista('');
+    } else {
+      setErroLista('Não foi possível carregar os usuários. Recarregue a página ou avise quem cuida do sistema.');
+    }
   }, []);
   useEffect(() => { (async () => { await reload(); setLoading(false); })(); }, [reload]);
 
@@ -163,20 +172,23 @@ export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
 
   return (
     <div>
+      {acessoV2 && <Tabs tabs={[{ k: 'usuarios', l: 'Usuários' }, { k: 'acessos', l: 'Departamentos e áreas' }]} active={aba} onChange={setAba} label="Gestão de usuários" />}
+      {aba === 'acessos' && acessoV2 ? <AcessosV2Client pessoas={users} /> : <>
       <div className="flex items-center gap-3 mb-4">
         <h1 className="text-2xl font-bold text-[var(--fg)]">Usuários</h1>
         {loading && <span className="text-sm text-[var(--fg-3)]">carregando…</span>}
-        {grantaveis.length > 0 && <Button onClick={() => setInviteOpen(true)} className="ml-auto">Convidar usuário</Button>}
+        {(acessoV2 || grantaveis.length > 0) && <Button onClick={() => setInviteOpen(true)} className="ml-auto">Convidar usuário</Button>}
       </div>
 
       <Toolbar className="mb-3">
         <SearchInput value={q} onChange={(e) => setQ(e.target.value)} onLimpar={() => setQ('')} placeholder="Buscar nome ou e-mail…" />
       </Toolbar>
+      {erroLista && <p role="alert" className="mb-3 text-sm text-[var(--red)]">{erroLista}</p>}
 
       <DataTable>
         <Thead>
           <Th>Usuário</Th>
-          <Th>Cargo</Th>
+          <Th>{acessoV2 ? 'Cargo legado' : 'Cargo'}</Th>
           <Th>Status</Th>
           <Th> </Th>
         </Thead>
@@ -184,7 +196,7 @@ export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
           {loading && !filtered.length && <SkeletonRows rows={4} cols={[72, 64, 48]} />}
           {filtered.map((u) => {
             const cargo = normalizeCargo(u);
-            const editavel = podeEditarUsuario(meuCargo, cargo);
+            const editavel = acessoV2 || podeEditarUsuario(meuCargo, cargo);
             const st = u.status || 'pendente';
             return (
               <Tr key={u.id}>
@@ -195,21 +207,22 @@ export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
               </Tr>
             );
           })}
-          {!filtered.length && !loading && (
+          {!filtered.length && !loading && !erroLista && (
             <tr><td colSpan={4} className="p-0"><EmptyState title="Nenhum usuário." /></td></tr>
           )}
         </tbody>
       </DataTable>
 
-      {editing && <EditDrawer u={editing} meuCargo={meuCargo} onClose={() => setEditId(null)} onSaved={async (m) => { flash(m); setEditId(null); await reload(); }} />}
-      {inviteOpen && <InviteDrawer grantaveis={grantaveis} onClose={() => setInviteOpen(false)} reload={reload} flash={flash} />}
+      {editing && <EditDrawer u={editing} meuCargo={meuCargo} acessoV2={acessoV2} abrirAcessos={() => { setEditId(null); setAba('acessos'); }} onClose={() => setEditId(null)} onSaved={async (m) => { flash(m); setEditId(null); await reload(); }} />}
+      {inviteOpen && <InviteDrawer grantaveis={grantaveis} acessoV2={acessoV2} abrirAcessos={() => { setInviteOpen(false); setAba('acessos'); }} onClose={() => setInviteOpen(false)} reload={reload} flash={flash} />}
       <Toast>{toast}</Toast>
+      </>}
     </div>
   );
 }
 
-function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo: Cargo; onClose: () => void; onSaved: (m: string) => void }) {
-  const souDev = meuCargo === 'dev';
+function EditDrawer({ u, meuCargo, acessoV2, abrirAcessos, onClose, onSaved }: { u: PerfilRow; meuCargo: Cargo; acessoV2: boolean; abrirAcessos: () => void; onClose: () => void; onSaved: (m: string) => void }) {
+  const souDev = acessoV2 || meuCargo === 'dev';
   const inicial = useMemo(() => estadoDoPerfil(u), [u]);
   const niveis = useMemo(() => {
     const base = niveisBaseGrantaveis(cargosGrantaveis(meuCargo));
@@ -229,6 +242,7 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
   const [linking, setLinking] = useState(false);
   const [accessLink, setAccessLink] = useState('');
   const [linkErr, setLinkErr] = useState('');
+  const [erroSalvar, setErroSalvar] = useState('');
 
   async function gerarLink() {
     setLinking(true); setLinkErr(''); setAccessLink('');
@@ -242,10 +256,11 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
   }
 
   async function save() {
+    setErroSalvar('');
     setBusy(true);
-    const campos = perfilDoEstado({ base, areas, funcoes, lgpd }, { areas: u.areas, funcoes: u.funcoes });
-    const fields: Record<string, unknown> = {
-      cargo: campos.cargo, status, areas: campos.areas, funcoes: campos.funcoes, pode_ver_cpf_completo: campos.pode_ver_cpf_completo,
+    const campos = acessoV2 ? null : perfilDoEstado({ base, areas, funcoes, lgpd }, { areas: u.areas, funcoes: u.funcoes });
+    const fields: Record<string, unknown> = acessoV2 ? { status } : {
+      cargo: campos?.cargo, status, areas: campos?.areas, funcoes: campos?.funcoes, pode_ver_cpf_completo: campos?.pode_ver_cpf_completo,
     };
     if (souDev) { fields.nome = nome; fields.time = time; }
     const r = await fetchJson<{ ok?: boolean; error?: string }>('/api/admin/usuarios', {
@@ -253,7 +268,8 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
       body: JSON.stringify({ id: u.id, fields }),
     });
     setBusy(false);
-    onSaved(r.json?.ok ? 'Usuário atualizado!' : (r.json?.error || (r.status === 0 ? 'Sem conexão — tente novamente.' : 'Falhou.')));
+    if (r.json?.ok) onSaved('Usuário atualizado!');
+    else setErroSalvar(r.json?.error || (r.status === 0 ? 'Sem conexão. Tente novamente.' : 'Não foi possível salvar o perfil.'));
   }
 
   return (
@@ -270,11 +286,14 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
           </>
         )}
 
-        <CatalogoAcessos
+        {acessoV2 ? <div className="rounded-[var(--r-lg)] border border-[var(--border)] p-3 space-y-2">
+          <p className="text-sm text-[var(--fg-2)]">Vínculos de departamento e acesso a CPF são definidos na aba Departamentos e áreas.</p>
+          <Button variant="ghost" onClick={abrirAcessos} className="w-full">Gerenciar acessos</Button>
+        </div> : <CatalogoAcessos
           niveis={niveis} base={base} setBase={setBase}
           areas={areas} setAreas={setAreas} funcoes={funcoes} setFuncoes={setFuncoes}
           lgpd={lgpd} setLgpd={setLgpd}
-        />
+        />}
 
         <label className="block"><span className="text-xs text-[var(--fg-3)]">Status</span>
           <FilterSelect value={status} onChange={(e) => setStatus(e.target.value)} className="mt-1">
@@ -283,6 +302,7 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
         </label>
 
         <Button onClick={save} disabled={busy} className="w-full">{busy ? 'Salvando…' : 'Salvar'}</Button>
+        {erroSalvar && <p role="alert" className="text-sm text-[var(--red)]">{erroSalvar}</p>}
 
         <div className="pt-3 border-t border-[var(--border)] space-y-2">
           <p className="text-xs text-[var(--fg-3)]">Acesso: gere um link para a pessoa criar/redefinir a senha e entrar.</p>
@@ -298,7 +318,7 @@ function EditDrawer({ u, meuCargo, onClose, onSaved }: { u: PerfilRow; meuCargo:
   );
 }
 
-function InviteDrawer({ grantaveis, onClose, reload, flash }: { grantaveis: Cargo[]; onClose: () => void; reload: () => Promise<void>; flash: (m: string) => void }) {
+function InviteDrawer({ grantaveis, acessoV2, abrirAcessos, onClose, reload, flash }: { grantaveis: Cargo[]; acessoV2: boolean; abrirAcessos: () => void; onClose: () => void; reload: () => Promise<void>; flash: (m: string) => void }) {
   const niveis = useMemo(() => niveisBaseGrantaveis(grantaveis), [grantaveis]);
   const [email, setEmail] = useState('');
   const [nome, setNome] = useState('');
@@ -312,10 +332,10 @@ function InviteDrawer({ grantaveis, onClose, reload, flash }: { grantaveis: Carg
 
   async function invite() {
     setBusy(true); setErr('');
-    const campos = perfilDoEstado({ base, areas, funcoes, lgpd }, { areas: [], funcoes: [] });
+    const campos = acessoV2 ? null : perfilDoEstado({ base, areas, funcoes, lgpd }, { areas: [], funcoes: [] });
     const r = await fetchJson<{ ok?: boolean; error?: string; link?: string }>('/api/admin/usuarios', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, nome, cargo: campos.cargo, areas: campos.areas, funcoes: campos.funcoes, pode_ver_cpf_completo: campos.pode_ver_cpf_completo }),
+      body: JSON.stringify(acessoV2 ? { email, nome } : { email, nome, cargo: campos?.cargo, areas: campos?.areas, funcoes: campos?.funcoes, pode_ver_cpf_completo: campos?.pode_ver_cpf_completo }),
     });
     setBusy(false);
     if (r.json?.ok && r.json.link) {
@@ -334,17 +354,18 @@ function InviteDrawer({ grantaveis, onClose, reload, flash }: { grantaveis: Carg
           <>
             <div className="text-sm text-[var(--fg)]">{nome || email}</div>
             <CopyLinkBox link={link} />
+            {acessoV2 && <Button variant="ghost" onClick={abrirAcessos} className="w-full">Definir departamentos e capacidades</Button>}
             <Button variant="ghost" onClick={onClose} className="w-full">Concluir</Button>
           </>
         ) : (
           <>
             <label className="block"><span className="text-xs text-[var(--fg-3)]">E-mail</span><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1" /></label>
             <label className="block"><span className="text-xs text-[var(--fg-3)]">Nome</span><Input value={nome} onChange={(e) => setNome(e.target.value)} className="mt-1" /></label>
-            <CatalogoAcessos
+            {acessoV2 ? <p className="text-sm text-[var(--fg-2)]">Após criar o convite, defina os departamentos e as capacidades na aba Departamentos e áreas.</p> : <CatalogoAcessos
               niveis={niveis} base={base} setBase={setBase}
               areas={areas} setAreas={setAreas} funcoes={funcoes} setFuncoes={setFuncoes}
               lgpd={lgpd} setLgpd={setLgpd}
-            />
+            />}
             {err && <p className="text-sm text-[var(--red)]">{err}</p>}
             <Button onClick={invite} disabled={busy || !email} className="w-full">{busy ? 'Criando…' : 'Criar e gerar link'}</Button>
           </>

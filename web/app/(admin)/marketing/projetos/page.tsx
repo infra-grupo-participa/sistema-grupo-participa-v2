@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/shared/composition/server-container';
-import { podeVerDepartamento } from '@/shared/domain/departamentos';
+import { podeEditarArea, podeVerDepartamento } from '@/shared/domain/departamentos';
+import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { ProjetosPaginasClient } from '@/modules/marketing/projetos/ui/ProjetosPaginasClient';
 
 export const dynamic = 'force-dynamic';
@@ -12,6 +13,6 @@ export const dynamic = 'force-dynamic';
  */
 export default async function ProjetosPaginasPage() {
   const user = await getCurrentUser();
-  if (!podeVerDepartamento(user, 'marketing')) redirect('/');
-  return <ProjetosPaginasClient />;
+  if (!podeVerDepartamento(user, 'marketing', ACESSO_DEPARTAMENTOS)) redirect('/');
+  return <ProjetosPaginasClient canEditProjeto={podeEditarArea(user, 'marketing', 'trafego', ACESSO_DEPARTAMENTOS)} canEditPagina={podeEditarArea(user, 'marketing', 'web', ACESSO_DEPARTAMENTOS)} />;
 }

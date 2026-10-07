@@ -48,14 +48,14 @@ const DISPOSITIVOS = [{ k: 'mobile', l: 'Celular' }, { k: 'desktop', l: 'Computa
 
 const abaValida = (a: string | null): Aba => (ABAS.find((x) => x.k === a)?.k ?? 'visao') as Aba;
 
-export function WebClient() {
+export function WebClient({ canEdit = true }: { canEdit?: boolean }) {
   const [projetos, setProjetos] = useState<ProjetoWeb[] | null>(null);
   const [projeto, setProjeto] = useState<number | null>(null);
   const [paginas, setPaginas] = useState<PaginaWeb[]>([]);
   const [pagina, setPagina] = useState<number | null>(null);
   const [periodo, setPeriodo] = useState<Periodo>(() => ultimosDias(7));
   const busca = useSearchParams();
-  const [aba, setAba] = useState<Aba>(() => abaValida(busca.get('aba')));
+  const [aba, setAba] = useState<Aba>(() => { const inicial = abaValida(busca.get('aba')); return !canEdit && inicial === 'instalacao' ? 'visao' : inicial; });
   // o resultado guarda a "chave" do pedido (aba, projeto, período, página): carregando = a chave mudou e não chegou
   const [resultado, setResultado] = useState<{ chave: string; dados: Dados | null } | null>(null);
   const [falhouProjetos, setFalhouProjetos] = useState(false);
@@ -132,6 +132,7 @@ export function WebClient() {
   const base = useMemo(() => (typeof window === 'undefined' ? 'https://grupoparticipa.app.br' : window.location.origin), []);
 
   async function onLigar(id: number, ligada: boolean) {
+    if (!canEdit) return;
     setOcupado(true);
     const r = await ligarColeta(id, ligada);
     setOcupado(false);
@@ -223,7 +224,7 @@ export function WebClient() {
         {erroPeriodo && mostraFiltros && <p role="alert" className="mt-2 text-sm text-[var(--red)]">{erroPeriodo}</p>}
       </SectionCard>
 
-      <Tabs tabs={ABAS.map((a) => ({ k: a.k, l: a.l }))} active={aba} onChange={trocarAba} idBase="web" label="Telas da Web" />
+      <Tabs tabs={ABAS.filter((a) => canEdit || a.k !== 'instalacao').map((a) => ({ k: a.k, l: a.l }))} active={!canEdit && aba === 'instalacao' ? 'visao' : aba} onChange={trocarAba} idBase="web" label="Telas da Web" />
 
       {falhou && !carregando && (
         <p role="alert" className="text-sm text-[var(--red)]">
@@ -252,7 +253,7 @@ export function WebClient() {
           {dados.aba === 'leitura' && <PainelLeitura l={dados.v} />}
           {dados.aba === 'problemas' && <PainelProblemas p={dados.v} />}
           {dados.aba === 'formulario' && <PainelFormulario f={dados.v} />}
-          {dados.aba === 'instalacao' && <PainelInstalacao i={dados.v} base={base} onLigar={onLigar} ocupado={ocupado} />}
+          {canEdit && dados.aba === 'instalacao' && <PainelInstalacao i={dados.v} base={base} onLigar={onLigar} ocupado={ocupado} />}
         </div>
       )}
       <Toast>{toast}</Toast>

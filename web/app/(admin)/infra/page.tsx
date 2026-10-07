@@ -1,8 +1,7 @@
 import { departamento } from '@/shared/domain/departamentos';
-import { EmBreve } from '@/shared/ui/departamentos/EmBreve';
+import { CartaoModulo } from '@/shared/ui/departamentos/CartaoModulo';
 
-// Departamento ainda não construído (decisão do Victor, 05/10/2026). Ver docs/central-de-dados.md.
-export default function Page() {
+export default function InfraPage() {
   const d = departamento('infra');
-  return <EmBreve titulo={d.label} descricao={d.descricao} ico={d.ico} />;
+  return <div className="max-w-5xl"><div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Departamento</div><h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">{d.label}</h1><p className="mt-1 text-sm text-[var(--fg-2)]">Escolha a área.</p><div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{d.areas.map((a, i) => <CartaoModulo key={a.key} href={a.path} label={a.label} descricao={a.descricao} ico={a.ico} emBreve={a.status === 'em_breve'} indice={i} />)}</div></div>;
 }

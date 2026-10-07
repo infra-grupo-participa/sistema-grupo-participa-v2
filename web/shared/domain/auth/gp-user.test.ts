@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ehEmailDaEquipe } from './gp-user';
+import { acessoValido, ehEmailDaEquipe } from './gp-user';
 
 describe('ehEmailDaEquipe', () => {
   it('aceita o domínio da equipe, com ruído de caixa e espaço', () => {
@@ -18,5 +18,16 @@ describe('ehEmailDaEquipe', () => {
     expect(ehEmailDaEquipe('x@advmais.com.br')).toBe(false);
     expect(ehEmailDaEquipe('x@fakeadvmais.com')).toBe(false);
     expect(ehEmailDaEquipe('x@sub.advmais.com')).toBe(false);
+  });
+});
+
+describe('contrato gp_meu_acesso', () => {
+  it('aceita as listas do banco e preserva as chaves de edição', () => {
+    const acesso = acessoValido({ equipe: true, master: false, vinculos: [{ departamento: 'marketing', area: 'web', papel: 'membro' }], capacidades: [], ver: ['marketing'], editar: ['marketing/web'] });
+    expect(acesso?.editar).toEqual(['marketing/web']);
+  });
+  it('falha fechado quando faltar campo ou o tipo estiver errado', () => {
+    expect(acessoValido({ equipe: true, master: false, ver: ['marketing'], editar: [] })).toBeNull();
+    expect(acessoValido({ equipe: true, master: false, vinculos: [], capacidades: [], ver: ['marketing'], editar: [0] })).toBeNull();
   });
 });

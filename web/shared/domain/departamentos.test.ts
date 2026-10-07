@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { Cargo, GpUser } from './auth';
 import {
   BASE_MARKETING, DEPARTAMENTOS, MODULO_DEPARTAMENTO, acessoComercial, departamento, departamentoDaRota, ehDoComercial,
-  podeSolicitarEstrategia, podeVerDepartamento,
+  podeEditarArea, podeSolicitarEstrategia, podeVerDepartamento,
 } from './departamentos';
 
 const user = (cargo: Cargo, setores: string[] = []): GpUser =>
@@ -14,9 +14,12 @@ describe('departamentos: registro', () => {
   it('os 5 departamentos da decisão de 05/10/2026, nesta ordem', () => {
     expect(DEPARTAMENTOS.map((d) => d.label)).toEqual(['Educacional', 'Marketing', 'Comercial', 'Financeiro', 'Infra']);
   });
-  it('Financeiro e Infra estão "Em breve"; Educacional, Marketing e Comercial ativos', () => {
+  it('Financeiro está "Em breve"; os demais departamentos estão ativos', () => {
     const st = Object.fromEntries(DEPARTAMENTOS.map((d) => [d.key, d.status]));
-    expect(st).toEqual({ educacional: 'ativo', marketing: 'ativo', comercial: 'ativo', financeiro: 'em_breve', infra: 'em_breve' });
+    expect(st).toEqual({ educacional: 'ativo', marketing: 'ativo', comercial: 'ativo', financeiro: 'em_breve', infra: 'ativo' });
+  });
+  it('Infra tem a área Dados ativa', () => {
+    expect(departamento('infra').areas).toEqual([expect.objectContaining({ key: 'dados', path: '/infra/dados', status: 'ativo' })]);
   });
   it('Marketing tem as 5 áreas em /marketing/<area>: Web, Mensageria e Tráfego ativas, as outras "Em breve"', () => {
     const mkt = departamento('marketing');
@@ -123,6 +126,40 @@ describe('departamentos: base compartilhada do Marketing (20261005m)', () => {
     expect(BASE_MARKETING.map((b) => b.path)).toEqual(['/marketing/projetos']);
     expect(departamento('marketing').areas.some((a) => a.path === '/marketing/projetos')).toBe(false);
     expect(departamentoDaRota('/marketing/projetos')).toBe('marketing');
+  });
+});
+
+describe('acesso v2 por área e capacidade', () => {
+  const opcoes = { acessoV2: true };
+  const pessoa = (editar: string[], capacidades: string[] = [], ver = ['educacional', 'marketing', 'comercial', 'infra']): GpUser => ({
+    ...user('visualizador'), acesso: { equipe: true, master: false, vinculos: [], capacidades, ver, editar },
+  });
+  it('Web lê Tráfego mas só edita Web', () => {
+    const u = pessoa(['marketing/web']);
+    expect(podeVerDepartamento(u, 'marketing', opcoes)).toBe(true);
+    expect(podeEditarArea(u, 'marketing', 'web', opcoes)).toBe(true);
+    expect(podeEditarArea(u, 'marketing', 'trafego', opcoes)).toBe(false);
+  });
+  it('Financeiro exige capacidade, inclusive quando consta em ver', () => {
+    const u = pessoa([], [], ['financeiro']);
+    expect(podeVerDepartamento(u, 'financeiro', opcoes)).toBe(false);
+    expect(podeVerDepartamento(pessoa([], ['financeiro.ver'], ['financeiro']), 'financeiro', opcoes)).toBe(true);
+  });
+  it('acesso ausente falha fechado e flag desligada preserva admin legado', () => {
+    expect(podeVerDepartamento(user('admin'), 'marketing', opcoes)).toBe(false);
+    expect(podeEditarArea(user('admin'), 'marketing', 'trafego', opcoes)).toBe(false);
+    expect(podeEditarArea(user('admin'), 'marketing', 'trafego')).toBe(true);
+  });
+  it('Comercial leitor fica só em relatórios', () => {
+    expect(acessoComercial(pessoa([]), opcoes)).toBe('relatorios');
+    expect(acessoComercial(pessoa(['comercial']), opcoes)).toBe('completo');
+  });
+  it('responsável de departamento edita as áreas dele; master edita todas', () => {
+    expect(podeEditarArea(pessoa(['marketing']), 'marketing', 'trafego', opcoes)).toBe(true);
+    expect(podeEditarArea(pessoa(['marketing']), 'infra', 'dados', opcoes)).toBe(false);
+    const master = pessoa([]);
+    master.acesso = { ...master.acesso!, master: true };
+    expect(podeEditarArea(master, 'infra', 'dados', opcoes)).toBe(true);
   });
 });
 

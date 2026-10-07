@@ -22,6 +22,15 @@ export const env = {
       return required('SUPABASE_JWT_SECRET', process.env.SUPABASE_JWT_SECRET);
     },
   },
+  captura: {
+    /**
+     * Segredo do Bearer de POST /api/captura/lead (docs/captura-de-lead.md) — SÓ servidor, também no config.php da
+     * página que chama. Vazio ou com menos de 32 caracteres = a rota responde 503 (fail-closed).
+     */
+    get leadSecret() {
+      return process.env.CAPTURA_LEAD_SECRET ?? '';
+    },
+  },
   app: {
     environment: process.env.APP_ENV ?? 'development',
     allowedOrigins: (process.env.APP_ALLOWED_ORIGINS ?? '')
@@ -65,4 +74,5 @@ export const publicEnv = {
    * NEXT_PUBLIC_COMERCIAL_VENDEDORES=false volta a só admin/dev.
    */
   comercialVendedores: lerFlag(process.env.NEXT_PUBLIC_COMERCIAL_VENDEDORES, true),
+  acessoV2: lerFlag(process.env.NEXT_PUBLIC_ACESSO_V2),
 } as const;

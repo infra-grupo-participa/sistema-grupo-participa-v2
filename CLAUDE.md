@@ -167,6 +167,7 @@ Rotas antigas (`/sistema/alunos`, `/relatorios/placas|financeiro|remocoes`, `/de
 |---|---|---|
 | Públicas | `placa`, `placa/upload`, `cep`, `agenda/hold`, `agenda/confirm` | `bootstrapPublic` (origin/método) + rate limit + token UUID no cookie `gp_placa_session` |
 | Cron | `cron/interview-reminder`, `cron/placas-resumo` | Bearer `CRON_SECRET` |
+| Servidor a servidor | `captura/lead` (`docs/captura-de-lead.md`) | Bearer `CAPTURA_LEAD_SECRET` em tempo constante, 503 sem segredo (fail-closed), bloqueio por IP após 10 falhas, corpo até 8 KB, service_role só no servidor |
 | Autenticadas | `admin/usuarios`, `admin/placas/entrevista`, `email/status`, `depoimentos/*`, `sip/progresso` | `getCurrentUser()` + regra de permissão |
 | Diagnóstico | `health` | checagem própria |
 

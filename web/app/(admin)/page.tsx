@@ -41,7 +41,7 @@ export default async function HomePage() {
           <CartaoModulo
             key={d.key}
             // Quem só pede estratégia entra direto em /comercial/estrategias.
-            href={d.key === 'comercial' && acessoComercial(user, ACESSO_DEPARTAMENTOS) === 'estrategias' ? '/comercial/estrategias' : d.path}
+            href={d.key === 'comercial' && acessoComercial(user, ACESSO_DEPARTAMENTOS) === 'estrategias' ? '/comercial/estrategias' : d.key === 'comercial' && acessoComercial(user, ACESSO_DEPARTAMENTOS) === 'relatorios' ? '/comercial/relatorios' : d.path}
             label={d.label}
             descricao={d.descricao}
             ico={d.ico}

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/shared/composition/server-container';
-import { podeVerDepartamento } from '@/shared/domain/departamentos';
+import { podeEditarArea, podeVerDepartamento } from '@/shared/domain/departamentos';
+import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { hojeSP } from '@/modules/marketing/mensageria/domain/mensageria';
 import { MensageriaClient } from '@/modules/marketing/mensageria/ui/MensageriaClient';
 
@@ -14,6 +15,6 @@ export const dynamic = 'force-dynamic';
  */
 export default async function MensageriaPage() {
   const user = await getCurrentUser();
-  if (!user || !podeVerDepartamento(user, 'marketing')) redirect('/');
-  return <MensageriaClient hoje={hojeSP()} nomeUsuario={user.nome} />;
+  if (!user || !podeVerDepartamento(user, 'marketing', ACESSO_DEPARTAMENTOS)) redirect('/');
+  return <MensageriaClient hoje={hojeSP()} nomeUsuario={user.nome} canEdit={podeEditarArea(user, 'marketing', 'mensageria', ACESSO_DEPARTAMENTOS)} />;
 }

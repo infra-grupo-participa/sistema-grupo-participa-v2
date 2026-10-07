@@ -8,7 +8,7 @@ import { podeVerFinanceiro } from '@/modules/financeiro/domain/acesso';
 import { podeVerRemocao } from '@/modules/remocao-acessos/domain/acesso';
 import { podePedirAlteracao } from '@/modules/alunos/domain/pedidos-alteracao';
 import { REPORTS, SYSTEM_NAV, type ReportGroup } from '@/shared/ui/nav/config';
-import { BASE_MARKETING, DEPARTAMENTOS, acessoComercial, departamento, departamentoDaRota, podeVerDepartamento } from '@/shared/domain/departamentos';
+import { BASE_MARKETING, DEPARTAMENTOS, acessoComercial, departamento, departamentoDaRota, podeEditarArea, podeVerDepartamento, temCapacidade } from '@/shared/domain/departamentos';
 import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { Icon } from '@/shared/ui/icons';
 import { chaveHashPadrao, itemHashAtivo } from './item-ativo';
@@ -30,8 +30,9 @@ function normalize(p: string): string {
 
 export function Sidebar({ user }: { user: GpUser }) {
   const pathname = usePathname();
-  const isAdmin = ehAdminOuAcima(user);
-  const isDev = ehDev(user);
+  const isAdmin = ACESSO_DEPARTAMENTOS.acessoV2 ? user.acesso?.master === true : ehAdminOuAcima(user);
+  const isEducEditor = ACESSO_DEPARTAMENTOS.acessoV2 && podeEditarArea(user, 'educacional', null, ACESSO_DEPARTAMENTOS);
+  const isDev = ACESSO_DEPARTAMENTOS.acessoV2 ? user.acesso?.master === true && ehDev(user) : ehDev(user);
 
   // Estado de colapso dos grupos e subgrupos (persistido).
   const [groups, setGroups] = useState<Record<string, boolean>>({});
@@ -90,27 +91,28 @@ export function Sidebar({ user }: { user: GpUser }) {
   const depAtual = departamentoDaRota(cur);
   // Victor, 05/10/2026: fora de departamento (Início, Usuários, Configurações) não mostra menu de departamento nenhum.
   const mostraEducacional = depAtual === 'educacional';
-  const mostraMarketing = depAtual === 'marketing' && podeVerDepartamento(user, 'marketing');
+  const mostraMarketing = depAtual === 'marketing' && podeVerDepartamento(user, 'marketing', ACESSO_DEPARTAMENTOS);
   // Comercial: CRM inteiro, ou só Estratégias para quem pede estratégia sem ser do Comercial (mesma regra do layout).
   const acessoCom = acessoComercial(user, ACESSO_DEPARTAMENTOS);
   const mostraComercial = depAtual === 'comercial' && !!acessoCom;
   const areasComercial = acessoCom === 'completo'
     ? departamento('comercial').areas
-    : departamento('comercial').areas.filter((a) => a.key === 'estrategias');
+    : departamento('comercial').areas.filter((a) => a.key === (acessoCom === 'relatorios' ? 'relatorios' : 'estrategias'));
 
   // O grupo aparece se o cargo permite E o usuário tem o setor.
   // Financeiro tem regra própria (visualizador NÃO vê dinheiro) — espelha
   // gp_pode_ver_financeiro() no banco, senão a tela abriria vazia.
   const podeVerGrupo = (g: ReportGroup) => {
-    if (g.setor === 'financeiro') return podeVerFinanceiro(user);
+    if (g.setor === 'financeiro') return ACESSO_DEPARTAMENTOS.acessoV2 ? temCapacidade(user, 'financeiro.ver', ACESSO_DEPARTAMENTOS) : podeVerFinanceiro(user);
     if (g.setor === 'remocao_acessos') return podeVerRemocao(user);
     if (g.setor === 'pedidos_alteracao') return podePedirAlteracao(user);
+    if (ACESSO_DEPARTAMENTOS.acessoV2 && g.setor === 'depoimentos') return podeVerDepartamento(user, 'educacional', ACESSO_DEPARTAMENTOS);
     // Base de Alunos: mesma regra da página (admin+ ou módulo Centro de Controle);
     // visualizador global fica de fora (dado sensível).
     if (g.setor === 'centro_controle') {
-      return isAdmin || ((user?.cargo === 'gestor' || user?.cargo === 'operador') && (user?.setores || []).includes('centro_controle'));
+      return ACESSO_DEPARTAMENTOS.acessoV2 ? podeEditarArea(user, 'educacional', null, ACESSO_DEPARTAMENTOS) : isAdmin || ((user?.cargo === 'gestor' || user?.cargo === 'operador') && (user?.setores || []).includes('centro_controle'));
     }
-    if (g.adminOnly && !isAdmin) return false;
+    if (g.adminOnly && !isAdmin && !(isEducEditor && g.setor === 'centro_controle')) return false;
     return podeVer(user, g.setor);
   };
 
@@ -225,7 +227,7 @@ export function Sidebar({ user }: { user: GpUser }) {
         {REPORTS.filter(podeVerGrupo).map((group) => {
           const onGroup = normalize(group.path) === cur;
           const open = reports[group.key] ?? onGroup;
-          const children = group.children.filter((c) => !c.adminOnly || isAdmin);
+          const children = group.children.filter((c) => !c.adminOnly || isAdmin || (ACESSO_DEPARTAMENTOS.acessoV2 && group.setor === 'depoimentos') || (isEducEditor && group.setor === 'placas'));
           return (
             <div key={group.key}>
               <div className={itemCls(onGroup)}>

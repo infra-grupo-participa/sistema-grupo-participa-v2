@@ -15,6 +15,6 @@ export default async function Page() {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
   const acesso = acessoComercial(user, ACESSO_DEPARTAMENTOS);
-  if (!acesso) redirect('/');
+  if (!acesso || acesso === 'relatorios') redirect('/');
   return <EstrategiasClient doComercial={acesso === 'completo'} podeSolicitar={podeSolicitarEstrategia(user)} />;
 }
