@@ -1,8 +1,10 @@
 -- 20261007t: níveis de acesso, fase 2 (rebaixar). Quem não é master deixa de ser admin/dev e passa a valer só pelos
 -- vínculos e capacidades de acesso.*, com os ajustes que o Victor Hugo decidiu sobre o relatório (07/10/2026).
 --
--- STATUS: NÃO APLICADA. Fase 2 aprovada pelo Victor Hugo (07/10/2026, ajustes abaixo, versão 3) e pelo pentester;
---   só aplicar quando o Maestro mandar. Relatório: .maestri/entregas/niveis-de-acesso/ensaio-fase2.md (cérebro);
+-- STATUS: APLICADA em produção em 07/10/2026 às 18:29:30 UTC, versão 20261007182928 (nome acesso_fase2_rebaixar, era
+--   20261007t), com o ok do Victor Hugo e do pentester, pelo aplica_sql.py aplicar + insert em
+--   supabase_migrations.schema_migrations na mesma transação. md5 gravado = c5284752bed86ee1bd9a4e4eae0da876 = este
+--   arquivo antes desta troca de STATUS (commit 0b85fd5). Rollback pronto e ensaiado: 20261007182928.explain.md §5. Relatório: .maestri/entregas/niveis-de-acesso/ensaio-fase2.md (cérebro);
 --   resumo em 20261007t.explain.md. Ensaio: 20261007t_ensaio.sql (rollback).
 --
 -- POR QUE
