@@ -186,7 +186,7 @@ const MODULOS: SecaoAjuda[] = [
     icone: 'kanban',
     resumo: 'O quadro de negócios por etapa, um funil por vez. Arraste o card para mover.',
     telas: [TELAS.funil],
-    sinonimos: ['kanban', 'pipeline', 'pipe', 'quadro', 'etapa', 'mover', 'arrastar', 'card', 'novo negócio', 'projeto', 'agrupador'],
+    sinonimos: ['kanban', 'pipeline', 'pipe', 'quadro', 'etapa', 'mover', 'arrastar', 'card', 'novo negócio', 'projeto', 'agrupador', 'atm', 'aula ao vivo', 'live'],
     paraQue: [
       'Mostra cada negócio na etapa em que está, do primeiro contato ao fechado. Cada produto tem seus funis, reunidos num **agrupador**.',
       'Funil **manual** é onde o comercial trabalha (a "Venda ativa"). Funil **automático** é preenchido pela Hotmart (carrinho abandonado, cartão recusado e outros); nele não se cria negócio à mão.',
@@ -231,7 +231,8 @@ const MODULOS: SecaoAjuda[] = [
     soGestor: [
       '**Novo funil:** assistente em 6 passos (ponto de partida, geral, etapas, campanhas e integrações, distribuição e revisão). Dá para partir de um modelo ou do zero.',
       '**Editar funil** (engrenagem): nome, etapas, prazos, campos obrigatórios, campanhas e distribuição própria. Também arquiva o funil.',
-      '**Comecei um novo projeto:** escolha o tipo (lançamento, webinar, seminário, evento, ascensão), dê o nome e o sistema cria de uma vez os funis certos, com a chave do projeto nas campanhas.',
+      '**Comecei um novo projeto:** escolha o tipo (lançamento, webinar, seminário, evento, ascensão, ATM), dê o nome e o sistema cria de uma vez os funis certos, com a chave do projeto nas campanhas.',
+      '**ATM (aula ao vivo de entrada):** uma live sobre a base que já existe, sem captação paga, para o HT ou para o Seminário ATM (Sessão de Viabilidade): escolha o produto. Cria a **Ativação comercial (pré-checkout)**: lista recebida, contato feito (recebeu e assistiu ao caso), convidado para a live, presença confirmada, ofertado no fechamento, aguardar pagamento e fechado. E o **Fechamento da live**, automático pela Hotmart, porque a condição vale só até 23h59 do dia.',
       'Regras ao salvar: pelo menos 2 etapas, nomes sem repetir, uma etapa de ganho e ela por último, prazo crítico maior que o de atenção, distribuição própria somando 100%.',
       'Etapa com negócio aberto não pode ser removida. Funil com negócio aberto não pode ser arquivado.',
     ],

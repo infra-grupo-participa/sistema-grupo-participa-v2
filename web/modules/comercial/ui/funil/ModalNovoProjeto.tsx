@@ -5,8 +5,8 @@
 import { useMemo, useState } from 'react';
 import { Button, FilterSelect, Input, Modal } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
-import { PRODUTOS } from '../../domain/catalogo';
-import { chaveProjeto, funisDoProjeto, MODELOS_FUNIL, MODELOS_PROJETO } from '../../domain/modelos';
+import { produto as produtoDe, PRODUTOS } from '../../domain/catalogo';
+import { chaveProjeto, funisDoProjeto, MODELOS_FUNIL, MODELOS_PROJETO, produtoDoTipo } from '../../domain/modelos';
 import type { Agrupador, ProdutoKey, TipoProjeto } from '../../domain/types';
 import { Campo } from '../comum';
 import { avisarMudanca, repo } from '../repositorio';
@@ -62,12 +62,17 @@ export function ModalNovoProjeto({ agrupadores, agrupadorInicial, onClose, onCri
     onCriado(r.funilIds, r.msg ?? `${r.funilIds.length} funis criados.`);
   };
 
+  const escolherTipo = (t: TipoProjeto) => {
+    setTipo(t);
+    setProduto((p) => produtoDoTipo(t, p));
+  };
+
   const onKeyDownTipo = (ev: React.KeyboardEvent, i: number) => {
     const d = ev.key === 'ArrowRight' || ev.key === 'ArrowDown' ? 1 : ev.key === 'ArrowLeft' || ev.key === 'ArrowUp' ? -1 : 0;
     if (!d) return;
     ev.preventDefault();
     const j = (i + d + MODELOS_PROJETO.length) % MODELOS_PROJETO.length;
-    setTipo(MODELOS_PROJETO[j].tipo);
+    escolherTipo(MODELOS_PROJETO[j].tipo);
     (ev.currentTarget.parentElement?.children[j] as HTMLElement | undefined)?.focus();
   };
 
@@ -95,7 +100,7 @@ export function ModalNovoProjeto({ agrupadores, agrupadorInicial, onClose, onCri
               const nomesFunis = m.funis.map((id) => MODELOS_FUNIL.find((x) => x.id === id)?.nome ?? id).join(', ');
               return (
                 <button key={m.tipo} type="button" role="radio" aria-checked={sel} tabIndex={sel ? 0 : -1}
-                  onClick={() => setTipo(m.tipo)} onKeyDown={(ev) => onKeyDownTipo(ev, i)}
+                  onClick={() => escolherTipo(m.tipo)} onKeyDown={(ev) => onKeyDownTipo(ev, i)}
                   className={`text-left rounded-[var(--r-lg)] border p-3 transition-colors ${sel ? 'border-[var(--border-accent)] bg-[var(--surface-4)]' : 'border-[var(--border)] bg-[var(--surface-1)] hover:bg-[var(--surface-3)]'}`}>
                   <div className="flex items-center gap-2">
                     <Icon name={m.icone} size={16} className={sel ? 'text-[var(--fg)]' : 'text-[var(--fg-3)]'} />
@@ -131,7 +136,7 @@ export function ModalNovoProjeto({ agrupadores, agrupadorInicial, onClose, onCri
               </div>
             </Campo>
           )}
-          <Campo rotulo="Produto">
+          <Campo rotulo="Produto" dica={modelo.produtosSugeridos?.length ? `Serve a: ${modelo.produtosSugeridos.map((k) => produtoDe(k).nome).join(' ou ')}` : undefined}>
             <FilterSelect value={produto} onChange={(e) => setProduto(e.target.value as ProdutoKey)}>
               {PRODUTOS.map((p) => <option key={p.key} value={p.key}>{p.nome} · escada {p.escada}</option>)}
             </FilterSelect>

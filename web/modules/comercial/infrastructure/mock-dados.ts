@@ -3,6 +3,7 @@
 // Gerador determinístico: a mesma semente produz a mesma base em toda carga.
 import { MOTIVOS_PADRAO } from '../domain/catalogo';
 import { etapasPadrao } from '../domain/funis';
+import { funisDoProjeto } from '../domain/modelos';
 import { calcularScore, faixaDoScore } from '../domain/regras';
 import type {
   Agrupador, Atividade, ConfigComercial, EtapaFunil, Funil, MotivoPerdaConfig, PainelPessoa, PontoJornada,
@@ -164,6 +165,11 @@ function montarFunis(agoraIso: string): Funil[] {
       distribuicao: [{ vendedorId: 'v-jonathan', percentual: 40 }, { vendedorId: 'v-marcos', percentual: 60 }],
       ativo: true, criadoEm: agoraIso,
     },
+    // Projeto ATM (aula ao vivo de entrada) do HT, criado por "Comecei um novo projeto". Fica depois dos funis
+    // fixos do HT: o encaixe dos negócios de exemplo continua indo para Venda ativa e Checkout.
+    ...funisDoProjeto('atm', 'ATM HT out26', AGRUPADORES[1], 'ht').map((f, i) => ({
+      ...f, id: `f-atm-ht-${i + 1}`, criadoEm: agoraIso, campanhas: f.campanhas.map((c) => ({ ...c, criadoEm: agoraIso })),
+    })),
   ];
 }
 

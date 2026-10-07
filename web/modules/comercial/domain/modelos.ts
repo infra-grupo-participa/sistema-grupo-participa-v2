@@ -134,6 +134,47 @@ export const MODELOS_FUNIL: ModeloFunil[] = [
     ],
     campanhas: [{ nome: 'Ascensão {chave}', canal: 'manual', regra: 'Lista de alunos indicada pela Educação', ativa: true }],
   },
+  {
+    id: 'atm_ativacao', nome: 'Ativação comercial (pré-checkout)', icone: 'phone', tipo: 'manual', eventosHotmart: [],
+    descricao: 'Régua de pré-checkout do ATM: quem foi ao checkout em eventos anteriores e não comprou recebe a API do caso; o comercial liga (recebeu? assistiu?) e convida para a live.',
+    etapas: [
+      e('Lista recebida', 'primeiro_contato', 'neutral', D, 2 * D, 'Ligação feita: recebeu a API do caso?'),
+      e('Contato feito', 'qualificar', 'info', D, 2 * D, 'Recebeu e assistiu ao caso; convite para a live feito', QUALI),
+      e('Convidado para a live', 'qualificar', 'cyan', D, 2 * D, 'Confirmou que vai à live'),
+      e('Presença confirmada', 'apresentar_oferta', 'purple', null, null, 'Esteve na live e ouviu a oferta'),
+      e('Ofertado no fechamento', 'negociar', 'accent', 2 * H, 6 * H, 'Escolheu a forma de pagamento até 23h59 do dia da live'),
+      e('Aguardar pagamento', 'aguardar_pagamento', 'yellow', D, 2 * D, 'Pagamento aprovado', ['forma_pagamento']),
+      e('Fechado na live', 'fechado', 'green', null, null),
+    ],
+    campanhas: [
+      { nome: 'API do caso {chave}', canal: 'disparo', regra: 'Pré-checkout de {chave}: foi ao checkout em eventos anteriores, não comprou e recebeu a API com o estudo de caso', ativa: true },
+      { nome: 'Base antiga {chave}', canal: 'disparo', regra: 'Reativação da base antiga (e-mail e grupos antigos) para a live de {chave}, sem quem reagiu ao último ATM', ativa: true },
+      { nome: 'Grupo {chave}', canal: 'formulario', regra: 'Inscrito no formulário de {chave} que entrou no grupo de WhatsApp da live', ativa: true },
+    ],
+  },
+  {
+    id: 'atm_fechamento', nome: 'Fechamento da live', icone: 'hourglass', tipo: 'hotmart',
+    eventosHotmart: ['carrinho_abandonado', 'cartao_recusado', 'compra_em_aberto'],
+    descricao: 'Nasce sozinho da Hotmart: checkout da oferta da live. A condição especial vale até 23h59 do mesmo dia, então a ligação é na hora.',
+    etapas: [
+      e('Ligar agora (vale até 23h59)', 'primeiro_contato', 'red', 5, 15, 'Atendeu ou respondeu'),
+      e('Em conversa', 'qualificar', 'cyan', 30, 2 * H, 'Entendeu o que travou'),
+      e('Link da condição enviado', 'negociar', 'accent', H, 3 * H, 'Escolheu a forma de pagamento antes das 23h59'),
+      e('Aguardar pagamento', 'aguardar_pagamento', 'yellow', 12 * H, D, 'Pagamento aprovado', ['forma_pagamento']),
+      e('Recuperado', 'fechado', 'green', null, null),
+    ],
+    campanhas: [{ nome: 'Oferta da live {chave}', canal: 'hotmart', regra: 'Checkout da oferta da live de {chave}: condição especial com escassez até 23h59 do dia da live', ativa: true }],
+  },
+];
+
+/** Boas práticas do ATM (gp-operacoes: projetos/2026-09-seminario-atm e a decisão de 09/09/2026 da cadência de 15 dias). */
+export const CHECKLIST_ATM = [
+  'Replay e treplay são internos: não divulgar o replay para a base',
+  'Excluir da lista quem reagiu ao último ATM',
+  'Não colidir com o Seminário: ATM e Seminário a cada 15 dias, alternando semana a semana',
+  'Ligações do comercial para a lista de pré-checkout a partir de D-5',
+  'Oferta, condição especial e escassez (até 23h59 do dia) prontas antes da live',
+  'Teto de 30 a 50 conversas novas por dia por número na Meta',
 ];
 
 export const MODELOS_PROJETO: ModeloProjeto[] = [
@@ -187,6 +228,13 @@ export const MODELOS_PROJETO: ModeloProjeto[] = [
     funis: ['ascensao'],
     checklist: ['Dono definido com a Educação (Isabela) antes de abordar', 'Faturamento declarado conferido'],
   },
+  {
+    tipo: 'atm', nome: 'ATM (aula ao vivo de entrada)', icone: 'mic',
+    descricao: 'Uma live sobre a base que já existe, sem captação paga; fechamento na própria live.',
+    funis: ['atm_ativacao', 'atm_fechamento'],
+    produtosSugeridos: ['ht', 'sv'],
+    checklist: CHECKLIST_ATM,
+  },
 ];
 
 export function modeloFunil(id: string): ModeloFunil | undefined {
@@ -219,4 +267,10 @@ export function funisDoProjeto(tipo: TipoProjeto, nomeProjeto: string, agrupador
     .map((id) => modeloFunil(id))
     .filter((m): m is ModeloFunil => !!m)
     .map((m, i) => funilDoModelo(m, { nome: `${nomeProjeto} · ${m.nome}`, agrupadorId: agrupador.id, produto, chave, prefixoId: `${chave}-${i + 1}` }));
+}
+
+/** Produto ao trocar o tipo: mantém o atual se o tipo serve a ele; senão, o primeiro sugerido (ex.: ATM → HT ou SV). */
+export function produtoDoTipo(tipo: TipoProjeto, atual: ProdutoKey): ProdutoKey {
+  const sug = MODELOS_PROJETO.find((x) => x.tipo === tipo)?.produtosSugeridos;
+  return !sug?.length || sug.includes(atual) ? atual : sug[0];
 }

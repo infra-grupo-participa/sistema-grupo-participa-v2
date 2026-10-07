@@ -570,7 +570,7 @@ export interface PontoJornada {
 // ── Modelos de funil e projetos ──
 
 export type TipoProjeto =
-  | 'lancamento_classico' | 'lancamento_meteorico' | 'webinar_perpetuo' | 'seminario' | 'evento_presencial' | 'ascensao_aluno';
+  | 'lancamento_classico' | 'lancamento_meteorico' | 'webinar_perpetuo' | 'seminario' | 'evento_presencial' | 'ascensao_aluno' | 'atm';
 
 export interface ModeloFunil {
   id: string;
@@ -593,6 +593,8 @@ export interface ModeloProjeto {
   funis: string[];
   /** Boas práticas para o começo do projeto. */
   checklist: string[];
+  /** Produtos a que o tipo serve (o assistente sugere o primeiro; qualquer produto continua escolhível). Só no front. */
+  produtosSugeridos?: ProdutoKey[];
 }
 
 // ── Painel personalizável (por pessoa) ──
