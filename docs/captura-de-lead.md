@@ -1,7 +1,11 @@
 # Captura de lead servidor a servidor (`POST /api/captura/lead`)
 
-**Situação (07/10/2026): NÃO PUBLICADO e migration NÃO APLICADA.** O código está na branch `victor-captura-pre-checkout`
-(não está na `main`). A migration `20261007i` existe só como arquivo. Aceite do Arthur dado em 07/10 (verbal, informado pelo Victor); falta rodar o ensaio e aplicar.
+**Situação (07/10/2026, fim do dia): rota NÃO PUBLICADA; as quatro migrations de Miami APLICADAS em produção.** O
+código está na branch `victor-captura-pre-checkout` (não está na `main`). Aceite do Arthur dado em 07/10 (verbal,
+informado pelo Victor). Migrations aplicadas em 07/10/2026 com autorização do Victor, depois do ensaio final da sequência
+2× com rollback (0 erro): `20261007152702_pessoas_pre_checkout` (era i), `20261007152751_crm_regra_lista_614_clinica_miami`
+(era j), `20261007152825_mkt_projeto_clinica_miami` (era k, CNFMIAMI26) e `20261007152903_mkt_projeto_encontro_diamantes_miami`
+(era l, EDIMIAMI26). Prova pós-aplicação em `infra/supabase/migrations/20261007152903.explain.md` §6.
 
 ## O que é e por quê
 
@@ -77,7 +81,7 @@ enviado, nunca a resposta inteira). Planilha e ActiveCampaign seguem gravando in
 ## O que a base guarda
 
 `pessoas.registrar(p, 'formulario')`: cria ou acha a pessoa por e-mail ou telefone e grava um evento do `tipo` pedido.
-Depois da migration `20261007i`, o detalhe do evento guarda `chave_evento`, `sck`, `xcod` e `pagina`. Antes dela:
+Com a migration `20261007152702` (aplicada em 07/10), o detalhe do evento guarda `chave_evento`, `sck`, `xcod` e `pagina`. Antes dela:
 `tipo: pre_checkout` recebe 400 ("Evento inválido…") e `tipo: lead` grava, mas sem esses quatro campos.
 O projeto do evento fica vazio: a função só liga projeto pela sigla de `mkt.projetos` (ex.: `PB26`), e a chave
 `clinica-miami-2026-12` não é sigla. Pré-checkout não conta como lead no Tráfego nem aparece na jornada do CRM.
@@ -89,9 +93,76 @@ O projeto do evento fica vazio: a função só liga projeto pela sigla de `mkt.p
 - Local com banco: atenção, o `.env.local` aponta para o Supabase de **produção**. Só com `"teste": true`, e-mail
   `@exemplo.invalid`, e conferindo o **conteúdo** da resposta e o evento gravado, não só o HTTP 200.
 
+## Os dois projetos de Miami (decisões do Victor Hugo, 07/10/2026)
+
+São dois eventos, cada um com cadastro próprio em `mkt.projetos` (`gp-operacoes/projetos/calendario.md`, bloco de 07/10):
+
+| | Clínica Internacional de Holding Familiar | Encontro Internacional dos Diamantes |
+|---|---|---|
+| Chave / etiqueta | `clinica-miami-2026-12` | `miami-2026-12` |
+| Datas | 03 e 04/12/2026, Miami | 01 e 02/12/2026, Miami |
+| Público | paga, aberta a todo o time (Diamantes já participam sem comprar) | gratuito, só Diamantes |
+| Sigla | **`CNFMIAMI26`** (CNF, não CHF: o calendário dizia "CHF"; decisão do Victor) | **`EDIMIAMI26`** (dada pelo Victor em 07/10) |
+| Migration (aplicada) | `20261007152825` (era k) | `20261007152903` (era l) |
+| Lista do ActiveCampaign | 614 "Clínica Internacional Diamante Dez/26" (`20261007152751`, era j) | nenhuma |
+
+**Risco do Encontro (resolvido):** a regra 42 (lista 614) era a única coisa que mantinha `miami-2026-12` como chave
+conhecida no CRM. A j tirou essa chave dela e a l a cadastrou em `mkt.projetos`. Aplicadas em sequência, a chave ficou
+cerca de 1 minuto sem resolver (15:27:51 a 15:29:03 UTC), com 0 contatos nela. Hoje as duas chaves são conhecidas.
+
+## Como aplicar (i, j, k, l)
+
+Caminho: `Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py aplicar`, que manda o arquivo pela Management API
+do Supabase dentro de `begin … commit` (tudo ou nada). **Diferença para o MCP:** o `apply_migration` do MCP grava a linha
+em `supabase_migrations.schema_migrations`; este caminho **não grava**. Sem a linha, um `db push` futuro tentaria
+reaplicar. Por isso o comando abaixo junta, no mesmo arquivo temporário (mesma transação), a migration e o insert:
+
+```sql
+insert into supabase_migrations.schema_migrations (version, name, statements)
+values ('<AAAAMMDDHHMMSS UTC na hora de aplicar>', '<nome sem a versão>', array[$mig$<texto inteiro do arquivo>$mig$]);
+```
+
+Formato conferido no banco em 07/10/2026 (só leitura): colunas `version text`, `statements text[]`, `name text`,
+`created_by text`, `idempotency_key text`, `rollback text[]`. As linhas do MCP têm `version` = relógio UTC de 14 dígitos,
+`name` = nome do arquivo sem a versão (ex.: `20261007150847` `crm_estrategias_opcoes`), **1 statement** com o arquivo
+inteiro (md5 do statement = md5 do arquivo), `created_by` com o e-mail da conta do MCP, `idempotency_key` e `rollback`
+nulos. As duas aplicadas antes pela Management API (`20261005230000`, `20261006012500`) têm `created_by` nulo: o insert
+segue esse precedente e deixa `created_by` nulo (não põe nome de ninguém). A versão sai do relógio na hora, então fica
+depois da última gravada (`20261007150847` em 07/10).
+
+Prova feita (07/10/2026, produção, rollback): i, j e k + o insert acima, com versões fictícias `2099…`, numa transação
+desfeita: md5 de `statements[1]` igual ao md5 de cada arquivo (`2c444427…`, `3dbef8f5…`, `cacd1422…`), 0 linhas `2099%`
+depois.
+
+**Como foi aplicado (07/10/2026).** Uma por vez, na ordem i, j, k, l, conferindo cada uma antes da próxima, com o
+comando abaixo (o mesmo serve para qualquer migration aplicada por este caminho; numa linha só, com `!` no prompt do
+Claude Code se for o Victor):
+
+```sh
+cd "/Users/victorhugo/Documents/2° cérebro/sistema-grupo-participa-v2/infra/supabase/migrations" && A="/Users/victorhugo/Documents/2° cérebro/Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py" && f=<arquivo.sql> && n=<nome sem a versão> && v=$(date -u +%Y%m%d%H%M%S) && t=$(mktemp) && { cat "$f"; printf "\ninsert into supabase_migrations.schema_migrations (version, name, statements) values ('%s', '%s', array[\$mig\$" "$v" "$n"; cat "$f"; printf '$mig$]);\n'; } > "$t" && out=$(python3 "$A" aplicar "$t"); rm -f "$t"; echo "$f -> $v: $out"
+```
+
+Sucesso = `[]` (visto nas quatro). `ERRO` na saída = nada daquela migration gravou, nem a linha em `schema_migrations`.
+Depois: conferir com `python3 "$A" consulta "select version, name, md5(statements[1]) from supabase_migrations.schema_migrations where name = '<nome>'"`
+(o md5 tem de bater com `md5 -q <arquivo>`), renomear o trio (`.sql`, `_ensaio.sql`, `.explain.md`) para a versão
+gravada e trocar o STATUS para APLICADA (manual de banco §3). Arquivo com letra (`20261007i_…`) não segue o padrão
+`<dígitos>_nome.sql` do CLI do Supabase, que o ignora; é o nome com a versão que faz o `db push` reconhecer a migration
+como já aplicada.
+
+| Era | Versão gravada | Nome | md5 do statement = md5 do arquivo aplicado |
+|---|---|---|---|
+| 20261007i | `20261007152702` | `pessoas_pre_checkout` | `2c4444270de3d507a438c22aa20b2106` |
+| 20261007j | `20261007152751` | `crm_regra_lista_614_clinica_miami` | `3dbef8f5dd2b33b0ed5e5d1943eb80f1` |
+| 20261007k | `20261007152825` | `mkt_projeto_clinica_miami` | `cacd142226c57ee7308879a24d7a3fc0` |
+| 20261007l | `20261007152903` | `mkt_projeto_encontro_diamantes_miami` | `13e86c8ce7769a3adf8f065acbff799e` |
+
+Prova pós-aplicação (só leitura): CHECK de `pessoas.eventos` com `pre_checkout`; md5 de `pessoas.registrar` =
+`8f77b9fc…`; ACL intacta; regra 42 em `clinica-miami-2026-12`; `mkt.projetos` com EDIMIAMI26 (`miami-2026-12`,
+01 a 02/12) e CNFMIAMI26 (`clinica-miami-2026-12`, 03 a 04/12); `crm.projeto_conhecido` verdadeiro para as duas chaves.
+
 ## O que falta
 
-1. ~~Aceite do Arthur~~ (dado em 07/10). Aplicação da migration `20261007i` (ensaio antes; ver `20261007i.explain.md`).
+1. ~~Aceite do Arthur~~ (dado em 07/10). ~~Ensaio~~ (07/10). ~~Aplicar as quatro migrations~~ (07/10, seção "Como aplicar").
 2. ~~Revisão do pentester na rota~~ (aprovada em 07/10, com as condições A1, A2 e B1 antes do segredo).
    - **B1 cumprida (07/10, nesta branch):** limite de chamadas autorizadas por IP baixou de 120 para 20 por minuto
      (`AUTORIZADAS_MAX_MIN` em `web/app/api/captura/lead/route.ts`), com teste da 21ª chamada em `route.test.ts`.
@@ -101,8 +172,12 @@ O projeto do evento fica vazio: a função só liga projeto pela sigla de `mkt.p
 3. `CAPTURA_LEAD_SECRET` na Hostinger e no `config.php` da página.
 4. Merge na `main` (publica).
 5. Edição do `submit.php` via FTP, na regra acima.
-6. Sigla da Clínica em `mkt.projetos` (para o evento ganhar projeto) e decidir se pré-checkout conta em algum painel.
-7. Conferir a regra da lista 614 do ActiveCampaign na catalogação do CRM (`20261007141044`): ela leva "Clínica
-   Internacional Diamante Dez/26" para `miami-2026-12`, e a Clínica é `clinica-miami-2026-12`.
-   Correção escrita na migration `20261007j_crm_regra_lista_614_clinica_miami` (decisão do Victor, 07/10): **NÃO
-   APLICADA**, ensaio não rodado; ver `infra/supabase/migrations/20261007j.explain.md`.
+6. Sigla da Clínica em `mkt.projetos`: migration `20261007152825` (CNFMIAMI26, APLICADA em 07/10). **Atenção:** mesmo
+   com a linha, o evento continua sem `projeto_id`, porque `pessoas.registrar` acha o projeto pela sigla
+   (`projeto`) e a rota manda só `chave_evento` (que fica no detalhe). Ligar ao projeto é pedido à parte. Falta
+   também decidir se pré-checkout conta em algum painel.
+7. ~~Conferir a regra da lista 614 do ActiveCampaign na catalogação do CRM (`20261007141044`): ela leva "Clínica
+   Internacional Diamante Dez/26" para `miami-2026-12`, e a Clínica é `clinica-miami-2026-12`.~~
+   Corrigida pela migration `20261007152751_crm_regra_lista_614_clinica_miami` (decisão do Victor, 07/10):
+   **APLICADA em 07/10** (0 contatos a recatalogar, 0 entradas de Ativação do Encontro vindas da 614); ver
+   `infra/supabase/migrations/20261007152751.explain.md`.

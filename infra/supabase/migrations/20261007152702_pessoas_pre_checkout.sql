@@ -1,32 +1,9 @@
--- Ensaio de 20261007i_pessoas_pre_checkout — tudo numa transação que termina em ROLLBACK. Nada persiste.
--- STATUS: ESCRITO, NÃO RODADO (07/10/2026). Rodar só com o aceite do Arthur, como no padrão da casa: via MCP com o
--- `rollback` final trocado por `raise exception` com o conteúdo de _r (rollback garantido). Colar o resultado no fim.
--- E-mail de teste @exemplo.invalid, pessoa marcada teste = true.
--- Esperado (tabela _r):
---   base                 contagens de pessoas/eventos antes
---   pre_checkout         ok true; 1 evento tipo 'pre_checkout', fonte 'formulario'; detalhe com chave_evento
---                        'clinica-miami-2026-12', sck, xcod e pagina SEM a query (?…) e sem o #
---   lead_sem_evento      evento omitido → tipo 'lead' (comportamento de antes); detalhe sem chave_evento quando não vem
---   evento_invalido      evento 'xpto' → ok false, msg "Evento inválido (…pre_checkout)"; nenhum evento novo
---   chave_invalida       chave_evento fora do kebab-case → evento grava, detalhe SEM chave_evento
---   explain              explain (analyze, buffers) da RPC inteira, 2×: colar tempos no .explain.md
---   acl                  antes = depois para pessoas.registrar e public.pessoas_registrar_lead
-begin;
-set local lock_timeout = '3s';
-set local statement_timeout = '25s';
-create temp table _r (k text, v jsonb) on commit drop;
-grant all on _r to service_role;
-insert into _r select 'base', jsonb_build_object('pessoas', (select count(*) from pessoas.pessoas),
-                                                 'eventos', (select count(*) from pessoas.eventos),
-                                                 'pre_checkout', (select count(*) from pessoas.eventos where tipo = 'pre_checkout'));
-insert into _r select 'acl.antes', jsonb_agg(jsonb_build_object(p.oid::regprocedure::text, p.proacl::text) order by p.proname)
-  from pg_proc p where p.oid in (to_regprocedure('pessoas.registrar(jsonb,text,uuid)'), to_regprocedure('public.pessoas_registrar_lead(jsonb)'));
-
--- MIGRATION (conteúdo idêntico ao arquivo, sem as duas linhas `set local` do topo)
 -- 20261007i: base de pessoas — evento 'pre_checkout' e rastro da captura (chave do evento, sck, xcod, página)
 --
--- STATUS: NÃO APLICADA. Precisa do ACEITE DO ARTHUR antes (o schema pessoas e a função pessoas.registrar são dele,
--- 20261005r). Ensaio escrito e NÃO rodado: 20261007i_ensaio.sql. Relatório: 20261007i.explain.md.
+-- STATUS: APLICADA em produção em 07/10/2026, versão 20261007152702 (nome pessoas_pre_checkout, era 20261007i) em
+-- supabase_migrations.schema_migrations, pelo aplica_sql.py aplicar + insert na mesma transação. md5 gravado =
+-- 2c4444270de3d507a438c22aa20b2106 = este arquivo antes desta troca de STATUS. Relatório: 20261007152702.explain.md.
+-- Aceite do Arthur dado em 07/10/2026 (o schema pessoas e pessoas.registrar são dele, 20261005r).
 -- Quem chama: rota POST /api/captura/lead (web/app/api/captura/lead/route.ts), docs/captura-de-lead.md.
 --
 -- POR QUE
@@ -62,23 +39,33 @@ insert into _r select 'acl.antes', jsonb_agg(jsonb_build_object(p.oid::regproced
 --   repetição: 1 RPC por envio; nada por linha.
 --   reversão: bloco REVERSÃO no fim (corpo antigo da 20261005r + CHECK antigo depois de reclassificar os eventos).
 
+set local lock_timeout = '3s';
+set local statement_timeout = '20s';
 
--- 0. Guarda de premissa
+-- 0. Guarda de premissa. Aceita dois estados e nenhum outro:
+--    a) antes da 20261007i: CHECK da 20261006043612 e corpo da 20261005r (md5 e082542b…) → aplica;
+--    b) depois da 20261007i: CHECK com 'pre_checkout' e corpo desta migration (md5 8f77b9fc…) → "já aplicada": os passos
+--       1 e 2 regravam exatamente o mesmo CHECK e o mesmo corpo (sem efeito) e a pós-condição confere. Assim um segundo
+--       `db push` antes de renomear o arquivo não aborta a cadeia (revisão do Forja, 07/10/2026; manual §3).
 do $guarda$
+declare v_ck text; v_md5 text;
 begin
-  if (select pg_get_constraintdef(c.oid) from pg_constraint c
-       where c.conrelid = 'pessoas.eventos'::regclass and c.conname = 'eventos_tipo_check')
-     is distinct from
-     'CHECK ((tipo = ANY (ARRAY[''lead''::text, ''mql''::text, ''nao_mql''::text, ''cadastro''::text, ''compra''::text, ''ativacao''::text, ''crm''::text, ''vinculo''::text, ''mescla''::text, ''mescla_desfeita''::text, ''revisao''::text, ''checkout''::text, ''reembolso''::text])))'
-  then
-    raise exception '20261007i: eventos_tipo_check diferente do esperado (20261006043612). Releia pg_get_constraintdef.';
-  end if;
   if to_regprocedure('pessoas.registrar(jsonb,text,uuid)') is null
      or to_regprocedure('public.pessoas_registrar_lead(jsonb)') is null then
     raise exception '20261007i: pessoas.registrar ou public.pessoas_registrar_lead ausente';
   end if;
-  if (select md5(p.prosrc) from pg_proc p where p.oid = 'pessoas.registrar(jsonb,text,uuid)'::regprocedure)
-     is distinct from 'e082542bde3f7abc431d562bb4e032e0' then
+  select pg_get_constraintdef(c.oid) into v_ck from pg_constraint c
+   where c.conrelid = 'pessoas.eventos'::regclass and c.conname = 'eventos_tipo_check';
+  select md5(p.prosrc) into v_md5 from pg_proc p where p.oid = 'pessoas.registrar(jsonb,text,uuid)'::regprocedure;
+  if v_ck is not distinct from
+       'CHECK ((tipo = ANY (ARRAY[''lead''::text, ''mql''::text, ''nao_mql''::text, ''cadastro''::text, ''compra''::text, ''ativacao''::text, ''crm''::text, ''vinculo''::text, ''mescla''::text, ''mescla_desfeita''::text, ''revisao''::text, ''checkout''::text, ''reembolso''::text, ''pre_checkout''::text])))'
+     and v_md5 is not distinct from '8f77b9fc25b84d526be4c9ebad528c2e' then
+    raise notice '20261007i: já aplicada (CHECK com pre_checkout e corpo 8f77b9fc…). Os passos seguintes não mudam nada.';
+  elsif v_ck is distinct from
+       'CHECK ((tipo = ANY (ARRAY[''lead''::text, ''mql''::text, ''nao_mql''::text, ''cadastro''::text, ''compra''::text, ''ativacao''::text, ''crm''::text, ''vinculo''::text, ''mescla''::text, ''mescla_desfeita''::text, ''revisao''::text, ''checkout''::text, ''reembolso''::text])))'
+  then
+    raise exception '20261007i: eventos_tipo_check diferente do esperado (20261006043612 ou pós-20261007i). Releia pg_get_constraintdef.';
+  elsif v_md5 is distinct from 'e082542bde3f7abc431d562bb4e032e0' then
     raise exception '20261007i: corpo vivo de pessoas.registrar não é o da 20261005r (md5). Refazer a partir do pg_get_functiondef.';
   end if;
 end
@@ -215,40 +202,3 @@ $confere$;
 -- alter table pessoas.eventos drop constraint eventos_tipo_check;
 -- alter table pessoas.eventos add constraint eventos_tipo_check check (tipo in ('lead', 'mql', 'nao_mql', 'cadastro', 'compra',
 --   'ativacao', 'crm', 'vinculo', 'mescla', 'mescla_desfeita', 'revisao', 'checkout', 'reembolso'));
-
--- CASOS (como service_role, igual à rota /api/captura/lead)
-set local role service_role;
-insert into _r select 'pre_checkout.rpc', public.pessoas_registrar_lead(jsonb_build_object(
-  'nome', 'Ensaio Captura', 'email', 'ensaio-20261007i-a@exemplo.invalid', 'telefone', '5521999990000',
-  'evento', 'pre_checkout', 'chave_evento', 'clinica-miami-2026-12', 'sck', 'ensaio_sck', 'xcod', 'ensaio_xcod',
-  'pagina', 'https://clinica.timeholdingbrasil.com.br/miami/?email=nao-pode-gravar#topo',
-  'utm_source', 'ensaio', 'utm_campaign', 'clinica-miami-2026-12', 'teste', true));
-insert into _r select 'lead_sem_evento.rpc', public.pessoas_registrar_lead(jsonb_build_object(
-  'nome', 'Ensaio Captura B', 'email', 'ensaio-20261007i-b@exemplo.invalid', 'teste', true));
-insert into _r select 'evento_invalido.rpc', public.pessoas_registrar_lead(jsonb_build_object(
-  'nome', 'Ensaio Captura C', 'email', 'ensaio-20261007i-c@exemplo.invalid', 'evento', 'xpto', 'teste', true));
-insert into _r select 'chave_invalida.rpc', public.pessoas_registrar_lead(jsonb_build_object(
-  'nome', 'Ensaio Captura D', 'email', 'ensaio-20261007i-d@exemplo.invalid', 'evento', 'pre_checkout',
-  'chave_evento', 'Clinica Miami!', 'teste', true));
-reset role;
-
-insert into _r select 'eventos.ensaio', coalesce(jsonb_agg(jsonb_build_object('email', i.chave, 'tipo', e.tipo, 'fonte', e.fonte,
-                                                                  'detalhe', e.detalhe) order by i.chave), '[]')
-  from pessoas.identificadores i join pessoas.eventos e on e.pessoa_id = i.pessoa_id
- where i.tipo = 'email' and i.chave like 'ensaio-20261007i-%@exemplo.invalid';
-insert into _r select 'depois', jsonb_build_object('pessoas', (select count(*) from pessoas.pessoas),
-                                                   'eventos', (select count(*) from pessoas.eventos),
-                                                   'pre_checkout', (select count(*) from pessoas.eventos where tipo = 'pre_checkout'));
-insert into _r select 'acl.depois', jsonb_agg(jsonb_build_object(p.oid::regprocedure::text, p.proacl::text) order by p.proname)
-  from pg_proc p where p.oid in (to_regprocedure('pessoas.registrar(jsonb,text,uuid)'), to_regprocedure('public.pessoas_registrar_lead(jsonb)'));
-
--- EXPLAIN da RPC inteira (rodar 2×; pessoa nova a cada vez para medir o caminho de criação)
--- explain (analyze, buffers) select public.pessoas_registrar_lead(jsonb_build_object('email', 'ensaio-20261007i-x1@exemplo.invalid',
---   'evento', 'pre_checkout', 'chave_evento', 'clinica-miami-2026-12', 'teste', true));
--- explain (analyze, buffers) select public.pessoas_registrar_lead(jsonb_build_object('email', 'ensaio-20261007i-x2@exemplo.invalid',
---   'evento', 'pre_checkout', 'chave_evento', 'clinica-miami-2026-12', 'teste', true));
-
-select k, v from _r;
-rollback;
-
--- RESULTADO: ainda não rodado.

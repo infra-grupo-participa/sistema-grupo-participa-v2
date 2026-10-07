@@ -1,3 +1,29 @@
+-- Ensaio de 20261007i_pessoas_pre_checkout — tudo numa transação que termina em ROLLBACK. Nada persiste.
+-- SUPERADO (07/10/2026): a guarda da migration mudou (aceita o estado pós-i) e o ensaio que valeu é o da sequência
+-- i → j → k 2×, 20261007k_ensaio.sql (resultado em 20261007k.explain.md §5). Este ficou como estava, NÃO RODADO. Rodar só com o aceite do Arthur, como no padrão da casa: via MCP com o
+-- `rollback` final trocado por `raise exception` com o conteúdo de _r (rollback garantido). Colar o resultado no fim.
+-- E-mail de teste @exemplo.invalid, pessoa marcada teste = true.
+-- Esperado (tabela _r):
+--   base                 contagens de pessoas/eventos antes
+--   pre_checkout         ok true; 1 evento tipo 'pre_checkout', fonte 'formulario'; detalhe com chave_evento
+--                        'clinica-miami-2026-12', sck, xcod e pagina SEM a query (?…) e sem o #
+--   lead_sem_evento      evento omitido → tipo 'lead' (comportamento de antes); detalhe sem chave_evento quando não vem
+--   evento_invalido      evento 'xpto' → ok false, msg "Evento inválido (…pre_checkout)"; nenhum evento novo
+--   chave_invalida       chave_evento fora do kebab-case → evento grava, detalhe SEM chave_evento
+--   explain              explain (analyze, buffers) da RPC inteira, 2×: colar tempos no .explain.md
+--   acl                  antes = depois para pessoas.registrar e public.pessoas_registrar_lead
+begin;
+set local lock_timeout = '3s';
+set local statement_timeout = '25s';
+create temp table _r (k text, v jsonb) on commit drop;
+grant all on _r to service_role;
+insert into _r select 'base', jsonb_build_object('pessoas', (select count(*) from pessoas.pessoas),
+                                                 'eventos', (select count(*) from pessoas.eventos),
+                                                 'pre_checkout', (select count(*) from pessoas.eventos where tipo = 'pre_checkout'));
+insert into _r select 'acl.antes', jsonb_agg(jsonb_build_object(p.oid::regprocedure::text, p.proacl::text) order by p.proname)
+  from pg_proc p where p.oid in (to_regprocedure('pessoas.registrar(jsonb,text,uuid)'), to_regprocedure('public.pessoas_registrar_lead(jsonb)'));
+
+-- MIGRATION (conteúdo idêntico ao arquivo, sem as duas linhas `set local` do topo)
 -- 20261007i: base de pessoas — evento 'pre_checkout' e rastro da captura (chave do evento, sck, xcod, página)
 --
 -- STATUS: NÃO APLICADA. Precisa do ACEITE DO ARTHUR antes (o schema pessoas e a função pessoas.registrar são dele,
@@ -37,8 +63,6 @@
 --   repetição: 1 RPC por envio; nada por linha.
 --   reversão: bloco REVERSÃO no fim (corpo antigo da 20261005r + CHECK antigo depois de reclassificar os eventos).
 
-set local lock_timeout = '3s';
-set local statement_timeout = '20s';
 
 -- 0. Guarda de premissa
 do $guarda$
@@ -192,3 +216,40 @@ $confere$;
 -- alter table pessoas.eventos drop constraint eventos_tipo_check;
 -- alter table pessoas.eventos add constraint eventos_tipo_check check (tipo in ('lead', 'mql', 'nao_mql', 'cadastro', 'compra',
 --   'ativacao', 'crm', 'vinculo', 'mescla', 'mescla_desfeita', 'revisao', 'checkout', 'reembolso'));
+
+-- CASOS (como service_role, igual à rota /api/captura/lead)
+set local role service_role;
+insert into _r select 'pre_checkout.rpc', public.pessoas_registrar_lead(jsonb_build_object(
+  'nome', 'Ensaio Captura', 'email', 'ensaio-20261007i-a@exemplo.invalid', 'telefone', '5521999990000',
+  'evento', 'pre_checkout', 'chave_evento', 'clinica-miami-2026-12', 'sck', 'ensaio_sck', 'xcod', 'ensaio_xcod',
+  'pagina', 'https://clinica.timeholdingbrasil.com.br/miami/?email=nao-pode-gravar#topo',
+  'utm_source', 'ensaio', 'utm_campaign', 'clinica-miami-2026-12', 'teste', true));
+insert into _r select 'lead_sem_evento.rpc', public.pessoas_registrar_lead(jsonb_build_object(
+  'nome', 'Ensaio Captura B', 'email', 'ensaio-20261007i-b@exemplo.invalid', 'teste', true));
+insert into _r select 'evento_invalido.rpc', public.pessoas_registrar_lead(jsonb_build_object(
+  'nome', 'Ensaio Captura C', 'email', 'ensaio-20261007i-c@exemplo.invalid', 'evento', 'xpto', 'teste', true));
+insert into _r select 'chave_invalida.rpc', public.pessoas_registrar_lead(jsonb_build_object(
+  'nome', 'Ensaio Captura D', 'email', 'ensaio-20261007i-d@exemplo.invalid', 'evento', 'pre_checkout',
+  'chave_evento', 'Clinica Miami!', 'teste', true));
+reset role;
+
+insert into _r select 'eventos.ensaio', coalesce(jsonb_agg(jsonb_build_object('email', i.chave, 'tipo', e.tipo, 'fonte', e.fonte,
+                                                                  'detalhe', e.detalhe) order by i.chave), '[]')
+  from pessoas.identificadores i join pessoas.eventos e on e.pessoa_id = i.pessoa_id
+ where i.tipo = 'email' and i.chave like 'ensaio-20261007i-%@exemplo.invalid';
+insert into _r select 'depois', jsonb_build_object('pessoas', (select count(*) from pessoas.pessoas),
+                                                   'eventos', (select count(*) from pessoas.eventos),
+                                                   'pre_checkout', (select count(*) from pessoas.eventos where tipo = 'pre_checkout'));
+insert into _r select 'acl.depois', jsonb_agg(jsonb_build_object(p.oid::regprocedure::text, p.proacl::text) order by p.proname)
+  from pg_proc p where p.oid in (to_regprocedure('pessoas.registrar(jsonb,text,uuid)'), to_regprocedure('public.pessoas_registrar_lead(jsonb)'));
+
+-- EXPLAIN da RPC inteira (rodar 2×; pessoa nova a cada vez para medir o caminho de criação)
+-- explain (analyze, buffers) select public.pessoas_registrar_lead(jsonb_build_object('email', 'ensaio-20261007i-x1@exemplo.invalid',
+--   'evento', 'pre_checkout', 'chave_evento', 'clinica-miami-2026-12', 'teste', true));
+-- explain (analyze, buffers) select public.pessoas_registrar_lead(jsonb_build_object('email', 'ensaio-20261007i-x2@exemplo.invalid',
+--   'evento', 'pre_checkout', 'chave_evento', 'clinica-miami-2026-12', 'teste', true));
+
+select k, v from _r;
+rollback;
+
+-- RESULTADO: ainda não rodado.

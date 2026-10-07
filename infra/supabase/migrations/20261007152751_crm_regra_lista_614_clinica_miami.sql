@@ -1,6 +1,8 @@
 -- 20261007j: Comercial, a regra da lista 614 do ActiveCampaign leva à CLÍNICA de Miami, não ao Encontro dos Diamantes.
 --
--- STATUS: NÃO APLICADA. Ensaio escrito e NÃO rodado: 20261007j_ensaio.sql. Relatório: 20261007j.explain.md.
+-- STATUS: APLICADA em produção em 07/10/2026, versão 20261007152751 (nome crm_regra_lista_614_clinica_miami, era 20261007j) em
+-- supabase_migrations.schema_migrations, pelo aplica_sql.py aplicar + insert na mesma transação. md5 gravado =
+-- 3dbef8f5dd2b33b0ed5e5d1943eb80f1 = este arquivo antes desta troca de STATUS. Relatório: 20261007152751.explain.md.
 --
 -- POR QUE
 --   A 20261007141044_crm_catalogacao_origem (APLICADA) semeou em crm.catalogo_regra:

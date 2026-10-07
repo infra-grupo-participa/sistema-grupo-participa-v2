@@ -1,5 +1,6 @@
 -- Ensaio de 20261007j_crm_regra_lista_614_clinica_miami: tudo numa transação que termina em ROLLBACK. Nada persiste.
--- STATUS: ESCRITO, NÃO RODADO (07/10/2026). Rodar como no padrão da casa: via MCP com o `rollback` final trocado por
+-- NÃO RODADO (07/10/2026): o ensaio que valeu é o da sequência i → j → k 2×, 20261007k_ensaio.sql
+-- (resultado em 20261007k.explain.md §5). Rodar como no padrão da casa: via MCP com o `rollback` final trocado por
 -- `raise exception` com o conteúdo de _r (rollback garantido). Colar o resultado no fim e no .explain.md.
 -- Só contagens: nenhum nome, e-mail, telefone ou documento sai deste ensaio.
 -- A migration roda DUAS vezes (manual §3: a guarda tem de tolerar o estado que ela mesma deixa).
