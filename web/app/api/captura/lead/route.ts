@@ -24,7 +24,7 @@ const MAX_BYTES = 8 * 1024;
 const NAO_AUTORIZADO = 'Não autorizado.';
 const FALHAS_MAX = 10;
 const FALHAS_JANELA_S = 600;
-const AUTORIZADAS_MAX_MIN = 120;
+const AUTORIZADAS_MAX_MIN = 20; // condição B1 do pentester (07/10/2026): era 120/min
 const SEGREDO_MIN = 32;
 
 // Tentativas sem segredo válido por IP (janela fixa), como em /api/mensageria/receber.

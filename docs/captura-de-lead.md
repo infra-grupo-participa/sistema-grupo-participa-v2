@@ -56,7 +56,7 @@ curl -sS -m 3 -X POST https://grupoparticipa.app.br/api/captura/lead \
 | 400 | `{"error":"…"}` | Content-Type, JSON ou campo inválido (a mensagem cita só o nome do campo), ou a base recusou |
 | 401 | `{"error":"Não autorizado."}` | Bearer ausente ou errado |
 | 413 | `{"error":"Corpo acima de 8 KB."}` | corpo grande demais |
-| 429 | `{"error":"Muitas requisições…"}` | 10 falhas de segredo no mesmo IP em 10 min, ou mais de 120 chamadas autorizadas por minuto no mesmo IP |
+| 429 | `{"error":"Muitas requisições…"}` | 10 falhas de segredo no mesmo IP em 10 min, ou mais de 20 chamadas autorizadas por minuto no mesmo IP (era 120; baixado em 07/10 pela condição B1 do pentester) |
 | 502 | `{"error":"Não foi possível gravar agora."}` | erro do banco (o log do servidor guarda só o código do erro) |
 | 503 | `{"error":"Captura indisponível."}` | `CAPTURA_LEAD_SECRET` ausente ou com menos de 32 caracteres |
 
@@ -93,6 +93,11 @@ O projeto do evento fica vazio: a função só liga projeto pela sigla de `mkt.p
 
 1. ~~Aceite do Arthur~~ (dado em 07/10). Aplicação da migration `20261007i` (ensaio antes; ver `20261007i.explain.md`).
 2. ~~Revisão do pentester na rota~~ (aprovada em 07/10, com as condições A1, A2 e B1 antes do segredo).
+   - **B1 cumprida (07/10, nesta branch):** limite de chamadas autorizadas por IP baixou de 120 para 20 por minuto
+     (`AUTORIZADAS_MAX_MIN` em `web/app/api/captura/lead/route.ts`), com teste da 21ª chamada em `route.test.ts`.
+     Continua NÃO PUBLICADO (só sai com o merge na `main`).
+   - **A1** (limite por IP do visitante no `submit.php`): edição preparada fora do repo, NÃO subida para a Hostinger.
+   - **A2** (`config.php` por FTPS): pendente.
 3. `CAPTURA_LEAD_SECRET` na Hostinger e no `config.php` da página.
 4. Merge na `main` (publica).
 5. Edição do `submit.php` via FTP, na regra acima.

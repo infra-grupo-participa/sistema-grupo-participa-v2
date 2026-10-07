@@ -120,6 +120,16 @@ describe('POST /api/captura/lead', () => {
     expect(chamadas).toHaveLength(0);
   });
 
+  it('429 na 21ª chamada autorizada do mesmo IP no mesmo minuto (limite 20/min, condição B1)', async () => {
+    const xff = '198.51.100.21';
+    for (let i = 0; i < 20; i++) expect((await POST(req(valido, { xff }))).status).toBe(200);
+    const r = await POST(req(valido, { xff }));
+    expect(r.status).toBe(429);
+    expect(chamadas).toHaveLength(20);
+    // Outro IP no mesmo minuto não é afetado.
+    expect((await POST(req(valido, { xff: '198.51.100.22' }))).status).toBe(200);
+  });
+
   it('400 com Content-Type errado', async () => {
     const r = await POST(req(valido, { tipoConteudo: 'text/plain' }));
     expect(r.status).toBe(400);
