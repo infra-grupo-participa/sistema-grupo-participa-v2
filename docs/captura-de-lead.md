@@ -1,7 +1,7 @@
 # Captura de lead servidor a servidor (`POST /api/captura/lead`)
 
 **Situação (07/10/2026): NÃO PUBLICADO e migration NÃO APLICADA.** O código está na branch `victor-captura-pre-checkout`
-(não está na `main`). A migration `20261007i` existe só como arquivo e espera o aceite do Arthur.
+(não está na `main`). A migration `20261007i` existe só como arquivo. Aceite do Arthur dado em 07/10 (verbal, informado pelo Victor); falta rodar o ensaio e aplicar.
 
 ## O que é e por quê
 
@@ -91,8 +91,8 @@ O projeto do evento fica vazio: a função só liga projeto pela sigla de `mkt.p
 
 ## O que falta
 
-1. Aceite do Arthur e aplicação da migration `20261007i` (ensaio antes; ver `20261007i.explain.md`).
-2. Revisão do pentester na rota.
+1. ~~Aceite do Arthur~~ (dado em 07/10). Aplicação da migration `20261007i` (ensaio antes; ver `20261007i.explain.md`).
+2. ~~Revisão do pentester na rota~~ (aprovada em 07/10, com as condições A1, A2 e B1 antes do segredo).
 3. `CAPTURA_LEAD_SECRET` na Hostinger e no `config.php` da página.
 4. Merge na `main` (publica).
 5. Edição do `submit.php` via FTP, na regra acima.
