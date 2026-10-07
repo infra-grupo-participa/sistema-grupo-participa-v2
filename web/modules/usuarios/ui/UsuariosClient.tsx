@@ -29,9 +29,11 @@ import {
   Toast,
   Toolbar,
   Tr,
+  Tabs,
   useFlash,
 } from '@/shared/ui/components';
 import { fetchJson } from '@/shared/ui/fetch-json';
+import { AcessosV2Client } from './AcessosV2Client';
 
 interface PerfilRow {
   id: string; nome: string | null; email: string | null; cargo: string | null; status: string | null;
@@ -139,12 +141,13 @@ function CatalogoAcessos({
   );
 }
 
-export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
+export function UsuariosClient({ meuCargo, acessoV2 = false }: { meuCargo: Cargo; acessoV2?: boolean }) {
   const [users, setUsers] = useState<PerfilRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [aba, setAba] = useState('usuarios');
   const { toast, flash } = useFlash();
   const grantaveis = cargosGrantaveis(meuCargo);
 
@@ -163,6 +166,8 @@ export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
 
   return (
     <div>
+      {acessoV2 && <Tabs tabs={[{ k: 'usuarios', l: 'Usuários' }, { k: 'acessos', l: 'Departamentos e áreas' }]} active={aba} onChange={setAba} label="Gestão de usuários" />}
+      {aba === 'acessos' && acessoV2 ? <AcessosV2Client pessoas={users} /> : <>
       <div className="flex items-center gap-3 mb-4">
         <h1 className="text-2xl font-bold text-[var(--fg)]">Usuários</h1>
         {loading && <span className="text-sm text-[var(--fg-3)]">carregando…</span>}
@@ -204,6 +209,7 @@ export function UsuariosClient({ meuCargo }: { meuCargo: Cargo }) {
       {editing && <EditDrawer u={editing} meuCargo={meuCargo} onClose={() => setEditId(null)} onSaved={async (m) => { flash(m); setEditId(null); await reload(); }} />}
       {inviteOpen && <InviteDrawer grantaveis={grantaveis} onClose={() => setInviteOpen(false)} reload={reload} flash={flash} />}
       <Toast>{toast}</Toast>
+      </>}
     </div>
   );
 }
