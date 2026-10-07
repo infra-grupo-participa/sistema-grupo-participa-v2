@@ -125,6 +125,18 @@ clique_pct numeric`
 
 Cada uma tem `.explain.md` com ensaio, explain e reversão.
 
+## 3.1 Segurança: achado CRÍTICO em aberto (pentester, 07/10/2026)
+
+O gate `public.gp_eh_equipe()` (perfil ativo `@advmais.com`) **pode ser contornado** fora desta mudança: o cadastro do
+Supabase Auth está aberto (`disable_signup = false`, `mailer_autoconfirm = true`, sem captcha) e o gatilho
+`public.handle_new_user()` grava `perfis.status` e `perfis.cargo` a partir do `raw_user_meta_data` escolhido por quem se
+cadastra. No ensaio (rollback), um cadastro forjado com e-mail `@advmais.com` e `{status: ativo, cargo: admin}` passou no
+gate e leu leads e vendas com telefone. O mesmo caminho abre `gp_pode_ver_cpf` e `crm.pode_catalogar` para qualquer
+domínio. A correção mora no Auth e no `handle_new_user` (dono do `perfis`: v2/João; configuração do Auth: Victor), não
+nas funções `dados_presencial_*`. Desligar o dashboard na hora, se o Victor decidir:
+`update dados.dashboards set ativo = false where chave = 'clinica-miami-2026-12'` (as funções passam a dar P0002).
+Hoje a tela expõe 1 lead e 1 pedido, ambos teste interno; o risco cresce quando a captação começar.
+
 ## 4. Provisório (decisões reversíveis do Maestro, 07/10/2026, para o Victor revisar)
 
 - `fin.eventos` da Clínica: `venda_ate` 2026-12-04 (fim do evento).
