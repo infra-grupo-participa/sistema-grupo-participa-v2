@@ -122,6 +122,21 @@ A Clínica vende em duas ofertas: `sju5pawn` ("Clínica de Holding Familiar - Mi
 uma oferta: `update dados.dashboards set ofertas_extra = array['<oferta>'] where chave = '<chave>'`. Migration
 `20261007203803`.
 
+## 2.8 Venda em tempo real (07/10/2026)
+
+Antes, a venda só aparecia quando o `hotmart-sync` passava (de hora em hora, minuto 7): atraso medido de 28,9 min na
+mediana e até 59,5 min. Desde a `20261007205017`, `dados.transacoes` também lê `cs.hotmart_eventos` (o log do webhook da
+Hotmart, gravado em mediana 15 s depois da aprovação) para as transações das ofertas do dashboard que o espelho ainda não
+tem. Quando o sync traz a transação, vale a linha do espelho: nada conta duas vezes. Contrato da tela sem mudança.
+
+- Vale para a conta **academy** (a única que o webhook recebe). Pedido aguardando pagamento (Pix/boleto) não gera evento
+  e continua vindo pelo sync.
+- Nome, telefone e UF da linha do webhook vêm do checkout e podem mudar quando o sync passar.
+- **A tela não se atualiza sozinha:** só no botão Atualizar. Ver a venda cair sem clicar depende de atualização automática
+  no front (`DashboardPresencialClient.tsx`).
+
+Detalhe, tradução de status e ensaio: `infra/supabase/migrations/20261007205017.explain.md`.
+
 ## 3. Migrations (ordem e versão gravada)
 
 | Versão | Nome | O quê |
@@ -131,6 +146,7 @@ uma oferta: `update dados.dashboards set ofertas_extra = array['<oferta>'] where
 | `20261007162432` | `mkt_trafego_clinica_miami_oferta` | projeto 68 `interno/csm` e oferta `mjzv4v0s` exclusiva do projeto no Tráfego (`conta_hotmart(68)` = academy) |
 | `20261007162557` | `pessoas_registrar_lead_projeto_por_chave` | a fachada da captura resolve o projeto pela chave da casa (lead da página grava `projeto_id` 68) |
 | `20261007203803` | `clinica_miami_oferta_nova` | oferta `sju5pawn` (produto 5682989) na Clínica: Financeiro, Tráfego e dashboard; `ofertas_extra` |
+| `20261007205017` | `dashboard_vendas_tempo_real` | `dados.transacoes` soma o que o webhook da Hotmart já recebeu e o sync ainda não trouxe (venda em segundos, academy) |
 | `20261007171902` (APLICADA 07/10) | `crm_lista_614_todos` | regra 42 com `para_todos`: quem entra na lista 614 vira contato comercial e é catalogado na Clínica. Ensaio refeito antes da aplicação, igual ao esperado |
 
 Cada uma tem `.explain.md` com ensaio, explain e reversão.
@@ -174,6 +190,7 @@ Hoje a tela expõe 1 lead e 1 pedido, ambos teste interno; o risco cresce quando
 
 ## 5. O que falta
 
+- Atualização automática da tela (hoje só no botão Atualizar), para a venda em tempo real aparecer sem clicar.
 - ~~Aplicar `crm_lista_614_todos`~~: aplicada em 07/10/2026, versão `20261007171902`.
 - Efeito da `20261007171902` a saber: quem entra na 614 sem ser contato passa a aparecer no Comercial, sem dono e sem negócio.
 - Webhook (`hotmart-events-webhook`): em produção roda a cópia do disparos-thb; o produto 6489980 não está mapeado
