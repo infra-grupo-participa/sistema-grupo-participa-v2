@@ -851,7 +851,7 @@ export const SECOES: Secao[] = [
     grupo: 'areas',
     resumo: 'Quem chegou perto de comprar é conduzido até o pagamento aprovado. Dono: Jonathan Mendes.',
     ferramentas: [
-      { rotulo: 'Recuperação', href: '/comercial/recuperacao' },
+      { rotulo: 'Estratégias', href: '/comercial/estrategias' },
       { rotulo: 'Funil', href: '/comercial/funil' },
     ],
     blocos: [

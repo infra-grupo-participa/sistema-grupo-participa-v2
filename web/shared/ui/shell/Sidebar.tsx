@@ -8,7 +8,7 @@ import { podeVerFinanceiro } from '@/modules/financeiro/domain/acesso';
 import { podeVerRemocao } from '@/modules/remocao-acessos/domain/acesso';
 import { podePedirAlteracao } from '@/modules/alunos/domain/pedidos-alteracao';
 import { REPORTS, SYSTEM_NAV, type ReportGroup } from '@/shared/ui/nav/config';
-import { BASE_MARKETING, DEPARTAMENTOS, departamento, departamentoDaRota, podeVerDepartamento } from '@/shared/domain/departamentos';
+import { BASE_MARKETING, DEPARTAMENTOS, acessoComercial, departamento, departamentoDaRota, podeVerDepartamento } from '@/shared/domain/departamentos';
 import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { Icon } from '@/shared/ui/icons';
 import { chaveHashPadrao, itemHashAtivo } from './item-ativo';
@@ -91,7 +91,12 @@ export function Sidebar({ user }: { user: GpUser }) {
   // Victor, 05/10/2026: fora de departamento (Início, Usuários, Configurações) não mostra menu de departamento nenhum.
   const mostraEducacional = depAtual === 'educacional';
   const mostraMarketing = depAtual === 'marketing' && podeVerDepartamento(user, 'marketing');
-  const mostraComercial = depAtual === 'comercial' && podeVerDepartamento(user, 'comercial', ACESSO_DEPARTAMENTOS);
+  // Comercial: CRM inteiro, ou só Estratégias para quem pede estratégia sem ser do Comercial (mesma regra do layout).
+  const acessoCom = acessoComercial(user, ACESSO_DEPARTAMENTOS);
+  const mostraComercial = depAtual === 'comercial' && !!acessoCom;
+  const areasComercial = acessoCom === 'completo'
+    ? departamento('comercial').areas
+    : departamento('comercial').areas.filter((a) => a.key === 'estrategias');
 
   // O grupo aparece se o cargo permite E o usuário tem o setor.
   // Financeiro tem regra própria (visualizador NÃO vê dinheiro) — espelha
@@ -144,7 +149,7 @@ export function Sidebar({ user }: { user: GpUser }) {
 
       {/* Seletor de departamento. Marketing some para quem não é admin/dev (mesma regra do layout /marketing). */}
       <Group label="Departamentos" collapsed={!!groups.departamentos} onToggle={() => toggleGroup('departamentos')}>
-        {DEPARTAMENTOS.filter((d) => podeVerDepartamento(user, d.key, ACESSO_DEPARTAMENTOS)).map((d) => {
+        {DEPARTAMENTOS.filter((d) => (d.key === 'comercial' ? !!acessoCom : podeVerDepartamento(user, d.key, ACESSO_DEPARTAMENTOS))).map((d) => {
           const active = depAtual === d.key;
           return (
             <Link key={d.key} href={d.path} className={itemCls(active)}>
@@ -188,11 +193,13 @@ export function Sidebar({ user }: { user: GpUser }) {
       {mostraComercial && (
         <>
           <Group label="Comercial" collapsed={!!groups.comercial} onToggle={() => toggleGroup('comercial')}>
-            <Link href="/comercial" className={itemCls(cur === '/comercial')}>
-              <span className={iconBoxCls(cur === '/comercial')}><Icon name="handshake" /></span>
-              <span>Início do Comercial</span>
-            </Link>
-            {departamento('comercial').areas.map((a) => {
+            {acessoCom === 'completo' && (
+              <Link href="/comercial" className={itemCls(cur === '/comercial')}>
+                <span className={iconBoxCls(cur === '/comercial')}><Icon name="handshake" /></span>
+                <span>Início do Comercial</span>
+              </Link>
+            )}
+            {areasComercial.map((a) => {
               const active = cur === a.path || cur.startsWith(a.path + '/');
               return (
                 <Link key={a.key} href={a.path} className={itemCls(active)}>
