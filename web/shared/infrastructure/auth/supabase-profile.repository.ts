@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ProfileRepository } from '@/shared/application/auth/ports';
-import type { PerfilData } from '@/shared/domain/auth';
+import { acessoValido, type AcessoV2, type PerfilData } from '@/shared/domain/auth';
 
 // Modelo unificado: cargo (canônico) + areas (setores) + funcoes. buildGpUser faz o
 // fallback areas→setores. Selecionar colunas inexistentes faz o PostgREST falhar e derruba
@@ -19,5 +19,11 @@ export class SupabaseProfileRepository implements ProfileRepository {
       .eq('id', id)
       .single();
     return (data as PerfilData) ?? null;
+  }
+
+  async findMyAccess(): Promise<AcessoV2 | null> {
+    const { data, error } = await this.supabase.rpc('gp_meu_acesso');
+    if (error) return null;
+    return acessoValido(data);
   }
 }

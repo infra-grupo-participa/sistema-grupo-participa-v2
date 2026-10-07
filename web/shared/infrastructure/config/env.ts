@@ -74,4 +74,5 @@ export const publicEnv = {
    * NEXT_PUBLIC_COMERCIAL_VENDEDORES=false volta a só admin/dev.
    */
   comercialVendedores: lerFlag(process.env.NEXT_PUBLIC_COMERCIAL_VENDEDORES, true),
+  acessoV2: lerFlag(process.env.NEXT_PUBLIC_ACESSO_V2),
 } as const;

@@ -12,6 +12,29 @@ export interface GpUser {
   podeVerCpf: boolean;
   time: string | null;
   avatarUrl: string | null;
+  acesso?: AcessoV2 | null;
+}
+
+/** Contrato de public.gp_meu_acesso(), migration 20261007180503. */
+export interface AcessoV2 {
+  equipe: boolean;
+  master: boolean;
+  vinculos: { departamento: string; area: string | null; papel: 'responsavel' | 'membro' }[];
+  capacidades: string[];
+  ver: string[];
+  editar: string[];
+}
+
+export function acessoValido(data: unknown): AcessoV2 | null {
+  if (!data || typeof data !== 'object') return null;
+  const a = data as Record<string, unknown>;
+  if (typeof a.equipe !== 'boolean' || typeof a.master !== 'boolean' ||
+      !Array.isArray(a.vinculos) || !Array.isArray(a.capacidades) || !Array.isArray(a.ver) || !Array.isArray(a.editar)) return null;
+  if (!a.capacidades.every((x) => typeof x === 'string') || !a.ver.every((x) => typeof x === 'string') ||
+      !a.editar.every((x) => typeof x === 'string')) return null;
+  if (!a.vinculos.every((x) => x && typeof x === 'object' && typeof x.departamento === 'string' &&
+      (x.area === null || typeof x.area === 'string') && (x.papel === 'responsavel' || x.papel === 'membro'))) return null;
+  return a as unknown as AcessoV2;
 }
 
 /** Linha bruta de `perfis` (campos relevantes para auth). */

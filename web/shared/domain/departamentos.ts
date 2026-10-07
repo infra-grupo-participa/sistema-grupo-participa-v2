@@ -132,6 +132,29 @@ export function departamento(key: DepartamentoKey): Departamento {
 export interface OpcoesAcessoDepartamento {
   /** NEXT_PUBLIC_COMERCIAL_VENDEDORES: libera o Comercial para gestor/vendedor do Comercial (não só admin/dev). */
   comercialVendedores?: boolean;
+  acessoV2?: boolean;
+}
+
+/** A flag é explícita para testes e para manter servidor e browser na mesma regra. */
+export function podeEditarArea(u: GpUser | null, key: DepartamentoKey, areaKey: string | null = null, opcoes: OpcoesAcessoDepartamento = {}): boolean {
+  if (!u) return false;
+  if (!opcoes.acessoV2) {
+    if (key === 'marketing' || key === 'infra') return ehAdminOuAcima(u);
+    if (key === 'comercial') return ehDoComercial(u);
+    return ehAdminOuAcima(u) || (u.cargo === 'gestor' && u.setores.includes(key));
+  }
+  const acesso = u.acesso;
+  if (!acesso?.equipe) return false;
+  if (acesso.master) return true;
+  if (key === 'financeiro') return acesso.capacidades.includes('financeiro.operar');
+  const chave = areaKey ? `${key}/${areaKey}` : key;
+  return acesso.editar.includes(chave) || (!!areaKey && acesso.editar.includes(key));
+}
+
+export function temCapacidade(u: GpUser | null, chave: string, opcoes: OpcoesAcessoDepartamento = {}): boolean {
+  if (!u) return false;
+  if (!opcoes.acessoV2) return ehAdminOuAcima(u);
+  return u.acesso?.equipe === true && (u.acesso.master || u.acesso.capacidades.includes(chave));
 }
 
 /**
@@ -164,6 +187,8 @@ export function ehDoComercial(u: GpUser | null): boolean {
  */
 export function podeVerDepartamento(u: GpUser | null, key: DepartamentoKey, opcoes: OpcoesAcessoDepartamento = {}): boolean {
   if (!u) return false;
+  if (opcoes.acessoV2) return u.acesso?.equipe === true && u.acesso.ver.includes(key) &&
+    (key !== 'financeiro' || temCapacidade(u, 'financeiro.ver', opcoes));
   if (key === 'marketing') return ehAdminOuAcima(u);
   if (key === 'comercial') return ehAdminOuAcima(u) || (opcoes.comercialVendedores === true && ehDoComercial(u));
   return true;
@@ -189,8 +214,12 @@ export function podeSolicitarEstrategia(u: GpUser | null): boolean {
  * Usado pelo layout de /comercial, pela página de Estratégias, pela sidebar e pelo cartão da home. As outras páginas do
  * Comercial continuam exigindo `podeVerDepartamento` (cada page repete a regra). A fronteira de dado é o banco.
  */
-export type AcessoComercial = 'completo' | 'estrategias' | null;
+export type AcessoComercial = 'completo' | 'relatorios' | 'estrategias' | null;
 export function acessoComercial(u: GpUser | null, opcoes: OpcoesAcessoDepartamento = {}): AcessoComercial {
+  if (opcoes.acessoV2) {
+    if (!podeVerDepartamento(u, 'comercial', opcoes)) return null;
+    return podeEditarArea(u, 'comercial', null, opcoes) ? 'completo' : 'relatorios';
+  }
   if (podeVerDepartamento(u, 'comercial', opcoes)) return 'completo';
   return podeSolicitarEstrategia(u) ? 'estrategias' : null;
 }
