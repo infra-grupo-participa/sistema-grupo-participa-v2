@@ -90,7 +90,7 @@ export const DEPARTAMENTOS: Departamento[] = [
   // Departamento Financeiro (Em breve). NÃO confundir com o módulo "Financeiro" (Contas a Receber), que hoje
   // mora DENTRO do Educacional em /educacional/financeiro e mantém o nome por decisão do Victor (05/10/2026).
   { key: 'financeiro', label: 'Financeiro', path: '/financeiro', descricao: 'Departamento financeiro da empresa', ico: 'building', status: 'em_breve', areas: [] },
-  { key: 'infra', label: 'Infra', path: '/infra', descricao: 'IA e Dados', ico: 'server', status: 'em_breve', areas: [] },
+  { key: 'infra', label: 'Infra', path: '/infra', descricao: 'IA e Dados', ico: 'server', status: 'ativo', areas: [area('infra', 'dados', 'Dados', 'chart', 'Dashboards de eventos e projetos', 'ativo')] },
 ];
 
 /**
@@ -116,6 +116,7 @@ export const MODULO_DEPARTAMENTO: Record<string, DepartamentoKey | 'sistema'> = 
   calendario: 'sistema', // home (/): calendário da empresa, toda a equipe
   marketing: 'marketing', // web/modules/marketing/<area>/
   comercial: 'comercial', // CRM: web/modules/comercial/
+  infra: 'infra',
 };
 
 export function departamento(key: DepartamentoKey): Departamento {
