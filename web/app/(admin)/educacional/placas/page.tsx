@@ -1,5 +1,7 @@
 import { getCurrentUser } from '@/shared/composition/server-container';
 import { ehAdminOuAcima, podeVer, temFuncao } from '@/shared/domain/auth';
+import { podeEditarArea } from '@/shared/domain/departamentos';
+import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { redirect } from 'next/navigation';
 import { RelatorioPlacasClient } from '@/modules/placas/ui/admin/RelatorioPlacasClient';
 
@@ -11,5 +13,5 @@ export default async function RelatorioPlacasPage() {
   // Modelo aberto v2: qualquer autenticado vê (3.2.1). Operar o fluxo exige placas.operar (3.2.2)
   // — hm_liberar (3.2.3) não dá edição do fluxo de auditoria.
   if (!podeVer(user, 'placas')) redirect('/');
-  return <RelatorioPlacasClient canEdit={ehAdminOuAcima(user) || temFuncao(user, 'placas.operar')} />;
+  return <RelatorioPlacasClient canEdit={ACESSO_DEPARTAMENTOS.acessoV2 ? podeEditarArea(user, 'educacional', null, ACESSO_DEPARTAMENTOS) && (user?.acesso?.master === true || temFuncao(user, 'placas.operar')) : ehAdminOuAcima(user) || temFuncao(user, 'placas.operar')} />;
 }

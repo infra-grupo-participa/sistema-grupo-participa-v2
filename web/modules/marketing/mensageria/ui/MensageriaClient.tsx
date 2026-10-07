@@ -47,8 +47,8 @@ const ID_BASE = 'mensageria';
 /** undefined = carregando; null = falhou (rede ou sem acesso); array = carregado (pode ser vazio). */
 type Carga<T> = T[] | null | undefined;
 
-export function MensageriaClient({ hoje, nomeUsuario }: { hoje: string; nomeUsuario: string }) {
-  const [aba, setAba] = useState<Aba>('disparos');
+export function MensageriaClient({ hoje, nomeUsuario, canEdit = true }: { hoje: string; nomeUsuario: string; canEdit?: boolean }) {
+  const [aba, setAba] = useState<Aba>(canEdit ? 'disparos' : 'projeto');
   const [projetos, setProjetos] = useState<Carga<Projeto>>(undefined);
   const [ferramentas, setFerramentas] = useState<Carga<Ferramenta>>(undefined);
   const [numeros, setNumeros] = useState<Carga<Numero>>(undefined);
@@ -106,26 +106,26 @@ export function MensageriaClient({ hoje, nomeUsuario }: { hoje: string; nomeUsua
 
       {projetos === null && <ErroCarga oque="os projetos (as listas de projeto ficam vazias)" />}
 
-      <Tabs tabs={ABAS} active={aba} onChange={(k) => setAba(k as Aba)} idBase={ID_BASE} label="Mensageria" />
+      <Tabs tabs={canEdit ? ABAS : ABAS.filter((a) => a.k === 'projeto' || a.k === 'integracoes')} active={aba} onChange={(k) => setAba(k as Aba)} idBase={ID_BASE} label="Mensageria" />
 
-      <Painel k="disparos" aba={aba}>
+      {canEdit && <Painel k="disparos" aba={aba}>
         <AbaDisparos
           hoje={hoje} nomeUsuario={nomeUsuario} projetos={listaProjetos} ferramentas={listaFerramentas} numeros={listaNumeros}
           ativo={aba === 'disparos'} versao={vLista} onGravou={gravou('disparo')}
         />
-      </Painel>
+      </Painel>}
       <Painel k="projeto" aba={aba}>
         <AbaPorProjeto hoje={hoje} projetos={listaProjetos} ativo={aba === 'projeto'} versao={vLista} />
       </Painel>
-      <Painel k="numeros" aba={aba}>
+      {canEdit && <Painel k="numeros" aba={aba}>
         <AbaNumeros numeros={listaNumeros} falhou={numeros === null} projetos={listaProjetos} ferramentas={listaFerramentas} onGravou={gravou('numero')} />
-      </Painel>
-      <Painel k="ferramentas" aba={aba}>
+      </Painel>}
+      {canEdit && <Painel k="ferramentas" aba={aba}>
         <AbaFerramentas
           ferramentas={listaFerramentas} falhou={ferramentas === null} onGravou={gravou('ferramenta')}
           ativo={aba === 'ferramentas'} versaoPrecos={vPrecos} onGravouPreco={gravou('preco')}
         />
-      </Painel>
+      </Painel>}
       <Painel k="integracoes" aba={aba}>
         <AbaIntegracoes ativo={aba === 'integracoes'} />
       </Painel>

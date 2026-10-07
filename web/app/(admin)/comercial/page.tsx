@@ -12,6 +12,7 @@ export default async function Page() {
   const acesso = acessoComercial(user, ACESSO_DEPARTAMENTOS);
   // Quem só pede estratégia entra direto na tela dele (o cartão da home e o menu apontam para /comercial).
   if (acesso === 'estrategias') redirect('/comercial/estrategias');
+  if (acesso === 'relatorios') redirect('/comercial/relatorios');
   if (acesso !== 'completo') redirect('/');
   return <InicioClient />;
 }

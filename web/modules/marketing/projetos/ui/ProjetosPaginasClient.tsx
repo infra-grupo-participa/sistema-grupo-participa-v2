@@ -216,7 +216,7 @@ function TestarCampanha() {
 }
 
 // ─── Tela ────────────────────────────────────────────────────────────────────────────────────────────────────────────
-export function ProjetosPaginasClient() {
+export function ProjetosPaginasClient({ canEditProjeto = true, canEditPagina = true }: { canEditProjeto?: boolean; canEditPagina?: boolean }) {
   const router = useRouter();
   const [projetos, setProjetos] = useState<Projeto[] | null>(null);
   const [paginas, setPaginas] = useState<Pagina[] | null>(null);
@@ -263,7 +263,7 @@ export function ProjetosPaginasClient() {
       <SectionCard
         title="Projetos"
         subtitle={`${projetos.length} cadastrado(s)`}
-        right={<Button size="sm" title="Abre o cadastro completo do projeto no Tráfego (tipo, unidade, períodos e contas)"
+        right={canEditProjeto && <Button size="sm" title="Abre o cadastro completo do projeto no Tráfego (tipo, unidade, períodos e contas)"
           onClick={() => router.push(NOVO_PROJETO_URL)}><Icon name="plus" size={14} /> Novo projeto</Button>}
       >
         {projetos.length === 0 ? <EmptyState title="Nenhum projeto" /> : (
@@ -273,7 +273,7 @@ export function ProjetosPaginasClient() {
             </Thead>
             <tbody>
               {projetos.map((p) => (
-                <Tr key={p.id} onClick={() => setEditProjeto({ ...p })}>
+                <Tr key={p.id} onClick={canEditProjeto ? () => setEditProjeto({ ...p }) : undefined}>
                   <Td><span className="font-mono font-semibold">{p.sigla}</span></Td>
                   <Td>{p.nome}</Td>
                   <Td>{p.linha}</Td>
@@ -299,9 +299,9 @@ export function ProjetosPaginasClient() {
               <option value="">Todos os projetos</option>
               {projetos.map((p) => <option key={p.id} value={p.id}>{p.sigla}</option>)}
             </FilterSelect>
-            <Button size="sm" disabled={projetos.length === 0} onClick={() => setEditPagina({
+            {canEditPagina && <Button size="sm" disabled={projetos.length === 0} onClick={() => setEditPagina({
               projeto_id: filtro === '' ? 0 : filtro, codigo: null, nome: '', dominio: '', caminho: '', funcao: 'captura', funil: null, ativa: true, obs: null,
-            })}><Icon name="plus" size={14} /> Nova página</Button>
+            })}><Icon name="plus" size={14} /> Nova página</Button>}
           </div>
         }
       >
@@ -312,10 +312,10 @@ export function ProjetosPaginasClient() {
             </Thead>
             <tbody>
               {paginasVisiveis.map((g) => (
-                <Tr key={g.id} onClick={() => setEditPagina({
+                <Tr key={g.id} onClick={canEditPagina ? () => setEditPagina({
                   id: g.id, projeto_id: g.projeto_id, codigo: g.codigo, nome: g.nome, dominio: g.dominio, caminho: g.caminho,
                   funcao: g.funcao, funil: g.funil, ativa: g.ativa, obs: g.obs,
-                })}>
+                }) : undefined}>
                   <Td><span className="font-mono">{g.projeto_sigla}</span></Td>
                   <Td>{g.codigo ? <span className="font-mono">{g.codigo}</span> : '—'}</Td>
                   <Td>{g.nome}</Td>
@@ -332,8 +332,8 @@ export function ProjetosPaginasClient() {
 
       <TestarCampanha />
 
-      {editProjeto && <ModalProjeto inicial={editProjeto} onFechar={() => setEditProjeto(null)} onSalvo={salvo} />}
-      {editPagina && <ModalPagina inicial={editPagina} projetos={projetos} onFechar={() => setEditPagina(null)} onSalvo={salvo} />}
+      {canEditProjeto && editProjeto && <ModalProjeto inicial={editProjeto} onFechar={() => setEditProjeto(null)} onSalvo={salvo} />}
+      {canEditPagina && editPagina && <ModalPagina inicial={editPagina} projetos={projetos} onFechar={() => setEditPagina(null)} onSalvo={salvo} />}
       <Toast>{toast}</Toast>
     </div>
   );

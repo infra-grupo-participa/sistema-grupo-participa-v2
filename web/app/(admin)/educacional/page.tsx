@@ -4,13 +4,15 @@ import { Card } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { podePedirAlteracao } from '@/modules/alunos/domain/pedidos-alteracao';
 import { podeVerRemocao } from '@/modules/remocao-acessos/domain/acesso';
+import { podeEditarArea } from '@/shared/domain/departamentos';
+import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 
 export const dynamic = 'force-dynamic';
 
 /** Início do departamento Educacional: os atalhos que eram a home do sistema até 05/10/2026. */
 export default async function EducacionalPage() {
   const user = await getCurrentUser();
-  const isAdmin = ehAdminOuAcima(user);
+  const isAdmin = ACESSO_DEPARTAMENTOS.acessoV2 ? podeEditarArea(user, 'educacional', null, ACESSO_DEPARTAMENTOS) : ehAdminOuAcima(user);
   const isDev = ehDev(user);
 
   const atalhos = [
@@ -19,7 +21,7 @@ export default async function EducacionalPage() {
     { ico: 'clipboard', label: 'Pedidos de alteração', desc: 'Pedir e aprovar mudança de cadastro e troca de sócio', href: '/educacional/pedidos-alteracao', external: false, show: podePedirAlteracao(user) },
     { ico: 'user-x', label: 'Remoção de Acessos', desc: 'Reembolsos, chargebacks e checklist de remoção', href: '/educacional/remocoes', external: false, show: podeVerRemocao(user) },
     { ico: 'depoimentos', label: 'Depoimentos', desc: 'Biblioteca, highlights e copy', href: '/educacional/depoimentos#biblioteca', external: false, show: isAdmin },
-    { ico: 'user', label: 'Usuários', desc: 'Perfis, cargos e permissões', href: '/usuarios', external: false, show: isAdmin },
+    { ico: 'user', label: 'Usuários', desc: 'Perfis, cargos e permissões', href: '/usuarios', external: false, show: ACESSO_DEPARTAMENTOS.acessoV2 ? user?.acesso?.master === true : isAdmin },
     { ico: 'check-circle', label: 'Ativação', desc: 'Sistema de ativação de acessos', href: 'https://ativacao.grupoparticipa.app.br/login', external: true, show: true },
     { ico: 'gem', label: 'Serviços Diamante', desc: 'Sistema de Serviços Diamante', href: 'https://diamantes.grupoparticipa.app.br/', external: true, show: true },
     { ico: 'settings', label: 'Configurações', desc: 'Seu perfil e tema', href: '/sistema/configuracoes', external: false, show: true },

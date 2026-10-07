@@ -135,7 +135,7 @@ function TabelaCentral({ linhas, ordem, onOrdenar, onAbrir }: {
   );
 }
 
-export function TrafegoClient() {
+export function TrafegoClient({ canEdit = true, canViewFinanceiro = true }: { canEdit?: boolean; canViewFinanceiro?: boolean }) {
   const [config, setConfig] = useState<ConfigTrafego | null | undefined>(undefined);
   const [linhas, setLinhas] = useState<LinhaResumo[] | null | undefined>(undefined);
   const [aba, setAba] = useState<Aba>('central');
@@ -145,7 +145,7 @@ export function TrafegoClient() {
   const [busca, setBusca] = useState(() => (typeof window === 'undefined' ? '' : lerEstadoUrl(window.location.search).q));
   const [ordem, setOrdem] = useState<OrdemCentral>(() => (typeof window === 'undefined' ? ORDEM_INICIAL : lerEstadoUrl(window.location.search).ordem));
   // ?novo=1 (botão "Novo projeto" de Marketing > Projetos e páginas): abre o cadastro completo assim que as listas chegam
-  const pedirNovo = useRef(typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('novo') === '1');
+  const pedirNovo = useRef(canEdit && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('novo') === '1');
   const [aberto, setAberto] = useState<number | null>(null);
   const [versao, setVersao] = useState(0);
   const [listas, setListas] = useState<ListasCadastro | null>(null);
@@ -183,8 +183,8 @@ export function TrafegoClient() {
     if (centralDesatualizada.current) { centralDesatualizada.current = false; mudou(); }
   }, [mudou]);
   useEffect(() => {
-    if (pedirNovo.current && listas && config) { pedirNovo.current = false; setNovo(true); }
-  }, [listas, config]);
+    if (canEdit && pedirNovo.current && listas && config) { pedirNovo.current = false; setNovo(true); }
+  }, [canEdit, listas, config]);
   // busca e ordem voltam para a URL sem criar entrada no histórico (e o ?novo=1 sai depois de lido)
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
@@ -196,6 +196,18 @@ export function TrafegoClient() {
   const t = useMemo(() => totais(visiveis), [visiveis]);
 
   if (config === undefined || linhas === undefined) return <Loading />;
+
+  // Leitores e pessoas sem financeiro.ver recebem uma vista sem valores monetários nem ações de gravação.
+  // O banco mantém a guarda das RPCs; a tela evita expor controles e números indevidos.
+  if (!canEdit || !canViewFinanceiro) return <div className="max-w-6xl space-y-5">
+    <div><div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Marketing · Tráfego</div><h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">Central do Tráfego</h1></div>
+    {!config || !linhas ? <p role="alert">Não foi possível carregar (sem conexão ou sem acesso).</p> : <SectionCard title="Projetos" right={canEdit && listas ? <Button size="sm" onClick={() => setNovo(true)}><Icon name="plus" size={14} /> Novo projeto</Button> : undefined}>
+      <div className="mb-3 w-72"><SearchInput value={busca} onChange={(e) => setBusca(e.target.value)} onLimpar={() => setBusca('')} placeholder="Buscar sigla ou nome" aria-label="Buscar projeto por sigla ou nome" /></div>
+      <DataTable><Thead><Th>Projeto</Th><Th>Situação</Th><Th>Leads</Th><Th>CTR</Th><Th>Connect rate</Th></Thead><tbody>{visiveis.map((l) => <Tr key={l.projeto_id}><Td><span className="font-mono font-semibold">{l.sigla}</span><div className="text-xs text-[var(--fg-3)]">{l.nome}</div></Td><Td>{l.status_nome ?? SEM_DADO}</Td><Td>{inteiro(l.leads)}</Td><Td>{pct(l.ctr, 2)}</Td><Td>{pct(l.connect_rate)}</Td></Tr>)}</tbody></DataTable>
+    </SectionCard>}
+    {canEdit && novo && config && listas && <ModalProjetoCadastro inicial={{ ...PROJETO_FORM_VAZIO }} listas={listas} config={config} contas={contas} onFechar={() => setNovo(false)} onSalvo={(m) => { setNovo(false); flash(m); mudou(); }} />}
+    <Toast>{toast}</Toast>
+  </div>;
 
   return (
     <div className="max-w-[1600px] space-y-5">
@@ -258,7 +270,7 @@ export function TrafegoClient() {
                   <div className="w-56"><SearchInput value={busca} onChange={(e) => setBusca(e.target.value)} onLimpar={() => setBusca('')}
                     placeholder="Buscar sigla ou nome" aria-label="Buscar projeto por sigla ou nome" maxLength={80} /></div>
                   <Filtros f={filtros} set={setFiltros} config={config} listas={listas} />
-                  {listas && <Button size="sm" onClick={() => setNovo(true)}><Icon name="plus" size={14} /> Novo projeto</Button>}
+                  {canEdit && listas && <Button size="sm" onClick={() => setNovo(true)}><Icon name="plus" size={14} /> Novo projeto</Button>}
                 </div>} title="Projetos" subtitle={`${visiveis.length} de ${linhas.length}`}>
                   <TabelaCentral linhas={visiveis} ordem={ordem} onOrdenar={(c) => setOrdem((o) => alternarOrdem(o, c))} onAbrir={setAberto} />
                 </SectionCard>
@@ -274,7 +286,7 @@ export function TrafegoClient() {
       {aberto != null && config && (
         <VidaProjeto key={aberto} id={aberto} config={config} listas={listas} contas={contas} versao={versao + versaoVida} onFechar={fecharVida} flash={flash} onMudou={mudouNaVida} />
       )}
-      {novo && config && listas && (
+      {canEdit && novo && config && listas && (
         <ModalProjetoCadastro inicial={{ ...PROJETO_FORM_VAZIO }} listas={listas} config={config} contas={contas}
           onFechar={() => setNovo(false)} onSalvo={(m, id) => { setNovo(false); flash(m); mudou(); if (id != null) setAberto(id); }} />
       )}
