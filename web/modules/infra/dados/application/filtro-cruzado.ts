@@ -3,7 +3,7 @@ export type Filtro = { campo: CampoFiltro; valor: string };
 
 export function rotuloFiltro(campo: CampoFiltro, valor: unknown): string {
   if (valor === null || valor === undefined || valor === '') {
-    if (campo === 'instrucao' || campo === 'turma') return 'Não é aluno';
+    if (campo === 'instrucao' || campo === 'turma') return 'Sem registro de aluno ativo';
     if (campo === 'entrou_grupo') return 'Sem fonte';
     return 'Sem informação';
   }

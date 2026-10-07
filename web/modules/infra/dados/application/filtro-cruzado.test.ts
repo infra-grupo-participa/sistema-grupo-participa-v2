@@ -14,7 +14,7 @@ describe('filtro cruzado', () => {
   });
   it('agrupa com os outros filtros e mantém nulo distinto de zero', () => {
     expect(agrupar(linhas, 'instrucao', [{ campo: 'comprou', valor: 'true' }])).toEqual([
-      { valor: '__null__', rotulo: 'Não é aluno', quantidade: 1 },
+      { valor: '__null__', rotulo: 'Sem registro de aluno ativo', quantidade: 1 },
       { valor: 'THB', rotulo: 'THB', quantidade: 1 },
     ]);
     expect(agrupar(linhas, 'utm_source', [])[1]).toEqual({ valor: '__null__', rotulo: 'Sem informação', quantidade: 1 });
