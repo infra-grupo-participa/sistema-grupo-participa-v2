@@ -1,10 +1,10 @@
 -- 20261007u: níveis de acesso, fase 3 (limpar). Tira o "velho" das guardas: gp_is_admin() passa a ser só o master
 -- (acesso.master) e as guardas de financeiro, CPF, Marketing e Comercial deixam de aceitar o cargo admin/dev.
 --
--- STATUS: NÃO APLICADA. Versão 3: correções do pentester das rodadas 1 e 2 (.maestri/entregas/niveis-de-acesso/
---   pentester.md no cérebro) e a EXCEÇÃO NOMINAL decidida pelo Victor Hugo em 07/10/2026 (noite) para os 6 não masters
---   a quem o João Pedro Alves devolveu admin/dev às 18:39:06 UTC (registro: migration 20261007184603). Só aplicar depois
---   de o pentester aprovar (rodada 3) e o Maestro mandar. Ensaio: 20261007u_ensaio.sql (rollback). Relatório: 20261007u.explain.md.
+-- STATUS: APLICADA em produção em 07/10/2026 às 19:57 UTC, versão 20261007195738 (nome acesso_fase3_limpar, era 20261007u),
+--   com o ok do pentester (rodada 3b) e do Maestro, pelo aplica_sql.py aplicar + blindagem.autorizar_guarda + insert em
+--   supabase_migrations.schema_migrations na mesma transação. md5 gravado = 74a76b07b002169902c0f223ddbd4b57 = este arquivo
+--   antes desta troca de STATUS (commit ff6fbea). Relatório: 20261007195738.explain.md.
 --
 -- POR QUE
 --   Depois da fase 2 (20261007182928, aplicada) só os 3 masters têm cargo admin/dev. Esta fase fecha o caminho de volta:
