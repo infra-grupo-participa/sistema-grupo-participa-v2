@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
+import { ROTULO_CANAL, SELO_CANAL, nomeProjeto, type OrigemContato } from '../../domain/catalogacao';
 import type { Contato } from '../../domain/types';
 import { Dono, Sinal } from '../comum';
 
@@ -72,5 +73,26 @@ export function PopoverFiltros({ ativos, children }: { ativos: number; children:
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Origem da linha: selo do canal de entrada + projeto (ou "sem projeto", com a linha do produto quando há compra).
+ * Sem catalogação (banco sem a 20261007141044): traço.
+ */
+export function OrigemLinha({ origem, compacta = false, className = '' }: {
+  origem: OrigemContato | null | undefined; compacta?: boolean; className?: string;
+}) {
+  if (!origem) return <span className={`block text-sm text-[var(--fg-3)] ${className}`}>—</span>;
+  const projeto = origem.projeto ? nomeProjeto(origem.projeto, origem.projetoNome) : null;
+  const semProjeto = origem.linha ? `${origem.linha.toUpperCase()}, sem projeto` : 'Sem projeto';
+  const title = `Entrou por ${ROTULO_CANAL[origem.canal]}${projeto ? ` · ${projeto}` : ` · ${semProjeto}`}${origem.projeto ? ` (${origem.projeto})` : ''}`;
+  return (
+    <span className={`flex min-w-0 items-center gap-1.5 ${compacta ? 'text-xs' : 'text-sm'} ${className}`} title={title}>
+      <span className="shrink-0 rounded-[var(--r-sm)] border border-[var(--border)] px-1.5 text-[11px] leading-5 text-[var(--fg-2)]">
+        {SELO_CANAL[origem.canal]}
+      </span>
+      <span className={`truncate ${projeto ? 'text-[var(--fg-2)]' : 'text-[var(--fg-3)]'}`}>{projeto ?? semProjeto}</span>
+    </span>
   );
 }

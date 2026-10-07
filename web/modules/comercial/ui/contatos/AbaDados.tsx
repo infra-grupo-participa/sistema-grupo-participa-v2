@@ -13,6 +13,7 @@ import { InfoIndicador } from '../InfoIndicador';
 import { INFO_FILA } from '../recuperacao/indicadores';
 import { repo, useDados } from '../repositorio';
 import { utmEmLinha } from './regras-contatos';
+import { ComoEntrou } from './ComoEntrou';
 
 export function AbaDados({ c, duplicados, nomeDe, onAbrirContato }: {
   c: Contato;
@@ -43,6 +44,7 @@ export function AbaDados({ c, duplicados, nomeDe, onAbrirContato }: {
       </section>
 
       <div className="min-w-0 space-y-6">
+        <ComoEntrou contatoId={c.id} />
         <section>
           <SectionTitle
             right={temDetalheUtm ? (

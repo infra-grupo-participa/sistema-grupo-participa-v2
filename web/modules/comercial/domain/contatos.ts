@@ -2,6 +2,7 @@
 // O banco faz o mesmo em `crm_contatos_pagina`/`crm_contatos_resumo` (migration 20261006m); esta versão serve à
 // demonstração e ao caminho antigo (RPC nova ainda não aplicada). Sem React, sem Supabase.
 import { chaveTelefone } from './regras';
+import type { CanalEntrada } from './catalogacao';
 import type { Contato, Negocio, PerfilProfissional, PontoJornada, ProdutoKey } from './types';
 
 export type OrdemContatos = 'criado' | 'nome' | 'dono' | 'negocios' | 'lancamentos' | 'ultima';
@@ -18,6 +19,10 @@ export interface FiltroContatos {
   tags?: string[];
   optOut?: boolean;
   soAlunos?: boolean;
+  /** Canal de entrada (catalogação de origem, 20261007141044) ou 'todos'. */
+  canal?: CanalEntrada | 'todos';
+  /** Chave do projeto, 'sem' (sem projeto) ou 'todos'. */
+  projeto?: string;
   ordem?: OrdemContatos;
   dir?: 'asc' | 'desc';
   limite?: number;
@@ -52,6 +57,10 @@ export interface ResumoContatos {
   /** Opções dos filtros (UF e tags existentes na lista visível). */
   ufs: string[];
   tags: string[];
+  /** Contatos por canal de entrada e por projeto (20261007141044). Ausente = banco sem a catalogação. */
+  canais?: { canal: CanalEntrada; total: number }[];
+  projetos?: { chave: string; nome: string | null; total: number }[];
+  semProjeto?: number;
 }
 
 export const LIMITE_PAGINA_CONTATOS = 50;
@@ -133,6 +142,9 @@ export function passaFiltro(c: Contato, f: FiltroContatos): boolean {
   if (f.tags?.length && !f.tags.some((t) => c.tags.includes(t))) return false;
   if (f.optOut && !c.optOut) return false;
   if (f.soAlunos && !c.ehAluno) return false;
+  if (f.canal && f.canal !== 'todos' && (c.origem?.canal ?? 'sistema') !== f.canal) return false;
+  const projeto = f.projeto ?? 'todos';
+  if (projeto === 'sem' ? !!c.origem?.projeto : projeto !== 'todos' && c.origem?.projeto !== projeto) return false;
   if (f.busca && !casaBusca(c, f.busca)) return false;
   return true;
 }
@@ -168,9 +180,20 @@ export function paginarContatos(
 }
 
 /** Números do topo e opções dos filtros (mesmos de `crm_contatos_resumo`). */
-export function resumirContatos(contatos: Pick<Contato, 'donoId' | 'optOut' | 'ehAluno' | 'uf' | 'tags'>[]): ResumoContatos {
+export function resumirContatos(contatos: Pick<Contato, 'donoId' | 'optOut' | 'ehAluno' | 'uf' | 'tags' | 'origem'>[]): ResumoContatos {
   const col = new Intl.Collator('pt-BR');
+  const canais = new Map<CanalEntrada, number>();
+  const projetos = new Map<string, { nome: string | null; total: number }>();
+  for (const c of contatos) {
+    const canal = c.origem?.canal ?? 'sistema';
+    canais.set(canal, (canais.get(canal) ?? 0) + 1);
+    const p = c.origem?.projeto;
+    if (p) projetos.set(p, { nome: c.origem?.projetoNome ?? null, total: (projetos.get(p)?.total ?? 0) + 1 });
+  }
   return {
+    canais: [...canais].map(([canal, total]) => ({ canal, total })).sort((a, b) => b.total - a.total || a.canal.localeCompare(b.canal)),
+    projetos: [...projetos].map(([chave, v]) => ({ chave, nome: v.nome, total: v.total })).sort((a, b) => b.total - a.total || a.chave.localeCompare(b.chave)),
+    semProjeto: contatos.filter((c) => !c.origem?.projeto).length,
     total: contatos.length,
     semDono: contatos.filter((c) => !c.donoId).length,
     optOut: contatos.filter((c) => c.optOut).length,

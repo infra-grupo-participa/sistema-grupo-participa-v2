@@ -10,6 +10,7 @@ import type {
   PreferenciasNotificacao, ProdutoKey, SessaoComercial, StatusFila, StatusWhatsapp, Template, TipoAtividade, TipoProjeto, Vendedor,
 } from '../domain/types';
 import type { FiltroContatos, PaginaContatos, ResumoContatos } from '../domain/contatos';
+import type { OrigemDetalhada, PainelCatalogo, RegraCatalogo } from '../domain/catalogacao';
 import type { EdicaoAtivacao, PainelAtivacao } from '../domain/ativacao';
 
 export interface Resultado {
@@ -144,8 +145,19 @@ export interface ComercialRepository {
   /** Cria ou edita um motivo de perda. Os de fábrica só mudam nota e ativo. Só o gestor. */
   salvarMotivoPerda(m: MotivoPerdaConfig): Promise<Resultado>;
 
-  /** Cria ou edita um motivo de perda. Os de fábrica só mudam nota e ativo. Só o gestor. */
-  salvarMotivoPerda(m: MotivoPerdaConfig): Promise<Resultado>;
+  // ── Catalogação de origem (migration 20261007141044) ──
+  /** Regras, listas do AC, projetos, números e valores sem regra. Todos do Comercial leem; `podeEditar` = gestor. */
+  catalogo(): Promise<PainelCatalogo>;
+  /** Cria (id null) ou edita uma regra; desativar = `ativo: false` (nada se apaga). Só o gestor. */
+  salvarRegraCatalogo(r: RegraCatalogo): Promise<Resultado & { id?: number }>;
+  /** Nome de uma lista do ActiveCampaign (o webhook só manda o id). Só o gestor. */
+  salvarListaAc(id: string, nome: string): Promise<Resultado>;
+  /** Reaplica as regras aos contatos sem projeto (ou a todos). Projeto definido à mão não muda. Só o gestor. */
+  reaplicarCatalogo(todos?: boolean): Promise<Resultado & { catalogados?: number }>;
+  /** "Como entrou" da ficha (null = contato sem origem registrada). */
+  origemContato(contatoId: string): Promise<OrigemDetalhada | null>;
+  /** Gestor define o projeto do contato à mão; null = volta a seguir as regras. */
+  definirProjetoContato(contatoId: string, projeto: string | null): Promise<Resultado>;
 
   /** Move para uma etapa do funil do negócio (id da etapa personalizada). */
   moverEtapa(negocioId: string, etapaId: string): Promise<Resultado>;

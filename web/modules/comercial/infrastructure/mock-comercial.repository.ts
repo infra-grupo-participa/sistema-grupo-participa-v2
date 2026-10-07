@@ -26,6 +26,8 @@ import { OFERTAS_DEMO, ORFAS_DEMO, PRODUTOS_DEMO } from './mock-catalogo';
 import { gerarBaseDemo, painelPadrao, preferenciasPadrao, type BaseDemo } from './mock-dados';
 import { validarAtivacao, type EdicaoAtivacao, type PainelAtivacao } from '../domain/ativacao';
 import { modeloFunil } from '../domain/modelos';
+import { evidenciaDemo, origemDemo, painelDemo, regrasDemo, resumoDeOrigem, type EstadoOrigemDemo } from './mock-catalogacao';
+import { CHAVE_PROJETO, type OrigemDetalhada, type PainelCatalogo, type RegraCatalogo } from '../domain/catalogacao';
 import { cadastroVazio, ehFunilAtivacao, painelAtivacaoDemo, SUFIXO_ATIVACAO, toquesDoNegocio, type CadastroAtivacao } from './mock-ativacao';
 
 const LATENCIA_MS = 120;
@@ -40,6 +42,8 @@ export class MockComercialRepository implements ComercialRepository {
   constructor() {
     this.db = gerarBaseDemo();
     this.semearAtivacao();
+    this.db.contatos.forEach((c, i) => this.origensCat.set(c.id, { evidencia: evidenciaDemo(c, i), manual: null }));
+    this.catalogarDemo();
     // Registro inicial a partir do histórico da demonstração (o que o backend teria gravado).
     const acao: Partial<Record<EventoTimeline['tipo'], AcaoLog>> = { criado: 'criou', etapa: 'moveu_etapa', dono: 'trocou_dono', perdido: 'marcou_perdido', ganho: 'marcou_ganho', nota: 'criou' };
     this.logDb = this.db.eventos.filter((e) => acao[e.tipo] && e.negocioId).map((e) => ({
@@ -496,6 +500,73 @@ export class MockComercialRepository implements ComercialRepository {
     else this.db.motivos.push({ ...m, label: m.label.trim(), sistema: false });
     this.registrar(atual ? 'editou' : 'criou', 'motivo', m.key, `${atual ? 'Editou' : 'Criou'} o motivo de perda "${m.label.trim()}"`);
     return espera({ ok: true, msg: atual ? 'Motivo atualizado.' : 'Motivo criado.' });
+  }
+
+  // ── Catalogação de origem (20261007141044) ──
+  private regrasCat: RegraCatalogo[] = regrasDemo();
+  private origensCat = new Map<string, EstadoOrigemDemo>();
+
+  /** Recalcula a origem de todo contato demo com as regras atuais (no banco: crm.origem_catalogar). */
+  private catalogarDemo() {
+    for (const c of this.db.contatos) {
+      const e = this.origensCat.get(c.id);
+      c.origem = e ? resumoDeOrigem(origemDemo(e, this.regrasCat)) : null;
+    }
+  }
+
+  catalogo(): Promise<PainelCatalogo> {
+    const estados = this.db.contatos.map((c) => this.origensCat.get(c.id)).filter((e): e is EstadoOrigemDemo => !!e);
+    const origens = estados.map((e) => origemDemo(e, this.regrasCat));
+    return espera(painelDemo(origens, estados, this.regrasCat, this.eu.papel === 'gestor'));
+  }
+
+  async salvarRegraCatalogo(r: RegraCatalogo): Promise<Resultado & { id?: number }> {
+    if (this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o gestor edita as regras de catalogação.' });
+    if (!r.padrao.trim()) return espera({ ok: false, msg: 'Escreva o valor ou o pedaço do nome.' });
+    if (r.projeto && !CHAVE_PROJETO.test(r.projeto)) return espera({ ok: false, msg: 'Chave do projeto inválida.' });
+    const igual = this.regrasCat.find((x) => x.ativo && r.ativo && x.id !== r.id && (x.tipo ?? 'projeto') === (r.tipo ?? 'projeto') && x.campo === r.campo && x.operador === r.operador
+      && x.padrao.trim().toLowerCase() === r.padrao.trim().toLowerCase() && (x.valeDe ?? '') === (r.valeDe ?? '') && (x.valeAte ?? '') === (r.valeAte ?? ''));
+    if (igual) return espera({ ok: false, msg: 'Já existe uma regra ativa igual (campo, operador, valor e datas).' });
+    const atual = r.id != null ? this.regrasCat.find((x) => x.id === r.id) : undefined;
+    if (r.id != null && !atual) return espera({ ok: false, msg: 'Regra não encontrada.' });
+    const id = atual?.id ?? Math.max(0, ...this.regrasCat.map((x) => x.id ?? 0)) + 1;
+    if (atual) Object.assign(atual, { ...r, id });
+    else this.regrasCat.push({ ...r, id, padrao: r.padrao.trim() });
+    this.catalogarDemo();
+    return espera({ ok: true, msg: atual ? 'Regra atualizada.' : 'Regra criada.', id });
+  }
+
+  async salvarListaAc(id: string, nome: string): Promise<Resultado> {
+    if (this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o gestor edita as listas.' });
+    if (!/^[0-9]{1,10}$/.test(id.trim())) return espera({ ok: false, msg: 'Id da lista inválido (só números).' });
+    if (!nome.trim()) return espera({ ok: false, msg: 'Escreva o nome da lista (até 200 letras).' });
+    return espera({ ok: true, msg: 'Lista salva. (Demonstração: os nomes de exemplo não mudam.)' });
+  }
+
+  async reaplicarCatalogo(todos = false): Promise<Resultado & { catalogados?: number }> {
+    if (this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o gestor reaplica as regras.' });
+    const antes = this.db.contatos.filter((c) => c.origem?.projeto).length;
+    const n = this.db.contatos.filter((c) => todos || !c.origem?.projeto).length;
+    this.catalogarDemo();
+    const depois = this.db.contatos.filter((c) => c.origem?.projeto).length;
+    return espera({ ok: true, msg: `${n} contatos recatalogados; com projeto: ${antes} → ${depois}.`, catalogados: n });
+  }
+
+  async origemContato(contatoId: string): Promise<OrigemDetalhada | null> {
+    const e = this.origensCat.get(contatoId);
+    if (!e) return espera(null);
+    return espera({ ...origemDemo(e, this.regrasCat), podeDefinir: this.eu.papel === 'gestor' });
+  }
+
+  async definirProjetoContato(contatoId: string, projeto: string | null): Promise<Resultado> {
+    if (this.eu.papel !== 'gestor') return espera({ ok: false, msg: 'Só o gestor define o projeto do contato.' });
+    const e = this.origensCat.get(contatoId);
+    if (!e) return espera({ ok: false, msg: 'Contato sem origem registrada.' });
+    const p = projeto?.trim().toLowerCase() || null;
+    if (p && !CHAVE_PROJETO.test(p)) return espera({ ok: false, msg: 'Chave do projeto inválida.' });
+    e.manual = p;
+    this.catalogarDemo();
+    return espera({ ok: true, msg: p ? 'Projeto do contato definido.' : 'Projeto volta a seguir as regras.' });
   }
 
   // ── Jornada ──

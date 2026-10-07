@@ -4,6 +4,8 @@
 // playbook (etapas no infinitivo, 9 motivos de perda, campos obrigatórios por etapa). Quando o backend
 // existir, as tabelas espelham estes tipos; o front não muda.
 
+import type { OrigemContato } from './catalogacao';
+
 /** Produto vendido = "agrupador" na Clint. Um funil "Venda ativa" por produto. */
 export type ProdutoKey = 'ht' | 'hm' | 'aurum' | 'sv' | 'acelera' | 'ethb';
 
@@ -141,6 +143,8 @@ export interface Contato {
   /** Pediu para não receber contato: entra na lista de bloqueio. */
   optOut: boolean;
   criadoEm: string;
+  /** Como entrou (canal, quando, projeto). Catalogação de origem, migration 20261007141044. Ausente = ainda não catalogado. */
+  origem?: OrigemContato | null;
 }
 
 export interface ProximaAtividade {

@@ -12,6 +12,7 @@ import {
 import { fmtRelativo } from '@/shared/ui/format';
 import { Icon } from '@/shared/ui/icons';
 import { produto, ROTULO_PERFIL } from '../../domain/catalogo';
+import { CANAIS_ENTRADA, ROTULO_CANAL, nomeProjeto, type CanalEntrada } from '../../domain/catalogacao';
 import { fmtTelefone } from '../../domain/regras';
 import {
   linhasContatos, passaFiltro, type ContatoLinha, type FiltroContatos, type NegocioAbertoLinha,
@@ -22,16 +23,28 @@ import { InfoIndicador, type TextoIndicador } from '../InfoIndicador';
 import { repo, useDados } from '../repositorio';
 import { ContatoDrawer } from './ContatoDrawer';
 import { ModalNovoContato } from './ModalNovoContato';
-import { DonoLinha, FlagsContato, PopoverFiltros } from './pecas';
+import { DonoLinha, FlagsContato, OrigemLinha, PopoverFiltros } from './pecas';
 import { resumoAbertos } from './regras-contatos';
 
 type Coluna = 'nome' | 'dono' | 'negocios' | 'lancamentos' | 'ultima';
 // Página do servidor (crm_contatos_pagina, migration 20261006m): filtro, ordem e contagem no banco.
 const PAGINA = 50;
 /** Mesmo molde de colunas no cabeçalho e nas linhas (só em tela larga). Proporcionais: nunca passam do contêiner. */
-const GRADE = 'grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,0.8fr)_minmax(0,1fr)] items-center gap-3 px-3';
+const GRADE = 'grid grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,0.7fr)_minmax(0,1fr)] items-center gap-3 px-3';
 
-const INFO: Record<'total' | 'semDono' | 'optOut' | 'alunos' | 'lancamentos' | 'ultima', TextoIndicador> = {
+const INFO: Record<'total' | 'semDono' | 'optOut' | 'alunos' | 'lancamentos' | 'ultima' | 'origem' | 'semProjeto', TextoIndicador> = {
+  origem: {
+    nome: 'Origem',
+    oQueE: 'Por onde a pessoa entrou na base e de qual projeto (lançamento, seminário, evento) ela veio.',
+    comoConta: 'Canal = a evidência mais antiga da pessoa: compra na Hotmart, negócio importado da Clint, evento do ActiveCampaign; sem evidência, quem cadastrou (manual, WhatsApp). Projeto = a primeira evidência que uma regra de catalogação liga a um projeto (lista ou tag do AC, oferta da Hotmart, funil, utm_campaign).',
+    paraQue: 'Saber de onde vem cada contato e quanto cada projeto trouxe. O gestor ajusta as regras em Configurações › Catalogação.',
+  },
+  semProjeto: {
+    nome: 'Sem projeto',
+    oQueE: 'Contatos que nenhuma regra ligou a um projeto.',
+    comoConta: 'Inclui quem só comprou um produto (ex.: ingresso do HT fora de edição cadastrada), quem chegou pelo AC sem lista nem tag e listas ou funis ainda sem regra.',
+    paraQue: 'O gestor classifica os valores sem regra em Configurações › Catalogação.',
+  },
   ultima: {
     nome: 'Última interação',
     oQueE: 'O registro mais recente da pessoa com a casa.',
@@ -79,6 +92,8 @@ export function ContatosClient() {
   const [tagsSel, setTagsSel] = useState<string[]>([]);
   const [soOptOut, setSoOptOut] = useState(false);
   const [soAlunos, setSoAlunos] = useState(false);
+  const [canal, setCanal] = useState<CanalEntrada | 'todos'>('todos');
+  const [projeto, setProjeto] = useState<string>('todos');
   const [ordem, setOrdem] = useState<{ col: Coluna; dir: 'asc' | 'desc' }>({ col: 'ultima', dir: 'desc' });
   const [pagina, setPagina] = useState(0);
   const [aberto, setAberto] = useState<string | null>(null);
@@ -98,7 +113,7 @@ export function ContatosClient() {
   // Filtro, ordem e página vão ao banco (crm_contatos_pagina): a tela recebe só a página, com lançamentos,
   // última interação e negócios abertos já calculados em lote. Nada de lista inteira nem histórico por pessoa.
   const filtro: FiltroContatos = {
-    busca: termo || undefined, dono, perfil, uf, tags: tagsSel, optOut: soOptOut, soAlunos,
+    busca: termo || undefined, dono, perfil, uf, tags: tagsSel, optOut: soOptOut, soAlunos, canal, projeto,
     ordem: ordem.col, dir: ordem.dir, limite: PAGINA, offset: pagina * PAGINA,
   };
   const pg = useDados(() => repo.contatosPagina(filtro), [filtro]);
@@ -121,10 +136,11 @@ export function ContatosClient() {
     setPagina(0);
   };
   // Filtros escondidos no popover (o contador do botão mostra quantos estão valendo).
-  const noPopover = [perfil !== 'todos', uf !== 'todas', tagsSel.length > 0, soOptOut, soAlunos].filter(Boolean).length;
+  const noPopover = [perfil !== 'todos', uf !== 'todas', tagsSel.length > 0, soOptOut, soAlunos, canal !== 'todos', projeto !== 'todos'].filter(Boolean).length;
   const filtrosAtivos = !!busca || dono !== 'todos' || noPopover > 0;
   const limpar = () => {
     setBusca(''); setDono('todos'); setPerfil('todos'); setUf('todas'); setTagsSel([]); setSoOptOut(false); setSoAlunos(false);
+    setCanal('todos'); setProjeto('todos');
     setPagina(0);
   };
   const abrir = (id: string) => setAberto(id);
@@ -159,6 +175,11 @@ export function ContatosClient() {
               rotulo: 'Já são alunos', valor: numeros.alunos.toLocaleString('pt-BR'), ativo: soAlunos, info: INFO.alunos,
               onClick: () => { setSoAlunos((v) => !v); setPagina(0); },
             },
+            ...(numeros.semProjeto === undefined ? [] : [{
+              rotulo: 'Sem projeto', valor: numeros.semProjeto.toLocaleString('pt-BR'), ativo: projeto === 'sem', info: INFO.semProjeto,
+              title: 'Contatos que nenhuma regra ligou a um projeto.',
+              onClick: () => { setProjeto((p) => (p === 'sem' ? 'todos' : 'sem')); setPagina(0); },
+            }]),
           ]}
         />
       )}
@@ -204,6 +225,25 @@ export function ContatosClient() {
                       placeholder="Todas as tags"
                       options={(rs.dados?.tags ?? []).map((t) => ({ value: t, label: t }))}
                     />
+                  </Campo>
+                  <Campo rotulo="Canal de entrada">
+                    <FilterSelect value={canal} onChange={(e) => { setCanal(e.target.value as typeof canal); setPagina(0); }}>
+                      <option value="todos">Todos os canais</option>
+                      {(rs.dados?.canais?.map((x) => x.canal) ?? CANAIS_ENTRADA).map((k) => (
+                        <option key={k} value={k}>
+                          {ROTULO_CANAL[k]}{rs.dados?.canais ? ` (${(rs.dados.canais.find((x) => x.canal === k)?.total ?? 0).toLocaleString('pt-BR')})` : ''}
+                        </option>
+                      ))}
+                    </FilterSelect>
+                  </Campo>
+                  <Campo rotulo="Projeto">
+                    <FilterSelect value={projeto} onChange={(e) => { setProjeto(e.target.value); setPagina(0); }}>
+                      <option value="todos">Todos os projetos</option>
+                      <option value="sem">Sem projeto{rs.dados?.semProjeto !== undefined ? ` (${rs.dados.semProjeto.toLocaleString('pt-BR')})` : ''}</option>
+                      {(rs.dados?.projetos ?? []).map((p) => (
+                        <option key={p.chave} value={p.chave}>{nomeProjeto(p.chave, p.nome)} ({p.total.toLocaleString('pt-BR')})</option>
+                      ))}
+                    </FilterSelect>
                   </Campo>
                   <div className="flex flex-col gap-3">
                     <Toggle checked={soOptOut} onChange={(v) => { setSoOptOut(v); setPagina(0); }} label="Só quem não quer contato" />
@@ -346,6 +386,7 @@ function Cabecalho({ ordem, onOrdenar }: {
   return (
     <div className={`${GRADE} rounded-t-[var(--r-lg)] border-b border-[var(--border)] bg-[var(--surface-3)] py-2 text-[var(--fg-3)]`}>
       {col('nome', 'Pessoa')}
+      {col('nome', 'Origem', INFO.origem, false, false)}
       {col('dono', 'Dono')}
       {col('negocios', 'Negócios abertos')}
       {col('lancamentos', 'Lançamentos', INFO.lancamentos, true)}
@@ -392,6 +433,7 @@ function LinhaContato({ c, nomeDe, onAbrir }: {
           rotuloAcao={`Abrir ficha de ${c.nome}`}
         />
       </div>
+      <OrigemLinha origem={c.origem} />
       <DonoLinha c={c} nomeDe={nomeDe} />
       <NegociosAbertos abertos={c.abertos} />
       <span className="text-right text-sm tabular text-[var(--fg-2)]">{c.lancamentos ? c.lancamentos.toLocaleString('pt-BR') : '—'}</span>
@@ -427,6 +469,7 @@ function CartaoContato({ c, nomeDe, onAbrir }: {
               : 'Sem negócio aberto'}
           </span>
         </div>
+        {c.origem && <OrigemLinha origem={c.origem} compacta className="mt-1" />}
         <div className="mt-1 truncate text-xs text-[var(--fg-3)] tabular">
           Última interação {ultima.label}{c.lancamentos ? ` · ${c.lancamentos} lançamento${c.lancamentos > 1 ? 's' : ''}` : ''}
         </div>

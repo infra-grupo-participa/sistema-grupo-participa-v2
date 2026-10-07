@@ -36,6 +36,8 @@ import {
 } from './mapeamento-escrita';
 import type { EdicaoAtivacao, PainelAtivacao } from '../domain/ativacao';
 import { argsSalvarAtivacao, mapPainelAtivacao } from './mapeamento-ativacao';
+import { argsRegra, mapOrigemDetalhada, mapPainelCatalogo } from './mapeamento-catalogacao';
+import type { OrigemDetalhada, PainelCatalogo, RegraCatalogo } from '../domain/catalogacao';
 // Padrão de fábrica de quem nunca personalizou (o mesmo que a demonstração usa).
 import { painelPadrao, preferenciasPadrao } from './mock-dados';
 
@@ -158,6 +160,9 @@ export class SupabaseComercialRepository implements ComercialRepository {
       p_busca: busca || null, p_dono: f.dono ?? null, p_perfil: f.perfil ?? null, p_uf: f.uf ?? null,
       p_tags: f.tags?.length ? f.tags : null, p_opt_out: !!f.optOut, p_so_alunos: !!f.soAlunos,
       p_ordem: f.ordem ?? 'criado', p_dir: f.dir ?? 'desc', p_limite: f.limite ?? 50, p_offset: f.offset ?? 0,
+      // 20261007141044: só vão quando filtram (sem a migration, a RPC de 11 parâmetros continua respondendo o resto)
+      ...(f.canal && f.canal !== 'todos' ? { p_canal: f.canal } : {}),
+      ...(f.projeto && f.projeto !== 'todos' ? { p_projeto: f.projeto } : {}),
     });
     if (d !== null) return mapPaginaServidor(d);
     const [{ contatos, negocios }, vendedores, achados] = await Promise.all([
@@ -316,6 +321,32 @@ export class SupabaseComercialRepository implements ComercialRepository {
     return this.escrever('crm_criar_projeto', argsEscrita.criarProjeto(tipo, nome, agrupadorId, produto), mapResultadoProjeto);
   }
   salvarMotivoPerda(m: MotivoPerdaConfig) { return this.simples('crm_salvar_motivo_perda', argsEscrita.salvarMotivoPerda(m)); }
+
+  // ── Catalogação de origem (20261007141044) ──
+  async catalogo(): Promise<PainelCatalogo> { return mapPainelCatalogo(await this.rpc('crm_catalogo')); }
+  salvarRegraCatalogo(r: RegraCatalogo): Promise<Resultado & { id?: number }> {
+    return this.escrever('crm_catalogo_regra_salvar', argsRegra(r), (d) => {
+      const res = mapResultado('crm_catalogo_regra_salvar', d);
+      const id = (d as { id?: unknown } | null)?.id;
+      return typeof id === 'number' ? { ...res, id } : res;
+    });
+  }
+  salvarListaAc(id: string, nome: string) { return this.simples('crm_catalogo_lista_salvar', { p_id: id, p_nome: nome }); }
+  reaplicarCatalogo(todos = false): Promise<Resultado & { catalogados?: number }> {
+    return this.escrever('crm_catalogo_reaplicar', { p_todos: todos }, (d) => {
+      const res = mapResultado('crm_catalogo_reaplicar', d);
+      const n = (d as { catalogados?: unknown } | null)?.catalogados;
+      return typeof n === 'number' ? { ...res, catalogados: n } : res;
+    });
+  }
+  async origemContato(contatoId: string): Promise<OrigemDetalhada | null> {
+    // Sem a migration: a ficha simplesmente não mostra o bloco (null), sem erro.
+    const d = await this.rpcNova('crm_contato_origem', { p_pessoa: contatoId });
+    return d === null ? null : mapOrigemDetalhada(d);
+  }
+  definirProjetoContato(contatoId: string, projeto: string | null) {
+    return this.simples('crm_contato_origem_definir', { p_pessoa: contatoId, p_projeto: projeto });
+  }
 
   // Ativação padrão (migration 20261007135415). Sem a migration aplicada, a leitura dá erro claro (nunca painel vazio).
   async ativacao(): Promise<PainelAtivacao> { return mapPainelAtivacao(await this.rpc('crm_ativacao_painel')); }

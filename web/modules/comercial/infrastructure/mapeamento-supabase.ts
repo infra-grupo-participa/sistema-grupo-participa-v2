@@ -10,6 +10,7 @@ import type {
   Vendedor, WidgetPainel,
 } from '../domain/types';
 import type { ContatoLinha, PaginaContatos, ResumoContatos } from '../domain/contatos';
+import { CANAIS_ENTRADA, type CanalEntrada, type OrigemContato } from '../domain/catalogacao';
 
 type Obj = Record<string, unknown>;
 
@@ -184,8 +185,25 @@ export function mapContatos(d: unknown): Contato[] {
       perfil: strOuNull(o.perfil) as Contato['perfil'], atuaComHolding: strOuNull(o.atuaComHolding) as Contato['atuaComHolding'],
       donoId: strOuNull(o.donoId), tags: strs(o.tags), utm: utm(o.utm), score: numOuNull(o.score),
       ehAluno: bool(o.ehAluno), optOut: bool(o.optOut), criadoEm: str(o.criadoEm),
+      ...(o.origem === undefined ? {} : { origem: mapOrigemContato(o.origem) }),
     };
   });
+}
+
+/** Canal desconhecido (valor novo no banco) cai em 'sistema' em vez de quebrar a lista. */
+export function canalEntrada(v: unknown): CanalEntrada {
+  return (CANAIS_ENTRADA as readonly string[]).includes(String(v)) ? (v as CanalEntrada) : 'sistema';
+}
+
+/** 'origem' de crm.contatos_itens (20261007141044): null = contato ainda não catalogado. */
+export function mapOrigemContato(v: unknown): OrigemContato | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = v as Obj;
+  return {
+    canal: canalEntrada(o.canal), entrouEm: str(o.entrouEm), projeto: strOuNull(o.projeto),
+    projetoNome: strOuNull(o.projetoNome), linha: strOuNull(o.linha),
+    ...(o.mqlDesde === undefined ? {} : { mqlDesde: strOuNull(o.mqlDesde) }),
+  };
 }
 
 /** crm_contatos_pagina (20261006m) devolve { itens, total }; cada item = contato + lancamentos, ultimaInteracaoEm, abertos. */
@@ -217,6 +235,13 @@ export function mapResumoContatos(d: unknown): ResumoContatos {
   return {
     total: num(o.total), semDono: num(o.semDono), optOut: num(o.optOut), alunos: num(o.alunos),
     ufs: strs(o.ufs), tags: strs(o.tags),
+    ...(Array.isArray(o.canais) ? {
+      canais: o.canais.map((x) => { const c = obj(x, 'crm_contatos_resumo', 'canal'); return { canal: canalEntrada(c.canal), total: num(c.total) }; }),
+    } : {}),
+    ...(Array.isArray(o.projetos) ? {
+      projetos: o.projetos.map((x) => { const p = obj(x, 'crm_contatos_resumo', 'projeto'); return { chave: str(p.chave), nome: strOuNull(p.nome), total: num(p.total) }; }),
+    } : {}),
+    ...(o.semProjeto === undefined ? {} : { semProjeto: num(o.semProjeto) }),
   };
 }
 

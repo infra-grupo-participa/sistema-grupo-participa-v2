@@ -92,7 +92,10 @@ describe('resumirContatos', () => {
       contato('b', { donoId: 'v1', uf: 'MG', optOut: true, tags: ['a'] }),
       contato('c', { uf: null }),
     ]);
-    expect(r).toEqual({ total: 3, semDono: 2, optOut: 1, alunos: 1, ufs: ['MG', 'SP'], tags: ['a', 'b'] });
+    expect(r).toEqual({
+      total: 3, semDono: 2, optOut: 1, alunos: 1, ufs: ['MG', 'SP'], tags: ['a', 'b'],
+      canais: [{ canal: 'sistema', total: 3 }], projetos: [], semProjeto: 3,
+    });
   });
 });
 
