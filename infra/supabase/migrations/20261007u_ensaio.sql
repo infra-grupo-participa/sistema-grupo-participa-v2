@@ -82,9 +82,22 @@ insert into pg_temp._z_out (passo, linha) select '1 antes', jsonb_object_agg(p.n
 --   reversão: bloco REVERSÃO no fim (drop do gatilho, corpos de acesso.corpo_antes, coluna pela foto).
 --
 -- IDEMPOTENTE: foto e capacidade com on conflict; create or replace; drop trigger if exists antes de criar.
+--
+-- BLINDAGEM: a migration chama blindagem.autorizar_guarda(motivo) no começo da transação, porque recria gp_is_admin(),
+--   que está na guarda de DDL instalada em 07/10/2026 (migração 20261007000363). Sem isso o banco recusa (42501).
 
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
+
+-- blindagem (migração 20261007000363, instalada em 07/10/2026 19:25 UTC): recriar funções de acesso guardadas
+-- (gp_is_admin e outras) exige autorização explícita na mesma transação, com motivo.
+do $bl$
+begin
+  if to_regprocedure('blindagem.autorizar_guarda(text)') is not null then
+    perform blindagem.autorizar_guarda('níveis de acesso, fase 3 (20261007u): gp_is_admin = master ou exceção nominal; decisão do Victor 07/10');
+  end if;
+end
+$bl$;
 
 do $g$
 begin
@@ -373,9 +386,22 @@ insert into pg_temp._z_out (passo, linha) select '2 depois1', jsonb_object_agg(p
 --   reversão: bloco REVERSÃO no fim (drop do gatilho, corpos de acesso.corpo_antes, coluna pela foto).
 --
 -- IDEMPOTENTE: foto e capacidade com on conflict; create or replace; drop trigger if exists antes de criar.
+--
+-- BLINDAGEM: a migration chama blindagem.autorizar_guarda(motivo) no começo da transação, porque recria gp_is_admin(),
+--   que está na guarda de DDL instalada em 07/10/2026 (migração 20261007000363). Sem isso o banco recusa (42501).
 
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
+
+-- blindagem (migração 20261007000363, instalada em 07/10/2026 19:25 UTC): recriar funções de acesso guardadas
+-- (gp_is_admin e outras) exige autorização explícita na mesma transação, com motivo.
+do $bl$
+begin
+  if to_regprocedure('blindagem.autorizar_guarda(text)') is not null then
+    perform blindagem.autorizar_guarda('níveis de acesso, fase 3 (20261007u): gp_is_admin = master ou exceção nominal; decisão do Victor 07/10');
+  end if;
+end
+$bl$;
 
 do $g$
 begin
@@ -694,5 +720,6 @@ update public.perfis set cargo = 'visualizador' where id = '9d5fb8e7-f61e-459d-b
 insert into pg_temp._z_out (passo, linha) select 'b2 via (SQL sem claims)', (select jsonb_build_object('autor', autor, 'via', depois ->> 'via') from acesso.log where tabela = 'perfis' order by id desc limit 1)::text;
 insert into pg_temp._z_out (passo, linha) select 'excecao_admin', count(*)::text from acesso.excecao_admin;
 insert into pg_temp._z_out (passo, linha) select 'cpf.ver depois', string_agg(p.nome || ' #' || left(p.id::text, 4), ', ' order by p.nome) from acesso.capacidade c join public.perfis p on p.id = c.perfil_id where c.chave = 'cpf.ver';
+insert into pg_temp._z_out (passo, linha) select 'jusy depois da fase 3', pg_temp.tenta('412d7d8d-7699-4dbf-977c-3b3cc82223df', $q$select jsonb_build_object('admin', public.gp_is_admin(), 'vendedor', crm.eh_vendedor(), 'comercial', crm.eh_comercial(), 'gestor', crm.eh_gestor(), 'editar_comercial', public.gp_pode_editar('comercial'), 'fin', public.gp_pode_ver_financeiro(), 'cpf', public.gp_pode_ver_cpf())::text$q$);
 select passo, linha from pg_temp._z_out order by em, passo;
 rollback;

@@ -44,9 +44,22 @@
 --   reversão: bloco REVERSÃO no fim (drop do gatilho, corpos de acesso.corpo_antes, coluna pela foto).
 --
 -- IDEMPOTENTE: foto e capacidade com on conflict; create or replace; drop trigger if exists antes de criar.
+--
+-- BLINDAGEM: a migration chama blindagem.autorizar_guarda(motivo) no começo da transação, porque recria gp_is_admin(),
+--   que está na guarda de DDL instalada em 07/10/2026 (migração 20261007000363). Sem isso o banco recusa (42501).
 
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
+
+-- blindagem (migração 20261007000363, instalada em 07/10/2026 19:25 UTC): recriar funções de acesso guardadas
+-- (gp_is_admin e outras) exige autorização explícita na mesma transação, com motivo.
+do $bl$
+begin
+  if to_regprocedure('blindagem.autorizar_guarda(text)') is not null then
+    perform blindagem.autorizar_guarda('níveis de acesso, fase 3 (20261007u): gp_is_admin = master ou exceção nominal; decisão do Victor 07/10');
+  end if;
+end
+$bl$;
 
 do $g$
 begin
