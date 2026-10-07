@@ -13,11 +13,17 @@
 //
 // Respostas: 200 quando o banco gravou (inclusive "ignorado"/"duplicado": a Infobip não deve reenviar);
 // 500 quando o banco falhou (a Infobip reenvia; o reenvio é idempotente). Log nunca leva corpo, telefone ou chave.
+//
+// Mídia (migration 20261007140044): a mensagem de imagem/áudio/documento/vídeo fica com midia_status='pendente'. Depois de
+// responder, em segundo plano (EdgeRuntime.waitUntil), esta Edge chama a crm-whatsapp-enviar {"acao":"midia"} com o header
+// x-crm-chave (Vault crm_whatsapp_envio_chave), que baixa da Infobip para o Storage. Se falhar, o cron
+// crm-whatsapp-reprocessar (*/10) tenta de novo. Nunca atrasa nem derruba a resposta à Infobip.
 import postgres from "npm:postgres@3.4.4";
 
 const sql = postgres(Deno.env.get("SUPABASE_DB_URL")!, { max: 2, prepare: false, idle_timeout: 20 });
 const LIMITE_BYTES = 1_000_000; // a Infobip manda lotes pequenos; acima disso é abuso
 const CHAVE_TTL_MS = 600_000;
+const URL_ENVIAR = `${(Deno.env.get("SUPABASE_URL") ?? "").replace(/\/+$/, "")}/functions/v1/crm-whatsapp-enviar`;
 
 type Obj = Record<string, unknown>;
 
@@ -48,6 +54,32 @@ async function chaveWebhook(): Promise<string> {
   const [r] = await sql`select crm.whatsapp_chave_webhook() as chave`;
   cache = { chave: String(r?.chave ?? ""), ate: Date.now() + CHAVE_TTL_MS };
   return cache.chave;
+}
+
+// Dispara o download da mídia recebida (não espera; erro só vai para o log, o cron cobre).
+async function dispararMidia(): Promise<void> {
+  try {
+    const [t] = await sql`select crm.whatsapp_midia_tem() as tem`;
+    if (!t?.tem) return;
+    const [c] = await sql`select chave_envio from crm.whatsapp_credenciais_envio()`;
+    if (!c?.chave_envio || !URL_ENVIAR.startsWith("https://")) return;
+    const r = await fetch(URL_ENVIAR, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-crm-chave": String(c.chave_envio) },
+      body: JSON.stringify({ acao: "midia" }),
+      signal: AbortSignal.timeout(55_000),
+    });
+    await r.body?.cancel().catch(() => {});
+    if (!r.ok) console.error("crm-whatsapp-webhook: mídia HTTP", r.status);
+  } catch (e) {
+    console.error("crm-whatsapp-webhook: falha ao disparar mídia", semSegredo(e));
+  }
+}
+
+type RuntimeEdge = { waitUntil?: (p: Promise<unknown>) => void };
+function emSegundoPlano(p: Promise<unknown>): void {
+  const rt = (globalThis as unknown as { EdgeRuntime?: RuntimeEdge }).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(p);
 }
 
 function senhaRecebida(req: Request): string | null {
@@ -103,6 +135,7 @@ Deno.serve(async (req: Request) => {
       recebidos: res.recebidos, novos: res.novos, duplicados: res.duplicados, ignorados: res.ignorados,
       processados: res.processados, erros: res.erros, ligado: res.ligado,
     }));
+    if (Number(res.processados ?? 0) > 0) emSegundoPlano(dispararMidia());
     return json({ ok: true });
   } catch (e) {
     console.error("crm-whatsapp-webhook: falha no banco", semSegredo(e));

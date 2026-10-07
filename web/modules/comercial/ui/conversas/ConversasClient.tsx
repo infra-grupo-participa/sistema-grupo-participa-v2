@@ -23,6 +23,9 @@ import { ModalAtividade, NegocioDrawer } from '../NegocioDrawer';
 import { avisarMudanca, repo, useAgora, useContatosPorIds, useDados } from '../repositorio';
 import { INFO_CAIXA } from './indicadores';
 import { ModalAtribuir } from './ModalAtribuir';
+import { BotaoAnexar } from './Anexar';
+import { MidiaMensagem } from './MidiaMensagem';
+import { legendaDaMensagem } from '../../domain/midia';
 import { MenuRespostas, useAlturaDisponivel } from './pecas';
 import {
   chaveDia, duracaoCurta, esperaResposta, janelaRestante, ordenarConversas, preencherTemplate, primeiroNome,
@@ -570,6 +573,7 @@ function StatusEnvio({ s, envio, erro }: { s: StatusMensagem | null; envio?: Men
 function Bolha({ m, nomeTemplate, autor }: { m: Mensagem; nomeTemplate: (id: string | null) => string | null; autor: string | null }) {
   const saida = m.direcao === 'saida';
   const hora = new Date(m.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const legenda = legendaDaMensagem(m);
   return (
     <div className={`flex ${saida ? 'justify-end' : 'justify-start'}`}>
       <div
@@ -585,7 +589,8 @@ function Bolha({ m, nomeTemplate, autor }: { m: Mensagem; nomeTemplate: (id: str
             <Icon name="file" size={12} /> Template · {nomeTemplate(m.templateId)}
           </div>
         )}
-        <div className="whitespace-pre-wrap break-words leading-relaxed">{m.texto}</div>
+        <MidiaMensagem m={m} />
+        {legenda && <div className="whitespace-pre-wrap break-words leading-relaxed">{legenda}</div>}
         <div className="mt-1 flex items-center justify-end gap-1.5 text-[11px] text-[var(--fg-3)] tabular">
           {saida && autor && <span className="truncate">{primeiroNome(autor)}</span>}
           <span>{hora}</span>
@@ -692,6 +697,7 @@ function Envio({ contato, negocio, janelaAberta, templates, remetente, flash }: 
           aria-label="Mensagem"
           className="!resize-none"
         />
+        <BotaoAnexar contatoId={contato.id} nomeContato={nome || contato.nome} desabilitado={enviando} flash={flash} />
         <Button
           ref={botaoMenu}
           variant="ghost"

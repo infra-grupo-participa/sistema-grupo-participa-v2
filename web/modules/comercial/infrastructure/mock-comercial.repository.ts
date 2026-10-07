@@ -400,6 +400,14 @@ export class MockComercialRepository implements ComercialRepository {
     return espera({ ok: true });
   }
 
+  async enviarAnexo(): Promise<Resultado> {
+    return espera({ ok: false, msg: 'Anexo só funciona com o banco real (modo demonstração).' });
+  }
+
+  async urlMidia(): Promise<string | null> {
+    return null;
+  }
+
   async marcarConversaLida(contatoId: string): Promise<Resultado> {
     this.db.mensagens.filter((m) => m.contatoId === contatoId && m.direcao === 'entrada' && !m.status).forEach((m) => { m.status = 'lida'; });
     return espera({ ok: true });

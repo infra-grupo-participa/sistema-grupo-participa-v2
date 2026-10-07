@@ -151,6 +151,8 @@ export const argsEscrita = {
   // WhatsApp (F4). Com template, o banco monta o texto e ignora p_texto.
   enviarMensagem: (contatoId: string, texto: string, templateId?: string | null) => ({ p_pessoa: contatoId, p_texto: texto, p_template: templateId || null }),
   marcarConversaLida: (contatoId: string) => ({ p_pessoa: contatoId }),
+  enviarAnexo: (contatoId: string, caminho: string, legenda: string, nome: string | null) =>
+    ({ p_pessoa: contatoId, p_texto: legenda.trim() || null, p_template: null, p_midia: caminho, p_midia_nome: nome }),
   /**
    * Ficha: `destinatarios` (contatoIds) é a lista que o banco grava. quantidade/suprimidos não vão (o banco conta).
    * `numeroEnvio` vazio = número padrão; só dígitos quando vier (o rótulo da tela não é número).

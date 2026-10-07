@@ -225,7 +225,7 @@ describe('WhatsApp (F4)', () => {
   const falhou = { ...entrada, id: 'm3', direcao: 'saida', tipo: 'template', status: 'falhou', erro: 'Número inválido', templateId: U1 };
   it('crm_mensagens: entrada não lida, saída na fila e falha com erro', () => {
     const [a, b, c] = mapMensagens([entrada, naFila, falhou]);
-    expect(a).toEqual({ ...entrada, envio: null });
+    expect(a).toEqual({ ...entrada, envio: null, midia: null });
     expect(b).toMatchObject({ direcao: 'saida', status: null, envio: 'na_fila' });
     expect(c).toMatchObject({ status: 'falhou', erro: 'Número inválido', tipo: 'template', templateId: U1 });
     expect(() => mapMensagens([{ ...entrada, direcao: 'x' }])).toThrow(/crm_mensagens/);

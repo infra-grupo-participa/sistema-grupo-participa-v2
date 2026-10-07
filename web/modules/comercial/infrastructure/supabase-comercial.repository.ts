@@ -38,6 +38,7 @@ import type { EdicaoAtivacao, PainelAtivacao } from '../domain/ativacao';
 import { argsSalvarAtivacao, mapPainelAtivacao } from './mapeamento-ativacao';
 import { argsRegra, mapOrigemDetalhada, mapPainelCatalogo } from './mapeamento-catalogacao';
 import type { OrigemDetalhada, PainelCatalogo, RegraCatalogo } from '../domain/catalogacao';
+import { LIMITE_LEGENDA, caminhoAnexo, validarAnexo } from '../domain/midia';
 // Padrão de fábrica de quem nunca personalizou (o mesmo que a demonstração usa).
 import { painelPadrao, preferenciasPadrao } from './mock-dados';
 
@@ -409,6 +410,34 @@ export class SupabaseComercialRepository implements ComercialRepository {
       (d) => mapResultadoComId('crm_enviar_mensagem', d, 'mensagemId'));
   }
   marcarConversaLida(contatoId: string) { return this.simples('crm_marcar_conversa_lida', argsEscrita.marcarConversaLida(contatoId)); }
+
+  // ── Arquivos do WhatsApp (20261007140044): bucket privado crm-midia ──
+  /** Sobe em envio/<meu id>/<uuid>.<ext> (policy do Storage) e enfileira pela crm_enviar_mensagem (que valida de novo). */
+  async enviarAnexo(contatoId: string, arquivo: File, legenda: string): Promise<Resultado & { mensagemId?: string }> {
+    const v = validarAnexo(arquivo);
+    if (!v.ok) return { ok: false, msg: v.msg };
+    if (legenda.trim().length > LIMITE_LEGENDA) return { ok: false, msg: 'Legenda longa demais (máximo 1.024 caracteres).' };
+    const { data: u } = await this.db().auth.getUser();
+    const eu = u.user?.id;
+    if (!eu) return { ok: false, msg: 'Sessão expirada. Entre de novo.' };
+    const caminho = caminhoAnexo(eu, crypto.randomUUID(), v.ext);
+    const { error } = await this.db().storage.from('crm-midia').upload(caminho, arquivo, { contentType: v.mime, upsert: false, cacheControl: '3600' });
+    if (error) {
+      logQueryError('crm-midia upload', error);
+      return { ok: false, msg: 'Não foi possível subir o arquivo. Tente de novo.' };
+    }
+    return this.escrever('crm_enviar_mensagem', argsEscrita.enviarAnexo(contatoId, caminho, legenda, v.tipo === 'documento' ? v.nome : null),
+      (d) => mapResultadoComId('crm_enviar_mensagem', d, 'mensagemId'));
+  }
+  /** URL assinada de 10 min; o Storage aplica a policy crm_midia_ler (mesma regra de quem vê a conversa). */
+  async urlMidia(caminho: string): Promise<string | null> {
+    const { data, error } = await this.db().storage.from('crm-midia').createSignedUrl(caminho, 600);
+    if (error || !data?.signedUrl) {
+      if (error) logQueryError('crm-midia url', error);
+      return null;
+    }
+    return data.signedUrl;
+  }
   salvarFicha(f: NovaFicha, enviarParaAprovacao: boolean): Promise<ResultadoFicha> {
     return this.escrever('crm_salvar_ficha', argsEscrita.salvarFicha(f, enviarParaAprovacao), mapResultadoFicha);
   }

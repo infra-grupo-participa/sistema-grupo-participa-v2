@@ -28,6 +28,8 @@ import {
 } from './comum';
 import { avisarMudanca, repo, useAgora, useContatosPorIds, useDados } from './repositorio';
 import { HistoricoAlteracoes } from './registro/HistoricoAlteracoes';
+import { MidiaMensagem } from './conversas/MidiaMensagem';
+import { legendaDaMensagem } from '../domain/midia';
 
 type Aba = 'resumo' | 'atividades' | 'historico' | 'conversa' | 'alteracoes';
 
@@ -310,7 +312,8 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
             {(mensagens ?? []).map((m) => (
               <div key={m.id} className={`flex ${m.direcao === 'saida' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[80%] rounded-[var(--r-lg)] border px-3 py-2 text-sm text-[var(--fg)] ${m.direcao === 'saida' ? 'bg-[var(--surface-4)] border-[var(--border-strong)]' : 'bg-[var(--surface-3)] border-[var(--border)]'}`}>
-                  <div className="whitespace-pre-wrap">{m.texto}</div>
+                  <MidiaMensagem m={m} compacto />
+                  {legendaDaMensagem(m) && <div className="whitespace-pre-wrap">{legendaDaMensagem(m)}</div>}
                   <div className="mt-1 text-[11px] text-[var(--fg-3)] text-right">{fmtDataHora(m.em)}{m.templateId ? ' · template' : ''}</div>
                 </div>
               </div>

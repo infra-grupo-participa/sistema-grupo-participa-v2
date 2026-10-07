@@ -11,6 +11,7 @@ import type {
 } from '../domain/types';
 import type { ContatoLinha, PaginaContatos, ResumoContatos } from '../domain/contatos';
 import { CANAIS_ENTRADA, type CanalEntrada, type OrigemContato } from '../domain/catalogacao';
+import { mapMidia } from './mapeamento-midia';
 
 type Obj = Record<string, unknown>;
 
@@ -448,6 +449,7 @@ function mapMensagem(x: unknown, rpc: string): Mensagem {
     id: str(o.id), contatoId: str(o.contatoId), canal: o.canal === 'email' || o.canal === 'nota' ? o.canal : 'whatsapp',
     direcao: o.direcao, texto: str(o.texto), em: str(o.em), status, autorId: strOuNull(o.autorId),
     templateId: strOuNull(o.templateId), envio, erro: strOuNull(o.erro), tipo: str(o.tipo) || 'texto', fichaId: strOuNull(o.fichaId),
+    midia: mapMidia(o.midia),
   };
 }
 

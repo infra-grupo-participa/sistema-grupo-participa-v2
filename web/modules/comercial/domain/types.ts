@@ -229,9 +229,22 @@ export interface Mensagem {
   tipo?: string;
   /** Ficha de disparo que gerou a mensagem. */
   fichaId?: string | null;
+  /** Arquivo (imagem, áudio, documento, vídeo) guardado no Storage privado. null = sem arquivo (texto ou mensagem antiga). */
+  midia?: MidiaMensagem | null;
 }
 
 export type EnvioMensagem = 'na_fila' | 'enviando';
+
+export type StatusMidia = 'pendente' | 'ok' | 'grande_demais' | 'falhou';
+
+/** Arquivo da mensagem (migration 20261007140044). `caminho` só vem quando `status = 'ok'` (bucket privado crm-midia). */
+export interface MidiaMensagem {
+  status: StatusMidia;
+  caminho: string | null;
+  mime: string | null;
+  tamanho: number | null;
+  nome: string | null;
+}
 
 /** Estado do WhatsApp para a tela (interruptores, número mascarado, fila). Sem dado de pessoa. */
 export interface StatusWhatsapp {

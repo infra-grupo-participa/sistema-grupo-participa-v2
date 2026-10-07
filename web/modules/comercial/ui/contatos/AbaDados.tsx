@@ -13,6 +13,8 @@ import { InfoIndicador } from '../InfoIndicador';
 import { INFO_FILA } from '../recuperacao/indicadores';
 import { repo, useDados } from '../repositorio';
 import { utmEmLinha } from './regras-contatos';
+import { MidiaMensagem } from '../conversas/MidiaMensagem';
+import { legendaDaMensagem } from '../../domain/midia';
 import { ComoEntrou } from './ComoEntrou';
 
 export function AbaDados({ c, duplicados, nomeDe, onAbrirContato }: {
@@ -137,7 +139,8 @@ export function AbaConversa({ c, nomeDe }: { c: Contato; nomeDe: (id: string | n
                 </span>
                 <span className="tabular">{fmtDataHora(m.em)}</span>
               </div>
-              <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-sm text-[var(--fg)]">{m.texto}</p>
+              <div className="mt-1"><MidiaMensagem m={m} compacto /></div>
+              {legendaDaMensagem(m) && <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-sm text-[var(--fg)]">{legendaDaMensagem(m)}</p>}
             </li>
           ))}
         </ul>

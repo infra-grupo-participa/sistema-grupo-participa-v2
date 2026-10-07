@@ -177,6 +177,13 @@ export interface ComercialRepository {
   /** Com template, o texto é montado no banco ({{1}} = primeiro nome) e `texto` é ignorado. */
   enviarMensagem(contatoId: string, texto: string, templateId?: string | null): Promise<Resultado & { mensagemId?: string }>;
   marcarConversaLida(contatoId: string): Promise<Resultado>;
+  /**
+   * Imagem (JPG/PNG/WebP até 5 MB) ou PDF (até 16 MB) com legenda opcional: sobe para o bucket privado e enfileira
+   * (janela de 24 h aberta; o banco valida dono, tipo e tamanho de novo).
+   */
+  enviarAnexo(contatoId: string, arquivo: File, legenda: string): Promise<Resultado & { mensagemId?: string }>;
+  /** URL assinada de curta duração (10 min) do arquivo de uma mensagem; null = sem acesso ou indisponível. */
+  urlMidia(caminho: string): Promise<string | null>;
 
   atualizarItemFila(filaId: string, itemId: string, status: StatusFila): Promise<Resultado>;
 
