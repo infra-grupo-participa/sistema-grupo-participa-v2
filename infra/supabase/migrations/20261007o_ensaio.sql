@@ -279,6 +279,29 @@ create trigger zz_origem_para_todos_upd after update on crm.evento_jornada for e
         and new.tipo in ('subscribe', 'contact_tag_added'))
   execute function crm.tg_origem_para_todos();
 
+-- ─── 3b. Trava da flag (condição C2.1 do pentester, 07/10/2026) ───────────────────────────────────────────────────
+-- A tela (public.crm_catalogo_regra_salvar) edita campo, operador e padrão sem mostrar para_todos: editar a regra 42
+-- para um padrão largo abriria contato para toda entrada do AC. Mudou tipo, campo, operador, padrão ou projeto de uma
+-- regra para_todos → a flag desliga sozinha (religar é decisão explícita, por migration).
+create or replace function crm.tg_catalogo_regra_para_todos_reset() returns trigger
+language plpgsql set search_path = '' as $f$
+begin
+  if old.para_todos and new.para_todos
+     and (new.tipo, new.campo, new.operador, new.padrao, new.projeto)
+         is distinct from (old.tipo, old.campo, old.operador, old.padrao, old.projeto) then
+    new.para_todos := false;
+    new.nota := left(coalesce(new.nota || ' · ', '') || 'para_todos desligado ao editar a regra (20261007o)', 300);
+  end if;
+  return new;
+end
+$f$;
+comment on function crm.tg_catalogo_regra_para_todos_reset() is
+  '20261007o: editar tipo/campo/operador/padrão/projeto de regra para_todos desliga a flag (C2.1 do pentester).';
+revoke all on function crm.tg_catalogo_regra_para_todos_reset() from public, anon, authenticated, service_role;
+drop trigger if exists catalogo_regra_para_todos_reset on crm.catalogo_regra;
+create trigger catalogo_regra_para_todos_reset before update on crm.catalogo_regra for each row
+  execute function crm.tg_catalogo_regra_para_todos_reset();
+
 -- ─── 4. Recataloga quem já entrou ─────────────────────────────────────────────────────────────────────────────────
 do $r$
 declare v uuid; v_n int := 0; v_canal text := current_setting('crm.canal', true);
@@ -323,6 +346,10 @@ begin
                 and not exists (select 1 from crm.pessoa_origem po where po.pessoa_id = any(pessoas.grupo(pessoas.atual(e.pessoa_id))))) then
     raise exception '20261007o: sobrou pessoa com entrada na lista 614 sem linha em crm.pessoa_origem';
   end if;
+  if not exists (select 1 from pg_trigger t where t.tgrelid = 'crm.catalogo_regra'::regclass and not t.tgisinternal
+                   and t.tgname = 'catalogo_regra_para_todos_reset' and t.tgenabled = 'O') then
+    raise exception '20261007o: gatilho catalogo_regra_para_todos_reset não ficou ligado';
+  end if;
   -- a lista 614 resolve para a regra 42 pelo id (nome vem de crm.ac_lista)
   if crm.catalogo_para_todos(jsonb_build_object('ac_lista', '614'), now()) is distinct from 42 then
     raise exception '20261007o: a lista 614 não casa a regra para_todos 42';
@@ -341,6 +368,8 @@ $c$;
 --   drop trigger if exists zz_origem_para_todos_ins on crm.evento_jornada;
 --   drop trigger if exists zz_origem_para_todos_upd on crm.evento_jornada;
 --   drop function if exists crm.tg_origem_para_todos();
+--   drop trigger if exists catalogo_regra_para_todos_reset on crm.catalogo_regra;
+--   drop function if exists crm.tg_catalogo_regra_para_todos_reset();
 --   drop function if exists crm.catalogo_para_todos(jsonb, timestamptz);
 --   alter table crm.catalogo_regra drop constraint if exists catalogo_regra_para_todos_ck;
 --   alter table crm.catalogo_regra drop column if exists para_todos;
@@ -582,6 +611,29 @@ create trigger zz_origem_para_todos_upd after update on crm.evento_jornada for e
         and new.tipo in ('subscribe', 'contact_tag_added'))
   execute function crm.tg_origem_para_todos();
 
+-- ─── 3b. Trava da flag (condição C2.1 do pentester, 07/10/2026) ───────────────────────────────────────────────────
+-- A tela (public.crm_catalogo_regra_salvar) edita campo, operador e padrão sem mostrar para_todos: editar a regra 42
+-- para um padrão largo abriria contato para toda entrada do AC. Mudou tipo, campo, operador, padrão ou projeto de uma
+-- regra para_todos → a flag desliga sozinha (religar é decisão explícita, por migration).
+create or replace function crm.tg_catalogo_regra_para_todos_reset() returns trigger
+language plpgsql set search_path = '' as $f$
+begin
+  if old.para_todos and new.para_todos
+     and (new.tipo, new.campo, new.operador, new.padrao, new.projeto)
+         is distinct from (old.tipo, old.campo, old.operador, old.padrao, old.projeto) then
+    new.para_todos := false;
+    new.nota := left(coalesce(new.nota || ' · ', '') || 'para_todos desligado ao editar a regra (20261007o)', 300);
+  end if;
+  return new;
+end
+$f$;
+comment on function crm.tg_catalogo_regra_para_todos_reset() is
+  '20261007o: editar tipo/campo/operador/padrão/projeto de regra para_todos desliga a flag (C2.1 do pentester).';
+revoke all on function crm.tg_catalogo_regra_para_todos_reset() from public, anon, authenticated, service_role;
+drop trigger if exists catalogo_regra_para_todos_reset on crm.catalogo_regra;
+create trigger catalogo_regra_para_todos_reset before update on crm.catalogo_regra for each row
+  execute function crm.tg_catalogo_regra_para_todos_reset();
+
 -- ─── 4. Recataloga quem já entrou ─────────────────────────────────────────────────────────────────────────────────
 do $r$
 declare v uuid; v_n int := 0; v_canal text := current_setting('crm.canal', true);
@@ -626,6 +678,10 @@ begin
                 and not exists (select 1 from crm.pessoa_origem po where po.pessoa_id = any(pessoas.grupo(pessoas.atual(e.pessoa_id))))) then
     raise exception '20261007o: sobrou pessoa com entrada na lista 614 sem linha em crm.pessoa_origem';
   end if;
+  if not exists (select 1 from pg_trigger t where t.tgrelid = 'crm.catalogo_regra'::regclass and not t.tgisinternal
+                   and t.tgname = 'catalogo_regra_para_todos_reset' and t.tgenabled = 'O') then
+    raise exception '20261007o: gatilho catalogo_regra_para_todos_reset não ficou ligado';
+  end if;
   -- a lista 614 resolve para a regra 42 pelo id (nome vem de crm.ac_lista)
   if crm.catalogo_para_todos(jsonb_build_object('ac_lista', '614'), now()) is distinct from 42 then
     raise exception '20261007o: a lista 614 não casa a regra para_todos 42';
@@ -644,6 +700,8 @@ $c$;
 --   drop trigger if exists zz_origem_para_todos_ins on crm.evento_jornada;
 --   drop trigger if exists zz_origem_para_todos_upd on crm.evento_jornada;
 --   drop function if exists crm.tg_origem_para_todos();
+--   drop trigger if exists catalogo_regra_para_todos_reset on crm.catalogo_regra;
+--   drop function if exists crm.tg_catalogo_regra_para_todos_reset();
 --   drop function if exists crm.catalogo_para_todos(jsonb, timestamptz);
 --   alter table crm.catalogo_regra drop constraint if exists catalogo_regra_para_todos_ck;
 --   alter table crm.catalogo_regra drop column if exists para_todos;
@@ -804,5 +862,12 @@ do $x$ declare l text; i int; begin
 end $x$;
 
 set local statement_timeout = '60s';
+-- ===== C2.1: editar a regra 42 desliga para_todos; editar outra regra não liga nada =====
+update crm.catalogo_regra set nota = nota where id = 42;
+insert into pg_temp._z_out (passo, linha) select 'c21 sem mudança de critério', para_todos::text from crm.catalogo_regra where id = 42;
+update crm.catalogo_regra set padrao = 'a' where id = 42;
+insert into pg_temp._z_out (passo, linha) select 'c21 padrão largo', para_todos::text || ' / ' || coalesce(nota, '') from crm.catalogo_regra where id = 42;
+insert into pg_temp._z_out (passo, linha) select 'c21 regras para_todos', count(*)::text from crm.catalogo_regra where para_todos;
+insert into pg_temp._z_out (passo, linha) select 'c21 acl reset', coalesce(proacl::text, 'null') from pg_proc where oid = 'crm.tg_catalogo_regra_para_todos_reset()'::regprocedure;
 select passo, linha from pg_temp._z_out order by em, passo;
 rollback;
