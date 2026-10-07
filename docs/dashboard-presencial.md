@@ -249,6 +249,20 @@ Retorna 1 linha: `pessoa_id uuid, teste boolean, alterado boolean`.
 `custo_por_pre_checkout_centavos`), `dados_presencial_serie_diaria` (`pre_checkout`), `dados_presencial_serie_vendas`
 (`pre_checkout`, `conversao_pct`) e `dados_presencial_vendas` (`no_pre_checkout`). O e-mail marcado sai inteiro.
 
+### 2.10.4 A tela (07/10/2026)
+
+- Modal de pré-checkout, aba Leads: coluna **Ação** só para master (`gp_meu_acesso().master`, o mesmo `acesso.eh_master()`
+  da RPC; com a flag v2 desligada a página lê `gp_meu_acesso` direto, em `getCurrentUserAccess`). Quem não é master não
+  vê a coluna, e a RPC recusa de qualquer jeito (42501).
+- **Marcar como teste** pede confirmação ("vale para o sistema todo"); **Desmarcar teste** é direto. Linha marcada fica
+  apagada (opacidade 50%) com a etiqueta "teste" ao lado do nome. A aba Resumo do modal ignora quem é teste.
+- Depois de marcar ou desmarcar, a lista é relida e os cards são atualizados na hora (sem esperar os 60 s).
+- Lead sem `pessoa_id` não mostra o botão. Erros do banco viram mensagem na tela (`mensagemErroTeste`).
+- Arquivos: `ModalPessoas.tsx`, `ModalPreCheckout.tsx`, `DashboardPresencialClient.tsx`, `presencial-data.ts`
+  (`marcarLeadTeste`), `presencial.ts`, `server-container.ts`, `page.tsx` da rota. Começado pelo JP, terminado pelo
+  Maestro quando o JP parou por limite de uso.
+- Verificado: tsc, vitest (2403) e build. Não verificado: a marcação real pela tela (o Victor marca os 2 leads de teste dele).
+
 ## 3. Migrations (ordem e versão gravada)
 
 | Versão | Nome | O quê |

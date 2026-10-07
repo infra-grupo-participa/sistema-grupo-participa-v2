@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { getCurrentUser } from '@/shared/composition/server-container';
+import { getCurrentUser, getCurrentUserAccess } from '@/shared/composition/server-container';
 import { podeVerDepartamento, temCapacidade } from '@/shared/domain/departamentos';
 import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { buscarDashboard } from '@/modules/infra/dados/domain/registro';
@@ -14,5 +14,6 @@ export default async function DashboardPage({ params }: { params: Promise<{ chav
   const { chave } = await params;
   const dashboard = buscarDashboard(chave);
   if (!dashboard) notFound();
-  return <DashboardPresencialClient chave={dashboard.chave} />;
+  const acesso = ACESSO_DEPARTAMENTOS.acessoV2 ? user?.acesso : await getCurrentUserAccess();
+  return <DashboardPresencialClient chave={dashboard.chave} isMaster={acesso?.master === true} />;
 }

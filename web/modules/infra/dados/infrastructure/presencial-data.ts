@@ -60,3 +60,29 @@ export async function carregarVendasPorHora(chave: string): Promise<Resultado<Ve
   const r = await chamar<VendaHoraPresencial[]>('dados_presencial_vendas_por_hora', chave);
   return { ...r, data: r.data?.map((v) => normalizarNumericos(v, ['receita_bruta'])) ?? null };
 }
+
+export async function marcarLeadTeste(chave: string, pessoaId: string, teste: boolean): Promise<Resultado<{ pessoa_id: string; teste: boolean; alterado: boolean }>> {
+  try {
+    const { data, error } = await createBrowserSupabase().rpc('dados_presencial_marcar_teste', { p_chave: chave, p_pessoa_id: pessoaId, p_teste: teste });
+    if (error) {
+      logQueryError('dados_presencial_marcar_teste', { message: error.code || 'SEM_CODIGO' });
+      return { data: null, erro: mensagemErroTeste(error.code) };
+    }
+    const resultado = Array.isArray(data) ? data[0] : data;
+    if (!resultado || resultado.pessoa_id !== pessoaId || resultado.teste !== teste || typeof resultado.alterado !== 'boolean') {
+      return { data: null, erro: 'A resposta do banco não confirmou a alteração.' };
+    }
+    return { data: resultado as { pessoa_id: string; teste: boolean; alterado: boolean }, erro: null };
+  } catch {
+    logQueryError('dados_presencial_marcar_teste', { message: 'NETWORK' });
+    return { data: null, erro: mensagemErroTeste() };
+  }
+}
+
+export function mensagemErroTeste(code?: string): string {
+  if (code === '42501') return 'Só masters podem marcar ou desmarcar leads como teste.';
+  if (code === '22023') return 'Não foi possível validar a pessoa ou a marcação.';
+  if (code === 'P0002') return 'Esta pessoa não está no pré-checkout deste dashboard.';
+  if (code === 'PGRST202') return 'A marcação de teste ainda não está disponível no banco.';
+  return 'Não foi possível alterar a marcação de teste agora.';
+}
