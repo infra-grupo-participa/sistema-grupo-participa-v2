@@ -4,7 +4,7 @@ Modelo `presencial-base`, primeiro uso: **Clínica de Miami** (`clinica-miami-20
 id 68). Pedido do Victor Hugo em 07/10/2026. A tela (Infra > Dados > Dashboards) está em
 `docs/dashboard-presencial-tela.md`; este arquivo é o lado do banco.
 
-**Situação (07/10/2026):** funções APLICADAS em produção (migration `20261007161809_dados_dashboard_presencial`).
+**Situação (07/10/2026):** migrations APLICADAS em produção (seção 3).
 Nada publicado: a tela e a rota de captura estão só na branch `victor-captura-pre-checkout`.
 
 ## 1. Como funciona
@@ -119,6 +119,8 @@ clique_pct numeric`
 |---|---|---|
 | `20261007161247` | `fin_evento_clinica_miami` | `fin.eventos` da Clínica 03 a 04/12/2026 e a oferta `mjzv4v0s` ligada a ela (não ao Encontro) |
 | `20261007161809` | `dados_dashboard_presencial` | schema `dados`, cadastro, gate e as 5 funções |
+| `20261007162432` | `mkt_trafego_clinica_miami_oferta` | projeto 68 `interno/csm` e oferta `mjzv4v0s` exclusiva do projeto no Tráfego (`conta_hotmart(68)` = academy) |
+| `20261007162557` | `pessoas_registrar_lead_projeto_por_chave` | a fachada da captura resolve o projeto pela chave da casa (lead da página grava `projeto_id` 68) |
 
 Cada uma tem `.explain.md` com ensaio, explain e reversão.
 

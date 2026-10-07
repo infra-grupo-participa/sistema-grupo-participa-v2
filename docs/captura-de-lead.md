@@ -83,8 +83,10 @@ enviado, nunca a resposta inteira). Planilha e ActiveCampaign seguem gravando in
 `pessoas.registrar(p, 'formulario')`: cria ou acha a pessoa por e-mail ou telefone e grava um evento do `tipo` pedido.
 Com a migration `20261007152702` (aplicada em 07/10), o detalhe do evento guarda `chave_evento`, `sck`, `xcod` e `pagina`. Antes dela:
 `tipo: pre_checkout` recebe 400 ("Evento inválido…") e `tipo: lead` grava, mas sem esses quatro campos.
-O projeto do evento fica vazio: a função só liga projeto pela sigla de `mkt.projetos` (ex.: `PB26`), e a chave
-`clinica-miami-2026-12` não é sigla. Pré-checkout não conta como lead no Tráfego nem aparece na jornada do CRM.
+O projeto do evento: desde a migration `20261007162557` (07/10/2026), a fachada `public.pessoas_registrar_lead`
+resolve o projeto pela chave da casa quando a rota não manda sigla (`chave_evento` = `mkt.projetos.etiqueta_clickup`
+→ `projeto` = sigla). Ex.: `clinica-miami-2026-12` grava `projeto_id` 68 (CNFMIAMI26). Sigla mandada explícita
+prevalece; chave desconhecida grava sem projeto. Pré-checkout não conta como lead no Tráfego nem aparece na jornada do CRM.
 
 ## Como testar
 
@@ -172,9 +174,8 @@ Prova pós-aplicação (só leitura): CHECK de `pessoas.eventos` com `pre_checko
 3. `CAPTURA_LEAD_SECRET` na Hostinger e no `config.php` da página.
 4. Merge na `main` (publica).
 5. Edição do `submit.php` via FTP, na regra acima.
-6. Sigla da Clínica em `mkt.projetos`: migration `20261007152825` (CNFMIAMI26, APLICADA em 07/10). **Atenção:** mesmo
-   com a linha, o evento continua sem `projeto_id`, porque `pessoas.registrar` acha o projeto pela sigla
-   (`projeto`) e a rota manda só `chave_evento` (que fica no detalhe). Ligar ao projeto é pedido à parte. Falta
+6. Sigla da Clínica em `mkt.projetos`: migration `20261007152825` (CNFMIAMI26, APLICADA em 07/10). ~~Ligar o evento ao
+   projeto~~: feito pela `20261007162557` (a fachada resolve pela chave). Falta
    também decidir se pré-checkout conta em algum painel.
 7. ~~Conferir a regra da lista 614 do ActiveCampaign na catalogação do CRM (`20261007141044`): ela leva "Clínica
    Internacional Diamante Dez/26" para `miami-2026-12`, e a Clínica é `clinica-miami-2026-12`.~~
