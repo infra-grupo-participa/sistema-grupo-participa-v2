@@ -11,9 +11,12 @@ import { avisarMudanca, repo, useDados } from '../repositorio';
 import { Aviso, Campo, RodapeAcoes } from '../comum';
 import { conflitosDaBusca, termosConflito, validarNovoContato, type RascunhoContato } from './regras-contatos';
 
-/** Escrita que o contrato ainda não tem. Quando `criarContato` entrar em ports.ts, este tipo some. */
+/**
+ * Escrita fora do contrato comum: o Supabase grava (crm_criar_contato, 20261007133345); a demonstração não.
+ * Quando `criarContato` entrar em ports.ts (e no mock), este tipo some.
+ */
 type ComCadastro = ComercialRepository & {
-  criarContato?: (c: RascunhoContato) => Promise<Resultado & { contatoId?: string }>;
+  criarContato?: (c: RascunhoContato) => Promise<Resultado & { contatoId?: string; nova?: boolean }>;
 };
 
 export function ModalNovoContato({ contatosLocais = [], nomeDe, onClose, onAbrirContato, onCriado }: {
@@ -30,6 +33,8 @@ export function ModalNovoContato({ contatosLocais = [], nomeDe, onClose, onAbrir
   const [tentou, setTentou] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  /** O banco casou com alguém que já estava no CRM (e-mail ou telefone): avisa e oferece a ficha, sem fechar. */
+  const [existente, setExistente] = useState<{ id: string; msg: string } | null>(null);
 
   const invalido = validarNovoContato(r);
   // Conferência no servidor (a tela não tem a base inteira): e-mail exato e chave de telefone, 400 ms depois de digitar.
@@ -54,6 +59,7 @@ export function ModalNovoContato({ contatosLocais = [], nomeDe, onClose, onAbrir
   const mudar = (k: keyof RascunhoContato) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setR((x) => ({ ...x, [k]: e.target.value }));
     setErro(null);
+    setExistente(null);
     if (k === 'telefone') setConfirmaOutra(false);
   };
 
@@ -67,6 +73,10 @@ export function ModalNovoContato({ contatosLocais = [], nomeDe, onClose, onAbrir
       setSalvando(false);
       if (!res.ok || !res.contatoId) { setErro(res.msg ?? 'Não foi possível salvar.'); return; }
       avisarMudanca();
+      if (res.nova === false) {
+        setExistente({ id: res.contatoId, msg: res.msg ?? 'Esse contato já estava no CRM.' });
+        return;
+      }
       onCriado({ contatoId: res.contatoId, local: null });
       return;
     }
@@ -136,6 +146,15 @@ export function ModalNovoContato({ contatosLocais = [], nomeDe, onClose, onAbrir
                 <Checkbox checked={confirmaOutra} onChange={setConfirmaOutra} label="É outra pessoa: cadastrar mesmo assim" />
               </span>
             )}
+          </Aviso>
+        )}
+
+        {existente && (
+          <Aviso tom="warning" icone="alert">
+            <span className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[var(--fg)]">{existente.msg}</span>
+              <Button type="button" size="sm" variant="link" onClick={() => onAbrirContato(existente.id)}>Abrir ficha</Button>
+            </span>
           </Aviso>
         )}
 

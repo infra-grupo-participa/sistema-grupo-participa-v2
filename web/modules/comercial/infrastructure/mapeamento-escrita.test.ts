@@ -1,7 +1,7 @@
 // Payloads no formato exato que as RPCs de escrita da migration 20261005t devolvem (crm.res: {ok, msg?, …ids}).
 import { describe, expect, it } from 'vitest';
 import {
-  argsEscrita, mapResultado, mapResultadoComId, mapResultadoNegocio, mapResultadoProjeto, mensagemErroEscrita,
+  argsCriarContato, argsEscrita, mapResultado, mapResultadoComId, mapResultadoContato, mapResultadoNegocio, mapResultadoProjeto, mensagemErroEscrita,
   mapResultadoFicha, mapResultadoLink, mapResultadoTokenMcp,
 } from './mapeamento-escrita';
 import { FormatoInesperado } from './mapeamento-supabase';
@@ -42,6 +42,30 @@ describe('resultado das RPCs de escrita', () => {
   it('criarProjeto devolve a lista de funis', () => {
     expect(mapResultadoProjeto({ ok: true, msg: '4 funis criados para HT34.', funilIds: [U1, U2] }))
       .toEqual({ ok: true, msg: '4 funis criados para HT34.', funilIds: [U1, U2] });
+  });
+});
+
+describe('criar contato (crm_criar_contato)', () => {
+  it('manda só o que foi preenchido, aparado', () => {
+    expect(argsCriarContato({ nome: ' Ana Lima ', telefone: '', email: ' ana@x.com ' }))
+      .toEqual({ p_dados: { nome: 'Ana Lima', email: 'ana@x.com' } });
+    expect(argsCriarContato({ nome: 'Ana', telefone: '(21) 99876-5432', email: '', donoId: U1 }))
+      .toEqual({ p_dados: { nome: 'Ana', telefone: '(21) 99876-5432', dono: U1 } });
+  });
+  it('contato novo: id, nova e dono', () => {
+    expect(mapResultadoContato({ ok: true, msg: 'Contato cadastrado.', contatoId: U1, nova: true, donoId: U2 }))
+      .toEqual({ ok: true, msg: 'Contato cadastrado.', contatoId: U1, nova: true, donoId: U2 });
+  });
+  it('já existia: nova false, sem dono = null, mensagem preservada', () => {
+    expect(mapResultadoContato({ ok: true, msg: 'Esse contato já estava no CRM: abri a ficha dele.', contatoId: U1, nova: false, donoId: null }))
+      .toEqual({ ok: true, msg: 'Esse contato já estava no CRM: abri a ficha dele.', contatoId: U1, nova: false, donoId: null });
+  });
+  it('recusa volta com a mensagem do banco', () => {
+    const msg = 'Esse contato já está no CRM com outro dono (Ronan). O dono não mudou: fale com o gestor.';
+    expect(mapResultadoContato({ ok: false, msg })).toEqual({ ok: false, msg });
+  });
+  it('ok sem contatoId é formato inesperado (nunca sucesso sem ficha)', () => {
+    expect(() => mapResultadoContato({ ok: true })).toThrow(FormatoInesperado);
   });
 });
 

@@ -30,8 +30,8 @@ import {
   mapContatosPorIds, mapPaginaServidor, mapResumoContatos, rpcAusente, type ErroRpc,
 } from './mapeamento-supabase';
 import {
-  argsEscrita, mapResultado, mapResultadoComId, mapResultadoFicha, mapResultadoLink, mapResultadoNegocio, mapResultadoProjeto,
-  mapResultadoTokenMcp,
+  argsCriarContato, argsEscrita, mapResultado, mapResultadoComId, mapResultadoContato, mapResultadoFicha, mapResultadoLink,
+  mapResultadoNegocio, mapResultadoProjeto, mapResultadoTokenMcp,
   mensagemErroEscrita,
 } from './mapeamento-escrita';
 // Padrão de fábrica de quem nunca personalizou (o mesmo que a demonstração usa).
@@ -324,6 +324,10 @@ export class SupabaseComercialRepository implements ComercialRepository {
   }
   transferirDono(negocioId: string, novoDonoId: string, motivo: string) {
     return this.simples('crm_transferir_dono', argsEscrita.transferirDono(negocioId, novoDonoId, motivo));
+  }
+  /** "Novo contato" (crm_criar_contato, 20261007133345): cria ou casa a pessoa (e-mail, depois telefone) e devolve a ficha a abrir. */
+  criarContato(c: { nome: string; telefone: string; email: string; donoId?: string | null }) {
+    return this.escrever('crm_criar_contato', argsCriarContato(c), mapResultadoContato);
   }
   criarNegocio(contatoId: string, funilId: string, campanhaId?: string | null): Promise<Resultado & { negocioId?: string; donoId?: string | null }> {
     return this.escrever('crm_criar_negocio', argsEscrita.criarNegocio(contatoId, funilId, campanhaId), mapResultadoNegocio);

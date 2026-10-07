@@ -47,6 +47,27 @@ export function mapResultadoProjeto(d: unknown): Resultado & { funilIds?: string
   return r;
 }
 
+/** Cadastro rápido de contato (crm_criar_contato, migration 20261007133345). Vazio vira ausente: o banco decide. */
+export function argsCriarContato(c: { nome: string; telefone: string; email: string; donoId?: string | null }): { p_dados: Obj } {
+  const p_dados: Obj = { nome: c.nome.trim() };
+  if (c.email.trim()) p_dados.email = c.email.trim();
+  if (c.telefone.trim()) p_dados.telefone = c.telefone.trim();
+  if (c.donoId) p_dados.dono = c.donoId;
+  return { p_dados };
+}
+
+/** criarContato: contatoId (ficha a abrir), `nova` (false = já estava no CRM) e o dono que ficou (null = sem dono). */
+export function mapResultadoContato(d: unknown): Resultado & { contatoId?: string; nova?: boolean; donoId?: string | null } {
+  const r: Resultado & { contatoId?: string; nova?: boolean; donoId?: string | null } = mapResultadoComId('crm_criar_contato', d, 'contatoId');
+  if (r.ok) {
+    if (!r.contatoId) throw new FormatoInesperado('crm_criar_contato', 'ok sem contatoId');
+    const o = d as Obj;
+    r.nova = o.nova === true;
+    r.donoId = typeof o.donoId === 'string' && o.donoId ? o.donoId : null;
+  }
+  return r;
+}
+
 /** Erro de chamada (rede, função ausente, permissão) → mensagem para a tela. */
 export function mensagemErroEscrita(rpc: string, e: ErroRpc): string {
   if (e.code === '42501') return e.message || 'Sem acesso ao Comercial.';
