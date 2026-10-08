@@ -13,6 +13,7 @@ import type { FiltroContatos, PaginaContatos, ResumoContatos } from '../domain/c
 import type { OrigemDetalhada, PainelCatalogo, RegraCatalogo } from '../domain/catalogacao';
 import type { EdicaoAtivacao, PainelAtivacao } from '../domain/ativacao';
 import type { PainelCanais } from '../domain/canais-whatsapp';
+import type { PainelIntegracoes } from '../domain/integracoes-status';
 
 export interface Resultado {
   ok: boolean;
@@ -253,6 +254,10 @@ export interface ComercialRepository {
   hotmartPainel(dias: number): Promise<PainelHotmart>;
   /** Refaz um evento que deu erro (só com a integração ligada). */
   reprocessarHotmart(chave: string): Promise<Resultado>;
+
+  // ── Status vivo das integrações (aba Integrações) — gestor, vendedor e leitor ──
+  /** Fatos de cada integração (chave, credencial, último evento, 24 h, erro) e os números de WhatsApp. Selo: domain/integracoes-status. */
+  integracoesStatus(): Promise<PainelIntegracoes>;
 
   // ── MCP (F7): tokens pessoais para conectar o Claude ──
   /** Os meus tokens (gestor: os do time todo). */

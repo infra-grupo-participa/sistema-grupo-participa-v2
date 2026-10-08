@@ -72,7 +72,7 @@ export function ConfiguracoesClient() {
           : abaEfetiva === 'motivos' ? <AbaMotivos gestor={gestor} flash={flash} />
           : abaEfetiva === 'catalogacao' ? <AbaCatalogacao gestor={gestor} leitor={leitor} flash={flash} />
           : abaEfetiva === 'links' ? <Links vendedores={vendedores} meuId={sessao.vendedorId} gestor={gestor} leitor={leitor} nomeDe={nomeDe} flash={flash} />
-          : abaEfetiva === 'integracoes' ? <AbaIntegracoes gestor={gestor} verTudo={verTudo} flash={flash} />
+          : abaEfetiva === 'integracoes' ? <AbaIntegracoes gestor={gestor} verTudo={verTudo} leitor={leitor} flash={flash} />
           : abaEfetiva === 'numeros' ? <AbaNumeros gestor={gestor} nomeDe={nomeDe} flash={flash} />
           : abaEfetiva === 'mcp' ? <AbaMcp key={sessao.vendedorId} sessao={sessao} gestor={gestor} flash={flash} />
           : <AbaNotificacoes key={sessao.vendedorId} flash={flash} />}

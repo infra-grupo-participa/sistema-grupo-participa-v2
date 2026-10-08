@@ -17,6 +17,8 @@ export const INTERVALO = {
   conversaAberta: 3_000,
   listaConversas: 10_000,
   sino: 30_000,
+  /** Aba Integrações (crm_integracoes_status, ≈25 ms). Status do número muda pelo webhook, não pelo Broadcast. */
+  integracoes: 15_000,
 } as const;
 
 /** Reserva quando o aviso do banco (Realtime) está conectado. */
@@ -24,6 +26,7 @@ export const INTERVALO_COM_AVISO: Record<keyof typeof INTERVALO, number> = {
   conversaAberta: 15_000,
   listaConversas: 30_000,
   sino: 30_000,
+  integracoes: 30_000,
 };
 
 /** Espera para juntar uma rajada de avisos (lote de status, mídia que chega) numa busca só. */

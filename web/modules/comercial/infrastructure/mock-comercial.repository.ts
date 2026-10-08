@@ -5,6 +5,7 @@ import type {
   ComercialRepository, FiltroNegocios, NovaAtividade, NovaFicha, Resultado, ResultadoEnvio, ResultadoFicha, ResultadoLink, ResultadoTokenMcp,
 } from '../application/ports';
 import type { PainelCanais } from '../domain/canais-whatsapp';
+import type { PainelIntegracoes } from '../domain/integracoes-status';
 import { linhasContatos, mapaDuplicados, paginarContatos, resumirContatos, type FiltroContatos } from '../domain/contatos';
 import { produto as produtoDe, ROTULO_CAMPO } from '../domain/catalogo';
 import { bloqueioMoverNoFunil, camposFaltandoNoFunil, etapaDoFunil, etapaInicial, validarFunil } from '../domain/funis';
@@ -938,6 +939,20 @@ export class MockComercialRepository implements ComercialRepository {
     if (i < 0) return espera({ ok: false, msg: 'Evento não encontrado.' });
     this.hotmartErros.splice(i, 1);
     return espera({ ok: true, msg: 'negocio_criado' });
+  }
+
+  // ── Status das integrações: na demonstração nada está ligado (mesmo aviso da aba) ──
+  integracoesStatus(): Promise<PainelIntegracoes> {
+    const chaves = ['hotmart', 'infobip', 'evolution', 'activecampaign', 'unnichat', 'sendflow', 'respondi', 'slack', 'mcp', 'clint'];
+    return espera({
+      geradoEm: new Date().toISOString(),
+      integracoes: chaves.map((chave) => ({ chave, ligada: false, configurada: false, ultimoEventoEm: null, eventos24h: 0, erroRecente: null })),
+      numeros: [{
+        id: 'demo-num', nome: 'Comercial (demonstração)', provedor: 'infobip' as const, status: 'desconectado' as const, statusEm: null,
+        statusMotivo: null, final: '0000', ativo: true, principal: true, recebe: true, envia: true, ultimaMensagemEm: null,
+        mensagens24h: 0, falhas24h: 0,
+      }],
+    });
   }
 
   // ── MCP (F7): tokens de demonstração (nenhum funciona fora desta tela) ──

@@ -37,6 +37,8 @@ import {
 import type { EdicaoAtivacao, PainelAtivacao } from '../domain/ativacao';
 import type { PainelCanais } from '../domain/canais-whatsapp';
 import { mapCanais } from './mapeamento-canais';
+import type { PainelIntegracoes } from '../domain/integracoes-status';
+import { mapIntegracoesStatus } from './mapeamento-integracoes';
 import { argsSalvarAtivacao, mapPainelAtivacao } from './mapeamento-ativacao';
 import { argsRegra, mapOrigemDetalhada, mapPainelCatalogo } from './mapeamento-catalogacao';
 import type { OrigemDetalhada, PainelCatalogo, RegraCatalogo } from '../domain/catalogacao';
@@ -494,6 +496,8 @@ export class SupabaseComercialRepository implements ComercialRepository {
     return mapPainelHotmart(await this.rpc('crm_hotmart_painel', { p_dias: dias }));
   }
   reprocessarHotmart(chave: string) { return this.simples('crm_hotmart_reprocessar', argsEscrita.reprocessarHotmart(chave)); }
+
+  async integracoesStatus(): Promise<PainelIntegracoes> { return mapIntegracoesStatus(await this.rpc('crm_integracoes_status')); }
 
   // ── MCP (F7) ──
   async tokensMcp(): Promise<TokenMcp[]> { return mapTokensMcp(await this.rpc('crm_mcp_tokens')); }
