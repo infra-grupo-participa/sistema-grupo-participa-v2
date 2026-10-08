@@ -90,7 +90,7 @@ export const DEPARTAMENTOS: Departamento[] = [
   // Departamento Financeiro (Em breve). NÃO confundir com o módulo "Financeiro" (Contas a Receber), que hoje
   // mora DENTRO do Educacional em /educacional/financeiro e mantém o nome por decisão do Victor (05/10/2026).
   { key: 'financeiro', label: 'Financeiro', path: '/financeiro', descricao: 'Departamento financeiro da empresa', ico: 'building', status: 'em_breve', areas: [] },
-  { key: 'infra', label: 'Infra', path: '/infra', descricao: 'IA e Dados', ico: 'server', status: 'ativo', areas: [area('infra', 'dados', 'Dados', 'chart', 'Dashboards de eventos e projetos', 'ativo')] },
+  { key: 'infra', label: 'Infra', path: '/infra', descricao: 'IA e Dados', ico: 'server', status: 'ativo', areas: [] },
 ];
 
 /**
@@ -185,7 +185,7 @@ export function ehDoComercial(u: GpUser | null): boolean {
  *   também quem é do Comercial (`ehDoComercial`: gestor com área comercial, vendedor com área + `comercial.vender`).
  *   Visualizador e equipe fora do Comercial continuam fora (e a RLS do schema crm também os nega).
  * - Financeiro: só mostra "Em breve"; qualquer pessoa da equipe vê o aviso.
- * - Infra: área Dados (dashboards por modelo), qualquer pessoa da equipe; o dado é travado por `dados.pode_ver`.
+ * - Infra: qualquer pessoa da equipe; o dado dos dashboards é travado por `dados.pode_ver` e pela capacidade financeira.
  */
 export function podeVerDepartamento(u: GpUser | null, key: DepartamentoKey, opcoes: OpcoesAcessoDepartamento = {}): boolean {
   if (!u) return false;

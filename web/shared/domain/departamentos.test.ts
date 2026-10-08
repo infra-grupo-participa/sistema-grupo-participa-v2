@@ -18,8 +18,8 @@ describe('departamentos: registro', () => {
     const st = Object.fromEntries(DEPARTAMENTOS.map((d) => [d.key, d.status]));
     expect(st).toEqual({ educacional: 'ativo', marketing: 'ativo', comercial: 'ativo', financeiro: 'em_breve', infra: 'ativo' });
   });
-  it('Infra tem a área Dados ativa', () => {
-    expect(departamento('infra').areas).toEqual([expect.objectContaining({ key: 'dados', path: '/infra/dados', status: 'ativo' })]);
+  it('Infra não tem mais o nível intermediário de áreas', () => {
+    expect(departamento('infra').areas).toEqual([]);
   });
   it('Marketing tem as 5 áreas em /marketing/<area>: Web, Mensageria e Tráfego ativas, as outras "Em breve"', () => {
     const mkt = departamento('marketing');

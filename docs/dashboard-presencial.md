@@ -1,7 +1,7 @@
 # Dashboard de evento presencial para a base (banco)
 
 Modelo `presencial-base`, primeiro uso: **Clínica de Miami** (`clinica-miami-2026-12`, sigla CNFMIAMI26, `mkt.projetos`
-id 68). Pedido do Victor Hugo em 07/10/2026. A tela (Infra > Dados > Dashboards) está em
+id 68). Pedido do Victor Hugo em 07/10/2026. A tela (Infra > Dashboards > CSM) está em
 `docs/dashboard-presencial-tela.md`; este arquivo é o lado do banco.
 
 **Situação (07/10/2026):** migrations APLICADAS em produção (seção 3).
@@ -142,7 +142,7 @@ tem. Quando o sync traz a transação, vale a linha do espelho: nada conta duas 
 
 ### Testar a atualização da tela
 
-No repo, entrar em `web` e rodar `npm run dev -- -p 3001`. Abrir `/infra/dados/dashboards/clinica-miami-2026-12`
+No repo, entrar em `web` e rodar `npm run dev -- -p 3001`. Abrir `/infra/dashboards/csm/clinica-miami-2026-12`
 com uma conta autorizada. Conferir o horário, esperar 60 s com a aba visível e conferir novo horário sem piscar os
 cards. Deixar a aba oculta por mais de 60 s: não deve haver leitura periódica; ao voltar, resumo e série devem
 atualizar. No painel de rede, `dados_presencial_disparos`, `dados_presencial_leads` e `dados_presencial_vendas` não
