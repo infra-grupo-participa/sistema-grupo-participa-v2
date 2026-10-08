@@ -1,5 +1,5 @@
 // Regras puras do Registro do CRM: quem vê o quê, filtros da tela, agrupamento por dia, números e CSV.
-import type { AcaoLog, EntidadeLog, LogCrm, Negocio, SessaoComercial } from '../../domain/types';
+import type { AcaoLog, EntidadeLog, LogCrm } from '../../domain/types';
 import { diaSP, difDias } from '../atividades/agenda';
 
 // ── Rótulos ──
@@ -37,34 +37,29 @@ export function nomeAutor(autorId: string | null, nomeDe: (id: string | null) =>
 }
 
 // ── Quem vê o quê ──
+// A regra mora no banco (public.crm_log + policy crm.log.log_ler, migration 20261008001436): gestor vê tudo; vendedor vê
+// o que fez, os contatos que pode ver (dele, sem dono ou de negócio dele) e os negócios de que é dono. A tela não recorta.
 
-export interface EscopoVendedor {
-  negocioIds: Set<string>;
-  contatoIds: Set<string>;
+// ── Páginas (limite e cursor no servidor) ──
+
+/** Linhas por página pedidas ao banco (o banco não devolve mais que isso). */
+export const LIMITE_PAGINA = 500;
+
+/** Junta a página mais recente com as mais antigas já carregadas, sem repetir linha (a mais recente vence). */
+export function juntarPaginas(recente: LogCrm[], antigas: LogCrm[]): LogCrm[] {
+  const ids = new Set(recente.map((l) => l.id));
+  return [...recente, ...antigas.filter((l) => !ids.has(l.id))];
 }
 
-/** Negócios do vendedor (abertos ou fechados) e os contatos deles. */
-export function escopoDoVendedor(negocios: Pick<Negocio, 'id' | 'contatoId' | 'donoId'>[], vendedorId: string): EscopoVendedor {
-  const meus = negocios.filter((n) => n.donoId === vendedorId);
-  return { negocioIds: new Set(meus.map((n) => n.id)), contatoIds: new Set(meus.map((n) => n.contatoId)) };
-}
-
-/**
- * Regra de visibilidade do registro:
- * - gestor vê tudo;
- * - vendedor vê o que ele fez + o que tocou os negócios dele (o próprio negócio, ou o contato de um negócio dele:
- *   atividade, nota, mensagem), feito por qualquer pessoa ou pelo sistema.
- */
-export function visivelPara(l: Pick<LogCrm, 'autorId' | 'entidade' | 'entidadeId' | 'contatoId'>, sessao: SessaoComercial, escopo: EscopoVendedor): boolean {
-  if (sessao.papel === 'gestor') return true;
-  if (l.autorId === sessao.vendedorId) return true;
-  if ((l.entidade === 'negocio' || l.entidade === 'nota') && escopo.negocioIds.has(l.entidadeId)) return true;
-  return l.contatoId != null && escopo.contatoIds.has(l.contatoId);
+/** Aviso de corte: só quando a última página veio cheia (pode haver mais antigas no banco). */
+export function avisoLimite(total: number, temMais: boolean): string | null {
+  if (!temMais) return null;
+  return `Mostrando as ${total.toLocaleString('pt-BR')} alterações mais recentes do período. Os números e os filtros consideram só elas; carregue as anteriores para ver mais.`;
 }
 
 export const REGRA_VISIBILIDADE = {
   gestor: 'Você é gestor: vê todas as alterações do CRM, de todas as pessoas e do sistema.',
-  vendedor: 'Você vê o que você fez e tudo o que tocou os seus negócios (inclusive o que outra pessoa ou o sistema fez neles).',
+  vendedor: 'Você vê o que você fez, o que tocou os seus contatos e negócios (inclusive o que outra pessoa ou o sistema fez neles) e os contatos sem dono.',
 };
 
 // ── Filtros da tela ──

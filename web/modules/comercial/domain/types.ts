@@ -773,4 +773,6 @@ export interface FiltroLog {
   desde?: string;
   ate?: string;
   limite?: number;
+  /** Cursor: id da última linha já recebida (traz as anteriores a ela). */
+  antes?: string;
 }

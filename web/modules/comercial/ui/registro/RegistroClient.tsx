@@ -12,7 +12,7 @@ import { useAgora } from '../repositorio';
 import { NOTA_REGISTRO } from './HistoricoAlteracoes';
 import { ItemLog } from './ItemLog';
 import {
-  ACAO, agruparPorDia, chipsAtivos, ENTIDADE, FILTRO_INICIAL, filtrarLog, gerarCsv, inicioDoPeriodo, nomeArquivoCsv,
+  ACAO, agruparPorDia, avisoLimite, chipsAtivos, ENTIDADE, FILTRO_INICIAL, filtrarLog, gerarCsv, inicioDoPeriodo, LIMITE_PAGINA, nomeArquivoCsv,
   numerosRegistro, PERIODOS, REGRA_VISIBILIDADE, type FiltroTela, type PeriodoLog,
 } from './registro';
 import { useRegistroVisivel } from './usar-registro';
@@ -62,7 +62,8 @@ export function RegistroClient() {
   const [f, setF] = useState<FiltroTela>(FILTRO_INICIAL);
   const [mostrar, setMostrar] = useState(PAGINA);
   // Busca no repositório só pelo período; o resto filtra na tela.
-  const filtroRepo = useMemo(() => ({ desde: inicioDoPeriodo(f.periodo, new Date()), limite: 5000 }), [f.periodo]);
+  // O banco devolve em páginas (LIMITE_PAGINA) e já recortado pelo que a pessoa pode ver.
+  const filtroRepo = useMemo(() => ({ desde: inicioDoPeriodo(f.periodo, new Date()) }), [f.periodo]);
   const reg = useRegistroVisivel(filtroRepo);
   const { vendedores, nomeDe, gestor, sessao } = reg;
 
@@ -137,6 +138,21 @@ export function RegistroClient() {
           />
         </div>
       </div>
+
+      {reg.dados && avisoLimite(reg.dados.length, reg.temMais) && (
+        <Aviso
+          tom="info"
+          className="mb-3"
+          acao={(
+            <Button size="sm" variant="ghost" onClick={() => void reg.carregarMais()} disabled={reg.carregandoMais}>
+              {reg.carregandoMais ? 'Carregando…' : `Carregar as ${LIMITE_PAGINA} anteriores`}
+            </Button>
+          )}
+        >
+          {avisoLimite(reg.dados.length, reg.temMais)}
+          {reg.erroMais && <span className="block text-xs text-[var(--red)]">{reg.erroMais}</span>}
+        </Aviso>
+      )}
 
       {chips.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2" aria-label="Filtros ativos">

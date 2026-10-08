@@ -154,6 +154,15 @@ describe('acesso v2 por área e capacidade', () => {
     expect(acessoComercial(pessoa([]), opcoes)).toBe('relatorios');
     expect(acessoComercial(pessoa(['comercial']), opcoes)).toBe('completo');
   });
+  it('quem só pede estratégia abre Estratégias com a flag ligada (leitor ou fora do Comercial)', () => {
+    const solicitante = (ver: string[]) => ({ ...pessoa([], [], ver), funcoes: ['comercial.solicitar_estrategia'], status: 'ativo' });
+    expect(acessoComercial(solicitante(['comercial']), opcoes)).toBe('estrategias');
+    expect(acessoComercial(solicitante(['educacional']), opcoes)).toBe('estrategias');
+    // quem edita o Comercial continua com o CRM inteiro, mesmo pedindo estratégia
+    expect(acessoComercial({ ...pessoa(['comercial']), funcoes: ['comercial.solicitar_estrategia'], status: 'ativo' }, opcoes)).toBe('completo');
+    // sem a função e sem ver o Comercial: nada
+    expect(acessoComercial(pessoa([], [], ['educacional']), opcoes)).toBeNull();
+  });
   it('responsável de departamento edita as áreas dele; master edita todas', () => {
     expect(podeEditarArea(pessoa(['marketing']), 'marketing', 'trafego', opcoes)).toBe(true);
     expect(podeEditarArea(pessoa(['marketing']), 'infra', 'dados', opcoes)).toBe(false);

@@ -164,7 +164,7 @@ function Placar({ e }: { e: Estrategia }) {
         <h3 className="text-sm font-semibold text-[var(--fg)]">Placar</h3>
         <span className="text-xs text-[var(--fg-3)]">
           {ROTULO_TIPO_ACAO[e.acaoTipo]} desde {fmtData(e.acaoCriadaEm)}
-          {e.acaoTipo === 'funil' && e.funilId && <> · <Link className="text-[var(--accent)] hover:underline" href={`/comercial/funil?funil=${e.funilId}`}>abrir funil</Link></>}
+          {e.acaoTipo === 'funil' && e.funilId && <> · <Link className="text-[var(--accent)] hover:underline" href={`/comercial/funil?f=${e.funilId}`}>abrir funil</Link></>}
           {e.acaoTipo === 'fila' && <> · <Link className="text-[var(--accent)] hover:underline" href="/comercial/estrategias#filas">abrir filas</Link></>}
         </span>
       </div>

@@ -876,14 +876,16 @@ export class MockComercialRepository implements ComercialRepository {
 
   // ── Registro do CRM ──
   log(filtro: FiltroLog = {}): Promise<LogCrm[]> {
-    const l = this.logDb.filter((x) =>
+    const ordenado = [...this.logDb].sort((a, b) => b.em.localeCompare(a.em));
+    const corte = filtro.antes ? ordenado.findIndex((x) => x.id === filtro.antes) + 1 : 0;
+    const l = ordenado.slice(corte).filter((x) =>
       (filtro.autorId === undefined || x.autorId === filtro.autorId)
       && (!filtro.entidade || x.entidade === filtro.entidade)
       && (!filtro.entidadeId || x.entidadeId === filtro.entidadeId)
       && (!filtro.contatoId || x.contatoId === filtro.contatoId)
       && (!filtro.desde || x.em >= filtro.desde)
       && (!filtro.ate || x.em <= filtro.ate));
-    return espera([...l].sort((a, b) => b.em.localeCompare(a.em)).slice(0, filtro.limite ?? 500));
+    return espera(l.slice(0, Math.min(filtro.limite ?? 500, 500)));
   }
 
   async verComo(vendedorId: string) {

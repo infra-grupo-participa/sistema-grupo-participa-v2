@@ -217,8 +217,10 @@ export function podeSolicitarEstrategia(u: GpUser | null): boolean {
 export type AcessoComercial = 'completo' | 'relatorios' | 'estrategias' | null;
 export function acessoComercial(u: GpUser | null, opcoes: OpcoesAcessoDepartamento = {}): AcessoComercial {
   if (opcoes.acessoV2) {
-    if (!podeVerDepartamento(u, 'comercial', opcoes)) return null;
-    return podeEditarArea(u, 'comercial', null, opcoes) ? 'completo' : 'relatorios';
+    if (podeVerDepartamento(u, 'comercial', opcoes) && podeEditarArea(u, 'comercial', null, opcoes)) return 'completo';
+    // Quem pede estratégia e não é do Comercial abre Estratégias (antes caía em 'relatorios' e perdia a tela).
+    if (podeSolicitarEstrategia(u)) return 'estrategias';
+    return podeVerDepartamento(u, 'comercial', opcoes) ? 'relatorios' : null;
   }
   if (podeVerDepartamento(u, 'comercial', opcoes)) return 'completo';
   return podeSolicitarEstrategia(u) ? 'estrategias' : null;

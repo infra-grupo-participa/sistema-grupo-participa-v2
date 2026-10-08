@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { LogCrm } from '../../domain/types';
 import {
-  agruparPorDia, chipsAtivos, escopoDoVendedor, FILTRO_INICIAL, filtrarLog, gerarCsv, inicioDoPeriodo, nomeAutor,
-  numerosRegistro, tituloDia, visivelPara,
+  agruparPorDia, avisoLimite, chipsAtivos, FILTRO_INICIAL, filtrarLog, gerarCsv, inicioDoPeriodo, juntarPaginas, nomeAutor,
+  numerosRegistro, tituloDia,
 } from './registro';
 
 // 05/10/2026 15:00 em Brasília (UTC−3).
@@ -15,31 +15,16 @@ const log = (id: string, em: string, extra: Partial<LogCrm> = {}): LogCrm => ({
 
 const nomeDe = (id: string | null) => ({ 'v-ana': 'Ana', 'v-bia': 'Bia' } as Record<string, string>)[id ?? ''] ?? '—';
 
-describe('visibilidade', () => {
-  const negocios = [
-    { id: 'n-1', contatoId: 'c-1', donoId: 'v-ana' },
-    { id: 'n-2', contatoId: 'c-2', donoId: 'v-bia' },
-  ];
-  const escopoAna = escopoDoVendedor(negocios, 'v-ana');
-  const ana = { vendedorId: 'v-ana', papel: 'vendedor' as const };
-
-  it('gestor vê tudo', () => {
-    expect(visivelPara(log('a', AGORA.toISOString(), { autorId: 'v-bia', entidadeId: 'n-2', contatoId: 'c-2' }), { vendedorId: 'v-g', papel: 'gestor' }, escopoAna)).toBe(true);
+describe('páginas do servidor', () => {
+  it('junta a página recente com as antigas sem repetir linha', () => {
+    const r = juntarPaginas([log('3', ''), log('2', '')], [log('2', ''), log('1', '')]);
+    expect(r.map((l) => l.id)).toEqual(['3', '2', '1']);
   });
 
-  it('vendedor vê o que fez', () => {
-    expect(visivelPara(log('a', '', { entidade: 'funil', entidadeId: 'f-1', contatoId: null }), ana, escopoAna)).toBe(true);
-  });
-
-  it('vendedor vê o que outra pessoa ou o sistema fez nos negócios dele', () => {
-    expect(visivelPara(log('a', '', { autorId: 'v-bia', entidadeId: 'n-1', contatoId: null }), ana, escopoAna)).toBe(true);
-    expect(visivelPara(log('a', '', { autorId: null, entidade: 'atividade', entidadeId: 'a-9', contatoId: 'c-1' }), ana, escopoAna)).toBe(true);
-    expect(visivelPara(log('a', '', { autorId: 'v-bia', entidade: 'nota', entidadeId: 'n-1', contatoId: null }), ana, escopoAna)).toBe(true);
-  });
-
-  it('vendedor não vê o que é de outro vendedor', () => {
-    expect(visivelPara(log('a', '', { autorId: 'v-bia', entidadeId: 'n-2', contatoId: 'c-2' }), ana, escopoAna)).toBe(false);
-    expect(visivelPara(log('a', '', { autorId: 'v-bia', entidade: 'funil', entidadeId: 'f-1', contatoId: null }), ana, escopoAna)).toBe(false);
+  it('avisa o corte só quando a última página veio cheia', () => {
+    expect(avisoLimite(500, true)).toContain('Mostrando as 500 alterações mais recentes');
+    expect(avisoLimite(1500, true)).toContain('1.500');
+    expect(avisoLimite(320, false)).toBeNull();
   });
 });
 

@@ -270,7 +270,7 @@ export class SupabaseComercialRepository implements ComercialRepository {
     return mapLog(await this.rpc('crm_log', {
       p_autor: pAutor, p_entidade: filtro.entidade ?? null, p_entidade_id: filtro.entidadeId ?? null,
       p_pessoa: filtro.contatoId ?? null, p_desde: filtro.desde ?? null, p_ate: filtro.ate ?? null,
-      p_limite: filtro.limite ?? 500,
+      p_limite: filtro.limite ?? 500, p_antes: filtro.antes ? Number(filtro.antes) : null,
     }));
   }
 

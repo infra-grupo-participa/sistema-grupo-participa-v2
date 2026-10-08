@@ -9,6 +9,8 @@ export const dynamic = 'force-dynamic';
 export default async function Page() {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
-  if (!acessoComercial(user, ACESSO_DEPARTAMENTOS)) redirect('/');
+  // Só quem vê o CRM (ou o nível de relatórios). Quem só pede estratégia não entra: as RPCs daqui exigem o Comercial (42501).
+  const acesso = acessoComercial(user, ACESSO_DEPARTAMENTOS);
+  if (acesso !== 'completo' && acesso !== 'relatorios') redirect('/');
   return <RelatoriosClient />;
 }
