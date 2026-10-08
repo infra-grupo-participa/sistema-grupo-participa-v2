@@ -711,7 +711,7 @@ export const SECOES: Secao[] = [
         ['Agenda e log de disparos', 'Marcar o disparo antes e registrar depois'],
       ]),
       ul([
-        'O Jonathan é o gestor do CRM. O Arthur é administrador.',
+        'Gestores do CRM e de Estratégias: o Jonathan e o Arthur (supervisor dele).',
         'Marcos Paulo monta ficha de disparo. Quem aprova é o gestor.',
         'Nenhuma credencial entra no repositório nem neste sistema.',
       ], 'Acessos'),

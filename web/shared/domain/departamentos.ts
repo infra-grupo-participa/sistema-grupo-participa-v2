@@ -160,7 +160,9 @@ export function temCapacidade(u: GpUser | null, chave: string, opcoes: OpcoesAce
 /**
  * É do Comercial? Espelha `crm.eh_comercial()` do banco (= `crm.eh_gestor()` OU `crm.eh_vendedor()`, migration
  * 20261005r), sem a parte que só o banco sabe:
- * - gestor: status ativo e (cargo dev/admin, ou cargo `gestor` com área `comercial`);
+ * - gestor: aqui é só a PORTA (cargo dev/admin, ou cargo `gestor` com área `comercial`). Quem é gestor de fato é a lista
+ *   `crm.config.gestores` (`crm.eh_gestor`, migration 20261008150041) e o papel chega à tela por `crm_sessao`; admin fora
+ *   da lista entra aqui mas o banco devolve "Sem acesso ao Comercial." se também não for vendedor;
  * - vendedor: status ativo, área `comercial` e função `comercial.vender` (o banco exige também a linha ATIVA em
  *   `crm.vendedor`; quem passar aqui sem ela entra na tela, mas as RPCs devolvem "Sem acesso ao Comercial." — a
  *   fronteira de dado é a RLS, isto é só a porta).

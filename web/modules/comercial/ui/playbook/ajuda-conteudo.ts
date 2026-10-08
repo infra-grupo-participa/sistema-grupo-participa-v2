@@ -1153,7 +1153,7 @@ const SISTEMA: SecaoAjuda[] = [
         ['Jonathan Mendes', 'Gestor do Comercial. Também recebe negócios'],
         ['Marcos Paulo', 'Vendedor. Recebe 50% dos leads novos'],
         ['Jusy', 'Vendedora. Recebe 50% dos leads novos'],
-        ['Arthur Galvão', 'Administrador e supervisor'],
+        ['Arthur Galvão', 'Supervisor do Jonathan. Também é gestor'],
       ], 'O time hoje (o gestor ajusta os percentuais em Configurações)'),
       cuidados([
         'Lead que não é seu não se toca, nem para tirar dúvida. Peça ao gestor para transferir.',
@@ -1234,8 +1234,9 @@ const SISTEMA: SecaoAjuda[] = [
     parte: 'sistema',
     icone: 'users',
     resumo: 'O que cada papel vê e pode fazer.',
-    sinonimos: ['permissão', 'papel', 'acesso', 'pode', 'não consigo', 'bloqueado'],
+    sinonimos: ['permissão', 'papel', 'acesso', 'pode', 'não consigo', 'bloqueado', 'quem é gestor', 'administrador'],
     blocos: [
+      p('**Quem é gestor:** o Jonathan (gestor comercial) e o Arthur (supervisor dele), no CRM e em Estratégias. A lista fica no banco: ser administrador do sistema não faz ninguém gestor do Comercial.'),
       tab(['O quê', 'Vendedor', 'Gestor'], [
         ['Início', '"Meu dia", com os próprios números', '"Visão do time", Controle das 9h e o painel de cada vendedor'],
         ['Conversas', 'Escreve só nas próprias', 'Escreve em qualquer uma e atribui dono'],
@@ -1512,7 +1513,7 @@ const FAQ: SecaoAjuda[] = [
     icone: 'settings',
     blocos: [
       pergunta('Apareceu "CRM em manutenção: escrita desligada". Fiz algo errado?', 'Não. A gravação foi desligada por um tempo, para manutenção. Espere e tente de novo. Se durar, avise o Arthur.'),
-      pergunta('Quem pode entrar no Comercial?', 'O time do Comercial: o gestor (Jonathan), os vendedores (Marcos Paulo e Jusy) e o administrador (Arthur). Quem só pede estratégia vê a tela de Estratégias.'),
+      pergunta('Quem pode entrar no Comercial?', 'O time do Comercial: os gestores (Jonathan e Arthur, supervisor dele) e os vendedores (Marcos Paulo e Jusy). Quem só pede estratégia vê a tela de Estratégias.'),
       pergunta('Ainda uso a Clint?', 'Só para terminar o que já estava aberto lá. Lead novo é no CRM. O gestor define a data de desligamento da Clint.'),
       pergunta('Sumiu um funil inteiro. E agora?', 'Ele pode ter sido arquivado. Nada foi apagado. Pergunte ao gestor: dá para desarquivar.'),
       pergunta('Como paro de receber aviso fora do horário?', 'Em Configurações › Notificações, ligue o horário de silêncio e salve.', TELAS.notificacoes),
