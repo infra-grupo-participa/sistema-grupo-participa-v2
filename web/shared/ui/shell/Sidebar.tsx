@@ -92,6 +92,7 @@ export function Sidebar({ user }: { user: GpUser }) {
   // Victor, 05/10/2026: fora de departamento (Início, Usuários, Configurações) não mostra menu de departamento nenhum.
   const mostraEducacional = depAtual === 'educacional';
   const mostraMarketing = depAtual === 'marketing' && podeVerDepartamento(user, 'marketing', ACESSO_DEPARTAMENTOS);
+  const mostraInfra = depAtual === 'infra' && podeVerDepartamento(user, 'infra', ACESSO_DEPARTAMENTOS);
   // Comercial: CRM inteiro, ou só Estratégias para quem pede estratégia sem ser do Comercial (mesma regra do layout).
   const acessoCom = acessoComercial(user, ACESSO_DEPARTAMENTOS);
   const mostraComercial = depAtual === 'comercial' && !!acessoCom;
@@ -187,6 +188,18 @@ export function Sidebar({ user }: { user: GpUser }) {
                 </Link>
               );
             })}
+          </Group>
+          <Divider />
+        </>
+      )}
+
+      {mostraInfra && (
+        <>
+          <Group label="Infra" collapsed={!!groups.infra} onToggle={() => toggleGroup('infra')}>
+            <Link href="/infra/dashboards" className={itemCls(cur === '/infra/dashboards' || cur.startsWith('/infra/dashboards/'))}>
+              <span className={iconBoxCls(cur === '/infra/dashboards' || cur.startsWith('/infra/dashboards/'))}><Icon name="chart" /></span>
+              <span>Dashboards</span>
+            </Link>
           </Group>
           <Divider />
         </>
