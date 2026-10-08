@@ -7,29 +7,33 @@ const U2 = '22222222-2222-4222-8222-222222222222';
 const f = (n: string) => acharFerramenta(n)!;
 const VEND = { perfilId: U1, papel: 'vendedor' as const };
 const GEST = { perfilId: U2, papel: 'gestor' as const };
+const CONSULTAS_WHATSAPP = ['comercial_numeros_whatsapp', 'comercial_templates_whatsapp', 'comercial_situacao_conversa'];
 
 describe('mcp: catálogo', () => {
-  it('9 de leitura + 9 de escrita, nomes válidos para o MCP e para crm.mcp_chamada', () => {
+  it('9 de leitura + 13 no escopo operar (9 escritas + 4 do WhatsApp), nomes válidos para o MCP e para crm.mcp_chamada', () => {
     expect(FERRAMENTAS.filter((x) => x.escopo === 'ler')).toHaveLength(9);
     expect(FERRAMENTAS.filter((x) => x.escopo === 'operar').map((x) => x.name).sort())
       .toEqual(['comercial_adicionar_nota', 'comercial_concluir_atividade', 'comercial_criar_atividade', 'comercial_criar_contato',
-        'comercial_editar_contato', 'comercial_mover_etapa', 'comercial_reabrir_atividade', 'comercial_tag_adicionar', 'comercial_tag_remover']);
+        'comercial_editar_contato', 'comercial_enviar_whatsapp', 'comercial_mover_etapa', 'comercial_numeros_whatsapp',
+        'comercial_reabrir_atividade', 'comercial_situacao_conversa', 'comercial_tag_adicionar', 'comercial_tag_remover',
+        'comercial_templates_whatsapp']);
     for (const x of FERRAMENTAS) {
       expect(x.name).toMatch(/^[a-z_]{3,60}$/);
-      expect(x.annotations.readOnlyHint).toBe(x.escopo === 'ler');
+      expect(x.annotations.readOnlyHint).toBe(x.escopo === 'ler' || CONSULTAS_WHATSAPP.includes(x.name));
       expect(!!x.escrita).toBe(x.escopo === 'operar');
     }
   });
-  it('fora de propósito não existe: ganho, perda, transferência, disparo, exportação', () => {
-    const nomes = FERRAMENTAS.map((x) => x.name).join(' ');
-    expect(nomes).not.toMatch(/ganho|perdido|transferir|disparo|enviar|exportar|funil_salvar|oferta|apagar|excluir|whatsapp_enviar/);
+  it('fora de propósito não existe: ganho, perda, transferência, disparo, exportação; o único envio é o 1:1 de WhatsApp', () => {
+    const nomes = FERRAMENTAS.map((x) => x.name).filter((n) => n !== 'comercial_enviar_whatsapp').join(' ');
+    expect(nomes).not.toMatch(/ganho|perdido|transferir|disparo|enviar|exportar|funil_salvar|oferta|apagar|excluir|massa/);
   });
   it('toda RPC usada está na lista fechada de public.crm_mcp_rpc (migrations 20261008150823 e 20261008222038)', () => {
     const LISTA = ['crm_funis', 'crm_funil_resumo', 'crm_negocios', 'crm_contatos', 'crm_jornada', 'crm_atividades',
       'crm_desempenho', 'crm_mensagens', 'crm_criar_atividade', 'crm_adicionar_nota', 'crm_mover_etapa', 'crm_concluir_atividade',
-      'crm_criar_contato', 'crm_editar_contato', 'crm_tags_contato', 'crm_reabrir_atividade'];
+      'crm_criar_contato', 'crm_editar_contato', 'crm_tags_contato', 'crm_reabrir_atividade',
+      'crm_mcp_numeros', 'crm_mcp_templates', 'crm_mcp_situacao_conversa', 'crm_mcp_enviar_whatsapp'];
     const args = { funil_id: U1, pessoa_id: U1, negocio_id: U1, etapa_id: U2, atividade_id: U1, busca: 'ana', tipo: 'ligacao', titulo: 't', texto: 't',
-      vence_em: '2026-10-06T10:00', nome: 'Ana Souza', email: 'ana@exemplo.com', tags: ['vip'] };
+      vence_em: '2026-10-06T10:00', nome: 'Ana Souza', email: 'ana@exemplo.com', tags: ['vip'], contato_id: U1, chave_idempotencia: U2 };
     let planos = 0;
     for (const x of FERRAMENTAS) {
       const v = x.validar(args);
@@ -243,5 +247,64 @@ describe('mcp: contato, tags e reabrir (20261008222038)', () => {
     expect(ra.validar({}).ok).toBe(false);
     const v = ra.validar({ atividade_id: U1 });
     expect(v.ok && ra.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_reabrir_atividade', params: { p_atividade: U1 } }]);
+  });
+});
+
+describe('mcp: WhatsApp pelo Claude (20261008233100)', () => {
+  const env = f('comercial_enviar_whatsapp');
+  it('descrição exige confirmação explícita antes de enviar', () => {
+    expect(env.description).toMatch(/^IMPORTANTE: antes de chamar, mostre ao usuário o texto final.*o número e o destinatário e peça confirmação explícita/);
+    expect(env.escopo).toBe('operar');
+    expect(env.escrita).toBe(true);
+    expect(env.inputSchema.required).toEqual(['contato_id', 'chave_idempotencia']);
+  });
+  it('texto OU template, nunca os dois nem nenhum', () => {
+    expect(env.validar({ contato_id: U1, chave_idempotencia: U2 })).toEqual({ ok: false, msg: 'Informe texto OU template (um dos dois).' });
+    expect(env.validar({ contato_id: U1, chave_idempotencia: U2, texto: 'oi', template: 'x' }).ok).toBe(false);
+    expect(env.validar({ contato_id: U1, chave_idempotencia: U2, texto: '   ' }).ok).toBe(false);
+    expect(env.validar({ contato_id: U1, chave_idempotencia: U2, texto: 'x'.repeat(4097) }).ok).toBe(false);
+  });
+  it('chave_idempotencia obrigatória e UUID', () => {
+    expect(env.validar({ contato_id: U1, texto: 'oi' })).toEqual({ ok: false, msg: 'Informe chave_idempotencia.' });
+    expect(env.validar({ contato_id: U1, texto: 'oi', chave_idempotencia: 'abc' }).ok).toBe(false);
+  });
+  it('plano: texto livre com número escolhido', () => {
+    const v = env.validar({ contato_id: U1, numero_id: U2, texto: ' Oi João ', chave_idempotencia: U2 });
+    expect(v.ok).toBe(true);
+    if (!v.ok) return;
+    expect(env.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_mcp_enviar_whatsapp',
+      params: { p_contato: U1, p_chave: U2, p_canal: U2, p_texto: 'Oi João' } }]);
+  });
+  it('plano: template sem número (o banco escolhe a conversa mais recente, senão o oficial)', () => {
+    const v = env.validar({ contato_id: U1, template: 'boas_vindas', chave_idempotencia: U2 });
+    expect(v.ok).toBe(true);
+    if (!v.ok) return;
+    expect(env.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_mcp_enviar_whatsapp',
+      params: { p_contato: U1, p_chave: U2, p_template: 'boas_vindas' } }]);
+  });
+  it('situação: só contato é obrigatório; número e template opcionais', () => {
+    const s = f('comercial_situacao_conversa');
+    expect(s.validar({}).ok).toBe(false);
+    const v = s.validar({ contato_id: U1, template: 'aula' });
+    expect(v.ok).toBe(true);
+    if (!v.ok) return;
+    expect(s.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_mcp_situacao_conversa', params: { p_contato: U1, p_template: 'aula' } }]);
+  });
+  it('templates: busca opcional e limite', () => {
+    const t = f('comercial_templates_whatsapp');
+    const v = t.validar({});
+    expect(v.ok).toBe(true);
+    if (!v.ok) return;
+    expect(t.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_mcp_templates', params: { p_busca: null, p_limite: 50 } }]);
+    expect(t.validar({ limite: 500 }).ok).toBe(false);
+  });
+  it('consultas do WhatsApp só aparecem com o escopo operar', () => {
+    const so = ferramentasDoEscopo(['ler']).map((x) => x.name);
+    for (const n of [...CONSULTAS_WHATSAPP, 'comercial_enviar_whatsapp']) expect(so).not.toContain(n);
+  });
+  it('resultado devolve o que o banco mandou (ok incluído)', () => {
+    expect(env.resultado([{ ok: true, msg: 'Mensagem na fila', mensagemId: U1 }], {}, new Date(), VEND))
+      .toEqual({ ok: true, msg: 'Mensagem na fila', mensagemId: U1 });
+    expect(f('comercial_numeros_whatsapp').resultado([null], {}, new Date(), GEST)).toEqual({});
   });
 });

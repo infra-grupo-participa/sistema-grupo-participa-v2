@@ -108,3 +108,31 @@ describe('atenderMcp: ferramentas', () => {
     expect(r.corpo).toMatchObject({ result: { structuredContent: { apenasMeus: true, total: 1, negocios: [{ id: 'n1' }] } } });
   });
 });
+
+describe('atenderMcp: WhatsApp pelo Claude (20261008233100)', () => {
+  const envio = { contato_id: U1, texto: 'Oi João', chave_idempotencia: U2 };
+  it('token só "ler" não envia nem lista números (nem chama o banco)', async () => {
+    const { p, chamadas } = porta(sessao(['ler']));
+    expect((await atenderMcp(call('comercial_enviar_whatsapp', envio), HASH, p)).corpo).toMatchObject({ result: { isError: true } });
+    expect((await atenderMcp(call('comercial_numeros_whatsapp', {}), HASH, p)).corpo).toMatchObject({ result: { isError: true } });
+    expect(chamadas).toHaveLength(0);
+  });
+  it('recusa do banco (janela fechada) vira erro com a mensagem clara', async () => {
+    const msg = 'Janela de 24 h fechada neste número: precisa template. Veja comercial_templates_whatsapp.';
+    const { p, chamadas } = porta(sessao(['ler', 'operar']), { crm_mcp_enviar_whatsapp: { data: { ok: false, msg } } });
+    const r = await atenderMcp(call('comercial_enviar_whatsapp', envio), HASH, p);
+    expect(chamadas).toEqual([{ rpc: 'crm_mcp_enviar_whatsapp', params: { p_contato: U1, p_chave: U2, p_texto: 'Oi João' },
+      sessao: expect.objectContaining({ tokenId: 't1' }) }]);
+    expect(r.corpo).toMatchObject({ result: { isError: true, content: [{ text: msg }] } });
+  });
+  it('envio aceito devolve a mensagem na fila', async () => {
+    const { p } = porta(sessao(['ler', 'operar']), { crm_mcp_enviar_whatsapp: { data: { ok: true, mensagemId: U1, msg: 'Mensagem na fila de envio (enviada pelo Claude).' } } });
+    const r = await atenderMcp(call('comercial_enviar_whatsapp', envio), HASH, p);
+    expect(r.corpo).toMatchObject({ result: { isError: false, structuredContent: { ok: true, mensagemId: U1 } } });
+  });
+  it('contato falso: "Contato não encontrado." do banco chega ao Claude', async () => {
+    const { p } = porta(sessao(['ler', 'operar']), { crm_mcp_situacao_conversa: { data: { ok: false, msg: 'Contato não encontrado.' } } });
+    const r = await atenderMcp(call('comercial_situacao_conversa', { contato_id: U1 }), HASH, p);
+    expect(r.corpo).toMatchObject({ result: { isError: true, content: [{ text: 'Contato não encontrado.' }] } });
+  });
+});

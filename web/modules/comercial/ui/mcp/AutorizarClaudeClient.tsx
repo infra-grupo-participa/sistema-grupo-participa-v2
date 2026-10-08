@@ -81,15 +81,18 @@ export function AutorizarClaudeClient({ cliente, email, pedido, emissor }: {
         <p className="font-medium text-[var(--fg)]">O Claude vai poder:</p>
         <ul className="space-y-1.5">
           <li className="flex gap-2"><Icon name="check" size={16} className="mt-0.5 shrink-0 text-[var(--green)]" />Ver os seus negócios, contatos, atividades e conversas — só o que você já vê no CRM.</li>
-          <li className="flex gap-2"><Icon name="x" size={16} className="mt-0.5 shrink-0 text-[var(--fg-3)]" />Nunca envia WhatsApp, não marca ganho/perdido, não troca dono, não vê CPF.</li>
+          <li className="flex gap-2"><Icon name="x" size={16} className="mt-0.5 shrink-0 text-[var(--fg-3)]" />Não marca ganho/perdido, não troca dono, não faz disparo em massa, não vê CPF.</li>
         </ul>
         <div className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3">
           <Checkbox
             checked={operar}
             onChange={setOperar}
-            label="Também registrar por mim: atividades (criar, concluir, reabrir), notas, mover etapa, criar e editar contato e tags"
+            label="Também escrever por mim: atividades (criar, concluir, reabrir), notas, mover etapa, criar e editar contato, tags e enviar WhatsApp"
           />
-          <p className="mt-1.5 pl-6 text-xs text-[var(--fg-3)]">Tudo fica no Registro do CRM como feito “via Claude”, no seu nome.</p>
+          <p className="mt-1.5 pl-6 text-xs text-[var(--fg-3)]">
+            “Escrever” inclui enviar WhatsApp aos seus contatos (gestor: do time), um por vez: o Claude mostra o texto, o número e o
+            destinatário e só envia depois da sua confirmação. Tudo fica no Registro do CRM como feito “via Claude”, no seu nome.
+          </p>
         </div>
         {local && <p className="text-xs text-[var(--fg-3)]">Pedido vindo de um programa no seu computador (Claude Code/Desktop).</p>}
         <p className="text-xs text-[var(--fg-3)]">

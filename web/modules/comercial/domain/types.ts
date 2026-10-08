@@ -243,6 +243,8 @@ export interface Mensagem {
   canalId?: string | null;
   /** Saída que não nasceu no CRM: enviada pelo celular ou pela Clint no número conectado por QR. */
   externa?: boolean;
+  /** 'mcp' = enviada pelo Claude (MCP do Comercial), no nome do autor (migration 20261008233100). */
+  origem?: 'mcp' | null;
 }
 
 export type EnvioMensagem = 'na_fila' | 'enviando';

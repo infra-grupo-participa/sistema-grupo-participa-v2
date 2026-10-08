@@ -28,7 +28,9 @@ export interface Integracao {
  */
 export const FERRAMENTAS_MCP: FerramentaMcp[] = FERRAMENTAS.map((f) => ({
   nome: f.name,
-  descricao: f.escopo === 'operar' ? `${f.title} (escreve; precisa da permissão "operar").` : `${f.title}.`,
+  descricao: f.escopo === 'ler' ? `${f.title}.`
+    : f.annotations.readOnlyHint ? `${f.title} (só consulta, para o envio de WhatsApp; precisa da permissão "operar").`
+      : `${f.title} (escreve; precisa da permissão "operar").`,
 }));
 
 export const INTEGRACOES: Integracao[] = [

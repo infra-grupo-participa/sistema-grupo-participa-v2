@@ -785,6 +785,7 @@ function Bolha({ m, nomeTemplate, autor, numero }: { m: Mensagem; nomeTemplate: 
         <div className="mt-1 flex items-center justify-end gap-1.5 text-[11px] text-[var(--fg-3)] tabular">
           {numero && <span className="truncate" title="Número da mensagem">{numero} ·</span>}
           {saida && autor && <span className="truncate">{primeiroNome(autor)}</span>}
+          {saida && m.origem === 'mcp' && <span title="Enviada pelo Claude, no nome de quem pediu">via Claude</span>}
           <span>{hora}</span>
           {saida && <StatusEnvio s={m.status} envio={m.envio} erro={m.erro} />}
         </div>

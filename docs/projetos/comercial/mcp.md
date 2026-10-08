@@ -18,7 +18,7 @@
 
 O Claude vira um assistente do seu CRM. Você pergunta em português e ele busca no sistema: sua agenda, seus negócios,
 o histórico de uma pessoa, a conversa de WhatsApp dela. Se você deixar, ele também agenda atividade, anota, conclui
-atividade e move etapa.
+atividade, move etapa e **envia WhatsApp** (um por vez, sempre depois da sua confirmação).
 
 Ele entra **como você**: vê só o que você já vê na tela, com as mesmas regras. Vendedor vê os próprios leads e os sem
 dono; gestor vê o time.
@@ -67,7 +67,11 @@ hora. Ou remova o conector no claude.ai.
 | "Quais negócios meus estão sem próximo passo?" | Negócios abertos sem atividade agendada, do mais parado para o mais recente. |
 | "Quais são os meus negócios na etapa Proposta do funil HT?" | Negócios da etapa, com valor e próxima atividade. |
 | "Resuma o histórico da Ana Souza: compras, etapas e notas." | Acha a pessoa e conta a jornada dela. |
-| "Resuma a conversa de WhatsApp com a Ana e sugira a próxima mensagem." | Lê as mensagens e escreve resumo + sugestão. **Quem envia é você**, pela tela de Conversas. |
+| "Resuma a conversa de WhatsApp com a Ana e sugira a próxima mensagem." | Lê as mensagens e escreve resumo + sugestão. |
+| "Abre conversa com o João Lima pelo número 2536 e manda: Oi João, tudo bem?…" | Mostra texto final, número (2536, QR) e destinatário; envia só depois do seu "pode enviar". QR = texto livre direto. |
+| "Manda o template boas_vindas_ht para a Ana pelo número oficial." | Mostra a prévia já com o primeiro nome, o número e o destinatário; envia depois do seu ok. |
+| "A Ana respondeu no oficial? Posso mandar texto livre?" | Diz se a janela de 24 h daquele número está aberta (e até quando) ou se precisa template. |
+| "Quais números eu posso usar? Quais templates falam de aula?" | Lista números (Oficial/QR, status, 4 últimos dígitos) e templates aprovados com prévia. |
 | "Crie uma ligação para a Ana amanhã às 10h: retomar proposta." | Agenda a atividade (depois de você confirmar). |
 | "Anote na Ana: pediu desconto, vai falar com o sócio." | Registra a nota. |
 | "Marque como feita a ligação da Ana, resultado: atendeu." | Conclui a atividade. |
@@ -82,7 +86,10 @@ Dica: comece o dia com "o que eu tenho para hoje e quem está sem próximo passo
 
 ## O que o Claude não faz
 
-- Não envia WhatsApp nem e-mail, não faz disparo. Não apaga contato (as duas coisas aguardam decisão).
+- Não envia WhatsApp **sem a sua confirmação**, não envia e-mail, não faz disparo em massa. Não apaga contato (aguarda decisão).
+- WhatsApp só para contato seu (gestor: do time), nunca para quem pediu para sair; até 30 por hora por pessoa e 1 a cada
+  20 s para o mesmo contato; nos números QR valem também os limites contra banimento.
+- Número oficial: texto livre só com a janela de 24 h aberta naquele número; fora dela, só template aprovado.
 - Não marca ganho nem perdido, não troca dono, não mexe em funil, produto, oferta ou motivo.
 - Não vê CPF. E-mail e telefone completos só para o dono do contato ou o gestor.
 - Não vê o que você não vê na tela. Não exporta lista de contatos.
@@ -92,6 +99,8 @@ Dica: comece o dia com "o que eu tenho para hoje e quem está sem próximo passo
 - Dado de cliente é dado pessoal. Use o Claude só para o atendimento. Não peça listas para copiar para fora.
 - Conecte só com o **seu** login do sistema. Nunca com o de outra pessoa.
 - Tudo que o Claude grava fica no Registro do CRM com o seu nome e "via Claude". Você responde pelo que ele registra.
+- WhatsApp enviado pelo Claude sai no seu nome, aparece na conversa com "via Claude" e no Registro. Confira texto,
+  número e destinatário antes de dizer "pode enviar". Nada de massa: disparo é pela ficha, no número oficial.
 - O Claude pode errar: confira número, data e nome antes de usar com o cliente.
 - Celular perdido ou saiu da empresa: revogue a conexão (gestor também pode revogar de qualquer pessoa).
 
@@ -113,7 +122,7 @@ Por pedido: `crm_mcp_autenticar(hash, ferramenta)` (service role; kill-switch, t
 `crm.mcp_papel`, 60 ferramentas/min/token, auditoria em `crm.mcp_chamada`). Cada RPC da ferramenta vai por
 **`public.crm_mcp_rpc(token_id, rpc, params)`** (só service_role): confere o token de novo, monta as claims do dono
 (`sub`, `email`, `gp_canal='mcp'`), `SET LOCAL ROLE authenticated` e chama a **mesma** `public.crm_*` da tela; role e
-claims voltam ao fim. Lista fechada de 16 RPCs (8 ler + 8 operar; migration 20261008222038); parâmetros só pelos nomes da assinatura viva (valor vira literal
+claims voltam ao fim. Lista fechada de 20 RPCs (8 ler + 12 operar; migrations 20261008222038 e 20261008233100); parâmetros só pelos nomes da assinatura viva (valor vira literal
 tipado: injeção vira erro de tipo; parâmetro `text[]` aceita array JSON, que vira `array(select jsonb_array_elements_text(…))`). RLS, guardas, `escrita_ligada` e o `crm.tg_log` (`autor_tipo='mcp'`) valem igual.
 
 **Mudança de 08/10/2026:** antes o servidor assinava um JWT HS256 com o "Legacy JWT secret" (`SUPABASE_JWT_SECRET`).
@@ -143,8 +152,27 @@ mais usado**; se estiver na Hostinger, pode remover.
 | `comercial_editar_contato` | operar | Nome, telefone, e-mail, cidade/UF, perfil, holding, empresa, observação (D6) | `crm_editar_contato` |
 | `comercial_tag_adicionar` | operar | Adiciona tags normalizadas (≤ 30 por contato; D6) | `crm_tags_contato` |
 | `comercial_tag_remover` | operar | Remove tags pela forma normalizada (D6) | `crm_tags_contato` |
+| `comercial_numeros_whatsapp` | operar (consulta) | Números que a pessoa pode usar: nome, Oficial/QR, status, 4 últimos dígitos, envia?, limites | `crm_mcp_numeros` |
+| `comercial_templates_whatsapp` | operar (consulta) | Templates aprovados do oficial: nome, idioma, variáveis, prévia (busca, até 200) | `crm_mcp_templates` |
+| `comercial_situacao_conversa` | operar (consulta) | Texto livre × template por número, quando a janela fecha, destinatário, bloqueios, prévia do template | `crm_mcp_situacao_conversa` |
+| `comercial_enviar_whatsapp` | operar | 1 mensagem a 1 contato: texto OU template, `chave_idempotencia` obrigatória. Descrição exige confirmação explícita | `crm_mcp_enviar_whatsapp` |
 
-**De propósito, não existe:** envio de WhatsApp/disparo, apagar contato (os dois aguardam decisão do Arthur), ganho/perdido, transferir dono, editar funil/motivo/produto/
+### WhatsApp pelo Claude (decisão do Arthur, 08/10/2026; migration 20261008233100)
+
+Travas **no banco** (`crm_mcp_enviar_whatsapp`, SECURITY DEFINER), nesta ordem: `crm.guarda_escrita()` (leitor,
+`escrita_ligada`) → só com claim `gp_canal='mcp'` (a tela continua em `crm_enviar_mensagem`, que segue fora da lista do
+MCP) → kill-switch `crm.config.mcp_envio_ligado` (default true, independente de `envio_ligado`) → chave de
+idempotência obrigatória (mesma chave = mesma mensagem, antes dos limites) → D6 (`crm.pode_escrever_pessoa`) → opt-out
+→ limites do MCP com advisory lock: `mcp_envio_limite_hora` (30/usuário/h) e `mcp_envio_intervalo_contato_s` (20 s por
+contato) → número (pedido; senão conversa mais recente não excluída; senão o oficial) → template só no oficial, aprovado,
+até 1 variável ({{1}} = primeiro nome, como na tela; 2+ = ficha de disparo) → oficial sem template exige janela de 24 h
+**daquele número** ("precisa template") → `crm_enviar_mensagem` (travas da tela: `envio_ligado`, `evolution_ligado`,
+número conectado, anti-ban/massa no trigger `crm.tg_mensagem_canal`) → `crm.mensagem.origem = 'mcp'`.
+Registro: `crm.log` com canal/autor_tipo `mcp`, autor = dono do token, resumo sem o texto. A bolha mostra "via Claude".
+Fila: `status='na_fila'`; o envio real sai pelo pg_net/cron só depois do COMMIT.
+Desligar só o envio: `update crm.config set mcp_envio_ligado = false;`.
+
+**De propósito, não existe:** disparo em massa, apagar contato (aguarda decisão do Arthur), ganho/perdido, transferir dono, editar funil/motivo/produto/
 oferta, exportar lista. Nunca sai CPF. Ferramenta nova = `domain/mcp-ferramentas.ts` + teste + RPC na lista fechada de
 `crm_mcp_rpc` (migration nova).
 
@@ -164,7 +192,7 @@ Fluxo:
    `https://claude.com/api/mcp/auth_callback` ou loopback `http://localhost|127.0.0.1:<porta>/…`. 10/h por IP, 200/dia no banco.
 5. `GET /oauth/autorizar?...` (página, exige sessão da equipe pelo proxy; o login devolve a query): confere cliente +
    redirect + Comercial + MCP ligado (`crm_mcp_oauth_cliente`, JWT da pessoa) e mostra o consentimento (escopo
-   `operar` opcional, marcado por padrão). "Permitir" → `crm_mcp_oauth_autorizar` (código de 64 hex, uso único, 5 min,
+   `operar` opcional, marcado por padrão; a tela diz que "escrever" inclui enviar WhatsApp). "Permitir" → `crm_mcp_oauth_autorizar` (código de 64 hex, uso único, 5 min,
    só hash no banco, ≤ 20 por pessoa a cada 10 min) → redirect com `code`, `state`, `iss`. "Recusar" → `access_denied`.
 6. `POST /api/oauth/token`: `authorization_code` (+ `code_verifier`, conferido como S256 no banco; código repetido
    revoga o que ele emitiu) ou `refresh_token` (rotativo: o anterior deixa de valer). 60/min por IP.
@@ -193,7 +221,9 @@ vencidos há > 1 dia são apagados no próximo consentimento da mesma pessoa).
 
 ## 7. Riscos conhecidos
 
-- Dado do CRM sai para o Claude (Anthropic): decisão LGPD do gestor; o MCP não exporta lista e não envia nada ao cliente.
+- Dado do CRM sai para o Claude (Anthropic): decisão LGPD do gestor; o MCP não exporta lista.
+- Envio ao cliente pelo Claude: a confirmação antes de enviar é regra da descrição da ferramenta (o servidor não vê a
+  conversa); o que o banco garante é D6, opt-out, janela, limites, idempotência e o registro "via Claude".
 - `crm_mcp_rpc` impersona o dono a partir da service role: mesmo poder que o JWT assinado tinha, sem segredo novo
   fora do Supabase. Protegido por grant (só service_role), lista fechada e conferência do token dentro da função.
 - Registro dinâmico é aberto, mas inútil para terceiros: o redirect só pode ser o Claude ou a máquina de quem consente.

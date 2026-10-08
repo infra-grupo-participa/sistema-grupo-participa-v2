@@ -49,3 +49,13 @@ describe('argsEscrita.enviarAudio', () => {
       .toEqual({ p_pessoa: 'p1', p_texto: null, p_template: null, p_midia: 'envio/u/x.ogg', p_midia_nome: null, p_chave: null });
   });
 });
+
+describe('crm_mensagens com origem (20261008233100)', () => {
+  it('origem mcp vira "mcp"; outra coisa vira null; ausente fica de fora', () => {
+    const base = { id: '1', contatoId: 'p', direcao: 'saida', tipo: 'texto', texto: 'oi', em: '2026-10-08T10:00:00Z', midia: null };
+    expect(mapMensagens([{ ...base, origem: 'mcp' }])[0].origem).toBe('mcp');
+    expect(mapMensagens([{ ...base, origem: null }])[0].origem).toBeNull();
+    expect(mapMensagens([{ ...base, origem: 'x' }])[0].origem).toBeNull();
+    expect('origem' in mapMensagens([base])[0]).toBe(false);
+  });
+});

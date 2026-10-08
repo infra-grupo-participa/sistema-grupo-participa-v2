@@ -114,7 +114,7 @@ function NovoToken({ ativosMeus, bloqueado, onCriado, onDesligado, flash }: {
           />
           <p className="mt-1.5 text-xs text-[var(--fg-3)] leading-relaxed">
             {operar
-              ? 'Consulta e também agenda atividade, registra nota e move etapa, com as mesmas regras da tela. Não marca ganho nem perdido, não troca dono, não dispara.'
+              ? 'Consulta e também agenda atividade, registra nota, move etapa, edita contato e tags e envia WhatsApp (um por vez, com a sua confirmação), com as mesmas regras da tela. Não marca ganho nem perdido, não troca dono, não faz disparo em massa.'
               : 'Consulta funis, negócios, pessoas, atividades do dia e desempenho. Não grava nada.'}
           </p>
         </div>
@@ -248,7 +248,7 @@ function ComoConectar({ token }: { token: string | null }) {
         <p>Para testar, peça ao Claude: &quot;liste os funis do comercial&quot;. Guia completo: Playbook › Central de ajuda › Conectar ao Claude.</p>
         <NotaRodape>
           Toda gravação feita pelo Claude entra no Registro do CRM com o seu nome. Limite de 60 pedidos por minuto por conexão.
-          O Claude não envia WhatsApp.
+          WhatsApp pelo Claude: só com o escopo “Ler e operar”, um contato por vez, depois da sua confirmação, no máximo 30 por hora.
           CPF nunca sai; e-mail e telefone só aparecem completos para o dono do contato ou o gestor.
         </NotaRodape>
       </div>

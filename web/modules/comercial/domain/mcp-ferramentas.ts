@@ -6,9 +6,11 @@ import { MAX_TAGS_CONTATO, normalizarTag } from './tags';
 // PRÓPRIO dono do token: RLS, guardas e crm.config.escrita_ligada do banco decidem o que passa. Nada aqui decide
 // permissão de dado; o único corte local é o escopo do token ('ler' × 'operar').
 //
-// Fora de propósito (backend-arquitetura.md §5.9): transferir dono, marcar ganho/perdido, disparo/envio de WhatsApp,
-// funil/motivo, produto/oferta, exportar lista, apagar contato (envio e exclusão aguardam decisão do Arthur). Para incluir uma ferramenta: definir aqui + teste em
-// mcp-ferramentas.test.ts + a RPC na lista fechada de public.crm_mcp_rpc (migration nova).
+// Fora de propósito (backend-arquitetura.md §5.9): transferir dono, marcar ganho/perdido, disparo em massa, funil/motivo,
+// produto/oferta, exportar lista, apagar contato (exclusão aguarda decisão do Arthur). Envio de WhatsApp 1:1 entrou em
+// 08/10/2026 (decisão do Arthur, migration 20261008233100): as travas moram no banco (crm_mcp_enviar_whatsapp).
+// Para incluir uma ferramenta: definir aqui + teste em mcp-ferramentas.test.ts + a RPC na lista fechada de
+// public.crm_mcp_rpc (migration nova).
 
 export type EscopoMcp = 'ler' | 'operar';
 
@@ -38,7 +40,8 @@ export interface DefFerramenta {
   plano(args: Args, agora: Date): ChamadaRpc[];
   /** Respostas das RPCs na ordem do plano → objeto devolvido ao Claude. */
   resultado(respostas: unknown[], args: Args, agora: Date, ctx: ContextoMcp): Record<string, unknown>;
-  /** Escrita: a RPC devolve {ok, msg}; ok=false vira erro da ferramenta (mensagem do banco, igual à tela). */
+  /** A RPC devolve {ok, msg}; ok=false vira erro da ferramenta (mensagem do banco, igual à tela). Toda escrita e as
+   *  consultas do WhatsApp (que também respondem {ok, msg}). */
   escrita?: boolean;
 }
 
@@ -643,6 +646,122 @@ export const FERRAMENTAS: DefFerramenta[] = [
     annotations: ANOT_ESCREVE,
     validar: validarCom((a) => ({ atividade_id: uuid(a, 'atividade_id', true) })),
     plano: (a) => [{ rpc: 'crm_reabrir_atividade', params: { p_atividade: a.atividade_id } }],
+    resultado: resultadoRpc,
+  },
+  // ─── WhatsApp pelo Claude (migration 20261008233100). As regras moram no banco; aqui só valida o formato. ────────
+  {
+    name: 'comercial_numeros_whatsapp',
+    title: 'Números de WhatsApp para enviar',
+    description: 'Lista os números de WhatsApp que você pode usar para enviar: nome, tipo (Oficial = API Infobip; QR = WhatsApp '
+      + 'comum conectado por QR), status, 4 últimos dígitos e se envia agora. No Oficial, texto livre só com a janela de 24 h '
+      + 'aberta (senão template); no QR, texto livre sempre (sem template). Traz também os limites de envio.',
+    escopo: 'operar',
+    escrita: true,
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: ANOT_LER,
+    validar: validarCom(() => ({})),
+    plano: () => [{ rpc: 'crm_mcp_numeros', params: {} }],
+    resultado: resultadoRpc,
+  },
+  {
+    name: 'comercial_templates_whatsapp',
+    title: 'Templates aprovados do WhatsApp oficial',
+    description: 'Templates aprovados do número oficial: nome, idioma, categoria, número de variáveis e prévia do texto. '
+      + 'Filtre com busca (no nome ou no texto). {{1}} é sempre o primeiro nome do contato, preenchido pelo CRM. '
+      + 'usavel=false (2+ variáveis, ex.: link) só sai por ficha de disparo, não por aqui.',
+    escopo: 'operar',
+    escrita: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        busca: { type: 'string', maxLength: 80, description: 'Parte do nome ou do texto (ex.: "aula", "ht")' },
+        limite: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
+      },
+      additionalProperties: false,
+    },
+    annotations: ANOT_LER,
+    validar: validarCom((a) => ({ busca: texto(a, 'busca', 0, 80, false) || null, limite: inteiro(a, 'limite', 1, 200, 50) })),
+    plano: (a) => [{ rpc: 'crm_mcp_templates', params: { p_busca: a.busca, p_limite: a.limite } }],
+    resultado: resultadoRpc,
+  },
+  {
+    name: 'comercial_situacao_conversa',
+    title: 'Situação da conversa (texto livre ou template?)',
+    description: 'Para um contato e um número: se pode mandar texto livre (QR sempre; Oficial só com a janela de 24 h aberta, '
+      + 'contada naquele número) ou se precisa template, quando a janela fecha, o destinatário (nome + 4 últimos dígitos) e '
+      + 'bloqueios (opt-out, número desconectado, envio desligado). Com template, devolve a prévia já com o nome do contato. '
+      + 'Use antes de comercial_enviar_whatsapp para montar a confirmação. Sem numero_id: o da conversa mais recente, senão o oficial.',
+    escopo: 'operar',
+    escrita: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        contato_id: { ...SCHEMA_UUID, description: 'pessoa_id de comercial_buscar_pessoa' },
+        numero_id: { ...SCHEMA_UUID, description: 'id de comercial_numeros_whatsapp (opcional)' },
+        template: { type: 'string', minLength: 1, maxLength: 200, description: 'Nome ou id do template (opcional, para a prévia)' },
+      },
+      required: ['contato_id'],
+      additionalProperties: false,
+    },
+    annotations: ANOT_LER,
+    validar: validarCom((a) => ({
+      contato_id: uuid(a, 'contato_id', true),
+      numero_id: uuid(a, 'numero_id', false),
+      template: texto(a, 'template', 1, 200, false),
+    })),
+    plano: (a) => {
+      const params: Record<string, unknown> = { p_contato: a.contato_id };
+      if (a.numero_id) params.p_canal = a.numero_id;
+      if (a.template) params.p_template = a.template;
+      return [{ rpc: 'crm_mcp_situacao_conversa', params }];
+    },
+    resultado: resultadoRpc,
+  },
+  {
+    name: 'comercial_enviar_whatsapp',
+    title: 'Enviar WhatsApp',
+    description: 'IMPORTANTE: antes de chamar, mostre ao usuário o texto final (ou a prévia do template), o número e o '
+      + 'destinatário e peça confirmação explícita. Sem um "pode enviar" do usuário para ESTA mensagem, não chame. '
+      + 'Envia UMA mensagem de WhatsApp a UM contato seu (gestor: do time), no seu nome, marcada "via Claude". '
+      + 'Mande texto OU template (nome ou id de comercial_templates_whatsapp; {{1}} = primeiro nome, preenchido pelo CRM). '
+      + 'Número Oficial: texto livre só com a janela de 24 h aberta; fora dela, template (veja comercial_situacao_conversa). '
+      + 'Número QR: só texto. chave_idempotencia: gere um UUID novo para cada mensagem e reuse o MESMO só se for repetir a '
+      + 'chamada por erro de rede (não duplica). Recusa: opt-out, contato de outro dono, mais de 30 por hora, menos de 20 s '
+      + 'para o mesmo contato, limites anti-ban do QR. Nunca use para envio em massa.',
+    escopo: 'operar',
+    escrita: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        contato_id: { ...SCHEMA_UUID, description: 'pessoa_id de comercial_buscar_pessoa' },
+        numero_id: { ...SCHEMA_UUID, description: 'id de comercial_numeros_whatsapp. Padrão: o da conversa mais recente, senão o oficial' },
+        texto: { type: 'string', minLength: 1, maxLength: 4096 },
+        template: { type: 'string', minLength: 1, maxLength: 200, description: 'Nome ou id de template aprovado (só número Oficial)' },
+        chave_idempotencia: { ...SCHEMA_UUID, description: 'UUID novo por mensagem; o mesmo só para repetir a chamada' },
+      },
+      required: ['contato_id', 'chave_idempotencia'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    validar: validarCom((a) => {
+      const msg = texto(a, 'texto', 1, 4096, false);
+      const template = texto(a, 'template', 1, 200, false);
+      if (!msg === !template) throw new ErroArg('Informe texto OU template (um dos dois).');
+      return {
+        contato_id: uuid(a, 'contato_id', true),
+        numero_id: uuid(a, 'numero_id', false),
+        texto: msg,
+        template,
+        chave_idempotencia: uuid(a, 'chave_idempotencia', true),
+      };
+    }),
+    plano: (a) => {
+      const params: Record<string, unknown> = { p_contato: a.contato_id, p_chave: a.chave_idempotencia };
+      if (a.numero_id) params.p_canal = a.numero_id;
+      if (a.texto) params.p_texto = a.texto;
+      if (a.template) params.p_template = a.template;
+      return [{ rpc: 'crm_mcp_enviar_whatsapp', params }];
+    },
     resultado: resultadoRpc,
   },
 ];

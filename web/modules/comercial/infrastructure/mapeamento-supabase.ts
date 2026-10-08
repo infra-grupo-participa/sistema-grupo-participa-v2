@@ -454,6 +454,8 @@ function mapMensagem(x: unknown, rpc: string): Mensagem {
     midia: mapMidia(o.midia),
     // canal (20261008152212): só quando o banco manda (resposta antiga continua igual)
     ...('canalId' in o ? { canalId: strOuNull(o.canalId), externa: o.externa === true } : {}),
+    // origem (20261008233100): só quando o banco manda
+    ...('origem' in o ? { origem: o.origem === 'mcp' ? 'mcp' as const : null } : {}),
   };
 }
 
