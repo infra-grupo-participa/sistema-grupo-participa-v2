@@ -1,6 +1,7 @@
 -- 20261008161000: modelo de dashboard "seminario-atm" no schema dados (Seminário ATM, padrão para todos os ATMs)
 --
--- STATUS: ESCRITA, NÃO APLICADA. Aplicar só com aval do JP (dono do banco desde 08/10/2026) e do Victor Hugo, depois do
+-- STATUS: APLICADA em produção em 08/10/2026 com ok do Victor Hugo (registrada em supabase_migrations.schema_migrations).
+-- Antes: escrita para aplicar com aval do JP (dono do banco desde 08/10/2026) e do Victor Hugo, depois do
 -- pentester (cria RPC com GRANT para authenticated e devolve dado pessoal de lead: e-mail, nome, telefone).
 -- Ensaio: 20261008161000_ensaio.sql. Relatório: 20261008161000.explain.md. Reversão: 20261008161000_reversao.sql.
 -- Contrato com a tela: docs/dashboard-atm/MODELO-DE-DADOS.md. Mudar coluna, tipo ou ordem quebra a tela.

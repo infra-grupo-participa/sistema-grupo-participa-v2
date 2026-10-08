@@ -42,7 +42,7 @@ Se a RPC ainda não existir, falhar ou não devolver dado, o bloco permanece dis
 
 ## Situação do banco
 
-O contrato do front está descrito na migration **infra/supabase/migrations/20261008161000_dados_criar_modelo_seminario_atm.sql**. O cabeçalho dessa migration registra que foi escrita e não aplicada. O cadastro inicial depende de **20261008161100_dados_cadastrar_atm_elaine_1.sql**, também escrito e ainda bloqueado por uma sigla não definida. O front não aplica migrations nem lê planilhas. Confirmar no histórico do dono do banco antes de tratar as RPCs como disponíveis.
+O contrato do front está descrito na migration **infra/supabase/migrations/20261008161000_dados_criar_modelo_seminario_atm.sql**. Ela e o cadastro inicial (**20261008161100_dados_cadastrar_atm_elaine_1.sql**, sigla `ATMEL126`) foram aplicados em produção em 08/10/2026; situação e pendências em `MODELO-DE-DADOS.md`. O front não aplica migrations nem lê planilhas.
 
 ## Teste local
 
