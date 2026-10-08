@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { getCurrentUser } from '@/shared/composition/server-container';
+import { getCurrentUser, getCurrentUserAccess } from '@/shared/composition/server-container';
 import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { podeVerDepartamento, temCapacidade } from '@/shared/domain/departamentos';
 import { buscarAtm } from '@/modules/infra/atm/domain/registro';
@@ -14,5 +14,6 @@ export default async function SeminarioAtmPage({ params }: { params: Promise<{ c
   const { chave } = await params;
   const projeto = buscarAtm(chave);
   if (!projeto) notFound();
-  return <SeminarioAtmClient projeto={projeto} />;
+  const acesso = ACESSO_DEPARTAMENTOS.acessoV2 ? user?.acesso : await getCurrentUserAccess();
+  return <SeminarioAtmClient projeto={projeto} isMaster={acesso?.master === true} />;
 }

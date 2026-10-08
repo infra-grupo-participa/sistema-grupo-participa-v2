@@ -55,17 +55,57 @@ export type ResumoAtm = {
 
 export type LeadAtm = {
   id: string;
+  pessoaId: string | null;
   dataHora: string | null;
   nome: string | null;
   email: string | null;
   telefone: string | null;
+  teste: boolean;
   entrouGrupo: boolean | null;
   aluno: boolean | null;
+  instrucao: string | null;
+  turma: string | null;
   utmSource: string | null;
   estado: string | null;
   listaOrigem: string | null;
   seminarioOrigem: string | null;
+  noPreCheckout: boolean | null;
+  comprou: boolean | null;
 };
+
+export type NumeroGrupoAtm = {
+  foneKey: string;
+  nome: string | null;
+  entrouEm: string | null;
+  saiuEm: string | null;
+  noGrupo: boolean | null;
+  ehLead: boolean | null;
+  teste: boolean;
+  testeMotivo: string | null;
+};
+
+export type PeriodoAplicadoAtm = {
+  de: string | null;
+  ate: string | null;
+  leadsTeste: number | null;
+  grupoTeste: number | null;
+  vendasTeste: number | null;
+  receitaTesteBruta: number | null;
+};
+
+export type AvisoTesteAtm =
+  | { tipo: 'leads'; quantidade: number }
+  | { tipo: 'grupo'; quantidade: number }
+  | { tipo: 'vendas'; quantidade: number; receitaBruta: number | null };
+
+export function montarAvisosTesteAtm(periodo: PeriodoAplicadoAtm | null | undefined): AvisoTesteAtm[] {
+  if (!periodo) return [];
+  const avisos: AvisoTesteAtm[] = [];
+  if ((periodo.leadsTeste ?? 0) > 0) avisos.push({ tipo: 'leads', quantidade: periodo.leadsTeste! });
+  if ((periodo.grupoTeste ?? 0) > 0) avisos.push({ tipo: 'grupo', quantidade: periodo.grupoTeste! });
+  if ((periodo.vendasTeste ?? 0) > 0) avisos.push({ tipo: 'vendas', quantidade: periodo.vendasTeste!, receitaBruta: periodo.receitaTesteBruta });
+  return avisos;
+}
 
 export type SerieLeadsAtm = { dia: string; leads: number };
 export type DistribuicaoLeadAtm = { campo: CampoResumoLeadAtm; valor: string; quantidade: number };
@@ -88,6 +128,7 @@ export type CicloPosLiveAtm = { vendas: MetricaAtm; conversao: MetricaAtm };
 export type DashboardAtm = {
   chave: string;
   resumo: ResumoAtm;
+  periodo: PeriodoAplicadoAtm;
   leadsPorDia: SerieLeadsAtm[];
   leads: LeadAtm[];
   distribuicaoLeads: DistribuicaoLeadAtm[];
@@ -102,6 +143,7 @@ const zero = (): MetricaAtm => ({ valor: 0, semDado: true });
 export function dashboardAtmSemDado(chave: string): DashboardAtm {
   return {
     chave,
+    periodo: { de: null, ate: null, leadsTeste: null, grupoTeste: null, vendasTeste: null, receitaTesteBruta: null },
     resumo: {
       disparos: zero(), leads: zero(), ingressosGrupo: zero(), percentualIngressoGrupo: zero(), taxaEvasao: zero(),
       custoDisparo: zero(), cpl: zero(), preCheckout: zero(), vendas: zero(), conversaoPreCheckout: zero(), cac: zero(),
