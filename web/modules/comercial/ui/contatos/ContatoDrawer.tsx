@@ -170,8 +170,10 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
           {c.ehAluno && <Badge tone="success">Já é aluno</Badge>}
         </> : undefined}
         actions={<>
-          {semNome(c.nome) && !motivoEdicao && !editando && (
-            <Button size="sm" variant="link" onClick={abrirEdicao}>Adicionar nome</Button>
+          {!editando && (
+            <Button size="sm" variant="ghost" onClick={abrirEdicao} disabled={!!motivoEdicao} title={motivoEdicao ?? undefined}>
+              <Icon name="pencil" size={14} /> {semNome(c.nome) ? 'Adicionar nome' : 'Editar'}
+            </Button>
           )}
           {podeConversar && <BotaoConversa contatoId={c.id} />}
           {c.telefone && <BotaoCopiar texto={fmtTelefone(c.telefone)} onCopiado={(m) => flash(m === 'Copiado.' ? 'Telefone copiado.' : m)} />}
