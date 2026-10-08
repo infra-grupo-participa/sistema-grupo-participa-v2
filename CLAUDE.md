@@ -167,6 +167,7 @@ Rotas antigas (`/sistema/alunos`, `/relatorios/placas|financeiro|remocoes`, `/de
 |---|---|---|
 | Públicas | `placa`, `placa/upload`, `cep`, `agenda/hold`, `agenda/confirm` | `bootstrapPublic` (origin/método) + rate limit + token UUID no cookie `gp_placa_session` |
 | Cron | `cron/interview-reminder`, `cron/placas-resumo` | Bearer `CRON_SECRET` |
+| MCP + OAuth do Comercial | `mcp`, `oauth/registrar`, `oauth/token`, `/.well-known/oauth-*` (`docs/projetos/comercial/mcp.md`) | token `gpc_` (hash) / PKCE + código de uso único; consentimento em `/oauth/autorizar` (sessão + Comercial) |
 | Servidor a servidor | `captura/lead` (`docs/captura-de-lead.md`) | Bearer `CAPTURA_LEAD_SECRET` em tempo constante, 503 sem segredo (fail-closed), bloqueio por IP após 10 falhas, corpo até 8 KB, service_role só no servidor |
 | Autenticadas | `admin/usuarios`, `admin/placas/entrevista`, `email/status`, `depoimentos/*`, `sip/progresso` | `getCurrentUser()` + regra de permissão |
 | Diagnóstico | `health` | checagem própria |
@@ -268,6 +269,7 @@ Delega para `shared/infrastructure/supabase/proxy-session.ts`: renova sessão; s
 7. **Hex no código quebra o CI** (`lint:tokens`) — usar token do tema.
 8. **Next 16 difere do que você conhece** — `middleware` virou `proxy.ts`; ler `node_modules/next/dist/docs/` antes.
 9. **Gate só no layout não basta** — layout e page renderizam em paralelo; page com dado chama a regra também.
+10. **Site URL do Supabase é de outro sistema** (`sip.timeholdingbrasil.com.br`) — links/telas que o Supabase Auth monta a partir do Site URL (ex.: consentimento do OAuth server dele) não caem aqui. Por isso o OAuth do MCP do Comercial é próprio (`docs/projetos/comercial/mcp.md`).
 
 ---
 

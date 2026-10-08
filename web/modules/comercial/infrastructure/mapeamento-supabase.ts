@@ -92,7 +92,7 @@ export function rpcAusente(e: ErroRpc | null | undefined): boolean {
 
 export function mapSessao(d: unknown): SessaoComercial {
   const o = obj(d, 'crm_sessao', 'sessão');
-  const papel = o.papel === 'gestor' ? 'gestor' : o.papel === 'vendedor' ? 'vendedor' : null;
+  const papel = o.papel === 'gestor' ? 'gestor' : o.papel === 'vendedor' ? 'vendedor' : o.papel === 'leitor' ? 'leitor' : null;
   if (!o.vendedorId || !papel) throw new FormatoInesperado('crm_sessao', 'sem vendedorId ou papel');
   return { vendedorId: str(o.vendedorId), papel };
 }
@@ -585,7 +585,7 @@ export function mapTokensMcp(d: unknown): TokenMcp[] {
     return {
       id: str(o.id), nome: str(o.nome), prefixo: str(o.prefixo), escopos: escoposMcp(o.escopos),
       perfilId: str(o.perfilId), perfilNome: str(o.perfilNome), criadoEm: str(o.criadoEm), expiraEm: str(o.expiraEm),
-      revogadoEm: strOuNull(o.revogadoEm), ultimoUsoEm: strOuNull(o.ultimoUsoEm), ativo: bool(o.ativo),
+      revogadoEm: strOuNull(o.revogadoEm), ultimoUsoEm: strOuNull(o.ultimoUsoEm), ativo: bool(o.ativo), oauth: o.oauth === true,
     };
   });
 }

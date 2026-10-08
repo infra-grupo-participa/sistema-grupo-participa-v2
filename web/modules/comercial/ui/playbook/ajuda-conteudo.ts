@@ -832,7 +832,7 @@ const MODULOS: SecaoAjuda[] = [
       '**Motivos de perda:** os 9 de fábrica e os criados pelo gestor.',
       '**Links rastreáveis:** os links de cada vendedor, com o código de rastreio.',
       '**Integrações:** o que cada uma traz e leva, e a situação dela. O gestor vê também o painel da Hotmart: ligada ou não, último evento, o que aconteceu com cada evento, os erros e as ofertas vendidas fora do catálogo.',
-      '**Conectar ao Claude:** gere um token pessoal e conecte o Claude Code ou o Claude Desktop ao CRM. O Claude vê o que você vê, com as mesmas regras da tela.',
+      '**Conectar ao Claude:** ligue o Claude (claude.ai, celular, Desktop ou Code) ao CRM com o seu login, ou com um token pessoal. O Claude vê o que você vê, com as mesmas regras da tela. Passo a passo na seção "Conectar ao Claude".',
       '**Notificações:** os seus avisos (cada pessoa ajusta os próprios).',
     ],
     comoFazer: [
@@ -846,13 +846,13 @@ const MODULOS: SecaoAjuda[] = [
         ],
       },
       {
-        titulo: 'Como conectar o Claude ao CRM',
+        titulo: 'Como conectar o Claude ao CRM com token (alternativa)',
         itens: [
-          'Abra **Configurações › Conectar ao Claude**.',
-          'Em "Novo token", dê um nome (ex.: "Claude Code notebook"), escolha "Só leitura" ou "Ler e operar" e a validade.',
+          'O jeito mais fácil é pelo login, sem token: veja a seção **"Conectar ao Claude"**.',
+          'Se preferir token: abra **Configurações › Conectar ao Claude**, em "Novo token" dê um nome, escolha "Só leitura" ou "Ler e operar" e a validade.',
           'Clique em **"Gerar token"** e copie na hora: ele não aparece de novo.',
           'Em "Como conectar", copie o comando do Claude Code ou o trecho do Claude Desktop (já vem com o seu token).',
-          'Teste pedindo ao Claude: "liste os funis do comercial". Token que não usa mais: **"Revogar"**.',
+          'Token que não usa mais: **"Revogar"**.',
         ],
       },
     ],
@@ -874,7 +874,93 @@ const MODULOS: SecaoAjuda[] = [
       'Aviso "O MCP do Comercial está desligado": nenhum token conecta e não dá para gerar novo. Quem liga é o responsável pelo sistema.',
     ],
     emBreve: [
-      { titulo: 'O que ainda não está ligado', texto: 'Já ligados: Hotmart, WhatsApp oficial (Infobip), ActiveCampaign, Respondi e o aviso de reembolso no Slack. Ainda vêm: Instagram (social selling) e o assistente de IA no navegador (claude.ai) e no celular. Hoje o assistente conecta pelo Claude Code e pelo Claude Desktop. A Clint convive só para terminar o que já estava aberto lá.' },
+      { titulo: 'O que ainda não está ligado', texto: 'Já ligados: Hotmart, WhatsApp oficial (Infobip), ActiveCampaign, Respondi, o aviso de reembolso no Slack e o Claude (claude.ai, celular, Desktop e Code). Ainda vem: Instagram (social selling). A Clint convive só para terminar o que já estava aberto lá.' },
+    ],
+  }),
+  modulo({
+    id: 'modulo-claude',
+    titulo: 'Conectar ao Claude',
+    icone: 'link',
+    resumo: 'Use o Claude (claude.ai, celular, Desktop ou Code) para consultar e organizar o seu CRM conversando: o que fazer hoje, quem está sem próximo passo, resumo de uma pessoa.',
+    telas: [TELAS.claude],
+    sinonimos: ['claude', 'ia', 'inteligência artificial', 'assistente', 'mcp', 'conector', 'claude.ai', 'chatgpt', 'token', 'oauth'],
+    paraQue: [
+      'O Claude vira um assistente do seu CRM. Você pergunta em português e ele busca no sistema: sua agenda, seus negócios, o histórico de uma pessoa, as conversas de WhatsApp dela.',
+      'Ele entra como você: vê só o que você já vê na tela, com as mesmas regras. Vendedor vê os próprios leads e os sem dono; gestor vê o time.',
+    ],
+    naTela: [
+      '**No claude.ai (e no app do celular e no Claude Desktop):** um conector chamado "CRM Comercial" que você liga com o seu login do sistema.',
+      '**Na tela Configurações › Conectar ao Claude:** o endereço do conector, a lista das suas conexões (com o botão "Revogar") e, se preferir, a opção de token.',
+    ],
+    comoFazer: [
+      {
+        titulo: 'Como conectar no claude.ai (uma vez só)',
+        itens: [
+          'Entre no **claude.ai** com a sua conta do Claude.',
+          'Abra **Configurações › Conectores** e clique em **"Adicionar conector personalizado"**.',
+          'Nome: **CRM Comercial**. URL: **https://grupoparticipa.app.br/api/mcp**. Clique em **"Adicionar"**.',
+          'Clique em **"Conectar"**. Abre a tela do nosso sistema: entre com o seu e-mail e senha de sempre.',
+          'Confira o que o Claude vai poder fazer. Deixe marcado "Também registrar por mim" se quiser que ele crie atividades e notas. Clique em **"Permitir"**.',
+          'Pronto. Numa conversa nova, confira no botão de ferramentas que o "CRM Comercial" está ligado e pergunte: "quais são as minhas atividades de hoje?".',
+        ],
+      },
+      {
+        titulo: 'Celular e Claude Desktop',
+        itens: [
+          'Depois de conectar no claude.ai, o conector aparece sozinho no app do celular e no Claude Desktop, na mesma conta.',
+          'No celular: numa conversa, toque no botão de ferramentas e ligue o "CRM Comercial".',
+          'Se ele pedir login de novo, é só entrar com o seu e-mail e senha do sistema e clicar em "Permitir".',
+        ],
+      },
+      {
+        titulo: 'Claude Code (quem usa o terminal)',
+        itens: [
+          'Rode: **claude mcp add --transport http comercial https://grupoparticipa.app.br/api/mcp**.',
+          'Dentro do Claude Code, digite **/mcp**, escolha "comercial" e "Authenticate". O navegador abre a tela de login do sistema: entre e clique em "Permitir".',
+          'Sem navegador? Use um token: Configurações › Conectar ao Claude › "Novo token".',
+        ],
+      },
+      {
+        titulo: 'Como desligar',
+        itens: [
+          'Abra **Configurações › Conectar ao Claude**. A conexão aparece como "Claude: …". Clique em **"Revogar"**: o Claude perde o acesso na hora.',
+          'Ou remova o conector no claude.ai (Configurações › Conectores).',
+        ],
+      },
+    ],
+    extra: [
+      tab(['Você pede', 'O Claude faz'], [
+        ['"Quais são as minhas atividades de hoje? E as atrasadas?"', 'Lista a sua agenda do dia, as atrasadas e o que você já concluiu.'],
+        ['"Quais negócios meus estão sem próximo passo?"', 'Mostra os negócios abertos sem nenhuma atividade agendada, do mais parado para o mais recente.'],
+        ['"Quais são os meus negócios na etapa Proposta do funil HT?"', 'Lista os negócios da etapa, com valor e próxima atividade.'],
+        ['"Resuma o histórico da Ana Souza: compras, etapas e notas."', 'Busca a pessoa e conta a jornada dela com a empresa.'],
+        ['"Resuma a conversa de WhatsApp com a Ana e sugira a próxima mensagem."', 'Lê as mensagens e escreve um resumo e uma sugestão. Quem envia é você, pela tela de Conversas.'],
+        ['"Crie uma ligação para a Ana amanhã às 10h: retomar proposta."', 'Agenda a atividade no CRM (depois de você confirmar).'],
+        ['"Anote na Ana: pediu desconto, vai falar com o sócio."', 'Registra a nota na pessoa (e no negócio, se você disser qual).'],
+        ['"Marque como feita a ligação da Ana, resultado: atendeu."', 'Conclui a atividade com o resultado.'],
+        ['"Mova o negócio da Ana para Negociação."', 'Move de etapa, com as mesmas exigências da tela.'],
+        ['"Como está o funil HT? E o meu desempenho na semana?"', 'Resumo por etapa (quantidade, valor, prazo estourado) e números do período.'],
+      ], 'Exemplos do que pedir'),
+      ul([
+        'Não envia WhatsApp nem e-mail, não faz disparo.',
+        'Não marca ganho nem perdido, não troca o dono, não mexe em funil, produto, oferta ou motivo.',
+        'Não vê CPF. E-mail e telefone completos só aparecem para o dono do contato ou o gestor.',
+        'Não vê o que você não vê na tela.',
+        'Não exporta lista de contatos.',
+      ], 'O que o Claude não faz'),
+    ],
+    dicas: [
+      'Peça com nome e detalhe: "a Ana Souza do funil HT" acha mais rápido que "aquela cliente".',
+      'Antes de gravar (atividade, nota, mover etapa), o Claude mostra o que vai fazer. Confira e confirme.',
+      'Comece o dia com: "o que eu tenho para hoje e quem está sem próximo passo?".',
+    ],
+    cuidados: [
+      'Dado de cliente é dado pessoal (LGPD). Use o Claude só para o atendimento. Não peça listas para copiar para fora, não cole os dados em outros lugares.',
+      'Use a sua conta do Claude da empresa ou a sua pessoal só com o seu login do sistema. Nunca conecte com o login de outra pessoa.',
+      'Tudo que o Claude grava fica no Registro do CRM com o seu nome e "via Claude". Você responde pelo que ele registra.',
+      'O Claude pode errar. Confira número, data e nome antes de usar com o cliente.',
+      'Celular perdido ou saiu da empresa? Revogue a conexão em Configurações › Conectar ao Claude.',
+      'Aviso "conexão com o Claude está desligada": quem liga é o responsável pelo sistema.',
     ],
   }),
   modulo({
@@ -1230,13 +1316,14 @@ const SISTEMA: SecaoAjuda[] = [
   },
   {
     id: 'vendedor-e-gestor',
-    titulo: 'O que muda entre vendedor e gestor',
+    titulo: 'O que muda entre vendedor, gestor e leitor',
     parte: 'sistema',
     icone: 'users',
     resumo: 'O que cada papel vê e pode fazer.',
-    sinonimos: ['permissão', 'papel', 'acesso', 'pode', 'não consigo', 'bloqueado', 'quem é gestor', 'administrador'],
+    sinonimos: ['permissão', 'papel', 'acesso', 'pode', 'não consigo', 'bloqueado', 'quem é gestor', 'administrador', 'leitor', 'somente leitura', 'só leitura'],
     blocos: [
       p('**Quem é gestor:** o Jonathan (gestor comercial) e o Arthur (supervisor dele), no CRM e em Estratégias. A lista fica no banco: ser administrador do sistema não faz ninguém gestor do Comercial.'),
+      p('**Quem é leitor:** administrador (ou dev) do sistema que não é gestor nem vendedor do Comercial. Vê tudo o que o gestor vê (todos os funis, negócios, contatos, conversas, painéis, desempenho e Estratégias), com e-mail e telefone mascarados, e não altera nada: os botões de ação somem e o banco recusa com "Acesso só de leitura.". O selo "Somente leitura" aparece no topo das telas. O leitor não entra na distribuição, não recebe aviso e não aparece como vendedor.'),
       tab(['O quê', 'Vendedor', 'Gestor'], [
         ['Início', '"Meu dia", com os próprios números', '"Visão do time", Controle das 9h e o painel de cada vendedor'],
         ['Conversas', 'Escreve só nas próprias', 'Escreve em qualquer uma e atribui dono'],
@@ -1247,7 +1334,7 @@ const SISTEMA: SecaoAjuda[] = [
         ['Disparos', 'Envia ficha para aprovação (se opera disparo)', 'Aprova, reprova e registra direto'],
         ['Produtos', 'Consulta e copia links', 'Vincula e marca a oferta vigente'],
         ['Configurações', 'Só leitura (menos os próprios avisos e tokens do Claude)', 'Ajusta tudo e vê o painel da Hotmart'],
-        ['Conectar ao Claude', 'Gera e revoga os próprios tokens', 'Vê e revoga os tokens do time'],
+        ['Conectar ao Claude', 'Conecta e revoga as próprias conexões e tokens', 'Vê e revoga as conexões e tokens do time'],
         ['Registro', 'O que fez e o que tocou a carteira dele', 'Tudo'],
         ['Dashboards', 'Vê os próprios números', 'Filtra por vendedor e edita qualquer um'],
       ]),

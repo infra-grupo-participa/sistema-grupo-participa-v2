@@ -97,5 +97,14 @@ describe('atenderMcp: ferramentas', () => {
     expect(r.corpo).toMatchObject({ result: { isError: true, content: [{ text: 'Sem acesso a este dado do Comercial.' }] } });
     expect(mensagemDeErroRpc({ message: 'Sem acesso ao Comercial.', code: '42501' })).toBe('Sem acesso ao Comercial.');
     expect(mensagemDeErroRpc({ message: 'relation x does not exist', code: '42P01' })).toBe('Não foi possível consultar o CRM agora.');
+    expect(mensagemDeErroRpc({ message: 'Token do MCP inválido, revogado ou expirado.', code: '28000' })).toMatch(/Conecte de novo/);
+  });
+  it('"sem próximo passo" usa a pessoa conectada (sessão do token) para "os meus"', async () => {
+    const { p, chamadas } = porta(sessao(['ler']), {
+      crm_negocios: { data: [{ id: 'n1', donoId: U1, proximaAtividade: null }, { id: 'n2', donoId: U2, proximaAtividade: null }] },
+    });
+    const r = await atenderMcp(call('comercial_sem_proximo_passo', {}), HASH, p);
+    expect(chamadas[0].sessao.tokenId).toBe('t1');
+    expect(r.corpo).toMatchObject({ result: { structuredContent: { apenasMeus: true, total: 1, negocios: [{ id: 'n1' }] } } });
   });
 });

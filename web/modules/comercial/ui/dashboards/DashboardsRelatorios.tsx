@@ -36,7 +36,7 @@ function gravarSel(id: string | null) {
 type ModalAberto = { modo: 'novo'; inicial: FormDashboard } | { modo: 'renomear'; inicial: FormDashboard } | null;
 
 export function DashboardsRelatorios() {
-  const { sessao, vendedores, nomeDe, gestor } = useEquipe();
+  const { sessao, vendedores, nomeDe, gestor, verTudo, leitor } = useEquipe();
   const dashQ = useDados(() => repo.dashboards());
   const negQ = useDados(() => repo.negocios());
   const atvQ = useDados(() => repo.atividades());
@@ -67,7 +67,7 @@ export function DashboardsRelatorios() {
     if (!negocios || !atividades || !eventos || !funis || !motivos || !sessao) return null;
     const cache = new Map<string, DadosPainel>();
     return (vendedorId: string | null | undefined): DadosPainel => {
-      const donoId = gestor ? vendedorId ?? null : sessao.vendedorId;
+      const donoId = verTudo ? vendedorId ?? null : sessao.vendedorId;
       const k = donoId ?? '';
       let d = cache.get(k);
       if (!d) {
@@ -76,7 +76,7 @@ export function DashboardsRelatorios() {
       }
       return d;
     };
-  }, [negocios, atividades, eventos, funis, motivos, vendedores, agora, gestor, sessao]);
+  }, [negocios, atividades, eventos, funis, motivos, vendedores, agora, verTudo, sessao]);
 
   const selecionar = (id: string) => { if (!editando) setSelId(id); };
 
@@ -145,7 +145,7 @@ export function DashboardsRelatorios() {
         <h2 className="inline-flex items-center gap-1 text-base font-bold text-[var(--fg)]">
           Dashboards <InfoIndicador texto={INFO_DASHBOARDS} />
         </h2>
-        {!editando && lista && lista.length > 0 && (
+        {!leitor && !editando && lista && lista.length > 0 && (
           <Button size="sm" variant="ghost" onClick={() => abrirNovo()}><Icon name="plus" size={14} /> Novo dashboard</Button>
         )}
       </div>
@@ -155,7 +155,9 @@ export function DashboardsRelatorios() {
       ) : carregando ? (
         <Esqueleto />
       ) : !dash ? (
-        <ComecarDoZero onNovo={abrirNovo} />
+        leitor
+          ? <Card><Vazio icone="dashboard" titulo="Nenhum dashboard compartilhado" hint="Quando alguém do Comercial compartilhar um dashboard, ele aparece aqui." /></Card>
+          : <ComecarDoZero onNovo={abrirNovo} />
       ) : (
         <>
           {!editando && (
@@ -170,7 +172,7 @@ export function DashboardsRelatorios() {
           ) : (
             <>
               <CabecalhoDashboard
-                dash={dash} podeEditar={podeEditar} euId={euId} nomeDe={nomeDe}
+                dash={dash} podeEditar={podeEditar} podeDuplicar={!leitor} euId={euId} nomeDe={nomeDe}
                 onEditar={() => setEditando(true)}
                 onRenomear={() => setModal({ modo: 'renomear', inicial: { nome: dash.nome, descricao: dash.descricao ?? '', compartilhado: dash.compartilhado, modelo: null } })}
                 onDuplicar={duplicar}
@@ -188,7 +190,7 @@ export function DashboardsRelatorios() {
                   />
                 </Card>
               )}
-              {!gestor && <NotaRodape>Os widgets mostram os seus números. O filtro por vendedor vale para o gestor.</NotaRodape>}
+              {!verTudo && <NotaRodape>Os widgets mostram os seus números. O filtro por vendedor vale para o gestor.</NotaRodape>}
             </>
           )}
         </>
@@ -232,8 +234,8 @@ function SeletorDashboards({ meus, compartilhados, atual, nomeDe, onSelecionar }
   );
 }
 
-function CabecalhoDashboard({ dash, podeEditar, euId, nomeDe, onEditar, onRenomear, onDuplicar, onExcluir }: {
-  dash: Dashboard; podeEditar: boolean; euId: string | null; nomeDe: (id: string | null) => string;
+function CabecalhoDashboard({ dash, podeEditar, podeDuplicar, euId, nomeDe, onEditar, onRenomear, onDuplicar, onExcluir }: {
+  dash: Dashboard; podeEditar: boolean; podeDuplicar: boolean; euId: string | null; nomeDe: (id: string | null) => string;
   onEditar: () => void; onRenomear: () => void; onDuplicar: () => void; onExcluir: () => void;
 }) {
   const atualizado = dash.atualizadoEm
@@ -252,12 +254,12 @@ function CabecalhoDashboard({ dash, podeEditar, euId, nomeDe, onEditar, onRenome
           {meu ? 'Criado por você' : `Criado por ${nomeDe(dash.donoId)}`}
           {atualizado ? ` · atualizado em ${atualizado}` : ''}
           {` · ${dash.widgets.length} ${dash.widgets.length === 1 ? 'widget' : 'widgets'}`}
-          {!podeEditar ? ' · só o dono e o gestor editam; duplique para ter a sua versão' : ''}
+          {podeEditar ? '' : podeDuplicar ? ' · só o dono e o gestor editam; duplique para ter a sua versão' : ' · somente leitura'}
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {podeEditar && <Button size="sm" variant="ghost" onClick={onRenomear}><Icon name="pen" size={14} /> Renomear</Button>}
-        <Button size="sm" variant="ghost" onClick={onDuplicar}><Icon name="copy" size={14} /> Duplicar</Button>
+        {podeDuplicar && <Button size="sm" variant="ghost" onClick={onDuplicar}><Icon name="copy" size={14} /> Duplicar</Button>}
         {podeEditar && <Button size="sm" variant="danger" onClick={onExcluir}><Icon name="trash" size={14} /> Excluir</Button>}
         {podeEditar && <Button size="sm" onClick={onEditar}><Icon name="sliders" size={14} /> Editar dashboard</Button>}
       </div>

@@ -44,14 +44,16 @@ export interface RespostaHttp {
 }
 
 const INSTRUCOES =
-  'CRM Comercial do Grupo Participa. Tudo roda como o dono do token: vendedor vê os próprios leads e os sem dono; '
+  'CRM Comercial do Grupo Participa. Tudo roda como a pessoa conectada: vendedor vê os próprios leads e os sem dono; '
   + 'gestor vê o time. Use comercial_listar_funis para achar funil_id/etapa_id e comercial_buscar_pessoa para achar '
-  + 'pessoa_id. Escritas (atividade, nota, mover etapa) ficam no registro do CRM como feitas via MCP; confirme com a '
-  + 'pessoa antes de escrever. Horários sem fuso são de Brasília.';
+  + 'pessoa_id. Escritas (atividade, nota, concluir atividade, mover etapa) ficam no registro do CRM como feitas via MCP; '
+  + 'confirme com a pessoa antes de escrever. Não existe envio de WhatsApp por aqui. Dados de clientes são pessoais (LGPD): '
+  + 'use só para o atendimento, não copie listas de contatos para fora. Horários sem fuso são de Brasília.';
 
 /** Erro do banco → mensagem para o Claude, sem detalhe interno. */
 export function mensagemDeErroRpc(e: ErroRpc): string {
   if (e.code === '42501') return e.message && !/permission denied/i.test(e.message) ? e.message : 'Sem acesso a este dado do Comercial.';
+  if (e.code === '28000') return 'Token inválido, revogado ou expirado (ou MCP desligado). Conecte de novo.';
   if (e.code === 'PGRST202' || e.code === '42883') return 'Função do CRM indisponível (migration da fase ainda não aplicada).';
   if (e.code === '22023' || e.code === 'P0002' || e.code === '22P02') return e.message || 'Parâmetro inválido.';
   return 'Não foi possível consultar o CRM agora.';
@@ -120,7 +122,7 @@ export async function atenderMcp(corpo: unknown, hashToken: string, porta: Porta
     if (error) return { status: 200, corpo: respostaOk(id, erroFerramenta(mensagemDeErroRpc(error))) };
     respostas.push(data);
   }
-  const dados = ferramenta.resultado(respostas, v.valor, agora);
+  const dados = ferramenta.resultado(respostas, v.valor, agora, { perfilId: sessao.perfilId, papel: sessao.papel });
   if (ferramenta.escrita && dados.ok !== true) {
     return { status: 200, corpo: respostaOk(id, erroFerramenta(typeof dados.msg === 'string' ? dados.msg : 'O CRM recusou a operação.')) };
   }

@@ -49,6 +49,14 @@ describe('proxy — só o domínio da equipe atravessa', () => {
     expect(semComentarios).not.toContain('advmais');
   });
 
+  it('OAuth do MCP: metadados, registro e token públicos; a tela de consentimento NÃO', () => {
+    for (const rota of ['/.well-known', '/api/oauth', '/api/mcp']) expect(FONTE).toContain(`'${rota}'`);
+    // consentimento exige sessão da equipe (proxy) + Comercial (banco); só ganha a query de volta no login
+    expect(FONTE).not.toContain("'/oauth/autorizar', //");
+    expect(FONTE).toContain("pathname === '/oauth/autorizar' ? pathname + request.nextUrl.search : pathname");
+    expect(FONTE).toContain("if (pathname === '/oauth/autorizar') url.search = '';");
+  });
+
   it('o formulário público de placa continua alcançável sem sessão', () => {
     // O fluxo do aluno é identificado por token UUID, não por login. Travar
     // o domínio não pode fechar a porta de quem vem pedir a placa.

@@ -21,7 +21,7 @@ type Aba = (typeof ABAS)[number];
 
 export function DisparosClient() {
   const agora = useAgora(60_000);
-  const { sessao, vendedores, nomeDe, gestor } = useEquipe();
+  const { sessao, vendedores, nomeDe, gestor, leitor } = useEquipe();
   const fichasQ = useDados(() => repo.fichas());
   const templatesQ = useDados(() => repo.templates());
   const contatosQ = useDados(() => repo.contatos());
@@ -38,7 +38,7 @@ export function DisparosClient() {
   const { toast, flash } = useFlash();
 
   const eu = vendedores.find((v) => v.id === sessao?.vendedorId) ?? null;
-  const podeDisparar = !!eu?.disparaApi;
+  const podeDisparar = !leitor && !!eu?.disparaApi;
   const conflitos = useMemo(() => fichasEmConflito(fichas ?? []), [fichas]);
   const resumo = useMemo(() => resumoDisparos(fichas ?? [], agora), [fichas, agora]);
   const aguardando = resumo.aguardando;
@@ -81,7 +81,7 @@ export function DisparosClient() {
   const erro = fichasQ.erro ?? templatesQ.erro ?? contatosQ.erro ?? negociosQ.erro;
   const tentarDeNovo = () => { fichasQ.recarregar(); templatesQ.recarregar(); contatosQ.recarregar(); negociosQ.recarregar(); };
   const botaoNova = (
-    <span title={podeDisparar ? undefined : 'Seu usuário não opera disparo por API. Peça ao Jonathan.'}>
+    <span title={podeDisparar ? undefined : leitor ? 'Acesso só de leitura.' : 'Seu usuário não opera disparo por API. Peça ao Jonathan.'}>
       <Button size="sm" disabled={!podeDisparar} onClick={() => setNova(true)}><Icon name="plus" size={14} /> Nova ficha</Button>
     </span>
   );

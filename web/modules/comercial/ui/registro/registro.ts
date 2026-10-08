@@ -60,6 +60,7 @@ export function avisoLimite(total: number, temMais: boolean): string | null {
 export const REGRA_VISIBILIDADE = {
   gestor: 'Você é gestor: vê todas as alterações do CRM, de todas as pessoas e do sistema.',
   vendedor: 'Você vê o que você fez, o que tocou os seus contatos e negócios (inclusive o que outra pessoa ou o sistema fez neles) e os contatos sem dono.',
+  leitor: 'Acesso só de leitura: você vê todas as alterações do CRM, de todas as pessoas e do sistema, sem alterar nada.',
 };
 
 // ── Filtros da tela ──

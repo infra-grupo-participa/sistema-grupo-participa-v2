@@ -14,10 +14,12 @@ import type { Funil } from '../../domain/types';
 import { Aviso, Campo } from '../comum';
 import { avisarMudanca, repo } from '../repositorio';
 
-export function PainelAtivacao({ funil, painel, gestor, eu, nomeDe, onFlash, onAbrirFunil }: {
+export function PainelAtivacao({ funil, painel, gestor, verTudo = gestor, eu, nomeDe, onFlash, onAbrirFunil }: {
   funil: Funil;
   painel: PainelAtivacao;
   gestor: boolean;
+  /** Vê a carga do time inteiro (gestor e leitor). */
+  verTudo?: boolean;
   eu: string | null;
   nomeDe: (id: string | null) => string;
   onFlash: (msg: string) => void;
@@ -46,7 +48,7 @@ export function PainelAtivacao({ funil, painel, gestor, eu, nomeDe, onFlash, onA
   const minhaCarga = painel.carga.find((c) => c.vendedorId === eu);
   const avisos = [
     nivelCarga(painel.totalNovasHoje) !== 'ok' ? avisoCarga({ novasHoje: painel.totalNovasHoje }, 'O número oficial') : null,
-    ...(gestor ? painel.carga.map((c) => avisoCarga(c, nomeDe(c.vendedorId))) : [minhaCarga ? avisoCarga(minhaCarga, 'Você') : null]),
+    ...(verTudo ? painel.carga.map((c) => avisoCarga(c, nomeDe(c.vendedorId))) : [minhaCarga ? avisoCarga(minhaCarga, 'Você') : null]),
     avisoMensageria(p),
   ].filter((x): x is string => !!x);
   const datas = datasDoEvento(p.eventoInicio, p.eventoFim);

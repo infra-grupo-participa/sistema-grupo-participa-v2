@@ -20,7 +20,7 @@ import {
 } from '../domain/catalogo';
 import { COR_ETAPA, bloqueioMoverNoFunil, camposFaltandoNoFunil } from '../domain/funis';
 import { atividadeAtrasada, fmtTelefone, situacaoSla } from '../domain/regras';
-import { motivoSomenteLeitura, podeTrocarDono, travaMover } from '../domain/travas';
+import { motivoSomenteLeitura, MSG_SOMENTE_LEITURA, podeTrocarDono, travaMover } from '../domain/travas';
 import type { CampoKey, EventoTimeline, Funil, MotivoPerda, TipoAtividade } from '../domain/types';
 import {
   Aviso, BotaoConversa, BotaoCopiar, Campo, Chip, Dono, EsqueletoLista, EstadoErro, NotaRodape, ProdutoTag, RodapeAcoes,
@@ -193,7 +193,7 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
         {aba === 'resumo' && (
           <div className="space-y-6">
             {aberto && leitura && (
-              <Aviso tom="neutral" icone="lock">{leitura} Peça ao gestor se precisar transferir.</Aviso>
+              <Aviso tom="neutral" icone="lock">{leitura}{leitura === MSG_SOMENTE_LEITURA ? '' : ' Peça ao gestor se precisar transferir.'}</Aviso>
             )}
             {aberto && (
               <section>

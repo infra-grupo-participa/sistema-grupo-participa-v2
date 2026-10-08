@@ -5,8 +5,9 @@
 // PRÓPRIO dono do token: RLS, guardas e crm.config.escrita_ligada do banco decidem o que passa. Nada aqui decide
 // permissão de dado; o único corte local é o escopo do token ('ler' × 'operar').
 //
-// Fora de propósito (backend-arquitetura.md §5.9): transferir dono, marcar ganho/perdido, disparo, funil/motivo,
-// produto/oferta, exportar lista. Para incluir uma ferramenta: definir aqui + teste em mcp-ferramentas.test.ts.
+// Fora de propósito (backend-arquitetura.md §5.9): transferir dono, marcar ganho/perdido, disparo/envio de WhatsApp,
+// funil/motivo, produto/oferta, exportar lista. Para incluir uma ferramenta: definir aqui + teste em
+// mcp-ferramentas.test.ts + a RPC na lista fechada de public.crm_mcp_rpc (migration nova).
 
 export type EscopoMcp = 'ler' | 'operar';
 
@@ -19,6 +20,12 @@ export type Validado<T> = { ok: true; valor: T } | { ok: false; msg: string };
 
 type Args = Record<string, unknown>;
 
+/** Quem está conectado (para filtros "só os meus"; a permissão de dado continua no banco). */
+export interface ContextoMcp {
+  perfilId: string;
+  papel: 'gestor' | 'vendedor';
+}
+
 export interface DefFerramenta {
   name: string;
   title: string;
@@ -29,7 +36,7 @@ export interface DefFerramenta {
   validar(args: Args): Validado<Args>;
   plano(args: Args, agora: Date): ChamadaRpc[];
   /** Respostas das RPCs na ordem do plano → objeto devolvido ao Claude. */
-  resultado(respostas: unknown[], args: Args, agora: Date): Record<string, unknown>;
+  resultado(respostas: unknown[], args: Args, agora: Date, ctx: ContextoMcp): Record<string, unknown>;
   /** Escrita: a RPC devolve {ok, msg}; ok=false vira erro da ferramenta (mensagem do banco, igual à tela). */
   escrita?: boolean;
 }
@@ -198,8 +205,9 @@ export const FERRAMENTAS: DefFerramenta[] = [
   },
   {
     name: 'comercial_negocios_por_etapa',
-    title: 'Negócios de um funil (por etapa)',
-    description: 'Lista negócios de um funil, opcionalmente de UMA etapa, com próxima atividade. Padrão: só abertos, até 50.',
+    title: 'Negócios (por funil e etapa)',
+    description: 'Lista negócios com a próxima atividade, opcionalmente de UM funil e de UMA etapa. Padrão: só abertos, até 50. '
+      + 'apenas_meus=true traz só os negócios de que a pessoa conectada é dona ("meus negócios").',
     escopo: 'ler',
     inputSchema: {
       type: 'object',
@@ -207,26 +215,29 @@ export const FERRAMENTAS: DefFerramenta[] = [
         funil_id: SCHEMA_UUID,
         etapa_id: SCHEMA_UUID,
         status: { type: 'string', enum: [...STATUS_NEGOCIO], default: 'aberto' },
+        apenas_meus: { type: 'boolean', default: false },
         limite: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
       },
-      required: ['funil_id'],
       additionalProperties: false,
     },
     annotations: ANOT_LER,
     validar: validarCom((a) => ({
-      funil_id: uuid(a, 'funil_id', true),
+      funil_id: uuid(a, 'funil_id', false),
       etapa_id: uuid(a, 'etapa_id', false),
       status: umDe(a, 'status', STATUS_NEGOCIO, 'aberto'),
+      apenas_meus: booleano(a, 'apenas_meus', false),
       limite: inteiro(a, 'limite', 1, 200, 50),
     })),
-    // Sem etapa: a própria RPC limita. Com etapa: a RPC não filtra por etapa, então traz até 500 do funil (lista já
-    // cortada pela RLS) e o filtro por etapa é feito aqui. Para contagens use comercial_resumo_funil (agregado no banco).
+    // Sem filtro local: a própria RPC limita. Com etapa/apenas_meus: a RPC não filtra por isso, então traz até 1.000
+    // (lista já cortada pela RLS) e o filtro é feito aqui. Para contagens use comercial_resumo_funil (agregado no banco).
     plano: (a) => [{
       rpc: 'crm_negocios',
-      params: { p_funil: a.funil_id, p_status: a.status, p_limite: a.etapa_id ? 500 : a.limite },
+      params: { p_funil: a.funil_id, p_status: a.status, p_limite: a.etapa_id || a.apenas_meus ? 1000 : a.limite },
     }],
-    resultado: ([ns], a) => {
-      const todos = lista(ns).filter((n) => !a.etapa_id || n.etapaId === a.etapa_id);
+    resultado: ([ns], a, _agora, ctx) => {
+      const todos = lista(ns)
+        .filter((n) => !a.etapa_id || n.etapaId === a.etapa_id)
+        .filter((n) => !a.apenas_meus || n.donoId === ctx.perfilId);
       const limite = a.limite as number;
       return { total: todos.length, temMais: todos.length > limite, negocios: todos.slice(0, limite).map(negocioCompacto) };
     },
@@ -316,6 +327,62 @@ export const FERRAMENTAS: DefFerramenta[] = [
     },
   },
   {
+    name: 'comercial_sem_proximo_passo',
+    title: 'Negócios sem próximo passo',
+    description: 'Negócios ABERTOS sem nenhuma atividade agendada (sem próximo passo), do mais parado para o mais recente. '
+      + 'Padrão: vendedor vê só os seus; gestor vê o time (apenas_meus=true restringe aos dele). Opcional: um funil.',
+    escopo: 'ler',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        funil_id: SCHEMA_UUID,
+        apenas_meus: { type: 'boolean', description: 'Padrão: true para vendedor, false para gestor' },
+        limite: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
+      },
+      additionalProperties: false,
+    },
+    annotations: ANOT_LER,
+    validar: validarCom((a) => {
+      const m = a.apenas_meus;
+      if (m !== undefined && m !== null && typeof m !== 'boolean') throw new ErroArg('apenas_meus precisa ser true ou false.');
+      return { funil_id: uuid(a, 'funil_id', false), apenas_meus: m ?? null, limite: inteiro(a, 'limite', 1, 200, 50) };
+    }),
+    plano: (a) => [{ rpc: 'crm_negocios', params: { p_funil: a.funil_id, p_status: 'aberto', p_limite: 1000 } }],
+    resultado: ([ns], a, _agora, ctx) => {
+      const meus = (a.apenas_meus as boolean | null) ?? ctx.papel === 'vendedor';
+      const parado = (n: Obj) => Date.parse(String(n.ultimaInteracaoEm ?? n.etapaDesde ?? n.criadoEm ?? '')) || 0;
+      const sem = lista(ns)
+        .filter((n) => !n.proximaAtividade)
+        .filter((n) => !meus || n.donoId === ctx.perfilId)
+        .sort((x, y) => parado(x) - parado(y));
+      const limite = a.limite as number;
+      return { apenasMeus: meus, total: sem.length, temMais: sem.length > limite, negocios: sem.slice(0, limite).map(negocioCompacto) };
+    },
+  },
+  {
+    name: 'comercial_conversa_whatsapp',
+    title: 'Conversa de WhatsApp da pessoa',
+    description: 'Mensagens de WhatsApp trocadas com a pessoa (mais antigas primeiro; padrão: as últimas 100), para resumir a '
+      + 'conversa ou preparar o próximo contato. Só leitura: NÃO envia mensagem. Só para quem pode ver a pessoa.',
+    escopo: 'ler',
+    inputSchema: {
+      type: 'object',
+      properties: { pessoa_id: SCHEMA_UUID, limite: { type: 'integer', minimum: 1, maximum: 300, default: 100 } },
+      required: ['pessoa_id'],
+      additionalProperties: false,
+    },
+    annotations: ANOT_LER,
+    validar: validarCom((a) => ({ pessoa_id: uuid(a, 'pessoa_id', true), limite: inteiro(a, 'limite', 1, 300, 100) })),
+    plano: (a) => [{ rpc: 'crm_mensagens', params: { p_pessoa: a.pessoa_id, p_limite: a.limite } }],
+    resultado: ([ms], a) => {
+      const msgs = lista(ms).map((m) => ({
+        em: m.em, de: m.direcao === 'entrada' ? 'cliente' : 'equipe', tipo: m.tipo, texto: m.texto ?? null,
+        ...(m.status ? { status: m.status } : {}), ...(m.erro ? { falhou: true } : {}),
+      }));
+      return { pessoaId: a.pessoa_id, total: msgs.length, mensagens: msgs };
+    },
+  },
+  {
     name: 'comercial_desempenho',
     title: 'Desempenho comercial',
     description: 'Por dono no período: abertos, criados, ganhos (e valor), perdidos, taxa de conversão, atividades concluídas e atrasadas. '
@@ -391,6 +458,24 @@ export const FERRAMENTAS: DefFerramenta[] = [
       texto: texto(a, 'texto', 1, 5000),
     })),
     plano: (a) => [{ rpc: 'crm_adicionar_nota', params: { p_pessoa: a.pessoa_id, p_negocio: a.negocio_id, p_texto: a.texto } }],
+    resultado: ([r]) => (r && typeof r === 'object' ? (r as Obj) : {}),
+  },
+  {
+    name: 'comercial_concluir_atividade',
+    title: 'Concluir atividade',
+    description: 'Marca uma atividade SUA (gestor: qualquer) como feita, com o resultado opcional (ex.: "Atendeu, pediu proposta"). '
+      + 'Use o id que aparece em comercial_atividades_do_dia ou comercial_pessoa_jornada.',
+    escopo: 'operar',
+    escrita: true,
+    inputSchema: {
+      type: 'object',
+      properties: { atividade_id: SCHEMA_UUID, resultado: { type: 'string', maxLength: 1000 } },
+      required: ['atividade_id'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    validar: validarCom((a) => ({ atividade_id: uuid(a, 'atividade_id', true), resultado: texto(a, 'resultado', 0, 1000, false) })),
+    plano: (a) => [{ rpc: 'crm_concluir_atividade', params: { p_atividade: a.atividade_id, p_resultado: a.resultado } }],
     resultado: ([r]) => (r && typeof r === 'object' ? (r as Obj) : {}),
   },
   {

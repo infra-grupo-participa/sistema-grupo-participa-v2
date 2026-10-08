@@ -22,6 +22,8 @@ const PUBLIC_PREFIXES = [
   '/api/agenda',
   '/api/cron', // autenticação própria via Bearer CRON_SECRET (cron não tem sessão)
   '/api/mcp', // MCP do Comercial: autenticação própria por token pessoal (Bearer gpc_…), sem cookie
+  '/.well-known', // metadados OAuth do MCP (RFC 9728/8414): JSON público, sem dado
+  '/api/oauth', // registro de cliente e troca de código/refresh do OAuth do MCP: a prova é o PKCE/refresh, não o cookie
   '/api/mensageria/receber', // n8n sem sessão; chave por fonte conferida no banco (Vault), migration 20261005o
   '/api/captura/lead', // servidor da página sem sessão; Bearer CAPTURA_LEAD_SECRET (docs/captura-de-lead.md)
 ];
@@ -180,7 +182,11 @@ export async function updateSession(request: NextRequest) {
     if (user && !ehEquipe) {
       url.searchParams.set('erro', 'sem_acesso');
     } else {
-      url.searchParams.set('redirect', pathname);
+      // 🔑 /oauth/autorizar precisa da query (client_id, redirect_uri, PKCE, state) depois do login; o destino
+      // continua sendo caminho relativo do próprio app. Nas outras rotas segue só o caminho, como sempre.
+      const destino = pathname === '/oauth/autorizar' ? pathname + request.nextUrl.search : pathname;
+      if (pathname === '/oauth/autorizar') url.search = '';
+      url.searchParams.set('redirect', destino);
     }
     return NextResponse.redirect(url);
   }

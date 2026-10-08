@@ -34,9 +34,11 @@ const CLS_LINK_GHOST = 'inline-flex items-center justify-center gap-2 rounded-[v
 
 export function ConfiguracoesClient() {
   const [aba, setAba] = useAbaHash<Aba>(ABAS, 'distribuicao');
-  const { sessao, vendedores, nomeDe, gestor } = useEquipe();
+  const { sessao, vendedores, nomeDe, gestor, verTudo, leitor } = useEquipe();
   const { toast, flash } = useFlash();
   const leitura = !gestor && !!sessao;
+  // Leitor (admin/dev fora do Comercial): sem as abas pessoais (token do Claude e notificações) — ele não recebe nem conecta.
+  const abaEfetiva: Aba = leitor && (aba === 'mcp' || aba === 'notificacoes') ? 'distribuicao' : aba;
 
   return (
     <PaginaComercial
@@ -44,32 +46,32 @@ export function ConfiguracoesClient() {
       subtitulo={(
         <>
           Distribuição de leads, motivos de perda, catalogação de origem, links, integrações, conexão com o Claude e suas notificações.
-          {leitura && <span title="Só o gestor do Comercial altera"> · Somente leitura</span>}
+          {leitura && <span title={leitor ? 'Acesso só de leitura.' : 'Só o gestor do Comercial altera'}> · Somente leitura</span>}
         </>
       )}
     >
       <Tabs
         idBase={ID_ABAS}
         label="Configurações do Comercial"
-        active={aba}
+        active={abaEfetiva}
         onChange={(k) => setAba(k as Aba)}
         tabs={[
           { k: 'distribuicao', l: 'Distribuição' }, { k: 'funil', l: 'Modelo do funil' }, { k: 'motivos', l: 'Motivos de perda' },
           { k: 'catalogacao', l: 'Catalogação' },
-          { k: 'links', l: 'Links rastreáveis' }, { k: 'integracoes', l: 'Integrações' }, { k: 'mcp', l: 'Conectar ao Claude' },
-          { k: 'notificacoes', l: 'Notificações' },
+          { k: 'links', l: 'Links rastreáveis' }, { k: 'integracoes', l: 'Integrações' },
+          ...(leitor ? [] : [{ k: 'mcp', l: 'Conectar ao Claude' }, { k: 'notificacoes', l: 'Notificações' }]),
         ]}
       />
-      <div role="tabpanel" id={idsAba(ID_ABAS, aba).panel} aria-labelledby={idsAba(ID_ABAS, aba).tab}>
-        {!sessao || !vendedores.length ? <Loading /> : aba === 'distribuicao' ? (
+      <div role="tabpanel" id={idsAba(ID_ABAS, abaEfetiva).panel} aria-labelledby={idsAba(ID_ABAS, abaEfetiva).tab}>
+        {!sessao || !vendedores.length ? <Loading /> : abaEfetiva === 'distribuicao' ? (
           // key: quando a equipe salva muda, o rascunho recomeça do salvo.
           <Distribuicao key={vendedores.map((v) => `${v.id}:${v.percentual}:${v.ativo}`).join('|')} vendedores={vendedores} gestor={gestor} flash={flash} />
-        ) : aba === 'funil' ? <FunilConfig gestor={gestor} />
-          : aba === 'motivos' ? <AbaMotivos gestor={gestor} flash={flash} />
-          : aba === 'catalogacao' ? <AbaCatalogacao gestor={gestor} flash={flash} />
-          : aba === 'links' ? <Links vendedores={vendedores} meuId={sessao.vendedorId} gestor={gestor} nomeDe={nomeDe} flash={flash} />
-          : aba === 'integracoes' ? <AbaIntegracoes gestor={gestor} flash={flash} />
-          : aba === 'mcp' ? <AbaMcp key={sessao.vendedorId} sessao={sessao} gestor={gestor} flash={flash} />
+        ) : abaEfetiva === 'funil' ? <FunilConfig gestor={gestor} />
+          : abaEfetiva === 'motivos' ? <AbaMotivos gestor={gestor} flash={flash} />
+          : abaEfetiva === 'catalogacao' ? <AbaCatalogacao gestor={gestor} leitor={leitor} flash={flash} />
+          : abaEfetiva === 'links' ? <Links vendedores={vendedores} meuId={sessao.vendedorId} gestor={gestor} leitor={leitor} nomeDe={nomeDe} flash={flash} />
+          : abaEfetiva === 'integracoes' ? <AbaIntegracoes gestor={gestor} verTudo={verTudo} flash={flash} />
+          : abaEfetiva === 'mcp' ? <AbaMcp key={sessao.vendedorId} sessao={sessao} gestor={gestor} flash={flash} />
           : <AbaNotificacoes key={sessao.vendedorId} flash={flash} />}
       </div>
       <Toast>{toast}</Toast>
@@ -319,8 +321,8 @@ function textoSla(atencao: number | null | undefined, critico: number | null | u
 const CANAIS = ['whatsapp', 'ligacao', 'email', 'instagram', 'grupo'];
 const ROTULO_CANAL: Record<string, string> = { whatsapp: 'WhatsApp', ligacao: 'Ligação', email: 'E-mail', instagram: 'Instagram', grupo: 'Grupo' };
 
-function Links({ vendedores, meuId, gestor, nomeDe, flash }: {
-  vendedores: Vendedor[]; meuId: string; gestor: boolean; nomeDe: (id: string | null) => string; flash: (m: string) => void;
+function Links({ vendedores, meuId, gestor, leitor = false, nomeDe, flash }: {
+  vendedores: Vendedor[]; meuId: string; gestor: boolean; leitor?: boolean; nomeDe: (id: string | null) => string; flash: (m: string) => void;
 }) {
   const rLinks = useDados(() => repo.links());
   const [filtro, setFiltro] = useState<string>('todos');
@@ -335,7 +337,7 @@ function Links({ vendedores, meuId, gestor, nomeDe, flash }: {
         </ul>
       </SectionCard>
 
-      <NovoLink key={meuId} vendedores={vendedores} meuId={meuId} gestor={gestor} flash={flash} />
+      {!leitor && <NovoLink key={meuId} vendedores={vendedores} meuId={meuId} gestor={gestor} flash={flash} />}
 
       <div>
         <SectionTitle right={

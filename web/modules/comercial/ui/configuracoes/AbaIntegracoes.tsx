@@ -9,10 +9,11 @@ import { MODO_DEMONSTRACAO } from '../repositorio';
 import { INTEGRACOES, type Integracao } from './integracoes';
 import { PainelHotmart } from './PainelHotmart';
 
-export function AbaIntegracoes({ gestor, flash }: { gestor: boolean; flash: (m: string) => void }) {
+export function AbaIntegracoes({ gestor, verTudo = gestor, flash }: { gestor: boolean; verTudo?: boolean; flash: (m: string) => void }) {
   return (
     <div className="space-y-4">
-      {gestor && <PainelHotmart gestor={gestor} flash={flash} />}
+      {/* O leitor vê o painel; reprocessar continua só do gestor (podeReprocessar). */}
+      {verTudo && <PainelHotmart gestor={gestor} flash={flash} />}
       <Aviso tom="neutral" icone="lock">
         {MODO_DEMONSTRACAO
           ? `Modo demonstração: nenhuma integração está ligada${gestor ? ' e os números da Hotmart acima são fictícios' : ''}.`

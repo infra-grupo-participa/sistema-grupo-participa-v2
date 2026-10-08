@@ -110,6 +110,8 @@ export interface PreviaPublico {
 export interface AcessoEstrategias {
   solicitar: boolean;
   gestor: boolean;
+  /** Leitor do Comercial (20261008151801): vê os pedidos do time, não pede nem decide. */
+  leitor?: boolean;
 }
 
 export interface NovaSolicitacao {

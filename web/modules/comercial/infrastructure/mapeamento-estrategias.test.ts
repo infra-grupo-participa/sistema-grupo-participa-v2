@@ -29,7 +29,8 @@ describe('mapeamento das Estratégias', () => {
     expect(() => mapEstrategia('x')).toThrow();
   });
   it('acesso, modelos e opções', () => {
-    expect(mapAcesso({ solicitar: true, gestor: false })).toEqual({ solicitar: true, gestor: false });
+    expect(mapAcesso({ solicitar: true, gestor: false })).toEqual({ solicitar: true, gestor: false, leitor: false });
+    expect(mapAcesso({ solicitar: false, gestor: false, leitor: true })).toEqual({ solicitar: false, gestor: false, leitor: true });
     expect(mapModelos([{ chave: 'm', nome: 'M', descricao: 'd', filtros: { base: 'alunos' } }])[0].filtros).toEqual({ base: 'alunos' });
     const o = mapOpcoes({ niveis: ['ouro'], turmas: [{ codigo: 'T33', tipo: 'thb' }], planos: [], statusAcesso: [], linhas: [{ chave: 'sv', nome: 'SV', escada: 'A' }],
       produtos: [{ id: '1', nome: 'P' }], projetos: [], canais: ['hotmart'], perguntas: [{ pergunta: 'P?', formularios: 3 }] });

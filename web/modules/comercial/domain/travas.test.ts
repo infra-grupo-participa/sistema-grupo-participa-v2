@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { etapasPadrao } from './funis';
 import {
-  motivoSemEscrita, motivoSemNovoNegocio, motivoSomenteLeitura, podeAbrirNegocioPara, podeConcluirAtividade, podeEscreverContato, podeMexerNoNegocio, podeTrocarDono, travaMover,
+  motivoSemEscrita, motivoSemNovoNegocio, motivoSomenteLeitura, MSG_SOMENTE_LEITURA, podeAbrirNegocioPara, podeConcluirAtividade, podeEscrever, podeEscreverContato, podeMexerNoNegocio, podeTrocarDono,
+  somenteLeitura, travaMover, veComoGestor,
 } from './travas';
 import type { Funil, Negocio, SessaoComercial } from './types';
 
@@ -130,5 +131,29 @@ describe('podeEscreverContato (espelho de crm.pode_escrever_pessoa em crm_enviar
     expect(motivoSemEscrita({ donoId: null }, [], vend, nomeDe)).toMatch(/sem dono/);
     expect(motivoSemEscrita({ donoId: 'v2' }, [], vend, nomeDe)).toMatch(/Lead de Nome v2/);
     expect(motivoSemEscrita({ donoId: 'v1' }, [], null, nomeDe)).toMatch(/Carregando/);
+  });
+});
+
+describe('leitor (admin/dev fora do Comercial, 20261008151801): vê tudo, não escreve nada', () => {
+  const leitor: SessaoComercial = { vendedorId: 'l', papel: 'leitor' };
+  it('nenhuma trava de escrita libera o leitor, nem em negócio sem dono ou "dele"', () => {
+    expect(podeMexerNoNegocio({ donoId: 'l' }, leitor)).toBe(false);
+    expect(podeMexerNoNegocio({ donoId: null }, leitor)).toBe(false);
+    expect(podeTrocarDono(leitor)).toBe(false);
+    expect(podeConcluirAtividade({ donoId: 'l', concluidaEm: null }, leitor)).toBe(false);
+    expect(podeAbrirNegocioPara({ donoId: null }, [], leitor)).toBe(false);
+    expect(podeEscreverContato({ donoId: null }, [], leitor)).toBe(false);
+    expect(travaMover(neg({ donoId: null }), funil, 'e-qualificar', leitor, nomeDe).permitido).toBe(false);
+  });
+  it('as frases dizem "Acesso só de leitura." (a mesma do banco)', () => {
+    expect(motivoSomenteLeitura({ donoId: 'ana' }, leitor, nomeDe)).toBe(MSG_SOMENTE_LEITURA);
+    expect(motivoSemNovoNegocio({ donoId: 'ana' }, [], leitor, nomeDe)).toBe(MSG_SOMENTE_LEITURA);
+    expect(motivoSemEscrita({ donoId: null }, [], leitor, nomeDe)).toBe(MSG_SOMENTE_LEITURA);
+    expect(MSG_SOMENTE_LEITURA).toBe('Acesso só de leitura.');
+  });
+  it('somenteLeitura / podeEscrever / veComoGestor', () => {
+    expect([somenteLeitura(leitor), somenteLeitura(gestor), somenteLeitura(ana), somenteLeitura(null)]).toEqual([true, false, false, false]);
+    expect([podeEscrever(leitor), podeEscrever(gestor), podeEscrever(ana), podeEscrever(null)]).toEqual([false, true, true, false]);
+    expect([veComoGestor(leitor), veComoGestor(gestor), veComoGestor(ana), veComoGestor(undefined)]).toEqual([true, true, false, false]);
   });
 });

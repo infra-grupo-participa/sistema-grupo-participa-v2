@@ -25,7 +25,7 @@ const TRAVA_CD = 'Travada: ninguém toca em C e D antes de A e B estarem zeradas
 
 /** `embutido`: dentro da tela Estratégias (aba "Filas de recuperação"), sem o cabeçalho de página próprio. */
 export function RecuperacaoClient({ embutido = false }: { embutido?: boolean } = {}) {
-  const { sessao, vendedores, nomeDe, gestor } = useEquipe();
+  const { sessao, vendedores, nomeDe, gestor, verTudo, leitor } = useEquipe();
   const { dados: filas, erro: erroFilas, recarregar: recFilas } = useDados(() => repo.filas());
   // Só os contatos dos itens das filas (não a base inteira).
   const { dados: contatos, erro: erroContatos, recarregar: recContatos } = useContatosPorIds(filas?.flatMap((f) => f.itens.map((i) => i.contatoId)));
@@ -46,7 +46,7 @@ export function RecuperacaoClient({ embutido = false }: { embutido?: boolean } =
 
   const fila: FilaRecuperacao | null = filas?.find((f) => f.id === filaId) ?? filas?.[0] ?? null;
   const contatoPorId = useMemo(() => new Map((contatos ?? []).map((c) => [c.id, c])), [contatos]);
-  const respPadrao = gestor ? 'todos' : 'meus';
+  const respPadrao = verTudo ? 'todos' : 'meus';
   const respEfetivo = resp ?? respPadrao;
 
   const itens = useMemo(() => fila?.itens ?? [], [fila]);
@@ -111,7 +111,7 @@ export function RecuperacaoClient({ embutido = false }: { embutido?: boolean } =
       : !liberado
         ? `Faixa ${it.faixa} ${TRAVA_CD.toLowerCase()}`
         : !podeEditar
-          ? 'Só o responsável da carteira (ou o gestor) muda o status.'
+          ? (leitor ? 'Acesso só de leitura.' : 'Só o responsável da carteira (ou o gestor) muda o status.')
           : null;
     return { it, c, liberado, travaMotivo };
   });

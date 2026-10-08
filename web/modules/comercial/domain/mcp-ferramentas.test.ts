@@ -5,12 +5,14 @@ import { lerPedido, negociarVersao, VERSAO_PADRAO } from './mcp-protocolo';
 const U1 = '11111111-1111-4111-8111-111111111111';
 const U2 = '22222222-2222-4222-8222-222222222222';
 const f = (n: string) => acharFerramenta(n)!;
+const VEND = { perfilId: U1, papel: 'vendedor' as const };
+const GEST = { perfilId: U2, papel: 'gestor' as const };
 
 describe('mcp: catálogo', () => {
-  it('7 de leitura + 3 de escrita, nomes válidos para o MCP e para crm.mcp_chamada', () => {
-    expect(FERRAMENTAS.filter((x) => x.escopo === 'ler')).toHaveLength(7);
+  it('9 de leitura + 4 de escrita, nomes válidos para o MCP e para crm.mcp_chamada', () => {
+    expect(FERRAMENTAS.filter((x) => x.escopo === 'ler')).toHaveLength(9);
     expect(FERRAMENTAS.filter((x) => x.escopo === 'operar').map((x) => x.name).sort())
-      .toEqual(['comercial_adicionar_nota', 'comercial_criar_atividade', 'comercial_mover_etapa']);
+      .toEqual(['comercial_adicionar_nota', 'comercial_concluir_atividade', 'comercial_criar_atividade', 'comercial_mover_etapa']);
     for (const x of FERRAMENTAS) {
       expect(x.name).toMatch(/^[a-z_]{3,60}$/);
       expect(x.annotations.readOnlyHint).toBe(x.escopo === 'ler');
@@ -19,7 +21,17 @@ describe('mcp: catálogo', () => {
   });
   it('fora de propósito não existe: ganho, perda, transferência, disparo, exportação', () => {
     const nomes = FERRAMENTAS.map((x) => x.name).join(' ');
-    expect(nomes).not.toMatch(/ganho|perdido|transferir|disparo|exportar|funil_salvar|oferta/);
+    expect(nomes).not.toMatch(/ganho|perdido|transferir|disparo|enviar|exportar|funil_salvar|oferta/);
+  });
+  it('toda RPC usada está na lista fechada de public.crm_mcp_rpc (migration 20261008150823)', () => {
+    const LISTA = ['crm_funis', 'crm_funil_resumo', 'crm_negocios', 'crm_contatos', 'crm_jornada', 'crm_atividades',
+      'crm_desempenho', 'crm_mensagens', 'crm_criar_atividade', 'crm_adicionar_nota', 'crm_mover_etapa', 'crm_concluir_atividade'];
+    const args = { funil_id: U1, pessoa_id: U1, negocio_id: U1, etapa_id: U2, atividade_id: U1, busca: 'ana', tipo: 'ligacao', titulo: 't', texto: 't', vence_em: '2026-10-06T10:00' };
+    for (const x of FERRAMENTAS) {
+      const v = x.validar(args);
+      if (!v.ok) continue;
+      for (const c of x.plano(v.valor, new Date())) expect(LISTA).toContain(c.rpc);
+    }
   });
   it('escopo ler esconde as de escrita; ler+operar mostra todas', () => {
     expect(ferramentasDoEscopo(['ler']).every((x) => x.escopo === 'ler')).toBe(true);
@@ -103,19 +115,68 @@ describe('mcp: resultados', () => {
       { id: 'b', venceEm: '2026-10-06T12:00:00Z', concluidaEm: null },
       { id: 'c', venceEm: '2026-10-08T12:00:00Z', concluidaEm: null },
       { id: 'd', venceEm: '2026-10-06T12:00:00Z', concluidaEm: '2026-10-06T13:00:00Z' },
-    ]], v.valor, new Date());
+    ]], v.valor, new Date(), VEND);
     expect({ dia: (r.doDia as { id: string }[]).map((x) => x.id), atr: (r.atrasadas as { id: string }[]).map((x) => x.id), con: (r.concluidas as { id: string }[]).map((x) => x.id) })
       .toEqual({ dia: ['b'], atr: ['a'], con: ['d'] });
   });
-  it('negócios por etapa: com etapa, busca 500 do funil e corta na etapa e no limite', () => {
+  it('negócios por etapa: com etapa, busca 1.000 e corta na etapa e no limite', () => {
     const ng = f('comercial_negocios_por_etapa');
     const v = ng.validar({ funil_id: U1, etapa_id: U2, limite: 1 });
     if (!v.ok) throw new Error(v.msg);
-    expect(ng.plano(v.valor, new Date())[0].params).toEqual({ p_funil: U1, p_status: 'aberto', p_limite: 500 });
-    const r = ng.resultado([[{ id: 'n1', etapaId: U2 }, { id: 'n2', etapaId: U1 }, { id: 'n3', etapaId: U2 }]], v.valor, new Date());
+    expect(ng.plano(v.valor, new Date())[0].params).toEqual({ p_funil: U1, p_status: 'aberto', p_limite: 1000 });
+    const r = ng.resultado([[{ id: 'n1', etapaId: U2 }, { id: 'n2', etapaId: U1 }, { id: 'n3', etapaId: U2 }]], v.valor, new Date(), VEND);
     expect(r.total).toBe(2);
     expect(r.temMais).toBe(true);
     expect((r.negocios as { id: string }[]).map((x) => x.id)).toEqual(['n1']);
+  });
+  it('negócios: sem funil = todos os funis; apenas_meus filtra pelo dono conectado', () => {
+    const ng = f('comercial_negocios_por_etapa');
+    const v = ng.validar({ apenas_meus: true });
+    if (!v.ok) throw new Error(v.msg);
+    expect(ng.plano(v.valor, new Date())[0].params).toEqual({ p_funil: null, p_status: 'aberto', p_limite: 1000 });
+    const r = ng.resultado([[{ id: 'n1', donoId: U1 }, { id: 'n2', donoId: U2 }, { id: 'n3', donoId: null }]], v.valor, new Date(), VEND);
+    expect((r.negocios as { id: string }[]).map((x) => x.id)).toEqual(['n1']);
+  });
+  it('sem próximo passo: só abertos sem atividade; vendedor = os dele, gestor = todos; mais parado primeiro', () => {
+    const sp = f('comercial_sem_proximo_passo');
+    const v = sp.validar({});
+    if (!v.ok) throw new Error(v.msg);
+    expect(sp.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_negocios', params: { p_funil: null, p_status: 'aberto', p_limite: 1000 } }]);
+    const ns = [
+      { id: 'a', donoId: U1, proximaAtividade: null, ultimaInteracaoEm: '2026-10-05T10:00:00Z' },
+      { id: 'b', donoId: U1, proximaAtividade: { id: 'x', tipo: 'ligacao', titulo: 't', venceEm: '2026-10-09T10:00:00Z' } },
+      { id: 'c', donoId: U2, proximaAtividade: null, etapaDesde: '2026-10-01T10:00:00Z' },
+      { id: 'd', donoId: U1, proximaAtividade: null, ultimaInteracaoEm: '2026-10-02T10:00:00Z' },
+    ];
+    const rv = sp.resultado([ns], v.valor, new Date(), VEND);
+    expect((rv.negocios as { id: string }[]).map((x) => x.id)).toEqual(['d', 'a']);
+    const rg = sp.resultado([ns], v.valor, new Date(), GEST);
+    expect((rg.negocios as { id: string }[]).map((x) => x.id)).toEqual(['c', 'd', 'a']);
+    expect(sp.validar({ apenas_meus: 'sim' }).ok).toBe(false);
+  });
+  it('conversa de WhatsApp: só leitura, campos enxutos (sem caminho de mídia nem ids internos)', () => {
+    const cw = f('comercial_conversa_whatsapp');
+    expect(cw.escopo).toBe('ler');
+    const v = cw.validar({ pessoa_id: U1 });
+    if (!v.ok) throw new Error(v.msg);
+    expect(cw.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_mensagens', params: { p_pessoa: U1, p_limite: 100 } }]);
+    const r = cw.resultado([[
+      { id: 'm1', direcao: 'entrada', tipo: 'texto', texto: 'Oi', em: '2026-10-06T10:00:00Z', midia: { caminho: 'x/y.jpg' }, autorId: U2 },
+      { id: 'm2', direcao: 'saida', tipo: 'texto', texto: 'Olá!', em: '2026-10-06T10:01:00Z', status: 'lida', erro: null },
+    ]], v.valor, new Date(), VEND);
+    expect(r.mensagens).toEqual([
+      { em: '2026-10-06T10:00:00Z', de: 'cliente', tipo: 'texto', texto: 'Oi' },
+      { em: '2026-10-06T10:01:00Z', de: 'equipe', tipo: 'texto', texto: 'Olá!', status: 'lida' },
+    ]);
+    expect(JSON.stringify(r)).not.toContain('caminho');
+  });
+  it('concluir atividade: escrita, resultado opcional', () => {
+    const ca = f('comercial_concluir_atividade');
+    expect(ca.escrita).toBe(true);
+    const v = ca.validar({ atividade_id: U1, resultado: ' Atendeu ' });
+    expect(v.ok && ca.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_concluir_atividade', params: { p_atividade: U1, p_resultado: 'Atendeu' } }]);
+    const sem = ca.validar({ atividade_id: U1 });
+    expect(sem.ok && ca.plano(sem.valor, new Date())[0].params).toEqual({ p_atividade: U1, p_resultado: null });
   });
 });
 

@@ -14,7 +14,7 @@ import { Icon } from '@/shared/ui/icons';
 import { ROTULO_ATUA, ROTULO_PERFIL, produto as produtoDe } from '../../domain/catalogo';
 import { fmtTelefone } from '../../domain/regras';
 import type { Contato, Conversa, EtapaFunil, Mensagem, Negocio, SessaoComercial, StatusMensagem, Template } from '../../domain/types';
-import { motivoSemEscrita, motivoSomenteLeitura, podeTrocarDono, travaMover, type TravaMover } from '../../domain/travas';
+import { motivoSemEscrita, motivoSomenteLeitura, podeTrocarDono, somenteLeitura, travaMover, type TravaMover } from '../../domain/travas';
 import { BotaoPlaybook, Dono, EstadoErro, FaixaErroAtualizacao, FaixaNumeros, PaginaComercial, Segmentado, Vazio, useEquipe, useParamUrl } from '../comum';
 import { InfoIndicador } from '../InfoIndicador';
 import { ContatoDrawer } from '../contatos/ContatoDrawer';
@@ -58,7 +58,7 @@ const COR_ESPERA: Record<NivelEspera, string> = { ok: 'var(--fg-3)', atencao: 'v
 export function ConversasClient() {
   const agora = useAgora();
   const { toast, flash } = useFlash(4000);
-  const { sessao, vendedores, nomeDe, gestor } = useEquipe();
+  const { sessao, vendedores, nomeDe, gestor, verTudo } = useEquipe();
   const rConversas = useDados(() => repo.conversas());
   const rNegocios = useDados(() => repo.negocios());
   // Só os contatos das conversas (não a base inteira).
@@ -76,7 +76,7 @@ export function ConversasClient() {
 
   // Padrão: vendedor vê as dele, gestor vê todas. A escolha vale enquanto a sessão não mudar ("Ver como").
   const [escolha, setEscolha] = useState<{ de: string; f: Filtro } | null>(null);
-  const padrao: Filtro = gestor ? 'todas' : 'minhas';
+  const padrao: Filtro = verTudo ? 'todas' : 'minhas';
   const filtro: Filtro = escolha && escolha.de === sessao?.vendedorId ? escolha.f : padrao;
   const trocarFiltro = (f: Filtro) => { if (sessao) setEscolha({ de: sessao.vendedorId, f }); };
   const [busca, setBusca] = useState('');
@@ -475,7 +475,9 @@ function PainelConversa({ contato, conversa, negocio, negociosDoContato, templat
   const podeAtribuir = podeTrocarDono(sessao) && !dono;
 
   // Quem pode escrever: espelho de crm.pode_escrever_pessoa (dono do contato, dono de algum negócio da pessoa ou gestor).
-  const bloqueio: string | null = contato.optOut
+  const bloqueio: string | null = somenteLeitura(sessao)
+    ? 'Você acompanha a conversa, mas não responde (acesso só de leitura).'
+    : contato.optOut
     ? 'Este contato pediu para não receber contato. Nenhuma mensagem sai para ele.'
     : !contato.telefone
       ? 'Contato sem telefone.'
