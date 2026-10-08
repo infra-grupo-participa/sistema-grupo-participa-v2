@@ -1,8 +1,10 @@
 -- 20261007y2: níveis de acesso, B2 parte 2: a service_role não muda acesso em public.perfis sem dizer o autor.
 --
--- STATUS: NÃO APLICADA. SÓ APLICAR DEPOIS que a rota web/app/api/admin/usuarios/route.ts estiver em produção (main) usando
---   public.acesso_perfil_atualizar_como (20261007204017, aplicada). Antes disso, a tela de Usuários que está no ar passaria a receber 42501
---   ao mudar status de usuário. Ensaio: 20261007y2_ensaio.sql. Relatório: 20261007204017.explain.md §2.
+-- STATUS: APLICADA em produção em 08/10/2026 às 20:57 UTC, versão 20261008205705 (nome acesso_autor_obrigatorio), pelo
+--   aplica_sql.py aplicar + insert em supabase_migrations.schema_migrations na mesma transação; md5 gravado =
+--   e257bfc9b5defd692338d40749d92164 = este arquivo antes desta troca de STATUS. Pré-requisito cumprido: a rota
+--   web/app/api/admin/usuarios/route.ts usa public.acesso_perfil_atualizar_como na main (264928b, no ar desde 08/10 17:51 BRT).
+--   Ensaio: 20261007y2_ensaio.sql (rodado de novo em 08/10 antes de aplicar). Relatório: 20261007204017.explain.md §2 e §7.
 --
 -- O QUE FAZ: recria acesso.tg_perfis_guarda (corpo da 20261007y) acrescentando a recusa: mudança de cargo, status,
 --   áreas, funções ou CPF com papel service_role e sem autor (nem auth.uid() nem 'acesso.autor') → 42501. O cadastro

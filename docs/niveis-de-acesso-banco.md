@@ -35,13 +35,13 @@ falta. Detalhe e provas de cada passo no `.explain.md` da migration.
 | `20261007195738` | fase 3: tira o atalho do cargo, exceção nominal, gatilho | aplicada |
 | `20261007204002` | conta de teste QA Sessoes (`qa.sessoes@advmais.com`) vira master para o JP testar a tela (temporário; reversão no explain) | aplicada |
 | `20261007204017` | B2 parte 1: RPC `acesso_perfil_atualizar_como` (só service_role; master só por master), log com o autor da rota | aplicada |
-| `20261007y2` | B2 parte 2: recusa mudança de acesso pela service_role sem autor | não aplicada; **só depois da rota nova na main** |
+| `20261007y2` | B2 parte 2: recusa mudança de acesso pela service_role sem autor | **aplicada em 08/10/2026 20:57 UTC** (versão `20261008205705`) |
 | `20261007204020` | anon sem execute nas 4 guardas; sem MAINTAIN em perfis | aplicada |
 | `20261007204024` | B3: `gps.trocar_meu_nome` não derruba a parte do aluno | aplicada |
 | `20261007204700` | conta de teste QA Tráfego (`qa.trafego@advmais.com`) membro do Tráfego, sem financeiro, para o JP (reversão no explain) | aplicada |
 
 ## Pendências
 
-- Rota `/api/admin/usuarios` usar `acesso_perfil_atualizar_como` (contrato em `20261007204017.explain.md` §3, RPC no ar desde 07/10), depois a y2.
+- ~~Rota `/api/admin/usuarios` usar `acesso_perfil_atualizar_como`, depois a y2.~~ Feito: rota na main `264928b` e y2 aplicada em 08/10 (`20261007204017.explain.md` §7).
 - MAINTAIN nas outras tabelas do `public` (default do Supabase): dívida.
 - Telas de Usuários e Configurações (front).
