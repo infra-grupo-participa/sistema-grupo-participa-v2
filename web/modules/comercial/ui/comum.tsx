@@ -39,6 +39,7 @@ export function PaginaComercial({ titulo, subtitulo, acoes, meta, cheia = false,
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {acoes}
+            <SeloSomenteLeitura />
             <SinoNotificacoes />
           </div>
         </div>
@@ -46,6 +47,17 @@ export function PaginaComercial({ titulo, subtitulo, acoes, meta, cheia = false,
       </header>
       {cheia ? <div className="flex-1 min-h-0 flex flex-col">{children}</div> : children}
     </div>
+  );
+}
+
+/** Selo discreto para o leitor (admin/dev fora do Comercial, 20261008151801): vê tudo, não altera nada. */
+function SeloSomenteLeitura() {
+  const { dados: sessao } = useDados(() => repo.sessao());
+  if (sessao?.papel !== 'leitor') return null;
+  return (
+    <span title="Você vê o Comercial inteiro, com e-mail e telefone mascarados, mas não altera nada.">
+      <Badge>Somente leitura</Badge>
+    </span>
   );
 }
 
@@ -478,7 +490,14 @@ export function Carregando<T>({ dados, erro, onTentar, esqueleto, children }: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Sessão + vendedores, carregados juntos (quase toda tela precisa dos dois). */
-export function useEquipe(): { sessao: SessaoComercial | null; vendedores: Vendedor[]; nomeDe: (id: string | null) => string; gestor: boolean } {
+/**
+ * `gestor` = PODE agir como gestor (ações). `verTudo` = vê a operação como o gestor (gestor ou leitor): use para
+ * filtros/visões padrão. `leitor` (20261008151801) = admin/dev fora do Comercial, só leitura: esconda as ações.
+ */
+export function useEquipe(): {
+  sessao: SessaoComercial | null; vendedores: Vendedor[]; nomeDe: (id: string | null) => string;
+  gestor: boolean; verTudo: boolean; leitor: boolean;
+} {
   const { dados: sessao } = useDados(() => repo.sessao());
   const { dados: vendedores } = useDados(() => repo.vendedores());
   const lista = vendedores ?? [];
@@ -487,6 +506,8 @@ export function useEquipe(): { sessao: SessaoComercial | null; vendedores: Vende
     vendedores: lista,
     nomeDe: (id) => (id ? lista.find((v) => v.id === id)?.nome ?? '—' : 'Sem dono'),
     gestor: sessao?.papel === 'gestor',
+    verTudo: sessao?.papel === 'gestor' || sessao?.papel === 'leitor',
+    leitor: sessao?.papel === 'leitor',
   };
 }
 

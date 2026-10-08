@@ -30,7 +30,7 @@ const CHAVE_FUNIL = 'gp_comercial_funil';
 export function FunilClient() {
   const agora = useAgora();
   const { toast, flash } = useFlash();
-  const { sessao, vendedores, nomeDe, gestor } = useEquipe();
+  const { sessao, vendedores, nomeDe, gestor, verTudo, leitor } = useEquipe();
   const qFunis = useDados(() => repo.funis());
   const qAgrupadores = useDados(() => repo.agrupadores());
   const qNegocios = useDados(() => repo.negocios());
@@ -148,7 +148,7 @@ export function FunilClient() {
           <Icon name="settings" size={16} />
         </Button>
       )}
-      {funil?.tipo === 'manual' && <Button size="sm" className="min-h-8" onClick={() => setNovoNegocio(true)}><Icon name="plus" size={14} /> Novo negócio</Button>}
+      {!leitor && funil?.tipo === 'manual' && <Button size="sm" className="min-h-8" onClick={() => setNovoNegocio(true)}><Icon name="plus" size={14} /> Novo negócio</Button>}
     </>
   );
 
@@ -214,6 +214,7 @@ export function FunilClient() {
               funil={funil}
               painel={qAtivacao.dados}
               gestor={gestor}
+              verTudo={verTudo}
               eu={sessao?.vendedorId ?? null}
               nomeDe={nomeDe}
               onFlash={flash}

@@ -51,7 +51,7 @@ const INEGOCIAVEIS = [
 export function InicioClient() {
   const agora = useAgora();
   const { toast, flash } = useFlash();
-  const { sessao, vendedores, nomeDe, gestor } = useEquipe();
+  const { sessao, vendedores, nomeDe, verTudo, leitor } = useEquipe();
   const negQ = useDados(() => repo.negocios());
   const atvQ = useDados(() => repo.atividades());
   const evtQ = useDados(() => repo.eventos());
@@ -77,7 +77,7 @@ export function InicioClient() {
   const contatoPorId = useMemo(() => new Map((contatos ?? []).map((c) => [c.id, c])), [contatos]);
   const p = sessao ? perspectiva(sessao, ver) : null;
   const alvo = p?.donoId ?? null;
-  const time = gestor && alvo == null;
+  const time = verTudo && alvo == null;
 
   const agir = useMemo(
     () => (pronto ? itensAgirAgora({ negocios: negocios!, conversas: conversas!, atividades: atividades!, donoId: alvo, agora }) : []),
@@ -99,12 +99,12 @@ export function InicioClient() {
   const doAlvo = alvo && fechamento ? fechamento.porVendedor[alvo] : undefined;
   const voltar = () => setVer(VER_TIME);
 
-  const titulo = !gestor ? 'Meu dia' : time ? 'Visão do time' : p?.deOutro ? `Vendo o painel de ${nomeAlvo}` : 'Meu dia como vendedor';
+  const titulo = !verTudo ? 'Meu dia' : time ? 'Visão do time' : p?.deOutro ? `Vendo o painel de ${nomeAlvo}` : 'Meu dia como vendedor';
   const subtitulo = !sessao ? null : p?.deOutro
-    ? <>O que {nomeAlvo} tem para agir agora, os números do dia dele e o painel dele. Você continua como gestor.</>
+    ? <>O que {nomeAlvo} tem para agir agora, os números do dia dele e o painel dele. {leitor ? 'Somente leitura.' : 'Você continua como gestor.'}</>
     : <>{saudacao(agora)}, {primeiroNome}. Hoje é {dataHoje}.</>;
 
-  const seletor = gestor && ativos.length > 0 && (
+  const seletor = verTudo && ativos.length > 0 && (
     <>
       <span className="hidden sm:inline-flex items-center gap-2">
         <span className="text-xs text-[var(--fg-3)]">Ver</span>
@@ -173,11 +173,11 @@ export function InicioClient() {
           <PainelPersonalizavel
             key={p.painelDe}
             vendedorId={p.painelDe}
-            padraoGestor={vendedores.find((v) => v.id === p.painelDe)?.papel === 'gestor'}
+            padraoGestor={p.painelDe === eu ? verTudo : vendedores.find((v) => v.id === p.painelDe)?.papel === 'gestor'}
             dados={dadosPainel}
             funis={funis!}
             titulo={p.deOutro ? `Painel de ${nomeAlvo}` : 'Meu painel'}
-            podeEditar={gestor || p.painelDe === eu}
+            podeEditar={!leitor && (verTudo || p.painelDe === eu)}
             flash={flash}
           />
 

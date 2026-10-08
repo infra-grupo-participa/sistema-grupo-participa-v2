@@ -98,6 +98,11 @@ export interface MotivoPerdaConfig {
 export type StatusNegocio = 'aberto' | 'ganho' | 'perdido';
 
 export type PapelComercial = 'gestor' | 'vendedor';
+/**
+ * Papel de quem está olhando (crm_sessao). 'leitor' (20261008151801) = admin/dev do sistema fora do Comercial:
+ * vê tudo o que o gestor vê, com e-mail/telefone mascarados, e não escreve nada (o banco recusa "Acesso só de leitura.").
+ */
+export type PapelSessao = PapelComercial | 'leitor';
 
 export interface Vendedor {
   id: string;
@@ -546,7 +551,7 @@ export interface TokenMcp {
 /** Quem está olhando a tela: decide o que aparece como "meu". */
 export interface SessaoComercial {
   vendedorId: string;
-  papel: PapelComercial;
+  papel: PapelSessao;
 }
 
 // ── Jornada da pessoa: tudo o que a pessoa fez com a empresa, em ordem ──

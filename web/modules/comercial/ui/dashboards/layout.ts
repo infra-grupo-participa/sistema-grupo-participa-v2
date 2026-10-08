@@ -208,9 +208,9 @@ export function validarDashboard(nome: string, widgets: WidgetDash[]): string | 
   return null;
 }
 
-/** Só o dono e o gestor editam (o compartilhado os outros só veem). */
+/** Só o dono e o gestor editam (o compartilhado os outros só veem). O leitor não edita nada. */
 export function podeEditarDashboard(d: Pick<Dashboard, 'donoId'>, sessao: SessaoComercial | null): boolean {
-  return !!sessao && (d.donoId === sessao.vendedorId || sessao.papel === 'gestor');
+  return !!sessao && sessao.papel !== 'leitor' && (d.donoId === sessao.vendedorId || sessao.papel === 'gestor');
 }
 
 /** Meus primeiro, depois os compartilhados por outras pessoas; cada grupo por nome. */

@@ -82,7 +82,7 @@ const INFO: Record<'total' | 'semDono' | 'optOut' | 'alunos' | 'lancamentos' | '
 };
 
 export function ContatosClient() {
-  const { vendedores, nomeDe } = useEquipe();
+  const { vendedores, nomeDe, leitor } = useEquipe();
   const { toast, flash } = useFlash(5000);
 
   const [busca, setBusca] = useState('');
@@ -148,7 +148,7 @@ export function ContatosClient() {
   const erro = pg.erro;
   const buscaCurta = busca.trim().length > 0 && busca.trim().length < 3;
 
-  const botaoNovo = (
+  const botaoNovo = leitor ? null : (
     <Button size="sm" onClick={() => setNovo(true)}><Icon name="plus" size={14} /> Novo contato</Button>
   );
 
@@ -268,7 +268,7 @@ export function ContatosClient() {
                   titulo="Nenhum contato no CRM"
                   hint="Se a pessoa não está no CRM, ela não existe para o Comercial: cadastre antes de conversar."
                   icone="contact"
-                  acao={<Button size="sm" variant="ghost" onClick={() => setNovo(true)}><Icon name="plus" size={14} /> Novo contato</Button>}
+                  acao={leitor ? undefined : <Button size="sm" variant="ghost" onClick={() => setNovo(true)}><Icon name="plus" size={14} /> Novo contato</Button>}
                 />
               ) : (
                 <Vazio
@@ -277,7 +277,7 @@ export function ContatosClient() {
                   icone="contact"
                   acao={<>
                     <Button size="sm" variant="ghost" onClick={limpar}>Limpar filtros</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setNovo(true)}><Icon name="plus" size={14} /> Novo contato</Button>
+                    {!leitor && <Button size="sm" variant="ghost" onClick={() => setNovo(true)}><Icon name="plus" size={14} /> Novo contato</Button>}
                   </>}
                 />
               )

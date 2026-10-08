@@ -149,9 +149,10 @@ export interface Perspectiva {
   deOutro: boolean;
 }
 
-/** Vendedor só vê o próprio; o gestor escolhe entre o time e qualquer vendedor (`ver`). */
-export function perspectiva(sessao: { vendedorId: string; papel: 'gestor' | 'vendedor' }, ver: string): Perspectiva {
-  if (sessao.papel !== 'gestor' || ver === VER_TIME) return { donoId: sessao.papel === 'gestor' ? null : sessao.vendedorId, painelDe: sessao.vendedorId, deOutro: false };
+/** Vendedor só vê o próprio; o gestor (e o leitor, que vê como ele) escolhe entre o time e qualquer vendedor (`ver`). */
+export function perspectiva(sessao: { vendedorId: string; papel: 'gestor' | 'vendedor' | 'leitor' }, ver: string): Perspectiva {
+  const visaoTime = sessao.papel === 'gestor' || sessao.papel === 'leitor';
+  if (!visaoTime || ver === VER_TIME) return { donoId: visaoTime ? null : sessao.vendedorId, painelDe: sessao.vendedorId, deOutro: false };
   return { donoId: ver, painelDe: ver, deOutro: ver !== sessao.vendedorId };
 }
 

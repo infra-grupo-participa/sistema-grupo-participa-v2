@@ -35,6 +35,7 @@ describe('erros e formato', () => {
 describe('sessão, config, vendedores, agrupadores, motivos', () => {
   it('crm_sessao', () => {
     expect(mapSessao({ vendedorId: U1, papel: 'gestor' })).toEqual({ vendedorId: U1, papel: 'gestor' });
+    expect(mapSessao({ vendedorId: U1, papel: 'leitor' })).toEqual({ vendedorId: U1, papel: 'leitor' });
     expect(() => mapSessao({ vendedorId: U1, papel: 'admin' })).toThrow();
   });
   it('crm_config descarta escritaLigada e mantém limite null', () => {

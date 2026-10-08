@@ -17,7 +17,7 @@ import { avisarMudanca, repo, useDados } from '../repositorio';
 
 const PENDENCIAS_VISIVEIS = 30;
 
-export function AbaCatalogacao({ flash }: { gestor?: boolean; flash: (m: string) => void }) {
+export function AbaCatalogacao({ leitor = false, flash }: { gestor?: boolean; leitor?: boolean; flash: (m: string) => void }) {
   const r = useDados(() => repo.catalogo());
   // undefined = modal fechado; objeto = rascunho (nova ou edição)
   const [editando, setEditando] = useState<Partial<RegraCatalogo> | undefined>(undefined);
@@ -43,8 +43,9 @@ export function AbaCatalogacao({ flash }: { gestor?: boolean; flash: (m: string)
     <div className="space-y-6">
       <Carregando dados={r.dados} erro={r.erro} onTentar={() => { void r.recarregar(); }} esqueleto={<EsqueletoLista linhas={6} avatar={false} />}>
         {(p: PainelCatalogo) => {
-          const podeEditar = p.podeEditar;
-          const podeReaplicar = p.podeClassificar;
+          // Leitor do Comercial (admin/dev fora do time) não escreve: o banco recusa "Acesso só de leitura.".
+          const podeEditar = p.podeEditar && !leitor;
+          const podeReaplicar = p.podeClassificar && !leitor;
           const regras = p.regras.filter((x) => verInativas || x.ativo);
           const pend = todasPend ? p.pendencias : p.pendencias.slice(0, PENDENCIAS_VISIVEIS);
           const pct = (n: number) => (p.resumo.total ? ` (${Math.round((100 * n) / p.resumo.total)}%)` : '');

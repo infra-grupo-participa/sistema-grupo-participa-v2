@@ -38,7 +38,7 @@ const VAZIO: Record<AbaAgenda, { title: string; hint: string }> = {
 export function AtividadesClient() {
   const agora = useAgora();
   const { toast, flash } = useFlash();
-  const { sessao, vendedores, nomeDe, gestor } = useEquipe();
+  const { sessao, vendedores, nomeDe, verTudo, leitor } = useEquipe();
   const atvQ = useDados(() => repo.atividades());
   const negQ = useDados(() => repo.negocios());
   // Só os contatos das atividades e dos negócios carregados (não a base inteira).
@@ -62,8 +62,8 @@ export function AtividadesClient() {
   const fluxo = useConcluirComProximo(flash, (n) => motivoSomenteLeitura(n, sessao, nomeDe));
 
   const eu = sessao?.vendedorId ?? null;
-  const dono = escolhaDono && escolhaDono.sessao === eu ? escolhaDono.valor : gestor ? 'todos' : 'meus';
-  const padraoDono = gestor ? 'todos' : 'meus';
+  const dono = escolhaDono && escolhaDono.sessao === eu ? escolhaDono.valor : verTudo ? 'todos' : 'meus';
+  const padraoDono = verTudo ? 'todos' : 'meus';
 
   const contatoPorId = useMemo(() => new Map((contatos ?? []).map((c) => [c.id, c])), [contatos]);
   const negocioPorId = useMemo(() => new Map((negocios ?? []).map((n) => [n.id, n])), [negocios]);
@@ -98,7 +98,7 @@ export function AtividadesClient() {
       subtitulo="Agenda de toques: o que fazer hoje, o que atrasou e o que vem."
       acoes={<>
         <Button size="sm" variant="ghost" onClick={() => setVerCadencia(true)}><Icon name="list-checks" size={14} /> Cadência padrão</Button>
-        <Button size="sm" onClick={() => setNova(true)} disabled={!pronto}><Icon name="plus" size={14} /> Nova atividade</Button>
+        {!leitor && <Button size="sm" onClick={() => setNova(true)} disabled={!pronto}><Icon name="plus" size={14} /> Nova atividade</Button>}
       </>}
     >
       {erro && !pronto ? (
@@ -154,7 +154,7 @@ export function AtividadesClient() {
                   {filtrosAtivos && (
                     <Button size="sm" variant="ghost" onClick={() => { setTipo('todos'); setEscolhaDono(null); }}>Limpar filtros</Button>
                   )}
-                  {(aba === 'hoje' || aba === 'proximas') && (
+                  {!leitor && (aba === 'hoje' || aba === 'proximas') && (
                     <Button size="sm" variant="ghost" onClick={() => setNova(true)}><Icon name="plus" size={14} /> Agendar atividade</Button>
                   )}
                 </div>

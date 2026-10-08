@@ -1323,7 +1323,7 @@ const SISTEMA: SecaoAjuda[] = [
     sinonimos: ['permissão', 'papel', 'acesso', 'pode', 'não consigo', 'bloqueado', 'quem é gestor', 'administrador', 'leitor', 'somente leitura', 'só leitura'],
     blocos: [
       p('**Quem é gestor:** o Jonathan (gestor comercial) e o Arthur (supervisor dele), no CRM e em Estratégias. A lista fica no banco: ser administrador do sistema não faz ninguém gestor do Comercial.'),
-      p('**Quem é leitor:** administrador do sistema que não é gestor nem vendedor do Comercial. Vê tudo o que o gestor vê (todos os funis, negócios, contatos, conversas, painéis, desempenho e Estratégias), com e-mail e telefone mascarados, e não altera nada: os botões de ação somem e o banco recusa com "Acesso só de leitura.". O selo "Somente leitura" aparece no topo das telas. O leitor não entra na distribuição, não recebe aviso e não aparece como vendedor.'),
+      p('**Quem é leitor:** administrador (ou dev) do sistema que não é gestor nem vendedor do Comercial. Vê tudo o que o gestor vê (todos os funis, negócios, contatos, conversas, painéis, desempenho e Estratégias), com e-mail e telefone mascarados, e não altera nada: os botões de ação somem e o banco recusa com "Acesso só de leitura.". O selo "Somente leitura" aparece no topo das telas. O leitor não entra na distribuição, não recebe aviso e não aparece como vendedor.'),
       tab(['O quê', 'Vendedor', 'Gestor'], [
         ['Início', '"Meu dia", com os próprios números', '"Visão do time", Controle das 9h e o painel de cada vendedor'],
         ['Conversas', 'Escreve só nas próprias', 'Escreve em qualquer uma e atribui dono'],

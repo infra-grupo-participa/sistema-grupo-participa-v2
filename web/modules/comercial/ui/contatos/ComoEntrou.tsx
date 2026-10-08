@@ -9,12 +9,14 @@ import { fmtData } from '@/shared/ui/format';
 import {
   CHAVE_PROJETO, ROTULO_CAMPO_REGRA, ROTULO_CANAL, ROTULO_MOTIVO, ROTULO_OPERADOR, linhasComoEntrou, nomeProjeto,
 } from '../../domain/catalogacao';
+import { somenteLeitura } from '../../domain/travas';
 import { Aviso } from '../comum';
 import { avisarMudanca, repo, useDados } from '../repositorio';
 
 export function ComoEntrou({ contatoId }: { contatoId: string }) {
   // embrulho: dados null = carregando; { v: null } = contato sem origem registrada
   const o = useDados(async () => ({ v: await repo.origemContato(contatoId) }), [contatoId]);
+  const { dados: sessao } = useDados(() => repo.sessao());
   const [editando, setEditando] = useState(false);
   const [chave, setChave] = useState('');
   const [erro, setErro] = useState<string | null>(null);
@@ -44,7 +46,7 @@ export function ComoEntrou({ contatoId }: { contatoId: string }) {
   return (
     <section>
       <SectionTitle
-        right={d.podeDefinir && !editando ? (
+        right={d.podeDefinir && !somenteLeitura(sessao) && !editando ? (
           <Button size="sm" variant="link" onClick={() => { setEditando(true); setChave(d.projeto ?? ''); setErro(null); }}>
             {d.manual ? 'trocar projeto' : 'definir projeto'}
           </Button>

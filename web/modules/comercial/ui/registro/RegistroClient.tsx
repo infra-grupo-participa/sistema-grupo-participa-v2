@@ -65,7 +65,7 @@ export function RegistroClient() {
   // O banco devolve em páginas (LIMITE_PAGINA) e já recortado pelo que a pessoa pode ver.
   const filtroRepo = useMemo(() => ({ desde: inicioDoPeriodo(f.periodo, new Date()) }), [f.periodo]);
   const reg = useRegistroVisivel(filtroRepo);
-  const { vendedores, nomeDe, gestor, sessao } = reg;
+  const { vendedores, nomeDe, gestor, leitor, sessao } = reg;
 
   const trocar = <K extends keyof FiltroTela>(k: K, v: FiltroTela[K]) => { setF((x) => ({ ...x, [k]: v })); setMostrar(PAGINA); };
 
@@ -104,7 +104,7 @@ export function RegistroClient() {
     >
       {sessao && (
         <Aviso icone="lock" className="mb-4">
-          {gestor ? REGRA_VISIBILIDADE.gestor : REGRA_VISIBILIDADE.vendedor}
+          {leitor ? REGRA_VISIBILIDADE.leitor : gestor ? REGRA_VISIBILIDADE.gestor : REGRA_VISIBILIDADE.vendedor}
         </Aviso>
       )}
 

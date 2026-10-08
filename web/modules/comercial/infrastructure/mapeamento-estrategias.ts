@@ -33,7 +33,7 @@ function situacao(v: unknown, rpc: string): SituacaoEstrategia {
 
 export function mapAcesso(d: unknown): AcessoEstrategias {
   const o = obj(d, 'crm_estrategia_acesso', 'acesso');
-  return { solicitar: o.solicitar === true, gestor: o.gestor === true };
+  return { solicitar: o.solicitar === true, gestor: o.gestor === true, leitor: o.leitor === true };
 }
 
 /** Filtros do banco → domínio (descarta chave desconhecida em vez de quebrar a tela). */

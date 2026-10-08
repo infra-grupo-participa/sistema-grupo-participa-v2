@@ -92,7 +92,7 @@ export function rpcAusente(e: ErroRpc | null | undefined): boolean {
 
 export function mapSessao(d: unknown): SessaoComercial {
   const o = obj(d, 'crm_sessao', 'sessão');
-  const papel = o.papel === 'gestor' ? 'gestor' : o.papel === 'vendedor' ? 'vendedor' : null;
+  const papel = o.papel === 'gestor' ? 'gestor' : o.papel === 'vendedor' ? 'vendedor' : o.papel === 'leitor' ? 'leitor' : null;
   if (!o.vendedorId || !papel) throw new FormatoInesperado('crm_sessao', 'sem vendedorId ou papel');
   return { vendedorId: str(o.vendedorId), papel };
 }

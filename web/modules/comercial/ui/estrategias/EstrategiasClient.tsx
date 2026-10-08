@@ -27,7 +27,7 @@ const aberto = (e: Estrategia) => e.situacao !== 'concluida' && e.situacao !== '
 
 export function EstrategiasClient({ doComercial, podeSolicitar }: { doComercial: boolean; podeSolicitar: boolean }) {
   const { dados: acesso, erro: erroAcesso, recarregar: recAcesso } = useDados(() => repoEstrategias.acesso());
-  const vePedidos = !!acesso && (acesso.gestor || acesso.solicitar);
+  const vePedidos = !!acesso && (acesso.gestor || acesso.solicitar || !!acesso.leitor);
   const [aba, setAba] = useAbaHash(ABAS, podeSolicitar || !doComercial ? 'pedidos' : 'filas');
   // Quem não vê pedidos (vendedor sem a função) fica nas filas; quem não é do Comercial fica nos pedidos.
   const abaEfetiva: Aba = !doComercial ? 'pedidos' : acesso && !vePedidos ? 'filas' : aba;
@@ -45,7 +45,7 @@ export function EstrategiasClient({ doComercial, podeSolicitar }: { doComercial:
         : erroAcesso && !acesso ? <EstadoErro mensagem={erroAcesso} onTentar={recAcesso} />
           : !acesso ? <EsqueletoLista linhas={4} avatar={false} />
             : !vePedidos ? <Vazio titulo="Sem acesso às solicitações" icone="lock" hint='Peça a permissão "Solicitar estratégia" ao administrador.' />
-              : <Solicitacoes gestor={acesso.gestor} solicitar={acesso.solicitar} />}
+              : <Solicitacoes gestor={acesso.gestor} verTime={acesso.gestor || !!acesso.leitor} solicitar={acesso.solicitar} />}
     </div>
   );
 
@@ -63,7 +63,7 @@ export function EstrategiasClient({ doComercial, podeSolicitar }: { doComercial:
   );
 }
 
-function Solicitacoes({ gestor, solicitar }: { gestor: boolean; solicitar: boolean }) {
+function Solicitacoes({ gestor, verTime = gestor, solicitar }: { gestor: boolean; verTime?: boolean; solicitar: boolean }) {
   const { dados: pedidos, erro, recarregar } = useDados(() => repoEstrategias.pedidos());
   const { dados: modelos } = useDados(() => repoEstrategias.modelos());
   const { dados: opcoes } = useDados<OpcoesFiltro | null>(() => repoEstrategias.opcoes().catch(() => null));
@@ -102,7 +102,7 @@ function Solicitacoes({ gestor, solicitar }: { gestor: boolean; solicitar: boole
       </div>
 
       <FaixaNumeros
-        rotulo={gestor ? 'Pedidos do time' : 'Meus pedidos'}
+        rotulo={verTime ? 'Pedidos do time' : 'Meus pedidos'}
         itens={[
           { rotulo: 'Abertos', valor: numeros.abertos },
           { rotulo: 'Em execução', valor: numeros.execucao },
@@ -131,7 +131,7 @@ function Solicitacoes({ gestor, solicitar }: { gestor: boolean; solicitar: boole
                       <span className="min-w-0">
                         <span className="block truncate font-semibold text-[var(--fg)]">{e.titulo}</span>
                         <span className="block truncate text-xs text-[var(--fg-3)]">
-                          {gestor ? `${e.solicitanteNome} · ` : ''}{fmtData(e.criadoEm)}{e.prazo ? ` · prazo ${fmtData(e.prazo)}` : ''}
+                          {verTime ? `${e.solicitanteNome} · ` : ''}{fmtData(e.criadoEm)}{e.prazo ? ` · prazo ${fmtData(e.prazo)}` : ''}
                         </span>
                       </span>
                       <Badge tone={TOM_SITUACAO[e.situacao]} dot>{ROTULO_SITUACAO[e.situacao]}</Badge>

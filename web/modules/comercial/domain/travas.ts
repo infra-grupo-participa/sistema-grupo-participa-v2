@@ -9,9 +9,31 @@ import type { Atividade, CampoKey, Contato, Funil, Negocio, SessaoComercial } fr
 
 type Quem = Pick<SessaoComercial, 'vendedorId' | 'papel'> | null | undefined;
 
+/** Texto padrão da recusa do leitor — o mesmo que o banco devolve (`crm.guarda_escrita` / `crm.pode_escrever`). */
+export const MSG_SOMENTE_LEITURA = 'Acesso só de leitura.';
+
+/**
+ * Leitor (20261008151801): admin/dev do sistema fora do Comercial. Vê tudo o que o gestor vê e não escreve nada.
+ * Todas as funções `pode*` abaixo já devolvem false para ele (não é gestor nem dono de nada); esta serve para
+ * esconder as ações que não passam por elas (novo negócio, novo contato, nova ficha, links, painel, tokens…).
+ */
+export function somenteLeitura(quem: Quem): boolean {
+  return quem?.papel === 'leitor';
+}
+
+/** Pode escrever alguma coisa no CRM (gestor ou vendedor). Sem sessão: não. */
+export function podeEscrever(quem: Quem): boolean {
+  return !!quem && quem.papel !== 'leitor';
+}
+
+/** Vê a operação inteira (time, todos os funis, todas as conversas): gestor e leitor. */
+export function veComoGestor(quem: Quem): boolean {
+  return quem?.papel === 'gestor' || quem?.papel === 'leitor';
+}
+
 /** Gestor mexe em qualquer negócio; vendedor só no que é dele. Sem sessão: não mexe. */
 export function podeMexerNoNegocio(n: Pick<Negocio, 'donoId'>, quem: Quem): boolean {
-  if (!quem) return false;
+  if (!quem || somenteLeitura(quem)) return false;
   if (quem.papel === 'gestor') return true;
   return !!n.donoId && n.donoId === quem.vendedorId;
 }
@@ -25,13 +47,14 @@ export function podeTrocarDono(quem: Quem): boolean {
 export function motivoSomenteLeitura(n: Pick<Negocio, 'donoId'>, quem: Quem, nomeDe: (id: string | null) => string): string | null {
   if (podeMexerNoNegocio(n, quem)) return null;
   if (!quem) return 'Carregando quem você é.';
+  if (somenteLeitura(quem)) return MSG_SOMENTE_LEITURA;
   if (!n.donoId) return 'Negócio sem dono: o gestor define quem atende antes.';
   return `Negócio de ${nomeDe(n.donoId)}: só o dono ou o gestor altera.`;
 }
 
 /** Concluir atividade (espelho de `crm_concluir_atividade`): só o dono DA ATIVIDADE ou o gestor; já concluída, ninguém. */
 export function podeConcluirAtividade(a: Pick<Atividade, 'donoId' | 'concluidaEm'>, quem: Quem): boolean {
-  if (!quem || a.concluidaEm) return false;
+  if (!quem || a.concluidaEm || somenteLeitura(quem)) return false;
   return quem.papel === 'gestor' || (!!a.donoId && a.donoId === quem.vendedorId);
 }
 
@@ -40,7 +63,7 @@ export function podeConcluirAtividade(a: Pick<Atividade, 'donoId' | 'concluidaEm
  * vendedor se o contato é dele, está sem dono, ou se ele já é dono de algum negócio da pessoa.
  */
 export function podeAbrirNegocioPara(c: Pick<Contato, 'donoId'>, negociosDaPessoa: Pick<Negocio, 'donoId'>[], quem: Quem): boolean {
-  if (!quem) return false;
+  if (!quem || somenteLeitura(quem)) return false;
   if (quem.papel === 'gestor') return true;
   return !c.donoId || c.donoId === quem.vendedorId || negociosDaPessoa.some((n) => !!n.donoId && n.donoId === quem.vendedorId);
 }
@@ -49,6 +72,7 @@ export function podeAbrirNegocioPara(c: Pick<Contato, 'donoId'>, negociosDaPesso
 export function motivoSemNovoNegocio(c: Pick<Contato, 'donoId'>, negociosDaPessoa: Pick<Negocio, 'donoId'>[], quem: Quem, nomeDe: (id: string | null) => string): string | null {
   if (podeAbrirNegocioPara(c, negociosDaPessoa, quem)) return null;
   if (!quem) return 'Carregando quem você é.';
+  if (somenteLeitura(quem)) return MSG_SOMENTE_LEITURA;
   return `Contato de ${nomeDe(c.donoId)}: só o dono ou o gestor abre negócio.`;
 }
 
@@ -90,7 +114,7 @@ export function rotulosCampos(campos: CampoKey[]): string[] {
  * `negociosDaPessoa` = negócios do contato (o banco olha o grupo inteiro da pessoa; a tela passa os que conhece).
  */
 export function podeEscreverContato(c: Pick<Contato, 'donoId'>, negociosDaPessoa: Pick<Negocio, 'donoId'>[], quem: Quem): boolean {
-  if (!quem) return false;
+  if (!quem || somenteLeitura(quem)) return false;
   if (quem.papel === 'gestor') return true;
   return (!!c.donoId && c.donoId === quem.vendedorId) || negociosDaPessoa.some((n) => !!n.donoId && n.donoId === quem.vendedorId);
 }
@@ -99,6 +123,7 @@ export function podeEscreverContato(c: Pick<Contato, 'donoId'>, negociosDaPessoa
 export function motivoSemEscrita(c: Pick<Contato, 'donoId'>, negociosDaPessoa: Pick<Negocio, 'donoId'>[], quem: Quem, nomeDe: (id: string | null) => string): string | null {
   if (podeEscreverContato(c, negociosDaPessoa, quem)) return null;
   if (!quem) return 'Carregando quem você é.';
+  if (somenteLeitura(quem)) return MSG_SOMENTE_LEITURA;
   if (!c.donoId) return 'Lead sem dono. O gestor atribui o dono antes de qualquer conversa.';
   return `Lead de ${nomeDe(c.donoId)}. Lead que não é seu não se toca: transfira pelo gestor.`;
 }
