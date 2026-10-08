@@ -6,8 +6,12 @@ só com cadastro pela chave, sem função nova.
 
 **Situação (08/10/2026): migrations APLICADAS em produção** (161000, 161001, 161100) com ok do Victor. Projeto `ATMEL126`
 (id 75), oferta `mqquvrtc` provisória, Listas 1 (131.515) e 2 (2.316) carregadas em `dados.lista_membros`.
-**Falta:** webhook do SendFlow (token `crm_webhook_sendflow` no Vault, `crm.config.sendflow_ligado`, linha em
-`dados.dashboard_grupos` para a campanha `ATM 10/26`) e a fonte do pré-checkout. Sem isso esses cards ficam "sem dado ainda".
+**Grupo (08/10/2026, 18h UTC): caminho LIGADO no banco.** Segredo `crm_webhook_sendflow` criado no Vault,
+`crm.config.sendflow_ligado = true`, campanha `ATM 10/26` cadastrada em `dados.dashboard_grupos`. Testado com POST na Edge
+(token errado = 401; token certo = 1 evento gravado, apagado em seguida). **Falta o passo manual no painel do SendFlow:**
+colar a URL `crm-integracao-webhook/sendflow?token=...` no SendHook da campanha `ATM 10/26` (o token não vai no repo).
+Quem entrou antes do SendHook (43 participantes em 08/10, contando admins) não é contado: o webhook não olha para trás.
+**Falta também** a fonte do pré-checkout; sem ela esse card fica "sem dado ainda".
 Disparo só entra no dashboard se a campanha tiver `[ATMEL126]` no nome (ou for ligada à mão ao projeto 75).
 Detalhe técnico, ensaio e reversão: `infra/supabase/migrations/20261008161000.explain.md`.
 
@@ -128,12 +132,12 @@ Lista de vendas, se a tela quiser: `dados_presencial_vendas(p_chave)` serve para
 
 | Card | Hoje | Falta |
 |---|---|---|
-| Leads | 46 (lista 615) | nada |
-| Disparos, custo, CPL, CAC, ROAS | sem projeto | sigla do projeto e `[SIGLA]` nas campanhas; custo lançado |
-| Grupo, % ingresso, evasão | sem fonte | ligar o webhook do SendFlow no CRM (proposta, JP e Victor) e cadastrar a campanha |
+| Leads | 54 em 08/10 (lista 615, webhook do AC, automático) | nada |
+| Disparos, custo, CPL, CAC, ROAS | projeto 75 (`ATMEL126`) | `[ATMEL126]` no nome das campanhas; custo lançado |
+| Grupo, % ingresso, evasão | banco pronto (08/10) | colar a URL no SendHook da campanha `ATM 10/26` |
 | Pré-checkout | sem fonte | lista do gateway Guardiões do Legado ou a rota de captura |
-| Vendas, faturamento | sem oferta | código da oferta de 3.000 (Arthur, 86aktf1c3) |
-| Lista e seminário de origem | sem carga | CSVs das listas (86aktf117) |
+| Vendas, faturamento | oferta `mqquvrtc` (provisória) | confirmar a oferta definitiva (Arthur, 86aktf1c3) |
+| Lista e seminário de origem | carregadas (131.515 e 2.316) | nada |
 | Comparecimento | só a live cadastrada | hora do replay e do triplay; pico, equipe e relatório do Zoom depois da live |
 
 ## 4. Como cadastrar o próximo ATM (ou completar este)
