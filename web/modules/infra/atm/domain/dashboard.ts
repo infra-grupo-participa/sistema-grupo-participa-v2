@@ -103,6 +103,11 @@ export function rotuloValorResumoLead(valor: unknown): string {
   return String(valor ?? 'Não identificado');
 }
 
+/** Na tela, `descartado` (estava na aba Descartados de uma lista) aparece como "Outros" (pedido do Victor, 08/10/2026). */
+export function rotuloListaOrigem(listaOrigem: string | null): string | null {
+  return listaOrigem === 'descartado' ? 'Outros' : listaOrigem;
+}
+
 export function montarAvisosTesteAtm(periodo: PeriodoAplicadoAtm | null | undefined): AvisoTesteAtm[] {
   if (!periodo) return [];
   const avisos: AvisoTesteAtm[] = [];

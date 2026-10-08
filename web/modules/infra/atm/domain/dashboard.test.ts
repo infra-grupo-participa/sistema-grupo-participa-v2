@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { montarAvisosTesteAtm, rotuloValorResumoLead, type PeriodoAplicadoAtm } from './dashboard';
+import { montarAvisosTesteAtm, rotuloListaOrigem, rotuloValorResumoLead, type PeriodoAplicadoAtm } from './dashboard';
 
 const base: PeriodoAplicadoAtm = { de: '2026-10-07', ate: '2026-10-14', leadsTeste: 0, grupoTeste: 0, vendasTeste: 0, receitaTesteBruta: 0 };
 
@@ -31,5 +31,14 @@ describe('rótulos dos valores do resumo de leads', () => {
   it('preserva os rótulos de texto e o estado sem identificação', () => {
     expect(rotuloValorResumoLead('São Paulo')).toBe('São Paulo');
     expect(rotuloValorResumoLead(null)).toBe('Não identificado');
+  });
+});
+
+describe('rótulo da lista de origem', () => {
+  it('mostra descartado como Outros e mantém as demais origens', () => {
+    expect(rotuloListaOrigem('descartado')).toBe('Outros');
+    expect(rotuloListaOrigem('lista_1')).toBe('lista_1');
+    expect(rotuloListaOrigem('fora_das_listas')).toBe('fora_das_listas');
+    expect(rotuloListaOrigem(null)).toBeNull();
   });
 });

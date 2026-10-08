@@ -72,6 +72,8 @@ Verificações do projeto:
 
 A aba Resumo apresenta as mesmas seis categorias e contagens que antes apareciam em linhas: Entrou no grupo?, É aluno?, utm_source, Estado, Lista de origem e Seminário de origem. Valores booleanos aparecem como “Sim” e “Não”, sem texto `true`/`false`. Cada categoria usa o componente reutilizável RoscaCategorias, já adotado pela visão geral de vendas do dashboard presencial. A legenda conserva o rótulo e a quantidade de cada categoria; o centro mostra o total de leads da categoria. Em telas estreitas, a legenda fica abaixo da rosca para manter rótulo e valor legíveis.
 
+Na rosca e na tabela, `lista_origem = 'descartado'` (estava na aba Descartados de uma das listas) aparece como **Outros**, pedido do Victor em 08/10/2026. O valor no banco continua `descartado`; a troca é só de rótulo, em `rotuloListaOrigem` (`web/modules/infra/atm/domain/dashboard.ts`).
+
 ## Período e marcação de teste
 
 Contrato aplicado em produção em 08/10/2026, migration `20261008191000` e ajuste `20261008191100`. O detalhe de nomes, parâmetros e limites está em [MODELO-DE-DADOS.md](./MODELO-DE-DADOS.md), seção 0.
