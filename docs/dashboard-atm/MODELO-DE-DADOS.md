@@ -115,8 +115,13 @@ eventos do webhook. Situação da aplicação: `infra/supabase/migrations/202610
 | Pico, equipe na sala | `dados.sessoes` (lançado do Zoom) | |
 | Presentes | `dados.sessao_presencas` (relatório de participantes do Zoom) | quem é da equipe não conta |
 
-`utm_source`: só existe para lead que entrou pela rota `/api/captura/lead`; quem veio só pelo ActiveCampaign tem UTM nula
-(o webhook do AC não traz UTM).
+`utm_source` e demais UTMs (20261008210000, 08/10/2026): 1º a da rota `/api/captura/lead` (passagem mais antiga com UTM);
+sem ela, a dos **campos personalizados do contato no ActiveCampaign** (`dados.ac_utm`), lidos quando o lead entra na
+lista do AC (gatilho em `crm.evento_jornada` + fila `dados.ac_utm_fila`, um pedido à API do AC por contato) e numa carga
+única para quem já estava na lista. A primeira UTM obtida vale. Campos por edição em `dados.dashboards.ac_campos_utm`
+(ATM 1: 945 data_hora, 946 source, 947 medium, 948 campaign, 949 content, 950 term, 951 pagina). Lead sem UTM nos campos
+do AC continua nulo ("não identificado"). Próximo ATM: preencher `ac_campos_utm` com os ids dos campos da nova edição
+(`GET /api/3/fields`). Solução definitiva (não feita): a página ak1 chamar `/api/captura/lead`.
 
 ## 2. Contrato das RPCs (nomes, colunas e ordem exatos)
 
