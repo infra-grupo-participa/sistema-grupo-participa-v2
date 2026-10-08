@@ -12,6 +12,7 @@ import { ROTULO_ORIGEM } from '../../domain/catalogo';
 import { motivoSomenteLeitura, travaMover } from '../../domain/travas';
 import type { Funil, Negocio } from '../../domain/types';
 import { Aviso, EstadoErro, FaixaErroAtualizacao, FaixaNumeros, PaginaComercial, useEquipe, useParamUrl, Vazio } from '../comum';
+import { ContatoDrawer } from '../contatos/ContatoDrawer';
 import { ModalNovoNegocio } from '../ModalNovoNegocio';
 import { ModalAtividade, NegocioDrawer } from '../NegocioDrawer';
 import { avisarMudanca, repo, useAgora, useContatosPorIds, useDados } from '../repositorio';
@@ -48,6 +49,7 @@ export function FunilClient() {
   const [funilId, setFunilId] = useState<string | null>(null);
   const [dono, setDono] = useState<FiltroDono>('todos');
   const [busca, setBusca] = useState('');
+  const [fichaPessoa, setFichaPessoa] = useState<string | null>(null);
   const [alerta, setAlerta] = useState<FiltroAlerta>(null);
   const [aberto, setAberto] = useState<string | null>(null);
   const [novoNegocio, setNovoNegocio] = useState(false);
@@ -240,6 +242,7 @@ export function FunilClient() {
               leituraDe={leituraDe}
               travaPara={travaPara}
               onAbrir={setAberto}
+              onAbrirPessoa={setFichaPessoa}
               onMover={mover}
               onAgendar={setAgendando}
               onCopiarTelefone={copiarTelefone}
@@ -251,6 +254,7 @@ export function FunilClient() {
         </div>
       )}
 
+      {fichaPessoa && <ContatoDrawer key={fichaPessoa} contatoId={fichaPessoa} onClose={() => setFichaPessoa(null)} onAbrirContato={setFichaPessoa} />}
       {negocioAberto && (
         <NegocioDrawer
           negocioId={negocioAberto}

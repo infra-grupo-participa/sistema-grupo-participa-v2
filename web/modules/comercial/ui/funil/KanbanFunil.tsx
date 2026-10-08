@@ -18,7 +18,7 @@ import { ordenarPorUrgencia } from './regras-funil';
 /** Cards por vez em cada coluna; o resto vem no "Mostrar mais". */
 const LOTE = 20;
 
-export function KanbanFunil({ funil, negocios, contatoPorId, agora, nomeDe, altura, ocultarGanho, leituraDe, travaPara, onAbrir, onMover, onAgendar, onCopiarTelefone }: {
+export function KanbanFunil({ funil, negocios, contatoPorId, agora, nomeDe, altura, ocultarGanho, leituraDe, travaPara, onAbrir, onAbrirPessoa, onMover, onAgendar, onCopiarTelefone }: {
   funil: Funil;
   negocios: Negocio[];
   contatoPorId: Map<string, Contato>;
@@ -32,6 +32,7 @@ export function KanbanFunil({ funil, negocios, contatoPorId, agora, nomeDe, altu
   leituraDe: (n: Negocio) => string | null;
   travaPara: (n: Negocio, etapaId: string) => TravaMover;
   onAbrir: (negocioId: string) => void;
+  onAbrirPessoa?: (contatoId: string) => void;
   onMover: (negocioId: string, etapaId: string) => void;
   onAgendar: (negocio: Negocio) => void;
   onCopiarTelefone: (tel: string) => void;
@@ -106,6 +107,7 @@ export function KanbanFunil({ funil, negocios, contatoPorId, agora, nomeDe, altu
                       travaPara={(etapaId) => travaPara(n, etapaId)}
                       onArrastar={setArrastandoId}
                       onAbrir={() => onAbrir(n.id)}
+                      onAbrirPessoa={onAbrirPessoa ? () => onAbrirPessoa(n.contatoId) : undefined}
                       onAgendar={() => onAgendar(n)}
                       onMover={(etapaId) => onMover(n.id, etapaId)}
                       onCopiarTelefone={onCopiarTelefone}

@@ -19,7 +19,7 @@ import { quandoCurto, urgenciaDoNegocio } from './regras-funil';
 
 const BOTAO_ACAO = 'grid place-items-center w-7 h-7 [@media(hover:none)]:w-8 [@media(hover:none)]:h-8 rounded-[var(--r-sm)] text-[var(--fg-2)] hover:text-[var(--fg)] hover:bg-[var(--surface-4)]';
 
-export function CardNegocio({ n, c, agora, nomeDe, etapas, leitura, travaPara, onAbrir, onAgendar, onMover, onCopiarTelefone, arrastavel, onArrastar }: {
+export function CardNegocio({ n, c, agora, nomeDe, etapas, leitura, travaPara, onAbrir, onAbrirPessoa, onAgendar, onMover, onCopiarTelefone, arrastavel, onArrastar }: {
   n: Negocio;
   c: Contato | undefined;
   agora: Date;
@@ -31,6 +31,8 @@ export function CardNegocio({ n, c, agora, nomeDe, etapas, leitura, travaPara, o
   /** Trava de cada etapa destino (dono, ganho, campos obrigatórios). */
   travaPara: (etapaId: string) => TravaMover;
   onAbrir: () => void;
+  /** Abre a ficha da pessoa (dados, jornada, todos os negócios). */
+  onAbrirPessoa?: () => void;
   onAgendar: () => void;
   onMover: (etapaId: string) => void;
   onCopiarTelefone: (tel: string) => void;
@@ -47,7 +49,8 @@ export function CardNegocio({ n, c, agora, nomeDe, etapas, leitura, travaPara, o
   const dono = n.donoId ? nomeDe(n.donoId) : null;
 
   const itensMenu: ItemMenu[] = [
-    { rotulo: 'Abrir ficha', icone: 'file', onEscolher: onAbrir },
+    { rotulo: 'Abrir negócio', icone: 'file', onEscolher: onAbrir },
+    ...(onAbrirPessoa ? [{ rotulo: 'Ficha da pessoa', icone: 'user', onEscolher: onAbrirPessoa }] : []),
     ...(c?.telefone ? [{ rotulo: 'Copiar telefone', icone: 'copy', onEscolher: () => onCopiarTelefone(c.telefone!) }] : []),
     ...(mexe ? [
       { rotulo: 'Mover para', grupo: true },

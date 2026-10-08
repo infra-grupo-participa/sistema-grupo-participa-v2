@@ -29,6 +29,7 @@ import {
 import { avisarMudanca, repo, useAgora, useAtualizacaoPeriodica, useContatosPorIds, useDados } from './repositorio';
 import { HistoricoAlteracoes } from './registro/HistoricoAlteracoes';
 import { MidiaMensagem } from './conversas/MidiaMensagem';
+import { ContatoDrawer } from './contatos/ContatoDrawer';
 import { legendaDaMensagem } from '../domain/midia';
 
 type Aba = 'resumo' | 'atividades' | 'historico' | 'conversa' | 'alteracoes';
@@ -67,6 +68,8 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
   const [perder, setPerder] = useState(false);
   const [transferir, setTransferir] = useState(false);
   const [novaAtv, setNovaAtv] = useState(false);
+  // Ficha da pessoa (dados, jornada, todos os negócios) aberta a partir do negócio; fechar volta para o negócio.
+  const [fichaPessoa, setFichaPessoa] = useState(false);
 
   const minhas = useMemo(() => (atividades ?? []).filter((a) => a.negocioId === negocioId).sort((a, b) => a.venceEm.localeCompare(b.venceEm)), [atividades, negocioId]);
   const abertas = minhas.filter((a) => !a.concluidaEm);
@@ -96,6 +99,8 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
       </Drawer>
     );
   }
+
+  if (fichaPessoa) return <ContatoDrawer contatoId={c.id} onClose={() => setFichaPessoa(false)} />;
 
   const idx = funil.etapas.findIndex((e) => e.id === n.etapaId);
   const proxima = funil.etapas[idx + 1];
@@ -155,6 +160,7 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
         subtitle={subtitulo}
         avatar={<AvatarInicial nome={c.nome} size={44} />}
         actions={<>
+          <Button size="sm" variant="ghost" onClick={() => setFichaPessoa(true)}><Icon name="user" size={14} /> Ficha da pessoa</Button>
           <BotaoConversa contatoId={c.id} />
           <BotaoCopiar texto={c.telefone} onCopiado={flash} />
         </>}
