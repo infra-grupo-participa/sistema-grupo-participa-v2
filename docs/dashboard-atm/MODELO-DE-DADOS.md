@@ -156,11 +156,14 @@ ROAS nulos. `custo_completo = false` → CPL, CAC, ROAS nulos (a tela pode avisa
 `email text, nome text, telefone text, primeiro_em timestamptz, fonte text, utm_source text, utm_medium text,
 utm_campaign text, utm_content text, utm_term text, ddd text, estado text, entrou_grupo boolean, saiu_grupo boolean,
 eh_aluno boolean, instrucao text, turma text, lista_origem text, seminario_origem text, no_pre_checkout boolean,
-comprou boolean, pessoa_id uuid, teste boolean`
+comprou boolean, pessoa_id uuid, teste boolean, descarte_motivo text, descarte_lista text`
 
 - `fonte`: `activecampaign`, `sistema` ou `ambos`.
 - `entrou_grupo`/`saiu_grupo`: nulo sem campanha do SendFlow cadastrada.
-- `lista_origem`: `lista_1`, `lista_2`, `lista_1_e_2`, `fora_das_listas`; nulo enquanto nenhuma lista foi carregada.
+- `lista_origem`: `lista_1`, `lista_2`, `lista_1_e_2`, `descartado` (fora das listas mas na aba Descartados de uma
+  delas, 20261008220000), `fora_das_listas` (em nenhuma); nulo enquanto nenhuma lista foi carregada.
+- `descarte_motivo` / `descarte_lista` (no FIM, 20261008220000): motivo exato da coluna "Por que saiu" e a lista de onde
+  saiu; só preenchidos quando `lista_origem = 'descartado'`. A rosca "Lista de origem" mostra o motivo como rótulo.
 - `seminario_origem`: `marcio`, `elaine`, `marcio_e_elaine` ou nulo.
 - `comprou`: nulo sem oferta no cadastro.
 - Desde 20261008191000 vem **sem** quem é teste (cadastro da pessoa ou marcado no evento). Com `p_incluir_teste = true`
