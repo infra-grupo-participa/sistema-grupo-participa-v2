@@ -70,7 +70,9 @@ Verificações do projeto:
 
 ## Resumo do modal de leads
 
-A aba Resumo apresenta as mesmas seis categorias e contagens que antes apareciam em linhas: Entrou no grupo?, É aluno?, utm_source, Estado, Lista de origem e Seminário de origem. Cada categoria agora usa o componente reutilizável RoscaCategorias, já adotado pela visão geral de vendas do dashboard presencial. A legenda conserva o rótulo e a quantidade de cada categoria; o centro mostra o total de leads da categoria. Em telas estreitas, a legenda fica abaixo da rosca para manter rótulo e valor legíveis.
+A aba Resumo apresenta as mesmas seis categorias e contagens que antes apareciam em linhas: Entrou no grupo?, É aluno?, utm_source, Estado, Lista de origem e Seminário de origem. Valores booleanos aparecem como “Sim” e “Não”, sem texto `true`/`false`. Cada categoria usa o componente reutilizável RoscaCategorias, já adotado pela visão geral de vendas do dashboard presencial. A legenda conserva o rótulo e a quantidade de cada categoria; o centro mostra o total de leads da categoria. Em telas estreitas, a legenda fica abaixo da rosca para manter rótulo e valor legíveis.
+
+Na rosca e na tabela, `lista_origem = 'descartado'` (estava na aba Descartados de uma das listas) aparece como **Outros**, pedido do Victor em 08/10/2026. O valor no banco continua `descartado`; a troca é só de rótulo, em `rotuloListaOrigem` (`web/modules/infra/atm/domain/dashboard.ts`).
 
 ## Período e marcação de teste
 
@@ -82,6 +84,7 @@ Contrato aplicado em produção em 08/10/2026, migration `20261008191000` e ajus
 - O modal Leads ganhou a aba Grupo. Master pode marcar e desmarcar leads ou números do grupo; os controles não aparecem para outros perfis. A confirmação informa que a marcação vale para aquele evento.
 - O banco exclui marcados dos indicadores. A tela não filtra resultados numéricos. Lead marcado permanece na lista master, esmaecido e com etiqueta “teste”. Números do grupo marcados também mostram a etiqueta e o motivo equipe quando aplicável.
 - Se o banco devolver `leads_teste`, `grupo_teste`, `vendas_teste` ou `receita_teste_bruta` maior que zero, a tela apresenta um aviso para deixar claro o que foi excluído, inclusive quantidade de vendas e faturamento bruto.
+- O aviso de itens excluídos por marcação de teste é decidido no servidor pelo UUID autenticado. A configuração única em `web/modules/infra/atm/domain/visibilidade-aviso-teste.ts` aponta para a conta do Victor; o cliente recebe só um booleano. Os dados marcados continuam fora dos indicadores para todos os usuários.
 - As RPCs retornam `42501`, `P0002` e `22023` em situações de acesso, vínculo ao evento e validação. A tela apresenta mensagens legíveis e não registra identificadores pessoais nos logs.
 
-Para validar: selecionar cada período, conferir as datas e os números, abrir Leads e Grupo, verificar as etiquetas de teste com um perfil master e confirmar que os outros perfis não recebem os controles. O teste local não deve marcar ou desmarcar dados reais.
+Para validar: selecionar cada período, conferir as datas e os números, abrir Leads e Grupo, verificar as etiquetas de teste com um perfil master e confirmar que os outros perfis não recebem os controles. O aviso de exclusões aparece apenas para o Victor; confirme com sessão dele e com uma conta QA. O teste local não deve marcar ou desmarcar dados reais.

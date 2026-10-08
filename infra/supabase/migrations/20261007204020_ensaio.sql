@@ -1,3 +1,5 @@
+-- 08/10/2026: tirada a prova gps.eh_equipe() da sonda e a chave 'gps' virou 'admin_ou_editar_educacional' (o GPS
+-- tem guarda própria, gps.eh_admin, e não lê mais o acesso central; ver docs/niveis-de-acesso-banco.md). O resto não mudou.
 -- Ensaio de 20261007z_perfis_e_guardas_sem_anon.sql: sonda de 32 guardas antes, 2 passadas, sonda depois, provas, ROLLBACK e sonda de novo.
 -- Transação desfeita: nada persiste.
 begin;
@@ -14,10 +16,10 @@ begin
     'fin_ver', public.gp_pode_ver_financeiro(), 'fin_operar', public.gp_pode_operar_financeiro(), 'cpf', public.gp_pode_ver_cpf(),
     'crm_gestor', crm.eh_gestor(), 'crm_comercial', crm.eh_comercial(), 'crm_catalogar', crm.pode_catalogar(),
     'remocao', public.ra_pode_ver(), 'pedidos', public.pa_pode_pedir(), 'placas', public.gp_pode_editar('placas'),
-    'base_pessoas', pessoas.pode_ver(), 'gps_eh_equipe', gps.eh_equipe(), 'pa_pode_ver_doc', public.pa_pode_ver_doc(), 'alunos_ver_sensivel', public.tem_permissao(p_id, 'alunos.ver_sensivel'),
+    'base_pessoas', pessoas.pode_ver(), 'pa_pode_ver_doc', public.pa_pode_ver_doc(), 'alunos_ver_sensivel', public.tem_permissao(p_id, 'alunos.ver_sensivel'),
     'mkt_ver', mkt.pode_ver('mkt_trafego'), 'ed_trafego', mkt.pode_editar('mkt_trafego'), 'ed_web', mkt.pode_editar('mkt_web'),
     'ed_mensageria', mkt.pode_editar('mkt_mensageria'),
-    'gps', public.gp_is_admin() or coalesce(public.gp_acesso_pode_editar('educacional', null), false),
+    'admin_ou_editar_educacional', public.gp_is_admin() or coalesce(public.gp_acesso_pode_editar('educacional', null), false),
     'ver_financeiro', public.gp_acesso_pode_ver('financeiro', null));
   for a in select d.key as dep, null::text as ar from acesso.departamento d union all select ar2.departamento, ar2.key from acesso.area ar2 loop
     j := j || jsonb_build_object('ed:' || a.dep || coalesce('/' || a.ar, ''), public.gp_acesso_pode_editar(a.dep, a.ar));

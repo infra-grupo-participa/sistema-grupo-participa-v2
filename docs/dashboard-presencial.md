@@ -326,8 +326,8 @@ Hoje a tela expõe 1 lead e 1 pedido, ambos teste interno; o risco cresce quando
 - Push na `main` = deploy automático da Hostinger.
 - **Não aplicada junto:** a migration `y2` (autor no log de acesso). Ela só pode ir depois que o código da `main`
   manda `p_autor`, ou seja, depois deste merge e do deploy.
-- O front novo de acesso continua atrás de `NEXT_PUBLIC_ACESSO_V2` (padrão desligado). O valor dela na Hostinger
-  não foi conferido.
+- O front novo de acesso continua atrás de `NEXT_PUBLIC_ACESSO_V2`. **Atualização de 08/10/2026:** a flag foi ligada
+  na Hostinger e a y2 aplicada (`20261008205705`); ver `docs/niveis-de-acesso-front.md`.
 - `/api/captura/lead` responde 503 enquanto `CAPTURA_LEAD_SECRET` não estiver configurada (estado seguro).
 
 ## 5. O que falta

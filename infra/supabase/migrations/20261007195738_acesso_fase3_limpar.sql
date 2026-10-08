@@ -25,6 +25,13 @@
 --   João devolveu admin/dev a estes 6 às 18:39 UTC e instalou a blindagem às 19:25 UTC. Esta fase não pode tirar nada
 --   de ninguém em relação a hoje (provado no ensaio por pessoa, inclusive gps.eh_equipe). Para estreitar a exceção
 --   depois (ex.: financeiro só por capacidade), é decisão do Victor e outra migration.
+--   ATUALIZAÇÃO 08/10/2026 (só comentário, nada muda no banco): a parte "mantém ... GPS" e a prova "inclusive
+--   gps.eh_equipe" deixaram de valer. O JP relatou (Slack, 08/10 10:31) que esta frente de acesso redefiniu o gp_is_admin
+--   e rebaixou o perfis.cargo, e a equipe do GPS ficou sem acesso. Ele corrigiu no GPS (repo gps-thb, migrations 366 a
+--   375): lista própria gps.admins + gps.eh_admin(); o GPS não lê mais gp_is_admin, perfis.cargo nem
+--   gp_acesso_pode_editar. No banco (consulta de 08/10): gps.eh_equipe() = gps.eh_admin() OR gps.eh_operador().
+--   A exceção nominal continua valendo para o v2 (gp_is_admin), não para o GPS. Princípio aceito pelo Victor: identidade
+--   central, permissão no schema de cada sistema. Ver docs/niveis-de-acesso-banco.md.
 --   O CPF da Fernanda #00b1 (coluna ligada pelo João) vira a capacidade cpf.ver, com log.
 --
 -- O QUE FAZ (corpo anterior de cada função guardado em acesso.corpo_antes, migration 20261007u)
