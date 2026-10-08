@@ -284,6 +284,8 @@ export interface Conversa {
   canalId?: string | null;
   /** Todos os números em que a pessoa conversou. */
   canais?: string[];
+  /** As crm.conversa vivas da pessoa (uma por número), a mais recente primeiro: o gestor exclui por aqui. */
+  conversas?: { id: string; canalId: string | null }[];
 }
 
 export type TipoEvento =
@@ -765,7 +767,7 @@ export type AcaoLog =
 
 export type EntidadeLog =
   | 'negocio' | 'contato' | 'atividade' | 'mensagem' | 'nota' | 'funil' | 'agrupador' | 'projeto' | 'motivo' | 'ficha'
-  | 'fila' | 'produto' | 'oferta' | 'distribuicao' | 'link' | 'dashboard' | 'painel' | 'preferencias';
+  | 'fila' | 'produto' | 'oferta' | 'distribuicao' | 'link' | 'dashboard' | 'painel' | 'preferencias' | 'conversa';
 
 export interface LogCrm {
   id: string;

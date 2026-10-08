@@ -28,7 +28,7 @@ export const ENTIDADE: Record<EntidadeLog, string> = {
   negocio: 'Negócio', contato: 'Contato', atividade: 'Atividade', mensagem: 'Mensagem', nota: 'Nota', funil: 'Funil',
   agrupador: 'Agrupador', projeto: 'Projeto', motivo: 'Motivo de perda', ficha: 'Ficha de disparo', fila: 'Fila de recuperação',
   produto: 'Produto', oferta: 'Oferta', distribuicao: 'Distribuição', link: 'Link rastreável', dashboard: 'Dashboard',
-  painel: 'Painel', preferencias: 'Preferências',
+  painel: 'Painel', preferencias: 'Preferências', conversa: 'Conversa',
 };
 
 /** Nome de quem fez: "Sistema" quando foi integração/rotina (autorId null). */

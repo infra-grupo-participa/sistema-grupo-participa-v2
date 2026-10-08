@@ -26,6 +26,9 @@ import { avisarMudanca, recarregarSino, repo, useAgora, useAtualizacaoPeriodica,
 import { estaNoFim } from '../atualizacao';
 import { INFO_CAIXA } from './indicadores';
 import { ModalAtribuir } from './ModalAtribuir';
+import { ModalExcluirConversa } from './ModalExcluirConversa';
+import { Menu } from '../funil/pecas';
+import { conversasExcluiveis, mensagensDoCanal, podeExcluirConversa } from '../../domain/excluir-conversa';
 import { BotaoAnexar } from './Anexar';
 import { BotaoGravarAudio } from './GravarAudio';
 import { MidiaMensagem } from './MidiaMensagem';
@@ -312,6 +315,7 @@ export function ConversasClient() {
                   agora={agora}
                   flash={flash}
                   onAtribuir={() => setAtribuir(contato)}
+                  onExcluida={(msg) => { flash(msg); fecharConversa(); void rConversas.recarregar(); recarregarSino(); }}
                   onVoltar={fecharConversa}
                   onAbrirNegocio={setNegocioAberto}
                   onAgendar={setAgendar}
@@ -500,13 +504,15 @@ function ItemConversa({ cv, c, agora, ativa, donoNome, semDono, selo, onClick }:
 
 // ── Conversa ──
 
-function PainelConversa({ canalInicial, contato, conversa, negocio, negociosDoContato, templates, canais, painelCanais, sessao, gestor, nomeDe, agora, flash, onVoltar, onAbrirNegocio, onAgendar, onDetalhes, onAtribuir }: {
+function PainelConversa({ canalInicial, contato, conversa, negocio, negociosDoContato, templates, canais, painelCanais, sessao, gestor, nomeDe, agora, flash, onVoltar, onAbrirNegocio, onAgendar, onDetalhes, onAtribuir, onExcluida }: {
   /** Número escolhido na "Nova conversa" (a 1ª mensagem cria a conversa nele). */
   canalInicial?: string | null;
   contato: Contato; conversa: Conversa | null; negocio: Negocio | null; negociosDoContato: Negocio[]; templates: Template[];
   canais: CanalWhatsapp[]; painelCanais: PainelCanais | null; sessao: SessaoComercial;
   gestor: boolean; nomeDe: (id: string | null) => string; agora: Date; flash: (m: string) => void; onVoltar: () => void;
   onAbrirNegocio: (id: string) => void; onAgendar: (n: Negocio) => void; onDetalhes: () => void; onAtribuir: () => void;
+  /** Gestor excluiu a conversa: avisa, fecha o painel e recarrega a lista. */
+  onExcluida: (msg: string) => void;
 }) {
   const { dados, erro, carregando: carregandoMsgs, recarregar } = useDados(() => repo.mensagens(contato.id), [contato.id]);
   // Conversa aberta sozinha: mensagem nova, mídia que sai de "pendente" e status (enviada → entregue → lida).
@@ -554,6 +560,9 @@ function PainelConversa({ canalInicial, contato, conversa, negocio, negociosDoCo
   const podeAgendar = !!negocio && (gestor || negocio.donoId === sessao.vendedorId);
   // Conversa sem dono: só o gestor define quem atende (playbook: ninguém responde lead sem dono).
   const podeAtribuir = podeTrocarDono(sessao) && !dono;
+  // Excluir conversa (ex.: teste): só o gestor de verdade; o banco confere de novo (crm_excluir_conversa).
+  const excluiveis = podeExcluirConversa(sessao) ? conversasExcluiveis(conversa) : [];
+  const [excluir, setExcluir] = useState(false);
 
   // Quem pode escrever: espelho de crm.pode_escrever_pessoa (dono do contato, dono de algum negócio da pessoa ou gestor).
   const bloqueio: string | null = somenteLeitura(sessao)
@@ -626,8 +635,27 @@ function PainelConversa({ canalInicial, contato, conversa, negocio, negociosDoCo
           >
             <Icon name="panel-open" size={15} className="scale-x-[-1]" />
           </button>
+          {excluiveis.length > 0 && (
+            <Menu
+              rotulo="Mais ações da conversa"
+              itens={[{ rotulo: 'Excluir conversa', icone: 'trash', titulo: 'Some do CRM para todos (não apaga no WhatsApp do cliente)', onEscolher: () => setExcluir(true) }]}
+              classeGatilho="w-8 h-8 grid place-items-center rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--fg)] hover:bg-[var(--surface-3)]"
+              gatilho={<span aria-hidden className="text-base leading-none">⋯</span>}
+            />
+          )}
         </div>
       </div>
+      {excluir && (
+        <ModalExcluirConversa
+          nome={contato.nome}
+          conversas={excluiveis}
+          canalInicial={canal?.id ?? conversa?.canalId ?? null}
+          contarMensagens={(id) => mensagensDoCanal(mensagens, id)}
+          rotuloCanal={(id) => nomeCanal(id) || 'WhatsApp'}
+          onClose={() => setExcluir(false)}
+          onFeito={(msg) => { setExcluir(false); onExcluida(msg); }}
+        />
+      )}
 
       <div className="relative flex-1 min-h-0">
       <div ref={rolagem} onScroll={aoRolar} className="h-full overflow-y-auto overscroll-contain px-4 pb-3 bg-[var(--surface-1)]" aria-live="polite" aria-label={`Mensagens com ${contato.nome}`} role="log">

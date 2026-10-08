@@ -339,6 +339,7 @@ const MODULOS: SecaoAjuda[] = [
       '**Conversa no meio:** mensagens por dia, com o status (enviada, entregue, lida, falhou) e o selo da janela de 24 horas.',
       '**Painel à direita:** dados do contato, dono, tags e os negócios abertos.',
       '**Botão "Playbook":** as regras da conversa, sempre à mão.',
+      '**Menu "⋯" no topo da conversa (só gestor):** "Excluir conversa" tira do CRM, para todos, a conversa e as mensagens dela (ex.: mensagem de teste), com motivo obrigatório que fica no Registro. Não apaga nada no WhatsApp do cliente; se a pessoa escrever de novo, começa uma conversa nova.',
     ],
     comoFazer: [
       {
@@ -1349,7 +1350,7 @@ const SISTEMA: SecaoAjuda[] = [
       p('**Quem é leitor:** administrador (ou dev) do sistema que não é gestor nem vendedor do Comercial. Vê tudo o que o gestor vê (todos os funis, negócios, contatos, conversas, painéis, desempenho e Estratégias), com e-mail e telefone mascarados, e não altera nada: os botões de ação somem e o banco recusa com "Acesso só de leitura.". O selo "Somente leitura" aparece no topo das telas. O leitor não entra na distribuição, não recebe aviso e não aparece como vendedor.'),
       tab(['O quê', 'Vendedor', 'Gestor'], [
         ['Início', '"Meu dia", com os próprios números', '"Visão do time", Controle das 9h e o painel de cada vendedor'],
-        ['Conversas', 'Escreve só nas próprias', 'Escreve em qualquer uma e atribui dono'],
+        ['Conversas', 'Escreve só nas próprias', 'Escreve em qualquer uma, atribui dono e exclui conversa (ex.: teste)'],
         ['Atividades', 'Conclui só as próprias', 'Conclui qualquer uma'],
         ['Negócio de outro vendedor', 'Só lê: a ficha abre sem ações e o card não arrasta', 'Mexe em qualquer um'],
         ['Dono do negócio', 'Não troca (o botão nem aparece)', 'Troca, com motivo'],

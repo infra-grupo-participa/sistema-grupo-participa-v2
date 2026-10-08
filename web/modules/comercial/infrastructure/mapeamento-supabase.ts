@@ -465,6 +465,10 @@ export function mapConversas(d: unknown): Conversa[] {
       contatoId: str(o.contatoId), ultimaMensagem: mapMensagem(o.ultimaMensagem, 'crm_conversas'), naoLidas: num(o.naoLidas),
       janelaAteEm: strOuNull(o.janelaAteEm), atribuidaA: strOuNull(o.atribuidaA),
       canalId: strOuNull(o.canalId), canais: Array.isArray(o.canais) ? o.canais.filter((x): x is string => typeof x === 'string') : [],
+      conversas: Array.isArray(o.conversas)
+        ? o.conversas.flatMap((k) => (k && typeof k === 'object' && typeof (k as { id?: unknown }).id === 'string'
+          ? [{ id: (k as { id: string }).id, canalId: strOuNull((k as { canalId?: unknown }).canalId) }] : []))
+        : [],
     };
   });
 }
