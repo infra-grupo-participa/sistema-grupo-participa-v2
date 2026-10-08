@@ -38,7 +38,7 @@ O front lê somente RPCs Supabase com a chave do dashboard:
 
 Receita, custos, CPL, CAC e ROAS são apresentados conforme os valores devolvidos pelo banco. Não há preço de venda fixo no código. Custos em centavos são convertidos para reais na camada de dados. O modal mostra os campos de origem descritos no briefing; dado pessoal só é buscado ao abrir o modal.
 
-Se a RPC ainda não existir, falhar ou não devolver dado, o bloco permanece disponível, mostra zero quando se trata de card numérico e exibe “sem dado ainda”. Falhas isoladas não impedem os demais blocos. Uma falha de atualização preserva o último dado carregado. Resumo e série atualizam a cada 60 segundos somente com a aba visível, sem sobrepor chamadas.
+Se a RPC ainda não existir ou não devolver dado, o bloco permanece disponível e mostra “sem dado ainda”. Zero numérico devolvido pelo banco é apresentado como zero medido. Falhas isoladas não impedem os demais blocos. Uma falha de atualização preserva o último dado carregado. Resumo e série atualizam a cada 60 segundos somente com a aba visível, sem sobrepor chamadas.
 
 ## Situação do banco
 
@@ -71,3 +71,17 @@ Verificações do projeto:
 ## Resumo do modal de leads
 
 A aba Resumo apresenta as mesmas seis categorias e contagens que antes apareciam em linhas: Entrou no grupo?, É aluno?, utm_source, Estado, Lista de origem e Seminário de origem. Cada categoria agora usa o componente reutilizável RoscaCategorias, já adotado pela visão geral de vendas do dashboard presencial. A legenda conserva o rótulo e a quantidade de cada categoria; o centro mostra o total de leads da categoria. Em telas estreitas, a legenda fica abaixo da rosca para manter rótulo e valor legíveis.
+
+## Período e marcação de teste
+
+Contrato aplicado em produção em 08/10/2026, migration `20261008191000` e ajuste `20261008191100`. O detalhe de nomes, parâmetros e limites está em [MODELO-DE-DADOS.md](./MODELO-DE-DADOS.md), seção 0.
+
+- O seletor oferece Período do evento, Hoje, Ontem, Últimos 3 dias e Últimos 7 dias. As datas relativas são calculadas em `America/Sao_Paulo`; Período do evento envia `p_de` e `p_ate` nulos para usar as datas da configuração do dashboard.
+- Resumo, série, leads, canais e números do grupo recebem o período. Comparecimento e pós-live continuam no evento inteiro.
+- Atualizar recarrega todos os blocos. O polling continua atualizando resumo e série a cada 60 segundos só com a aba visível. Falhas conservam o último resultado bom.
+- O modal Leads ganhou a aba Grupo. Master pode marcar e desmarcar leads ou números do grupo; os controles não aparecem para outros perfis. A confirmação informa que a marcação vale para aquele evento.
+- O banco exclui marcados dos indicadores. A tela não filtra resultados numéricos. Lead marcado permanece na lista master, esmaecido e com etiqueta “teste”. Números do grupo marcados também mostram a etiqueta e o motivo equipe quando aplicável.
+- Se o banco devolver `leads_teste`, `grupo_teste`, `vendas_teste` ou `receita_teste_bruta` maior que zero, a tela apresenta um aviso para deixar claro o que foi excluído, inclusive quantidade de vendas e faturamento bruto.
+- As RPCs retornam `42501`, `P0002` e `22023` em situações de acesso, vínculo ao evento e validação. A tela apresenta mensagens legíveis e não registra identificadores pessoais nos logs.
+
+Para validar: selecionar cada período, conferir as datas e os números, abrir Leads e Grupo, verificar as etiquetas de teste com um perfil master e confirmar que os outros perfis não recebem os controles. O teste local não deve marcar ou desmarcar dados reais.

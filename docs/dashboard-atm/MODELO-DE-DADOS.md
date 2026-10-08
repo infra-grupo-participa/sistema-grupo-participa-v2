@@ -18,6 +18,61 @@ Detalhe técnico, ensaio e reversão: `infra/supabase/migrations/20261008161000.
 Regra de dado do briefing: nada lê planilha. Sem dado = **nulo** (a tela mostra "sem dado ainda"); zero = zero medido.
 Nunca número inventado, nunca erro.
 
+## 0. Marcar como teste e filtro de período (20261008191000, 08/10/2026)
+
+Pedido do Victor de 08/10; contrato combinado com o JP no mesmo dia. **APLICADO em produção em 08/10/2026 (18:37 UTC)**,
+depois de ensaio e pentester; detalhes em `infra/supabase/migrations/20261008191000.explain.md`.
+
+**Teste.** Um lead ou número do grupo marcado num dashboard sai de tudo daquele evento: leads, ingresso, evasão, CPL,
+série, pré-checkout, vendas, comparecimento e pós-live. A regra está no banco (`dados.v_grupo_eventos`,
+`dados.atm_leads`, `dados.atm_pre_checkout`, `dados.atm_vendas`); a tela não filtra nada.
+- Guardado em `dados.marcacoes_teste` por chave: tipo `email` (minúsculo) ou `fone` (8 últimos dígitos), motivo `teste`
+  ou `equipe`, quem marcou e quando, quem desmarcou e quando. Desmarcar não apaga a linha.
+- Casa por e-mail OU pelos 8 últimos dígitos do telefone. Marcar um lead pela tela: mandar e-mail e telefone da linha;
+  para desmarcar, os mesmos dois (se um só for desmarcado, o outro continua marcando).
+- Por evento: marcar no ATM não mexe em outro dashboard nem no cadastro global da pessoa (`pessoas.pessoas.teste`,
+  que continua valendo e é o que `public.dados_presencial_marcar_teste` muda, só para master).
+- Primeiro uso: os 7 números da equipe que entraram no grupo `ATM 10/26` em 06/10/2026 (17:42 a 18:39, Brasília),
+  motivo `equipe`.
+
+**Período.** RPCs com `p_de date default null, p_ate date default null`, datas em America/Sao_Paulo. Intervalo
+`[p_de 00:00, (p_ate + 1 dia) 00:00)` em America/Sao_Paulo, limite final exclusivo. Nulos = "Período do evento", lido de
+`dados.dashboards.periodo_inicio` / `periodo_fim` (ATM 1: 2026-10-07 a 2026-10-14, captação até 1 dia depois da live).
+Período invertido = erro `22023`. Chamada antiga só com `p_chave` continua valendo e cai no período do evento.
+
+| Número | Data que decide se entra no período |
+|---|---|
+| Lead | `primeiro_em` (1ª passagem do e-mail) |
+| Entrada no grupo | 1ª entrada do número (`entrou_em`) |
+| Saída do grupo | `saiu_em` (só de quem entrou antes) |
+| Pré-checkout | `primeiro_em` |
+| Venda | `aprovado_em` |
+| Disparo | `enviado_em` (ou `criado_em` se nulo) |
+
+Ingresso no grupo = **números únicos** que entraram no período ÷ leads do período (sem teste). Comparecimento e
+pós-live não têm período (são da live e do ciclo do evento inteiro).
+
+**Atualizar.** As RPCs não guardam cache; o botão Atualizar só chama de novo.
+
+### 0.1 RPCs de marcação (genéricas por chave, qualquer dashboard do schema `dados`)
+
+| RPC | Devolve |
+|---|---|
+| `dados_marcar_teste(p_chave text, p_email text default null, p_telefone text default null, p_motivo text default 'teste')` | `integer`: marcações novas (0 = já estava) |
+| `dados_desmarcar_teste(p_chave text, p_email text default null, p_telefone text default null)` | `integer`: marcações desfeitas |
+| `dados_testes(p_chave text)` | `id bigint, tipo text, valor text, motivo text, marcado_por_email text, marcado_em timestamptz` (só as ativas) |
+
+Só para dashboards `seminario-atm` (gate `dados.atm_cadastro`), e marcar só aceita e-mail/telefone que aparece no evento
+(lead, pré-checkout, comprador, grupo ou presença da live). Erros: `42501` não é equipe; `P0002` chave fora do cadastro
+ativo, de outro modelo, ou identificador que não aparece no evento; `22023` sem e-mail e sem telefone, telefone sem DDD,
+e-mail sem `@`, motivo fora de `teste`/`equipe`.
+
+### 0.2 `dados_atm_grupo_numeros(p_chave, p_de, p_ate, p_incluir_teste boolean default false)` (1 linha por número)
+
+`fone_key text, nome text, entrou_em timestamptz, saiu_em timestamptz, no_grupo boolean, eh_lead boolean, teste boolean,
+teste_motivo text`. Números cuja 1ª entrada cai no período, `entrou_em desc`. Com `p_incluir_teste = true` vêm também os
+marcados (para o botão Desmarcar). `nome` = nome que o SendFlow mandou no evento.
+
 ## 1. De onde vem cada número
 
 | Card / coluna | Fonte no banco | Regra |
@@ -46,7 +101,8 @@ Nunca número inventado, nunca erro.
 
 ## 2. Contrato das RPCs (nomes, colunas e ordem exatos)
 
-Todas: `public.<nome>(p_chave text)`, só `authenticated`. Erros: `42501` não é equipe (ou anon); `P0002` chave fora do
+Todas: `public.<nome>(p_chave text)`, só `authenticated`. Desde 20261008191000, resumo, série, leads e canais também
+aceitam `p_de date, p_ate date` (seção 0); leads aceita ainda `p_incluir_teste boolean default false`. Erros: `42501` não é equipe (ou anon); `P0002` chave fora do
 cadastro ativo ou de outro modelo; `PGRST202` função ainda não aplicada. Dinheiro de venda em reais `numeric(14,2)`;
 custo em centavos `bigint`; percentual `numeric(7,2)` de 0 a 100; ROAS `numeric(10,2)` (vezes); dia `date` em São Paulo.
 
@@ -57,7 +113,12 @@ disparos_enviados integer, leads integer, grupo_tem_fonte boolean, grupo_entrada
 grupo_pct numeric, evasao_pct numeric, custo_disparo_centavos bigint, disparos_sem_custo integer, custo_completo boolean,
 cpl_centavos bigint, pre_checkout_pessoas integer, vendas integer, vendas_fora_brl integer, compradores integer,
 compradores_no_pre_checkout integer, conversao_pre_checkout_pct numeric, cac_centavos bigint, receita_bruta numeric,
-receita_liquida numeric, roas numeric, roas_liquido numeric, atualizado_em timestamptz`
+receita_liquida numeric, roas numeric, roas_liquido numeric, atualizado_em timestamptz, periodo_de date,
+periodo_ate date, leads_teste integer, grupo_teste integer, vendas_teste integer, receita_teste_bruta numeric`
+
+As últimas (20261008191000): período aplicado; leads do período que saíram por teste; números marcados que entraram
+no período (nulo sem fonte de grupo); `vendas_teste integer` e `receita_teste_bruta numeric` (vendas e faturamento
+bruto BRL que saíram por teste, nulos sem oferta). A tela deve mostrar quando forem maiores que zero.
 
 Cards na ordem do briefing: disparos (`disparos_qtd`), leads, ingresso no grupo (`grupo_entradas`), % ingresso
 (`grupo_pct`), evasão (`evasao_pct`), custo (`custo_disparo_centavos`), CPL (`cpl_centavos`), pré-checkout
@@ -78,10 +139,12 @@ comprou boolean, pessoa_id uuid, teste boolean`
 - `lista_origem`: `lista_1`, `lista_2`, `lista_1_e_2`, `fora_das_listas`; nulo enquanto nenhuma lista foi carregada.
 - `seminario_origem`: `marcio`, `elaine`, `marcio_e_elaine` ou nulo.
 - `comprou`: nulo sem oferta no cadastro.
-- Traz também quem é teste (`teste = true`, para mostrar apagado); os números do resumo e da série não contam.
+- Desde 20261008191000 vem **sem** quem é teste (cadastro da pessoa ou marcado no evento). Com `p_incluir_teste = true`
+  vem todo mundo e `teste = true` marca quem está fora das contas (para o botão Desmarcar). Só leads com `primeiro_em`
+  no período.
 - Evolução diária e resumo do modal: usar `dados_atm_serie_diaria` (coluna `leads`) e `dados_atm_resumo`.
 
-### 2.3 `dados_atm_serie_diaria` (1 linha por dia, sem buraco, do 1º dia com dado até hoje)
+### 2.3 `dados_atm_serie_diaria` (1 linha por dia, sem buraco, de `p_de` até o menor entre `p_ate` e hoje)
 
 `dia date, leads integer, grupo_entradas integer, grupo_saidas integer, pre_checkout integer, vendas integer,
 receita_bruta numeric, custo_disparo_centavos bigint`
