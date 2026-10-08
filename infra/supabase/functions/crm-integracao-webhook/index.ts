@@ -10,8 +10,14 @@
 // `?token=` — DESLIGADO por padrão (a URL inteira vai para o log das Edge Functions: pentest 29/09). Liga com a env
 // CRM_WEBHOOK_TOKEN_NA_URL=sim, decisão do Arthur (ver 20261006c.explain.md).
 // Deploy: verify_jwt = false (provedor não manda JWT). Resposta 200 também quando a fonte está desligada (o provedor não
-// desliga o webhook por erro em série); 401 token errado; 400 corpo inválido; 500 erro do banco.
-import { createClient } from "jsr:@supabase/supabase-js@2";
+// desliga o webhook por erro em série); 401 token errado; 400 corpo inválido; 500 erro do banco (ou banco > 3 s).
+//
+// Incidente 08/10/2026 20:04–20:10 UTC: ~38 mil webhooks do AC em 6 min saturaram o pool (522, banco reiniciado).
+// Desde a migration 20261008230000 a RPC só ENFILEIRA (crm.integracao_fila); o processamento pesado roda no cron.
+// Freios daqui: CRM_WEBHOOK_PAUSADO=sim responde 200 sem tocar no banco (funciona com o banco fora; o evento se perde,
+// o AC não reenvia); a espera pela RPC é cortada em 3 s (libera o worker da Edge; a consulta já iniciada segue no
+// banco até o statement_timeout do authenticator, 8 s). Nunca 410: o AC desliga o webhook para sempre com 410.
+import { createClient } from "jsr:@supabase/supabase-js@2.117.2";
 
 // ─── Normalização (pura, sem rede) ───
 export type Fonte = "activecampaign" | "unnichat" | "sendflow";
@@ -126,12 +132,17 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const TOKEN_NA_URL = ["sim", "true", "1", "on"].includes((Deno.env.get("CRM_WEBHOOK_TOKEN_NA_URL") ?? "").trim().toLowerCase());
 const AC_FUSO = Deno.env.get("AC_FUSO") ?? "-03:00";
 const MAX_BYTES = 64_000;
+const RPC_TIMEOUT_MS = 3_000;
+const PAUSADO = ["sim", "true", "1", "on"].includes((Deno.env.get("CRM_WEBHOOK_PAUSADO") ?? "").trim().toLowerCase());
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ ok: false, reason: "method_not_allowed" }, 405);
+  // Freio de emergência (mesmo ponto da v7 publicada): antes de tudo, sem ler o corpo e sem tocar no banco (o token é
+  // conferido NO banco). 200 para o provedor não desligar o webhook.
+  if (PAUSADO) return json({ ok: true, ignorado: "pausado" });
   if (!SUPABASE_URL || !SERVICE_ROLE) {
     console.error("crm-integracao-webhook: env do Supabase ausente");
     return json({ ok: false, reason: "server_misconfigured" }, 500);
@@ -169,9 +180,12 @@ Deno.serve(async (req) => {
   if (eventos.length === 0) return json({ ok: false, reason: "sem_evento_reconhecido" }, 400);
 
   const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data, error } = await db.rpc("crm_integracao_receber", { p_fonte: fonte, p_chave: token, p_eventos: eventos });
+  const { data, error } = await db
+    .rpc("crm_integracao_receber", { p_fonte: fonte, p_chave: token, p_eventos: eventos })
+    .abortSignal(AbortSignal.timeout(RPC_TIMEOUT_MS));
   if (error) {
-    console.error(`crm-integracao-webhook: rpc falhou (${error.code ?? "?"})`); // nunca o corpo: tem e-mail/telefone
+    // nunca o corpo nem a mensagem: tem e-mail/telefone. Timeout/rede pode chegar sem code.
+    console.error(`crm-integracao-webhook: rpc falhou (${error.code || "timeout_ou_rede"})`);
     return json({ ok: false, reason: "db_error" }, 500);
   }
   const r = (data ?? {}) as Record<string, unknown>;
