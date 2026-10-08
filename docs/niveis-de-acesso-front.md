@@ -34,6 +34,7 @@ Feito com as contas sintéticas `qa.sessoes@advmais.com` (master) e `qa.trafego@
 - Escrita reversível pela tela: status do perfil sintético "Robô de teste E2E (Financeiro)" ativo, pendente, ativo de novo. Nenhum convite criado.
 - Editora de Tráfego sem financeiro: Tráfego sem valores de receita e com "Novo projeto" (certo, porque ela edita Tráfego); Contas a Receber redireciona para `/`; o dashboard da Clínica redireciona para `/infra/dashboards/csm` sem carregar dados; Configurações mostra Avatar e esconde Nome.
 - Console sem erro nas rotas abertas.
+- Leitor nas outras áreas: Comercial abre só Relatórios (Contatos e Conversas voltam ao início); Web e Mensageria abrem sem controles de escrita. Os Relatórios do Comercial mostram "Sem acesso ao Comercial." para quem não está em `crm.vendedor` nem em `crm.config.gestores`: é esperado, porque a fronteira de dado do Comercial continua sendo a RLS do `crm` (ver `ehDoComercial` em `web/shared/domain/departamentos.ts`). Para alguém ver dado do Comercial, além do nível de acesso precisa estar numa dessas listas.
 - Não testado em produção: `?novo=1` com um leitor do Tráfego (não há conta sintética leitora).
 
 ## Pendente
