@@ -1,0 +1,53 @@
+# Evolution API v2 para o WhatsApp por QR do CRM Comercial. Passo a passo: docs/projetos/comercial/whatsapp-qr-evolution.md
+# (a instalação na VPS segue docs/projetos/comercial/prompt-joao-vps-evolution.md). Sem segredo aqui: tudo vem do .env
+# (copie .env.example para .env na VPS, gere os valores com `openssl rand -hex 32` e deixe com chmod 600).
+# Postgres e Redis ficam só na rede interna do Docker; só o Caddy (80/443) fica exposto.
+services:
+  evolution:
+    # tag FIXA (nunca "latest"); para atualizar, troque a tag e rode `docker compose up -d`
+    image: evoapicloud/evolution-api:v2.3.7
+    restart: unless-stopped
+    env_file: .env
+    depends_on: [postgres, redis]
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks: [interna]
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: evolution
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks: [interna]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks: [interna]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [interna]
+
+volumes:
+  evolution_instances: {}
+  pg_data: {}
+  redis_data: {}
+  caddy_data: {}
+  caddy_config: {}
+
+networks:
+  interna: {}

@@ -59,3 +59,13 @@ verify_jwt = false
 
 [functions.crm-whatsapp-enviar]
 verify_jwt = false
+
+# crm-evolution-webhook (migration 20261008152212): a Evolution API (WhatsApp por QR) chama sem Authorization; autentica
+# pelo header x-crm-chave conferido com a chave da instância no banco (crm.evolution_chave_webhook), fail-closed.
+[functions.crm-evolution-webhook]
+verify_jwt = false
+
+# crm-evolution-enviar: chamada por crm.evolution_disparar_envio() e pelo cron crm-evolution-enviar (ops.cron_post) sem
+# Authorization; autentica pelo header x-crm-chave (Vault crm_whatsapp_envio_chave), fail-closed.
+[functions.crm-evolution-enviar]
+verify_jwt = false

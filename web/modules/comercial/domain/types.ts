@@ -236,6 +236,10 @@ export interface Mensagem {
   fichaId?: string | null;
   /** Arquivo (imagem, áudio, documento, vídeo) guardado no Storage privado. null = sem arquivo (texto ou mensagem antiga). */
   midia?: MidiaMensagem | null;
+  /** Número (canal) por onde a mensagem entrou/saiu (migration 20261008152212). */
+  canalId?: string | null;
+  /** Saída que não nasceu no CRM: enviada pelo celular ou pela Clint no número conectado por QR. */
+  externa?: boolean;
 }
 
 export type EnvioMensagem = 'na_fila' | 'enviando';
@@ -273,6 +277,10 @@ export interface Conversa {
   /** Fim da janela de 24h aberta pela última mensagem do lead. null = fechada. */
   janelaAteEm: string | null;
   atribuidaA: string | null;
+  /** Número da conversa mais recente (é por ele que a resposta sai). */
+  canalId?: string | null;
+  /** Todos os números em que a pessoa conversou. */
+  canais?: string[];
 }
 
 export type TipoEvento =

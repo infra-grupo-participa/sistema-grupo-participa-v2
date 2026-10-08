@@ -4,6 +4,7 @@
 import type {
   ComercialRepository, FiltroNegocios, NovaAtividade, NovaFicha, Resultado, ResultadoEnvio, ResultadoFicha, ResultadoLink, ResultadoTokenMcp,
 } from '../application/ports';
+import type { PainelCanais } from '../domain/canais-whatsapp';
 import { linhasContatos, mapaDuplicados, paginarContatos, resumirContatos, type FiltroContatos } from '../domain/contatos';
 import { produto as produtoDe, ROTULO_CAMPO } from '../domain/catalogo';
 import { bloqueioMoverNoFunil, camposFaltandoNoFunil, etapaDoFunil, etapaInicial, validarFunil } from '../domain/funis';
@@ -141,6 +142,17 @@ export class MockComercialRepository implements ComercialRepository {
       templatesAprovados: this.db.templates.filter((t) => t.aprovado).length,
       naFila: 0, falhasHoje: 0, janelaHoras: 24, maxDestinatarios: 5000,
     });
+  }
+  /** Demonstração: só o número oficial; conectar por QR exige o banco real. */
+  canais(): Promise<PainelCanais> {
+    return espera({
+      evolutionLigado: false, envioLigado: true, limiteMinuto: 15, limiteHora: 200, novosHora: 20,
+      canais: [{ id: 'n-demo', provedor: 'infobip', nome: 'Comercial oficial (API)', final: '0000', status: 'conectado', statusEm: null,
+                 statusMotivo: null, conectadoEm: null, recebe: true, envia: true, donoId: null, padrao: true }],
+    });
+  }
+  async salvarCanal(): Promise<Resultado> {
+    return espera({ ok: false, msg: 'Números só funcionam com o banco real (modo demonstração).' });
   }
   filas() { return espera(this.db.filas); }
   fichas() { return espera([...this.db.fichas].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))); }

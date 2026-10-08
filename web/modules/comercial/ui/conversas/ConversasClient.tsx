@@ -28,6 +28,7 @@ import { BotaoAnexar } from './Anexar';
 import { BotaoGravarAudio } from './GravarAudio';
 import { MidiaMensagem } from './MidiaMensagem';
 import { legendaDaMensagem } from '../../domain/midia';
+import { bloqueioEnvio, canalDeResposta, rotuloCanal, semJanela, type CanalWhatsapp, type PainelCanais } from '../../domain/canais-whatsapp';
 import { MenuRespostas, useAlturaDisponivel } from './pecas';
 import {
   chaveDia, criarTravaEnvio, duracaoCurta, esperaResposta, janelaRestante, ordenarConversas, preencherTemplate, primeiroNome,
@@ -46,7 +47,7 @@ const RESPOSTAS_RAPIDAS = [
 
 /** Regras do playbook para a conversa (no botão "Playbook" do cabeçalho; cada uma também bloqueia no ponto de ação). */
 const REGRAS_PLAYBOOK = [
-  'Só se fala pelo número oficial do Comercial.',
+  'Só se fala pelos números do Comercial (oficial ou conectado por QR), e a resposta sai pelo número em que o lead escreveu.',
   'Lead que não é seu não se toca: transfira pelo gestor.',
   'Fora da janela de 24 h só sai template aprovado.',
   'Mensagem curta, pelo nome do lead, sem emoji.',
@@ -64,6 +65,12 @@ export function ConversasClient() {
   // Só os contatos das conversas (não a base inteira).
   const rContatos = useContatosPorIds(rConversas.dados?.map((c) => c.contatoId));
   const rTemplates = useDados(() => repo.templates());
+  // Números de WhatsApp (oficial + QR): filtro, selo e número de resposta.
+  const rCanais = useDados(() => repo.canais());
+  const painelCanais = rCanais.dados;
+  const canais = useMemo(() => painelCanais?.canais ?? [], [painelCanais]);
+  const variosNumeros = canais.length > 1;
+  const [numero, setNumero] = useState('');
   const { dados: funis } = useDados(() => repo.funis());
   const conversas = rConversas.dados;
   const contatos = rContatos.dados;
@@ -133,13 +140,14 @@ export function ConversasClient() {
     const filtradas = lista.filter((cv) => {
       if (filtro === 'minhas' && cv.atribuidaA !== sessao?.vendedorId) return false;
       if (filtro === 'nao_atribuidas' && cv.atribuidaA) return false;
+      if (numero && !(cv.canais ?? []).includes(numero)) return false;
       if (!q) return true;
       const c = contatoPorId.get(cv.contatoId);
       if (`${c?.nome ?? ''} ${c?.email ?? ''} ${cv.ultimaMensagem.texto}`.toLowerCase().includes(q)) return true;
       return dig.length >= 4 && String(c?.telefone ?? '').replace(/\D/g, '').includes(dig);
     });
     return ordenarConversas(filtradas, agora);
-  }, [lista, filtro, busca, sessao, contatoPorId, agora]);
+  }, [lista, filtro, busca, numero, sessao, contatoPorId, agora]);
 
   const conversa = lista.find((c) => c.contatoId === ativo) ?? null;
   const contato = ativo ? contatoPorId.get(ativo) ?? null : null;
@@ -231,6 +239,12 @@ export function ConversasClient() {
                     { valor: 'nao_atribuidas', rotulo: 'Sem dono', n: contagem.nao_atribuidas, title: 'Não atribuídas' },
                   ]}
                 />
+                {variosNumeros && (
+                  <FilterSelect value={numero} onChange={(e) => setNumero(e.target.value)} aria-label="Filtrar por número" className="w-full">
+                    <option value="">Todos os números</option>
+                    {canais.map((c) => <option key={c.id} value={c.id}>{rotuloCanal(c)}</option>)}
+                  </FilterSelect>
+                )}
                 <SearchInput placeholder="Buscar nome, telefone ou texto" value={busca} onChange={(e) => setBusca(e.target.value)} onLimpar={() => setBusca('')} />
               </div>
               <ul className="flex-1 overflow-y-auto" aria-label="Conversas">
@@ -257,6 +271,7 @@ export function ConversasClient() {
                     ativa={cv.contatoId === ativo}
                     donoNome={filtro !== 'minhas' && cv.atribuidaA ? nomeDe(cv.atribuidaA) : null}
                     semDono={!cv.atribuidaA}
+                    selo={variosNumeros ? rotuloCanal(canais.find((c) => c.id === cv.canalId)) : null}
                     onClick={() => setSel(cv.contatoId)}
                   />
                 ))}
@@ -273,6 +288,8 @@ export function ConversasClient() {
                   negocio={negociosAbertos[0] ?? null}
                   negociosDoContato={negociosDoContato}
                   templates={templates}
+                  canais={canais}
+                  painelCanais={painelCanais ?? null}
                   sessao={sessao}
                   gestor={gestor}
                   nomeDe={nomeDe}
@@ -385,8 +402,8 @@ function EsqueletoCaixa() {
 
 // ── Lista ──
 
-function ItemConversa({ cv, c, agora, ativa, donoNome, semDono, onClick }: {
-  cv: Conversa; c: Contato | undefined; agora: Date; ativa: boolean; donoNome: string | null; semDono: boolean; onClick: () => void;
+function ItemConversa({ cv, c, agora, ativa, donoNome, semDono, selo, onClick }: {
+  cv: Conversa; c: Contato | undefined; agora: Date; ativa: boolean; donoNome: string | null; semDono: boolean; selo: string | null; onClick: () => void;
 }) {
   const m = cv.ultimaMensagem;
   const espera = esperaResposta(m, agora);
@@ -418,9 +435,12 @@ function ItemConversa({ cv, c, agora, ativa, donoNome, semDono, onClick }: {
           </span>
           <span className="flex items-center justify-between gap-2 mt-0.5">
             <span className={`text-xs truncate ${cv.naoLidas ? 'text-[var(--fg-2)]' : 'text-[var(--fg-3)]'}`}>
-              {m.direcao === 'saida' ? 'Você: ' : ''}{m.texto}
+              {m.direcao === 'saida' ? (m.externa ? 'Celular: ' : 'Você: ') : ''}{m.texto}
             </span>
             <span className="flex items-center gap-1.5 shrink-0 text-[var(--fg-3)]">
+              {selo && (
+                <span title={`Número: ${selo}`} className="text-[10px] max-w-[84px] truncate rounded-[var(--r-pill)] border border-[var(--border)] px-1.5 leading-4">{selo}</span>
+              )}
               {donoNome && <span className="text-[11px] max-w-[72px] truncate">{primeiroNome(donoNome)}</span>}
               {semDono && (
                 <span title="Sem dono: o gestor atribui antes de qualquer conversa" className="inline-flex">
@@ -447,8 +467,9 @@ function ItemConversa({ cv, c, agora, ativa, donoNome, semDono, onClick }: {
 
 // ── Conversa ──
 
-function PainelConversa({ contato, conversa, negocio, negociosDoContato, templates, sessao, gestor, nomeDe, agora, flash, onVoltar, onAbrirNegocio, onAgendar, onDetalhes, onAtribuir }: {
-  contato: Contato; conversa: Conversa | null; negocio: Negocio | null; negociosDoContato: Negocio[]; templates: Template[]; sessao: SessaoComercial;
+function PainelConversa({ contato, conversa, negocio, negociosDoContato, templates, canais, painelCanais, sessao, gestor, nomeDe, agora, flash, onVoltar, onAbrirNegocio, onAgendar, onDetalhes, onAtribuir }: {
+  contato: Contato; conversa: Conversa | null; negocio: Negocio | null; negociosDoContato: Negocio[]; templates: Template[];
+  canais: CanalWhatsapp[]; painelCanais: PainelCanais | null; sessao: SessaoComercial;
   gestor: boolean; nomeDe: (id: string | null) => string; agora: Date; flash: (m: string) => void; onVoltar: () => void;
   onAbrirNegocio: (id: string) => void; onAgendar: (n: Negocio) => void; onDetalhes: () => void; onAtribuir: () => void;
 }) {
@@ -470,6 +491,13 @@ function PainelConversa({ contato, conversa, negocio, negociosDoContato, templat
 
   const dono = conversa?.atribuidaA ?? contato.donoId;
   const janela = janelaRestante(conversa?.janelaAteEm ?? null, agora);
+  // Número da resposta: o escolhido; senão o da conversa mais recente; senão o oficial (mesmo critério do banco).
+  const [canalEscolhido, setCanalEscolhido] = useState<string | null>(null);
+  const canal = canalDeResposta(canalEscolhido, conversa?.canalId ?? null, canais);
+  const opcoesCanal = canais.filter((c) => (conversa?.canais ?? []).includes(c.id) || c.padrao);
+  const porQr = semJanela(canal);
+  const variosNaConversa = new Set(mensagens.map((m) => m.canalId).filter(Boolean)).size > 1;
+  const nomeCanal = (id: string | null | undefined) => rotuloCanal(canais.find((c) => c.id === id));
   const podeAgendar = !!negocio && (gestor || negocio.donoId === sessao.vendedorId);
   // Conversa sem dono: só o gestor define quem atende (playbook: ninguém responde lead sem dono).
   const podeAtribuir = podeTrocarDono(sessao) && !dono;
@@ -481,7 +509,7 @@ function PainelConversa({ contato, conversa, negocio, negociosDoContato, templat
     ? 'Este contato pediu para não receber contato. Nenhuma mensagem sai para ele.'
     : !contato.telefone
       ? 'Contato sem telefone.'
-      : motivoSemEscrita({ donoId: dono }, negociosDoContato, sessao, nomeDe);
+      : motivoSemEscrita({ donoId: dono }, negociosDoContato, sessao, nomeDe) ?? bloqueioEnvio(canal, painelCanais);
 
   // Agrupa por dia para o separador.
   const grupos = useMemo(() => {
@@ -507,8 +535,17 @@ function PainelConversa({ contato, conversa, negocio, negociosDoContato, templat
           <div className="text-xs text-[var(--fg-3)] truncate">{fmtTelefone(contato.telefone)} · {dono ? nomeDe(dono) : 'sem dono'}</div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {opcoesCanal.length > 1 ? (
+            <FilterSelect value={canal?.id ?? ''} onChange={(e) => setCanalEscolhido(e.target.value || null)} aria-label="Responder pelo número" title="Responder pelo número">
+              {opcoesCanal.map((c) => <option key={c.id} value={c.id}>{rotuloCanal(c)}</option>)}
+            </FilterSelect>
+          ) : canal && canais.length > 1 ? (
+            <span title="Número desta conversa: a resposta sai por ele"><Badge>{rotuloCanal(canal)}</Badge></span>
+          ) : null}
           <span className="inline-flex items-center">
-            {janela ? (
+            {porQr ? (
+              <span title="Número conectado por QR: sem janela de 24 h e sem template. Sem disparo em massa."><Badge tone="info">WhatsApp por QR</Badge></span>
+            ) : janela ? (
               <span title={`Janela de 24 h aberta pela última mensagem do lead: fecha em ${janela.rotulo}`}>
                 <Badge tone={janela.minutos < 120 ? 'warning' : 'info'}>Janela: {janela.rotulo}</Badge>
               </span>
@@ -561,7 +598,10 @@ function PainelConversa({ contato, conversa, negocio, negociosDoContato, templat
               <span className="h-px flex-1 bg-[var(--border-faint)]" />
             </div>
             <div className="space-y-2">
-              {g.itens.map((m) => <Bolha key={m.id} m={m} nomeTemplate={nomeTemplate} autor={m.autorId ? nomeDe(m.autorId) : null} />)}
+              {g.itens.map((m) => (
+                <Bolha key={m.id} m={m} nomeTemplate={nomeTemplate} autor={m.autorId ? nomeDe(m.autorId) : m.externa ? 'Celular/Clint' : null}
+                       numero={variosNaConversa ? nomeCanal(m.canalId) : null} />
+              ))}
             </div>
           </div>
         ))}
@@ -584,9 +624,12 @@ function PainelConversa({ contato, conversa, negocio, negociosDoContato, templat
         </div>
       ) : (
         <Envio
+          key={canal?.id ?? 'padrao'}
           contato={contato}
           negocio={negocio}
-          janelaAberta={!!janela}
+          canalId={canalEscolhido ?? conversa?.canalId ?? null}
+          porQr={porQr}
+          janelaAberta={porQr || !!janela}
           templates={templates}
           remetente={nomeDe(sessao.vendedorId)}
           flash={flash}
@@ -613,7 +656,7 @@ function StatusEnvio({ s, envio, erro }: { s: StatusMensagem | null; envio?: Men
   );
 }
 
-function Bolha({ m, nomeTemplate, autor }: { m: Mensagem; nomeTemplate: (id: string | null) => string | null; autor: string | null }) {
+function Bolha({ m, nomeTemplate, autor, numero }: { m: Mensagem; nomeTemplate: (id: string | null) => string | null; autor: string | null; numero: string | null }) {
   const saida = m.direcao === 'saida';
   const hora = new Date(m.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const legenda = legendaDaMensagem(m);
@@ -635,6 +678,7 @@ function Bolha({ m, nomeTemplate, autor }: { m: Mensagem; nomeTemplate: (id: str
         <MidiaMensagem m={m} />
         {legenda && <div className="whitespace-pre-wrap break-words leading-relaxed">{legenda}</div>}
         <div className="mt-1 flex items-center justify-end gap-1.5 text-[11px] text-[var(--fg-3)] tabular">
+          {numero && <span className="truncate" title="Número da mensagem">{numero} ·</span>}
           {saida && autor && <span className="truncate">{primeiroNome(autor)}</span>}
           <span>{hora}</span>
           {saida && <StatusEnvio s={m.status} envio={m.envio} erro={m.erro} />}
@@ -646,8 +690,8 @@ function Bolha({ m, nomeTemplate, autor }: { m: Mensagem; nomeTemplate: (id: str
 
 // ── Envio ──
 
-function Envio({ contato, negocio, janelaAberta, templates, remetente, flash }: {
-  contato: Contato; negocio: Negocio | null; janelaAberta: boolean; templates: Template[]; remetente: string; flash: (m: string) => void;
+function Envio({ contato, negocio, canalId, porQr, janelaAberta, templates, remetente, flash }: {
+  contato: Contato; negocio: Negocio | null; canalId: string | null; porQr: boolean; janelaAberta: boolean; templates: Template[]; remetente: string; flash: (m: string) => void;
 }) {
   const aprovados = templates.filter((t) => t.aprovado);
   const pendentes = templates.length - aprovados.length;
@@ -678,7 +722,7 @@ function Envio({ contato, negocio, janelaAberta, templates, remetente, flash }: 
     if (!chave) return;
     setEnviando(true);
     let r: Awaited<ReturnType<typeof repo.enviarMensagem>>;
-    try { r = await repo.enviarMensagem(contato.id, corpo, tId, chave); } catch { r = { ok: false, msg: 'Não foi possível enviar.' }; }
+    try { r = await repo.enviarMensagem(contato.id, corpo, tId, chave, canalId); } catch { r = { ok: false, msg: 'Não foi possível enviar.' }; }
     trava.current.terminar(r.ok);
     setEnviando(false);
     if (!r.ok) { flash(r.msg ?? 'Não foi possível enviar.'); return; }
@@ -746,8 +790,8 @@ function Envio({ contato, negocio, janelaAberta, templates, remetente, flash }: 
           aria-label="Mensagem"
           className="!resize-none"
         />
-        <BotaoAnexar contatoId={contato.id} nomeContato={nome || contato.nome} desabilitado={enviando} flash={flash} />
-        <BotaoGravarAudio contatoId={contato.id} nomeContato={nome || contato.nome} desabilitado={enviando} flash={flash} />
+        <BotaoAnexar contatoId={contato.id} nomeContato={nome || contato.nome} desabilitado={enviando} flash={flash} canalId={canalId} />
+        <BotaoGravarAudio contatoId={contato.id} nomeContato={nome || contato.nome} desabilitado={enviando} flash={flash} canalId={canalId} />
         <Button
           ref={botaoMenu}
           variant="ghost"
@@ -767,7 +811,7 @@ function Envio({ contato, negocio, janelaAberta, templates, remetente, flash }: 
         </Button>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-[11px] text-[var(--fg-3)]">
-        <span>Ctrl/⌘ + Enter envia · / abre respostas rápidas · termine com próximo passo e data</span>
+        <span>Ctrl/⌘ + Enter envia · / abre respostas rápidas · termine com próximo passo e data{porQr ? ' · número por QR: conversa 1 a 1, sem disparo' : ''}</span>
         {emoji && <span className="font-semibold text-[var(--yellow)]" role="status">Playbook: mensagem sem emoji</span>}
       </div>
     </div>

@@ -1,0 +1,6 @@
+# HTTPS automático (Let's Encrypt) para a Evolution. O DNS A de wa.grupoparticipa.app.br aponta para a VPS
+# (no Cloudflare: sem proxy, nuvem cinza).
+wa.grupoparticipa.app.br {
+  encode gzip
+  reverse_proxy evolution:8080
+}

@@ -157,14 +157,14 @@ export const argsEscrita = {
   salvarPreferencias: (p: PreferenciasNotificacao) => ({ p_preferencias: p }),
   // WhatsApp (F4). Com template, o banco monta o texto e ignora p_texto.
   // p_chave (20261008000740): idempotência — a mesma chave devolve a mesma mensagem, sem duplicar.
-  enviarMensagem: (contatoId: string, texto: string, templateId?: string | null, chave?: string | null) =>
-    ({ p_pessoa: contatoId, p_texto: texto, p_template: templateId || null, p_chave: chave || null }),
+  enviarMensagem: (contatoId: string, texto: string, templateId?: string | null, chave?: string | null, canalId?: string | null) =>
+    ({ p_pessoa: contatoId, p_texto: texto, p_template: templateId || null, p_chave: chave || null, ...(canalId ? { p_canal: canalId } : {}) }),
   marcarConversaLida: (contatoId: string) => ({ p_pessoa: contatoId }),
-  enviarAnexo: (contatoId: string, caminho: string, legenda: string, nome: string | null, chave?: string | null) =>
-    ({ p_pessoa: contatoId, p_texto: legenda.trim() || null, p_template: null, p_midia: caminho, p_midia_nome: nome, p_chave: chave || null }),
+  enviarAnexo: (contatoId: string, caminho: string, legenda: string, nome: string | null, chave?: string | null, canalId?: string | null) =>
+    ({ p_pessoa: contatoId, p_texto: legenda.trim() || null, p_template: null, p_midia: caminho, p_midia_nome: nome, p_chave: chave || null, ...(canalId ? { p_canal: canalId } : {}) }),
   /** Áudio (20261007s): sem legenda nem nome; o banco grava "[áudio]". */
-  enviarAudio: (contatoId: string, caminho: string, chave?: string | null) =>
-    ({ p_pessoa: contatoId, p_texto: null, p_template: null, p_midia: caminho, p_midia_nome: null, p_chave: chave || null }),
+  enviarAudio: (contatoId: string, caminho: string, chave?: string | null, canalId?: string | null) =>
+    ({ p_pessoa: contatoId, p_texto: null, p_template: null, p_midia: caminho, p_midia_nome: null, p_chave: chave || null, ...(canalId ? { p_canal: canalId } : {}) }),
   /**
    * Ficha: `destinatarios` (contatoIds) é a lista que o banco grava. quantidade/suprimidos não vão (o banco conta).
    * `numeroEnvio` vazio = número padrão; só dígitos quando vier (o rótulo da tela não é número).

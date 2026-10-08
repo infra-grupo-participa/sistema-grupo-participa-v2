@@ -23,6 +23,19 @@ export const env = {
       return process.env.CAPTURA_LEAD_SECRET ?? '';
     },
   },
+  evolution: {
+    /**
+     * Evolution API v2 (WhatsApp por QR do CRM, docs/projetos/comercial/whatsapp-qr-evolution.md) — SÓ servidor.
+     * EVOLUTION_API_URL (https://wa.grupoparticipa.app.br) e EVOLUTION_API_KEY (AUTHENTICATION_API_KEY da Evolution).
+     * Vazio = as rotas de conectar número respondem 503 (fail-closed). As Edges usam o Vault evolution_api_url/_key.
+     */
+    get url() {
+      return process.env.EVOLUTION_API_URL ?? '';
+    },
+    get apiKey() {
+      return process.env.EVOLUTION_API_KEY ?? '';
+    },
+  },
   app: {
     environment: process.env.APP_ENV ?? 'development',
     allowedOrigins: (process.env.APP_ALLOWED_ORIGINS ?? '')

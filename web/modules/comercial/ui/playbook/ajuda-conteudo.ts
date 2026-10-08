@@ -1400,6 +1400,35 @@ const SISTEMA: SecaoAjuda[] = [
     ],
   },
   {
+    id: 'numeros-de-whatsapp',
+    titulo: 'Números de WhatsApp',
+    parte: 'sistema',
+    icone: 'phone',
+    resumo: 'Além do número oficial, o gestor conecta outros números lendo um QR Code. Cada conversa mostra o número e a resposta sai por ele.',
+    sinonimos: ['qr code', 'conectar número', 'número da clint', 'aparelho conectado', 'evolution', 'outro número', 'selo do número', 'banimento'],
+    ferramentas: [{ rotulo: 'Configurações › Números de WhatsApp', href: '/comercial/configuracoes#numeros' }, TELAS.conversas],
+    blocos: [
+      p('O CRM fala por mais de um número. O **oficial** (API) faz templates e disparos. Os números **conectados por QR Code** (como os dois da Clint) são WhatsApp comum, ligados ao CRM como um aparelho a mais: o número continua no celular e na Clint até ser desligado de lá.'),
+      passos('Conectar um número (gestor)', [
+        'Abra **Configurações › Números de WhatsApp** e clique em **Conectar número**.',
+        'Dê um nome (ex.: "Clint 4276") e clique em **Gerar QR Code**.',
+        'No celular desse número: **WhatsApp › Aparelhos conectados › Conectar aparelho** e aponte para o QR. Ele se atualiza sozinho.',
+        'Quando aparecer **Conectado**, as conversas desse número já entram em **Conversas**.',
+      ]),
+      dicas([
+        'Em **Conversas**, use o filtro **Todos os números** para ver só um número. Cada conversa mostra o selo do número.',
+        'A resposta sai pelo número em que o lead escreveu. Se ele falou por mais de um, escolha no topo da conversa.',
+        'O que alguém responde pelo celular ou pela Clint também aparece no histórico, marcado como "Celular/Clint".',
+      ]),
+      cuidados([
+        'Número por QR não faz disparo em massa nem template. O CRM bloqueia e limita o volume por minuto e por hora para evitar banimento.',
+        'Número por QR não tem janela de 24 horas, mas é conversa 1 a 1: nada de colar a mesma mensagem para muita gente.',
+        'Desconectar no CRM não desliga o número do celular nem da Clint.',
+        'Os números por QR só conectam depois que o servidor do WhatsApp por QR estiver no ar e ligado pelo responsável do sistema.',
+      ]),
+    ],
+  },
+  {
     id: 'estrategias-pedido-a-acao',
     titulo: 'Estratégias: do pedido à ação',
     parte: 'sistema',

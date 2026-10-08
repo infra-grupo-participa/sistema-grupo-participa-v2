@@ -35,6 +35,8 @@ import {
   mensagemErroEscrita,
 } from './mapeamento-escrita';
 import type { EdicaoAtivacao, PainelAtivacao } from '../domain/ativacao';
+import type { PainelCanais } from '../domain/canais-whatsapp';
+import { mapCanais } from './mapeamento-canais';
 import { argsSalvarAtivacao, mapPainelAtivacao } from './mapeamento-ativacao';
 import { argsRegra, mapOrigemDetalhada, mapPainelCatalogo } from './mapeamento-catalogacao';
 import type { OrigemDetalhada, PainelCatalogo, RegraCatalogo } from '../domain/catalogacao';
@@ -282,6 +284,10 @@ export class SupabaseComercialRepository implements ComercialRepository {
   async templates(): Promise<Template[]> { return mapTemplates(await this.rpc('crm_templates')); }
   async fichas(): Promise<FichaDisparo[]> { return mapFichas(await this.rpc('crm_fichas', { p_limite: 200 })); }
   async whatsappStatus(): Promise<StatusWhatsapp> { return mapWhatsappStatus(await this.rpc('crm_whatsapp_status')); }
+  async canais(): Promise<PainelCanais> { return mapCanais(await this.rpc('crm_canais')); }
+  salvarCanal(canalId: string, dados: { nome?: string; donoId?: string | null; recebe?: boolean; envia?: boolean; ativo?: boolean }) {
+    return this.simples('crm_canal_salvar', { p_canal: canalId, p_dados: dados });
+  }
 
   // ── Filas de recuperação e links (F5) ──
   /** Só as abertas. Vendas por link (`p_vendas`) custam 2 Seq Scans: ficam para pedido explícito. */
@@ -406,14 +412,14 @@ export class SupabaseComercialRepository implements ComercialRepository {
   excluirDashboard(id: string) { return this.simples('crm_arquivar_dashboard', argsEscrita.excluirDashboard(id)); }
 
   // ── Escrita WhatsApp (F4) ──
-  enviarMensagem(contatoId: string, texto: string, templateId?: string | null, chave?: string | null): Promise<ResultadoEnvio> {
-    return this.escrever('crm_enviar_mensagem', argsEscrita.enviarMensagem(contatoId, texto, templateId, chave), mapResultadoEnvio);
+  enviarMensagem(contatoId: string, texto: string, templateId?: string | null, chave?: string | null, canalId?: string | null): Promise<ResultadoEnvio> {
+    return this.escrever('crm_enviar_mensagem', argsEscrita.enviarMensagem(contatoId, texto, templateId, chave, canalId), mapResultadoEnvio);
   }
   marcarConversaLida(contatoId: string) { return this.simples('crm_marcar_conversa_lida', argsEscrita.marcarConversaLida(contatoId)); }
 
   // ── Arquivos do WhatsApp (20261007140044): bucket privado crm-midia ──
   /** Sobe em envio/<meu id>/<uuid>.<ext> (policy do Storage) e enfileira pela crm_enviar_mensagem (que valida de novo). */
-  async enviarAnexo(contatoId: string, arquivo: File, legenda: string, chave?: string | null): Promise<ResultadoEnvio> {
+  async enviarAnexo(contatoId: string, arquivo: File, legenda: string, chave?: string | null, canalId?: string | null): Promise<ResultadoEnvio> {
     const v = validarAnexo(arquivo);
     if (!v.ok) return { ok: false, msg: v.msg };
     if (legenda.trim().length > LIMITE_LEGENDA) return { ok: false, msg: 'Legenda longa demais (máximo 1.024 caracteres).' };
@@ -426,12 +432,12 @@ export class SupabaseComercialRepository implements ComercialRepository {
       logQueryError('crm-midia upload', error);
       return { ok: false, msg: 'Não foi possível subir o arquivo. Tente de novo.' };
     }
-    const r = await this.escrever('crm_enviar_mensagem', argsEscrita.enviarAnexo(contatoId, caminho, legenda, v.tipo === 'documento' ? v.nome : null, chave), mapResultadoEnvio);
+    const r = await this.escrever('crm_enviar_mensagem', argsEscrita.enviarAnexo(contatoId, caminho, legenda, v.tipo === 'documento' ? v.nome : null, chave, canalId), mapResultadoEnvio);
     await this.apagarUploadSeSobrou(caminho, r);
     return r;
   }
   /** Áudio gravado (20261007s): sobe em envio/<meu id>/<uuid>.<ogg|m4a|aac|mp3> e enfileira sem legenda. */
-  async enviarAudio(contatoId: string, audio: Blob, formato: { mime: string; ext: string }, chave?: string | null): Promise<ResultadoEnvio> {
+  async enviarAudio(contatoId: string, audio: Blob, formato: { mime: string; ext: string }, chave?: string | null, canalId?: string | null): Promise<ResultadoEnvio> {
     if (!extAudioPermitida(formato.ext, formato.mime)) return { ok: false, msg: 'Formato de áudio não aceito.' };
     if (!audio.size) return { ok: false, msg: 'A gravação ficou vazia. Grave de novo.' };
     if (audio.size > LIMITE_AUDIO) return { ok: false, msg: 'Áudio grande demais (máximo 16 MB).' };
@@ -444,7 +450,7 @@ export class SupabaseComercialRepository implements ComercialRepository {
       logQueryError('crm-midia upload audio', error);
       return { ok: false, msg: 'Não foi possível subir o áudio. Tente de novo.' };
     }
-    const r = await this.escrever('crm_enviar_mensagem', argsEscrita.enviarAudio(contatoId, caminho, chave), mapResultadoEnvio);
+    const r = await this.escrever('crm_enviar_mensagem', argsEscrita.enviarAudio(contatoId, caminho, chave, canalId), mapResultadoEnvio);
     await this.apagarUploadSeSobrou(caminho, r);
     return r;
   }

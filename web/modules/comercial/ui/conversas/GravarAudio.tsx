@@ -20,8 +20,8 @@ function suportaGravacao(): boolean {
     && typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
 }
 
-export function BotaoGravarAudio({ contatoId, nomeContato, desabilitado, flash }: {
-  contatoId: string; nomeContato: string; desabilitado?: boolean; flash: (m: string) => void;
+export function BotaoGravarAudio({ contatoId, nomeContato, desabilitado, flash, canalId = null }: {
+  contatoId: string; nomeContato: string; desabilitado?: boolean; flash: (m: string) => void; canalId?: string | null;
 }) {
   const [aberto, setAberto] = useState(false);
   const abrir = () => {
@@ -41,7 +41,7 @@ export function BotaoGravarAudio({ contatoId, nomeContato, desabilitado, flash }
       >
         <Icon name="mic" size={15} />
       </Button>
-      {aberto && <ModalGravar contatoId={contatoId} nomeContato={nomeContato} flash={flash} onFechar={() => setAberto(false)} />}
+      {aberto && <ModalGravar canalId={canalId} contatoId={contatoId} nomeContato={nomeContato} flash={flash} onFechar={() => setAberto(false)} />}
     </>
   );
 }
@@ -49,7 +49,8 @@ export function BotaoGravarAudio({ contatoId, nomeContato, desabilitado, flash }
 type Gravacao = { blob: Blob; url: string; duracaoMs: number; mime: string };
 type Fase = 'pedindo' | 'gravando' | 'pronto' | 'enviando' | 'erro';
 
-function ModalGravar({ contatoId, nomeContato, flash, onFechar }: {
+function ModalGravar({ contatoId, nomeContato, flash, onFechar, canalId }: {
+  canalId: string | null;
   contatoId: string; nomeContato: string; flash: (m: string) => void; onFechar: () => void;
 }) {
   const [fase, setFase] = useState<Fase>('pedindo');
@@ -201,7 +202,7 @@ function ModalGravar({ contatoId, nomeContato, flash, onFechar }: {
     const v = validarAudio({ tamanho: arquivo.size, duracaoMs: gravacao.duracaoMs });
     if (!v.ok) { trava.current.terminar(false); setFase('pronto'); flash(v.msg); return; }
     let r: Awaited<ReturnType<typeof repo.enviarAudio>>;
-    try { r = await repo.enviarAudio(contatoId, arquivo, { mime: plano.mime, ext: plano.ext }, chave); } catch { r = { ok: false, msg: 'Não foi possível enviar o áudio.' }; }
+    try { r = await repo.enviarAudio(contatoId, arquivo, { mime: plano.mime, ext: plano.ext }, chave, canalId); } catch { r = { ok: false, msg: 'Não foi possível enviar o áudio.' }; }
     trava.current.terminar(r.ok);
     if (!vivo.current) return;
     if (!r.ok) { setFase('pronto'); flash(r.msg ?? 'Não foi possível enviar o áudio.'); return; }

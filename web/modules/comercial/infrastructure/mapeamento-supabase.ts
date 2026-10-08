@@ -450,6 +450,8 @@ function mapMensagem(x: unknown, rpc: string): Mensagem {
     direcao: o.direcao, texto: str(o.texto), em: str(o.em), status, autorId: strOuNull(o.autorId),
     templateId: strOuNull(o.templateId), envio, erro: strOuNull(o.erro), tipo: str(o.tipo) || 'texto', fichaId: strOuNull(o.fichaId),
     midia: mapMidia(o.midia),
+    // canal (20261008152212): só quando o banco manda (resposta antiga continua igual)
+    ...('canalId' in o ? { canalId: strOuNull(o.canalId), externa: o.externa === true } : {}),
   };
 }
 
@@ -460,6 +462,7 @@ export function mapConversas(d: unknown): Conversa[] {
     return {
       contatoId: str(o.contatoId), ultimaMensagem: mapMensagem(o.ultimaMensagem, 'crm_conversas'), naoLidas: num(o.naoLidas),
       janelaAteEm: strOuNull(o.janelaAteEm), atribuidaA: strOuNull(o.atribuidaA),
+      canalId: strOuNull(o.canalId), canais: Array.isArray(o.canais) ? o.canais.filter((x): x is string => typeof x === 'string') : [],
     };
   });
 }

@@ -22,11 +22,12 @@ import {
 import { AbaCatalogacao } from './AbaCatalogacao';
 import { AbaIntegracoes } from './AbaIntegracoes';
 import { AbaMcp } from './AbaMcp';
+import { AbaNumeros } from './AbaNumeros';
 import { AbaMotivos } from './AbaMotivos';
 import { AbaNotificacoes } from './AbaNotificacoes';
 
-type Aba = 'distribuicao' | 'funil' | 'motivos' | 'catalogacao' | 'links' | 'integracoes' | 'mcp' | 'notificacoes';
-const ABAS: readonly Aba[] = ['distribuicao', 'funil', 'motivos', 'catalogacao', 'links', 'integracoes', 'mcp', 'notificacoes'];
+type Aba = 'distribuicao' | 'funil' | 'motivos' | 'catalogacao' | 'links' | 'integracoes' | 'numeros' | 'mcp' | 'notificacoes';
+const ABAS: readonly Aba[] = ['distribuicao', 'funil', 'motivos', 'catalogacao', 'links', 'integracoes', 'numeros', 'mcp', 'notificacoes'];
 const ID_ABAS = 'config-comercial';
 
 // Link interno com visual de Button ghost (sm).
@@ -38,14 +39,15 @@ export function ConfiguracoesClient() {
   const { toast, flash } = useFlash();
   const leitura = !gestor && !!sessao;
   // Leitor (admin/dev fora do Comercial): sem as abas pessoais (token do Claude e notificações) — ele não recebe nem conecta.
-  const abaEfetiva: Aba = leitor && (aba === 'mcp' || aba === 'notificacoes') ? 'distribuicao' : aba;
+  // Números de WhatsApp (conectar por QR) também some para ele.
+  const abaEfetiva: Aba = leitor && (aba === 'mcp' || aba === 'notificacoes' || aba === 'numeros') ? 'distribuicao' : aba;
 
   return (
     <PaginaComercial
       titulo="Configurações"
       subtitulo={(
         <>
-          Distribuição de leads, motivos de perda, catalogação de origem, links, integrações, conexão com o Claude e suas notificações.
+          Distribuição de leads, motivos de perda, catalogação de origem, links, integrações, números de WhatsApp, conexão com o Claude e suas notificações.
           {leitura && <span title={leitor ? 'Acesso só de leitura.' : 'Só o gestor do Comercial altera'}> · Somente leitura</span>}
         </>
       )}
@@ -59,7 +61,7 @@ export function ConfiguracoesClient() {
           { k: 'distribuicao', l: 'Distribuição' }, { k: 'funil', l: 'Modelo do funil' }, { k: 'motivos', l: 'Motivos de perda' },
           { k: 'catalogacao', l: 'Catalogação' },
           { k: 'links', l: 'Links rastreáveis' }, { k: 'integracoes', l: 'Integrações' },
-          ...(leitor ? [] : [{ k: 'mcp', l: 'Conectar ao Claude' }, { k: 'notificacoes', l: 'Notificações' }]),
+          ...(leitor ? [] : [{ k: 'numeros', l: 'Números de WhatsApp' }, { k: 'mcp', l: 'Conectar ao Claude' }, { k: 'notificacoes', l: 'Notificações' }]),
         ]}
       />
       <div role="tabpanel" id={idsAba(ID_ABAS, abaEfetiva).panel} aria-labelledby={idsAba(ID_ABAS, abaEfetiva).tab}>
@@ -71,6 +73,7 @@ export function ConfiguracoesClient() {
           : abaEfetiva === 'catalogacao' ? <AbaCatalogacao gestor={gestor} leitor={leitor} flash={flash} />
           : abaEfetiva === 'links' ? <Links vendedores={vendedores} meuId={sessao.vendedorId} gestor={gestor} leitor={leitor} nomeDe={nomeDe} flash={flash} />
           : abaEfetiva === 'integracoes' ? <AbaIntegracoes gestor={gestor} verTudo={verTudo} flash={flash} />
+          : abaEfetiva === 'numeros' ? <AbaNumeros gestor={gestor} nomeDe={nomeDe} flash={flash} />
           : abaEfetiva === 'mcp' ? <AbaMcp key={sessao.vendedorId} sessao={sessao} gestor={gestor} flash={flash} />
           : <AbaNotificacoes key={sessao.vendedorId} flash={flash} />}
       </div>

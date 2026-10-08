@@ -11,8 +11,8 @@ import { criarTravaEnvio } from './regras-conversas';
 
 const ACEITA = 'image/jpeg,image/png,image/webp,application/pdf';
 
-export function BotaoAnexar({ contatoId, nomeContato, desabilitado, flash }: {
-  contatoId: string; nomeContato: string; desabilitado?: boolean; flash: (m: string) => void;
+export function BotaoAnexar({ contatoId, nomeContato, desabilitado, flash, canalId = null }: {
+  contatoId: string; nomeContato: string; desabilitado?: boolean; flash: (m: string) => void; canalId?: string | null;
 }) {
   const campo = useRef<HTMLInputElement>(null);
   const [arquivo, setArquivo] = useState<{ file: File; info: AnexoValido; previa: string | null } | null>(null);
@@ -52,6 +52,7 @@ export function BotaoAnexar({ contatoId, nomeContato, desabilitado, flash }: {
       </Button>
       {arquivo && (
         <ModalAnexo
+          canalId={canalId}
           contatoId={contatoId}
           nomeContato={nomeContato}
           file={arquivo.file}
@@ -65,8 +66,8 @@ export function BotaoAnexar({ contatoId, nomeContato, desabilitado, flash }: {
   );
 }
 
-function ModalAnexo({ contatoId, nomeContato, file, info, previa, flash, onFechar }: {
-  contatoId: string; nomeContato: string; file: File; info: AnexoValido; previa: string | null; flash: (m: string) => void; onFechar: () => void;
+function ModalAnexo({ contatoId, nomeContato, file, info, previa, flash, onFechar, canalId }: {
+  canalId: string | null; contatoId: string; nomeContato: string; file: File; info: AnexoValido; previa: string | null; flash: (m: string) => void; onFechar: () => void;
 }) {
   const [legenda, setLegenda] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -78,7 +79,7 @@ function ModalAnexo({ contatoId, nomeContato, file, info, previa, flash, onFecha
     if (!chave) return;
     setEnviando(true);
     let r: Awaited<ReturnType<typeof repo.enviarAnexo>>;
-    try { r = await repo.enviarAnexo(contatoId, file, legenda, chave); } catch { r = { ok: false, msg: 'Não foi possível enviar o arquivo.' }; }
+    try { r = await repo.enviarAnexo(contatoId, file, legenda, chave, canalId); } catch { r = { ok: false, msg: 'Não foi possível enviar o arquivo.' }; }
     trava.current.terminar(r.ok);
     setEnviando(false);
     if (!r.ok) { flash(r.msg ?? 'Não foi possível enviar o arquivo.'); return; }

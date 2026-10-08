@@ -12,6 +12,7 @@ import type {
 import type { FiltroContatos, PaginaContatos, ResumoContatos } from '../domain/contatos';
 import type { OrigemDetalhada, PainelCatalogo, RegraCatalogo } from '../domain/catalogacao';
 import type { EdicaoAtivacao, PainelAtivacao } from '../domain/ativacao';
+import type { PainelCanais } from '../domain/canais-whatsapp';
 
 export interface Resultado {
   ok: boolean;
@@ -126,6 +127,10 @@ export interface ComercialRepository {
   templates(): Promise<Template[]>;
   /** Interruptores e limites do WhatsApp (sem dado de pessoa). */
   whatsappStatus(): Promise<StatusWhatsapp>;
+  /** Números de WhatsApp do CRM (oficial + conectados por QR), com status e limites anti-ban (20261008152212). */
+  canais(): Promise<PainelCanais>;
+  /** Nome, dono, recebe/envia de um número. Só o gestor. */
+  salvarCanal(canalId: string, dados: { nome?: string; donoId?: string | null; recebe?: boolean; envia?: boolean; ativo?: boolean }): Promise<Resultado>;
 
   filas(): Promise<FilaRecuperacao[]>;
   fichas(): Promise<FichaDisparo[]>;
@@ -182,18 +187,19 @@ export interface ComercialRepository {
 
   /** Com template, o texto é montado no banco ({{1}} = primeiro nome) e `texto` é ignorado. */
   /** `chave` = idempotência: a mesma chave devolve a mesma mensagem (repetida) sem duplicar. */
-  enviarMensagem(contatoId: string, texto: string, templateId?: string | null, chave?: string | null): Promise<ResultadoEnvio>;
+  /** `canalId` = número por onde sai (vazio = o da conversa mais recente; senão o oficial). */
+  enviarMensagem(contatoId: string, texto: string, templateId?: string | null, chave?: string | null, canalId?: string | null): Promise<ResultadoEnvio>;
   marcarConversaLida(contatoId: string): Promise<Resultado>;
   /**
    * Imagem (JPG/PNG/WebP até 5 MB) ou PDF (até 16 MB) com legenda opcional: sobe para o bucket privado e enfileira
    * (janela de 24 h aberta; o banco valida dono, tipo e tamanho de novo).
    */
-  enviarAnexo(contatoId: string, arquivo: File, legenda: string, chave?: string | null): Promise<ResultadoEnvio>;
+  enviarAnexo(contatoId: string, arquivo: File, legenda: string, chave?: string | null, canalId?: string | null): Promise<ResultadoEnvio>;
   /**
    * Áudio gravado no navegador (20261007s), já no formato final (ogg/opus = nota de voz; m4a/aac/mp3 = áudio comum):
    * sobe para o bucket privado e enfileira sem legenda (janela de 24 h aberta; o banco valida dono, tipo e tamanho).
    */
-  enviarAudio(contatoId: string, audio: Blob, formato: { mime: string; ext: string }, chave?: string | null): Promise<ResultadoEnvio>;
+  enviarAudio(contatoId: string, audio: Blob, formato: { mime: string; ext: string }, chave?: string | null, canalId?: string | null): Promise<ResultadoEnvio>;
   /** URL assinada de curta duração (10 min) do arquivo de uma mensagem; null = sem acesso ou indisponível. */
   urlMidia(caminho: string): Promise<string | null>;
 
