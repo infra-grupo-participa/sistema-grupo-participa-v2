@@ -44,10 +44,25 @@ describe('central de ajuda: estrutura', () => {
     }
   });
 
-  it('o que é futuro está marcado como em breve (WhatsApp, Hotmart, Clint, assistente de IA, social selling)', () => {
-    const emBreve = CENTRAL.flatMap((s) => s.blocos).filter((b) => b.tipo === 'em_breve').map((b) => b.tipo === 'em_breve' ? `${b.titulo} ${b.texto}` : '').join(' ');
-    for (const t of ['WhatsApp', 'Hotmart', 'Clint', 'IA', 'Instagram']) expect(emBreve).toContain(t);
+  it('"o que vem por aí" lista só o que de fato falta', () => {
+    const vem = CENTRAL.find((s) => s.id === 'o-que-vem-por-ai')!.blocos.filter((b) => b.tipo === 'em_breve').map((b) => (b.tipo === 'em_breve' ? b.titulo : ''));
+    expect(vem).toEqual(['Disparo em massa automático', 'Reativação automática', 'Ligação com registro (VoIP)', 'Relatórios por período', 'Social selling']);
     expect(CENTRAL.find((s) => s.id === 'modulo-social-selling')!.emBreve).toBe(true);
+  });
+
+  it('não fala mais em modo demonstração nem em integração "a conectar"', () => {
+    const texto = CENTRAL.flatMap(textosDaSecao).join(' ');
+    expect(texto).not.toMatch(/demonstra[çc][ãa]o|a conectar|some ao recarregar|Ronan/i);
+    expect(texto).toContain('(21) 98754-5211');
+  });
+
+  it('tem as seções novas: WhatsApp, Estratégias, Ativação, Catalogação, Arquivar funil e Convivência com a Clint', () => {
+    for (const id of ['whatsapp-no-crm', 'estrategias-pedido-a-acao', 'ativacao-padrao', 'catalogacao', 'arquivar-funil', 'convivencia-clint']) {
+      const s = CENTRAL.find((x) => x.id === id);
+      expect(s, id).toBeDefined();
+      const tipos = new Set(s!.blocos.map((b) => b.tipo));
+      for (const t of ['passos', 'dicas', 'cuidados'] as const) expect(tipos.has(t), `${id}: ${t}`).toBe(true);
+    }
   });
 
   it('todo link aponta para uma tela que existe ou para uma seção/parte da central', () => {

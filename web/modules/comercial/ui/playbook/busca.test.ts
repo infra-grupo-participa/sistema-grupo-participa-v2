@@ -49,7 +49,7 @@ describe('conteúdo do playbook', () => {
     const grupos = new Set(GRUPOS.map((g) => g.key));
     expect(SECOES.every((s) => grupos.has(s.grupo))).toBe(true);
     for (const id of ['inegociaveis', 'funil', 'distribuicao', 'disparo-api', 'cadencia', 'conversa', 'fechamento-do-dia',
-      'area-atendimento', 'area-prospeccao', 'area-fechamento', 'em-aberto', 'glossario']) {
+      'area-atendimento', 'area-prospeccao', 'area-fechamento', 'em-aberto', 'glossario', 'convivencia-clint']) {
       expect(ids).toContain(id);
     }
   });

@@ -34,7 +34,7 @@ export const PARTES: Parte[] = [
   { key: 'comece', ancora: 'parte-comece-aqui', titulo: 'Comece aqui', icone: 'star', chamada: 'Primeiro dia e rotina', descricao: 'O primeiro dia do vendedor e do gestor no sistema, a rotina diária e os atalhos que poupam tempo.' },
   { key: 'sistema', ancora: 'parte-como-funciona', titulo: 'Como o sistema funciona', icone: 'sliders', chamada: 'O mapa e as peças', descricao: 'O mapa das telas, o caminho de um lead do começo ao fim, as peças do CRM e o que ainda vem por aí.' },
   { key: 'modulos', ancora: 'parte-modulos', titulo: 'Módulo a módulo', icone: 'dashboard', chamada: 'Cada tela, passo a passo', descricao: 'Cada tela do Comercial: para que serve, passo a passo, dicas, erros comuns e o atalho para abrir.' },
-  { key: 'playbook', ancora: 'parte-playbook', titulo: 'Playbook de vendas', icone: 'notebook', chamada: 'Regras, scripts e processos', descricao: 'O playbook completo do Comercial: regras inegociáveis, funil, distribuição, conversa, scripts e processos das áreas. O playbook ainda cita o Clint, o CRM em uso hoje; as regras valem igual neste sistema.' },
+  { key: 'playbook', ancora: 'parte-playbook', titulo: 'Playbook de vendas', icone: 'notebook', chamada: 'Regras, scripts e processos', descricao: 'O playbook completo do Comercial: regras inegociáveis, funil, distribuição, conversa, scripts e processos das áreas. O CRM do Comercial é este sistema; a Clint só termina o que já estava aberto lá.' },
   { key: 'faq', ancora: 'parte-perguntas', titulo: 'Perguntas frequentes', icone: 'message', chamada: 'Dúvidas do dia a dia', descricao: 'As dúvidas que mais aparecem, com resposta curta e o caminho na tela.' },
   { key: 'glossario', ancora: 'parte-glossario', titulo: 'Glossário', icone: 'list-checks', chamada: 'O que cada termo quer dizer', descricao: 'Os termos do sistema e os termos de vendas que o Comercial usa.' },
 ];
@@ -139,6 +139,7 @@ const MODULOS: SecaoAjuda[] = [
       '**Números do dia:** abordados, responderam, em negociação, vendas e receita. Contam de meia-noite até agora.',
       '**Minha carga:** negócios abertos, prazo crítico, sem próximo passo, atividades atrasadas e conversas esperando. Fica vermelho quando passa de zero.',
       '**Agir agora:** a lista do que fazer, em três grupos: **Atrasado**, **Agora** e **Hoje**. Mostra até 10; "Ver todos" mostra o resto. O que está atrasado nunca fica escondido.',
+      '**Calendário de eventos:** os eventos dos projetos, para saber o que vem pela frente.',
       '**Meu painel:** cartões e gráficos que você escolhe (até 12).',
       '**Os 9 inegociáveis do playbook:** versão de bolso, recolhida. Clique em "Mostrar".',
     ],
@@ -189,7 +190,7 @@ const MODULOS: SecaoAjuda[] = [
     sinonimos: ['kanban', 'pipeline', 'pipe', 'quadro', 'etapa', 'mover', 'arrastar', 'card', 'novo negócio', 'projeto', 'agrupador', 'atm', 'aula ao vivo', 'live'],
     paraQue: [
       'Mostra cada negócio na etapa em que está, do primeiro contato ao fechado. Cada produto tem seus funis, reunidos num **agrupador**.',
-      'Funil **manual** é onde o comercial trabalha (a "Venda ativa"). Funil **automático** é preenchido pela Hotmart (carrinho abandonado, cartão recusado e outros); nele não se cria negócio à mão.',
+      'Funil **manual** é onde o comercial trabalha (a "Venda ativa"). Funil **automático** é preenchido pela Hotmart: carrinho abandonado, cartão recusado e boleto ou Pix viram negócio sozinhos. Nele não se cria negócio à mão. A compra aprovada fecha o negócio aberto da pessoa.',
     ],
     naTela: [
       '**Trocar funil:** lista os funis por produto, com quantos abertos e um ponto vermelho onde há prazo crítico. Um ponto vermelho no próprio botão avisa crítico em outro funil.',
@@ -234,7 +235,7 @@ const MODULOS: SecaoAjuda[] = [
       '**Comecei um novo projeto:** escolha o tipo (lançamento, webinar, seminário, evento, ascensão, ATM), dê o nome e o sistema cria de uma vez os funis certos, com a chave do projeto nas campanhas.',
       '**ATM (aula ao vivo de entrada):** uma live sobre a base que já existe, sem captação paga, para o HT ou para o Seminário ATM (Sessão de Viabilidade): escolha o produto. Cria a **Ativação comercial (pré-checkout)**: lista recebida, contato feito (recebeu e assistiu ao caso), convidado para a live, presença confirmada, ofertado no fechamento, aguardar pagamento e fechado. E o **Fechamento da live**, automático pela Hotmart, porque a condição vale só até 23h59 do dia.',
       'Regras ao salvar: pelo menos 2 etapas, nomes sem repetir, uma etapa de ganho e ela por último, prazo crítico maior que o de atenção, distribuição própria somando 100%.',
-      'Etapa com negócio aberto não pode ser removida. Funil com negócio aberto não pode ser arquivado.',
+      'Etapa com negócio aberto não pode ser removida. Funil arquivado com negócio aberto esconde esses negócios de todas as telas até ser desarquivado. Nada é apagado (veja "Arquivar e ocultar funil").',
     ],
     dicas: [
       'Os cards já vêm em ordem de urgência: crítico primeiro, depois quem está parado há mais tempo.',
@@ -246,9 +247,6 @@ const MODULOS: SecaoAjuda[] = [
       'Negócio perdido não aparece no quadro. Procure pela ficha do contato.',
       'Lead que não é seu não se toca, e o quadro trava: o card de outro dono mostra um cadeado, não arrasta, não agenda e não tem "Mover para". Negócio sem dono também fica travado para o vendedor até o gestor definir quem atende.',
       'Um contato só tem um negócio aberto por funil. Se já existe, o funil aparece desativado na criação.',
-    ],
-    emBreve: [
-      { titulo: 'Negócios criados pela Hotmart', texto: 'Os funis automáticos vão nascer sozinhos dos eventos da Hotmart (carrinho abandonado, cartão recusado, compra aprovada) e o ganho vai fechar sozinho com o pagamento aprovado. A ligação com a Hotmart está a conectar.' },
     ],
   }),
   modulo({
@@ -327,11 +325,12 @@ const MODULOS: SecaoAjuda[] = [
     id: 'modulo-conversas',
     titulo: 'Conversas',
     icone: 'message',
-    resumo: 'A caixa do WhatsApp oficial: quem espera há mais tempo vem primeiro.',
+    resumo: 'A caixa do WhatsApp oficial do Comercial: quem espera há mais tempo vem primeiro.',
     telas: [TELAS.conversas],
-    sinonimos: ['whatsapp', 'mensagem', 'chat', 'caixa', 'responder', 'template', 'janela de 24 horas', 'resposta rápida'],
+    sinonimos: ['whatsapp', 'mensagem', 'chat', 'caixa', 'responder', 'template', 'janela de 24 horas', 'resposta rápida', 'áudio', 'anexo', 'arquivo', 'pdf', 'imagem', 'foto', 'vídeo'],
     paraQue: [
-      'Reúne as conversas do número oficial do comercial, cada uma ligada ao dono do lead.',
+      'Reúne as conversas do número oficial do comercial, **(21) 98754-5211**, cada uma ligada ao dono do lead. O que você envia aqui sai de verdade para o lead.',
+      'A tela atualiza sozinha: mensagem nova aparece sem recarregar.',
       'A regra é simples: responda primeiro quem espera há mais tempo.',
     ],
     naTela: [
@@ -350,6 +349,14 @@ const MODULOS: SecaoAjuda[] = [
           'Digite **"/"** com o campo vazio para ver as respostas rápidas do playbook.',
           'Envie com **Ctrl + Enter** (no Mac, ⌘ + Enter).',
           'Termine com o próximo passo: clique em **"Próximo passo"** e agende.',
+        ],
+      },
+      {
+        titulo: 'Como mandar áudio, imagem ou PDF',
+        itens: [
+          'Com a janela aberta, clique no **microfone** para gravar pelo navegador. Ouça antes de enviar. O limite é 5 minutos.',
+          'Para arquivo, clique no **clipe**. Imagem (JPG, PNG ou WebP) até 5 MB; PDF até 16 MB.',
+          'Confira a prévia e envie.',
         ],
       },
       {
@@ -376,9 +383,6 @@ const MODULOS: SecaoAjuda[] = [
       'Lead sem dono também fica só para leitura do vendedor. O gestor atribui antes.',
       'Quem pediu para não receber contato não recebe nenhuma mensagem.',
       'Emoji não bloqueia o envio, mas o playbook pede mensagem sem emoji.',
-    ],
-    emBreve: [
-      { titulo: 'WhatsApp oficial conectado', texto: 'O envio e o recebimento de verdade entram quando o número oficial for conectado ao sistema. Hoje a caixa é de demonstração: o que você envia aqui não sai para o lead.' },
     ],
   }),
   modulo({
@@ -448,6 +452,7 @@ const MODULOS: SecaoAjuda[] = [
     sinonimos: ['pessoa', 'lead', 'cliente', 'cadastro', 'buscar', 'dono', 'jornada', 'duplicado', 'opt-out', 'aluno', 'ficha do contato'],
     paraQue: [
       'Cada pessoa aparece uma vez só. Ela é reconhecida pelo e-mail ou pelo DDD com os últimos 8 dígitos do telefone.',
+      'Contatos chegam sozinhos: lead novo do ActiveCampaign, quem responde a pesquisa (Respondi) e os eventos da Hotmart. Cada um vem com origem e projeto (catalogação).',
       '**Antes de abordar alguém, busque aqui.** Se a pessoa tem dono e não é você, não toque.',
     ],
     naTela: [
@@ -496,9 +501,6 @@ const MODULOS: SecaoAjuda[] = [
       'Possível duplicado não é a mesma pessoa até alguém confirmar. Não junte por conta própria.',
       'CPF não entra no CRM.',
     ],
-    emBreve: [
-      { titulo: 'Cadastro gravado', texto: 'Hoje o contato novo vale só na tela (na demonstração, some ao recarregar). A gravação entra na próxima etapa do sistema.' },
-    ],
   }),
   modulo({
     id: 'modulo-estrategias',
@@ -510,7 +512,7 @@ const MODULOS: SecaoAjuda[] = [
       'carrinho abandonado', 'boleto', 'cartão recusado', 'script de abordagem', 'transformar em ação', 'placar', 'própria holding'],
     paraQue: [
       'Antes esta tela se chamava **Recuperação**. O endereço antigo continua abrindo aqui.',
-      'Quem tem a permissão **"Solicitar estratégia"** pede uma ação ao Comercial: o que quer, para quem, qual produto e até quando.',
+      'Quem tem a permissão **"Solicitar estratégia"** (hoje, Elaine, Marcio e Arthur) pede uma ação ao Comercial: o que quer, para quem, qual produto e até quando.',
       'O gestor comercial analisa, transforma o pedido em ação com um clique e acompanha o placar junto com quem pediu.',
       'As **filas de recuperação** pós-lançamento continuam aqui, como um tipo de ação.',
     ],
@@ -615,7 +617,7 @@ const MODULOS: SecaoAjuda[] = [
       'Template novo é aprovado pela Mensageria. Fora da janela de 24 horas, só sai template aprovado.',
     ],
     emBreve: [
-      { titulo: 'Envio pelo sistema', texto: 'O disparo de verdade, com entregues, lidas e respostas voltando sozinhos, entra quando o número oficial for conectado.' },
+      { titulo: 'Disparo em massa automático', texto: 'Hoje a tela registra, aprova e agenda. O envio em massa saindo sozinho do sistema, com entregues, lidas e respostas voltando, ainda vem.' },
     ],
   }),
   modulo({
@@ -811,7 +813,7 @@ const MODULOS: SecaoAjuda[] = [
       'A aba "Alterações" das fichas tem o link "Ver registro completo".',
     ],
     cuidados: [
-      'O gestor vê tudo. O vendedor vê o que fez e o que tocou os negócios e contatos dele.',
+      'O gestor vê tudo. Cada vendedor vê só o que é dele.',
     ],
   }),
   modulo({
@@ -855,7 +857,7 @@ const MODULOS: SecaoAjuda[] = [
       },
     ],
     soGestor: [
-      '**Distribuição:** ligue ou desligue quem recebe e ajuste os percentuais. A soma dos ativos tem de dar 100%. Clique em "Salvar".',
+      '**Distribuição:** ligue ou desligue quem recebe e ajuste os percentuais. A soma dos ativos tem de dar 100%. Clique em "Salvar". Hoje: Jusy 50% e Marcos Paulo 50%.',
       '**Motivos:** "Novo motivo", editar, desativar e reativar. Cada motivo pode voltar para reativação, mandar para a lista de bloqueio ou avisar o gestor. Nos 9 de fábrica, só a nota e o ativo mudam.',
       'O gestor cria link para qualquer vendedor.',
       '**Hotmart:** escolha o período (24 h a 90 dias). Em cada erro, **"Reprocessar"** refaz o evento com a regra atual. Só funciona com a integração ligada.',
@@ -872,7 +874,7 @@ const MODULOS: SecaoAjuda[] = [
       'Aviso "O MCP do Comercial está desligado": nenhum token conecta e não dá para gerar novo. Quem liga é o responsável pelo sistema.',
     ],
     emBreve: [
-      { titulo: 'Integrações ligadas', texto: 'WhatsApp oficial (Infobip, Unnichat), Manychat, ActiveCampaign, SendFlow e Slack aparecem como "a conectar". A Hotmart já tem painel, mas só cria negócio quando for ligada. O Clint entra só para a migração. Instagram (social selling) vem depois, e o assistente de IA no navegador (claude.ai) e no celular também: hoje ele conecta pelo Claude Code e pelo Claude Desktop.' },
+      { titulo: 'O que ainda não está ligado', texto: 'Já ligados: Hotmart, WhatsApp oficial (Infobip), ActiveCampaign, Respondi e o aviso de reembolso no Slack. Ainda vêm: Instagram (social selling) e o assistente de IA no navegador (claude.ai) e no celular. Hoje o assistente conecta pelo Claude Code e pelo Claude Desktop. A Clint convive só para terminar o que já estava aberto lá.' },
     ],
   }),
   modulo({
@@ -1147,6 +1149,12 @@ const SISTEMA: SecaoAjuda[] = [
         'Só o **gestor** troca o dono, sempre com motivo. O contato e as atividades abertas vão junto.',
         'Lead sem dono aparece em vermelho e entra no Controle das 9h do gestor.',
       ], 'Como funciona'),
+      tab(['Pessoa', 'Papel'], [
+        ['Jonathan Mendes', 'Gestor do Comercial. Também recebe negócios'],
+        ['Marcos Paulo', 'Vendedor. Recebe 50% dos leads novos'],
+        ['Jusy', 'Vendedora. Recebe 50% dos leads novos'],
+        ['Arthur Galvão', 'Administrador e supervisor'],
+      ], 'O time hoje (o gestor ajusta os percentuais em Configurações)'),
       cuidados([
         'Lead que não é seu não se toca, nem para tirar dúvida. Peça ao gestor para transferir.',
         'Antes de abordar alguém fora da fila, busque em Contatos.',
@@ -1162,6 +1170,17 @@ const SISTEMA: SecaoAjuda[] = [
     sinonimos: ['ativação', 'ativacao', 'mql', 'toque 1', 'toques', 'acompanhar mql', 'ingresso', 'inscrição', 'comparecimento', 'salvar o número'],
     ferramentas: [TELAS.funil],
     blocos: [
+      passos('Passo a passo do vendedor', [
+        'Abra **Atividades › Hoje**. Os toques da Ativação já estão lá, no seu nome.',
+        'Toque 1: mande a mensagem assim que a pessoa entrar (em horário comercial). Copie o texto em **Roteiros**.',
+        'Toque 2: ligue na sexta anterior ao evento, às 10h.',
+        'Toque 3: em cada dia do evento, mande o link no privado 1 hora antes.',
+        'Conclua cada atividade com o resultado. O sistema agenda o próximo toque.',
+      ]),
+      dicas([
+        'Peça para a pessoa salvar o número. Assim os próximos toques chegam como conversa, não como disparo.',
+        'Quem não comprou volta para você na recuperação. Anote na ficha o que ouviu durante o evento.',
+      ]),
       p('**Todo projeto nasce com o funil de Ativação**, qualquer que seja o tipo. Projeto criado antes: o gestor abre um funil do projeto e clica em **Acrescentar a Ativação**.'),
       p('A pessoa entra sozinha quando se inscreve, compra o ingresso ou responde a pesquisa (quem responde e ainda não está no CRM vira contato novo). Quais listas, tags e produtos valem para cada projeto, e quais tags marcam MQL, é a catalogação de origem, cuidada pelo Victor Hugo. Uma pessoa tem um negócio de ativação por projeto: entrar de novo não duplica. O dono vem pela distribuição, e quem já tem dono continua com ele.'),
       tab(['Toque', 'Quando', 'O que fazer'], [
@@ -1257,20 +1276,143 @@ const SISTEMA: SecaoAjuda[] = [
     ],
   },
   {
-    id: 'demonstracao',
-    titulo: 'Demonstração e implantação: o que já grava',
+    id: 'whatsapp-no-crm',
+    titulo: 'WhatsApp no CRM',
+    parte: 'sistema',
+    icone: 'message',
+    resumo: 'O número oficial (21) 98754-5211 dentro da tela Conversas: janela, templates, áudio, arquivos e atualização sozinha.',
+    sinonimos: ['whatsapp', 'número oficial', 'infobip', 'janela de 24 horas', 'template', 'áudio', 'gravar áudio', 'anexo', 'arquivo', 'pdf', 'imagem', 'vídeo', 'celular', 'app'],
+    ferramentas: [TELAS.conversas],
+    blocos: [
+      p('O WhatsApp oficial do Comercial é o **(21) 98754-5211**. Ele está ligado ao CRM: tudo o que você envia na tela **Conversas** sai de verdade para o lead, e tudo o que o lead manda chega lá.'),
+      tab(['O quê', 'Envia', 'Recebe'], [
+        ['Texto', 'Sim', 'Sim'],
+        ['Imagem (JPG, PNG, WebP até 5 MB)', 'Sim', 'Sim'],
+        ['PDF (até 16 MB)', 'Sim', 'Sim'],
+        ['Áudio (gravado no navegador, até 5 min)', 'Sim', 'Sim'],
+        ['Vídeo', 'Não', 'Sim'],
+      ], 'O que passa pelo número'),
+      passos('Passo a passo', [
+        'Abra **Conversas › Minhas**. A tela atualiza sozinha: não precisa recarregar.',
+        'Janela aberta (até 24 horas depois da última mensagem do lead): escreva, grave áudio no microfone ou anexe arquivo no clipe.',
+        'Janela fechada: escolha um **template aprovado**, confira a prévia e envie.',
+        'Termine com o próximo passo agendado.',
+      ]),
+      dicas([
+        'O selo da janela fica amarelo quando faltam menos de 2 horas. Responda antes de fechar.',
+        'Áudio curto, só com a conversa já aberta. Para conta comercial com robô, só texto.',
+        'Não existe app de celular. Tudo é pela tela Conversas, no computador ou no navegador do celular.',
+      ]),
+      cuidados([
+        'Fora da janela de 24 horas, só sai template aprovado. Mensagem livre não sai.',
+        'Nunca fale com lead pelo WhatsApp pessoal. Só pelo número oficial.',
+        'Arquivo acima do limite não sai. Diminua a imagem ou divida o PDF.',
+        'Lead de outro vendedor ou sem dono fica só para leitura. Peça ao gestor.',
+      ]),
+    ],
+  },
+  {
+    id: 'estrategias-pedido-a-acao',
+    titulo: 'Estratégias: do pedido à ação',
+    parte: 'sistema',
+    icone: 'target',
+    resumo: 'Elaine, Marcio e Arthur pedem; o gestor transforma em fila ou funil com um clique; todos acompanham o placar.',
+    sinonimos: ['estratégia', 'pedido', 'solicitação', 'recuperação', 'placar', 'transformar em ação', 'fila de recuperação'],
+    ferramentas: [TELAS.estrategias],
+    blocos: [
+      p('A tela **Estratégias** é a antiga Recuperação. Ela junta os pedidos de ação ao Comercial e as filas de recuperação.'),
+      passos('Passo a passo', [
+        '**Quem pede** (Elaine, Marcio ou Arthur) abre **"Nova solicitação"**: objetivo, público, produto, prazo e prioridade.',
+        '**O gestor** analisa e clica em **"Transformar em ação"**. Escolhe fila de recuperação ou funil próprio.',
+        'As pessoas vão para os vendedores. Quem já tem dono fica com o mesmo dono.',
+        '**Todos acompanham o placar**: na lista, abordadas, em conversa, vendas e receita.',
+      ]),
+      dicas([
+        'Quem pede vê só os próprios pedidos e o placar. Não precisa de acesso ao resto do CRM.',
+        'A prévia já tira quem não quer contato, quem já comprou e quem está em negociação.',
+      ]),
+      cuidados([
+        'Depois que o Comercial começa a analisar, o pedido não muda. Objetivo novo pede pedido novo.',
+        'Funil próprio aceita até 300 pessoas. Para mais, use a fila de recuperação.',
+      ]),
+    ],
+  },
+  {
+    id: 'catalogacao',
+    titulo: 'Catalogação: origem, projeto e MQL',
+    parte: 'sistema',
+    icone: 'list-checks',
+    resumo: 'Todo contato chega com a origem e o projeto marcados. As regras são do Victor Hugo, da área de Dados.',
+    sinonimos: ['catalogação', 'catalogacao', 'origem', 'projeto', 'mql', 'tag', 'pb mql', 'activecampaign', 'respondi', 'pesquisa'],
+    ferramentas: [TELAS.contatos],
+    blocos: [
+      p('Catalogar é dizer **de onde a pessoa veio** (origem) e **em qual projeto ela está**. Isso acontece sozinho, quando o contato entra.'),
+      ul([
+        '**ActiveCampaign:** lead novo vira contato.',
+        '**Respondi:** quem responde a pesquisa vira contato.',
+        '**Hotmart:** carrinho, cartão recusado e boleto ou Pix viram negócio; a compra fecha o negócio aberto.',
+        '**MQL** é marcado por regra. Exemplo: a tag "PB MQL".',
+      ], 'De onde vem'),
+      passos('Passo a passo para conferir', [
+        'Abra o contato em **Contatos**.',
+        'Na aba **Jornada**, veja cada projeto e como a pessoa chegou.',
+        'Origem ou projeto errado? Avise o Victor Hugo (Dados). Não corrija por conta própria.',
+      ]),
+      dicas(['A origem não se edita na ficha: ela vem da integração.']),
+      cuidados([
+        'Não invente regra de MQL. Quem define é a área de Dados.',
+        'Contato sem projeto não entra na Ativação. Avise o gestor.',
+      ]),
+    ],
+  },
+  {
+    id: 'arquivar-funil',
+    titulo: 'Arquivar e ocultar funil',
     parte: 'sistema',
     icone: 'eye',
-    resumo: 'Por que aparece "Demonstração · dados fictícios" e o que isso muda.',
-    sinonimos: ['demo', 'teste', 'fictício', 'não salvou', 'sumiu', 'ver como', 'fase 2', 'erro ao salvar'],
+    resumo: 'Arquivar esconde o funil e os negócios dele de todas as telas. Nada é apagado e dá para desarquivar.',
+    sinonimos: ['arquivar', 'arquivado', 'desarquivar', 'ocultar', 'esconder funil', 'funil sumiu', 'funil arquivado'],
+    ferramentas: [TELAS.funil],
     blocos: [
-      p('O sistema do Comercial está sendo ligado aos poucos. Por isso ele funciona de dois jeitos:'),
-      ul([
-        '**Demonstração:** aparece a faixa "Demonstração · dados fictícios". As pessoas são inventadas. Tudo funciona, mas **nada fica gravado**: ao recarregar, volta como era.',
-        '**Ligado ao banco real:** a gravação só funciona depois que o gestor liberar o CRM para uso. Até lá, ao tentar gravar, aparece "CRM em manutenção: escrita desligada." Isso é esperado, não é erro seu.',
+      p('O gestor arquiva um funil quando ele não está mais em uso. Os funis da Clint estão arquivados.'),
+      passos('Passo a passo (só o gestor)', [
+        'No **Funil**, abra o funil e clique na **engrenagem**.',
+        'Clique em **"Arquivar"** e leia o aviso.',
+        'Se houver negócio aberto, ele fica oculto no Funil, no Início, em Atividades, nos Relatórios e nos avisos.',
+        'Para trazer de volta, o funil é desarquivado. Tudo volta como estava. Hoje, peça ao Arthur.',
       ]),
-      p('Na demonstração, o seletor **"Ver como"** troca a pessoa da tela. Serve para ver o sistema como vendedor ou como gestor. O "x" esconde a faixa nesta sessão.'),
-      dicas(['Use a demonstração para treinar: mova, perca, agende e conclua à vontade.']),
+      dicas([
+        'Arquivar não apaga nada. Os negócios encerrados também voltam ao desarquivar.',
+        'Em telas antigas, um funil arquivado aparece como "Funil arquivado".',
+      ]),
+      cuidados([
+        'Negócio aberto num funil arquivado some dos números. Confira antes de arquivar.',
+        'Sumiu um funil da lista? Pode estar arquivado. Pergunte ao gestor.',
+      ]),
+    ],
+  },
+  {
+    id: 'o-que-ja-esta-ligado',
+    titulo: 'O que já está ligado',
+    parte: 'sistema',
+    icone: 'zap',
+    resumo: 'O CRM grava de verdade e já recebe dados do WhatsApp, da Hotmart, do ActiveCampaign e do Respondi.',
+    sinonimos: ['ligado', 'integração', 'funciona', 'grava', 'salvou', 'hotmart', 'slack', 'reembolso', 'chargeback'],
+    ferramentas: [TELAS.integracoes],
+    blocos: [
+      p('Tudo o que você faz no CRM fica gravado e entra no **Registro**.'),
+      tab(['O quê', 'O que faz'], [
+        ['WhatsApp oficial (21) 98754-5211', 'Recebe e envia texto, imagem, PDF e áudio; recebe vídeo'],
+        ['Hotmart', 'Carrinho, cartão recusado e boleto ou Pix viram negócio. Compra fecha o negócio aberto'],
+        ['Slack #comercial', 'Reembolso e chargeback, sem dado pessoal, com o link'],
+        ['ActiveCampaign', 'Lead novo vira contato'],
+        ['Respondi', 'Quem responde a pesquisa vira contato'],
+        ['Clint', 'Convive só para terminar o que já estava aberto lá'],
+      ]),
+      atalhos([
+        { rotulo: 'Convivência com a Clint', href: '#convivencia-clint', texto: 'O que fica na Clint e o que vem para o CRM.', icone: 'arrow-right' },
+        { rotulo: 'WhatsApp no CRM', href: '#whatsapp-no-crm', texto: 'Janela, templates, áudio e arquivos.', icone: 'message' },
+      ]),
     ],
   },
   {
@@ -1283,12 +1425,10 @@ const SISTEMA: SecaoAjuda[] = [
     sinonimos: ['futuro', 'roadmap', 'próximas fases', 'integração', 'quando'],
     blocos: [
       p('Estas partes estão planejadas. Enquanto não chegam, **não conte com elas**.'),
-      emBreve('Gravar no banco', 'Criar, mover, perder, agendar e todas as outras gravações valendo de verdade, com o registro automático de cada mudança.'),
-      emBreve('Hotmart automática', 'Carrinho abandonado, cartão recusado e compra aprovada criando e fechando negócios sozinhos. Ganho fechando com o pagamento aprovado.'),
-      emBreve('WhatsApp oficial', 'Envio e recebimento de verdade nas Conversas e nos Disparos, pelo número oficial (Infobip ou Unnichat).'),
-      emBreve('Outras integrações', 'ActiveCampaign, SendFlow, Manychat, pesquisas e Slack alimentando a jornada e os alertas.'),
-      emBreve('Migração do Clint', 'Trazer os negócios e o histórico do Clint para cá. Até lá, o Clint segue sendo o CRM em uso.'),
-      emBreve('Assistente de IA do Comercial', 'Perguntar e agir no CRM conversando: buscar pessoa, ver o funil, criar atividade, mover etapa, montar o fechamento do dia.'),
+      emBreve('Disparo em massa automático', 'O envio em massa saindo sozinho do sistema. Hoje Disparos registra, aprova e agenda.'),
+      emBreve('Reativação automática', 'Perdidos por "não é o momento" ou "sem condição financeira agora" voltando sozinhos para a fila na próxima turma.'),
+      emBreve('Ligação com registro (VoIP)', 'Ligar de dentro do sistema, com a gravação no negócio. Hoje a ligação é registrada como atividade.'),
+      emBreve('Relatórios por período', 'Os relatórios do dia abertos para qualquer período.'),
       emBreve('Social selling', 'Comentários do Instagram virando lead com um clique.'),
     ],
   },
@@ -1335,7 +1475,9 @@ const FAQ: SecaoAjuda[] = [
       pergunta('Por que não consigo escrever na conversa?', 'Uma destas: o lead é de outro vendedor; o lead está sem dono (o gestor atribui antes); a pessoa pediu para não receber contato; ou o contato não tem telefone. A tela mostra o motivo.'),
       pergunta('O que é a janela de 24 horas?', 'Depois da última mensagem do lead, você tem 24 horas para mandar mensagem livre. Fechou, só sai template aprovado.'),
       pergunta('Posso falar pelo meu WhatsApp pessoal?', 'Não. Só se fala com lead pelos números oficiais do comercial.'),
-      pergunta('A mensagem que mandei chegou no lead?', 'Ainda não. O WhatsApp oficial está a conectar. Hoje a caixa de Conversas é de demonstração.'),
+      pergunta('A mensagem que mandei chegou no lead?', 'Sim. A caixa de Conversas usa o número oficial (21) 98754-5211. Veja o status ao lado da mensagem: enviada, entregue, lida ou falhou.', TELAS.conversas),
+      pergunta('Posso mandar áudio, foto ou PDF?', 'Sim, com a janela aberta. Microfone para gravar áudio (até 5 min). Clipe para imagem (até 5 MB) ou PDF (até 16 MB). Vídeo o lead pode mandar, mas não sai pelo CRM.', TELAS.conversas),
+      pergunta('Tem app de celular?', 'Não. Tudo é pela tela Conversas. Ela atualiza sozinha, sem recarregar.'),
     ],
   },
   {
@@ -1369,9 +1511,10 @@ const FAQ: SecaoAjuda[] = [
     parte: 'faq',
     icone: 'settings',
     blocos: [
-      pergunta('Apareceu "CRM em manutenção: escrita desligada". Fiz algo errado?', 'Não. O CRM ainda não foi liberado para gravar. Quando o gestor liberar, salvar passa a funcionar normalmente.'),
-      pergunta('Mudei algo e sumiu quando recarreguei.', 'Você está na demonstração (faixa "Demonstração · dados fictícios"). Nela nada fica gravado.'),
-      pergunta('Quem pode entrar no Comercial?', 'Hoje, só administradores. Quando o sistema estiver ligado ao banco, o acesso passa a ser do time do Comercial (gestor e vendedores).'),
+      pergunta('Apareceu "CRM em manutenção: escrita desligada". Fiz algo errado?', 'Não. A gravação foi desligada por um tempo, para manutenção. Espere e tente de novo. Se durar, avise o Arthur.'),
+      pergunta('Quem pode entrar no Comercial?', 'O time do Comercial: o gestor (Jonathan), os vendedores (Marcos Paulo e Jusy) e o administrador (Arthur). Quem só pede estratégia vê a tela de Estratégias.'),
+      pergunta('Ainda uso a Clint?', 'Só para terminar o que já estava aberto lá. Lead novo é no CRM. O gestor define a data de desligamento da Clint.'),
+      pergunta('Sumiu um funil inteiro. E agora?', 'Ele pode ter sido arquivado. Nada foi apagado. Pergunte ao gestor: dá para desarquivar.'),
       pergunta('Como paro de receber aviso fora do horário?', 'Em Configurações › Notificações, ligue o horário de silêncio e salve.', TELAS.notificacoes),
       pergunta('Achei um erro ou falta algo aqui na ajuda.', 'Avise o Arthur Galvão. A central é atualizada junto com o sistema.'),
     ],
@@ -1399,7 +1542,10 @@ const GLOSSARIO_SISTEMA: SecaoAjuda = {
       ['Crítico', 'Prazo da etapa estourado (vermelho)'],
       ['Atenção', 'Prazo da etapa chegando ao limite (amarelo)'],
       ['Ativação', 'O funil padrão de todo projeto: os três toques do mesmo vendedor, da entrada até o evento'],
+      ['Catalogação', 'A origem e o projeto de cada contato, marcados sozinhos pelas regras da área de Dados'],
       ['Dashboard', 'Tela de números montada por alguém, com widgets'],
+      ['Estratégia', 'Pedido de ação ao Comercial que o gestor transforma em fila ou funil'],
+      ['Funil arquivado', 'Funil oculto de todas as telas, com os negócios dele. Nada é apagado'],
       ['Distribuição', 'A regra que escolhe o dono de quem chega sem dono, pelo percentual de cada vendedor'],
       ['Faixa de números', 'Os números do topo de cada tela, com o (i)'],
       ['Ficha do negócio', 'A gaveta que abre ao clicar num negócio'],
@@ -1419,7 +1565,6 @@ const GLOSSARIO_SISTEMA: SecaoAjuda = {
       ['Score', 'Nota de 0 a 100 na recuperação; define a faixa A, B, C ou D'],
       ['Sem próximo passo', 'Negócio aberto sem atividade futura com data'],
       ['Sino', 'As notificações, no topo de cada tela'],
-      ['Ver como', 'Na demonstração, troca a pessoa da tela para ver como vendedor ou gestor'],
       ['Widget', 'Um cartão ou gráfico dentro de um painel ou dashboard'],
     ]),
   ],
@@ -1467,4 +1612,4 @@ export const PRIMEIRO_DIA: { id: string; titulo: string; texto: string; icone: s
 ];
 
 /** Atalhos de busca na entrada (o que mais se pergunta). */
-export const BUSCAS_SUGERIDAS = ['mover etapa', 'motivo de perda', 'próximo passo', 'janela de 24 horas', 'oferta vigente', 'disparo', 'objeção', 'fechamento do dia'];
+export const BUSCAS_SUGERIDAS = ['mover etapa', 'motivo de perda', 'próximo passo', 'janela de 24 horas', 'áudio', 'oferta vigente', 'objeção', 'fechamento do dia'];
