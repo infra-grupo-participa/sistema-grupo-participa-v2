@@ -1,6 +1,8 @@
 # Níveis de acesso no front
 
-Situação em 07/10/2026: código na branch `victor-captura-pre-checkout`, sem publicação. A fase 3 do banco foi aplicada em produção como `20261007195738` (versão `ff6fbea`, registro `5a28dda`). A flag `NEXT_PUBLIC_ACESSO_V2` começa desligada.
+Situação em 08/10/2026: **no ar em produção.** A flag `NEXT_PUBLIC_ACESSO_V2=true` foi criada nas variáveis de ambiente da Hostinger (site `grupoparticipa.app.br`) e o build do commit `264928b` da `main` terminou às 17:51 (BRT) com ela, pela tela "Configurações e reimplantação" (botão "Salvar e reimplantar"). A y2 foi aplicada logo depois, como `20261008205705` (`acesso_autor_obrigatorio`). A fase 3 do banco segue aplicada como `20261007195738`.
+
+**Para desligar:** na Hostinger, Sites > grupoparticipa.app.br > Implantações > Configurações e reimplantação, mudar `NEXT_PUBLIC_ACESSO_V2` para `false` e "Salvar e reimplantar". A tela "Variáveis de ambiente" do hPanel não gravou a variável na primeira tentativa (o diálogo fechou e a contagem continuou 23); por isso o caminho que funcionou foi o da tela de reimplantação. A flag entra no build, então mudar sem reimplantar não tem efeito.
 
 ## Como funciona
 
@@ -24,6 +26,16 @@ Na pasta `web`, executar `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm ru
 
 No E2E de 07/10/2026, o editor sintético de Tráfego abriu `?novo=1` sem salvar projeto; Financeiro e Usuários ficaram fechados e Configurações ocultou Nome. A sessão master abriu a aba de gestão. Um vínculo temporário autorizado em perfil sintético foi criado e removido por RPC; depois, o vínculo estava inativo, o perfil continuava ativo e sua capacidade financeira permanecia presente. A API pública não expõe `acesso.log`, então a autoria dessas linhas segue sem confirmação direta. A rota local de Usuários mostrou erro de carregamento porque o processo não tem a chave service role do projeto v2.
 
+### E2E em produção (08/10/2026, build `264928b`, flag ligada)
+
+Feito com as contas sintéticas `qa.sessoes@advmais.com` (master) e `qa.trafego@advmais.com` (editora de Tráfego sem `financeiro.ver`). Relatório completo fora do repo, no cérebro do Victor (`.maestri/entregas/niveis-de-acesso/e2e-producao.md`), e cada passo no `DIARIO-DO-BANCO.md`.
+
+- Master: Usuários mostra "Departamentos e áreas" com departamentos, áreas e capacidades; o formulário do perfil não tem cargo nem CPF. Depois da y2, Usuários continuou abrindo sem `42501`.
+- Escrita reversível pela tela: status do perfil sintético "Robô de teste E2E (Financeiro)" ativo, pendente, ativo de novo. Nenhum convite criado.
+- Editora de Tráfego sem financeiro: Tráfego sem valores de receita e com "Novo projeto" (certo, porque ela edita Tráfego); Contas a Receber redireciona para `/`; o dashboard da Clínica redireciona para `/infra/dashboards/csm` sem carregar dados; Configurações mostra Avatar e esconde Nome.
+- Console sem erro nas rotas abertas.
+- Não testado em produção: `?novo=1` com um leitor do Tráfego (não há conta sintética leitora).
+
 ## Pendente
 
-Com a chave service role do projeto v2, validar a listagem e a atualização reversível de perfil pela rota local de Usuários e consultar a autoria em `acesso.log` por canal de banco autorizado. Só depois avaliar a y2. A flag precisa ser ligada no build para que o novo front funcione em ambiente publicado. Refinar as vistas de leitura de Mensageria para expor mais detalhes sem controles de escrita.
+Criar uma conta sintética só leitora para fechar o caso `?novo=1` em produção. Mudanças feitas direto no SQL com o papel `postgres` continuam passando sem autor no `acesso.log`; a y2 cobre só a `service_role`. Refinar as vistas de leitura de Mensageria para expor mais detalhes sem controles de escrita.
