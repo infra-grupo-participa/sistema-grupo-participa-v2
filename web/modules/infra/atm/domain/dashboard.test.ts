@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { montarAvisosTesteAtm, type PeriodoAplicadoAtm } from './dashboard';
 
-const base: PeriodoAplicadoAtm = { de: '2026-10-07', ate: '2026-10-14', leadsTeste: 0, grupoTeste: 0, vendasTeste: 0, receitaTesteBruta: 0 };
+const base: PeriodoAplicadoAtm = {
+  de: '2026-10-07', ate: '2026-10-14', leadsTeste: 0, grupoTeste: 0, vendasTeste: 0, receitaTesteBruta: 0,
+  grupoEntradasAproximadas: 0, grupoFotoEm: null, grupoNoGrupo: null,
+};
 
 describe('avisos de registros excluídos por teste', () => {
   it('não cria aviso quando os contadores são zero ou nulos', () => {

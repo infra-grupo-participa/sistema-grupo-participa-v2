@@ -82,6 +82,8 @@ export type NumeroGrupoAtm = {
   ehLead: boolean | null;
   teste: boolean;
   testeMotivo: string | null;
+  entradaAproximada: boolean;
+  grupos: string | null;
 };
 
 export type PeriodoAplicadoAtm = {
@@ -91,6 +93,9 @@ export type PeriodoAplicadoAtm = {
   grupoTeste: number | null;
   vendasTeste: number | null;
   receitaTesteBruta: number | null;
+  grupoEntradasAproximadas: number | null;
+  grupoFotoEm: string | null;
+  grupoNoGrupo: number | null;
 };
 
 export type AvisoTesteAtm =
@@ -143,7 +148,10 @@ const zero = (): MetricaAtm => ({ valor: 0, semDado: true });
 export function dashboardAtmSemDado(chave: string): DashboardAtm {
   return {
     chave,
-    periodo: { de: null, ate: null, leadsTeste: null, grupoTeste: null, vendasTeste: null, receitaTesteBruta: null },
+    periodo: {
+      de: null, ate: null, leadsTeste: null, grupoTeste: null, vendasTeste: null, receitaTesteBruta: null,
+      grupoEntradasAproximadas: null, grupoFotoEm: null, grupoNoGrupo: null,
+    },
     resumo: {
       disparos: zero(), leads: zero(), ingressosGrupo: zero(), percentualIngressoGrupo: zero(), taxaEvasao: zero(),
       custoDisparo: zero(), cpl: zero(), preCheckout: zero(), vendas: zero(), conversaoPreCheckout: zero(), cac: zero(),

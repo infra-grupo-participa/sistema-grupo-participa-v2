@@ -31,6 +31,9 @@ describe('leitura e marcação do dashboard ATM', () => {
       grupo_teste: 2,
       vendas_teste: 1,
       receita_teste_bruta: 197,
+      grupo_entradas_aproximadas: 41,
+      grupo_foto_em: '2026-10-08T19:35:00Z',
+      grupo_no_grupo: 46,
     }], error: null });
 
     const resultado = await carregarAtmResumo('atm-elaine-1-2026-10', { p_de: null, p_ate: null });
@@ -38,7 +41,10 @@ describe('leitura e marcação do dashboard ATM', () => {
     expect(mocks.rpc).toHaveBeenCalledWith('dados_atm_resumo', { p_chave: 'atm-elaine-1-2026-10', p_de: null, p_ate: null });
     expect(resultado.data.resumo.disparos).toEqual({ valor: 0, semDado: false });
     expect(resultado.data.resumo.custoDisparo).toEqual({ valor: 0, semDado: true });
-    expect(resultado.data.periodo).toEqual({ de: '2026-10-07', ate: '2026-10-14', leadsTeste: 1, grupoTeste: 2, vendasTeste: 1, receitaTesteBruta: 197 });
+    expect(resultado.data.periodo).toEqual({
+      de: '2026-10-07', ate: '2026-10-14', leadsTeste: 1, grupoTeste: 2, vendasTeste: 1, receitaTesteBruta: 197,
+      grupoEntradasAproximadas: 41, grupoFotoEm: '2026-10-08T19:35:00Z', grupoNoGrupo: 46,
+    });
   });
 
   it('envia inclusão de teste somente quando pedida e mapeia o estado do lead', async () => {
@@ -53,14 +59,14 @@ describe('leitura e marcação do dashboard ATM', () => {
   });
 
   it('carrega números do grupo no período incluindo os já marcados para permitir desfazer', async () => {
-    mocks.rpc.mockResolvedValue({ data: [{ fone_key: '5511999999999', nome: 'QA', entrou_em: '2026-10-08T12:00:00Z', no_grupo: true, eh_lead: false, teste: true, teste_motivo: 'teste' }], error: null });
+    mocks.rpc.mockResolvedValue({ data: [{ fone_key: '5511999999999', nome: 'QA', entrou_em: '2026-10-08T12:00:00Z', no_grupo: true, eh_lead: false, teste: true, teste_motivo: 'teste', entrada_aproximada: true, grupos: '13/10 #1' }], error: null });
 
     const resultado = await carregarAtmGrupo('atm-elaine-1-2026-10', { p_de: '2026-10-08', p_ate: '2026-10-08' }, true);
 
     expect(mocks.rpc).toHaveBeenCalledWith('dados_atm_grupo_numeros', {
       p_chave: 'atm-elaine-1-2026-10', p_de: '2026-10-08', p_ate: '2026-10-08', p_incluir_teste: true,
     });
-    expect(resultado.data[0]).toMatchObject({ foneKey: '5511999999999', teste: true, testeMotivo: 'teste' });
+    expect(resultado.data[0]).toMatchObject({ foneKey: '5511999999999', teste: true, testeMotivo: 'teste', entradaAproximada: true, grupos: '13/10 #1' });
   });
 
   it('envia ambos identificadores para desfazer e comunica recusa do banco', async () => {

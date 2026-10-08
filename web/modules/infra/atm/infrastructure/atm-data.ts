@@ -64,6 +64,9 @@ export async function carregarAtmResumo(chave: string, periodo?: DatasPeriodoAtm
     grupoTeste: num(row.grupo_teste),
     vendasTeste: num(row.vendas_teste),
     receitaTesteBruta: num(row.receita_teste_bruta),
+    grupoEntradasAproximadas: num(row.grupo_entradas_aproximadas),
+    grupoFotoEm: typeof row.grupo_foto_em === 'string' ? row.grupo_foto_em : null,
+    grupoNoGrupo: num(row.grupo_no_grupo),
   };
   return {
     data: {
@@ -129,6 +132,8 @@ export async function carregarAtmGrupo(chave: string, periodo?: DatasPeriodoAtm,
       ehLead: booleano(x.eh_lead),
       teste: x.teste === true,
       testeMotivo: typeof x.teste_motivo === 'string' ? x.teste_motivo : null,
+      entradaAproximada: x.entrada_aproximada === true,
+      grupos: typeof x.grupos === 'string' ? x.grupos : null,
     })),
     semDado: r.semDado,
     erro: r.erro,
