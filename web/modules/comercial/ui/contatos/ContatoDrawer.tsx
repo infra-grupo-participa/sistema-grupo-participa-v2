@@ -9,7 +9,8 @@ import { AvatarInicial, Badge, Button, Drawer, Skeleton, Tabs, Toast, idsAba, us
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import { Icon } from '@/shared/ui/icons';
 import { fmtTelefone } from '../../domain/regras';
-import { motivoSemNovoNegocio, podeEscreverContato } from '../../domain/travas';
+import { motivoSemEdicao, motivoSemNovoNegocio, podeEscreverContato } from '../../domain/travas';
+import { semNome } from '../../domain/editar-contato';
 import type { Contato } from '../../domain/types';
 import type { TextoIndicador } from '../InfoIndicador';
 import {
@@ -61,7 +62,7 @@ const INFO: Record<'lancamentos' | 'compras' | 'pago' | 'reembolsos' | 'abertos'
   },
 };
 
-export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReserva, reservaDaBusca }: {
+export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReserva, reservaDaBusca, iniciarEdicao = false }: {
   contatoId: string;
   onClose: () => void;
   /** Troca a ficha para outro contato (usado no aviso de duplicidade). */
@@ -70,6 +71,8 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
   contatoReserva?: Contato;
   /** A reserva veio da busca no servidor (contato real fora da lista do vendedor), não do cadastro de demonstração. */
   reservaDaBusca?: boolean;
+  /** Abre já na aba Dados em modo edição (atalho "Adicionar nome" da lista). */
+  iniciarEdicao?: boolean;
 }) {
   const agora = useAgora();
   const { toast, flash } = useFlash(4000);
@@ -83,7 +86,8 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
   const jor = useDados(() => repo.jornada(contatoId), [contatoId]);
   const [negocioAberto, setNegocioAberto] = useState<string | null>(null);
   const [novo, setNovo] = useState(false);
-  const [aba, setAba] = useState<Aba>('jornada');
+  const [aba, setAba] = useState<Aba>(iniciarEdicao ? 'dados' : 'jornada');
+  const [editando, setEditando] = useState(iniciarEdicao);
 
   const contatos = useMemo(
     () => (cs.dados && contatoReserva && !cs.dados.some((x) => x.id === contatoReserva.id) ? [contatoReserva, ...cs.dados] : cs.dados),
@@ -135,6 +139,11 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
     : soLocal ? 'Contato só desta tela (demonstração): grave o cadastro antes de abrir negócio.'
     : motivoSemNovoNegocio(c, dele, sessao, nomeDe) ?? undefined;
   const podeConversar = !!c.telefone && !c.optOut;
+  // Mesma trava do banco (crm_editar_contato → crm.pode_escrever_pessoa). Sem a lista de negócios ainda, espera.
+  const motivoEdicao = soLocal
+    ? 'Contato só desta tela (demonstração): grave o cadastro antes de editar.'
+    : !ns.dados ? 'Carregando os negócios do contato.' : motivoSemEdicao(c, dele, sessao, nomeDe);
+  const abrirEdicao = () => { setAba('dados'); setEditando(true); };
 
   const botaoNovoNegocio = (
     <Button size="sm" onClick={() => setNovo(true)} disabled={!!bloqueioNovo} title={bloqueioNovo}>
@@ -161,6 +170,9 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
           {c.ehAluno && <Badge tone="success">Já é aluno</Badge>}
         </> : undefined}
         actions={<>
+          {semNome(c.nome) && !motivoEdicao && !editando && (
+            <Button size="sm" variant="link" onClick={abrirEdicao}>Adicionar nome</Button>
+          )}
           {podeConversar && <BotaoConversa contatoId={c.id} />}
           {c.telefone && <BotaoCopiar texto={fmtTelefone(c.telefone)} onCopiado={(m) => flash(m === 'Copiado.' ? 'Telefone copiado.' : m)} />}
         </>}
@@ -239,7 +251,13 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
 
         {aba === 'dados' && (
           <div {...painel('dados')}>
-            <AbaDados c={c} duplicados={duplicados} nomeDe={nomeDe} onAbrirContato={onAbrirContato} />
+            <AbaDados
+              c={c}
+              duplicados={duplicados}
+              nomeDe={nomeDe}
+              onAbrirContato={onAbrirContato}
+              edicao={{ motivo: motivoEdicao, editando, setEditando, onSalvo: (msg) => { flash(msg); cs.recarregar(); } }}
+            />
           </div>
         )}
 

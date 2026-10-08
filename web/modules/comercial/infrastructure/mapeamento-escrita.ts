@@ -75,6 +75,20 @@ export function mapResultadoContato(d: unknown): Resultado & { contatoId?: strin
   return r;
 }
 
+/** Edição da ficha (crm_editar_contato, migration 20261008182832): só as chaves que mudaram vão em p_dados. */
+export function argsEditarContato(contatoId: string, mudancas: Record<string, string>): { p_contato: string; p_dados: Obj } {
+  return { p_contato: contatoId, p_dados: { ...mudancas } };
+}
+
+/** editarContato: campos que o banco gravou (rótulos, ex.: "nome", "telefone"); duplicado = 'email' | 'telefone' na recusa. */
+export function mapResultadoEdicao(d: unknown): Resultado & { campos?: string[]; duplicado?: 'email' | 'telefone' } {
+  const r: Resultado & { campos?: string[]; duplicado?: 'email' | 'telefone' } = mapResultado('crm_editar_contato', d);
+  const o = d as Obj;
+  if (r.ok) r.campos = Array.isArray(o.campos) ? o.campos.filter((x): x is string => typeof x === 'string') : [];
+  else if (o.duplicado === 'email' || o.duplicado === 'telefone') r.duplicado = o.duplicado;
+  return r;
+}
+
 /** Erro de chamada (rede, função ausente, permissão) → mensagem para a tela. */
 export function mensagemErroEscrita(rpc: string, e: ErroRpc): string {
   if (e.code === '42501') return e.message || 'Sem acesso ao Comercial.';

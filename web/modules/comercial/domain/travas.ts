@@ -127,3 +127,21 @@ export function motivoSemEscrita(c: Pick<Contato, 'donoId'>, negociosDaPessoa: P
   if (!c.donoId) return 'Lead sem dono. O gestor atribui o dono antes de qualquer conversa.';
   return `Lead de ${nomeDe(c.donoId)}. Lead que não é seu não se toca: transfira pelo gestor.`;
 }
+
+/**
+ * Editar a ficha do contato (nome, e-mail, telefone, cidade…). ESPELHO de `crm_editar_contato` (20261008182832), que usa
+ * a mesma `crm.pode_escrever_pessoa` da mensagem: gestor sempre; vendedor dono do contato ou de negócio da pessoa;
+ * contato sem dono e sem negócio dele, só o gestor. Leitor nunca.
+ */
+export function podeEditarContato(c: Pick<Contato, 'donoId'>, negociosDaPessoa: Pick<Negocio, 'donoId'>[], quem: Quem): boolean {
+  return podeEscreverContato(c, negociosDaPessoa, quem);
+}
+
+/** Frase para a tela explicar por que a ficha não é editável. null = pode editar. */
+export function motivoSemEdicao(c: Pick<Contato, 'donoId'>, negociosDaPessoa: Pick<Negocio, 'donoId'>[], quem: Quem, nomeDe: (id: string | null) => string): string | null {
+  if (podeEditarContato(c, negociosDaPessoa, quem)) return null;
+  if (!quem) return 'Carregando quem você é.';
+  if (somenteLeitura(quem)) return MSG_SOMENTE_LEITURA;
+  if (!c.donoId) return 'Contato sem dono: só o gestor edita.';
+  return `Contato de ${nomeDe(c.donoId)}: só o dono ou o gestor edita.`;
+}

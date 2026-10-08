@@ -150,6 +150,9 @@ export interface Contato {
   criadoEm: string;
   /** Como entrou (canal, quando, projeto). Catalogação de origem, migration 20261007141044. Ausente = ainda não catalogado. */
   origem?: OrigemContato | null;
+  /** Empresa e observação digitadas na ficha (crm.contato_ajuste, migration 20261008182832). Ausente = fonte sem o campo. */
+  empresa?: string | null;
+  observacao?: string | null;
 }
 
 export interface ProximaAtividade {

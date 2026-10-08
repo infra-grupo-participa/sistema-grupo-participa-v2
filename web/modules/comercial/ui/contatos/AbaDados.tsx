@@ -18,12 +18,24 @@ import { legendaDaMensagem } from '../../domain/midia';
 import { ComoEntrou } from './ComoEntrou';
 import { BotaoGravarAudio } from '../conversas/GravarAudio';
 import { janelaRestante } from '../conversas/regras-conversas';
+import { semNome } from '../../domain/editar-contato';
+import { FormEdicaoContato } from './EdicaoContato';
 
-export function AbaDados({ c, duplicados, nomeDe, onAbrirContato }: {
+/** Estado do modo edição, dono da ficha (o cabeçalho também abre pelo atalho "Adicionar nome"). */
+export interface EdicaoFicha {
+  /** null = pode editar; texto = motivo da trava (mostrado no lugar do botão). */
+  motivo: string | null;
+  editando: boolean;
+  setEditando: (v: boolean) => void;
+  onSalvo: (msg: string) => void;
+}
+
+export function AbaDados({ c, duplicados, nomeDe, onAbrirContato, edicao }: {
   c: Contato;
   duplicados: Contato[];
   nomeDe: (id: string | null) => string;
   onAbrirContato?: (id: string) => void;
+  edicao?: EdicaoFicha;
 }) {
   const [utmAberta, setUtmAberta] = useState(false);
   const faixa = c.score != null ? faixaDoScore(c.score) : null;
@@ -31,12 +43,36 @@ export function AbaDados({ c, duplicados, nomeDe, onAbrirContato }: {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <section className="min-w-0">
-        <SectionTitle>Dados</SectionTitle>
-        <Row k="Telefone" v={<span className="tabular select-all">{fmtTelefone(c.telefone)}</span>} />
-        <Row k="E-mail" v={c.email ?? '—'} />
-        <Row k="Cidade" v={c.cidade ? `${c.cidade}${c.uf ? ` · ${c.uf}` : ''}` : '—'} />
-        <Row k="Perfil" v={c.perfil ? ROTULO_PERFIL[c.perfil] : '—'} />
-        <Row k="Holding" v={c.atuaComHolding ? ROTULO_ATUA[c.atuaComHolding] : '—'} />
+        <SectionTitle
+          right={edicao && !edicao.editando && !edicao.motivo ? (
+            <Button size="sm" variant="ghost" onClick={() => edicao.setEditando(true)}>
+              <Icon name="pencil" size={14} /> Editar
+            </Button>
+          ) : undefined}
+        >
+          Dados
+        </SectionTitle>
+        {edicao?.editando && !edicao.motivo ? (
+          <FormEdicaoContato
+            c={c}
+            onCancelar={() => edicao.setEditando(false)}
+            onSalvo={(msg) => { edicao.setEditando(false); edicao.onSalvo(msg); }}
+          />
+        ) : (
+          <>
+            {edicao?.motivo && <p className="mb-2 text-xs text-[var(--fg-3)]">Edição: {edicao.motivo}</p>}
+            {semNome(c.nome) && edicao && !edicao.motivo && (
+              <Row k="Nome" v={<Button size="sm" variant="link" onClick={() => edicao.setEditando(true)}>Adicionar nome</Button>} />
+            )}
+            <Row k="Telefone" v={<span className="tabular select-all">{fmtTelefone(c.telefone)}</span>} />
+            <Row k="E-mail" v={c.email ?? '—'} />
+            <Row k="Cidade" v={c.cidade ? `${c.cidade}${c.uf ? ` · ${c.uf}` : ''}` : '—'} />
+            <Row k="Perfil" v={c.perfil ? ROTULO_PERFIL[c.perfil] : '—'} />
+            <Row k="Holding" v={c.atuaComHolding ? ROTULO_ATUA[c.atuaComHolding] : '—'} />
+            {c.empresa && <Row k="Empresa" v={c.empresa} />}
+            {c.observacao && <Row k="Observação" v={<span className="whitespace-pre-wrap">{c.observacao}</span>} />}
+          </>
+        )}
         <Row k="Dono" v={<Dono id={c.donoId} nomeDe={nomeDe} />} />
         <Row k="Score" v={faixa ? (
           <span className="inline-flex items-center gap-1">

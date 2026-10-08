@@ -461,7 +461,7 @@ const MODULOS: SecaoAjuda[] = [
     icone: 'contact',
     resumo: 'A base única de pessoas, com dono, jornada completa e negócios.',
     telas: [TELAS.contatos],
-    sinonimos: ['pessoa', 'lead', 'cliente', 'cadastro', 'buscar', 'dono', 'jornada', 'duplicado', 'opt-out', 'aluno', 'ficha do contato'],
+    sinonimos: ['pessoa', 'lead', 'cliente', 'cadastro', 'buscar', 'dono', 'jornada', 'duplicado', 'opt-out', 'aluno', 'ficha do contato', 'editar contato', 'sem nome', 'corrigir nome'],
     paraQue: [
       'Cada pessoa aparece uma vez só. Ela é reconhecida pelo e-mail ou pelo DDD com os últimos 8 dígitos do telefone.',
       'Contatos chegam sozinhos: lead novo do ActiveCampaign, quem responde a pesquisa (Respondi) e os eventos da Hotmart. Cada um vem com origem e projeto (catalogação).',
@@ -500,6 +500,17 @@ const MODULOS: SecaoAjuda[] = [
           'Se o e-mail já existe, o sistema bloqueia e mostra a ficha da pessoa.',
           'Se o final do telefone já existe, confira. Só marque "É outra pessoa" se tiver certeza.',
           'Clique em **"Salvar contato"**.',
+        ],
+      },
+      {
+        titulo: 'Editar contato',
+        itens: [
+          'Abra a ficha, aba **Dados**, e clique em **"Editar"**. Contato "(sem nome)" tem o atalho **"Adicionar nome"** na lista e na ficha.',
+          'Corrija nome, telefone, e-mail, cidade/UF, perfil, holding, empresa ou observação e clique em **"Salvar"**. "Cancelar" descarta.',
+          'Só o dono do contato (ou de um negócio dele) e o gestor editam. Sem permissão, o botão some e a ficha diz por quê.',
+          'Telefone ou e-mail que já é de outro contato é recusado: confira em "Possíveis duplicados" e peça ao gestor para unificar.',
+          'O telefone ou e-mail antigo não se perde: o novo vira o principal. A correção não é desfeita pela próxima importação.',
+          'Fica registrado em "Alterações" quem editou e quais campos, sem o valor.',
         ],
       },
     ],

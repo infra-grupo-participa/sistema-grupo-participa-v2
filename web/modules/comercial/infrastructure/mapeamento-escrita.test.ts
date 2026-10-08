@@ -192,3 +192,17 @@ describe('Hotmart e MCP (F3 20261006043612, F7 20261006050132)', () => {
     expect(() => mapResultadoTokenMcp({ ok: true, id: U1 })).toThrow(FormatoInesperado);
   });
 });
+
+describe('crm_editar_contato (20261008182832)', () => {
+  it('argsEditarContato manda só as chaves recebidas', async () => {
+    const { argsEditarContato } = await import('./mapeamento-escrita');
+    expect(argsEditarContato('c1', { nome: 'Ana', uf: 'SP' })).toEqual({ p_contato: 'c1', p_dados: { nome: 'Ana', uf: 'SP' } });
+  });
+  it('mapResultadoEdicao: campos no ok, duplicado na recusa', async () => {
+    const { mapResultadoEdicao } = await import('./mapeamento-escrita');
+    expect(mapResultadoEdicao({ ok: true, msg: 'Contato atualizado.', contatoId: 'c1', campos: ['nome', 'telefone'] }))
+      .toMatchObject({ ok: true, campos: ['nome', 'telefone'] });
+    expect(mapResultadoEdicao({ ok: false, msg: 'Esse telefone já é de outro contato.', duplicado: 'telefone' }))
+      .toMatchObject({ ok: false, duplicado: 'telefone' });
+  });
+});

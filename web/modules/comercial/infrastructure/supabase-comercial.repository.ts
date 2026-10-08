@@ -30,8 +30,8 @@ import {
   mapContatosPorIds, mapPaginaServidor, mapResumoContatos, rpcAusente, type ErroRpc,
 } from './mapeamento-supabase';
 import {
-  argsCriarContato, argsEscrita, mapResultado, mapResultadoComId, mapResultadoContato, mapResultadoEnvio, mapResultadoFicha, mapResultadoLink,
-  mapResultadoNegocio, mapResultadoProjeto, mapResultadoTokenMcp,
+  argsCriarContato, argsEditarContato, argsEscrita, mapResultado, mapResultadoComId, mapResultadoContato, mapResultadoEnvio, mapResultadoFicha, mapResultadoLink,
+  mapResultadoEdicao, mapResultadoNegocio, mapResultadoProjeto, mapResultadoTokenMcp,
   mensagemErroEscrita,
 } from './mapeamento-escrita';
 import type { EdicaoAtivacao, PainelAtivacao } from '../domain/ativacao';
@@ -379,6 +379,10 @@ export class SupabaseComercialRepository implements ComercialRepository {
   /** "Novo contato" (crm_criar_contato, 20261007133345): cria ou casa a pessoa (e-mail, depois telefone) e devolve a ficha a abrir. */
   criarContato(c: { nome: string; telefone: string; email: string; donoId?: string | null }) {
     return this.escrever('crm_criar_contato', argsCriarContato(c), mapResultadoContato);
+  }
+  /** Ficha do contato (crm_editar_contato, 20261008182832): grava só as chaves enviadas; nunca apaga dado da base central. */
+  editarContato(contatoId: string, mudancas: Record<string, string>) {
+    return this.escrever('crm_editar_contato', argsEditarContato(contatoId, mudancas), mapResultadoEdicao);
   }
   criarNegocio(contatoId: string, funilId: string, campanhaId?: string | null): Promise<Resultado & { negocioId?: string; donoId?: string | null }> {
     return this.escrever('crm_criar_negocio', argsEscrita.criarNegocio(contatoId, funilId, campanhaId), mapResultadoNegocio);

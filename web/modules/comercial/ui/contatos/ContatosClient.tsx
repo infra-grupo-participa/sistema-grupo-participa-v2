@@ -25,6 +25,7 @@ import { ContatoDrawer } from './ContatoDrawer';
 import { ModalNovoContato } from './ModalNovoContato';
 import { DonoLinha, FlagsContato, OrigemLinha, PopoverFiltros } from './pecas';
 import { resumoAbertos } from './regras-contatos';
+import { semNome } from '../../domain/editar-contato';
 
 type Coluna = 'nome' | 'dono' | 'negocios' | 'lancamentos' | 'ultima';
 // Página do servidor (crm_contatos_pagina, migration 20261006m): filtro, ordem e contagem no banco.
@@ -143,7 +144,10 @@ export function ContatosClient() {
     setCanal('todos'); setProjeto('todos');
     setPagina(0);
   };
-  const abrir = (id: string) => setAberto(id);
+  // "Adicionar nome" na linha: abre a ficha já em modo edição (a ficha confere a trava de dono).
+  const [editarAoAbrir, setEditarAoAbrir] = useState(false);
+  const abrir = (id: string, editar = false) => { setEditarAoAbrir(editar); setAberto(id); };
+  const adicionarNome = leitor ? undefined : (id: string) => abrir(id, true);
   const carregando = !pg.dados;
   const erro = pg.erro;
   const buscaCurta = busca.trim().length > 0 && busca.trim().length < 3;
@@ -288,14 +292,14 @@ export function ContatosClient() {
                   <Cabecalho ordem={ordem} onOrdenar={ordenar} />
                   <ul aria-label="Contatos">
                     {itens.map((c) => (
-                      <LinhaContato key={c.id} c={c} nomeDe={nomeDe} onAbrir={() => abrir(c.id)} />
+                      <LinhaContato key={c.id} c={c} nomeDe={nomeDe} onAbrir={() => abrir(c.id)} onAdicionarNome={adicionarNome && (() => adicionarNome(c.id))} />
                     ))}
                   </ul>
                 </div>
                 {/* Telas estreitas: cartões empilhados. */}
                 <ul className="space-y-2 lg:hidden" aria-label="Contatos">
                   {itens.map((c) => (
-                    <CartaoContato key={c.id} c={c} nomeDe={nomeDe} onAbrir={() => abrir(c.id)} />
+                    <CartaoContato key={c.id} c={c} nomeDe={nomeDe} onAbrir={() => abrir(c.id)} onAdicionarNome={adicionarNome && (() => adicionarNome(c.id))} />
                   ))}
                 </ul>
                 {paginas > 1 && (
@@ -340,6 +344,7 @@ export function ContatosClient() {
         <ContatoDrawer
           key={contatoAberto}
           contatoId={contatoAberto}
+          iniciarEdicao={editarAoAbrir}
           contatoReserva={locais.find((c) => c.id === contatoAberto) ?? itens.find((c) => c.id === contatoAberto)}
           reservaDaBusca={!locais.some((c) => c.id === contatoAberto)}
           onAbrirContato={abrir}
@@ -416,8 +421,8 @@ function UltimaInteracao({ em }: { em: string | null | undefined }) {
 
 // O aviso de possível duplicado fica na ficha (o banco compara o telefone inteiro); a lista paginada não tem a base
 // toda para comparar.
-function LinhaContato({ c, nomeDe, onAbrir }: {
-  c: ContatoLinha; nomeDe: (id: string | null) => string; onAbrir: () => void;
+function LinhaContato({ c, nomeDe, onAbrir, onAdicionarNome }: {
+  c: ContatoLinha; nomeDe: (id: string | null) => string; onAbrir: () => void; onAdicionarNome?: () => void;
 }) {
   return (
     // O nome (Pessoa) é o alvo de teclado; o clique na linha inteira é atalho de mouse.
@@ -429,7 +434,10 @@ function LinhaContato({ c, nomeDe, onAbrir }: {
         <Pessoa
           nome={c.nome}
           sub={<span className="tabular">{c.telefone ? fmtTelefone(c.telefone) : (c.email ?? 'sem telefone')}</span>}
-          flags={<FlagsContato duplicado={false} optOut={c.optOut} aluno={c.ehAluno} />}
+          flags={<>
+            <FlagsContato duplicado={false} optOut={c.optOut} aluno={c.ehAluno} />
+            {semNome(c.nome) && onAdicionarNome && <LinkAdicionarNome onClick={onAdicionarNome} />}
+          </>}
           onClick={onAbrir}
           rotuloAcao={`Abrir ficha de ${c.nome}`}
         />
@@ -443,8 +451,21 @@ function LinhaContato({ c, nomeDe, onAbrir }: {
   );
 }
 
-function CartaoContato({ c, nomeDe, onAbrir }: {
-  c: ContatoLinha; nomeDe: (id: string | null) => string; onAbrir: () => void;
+/** Atalho em quem chegou só com telefone (WhatsApp): abre a ficha em modo edição. */
+function LinkAdicionarNome({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      className="text-xs font-medium text-[var(--accent)] hover:underline focus-visible:underline"
+    >
+      Adicionar nome
+    </button>
+  );
+}
+
+function CartaoContato({ c, nomeDe, onAbrir, onAdicionarNome }: {
+  c: ContatoLinha; nomeDe: (id: string | null) => string; onAbrir: () => void; onAdicionarNome?: () => void;
 }) {
   const ultima = fmtRelativo(c.ultimaInteracaoEm);
   const abertos = c.abertos;
@@ -475,6 +496,7 @@ function CartaoContato({ c, nomeDe, onAbrir }: {
           Última interação {ultima.label}{c.lancamentos ? ` · ${c.lancamentos} lançamento${c.lancamentos > 1 ? 's' : ''}` : ''}
         </div>
       </button>
+      {semNome(c.nome) && onAdicionarNome && <div className="mt-1 px-3"><LinkAdicionarNome onClick={onAdicionarNome} /></div>}
     </li>
   );
 }

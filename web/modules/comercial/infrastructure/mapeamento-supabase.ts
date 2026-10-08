@@ -187,6 +187,8 @@ export function mapContatos(d: unknown): Contato[] {
       donoId: strOuNull(o.donoId), tags: strs(o.tags), utm: utm(o.utm), score: numOuNull(o.score),
       ehAluno: bool(o.ehAluno), optOut: bool(o.optOut), criadoEm: str(o.criadoEm),
       ...(o.origem === undefined ? {} : { origem: mapOrigemContato(o.origem) }),
+      ...(o.empresa === undefined ? {} : { empresa: strOuNull(o.empresa) }),
+      ...(o.observacao === undefined ? {} : { observacao: strOuNull(o.observacao) }),
     };
   });
 }
