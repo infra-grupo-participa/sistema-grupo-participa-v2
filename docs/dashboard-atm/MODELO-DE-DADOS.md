@@ -4,8 +4,11 @@ Modelo `seminario-atm`, primeiro uso: **ATM 1 da Dra. Elaine** (`atm-elaine-1-20
 86aktf11y. Lugar na tela: Infra > Dashboards > Escritório > Seminário ATM. Vale para os próximos ATMs (27/10, 17/11)
 só com cadastro pela chave, sem função nova.
 
-**Situação (08/10/2026): migrations ESCRITAS, NÃO APLICADAS** na branch `victor-dashboard-atm`. Aplicar só com aval do
-JP (dono do banco) e do Victor, depois do pentester. Até lá as RPCs abaixo não existem no banco (`PGRST202`).
+**Situação (08/10/2026): migrations APLICADAS em produção** (161000, 161001, 161100) com ok do Victor. Projeto `ATMEL126`
+(id 75), oferta `mqquvrtc` provisória, Listas 1 (131.515) e 2 (2.316) carregadas em `dados.lista_membros`.
+**Falta:** webhook do SendFlow (token `crm_webhook_sendflow` no Vault, `crm.config.sendflow_ligado`, linha em
+`dados.dashboard_grupos` para a campanha `ATM 10/26`) e a fonte do pré-checkout. Sem isso esses cards ficam "sem dado ainda".
+Disparo só entra no dashboard se a campanha tiver `[ATMEL126]` no nome (ou for ligada à mão ao projeto 75).
 Detalhe técnico, ensaio e reversão: `infra/supabase/migrations/20261008161000.explain.md`.
 
 Regra de dado do briefing: nada lê planilha. Sem dado = **nulo** (a tela mostra "sem dado ainda"); zero = zero medido.

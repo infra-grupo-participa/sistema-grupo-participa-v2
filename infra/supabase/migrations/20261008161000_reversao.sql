@@ -1,6 +1,6 @@
 -- Reversão de 20261008161000 (modelo seminario-atm) e de 20261008161100 (cadastro do ATM 1 da Dra. Elaine).
 --
--- STATUS: ESCRITA, NÃO APLICADA (nenhuma das duas migrations foi aplicada). Rodada dentro do ensaio
+-- STATUS: NÃO RODADA. As migrations 20261008161000, 161001 e 161100 foram aplicadas em 08/10/2026; esta reversão desfaz. Rodada dentro do ensaio
 -- 20261008161000_ensaio.sql: volta dados.dashboards às colunas e checks de antes e as funções do presencial seguem iguais.
 --
 -- Ordem: primeiro o cadastro da edição (se existir), depois o modelo. Aborta se houver outro dashboard 'seminario-atm'
