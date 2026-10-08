@@ -19,16 +19,21 @@ type ComCadastro = ComercialRepository & {
   criarContato?: (c: RascunhoContato) => Promise<Resultado & { contatoId?: string; nova?: boolean }>;
 };
 
-export function ModalNovoContato({ contatosLocais = [], nomeDe, onClose, onAbrirContato, onCriado }: {
+export function ModalNovoContato({ contatosLocais = [], inicial, titulo = 'Novo contato', rotuloAbrir = 'Abrir ficha', nomeDe, onClose, onAbrirContato, onCriado }: {
   /** Cadastrados só nesta tela (demonstração). O resto é conferido no servidor, pela busca. */
   contatosLocais?: Contato[];
+  /** Valores já digitados em outra tela (ex.: a busca da Nova conversa). */
+  inicial?: Partial<RascunhoContato>;
+  titulo?: string;
+  /** Texto do botão que leva ao contato que já existe (padrão: "Abrir ficha"). */
+  rotuloAbrir?: string;
   nomeDe: (id: string | null) => string;
   onClose: () => void;
   onAbrirContato: (id: string) => void;
   /** `local`: a fonte ainda não grava contato; o cadastro vale só nesta tela. */
   onCriado: (r: { contatoId: string; local: Contato | null }) => void;
 }) {
-  const [r, setR] = useState<RascunhoContato>({ nome: '', telefone: '', email: '' });
+  const [r, setR] = useState<RascunhoContato>({ nome: '', telefone: '', email: '', ...inicial });
   const [confirmaOutra, setConfirmaOutra] = useState(false);
   const [tentou, setTentou] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -99,7 +104,7 @@ export function ModalNovoContato({ contatosLocais = [], nomeDe, onClose, onAbrir
   return (
     <Modal
       onClose={onClose}
-      title="Novo contato"
+      title={titulo}
       footer={
         <RodapeAcoes
           secundario={<Button size="sm" variant="ghost" onClick={onClose}>Cancelar</Button>}
@@ -137,7 +142,7 @@ export function ModalNovoContato({ contatosLocais = [], nomeDe, onClose, onAbrir
               {conflitos.map((c) => (
                 <span key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--fg-2)]">
                   <span className="min-w-0 truncate">{c.nome} · {fmtTelefone(c.telefone)} · {nomeDe(c.donoId)}</span>
-                  <Button type="button" size="sm" variant="link" onClick={() => onAbrirContato(c.id)}>Abrir ficha</Button>
+                  <Button type="button" size="sm" variant="link" onClick={() => onAbrirContato(c.id)}>{rotuloAbrir}</Button>
                 </span>
               ))}
             </span>
@@ -153,7 +158,7 @@ export function ModalNovoContato({ contatosLocais = [], nomeDe, onClose, onAbrir
           <Aviso tom="warning" icone="alert">
             <span className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[var(--fg)]">{existente.msg}</span>
-              <Button type="button" size="sm" variant="link" onClick={() => onAbrirContato(existente.id)}>Abrir ficha</Button>
+              <Button type="button" size="sm" variant="link" onClick={() => onAbrirContato(existente.id)}>{rotuloAbrir}</Button>
             </span>
           </Aviso>
         )}

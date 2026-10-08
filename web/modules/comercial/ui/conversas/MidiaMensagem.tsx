@@ -99,12 +99,12 @@ export function MidiaMensagem({ m, compacto = false }: { m: Mensagem; compacto?:
         <button
           type="button"
           onClick={() => setGrande(true)}
-          className="mb-1 block overflow-hidden rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+          className="mb-1 block w-fit max-w-full overflow-hidden rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
           aria-label={`Abrir imagem ${nome}`}
           title="Abrir imagem"
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada temporária do Storage, fora do otimizador do Next */}
-          <img src={url} alt={nome} loading="lazy" className={`block w-auto max-w-full object-cover ${compacto ? 'max-h-32' : 'max-h-60'}`} />
+          <img src={url} alt={nome} loading="lazy" className={`block w-auto max-w-full sm:max-w-[320px] object-cover ${compacto ? 'max-h-32' : 'max-h-60'}`} />
         </button>
         {grande && (
           <Modal onClose={() => setGrande(false)} title={nome} width="max-w-4xl">

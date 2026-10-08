@@ -130,7 +130,10 @@ export function rotuloDia(iso: string, agora: Date): string {
 
 /** Primeiro nome, para a mensagem sair pelo nome do lead (playbook). */
 export function primeiroNome(nome: string | null | undefined): string {
-  return String(nome ?? '').trim().split(/\s+/)[0] ?? '';
+  const n = String(nome ?? '').trim();
+  // Marcador da base ("(sem nome)") não é nome: sem primeiro nome, a tela fala "o lead".
+  if (/^\(.*\)$/.test(n)) return '';
+  return n.split(/\s+/)[0] ?? '';
 }
 
 /** Playbook: mensagem sem emoji. */

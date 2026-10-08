@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { Icon } from '@/shared/ui/icons';
+import { inicialAvatar } from './avatar-inicial';
 import { idsAba, indiceAbaPorTecla, rotuloPendencias } from './tabs-teclado';
 
 /** Card de detalhe: modal centralizado amplo com header (avatar/título/badges/ações),
@@ -65,13 +66,13 @@ export function Drawer({
 
 /** Avatar circular com inicial — cabeçalho dos cards de detalhe. */
 export function AvatarInicial({ nome, size = 40 }: { nome?: string | null; size?: number }) {
-  const inicial = (nome || '?').trim().charAt(0).toUpperCase();
+  const inicial = inicialAvatar(nome);
   return (
     <div
       className="grid place-items-center rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] font-semibold border border-[var(--accent-border)] shadow-[var(--highlight-surface)] select-none"
       style={{ width: size, height: size, fontSize: size * 0.4 }}
     >
-      {inicial}
+      {inicial ?? <Icon name="user" size={Math.round(size * 0.5)} />}
     </div>
   );
 }

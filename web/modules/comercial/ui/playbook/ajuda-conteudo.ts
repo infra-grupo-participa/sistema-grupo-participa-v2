@@ -327,7 +327,7 @@ const MODULOS: SecaoAjuda[] = [
     icone: 'message',
     resumo: 'A caixa do WhatsApp oficial do Comercial: quem espera há mais tempo vem primeiro.',
     telas: [TELAS.conversas],
-    sinonimos: ['whatsapp', 'mensagem', 'chat', 'caixa', 'responder', 'template', 'janela de 24 horas', 'resposta rápida', 'áudio', 'anexo', 'arquivo', 'pdf', 'imagem', 'foto', 'vídeo'],
+    sinonimos: ['whatsapp', 'mensagem', 'chat', 'caixa', 'responder', 'template', 'janela de 24 horas', 'resposta rápida', 'áudio', 'anexo', 'arquivo', 'pdf', 'imagem', 'foto', 'vídeo', 'nova conversa', 'começar conversa', 'iniciar conversa', 'qr'],
     paraQue: [
       'Reúne as conversas do número oficial do comercial, **(21) 98754-5211**, cada uma ligada ao dono do lead. O que você envia aqui sai de verdade para o lead.',
       'A tela atualiza sozinha: mensagem nova aparece sem recarregar.',
@@ -349,6 +349,18 @@ const MODULOS: SecaoAjuda[] = [
           'Digite **"/"** com o campo vazio para ver as respostas rápidas do playbook.',
           'Envie com **Ctrl + Enter** (no Mac, ⌘ + Enter).',
           'Termine com o próximo passo: clique em **"Próximo passo"** e agende.',
+        ],
+      },
+      {
+        titulo: 'Começar uma conversa',
+        itens: [
+          'Clique em **"Nova conversa"**, no topo da tela.',
+          '**Número:** escolha por qual número falar. "Oficial" é o número da API; "QR" é o número conectado por QR. Com um número só, ele já vem escolhido.',
+          '**Pessoa:** busque pelo nome, telefone ou e-mail. Não achou? Clique em **"Cadastrar contato novo"** (nome e telefone). Se o telefone ou o e-mail já estiver no CRM, o sistema avisa antes.',
+          'Clique em **"Começar conversa"**. Se já existe conversa com a pessoa nesse número, ela abre com o histórico.',
+          'No número oficial fora da janela de 24 horas, a primeira mensagem sai por template aprovado. No número por QR, escreva normalmente: conversa 1 a 1, sem disparo em massa.',
+          'A conversa entra na lista assim que a primeira mensagem sai.',
+          'Não abre para quem pediu para não receber contato, nem para lead de outro vendedor (só o gestor).',
         ],
       },
       {

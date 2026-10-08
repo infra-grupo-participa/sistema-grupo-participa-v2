@@ -14,7 +14,9 @@ import { Icon } from '@/shared/ui/icons';
 import { ROTULO_ATUA, ROTULO_PERFIL, produto as produtoDe } from '../../domain/catalogo';
 import { fmtTelefone } from '../../domain/regras';
 import type { Contato, Conversa, EtapaFunil, Mensagem, Negocio, SessaoComercial, StatusMensagem, Template } from '../../domain/types';
-import { motivoSemEscrita, motivoSomenteLeitura, podeTrocarDono, somenteLeitura, travaMover, type TravaMover } from '../../domain/travas';
+import { motivoSemEscrita, motivoSomenteLeitura, podeEscrever, podeTrocarDono, somenteLeitura, travaMover, type TravaMover } from '../../domain/travas';
+import { janelaDoCanal } from '../../domain/nova-conversa';
+import { ModalNovaConversa } from './ModalNovaConversa';
 import { BotaoPlaybook, Dono, EstadoErro, FaixaErroAtualizacao, FaixaNumeros, PaginaComercial, Segmentado, Vazio, useEquipe, useParamUrl } from '../comum';
 import { InfoIndicador } from '../InfoIndicador';
 import { ContatoDrawer } from '../contatos/ContatoDrawer';
@@ -99,7 +101,10 @@ export function ConversasClient() {
   const [detalhes, setDetalhes] = useState(false);
   const [agendar, setAgendar] = useState<Negocio | null>(null);
   const [atribuir, setAtribuir] = useState<Contato | null>(null);
-  const { ref: area, altura } = useAlturaDisponivel<HTMLDivElement>();
+  // Nova conversa: abre o painel da pessoa já com o número escolhido (`n` remonta o painel se for a mesma pessoa).
+  const [novaConversa, setNovaConversa] = useState(false);
+  const [inicio, setInicio] = useState<{ contatoId: string; canalId: string; n: number } | null>(null);
+  const { ref: area, altura } = useAlturaDisponivel<HTMLDivElement>(320);
 
   // Abrir a conversa marca como lida, mas só para o dono (ou o gestor, em conversa sem dono):
   // quem só espia a conversa de outro não pode sumir com o aviso de não lida do dono.
@@ -199,8 +204,17 @@ export function ConversasClient() {
     <PaginaComercial
       titulo="Conversas"
       subtitulo="Caixa do WhatsApp oficial. Responda primeiro quem espera há mais tempo."
-      acoes={<BotaoPlaybook regras={REGRAS_PLAYBOOK} />}
+      acoes={<>
+        {podeEscrever(sessao) && !carregando && (
+          <Button size="sm" onClick={() => setNovaConversa(true)} aria-label="Nova conversa" title="Nova conversa">
+            <Icon name="plus" size={14} /><span className="hidden sm:inline">Nova conversa</span>
+          </Button>
+        )}
+        <BotaoPlaybook regras={REGRAS_PLAYBOOK} />
+      </>}
       meta={!carregando && (
+        // No celular, com conversa aberta, a faixa sai: a altura fica para as mensagens.
+        <div className={ativo ? 'hidden lg:block' : undefined}>
         <FaixaNumeros
           rotulo="Caixa agora"
           itens={[
@@ -213,10 +227,11 @@ export function ConversasClient() {
             },
           ]}
         />
+        </div>
       )}
     >
       {erro && !carregando && <FaixaErroAtualizacao className="mb-2" mensagem={erro} onTentar={recarregar} />}
-      <div ref={area} style={alturaEstilo} className="min-h-[480px]">
+      <div ref={area} style={alturaEstilo} className="min-h-[320px]">
         {erro && carregando ? (
           <Card className="h-full grid place-items-center">
             <EstadoErro mensagem={erro} onTentar={recarregar} />
@@ -224,9 +239,9 @@ export function ConversasClient() {
         ) : carregando ? (
           <EsqueletoCaixa />
         ) : (
-          <div className="h-full grid gap-3 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_300px]">
+          <div className="h-full grid grid-rows-[minmax(0,1fr)] gap-3 lg:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)_300px]">
             {/* Lista */}
-            <Card className={`h-full flex-col min-w-0 overflow-hidden ${ativo ? 'hidden lg:flex' : 'flex'}`}>
+            <Card className={`h-full min-h-0 flex-col min-w-0 overflow-hidden ${ativo ? 'hidden lg:flex' : 'flex'}`}>
               <div className="shrink-0 p-3 border-b border-[var(--border)] space-y-2">
                 <Segmentado<Filtro>
                   className="w-full [&>button]:flex-1 [&>button]:justify-center"
@@ -247,7 +262,7 @@ export function ConversasClient() {
                 )}
                 <SearchInput placeholder="Buscar nome, telefone ou texto" value={busca} onChange={(e) => setBusca(e.target.value)} onLimpar={() => setBusca('')} />
               </div>
-              <ul className="flex-1 overflow-y-auto" aria-label="Conversas">
+              <ul className="flex-1 min-h-0 overflow-y-auto overscroll-contain" aria-label="Conversas">
                 {visiveis.length === 0 && (
                   <li className="px-3">
                     <Vazio
@@ -279,10 +294,11 @@ export function ConversasClient() {
             </Card>
 
             {/* Conversa */}
-            <div className={`h-full min-w-0 ${ativo ? '' : 'hidden lg:block'}`}>
+            <div className={`h-full min-h-0 min-w-0 ${ativo ? '' : 'hidden lg:block'}`}>
               {ativo && contato ? (
                 <PainelConversa
-                  key={ativo}
+                  key={inicio?.contatoId === ativo ? `${ativo}:${inicio.n}` : ativo}
+                  canalInicial={inicio?.contatoId === ativo ? inicio.canalId : null}
                   contato={contato}
                   conversa={conversa}
                   negocio={negociosAbertos[0] ?? null}
@@ -323,7 +339,7 @@ export function ConversasClient() {
 
             {/* Painel do contato: coluna própria só em telas largas; abaixo disso, botão "Detalhes" */}
             {ativo && contato && (
-              <Card className="hidden xl:block h-full min-w-0 overflow-y-auto p-4">{painelContato}</Card>
+              <Card className="hidden 2xl:block h-full min-h-0 min-w-0 overflow-y-auto overscroll-contain p-4">{painelContato}</Card>
             )}
           </div>
         )}
@@ -361,6 +377,23 @@ export function ConversasClient() {
           onFeito={(msg) => { setAtribuir(null); flash(msg); }}
         />
       )}
+      {novaConversa && sessao && (
+        <ModalNovaConversa
+          canais={canais}
+          painel={painelCanais ?? null}
+          sessao={sessao}
+          conversas={lista}
+          nomeDe={nomeDe}
+          agora={agora}
+          onClose={() => setNovaConversa(false)}
+          onComecar={(contatoId, canalId) => {
+            setNovaConversa(false);
+            setInicio({ contatoId, canalId, n: Date.now() });
+            setSel(contatoId);
+            setDetalhes(false);
+          }}
+        />
+      )}
       {negocioAberto && <NegocioDrawer negocioId={negocioAberto} onClose={() => setNegocioAberto(null)} />}
       {fichaContato && !negocioAberto && (
         <ContatoDrawer key={fichaContato} contatoId={fichaContato} onClose={() => setFichaContato(null)} onAbrirContato={setFichaContato} />
@@ -373,7 +406,7 @@ export function ConversasClient() {
 /** Carregando no formato da caixa: lista à esquerda, conversa ao lado. */
 function EsqueletoCaixa() {
   return (
-    <div className="h-full grid gap-3 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_300px]" aria-busy="true">
+    <div className="h-full grid grid-rows-[minmax(0,1fr)] gap-3 lg:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)_300px]" aria-busy="true">
       <Card className="h-full overflow-hidden">
         <div className="p-3 border-b border-[var(--border)] space-y-2">
           <Skeleton h={30} />
@@ -392,7 +425,7 @@ function EsqueletoCaixa() {
       <Card className="hidden lg:grid h-full place-items-center text-[var(--fg-3)]">
         <span className="inline-flex items-center gap-3 text-sm"><Spinner size={20} /> Carregando conversas…</span>
       </Card>
-      <Card className="hidden xl:block h-full p-4 space-y-3">
+      <Card className="hidden 2xl:block h-full p-4 space-y-3">
         <Skeleton w="40%" h={10} />
         {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} h={14} />)}
       </Card>
@@ -467,7 +500,9 @@ function ItemConversa({ cv, c, agora, ativa, donoNome, semDono, selo, onClick }:
 
 // ── Conversa ──
 
-function PainelConversa({ contato, conversa, negocio, negociosDoContato, templates, canais, painelCanais, sessao, gestor, nomeDe, agora, flash, onVoltar, onAbrirNegocio, onAgendar, onDetalhes, onAtribuir }: {
+function PainelConversa({ canalInicial, contato, conversa, negocio, negociosDoContato, templates, canais, painelCanais, sessao, gestor, nomeDe, agora, flash, onVoltar, onAbrirNegocio, onAgendar, onDetalhes, onAtribuir }: {
+  /** Número escolhido na "Nova conversa" (a 1ª mensagem cria a conversa nele). */
+  canalInicial?: string | null;
   contato: Contato; conversa: Conversa | null; negocio: Negocio | null; negociosDoContato: Negocio[]; templates: Template[];
   canais: CanalWhatsapp[]; painelCanais: PainelCanais | null; sessao: SessaoComercial;
   gestor: boolean; nomeDe: (id: string | null) => string; agora: Date; flash: (m: string) => void; onVoltar: () => void;
@@ -477,24 +512,42 @@ function PainelConversa({ contato, conversa, negocio, negociosDoContato, templat
   // Conversa aberta sozinha: mensagem nova, mídia que sai de "pendente" e status (enviada → entregue → lida).
   useAtualizacaoPeriodica(recarregar, 'conversaAberta');
   const mensagens = useMemo(() => (dados ?? []).filter((m) => m.contatoId === contato.id && m.canal === 'whatsapp'), [dados, contato.id]);
-  const fim = useRef<HTMLDivElement>(null);
-  // Rola para o fim ao abrir e quando chega mensagem, mas só se o vendedor já estava no fim (lendo o histórico, fica onde está).
+  // Rola SÓ a coluna de mensagens (scrollIntoView rolava a página inteira junto e sumia com o topo e o compositor).
+  // Ao abrir e quando chega mensagem: vai ao fim só se o vendedor já estava perto do fim; senão, botão "novas mensagens".
+  const rolagem = useRef<HTMLDivElement>(null);
   const noFim = useRef(true);
+  const [novas, setNovas] = useState(false);
+  const irAoFim = () => {
+    const el = rolagem.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    noFim.current = true;
+    setNovas(false);
+  };
   const aoRolar = (e: UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     noFim.current = estaNoFim(el.scrollTop, el.scrollHeight, el.clientHeight);
+    if (noFim.current) setNovas(false);
   };
   const ultimaId = mensagens.at(-1)?.id;
+  const vistaUltima = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (noFim.current) fim.current?.scrollIntoView({ block: 'end' });
-  }, [mensagens.length, ultimaId]);
+    if (!ultimaId || vistaUltima.current === ultimaId) return;
+    const primeira = vistaUltima.current === undefined;
+    vistaUltima.current = ultimaId;
+    if (primeira || noFim.current) {
+      const el = rolagem.current;
+      if (el) el.scrollTop = el.scrollHeight;
+      noFim.current = true;
+    } else setNovas(true);
+  }, [ultimaId]);
 
   const dono = conversa?.atribuidaA ?? contato.donoId;
-  const janela = janelaRestante(conversa?.janelaAteEm ?? null, agora);
   // Número da resposta: o escolhido; senão o da conversa mais recente; senão o oficial (mesmo critério do banco).
-  const [canalEscolhido, setCanalEscolhido] = useState<string | null>(null);
+  const [canalEscolhido, setCanalEscolhido] = useState<string | null>(canalInicial ?? null);
   const canal = canalDeResposta(canalEscolhido, conversa?.canalId ?? null, canais);
-  const opcoesCanal = canais.filter((c) => (conversa?.canais ?? []).includes(c.id) || c.padrao);
+  const opcoesCanal = canais.filter((c) => (conversa?.canais ?? []).includes(c.id) || c.padrao || c.id === canalEscolhido);
+  // Janela de 24 h DO NÚMERO da resposta: quem só falou pelo QR tem a do oficial fechada.
+  const janela = janelaRestante(janelaDoCanal(conversa, canal?.id), agora);
   const porQr = semJanela(canal);
   const variosNaConversa = new Set(mensagens.map((m) => m.canalId).filter(Boolean)).size > 1;
   const nomeCanal = (id: string | null | undefined) => rotuloCanal(canais.find((c) => c.id === id));
@@ -525,16 +578,16 @@ function PainelConversa({ contato, conversa, negocio, negociosDoContato, templat
 
   return (
     <Card className="h-full flex flex-col overflow-hidden">
-      <div className="shrink-0 flex items-center gap-3 px-3 py-2 border-b border-[var(--border)]">
+      <div className="shrink-0 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 border-b border-[var(--border)]">
         <button type="button" onClick={onVoltar} aria-label="Voltar para a lista" className="lg:hidden -ml-1 w-8 h-8 grid place-items-center rounded-[var(--r-md)] text-[var(--fg-2)] hover:bg-[var(--surface-3)]">
           <Icon name="arrow-left" size={16} />
         </button>
         <AvatarInicial nome={contato.nome} size={32} />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[120px] flex-1">
           <h2 className="text-sm font-semibold text-[var(--fg)] truncate">{contato.nome}</h2>
           <div className="text-xs text-[var(--fg-3)] truncate">{fmtTelefone(contato.telefone)} · {dono ? nomeDe(dono) : 'sem dono'}</div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
           {opcoesCanal.length > 1 ? (
             <FilterSelect value={canal?.id ?? ''} onChange={(e) => setCanalEscolhido(e.target.value || null)} aria-label="Responder pelo número" title="Responder pelo número">
               {opcoesCanal.map((c) => <option key={c.id} value={c.id}>{rotuloCanal(c)}</option>)}
@@ -569,14 +622,15 @@ function PainelConversa({ contato, conversa, negocio, negociosDoContato, templat
             onClick={onDetalhes}
             aria-label="Detalhes do contato"
             title="Detalhes do contato"
-            className="xl:hidden w-8 h-8 grid place-items-center rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--fg)] hover:bg-[var(--surface-3)]"
+            className="2xl:hidden w-8 h-8 grid place-items-center rounded-[var(--r-md)] border border-[var(--border)] text-[var(--fg-2)] hover:text-[var(--fg)] hover:bg-[var(--surface-3)]"
           >
             <Icon name="panel-open" size={15} className="scale-x-[-1]" />
           </button>
         </div>
       </div>
 
-      <div onScroll={aoRolar} className="flex-1 overflow-y-auto px-4 py-3 bg-[var(--surface-1)]" aria-live="polite" aria-label={`Mensagens com ${contato.nome}`} role="log">
+      <div className="relative flex-1 min-h-0">
+      <div ref={rolagem} onScroll={aoRolar} className="h-full overflow-y-auto overscroll-contain px-4 pb-3 bg-[var(--surface-1)]" aria-live="polite" aria-label={`Mensagens com ${contato.nome}`} role="log">
         {erro && dados && !carregandoMsgs && <FaixaErroAtualizacao className="mb-2" mensagem={erro} onTentar={recarregar} />}
         {erro && !dados ? (
           <EstadoErro mensagem={erro} onTentar={recarregar} />
@@ -589,13 +643,19 @@ function PainelConversa({ contato, conversa, negocio, negociosDoContato, templat
             ))}
           </div>
         ) : mensagens.length === 0 ? (
-          <Vazio titulo="Sem mensagens ainda" hint="A primeira mensagem para quem nunca escreveu só sai por template aprovado." icone="message" />
+          <Vazio
+            titulo="Sem mensagens ainda"
+            hint={porQr ? 'Número por QR: escreva a primeira mensagem. A conversa aparece na lista assim que ela sair.'
+              : janela ? 'Janela aberta: escreva a primeira mensagem.' : 'Fora da janela de 24 h, a primeira mensagem sai por template aprovado.'}
+            icone="message"
+          />
         ) : grupos.map((g) => (
           <div key={g.dia}>
-            <div className="my-4 flex items-center gap-3 text-xs text-[var(--fg-3)]">
-              <span className="h-px flex-1 bg-[var(--border-faint)]" />
-              <span>{rotuloDia(g.itens[0].em, agora)}</span>
-              <span className="h-px flex-1 bg-[var(--border-faint)]" />
+            {/* Separador do dia fica preso no topo enquanto rola as mensagens daquele dia. */}
+            <div className="sticky top-0 z-[1] flex justify-center py-2 pointer-events-none">
+              <span className="rounded-[var(--r-pill)] border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-0.5 text-[11px] text-[var(--fg-3)] shadow-[var(--highlight-surface)]">
+                {rotuloDia(g.itens[0].em, agora)}
+              </span>
             </div>
             <div className="space-y-2">
               {g.itens.map((m) => (
@@ -605,7 +665,16 @@ function PainelConversa({ contato, conversa, negocio, negociosDoContato, templat
             </div>
           </div>
         ))}
-        <div ref={fim} />
+      </div>
+      {novas && (
+        <button
+          type="button"
+          onClick={irAoFim}
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1.5 rounded-[var(--r-pill)] border border-[var(--border-strong)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--fg)] shadow-[var(--shadow-overlay)] hover:bg-[var(--surface-3)]"
+        >
+          <Icon name="arrow-down" size={13} /> Novas mensagens
+        </button>
+      )}
       </div>
 
       {podeAtribuir && (
@@ -663,7 +732,7 @@ function Bolha({ m, nomeTemplate, autor, numero }: { m: Mensagem; nomeTemplate: 
   return (
     <div className={`flex ${saida ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[85%] sm:max-w-[72%] px-3 py-2 text-sm text-[var(--fg)] border ${
+        className={`min-w-0 max-w-[85%] sm:max-w-[68%] px-3 py-2 text-sm text-[var(--fg)] border ${
           saida ? 'rounded-[var(--r-lg)] rounded-br-[var(--r-sm)]' : 'rounded-[var(--r-lg)] rounded-bl-[var(--r-sm)]'
         } ${
           m.status === 'falhou' ? 'border-[var(--red-border)] bg-[var(--red-subtle)]'
@@ -774,7 +843,7 @@ function Envio({ contato, negocio, canalId, porQr, janelaAberta, templates, reme
   const emoji = temEmoji(texto);
   return (
     <div className="shrink-0 border-t border-[var(--border)] px-4 pt-3 pb-2">
-      <div className="relative flex items-end gap-2">
+      <div className="relative flex flex-wrap sm:flex-nowrap items-end justify-end gap-2">
         {menu && <MenuRespostas id={idMenu} frases={RESPOSTAS_RAPIDAS} ancora={botaoMenu} onEscolher={inserir} onFechar={fecharMenu} />}
         <Textarea
           ref={campo}
@@ -788,7 +857,7 @@ function Envio({ contato, negocio, canalId, porQr, janelaAberta, templates, reme
           }}
           placeholder={`Mensagem para ${nome || 'o lead'} (sem emoji)`}
           aria-label="Mensagem"
-          className="!resize-none"
+          className="!resize-none basis-full sm:basis-0 sm:flex-1"
         />
         <BotaoAnexar contatoId={contato.id} nomeContato={nome || contato.nome} desabilitado={enviando} flash={flash} canalId={canalId} />
         <BotaoGravarAudio contatoId={contato.id} nomeContato={nome || contato.nome} desabilitado={enviando} flash={flash} canalId={canalId} />

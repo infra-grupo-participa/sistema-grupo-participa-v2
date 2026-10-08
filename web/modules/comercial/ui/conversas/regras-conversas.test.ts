@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { criarTravaEnvio, esperaResposta, janelaRestante, minutosUteis, ordenarConversas, preencherTemplate, resumoCaixa, rotuloDia, temEmoji } from './regras-conversas';
+import { criarTravaEnvio, esperaResposta, janelaRestante, minutosUteis, ordenarConversas, preencherTemplate, primeiroNome, resumoCaixa, rotuloDia, temEmoji } from './regras-conversas';
 
 // 05/10/2026 é segunda-feira.
 const seg = (h: number, m = 0) => new Date(2026, 9, 5, h, m);
@@ -135,5 +135,13 @@ describe('criarTravaEnvio', () => {
     expect(t.comecar('oi, tudo bem?')).toBe('k2');
     t.terminar(true);
     expect(t.comecar('oi, tudo bem?')).toBe('k3');
+  });
+});
+
+describe('primeiroNome', () => {
+  it('primeira palavra; marcador "(sem nome)" não vira nome', () => {
+    expect(primeiroNome('Ana Souza')).toBe('Ana');
+    expect(primeiroNome('(sem nome)')).toBe('');
+    expect(primeiroNome(null)).toBe('');
   });
 });
