@@ -61,3 +61,9 @@ Verificações do projeto:
     npx tsc --noEmit
     npx vitest run
     npm run build
+
+## Teste em produção (08/10/2026)
+
+- Merge `ba417ab` na main, CI verde. Teste logado em produção: card no Escritório, 14 cards zerados com "sem dado ainda", modal e abas ok, chave inexistente 404, sem rolagem horizontal em 374 e 377 px.
+- **Acesso:** a tela usa o mesmo gate da Clínica (`csm/[chave]`). Com `acessoV2` desligado em produção, vale o modelo antigo: quem vê Infra vê a tela. O dado continua protegido no banco: as RPCs recusam quem não é da equipe (42501). Bloquear por `financeiro.ver` depende de ligar o `acessoV2`, que é outra frente.
+- **Console:** enquanto a migration não for aplicada, as RPCs respondem PGRST202 (função inexistente). Desde este commit isso é tratado como "sem dado ainda", sem registrar erro.

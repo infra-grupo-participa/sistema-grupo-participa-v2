@@ -25,6 +25,8 @@ async function rpc(nome: string, chave: string): Promise<Resultado<Linha[]>> {
   try {
     const { data, error } = await createBrowserSupabase().rpc(nome, { p_chave: chave });
     if (error) {
+      // PGRST202: a RPC ainda não existe (migration do ATM não aplicada). É o estado "sem dado ainda", não erro.
+      if (error.code === 'PGRST202') return { data: [], semDado: true, erro: null };
       logQueryError(nome, { message: error.code || 'SEM_CODIGO' });
       return { data: [], semDado: true, erro: error.code === '42501' ? 'Sem permissão para ler este dashboard.' : null };
     }
