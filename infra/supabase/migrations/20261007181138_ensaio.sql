@@ -1,3 +1,5 @@
+-- 08/10/2026: a chave 'gps' da sonda virou 'admin_ou_editar_educacional' (mede o v2; o GPS tem guarda própria desde
+-- 08/10, ver docs/niveis-de-acesso-banco.md). O resto do ensaio não mudou.
 -- Ensaio de 20261007s_acesso_guardas_fase1.sql: 2 passadas num só begin … rollback. Gerado a partir dos .sql
 -- como estão. Rodar com aplica_sql.py ensaio (o fim vira raise com a saída). Nada persiste.
 begin;
@@ -21,7 +23,7 @@ begin
     execute format('select %s(%L)', case when tem_ed then 'mkt.pode_editar' else 'mkt.pode_ver' end, f) into b;
     j := j || jsonb_build_object('ed_' || f, b);
   end loop;
-  j := j || jsonb_build_object('gps', public.gp_is_admin() or (tem_ac and coalesce(public.gp_acesso_pode_editar('educacional', null), false)));
+  j := j || jsonb_build_object('admin_ou_editar_educacional', public.gp_is_admin() or (tem_ac and coalesce(public.gp_acesso_pode_editar('educacional', null), false)));
   return j;
 end $s$;
 grant execute on function pg_temp.sonda(uuid) to authenticated, anon;

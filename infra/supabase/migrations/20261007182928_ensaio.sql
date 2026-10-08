@@ -1,3 +1,5 @@
+-- 08/10/2026: a chave 'gps' da sonda virou 'admin_ou_editar_educacional' (mede o v2; o GPS tem guarda própria desde
+-- 08/10, ver docs/niveis-de-acesso-banco.md). O resto do ensaio não mudou.
 -- Ensaio das fases 2 (20261007t) e 3 (20261007u) de níveis de acesso, sobre o banco com as fases 0 e 1 aplicadas.
 -- Uma transação desfeita: foto atual, fase 2 duas vezes, provas, fase 3 duas vezes, provas. Nada persiste.
 -- Rodar com aplica_sql.py ensaio. Saída: nomes de perfil e booleanos; nenhum e-mail, CPF ou telefone.
@@ -19,7 +21,7 @@ begin
     'base_pessoas', pessoas.pode_ver(),
     'mkt_ver', mkt.pode_ver('mkt_trafego'), 'ed_trafego', mkt.pode_editar('mkt_trafego'), 'ed_web', mkt.pode_editar('mkt_web'),
     'ed_mensageria', mkt.pode_editar('mkt_mensageria'),
-    'gps', public.gp_is_admin() or coalesce(public.gp_acesso_pode_editar('educacional', null), false),
+    'admin_ou_editar_educacional', public.gp_is_admin() or coalesce(public.gp_acesso_pode_editar('educacional', null), false),
     'ver_financeiro', public.gp_acesso_pode_ver('financeiro', null));
   for a in select d.key as dep, null::text as ar from acesso.departamento d union all select ar2.departamento, ar2.key from acesso.area ar2 loop
     j := j || jsonb_build_object('ed:' || a.dep || coalesce('/' || a.ar, ''), public.gp_acesso_pode_editar(a.dep, a.ar));
