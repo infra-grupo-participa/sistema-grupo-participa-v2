@@ -15,7 +15,7 @@ import {
   marcarAtmTeste,
   type Resultado,
 } from '../infrastructure/atm-data';
-import { CANAIS_DISPARO_ATM, METRICAS_RESUMO_ATM, montarAvisosTesteAtm, type DashboardAtm, type LeadAtm, type NumeroGrupoAtm } from '../domain/dashboard';
+import { CANAIS_DISPARO_ATM, METRICAS_RESUMO_ATM, montarAvisosTesteAtm, rotuloValorResumoLead, type DashboardAtm, type LeadAtm, type NumeroGrupoAtm } from '../domain/dashboard';
 import type { RegistroAtm } from '../domain/registro';
 import { dataPtBr, datasDoPeriodo, type PresetPeriodoAtm } from '../domain/periodo';
 import { RoscaCategorias } from '@/modules/infra/dados/ui/viz/RoscaCategorias';
@@ -64,7 +64,7 @@ function ModalLeads({ open, onClose, result, grupo, serie, periodoLabel, isMaste
   const leadsAtivos = useMemo(() => result.data.filter((lead) => !lead.teste), [result.data]);
   const distribuicoes = useMemo(() => {
     const campos: [keyof LeadAtm, string][] = [['entrouGrupo', 'Entrou no grupo?'], ['aluno', 'É aluno?'], ['utmSource', 'utm_source'], ['estado', 'Estado'], ['listaOrigem', 'Lista de origem'], ['seminarioOrigem', 'Seminário de origem']];
-    return campos.map(([campo, nome]) => ({ nome, valores: Object.entries(leadsAtivos.reduce<Record<string, number>>((a, lead) => { const k = String(lead[campo] ?? 'Não identificado'); a[k] = (a[k] ?? 0) + 1; return a; }, {})) }));
+    return campos.map(([campo, nome]) => ({ nome, valores: Object.entries(leadsAtivos.reduce<Record<string, number>>((a, lead) => { const k = rotuloValorResumoLead(lead[campo]); a[k] = (a[k] ?? 0) + 1; return a; }, {})) }));
   }, [leadsAtivos]);
 
   const mudarLead = async (lead: LeadAtm, teste: boolean) => {

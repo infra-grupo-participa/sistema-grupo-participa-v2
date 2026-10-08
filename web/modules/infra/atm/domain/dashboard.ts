@@ -98,6 +98,11 @@ export type AvisoTesteAtm =
   | { tipo: 'grupo'; quantidade: number }
   | { tipo: 'vendas'; quantidade: number; receitaBruta: number | null };
 
+export function rotuloValorResumoLead(valor: unknown): string {
+  if (typeof valor === 'boolean') return valor ? 'Sim' : 'Não';
+  return String(valor ?? 'Não identificado');
+}
+
 export function montarAvisosTesteAtm(periodo: PeriodoAplicadoAtm | null | undefined): AvisoTesteAtm[] {
   if (!periodo) return [];
   const avisos: AvisoTesteAtm[] = [];
