@@ -1,7 +1,8 @@
 'use client';
 
-// Aba #mcp: token pessoal para conectar o Claude (Code ou Desktop) ao CRM (F7). Cada pessoa gera os próprios tokens;
-// o gestor vê e revoga os do time. O token completo aparece UMA vez (o banco guarda só o sha-256).
+// Aba #mcp: conectar o Claude ao CRM (F7). Jeito principal: conector com login (OAuth) no claude.ai, app do celular,
+// Claude Desktop e Claude Code — sem token para copiar. Alternativa: token pessoal (aparece UMA vez; o banco guarda só o
+// sha-256). As conexões OAuth aparecem na lista como "Claude: …" e se revogam igual. O gestor vê e revoga as do time.
 import { useState } from 'react';
 import {
   Badge, Button, ConfirmDialog, CopyField, FilterSelect, Input, SectionCard,
@@ -12,7 +13,7 @@ import type { SessaoComercial, TokenMcp } from '../../domain/types';
 import { Aviso, Campo, Carregando, EsqueletoLista, NotaRodape, Segmentado } from '../comum';
 import { repo, useAgora, useDados } from '../repositorio';
 import {
-  MAX_TOKENS_ATIVOS, URL_MCP, VALIDADES_TOKEN, ativosDe, comandoClaudeCode, configClaudeDesktop, ehRespostaMcpDesligado,
+  MAX_TOKENS_ATIVOS, URL_MCP, VALIDADES_TOKEN, ativosDe, comandoClaudeCode, comandoClaudeCodeOAuth, configClaudeDesktop, ehRespostaMcpDesligado,
   escoposDoNovoToken, estadoMcp, ordenarTokens, rotuloEscopos, situacaoToken, validarNovoToken, type SituacaoToken,
 } from './regras-integracoes';
 
@@ -218,13 +219,25 @@ function Bloco({ titulo, texto }: { titulo: string; texto: string }) {
 
 function ComoConectar({ token }: { token: string | null }) {
   return (
-    <SectionCard title="Como conectar" subtitle={token ? 'Os comandos abaixo já estão com o seu token novo.' : 'Troque gpc_SEU_TOKEN pelo token gerado.'}>
+    <SectionCard title="Como conectar" subtitle="O jeito mais fácil não precisa de token: é só entrar com o seu login do sistema.">
       <div className="space-y-4 text-xs text-[var(--fg-2)] leading-relaxed">
         <p>
           O Claude passa a consultar o CRM como você: vê o que você vê na tela, com as mesmas regras. Endereço do servidor:{' '}
           <code className="break-all text-[var(--fg)]">{URL_MCP}</code>
         </p>
-        <Bloco titulo="Claude Code (terminal)" texto={comandoClaudeCode(token)} />
+        <div className="space-y-1.5">
+          <p><b className="text-[var(--fg)]">claude.ai, app do celular e Claude Desktop (recomendado):</b></p>
+          <ol className="list-decimal space-y-1 pl-4">
+            <li>No claude.ai: Configurações › Conectores › Adicionar conector personalizado.</li>
+            <li>Nome: <code>CRM Comercial</code>. URL: o endereço acima. Adicionar.</li>
+            <li>Clique em Conectar, entre com o seu e-mail e senha do sistema e clique em Permitir.</li>
+            <li>Numa conversa, ligue o conector no botão de ferramentas. Vale também no celular e no Claude Desktop.</li>
+          </ol>
+        </div>
+        <Bloco titulo="Claude Code (terminal) — com login" texto={comandoClaudeCodeOAuth()} />
+        <p className="font-medium text-[var(--fg)]">Alternativa com token (Claude Code ou Desktop sem login):</p>
+        <p>{token ? 'Os comandos abaixo já estão com o seu token novo.' : 'Gere um token ao lado e troque gpc_SEU_TOKEN por ele.'}</p>
+        <Bloco titulo="Claude Code (terminal) — com token" texto={comandoClaudeCode(token)} />
         <div className="space-y-2">
           <p>
             <b className="text-[var(--fg)]">Claude Desktop:</b> Configurações › Desenvolvedor › Editar config. Cole o trecho no
@@ -232,13 +245,10 @@ function ComoConectar({ token }: { token: string | null }) {
           </p>
           <Bloco titulo="claude_desktop_config.json" texto={configClaudeDesktop(token)} />
         </div>
-        <p>
-          <b className="text-[var(--fg)]">claude.ai no navegador e app do celular:</b> ainda não conectam (pedem outro tipo de
-          login). Use o Claude Code ou o Claude Desktop.
-        </p>
-        <p>Para testar, peça ao Claude: &quot;liste os funis do comercial&quot;.</p>
+        <p>Para testar, peça ao Claude: &quot;liste os funis do comercial&quot;. Guia completo: Playbook › Central de ajuda › Conectar ao Claude.</p>
         <NotaRodape>
-          Toda gravação feita pelo Claude entra no Registro do CRM com o seu nome. Limite de 60 pedidos por minuto por token.
+          Toda gravação feita pelo Claude entra no Registro do CRM com o seu nome. Limite de 60 pedidos por minuto por conexão.
+          O Claude não envia WhatsApp.
           CPF nunca sai; e-mail e telefone só aparecem completos para o dono do contato ou o gestor.
         </NotaRodape>
       </div>

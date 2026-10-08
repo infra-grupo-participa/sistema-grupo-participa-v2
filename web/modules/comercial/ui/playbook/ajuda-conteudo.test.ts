@@ -29,7 +29,7 @@ describe('central de ajuda: estrutura', () => {
   it('tem uma seção por tela do Comercial, com âncora #modulo-*', () => {
     const modulos = secoesDaParte('modulos').map((s) => s.id);
     for (const id of ['inicio', 'funil', 'ficha-negocio', 'conversas', 'atividades', 'contatos', 'estrategias', 'disparos',
-      'relatorios', 'dashboards', 'equipe', 'produtos', 'registro', 'configuracoes', 'notificacoes', 'social-selling']) {
+      'relatorios', 'dashboards', 'equipe', 'produtos', 'registro', 'configuracoes', 'claude', 'notificacoes', 'social-selling']) {
       expect(modulos).toContain(`modulo-${id}`);
     }
   });

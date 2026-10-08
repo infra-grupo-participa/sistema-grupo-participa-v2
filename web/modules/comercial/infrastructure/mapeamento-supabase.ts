@@ -585,7 +585,7 @@ export function mapTokensMcp(d: unknown): TokenMcp[] {
     return {
       id: str(o.id), nome: str(o.nome), prefixo: str(o.prefixo), escopos: escoposMcp(o.escopos),
       perfilId: str(o.perfilId), perfilNome: str(o.perfilNome), criadoEm: str(o.criadoEm), expiraEm: str(o.expiraEm),
-      revogadoEm: strOuNull(o.revogadoEm), ultimoUsoEm: strOuNull(o.ultimoUsoEm), ativo: bool(o.ativo),
+      revogadoEm: strOuNull(o.revogadoEm), ultimoUsoEm: strOuNull(o.ultimoUsoEm), ativo: bool(o.ativo), oauth: o.oauth === true,
     };
   });
 }

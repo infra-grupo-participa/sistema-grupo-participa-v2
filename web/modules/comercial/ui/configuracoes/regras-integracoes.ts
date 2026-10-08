@@ -119,8 +119,9 @@ export function ordenarTokens(lista: TokenMcp[], agora: Date): TokenMcp[] {
   return [...lista].sort((a, b) => peso[situacaoToken(a, agora)] - peso[situacaoToken(b, agora)] || b.criadoEm.localeCompare(a.criadoEm));
 }
 
+/** Tokens MANUAIS ativos (o limite de 5 do banco não conta conexão OAuth). */
 export function ativosDe(lista: TokenMcp[], perfilId: string | undefined, agora: Date): number {
-  return lista.filter((t) => t.perfilId === perfilId && situacaoToken(t, agora) === 'ativo').length;
+  return lista.filter((t) => !t.oauth && t.perfilId === perfilId && situacaoToken(t, agora) === 'ativo').length;
 }
 
 export function rotuloEscopos(e: EscopoMcp[]): string {
@@ -130,6 +131,11 @@ export function rotuloEscopos(e: EscopoMcp[]): string {
 /** Comando do Claude Code com o token já preenchido (ou o marcador, quando ainda não há token). */
 export function comandoClaudeCode(token: string | null): string {
   return `claude mcp add --transport http comercial ${URL_MCP} \\\n  --header "Authorization: Bearer ${token ?? 'gpc_SEU_TOKEN'}"`;
+}
+
+/** Claude Code com login (OAuth): adiciona o servidor e o /mcp abre o navegador para entrar e permitir. */
+export function comandoClaudeCodeOAuth(): string {
+  return `claude mcp add --transport http comercial ${URL_MCP}\n# depois, dentro do Claude Code: /mcp › comercial › Authenticate`;
 }
 
 /** Trecho do claude_desktop_config.json (via mcp-remote). */

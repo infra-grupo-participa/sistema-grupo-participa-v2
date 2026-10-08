@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
-import { allowedOrigins, clientIp } from '@/shared/infrastructure/http/security';
+import { allowedOrigins, clientIp, publicAppBaseUrl } from '@/shared/infrastructure/http/security';
 import { rateLimitOk, sweepRateLimit } from '@/shared/infrastructure/http/rate-limit';
 import { atenderMcp } from '@/modules/comercial/application/mcp-servidor';
 import { SupabaseMcpAdapter } from '@/modules/comercial/infrastructure/supabase-mcp';
@@ -8,14 +8,22 @@ import { SupabaseMcpAdapter } from '@/modules/comercial/infrastructure/supabase-
 export const dynamic = 'force-dynamic';
 
 // MCP do Comercial (F7): servidor MCP remoto (Streamable HTTP, stateless, só POST + JSON). Como conectar e regras:
-// docs/projetos/comercial/mcp.md. Público no proxy (sem cookie): autenticação própria por token pessoal
-// (Authorization: Bearer gpc_…). O token vira hash sha-256 aqui; o texto nunca vai ao banco nem a log.
+// docs/projetos/comercial/mcp.md. Público no proxy (sem cookie): autenticação própria por Bearer gpc_… — token pessoal
+// gerado no CRM ou access token do OAuth (/oauth/autorizar → /api/oauth/token), os dois em crm.mcp_token.
+// O token vira hash sha-256 aqui; o texto nunca vai ao banco nem a log. O 401 aponta os metadados OAuth (RFC 9728),
+// que é como o claude.ai descobre onde pedir login.
 
 const TOKEN = /^Bearer\s+(gpc_[0-9a-f]{64})$/i;
 const LIMITE_CORPO = 64 * 1024;
 /** Teto por IP antes de tocar o banco (o limite real é por token, 60/min, no banco). */
 const LIMITE_IP_MIN = 300;
 const CABECALHOS = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } as const;
+
+/** WWW-Authenticate com o endereço dos metadados do recurso (RFC 9728 §5.1). */
+function desafio(erro?: string): string {
+  const meta = `${publicAppBaseUrl()}/.well-known/oauth-protected-resource/api/mcp`;
+  return `Bearer realm="grupo-participa-comercial", resource_metadata="${meta}"${erro ? `, error="${erro}"` : ''}`;
+}
 
 function json(corpo: unknown, status: number, extra: Record<string, string> = {}) {
   return NextResponse.json(corpo, { status, headers: { ...CABECALHOS, ...extra } });
@@ -35,8 +43,8 @@ export async function POST(req: NextRequest) {
 
   const m = TOKEN.exec((req.headers.get('authorization') || '').trim());
   if (!m) {
-    return json({ error: 'Token ausente ou inválido. Use Authorization: Bearer gpc_…' }, 401, {
-      'WWW-Authenticate': 'Bearer realm="grupo-participa-comercial"',
+    return json({ error: 'Token ausente ou inválido. Conecte pelo OAuth ou use Authorization: Bearer gpc_…' }, 401, {
+      'WWW-Authenticate': desafio(),
     });
   }
   const tipo = (req.headers.get('content-type') || '').toLowerCase();
@@ -56,12 +64,12 @@ export async function POST(req: NextRequest) {
   try {
     r = await atenderMcp(corpo, hash, new SupabaseMcpAdapter());
   } catch (e) {
-    // Sem segredo/ambiente (ex.: SUPABASE_JWT_SECRET ausente) ou falha inesperada: nada de detalhe para fora.
+    // Sem ambiente (ex.: SUPABASE_SERVICE_ROLE_KEY ausente) ou falha inesperada: nada de detalhe para fora.
     console.error('[mcp] falha', e instanceof Error ? e.message : 'erro');
     return json({ error: 'MCP indisponível.' }, 503);
   }
   if (r.status === 202) return new NextResponse(null, { status: 202, headers: CABECALHOS });
-  return json(r.corpo, r.status, r.autenticar ? { 'WWW-Authenticate': 'Bearer realm="grupo-participa-comercial", error="invalid_token"' } : {});
+  return json(r.corpo, r.status, r.autenticar ? { 'WWW-Authenticate': desafio('invalid_token') } : {});
 }
 
 /** Sem stream SSE nem sessão: GET/DELETE não se aplicam (spec Streamable HTTP permite 405). */

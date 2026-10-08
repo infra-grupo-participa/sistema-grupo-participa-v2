@@ -539,6 +539,8 @@ export interface TokenMcp {
   ultimoUsoEm: string | null;
   /** Não revogado e dentro da validade (calculado pelo banco). */
   ativo: boolean;
+  /** Conexão feita pelo OAuth (claude.ai/Desktop/Code com login). expiraEm = validade da conexão (refresh), não do acesso de 1 h. */
+  oauth?: boolean;
 }
 
 /** Quem está olhando a tela: decide o que aparece como "meu". */

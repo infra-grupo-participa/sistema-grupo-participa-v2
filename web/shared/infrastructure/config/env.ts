@@ -13,14 +13,6 @@ export const env = {
     get serviceRoleKey() {
       return required('SUPABASE_SERVICE_ROLE_KEY', process.env.SUPABASE_SERVICE_ROLE_KEY);
     },
-    /**
-     * Segredo JWT (HS256, "legacy JWT secret" do projeto) — SÓ servidor. Usado apenas pelo MCP do Comercial
-     * (`/api/mcp`) para assinar um JWT curto (5 min) do PRÓPRIO dono do token, para chamar as RPCs crm_* sob RLS.
-     * Ausente = o MCP responde 503 (o resto do app não usa).
-     */
-    get jwtSecret() {
-      return required('SUPABASE_JWT_SECRET', process.env.SUPABASE_JWT_SECRET);
-    },
   },
   captura: {
     /**
