@@ -8,8 +8,13 @@ Primeiro os dois números que hoje estão na Clint; depois, qualquer número. O 
   (explicação e ensaio: `20261008152212.explain.md`, `20261008152212_ensaio.sql`).
 - Edge Functions publicadas: `crm-evolution-webhook` (entrada) e `crm-evolution-enviar` (saída), `verify_jwt = false`.
 - Tela: **Comercial › Configurações › Números de WhatsApp** (só gestor; o leitor não vê) e filtro/selo por número em **Conversas**.
-- Infra da VPS: `docs/projetos/comercial/prompt-joao-vps-evolution.md` (passo da infra, não repetido aqui) e os arquivos
-  prontos em `infra/evolution/` (`docker-compose.yml`, `Caddyfile`, `.env.example`, sem segredo).
+- Migration do servidor ler a chave no Vault: `20261008180226_crm_evolution_credenciais_servidor.sql` — **APLICADA**
+  em 08/10/2026 (`20261008180226.explain.md`, `20261008180226_ensaio.sql`).
+- **LIGADO em 08/10/2026** (`crm.config.evolution_ligado = true`). Nenhum número conectado ainda.
+- Infra: **Evolution v2.3.7 no Easypanel da VPS do João (Hostinger KVM 4)**, HTTPS pelo **Traefik do próprio Easypanel**
+  (sem Caddy — o `Caddyfile` de `infra/evolution/` ficou só como referência). `CORS_ORIGIN=*`: a v2.3.7 recusava chamada
+  servidor→servidor sem `Origin`; a proteção é a `apikey`. **Backup diário às 03:30.** Histórico do passo de infra:
+  `docs/projetos/comercial/prompt-joao-vps-evolution.md`.
 
 ## Como funciona
 
@@ -53,48 +58,46 @@ Tela Configurações ── /api/comercial/canais (Next, servidor) ── Evolut
 
 ### Kill-switches
 
-- `crm.config.evolution_ligado` (**default false**): desligado = mensagens recebidas ficam guardadas em
+- `crm.config.evolution_ligado` (default false; **true desde 08/10/2026**): desligado = mensagens recebidas ficam guardadas em
   `crm.integracao_evento` (processadas quando ligar, sem o arquivo); nada sai por número QR. Status de conexão continua
   sendo atualizado (é dado do número, não do lead).
 - `crm.config.envio_ligado` (já existia): desliga também o envio por QR.
 
-## O que depende da VPS
+## Onde ficam as chaves
 
-Tudo do lado do sistema está pronto e publicado. Falta só a Evolution no ar e as chaves:
-
-| Onde | Nome | Valor |
+| Onde | Nome | Quem usa |
 |---|---|---|
-| Hostinger do app Next (variáveis de ambiente) | `EVOLUTION_API_URL` | `https://wa.grupoparticipa.app.br` |
-| Hostinger do app Next | `EVOLUTION_API_KEY` | a `AUTHENTICATION_API_KEY` do `.env` da VPS |
-| Vault do Supabase (Edge de envio) | `evolution_api_url` | `https://wa.grupoparticipa.app.br` |
-| Vault do Supabase | `evolution_api_key` | a mesma chave |
+| **Vault do Supabase** (fonte principal) | `evolution_api_url` = `https://wa.grupoparticipa.app.br` | Edge de envio e servidor Next |
+| **Vault do Supabase** | `evolution_api_key` = a `AUTHENTICATION_API_KEY` da Evolution | Edge de envio e servidor Next |
+| Hostinger do app Next (**opcional**) | `EVOLUTION_API_URL` / `EVOLUTION_API_KEY` | servidor Next; se preenchidas, **têm prioridade** sobre o Vault |
 
-Sem as variáveis no app, "Conectar número" responde "Evolution não configurada" (503). Sem o Vault, a Edge de envio
-responde 503 e nada sai. Nunca colar a chave em chat/Slack: copiar direto da VPS para o painel.
+- O servidor Next, com o env vazio, lê o Vault por `public.crm_evolution_credenciais()` (execute só `service_role`), com
+  `createAdminSupabase()`, **só depois** do portão de gestor (`crm_sessao().papel = 'gestor'`) nas rotas
+  `/api/comercial/canais`. Cache em memória de 5 min (30 s quando vazio). Código:
+  `web/modules/comercial/infrastructure/evolution-credenciais.ts`; regra de prioridade em `escolherCredenciais`
+  (`domain/canais-whatsapp.ts`, teste `domain/credenciais-evolution.test.ts`).
+- Trocar a chave: atualizar o segredo no Vault (`vault.update_secret`); o Next pega em até 5 min (ou no próximo deploy).
+- Nada configurado = "Conectar número" responde 503 e a Edge de envio responde 503 (fail-closed). Nunca colar a chave em
+  chat/Slack.
 
-Gravar no Vault (SQL Editor do Supabase; o retorno não mostra o valor):
+## Conferência de 08/10/2026 (pg_net com a chave do Vault, sem imprimir a chave)
 
-```sql
-select vault.create_secret('https://wa.grupoparticipa.app.br', 'evolution_api_url');
-select vault.create_secret('<chave>', 'evolution_api_key');
-```
+| Chamada | HTTP |
+|---|---|
+| `GET https://wa.grupoparticipa.app.br/` | 200 (2.3.7) |
+| `GET /instance/fetchInstances` com apikey / sem apikey | 200 / 401 |
+| `POST /functions/v1/crm-evolution-webhook` sem segredo | 401 |
 
 ## Passo a passo para o Arthur
 
-1. **VPS** (João, `prompt-joao-vps-evolution.md`): Hostinger KVM 2 (2 vCPU / 8 GB) é o recomendado; o mínimo que
-   funciona é KVM 1 (1 vCPU / 4 GB) para 2–5 números. DNS `wa.grupoparticipa.app.br` → IP da VPS; Docker; os 3 arquivos
-   de `infra/evolution/` em `/opt/evolution/` (`.env` a partir do `.env.example`, `chmod 600`); `docker compose up -d`.
-2. **Conferir**: `https://wa.grupoparticipa.app.br/` responde JSON com a versão; `/instance/fetchInstances` sem `apikey`
-   dá 401.
-3. **Chaves**: as 2 variáveis na Hostinger do app (e redeploy) + os 2 segredos no Vault (tabela acima).
-4. **Ligar**: `update crm.config set evolution_ligado = true;` (desligar = `false`, efeito em segundos).
-5. **Conectar o 1º número da Clint**: Configurações › Números de WhatsApp › Conectar número → nome (ex.: "Clint 4276")
-   → no celular desse número, WhatsApp › Aparelhos conectados › Conectar aparelho → ler o QR. Status vira "Conectado".
-   Repetir para o segundo.
-6. **Testar sem incomodar ninguém**: de um celular da equipe, mandar "teste" para o número conectado → a conversa
+1. **Conectar o 1º número da Clint** (só gestor do Comercial): **Comercial › Configurações › aba Números de WhatsApp ›
+   Conectar número** → nome (ex.: "Clint 4276") → **Gerar QR Code** → no celular desse número, **WhatsApp › Aparelhos
+   conectados › Conectar aparelho** → ler o QR. Status vira "Conectado". Repetir para o segundo.
+2. **Testar sem incomodar ninguém**: de um celular da equipe, mandar "teste" para o número conectado → a conversa
    aparece em Conversas com o selo do número; responder pelo CRM → chega no celular da equipe; responder pelo celular do
    número → aparece no CRM como "Celular/Clint". Não testar com lead.
-7. **Se algo der errado**: `update crm.config set evolution_ligado = false;` e Configurações › Desconectar.
+3. **Se algo der errado**: `update crm.config set evolution_ligado = false;` (efeito em segundos) e Configurações ›
+   Desconectar.
 
 ## Testes e conferências
 
@@ -112,8 +115,8 @@ select status, count(*) from crm.mensagem where provedor = 'evolution' and direc
 ## Decisões
 
 - Webhook na **Edge do Supabase** (não no Next): nenhuma mensagem se perde quando o site cai ou está em deploy.
-- Gestão (criar instância, QR, desconectar) pelo **servidor Next** com `EVOLUTION_API_URL/KEY`; envio pela **Edge** com o
-  Vault. A chave nunca vai ao navegador.
+- Gestão (criar instância, QR, desconectar) pelo **servidor Next** (env opcional, senão Vault); envio pela **Edge** com o
+  Vault. A chave nunca vai ao navegador nem ao log.
 - Uma chave de webhook **por instância**, gerada no banco, conferida em tempo constante.
 - A VPS não guarda mensagem (`DATABASE_SAVE_DATA_NEW_MESSAGE=false`): o arquivo recebido vem em base64 no webhook. Se a
   Edge não conseguir subir o arquivo e a Evolution não reenviar, a mensagem fica com "Arquivo não chegou ao CRM" em 15 min.

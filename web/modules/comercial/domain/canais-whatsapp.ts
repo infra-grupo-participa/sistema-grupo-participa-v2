@@ -154,3 +154,27 @@ export function numeroDaInstancia(d: unknown, instancia: string): string | null 
   }
   return null;
 }
+
+/** URL base + chave global da Evolution, já validadas. */
+export type CredenciaisEvolution = { base: string; chave: string };
+
+/** Valida um par URL/chave (https sem caminho; chave com 16+ caracteres). null = incompleto ou inválido. */
+export function credenciaisValidas(url: string | null | undefined, chave: string | null | undefined): CredenciaisEvolution | null {
+  const base = baseEvolution(url);
+  const k = String(chave ?? '').trim();
+  return base && k.length >= 16 ? { base, chave: k } : null;
+}
+
+/**
+ * Prioridade: env do servidor (EVOLUTION_API_URL/KEY) vence o Vault (evolution_api_url/_key). O Vault só é consultado
+ * quando o env não traz um par válido. Env parcial (só URL ou só chave) não se mistura com o Vault.
+ */
+export async function escolherCredenciais(
+  envUrl: string, envChave: string, doVault: () => Promise<{ url: string | null; chave: string | null } | null>,
+): Promise<(CredenciaisEvolution & { fonte: 'env' | 'vault' }) | null> {
+  const doEnv = credenciaisValidas(envUrl, envChave);
+  if (doEnv) return { ...doEnv, fonte: 'env' };
+  const v = await doVault();
+  const doCofre = v ? credenciaisValidas(v.url, v.chave) : null;
+  return doCofre ? { ...doCofre, fonte: 'vault' } : null;
+}

@@ -5,7 +5,7 @@ import { getCurrentUser } from '@/shared/composition/server-container';
 import { publicEnv } from '@/shared/infrastructure/config/env';
 import { desconectarNumero, estadoConexao } from '@/modules/comercial/application/canais-whatsapp';
 import { EvolutionApi, EvolutionIndisponivel } from '@/modules/comercial/infrastructure/evolution-api';
-import { portasCanais } from '@/modules/comercial/infrastructure/supabase-canais';
+import { ehGestorCrm, portasCanais } from '@/modules/comercial/infrastructure/supabase-canais';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,8 +22,9 @@ async function preparar(req: NextRequest, ctx: Ctx) {
   if (!user) return { erro: jsonError('Não autorizado.', 401) };
   const { id } = await ctx.params;
   if (!isUuid(id)) return { erro: jsonError('Número inválido.', 400) };
-  const evo = EvolutionApi.doAmbiente();
-  if (!evo) return { erro: jsonError('Evolution não configurada no servidor (EVOLUTION_API_URL / EVOLUTION_API_KEY).', 503) };
+  if (!(await ehGestorCrm())) return { erro: jsonError('Só o gestor do Comercial gerencia números.', 403) };
+  const evo = await EvolutionApi.resolver();
+  if (!evo) return { erro: jsonError('Evolution não configurada (env EVOLUTION_API_URL/KEY ou Vault evolution_api_url/_key).', 503) };
   return { id, evo };
 }
 

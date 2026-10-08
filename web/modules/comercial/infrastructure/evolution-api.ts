@@ -1,8 +1,9 @@
 // Cliente da Evolution API v2 — SÓ servidor (lê env de servidor; nunca importar em Client Component) (Route Handlers de /api/comercial/canais). A chave global nunca vai ao browser.
-// URL e chave: env.ts (EVOLUTION_API_URL / EVOLUTION_API_KEY). Doc: docs/projetos/comercial/whatsapp-qr-evolution.md
-import { env } from '@/shared/infrastructure/config/env';
+// URL e chave: env (EVOLUTION_API_URL / EVOLUTION_API_KEY) ou, vazio, o Vault (evolution-credenciais.ts).
+// Doc: docs/projetos/comercial/whatsapp-qr-evolution.md
+import { credenciaisEvolution } from './evolution-credenciais';
 import {
-  baseEvolution, corpoCriarInstancia, corpoWebhookEvolution, estadoDaResposta, INSTANCIA_RE, numeroDaInstancia, qrDaResposta,
+  corpoCriarInstancia, corpoWebhookEvolution, estadoDaResposta, INSTANCIA_RE, numeroDaInstancia, qrDaResposta,
 } from '../domain/canais-whatsapp';
 
 const TIMEOUT_MS = 15_000;
@@ -14,11 +15,10 @@ export class EvolutionIndisponivel extends Error {}
 export class EvolutionApi {
   private constructor(private readonly base: string, private readonly chave: string) {}
 
-  /** null = Evolution não configurada (rota responde 503). */
-  static doAmbiente(): EvolutionApi | null {
-    const base = baseEvolution(env.evolution.url);
-    const chave = env.evolution.apiKey.trim();
-    return base && chave.length >= 16 ? new EvolutionApi(base, chave) : null;
+  /** null = Evolution não configurada (rota responde 503). Chamar só depois de autorizar o gestor. */
+  static async resolver(): Promise<EvolutionApi | null> {
+    const c = await credenciaisEvolution();
+    return c ? new EvolutionApi(c.base, c.chave) : null;
   }
 
   private async chamar(metodo: 'GET' | 'POST' | 'DELETE', caminho: string, corpo?: unknown): Promise<RespostaEvolution> {

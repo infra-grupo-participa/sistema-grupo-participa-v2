@@ -28,3 +28,9 @@ export async function portasCanais(): Promise<PortasCanais> {
     },
   };
 }
+
+/** Gestor do CRM (crm_sessao, com o JWT de quem clicou)? Portão ANTES de ler a chave da Evolution. */
+export async function ehGestorCrm(): Promise<boolean> {
+  const { data, error } = await (await createServerSupabase()).rpc('crm_sessao');
+  return !error && !!data && typeof data === 'object' && (data as { papel?: unknown }).papel === 'gestor';
+}

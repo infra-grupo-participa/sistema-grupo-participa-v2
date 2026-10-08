@@ -5,7 +5,7 @@ import { publicEnv } from '@/shared/infrastructure/config/env';
 import { criarNumero } from '@/modules/comercial/application/canais-whatsapp';
 import { validarNomeCanal } from '@/modules/comercial/domain/canais-whatsapp';
 import { EvolutionApi, EvolutionIndisponivel } from '@/modules/comercial/infrastructure/evolution-api';
-import { portasCanais } from '@/modules/comercial/infrastructure/supabase-canais';
+import { ehGestorCrm, portasCanais } from '@/modules/comercial/infrastructure/supabase-canais';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,8 +16,9 @@ export async function POST(req: NextRequest) {
   if (!validateOrigin(req)) return jsonError('Origem não permitida.', 403);
   const user = await getCurrentUser();
   if (!user) return jsonError('Não autorizado.', 401);
-  const evo = EvolutionApi.doAmbiente();
-  if (!evo) return jsonError('Evolution não configurada no servidor (EVOLUTION_API_URL / EVOLUTION_API_KEY).', 503);
+  if (!(await ehGestorCrm())) return jsonError('Só o gestor do Comercial conecta números.', 403);
+  const evo = await EvolutionApi.resolver();
+  if (!evo) return jsonError('Evolution não configurada (env EVOLUTION_API_URL/KEY ou Vault evolution_api_url/_key).', 503);
   const corpo = (await req.json().catch(() => null)) as { nome?: unknown } | null;
   const nome = typeof corpo?.nome === 'string' ? corpo.nome : '';
   const invalido = validarNomeCanal(nome);
