@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CanalWhatsapp } from './canais-whatsapp';
 import {
   avisoLimiteQr, bloqueioCanalNovaConversa, bloqueioPessoaNovaConversa, canaisParaNovaConversa, canalInicialNovaConversa,
-  janelaDoCanal, modoEnvio, rotuloProvedor,
+  bloqueioCanalResposta, janelaDoCanal, modoEnvio, opcoesCanalResposta, rotuloProvedor,
 } from './nova-conversa';
 
 const canal = (p: Partial<CanalWhatsapp>): CanalWhatsapp => ({
@@ -98,5 +98,30 @@ describe('aviso do QR', () => {
   it('mostra os limites do painel', () => {
     expect(avisoLimiteQr({ limiteMinuto: 15, limiteHora: 200, novosHora: 20 })).toMatch(/15 mensagens por minuto, 200 por hora e 20 contatos novos/);
     expect(avisoLimiteQr(null)).toMatch(/sem disparo em massa/);
+  });
+});
+
+describe('seletor do número na conversa aberta', () => {
+  const qr2 = canal({ id: 'qr2', nome: '2536', final: '2536' });
+  const deAna = canal({ id: 'ana', donoId: 'v2' });
+  const caido = canal({ id: 'caido', status: 'desconectado' });
+  it('conversa nova (botão "Conversa"): oficial + todo QR conectado que a pessoa pode usar', () => {
+    expect(opcoesCanalResposta([qr, oficial, qr2, deAna, caido], [], painel, vendedor).map((c) => c.id)).toEqual(['of', 'qr', 'qr2']);
+  });
+  it('conversa só no oficial ainda oferece os QR (antes ficava preso no oficial)', () => {
+    expect(opcoesCanalResposta([oficial, qr], ['of'], painel, vendedor).map((c) => c.id)).toEqual(['of', 'qr']);
+  });
+  it('número já usado continua no seletor mesmo desconectado; gestor vê QR de outro dono', () => {
+    expect(opcoesCanalResposta([oficial, caido], ['caido'], painel, vendedor).map((c) => c.id)).toEqual(['of', 'caido']);
+    expect(opcoesCanalResposta([oficial, deAna], null, painel, gestor).map((c) => c.id)).toEqual(['of', 'ana']);
+  });
+  it('leitor: só oficial e os já usados', () => {
+    expect(opcoesCanalResposta([oficial, qr, qr2], ['qr2'], painel, leitor).map((c) => c.id)).toEqual(['of', 'qr2']);
+  });
+  it('bloqueio do número escolhido: QR de outro dono ou desconectado trava; oficial fica com o banco', () => {
+    expect(bloqueioCanalResposta(deAna, painel, vendedor)).toMatch(/outra pessoa/);
+    expect(bloqueioCanalResposta(caido, painel, vendedor)).toMatch(/desconectado/);
+    expect(bloqueioCanalResposta(qr, painel, vendedor)).toBeNull();
+    expect(bloqueioCanalResposta(oficial, painel, vendedor)).toBeNull();
   });
 });

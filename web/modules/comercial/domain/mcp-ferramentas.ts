@@ -1,4 +1,5 @@
 // Ferramentas do MCP do Comercial (F7). Domínio puro: sem Next, sem Supabase.
+import { MAX_TAGS_CONTATO, normalizarTag } from './tags';
 //
 // Cada ferramenta = validação dos argumentos + PLANO (quais RPCs public.crm_* chamar, com quais parâmetros) +
 // montagem do resultado. Quem executa o plano é a aplicação (`application/mcp-servidor.ts`), sempre com o JWT do
@@ -6,7 +7,7 @@
 // permissão de dado; o único corte local é o escopo do token ('ler' × 'operar').
 //
 // Fora de propósito (backend-arquitetura.md §5.9): transferir dono, marcar ganho/perdido, disparo/envio de WhatsApp,
-// funil/motivo, produto/oferta, exportar lista. Para incluir uma ferramenta: definir aqui + teste em
+// funil/motivo, produto/oferta, exportar lista, apagar contato (envio e exclusão aguardam decisão do Arthur). Para incluir uma ferramenta: definir aqui + teste em
 // mcp-ferramentas.test.ts + a RPC na lista fechada de public.crm_mcp_rpc (migration nova).
 
 export type EscopoMcp = 'ler' | 'operar';
@@ -48,6 +49,8 @@ const DATA = /^\d{4}-\d{2}-\d{2}$/;
 const DATA_HORA = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:\d{2})?$/;
 export const TIPOS_ATIVIDADE = ['whatsapp', 'ligacao', 'email', 'tarefa', 'reuniao'] as const;
 const STATUS_NEGOCIO = ['aberto', 'ganho', 'perdido'] as const;
+const PERFIS = ['advogado', 'contador', 'outro'] as const;
+const HOLDING = ['sim', 'nao', 'comecando'] as const;
 /** Brasil sem horário de verão desde 2019: São Paulo = UTC−3 fixo. */
 const OFFSET_SP = '-03:00';
 
@@ -75,6 +78,19 @@ function texto(a: Args, campo: string, min: number, max: number, obrigatorio = t
   const t = v.trim();
   if (t.length < min || t.length > max) throw new ErroArg(`${campo} precisa ter de ${min} a ${max} caracteres.`);
   return t;
+}
+
+/** Lista de tags: 1 a 30 textos; cada um precisa sobrar letra/número depois de normalizar (crm.tag_normalizar). */
+function listaTags(a: Args, campo: string): string[] {
+  const v = a[campo];
+  if (!Array.isArray(v) || v.length < 1 || v.length > MAX_TAGS_CONTATO) throw new ErroArg(`${campo} precisa ser lista de 1 a ${MAX_TAGS_CONTATO} tags.`);
+  const out: string[] = [];
+  for (const t of v) {
+    if (typeof t !== 'string' || t.trim().length < 1 || t.trim().length > 60) throw new ErroArg(`Cada tag precisa ser texto de 1 a 60 caracteres.`);
+    if (!normalizarTag(t)) throw new ErroArg(`Tag inválida: "${t.trim()}" (use letras ou números).`);
+    out.push(t.trim());
+  }
+  return out;
 }
 
 function inteiro(a: Args, campo: string, min: number, max: number, padrao: number): number {
@@ -172,6 +188,21 @@ function negocioCompacto(n: Obj): Obj {
 
 const SCHEMA_UUID = { type: 'string', format: 'uuid' };
 const ANOT_LER = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+const ANOT_ESCREVE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+const ANOT_ESCREVE_IDEMP = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+const SCHEMA_TAGS = { type: 'array', items: { type: 'string', minLength: 1, maxLength: 60 }, minItems: 1, maxItems: MAX_TAGS_CONTATO };
+const resultadoRpc = ([r]: unknown[]) => (r && typeof r === 'object' ? (r as Obj) : {});
+
+/** Campos editáveis do contato (MCP → chave de p_dados de crm_editar_contato) e limites (os mesmos do banco). */
+const CAMPOS_EDICAO: { arg: string; chave: string; min: number; max: number }[] = [
+  { arg: 'nome', chave: 'nome', min: 2, max: 160 },
+  { arg: 'telefone', chave: 'telefone', min: 0, max: 30 },
+  { arg: 'email', chave: 'email', min: 0, max: 200 },
+  { arg: 'cidade', chave: 'cidade', min: 0, max: 120 },
+  { arg: 'uf', chave: 'uf', min: 0, max: 2 },
+  { arg: 'empresa', chave: 'empresa', min: 0, max: 160 },
+  { arg: 'observacao', chave: 'observacao', min: 0, max: 1000 },
+];
 
 // ─── Ferramentas ────────────────────────────────────────────────────────────────────────────────────────────────────
 export const FERRAMENTAS: DefFerramenta[] = [
@@ -495,6 +526,124 @@ export const FERRAMENTAS: DefFerramenta[] = [
     validar: validarCom((a) => ({ negocio_id: uuid(a, 'negocio_id', true), etapa_id: uuid(a, 'etapa_id', true) })),
     plano: (a) => [{ rpc: 'crm_mover_etapa', params: { p_negocio: a.negocio_id, p_etapa: a.etapa_id } }],
     resultado: ([r]) => (r && typeof r === 'object' ? (r as Obj) : {}),
+  },
+  {
+    name: 'comercial_criar_contato',
+    title: 'Criar contato',
+    description: 'Cadastra um contato (nome + telefone e/ou e-mail). Antes, confere duplicidade como a tela: se o e-mail ou o '
+      + 'telefone já estiver no CRM, NÃO cria outro e devolve o contato existente (nova=false, contatoId) sem trocar o dono. '
+      + 'Vendedor vira dono do que cadastra. Busque antes com comercial_buscar_pessoa.',
+    escopo: 'operar',
+    escrita: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        nome: { type: 'string', minLength: 2, maxLength: 160 },
+        telefone: { type: 'string', maxLength: 30, description: 'DDD + número (celular com 9)' },
+        email: { type: 'string', maxLength: 200 },
+      },
+      required: ['nome'],
+      additionalProperties: false,
+    },
+    annotations: ANOT_ESCREVE_IDEMP,
+    validar: validarCom((a) => {
+      const nome = texto(a, 'nome', 2, 160);
+      const telefone = texto(a, 'telefone', 0, 30, false) || null;
+      const email = texto(a, 'email', 0, 200, false) || null;
+      if (!telefone && !email) throw new ErroArg('Informe telefone ou e-mail.');
+      if (telefone && !/^\+?[\d\s().-]{8,30}$/.test(telefone)) throw new ErroArg('telefone inválido: use DDD + número.');
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ErroArg('email inválido.');
+      return { nome, telefone, email };
+    }),
+    plano: (a) => {
+      const dados: Record<string, unknown> = { nome: a.nome };
+      if (a.telefone) dados.telefone = a.telefone;
+      if (a.email) dados.email = a.email;
+      return [{ rpc: 'crm_criar_contato', params: { p_dados: dados } }];
+    },
+    resultado: resultadoRpc,
+  },
+  {
+    name: 'comercial_editar_contato',
+    title: 'Editar contato',
+    description: 'Corrige a ficha de um contato SEU (gestor: qualquer): nome, telefone, e-mail, cidade, UF, perfil '
+      + '(advogado, contador, outro), atua_com_holding (sim, nao, comecando), empresa e observação. Só os campos enviados mudam. '
+      + 'Telefone/e-mail novo vira o principal e o antigo fica guardado (nada é apagado); recusa se já for de outro contato. '
+      + 'Texto vazio ("") volta o campo ao dado da base.',
+    escopo: 'operar',
+    escrita: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pessoa_id: SCHEMA_UUID,
+        nome: { type: 'string', minLength: 2, maxLength: 160 },
+        telefone: { type: 'string', maxLength: 30 },
+        email: { type: 'string', maxLength: 200 },
+        cidade: { type: 'string', maxLength: 120 },
+        uf: { type: 'string', maxLength: 2 },
+        perfil: { type: 'string', enum: [...PERFIS, ''] },
+        atua_com_holding: { type: 'string', enum: [...HOLDING, ''] },
+        empresa: { type: 'string', maxLength: 160 },
+        observacao: { type: 'string', maxLength: 1000 },
+      },
+      required: ['pessoa_id'],
+      additionalProperties: false,
+    },
+    annotations: ANOT_ESCREVE_IDEMP,
+    validar: validarCom((a) => {
+      const dados: Record<string, string> = {};
+      for (const c of CAMPOS_EDICAO) {
+        const v = texto(a, c.arg, c.min, c.max, false);
+        if (v !== null) dados[c.chave] = v;
+      }
+      if (dados.uf && !/^[A-Za-z]{2}$/.test(dados.uf)) throw new ErroArg('uf precisa ser a sigla (ex.: SP).');
+      const perfil = umDe(a, 'perfil', PERFIS, null);
+      if (perfil || a.perfil === '') dados.perfil = perfil ?? '';
+      const holding = umDe(a, 'atua_com_holding', HOLDING, null);
+      if (holding || a.atua_com_holding === '') dados.atuaComHolding = holding ?? '';
+      if (Object.keys(dados).length === 0) throw new ErroArg('Informe ao menos um campo para mudar.');
+      return { pessoa_id: uuid(a, 'pessoa_id', true), dados };
+    }),
+    plano: (a) => [{ rpc: 'crm_editar_contato', params: { p_contato: a.pessoa_id, p_dados: a.dados } }],
+    resultado: resultadoRpc,
+  },
+  {
+    name: 'comercial_tag_adicionar',
+    title: 'Adicionar tags ao contato',
+    description: 'Adiciona tags a um contato SEU (gestor: qualquer). A tag é normalizada (minúsculo, sem acento, hífen no lugar '
+      + 'de espaço, até 40 caracteres: "Quente Ágora" vira "quente-agora"); a que já existe não repete. Máximo de 30 tags por contato.',
+    escopo: 'operar',
+    escrita: true,
+    inputSchema: { type: 'object', properties: { pessoa_id: SCHEMA_UUID, tags: SCHEMA_TAGS }, required: ['pessoa_id', 'tags'], additionalProperties: false },
+    annotations: ANOT_ESCREVE_IDEMP,
+    validar: validarCom((a) => ({ pessoa_id: uuid(a, 'pessoa_id', true), tags: listaTags(a, 'tags') })),
+    plano: (a) => [{ rpc: 'crm_tags_contato', params: { p_pessoa: a.pessoa_id, p_adicionar: a.tags } }],
+    resultado: resultadoRpc,
+  },
+  {
+    name: 'comercial_tag_remover',
+    title: 'Remover tags do contato',
+    description: 'Remove tags de um contato SEU (gestor: qualquer). Compara pela forma normalizada: "ht alunos" tira "[HT] ALUNOS".',
+    escopo: 'operar',
+    escrita: true,
+    inputSchema: { type: 'object', properties: { pessoa_id: SCHEMA_UUID, tags: SCHEMA_TAGS }, required: ['pessoa_id', 'tags'], additionalProperties: false },
+    annotations: ANOT_ESCREVE_IDEMP,
+    validar: validarCom((a) => ({ pessoa_id: uuid(a, 'pessoa_id', true), tags: listaTags(a, 'tags') })),
+    plano: (a) => [{ rpc: 'crm_tags_contato', params: { p_pessoa: a.pessoa_id, p_remover: a.tags } }],
+    resultado: resultadoRpc,
+  },
+  {
+    name: 'comercial_reabrir_atividade',
+    title: 'Reabrir atividade',
+    description: 'Desfaz a conclusão de uma atividade SUA (gestor: qualquer): ela volta para a agenda, sem resultado. '
+      + 'Use quando marcou como feita por engano.',
+    escopo: 'operar',
+    escrita: true,
+    inputSchema: { type: 'object', properties: { atividade_id: SCHEMA_UUID }, required: ['atividade_id'], additionalProperties: false },
+    annotations: ANOT_ESCREVE,
+    validar: validarCom((a) => ({ atividade_id: uuid(a, 'atividade_id', true) })),
+    plano: (a) => [{ rpc: 'crm_reabrir_atividade', params: { p_atividade: a.atividade_id } }],
+    resultado: resultadoRpc,
   },
 ];
 

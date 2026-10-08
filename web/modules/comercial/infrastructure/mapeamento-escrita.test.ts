@@ -194,6 +194,12 @@ describe('Hotmart e MCP (F3 20261006043612, F7 20261006050132)', () => {
 });
 
 describe('crm_editar_contato (20261008182832)', () => {
+  it('tags: lista vazia vai null; resultado traz a lista final', async () => {
+    const { argsTagsContato, mapResultadoTags } = await import('./mapeamento-escrita');
+    expect(argsTagsContato('c1', ['vip'], [])).toEqual({ p_pessoa: 'c1', p_adicionar: ['vip'], p_remover: null });
+    expect(mapResultadoTags({ ok: true, msg: 'Tags atualizadas.', tags: ['vip', 2] })).toEqual({ ok: true, msg: 'Tags atualizadas.', tags: ['vip'] });
+    expect(mapResultadoTags({ ok: false, msg: 'Este contato não é seu.' })).toEqual({ ok: false, msg: 'Este contato não é seu.' });
+  });
   it('argsEditarContato manda só as chaves recebidas', async () => {
     const { argsEditarContato } = await import('./mapeamento-escrita');
     expect(argsEditarContato('c1', { nome: 'Ana', uf: 'SP' })).toEqual({ p_contato: 'c1', p_dados: { nome: 'Ana', uf: 'SP' } });

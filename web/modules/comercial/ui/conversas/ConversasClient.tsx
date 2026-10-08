@@ -15,7 +15,7 @@ import { ROTULO_ATUA, ROTULO_PERFIL, produto as produtoDe } from '../../domain/c
 import { fmtTelefone } from '../../domain/regras';
 import type { Contato, Conversa, EtapaFunil, Mensagem, Negocio, SessaoComercial, StatusMensagem, Template } from '../../domain/types';
 import { motivoSemEscrita, motivoSomenteLeitura, podeEscrever, podeTrocarDono, somenteLeitura, travaMover, type TravaMover } from '../../domain/travas';
-import { janelaDoCanal } from '../../domain/nova-conversa';
+import { bloqueioCanalResposta, janelaDoCanal, opcoesCanalResposta, rotuloProvedor } from '../../domain/nova-conversa';
 import { ModalNovaConversa } from './ModalNovaConversa';
 import { BotaoPlaybook, Dono, EstadoErro, FaixaErroAtualizacao, FaixaNumeros, PaginaComercial, Segmentado, Vazio, useEquipe, useParamUrl } from '../comum';
 import { InfoIndicador } from '../InfoIndicador';
@@ -206,7 +206,7 @@ export function ConversasClient() {
   return (
     <PaginaComercial
       titulo="Conversas"
-      subtitulo="Caixa do WhatsApp oficial. Responda primeiro quem espera há mais tempo."
+      subtitulo="Caixa do WhatsApp (oficial e números por QR). Responda primeiro quem espera há mais tempo."
       acoes={<>
         {podeEscrever(sessao) && !carregando && (
           <Button size="sm" onClick={() => setNovaConversa(true)} aria-label="Nova conversa" title="Nova conversa">
@@ -551,7 +551,8 @@ function PainelConversa({ canalInicial, contato, conversa, negocio, negociosDoCo
   // Número da resposta: o escolhido; senão o da conversa mais recente; senão o oficial (mesmo critério do banco).
   const [canalEscolhido, setCanalEscolhido] = useState<string | null>(canalInicial ?? null);
   const canal = canalDeResposta(canalEscolhido, conversa?.canalId ?? null, canais);
-  const opcoesCanal = canais.filter((c) => (conversa?.canais ?? []).includes(c.id) || c.padrao || c.id === canalEscolhido);
+  // Seletor: oficial + todo número que esta pessoa pode usar (QR conectado, regra de dono) + os já usados na conversa.
+  const opcoesCanal = opcoesCanalResposta(canais, conversa?.canais ?? (conversa?.canalId ? [conversa.canalId] : []), painelCanais, sessao, canalEscolhido);
   // Janela de 24 h DO NÚMERO da resposta: quem só falou pelo QR tem a do oficial fechada.
   const janela = janelaRestante(janelaDoCanal(conversa, canal?.id), agora);
   const porQr = semJanela(canal);
@@ -571,7 +572,9 @@ function PainelConversa({ canalInicial, contato, conversa, negocio, negociosDoCo
     ? 'Este contato pediu para não receber contato. Nenhuma mensagem sai para ele.'
     : !contato.telefone
       ? 'Contato sem telefone.'
-      : motivoSemEscrita({ donoId: dono }, negociosDoContato, sessao, nomeDe) ?? bloqueioEnvio(canal, painelCanais);
+      : motivoSemEscrita({ donoId: dono }, negociosDoContato, sessao, nomeDe);
+  // O número escolhido não envia (QR desconectado, de outra pessoa…): troca no seletor acima, não é "somente leitura".
+  const bloqueioNumero = bloqueio ? null : bloqueioEnvio(canal, painelCanais) ?? bloqueioCanalResposta(canal, painelCanais, sessao);
 
   // Agrupa por dia para o separador.
   const grupos = useMemo(() => {
@@ -599,7 +602,7 @@ function PainelConversa({ canalInicial, contato, conversa, negocio, negociosDoCo
         <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
           {opcoesCanal.length > 1 ? (
             <FilterSelect value={canal?.id ?? ''} onChange={(e) => setCanalEscolhido(e.target.value || null)} aria-label="Responder pelo número" title="Responder pelo número">
-              {opcoesCanal.map((c) => <option key={c.id} value={c.id}>{rotuloCanal(c)}</option>)}
+              {opcoesCanal.map((c) => <option key={c.id} value={c.id}>{rotuloCanal(c)} ({rotuloProvedor(c)})</option>)}
             </FilterSelect>
           ) : canal && canais.length > 1 ? (
             <span title="Número desta conversa: a resposta sai por ele"><Badge>{rotuloCanal(canal)}</Badge></span>
@@ -719,12 +722,17 @@ function PainelConversa({ canalInicial, contato, conversa, negocio, negociosDoCo
           <Icon name="lock" size={16} className="mt-0.5 shrink-0 text-[var(--fg-3)]" />
           <span><strong className="text-[var(--fg)]">Somente leitura.</strong> {bloqueio}</span>
         </div>
+      ) : bloqueioNumero ? (
+        <div className="shrink-0 flex items-start gap-2 border-t border-[var(--border)] bg-[var(--surface-3)] px-4 py-3 text-sm text-[var(--fg-2)]">
+          <Icon name="alert" size={16} className="mt-0.5 shrink-0 text-[var(--fg-3)]" />
+          <span><strong className="text-[var(--fg)]">Número indisponível.</strong> {bloqueioNumero}{opcoesCanal.length > 1 ? ' Escolha outro número acima.' : ''}</span>
+        </div>
       ) : (
         <Envio
           key={canal?.id ?? 'padrao'}
           contato={contato}
           negocio={negocio}
-          canalId={canalEscolhido ?? conversa?.canalId ?? null}
+          canalId={canal?.id ?? null}
           porQr={porQr}
           janelaAberta={porQr || !!janela}
           templates={templates}

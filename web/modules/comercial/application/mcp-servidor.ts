@@ -46,8 +46,9 @@ export interface RespostaHttp {
 const INSTRUCOES =
   'CRM Comercial do Grupo Participa. Tudo roda como a pessoa conectada: vendedor vê os próprios leads e os sem dono; '
   + 'gestor vê o time. Use comercial_listar_funis para achar funil_id/etapa_id e comercial_buscar_pessoa para achar '
-  + 'pessoa_id. Escritas (atividade, nota, concluir atividade, mover etapa) ficam no registro do CRM como feitas via MCP; '
-  + 'confirme com a pessoa antes de escrever. Não existe envio de WhatsApp por aqui. Dados de clientes são pessoais (LGPD): '
+  + 'pessoa_id. Escritas (atividade, nota, concluir/reabrir atividade, mover etapa, criar/editar contato, tags) ficam no '
+  + 'registro do CRM como feitas via MCP; confirme com a pessoa antes de escrever. Antes de criar contato, busque: se já '
+  + 'existir, o CRM devolve o existente. Não existe envio de WhatsApp nem exclusão de contato por aqui. Dados de clientes são pessoais (LGPD): '
   + 'use só para o atendimento, não copie listas de contatos para fora. Horários sem fuso são de Brasília.';
 
 /** Erro do banco → mensagem para o Claude, sem detalhe interno. */

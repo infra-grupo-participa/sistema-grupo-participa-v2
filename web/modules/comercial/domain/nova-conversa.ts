@@ -47,6 +47,28 @@ export function janelaDoCanal(conversa: Pick<Conversa, 'janelaAteEm' | 'canais'>
   return conversa.janelaAteEm;
 }
 
+/**
+ * Números do seletor "Responder pelo número" da conversa aberta (inclusive a conversa vazia que nasce do botão
+ * "Conversa" da ficha/negócio). Antes só entravam os números já usados com a pessoa + o oficial: quem nunca falou por
+ * QR ficava preso no oficial (template). Agora: o oficial, todo número que esta pessoa PODE usar para abrir conversa
+ * (mesma regra da "Nova conversa") e os que a conversa já usou (mesmo bloqueados, para não sumir o histórico).
+ * Ordem: oficial primeiro, depois a ordem da lista de canais.
+ */
+export function opcoesCanalResposta(
+  canais: CanalWhatsapp[], usadosNaConversa: string[] | null | undefined, painel: Pick<PainelCanais, 'evolutionLigado' | 'envioLigado'> | null, quem: Quem,
+  escolhido?: string | null,
+): CanalWhatsapp[] {
+  const usados = new Set(usadosNaConversa ?? []);
+  const lista = canais.filter((c) => c.padrao || usados.has(c.id) || c.id === escolhido || !bloqueioCanalNovaConversa(c, painel, quem));
+  return [...lista.filter((c) => c.padrao), ...lista.filter((c) => !c.padrao)];
+}
+
+/** Por que não dá para responder pelo número escolhido (QR: conexão, envio e dono). Oficial: o banco decide (janela/template). */
+export function bloqueioCanalResposta(c: CanalWhatsapp | null | undefined, painel: Pick<PainelCanais, 'evolutionLigado' | 'envioLigado'> | null, quem: Quem): string | null {
+  if (!c || c.provedor !== 'evolution') return null;
+  return bloqueioCanalNovaConversa(c, painel, quem);
+}
+
 export type ModoEnvio = 'livre' | 'template';
 
 /** QR: texto livre sempre. Oficial: texto livre só com a janela de 24 h aberta; fora dela, template aprovado. */

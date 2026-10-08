@@ -80,6 +80,19 @@ export function argsEditarContato(contatoId: string, mudancas: Record<string, st
   return { p_contato: contatoId, p_dados: { ...mudancas } };
 }
 
+/** Tags do contato (crm_tags_contato, migration 20261008222038): lista vazia vai como null (a RPC ignora). */
+export function argsTagsContato(contatoId: string, adicionar: string[], remover: string[]): { p_pessoa: string; p_adicionar: string[] | null; p_remover: string[] | null } {
+  return { p_pessoa: contatoId, p_adicionar: adicionar.length ? adicionar : null, p_remover: remover.length ? remover : null };
+}
+
+/** tagsContato: a lista final de tags gravada pelo banco (só com ok=true). */
+export function mapResultadoTags(d: unknown): Resultado & { tags?: string[] } {
+  const r: Resultado & { tags?: string[] } = mapResultado('crm_tags_contato', d);
+  const o = d as Obj;
+  if (r.ok && Array.isArray(o.tags)) r.tags = o.tags.filter((x): x is string => typeof x === 'string');
+  return r;
+}
+
 /** editarContato: campos que o banco gravou (rótulos, ex.: "nome", "telefone"); duplicado = 'email' | 'telefone' na recusa. */
 export function mapResultadoEdicao(d: unknown): Resultado & { campos?: string[]; duplicado?: 'email' | 'telefone' } {
   const r: Resultado & { campos?: string[]; duplicado?: 'email' | 'telefone' } = mapResultado('crm_editar_contato', d);

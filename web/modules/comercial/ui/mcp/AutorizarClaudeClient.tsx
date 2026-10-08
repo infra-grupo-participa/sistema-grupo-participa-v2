@@ -87,7 +87,7 @@ export function AutorizarClaudeClient({ cliente, email, pedido, emissor }: {
           <Checkbox
             checked={operar}
             onChange={setOperar}
-            label="Também registrar por mim: criar e concluir atividade, adicionar nota e mover etapa"
+            label="Também registrar por mim: atividades (criar, concluir, reabrir), notas, mover etapa, criar e editar contato e tags"
           />
           <p className="mt-1.5 pl-6 text-xs text-[var(--fg-3)]">Tudo fica no Registro do CRM como feito “via Claude”, no seu nome.</p>
         </div>

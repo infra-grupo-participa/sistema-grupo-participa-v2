@@ -20,6 +20,7 @@ import { BotaoGravarAudio } from '../conversas/GravarAudio';
 import { janelaRestante } from '../conversas/regras-conversas';
 import { semNome } from '../../domain/editar-contato';
 import { FormEdicaoContato } from './EdicaoContato';
+import { EditorTags } from './EditorTags';
 
 /** Estado do modo edição, dono da ficha (o cabeçalho também abre pelo atalho "Adicionar nome"). */
 export interface EdicaoFicha {
@@ -110,7 +111,11 @@ export function AbaDados({ c, duplicados, nomeDe, onAbrirContato, edicao }: {
 
         <section>
           <SectionTitle>Tags</SectionTitle>
-          <p className="text-sm text-[var(--fg-2)]">{c.tags.length ? c.tags.join(', ') : <span className="text-[var(--fg-3)]">Sem tags.</span>}</p>
+          {edicao && !edicao.motivo ? (
+            <EditorTags contatoId={c.id} tags={c.tags} onSalvo={edicao.onSalvo} />
+          ) : (
+            <p className="text-sm text-[var(--fg-2)]">{c.tags.length ? c.tags.join(', ') : <span className="text-[var(--fg-3)]">Sem tags.</span>}</p>
+          )}
         </section>
 
         {duplicados.length > 0 && (

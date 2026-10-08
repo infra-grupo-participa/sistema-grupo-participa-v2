@@ -9,10 +9,11 @@ const VEND = { perfilId: U1, papel: 'vendedor' as const };
 const GEST = { perfilId: U2, papel: 'gestor' as const };
 
 describe('mcp: catálogo', () => {
-  it('9 de leitura + 4 de escrita, nomes válidos para o MCP e para crm.mcp_chamada', () => {
+  it('9 de leitura + 9 de escrita, nomes válidos para o MCP e para crm.mcp_chamada', () => {
     expect(FERRAMENTAS.filter((x) => x.escopo === 'ler')).toHaveLength(9);
     expect(FERRAMENTAS.filter((x) => x.escopo === 'operar').map((x) => x.name).sort())
-      .toEqual(['comercial_adicionar_nota', 'comercial_concluir_atividade', 'comercial_criar_atividade', 'comercial_mover_etapa']);
+      .toEqual(['comercial_adicionar_nota', 'comercial_concluir_atividade', 'comercial_criar_atividade', 'comercial_criar_contato',
+        'comercial_editar_contato', 'comercial_mover_etapa', 'comercial_reabrir_atividade', 'comercial_tag_adicionar', 'comercial_tag_remover']);
     for (const x of FERRAMENTAS) {
       expect(x.name).toMatch(/^[a-z_]{3,60}$/);
       expect(x.annotations.readOnlyHint).toBe(x.escopo === 'ler');
@@ -21,17 +22,21 @@ describe('mcp: catálogo', () => {
   });
   it('fora de propósito não existe: ganho, perda, transferência, disparo, exportação', () => {
     const nomes = FERRAMENTAS.map((x) => x.name).join(' ');
-    expect(nomes).not.toMatch(/ganho|perdido|transferir|disparo|enviar|exportar|funil_salvar|oferta/);
+    expect(nomes).not.toMatch(/ganho|perdido|transferir|disparo|enviar|exportar|funil_salvar|oferta|apagar|excluir|whatsapp_enviar/);
   });
-  it('toda RPC usada está na lista fechada de public.crm_mcp_rpc (migration 20261008150823)', () => {
+  it('toda RPC usada está na lista fechada de public.crm_mcp_rpc (migrations 20261008150823 e 20261008222038)', () => {
     const LISTA = ['crm_funis', 'crm_funil_resumo', 'crm_negocios', 'crm_contatos', 'crm_jornada', 'crm_atividades',
-      'crm_desempenho', 'crm_mensagens', 'crm_criar_atividade', 'crm_adicionar_nota', 'crm_mover_etapa', 'crm_concluir_atividade'];
-    const args = { funil_id: U1, pessoa_id: U1, negocio_id: U1, etapa_id: U2, atividade_id: U1, busca: 'ana', tipo: 'ligacao', titulo: 't', texto: 't', vence_em: '2026-10-06T10:00' };
+      'crm_desempenho', 'crm_mensagens', 'crm_criar_atividade', 'crm_adicionar_nota', 'crm_mover_etapa', 'crm_concluir_atividade',
+      'crm_criar_contato', 'crm_editar_contato', 'crm_tags_contato', 'crm_reabrir_atividade'];
+    const args = { funil_id: U1, pessoa_id: U1, negocio_id: U1, etapa_id: U2, atividade_id: U1, busca: 'ana', tipo: 'ligacao', titulo: 't', texto: 't',
+      vence_em: '2026-10-06T10:00', nome: 'Ana Souza', email: 'ana@exemplo.com', tags: ['vip'] };
+    let planos = 0;
     for (const x of FERRAMENTAS) {
       const v = x.validar(args);
       if (!v.ok) continue;
-      for (const c of x.plano(v.valor, new Date())) expect(LISTA).toContain(c.rpc);
+      for (const c of x.plano(v.valor, new Date())) { expect(LISTA).toContain(c.rpc); planos++; }
     }
+    expect(planos).toBeGreaterThanOrEqual(FERRAMENTAS.length);
   });
   it('escopo ler esconde as de escrita; ler+operar mostra todas', () => {
     expect(ferramentasDoEscopo(['ler']).every((x) => x.escopo === 'ler')).toBe(true);
@@ -190,5 +195,53 @@ describe('mcp: protocolo', () => {
   it('versão: devolve a pedida se suportada, senão a mais nova', () => {
     expect(negociarVersao('2025-03-26')).toBe('2025-03-26');
     expect(negociarVersao('1999-01-01')).toBe(VERSAO_PADRAO);
+  });
+});
+
+describe('mcp: contato, tags e reabrir (20261008222038)', () => {
+  it('criar contato: nome + telefone ou e-mail; sem dono no pedido', () => {
+    const cc = f('comercial_criar_contato');
+    expect(cc.validar({ nome: 'Ana' })).toEqual({ ok: false, msg: 'Informe telefone ou e-mail.' });
+    expect(cc.validar({ nome: 'A', email: 'a@b.co' }).ok).toBe(false);
+    expect(cc.validar({ nome: 'Ana', email: 'nao-e-email' }).ok).toBe(false);
+    expect(cc.validar({ nome: 'Ana', telefone: 'abc' }).ok).toBe(false);
+    expect(cc.validar({ nome: 'Ana', email: 'a@b.co', dono: U1 }).ok).toBe(true); // campo extra é ignorado (o schema recusa no cliente)
+    const v = cc.validar({ nome: ' Ana Souza ', telefone: '(21) 98765-4321' });
+    expect(v.ok && cc.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_criar_contato', params: { p_dados: { nome: 'Ana Souza', telefone: '(21) 98765-4321' } } }]);
+  });
+  it('criar contato repetido: ok=true do banco devolve o existente (nova=false)', () => {
+    const cc = f('comercial_criar_contato');
+    const v = cc.validar({ nome: 'Ana', email: 'a@b.co' });
+    if (!v.ok) throw new Error(v.msg);
+    expect(cc.resultado([{ ok: true, msg: 'Esse contato já estava no CRM: abri a ficha dele.', contatoId: U1, nova: false }], v.valor, new Date(), VEND))
+      .toMatchObject({ ok: true, contatoId: U1, nova: false });
+  });
+  it('editar contato: só os campos enviados, chaves da RPC, vazio limpa', () => {
+    const ec = f('comercial_editar_contato');
+    expect(ec.validar({ pessoa_id: U1 })).toEqual({ ok: false, msg: 'Informe ao menos um campo para mudar.' });
+    expect(ec.validar({ pessoa_id: U1, uf: 'São' }).ok).toBe(false);
+    expect(ec.validar({ pessoa_id: U1, perfil: 'medico' }).ok).toBe(false);
+    const v = ec.validar({ pessoa_id: U1, cidade: ' Niterói ', uf: 'rj', perfil: 'advogado', atua_com_holding: 'comecando', observacao: '' });
+    expect(v.ok && ec.plano(v.valor, new Date())).toEqual([{
+      rpc: 'crm_editar_contato',
+      params: { p_contato: U1, p_dados: { cidade: 'Niterói', uf: 'rj', observacao: '', perfil: 'advogado', atuaComHolding: 'comecando' } },
+    }]);
+  });
+  it('tags: lista de 1 a 30, inválida recusada, adicionar e remover usam a mesma RPC', () => {
+    const ta = f('comercial_tag_adicionar');
+    const tr = f('comercial_tag_remover');
+    expect(ta.validar({ pessoa_id: U1, tags: [] }).ok).toBe(false);
+    expect(ta.validar({ pessoa_id: U1, tags: ['🔔'] }).ok).toBe(false);
+    expect(ta.validar({ pessoa_id: U1, tags: Array.from({ length: 31 }, (_, i) => `t${i}`) }).ok).toBe(false);
+    const v = ta.validar({ pessoa_id: U1, tags: [' Quente Ágora '] });
+    expect(v.ok && ta.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_tags_contato', params: { p_pessoa: U1, p_adicionar: ['Quente Ágora'] } }]);
+    const r = tr.validar({ pessoa_id: U1, tags: ['[HT] ALUNOS'] });
+    expect(r.ok && tr.plano(r.valor, new Date())).toEqual([{ rpc: 'crm_tags_contato', params: { p_pessoa: U1, p_remover: ['[HT] ALUNOS'] } }]);
+  });
+  it('reabrir atividade', () => {
+    const ra = f('comercial_reabrir_atividade');
+    expect(ra.validar({}).ok).toBe(false);
+    const v = ra.validar({ atividade_id: U1 });
+    expect(v.ok && ra.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_reabrir_atividade', params: { p_atividade: U1 } }]);
   });
 });

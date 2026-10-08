@@ -30,7 +30,7 @@ import {
   mapContatosPorIds, mapPaginaServidor, mapResumoContatos, rpcAusente, type ErroRpc,
 } from './mapeamento-supabase';
 import {
-  argsCriarContato, argsEditarContato, argsEscrita, mapResultado, mapResultadoComId, mapResultadoContato, mapResultadoEnvio, mapResultadoFicha, mapResultadoLink,
+  argsCriarContato, argsEditarContato, argsEscrita, argsTagsContato, mapResultadoTags, mapResultado, mapResultadoComId, mapResultadoContato, mapResultadoEnvio, mapResultadoFicha, mapResultadoLink,
   mapResultadoEdicao, mapResultadoNegocio, mapResultadoProjeto, mapResultadoTokenMcp,
   mensagemErroEscrita,
 } from './mapeamento-escrita';
@@ -383,6 +383,10 @@ export class SupabaseComercialRepository implements ComercialRepository {
   /** Ficha do contato (crm_editar_contato, 20261008182832): grava só as chaves enviadas; nunca apaga dado da base central. */
   editarContato(contatoId: string, mudancas: Record<string, string>) {
     return this.escrever('crm_editar_contato', argsEditarContato(contatoId, mudancas), mapResultadoEdicao);
+  }
+  /** Tags da ficha (crm_tags_contato, 20261008222038): normaliza, D6 e máximo de 30 no banco. */
+  tagsContato(contatoId: string, adicionar: string[], remover: string[]) {
+    return this.escrever('crm_tags_contato', argsTagsContato(contatoId, adicionar, remover), mapResultadoTags);
   }
   criarNegocio(contatoId: string, funilId: string, campanhaId?: string | null): Promise<Resultado & { negocioId?: string; donoId?: string | null }> {
     return this.escrever('crm_criar_negocio', argsEscrita.criarNegocio(contatoId, funilId, campanhaId), mapResultadoNegocio);

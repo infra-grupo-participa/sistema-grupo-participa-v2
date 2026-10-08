@@ -71,6 +71,10 @@ hora. Ou remova o conector no claude.ai.
 | "Crie uma ligação para a Ana amanhã às 10h: retomar proposta." | Agenda a atividade (depois de você confirmar). |
 | "Anote na Ana: pediu desconto, vai falar com o sócio." | Registra a nota. |
 | "Marque como feita a ligação da Ana, resultado: atendeu." | Conclui a atividade. |
+| "Marquei por engano, reabra a ligação da Ana." | Reabre a atividade (volta para a agenda, sem resultado). |
+| "Cadastre o João Lima, (21) 98765-4321." | Cria o contato. Se o telefone/e-mail já estiver no CRM, não duplica: devolve o existente. |
+| "Corrija o e-mail da Ana para ana@escritorio.com." | Edita a ficha (o dado antigo fica guardado). |
+| "Coloque a tag quente na Ana e tire a tag frio." | Adiciona/remove tags. |
 | "Mova o negócio da Ana para Negociação." | Move de etapa, com as exigências da tela. |
 | "Como está o funil HT? E o meu desempenho na semana?" | Resumo por etapa e números do período. |
 
@@ -78,7 +82,7 @@ Dica: comece o dia com "o que eu tenho para hoje e quem está sem próximo passo
 
 ## O que o Claude não faz
 
-- Não envia WhatsApp nem e-mail, não faz disparo.
+- Não envia WhatsApp nem e-mail, não faz disparo. Não apaga contato (as duas coisas aguardam decisão).
 - Não marca ganho nem perdido, não troca dono, não mexe em funil, produto, oferta ou motivo.
 - Não vê CPF. E-mail e telefone completos só para o dono do contato ou o gestor.
 - Não vê o que você não vê na tela. Não exporta lista de contatos.
@@ -109,8 +113,8 @@ Por pedido: `crm_mcp_autenticar(hash, ferramenta)` (service role; kill-switch, t
 `crm.mcp_papel`, 60 ferramentas/min/token, auditoria em `crm.mcp_chamada`). Cada RPC da ferramenta vai por
 **`public.crm_mcp_rpc(token_id, rpc, params)`** (só service_role): confere o token de novo, monta as claims do dono
 (`sub`, `email`, `gp_canal='mcp'`), `SET LOCAL ROLE authenticated` e chama a **mesma** `public.crm_*` da tela; role e
-claims voltam ao fim. Lista fechada de 12 RPCs; parâmetros só pelos nomes da assinatura viva (valor vira literal
-tipado: injeção vira erro de tipo). RLS, guardas, `escrita_ligada` e o `crm.tg_log` (`autor_tipo='mcp'`) valem igual.
+claims voltam ao fim. Lista fechada de 16 RPCs (8 ler + 8 operar; migration 20261008222038); parâmetros só pelos nomes da assinatura viva (valor vira literal
+tipado: injeção vira erro de tipo; parâmetro `text[]` aceita array JSON, que vira `array(select jsonb_array_elements_text(…))`). RLS, guardas, `escrita_ligada` e o `crm.tg_log` (`autor_tipo='mcp'`) valem igual.
 
 **Mudança de 08/10/2026:** antes o servidor assinava um JWT HS256 com o "Legacy JWT secret" (`SUPABASE_JWT_SECRET`).
 A variável nunca foi configurada na Hostinger → `tools/call` dava 503 em produção. A troca por `crm_mcp_rpc` dispensa
@@ -134,8 +138,13 @@ mais usado**; se estiver na Hostinger, pode remover.
 | `comercial_adicionar_nota` | operar | Nota interna na pessoa/negócio | `crm_adicionar_nota` |
 | `comercial_concluir_atividade` | operar | Conclui atividade com resultado | `crm_concluir_atividade` |
 | `comercial_mover_etapa` | operar | Move negócio (Ganho recusado; campos obrigatórios exigidos) | `crm_mover_etapa` |
+| `comercial_reabrir_atividade` | operar | Desfaz a conclusão (dono da atividade ou gestor) | `crm_reabrir_atividade` |
+| `comercial_criar_contato` | operar | Nome + telefone e/ou e-mail; duplicado devolve o existente (`nova=false`), sem trocar dono | `crm_criar_contato` |
+| `comercial_editar_contato` | operar | Nome, telefone, e-mail, cidade/UF, perfil, holding, empresa, observação (D6) | `crm_editar_contato` |
+| `comercial_tag_adicionar` | operar | Adiciona tags normalizadas (≤ 30 por contato; D6) | `crm_tags_contato` |
+| `comercial_tag_remover` | operar | Remove tags pela forma normalizada (D6) | `crm_tags_contato` |
 
-**De propósito, não existe:** envio de WhatsApp/disparo, ganho/perdido, transferir dono, editar funil/motivo/produto/
+**De propósito, não existe:** envio de WhatsApp/disparo, apagar contato (os dois aguardam decisão do Arthur), ganho/perdido, transferir dono, editar funil/motivo/produto/
 oferta, exportar lista. Nunca sai CPF. Ferramenta nova = `domain/mcp-ferramentas.ts` + teste + RPC na lista fechada de
 `crm_mcp_rpc` (migration nova).
 
