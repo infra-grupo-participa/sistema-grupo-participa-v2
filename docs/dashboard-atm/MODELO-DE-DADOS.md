@@ -73,13 +73,32 @@ e-mail sem `@`, motivo fora de `teste`/`equipe`.
 teste_motivo text`. Números cuja 1ª entrada cai no período, `entrou_em desc`. Com `p_incluir_teste = true` vêm também os
 marcados (para o botão Desmarcar). `nome` = nome que o SendFlow mandou no evento.
 
+## 0b. Grupo pela foto do SendFlow (20261008200000, 08/10/2026)
+
+O webhook do SendFlow só traz parte das entradas (o próprio SendFlow não registra a maioria). Desde 20261008200000 o
+grupo conta a **foto da lista de participantes** (API `export-leads`, a cada 10 min, chave do Victor no Vault) somada aos
+eventos do webhook. Situação da aplicação: `infra/supabase/migrations/20261008200000.explain.md`.
+
+- Entrada = evento do webhook; sem evento, 1ª foto em que o número apareceu (**data aproximada**, coluna
+  `entrada_aproximada`). Na 1ª carga (08/10) quase todos ficaram com data aproximada de 08/10: a série diária mostra
+  esse pico em 08/10, não é entrada real daquele dia.
+- No grupo / saída: a foto manda ("Saiu = Sim" ou sumiu da foto = saída).
+- Teste e período: iguais (seção 0).
+- `dados_atm_resumo` ganha no fim: `grupo_entradas_aproximadas integer`, `grupo_foto_em timestamptz` (hora da última foto;
+  a tela pode mostrar "grupo atualizado às ..."), `grupo_no_grupo integer` (dos que entraram no período, quantos estão no
+  grupo agora). `grupo_entradas` continua sendo quem entrou no período, incluindo quem já saiu.
+- `dados_atm_grupo_numeros` ganha no fim: `entrada_aproximada boolean`, `grupos text` (ex.: `13/10 #1, 13/10 #2`).
+  `nome` passa a vir também da foto (nome do WhatsApp).
+- Próximo ATM: na linha da campanha em `dados.dashboard_grupos`, preencher `sendflow_release_id` (id da campanha na API)
+  e `sendflow_conta_id` (conta de WhatsApp que exporta).
+
 ## 1. De onde vem cada número
 
 | Card / coluna | Fonte no banco | Regra |
 |---|---|---|
 | Disparos, enviados, custo | `mkt_mensageria.disparos` do projeto, não arquivados | disparos = linhas; enviados = soma de `tamanho_lista`; custo = soma de `custo_centavos`, nulo se nenhum tem custo |
 | Leads | lista do ActiveCampaign da edição (`lista_ac_leads`, hoje 615) + evento `lead` do projeto em `pessoas.eventos` | pessoa = e-mail único; teste (`pessoas.pessoas.teste`, `@exemplo.invalid`) não conta |
-| Ingresso no grupo | `crm.evento_jornada` fonte `sendflow` com `tag` = campanha cadastrada em `dados.dashboard_grupos` | pessoas (telefone) que entraram, leads ou não; nulo sem campanha cadastrada |
+| Ingresso no grupo | foto da lista de participantes do SendFlow (`dados.grupo_participantes`) + `crm.evento_jornada` fonte `sendflow` com `tag` = campanha cadastrada em `dados.dashboard_grupos` | números únicos que entraram, leads ou não, sem teste; nulo sem campanha cadastrada (seção 0b) |
 | % ingresso no grupo | ingresso ÷ leads × 100 | |
 | Taxa de evasão | saídas ÷ entradas × 100 | saída só conta para quem entrou e saiu depois de entrar |
 | CPL | custo ÷ leads | só com custo completo (todos os disparos com custo); senão nulo |
@@ -114,7 +133,7 @@ grupo_pct numeric, evasao_pct numeric, custo_disparo_centavos bigint, disparos_s
 cpl_centavos bigint, pre_checkout_pessoas integer, vendas integer, vendas_fora_brl integer, compradores integer,
 compradores_no_pre_checkout integer, conversao_pre_checkout_pct numeric, cac_centavos bigint, receita_bruta numeric,
 receita_liquida numeric, roas numeric, roas_liquido numeric, atualizado_em timestamptz, periodo_de date,
-periodo_ate date, leads_teste integer, grupo_teste integer, vendas_teste integer, receita_teste_bruta numeric`
+periodo_ate date, leads_teste integer, grupo_teste integer, vendas_teste integer, receita_teste_bruta numeric, grupo_entradas_aproximadas integer, grupo_foto_em timestamptz, grupo_no_grupo integer`
 
 As últimas (20261008191000): período aplicado; leads do período que saíram por teste; números marcados que entraram
 no período (nulo sem fonte de grupo); `vendas_teste integer` e `receita_teste_bruta numeric` (vendas e faturamento
