@@ -3,6 +3,7 @@ import { getCurrentUser, getCurrentUserAccess } from '@/shared/composition/serve
 import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { podeVerDepartamento, temCapacidade } from '@/shared/domain/departamentos';
 import { buscarAtm } from '@/modules/infra/atm/domain/registro';
+import { deveExibirAvisoTesteAtm } from '@/modules/infra/atm/domain/visibilidade-aviso-teste';
 import { SeminarioAtmClient } from '@/modules/infra/atm/ui/SeminarioAtmClient';
 
 export const dynamic = 'force-dynamic';
@@ -15,5 +16,5 @@ export default async function SeminarioAtmPage({ params }: { params: Promise<{ c
   const projeto = buscarAtm(chave);
   if (!projeto) notFound();
   const acesso = ACESSO_DEPARTAMENTOS.acessoV2 ? user?.acesso : await getCurrentUserAccess();
-  return <SeminarioAtmClient projeto={projeto} isMaster={acesso?.master === true} />;
+  return <SeminarioAtmClient projeto={projeto} isMaster={acesso?.master === true} mostrarAvisoTeste={deveExibirAvisoTesteAtm(user?.id)} />;
 }
