@@ -39,13 +39,13 @@ describe('crm_mensagens com midia', () => {
 describe('argsEscrita.enviarAnexo', () => {
   it('legenda vazia vira null; template sempre null', () => {
     expect(argsEscrita.enviarAnexo('p1', 'envio/u/x.pdf', '  ', 'Proposta.pdf'))
-      .toEqual({ p_pessoa: 'p1', p_texto: null, p_template: null, p_midia: 'envio/u/x.pdf', p_midia_nome: 'Proposta.pdf' });
+      .toEqual({ p_pessoa: 'p1', p_texto: null, p_template: null, p_midia: 'envio/u/x.pdf', p_midia_nome: 'Proposta.pdf', p_chave: null });
   });
 });
 
 describe('argsEscrita.enviarAudio', () => {
   it('sem legenda, sem nome, sem template', () => {
     expect(argsEscrita.enviarAudio('p1', 'envio/u/x.ogg'))
-      .toEqual({ p_pessoa: 'p1', p_texto: null, p_template: null, p_midia: 'envio/u/x.ogg', p_midia_nome: null });
+      .toEqual({ p_pessoa: 'p1', p_texto: null, p_template: null, p_midia: 'envio/u/x.ogg', p_midia_nome: null, p_chave: null });
   });
 });

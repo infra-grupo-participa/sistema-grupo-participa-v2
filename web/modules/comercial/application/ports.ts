@@ -18,6 +18,12 @@ export interface Resultado {
   msg?: string;
 }
 
+/** Envio de WhatsApp. `repetida` = a chave de idempotência já tinha virado mensagem (nada novo foi enfileirado). */
+export interface ResultadoEnvio extends Resultado {
+  mensagemId?: string;
+  repetida?: boolean;
+}
+
 export interface ResultadoFicha extends Resultado {
   fichaId?: string;
   codigo?: string;
@@ -175,18 +181,19 @@ export interface ComercialRepository {
   adicionarNota(contatoId: string, negocioId: string | null, texto: string): Promise<Resultado>;
 
   /** Com template, o texto é montado no banco ({{1}} = primeiro nome) e `texto` é ignorado. */
-  enviarMensagem(contatoId: string, texto: string, templateId?: string | null): Promise<Resultado & { mensagemId?: string }>;
+  /** `chave` = idempotência: a mesma chave devolve a mesma mensagem (repetida) sem duplicar. */
+  enviarMensagem(contatoId: string, texto: string, templateId?: string | null, chave?: string | null): Promise<ResultadoEnvio>;
   marcarConversaLida(contatoId: string): Promise<Resultado>;
   /**
    * Imagem (JPG/PNG/WebP até 5 MB) ou PDF (até 16 MB) com legenda opcional: sobe para o bucket privado e enfileira
    * (janela de 24 h aberta; o banco valida dono, tipo e tamanho de novo).
    */
-  enviarAnexo(contatoId: string, arquivo: File, legenda: string): Promise<Resultado & { mensagemId?: string }>;
+  enviarAnexo(contatoId: string, arquivo: File, legenda: string, chave?: string | null): Promise<ResultadoEnvio>;
   /**
    * Áudio gravado no navegador (20261007s), já no formato final (ogg/opus = nota de voz; m4a/aac/mp3 = áudio comum):
    * sobe para o bucket privado e enfileira sem legenda (janela de 24 h aberta; o banco valida dono, tipo e tamanho).
    */
-  enviarAudio(contatoId: string, audio: Blob, formato: { mime: string; ext: string }): Promise<Resultado & { mensagemId?: string }>;
+  enviarAudio(contatoId: string, audio: Blob, formato: { mime: string; ext: string }, chave?: string | null): Promise<ResultadoEnvio>;
   /** URL assinada de curta duração (10 min) do arquivo de uma mensagem; null = sem acesso ou indisponível. */
   urlMidia(caminho: string): Promise<string | null>;
 

@@ -54,6 +54,26 @@ describe('criarAtualizador', () => {
     a.parar();
   });
 
+  it('ocultar e voltar dentro da folga não para o laço', async () => {
+    const f = vi.fn();
+    const e = ambiente();
+    const a = criarAtualizador(f, 3_000, e.amb);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(f).toHaveBeenCalledTimes(1);
+    // some e volta logo depois da busca (dentro da folga de 1 s): não busca na hora...
+    e.ocultar();
+    await vi.advanceTimersByTimeAsync(200);
+    e.mostrar();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f).toHaveBeenCalledTimes(1);
+    // ...mas o próximo ciclo continua agendado
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(f).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(f).toHaveBeenCalledTimes(3);
+    a.parar();
+  });
+
   it('não sobrepõe chamadas lentas e não perde o pedido feito no meio', async () => {
     let soltar: () => void = () => {};
     const f = vi.fn(() => new Promise<void>((r) => { soltar = r; }));

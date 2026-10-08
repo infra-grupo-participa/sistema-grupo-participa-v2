@@ -104,7 +104,11 @@ export function AbaDados({ c, duplicados, nomeDe, onAbrirContato }: {
 }
 
 /** Últimas mensagens e o atalho para a caixa de Conversas (onde se responde). */
-export function AbaConversa({ c, nomeDe, flash }: { c: Contato; nomeDe: (id: string | null) => string; flash?: (m: string) => void }) {
+export function AbaConversa({ c, nomeDe, flash, podeEscrever }: {
+  c: Contato; nomeDe: (id: string | null) => string; flash?: (m: string) => void;
+  /** `podeEscreverContato` (espelho de crm.pode_escrever_pessoa): sem ele, nem oferece o áudio. */
+  podeEscrever: boolean;
+}) {
   const ms = useDados(() => repo.mensagens(c.id), [c.id]);
   // Aba aberta = conversa à vista: atualiza sozinha (mensagem nova, mídia, status).
   useAtualizacaoPeriodica(ms.recarregar, 'conversaAberta', !c.optOut && !!c.telefone);
@@ -131,7 +135,7 @@ export function AbaConversa({ c, nomeDe, flash }: { c: Contato; nomeDe: (id: str
             : 'Nenhuma mensagem ainda. Comece pela caixa de Conversas.'}
         </p>
         <div className="flex shrink-0 items-center gap-2">
-          {janela && flash && <BotaoGravarAudio contatoId={c.id} nomeContato={c.nome.split(' ')[0] || c.nome} flash={flash} />}
+          {janela && flash && podeEscrever && <BotaoGravarAudio contatoId={c.id} nomeContato={c.nome.split(' ')[0] || c.nome} flash={flash} />}
           <BotaoConversa contatoId={c.id} />
         </div>
       </div>

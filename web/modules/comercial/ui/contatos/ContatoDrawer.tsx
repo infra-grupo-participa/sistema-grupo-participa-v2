@@ -9,7 +9,7 @@ import { AvatarInicial, Badge, Button, Drawer, Skeleton, Tabs, Toast, idsAba, us
 import { fmtBRL, fmtData } from '@/shared/ui/format';
 import { Icon } from '@/shared/ui/icons';
 import { fmtTelefone } from '../../domain/regras';
-import { motivoSemNovoNegocio } from '../../domain/travas';
+import { motivoSemNovoNegocio, podeEscreverContato } from '../../domain/travas';
 import type { Contato } from '../../domain/types';
 import type { TextoIndicador } from '../InfoIndicador';
 import {
@@ -245,7 +245,7 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
 
         {aba === 'conversa' && (
           <div {...painel('conversa')}>
-            <AbaConversa c={c} nomeDe={nomeDe} flash={flash} />
+            <AbaConversa c={c} nomeDe={nomeDe} flash={flash} podeEscrever={podeEscreverContato(c, dele, sessao)} />
           </div>
         )}
 

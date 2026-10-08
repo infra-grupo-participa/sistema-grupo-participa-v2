@@ -1,7 +1,7 @@
 // Payloads no formato exato que as RPCs de escrita da migration 20261005t devolvem (crm.res: {ok, msg?, …ids}).
 import { describe, expect, it } from 'vitest';
 import {
-  argsCriarContato, argsEscrita, mapResultado, mapResultadoComId, mapResultadoContato, mapResultadoNegocio, mapResultadoProjeto, mensagemErroEscrita,
+  argsCriarContato, argsEscrita, mapResultado, mapResultadoComId, mapResultadoContato, mapResultadoEnvio, mapResultadoNegocio, mapResultadoProjeto, mensagemErroEscrita,
   mapResultadoFicha, mapResultadoLink, mapResultadoTokenMcp,
 } from './mapeamento-escrita';
 import { FormatoInesperado } from './mapeamento-supabase';
@@ -118,12 +118,20 @@ describe('argumentos (nomes p_* da migration 20261005t)', () => {
 
 describe('WhatsApp (F4, migration 20261006051434)', () => {
   it('enviarMensagem: template vai como uuid ou null', () => {
-    expect(argsEscrita.enviarMensagem(U1, 'oi', null)).toEqual({ p_pessoa: U1, p_texto: 'oi', p_template: null });
-    expect(argsEscrita.enviarMensagem(U1, '', U2)).toEqual({ p_pessoa: U1, p_texto: '', p_template: U2 });
-    expect(argsEscrita.enviarMensagem(U1, 'oi', '')).toEqual({ p_pessoa: U1, p_texto: 'oi', p_template: null });
+    expect(argsEscrita.enviarMensagem(U1, 'oi', null)).toEqual({ p_pessoa: U1, p_texto: 'oi', p_template: null, p_chave: null });
+    expect(argsEscrita.enviarMensagem(U1, '', U2)).toEqual({ p_pessoa: U1, p_texto: '', p_template: U2, p_chave: null });
+    expect(argsEscrita.enviarMensagem(U1, 'oi', '')).toEqual({ p_pessoa: U1, p_texto: 'oi', p_template: null, p_chave: null });
+    expect(argsEscrita.enviarMensagem(U1, 'oi', null, U2)).toEqual({ p_pessoa: U1, p_texto: 'oi', p_template: null, p_chave: U2 });
     expect(mapResultadoComId('crm_enviar_mensagem', { ok: true, msg: 'Mensagem na fila de envio.', mensagemId: U2 }, 'mensagemId'))
       .toEqual({ ok: true, msg: 'Mensagem na fila de envio.', mensagemId: U2 });
     expect(mapResultado('crm_enviar_mensagem', { ok: false, msg: 'Envio de WhatsApp desligado.' })).toEqual({ ok: false, msg: 'Envio de WhatsApp desligado.' });
+  });
+  it('envio idempotente: repetida só vem quando o banco devolve a mensagem que já existia', () => {
+    expect(mapResultadoEnvio({ ok: true, msg: 'Mensagem já enviada.', mensagemId: U2, repetida: true }))
+      .toEqual({ ok: true, msg: 'Mensagem já enviada.', mensagemId: U2, repetida: true });
+    expect(mapResultadoEnvio({ ok: true, msg: 'Mensagem na fila de envio.', mensagemId: U2 }))
+      .toEqual({ ok: true, msg: 'Mensagem na fila de envio.', mensagemId: U2 });
+    expect(mapResultadoEnvio({ ok: false, msg: 'Chave de envio inválida.', repetida: true })).toEqual({ ok: false, msg: 'Chave de envio inválida.' });
   });
   it('conversa lida e decisão da ficha', () => {
     expect(argsEscrita.marcarConversaLida(U1)).toEqual({ p_pessoa: U1 });

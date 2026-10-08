@@ -90,7 +90,9 @@ export function criarAtualizador(
   const cutucar = () => {
     if (parado || !amb.visivel()) return;
     if (emVoo) { pendente = true; return; }
-    if (amb.agora() - ultima < folgaMs) return;
+    // Dentro da folga não busca de novo, mas garante o próximo ciclo: voltar à aba logo depois de buscar (o ocultar
+    // limpou o timer) não pode deixar o laço parado.
+    if (amb.agora() - ultima < folgaMs) { if (timer === null) agendar(); return; }
     limpar();
     void rodar();
   };

@@ -393,6 +393,27 @@ export function EstadoErro({ mensagem, onTentar }: { mensagem?: string | null; o
   );
 }
 
+/**
+ * Erro ao ATUALIZAR com dado já na tela: faixa discreta em vez de sumir com a lista (o dado anterior continua à vista).
+ * Para o erro da 1ª carga (sem dado nenhum) use `EstadoErro`.
+ */
+export function FaixaErroAtualizacao({ mensagem, onTentar, className = '' }: { mensagem?: string | null; onTentar: () => void; className?: string }) {
+  return (
+    <div
+      role="alert"
+      title={mensagem ?? undefined}
+      className={`flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--r-md)] border border-[var(--red-border)] bg-[var(--red-subtle)] px-3 py-1.5 text-xs text-[var(--fg-2)] ${className}`}
+    >
+      <Icon name="alert" size={13} className="shrink-0 text-[var(--red)]" />
+      <span>Não foi possível atualizar</span>
+      <span aria-hidden="true">·</span>
+      <button type="button" onClick={onTentar} className="font-semibold text-[var(--fg)] underline-offset-2 hover:underline">
+        tentar de novo
+      </button>
+    </div>
+  );
+}
+
 /** Vazio com o próximo passo ("Novo negócio", "Limpar filtros", "Agendar atividade"). */
 export function Vazio({ titulo, hint, icone, acao }: { titulo: string; hint?: string; icone?: string; acao?: React.ReactNode }) {
   return (

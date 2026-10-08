@@ -14,13 +14,13 @@ import { Icon } from '@/shared/ui/icons';
 import { ROTULO_ATUA, ROTULO_PERFIL, produto as produtoDe } from '../../domain/catalogo';
 import { fmtTelefone } from '../../domain/regras';
 import type { Contato, Conversa, EtapaFunil, Mensagem, Negocio, SessaoComercial, StatusMensagem, Template } from '../../domain/types';
-import { motivoSomenteLeitura, podeTrocarDono, travaMover, type TravaMover } from '../../domain/travas';
-import { BotaoPlaybook, Dono, EstadoErro, FaixaNumeros, PaginaComercial, Segmentado, Vazio, useEquipe, useParamUrl } from '../comum';
+import { motivoSemEscrita, motivoSomenteLeitura, podeTrocarDono, travaMover, type TravaMover } from '../../domain/travas';
+import { BotaoPlaybook, Dono, EstadoErro, FaixaErroAtualizacao, FaixaNumeros, PaginaComercial, Segmentado, Vazio, useEquipe, useParamUrl } from '../comum';
 import { InfoIndicador } from '../InfoIndicador';
 import { ContatoDrawer } from '../contatos/ContatoDrawer';
 import { CardNegocio } from '../funil/CardNegocio';
 import { ModalAtividade, NegocioDrawer } from '../NegocioDrawer';
-import { avisarMudanca, repo, useAgora, useAtualizacaoPeriodica, useContatosPorIds, useDados } from '../repositorio';
+import { avisarMudanca, recarregarSino, repo, useAgora, useAtualizacaoPeriodica, useContatosPorIds, useDados } from '../repositorio';
 import { estaNoFim } from '../atualizacao';
 import { INFO_CAIXA } from './indicadores';
 import { ModalAtribuir } from './ModalAtribuir';
@@ -30,7 +30,7 @@ import { MidiaMensagem } from './MidiaMensagem';
 import { legendaDaMensagem } from '../../domain/midia';
 import { MenuRespostas, useAlturaDisponivel } from './pecas';
 import {
-  chaveDia, duracaoCurta, esperaResposta, janelaRestante, ordenarConversas, preencherTemplate, primeiroNome,
+  chaveDia, criarTravaEnvio, duracaoCurta, esperaResposta, janelaRestante, ordenarConversas, preencherTemplate, primeiroNome,
   resumoCaixa, rotuloDia, temEmoji, type NivelEspera,
 } from './regras-conversas';
 
@@ -83,6 +83,10 @@ export function ConversasClient() {
   const [sel, setSel] = useState<string | null>(null);
   const paramContato = useParamUrl('contato');
   const ativo = sel ?? paramContato;
+  // Link "Conversa" (ficha, funil, agenda, Início) para quem ainda não tem conversa: o contato não vem da lista
+  // (crm_conversas). Carrega só ele e abre a conversa vazia; a 1ª mensagem cria a crm.conversa no banco.
+  const foraDaLista = !!ativo && !!contatos && !contatos.some((c) => c.id === ativo);
+  const rAvulso = useDados(async () => (foraDaLista && ativo ? repo.contatosPorIds([ativo]) : null), [foraDaLista ? ativo : null]);
   const [negocioAberto, setNegocioAberto] = useState<string | null>(null);
   const [fichaContato, setFichaContato] = useState<string | null>(null);
   const [detalhes, setDetalhes] = useState(false);
@@ -102,10 +106,15 @@ export function ConversasClient() {
     if (!ativo || !podeMarcarLida) return;
     if (marcadaPara.current === ativo && !temNaoLida) return;
     marcadaPara.current = ativo;
-    repo.marcarConversaLida(ativo).then((r) => { if (r.ok) avisarMudanca(); });
-  }, [ativo, podeMarcarLida, temNaoLida]);
+    // Só a lista (contador de não lidas) e o sino mudam: não recarrega a tela inteira.
+    const recarregarLista = rConversas.recarregar;
+    repo.marcarConversaLida(ativo).then((r) => { if (r.ok) { void recarregarLista(); recarregarSino(); } });
+  }, [ativo, podeMarcarLida, temNaoLida, rConversas.recarregar]);
 
-  const contatoPorId = useMemo(() => new Map((contatos ?? []).map((c) => [c.id, c])), [contatos]);
+  const contatoPorId = useMemo(
+    () => new Map([...(contatos ?? []), ...(rAvulso.dados ?? [])].map((c) => [c.id, c])),
+    [contatos, rAvulso.dados],
+  );
   const lista = useMemo(() => conversas ?? [], [conversas]);
   const contagem = {
     minhas: lista.filter((c) => c.atribuidaA === sessao?.vendedorId).length,
@@ -134,6 +143,8 @@ export function ConversasClient() {
 
   const conversa = lista.find((c) => c.contatoId === ativo) ?? null;
   const contato = ativo ? contatoPorId.get(ativo) ?? null : null;
+  // Todos os negócios da pessoa (qualquer status): dono de algum deles pode escrever (crm.pode_escrever_pessoa).
+  const negociosDoContato = useMemo(() => (negocios ?? []).filter((n) => n.contatoId === ativo), [negocios, ativo]);
   const negociosAbertos = useMemo(
     () => (negocios ?? []).filter((n) => n.contatoId === ativo && n.status === 'aberto').sort((a, b) => b.criadoEm.localeCompare(a.criadoEm)),
     [negocios, ativo],
@@ -146,6 +157,8 @@ export function ConversasClient() {
   };
 
   const carregando = !conversas || !contatos || !negocios || !templates || !sessao;
+  // Contato do link ainda chegando (fora da lista): mostra carregando no painel, não "não encontrado".
+  const buscandoAvulso = foraDaLista && !contato && (rAvulso.carregando || (!rAvulso.dados && !rAvulso.erro));
   const alturaEstilo = altura ? { height: altura } : undefined;
 
   const painelContato = contato && (
@@ -194,6 +207,7 @@ export function ConversasClient() {
         />
       )}
     >
+      {erro && !carregando && <FaixaErroAtualizacao className="mb-2" mensagem={erro} onTentar={recarregar} />}
       <div ref={area} style={alturaEstilo} className="min-h-[480px]">
         {erro && carregando ? (
           <Card className="h-full grid place-items-center">
@@ -257,6 +271,7 @@ export function ConversasClient() {
                   contato={contato}
                   conversa={conversa}
                   negocio={negociosAbertos[0] ?? null}
+                  negociosDoContato={negociosDoContato}
                   templates={templates}
                   sessao={sessao}
                   gestor={gestor}
@@ -269,6 +284,14 @@ export function ConversasClient() {
                   onAgendar={setAgendar}
                   onDetalhes={() => setDetalhes(true)}
                 />
+              ) : buscandoAvulso ? (
+                <Card className="h-full grid place-items-center text-[var(--fg-3)]">
+                  <span className="inline-flex items-center gap-3 text-sm"><Spinner size={20} /> Abrindo conversa…</span>
+                </Card>
+              ) : ativo && rAvulso.erro ? (
+                <Card className="h-full grid place-items-center">
+                  <EstadoErro mensagem={rAvulso.erro} onTentar={rAvulso.recarregar} />
+                </Card>
               ) : (
                 <Card className="h-full grid place-items-center">
                   <Vazio
@@ -424,12 +447,12 @@ function ItemConversa({ cv, c, agora, ativa, donoNome, semDono, onClick }: {
 
 // ── Conversa ──
 
-function PainelConversa({ contato, conversa, negocio, templates, sessao, gestor, nomeDe, agora, flash, onVoltar, onAbrirNegocio, onAgendar, onDetalhes, onAtribuir }: {
-  contato: Contato; conversa: Conversa | null; negocio: Negocio | null; templates: Template[]; sessao: SessaoComercial;
+function PainelConversa({ contato, conversa, negocio, negociosDoContato, templates, sessao, gestor, nomeDe, agora, flash, onVoltar, onAbrirNegocio, onAgendar, onDetalhes, onAtribuir }: {
+  contato: Contato; conversa: Conversa | null; negocio: Negocio | null; negociosDoContato: Negocio[]; templates: Template[]; sessao: SessaoComercial;
   gestor: boolean; nomeDe: (id: string | null) => string; agora: Date; flash: (m: string) => void; onVoltar: () => void;
   onAbrirNegocio: (id: string) => void; onAgendar: (n: Negocio) => void; onDetalhes: () => void; onAtribuir: () => void;
 }) {
-  const { dados, erro, recarregar } = useDados(() => repo.mensagens(contato.id), [contato.id]);
+  const { dados, erro, carregando: carregandoMsgs, recarregar } = useDados(() => repo.mensagens(contato.id), [contato.id]);
   // Conversa aberta sozinha: mensagem nova, mídia que sai de "pendente" e status (enviada → entregue → lida).
   useAtualizacaoPeriodica(recarregar, 'conversaAberta');
   const mensagens = useMemo(() => (dados ?? []).filter((m) => m.contatoId === contato.id && m.canal === 'whatsapp'), [dados, contato.id]);
@@ -451,16 +474,12 @@ function PainelConversa({ contato, conversa, negocio, templates, sessao, gestor,
   // Conversa sem dono: só o gestor define quem atende (playbook: ninguém responde lead sem dono).
   const podeAtribuir = podeTrocarDono(sessao) && !dono;
 
-  // Quem pode escrever: lead que não é seu não se toca (gestor pode).
+  // Quem pode escrever: espelho de crm.pode_escrever_pessoa (dono do contato, dono de algum negócio da pessoa ou gestor).
   const bloqueio: string | null = contato.optOut
     ? 'Este contato pediu para não receber contato. Nenhuma mensagem sai para ele.'
     : !contato.telefone
       ? 'Contato sem telefone.'
-      : gestor || dono === sessao.vendedorId
-        ? null
-        : dono
-          ? `Lead de ${nomeDe(dono)}. Lead que não é seu não se toca: transfira pelo gestor.`
-          : 'Lead sem dono. O gestor atribui o dono antes de qualquer conversa.';
+      : motivoSemEscrita({ donoId: dono }, negociosDoContato, sessao, nomeDe);
 
   // Agrupa por dia para o separador.
   const grupos = useMemo(() => {
@@ -519,6 +538,7 @@ function PainelConversa({ contato, conversa, negocio, templates, sessao, gestor,
       </div>
 
       <div onScroll={aoRolar} className="flex-1 overflow-y-auto px-4 py-3 bg-[var(--surface-1)]" aria-live="polite" aria-label={`Mensagens com ${contato.nome}`} role="log">
+        {erro && dados && !carregandoMsgs && <FaixaErroAtualizacao className="mb-2" mensagem={erro} onTentar={recarregar} />}
         {erro && !dados ? (
           <EstadoErro mensagem={erro} onTentar={recarregar} />
         ) : !dados ? (
@@ -632,6 +652,8 @@ function Envio({ contato, negocio, janelaAberta, templates, remetente, flash }: 
   const [texto, setTexto] = useState('');
   const [templateId, setTemplateId] = useState<string>(aprovados[0]?.id ?? '');
   const [enviando, setEnviando] = useState(false);
+  // Trava síncrona (o estado `enviando` só vale no próximo render: duplo clique passaria) + chave de idempotência.
+  const trava = useRef(criarTravaEnvio());
   const [menu, setMenu] = useState(false);
   const campo = useRef<HTMLTextAreaElement>(null);
   const botaoMenu = useRef<HTMLButtonElement>(null);
@@ -649,9 +671,13 @@ function Envio({ contato, negocio, janelaAberta, templates, remetente, flash }: 
     : null;
 
   const enviar = async (corpo: string, tId: string | null) => {
-    if (!corpo.trim() || enviando) return;
+    if (!corpo.trim()) return;
+    const chave = trava.current.comecar(`${tId ?? ''}|${corpo}`);
+    if (!chave) return;
     setEnviando(true);
-    const r = await repo.enviarMensagem(contato.id, corpo, tId);
+    let r: Awaited<ReturnType<typeof repo.enviarMensagem>>;
+    try { r = await repo.enviarMensagem(contato.id, corpo, tId, chave); } catch { r = { ok: false, msg: 'Não foi possível enviar.' }; }
+    trava.current.terminar(r.ok);
     setEnviando(false);
     if (!r.ok) { flash(r.msg ?? 'Não foi possível enviar.'); return; }
     if (!tId) setTexto('');

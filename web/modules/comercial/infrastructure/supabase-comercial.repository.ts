@@ -11,7 +11,7 @@
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type {
-  ComercialRepository, FiltroNegocios, NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink, ResultadoTokenMcp,
+  ComercialRepository, FiltroNegocios, NovaAtividade, NovaFicha, Resultado, ResultadoEnvio, ResultadoFicha, ResultadoLink, ResultadoTokenMcp,
 } from '../application/ports';
 import {
   casaBusca, linhasContatos, mapaDuplicados, paginarContatos, resumirContatos,
@@ -30,7 +30,7 @@ import {
   mapContatosPorIds, mapPaginaServidor, mapResumoContatos, rpcAusente, type ErroRpc,
 } from './mapeamento-supabase';
 import {
-  argsCriarContato, argsEscrita, mapResultado, mapResultadoComId, mapResultadoContato, mapResultadoFicha, mapResultadoLink,
+  argsCriarContato, argsEscrita, mapResultado, mapResultadoComId, mapResultadoContato, mapResultadoEnvio, mapResultadoFicha, mapResultadoLink,
   mapResultadoNegocio, mapResultadoProjeto, mapResultadoTokenMcp,
   mensagemErroEscrita,
 } from './mapeamento-escrita';
@@ -38,7 +38,7 @@ import type { EdicaoAtivacao, PainelAtivacao } from '../domain/ativacao';
 import { argsSalvarAtivacao, mapPainelAtivacao } from './mapeamento-ativacao';
 import { argsRegra, mapOrigemDetalhada, mapPainelCatalogo } from './mapeamento-catalogacao';
 import type { OrigemDetalhada, PainelCatalogo, RegraCatalogo } from '../domain/catalogacao';
-import { LIMITE_LEGENDA, caminhoAnexo, validarAnexo } from '../domain/midia';
+import { LIMITE_LEGENDA, caminhoAnexo, uploadSobrou, validarAnexo } from '../domain/midia';
 import { LIMITE_AUDIO, extAudioPermitida } from '../domain/audio';
 // Padrão de fábrica de quem nunca personalizou (o mesmo que a demonstração usa).
 import { painelPadrao, preferenciasPadrao } from './mock-dados';
@@ -406,15 +406,14 @@ export class SupabaseComercialRepository implements ComercialRepository {
   excluirDashboard(id: string) { return this.simples('crm_arquivar_dashboard', argsEscrita.excluirDashboard(id)); }
 
   // ── Escrita WhatsApp (F4) ──
-  enviarMensagem(contatoId: string, texto: string, templateId?: string | null): Promise<Resultado & { mensagemId?: string }> {
-    return this.escrever('crm_enviar_mensagem', argsEscrita.enviarMensagem(contatoId, texto, templateId),
-      (d) => mapResultadoComId('crm_enviar_mensagem', d, 'mensagemId'));
+  enviarMensagem(contatoId: string, texto: string, templateId?: string | null, chave?: string | null): Promise<ResultadoEnvio> {
+    return this.escrever('crm_enviar_mensagem', argsEscrita.enviarMensagem(contatoId, texto, templateId, chave), mapResultadoEnvio);
   }
   marcarConversaLida(contatoId: string) { return this.simples('crm_marcar_conversa_lida', argsEscrita.marcarConversaLida(contatoId)); }
 
   // ── Arquivos do WhatsApp (20261007140044): bucket privado crm-midia ──
   /** Sobe em envio/<meu id>/<uuid>.<ext> (policy do Storage) e enfileira pela crm_enviar_mensagem (que valida de novo). */
-  async enviarAnexo(contatoId: string, arquivo: File, legenda: string): Promise<Resultado & { mensagemId?: string }> {
+  async enviarAnexo(contatoId: string, arquivo: File, legenda: string, chave?: string | null): Promise<ResultadoEnvio> {
     const v = validarAnexo(arquivo);
     if (!v.ok) return { ok: false, msg: v.msg };
     if (legenda.trim().length > LIMITE_LEGENDA) return { ok: false, msg: 'Legenda longa demais (máximo 1.024 caracteres).' };
@@ -427,11 +426,12 @@ export class SupabaseComercialRepository implements ComercialRepository {
       logQueryError('crm-midia upload', error);
       return { ok: false, msg: 'Não foi possível subir o arquivo. Tente de novo.' };
     }
-    return this.escrever('crm_enviar_mensagem', argsEscrita.enviarAnexo(contatoId, caminho, legenda, v.tipo === 'documento' ? v.nome : null),
-      (d) => mapResultadoComId('crm_enviar_mensagem', d, 'mensagemId'));
+    const r = await this.escrever('crm_enviar_mensagem', argsEscrita.enviarAnexo(contatoId, caminho, legenda, v.tipo === 'documento' ? v.nome : null, chave), mapResultadoEnvio);
+    await this.apagarUploadSeSobrou(caminho, r);
+    return r;
   }
   /** Áudio gravado (20261007s): sobe em envio/<meu id>/<uuid>.<ogg|m4a|aac|mp3> e enfileira sem legenda. */
-  async enviarAudio(contatoId: string, audio: Blob, formato: { mime: string; ext: string }): Promise<Resultado & { mensagemId?: string }> {
+  async enviarAudio(contatoId: string, audio: Blob, formato: { mime: string; ext: string }, chave?: string | null): Promise<ResultadoEnvio> {
     if (!extAudioPermitida(formato.ext, formato.mime)) return { ok: false, msg: 'Formato de áudio não aceito.' };
     if (!audio.size) return { ok: false, msg: 'A gravação ficou vazia. Grave de novo.' };
     if (audio.size > LIMITE_AUDIO) return { ok: false, msg: 'Áudio grande demais (máximo 16 MB).' };
@@ -444,8 +444,21 @@ export class SupabaseComercialRepository implements ComercialRepository {
       logQueryError('crm-midia upload audio', error);
       return { ok: false, msg: 'Não foi possível subir o áudio. Tente de novo.' };
     }
-    return this.escrever('crm_enviar_mensagem', argsEscrita.enviarAudio(contatoId, caminho),
-      (d) => mapResultadoComId('crm_enviar_mensagem', d, 'mensagemId'));
+    const r = await this.escrever('crm_enviar_mensagem', argsEscrita.enviarAudio(contatoId, caminho, chave), mapResultadoEnvio);
+    await this.apagarUploadSeSobrou(caminho, r);
+    return r;
+  }
+  /**
+   * Envio recusado (ou repetido pela chave: a mensagem usa o arquivo da 1ª tentativa) deixa o upload sem dono no bucket.
+   * Apaga (policy crm_midia_apagar, 20261008000740: só o próprio envio/<uid>/… que nenhuma mensagem usa). Falha aqui não
+   * muda o resultado do envio.
+   */
+  private async apagarUploadSeSobrou(caminho: string, r: ResultadoEnvio | Resultado) {
+    if (!uploadSobrou(r)) return;
+    try {
+      const { error } = await this.db().storage.from('crm-midia').remove([caminho]);
+      if (error) logQueryError('crm-midia remover órfão', error);
+    } catch (e) { logQueryError('crm-midia remover órfão', e instanceof Error ? e : null); }
   }
   /** URL assinada de 10 min; o Storage aplica a policy crm_midia_ler (mesma regra de quem vê a conversa). */
   async urlMidia(caminho: string): Promise<string | null> {

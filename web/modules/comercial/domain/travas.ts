@@ -82,3 +82,23 @@ export function travaMover(n: Pick<Negocio, 'donoId' | 'campos' | 'status' | 'et
 export function rotulosCampos(campos: CampoKey[]): string[] {
   return campos.map((c) => ROTULO_CAMPO[c]);
 }
+
+/**
+ * Escrever para o contato no WhatsApp (mensagem, anexo, áudio). ESPELHO de `crm.pode_escrever_pessoa` (usada por
+ * `crm_enviar_mensagem`, recusa "Este contato não é seu."): gestor sempre; vendedor se é dono do contato OU dono de
+ * algum negócio da pessoa (qualquer status). Contato sem dono e sem negócio dele: só o gestor (diferente de abrir negócio).
+ * `negociosDaPessoa` = negócios do contato (o banco olha o grupo inteiro da pessoa; a tela passa os que conhece).
+ */
+export function podeEscreverContato(c: Pick<Contato, 'donoId'>, negociosDaPessoa: Pick<Negocio, 'donoId'>[], quem: Quem): boolean {
+  if (!quem) return false;
+  if (quem.papel === 'gestor') return true;
+  return (!!c.donoId && c.donoId === quem.vendedorId) || negociosDaPessoa.some((n) => !!n.donoId && n.donoId === quem.vendedorId);
+}
+
+/** Frase para a tela explicar por que não dá para escrever ao contato. null = pode. */
+export function motivoSemEscrita(c: Pick<Contato, 'donoId'>, negociosDaPessoa: Pick<Negocio, 'donoId'>[], quem: Quem, nomeDe: (id: string | null) => string): string | null {
+  if (podeEscreverContato(c, negociosDaPessoa, quem)) return null;
+  if (!quem) return 'Carregando quem você é.';
+  if (!c.donoId) return 'Lead sem dono. O gestor atribui o dono antes de qualquer conversa.';
+  return `Lead de ${nomeDe(c.donoId)}. Lead que não é seu não se toca: transfira pelo gestor.`;
+}

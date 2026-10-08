@@ -8,18 +8,32 @@ import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-
 
 export const TOPICO_CAIXA = 'crm:caixa';
 
+// Remoção do canal anterior ainda em curso: criar o mesmo tópico antes dela terminar dá
+// "tried to subscribe multiple times". A assinatura nova espera esta promessa.
+let removendo: Promise<unknown> | null = null;
+
 /**
  * Assina os avisos. `aoAvisar` a cada mudança; `aoEstado(true)` quando o canal entra (inclusive ao reconectar),
  * `false` quando cai (o supabase-js tenta de novo sozinho). Devolve o cancelamento.
  */
 export function assinarAvisosCaixa(aoAvisar: () => void, aoEstado: (conectado: boolean) => void): () => void {
   const sb = createBrowserSupabase();
-  const canal: RealtimeChannel = sb
-    .channel(TOPICO_CAIXA, { config: { private: true } })
-    .on('broadcast', { event: 'mudou' }, () => aoAvisar())
-    .subscribe((status) => aoEstado(status === 'SUBSCRIBED'));
+  let canal: RealtimeChannel | null = null;
+  let cancelado = false;
+  const abrir = () => {
+    if (cancelado) return;
+    canal = sb
+      .channel(TOPICO_CAIXA, { config: { private: true } })
+      .on('broadcast', { event: 'mudou' }, () => aoAvisar())
+      .subscribe((status) => aoEstado(status === 'SUBSCRIBED'));
+  };
+  if (removendo) void removendo.finally(abrir); else abrir();
   return () => {
+    cancelado = true;
     aoEstado(false);
-    void sb.removeChannel(canal);
+    if (!canal) return;
+    const p = sb.removeChannel(canal).catch(() => undefined);
+    removendo = p;
+    void p.finally(() => { if (removendo === p) removendo = null; });
   };
 }

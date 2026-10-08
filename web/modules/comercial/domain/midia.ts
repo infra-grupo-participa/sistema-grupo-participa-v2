@@ -87,3 +87,11 @@ export function validarAnexo(a: { type: string; size: number; name: string }): A
 export function caminhoAnexo(perfilId: string, uuid: string, ext: string): string {
   return `envio/${perfilId}/${uuid}.${ext}`;
 }
+
+/**
+ * O arquivo subido para o envio ficou sem mensagem? Envio recusado, ou repetido pela chave de idempotência (a mensagem
+ * já usa o arquivo da 1ª tentativa). Aí o upload desta tentativa é apagado do bucket.
+ */
+export function uploadSobrou(r: { ok: boolean; repetida?: boolean }): boolean {
+  return !r.ok || r.repetida === true;
+}

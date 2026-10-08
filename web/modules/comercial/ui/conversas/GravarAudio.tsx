@@ -13,6 +13,7 @@ import {
 import { fmtTamanho } from '../../domain/midia';
 import { ErroAudio, webmOpusParaOgg } from '../../domain/ogg-opus';
 import { avisarMudanca, repo } from '../repositorio';
+import { criarTravaEnvio } from './regras-conversas';
 
 function suportaGravacao(): boolean {
   return typeof window !== 'undefined' && typeof window.MediaRecorder !== 'undefined'
@@ -174,10 +175,14 @@ function ModalGravar({ contatoId, nomeContato, flash, onFechar }: {
   };
 
   const plano = gravacao ? planoAudio(gravacao.mime) : null;
+  // Trava síncrona contra duplo clique + chave de idempotência do banco (mesma gravação reenviada = mesma mensagem).
+  const trava = useRef(criarTravaEnvio());
 
   const enviar = async () => {
     if (!gravacao || fase === 'enviando') return;
     if (!plano) { flash('Este navegador gravou num formato que o WhatsApp não aceita. Use Chrome, Edge, Firefox ou Safari atualizados.'); return; }
+    const chave = trava.current.comecar(`${gravacao.url}|${gravacao.blob.size}|${gravacao.duracaoMs}`);
+    if (!chave) return;
     setFase('enviando');
     let arquivo: Blob;
     try {
@@ -188,13 +193,16 @@ function ModalGravar({ contatoId, nomeContato, flash, onFechar }: {
         arquivo = new Blob([gravacao.blob], { type: plano.mime });
       }
     } catch (e) {
+      trava.current.terminar(false);
       setFase('pronto');
       flash(e instanceof ErroAudio ? `${e.message} Grave de novo.` : 'Não foi possível preparar o áudio. Grave de novo.');
       return;
     }
     const v = validarAudio({ tamanho: arquivo.size, duracaoMs: gravacao.duracaoMs });
-    if (!v.ok) { setFase('pronto'); flash(v.msg); return; }
-    const r = await repo.enviarAudio(contatoId, arquivo, { mime: plano.mime, ext: plano.ext });
+    if (!v.ok) { trava.current.terminar(false); setFase('pronto'); flash(v.msg); return; }
+    let r: Awaited<ReturnType<typeof repo.enviarAudio>>;
+    try { r = await repo.enviarAudio(contatoId, arquivo, { mime: plano.mime, ext: plano.ext }, chave); } catch { r = { ok: false, msg: 'Não foi possível enviar o áudio.' }; }
+    trava.current.terminar(r.ok);
     if (!vivo.current) return;
     if (!r.ok) { setFase('pronto'); flash(r.msg ?? 'Não foi possível enviar o áudio.'); return; }
     flash(r.msg ?? 'Áudio na fila de envio.');

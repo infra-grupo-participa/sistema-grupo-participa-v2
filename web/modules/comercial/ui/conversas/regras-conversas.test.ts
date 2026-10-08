@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { esperaResposta, janelaRestante, minutosUteis, ordenarConversas, preencherTemplate, resumoCaixa, rotuloDia, temEmoji } from './regras-conversas';
+import { criarTravaEnvio, esperaResposta, janelaRestante, minutosUteis, ordenarConversas, preencherTemplate, resumoCaixa, rotuloDia, temEmoji } from './regras-conversas';
 
 // 05/10/2026 é segunda-feira.
 const seg = (h: number, m = 0) => new Date(2026, 9, 5, h, m);
@@ -110,5 +110,30 @@ describe('resumoCaixa', () => {
   });
   it('lista vazia zera tudo', () => {
     expect(resumoCaixa([], seg(11))).toEqual({ esperando: 0, criticas: 0, naoLidas: 0, semDono: 0 });
+  });
+});
+
+describe('criarTravaEnvio', () => {
+  const gerador = () => { let n = 0; return () => `k${++n}`; };
+  it('só um envio em voo: o segundo clique é ignorado', () => {
+    const t = criarTravaEnvio(gerador());
+    expect(t.comecar('oi')).toBe('k1');
+    expect(t.comecar('oi')).toBeNull();
+    expect(t.emVoo()).toBe(true);
+    t.terminar(true);
+    expect(t.emVoo()).toBe(false);
+  });
+  it('falhou com o mesmo conteúdo: a chave se mantém (retry não duplica no banco)', () => {
+    const t = criarTravaEnvio(gerador());
+    expect(t.comecar('oi')).toBe('k1');
+    t.terminar(false);
+    expect(t.comecar('oi')).toBe('k1');
+  });
+  it('mudou o conteúdo ou deu certo: chave nova', () => {
+    const t = criarTravaEnvio(gerador());
+    t.comecar('oi'); t.terminar(false);
+    expect(t.comecar('oi, tudo bem?')).toBe('k2');
+    t.terminar(true);
+    expect(t.comecar('oi, tudo bem?')).toBe('k3');
   });
 });

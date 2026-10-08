@@ -7,6 +7,7 @@ import { Button, Modal, Textarea } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { LIMITE_LEGENDA, fmtTamanho, validarAnexo, type AnexoValido } from '../../domain/midia';
 import { avisarMudanca, repo } from '../repositorio';
+import { criarTravaEnvio } from './regras-conversas';
 
 const ACEITA = 'image/jpeg,image/png,image/webp,application/pdf';
 
@@ -69,11 +70,16 @@ function ModalAnexo({ contatoId, nomeContato, file, info, previa, flash, onFecha
 }) {
   const [legenda, setLegenda] = useState('');
   const [enviando, setEnviando] = useState(false);
+  // Trava síncrona contra duplo clique + chave de idempotência do banco (mesmo arquivo e legenda = mesma mensagem).
+  const trava = useRef(criarTravaEnvio());
 
   const enviar = async () => {
-    if (enviando) return;
+    const chave = trava.current.comecar(`${file.name}|${file.size}|${file.lastModified}|${legenda}`);
+    if (!chave) return;
     setEnviando(true);
-    const r = await repo.enviarAnexo(contatoId, file, legenda);
+    let r: Awaited<ReturnType<typeof repo.enviarAnexo>>;
+    try { r = await repo.enviarAnexo(contatoId, file, legenda, chave); } catch { r = { ok: false, msg: 'Não foi possível enviar o arquivo.' }; }
+    trava.current.terminar(r.ok);
     setEnviando(false);
     if (!r.ok) { flash(r.msg ?? 'Não foi possível enviar o arquivo.'); return; }
     flash(r.msg ?? 'Arquivo na fila de envio.');

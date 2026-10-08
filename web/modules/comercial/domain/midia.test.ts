@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  LIMITE_IMAGEM, LIMITE_PDF, avisoMidia, caminhoAnexo, ehOggOpus, fmtTamanho, legendaDaMensagem, nomeArquivo, tipoMidia, validarAnexo,
+  LIMITE_IMAGEM, LIMITE_PDF, avisoMidia, caminhoAnexo, ehOggOpus, fmtTamanho, legendaDaMensagem, nomeArquivo, tipoMidia, uploadSobrou, validarAnexo,
 } from './midia';
 import type { MidiaMensagem } from './types';
 
@@ -91,5 +91,14 @@ describe('validarAnexo', () => {
 describe('caminhoAnexo', () => {
   it('formato que a policy do Storage aceita', () => {
     expect(caminhoAnexo('u-1', 'abc', 'pdf')).toBe('envio/u-1/abc.pdf');
+  });
+});
+
+describe('uploadSobrou', () => {
+  it('recusado ou repetido = apagar o upload; enviado = manter', () => {
+    expect(uploadSobrou({ ok: false })).toBe(true);
+    expect(uploadSobrou({ ok: true, repetida: true })).toBe(true);
+    expect(uploadSobrou({ ok: true })).toBe(false);
+    expect(uploadSobrou({ ok: true, repetida: false })).toBe(false);
   });
 });

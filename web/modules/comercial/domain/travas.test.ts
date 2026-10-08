@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { etapasPadrao } from './funis';
 import {
-  motivoSemNovoNegocio, motivoSomenteLeitura, podeAbrirNegocioPara, podeConcluirAtividade, podeMexerNoNegocio, podeTrocarDono, travaMover,
+  motivoSemEscrita, motivoSemNovoNegocio, motivoSomenteLeitura, podeAbrirNegocioPara, podeConcluirAtividade, podeEscreverContato, podeMexerNoNegocio, podeTrocarDono, travaMover,
 } from './travas';
 import type { Funil, Negocio, SessaoComercial } from './types';
 
@@ -101,5 +101,34 @@ describe('podeAbrirNegocioPara (espelho de crm.pode_ver_pessoa em crm_criar_nego
     expect(motivoSemNovoNegocio({ donoId: 'bia' }, [], ana, nomeDe)).toBe('Contato de Bia: só o dono ou o gestor abre negócio.');
     expect(motivoSemNovoNegocio({ donoId: 'ana' }, [], ana, nomeDe)).toBeNull();
     expect(motivoSemNovoNegocio({ donoId: 'ana' }, [], null, nomeDe)).toBe('Carregando quem você é.');
+  });
+});
+
+describe('podeEscreverContato (espelho de crm.pode_escrever_pessoa em crm_enviar_mensagem)', () => {
+  const vend = { vendedorId: 'v1', papel: 'vendedor' as const };
+  const gest = { vendedorId: 'g1', papel: 'gestor' as const };
+  const nomeDe = (id: string | null) => (id ? `Nome ${id}` : 'sem dono');
+  it('gestor escreve para qualquer contato, inclusive sem dono', () => {
+    expect(podeEscreverContato({ donoId: null }, [], gest)).toBe(true);
+    expect(podeEscreverContato({ donoId: 'v2' }, [], gest)).toBe(true);
+  });
+  it('vendedor: dono do contato ou dono de algum negócio da pessoa', () => {
+    expect(podeEscreverContato({ donoId: 'v1' }, [], vend)).toBe(true);
+    expect(podeEscreverContato({ donoId: 'v2' }, [{ donoId: 'v1' }], vend)).toBe(true);
+    expect(podeEscreverContato({ donoId: null }, [{ donoId: 'v1' }], vend)).toBe(true);
+  });
+  it('vendedor não escreve para contato sem dono, de outro, ou com negócio sem dono', () => {
+    expect(podeEscreverContato({ donoId: null }, [], vend)).toBe(false);
+    expect(podeEscreverContato({ donoId: 'v2' }, [{ donoId: 'v2' }], vend)).toBe(false);
+    expect(podeEscreverContato({ donoId: null }, [{ donoId: null }], vend)).toBe(false);
+  });
+  it('sem sessão não escreve', () => {
+    expect(podeEscreverContato({ donoId: 'v1' }, [], null)).toBe(false);
+  });
+  it('motivo explica o bloqueio', () => {
+    expect(motivoSemEscrita({ donoId: 'v1' }, [], vend, nomeDe)).toBeNull();
+    expect(motivoSemEscrita({ donoId: null }, [], vend, nomeDe)).toMatch(/sem dono/);
+    expect(motivoSemEscrita({ donoId: 'v2' }, [], vend, nomeDe)).toMatch(/Lead de Nome v2/);
+    expect(motivoSemEscrita({ donoId: 'v1' }, [], null, nomeDe)).toMatch(/Carregando/);
   });
 });

@@ -18,7 +18,7 @@ import {
   linhasContatos, passaFiltro, type ContatoLinha, type FiltroContatos, type NegocioAbertoLinha,
 } from '../../domain/contatos';
 import type { Contato, PerfilProfissional } from '../../domain/types';
-import { Campo, EsqueletoLista, EstadoErro, FaixaNumeros, PaginaComercial, Pessoa, Vazio, useEquipe, useParamUrl } from '../comum';
+import { Campo, EsqueletoLista, EstadoErro, FaixaErroAtualizacao, FaixaNumeros, PaginaComercial, Pessoa, Vazio, useEquipe, useParamUrl } from '../comum';
 import { InfoIndicador, type TextoIndicador } from '../InfoIndicador';
 import { repo, useDados } from '../repositorio';
 import { ContatoDrawer } from './ContatoDrawer';
@@ -185,6 +185,7 @@ export function ContatosClient() {
       )}
     >
       <div className="space-y-4">
+        {erro && !carregando && <FaixaErroAtualizacao mensagem={erro} onTentar={() => { pg.recarregar(); rs.recarregar(); }} />}
         {erro && carregando ? (
           <EstadoErro mensagem={erro} onTentar={() => { pg.recarregar(); rs.recarregar(); }} />
         ) : (

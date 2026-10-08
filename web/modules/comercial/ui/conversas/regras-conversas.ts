@@ -166,3 +166,35 @@ export function resumoCaixa(lista: readonly Pick<Conversa, 'naoLidas' | 'atribui
   }
   return { esperando, criticas, naoLidas, semDono };
 }
+
+/**
+ * Trava de envio (mensagem, anexo, áudio): só UM envio em voo por vez (duplo clique / Ctrl+Enter repetido não duplica)
+ * e a chave de idempotência do banco (crm_enviar_mensagem p_chave) se mantém enquanto o MESMO conteúdo é reenviado sem
+ * sucesso — retry depois de rede instável devolve a mensagem que já foi, em vez de mandar outra. Deu certo (ou mudou o
+ * conteúdo) = chave nova na próxima.
+ */
+export interface TravaEnvio {
+  /** Chave para este envio; null = já há um em voo (ignorar o clique). */
+  comecar(conteudo: string): string | null;
+  terminar(ok: boolean): void;
+  emVoo(): boolean;
+}
+
+export function criarTravaEnvio(gerar: () => string = () => crypto.randomUUID()): TravaEnvio {
+  let voando = false;
+  let assinatura: string | null = null;
+  let chave: string | null = null;
+  return {
+    comecar(conteudo) {
+      if (voando) return null;
+      voando = true;
+      if (!chave || conteudo !== assinatura) { assinatura = conteudo; chave = gerar(); }
+      return chave;
+    },
+    terminar(ok) {
+      voando = false;
+      if (ok) { chave = null; assinatura = null; }
+    },
+    emVoo: () => voando,
+  };
+}

@@ -11,7 +11,7 @@ import { Icon } from '@/shared/ui/icons';
 import { ROTULO_ORIGEM } from '../../domain/catalogo';
 import { motivoSomenteLeitura, travaMover } from '../../domain/travas';
 import type { Funil, Negocio } from '../../domain/types';
-import { Aviso, EstadoErro, FaixaNumeros, PaginaComercial, useEquipe, useParamUrl, Vazio } from '../comum';
+import { Aviso, EstadoErro, FaixaErroAtualizacao, FaixaNumeros, PaginaComercial, useEquipe, useParamUrl, Vazio } from '../comum';
 import { ModalNovoNegocio } from '../ModalNovoNegocio';
 import { ModalAtividade, NegocioDrawer } from '../NegocioDrawer';
 import { avisarMudanca, repo, useAgora, useContatosPorIds, useDados } from '../repositorio';
@@ -126,7 +126,7 @@ export function FunilClient() {
   const agrupadorAtual = agrupadores?.find((a) => a.id === funil?.agrupadorId) ?? agrupadores?.[0];
   const novoFunil = () => setCriandoFunil(true);
 
-  const acoes = !carregando && !erro && funis.length > 0 && (
+  const acoes = !carregando && funis.length > 0 && (
     <>
       <SeletorFunil
         funis={funis}
@@ -163,7 +163,9 @@ export function FunilClient() {
       subtitulo={funil ? <LinhaFunil funil={funil} agrupador={agrupadores?.find((a) => a.id === funil.agrupadorId)?.nome} /> : 'Negócios por etapa, do primeiro contato ao pagamento.'}
       acoes={acoes || undefined}
     >
-      {erro ? (
+      {/* Erro ao atualizar com o quadro já na tela: faixa, sem sumir com o quadro. Sem dado: estado de erro. */}
+      {erro && !carregando && <FaixaErroAtualizacao className="mb-3" mensagem={erro} onTentar={recarregarTudo} />}
+      {erro && carregando ? (
         <EstadoErro mensagem={erro} onTentar={recarregarTudo} />
       ) : carregando ? (
         <EsqueletoKanban />

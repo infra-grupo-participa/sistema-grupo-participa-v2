@@ -29,6 +29,13 @@ export function mapResultadoComId<K extends string>(rpc: string, d: unknown, cha
   return r;
 }
 
+/** Envio de WhatsApp: mensagemId + repetida (mesma chave de idempotência: o banco devolveu a mensagem que já existia). */
+export function mapResultadoEnvio(d: unknown): Resultado & { mensagemId?: string; repetida?: boolean } {
+  const r: Resultado & { mensagemId?: string; repetida?: boolean } = mapResultadoComId('crm_enviar_mensagem', d, 'mensagemId');
+  if (r.ok && (d as Obj).repetida === true) r.repetida = true;
+  return r;
+}
+
 /** criarNegocio: negocioId + donoId (null = ficou sem dono: ninguém ativo na distribuição). */
 export function mapResultadoNegocio(d: unknown): Resultado & { negocioId?: string; donoId?: string | null } {
   const r: Resultado & { negocioId?: string; donoId?: string | null } = mapResultadoComId('crm_criar_negocio', d, 'negocioId');
@@ -149,13 +156,15 @@ export const argsEscrita = {
   salvarPainel: (p: PainelPessoa) => ({ p_perfil: p.vendedorId, p_widgets: p.widgets }),
   salvarPreferencias: (p: PreferenciasNotificacao) => ({ p_preferencias: p }),
   // WhatsApp (F4). Com template, o banco monta o texto e ignora p_texto.
-  enviarMensagem: (contatoId: string, texto: string, templateId?: string | null) => ({ p_pessoa: contatoId, p_texto: texto, p_template: templateId || null }),
+  // p_chave (20261008000740): idempotência — a mesma chave devolve a mesma mensagem, sem duplicar.
+  enviarMensagem: (contatoId: string, texto: string, templateId?: string | null, chave?: string | null) =>
+    ({ p_pessoa: contatoId, p_texto: texto, p_template: templateId || null, p_chave: chave || null }),
   marcarConversaLida: (contatoId: string) => ({ p_pessoa: contatoId }),
-  enviarAnexo: (contatoId: string, caminho: string, legenda: string, nome: string | null) =>
-    ({ p_pessoa: contatoId, p_texto: legenda.trim() || null, p_template: null, p_midia: caminho, p_midia_nome: nome }),
+  enviarAnexo: (contatoId: string, caminho: string, legenda: string, nome: string | null, chave?: string | null) =>
+    ({ p_pessoa: contatoId, p_texto: legenda.trim() || null, p_template: null, p_midia: caminho, p_midia_nome: nome, p_chave: chave || null }),
   /** Áudio (20261007s): sem legenda nem nome; o banco grava "[áudio]". */
-  enviarAudio: (contatoId: string, caminho: string) =>
-    ({ p_pessoa: contatoId, p_texto: null, p_template: null, p_midia: caminho, p_midia_nome: null }),
+  enviarAudio: (contatoId: string, caminho: string, chave?: string | null) =>
+    ({ p_pessoa: contatoId, p_texto: null, p_template: null, p_midia: caminho, p_midia_nome: null, p_chave: chave || null }),
   /**
    * Ficha: `destinatarios` (contatoIds) é a lista que o banco grava. quantidade/suprimidos não vão (o banco conta).
    * `numeroEnvio` vazio = número padrão; só dígitos quando vier (o rótulo da tela não é número).

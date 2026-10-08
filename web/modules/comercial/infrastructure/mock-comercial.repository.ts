@@ -2,7 +2,7 @@
 // O estado vive enquanto a aba estiver aberta (recarregar a página volta à base inicial).
 // Aplica as mesmas regras de domínio que o backend vai aplicar, para a tela se comportar como a real.
 import type {
-  ComercialRepository, FiltroNegocios, NovaAtividade, NovaFicha, Resultado, ResultadoFicha, ResultadoLink, ResultadoTokenMcp,
+  ComercialRepository, FiltroNegocios, NovaAtividade, NovaFicha, Resultado, ResultadoEnvio, ResultadoFicha, ResultadoLink, ResultadoTokenMcp,
 } from '../application/ports';
 import { linhasContatos, mapaDuplicados, paginarContatos, resumirContatos, type FiltroContatos } from '../domain/contatos';
 import { produto as produtoDe, ROTULO_CAMPO } from '../domain/catalogo';
@@ -38,6 +38,8 @@ export class MockComercialRepository implements ComercialRepository {
   private db: BaseDemo;
   private eu: SessaoComercial = { vendedorId: 'v-jonathan', papel: 'gestor' };
   private seq = 0;
+  /** Chave de idempotência do envio → mensagem (espelho de crm.mensagem.chave). */
+  private chavesEnvio = new Map<string, string>();
 
   constructor() {
     this.db = gerarBaseDemo();
@@ -385,19 +387,24 @@ export class MockComercialRepository implements ComercialRepository {
     return espera({ ok: true });
   }
 
-  async enviarMensagem(contatoId: string, texto: string, templateId?: string | null): Promise<Resultado> {
+  async enviarMensagem(contatoId: string, texto: string, templateId?: string | null, chave?: string | null): Promise<ResultadoEnvio> {
     if (!texto.trim()) return espera({ ok: false, msg: 'Mensagem vazia.' });
+    // Idempotência (espelho de 20261008000740): a mesma chave devolve a mesma mensagem.
+    const repetida = chave ? this.chavesEnvio.get(chave) : undefined;
+    if (repetida) return espera({ ok: true, msg: 'Mensagem já enviada.', mensagemId: repetida, repetida: true });
     const c = this.db.contatos.find((x) => x.id === contatoId);
     if (c?.optOut) return espera({ ok: false, msg: 'Contato pediu para não receber mensagens.' });
     const ultimaEntrada = this.db.mensagens.filter((m) => m.contatoId === contatoId && m.direcao === 'entrada').sort((a, b) => b.em.localeCompare(a.em))[0];
     const janelaAberta = !!ultimaEntrada && Date.now() - new Date(ultimaEntrada.em).getTime() < 24 * 3600_000;
     if (!janelaAberta && !templateId) return espera({ ok: false, msg: 'Janela de 24 h fechada: só sai template aprovado.' });
-    this.db.mensagens.push({ id: this.novoId('m'), contatoId, canal: 'whatsapp', direcao: 'saida', texto: texto.trim(), em: agoraIso(), status: 'enviada', autorId: this.eu.vendedorId, templateId: templateId ?? null });
+    const mensagemId = this.novoId('m');
+    if (chave) this.chavesEnvio.set(chave, mensagemId);
+    this.db.mensagens.push({ id: mensagemId, contatoId, canal: 'whatsapp', direcao: 'saida', texto: texto.trim(), em: agoraIso(), status: 'enviada', autorId: this.eu.vendedorId, templateId: templateId ?? null });
     this.db.mensagens.filter((m) => m.contatoId === contatoId && m.direcao === 'entrada' && !m.status).forEach((m) => { m.status = 'lida'; });
     const n = this.db.negocios.find((x) => x.contatoId === contatoId && x.status === 'aberto');
     this.evento({ contatoId, negocioId: n?.id ?? null, tipo: 'mensagem', titulo: 'Mensagem enviada no WhatsApp', detalhe: texto.trim().slice(0, 140) });
     this.registrar('enviou', 'mensagem', contatoId, `Enviou ${templateId ? 'template' : 'mensagem'} para ${this.nomeContato(contatoId)}`, contatoId);
-    return espera({ ok: true });
+    return espera({ ok: true, mensagemId });
   }
 
   async enviarAnexo(): Promise<Resultado> {
