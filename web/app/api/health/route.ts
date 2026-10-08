@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/shared/composition/server-container';
 import { ehDev } from '@/shared/domain/auth';
+import { env as configEnv } from '@/shared/infrastructure/config/env';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +10,8 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const user = await getCurrentUser().catch(() => null);
   if (!user || !ehDev(user)) {
-    return NextResponse.json({ ok: true });
+    // Versão publicada: só o commit curto e a hora do build (confirma se o deploy da main entrou no ar).
+    return NextResponse.json({ ok: true, versao: configEnv.build.commit, publicado_em: configEnv.build.em });
   }
   const has = (k: string) => Boolean(process.env[k] && String(process.env[k]).length > 0);
   return NextResponse.json({

@@ -7,6 +7,11 @@ function required(name: string, value: string | undefined): string {
 }
 
 export const env = {
+  /** Versão publicada (preenchida no build pelo next.config.ts). */
+  build: {
+    commit: process.env.GP_BUILD_COMMIT ?? 'desconhecido',
+    em: process.env.GP_BUILD_EM ?? '',
+  },
   supabase: {
     url: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
     anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',

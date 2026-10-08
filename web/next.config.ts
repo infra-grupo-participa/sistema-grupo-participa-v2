@@ -1,8 +1,22 @@
 import type { NextConfig } from 'next';
+import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { redirectsNext } from './shared/ui/nav/redirects';
 
+// Carimbo da versão publicada (lido em /api/health): commit curto + hora do build. Sem git no build = 'sem-git'.
+function commitDoBuild(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return 'sem-git';
+  }
+}
+
 const nextConfig: NextConfig = {
+  env: {
+    GP_BUILD_COMMIT: commitDoBuild(),
+    GP_BUILD_EM: new Date().toISOString(),
+  },
   // Raiz do workspace = este diretório (evita ambiguidade com o lockfile legado na raiz do repo).
   turbopack: {
     root: path.join(__dirname),
