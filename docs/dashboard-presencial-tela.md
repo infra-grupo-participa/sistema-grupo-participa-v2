@@ -1,10 +1,12 @@
 # Dashboard presencial: tela
 
-Implementação local na branch `victor-captura-pre-checkout`. Sem publicação.
+Dashboard original na branch `victor-captura-pre-checkout`; reorganização da navegação na branch `victor-modularizacao-infra`. Sem publicação.
 
 ## Rotas e modelo
 
-Infra (`/infra`) leva a Dados (`/infra/dados`), à lista (`/infra/dados/dashboards`) e à tela (`/infra/dados/dashboards/[chave]`). O manifesto em `web/modules/infra/dados/domain/registro.ts` valida a chave antes da renderização. A entrada atual usa `clinica-miami-2026-12` e o modelo `presencial-base`. O título dentro da tela vem de `projeto_nome` da função de resumo, não do manifesto.
+Infra (`/infra`) leva a Dashboards (`/infra/dashboards`), que apresenta CSM e Escritório. CSM abre a lista (`/infra/dashboards/csm`) e a Clínica de Miami fica em `/infra/dashboards/csm/clinica-miami-2026-12`. Escritório abre um aviso Em breve. O manifesto em `web/modules/infra/dados/domain/registro.ts` valida a chave antes da renderização. A entrada atual usa `clinica-miami-2026-12` e o modelo `presencial-base`. O título dentro da tela vem de `projeto_nome` da função de resumo, não do manifesto.
+
+Os links antigos continuam funcionando por redirect: `/infra/dados` e `/infra/dados/dashboards` vão para `/infra/dashboards`; `/infra/dados/dashboards/[chave]` vai para `/infra/dashboards/csm/[chave]`. O layout de Infra mantém o gate do departamento nos caminhos novos e antigos, e a tela da Clínica exige `financeiro.ver` quando a flag de acesso V2 está ligada. O menu lateral e os títulos de navegação usam a hierarquia Infra / Dashboards / CSM.
 
 Para acrescentar outro dashboard do mesmo modelo, cadastre a chave, o título de navegação e a descrição no manifesto. A chave também precisa existir em `dados.dashboards` e as cinco funções `public.dados_presencial_*` precisam responder para ela. Nenhum componente deve copiar a tela. O gate do departamento é feito no servidor e a função `dados.pode_ver` controla os dados no banco.
 
@@ -26,6 +28,6 @@ As seis funções constam como aplicadas no banco na migration `20261007212530` 
 
 ## Verificação
 
-Na pasta `web`, rodar `npm run lint`, `npx tsc --noEmit`, `npm test` e `npm run build`. Para abrir localmente, rodar `npm run dev -- -p 3001` e entrar em `/infra/dados/dashboards/clinica-miami-2026-12` com uma conta da equipe. Sem as funções aplicadas, a tela deve exibir a mensagem de função ausente no bloco correspondente. Depois da aplicação, conferir cada número diretamente na fonte antes de usar o dashboard para decisão.
+Na pasta `web`, rodar `npm run lint`, `npx tsc --noEmit`, `npm test` e `npm run build`. Para abrir localmente, rodar `npm run dev -- -p 3001`, navegar por `/infra` → `/infra/dashboards` → `/infra/dashboards/csm` → Clínica de Miami com uma conta da equipe e confirmar o aviso Em breve em Escritório. Conferir também os redirects das três URLs antigas listadas acima. Sem as funções aplicadas, a tela deve exibir a mensagem de função ausente no bloco correspondente. Depois da aplicação, conferir cada número diretamente na fonte antes de usar o dashboard para decisão.
 
 Após a aplicação das funções do §2.9, comparar o total de vendas dos pagamentos, o total das roscas e o último ponto de vendas acumuladas com `resumo.vendas`; comparar receita acumulada final com `resumo.receita_bruta`. Nos cards, conferir que o total de pessoas não é a soma das categorias quando há sobreposição. Abrir cada modal e conferir a contagem de linhas com a linha `total` do grupo. Na aba visível, observar a segunda leitura após 60 s; disparos e a lista dos modais não devem ser chamados pelo polling. Repetir com a aba oculta e simular falha de uma função para confirmar que só seu bloco mostra aviso e mantém os dados anteriores.
