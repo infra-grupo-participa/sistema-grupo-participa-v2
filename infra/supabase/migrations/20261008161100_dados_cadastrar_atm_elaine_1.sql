@@ -1,6 +1,6 @@
 -- 20261008161100: cadastro do ATM 1 da Dra. Elaine (atm-elaine-1-2026-10) no modelo seminario-atm
 --
--- STATUS: ESCRITA, NÃO APLICADA. Depende da 20261008161000. TRAVADA DE PROPÓSITO até alguém preencher a SIGLA (v_sigla
+-- STATUS: APLICADA em 08/10/2026 com ok do Victor (sigla ATMEL126; oferta mqquvrtc, a de 1.500, provisória até a de 3.000). Depende da 20261008161000. TRAVADA DE PROPÓSITO até alguém preencher a SIGLA (v_sigla
 -- abaixo): a guarda aborta enquanto ela for nula. A sigla é decisão do Victor (dono do padrão de nomenclatura) e tem de
 -- casar com '^[A-Z]{2,10}[0-9]{2,4}$' (check de mkt.projetos). Ela é o que liga os disparos da Mensageria ao projeto
 -- ([SIGLA] no nome da campanha). Observado em 08/10: o disparo de e-mail "SEMATMOUT - BYTHEWAY" (sem colchete e sem
@@ -35,7 +35,7 @@ set local statement_timeout = '30s';
 
 do $c$
 declare
-  v_sigla   text := null;   -- <<< PREENCHER (decisão do Victor). Ex. de formato: 'XXXX26'
+  v_sigla   text := 'ATMEL126';   -- ATM Elaine 1 de 2026 (08/10/2026, Victor deu autonomia; casa com [ATMEL1/26])
   v_chave   text := 'atm-elaine-1-2026-10';
   v_proj    bigint;
 begin
@@ -67,7 +67,7 @@ begin
 
   insert into dados.dashboards (chave, modelo, projeto_id, conta_hotmart, oferta_codigo, lista_ac, lista_ac_leads,
                                 vendas_desde, ciclo_fecha_em)
-  values (v_chave, 'seminario-atm', v_proj, 'escritorio', null, null, '615',
+  values (v_chave, 'seminario-atm', v_proj, 'escritorio', 'mqquvrtc', null, '615',
           timestamptz '2026-10-07 00:00:00-03', null)
   on conflict (chave) do nothing;
 
