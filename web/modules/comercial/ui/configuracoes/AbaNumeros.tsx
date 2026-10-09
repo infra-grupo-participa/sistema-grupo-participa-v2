@@ -37,6 +37,11 @@ export function AbaNumeros({ gestor, nomeDe, flash }: { gestor: boolean; nomeDe:
     void r.recarregar();
   }
 
+  async function atualizarEventos(c: CanalWhatsapp) {
+    const d = await chamar(`/api/comercial/canais/${c.id}`, { method: 'POST', body: JSON.stringify({ acao: 'webhook' }) });
+    flash(d.ok ? `Eventos de "${c.nome}" atualizados (edição e exclusão de mensagem).` : d.error ?? 'Não foi possível atualizar.');
+  }
+
   return (
     <div className="space-y-4">
       <Aviso tom="warning" icone="alert" titulo="Número conectado por QR é WhatsApp comum, não a API oficial">
@@ -82,6 +87,11 @@ export function AbaNumeros({ gestor, nomeDe, flash }: { gestor: boolean; nomeDe:
                         {c.status !== 'conectado' && (
                           <Button size="sm" variant="subtle" onClick={() => setConectando({ canalId: c.id, nome: c.nome })}>
                             <Icon name="refresh" size={13} /> Gerar QR
+                          </Button>
+                        )}
+                        {c.status === 'conectado' && (
+                          <Button size="sm" variant="ghost" onClick={() => atualizarEventos(c)} title="Reaplica o webhook com os eventos atuais (não desconecta)">
+                            <Icon name="refresh" size={13} /> Atualizar eventos
                           </Button>
                         )}
                         {c.status === 'conectado' && (

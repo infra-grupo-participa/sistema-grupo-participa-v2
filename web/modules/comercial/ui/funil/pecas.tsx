@@ -48,7 +48,7 @@ export function Popover({ ancora, aberto, onFechar, alinhar = 'direita', largura
       if (e.key !== 'Escape') return;
       e.stopPropagation();
       onFechar();
-      ancora.current?.focus();
+      ancora.current?.focus({ preventScroll: true });
     };
     document.addEventListener('mousedown', fora);
     window.addEventListener('scroll', rolou, true);
@@ -89,6 +89,8 @@ export interface ItemMenu {
   onEscolher?: () => void;
   /** Linha de título de grupo (não clicável). */
   grupo?: boolean;
+  /** Linha pequena embaixo do rótulo (ex.: por que o item está desativado). */
+  nota?: string;
 }
 
 /** Botão + menu (role=menu): setas sobem/descem, Enter escolhe, Esc fecha e devolve o foco. */
@@ -107,7 +109,7 @@ export function Menu({ rotulo, itens, gatilho, classeGatilho = '', largura = 232
   const focaveis = () => Array.from(lista.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []);
   useEffect(() => {
     if (!aberto) return;
-    const t = setTimeout(() => focaveis()[0]?.focus(), 0);
+    const t = setTimeout(() => focaveis()[0]?.focus({ preventScroll: true }), 0);
     return () => clearTimeout(t);
   }, [aberto]);
 
@@ -149,13 +151,18 @@ export function Menu({ rotulo, itens, gatilho, classeGatilho = '', largura = 232
               title={it.titulo}
               aria-current={it.ativo ? 'true' : undefined}
               tabIndex={-1}
-              onClick={() => { setAberto(false); botao.current?.focus(); it.onEscolher?.(); }}
+              onClick={() => { setAberto(false); botao.current?.focus({ preventScroll: true }); it.onEscolher?.(); }}
               className="w-full flex items-center gap-2 min-h-8 px-2 py-1 rounded-[var(--r-sm)] text-left text-sm text-[var(--fg)] hover:bg-[var(--surface-4)] focus-visible:bg-[var(--surface-4)] disabled:text-[var(--fg-3)] disabled:hover:bg-transparent disabled:cursor-not-allowed"
             >
               <span className="w-4 shrink-0 grid place-items-center text-[var(--fg-3)]">
                 {it.ativo ? <Icon name="check" size={14} /> : it.icone ? <Icon name={it.icone} size={14} /> : null}
               </span>
-              <span className="flex-1 truncate">{it.rotulo}</span>
+              {it.nota ? (
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate">{it.rotulo}</span>
+                  <span className="block text-[11px] leading-snug text-[var(--fg-3)] whitespace-normal">{it.nota}</span>
+                </span>
+              ) : <span className="flex-1 truncate">{it.rotulo}</span>}
               {it.dica && <span className="shrink-0 text-[11px] text-[var(--fg-3)]">{it.dica}</span>}
             </button>
           ))}

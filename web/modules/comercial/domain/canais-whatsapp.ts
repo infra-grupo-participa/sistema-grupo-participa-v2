@@ -94,7 +94,8 @@ export function urlWebhookEvolution(supabaseUrl: string, instancia: string): str
   return `${supabaseUrl.replace(/\/+$/, '')}/functions/v1/crm-evolution-webhook?i=${encodeURIComponent(instancia)}`;
 }
 
-export const EVENTOS_WEBHOOK = ['MESSAGES_UPSERT', 'CONNECTION_UPDATE', 'QRCODE_UPDATED'] as const;
+// MESSAGES_EDITED / MESSAGES_DELETE (20261009153515): o contato (ou o celular) editou/apagou — reflete na conversa.
+export const EVENTOS_WEBHOOK = ['MESSAGES_UPSERT', 'MESSAGES_EDITED', 'MESSAGES_DELETE', 'CONNECTION_UPDATE', 'QRCODE_UPDATED'] as const;
 
 /** Corpo de POST /webhook/set/{instância} (Evolution v2). base64: o arquivo recebido já vem junto. */
 export function corpoWebhookEvolution(url: string, chave: string) {

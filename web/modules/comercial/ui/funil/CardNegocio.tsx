@@ -15,6 +15,7 @@ import { tempoNaEtapa } from '../../domain/regras';
 import type { TravaMover } from '../../domain/travas';
 import type { Contato, EtapaFunil, Negocio } from '../../domain/types';
 import { Menu, type ItemMenu } from './pecas';
+import { useDockConversa } from '../conversas/dock-contexto';
 import { quandoCurto, urgenciaDoNegocio } from './regras-funil';
 
 const BOTAO_ACAO = 'grid place-items-center w-7 h-7 [@media(hover:none)]:w-8 [@media(hover:none)]:h-8 rounded-[var(--r-sm)] text-[var(--fg-2)] hover:text-[var(--fg)] hover:bg-[var(--surface-4)]';
@@ -40,6 +41,7 @@ export function CardNegocio({ n, c, agora, nomeDe, etapas, leitura, travaPara, o
   /** Avisa o kanban do card que está sendo arrastado (null ao soltar). */
   onArrastar?: (negocioId: string | null) => void;
 }) {
+  const dock = useDockConversa();
   const aberto = n.status === 'aberto';
   const mexe = aberto && !leitura;
   const prox = n.proximaAtividade;
@@ -140,7 +142,8 @@ export function CardNegocio({ n, c, agora, nomeDe, etapas, leitura, travaPara, o
         {/* Ações rápidas: aparecem no hover/foco (sempre visíveis no toque) sobre o canto do valor. */}
         <div className="pointer-events-auto absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-3)] p-0.5 shadow-[var(--shadow-sm)] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:mt-2 [@media(hover:none)]:w-fit [@media(hover:none)]:ml-auto transition-opacity">
           {c && (
-            <Link href={`/comercial/conversas?contato=${encodeURIComponent(c.id)}`} draggable={false} aria-label={`Conversar com ${nome}`} title="Conversa" className={BOTAO_ACAO}>
+            <Link href={`/comercial/conversas?contato=${encodeURIComponent(c.id)}`} draggable={false} aria-label={`Conversar com ${nome}`} title="Conversa" className={BOTAO_ACAO}
+                  onClick={dock ? (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); e.stopPropagation(); dock.abrir(c.id); } : undefined}>
               <Icon name="message" size={14} />
             </Link>
           )}

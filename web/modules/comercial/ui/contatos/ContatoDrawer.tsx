@@ -16,6 +16,7 @@ import type { TextoIndicador } from '../InfoIndicador';
 import {
   Aviso, BotaoConversa, BotaoCopiar, Carregando, EstadoErro, FaixaNumeros, RodapeAcoes, Vazio, useEquipe,
 } from '../comum';
+import { BotaoLigar } from '../BotaoLigar';
 import { ModalNovoNegocio } from '../ModalNovoNegocio';
 import { NegocioDrawer } from '../NegocioDrawer';
 import { avisarMudanca, repo, useAgora, useDados } from '../repositorio';
@@ -176,6 +177,10 @@ export function ContatoDrawer({ contatoId, onClose, onAbrirContato, contatoReser
             </Button>
           )}
           {podeConversar && <BotaoConversa contatoId={c.id} />}
+          {podeConversar && (
+            <BotaoLigar alvo={{ contatoId: c.id, nome: c.nome, telefone: c.telefone, negocioId: dele.find((n) => n.status === 'aberto')?.id ?? null }}
+                        podeRegistrar={podeEscreverContato(c, dele, sessao)} flash={flash} />
+          )}
           {c.telefone && <BotaoCopiar texto={fmtTelefone(c.telefone)} onCopiado={(m) => flash(m === 'Copiado.' ? 'Telefone copiado.' : m)} />}
         </>}
         footer={<RodapeAcoes primario={botaoNovoNegocio} />}

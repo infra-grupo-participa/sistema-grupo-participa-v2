@@ -13,10 +13,18 @@
 //   5xx/rede/timeout → falha incerta (NUNCA reenvia o que pode ter saído).
 // Arquivo: URL assinada de 1 h do bucket privado crm-midia (a Evolution baixa dali).
 //
+// 20261009153515: responder citando ("quoted" no sendText, key da citada via crm.evolution_citacoes) e a fila de ações
+// crm.mensagem_acao (editar: POST /chat/updateMessage; apagar para todos: DELETE /chat/deleteMessageForEveryone). O JID
+// real vem de POST /chat/findMessages pela key (número antigo pode não ter o 9). Resultado: crm.evolution_acao_resultado.
+// Limites do WhatsApp conferidos no banco antes (editar 15 min, apagar 2 dias) e de novo em crm.evolution_acoes_pegar.
+//
 // Segredos (Vault, nunca em código): evolution_api_url, evolution_api_key, crm_whatsapp_envio_chave — lidos por
 // crm.evolution_credenciais() (só o dono executa; conexão SUPABASE_DB_URL). Fail-closed: sem chave/URL → 503.
 import postgres from "npm:postgres@3.4.4";
-import { baseEvolution, classificar, erroDaResposta, idDaResposta, pausaMs, pedidoEvolution, type FilaEvolution } from "./evolution.ts";
+import {
+  baseEvolution, buscaMensagem, classificar, erroDaResposta, idDaResposta, jidDaBusca, pausaMs, pedidoAcao, pedidoEvolution,
+  type AcaoEvolution, type Citacao, type FilaEvolution,
+} from "./evolution.ts";
 
 const sql = postgres(Deno.env.get("SUPABASE_DB_URL")!, { max: 2, prepare: false, idle_timeout: 20 });
 const PRAZO_MS = 45_000;
@@ -71,10 +79,29 @@ async function resultado(id: string, http: number, msgId: string | null, erro: s
   return String(x?.x ?? "?");
 }
 
-async function enviarUma(base: string, apiKey: string, m: FilaEvolution): Promise<string> {
+/** JID real da conversa pela key da mensagem (null = não achou; quem chama usa o telefone). */
+async function jidReal(base: string, apiKey: string, instancia: string, keyId: string): Promise<string | null> {
+  const b = buscaMensagem(instancia, keyId);
+  if (!b) return null;
+  try {
+    const r = await fetch(base + b.caminho, {
+      method: "POST",
+      headers: { apikey: apiKey, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(b.corpo),
+      signal: AbortSignal.timeout(RQ_MAX_MS),
+    });
+    if (!r.ok) { await r.body?.cancel().catch(() => {}); return null; }
+    return jidDaBusca(await r.json().catch(() => null), keyId);
+  } catch {
+    return null;
+  }
+}
+
+async function enviarUma(base: string, apiKey: string, m: FilaEvolution, citacao: Citacao | null): Promise<string> {
   const url = m.midia_caminho ? await assinar(m.midia_caminho) : null;
   if (m.midia_caminho && !url) return resultado(m.mensagem_id, -1, null, "Não foi possível preparar o anexo.", true);
-  const p = pedidoEvolution(m, url);
+  if (citacao) citacao = { ...citacao, remote_jid: await jidReal(base, apiKey, m.instancia, citacao.key_id) };
+  const p = pedidoEvolution(m, url, citacao);
   if (!p) return resultado(m.mensagem_id, 400, null, "Mensagem fora do formato aceito.", false);
   let http = 0;
   let dados: unknown = null;
@@ -99,6 +126,11 @@ async function enviarUma(base: string, apiKey: string, m: FilaEvolution): Promis
 async function enviar(base: string, apiKey: string, inicio: number): Promise<Record<string, unknown>> {
   const fila = (await sql`select * from crm.evolution_fila_pegar(20)`) as unknown as FilaEvolution[];
   const cont: Record<string, number> = {};
+  const citacoes = new Map<string, Citacao>();
+  if (fila.length) {
+    const cs = await sql`select mensagem_id, key_id, from_me, texto from crm.evolution_citacoes(${sql.array(fila.map((m) => m.mensagem_id))}::uuid[])`;
+    for (const c of cs) citacoes.set(String(c.mensagem_id), { key_id: String(c.key_id), from_me: c.from_me === true, texto: c.texto ?? null });
+  }
   // um trabalhador por número; dentro do número, uma por vez com pausa
   const porNumero = new Map<string, FilaEvolution[]>();
   for (const m of fila) porNumero.set(m.instancia, [...(porNumero.get(m.instancia) ?? []), m]);
@@ -110,7 +142,7 @@ async function enviar(base: string, apiKey: string, inicio: number): Promise<Rec
         res = await resultado(m.mensagem_id, -1, null, "prazo do ciclo esgotado", true).catch(() => "erro_gravacao");
       } else {
         try {
-          res = await enviarUma(base, apiKey, m);
+          res = await enviarUma(base, apiKey, m, citacoes.get(m.mensagem_id) ?? null);
         } catch (e) {
           console.error("crm-evolution-enviar: falha ao gravar resultado", semSegredo(e));
           res = "erro_gravacao";
@@ -121,6 +153,56 @@ async function enviar(base: string, apiKey: string, inicio: number): Promise<Rec
     }
   }));
   return { pegas: fila.length, numeros: porNumero.size, resultado: cont };
+}
+
+/** Fila de edição/exclusão (crm.mensagem_acao). Uma por vez, com a mesma pausa anti-ban entre elas. */
+async function acoes(base: string, apiKey: string, inicio: number): Promise<Record<string, unknown>> {
+  const lista = (await sql`select * from crm.evolution_acoes_pegar(10)`) as unknown as AcaoEvolution[];
+  const cont: Record<string, number> = {};
+  for (let i = 0; i < lista.length; i++) {
+    const a = lista[i];
+    let res: string;
+    try {
+      if (Date.now() - inicio > PRAZO_MS) {
+        res = await acaoResultado(a.acao_id, 0, "Prazo do ciclo esgotado: tente de novo.");
+      } else {
+        const p = pedidoAcao(a, await jidReal(base, apiKey, a.instancia, a.key_id));
+        if (!p) {
+          res = await acaoResultado(a.acao_id, 400, "Ação fora do formato aceito.");
+        } else {
+          let http = 0;
+          let dados: unknown = null;
+          try {
+            const r = await fetch(base + p.caminho, {
+              method: p.metodo,
+              headers: { apikey: apiKey, "Content-Type": "application/json", Accept: "application/json" },
+              body: JSON.stringify(p.corpo),
+              signal: AbortSignal.timeout(RQ_MAX_MS),
+            });
+            http = r.status;
+            dados = await r.json().catch(() => null);
+          } catch (e) {
+            dados = null;
+            http = 0;
+            console.warn("crm-evolution-enviar: ação sem resposta", (e instanceof Error && e.name === "TimeoutError") ? "timeout" : "rede");
+          }
+          res = await acaoResultado(a.acao_id, http, http >= 200 && http <= 299 ? null
+            : http === 0 ? "Sem resposta do WhatsApp: confira no celular." : erroDaResposta(http, dados));
+        }
+        if (i < lista.length - 1) await dormir(pausaMs(Math.random()));
+      }
+    } catch (e) {
+      console.error("crm-evolution-enviar: falha na ação", semSegredo(e));
+      res = "erro_gravacao";
+    }
+    cont[res] = (cont[res] ?? 0) + 1;
+  }
+  return { acoes: lista.length, resultadoAcoes: cont };
+}
+
+async function acaoResultado(id: string, http: number, erro: string | null): Promise<string> {
+  const [x] = await sql`select crm.evolution_acao_resultado(${id}::uuid, ${http}, ${erro}) as x`;
+  return String(x?.x ?? "?");
 }
 
 Deno.serve(async (req: Request) => {
@@ -140,7 +222,7 @@ Deno.serve(async (req: Request) => {
   if (!base || !cred.api_key) return json({ ok: false, msg: "Evolution não configurada (Vault evolution_api_url / evolution_api_key)." }, 503);
 
   try {
-    const out = await enviar(base, cred.api_key, inicio);
+    const out = { ...(await enviar(base, cred.api_key, inicio)), ...(await acoes(base, cred.api_key, inicio)) };
     console.log("crm-evolution-enviar", JSON.stringify(out), `${Date.now() - inicio} ms`);
     return json({ ok: true, ...out });
   } catch (e) {

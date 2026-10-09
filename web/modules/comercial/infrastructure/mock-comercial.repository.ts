@@ -362,7 +362,7 @@ export class MockComercialRepository implements ComercialRepository {
     return espera({ ok: true });
   }
 
-  async criarAtividade(a: NovaAtividade): Promise<Resultado> {
+  async criarAtividade(a: NovaAtividade): Promise<Resultado & { atividadeId?: string }> {
     const alvo = a.negocioId ? this.negocio(a.negocioId) : undefined;
     if (a.negocioId && !alvo) return espera({ ok: false, msg: 'Negócio não encontrado.' });
     if (alvo && !podeMexerNoNegocio(alvo, this.eu)) return espera({ ok: false, msg: 'Este negócio não é seu.' });
@@ -371,7 +371,7 @@ export class MockComercialRepository implements ComercialRepository {
     this.db.atividades.push({ id: aid, ...a, donoId: dono, concluidaEm: null, resultado: null, cadenciaDia: null });
     this.registrar('agendou', 'atividade', aid, `Agendou "${a.titulo}" para ${this.nomeContato(a.contatoId)}`, a.contatoId);
     this.atualizarProxima(a.negocioId);
-    return espera({ ok: true });
+    return espera({ ok: true, atividadeId: aid });
   }
 
   async concluirAtividade(atividadeId: string, resultado: string): Promise<Resultado> {
@@ -431,6 +431,14 @@ export class MockComercialRepository implements ComercialRepository {
   async urlMidia(): Promise<string | null> {
     return null;
   }
+
+  // Ações na mensagem, atendimento e agendamento: só com o banco real (a fila e a Evolution moram lá).
+  async responderMensagem(): Promise<ResultadoEnvio> { return espera({ ok: false, msg: 'Só funciona com o banco real (modo demonstração).' }); }
+  async editarMensagem(): Promise<Resultado> { return espera({ ok: false, msg: 'Só funciona com o banco real (modo demonstração).' }); }
+  async apagarMensagem(): Promise<Resultado> { return espera({ ok: false, msg: 'Só funciona com o banco real (modo demonstração).' }); }
+  async mudarAtendimento(): Promise<Resultado> { return espera({ ok: false, msg: 'Só funciona com o banco real (modo demonstração).' }); }
+  async agendarMensagem(): Promise<ResultadoEnvio> { return espera({ ok: false, msg: 'Só funciona com o banco real (modo demonstração).' }); }
+  async cancelarAgendada(): Promise<Resultado> { return espera({ ok: false, msg: 'Só funciona com o banco real (modo demonstração).' }); }
 
   async marcarConversaLida(contatoId: string): Promise<Resultado> {
     this.db.mensagens.filter((m) => m.contatoId === contatoId && m.direcao === 'entrada' && !m.status).forEach((m) => { m.status = 'lida'; });

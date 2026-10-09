@@ -20,7 +20,11 @@ export type EventoMensagem = {
 };
 export type EventoConexao = { evento: 'conexao'; estado: 'open' | 'close' | 'connecting'; numero: string | null; codigo: number | null; motivo: string | null };
 export type EventoQr = { evento: 'qr'; base64: string };
-export type Evento = EventoMensagem | EventoConexao | EventoQr;
+/** O contato (ou o celular) editou uma mensagem: `id` é a key da mensagem ORIGINAL (migration 20261009153515). */
+export type EventoEdicao = { evento: 'edicao'; id: string; texto: string };
+/** O contato (ou o celular) apagou para todos: `id` é a key da mensagem apagada. */
+export type EventoRevogacao = { evento: 'revogacao'; id: string };
+export type Evento = EventoMensagem | EventoConexao | EventoQr | EventoEdicao | EventoRevogacao;
 
 export type TipoMensagem =
   | 'texto' | 'imagem' | 'documento' | 'audio' | 'video' | 'localizacao' | 'contato' | 'botao' | 'figurinha' | 'outro';
@@ -121,7 +125,7 @@ function emIso(ts: unknown): string | null {
 }
 
 /** Uma mensagem do messages.upsert → evento (ou motivo de ignorar) + base64 do arquivo, se veio. */
-export function normalizarMensagem(d: Obj): { evento: EventoMensagem; base64: string | null } | { ignorar: string } {
+export function normalizarMensagem(d: Obj): { evento: EventoMensagem; base64: string | null } | { alteracao: EventoEdicao | EventoRevogacao } | { ignorar: string } {
   const key = obj(d.key);
   if (!key) return { ignorar: 'sem_key' };
   const id = str(key.id);
@@ -130,6 +134,8 @@ export function normalizarMensagem(d: Obj): { evento: EventoMensagem; base64: st
   if (!telefone) return { ignorar: motivo ?? 'sem_telefone' };
   const m = desembrulhar(obj(d.message));
   if (!m) return { ignorar: 'sem_conteudo' };
+  const p = alteracaoDoProtocolo(m);
+  if (p) return { alteracao: p };
   const c = conteudo(m);
   if ('ignorar' in c) return { ignorar: c.ignorar };
   const fromMe = key.fromMe === true;
@@ -144,6 +150,42 @@ export function normalizarMensagem(d: Obj): { evento: EventoMensagem; base64: st
     },
     base64: b64,
   };
+}
+
+/** Texto de uma mensagem editada (conversation, extendedTextMessage ou legenda de mídia). */
+function textoEditado(m: Obj | null): string | null {
+  if (!m) return null;
+  return str(m.conversation) ?? str(obj(m.extendedTextMessage)?.text) ?? str(obj(m.imageMessage)?.caption)
+    ?? str(obj(m.videoMessage)?.caption) ?? str(obj(m.documentMessage)?.caption);
+}
+
+/**
+ * protocolMessage (dentro de messages.upsert ou o próprio corpo de messages.edited) → edição/revogação.
+ * type 0/REVOKE = apagou para todos; 14/MESSAGE_EDIT = editou. Grupo fica de fora (como na mensagem).
+ */
+export function alteracaoDoProtocolo(m: Obj): EventoEdicao | EventoRevogacao | null {
+  const pm = obj(m.protocolMessage) ?? obj(obj(obj(m.editedMessage)?.message)?.protocolMessage) ?? (obj(m.key) && 'type' in m ? m : null);
+  if (!pm) return null;
+  const key = obj(pm.key);
+  const id = str(key?.id);
+  if (!id || !ID_RE.test(id)) return null;
+  if (String(key?.remoteJid ?? '').endsWith('@g.us')) return null;
+  const tipo = pm.type;
+  if (tipo === 0 || tipo === 'REVOKE') return { evento: 'revogacao', id };
+  if (tipo === 14 || tipo === 'MESSAGE_EDIT') {
+    const texto = textoEditado(obj(pm.editedMessage));
+    return texto ? { evento: 'edicao', id, texto: texto.slice(0, 4096) } : null;
+  }
+  return null;
+}
+
+/** messages.delete → revogação (a Evolution manda a key espalhada: {id, remoteJid, fromMe, status:'DELETED'}). */
+export function normalizarExclusao(d: Obj): EventoRevogacao | null {
+  const k = obj(d.key) ?? d;
+  const id = str(k.id) ?? str(d.keyId);
+  if (!id || !ID_RE.test(id)) return null;
+  if (String(k.remoteJid ?? '').endsWith('@g.us')) return null;
+  return { evento: 'revogacao', id };
 }
 
 /** connection.update → estado; número do "wuid" (dono da sessão) quando abre. */
@@ -183,8 +225,24 @@ export function normalizarWebhook(corpo: unknown): Normalizado {
       const o = obj(item);
       const r = o ? normalizarMensagem(o) : { ignorar: 'item' };
       if ('ignorar' in r) { saida.ignorados.push(r.ignorar); continue; }
+      if ('alteracao' in r) { saida.eventos.push(r.alteracao); continue; }
       if (r.base64) saida.arquivos[saida.eventos.length] = r.base64;
       saida.eventos.push(r.evento);
+    }
+  } else if (ev === 'messages.edited' || ev === 'messages.update') {
+    // messages.edited: o corpo é o protocolMessage (key + editedMessage). messages.update só vale se trouxer protocolo.
+    const lista = Array.isArray(dados) ? dados : [dados];
+    for (const item of lista.slice(0, 200)) {
+      const o = obj(item);
+      const r = o ? alteracaoDoProtocolo(obj(o.message) ?? o) : null;
+      if (r) saida.eventos.push(r); else saida.ignorados.push(ev);
+    }
+  } else if (ev === 'messages.delete') {
+    const lista = Array.isArray(dados) ? dados : [dados];
+    for (const item of lista.slice(0, 200)) {
+      const o = obj(item);
+      const r = o ? normalizarExclusao(o) : null;
+      if (r) saida.eventos.push(r); else saida.ignorados.push(ev);
     }
   } else if (ev === 'connection.update') {
     const r = obj(dados) ? normalizarConexao(obj(dados)!) : null;

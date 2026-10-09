@@ -15,6 +15,7 @@ import { Aviso, EstadoErro, FaixaErroAtualizacao, FaixaNumeros, PaginaComercial,
 import { ContatoDrawer } from '../contatos/ContatoDrawer';
 import { ModalNovoNegocio } from '../ModalNovoNegocio';
 import { ModalAtividade, NegocioDrawer } from '../NegocioDrawer';
+import { DockConversaProvider } from '../conversas/DockConversa';
 import { avisarMudanca, repo, useAgora, useContatosPorIds, useDados } from '../repositorio';
 import { iconeDoFunil } from './assistente';
 import { AssistenteFunil } from './AssistenteFunil';
@@ -155,6 +156,7 @@ export function FunilClient() {
   );
 
   return (
+    <DockConversaProvider negocios={qNegocios.dados ?? null} flash={flash}>
     <PaginaComercial
       titulo={funil ? (
         <span className="flex items-center gap-2 min-w-0">
@@ -334,6 +336,7 @@ export function FunilClient() {
       )}
       <Toast>{toast}</Toast>
     </PaginaComercial>
+    </DockConversaProvider>
   );
 }
 

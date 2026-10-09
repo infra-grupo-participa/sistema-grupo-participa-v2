@@ -178,3 +178,32 @@ describe('arquivo', () => {
     expect(bytesDoBase64('QUJDREU=')).toBe(5);
   });
 });
+
+// ── Edição e revogação (migration 20261009153515) ──
+describe('edição e exclusão vindas do WhatsApp', () => {
+  it('messages.upsert com protocolMessage REVOKE vira revogação da key original', () => {
+    const n = normalizarWebhook({ event: 'messages.upsert', instance: 'crm-clint-ab12cd', data: msg({ message: { protocolMessage: { key: { id: 'ORIG12345', remoteJid: `${TEL}@s.whatsapp.net` }, type: 'REVOKE' } } }) });
+    expect(n.eventos).toEqual([{ evento: 'revogacao', id: 'ORIG12345' }]);
+  });
+  it('messages.upsert com edição (type 14) vira edição com o texto novo', () => {
+    const n = normalizarWebhook({ event: 'messages.upsert', data: msg({ message: { protocolMessage: { key: { id: 'ORIG12345' }, type: 14, editedMessage: { conversation: 'texto novo' } } } }) });
+    expect(n.eventos).toEqual([{ evento: 'edicao', id: 'ORIG12345', texto: 'texto novo' }]);
+  });
+  it('editedMessage embrulhado também', () => {
+    const n = normalizarWebhook({ event: 'messages.upsert', data: msg({ message: { editedMessage: { message: { protocolMessage: { key: { id: 'ORIG12345' }, type: 'MESSAGE_EDIT', editedMessage: { extendedTextMessage: { text: 'corrigido' } } } } } } }) });
+    expect(n.eventos).toEqual([{ evento: 'edicao', id: 'ORIG12345', texto: 'corrigido' }]);
+  });
+  it('MESSAGES_EDITED: o corpo é o próprio protocolMessage', () => {
+    const n = normalizarWebhook({ event: 'MESSAGES_EDITED', data: { key: { id: 'ORIG12345', remoteJid: `${TEL}@s.whatsapp.net`, fromMe: false }, type: 14, editedMessage: { conversation: 'oi de novo' } } });
+    expect(n.eventos).toEqual([{ evento: 'edicao', id: 'ORIG12345', texto: 'oi de novo' }]);
+  });
+  it('MESSAGES_DELETE: key espalhada vira revogação; grupo fica de fora', () => {
+    expect(normalizarWebhook({ event: 'messages.delete', data: { id: 'ORIG12345', remoteJid: `${TEL}@s.whatsapp.net`, fromMe: false, status: 'DELETED' } }).eventos)
+      .toEqual([{ evento: 'revogacao', id: 'ORIG12345' }]);
+    expect(normalizarWebhook({ event: 'messages.delete', data: { id: 'ORIG12345', remoteJid: '120363000000000000@g.us' } }).eventos).toEqual([]);
+  });
+  it('edição sem texto e protocolo de outro tipo são ignorados', () => {
+    expect(normalizarWebhook({ event: 'messages.upsert', data: msg({ message: { protocolMessage: { key: { id: 'ORIG12345' }, type: 14, editedMessage: {} } } }) }).eventos).toEqual([]);
+    expect(normalizarWebhook({ event: 'messages.upsert', data: msg({ message: { protocolMessage: { key: { id: 'ORIG12345' }, type: 3 } } }) }).eventos).toEqual([]);
+  });
+});

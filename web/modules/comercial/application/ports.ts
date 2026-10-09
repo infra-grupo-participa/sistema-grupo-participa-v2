@@ -182,7 +182,8 @@ export interface ComercialRepository {
   /** Gestor define o dono de um contato sem dono (ex.: conversa que caiu em "não atribuídos"). */
   atribuirContato(contatoId: string, donoId: string, motivo: string): Promise<Resultado>;
 
-  criarAtividade(a: NovaAtividade): Promise<Resultado>;
+  /** Devolve o id (a ligação conclui a atividade depois, com o resultado). */
+  criarAtividade(a: NovaAtividade): Promise<Resultado & { atividadeId?: string }>;
   concluirAtividade(atividadeId: string, resultado: string): Promise<Resultado>;
   adicionarNota(contatoId: string, negocioId: string | null, texto: string): Promise<Resultado>;
 
@@ -191,6 +192,18 @@ export interface ComercialRepository {
   /** `canalId` = número por onde sai (vazio = o da conversa mais recente; senão o oficial). */
   enviarMensagem(contatoId: string, texto: string, templateId?: string | null, chave?: string | null, canalId?: string | null): Promise<ResultadoEnvio>;
   marcarConversaLida(contatoId: string): Promise<Resultado>;
+  // ── Ações na mensagem, atendimento e agendamento (migration 20261009153515) ──
+  /** Responder citando (só número QR): mesmas travas do envio; sai pelo número da mensagem citada. */
+  responderMensagem(citadaId: string, texto: string, chave?: string | null): Promise<ResultadoEnvio>;
+  /** Editar mensagem enviada (só QR, até 15 min, quem enviou ou gestor). Vai para a fila; a Edge fala com a Evolution. */
+  editarMensagem(mensagemId: string, texto: string): Promise<Resultado>;
+  /** Apagar para todos (só QR, até 2 dias, quem enviou ou gestor). */
+  apagarMensagem(mensagemId: string): Promise<Resultado>;
+  /** Status do atendimento da conversa da pessoa. */
+  mudarAtendimento(contatoId: string, estado: 'aberto' | 'espera' | 'encerrado'): Promise<Resultado>;
+  /** Mensagem agendada: entra na fila do envio com a hora marcada (texto ou template do oficial). */
+  agendarMensagem(a: { contatoId: string; texto: string; enviarEm: string; canalId?: string | null; templateId?: string | null; chave?: string | null }): Promise<ResultadoEnvio>;
+  cancelarAgendada(mensagemId: string): Promise<Resultado>;
   /**
    * Imagem (JPG/PNG/WebP até 5 MB) ou PDF (até 16 MB) com legenda opcional: sobe para o bucket privado e enfileira
    * (janela de 24 h aberta; o banco valida dono, tipo e tamanho de novo).

@@ -245,6 +245,14 @@ export interface Mensagem {
   externa?: boolean;
   /** 'mcp' = enviada pelo Claude (MCP do Comercial), no nome do autor (migration 20261008233100). */
   origem?: 'mcp' | null;
+  /** Editada (pelo CRM ou no WhatsApp) — migration 20261009153515. */
+  editadaEm?: string | null;
+  /** Apagada para todos: o banco devolve texto "Mensagem apagada" e sem arquivo. */
+  apagadaEm?: string | null;
+  /** Resposta citando esta mensagem (só número QR). */
+  citadaId?: string | null;
+  /** Mensagem agendada: sai da fila nesta hora. */
+  agendadaPara?: string | null;
 }
 
 export type EnvioMensagem = 'na_fila' | 'enviando';
@@ -288,6 +296,10 @@ export interface Conversa {
   canais?: string[];
   /** As crm.conversa vivas da pessoa (uma por número), a mais recente primeiro: o gestor exclui por aqui. */
   conversas?: { id: string; canalId: string | null }[];
+  /** Status do atendimento (migration 20261009153515). Ausente = aberto. */
+  atendimento?: 'aberto' | 'espera' | 'encerrado';
+  atendimentoEm?: string | null;
+  atendimentoPor?: string | null;
 }
 
 export type TipoEvento =

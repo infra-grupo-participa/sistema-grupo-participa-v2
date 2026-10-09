@@ -52,7 +52,7 @@ describe('Evolution (servidor)', () => {
       .toBe('https://abc.supabase.co/functions/v1/crm-evolution-webhook?i=crm-clint-ab12cd');
     const c = corpoWebhookEvolution('https://x', 'k'.repeat(64));
     expect(c.webhook).toMatchObject({ enabled: true, byEvents: false, base64: true, headers: { 'x-crm-chave': 'k'.repeat(64) } });
-    expect(c.webhook.events).toEqual(['MESSAGES_UPSERT', 'CONNECTION_UPDATE', 'QRCODE_UPDATED']);
+    expect(c.webhook.events).toEqual(['MESSAGES_UPSERT', 'MESSAGES_EDITED', 'MESSAGES_DELETE', 'CONNECTION_UPDATE', 'QRCODE_UPDATED']);
   });
   it('instância nasce sem grupos e sem histórico', () => {
     expect(corpoCriarInstancia('crm-a-b1c2d3')).toMatchObject({ instanceName: 'crm-a-b1c2d3', integration: 'WHATSAPP-BAILEYS', qrcode: true, groupsIgnore: true, syncFullHistory: false });

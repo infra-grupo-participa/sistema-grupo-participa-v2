@@ -456,6 +456,10 @@ function mapMensagem(x: unknown, rpc: string): Mensagem {
     ...('canalId' in o ? { canalId: strOuNull(o.canalId), externa: o.externa === true } : {}),
     // origem (20261008233100): só quando o banco manda
     ...('origem' in o ? { origem: o.origem === 'mcp' ? 'mcp' as const : null } : {}),
+    // ações na mensagem e agendamento (20261009153515): só quando o banco manda
+    ...('editadaEm' in o ? {
+      editadaEm: strOuNull(o.editadaEm), apagadaEm: strOuNull(o.apagadaEm), citadaId: strOuNull(o.citadaId), agendadaPara: strOuNull(o.agendadaPara),
+    } : {}),
   };
 }
 
@@ -471,6 +475,10 @@ export function mapConversas(d: unknown): Conversa[] {
         ? o.conversas.flatMap((k) => (k && typeof k === 'object' && typeof (k as { id?: unknown }).id === 'string'
           ? [{ id: (k as { id: string }).id, canalId: strOuNull((k as { canalId?: unknown }).canalId) }] : []))
         : [],
+      ...('atendimento' in o ? {
+        atendimento: o.atendimento === 'espera' || o.atendimento === 'encerrado' ? o.atendimento : 'aberto' as const,
+        atendimentoEm: strOuNull(o.atendimentoEm), atendimentoPor: strOuNull(o.atendimentoPor),
+      } : {}),
     };
   });
 }

@@ -9,7 +9,7 @@ import {
   PanelLeftClose, PanelLeftOpen, Wallet, Receipt, TrendingUp, Banknote,
   LayoutDashboard, CircleDollarSign, Eye, EyeOff, UserX,
   Megaphone, Handshake, Server, Globe, MessageCircle, Video, Share2, Hourglass, Building2,
-  Phone, Send, Columns3, ChartColumn, Target, Zap, Contact, ListChecks, SlidersHorizontal, UserCheck, Flame, Clock, Paperclip, Image as ImageIcon, type LucideIcon,
+  Phone, Send, Columns3, ChartColumn, Target, Zap, Contact, ListChecks, SlidersHorizontal, UserCheck, Flame, Clock, Paperclip, Image as ImageIcon, Reply, Minimize2, Maximize2, Bell, type LucideIcon,
 } from 'lucide-react';
 
 const MAP: Record<string, LucideIcon> = {
@@ -47,7 +47,7 @@ const MAP: Record<string, LucideIcon> = {
   // comercial (CRM)
   phone: Phone, send: Send, kanban: Columns3, chart: ChartColumn, target: Target, zap: Zap, contact: Contact,
   'list-checks': ListChecks, sliders: SlidersHorizontal, 'user-check': UserCheck, flame: Flame, clock: Clock,
-  paperclip: Paperclip, image: ImageIcon,
+  paperclip: Paperclip, image: ImageIcon, reply: Reply, minimize: Minimize2, maximize: Maximize2, bell: Bell,
 };
 
 export function Icon({ name, size = 16, className, strokeWidth = 2, style }: {

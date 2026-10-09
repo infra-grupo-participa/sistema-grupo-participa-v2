@@ -80,6 +80,20 @@ export async function estadoConexao(evo: EvolutionApi, portas: PortasCanais, sup
   return { ok: true, status: 'aguardando_qr', qr: novo.qr, final: null };
 }
 
+/**
+ * Reaplica o webhook (eventos novos, ex.: MESSAGES_EDITED/MESSAGES_DELETE de 20261009153515) sem recriar a instância e sem
+ * pedir QR: idempotente, não desconecta o aparelho. Só número já conectado.
+ */
+export async function atualizarWebhook(evo: EvolutionApi, portas: PortasCanais, supabaseUrl: string, canalId: string): Promise<{ ok: true } | { ok: false; msg: string; http: number }> {
+  const p = await portas.portao(canalId, 'ver');
+  if (!p.ok || typeof p.instancia !== 'string') return { ok: false, msg: p.msg ?? 'Sem acesso.', http: 403 };
+  const s = await portas.servico('webhook', canalId);
+  const chave = typeof s.webhookChave === 'string' ? s.webhookChave : '';
+  if (!s.ok || !chave) return { ok: false, msg: 'Não foi possível ler a chave do webhook.', http: 500 };
+  const ok = await evo.configurarWebhook(p.instancia, urlWebhookEvolution(supabaseUrl, p.instancia), chave);
+  return ok ? { ok: true } : { ok: false, msg: 'A Evolution não aceitou o webhook.', http: 502 };
+}
+
 /** Desconecta o aparelho na Evolution e marca no banco. O número continua no celular e na Clint. */
 export async function desconectarNumero(evo: EvolutionApi, portas: PortasCanais, canalId: string): Promise<{ ok: true } | { ok: false; msg: string; http: number }> {
   const p = await portas.portao(canalId, 'desconectar');

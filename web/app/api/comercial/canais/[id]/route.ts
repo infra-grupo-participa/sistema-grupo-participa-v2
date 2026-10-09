@@ -3,7 +3,7 @@ import { jsonError, jsonOk, validateOrigin } from '@/shared/infrastructure/http/
 import { isUuid } from '@/shared/infrastructure/http/validation';
 import { getCurrentUser } from '@/shared/composition/server-container';
 import { publicEnv } from '@/shared/infrastructure/config/env';
-import { desconectarNumero, estadoConexao } from '@/modules/comercial/application/canais-whatsapp';
+import { atualizarWebhook, desconectarNumero, estadoConexao } from '@/modules/comercial/application/canais-whatsapp';
 import { EvolutionApi, EvolutionIndisponivel } from '@/modules/comercial/infrastructure/evolution-api';
 import { ehGestorCrm, portasCanais } from '@/modules/comercial/infrastructure/supabase-canais';
 
@@ -15,6 +15,7 @@ type Ctx = { params: Promise<{ id: string }> };
 //   GET  → estado para a tela que espera o QR (chamada a cada 3 s): {status, qr, final}
 //   POST {acao:'conectar'}    → refaz instância/webhook e pede QR novo (reconectar)
 //   POST {acao:'desconectar'} → desconecta o aparelho (o número segue no celular e na Clint)
+//   POST {acao:'webhook'}     → reaplica o webhook (eventos novos) sem recriar a instância nem pedir QR
 // Doc: docs/projetos/comercial/whatsapp-qr-evolution.md
 
 async function preparar(req: NextRequest, ctx: Ctx) {
@@ -50,6 +51,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (corpo?.acao === 'conectar') {
       const r = await estadoConexao(p.evo, await portasCanais(), publicEnv.supabaseUrl, p.id, true);
       return r.ok ? jsonOk(r) : jsonError(r.msg, r.http);
+    }
+    if (corpo?.acao === 'webhook') {
+      const r = await atualizarWebhook(p.evo, await portasCanais(), publicEnv.supabaseUrl, p.id);
+      return r.ok ? jsonOk({ ok: true }) : jsonError(r.msg, r.http);
     }
     if (corpo?.acao === 'desconectar') {
       const r = await desconectarNumero(p.evo, await portasCanais(), p.id);

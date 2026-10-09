@@ -120,3 +120,15 @@ select status, count(*) from crm.mensagem where provedor = 'evolution' and direc
 - Uma chave de webhook **por instância**, gerada no banco, conferida em tempo constante.
 - A VPS não guarda mensagem (`DATABASE_SAVE_DATA_NEW_MESSAGE=false`): o arquivo recebido vem em base64 no webhook. Se a
   Edge não conseguir subir o arquivo e a Evolution não reenviar, a mensagem fica com "Arquivo não chegou ao CRM" em 15 min.
+
+## Ações na mensagem, status do atendimento e agendada (migration 20261009153515)
+
+- **Menu na mensagem** (tela de Conversas e dock do Funil): copiar; responder citando (só QR, `quoted` no sendText);
+  editar (só QR, até 15 min, quem enviou ou gestor) e apagar para todos (só QR, até 48 h). No oficial (API Cloud) editar e
+  apagar aparecem desativados com o motivo. A tela grava em `crm.mensagem_acao`; a Edge `crm-evolution-enviar` chama
+  `POST /chat/updateMessage` / `DELETE /chat/deleteMessageForEveryone` e devolve em `crm.evolution_acao_resultado`.
+- **Webhook:** a instância assina também `MESSAGES_EDITED` e `MESSAGES_DELETE` (contato ou celular editou/apagou →
+  `crm.evolution_alteracao`). Instância antiga: Configurações → Números → **Atualizar eventos** (reaplica o webhook sem
+  desconectar). O texto anterior de uma edição não é guardado; apagada vira "Mensagem apagada" na API.
+- **Atendimento:** aberto / em espera / encerrado em `crm.conversa`; mensagem nova do contato reabre.
+- **Agendada:** mesma fila do envio (`fila_em` no futuro). Detalhes e decisões: `infra/supabase/migrations/20261009153515.explain.md`.

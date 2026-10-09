@@ -31,6 +31,8 @@ import { HistoricoAlteracoes } from './registro/HistoricoAlteracoes';
 import { MidiaMensagem } from './conversas/MidiaMensagem';
 import { ContatoDrawer } from './contatos/ContatoDrawer';
 import { legendaDaMensagem } from '../domain/midia';
+import { amanha9h, emUmaHora, paraInputLocal } from '../domain/agendamento';
+import { BotaoLigar } from './BotaoLigar';
 
 type Aba = 'resumo' | 'atividades' | 'historico' | 'conversa' | 'alteracoes';
 
@@ -162,6 +164,7 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
         actions={<>
           <Button size="sm" variant="ghost" onClick={() => setFichaPessoa(true)}><Icon name="user" size={14} /> Ficha da pessoa</Button>
           <BotaoConversa contatoId={c.id} />
+          <BotaoLigar alvo={{ contatoId: c.id, nome: c.nome, telefone: c.telefone, negocioId: n.id }} podeRegistrar={mexe} flash={flash} />
           <BotaoCopiar texto={c.telefone} onCopiado={flash} />
         </>}
         badges={(!aberto || c.optOut || c.ehAluno || situacaoSla(n, agora) !== 'sem_sla') ? <>
@@ -662,7 +665,11 @@ function ModalTransferir({ atual, vendedores, onClose, onConfirmar }: {
   );
 }
 
-export function ModalAtividade({ onClose, onConfirmar }: { onClose: () => void; onConfirmar: (tipo: TipoAtividade, titulo: string, venceEm: string) => void }) {
+export function ModalAtividade({ onClose, onConfirmar, lembrete = false }: {
+  onClose: () => void; onConfirmar: (tipo: TipoAtividade, titulo: string, venceEm: string) => void;
+  /** Lembrete = tarefa com hora, com os atalhos "Em 1h" e "Amanhã 9h" (painel da conversa). */
+  lembrete?: boolean;
+}) {
   const amanha10 = () => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
@@ -670,14 +677,14 @@ export function ModalAtividade({ onClose, onConfirmar }: { onClose: () => void; 
     const p = (x: number) => String(x).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T10:00`;
   };
-  const [tipo, setTipo] = useState<TipoAtividade>('ligacao');
+  const [tipo, setTipo] = useState<TipoAtividade>(lembrete ? 'tarefa' : 'ligacao');
   const [titulo, setTitulo] = useState('');
-  const [quando, setQuando] = useState(amanha10);
+  const [quando, setQuando] = useState(() => (lembrete ? paraInputLocal(emUmaHora(new Date())) : amanha10()));
   const pronto = !!titulo.trim() && !!quando;
   return (
     <Modal
       onClose={onClose}
-      title="Agendar próxima atividade"
+      title={lembrete ? 'Lembrete' : 'Agendar próxima atividade'}
       footer={<>
         <Button variant="ghost" size="sm" onClick={onClose}>Cancelar</Button>
         <Button size="sm" disabled={!pronto} onClick={() => onConfirmar(tipo, titulo, new Date(quando).toISOString())}>Agendar</Button>
@@ -700,6 +707,12 @@ export function ModalAtividade({ onClose, onConfirmar }: { onClose: () => void; 
         </Campo>
         <Campo rotulo="Quando">
           <Input type="datetime-local" value={quando} onChange={(e) => setQuando(e.target.value)} />
+          {lembrete && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <Chip ativo={false} onClick={() => setQuando(paraInputLocal(emUmaHora(new Date())))}>Lembrar em 1h</Chip>
+              <Chip ativo={false} onClick={() => setQuando(paraInputLocal(amanha9h(new Date())))}>Amanhã 9h</Chip>
+            </div>
+          )}
         </Campo>
         <NotaRodape>Quem define o próximo passo é o vendedor, não o lead.</NotaRodape>
       </form>

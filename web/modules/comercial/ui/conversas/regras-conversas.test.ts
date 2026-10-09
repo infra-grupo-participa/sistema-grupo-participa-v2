@@ -111,6 +111,15 @@ describe('resumoCaixa', () => {
   it('lista vazia zera tudo', () => {
     expect(resumoCaixa([], seg(11))).toEqual({ esperando: 0, criticas: 0, naoLidas: 0, semDono: 0 });
   });
+  it('em espera e encerrada saem da fila de "sem resposta" e do SLA (20261009153515)', () => {
+    const r = resumoCaixa([
+      { naoLidas: 0, atribuidaA: 'v1', ultimaMensagem: msg('entrada', seg(10)), atendimento: 'espera' },
+      { naoLidas: 0, atribuidaA: 'v1', ultimaMensagem: msg('entrada', seg(10)), atendimento: 'encerrado' },
+      { naoLidas: 0, atribuidaA: 'v1', ultimaMensagem: msg('entrada', seg(10)), atendimento: 'aberto' },
+    ], seg(11));
+    expect(r.esperando).toBe(1);
+    expect(r.criticas).toBe(1);
+  });
 });
 
 describe('criarTravaEnvio', () => {

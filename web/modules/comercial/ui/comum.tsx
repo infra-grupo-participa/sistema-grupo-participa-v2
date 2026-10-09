@@ -13,6 +13,7 @@ import type { MetricaKey, Negocio, ProdutoKey, SessaoComercial, Vendedor } from 
 import { InfoIndicador, type TextoIndicador } from './InfoIndicador';
 import { SinoNotificacoes } from './notificacoes/SinoNotificacoes';
 import { avisarMudanca, MODO_DEMONSTRACAO, repo, useDados } from './repositorio';
+import { useDockConversa } from './conversas/dock-contexto';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cabeçalho
@@ -648,12 +649,20 @@ export function BotaoCopiar({ texto, rotulo = 'Copiar telefone', onCopiado }: { 
 /** Abre a conversa do contato na caixa do Comercial (navegação interna, sem recarregar). */
 export function BotaoConversa({ contatoId, compacto = false }: { contatoId: string; compacto?: boolean }) {
   const href = `/comercial/conversas?contato=${encodeURIComponent(contatoId)}`;
+  // No Funil, abre a conversa no dock (sem sair da tela); Ctrl/⌘-clique segue abrindo a tela de Conversas.
+  const dock = useDockConversa();
+  const onClick = dock ? (e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    dock.abrir(contatoId);
+  } : undefined;
   if (compacto) {
-    return <Link href={href} className={BTN_ICONE} aria-label="Abrir conversa" title="Abrir conversa"><Icon name="message" size={14} /></Link>;
+    return <Link href={href} onClick={onClick} className={BTN_ICONE} aria-label="Abrir conversa" title="Abrir conversa"><Icon name="message" size={14} /></Link>;
   }
   return (
     <Link
       href={href}
+      onClick={onClick}
       className="inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--fg-2)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] transition-colors"
     >
       <Icon name="message" size={14} /> Conversa

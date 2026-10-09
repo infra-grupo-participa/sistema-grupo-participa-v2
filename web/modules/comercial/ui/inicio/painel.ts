@@ -1,4 +1,5 @@
 // Regras do painel de início, puras e testáveis: o que pede ação agora e o controle das 9h do gestor.
+import { contaNaFila } from '../../domain/atendimento';
 import { mesmoDia } from '../../domain/fechamento';
 import { atividadeAtrasada, semProximoPasso, situacaoSla } from '../../domain/regras';
 import type { Atividade, Conversa, FichaDisparo, Negocio, Vendedor } from '../../domain/types';
@@ -54,7 +55,7 @@ export function itensAgirAgora(p: {
   }
 
   for (const c of conversas) {
-    if (c.naoLidas <= 0 || !c.atribuidaA || !meu(c.atribuidaA)) continue;
+    if (c.naoLidas <= 0 || !c.atribuidaA || !meu(c.atribuidaA) || !contaNaFila(c)) continue;
     const n = negocioDoContato(negocios, c.contatoId, c.atribuidaA);
     itens.push({ id: `conv-${c.contatoId}`, tipo: 'conversa', negocioId: n?.id ?? null, contatoId: c.contatoId, donoId: c.atribuidaA, quando: c.ultimaMensagem.em, conversa: c, negocio: n ?? undefined });
   }
@@ -175,6 +176,6 @@ export function cargaDe(p: { negocios: Negocio[]; atividades: Atividade[]; conve
     criticos: abertos.filter((n) => situacaoSla(n, agora) === 'critico').length,
     semProximo: abertos.filter(semProximoPasso).length,
     atrasadas: atividades.filter((a) => meu(a.donoId) && atividadeAtrasada(a, agora)).length,
-    conversasEsperando: conversas.filter((c) => c.naoLidas > 0 && c.atribuidaA && meu(c.atribuidaA)).length,
+    conversasEsperando: conversas.filter((c) => c.naoLidas > 0 && c.atribuidaA && meu(c.atribuidaA) && contaNaFila(c)).length,
   };
 }

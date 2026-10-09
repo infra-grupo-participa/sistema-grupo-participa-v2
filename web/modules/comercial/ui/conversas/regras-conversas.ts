@@ -1,5 +1,6 @@
 // Regras puras da caixa de conversas: tempo esperando resposta, janela de 24 h, template e dia.
 // Sem React e sem relógio próprio: "agora" entra como parâmetro (testável).
+import { contaNaFila } from '../../domain/atendimento';
 import { etapa } from '../../domain/catalogo';
 import type { Conversa, Mensagem } from '../../domain/types';
 
@@ -61,9 +62,10 @@ const PESO_ESPERA: Record<NivelEspera, number> = { critico: 0, atencao: 1, ok: 2
  * em horário comercial primeiro; empate, mais não lidas), 3) o resto pela última mensagem, mais recente primeiro.
  * Não muda a lista recebida.
  */
-export function ordenarConversas<T extends Pick<Conversa, 'naoLidas'> & { ultimaMensagem: Pick<Mensagem, 'direcao' | 'em'> }>(lista: readonly T[], agora: Date): T[] {
+export function ordenarConversas<T extends Pick<Conversa, 'naoLidas'> & Partial<Pick<Conversa, 'atendimento'>> & { ultimaMensagem: Pick<Mensagem, 'direcao' | 'em'> }>(lista: readonly T[], agora: Date): T[] {
   const chave = lista.map((cv) => {
-    const e = esperaResposta(cv.ultimaMensagem, agora);
+    // em espera / encerrada não é "esperando resposta" (20261009153515)
+    const e = contaNaFila(cv) ? esperaResposta(cv.ultimaMensagem, agora) : null;
     const nivel: NivelEspera = e?.nivel ?? 'ok';
     const t = new Date(cv.ultimaMensagem.em).getTime();
     return { cv, peso: PESO_ESPERA[nivel], uteis: e?.minutosUteis ?? 0, t: Number.isNaN(t) ? 0 : t };
@@ -152,14 +154,15 @@ export interface ResumoCaixa {
   semDono: number;
 }
 
-/** Números da caixa para a faixa do topo. Não depende da ordem nem do filtro de busca. */
-export function resumoCaixa(lista: readonly Pick<Conversa, 'naoLidas' | 'atribuidaA' | 'ultimaMensagem'>[], agora: Date): ResumoCaixa {
+/** Números da caixa para a faixa do topo. Não depende da ordem nem do filtro de busca. Só conversa aberta espera. */
+export function resumoCaixa(lista: readonly (Pick<Conversa, 'naoLidas' | 'atribuidaA' | 'ultimaMensagem'> & Partial<Pick<Conversa, 'atendimento'>>)[], agora: Date): ResumoCaixa {
   let esperando = 0;
   let criticas = 0;
   let naoLidas = 0;
   let semDono = 0;
   for (const cv of lista) {
-    const e = esperaResposta(cv.ultimaMensagem, agora);
+    // em espera / encerrada sai da fila de "sem resposta" e do alerta de SLA (20261009153515)
+    const e = contaNaFila(cv) ? esperaResposta(cv.ultimaMensagem, agora) : null;
     if (e) {
       esperando += 1;
       if (e.nivel === 'critico') criticas += 1;

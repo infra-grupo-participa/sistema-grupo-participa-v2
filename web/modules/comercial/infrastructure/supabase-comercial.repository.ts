@@ -395,7 +395,9 @@ export class SupabaseComercialRepository implements ComercialRepository {
     return this.simples('crm_atribuir_contato', argsEscrita.atribuirContato(contatoId, donoId, motivo));
   }
 
-  criarAtividade(a: NovaAtividade) { return this.simples('crm_criar_atividade', argsEscrita.criarAtividade(a)); }
+  criarAtividade(a: NovaAtividade): Promise<Resultado & { atividadeId?: string }> {
+    return this.escrever('crm_criar_atividade', argsEscrita.criarAtividade(a), (d) => mapResultadoComId('crm_criar_atividade', d, 'atividadeId'));
+  }
   concluirAtividade(atividadeId: string, resultado: string) {
     return this.simples('crm_concluir_atividade', argsEscrita.concluirAtividade(atividadeId, resultado));
   }
@@ -426,6 +428,22 @@ export class SupabaseComercialRepository implements ComercialRepository {
     return this.escrever('crm_enviar_mensagem', argsEscrita.enviarMensagem(contatoId, texto, templateId, chave, canalId), mapResultadoEnvio);
   }
   marcarConversaLida(contatoId: string) { return this.simples('crm_marcar_conversa_lida', argsEscrita.marcarConversaLida(contatoId)); }
+
+  // ── Ações na mensagem, atendimento e agendamento (20261009153515) ──
+  responderMensagem(citadaId: string, texto: string, chave?: string | null): Promise<ResultadoEnvio> {
+    return this.escrever('crm_responder_mensagem', { p_citada: citadaId, p_texto: texto, p_chave: chave ?? null }, mapResultadoEnvio);
+  }
+  editarMensagem(mensagemId: string, texto: string) { return this.simples('crm_mensagem_editar', { p_mensagem: mensagemId, p_texto: texto }); }
+  apagarMensagem(mensagemId: string) { return this.simples('crm_mensagem_apagar', { p_mensagem: mensagemId }); }
+  mudarAtendimento(contatoId: string, estado: 'aberto' | 'espera' | 'encerrado') {
+    return this.simples('crm_conversa_atendimento', { p_pessoa: contatoId, p_estado: estado });
+  }
+  agendarMensagem(a: { contatoId: string; texto: string; enviarEm: string; canalId?: string | null; templateId?: string | null; chave?: string | null }): Promise<ResultadoEnvio> {
+    return this.escrever('crm_agendar_mensagem', {
+      p_pessoa: a.contatoId, p_texto: a.texto, p_enviar_em: a.enviarEm, p_canal: a.canalId ?? null, p_template: a.templateId ?? null, p_chave: a.chave ?? null,
+    }, mapResultadoEnvio);
+  }
+  cancelarAgendada(mensagemId: string) { return this.simples('crm_cancelar_agendada', { p_mensagem: mensagemId }); }
 
   // ── Arquivos do WhatsApp (20261007140044): bucket privado crm-midia ──
   /** Sobe em envio/<meu id>/<uuid>.<ext> (policy do Storage) e enfileira pela crm_enviar_mensagem (que valida de novo). */

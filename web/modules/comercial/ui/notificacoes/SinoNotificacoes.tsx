@@ -120,7 +120,7 @@ export function SinoNotificacoes() {
                   className={`flex items-start gap-2.5 px-3 py-2.5 border-b border-[var(--border-faint)] last:border-0 hover:bg-[var(--surface-3)] ${n.lida ? 'opacity-60' : ''}`}
                 >
                   <span className={`mt-0.5 grid place-items-center w-7 h-7 shrink-0 rounded-full ${n.gatilho === 'prazo_estourado' ? 'bg-[var(--red-subtle)] text-[var(--red)]' : n.gatilho === 'venda_aprovada' ? 'text-[var(--green)] bg-[var(--surface-3)]' : 'bg-[var(--surface-3)] text-[var(--fg-2)]'}`}>
-                    <Icon name={ICONE[n.gatilho]} size={14} />
+                    <Icon name={ICONE[n.gatilho] ?? 'bell'} size={14} />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-[13px] font-medium text-[var(--fg)] truncate">{n.titulo}</span>

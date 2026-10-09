@@ -2,7 +2,8 @@
 // Doc: docs/projetos/comercial/whatsapp-qr-evolution.md
 //
 // A Evolution chama POST <esta função>?i=<instância> (configurado pelo sistema ao criar a instância, um webhook por
-// instância, byEvents=false, base64=true) com os eventos MESSAGES_UPSERT, CONNECTION_UPDATE e QRCODE_UPDATED.
+// instância, byEvents=false, base64=true) com os eventos MESSAGES_UPSERT, MESSAGES_EDITED, MESSAGES_DELETE (20261009153515:
+// o contato ou o celular editou/apagou), CONNECTION_UPDATE e QRCODE_UPDATED.
 //
 // Autenticação (fail-closed): header x-crm-chave = chave própria da instância (crm.numero_whatsapp_segredo, gerada no banco
 // ao criar o número), lida por crm.evolution_chave_webhook(instância) e comparada em tempo constante. Instância
