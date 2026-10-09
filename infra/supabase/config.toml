@@ -32,6 +32,11 @@ verify_jwt = false
 [functions.respondi-sync]
 verify_jwt = false
 
+# respondi-webhook (20261009190000): webhook do Respondi (fichas ligadas a dashboard em dados.dashboard_formularios).
+# O Respondi não manda header próprio: autentica pelo segredo na URL (?k=, Vault respondi_webhook_chave), fail-closed.
+[functions.respondi-webhook]
+verify_jwt = false
+
 # trafego-meta e trafego-clickup (migration 20261006i): chamadas pelo cron via ops.cron_post sem Authorization;
 # autenticam pelo header x-sync-chave (Vault trafego_coleta_chave), fail-closed. Nascem sem cron (desligadas).
 [functions.trafego-meta]
