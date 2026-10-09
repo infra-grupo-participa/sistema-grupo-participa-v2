@@ -145,3 +145,7 @@ As visões usam exclusivamente as linhas da RPC `dados_historico_edicoes` e os i
 **Como validar.** Rode `npx vitest run modules/infra/atm/domain/historico.test.ts modules/infra/atm/ui/historico-visual.test.ts`, `npx tsc --noEmit`, `npm run lint` e `npm run build`. Faça a inspeção visual com fixtures de teste em 1280 px e 375 px; confira que não aparece rolagem horizontal na página, que a tabela está recolhida no comparativo, que foco/hover exibe fonte e que `prefers-reduced-motion` desativa o movimento.
 
 Na QA desta branch, a prévia visual usou uma rota temporária local que renderizava apenas `HistoricoAtmView` com os mesmos fixtures da suíte. A rota e a exceção temporária de autenticação foram removidas após a captura; não fazem parte do produto nem chamaram a RPC. As capturas 1280 px e 375 px ficam junto do relatório de entrega no cérebro.
+
+### 09/10/2026: Escritório sem o selo "Em breve"
+
+O cartão Escritório em Infra > Dashboards saiu do estado "Em breve" (`emBreve` removido em `web/app/(admin)/infra/dashboards/page.tsx`), porque a área já tem o Seminário ATM no ar. Pedido do Victor.
