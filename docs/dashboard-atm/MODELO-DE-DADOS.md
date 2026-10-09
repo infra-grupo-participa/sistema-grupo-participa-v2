@@ -119,7 +119,7 @@ Aba "Histórico". Situação da aplicação: `infra/supabase/migrations/20261009
 | Ingresso no grupo | foto da lista de participantes do SendFlow (`dados.grupo_participantes`) + `crm.evento_jornada` fonte `sendflow` com `tag` = campanha cadastrada em `dados.dashboard_grupos` | números únicos que entraram, leads ou não, sem teste; nulo sem campanha cadastrada (seção 0b) |
 | % ingresso no grupo | ingresso ÷ leads × 100 | |
 | Taxa de evasão | saídas ÷ entradas × 100 | saída só conta para quem entrou e saiu depois de entrar |
-| CPL | custo ÷ leads | só com custo completo (todos os disparos com custo); senão nulo |
+| CPL | custo de disparo ÷ leads (sem teste) | só com custo completo (nenhum disparo de canal pago sem custo; e-mail e grupo não têm custo por disparo, 20261009210000); senão nulo |
 | Pré-checkout | `dados.pre_checkout` (evento `pre_checkout` do projeto + lista do AC `lista_ac`) | o mesmo do dashboard presencial |
 | Vendas | `fin.hotmart_transacoes` da oferta do cadastro (conta `escritorio`), pagas, 1ª cobrança, pedido a partir de `vendas_desde` | nulo enquanto a oferta não estiver no cadastro. Atualiza de hora em hora (o webhook em tempo real só cobre a conta academy) |
 | Taxa de conversão do pré-checkout | compradores ÷ pré-checkout × 100 | mesma regra do presencial |
@@ -168,6 +168,9 @@ Cards na ordem do briefing: disparos (`disparos_qtd`), leads, ingresso no grupo 
 faturamento bruto (`receita_bruta`), líquido (`receita_liquida`), ROAS (`roas`).
 `grupo_tem_fonte = false` → todos os campos de grupo nulos. `oferta_codigo` nulo → vendas, compradores, receita, CAC,
 ROAS nulos. `custo_completo = false` → CPL, CAC, ROAS nulos (a tela pode avisar quantos disparos estão sem custo).
+Desde `20261009210000`: só canal pago (`whatsapp_api`, `sms`, `ligacao`) sem custo conta em `disparos_sem_custo` e
+deixa o custo incompleto; `email` e `grupo` não têm custo por disparo (custo nulo = sem custo, não falta). Só e-mail e
+grupo no período: custo 0 e CPL 0.
 
 ### 2.2 `dados_atm_leads` (modal de leads; 1 linha por e-mail, `primeiro_em desc`)
 
@@ -195,7 +198,7 @@ comprou boolean, pessoa_id uuid, teste boolean, descarte_motivo text, descarte_l
 receita_bruta numeric, custo_disparo_centavos bigint`
 
 Leads pelo 1º dia de cada e-mail; grupo pelo dia da 1ª entrada e da saída; vendas pelo dia de aprovação. Grupo nulo sem
-fonte; vendas e receita nulas sem oferta; custo do dia nulo se algum disparo do dia está sem custo. Sem nenhum dado:
+fonte; vendas e receita nulas sem oferta; custo do dia nulo se algum disparo de canal pago do dia está sem custo (e-mail e grupo contam 0, `20261009210000`). Sem nenhum dado:
 0 linhas.
 
 ### 2.4 `dados_atm_disparos_canais` (sempre 5 linhas, ordem das abas)

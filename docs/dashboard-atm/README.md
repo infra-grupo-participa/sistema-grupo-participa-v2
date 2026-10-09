@@ -36,7 +36,7 @@ O front lê somente RPCs Supabase com a chave do dashboard:
 | Comparecimento | dados_atm_comparecimento |
 | Ciclo aberto e fechado pós-live | dados_atm_pos_live |
 
-Receita, custos, CPL, CAC e ROAS são apresentados conforme os valores devolvidos pelo banco. Não há preço de venda fixo no código. Custos em centavos são convertidos para reais na camada de dados. O modal mostra os campos de origem descritos no briefing; dado pessoal só é buscado ao abrir o modal.
+Receita, custos, CPL, CAC e ROAS são apresentados conforme os valores devolvidos pelo banco. **CPL de "Esta edição" (09/10/2026, migration `20261009210000`):** custo de disparo ÷ leads sem teste; só some (nulo) quando algum disparo de canal pago (API WhatsApp, SMS, ligação) está sem custo. E-mail e grupo não têm custo por disparo e não bloqueiam mais o CPL. ATM OUT/26 em 09/10: 103.208 centavos ÷ 95 leads = 1.086 centavos (R$ 10,86). Atenção: no Histórico o CPL é investimento total (tráfego + disparo) ÷ leads, calculado na tela; as duas abas usam bases diferentes. Não há preço de venda fixo no código. Custos em centavos são convertidos para reais na camada de dados. O modal mostra os campos de origem descritos no briefing; dado pessoal só é buscado ao abrir o modal.
 
 Se a RPC ainda não existir ou não devolver dado, o bloco permanece disponível e mostra “sem dado ainda”. Zero numérico devolvido pelo banco é apresentado como zero medido. Falhas isoladas não impedem os demais blocos. Uma falha de atualização preserva o último dado carregado. Resumo e série atualizam a cada 60 segundos somente com a aba visível, sem sobrepor chamadas.
 

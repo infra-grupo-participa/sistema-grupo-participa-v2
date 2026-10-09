@@ -1,0 +1,388 @@
+-- Ensaio de 20261009210000 (transação desfeita). Lê como pessoa da equipe; só números, sem dado pessoal.
+begin;
+create temp table _z_out (em bigserial, passo text, linha text) on commit drop;
+grant all on pg_temp._z_out to authenticated; grant all on sequence pg_temp._z_out_em_seq to authenticated;
+insert into pg_temp._z_out (passo, linha) select '0 canais projeto 75', (select jsonb_object_agg(canal, jsonb_build_object('n', n, 'nulos', nulos)) from (select canal, count(*) n, count(*) filter (where custo_centavos is null) nulos from mkt_mensageria.disparos where projeto_id = 75 and arquivado_em is null group by 1) z)::text;
+insert into pg_temp._z_out (passo, linha) select '0 grants antes', (select string_agg(p.proname || '=' || p.proacl::text, ' ; ' order by 1) from pg_proc p where p.proname in ('dados_atm_resumo','dados_atm_serie_diaria') and p.pronamespace = 'public'::regnamespace);
+select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated"}', true);
+set local role authenticated;
+insert into pg_temp._z_out (passo, linha)
+select '1 antes resumo', (select jsonb_build_object('custo', custo_disparo_centavos, 'sem', disparos_sem_custo, 'completo', custo_completo,
+   'cpl', cpl_centavos, 'leads', leads, 'disparos', disparos_qtd) from public.dados_atm_resumo('atm-elaine-1-2026-10'))::text;
+insert into pg_temp._z_out (passo, linha)
+select '1 antes md5 resumo', md5((select jsonb_agg(to_jsonb(r)) from public.dados_atm_resumo('atm-elaine-1-2026-10') r)::text);
+insert into pg_temp._z_out (passo, linha)
+select '1 antes md5 resumo sem custo', md5((select jsonb_agg(to_jsonb(r) - array['custo_disparo_centavos','disparos_sem_custo','custo_completo','cpl_centavos','cac_centavos','roas_bruto','roas_liquido']) from public.dados_atm_resumo('atm-elaine-1-2026-10') r)::text);
+insert into pg_temp._z_out (passo, linha)
+select '1 antes serie custo', (select jsonb_agg(jsonb_build_object('dia', dia, 'custo', custo_disparo_centavos) order by dia) from public.dados_atm_serie_diaria('atm-elaine-1-2026-10') where custo_disparo_centavos is not null)::text;
+insert into pg_temp._z_out (passo, linha)
+select '1 antes md5 serie sem custo', md5((select jsonb_agg(to_jsonb(r) - 'custo_disparo_centavos' order by dia) from public.dados_atm_serie_diaria('atm-elaine-1-2026-10') r)::text);
+
+reset role;
+select set_config('request.jwt.claims', '{}', true);
+-- ===== MIGRATION =====
+-- 20261009210000: CPL do ATM volta a calcular: e-mail e grupo não têm custo por disparo
+--
+-- STATUS: ver 20261009210000.explain.md.
+-- POR QUE: pedido do Victor (09/10/2026, card 17tya50ftxn): "CPL não está sendo calculado. Tem que ser o custo sobre os
+--   leads." dados_atm_resumo só calculava CPL/CAC/ROAS com TODOS os disparos com custo; e-mail e grupo nunca têm custo
+--   (44 e-mail e 53 grupo no banco, todos nulos), então qualquer edição com e-mail ficava sem CPL.
+-- O QUE FAZ (só corpo; create or replace mantém security definer, search_path '' e os grants, inclusive o da TV):
+--   1. dados_atm_resumo: disparos_sem_custo conta só canal pago (whatsapp_api, sms, ligacao) sem custo; custo_completo =
+--      há disparo e nenhum pago sem custo; custo = soma dos custos (0 quando só há e-mail/grupo). CPL = custo ÷ leads
+--      (sem teste), CAC e ROAS na mesma completude, como antes.
+--   2. dados_atm_serie_diaria: custo do dia com a mesma regra (antes, dia com e-mail ficava nulo).
+-- Canais pagos: os do check de mkt_mensageria.disparos fora de email e grupo (whatsapp_api, sms, ligacao); "sem custo"
+--   para grupo e e-mail vem de docs/dashboard-atm/MAPA-DASHBOARD-HT.md (tabela de fontes).
+-- AS 5 PERGUNTAS: escala 2 funções; índice o mesmo; frequência a cada leitura do dashboard; repetição: idempotente;
+--   reversão: 20261009210000_reversao.sql (corpos de antes, md5 9c7b68b3 e d7a96edb).
+-- IDEMPOTENTE: create or replace; guarda pelo md5 do corpo vivo (o de antes ou o desta migration).
+
+
+do $g$
+begin
+  if (select md5(prosrc) from pg_proc where oid = 'public.dados_atm_resumo(text,date,date)'::regprocedure) <> '9c7b68b3ec83b304bdd2fb6ba7dd0bd6'
+     and (select prosrc from pg_proc where oid = 'public.dados_atm_resumo(text,date,date)'::regprocedure) !~ '20261009210000' then
+    raise exception '20261009210000: corpo vivo de dados_atm_resumo mudou. Reler.';
+  end if;
+  if (select md5(prosrc) from pg_proc where oid = 'public.dados_atm_serie_diaria(text,date,date)'::regprocedure) <> 'd7a96edb700fc15f50c8ae9b5977c96b'
+     and (select prosrc from pg_proc where oid = 'public.dados_atm_serie_diaria(text,date,date)'::regprocedure) !~ '20261009210000' then
+    raise exception '20261009210000: corpo vivo de dados_atm_serie_diaria mudou. Reler.';
+  end if;
+end
+$g$;
+
+CREATE OR REPLACE FUNCTION public.dados_atm_resumo(p_chave text, p_de date DEFAULT NULL::date, p_ate date DEFAULT NULL::date)
+ RETURNS TABLE(chave text, projeto_id bigint, projeto_sigla text, projeto_nome text, oferta_codigo text, disparos_qtd integer, disparos_enviados integer, leads integer, grupo_tem_fonte boolean, grupo_entradas integer, grupo_saidas integer, grupo_pct numeric, evasao_pct numeric, custo_disparo_centavos bigint, disparos_sem_custo integer, custo_completo boolean, cpl_centavos bigint, pre_checkout_pessoas integer, vendas integer, vendas_fora_brl integer, compradores integer, compradores_no_pre_checkout integer, conversao_pre_checkout_pct numeric, cac_centavos bigint, receita_bruta numeric, receita_liquida numeric, roas numeric, roas_liquido numeric, atualizado_em timestamp with time zone, periodo_de date, periodo_ate date, leads_teste integer, grupo_teste integer, vendas_teste integer, receita_teste_bruta numeric, grupo_entradas_aproximadas integer, grupo_foto_em timestamp with time zone, grupo_no_grupo integer)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+declare
+  d dados.dashboards := dados.atm_cadastro(p_chave);
+  v_de date; v_ate date; v_ini timestamptz; v_fim timestamptz;
+begin
+  select x.de, x.ate, x.ini, x.fim into v_de, v_ate, v_ini, v_fim
+    from dados.periodo(d.periodo_inicio, d.periodo_fim, p_de, p_ate) x;
+  return query
+  with disp as (
+    -- 20261009210000: e-mail e grupo não têm custo por disparo (custo nulo = sem custo, não falta); só canal pago
+    -- (whatsapp_api, sms, ligacao) sem custo deixa o custo incompleto
+    select count(*)::int as qtd,
+           count(*) filter (where x.custo_centavos is null and x.canal not in ('email', 'grupo'))::int as sem,
+           case when count(*) > 0 then coalesce(sum(x.custo_centavos), 0) end::bigint as custo,
+           sum(x.tamanho_lista)::int as enviados
+      from mkt_mensageria.disparos x
+     where x.projeto_id = d.projeto_id and x.arquivado_em is null
+       and coalesce(x.enviado_em, x.criado_em) >= v_ini and coalesce(x.enviado_em, x.criado_em) < v_fim
+  ),
+  lt as (select * from dados.atm_leads(d.chave) x where x.primeiro_em >= v_ini and x.primeiro_em < v_fim),
+  ld as (select * from lt where not lt.teste),
+  gr as (
+    select exists (select 1 from dados.dashboard_grupos g where g.chave = d.chave) as fonte,
+           count(*) filter (where g.entrou_em >= v_ini and g.entrou_em < v_fim)::int as entradas,
+           count(*) filter (where g.entrou_em >= v_ini and g.entrou_em < v_fim and g.entrada_aproximada)::int as aprox,
+           count(*) filter (where g.entrou_em >= v_ini and g.entrou_em < v_fim and g.no_grupo)::int as no_agora,
+           (select max(f.concluido_em) from dados.grupo_fotos f join dados.dashboard_grupos dg on dg.id = f.grupo_id
+             where dg.chave = d.chave and f.etapa = 'feito') as foto_em,
+           count(*) filter (where g.entrou_em is not null and g.saiu_em >= g.entrou_em
+                              and g.saiu_em >= v_ini and g.saiu_em < v_fim)::int as saidas
+      from dados.v_grupo_pessoas g where g.chave = d.chave
+  ),
+  gt as (
+    select count(*)::int as n from dados.v_grupo_pessoas_todos e
+     where e.chave = d.chave and e.teste and e.entrou_em >= v_ini and e.entrou_em < v_fim
+  ),
+  pc as (select y.email from dados.atm_pre_checkout(d.chave) y where y.primeiro_em >= v_ini and y.primeiro_em < v_fim),
+  tx as (select * from dados.atm_vendas(d.chave) v where v.aprovado_em >= v_ini and v.aprovado_em < v_fim),
+  txt as (select count(*)::int as n, coalesce(sum(v.valor_bruto) filter (where v.moeda = 'BRL'), 0)::numeric(14,2) as bruta
+            from dados.atm_vendas_todas(d.chave) v
+           where v.teste and v.aprovado_em >= v_ini and v.aprovado_em < v_fim),
+  ag as (
+    select (select count(*)::int from ld) as leads,
+           (select count(*)::int from lt where lt.teste) as leads_teste,
+           (select count(*)::int from pc) as pc,
+           (select count(*)::int from tx) as vendas,
+           (select count(*)::int from tx where tx.moeda <> 'BRL') as fora,
+           (select count(distinct tx.email)::int from tx) as comp,
+           (select count(distinct tx.email)::int from tx where exists (select 1 from pc where pc.email = tx.email)) as comp_pc,
+           (select coalesce(sum(tx.valor_bruto), 0) from tx where tx.moeda = 'BRL')::numeric(14,2) as bruta,
+           (select coalesce(sum(tx.valor_liquido), 0) from tx where tx.moeda = 'BRL')::numeric(14,2) as liq
+  ),
+  k as (select (disp.qtd > 0 and disp.sem = 0) as completo, d.oferta_codigo is not null as tem_oferta from disp)
+  select d.chave, pr.id, pr.sigla, pr.nome, d.oferta_codigo,
+         disp.qtd, disp.enviados, ag.leads,
+         gr.fonte,
+         case when gr.fonte then gr.entradas end,
+         case when gr.fonte then gr.saidas end,
+         case when gr.fonte and ag.leads > 0 then round(gr.entradas::numeric * 100 / ag.leads, 2)::numeric(7,2) end,
+         case when gr.fonte and gr.entradas > 0 then round(gr.saidas::numeric * 100 / gr.entradas, 2)::numeric(7,2) end,
+         disp.custo, disp.sem, k.completo,
+         case when k.completo and ag.leads > 0 then round(disp.custo::numeric / ag.leads)::bigint end,
+         ag.pc,
+         case when k.tem_oferta then ag.vendas end,
+         case when k.tem_oferta then ag.fora end,
+         case when k.tem_oferta then ag.comp end,
+         case when k.tem_oferta then ag.comp_pc end,
+         case when k.tem_oferta and ag.pc > 0 then round(ag.comp::numeric * 100 / ag.pc, 2)::numeric(7,2) end,
+         case when k.tem_oferta and k.completo and ag.vendas > 0 then round(disp.custo::numeric / ag.vendas)::bigint end,
+         case when k.tem_oferta then ag.bruta end,
+         case when k.tem_oferta then ag.liq end,
+         case when k.tem_oferta and k.completo and disp.custo > 0 then round(ag.bruta * 100 / disp.custo, 2)::numeric(10,2) end,
+         case when k.tem_oferta and k.completo and disp.custo > 0 then round(ag.liq * 100 / disp.custo, 2)::numeric(10,2) end,
+         now(),
+         v_de, v_ate, ag.leads_teste, case when gr.fonte then gt.n end,
+         case when k.tem_oferta then txt.n end, case when k.tem_oferta then txt.bruta end,
+         case when gr.fonte then gr.aprox end, gr.foto_em, case when gr.fonte then gr.no_agora end
+    from mkt.projetos pr cross join disp cross join ag cross join gr cross join gt cross join txt cross join k
+   where pr.id = d.projeto_id;
+end
+$function$;
+
+CREATE OR REPLACE FUNCTION public.dados_atm_serie_diaria(p_chave text, p_de date DEFAULT NULL::date, p_ate date DEFAULT NULL::date)
+ RETURNS TABLE(dia date, leads integer, grupo_entradas integer, grupo_saidas integer, pre_checkout integer, vendas integer, receita_bruta numeric, custo_disparo_centavos bigint)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+declare
+  d dados.dashboards := dados.atm_cadastro(p_chave);
+  v_tem_grupo boolean := exists (select 1 from dados.dashboard_grupos g where g.chave = d.chave);
+  v_de date; v_ate date; v_ini timestamptz; v_fim timestamptz;
+  v_hoje date := (now() at time zone 'America/Sao_Paulo')::date;
+begin
+  select x.de, x.ate, x.ini, x.fim into v_de, v_ate, v_ini, v_fim
+    from dados.periodo(d.periodo_inicio, d.periodo_fim, p_de, p_ate) x;
+  if v_de is not null and least(coalesce(v_ate, v_hoje), v_hoje) - v_de > 400 then
+    raise exception 'período longo demais para a série (máximo 400 dias)' using errcode = '22023';
+  end if;
+  return query
+  with ld as (select (x.primeiro_em at time zone 'America/Sao_Paulo')::date as dia from dados.atm_leads(d.chave) x
+               where not x.teste and x.primeiro_em >= v_ini and x.primeiro_em < v_fim),
+  ge as (select (g.entrou_em at time zone 'America/Sao_Paulo')::date as dia from dados.v_grupo_pessoas g
+          where g.chave = d.chave and g.entrou_em >= v_ini and g.entrou_em < v_fim),
+  gs as (select (g.saiu_em at time zone 'America/Sao_Paulo')::date as dia from dados.v_grupo_pessoas g
+          where g.chave = d.chave and g.entrou_em is not null and g.saiu_em >= g.entrou_em
+            and g.saiu_em >= v_ini and g.saiu_em < v_fim),
+  pc as (select (y.primeiro_em at time zone 'America/Sao_Paulo')::date as dia from dados.atm_pre_checkout(d.chave) y
+          where y.primeiro_em >= v_ini and y.primeiro_em < v_fim),
+  tx as (select v.dia_aprovado as dia, v.valor_bruto, v.moeda
+           from dados.atm_vendas(d.chave) v where v.aprovado_em >= v_ini and v.aprovado_em < v_fim),
+  ds as (select (coalesce(x.enviado_em, x.criado_em) at time zone 'America/Sao_Paulo')::date as dia, x.custo_centavos,
+                x.canal in ('email', 'grupo') as sem_custo_por_disparo  -- 20261009210000
+           from mkt_mensageria.disparos x
+          where x.projeto_id = d.projeto_id and x.arquivado_em is null
+            and coalesce(x.enviado_em, x.criado_em) >= v_ini and coalesce(x.enviado_em, x.criado_em) < v_fim),
+  lim as (
+    select coalesce(v_de, least((select min(dia) from ld), (select min(dia) from ge), (select min(dia) from pc),
+                                (select min(dia) from tx), (select min(dia) from ds))) as de,
+           least(coalesce(v_ate, v_hoje), v_hoje) as ate
+  )
+  select s::date,
+         (select count(*)::int from ld where ld.dia = s::date),
+         case when v_tem_grupo then (select count(*)::int from ge where ge.dia = s::date) end,
+         case when v_tem_grupo then (select count(*)::int from gs where gs.dia = s::date) end,
+         (select count(*)::int from pc where pc.dia = s::date),
+         case when d.oferta_codigo is not null then (select count(*)::int from tx where tx.dia = s::date) end,
+         case when d.oferta_codigo is not null then
+           (select coalesce(sum(tx.valor_bruto), 0)::numeric(14,2) from tx where tx.dia = s::date and tx.moeda = 'BRL') end,
+         (select case when count(*) filter (where ds.custo_centavos is null and not ds.sem_custo_por_disparo) = 0
+                      then coalesce(sum(ds.custo_centavos), 0)::bigint end
+            from ds where ds.dia = s::date having count(*) > 0)
+    from lim
+    cross join lateral generate_series(lim.de, lim.ate, interval '1 day') s
+   where lim.de is not null and lim.de <= lim.ate
+   order by 1;
+end
+$function$;
+
+insert into pg_temp._z_out (passo, linha) select '2 grants depois', (select string_agg(p.proname || '=' || p.proacl::text, ' ; ' order by 1) from pg_proc p where p.proname in ('dados_atm_resumo','dados_atm_serie_diaria') and p.pronamespace = 'public'::regnamespace);
+select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated"}', true);
+set local role authenticated;
+insert into pg_temp._z_out (passo, linha)
+select '2 depois resumo', (select jsonb_build_object('custo', custo_disparo_centavos, 'sem', disparos_sem_custo, 'completo', custo_completo,
+   'cpl', cpl_centavos, 'leads', leads, 'disparos', disparos_qtd) from public.dados_atm_resumo('atm-elaine-1-2026-10'))::text;
+insert into pg_temp._z_out (passo, linha)
+select '2 depois md5 resumo', md5((select jsonb_agg(to_jsonb(r)) from public.dados_atm_resumo('atm-elaine-1-2026-10') r)::text);
+insert into pg_temp._z_out (passo, linha)
+select '2 depois md5 resumo sem custo', md5((select jsonb_agg(to_jsonb(r) - array['custo_disparo_centavos','disparos_sem_custo','custo_completo','cpl_centavos','cac_centavos','roas_bruto','roas_liquido']) from public.dados_atm_resumo('atm-elaine-1-2026-10') r)::text);
+insert into pg_temp._z_out (passo, linha)
+select '2 depois serie custo', (select jsonb_agg(jsonb_build_object('dia', dia, 'custo', custo_disparo_centavos) order by dia) from public.dados_atm_serie_diaria('atm-elaine-1-2026-10') where custo_disparo_centavos is not null)::text;
+insert into pg_temp._z_out (passo, linha)
+select '2 depois md5 serie sem custo', md5((select jsonb_agg(to_jsonb(r) - 'custo_disparo_centavos' order by dia) from public.dados_atm_serie_diaria('atm-elaine-1-2026-10') r)::text);
+
+-- caso sintético: um disparo pago sem custo volta a deixar incompleto
+reset role;
+select set_config('request.jwt.claims', '{}', true);
+insert into mkt_mensageria.disparos (projeto_id, canal, tipo, copy_texto, publico_lista, tamanho_lista, disparado_por, origem, enviado_em, ferramenta_id)
+select 75, 'sms', null, 'ensaio', 'ensaio', 1, 'ensaio', 'manual', now(), (select ferramenta_id from mkt_mensageria.disparos where ferramenta_id is not null limit 1);
+select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated"}', true);
+set local role authenticated;
+insert into pg_temp._z_out (passo, linha)
+select '3 sms sem custo', (select jsonb_build_object('sem', disparos_sem_custo, 'completo', custo_completo, 'cpl', cpl_centavos) from public.dados_atm_resumo('atm-elaine-1-2026-10'))::text;
+reset role;
+select set_config('request.jwt.claims', '{}', true);
+update mkt_mensageria.disparos set arquivado_em = now(), arquivado_motivo = 'ensaio desfeito' where projeto_id = 75 and disparado_por = 'ensaio' and copy_texto = 'ensaio';  -- a transação é desfeita no fim
+-- ===== REVERSÃO =====
+-- Reversão de 20261009210000: volta dados_atm_resumo e dados_atm_serie_diaria aos corpos de antes
+-- (md5 9c7b68b3ec83b304bdd2fb6ba7dd0bd6 e d7a96edb700fc15f50c8ae9b5977c96b). Grants não mudam (create or replace).
+
+CREATE OR REPLACE FUNCTION public.dados_atm_resumo(p_chave text, p_de date DEFAULT NULL::date, p_ate date DEFAULT NULL::date)
+ RETURNS TABLE(chave text, projeto_id bigint, projeto_sigla text, projeto_nome text, oferta_codigo text, disparos_qtd integer, disparos_enviados integer, leads integer, grupo_tem_fonte boolean, grupo_entradas integer, grupo_saidas integer, grupo_pct numeric, evasao_pct numeric, custo_disparo_centavos bigint, disparos_sem_custo integer, custo_completo boolean, cpl_centavos bigint, pre_checkout_pessoas integer, vendas integer, vendas_fora_brl integer, compradores integer, compradores_no_pre_checkout integer, conversao_pre_checkout_pct numeric, cac_centavos bigint, receita_bruta numeric, receita_liquida numeric, roas numeric, roas_liquido numeric, atualizado_em timestamp with time zone, periodo_de date, periodo_ate date, leads_teste integer, grupo_teste integer, vendas_teste integer, receita_teste_bruta numeric, grupo_entradas_aproximadas integer, grupo_foto_em timestamp with time zone, grupo_no_grupo integer)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+declare
+  d dados.dashboards := dados.atm_cadastro(p_chave);
+  v_de date; v_ate date; v_ini timestamptz; v_fim timestamptz;
+begin
+  select x.de, x.ate, x.ini, x.fim into v_de, v_ate, v_ini, v_fim
+    from dados.periodo(d.periodo_inicio, d.periodo_fim, p_de, p_ate) x;
+  return query
+  with disp as (
+    select count(*)::int as qtd, count(*) filter (where x.custo_centavos is null)::int as sem,
+           sum(x.custo_centavos)::bigint as custo, sum(x.tamanho_lista)::int as enviados
+      from mkt_mensageria.disparos x
+     where x.projeto_id = d.projeto_id and x.arquivado_em is null
+       and coalesce(x.enviado_em, x.criado_em) >= v_ini and coalesce(x.enviado_em, x.criado_em) < v_fim
+  ),
+  lt as (select * from dados.atm_leads(d.chave) x where x.primeiro_em >= v_ini and x.primeiro_em < v_fim),
+  ld as (select * from lt where not lt.teste),
+  gr as (
+    select exists (select 1 from dados.dashboard_grupos g where g.chave = d.chave) as fonte,
+           count(*) filter (where g.entrou_em >= v_ini and g.entrou_em < v_fim)::int as entradas,
+           count(*) filter (where g.entrou_em >= v_ini and g.entrou_em < v_fim and g.entrada_aproximada)::int as aprox,
+           count(*) filter (where g.entrou_em >= v_ini and g.entrou_em < v_fim and g.no_grupo)::int as no_agora,
+           (select max(f.concluido_em) from dados.grupo_fotos f join dados.dashboard_grupos dg on dg.id = f.grupo_id
+             where dg.chave = d.chave and f.etapa = 'feito') as foto_em,
+           count(*) filter (where g.entrou_em is not null and g.saiu_em >= g.entrou_em
+                              and g.saiu_em >= v_ini and g.saiu_em < v_fim)::int as saidas
+      from dados.v_grupo_pessoas g where g.chave = d.chave
+  ),
+  gt as (
+    select count(*)::int as n from dados.v_grupo_pessoas_todos e
+     where e.chave = d.chave and e.teste and e.entrou_em >= v_ini and e.entrou_em < v_fim
+  ),
+  pc as (select y.email from dados.atm_pre_checkout(d.chave) y where y.primeiro_em >= v_ini and y.primeiro_em < v_fim),
+  tx as (select * from dados.atm_vendas(d.chave) v where v.aprovado_em >= v_ini and v.aprovado_em < v_fim),
+  txt as (select count(*)::int as n, coalesce(sum(v.valor_bruto) filter (where v.moeda = 'BRL'), 0)::numeric(14,2) as bruta
+            from dados.atm_vendas_todas(d.chave) v
+           where v.teste and v.aprovado_em >= v_ini and v.aprovado_em < v_fim),
+  ag as (
+    select (select count(*)::int from ld) as leads,
+           (select count(*)::int from lt where lt.teste) as leads_teste,
+           (select count(*)::int from pc) as pc,
+           (select count(*)::int from tx) as vendas,
+           (select count(*)::int from tx where tx.moeda <> 'BRL') as fora,
+           (select count(distinct tx.email)::int from tx) as comp,
+           (select count(distinct tx.email)::int from tx where exists (select 1 from pc where pc.email = tx.email)) as comp_pc,
+           (select coalesce(sum(tx.valor_bruto), 0) from tx where tx.moeda = 'BRL')::numeric(14,2) as bruta,
+           (select coalesce(sum(tx.valor_liquido), 0) from tx where tx.moeda = 'BRL')::numeric(14,2) as liq
+  ),
+  k as (select (disp.qtd > 0 and disp.sem = 0) as completo, d.oferta_codigo is not null as tem_oferta from disp)
+  select d.chave, pr.id, pr.sigla, pr.nome, d.oferta_codigo,
+         disp.qtd, disp.enviados, ag.leads,
+         gr.fonte,
+         case when gr.fonte then gr.entradas end,
+         case when gr.fonte then gr.saidas end,
+         case when gr.fonte and ag.leads > 0 then round(gr.entradas::numeric * 100 / ag.leads, 2)::numeric(7,2) end,
+         case when gr.fonte and gr.entradas > 0 then round(gr.saidas::numeric * 100 / gr.entradas, 2)::numeric(7,2) end,
+         disp.custo, disp.sem, k.completo,
+         case when k.completo and ag.leads > 0 then round(disp.custo::numeric / ag.leads)::bigint end,
+         ag.pc,
+         case when k.tem_oferta then ag.vendas end,
+         case when k.tem_oferta then ag.fora end,
+         case when k.tem_oferta then ag.comp end,
+         case when k.tem_oferta then ag.comp_pc end,
+         case when k.tem_oferta and ag.pc > 0 then round(ag.comp::numeric * 100 / ag.pc, 2)::numeric(7,2) end,
+         case when k.tem_oferta and k.completo and ag.vendas > 0 then round(disp.custo::numeric / ag.vendas)::bigint end,
+         case when k.tem_oferta then ag.bruta end,
+         case when k.tem_oferta then ag.liq end,
+         case when k.tem_oferta and k.completo and disp.custo > 0 then round(ag.bruta * 100 / disp.custo, 2)::numeric(10,2) end,
+         case when k.tem_oferta and k.completo and disp.custo > 0 then round(ag.liq * 100 / disp.custo, 2)::numeric(10,2) end,
+         now(),
+         v_de, v_ate, ag.leads_teste, case when gr.fonte then gt.n end,
+         case when k.tem_oferta then txt.n end, case when k.tem_oferta then txt.bruta end,
+         case when gr.fonte then gr.aprox end, gr.foto_em, case when gr.fonte then gr.no_agora end
+    from mkt.projetos pr cross join disp cross join ag cross join gr cross join gt cross join txt cross join k
+   where pr.id = d.projeto_id;
+end
+$function$;
+
+CREATE OR REPLACE FUNCTION public.dados_atm_serie_diaria(p_chave text, p_de date DEFAULT NULL::date, p_ate date DEFAULT NULL::date)
+ RETURNS TABLE(dia date, leads integer, grupo_entradas integer, grupo_saidas integer, pre_checkout integer, vendas integer, receita_bruta numeric, custo_disparo_centavos bigint)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+declare
+  d dados.dashboards := dados.atm_cadastro(p_chave);
+  v_tem_grupo boolean := exists (select 1 from dados.dashboard_grupos g where g.chave = d.chave);
+  v_de date; v_ate date; v_ini timestamptz; v_fim timestamptz;
+  v_hoje date := (now() at time zone 'America/Sao_Paulo')::date;
+begin
+  select x.de, x.ate, x.ini, x.fim into v_de, v_ate, v_ini, v_fim
+    from dados.periodo(d.periodo_inicio, d.periodo_fim, p_de, p_ate) x;
+  if v_de is not null and least(coalesce(v_ate, v_hoje), v_hoje) - v_de > 400 then
+    raise exception 'período longo demais para a série (máximo 400 dias)' using errcode = '22023';
+  end if;
+  return query
+  with ld as (select (x.primeiro_em at time zone 'America/Sao_Paulo')::date as dia from dados.atm_leads(d.chave) x
+               where not x.teste and x.primeiro_em >= v_ini and x.primeiro_em < v_fim),
+  ge as (select (g.entrou_em at time zone 'America/Sao_Paulo')::date as dia from dados.v_grupo_pessoas g
+          where g.chave = d.chave and g.entrou_em >= v_ini and g.entrou_em < v_fim),
+  gs as (select (g.saiu_em at time zone 'America/Sao_Paulo')::date as dia from dados.v_grupo_pessoas g
+          where g.chave = d.chave and g.entrou_em is not null and g.saiu_em >= g.entrou_em
+            and g.saiu_em >= v_ini and g.saiu_em < v_fim),
+  pc as (select (y.primeiro_em at time zone 'America/Sao_Paulo')::date as dia from dados.atm_pre_checkout(d.chave) y
+          where y.primeiro_em >= v_ini and y.primeiro_em < v_fim),
+  tx as (select v.dia_aprovado as dia, v.valor_bruto, v.moeda
+           from dados.atm_vendas(d.chave) v where v.aprovado_em >= v_ini and v.aprovado_em < v_fim),
+  ds as (select (coalesce(x.enviado_em, x.criado_em) at time zone 'America/Sao_Paulo')::date as dia, x.custo_centavos
+           from mkt_mensageria.disparos x
+          where x.projeto_id = d.projeto_id and x.arquivado_em is null
+            and coalesce(x.enviado_em, x.criado_em) >= v_ini and coalesce(x.enviado_em, x.criado_em) < v_fim),
+  lim as (
+    select coalesce(v_de, least((select min(dia) from ld), (select min(dia) from ge), (select min(dia) from pc),
+                                (select min(dia) from tx), (select min(dia) from ds))) as de,
+           least(coalesce(v_ate, v_hoje), v_hoje) as ate
+  )
+  select s::date,
+         (select count(*)::int from ld where ld.dia = s::date),
+         case when v_tem_grupo then (select count(*)::int from ge where ge.dia = s::date) end,
+         case when v_tem_grupo then (select count(*)::int from gs where gs.dia = s::date) end,
+         (select count(*)::int from pc where pc.dia = s::date),
+         case when d.oferta_codigo is not null then (select count(*)::int from tx where tx.dia = s::date) end,
+         case when d.oferta_codigo is not null then
+           (select coalesce(sum(tx.valor_bruto), 0)::numeric(14,2) from tx where tx.dia = s::date and tx.moeda = 'BRL') end,
+         (select case when count(*) filter (where ds.custo_centavos is null) = 0 then sum(ds.custo_centavos)::bigint end
+            from ds where ds.dia = s::date having count(*) > 0)
+    from lim
+    cross join lateral generate_series(lim.de, lim.ate, interval '1 day') s
+   where lim.de is not null and lim.de <= lim.ate
+   order by 1;
+end
+$function$;
+
+select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated"}', true);
+set local role authenticated;
+insert into pg_temp._z_out (passo, linha)
+select '4 reversao resumo', (select jsonb_build_object('custo', custo_disparo_centavos, 'sem', disparos_sem_custo, 'completo', custo_completo,
+   'cpl', cpl_centavos, 'leads', leads, 'disparos', disparos_qtd) from public.dados_atm_resumo('atm-elaine-1-2026-10'))::text;
+insert into pg_temp._z_out (passo, linha)
+select '4 reversao md5 resumo', md5((select jsonb_agg(to_jsonb(r)) from public.dados_atm_resumo('atm-elaine-1-2026-10') r)::text);
+insert into pg_temp._z_out (passo, linha)
+select '4 reversao md5 resumo sem custo', md5((select jsonb_agg(to_jsonb(r) - array['custo_disparo_centavos','disparos_sem_custo','custo_completo','cpl_centavos','cac_centavos','roas_bruto','roas_liquido']) from public.dados_atm_resumo('atm-elaine-1-2026-10') r)::text);
+insert into pg_temp._z_out (passo, linha)
+select '4 reversao serie custo', (select jsonb_agg(jsonb_build_object('dia', dia, 'custo', custo_disparo_centavos) order by dia) from public.dados_atm_serie_diaria('atm-elaine-1-2026-10') where custo_disparo_centavos is not null)::text;
+insert into pg_temp._z_out (passo, linha)
+select '4 reversao md5 serie sem custo', md5((select jsonb_agg(to_jsonb(r) - 'custo_disparo_centavos' order by dia) from public.dados_atm_serie_diaria('atm-elaine-1-2026-10') r)::text);
+
+reset role;
+select passo, linha from pg_temp._z_out order by em, passo;
+rollback;
