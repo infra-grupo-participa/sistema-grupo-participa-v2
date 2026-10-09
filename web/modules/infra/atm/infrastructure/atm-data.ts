@@ -7,6 +7,29 @@ import type { DatasPeriodoAtm } from '../domain/periodo';
 
 export type Resultado<T> = { data: T; semDado: boolean; erro: string | null };
 export type ResultadoAcao = { data: number | null; erro: string | null };
+export type DisparoDetalheAtm = {
+  id: number | null;
+  dataHora: string | null;
+  enviadoEm: string | null;
+  canal: 'whatsapp_api' | 'email' | 'sms' | 'ligacao' | 'grupo' | null;
+  canalPago: boolean | null;
+  tipo: string | null;
+  ferramenta: string | null;
+  numero: string | null;
+  campanha: string | null;
+  publicoLista: string | null;
+  publicoOrigem: string | null;
+  copyTexto: string | null;
+  copyLink: string | null;
+  enviados: number | null;
+  entregues: number | null;
+  lidas: number | null;
+  cliques: number | null;
+  falhas: number | null;
+  custoCentavos: number | null;
+  origem: string | null;
+  retornoEm: string | null;
+};
 type Linha = Record<string, unknown>;
 
 function num(v: unknown): number | null {
@@ -168,6 +191,36 @@ function mensagemAcao(codigo?: string): string {
 
 export async function carregarAtmCanais(chave: string, periodo?: DatasPeriodoAtm): Promise<Resultado<Linha[]>> {
   return rpc('dados_atm_disparos_canais', chave, periodo);
+}
+export async function carregarAtmDisparosLista(chave: string, periodo?: DatasPeriodoAtm): Promise<Resultado<DisparoDetalheAtm[]>> {
+  const r = await rpc('dados_atm_disparos_lista', chave, periodo);
+  return {
+    data: r.data.map((x) => ({
+      id: num(x.disparo_id),
+      dataHora: typeof x.data_hora === 'string' ? x.data_hora : null,
+      enviadoEm: typeof x.enviado_em === 'string' ? x.enviado_em : null,
+      canal: x.canal === 'whatsapp_api' || x.canal === 'email' || x.canal === 'sms' || x.canal === 'ligacao' || x.canal === 'grupo' ? x.canal : null,
+      canalPago: booleano(x.canal_pago),
+      tipo: typeof x.tipo === 'string' ? x.tipo : null,
+      ferramenta: typeof x.ferramenta === 'string' ? x.ferramenta : null,
+      numero: typeof x.numero === 'string' ? x.numero : null,
+      campanha: typeof x.campanha === 'string' ? x.campanha : null,
+      publicoLista: typeof x.publico_lista === 'string' ? x.publico_lista : null,
+      publicoOrigem: typeof x.publico_origem === 'string' ? x.publico_origem : null,
+      copyTexto: typeof x.copy_texto === 'string' ? x.copy_texto : null,
+      copyLink: typeof x.copy_link === 'string' ? x.copy_link : null,
+      enviados: num(x.tamanho_lista),
+      entregues: num(x.entregues),
+      lidas: num(x.lidas),
+      cliques: num(x.cliques),
+      falhas: num(x.falhas),
+      custoCentavos: num(x.custo_centavos),
+      origem: typeof x.origem === 'string' ? x.origem : null,
+      retornoEm: typeof x.retorno_em === 'string' ? x.retorno_em : null,
+    })),
+    semDado: r.semDado,
+    erro: r.erro,
+  };
 }
 export async function carregarAtmComparecimento(chave: string): Promise<Resultado<Linha[]>> {
   return rpc('dados_atm_comparecimento', chave);

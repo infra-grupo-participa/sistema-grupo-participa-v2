@@ -33,12 +33,23 @@ O front lê somente RPCs Supabase com a chave do dashboard:
 | Evolução diária | dados_atm_serie_diaria |
 | Modal de leads, evolução e resumo | dados_atm_leads e dados_atm_serie_diaria |
 | Abas API, Grupo, SMS, Ligação e E-mail | dados_atm_disparos_canais |
+| Lista detalhada de disparos | dados_atm_disparos_lista |
 | Comparecimento | dados_atm_comparecimento |
 | Ciclo aberto e fechado pós-live | dados_atm_pos_live |
 
 Receita, custos, CPL, CAC e ROAS são apresentados conforme os valores devolvidos pelo banco. **CPL de "Esta edição" (09/10/2026, migration `20261009210000`):** custo de disparo ÷ leads sem teste; só some (nulo) quando algum disparo de canal pago (API WhatsApp, SMS, ligação) está sem custo. E-mail e grupo não têm custo por disparo e não bloqueiam mais o CPL. ATM OUT/26 em 09/10: 103.208 centavos ÷ 95 leads = 1.086 centavos (R$ 10,86). Atenção: no Histórico o CPL é investimento total (tráfego + disparo) ÷ leads, calculado na tela; as duas abas usam bases diferentes. Não há preço de venda fixo no código. Custos em centavos são convertidos para reais na camada de dados. O modal mostra os campos de origem descritos no briefing; dado pessoal só é buscado ao abrir o modal.
 
 Se a RPC ainda não existir ou não devolver dado, o bloco permanece disponível e mostra “sem dado ainda”. Zero numérico devolvido pelo banco é apresentado como zero medido. Falhas isoladas não impedem os demais blocos. Uma falha de atualização preserva o último dado carregado. Resumo e série atualizam a cada 60 segundos somente com a aba visível, sem sobrepor chamadas.
+
+## Detalhe de disparos (09/10/2026)
+
+A seção Disparos mantém o resumo por canal e, abaixo dele, mostra cada registro retornado por `dados_atm_disparos_lista`, filtrável por canal. A ordem vem da RPC: data e hora ascendente e, em empate, identificador ascendente. A data de referência é `coalesce(enviado_em, criado_em)`, exibida no fuso de São Paulo. O filtro de período da tela é enviado à mesma RPC.
+
+O contrato está em [MODELO-DE-DADOS.md](./MODELO-DE-DADOS.md), seção “Lista de disparos”; a migration `20261009220000` foi aplicada pelo Galego em 09/10/2026. A tela chama a RPC com a sessão autenticada e não usa `service_role`.
+
+Cada linha expansível mostra a campanha, canal, tipo quando houver, contagens de enviados, entregues, lidas, cliques e falhas, além do custo. Os detalhes incluem ferramenta, número remetente, lista e origem do público, origem do registro e horários de envio e retorno. O conteúdo integral aparece quando há texto; quando só existe link, a tela mostra um link seguro para abrir. O campo é rotulado como **Campanha** porque não há coluna de título ou assunto no contrato.
+
+Nulos permanecem “Sem dado”, sem conversão para zero. Canais sem custo por disparo são identificados como tal. As taxas de entrega (entregues ÷ enviados), leitura (lidas ÷ entregues), cliques (cliques ÷ entregues) e custo por entregue são calculadas na tela, identificadas como cálculo; denominador nulo ou zero deixa o resultado como “Sem dado”. Uma falha da RPC preserva as linhas carregadas anteriormente e mostra o aviso. A RPC não está duplicada em outra chamada para cada linha.
 
 ## Situação do banco
 
@@ -52,6 +63,7 @@ O contrato do front está descrito na migration **infra/supabase/migrations/2026
 4. Abra Infra > Dashboards > Escritório > Seminário ATM.
 5. Sem RPCs aplicadas, confira que a página carrega, os cards mostram zero com “sem dado ainda” e as seções sem linhas mostram o estado vazio.
 6. Com as RPCs aplicadas e dados cadastrados, confira a ordem dos cards, abra o modal de leads e navegue pelas cinco abas de disparo, comparecimento e ciclos pós-live.
+7. Na seção Disparos, selecione cada canal e expanda registros para conferir contagens, taxas calculadas, valores nulos como “Sem dado” e conteúdo em texto ou link.
 7. Verifique a atualização periódica e o rótulo de horário no cabeçalho.
 
 Verificações do projeto:
