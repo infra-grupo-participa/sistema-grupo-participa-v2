@@ -136,3 +136,33 @@ describe('atenderMcp: WhatsApp pelo Claude (20261008233100)', () => {
     expect(r.corpo).toMatchObject({ result: { isError: true, content: [{ text: 'Contato não encontrado.' }] } });
   });
 });
+
+describe('atenderMcp: campos do negócio e link (20261009153128)', () => {
+  it('abrir link sem acesso: leitura com ok:false vira erro "Você não tem acesso a este lead."', async () => {
+    const { p, chamadas } = porta(sessao(['ler']), { crm_mcp_lead: { data: { ok: false, msg: 'Você não tem acesso a este lead.' } } });
+    const r = await atenderMcp(call('comercial_abrir_link', { link: `https://grupoparticipa.app.br/comercial/conversas?contato=${U1}` }), HASH, p);
+    expect(chamadas.map((c) => c.rpc)).toEqual(['crm_mcp_lead']);
+    expect(r.corpo).toMatchObject({ result: { isError: true, content: [{ text: 'Você não tem acesso a este lead.' }] } });
+  });
+  it('link de outro domínio não chama o banco', async () => {
+    const { p, chamadas } = porta(sessao(['ler']));
+    const r = await atenderMcp(call('comercial_abrir_link', { link: `https://evil.com/comercial/conversas?contato=${U1}` }), HASH, p);
+    expect(r.corpo).toMatchObject({ result: { isError: true } });
+    expect(chamadas).toHaveLength(0);
+  });
+  it('preencher campos: token só "ler" não grava; com "operar" grava normalizado', async () => {
+    const so = porta(sessao(['ler']));
+    expect((await atenderMcp(call('comercial_preencher_campos', { negocio_id: U1, campos: { perfil_profissional: 'contadora' } }), HASH, so.p)).corpo)
+      .toMatchObject({ result: { isError: true } });
+    expect(so.chamadas).toHaveLength(0);
+    const op = porta(sessao(['ler', 'operar']), { crm_mcp_preencher_campos: { data: { ok: true, mudou: [{ chave: 'perfil_profissional', de: null, para: 'contador' }] } } });
+    const r = await atenderMcp(call('comercial_preencher_campos', { negocio_id: U1, campos: { perfil_profissional: 'contadora' } }), HASH, op.p);
+    expect(op.chamadas[0]).toMatchObject({ rpc: 'crm_mcp_preencher_campos', params: { p_negocio: U1, p_campos: { perfil_profissional: 'contador' } } });
+    expect(r.corpo).toMatchObject({ result: { isError: false, structuredContent: { ok: true, interpretado: { perfil_profissional: 'contador' } } } });
+  });
+  it('leitura sem campo ok continua sem erro (compatível com as ferramentas antigas)', async () => {
+    const { p } = porta(sessao(['ler']), { crm_funis: { data: [] } });
+    const r = await atenderMcp(call('comercial_listar_funis', {}), HASH, p);
+    expect(r.corpo).toMatchObject({ result: { isError: false } });
+  });
+});

@@ -10,12 +10,13 @@ const GEST = { perfilId: U2, papel: 'gestor' as const };
 const CONSULTAS_WHATSAPP = ['comercial_numeros_whatsapp', 'comercial_templates_whatsapp', 'comercial_situacao_conversa'];
 
 describe('mcp: catálogo', () => {
-  it('9 de leitura + 13 no escopo operar (9 escritas + 4 do WhatsApp), nomes válidos para o MCP e para crm.mcp_chamada', () => {
-    expect(FERRAMENTAS.filter((x) => x.escopo === 'ler')).toHaveLength(9);
+  it('12 de leitura + 14 no escopo operar (10 escritas + 4 do WhatsApp), nomes válidos para o MCP e para crm.mcp_chamada', () => {
+    expect(FERRAMENTAS).toHaveLength(26);
+    expect(FERRAMENTAS.filter((x) => x.escopo === 'ler')).toHaveLength(12);
     expect(FERRAMENTAS.filter((x) => x.escopo === 'operar').map((x) => x.name).sort())
       .toEqual(['comercial_adicionar_nota', 'comercial_concluir_atividade', 'comercial_criar_atividade', 'comercial_criar_contato',
         'comercial_editar_contato', 'comercial_enviar_whatsapp', 'comercial_mover_etapa', 'comercial_numeros_whatsapp',
-        'comercial_reabrir_atividade', 'comercial_situacao_conversa', 'comercial_tag_adicionar', 'comercial_tag_remover',
+        'comercial_preencher_campos', 'comercial_reabrir_atividade', 'comercial_situacao_conversa', 'comercial_tag_adicionar', 'comercial_tag_remover',
         'comercial_templates_whatsapp']);
     for (const x of FERRAMENTAS) {
       expect(x.name).toMatch(/^[a-z_]{3,60}$/);
@@ -27,16 +28,19 @@ describe('mcp: catálogo', () => {
     const nomes = FERRAMENTAS.map((x) => x.name).filter((n) => n !== 'comercial_enviar_whatsapp').join(' ');
     expect(nomes).not.toMatch(/ganho|perdido|transferir|disparo|enviar|exportar|funil_salvar|oferta|apagar|excluir|massa/);
   });
-  it('toda RPC usada está na lista fechada de public.crm_mcp_rpc (migrations 20261008150823 e 20261008222038)', () => {
+  it('toda RPC usada está na lista fechada de public.crm_mcp_rpc (migrations 20261008150823, 20261008222038, 20261008233100 e 20261009153128)', () => {
     const LISTA = ['crm_funis', 'crm_funil_resumo', 'crm_negocios', 'crm_contatos', 'crm_jornada', 'crm_atividades',
       'crm_desempenho', 'crm_mensagens', 'crm_criar_atividade', 'crm_adicionar_nota', 'crm_mover_etapa', 'crm_concluir_atividade',
       'crm_criar_contato', 'crm_editar_contato', 'crm_tags_contato', 'crm_reabrir_atividade',
-      'crm_mcp_numeros', 'crm_mcp_templates', 'crm_mcp_situacao_conversa', 'crm_mcp_enviar_whatsapp'];
+      'crm_mcp_numeros', 'crm_mcp_templates', 'crm_mcp_situacao_conversa', 'crm_mcp_enviar_whatsapp',
+      'crm_mcp_negocio_campos', 'crm_mcp_preencher_campos', 'crm_mcp_lead'];
     const args = { funil_id: U1, pessoa_id: U1, negocio_id: U1, etapa_id: U2, atividade_id: U1, busca: 'ana', tipo: 'ligacao', titulo: 't', texto: 't',
-      vence_em: '2026-10-06T10:00', nome: 'Ana Souza', email: 'ana@exemplo.com', tags: ['vip'], contato_id: U1, chave_idempotencia: U2 };
+      vence_em: '2026-10-06T10:00', nome: 'Ana Souza', email: 'ana@exemplo.com', tags: ['vip'], contato_id: U1, chave_idempotencia: U2,
+      campos: { perfil_profissional: 'contador' }, link: `https://grupoparticipa.app.br/comercial/conversas?contato=${U1}` };
+    const soContato = { contato_id: U1 };
     let planos = 0;
     for (const x of FERRAMENTAS) {
-      const v = x.validar(args);
+      const v = x.name === 'comercial_sugerir_campos' ? x.validar(soContato) : x.validar(args);
       if (!v.ok) continue;
       for (const c of x.plano(v.valor, new Date())) { expect(LISTA).toContain(c.rpc); planos++; }
     }
@@ -306,5 +310,82 @@ describe('mcp: WhatsApp pelo Claude (20261008233100)', () => {
     expect(env.resultado([{ ok: true, msg: 'Mensagem na fila', mensagemId: U1 }], {}, new Date(), VEND))
       .toEqual({ ok: true, msg: 'Mensagem na fila', mensagemId: U1 });
     expect(f('comercial_numeros_whatsapp').resultado([null], {}, new Date(), GEST)).toEqual({});
+  });
+});
+
+describe('mcp: campos do negócio, sugestão e link (20261009153128)', () => {
+  it('campos_negocio: só leitura, chama crm_mcp_negocio_campos', () => {
+    const c = f('comercial_campos_negocio');
+    expect(c.escopo).toBe('ler');
+    const v = c.validar({ negocio_id: U1 });
+    expect(v.ok && c.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_mcp_negocio_campos', params: { p_negocio: U1 } }]);
+    expect(c.validar({}).ok).toBe(false);
+  });
+  it('preencher_campos: normaliza fala natural e manda à RPC que grava pela crm_salvar_campos', () => {
+    const p = f('comercial_preencher_campos');
+    expect(p.escopo).toBe('operar');
+    expect(p.description).toMatch(/inclusive por voz/);
+    expect(p.description).toMatch(/PROPONHA o preenchimento e confirme com o usuário antes de gravar/);
+    const v = p.validar({ negocio_id: U1, campos: {
+      perfil_profissional: 'é contadora', atua_com_holding: 'começando', produto_interesse: 'Holding Total', forma_pagamento: 'no pix', origem: ' indicação ',
+    } });
+    expect(v.ok && p.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_mcp_preencher_campos', params: { p_negocio: U1, p_campos: {
+      perfil_profissional: 'contador', atua_com_holding: 'comecando', produto_interesse: 'ht', forma_pagamento: 'pix', origem: 'indicação',
+    } } }]);
+    const limpa = p.validar({ negocio_id: U1, campos: { objecao_principal: '' } });
+    expect(limpa.ok && limpa.valor.campos).toEqual({ objecao_principal: '' });
+    expect(p.validar({ negocio_id: U1, campos: {} }).ok).toBe(false);
+    expect(p.validar({ negocio_id: U1, campos: [] }).ok).toBe(false);
+    expect(p.validar({ negocio_id: U1, campos: { 'Perfil X': 'a' } }).ok).toBe(false);
+    expect(p.validar({ negocio_id: U1, campos: { perfil_profissional: 3 } }).ok).toBe(false);
+    expect(p.validar({ campos: { perfil_profissional: 'contador' } }).ok).toBe(false);
+  });
+  it('preencher_campos: devolve o que mudou e o que foi interpretado; recusa do banco passa adiante', () => {
+    const p = f('comercial_preencher_campos');
+    const a = { negocio_id: U1, campos: { perfil_profissional: 'contador' } };
+    const r = p.resultado([{ ok: true, mudou: [{ chave: 'perfil_profissional', de: null, para: 'contador' }] }], a, new Date(), VEND);
+    expect(r).toMatchObject({ ok: true, interpretado: { perfil_profissional: 'contador' } });
+    expect(p.resultado([{ ok: false, msg: 'Este negócio não é seu.' }], a, new Date(), VEND)).toEqual({ ok: false, msg: 'Este negócio não é seu.' });
+  });
+  it('sugerir_campos: contato OU negócio; sugere pelo cliente e pelas notas, com trecho; nada é gravado', () => {
+    const s = f('comercial_sugerir_campos');
+    expect(s.escopo).toBe('ler');
+    expect(s.validar({}).ok).toBe(false);
+    expect(s.validar({ contato_id: U1, negocio_id: U2 }).ok).toBe(false);
+    const v = s.validar({ negocio_id: U2 });
+    expect(v.ok && s.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_mcp_lead', params: { p_contato: null, p_negocio: U2, p_mensagens: 100 } }]);
+    const r = s.resultado([{
+      ok: true, contato: { id: U1, nome: 'Maria' },
+      mensagens: [
+        { em: '2026-10-08T10:00:00Z', direcao: 'saida', texto: 'O HT é para advogados e contadores' },
+        { em: '2026-10-08T10:05:00Z', direcao: 'entrada', texto: 'Sou contadora e estou começando com holding' },
+      ],
+      notas: [{ em: '2026-10-08T11:00:00Z', texto: 'Quer pagar no pix' }],
+      negocios: [{ id: U2, status: 'aberto', etapaNome: 'Qualificar', produto: 'ht', campos: {} }, { id: U1, status: 'perdido' }],
+    }], v.ok ? v.valor : {}, new Date(), VEND);
+    expect(r.ok).toBe(true);
+    expect((r.sugestoes as { campo: string; valor: string }[]).map((x) => `${x.campo}=${x.valor}`))
+      .toEqual(['perfil_profissional=contador', 'atua_com_holding=comecando', 'forma_pagamento=pix']);
+    expect((r.negociosAbertos as { id: string }[]).map((x) => x.id)).toEqual([U2]);
+    expect(r.aviso).toMatch(/Nada foi gravado/);
+    expect(s.resultado([{ ok: false, msg: 'Você não tem acesso a este lead.' }], {}, new Date(), VEND))
+      .toEqual({ ok: false, msg: 'Você não tem acesso a este lead.' });
+  });
+  it('abrir_link: só link do sistema; conversa → contato, funil → negócio', () => {
+    const l = f('comercial_abrir_link');
+    expect(l.escopo).toBe('ler');
+    const c = l.validar({ link: `https://grupoparticipa.app.br/comercial/conversas?contato=${U1}` });
+    expect(c.ok && l.plano(c.valor, new Date())).toEqual([{ rpc: 'crm_mcp_lead', params: { p_contato: U1, p_mensagens: 50 } }]);
+    const n = l.validar({ link: `https://grupoparticipa.app.br/comercial/funil?negocio=${U2}`, mensagens: 10 });
+    expect(n.ok && l.plano(n.valor, new Date())).toEqual([{ rpc: 'crm_mcp_lead', params: { p_negocio: U2, p_mensagens: 10 } }]);
+    expect(l.validar({ link: `https://evil.com/comercial/conversas?contato=${U1}` }).ok).toBe(false);
+    expect(l.validar({ link: 'https://grupoparticipa.app.br/comercial/conversas?contato=123' }).ok).toBe(false);
+    const sem = l.resultado([{ ok: false, msg: 'Você não tem acesso a este lead.' }], c.ok ? c.valor : {}, new Date(), VEND);
+    expect(sem).toEqual({ ok: false, msg: 'Você não tem acesso a este lead.' });
+    const ok = l.resultado([{ ok: true, contato: { id: U1 }, negocios: [{ id: U2, campos: { perfil_profissional: 'contador' } }],
+      proximasAtividades: [], notas: [{ texto: 'x' }], mensagens: [{ em: 'e', direcao: 'entrada', tipo: 'texto', texto: 'oi' }] }],
+    c.ok ? c.valor : {}, new Date(), VEND);
+    expect(ok).toMatchObject({ ok: true, link: { tipo: 'contato', id: U1 }, mensagens: { total: 1, itens: [{ de: 'cliente', texto: 'oi' }] } });
+    expect((ok.negocios as { campos: unknown }[])[0].campos).toEqual({ perfil_profissional: 'contador' });
   });
 });

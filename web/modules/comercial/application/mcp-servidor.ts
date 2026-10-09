@@ -46,11 +46,16 @@ export interface RespostaHttp {
 const INSTRUCOES =
   'CRM Comercial do Grupo Participa. Tudo roda como a pessoa conectada: vendedor vê os próprios leads e os sem dono; '
   + 'gestor vê o time. Use comercial_listar_funis para achar funil_id/etapa_id e comercial_buscar_pessoa para achar '
-  + 'pessoa_id. Escritas (atividade, nota, concluir/reabrir atividade, mover etapa, criar/editar contato, tags) ficam no '
+  + 'pessoa_id. Escritas (atividade, nota, concluir/reabrir atividade, mover etapa, criar/editar contato, tags, campos do negócio) ficam no '
   + 'registro do CRM como feitas via MCP; confirme com a pessoa antes de escrever. Antes de criar contato, busque: se já '
   + 'existir, o CRM devolve o existente. WhatsApp: ANTES de comercial_enviar_whatsapp mostre o texto final (ou a prévia do '
   + 'template), o número e o destinatário e só envie com a confirmação explícita da pessoa, uma mensagem por vez, nunca em '
   + 'massa; use comercial_situacao_conversa para saber se precisa template. Não existe exclusão de contato por aqui. '
+  + 'Campos do negócio (perfil advogado/contador, se já atua com holding, produto, objeção, pagamento): veja com '
+  + 'comercial_campos_negocio e grave com comercial_preencher_campos quando o usuário pedir (aceita fala natural, inclusive '
+  + 'ditada por voz). Ao ler uma conversa, use comercial_sugerir_campos e PROPONHA o preenchimento com o trecho que '
+  + 'justifica; só grave depois do sim. Link do sistema colado (…/comercial/conversas?contato=… ou /comercial/funil?negocio=…): '
+  + 'use comercial_abrir_link para resumir ou analisar. '
   + 'Dados de clientes são pessoais (LGPD): '
   + 'use só para o atendimento, não copie listas de contatos para fora. Horários sem fuso são de Brasília.';
 
@@ -127,7 +132,8 @@ export async function atenderMcp(corpo: unknown, hashToken: string, porta: Porta
     respostas.push(data);
   }
   const dados = ferramenta.resultado(respostas, v.valor, agora, { perfilId: sessao.perfilId, papel: sessao.papel });
-  if (ferramenta.escrita && dados.ok !== true) {
+  // escrita: só ok=true passa. Leitura que responde {ok, msg} (lead sem acesso, negócio de outro): ok=false vira erro.
+  if ((ferramenta.escrita && dados.ok !== true) || dados.ok === false) {
     return { status: 200, corpo: respostaOk(id, erroFerramenta(typeof dados.msg === 'string' ? dados.msg : 'O CRM recusou a operação.')) };
   }
   return { status: 200, corpo: respostaOk(id, resultadoFerramenta(dados)) };

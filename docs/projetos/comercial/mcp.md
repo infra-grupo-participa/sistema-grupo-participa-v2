@@ -80,6 +80,9 @@ hora. Ou remova o conector no claude.ai.
 | "Corrija o e-mail da Ana para ana@escritorio.com." | Edita a ficha (o dado antigo fica guardado). |
 | "Coloque a tag quente na Ana e tire a tag frio." | Adiciona/remove tags. |
 | "Mova o negócio da Ana para Negociação." | Move de etapa, com as exigências da tela. |
+| "Marca o João como contador começando em holding." (também por voz, no app do celular) | Preenche os campos do negócio e mostra o que mudou. Entende "contadora", "começando", "Holding Total", "Clínica Miami", "no pix". |
+| "Lê a conversa da Maria e preenche o perfil." | Sugere os campos com o trecho da conversa que justifica cada um; grava só depois do seu ok. |
+| "Resume este link: https://grupoparticipa.app.br/comercial/conversas?contato=…" | Abre o lead do link (conversa ou negócio): contato, negócios, próximas atividades, notas e últimas mensagens. Sem acesso: "Você não tem acesso a este lead." |
 | "Como está o funil HT? E o meu desempenho na semana?" | Resumo por etapa e números do período. |
 
 Dica: comece o dia com "o que eu tenho para hoje e quem está sem próximo passo?".
@@ -156,6 +159,33 @@ mais usado**; se estiver na Hostinger, pode remover.
 | `comercial_templates_whatsapp` | operar (consulta) | Templates aprovados do oficial: nome, idioma, variáveis, prévia (busca, até 200) | `crm_mcp_templates` |
 | `comercial_situacao_conversa` | operar (consulta) | Texto livre × template por número, quando a janela fecha, destinatário, bloqueios, prévia do template | `crm_mcp_situacao_conversa` |
 | `comercial_enviar_whatsapp` | operar | 1 mensagem a 1 contato: texto OU template, `chave_idempotencia` obrigatória. Descrição exige confirmação explícita | `crm_mcp_enviar_whatsapp` |
+| `comercial_campos_negocio` | ler | Campos do negócio (rótulo, opções, valor) + próxima etapa e o que ela exige (`faltando`) | `crm_mcp_negocio_campos` |
+| `comercial_preencher_campos` | operar | `{chave: valor}` em fala natural, normalizado em `domain/campos-negocio.ts`; banco valida contra `crm.campo_def`/`crm.linha` e grava pela RPC da tela; devolve `mudou` | `crm_mcp_preencher_campos` → `crm_salvar_campos` |
+| `comercial_sugerir_campos` | ler | Sugestões (campo, valor, trecho, fonte) pelas mensagens do cliente e notas; heurística determinística, sem LLM; não grava | `crm_mcp_lead` |
+| `comercial_abrir_link` | ler | Link `…/comercial/conversas?contato=` ou `…/comercial/funil?negocio=` (só grupoparticipa.app.br/localhost, UUID válido) → contato, negócios com campos, próximas atividades, notas (20), mensagens | `crm_mcp_lead` |
+
+### Campos do negócio, sugestão e link (pedido do Marcos Paulo, 09/10/2026; migration 20261009153128)
+
+- **Gravar = a mesma RPC da tela.** `crm_mcp_preencher_campos` (INVOKER) valida cada chave contra `crm.campo_def` ativo
+  (opção dentro de `opcoes`; tipo `linha` = chave de `crm.linha` ativa; texto ≤ 200; `""`/null limpa) e chama
+  `public.crm_salvar_campos` com o JWT do usuário: `crm.guarda_escrita()` (leitor recusa, `escrita_ligada`), dono do
+  negócio ou gestor, `crm.log` com canal `mcp`. Devolve `mudou: [{chave, rotulo, de, para}]` e a próxima etapa.
+  `crm_salvar_campos` continua FORA da lista do MCP.
+- **Normalização** é pura (`web/modules/comercial/domain/campos-negocio.ts`, com teste): "é contadora" → contador;
+  "começando" → comecando; "Holding Total" → ht; "Clínica Miami" → clinica_miami; "no pix" → pix. O que não reconhece vira
+  slug e o banco recusa listando as opções válidas.
+- **Sugestão sem LLM no servidor:** `sugerirCampos` (mesmo arquivo) procura pistas (OAB/advogad*, CRC/contador*,
+  "já faço holding", "estou começando", nome de produto, forma de pagamento, objeção) só nas mensagens do **cliente** e nas
+  notas (a fala da equipe tem pitch com "advogados e contadores"). Devolve o trecho; valores conflitantes voltam todos.
+  Quem decide é o Claude do usuário, que propõe e só grava com `comercial_preencher_campos` depois do sim.
+- **Link:** `domain/link-crm.ts` aceita só `https://grupoparticipa.app.br` (ou `www.`) e `http(s)://localhost|127.0.0.1`,
+  caminho `/comercial/…`, sem usuário/senha, um único `contato` ou `negocio` UUID. A permissão é do banco:
+  `crm_mcp_lead` (INVOKER) resolve o negócio pela RLS de `crm.negocio`, exige `crm.pode_ver_pessoa` e reaproveita
+  `crm_contatos_por_ids`, `crm_negocios`, `crm_atividades` (abertas), `crm.nota` (RLS, 20 últimas) e `crm_mensagens`.
+  Sem acesso ou id inexistente: `{ok:false, msg:'Você não tem acesso a este lead.'}` (o servidor transforma qualquer
+  `ok:false` de leitura em erro da ferramenta).
+- Medido (`explain analyze`, 2×, Arthur, negócio real): `crm_mcp_negocio_campos` 9,5 → 4,4 ms; `crm_mcp_lead` (100
+  mensagens) 69 → 37 ms.
 
 ### WhatsApp pelo Claude (decisão do Arthur, 08/10/2026; migration 20261008233100)
 

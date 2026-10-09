@@ -1,5 +1,7 @@
 // Ferramentas do MCP do Comercial (F7). Domínio puro: sem Next, sem Supabase.
 import { MAX_TAGS_CONTATO, normalizarTag } from './tags';
+import { normalizarValorCampo, sugerirCampos, type TextoLead } from './campos-negocio';
+import { lerLinkCrm } from './link-crm';
 //
 // Cada ferramenta = validação dos argumentos + PLANO (quais RPCs public.crm_* chamar, com quais parâmetros) +
 // montagem do resultado. Quem executa o plano é a aplicação (`application/mcp-servidor.ts`), sempre com o JWT do
@@ -186,6 +188,13 @@ function negocioCompacto(n: Obj): Obj {
     donoId: n.donoId, valor: n.valor, origem: n.origem, criadoEm: n.criadoEm, etapaDesde: n.etapaDesde,
     ultimaInteracaoEm: n.ultimaInteracaoEm ?? null,
     proximaAtividade: pa ? { id: pa.id, tipo: pa.tipo, titulo: pa.titulo, venceEm: pa.venceEm } : null,
+  };
+}
+
+function mensagemCompacta(m: Obj): Obj {
+  return {
+    em: m.em, de: m.direcao === 'entrada' ? 'cliente' : 'equipe', tipo: m.tipo, texto: m.texto ?? null,
+    ...(m.status ? { status: m.status } : {}), ...(m.erro ? { falhou: true } : {}),
   };
 }
 
@@ -409,10 +418,7 @@ export const FERRAMENTAS: DefFerramenta[] = [
     validar: validarCom((a) => ({ pessoa_id: uuid(a, 'pessoa_id', true), limite: inteiro(a, 'limite', 1, 300, 100) })),
     plano: (a) => [{ rpc: 'crm_mensagens', params: { p_pessoa: a.pessoa_id, p_limite: a.limite } }],
     resultado: ([ms], a) => {
-      const msgs = lista(ms).map((m) => ({
-        em: m.em, de: m.direcao === 'entrada' ? 'cliente' : 'equipe', tipo: m.tipo, texto: m.texto ?? null,
-        ...(m.status ? { status: m.status } : {}), ...(m.erro ? { falhou: true } : {}),
-      }));
+      const msgs = lista(ms).map(mensagemCompacta);
       return { pessoaId: a.pessoa_id, total: msgs.length, mensagens: msgs };
     },
   },
@@ -763,6 +769,152 @@ export const FERRAMENTAS: DefFerramenta[] = [
       return [{ rpc: 'crm_mcp_enviar_whatsapp', params }];
     },
     resultado: resultadoRpc,
+  },
+  // ─── Campos do negócio, sugestão pela conversa e link do sistema (migration 20261009153128) ─────────────────────
+  {
+    name: 'comercial_campos_negocio',
+    title: 'Campos do negócio',
+    description: 'Campos de qualificação de UM negócio: perfil profissional (advogado, contador, outro), se já atua com holding '
+      + '(sim, comecando, nao), produto de interesse, origem, objeção principal e forma de pagamento — com rótulo, opções '
+      + 'válidas e valor atual. Traz também a próxima etapa do funil e quais campos ela exige (faltando). Use antes de '
+      + 'comercial_preencher_campos.',
+    escopo: 'ler',
+    inputSchema: { type: 'object', properties: { negocio_id: SCHEMA_UUID }, required: ['negocio_id'], additionalProperties: false },
+    annotations: ANOT_LER,
+    validar: validarCom((a) => ({ negocio_id: uuid(a, 'negocio_id', true) })),
+    plano: (a) => [{ rpc: 'crm_mcp_negocio_campos', params: { p_negocio: a.negocio_id } }],
+    resultado: resultadoRpc,
+  },
+  {
+    name: 'comercial_preencher_campos',
+    title: 'Preencher campos do negócio',
+    description: 'Grava campos de qualificação de um negócio SEU (gestor: qualquer), pela mesma regra da tela. Pode ser usada '
+      + 'quando o vendedor pedir, inclusive por voz ("marca como contador começando em holding"). Quando você identificar o '
+      + 'perfil numa conversa que leu, PROPONHA o preenchimento e confirme com o usuário antes de gravar. campos = '
+      + '{chave: valor}; aceita linguagem natural, que é normalizada (contadora → contador; começando → comecando; '
+      + 'Holding Total → ht; Clínica Miami → clinica_miami; "no pix" → pix). Valor vazio ("") limpa o campo. O banco valida '
+      + 'contra as opções de comercial_campos_negocio e devolve o que mudou.',
+    escopo: 'operar',
+    escrita: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        negocio_id: SCHEMA_UUID,
+        campos: {
+          type: 'object',
+          description: 'Ex.: {"perfil_profissional": "contador", "atua_com_holding": "começando", "produto_interesse": "Holding Total"}',
+          additionalProperties: { type: ['string', 'null'], maxLength: 200 },
+          minProperties: 1,
+          maxProperties: 10,
+        },
+      },
+      required: ['negocio_id', 'campos'],
+      additionalProperties: false,
+    },
+    annotations: ANOT_ESCREVE_IDEMP,
+    validar: validarCom((a) => {
+      const c = a.campos;
+      if (!c || typeof c !== 'object' || Array.isArray(c)) throw new ErroArg('campos precisa ser objeto {chave: valor}.');
+      const entradas = Object.entries(c as Record<string, unknown>);
+      if (entradas.length < 1 || entradas.length > 10) throw new ErroArg('Informe de 1 a 10 campos.');
+      const campos: Record<string, string> = {};
+      for (const [k, v] of entradas) {
+        if (!/^[a-z][a-z_]{1,39}$/.test(k)) throw new ErroArg(`Campo inválido: "${k.slice(0, 40)}". Veja comercial_campos_negocio.`);
+        if (v !== null && typeof v !== 'string') throw new ErroArg(`${k} precisa ser texto.`);
+        if (typeof v === 'string' && v.length > 200) throw new ErroArg(`${k}: até 200 caracteres.`);
+        campos[k] = normalizarValorCampo(k, v as string | null);
+      }
+      return { negocio_id: uuid(a, 'negocio_id', true), campos };
+    }),
+    plano: (a) => [{ rpc: 'crm_mcp_preencher_campos', params: { p_negocio: a.negocio_id, p_campos: a.campos } }],
+    resultado: ([r], a) => {
+      const o = resultadoRpc([r]);
+      return o.ok === true ? { ...o, interpretado: a.campos } : o;
+    },
+  },
+  {
+    name: 'comercial_sugerir_campos',
+    title: 'Sugerir campos pela conversa',
+    description: 'Lê as últimas mensagens do cliente e as notas do lead e SUGERE campos (perfil, se atua com holding, produto, '
+      + 'objeção, forma de pagamento), cada um com o trecho que justifica. Heurística por palavras-chave: confira o trecho. '
+      + 'NÃO grava nada: mostre as sugestões ao usuário e, com o "sim" dele, grave com comercial_preencher_campos. '
+      + 'Informe contato_id OU negocio_id. Só para quem pode ver o lead.',
+    escopo: 'ler',
+    inputSchema: {
+      type: 'object',
+      properties: { contato_id: { ...SCHEMA_UUID, description: 'pessoa_id' }, negocio_id: SCHEMA_UUID },
+      additionalProperties: false,
+    },
+    annotations: ANOT_LER,
+    validar: validarCom((a) => {
+      const contato = uuid(a, 'contato_id', false);
+      const negocio = uuid(a, 'negocio_id', false);
+      if (!contato === !negocio) throw new ErroArg('Informe contato_id OU negocio_id (um dos dois).');
+      return { contato_id: contato, negocio_id: negocio };
+    }),
+    plano: (a) => [{ rpc: 'crm_mcp_lead', params: { p_contato: a.contato_id, p_negocio: a.negocio_id, p_mensagens: 100 } }],
+    resultado: ([r]) => {
+      const o = resultadoRpc([r]);
+      if (o.ok !== true) return { ok: false, msg: typeof o.msg === 'string' ? o.msg : 'Você não tem acesso a este lead.' };
+      const textos: TextoLead[] = [
+        ...lista(o.mensagens).map((m) => ({ fonte: 'mensagem' as const, de: m.direcao === 'entrada' ? 'cliente' as const : 'equipe' as const, texto: m.texto as string, em: m.em as string })),
+        ...lista(o.notas).map((n) => ({ fonte: 'nota' as const, texto: n.texto as string, em: n.em as string })),
+      ];
+      const contato = (o.contato ?? {}) as Obj;
+      return {
+        ok: true,
+        contatoId: contato.id ?? null,
+        nome: contato.nome ?? null,
+        lidas: { mensagens: lista(o.mensagens).length, notas: lista(o.notas).length },
+        sugestoes: sugerirCampos(textos),
+        negociosAbertos: lista(o.negocios).filter((n) => n.status === 'aberto')
+          .map((n) => ({ id: n.id, etapaNome: n.etapaNome, produto: n.produto, campos: n.campos ?? {} })),
+        aviso: 'Nada foi gravado. Proponha ao usuário e só grave com comercial_preencher_campos depois do sim dele.',
+      };
+    },
+  },
+  {
+    name: 'comercial_abrir_link',
+    title: 'Abrir link do CRM',
+    description: 'Recebe um link do sistema colado pelo usuário (conversa: /comercial/conversas?contato=…; negócio: '
+      + '/comercial/funil?negocio=…) e devolve o lead para analisar ou resumir: contato, negócios (com os campos), próximas '
+      + 'atividades, últimas notas e últimas mensagens. Só links de grupoparticipa.app.br. Sem acesso: "Você não tem acesso a '
+      + 'este lead."',
+    escopo: 'ler',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        link: { type: 'string', minLength: 10, maxLength: 500 },
+        mensagens: { type: 'integer', minimum: 1, maximum: 200, default: 50, description: 'Quantas mensagens recentes trazer' },
+      },
+      required: ['link'],
+      additionalProperties: false,
+    },
+    annotations: ANOT_LER,
+    validar: validarCom((a) => {
+      const l = lerLinkCrm(a.link);
+      if (!l.ok) throw new ErroArg(l.msg);
+      return { tipo: l.tipo, id: l.id, mensagens: inteiro(a, 'mensagens', 1, 200, 50) };
+    }),
+    plano: (a) => [{
+      rpc: 'crm_mcp_lead',
+      params: a.tipo === 'negocio' ? { p_negocio: a.id, p_mensagens: a.mensagens } : { p_contato: a.id, p_mensagens: a.mensagens },
+    }],
+    resultado: ([r], a) => {
+      const o = resultadoRpc([r]);
+      if (o.ok !== true) return { ok: false, msg: typeof o.msg === 'string' ? o.msg : 'Você não tem acesso a este lead.' };
+      const msgs = lista(o.mensagens).map(mensagemCompacta);
+      return {
+        ok: true,
+        link: { tipo: a.tipo, id: a.id },
+        contato: o.contato ?? null,
+        negocios: lista(o.negocios).map((n) => ({ ...negocioCompacto(n), produto: n.produto ?? null, campos: n.campos ?? {} })),
+        proximasAtividades: lista(o.proximasAtividades)
+          .map((x) => ({ id: x.id, negocioId: x.negocioId, tipo: x.tipo, titulo: x.titulo, venceEm: x.venceEm, donoId: x.donoId })),
+        notas: lista(o.notas),
+        mensagens: { total: msgs.length, itens: msgs },
+      };
+    },
   },
 ];
 
