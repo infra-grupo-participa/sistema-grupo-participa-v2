@@ -11,7 +11,7 @@
 |---|---|---|
 | Base compartilhada (`mkt`) | No ar | 20261005m, 20261006e |
 | Web (`mkt_web`) | No ar, **coleta das páginas desligada** até a virada do PB26 | 20261006f, 20261006h + Edge `mkt-web-pagespeed` |
-| Tráfego (`mkt_trafego`) | No ar; coleta do Meta diária às 06h30 SP (cron `trafego-meta`), conferida contra o Meta | 20261006g, i, j, k, l + Edges `trafego-meta`, `trafego-clickup` (ClickUp sem token) |
+| Tráfego (`mkt_trafego`) | No ar; coleta do Meta diária às 06h30 SP (cron `trafego-meta`, relê 3 dias) e do dia corrente a cada 30 min, nos minutos 15 e 45 (cron `trafego-meta-hoje`, desde 09/10/2026, migration 20261009240000), conferida contra o Meta | 20261006g, i, j, k, l + Edges `trafego-meta`, `trafego-clickup` (ClickUp sem token) |
 | Comercial (`crm`, `pessoas`) | No ar (Arthur); ajuste rápido das telas e retroativos da Hotmart tirados | do Arthur + 20261006191824 |
 | Mensageria (`mkt_mensageria`) | No ar (João) | do João |
 
@@ -717,6 +717,8 @@ Mudar: `update mkt_trafego.alerta_regras set limiar = 30 where codigo = 'ritmo_f
    e ver `select * from mkt_trafego.coletas order by id desc limit 5;`.
 5. Agendar: o bloco **LIGAR AS ROTINAS** no fim da migration (`trafego-meta` 06:30 SP, `trafego-clickup` 07:00 SP,
    opcional `trafego-meta-hoje` de 3 em 3 horas), sempre pelo `ops.cron_post` (regra 11 do CLAUDE.md).
+   **Ligado em 09/10/2026 (20261009240000):** `trafego-meta-hoje` em `'15,45 * * * *'` com `{"so_hoje": true}`; desligar com
+   `select cron.unschedule('trafego-meta-hoje');` (o diário continua).
    Recarga de dias passados: corpo `{"de": "AAAA-MM-DD", "ate": "AAAA-MM-DD"}` (até 92 dias).
    Desligar: `select cron.unschedule('trafego-meta'); select cron.unschedule('trafego-clickup');`.
 
