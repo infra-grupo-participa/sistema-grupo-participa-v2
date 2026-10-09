@@ -52,6 +52,8 @@ Deno.serve(async (req) => {
     ate_ms: Date.now() + ORCAMENTO_MS,
     receberCampanhas: async (l) => (await sql`select public.trafego_campanhas_receber(${sql.json(l)}::jsonb) as r`)[0].r,
     receberDesempenho: async (l) => (await sql`select public.trafego_desempenho_receber(${sql.json(l)}::jsonb) as r`)[0].r,
+    // 20261009230000: alcance e frequência do período inteiro de cada campanha que gastou
+    receberTotais: async (l) => (await sql`select public.trafego_desempenho_total_receber(${sql.json(l)}::jsonb) as r`)[0].r,
   });
   const ok = resultado.contas.every((c) => c.ok) && resultado.puladas === 0;
   const erro = ok ? null : resultado.contas.filter((c) => !c.ok).map((c) => `${c.conta}: ${c.erro}`).join('; ').slice(0, 480) || 'contas puladas';

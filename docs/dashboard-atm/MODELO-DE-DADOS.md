@@ -282,3 +282,16 @@ E a entrada no manifesto da tela (`web/modules/infra/dados/domain/registro.ts`),
 Uma linha por disparo do dashboard, para o bloco "Disparos" de "Esta edição", com o mesmo período e filtro da visão por
 canal. Contrato, regra e ensaio em `infra/supabase/migrations/20261009220000.explain.md`. Não há título nem assunto na
 fonte: a tela usa `campanha`. Nulo é "sem dado", nunca zero; as taxas são calculadas na tela.
+
+## Tráfego e investimento total (migration `20261009230000`, APLICADA em 09/10/2026)
+
+- **Fonte:** campanhas de tráfego ligadas ao projeto do dashboard (`mkt_trafego.campanhas.projeto_id`, vínculo manual pelo
+  módulo de tráfego). Na ATM OUT/26 é a campanha 8441 (distribuição de conteúdo, conta "Seminários - Leads").
+- **`dados_atm_resumo`:** ganha `custo_trafego_centavos` e `investimento_total_centavos` (disparo + tráfego) no fim.
+  **CPL = investimento total ÷ leads sem teste**; CAC e ROAS também sobre o investimento total (decisão do Victor, 09/10).
+- **`dados_atm_trafego(p_chave, p_de, p_ate)` (jsonb):** dia a dia, total e campanhas, com métricas de distribuição
+  (alcance, frequência, vídeo 25/50/75/100 e thruplay, engajamento, cliques no link, visualizações de página) e CPM, CTR,
+  CPC calculados.
+  - Alcance não soma por dia: o total vem do período inteiro da campanha (API) e só aparece quando o período pedido cobre a campanha toda.
+  - Nulo é "sem dado".
+  - Contrato completo: `infra/supabase/migrations/20261009230000.explain.md`.

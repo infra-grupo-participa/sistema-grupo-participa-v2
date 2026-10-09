@@ -6,9 +6,18 @@
 //   GET /act_<conta>/campaigns?fields=id,name,effective_status        (nome EXATO e status de cada campanha)
 //   GET /act_<conta>/insights?level=campaign&time_increment=1&time_range={since,until}
 //       &fields=campaign_id,campaign_name,date_start,spend,impressions,clicks,inline_link_clicks,actions
+//               + (20261009230000) reach,frequency,outbound_clicks,video_play_actions,video_thruplay_watched_actions,
+//                 video_p25/p50/p75/p100_watched_actions (post_engagement e landing_page_view vêm de actions)
+//   GET /act_<conta>/insights?level=campaign&date_preset=maximum&filtering=[campaign.id IN ...] (20261009230000)
+//       &fields=campaign_id,date_start,date_stop,spend,impressions,reach,frequency
+//       alcance e frequência do período INTEIRO de cada campanha que gastou (alcance não soma por dia). Falha aqui não
+//       derruba a conta: vira totais_erro no resultado e o desempenho diário segue gravado.
 // e grava pelas funções de entrada da 20261006g, no formato delas:
 //   trafego_campanhas_receber   [{plataforma, conta, id, nome, status}]
-//   trafego_desempenho_receber  [{plataforma, campanha, dia, gasto, impressoes, cliques_link, cliques_total, leads}]
+//   trafego_desempenho_receber  [{plataforma, campanha, dia, gasto, impressoes, cliques_link, cliques_total, leads,
+//                                 + alcance, frequencia, cliques_saida, landing_page_views, engajamento, video_*}]
+//   trafego_desempenho_total_receber [{plataforma, campanha, de, ate, gasto, impressoes, alcance, frequencia}]
+// Métrica nova que a API não mandar fica null (sem dado), nunca 0.
 // cliques_link = inline_link_clicks (o clique do CTR, do CPC e do connect rate, decisão do Victor); cliques_total =
 // clicks (só informação); leads = a ação "lead" que o Meta informa (só informação; o lead da Central é o da base).
 // Token: no header Authorization (nunca na URL que a gente monta, nunca no registro). Vem do Vault (meta_ads_token da
@@ -26,11 +35,24 @@ export interface CampanhaMeta { id?: string; name?: string; effective_status?: s
 export interface InsightMeta {
   campaign_id?: string; campaign_name?: string; date_start?: string; spend?: string; impressions?: string;
   clicks?: string; inline_link_clicks?: string; actions?: { action_type?: string; value?: string }[];
+  date_stop?: string; reach?: string; frequency?: string;
+  outbound_clicks?: Acao[]; video_play_actions?: Acao[]; video_thruplay_watched_actions?: Acao[];
+  video_p25_watched_actions?: Acao[]; video_p50_watched_actions?: Acao[]; video_p75_watched_actions?: Acao[];
+  video_p100_watched_actions?: Acao[];
 }
+type Acao = { action_type?: string; value?: string };
 export interface LinhaCampanha { plataforma: 'meta'; conta: string; id: string; nome: string; status: string | null }
 export interface LinhaDesempenho {
   plataforma: 'meta'; campanha: string; dia: string; gasto: number; impressoes: number; cliques_link: number;
   cliques_total: number | null; leads: number | null;
+  // 20261009230000: métricas de distribuição de conteúdo (null = a API não mandou)
+  alcance: number | null; frequencia: number | null; cliques_saida: number | null; landing_page_views: number | null;
+  engajamento: number | null; video_plays: number | null; video_thruplay: number | null;
+  video_p25: number | null; video_p50: number | null; video_p75: number | null; video_p100: number | null;
+}
+export interface LinhaTotal {
+  plataforma: 'meta'; campanha: string; de: string; ate: string; gasto: number | null; impressoes: number | null;
+  alcance: number | null; frequencia: number | null;
 }
 
 /** Dia de hoje em São Paulo (AAAA-MM-DD). */
@@ -70,7 +92,25 @@ export function urlInsights(versao: string, conta: string, de: string, ate: stri
     level: 'campaign',
     time_increment: '1',
     time_range: JSON.stringify({ since: de, until: ate }),
-    fields: 'campaign_id,campaign_name,date_start,spend,impressions,clicks,inline_link_clicks,actions',
+    fields: 'campaign_id,campaign_name,date_start,spend,impressions,clicks,inline_link_clicks,actions,' + CAMPOS_DISTRIBUICAO,
+    limit: '500',
+  });
+  return `${BASE}/${versao}/act_${encodeURIComponent(conta)}/insights?${q}`;
+}
+
+/** 20261009230000: campos de distribuição de conteúdo (conferidos na v23.0 em 09/10/2026). */
+export const CAMPOS_DISTRIBUICAO = 'reach,frequency,outbound_clicks,video_play_actions,video_thruplay_watched_actions,'
+  + 'video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions';
+/** Ids por leitura do total (filtro campaign.id IN). */
+export const LOTE_TOTAIS = 50;
+
+/** Total do período inteiro de cada campanha (date_preset=maximum): alcance e frequência sem somar dias. */
+export function urlTotais(versao: string, conta: string, campanhas: string[]): string {
+  const q = new URLSearchParams({
+    level: 'campaign',
+    date_preset: 'maximum',
+    filtering: JSON.stringify([{ field: 'campaign.id', operator: 'IN', value: campanhas }]),
+    fields: 'campaign_id,date_start,date_stop,spend,impressions,reach,frequency',
     limit: '500',
   });
   return `${BASE}/${versao}/act_${encodeURIComponent(conta)}/insights?${q}`;
@@ -86,6 +126,21 @@ const dinheiro = (v: unknown): number | null => {
   const n = Number(v);
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
 };
+
+const decimal = (v: unknown): number | null => {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 10000) / 10000 : null;
+};
+/** Valor de uma ação numa lista do Meta; sem a ação (ou sem a lista) = null. tipo nulo = soma da lista inteira. */
+export function acao(lista: Acao[] | undefined, tipo: string | null): number | null {
+  if (!Array.isArray(lista) || !lista.length) return null;
+  const xs = tipo == null ? lista : lista.filter((x) => x?.action_type === tipo);
+  if (!xs.length) return null;
+  let t = 0;
+  for (const x of xs) { const v = inteiro(x?.value); if (v == null) return null; t += v; }
+  return t;
+}
 
 /** Leads que o Meta informa (ação "lead"); sem a ação = null (a plataforma não informou). */
 export function leadsDasAcoes(acoes: InsightMeta['actions']): number | null {
@@ -106,9 +161,31 @@ export function paraDesempenho(insights: InsightMeta[]): { linhas: LinhaDesempen
       cliques_link: inteiro(i.inline_link_clicks) ?? 0,
       cliques_total: inteiro(i.clicks),
       leads: leadsDasAcoes(i.actions),
+      alcance: inteiro(i.reach),
+      frequencia: decimal(i.frequency),
+      cliques_saida: acao(i.outbound_clicks, 'outbound_click'),
+      landing_page_views: acao(i.actions, 'landing_page_view'),
+      engajamento: acao(i.actions, 'post_engagement'),
+      video_plays: acao(i.video_play_actions, null),
+      video_thruplay: acao(i.video_thruplay_watched_actions, null),
+      video_p25: acao(i.video_p25_watched_actions, null),
+      video_p50: acao(i.video_p50_watched_actions, null),
+      video_p75: acao(i.video_p75_watched_actions, null),
+      video_p100: acao(i.video_p100_watched_actions, null),
     });
   }
   return { linhas, descartadas };
+}
+
+/** Totais do período inteiro no formato de trafego_desempenho_total_receber. Sem campanha ou datas válidas descarta. */
+export function paraTotais(insights: InsightMeta[]): LinhaTotal[] {
+  const out: LinhaTotal[] = [];
+  for (const i of insights) {
+    if (!i.campaign_id || !i.date_start || !i.date_stop || !RE_DIA.test(i.date_start) || !RE_DIA.test(i.date_stop)) continue;
+    out.push({ plataforma: PLATAFORMA, campanha: String(i.campaign_id), de: i.date_start, ate: i.date_stop,
+      gasto: dinheiro(i.spend), impressoes: inteiro(i.impressions), alcance: inteiro(i.reach), frequencia: decimal(i.frequency) });
+  }
+  return out;
 }
 
 /**
@@ -168,6 +245,7 @@ export async function lerPaginas<T>(buscar: Buscar, url: string, token: string, 
 export interface ResultadoConta {
   conta: string; token_origem: string; ok: boolean; erro?: string;
   campanhas?: number; linhas?: number; descartadas?: number; recusas_campanhas?: number; recusas_desempenho?: number;
+  totais?: number; totais_erro?: string;
 }
 
 export interface DepsMeta {
@@ -177,6 +255,8 @@ export interface DepsMeta {
   ate: string;
   receberCampanhas: (linhas: LinhaCampanha[]) => Promise<{ ok?: boolean; recusas?: unknown[] }>;
   receberDesempenho: (linhas: LinhaDesempenho[]) => Promise<{ ok?: boolean; recusas?: unknown[] }>;
+  /** 20261009230000: totais do período inteiro (opcional; sem ele a leitura dos totais não é feita). */
+  receberTotais?: (linhas: LinhaTotal[]) => Promise<{ ok?: boolean; recusas?: unknown[] }>;
   /** Para de começar conta nova depois deste instante (ms). */
   ate_ms?: number;
 }
@@ -202,9 +282,29 @@ export async function coletarConta(c: ContaMeta, d: DepsMeta): Promise<Resultado
       if (r?.ok === false) return { ...base, ok: false, erro: 'banco_desempenho' };
       recD += r?.recusas?.length ?? 0;
     }
-    return { ...base, ok: true, campanhas: lc.length, linhas: linhas.length, descartadas, recusas_campanhas: recC, recusas_desempenho: recD };
+    const extra = d.receberTotais && linhas.length ? await totaisDaConta(c, d, [...new Set(linhas.map((l) => l.campanha))]) : {};
+    return { ...base, ok: true, campanhas: lc.length, linhas: linhas.length, descartadas, recusas_campanhas: recC, recusas_desempenho: recD, ...extra };
   } catch (e) {
     return { ...base, ok: false, erro: e instanceof ErroMeta ? e.codigo : 'falha' };
+  }
+}
+
+/** Alcance e frequência do período inteiro das campanhas que gastaram. Nunca derruba a conta: erro vira totais_erro. */
+async function totaisDaConta(c: ContaMeta, d: DepsMeta, ids: string[]): Promise<{ totais?: number; totais_erro?: string }> {
+  try {
+    let n = 0;
+    for (let i = 0; i < ids.length; i += LOTE_TOTAIS) {
+      const ins = await lerPaginas<InsightMeta>(d.buscar, urlTotais(d.versao, c.conta_externa, ids.slice(i, i + LOTE_TOTAIS)), c.token!);
+      const lt = paraTotais(ins);
+      if (lt.length) {
+        const r = await d.receberTotais!(lt);
+        if (r?.ok === false) return { totais: n, totais_erro: 'banco_totais' };
+        n += lt.length;
+      }
+    }
+    return { totais: n };
+  } catch (e) {
+    return { totais_erro: e instanceof ErroMeta ? e.codigo : 'falha' };
   }
 }
 

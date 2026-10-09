@@ -3,6 +3,7 @@
 // no formato documentado de cada API). O que se confere: o que a Edge manda para as funções de entrada do banco.
 import { describe, expect, it } from 'vitest';
 import {
+  acao, paraTotais, urlTotais, type LinhaTotal,
   coletarConta, coletarMeta, hojeSaoPaulo, leadsDasAcoes, lerPaginas, paraCampanhas, paraDesempenho, periodo, urlInsights,
   type ContaMeta, type LinhaCampanha, type LinhaDesempenho,
 } from '../../../../../infra/supabase/functions/trafego-meta/meta';
@@ -66,12 +67,47 @@ describe('coleta Meta Ads (respostas simuladas)', () => {
     const { linhas, descartadas } = paraDesempenho([...insightsP1.data, ...insightsP2.data]);
     expect(descartadas).toBe(1);
     expect(linhas).toEqual<LinhaDesempenho[]>([
-      { plataforma: 'meta', campanha: '900000000000201', dia: '2026-10-03', gasto: 150.25, impressoes: 12000, cliques_link: 180, cliques_total: 260, leads: 12 },
-      { plataforma: 'meta', campanha: '900000000000201', dia: '2026-10-04', gasto: 149.75, impressoes: 11000, cliques_link: 170, cliques_total: 240, leads: 9 },
-      { plataforma: 'meta', campanha: '900000000000202', dia: '2026-10-04', gasto: 20, impressoes: 3000, cliques_link: 0, cliques_total: 15, leads: null },
-      { plataforma: 'meta', campanha: '900000000000209', dia: '2026-10-03', gasto: 5.5, impressoes: 400, cliques_link: 3, cliques_total: null, leads: null },
+      { plataforma: 'meta', campanha: '900000000000201', dia: '2026-10-03', gasto: 150.25, impressoes: 12000, cliques_link: 180, cliques_total: 260, leads: 12, alcance: null, frequencia: null, cliques_saida: null, landing_page_views: 130, engajamento: null, video_plays: null, video_thruplay: null, video_p25: null, video_p50: null, video_p75: null, video_p100: null },
+      { plataforma: 'meta', campanha: '900000000000201', dia: '2026-10-04', gasto: 149.75, impressoes: 11000, cliques_link: 170, cliques_total: 240, leads: 9, alcance: null, frequencia: null, cliques_saida: null, landing_page_views: null, engajamento: null, video_plays: null, video_thruplay: null, video_p25: null, video_p50: null, video_p75: null, video_p100: null },
+      { plataforma: 'meta', campanha: '900000000000202', dia: '2026-10-04', gasto: 20, impressoes: 3000, cliques_link: 0, cliques_total: 15, leads: null, alcance: null, frequencia: null, cliques_saida: null, landing_page_views: null, engajamento: null, video_plays: null, video_thruplay: null, video_p25: null, video_p50: null, video_p75: null, video_p100: null },
+      { plataforma: 'meta', campanha: '900000000000209', dia: '2026-10-03', gasto: 5.5, impressoes: 400, cliques_link: 3, cliques_total: null, leads: null, alcance: null, frequencia: null, cliques_saida: null, landing_page_views: null, engajamento: null, video_plays: null, video_thruplay: null, video_p25: null, video_p50: null, video_p75: null, video_p100: null },
     ]);
     expect(leadsDasAcoes([{ action_type: 'link_click', value: '3' }])).toBeNull();
+  });
+
+  it('20261009230000: métricas de distribuição (alcance, frequência, vídeo, engajamento); ausente = null, nunca 0', () => {
+    const { linhas } = paraDesempenho([{
+      campaign_id: '900000000000301', date_start: '2026-10-08', spend: '50.06', impressions: '886', clicks: '12', inline_link_clicks: '0',
+      reach: '772', frequency: '1.147668',
+      actions: [{ action_type: 'post_engagement', value: '363' }, { action_type: 'video_view', value: '355' }],
+      video_play_actions: [{ action_type: 'video_view', value: '811' }], video_thruplay_watched_actions: [{ action_type: 'video_view', value: '92' }],
+      video_p25_watched_actions: [{ action_type: 'video_view', value: '11' }], video_p50_watched_actions: [{ action_type: 'video_view', value: '6' }],
+      video_p75_watched_actions: [{ action_type: 'video_view', value: '4' }], video_p100_watched_actions: [{ action_type: 'video_view', value: '4' }],
+    }]);
+    expect(linhas[0]).toMatchObject({ alcance: 772, frequencia: 1.1477, engajamento: 363, video_plays: 811, video_thruplay: 92,
+      video_p25: 11, video_p50: 6, video_p75: 4, video_p100: 4, cliques_saida: null, landing_page_views: null, cliques_link: 0 });
+    expect(acao([{ action_type: 'outbound_click', value: '5' }], 'outbound_click')).toBe(5);
+    expect(acao(undefined, null)).toBeNull();
+  });
+
+  it('20261009230000: total do período inteiro por campanha (alcance não soma por dia); URL com date_preset=maximum e filtro por id', () => {
+    const u = new URL(urlTotais('v23.0', '000555', ['900000000000201', '900000000000202']));
+    expect(u.searchParams.get('date_preset')).toBe('maximum');
+    expect(u.searchParams.has('time_increment')).toBe(false);
+    expect(JSON.parse(u.searchParams.get('filtering')!)).toEqual([{ field: 'campaign.id', operator: 'IN', value: ['900000000000201', '900000000000202'] }]);
+    expect(paraTotais([{ campaign_id: '900000000000201', date_start: '2026-10-08', date_stop: '2026-10-09', spend: '87.26', impressions: '1434', reach: '985', frequency: '1.455838' },
+      { campaign_id: '900000000000202', date_start: 'ontem', date_stop: '2026-10-09' }]))
+      .toEqual<LinhaTotal[]>([{ plataforma: 'meta', campanha: '900000000000201', de: '2026-10-08', ate: '2026-10-09', gasto: 87.26, impressoes: 1434, alcance: 985, frequencia: 1.4558 }]);
+  });
+
+  it('20261009230000: falha na leitura dos totais não derruba a conta (vira totais_erro)', async () => {
+    const { buscar } = metaFalso();
+    const quebra = async (url: string, init?: { headers?: Record<string, string> }) =>
+      url.includes('date_preset=maximum') ? resp({ error: { code: 100 } }, 400) : buscar(url, init);
+    const nada = async () => ({ ok: true, recusas: [] });
+    const r = await coletarConta(CONTA, { buscar: quebra, versao: 'v23.0', de: '2026-10-02', ate: '2026-10-05',
+      receberCampanhas: nada, receberDesempenho: nada, receberTotais: nada });
+    expect([r.ok, r.linhas, r.totais_erro]).toEqual([true, 4, 'meta_100']);
   });
 
   it('campanhas: nome exato da lista + a que só aparece nos insights (status nulo)', () => {
