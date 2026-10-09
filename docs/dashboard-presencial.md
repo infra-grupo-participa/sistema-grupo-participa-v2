@@ -445,3 +445,14 @@ Hoje a tela expõe 1 lead e 1 pedido, ambos teste interno; o risco cresce quando
 - Abandono de checkout: depende de o webhook receber a oferta `mjzv4v0s` (decisão do Victor e do dono do disparos-thb).
 - Grupo da Clínica no SendFlow ligado ao projeto.
 - Disparos da Clínica com projeto 68 (hoje 0).
+
+### Correção 09/10/2026: aba Diamantes não abria
+
+`dados_miami_diamantes` devolve `n_respostas` nulo nas linhas `pendente`, porque a pessoa ainda não respondeu.
+A tela chamava `n_respostas.toLocaleString()` e quebrava inteira ("This page couldn't load").
+
+A correção foi feita na tela, e o banco não mudou:
+- o tipo `DiamantePresencial.n_respostas` passou a `number | null`;
+- a célula usa `inteiro()`, que mostra "sem dado".
+
+Verificado com `tsc` e com o `vitest` de `modules/infra/dados`.

@@ -34,7 +34,7 @@ export type SerieVendasPresencial = { dia: string; pre_checkout: number; vendas:
 export type VendaHoraPresencial = { hora: number; vendas: number; receita_bruta: Numerico };
 export type DiamantePresencial = {
   lista_ordem: number | null; lista_nome: string | null; status: 'respondeu' | 'pendente' | 'fora_da_lista';
-  casamento: 'nome' | 'manual' | null; resposta_uuid: string | null; respondido_em: string | null; n_respostas: number;
+  casamento: 'nome' | 'manual' | null; resposta_uuid: string | null; respondido_em: string | null; n_respostas: number | null;
   nome_formulario: string | null; email: string | null; telefone: string | null; grupo: string | null;
   situacao: string | null; situacao_codigo: 'confirmado' | 'organizando' | 'nao_vai' | null;
   chegada: string | null; chegada_data: string | null; retorno: string | null; retorno_data: string | null;

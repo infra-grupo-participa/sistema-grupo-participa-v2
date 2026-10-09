@@ -1,6 +1,6 @@
 import { DataTable, EmptyState, KpiCard, Td, Th, Thead, Tr } from '@/shared/ui/components';
 import type { DiamantePresencial } from '../domain/presencial';
-import { dataBR, dataHoraBR, SEM_DADO } from './formato';
+import { dataBR, dataHoraBR, inteiro, SEM_DADO } from './formato';
 
 export function AbaDiamantes({ linhas, erro, carregando }: { linhas: DiamantePresencial[] | null; erro: string | null; carregando: boolean }) {
   if (carregando) return <p className="pt-4">Carregando respostas de Diamantes…</p>;
@@ -32,7 +32,7 @@ export function AbaDiamantes({ linhas, erro, carregando }: { linhas: DiamantePre
       <Thead><Th>Ordem</Th><Th>Nome da Lista Diamantes</Th><Th>Status</Th><Th>Casamento</Th><Th>Respondido em</Th><Th>Respostas</Th><Th>Nome no formulário</Th><Th>E-mail</Th><Th>Telefone</Th><Th>Grupo</Th><Th>Situação</Th><Th>Chegada</Th><Th>Retorno</Th><Th>Aeroporto</Th><Th>Hospedagem</Th><Th>Acompanhado</Th><Th>Acompanhantes</Th></Thead>
       <tbody>{linhas.map((linha, i) => <Tr key={linha.resposta_uuid ?? `diamante-${linha.lista_ordem ?? 'fora'}-${i}`}>
         <Td>{linha.lista_ordem ?? SEM_DADO}</Td><Td>{linha.lista_nome ?? SEM_DADO}</Td><Td>{linha.status}</Td><Td>{linha.casamento ?? SEM_DADO}</Td>
-        <Td>{dataHoraBR(linha.respondido_em)}</Td><Td>{linha.n_respostas.toLocaleString('pt-BR')}</Td><Td>{linha.nome_formulario ?? SEM_DADO}</Td>
+        <Td>{dataHoraBR(linha.respondido_em)}</Td><Td>{inteiro(linha.n_respostas)}</Td><Td>{linha.nome_formulario ?? SEM_DADO}</Td>
         <Td>{linha.email ?? SEM_DADO}</Td><Td>{linha.telefone ?? SEM_DADO}</Td><Td>{linha.grupo ?? SEM_DADO}</Td><Td>{linha.situacao ?? SEM_DADO}</Td>
         <Td>{linha.chegada_data ? dataBR(linha.chegada_data) : linha.chegada ?? SEM_DADO}</Td><Td>{linha.retorno_data ? dataBR(linha.retorno_data) : linha.retorno ?? SEM_DADO}</Td>
         <Td>{linha.aeroporto ?? SEM_DADO}</Td><Td>{linha.hospedagem ?? SEM_DADO}</Td><Td>{linha.acompanhado ?? SEM_DADO}</Td><Td>{linha.acompanhantes ?? SEM_DADO}</Td>
