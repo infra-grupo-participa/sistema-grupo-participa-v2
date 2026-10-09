@@ -88,3 +88,12 @@ Contrato aplicado em produção em 08/10/2026, migration `20261008191000` e ajus
 - As RPCs retornam `42501`, `P0002` e `22023` em situações de acesso, vínculo ao evento e validação. A tela apresenta mensagens legíveis e não registra identificadores pessoais nos logs.
 
 Para validar: selecionar cada período, conferir as datas e os números, abrir Leads e Grupo, verificar as etiquetas de teste com um perfil master e confirmar que os outros perfis não recebem os controles. O aviso de exclusões aparece apenas para o Victor; confirme com sessão dele e com uma conta QA. O teste local não deve marcar ou desmarcar dados reais.
+
+## Disparos do ATM OUT/26 (09/10/2026)
+
+O dashboard lê os disparos só de `mkt_mensageria.disparos` com `projeto_id = 75` (`public.dados_presencial_disparos`).
+
+- **Lançado à mão em 09/10:** o disparo "SEMATM - OUT26 - BTW" (id 40087), que só existia na planilha `[SEMATM OUT/26] MENSAGERIA` da Jessica (aba API, linha 8): 07/10 18:50, lista `SEMATM_OUT26_ESTUDODECASO`, 2.136 enviados, custo R$ 1.032,08, ferramenta Infobip, `origem = planilha`. `entregues` = 1.578 é calculado (2.136 × 73,88% da planilha).
+- **Já estava no banco:** o e-mail de 08/10 (id 38520, ActiveCampaign, 726 enviados), sem custo.
+- **Lacunas conhecidas:** 3 disparos Unnichat (06/10 e 09/10) e 53 de grupo estão sem `projeto_id` e não aparecem aqui; a lista mostra o dia, não a hora; o custo por canal (API, SMS, Ligação) depende de cada disparo ter `custo_centavos`.
+- **Plano para largar a planilha:** lançar pela tela de disparo (`mkt_msg_disparo_salvar`), importar o histórico com `mkt_msg_importar`, amarrar projeto na entrada de API e grupo, mostrar a hora na lista. Não executado. Decisão completa no cérebro do Victor (`_contexto/decisoes/2026-10-disparos-da-planilha-para-o-banco.md`); registro da escrita no diário do banco.
