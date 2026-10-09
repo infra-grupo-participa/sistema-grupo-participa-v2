@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock('@/shared/infrastructure/supabase/browser-client', () => ({ createBrowserSupabase: () => ({ rpc: mocks.rpc }) }));
 vi.mock('@/shared/infrastructure/supabase/query-log', () => ({ logQueryError: vi.fn() }));
 
-import { carregarAtmGrupo, carregarAtmLeads, carregarAtmResumo, desmarcarAtmTeste, marcarAtmTeste } from './atm-data';
+import { carregarAtmDisparosLista, carregarAtmGrupo, carregarAtmLeads, carregarAtmResumo, desmarcarAtmTeste, marcarAtmTeste } from './atm-data';
 
 describe('leitura e marcação do dashboard ATM', () => {
   beforeEach(() => mocks.rpc.mockReset());
@@ -50,6 +50,51 @@ describe('leitura e marcação do dashboard ATM', () => {
       p_chave: 'atm-elaine-1-2026-10', p_de: '2026-10-08', p_ate: '2026-10-08', p_incluir_teste: true,
     });
     expect(resultado.data[0]).toMatchObject({ pessoaId: 'p1', teste: true, entrouGrupo: true, aluno: false });
+  });
+
+  it('carrega o detalhe de disparos com os parâmetros do contrato e preserva valores nulos', async () => {
+    mocks.rpc.mockResolvedValue({ data: [{
+      disparo_id: 123,
+      data_hora: '2026-10-08T22:30:00Z',
+      enviado_em: null,
+      canal: 'whatsapp_api',
+      canal_pago: true,
+      tipo: 'marketing',
+      ferramenta: 'Infobip',
+      numero: null,
+      campanha: 'Campanha de teste',
+      publico_lista: null,
+      publico_origem: 'lista',
+      copy_texto: null,
+      copy_link: 'https://example.com/campanha',
+      tamanho_lista: 40,
+      entregues: 35,
+      lidas: null,
+      cliques: 4,
+      falhas: 2,
+      custo_centavos: null,
+      origem: 'api',
+      retorno_em: null,
+    }], error: null });
+
+    const resultado = await carregarAtmDisparosLista('atm-elaine-1-2026-10', { p_de: '2026-10-07', p_ate: '2026-10-14' });
+
+    expect(mocks.rpc).toHaveBeenCalledWith('dados_atm_disparos_lista', {
+      p_chave: 'atm-elaine-1-2026-10', p_de: '2026-10-07', p_ate: '2026-10-14',
+    });
+    expect(resultado.data[0]).toMatchObject({
+      id: 123, dataHora: '2026-10-08T22:30:00Z', enviadoEm: null, canal: 'whatsapp_api', canalPago: true,
+      campanha: 'Campanha de teste', enviados: 40, entregues: 35, lidas: null, cliques: 4, falhas: 2,
+      custoCentavos: null, copyTexto: null, copyLink: 'https://example.com/campanha',
+    });
+  });
+
+  it('trata a RPC de detalhe ainda indisponível como sem dado', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } });
+
+    const resultado = await carregarAtmDisparosLista('atm-elaine-1-2026-10', { p_de: null, p_ate: null });
+
+    expect(resultado).toEqual({ data: [], semDado: true, erro: null });
   });
 
   it('carrega números do grupo no período incluindo os já marcados para permitir desfazer', async () => {

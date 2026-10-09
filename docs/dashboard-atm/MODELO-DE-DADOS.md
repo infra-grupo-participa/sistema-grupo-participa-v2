@@ -276,3 +276,9 @@ update dados.sessoes set pico_audiencia = <n>, equipe_na_sala = <n> where chave 
 Carga das listas e da presença: por `service_role`, só com a chave normalizada (`pessoas.norm_email(email)` e
 `controle.fone_key(telefone)`), `importacao` = rótulo do lote sem dado pessoal. O CSV não entra no repo.
 E a entrada no manifesto da tela (`web/modules/infra/dados/domain/registro.ts`), como no presencial.
+
+## Lista de disparos (`dados_atm_disparos_lista`, migration `20261009220000`, APLICADA em 09/10/2026)
+
+Uma linha por disparo do dashboard, para o bloco "Disparos" de "Esta edição", com o mesmo período e filtro da visão por
+canal. Contrato, regra e ensaio em `infra/supabase/migrations/20261009220000.explain.md`. Não há título nem assunto na
+fonte: a tela usa `campanha`. Nulo é "sem dado", nunca zero; as taxas são calculadas na tela.

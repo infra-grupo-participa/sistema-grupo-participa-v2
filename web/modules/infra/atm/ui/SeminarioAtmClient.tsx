@@ -6,6 +6,7 @@ import { Modal } from '@/shared/ui/components/Modal';
 import {
   carregarAtmCanais,
   carregarAtmComparecimento,
+  carregarAtmDisparosLista,
   carregarAtmGrupo,
   carregarAtmLeads,
   carregarAtmPosLive,
@@ -13,12 +14,14 @@ import {
   carregarAtmSerie,
   desmarcarAtmTeste,
   marcarAtmTeste,
+  type DisparoDetalheAtm,
   type Resultado,
 } from '../infrastructure/atm-data';
 import { CANAIS_DISPARO_ATM, METRICAS_RESUMO_ATM, montarAvisosTesteAtm, rotuloListaOrigem, rotuloValorResumoLead, type DashboardAtm, type LeadAtm, type NumeroGrupoAtm } from '../domain/dashboard';
 import type { RegistroAtm } from '../domain/registro';
 import { dataPtBr, datasDoPeriodo, type PresetPeriodoAtm } from '../domain/periodo';
 import { RoscaCategorias } from '@/modules/infra/dados/ui/viz/RoscaCategorias';
+import { DisparosDetalhe } from './DisparosDetalhe';
 import { HistoricoAtm } from './HistoricoAtm';
 
 type Linha = Record<string, unknown>;
@@ -105,9 +108,11 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
   const [leads, setLeads] = useState<Resultado<LeadAtm[]>>({ data: [], semDado: true, erro: null });
   const [grupo, setGrupo] = useState<Resultado<NumeroGrupoAtm[]>>({ data: [], semDado: true, erro: null });
   const [canais, setCanais] = useState<Resultado<Linha[]>>({ data: [], semDado: true, erro: null });
+  const [disparosDetalhe, setDisparosDetalhe] = useState<Resultado<DisparoDetalheAtm[]>>({ data: [], semDado: true, erro: null });
   const [comparecimento, setComparecimento] = useState<Resultado<Linha[]>>({ data: [], semDado: true, erro: null });
   const [posLive, setPosLive] = useState<Resultado<Linha[]>>({ data: [], semDado: true, erro: null });
   const [canalAtivo, setCanalAtivo] = useState('whatsapp_api');
+  const [canalDetalheAtivo, setCanalDetalheAtivo] = useState('todos');
   const [modal, setModal] = useState(false);
   const [periodoSelecionado, setPeriodoSelecionado] = useState<PresetPeriodoAtm>('evento');
   const [atualizado, setAtualizado] = useState<Date | null>(null);
@@ -149,6 +154,7 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
         if (atual.detalhado) {
           const pedidos: Promise<void>[] = [
             carregarAtmCanais(projeto.chave, atual.periodo).then((result) => { if (!result.semDado) { setCanais(result); teveLeitura = true; } else if (result.erro) setCanais((prev) => ({ ...prev, erro: result.erro })); if (result.erro) erros.push(result.erro); }),
+            carregarAtmDisparosLista(projeto.chave, atual.periodo).then((result) => { if (!result.semDado) { setDisparosDetalhe(result); teveLeitura = true; } else if (result.erro) setDisparosDetalhe((prev) => ({ ...prev, erro: result.erro })); if (result.erro) erros.push(result.erro); }),
             carregarAtmComparecimento(projeto.chave).then((result) => { if (!result.semDado) { setComparecimento(result); teveLeitura = true; } else if (result.erro) setComparecimento((prev) => ({ ...prev, erro: result.erro })); if (result.erro) erros.push(result.erro); }),
             carregarAtmPosLive(projeto.chave).then((result) => { if (!result.semDado) { setPosLive(result); teveLeitura = true; } else if (result.erro) setPosLive((prev) => ({ ...prev, erro: result.erro })); if (result.erro) erros.push(result.erro); }),
           ];
@@ -180,7 +186,7 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
   useEffect(() => {
     if (periodoAtual.current === periodoSelecionado) return;
     periodoAtual.current = periodoSelecionado;
-    void atualizarRef.current(modalAtual.current);
+    void atualizarRef.current(true);
   }, [periodoSelecionado]);
   useEffect(() => {
     const abriu = modal && !modalAtual.current;
@@ -240,6 +246,7 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
       <div className="mb-4 flex flex-wrap gap-2">{CANAIS_DISPARO_ATM.map((c) => { const key = c.canal === 'api' ? 'whatsapp_api' : c.canal; return <button key={c.canal} onClick={() => setCanalAtivo(key)} className={'rounded-[var(--r-md)] px-3 py-2 text-sm ' + (canalAtivo === key ? 'bg-[var(--accent)] text-black font-semibold' : 'bg-[var(--surface-3)] text-[var(--fg-2)]')}>{c.rotulo}</button>; })}</div>
       {canais.erro && <p role="status" className="mb-3 text-sm text-[var(--yellow)]">{canais.erro}</p>}
       {canal ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[['Disparos', 'disparos'], ['Enviados', 'enviados'], ['Entregues', 'entregues'], ['Lidas / atendidas', 'lidas'], ['Cliques', 'cliques'], ['Falhas', 'falhas'], ['Custo', 'custo_centavos']].map(([label, key]) => { const n = valor(canal[key]); const money = key === 'custo_centavos'; return <KpiCard key={key} label={label} value={n == null ? 'Não lançado' : formatar(money ? n / 100 : n, money ? 'moeda' : 'inteiro')} hint={n == null || canais.semDado ? 'sem dado ainda' : undefined} />; })}</div> : <EmptyState title="Sem dados para este canal" hint="sem dado ainda" />}
+      <DisparosDetalhe result={disparosDetalhe} canal={canalDetalheAtivo} onCanalChange={setCanalDetalheAtivo} />
     </SectionCard>
     <SectionCard title="Comparecimento" subtitle="Dados por sessão, conforme cadastro no banco. Este bloco considera o evento inteiro.">
       {comparecimento.erro && <p role="status" className="mb-3 text-sm text-[var(--yellow)]">{comparecimento.erro}</p>}
