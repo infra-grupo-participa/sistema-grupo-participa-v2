@@ -369,10 +369,10 @@ exception when others then insert into pg_temp._z_out (passo, linha) values ('an
 reset role;
 select set_config('request.jwt.claims', '{}', true);
 insert into pg_temp._z_out (passo, linha) values ('nome_casa', jsonb_build_object(
-  'omitido', dados.nome_casa(dados.nome_tokens('Bartira Paes Cardoso Santos'), dados.nome_tokens('BARTIRA CARDOSO')),
-  'acento', dados.nome_casa(dados.nome_tokens('Kátia Paixão'), dados.nome_tokens('katia paixao')),
-  'primeiro_diferente', dados.nome_casa(dados.nome_tokens('Bruna Corredeira'), dados.nome_tokens('Matheus Corredeira')),
-  'so_um_nome', dados.nome_casa(dados.nome_tokens('Maria Julia'), dados.nome_tokens('Maria')))::text);
+  'omitido', dados.nome_casa(dados.nome_tokens('Fulana Paes Exemplo Santos'), dados.nome_tokens('FULANA EXEMPLO')),
+  'acento', dados.nome_casa(dados.nome_tokens('Cátia Exemplão'), dados.nome_tokens('catia exemplao')),
+  'primeiro_diferente', dados.nome_casa(dados.nome_tokens('Beltrana Exemplar'), dados.nome_tokens('Ciclano Exemplar')),
+  'so_um_nome', dados.nome_casa(dados.nome_tokens('Fulana Teste'), dados.nome_tokens('Fulana')))::text);
 insert into pg_temp._z_out (passo, linha) values ('tempo', 'ok');
 
 -- ===== REVERSÃO =====
