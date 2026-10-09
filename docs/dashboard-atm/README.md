@@ -167,3 +167,9 @@ Na QA desta branch, a prévia visual usou uma rota temporária local que renderi
 ### 09/10/2026: Escritório sem o selo "Em breve"
 
 O cartão Escritório em Infra > Dashboards saiu do estado "Em breve" (`emBreve` removido em `web/app/(admin)/infra/dashboards/page.tsx`), porque a área já tem o Seminário ATM no ar. Pedido do Victor.
+
+### 09/10/2026: aba Tráfego publicada (funil visual)
+
+- A aba Tráfego abre com um funil em barras no padrão do Histórico: Impressões, Vídeo plays, 25%, 50%, 75%, 100%, Cliques no link e Visualizações de página. A base é a impressão; a passagem entre etapas e o "% das impressões" são cálculo da tela. Etapa sem dado na API aparece como "Sem dado" e não calcula passagem.
+- Alcance e frequência ficam fora do funil (são pessoas, não ações) e aparecem nos cards, só quando a RPC não manda `alcance_motivo`.
+- Publicado junto com o banco do Galego (branch `victor-atm-trafego-banco`) e a tela do JP (branch `victor-atm-trafego-tela`). Card ClickUp 17tya50fugc.
