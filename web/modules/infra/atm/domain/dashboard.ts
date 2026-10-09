@@ -37,6 +37,8 @@ export const METRICAS_RESUMO_ATM: { chave: keyof ResumoAtm; rotulo: string; form
 ];
 
 export type ResumoAtm = {
+  custoTrafego: MetricaAtm;
+  investimentoTotal: MetricaAtm;
   disparos: MetricaAtm;
   leads: MetricaAtm;
   ingressosGrupo: MetricaAtm;
@@ -155,6 +157,7 @@ export function dashboardAtmSemDado(chave: string): DashboardAtm {
     chave,
     periodo: { de: null, ate: null, leadsTeste: null, grupoTeste: null, vendasTeste: null, receitaTesteBruta: null },
     resumo: {
+      custoTrafego: zero(), investimentoTotal: zero(),
       disparos: zero(), leads: zero(), ingressosGrupo: zero(), percentualIngressoGrupo: zero(), taxaEvasao: zero(),
       custoDisparo: zero(), cpl: zero(), preCheckout: zero(), vendas: zero(), conversaoPreCheckout: zero(), cac: zero(),
       faturamentoBruto: zero(), faturamentoLiquido: zero(), roas: zero(),

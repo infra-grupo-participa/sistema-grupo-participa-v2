@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock('@/shared/infrastructure/supabase/browser-client', () => ({ createBrowserSupabase: () => ({ rpc: mocks.rpc }) }));
 vi.mock('@/shared/infrastructure/supabase/query-log', () => ({ logQueryError: vi.fn() }));
 
-import { carregarAtmDisparosLista, carregarAtmGrupo, carregarAtmLeads, carregarAtmResumo, desmarcarAtmTeste, marcarAtmTeste } from './atm-data';
+import { carregarAtmDisparosLista, carregarAtmGrupo, carregarAtmLeads, carregarAtmResumo, carregarAtmTrafego, desmarcarAtmTeste, marcarAtmTeste } from './atm-data';
 
 describe('leitura e marcação do dashboard ATM', () => {
   beforeEach(() => mocks.rpc.mockReset());
@@ -38,7 +38,74 @@ describe('leitura e marcação do dashboard ATM', () => {
     expect(mocks.rpc).toHaveBeenCalledWith('dados_atm_resumo', { p_chave: 'atm-elaine-1-2026-10', p_de: null, p_ate: null });
     expect(resultado.data.resumo.disparos).toEqual({ valor: 0, semDado: false });
     expect(resultado.data.resumo.custoDisparo).toEqual({ valor: 0, semDado: true });
+    expect(resultado.data.resumo.custoTrafego).toEqual({ valor: 0, semDado: true });
+    expect(resultado.data.resumo.investimentoTotal).toEqual({ valor: 0, semDado: true });
     expect(resultado.data.periodo).toEqual({ de: '2026-10-07', ate: '2026-10-14', leadsTeste: 1, grupoTeste: 2, vendasTeste: 1, receitaTesteBruta: 197 });
+  });
+
+  it('converte investimento geral e tráfego de centavos para reais', async () => {
+    mocks.rpc.mockResolvedValue({ data: [{ custo_disparo_centavos: 2500, custo_trafego_centavos: 5000, investimento_total_centavos: 7500 }], error: null });
+
+    const resultado = await carregarAtmResumo('atm-elaine-1-2026-10');
+
+    expect(resultado.data.resumo.custoDisparo).toEqual({ valor: 25, semDado: false });
+    expect(resultado.data.resumo.custoTrafego).toEqual({ valor: 50, semDado: false });
+    expect(resultado.data.resumo.investimentoTotal).toEqual({ valor: 75, semDado: false });
+  });
+
+  it('oculta CPL, CAC e ROAS antigos enquanto o resumo não informar investimento total', async () => {
+    mocks.rpc.mockResolvedValue({ data: [{ cpl_centavos: 1200, cac_centavos: 4000, roas_liquido: 2.5 }], error: null });
+
+    const resultado = await carregarAtmResumo('atm-elaine-1-2026-10');
+
+    expect(resultado.data.resumo.cpl.semDado).toBe(true);
+    expect(resultado.data.resumo.cac.semDado).toBe(true);
+    expect(resultado.data.resumo.roas.semDado).toBe(true);
+  });
+
+  it('envia o período, mapeia o JSON de tráfego e preserva os nulos', async () => {
+    mocks.rpc.mockResolvedValue({ data: {
+      periodo_de: '2026-10-08', periodo_ate: '2026-10-08', moeda: 'BRL', coletado_em: null,
+      calculados: ['cpm_centavos', 'ctr_pct', 'cpc_centavos'],
+      total: {
+        gasto_centavos: 4987, impressoes: 883, alcance: null, frequencia: null, alcance_motivo: 'sem_total',
+        alcance_de: null, alcance_ate: null, cliques_link: 0, cliques_total: null, cliques_saida: null,
+        landing_page_views: null, engajamento: null, video_plays: null, video_thruplay: null, video_p25: null,
+        video_p50: null, video_p75: null, video_p100: null, cpm_centavos: null, ctr_pct: null, cpc_centavos: null,
+        dias: 1, primeiro_dia: '2026-10-08', ultimo_dia: '2026-10-08',
+      },
+      dias: [{ dia: '2026-10-08', gasto_centavos: 4987, impressoes: 883, alcance: null, frequencia: null, cliques_link: 0 }],
+      campanhas: [{ id: 8441, nome: 'CF | ATM1OUT26 | DISTRIBUIÇÃO | BY THE WAY | META | PQ | ABO | ALCANCE', status: 'ACTIVE', objetivo: 'DISTRIBUIÇÃO', conta: 'Seminários - Leads', gasto_centavos: 4987, primeiro_dia: '2026-10-08', ultimo_dia: '2026-10-08' }],
+    }, error: null });
+
+    const resultado = await carregarAtmTrafego('atm-elaine-1-2026-10', { p_de: '2026-10-08', p_ate: '2026-10-08' });
+
+    expect(mocks.rpc).toHaveBeenCalledWith('dados_atm_trafego', {
+      p_chave: 'atm-elaine-1-2026-10', p_de: '2026-10-08', p_ate: '2026-10-08',
+    });
+    expect(resultado.semDado).toBe(false);
+    expect(resultado.data.total).toMatchObject({ gastoCentavos: 4987, impressoes: 883, alcance: null, frequencia: null, cliquesLink: 0, alcanceMotivo: 'sem_total' });
+    expect(resultado.data.dias[0]).toMatchObject({ dia: '2026-10-08', gastoCentavos: 4987, alcance: null, frequencia: null });
+    expect(resultado.data.campanhas[0].nome).toBe('CF | ATM1OUT26 | DISTRIBUIÇÃO | BY THE WAY | META | PQ | ABO | ALCANCE');
+  });
+
+  it('trata a RPC de tráfego ainda ausente como sem dado', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } });
+
+    const resultado = await carregarAtmTrafego('atm-elaine-1-2026-10', { p_de: null, p_ate: null });
+
+    expect(resultado.semDado).toBe(true);
+    expect(resultado.erro).toBeNull();
+    expect(resultado.data.total.gastoCentavos).toBeNull();
+  });
+
+  it('trata recusa de leitura do tráfego como falha isolada sem conteúdo para substituir o último dado', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: '42501' } });
+
+    const resultado = await carregarAtmTrafego('atm-elaine-1-2026-10', { p_de: '2026-10-08', p_ate: '2026-10-08' });
+
+    expect(resultado.semDado).toBe(true);
+    expect(resultado.erro).toBe('Sem permissão para ler este dashboard.');
   });
 
   it('envia inclusão de teste somente quando pedida e mapeia o estado do lead', async () => {

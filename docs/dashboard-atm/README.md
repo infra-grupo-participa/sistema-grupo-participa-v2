@@ -51,6 +51,22 @@ Cada linha expansível mostra a campanha, canal, tipo quando houver, contagens d
 
 Nulos permanecem “Sem dado”, sem conversão para zero. Canais sem custo por disparo são identificados como tal. As taxas de entrega (entregues ÷ enviados), leitura (lidas ÷ entregues), cliques (cliques ÷ entregues) e custo por entregue são calculadas na tela, identificadas como cálculo; denominador nulo ou zero deixa o resultado como “Sem dado”. Uma falha da RPC preserva as linhas carregadas anteriormente e mostra o aviso. A RPC não está duplicada em outra chamada para cada linha.
 
+## Investimento geral e tráfego (09/10/2026)
+
+A aba **Esta edição** inicia com o card **Investimento geral**, alimentado por `investimento_total_centavos`; abaixo aparecem as parcelas `custo_disparo_centavos` e `custo_trafego_centavos`, todas convertidas de centavos para reais. Com campos ainda ausentes ou nulos, o card mostra “Sem dado”, sem estimar ou somar valores na tela.
+
+Até `investimento_total_centavos` estar disponível, CPL, CAC e ROAS também ficam como “Sem dado”. Isso evita exibir os valores anteriores que consideravam apenas o custo de disparos e divergem da regra nova de investimento total.
+
+O canal selecionado no topo do bloco Disparos filtra tanto os totais quanto a lista detalhada; há um único controle de canal.
+
+### Aba Tráfego
+
+A aba usa `dados_atm_trafego(p_chave, p_de, p_ate)`, que retorna JSON com período, coleta, totais, série diária e campanhas. O contrato foi recebido do Galego em 09/10/2026; a RPC ainda não foi aplicada. A tela já está conectada à chamada e preparada para exibir seus campos, com nulos como “Sem dado”.
+
+O funil segue a ordem gasto, impressões, alcance, frequência, vídeo, cliques no link e visualizações de página. CPM, CTR e CPC recebem o rótulo “cálculo” conforme a lista `calculados` da RPC. O gráfico diário mostra gasto; cada dia pode ser expandido para consultar todas as métricas devolvidas.
+
+Alcance e frequência agregados só são exibidos quando `alcance_motivo` é nulo. Caso contrário, a tela mostra “Sem dado” e o motivo devolvido (`varias_campanhas`, `periodo_parcial` ou `sem_total`). Os valores diários de alcance e frequência são apresentados exatamente como vêm do banco; o front não soma esses campos. A lista de campanhas preserva nome, status, objetivo, conta, gasto e datas do JSON.
+
 ## Situação do banco
 
 O contrato do front está descrito na migration **infra/supabase/migrations/20261008161000_dados_criar_modelo_seminario_atm.sql**. Ela e o cadastro inicial (**20261008161100_dados_cadastrar_atm_elaine_1.sql**, sigla `ATMEL126`) foram aplicados em produção em 08/10/2026; situação e pendências em `MODELO-DE-DADOS.md`. O front não aplica migrations nem lê planilhas.
@@ -61,10 +77,12 @@ O contrato do front está descrito na migration **infra/supabase/migrations/2026
 2. Rode **npm run dev -- -p 3001**.
 3. Entre com um usuário autorizado a Infra e a **financeiro.ver**.
 4. Abra Infra > Dashboards > Escritório > Seminário ATM.
-5. Sem RPCs aplicadas, confira que a página carrega, os cards mostram zero com “sem dado ainda” e as seções sem linhas mostram o estado vazio.
+5. Sem a nova RPC de tráfego aplicada, confira que os valores do investimento geral e da aba Tráfego aparecem como “Sem dado”, sem erro ou zero inventado. As métricas existentes continuam conforme as RPCs já disponíveis.
 6. Com as RPCs aplicadas e dados cadastrados, confira a ordem dos cards, abra o modal de leads e navegue pelas cinco abas de disparo, comparecimento e ciclos pós-live.
 7. Na seção Disparos, selecione cada canal e expanda registros para conferir contagens, taxas calculadas, valores nulos como “Sem dado” e conteúdo em texto ou link.
-7. Verifique a atualização periódica e o rótulo de horário no cabeçalho.
+8. Confira que o seletor do resumo de Disparos também filtra a lista. Em **Esta edição**, confira o card Investimento geral e seus itens Disparo e Tráfego.
+9. Quando a RPC estiver aplicada, confira a aba Tráfego, o motivo para alcance/frequência sem total, a série diária, as campanhas e os campos identificados como cálculo.
+10. Verifique a atualização periódica e o rótulo de horário no cabeçalho.
 
 Verificações do projeto:
 

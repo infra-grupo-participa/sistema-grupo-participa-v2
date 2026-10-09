@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { KpiCard, SectionCard, EmptyState, ConfirmDialog, Tabs, idsAba } from '@/shared/ui/components';
+import { Card, KpiCard, SectionCard, EmptyState, ConfirmDialog, Tabs, idsAba } from '@/shared/ui/components';
 import { Modal } from '@/shared/ui/components/Modal';
 import {
   carregarAtmCanais,
@@ -12,9 +12,12 @@ import {
   carregarAtmPosLive,
   carregarAtmResumo,
   carregarAtmSerie,
+  carregarAtmTrafego,
   desmarcarAtmTeste,
   marcarAtmTeste,
+  trafegoAtmSemDado,
   type DisparoDetalheAtm,
+  type DadosTrafegoAtm,
   type Resultado,
 } from '../infrastructure/atm-data';
 import { CANAIS_DISPARO_ATM, METRICAS_RESUMO_ATM, montarAvisosTesteAtm, rotuloListaOrigem, rotuloValorResumoLead, type DashboardAtm, type LeadAtm, type NumeroGrupoAtm } from '../domain/dashboard';
@@ -23,6 +26,7 @@ import { dataPtBr, datasDoPeriodo, type PresetPeriodoAtm } from '../domain/perio
 import { RoscaCategorias } from '@/modules/infra/dados/ui/viz/RoscaCategorias';
 import { DisparosDetalhe } from './DisparosDetalhe';
 import { HistoricoAtm } from './HistoricoAtm';
+import { TrafegoAtm } from './TrafegoAtm';
 
 type Linha = Record<string, unknown>;
 type PedidoAtualizacao = { periodo: ReturnType<typeof datasDoPeriodo>; detalhado: boolean; modal: boolean; isMaster: boolean };
@@ -109,10 +113,10 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
   const [grupo, setGrupo] = useState<Resultado<NumeroGrupoAtm[]>>({ data: [], semDado: true, erro: null });
   const [canais, setCanais] = useState<Resultado<Linha[]>>({ data: [], semDado: true, erro: null });
   const [disparosDetalhe, setDisparosDetalhe] = useState<Resultado<DisparoDetalheAtm[]>>({ data: [], semDado: true, erro: null });
+  const [trafego, setTrafego] = useState<Resultado<DadosTrafegoAtm>>({ data: trafegoAtmSemDado(), semDado: true, erro: null });
   const [comparecimento, setComparecimento] = useState<Resultado<Linha[]>>({ data: [], semDado: true, erro: null });
   const [posLive, setPosLive] = useState<Resultado<Linha[]>>({ data: [], semDado: true, erro: null });
   const [canalAtivo, setCanalAtivo] = useState('whatsapp_api');
-  const [canalDetalheAtivo, setCanalDetalheAtivo] = useState('todos');
   const [modal, setModal] = useState(false);
   const [periodoSelecionado, setPeriodoSelecionado] = useState<PresetPeriodoAtm>('evento');
   const [atualizado, setAtualizado] = useState<Date | null>(null);
@@ -123,11 +127,12 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
   const atualizarRef = useRef<(detalhado?: boolean) => Promise<void>>(async () => {});
   const modalAtual = useRef(false);
   const periodoAtual = useRef<PresetPeriodoAtm>('evento');
-  const [abaPrincipal, setAbaPrincipal] = useState<'edicao' | 'historico'>('edicao');
+  const [abaPrincipal, setAbaPrincipal] = useState<'edicao' | 'trafego' | 'historico'>('edicao');
   // O histórico só é lido na primeira vez que a aba é aberta; depois fica montado para não reler a cada troca.
   const [historicoAberto, setHistoricoAberto] = useState(false);
-  const trocarAbaPrincipal = (k: string) => { const aba = k === 'historico' ? 'historico' : 'edicao'; if (aba === 'historico') setHistoricoAberto(true); setAbaPrincipal(aba); };
+  const trocarAbaPrincipal = (k: string) => { const aba = k === 'historico' ? 'historico' : k === 'trafego' ? 'trafego' : 'edicao'; if (aba === 'historico') setHistoricoAberto(true); setAbaPrincipal(aba); };
   const idsEdicao = idsAba('atm-principal', 'edicao');
+  const idsTrafego = idsAba('atm-principal', 'trafego');
   const idsHistorico = idsAba('atm-principal', 'historico');
 
   const atualizar = useCallback(async (detalhado = false) => {
@@ -155,6 +160,7 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
           const pedidos: Promise<void>[] = [
             carregarAtmCanais(projeto.chave, atual.periodo).then((result) => { if (!result.semDado) { setCanais(result); teveLeitura = true; } else if (result.erro) setCanais((prev) => ({ ...prev, erro: result.erro })); if (result.erro) erros.push(result.erro); }),
             carregarAtmDisparosLista(projeto.chave, atual.periodo).then((result) => { if (!result.semDado) { setDisparosDetalhe(result); teveLeitura = true; } else if (result.erro) setDisparosDetalhe((prev) => ({ ...prev, erro: result.erro })); if (result.erro) erros.push(result.erro); }),
+            carregarAtmTrafego(projeto.chave, atual.periodo).then((result) => { if (!result.semDado) { setTrafego(result); teveLeitura = true; } else if (result.erro) setTrafego((prev) => ({ ...prev, erro: result.erro })); if (result.erro) erros.push(result.erro); }),
             carregarAtmComparecimento(projeto.chave).then((result) => { if (!result.semDado) { setComparecimento(result); teveLeitura = true; } else if (result.erro) setComparecimento((prev) => ({ ...prev, erro: result.erro })); if (result.erro) erros.push(result.erro); }),
             carregarAtmPosLive(projeto.chave).then((result) => { if (!result.semDado) { setPosLive(result); teveLeitura = true; } else if (result.erro) setPosLive((prev) => ({ ...prev, erro: result.erro })); if (result.erro) erros.push(result.erro); }),
           ];
@@ -215,16 +221,19 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
   };
 
   const linhasResumo = useMemo(() => METRICAS_RESUMO_ATM.map((m) => ({ ...m, metrica: resumo?.resumo[m.chave] ?? { valor: 0, semDado: true } })), [resumo]);
-  const canal = canais.data.find((x) => x.canal === canalAtivo) ?? canais.data.find((x) => x.canal === 'whatsapp_api');
+  const canal = canais.data.find((x) => x.canal === canalAtivo);
   const sessao = comparecimento.data[0];
   const ciclo = (nome: string) => posLive.data.find((x) => x.ciclo === nome);
   const renderVal = (v: unknown, tipo: string) => { const n = valor(v); return n == null ? 'Não lançado' : formatar(n, tipo); };
   const intervalo = resumo?.periodo.de && resumo.periodo.ate ? `${dataPtBr(resumo.periodo.de)} a ${dataPtBr(resumo.periodo.ate)}` : 'sem dado ainda';
   const alertasTeste = montarAvisosTesteAtm(resumo?.periodo);
+  const investimentoTotal = resumo?.resumo.investimentoTotal;
+  const custoDisparoInvestimento = resumo?.resumo.custoDisparo;
+  const custoTrafegoInvestimento = resumo?.resumo.custoTrafego;
 
   return <div className="max-w-7xl space-y-5">
     <header><div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Infra / Dashboards / Escritório / Seminário ATM</div><h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">{projeto.rotulo}</h1><p className="mt-1 text-sm text-[var(--fg-2)]">Chave {projeto.chave} · {atualizado ? 'atualizado às ' + atualizado.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'aguardando leitura'}</p></header>
-    <Tabs idBase="atm-principal" label="Seções do dashboard" active={abaPrincipal} onChange={trocarAbaPrincipal} tabs={[{ k: 'edicao', l: 'Esta edição' }, { k: 'historico', l: 'Histórico' }]} />
+    <Tabs idBase="atm-principal" label="Seções do dashboard" active={abaPrincipal} onChange={trocarAbaPrincipal} tabs={[{ k: 'edicao', l: 'Esta edição' }, { k: 'trafego', l: 'Tráfego' }, { k: 'historico', l: 'Histórico' }]} />
     <div role="tabpanel" id={idsEdicao.panel} aria-labelledby={idsEdicao.tab} hidden={abaPrincipal !== 'edicao'} className="space-y-5">
     <div className="flex flex-wrap items-end gap-3 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3">
       <label className="grid gap-1 text-xs text-[var(--fg-2)]">Período
@@ -238,7 +247,18 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
     {erro && <p role="status" className="rounded-[var(--r-md)] border border-[var(--yellow)]/40 bg-[var(--surface-2)] p-3 text-sm text-[var(--yellow)]">{erro}</p>}
     {resumo?.semDado && <p className="text-xs text-[var(--fg-3)]">sem dado ainda · os dados aparecem quando as funções do banco e os dados do projeto estiverem disponíveis.</p>}
     {mostrarAvisoTeste && alertasTeste.length > 0 && <div role="status" className="rounded-[var(--r-md)] border border-[var(--yellow)]/50 bg-[var(--surface-2)] p-3 text-sm text-[var(--yellow)]"><strong>Registros excluídos por marcação de teste:</strong><ul className="mt-1 list-inside list-disc">{alertasTeste.map((aviso) => <li key={aviso.tipo}>{aviso.tipo === 'leads' ? `${inteiro.format(aviso.quantidade)} leads marcados como teste` : aviso.tipo === 'grupo' ? `${inteiro.format(aviso.quantidade)} números do grupo marcados como teste` : `${inteiro.format(aviso.quantidade)} vendas marcadas como teste, faturamento bruto excluído: ${aviso.receitaBruta == null ? 'não lançado' : moeda.format(aviso.receitaBruta)}`}</li>)}</ul></div>}
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{linhasResumo.map((m) => <button key={m.chave} type="button" onClick={() => { if (m.chave === 'leads') setModal(true); }} className="text-left"><KpiCard label={m.rotulo} value={m.metrica.semDado ? 'Não lançado' : formatar(m.metrica.valor, m.formato)} hint={m.metrica.semDado ? 'sem dado ainda' : undefined} bar={m.chave === 'vendas' ? 'green' : 'accent'} /></button>)}</div>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <Card className="min-w-0 overflow-hidden p-4" style={{ borderLeft: '4px solid var(--accent)' }}>
+        <div className="truncate text-xs font-medium uppercase tracking-wide text-[var(--fg-3)]">Investimento geral</div>
+        <div className="mt-1 break-words text-lg font-bold tabular leading-tight tracking-[-0.01em] text-[var(--fg)]">{!investimentoTotal || investimentoTotal.semDado ? 'Sem dado' : formatar(investimentoTotal.valor, 'moeda')}</div>
+        {(!investimentoTotal || investimentoTotal.semDado) && <div className="mt-1 text-[11px] text-[var(--fg-3)]">sem dado ainda</div>}
+        <div className="mt-3 space-y-2 border-t border-[var(--border)] pt-3 text-xs">
+          <div className="flex items-center justify-between gap-2"><span className="text-[var(--fg-3)]">Disparo</span><strong className="tabular text-[var(--fg)]">{!custoDisparoInvestimento || custoDisparoInvestimento.semDado ? 'Sem dado' : moeda.format(custoDisparoInvestimento.valor)}</strong></div>
+          <div className="flex items-center justify-between gap-2"><span className="text-[var(--fg-3)]">Tráfego</span><strong className="tabular text-[var(--fg)]">{!custoTrafegoInvestimento || custoTrafegoInvestimento.semDado ? 'Sem dado' : moeda.format(custoTrafegoInvestimento.valor)}</strong></div>
+        </div>
+      </Card>
+      {linhasResumo.map((m) => <button key={m.chave} type="button" onClick={() => { if (m.chave === 'leads') setModal(true); }} className="text-left"><KpiCard label={m.rotulo} value={m.metrica.semDado ? 'Não lançado' : formatar(m.metrica.valor, m.formato)} hint={m.metrica.semDado ? 'sem dado ainda' : undefined} bar={m.chave === 'vendas' ? 'green' : 'accent'} /></button>)}
+    </div>
     <SectionCard title="Evolução diária" subtitle={`Leads, grupo, pré-checkout, vendas, faturamento e custo. ${intervalo}`}>
       {serie.length ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs text-[var(--fg-3)]">{['Dia', 'Leads', 'Ingresso no grupo', 'Saídas', 'Pré-checkout', 'Vendas', 'Faturamento bruto', 'Custo disparo'].map((x) => <th key={x} className="p-2">{x}</th>)}</tr></thead><tbody>{serie.map((r) => <tr key={String(r.dia)} className="border-t border-[var(--border)]">{['dia', 'leads', 'grupo_entradas', 'grupo_saidas', 'pre_checkout', 'vendas', 'receita_bruta', 'custo_disparo_centavos'].map((k) => <td key={k} className="p-2">{k === 'dia' ? String(r[k] ?? '') : renderVal(k === 'custo_disparo_centavos' && valor(r[k]) != null ? (valor(r[k]) ?? 0) / 100 : r[k], k === 'receita_bruta' || k === 'custo_disparo_centavos' ? 'moeda' : 'inteiro')}</td>)}</tr>)}</tbody></table></div> : <EmptyState title="Sem série disponível" hint="sem dado ainda" />}
     </SectionCard>
@@ -246,7 +266,7 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
       <div className="mb-4 flex flex-wrap gap-2">{CANAIS_DISPARO_ATM.map((c) => { const key = c.canal === 'api' ? 'whatsapp_api' : c.canal; return <button key={c.canal} onClick={() => setCanalAtivo(key)} className={'rounded-[var(--r-md)] px-3 py-2 text-sm ' + (canalAtivo === key ? 'bg-[var(--accent)] text-black font-semibold' : 'bg-[var(--surface-3)] text-[var(--fg-2)]')}>{c.rotulo}</button>; })}</div>
       {canais.erro && <p role="status" className="mb-3 text-sm text-[var(--yellow)]">{canais.erro}</p>}
       {canal ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[['Disparos', 'disparos'], ['Enviados', 'enviados'], ['Entregues', 'entregues'], ['Lidas / atendidas', 'lidas'], ['Cliques', 'cliques'], ['Falhas', 'falhas'], ['Custo', 'custo_centavos']].map(([label, key]) => { const n = valor(canal[key]); const money = key === 'custo_centavos'; return <KpiCard key={key} label={label} value={n == null ? 'Não lançado' : formatar(money ? n / 100 : n, money ? 'moeda' : 'inteiro')} hint={n == null || canais.semDado ? 'sem dado ainda' : undefined} />; })}</div> : <EmptyState title="Sem dados para este canal" hint="sem dado ainda" />}
-      <DisparosDetalhe result={disparosDetalhe} canal={canalDetalheAtivo} onCanalChange={setCanalDetalheAtivo} />
+      <DisparosDetalhe result={disparosDetalhe} canal={canalAtivo} />
     </SectionCard>
     <SectionCard title="Comparecimento" subtitle="Dados por sessão, conforme cadastro no banco. Este bloco considera o evento inteiro.">
       {comparecimento.erro && <p role="status" className="mb-3 text-sm text-[var(--yellow)]">{comparecimento.erro}</p>}
@@ -257,6 +277,9 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
       {posLive.data.length ? <div className="grid gap-4 md:grid-cols-2">{(['aberto', 'fechado'] as const).map((nome) => { const p = ciclo(nome); return <div key={nome} className="rounded-[var(--r-md)] border border-[var(--border)] p-4"><h3 className="font-semibold capitalize">Ciclo {nome}</h3><div className="mt-3 grid grid-cols-2 gap-3"><KpiCard label="Vendas" value={renderVal(p?.vendas, 'inteiro')} hint={p?.vendas == null ? 'sem dado ainda' : undefined} /><KpiCard label="Conversão" value={renderVal(p?.conversao_pct, 'percentual')} hint={p?.conversao_pct == null ? 'sem dado ainda' : undefined} /></div></div>; })}</div> : <EmptyState title="Pós-live sem dados" hint="sem dado ainda" />}
     </SectionCard>
     <ModalLeads open={modal} onClose={() => setModal(false)} result={leads} grupo={grupo} serie={serie} periodoLabel={intervalo} isMaster={isMaster} onToggleLead={toggleLead} onToggleGrupo={toggleGrupo} />
+    </div>
+    <div role="tabpanel" id={idsTrafego.panel} aria-labelledby={idsTrafego.tab} hidden={abaPrincipal !== 'trafego'}>
+      {abaPrincipal === 'trafego' && <TrafegoAtm result={trafego} />}
     </div>
     <div role="tabpanel" id={idsHistorico.panel} aria-labelledby={idsHistorico.tab} hidden={abaPrincipal !== 'historico'}>
       {historicoAberto && <HistoricoAtm familia={projeto.familia} />}

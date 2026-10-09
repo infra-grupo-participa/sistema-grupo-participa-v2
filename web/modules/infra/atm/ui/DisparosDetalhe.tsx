@@ -57,33 +57,19 @@ function Dado({ label, value, calculado = false }: { label: string; value: strin
 export function DisparosDetalhe({
   result,
   canal,
-  onCanalChange,
 }: {
   result: Resultado<DisparoDetalheAtm[]>;
   canal: string;
-  onCanalChange: (canal: string) => void;
 }) {
-  const canais: { chave: string; rotulo: string }[] = [
-    { chave: 'todos', rotulo: 'Todos' },
-    { chave: 'whatsapp_api', rotulo: 'API' },
-    { chave: 'grupo', rotulo: 'Grupo' },
-    { chave: 'sms', rotulo: 'SMS' },
-    { chave: 'ligacao', rotulo: 'Ligação' },
-    { chave: 'email', rotulo: 'E-mail' },
-  ];
-  const rows = result.data.filter((row) => canal === 'todos' || row.canal === canal);
+  const rows = result.data.filter((row) => row.canal === canal);
+  const canalAtual = canalRotulo[canal as keyof typeof canalRotulo] ?? 'Sem dado';
 
   return <div className="mt-5 border-t border-[var(--border)] pt-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <h3 className="font-semibold text-[var(--fg)]">Disparos registrados</h3>
-        <p className="mt-1 text-xs text-[var(--fg-3)]">Data e hora em Brasília. Taxas e custo por entregue são cálculos da tela. Use Atualizar para reler os registros.</p>
+        <p className="mt-1 text-xs text-[var(--fg-3)]">Canal selecionado: {canalAtual}. Data e hora em Brasília. Taxas e custo por entregue são cálculos da tela. Use Atualizar para reler os registros.</p>
       </div>
-      <label className="grid gap-1 text-xs text-[var(--fg-2)]">Filtrar canal
-        <select aria-label="Filtrar disparos por canal" value={canal} onChange={(event) => onCanalChange(event.target.value)} className="min-h-10 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-1)] px-3 text-sm text-[var(--fg)]">
-          {canais.map((item) => <option key={item.chave} value={item.chave}>{item.rotulo}</option>)}
-        </select>
-      </label>
     </div>
 
     {result.erro && <p role="status" className="mt-3 text-sm text-[var(--yellow)]">{result.erro}</p>}

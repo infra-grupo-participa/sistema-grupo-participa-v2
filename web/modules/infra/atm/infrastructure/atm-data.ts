@@ -30,7 +30,76 @@ export type DisparoDetalheAtm = {
   origem: string | null;
   retornoEm: string | null;
 };
+export type MetricaTrafegoAtm = {
+  gastoCentavos: number | null;
+  impressoes: number | null;
+  alcance: number | null;
+  frequencia: number | null;
+  cliquesLink: number | null;
+  cliquesTotal: number | null;
+  cliquesSaida: number | null;
+  landingPageViews: number | null;
+  engajamento: number | null;
+  videoPlays: number | null;
+  videoThruplay: number | null;
+  videoP25: number | null;
+  videoP50: number | null;
+  videoP75: number | null;
+  videoP100: number | null;
+  cpmCentavos: number | null;
+  ctrPct: number | null;
+  cpcCentavos: number | null;
+};
+export type DiaTrafegoAtm = MetricaTrafegoAtm & { dia: string | null };
+export type CampanhaTrafegoAtm = {
+  id: string | null;
+  nome: string | null;
+  status: string | null;
+  objetivo: string | null;
+  conta: string | null;
+  gastoCentavos: number | null;
+  primeiroDia: string | null;
+  ultimoDia: string | null;
+};
+export type DadosTrafegoAtm = {
+  periodoDe: string | null;
+  periodoAte: string | null;
+  moeda: string | null;
+  coletadoEm: string | null;
+  calculados: string[];
+  total: MetricaTrafegoAtm & {
+    alcanceMotivo: string | null;
+    alcanceDe: string | null;
+    alcanceAte: string | null;
+    dias: number | null;
+    primeiroDia: string | null;
+    ultimoDia: string | null;
+  };
+  dias: DiaTrafegoAtm[];
+  campanhas: CampanhaTrafegoAtm[];
+};
 type Linha = Record<string, unknown>;
+
+function objeto(v: unknown): Linha | null {
+  return typeof v === 'object' && v !== null && !Array.isArray(v) ? v as Linha : null;
+}
+function texto(v: unknown): string | null { return typeof v === 'string' ? v : null; }
+function metricaTrafego(row: Linha): MetricaTrafegoAtm {
+  return {
+    gastoCentavos: num(row.gasto_centavos), impressoes: num(row.impressoes), alcance: num(row.alcance), frequencia: num(row.frequencia),
+    cliquesLink: num(row.cliques_link), cliquesTotal: num(row.cliques_total), cliquesSaida: num(row.cliques_saida),
+    landingPageViews: num(row.landing_page_views), engajamento: num(row.engajamento), videoPlays: num(row.video_plays),
+    videoThruplay: num(row.video_thruplay), videoP25: num(row.video_p25), videoP50: num(row.video_p50), videoP75: num(row.video_p75),
+    videoP100: num(row.video_p100), cpmCentavos: num(row.cpm_centavos), ctrPct: num(row.ctr_pct), cpcCentavos: num(row.cpc_centavos),
+  };
+}
+export function trafegoAtmSemDado(): DadosTrafegoAtm {
+  return {
+    periodoDe: null, periodoAte: null, moeda: null, coletadoEm: null, calculados: [],
+    total: { ...metricaTrafego({}), alcanceMotivo: null, alcanceDe: null, alcanceAte: null, dias: null, primeiroDia: null, ultimoDia: null },
+    dias: [], campanhas: [],
+  };
+}
 
 function num(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null;
@@ -80,6 +149,10 @@ export async function carregarAtmResumo(chave: string, periodo?: DatasPeriodoAtm
     const n = num(row[key]);
     return { valor: n === null ? 0 : n / 100, semDado: n === null };
   };
+  const investimentoTotalCentavos = num(row.investimento_total_centavos);
+  const metricaDependenteDoInvestimento = (key: string) => investimentoTotalCentavos === null
+    ? { valor: 0, semDado: true }
+    : valorCentavos(key);
   const periodoAplicado: PeriodoAplicadoAtm = {
     de: typeof row.periodo_de === 'string' ? row.periodo_de : null,
     ate: typeof row.periodo_ate === 'string' ? row.periodo_ate : null,
@@ -93,14 +166,17 @@ export async function carregarAtmResumo(chave: string, periodo?: DatasPeriodoAtm
       ...base,
       periodo: periodoAplicado,
       resumo: {
+        custoTrafego: valorCentavos('custo_trafego_centavos'),
+        investimentoTotal: valorCentavos('investimento_total_centavos'),
         disparos: valor('disparos_qtd'), leads: valor('leads'), ingressosGrupo: valor('grupo_entradas'),
         percentualIngressoGrupo: valor('grupo_pct'), taxaEvasao: valor('evasao_pct'),
         custoDisparo: valorCentavos('custo_disparo_centavos'),
-        cpl: valorCentavos('cpl_centavos'),
+        cpl: metricaDependenteDoInvestimento('cpl_centavos'),
         preCheckout: valor('pre_checkout_pessoas'), vendas: valor('vendas'),
         conversaoPreCheckout: valor('conversao_pre_checkout_pct'),
-        cac: valorCentavos('cac_centavos'),
-        faturamentoBruto: valor('receita_bruta'), faturamentoLiquido: valor('receita_liquida'), roas: valor('roas_liquido'),
+        cac: metricaDependenteDoInvestimento('cac_centavos'),
+        faturamentoBruto: valor('receita_bruta'), faturamentoLiquido: valor('receita_liquida'),
+        roas: metricaDependenteDoInvestimento('roas_liquido'),
       },
       semDado: false,
     },
@@ -221,6 +297,61 @@ export async function carregarAtmDisparosLista(chave: string, periodo?: DatasPer
     semDado: r.semDado,
     erro: r.erro,
   };
+}
+export async function carregarAtmTrafego(chave: string, periodo?: DatasPeriodoAtm): Promise<Resultado<DadosTrafegoAtm>> {
+  const nome = 'dados_atm_trafego';
+  const vazio = trafegoAtmSemDado();
+  try {
+    const argumentos: Record<string, unknown> = { p_chave: chave };
+    if (periodo) Object.assign(argumentos, periodo);
+    const { data, error } = await createBrowserSupabase().rpc(nome, argumentos);
+    if (error) {
+      logQueryError(nome, { message: error.code || 'SEM_CODIGO' });
+      return { data: vazio, semDado: true, erro: mensagemLeitura(error.code) };
+    }
+    const root = objeto(data);
+    if (!root) return { data: vazio, semDado: true, erro: null };
+    const totalRaw = objeto(root.total) ?? {};
+    const diasRaw = Array.isArray(root.dias) ? root.dias.map(objeto).filter((row): row is Linha => row !== null) : [];
+    const campanhasRaw = Array.isArray(root.campanhas) ? root.campanhas.map(objeto).filter((row): row is Linha => row !== null) : [];
+    const total: DadosTrafegoAtm['total'] = {
+      ...metricaTrafego(totalRaw),
+      alcanceMotivo: texto(totalRaw.alcance_motivo),
+      alcanceDe: texto(totalRaw.alcance_de),
+      alcanceAte: texto(totalRaw.alcance_ate),
+      dias: num(totalRaw.dias),
+      primeiroDia: texto(totalRaw.primeiro_dia),
+      ultimoDia: texto(totalRaw.ultimo_dia),
+    };
+    const dias: DiaTrafegoAtm[] = diasRaw.map((row) => ({ dia: texto(row.dia), ...metricaTrafego(row) }));
+    const campanhas: CampanhaTrafegoAtm[] = campanhasRaw.map((row) => ({
+      id: row.id == null ? null : String(row.id),
+      nome: texto(row.nome),
+      status: texto(row.status),
+      objetivo: texto(row.objetivo),
+      conta: texto(row.conta),
+      gastoCentavos: num(row.gasto_centavos),
+      primeiroDia: texto(row.primeiro_dia),
+      ultimoDia: texto(row.ultimo_dia),
+    }));
+    return {
+      data: {
+        periodoDe: texto(root.periodo_de),
+        periodoAte: texto(root.periodo_ate),
+        moeda: texto(root.moeda),
+        coletadoEm: texto(root.coletado_em),
+        calculados: Array.isArray(root.calculados) ? root.calculados.filter((item): item is string => typeof item === 'string') : [],
+        total,
+        dias,
+        campanhas,
+      },
+      semDado: false,
+      erro: null,
+    };
+  } catch {
+    logQueryError(nome, { message: 'NETWORK' });
+    return { data: vazio, semDado: true, erro: 'Falha de conexão ao carregar este bloco. Os últimos dados disponíveis foram mantidos.' };
+  }
 }
 export async function carregarAtmComparecimento(chave: string): Promise<Resultado<Linha[]>> {
   return rpc('dados_atm_comparecimento', chave);
