@@ -133,3 +133,15 @@ Divisão por zero ou valor nulo aparece como "—". Dia 3 nulo (ATM JUL/26) most
 2. Com a migration aplicada, logado com usuário da equipe, abrir Infra > Dashboards > Escritório > Seminário ATM > Histórico e conferir cada número da tabela contra a seção "Números que valem" do pedido e contra a carga da migration.
 3. Em 375 px: a página não pode rolar na horizontal; a tabela rola por dentro.
 4. Sem a migration: a aba mostra "Histórico sem edições · sem dado ainda".
+
+### Aprimoramento visual do histórico (branch `victor-atm-historico-visual`)
+
+O comparativo abre com dez cards: Leads, Grupo, Taxa de ingresso, Pico D1, Pré-checkout, Vendas, Receita, CAC, ROAS e CPL. Cada card coloca as edições em linhas com valor e barra proporcional; a edição mais recente recebe destaque. A variação relativa compara a edição mais recente com a anterior. Aumento é favorável para as métricas de volume e receita; queda é favorável para CAC e CPL. Sem base válida, a variação aparece como "—". A tabela completa continua disponível em um bloco recolhível.
+
+O comparativo também mostra um funil por etapa (Leads → Grupo → Pico D1 → Pré-checkout → Vendas), com uma barra por edição. Nas sub-abas, as barras de pico D1-D3 e as etapas do funil animam a entrada, contam os valores e respondem a foco e hover com destaque. As dicas mostram valor, passagem sobre a etapa anterior quando se aplica e fonte do dado. Trocar de sub-aba tem transição curta. `prefers-reduced-motion` desativa as animações e transições.
+
+As visões usam exclusivamente as linhas da RPC `dados_historico_edicoes` e os indicadores definidos em `domain/historico.ts`; a variação é calculada a partir das duas edições exibidas e divisão com base nula ou zero resulta em "—". Os cards empilham em telas estreitas; a tabela completa permanece recolhida e rola em seu próprio contêiner.
+
+**Como validar.** Rode `npx vitest run modules/infra/atm/domain/historico.test.ts modules/infra/atm/ui/historico-visual.test.ts`, `npx tsc --noEmit`, `npm run lint` e `npm run build`. Faça a inspeção visual com fixtures de teste em 1280 px e 375 px; confira que não aparece rolagem horizontal na página, que a tabela está recolhida no comparativo, que foco/hover exibe fonte e que `prefers-reduced-motion` desativa o movimento.
+
+Na QA desta branch, a prévia visual usou uma rota temporária local que renderizava apenas `HistoricoAtmView` com os mesmos fixtures da suíte. A rota e a exceção temporária de autenticação foram removidas após a captura; não fazem parte do produto nem chamaram a RPC. As capturas 1280 px e 375 px ficam junto do relatório de entrega no cérebro.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   descreverFonte, etapasFunil, formatarHistorico, indicadoresEdicao, investimentoTotal, metricaHistorico,
-  ordenarEdicoes, periodoEdicao, picosAulas, razao, type EdicaoHistorico,
+  ordenarEdicoes, periodoEdicao, picosAulas, razao, variacaoPercentualHistorico, type EdicaoHistorico,
 } from './historico';
 
 // Valores de exemplo do contrato da RPC dados_historico_edicoes (pedido de 09/10/2026), já em reais.
@@ -90,6 +90,15 @@ describe('ausência de dado nunca vira zero', () => {
     expect(i.investTotal).toBe(0);
     expect(formatarHistorico(i.roas, 'multiplicador')).toBe('—');
     expect(sp(formatarHistorico(i.cac, 'moeda'))).toBe('R$ 0,00');
+  });
+
+  it('variação comparativa usa a edição anterior e preserva valores ausentes', () => {
+    expect(variacaoPercentualHistorico(12, 10)).toBeCloseTo(0.2);
+    expect(variacaoPercentualHistorico(8, 10)).toBeCloseTo(-0.2);
+    expect(variacaoPercentualHistorico(0, 10)).toBe(-1);
+    expect(variacaoPercentualHistorico(10, 0)).toBeNull();
+    expect(variacaoPercentualHistorico(null, 10)).toBeNull();
+    expect(variacaoPercentualHistorico(10, null)).toBeNull();
   });
 });
 

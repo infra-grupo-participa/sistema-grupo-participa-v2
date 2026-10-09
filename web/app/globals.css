@@ -300,6 +300,8 @@ body {
 @keyframes gp-drawer-left { from { transform: translateX(-100%) } to { transform: translateX(0) } }
 @keyframes gp-spin { to { transform: rotate(360deg) } }
 @keyframes gp-shimmer { from { transform: translateX(-100%) } to { transform: translateX(100%) } }
+@keyframes atm-historico-grow { from { transform: scaleX(.12); opacity: .65 } to { transform: scaleX(1); opacity: 1 } }
+@keyframes atm-historico-panel { from { transform: translateY(6px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
 .gp-overlay-in { animation: gp-fade var(--dur-mid) var(--ease-out); }
 .gp-panel-in { animation: gp-slide-in var(--dur-modal) var(--ease-out); }
 /* Modal: centrado (exceção à regra do gatilho), sobe 8px e cresce de .97. */
@@ -314,6 +316,12 @@ body {
 /* Entrada de listas/grids — stagger sutil (delay aplicado por índice via style inline).
    Reveal informacional discreto (sem overshoot), fiel ao painel operacional. */
 .gp-rise { animation: gp-rise 280ms var(--ease-out) both; }
+.atm-historico-panel-enter { animation: atm-historico-panel 220ms var(--ease-out) both; }
+.atm-historico-barra, .atm-historico-funil-bar { transform-box: fill-box; transform-origin: left center; animation: atm-historico-grow 620ms var(--ease-out) both; }
+.atm-historico-interativo { transition: opacity 180ms ease, filter 180ms ease, transform 180ms ease, box-shadow 180ms ease; }
+.atm-historico-interativo:hover, .atm-historico-interativo:focus-visible { filter: brightness(1.14); transform: scale(1.012); box-shadow: var(--shadow-sm); }
+.atm-historico-card { transition: border-color 180ms ease, box-shadow 180ms ease; }
+.atm-historico-card:hover { border-color: var(--border-accent); box-shadow: var(--shadow-md); }
 
 /* Pressionar: o elemento afunda 3% — confirma que a interface ouviu o clique.
    Aplica-se a qualquer coisa clicável que não seja texto corrido. */
@@ -378,6 +386,9 @@ body {
   .gp-press:active:not(:disabled):not([aria-disabled='true']) { scale: none; }
   .gp-skeleton::after { animation: none; display: none; }
   .gp-toast { transition-property: opacity; transition-duration: 150ms !important; }
+  .atm-historico-panel-enter, .atm-historico-barra, .atm-historico-funil-bar { animation: none !important; }
+  .atm-historico-interativo, .atm-historico-card { transition: none !important; }
+  .atm-historico-interativo:hover, .atm-historico-interativo:focus-visible { transform: none; filter: none; box-shadow: none; }
 }
 
 /* Logo Grupo Participa — troca por tema (sem flicker: data-theme vem do script inline).

@@ -68,6 +68,12 @@ export function razao(numerador: number | null | undefined, denominador: number 
   return numerador / denominador;
 }
 
+/** Variação relativa atual ÷ anterior − 1. Sem base anterior ou com base zero = null. */
+export function variacaoPercentualHistorico(atual: number | null, anterior: number | null): number | null {
+  if (!finito(atual) || !finito(anterior) || anterior === 0) return null;
+  return (atual - anterior) / Math.abs(anterior);
+}
+
 /** Tráfego + disparo. Se uma das partes não veio da fonte, o total é desconhecido (null): nunca supor zero. */
 export function investimentoTotal(e: Pick<EdicaoHistorico, 'investTrafego' | 'investDisparo'>): number | null {
   if (!finito(e.investTrafego) || !finito(e.investDisparo)) return null;

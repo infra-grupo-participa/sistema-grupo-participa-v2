@@ -1,12 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { DataTable, EmptyState, KpiCard, SectionCard, Tabs, Td, Th, Thead, Tr, idsAba } from '@/shared/ui/components';
 import { carregarHistoricoEdicoes } from '../infrastructure/historico-data';
 import {
   descreverFonte, ehProvisorio, etapasFunil, formatarHistorico, indicadoresEdicao, METRICAS_HISTORICO, metricaHistorico,
   periodoEdicao, picosAulas, ROTULO_CAMPO_FONTE, SECOES_HISTORICO, SEM_VALOR,
-  type CampoFonteHistorico, type EdicaoHistorico, type MetricaHistorico,
+  variacaoPercentualHistorico, type CampoFonteHistorico, type EdicaoHistorico, type FormatoHistorico, type MetricaHistorico,
 } from '../domain/historico';
 
 const ABA_COMPARATIVO = 'comparativo';
@@ -77,7 +77,7 @@ export function HistoricoAtmView({ edicoes, carregando, erro, lidoEm, onRecarreg
       ? <SectionCard><EmptyState title={carregando ? 'Carregando o histórico…' : 'Histórico sem edições'} hint={carregando ? undefined : 'sem dado ainda · as edições aparecem quando o banco devolver o histórico desta família.'} /></SectionCard>
       : <div className={'min-w-0 transition-opacity ' + (desatualizado ? 'opacity-60' : '')}>
         <Tabs idBase={ID_ABAS} label="Visões do histórico" active={abaAtiva} onChange={setAba} tabs={[{ k: ABA_COMPARATIVO, l: 'Comparativo geral' }, ...edicoes.map((e) => ({ k: e.chave, l: e.rotulo }))]} />
-        <div role="tabpanel" id={ids.panel} aria-labelledby={ids.tab} tabIndex={0} className="min-w-0 focus-visible:outline-2 focus-visible:outline-[var(--accent)]">
+        <div key={abaAtiva} role="tabpanel" id={ids.panel} aria-labelledby={ids.tab} tabIndex={0} className="atm-historico-panel-enter min-w-0 focus-visible:outline-2 focus-visible:outline-[var(--accent)]">
           {abaAtiva === ABA_COMPARATIVO || idx < 0
             ? <ComparativoGeral edicoes={edicoes} />
             : <EdicaoDetalhe edicao={edicoes[idx]} anterior={edicoes[idx - 1] ?? null} />}
@@ -97,19 +97,122 @@ function ValorComFonte({ m, e, anterior, grande = false }: { m: MetricaHistorico
 }
 
 function ComparativoGeral({ edicoes }: { edicoes: EdicaoHistorico[] }) {
+  const destaques = ['leads', 'grupo', 'taxa_grupo', 'pico_d1', 'pre_checkout', 'vendas', 'receita_liquida', 'cac', 'roas', 'cpl'];
+  const metricas = destaques.map(metricaHistorico);
+
   return <div className="space-y-3">
-    <DataTable minWidth={220 + edicoes.length * 140}>
-      <caption className="sr-only">Comparativo geral: métricas nas linhas, uma coluna por edição</caption>
-      <Thead>
-        <Th className="sticky left-0 z-[2] bg-[var(--surface-3)]">Métrica</Th>
-        {edicoes.map((e) => <th key={e.chave} scope="col" className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] whitespace-nowrap">{e.rotulo}</th>)}
-      </Thead>
-      <tbody>
-        {SECOES_HISTORICO.map((secao) => <SecaoComparativo key={secao} secao={secao} edicoes={edicoes} />)}
-      </tbody>
-    </DataTable>
-    <p className="text-xs text-[var(--fg-3)]">Passe o mouse sobre o número para ver a fonte. <span className="text-[var(--yellow)]">*</span> provisório. {SEM_VALOR} = sem dado na fonte ou divisão por zero. Comparativo = pico da edição ÷ pico da mesma aula da edição anterior.</p>
+    <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {metricas.map((m, i) => <CartaoComparativo key={m.id} m={m} edicoes={edicoes} style={{ animationDelay: `${i * 45}ms` }} />)}
+    </div>
+    <SectionCard title="Funil comparativo" subtitle="Cada etapa mostra a escala entre edições; passe o mouse ou foque uma barra para ver passagem e fonte.">
+      <FunilComparativo edicoes={edicoes} />
+    </SectionCard>
+    <details className="min-w-0 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3">
+      <summary className="cursor-pointer font-medium text-[var(--fg)]">Tabela completa do comparativo</summary>
+      <div className="mt-3">
+        <DataTable minWidth={220 + edicoes.length * 140}>
+          <caption className="sr-only">Comparativo geral completo: métricas nas linhas, uma coluna por edição</caption>
+          <Thead>
+            <Th className="sticky left-0 z-[2] bg-[var(--surface-3)]">Métrica</Th>
+            {edicoes.map((e) => <th key={e.chave} scope="col" className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] whitespace-nowrap">{e.rotulo}</th>)}
+          </Thead>
+          <tbody>{SECOES_HISTORICO.map((secao) => <SecaoComparativo key={secao} secao={secao} edicoes={edicoes} />)}</tbody>
+        </DataTable>
+      </div>
+    </details>
+    <p className="text-xs text-[var(--fg-3)]">Passe o mouse sobre os valores para ver a fonte. <span className="text-[var(--yellow)]">*</span> provisório. {SEM_VALOR} = sem dado na fonte ou divisão por zero. CAC e CPL menores são melhores.</p>
     <FontesDetalhe edicoes={edicoes} />
+  </div>;
+}
+
+function valorMetrica(m: MetricaHistorico, edicoes: EdicaoHistorico[], indice: number): number | null {
+  return m.valor(edicoes[indice], indicadoresEdicao(edicoes[indice], edicoes[indice - 1] ?? null));
+}
+
+function CartaoComparativo({ m, edicoes, style }: { m: MetricaHistorico; edicoes: EdicaoHistorico[]; style?: CSSProperties }) {
+  const valores = edicoes.map((e, i) => valorMetrica(m, edicoes, i));
+  const maximo = Math.max(0, ...valores.filter((v): v is number => v !== null));
+  const atual = valores.at(-1) ?? null;
+  const anterior = valores.at(-2) ?? null;
+  const variacao = variacaoPercentualHistorico(atual, anterior);
+  const caiEhBom = m.id === 'cac' || m.id === 'cpl';
+  const favorece = variacao === null || variacao === 0 ? null : caiEhBom ? variacao < 0 : variacao > 0;
+  const seta = variacao === null ? '' : variacao > 0 ? '↑' : variacao < 0 ? '↓' : '→';
+  const cor = favorece === null ? 'text-[var(--fg-3)]' : favorece ? 'text-[var(--green)]' : 'text-[var(--red)]';
+  const [foco, setFoco] = useState<string | null>(null);
+
+  return <article style={style} className="atm-historico-card gp-rise min-w-0 rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] p-4 shadow-[var(--shadow-sm)]">
+    <div className="flex items-start justify-between gap-2">
+      <h3 className="min-w-0 text-sm font-semibold text-[var(--fg)]">{m.rotulo}</h3>
+      <span className="shrink-0 text-right text-xs font-semibold tabular" aria-label={variacao === null ? 'Sem variação calculável' : `${seta} ${formatarHistorico(Math.abs(variacao), 'percentual')} contra edição anterior`}>
+        {variacao === null ? SEM_VALOR : <span className={cor}>{seta} {formatarHistorico(Math.abs(variacao), 'percentual')}</span>}
+        <span className="block font-normal text-[var(--fg-3)]">vs anterior</span>
+      </span>
+    </div>
+    <div className="mt-3 space-y-3">
+      {edicoes.map((e, i) => {
+        const v = valores[i];
+        const anteriorEdicao = edicoes[i - 1] ?? null;
+        const prov = ehProvisorio(m, e, anteriorEdicao);
+        const largura = v === null || maximo === 0 ? 0 : Math.min(100, Math.max(0, v / maximo * 100));
+        const ativo = foco === null || foco === e.chave;
+        return <div key={e.chave} onMouseEnter={() => setFoco(e.chave)} onMouseLeave={() => setFoco(null)} onFocus={() => setFoco(e.chave)} onBlur={() => setFoco(null)} className={'min-w-0 rounded-[var(--r-md)] p-2 transition-[opacity,filter,background-color] duration-200 ' + (i === edicoes.length - 1 ? 'border border-[var(--accent-border)] bg-[color-mix(in_srgb,var(--accent)_9%,var(--surface-2))] ' : '') + (ativo ? 'opacity-100' : 'opacity-40')}>
+          <div className="flex min-w-0 items-baseline justify-between gap-2">
+            <span className="min-w-0 truncate text-xs text-[var(--fg-2)]">{e.rotulo}{i === edicoes.length - 1 ? ' · mais recente' : ''}</span>
+            <span title={descreverFonte(m, e, anteriorEdicao)} className="shrink-0 text-right text-sm font-semibold tabular text-[var(--fg)]"><ValorAnimado valor={v} formato={m.formato} />{prov && <span className="ml-0.5 text-[var(--yellow)]" aria-label="provisório">*</span>}</span>
+          </div>
+          <div className="mt-1 h-2 overflow-hidden rounded-full bg-[var(--surface-3)]" role="progressbar" aria-label={`${m.rotulo}, ${e.rotulo}`} aria-valuemin={0} aria-valuemax={maximo} aria-valuenow={v ?? undefined} aria-valuetext={formatarHistorico(v, m.formato)} title={descreverFonte(m, e, anteriorEdicao)}>
+            {v !== null && <span className={'atm-historico-barra block h-full rounded-full ' + (i === edicoes.length - 1 ? 'bg-[var(--accent)]' : 'bg-[color-mix(in_srgb,var(--accent)_55%,var(--surface-3))]')} style={{ width: `${largura}%`, animationDelay: `${i * 70}ms` }} />}
+          </div>
+          {v === null && m.vazio && <span className="text-[10px] text-[var(--fg-3)]">{m.vazio}</span>}
+          {prov && <span className="sr-only">Valor provisório.</span>}
+        </div>;
+      })}
+    </div>
+  </article>;
+}
+
+function ValorAnimado({ valor, formato }: { valor: number | null; formato: FormatoHistorico }) {
+  const [progresso, setProgresso] = useState(1);
+  useEffect(() => {
+    if (valor === null || valor === 0 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const inicio = performance.now();
+    const duracao = 620;
+    let frame = 0;
+    const animar = (agora: number) => {
+      const t = Math.min(1, (agora - inicio) / duracao);
+      setProgresso(1 - (1 - t) ** 3);
+      if (t < 1) frame = requestAnimationFrame(animar);
+    };
+    frame = requestAnimationFrame(animar);
+    return () => cancelAnimationFrame(frame);
+  }, [valor]);
+  return <>{formatarHistorico(valor === null ? null : valor * progresso, formato)}</>;
+}
+
+function FunilComparativo({ edicoes }: { edicoes: EdicaoHistorico[] }) {
+  const chavesEtapa = ['leads', 'grupo', 'pico_d1', 'pre_checkout', 'vendas'] as const;
+  const rotulos = ['Leads', 'Entraram no grupo', 'Pico na live (dia 1)', 'Pré-checkout', 'Vendas'];
+  const linhas = edicoes.map((e, i) => ({ e, anterior: edicoes[i - 1] ?? null, etapas: etapasFunil(e) }));
+  const maximos = chavesEtapa.map((_, k) => Math.max(0, ...linhas.map((l) => l.etapas[k].valor ?? 0)));
+  const [foco, setFoco] = useState<string | null>(null);
+  return <div className="space-y-4">
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--fg-2)]">{linhas.map((l, i) => <span key={l.e.chave}><span aria-hidden="true" className="mr-1 inline-block h-2.5 w-2.5 rounded-sm" style={{ background: i === linhas.length - 1 ? 'var(--accent)' : CORES_FUNIL[i % CORES_FUNIL.length] }} />{l.e.rotulo}</span>)}</div>
+    {chavesEtapa.map((id, k) => <div key={id} className="min-w-0 border-t border-[var(--border-faint)] pt-3">
+      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-2)]">{rotulos[k]}</h4>
+      <div className="space-y-2">{linhas.map(({ e, anterior, etapas }, i) => {
+        const etapa = etapas[k];
+        const m = metricaHistorico(id);
+        const largura = etapa.valor === null || maximos[k] === 0 ? 0 : Math.max(0, etapa.valor / maximos[k] * 100);
+        const key = `${id}:${e.chave}`;
+        const ativo = foco === null || foco === key;
+        const info = `${rotulos[k]} · ${e.rotulo}: ${formatarHistorico(etapa.valor, 'inteiro')}${k > 0 ? ` · ${formatarHistorico(etapa.passagem, 'percentual')} sobre a etapa anterior` : ''} · ${descreverFonte(m, e, anterior)}`;
+        return <div key={key} role="group" tabIndex={0} title={info} aria-label={info} onMouseEnter={() => setFoco(key)} onMouseLeave={() => setFoco(null)} onFocus={() => setFoco(key)} onBlur={() => setFoco(null)} className={'atm-historico-interativo min-w-0 rounded-[var(--r-md)] p-2 transition-[opacity,filter,transform,background-color] duration-200 ' + (i === linhas.length - 1 ? 'bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] ' : '') + (ativo ? 'opacity-100' : 'opacity-35')}>
+          <div className="flex items-baseline justify-between gap-2 text-xs"><span className="min-w-0 truncate text-[var(--fg-3)]">{e.rotulo}{i === linhas.length - 1 ? ' · mais recente' : ''}</span><span className="shrink-0 font-semibold tabular text-[var(--fg)]"><ValorAnimado valor={etapa.valor} formato="inteiro" />{k > 0 && <span className="ml-2 font-normal text-[var(--fg-3)]">{formatarHistorico(etapa.passagem, 'percentual')}</span>}</span></div>
+          <div className="mt-1 h-3 overflow-hidden rounded-full bg-[var(--surface-3)]"><span className="atm-historico-barra block h-full rounded-full" style={{ width: `${largura}%`, background: i === linhas.length - 1 ? 'var(--accent)' : CORES_FUNIL[i % CORES_FUNIL.length], animationDelay: `${k * 90 + i * 45}ms` }} /></div>
+        </div>;
+      })}</div>
+    </div>)}
   </div>;
 }
 
@@ -205,6 +308,7 @@ function EdicaoDetalhe({ edicao: e, anterior }: { edicao: EdicaoHistorico; anter
 
 function GraficoPicos({ e, anterior }: { e: EdicaoHistorico; anterior: EdicaoHistorico | null }) {
   const picos = picosAulas(e, anterior);
+  const [foco, setFoco] = useState<number | null>(null);
   const max = Math.max(1, ...picos.map((p) => p.valor ?? 0));
   const largura = 360;
   const alturaUtil = 130;
@@ -217,17 +321,23 @@ function GraficoPicos({ e, anterior }: { e: EdicaoHistorico; anterior: EdicaoHis
       {picos.map((p, k) => {
         const x = k * passo + passo / 2;
         const w = passo * 0.52;
+        const metrica = metricaHistorico(p.campo);
+        const textoFonte = descreverFonte(metrica, e, anterior);
+        const textoTooltip = `Dia ${p.dia}: ${formatarHistorico(p.valor, 'inteiro')}; ${p.dia === 1 ? 'primeira etapa' : `${formatarHistorico(p.retencao, 'percentual')} sobre o pico da aula anterior`}; ${textoFonte}`;
+        const ativo = foco === null || foco === p.dia;
         if (p.valor === null) {
-          return <g key={p.dia}>
+          return <g key={p.dia} tabIndex={0} role="group" aria-label={textoTooltip} onMouseEnter={() => setFoco(p.dia)} onMouseLeave={() => setFoco(null)} onFocus={() => setFoco(p.dia)} onBlur={() => setFoco(null)} className={'atm-historico-interativo ' + (ativo ? '' : 'opacity-35')}>
+            <title>{textoTooltip}</title>
             <rect x={x - w / 2} y={base - 50} width={w} height={50} rx="6" fill="none" stroke="var(--border-strong)" strokeDasharray="4 4" />
             <text x={x} y={base - 22} textAnchor="middle" fontSize="11" fill="var(--fg-3)">{p.dia === 3 ? 'sem dia 3' : 'sem dado'}</text>
             <text x={x} y={base + 18} textAnchor="middle" fontSize="12" fill="var(--fg-2)">Dia {p.dia}</text>
           </g>;
         }
         const h = Math.max(2, (p.valor / max) * alturaUtil);
-        return <g key={p.dia}>
-          <rect x={x - w / 2} y={base - h} width={w} height={h} rx="6" fill={k === 0 ? 'var(--accent)' : 'color-mix(in srgb, var(--accent) 62%, var(--surface-3))'}><title>{descreverFonte(metricaHistorico(p.campo), e, anterior)}</title></rect>
-          <text x={x} y={base - h - 7} textAnchor="middle" fontSize="15" fontWeight="700" fill="var(--fg)">{formatarHistorico(p.valor, 'inteiro')}</text>
+        return <g key={p.dia} tabIndex={0} role="group" aria-label={textoTooltip} onMouseEnter={() => setFoco(p.dia)} onMouseLeave={() => setFoco(null)} onFocus={() => setFoco(p.dia)} onBlur={() => setFoco(null)} className={'atm-historico-interativo ' + (ativo ? '' : 'opacity-35')}>
+          <title>{textoTooltip}</title>
+          <rect className="atm-historico-barra" x={x - w / 2} y={base - h} width={w} height={h} rx="6" fill={k === 0 ? 'var(--accent)' : 'color-mix(in srgb, var(--accent) 62%, var(--surface-3))'}><title>{textoTooltip}</title></rect>
+          <text x={x} y={base - h - 7} textAnchor="middle" fontSize="15" fontWeight="700" fill="var(--fg)"><ValorAnimado valor={p.valor} formato="inteiro" /></text>
           <text x={x} y={base + 18} textAnchor="middle" fontSize="12" fill="var(--fg-2)">Dia {p.dia}</text>
         </g>;
       })}
@@ -245,6 +355,7 @@ function GraficoPicos({ e, anterior }: { e: EdicaoHistorico; anterior: EdicaoHis
 
 function FunilEdicao({ e }: { e: EdicaoHistorico }) {
   const etapas = etapasFunil(e);
+  const [foco, setFoco] = useState<string | null>(null);
   return <ol className="space-y-1" aria-label="Funil da edição">
     {etapas.map((etapa, k) => {
       const largura = etapa.doTotal === null ? 0 : Math.min(100, Math.max(2, etapa.doTotal * 100));
@@ -255,12 +366,12 @@ function FunilEdicao({ e }: { e: EdicaoHistorico }) {
           <span aria-hidden="true">↓</span>
           <span><strong className="tabular text-[var(--fg-2)]">{formatarHistorico(etapa.passagem, 'percentual')}</strong> da etapa anterior</span>
         </div>}
-        <div className="relative h-12 overflow-hidden rounded-[var(--r-md)] bg-[var(--surface-3)]" title={descreverFonte(m, e, null)}>
-          <div aria-hidden="true" className="absolute inset-y-0 left-1/2 -translate-x-1/2 rounded-[var(--r-md)] border" style={{ width: `${largura}%`, borderColor: cor, background: `color-mix(in srgb, ${cor} 28%, transparent)` }} />
+        <div tabIndex={0} title={`${etapa.rotulo}: ${formatarHistorico(etapa.valor, 'inteiro')}${k > 0 ? ` · ${formatarHistorico(etapa.passagem, 'percentual')} sobre a etapa anterior` : ''} · ${descreverFonte(m, e, null)}`} onMouseEnter={() => setFoco(etapa.id)} onMouseLeave={() => setFoco(null)} onFocus={() => setFoco(etapa.id)} onBlur={() => setFoco(null)} className={'atm-historico-interativo relative h-12 overflow-hidden rounded-[var(--r-md)] bg-[var(--surface-3)] ' + (foco === null || foco === etapa.id ? '' : 'opacity-35')}>
+          <div aria-hidden="true" className="atm-historico-funil-bar absolute inset-y-0 left-1/2 -translate-x-1/2 rounded-[var(--r-md)] border" style={{ width: `${largura}%`, borderColor: cor, background: `color-mix(in srgb, ${cor} 28%, transparent)`, animationDelay: `${k * 90}ms` }} />
           <div className="relative flex h-full items-center justify-between gap-2 px-3">
             <span className="min-w-0 truncate text-sm font-medium text-[var(--fg)]">{etapa.rotulo}</span>
             <span className="shrink-0 text-right">
-              <span className={'block text-base font-bold tabular leading-tight ' + (etapa.valor === null ? 'text-[var(--fg-3)]' : 'text-[var(--fg)]')}>{formatarHistorico(etapa.valor, 'inteiro')}</span>
+              <span className={'block text-base font-bold tabular leading-tight ' + (etapa.valor === null ? 'text-[var(--fg-3)]' : 'text-[var(--fg)]')}><ValorAnimado valor={etapa.valor} formato="inteiro" /></span>
               {k > 0 && <span className="block text-[10px] text-[var(--fg-3)]">{formatarHistorico(etapa.doTotal, 'percentual')} dos leads</span>}
             </span>
           </div>
