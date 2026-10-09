@@ -8,7 +8,7 @@
 //       &fields=campaign_id,campaign_name,date_start,spend,impressions,clicks,inline_link_clicks,actions
 //               + (20261009230000) reach,frequency,outbound_clicks,video_play_actions,video_thruplay_watched_actions,
 //                 video_p25/p50/p75/p100_watched_actions (post_engagement e landing_page_view vêm de actions)
-//   GET /act_<conta>/insights?level=campaign&date_preset=maximum&filtering=[campaign.id IN ...] (20261009230000)
+//   GET /act_<conta>/insights?level=campaign&date_preset=maximum&filtering=[campaign.id IN [uma]] (20261009230000)
 //       &fields=campaign_id,date_start,date_stop,spend,impressions,reach,frequency
 //       alcance e frequência do período INTEIRO de cada campanha que gastou (alcance não soma por dia). Falha aqui não
 //       derruba a conta: vira totais_erro no resultado e o desempenho diário segue gravado.
@@ -101,8 +101,12 @@ export function urlInsights(versao: string, conta: string, de: string, ate: stri
 /** 20261009230000: campos de distribuição de conteúdo (conferidos na v23.0 em 09/10/2026). */
 export const CAMPOS_DISTRIBUICAO = 'reach,frequency,outbound_clicks,video_play_actions,video_thruplay_watched_actions,'
   + 'video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions';
-/** Ids por leitura do total (filtro campaign.id IN). */
-export const LOTE_TOTAIS = 50;
+/**
+ * Ids por leitura do total: 1. Com várias campanhas na mesma leitura, o Meta devolve date_start/date_stop da consulta
+ * inteira (o início da campanha mais antiga) em todas as linhas, e o período de cada uma sai errado (visto em produção
+ * em 09/10/2026: 29/09 para uma campanha que começou em 08/10). Uma por leitura = o período real de cada campanha.
+ */
+export const LOTE_TOTAIS = 1;
 
 /** Total do período inteiro de cada campanha (date_preset=maximum): alcance e frequência sem somar dias. */
 export function urlTotais(versao: string, conta: string, campanhas: string[]): string {
