@@ -10,9 +10,9 @@ const GEST = { perfilId: U2, papel: 'gestor' as const };
 const CONSULTAS_WHATSAPP = ['comercial_numeros_whatsapp', 'comercial_templates_whatsapp', 'comercial_situacao_conversa'];
 
 describe('mcp: catálogo', () => {
-  it('12 de leitura + 14 no escopo operar (10 escritas + 4 do WhatsApp), nomes válidos para o MCP e para crm.mcp_chamada', () => {
-    expect(FERRAMENTAS).toHaveLength(26);
-    expect(FERRAMENTAS.filter((x) => x.escopo === 'ler')).toHaveLength(12);
+  it('15 de leitura (3 do playbook) + 14 no escopo operar (10 escritas + 4 do WhatsApp), nomes válidos para o MCP e para crm.mcp_chamada', () => {
+    expect(FERRAMENTAS).toHaveLength(29);
+    expect(FERRAMENTAS.filter((x) => x.escopo === 'ler')).toHaveLength(15);
     expect(FERRAMENTAS.filter((x) => x.escopo === 'operar').map((x) => x.name).sort())
       .toEqual(['comercial_adicionar_nota', 'comercial_concluir_atividade', 'comercial_criar_atividade', 'comercial_criar_contato',
         'comercial_editar_contato', 'comercial_enviar_whatsapp', 'comercial_mover_etapa', 'comercial_numeros_whatsapp',
@@ -39,12 +39,24 @@ describe('mcp: catálogo', () => {
       campos: { perfil_profissional: 'contador' }, link: `https://grupoparticipa.app.br/comercial/conversas?contato=${U1}` };
     const soContato = { contato_id: U1 };
     let planos = 0;
-    for (const x of FERRAMENTAS) {
+    for (const x of FERRAMENTAS.filter((y) => !y.local)) {
       const v = x.name === 'comercial_sugerir_campos' ? x.validar(soContato) : x.validar(args);
       if (!v.ok) continue;
       for (const c of x.plano(v.valor, new Date())) { expect(LISTA).toContain(c.rpc); planos++; }
     }
-    expect(planos).toBeGreaterThanOrEqual(FERRAMENTAS.length);
+    expect(planos).toBeGreaterThanOrEqual(FERRAMENTAS.filter((y) => !y.local).length);
+  });
+  it('ferramenta local (playbook) é só leitura, escopo ler e não chama RPC nenhuma', () => {
+    const locais = FERRAMENTAS.filter((x) => x.local);
+    expect(locais.map((x) => x.name)).toEqual(['comercial_playbook_indice', 'comercial_playbook_ler', 'comercial_playbook_buscar']);
+    for (const x of locais) {
+      expect(x.escopo).toBe('ler');
+      expect(x.escrita ?? false).toBe(false);
+      expect(x.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+      expect(x.description).toMatch(/cite a seção/);
+      const v = x.validar({ id: 'conversa', termo: 'objeção caro' });
+      expect(v.ok && x.plano(v.valor, new Date())).toEqual([]);
+    }
   });
   it('escopo ler esconde as de escrita; ler+operar mostra todas', () => {
     expect(ferramentasDoEscopo(['ler']).every((x) => x.escopo === 'ler')).toBe(true);

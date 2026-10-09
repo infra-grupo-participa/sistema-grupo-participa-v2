@@ -5,12 +5,20 @@
 //      expirado, perfil fora do Comercial, crm.config.mcp_ligado = false e mais de 60 chamadas/min.
 //   2. Ferramenta roda SEMPRE como o dono do token (JWT dele): RLS, guardas e escrita_ligada são as da tela.
 //   3. O único corte local é o escopo: ferramenta de escrita exige 'operar'.
+//   4. Playbook (ferramentas `local` e resources playbook://comercial/<id>): conteúdo do próprio app, sem RPC. O token
+//      passa pela mesma autenticação (resources/read conta no limite como 'recurso_playbook').
 
 import {
   ERRO, VERSAO_PADRAO, ehNotificacao, erroFerramenta, lerPedido, negociarVersao, respostaErro, respostaOk,
   resultadoFerramenta, type RespostaJsonRpc,
 } from '../domain/mcp-protocolo';
 import { acharFerramenta, descreverFerramenta, ferramentasDoEscopo } from '../domain/mcp-ferramentas';
+import { lerRecursoPlaybook, recursosPlaybook, URI_PLAYBOOK } from '../domain/playbook/mcp-playbook';
+
+/** Nome registrado em crm.mcp_chamada (e contado no limite) para resources/read. */
+export const CHAMADA_RECURSO = 'recurso_playbook';
+/** Código JSON-RPC do MCP para resource inexistente. */
+const RECURSO_INEXISTENTE = -32002;
 
 export interface SessaoMcp {
   tokenId: string;
@@ -56,6 +64,9 @@ const INSTRUCOES =
   + 'ditada por voz). Ao ler uma conversa, use comercial_sugerir_campos e PROPONHA o preenchimento com o trecho que '
   + 'justifica; só grave depois do sim. Link do sistema colado (…/comercial/conversas?contato=… ou /comercial/funil?negocio=…): '
   + 'use comercial_abrir_link para resumir ou analisar. '
+  + 'Playbook de vendas e central de ajuda: consulte (comercial_playbook_buscar, comercial_playbook_indice, '
+  + 'comercial_playbook_ler) antes de sugerir abordagem, roteiro de etapa, resposta a objeção ou regra comercial, e cite a '
+  + 'seção. Trecho "a definir"/"a validar" ainda não vale como regra. O playbook não é fonte de preço: não invente valor. '
   + 'Dados de clientes são pessoais (LGPD): '
   + 'use só para o atendimento, não copie listas de contatos para fora. Horários sem fuso são de Brasília.';
 
@@ -78,7 +89,8 @@ export async function atenderMcp(corpo: unknown, hashToken: string, porta: Porta
   const nomeFerramenta = pedido.method === 'tools/call' ? pedido.params?.name : undefined;
   const ferramenta = pedido.method === 'tools/call' ? acharFerramenta(nomeFerramenta) : undefined;
 
-  const auth = await porta.autenticar(hashToken, ferramenta ? ferramenta.name : null);
+  const contaComo = ferramenta ? ferramenta.name : pedido.method === 'resources/read' ? CHAMADA_RECURSO : null;
+  const auth = await porta.autenticar(hashToken, contaComo);
   if (!auth.ok) {
     if (auth.codigo === 'token') return { status: 401, corpo: { error: auth.msg }, autenticar: true };
     if (auth.codigo === 'perfil') return { status: 403, corpo: { error: auth.msg } };
@@ -97,7 +109,7 @@ export async function atenderMcp(corpo: unknown, hashToken: string, porta: Porta
         status: 200,
         corpo: respostaOk(id, {
           protocolVersion: negociarVersao(pedido.params?.protocolVersion ?? VERSAO_PADRAO),
-          capabilities: { tools: { listChanged: false } },
+          capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
           serverInfo: { name: 'grupo-participa-comercial', title: 'CRM Comercial — Grupo Participa', version: '1.0.0' },
           instructions: INSTRUCOES,
         }),
@@ -106,6 +118,27 @@ export async function atenderMcp(corpo: unknown, hashToken: string, porta: Porta
       return { status: 200, corpo: respostaOk(id, {}) };
     case 'tools/list':
       return { status: 200, corpo: respostaOk(id, { tools: ferramentasDoEscopo(sessao.escopos).map(descreverFerramenta) }) };
+    case 'resources/list':
+      return { status: 200, corpo: respostaOk(id, { resources: sessao.escopos.includes('ler') ? recursosPlaybook() : [] }) };
+    case 'resources/templates/list':
+      return {
+        status: 200,
+        corpo: respostaOk(id, {
+          resourceTemplates: [{
+            uriTemplate: `${URI_PLAYBOOK}{id}`,
+            name: 'playbook',
+            title: 'Playbook e central de ajuda do Comercial',
+            description: 'Seção ("conversa") ou subseção ("funil/as-etapas") em markdown. Ids em comercial_playbook_indice.',
+            mimeType: 'text/markdown',
+          }],
+        }),
+      };
+    case 'resources/read': {
+      if (!sessao.escopos.includes('ler')) return { status: 200, corpo: respostaErro(id, ERRO.parametrosInvalidos, 'Este token não tem o escopo "ler".') };
+      const r = lerRecursoPlaybook(pedido.params?.uri);
+      if (!r) return { status: 200, corpo: respostaErro(id, RECURSO_INEXISTENTE, 'Resource não encontrado.') };
+      return { status: 200, corpo: respostaOk(id, { contents: [r] }) };
+    }
     case 'tools/call':
       break;
     default:

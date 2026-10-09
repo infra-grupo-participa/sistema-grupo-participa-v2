@@ -1,6 +1,6 @@
 # MCP do Comercial — conectar o CRM ao Claude (F7)
 
-> Versão de 08/10/2026. **Status: no ar.** `crm.config.mcp_ligado = true`.
+> Versão de 09/10/2026 (playbook no MCP). **Status: no ar.** `crm.config.mcp_ligado = true`.
 > Banco: `20261006050132_crm_f7_mcp` (tokens, auditoria, canal `mcp`), `20261008150823_crm_mcp_oauth` (execução sem
 > segredo JWT + OAuth 2.1 próprio) e `20261008151421_crm_mcp_tokens_oauth` (lista de conexões) — todas APLICADAS.
 > Servidor: `web/app/api/mcp/route.ts` → `web/modules/comercial/application/mcp-servidor.ts`.
@@ -84,6 +84,10 @@ hora. Ou remova o conector no claude.ai.
 | "Lê a conversa da Maria e preenche o perfil." | Sugere os campos com o trecho da conversa que justifica cada um; grava só depois do seu ok. |
 | "Resume este link: https://grupoparticipa.app.br/comercial/conversas?contato=…" | Abre o lead do link (conversa ou negócio): contato, negócios, próximas atividades, notas e últimas mensagens. Sem acesso: "Você não tem acesso a este lead." |
 | "Como está o funil HT? E o meu desempenho na semana?" | Resumo por etapa e números do período. |
+| "O que o playbook diz para a objeção 'está caro'?" | Busca no playbook e responde com o roteiro e os scripts de objeção, citando a seção. |
+| "Qual o roteiro da etapa Qualificar?" | Lê no playbook o que a etapa pede (o que fazer, critério para avançar, prazo) e cita a seção. |
+| "Me ajuda a responder a Ana, que achou caro. Segue o playbook." | Consulta o playbook antes de sugerir; mostra a seção usada; só envia se você pedir e confirmar. |
+| "Como eu marco motivo de perda no sistema?" | Consulta a central de ajuda e explica o passo a passo da tela. |
 
 Dica: comece o dia com "o que eu tenho para hoje e quem está sem próximo passo?".
 
@@ -202,9 +206,33 @@ Registro: `crm.log` com canal/autor_tipo `mcp`, autor = dono do token, resumo se
 Fila: `status='na_fila'`; o envio real sai pelo pg_net/cron só depois do COMMIT.
 Desligar só o envio: `update crm.config set mcp_envio_ligado = false;`.
 
+### Playbook e central de ajuda (pedido do Arthur, 09/10/2026; sem migration)
+
+| Ferramenta | Escopo | O que faz | RPC |
+|---|---|---|---|
+| `comercial_playbook_indice` | ler | Seções e subseções do playbook + central de ajuda (id, título, parte, grupo, resumo de 1 linha); `parte` filtra | — |
+| `comercial_playbook_ler` | ler | Markdown de uma seção (`conversa`) ou subseção (`conversa/objecoes`); páginas de até 12.000 caracteres (`pagina`, `proximaPagina`) | — |
+| `comercial_playbook_buscar` | ler | A mesma busca da tela (`buscarSecoes`: sem acento, todas as palavras, ranking título > sinônimo > resumo > corpo); devolve id, subseção, trecho; até 20 | — |
+
+- **Fonte única:** `web/modules/comercial/domain/playbook/` (`conteudo.ts` = playbook, `ajuda-conteudo.ts` = central, que já
+  inclui o playbook inteiro; `busca.ts`). A tela (`ui/playbook/`) e o MCP leem os mesmos arquivos; `mcp-playbook.ts` só
+  converte em índice/markdown/páginas/resources. Até 09/10 os três moravam em `ui/playbook/` (já eram dado puro, sem React).
+- **Sem banco além do token:** são ferramentas `local` (plano vazio). O pedido passa pelo mesmo `crm_mcp_autenticar`
+  (kill-switch, token, perfil do Comercial, limite de 60/min, linha em `crm.mcp_chamada`), escopo `ler`. Nenhuma RPC, por
+  isso nada muda em `crm_mcp_rpc`.
+- **Resources:** `initialize` anuncia `resources`; `resources/list` devolve uma entrada por seção da central
+  (`playbook://comercial/<id>`, `text/markdown`), `resources/templates/list` devolve `playbook://comercial/{id}` (aceita
+  subseção `secao/subsecao`), `resources/read` devolve a seção inteira (sem paginar) e conta no limite como
+  `recurso_playbook`. URI desconhecida → erro `-32002`.
+- **Instruções do servidor** pedem ao Claude: consultar o playbook antes de sugerir abordagem, roteiro, resposta a objeção
+  ou regra; citar a seção; trecho "a definir"/"a validar" não vale como regra; playbook não é fonte de preço.
+- **Fichas de produto:** o app não tem lugar para ficha de produto (a tela Produtos e ofertas mostra só o que vem da
+  Hotmart). A Clínica Internacional Diamante (Miami) **não** entrou; fica como sugestão (ficha em `domain/playbook/` +
+  seção na central).
+
 **De propósito, não existe:** disparo em massa, apagar contato (aguarda decisão do Arthur), ganho/perdido, transferir dono, editar funil/motivo/produto/
 oferta, exportar lista. Nunca sai CPF. Ferramenta nova = `domain/mcp-ferramentas.ts` + teste + RPC na lista fechada de
-`crm_mcp_rpc` (migration nova).
+`crm_mcp_rpc` (migration nova). Exceção: ferramenta `local` (só conteúdo do app, plano vazio) não precisa de RPC.
 
 ## 3. OAuth 2.1 (claude.ai, celular, Desktop, Claude Code com login)
 

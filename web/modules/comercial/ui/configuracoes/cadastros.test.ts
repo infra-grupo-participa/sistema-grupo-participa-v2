@@ -105,9 +105,9 @@ describe('integrações', () => {
     expect(INTEGRACOES.map((i) => i.nome)).toEqual(expect.arrayContaining(['Unnichat', 'Manychat', 'MCP do Comercial', 'Instagram / Social selling']));
   });
 
-  it('o MCP lista as 26 ferramentas reais, na ordem do servidor', () => {
+  it('o MCP lista as 29 ferramentas reais, na ordem do servidor', () => {
     expect(INTEGRACOES.find((i) => i.nome === 'MCP do Comercial')?.ferramentas).toBe(FERRAMENTAS_MCP);
-    expect(FERRAMENTAS_MCP).toHaveLength(26);
+    expect(FERRAMENTAS_MCP).toHaveLength(29);
     expect(FERRAMENTAS_MCP.map((f) => f.nome)).toEqual(FERRAMENTAS.map((f) => f.name));
     expect(FERRAMENTAS_MCP.filter((f) => f.descricao.includes('(escreve;')).map((f) => f.nome))
       .toEqual(['comercial_criar_atividade', 'comercial_adicionar_nota', 'comercial_concluir_atividade', 'comercial_mover_etapa',

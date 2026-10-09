@@ -6,8 +6,8 @@ import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Badge, type Tone } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
-import { acharPalavras, palavrasDaBusca, segmentar, textoLimpo } from './busca';
-import { ROTULO_STATUS, type Atalho, type Bloco, type LinkFerramenta, type StatusTrecho } from './conteudo';
+import { acharPalavras, palavrasDaBusca, segmentar, textoLimpo } from '../../domain/playbook/busca';
+import { ROTULO_STATUS, type Atalho, type Bloco, type LinkFerramenta, type StatusTrecho } from '../../domain/playbook/conteudo';
 
 /** Texto com **negrito** e o termo da busca destacado. */
 export function TextoRico({ texto, termo }: { texto: string; termo: string }) {

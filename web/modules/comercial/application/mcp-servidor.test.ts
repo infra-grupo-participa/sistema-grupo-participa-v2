@@ -50,8 +50,52 @@ describe('atenderMcp: autenticação e protocolo', () => {
   });
   it('método desconhecido → -32601; lote → 400', async () => {
     const { p } = porta(sessao(['ler']));
-    expect((await atenderMcp({ jsonrpc: '2.0', id: 1, method: 'resources/list' }, HASH, p)).corpo).toMatchObject({ error: { code: -32601 } });
+    expect((await atenderMcp({ jsonrpc: '2.0', id: 1, method: 'prompts/list' }, HASH, p)).corpo).toMatchObject({ error: { code: -32601 } });
     expect((await atenderMcp([], HASH, p)).status).toBe(400);
+  });
+});
+
+describe('atenderMcp: playbook (sem banco além do token)', () => {
+  it('initialize anuncia resources', async () => {
+    const { p } = porta(sessao(['ler']));
+    const r = await atenderMcp({ jsonrpc: '2.0', id: 0, method: 'initialize' }, HASH, p);
+    expect(r.corpo).toMatchObject({ result: { capabilities: { resources: { listChanged: false } } } });
+  });
+  it('ferramentas do playbook não chamam RPC, mas autenticam e contam no limite', async () => {
+    const { p, chamadas, autenticacoes } = porta(sessao(['ler']));
+    const b = await atenderMcp(call('comercial_playbook_buscar', { termo: 'objeção caro' }), HASH, p);
+    expect(b.corpo).toMatchObject({ result: { isError: false, structuredContent: { termo: 'objeção caro' } } });
+    const l = await atenderMcp(call('comercial_playbook_ler', { id: 'conversa' }), HASH, p);
+    expect(l.corpo).toMatchObject({ result: { isError: false, structuredContent: { ok: true, id: 'conversa', pagina: 1 } } });
+    const i = await atenderMcp(call('comercial_playbook_indice', {}), HASH, p);
+    expect((i.corpo as { result: { structuredContent: { total: number } } }).result.structuredContent.total).toBeGreaterThan(20);
+    expect(chamadas).toHaveLength(0);
+    expect(autenticacoes).toEqual(['comercial_playbook_buscar', 'comercial_playbook_ler', 'comercial_playbook_indice']);
+  });
+  it('token recusado não lê o playbook', async () => {
+    const { p } = porta({ ok: false, codigo: 'token', msg: 'x' });
+    expect((await atenderMcp(call('comercial_playbook_ler', { id: 'conversa' }), HASH, p)).status).toBe(401);
+    expect((await atenderMcp({ jsonrpc: '2.0', id: 1, method: 'resources/read', params: { uri: 'playbook://comercial/conversa' } }, HASH, p)).status).toBe(401);
+  });
+  it('seção inexistente vira erro da ferramenta', async () => {
+    const { p } = porta(sessao(['ler']));
+    const r = await atenderMcp(call('comercial_playbook_ler', { id: 'nao-existe' }), HASH, p);
+    expect(r.corpo).toMatchObject({ result: { isError: true } });
+    expect((await atenderMcp(call('comercial_playbook_ler', { id: '../x' }), HASH, p)).corpo).toMatchObject({ result: { isError: true } });
+  });
+  it('resources/list e templates; resources/read conta como recurso_playbook; inexistente → -32002', async () => {
+    const { p, chamadas, autenticacoes } = porta(sessao(['ler']));
+    const lst = await atenderMcp({ jsonrpc: '2.0', id: 1, method: 'resources/list' }, HASH, p);
+    const rs = (lst.corpo as { result: { resources: { uri: string }[] } }).result.resources;
+    expect(rs.map((x) => x.uri)).toContain('playbook://comercial/conversa');
+    const tpl = await atenderMcp({ jsonrpc: '2.0', id: 2, method: 'resources/templates/list' }, HASH, p);
+    expect(tpl.corpo).toMatchObject({ result: { resourceTemplates: [{ uriTemplate: 'playbook://comercial/{id}' }] } });
+    const rd = await atenderMcp({ jsonrpc: '2.0', id: 3, method: 'resources/read', params: { uri: 'playbook://comercial/conversa' } }, HASH, p);
+    expect(rd.corpo).toMatchObject({ result: { contents: [{ uri: 'playbook://comercial/conversa', mimeType: 'text/markdown' }] } });
+    const no = await atenderMcp({ jsonrpc: '2.0', id: 4, method: 'resources/read', params: { uri: 'playbook://comercial/x' } }, HASH, p);
+    expect(no.corpo).toMatchObject({ error: { code: -32002 } });
+    expect(autenticacoes).toEqual([null, null, 'recurso_playbook', 'recurso_playbook']);
+    expect(chamadas).toHaveLength(0);
   });
 });
 

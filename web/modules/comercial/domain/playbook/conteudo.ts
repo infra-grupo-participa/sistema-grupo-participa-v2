@@ -48,6 +48,8 @@ export interface Secao {
   resumo?: string;
   ferramentas?: LinkFerramenta[];
   blocos: Bloco[];
+  /** Palavras que levam à seção na busca sem aparecer no texto (não são texto do playbook). */
+  sinonimos?: string[];
 }
 
 export type GrupoKey = 'comece' | 'lead' | 'conversa' | 'gestao' | 'areas' | 'referencia';
@@ -475,6 +477,7 @@ export const SECOES: Secao[] = [
     grupo: 'conversa',
     resumo: 'Padrão de comunicação, roteiro por etapa, qualificação, preço, objeções e fechamento.',
     ferramentas: [{ rotulo: 'Conversas', href: '/comercial/conversas' }],
+    sinonimos: ['objeção', 'objeções', 'está caro', 'tá caro', 'vou pensar', 'roteiro', 'script de conversa'],
     blocos: [
       h('Padrão de comunicação'),
       ul([

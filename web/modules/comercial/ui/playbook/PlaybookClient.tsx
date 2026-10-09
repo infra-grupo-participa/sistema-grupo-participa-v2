@@ -3,19 +3,19 @@
 // Central de ajuda do Comercial: como usar o sistema (módulo a módulo) + o playbook de vendas, num lugar só.
 // Busca no topo em todo o conteúdo, uma parte por vez (Comece aqui, Como funciona, Módulos, Playbook, Perguntas,
 // Glossário), seções em sanfona com âncora própria (#modulo-funil) e atalho para a tela de cada assunto.
-// O texto mora em ajuda-conteudo.ts e conteudo.ts; esta tela só desenha.
+// O texto mora em domain/playbook/ (ajuda-conteudo.ts e conteudo.ts), a mesma fonte do MCP; esta tela só desenha.
 import Link from 'next/link';
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Badge, Button, FilterSelect, SearchInput } from '@/shared/ui/components';
 import { Icon } from '@/shared/ui/icons';
 import { FaixaNumeros, PaginaComercial, Vazio } from '../comum';
 import { BlocoPlaybook, TextoRico } from './Blocos';
-import { buscarSecoes, resumoConteudo, termoValido } from './busca';
-import { SECOES, SELO } from './conteudo';
+import { buscarSecoes, resumoConteudo, termoValido } from '../../domain/playbook/busca';
+import { SECOES, SELO } from '../../domain/playbook/conteudo';
 import {
   BUSCAS_SUGERIDAS, CENTRAL, PARTES, PRIMEIRO_DIA, parte as dadosParte, secoesDaParte,
   type ParteKey, type SecaoAjuda,
-} from './ajuda-conteudo';
+} from '../../domain/playbook/ajuda-conteudo';
 
 const RESUMO_PLAYBOOK = resumoConteudo(SECOES);
 /** Partes que já abrem com todas as seções à mostra (leitura corrida). As outras abrem recolhidas. */

@@ -2,6 +2,7 @@
 import { MAX_TAGS_CONTATO, normalizarTag } from './tags';
 import { normalizarValorCampo, sugerirCampos, type TextoLead } from './campos-negocio';
 import { lerLinkCrm } from './link-crm';
+import { LIMITE_PAGINA, PARTES_PLAYBOOK, buscarPlaybook, indicePlaybook, lerSecao } from './playbook/mcp-playbook';
 //
 // Cada ferramenta = validação dos argumentos + PLANO (quais RPCs public.crm_* chamar, com quais parâmetros) +
 // montagem do resultado. Quem executa o plano é a aplicação (`application/mcp-servidor.ts`), sempre com o JWT do
@@ -13,6 +14,9 @@ import { lerLinkCrm } from './link-crm';
 // 08/10/2026 (decisão do Arthur, migration 20261008233100): as travas moram no banco (crm_mcp_enviar_whatsapp).
 // Para incluir uma ferramenta: definir aqui + teste em mcp-ferramentas.test.ts + a RPC na lista fechada de
 // public.crm_mcp_rpc (migration nova).
+// Exceção: ferramenta `local` (playbook, 09/10/2026) não toca o banco além da autenticação do token (que valida,
+// aplica kill-switch e limite e registra a chamada em crm.mcp_chamada): plano vazio, resposta montada aqui com o
+// conteúdo do próprio app (domain/playbook). Não precisa de migration.
 
 export type EscopoMcp = 'ler' | 'operar';
 
@@ -45,6 +49,8 @@ export interface DefFerramenta {
   /** A RPC devolve {ok, msg}; ok=false vira erro da ferramenta (mensagem do banco, igual à tela). Toda escrita e as
    *  consultas do WhatsApp (que também respondem {ok, msg}). */
   escrita?: boolean;
+  /** Só servidor: plano vazio, nenhuma RPC além da autenticação do token. Só leitura de conteúdo do app. */
+  local?: boolean;
 }
 
 // ─── Validação ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -913,6 +919,91 @@ export const FERRAMENTAS: DefFerramenta[] = [
           .map((x) => ({ id: x.id, negocioId: x.negocioId, tipo: x.tipo, titulo: x.titulo, venceEm: x.venceEm, donoId: x.donoId })),
         notas: lista(o.notas),
         mensagens: { total: msgs.length, itens: msgs },
+      };
+    },
+  },
+  // ─── Playbook e central de ajuda (conteúdo do app, sem banco: domain/playbook) ────────────────────────────────────
+  {
+    name: 'comercial_playbook_indice',
+    title: 'Índice do playbook',
+    description: 'Lista as seções e subseções do playbook de vendas do Comercial e da central de ajuda do CRM (id, título, '
+      + 'resumo de 1 linha). Consulte o playbook antes de sugerir abordagem, roteiro de etapa, resposta a objeção, script ou '
+      + 'regra comercial, e cite a seção (id e título) na resposta. Depois leia com comercial_playbook_ler. Para um assunto '
+      + 'específico, comercial_playbook_buscar costuma ser mais rápido. parte filtra: comece, sistema, modulos, playbook, faq, glossario.',
+    escopo: 'ler',
+    local: true,
+    inputSchema: {
+      type: 'object',
+      properties: { parte: { type: 'string', enum: [...PARTES_PLAYBOOK], description: 'Só uma parte (padrão: todas)' } },
+      additionalProperties: false,
+    },
+    annotations: ANOT_LER,
+    validar: validarCom((a) => ({ parte: umDe(a, 'parte', PARTES_PLAYBOOK, null) })),
+    plano: () => [],
+    resultado: (_r, a) => {
+      const secoes = indicePlaybook(a.parte as (typeof PARTES_PLAYBOOK)[number] | null);
+      return {
+        total: secoes.length,
+        secoes,
+        uso: 'Leia com comercial_playbook_ler {id} (seção ou subseção "secao/subsecao"). Cite a seção ao usar o conteúdo.',
+      };
+    },
+  },
+  {
+    name: 'comercial_playbook_ler',
+    title: 'Ler seção do playbook',
+    description: 'Devolve o texto de uma seção (ou subseção "secao/subsecao") do playbook ou da central de ajuda, em markdown: '
+      + 'regras, roteiros, scripts prontos, tabelas e trechos "a definir"/"a validar" (que ainda não valem como regra). '
+      + 'Seção grande vem em páginas: use pagina=proximaPagina. Consulte antes de sugerir abordagem, resposta a objeção ou '
+      + 'regra comercial e cite a seção. Preço: o playbook não é fonte de preço; não invente valor.',
+    escopo: 'ler',
+    local: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', minLength: 2, maxLength: 140, description: 'Id do índice ou da busca (ex.: "conversa", "funil/as-etapas")' },
+        pagina: { type: 'integer', minimum: 1, maximum: 50, default: 1 },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    annotations: ANOT_LER,
+    validar: validarCom((a) => {
+      const id = texto(a, 'id', 2, 140) as string;
+      if (!/^[a-z0-9-]+(\/[a-z0-9-]+)?$/i.test(id)) throw new ErroArg('id inválido: use o id do índice (ex.: "conversa" ou "funil/as-etapas").');
+      return { id: id.toLowerCase(), pagina: inteiro(a, 'pagina', 1, 50, 1) };
+    }),
+    plano: () => [],
+    resultado: (_r, a) => lerSecao(a.id as string, a.pagina as number, LIMITE_PAGINA),
+  },
+  {
+    name: 'comercial_playbook_buscar',
+    title: 'Buscar no playbook',
+    description: 'Busca no playbook de vendas e na central de ajuda (sem acento e sem caixa; todas as palavras precisam '
+      + 'aparecer na seção). Ex.: "objeção caro", "garantia", "Miami", "template", "janela de 24 horas". Devolve as seções '
+      + 'mais relevantes com o trecho e o id (e a subseção onde mais aparece) para ler com comercial_playbook_ler. Consulte o '
+      + 'playbook antes de sugerir abordagem, resposta a objeção ou regra comercial; cite a seção.',
+    escopo: 'ler',
+    local: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        termo: { type: 'string', minLength: 2, maxLength: 120 },
+        limite: { type: 'integer', minimum: 1, maximum: 20, default: 8 },
+      },
+      required: ['termo'],
+      additionalProperties: false,
+    },
+    annotations: ANOT_LER,
+    validar: validarCom((a) => ({ termo: texto(a, 'termo', 2, 120), limite: inteiro(a, 'limite', 1, 20, 8) })),
+    plano: () => [],
+    resultado: (_r, a) => {
+      const achados = buscarPlaybook(a.termo as string, a.limite as number);
+      return {
+        termo: a.termo,
+        total: achados.length,
+        resultados: achados,
+        ...(achados.length ? {} : { dica: 'Nada encontrado. Tente menos palavras ou um sinônimo, ou veja comercial_playbook_indice.' }),
       };
     },
   },

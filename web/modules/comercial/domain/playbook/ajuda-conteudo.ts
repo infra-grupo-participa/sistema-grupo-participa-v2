@@ -907,12 +907,13 @@ const MODULOS: SecaoAjuda[] = [
     id: 'modulo-claude',
     titulo: 'Conectar ao Claude',
     icone: 'link',
-    resumo: 'Use o Claude (claude.ai, celular, Desktop ou Code) para consultar e organizar o seu CRM conversando: o que fazer hoje, quem está sem próximo passo, resumo de uma pessoa.',
+    resumo: 'Use o Claude (claude.ai, celular, Desktop ou Code) para consultar e organizar o seu CRM conversando: o que fazer hoje, quem está sem próximo passo, resumo de uma pessoa, o que o playbook diz.',
     telas: [TELAS.claude],
-    sinonimos: ['claude', 'ia', 'inteligência artificial', 'assistente', 'mcp', 'conector', 'claude.ai', 'chatgpt', 'token', 'oauth'],
+    sinonimos: ['claude', 'ia', 'inteligência artificial', 'assistente', 'mcp', 'conector', 'claude.ai', 'chatgpt', 'token', 'oauth', 'playbook no claude'],
     paraQue: [
       'O Claude vira um assistente do seu CRM. Você pergunta em português e ele busca no sistema: sua agenda, seus negócios, o histórico de uma pessoa, as conversas de WhatsApp dela.',
       'Ele entra como você: vê só o que você já vê na tela, com as mesmas regras. Vendedor vê os próprios leads e os sem dono; gestor vê o time.',
+      'Ele também consulta o **playbook de vendas e esta central de ajuda**: roteiro por etapa, objeções, scripts, regras e o passo a passo de cada tela. É o mesmo texto da tela Playbook, e ele cita a seção de onde tirou a resposta.',
     ],
     naTela: [
       '**No claude.ai (e no app do celular e no Claude Desktop):** um conector chamado "CRM Comercial" que você liga com o seu login do sistema.',
@@ -978,6 +979,10 @@ const MODULOS: SecaoAjuda[] = [
         ['"Resume este link: https://grupoparticipa.app.br/comercial/conversas?contato=…"', 'Abre o lead do link (conversa ou negócio) e resume: contato, negócios, próximas atividades, notas e últimas mensagens. Sem acesso ao lead, avisa.'],
         ['"Quais campos faltam para o negócio da Ana ir para Aguardar pagamento?"', 'Mostra os campos do negócio, o valor de cada um e o que a próxima etapa exige.'],
         ['"Como está o funil HT? E o meu desempenho na semana?"', 'Resumo por etapa (quantidade, valor, prazo estourado) e números do período.'],
+        ['"O que o playbook diz para a objeção \'está caro\'?"', 'Busca no playbook e responde com o roteiro e os scripts de objeção, citando a seção de onde tirou.'],
+        ['"Qual o roteiro da etapa Qualificar?"', 'Lê no playbook o que a etapa pede (o que fazer, o que precisa estar preenchido para avançar e o prazo) e cita a seção.'],
+        ['"Me ajuda a responder a Ana, que achou caro. Segue o playbook."', 'Consulta o playbook antes de sugerir a resposta, mostra a seção usada e só envia algo se você pedir e confirmar.'],
+        ['"Como eu marco motivo de perda no sistema?"', 'Consulta esta central de ajuda e explica o passo a passo da tela.'],
       ], 'Exemplos do que pedir'),
       ul([
         'Não envia WhatsApp sem a sua confirmação, não envia e-mail e não faz disparo em massa. Não apaga contato.',
@@ -996,6 +1001,8 @@ const MODULOS: SecaoAjuda[] = [
       'Antes de cada WhatsApp, o Claude mostra o texto final, o número e o destinatário. Só responda "pode enviar" depois de conferir os três.',
       'Para abrir conversa pelo oficial, peça o template ("manda o template X"). Depois que o cliente responder, siga em texto livre.',
       'Comece o dia com: "o que eu tenho para hoje e quem está sem próximo passo?".',
+      'Antes de responder objeção, peça: "segue o playbook". Ele consulta e mostra a seção. Trecho marcado "a definir" ou "a validar" ainda não vale como regra.',
+      'O playbook não é fonte de preço. Se o Claude citar valor, confira na oferta vigente (tela Produtos e ofertas) antes de passar ao cliente.',
     ],
     cuidados: [
       'Dado de cliente é dado pessoal (LGPD). Use o Claude só para o atendimento. Não peça listas para copiar para fora, não cole os dados em outros lugares.',
