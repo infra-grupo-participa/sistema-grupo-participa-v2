@@ -37,7 +37,7 @@ O front lê somente RPCs Supabase com a chave do dashboard:
 | Comparecimento | dados_atm_comparecimento |
 | Ciclo aberto e fechado pós-live | dados_atm_pos_live |
 
-Receita, custos, CPL, CAC e ROAS são apresentados conforme os valores devolvidos pelo banco. **CPL de "Esta edição" (09/10/2026, migration `20261009210000`):** custo de disparo ÷ leads sem teste; só some (nulo) quando algum disparo de canal pago (API WhatsApp, SMS, ligação) está sem custo. E-mail e grupo não têm custo por disparo e não bloqueiam mais o CPL. ATM OUT/26 em 09/10: 103.208 centavos ÷ 95 leads = 1.086 centavos (R$ 10,86). Atenção: no Histórico o CPL é investimento total (tráfego + disparo) ÷ leads, calculado na tela; as duas abas usam bases diferentes. Não há preço de venda fixo no código. Custos em centavos são convertidos para reais na camada de dados. O modal mostra os campos de origem descritos no briefing; dado pessoal só é buscado ao abrir o modal.
+Receita, custos, CPL, CAC e ROAS são apresentados conforme os valores devolvidos pelo banco. Desde a migration `20261009230000`, o resumo calcula CPL como investimento total (tráfego + disparo) ÷ leads sem teste; CAC e ROAS também usam o investimento total. Para ATM OUT/26, o Galego informou investimento de 112.050 centavos (103.208 de disparos + 8.842 de tráfego), 97 leads e CPL de 1.155 centavos (R$ 11,55). Não há preço de venda fixo no código. Custos em centavos são convertidos para reais na camada de dados. O modal mostra os campos de origem descritos no briefing; dado pessoal só é buscado ao abrir o modal.
 
 Se a RPC ainda não existir ou não devolver dado, o bloco permanece disponível e mostra “sem dado ainda”. Zero numérico devolvido pelo banco é apresentado como zero medido. Falhas isoladas não impedem os demais blocos. Uma falha de atualização preserva o último dado carregado. Resumo e série atualizam a cada 60 segundos somente com a aba visível, sem sobrepor chamadas.
 
@@ -61,7 +61,7 @@ O canal selecionado no topo do bloco Disparos filtra tanto os totais quanto a li
 
 ### Aba Tráfego
 
-A aba usa `dados_atm_trafego(p_chave, p_de, p_ate)`, que retorna JSON com período, coleta, totais, série diária e campanhas. O contrato foi recebido do Galego em 09/10/2026; a RPC ainda não foi aplicada. A tela já está conectada à chamada e preparada para exibir seus campos, com nulos como “Sem dado”.
+A aba usa `dados_atm_trafego(p_chave, p_de, p_ate)`, que retorna JSON com período, coleta, totais, série diária e campanhas. A migration `20261009230000` e a coleta `trafego-meta` foram aplicadas/publicadas em 09/10/2026, conforme atualização do Galego. Para ATM OUT/26, ele informou 1.448 impressões, alcance 993, frequência 1,4582, 1.310 plays, 147 ThruPlay, engajamento 564 e nenhum clique no link. CTR informado 0,00; CPC, visualizações da página e cliques de saída vieram nulos porque a API não enviou esses campos. A tela preserva nulos como “Sem dado”.
 
 O funil segue a ordem gasto, impressões, alcance, frequência, vídeo, cliques no link e visualizações de página. CPM, CTR e CPC recebem o rótulo “cálculo” conforme a lista `calculados` da RPC. O gráfico diário mostra gasto; cada dia pode ser expandido para consultar todas as métricas devolvidas.
 
@@ -77,11 +77,11 @@ O contrato do front está descrito na migration **infra/supabase/migrations/2026
 2. Rode **npm run dev -- -p 3001**.
 3. Entre com um usuário autorizado a Infra e a **financeiro.ver**.
 4. Abra Infra > Dashboards > Escritório > Seminário ATM.
-5. Sem a nova RPC de tráfego aplicada, confira que os valores do investimento geral e da aba Tráfego aparecem como “Sem dado”, sem erro ou zero inventado. As métricas existentes continuam conforme as RPCs já disponíveis.
+5. Com a migration aplicada, confira Investimento geral, Disparo e Tráfego contra o resumo do banco. Para a leitura informada em 09/10/2026, o total foi R$ 1.120,50, CPL R$ 11,55 e 97 leads.
 6. Com as RPCs aplicadas e dados cadastrados, confira a ordem dos cards, abra o modal de leads e navegue pelas cinco abas de disparo, comparecimento e ciclos pós-live.
 7. Na seção Disparos, selecione cada canal e expanda registros para conferir contagens, taxas calculadas, valores nulos como “Sem dado” e conteúdo em texto ou link.
 8. Confira que o seletor do resumo de Disparos também filtra a lista. Em **Esta edição**, confira o card Investimento geral e seus itens Disparo e Tráfego.
-9. Quando a RPC estiver aplicada, confira a aba Tráfego, o motivo para alcance/frequência sem total, a série diária, as campanhas e os campos identificados como cálculo.
+9. Confira a aba Tráfego, o motivo para alcance/frequência sem total, a série diária, as campanhas e os campos identificados como cálculo. A frequência do período é formatada com duas casas decimais na tela.
 10. Verifique a atualização periódica e o rótulo de horário no cabeçalho.
 
 Verificações do projeto:
