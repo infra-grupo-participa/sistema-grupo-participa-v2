@@ -263,6 +263,77 @@ Retorna 1 linha: `pessoa_id uuid, teste boolean, alterado boolean`.
   Maestro quando o JP parou por limite de uso.
 - Verificado: tsc, vitest (2403) e build. Não verificado: a marcação real pela tela (o Victor marca os 2 leads de teste dele).
 
+## 2.11 Clínica Miami: abas "Diamantes" e "Fichas de interesse" (migrations `20261009190000` e `20261009190100`, APLICADAS em 09/10/2026)
+
+Pedido do Victor de 09/10/2026. Detalhe técnico, ensaio e segurança: `infra/supabase/migrations/20261009190000.explain.md`.
+
+**Fonte:** `respondi.respostas`. As respostas chegam pelo webhook do Respondi (Edge `respondi-webhook`, em tempo real)
+e pelo `respondi-sync` (1x ao dia). Os dois usam o mesmo uuid, então não há duplicata. Os formulários de cada dashboard
+ficam em `dados.dashboard_formularios` (`interesse` e `diamantes`), e a Lista Diamantes em `dados.dashboard_lista_pessoas`.
+
+**Acesso e erros (iguais aos outros `dados_*`):**
+- Só authenticated: 42501 "sem acesso" para quem não tem permissão do dashboard; P0002 "dashboard não cadastrado".
+- Formulário não cadastrado para a chave: 0 linhas, sem erro.
+- Textos de resposta: string exata do formulário (null quando a pergunta não foi respondida).
+
+### 2.11.1 `dados_miami_diamantes(p_chave text)`
+
+Uma linha por nome da Lista Diamantes (`respondeu` ou `pendente`) e uma por pessoa que respondeu e não casou com a
+lista (`fora_da_lista`). Ordem: `lista_ordem`; as `fora_da_lista` vêm depois, por `respondido_em`.
+
+| Coluna | Tipo | O quê |
+|---|---|---|
+| `lista_ordem` | int | posição na aba Lista Diamantes (null em `fora_da_lista`) |
+| `lista_nome` | text | nome exato da lista (null em `fora_da_lista`) |
+| `status` | text | `respondeu`, `pendente` ou `fora_da_lista` |
+| `casamento` | text | `nome`, `manual` (por `resposta_uuid_manual`) ou null |
+| `resposta_uuid`, `respondido_em` | uuid, timestamptz | resposta usada (a mais recente da pessoa) |
+| `n_respostas` | int | quantas respostas a mesma pessoa mandou (por e-mail, senão telefone) |
+| `nome_formulario`, `email`, `telefone`, `grupo` | text | como respondido |
+| `situacao` | text | exato: "Já estou confirmado(a) e com a viagem organizada." / "Estou me organizando para participar, mas ainda não confirmado(a)." / "Já sei que não irei participar." |
+| `situacao_codigo` | text | `confirmado`, `organizando`, `nao_vai` ou null |
+| `chegada`, `retorno` | text | texto exato (dd/mm/aaaa) |
+| `chegada_data`, `retorno_data` | date | a data, quando o texto é dd/mm/aaaa válido; senão null |
+| `aeroporto`, `hospedagem`, `acompanhado`, `acompanhantes` | text | como respondido (`acompanhado`: "Sim" / "Não, irei sozinho(a)") |
+
+Casamento de nome igual ao da planilha: sem acento e sem maiúscula, mesmo primeiro nome, nome menor com 2 ou mais partes
+e todas contidas no maior. Quando não casar, preencha `dados.dashboard_lista_pessoas.resposta_uuid_manual` (só banco).
+
+### 2.11.2 `dados_miami_interesse(p_chave text)`
+
+Uma linha por pessoa (e-mail, senão telefone), com a resposta mais recente. Ordem: `comprou` (não comprou primeiro),
+depois `respondido_em desc`.
+
+| Coluna | Tipo | O quê |
+|---|---|---|
+| `resposta_uuid`, `respondido_em`, `n_respostas` | uuid, timestamptz, int | resposta usada e quantas a pessoa mandou |
+| `nome`, `email`, `telefone`, `turma` | text | como respondido |
+| `passaporte`, `visto`, `planos`, `comprou_passagem`, `data_passagem`, `confirma_pre_venda`, `deseja_programa` | text | textos exatos das perguntas do formulário |
+| `comprou` | boolean | true = tem transação **paga** (`status_grupo = 'pago'`) nas ofertas do dashboard (`sju5pawn` e `mjzv4v0s`) |
+| `compra_status` | text | null = nenhuma transação; senão o `status_grupo` da melhor: pago > em_aberto > atrasado > estornado > recusado > expirado > outro |
+| `compra_transacao`, `compra_em` | text, timestamptz | da melhor transação (`aprovado_em`, senão `pedido_em`) |
+| `casou_por` | text | `email`, `telefone` (últimos 8 dígitos) ou null |
+
+"Preencheu e NÃO comprou" é `comprou = false`. Isso inclui sem transação (`compra_status` null) e boleto em aberto,
+recusado ou estornado.
+
+### 2.11.3 Webhook do Respondi
+
+- **URL:** a completa, com o segredo, está só no `.env` do cérebro do Victor (`RESPONDI_MIAMI_WEBHOOK_URL`). Nunca no
+  repo nem no chat.
+- **Formulários a conectar:** "Aplicação Interesse Miami 2026" (`xmaNmRIV`) e "[MIAMI 2026] Dados iniciais"
+  (`HFaSnLRf`). Outro formulário recebe 202 e nada é gravado.
+- **Situação:** Edge `respondi-webhook` PUBLICADA em 09/10/2026 às 19:07 UTC (pentester APROVADO na 2ª rodada).
+  - Testada em produção: sem chave e chave errada dão 401; GET dá 405; formulário fora da lista dá 202; JSON inválido
+    dá 400; corpo grande dá 413.
+  - Ficha fictícia: grava; o reenvio não duplica; uuid de outro formulário dá 409. A ficha fictícia foi apagada.
+- **Como testar:** responder a ficha. Depois `select recebido_em, form_slug, resultado from respondi.webhook_log order
+  by id desc limit 5` mostra `gravada`, e a linha aparece na RPC.
+- **Números em 09/10/2026 19:05 UTC (depois da carga inicial):**
+  - Diamantes: 42 da lista responderam, 34 pendentes e 3 fora da lista. Das 42: 24 confirmados, 6 se organizando e 12 não vão.
+  - A planilha mostra 35 e 41 porque não recebeu 14 respostas que o Respondi tem (pela API).
+  - Interesse: 31 pessoas, 3 com compra paga.
+
 ## 3. Migrations (ordem e versão gravada)
 
 | Versão | Nome | O quê |
@@ -276,6 +347,8 @@ Retorna 1 linha: `pessoa_id uuid, teste boolean, alterado boolean`.
 | `20261007212530` | `dashboard_graficos_vendas` | as 6 funções dos gráficos da Visão geral de vendas (§2.9), aprovadas pelo pentester |
 | `20261007220043` | `dashboard_lead_teste` | marcar/desmarcar lead do pré-checkout como teste (§2.10), aprovada pelo pentester |
 | `20261007171902` (APLICADA 07/10) | `crm_lista_614_todos` | regra 42 com `para_todos`: quem entra na lista 614 vira contato comercial e é catalogado na Clínica. Ensaio refeito antes da aplicação, igual ao esperado |
+| `20261009190000` | `dados_miami_respondi` | fichas do Respondi por dashboard, Lista Diamantes, webhook, RPCs `dados_miami_diamantes` e `dados_miami_interesse` |
+| `20261009190100` | `respondi_carga_mesmo_formulario` | `fn_respondi_carga` não atualiza resposta de outro formulário (pentester) |
 
 Cada uma tem `.explain.md` com ensaio, explain e reversão.
 
