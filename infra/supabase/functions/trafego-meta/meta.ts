@@ -282,7 +282,11 @@ export async function coletarConta(c: ContaMeta, d: DepsMeta): Promise<Resultado
       if (r?.ok === false) return { ...base, ok: false, erro: 'banco_desempenho' };
       recD += r?.recusas?.length ?? 0;
     }
-    const extra = d.receberTotais && linhas.length ? await totaisDaConta(c, d, [...new Set(linhas.map((l) => l.campanha))]) : {};
+    // sem tempo (orçamento ate_ms passou), não lê os totais: a Edge morre em 150 s e não registraria a coleta (pentester)
+    const semTempo = d.ate_ms != null && Date.now() > d.ate_ms;
+    const extra = !d.receberTotais || !linhas.length ? {}
+      : semTempo ? { totais_erro: 'sem_tempo' }
+      : await totaisDaConta(c, d, [...new Set(linhas.map((l) => l.campanha))]);
     return { ...base, ok: true, campanhas: lc.length, linhas: linhas.length, descartadas, recusas_campanhas: recC, recusas_desempenho: recD, ...extra };
   } catch (e) {
     return { ...base, ok: false, erro: e instanceof ErroMeta ? e.codigo : 'falha' };
