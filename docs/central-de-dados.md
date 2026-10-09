@@ -593,6 +593,8 @@ Central chama uma vez por carga; a vida do projeto, duas. **Nenhum índice novo 
 | `contas` | conta de anúncio: plataforma, id na plataforma (Meta sem `act_`, Google só dígitos), nome, de quem é (grupo, diamante, aurum), cliente, moeda |
 | `campanhas` | nome **exato** da plataforma + leitura pelo padrão `GESTOR \| PROJETO \| OBJETIVO \| DESCRIÇÃO \| PÁGINA` (`mkt.campanha_traduzir`): projeto, gestor, objetivo, página, fora do padrão. Projeto pode ser ligado à mão; `fase_manual` corrige a fase do objetivo |
 | `desempenho_dia` | gasto, impressões, cliques no link, cliques totais, leads da plataforma por campanha e dia (vazia até a coleta) |
+| `desempenho_dia` (20261009230000) | + alcance, frequência, cliques de saída, visualizações de página, engajamento, vídeo (plays, thruplay, 25/50/75/100) do dia; **nulos** quando a API não manda; alcance do dia não soma |
+| `desempenho_total` (20261009230000) | alcance e frequência do período inteiro de cada campanha que gastou (`date_preset=maximum`), uma linha por campanha |
 | `planejamento` | por projeto: status, verba máxima e diária, metas de leads, receita, CPL e % MQL |
 | `projeto_gestores` | gestores do projeto (vários) |
 | `projeto_fases` | verba planejada e período de cada fase |
