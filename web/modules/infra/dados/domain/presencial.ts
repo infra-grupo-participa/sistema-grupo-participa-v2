@@ -32,6 +32,22 @@ export type GrupoPendencia = PendenciaPresencial['grupo'];
 export type PessoaPendenciaPresencial = { email: string; nome: string | null; telefone: string | null; categorias: string; transacoes: number; valor_bruto: Numerico; ultimo_em: string };
 export type SerieVendasPresencial = { dia: string; pre_checkout: number; vendas: number; receita_bruta: Numerico; vendas_acumuladas: number; receita_acumulada: Numerico; conversao_pct: Numerico };
 export type VendaHoraPresencial = { hora: number; vendas: number; receita_bruta: Numerico };
+export type DiamantePresencial = {
+  lista_ordem: number | null; lista_nome: string | null; status: 'respondeu' | 'pendente' | 'fora_da_lista';
+  casamento: 'nome' | 'manual' | null; resposta_uuid: string | null; respondido_em: string | null; n_respostas: number;
+  nome_formulario: string | null; email: string | null; telefone: string | null; grupo: string | null;
+  situacao: string | null; situacao_codigo: 'confirmado' | 'organizando' | 'nao_vai' | null;
+  chegada: string | null; chegada_data: string | null; retorno: string | null; retorno_data: string | null;
+  aeroporto: string | null; hospedagem: string | null; acompanhado: string | null; acompanhantes: string | null;
+};
+export type FichaInteresseMiami = {
+  resposta_uuid: string; respondido_em: string | null; n_respostas: number;
+  nome: string | null; email: string | null; telefone: string | null; turma: string | null;
+  passaporte: string | null; visto: string | null; planos: string | null; comprou_passagem: string | null;
+  data_passagem: string | null; confirma_pre_venda: string | null; deseja_programa: string | null;
+  comprou: boolean; compra_status: string | null; compra_transacao: string | null; compra_em: string | null;
+  casou_por: 'email' | 'telefone' | null;
+};
 
 export function numero(valor: Numerico | undefined): number | null {
   if (valor === null || valor === undefined || valor === '') return null;

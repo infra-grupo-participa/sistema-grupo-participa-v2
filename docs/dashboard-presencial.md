@@ -7,6 +7,33 @@ id 68). Pedido do Victor Hugo em 07/10/2026. A tela (Infra > Dashboards > CSM) e
 **Situação (07/10/2026):** migrations APLICADAS em produção (seção 3).
 Nada publicado: a tela e a rota de captura estão só na branch `victor-captura-pre-checkout`.
 
+## 6. Abas de Diamantes e Fichas de interesse (09/10/2026)
+
+Na branch `victor-miami-abas`, os cards do dashboard da Clínica Miami seguem a ordem: Pré-checkout, Vendas,
+Conversão, Receita, CAC, Custo por disparo e Custo por pré-checkout. As abas **Diamantes** e **Fichas de interesse**
+são exibidas somente para a chave `clinica-miami-2026-12` e carregam sob demanda pelas RPCs `dados_miami_diamantes`
+e `dados_miami_interesse`. O banco aplicou as funções em `20261009190000` em 09/10/2026; a carga e publicação do
+webhook do Respondi continuam com o Galego.
+
+A aba Diamantes exibe a lista de nomes de Diamantes, totais de respostas por situação e as respostas de participação,
+viagem e acompanhantes. A aba Fichas de interesse separa quem preencheu e comprou de quem preencheu e NÃO comprou; a
+segunda lista fica destacada para acompanhamento do time. A compra é conferida por e-mail e telefone nas ofertas
+indicadas no pedido.
+
+Diamantes mostra uma linha por nome da lista oficial e uma por resposta que não casou com a lista, incluindo as
+respostas mais recentes e os campos de viagem. Fichas de interesse separa `comprou = false` para a lista destacada
+“Preencheram e NÃO compraram” (inclui ausência de transação ou status não pago) e `comprou = true` para as compras pagas das ofertas
+`sju5pawn` e `mjzv4v0s`; o casamento vem pronto do banco por e-mail ou telefone. As duas visões exibem texto exato do
+formulário e não consultam planilhas.
+
+O front trata falha das RPCs sem derrubar o dashboard e preserva o último resultado válido. Formulário ainda não
+cadastrado para a chave retorna zero linhas; erros de acesso e chave ausente são mostrados pela camada de dados.
+
+Para testar localmente: `cd web && npm run dev -- -p 3001`, abra o dashboard com a chave acima e confira a ordem dos
+cards e as abas. Nesta entrega usei a porta `3003` porque a `3001` já estava ocupada. O teste local com a conta QA
+redirecionou para a página inicial porque o perfil estava sem acesso à Infra; ainda falta conferir a tela com uma
+conta que tenha acesso ao dashboard.
+
 ## 1. Como funciona
 
 - `dados.dashboards` guarda um dashboard por chave da casa (`mkt.projetos.etiqueta_clickup`): modelo, projeto, conta

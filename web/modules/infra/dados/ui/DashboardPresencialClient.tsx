@@ -2,14 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Tabs } from '@/shared/ui/components';
-import { carregarDisparos, carregarLeads, carregarPagamentos, carregarPendencias, carregarPerfilCompradores, carregarPessoasPendencias, carregarResumo, carregarSerieDiaria, carregarSerieVendas, carregarVendas, carregarVendasPorHora, marcarLeadTeste, type Resultado } from '../infrastructure/presencial-data';
-import type { DiaPresencial, DisparoPresencial, GrupoPendencia, LeadPresencial, PagamentoPresencial, PendenciaPresencial, PerfilCompradorPresencial, PessoaPendenciaPresencial, ResumoPresencial, SerieVendasPresencial, VendaHoraPresencial, VendaPresencial } from '../domain/presencial';
+import { carregarDiamantesMiami, carregarDisparos, carregarFichasInteresseMiami, carregarLeads, carregarPagamentos, carregarPendencias, carregarPerfilCompradores, carregarPessoasPendencias, carregarResumo, carregarSerieDiaria, carregarSerieVendas, carregarVendas, carregarVendasPorHora, marcarLeadTeste, type Resultado } from '../infrastructure/presencial-data';
+import type { DiamantePresencial, DiaPresencial, DisparoPresencial, FichaInteresseMiami, GrupoPendencia, LeadPresencial, PagamentoPresencial, PendenciaPresencial, PerfilCompradorPresencial, PessoaPendenciaPresencial, ResumoPresencial, SerieVendasPresencial, VendaHoraPresencial, VendaPresencial } from '../domain/presencial';
 import { CardsResumo } from './CardsResumo';
 import { AbaDisparos } from './AbaDisparos';
 import { AbaVisaoVendas } from './AbaVisaoVendas';
 import { ModalPreCheckout } from './ModalPreCheckout';
 import { ModalVendas } from './ModalVendas';
 import { ModalPendencias } from './ModalPendencias';
+import { AbaDiamantes } from './AbaDiamantes';
+import { AbaFichasInteresse } from './AbaFichasInteresse';
 import { dataBR } from './formato';
 import { deveCarregar } from '../application/carga-sob-demanda';
 import { manterUltimoDado, type EstadoLeitura } from '../application/ultimo-dado';
@@ -30,6 +32,8 @@ export function DashboardPresencialClient({ chave, isMaster = false }: { chave: 
   const [disparos, setDisparos] = useState<EstadoLeitura<DisparoPresencial[]>>(inicial);
   const [leads, setLeads] = useState<EstadoLeitura<LeadPresencial[]>>(ocioso);
   const [vendas, setVendas] = useState<EstadoLeitura<VendaPresencial[]>>(ocioso);
+  const [diamantes, setDiamantes] = useState<EstadoLeitura<DiamantePresencial[]>>(ocioso);
+  const [interesse, setInteresse] = useState<EstadoLeitura<FichaInteresseMiami[]>>(ocioso);
   const [pessoasPendencias, setPessoasPendencias] = useState<Record<GrupoPendencia, EstadoLeitura<PessoaPendenciaPresencial[]>>>({ nao_pago: ocioso(), cancelada: ocioso() });
   const [aba, setAba] = useState('disparos');
   const [modal, setModal] = useState<'leads' | 'vendas' | null>(null);
@@ -39,6 +43,8 @@ export function DashboardPresencialClient({ chave, isMaster = false }: { chave: 
   const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
   const atualizarLevesRef = useRef<() => boolean>(() => false);
   const pendenciasEmAndamento = useRef<Record<GrupoPendencia, boolean>>({ nao_pago: false, cancelada: false });
+  const miamiEmAndamento = useRef({ diamantes: false, interesse: false });
+  const recarregarMiami = useRef({ diamantes: false, interesse: false });
 
   useEffect(() => {
     let ativo = true;
@@ -123,16 +129,47 @@ export function DashboardPresencialClient({ chave, isMaster = false }: { chave: 
     carregarDisparos(chave).then((r) => setDisparos({ resultado: r, carregando: false }));
   }, [aba, chave, versao, disparos.resultado]);
 
+  useEffect(() => {
+    if (aba === 'diamantes' && miamiEmAndamento.current.diamantes) recarregarMiami.current.diamantes = true;
+    if (aba === 'diamantes' && !miamiEmAndamento.current.diamantes) {
+      miamiEmAndamento.current.diamantes = true;
+      setDiamantes((anterior) => ({ ...anterior, carregando: anterior.resultado === null }));
+      void carregarDiamantesMiami(chave).then((r) => {
+        setDiamantes((anterior) => ({ resultado: manterUltimoDado(anterior.resultado, r), carregando: false }));
+      }).finally(() => {
+        miamiEmAndamento.current.diamantes = false;
+        if (recarregarMiami.current.diamantes) { recarregarMiami.current.diamantes = false; setVersao((v) => v + 1); }
+      });
+    }
+    if (aba === 'interesse' && miamiEmAndamento.current.interesse) recarregarMiami.current.interesse = true;
+    if (aba === 'interesse' && !miamiEmAndamento.current.interesse) {
+      miamiEmAndamento.current.interesse = true;
+      setInteresse((anterior) => ({ ...anterior, carregando: anterior.resultado === null }));
+      void carregarFichasInteresseMiami(chave).then((r) => {
+        setInteresse((anterior) => ({ resultado: manterUltimoDado(anterior.resultado, r), carregando: false }));
+      }).finally(() => {
+        miamiEmAndamento.current.interesse = false;
+        if (recarregarMiami.current.interesse) { recarregarMiami.current.interesse = false; setVersao((v) => v + 1); }
+      });
+    }
+  }, [aba, chave, versao]);
+
   const atualizar = () => {
     if (!atualizarLevesRef.current()) return;
     setDisparos(inicial()); setLeads(ocioso()); setVendas(ocioso()); setVersao((v) => v + 1);
   };
   const r = resumo.resultado;
+  const ehClinicaMiami = chave === 'clinica-miami-2026-12';
+  const abas = [
+    { k: 'disparos', l: 'Visão de disparos' },
+    { k: 'vendas', l: 'Visão geral de vendas' },
+    ...(ehClinicaMiami ? [{ k: 'diamantes', l: 'Diamantes' }, { k: 'interesse', l: 'Fichas de interesse' }] : []),
+  ];
   return <div className="max-w-7xl space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Infra / Dashboards / CSM</div><h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">{r?.data?.projeto_nome ?? 'Dashboard presencial'}</h1>{r?.data && <p className="mt-1 text-sm text-[var(--fg-2)]">{r.data.projeto_sigla} · {dataBR(r.data.evento_inicio)} a {dataBR(r.data.evento_fim)}</p>}{atualizadoEm && <p className="mt-1 text-xs text-[var(--fg-2)]" role="status">Atualizado às {atualizadoEm.toLocaleTimeString('pt-BR', { hour12: false })}</p>}</div><Button onClick={atualizar} disabled={atualizando}>Atualizar</Button></div>
     {resumo.carregando ? <p>Carregando resumo…</p> : <>{r?.erro && <p role="alert" className="text-sm text-[var(--fg-2)]">{r.erro} {r.data && 'Exibindo o último resumo carregado.'}</p>}{r?.data ? <CardsResumo resumo={r.data} abrirLeads={abrirLeads} abrirVendas={abrirVendas} /> : !r?.erro && <p role="alert">Não foi possível carregar agora.</p>}</>}
-    <section><Tabs tabs={[{ k: 'disparos', l: 'Visão de disparos' }, { k: 'vendas', l: 'Visão geral de vendas' }]} active={aba} onChange={setAba} label="Visões do dashboard" />
-      {aba === 'disparos' ? <AbaDisparos linhas={disparos.resultado?.data ?? null} erro={disparos.resultado?.erro ?? null} carregando={disparos.carregando} /> : <AbaVisaoVendas dias={serie} pagamentos={pagamentos} perfil={perfil} pendencias={pendencias} serieVendas={serieVendas} porHora={porHora} abrirPendencias={abrirPendencias} />}
+    <section><Tabs tabs={abas} active={aba} onChange={setAba} label="Visões do dashboard" />
+      {aba === 'disparos' ? <AbaDisparos linhas={disparos.resultado?.data ?? null} erro={disparos.resultado?.erro ?? null} carregando={disparos.carregando} /> : aba === 'vendas' ? <AbaVisaoVendas dias={serie} pagamentos={pagamentos} perfil={perfil} pendencias={pendencias} serieVendas={serieVendas} porHora={porHora} abrirPendencias={abrirPendencias} /> : aba === 'diamantes' ? <AbaDiamantes linhas={diamantes.resultado?.data ?? null} erro={diamantes.resultado?.erro ?? null} carregando={diamantes.carregando} /> : <AbaFichasInteresse linhas={interesse.resultado?.data ?? null} erro={interesse.resultado?.erro ?? null} carregando={interesse.carregando} />}
     </section>
     {modal === 'leads' && <ModalPreCheckout linhas={leads.resultado?.data ?? null} erro={leads.resultado?.erro ?? null} carregando={leads.carregando} onClose={() => setModal(null)} isMaster={isMaster} onToggleTeste={alternarTeste} />}
     {modal === 'vendas' && <ModalVendas linhas={vendas.resultado?.data ?? null} erro={vendas.resultado?.erro ?? null} carregando={vendas.carregando} onClose={() => setModal(null)} />}

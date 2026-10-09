@@ -2,7 +2,7 @@
 
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import { normalizarNumericos, type ResumoPresencial, type LeadPresencial, type VendaPresencial, type DisparoPresencial, type DiaPresencial, type PagamentoPresencial, type PerfilCompradorPresencial, type PendenciaPresencial, type PessoaPendenciaPresencial, type SerieVendasPresencial, type VendaHoraPresencial, type GrupoPendencia } from '../domain/presencial';
+import { normalizarNumericos, type ResumoPresencial, type LeadPresencial, type VendaPresencial, type DisparoPresencial, type DiaPresencial, type PagamentoPresencial, type PerfilCompradorPresencial, type PendenciaPresencial, type PessoaPendenciaPresencial, type SerieVendasPresencial, type VendaHoraPresencial, type GrupoPendencia, type DiamantePresencial, type FichaInteresseMiami } from '../domain/presencial';
 
 export type Resultado<T> = { data: T | null; erro: string | null };
 
@@ -60,6 +60,9 @@ export async function carregarVendasPorHora(chave: string): Promise<Resultado<Ve
   const r = await chamar<VendaHoraPresencial[]>('dados_presencial_vendas_por_hora', chave);
   return { ...r, data: r.data?.map((v) => normalizarNumericos(v, ['receita_bruta'])) ?? null };
 }
+
+export const carregarDiamantesMiami = (chave: string) => chamar<DiamantePresencial[]>('dados_miami_diamantes', chave);
+export const carregarFichasInteresseMiami = (chave: string) => chamar<FichaInteresseMiami[]>('dados_miami_interesse', chave);
 
 export async function marcarLeadTeste(chave: string, pessoaId: string, teste: boolean): Promise<Resultado<{ pessoa_id: string; teste: boolean; alterado: boolean }>> {
   try {
