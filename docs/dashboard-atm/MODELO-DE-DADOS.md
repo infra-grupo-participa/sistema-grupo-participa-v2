@@ -92,6 +92,24 @@ eventos do webhook. Situação da aplicação: `infra/supabase/migrations/202610
 - Próximo ATM: na linha da campanha em `dados.dashboard_grupos`, preencher `sendflow_release_id` (id da campanha na API)
   e `sendflow_conta_id` (conta de WhatsApp que exporta).
 
+## 0c. Histórico por edição (20261009200000, 09/10/2026)
+
+Aba "Histórico". Situação da aplicação: `infra/supabase/migrations/20261009200000.explain.md`.
+
+- Tabela genérica `dados.edicoes_historico` (uma linha por edição, por `familia`), só lida pela RPC. Carga: `atm-1-2026-07`
+  (ATM JUL/26) e `atm-2-2026-09` (ATM SET/26), números confirmados pelo Victor em 09/10, com a fonte de cada um.
+- `public.dados_historico_edicoes(p_familia text)` (a tela pede `'seminario-atm'`), só `authenticated`, gate da equipe
+  (`42501`). 1 linha por edição, `order by ordem`; família inexistente = 0 linhas:
+  `chave text, familia text, rotulo text, ordem integer, data_inicio date, data_fim date, leads integer,
+  invest_trafego_centavos bigint, invest_disparo_centavos bigint, grupo integer, pico_d1 integer, pico_d2 integer,
+  pico_d3 integer, vendas integer, receita_liquida_centavos bigint, pre_checkout integer, fontes jsonb, provisorio text[],
+  criado_em timestamptz, atualizado_em timestamptz`
+- Dinheiro em centavos. Métrica nula = sem dado (ex.: `pico_d3` do ATM JUL/26, que não teve dia 3). `fontes` = {métrica:
+  texto da fonte} para o tooltip; `provisorio` = métricas ainda não confirmadas (hoje vazio nas duas). Chaves: `leads`,
+  `invest_trafego`, `invest_disparo`, `grupo`, `pico_d1`, `pico_d2`, `pico_d3`, `vendas`, `receita_liquida`,
+  `pre_checkout`. CAC, ROAS, CPL, conversões e retenção são calculados na tela, nunca gravados.
+- A edição OUT/26 entra depois do ciclo fechado, pelo passo SQL da seção 4 do `.explain.md`.
+
 ## 1. De onde vem cada número
 
 | Card / coluna | Fonte no banco | Regra |
