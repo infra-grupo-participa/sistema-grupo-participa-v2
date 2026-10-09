@@ -88,3 +88,36 @@ Contrato aplicado em produção em 08/10/2026, migration `20261008191000` e ajus
 - As RPCs retornam `42501`, `P0002` e `22023` em situações de acesso, vínculo ao evento e validação. A tela apresenta mensagens legíveis e não registra identificadores pessoais nos logs.
 
 Para validar: selecionar cada período, conferir as datas e os números, abrir Leads e Grupo, verificar as etiquetas de teste com um perfil master e confirmar que os outros perfis não recebem os controles. O aviso de exclusões aparece apenas para o Victor; confirme com sessão dele e com uma conta QA. O teste local não deve marcar ou desmarcar dados reais.
+
+## Aba Histórico (09/10/2026, branch `victor-atm-historico`, não publicada)
+
+Pedido do Victor de 09/10/2026 (card 17tya50ftxn). O dashboard ganhou duas abas no topo: **Esta edição** (tudo o que existia antes, sem mudança de comportamento) e **Histórico**. O histórico só é lido na primeira vez que a aba é aberta.
+
+**Fonte.** Uma RPC só: `dados_historico_edicoes(p_familia)`, criada pela migration `20261009200000` (banco descrito no `.explain.md` dela). A família vem de `familia` no registro (`web/modules/infra/atm/domain/registro.ts`, hoje `seminario-atm`). A RPC devolve uma linha por edição com os números medidos, `fontes` (texto da fonte de cada número) e `provisorio` (métricas que ainda podem mudar). Dinheiro chega em centavos e vira reais em `infrastructure/historico-data.ts`. Enquanto a função não existir (PGRST202) a aba mostra "sem dado ainda", sem erro. Tempo limite de 15 s; falha conserva a última leitura, esmaece a tela e mostra a hora dela.
+
+**Sub-abas.**
+- **Comparativo geral:** métricas nas linhas, uma coluna por edição (rótulo exato do banco), em quatro blocos: Captação, Aulas, Vendas e Eficiência. A conversão sobre o pré-checkout é a linha principal, em destaque. A tabela rola por dentro em tela estreita.
+- **Uma sub-aba por edição** devolvida pela RPC: cartão principal com a conversão sobre o pré-checkout, cards de receita líquida, ROAS, vendas, CAC, leads, ingressos no grupo, taxa de ingresso, investimento total (com tráfego e disparo) e CPL; gráfico dos picos D1 a D3 com retenção e comparativo; funil leads → grupo → pico na live (dia 1) → pré-checkout → vendas, com a passagem entre etapas e o percentual sobre os leads. Não há funil de investimento.
+
+**Fórmulas (calculadas na tela, nunca gravadas), em `web/modules/infra/atm/domain/historico.ts`:**
+
+| Métrica | Fórmula |
+|---|---|
+| Investimento total | tráfego + disparo (se uma das partes vier nula, o total fica "—") |
+| CPL | investimento total ÷ leads |
+| CAC | investimento total ÷ vendas |
+| ROAS | receita líquida ÷ investimento total |
+| Taxa de ingresso no grupo | grupo ÷ leads |
+| Conversão (pré-checkout, grupo, leads) | vendas ÷ base |
+| Retenção | pico da aula ÷ pico da aula anterior da mesma edição |
+| Comparativo | pico da edição ÷ pico da mesma aula da edição anterior (anterior = a edição imediatamente antes pela `ordem`) |
+
+Divisão por zero ou valor nulo aparece como "—". Dia 3 nulo (ATM JUL/26) mostra "—" e "sem dia 3", sem quebrar o layout. Cada número tem tooltip com a fonte (string do campo `fontes`) e, se for calculado, a fórmula; número provisório leva `*` e aviso. Para teclado e leitor de tela, o bloco "Fonte de cada número" lista as mesmas fontes.
+
+**Como entra a próxima edição.** Basta a linha nova em `dados.edicoes_historico` com a mesma família e a `ordem` seguinte: a sub-aba e a coluna aparecem sozinhas, sem mexer na tela. Como a linha é preenchida está no `.explain.md` da migration `20261009200000`.
+
+**Como testar.**
+1. Em `web/`: `npx vitest run modules/infra/atm` (os testes de `historico.test.ts` conferem os dois ATMs: ROAS 4,86x e 6,02x; CAC R$ 291,42 e R$ 235,50; conversão sobre o pré-checkout 26,9% e 27,3%; retenção D2/D1 28,4% e 48,8%; comparativo D1 171,6% e D2 295,2%).
+2. Com a migration aplicada, logado com usuário da equipe, abrir Infra > Dashboards > Escritório > Seminário ATM > Histórico e conferir cada número da tabela contra a seção "Números que valem" do pedido e contra a carga da migration.
+3. Em 375 px: a página não pode rolar na horizontal; a tabela rola por dentro.
+4. Sem a migration: a aba mostra "Histórico sem edições · sem dado ainda".

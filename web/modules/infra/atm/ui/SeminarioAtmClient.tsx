@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { KpiCard, SectionCard, EmptyState, ConfirmDialog } from '@/shared/ui/components';
+import { KpiCard, SectionCard, EmptyState, ConfirmDialog, Tabs, idsAba } from '@/shared/ui/components';
 import { Modal } from '@/shared/ui/components/Modal';
 import {
   carregarAtmCanais,
@@ -19,6 +19,7 @@ import { CANAIS_DISPARO_ATM, METRICAS_RESUMO_ATM, montarAvisosTesteAtm, rotuloLi
 import type { RegistroAtm } from '../domain/registro';
 import { dataPtBr, datasDoPeriodo, type PresetPeriodoAtm } from '../domain/periodo';
 import { RoscaCategorias } from '@/modules/infra/dados/ui/viz/RoscaCategorias';
+import { HistoricoAtm } from './HistoricoAtm';
 
 type Linha = Record<string, unknown>;
 type PedidoAtualizacao = { periodo: ReturnType<typeof datasDoPeriodo>; detalhado: boolean; modal: boolean; isMaster: boolean };
@@ -117,6 +118,12 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
   const atualizarRef = useRef<(detalhado?: boolean) => Promise<void>>(async () => {});
   const modalAtual = useRef(false);
   const periodoAtual = useRef<PresetPeriodoAtm>('evento');
+  const [abaPrincipal, setAbaPrincipal] = useState<'edicao' | 'historico'>('edicao');
+  // O histórico só é lido na primeira vez que a aba é aberta; depois fica montado para não reler a cada troca.
+  const [historicoAberto, setHistoricoAberto] = useState(false);
+  const trocarAbaPrincipal = (k: string) => { const aba = k === 'historico' ? 'historico' : 'edicao'; if (aba === 'historico') setHistoricoAberto(true); setAbaPrincipal(aba); };
+  const idsEdicao = idsAba('atm-principal', 'edicao');
+  const idsHistorico = idsAba('atm-principal', 'historico');
 
   const atualizar = useCallback(async (detalhado = false) => {
     const pedido: PedidoAtualizacao = { periodo: datasDoPeriodo(periodoSelecionado), detalhado, modal: modalAtual.current, isMaster };
@@ -211,6 +218,8 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
 
   return <div className="max-w-7xl space-y-5">
     <header><div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Infra / Dashboards / Escritório / Seminário ATM</div><h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">{projeto.rotulo}</h1><p className="mt-1 text-sm text-[var(--fg-2)]">Chave {projeto.chave} · {atualizado ? 'atualizado às ' + atualizado.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'aguardando leitura'}</p></header>
+    <Tabs idBase="atm-principal" label="Seções do dashboard" active={abaPrincipal} onChange={trocarAbaPrincipal} tabs={[{ k: 'edicao', l: 'Esta edição' }, { k: 'historico', l: 'Histórico' }]} />
+    <div role="tabpanel" id={idsEdicao.panel} aria-labelledby={idsEdicao.tab} hidden={abaPrincipal !== 'edicao'} className="space-y-5">
     <div className="flex flex-wrap items-end gap-3 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3">
       <label className="grid gap-1 text-xs text-[var(--fg-2)]">Período
         <select aria-label="Período do dashboard" value={periodoSelecionado} onChange={(e) => setPeriodoSelecionado(e.target.value as PresetPeriodoAtm)} className="min-h-10 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-1)] px-3 text-sm text-[var(--fg)]">
@@ -241,5 +250,9 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
       {posLive.data.length ? <div className="grid gap-4 md:grid-cols-2">{(['aberto', 'fechado'] as const).map((nome) => { const p = ciclo(nome); return <div key={nome} className="rounded-[var(--r-md)] border border-[var(--border)] p-4"><h3 className="font-semibold capitalize">Ciclo {nome}</h3><div className="mt-3 grid grid-cols-2 gap-3"><KpiCard label="Vendas" value={renderVal(p?.vendas, 'inteiro')} hint={p?.vendas == null ? 'sem dado ainda' : undefined} /><KpiCard label="Conversão" value={renderVal(p?.conversao_pct, 'percentual')} hint={p?.conversao_pct == null ? 'sem dado ainda' : undefined} /></div></div>; })}</div> : <EmptyState title="Pós-live sem dados" hint="sem dado ainda" />}
     </SectionCard>
     <ModalLeads open={modal} onClose={() => setModal(false)} result={leads} grupo={grupo} serie={serie} periodoLabel={intervalo} isMaster={isMaster} onToggleLead={toggleLead} onToggleGrupo={toggleGrupo} />
+    </div>
+    <div role="tabpanel" id={idsHistorico.panel} aria-labelledby={idsHistorico.tab} hidden={abaPrincipal !== 'historico'}>
+      {historicoAberto && <HistoricoAtm familia={projeto.familia} />}
+    </div>
   </div>;
 }
