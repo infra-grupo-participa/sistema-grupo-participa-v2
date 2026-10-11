@@ -971,6 +971,34 @@ contrato das funções e planos medidos em `20261005n.explain.md`). Depende da b
   hoje só admin/dev. Liberar operador/gestor da Mensageria = mudar só `mkt.pode_ver` (ver o explain).
 - **Não tocar:** `cs.disparos` e `cs.canais_disparo` são de outro sistema; a Mensageria não lê nem aponta para eles.
 
+### Sync da planilha de mensageria (migration `20261011120000`, 11/10/2026)
+
+O time lança disparo e custo na planilha de mensageria do projeto; o banco puxa sozinho **a cada 10 minutos** (cron
+`mensageria-planilha-sync`, minutos 2, 12, 22... UTC → Edge `mensageria-planilha` → `mkt_mensageria.planilha_sync_receber`).
+Hoje há uma planilha cadastrada: `[SEMATM OUT/26] MENSAGERIA` → projeto 75 (`ATMEL126`), a partir de 07/10/2026.
+
+- **Qual linha entra:** data ≥ `planilhas.desde` (e ≤ `ate`, se houver) **e** (STATUS começa com `ENVIAD`, ou ENVIADOS > 0,
+  ou custo > 0). Linha de planejamento sem nada disso não entra. ENVIADOS vazio grava `tamanho_lista = 0` (coluna NOT NULL)
+  e o sync troca pelo número quando o time preencher. Mesma validação da importação da tela (`importar_linha`).
+- **Abas:** API (Infobip), GRUPO (SendFlow), SMS e LIGAÇÃO (Ligue Lead). **EMAIIL fica de fora**: o e-mail já chega pela
+  integração do ActiveCampaign e entraria em dobro. O mapa de colunas e o texto esperado no cabeçalho ficam em
+  `mkt_mensageria.planilhas.abas`; **cabeçalho diferente = a aba para** (não grava nem arquiva) e a rodada fica com `ok = false`.
+- **Sem duplicar:** cada linha tem uma chave (aba + data + hora + campanha + lista) em `mkt_mensageria.planilha_linhas`.
+  Mudou custo ou ENVIADOS na planilha: atualiza o mesmo disparo. Célula vazia mantém o valor gravado. Disparo já lançado à
+  mão (mesmo projeto, canal, data/hora e lista) é **adotado**, não copiado.
+- **Linha que some da planilha** (ou deixa de valer) arquiva o disparo com o motivo "Sync da planilha: ..."; se voltar,
+  desarquiva. Mais de 5 de uma vez por aba: não arquiva e acusa (`ok = false`), porque parece leitura quebrada.
+  Disparo arquivado à mão ou anonimizado o sync não toca.
+- **Tetos:** mais de 20 disparos novos numa aba de uma vez suspende a aba na rodada (nada dela é gravado); custo acima
+  de R$ 50.000,00 numa linha é recusado. As recusas aparecem em `planilha_execucoes.resumo`.
+- **Mudou a hora ou o nome da campanha na planilha?** A chave muda: o disparo antigo é arquivado e entra um novo.
+- **Conferir:** `select em, ok, erro, resumo from mkt_mensageria.planilha_execucoes order by id desc limit 5;`
+- **Desligar (kill-switch):** `update mkt_mensageria.planilhas set ativa = false where nome = '[SEMATM OUT/26] MENSAGERIA';`
+- **Nova planilha (próxima edição):** `insert` em `mkt_mensageria.planilhas` com o id da planilha, o projeto, `desde` e o
+  mapa de abas (copiar o do ATM e conferir as letras). Compartilhar a planilha como leitor com a conta de serviço do
+  segredo `SHEETS_SA_B64` (`dashboard-eventos@...iam.gserviceaccount.com`).
+- **Acesso:** tabelas e funções `planilha*` só do postgres (a Edge entra pelo `SUPABASE_DB_URL`); nada exposto na API.
+
 ## Ordem para aplicar em produção (Marketing: Web e Tráfego)
 
 > Situação em 06/10/2026: **nenhuma destas está aplicada.** Já em produção (main, não mexer): 20261005m (base
