@@ -37,6 +37,11 @@ verify_jwt = false
 [functions.respondi-webhook]
 verify_jwt = false
 
+# mensageria-planilha (20261011120000): chamada pelo cron mensageria-planilha-sync via ops.cron_post sem Authorization;
+# autentica pelo header x-sync-chave (Vault mkt_msg_planilha_chave), fail-closed.
+[functions.mensageria-planilha]
+verify_jwt = false
+
 # trafego-meta e trafego-clickup (migration 20261006i): chamadas pelo cron via ops.cron_post sem Authorization;
 # autenticam pelo header x-sync-chave (Vault trafego_coleta_chave), fail-closed. Nascem sem cron (desligadas).
 [functions.trafego-meta]

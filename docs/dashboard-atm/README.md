@@ -59,6 +59,11 @@ Até `investimento_total_centavos` estar disponível, CPL, CAC e ROAS também fi
 
 O canal selecionado no topo do bloco Disparos filtra tanto os totais quanto a lista detalhada; há um único controle de canal.
 
+**De onde vêm os disparos (11/10/2026, migration `20261011120000`):** API, grupo, SMS e ligação vêm da planilha
+`[SEMATM OUT/26] MENSAGERIA`, puxada sozinha a cada 10 minutos (ver `docs/central-de-dados.md`, "Sync da planilha de
+mensageria"); o e-mail vem da integração do ActiveCampaign. Lançou custo ou disparo na planilha: aparece no dashboard em
+até 10 minutos. Quando a planilha não traz ENVIADOS, o disparo entra com 0 enviados (e o custo) até alguém preencher.
+
 ### Aba Tráfego
 
 A aba usa `dados_atm_trafego(p_chave, p_de, p_ate)`, que retorna JSON com período, coleta, totais, série diária e campanhas. A migration `20261009230000` e a coleta `trafego-meta` foram aplicadas/publicadas em 09/10/2026, conforme atualização do Galego. Para ATM OUT/26, ele informou 1.448 impressões, alcance 993, frequência 1,4582, 1.310 plays, 147 ThruPlay, engajamento 564 e nenhum clique no link. CTR informado 0,00; CPC, visualizações da página e cliques de saída vieram nulos porque a API não enviou esses campos. A tela preserva nulos como “Sem dado”.
