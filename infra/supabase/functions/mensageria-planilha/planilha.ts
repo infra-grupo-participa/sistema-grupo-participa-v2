@@ -65,13 +65,22 @@ export async function tokenDeAcesso(sa: ContaServico, buscar: Buscar): Promise<s
  * Lê as abas pedidas numa chamada só (values:batchGet, valores formatados como aparecem na tela). Aba que o Google
  * não devolver vira {aba, erro}: o banco trata como cabeçalho não conferido e não poda nada dela.
  */
-export async function lerAbas(planilhaId: string, abas: string[], token: string, buscar: Buscar): Promise<Aba[]> {
+// 429 do Google = cota por minuto da conta de serviço, que é dividida com outros sistemas (a 1ª rodada automática, em
+// 11/10/2026 17:22 UTC, levou 429 nas 4 abas). Espera e tenta de novo; a cota volta no minuto seguinte.
+export const ESPERAS_429_MS = [15_000, 30_000]; // cabe no timeout de 60 s do cron
+const dormir = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+
+export async function lerAbas(planilhaId: string, abas: string[], token: string, buscar: Buscar,
+                              esperas: number[] = ESPERAS_429_MS, esperar: (ms: number) => Promise<unknown> = dormir): Promise<Aba[]> {
   const qs = new URLSearchParams({ valueRenderOption: 'FORMATTED_VALUE', majorDimension: 'ROWS' });
   for (const a of abas) qs.append('ranges', intervalo(a));
-  const r = await buscar(
-    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(planilhaId)}/values:batchGet?${qs}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(planilhaId)}/values:batchGet?${qs}`;
+  let r = await buscar(url, { headers: { Authorization: `Bearer ${token}` } });
+  for (const ms of esperas) {
+    if (r.status !== 429) break;
+    await esperar(ms);
+    r = await buscar(url, { headers: { Authorization: `Bearer ${token}` } });
+  }
   if (!r.ok) return abas.map((aba) => ({ aba, erro: `google_${r.status}` }));
   const j = await r.json().catch(() => null) as { valueRanges?: { range?: string; values?: unknown[][] }[] } | null;
   const ranges = j?.valueRanges ?? [];

@@ -53,6 +53,21 @@ describe('lerAbas', () => {
     const abas = await lerAbas('P', ['API', 'SMS'], 'tok', async () => resposta(200, { valueRanges: [{ range: 'SMS!A1:AD1', values: [['FASE']] }] }));
     expect(abas).toEqual([{ aba: 'API', erro: 'aba_nao_veio' }, { aba: 'SMS', erro: 'aba_nao_veio' }]);
   });
+  it('429 espera e tenta de novo; volta com dado se a cota liberar', async () => {
+    const status = [429, 429, 200];
+    const esperas: number[] = [];
+    const abas = await lerAbas('P', ['API'], 'tok',
+      async () => resposta(status.shift()!, { valueRanges: [{ range: 'API!A1:AD1', values: [['ETAPA']] }] }),
+      [20, 40], async (ms) => { esperas.push(ms); });
+    expect(esperas).toEqual([20, 40]);
+    expect(abas).toEqual([{ aba: 'API', valores: [['ETAPA']] }]);
+  });
+  it('429 que não passa depois das tentativas vira erro com o código', async () => {
+    let chamadas = 0;
+    const abas = await lerAbas('P', ['API'], 'tok', async () => { chamadas++; return resposta(429, {}); }, [1, 1], async () => {});
+    expect(chamadas).toBe(3);
+    expect(abas).toEqual([{ aba: 'API', erro: 'google_429' }]);
+  });
   it('erro HTTP do Google vira erro em todas as abas, só com o código', async () => {
     const abas = await lerAbas('P', ['API', 'GRUPO'], 'tok', async () => resposta(403, { error: { message: 'detalhe' } }));
     expect(abas).toEqual([{ aba: 'API', erro: 'google_403' }, { aba: 'GRUPO', erro: 'google_403' }]);
