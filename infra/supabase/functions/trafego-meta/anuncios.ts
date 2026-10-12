@@ -227,6 +227,8 @@ export function urlCadastro(versao: string, conta: string, borda: 'adsets' | 'ad
 async function lerCadastro<T>(d: DepsAnuncios, buscar: Buscar, urls: string[], token: string): Promise<{ lidos: T[]; erro?: string }> {
   const lidos: T[] = [];
   for (const u of urls) {
+    // o lerPaginas só confere o paging.next; a URL inicial também tem que ser do Graph (o token vai junto no header)
+    if (!u.startsWith(`${BASE}/`)) return { lidos, erro: 'url_fora_do_graph' };
     try {
       lidos.push(...(await d.lerPaginas<T>(buscar, u, token)).filter((v) => v && typeof v === 'object'));
     } catch (e) {

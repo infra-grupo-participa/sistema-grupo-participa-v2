@@ -26,3 +26,13 @@ as $function$
          case when (select count(*) from cod) = 1 and (select count(*) from sub) = 1 then (select s.rotulo from sub s) end as subtipo,
          (select count(*) from cod) > 1 as conflito
 $function$;
+
+-- create or replace preserva dono e grants; a conferência abaixo garante que continua sem grant além do dono.
+do $g$
+begin
+  if exists (select 1 from pg_proc p cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) g
+              where p.oid = 'mkt_trafego.etapa_black(text)'::regprocedure and g.grantee <> p.proowner) then
+    raise exception '20261012220000 (reversão): mkt_trafego.etapa_black tem grant além do dono (inclusive PUBLIC)';
+  end if;
+end
+$g$;
