@@ -416,8 +416,14 @@ do criativo. Detalhe completo (ensaio, conferências do estado vivo C1 a C17, ri
 - **Ligar (só a CNF):** `update mkt_trafego.coleta_config set valor = '1570090828117070' where chave =
   'meta_anuncio_contas';`. **Desligar:** o mesmo `update` com `valor = null` (os dados ficam). **Reverter:** flag nula,
   Edge anterior, esvaziar o bucket pela API do Storage, depois `20261012120000_reversao.sql`.
-- **Falta:** decisões do Victor (código sem subtipo, vários subtipos, ISCA x ISCAS, MANIFESTO no C1, que campanha é "da
-  Black", ok para ligar a CNF) e o aceite do JP como dono do banco antes de aplicar.
+- **Etapa (regra final do Victor, 12/10/2026):** C1 = `C1` + TEASER, MANIFESTO, REELS ou CORTES; C2 = `C2` +
+  CONSULTORIA ou ISCA (só singular); C3 = `C3` + LEADS. Código sem subtipo = etapa com subtipo nulo. Mais de um código =
+  etapa nula com `conflito = true` (terceira coluna da `etapa_black`): o dashboard mostra o conflito à parte do "sem
+  etapa" comum (`conflito = false`).
+- **Critério do dashboard:** campanha da Black = `BF26` no nome da campanha (decisão do Victor, 12/10/2026).
+- **Decidido:** flag só com a CNF; aceite do banco dado pelo Victor (o banco é do Victor e do JP).
+- **Falta:** mais de um subtipo no mesmo nome (hoje subtipo nulo, sem precedência; o Victor ainda vai ver) e as
+  conferências do estado vivo antes de aplicar (C3 obrigatória).
 
 ### Receita do projeto: oferta exclusiva e SCK
 

@@ -4,7 +4,7 @@
 -- dos conjuntos de ensaio; nada dela é alterado.
 -- ESPERADOS (passo: valor):
 --   0 antes md5 desempenho_dia / md5 funções atuais = os mesmos valores no passo 9 (nada existente muda)
---   1 etapa resumo: {"casos": 14, "erradas": 0}
+--   1 etapa resumo: {"casos": 22, "erradas": 0}  (etapa, subtipo e conflito conferidos em cada caso)
 --   2 conjuntos 1a: novos 2, recusas 5 (formato_invalido x2, id_invalido, nome_invalido, campanha_desconhecida)
 --   2 conjuntos 2a (mesmo lote): novos 0, atualizados 0, iguais 2
 --   2 conjuntos 3a (nome trocado num, status nulo no outro): atualizados 1, iguais 1; status do outro mantido
@@ -42,7 +42,7 @@ insert into pg_temp._z_out (passo, linha)
 -- STATUS: NÃO APLICADA. Ver 20261012120000.explain.md (conferências do estado vivo C1 a C17 ainda NÃO FEITAS; a C3,
 --   colunas e checks vivos de mkt_trafego.desempenho_dia, é obrigatória antes de aplicar).
 -- ARQUIVO EM UTF-8: o translate da mkt_trafego.etapa_black usa um mapa de letras acentuadas. Se o arquivo for
---   regravado em outra codificação, a etapa deixa de casar "ANTECIPAÇÃO". O ensaio confere.
+--   regravado em outra codificação, o termo acentuado deixa de casar (ex.: "Manifésto"). O ensaio confere.
 -- POR QUE: o painel da Black vai mostrar quanto cada anúncio e cada conjunto gastou e entregou por dia, com miniatura e
 --   com a etapa C1/C2/C3 tirada do nome da campanha. Hoje a coleta Meta (20261006g/i, 20261009230000) só grava por
 --   campanha. Tudo aqui é ADITIVO: desempenho_dia, as funções de entrada atuais e os jobs não mudam.
@@ -54,8 +54,9 @@ insert into pg_temp._z_out (passo, linha)
 --      trafego_anuncios_receber, trafego_desempenho_anuncio_receber, trafego_anuncio_miniatura_receber.
 --      Cadastro: nulo nunca apaga dado conhecido (coalesce); a linha só é reescrita quando algo mudou
 --      (is distinct from); ultima_coleta atualiza sempre.
---   3. mkt_trafego.etapa_black(nome): etapa (C1, C2, C3) e subtipo pelo nome da campanha, calculados na leitura e nunca
---      gravados. Sem grant para ninguém (interna; a RPC de leitura do dashboard é de outra fase).
+--   3. mkt_trafego.etapa_black(nome): etapa (C1, C2, C3), subtipo e conflito (mais de um código) pelo nome da campanha,
+--      calculados na leitura e nunca gravados. Sem grant para ninguém (interna; a RPC de leitura do dashboard é de outra
+--      fase). Campanha da Black, para o dashboard, = nome com o termo BF26 (decisão do Victor, 12/10/2026).
 --   4. Liga e desliga por conta: linha 'meta_anuncio_contas' em mkt_trafego.coleta_config, NASCE NULA (desligada).
 --   5. Bucket privado 'trafego-miniaturas' (sem policy: só a service_role lê e grava). Caminho meta/<conta>/<criativo>.<ext>.
 -- AS 5 PERGUNTAS:
@@ -521,22 +522,26 @@ grant execute on function public.trafego_anuncios_receber(jsonb) to service_role
 grant execute on function public.trafego_desempenho_anuncio_receber(jsonb) to service_role;
 grant execute on function public.trafego_anuncio_miniatura_receber(jsonb) to service_role;
 
--- 3. Etapa da Black pelo nome da campanha (regra de 12/10/2026). A regra mora SÓ aqui: para trocar, create or replace
---    com a mesma assinatura numa migration nova.
+-- 3. Etapa da Black pelo nome da campanha (regra final do Victor, 12/10/2026). A regra mora SÓ aqui: para trocar,
+--    create or replace com a mesma assinatura numa migration nova.
+--    C1 = termo C1 + TEASER, MANIFESTO, REELS ou CORTES. C2 = termo C2 + CONSULTORIA ou ISCA (só no singular: ISCAS não
+--    casa). C3 = termo C3 + LEADS. ANTECIPAÇÃO não é subtipo (saiu da lista em 12/10/2026).
 --    Como casa: o nome é dividido por "|", cada termo sem espaço nas pontas; o termo INTEIRO tem que ser o código
 --    (C1, C2, C3) ou o subtipo (CPF01 não vira C1; "C2 ISCAS" num termo só não casa). Acento e maiúscula não importam:
 --    o translate tira o acento ANTES do upper (não depende do ctype do banco). O subtipo sai na grafia oficial.
---    Mais de um código: etapa nula. Mais de um subtipo da etapa: subtipo nulo.
+--    Casos especiais:
+--      - código sem subtipo da etapa: etapa preenchida e subtipo nulo (DECIDIDO pelo Victor em 12/10/2026);
+--      - mais de um subtipo da etapa: subtipo nulo, sem precedência (PENDENTE: o Victor ainda vai ver);
+--      - mais de um código: etapa e subtipo nulos e conflito = true. O dashboard mostra o conflito à parte do
+--        "sem etapa" comum (conflito = false). O mesmo código repetido não é conflito.
 create or replace function mkt_trafego.etapa_black(p_nome text)
- returns table (etapa text, subtipo text)
+ returns table (etapa text, subtipo text, conflito boolean)
  language sql
  immutable parallel safe
  set search_path to ''
 as $function$
   with regra (etapa, chave, rotulo) as (
-    values ('C1', 'TEASER', 'TEASER'), ('C1', 'ANTECIPACAO', 'ANTECIPAÇÃO'), ('C1', 'REELS', 'REELS'), ('C1', 'CORTES', 'CORTES'),
-           -- MANIFESTO: EM ABERTO (decisão de 12/10). Se o Victor decidir que é do C1, acrescentar aqui
-           -- ('C1', 'MANIFESTO', 'MANIFESTO'). Hoje "X | C1 | MANIFESTO" dá C1 sem subtipo.
+    values ('C1', 'TEASER', 'TEASER'), ('C1', 'MANIFESTO', 'MANIFESTO'), ('C1', 'REELS', 'REELS'), ('C1', 'CORTES', 'CORTES'),
            ('C2', 'CONSULTORIA', 'CONSULTORIA'), ('C2', 'ISCA', 'ISCA'),
            ('C3', 'LEADS', 'LEADS')
   ),
@@ -547,11 +552,10 @@ as $function$
   ),
   cod as (select distinct r.etapa from regra r join termo on termo.t = r.etapa),
   sub as (select distinct r.rotulo from regra r join termo on termo.t = r.chave join cod on cod.etapa = r.etapa)
-  -- DECISÃO PENDENTE DO VICTOR: código que casa sem subtipo (ex.: "X | C3 | LEAD") hoje fica COM a etapa e subtipo
-  -- nulo, para o gasto não sumir da etapa. Para virar "sem etapa", a linha da etapa abaixo passa a exigir também
-  -- (select count(*) from sub) = 1.
+  -- código sem subtipo (ex.: "X | C3 | LEAD"): etapa preenchida e subtipo nulo, para o gasto não sumir da etapa (DECIDIDO)
   select case when (select count(*) from cod) = 1 then (select c.etapa from cod c) end as etapa,
-         case when (select count(*) from cod) = 1 and (select count(*) from sub) = 1 then (select s.rotulo from sub s) end as subtipo
+         case when (select count(*) from cod) = 1 and (select count(*) from sub) = 1 then (select s.rotulo from sub s) end as subtipo,
+         (select count(*) from cod) > 1 as conflito
 $function$;
 revoke all on function mkt_trafego.etapa_black(text) from public, anon, authenticated, service_role;
 
@@ -622,32 +626,41 @@ begin
   end if;
 end
 $c$;
-
 -- ===== FIM DA MIGRATION =====
 
--- 1. Etapa pelo nome (os 14 casos da regra de 12/10/2026)
+-- 1. Etapa pelo nome (regra final do Victor, 12/10/2026: 22 casos)
 create temp table _z_etapa on commit drop as
-select v.n, v.esp_e, v.esp_s, e.etapa, e.subtipo,
-       (e.etapa is not distinct from v.esp_e and e.subtipo is not distinct from v.esp_s) as confere
+select v.n, v.esp_e, v.esp_s, v.esp_c, e.etapa, e.subtipo, e.conflito,
+       (e.etapa is not distinct from v.esp_e and e.subtipo is not distinct from v.esp_s
+        and e.conflito is not distinct from v.esp_c) as confere
   from (values
-    ('BF26 | CPF01 | META | IG | MORNO | ABO | LEAD', null::text, null::text),
-    ('CF | BF26 | ANTECIPAÇÃO | TEASER | X', null, null),
-    ('X | C1 | Antecipacao', 'C1', 'ANTECIPAÇÃO'),
-    ('X | c1 | antecipação', 'C1', 'ANTECIPAÇÃO'),
-    ('X | C1 | MANIFESTO', 'C1', null),
-    ('X | c2 | isca', 'C2', 'ISCA'),
-    ('X | C2 | ISCAS', 'C2', null),
-    ('X | C2 ISCAS | Y', null, null),
-    ('X | C3 | LEADS', 'C3', 'LEADS'),
-    ('X | C3 | LEAD', 'C3', null),
-    ('X | C1 | C2 | TEASER', null, null),
-    ('C1|TEASER', 'C1', 'TEASER'),
-    ('C1 | ANTECIPAÇÃO | TEASER', 'C1', null),
-    (null, null, null)
-  ) v (n, esp_e, esp_s)
+    ('BF26 | CPF01 | META | IG | MORNO | ABO | LEAD', null::text, null::text, false),
+    ('CF | BF26 | ANTECIPAÇÃO | TEASER | X', null, null, false),
+    ('X | C1 | Antecipacao', 'C1', null, false),
+    ('X | c1 | antecipação', 'C1', null, false),
+    ('C1 | ANTECIPAÇÃO | TEASER', 'C1', 'TEASER', false),
+    ('X | C1 | MANIFESTO', 'C1', 'MANIFESTO', false),
+    ('x | c1 | manifesto', 'C1', 'MANIFESTO', false),
+    ('X | C1 | Manifésto', 'C1', 'MANIFESTO', false),
+    ('X | C1 | TEASER | MANIFESTO', 'C1', null, false),
+    ('C1|TEASER', 'C1', 'TEASER', false),
+    ('X | C1 | REELS', 'C1', 'REELS', false),
+    ('X | C1 | CORTES', 'C1', 'CORTES', false),
+    ('X | c2 | isca', 'C2', 'ISCA', false),
+    ('X | C2 | CONSULTORIA', 'C2', 'CONSULTORIA', false),
+    ('X | C2 | ISCAS', 'C2', null, false),
+    ('X | C2 ISCAS | Y', null, null, false),
+    ('X | C3 | LEADS', 'C3', 'LEADS', false),
+    ('X | C3 | LEAD', 'C3', null, false),
+    ('X | C3 | TEASER', 'C3', null, false),
+    ('X | C1 | C2 | TEASER', null, null, true),
+    ('X | C1 | C1 | TEASER', 'C1', 'TEASER', false),
+    (null, null, null, false)
+  ) v (n, esp_e, esp_s, esp_c)
   cross join lateral mkt_trafego.etapa_black(v.n) e;
 insert into pg_temp._z_out (passo, linha)
-  select '1 etapa ' || coalesce(n, '(nulo)'), jsonb_build_object('etapa', etapa, 'subtipo', subtipo, 'confere', confere)::text from pg_temp._z_etapa;
+  select '1 etapa ' || coalesce(n, '(nulo)'),
+         jsonb_build_object('etapa', etapa, 'subtipo', subtipo, 'conflito', conflito, 'confere', confere)::text from pg_temp._z_etapa;
 insert into pg_temp._z_out (passo, linha)
   select '1 etapa resumo', jsonb_build_object('casos', count(*), 'erradas', count(*) filter (where not confere))::text from pg_temp._z_etapa;
 

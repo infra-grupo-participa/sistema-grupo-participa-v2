@@ -3,7 +3,7 @@
 -- STATUS: NÃO APLICADA. Ver 20261012120000.explain.md (conferências do estado vivo C1 a C17 ainda NÃO FEITAS; a C3,
 --   colunas e checks vivos de mkt_trafego.desempenho_dia, é obrigatória antes de aplicar).
 -- ARQUIVO EM UTF-8: o translate da mkt_trafego.etapa_black usa um mapa de letras acentuadas. Se o arquivo for
---   regravado em outra codificação, a etapa deixa de casar "ANTECIPAÇÃO". O ensaio confere.
+--   regravado em outra codificação, o termo acentuado deixa de casar (ex.: "Manifésto"). O ensaio confere.
 -- POR QUE: o painel da Black vai mostrar quanto cada anúncio e cada conjunto gastou e entregou por dia, com miniatura e
 --   com a etapa C1/C2/C3 tirada do nome da campanha. Hoje a coleta Meta (20261006g/i, 20261009230000) só grava por
 --   campanha. Tudo aqui é ADITIVO: desempenho_dia, as funções de entrada atuais e os jobs não mudam.
@@ -15,8 +15,9 @@
 --      trafego_anuncios_receber, trafego_desempenho_anuncio_receber, trafego_anuncio_miniatura_receber.
 --      Cadastro: nulo nunca apaga dado conhecido (coalesce); a linha só é reescrita quando algo mudou
 --      (is distinct from); ultima_coleta atualiza sempre.
---   3. mkt_trafego.etapa_black(nome): etapa (C1, C2, C3) e subtipo pelo nome da campanha, calculados na leitura e nunca
---      gravados. Sem grant para ninguém (interna; a RPC de leitura do dashboard é de outra fase).
+--   3. mkt_trafego.etapa_black(nome): etapa (C1, C2, C3), subtipo e conflito (mais de um código) pelo nome da campanha,
+--      calculados na leitura e nunca gravados. Sem grant para ninguém (interna; a RPC de leitura do dashboard é de outra
+--      fase). Campanha da Black, para o dashboard, = nome com o termo BF26 (decisão do Victor, 12/10/2026).
 --   4. Liga e desliga por conta: linha 'meta_anuncio_contas' em mkt_trafego.coleta_config, NASCE NULA (desligada).
 --   5. Bucket privado 'trafego-miniaturas' (sem policy: só a service_role lê e grava). Caminho meta/<conta>/<criativo>.<ext>.
 -- AS 5 PERGUNTAS:
@@ -482,22 +483,26 @@ grant execute on function public.trafego_anuncios_receber(jsonb) to service_role
 grant execute on function public.trafego_desempenho_anuncio_receber(jsonb) to service_role;
 grant execute on function public.trafego_anuncio_miniatura_receber(jsonb) to service_role;
 
--- 3. Etapa da Black pelo nome da campanha (regra de 12/10/2026). A regra mora SÓ aqui: para trocar, create or replace
---    com a mesma assinatura numa migration nova.
+-- 3. Etapa da Black pelo nome da campanha (regra final do Victor, 12/10/2026). A regra mora SÓ aqui: para trocar,
+--    create or replace com a mesma assinatura numa migration nova.
+--    C1 = termo C1 + TEASER, MANIFESTO, REELS ou CORTES. C2 = termo C2 + CONSULTORIA ou ISCA (só no singular: ISCAS não
+--    casa). C3 = termo C3 + LEADS. ANTECIPAÇÃO não é subtipo (saiu da lista em 12/10/2026).
 --    Como casa: o nome é dividido por "|", cada termo sem espaço nas pontas; o termo INTEIRO tem que ser o código
 --    (C1, C2, C3) ou o subtipo (CPF01 não vira C1; "C2 ISCAS" num termo só não casa). Acento e maiúscula não importam:
 --    o translate tira o acento ANTES do upper (não depende do ctype do banco). O subtipo sai na grafia oficial.
---    Mais de um código: etapa nula. Mais de um subtipo da etapa: subtipo nulo.
+--    Casos especiais:
+--      - código sem subtipo da etapa: etapa preenchida e subtipo nulo (DECIDIDO pelo Victor em 12/10/2026);
+--      - mais de um subtipo da etapa: subtipo nulo, sem precedência (PENDENTE: o Victor ainda vai ver);
+--      - mais de um código: etapa e subtipo nulos e conflito = true. O dashboard mostra o conflito à parte do
+--        "sem etapa" comum (conflito = false). O mesmo código repetido não é conflito.
 create or replace function mkt_trafego.etapa_black(p_nome text)
- returns table (etapa text, subtipo text)
+ returns table (etapa text, subtipo text, conflito boolean)
  language sql
  immutable parallel safe
  set search_path to ''
 as $function$
   with regra (etapa, chave, rotulo) as (
-    values ('C1', 'TEASER', 'TEASER'), ('C1', 'ANTECIPACAO', 'ANTECIPAÇÃO'), ('C1', 'REELS', 'REELS'), ('C1', 'CORTES', 'CORTES'),
-           -- MANIFESTO: EM ABERTO (decisão de 12/10). Se o Victor decidir que é do C1, acrescentar aqui
-           -- ('C1', 'MANIFESTO', 'MANIFESTO'). Hoje "X | C1 | MANIFESTO" dá C1 sem subtipo.
+    values ('C1', 'TEASER', 'TEASER'), ('C1', 'MANIFESTO', 'MANIFESTO'), ('C1', 'REELS', 'REELS'), ('C1', 'CORTES', 'CORTES'),
            ('C2', 'CONSULTORIA', 'CONSULTORIA'), ('C2', 'ISCA', 'ISCA'),
            ('C3', 'LEADS', 'LEADS')
   ),
@@ -508,11 +513,10 @@ as $function$
   ),
   cod as (select distinct r.etapa from regra r join termo on termo.t = r.etapa),
   sub as (select distinct r.rotulo from regra r join termo on termo.t = r.chave join cod on cod.etapa = r.etapa)
-  -- DECISÃO PENDENTE DO VICTOR: código que casa sem subtipo (ex.: "X | C3 | LEAD") hoje fica COM a etapa e subtipo
-  -- nulo, para o gasto não sumir da etapa. Para virar "sem etapa", a linha da etapa abaixo passa a exigir também
-  -- (select count(*) from sub) = 1.
+  -- código sem subtipo (ex.: "X | C3 | LEAD"): etapa preenchida e subtipo nulo, para o gasto não sumir da etapa (DECIDIDO)
   select case when (select count(*) from cod) = 1 then (select c.etapa from cod c) end as etapa,
-         case when (select count(*) from cod) = 1 and (select count(*) from sub) = 1 then (select s.rotulo from sub s) end as subtipo
+         case when (select count(*) from cod) = 1 and (select count(*) from sub) = 1 then (select s.rotulo from sub s) end as subtipo,
+         (select count(*) from cod) > 1 as conflito
 $function$;
 revoke all on function mkt_trafego.etapa_black(text) from public, anon, authenticated, service_role;
 
