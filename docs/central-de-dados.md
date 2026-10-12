@@ -423,11 +423,13 @@ do criativo. Detalhe completo (ensaio, conferências do estado vivo C1 a C17, ri
 - **Etapa (regra final do Victor, 12/10/2026):** C1 = `C1` + TEASER, MANIFESTO, REELS ou CORTES; C2 = `C2` +
   CONSULTORIA ou ISCA (só singular); C3 = `C3` + LEADS. Código sem subtipo = etapa com subtipo nulo. Mais de um código =
   etapa nula com `conflito = true` (terceira coluna da `etapa_black`): o dashboard mostra o conflito à parte do "sem
-  etapa" comum (`conflito = false`).
+  etapa" comum (`conflito = false`). Mais de um subtipo da etapa = fica o **primeiro** que aparece no nome e
+  `conflito = true` com a etapa preenchida (regra do Victor, 12/10/2026 noite; migration `20261012220000`). Leitura:
+  conflito com etapa nula = códigos; conflito com etapa preenchida = subtipos.
 - **Critério do dashboard:** campanha da Black = `BF26` no nome da campanha (decisão do Victor, 12/10/2026).
 - **Decidido:** flag só com a CNF; aceite do banco dado pelo Victor (o banco é do Victor e do JP).
-- **Falta:** mais de um subtipo no mesmo nome (hoje subtipo nulo, sem precedência; o Victor ainda vai ver) e as
-  conferências do estado vivo antes de aplicar (C3 obrigatória).
+- **Dois subtipos:** decidido em 12/10/2026 (noite), ver a regra acima. Migration `20261012220000`
+  (só o corpo da `etapa_black`), com explain em `infra/supabase/migrations/20261012220000.explain.md`.
 
 ### Receita do projeto: oferta exclusiva e SCK
 
