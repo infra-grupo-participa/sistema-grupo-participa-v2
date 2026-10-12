@@ -205,8 +205,8 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial }:
           {ABAS_TELA.map(({ k }) => (
             <section key={k} role="tabpanel" id={ids(k).panel} aria-labelledby={ids(k).tab} hidden={recorte.aba !== k} className="atm-historico-panel-enter">
               {recorte.aba === k && k === 'visao' && <AbaVisaoGeral d={dados} />}
-              {recorte.aba === k && k === 'jornada' && <AbaJornada d={dados} />}
-              {recorte.aba === k && k === 'criativos' && <AbaCriativosPaginas d={dados} />}
+              {recorte.aba === k && k === 'jornada' && <AbaJornada d={dados} gaveta={gaveta} />}
+              {recorte.aba === k && k === 'criativos' && <AbaCriativosPaginas d={dados} gaveta={gaveta} />}
               {recorte.aba === k && k === 'mensageria' && <AbaMensageria d={dados} />}
               {recorte.aba === k && k === 'historico' && <AbaHistorico d={dados} />}
             </section>
