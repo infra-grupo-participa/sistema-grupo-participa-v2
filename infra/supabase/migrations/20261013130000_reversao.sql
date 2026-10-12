@@ -100,6 +100,7 @@ end
 $function$;
 
 drop function if exists dados.black_pertence(text, text, text);
+drop function if exists dados.black_evento(text);
 drop view if exists dados.black_leads;
 
 delete from dados.marcacoes_teste where chave = 'black-friday-2026-10';

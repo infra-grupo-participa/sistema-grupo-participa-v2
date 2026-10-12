@@ -1,7 +1,7 @@
--- Ensaio de 20261013130000 (transação desfeita). A (20261012231649) já está aplicada; a C (20261013120000) é independente.
+-- Ensaio de 20261013130000 (transação desfeita). A (20261012231649) e C (20261012233334) aplicadas. REPEATABLE READ: dado novo chegando não muda o md5.
 -- Números do ATM e da Clínica antes e depois (md5), contagens por página, grupo com e sem recorte, travas de acesso,
 -- marcar/desmarcar na Black e no ATM (vai e volta), reversão no fim. Só contagens: nenhum dado pessoal sai do ensaio.
-begin;
+begin transaction isolation level repeatable read;
 create temp table _z_out (em bigserial, passo text, linha text) on commit drop;
 grant all on pg_temp._z_out to authenticated, anon; grant all on sequence pg_temp._z_out_em_seq to authenticated, anon;
 select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated","email":"ensaio@ensaio"}', true);
@@ -20,7 +20,7 @@ select set_config('request.jwt.claims', '{}', true);
 -- STATUS: ver 20261013130000.explain.md.
 -- POR QUE: pedido do Victor (13/10/2026), via Maestro. O dashboard da Black lê do banco os leads das 5 páginas, o perfil, os
 --   MQLs e o ingresso nos 3 grupos do WhatsApp, com o dado sujo marcado como "a corrigir" (sem alterar a fonte).
---   Depende da A (20261012231649, aplicada; e da C 20261013120000, aplicada antes: linha da Black em dados.dashboards e dados.black_cadastro).
+--   Depende da A (20261012231649, aplicada; e da C 20261012233334 (arquivo 20261013120000), aplicada antes: linha da Black em dados.dashboards e dados.black_cadastro).
 -- O QUE FAZ:
 --   1. dados.black_leads (view, security_invoker, sem leitura para anon/authenticated): uma linha por envio, desde
 --      04/10/2026 00:00 -03, das 5 páginas: captação (metodo.pesquisa_respostas origem metodo-perfeito), fluxograma (mesma
@@ -31,8 +31,8 @@ select set_config('request.jwt.claims', '{}', true);
 --   3. dados_marcar_teste / dados_desmarcar_teste / dados_testes: um ramo por modelo. Chave de modelo jornada-captacao vai
 --      para dados.black_cadastro + dados.black_pertence; qualquer outra segue exatamente o caminho de antes (atm_cadastro +
 --      atm_pertence). Mesma tabela dados.marcacoes_teste, sem mecanismo novo.
---   4. public.dados_black_perfil: uma linha por envio no período, sem nome, e-mail nem telefone (pessoa_id = md5 da chave
---      da pessoa).
+--   4. public.dados_black_perfil: uma linha por envio no período, sem nome, e-mail nem telefone (pessoa_id = md5 com sal
+--      sorteado a cada chamada: agrupa a pessoa dentro da resposta, não vale entre chamadas nem volta ao telefone).
 --   5. public.dados_black_leads: nome, e-mail e telefone de até 500 lead_id (a gaveta da tela).
 --   6. public.dados_black_grupo: pessoas ÚNICAS por telefone (8 últimos dígitos) que entraram em cada grupo no período,
 --      pelo evento do webhook (crm.evento_jornada) e, para quem o webhook perdeu, pela 1ª vez visto na foto
@@ -40,7 +40,7 @@ select set_config('request.jwt.claims', '{}', true);
 --      conjunto/anúncio): leads do recorte e unicos_cruzados (lead do recorte cujo telefone entrou no grupo).
 --   7. dados.dashboard_grupos: as 3 campanhas da Black, nome, release e contas conferidos no SendFlow em 13/10/2026.
 --      sendflow_conta_id NULL: cada campanha usa 3 contas e a foto exporta sem accountId (cobre as 3).
---   8. Testes conhecidos da auditoria de 12/10 marcados por e-mail (11 e-mails; @advmais.com.br = equipe).
+--   8. Testes conhecidos da auditoria de 12/10 marcados por e-mail (10 e-mails hoje; @advmais.com = equipe).
 -- AS 5 PERGUNTAS: escala: ~190 envios hoje (5 tabelas pequenas), até ~25 mil na Black inteira; 3 linhas em dashboard_grupos;
 --   índice: as 5 fontes são lidas inteiras com filtro de data (pequenas); evento_jornada filtrada por fonte+tag (130 linhas
 --   sendflow hoje); frequência: abertura do dashboard e o cron da foto (3 exports a cada ~9 min, mesmo cron do ATM);
@@ -159,6 +159,24 @@ revoke all on dados.black_leads from public, anon, authenticated, service_role;
 comment on view dados.black_leads is
   '20261013130000: leads da Black (5 páginas) desde 04/10/2026, uma linha por envio. Dado pessoal: só pelas RPCs dados_black_*.';
 
+-- 2a. trava da chave: o modelo jornada-captacao é genérico, mas estes dados (view, marcações) são só da Black
+create or replace function dados.black_evento(p_chave text)
+ returns dados.dashboards
+ language plpgsql
+ stable
+ set search_path to ''
+as $function$
+declare d dados.dashboards := dados.black_cadastro(p_chave);   -- 42501 sem acesso, P0002 fora do cadastro ou outro modelo
+begin
+  -- 20261013130000 (pentester): outra chave do mesmo modelo não lê nem marca a Black
+  if d.chave is distinct from 'black-friday-2026-10' then
+    raise exception 'dashboard não cadastrado' using errcode = 'P0002';
+  end if;
+  return d;
+end
+$function$;
+revoke all on function dados.black_evento(text) from public, anon, authenticated, service_role;
+
 -- 2. pertence (para o marcar teste)
 create or replace function dados.black_pertence(p_chave text, p_tipo text, p_valor text)
  returns boolean
@@ -167,7 +185,7 @@ create or replace function dados.black_pertence(p_chave text, p_tipo text, p_val
  set search_path to ''
 as $function$
   -- 20261013130000
-  select case p_tipo
+  select p_chave = 'black-friday-2026-10' and case p_tipo
     when 'email' then exists (select 1 from dados.black_leads l where l.email = p_valor)
     when 'fone' then
          exists (select 1 from dados.black_leads l where l.fone8 = p_valor)
@@ -186,7 +204,7 @@ as $function$
 declare
   -- 20261013130000: ramo da Black (jornada-captacao); os outros modelos seguem por atm_cadastro, como antes
   v_black boolean := exists (select 1 from dados.dashboards x where x.chave = p_chave and x.modelo = 'jornada-captacao');
-  d dados.dashboards := case when v_black then dados.black_cadastro(p_chave) else dados.atm_cadastro(p_chave) end;   -- 42501 não equipe, P0002 chave fora do cadastro ou outro modelo
+  d dados.dashboards := case when v_black then dados.black_evento(p_chave) else dados.atm_cadastro(p_chave) end;   -- 42501 não equipe, P0002 chave fora do cadastro ou outro modelo
   v_email text := nullif(lower(btrim(p_email)), '');
   v_fk text := controle.fone_key(p_telefone);
   v_por uuid := auth.uid();
@@ -238,7 +256,7 @@ as $function$
 declare
   -- 20261013130000: ramo da Black (jornada-captacao); os outros modelos seguem por atm_cadastro, como antes
   d dados.dashboards := case when exists (select 1 from dados.dashboards x where x.chave = p_chave and x.modelo = 'jornada-captacao')
-                             then dados.black_cadastro(p_chave) else dados.atm_cadastro(p_chave) end;
+                             then dados.black_evento(p_chave) else dados.atm_cadastro(p_chave) end;
   v_email text := nullif(lower(btrim(p_email)), '');
   v_fk text := controle.fone_key(p_telefone);
   n int;
@@ -265,7 +283,7 @@ as $function$
 declare
   -- 20261013130000: ramo da Black (jornada-captacao); os outros modelos seguem por atm_cadastro, como antes
   d dados.dashboards := case when exists (select 1 from dados.dashboards x where x.chave = p_chave and x.modelo = 'jornada-captacao')
-                             then dados.black_cadastro(p_chave) else dados.atm_cadastro(p_chave) end;
+                             then dados.black_evento(p_chave) else dados.atm_cadastro(p_chave) end;
 begin
   return query
   select m.id, m.tipo, m.valor, m.motivo, m.marcado_por_email, m.marcado_em
@@ -337,9 +355,10 @@ create or replace function public.dados_black_perfil(p_chave text, p_de date def
 as $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.black_cadastro(p_chave);   -- 42501 sem acesso, P0002 fora do cadastro ou outro modelo
+  d dados.dashboards := dados.black_evento(p_chave);   -- 42501 sem acesso, P0002 fora do cadastro ou outro modelo
   v_de timestamptz := (coalesce(p_de, d.periodo_inicio)::timestamp at time zone 'America/Sao_Paulo');
   v_ate timestamptz := ((coalesce(p_ate, (now() at time zone 'America/Sao_Paulo')::date) + 1)::timestamp at time zone 'America/Sao_Paulo');
+  v_sal text := gen_random_uuid()::text;   -- pessoa_id só vale dentro desta resposta
 begin
   return query
   with l as (
@@ -352,7 +371,7 @@ begin
      where e.chave = d.chave
      group by e.fone8
   )
-  select l.lead_id, md5(l.pessoa_chave), l.criado_em, l.primeira, l.pagina, l.porta, l.isca,
+  select l.lead_id, md5(v_sal || l.pessoa_chave), l.criado_em, l.primeira, l.pagina, l.porta, l.isca,
          l.campanha_id, l.conjunto_id, l.anuncio_id, l.canal,
          l.utm_source, l.utm_medium, l.utm_campaign, l.utm_content, l.utm_term,
          l.profissao_classe, l.profissao, l.mql, l.uf,
@@ -377,7 +396,7 @@ create or replace function public.dados_black_leads(p_chave text, p_lead_ids tex
 as $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.black_cadastro(p_chave);
+  d dados.dashboards := dados.black_evento(p_chave);
 begin
   if p_lead_ids is null or cardinality(p_lead_ids) = 0 then return; end if;
   if cardinality(p_lead_ids) > 500 then
@@ -402,7 +421,7 @@ create or replace function public.dados_black_grupo(p_chave text, p_de date defa
  set search_path to ''
 as $function$
 declare
-  d dados.dashboards := dados.black_cadastro(p_chave);
+  d dados.dashboards := dados.black_evento(p_chave);
   v_rec jsonb := dados.black_recorte_valido(p_recorte);
   v_de timestamptz := (coalesce(p_de, d.periodo_inicio)::timestamp at time zone 'America/Sao_Paulo');
   v_ate timestamptz := ((coalesce(p_ate, (now() at time zone 'America/Sao_Paulo')::date) + 1)::timestamp at time zone 'America/Sao_Paulo');
@@ -587,6 +606,33 @@ do $t$ begin perform dados.black_pertence('black-friday-2026-10','email','a@b.c'
   insert into pg_temp._z_out (passo, linha) values ('8 black_pertence direto (equipe)', 'ERRO DO ENSAIO: passou');
 exception when others then insert into pg_temp._z_out (passo, linha) values ('8 black_pertence direto (equipe)', sqlstate || ' ' || sqlerrm); end $t$;
 
+reset role;
+select set_config('request.jwt.claims', '{}', true);
+-- 2ª chave do mesmo modelo (pentester): não pode ler nem marcar a Black
+insert into dados.dashboards select (jsonb_populate_record(null::dados.dashboards, to_jsonb(d) || '{"chave":"ensaio-outra-jornada"}')).* from dados.dashboards d where d.chave = 'black-friday-2026-10';
+select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated","email":"ensaio@ensaio"}', true);
+set local role authenticated;
+do $t$ begin perform public.dados_black_perfil('ensaio-outra-jornada');
+  insert into pg_temp._z_out (passo, linha) values ('8b outra chave jornada perfil', 'ERRO DO ENSAIO: passou');
+exception when others then insert into pg_temp._z_out (passo, linha) values ('8b outra chave jornada perfil', sqlstate || ' ' || sqlerrm); end $t$;
+
+do $t$ begin perform public.dados_black_leads('ensaio-outra-jornada', array['captacao:1']);
+  insert into pg_temp._z_out (passo, linha) values ('8b outra chave jornada leads', 'ERRO DO ENSAIO: passou');
+exception when others then insert into pg_temp._z_out (passo, linha) values ('8b outra chave jornada leads', sqlstate || ' ' || sqlerrm); end $t$;
+
+do $t$ begin perform public.dados_black_grupo('ensaio-outra-jornada');
+  insert into pg_temp._z_out (passo, linha) values ('8b outra chave jornada grupo', 'ERRO DO ENSAIO: passou');
+exception when others then insert into pg_temp._z_out (passo, linha) values ('8b outra chave jornada grupo', sqlstate || ' ' || sqlerrm); end $t$;
+
+do $t$ begin perform public.dados_marcar_teste('ensaio-outra-jornada', 'ninguem-ensaio@nao.existe');
+  insert into pg_temp._z_out (passo, linha) values ('8b outra chave jornada marcar', 'ERRO DO ENSAIO: passou');
+exception when others then insert into pg_temp._z_out (passo, linha) values ('8b outra chave jornada marcar', sqlstate || ' ' || sqlerrm); end $t$;
+
+do $t$ begin perform public.dados_testes('ensaio-outra-jornada');
+  insert into pg_temp._z_out (passo, linha) values ('8b outra chave jornada testes', 'ERRO DO ENSAIO: passou');
+exception when others then insert into pg_temp._z_out (passo, linha) values ('8b outra chave jornada testes', sqlstate || ' ' || sqlerrm); end $t$;
+
+insert into pg_temp._z_out (passo, linha) select '8b pessoa_id muda entre chamadas', ((select min(pessoa_id) from public.dados_black_perfil('black-friday-2026-10') where lead_id = (select min(lead_id) from pg_temp._z_p)) <> (select pessoa_id from pg_temp._z_p where lead_id = (select min(lead_id) from pg_temp._z_p)))::text;
 do $t$ begin perform public.dados_marcar_teste('black-friday-2026-10', 'ninguem-ensaio@nao.existe');
   insert into pg_temp._z_out (passo, linha) values ('8 e-mail fora da Black', 'ERRO DO ENSAIO: passou');
 exception when others then insert into pg_temp._z_out (passo, linha) values ('8 e-mail fora da Black', sqlstate || ' ' || sqlerrm); end $t$;
@@ -753,6 +799,7 @@ end
 $function$;
 
 drop function if exists dados.black_pertence(text, text, text);
+drop function if exists dados.black_evento(text);
 drop view if exists dados.black_leads;
 
 delete from dados.marcacoes_teste where chave = 'black-friday-2026-10';
