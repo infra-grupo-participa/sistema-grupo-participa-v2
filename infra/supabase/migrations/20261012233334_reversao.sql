@@ -1,76 +1,9 @@
--- 20261013120000: trava de modelo nas RPCs do dashboard presencial (dados_presencial_*) e da Clínica Miami (dados_miami_*)
---
--- STATUS: ver 20261013120000.explain.md.
--- POR QUE: risco do §5 do pentester na migration A da Black (20261012231649). As 14 RPCs abaixo só checavam
---   dados.cadastro (equipe + chave ativa), ou nem isso no caso da marcar_teste, e rodavam com a chave de qualquer modelo.
---   Com a chave da Black (jornada-captacao), dados_presencial_leads passaria a devolver nome, e-mail e telefone dos
---   pré-checkouts do projeto 4 por uma RPC que não foi revisada para a Black. Decisão do Maestro (13/10/2026), com a
---   autorização do Victor. Vai ao ar antes da B da Black (20261013130000).
--- O QUE FAZ:
---   1. dados.presencial_cadastro(p_chave): dados.cadastro + modelo presencial-base (P0002 se for outro), igual à atm_cadastro.
---   2. As 13 RPCs de leitura trocam dados.cadastro por dados.presencial_cadastro. Nada mais muda no corpo.
---   3. dados_presencial_marcar_teste (lê dados.dashboards direto) passa a exigir o modelo presencial-base.
---   Os corpos abaixo são os vivos em 13/10/2026 (pg_get_functiondef), conferidos por md5 na guarda. O create or replace
---   mantém dono e permissões.
--- AS 5 PERGUNTAS: escala: 1 função nova e 14 trocadas, sem tabela; índice: nenhum novo (a trava lê dados.dashboards pela
---   chave, que é PK); frequência: a abertura do dashboard presencial; repetição: a guarda recusa rodar de novo (o md5 muda),
---   de propósito; reversão: 20261013120000_reversao.sql.
-
+-- Reversão de 20261012233334. Numa transação. Volta os 14 corpos de antes (vivos em 13/10/2026) e apaga dados.presencial_cadastro.
+-- ATENÇÃO: sem a trava, as RPCs presenciais voltam a aceitar a chave da Black. Não reverter com a B da Black no ar
+-- sem antes decidir com o pentester.
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
 
-do $g$
-declare
-  r record;
-begin
-  for r in select * from (values
-    ('public.dados_miami_diamantes(text)', '21aaac1cf342dff6aa66f2062be94dce'),
-    ('public.dados_miami_interesse(text)', 'fb84c84c07073ffec799e8bf37e16919'),
-    ('public.dados_presencial_compradores_perfil(text)', 'e58dc42304f885abe4044d8b465e20ad'),
-    ('public.dados_presencial_disparos(text)', 'e2bcf87a8c396dc8d9ca77643bcbe84c'),
-    ('public.dados_presencial_leads(text)', '667e0e4255e9f4f079f8d26053ac0534'),
-    ('public.dados_presencial_marcar_teste(text,uuid,boolean)', '4a0eb550e499b40c3bf903833264bc0e'),
-    ('public.dados_presencial_pagamentos(text)', '845d1e4efcaac7212e98277a4bb3e89d'),
-    ('public.dados_presencial_pendencias(text)', 'b8af74e3016ee0c057af2d9e2bc99889'),
-    ('public.dados_presencial_pendencias_pessoas(text,text)', '31679bee08dbba2cf603eda40f76da50'),
-    ('public.dados_presencial_resumo(text)', 'c8e7051801da180cb6ae15855c5ee4c1'),
-    ('public.dados_presencial_serie_diaria(text)', 'e008e47a08450daa43cbb3ee8818077f'),
-    ('public.dados_presencial_serie_vendas(text)', 'ae441a5de12eab7deaae4a1faeef6e9c'),
-    ('public.dados_presencial_vendas(text)', '0b2ffd70e07f9ab77d78ea3e996fe607'),
-    ('public.dados_presencial_vendas_por_hora(text)', '12eaff0912c643793ca276d44d3834e5')
-  ) v(sig, h) loop
-    if (select md5(prosrc) from pg_proc where oid = r.sig::regprocedure) is distinct from r.h then
-      raise exception '20261013120000: corpo vivo de % mudou. Reler.', r.sig;
-    end if;
-  end loop;
-  if (select md5(prosrc) from pg_proc where oid = 'dados.cadastro(text)'::regprocedure) <> 'dd7dc3b59ecc65784b1302955a8a7fe2' then
-    raise exception '20261013120000: dados.cadastro mudou. Reler.';
-  end if;
-  if not exists (select 1 from dados.dashboards where chave = 'clinica-miami-2026-12' and modelo = 'presencial-base') then
-    raise exception '20261013120000: a Clínica Miami não está como presencial-base. Reler.';
-  end if;
-end
-$g$;
-
--- 1. trava do modelo presencial
-create or replace function dados.presencial_cadastro(p_chave text)
- returns dados.dashboards
- language plpgsql
- stable
- set search_path to ''
-as $function$
-declare
-  r dados.dashboards := dados.cadastro(p_chave);   -- 42501 sem acesso, P0002 chave fora do cadastro
-begin
-  if r.modelo is distinct from 'presencial-base' then
-    raise exception 'dashboard de outro modelo' using errcode = 'P0002';
-  end if;
-  return r;
-end
-$function$;
-revoke all on function dados.presencial_cadastro(text) from public, anon, authenticated, service_role;
-
--- 2 e 3. as 14 RPCs (corpo vivo, só a linha da trava trocada)
 -- dados_miami_diamantes(text)
 CREATE OR REPLACE FUNCTION public.dados_miami_diamantes(p_chave text)
  RETURNS TABLE(lista_ordem integer, lista_nome text, status text, casamento text, resposta_uuid uuid, respondido_em timestamp with time zone, n_respostas integer, nome_formulario text, email text, telefone text, grupo text, situacao text, situacao_codigo text, chegada text, chegada_data date, retorno text, retorno_data date, aeroporto text, hospedagem text, acompanhado text, acompanhantes text)
@@ -80,7 +13,7 @@ CREATE OR REPLACE FUNCTION public.dados_miami_diamantes(p_chave text)
 AS $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.presencial_cadastro(p_chave);   -- 20261013120000: só o modelo presencial-base
+  d dados.dashboards := dados.cadastro(p_chave);
   v_slug text := (select f.form_slug from dados.dashboard_formularios f where f.chave = d.chave and f.papel = 'diamantes');
 begin
   return query
@@ -149,7 +82,7 @@ CREATE OR REPLACE FUNCTION public.dados_miami_interesse(p_chave text)
 AS $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.presencial_cadastro(p_chave);   -- 20261013120000: só o modelo presencial-base
+  d dados.dashboards := dados.cadastro(p_chave);
   v_slug text := (select f.form_slug from dados.dashboard_formularios f where f.chave = d.chave and f.papel = 'interesse');
 begin
   return query
@@ -205,7 +138,7 @@ CREATE OR REPLACE FUNCTION public.dados_presencial_compradores_perfil(p_chave te
 AS $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.presencial_cadastro(p_chave);   -- 20261013120000: só o modelo presencial-base
+  d dados.dashboards := dados.cadastro(p_chave);
 begin
   return query
   with tx as (
@@ -268,7 +201,7 @@ CREATE OR REPLACE FUNCTION public.dados_presencial_disparos(p_chave text)
 AS $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.presencial_cadastro(p_chave);   -- 20261013120000: só o modelo presencial-base
+  d dados.dashboards := dados.cadastro(p_chave);
 begin
   return query
   select x.id, (x.enviado_em at time zone 'America/Sao_Paulo')::date, x.campanha, x.canal, f.nome,
@@ -292,7 +225,7 @@ CREATE OR REPLACE FUNCTION public.dados_presencial_leads(p_chave text)
 AS $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.presencial_cadastro(p_chave);   -- 20261013120000: só o modelo presencial-base
+  d dados.dashboards := dados.cadastro(p_chave);
 begin
   -- 20261007te: quem é teste continua na lista (teste = true) e não conta nos números
   return query
@@ -327,8 +260,7 @@ begin
   if p_pessoa_id is null or p_teste is null then
     raise exception 'pessoa e teste são obrigatórios' using errcode = '22023';
   end if;
-  select * into d from dados.dashboards x where x.chave = p_chave and x.ativo
-     and x.modelo = 'presencial-base';   -- 20261013120000: só o modelo presencial-base
+  select * into d from dados.dashboards x where x.chave = p_chave and x.ativo;
   if not found then
     raise exception 'dashboard não cadastrado' using errcode = 'P0002';
   end if;
@@ -373,7 +305,7 @@ CREATE OR REPLACE FUNCTION public.dados_presencial_pagamentos(p_chave text)
 AS $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.presencial_cadastro(p_chave);   -- 20261013120000: só o modelo presencial-base
+  d dados.dashboards := dados.cadastro(p_chave);
 begin
   return query
   select coalesce(x.forma, 'NAO_INFORMADO'),
@@ -413,7 +345,7 @@ CREATE OR REPLACE FUNCTION public.dados_presencial_pendencias(p_chave text)
 AS $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.presencial_cadastro(p_chave);   -- 20261013120000: só o modelo presencial-base
+  d dados.dashboards := dados.cadastro(p_chave);
 begin
   return query
   with p as (select * from dados.pendencias(d.conta_hotmart, d.oferta_codigo)),
@@ -437,7 +369,7 @@ CREATE OR REPLACE FUNCTION public.dados_presencial_pendencias_pessoas(p_chave te
 AS $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.presencial_cadastro(p_chave);   -- 20261013120000: só o modelo presencial-base
+  d dados.dashboards := dados.cadastro(p_chave);
 begin
   if p_grupo is null or p_grupo not in ('nao_pago', 'cancelada') then
     raise exception 'grupo inválido' using errcode = '22023';
@@ -466,7 +398,7 @@ CREATE OR REPLACE FUNCTION public.dados_presencial_resumo(p_chave text)
 AS $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.presencial_cadastro(p_chave);   -- 20261013120000: só o modelo presencial-base
+  d dados.dashboards := dados.cadastro(p_chave);
 begin
   return query
   with disp as (
@@ -509,7 +441,7 @@ CREATE OR REPLACE FUNCTION public.dados_presencial_serie_diaria(p_chave text)
 AS $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.presencial_cadastro(p_chave);   -- 20261013120000: só o modelo presencial-base
+  d dados.dashboards := dados.cadastro(p_chave);
   v_hoje date := (now() at time zone 'America/Sao_Paulo')::date;
 begin
   return query
@@ -540,7 +472,7 @@ CREATE OR REPLACE FUNCTION public.dados_presencial_serie_vendas(p_chave text)
 AS $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.presencial_cadastro(p_chave);   -- 20261013120000: só o modelo presencial-base
+  d dados.dashboards := dados.cadastro(p_chave);
   v_hoje date := (now() at time zone 'America/Sao_Paulo')::date;
 begin
   return query
@@ -576,7 +508,7 @@ CREATE OR REPLACE FUNCTION public.dados_presencial_vendas(p_chave text)
 AS $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.presencial_cadastro(p_chave);   -- 20261013120000: só o modelo presencial-base
+  d dados.dashboards := dados.cadastro(p_chave);
 begin
   return query
   with pc as (select x.email from dados.pre_checkout(d.chave, d.projeto_id, d.lista_ac) x)
@@ -599,7 +531,7 @@ CREATE OR REPLACE FUNCTION public.dados_presencial_vendas_por_hora(p_chave text)
 AS $function$
 #variable_conflict use_column
 declare
-  d dados.dashboards := dados.presencial_cadastro(p_chave);   -- 20261013120000: só o modelo presencial-base
+  d dados.dashboards := dados.cadastro(p_chave);
 begin
   return query
   with tx as (select extract(hour from (t.aprovado_em at time zone 'America/Sao_Paulo'))::int as h, t.primeira,
@@ -614,31 +546,4 @@ begin
 end
 $function$;
 
-do $c$
-declare
-  r record;
-  n int := 0;
-begin
-  for r in select p.oid::regprocedure::text sig, p.prosrc from pg_proc p join pg_namespace s on s.oid = p.pronamespace
-            where s.nspname = 'public' and (p.proname like 'dados_presencial%' or p.proname like 'dados_miami%') loop
-    n := n + 1;
-    if r.sig = 'dados_presencial_marcar_teste(text,uuid,boolean)' then
-      if r.prosrc not like '%x.modelo = ''presencial-base''%' then
-        raise exception '20261013120000: % sem trava', r.sig;
-      end if;
-    elsif r.prosrc not like '%dados.presencial_cadastro(p_chave)%' or r.prosrc like '%dados.cadastro(%' then
-      raise exception '20261013120000: % sem trava', r.sig;
-    end if;
-    if has_function_privilege('anon', r.sig, 'execute') or not has_function_privilege('authenticated', r.sig, 'execute') then
-      raise exception '20261013120000: permissões de % mudaram', r.sig;
-    end if;
-  end loop;
-  if n <> 14 then
-    raise exception '20261013120000: esperava 14 RPCs, achei %', n;
-  end if;
-  if has_function_privilege('authenticated', 'dados.presencial_cadastro(text)', 'execute')
-     or has_function_privilege('anon', 'dados.presencial_cadastro(text)', 'execute') then
-    raise exception '20261013120000: presencial_cadastro com grant';
-  end if;
-end
-$c$;
+drop function if exists dados.presencial_cadastro(text);

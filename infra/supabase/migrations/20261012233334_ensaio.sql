@@ -1,4 +1,4 @@
--- Ensaio de 20261013120000 (transação desfeita). Fotografa as 14 RPCs presenciais e da Clínica Miami com a chave da Clínica, a da Black
+-- Ensaio de 20261012233334 (transação desfeita). Fotografa as 14 RPCs presenciais e da Clínica Miami com a chave da Clínica, a da Black
 -- e uma inexistente, antes e depois da trava: número de linhas e md5 das linhas (o dado pessoal não sai do banco, só o md5).
 -- A marcar_teste usa uma pessoa que não existe, então nunca grava. Depois roda a reversão e confere que os corpos voltaram.
 begin;
@@ -71,9 +71,9 @@ reset role;
 insert into pg_temp._z_out (fase, chave, rpc, linha) select '1 antes', '-', 'corpos', md5(string_agg(p.oid::regprocedure::text || md5(p.prosrc) || coalesce(p.proacl::text, ''), '|' order by p.oid::regprocedure::text)) from pg_proc p join pg_namespace s on s.oid = p.pronamespace where s.nspname = 'public' and (p.proname like 'dados_presencial%' or p.proname like 'dados_miami%');
 
 -- ===== MIGRATION =====
--- 20261013120000: trava de modelo nas RPCs do dashboard presencial (dados_presencial_*) e da Clínica Miami (dados_miami_*)
+-- 20261012233334: trava de modelo nas RPCs do dashboard presencial (dados_presencial_*) e da Clínica Miami (dados_miami_*)
 --
--- STATUS: ver 20261013120000.explain.md.
+-- STATUS: ver 20261012233334.explain.md.
 -- POR QUE: risco do §5 do pentester na migration A da Black (20261012231649). As 14 RPCs abaixo só checavam
 --   dados.cadastro (equipe + chave ativa), ou nem isso no caso da marcar_teste, e rodavam com a chave de qualquer modelo.
 --   Com a chave da Black (jornada-captacao), dados_presencial_leads passaria a devolver nome, e-mail e telefone dos
@@ -87,7 +87,7 @@ insert into pg_temp._z_out (fase, chave, rpc, linha) select '1 antes', '-', 'cor
 --   mantém dono e permissões.
 -- AS 5 PERGUNTAS: escala: 1 função nova e 14 trocadas, sem tabela; índice: nenhum novo (a trava lê dados.dashboards pela
 --   chave, que é PK); frequência: a abertura do dashboard presencial; repetição: a guarda recusa rodar de novo (o md5 muda),
---   de propósito; reversão: 20261013120000_reversao.sql.
+--   de propósito; reversão: 20261012233334_reversao.sql.
 
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
@@ -113,14 +113,14 @@ begin
     ('public.dados_presencial_vendas_por_hora(text)', '12eaff0912c643793ca276d44d3834e5')
   ) v(sig, h) loop
     if (select md5(prosrc) from pg_proc where oid = r.sig::regprocedure) is distinct from r.h then
-      raise exception '20261013120000: corpo vivo de % mudou. Reler.', r.sig;
+      raise exception '20261012233334: corpo vivo de % mudou. Reler.', r.sig;
     end if;
   end loop;
   if (select md5(prosrc) from pg_proc where oid = 'dados.cadastro(text)'::regprocedure) <> 'dd7dc3b59ecc65784b1302955a8a7fe2' then
-    raise exception '20261013120000: dados.cadastro mudou. Reler.';
+    raise exception '20261012233334: dados.cadastro mudou. Reler.';
   end if;
   if not exists (select 1 from dados.dashboards where chave = 'clinica-miami-2026-12' and modelo = 'presencial-base') then
-    raise exception '20261013120000: a Clínica Miami não está como presencial-base. Reler.';
+    raise exception '20261012233334: a Clínica Miami não está como presencial-base. Reler.';
   end if;
 end
 $g$;
@@ -697,21 +697,21 @@ begin
     n := n + 1;
     if r.sig = 'dados_presencial_marcar_teste(text,uuid,boolean)' then
       if r.prosrc not like '%x.modelo = ''presencial-base''%' then
-        raise exception '20261013120000: % sem trava', r.sig;
+        raise exception '20261012233334: % sem trava', r.sig;
       end if;
     elsif r.prosrc not like '%dados.presencial_cadastro(p_chave)%' or r.prosrc like '%dados.cadastro(%' then
-      raise exception '20261013120000: % sem trava', r.sig;
+      raise exception '20261012233334: % sem trava', r.sig;
     end if;
     if has_function_privilege('anon', r.sig, 'execute') or not has_function_privilege('authenticated', r.sig, 'execute') then
-      raise exception '20261013120000: permissões de % mudaram', r.sig;
+      raise exception '20261012233334: permissões de % mudaram', r.sig;
     end if;
   end loop;
   if n <> 14 then
-    raise exception '20261013120000: esperava 14 RPCs, achei %', n;
+    raise exception '20261012233334: esperava 14 RPCs, achei %', n;
   end if;
   if has_function_privilege('authenticated', 'dados.presencial_cadastro(text)', 'execute')
      or has_function_privilege('anon', 'dados.presencial_cadastro(text)', 'execute') then
-    raise exception '20261013120000: presencial_cadastro com grant';
+    raise exception '20261012233334: presencial_cadastro com grant';
   end if;
 end
 $c$;
@@ -773,7 +773,7 @@ reset role;
 insert into pg_temp._z_out (fase, chave, rpc, linha) select '2 depois', '-', 'corpos', md5(string_agg(p.oid::regprocedure::text || md5(p.prosrc) || coalesce(p.proacl::text, ''), '|' order by p.oid::regprocedure::text)) from pg_proc p join pg_namespace s on s.oid = p.pronamespace where s.nspname = 'public' and (p.proname like 'dados_presencial%' or p.proname like 'dados_miami%');
 
 -- ===== REVERSÃO =====
--- Reversão de 20261013120000. Numa transação. Volta os 14 corpos de antes (vivos em 13/10/2026) e apaga dados.presencial_cadastro.
+-- Reversão de 20261012233334. Numa transação. Volta os 14 corpos de antes (vivos em 13/10/2026) e apaga dados.presencial_cadastro.
 -- ATENÇÃO: sem a trava, as RPCs presenciais voltam a aceitar a chave da Black. Não reverter com a B da Black no ar
 -- sem antes decidir com o pentester.
 
