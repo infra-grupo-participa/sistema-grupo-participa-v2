@@ -12,9 +12,9 @@ const idx = indexar(b);
 describe('base fictícia', () => {
   it('é reprodutível (mesma semente, mesmos totais)', () => {
     const gasto = b.dias.reduce((s, d) => s + d.gasto, 0);
-    expect(b.linhas).toHaveLength(14590);
-    expect(Math.round(gasto * 100) / 100).toBe(276000.76);
-    expect(new Set(b.linhas.map((l) => l.pessoaId)).size).toBe(14146);
+    expect(b.linhas).toHaveLength(13528);
+    expect(Math.round(gasto * 100) / 100).toBe(263977.08);
+    expect(new Set(b.linhas.map((l) => l.pessoaId)).size).toBe(13102);
   });
   it('pagos por funil + não pagos = total de cadastros', () => {
     const pagos = b.linhas.filter((l) => l.origem === 'pago');

@@ -107,7 +107,8 @@ export const PLANOS: readonly PlanoConjunto[] = [
   { conjunto: cj('cj-remarketing', 'cp-remarketing', 'FICTÍCIO VIU 50 A 75% SEM CADASTRO'), de: '2026-10-13', ate: '2026-11-02', gastoDia: 900, cplAlvo: 16, anuncios: videos('FICTÍCIO REMARKETING', 2), paginaId: 'pg-metodo' },
   { conjunto: cj('cj-aquecimento', 'cp-aquecimento', 'FICTÍCIO INSCRITOS E LEADS DE ISCA'), de: '2026-10-12', ate: '2026-11-03', gastoDia: 1050, cplAlvo: null, anuncios: videos('FICTÍCIO MANIFESTO', 2), paginaId: null },
   { conjunto: cj('cj-carrinho', 'cp-carrinho', 'FICTÍCIO LISTA DO MÉTODO PERFEITO'), de: '2026-11-03', ate: '2026-11-03', gastoDia: 9000, cplAlvo: null, anuncios: videos('FICTÍCIO CARRINHO', 1), paginaId: null },
-  { conjunto: cj('cj-google', 'cp-google', 'FICTÍCIO PESQUISA MARCA'), de: '2026-10-12', ate: '2026-11-03', gastoDia: 420, cplAlvo: 20, anuncios: [{ nome: 'FICTÍCIO ANÚNCIO DE PESQUISA 01', formato: null }, { nome: 'FICTÍCIO ANÚNCIO DE PESQUISA 02', formato: null }], paginaId: 'pg-metodo' },
+  { conjunto: cj('cj-google', 'cp-google', 'FICTÍCIO PESQUISA MARCA'), de: '2026-10-12', ate: '2026-11-03', gastoDia: 0, cplAlvo: 20, // zerado: ainda não há campanha de Google (Victor, 12/10/2026)
+    anuncios: [{ nome: 'FICTÍCIO ANÚNCIO DE PESQUISA 01', formato: null }, { nome: 'FICTÍCIO ANÚNCIO DE PESQUISA 02', formato: null }], paginaId: 'pg-metodo' },
 ];
 
 /** Peso de cada UF nos leads fictícios (mais SP, RJ e MG, como pede o plano). Não é distribuição real. */

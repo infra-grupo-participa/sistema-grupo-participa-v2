@@ -15,7 +15,8 @@ export type ConjuntoC3 = 'base' | 'quente' | 'aberto';
 export type Porta = 'isca' | 'consultoria' | 'inscricao_direta';
 export type OrigemLead = 'pago' | 'base_api' | 'grupo_legado' | 'organico';
 export type AbaBlack = 'visao' | 'jornada' | 'criativos' | 'mensageria' | 'historico';
-export type Profissao = 'advogado' | 'contador' | 'outros';
+/** As 5 respostas da pergunta de profissão (Respondi JmSmjBBS, decisão do Victor de 12/10/2026). */
+export type Profissao = 'advogado' | 'contador' | 'estudante_direito' | 'outros' | 'patrimonio_familia';
 
 /** AAAA-MM-DD no fuso de São Paulo, inclusivo nas duas pontas. */
 export interface Periodo { de: string; ate: string }
@@ -123,5 +124,10 @@ export const ROTULO_CANAL: Record<Canal, string> = { meta: 'Meta', google: 'Goog
 export const ROTULO_PORTA: Record<Porta, string> = { isca: 'Isca', consultoria: 'Consultoria', inscricao_direta: 'Inscrição direta' };
 export const ROTULO_ORIGEM: Record<OrigemLead, string> = { pago: 'Tráfego pago', base_api: 'Base por API', grupo_legado: 'Grupo legado', organico: 'Orgânico' };
 export const ROTULO_CONJUNTO_C3: Record<ConjuntoC3, string> = { base: 'Base', quente: 'Quente', aberto: 'Aberto' };
-export const ROTULO_PROFISSAO: Record<Profissao, string> = { advogado: 'Advogado', contador: 'Contador', outros: 'Outros' };
+export const ROTULO_PROFISSAO: Record<Profissao, string> = {
+  advogado: 'Advogado', contador: 'Contador', estudante_direito: 'Estudante de Direito', outros: 'Outros',
+  patrimonio_familia: 'Não trabalho na área, quero organizar o patrimônio da minha família',
+};
+/** MQL do evento inteiro = advogado, contador ou estudante de Direito (Victor, 12/10/2026). */
+export const PROFISSOES_MQL: ReadonlySet<Profissao> = new Set<Profissao>(['advogado', 'contador', 'estudante_direito']);
 export const NAO_INFORMADO = 'Não informado';
