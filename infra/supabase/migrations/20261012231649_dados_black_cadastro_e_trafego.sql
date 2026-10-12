@@ -1,6 +1,6 @@
--- 20261013100000: cadastro do dashboard da Black Friday (modelo jornada-captacao) e tráfego Meta por campanha, conjunto e anúncio
+-- 20261012231649: cadastro do dashboard da Black Friday (modelo jornada-captacao) e tráfego Meta por campanha, conjunto e anúncio
 --
--- STATUS: ver 20261013100000.explain.md.
+-- STATUS: ver 20261012231649.explain.md.
 -- POR QUE: pedido do Victor (13/10/2026). O dashboard da Black (/infra/dashboards/csm/black-friday-2026-10) sai do modo demo
 --   e passa a ler o banco. Esta é a migration A; a B (20261013110000, leads, perfil e marcar teste) depende desta.
 -- O QUE FAZ:
@@ -14,7 +14,7 @@
 --      Não devolve url_tags nem miniatura (dado que o navegador não precisa).
 -- AS 5 PERGUNTAS: escala: 1 linha, 1 CHECK, 2 funções; leitura de ~4 campanhas, ~40 anúncios, ~100 linhas/dia no máximo;
 --   índice: PKs (campanha_id, dia) e (anuncio_id, dia); frequência: a abertura do dashboard; repetição: idempotente
---   (insert on conflict do nothing + conferência); reversão: 20261013100000_reversao.sql.
+--   (insert on conflict do nothing + conferência); reversão: 20261012231649_reversao.sql.
 
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
@@ -22,21 +22,21 @@ set local statement_timeout = '60s';
 do $g$
 begin
   if (select md5(prosrc) from pg_proc where oid = 'mkt_trafego.etapa_black(text)'::regprocedure) <> 'ad283827886ef398bff20d806a8fd02b' then
-    raise exception '20261013100000: corpo vivo de mkt_trafego.etapa_black mudou. Reler.';
+    raise exception '20261012231649: corpo vivo de mkt_trafego.etapa_black mudou. Reler.';
   end if;
   if (select pg_get_constraintdef(oid) from pg_constraint
        where conrelid = 'dados.dashboards'::regclass and conname = 'dashboards_modelo_check')
      not in ('CHECK ((modelo = ANY (ARRAY[''presencial-base''::text, ''seminario-atm''::text])))',
              'CHECK ((modelo = ANY (ARRAY[''presencial-base''::text, ''seminario-atm''::text, ''jornada-captacao''::text])))') then
-    raise exception '20261013100000: dashboards_modelo_check mudou. Reler.';
+    raise exception '20261012231649: dashboards_modelo_check mudou. Reler.';
   end if;
   if exists (select 1 from dados.dashboards where chave = 'black-friday-2026-10'
               and (modelo, projeto_id, conta_hotmart, periodo_inicio) is distinct from
                   ('jornada-captacao', 4::bigint, 'academy', date '2026-10-04')) then
-    raise exception '20261013100000: já existe uma linha black-friday-2026-10 diferente. Reler.';
+    raise exception '20261012231649: já existe uma linha black-friday-2026-10 diferente. Reler.';
   end if;
   if not exists (select 1 from mkt.projetos where id = 4 and sigla = 'BF26') then
-    raise exception '20261013100000: projeto 4 não é o BF26. Reler.';
+    raise exception '20261012231649: projeto 4 não é o BF26. Reler.';
   end if;
 end
 $g$;
@@ -83,7 +83,7 @@ declare
 begin
   select x.de, x.ate into v_de, v_ate from dados.periodo(d.periodo_inicio, d.periodo_fim, p_de, p_ate) x;
   with c as (
-    -- 20261013100000: campanhas do projeto do cadastro; a campanha sem projeto_id (o CPF01 hoje; ver o explain) entra
+    -- 20261012231649: campanhas do projeto do cadastro; a campanha sem projeto_id (o CPF01 hoje; ver o explain) entra
     -- quando um dos termos entre barras do nome é a sigla do projeto (BF26). O termo vem do cadastro, não fica fixo aqui.
     select c.id, c.nome, c.plataforma, c.status_plataforma, c.objetivo, c.projeto_id, ct.nome as conta,
            e.etapa, e.subtipo, e.conflito
@@ -147,14 +147,14 @@ do $c$
 begin
   if not exists (select 1 from dados.dashboards where chave = 'black-friday-2026-10' and ativo and modelo = 'jornada-captacao'
                   and projeto_id = 4 and conta_hotmart = 'academy' and periodo_inicio = date '2026-10-04') then
-    raise exception '20261013100000: a linha da Black não ficou como esperado';
+    raise exception '20261012231649: a linha da Black não ficou como esperado';
   end if;
   if not has_function_privilege('authenticated', 'public.dados_black_trafego(text,date,date)', 'execute')
      or has_function_privilege('anon', 'public.dados_black_trafego(text,date,date)', 'execute')
      or has_function_privilege('service_role', 'public.dados_black_trafego(text,date,date)', 'execute')
      or has_function_privilege('authenticated', 'dados.black_cadastro(text)', 'execute')
      or has_function_privilege('anon', 'dados.black_cadastro(text)', 'execute') then
-    raise exception '20261013100000: permissões erradas';
+    raise exception '20261012231649: permissões erradas';
   end if;
 end
 $c$;

@@ -1,4 +1,4 @@
--- Reversão de 20261013100000. Numa transação. ANTES: reverter a 20261013110000 (B), que usa dados.black_cadastro e grava
+-- Reversão de 20261012231649. Numa transação. ANTES: reverter a 20261013110000 (B), que usa dados.black_cadastro e grava
 -- marcações de teste com a chave da Black (FK em dados.dashboards; o delete abaixo falha se ainda houver linha filha).
 -- O dashboard da Black volta a não ter cadastro (a tela cai em "dashboard não cadastrado").
 set local lock_timeout = '5s';
