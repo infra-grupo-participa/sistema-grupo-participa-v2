@@ -97,7 +97,8 @@ R$ 428.571,00; CPL do placar R$ 14,61 = R$ 192.079,46 ÷ 13.145; soma das 6 fase
   página, Leads pagos, Ingresso no grupo (48h)) e, à direita, a ponte com a taxa de passagem (CTR, Connect rate,
   Conversão da página, Taxa de ingresso no grupo). No C1 fica Impressões e Vídeo 75%, com a taxa de vídeo 75%.
   A largura das fatias é ilustrativa (afunila sempre, para dar leitura); quem manda é o número. Etapa sem dado fica
-  cinza com "Sem dado". As etapas e taxas saem de `funilCriativo` (`domain/criativos.ts`, com teste), que só chama
+  cinza com "Sem dado". Ao passar o mouse (ou focar com Tab) numa etapa, ela fica em destaque (borda grossa) com a
+  ponte que chega nela, e as outras esmaecem (pedido do Victor, 12/10). As etapas e taxas saem de `funilCriativo` (`domain/criativos.ts`, com teste), que só chama
   as funções de `domain/metricas.ts` (`ctr`, `connectRate`, `conversaoPagina`, `ingressoGrupo`). O recorte é o do
   período escolhido, só do criativo. Atenção: a taxa de ingresso conta **pessoas únicas com a janela de 48h já
   fechada** (regra do `ingressoGrupo`), então o denominador dela pode ser menor que os leads pagos da fatia acima.

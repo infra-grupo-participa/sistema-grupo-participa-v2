@@ -193,9 +193,13 @@ const F_LARG = 480; const F_FUNIL = 300; const F_LINHA = 56; const F_FATIA = 46;
 /** Funil de verdade: uma fatia por etapa (valor total dentro), ponte à direita com a taxa de passagem. */
 export function FunilTrapezio({ etapas, rotulo }: { etapas: EtapaFunil[]; rotulo: string }) {
   const menos = usePrefereMenosMovimento();
+  const [ativa, setAtiva] = useState<number | null>(null);
   const n = etapas.length;
   if (n === 0) return null;
   const cx = F_FUNIL / 2;
+  // Etapa sob o cursor (ou foco) fica em destaque; as outras esmaecem. A ponte que chega na etapa acompanha.
+  const apagada = (i: number) => ativa !== null && ativa !== i;
+  const transicao = menos ? undefined : 'opacity 150ms ease, stroke-width 150ms ease';
   const larg = (i: number) => F_FUNIL * (1 - (1 - F_ESTREITO) * (i / n));
   const altura = n * F_LINHA - (F_LINHA - F_FATIA);
   const meio = (F_LINHA - F_FATIA) / 2;
@@ -208,10 +212,13 @@ export function FunilTrapezio({ etapas, rotulo }: { etapas: EtapaFunil[]; rotulo
           const y0 = i * F_LINHA; const y1 = y0 + F_FATIA; const a = larg(i) / 2; const b = larg(i + 1) / 2;
           const sem = e.valor === null;
           return (
-            <g key={e.chave} className={menos ? undefined : 'gp-fade-in'} style={anima(i * 80)}>
+            <g key={e.chave} className={menos ? undefined : 'gp-fade-in'} tabIndex={0} aria-label={`${e.rotulo}: ${formatar(e.valor, 'int')}`}
+              style={{ ...anima(i * 80), opacity: apagada(i) ? 0.4 : 1, transition: transicao, cursor: 'pointer', outline: 'none' }}
+              onMouseEnter={() => setAtiva(i)} onMouseLeave={() => setAtiva(null)} onFocus={() => setAtiva(i)} onBlur={() => setAtiva(null)}>
               <title>{`${e.rotulo}: ${formatar(e.valor, 'int')}`}</title>
               <polygon points={`${cx - a},${y0} ${cx + a},${y0} ${cx + b},${y1} ${cx - b},${y1}`}
-                fill={sem ? 'var(--surface-4)' : 'var(--accent-subtle)'} stroke={sem ? 'var(--border-strong)' : 'var(--accent)'} strokeWidth={1.5} strokeLinejoin="round" />
+                fill={sem ? 'var(--surface-4)' : 'var(--accent-subtle)'} stroke={sem ? 'var(--border-strong)' : 'var(--accent)'}
+                strokeWidth={ativa === i ? 3.5 : 1.5} strokeLinejoin="round" style={{ transition: transicao }} />
               <text x={cx} y={y0 + 18} textAnchor="middle" fontSize={11} fill="var(--fg-2)">{e.rotulo}</text>
               <text x={cx} y={y0 + 37} textAnchor="middle" fontSize={16} fontWeight={700} fill={sem ? 'var(--fg-3)' : 'var(--fg)'} className="tabular">{formatar(e.valor, 'int')}</text>
             </g>
@@ -222,11 +229,13 @@ export function FunilTrapezio({ etapas, rotulo }: { etapas: EtapaFunil[]; rotulo
           const y = i * F_LINHA - meio; const borda = cx + larg(i) / 2 + 6; const px = F_LARG - F_PILULA - 4;
           const sem = e.ponte.taxa.valor === null;
           return (
-            <g key={`ponte-${e.chave}`} className={menos ? undefined : 'gp-fade-in'} style={anima(i * 80 + 40)}>
+            <g key={`ponte-${e.chave}`} className={menos ? undefined : 'gp-fade-in'}
+              style={{ ...anima(i * 80 + 40), opacity: apagada(i) ? 0.4 : 1, transition: transicao }}>
               <title>{`${e.ponte.rotulo}: ${formatar(e.ponte.taxa.valor, 'pct')}. ${dicaTaxa(e.ponte.taxa)}`}</title>
               <circle cx={borda} cy={y} r={3} fill="var(--accent)" />
               <line x1={borda} x2={px} y1={y} y2={y} stroke="var(--border-strong)" strokeDasharray="3 3" />
-              <rect x={px} y={y - 18} width={F_PILULA} height={36} rx={8} fill="var(--surface-2)" stroke="var(--border-accent)" />
+              <rect x={px} y={y - 18} width={F_PILULA} height={36} rx={8} fill="var(--surface-2)"
+                stroke={ativa === i ? 'var(--accent)' : 'var(--border-accent)'} strokeWidth={ativa === i ? 2 : 1} />
               <text x={px + F_PILULA / 2} y={y - 4} textAnchor="middle" fontSize={10} fill="var(--fg-3)">{e.ponte.rotulo}</text>
               <text x={px + F_PILULA / 2} y={y + 12} textAnchor="middle" fontSize={13} fontWeight={700} fill={sem ? 'var(--fg-3)' : 'var(--fg)'} className="tabular">{formatar(e.ponte.taxa.valor, 'pct')}</text>
             </g>
