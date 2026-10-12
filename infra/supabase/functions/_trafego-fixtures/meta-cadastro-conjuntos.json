@@ -1,0 +1,9 @@
+{
+  "data": [
+    { "id": "900000000000301", "name": "ENSAIO | CONJ 01 | MORNO", "effective_status": "ACTIVE",
+      "campaign_id": "900000000000201", "optimization_goal": "LEAD_GENERATION" },
+    { "id": "900000000000302", "name": "ENSAIO | CONJ 02 | FRIO", "effective_status": "PAUSED",
+      "campaign_id": "900000000000201", "optimization_goal": "LINK_CLICKS" }
+  ],
+  "paging": { "cursors": { "before": "ENSAIO_ANTES", "after": "ENSAIO_DEPOIS" } }
+}
