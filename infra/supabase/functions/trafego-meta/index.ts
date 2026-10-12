@@ -8,10 +8,15 @@
 // {"so_hoje": true}, ou {"de": "AAAA-MM-DD", "ate": "AAAA-MM-DD"} (recarga, até 92 dias).
 // Nunca registra token nem URL; a falha de cada conta vai para mkt_trafego.coletas com um código curto.
 import postgres from 'npm:postgres@3.4.4';
-import { META_API_VERSAO_PADRAO, coletarMeta, hojeSaoPaulo, periodo, type ContaMeta } from './meta.ts';
+import { CAMPOS_DISTRIBUICAO, META_API_VERSAO_PADRAO, coletarMeta, hojeSaoPaulo, lerPaginas, paraDesempenho, periodo, type ContaMeta } from './meta.ts';
+import { coletarAnuncios, contasDaFlag } from './anuncios.ts';
 
 const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 2, prepare: false, idle_timeout: 20 });
 const ORCAMENTO_MS = 110_000; // não começa conta nova depois disso (a Edge morre em 150 s)
+// 20261012120000: miniaturas no bucket privado trafego-miniaturas pela Storage API. Sem as duas variáveis (o Supabase
+// injeta as duas em toda Edge), as miniaturas não são baixadas (fail-closed); o resto da coleta por anúncio segue.
+const SUPABASE_URL = (Deno.env.get('SUPABASE_URL') ?? '').replace(/\/+$/, '');
+const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
 const json = (corpo: unknown, status = 200) =>
   new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } });
@@ -21,6 +26,19 @@ function igual(a: string, b: string) {
   let d = 0;
   for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return d === 0;
+}
+
+/** Grava a miniatura no bucket privado (a service role fica só aqui, no servidor; nunca vai para o registro). */
+async function subirMiniatura(caminho: string, bytes: Uint8Array<ArrayBuffer>, mime: string): Promise<void> {
+  const alvo = caminho.split('/').map(encodeURIComponent).join('/');
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/trafego-miniaturas/${alvo}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${SERVICE_ROLE}`, apikey: SERVICE_ROLE, 'Content-Type': mime, 'x-upsert': 'true', 'cache-control': '3600' },
+    body: new Blob([bytes], { type: mime }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  await r.body?.cancel();
+  if (!r.ok) throw new Error(`storage_${r.status}`);
 }
 
 Deno.serve(async (req) => {
@@ -44,12 +62,13 @@ Deno.serve(async (req) => {
   const contas: ContaMeta[] = (await sql`select conta_externa, nome, token, token_origem from mkt_trafego.meta_contas()`)
     .map((r) => ({ conta_externa: String(r.conta_externa), nome: String(r.nome), token: r.token ?? null, token_origem: String(r.token_origem) }));
 
+  const ate_ms = Date.now() + ORCAMENTO_MS;
   const resultado = await coletarMeta(contas, {
     buscar: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(30_000) }),
     versao,
     de: per.de,
     ate: per.ate,
-    ate_ms: Date.now() + ORCAMENTO_MS,
+    ate_ms,
     receberCampanhas: async (l) => (await sql`select public.trafego_campanhas_receber(${sql.json(l)}::jsonb) as r`)[0].r,
     receberDesempenho: async (l) => (await sql`select public.trafego_desempenho_receber(${sql.json(l)}::jsonb) as r`)[0].r,
     // 20261009230000: alcance e frequência do período inteiro de cada campanha que gastou
@@ -57,6 +76,28 @@ Deno.serve(async (req) => {
   });
   const ok = resultado.contas.every((c) => c.ok) && resultado.puladas === 0;
   const erro = ok ? null : resultado.contas.filter((c) => !c.ok).map((c) => `${c.conta}: ${c.erro}`).join('; ').slice(0, 480) || 'contas puladas';
-  await sql`select mkt_trafego.coleta_registrar('meta', ${ok}, ${sql.json({ ...resultado, versao, contas_lidas: contas.length })}::jsonb, ${erro})`;
-  return json({ ok, ...resultado });
+  // 20261012120000: por conjunto e anúncio, só nas contas da flag meta_anuncio_contas (nula = desligada) que deram ok
+  // acima. Fica FORA do ok/erro: falha aqui só aparece em coletas.resultado -> 'anuncios'. Flag nula = saída idêntica.
+  const alvo = contasDaFlag(p?.meta_anuncio_contas, contas, resultado.contas);
+  const anuncios = alvo.length
+    ? await coletarAnuncios(alvo, {
+      buscar: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(30_000) }),
+      versao,
+      de: per.de,
+      ate: per.ate,
+      ate_ms,
+      lerPaginas,
+      paraDesempenho,
+      camposDistribuicao: CAMPOS_DISTRIBUICAO,
+      receberConjuntos: async (l) => (await sql`select public.trafego_conjuntos_receber(${sql.json(l)}::jsonb) as r`)[0].r,
+      receberAnuncios: async (l) => (await sql`select public.trafego_anuncios_receber(${sql.json(l)}::jsonb) as r`)[0].r,
+      receberDesempenhoAnuncio: async (l) =>
+        (await sql`select public.trafego_desempenho_anuncio_receber(${sql.json(l)}::jsonb) as r`)[0].r,
+      receberMiniaturas: async (l) => (await sql`select public.trafego_anuncio_miniatura_receber(${sql.json(l)}::jsonb) as r`)[0].r,
+      ...(SUPABASE_URL && SERVICE_ROLE ? { baixar: (url: string, init: RequestInit) => fetch(url, init), subirMiniatura } : {}),
+    }).catch(() => ({ erro: 'falha_inesperada' }))
+    : null;
+  const extra = anuncios ? { anuncios } : {};
+  await sql`select mkt_trafego.coleta_registrar('meta', ${ok}, ${sql.json({ ...resultado, versao, contas_lidas: contas.length, ...extra })}::jsonb, ${erro})`;
+  return json({ ok, ...resultado, ...extra });
 });
