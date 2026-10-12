@@ -48,6 +48,15 @@ Login normal em `http://localhost:3000/login` (conta `@advmais.com`, cargo admin
 Conferido na tela renderizada com o padrão `desde-inicio` (placar 14.146 de 15.000; verba R$ 276.000,76 de
 R$ 428.571,00; CPL do placar R$ 14,61 = R$ 192.079,46 ÷ 13.145; soma das 6 fases = R$ 276.000,76).
 
+## Ajustes da auditoria do Victor (12/10/2026)
+
+- **P1, gaveta que não fechava.** Causa: a gaveta era `fixed z-40` dentro da página e a barra do app é `z-[60]`;
+  o cabeçalho da gaveta, com o botão Fechar, ficava escondido atrás da barra. Agora a gaveta abre num portal no
+  `<body>` em `z-[1000]` (mesma camada do Modal canônico), com o botão "Fechar" (X + texto) fixo no topo (só o
+  corpo rola), Esc fecha, clique no fundo fecha e o foco fica preso na gaveta. Vale para etapa e criativo
+  (as duas usam `ui/GavetaLateral.tsx`). Troca de decisão: a gaveta passou a ter fundo escurecido, porque o
+  clique fora precisa fechar.
+
 ## O que foi feito (5 abas, filtro global)
 
 Seletor global: funil (Todos, C1, Consultoria, Iscas, C3), período (Hoje, 7 dias, Desde o início, Semana do
@@ -92,7 +101,7 @@ Do executor (front-end-sr), sem pedido explícito:
   para o build de produção descartar o fixture;
 - a live absorve o carrinho no nó da Jornada; nós semanais sem fonte mostram "Sem dado";
 - com fonte real e config ausente, a tela mostra um aviso vazio em vez de números;
-- gaveta lateral própria (`ui/GavetaLateral.tsx`), porque o Drawer canônico é modal e escurece o fundo;
+- gaveta lateral própria (`ui/GavetaLateral.tsx`), porque o Drawer canônico é um modal centrado (desde 12/10 ela também escurece o fundo e fecha no clique fora);
 - KpiCard envolvido por um `div role=button` (o canônico não tem clique); barras clicáveis próprias;
 - alcance e frequência do C1 só quando há uma única campanha no recorte (não somam entre campanhas);
 - links (Ver anúncio, Gerenciador, Página) desligados na demonstração; com dado real, só http(s) válido;
