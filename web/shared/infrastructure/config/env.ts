@@ -86,4 +86,14 @@ export const publicEnv = {
    */
   comercialVendedores: lerFlag(process.env.NEXT_PUBLIC_COMERCIAL_VENDEDORES, true),
   acessoV2: lerFlag(process.env.NEXT_PUBLIC_ACESSO_V2),
+  /**
+   * Dashboard da Black (Infra › Dashboards › CSM) com dado FICTÍCIO em memória. Só liga com o valor exato '1'
+   * e nunca em produção (docs/dashboard-black/README.md).
+   */
+  blackDemo: modoDemoBlack(process.env.NODE_ENV, process.env.NEXT_PUBLIC_BLACK_DEMO),
 } as const;
+
+/** Regra do modo demonstração da Black, pura para teste: flag '1' e fora de produção. */
+export function modoDemoBlack(nodeEnv: string | undefined, flag: string | undefined): boolean {
+  return flag === '1' && nodeEnv !== 'production';
+}
