@@ -2,7 +2,7 @@
 // produção; no resto, a fonte real (hoje: semDado em tudo, sem rede).
 // O teste `process.env.NODE_ENV !== 'production'` fica INLINE de propósito: o Next troca por constante no
 // build de produção e o webpack descarta o import() inteiro, então nenhum byte da base fictícia entra no
-// bundle de produção (conferido com grep "Lead Teste" em .next; ver docs/dashboard-black/README.md).
+// bundle de produção (conferido com grep do nome dos leads fictícios em .next; ver docs/dashboard-black/README.md).
 import { modoDemoBlack, publicEnv } from '@/shared/infrastructure/config/env';
 import type { FonteDadosBlack } from '../application/ports';
 import { fonteSupabaseBlack } from './fonte-supabase';
