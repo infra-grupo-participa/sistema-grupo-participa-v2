@@ -45,7 +45,7 @@ export function AbaCriativosPaginas({ d, gaveta }: { d: DadosTela; gaveta?: Alvo
         <CampanhaConjunto campanhas={paineis.campanha} conjuntos={paineis.conjunto} campanha={f.campanha ?? null} conjunto={f.conjunto ?? null}
           nomeCampanha={(id) => d.idx.campanha.get(id)?.nome ?? id} onCampanha={escolherCampanha} onConjunto={(id) => alternar('conjunto', id)} />
       </SectionCard>
-      <SectionCard title="Criativos" subtitle="Clique para abrir o detalhe (miniatura, mini-funil, curva diária e links).">
+      <SectionCard title="Criativos" subtitle="Clique para abrir o detalhe (miniatura, funil, curva diária e links).">
         <GaleriaCriativos itens={paineis.anuncio} anuncio={(id) => d.idx.anuncio.get(id)} selecionado={f.anuncio ?? null}
           ativo={gaveta?.tipo === 'criativo' ? gaveta.id : null} onAbrir={abrirCriativo} />
       </SectionCard>

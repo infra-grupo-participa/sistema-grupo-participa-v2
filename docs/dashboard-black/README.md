@@ -92,6 +92,20 @@ R$ 428.571,00; CPL do placar R$ 14,61 = R$ 192.079,46 ÷ 13.145; soma das 6 fase
   Agora cada cartão mostra a posição e o valor que a ordem usa (ex.: "1º CTR 4,49%"), o CTR sai com duas casas,
   uma linha explica a ordem escolhida e o empate desempata por gasto e nome (`valorOrdem` e `ordenar` em
   `domain/criativos.ts`).
+- **Funil do criativo em trapézios** (gaveta do criativo, segunda rodada de 12/10). O mini-funil de barras virou
+  `FunilTrapezio` em `ui/graficos.tsx`: uma fatia por etapa com o valor total dentro (Impressões, Cliques, Views da
+  página, Leads pagos, Ingresso no grupo (48h)) e, à direita, a ponte com a taxa de passagem (CTR, Connect rate,
+  Conversão da página, Taxa de ingresso no grupo). No C1 fica Impressões e Vídeo 75%, com a taxa de vídeo 75%.
+  A largura das fatias é ilustrativa (afunila sempre, para dar leitura); quem manda é o número. Etapa sem dado fica
+  cinza com "Sem dado". As etapas e taxas saem de `funilCriativo` (`domain/criativos.ts`, com teste), que só chama
+  as funções de `domain/metricas.ts` (`ctr`, `connectRate`, `conversaoPagina`, `ingressoGrupo`). O recorte é o do
+  período escolhido, só do criativo. Atenção: a taxa de ingresso conta **pessoas únicas com a janela de 48h já
+  fechada** (regra do `ingressoGrupo`), então o denominador dela pode ser menor que os leads pagos da fatia acima.
+  O único outro funil de barras do painel, o "Funil do dia" do Histórico, ficou como estava (não é o mini-funil).
+- **Investimento e leads por dia** (logo abaixo do funil) virou `GraficoInvestimentoLeads` em `ui/graficos.tsx`,
+  no mesmo padrão de cursor do `GraficoLinha`: passando o mouse (ou o dedo) aparece a data, o investimento e os
+  leads pagos do dia, com a barra do dia destacada. Também funciona no teclado: foco no gráfico e setas
+  (Home e End vão ao primeiro e ao último dia, Esc fecha).
 
 ## O que foi feito (5 abas, filtro global)
 
@@ -106,7 +120,7 @@ ciclo) e canal (Todos, Meta, Google). Tudo mora na URL. Releitura a cada 5 min s
    apaga os outros nós. Clicar no nó abre a **gaveta lateral** (Etapa · Criativos · Perfil).
 3. **Criativos e páginas:** trilha Campanha › Conjunto › Criativo › Página com chips; campanhas e conjuntos
    lado a lado (mestre e detalhe); galeria com miniatura fictícia e ordem por chips; cartões por página. O criativo abre a
-   gaveta com miniatura, mini-funil, curva diária e os 3 botões (desligados na demonstração).
+   gaveta com miniatura, funil em trapézios, curva diária interativa e os 3 botões (desligados na demonstração).
 4. **Mensageria:** API, SMS e ligação lado a lado (custo total e por mensagem enviada), grupo e e-mail sem custo,
    lista de envios por canal (título, objetivo, data e hora, base, copy, métricas) e régua de API do grupo (+2h,
    +12h, +24h). Selo "dado fictício".

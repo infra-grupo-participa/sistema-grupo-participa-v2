@@ -2,7 +2,8 @@
 // cruzado. Cada painel vê os filtros dos OUTROS painéis (o próprio só destaca), para o escolhido continuar
 // enxergando os irmãos. Métricas por soma sobre soma, no mesmo recorte de dias e leads.
 import {
-  agregar, connectRate, cpl, cpm, ctr, custoPorVisualizacao, ehPago, farolCpl, taxaVideo75, type Farol, type IndiceTrafego, type Taxa,
+  agregar, connectRate, conversaoPagina, cpl, cpm, ctr, custoPorVisualizacao, ehPago, farolCpl, ingressoGrupo, taxaVideo75,
+  type Farol, type IndiceTrafego, type Taxa,
 } from './metricas';
 import { diaDe } from './recorte';
 import type { Anuncio, DesempenhoDia, FiltroCriativos, LinhaPerfil, Valor } from './tipos';
@@ -104,7 +105,38 @@ export function ordenar(itens: readonly ItemPainel[], ordem: OrdemGaleria): Item
   });
 }
 
-/** Mini-funil do criativo: impressões → cliques → LPV → leads pagos → grupo (48h). */
+/** Etapa do funil do criativo. `ponte` = taxa de passagem da etapa ANTERIOR para esta (a primeira não tem). */
+export interface EtapaFunil { chave: string; rotulo: string; valor: Valor; ponte: { rotulo: string; taxa: Taxa } | null }
+
+/** Janela do ingresso no grupo no funil do criativo (a mesma da gaveta desde o início: 48h). */
+export const JANELA_GRUPO_FUNIL = 48;
+
+/**
+ * Funil do criativo (12/10, trapézios). Captação: impressões → cliques → views da página → leads pagos → ingresso
+ * no grupo em 48h, com CTR, connect rate, conversão da página e taxa de ingresso nas pontes. Distribuição (C1):
+ * impressões → vídeo 75%. Toda taxa vem de `metricas.ts` (soma sobre soma, mesmo recorte de dias e leads).
+ * Atenção: o ingresso no grupo conta pessoas únicas com a janela já fechada; não é "leads pagos que entraram".
+ */
+export function funilCriativo(
+  r: ResumoCriativo, dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego, agora: Date,
+): EtapaFunil[] {
+  if (r.distribuicao) {
+    return [
+      { chave: 'impressoes', rotulo: 'Impressões', valor: r.impressoes, ponte: null },
+      { chave: 'video75', rotulo: 'Vídeo 75%', valor: r.video75.num, ponte: { rotulo: 'Taxa de vídeo 75%', taxa: r.video75 } },
+    ];
+  }
+  const grupo = ingressoGrupo(linhas, JANELA_GRUPO_FUNIL, agora);
+  return [
+    { chave: 'impressoes', rotulo: 'Impressões', valor: r.impressoes, ponte: null },
+    { chave: 'cliques', rotulo: 'Cliques', valor: r.cliques, ponte: { rotulo: 'CTR', taxa: r.ctr } },
+    { chave: 'lpv', rotulo: 'Views da página', valor: r.lpv, ponte: { rotulo: 'Connect rate', taxa: r.connect } },
+    { chave: 'leads', rotulo: 'Leads pagos', valor: r.leadsPagos, ponte: { rotulo: 'Conversão da página', taxa: conversaoPagina(dias, linhas, idx) } },
+    { chave: 'grupo', rotulo: `Ingresso no grupo (${JANELA_GRUPO_FUNIL}h)`, valor: grupo.num, ponte: { rotulo: 'Taxa de ingresso no grupo', taxa: grupo } },
+  ];
+}
+
+/** Série diária do criativo: investimento, impressões e leads pagos por dia do período (dia sem nada = 0). */
 export function serieDiariaAnuncio(anuncioId: string, dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], periodo: readonly string[]) {
   const g = new Map<string, number>(); const imp = new Map<string, number>(); const ld = new Map<string, number>();
   for (const d of dias) if (d.anuncioId === anuncioId) { g.set(d.dia, (g.get(d.dia) ?? 0) + d.gasto); imp.set(d.dia, (imp.get(d.dia) ?? 0) + d.impressoes); }

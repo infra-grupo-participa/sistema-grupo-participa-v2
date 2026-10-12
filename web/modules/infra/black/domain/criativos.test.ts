@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { baseFicticia } from '../infrastructure/fixtures/gerador';
 import { CONFIG_BLACK } from '../infrastructure/fixtures/catalogo';
-import { indexar } from './metricas';
-import { ORDENS_GALERIA, ordenar, painel, serieDiariaAnuncio, valorOrdem } from './criativos';
+import { conversaoPagina, ctr, agregar, indexar, ingressoGrupo } from './metricas';
+import { funilCriativo, ORDENS_GALERIA, ordenar, painel, resumir, serieDiariaAnuncio, valorOrdem } from './criativos';
 
 const b = baseFicticia();
 const idx = indexar(b);
@@ -56,5 +56,26 @@ describe('criativos e páginas', () => {
     const dias = [...new Set(b.dias.map((d) => d.dia))].sort();
     const s = serieDiariaAnuncio(a.id, b.dias, b.linhas, dias);
     expect(s.reduce((x, d) => x + d.gasto, 0)).toBeCloseTo(a.resumo.gasto, 6);
+  });
+  it('funil do criativo (captação): 5 etapas, cada ponte é a função de metricas.ts no mesmo recorte', () => {
+    const a = painel('anuncio', { campanha: 'cp-iscas' }, b.dias, b.linhas, idx, regua, nomePagina)[0];
+    const dias = b.dias.filter((d) => d.anuncioId === a.id); const linhas = b.linhas.filter((l) => l.anuncioId === a.id);
+    const agora = new Date('2026-11-04T12:00:00-03:00');
+    const r = resumir(dias, linhas, idx, regua, false);
+    const f = funilCriativo(r, dias, linhas, idx, agora);
+    expect(f.map((e) => e.rotulo)).toEqual(['Impressões', 'Cliques', 'Views da página', 'Leads pagos', 'Ingresso no grupo (48h)']);
+    expect(f[0].ponte).toBeNull();
+    expect(f[1].ponte!.taxa).toEqual(ctr(agregar(dias)));
+    expect(f[1].ponte!.taxa.valor).toBeCloseTo(r.cliques! / dias.filter((d) => d.cliquesLink !== null).reduce((s, d) => s + d.impressoes, 0), 9);
+    expect(f[2].ponte!.taxa).toEqual(r.connect);
+    expect(f[3].ponte!.taxa).toEqual(conversaoPagina(dias, linhas, idx));
+    expect(f[4].ponte!.taxa).toEqual(ingressoGrupo(linhas, 48, agora));
+    expect(f[4].valor).toBe(f[4].ponte!.taxa.num);
+  });
+  it('funil do criativo (C1, distribuição): impressões → vídeo 75%', () => {
+    const c1 = painel('anuncio', {}, b.dias, b.linhas, idx, regua, nomePagina).find((x) => idx.campanhaDoAnuncio(x.id)?.funil === 'c1')!;
+    const f = funilCriativo(c1.resumo, [], [], idx, new Date());
+    expect(f.map((e) => e.chave)).toEqual(['impressoes', 'video75']);
+    expect(f[1].ponte!.taxa).toEqual(c1.resumo.video75);
   });
 });

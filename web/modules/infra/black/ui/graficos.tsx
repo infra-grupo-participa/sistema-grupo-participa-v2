@@ -5,11 +5,16 @@
 //   entrada animada e dica com o valor ao passar o mouse ou focar com o teclado.
 // - GraficoLinha: série diária (eixo X = dia, eixo Y = métrica do dia), linha desenhada na entrada, cursor que
 //   mostra o valor do dia. Dia sem dado quebra a linha (nunca vira zero).
+// - FunilTrapezio: funil de verdade (trapézios que afunilam), valor total em cada etapa e, à direita, a ponte com a
+//   taxa de passagem entre duas etapas. A largura é ilustrativa (afunila sempre); o número é que manda.
+// - GraficoInvestimentoLeads: investimento por dia em barras e leads pagos em linha, cursor com data, investimento e
+//   leads do dia (mouse, toque e setas do teclado).
 // Tudo respeita prefers-reduced-motion.
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import type { EtapaFunil } from '../domain/criativos';
 import type { FormatoMetrica } from '../domain/jornada';
 import type { Fase, Valor } from '../domain/tipos';
-import { formatar, usePrefereMenosMovimento } from './pecas';
+import { dicaTaxa, formatar, moeda, usePrefereMenosMovimento } from './pecas';
 
 /** Cor de cada fase: distintas entre si, sem vermelho (vermelho é só farol). */
 export const COR_FASE: Record<Fase, string> = {
@@ -179,5 +184,152 @@ export function GraficoLinha({ pontos, formato, rotuloSerie }: { pontos: PontoLi
         <tbody>{pontos.map((pt) => <tr key={pt.chave}><th scope="row">{pt.rotulo}</th><td>{formatar(pt.valor, formato)}</td></tr>)}</tbody>
       </table>
     </div>
+  );
+}
+
+// ─── Funil em trapézios ────────────────────────────────────────────────────────────────────────────────────
+const F_LARG = 480; const F_FUNIL = 300; const F_LINHA = 56; const F_FATIA = 46; const F_PILULA = 144; const F_ESTREITO = 0.45;
+
+/** Funil de verdade: uma fatia por etapa (valor total dentro), ponte à direita com a taxa de passagem. */
+export function FunilTrapezio({ etapas, rotulo }: { etapas: EtapaFunil[]; rotulo: string }) {
+  const menos = usePrefereMenosMovimento();
+  const n = etapas.length;
+  if (n === 0) return null;
+  const cx = F_FUNIL / 2;
+  const larg = (i: number) => F_FUNIL * (1 - (1 - F_ESTREITO) * (i / n));
+  const altura = n * F_LINHA - (F_LINHA - F_FATIA);
+  const meio = (F_LINHA - F_FATIA) / 2;
+  const anima = (atraso: number) => (menos ? undefined : { animationDelay: `${atraso}ms`, animationFillMode: 'backwards' as const });
+  return (
+    <figure className="m-0">
+      <svg viewBox={`0 0 ${F_LARG} ${altura}`} className="block h-auto w-full" role="img"
+        aria-label={`${rotulo}: ${etapas.map((e) => `${e.rotulo} ${formatar(e.valor, 'int')}${e.ponte ? ` (${e.ponte.rotulo} ${formatar(e.ponte.taxa.valor, 'pct')})` : ''}`).join(', ')}`}>
+        {etapas.map((e, i) => {
+          const y0 = i * F_LINHA; const y1 = y0 + F_FATIA; const a = larg(i) / 2; const b = larg(i + 1) / 2;
+          const sem = e.valor === null;
+          return (
+            <g key={e.chave} className={menos ? undefined : 'gp-fade-in'} style={anima(i * 80)}>
+              <title>{`${e.rotulo}: ${formatar(e.valor, 'int')}`}</title>
+              <polygon points={`${cx - a},${y0} ${cx + a},${y0} ${cx + b},${y1} ${cx - b},${y1}`}
+                fill={sem ? 'var(--surface-4)' : 'var(--accent-subtle)'} stroke={sem ? 'var(--border-strong)' : 'var(--accent)'} strokeWidth={1.5} strokeLinejoin="round" />
+              <text x={cx} y={y0 + 18} textAnchor="middle" fontSize={11} fill="var(--fg-2)">{e.rotulo}</text>
+              <text x={cx} y={y0 + 37} textAnchor="middle" fontSize={16} fontWeight={700} fill={sem ? 'var(--fg-3)' : 'var(--fg)'} className="tabular">{formatar(e.valor, 'int')}</text>
+            </g>
+          );
+        })}
+        {etapas.map((e, i) => {
+          if (!e.ponte) return null;
+          const y = i * F_LINHA - meio; const borda = cx + larg(i) / 2 + 6; const px = F_LARG - F_PILULA - 4;
+          const sem = e.ponte.taxa.valor === null;
+          return (
+            <g key={`ponte-${e.chave}`} className={menos ? undefined : 'gp-fade-in'} style={anima(i * 80 + 40)}>
+              <title>{`${e.ponte.rotulo}: ${formatar(e.ponte.taxa.valor, 'pct')}. ${dicaTaxa(e.ponte.taxa)}`}</title>
+              <circle cx={borda} cy={y} r={3} fill="var(--accent)" />
+              <line x1={borda} x2={px} y1={y} y2={y} stroke="var(--border-strong)" strokeDasharray="3 3" />
+              <rect x={px} y={y - 18} width={F_PILULA} height={36} rx={8} fill="var(--surface-2)" stroke="var(--border-accent)" />
+              <text x={px + F_PILULA / 2} y={y - 4} textAnchor="middle" fontSize={10} fill="var(--fg-3)">{e.ponte.rotulo}</text>
+              <text x={px + F_PILULA / 2} y={y + 12} textAnchor="middle" fontSize={13} fontWeight={700} fill={sem ? 'var(--fg-3)' : 'var(--fg)'} className="tabular">{formatar(e.ponte.taxa.valor, 'pct')}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <table className="sr-only">
+        <caption>{rotulo}</caption>
+        <tbody>
+          {etapas.map((e) => (
+            <tr key={e.chave}>
+              <th scope="row">{e.rotulo}</th><td>{formatar(e.valor, 'int')}</td>
+              <td>{e.ponte ? `${e.ponte.rotulo}: ${formatar(e.ponte.taxa.valor, 'pct')} (${dicaTaxa(e.ponte.taxa)})` : ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </figure>
+  );
+}
+
+// ─── Investimento e leads por dia ──────────────────────────────────────────────────────────────────────────
+export interface DiaInvestimentoLeads { dia: string; gasto: number; leads: number }
+const dataCurta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
+/** Investimento por dia (barras) e leads pagos (linha), escalas próprias; cursor mostra o dia (mouse, toque, setas). */
+export function GraficoInvestimentoLeads({ serie }: { serie: DiaInvestimentoLeads[] }) {
+  const caixa = useRef<HTMLDivElement>(null);
+  const [largura, setLargura] = useState(480);
+  const [ativo, setAtivo] = useState<number | null>(null);
+  const n = serie.length;
+  const vazio = n === 0;
+
+  useEffect(() => {
+    const el = caixa.current; if (!el) return;
+    const ro = new ResizeObserver(([e]) => setLargura(Math.max(220, Math.round(e.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [vazio]);
+
+  if (vazio) return null;
+  const H = 120; const topo = 8;
+  const maxG = Math.max(1, ...serie.map((s) => s.gasto)); const maxL = Math.max(1, ...serie.map((s) => s.leads));
+  const larg = largura / n;
+  const xc = (i: number) => (i + 0.5) * larg;
+  const yG = (v: number) => H - (v / maxG) * (H - topo);
+  const yL = (v: number) => H - (v / maxL) * (H - topo) - 2;
+  const pontos = serie.map((s, i) => `${xc(i).toFixed(1)},${yL(s.leads).toFixed(1)}`).join(' ');
+  const total = serie.reduce((s, x) => s + x.gasto, 0);
+  const mover = (cx: number) => {
+    const r = caixa.current?.getBoundingClientRect(); if (!r) return;
+    setAtivo(Math.max(0, Math.min(n - 1, Math.floor((cx - r.left) / Math.max(1, larg)))));
+  };
+  const teclar = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      setAtivo((a) => Math.max(0, Math.min(n - 1, (a ?? n - 1) + (e.key === 'ArrowLeft' ? -1 : 1))));
+    } else if (e.key === 'Home') { e.preventDefault(); setAtivo(0); }
+    else if (e.key === 'End') { e.preventDefault(); setAtivo(n - 1); }
+    else if (e.key === 'Escape') setAtivo(null);
+  };
+  const p = ativo !== null ? serie[ativo] : null;
+
+  return (
+    <figure className="m-0">
+      <figcaption className="mb-1 flex flex-wrap items-center gap-3 text-xs text-[var(--fg-3)]">
+        <span>Por dia</span>
+        <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="h-2 w-3 rounded-sm bg-[var(--accent)] opacity-60" />Investimento (máx. {moeda(maxG)})</span>
+        <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="h-0.5 w-3 bg-[var(--cyan)]" />Leads pagos (máx. {formatar(maxL, 'int')})</span>
+      </figcaption>
+      <div ref={caixa} tabIndex={0} role="group" aria-label={`Investimento e leads pagos por dia, ${n} dias. Use as setas para ver cada dia.`}
+        className="relative w-full cursor-crosshair select-none rounded-[var(--r-sm)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+        onMouseMove={(e) => mover(e.clientX)} onMouseLeave={() => setAtivo(null)}
+        onTouchMove={(e) => mover(e.touches[0].clientX)} onTouchEnd={() => setAtivo(null)}
+        onKeyDown={teclar} onFocus={() => setAtivo((a) => a ?? n - 1)} onBlur={() => setAtivo(null)}>
+        <svg width={largura} height={H} className="block" aria-hidden="true">
+          {serie.map((s, i) => (
+            <rect key={s.dia} x={i * larg + larg * 0.15} width={larg * 0.7} y={yG(s.gasto)} height={H - yG(s.gasto)}
+              fill="var(--accent)" opacity={ativo === i ? 0.85 : 0.45} />
+          ))}
+          <polyline points={pontos} fill="none" stroke="var(--cyan)" strokeWidth={2} strokeLinejoin="round" />
+          {p && ativo !== null && (
+            <g>
+              <line x1={xc(ativo)} x2={xc(ativo)} y1={0} y2={H} stroke="var(--fg-3)" strokeDasharray="2 3" />
+              <circle cx={xc(ativo)} cy={yL(p.leads)} r={4} fill="var(--cyan)" stroke="var(--surface-2)" strokeWidth={2} />
+            </g>
+          )}
+        </svg>
+        {p && ativo !== null && (
+          <div role="tooltip" aria-live="polite"
+            className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded-[var(--r-md)] border border-[var(--border-strong)] bg-[var(--surface-3)] px-2.5 py-1.5 text-xs shadow-[var(--shadow-md)]"
+            style={{ left: Math.min(largura - 80, Math.max(80, xc(ativo))) }}>
+            <span className="block font-semibold text-[var(--fg)]">{dataCurta(p.dia)}</span>
+            <span className="block text-[var(--fg-2)]">Investimento <strong className="tabular text-[var(--fg)]">{moeda(p.gasto)}</strong></span>
+            <span className="block text-[var(--fg-2)]">Leads pagos <strong className="tabular text-[var(--fg)]">{formatar(p.leads, 'int')}</strong></span>
+          </div>
+        )}
+      </div>
+      <div className="mt-1 flex justify-between text-[10px] text-[var(--fg-3)]"><span>{dataCurta(serie[0].dia)}</span><span>{dataCurta(serie[n - 1].dia)}</span></div>
+      <table className="sr-only">
+        <caption>{`Investimento total ${moeda(total)}`}</caption>
+        <tbody>{serie.map((s) => <tr key={s.dia}><th scope="row">{dataCurta(s.dia)}</th><td>{moeda(s.gasto)}</td><td>{`${formatar(s.leads, 'int')} leads pagos`}</td></tr>)}</tbody>
+      </table>
+    </figure>
   );
 }
