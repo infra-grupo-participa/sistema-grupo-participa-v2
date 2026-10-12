@@ -56,6 +56,21 @@ R$ 428.571,00; CPL do placar R$ 14,61 = R$ 192.079,46 ÷ 13.145; soma das 6 fase
   corpo rola), Esc fecha, clique no fundo fecha e o foco fica preso na gaveta. Vale para etapa e criativo
   (as duas usam `ui/GavetaLateral.tsx`). Troca de decisão: a gaveta passou a ter fundo escurecido, porque o
   clique fora precisa fechar.
+- **Visão geral.** "CPL do placar" virou **"CPL geral"**, com a dica em linguagem simples (gasto de captação e
+  remarketing ÷ leads que vieram de anúncio); a conta não mudou. O gráfico **por fase** (card de investimento e
+  sub-aba do modal) virou `BarrasFase` em `ui/graficos.tsx`: barras grossas, uma cor por fase sem vermelho
+  (azul, ouro, roxo, verde-água, lilás e verde, tokens `--info`, `--nivel-ouro`, `--purple`, `--cyan`,
+  `--nivel-diamante`, `--green`), entrada animada, dica com o valor ao passar o mouse ou focar, marca do previsto
+  e muito mais espaço entre as fases. Fase acima do previsto diz "acima do previsto" em texto (antes era barra vermelha).
+- **Funil macro** com **CPM** (gasto ÷ impressões × 1000) e **CPC** (gasto ÷ cliques, só nas linhas com clique
+  medido, a mesma base do CTR; `cpc` em `domain/metricas.ts`, com teste), na ordem: Impressões, CPM, Cliques no
+  link, CTR, CPC, Visualizações da página, Connect rate, Inscrições, Conversão da página, Grupo em 48h. Grade de
+  5 colunas com linhas de altura igual. Presença na live e Vendas ficam numa linha própria abaixo.
+- **Modal dos cards:** "Por dia" virou gráfico de **linha** (`GraficoLinha`: eixo X dia, eixo Y a métrica do dia,
+  linha desenhada na entrada, cursor que mostra o valor do dia; dia sem dado quebra a linha). "Por criativo"
+  ficou compacto: top 10, busca pelo nome, "maior/menor primeiro" (custos abrem pelo menor), rolagem e
+  "mostrar todos"; o clique continua levando ao criativo. Modal de `max-w-4xl` para `max-w-3xl`.
+- **CPL por etapa** ganhou a linha do **C1**, com CPM e custo por visualização e o aviso "não gera lead: não é CPL".
 
 ## O que foi feito (5 abas, filtro global)
 
@@ -81,11 +96,11 @@ região, utm_source, página, base de origem, isca; tudo clicável e encadeado; 
 
 ## Fórmulas (regra única: razão = soma sobre soma, mesmo recorte; sem dado nunca vira zero)
 
-- CPL = gasto ÷ leads pagos (só cadastro com origem paga). CPL do placar (provisório, BLOQUEIO 3): gasto de
+- CPL = gasto ÷ leads pagos (só cadastro com origem paga). CPL geral (antes "CPL do placar"; provisório, BLOQUEIO 3): gasto de
   captação + remarketing ÷ leads pagos. Farol pela régua do Caio: até R$ 15 verde, até R$ 20 amarelo, acima vermelho.
 - Connect rate = Σ views da página ÷ Σ cliques, só consultoria, iscas e C3 e só nas linhas com as duas
   métricas (Google não tem LPV e fica fora, com nota). Conversão da página = leads pagos ÷ views, mesma regra.
-- CTR = cliques ÷ impressões; CPM = gasto ÷ impressões × 1000; vídeo 75% = p75 ÷ impressões com vídeo;
+- CTR = cliques ÷ impressões; CPM = gasto ÷ impressões × 1000; CPC = gasto ÷ cliques (só linhas com clique medido); vídeo 75% = p75 ÷ impressões com vídeo;
   custo por visualização = gasto ÷ ThruPlay. Alcance e frequência não somam entre dias: vêm do total do período.
 - Grupo em 48h = pessoas que entraram no grupo em até 48h ÷ pessoas com a janela de 48h já fechada.
 - Meta acumulada = 650 × dias desde o início da captação (12/10). Leads da meta = pessoas únicas.

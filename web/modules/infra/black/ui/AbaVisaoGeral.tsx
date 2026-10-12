@@ -6,13 +6,14 @@
 import { useState, type ReactNode } from 'react';
 import { KpiCard, ProgressBar, SectionCard } from '@/shared/ui/components';
 import {
-  agregar, connectRate, conversaoPagina, cplDo, cplPlacar, cplPorEtapa, cplRemarketing, cpm, ctr, custoPorVisualizacao,
+  agregar, connectRate, conversaoPagina, cpc, cplDo, cplPlacar, cplPorEtapa, cplRemarketing, cpm, ctr, custoPorVisualizacao,
   dividir, ehCaptacao, farolCpl, filtrarDias, filtrarLinhas, gastoDe, gastoPorFase, ingressoGrupo, pessoasUnicas, somar,
   taxaVideo75, type Taxa as TipoTaxa,
 } from '../domain/metricas';
 import { FASES, FUNIS, ROTULO_FASE, ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
 import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
+import { BarrasFase } from './graficos';
 import { Farol, formatar, moeda, Numero, SeloFicticio, Taxa } from './pecas';
 
 const TODAS: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo', 'perfil'];
@@ -21,12 +22,14 @@ const capDias = (dias: DesempenhoDia[], d: DadosTela) => dias.filter((x) => ehCa
 const capLinhas = (linhas: LinhaPerfil[]) => linhas.filter((l) => ehCaptacao(l.funil));
 const valorTaxa = (t: TipoTaxa): Valor => t.valor;
 
-function Cartao({ onAbrir, titulo, children }: { onAbrir?: () => void; titulo: string; children: ReactNode }) {
-  if (!onAbrir) return <div className="min-w-0">{children}</div>;
+function Cartao({ onAbrir, titulo, children, cheio = false }: { onAbrir?: () => void; titulo: string; children: ReactNode; cheio?: boolean }) {
+  // `cheio`: o card ocupa a altura toda da célula (grade com linhas iguais no funil macro).
+  const altura = cheio ? ' h-full [&>*]:h-full' : '';
+  if (!onAbrir) return <div className={'min-w-0' + altura}>{children}</div>;
   return (
     <div role="button" tabIndex={0} aria-label={`Abrir detalhe: ${titulo}`} onClick={onAbrir}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAbrir(); } }}
-      className="atm-historico-card atm-historico-interativo min-w-0 cursor-pointer rounded-[var(--r-lg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]">
+      className={'atm-historico-card atm-historico-interativo min-w-0 cursor-pointer' + altura + '  rounded-[var(--r-lg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]'}>
       {children}
     </div>
   );
@@ -56,8 +59,8 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
 
   const cardLeads: CardDef = { id: 'leads', rotulo: 'Leads (pessoas únicas)', formato: 'int', medir: (_, l) => pessoasUnicas(l), aplica: TODAS,
     dica: 'No detalhe, o recorte é o período escolhido no topo. Uma pessoa com duas portas conta uma vez.' };
-  const cardCpl: CardDef = { id: 'cpl', rotulo: 'CPL do placar', formato: 'brl', medir: (x, l) => cplPlacar(x, l, idx).valor, aplica: TRAFEGO,
-    dica: 'Gasto de captação e remarketing ÷ leads pagos do mesmo recorte (provisório, BLOQUEIO 3).' };
+  const cardCpl: CardDef = { id: 'cpl', rotulo: 'CPL geral', formato: 'brl', medir: (x, l) => cplPlacar(x, l, idx).valor, aplica: TRAFEGO, menorMelhor: true,
+    dica: 'Gasto de captação e remarketing ÷ leads que vieram de anúncio, no mesmo período (regra provisória, BLOQUEIO 3).' };
   const cardGasto: CardDef = { id: 'gasto', rotulo: 'Gasto de tráfego', formato: 'brl', medir: (x) => (x.length ? gastoDe(x) : null), aplica: TRAFEGO,
     dica: 'No detalhe, o recorte é o período escolhido no topo.' };
 
@@ -75,14 +78,18 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   // ─── Faixa 3: funil macro (só captação) ─────────────────────────────────────────────────────────────────
   const dCap = capDias(d.dias, d); const lCap = capLinhas(d.linhas);
   const aCap = agregar(dCap);
+  const medirCap = (f: (a: ReturnType<typeof agregar>) => Valor) => (x: DesempenhoDia[]) => { const c = capDias(x, d); return c.length ? f(agregar(c)) : null; };
+  // Ordem pedida pelo Victor (12/10): Impressões, CPM, Cliques, CTR, CPC, Visualizações, Connect, Inscrições, Conversão, Grupo.
   const cards3: { c: CardDef; valor: ReactNode; hint?: string }[] = [
-    { c: { id: 'imp', rotulo: 'Impressões', formato: 'int', medir: (x) => (capDias(x, d).length ? agregar(capDias(x, d)).impressoes : null), aplica: TRAFEGO }, valor: <Numero valor={dCap.length ? aCap.impressoes : null} formato="int" /> },
-    { c: { id: 'ctr', rotulo: 'CTR', formato: 'pct', medir: (x) => valorTaxa(ctr(agregar(capDias(x, d)))), aplica: TRAFEGO }, valor: <Taxa taxa={ctr(aCap)} /> },
+    { c: { id: 'imp', rotulo: 'Impressões', formato: 'int', medir: medirCap((a) => a.impressoes), aplica: TRAFEGO }, valor: <Numero valor={dCap.length ? aCap.impressoes : null} formato="int" /> },
+    { c: { id: 'cpm', rotulo: 'CPM', formato: 'brl', medir: medirCap(cpm), aplica: TRAFEGO, menorMelhor: true, dica: 'Custo por mil impressões: gasto ÷ impressões × 1000.' }, valor: <Numero valor={dCap.length ? cpm(aCap) : null} formato="brl" />, hint: 'Custo por mil impressões.' },
     { c: { id: 'cliques', rotulo: 'Cliques no link', formato: 'int', medir: (x) => agregar(capDias(x, d)).cliques.valor, aplica: TRAFEGO }, valor: <Numero valor={aCap.cliques.valor} formato="int" /> },
+    { c: { id: 'ctr', rotulo: 'CTR', formato: 'pct', medir: (x) => valorTaxa(ctr(agregar(capDias(x, d)))), aplica: TRAFEGO, dica: 'Cliques no link ÷ impressões.' }, valor: <Taxa taxa={ctr(aCap)} /> },
+    { c: { id: 'cpc', rotulo: 'CPC', formato: 'brl', medir: medirCap(cpc), aplica: TRAFEGO, menorMelhor: true, dica: 'Custo por clique: gasto ÷ cliques no link, só nas linhas com clique medido.' }, valor: <Numero valor={dCap.length ? cpc(aCap) : null} formato="brl" />, hint: 'Custo por clique no link.' },
+    { c: { id: 'lpv', rotulo: 'Visualizações da página', formato: 'int', medir: (x) => agregar(capDias(x, d)).lpv.valor, aplica: TRAFEGO }, valor: <Numero valor={aCap.lpv.valor} formato="int" />, hint: aCap.lpv.conhecidos < aCap.lpv.total ? 'Parcial: Google sem LPV.' : undefined },
     { c: { id: 'connect', rotulo: 'Connect rate', formato: 'pct', medir: (x) => valorTaxa(connectRate(x, idx)), aplica: TRAFEGO, dica: 'Σ views da página ÷ Σ cliques, só nas linhas com as duas métricas.' }, valor: <Taxa taxa={connectRate(d.dias, idx)} /> },
-    { c: { id: 'lpv', rotulo: 'Views da página', formato: 'int', medir: (x) => agregar(capDias(x, d)).lpv.valor, aplica: TRAFEGO }, valor: <Numero valor={aCap.lpv.valor} formato="int" />, hint: aCap.lpv.conhecidos < aCap.lpv.total ? 'Parcial: Google sem LPV.' : undefined },
-    { c: { id: 'conv', rotulo: 'Conversão da página', formato: 'pct', medir: (x, l) => valorTaxa(conversaoPagina(x, l, idx)), aplica: TRAFEGO, dica: 'Inscrições pagas ÷ views da página, dos mesmos anúncios.' }, valor: <Taxa taxa={conversaoPagina(d.dias, d.linhas, idx)} /> },
     { c: { id: 'insc', rotulo: 'Inscrições', formato: 'int', medir: (_, l) => capLinhas(l).length, aplica: TODAS, dica: 'Cadastros de C2 e C3 (todas as portas).' }, valor: <Numero valor={lCap.length} formato="int" />, hint: `${formatar(lCap.filter((l) => l.origem === 'pago').length, 'int')} de tráfego pago` },
+    { c: { id: 'conv', rotulo: 'Conversão da página', formato: 'pct', medir: (x, l) => valorTaxa(conversaoPagina(x, l, idx)), aplica: TRAFEGO, dica: 'Inscrições pagas ÷ views da página, dos mesmos anúncios.' }, valor: <Taxa taxa={conversaoPagina(d.dias, d.linhas, idx)} /> },
     { c: { id: 'grupo', rotulo: 'Grupo em 48h', formato: 'pct', medir: (_, l) => valorTaxa(ingressoGrupo(capLinhas(l), 48, d.agora)), aplica: TODAS, dica: 'Pessoas únicas com a janela de 48h já fechada.' }, valor: <Taxa taxa={ingressoGrupo(lCap, 48, d.agora)} /> },
   ];
 
@@ -104,9 +111,9 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
             <div className="-mt-2 px-4 pb-3"><ProgressBar value={(leadsAteAgora / config.metaLeads) * 100} ariaLabel={`${formatar(leadsAteAgora, 'int')} de ${formatar(config.metaLeads, 'int')} leads`} valueNow={leadsAteAgora} valueMin={0} valueMax={config.metaLeads} /></div>
           </Cartao>
           <Cartao titulo={cardCpl.rotulo} onAbrir={abrir(cardCpl)}>
-            <KpiCard label="CPL do placar" bar={placar.valor === null ? 'gray' : placar.valor <= config.cplAlvoMedio ? 'green' : 'red'}
+            <KpiCard label="CPL geral" bar={placar.valor === null ? 'gray' : placar.valor <= config.cplAlvoMedio ? 'green' : 'red'}
               value={<span className="inline-flex items-center gap-2"><Numero valor={placar.valor} formato="brl" falta="sem leads pagos no recorte" /><Farol farol={farolCpl(placar.valor, config.reguaCpl)} /></span>}
-              hint={`Alvo ${moeda(config.cplAlvoMedio)}. Régua: meta ${moeda(config.reguaCpl.meta)}, teto ${moeda(config.reguaCpl.teto)}. ${moeda(placar.gasto)} ÷ ${formatar(placar.leadsPagos, 'int')} leads pagos.`} />
+              hint={`Gasto de captação e remarketing ÷ leads que vieram de anúncio: ${moeda(placar.gasto)} ÷ ${formatar(placar.leadsPagos, 'int')}. Alvo ${moeda(config.cplAlvoMedio)}.`} />
           </Cartao>
           <Cartao titulo={cardGasto.rotulo} onAbrir={abrir(cardGasto)}>
             <KpiCard label="Verba contra o orçamento" bar="yellow"
@@ -130,21 +137,8 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
               hint={`API ${moeda(custoCanal('api'))} · SMS ${moeda(custoCanal('sms'))} · Ligação ${moeda(custoCanal('ligacao'))}`} />
           </Cartao>
         </div>
-        <SectionCard className="mt-3" title="Por fase" subtitle={`Gasto do período contra o previsto por fase (fonte: ${config.fontes.plano ?? "sem fonte"}).`}>
-          <ul className="space-y-2.5">
-            {FASES.map((f) => {
-              const previsto = config.previstoPorFase[f]; const gasto = fases.porFase[f];
-              return (
-                <li key={f}>
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
-                    <span className="text-[var(--fg-2)]">{ROTULO_FASE[f]}</span>
-                    <span className="tabular text-[var(--fg)]">{moeda(gasto)} <span className="text-[var(--fg-3)]">de {previsto === null ? 'Sem dado' : moeda(previsto)}</span></span>
-                  </div>
-                  <ProgressBar value={previsto ? (gasto / previsto) * 100 : 0} tone={previsto !== null && gasto > previsto ? 'red' : 'accent'} ariaLabel={`${ROTULO_FASE[f]}: ${moeda(gasto)} de ${previsto === null ? 'previsto sem dado' : moeda(previsto)}`} />
-                </li>
-              );
-            })}
-          </ul>
+        <SectionCard className="mt-3" title="Por fase" subtitle={`Gasto do período contra o previsto por fase (fonte: ${config.fontes.plano ?? "sem fonte"}). Passe o mouse na barra para ver o valor.`}>
+          <BarrasFase formato="brl" itens={FASES.map((f) => ({ fase: f, rotulo: ROTULO_FASE[f], valor: fases.porFase[f], previsto: config.previstoPorFase[f] }))} />
           {fases.semFase > 0 && <p className="mt-2 text-xs text-[var(--fg-3)]">Campanhas sem fase: {moeda(fases.semFase)} (fora das barras).</p>}
         </SectionCard>
       </section>
@@ -155,13 +149,17 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
         {recorte.funil === 'c1' ? (
           <p className="rounded-[var(--r-md)] border border-dashed border-[var(--border-strong)] p-4 text-sm text-[var(--fg-3)]">O C1 é distribuição: não tem página, inscrição nem connect rate. Veja os funis lado a lado abaixo.</p>
         ) : (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5">
-            {cards3.map(({ c, valor, hint }) => (
-              <Cartao key={c.id} titulo={c.rotulo} onAbrir={abrir(c)}><KpiCard label={c.rotulo} value={valor} hint={hint} /></Cartao>
-            ))}
-            <KpiCard label="Presença na live" value={<Numero valor={d.marcos?.presencaLive ?? null} formato="int" falta="presença da live ainda sem fonte" />} bar="gray" />
-            <KpiCard label="Vendas" value={<Numero valor={d.marcos?.vendas ?? null} formato="int" falta="vendas ainda sem fonte" />} bar="gray" />
-          </div>
+          <>
+            <ol className="grid auto-rows-fr grid-cols-2 gap-3 md:grid-cols-5">
+              {cards3.map(({ c, valor, hint }) => (
+                <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={abrir(c)}><KpiCard label={c.rotulo} value={valor} hint={hint} /></Cartao></li>
+              ))}
+            </ol>
+            <div className="mt-3 grid auto-rows-fr grid-cols-2 gap-3 md:grid-cols-5">
+              <Cartao cheio titulo="Presença na live"><KpiCard label="Presença na live" value={<Numero valor={d.marcos?.presencaLive ?? null} formato="int" falta="presença da live ainda sem fonte" />} bar="gray" /></Cartao>
+              <Cartao cheio titulo="Vendas"><KpiCard label="Vendas" value={<Numero valor={d.marcos?.vendas ?? null} formato="int" falta="vendas ainda sem fonte" />} bar="gray" /></Cartao>
+            </div>
+          </>
         )}
       </section>
 
@@ -183,6 +181,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
 
         <SectionCard className="mt-3" title="CPL por etapa" subtitle={`Fase de captação; remarketing à parte. Farol: meta ${moeda(config.reguaCpl.meta)}, teto ${moeda(config.reguaCpl.teto)}.`}>
           <ul className="divide-y divide-[var(--border-faint)]">
+            <LinhaC1 dias={filtrarDias(d.dias, idx, { funil: 'c1', canal: 'todos' })} />
             {etapas.map((e) => (
               <li key={e.chave} className={'flex flex-wrap items-center gap-x-3 gap-y-0.5 py-2 text-sm ' + (e.nivel === 'etapa' ? '' : 'pl-4')}>
                 <Farol farol={farolCpl(e.cpl.valor, config.reguaCpl)} />
@@ -197,6 +196,22 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
 
       <ModalCard d={d} card={aberto} onClose={() => setAberto(null)} />
     </div>
+  );
+}
+
+/** C1 não gera lead: a linha mostra o custo que se aplica a ele (CPM e custo por visualização), sem farol de CPL. */
+function LinhaC1({ dias }: { dias: DesempenhoDia[] }) {
+  const a = agregar(dias);
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-2 text-sm">
+      <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full border border-[var(--border-strong)]" />
+      <span className="min-w-0 flex-1 break-words">
+        <span className="font-semibold text-[var(--fg)]">C1</span>
+        <span className="ml-2 text-xs text-[var(--fg-3)]">distribuição, não gera lead: não é CPL</span>
+      </span>
+      <span className="text-xs text-[var(--fg-3)]">CPM <Numero valor={dias.length ? cpm(a) : null} formato="brl" animado={false} className="text-[var(--fg)]" /></span>
+      <span className="text-xs text-[var(--fg-3)]" title="Custo por visualização = gasto ÷ ThruPlay">Por visualização <Numero valor={custoPorVisualizacao(a)} formato="brl" falta="ThruPlay" animado={false} className="text-sm text-[var(--fg)]" /></span>
+    </li>
   );
 }
 

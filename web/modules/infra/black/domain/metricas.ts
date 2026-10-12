@@ -51,13 +51,15 @@ export interface Agregado {
   parLpv: { lpv: number; cliques: number; linhas: number };
   /** Impressões só das linhas com cliques conhecidos (base do CTR) e com vídeo 75% conhecido. */
   impressoesComCliques: number; impressoesComVideo: number;
+  /** Gasto só das linhas com cliques conhecidos (base do CPC). */
+  gastoComCliques: number;
   linhas: number;
 }
 export function agregar(dias: readonly DesempenhoDia[]): Agregado {
-  let gasto = 0; let impressoes = 0; let pl = 0; let pc = 0; let pn = 0; let ic = 0; let iv = 0;
+  let gasto = 0; let impressoes = 0; let pl = 0; let pc = 0; let pn = 0; let ic = 0; let iv = 0; let gc = 0;
   for (const d of dias) {
     gasto += d.gasto; impressoes += d.impressoes;
-    if (d.cliquesLink !== null) ic += d.impressoes;
+    if (d.cliquesLink !== null) { ic += d.impressoes; gc += d.gasto; }
     if (d.videoP75 !== null) iv += d.impressoes;
     if (d.landingPageViews !== null && d.cliquesLink !== null) { pl += d.landingPageViews; pc += d.cliquesLink; pn += 1; }
   }
@@ -69,12 +71,14 @@ export function agregar(dias: readonly DesempenhoDia[]): Agregado {
     p75: somar(dias.map((d) => d.videoP75)),
     thruplay: somar(dias.map((d) => d.thruplay)),
     parLpv: { lpv: pl, cliques: pc, linhas: pn },
-    impressoesComCliques: ic, impressoesComVideo: iv,
+    impressoesComCliques: ic, impressoesComVideo: iv, gastoComCliques: gc,
     linhas: dias.length,
   };
 }
 
 export const cpm = (a: Agregado): Valor => dividir(a.gasto * 1000, a.impressoes);
+/** CPC = gasto ÷ cliques no link, só nas linhas com cliques conhecidos (mesma base do CTR). */
+export const cpc = (a: Agregado): Valor => (a.cliques.valor === null ? null : dividir(a.gastoComCliques, a.cliques.valor));
 export const ctr = (a: Agregado): Taxa => taxa(a.cliques.valor, a.cliques.valor === null ? null : a.impressoesComCliques);
 /** Custo por visualização = gasto ÷ ThruPlay (métrica de vídeo do Meta). */
 export const custoPorVisualizacao = (a: Agregado): Valor => dividir(a.gasto, a.thruplay.valor);

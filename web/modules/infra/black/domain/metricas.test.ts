@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  agregar, connectRate, conversaoPagina, cplDo, cplPlacar, cplPorEtapa, cplRemarketing, ctr, dividir, farolCpl, filtrarDias,
+  agregar, connectRate, cpc, cpm, conversaoPagina, cplDo, cplPlacar, cplPorEtapa, cplRemarketing, ctr, dividir, farolCpl, filtrarDias,
   filtrarLinhas, indexar, ingressoGrupo, pessoasUnicas, somar,
 } from './metricas';
 import type { Anuncio, Campanha, Conjunto, DesempenhoDia, LinhaPerfil } from './tipos';
@@ -121,5 +121,15 @@ describe('grupo e pessoas', () => {
     const t = ingressoGrupo(ls, 2, new Date('2026-10-12T12:30:00-03:00'));
     expect(t.num).toBe(1);
     expect(t.den).toBe(3);
+  });
+});
+
+describe('CPM e CPC', () => {
+  it('CPM = gasto ÷ impressões × 1000; CPC só nas linhas com clique conhecido', () => {
+    const a = agregar(dias);
+    expect(cpm(a)).toBeCloseTo((380 * 1000) / 16900, 6);
+    // a1 (sem clique) fica fora do CPC: (200 + 50 + 30) ÷ (100 + 40 + 10)
+    expect(cpc(a)).toBeCloseTo(280 / 150, 6);
+    expect(cpc(agregar([dia('a1', 100, 10000, null, null)]))).toBeNull();
   });
 });
