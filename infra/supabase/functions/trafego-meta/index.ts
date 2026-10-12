@@ -13,11 +13,11 @@ import { coletarAnuncios, contasDaFlag } from './anuncios.ts';
 
 const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 2, prepare: false, idle_timeout: 20 });
 const ORCAMENTO_MS = 110_000; // não começa conta nova depois disso (a Edge morre em 150 s)
-// 20261012120000: a fase de anúncios tem orçamento PRÓPRIO, contado do início da requisição: termina até
+// 20261012212726: a fase de anúncios tem orçamento PRÓPRIO, contado do início da requisição: termina até
 // LIMITE_EDGE_MS - RESERVA_REGISTRO_MS (125 s), para sobrar tempo ao coleta_registrar da rodada de campanha e à resposta.
 const LIMITE_EDGE_MS = 150_000;
 const RESERVA_REGISTRO_MS = 25_000;
-// 20261012120000: miniaturas no bucket privado trafego-miniaturas pela Storage API. Sem as duas variáveis (o Supabase
+// 20261012212726: miniaturas no bucket privado trafego-miniaturas pela Storage API. Sem as duas variáveis (o Supabase
 // injeta as duas em toda Edge), as miniaturas não são baixadas (fail-closed); o resto da coleta por anúncio segue.
 const SUPABASE_URL = (Deno.env.get('SUPABASE_URL') ?? '').replace(/\/+$/, '');
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -46,7 +46,7 @@ async function subirMiniatura(caminho: string, bytes: Uint8Array<ArrayBuffer>, m
 }
 
 /**
- * 20261012120000: função de entrada da coleta por anúncio com teto no próprio banco (statement_timeout local à
+ * 20261012212726: função de entrada da coleta por anúncio com teto no próprio banco (statement_timeout local à
  * transação): se o prazo da fase acaba, o comando é cancelado no servidor e não segura a conexão do coleta_registrar.
  */
 // deno-lint-ignore no-explicit-any
@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
   });
   const ok = resultado.contas.every((c) => c.ok) && resultado.puladas === 0;
   const erro = ok ? null : resultado.contas.filter((c) => !c.ok).map((c) => `${c.conta}: ${c.erro}`).join('; ').slice(0, 480) || 'contas puladas';
-  // 20261012120000: por conjunto e anúncio, só nas contas da flag meta_anuncio_contas (nula = desligada) que deram ok
+  // 20261012212726: por conjunto e anúncio, só nas contas da flag meta_anuncio_contas (nula = desligada) que deram ok
   // acima. Fica FORA do ok/erro: falha aqui só aparece em coletas.resultado -> 'anuncios'. Flag nula = saída idêntica.
   const alvo = contasDaFlag(p?.meta_anuncio_contas, contas, resultado.contas);
   const anuncios = alvo.length

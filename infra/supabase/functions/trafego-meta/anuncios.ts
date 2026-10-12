@@ -1,4 +1,4 @@
-// trafego-meta: coleta por conjunto (adset) e por anúncio (migration 20261012120000). Parte pura, sem Deno e sem banco:
+// trafego-meta: coleta por conjunto (adset) e por anúncio (migration 20261012212726). Parte pura, sem Deno e sem banco:
 // testada no vitest (web/modules/marketing/trafego/infrastructure/coleta-anuncios.test.ts, fixtures em
 // infra/supabase/functions/_trafego-fixtures/meta-*-anuncio*.json e meta-ids-*.json).
 //
@@ -42,7 +42,7 @@ const BASE = 'https://graph.facebook.com';
 const PLATAFORMA = 'meta';
 /** Ids por busca de cadastro (filtering id IN); 50 mantém a URL curta e cabe numa página (limit=50). */
 export const LOTE_IDS = 50;
-/** Teto das funções de entrada (20261012120000). */
+/** Teto das funções de entrada (20261012212726). */
 export const LOTE_ANUNCIO = 5000;
 /** Miniaturas por rodada (o resto fica para a próxima). */
 export const MAX_MINIATURAS = 20;

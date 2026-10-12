@@ -1,4 +1,4 @@
--- Reversão da 20261012220000: volta o corpo da mkt_trafego.etapa_black da 20261012120000 (dois subtipos = subtipo
+-- Reversão da 20261012214704: volta o corpo da mkt_trafego.etapa_black da 20261012212726 (dois subtipos = subtipo
 -- nulo, sem conflito). Assinatura, dono e grants não mudam com create or replace.
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
@@ -32,7 +32,7 @@ do $g$
 begin
   if exists (select 1 from pg_proc p cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) g
               where p.oid = 'mkt_trafego.etapa_black(text)'::regprocedure and g.grantee <> p.proowner) then
-    raise exception '20261012220000 (reversão): mkt_trafego.etapa_black tem grant além do dono (inclusive PUBLIC)';
+    raise exception '20261012214704 (reversão): mkt_trafego.etapa_black tem grant além do dono (inclusive PUBLIC)';
   end if;
 end
 $g$;

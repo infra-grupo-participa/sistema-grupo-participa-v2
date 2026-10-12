@@ -1,4 +1,4 @@
--- Reversão de 20261012120000. Numa transação.
+-- Reversão de 20261012212726. Numa transação.
 -- ANTES, nesta ordem:
 --   1. Desligar a flag: update mkt_trafego.coleta_config set valor = null where chave = 'meta_anuncio_contas';
 --      (com a flag nula a Edge trafego-meta não chama nenhuma função daqui; a coleta por campanha segue igual).

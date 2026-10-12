@@ -1,8 +1,8 @@
--- 20261012220000: mkt_trafego.etapa_black passa a ficar com o PRIMEIRO subtipo e a sinalizar o conflito.
--- ARQUIVO EM UTF-8: o translate usa um mapa de letras acentuadas (mesmo cuidado da 20261012120000).
+-- 20261012214704: mkt_trafego.etapa_black passa a ficar com o PRIMEIRO subtipo e a sinalizar o conflito.
+-- ARQUIVO EM UTF-8: o translate usa um mapa de letras acentuadas (mesmo cuidado da 20261012212726).
 -- POR QUE: regra do Victor (12/10/2026, noite), registrada no cérebro em
 --   _contexto/decisoes/2026-10-black-etapas-pelo-nome-da-campanha.md: "dois subtipos no mesmo nome: sinaliza o
---   conflito e fica com o primeiro subtipo que aparece no nome". Na 20261012120000 o subtipo ficava nulo e sem
+--   conflito e fica com o primeiro subtipo que aparece no nome". Na 20261012212726 o subtipo ficava nulo e sem
 --   sinal (era o "por ora" enquanto ele não decidia).
 -- O QUE MUDA (só o corpo da função; assinatura, dono, grants e search_path iguais):
 --   - dois ou mais subtipos da mesma etapa: subtipo = o que aparece primeiro no nome (posição entre as barras) e
@@ -12,14 +12,14 @@
 --   - o mesmo subtipo repetido (MANIFESTO | MANIFESTO) não é conflito.
 -- AS 5 PERGUNTAS: escala, índice e frequência: nenhuma mudança (função imutável, calculada na leitura, ninguém
 --   chama ainda além do ensaio; a RPC do dashboard é de outra fase). Repetição: create or replace, idempotente.
---   Reversão: 20261012220000_reversao.sql (corpo anterior).
+--   Reversão: 20261012214704_reversao.sql (corpo anterior).
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
 
 do $g$
 begin
   if to_regprocedure('mkt_trafego.etapa_black(text)') is null then
-    raise exception '20261012220000: mkt_trafego.etapa_black não existe (aplicar antes a 20261012120000).';
+    raise exception '20261012214704: mkt_trafego.etapa_black não existe (aplicar antes a 20261012212726).';
   end if;
 end
 $g$;
@@ -57,7 +57,7 @@ do $g$
 begin
   if exists (select 1 from pg_proc p cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) g
               where p.oid = 'mkt_trafego.etapa_black(text)'::regprocedure and g.grantee <> p.proowner) then
-    raise exception '20261012220000: mkt_trafego.etapa_black tem grant além do dono (inclusive PUBLIC)';
+    raise exception '20261012214704: mkt_trafego.etapa_black tem grant além do dono (inclusive PUBLIC)';
   end if;
 end
 $g$;

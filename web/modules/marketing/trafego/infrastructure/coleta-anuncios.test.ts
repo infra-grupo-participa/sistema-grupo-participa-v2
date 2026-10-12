@@ -1,4 +1,4 @@
-// Coleta por conjunto e por anúncio do Meta (migration 20261012120000), testada SEM credencial e SEM API real: as
+// Coleta por conjunto e por anúncio do Meta (migration 20261012212726), testada SEM credencial e SEM API real: as
 // respostas do Meta são fixtures inventadas (ids 9000000000003xx/4xx/5xx, marcadas "ENSAIO") em
 // infra/supabase/functions/_trafego-fixtures, no formato documentado da Graph API. O banco e o Storage são simulados:
 // o que se confere é o que a Edge manda para as funções de entrada e para o bucket.
