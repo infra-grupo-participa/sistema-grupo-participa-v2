@@ -1,4 +1,4 @@
--- Reversão de 20261013130000. Numa transação. Rodar ANTES da reversão da A (20261012231649).
+-- Reversão de 20261012234606. Numa transação. Rodar ANTES da reversão da A (20261012231649).
 -- As 3 RPCs de teste voltam ao corpo de antes (só atm_cadastro + atm_pertence, md5 de prosrc conferidos na migration).
 -- As marcações de teste da Black e as 3 linhas de dashboard_grupos saem; a foto do grupo da Black (grupo_participantes,
 -- FK em dashboard_grupos) sai junto se existir. crm.evento_jornada não é tocada (é a timeline do CRM, tag BF26).
@@ -112,7 +112,7 @@ begin
   if (select md5(prosrc) from pg_proc where oid = 'public.dados_marcar_teste(text,text,text,text)'::regprocedure) <> '2632356addaa503a8c1e6415ab6cb06d'
      or (select md5(prosrc) from pg_proc where oid = 'public.dados_desmarcar_teste(text,text,text)'::regprocedure) <> '99ed0ca0dc9c1268b2be18c9c055b84b'
      or (select md5(prosrc) from pg_proc where oid = 'public.dados_testes(text)'::regprocedure) <> '15cc20af1d1593c869a1787908406d64' then
-    raise exception 'reversão 20261013130000: corpo das RPCs de teste não voltou ao de antes';
+    raise exception 'reversão 20261012234606: corpo das RPCs de teste não voltou ao de antes';
   end if;
 end
 $c$;

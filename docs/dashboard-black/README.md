@@ -204,10 +204,10 @@ qualquer tela que passe esses nomes por ele vai recusá-los.
 
 ## Banco: migration B (leads, perfil, grupo e teste)
 
-`infra/supabase/migrations/20261013130000_*` (branch `victor-black-banco-b`), **não aplicada**: vai ao ar depois da
+`infra/supabase/migrations/20261012234606_*` (branch `victor-black-banco-b`), **não aplicada**: vai ao ar depois da
 A e da C. View `dados.black_leads` (fechada) e as RPCs `dados_black_perfil`, `dados_black_leads` e
 `dados_black_grupo` (com recorte `{"tipo","valor"}`), mais a marcação de teste com ramo por modelo. Regras de MQL,
-ingresso único no grupo e "A corrigir", números e ensaio: [`20261013130000.explain.md`](../../infra/supabase/migrations/20261013130000.explain.md).
+ingresso único no grupo e "A corrigir", números e ensaio: [`20261012234606.explain.md`](../../infra/supabase/migrations/20261012234606.explain.md).
 
 ## Contrato da fonte (`application/ports.ts`)
 

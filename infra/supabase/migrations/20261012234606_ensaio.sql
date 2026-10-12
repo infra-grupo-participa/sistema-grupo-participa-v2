@@ -1,4 +1,4 @@
--- Ensaio de 20261013130000 (transação desfeita). A (20261012231649) e C (20261012233334) aplicadas. REPEATABLE READ: dado novo chegando não muda o md5.
+-- Ensaio de 20261012234606 (transação desfeita). A (20261012231649) e C (20261012233334) aplicadas. REPEATABLE READ: dado novo chegando não muda o md5.
 -- Números do ATM e da Clínica antes e depois (md5), contagens por página, grupo com e sem recorte, travas de acesso,
 -- marcar/desmarcar na Black e no ATM (vai e volta), reversão no fim. Só contagens: nenhum dado pessoal sai do ensaio.
 begin transaction isolation level repeatable read;
@@ -15,9 +15,9 @@ reset role;
 select set_config('request.jwt.claims', '{}', true);
 
 -- ===== MIGRATION =====
--- 20261013130000: leads da Black (5 páginas), perfil sem dado pessoal, ingresso no grupo por campanha, marcar teste na Black
+-- 20261012234606: leads da Black (5 páginas), perfil sem dado pessoal, ingresso no grupo por campanha, marcar teste na Black
 --
--- STATUS: ver 20261013130000.explain.md.
+-- STATUS: ver 20261012234606.explain.md.
 -- POR QUE: pedido do Victor (13/10/2026), via Maestro. O dashboard da Black lê do banco os leads das 5 páginas, o perfil, os
 --   MQLs e o ingresso nos 3 grupos do WhatsApp, com o dado sujo marcado como "a corrigir" (sem alterar a fonte).
 --   Depende da A (20261012231649, aplicada; e da C 20261012233334 (arquivo 20261013120000), aplicada antes: linha da Black em dados.dashboards e dados.black_cadastro).
@@ -44,7 +44,7 @@ select set_config('request.jwt.claims', '{}', true);
 -- AS 5 PERGUNTAS: escala: ~190 envios hoje (5 tabelas pequenas), até ~25 mil na Black inteira; 3 linhas em dashboard_grupos;
 --   índice: as 5 fontes são lidas inteiras com filtro de data (pequenas); evento_jornada filtrada por fonte+tag (130 linhas
 --   sendflow hoje); frequência: abertura do dashboard e o cron da foto (3 exports a cada ~9 min, mesmo cron do ATM);
---   repetição: create or replace + insert on conflict do nothing (idempotente); reversão: 20261013130000_reversao.sql.
+--   repetição: create or replace + insert on conflict do nothing (idempotente); reversão: 20261012234606_reversao.sql.
 
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
@@ -52,10 +52,10 @@ set local statement_timeout = '60s';
 do $g$
 begin
   if not exists (select 1 from dados.dashboards where chave = 'black-friday-2026-10' and modelo = 'jornada-captacao') then
-    raise exception '20261013130000: a migration A (20261012231649) não está aplicada.';
+    raise exception '20261012234606: a migration A (20261012231649) não está aplicada.';
   end if;
   if to_regprocedure('dados.black_cadastro(text)') is null then
-    raise exception '20261013130000: dados.black_cadastro não existe (aplicar a A antes).';
+    raise exception '20261012234606: dados.black_cadastro não existe (aplicar a A antes).';
   end if;
   -- corpos vivos que esta migration reescreve ou usa: se mudaram, reler antes
   if (select md5(prosrc) from pg_proc where oid = 'public.dados_marcar_teste(text,text,text,text)'::regprocedure) <> '2632356addaa503a8c1e6415ab6cb06d'
@@ -64,12 +64,12 @@ begin
      or (select md5(prosrc) from pg_proc where oid = 'dados.atm_pertence(text,text,text)'::regprocedure) <> '7945be0a410031528e24bd21a4c876ca'
      or (select md5(prosrc) from pg_proc where oid = 'dados.teste_ativo(text,text,text)'::regprocedure) <> '62b892dac3581cfcc08f8b2ec04582f2'
      or (select md5(prosrc) from pg_proc where oid = 'controle.fone_key(text)'::regprocedure) <> '8ae6c891be75f0b128fcb8bb09f36f12' then
-    raise exception '20261013130000: corpo vivo de função de teste ou fone_key mudou. Reler.';
+    raise exception '20261012234606: corpo vivo de função de teste ou fone_key mudou. Reler.';
   end if;
   if exists (select 1 from dados.dashboard_grupos
               where sendflow_release_id in ('D94OTzpfoK13WeiM3IcM', 'ZHCd0RrBGYkUBXAi53FN', 'CiHdZJsQn06SYzGPMhMH')
                 and chave <> 'black-friday-2026-10') then
-    raise exception '20261013130000: release da Black já ligado a outra chave. Reler.';
+    raise exception '20261012234606: release da Black já ligado a outra chave. Reler.';
   end if;
 end
 $g$;
@@ -157,7 +157,7 @@ select n.pagina || ':' || n.id_fonte as lead_id,
 
 revoke all on dados.black_leads from public, anon, authenticated, service_role;
 comment on view dados.black_leads is
-  '20261013130000: leads da Black (5 páginas) desde 04/10/2026, uma linha por envio. Dado pessoal: só pelas RPCs dados_black_*.';
+  '20261012234606: leads da Black (5 páginas) desde 04/10/2026, uma linha por envio. Dado pessoal: só pelas RPCs dados_black_*.';
 
 -- 2a. trava da chave: o modelo jornada-captacao é genérico, mas estes dados (view, marcações) são só da Black
 create or replace function dados.black_evento(p_chave text)
@@ -168,7 +168,7 @@ create or replace function dados.black_evento(p_chave text)
 as $function$
 declare d dados.dashboards := dados.black_cadastro(p_chave);   -- 42501 sem acesso, P0002 fora do cadastro ou outro modelo
 begin
-  -- 20261013130000 (pentester): outra chave do mesmo modelo não lê nem marca a Black
+  -- 20261012234606 (pentester): outra chave do mesmo modelo não lê nem marca a Black
   if d.chave is distinct from 'black-friday-2026-10' then
     raise exception 'dashboard não cadastrado' using errcode = 'P0002';
   end if;
@@ -184,7 +184,7 @@ create or replace function dados.black_pertence(p_chave text, p_tipo text, p_val
  stable
  set search_path to ''
 as $function$
-  -- 20261013130000
+  -- 20261012234606
   select p_chave = 'black-friday-2026-10' and case p_tipo
     when 'email' then exists (select 1 from dados.black_leads l where l.email = p_valor)
     when 'fone' then
@@ -202,7 +202,7 @@ create or replace function public.dados_marcar_teste(p_chave text, p_email text 
  set search_path to ''
 as $function$
 declare
-  -- 20261013130000: ramo da Black (jornada-captacao); os outros modelos seguem por atm_cadastro, como antes
+  -- 20261012234606: ramo da Black (jornada-captacao); os outros modelos seguem por atm_cadastro, como antes
   v_black boolean := exists (select 1 from dados.dashboards x where x.chave = p_chave and x.modelo = 'jornada-captacao');
   d dados.dashboards := case when v_black then dados.black_evento(p_chave) else dados.atm_cadastro(p_chave) end;   -- 42501 não equipe, P0002 chave fora do cadastro ou outro modelo
   v_email text := nullif(lower(btrim(p_email)), '');
@@ -254,7 +254,7 @@ create or replace function public.dados_desmarcar_teste(p_chave text, p_email te
  set search_path to ''
 as $function$
 declare
-  -- 20261013130000: ramo da Black (jornada-captacao); os outros modelos seguem por atm_cadastro, como antes
+  -- 20261012234606: ramo da Black (jornada-captacao); os outros modelos seguem por atm_cadastro, como antes
   d dados.dashboards := case when exists (select 1 from dados.dashboards x where x.chave = p_chave and x.modelo = 'jornada-captacao')
                              then dados.black_evento(p_chave) else dados.atm_cadastro(p_chave) end;
   v_email text := nullif(lower(btrim(p_email)), '');
@@ -281,7 +281,7 @@ create or replace function public.dados_testes(p_chave text)
 as $function$
 #variable_conflict use_column
 declare
-  -- 20261013130000: ramo da Black (jornada-captacao); os outros modelos seguem por atm_cadastro, como antes
+  -- 20261012234606: ramo da Black (jornada-captacao); os outros modelos seguem por atm_cadastro, como antes
   d dados.dashboards := case when exists (select 1 from dados.dashboards x where x.chave = p_chave and x.modelo = 'jornada-captacao')
                              then dados.black_evento(p_chave) else dados.atm_cadastro(p_chave) end;
 begin
@@ -310,7 +310,7 @@ create or replace function dados.black_no_recorte(p_recorte jsonb, p_porta text,
  immutable
  set search_path to ''
 as $function$
-  -- 20261013130000
+  -- 20261012234606
   select p_recorte is null
       or (p_recorte ->> 'valor') = case p_recorte ->> 'tipo'
            when 'porta' then p_porta when 'isca' then p_isca when 'campanha' then p_campanha_id
@@ -325,7 +325,7 @@ create or replace function dados.black_recorte_valido(p_recorte jsonb)
  set search_path to ''
 as $function$
 begin
-  -- 20261013130000: null, {} e jsonb null = sem recorte
+  -- 20261012234606: null, {} e jsonb null = sem recorte
   if p_recorte is null or p_recorte = '{}'::jsonb or jsonb_typeof(p_recorte) = 'null' then return null; end if;
   if jsonb_typeof(p_recorte) <> 'object'
      or exists (select 1 from jsonb_object_keys(p_recorte) k where k not in ('tipo', 'valor'))
@@ -520,7 +520,7 @@ on conflict (chave, sendflow_campanha) do nothing;
 insert into dados.marcacoes_teste (chave, tipo, valor, motivo, marcado_por, marcado_por_email)
 select distinct 'black-friday-2026-10', 'email', l.email,
        case when l.email like '%@advmais.com%' then 'equipe' else 'teste' end,
-       null::uuid, 'migration 20261013130000 (auditoria 12/10)'
+       null::uuid, 'migration 20261012234606 (auditoria 12/10)'
   from dados.black_leads l
  where l.parece_teste and l.email like '%@%'
 on conflict (chave, tipo, valor) where desmarcado_em is null do nothing;
@@ -528,10 +528,10 @@ on conflict (chave, tipo, valor) where desmarcado_em is null do nothing;
 do $c$
 begin
   if (select count(*) from dados.dashboard_grupos where chave = 'black-friday-2026-10') <> 3 then
-    raise exception '20261013130000: dashboard_grupos da Black não tem 3 linhas';
+    raise exception '20261012234606: dashboard_grupos da Black não tem 3 linhas';
   end if;
   if has_table_privilege('anon', 'dados.black_leads', 'select') or has_table_privilege('authenticated', 'dados.black_leads', 'select') then
-    raise exception '20261013130000: black_leads legível por anon/authenticated';
+    raise exception '20261012234606: black_leads legível por anon/authenticated';
   end if;
   if not has_function_privilege('authenticated', 'public.dados_black_perfil(text,date,date,boolean)', 'execute')
      or not has_function_privilege('authenticated', 'public.dados_black_leads(text,text[])', 'execute')
@@ -542,7 +542,7 @@ begin
      or has_function_privilege('anon', 'public.dados_marcar_teste(text,text,text,text)', 'execute')
      or has_function_privilege('authenticated', 'dados.black_pertence(text,text,text)', 'execute')
      or has_function_privilege('authenticated', 'dados.black_no_recorte(jsonb,text,text,text,text,text)', 'execute') then
-    raise exception '20261013130000: permissões erradas';
+    raise exception '20261012234606: permissões erradas';
   end if;
 end
 $c$;
@@ -697,7 +697,7 @@ insert into pg_temp._z_out (passo, linha) select '13 grants', (select string_agg
 insert into pg_temp._z_out (passo, linha) select '13 view acl e opcoes', (select coalesce(relacl::text,'null') || ' ' || coalesce(reloptions::text,'') from pg_class where oid = 'dados.black_leads'::regclass);
 
 -- ===== REVERSÃO =====
--- Reversão de 20261013130000. Numa transação. Rodar ANTES da reversão da A (20261012231649).
+-- Reversão de 20261012234606. Numa transação. Rodar ANTES da reversão da A (20261012231649).
 -- As 3 RPCs de teste voltam ao corpo de antes (só atm_cadastro + atm_pertence, md5 de prosrc conferidos na migration).
 -- As marcações de teste da Black e as 3 linhas de dashboard_grupos saem; a foto do grupo da Black (grupo_participantes,
 -- FK em dashboard_grupos) sai junto se existir. crm.evento_jornada não é tocada (é a timeline do CRM, tag BF26).
@@ -811,7 +811,7 @@ begin
   if (select md5(prosrc) from pg_proc where oid = 'public.dados_marcar_teste(text,text,text,text)'::regprocedure) <> '2632356addaa503a8c1e6415ab6cb06d'
      or (select md5(prosrc) from pg_proc where oid = 'public.dados_desmarcar_teste(text,text,text)'::regprocedure) <> '99ed0ca0dc9c1268b2be18c9c055b84b'
      or (select md5(prosrc) from pg_proc where oid = 'public.dados_testes(text)'::regprocedure) <> '15cc20af1d1593c869a1787908406d64' then
-    raise exception 'reversão 20261013130000: corpo das RPCs de teste não voltou ao de antes';
+    raise exception 'reversão 20261012234606: corpo das RPCs de teste não voltou ao de antes';
   end if;
 end
 $c$;
