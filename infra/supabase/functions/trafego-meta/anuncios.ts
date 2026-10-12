@@ -4,8 +4,15 @@
 //
 // LIGA E DESLIGA POR CONTA: só roda nas contas listadas em mkt_trafego.coleta_config 'meta_anuncio_contas' (nasce
 // nula = desligada) e só nas que tiveram a coleta de campanha ok NESTA rodada (o conjunto precisa da campanha gravada).
-// Roda DEPOIS do coletarMeta, com o mesmo orçamento de tempo (ate_ms), e fica FORA do ok/erro da rodada: falha aqui
-// aparece só em mkt_trafego.coletas.resultado -> 'anuncios' (o vigia de rotinas não vê).
+// Roda DEPOIS do coletarMeta e fica FORA do ok/erro da rodada: falha aqui aparece só em
+// mkt_trafego.coletas.resultado -> 'anuncios' (o vigia de rotinas não vê).
+//
+// ORÇAMENTO PRÓPRIO (ressalva do pentester, 12/10/2026): ate_ms é o fim da FASE de anúncios, que o index.ts põe com
+// folga antes dos 150 s da Edge, para o coleta_registrar da rodada de campanha rodar sempre. O tempo é conferido antes
+// de CADA chamada (insights, cada página, cada bloco ?ids=, cada função de entrada, cada miniatura) e o timeout de cada
+// uma é limitado ao que resta (classe Prazo). Sem tempo, a conta para com erro 'sem_tempo' (o que já foi gravado fica:
+// os upserts são idempotentes e a próxima rodada completa). Miniatura só começa se couber download (10 s) mais upload
+// (15 s) mais folga (5 s).
 //
 // O que lê da Graph API (só leitura), por conta:
 //   GET /act_<conta>/insights?level=ad&time_increment=1&time_range={since,until}
@@ -34,8 +41,16 @@ export const LOTE_ANUNCIO = 5000;
 /** Miniaturas por rodada (o resto fica para a próxima). */
 export const MAX_MINIATURAS = 20;
 export const MINIATURA_MAX_BYTES = 1_048_576;
-/** Só começa a baixar miniatura se sobrarem mais que isto do orçamento (ms). */
-export const FOLGA_MINIATURA_MS = 10_000;
+/** Teto de cada chamada ao Meta e ao banco (ms); o efetivo é o menor entre o teto e o que resta da fase. */
+export const TIMEOUT_META_MS = 30_000;
+export const TIMEOUT_BANCO_MS = 20_000;
+/** A menos disto do fim da fase, nenhuma chamada nova começa (ms). */
+export const MIN_CHAMADA_MS = 2_000;
+export const MINIATURA_DOWNLOAD_MS = 10_000;
+export const MINIATURA_UPLOAD_MS = 15_000;
+export const FOLGA_MINIATURA_MS = 5_000;
+/** Só começa uma miniatura se sobrar isto da fase (download + upload + folga). */
+export const CUSTO_MINIATURA_MS = MINIATURA_DOWNLOAD_MS + MINIATURA_UPLOAD_MS + FOLGA_MINIATURA_MS;
 const RE_ID = /^[0-9]{1,30}$/;
 const RE_EXTERNA = /^[A-Za-z0-9_-]{1,60}$/;
 
@@ -69,19 +84,21 @@ export interface DepsAnuncios {
   versao: string;
   de: string;
   ate: string;
-  /** Mesmo orçamento do coletarMeta: não começa conta nova (nem miniatura) depois dele. */
+  /** Fim da FASE de anúncios (epoch ms). Nenhuma chamada começa a menos de MIN_CHAMADA_MS dele. */
   ate_ms: number;
   /** De meta.ts, injetados (ver o cabeçalho). */
   lerPaginas: <T>(buscar: Buscar, url: string, token: string) => Promise<T[]>;
   paraDesempenho: (insights: InsightMeta[]) => { linhas: LinhaDesempenho[]; descartadas: number };
   camposDistribuicao: string;
-  receberConjuntos: (l: LinhaConjunto[]) => Promise<Receber>;
-  receberAnuncios: (l: LinhaAnuncio[]) => Promise<Receber & { pendentes_miniatura?: unknown[] }>;
-  receberDesempenhoAnuncio: (l: LinhaDesempenhoAnuncio[]) => Promise<Receber>;
-  receberMiniaturas: (l: LinhaMiniatura[]) => Promise<Receber>;
+  /** ms = tempo máximo desta chamada (o index.ts aplica como statement_timeout da transação). */
+  receberConjuntos: (l: LinhaConjunto[], ms: number) => Promise<Receber>;
+  receberAnuncios: (l: LinhaAnuncio[], ms: number) => Promise<Receber & { pendentes_miniatura?: unknown[] }>;
+  receberDesempenhoAnuncio: (l: LinhaDesempenhoAnuncio[], ms: number) => Promise<Receber>;
+  receberMiniaturas: (l: LinhaMiniatura[], ms: number) => Promise<Receber>;
   /** Sem baixar ou sem subirMiniatura, as miniaturas não são tocadas (fail-closed). */
   baixar?: Baixar;
-  subirMiniatura?: (caminho: string, bytes: Uint8Array<ArrayBuffer>, mime: string) => Promise<void>;
+  /** ms = tempo máximo do upload (até MINIATURA_UPLOAD_MS). */
+  subirMiniatura?: (caminho: string, bytes: Uint8Array<ArrayBuffer>, mime: string, ms: number) => Promise<void>;
 }
 
 export interface ResultadoContaAnuncio {
@@ -94,6 +111,41 @@ export interface ResultadoAnuncios { ms: number; puladas: number; contas: Result
 class ErroAnuncio extends Error {
   constructor(public codigo: string) { super(codigo); }
 }
+/** Relógio da fase de anúncios: confere o tempo antes de cada chamada e devolve o timeout dela (teto ou o que resta). */
+export class Prazo {
+  estourou = false;
+  constructor(readonly ate_ms: number, readonly agora: () => number) {}
+  resta(): number { return this.ate_ms - this.agora(); }
+  /** Lança ErroAnuncio('sem_tempo') se faltar menos que MIN_CHAMADA_MS; senão devolve min(teto, o que resta). */
+  reservar(teto: number): number {
+    const r = this.resta();
+    if (r < MIN_CHAMADA_MS) { this.estourou = true; throw new ErroAnuncio('sem_tempo'); }
+    return Math.min(teto, r);
+  }
+}
+
+/** buscar no prazo: confere antes e passa um AbortSignal limitado ao que resta (vale para cada página do lerPaginas). */
+function buscarNoPrazo(buscar: Buscar, prazo: Prazo): Buscar {
+  return (url, init) => {
+    const ms = prazo.reservar(TIMEOUT_META_MS);
+    return buscar(url, { ...init, signal: AbortSignal.timeout(ms) });
+  };
+}
+
+/** Chamada ao banco (ou ao Storage) no prazo: confere antes e desiste quando o tempo acaba, mesmo se a chamada travar. */
+async function noPrazo<T>(prazo: Prazo, teto: number, chamar: (ms: number) => Promise<T>): Promise<T> {
+  const ms = prazo.reservar(teto);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limite = new Promise<never>((_, rejeitar) => {
+    timer = setTimeout(() => { prazo.estourou = true; rejeitar(new ErroAnuncio('sem_tempo')); }, ms);
+  });
+  try {
+    return await Promise.race([chamar(ms), limite]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** ErroMeta (de meta.ts, que chega por lerPaginas injetado) ou ErroAnuncio: os dois têm codigo string. */
 const codigoDe = (e: unknown): string | null => {
   const c = (e as { codigo?: unknown } | null)?.codigo;
@@ -268,12 +320,12 @@ export function hostDeMiniaturaOk(url: string): boolean {
 
 export type Miniatura = { ok: true; bytes: Uint8Array<ArrayBuffer>; ext: 'jpg' | 'png' | 'webp'; mime: string } | { ok: false; erro: string };
 
-/** Baixa uma miniatura: sem redirect, 10 s, até 1 MB lido de fato (stream), tipo pelos bytes. Nunca lança. */
-export async function baixarMiniatura(url: string, baixar: Baixar): Promise<Miniatura> {
+/** Baixa uma miniatura: sem redirect, até 10 s (ou ms, se menor), até 1 MB lido de fato (stream), tipo pelos bytes. Nunca lança. */
+export async function baixarMiniatura(url: string, baixar: Baixar, ms: number = MINIATURA_DOWNLOAD_MS): Promise<Miniatura> {
   if (!hostDeMiniaturaOk(url)) return { ok: false, erro: 'miniatura_host' };
   let r: RespostaBinaria;
   try {
-    r = await baixar(url, { redirect: 'error', signal: AbortSignal.timeout(10_000) });
+    r = await baixar(url, { redirect: 'error', signal: AbortSignal.timeout(Math.max(1, Math.min(MINIATURA_DOWNLOAD_MS, ms))) });
   } catch {
     return { ok: false, erro: 'miniatura_rede' };
   }
@@ -312,21 +364,22 @@ export async function baixarMiniatura(url: string, baixar: Baixar): Promise<Mini
   return { ok: true, bytes, ...tipo };
 }
 
-async function miniaturasDaConta(conta: string, pendentes: string[], urls: Map<string, string>, d: DepsAnuncios, agora: () => number):
+async function miniaturasDaConta(conta: string, pendentes: string[], urls: Map<string, string>, d: DepsAnuncios, prazo: Prazo):
   Promise<{ miniaturas: number; miniaturas_erro: number }> {
-  if (!d.baixar || !d.subirMiniatura || !pendentes.length) return { miniaturas: 0, miniaturas_erro: 0 };
+  const subir = d.subirMiniatura;
+  if (!d.baixar || !subir || !pendentes.length) return { miniaturas: 0, miniaturas_erro: 0 };
   const saida: LinhaMiniatura[] = [];
   let ok = 0;
   let erros = 0;
   for (const criativo of pendentes.slice(0, MAX_MINIATURAS)) {
-    if (!(agora() + FOLGA_MINIATURA_MS < d.ate_ms)) break;
+    if (prazo.resta() < CUSTO_MINIATURA_MS) break; // não cabe download + upload + folga: fica para a próxima rodada
     const url = urls.get(criativo);
     if (!url || !RE_ID.test(criativo)) continue; // sem URL nesta rodada (cadastro parcial): tenta na próxima
-    const m = await baixarMiniatura(url, d.baixar);
+    const m = await baixarMiniatura(url, d.baixar, prazo.resta() - MIN_CHAMADA_MS);
     if (!m.ok) { saida.push({ criativo, erro: m.erro }); erros++; continue; }
     const caminho = `meta/${conta}/${criativo}.${m.ext}`;
     try {
-      await d.subirMiniatura(caminho, m.bytes, m.mime);
+      await noPrazo(prazo, MINIATURA_UPLOAD_MS, (ms) => subir(caminho, m.bytes, m.mime, ms));
       saida.push({ criativo, caminho });
       ok++;
     } catch {
@@ -335,16 +388,17 @@ async function miniaturasDaConta(conta: string, pendentes: string[], urls: Map<s
     }
   }
   if (saida.length) {
-    try { await d.receberMiniaturas(saida); } catch { /* não derruba a conta; tenta de novo na próxima rodada */ }
+    try { await noPrazo(prazo, TIMEOUT_BANCO_MS, (ms) => d.receberMiniaturas(saida, ms)); } catch { /* não derruba a conta; tenta de novo na próxima rodada */ }
   }
   return { miniaturas: ok, miniaturas_erro: erros };
 }
 
-async function coletarContaAnuncios(c: ContaMeta, d: DepsAnuncios, agora: () => number): Promise<ResultadoContaAnuncio> {
+async function coletarContaAnuncios(c: ContaMeta, d: DepsAnuncios, prazo: Prazo): Promise<ResultadoContaAnuncio> {
   const base = { conta: c.conta_externa };
   if (!c.token) return { ...base, ok: false, erro: 'sem_token' };
+  const buscar = buscarNoPrazo(d.buscar, prazo);
   try {
-    const insights = await d.lerPaginas<InsightAnuncio>(d.buscar,
+    const insights = await d.lerPaginas<InsightAnuncio>(buscar,
       urlInsightsAnuncio(d.versao, c.conta_externa, d.de, d.ate, d.camposDistribuicao), c.token);
     const { linhas, descartadas } = paraDesempenhoAnuncio(insights, d.paraDesempenho);
     if (!linhas.length) return { ...base, ok: true, conjuntos: 0, anuncios: 0, linhas: 0, descartadas, recusas: 0, cadastro_parcial: 0,
@@ -352,36 +406,44 @@ async function coletarContaAnuncios(c: ContaMeta, d: DepsAnuncios, agora: () => 
 
     const idsConj = [...new Set(insights.map((i) => i.adset_id).filter((x): x is string => !!x).map(String))];
     const idsAnu = [...new Set(linhas.map((l) => l.anuncio))];
-    const conjLidos = await lerTodosIds<ConjuntoMeta>(d.buscar, urlPorIds(d.versao, idsConj, CAMPOS_CONJUNTO), c.token);
+    const conjLidos = await lerTodosIds<ConjuntoMeta>(buscar, urlPorIds(d.versao, idsConj, CAMPOS_CONJUNTO), c.token);
+    if (prazo.estourou) throw new ErroAnuncio('sem_tempo');
     const conj = paraConjuntos(conjLidos.lidos, insights);
     let recusas = 0;
     for (let i = 0; i < conj.linhas.length; i += LOTE_ANUNCIO) {
-      const r = await d.receberConjuntos(conj.linhas.slice(i, i + LOTE_ANUNCIO));
+      const lote = conj.linhas.slice(i, i + LOTE_ANUNCIO);
+      const r = await noPrazo(prazo, TIMEOUT_BANCO_MS, (ms) => d.receberConjuntos(lote, ms));
       if (r?.ok === false) return { ...base, ok: false, erro: 'banco_conjuntos' };
       recusas += r?.recusas?.length ?? 0;
     }
 
-    const anuLidos = await lerTodosIds<AnuncioMeta>(d.buscar, urlPorIds(d.versao, idsAnu, CAMPOS_ANUNCIO), c.token);
+    const anuLidos = await lerTodosIds<AnuncioMeta>(buscar, urlPorIds(d.versao, idsAnu, CAMPOS_ANUNCIO), c.token);
+    if (prazo.estourou) throw new ErroAnuncio('sem_tempo');
     const anu = paraAnuncios(anuLidos.lidos, insights);
     const pendentes: string[] = [];
     for (let i = 0; i < anu.linhas.length; i += LOTE_ANUNCIO) {
-      const r = await d.receberAnuncios(anu.linhas.slice(i, i + LOTE_ANUNCIO));
+      const lote = anu.linhas.slice(i, i + LOTE_ANUNCIO);
+      const r = await noPrazo(prazo, TIMEOUT_BANCO_MS, (ms) => d.receberAnuncios(lote, ms));
       if (r?.ok === false) return { ...base, ok: false, erro: 'banco_anuncios' };
       recusas += r?.recusas?.length ?? 0;
       for (const p of r?.pendentes_miniatura ?? []) if (typeof p === 'string' && !pendentes.includes(p)) pendentes.push(p);
     }
 
     for (let i = 0; i < linhas.length; i += LOTE_ANUNCIO) {
-      const r = await d.receberDesempenhoAnuncio(linhas.slice(i, i + LOTE_ANUNCIO));
+      const lote = linhas.slice(i, i + LOTE_ANUNCIO);
+      const r = await noPrazo(prazo, TIMEOUT_BANCO_MS, (ms) => d.receberDesempenhoAnuncio(lote, ms));
       if (r?.ok === false) return { ...base, ok: false, erro: 'banco_desempenho' };
       recusas += r?.recusas?.length ?? 0;
     }
 
-    const mini = await miniaturasDaConta(c.conta_externa, pendentes, anu.miniaturas, d, agora);
+    const mini = await miniaturasDaConta(c.conta_externa, pendentes, anu.miniaturas, d, prazo);
     const erroIds = conjLidos.erro ?? anuLidos.erro;
     return { ...base, ok: true, conjuntos: conj.linhas.length, anuncios: anu.linhas.length, linhas: linhas.length, descartadas,
       recusas, cadastro_parcial: conj.parciais + anu.parciais, ...(erroIds ? { cadastro_erro: erroIds } : {}), ...mini };
   } catch (e) {
+    // fim da fase: o prazo recusou ou cortou a chamada (estourou), ou um timeout limitado ao que restava a abortou
+    // (lerPaginas troca qualquer falha do buscar por 'rede'; por isso a conferência é pelo prazo, não pelo código)
+    if (prazo.estourou || prazo.resta() < MIN_CHAMADA_MS) return { ...base, ok: false, erro: 'sem_tempo' };
     return { ...base, ok: false, erro: codigoDe(e) ?? 'banco' };
   }
 }
@@ -389,16 +451,18 @@ async function coletarContaAnuncios(c: ContaMeta, d: DepsAnuncios, agora: () => 
 /** Coleta por anúncio das contas da flag, uma a uma. Nunca lança: qualquer falha vira erro curto no resultado. */
 export async function coletarAnuncios(contas: ContaMeta[], d: DepsAnuncios, agora: () => number = Date.now): Promise<ResultadoAnuncios> {
   const t0 = agora();
+  const prazo = new Prazo(d.ate_ms, agora);
   const res: ResultadoContaAnuncio[] = [];
   let puladas = 0;
   for (const c of contas) {
-    if (agora() > d.ate_ms) {
+    if (prazo.resta() < MIN_CHAMADA_MS) {
       res.push({ conta: c.conta_externa, ok: false, erro: 'sem_tempo' });
       puladas++;
       continue;
     }
     try {
-      res.push(await coletarContaAnuncios(c, d, agora));
+      prazo.estourou = false; // cada conta começa limpa; o tempo que resta é o mesmo relógio
+      res.push(await coletarContaAnuncios(c, d, prazo));
     } catch {
       res.push({ conta: c.conta_externa, ok: false, erro: 'falha' });
     }

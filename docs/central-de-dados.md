@@ -406,7 +406,8 @@ do criativo. Detalhe completo (ensaio, conferências do estado vivo C1 a C17, ri
   de entrada para `service_role`; `mkt_trafego.etapa_black(nome)` (calculada na leitura, nada gravado); bucket privado
   `trafego-miniaturas`. Nada do que existe muda de comportamento (`desempenho_dia`, funções atuais, os 2 jobs).
 - **Edge:** módulo `infra/supabase/functions/trafego-meta/anuncios.ts`, chamado pelo `index.ts` depois da coleta por
-  campanha, com o mesmo orçamento de tempo, só nas contas da flag e fora do ok/erro da rodada. Resultado em
+  campanha, com orçamento de tempo próprio (termina 25 s antes do limite de 150 s da Edge, cada chamada conferida antes),
+  só nas contas da flag e fora do ok/erro da rodada. Resultado em
   `mkt_trafego.coletas.resultado -> 'anuncios'` (o vigia de rotinas não vê falha dali).
 - **Situação:** migration NÃO APLICADA, Edge NÃO PUBLICADA, flag nula. Ensaio rodado só em Postgres local (PGlite), não em
   produção: o acesso ao banco e ao Meta estava bloqueado na sessão em que foi escrito.

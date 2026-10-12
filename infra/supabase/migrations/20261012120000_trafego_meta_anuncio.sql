@@ -51,6 +51,23 @@ begin
   if to_regprocedure('mkt_trafego.etapa_black(text)') is not null then
     raise exception '20261012120000: mkt_trafego.etapa_black já existe.';
   end if;
+  if to_regprocedure('public.trafego_conjuntos_receber(jsonb)') is not null
+     or to_regprocedure('public.trafego_anuncios_receber(jsonb)') is not null
+     or to_regprocedure('public.trafego_desempenho_anuncio_receber(jsonb)') is not null
+     or to_regprocedure('public.trafego_anuncio_miniatura_receber(jsonb)') is not null then
+    raise exception '20261012120000: função de entrada de conjunto/anúncio já existe.';
+  end if;
+  -- Conferência do ESTADO VIVO (C11): o bucket novo é privado e sem policy, mas uma policy PERMISSIVA em
+  -- storage.objects para anon, authenticated ou public que não filtre bucket_id abriria também este bucket. Se existir
+  -- (inclusive de outro sistema), a premissa falha e a decisão é do Victor (não se mexe em policy de terceiro aqui).
+  if exists (select 1 from pg_policies p
+              where p.schemaname = 'storage' and p.tablename = 'objects' and p.permissive = 'PERMISSIVE'
+                and p.roles && array['anon', 'authenticated', 'public']::name[]
+                and ((p.qual is null and p.with_check is null)
+                     or (p.qual is not null and p.qual not like '%bucket_id%')
+                     or (p.with_check is not null and p.with_check not like '%bucket_id%'))) then
+    raise exception '20261012120000: policy em storage.objects para anon/authenticated/public sem filtro de bucket_id (C11). Decidir com o Victor antes de aplicar.';
+  end if;
   if exists (select 1 from mkt_trafego.coleta_config where chave = 'meta_anuncio_contas') then
     raise exception '20261012120000: coleta_config meta_anuncio_contas já existe.';
   end if;
@@ -161,7 +178,7 @@ begin
   end if;
   for e in select * from jsonb_array_elements(p) loop
     if jsonb_typeof(e) is distinct from 'object' or lower(btrim(coalesce(e ->> 'plataforma', ''))) <> 'meta' then
-      v_recusas := v_recusas || jsonb_build_object('id', e ->> 'id', 'motivo', 'formato_invalido');
+      v_recusas := v_recusas || jsonb_build_object('id', left(e ->> 'id', 60), 'motivo', 'formato_invalido');
       continue;
     end if;
     v_plat := 'meta';
@@ -170,17 +187,17 @@ begin
     v_status := nullif(left(btrim(coalesce(e ->> 'status', '')), 40), '');
     v_otim := nullif(left(btrim(coalesce(e ->> 'meta_otimizacao', '')), 60), '');
     if v_ext !~ '^[A-Za-z0-9_-]{1,60}$' then
-      v_recusas := v_recusas || jsonb_build_object('id', e ->> 'id', 'motivo', 'id_invalido');
+      v_recusas := v_recusas || jsonb_build_object('id', left(e ->> 'id', 60), 'motivo', 'id_invalido');
       continue;
     end if;
     if length(v_nome) not between 1 and 400 then
-      v_recusas := v_recusas || jsonb_build_object('id', v_ext, 'motivo', 'nome_invalido');
+      v_recusas := v_recusas || jsonb_build_object('id', left(v_ext, 60), 'motivo', 'nome_invalido');
       continue;
     end if;
     select c.id into v_camp from mkt_trafego.campanhas c
      where c.plataforma = v_plat and c.campanha_externa = btrim(coalesce(e ->> 'campanha', ''));
     if v_camp is null then
-      v_recusas := v_recusas || jsonb_build_object('id', v_ext, 'motivo', 'campanha_desconhecida');
+      v_recusas := v_recusas || jsonb_build_object('id', left(v_ext, 60), 'motivo', 'campanha_desconhecida');
       continue;
     end if;
     select j.id,
@@ -242,7 +259,7 @@ begin
   end if;
   for e in select * from jsonb_array_elements(p) loop
     if jsonb_typeof(e) is distinct from 'object' or lower(btrim(coalesce(e ->> 'plataforma', ''))) <> 'meta' then
-      v_recusas := v_recusas || jsonb_build_object('id', e ->> 'id', 'motivo', 'formato_invalido');
+      v_recusas := v_recusas || jsonb_build_object('id', left(e ->> 'id', 60), 'motivo', 'formato_invalido');
       continue;
     end if;
     v_plat := 'meta';
@@ -253,21 +270,21 @@ begin
     v_vid := nullif(btrim(coalesce(e ->> 'video_id', '')), '');
     v_tags := nullif(e ->> 'url_tags', '');
     if v_ext !~ '^[A-Za-z0-9_-]{1,60}$' then
-      v_recusas := v_recusas || jsonb_build_object('id', e ->> 'id', 'motivo', 'id_invalido');
+      v_recusas := v_recusas || jsonb_build_object('id', left(e ->> 'id', 60), 'motivo', 'id_invalido');
       continue;
     end if;
     if length(v_nome) not between 1 and 400 then
-      v_recusas := v_recusas || jsonb_build_object('id', v_ext, 'motivo', 'nome_invalido');
+      v_recusas := v_recusas || jsonb_build_object('id', left(v_ext, 60), 'motivo', 'nome_invalido');
       continue;
     end if;
     if v_cri !~ '^[0-9]{1,30}$' or v_vid !~ '^[0-9]{1,30}$' or length(v_tags) > 2000 then
-      v_recusas := v_recusas || jsonb_build_object('id', v_ext, 'motivo', 'formato_invalido');
+      v_recusas := v_recusas || jsonb_build_object('id', left(v_ext, 60), 'motivo', 'formato_invalido');
       continue;
     end if;
     select j.id into v_conj from mkt_trafego.conjuntos j
      where j.plataforma = v_plat and j.conjunto_externa = btrim(coalesce(e ->> 'conjunto', ''));
     if v_conj is null then
-      v_recusas := v_recusas || jsonb_build_object('id', v_ext, 'motivo', 'conjunto_desconhecido');
+      v_recusas := v_recusas || jsonb_build_object('id', left(v_ext, 60), 'motivo', 'conjunto_desconhecido');
       continue;
     end if;
     select a.id, a.criativo_externa,
@@ -354,7 +371,7 @@ begin
     select a.id into v_anu from mkt_trafego.anuncios a
      where a.plataforma = lower(btrim(coalesce(e ->> 'plataforma', ''))) and a.anuncio_externa = btrim(coalesce(e ->> 'anuncio', ''));
     if v_anu is null then
-      v_recusas := v_recusas || jsonb_build_object('anuncio', e ->> 'anuncio', 'dia', e ->> 'dia', 'motivo', 'anuncio_desconhecido');
+      v_recusas := v_recusas || jsonb_build_object('anuncio', left(e ->> 'anuncio', 60), 'dia', left(e ->> 'dia', 60), 'motivo', 'anuncio_desconhecido');
       continue;
     end if;
     begin
@@ -370,14 +387,14 @@ begin
       v_v25 := (e ->> 'video_p25')::bigint; v_v50 := (e ->> 'video_p50')::bigint;
       v_v75 := (e ->> 'video_p75')::bigint; v_v100 := (e ->> 'video_p100')::bigint;
     exception when others then
-      v_recusas := v_recusas || jsonb_build_object('anuncio', e ->> 'anuncio', 'dia', e ->> 'dia', 'motivo', 'formato_invalido');
+      v_recusas := v_recusas || jsonb_build_object('anuncio', left(e ->> 'anuncio', 60), 'dia', left(e ->> 'dia', 60), 'motivo', 'formato_invalido');
       continue;
     end;
     if v_dia is null or v_dia > mkt_trafego.ontem() + 1 or v_gasto < 0 or v_imp < 0 or v_cli < 0 or v_tot < 0 or v_leads < 0
        or v_gasto >= 1e12
        or v_alc < 0 or v_freq < 0 or v_freq >= 1e6 or v_sai < 0 or v_lpv < 0 or v_eng < 0 or v_vpl < 0 or v_vth < 0
        or v_v25 < 0 or v_v50 < 0 or v_v75 < 0 or v_v100 < 0 then
-      v_recusas := v_recusas || jsonb_build_object('anuncio', e ->> 'anuncio', 'dia', e ->> 'dia', 'motivo', 'valor_invalido');
+      v_recusas := v_recusas || jsonb_build_object('anuncio', left(e ->> 'anuncio', 60), 'dia', left(e ->> 'dia', 60), 'motivo', 'valor_invalido');
       continue;
     end if;
     insert into mkt_trafego.desempenho_anuncio_dia (anuncio_id, dia, gasto, impressoes, cliques_link, cliques_total, leads_plataforma,
@@ -422,13 +439,13 @@ begin
     v_cam := nullif(btrim(coalesce(e ->> 'caminho', '')), '');
     v_err := nullif(left(btrim(coalesce(e ->> 'erro', '')), 60), '');
     if v_cri !~ '^[0-9]{1,30}$' then
-      v_recusas := v_recusas || jsonb_build_object('criativo', e ->> 'criativo', 'motivo', 'criativo_invalido');
+      v_recusas := v_recusas || jsonb_build_object('criativo', left(e ->> 'criativo', 60), 'motivo', 'criativo_invalido');
       continue;
     end if;
     if v_cam is not null then
       -- v_cri só tem dígitos (conferido acima): seguro dentro da expressão
       if v_cam !~ ('^meta/[0-9]{1,30}/' || v_cri || '\.(jpg|png|webp)$') then
-        v_recusas := v_recusas || jsonb_build_object('criativo', v_cri, 'motivo', 'caminho_invalido');
+        v_recusas := v_recusas || jsonb_build_object('criativo', left(v_cri, 60), 'motivo', 'caminho_invalido');
         continue;
       end if;
       update mkt_trafego.anuncios a
@@ -443,11 +460,11 @@ begin
       get diagnostics v_n = row_count;
       if v_n > 0 then v_erros := v_erros + 1; end if;
     else
-      v_recusas := v_recusas || jsonb_build_object('criativo', v_cri, 'motivo', 'formato_invalido');
+      v_recusas := v_recusas || jsonb_build_object('criativo', left(v_cri, 60), 'motivo', 'formato_invalido');
       continue;
     end if;
     if v_n = 0 then
-      v_recusas := v_recusas || jsonb_build_object('criativo', v_cri, 'motivo',
+      v_recusas := v_recusas || jsonb_build_object('criativo', left(v_cri, 60), 'motivo',
         case when exists (select 1 from mkt_trafego.anuncios a where a.plataforma = 'meta' and a.criativo_externa = v_cri)
              then 'ja_tem_miniatura' else 'criativo_desconhecido' end);
     end if;
@@ -551,8 +568,8 @@ begin
     end if;
   end loop;
   if exists (select 1 from pg_proc p cross join lateral aclexplode(p.proacl) g
-              where p.oid = 'mkt_trafego.etapa_black(text)'::regprocedure and g.grantee = 0) then
-    raise exception '20261012120000: PUBLIC executa mkt_trafego.etapa_black';
+              where p.oid = 'mkt_trafego.etapa_black(text)'::regprocedure and g.grantee <> p.proowner) then
+    raise exception '20261012120000: mkt_trafego.etapa_black tem grant além do dono (inclusive PUBLIC)';
   end if;
   if (select b.public from storage.buckets b where b.id = 'trafego-miniaturas') is distinct from false then
     raise exception '20261012120000: bucket trafego-miniaturas não ficou privado';

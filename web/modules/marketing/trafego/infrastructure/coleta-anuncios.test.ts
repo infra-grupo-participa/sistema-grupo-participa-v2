@@ -2,12 +2,12 @@
 // respostas do Meta são fixtures inventadas (ids 9000000000003xx/4xx/5xx, marcadas "ENSAIO") em
 // infra/supabase/functions/_trafego-fixtures, no formato documentado da Graph API. O banco e o Storage são simulados:
 // o que se confere é o que a Edge manda para as funções de entrada e para o bucket.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   CAMPOS_DISTRIBUICAO, lerPaginas, paraDesempenho, type ContaMeta, type InsightMeta,
 } from '../../../../../infra/supabase/functions/trafego-meta/meta';
 import {
-  LOTE_IDS, MAX_MINIATURAS, MINIATURA_MAX_BYTES, baixarMiniatura, coletarAnuncios, contasDaFlag, hostDeMiniaturaOk,
+  CUSTO_MINIATURA_MS, LOTE_IDS, MAX_MINIATURAS, MINIATURA_MAX_BYTES, TIMEOUT_BANCO_MS, baixarMiniatura, coletarAnuncios, contasDaFlag, hostDeMiniaturaOk,
   paraDesempenhoAnuncio, tipoDaImagem, urlInsightsAnuncio, urlPorIds,
   type Baixar, type DepsAnuncios, type LinhaAnuncio, type LinhaConjunto, type LinhaDesempenhoAnuncio, type LinhaMiniatura,
 } from '../../../../../infra/supabase/functions/trafego-meta/anuncios';
@@ -213,9 +213,9 @@ describe('coleta Meta por conjunto e anúncio (respostas simuladas)', () => {
     expect(gravado.subidas).toEqual([]);
   });
 
-  it('miniatura no fim do orçamento (folga de 10 s): não baixa', async () => {
+  it('miniatura no fim do orçamento (menos que download + upload + folga): não baixa', async () => {
     const { baixar, chamadas } = baixarFalso();
-    const { d } = deps({ baixar, ate_ms: 5_000 });
+    const { d } = deps({ baixar, ate_ms: CUSTO_MINIATURA_MS - 1 });
     const r = await coletarAnuncios([CONTA], d, () => 0);
     expect(r.contas[0]).toMatchObject({ ok: true, miniaturas: 0 });
     expect(chamadas).toHaveLength(0);
@@ -301,5 +301,85 @@ describe('download da miniatura', () => {
     expect(await baixarMiniatura(url, baixarFalso({}, 403).baixar)).toEqual({ ok: false, erro: 'miniatura_http_403' });
     const rede: Baixar = async () => { throw new TypeError('redirect mode is set to error'); };
     expect(await baixarMiniatura(url, rede)).toEqual({ ok: false, erro: 'miniatura_rede' });
+  });
+});
+
+// Ressalva do pentester (12/10/2026): a fase de anúncios tem orçamento próprio, conferido antes de CADA chamada, para
+// nunca levar a Edge aos 150 s sem o coleta_registrar da rodada de campanha. Relógio falso: o tempo anda só quando o
+// teste manda.
+describe('orçamento da fase de anúncios (para por tempo)', () => {
+  it('o relógio passa do fim no meio da conta: para antes da próxima chamada, sem gravar, e a conta seguinte é pulada', async () => {
+    let t = 0;
+    const meta = metaFalso();
+    const sinais: (AbortSignal | undefined)[] = [];
+    // cada leitura do Meta "leva" 10 s
+    const buscar = async (url: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) => {
+      sinais.push(init?.signal);
+      const r = await meta.buscar(url, init);
+      t += 10_000;
+      return r;
+    };
+    const { d, ordem } = deps({ buscar, ate_ms: 25_000 });
+    const r = await coletarAnuncios([CONTA, { ...CONTA, conta_externa: '000556' }], d, () => t);
+    // insights p1 (0 s), insights p2 (10 s), ?ids= dos conjuntos (20 s); aos 30 s não começa mais nada
+    expect(meta.pedidos.map((p) => (p.url.includes('/insights') ? 'insights' : 'ids'))).toEqual(['insights', 'insights', 'ids']);
+    expect(ordem).toEqual([]);
+    expect(r.puladas).toBe(1);
+    expect(r.contas).toEqual([{ conta: '000555', ok: false, erro: 'sem_tempo' }, { conta: '000556', ok: false, erro: 'sem_tempo' }]);
+    // toda leitura do Meta saiu com timeout próprio (o lerPaginas não põe signal)
+    expect(sinais.every((s) => s instanceof AbortSignal)).toBe(true);
+  });
+
+  it('timeout de cada função de entrada = o menor entre o teto e o que resta da fase', async () => {
+    const ms: number[] = [];
+    const { d } = deps({
+      ate_ms: 12_000,
+      receberConjuntos: async (_l, m) => { ms.push(m); return { ok: true, recusas: [] }; },
+      receberAnuncios: async (_l, m) => { ms.push(m); return { ok: true, recusas: [] }; },
+      receberDesempenhoAnuncio: async (_l, m) => { ms.push(m); return { ok: true, recusas: [] }; },
+    });
+    const r = await coletarAnuncios([CONTA], d, () => 0);
+    expect(r.contas[0]).toMatchObject({ ok: true });
+    expect(ms).toEqual([12_000, 12_000, 12_000]);
+    const { d: d2 } = deps({ ate_ms: 100_000, receberConjuntos: async (_l, m) => { ms.push(m); return { ok: true }; } });
+    await coletarAnuncios([CONTA], d2, () => 0);
+    expect(ms.at(-1)).toBe(TIMEOUT_BANCO_MS);
+  });
+
+  it('função de entrada que trava é abandonada no fim da fase: conta sai com sem_tempo e nada depois dela roda', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let t = 0;
+      const pedido: number[] = [];
+      const { d, ordem } = deps({
+        ate_ms: 8_000,
+        receberAnuncios: (_l, m) => { pedido.push(m); return new Promise(() => { /* banco travado */ }); },
+      });
+      const rodada = coletarAnuncios([CONTA], d, () => t);
+      await vi.advanceTimersByTimeAsync(7_999);
+      t = 7_999;
+      let acabou = false;
+      void rodada.then(() => { acabou = true; });
+      await Promise.resolve();
+      expect(acabou).toBe(false);
+      t = 8_000;
+      await vi.advanceTimersByTimeAsync(1);
+      const r = await rodada;
+      expect(pedido).toEqual([8_000]);
+      expect(ordem).toEqual(['conjuntos']);
+      expect(r.contas).toEqual([{ conta: '000555', ok: false, erro: 'sem_tempo' }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('miniatura só começa se couber download + upload + folga; o upload recebe o timeout dele', async () => {
+    const { baixar, chamadas } = baixarFalso();
+    const subidas: number[] = [];
+    const { d } = deps({ baixar, ate_ms: CUSTO_MINIATURA_MS, subirMiniatura: async (_c, _b, _m, ms) => { subidas.push(ms); } });
+    const r = await coletarAnuncios([CONTA], d, () => 0);
+    expect(r.contas[0]).toMatchObject({ ok: true, miniaturas: 2 });
+    expect(chamadas).toHaveLength(2);
+    expect(subidas).toEqual([15_000, 15_000]);
   });
 });
