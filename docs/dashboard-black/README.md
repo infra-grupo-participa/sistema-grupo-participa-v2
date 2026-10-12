@@ -83,6 +83,15 @@ R$ 428.571,00; CPL do placar R$ 14,61 = R$ 192.079,46 ÷ 13.145; soma das 6 fase
   totais de tráfego e de leads da semente não mudaram) e a fonte soma o canal a partir dos envios do período
   (teste em `fixtures.test.ts`). A régua de API do grupo continua. Na Jornada, o nó "Régua do aquecimento" mostra
   Enviados, Entregues e Custo (antes "Viraram ingresso").
+- **Campanha × conjunto** (aba Criativos e páginas) virou mestre e detalhe lado a lado (`ui/CampanhaConjunto.tsx`):
+  campanhas à esquerda, os conjuntos da campanha clicada à direita, cada cartão com **gasto, CPL (com farol) e
+  leads pagos** em destaque (no C1, custo por visualização e impressões). A lista de campanhas ignora o filtro de
+  conjunto, e trocar ou tirar a campanha limpa o conjunto (o conjunto é filho dela). Sai a dupla de barras.
+- **Ordem dos criativos.** A conta da ordem estava certa (teste novo cobre as quatro ordens), mas não se via: o CTR
+  com uma casa deixava quase todos em "1,1%" e o topo era o mesmo em "Mais leads", "Menor CPL" e "Mais gasto".
+  Agora cada cartão mostra a posição e o valor que a ordem usa (ex.: "1º CTR 4,49%"), o CTR sai com duas casas,
+  uma linha explica a ordem escolhida e o empate desempata por gasto e nome (`valorOrdem` e `ordenar` em
+  `domain/criativos.ts`).
 
 ## O que foi feito (5 abas, filtro global)
 
@@ -95,8 +104,8 @@ ciclo) e canal (Todos, Meta, Google). Tudo mora na URL. Releitura a cada 5 min s
    fase, dia, criativo, Perfil; a que não cabe diz "Não se aplica a este card").
 2. **Jornada:** o fluxograma do Arthur vivo, setas com espessura pelo volume e fluxo animado; o funil filtrado
    apaga os outros nós. Clicar no nó abre a **gaveta lateral** (Etapa · Criativos · Perfil).
-3. **Criativos e páginas:** trilha Campanha › Conjunto › Criativo › Página com chips; painéis de campanhas e
-   conjuntos em barras; galeria com miniatura fictícia e ordem por chips; cartões por página. O criativo abre a
+3. **Criativos e páginas:** trilha Campanha › Conjunto › Criativo › Página com chips; campanhas e conjuntos
+   lado a lado (mestre e detalhe); galeria com miniatura fictícia e ordem por chips; cartões por página. O criativo abre a
    gaveta com miniatura, mini-funil, curva diária e os 3 botões (desligados na demonstração).
 4. **Mensageria:** API, SMS e ligação lado a lado (custo total e por mensagem enviada), grupo e e-mail sem custo,
    lista de envios por canal (título, objetivo, data e hora, base, copy, métricas) e régua de API do grupo (+2h,
@@ -119,6 +128,8 @@ região, utm_source, página, base de origem, isca; tudo clicável e encadeado; 
 - Meta acumulada = 650 × dias desde o início da captação (12/10). Leads da meta = pessoas únicas.
 - Mensageria: custo por mensagem enviada = Σ custo ÷ Σ enviados dos canais pagos (na ligação, por discada); taxas
   do canal sobre entregues quando o canal mede entrega, senão sobre enviados; falhas sobre enviados.
+- MQL = profissão advogado ou contador (profissão fechada: advogado, contador ou outros; decisão de 12/10). Conferido em
+  12/10: nenhuma conta do dashboard usa MQL hoje; "MQL" só aparece como rótulo de temperatura de base, string da fonte.
 - Falha de bloco: segura o último valor, esmaece e mostra a idade da leitura.
 
 ## Decisões

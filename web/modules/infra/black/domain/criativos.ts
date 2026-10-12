@@ -83,21 +83,24 @@ export const ORDENS_GALERIA = ['leads', 'cpl', 'ctr', 'gasto'] as const;
 export type OrdemGaleria = (typeof ORDENS_GALERIA)[number];
 export const ROTULO_ORDEM: Record<OrdemGaleria, string> = { leads: 'Mais leads', cpl: 'Menor CPL', ctr: 'Maior CTR', gasto: 'Mais gasto' };
 
-/** Ordena a galeria. Sem dado vai para o fim, sempre. */
+/** Valor que a ordem usa (a galeria mostra este número no cartão, para a ordem ficar visível). */
+export function valorOrdem(i: ItemPainel, ordem: OrdemGaleria): Valor {
+  if (ordem === 'leads') return i.resumo.distribuicao ? null : i.resumo.leadsPagos;
+  if (ordem === 'cpl') return i.resumo.cpl;
+  if (ordem === 'ctr') return i.resumo.ctr.valor;
+  return i.resumo.gasto;
+}
+
+/** Ordena a galeria. Sem dado vai para o fim, sempre. Empate: mais gasto primeiro, depois o nome (ordem estável). */
 export function ordenar(itens: readonly ItemPainel[], ordem: OrdemGaleria): ItemPainel[] {
-  const chave = (i: ItemPainel): Valor => {
-    if (ordem === 'leads') return i.resumo.distribuicao ? null : i.resumo.leadsPagos;
-    if (ordem === 'cpl') return i.resumo.cpl;
-    if (ordem === 'ctr') return i.resumo.ctr.valor;
-    return i.resumo.gasto;
-  };
   const sinal = ordem === 'cpl' ? 1 : -1;
   return [...itens].sort((a, b) => {
-    const x = chave(a); const y = chave(b);
-    if (x === null && y === null) return 0;
-    if (x === null) return 1;
-    if (y === null) return -1;
-    return sinal * (x - y);
+    const x = valorOrdem(a, ordem); const y = valorOrdem(b, ordem);
+    if (x === null && y !== null) return 1;
+    if (y === null && x !== null) return -1;
+    if (x !== null && y !== null && x !== y) return sinal * (x - y);
+    if (a.resumo.gasto !== b.resumo.gasto) return b.resumo.gasto - a.resumo.gasto;
+    return a.nome.localeCompare(b.nome, 'pt-BR');
   });
 }
 
