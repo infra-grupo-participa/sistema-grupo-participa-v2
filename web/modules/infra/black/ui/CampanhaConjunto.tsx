@@ -24,7 +24,7 @@ export function CampanhaConjunto({ campanhas, conjuntos, campanha, conjunto, cha
   const maxCampanha = Math.max(1, ...campanhas.map((i) => i.resumo.gasto));
   const maxConjunto = Math.max(1, ...conjuntos.map((i) => i.resumo.gasto));
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-6 md:grid-cols-2">
       <section aria-labelledby="black-cc-campanhas" className="min-w-0">
         <h3 id="black-cc-campanhas" className="text-sm font-semibold text-[var(--fg)]">Campanhas</h3>
         <p className="mb-2 text-xs text-[var(--fg-3)]">Clique numa campanha para ver só os conjuntos dela ao lado.</p>

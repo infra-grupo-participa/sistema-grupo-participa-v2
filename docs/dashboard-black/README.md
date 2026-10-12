@@ -107,7 +107,8 @@ R$ 428.571,00; CPL do placar R$ 14,61 = R$ 192.079,46 ÷ 13.145; soma das 6 fase
   leads pagos do dia, com a barra do dia destacada. Também funciona no teclado: foco no gráfico e setas
   (Home e End vão ao primeiro e ao último dia, Esc fecha).
 - **Campanhas e conjuntos paginados** (`ui/CampanhaConjunto.tsx`). Os dois lados usam o **mesmo cartão**, do mesmo
-  tamanho (duas colunas iguais lado a lado; no celular empilham). **Sem campanha escolhida**, a direita mostra os
+  tamanho: **lado a lado, metade da largura cada, um cartão embaixo do outro** (uma coluna só em cada metade,
+  nada de dois cartões lado a lado nos conjuntos). Só abaixo de 768 px (celular) as duas metades empilham. **Sem campanha escolhida**, a direita mostra os
   conjuntos de **todas as campanhas** do recorte (antes ficava vazia), e a dica do cartão diz de qual campanha ele é;
   clicar numa campanha filtra para os conjuntos dela, clicar de novo tira. Cada lado mostra **no máximo 10** e embaixo
   a régua estilo Google: "‹ 1 2 3 4 5 ›" com a página atual destacada (`aria-current="page"`, `nav` com
