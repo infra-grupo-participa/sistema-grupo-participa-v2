@@ -15,8 +15,8 @@ export type ConjuntoC3 = 'base' | 'quente' | 'aberto';
 export type Porta = 'isca' | 'consultoria' | 'inscricao_direta';
 export type OrigemLead = 'pago' | 'base_api' | 'grupo_legado' | 'organico';
 export type AbaBlack = 'visao' | 'jornada' | 'criativos' | 'mensageria' | 'historico';
-/** As 5 respostas da pergunta de profissão (Respondi JmSmjBBS, decisão do Victor de 12/10/2026). */
-export type Profissao = 'advogado' | 'contador' | 'estudante_direito' | 'outros' | 'patrimonio_familia';
+/** As 4 respostas da pergunta de profissão (decisão do Victor de 12/10/2026, noite: sem a opção do patrimônio da família). */
+export type Profissao = 'advogado' | 'contador' | 'estudante_direito' | 'outros';
 
 /** AAAA-MM-DD no fuso de São Paulo, inclusivo nas duas pontas. */
 export interface Periodo { de: string; ate: string }
@@ -126,7 +126,6 @@ export const ROTULO_ORIGEM: Record<OrigemLead, string> = { pago: 'Tráfego pago'
 export const ROTULO_CONJUNTO_C3: Record<ConjuntoC3, string> = { base: 'Base', quente: 'Quente', aberto: 'Aberto' };
 export const ROTULO_PROFISSAO: Record<Profissao, string> = {
   advogado: 'Advogado', contador: 'Contador', estudante_direito: 'Estudante de Direito', outros: 'Outros',
-  patrimonio_familia: 'Não trabalho na área, quero organizar o patrimônio da minha família',
 };
 /** MQL do evento inteiro = advogado, contador ou estudante de Direito (Victor, 12/10/2026). */
 export const PROFISSOES_MQL: ReadonlySet<Profissao> = new Set<Profissao>(['advogado', 'contador', 'estudante_direito']);

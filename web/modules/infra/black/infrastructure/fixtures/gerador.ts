@@ -113,7 +113,7 @@ function gerar(): BaseFicticia {
       if (alvo.funil !== base.funil) { pessoaId = alvo.pessoaId; primeiraPorta = false; }
     }
     const prof = r();
-    const profissao: Profissao | null = prof < 0.5 ? 'advogado' : prof < 0.72 ? 'contador' : prof < 0.8 ? 'estudante_direito' : prof < 0.88 ? 'outros' : prof < 0.95 ? 'patrimonio_familia' : null;
+    const profissao: Profissao | null = prof < 0.5 ? 'advogado' : prof < 0.72 ? 'contador' : prof < 0.8 ? 'estudante_direito' : prof < 0.95 ? 'outros' : null;
     const uf = sortearPeso(r, PESO_UF);
     const ddds = DDDS_POR_UF[uf];
     const ddd = ddds[Math.floor(r() * ddds.length)];

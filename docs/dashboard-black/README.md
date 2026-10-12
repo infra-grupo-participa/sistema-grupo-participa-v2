@@ -36,7 +36,7 @@ Login normal em `http://localhost:3000/login` (conta `@advmais.com`, cargo admin
 
 ### Totais da semente (PRNG mulberry32, semente 20261103, dias 04/10 a 03/11)
 
-> **Atualizado em 12/10/2026 (noite):** com o Google zerado e as 5 profissões, a semente passou a dar
+> **Atualizado em 12/10/2026 (noite):** com o Google zerado e a profissão nova, a semente passou a dar
 > **R$ 263.977,08** de gasto (Google R$ 0), **13.528** cadastros e **13.102** pessoas únicas (medido no teste
 > `fixtures.test.ts`). A tabela abaixo é da versão anterior e não foi remedida linha a linha.
 
@@ -157,17 +157,16 @@ região, utm_source, página, base de origem, isca; tudo clicável e encadeado; 
 - Meta acumulada = 650 × dias desde o início da captação (12/10). Leads da meta = pessoas únicas.
 - Mensageria: custo por mensagem enviada = Σ custo ÷ Σ enviados dos canais pagos (na ligação, por discada); taxas
   do canal sobre entregues quando o canal mede entrega, senão sobre enviados; falhas sobre enviados.
-- MQL = profissão advogado, contador ou estudante de Direito (5 respostas; decisão de 12/10, noite, ver Decisões). Conferido em
+- MQL = profissão advogado, contador ou estudante de Direito (4 respostas; decisão de 12/10, noite, ver Decisões). Conferido em
   12/10: nenhuma conta do dashboard usa MQL hoje; "MQL" só aparece como rótulo de temperatura de base, string da fonte.
 - Falha de bloco: segura o último valor, esmaece e mostra a idade da leitura.
 
 ## Decisões
 
-- **Profissão com 5 respostas e MQL com estudante (Victor, 12/10/2026, noite).** A pergunta segue as 5 opções do
-  Respondi (JmSmjBBS): advogado, contador, estudante de Direito, outros e "Não trabalho na área, quero organizar o
-  patrimônio da minha família". **MQL = advogado, contador ou estudante de Direito** (`PROFISSOES_MQL` em
-  `domain/tipos.ts`). Quem quer só proteger o patrimônio da família é redirecionado para a Black Friday (fala do
-  Victor). Isso substitui a lista fechada de 3 respostas.
+- **Profissão com 4 respostas e MQL com estudante (Victor, 12/10/2026, noite).** Advogado, contador, estudante de
+  Direito e outros (texto "Outros", padronizado nas páginas). **MQL = advogado, contador ou estudante de Direito**
+  (`PROFISSOES_MQL` em `domain/tipos.ts`). A opção "Não trabalho na área, quero organizar o patrimônio da minha
+  família", que existia no Respondi, saiu. Substitui a lista anterior de 3 respostas.
 - **Google zerado (Victor, 12/10/2026, noite).** Ainda não há campanha de Google. A campanha fictícia continua no
   C3 e no filtro de canal, mas com gasto 0 e sem leads, até existir campanha real.
 
