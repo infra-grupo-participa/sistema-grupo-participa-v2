@@ -1,0 +1,22 @@
+{
+  "data": [
+    { "ad_id": "900000000000401", "ad_name": "ENSAIO | BF26 | C1 | TEASER | AD 01", "adset_id": "900000000000301", "adset_name": "ENSAIO | CONJ 01 | MORNO",
+      "campaign_id": "900000000000201", "date_start": "2026-10-10", "date_stop": "2026-10-10",
+      "spend": "10.50", "impressions": "1000", "clicks": "40", "inline_link_clicks": "30",
+      "actions": [ { "action_type": "lead", "value": "3" }, { "action_type": "landing_page_view", "value": "20" }, { "action_type": "post_engagement", "value": "55" } ],
+      "reach": "800", "frequency": "1.25", "outbound_clicks": [ { "action_type": "outbound_click", "value": "28" } ],
+      "video_play_actions": [ { "action_type": "video_view", "value": "300" } ],
+      "video_thruplay_watched_actions": [ { "action_type": "video_view", "value": "90" } ],
+      "video_p25_watched_actions": [ { "action_type": "video_view", "value": "200" } ],
+      "video_p50_watched_actions": [ { "action_type": "video_view", "value": "120" } ],
+      "video_p75_watched_actions": [ { "action_type": "video_view", "value": "80" } ],
+      "video_p100_watched_actions": [ { "action_type": "video_view", "value": "50" } ] },
+    { "ad_id": "900000000000402", "ad_name": "ENSAIO | BF26 | C1 | TEASER | AD 02", "adset_id": "900000000000301", "adset_name": "ENSAIO | CONJ 01 | MORNO",
+      "campaign_id": "900000000000201", "date_start": "2026-10-10", "date_stop": "2026-10-10",
+      "spend": "5.00", "impressions": "400", "clicks": "9", "inline_link_clicks": "7" }
+  ],
+  "paging": {
+    "cursors": { "before": "MAZDZD", "after": "MQZDZD" },
+    "next": "https://graph.facebook.com/v23.0/act_000555/insights?level=ad&after=MQZDZD"
+  }
+}

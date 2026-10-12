@@ -1,0 +1,11 @@
+{
+  "data": [
+    { "ad_id": "900000000000403", "ad_name": "ENSAIO | BF26 | C2 | ISCA | AD 03", "adset_id": "900000000000302", "adset_name": "ENSAIO | CONJ 02 | FRIO",
+      "campaign_id": "900000000000201", "date_start": "2026-10-11", "date_stop": "2026-10-11",
+      "spend": "2.25", "impressions": "150", "clicks": "3", "inline_link_clicks": "2" },
+    { "adset_id": "900000000000302", "adset_name": "ENSAIO | CONJ 02 | FRIO",
+      "campaign_id": "900000000000201", "date_start": "2026-10-11", "date_stop": "2026-10-11",
+      "spend": "1.00", "impressions": "10", "clicks": "0", "inline_link_clicks": "0" }
+  ],
+  "paging": { "cursors": { "before": "MQZDZD", "after": "MgZDZD" } }
+}
