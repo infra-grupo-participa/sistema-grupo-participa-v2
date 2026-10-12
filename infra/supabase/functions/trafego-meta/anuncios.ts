@@ -9,7 +9,7 @@
 //
 // ORÇAMENTO PRÓPRIO (ressalva do pentester, 12/10/2026): ate_ms é o fim da FASE de anúncios, que o index.ts põe com
 // folga antes dos 150 s da Edge, para o coleta_registrar da rodada de campanha rodar sempre. O tempo é conferido antes
-// de CADA chamada (insights, cada página, cada bloco ?ids=, cada função de entrada, cada miniatura) e o timeout de cada
+// de CADA chamada (insights, cada página, cada bloco de cadastro, cada função de entrada, cada miniatura) e o timeout de cada
 // uma é limitado ao que resta (classe Prazo). Sem tempo, a conta para com erro 'sem_tempo' (o que já foi gravado fica:
 // os upserts são idempotentes e a próxima rodada completa). Miniatura só começa se couber download (10 s) mais upload
 // (15 s) mais folga (5 s).
@@ -18,11 +18,17 @@
 //   GET /act_<conta>/insights?level=ad&time_increment=1&time_range={since,until}
 //       &fields=ad_id,ad_name,adset_id,adset_name,campaign_id,date_start,spend,impressions,clicks,inline_link_clicks,
 //               actions + CAMPOS_DISTRIBUICAO (os mesmos campos da coleta por campanha)
-//   GET /?ids=<até 50 conjuntos>&fields=id,name,effective_status,campaign_id,optimization_goal
-//   GET /?ids=<até 50 anúncios>&fields=id,name,effective_status,adset_id,campaign_id,creative{id,thumbnail_url,video_id,url_tags}
-// O cadastro vem só dos ids que tiveram entrega (nunca lista /act_x/ads inteiro). Se a busca por ids falhar, o cadastro
-// daquele bloco sai das próprias linhas de insights (nome exato, status nulo) e conta em cadastro_parcial: o desempenho
-// nunca fica sem anúncio.
+//   GET /act_<conta>/adsets?fields=id,name,effective_status,campaign_id,optimization_goal
+//       &filtering=[{id IN <até 50 conjuntos>},{effective_status IN STATUS_CADASTRO}]&limit=50
+//   GET /act_<conta>/ads?fields=id,name,effective_status,adset_id,campaign_id,creative{id,thumbnail_url,video_id,url_tags}
+//       &filtering=[{id IN <até 50 anúncios>},{effective_status IN STATUS_CADASTRO}]&limit=50
+// As duas seguem paging.next (lerPaginas). Até 12/10/2026 o cadastro saía de GET /?ids=, que o Meta passou a recusar
+// em TODA versão (HTTP 500, code 100, "The ids query parameter is deprecated in v26.0+", rodada 158; explain seção 11).
+// O filtro de status é obrigatório: sem ele a borda da conta esconde ARCHIVED, e anúncio com gasto no período pode estar
+// arquivado hoje (medido na CNF em 12/10/2026: 4 ids pedidos, 2 voltaram sem o filtro e os 4 com ele).
+// O cadastro vem só dos ids que tiveram entrega (nunca lista /act_x/ads inteiro). Se a busca falhar, ou se um id pedido
+// não voltar, o cadastro dele sai das próprias linhas de insights (nome exato, status nulo) e conta em
+// cadastro_parcial: o desempenho nunca fica sem anúncio.
 // Grava por public.trafego_conjuntos_receber, trafego_anuncios_receber, trafego_desempenho_anuncio_receber e
 // trafego_anuncio_miniatura_receber. Miniatura: baixa a thumbnail_url (só https em *.fbcdn.net, sem redirect, até 1 MB,
 // tipo pelos bytes) e guarda no bucket privado trafego-miniaturas; a URL do Meta nunca é gravada.
@@ -34,7 +40,7 @@ import type { ContaMeta, InsightMeta, LinhaDesempenho, ResultadoConta } from './
 
 const BASE = 'https://graph.facebook.com';
 const PLATAFORMA = 'meta';
-/** Ids por busca em ?ids= (limite do Meta é maior; 50 mantém a URL curta). */
+/** Ids por busca de cadastro (filtering id IN); 50 mantém a URL curta e cabe numa página (limit=50). */
 export const LOTE_IDS = 50;
 /** Teto das funções de entrada (20261012120000). */
 export const LOTE_ANUNCIO = 5000;
@@ -178,45 +184,51 @@ export function urlInsightsAnuncio(versao: string, conta: string, de: string, at
 export const CAMPOS_CONJUNTO = 'id,name,effective_status,campaign_id,optimization_goal';
 export const CAMPOS_ANUNCIO = 'id,name,effective_status,adset_id,campaign_id,creative{id,thumbnail_url,video_id,url_tags}';
 
-/** URLs de ?ids= em blocos de LOTE_IDS (ids repetidos ou fora do padrão ficam de fora). */
-export function urlPorIds(versao: string, ids: string[], campos: string): string[] {
+/**
+ * Status para o filtro do cadastro: a lista que o próprio Meta devolveu ao recusar um valor inválido em
+ * /act_<conta>/adsets?effective_status=[...] (v23.0, 12/10/2026), MENOS DELETED: pedido no parâmetro effective_status
+ * de /act_<conta>/ads, o Meta responde "A solicitação de objetos excluídos não é aceita neste ponto de extremidade"
+ * (code 100, subcode 1815001). Anúncio ou conjunto apagado com gasto no período continua caindo no cadastro parcial.
+ * A mesma lista serve às duas bordas. Atenção: dentro de filtering o Meta NÃO valida o valor (um status inexistente
+ * voltou HTTP 200), por isso a lista sai do Meta e não de memória.
+ */
+export const STATUS_CADASTRO = [
+  'ACTIVE', 'PAUSED', 'PENDING_REVIEW', 'DISAPPROVED', 'PREAPPROVED', 'PENDING_BILLING_INFO', 'CAMPAIGN_PAUSED', 'ARCHIVED',
+  'ADSET_PAUSED', 'IN_PROCESS', 'WITH_ISSUES',
+] as const;
+
+/**
+ * URLs do cadastro na conta (act_<conta>/adsets ou /ads) com filtering id IN em blocos de LOTE_IDS e todos os status de
+ * STATUS_CADASTRO. Ids repetidos ou fora do padrão ficam de fora; conta fora do padrão = nenhuma URL.
+ */
+export function urlCadastro(versao: string, conta: string, borda: 'adsets' | 'ads', ids: string[], campos: string): string[] {
+  if (!RE_ID.test(conta)) return [];
   const uniq = [...new Set(ids.map(String))].filter((x) => RE_ID.test(x));
   const out: string[] = [];
   for (let i = 0; i < uniq.length; i += LOTE_IDS) {
-    const q = new URLSearchParams({ ids: uniq.slice(i, i + LOTE_IDS).join(','), fields: campos });
-    out.push(`${BASE}/${versao}/?${q}`);
+    const q = new URLSearchParams({
+      fields: campos,
+      filtering: JSON.stringify([
+        { field: 'id', operator: 'IN', value: uniq.slice(i, i + LOTE_IDS) },
+        { field: 'effective_status', operator: 'IN', value: STATUS_CADASTRO },
+      ]),
+      limit: String(LOTE_IDS),
+    });
+    out.push(`${BASE}/${versao}/act_${encodeURIComponent(conta)}/${borda}?${q}`);
   }
   return out;
 }
 
-/** Uma leitura de ?ids= (objeto id -> dados). Mesmo tratamento de erro do lerPaginas: código curto, token só no header. */
-async function lerIds<T>(buscar: Buscar, url: string, token: string): Promise<T[]> {
-  if (!url.startsWith(`${BASE}/`)) throw new ErroAnuncio('url');
-  let r;
-  try {
-    r = await buscar(url, { headers: { Authorization: `Bearer ${token}` } });
-  } catch {
-    throw new ErroAnuncio('rede');
-  }
-  let corpo: Record<string, unknown> & { error?: { code?: number; error_subcode?: number } };
-  try {
-    corpo = (await r.json()) as typeof corpo;
-  } catch {
-    throw new ErroAnuncio(`http_${r.status}`);
-  }
-  if (!r.ok || !corpo || typeof corpo !== 'object' || corpo.error) {
-    const c = corpo?.error?.code;
-    throw new ErroAnuncio(c != null ? `meta_${c}${corpo?.error?.error_subcode ? `_${corpo.error.error_subcode}` : ''}` : `http_${r.status}`);
-  }
-  return Object.values(corpo).filter((v) => v && typeof v === 'object') as T[];
-}
-
-/** Lê todos os blocos; o primeiro erro devolve o código e o que já foi lido (o resto sai dos insights). */
-async function lerTodosIds<T>(buscar: Buscar, urls: string[], token: string): Promise<{ lidos: T[]; erro?: string }> {
+/**
+ * Lê todos os blocos pelo lerPaginas injetado (segue paging.next; cada página passa pelo buscar no prazo, com token só
+ * no header e erro em código curto meta_<code>). O primeiro erro devolve o código e o que já foi lido (o resto sai dos
+ * insights).
+ */
+async function lerCadastro<T>(d: DepsAnuncios, buscar: Buscar, urls: string[], token: string): Promise<{ lidos: T[]; erro?: string }> {
   const lidos: T[] = [];
   for (const u of urls) {
     try {
-      lidos.push(...await lerIds<T>(buscar, u, token));
+      lidos.push(...(await d.lerPaginas<T>(buscar, u, token)).filter((v) => v && typeof v === 'object'));
     } catch (e) {
       return { lidos, erro: codigoDe(e) ?? 'falha' };
     }
@@ -230,7 +242,7 @@ const texto = (v: unknown, max: number): string | null => {
   return t ? t.slice(0, max) : null;
 };
 
-/** Conjuntos no formato de trafego_conjuntos_receber. O que não veio da busca por ids sai dos insights (parcial). */
+/** Conjuntos no formato de trafego_conjuntos_receber. O que não veio da busca de cadastro sai dos insights (parcial). */
 export function paraConjuntos(lidos: ConjuntoMeta[], insights: InsightAnuncio[]): { linhas: LinhaConjunto[]; parciais: number } {
   const m = new Map<string, LinhaConjunto>();
   const campanhaDoInsight = new Map<string, string>();
@@ -254,7 +266,7 @@ export function paraConjuntos(lidos: ConjuntoMeta[], insights: InsightAnuncio[])
 
 /**
  * Anúncios no formato de trafego_anuncios_receber, mais o mapa criativo -> thumbnail_url (só em memória, para baixar a
- * miniatura nesta rodada). O que não veio da busca por ids sai dos insights (parcial, sem criativo).
+ * miniatura nesta rodada). O que não veio da busca de cadastro sai dos insights (parcial, sem criativo).
  */
 export function paraAnuncios(lidos: AnuncioMeta[], insights: InsightAnuncio[]):
   { linhas: LinhaAnuncio[]; parciais: number; miniaturas: Map<string, string> } {
@@ -406,7 +418,8 @@ async function coletarContaAnuncios(c: ContaMeta, d: DepsAnuncios, prazo: Prazo)
 
     const idsConj = [...new Set(insights.map((i) => i.adset_id).filter((x): x is string => !!x).map(String))];
     const idsAnu = [...new Set(linhas.map((l) => l.anuncio))];
-    const conjLidos = await lerTodosIds<ConjuntoMeta>(buscar, urlPorIds(d.versao, idsConj, CAMPOS_CONJUNTO), c.token);
+    const conjLidos = await lerCadastro<ConjuntoMeta>(d, buscar,
+      urlCadastro(d.versao, c.conta_externa, 'adsets', idsConj, CAMPOS_CONJUNTO), c.token);
     if (prazo.estourou) throw new ErroAnuncio('sem_tempo');
     const conj = paraConjuntos(conjLidos.lidos, insights);
     let recusas = 0;
@@ -417,7 +430,8 @@ async function coletarContaAnuncios(c: ContaMeta, d: DepsAnuncios, prazo: Prazo)
       recusas += r?.recusas?.length ?? 0;
     }
 
-    const anuLidos = await lerTodosIds<AnuncioMeta>(buscar, urlPorIds(d.versao, idsAnu, CAMPOS_ANUNCIO), c.token);
+    const anuLidos = await lerCadastro<AnuncioMeta>(d, buscar,
+      urlCadastro(d.versao, c.conta_externa, 'ads', idsAnu, CAMPOS_ANUNCIO), c.token);
     if (prazo.estourou) throw new ErroAnuncio('sem_tempo');
     const anu = paraAnuncios(anuLidos.lidos, insights);
     const pendentes: string[] = [];

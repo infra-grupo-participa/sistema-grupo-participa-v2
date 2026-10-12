@@ -387,7 +387,7 @@ link**. Quando a tela do Arthur aceitar um parâmetro, volta o link (`SecaoLeads
 | Banco (schema `mkt_trafego`, 13 funções `public.trafego_*`) | escrito e ensaiado em Postgres local; **não aplicado** |
 | Tela `/marketing/trafego` (Projetos, Campanhas fora do padrão, Contas de anúncio, vida do projeto) | pronta; funciona de verdade só depois da migration; hoje dá para ver no modo demo |
 | Coleta Meta Ads (por campanha) | **ligada em produção**: job diário `trafego-meta` (09:30 UTC, relê 3 dias) e `trafego-meta-hoje` a cada 30 min (20261009240000, **APLICADA** em 09/10/2026; medido em `20261009240000.explain.md`). Esta linha dizia "desligada", o que ficou velho. Estado vivo não conferido em 12/10/2026 (acesso bloqueado na sessão) |
-| Coleta Meta Ads por conjunto e anúncio (Black) | migration 20261012120000 **NÃO APLICADA**, Edge **NÃO PUBLICADA**, flag `meta_anuncio_contas` nasce **nula** (desligada). Branch `victor-meta-anuncio`. Ver "Conjunto e anúncio do Meta" abaixo |
+| Coleta Meta Ads por conjunto e anúncio (Black) | migration 20261012120000 **APLICADA** em 12/10/2026 (versão gravada `20261012212726`); Edge publicada, flag `meta_anuncio_contas` só com a CNF. O cadastro por `?ids=` é recusado pelo Meta; a correção (busca na conta) está na branch `victor-meta-anuncio`, **não publicada**. Ver "Conjunto e anúncio do Meta" abaixo |
 | Coleta Google Ads | só o desenho e o esqueleto da conversão (`trafego-google/google.ts`); falta developer token, MCC e OAuth |
 | Resumo do dia ("o que está pegando fogo") | pronto no banco e na tela (20261006i, não aplicada); limiares iniciais **propostos**, a confirmar |
 | Receita (Hotmart) | por **nível de certeza** (decisão de 06/10/2026): oferta exclusiva, SCK com o projeto, lead do projeto; a estimada (só produto + período) à parte. Vínculo **cadastrado à mão** na vida do projeto (20261006i, não aplicada). Ver "Receita do projeto: oferta exclusiva e SCK" |
@@ -409,8 +409,12 @@ do criativo. Detalhe completo (ensaio, conferências do estado vivo C1 a C17, ri
   campanha, com orçamento de tempo próprio (termina 25 s antes do limite de 150 s da Edge, cada chamada conferida antes),
   só nas contas da flag e fora do ok/erro da rodada. Resultado em
   `mkt_trafego.coletas.resultado -> 'anuncios'` (o vigia de rotinas não vê falha dali).
-- **Situação:** migration NÃO APLICADA, Edge NÃO PUBLICADA, flag nula. Ensaio rodado só em Postgres local (PGlite), não em
-  produção: o acesso ao banco e ao Meta estava bloqueado na sessão em que foi escrito.
+- **Rotas do Meta:** insights `act_<conta>/insights?level=ad`; cadastro em `act_<conta>/adsets` e `act_<conta>/ads` com
+  `filtering` (id IN, blocos de 50, e todos os status, senão o arquivado não volta). Até 12/10/2026 o cadastro era
+  `GET /?ids=`, que o Meta passou a recusar em qualquer versão (HTTP 500, code 100); ver a seção 11 do explain.
+- **Situação (12/10/2026, noite):** ensaio em produção verde; migration APLICADA às 21:27 UTC (versão gravada
+  `20261012212726`); Edge publicada às 21:29 UTC; flag só com a CNF. Na rodada 158 os insights por anúncio entraram
+  (123 linhas), mas o cadastro saiu todo parcial (`meta_100`, rota `?ids=`). Correção nesta branch, **não publicada**.
 - **Testar:** em `web/`, `npx vitest run modules/marketing/trafego/infrastructure/coleta-anuncios.test.ts` (respostas
   simuladas, sem credencial). O lado do banco: `20261012120000_ensaio.sql` (termina em ROLLBACK).
 - **Ligar (só a CNF):** `update mkt_trafego.coleta_config set valor = '1570090828117070' where chave =

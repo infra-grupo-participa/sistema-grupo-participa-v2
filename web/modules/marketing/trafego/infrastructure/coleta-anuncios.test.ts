@@ -7,14 +7,14 @@ import {
   CAMPOS_DISTRIBUICAO, lerPaginas, paraDesempenho, type ContaMeta, type InsightMeta,
 } from '../../../../../infra/supabase/functions/trafego-meta/meta';
 import {
-  CUSTO_MINIATURA_MS, LOTE_IDS, MAX_MINIATURAS, MINIATURA_MAX_BYTES, TIMEOUT_BANCO_MS, baixarMiniatura, coletarAnuncios, contasDaFlag, hostDeMiniaturaOk,
-  paraDesempenhoAnuncio, tipoDaImagem, urlInsightsAnuncio, urlPorIds,
+  CAMPOS_ANUNCIO, CUSTO_MINIATURA_MS, LOTE_IDS, MAX_MINIATURAS, MINIATURA_MAX_BYTES, STATUS_CADASTRO, TIMEOUT_BANCO_MS, baixarMiniatura,
+  coletarAnuncios, contasDaFlag, hostDeMiniaturaOk, paraDesempenhoAnuncio, tipoDaImagem, urlCadastro, urlInsightsAnuncio,
   type Baixar, type DepsAnuncios, type LinhaAnuncio, type LinhaConjunto, type LinhaDesempenhoAnuncio, type LinhaMiniatura,
 } from '../../../../../infra/supabase/functions/trafego-meta/anuncios';
 import insightsP1 from '../../../../../infra/supabase/functions/_trafego-fixtures/meta-insights-anuncio-p1.json';
 import insightsP2 from '../../../../../infra/supabase/functions/_trafego-fixtures/meta-insights-anuncio-p2.json';
-import idsConjuntos from '../../../../../infra/supabase/functions/_trafego-fixtures/meta-ids-conjuntos.json';
-import idsAnuncios from '../../../../../infra/supabase/functions/_trafego-fixtures/meta-ids-anuncios.json';
+import cadConjuntos from '../../../../../infra/supabase/functions/_trafego-fixtures/meta-cadastro-conjuntos.json';
+import cadAnuncios from '../../../../../infra/supabase/functions/_trafego-fixtures/meta-cadastro-anuncios.json';
 import erroToken from '../../../../../infra/supabase/functions/_trafego-fixtures/meta-erro-token.json';
 
 type Resp = { ok: boolean; status: number; json(): Promise<unknown> };
@@ -25,8 +25,17 @@ const JPG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
 const WEBP = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]);
 
-/** fetch falso do Meta: responde pelas fixtures e guarda cada URL e o header (o token nunca vai na URL). */
-function metaFalso(o: { erroInsights?: boolean; erroIds?: boolean } = {}) {
+/** O corpo que o Meta devolveu em produção (rodada 158, 12/10/2026) para qualquer GET /?ids=, em qualquer versão. */
+const ERRO_IDS_V26 = { error: { message: 'The ids query parameter is deprecated in v26.0+.', type: 'FacebookApiException', code: 100 } };
+const RE_CADASTRO = /\/act_[0-9]+\/(adsets|ads)\?/;
+const ehCadastro = (url: string) => RE_CADASTRO.test(url);
+
+/**
+ * fetch falso do Meta: responde pelas fixtures e guarda cada URL e o header (o token nunca vai na URL). O cadastro
+ * (act_<conta>/adsets e /ads) devolve só os ids pedidos no filtering, porPagina por página, com paging.next (after=n).
+ * GET /?ids= responde como o Meta responde hoje (500, code 100).
+ */
+function metaFalso(o: { erroInsights?: boolean; erroCadastro?: boolean; erroNaPagina2?: boolean; some?: string[]; porPagina?: number } = {}) {
   const pedidos: { url: string; auth?: string }[] = [];
   const buscar = async (url: string, init?: { headers?: Record<string, string> }) => {
     pedidos.push({ url, auth: init?.headers?.Authorization });
@@ -34,12 +43,21 @@ function metaFalso(o: { erroInsights?: boolean; erroIds?: boolean } = {}) {
       if (o.erroInsights) return resp(erroToken, 400);
       return resp(url.includes('after=') ? insightsP2 : insightsP1);
     }
-    if (url.includes('/?ids=')) {
-      if (o.erroIds) return resp({ error: { code: 100 } }, 400);
-      const ids = new URL(url).searchParams.get('ids')!.split(',');
-      const fonte: Record<string, unknown> = url.includes('creative') ? idsAnuncios : idsConjuntos;
-      return resp(Object.fromEntries(ids.filter((i) => fonte[i]).map((i) => [i, fonte[i]])));
+    const cad = RE_CADASTRO.exec(url);
+    if (cad) {
+      if (o.erroCadastro) return resp({ error: { message: 'ENSAIO', type: 'OAuthException', code: 100 } }, 400);
+      const u = new URL(url);
+      const filtro = JSON.parse(u.searchParams.get('filtering')!) as { field: string; value: string[] }[];
+      const ids = filtro.find((f) => f.field === 'id')!.value;
+      const fonte = (cad[1] === 'ads' ? cadAnuncios : cadConjuntos).data as { id: string }[];
+      const achados = fonte.filter((x) => ids.includes(x.id) && !o.some?.includes(x.id));
+      const de = Number(u.searchParams.get('after') ?? '0');
+      if (de > 0 && o.erroNaPagina2) return resp({ error: { message: 'ENSAIO', type: 'OAuthException', code: 2 } }, 500);
+      const n = o.porPagina ?? 2;
+      const prox = de + n < achados.length ? `${url.replace(/&after=[0-9]+$/, '')}&after=${de + n}` : null;
+      return resp({ data: achados.slice(de, de + n), paging: { cursors: { before: 'ENSAIO', after: 'ENSAIO' }, ...(prox ? { next: prox } : {}) } });
     }
+    if (url.includes('ids=')) return resp(ERRO_IDS_V26, 500);
     return resp({ error: { code: 100 } }, 400);
   };
   return { buscar, pedidos };
@@ -92,14 +110,31 @@ describe('coleta Meta por conjunto e anúncio (respostas simuladas)', () => {
     expect(u.toString()).not.toContain('token');
   });
 
-  it('?ids= em blocos de 50, sem repetidos e sem id fora do padrão', () => {
+  it('cadastro na conta (act_<conta>/ads|adsets) com filtering id IN em blocos de 50 e todos os status; nunca ?ids=', () => {
     const ids = Array.from({ length: 51 }, (_, k) => String(900000000000000 + k));
-    const urls = urlPorIds('v23.0', [...ids, ids[0], 'abc', '1;drop'], 'id,name');
+    const urls = urlCadastro('v23.0', '000555', 'ads', [...ids, ids[0], 'abc', '1;drop'], CAMPOS_ANUNCIO);
     expect(urls).toHaveLength(2);
-    expect(new URL(urls[0]).searchParams.get('ids')!.split(',')).toHaveLength(LOTE_IDS);
-    expect(new URL(urls[1]).searchParams.get('ids')).toBe(ids[50]);
-    expect(new URL(urls[0]).pathname).toBe('/v23.0/');
-    expect(urlPorIds('v23.0', [], 'id')).toEqual([]);
+    for (const s of urls) {
+      const u = new URL(s);
+      expect(u.pathname).toBe('/v23.0/act_000555/ads');
+      expect(u.searchParams.has('ids')).toBe(false);
+      expect(s).not.toContain('ids=');
+      expect(s).not.toContain('token');
+      expect(u.searchParams.get('fields')).toBe(CAMPOS_ANUNCIO);
+      expect(u.searchParams.get('limit')).toBe(String(LOTE_IDS));
+    }
+    const f0 = JSON.parse(new URL(urls[0]).searchParams.get('filtering')!);
+    expect(f0).toEqual([
+      { field: 'id', operator: 'IN', value: ids.slice(0, LOTE_IDS) },
+      { field: 'effective_status', operator: 'IN', value: [...STATUS_CADASTRO] },
+    ]);
+    expect(JSON.parse(new URL(urls[1]).searchParams.get('filtering')!)[0].value).toEqual([ids[50]]);
+    // arquivado tem que voltar (a borda esconde por padrão); DELETED o Meta recusa nesta borda (subcode 1815001)
+    expect(STATUS_CADASTRO).toContain('ARCHIVED');
+    expect(STATUS_CADASTRO).not.toContain('DELETED');
+    expect(new URL(urlCadastro('v23.0', '000555', 'adsets', ['900000000000301'], 'id')[0]).pathname).toBe('/v23.0/act_000555/adsets');
+    expect(urlCadastro('v23.0', '000555', 'ads', [], 'id')).toEqual([]);
+    expect(urlCadastro('v23.0', '1/../x', 'ads', ['900000000000301'], 'id')).toEqual([]);
   });
 
   it('desempenho por anúncio = mesma conversão da campanha, trocando campanha por anúncio; sem ad_id descarta', () => {
@@ -139,6 +174,13 @@ describe('coleta Meta por conjunto e anúncio (respostas simuladas)', () => {
     expect(r.contas).toEqual([{ conta: '000555', ok: true, conjuntos: 2, anuncios: 3, linhas: 3, descartadas: 1, recusas: 0,
       cadastro_parcial: 0, miniaturas: 2, miniaturas_erro: 0 }]);
     expect(ordem).toEqual(['conjuntos', 'anuncios', 'desempenho', 'miniaturas']);
+    // cadastro: na conta, com filtering, nunca ?ids=; anúncios em 2 páginas (2 + 1) seguindo o paging.next
+    const cad = pedidos.filter((p) => ehCadastro(p.url));
+    expect(cad.map((p) => new URL(p.url).pathname)).toEqual([
+      '/v23.0/act_000555/adsets', '/v23.0/act_000555/ads', '/v23.0/act_000555/ads']);
+    expect(cad.every((p) => new URL(p.url).searchParams.has('filtering'))).toBe(true);
+    expect(cad[2].url).toContain('after=2');
+    expect(pedidos.some((p) => p.url.includes('ids='))).toBe(false);
     // paginação: a segunda leitura de insights segue o paging.next (after=)
     const ins = pedidos.filter((p) => p.url.includes('/insights'));
     expect(ins).toHaveLength(2);
@@ -153,6 +195,8 @@ describe('coleta Meta por conjunto e anúncio (respostas simuladas)', () => {
     expect(gravado.anuncios).toContainEqual({ plataforma: 'meta', conjunto: '900000000000301', id: '900000000000401',
       nome: 'ENSAIO | BF26 | C1 | TEASER | AD 01', status: 'ACTIVE', criativo: '900000000000501', video_id: '900000000000601',
       url_tags: 'utm_source=FB&utm_content={{ad.name}}|{{ad.id}}' });
+    // anúncio arquivado hoje, com gasto no período: cadastro completo (veio pelo filtro de status)
+    expect(gravado.anuncios.find((a) => a.id === '900000000000403')).toMatchObject({ status: 'ARCHIVED', criativo: '900000000000502' });
     expect(gravado.desempenho.map((l) => `${l.anuncio}@${l.dia}`)).toEqual([
       '900000000000401@2026-10-10', '900000000000402@2026-10-10', '900000000000403@2026-10-11']);
     // miniatura: um download por criativo (dois anúncios dividem o 501), sem redirect, caminho meta/<conta>/<criativo>.<ext>
@@ -195,14 +239,38 @@ describe('coleta Meta por conjunto e anúncio (respostas simuladas)', () => {
     expect(ordem).toEqual([]);
   });
 
-  it('busca por ids falha: cadastro sai dos insights (parcial) e o desempenho é gravado igual', async () => {
-    const { d, gravado } = deps({ buscar: metaFalso({ erroIds: true }).buscar, baixar: baixarFalso().baixar });
+  it('busca de cadastro falha: cadastro sai dos insights (parcial), cadastro_erro curto, desempenho gravado igual', async () => {
+    const { d, gravado } = deps({ buscar: metaFalso({ erroCadastro: true }).buscar, baixar: baixarFalso().baixar });
     const r = await coletarAnuncios([CONTA], d);
     expect(r.contas[0]).toMatchObject({ ok: true, conjuntos: 2, anuncios: 3, linhas: 3, cadastro_parcial: 5,
       cadastro_erro: 'meta_100', miniaturas: 0 });
     expect(gravado.desempenho).toHaveLength(3);
     expect(gravado.anuncios.every((a) => a.status === null && a.criativo === null)).toBe(true);
     expect(gravado.conjuntos.find((c) => c.id === '900000000000302')?.nome).toBe('ENSAIO | CONJ 02 | FRIO');
+  });
+
+  it('id pedido que não volta no cadastro: só ele sai dos insights (parcial), sem cadastro_erro', async () => {
+    const { d, gravado } = deps({ buscar: metaFalso({ some: ['900000000000403'] }).buscar });
+    const r = await coletarAnuncios([CONTA], d);
+    expect(r.contas[0]).toMatchObject({ ok: true, conjuntos: 2, anuncios: 3, linhas: 3, cadastro_parcial: 1 });
+    expect(r.contas[0]).not.toHaveProperty('cadastro_erro');
+    expect(gravado.anuncios.find((a) => a.id === '900000000000403')).toEqual({ plataforma: 'meta', conjunto: '900000000000302',
+      id: '900000000000403', nome: 'ENSAIO | BF26 | C2 | ISCA | AD 03', status: null, criativo: null, video_id: null, url_tags: null });
+    expect(gravado.anuncios.find((a) => a.id === '900000000000401')?.status).toBe('ACTIVE');
+  });
+
+  it('erro na 2a página do cadastro: cadastro_erro com o código do Meta e o bloco inteiro cai no parcial', async () => {
+    const { d, gravado } = deps({ buscar: metaFalso({ erroNaPagina2: true }).buscar });
+    const r = await coletarAnuncios([CONTA], d);
+    expect(r.contas[0]).toMatchObject({ ok: true, anuncios: 3, linhas: 3, cadastro_parcial: 3, cadastro_erro: 'meta_2' });
+    expect(gravado.conjuntos.every((c) => c.status !== null)).toBe(true);
+    expect(gravado.desempenho).toHaveLength(3);
+  });
+
+  it('o corpo real do ?ids= (500, code 100) vira meta_100: é o erro da rodada 158', async () => {
+    const { buscar } = metaFalso();
+    await expect(lerPaginas(buscar, 'https://graph.facebook.com/v23.0/?ids=900000000000401&fields=id', 'x'))
+      .rejects.toMatchObject({ codigo: 'meta_100' });
   });
 
   it('sem baixar/subirMiniatura (env ausente): miniatura não é tocada', async () => {
@@ -237,7 +305,7 @@ describe('coleta Meta por conjunto e anúncio (respostas simuladas)', () => {
     const { baixar, chamadas } = baixarFalso();
     const meta = metaFalso();
     const buscar = async (url: string, init?: { headers?: Record<string, string> }) => {
-      if (url.includes('/?ids=') && url.includes('creative')) return resp(Object.fromEntries(lidos.map((a) => [a.id, a])));
+      if (url.includes('/ads?')) return resp({ data: lidos, paging: { cursors: { before: 'ENSAIO', after: 'ENSAIO' } } });
       if (url.includes('/insights') && !url.includes('after=')) {
         return resp({ data: lidos.map((a) => ({ ad_id: a.id, ad_name: a.name, adset_id: '900000000000301', adset_name: 'ENSAIO',
           campaign_id: '900000000000201', date_start: '2026-10-10', spend: '1.00' })) });
@@ -321,8 +389,9 @@ describe('orçamento da fase de anúncios (para por tempo)', () => {
     };
     const { d, ordem } = deps({ buscar, ate_ms: 25_000 });
     const r = await coletarAnuncios([CONTA, { ...CONTA, conta_externa: '000556' }], d, () => t);
-    // insights p1 (0 s), insights p2 (10 s), ?ids= dos conjuntos (20 s); aos 30 s não começa mais nada
-    expect(meta.pedidos.map((p) => (p.url.includes('/insights') ? 'insights' : 'ids'))).toEqual(['insights', 'insights', 'ids']);
+    // insights p1 (0 s), insights p2 (10 s), cadastro dos conjuntos (20 s); aos 30 s não começa mais nada
+    expect(meta.pedidos.map((p) => (p.url.includes('/insights') ? 'insights' : ehCadastro(p.url) ? 'cadastro' : 'outro')))
+      .toEqual(['insights', 'insights', 'cadastro']);
     expect(ordem).toEqual([]);
     expect(r.puladas).toBe(1);
     expect(r.contas).toEqual([{ conta: '000555', ok: false, erro: 'sem_tempo' }, { conta: '000556', ok: false, erro: 'sem_tempo' }]);
