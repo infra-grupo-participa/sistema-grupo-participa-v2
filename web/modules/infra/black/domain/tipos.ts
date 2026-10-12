@@ -78,12 +78,32 @@ export interface LinhaPerfil {
 }
 export interface LeadDetalhe { leadId: string; nome: string | null; email: string | null; telefone: string | null }
 
-export interface CanalMensageria {
-  canal: 'api' | 'sms' | 'ligacao'; enviados: Valor; entregues: Valor;
-  cliquesOuAtendidas: Valor; custo: Valor; viraramIngresso: Valor; viraramPresenca: Valor;
+export type CanalDisparo = 'api' | 'sms' | 'ligacao' | 'grupo' | 'email';
+export const CANAIS_DISPARO: readonly CanalDisparo[] = ['api', 'sms', 'ligacao', 'grupo', 'email'];
+/** Canal pago tem custo por envio; grupo e e-mail não têm (custo null, a tela diz "Sem custo por envio"). */
+export const CANAL_PAGO: Record<CanalDisparo, boolean> = { api: true, sms: true, ligacao: true, grupo: false, email: false };
+
+/**
+ * Métricas de um canal (ou de um envio). Cada canal usa as que fazem sentido para ele (o rótulo vem da tela):
+ * `lidas` = lidas na API, atendidas na ligação, abertos no e-mail; `falhas` = não atendidas na ligação,
+ * devolvidos no e-mail. Métrica que o canal não mede fica null ("Sem dado"), nunca zero.
+ */
+export interface MetricasDisparo {
+  enviados: Valor; entregues: Valor; lidas: Valor; cliques: Valor; falhas: Valor; custo: Valor;
+}
+export interface CanalMensageria extends MetricasDisparo { canal: CanalDisparo; envios: number }
+/** Um envio (disparo): cada um tem o seu objetivo; o custo é do envio, não de um resultado depois dele. */
+export interface EnvioMensageria extends MetricasDisparo {
+  id: string; canal: CanalDisparo; titulo: string; objetivo: string;
+  /** Data e hora do envio, `AAAA-MM-DDTHH:MM` no horário de Brasília. */
+  enviadoEm: string;
+  /** Tamanho da base para a qual o envio saiu (pessoas, ou membros nos grupos). */
+  base: Valor; copy: string | null;
 }
 export interface MensageriaBlack {
   canais: CanalMensageria[];
+  /** Envios do período, do mais recente para o mais antigo. */
+  envios: EnvioMensageria[];
   regua: { janela: '2h' | '12h' | '24h'; enviados: Valor; ingressos: Valor }[];
 }
 export interface Marcos { presencaLive: Valor; vendas: Valor }

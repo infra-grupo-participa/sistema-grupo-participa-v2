@@ -5,7 +5,7 @@
 import { deslocarDia } from '@/modules/infra/atm/domain/periodo';
 import { DDD_UF, ufDoTelefone } from '../../domain/ddd-uf';
 import type {
-  Anuncio, Campanha, CanalMensageria, Conjunto, DesempenhoDia, Funil, LeadDetalhe, LinhaPerfil, OrigemLead, Porta, Profissao,
+  Anuncio, Campanha, CanalDisparo, Conjunto, DesempenhoDia, EnvioMensageria, Funil, LeadDetalhe, LinhaPerfil, OrigemLead, Porta, Profissao,
 } from '../../domain/tipos';
 import { BASES_PUBLICOS, CAMPANHAS, PAGINAS, PESO_UF, PLANOS } from './catalogo';
 
@@ -28,7 +28,26 @@ export function mulberry32(semente: number): () => number {
   };
 }
 
-export interface DiaMensageria { dia: string; canais: CanalMensageria[]; regua: { janela: '2h' | '12h' | '24h'; enviados: number; ingressos: number }[] }
+export interface DiaMensageria { dia: string; envios: EnvioMensageria[]; regua: { janela: '2h' | '12h' | '24h'; enviados: number; ingressos: number }[] }
+
+/** Modelos FICTÍCIOS de envio (título, objetivo e copy de demonstração; {nome} e {link} são marcadores). */
+interface ModeloEnvio { titulo: string; objetivo: string; copy: string }
+const MODELOS: Record<'email' | 'grupoManha' | 'grupoTarde' | 'apiBoasVindas' | 'apiLembrete' | 'sms' | 'ligacao', ModeloEnvio> = {
+  email: { titulo: 'E-mail de conteúdo do dia', objetivo: 'Levar o lead para a página da live',
+    copy: 'Assunto: o erro que mais custa caro no planejamento patrimonial.\n\nOi, {nome}. Separei um conteúdo curto para você ver antes da live: {link}' },
+  grupoManha: { titulo: 'Aquecimento da manhã no grupo', objetivo: 'Engajar o grupo antes da live',
+    copy: 'Bom dia! Hoje tem conteúdo novo sobre holding familiar aqui no grupo. Fique de olho: {link}' },
+  grupoTarde: { titulo: 'Lembrete da tarde no grupo', objetivo: 'Lembrar a live do grupo',
+    copy: 'Passando para lembrar: a live da Black vem aí. Ative o lembrete: {link}' },
+  apiBoasVindas: { titulo: 'Boas-vindas ao inscrito', objetivo: 'Levar o inscrito para o grupo da live',
+    copy: 'Oi, {nome}! Sua inscrição está confirmada. Entre no grupo para receber o link da live: {link}' },
+  apiLembrete: { titulo: 'Convite para quem não entrou no grupo', objetivo: 'Levar o inscrito para o grupo da live',
+    copy: '{nome}, vi que você ainda não entrou no grupo da live. O link é este: {link}' },
+  sms: { titulo: 'SMS para quem não entrou no grupo', objetivo: 'Levar o inscrito para o grupo da live',
+    copy: 'Black HT: sua vaga esta garantida. Entre no grupo da live: {link}' },
+  ligacao: { titulo: 'Ligação para inscrito fora do grupo', objetivo: 'Levar o inscrito para o grupo da live',
+    copy: 'Roteiro: confirmar a inscrição, explicar a live e enviar o link do grupo por mensagem.' },
+};
 
 export interface BaseFicticia {
   campanhas: Campanha[]; conjuntos: Conjunto[]; anuncios: Anuncio[];
@@ -74,6 +93,9 @@ function gerar(): BaseFicticia {
   const linhas: LinhaPerfil[] = [];
   const detalhes = new Map<string, LeadDetalhe>();
   const mensageria: DiaMensageria[] = [];
+  // Sorteio próprio da mensageria: o fluxo principal (r) continua com as mesmas 3 chamadas por dia de antes,
+  // para os totais de tráfego e de leads não mudarem.
+  const rm = mulberry32(SEMENTE + 7);
   let n = 0;
   const pessoasAnteriores: { pessoaId: string; funil: Funil | null }[] = [];
 
@@ -188,20 +210,45 @@ function gerar(): BaseFicticia {
       });
       novosDoDia.push({ pessoaId: l.pessoaId, funil: l.funil });
     }
-    // Mensageria fictícia, a partir de 12/10.
+    // Mensageria fictícia, a partir de 12/10: uma lista de envios por canal, cada um com título, objetivo e copy.
     if (dia >= '2026-10-12') {
-      const api = Math.round(2400 * (0.85 + r() * 0.3));
-      const sms = Math.round(800 * (0.85 + r() * 0.3));
-      const lig = Math.round(150 * (0.85 + r() * 0.3));
-      const canal = (c: CanalMensageria['canal'], env: number, entrega: number, clique: number, custoUn: number, ingresso: number): CanalMensageria => {
-        const ent = Math.round(env * entrega);
-        const cli = Math.round(ent * clique);
-        return { canal: c, enviados: env, entregues: ent, cliquesOuAtendidas: cli, custo: Math.round(env * custoUn * 100) / 100, viraramIngresso: Math.round(cli * ingresso), viraramPresenca: null };
+      const fApi = 0.85 + r() * 0.3; const fSms = 0.85 + r() * 0.3; const fLig = 0.85 + r() * 0.3;
+      const entre = (a: number, b: number) => a + rm() * (b - a);
+      const envios: EnvioMensageria[] = [];
+      const envio = (canal: CanalDisparo, hora: string, modelo: ModeloEnvio, base: number) => {
+        const env = base;
+        const m: Pick<EnvioMensageria, 'enviados' | 'entregues' | 'lidas' | 'cliques' | 'falhas' | 'custo'> = (() => {
+          if (canal === 'api') {
+            const falhas = Math.round(env * entre(0.02, 0.05)); const ent = env - falhas;
+            return { enviados: env, entregues: ent, lidas: Math.round(ent * entre(0.6, 0.78)), cliques: Math.round(ent * entre(0.06, 0.12)), falhas, custo: Math.round(env * 0.05 * 100) / 100 };
+          }
+          if (canal === 'sms') {
+            const falhas = Math.round(env * entre(0.06, 0.11)); const ent = env - falhas;
+            return { enviados: env, entregues: ent, lidas: null, cliques: Math.round(ent * entre(0.02, 0.04)), falhas, custo: Math.round(env * 0.09 * 100) / 100 };
+          }
+          if (canal === 'ligacao') {
+            const atendidas = Math.round(env * entre(0.28, 0.4));
+            return { enviados: env, entregues: null, lidas: atendidas, cliques: null, falhas: env - atendidas, custo: Math.round(env * 0.6 * 100) / 100 };
+          }
+          if (canal === 'grupo') return { enviados: env, entregues: null, lidas: null, cliques: Math.round(env * entre(0.03, 0.08)), falhas: null, custo: null };
+          const falhas = Math.round(env * entre(0.01, 0.03)); const ent = env - falhas;
+          return { enviados: env, entregues: ent, lidas: Math.round(ent * entre(0.17, 0.28)), cliques: Math.round(ent * entre(0.015, 0.03)), falhas, custo: null };
+        })();
+        envios.push({ id: `env-${dia}-${canal}-${hora.replace(':', '')}`, canal, enviadoEm: `${dia}T${hora}`, base, ...modelo, ...m });
       };
+      const api = Math.round(2400 * fApi);
+      const membros = Math.round(linhas.length * 0.72);
+      envio('email', '07:00', MODELOS.email, Math.round(9000 * entre(0.9, 1.1)));
+      envio('grupo', '08:30', MODELOS.grupoManha, membros);
+      envio('api', '09:30', MODELOS.apiBoasVindas, Math.round(api * 0.6));
+      envio('sms', '11:00', MODELOS.sms, Math.round(800 * fSms));
+      envio('ligacao', '14:00', MODELOS.ligacao, Math.round(150 * fLig));
+      envio('api', '16:00', MODELOS.apiLembrete, api - Math.round(api * 0.6));
+      envio('grupo', '17:30', MODELOS.grupoTarde, membros);
       const reg = (j: '2h' | '12h' | '24h', env: number, tx: number) => ({ janela: j, enviados: env, ingressos: Math.round(env * tx) });
       mensageria.push({
         dia,
-        canais: [canal('api', api, 0.96, 0.09, 0.05, 0.35), canal('sms', sms, 0.9, 0.03, 0.09, 0.3), canal('ligacao', lig, 1, 0.35, 0.6, 0.25)],
+        envios,
         regua: [reg('2h', Math.round(pagosDoDia * 0.5), 0.22), reg('12h', Math.round(pagosDoDia * 0.35), 0.14), reg('24h', Math.round(pagosDoDia * 0.25), 0.09)],
       });
     }

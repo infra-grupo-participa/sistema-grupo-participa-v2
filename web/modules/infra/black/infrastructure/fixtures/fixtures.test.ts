@@ -75,6 +75,23 @@ describe('fonte de demonstração', () => {
     const limite = f.agora().getTime();
     expect(l.data.every((x) => x.entrouGrupoEm === null || Date.parse(x.entrouGrupoEm) <= limite)).toBe(true);
   });
+  it('mensageria: canal = soma dos seus envios; grupo e e-mail sem custo; envios do mais recente ao mais antigo, sem futuro', async () => {
+    const f = criarFonteFixtures();
+    const m = (await f.mensageria(CHAVE_BLACK, { de: '2026-10-04', ate: '2026-11-03' })).data;
+    expect(m.canais.map((c) => c.canal)).toEqual(['api', 'sms', 'ligacao', 'grupo', 'email']);
+    for (const c of m.canais) {
+      const doCanal = m.envios.filter((e) => e.canal === c.canal);
+      expect(c.envios).toBe(doCanal.length);
+      expect(c.enviados).toBe(doCanal.reduce((t, e) => t + (e.enviados ?? 0), 0));
+      if (c.canal === 'grupo' || c.canal === 'email') expect(doCanal.every((e) => e.custo === null) && c.custo === null).toBe(true);
+      else expect(c.custo).toBeCloseTo(doCanal.reduce((t, e) => t + (e.custo ?? 0), 0), 2);
+    }
+    expect(m.canais.find((c) => c.canal === 'sms')!.lidas).toBeNull();
+    expect(m.envios.every((e, i) => i === 0 || m.envios[i - 1].enviadoEm >= e.enviadoEm)).toBe(true);
+    expect(m.envios.every((e) => e.titulo && e.objetivo && e.copy)).toBe(true);
+    const limite = f.agora().getTime();
+    expect(m.envios.every((e) => Date.parse(`${e.enviadoEm}:00-03:00`) <= limite)).toBe(true);
+  });
   it('leads: no máximo 50 por chamada; chave errada devolve erro', async () => {
     const f = criarFonteFixtures();
     const ids = b.linhas.slice(0, 80).map((l) => l.leadId);

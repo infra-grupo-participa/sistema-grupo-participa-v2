@@ -71,6 +71,18 @@ R$ 428.571,00; CPL do placar R$ 14,61 = R$ 192.079,46 ÷ 13.145; soma das 6 fase
   ficou compacto: top 10, busca pelo nome, "maior/menor primeiro" (custos abrem pelo menor), rolagem e
   "mostrar todos"; o clique continua levando ao criativo. Modal de `max-w-4xl` para `max-w-3xl`.
 - **CPL por etapa** ganhou a linha do **C1**, com CPM e custo por visualização e o aviso "não gera lead: não é CPL".
+- **Mensageria.** Saiu o "custo por ingresso" (e "viraram ingresso/presença" como resultado do custo): cada envio
+  tem um objetivo próprio, então o custo é do envio, **custo total** e **custo por mensagem enviada** (Σ custo ÷
+  Σ enviados, só nos canais pagos). Cinco canais: **API, SMS e ligação** lado a lado (pagos) e **grupo e e-mail**
+  (sem custo, "Sem custo por envio", cada um com as métricas que mede: membros alcançados e cliques no link no
+  grupo; enviados, entregues, abertos, cliques e devolvidos no e-mail). Embaixo, a **lista de envios** no padrão
+  do ATM (`atm/ui/DisparosDetalhe.tsx`): canal, data e hora, título, objetivo, tamanho da base, enviados, custo,
+  custo por enviada e, aberto, as métricas do canal com a taxa e a copy; filtro por canal e "mostrar mais" de 20
+  em 20. Tudo com selo "dado fictício". Tipos novos em `domain/tipos.ts` (`CanalDisparo`, `EnvioMensageria`,
+  `MetricasDisparo`, `CANAL_PAGO`); o fixture gera 7 envios por dia a partir de 12/10 com sorteio próprio (os
+  totais de tráfego e de leads da semente não mudaram) e a fonte soma o canal a partir dos envios do período
+  (teste em `fixtures.test.ts`). A régua de API do grupo continua. Na Jornada, o nó "Régua do aquecimento" mostra
+  Enviados, Entregues e Custo (antes "Viraram ingresso").
 
 ## O que foi feito (5 abas, filtro global)
 
@@ -86,8 +98,9 @@ ciclo) e canal (Todos, Meta, Google). Tudo mora na URL. Releitura a cada 5 min s
 3. **Criativos e páginas:** trilha Campanha › Conjunto › Criativo › Página com chips; painéis de campanhas e
    conjuntos em barras; galeria com miniatura fictícia e ordem por chips; cartões por página. O criativo abre a
    gaveta com miniatura, mini-funil, curva diária e os 3 botões (desligados na demonstração).
-4. **Mensageria:** API, SMS e ligação com enviados, entregues, cliques ou atendidas, custo, custo por clique,
-   ingresso e presença; régua de API do grupo (+2h, +12h, +24h). Selo "dado fictício".
+4. **Mensageria:** API, SMS e ligação lado a lado (custo total e por mensagem enviada), grupo e e-mail sem custo,
+   lista de envios por canal (título, objetivo, data e hora, base, copy, métricas) e régua de API do grupo (+2h,
+   +12h, +24h). Selo "dado fictício".
 5. **Histórico:** régua de dias com play que "toca" o funil do dia e o gráfico de investimento por dia com
    pessoas acumuladas contra a meta acumulada.
 
@@ -104,6 +117,8 @@ região, utm_source, página, base de origem, isca; tudo clicável e encadeado; 
   custo por visualização = gasto ÷ ThruPlay. Alcance e frequência não somam entre dias: vêm do total do período.
 - Grupo em 48h = pessoas que entraram no grupo em até 48h ÷ pessoas com a janela de 48h já fechada.
 - Meta acumulada = 650 × dias desde o início da captação (12/10). Leads da meta = pessoas únicas.
+- Mensageria: custo por mensagem enviada = Σ custo ÷ Σ enviados dos canais pagos (na ligação, por discada); taxas
+  do canal sobre entregues quando o canal mede entrega, senão sobre enviados; falhas sobre enviados.
 - Falha de bloco: segura o último valor, esmaece e mostra a idade da leitura.
 
 ## Decisões
@@ -134,7 +149,7 @@ Do executor (front-end-sr), sem pedido explícito:
 6. Campanha do criativo da consultoria: não está no documento do Caio.
 7. Temperatura: PQ/PF/MIX/ADV (Caio) x Superquente/Quente/MQL/Lançamentos gratuitos (publicos.md).
 8. Farol de frequência: fora do teto 3/semana no C3 e remarketing, faixas não definidas.
-9. Custo de disparo e LPV do Google: sem fonte.
+9. Custo de disparo e LPV do Google: sem fonte. A lista de envios real (título, objetivo, base, copy e métricas por canal, incluindo grupo e e-mail) também não tem fonte ligada; o ATM lê os disparos dele de outra fonte, não sei se serve à Black, precisa confirmar.
 
 Acréscimos da revisão: o grupo legado conta nos 15 mil? Título e descrição do cartão no registro. O parser
 `traduzirCampanha` (Marketing › Tráfego) rejeita o gestor `ZZ` dos nomes fictícios: não é usado aqui, mas

@@ -76,7 +76,7 @@ export const NOS: readonly DefinicaoNo[] = [
   { id: 'inscricao', kicker: 'Página', titulo: 'Inscrição', sub: ['timeholdingbrasil.com.br/metodo-perfeito'], forma: 'caixa', x: 800, y: 810, w: 240, h: 150, funis: ['c3'], recorte: { campanha: captacao('c3'), linha: (l) => l.porta === 'inscricao_direta' }, resumo: ['Inscrições', 'Pagas', 'Fora do tráfego'] },
   { id: 'lista', kicker: 'Ponto de encontro', titulo: 'Lista do Método Perfeito', sub: ['uma pessoa, uma régua', 'reconhecida por e-mail ou pelos 8 últimos dígitos'], forma: 'caixa', destaque: true, x: 380, y: 1000, w: 340, h: 140, funis: [], recorte: { campanha: () => true, linha: () => true }, resumo: ['Pessoas', 'Cadastros', 'Da meta de 15 mil'] },
   { id: 'grupos', kicker: 'WhatsApp · ver links', titulo: 'Grupos por profissão', sub: ['em silêncio até 31/10'], forma: 'caixa', x: 70, y: 1190, w: 240, h: 132, funis: [], recorte: { campanha: () => false, linha: () => true }, resumo: ['Em 2h', 'Em 24h', 'Em 48h'] },
-  { id: 'regua', kicker: 'API · ver mensageria', titulo: 'Régua do aquecimento', sub: ['boas-vindas e convites da semana'], forma: 'caixa', x: 430, y: 1190, w: 240, h: 132, funis: [], recorte: null, semFonte: 'Mensageria por API: sem fonte ligada.', resumo: ['Enviados', 'Viraram ingresso', 'Custo'] },
+  { id: 'regua', kicker: 'API · ver mensageria', titulo: 'Régua do aquecimento', sub: ['boas-vindas e convites da semana'], forma: 'caixa', x: 430, y: 1190, w: 240, h: 132, funis: [], recorte: null, semFonte: 'Mensageria por API: sem fonte ligada.', resumo: ['Enviados', 'Entregues', 'Custo'] },
   { id: 'lembrete', kicker: 'Tráfego', titulo: 'Lembrete de cada live', sub: ['é amanhã · é hoje · ao vivo'], forma: 'caixa', x: 800, y: 1190, w: 240, h: 132, funis: [], recorte: { campanha: naFase('aquecimento'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
   // Ciclo semanal (painel "Toda semana · 13 a 29/10"): sem fonte por etapa nesta versão.
   { id: 'seg', kicker: 'Segunda · API', titulo: 'Consultoria é amanhã', sub: ['e convite para aplicar'], forma: 'caixa', x: 70, y: 1416, w: 210, h: 100, funis: [], recorte: null, semFonte: 'Sem fonte por dia da semana.' },
@@ -248,7 +248,7 @@ export function calcularJornada(args: {
     return m(`Em ${h}h`, t.valor, 'pct', { taxa: t, nota: t.nota ?? undefined });
   });
   const api = mensageria?.canais.find((c) => c.canal === 'api') ?? null;
-  if (api) out.regua = [m('Enviados', api.enviados, 'int'), m('Viraram ingresso', api.viraramIngresso, 'int'), m('Custo', api.custo, 'brl')];
+  if (api) out.regua = [m('Enviados', api.enviados, 'int'), m('Entregues', api.entregues, 'int'), m('Custo', api.custo, 'brl')];
   const live = metricasDistribuicao(rec('live').dias);
   out.live = [...(live.length ? live : [m('Investimento', null, 'brl')]), m('Presença', null, 'int', { nota: 'Sem fonte ainda' }), m('Vendas', null, 'int', { nota: 'Sem fonte ainda' })];
   return out;

@@ -15,6 +15,6 @@ export const fonteSupabaseBlack: FonteDadosBlack = {
   trafego: () => semDado({ campanhas: [], conjuntos: [], anuncios: [], paginas: [], dias: [], totais: [], coletadoEm: null }),
   perfil: () => semDado([]),
   leads: () => semDado([]),
-  mensageria: () => semDado({ canais: [], regua: [] }),
+  mensageria: () => semDado({ canais: [], envios: [], regua: [] }),
   marcos: () => semDado({ presencaLive: null, vendas: null }),
 };

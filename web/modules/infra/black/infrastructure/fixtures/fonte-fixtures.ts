@@ -3,7 +3,8 @@
 import type { FonteDadosBlack } from '../../application/ports';
 import { LEADS_POR_PAGINA } from '../../application/ports';
 import { diaDe } from '../../domain/recorte';
-import type { CanalMensageria, MensageriaBlack, Periodo, Resultado, TotalPeriodo } from '../../domain/tipos';
+import { CANAIS_DISPARO } from '../../domain/tipos';
+import type { CanalMensageria, MensageriaBlack, MetricasDisparo, Periodo, Resultado, TotalPeriodo } from '../../domain/tipos';
 import { CHAVE_BLACK, CONFIG_BLACK, PAGINAS } from './catalogo';
 import { baseFicticia, PRIMEIRO_DIA, RELOGIO_PADRAO, ULTIMO_DIA } from './gerador';
 
@@ -88,27 +89,29 @@ export function criarFonteFixtures(relogio?: string | null): FonteDadosBlack {
       return ok(leadIds.slice(0, LEADS_POR_PAGINA).flatMap((id) => { const d = det.get(id); return d ? [d] : []; }));
     },
     async mensageria(chave, p) {
-      const vazio: MensageriaBlack = { canais: [], regua: [] };
+      const vazio: MensageriaBlack = { canais: [], envios: [], regua: [] };
       const erro = chaveErrada(chave, vazio);
       if (erro) return erro;
       const { de, ate } = corte(p);
       const doPeriodo = baseFicticia().mensageria.filter((m) => m.dia >= de && m.dia <= ate);
       if (doPeriodo.length === 0) return { data: vazio, semDado: true, erro: null };
-      const canais = new Map<CanalMensageria['canal'], CanalMensageria>();
-      const s = (a: number | null, b: number | null) => (a === null || b === null ? null : a + b);
-      for (const m of doPeriodo) for (const c of m.canais) {
-        const atual = canais.get(c.canal);
-        canais.set(c.canal, atual ? {
-          canal: c.canal, enviados: s(atual.enviados, c.enviados), entregues: s(atual.entregues, c.entregues),
-          cliquesOuAtendidas: s(atual.cliquesOuAtendidas, c.cliquesOuAtendidas), custo: s(atual.custo, c.custo),
-          viraramIngresso: s(atual.viraramIngresso, c.viraramIngresso), viraramPresenca: null,
-        } : { ...c });
-      }
+      const envios = doPeriodo.flatMap((m) => m.envios).sort((x, y) => (x.enviadoEm < y.enviadoEm ? 1 : x.enviadoEm > y.enviadoEm ? -1 : 0));
+      // Por canal = soma dos envios do período. Métrica que o canal não mede (todos null) continua null.
+      const campos: (keyof MetricasDisparo)[] = ['enviados', 'entregues', 'lidas', 'cliques', 'falhas', 'custo'];
+      const canais: CanalMensageria[] = CANAIS_DISPARO.flatMap((canal) => {
+        const doCanal = envios.filter((e) => e.canal === canal);
+        if (doCanal.length === 0) return [];
+        const m = Object.fromEntries(campos.map((k) => {
+          const vs = doCanal.map((e) => e[k]).filter((v): v is number => v !== null);
+          return [k, vs.length ? Math.round(vs.reduce((t, v) => t + v, 0) * 100) / 100 : null];
+        })) as unknown as MetricasDisparo;
+        return [{ canal, envios: doCanal.length, ...m }];
+      });
       const regua = (['2h', '12h', '24h'] as const).map((janela) => {
         const r = doPeriodo.flatMap((m) => m.regua.filter((x) => x.janela === janela));
         return { janela, enviados: r.reduce((t, x) => t + x.enviados, 0), ingressos: r.reduce((t, x) => t + x.ingressos, 0) };
       });
-      return ok({ canais: [...canais.values()], regua });
+      return ok({ canais, envios, regua });
     },
     async marcos(chave) {
       // Presença na live e vendas: null de propósito (não existe nem no fictício).
