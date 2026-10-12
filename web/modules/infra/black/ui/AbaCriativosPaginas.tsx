@@ -2,8 +2,9 @@
 
 // Aba 3, Criativos e páginas (aprovada em 12/10). Trilha Campanha › Conjunto › Criativo › Página; cada clique em
 // qualquer painel vira chip e refiltra os outros (cada painel vê os filtros dos outros, o próprio só destaca).
-// O filtro mora na URL (recorte.criativos), então o link volta igual. Campanha × conjunto virou mestre e detalhe
-// lado a lado (`CampanhaConjunto`): a lista de campanhas ignora o filtro de conjunto (o conjunto é filho dela).
+// O filtro mora na URL (recorte.criativos), então o link volta igual. Campanha × conjunto lado a lado
+// (`CampanhaConjunto`), paginados de 10 em 10: a lista de campanhas ignora o filtro de conjunto (o conjunto é filho
+// dela) e, sem campanha escolhida, a de conjuntos mostra todos os do recorte.
 import { useMemo } from 'react';
 import { SectionCard } from '@/shared/ui/components';
 import { painel, type PainelCriativos } from '../domain/criativos';
@@ -41,9 +42,12 @@ export function AbaCriativosPaginas({ d, gaveta }: { d: DadosTela; gaveta?: Alvo
   return (
     <div className="space-y-4">
       <TrilhaFiltro filtro={f} nome={nome} onTirar={tirar} onLimpar={() => d.irPara({ criativos: {} })} />
-      <SectionCard title="Campanhas e conjuntos" subtitle="Gasto, CPL com o farol da régua e leads pagos do período. Clique na campanha para ver os conjuntos dela.">
+      <SectionCard title="Campanhas e conjuntos" subtitle="Gasto, CPL com o farol da régua e leads pagos do período, 10 por página. Clique na campanha para ver só os conjuntos dela.">
         <CampanhaConjunto campanhas={paineis.campanha} conjuntos={paineis.conjunto} campanha={f.campanha ?? null} conjunto={f.conjunto ?? null}
-          nomeCampanha={(id) => d.idx.campanha.get(id)?.nome ?? id} onCampanha={escolherCampanha} onConjunto={(id) => alternar('conjunto', id)} />
+          chaveFiltro={[d.recorte.funil, d.recorte.canal, d.recorte.periodo, f.anuncio ?? '', f.pagina ?? ''].join('|')}
+          nomeCampanha={(id) => d.idx.campanha.get(id)?.nome ?? id}
+          campanhaDoConjunto={(id) => { const c = d.idx.conjunto.get(id); return c ? d.idx.campanha.get(c.campanhaId)?.nome ?? null : null; }}
+          onCampanha={escolherCampanha} onConjunto={(id) => alternar('conjunto', id)} />
       </SectionCard>
       <SectionCard title="Criativos" subtitle="Clique para abrir o detalhe (miniatura, funil, curva diária e links).">
         <GaleriaCriativos itens={paineis.anuncio} anuncio={(id) => d.idx.anuncio.get(id)} selecionado={f.anuncio ?? null}

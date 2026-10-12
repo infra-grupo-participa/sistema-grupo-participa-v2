@@ -106,6 +106,15 @@ R$ 428.571,00; CPL do placar R$ 14,61 = R$ 192.079,46 ÷ 13.145; soma das 6 fase
   no mesmo padrão de cursor do `GraficoLinha`: passando o mouse (ou o dedo) aparece a data, o investimento e os
   leads pagos do dia, com a barra do dia destacada. Também funciona no teclado: foco no gráfico e setas
   (Home e End vão ao primeiro e ao último dia, Esc fecha).
+- **Campanhas e conjuntos paginados** (`ui/CampanhaConjunto.tsx`). Os dois lados usam o **mesmo cartão**, do mesmo
+  tamanho (duas colunas iguais lado a lado; no celular empilham). **Sem campanha escolhida**, a direita mostra os
+  conjuntos de **todas as campanhas** do recorte (antes ficava vazia), e a dica do cartão diz de qual campanha ele é;
+  clicar numa campanha filtra para os conjuntos dela, clicar de novo tira. Cada lado mostra **no máximo 10** e embaixo
+  a régua estilo Google: "‹ 1 2 3 4 5 ›" com a página atual destacada (`aria-current="page"`, `nav` com
+  `aria-label`), setas desligadas nas pontas e "11 a 20 de 23". Uma página só = sem régua. **Trocar filtro volta
+  para a página 1**: funil, canal, período, criativo ou página escolhidos mudam a chave; nos conjuntos, trocar a
+  campanha também. Escolher um conjunto não mexe na página. Contas puras em `domain/paginacao.ts` (`paginar`,
+  `paginasVisiveis`, com teste). Na semente fictícia são 9 campanhas (sem régua) e 14 conjuntos (2 páginas).
 
 ## O que foi feito (5 abas, filtro global)
 
@@ -119,7 +128,7 @@ ciclo) e canal (Todos, Meta, Google). Tudo mora na URL. Releitura a cada 5 min s
 2. **Jornada:** o fluxograma do Arthur vivo, setas com espessura pelo volume e fluxo animado; o funil filtrado
    apaga os outros nós. Clicar no nó abre a **gaveta lateral** (Etapa · Criativos · Perfil).
 3. **Criativos e páginas:** trilha Campanha › Conjunto › Criativo › Página com chips; campanhas e conjuntos
-   lado a lado (mestre e detalhe); galeria com miniatura fictícia e ordem por chips; cartões por página. O criativo abre a
+   lado a lado, 10 por página (sem campanha, todos os conjuntos); galeria com miniatura fictícia e ordem por chips; cartões por página. O criativo abre a
    gaveta com miniatura, funil em trapézios, curva diária interativa e os 3 botões (desligados na demonstração).
 4. **Mensageria:** API, SMS e ligação lado a lado (custo total e por mensagem enviada), grupo e e-mail sem custo,
    lista de envios por canal (título, objetivo, data e hora, base, copy, métricas) e régua de API do grupo (+2h,
