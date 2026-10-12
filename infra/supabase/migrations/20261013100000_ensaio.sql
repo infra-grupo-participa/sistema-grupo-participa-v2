@@ -12,6 +12,26 @@ reset role;
 select set_config('request.jwt.claims', '{}', true);
 
 -- ===== MIGRATION =====
+-- 20261013100000: cadastro do dashboard da Black Friday (modelo jornada-captacao) e tráfego Meta por campanha, conjunto e anúncio
+--
+-- STATUS: ver 20261013100000.explain.md.
+-- POR QUE: pedido do Victor (13/10/2026). O dashboard da Black (/infra/dashboards/csm/black-friday-2026-10) sai do modo demo
+--   e passa a ler o banco. Esta é a migration A; a B (20261013110000, leads, perfil e marcar teste) depende desta.
+-- O QUE FAZ:
+--   1. dados.dashboards: o CHECK do modelo passa a aceitar 'jornada-captacao' (os dois modelos de hoje continuam).
+--   2. Linha da Black: chave black-friday-2026-10, projeto 4 (BF26), conta_hotmart academy (confirmado pelo Victor em
+--      13/10/2026), periodo_inicio 04/10/2026 (decisão do Victor: o gasto de antecipação começa aí). Sem oferta e sem lista AC.
+--   3. dados.black_cadastro(p_chave): a trava das RPCs da Black (dados.cadastro + modelo jornada-captacao), igual à do ATM.
+--   4. public.dados_black_trafego(p_chave, p_de, p_ate) jsonb: campanhas do projeto do cadastro, mais as sem projeto que têm
+--      a sigla do projeto (BF26) entre barras no nome (conta em BRL), com etapa,
+--      subtipo e conflito de mkt_trafego.etapa_black; conjuntos; anúncios; dia a dia por campanha e por anúncio.
+--      Não devolve url_tags nem miniatura (dado que o navegador não precisa).
+-- AS 5 PERGUNTAS: escala: 1 linha, 1 CHECK, 2 funções; leitura de ~4 campanhas, ~40 anúncios, ~100 linhas/dia no máximo;
+--   índice: PKs (campanha_id, dia) e (anuncio_id, dia); frequência: a abertura do dashboard; repetição: idempotente
+--   (insert on conflict do nothing + conferência); reversão: 20261013100000_reversao.sql.
+
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
 
 do $g$
 begin
@@ -77,13 +97,17 @@ declare
 begin
   select x.de, x.ate into v_de, v_ate from dados.periodo(d.periodo_inicio, d.periodo_fim, p_de, p_ate) x;
   with c as (
-    -- 20261013100000: a Black é o termo BF26 entre barras no nome (o CPF01 ainda está sem projeto_id; ver o explain)
+    -- 20261013100000: campanhas do projeto do cadastro; a campanha sem projeto_id (o CPF01 hoje; ver o explain) entra
+    -- quando um dos termos entre barras do nome é a sigla do projeto (BF26). O termo vem do cadastro, não fica fixo aqui.
     select c.id, c.nome, c.plataforma, c.status_plataforma, c.objetivo, c.projeto_id, ct.nome as conta,
            e.etapa, e.subtipo, e.conflito
       from mkt_trafego.campanhas c
       join mkt_trafego.contas ct on ct.id = c.conta_id and ct.moeda = 'BRL'
+      join mkt.projetos p on p.id = d.projeto_id
       cross join lateral mkt_trafego.etapa_black(c.nome) e
-     where c.nome ~* '(^|\|)\s*BF26\s*(\||$)'
+     where c.projeto_id = d.projeto_id
+        or (c.projeto_id is null
+            and exists (select 1 from unnest(string_to_array(c.nome, '|')) t where upper(btrim(t)) = upper(p.sigla)))
   ),
   cj as (select j.id, j.campanha_id, j.nome, j.status_plataforma, j.meta_otimizacao
            from mkt_trafego.conjuntos j join c on c.id = j.campanha_id),
@@ -213,6 +237,23 @@ do $t$ begin perform public.dados_black_trafego('black-friday-2026-10');
   insert into pg_temp._z_out (passo, linha) values ('7 anon', 'ERRO DO ENSAIO: passou');
 exception when others then insert into pg_temp._z_out (passo, linha) values ('7 anon', sqlstate); end $t$;
 reset role;
+-- teste A do pentester: outro dashboard jornada-captacao (projeto 1) não pode receber o tráfego da Black
+insert into dados.dashboards (chave, modelo, projeto_id, conta_hotmart, periodo_inicio)
+values ('zz-pentest-jornada', 'jornada-captacao', 1, 'academy', date '2026-10-04');
+select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated"}', true);
+set local role authenticated;
+insert into pg_temp._z_out (passo, linha) select '11 outro projeto no mesmo modelo (BF26 esperado 0)', jsonb_build_object(
+  'campanhas', jsonb_array_length(x->'campanhas'),
+  'com_bf26', (select count(*) from jsonb_array_elements(x->'campanhas') c where c->>'nome' ~* '(^|\|)\s*BF26\s*(\||$)'),
+  'projetos', (select jsonb_agg(distinct c->'projeto_id') from jsonb_array_elements(x->'campanhas') c))::text
+  from (select public.dados_black_trafego('zz-pentest-jornada') x) z;
+insert into pg_temp._z_out (passo, linha) select '11 Black: campanhas e projetos', jsonb_build_object(
+  'campanhas', jsonb_array_length(x->'campanhas'),
+  'projetos', (select jsonb_agg(distinct c->'projeto_id') from jsonb_array_elements(x->'campanhas') c),
+  'nomes', (select jsonb_agg(c->>'id' order by (c->>'id')::bigint) from jsonb_array_elements(x->'campanhas') c))::text
+  from (select public.dados_black_trafego('black-friday-2026-10') x) z;
+reset role;
+delete from dados.dashboards where chave = 'zz-pentest-jornada';
 select set_config('request.jwt.claims', '{}', true);
 insert into pg_temp._z_out (passo, linha) select '9 grants', (select string_agg(p.proname || '=' || coalesce(p.proacl::text,'null'), ' ; ' order by 1) from pg_proc p where p.proname in ('dados_black_trafego','black_cadastro'));
 insert into pg_temp._z_out (passo, linha) select '9 linha', (select to_jsonb(d) - 'criado_em' from dados.dashboards d where chave = 'black-friday-2026-10')::text;
