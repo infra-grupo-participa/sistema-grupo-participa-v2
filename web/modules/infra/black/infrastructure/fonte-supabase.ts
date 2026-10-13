@@ -246,7 +246,7 @@ export const BUCKET_MINIATURAS = 'trafego-miniaturas';
 /** Formato que a coleta grava (Edge trafego-meta): meta/<conta>/<criativo>.<ext>. Outro texto não vira pedido ao Storage. */
 const CAMINHO_MINIATURA = /^meta\/[0-9]{1,30}\/[A-Za-z0-9_-]{1,100}\.(jpg|jpeg|png|webp|gif)$/;
 
-/** id do anúncio -> caminho da miniatura no bucket privado (anuncios[].miniatura_caminho, migration 20261013114630). */
+/** id do anúncio -> caminho da miniatura no bucket privado (anuncios[].miniatura_caminho, migration 20261013121212). */
 export function caminhosMiniatura(cru: unknown): Map<string, string> {
   const m = new Map<string, string>();
   for (const a of linhas(objeto(cru)?.anuncios)) {

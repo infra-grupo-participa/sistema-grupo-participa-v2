@@ -10,7 +10,8 @@ Pedido do Victor Hugo (12/10/2026). Desenho e plano técnico no cérebro do Vict
   `dados_black_*` do Supabase com a sessão do usuário (mesmo padrão do ATM). Migrations no ar: A
   `20261012231649` (cadastro e `dados_black_trafego`), C `20261012233334` (trava de modelo nas RPCs
   presenciais), B `20261012234606` (`dados_black_perfil`, `dados_black_leads`, `dados_black_grupo`, marcar teste)
-  e a foto do grupo `20261013001456`. Detalhe de cada método na seção "Fonte real" abaixo.
+  e a foto do grupo `20261013001456`; depois, o recorte com lista `20261013120148` e a miniatura dos criativos
+  `20261013121212` (13/10). Detalhe de cada método na seção "Fonte real" abaixo.
 - **Na `main` e no ar** (deploy automático da Hostinger a cada push na `main`).
 - A demonstração (dado fictício) continua existindo só em dev com `NEXT_PUBLIC_BLACK_DEMO=1`.
 - Fora do módulo, a branch toca 3 arquivos: a rota `app/(admin)/infra/dashboards/csm/[chave]/page.tsx`
@@ -313,20 +314,21 @@ número (`ADV_BF26_09_PROVA_SOCIAL_A`: 3/3, antes 0/0).
 - Detalhe, guarda corrigida (md5 vivos), números e caminho de aplicação:
   [`20261013120148.explain.md`](../../infra/supabase/migrations/20261013120148.explain.md).
 
-## Banco e tela: miniatura e "Abrir no Gerenciador" nos criativos (13/10, NÃO aplicada)
+## Banco e tela: miniatura e "Abrir no Gerenciador" nos criativos (APLICADA 13/10)
 
 Branch `victor-black-miniatura`. Na aba "Criativos e páginas", os cartões (galeria e gaveta) não mostravam a miniatura
 nem os links "Ver anúncio" e "Abrir no Gerenciador": o adaptador gravava os três como `null` fixo. Nada foi redesenhado;
 os campos que já existiam na tela passam a receber dado real.
 
-- **Migration `20261013114630`** (escrita, ensaiada, **NÃO aplicada**; falta o APROVADO do pentester):
+- **Migration `20261013121212`** (escrita como `20261013114630`; **APLICADA** em 13/10/2026 às 12:12 UTC pela Management
+  API, depois do APROVADO do pentester e de um segundo ensaio igual ao primeiro; md5 depois `4ecabc5c…`, o esperado):
   `dados_black_trafego` devolve `miniatura_caminho` em cada anúncio e `conta_externa` em cada campanha; função
   `public.trafego_miniatura_pode_ver` e policy `trafego_miniaturas_ler` (só `SELECT`, só `authenticated`, só o bucket
   privado `trafego-miniaturas`): a equipe lê só as miniaturas dos anúncios da Black que ela vê, como o anexo do CRM
   (`crm-midia`). Ensaio em produção, transação desfeita: equipe vê 63 objetos (exatamente as miniaturas da Black, de 80
   no bucket), fora da equipe e anon 0; resultado da RPC sem as 2 chaves novas igual ao de antes; ATM com o mesmo md5 nas
   3 fases; `url_tags` fora. Por que esta via, números e como aplicar:
-  [`20261013114630.explain.md`](../../infra/supabase/migrations/20261013114630.explain.md).
+  [`20261013121212.explain.md`](../../infra/supabase/migrations/20261013121212.explain.md).
 - **Miniatura (tela).** `fonte-supabase.ts` pede ao Storage, em lote, URLs assinadas de 900 s para os caminhos
   distintos (`createSignedUrls`, com a sessão do usuário) e guarda em cache por caminho, renovando quando faltam menos
   de 420 s: a releitura de 5 min não reassina nem baixa as imagens de novo. A galeria mostra a imagem no mesmo quadro
@@ -346,8 +348,9 @@ os campos que já existiam na tela passam a receber dado real.
   link do Gerenciador, ids não numéricos, formato do caminho, lote, cache, renovação, sem acesso e RPC antiga). Depois
   de aplicada: abrir a aba "Criativos e páginas" logado como equipe e ver as imagens nos cartões e o botão "Abrir no
   Gerenciador" ligado; no DevTools, um único `POST .../storage/v1/object/sign/trafego-miniaturas` por ~10 min.
-- **Falta:** APROVADO do pentester, aplicar, renomear os arquivos para a versão gravada, abrir a tela com dado real e
-  conferir o link do Gerenciador com login no Meta. Reverter: `20261013114630_reversao.sql` (a tela volta sozinha à
+- **Conferido depois de aplicar** (banco vivo, como equipe, transação desfeita): 63 objetos visíveis no bucket, 74 de 74
+  anúncios da Black com `miniatura_caminho`. **Falta:** conferir o link do Gerenciador com login no Meta.
+  Reverter: `20261013121212_reversao.sql` (a tela volta sozinha à
   fictícia e ao botão desligado).
 
 ## Banco: ingresso no grupo (webhook n8n e backfill)
@@ -395,7 +398,7 @@ sem quebrar a tela. Os mapeadores são puros e testados sem rede contra resposta
 | Método | De onde vem | Observações |
 |---|---|---|
 | `config(chave)` | `dados.dashboards.periodo_inicio` (A): início 04/10/2026, fixo no adaptador | Metas de leads, CPL, régua, orçamento, reserva, previsto por fase, base da casa e data da live **não têm cadastro no banco**: ficam `null` e a tela mostra "Sem dado" / "sem cadastro". Nunca inventadas. |
-| `trafego(chave, p)` | `dados_black_trafego(p_chave, p_de, p_ate)` (A) | Centavos viram reais. Métrica que a API não mandou continua `null`. Etapa C1 → funil C1; C2 + subtipo CONSULTORIA → consultoria; C2 + ISCA → iscas; C3 → C3; **etapa null → "Sem etapa"** (seção própria na Visão geral, com o nome exato da campanha e o gasto). `subtipo` e `conflito` preservados. Só plataforma `meta`. Desde `20261013114630` (não aplicada): miniatura por URL assinada do bucket `trafego-miniaturas` (cache de 900 s) e "Abrir no Gerenciador" pela `conta_externa` + `anuncio_externa`; "Ver anúncio" sem fonte. |
+| `trafego(chave, p)` | `dados_black_trafego(p_chave, p_de, p_ate)` (A) | Centavos viram reais. Métrica que a API não mandou continua `null`. Etapa C1 → funil C1; C2 + subtipo CONSULTORIA → consultoria; C2 + ISCA → iscas; C3 → C3; **etapa null → "Sem etapa"** (seção própria na Visão geral, com o nome exato da campanha e o gasto). `subtipo` e `conflito` preservados. Só plataforma `meta`. Desde `20261013121212` (aplicada 13/10): miniatura por URL assinada do bucket `trafego-miniaturas` (cache de 900 s) e "Abrir no Gerenciador" pela `conta_externa` + `anuncio_externa`; "Ver anúncio" sem fonte. |
 | `perfil(chave, p, {incluirTeste})` | `dados_black_perfil` (B) | Uma linha por envio, sem dado pessoal. Os ids do Meta da utm (`campanha_id`, `conjunto_id`, `anuncio_id`) casam com o tráfego pelo anúncio (`domain/alinhar.ts`). Master recebe também os testes (para ver e desmarcar); a tela tira os testes de todas as contas. |
 | `leads(chave, ids)` | `dados_black_leads` (B) | Nome, e-mail e telefone só ao abrir a tabela, 50 por página (a RPC aceita até 500). |
 | `grupo(chave, p, recorte)` | `dados_black_grupo` (B), sempre `p_incluir_teste = false` | Alimenta os cards **MQLs** e **Ingresso no grupo**. |

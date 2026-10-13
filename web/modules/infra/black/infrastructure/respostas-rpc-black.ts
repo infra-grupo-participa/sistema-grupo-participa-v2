@@ -3,7 +3,7 @@
 // campanha seguem o padrão do tráfego, mas os ids são inventados para o teste. Não é importado por código de tela.
 // Contrato de cada campo: docs/dashboard-black/README.md.
 
-/** dados_black_trafego (migration 20261012231649; conta_externa e miniatura_caminho desde 20261013114630). Valores em centavos;
+/** dados_black_trafego (migration 20261012231649; conta_externa e miniatura_caminho desde 20261013121212). Valores em centavos;
  * métricas que o Meta não mandou vêm null. */
 export const RESPOSTA_TRAFEGO = {
   periodo_de: '2026-10-04',
