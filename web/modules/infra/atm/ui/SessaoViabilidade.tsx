@@ -137,22 +137,20 @@ export function SessaoViabilidade({ chave, vendas, vendasTeste, periodoLabel, po
             : lista.data.length === 0
               ? <EmptyState title="Nenhuma venda da Sessão de Viabilidade" />
               : <div className={'max-h-[65vh] overflow-auto ' + (desatualizada ? 'opacity-60' : '')}>
-                <DataTable minWidth={isMaster ? 1120 : 1000}>
-                  <Thead><Th>Data do evento</Th><Th>Nome</Th><Th>E-mail</Th><Th>Telefone</Th><Th>Status</Th><Th>Valor bruto</Th><Th>Valor líquido</Th><Th>Oferta</Th>{isMaster && <><Th>Teste</Th><Th>Ação</Th></>}<Th>Transação</Th></Thead>
+                <DataTable minWidth={isMaster ? 1040 : 900}>
+                  <Thead><Th className="px-2!">Data do evento</Th><Th className="px-2!">Nome</Th><Th className="px-2!">E-mail</Th><Th className="px-2!">Telefone</Th><Th className="px-2!">Status</Th><Th className="px-2!">Bruto / líquido</Th><Th className="px-2!">Oferta</Th>{isMaster && <><Th className="px-2!">Teste</Th><Th className="px-2!">Ação</Th></>}</Thead>
                   <tbody>{lista.data.map((venda) => <Tr key={venda.id} className={venda.teste ? 'opacity-60' : ''}>
-                    <Td className="whitespace-nowrap">{dataDaVendaSessaoViabilidade(venda) ?? 'Sem dado'}</Td>
-                    <Td className="whitespace-nowrap">{venda.nome ?? 'Sem dado'}</Td>
-                    <Td>{venda.email ?? 'Sem dado'}</Td>
-                    <Td className="whitespace-nowrap">{venda.telefone ?? 'Sem dado'}</Td>
-                    <Td>{venda.status ?? 'Sem dado'}</Td>
-                    <Td className="whitespace-nowrap tabular">{valorDaVendaSessaoViabilidade(venda.valorBruto, venda.moeda) ?? 'Sem dado'}</Td>
-                    <Td className="whitespace-nowrap tabular">{valorDaVendaSessaoViabilidade(venda.valorLiquido, venda.moeda) ?? 'Sem dado'}</Td>
-                    <Td className="whitespace-nowrap">{venda.ofertaCodigo ?? 'Sem dado'}</Td>
+                    <Td className="px-2! whitespace-nowrap">{dataDaVendaSessaoViabilidade(venda) ?? 'Sem dado'}</Td>
+                    <Td className="px-2! whitespace-nowrap"><div>{venda.nome ?? 'Sem dado'}</div><div className="text-[10px] text-[var(--fg-3)]" title="Transação">{venda.transacao ?? 'Transação: sem dado'}</div></Td>
+                    <Td className="px-2! max-w-[9rem] truncate"><span title={venda.email ?? undefined}>{venda.email ?? 'Sem dado'}</span></Td>
+                    <Td className="px-2! whitespace-nowrap">{venda.telefone ?? 'Sem dado'}</Td>
+                    <Td className="px-2!">{venda.status ?? 'Sem dado'}</Td>
+                    <Td className="px-2! whitespace-nowrap tabular">{valorDaVendaSessaoViabilidade(venda.valorBruto, venda.moeda) ?? 'Sem dado'} / {valorDaVendaSessaoViabilidade(venda.valorLiquido, venda.moeda) ?? 'Sem dado'}</Td>
+                    <Td className="px-2! whitespace-nowrap">{venda.ofertaCodigo ?? 'Sem dado'}</Td>
                     {isMaster && <>
-                      <Td>{venda.teste ? <Badge tone="warning">TESTE</Badge> : 'Não'}</Td>
-                      <Td>{venda.email ? <button type="button" disabled={salvando === venda.id} onClick={() => { setErroAcao(null); if (venda.teste) void mudarTeste(venda, false); else setAlvo(venda); }} className="whitespace-nowrap rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-3)] disabled:opacity-50">{salvando === venda.id ? 'Salvando…' : venda.teste ? 'Desmarcar teste' : 'Marcar como teste'}</button> : 'Sem e-mail'}</Td>
+                      <Td className="px-2!">{venda.teste ? <Badge tone="warning">TESTE</Badge> : 'Não'}</Td>
+                      <Td className="px-2!">{venda.email ? <button type="button" disabled={salvando === venda.id} onClick={() => { setErroAcao(null); if (venda.teste) void mudarTeste(venda, false); else setAlvo(venda); }} className="whitespace-nowrap rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-3)] disabled:opacity-50">{salvando === venda.id ? 'Salvando…' : venda.teste ? 'Desmarcar teste' : 'Marcar teste'}</button> : 'Sem e-mail'}</Td>
                     </>}
-                    <Td className="max-w-[8rem] truncate"><span title={venda.transacao ?? undefined}>{venda.transacao ?? 'Sem dado'}</span></Td>
                   </Tr>)}</tbody>
                 </DataTable>
               </div>}
