@@ -26,6 +26,7 @@ export const CONFIG_BLACK: ConfigBlack = {
   metaLeadsDia: 650, // CONCEPCAO: "cerca de 650 leads por dia"
   cplAlvoMedio: 16.7, // CONCEPCAO: "CPL médio precisa ficar em até R$ 16,70"
   reguaCpl: { meta: 15, teto: 20 }, // CONCEPCAO: "a régua da casa é meta de R$ 15 e teto de R$ 20"
+  metas: { mql: 0.6, ingressoGrupo: 0.85, conversaoPagina: 0.2, connectRate: 0.85, ctr: 0.02, cpc: 3, cpm: 50 }, // Victor, 13/10/2026
   orcamentoTotal: 428571, // CONCEPCAO: "Verba de mídia: R$ 428.571"
   previstoPorFase: { // CONCEPCAO, tabela "Orçamento por fase"
     antecipacao: 17591, distribuicao: 47575, captacao: 220000, aquecimento: 26909, remarketing: 30000, live_carrinho: 70000,

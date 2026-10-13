@@ -63,7 +63,11 @@ describe('mapeadores das RPCs da Black', () => {
     const c = configReal(CHAVE_BLACK);
     expect(c.semDado).toBe(false);
     expect(c.data.inicio).toBe('2026-10-04');
-    expect([c.data.metaLeads, c.data.cplAlvoMedio, c.data.reguaCpl]).toEqual([null, null, null]);
+    expect([c.data.metaLeads, c.data.metaLeadsDia, c.data.cplAlvoMedio]).toEqual([15000, null, 16.7]);
+    expect(c.data.reguaCpl).toEqual({ meta: 15, teto: 20 });
+    expect(c.data.metas).toEqual({ mql: 0.6, ingressoGrupo: 0.85, conversaoPagina: 0.2, connectRate: 0.85, ctr: 0.02, cpc: 3, cpm: 50 });
+    // sem início da captação cadastrado, a meta acumulada do Histórico continua sem dado (não chuta data)
+    expect(c.data.inicioCaptacao).toBeNull();
     expect(c.data.liveEm).toBe('2026-11-03T19:30:00-03:00');
     expect(c.data.orcamentoTotal).toBe(428571);
     expect(c.data.reserva).toBe(16496);
@@ -71,7 +75,7 @@ describe('mapeadores das RPCs da Black', () => {
       antecipacao: 17591, distribuicao: 47575, captacao: 220000, aquecimento: 26909, remarketing: 30000, live_carrinho: 70000,
     });
     // as 6 fases + a reserva fecham o total da tabela
-    expect(Object.values(c.data.previstoPorFase).reduce((s, v) => s + (v ?? 0), 0) + (c.data.reserva ?? 0)).toBe(428571);
+    expect(Object.values(c.data.previstoPorFase).reduce<number>((s, v) => s + (v ?? 0), 0) + (c.data.reserva ?? 0)).toBe(428571);
     expect(configReal('outra').erro).not.toBeNull();
   });
 });

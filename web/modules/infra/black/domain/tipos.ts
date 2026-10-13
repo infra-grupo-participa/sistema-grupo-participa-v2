@@ -26,6 +26,11 @@ export interface Recorte { funil: FiltroFunil; canal: FiltroCanal; periodo: stri
 /** Régua de CPL do Caio (meta e teto, em reais). */
 export interface ReguaCpl { meta: number; teto: number }
 
+/** Metas dos cards com fórmula (Victor, 13/10/2026). Taxas em fração (0,6 = 60%); CPM, CPC em reais. null = sem meta. */
+export interface MetasCard {
+  mql: Valor; ingressoGrupo: Valor; conversaoPagina: Valor; connectRate: Valor; ctr: Valor; cpc: Valor; cpm: Valor;
+}
+
 /**
  * Configuração do evento. Na fonte real só `inicio` vem do cadastro (dados.dashboards.periodo_inicio); as metas
  * existem só no plano (CONCEPCAO), não no banco, e ficam null ("Sem dado") até terem cadastro. Ver o README.
@@ -42,6 +47,7 @@ export interface ConfigBlack {
   metaLeadsDia: Valor;
   cplAlvoMedio: Valor;
   reguaCpl: ReguaCpl | null;
+  metas: MetasCard;
   orcamentoTotal: Valor;
   previstoPorFase: Record<Fase, Valor>;
   reserva: Valor;

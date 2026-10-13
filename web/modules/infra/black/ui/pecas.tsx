@@ -6,6 +6,7 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { Farol as TipoFarol, Taxa as TipoTaxa } from '../domain/metricas';
 import type { FormatoMetrica } from '../domain/jornada';
+import { avaliarFaixa, avaliarMeta } from '../domain/meta';
 import type { Valor } from '../domain/tipos';
 
 const CONSULTA_MOVIMENTO = '(prefers-reduced-motion: reduce)';
@@ -101,6 +102,34 @@ export function Farol({ farol, className = '' }: { farol: TipoFarol; className?:
   </span>;
 }
 export const corFarol = (f: TipoFarol) => COR_FAROL[f];
+
+/**
+ * Indicador de meta de um card com fórmula: bolinha + "Bom"/"Atenção"/"Ruim" + % da meta + a meta. A cor nunca vai sozinha (o
+ * texto diz o estado). Sem valor ou sem meta, mostra "Sem meta" em vez de sumir.
+ */
+export function IndicadorMeta({ valor, meta, ideal, menorMelhor = false, formato, className = '' }: {
+  valor: Valor; meta: Valor; /** Com `ideal`, vira faixa de duas linhas (ideal e `meta` como limite); só para menor-melhor. */ ideal?: Valor;
+  menorMelhor?: boolean; formato: FormatoMetrica; className?: string;
+}) {
+  const faixa = ideal !== undefined;
+  const a = faixa ? avaliarFaixa(valor, ideal, meta) : avaliarMeta(valor, meta, menorMelhor);
+  if (a.estado === 'sem') {
+    const motivo = meta === null ? 'Sem meta' : 'Sem dado para comparar';
+    return <span className={'text-[11px] font-normal text-[var(--fg-3)] ' + className}>{motivo}</span>;
+  }
+  const rotulo = a.estado === 'bom' ? 'Bom' : a.estado === 'atencao' ? 'Atenção' : 'Ruim';
+  const cor = a.estado === 'bom' ? 'var(--green)' : a.estado === 'atencao' ? 'var(--yellow)' : 'var(--red)';
+  const pctMeta = `${INTEIRO.format((a.pctDaMeta ?? 0) * 100)}% da meta`;
+  const dica = `${rotulo}: ${formatar(valor, formato)} contra ${faixa ? `ideal de ${formatar(ideal, formato)} e limite de ${formatar(meta, formato)}` : `meta de ${formatar(meta, formato)}`} (${pctMeta}). ${menorMelhor || faixa ? 'Quanto menor, melhor.' : 'Quanto maior, melhor.'}`;
+  return (
+    <span title={dica} className={'inline-flex flex-wrap items-center gap-x-1.5 text-[11px] font-normal text-[var(--fg-2)] ' + className}>
+      <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: cor }} />
+      <span className="font-semibold text-[var(--fg)]">{rotulo}</span>
+      <span>{pctMeta}</span>
+      <span className="text-[var(--fg-3)]">{faixa ? `· ideal ${formatar(ideal, formato)}, máx. ${formatar(meta, formato)}` : `· meta ${formatar(meta, formato)}`}</span>
+    </span>
+  );
+}
 
 /** Selo de dado fictício (modo demonstração e mensageria sem fonte real). */
 export function SeloFicticio({ children = 'dado fictício' }: { children?: ReactNode }) {

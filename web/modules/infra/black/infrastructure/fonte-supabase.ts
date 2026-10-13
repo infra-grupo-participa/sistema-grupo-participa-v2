@@ -16,7 +16,7 @@ import { faseDoNome } from '../domain/fase-campanha';
 import {
   FASES, ISCAS,
   type Anuncio, type Campanha, type ConfigBlack, type Conjunto, type DesempenhoDia, type EtapaCampanha, type Fase, type Funil,
-  type GrupoBlack, type GrupoResumoBlack, type Isca, type LeadDetalhe, type LinhaPerfil, type Marcos, type MensageriaBlack,
+  type GrupoBlack, type GrupoResumoBlack, type MetasCard, type Isca, type LeadDetalhe, type LinhaPerfil, type Marcos, type MensageriaBlack,
   type Porta, type Profissao, type RecorteGrupo, type Resultado, type ResultadoAcao, type SegmentoGrupo, type TrafegoBlack,
   type Valor,
 } from '../domain/tipos';
@@ -118,6 +118,16 @@ const CADASTRO: Record<string, { inicio: string }> = { 'black-friday-2026-10': {
  * como o início do período. Captação (220.000) = C2 Iscas 70.000 + C3 Convite direto 150.000; a tela só tem a fase.
  * Live e abertura do carrinho: 03/11/2026 às 19h30 (PLANO-DASHBOARD-JORNADA.md).
  */
+const METAS_PLANO: Record<string, {
+  metaLeads: number; cplAlvoMedio: number; regua: { meta: number; teto: number }; cards: MetasCard;
+}> = {
+  // Victor, 13/10/2026: 15.000 leads até 03/11 (a meta diária fica para o gráfico de captação); CPL médio até R$ 16,70, ideal R$ 15, teto por conjunto R$ 20.
+  'black-friday-2026-10': {
+    metaLeads: 15000, cplAlvoMedio: 16.7, regua: { meta: 15, teto: 20 },
+    cards: { mql: 0.6, ingressoGrupo: 0.85, conversaoPagina: 0.2, connectRate: 0.85, ctr: 0.02, cpc: 3, cpm: 50 },
+  },
+};
+
 const ORCAMENTO: Record<string, { total: number; reserva: number; liveEm: string; porFase: Record<Fase, number> }> = {
   'black-friday-2026-10': {
     total: 428571, reserva: 16496, liveEm: '2026-11-03T19:30:00-03:00',
@@ -129,16 +139,19 @@ export function configReal(chave: string): Resultado<ConfigBlack> {
   const c = CADASTRO[chave];
   const previstoPorFase = Object.fromEntries(FASES.map((f) => [f, null])) as ConfigBlack['previstoPorFase'];
   const orc = c ? ORCAMENTO[chave] : undefined;
+  const mp = c ? METAS_PLANO[chave] : undefined;
   if (orc) for (const f of FASES) previstoPorFase[f] = orc.porFase[f];
   const data: ConfigBlack = {
-    chave, inicio: c?.inicio ?? '', inicioCaptacao: null, liveEm: orc?.liveEm ?? null, metaLeads: null, metaLeadsDia: null,
-    cplAlvoMedio: null, reguaCpl: null, orcamentoTotal: orc?.total ?? null, previstoPorFase, reserva: orc?.reserva ?? null, baseDaCasa: null, semanas: [],
+    chave, inicio: c?.inicio ?? '', inicioCaptacao: null, liveEm: orc?.liveEm ?? null, metaLeads: mp?.metaLeads ?? null, metaLeadsDia: null,
+    cplAlvoMedio: mp?.cplAlvoMedio ?? null, reguaCpl: mp?.regua ?? null,
+    metas: mp?.cards ?? { mql: null, ingressoGrupo: null, conversaoPagina: null, connectRate: null, ctr: null, cpc: null, cpm: null },
+    orcamentoTotal: orc?.total ?? null, previstoPorFase, reserva: orc?.reserva ?? null, baseDaCasa: null, semanas: [],
     fontes: {
       Cadastro: 'dados.dashboards.periodo_inicio (migration 20261012231649): início do período, 04/10/2026.',
       Tráfego: 'dados_black_trafego (mkt_trafego, coleta do Meta).',
       Leads: 'dados_black_perfil e dados_black_leads (migration 20261012234606).',
       Grupo: 'dados_black_grupo (webhook do SendFlow e foto dos grupos, migration 20261012234606).',
-      Metas: 'Orçamento por fase, total, reserva e data da live: passados pelo Victor em 13/10/2026 (no adaptador). Metas de leads, CPL e régua: sem cadastro, ficam "Sem dado".',
+      Metas: 'Orçamento por fase, total, reserva, data da live, metas de leads, CPL, régua e dos cards: passados pelo Victor em 13/10/2026 (no adaptador).',
     },
   };
   if (!c) return { data, semDado: true, erro: 'Dashboard não encontrado neste cadastro.' };

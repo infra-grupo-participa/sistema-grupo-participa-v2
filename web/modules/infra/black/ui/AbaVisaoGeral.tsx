@@ -6,6 +6,7 @@
 import { useState, type ReactNode } from 'react';
 import { KpiCard, Modal, ProgressBar, SectionCard } from '@/shared/ui/components';
 import { cardMql, cardsGrupo, ROTULO_CRUZADO } from '../domain/grupo';
+import { avaliarFaixa } from '../domain/meta';
 import { diaDe } from '../domain/recorte';
 import {
   agregar, connectRate, conversaoPagina, cpc, cplDo, cplPlacar, cplPorEtapa, cplRemarketing, cpm, ctr, custoPorVisualizacao,
@@ -16,7 +17,7 @@ import { FASES, FUNIS, PROFISSOES_MQL, ROTULO_FASE, ROTULO_FUNIL, type Desempenh
 import type { DadosTela } from './contexto';
 import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
 import { BarrasFase } from './graficos';
-import { Farol, formatar, MODAL_TELA_CHEIA, moeda, Numero, SeloFicticio, Taxa } from './pecas';
+import { Farol, formatar, IndicadorMeta, MODAL_TELA_CHEIA, moeda, Numero, SeloFicticio, Taxa } from './pecas';
 import { TabelaLeads } from './perfil/TabelaLeads';
 
 const TODAS: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo', 'perfil'];
@@ -68,7 +69,7 @@ function CardMql({ d, onAbrir }: { d: DadosTela; onAbrir: () => void }) {
   return (
     <Cartao cheio titulo="MQLs" onAbrir={onAbrir}>
       <KpiCard label="MQLs" title="dados_black_grupo: leads.mql e leads.unicos (pessoas únicas do período e do nó, sem teste)."
-        value={<Numero valor={c?.total ?? null} formato="int" falta={falta} />}
+        value={<span className="inline-flex flex-wrap items-baseline gap-x-2"><Numero valor={c?.total ?? null} formato="int" falta={falta} />{c && <IndicadorMeta valor={c.taxa.valor} meta={d.config.metas.mql} formato="pct" />}</span>}
         hint={c ? `${c.taxa.valor === null ? 'Sem dado' : formatar(c.taxa.valor, 'pct')} dos leads (${formatar(c.taxa.num, 'int')} ÷ ${formatar(c.taxa.den, 'int')}).` : falta} />
       {c && d.grupo.descricao && <p className="-mt-2 px-4 pb-3 text-xs text-[var(--fg-3)]">Recorte: {d.grupo.descricao}</p>}
     </Cartao>
@@ -83,7 +84,7 @@ function CardIngresso({ d, onAbrir }: { d: DadosTela; onAbrir: () => void }) {
   return (
     <Cartao cheio="xl" titulo="Ingresso no grupo" onAbrir={onAbrir}>
       <KpiCard label="Ingresso no grupo" title="Únicos nos grupos de Advogados e Contadores ÷ leads MQL (dados_black_grupo)."
-        value={c ? <Taxa taxa={c.geral} /> : <Numero valor={null} formato="pct" falta={falta} />}
+        value={c ? <span className="inline-flex flex-wrap items-baseline gap-x-2"><Taxa taxa={c.geral} /><IndicadorMeta valor={c.geral.valor} meta={d.config.metas.ingressoGrupo} formato="pct" /></span> : <Numero valor={null} formato="pct" falta={falta} />}
         hint={c ? (c.cruzado ? ROTULO_CRUZADO : 'MQL no grupo ÷ leads MQL.') : falta} />
       {c && (
         <ul className="-mt-2 px-4 pb-3 text-xs">
@@ -152,6 +153,17 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
     { c: { id: 'grupo48', rotulo: 'Grupo em 48h', formato: 'pct', medir: (_, l) => valorTaxa(ingressoGrupo(capLinhas(l), 48, d.agora)), aplica: TODAS, dica: 'Pessoas únicas com a janela de 48h já fechada.' }, valor: <Taxa taxa={ingressoGrupo(lCap, 48, d.agora)} /> },
   ];
 
+  // Indicador de meta (bom/ruim + % da meta) dos cards com fórmula. Metas: Victor, 13/10/2026 (config.metas).
+  const m = config.metas;
+  const estadoCpl = avaliarFaixa(placar.valor, config.reguaCpl?.meta ?? null, config.cplAlvoMedio).estado;
+  const indicador: Record<string, ReactNode> = {
+    cpm: <IndicadorMeta valor={dCap.length ? cpm(aCap) : null} meta={m.cpm} menorMelhor formato="brl" />,
+    ctr: <IndicadorMeta valor={ctr(aCap).valor} meta={m.ctr} formato="pct" />,
+    cpc: <IndicadorMeta valor={dCap.length ? cpc(aCap) : null} meta={m.cpc} menorMelhor formato="brl" />,
+    connect: <IndicadorMeta valor={connectRate(d.dias, idx).valor} meta={m.connectRate} formato="pct" />,
+    conv: <IndicadorMeta valor={conversaoPagina(d.dias, d.linhas, idx).valor} meta={m.conversaoPagina} formato="pct" />,
+  };
+
   // Tabelas dos cards MQLs e Ingresso: os envios do período e do nó (cada envio é uma linha; o card conta pessoas).
   const linhasMql = d.linhas.filter((l) => (l.mql ?? (l.profissao !== null && PROFISSOES_MQL.has(l.profissao))) === true);
   const linhasGrupo = d.linhas.filter((l) => l.entrouGrupoEm !== null && diaDe(l.entrouGrupoEm) >= d.periodo.de && diaDe(l.entrouGrupoEm) <= d.periodo.ate);
@@ -181,8 +193,8 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
             )}
           </Cartao>
           <Cartao titulo={cardCpl.rotulo} onAbrir={abrir(cardCpl)}>
-            <KpiCard label="CPL geral" bar={placar.valor === null || config.cplAlvoMedio === null ? 'gray' : placar.valor <= config.cplAlvoMedio ? 'green' : 'red'}
-              value={<span className="inline-flex items-center gap-2"><Numero valor={placar.valor} formato="brl" falta="sem leads pagos no recorte" /><Farol farol={farolCpl(placar.valor, config.reguaCpl)} /></span>}
+            <KpiCard label="CPL geral" bar={estadoCpl === 'sem' ? 'gray' : estadoCpl === 'bom' ? 'green' : estadoCpl === 'atencao' ? 'yellow' : 'red'}
+              value={<span className="inline-flex items-center gap-2"><Numero valor={placar.valor} formato="brl" falta="sem leads pagos no recorte" /><IndicadorMeta valor={placar.valor} ideal={config.reguaCpl?.meta ?? null} meta={config.cplAlvoMedio} formato="brl" /></span>}
               hint={`Gasto de captação e remarketing ÷ leads que vieram de anúncio: ${moeda(placar.gasto)} ÷ ${formatar(placar.leadsPagos, 'int')}. Alvo ${config.cplAlvoMedio === null ? 'sem cadastro' : moeda(config.cplAlvoMedio)}.`} />
           </Cartao>
           <Cartao titulo={cardGasto.rotulo} onAbrir={abrir(cardGasto)}>
@@ -224,7 +236,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           <>
             <ol className={GRADE_MACRO}>
               {cards3.flatMap(({ c, valor, hint }) => [
-                <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={abrir(c)}><KpiCard label={c.rotulo} value={valor} hint={hint} /></Cartao></li>,
+                <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={abrir(c)}><KpiCard label={c.rotulo} value={indicador[c.id] ? <span className="inline-flex flex-wrap items-baseline gap-x-2">{valor}{indicador[c.id]}</span> : valor} hint={hint} /></Cartao></li>,
                 // MQLs logo depois da conversão da página; o Ingresso no grupo vem em seguida (pedido de 13/10).
                 ...(c.id === 'conv' ? [
                   <li key="mql" className="min-w-0"><CardMql d={d} onAbrir={abrirMql} /></li>,
