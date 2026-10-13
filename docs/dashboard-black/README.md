@@ -133,7 +133,7 @@ Seletor global: funil (Todos, C1, Consultoria, Iscas, C3), período (Hoje, 7 dia
 ciclo) e canal (Todos, Meta, Google). Tudo mora na URL. Releitura a cada 5 min só com a aba visível.
 
 1. **Visão geral:** placar (até a live, leads x meta, CPL x régua, verba x orçamento); investimento do período
-   (total = tráfego + disparo, tráfego por canal, disparo fictício, por fase x previsto); funil macro só da
+   (total = tráfego + disparo, tráfego por canal, disparo fictício; o por fase x previsto saiu da visão geral em 13/10 e ficou no modal); funil macro só da
    captação; funis lado a lado; CPL por etapa. Todo card abre o **modal com sub-abas fixas** (Por funil, canal,
    fase, dia, criativo, Perfil; a que não cabe diz "Não se aplica a este card").
 2. **Jornada:** o fluxograma do Arthur vivo, setas com espessura pelo volume e fluxo animado; o funil filtrado
@@ -206,6 +206,17 @@ celular); e a lista de estados do mapa do Perfil tem 24 px de altura.
   animação é a mesma e nada fica preso. Vale também para os modais e gavetas do ATM, que usam a mesma classe.
 - Como testar: abrir a Visão geral a 1440 px, conferir a lista dentro do card e clicar num card do funil macro com a
   página rolada até o funil: o modal tem que abrir no centro da tela.
+
+### Visão geral: placar na primeira dobra, sem o gráfico por fase (13/10/2026, pedido do Victor)
+
+- **Pedido:** visão geral parecida com a do HT. Os cards Até a live, Leads contra a meta, CPL geral, Verba contra o
+  orçamento, Investimento total, Investimento em tráfego e Investimento com disparo ficam juntos na primeira faixa, e o
+  funil macro (Impressões, CPM, Cliques no link, CTR e o resto) sobe logo abaixo.
+- **Feito:** o gráfico "Por fase" saiu da visão geral; ele continua na sub-aba Fase do detalhe do card de tráfego
+  (`ModalCard`). A faixa "Investimento no período" deixou de ser seção própria: os três cards de investimento são a
+  segunda linha do placar e ganharam o nome "Investimento ..." no rótulo. Números e fórmulas não mudaram (os três
+  continuam no período escolhido no topo; os quatro de cima, do início até agora).
+- Como testar: abrir a Visão geral a 1440 px e conferir que os sete cards e o começo do funil macro aparecem sem rolar.
 
 ## Decisões
 

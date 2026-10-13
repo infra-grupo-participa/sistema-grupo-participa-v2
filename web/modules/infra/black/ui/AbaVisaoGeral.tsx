@@ -1,8 +1,8 @@
 'use client';
 
 // Aba 1, Visão geral: "estamos no caminho?". Só cards, cada card abre o ModalCard com as sub-abas fixas.
-// Faixa 1 placar · Faixa 2 investimento · Faixa 3 funil macro (só C2 e C3) · Faixa 4 funis lado a lado + CPL por
-// etapa. Razão = soma sobre soma no mesmo recorte; sem dado = "Sem dado", nunca zero.
+// Faixa 1 placar e investimento (primeira dobra) · Faixa 2 funil macro (só C2 e C3) · Faixa 3 funis lado a lado + CPL
+// por etapa. O gráfico por fase saiu da visão geral em 13/10 (pedido do Victor): fica no detalhe do card de tráfego. Razão = soma sobre soma no mesmo recorte; sem dado = "Sem dado", nunca zero.
 import { useState, type ReactNode } from 'react';
 import { KpiCard, Modal, ProgressBar, SectionCard } from '@/shared/ui/components';
 import { cardMql, cardsGrupo, ROTULO_CRUZADO } from '../domain/grupo';
@@ -10,13 +10,12 @@ import { avaliarFaixa } from '../domain/meta';
 import { diaDe } from '../domain/recorte';
 import {
   agregar, connectRate, conversaoPagina, cpc, cplDo, cplPlacar, cplPorEtapa, cplRemarketing, cpm, ctr, custoPorVisualizacao,
-  dividir, ehCaptacao, farolCpl, filtrarDias, filtrarLinhas, gastoDe, gastoPorFase, ingressoGrupo, pessoasUnicas, somar,
+  dividir, ehCaptacao, farolCpl, filtrarDias, filtrarLinhas, gastoDe, ingressoGrupo, pessoasUnicas, somar,
   taxaVideo75, type Taxa as TipoTaxa,
 } from '../domain/metricas';
-import { FASES, FUNIS, PROFISSOES_MQL, ROTULO_FASE, ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
+import { FUNIS, PROFISSOES_MQL, ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
 import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
-import { BarrasFase } from './graficos';
 import { Farol, formatar, IndicadorMeta, MODAL_TELA_CHEIA, moeda, Numero, SeloFicticio, Taxa } from './pecas';
 import { TabelaLeads } from './perfil/TabelaLeads';
 
@@ -132,7 +131,6 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const total = disparoAplica && custoDisparo?.valor != null ? gastoPeriodo + custoDisparo.valor : gastoPeriodo;
   const notaTotal = !disparoAplica ? 'Disparo não se divide por funil nem canal: fora da soma.'
     : custoDisparo?.valor == null ? 'Custo de disparo sem dado: fora da soma.' : 'Tráfego + disparo (disparo fictício).';
-  const fases = gastoPorFase(d.dias, idx);
   const custoCanal = (k: 'api' | 'sms' | 'ligacao') => d.mensageria?.canais.find((c) => c.canal === k)?.custo ?? null;
 
   // ─── Faixa 3: funil macro (só captação) ─────────────────────────────────────────────────────────────────
@@ -205,25 +203,18 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
             )}
           </Cartao>
         </div>
-      </section>
-
-      <section aria-labelledby="vg-invest">
-        <h2 id="vg-invest" className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)]">Investimento no período</h2>
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <KpiCard label="Total" value={<Numero valor={total} formato="brl" />} hint={notaTotal} bar="accent" />
+        {/* Investimento do período, na mesma faixa do placar: os sete cards ficam na primeira dobra (pedido de 13/10). */}
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <KpiCard label="Investimento total" value={<Numero valor={total} formato="brl" />} hint={notaTotal} bar="accent" />
           <Cartao titulo="Tráfego" onAbrir={abrir(cardGasto)}>
-            <KpiCard label="Tráfego" value={<Numero valor={d.dias.length ? gastoPeriodo : null} formato="brl" />} hint={`Meta ${moeda(porCanal('meta'))} · Google ${moeda(porCanal('google'))}`} bar="accent" />
+            <KpiCard label="Investimento em tráfego" value={<Numero valor={d.dias.length ? gastoPeriodo : null} formato="brl" />} hint={`Meta ${moeda(porCanal('meta'))} · Google ${moeda(porCanal('google'))}`} bar="accent" />
           </Cartao>
           <Cartao titulo="Disparo" onAbrir={() => d.irPara({ aba: 'mensageria' })}>
-            <KpiCard label="Disparo" bar="purple"
+            <KpiCard label="Investimento com disparo" bar="purple"
               value={<span className="inline-flex flex-wrap items-center gap-2"><Numero valor={custoDisparo?.valor ?? null} formato="brl" falta="custo de disparo" />{d.mensageria && <SeloFicticio />}</span>}
               hint={`API ${moeda(custoCanal('api'))} · SMS ${moeda(custoCanal('sms'))} · Ligação ${moeda(custoCanal('ligacao'))}`} />
           </Cartao>
         </div>
-        <SectionCard className="mt-3" title="Por fase" subtitle={`Gasto do período contra o previsto por fase (fonte: ${config.fontes.plano ?? "sem fonte"}). Passe o mouse na barra para ver o valor.`}>
-          <BarrasFase formato="brl" itens={FASES.map((f) => ({ fase: f, rotulo: ROTULO_FASE[f], valor: fases.porFase[f], previsto: config.previstoPorFase[f] }))} />
-          {fases.semFase > 0 && <p className="mt-2 text-xs text-[var(--fg-3)]">Campanhas sem fase: {moeda(fases.semFase)} (fora das barras).</p>}
-        </SectionCard>
       </section>
 
       <section aria-labelledby="vg-funil">
