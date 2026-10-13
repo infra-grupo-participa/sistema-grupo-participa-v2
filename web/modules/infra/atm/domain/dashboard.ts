@@ -79,6 +79,9 @@ export type LeadAtm = {
   comprou: boolean | null;
 };
 
+/** Uma linha de `dados_atm_pre_checkout`: as colunas de `dados_atm_leads` (`dataHora` = data do pré-checkout) mais `eh_lead`. */
+export type PessoaPreCheckoutAtm = LeadAtm & { ehLead: boolean | null };
+
 export type NumeroGrupoAtm = {
   foneKey: string;
   nome: string | null;

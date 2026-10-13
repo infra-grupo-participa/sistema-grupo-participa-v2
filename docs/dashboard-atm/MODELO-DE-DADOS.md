@@ -218,7 +218,8 @@ comprou boolean, pessoa_id uuid, teste boolean, descarte_motivo text, descarte_l
 - Desde 20261008191000 vem **sem** quem é teste (cadastro da pessoa ou marcado no evento). Com `p_incluir_teste = true`
   vem todo mundo e `teste = true` marca quem está fora das contas (para o botão Desmarcar). Só leads com `primeiro_em`
   no período.
-- Evolução diária e resumo do modal: usar `dados_atm_serie_diaria` (coluna `leads`) e `dados_atm_resumo`.
+- Modal de Leads (desde 13/10/2026, ~19h): a Evolução e o Resumo saem da própria lista (sem teste); o contador (linhas sem
+  teste) tem de bater com `dados_atm_resumo.leads`. A lista é lida sozinha ao abrir o modal (README, "Modais do funil lendo sozinhos").
 
 ### 2.3 `dados_atm_serie_diaria` (1 linha por dia, sem buraco, de `p_de` até o menor entre `p_ate` e hoje)
 
@@ -349,40 +350,58 @@ a seção separada da Sessão de Viabilidade), por `carregarAtmSvVendas` em `web
 | `teste` | `boolean` | `true` = fora das contas por teste (regra exata na migration; a marcação pela tela grava em `dados.marcacoes_teste`): selo TESTE, fora das contagens |
 
 - Sem período (`p_de`/`p_ate` não existem nesta RPC). O total do card continua sendo `dados_atm_resumo.vendas`, que é
-  por período, com `vendas_teste` para a nota de vendas de teste fora do total.
+  por período, com `vendas_teste` para a nota de vendas de teste fora do total. Desde 13/10/2026 (~19h) o modal recorta a
+  lista na tela pela regra do card: `aprovado_em` em São Paulo entre o início e o fim do período aplicado (`vendasNoPeriodoAtm`),
+  sem teste; assim o contador do modal é igual ao card. Lista vazia = "Nenhuma venda da Sessão de Viabilidade registrada
+  neste período", com a hora da leitura.
 - `p_incluir_teste = false` (padrão) não devolve as linhas de teste; a tela só pede `true` para master.
 - Dado pessoal: a tela só chama a RPC para quem tem a capacidade `contato.ver`. O gate também está no banco, na migration
   `infra/supabase/migrations/20261013190752_dados_atm_sv_vendas.sql` (aplicada): `dados.atm_cadastro` (equipe e
   chave), `acesso.tem('contato.ver')` e `p_incluir_teste = true` só para master, todos com `42501`.
-- Erros que a tela trata: `PGRST202` (função ainda não aplicada) vira "sem dado ainda"; `42501` (sem permissão, inclusive
+- Erros que a tela trata: `PGRST202` (função ainda não aplicada) vira "não publicada"; `42501` (sem permissão, inclusive
   perda de `contato.ver` no meio da sessão) limpa a lista e mostra "Lista indisponível"; `P0002`, `22023` e qualquer outro
   viram aviso com a última lista mantida. A RPC levanta `42501` (fora da equipe, sem `contato.ver`, teste sem ser master)
   e `P0002` (chave que não é do modelo ATM).
 
-## Lista de pré-checkout: RPC que falta (13/10/2026)
+## Lista de pré-checkout: `dados_atm_pre_checkout` (A PUBLICAR, 13/10/2026)
 
-O card Pré-checkout lê `dados_atm_resumo.pre_checkout_pessoas` (conta de `dados.atm_pre_checkout` no período). A lista de
-quem preencheu o formulário **não tem RPC pública**: `dados.atm_pre_checkout` é interna; `dados_atm_leads.no_pre_checkout`
-só cobre quem é lead da lista do AC (quem fez pré-checkout sem ser lead não aparece); `dados_presencial_leads` dá P0002 para
-chave de outro modelo desde `20261012233334`. Por isso o modal mostra "Lista ainda não ligada". Proposta para o back-end
-(não criada):
+**Situação: A PUBLICAR.** A função é criada por outra frente (back-end) e **ainda não está no banco** em 13/10/2026, ~19h.
+A tela já está ligada a ela (`carregarAtmPreCheckout` em `web/modules/infra/atm/infrastructure/atm-data.ts`): enquanto não
+existir, o PostgREST devolve `PGRST202` e o modal do card Pré-checkout mostra "A lista de pré-checkout ainda não foi
+publicada no banco." (estado transitório, sem número inventado). Quem lê: modal do card Pré-checkout do funil.
 
-`public.dados_atm_pre_checkout(p_chave text, p_incluir_teste boolean default false)`, período opcional `p_de date, p_ate date`
-como no resumo, ordem `primeiro_em desc`, 1 linha por e-mail:
+Por que precisa de RPC própria: `dados.atm_pre_checkout` é interna; `dados_atm_leads.no_pre_checkout` só cobre quem é lead
+da lista do AC (quem fez pré-checkout sem ser lead não aparece); `dados_presencial_leads` dá P0002 para chave de outro modelo
+desde `20261012233334`.
 
-| coluna | tipo | de onde |
-|---|---|---|
-| `email` | `text` | `dados.pre_checkout_todos` (o mesmo de `dados.atm_pre_checkout`) |
-| `nome` | `text` | idem |
-| `telefone` | `text` | idem |
-| `primeiro_em` | `timestamptz` | idem (Data do pré-checkout) |
-| `fonte` | `text` | idem |
-| `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` | `text` | idem |
-| `comprou` | `boolean` | e-mail em `dados.atm_vendas` (mesma regra das contagens); nulo sem `oferta_codigo` |
-| `teste` | `boolean` | `dados.teste_ativo(p_chave, email, telefone)` |
+`public.dados_atm_pre_checkout(p_chave text, p_de date default null, p_ate date default null, p_incluir_teste boolean default false)`,
+1 linha por pessoa. **Mesmas colunas, na mesma ordem, de `dados_atm_leads`** (seção 2.2), mais `eh_lead` no fim:
 
-- Linhas sem teste com `p_incluir_teste = false` iguais, em número, a `pre_checkout_pessoas` no mesmo período.
-- Gate igual ao de `dados_atm_sv_vendas`: `dados.atm_cadastro` (equipe e modelo `seminario-atm`), `contato.ver`
-  (master sempre), `p_incluir_teste = true` só master, tudo `42501`; `security definer`, `search_path ''`, execute só
-  `authenticated`.
+`email text, nome text, telefone text, primeiro_em timestamptz, fonte text, utm_source text, utm_medium text,
+utm_campaign text, utm_content text, utm_term text, ddd text, estado text, entrou_grupo boolean, saiu_grupo boolean,
+eh_aluno boolean, instrucao text, turma text, lista_origem text, seminario_origem text, no_pre_checkout boolean,
+comprou boolean, pessoa_id uuid, teste boolean, descarte_motivo text, descarte_lista text, eh_lead boolean`
+
+| coluna | na tela |
+|---|---|
+| `primeiro_em` | **Data do pré-checkout** (America/Sao_Paulo); também o dia da aba Evolução |
+| `nome`, `email`, `telefone` | Nome, E-mail, Telefone (dado pessoal; gate abaixo). `telefone` também cruza com o grupo (8 últimos dígitos) |
+| `eh_lead` | É lead? (coluna e rosca) |
+| `comprou` | Comprou? (coluna e rosca) |
+| `utm_source` | coluna e rosca |
+| `eh_aluno`, `estado`, `lista_origem`, `seminario_origem` | roscas do Resumo (mesmos rótulos do modal de Leads) |
+| `pessoa_id` | chave da linha (sem ela, e-mail, depois telefone) |
+| `teste` | selo TESTE e fora do contador; botão Marcar/Desmarcar teste (só master), pelo e-mail (telefone só sem e-mail) |
+| demais | lidas e mapeadas como no modal de Leads, não exibidas |
+
+- **Período** como no resumo (`dados.periodo`): só quem tem `primeiro_em` em [`p_de` 00:00, `p_ate` + 1 dia 00:00) de São Paulo;
+  nulos = período do evento.
+- **Contagem:** com `p_incluir_teste = false`, o número de linhas tem de ser igual a `dados_atm_resumo.pre_checkout_pessoas`
+  no mesmo período (o contador do modal conta as linhas sem teste e é comparado com o card; divergência vira aviso).
+- **Gate:** equipe do evento (`dados.atm_cadastro`) + `contato.ver` (master sempre); `p_incluir_teste = true` só master; tudo
+  `42501`. `security definer`, `search_path ''`, execute só `authenticated`. A tela só chama com `contato.ver`.
+- **Erros que a tela trata:** `PGRST202` = não publicada (mensagem acima); `42501` = lista limpa, "Lista indisponível";
+  qualquer outro e tempo limite de 20 s = aviso com a última lista mantida.
+- Em 13/10/2026 o resumo dá `pre_checkout_pessoas = 1` (o lead de teste 27851, não marcado como teste): é a linha esperada
+  quando a função for publicada.
 

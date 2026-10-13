@@ -1,165 +1,131 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Badge, ConfirmDialog, DataTable, EmptyState, Td, Th, Thead, Toggle, Tr } from '@/shared/ui/components';
-import { Modal } from '@/shared/ui/components/Modal';
-import {
-  contarVendasSessaoViabilidade,
-  dataDaVendaSessaoViabilidade,
-  listaAposLeituraSv,
-  notaVendasTesteForaDoTotal,
-  valorDaVendaSessaoViabilidade,
-  type VendaSessaoViabilidade,
-} from '../domain/sessao-viabilidade';
-import type { MetricaAtm } from '../domain/dashboard';
-import { carregarAtmSvVendas, desmarcarAtmTestePorEmail, marcarAtmTestePorEmail, type Resultado } from '../infrastructure/atm-data';
+import { rotuloListaOrigem, rotuloValorResumoLead, type LeadAtm, type MetricaAtm, type NumeroGrupoAtm, type PessoaPreCheckoutAtm } from '../domain/dashboard';
+import { vendasNoPeriodoAtm, type SituacaoGrupoAtm } from '../domain/modal-pessoas';
+import { dataDaVendaSessaoViabilidade, notaVendasTesteForaDoTotal, valorDaVendaSessaoViabilidade, type VendaSessaoViabilidade } from '../domain/sessao-viabilidade';
+import { MENSAGEM_PRE_CHECKOUT_NAO_PUBLICADA } from '../infrastructure/atm-data';
+import type { EstadoListaAtm } from './carregador-listas';
+import { dataHoraAtm, ModalPessoasAtm, simNaoAtm, type CampoResumoPessoasAtm, type ColunaPessoasAtm } from './ModalPessoasAtm';
 
 /*
- * Modais dos cards Pré-checkout e Vendas do funil do Seminário ATM (decisão do Victor, 13/10/2026 18h35):
- * substituem a antiga seção separada "Sessão de Viabilidade". Os números dos cards vêm de dados_atm_resumo;
- * os modais só mostram a lista (dado pessoal, gate contato.ver na tela e no banco).
+ * Os três modais do funil do Seminário ATM (Leads, Pré-checkout, Vendas), todos no ModalPessoasAtm (13/10/2026).
+ * Os números dos cards vêm de dados_atm_resumo; cada modal lê a sua lista sozinho (SeminarioAtmClient + useListaAtm)
+ * e o contador usa o mesmo critério do card (domain/modal-pessoas.ts).
  */
 
-const inteiro = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
-
-function textoMetrica(metrica: MetricaAtm) {
-  return metrica.semDado ? 'Sem dado' : inteiro.format(metrica.valor);
-}
-
-/**
- * Leitura da lista de vendas da SV (`public.dados_atm_sv_vendas`). Só chama a RPC para quem tem `contato.ver`.
- * Falha mantém a última lista (esmaecida, com a hora da leitura), menos a perda de permissão (42501), que limpa.
- */
-export function useVendasSvAtm(chave: string, isMaster: boolean, podeVerContato: boolean) {
-  const [incluirTeste, setIncluirTeste] = useState(isMaster);
-  const [lista, setLista] = useState<Resultado<VendaSessaoViabilidade[]>>({ data: [], semDado: true, erro: null });
-  const [lidoEm, setLidoEm] = useState<Date | null>(null);
-  const [carregando, setCarregando] = useState(false);
-  const pedidoAtual = useRef(0);
-
-  const carregar = async (comTeste: boolean = incluirTeste) => {
-    if (!podeVerContato) return;
-    const id = ++pedidoAtual.current;
-    setCarregando(true);
-    const r = await carregarAtmSvVendas(chave, isMaster && comTeste);
-    if (id !== pedidoAtual.current) return;
-    setCarregando(false);
-    setLista((anterior) => listaAposLeituraSv(anterior, r));
-    if (!r.semDado) setLidoEm(new Date());
-    else if (r.semPermissao) setLidoEm(null);
-  };
-
-  const trocarInclusao = (valor: boolean) => {
-    setIncluirTeste(valor);
-    void carregar(valor);
-  };
-
-  return { lista, lidoEm, carregando, incluirTeste, carregar, trocarInclusao };
-}
-
-export type VendasSvAtm = ReturnType<typeof useVendasSvAtm>;
-
-export function ModalVendasAtm({ open, onClose, chave, vendas, vendasTeste, periodoLabel, podeVerContato, isMaster, sv, onTesteAlterado }: {
+type Comum = {
   open: boolean;
   onClose: () => void;
-  chave: string;
-  /** `dados_atm_resumo.vendas` no período aplicado (o número do card). */
-  vendas: MetricaAtm;
+  periodoLabel: string;
+  periodo: { de: string | null; ate: string | null };
+  card: MetricaAtm;
+  isMaster: boolean;
+  incluirTeste: boolean;
+  onIncluirTeste: (v: boolean) => void;
+  grupo: EstadoListaAtm<NumeroGrupoAtm> | null;
+};
+
+const SEM_CONTATO = { titulo: 'Lista indisponível', hint: 'A capacidade contato.ver é necessária para visualizar dados pessoais.' };
+const MENSAGEM_TESTE = 'Esta marcação vale para este Seminário ATM. O lead e os dados relacionados deixam de contar nos indicadores deste evento. Quer continuar?';
+const grupoSimNao = (s: SituacaoGrupoAtm | undefined) => (!s || s.semTelefone ? 'Sem telefone' : s.numero ? 'Sim' : 'Não');
+const texto = (v: string | null) => v ?? 'Não lançado';
+
+const COLUNAS_LEADS: ColunaPessoasAtm<LeadAtm>[] = [
+  { titulo: 'Data', celula: (l) => dataHoraAtm(l.dataHora), className: 'whitespace-nowrap' },
+  { titulo: 'Nome', celula: (l) => texto(l.nome) },
+  { titulo: 'E-mail', celula: (l) => texto(l.email) },
+  { titulo: 'Telefone', celula: (l) => texto(l.telefone), className: 'whitespace-nowrap' },
+  { titulo: 'Entrou no grupo?', celula: (l) => simNaoAtm(l.entrouGrupo) },
+  { titulo: 'É aluno?', celula: (l) => simNaoAtm(l.aluno) },
+  { titulo: 'utm_source', celula: (l) => texto(l.utmSource) },
+  { titulo: 'Estado', celula: (l) => texto(l.estado) },
+  { titulo: 'Lista de origem', celula: (l) => texto(rotuloListaOrigem(l.listaOrigem)) },
+  { titulo: 'Seminário de origem', celula: (l) => texto(l.seminarioOrigem) },
+];
+const CAMPOS_LEADS: CampoResumoPessoasAtm<LeadAtm>[] = [
+  { nome: 'Entrou no grupo?', valor: (l) => rotuloValorResumoLead(l.entrouGrupo) },
+  { nome: 'É aluno?', valor: (l) => rotuloValorResumoLead(l.aluno) },
+  { nome: 'utm_source', valor: (l) => rotuloValorResumoLead(l.utmSource) },
+  { nome: 'Estado', valor: (l) => rotuloValorResumoLead(l.estado) },
+  { nome: 'Lista de origem', valor: (l) => rotuloValorResumoLead(rotuloListaOrigem(l.listaOrigem)) },
+  { nome: 'Seminário de origem', valor: (l) => rotuloValorResumoLead(l.seminarioOrigem) },
+];
+
+export function ModalLeadsAtm({ lista, onToggleLead, onToggleGrupo, ...c }: Comum & {
+  lista: EstadoListaAtm<LeadAtm> | null;
+  onToggleLead: (lead: LeadAtm, teste: boolean) => Promise<string | null>;
+  onToggleGrupo: (numero: NumeroGrupoAtm, teste: boolean) => Promise<string | null>;
+}) {
+  return <ModalPessoasAtm<LeadAtm> {...c} titulo="Leads do Seminário ATM" abaPessoas="Leads" rotuloContador={['lead válido', 'leads válidos']} rotuloCentro="leads"
+    card={{ rotulo: 'Leads', metrica: c.card }} lista={lista} colunas={COLUNAS_LEADS} rotuloData="Data" dataDe={(l) => l.dataHora} campos={CAMPOS_LEADS}
+    grupo={{ modo: 'numeros', estado: c.grupo, onToggle: onToggleGrupo }}
+    textos={{ naoPublicada: 'Leads indisponíveis', vazio: 'Nenhum lead neste período' }}
+    acaoTeste={{ disponivel: (l) => !!(l.email || l.telefone), tituloConfirmacao: 'Marcar lead como teste', mensagemConfirmacao: MENSAGEM_TESTE, executar: onToggleLead }} />;
+}
+
+const COLUNAS_PRE_CHECKOUT: ColunaPessoasAtm<PessoaPreCheckoutAtm>[] = [
+  { titulo: 'Data do pré-checkout', celula: (p) => dataHoraAtm(p.dataHora), className: 'whitespace-nowrap' },
+  { titulo: 'Nome', celula: (p) => texto(p.nome) },
+  { titulo: 'E-mail', celula: (p) => texto(p.email) },
+  { titulo: 'Telefone', celula: (p) => texto(p.telefone), className: 'whitespace-nowrap' },
+  { titulo: 'É lead?', celula: (p) => simNaoAtm(p.ehLead) },
+  { titulo: 'Comprou?', celula: (p) => simNaoAtm(p.comprou) },
+  { titulo: 'utm_source', celula: (p) => texto(p.utmSource) },
+];
+const CAMPOS_PRE_CHECKOUT: CampoResumoPessoasAtm<PessoaPreCheckoutAtm>[] = [
+  { nome: 'Entrou no grupo?', valor: (_p, g) => grupoSimNao(g), usaGrupo: true },
+  { nome: 'É lead?', valor: (p) => rotuloValorResumoLead(p.ehLead) },
+  { nome: 'É aluno?', valor: (p) => rotuloValorResumoLead(p.aluno) },
+  { nome: 'Comprou?', valor: (p) => rotuloValorResumoLead(p.comprou) },
+  { nome: 'utm_source', valor: (p) => rotuloValorResumoLead(p.utmSource) },
+  { nome: 'Estado', valor: (p) => rotuloValorResumoLead(p.estado) },
+  { nome: 'Lista de origem', valor: (p) => rotuloValorResumoLead(rotuloListaOrigem(p.listaOrigem)) },
+  { nome: 'Seminário de origem', valor: (p) => rotuloValorResumoLead(p.seminarioOrigem) },
+];
+
+export function ModalPreCheckoutAtm({ lista, podeVerContato, onTogglePessoa, ...c }: Comum & {
+  lista: EstadoListaAtm<PessoaPreCheckoutAtm> | null;
+  podeVerContato: boolean;
+  onTogglePessoa: (pessoa: PessoaPreCheckoutAtm, teste: boolean) => Promise<string | null>;
+}) {
+  return <ModalPessoasAtm<PessoaPreCheckoutAtm> {...c} titulo="Pré-checkout" abaPessoas="Pessoas" rotuloContador={['pessoa no pré-checkout', 'pessoas no pré-checkout']} rotuloCentro="pessoas"
+    card={{ rotulo: 'Pré-checkout', metrica: c.card }} lista={lista} colunas={COLUNAS_PRE_CHECKOUT} rotuloData="Data do pré-checkout" dataDe={(p) => p.dataHora} campos={CAMPOS_PRE_CHECKOUT}
+    grupo={{ modo: 'cruzamento', estado: c.grupo, telefoneDe: (p) => p.telefone, nomeDe: (p) => p.nome }}
+    textos={{ naoPublicada: MENSAGEM_PRE_CHECKOUT_NAO_PUBLICADA, vazio: 'Ninguém fez pré-checkout neste período' }}
+    bloqueio={podeVerContato ? null : SEM_CONTATO}
+    acaoTeste={{ disponivel: (p) => !!(p.email || p.telefone), tituloConfirmacao: 'Marcar pessoa como teste', mensagemConfirmacao: 'Esta marcação vale para este Seminário ATM e é feita pelo e-mail desta linha (pelo telefone só quando não há e-mail): a pessoa e os dados relacionados deixam de contar nos indicadores deste evento. Quer continuar?', executar: onTogglePessoa }} />;
+}
+
+const COLUNAS_VENDAS: ColunaPessoasAtm<VendaSessaoViabilidade>[] = [
+  { titulo: 'Data da venda', celula: (v) => dataDaVendaSessaoViabilidade(v) ?? 'Sem dado', className: 'whitespace-nowrap' },
+  { titulo: 'Nome', celula: (v) => <><div>{v.nome ?? 'Sem dado'}</div><div className="text-[10px] text-[var(--fg-3)]" title="Transação">{v.transacao ?? 'Transação: sem dado'}</div></>, className: 'whitespace-nowrap' },
+  { titulo: 'E-mail', celula: (v) => v.email ?? 'Sem dado' },
+  { titulo: 'Telefone', celula: (v) => v.telefone ?? 'Sem dado', className: 'whitespace-nowrap' },
+  { titulo: 'Status', celula: (v) => v.status ?? 'Sem dado' },
+  { titulo: 'Bruto / líquido', celula: (v) => `${valorDaVendaSessaoViabilidade(v.valorBruto, v.moeda) ?? 'Sem dado'} / ${valorDaVendaSessaoViabilidade(v.valorLiquido, v.moeda) ?? 'Sem dado'}`, className: 'whitespace-nowrap tabular' },
+  { titulo: 'Oferta', celula: (v) => v.ofertaCodigo ?? 'Sem dado', className: 'whitespace-nowrap' },
+];
+const CAMPOS_VENDAS: CampoResumoPessoasAtm<VendaSessaoViabilidade>[] = [
+  { nome: 'Status', valor: (v) => v.status ?? 'Sem dado' },
+  { nome: 'Oferta', valor: (v) => v.ofertaCodigo ?? 'Sem dado' },
+  { nome: 'Entrou no grupo?', valor: (_v, g) => grupoSimNao(g), usaGrupo: true },
+];
+
+export function ModalVendasAtm({ lista, podeVerContato, vendasTeste, onToggleVenda, ...c }: Comum & {
+  lista: EstadoListaAtm<VendaSessaoViabilidade> | null;
+  podeVerContato: boolean;
   /** `dados_atm_resumo.vendas_teste`: vendas que a marcação de teste tirou do total. */
   vendasTeste: number | null;
-  periodoLabel: string;
-  podeVerContato: boolean;
-  isMaster: boolean;
-  sv: VendasSvAtm;
-  /** Releitura do resumo depois de marcar ou desmarcar teste (o card Vendas vem dele). */
-  onTesteAlterado: () => Promise<void>;
+  onToggleVenda: (venda: VendaSessaoViabilidade, teste: boolean) => Promise<string | null>;
 }) {
-  const [alvo, setAlvo] = useState<VendaSessaoViabilidade | null>(null);
-  const [salvando, setSalvando] = useState<string | null>(null);
-  const [erroAcao, setErroAcao] = useState<string | null>(null);
-  const { lista, lidoEm, carregando, incluirTeste } = sv;
-  const contagem = contarVendasSessaoViabilidade(lista.data);
-  const listaSemPermissao = lista.semPermissao === true;
-  const desatualizada = lista.erro !== null && lidoEm !== null;
-  const notaTeste = isMaster ? notaVendasTesteForaDoTotal(vendasTeste) : null;
-
-  const mudarTeste = async (venda: VendaSessaoViabilidade, teste: boolean) => {
-    if (salvando || !isMaster) return;
-    setSalvando(venda.id); setErroAcao(null);
-    if (!venda.email) { setSalvando(null); setAlvo(null); setErroAcao('Esta venda não tem e-mail: a marcação é feita pelo e-mail.'); return; }
-    const r = teste
-      ? await marcarAtmTestePorEmail(chave, venda.email)
-      : await desmarcarAtmTestePorEmail(chave, venda.email);
-    setSalvando(null);
-    setAlvo(null);
-    if (r.erro) { setErroAcao(r.erro); return; }
-    await Promise.all([sv.carregar(), onTesteAlterado()]);
-  };
-
-  return <Modal open={open} onClose={() => { setErroAcao(null); onClose(); }} title="Vendas da Sessão de Viabilidade" width="max-w-6xl">
-    <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-[var(--fg-3)]">
-      <span className="text-sm text-[var(--fg-2)]">Card Vendas: <strong className="tabular text-[var(--fg)]">{textoMetrica(vendas)}</strong> no período {periodoLabel}</span>
-      {notaTeste && <span>{notaTeste}</span>}
-    </div>
-    {!podeVerContato
-      ? <EmptyState title="Lista indisponível" hint="A capacidade contato.ver é necessária para visualizar dados pessoais." />
-      : <>
-        <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-[var(--fg-3)]">
-          {isMaster && <Toggle checked={incluirTeste} onChange={sv.trocarInclusao} disabled={carregando} label="Incluir testes" />}
-          <span>{lista.semDado ? 'sem dado ainda' : `${inteiro.format(contagem.validas)} vendas válidas na lista${incluirTeste && isMaster ? ` · ${inteiro.format(contagem.teste)} de teste fora das contagens` : ''}`}</span>
-          <span className="ml-auto">{carregando ? 'Carregando…' : lidoEm ? `lista lida às ${lidoEm.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}` : ''}</span>
-        </div>
-        <p className="mb-3 text-xs text-[var(--fg-3)]">A lista traz todas as vendas do evento, sem o filtro de período. O card Vendas segue o período aplicado.</p>
-        {lista.erro && <p role="status" className="mb-3 rounded border border-[var(--yellow)]/40 p-3 text-sm text-[var(--yellow)]">{lista.erro}{desatualizada ? ' A lista abaixo é a última lida.' : ''}</p>}
-        {erroAcao && <p role="alert" className="mb-3 rounded border border-[var(--red)]/40 p-3 text-sm text-[var(--red)]">{erroAcao}</p>}
-        {listaSemPermissao
-          ? <EmptyState title="Lista indisponível" hint="A permissão para ler esta lista foi perdida. Recarregue a página ou entre de novo." />
-          : lista.semDado
-            ? <EmptyState title="Vendas da Sessão de Viabilidade" hint={carregando ? 'carregando…' : 'sem dado ainda'} />
-            : lista.data.length === 0
-              ? <EmptyState title="Nenhuma venda da Sessão de Viabilidade" />
-              : <div className={'max-h-[65vh] overflow-auto ' + (desatualizada ? 'opacity-60' : '')}>
-                <DataTable minWidth={isMaster ? 1040 : 900}>
-                  <Thead><Th className="px-2!">Data da venda</Th><Th className="px-2!">Nome</Th><Th className="px-2!">E-mail</Th><Th className="px-2!">Telefone</Th><Th className="px-2!">Status</Th><Th className="px-2!">Bruto / líquido</Th><Th className="px-2!">Oferta</Th>{isMaster && <><Th className="px-2!">Teste</Th><Th className="px-2!">Ação</Th></>}</Thead>
-                  <tbody>{lista.data.map((venda) => <Tr key={venda.id} className={venda.teste ? 'opacity-60' : ''}>
-                    <Td className="px-2! whitespace-nowrap">{dataDaVendaSessaoViabilidade(venda) ?? 'Sem dado'}</Td>
-                    <Td className="px-2! whitespace-nowrap"><div>{venda.nome ?? 'Sem dado'}</div><div className="text-[10px] text-[var(--fg-3)]" title="Transação">{venda.transacao ?? 'Transação: sem dado'}</div></Td>
-                    <Td className="px-2! max-w-[9rem] truncate"><span title={venda.email ?? undefined}>{venda.email ?? 'Sem dado'}</span></Td>
-                    <Td className="px-2! whitespace-nowrap">{venda.telefone ?? 'Sem dado'}</Td>
-                    <Td className="px-2!">{venda.status ?? 'Sem dado'}</Td>
-                    <Td className="px-2! whitespace-nowrap tabular">{valorDaVendaSessaoViabilidade(venda.valorBruto, venda.moeda) ?? 'Sem dado'} / {valorDaVendaSessaoViabilidade(venda.valorLiquido, venda.moeda) ?? 'Sem dado'}</Td>
-                    <Td className="px-2! whitespace-nowrap">{venda.ofertaCodigo ?? 'Sem dado'}</Td>
-                    {isMaster && <>
-                      <Td className="px-2!">{venda.teste ? <Badge tone="warning">TESTE</Badge> : 'Não'}</Td>
-                      <Td className="px-2!">{venda.email ? <button type="button" disabled={salvando === venda.id} onClick={() => { setErroAcao(null); if (venda.teste) void mudarTeste(venda, false); else setAlvo(venda); }} className="whitespace-nowrap rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-3)] disabled:opacity-50">{salvando === venda.id ? 'Salvando…' : venda.teste ? 'Desmarcar teste' : 'Marcar teste'}</button> : 'Sem e-mail'}</Td>
-                    </>}
-                  </Tr>)}</tbody>
-                </DataTable>
-              </div>}
-        {isMaster && !lista.semDado && <p className="mt-2 text-xs text-[var(--fg-3)]">Linha marcada TESTE fica fora de todas as contagens deste evento (marcação em dados.marcacoes_teste).</p>}
-      </>}
-    {alvo && <ConfirmDialog title="Marcar venda como teste" confirmLabel="Marcar como teste" cancelLabel="Cancelar" onCancel={() => setAlvo(null)} onConfirm={() => void mudarTeste(alvo, true)} message="Esta marcação vale para este Seminário ATM e é feita pelo e-mail desta linha: a pessoa e os dados relacionados deixam de contar nos indicadores deste evento. Quer continuar?" />}
-  </Modal>;
-}
-
-/** Colunas da lista de pré-checkout pedidas pelo Victor (13/10/2026). A lista ainda não tem RPC pública. */
-const COLUNAS_PRE_CHECKOUT = ['Data do pré-checkout', 'Nome', 'E-mail', 'Telefone', 'Comprou?', 'utm_source'];
-
-export function ModalPreCheckoutAtm({ open, onClose, preCheckout, periodoLabel, podeVerContato }: {
-  open: boolean;
-  onClose: () => void;
-  /** `dados_atm_resumo.pre_checkout_pessoas` no período aplicado (o número do card). */
-  preCheckout: MetricaAtm;
-  periodoLabel: string;
-  podeVerContato: boolean;
-}) {
-  return <Modal open={open} onClose={onClose} title="Pré-checkout" width="max-w-6xl">
-    <div className="mb-3 text-sm text-[var(--fg-2)]">Card Pré-checkout: <strong className="tabular text-[var(--fg)]">{textoMetrica(preCheckout)}</strong> no período {periodoLabel}</div>
-    {!podeVerContato
-      ? <EmptyState title="Lista indisponível" hint="A capacidade contato.ver é necessária para visualizar dados pessoais." />
-      : <DataTable minWidth={760}>
-        <Thead>{COLUNAS_PRE_CHECKOUT.map((c) => <Th key={c} className="px-2!">{c}</Th>)}</Thead>
-        <tbody><tr><td colSpan={COLUNAS_PRE_CHECKOUT.length} className="p-0"><EmptyState title="Lista ainda não ligada" hint="O número do card vem do banco (dados_atm_resumo). A lista de quem preencheu o formulário depende de uma função do banco que ainda não existe; nenhuma linha é mostrada até ela ser criada." /></td></tr></tbody>
-      </DataTable>}
-  </Modal>;
+  const notaTeste = c.isMaster ? notaVendasTesteForaDoTotal(vendasTeste) : null;
+  const { de, ate } = c.periodo;
+  return <ModalPessoasAtm<VendaSessaoViabilidade> {...c} titulo="Vendas da Sessão de Viabilidade" abaPessoas="Pessoas" rotuloContador={['venda válida', 'vendas válidas']} rotuloCentro="vendas"
+    card={{ rotulo: 'Vendas', metrica: c.card }} lista={lista} filtrar={(data) => vendasNoPeriodoAtm(data, de, ate)}
+    colunas={COLUNAS_VENDAS} rotuloData="Data da venda" dataDe={(v) => v.aprovadoEm} campos={CAMPOS_VENDAS}
+    grupo={{ modo: 'cruzamento', estado: c.grupo, telefoneDe: (v) => v.telefone, nomeDe: (v) => v.nome }}
+    textos={{ naoPublicada: 'A lista de vendas da Sessão de Viabilidade não está publicada no banco', vazio: 'Nenhuma venda da Sessão de Viabilidade registrada neste período' }}
+    bloqueio={podeVerContato ? null : SEM_CONTATO}
+    notas={<p className="mb-3 text-xs text-[var(--fg-3)]">Vendas no período aplicado (pela data de aprovação, a mesma regra do card Vendas).{notaTeste ? ` ${notaTeste}.` : ''}</p>}
+    acaoTeste={{ disponivel: (v) => !!v.email, semAcao: 'Sem e-mail', tituloConfirmacao: 'Marcar venda como teste', mensagemConfirmacao: 'Esta marcação vale para este Seminário ATM e é feita pelo e-mail desta linha: a pessoa e os dados relacionados deixam de contar nos indicadores deste evento. Quer continuar?', executar: onToggleVenda }} />;
 }

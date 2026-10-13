@@ -4,7 +4,8 @@ const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock('@/shared/infrastructure/supabase/browser-client', () => ({ createBrowserSupabase: () => ({ rpc: mocks.rpc }) }));
 vi.mock('@/shared/infrastructure/supabase/query-log', () => ({ logQueryError: vi.fn() }));
 
-import { carregarAtmDisparosLista, desmarcarAtmTestePorEmail, marcarAtmTestePorEmail, carregarAtmGrupo, carregarAtmSvVendas, carregarAtmLeads, carregarAtmResumo, carregarAtmTrafego, desmarcarAtmTeste, marcarAtmTeste } from './atm-data';
+import { carregarAtmDisparosLista, desmarcarAtmTestePorEmail, marcarAtmTestePorEmail, carregarAtmGrupo, carregarAtmSvVendas, carregarAtmLeads, carregarAtmPreCheckout, carregarAtmResumo, carregarAtmTrafego, desmarcarAtmTeste, marcarAtmTeste, MENSAGEM_PRE_CHECKOUT_NAO_PUBLICADA } from './atm-data';
+import { contadorDoModalAtm, vendasNoPeriodoAtm } from '../domain/modal-pessoas';
 
 describe('leitura e marcação do dashboard ATM', () => {
   beforeEach(() => mocks.rpc.mockReset());
@@ -260,9 +261,9 @@ describe('vendas da Sessão de Viabilidade (dados_atm_sv_vendas)', () => {
     expect(resultado).toEqual({ data: [], semDado: false, erro: null });
   });
 
-  it('trata a RPC ainda não aplicada como sem dado, sem mensagem de erro', async () => {
+  it('trata a RPC ainda não aplicada como não publicada, sem mensagem de erro', async () => {
     mocks.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } });
-    expect(await carregarAtmSvVendas('atm-elaine-1-2026-10')).toEqual({ data: [], semDado: true, erro: null });
+    expect(await carregarAtmSvVendas('atm-elaine-1-2026-10')).toEqual({ data: [], semDado: true, erro: null, naoPublicada: true });
   });
 
   it('trata recusa do banco como sem dado com aviso, para a tela manter a última lista', async () => {
@@ -294,5 +295,132 @@ describe('vendas da Sessão de Viabilidade (dados_atm_sv_vendas)', () => {
     expect(resultado.semDado).toBe(true);
     expect(resultado.data).toEqual([]);
     expect(resultado.erro).toMatch(/demoraram a responder/);
+  });
+});
+
+/** Linha fictícia no contrato de dados_atm_leads / dados_atm_pre_checkout. */
+function linhaPessoa(i: number, extra: Record<string, unknown> = {}) {
+  return {
+    email: `pessoa${i}@exemplo.invalid`, nome: `Pessoa Teste ${i}`, telefone: `551190000${String(i).padStart(4, '0')}`, primeiro_em: '2026-10-13T13:41:00Z',
+    fonte: 'sistema', utm_source: 'FB', utm_medium: null, utm_campaign: null, utm_content: null, utm_term: null, ddd: '11', estado: 'SP',
+    entrou_grupo: true, saiu_grupo: false, eh_aluno: false, instrucao: null, turma: null, lista_origem: null, seminario_origem: null,
+    no_pre_checkout: true, comprou: false, pessoa_id: `fic-${i}`, teste: false, descarte_motivo: null, descarte_lista: null, ...extra,
+  };
+}
+
+describe('lista de pré-checkout (dados_atm_pre_checkout, a publicar)', () => {
+  beforeEach(() => { mocks.rpc.mockReset(); });
+  afterEach(() => vi.useRealTimers());
+
+  it('chama a RPC com chave, período e inclusão de teste e mapeia como pessoa + eh_lead', async () => {
+    mocks.rpc.mockResolvedValue({ data: [linhaPessoa(1, { eh_lead: true }), linhaPessoa(2, { eh_lead: null, teste: true })], error: null });
+    const r = await carregarAtmPreCheckout('atm-elaine-1-2026-10', { p_de: '2026-10-07', p_ate: '2026-10-14' }, true);
+    expect(mocks.rpc).toHaveBeenCalledWith('dados_atm_pre_checkout', { p_chave: 'atm-elaine-1-2026-10', p_de: '2026-10-07', p_ate: '2026-10-14', p_incluir_teste: true });
+    expect(r.semDado).toBe(false);
+    expect(r.erro).toBeNull();
+    expect(r.data[0]).toMatchObject({ id: 'fic-1', dataHora: '2026-10-13T13:41:00Z', nome: 'Pessoa Teste 1', ehLead: true, comprou: false, utmSource: 'FB', teste: false });
+    expect(r.data[1]).toMatchObject({ ehLead: null, teste: true });
+  });
+
+  it('PGRST202: não publicada, com a mensagem honesta do estado transitório', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } });
+    const r = await carregarAtmPreCheckout('atm-elaine-1-2026-10', { p_de: null, p_ate: null });
+    expect(r).toEqual({ data: [], semDado: true, erro: MENSAGEM_PRE_CHECKOUT_NAO_PUBLICADA, naoPublicada: true });
+  });
+
+  it('42501 marca semPermissao; outras falhas só avisam', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: '42501' } });
+    expect(await carregarAtmPreCheckout('atm-elaine-1-2026-10')).toMatchObject({ semDado: true, semPermissao: true, erro: 'Sem permissão para ler este dashboard.' });
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: 'XX000' } });
+    const r = await carregarAtmPreCheckout('atm-elaine-1-2026-10');
+    expect(r.semPermissao).toBeUndefined();
+    expect(r.naoPublicada).toBeUndefined();
+    expect(r.erro).toBe('Não foi possível carregar os dados agora.');
+  });
+
+  it('lista vazia é vazia medida (não é falha)', async () => {
+    mocks.rpc.mockResolvedValue({ data: [], error: null });
+    expect(await carregarAtmPreCheckout('atm-elaine-1-2026-10')).toEqual({ data: [], semDado: false, erro: null });
+  });
+
+  it('desiste depois do tempo limite', async () => {
+    vi.useFakeTimers();
+    mocks.rpc.mockReturnValue(new Promise(() => {}));
+    const pendente = carregarAtmPreCheckout('atm-elaine-1-2026-10', undefined, false, 1000);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect((await pendente).erro).toMatch(/demorou a responder/);
+  });
+});
+
+describe('leads e grupo: estados da leitura', () => {
+  beforeEach(() => { mocks.rpc.mockReset(); });
+  afterEach(() => vi.useRealTimers());
+
+  it('PGRST202 vira não publicada (a tela diz indisponível só neste caso)', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } });
+    expect(await carregarAtmLeads('atm-elaine-1-2026-10')).toEqual({ data: [], semDado: true, erro: null, naoPublicada: true });
+    expect(await carregarAtmGrupo('atm-elaine-1-2026-10')).toEqual({ data: [], semDado: true, erro: null, naoPublicada: true });
+  });
+
+  it('leads com tempo limite: não fica girando para sempre', async () => {
+    vi.useFakeTimers();
+    mocks.rpc.mockReturnValue(new Promise(() => {}));
+    const pendente = carregarAtmLeads('atm-elaine-1-2026-10', undefined, false, 500);
+    await vi.advanceTimersByTimeAsync(500);
+    const r = await pendente;
+    expect(r.semDado).toBe(true);
+    expect(r.naoPublicada).toBeUndefined();
+    expect(r.erro).toMatch(/demorou a responder/);
+  });
+});
+
+describe('contador do modal = número do card (mesmo conjunto, mesmo critério)', () => {
+  beforeEach(() => { mocks.rpc.mockReset(); });
+
+  it('Leads: linhas sem teste de dados_atm_leads = dados_atm_resumo.leads', async () => {
+    const linhas = [...Array.from({ length: 387 }, (_, i) => linhaPessoa(i + 1)), ...Array.from({ length: 10 }, (_, i) => linhaPessoa(1000 + i, { teste: true }))];
+    mocks.rpc.mockResolvedValueOnce({ data: [{ leads: 387, leads_teste: 10 }], error: null });
+    mocks.rpc.mockResolvedValueOnce({ data: linhas, error: null });
+    const resumo = await carregarAtmResumo('atm-elaine-1-2026-10');
+    const leads = await carregarAtmLeads('atm-elaine-1-2026-10', undefined, true);
+    expect(leads.data).toHaveLength(397);
+    expect(contadorDoModalAtm(leads.data)).toBe(resumo.data.resumo.leads.valor);
+    expect(leads.data.length - contadorDoModalAtm(leads.data)).toBe(resumo.data.periodo.leadsTeste);
+  });
+
+  it('Pré-checkout: linhas sem teste de dados_atm_pre_checkout = pre_checkout_pessoas', async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: [{ pre_checkout_pessoas: 1 }], error: null });
+    mocks.rpc.mockResolvedValueOnce({ data: [linhaPessoa(1, { eh_lead: true }), linhaPessoa(2, { eh_lead: false, teste: true })], error: null });
+    const resumo = await carregarAtmResumo('atm-elaine-1-2026-10');
+    const pc = await carregarAtmPreCheckout('atm-elaine-1-2026-10', undefined, true);
+    expect(contadorDoModalAtm(pc.data)).toBe(resumo.data.resumo.preCheckout.valor);
+  });
+
+  it('Vendas: sem teste e com aprovado_em no período (São Paulo) = dados_atm_resumo.vendas', async () => {
+    const venda = (t: string, aprovado: string | null, teste = false) => ({ transacao: t, aprovado_em: aprovado, pedido_em: null, dia_aprovado: null, nome: 'Pessoa Teste', email: `${t}@exemplo.invalid`, telefone: null, valor_bruto: 297, valor_liquido: 260, moeda: 'BRL', status: 'APPROVED', oferta_codigo: 'fic', teste });
+    // período 07/10 a 14/10: [07/10 00:00, 15/10 00:00) em São Paulo (UTC-3)
+    mocks.rpc.mockResolvedValueOnce({ data: [{ vendas: 2, periodo_de: '2026-10-07', periodo_ate: '2026-10-14' }], error: null });
+    mocks.rpc.mockResolvedValueOnce({ data: [
+      venda('dentro-1', '2026-10-07T03:00:00Z'),        // 07/10 00:00 SP: conta
+      venda('dentro-2', '2026-10-15T02:59:00Z'),        // 14/10 23:59 SP: conta
+      venda('fora-antes', '2026-10-07T02:59:00Z'),      // 06/10 23:59 SP
+      venda('fora-depois', '2026-10-15T03:00:00Z'),     // 15/10 00:00 SP
+      venda('teste', '2026-10-10T15:00:00Z', true),     // teste não conta
+      venda('sem-data', null),                          // sem aprovado_em não conta (como no banco)
+    ], error: null });
+    const resumo = await carregarAtmResumo('atm-elaine-1-2026-10');
+    const vendas = await carregarAtmSvVendas('atm-elaine-1-2026-10', true);
+    const noPeriodo = vendasNoPeriodoAtm(vendas.data, resumo.data.periodo.de, resumo.data.periodo.ate);
+    expect(noPeriodo.map((v) => v.transacao)).toEqual(['dentro-1', 'dentro-2', 'teste']);
+    expect(contadorDoModalAtm(noPeriodo)).toBe(resumo.data.resumo.vendas.valor);
+  });
+
+  it('Vendas: zero do banco e lista vazia batem em zero (vazio honesto)', async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: [{ vendas: 0, periodo_de: '2026-10-07', periodo_ate: '2026-10-14' }], error: null });
+    mocks.rpc.mockResolvedValueOnce({ data: [], error: null });
+    const resumo = await carregarAtmResumo('atm-elaine-1-2026-10');
+    const vendas = await carregarAtmSvVendas('atm-elaine-1-2026-10');
+    expect(vendas).toEqual({ data: [], semDado: false, erro: null });
+    expect(contadorDoModalAtm(vendasNoPeriodoAtm(vendas.data, resumo.data.periodo.de, resumo.data.periodo.ate))).toBe(resumo.data.resumo.vendas.valor);
   });
 });
