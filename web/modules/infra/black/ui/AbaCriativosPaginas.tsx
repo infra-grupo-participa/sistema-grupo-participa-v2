@@ -3,8 +3,9 @@
 // Aba 3, Criativos e páginas (aprovada em 12/10). Trilha Campanha › Conjunto › Criativo › Página; cada clique em
 // qualquer painel vira chip e refiltra os outros (cada painel vê os filtros dos outros, o próprio só destaca).
 // O filtro mora na URL (recorte.criativos), então o link volta igual. Campanha × conjunto lado a lado
-// (`CampanhaConjunto`), paginados de 10 em 10: a lista de campanhas ignora o filtro de conjunto (o conjunto é filho
-// dela) e, sem campanha escolhida, a de conjuntos mostra todos os do recorte.
+// (`CampanhaConjunto`), paginados de 10 em 10. Clicar num conjunto filtra TUDO, inclusive a lista de campanhas, que
+// passa a mostrar só a campanha dele (Victor, 13/10/2026). Sem campanha escolhida, a de conjuntos mostra todos os do
+// recorte. Cada painel continua vendo os filtros dos outros e só destaca o seu próprio.
 import { useMemo } from 'react';
 import { SectionCard } from '@/shared/ui/components';
 import { painel, type PainelCriativos } from '../domain/criativos';
@@ -21,7 +22,7 @@ export function AbaCriativosPaginas({ d, gaveta }: { d: DadosTela; gaveta?: Alvo
   const nomePagina = (id: string) => d.paginas.get(id)?.rotulo ?? id;
   const paineis = useMemo(() => {
     const p = (q: PainelCriativos, filtro = f) => painel(q, filtro, d.dias, d.linhas, d.idx, d.config.reguaCpl, (id) => d.paginas.get(id)?.rotulo ?? id);
-    return { campanha: p('campanha', { ...f, conjunto: undefined }), conjunto: p('conjunto'), anuncio: p('anuncio'), pagina: p('pagina') };
+    return { campanha: p('campanha'), conjunto: p('conjunto'), anuncio: p('anuncio'), pagina: p('pagina') };
   }, [f, d.dias, d.linhas, d.idx, d.config.reguaCpl, d.paginas]);
 
   const alternar = (k: keyof FiltroCriativos, id: string) => d.irPara({ criativos: { ...f, [k]: f[k] === id ? undefined : id } });
@@ -44,7 +45,7 @@ export function AbaCriativosPaginas({ d, gaveta }: { d: DadosTela; gaveta?: Alvo
       <TrilhaFiltro filtro={f} nome={nome} onTirar={tirar} onLimpar={() => d.irPara({ criativos: {} })} />
       <SectionCard title="Campanhas e conjuntos" subtitle="Gasto, CPL com o farol da régua e leads pagos do período, 10 por página. Clique na campanha para ver só os conjuntos dela.">
         <CampanhaConjunto campanhas={paineis.campanha} conjuntos={paineis.conjunto} campanha={f.campanha ?? null} conjunto={f.conjunto ?? null}
-          chaveFiltro={[d.recorte.funil, d.recorte.canal, d.recorte.periodo, f.anuncio ?? '', f.pagina ?? ''].join('|')}
+          chaveFiltro={[d.recorte.funil, d.recorte.canal, d.recorte.periodo, f.conjunto ?? '', f.anuncio ?? '', f.pagina ?? ''].join('|')}
           nomeCampanha={(id) => d.idx.campanha.get(id)?.nome ?? id}
           campanhaDoConjunto={(id) => { const c = d.idx.conjunto.get(id); return c ? d.idx.campanha.get(c.campanhaId)?.nome ?? null : null; }}
           onCampanha={escolherCampanha} onConjunto={(id) => alternar('conjunto', id)} />

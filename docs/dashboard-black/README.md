@@ -92,8 +92,9 @@ R$ 428.571,00; CPL do placar R$ 14,61 = R$ 192.079,46 ÷ 13.145; soma das 6 fase
   Enviados, Entregues e Custo (antes "Viraram ingresso").
 - **Campanha × conjunto** (aba Criativos e páginas) virou mestre e detalhe lado a lado (`ui/CampanhaConjunto.tsx`):
   campanhas à esquerda, os conjuntos da campanha clicada à direita, cada cartão com **gasto, CPL (com farol) e
-  leads pagos** em destaque (no C1, custo por visualização e impressões). A lista de campanhas ignora o filtro de
-  conjunto, e trocar ou tirar a campanha limpa o conjunto (o conjunto é filho dela). Sai a dupla de barras.
+  leads pagos** em destaque (no C1, custo por visualização e impressões). Clicar num conjunto filtra tudo, inclusive
+  a lista de campanhas, que passa a mostrar só a campanha dele (pedido de 13/10; antes ela ignorava o conjunto). Trocar
+  ou tirar a campanha limpa o conjunto (o conjunto é filho dela). Sai a dupla de barras.
 - **Ordem dos criativos.** A conta da ordem estava certa (teste novo cobre as quatro ordens), mas não se via: o CTR
   com uma casa deixava quase todos em "1,1%" e o topo era o mesmo em "Mais leads", "Menor CPL" e "Mais gasto".
   Agora cada cartão mostra a posição e o valor que a ordem usa (ex.: "1º CTR 4,49%"), o CTR sai com duas casas,

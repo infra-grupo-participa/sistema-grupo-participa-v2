@@ -22,6 +22,16 @@ describe('criativos e páginas', () => {
     const conj = painel('conjunto', f, b.dias, b.linhas, idx, regua, nomePagina);
     expect(conj.every((c) => b.conjuntos.find((x) => x.id === c.id)!.campanhaId === 'cp-iscas')).toBe(true);
   });
+  it('escolher um conjunto filtra também as campanhas: sobra só a campanha dele, com o gasto só daquele conjunto', () => {
+    const conjunto = b.conjuntos.find((c) => c.campanhaId === 'cp-iscas')!;
+    const f = { conjunto: conjunto.id };
+    const camp = painel('campanha', f, b.dias, b.linhas, idx, regua, nomePagina);
+    expect(camp.map((c) => c.id)).toEqual(['cp-iscas']);
+    const doConjunto = painel('conjunto', f, b.dias, b.linhas, idx, regua, nomePagina);
+    expect(camp[0].resumo.gasto).toBeCloseTo(doConjunto.find((c) => c.id === conjunto.id)!.resumo.gasto, 6);
+    // o painel de conjuntos continua vendo os irmãos do conjunto escolhido (o próprio painel só destaca)
+    expect(doConjunto.length).toBeGreaterThan(1);
+  });
   it('CPL do criativo = gasto ÷ leads pagos dele; C1 é distribuição (sem CPL)', () => {
     const anuncios = painel('anuncio', {}, b.dias, b.linhas, idx, regua, nomePagina);
     const capt = anuncios.find((a) => !a.resumo.distribuicao && a.resumo.leadsPagos > 0)!;

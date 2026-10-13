@@ -3,10 +3,12 @@
 // Campanha × conjunto lado a lado (auditoria do Victor, 12/10): campanhas à esquerda, conjuntos à direita, os dois
 // com o MESMO cartão (gasto, CPL e leads pagos em destaque; no C1, distribuição, o CPL dá lugar ao custo por
 // visualização e os leads às impressões). Sem campanha escolhida, a direita mostra os conjuntos de todas as
-// campanhas do recorte; clicar numa campanha filtra para os conjuntos dela (clicar de novo tira).
+// campanhas do recorte; clicar numa campanha filtra para os conjuntos dela (clicar de novo tira). Clicar num
+// conjunto filtra a lista de campanhas para a campanha dele.
 // Cada lado pagina de 10 em 10 com a régua estilo Google ("‹ 1 2 3 4 5 ›"), sem rolagem lateral. Trocar filtro
 // volta para a página 1 (a página guarda a chave do filtro em que foi escolhida; chave nova = página 1).
-// O clique continua sendo o filtro cruzado da aba (mora na URL): trocar de campanha limpa o conjunto escolhido.
+// O clique continua sendo o filtro cruzado da aba (mora na URL): trocar de campanha limpa o conjunto escolhido, e
+// com um conjunto escolhido a esquerda mostra só a campanha dele (por isso a página das campanhas guarda o conjunto na chave).
 import { useState, type ReactNode } from 'react';
 import type { ItemPainel } from '../domain/criativos';
 import { paginar, paginasVisiveis, POR_PAGINA, type Pagina } from '../domain/paginacao';
@@ -19,7 +21,7 @@ export function CampanhaConjunto({ campanhas, conjuntos, campanha, conjunto, cha
   nomeCampanha: (id: string) => string; campanhaDoConjunto: (id: string) => string | null;
   onCampanha: (id: string) => void; onConjunto: (id: string) => void;
 }) {
-  const pagCampanhas = usePagina(campanhas, chaveFiltro);
+  const pagCampanhas = usePagina(campanhas, `${chaveFiltro}|${conjunto ?? ''}`);
   const pagConjuntos = usePagina(conjuntos, `${chaveFiltro}|${campanha ?? ''}`);
   const maxCampanha = Math.max(1, ...campanhas.map((i) => i.resumo.gasto));
   const maxConjunto = Math.max(1, ...conjuntos.map((i) => i.resumo.gasto));
@@ -27,7 +29,7 @@ export function CampanhaConjunto({ campanhas, conjuntos, campanha, conjunto, cha
     <div className="grid gap-6 xl:grid-cols-2">
       <section aria-labelledby="black-cc-campanhas" className="min-w-0">
         <h3 id="black-cc-campanhas" className="text-sm font-semibold text-[var(--fg)]">Campanhas</h3>
-        <p className="mb-2 text-xs text-[var(--fg-3)]">Clique numa campanha para ver só os conjuntos dela ao lado.</p>
+        <p className="mb-2 text-xs text-[var(--fg-3)]">{conjunto ? 'Só a campanha do conjunto escolhido. Tire o conjunto para ver todas.' : 'Clique numa campanha para ver só os conjuntos dela ao lado.'}</p>
         {campanhas.length === 0
           ? <p className="text-sm text-[var(--fg-3)]">Nada veiculado neste recorte.</p>
           : (
