@@ -212,6 +212,25 @@ qualquer tela que passe esses nomes por ele vai recusá-los.
 `dados_black_grupo` (com recorte `{"tipo","valor"}`), mais a marcação de teste com ramo por modelo. Regras de MQL,
 ingresso único no grupo e "A corrigir", números e ensaio: [`20261012234606.explain.md`](../../infra/supabase/migrations/20261012234606.explain.md).
 
+## Banco: marcar teste só master e ids do Meta no tráfego (13/10, aplicadas)
+
+Duas migrations, aprovadas pelo pentester e **aplicadas em produção em 13/10/2026** (escritas como `20261013013625` e
+`20261013014209`; arquivos renomeados para a versão gravada):
+
+- **`20261013021142`** (aplicada às 02:11:42 UTC; achado bloqueante do pentester): na Black, `dados_marcar_teste` e
+  `dados_desmarcar_teste` exigem master (`acesso.eh_master()`, 42501 para os demais), como o presencial. **Marcar e
+  desmarcar teste na Black agora é só para master**: quem é da equipe e não é master recebe "sem acesso" (conferido em
+  produção, numa transação desfeita). O ATM ficou igual, ainda aberto à equipe (pendência registrada para decisão). O
+  desmarcar só toca marcação da própria chave. Detalhe: [`20261013021142.explain.md`](../../infra/supabase/migrations/20261013021142.explain.md).
+- **`20261013021259`** (aplicada às 02:12:59 UTC): `dados_black_trafego` devolve `campanha_externa` (em cada item de
+  `campanhas`) e `conjunto_externa` (em cada item de `conjuntos`), que a tela já lê para o recorte por campanha e
+  conjunto. Conferido em produção: 7 de 7 campanhas e 32 de 32 conjuntos com o id, iguais às tabelas de origem. Nada mais
+  muda. Detalhe: [`20261013021259.explain.md`](../../infra/supabase/migrations/20261013021259.explain.md).
+
+Efeito na tela: marcar/desmarcar teste na Black dá "sem acesso" para quem não é master; o recorte do grupo por campanha
+e por conjunto passa a receber o id do Meta que a tela lê (a tela em si não foi aberta nesta conferência, só a RPC).
+Reverter: os `_reversao.sql` de cada uma.
+
 ## Banco: ingresso no grupo (webhook n8n e backfill)
 
 Não tem migration: usa o caminho que já existe para o ATM. Situação em 12/10/2026: **o n8n foi publicado às 23:55 UTC
