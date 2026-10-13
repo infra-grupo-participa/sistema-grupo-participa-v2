@@ -180,3 +180,22 @@ O cartão Escritório em Infra > Dashboards saiu do estado "Em breve" (`emBreve`
 - A aba Tráfego abre com um funil em barras no padrão do Histórico: Impressões, Vídeo plays, 25%, 50%, 75%, 100%, Cliques no link e Visualizações de página. A base é a impressão; a passagem entre etapas e o "% das impressões" são cálculo da tela. Etapa sem dado na API aparece como "Sem dado" e não calcula passagem.
 - Alcance e frequência ficam fora do funil (são pessoas, não ações) e aparecem nos cards, só quando a RPC não manda `alcance_motivo`.
 - Publicado junto com o banco do Galego (branch `victor-atm-trafego-banco`) e a tela do JP (branch `victor-atm-trafego-tela`). Card ClickUp 17tya50fugc.
+# Sessão de Viabilidade no ATM
+
+## Mockup inicial · 13/10/2026
+
+Foi adicionada à tela da chave `atm-elaine-1-2026-10` a seção **Sessão de Viabilidade**, com três cards clicáveis: **Pré-checkouts únicos**, **Total de vendas** e **Conversão do pré-checkout**. O modal usa o componente compartilhado e abre nas abas **Pessoas** (tabela primeiro) e **Resumo**.
+
+Esta entrega é um mockup honesto, sem lista de pessoas nem contagens fictícias:
+
+- Pré-checkouts únicos: `sem dado ainda` até existir a fonte própria da sessão. A regra solicitada é um e-mail único.
+- Total de vendas: lê `dados_atm_resumo.vendas` já carregado pelo dashboard. Quando não houver oferta cadastrada, mantém `sem dado ainda`, conforme o contrato do ATM. O código da oferta não é definido nesta tela.
+- Conversão: vendas ÷ pré-checkouts únicos, calculada em `web/modules/infra/atm/domain/sessao-viabilidade.ts`; permanece `sem dado` se qualquer fonte estiver ausente ou se o denominador for zero.
+- A tabela reserva as colunas Data do evento, Nome, E-mail, Telefone, Data do pré-checkout, Comprou?, Status da compra e Oferta. A fonte ainda precisa confirmar quais campos existem; nenhum contato é carregado pelo mockup.
+- O servidor passa `contato.ver` como permissão para revelar a lista pessoal. O modal oculta a tabela quando a capacidade não está presente.
+
+### Ainda falta ligar
+
+O contrato atual em `MODELO-DE-DADOS.md` não especifica uma lista própria de pré-checkouts da Sessão de Viabilidade: `dados_atm_leads` é a lista geral de leads e tem apenas o indicador `no_pre_checkout`. Não usar essa lista como se fosse a lista da SV. Falta confirmar com o Galego a RPC/fonte para e-mails únicos e os campos disponíveis, como a oferta da sessão será identificada sem código inventado e se `dados_marcar_teste` / `dados_desmarcar_teste` atende à marcação por pessoa na SV. A ação de marcar teste fica pendente desse contrato; não há botão falso no mockup.
+
+Como testar: abrir o dashboard ATM e localizar a seção abaixo dos cards gerais. Os cards abrem o modal; a aba Pessoas mostra o estado vazio sem contatos; a aba Resumo informa que os dados ainda não foram conectados. Verificar também o gate `contato.ver` no servidor e a conversão unitária da fórmula. Não é preciso alterar o banco.
