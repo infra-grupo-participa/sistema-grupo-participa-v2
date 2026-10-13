@@ -110,10 +110,11 @@ Aba "Histórico". Situação da aplicação: `infra/supabase/migrations/20261009
   `pre_checkout`. CAC, ROAS, CPL, conversões e retenção são calculados na tela, nunca gravados.
 - A edição OUT/26 entra depois do ciclo fechado, pelo passo SQL da seção 4 do `.explain.md`.
 
-## 0d. Venda do escritório em tempo real (20261013193000, 13/10/2026): NÃO APLICADA
+## 0d. Venda do escritório em tempo real (20261013193000, 13/10/2026): APLICADA, webhook ainda não cadastrado na Hotmart
 
-**Situação:** migration, ensaio, reversão e edge escritos e ensaiados em transação desfeita; **nada aplicado em produção,
-edge não publicada, webhook não cadastrado na Hotmart.** Enquanto isso, a venda do ATM continua de hora em hora.
+**Situação (13/10/2026):** migration **aplicada** em produção e edge **publicada** (responde 503 até o secret
+`HOTMART_HOTTOK_ESCRITORIO` ser criado no Supabase com o hottok da conta escritório). **Webhook ainda não cadastrado na Hotmart**:
+enquanto isso, a venda do ATM continua de hora em hora (sync). Depois de cadastrado, a venda aparece em segundos.
 
 - **Caminho:** Hotmart (conta escritório) → edge `hotmart-escritorio-webhook` (header `x-hotmart-hottok` contra o secret
   `HOTMART_HOTTOK_ESCRITORIO`) → `dados.hotmart_ao_vivo_gravar` → tabela-ponte `dados.hotmart_ao_vivo` (uma linha por

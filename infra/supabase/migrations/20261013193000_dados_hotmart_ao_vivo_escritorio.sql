@@ -1,8 +1,10 @@
 -- 20261013193000 (marca 20261013av): venda da conta escritório aparece no dashboard em segundos (Sessão de Viabilidade
 -- do Seminário ATM, chave atm-elaine-1-2026-10, produto 5238525), por um webhook próprio da conta.
 --
--- STATUS: NÃO APLICADA. Ensaiada em transação desfeita em 13/10/2026 (20261013193000_ensaio.sql). Reversão pronta e
--- ensaiada (20261013193000_reversao.sql). Relatório: 20261013193000.explain.md. Card ClickUp 17tya50ga24.
+-- STATUS: APLICADA em produção em 13/10/2026 (ok do Victor), versão 20261013193000, com a linha em
+-- supabase_migrations.schema_migrations na mesma transação; md5 gravado = 3adc9cbe2b7adebb309d1f46f7c54601 = este arquivo antes desta
+-- troca de STATUS. Ensaiada em transação desfeita (20261013193000_ensaio.sql). Reversão pronta e ensaiada
+-- (20261013193000_reversao.sql). Relatório: 20261013193000.explain.md. Card ClickUp 17tya50ga24.
 -- Ordem de publicação: esta migration → secret HOTMART_HOTTOK_ESCRITORIO → deploy da edge hotmart-escritorio-webhook
 -- → por último o cadastro do webhook na Hotmart (conta escritório). Sem o cadastro, nada entra e nada muda na tela.
 --
