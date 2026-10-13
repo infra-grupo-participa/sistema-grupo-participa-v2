@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { baseFicticia } from '../infrastructure/fixtures/gerador';
 import { CONFIG_BLACK } from '../infrastructure/fixtures/catalogo';
-import { conversaoPagina, ctr, agregar, indexar, ingressoGrupo } from './metricas';
+import { conversaoPagina, ctr, agregar, indexar, ingressoGrupoGeral, mqlDoRecorte } from './metricas';
 import { anunciosDoCriativo, funilCriativo, idDoCriativo, ORDENS_GALERIA, ordenar, painel, resumir, serieDiariaAnuncio, valorOrdem } from './criativos';
 import { recorteDaTela } from './grupo';
 
@@ -146,24 +146,36 @@ describe('criativos e páginas', () => {
     const s = serieDiariaAnuncio(a.id, b.dias, b.linhas, dias);
     expect(s.reduce((x, d) => x + d.gasto, 0)).toBeCloseTo(a.resumo.gasto, 6);
   });
-  it('funil do criativo (captação): 5 etapas, cada ponte é a função de metricas.ts no mesmo recorte', () => {
+  it('funil do criativo (captação): 6 etapas, cada ponte é a função de metricas.ts no mesmo recorte', () => {
     const a = painel('anuncio', { campanha: 'cp-iscas' }, b.dias, b.linhas, idx, regua, nomePagina)[0];
-    const dias = b.dias.filter((d) => d.anuncioId === a.id); const linhas = b.linhas.filter((l) => l.anuncioId === a.id);
-    const agora = new Date('2026-11-04T12:00:00-03:00');
+    const dias = b.dias.filter((d) => a.anuncios.includes(d.anuncioId)); const linhas = b.linhas.filter((l) => l.anuncioId !== null && a.anuncios.includes(l.anuncioId));
     const r = resumir(dias, linhas, idx, regua, false);
-    const f = funilCriativo(r, dias, linhas, idx, agora);
-    expect(f.map((e) => e.rotulo)).toEqual(['Impressões', 'Cliques', 'Views da página', 'Leads pagos', 'Ingresso no grupo (48h)']);
+    const f = funilCriativo(r, dias, linhas, idx);
+    expect(f.map((e) => e.rotulo)).toEqual(['Impressões', 'Cliques', 'Views da página', 'Leads pagos', 'Total de MQL', 'Ingresso no grupo']);
     expect(f[0].ponte).toBeNull();
     expect(f[1].ponte!.taxa).toEqual(ctr(agregar(dias)));
     expect(f[1].ponte!.taxa.valor).toBeCloseTo(r.cliques! / dias.filter((d) => d.cliquesLink !== null).reduce((s, d) => s + d.impressoes, 0), 9);
     expect(f[2].ponte!.taxa).toEqual(r.connect);
     expect(f[3].ponte!.taxa).toEqual(conversaoPagina(dias, linhas, idx));
-    expect(f[4].ponte!.taxa).toEqual(ingressoGrupo(linhas, 48, agora));
+    expect(f[4].ponte!.rotulo).toBe('% de MQL');
+    expect(f[4].ponte!.taxa).toEqual(mqlDoRecorte(linhas));
     expect(f[4].valor).toBe(f[4].ponte!.taxa.num);
+    expect(f[5].ponte!.taxa).toEqual(ingressoGrupoGeral(linhas));
+    expect(f[5].valor).toBe(f[5].ponte!.taxa.num);
+  });
+  it('MQL e ingresso: pessoas únicas, ingresso sobre os leads gerais e sem janela de horas', () => {
+    const L = (pessoaId: string, mql: boolean | null, entrou: string | null) => ({ ...b.linhas[0], leadId: `l-${pessoaId}-${Math.random()}`, pessoaId, mql, entrouGrupoEm: entrou });
+    const t = [L('a', true, '2026-10-05T10:00:00Z'), L('a', true, null), L('b', false, '2026-10-30T10:00:00Z'), L('c', true, null), L('d', null, null)];
+    const m = mqlDoRecorte(t);
+    expect(m.num).toBe(2); expect(m.den).toBe(4); expect(m.valor).toBeCloseTo(0.5, 9);
+    const g = ingressoGrupoGeral(t); // a e b entraram, qualquer data; base = os 4 leads (não só os MQL)
+    expect(g.num).toBe(2); expect(g.den).toBe(4); expect(g.valor).toBeCloseTo(0.5, 9);
+    expect(mqlDoRecorte([]).valor).toBeNull(); // sem lead: Sem dado, nunca 0
+    expect(ingressoGrupoGeral([]).valor).toBeNull();
   });
   it('funil do criativo (C1, distribuição): impressões → vídeo 75%', () => {
     const c1 = painel('anuncio', {}, b.dias, b.linhas, idx, regua, nomePagina).find((x) => idx.campanhaDoAnuncio(x.id)?.funil === 'c1')!;
-    const f = funilCriativo(c1.resumo, [], [], idx, new Date());
+    const f = funilCriativo(c1.resumo, [], [], idx);
     expect(f.map((e) => e.chave)).toEqual(['impressoes', 'video75']);
     expect(f[1].ponte!.taxa).toEqual(c1.resumo.video75);
   });

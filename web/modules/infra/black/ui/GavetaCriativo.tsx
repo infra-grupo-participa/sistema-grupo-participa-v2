@@ -22,7 +22,7 @@ export function GavetaCriativo({ d, id }: { d: DadosTela; id: string }) {
     const camps = ids.map((x) => d.idx.campanhaDoAnuncio(x));
     const distribuicao = camps.every((c) => c === null || c.funil === 'c1' || c.funil === null);
     const resumo = resumir(dias, linhas, d.idx, d.config.reguaCpl, distribuicao);
-    return { ids, dias, linhas, distribuicao, resumo, funil: funilCriativo(resumo, dias, linhas, d.idx, d.agora), serie: serieDiariaAnuncio(ids, dias, linhas, d.diasPeriodo) };
+    return { ids, dias, linhas, distribuicao, resumo, funil: funilCriativo(resumo, dias, linhas, d.idx), serie: serieDiariaAnuncio(ids, dias, linhas, d.diasPeriodo) };
   }, [d, id]);
   if (!a) return <p className="text-sm text-[var(--fg-3)]">Criativo não encontrado no catálogo.</p>;
   // Onde o criativo roda: nomes exatos das campanhas e dos conjuntos (sem repetir), na ordem dos anúncios.

@@ -139,6 +139,27 @@ const HORA = 3_600_000;
  * já fechou em `agora` (não pune quem se cadastrou há 1 hora); numerador = dessas, quem entrou dentro da janela.
  * Quem já estava no grupo antes do cadastro conta como dentro.
  */
+/**
+ * MQL do recorte (Victor, 13/10/2026): pessoas únicas que são MQL (advogado, contador ou estudante de Direito, o
+ * `mql` que o banco calcula) ÷ pessoas únicas do recorte. A pessoa conta uma vez, mesmo com mais de um envio.
+ * Linha sem `mql` (o demo não manda em todas) não conta como MQL.
+ */
+export function mqlDoRecorte(linhas: readonly LinhaPerfil[]): Taxa {
+  const todas = new Set<string>(); const mql = new Set<string>();
+  for (const l of linhas) { todas.add(l.pessoaId); if (l.mql) mql.add(l.pessoaId); }
+  return taxa(mql.size, todas.size, 'Pessoas únicas MQL ÷ pessoas únicas do recorte.');
+}
+
+/**
+ * Ingresso no grupo geral: pessoas únicas que entraram no grupo, em qualquer data, ÷ pessoas únicas do recorte
+ * (os leads gerais, não só os MQL). Sem janela de horas, diferente de `ingressoGrupo`.
+ */
+export function ingressoGrupoGeral(linhas: readonly LinhaPerfil[]): Taxa {
+  const todas = new Set<string>(); const entrou = new Set<string>();
+  for (const l of linhas) { todas.add(l.pessoaId); if (l.entrouGrupoEm) entrou.add(l.pessoaId); }
+  return taxa(entrou.size, todas.size, 'Pessoas únicas que entraram no grupo ÷ pessoas únicas do recorte (todos os leads).');
+}
+
 export function ingressoGrupo(linhas: readonly LinhaPerfil[], horas: number, agora: Date): Taxa {
   const pessoas = new Map<string, { criado: number; entrou: number | null }>();
   for (const l of linhas) {
