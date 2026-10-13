@@ -1,4 +1,4 @@
--- Ensaio de 20261013001500 (uma foto nova por ciclo). Transação desfeita: nada persiste e nenhuma chamada HTTP sai
+-- Ensaio de 20261013001456 (uma foto nova por ciclo). Transação desfeita: nada persiste e nenhuma chamada HTTP sai
 -- (o pg_net só envia depois do commit). Saída só com contagens, nomes de campanha e md5; nenhum telefone.
 begin;
 set local lock_timeout = '5s';
@@ -9,9 +9,9 @@ insert into pg_temp._z_out (passo, linha) select '01 md5 funcao antes', md5(pg_g
 insert into pg_temp._z_out (passo, linha) select '01 acl antes', (select coalesce(proacl::text,'') || ' dono ' || pg_get_userbyid(proowner) from pg_proc where oid = 'dados.grupo_foto_ciclo'::regproc);
 
 -- migration
--- 20261013001500: foto do grupo do SendFlow abre no máximo UMA exportação por ciclo
+-- 20261013001456: foto do grupo do SendFlow abre no máximo UMA exportação por ciclo
 --
--- STATUS: ver 20261013001500.explain.md. Ensaio: 20261013001500_ensaio.sql. Reversão: 20261013001500_reversao.sql.
+-- STATUS: ver 20261013001456.explain.md. Ensaio: 20261013001456_ensaio.sql. Reversão: 20261013001456_reversao.sql.
 --
 -- POR QUE (diagnóstico do Maestro, autorizado pelo Victor, 13/10/2026 ~00:10 UTC)
 --   dados.grupo_foto_ciclo() abria no mesmo minuto a foto de todos os grupos elegíveis. O export-leads do SendFlow
@@ -31,7 +31,7 @@ CREATE OR REPLACE FUNCTION dados.grupo_foto_ciclo()
  SET search_path TO ''
 AS $function$
 -- 20261008200000: exportar -> baixar -> processar; uma foto nova por grupo a cada 10 min (9 de folga para o cron)
--- 20261013001500: só uma foto nova por ciclo (limite por minuto do export-leads do SendFlow)
+-- 20261013001456: só uma foto nova por ciclo (limite por minuto do export-leads do SendFlow)
 declare
   r record;
   v_chave_api text;
@@ -111,7 +111,7 @@ begin
   if v_chave_api is null then
     return format('feitas %s, erros %s; sem segredo sendflow_api_key no Vault: nenhuma foto nova', v_feitas, v_erros);
   end if;
-  -- 20261013001500: no máximo UMA foto nova por ciclo. O SendFlow limita export-leads por minuto: abrir todas no
+  -- 20261013001456: no máximo UMA foto nova por ciclo. O SendFlow limita export-leads por minuto: abrir todas no
   -- mesmo minuto fazia só uma passar e as outras levarem 403 (e, sem ordem, sempre a mesma ficava de fora).
   -- Vai primeiro quem tem a última foto concluída mais antiga (quem nunca concluiu antes), depois a tentativa mais antiga.
   for r in
@@ -150,7 +150,7 @@ insert into pg_temp._z_out (passo, linha) select '05 ciclo 2', dados.grupo_foto_
 insert into pg_temp._z_out (passo, linha) select '05 ciclos 1+2 abriram', (select string_agg(g.sendflow_campanha, ' | ' order by f.id) from dados.grupo_fotos f join dados.dashboard_grupos g on g.id = f.grupo_id where f.id > (select max_id from pg_temp._z_ini));
 
 -- reversão
--- Reversão de 20261013001500: volta dados.grupo_foto_ciclo() ao corpo lido no banco antes da mudança
+-- Reversão de 20261013001456: volta dados.grupo_foto_ciclo() ao corpo lido no banco antes da mudança
 -- (todas as fotos elegíveis abertas no mesmo ciclo). Não apaga nada de dados.grupo_fotos.
 
 CREATE OR REPLACE FUNCTION dados.grupo_foto_ciclo()

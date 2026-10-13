@@ -219,7 +219,7 @@ tag like 'BF26 - %' and ocorreu_em < '2026-10-12 23:50+00'`.
 Checagem de 12/10 ~23:58 UTC: os telefones com data na planilha batem com o banco (Advogados 47, Contadores 16,
 Outros 39). A foto do grupo bate com o total da planilha em Advogados (89) e Contadores (33). Risco: o SendFlow devolve
 `export-leads: http 403` para duas das três BF26 em cada ciclo do cron `dados-grupo-foto`. **Corrigido pela migration
-`20261013001500`** (aplicada em 13/10 às 00:14 UTC): o ciclo abre no máximo uma foto, primeiro a de quem tem a foto
+`20261013001456`** (aplicada em 13/10 às 00:14 UTC): o ciclo abre no máximo uma foto, primeiro a de quem tem a foto
 concluída mais antiga. Cada grupo fica com foto a cada ~10 min.
 
 - **Ao vivo.** SendHook das 3 campanhas BF26 → n8n `B7RBTJkAl9ynPNZh` (`/webhook/bf26-grupo-whatsapp`) → "Filtro BF26"
