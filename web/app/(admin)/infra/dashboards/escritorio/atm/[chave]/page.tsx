@@ -16,5 +16,5 @@ export default async function SeminarioAtmPage({ params }: { params: Promise<{ c
   const projeto = buscarAtm(chave);
   if (!projeto) notFound();
   const acesso = ACESSO_DEPARTAMENTOS.acessoV2 ? user?.acesso : await getCurrentUserAccess();
-  return <SeminarioAtmClient projeto={projeto} isMaster={acesso?.master === true} mostrarAvisoTeste={deveExibirAvisoTesteAtm(user?.id)} />;
+  return <SeminarioAtmClient projeto={projeto} isMaster={acesso?.master === true} podeVerContato={temCapacidade(user, 'contato.ver', ACESSO_DEPARTAMENTOS)} mostrarAvisoTeste={deveExibirAvisoTesteAtm(user?.id)} />;
 }
