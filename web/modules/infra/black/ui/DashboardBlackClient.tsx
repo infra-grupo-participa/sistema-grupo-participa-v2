@@ -10,9 +10,11 @@ import { Button, EmptyState, Loading, SectionCard, Tabs, idsAba } from '@/shared
 import { Icon } from '@/shared/ui/icons';
 import type { FonteDadosBlack } from '../application/ports';
 import { obterFonte } from '../infrastructure/fonte';
+import { alinharIds } from '../domain/alinhar';
+import { chaveRecorte, recorteGrupoDe } from '../domain/grupo';
 import { filtrarDias, filtrarLinhas, indexar } from '../domain/metricas';
 import { diaDe, diasDoPeriodo, escreverRecorte, periodoDe } from '../domain/recorte';
-import type { AbaBlack, ConfigBlack, LinhaPerfil, Marcos, MensageriaBlack, Recorte, Resultado, TotalPeriodo, TrafegoBlack } from '../domain/tipos';
+import type { AbaBlack, ConfigBlack, GrupoResumoBlack, LinhaPerfil, Marcos, MensageriaBlack, Recorte, Resultado, TotalPeriodo, TrafegoBlack } from '../domain/tipos';
 import type { AlvoGaveta, DadosTela } from './contexto';
 import { AvisoBloco } from './pecas';
 import { SeletorGlobal } from './SeletorGlobal';
@@ -34,8 +36,8 @@ const ABAS_TELA: { k: AbaBlack; l: string }[] = [
   { k: 'historico', l: 'Histórico' },
 ];
 
-interface Bloco<T> { data: T | null; semDado: boolean; erro: string | null; lidoEm: Date | null }
-const vazio = <T,>(): Bloco<T> => ({ data: null, semDado: false, erro: null, lidoEm: null });
+interface Bloco<T> { data: T | null; semDado: boolean; erro: string | null; aviso: string | null; lidoEm: Date | null }
+const vazio = <T,>(): Bloco<T> => ({ data: null, semDado: false, erro: null, aviso: null, lidoEm: null });
 
 function comTempo<T>(p: Promise<T>, ms = TEMPO_LIMITE_MS): Promise<T> {
   return new Promise<T>((ok, falha) => {
@@ -49,7 +51,7 @@ async function lerBloco<T>(nome: string, f: () => Promise<Resultado<T>>, set: (f
   try {
     const r = await comTempo(f());
     if (r.erro) set((b) => ({ ...b, erro: `Falha ao ler ${nome}: ${r.erro}` }));
-    else set(() => ({ data: r.data, semDado: r.semDado, erro: null, lidoEm: new Date() }));
+    else set(() => ({ data: r.data, semDado: r.semDado, erro: null, aviso: r.aviso ?? null, lidoEm: new Date() }));
   } catch (e) {
     const motivo = e instanceof Error && e.message === 'tempo esgotado' ? 'tempo esgotado' : 'erro na leitura';
     set((b) => ({ ...b, erro: `Falha ao ler ${nome} (${motivo}).` }));
@@ -59,8 +61,10 @@ async function lerBloco<T>(nome: string, f: () => Promise<Resultado<T>>, set: (f
 const horaCurta = (d: Date) => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 const dataHora = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 
-export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial }: {
+export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, isMaster = false }: {
   chave: string; titulo: string; relogio: string | null; recorteInicial: Recorte;
+  /** Master vê e marca os testes (padrão do ATM). */
+  isMaster?: boolean;
 }) {
   const router = useRouter();
   const [recorte, setRecorte] = useState<Recorte>(recorteInicial);
@@ -72,6 +76,7 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial }:
   const [perfil, setPerfil] = useState<Bloco<LinhaPerfil[]>>(vazio);
   const [mensageria, setMensageria] = useState<Bloco<MensageriaBlack>>(vazio);
   const [marcos, setMarcos] = useState<Bloco<Marcos>>(vazio);
+  const [grupo, setGrupo] = useState<Bloco<GrupoResumoBlack>>(vazio);
   const [versao, setVersao] = useState(0);
   const [lida, setLida] = useState<string | null>(null);
   const [gaveta, setGaveta] = useState<AlvoGaveta | null>(null);
@@ -109,12 +114,21 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial }:
         const r = await fonte.trafego(chave, periodo);
         return { data: r.data.totais, semDado: r.semDado, erro: r.erro };
       }, setTotais),
-      lerBloco('os cadastros', () => fonte.perfil(chave, completo), setPerfil),
+      // Master recebe também os testes (para ver e desmarcar); a tela tira os testes de todas as contas.
+      lerBloco('os cadastros', () => fonte.perfil(chave, completo, { incluirTeste: isMaster }), setPerfil),
       lerBloco('a mensageria', () => fonte.mensageria(chave, periodo), setMensageria),
       lerBloco('os marcos da live', () => fonte.marcos(chave), setMarcos),
     ]).finally(() => { if (vivo) { setLida(marca); ultimaLeitura.current = Date.now(); setRelogioTela(new Date()); } });
     return () => { vivo = false; };
-  }, [fonte, chave, de, ate, inicio, hoje, versao]);
+  }, [fonte, chave, de, ate, inicio, hoje, versao, isMaster]);
+
+  // 3) grupo: período e nó (funil/canal) da tela vão ao servidor (p_recorte); sem teste.
+  const alvoGrupo = useMemo(() => recorteGrupoDe({ funil: recorte.funil, canal: recorte.canal }), [recorte.funil, recorte.canal]);
+  const marcaRecorte = alvoGrupo.ok ? chaveRecorte(alvoGrupo.recorte) : 'sem-numero';
+  useEffect(() => {
+    if (!fonte || !de || !ate || !alvoGrupo.ok) return;
+    void lerBloco('o grupo', () => fonte.grupo(chave, { de, ate }, alvoGrupo.recorte), setGrupo);
+  }, [fonte, chave, de, ate, marcaRecorte, versao]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Releitura a cada 5 min, só com a aba visível; ao voltar para a aba, relê se passou do prazo.
   useEffect(() => {
@@ -138,7 +152,10 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial }:
     const t = trafego.data;
     const idx = indexar(t);
     const diasPeriodoSemFiltro = t.dias.filter((d) => d.dia >= periodo.de && d.dia <= periodo.ate);
-    const linhasTodas = perfil.data.filter((l) => !l.teste);
+    // O lead traz os ids do Meta; o tráfego, os internos. Casa pelo anúncio (domain/alinhar.ts).
+    const linhasBase = alinharIds(perfil.data, t);
+    const linhasTodas = linhasBase.filter((l) => !l.teste);
+    const noPeriodo = (l: LinhaPerfil) => { const d = diaDe(l.criadoEm); return d >= periodo.de && d <= periodo.ate; };
     const linhasPeriodoSemFiltro = linhasTodas.filter((l) => { const d = diaDe(l.criadoEm); return d >= periodo.de && d <= periodo.ate; });
     const filtro = { funil: recorte.funil, canal: recorte.canal };
     return {
@@ -147,16 +164,24 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial }:
       diasTodos: t.dias, diasPeriodoSemFiltro, dias: filtrarDias(diasPeriodoSemFiltro, idx, filtro),
       linhasTodas, linhasPeriodoSemFiltro, linhas: filtrarLinhas(linhasPeriodoSemFiltro, filtro),
       mensageria: mensageria.data, mensageriaSemDado: mensageria.semDado || mensageria.data === null, marcos: marcos.data,
+      perfilSemDado: perfil.semDado, avisoPerfil: perfil.aviso,
+      linhasTeste: isMaster ? linhasBase.filter((l) => l.teste && noPeriodo(l)) : [],
+      grupo: alvoGrupo.ok
+        ? { data: grupo.data, semDado: grupo.semDado || grupo.data === null, aviso: grupo.aviso, motivo: null, erro: grupo.erro }
+        : { data: null, semDado: true, aviso: null, motivo: alvoGrupo.motivo, erro: null },
+      isMaster, recarregar: () => setVersao((v) => v + 1),
       irPara, abrirGaveta: setGaveta,
     };
-  }, [fonte, cfg, agora, periodo, trafego.data, perfil.data, totais.data, mensageria.data, mensageria.semDado, marcos.data, recorte, chave, irPara]);
+  }, [fonte, cfg, agora, periodo, trafego.data, perfil.data, perfil.semDado, perfil.aviso, totais.data, mensageria.data, mensageria.semDado, marcos.data, grupo, alvoGrupo, isMaster, recorte, chave, irPara]);
 
   const marcaAtual = de && ate && inicio && hoje ? `${de}|${ate}|${inicio}|${hoje}|${versao}` : null;
   const lendo = marcaAtual !== null && lida !== marcaAtual;
-  const erros = [config, trafego, totais, perfil, mensageria, marcos].filter((b) => b.erro);
+  const erros = [config, trafego, totais, perfil, mensageria, marcos, grupo].filter((b) => b.erro);
+  const avisos = ([['Tráfego', trafego], ['Cadastros', perfil], ['Grupo', grupo]] as const).filter(([, b]) => b.aviso && !b.erro);
   const esmaecido = Boolean(trafego.erro || perfil.erro || config.erro);
   const lidoEm = trafego.lidoEm ?? perfil.lidoEm;
-  const semFonteReal = config.semDado || (trafego.semDado && perfil.semDado);
+  // Só a config derruba a tela inteira: sem tráfego ou sem cadastros, cada bloco mostra o seu "Sem dado".
+  const semFonteReal = config.semDado;
   const ids = (k: AbaBlack) => idsAba('black-principal', k);
 
   return (
@@ -166,7 +191,7 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial }:
           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Infra / Dashboards / CSM</div>
           <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">{titulo}</h1>
           <p className="mt-1 text-sm text-[var(--fg-2)]">
-            {cfg ? `Live em ${dataHora(cfg.liveEm)}. ` : ''}
+            {cfg?.liveEm ? `Live em ${dataHora(cfg.liveEm)}. ` : ''}
             {trafego.data?.coletadoEm ? `Tráfego coletado em ${dataHora(trafego.data.coletadoEm)}.` : 'Coleta do tráfego: sem dado.'}
           </p>
         </div>
@@ -189,13 +214,16 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial }:
 
       {erroFonte && <p role="alert" className="text-sm text-[var(--red)]">{erroFonte}</p>}
       {erros.map((b) => <AvisoBloco key={b.erro} erro={b.erro} lidoEm={b.lidoEm} agora={relogioTela} />)}
+      {avisos.map(([nome, b]) => (
+        <p key={nome} role="note" className="text-xs text-[var(--fg-3)]">{nome}: {b.aviso}. Os números deste bloco ficam como Sem dado.</p>
+      ))}
 
       {!fonte || (!dados && !semFonteReal && (lendo || !config.lidoEm)) ? (
         <Loading label="Lendo os dados da Black…" />
       ) : semFonteReal ? (
         <SectionCard title="Sem dado">
-          <EmptyState icon="chart" title="A fonte real ainda não está ligada"
-            hint="Todos os números ficam como Sem dado até o adaptador real existir. O que falta está em docs/dashboard-black/README.md (BLOQUEIOS)." />
+          <EmptyState icon="chart" title="Dashboard sem cadastro"
+            hint="A chave não tem cadastro na fonte real: todos os números ficam como Sem dado. Ver docs/dashboard-black/README.md." />
         </SectionCard>
       ) : !dados ? (
         <SectionCard title="Sem dado"><EmptyState title="Não há leitura para mostrar" hint="Tente Atualizar." /></SectionCard>

@@ -18,11 +18,11 @@ export default async function DashboardCsmPage({ params, searchParams }: { param
   const { chave } = await params;
   const dashboard = buscarDashboard(chave);
   if (!dashboard) notFound();
+  const acesso = ACESSO_DEPARTAMENTOS.acessoV2 ? user?.acesso : await getCurrentUserAccess();
   if (dashboard.modelo === 'jornada-captacao') {
     const busca = await searchParams;
     const relogio = typeof busca.relogio === 'string' ? busca.relogio : null;
-    return <DashboardBlackClient chave={dashboard.chave} titulo={dashboard.titulo} relogio={relogio} recorteInicial={lerRecorte(busca)} />;
+    return <DashboardBlackClient chave={dashboard.chave} titulo={dashboard.titulo} relogio={relogio} recorteInicial={lerRecorte(busca)} isMaster={acesso?.master === true} />;
   }
-  const acesso = ACESSO_DEPARTAMENTOS.acessoV2 ? user?.acesso : await getCurrentUserAccess();
   return <DashboardPresencialClient chave={dashboard.chave} isMaster={acesso?.master === true} />;
 }

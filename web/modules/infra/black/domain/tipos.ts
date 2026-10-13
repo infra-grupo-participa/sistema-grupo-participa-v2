@@ -23,19 +23,26 @@ export interface Periodo { de: string; ate: string }
 export interface FiltroCriativos { campanha?: string; conjunto?: string; anuncio?: string; pagina?: string }
 export interface Recorte { funil: FiltroFunil; canal: FiltroCanal; periodo: string; aba: AbaBlack; criativos: FiltroCriativos }
 
+/** Régua de CPL do Caio (meta e teto, em reais). */
+export interface ReguaCpl { meta: number; teto: number }
+
+/**
+ * Configuração do evento. Na fonte real só `inicio` vem do cadastro (dados.dashboards.periodo_inicio); as metas
+ * existem só no plano (CONCEPCAO), não no banco, e ficam null ("Sem dado") até terem cadastro. Ver o README.
+ */
 export interface ConfigBlack {
   chave: string;
   /** Primeiro dia com gasto (antecipação). */
   inicio: string;
-  /** Primeiro dia da meta diária de leads. */
-  inicioCaptacao: string;
-  /** ISO com fuso (-03:00). */
-  liveEm: string;
-  metaLeads: number;
-  metaLeadsDia: number;
-  cplAlvoMedio: number;
-  reguaCpl: { meta: number; teto: number };
-  orcamentoTotal: number;
+  /** Primeiro dia da meta diária de leads. null = sem cadastro. */
+  inicioCaptacao: string | null;
+  /** ISO com fuso (-03:00). null = sem cadastro. */
+  liveEm: string | null;
+  metaLeads: Valor;
+  metaLeadsDia: Valor;
+  cplAlvoMedio: Valor;
+  reguaCpl: ReguaCpl | null;
+  orcamentoTotal: Valor;
   previstoPorFase: Record<Fase, Valor>;
   reserva: Valor;
   /** Tamanho da base da casa (nó "Base da casa" da Jornada). */
@@ -45,11 +52,19 @@ export interface ConfigBlack {
   fontes: Record<string, string>;
 }
 
-export interface Campanha { id: string; nome: string; canal: Canal; funil: Funil | null; fase: Fase | null }
+/** Etapa do nome da campanha (mkt_trafego.etapa_black): C1, C2 ou C3; null = sem o código no nome ("Sem etapa"). */
+export type EtapaCampanha = 'C1' | 'C2' | 'C3';
+export interface Campanha {
+  id: string; nome: string; canal: Canal; funil: Funil | null; fase: Fase | null;
+  /** Só a fonte real preenche: etapa e subtipo como vêm do banco, e se o nome tem dois subtipos (conflito). */
+  etapa?: EtapaCampanha | null; subtipo?: string | null; conflito?: boolean | null;
+}
 export interface Conjunto { id: string; campanhaId: string; nome: string; isca: Isca | null; conjuntoC3: ConjuntoC3 | null }
 export interface Anuncio {
   id: string; conjuntoId: string; nome: string; formato: 'video' | 'imagem' | null;
   paginaId: string | null; miniaturaUrl: string | null; linkPrevia: string | null; linkGerenciador: string | null;
+  /** Id do anúncio no Meta (mkt_trafego.anuncios.anuncio_externa). Só a fonte real preenche; casa com o lead pela utm. */
+  idExterno?: string | null;
 }
 export interface Pagina { id: string; url: string; rotulo: string; porta: Porta | null; isca: Isca | null }
 export interface DesempenhoDia {
@@ -62,6 +77,10 @@ export interface TotalPeriodo { nivel: 'campanha' | 'conjunto' | 'anuncio'; id: 
 export interface TrafegoBlack {
   campanhas: Campanha[]; conjuntos: Conjunto[]; anuncios: Anuncio[]; paginas: Pagina[];
   dias: DesempenhoDia[]; totais: TotalPeriodo[]; coletadoEm: string | null;
+  /** Fonte real: primeiro dia com quebra por anúncio (antes dele o gasto só existe por campanha). */
+  anuncioDesde?: string | null;
+  /** Fonte real: gasto do período por campanha (dias_campanha), em reais. Confere com a soma por anúncio. */
+  gastoCampanhas?: { campanhaId: string; gasto: number }[];
 }
 
 /** Uma linha por cadastro (porta). Sem dado pessoal: nome, e-mail e telefone só em LeadDetalhe. */
@@ -76,6 +95,22 @@ export interface LinhaPerfil {
   uf: string | null; ufOrigem: 'ddd' | null;
   listaOrigem: string | null; temperaturaBase: string | null; jaNaBase: boolean | null;
   entrouGrupoEm: string | null; teste: boolean;
+  // Campos do contrato da B (dados_black_perfil). Opcionais: o demo não tem todos.
+  /** Página do envio, string exata da fonte: captacao, fluxograma, consultoria, checkup ou futurometro. */
+  pagina?: string | null;
+  /** MQL calculado no banco (advogado, contador ou estudante de Direito). */
+  mql?: boolean | null;
+  /** Sugestão do banco de que o envio é teste. Só sugere: nunca marca sozinho. */
+  pareceTeste?: boolean | null;
+  /** Problemas de cadastro que o banco apontou (profissao_vazia, sem_utm, utm_campaign_fora_do_padrao). */
+  aCorrigir?: string[];
+  /** Entrada no grupo vinda só da foto do grupo (sem a hora exata do webhook). */
+  entradaGrupoAproximada?: boolean | null;
+  /** Ids do Meta como vieram da utm (o que vem depois do |). Os campos campanhaId/conjuntoId/anuncioId da tela são
+   * os ids internos do tráfego, preenchidos só quando o anúncio do Meta casa com um anúncio do tráfego. */
+  campanhaMeta?: string | null; conjuntoMeta?: string | null; anuncioMeta?: string | null;
+  /** Respostas próprias de cada página, como vieram do banco. */
+  campos?: Record<string, unknown> | null;
 }
 export interface LeadDetalhe { leadId: string; nome: string | null; email: string | null; telefone: string | null }
 
@@ -108,7 +143,42 @@ export interface MensageriaBlack {
   regua: { janela: '2h' | '12h' | '24h'; enviados: Valor; ingressos: Valor }[];
 }
 export interface Marcos { presencaLive: Valor; vendas: Valor }
-export interface Resultado<T> { data: T; semDado: boolean; erro: string | null }
+/**
+ * Resultado de uma leitura. `erro` = falha (a tela segura a última leitura e esmaece). `aviso` = sem dado
+ * legítimo com motivo (ex.: "Fonte ainda não ligada" quando a função ainda não existe no banco): não é falha.
+ */
+export interface Resultado<T> { data: T; semDado: boolean; erro: string | null; aviso?: string | null }
+/** Resultado de uma ação (marcar ou desmarcar teste): quantas marcações mudaram, ou o erro. */
+export interface ResultadoAcao { data: number | null; erro: string | null }
+
+/** Segmento do grupo de WhatsApp no contrato da B. */
+export type SegmentoGrupo = 'advogado' | 'contador' | 'outros';
+/** Um grupo do SendFlow. `campanha` = nome exato da campanha no SendFlow. */
+export interface GrupoBlack {
+  campanha: string; segmento: SegmentoGrupo | null;
+  unicos: Valor; unicosWebhook: Valor; unicosSoFoto: Valor;
+  /** Dos leads do recorte, quantos estão neste grupo. null sem recorte. */
+  unicosCruzados: Valor;
+}
+/** Leads únicos (pessoa por telefone, 8 últimos dígitos; senão e-mail) do período e do recorte, sem teste. */
+export interface LeadsGrupoBlack {
+  unicos: Valor; mql: Valor; advogado: Valor; estudanteDireito: Valor; advogadoMaisEstudante: Valor;
+  contador: Valor; outros: Valor; semProfissao: Valor; naoMql: Valor;
+}
+/** Recorte que o servidor aplica no grupo (p_recorte). */
+export type TipoRecorteGrupo = 'porta' | 'isca' | 'campanha' | 'conjunto' | 'anuncio';
+export interface RecorteGrupo { tipo: TipoRecorteGrupo; valor: string }
+/** Resposta de dados_black_grupo, já em camelCase. */
+export interface GrupoResumoBlack {
+  periodo: { de: string | null; ate: string | null };
+  recorte: RecorteGrupo | null;
+  grupos: GrupoBlack[];
+  unicosGruposMql: Valor; unicosGruposTotal: Valor;
+  /** Dos leads MQL do recorte, quantos estão nos grupos de MQL. null sem recorte. */
+  unicosCruzadosMql: Valor;
+  leads: LeadsGrupoBlack;
+  atualizado: { ultimoEventoWebhook: string | null; ultimaFoto: string | null };
+}
 
 export const FUNIS: readonly Funil[] = ['c1', 'consultoria', 'iscas', 'c3'];
 export const FASES: readonly Fase[] = ['antecipacao', 'distribuicao', 'captacao', 'aquecimento', 'remarketing', 'live_carrinho'];

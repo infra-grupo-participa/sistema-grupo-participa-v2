@@ -2,7 +2,7 @@
 import type { FonteDadosBlack } from '../application/ports';
 import type { IndiceTrafego } from '../domain/metricas';
 import type {
-  ConfigBlack, DesempenhoDia, LinhaPerfil, Marcos, MensageriaBlack, Pagina, Periodo, Recorte, TotalPeriodo, TrafegoBlack,
+  ConfigBlack, DesempenhoDia, GrupoResumoBlack, LinhaPerfil, Marcos, MensageriaBlack, Pagina, Periodo, Recorte, TotalPeriodo, TrafegoBlack,
 } from '../domain/tipos';
 
 export type AlvoGaveta = { tipo: 'etapa'; id: string } | { tipo: 'criativo'; id: string };
@@ -36,6 +36,16 @@ export interface DadosTela {
   mensageria: MensageriaBlack | null;
   mensageriaSemDado: boolean;
   marcos: Marcos | null;
+  /** Cadastros sem fonte (função ausente ou falha): número de lead fica "Sem dado", nunca zero. */
+  perfilSemDado: boolean;
+  avisoPerfil: string | null;
+  /** Só master: envios marcados como teste no período (para ver e desmarcar). Vazio para os demais. */
+  linhasTeste: LinhaPerfil[];
+  /** dados_black_grupo do período e do nó da tela. `motivo` = por que não há número neste recorte (ex.: canal). */
+  grupo: { data: GrupoResumoBlack | null; semDado: boolean; aviso: string | null; motivo: string | null; erro: string | null };
+  isMaster: boolean;
+  /** Relê todos os blocos (depois de marcar ou desmarcar teste). */
+  recarregar: () => void;
   /** Muda o recorte (e a URL). */
   irPara: (r: Partial<Recorte>) => void;
   abrirGaveta: (alvo: AlvoGaveta) => void;

@@ -6,10 +6,13 @@ Pedido do Victor Hugo (12/10/2026). Desenho e plano técnico no cérebro do Vict
 
 ## Situação
 
-- **Só dado fictício.** Nada lê banco nem rede. O adaptador real (`infrastructure/fonte-supabase.ts`)
-  devolve "Sem dado" em tudo, sem chamada nenhuma.
-- **Nenhuma migration, nenhuma tabela nova.**
-- **Não mergeado.** Mergear hoje publica um cartão com tudo "Sem dado" para todos os admins (ver Riscos).
+- **Ligado no banco (13/10/2026).** A fonte real (`infrastructure/fonte-supabase.ts`) chama as RPCs
+  `dados_black_*` do Supabase com a sessão do usuário (mesmo padrão do ATM). Migrations no ar: A
+  `20261012231649` (cadastro e `dados_black_trafego`), C `20261012233334` (trava de modelo nas RPCs
+  presenciais), B `20261012234606` (`dados_black_perfil`, `dados_black_leads`, `dados_black_grupo`, marcar teste)
+  e a foto do grupo `20261013001456`. Detalhe de cada método na seção "Fonte real" abaixo.
+- **Não mergeado, sem push.** A decisão de levar para a `main` (deploy automático) é do Maestro/Victor no fim.
+- A demonstração (dado fictício) continua existindo só em dev com `NEXT_PUBLIC_BLACK_DEMO=1`.
 - Fora do módulo, a branch toca 3 arquivos: a rota `app/(admin)/infra/dashboards/csm/[chave]/page.tsx`
   (desvia o modelo `jornada-captacao`), uma linha no `modules/infra/dados/domain/registro.ts` e a flag
   `blackDemo` no `shared/infrastructure/config/env.ts`. **Reversão:** tirar a linha do `registro.ts`.
@@ -205,14 +208,80 @@ qualquer tela que passe esses nomes por ele vai recusá-los.
 ## Contrato da fonte (`application/ports.ts`)
 
 `FonteDadosBlack` com `modo` (`'demonstracao' | 'real'`), `agora()` e métodos que devolvem
-`Resultado<T> = { data, semDado, erro }`: `config(chave)`, `trafego(chave, periodo)` (catálogo, dias e totais
-do período), `perfil(chave, periodo)` (uma linha por cadastro, sem dado pessoal), `leads(chave, ids)` (nome,
-e-mail e telefone, só quando a tabela abre), `mensageria(chave, periodo)` e `marcos(chave)` (presença e vendas).
+`Resultado<T> = { data, semDado, erro, aviso? }` (`erro` = falha, a tela segura a última leitura e esmaece;
+`aviso` = sem dado legítimo com motivo, não é falha). Ações devolvem `ResultadoAcao = { data, erro }`.
+
+## Fonte real (13/10/2026)
+
+Cliente: `createBrowserSupabase()` com a sessão do usuário; só a chave anon pública vai ao navegador. Quem
+decide o acesso são as RPCs (`42501` sem acesso, `P0002` fora do cadastro, `22023` parâmetro inválido).
+Função que não existe no banco (`PGRST202` / `42883`) vira `semDado` com o aviso **"Fonte ainda não ligada"**,
+sem quebrar a tela. Os mapeadores são puros e testados sem rede contra respostas cruas em snake_case
+(`infrastructure/respostas-rpc-black.ts`, testes em `infrastructure/fonte-supabase.test.ts`).
+
+| Método | De onde vem | Observações |
+|---|---|---|
+| `config(chave)` | `dados.dashboards.periodo_inicio` (A): início 04/10/2026, fixo no adaptador | Metas de leads, CPL, régua, orçamento, reserva, previsto por fase, base da casa e data da live **não têm cadastro no banco**: ficam `null` e a tela mostra "Sem dado" / "sem cadastro". Nunca inventadas. |
+| `trafego(chave, p)` | `dados_black_trafego(p_chave, p_de, p_ate)` (A) | Centavos viram reais. Métrica que a API não mandou continua `null`. Etapa C1 → funil C1; C2 + subtipo CONSULTORIA → consultoria; C2 + ISCA → iscas; C3 → C3; **etapa null → "Sem etapa"** (seção própria na Visão geral, com o nome exato da campanha e o gasto). `subtipo` e `conflito` preservados. Só plataforma `meta`. |
+| `perfil(chave, p, {incluirTeste})` | `dados_black_perfil` (B) | Uma linha por envio, sem dado pessoal. Os ids do Meta da utm (`campanha_id`, `conjunto_id`, `anuncio_id`) casam com o tráfego pelo anúncio (`domain/alinhar.ts`). Master recebe também os testes (para ver e desmarcar); a tela tira os testes de todas as contas. |
+| `leads(chave, ids)` | `dados_black_leads` (B) | Nome, e-mail e telefone só ao abrir a tabela, 50 por página (a RPC aceita até 500). |
+| `grupo(chave, p, recorte)` | `dados_black_grupo` (B), sempre `p_incluir_teste = false` | Alimenta os cards **MQLs** e **Ingresso no grupo**. |
+| `marcarTeste` / `desmarcarTeste` | `dados_marcar_teste` / `dados_desmarcar_teste` (as mesmas do ATM, `p_motivo = 'teste'`) | Só master. Confirmação antes de marcar; recarrega todos os blocos depois. `parece_teste` aparece como sugestão ("parece teste"), nunca marca sozinho. |
+| `mensageria`, `marcos` | sem fonte | `semDado` com aviso "Sem fonte no banco para este bloco." |
+
+### Cards MQLs e Ingresso no grupo (Visão geral, logo depois de "Conversão da página")
+
+- **MQLs** = `leads.mql`; % = `leads.mql ÷ leads.unicos`.
+- **Ingresso no grupo**: número grande = `unicos_grupos_mql ÷ leads.mql`. Linhas: Advogados =
+  `grupos[advogado].unicos ÷ leads.advogado_mais_estudante`; Contadores = `grupos[contador].unicos ÷ leads.contador`;
+  Outros (não MQL) = `grupos[outros].unicos ÷ leads.nao_mql`. Zero ou null no denominador = "Sem dado".
+  Mais de um grupo no mesmo segmento = "Sem dado" (somar contaria a mesma pessoa duas vezes).
+- **Recorte** (`domain/grupo.ts`, `recorteGrupoDe`): funil da tela → `p_recorte` `{tipo: 'porta', valor}`
+  (C3 = `inscricao_direta`, Consultoria = `consultoria`, Iscas = `isca`); "Todos" = `null` (conta simples, sem cruzar).
+  Com recorte, os numeradores passam a ser `unicos_cruzados` / `unicos_cruzados_mql`, com o rótulo
+  "dos leads deste nó, quantos estão no grupo". C1 e filtro por canal não têm recorte no servidor: o card mostra
+  "Sem dado" com o motivo. A função já aceita isca, campanha, conjunto e anúncio (ids do Meta), mas a tela ainda
+  só manda funil.
+- Os dois cards abrem a tabela de leads filtrada (envios MQL; envios cuja pessoa entrou no grupo no período).
+
+### Conferência contra o banco (13/10/2026 ~01h30 UTC, período 04/10 a 12/10, sem teste)
+
+`dados_black_perfil`: 191 envios, 165 pessoas (captação 172 envios / 155 pessoas; consultoria 17 / 13;
+checkup 1 / 1; futurômetro 1 / 1). `dados_black_grupo`: leads únicos 165, MQL 112 (advogado 84, contador 28,
+estudante de Direito 0), não MQL 53 (outros 40, sem profissão 13). Grupos: Advogados 90, Contadores 33, Outros 43;
+únicos nos grupos de MQL 112, total 145. 14 envios marcados como teste. Os números mudam com a captação.
+
+### Nó a nó
+
+| Nó | Na tela | No banco | Casos de borda |
+|---|---|---|---|
+| Captação (C3, página `captacao`) | inscrições, MQL e grupo do funil C3 | `dados_black_perfil.pagina = 'captacao'`, `porta = 'inscricao_direta'`; grupo com `p_recorte {porta, inscricao_direta}` | teste fora por padrão; sem UTM conta como não pago; telefone sem DDD fica sem UF |
+| Método Perfeito | Sem dado | sem fonte ligada à Black | não sei se é página própria da Black: precisa confirmar |
+| Consultoria | funil Consultoria | `pagina = 'consultoria'`, `porta = 'consultoria'` | chega **sem UTM** (`a_corrigir` = `sem_utm`) |
+| Futurômetro | iscas | `pagina = 'futurometro'`, `isca = 'Futurômetro'` | **profissão vazia** (`profissao_vazia`), cai em não MQL |
+| Checkup | iscas | `pagina = 'checkup'`, `isca = 'Checkup'` | **profissão vazia**, cai em não MQL |
+| Fluxograma | iscas | `pagina = 'fluxograma'`, `isca = 'Fluxograma'` | sem envio no período da conferência |
+| C1 | gasto, alcance e vídeo | `dados_black_trafego`, etapa C1 | não gera cadastro: card de grupo mostra o motivo |
+| C2 | gasto por consultoria e iscas | `dados_black_trafego`, etapa C2 + subtipo | nome com dois subtipos = `conflito` |
+| C3 | gasto e CPL da captação | `dados_black_trafego`, etapa C3 | sem data no envio: a linha é descartada pelo mapeador |
+
+## A corrigir (na fonte, não na tela)
+
+- Profissão vazia no checkup e no futurômetro.
+- Consultoria sem UTM.
+- `utm_campaign=disparo` e `utm_campaign=grupoantigo` fora do padrão (`utm_campaign_fora_do_padrao`).
+- `utm_term` trazendo o placement.
+- CPF01 com `projeto_id` nulo.
+- Campanhas sem código de etapa no nome (TEASER, MANIFESTO, CPF01) aparecem como "Sem etapa" até o tráfego
+  renomear. A etapa nunca é deduzida.
 
 ## Riscos
 
-- Mergear publica o cartão para todos os admins com tudo "Sem dado".
-- Com dado real, a tabela de leads fica protegida só por "vê Infra": precisa de RPC com guarda própria e revisão do pentester antes da `main`.
+- Mergear publica o dashboard para quem vê Infra; os dados pessoais saem só por `dados_black_leads`, que tem guarda
+  própria (revisada pelo pentester na B).
+- Sem recorte, "Ingresso no grupo" divide todos os membros dos grupos de MQL (inclui quem não é lead do período,
+  como a base antiga) pelos leads MQL: a taxa pode chegar a 100% ou passar. É a regra do contrato da B; o cruzado
+  só existe com recorte.
 - Filtro cruzado no cliente não escala para 150 mil leads.
 - DDD 42: a tabela `dados.ddd_uf` diz PR (espelhada aqui); a BrasilAPI diz SC.
 - Base da casa no config = 188.013; o desenho fala em "cerca de 189 mil".

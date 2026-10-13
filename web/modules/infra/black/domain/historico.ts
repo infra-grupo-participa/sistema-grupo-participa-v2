@@ -20,7 +20,9 @@ export function diasDeCaptacao(dia: string, inicioCaptacao: string): number {
   return n;
 }
 
+/** Sem início de captação ou sem meta diária cadastrados (fonte real hoje), não há meta acumulada: null. */
 export const metaAcumuladaAte = (dia: string, cfg: Pick<ConfigBlack, 'inicioCaptacao' | 'metaLeadsDia'>): Valor => {
+  if (cfg.inicioCaptacao === null || cfg.metaLeadsDia === null) return null;
   const n = diasDeCaptacao(dia, cfg.inicioCaptacao);
   return n === 0 ? null : n * cfg.metaLeadsDia;
 };

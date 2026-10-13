@@ -137,6 +137,8 @@ function gerar(): BaseFicticia {
     const linha: LinhaPerfil = {
       ...base, leadId, pessoaId, criadoEm, primeiraPorta, profissao, profissaoBruta: null,
       uf: ufLida, ufOrigem: ufLida === null ? null : 'ddd', entrouGrupoEm, teste: false,
+      // Sugestão de teste FICTÍCIA e determinista (não muda a ordem dos sorteios da base).
+      pareceTeste: n % 211 === 0,
     };
     linhas.push(linha);
     detalhes.set(leadId, { leadId, nome: `Lead Teste ${pad(n, 5)}`, email: `lead${pad(n, 5)}@exemplo.test`, telefone: telefone === '' ? null : telefone });

@@ -6,7 +6,7 @@ import {
   type Farol, type IndiceTrafego, type Taxa,
 } from './metricas';
 import { diaDe } from './recorte';
-import type { Anuncio, DesempenhoDia, FiltroCriativos, LinhaPerfil, Valor } from './tipos';
+import type { Anuncio, DesempenhoDia, FiltroCriativos, LinhaPerfil, ReguaCpl, Valor } from './tipos';
 
 export type PainelCriativos = 'campanha' | 'conjunto' | 'anuncio' | 'pagina';
 
@@ -28,7 +28,7 @@ export interface ResumoCriativo {
 }
 
 export function resumir(
-  dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego, regua: { meta: number; teto: number }, distribuicao: boolean,
+  dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego, regua: ReguaCpl | null, distribuicao: boolean,
 ): ResumoCriativo {
   const a = agregar(dias);
   const pagos = linhas.filter(ehPago).length;
@@ -50,7 +50,7 @@ export interface ItemPainel { id: string; nome: string; resumo: ResumoCriativo; 
 /** Agrupa os anúncios que passam no filtro (menos o do próprio painel) pela chave do painel. */
 export function painel(
   qual: PainelCriativos, f: FiltroCriativos, dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego,
-  regua: { meta: number; teto: number }, nomePagina: (id: string) => string,
+  regua: ReguaCpl | null, nomePagina: (id: string) => string,
 ): ItemPainel[] {
   const grupos = new Map<string, { nome: string; anuncios: Set<string> }>();
   for (const a of idx.anuncio.values()) {

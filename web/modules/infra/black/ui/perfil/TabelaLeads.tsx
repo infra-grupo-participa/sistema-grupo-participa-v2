@@ -2,8 +2,10 @@
 
 // Tabela de leads do recorte, só ao abrir a sub-aba e 50 por página: nome, e-mail e telefone saem da fonte
 // sob demanda (dado pessoal não vem junto do perfil). Falha na leitura segura a página anterior.
+// Master marca e desmarca teste por linha (padrão do ATM: confirmação antes de marcar, recarrega depois). O
+// `parece_teste` do banco só aparece como sugestão: nada é marcado sozinho.
 import { useEffect, useState } from 'react';
-import { Button, DataTable, Td, Th, Thead, Tr } from '@/shared/ui/components';
+import { Button, ConfirmDialog, DataTable, Td, Th, Thead, Tr } from '@/shared/ui/components';
 import { LEADS_POR_PAGINA } from '../../application/ports';
 import { NAO_INFORMADO, ROTULO_FUNIL, ROTULO_PORTA, ROTULO_PROFISSAO, type LeadDetalhe, type LinhaPerfil } from '../../domain/tipos';
 import type { DadosTela } from '../contexto';
@@ -15,7 +17,13 @@ const ou = (v: string | null | undefined) => v ?? NAO_INFORMADO;
 export function TabelaLeads({ d, linhas }: { d: DadosTela; linhas: LinhaPerfil[] }) {
   const [pagina, setPagina] = useState(0);
   const [lido, setLido] = useState<{ marca: string; detalhes: Map<string, LeadDetalhe>; erro: string | null } | null>(null);
-  const ordenadas = [...linhas].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+  const [verTestes, setVerTestes] = useState(false);
+  const [alvo, setAlvo] = useState<LeadDetalhe | null>(null);
+  const [salvando, setSalvando] = useState<string | null>(null);
+  const [erroAcao, setErroAcao] = useState<string | null>(null);
+  const master = d.isMaster;
+  const fonteLinhas = master && verTestes ? d.linhasTeste : linhas;
+  const ordenadas = [...fonteLinhas].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
   const paginas = Math.max(1, Math.ceil(ordenadas.length / LEADS_POR_PAGINA));
   const atual = Math.min(pagina, paginas - 1);
   const daPagina = ordenadas.slice(atual * LEADS_POR_PAGINA, (atual + 1) * LEADS_POR_PAGINA);
@@ -35,20 +43,41 @@ export function TabelaLeads({ d, linhas }: { d: DadosTela; linhas: LinhaPerfil[]
 
   const carregando = Boolean(marca) && lido?.marca !== marca;
   const detalhes = lido?.detalhes ?? new Map<string, LeadDetalhe>();
-  if (ordenadas.length === 0) return <p className="py-6 text-center text-sm text-[var(--fg-3)]">Nenhum cadastro neste recorte.</p>;
+
+  const mudar = async (lead: LeadDetalhe, teste: boolean) => {
+    if (salvando) return;
+    setSalvando(lead.leadId); setErroAcao(null);
+    const r = await (teste ? d.fonte.marcarTeste(d.chave, lead) : d.fonte.desmarcarTeste(d.chave, lead));
+    setSalvando(null); setAlvo(null);
+    if (r.erro) setErroAcao(r.erro); else d.recarregar();
+  };
+
+  const alternar = master ? (
+    <div className="flex justify-end">
+      <Button variant="ghost" size="sm" onClick={() => { setVerTestes((v) => !v); setPagina(0); }}>
+        {verTestes ? 'Voltar aos leads' : `Ver os testes do período (${inteiro(d.linhasTeste.length)})`}
+      </Button>
+    </div>
+  ) : null;
+  if (ordenadas.length === 0) {
+    return <div className="space-y-2">{alternar}<p className="py-6 text-center text-sm text-[var(--fg-3)]">{verTestes ? 'Nenhum teste marcado neste período.' : 'Nenhum cadastro neste recorte.'}</p></div>;
+  }
 
   return (
     <div className="space-y-2">
+      {alternar}
       {lido?.erro && <p role="status" className="text-xs text-[var(--yellow)]">{lido.erro}</p>}
-      <DataTable minWidth={880} className={carregando ? 'opacity-60' : ''}>
+      {erroAcao && <p role="alert" className="text-xs text-[var(--yellow)]">{erroAcao}</p>}
+      <DataTable minWidth={master ? 1080 : 880} className={carregando ? 'opacity-60' : ''}>
         <Thead>
           <Th>Nome</Th><Th>E-mail</Th><Th>Telefone</Th><Th>Profissão</Th><Th>Estado *</Th><Th>Funil</Th><Th>Porta</Th><Th>Cadastro</Th>
+          {master && <><Th>Teste</Th><Th>Ação</Th></>}
         </Thead>
         <tbody>
           {daPagina.map((l) => {
             const x = detalhes.get(l.leadId);
             return (
-              <Tr key={l.leadId}>
+              <Tr key={l.leadId} className={l.teste ? 'opacity-60' : undefined}>
                 <Td className="text-sm">{x?.nome ?? '—'}</Td>
                 <Td className="text-xs text-[var(--fg-2)]">{x?.email ?? '—'}</Td>
                 <Td className="text-xs tabular text-[var(--fg-2)]">{x?.telefone ?? '—'}</Td>
@@ -57,6 +86,24 @@ export function TabelaLeads({ d, linhas }: { d: DadosTela; linhas: LinhaPerfil[]
                 <Td className="text-xs">{l.funil ? ROTULO_FUNIL[l.funil] : NAO_INFORMADO}</Td>
                 <Td className="text-xs">{l.porta ? ROTULO_PORTA[l.porta] : NAO_INFORMADO}{l.primeiraPorta ? '' : ' (2ª porta)'}</Td>
                 <Td className="text-xs tabular">{quando(l.criadoEm)}</Td>
+                {master && (
+                  <>
+                    <Td className="text-xs">
+                      {l.teste ? <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] uppercase">teste</span>
+                        : l.pareceTeste ? <span title="Sugestão do banco (nome ou e-mail com teste, ou e-mail da equipe). Não foi marcado." className="rounded-full border border-dashed border-[var(--yellow)] px-2 py-0.5 text-[10px] text-[var(--yellow)]">parece teste</span>
+                        : 'Não'}
+                    </Td>
+                    <Td className="text-xs">
+                      {x && (x.email || x.telefone) && (
+                        <button type="button" disabled={salvando === l.leadId}
+                          onClick={() => { setErroAcao(null); if (l.teste) void mudar(x, false); else setAlvo(x); }}
+                          className="whitespace-nowrap rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-3)] disabled:opacity-50">
+                          {salvando === l.leadId ? 'Salvando…' : l.teste ? 'Desmarcar teste' : 'Marcar como teste'}
+                        </button>
+                      )}
+                    </Td>
+                  </>
+                )}
               </Tr>
             );
           })}
@@ -69,6 +116,11 @@ export function TabelaLeads({ d, linhas }: { d: DadosTela; linhas: LinhaPerfil[]
           <Button variant="ghost" size="sm" disabled={atual >= paginas - 1} onClick={() => setPagina(atual + 1)}>Próxima</Button>
         </span>
       </div>
+      {alvo && (
+        <ConfirmDialog title="Marcar lead como teste" confirmLabel="Marcar como teste" cancelLabel="Cancelar"
+          onCancel={() => setAlvo(null)} onConfirm={() => void mudar(alvo, true)}
+          message="Esta marcação vale para esta Black Friday. A pessoa (pelo e-mail e pelo telefone) e os dados relacionados deixam de contar nos indicadores deste evento. Quer continuar?" />
+      )}
     </div>
   );
 }

@@ -4,17 +4,20 @@
 // Faixa 1 placar · Faixa 2 investimento · Faixa 3 funil macro (só C2 e C3) · Faixa 4 funis lado a lado + CPL por
 // etapa. Razão = soma sobre soma no mesmo recorte; sem dado = "Sem dado", nunca zero.
 import { useState, type ReactNode } from 'react';
-import { KpiCard, ProgressBar, SectionCard } from '@/shared/ui/components';
+import { KpiCard, Modal, ProgressBar, SectionCard } from '@/shared/ui/components';
+import { cardMql, cardsGrupo, ROTULO_CRUZADO } from '../domain/grupo';
+import { diaDe } from '../domain/recorte';
 import {
   agregar, connectRate, conversaoPagina, cpc, cplDo, cplPlacar, cplPorEtapa, cplRemarketing, cpm, ctr, custoPorVisualizacao,
   dividir, ehCaptacao, farolCpl, filtrarDias, filtrarLinhas, gastoDe, gastoPorFase, ingressoGrupo, pessoasUnicas, somar,
   taxaVideo75, type Taxa as TipoTaxa,
 } from '../domain/metricas';
-import { FASES, FUNIS, ROTULO_FASE, ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
+import { FASES, FUNIS, PROFISSOES_MQL, ROTULO_FASE, ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
 import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
 import { BarrasFase } from './graficos';
 import { Farol, formatar, moeda, Numero, SeloFicticio, Taxa } from './pecas';
+import { TabelaLeads } from './perfil/TabelaLeads';
 
 const TODAS: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo', 'perfil'];
 const TRAFEGO: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo'];
@@ -44,8 +47,52 @@ function tempoAte(alvo: string, agora: Date): string {
 }
 const dataHora = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 
+/** Tabela aberta por um card que não tem as sub-abas do ModalCard (os números vêm prontos do servidor). */
+interface TabelaAberta { titulo: string; nota: string; linhas: LinhaPerfil[] }
+
+/** Card MQLs: total e % sobre os leads únicos (dados_black_grupo.leads). */
+function CardMql({ d, onAbrir }: { d: DadosTela; onAbrir: () => void }) {
+  const g = d.grupo.data;
+  const falta = d.grupo.motivo ?? d.grupo.aviso ?? 'leads do grupo';
+  const c = g ? cardMql(g) : null;
+  return (
+    <Cartao cheio titulo="MQLs" onAbrir={onAbrir}>
+      <KpiCard label="MQLs" title="dados_black_grupo: leads.mql e leads.unicos (pessoas únicas do período e do nó, sem teste)."
+        value={<Numero valor={c?.total ?? null} formato="int" falta={falta} />}
+        hint={c ? `${c.taxa.valor === null ? 'Sem dado' : formatar(c.taxa.valor, 'pct')} dos leads (${formatar(c.taxa.num, 'int')} ÷ ${formatar(c.taxa.den, 'int')}).` : falta} />
+    </Cartao>
+  );
+}
+
+/** Card Ingresso no grupo: taxa geral MQL e uma linha por grupo (dados_black_grupo). */
+function CardIngresso({ d, onAbrir }: { d: DadosTela; onAbrir: () => void }) {
+  const g = d.grupo.data;
+  const falta = d.grupo.motivo ?? d.grupo.aviso ?? 'grupo';
+  const c = g ? cardsGrupo(g) : null;
+  return (
+    <Cartao cheio titulo="Ingresso no grupo" onAbrir={onAbrir}>
+      <KpiCard label="Ingresso no grupo" title="Únicos nos grupos de Advogados e Contadores ÷ leads MQL (dados_black_grupo)."
+        value={c ? <Taxa taxa={c.geral} /> : <Numero valor={null} formato="pct" falta={falta} />}
+        hint={c ? (c.cruzado ? ROTULO_CRUZADO : 'MQL no grupo ÷ leads MQL.') : falta} />
+      {c && (
+        <ul className="-mt-2 px-4 pb-3 text-xs">
+          {c.linhas.map((x) => (
+            <li key={x.segmento} className="flex items-baseline justify-between gap-2 py-0.5">
+              <span className="text-[var(--fg-3)]">{x.rotulo}</span>
+              <span className="text-right text-[var(--fg)]"><Taxa taxa={x.taxa} /> <span className="text-[var(--fg-3)]">{formatar(x.taxa.num, 'int')} ÷ {formatar(x.taxa.den, 'int')}</span></span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Cartao>
+  );
+}
+
 export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const [aberto, setAberto] = useState<CardDef | null>(null);
+  const [tabela, setTabela] = useState<TabelaAberta | null>(null);
+  // Sem fonte de cadastros, número de lead é "Sem dado" (nunca o zero de uma lista vazia).
+  const semLeads = d.perfilSemDado;
   const { config, idx, recorte } = d;
   const filtro = { funil: recorte.funil, canal: recorte.canal };
   const abrir = (c: CardDef) => () => setAberto(c);
@@ -53,7 +100,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   // ─── Faixa 1: placar (do início até agora) ──────────────────────────────────────────────────────────────
   const diasAteHoje = filtrarDias(d.diasTodos, idx, filtro);
   const linhasAteAgora = filtrarLinhas(d.linhasTodas, filtro);
-  const leadsAteAgora = pessoasUnicas(linhasAteAgora);
+  const leadsAteAgora: Valor = semLeads ? null : pessoasUnicas(linhasAteAgora);
   const gastoAteHoje = gastoDe(diasAteHoje);
   const placar = cplPlacar(d.dias, d.linhas, idx);
 
@@ -88,10 +135,18 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
     { c: { id: 'cpc', rotulo: 'CPC', formato: 'brl', medir: medirCap(cpc), aplica: TRAFEGO, menorMelhor: true, dica: 'Custo por clique: gasto ÷ cliques no link, só nas linhas com clique medido.' }, valor: <Numero valor={dCap.length ? cpc(aCap) : null} formato="brl" />, hint: 'Custo por clique no link.' },
     { c: { id: 'lpv', rotulo: 'Visualizações da página', formato: 'int', medir: (x) => agregar(capDias(x, d)).lpv.valor, aplica: TRAFEGO }, valor: <Numero valor={aCap.lpv.valor} formato="int" />, hint: aCap.lpv.conhecidos < aCap.lpv.total ? 'Parcial: Google sem LPV.' : undefined },
     { c: { id: 'connect', rotulo: 'Connect rate', formato: 'pct', medir: (x) => valorTaxa(connectRate(x, idx)), aplica: TRAFEGO, dica: 'Σ views da página ÷ Σ cliques, só nas linhas com as duas métricas.' }, valor: <Taxa taxa={connectRate(d.dias, idx)} /> },
-    { c: { id: 'insc', rotulo: 'Inscrições', formato: 'int', medir: (_, l) => capLinhas(l).length, aplica: TODAS, dica: 'Cadastros de C2 e C3 (todas as portas).' }, valor: <Numero valor={lCap.length} formato="int" />, hint: `${formatar(lCap.filter((l) => l.origem === 'pago').length, 'int')} de tráfego pago` },
+    { c: { id: 'insc', rotulo: 'Inscrições', formato: 'int', medir: (_, l) => capLinhas(l).length, aplica: TODAS, dica: 'Cadastros de C2 e C3 (todas as portas).' }, valor: <Numero valor={semLeads ? null : lCap.length} formato="int" falta={d.avisoPerfil ?? undefined} />, hint: `${formatar(lCap.filter((l) => l.origem === 'pago').length, 'int')} de tráfego pago` },
     { c: { id: 'conv', rotulo: 'Conversão da página', formato: 'pct', medir: (x, l) => valorTaxa(conversaoPagina(x, l, idx)), aplica: TRAFEGO, dica: 'Inscrições pagas ÷ views da página, dos mesmos anúncios.' }, valor: <Taxa taxa={conversaoPagina(d.dias, d.linhas, idx)} /> },
-    { c: { id: 'grupo', rotulo: 'Grupo em 48h', formato: 'pct', medir: (_, l) => valorTaxa(ingressoGrupo(capLinhas(l), 48, d.agora)), aplica: TODAS, dica: 'Pessoas únicas com a janela de 48h já fechada.' }, valor: <Taxa taxa={ingressoGrupo(lCap, 48, d.agora)} /> },
+    { c: { id: 'grupo48', rotulo: 'Grupo em 48h', formato: 'pct', medir: (_, l) => valorTaxa(ingressoGrupo(capLinhas(l), 48, d.agora)), aplica: TODAS, dica: 'Pessoas únicas com a janela de 48h já fechada.' }, valor: <Taxa taxa={ingressoGrupo(lCap, 48, d.agora)} /> },
   ];
+
+  // Tabelas dos cards MQLs e Ingresso: os envios do período e do nó (cada envio é uma linha; o card conta pessoas).
+  const linhasMql = d.linhas.filter((l) => (l.mql ?? (l.profissao !== null && PROFISSOES_MQL.has(l.profissao))) === true);
+  const linhasGrupo = d.linhas.filter((l) => l.entrouGrupoEm !== null && diaDe(l.entrouGrupoEm) >= d.periodo.de && diaDe(l.entrouGrupoEm) <= d.periodo.ate);
+  const abrirMql = () => setTabela({ titulo: 'MQLs', linhas: linhasMql,
+    nota: 'Envios de advogado, contador ou estudante de Direito no período e no nó. O card conta pessoas únicas (a classe é a do envio mais recente com profissão).' });
+  const abrirGrupo = () => setTabela({ titulo: 'Ingresso no grupo', linhas: linhasGrupo,
+    nota: 'Envios do período e do nó cuja pessoa entrou no grupo dentro do período. O card conta telefones únicos por grupo.' });
 
   // ─── Faixa 4: funis lado a lado ─────────────────────────────────────────────────────────────────────────
   const diasCanal = filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: 'todos', canal: recorte.canal });
@@ -103,23 +158,28 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
       <section aria-labelledby="vg-placar">
         <h2 id="vg-placar" className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)]">Placar</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <KpiCard label="Até a live" value={tempoAte(config.liveEm, d.agora)} hint={`Live em ${dataHora(config.liveEm)}`} bar="purple" />
+          <KpiCard label="Até a live" value={config.liveEm ? tempoAte(config.liveEm, d.agora) : 'Sem dado'}
+            hint={config.liveEm ? `Live em ${dataHora(config.liveEm)}` : 'Data da live sem cadastro.'} bar={config.liveEm ? 'purple' : 'gray'} />
           <Cartao titulo={cardLeads.rotulo} onAbrir={abrir(cardLeads)}>
             <KpiCard label="Leads contra a meta" bar="accent" title={config.fontes.plano}
-              value={<><Numero valor={leadsAteAgora} formato="int" /> <span className="text-sm font-normal text-[var(--fg-3)]">de {formatar(config.metaLeads, 'int')}</span></>}
-              hint={`Pessoas únicas do início até agora. ${formatar(dividir(leadsAteAgora, config.metaLeads), 'pct')} da meta.`} />
-            <div className="-mt-2 px-4 pb-3"><ProgressBar value={(leadsAteAgora / config.metaLeads) * 100} ariaLabel={`${formatar(leadsAteAgora, 'int')} de ${formatar(config.metaLeads, 'int')} leads`} valueNow={leadsAteAgora} valueMin={0} valueMax={config.metaLeads} /></div>
+              value={<><Numero valor={leadsAteAgora} formato="int" falta={d.avisoPerfil ?? undefined} /> <span className="text-sm font-normal text-[var(--fg-3)]">de {config.metaLeads === null ? 'meta sem cadastro' : formatar(config.metaLeads, 'int')}</span></>}
+              hint={`Pessoas únicas do início até agora. ${config.metaLeads === null ? 'Meta: Sem dado.' : `${formatar(dividir(leadsAteAgora, config.metaLeads), 'pct')} da meta.`}`} />
+            {config.metaLeads !== null && leadsAteAgora !== null && (
+              <div className="-mt-2 px-4 pb-3"><ProgressBar value={(leadsAteAgora / config.metaLeads) * 100} ariaLabel={`${formatar(leadsAteAgora, 'int')} de ${formatar(config.metaLeads, 'int')} leads`} valueNow={leadsAteAgora} valueMin={0} valueMax={config.metaLeads} /></div>
+            )}
           </Cartao>
           <Cartao titulo={cardCpl.rotulo} onAbrir={abrir(cardCpl)}>
-            <KpiCard label="CPL geral" bar={placar.valor === null ? 'gray' : placar.valor <= config.cplAlvoMedio ? 'green' : 'red'}
+            <KpiCard label="CPL geral" bar={placar.valor === null || config.cplAlvoMedio === null ? 'gray' : placar.valor <= config.cplAlvoMedio ? 'green' : 'red'}
               value={<span className="inline-flex items-center gap-2"><Numero valor={placar.valor} formato="brl" falta="sem leads pagos no recorte" /><Farol farol={farolCpl(placar.valor, config.reguaCpl)} /></span>}
-              hint={`Gasto de captação e remarketing ÷ leads que vieram de anúncio: ${moeda(placar.gasto)} ÷ ${formatar(placar.leadsPagos, 'int')}. Alvo ${moeda(config.cplAlvoMedio)}.`} />
+              hint={`Gasto de captação e remarketing ÷ leads que vieram de anúncio: ${moeda(placar.gasto)} ÷ ${formatar(placar.leadsPagos, 'int')}. Alvo ${config.cplAlvoMedio === null ? 'sem cadastro' : moeda(config.cplAlvoMedio)}.`} />
           </Cartao>
           <Cartao titulo={cardGasto.rotulo} onAbrir={abrir(cardGasto)}>
             <KpiCard label="Verba contra o orçamento" bar="yellow"
-              value={<><Numero valor={gastoAteHoje} formato="brl" /> <span className="text-sm font-normal text-[var(--fg-3)]">de {moeda(config.orcamentoTotal)}</span></>}
-              hint={`Tráfego do início até hoje. ${formatar(dividir(gastoAteHoje, config.orcamentoTotal), 'pct')} do orçamento.`} />
-            <div className="-mt-2 px-4 pb-3"><ProgressBar value={(gastoAteHoje / config.orcamentoTotal) * 100} tone="yellow" ariaLabel={`${moeda(gastoAteHoje)} de ${moeda(config.orcamentoTotal)}`} /></div>
+              value={<><Numero valor={gastoAteHoje} formato="brl" /> <span className="text-sm font-normal text-[var(--fg-3)]">de {config.orcamentoTotal === null ? 'orçamento sem cadastro' : moeda(config.orcamentoTotal)}</span></>}
+              hint={`Tráfego do início até hoje. ${config.orcamentoTotal === null ? 'Orçamento: Sem dado.' : `${formatar(dividir(gastoAteHoje, config.orcamentoTotal), 'pct')} do orçamento.`}`} />
+            {config.orcamentoTotal !== null && (
+              <div className="-mt-2 px-4 pb-3"><ProgressBar value={(gastoAteHoje / config.orcamentoTotal) * 100} tone="yellow" ariaLabel={`${moeda(gastoAteHoje)} de ${moeda(config.orcamentoTotal)}`} /></div>
+            )}
           </Cartao>
         </div>
       </section>
@@ -151,9 +211,14 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
         ) : (
           <>
             <ol className="grid auto-rows-fr grid-cols-2 gap-3 md:grid-cols-5">
-              {cards3.map(({ c, valor, hint }) => (
-                <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={abrir(c)}><KpiCard label={c.rotulo} value={valor} hint={hint} /></Cartao></li>
-              ))}
+              {cards3.flatMap(({ c, valor, hint }) => [
+                <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={abrir(c)}><KpiCard label={c.rotulo} value={valor} hint={hint} /></Cartao></li>,
+                // MQLs logo depois da conversão da página; o Ingresso no grupo vem em seguida (pedido de 13/10).
+                ...(c.id === 'conv' ? [
+                  <li key="mql" className="min-w-0"><CardMql d={d} onAbrir={abrirMql} /></li>,
+                  <li key="ingresso" className="min-w-0"><CardIngresso d={d} onAbrir={abrirGrupo} /></li>,
+                ] : []),
+              ])}
             </ol>
             <div className="mt-3 grid auto-rows-fr grid-cols-2 gap-3 md:grid-cols-5">
               <Cartao cheio titulo="Presença na live"><KpiCard label="Presença na live" value={<Numero valor={d.marcos?.presencaLive ?? null} formato="int" falta="presença da live ainda sem fonte" />} bar="gray" /></Cartao>
@@ -179,7 +244,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           })}
         </div>
 
-        <SectionCard className="mt-3" title="CPL por etapa" subtitle={`Fase de captação; remarketing à parte. Farol: meta ${moeda(config.reguaCpl.meta)}, teto ${moeda(config.reguaCpl.teto)}.`}>
+        <SectionCard className="mt-3" title="CPL por etapa" subtitle={`Fase de captação; remarketing à parte. ${config.reguaCpl ? `Farol: meta ${moeda(config.reguaCpl.meta)}, teto ${moeda(config.reguaCpl.teto)}.` : 'Farol: régua de CPL sem cadastro.'}`}>
           <ul className="divide-y divide-[var(--border-faint)]">
             <LinhaC1 dias={filtrarDias(d.dias, idx, { funil: 'c1', canal: 'todos' })} />
             {etapas.map((e) => (
@@ -194,7 +259,15 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
         </SectionCard>
       </section>
 
+      <SemEtapa d={d} />
+
       <ModalCard d={d} card={aberto} onClose={() => setAberto(null)} />
+      {tabela && (
+        <Modal open onClose={() => setTabela(null)} title={tabela.titulo} width="max-w-5xl">
+          <p className="mb-2 text-xs text-[var(--fg-3)]">{tabela.nota}</p>
+          <TabelaLeads d={d} linhas={tabela.linhas} />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -250,5 +323,27 @@ function ColunaCaptacao({ d, dias, linhas }: { d: DadosTela; dias: DesempenhoDia
       <Linha rotulo="Conversão da página"><Taxa taxa={conversaoPagina(dias, linhas, d.idx)} /></Linha>
       <Linha rotulo="Grupo em 48h"><Taxa taxa={ingressoGrupo(linhas, 48, d.agora)} /></Linha>
     </div>
+  );
+}
+
+/** Campanhas sem o código de etapa no nome: nome exato da fonte, gasto fora dos funis. A etapa nunca é deduzida. */
+function SemEtapa({ d }: { d: DadosTela }) {
+  const sem = d.trafego.campanhas.filter((c) => c.funil === null);
+  if (sem.length === 0) return null;
+  const gastoDaCampanha = (id: string): Valor => {
+    const dias = d.diasPeriodoSemFiltro.filter((x) => d.idx.campanhaDoAnuncio(x.anuncioId)?.id === id);
+    return dias.length ? gastoDe(dias) : null;
+  };
+  return (
+    <SectionCard title="Sem etapa" subtitle="Campanhas sem C1, C2 ou C3 no nome: ficam fora dos funis até o tráfego renomear. A etapa nunca é deduzida.">
+      <ul className="divide-y divide-[var(--border-faint)] text-sm">
+        {sem.map((c) => (
+          <li key={c.id} className="flex flex-wrap items-baseline justify-between gap-2 py-1.5">
+            <span className="min-w-0 break-words">{c.nome}{c.conflito ? <span className="ml-2 text-xs text-[var(--yellow)]">nome com dois subtipos</span> : null}</span>
+            <span className="text-xs text-[var(--fg-3)]">Gasto no período <Numero valor={gastoDaCampanha(c.id)} formato="brl" falta="sem gasto por anúncio no período" animado={false} /></span>
+          </li>
+        ))}
+      </ul>
+    </SectionCard>
   );
 }

@@ -1,0 +1,91 @@
+// Cards de MQL e de ingresso no grupo de WhatsApp (contrato da B, dados_black_grupo) e o recorte que a tela manda
+// ao servidor (p_recorte). As contas de pessoa única e de ingresso são do servidor; aqui só a razão, soma sobre
+// soma do mesmo período e do mesmo recorte. Divisão por zero ou por null = Sem dado, nunca zero.
+import { taxa, type Taxa } from './metricas';
+import type {
+  FiltroCanal, FiltroFunil, GrupoResumoBlack, Isca, Porta, RecorteGrupo, SegmentoGrupo, Valor,
+} from './tipos';
+
+/** Rótulo dos cards quando há recorte: a conta passa a ser cruzada (dos leads do recorte, quem está no grupo). */
+export const ROTULO_CRUZADO = 'dos leads deste nó, quantos estão no grupo';
+
+/** Recorte pronto para o servidor, ou o motivo de não haver (o card mostra Sem dado com o motivo). */
+export type RecorteServidor = { ok: true; recorte: RecorteGrupo | null } | { ok: false; motivo: string };
+
+const PORTA_DO_FUNIL: Record<'consultoria' | 'iscas' | 'c3', Porta> = { consultoria: 'consultoria', iscas: 'isca', c3: 'inscricao_direta' };
+
+/**
+ * Nó ou filtro da tela -> p_recorte. Prioridade do mais fino para o mais grosso: anúncio, conjunto, campanha
+ * (sempre o id do Meta, o que vem depois do | na utm; o id interno de mkt_trafego não serve), isca, porta e funil.
+ * Sem nada escolhido = null (conta simples, sem cruzar). O grupo não tem recorte por canal: com canal escolhido,
+ * não há número (devolver o total seria mostrar um número de outro recorte).
+ */
+export function recorteGrupoDe(n: {
+  funil: FiltroFunil; canal: FiltroCanal; porta?: Porta | null; isca?: Isca | null;
+  campanhaMeta?: string | null; conjuntoMeta?: string | null; anuncioMeta?: string | null;
+}): RecorteServidor {
+  if (n.canal !== 'todos') return { ok: false, motivo: 'O grupo não se divide por canal: o servidor não tem esse recorte.' };
+  if (n.anuncioMeta) return { ok: true, recorte: { tipo: 'anuncio', valor: n.anuncioMeta } };
+  if (n.conjuntoMeta) return { ok: true, recorte: { tipo: 'conjunto', valor: n.conjuntoMeta } };
+  if (n.campanhaMeta) return { ok: true, recorte: { tipo: 'campanha', valor: n.campanhaMeta } };
+  if (n.isca) return { ok: true, recorte: { tipo: 'isca', valor: n.isca } };
+  if (n.porta) return { ok: true, recorte: { tipo: 'porta', valor: n.porta } };
+  if (n.funil === 'todos') return { ok: true, recorte: null };
+  if (n.funil === 'c1') return { ok: false, motivo: 'O C1 é distribuição: não gera cadastro nem entrada no grupo.' };
+  return { ok: true, recorte: { tipo: 'porta', valor: PORTA_DO_FUNIL[n.funil] } };
+}
+
+/** Chave estável do recorte (para a releitura do bloco do grupo). */
+export const chaveRecorte = (r: RecorteGrupo | null) => (r ? `${r.tipo}:${r.valor}` : 'sem-recorte');
+
+/** % MQL = leads.mql ÷ leads.unicos (pessoas únicas do período e do recorte, sem teste). */
+export function cardMql(g: GrupoResumoBlack): { total: Valor; taxa: Taxa } {
+  return { total: g.leads.mql, taxa: taxa(g.leads.mql, g.leads.unicos) };
+}
+
+/**
+ * Únicos de um segmento. Um grupo só no segmento: o número dele. Nenhum: Sem dado. Mais de um: Sem dado, porque
+ * somar contaria duas vezes quem está nos dois (a união por pessoa é conta do servidor).
+ */
+function unicosDoSegmento(g: GrupoResumoBlack, segmento: SegmentoGrupo, cruzado: boolean): { valor: Valor; nota: string | null } {
+  const doSegmento = g.grupos.filter((x) => x.segmento === segmento);
+  if (doSegmento.length === 0) return { valor: null, nota: 'Nenhum grupo deste segmento na fonte.' };
+  if (doSegmento.length > 1) return { valor: null, nota: `${doSegmento.length} grupos neste segmento: a soma contaria a mesma pessoa duas vezes.` };
+  return { valor: cruzado ? doSegmento[0].unicosCruzados : doSegmento[0].unicos, nota: null };
+}
+
+export interface LinhaGrupo { segmento: SegmentoGrupo; rotulo: string; taxa: Taxa }
+export interface CardsGrupo { geral: Taxa; linhas: LinhaGrupo[]; cruzado: boolean }
+
+/**
+ * Ingresso no grupo. Geral = únicos nos grupos de MQL ÷ leads MQL. Advogados = grupo do advogado ÷ (advogado +
+ * estudante de Direito); Contadores = grupo do contador ÷ contadores; Outros = grupo de outros ÷ não MQL.
+ * Com recorte, o numerador é o cruzado (dos leads do recorte, quantos estão no grupo).
+ */
+export function cardsGrupo(g: GrupoResumoBlack): CardsGrupo {
+  const cruzado = g.recorte !== null;
+  const nota = cruzado ? `Cruzado: ${ROTULO_CRUZADO}.` : null;
+  const linha = (segmento: SegmentoGrupo, rotulo: string, den: Valor): LinhaGrupo => {
+    const u = unicosDoSegmento(g, segmento, cruzado);
+    return { segmento, rotulo, taxa: taxa(u.valor, den, u.nota ?? nota) };
+  };
+  return {
+    cruzado,
+    geral: taxa(cruzado ? g.unicosCruzadosMql : g.unicosGruposMql, g.leads.mql, nota),
+    linhas: [
+      linha('advogado', 'Advogados', g.leads.advogadoMaisEstudante),
+      linha('contador', 'Contadores', g.leads.contador),
+      linha('outros', 'Outros (não MQL)', g.leads.naoMql),
+    ],
+  };
+}
+
+/** Resposta vazia (Sem dado em tudo), para quando o bloco ainda não foi lido ou a fonte não existe. */
+export function grupoSemDado(recorte: RecorteGrupo | null = null): GrupoResumoBlack {
+  return {
+    periodo: { de: null, ate: null }, recorte, grupos: [],
+    unicosGruposMql: null, unicosGruposTotal: null, unicosCruzadosMql: null,
+    leads: { unicos: null, mql: null, advogado: null, estudanteDireito: null, advogadoMaisEstudante: null, contador: null, outros: null, semProfissao: null, naoMql: null },
+    atualizado: { ultimoEventoWebhook: null, ultimaFoto: null },
+  };
+}

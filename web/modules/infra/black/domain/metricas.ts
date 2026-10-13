@@ -1,7 +1,7 @@
 // Métricas do dashboard da Black. Regra única: razão = soma sobre soma, numerador e denominador no MESMO
 // recorte e só nas linhas em que os dois são conhecidos. Sem dado (null) nunca vira zero.
 import { FASES, ISCAS } from './tipos';
-import type { Anuncio, Campanha, Conjunto, DesempenhoDia, Fase, FiltroCanal, FiltroFunil, Funil, LinhaPerfil, TrafegoBlack, Valor } from './tipos';
+import type { Anuncio, Campanha, Conjunto, DesempenhoDia, Fase, FiltroCanal, FiltroFunil, Funil, LinhaPerfil, ReguaCpl, TrafegoBlack, Valor } from './tipos';
 
 /** Divisão segura: null ou zero no denominador = null (sem dado), null no numerador = null. */
 export function dividir(num: Valor, den: Valor): Valor {
@@ -121,8 +121,9 @@ export const cpl = (gasto: Valor, leadsPagos: Valor): Valor => dividir(gasto, le
 
 /** Farol pela régua do Caio (CPL por conjunto: meta R$ 15, teto R$ 20). */
 export type Farol = 'verde' | 'amarelo' | 'vermelho' | 'sem';
-export function farolCpl(valor: Valor, regua: { meta: number; teto: number }): Farol {
-  if (valor === null) return 'sem';
+/** Sem régua cadastrada (fonte real hoje), não há farol: 'sem'. */
+export function farolCpl(valor: Valor, regua: ReguaCpl | null): Farol {
+  if (valor === null || regua === null) return 'sem';
   if (valor <= regua.meta) return 'verde';
   if (valor <= regua.teto) return 'amarelo';
   return 'vermelho';
