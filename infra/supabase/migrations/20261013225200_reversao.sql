@@ -1,6 +1,15 @@
 -- Reversão de 20261013225200: dados_black_perfil volta a ler dados.v_grupo_pessoas_todos (todos os grupos da chave).
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
+
+do $g$
+begin
+  -- pentester 13/10: só reverte se o corpo vivo ainda for o desta migration (senão sobrescreveria outra mudança)
+  if (select md5(prosrc) from pg_proc where oid = 'public.dados_black_perfil(text,date,date,boolean)'::regprocedure) <> 'f6aadcc5a8ceebad73d0c4a291c3daf1' then
+    raise exception 'reversão de 20261013225200: corpo vivo de dados_black_perfil não é o desta migration. Reler.';
+  end if;
+end
+$g$;
 CREATE OR REPLACE FUNCTION public.dados_black_perfil(p_chave text, p_de date DEFAULT NULL::date, p_ate date DEFAULT NULL::date, p_incluir_teste boolean DEFAULT false)
  RETURNS TABLE(lead_id text, pessoa_id text, criado_em timestamp with time zone, primeira_porta boolean, pagina text, porta text, isca text, campanha_id text, conjunto_id text, anuncio_id text, canal text, utm_source text, utm_medium text, utm_campaign text, utm_content text, utm_term text, profissao text, profissao_bruta text, mql boolean, uf text, entrou_grupo_em timestamp with time zone, entrada_grupo_aproximada boolean, teste boolean, parece_teste boolean, a_corrigir text[], campos jsonb)
  LANGUAGE plpgsql
