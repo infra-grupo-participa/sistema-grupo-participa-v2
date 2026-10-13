@@ -9,10 +9,8 @@
 --     hoje false). Sem UTM: canal sempre nulo, nunca é lead pago. campos.parcial diz se a resposta é parcial.
 --  2. dados.black_base_pessoas e dados.black_lista_disparo_montar passam a ignorar esse ramo, porque já leem o Respondi
 --     pelo ramo próprio: as listas da Mensageria e a planilha ficam iguais.
---  3. public.dados_black_grupo devolve 'grupo_consultoria' (decisão do Victor, 13/10: o card de ingresso fica só com o
---     grupo da Black e mostra à parte "no grupo da consultoria: X"): membros, leads_no_grupo e mql_no_grupo (pessoas do
---     recorte, o mesmo denominador do card). Só contagem, sem dado pessoal. Nenhuma chave existente muda.
--- DECISÕES DO VICTOR (13/10 noite): início do dashboard continua 04/10; parciais pelo interruptor das listas.
+-- DECISÕES DO VICTOR (13/10 noite): início do dashboard continua 04/10 (o Respondi de antes fica fora pelo periodo_inicio);
+--   parciais pelo interruptor das listas; o grupo da consultoria NÃO conta em nada do dashboard (correção das 21h).
 -- ATENÇÃO: as RPCs da tela filtram criado_em a partir de dados.dashboards.periodo_inicio (04/10); as respostas de 29/09
 --   a 03/10 só aparecem com p_de anterior ou com o início do dashboard mudado (decisão do Victor, fora desta migration).
 -- AS 5 PERGUNTAS: escala = + até 664 linhas (respondi.respostas por form_slug, índice respostas_form_idx; o form parou em
@@ -26,9 +24,8 @@ do $g$
 begin
   if md5(pg_get_viewdef('dados.black_leads'::regclass)) <> '5ce616621e652aaf79445444620f9798'
      or (select md5(prosrc) from pg_proc where oid = 'dados.black_base_pessoas()'::regprocedure) <> '5c5662907874de3e301e6710adf6eb56'
-     or (select md5(prosrc) from pg_proc where oid = 'dados.black_lista_disparo_montar()'::regprocedure) <> '37f944836201dd0c7cbf15ce77539c16'
-     or (select md5(prosrc) from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> 'd01f477c89b3aa735fd90f393bfbb26f' then
-    raise exception '20261013225100: definição viva mudou (black_leads, black_base_pessoas, black_lista_disparo_montar ou dados_black_grupo). Reler.';
+     or (select md5(prosrc) from pg_proc where oid = 'dados.black_lista_disparo_montar()'::regprocedure) <> '37f944836201dd0c7cbf15ce77539c16' then
+    raise exception '20261013225100: definição viva mudou (black_leads, black_base_pessoas, ou black_lista_disparo_montar). Reler.';
   end if;
 end
 $g$;
@@ -589,130 +586,3 @@ $function$;
 
 revoke execute on function dados.black_base_pessoas() from public, anon, authenticated, service_role;
 revoke execute on function dados.black_lista_disparo_montar() from public, anon, authenticated, service_role;
-
-CREATE OR REPLACE FUNCTION public.dados_black_grupo(p_chave text, p_de date DEFAULT NULL::date, p_ate date DEFAULT NULL::date, p_incluir_teste boolean DEFAULT false, p_recorte jsonb DEFAULT NULL::jsonb)
- RETURNS jsonb
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO ''
-AS $function$
--- 20261013225100: devolve também 'grupo_consultoria' (pessoas do recorte que estão no grupo da consultoria, linha à parte do card).
-declare
-  d dados.dashboards := dados.black_evento(p_chave);
-  v_rec jsonb := dados.black_recorte_valido(p_recorte);
-  v_de timestamptz := (coalesce(p_de, d.periodo_inicio)::timestamp at time zone 'America/Sao_Paulo');
-  v_ate timestamptz := ((coalesce(p_ate, (now() at time zone 'America/Sao_Paulo')::date) + 1)::timestamp at time zone 'America/Sao_Paulo');
-  r jsonb;
-begin
-  with grp as (
-    select g.id, g.sendflow_campanha, g.sendflow_release_id,
-           case when g.sendflow_campanha ~ ' - Advogados$' then 'advogado'
-                when g.sendflow_campanha ~ ' - Contadores$' then 'contador'
-                when g.sendflow_campanha ~ ' - Outros$' then 'outros' end as segmento
-      from dados.dashboard_grupos g
-     where g.chave = d.chave
-       and g.papel = 'dashboard'   -- 20261013172751: grupo só de lista de disparo (ex.: consultoria) fica fora dos cards
-  ), bl as materialized (   -- 20261013023136: telefone dos envios da Black, lido uma vez só
-    select l.fone8, l.email, l.whatsapp from dados.black_leads l where l.fone8 is not null
-  ), tst as (
-    -- 20261013023136: fora do grupo, (1) o telefone marcado como teste e (2) o telefone cujos envios da Black são TODOS
-    -- teste (dados.teste_ativo: marcação por e-mail ou por fone), olhando todos os envios da Black, não só os do período.
-    -- Telefone misto (um envio teste e outro não) continua contando até decisão do Victor (docs/dashboard-black/README.md).
-    -- teste_ativo só roda nos envios dos telefones candidatos (os que têm algum envio de e-mail marcado), não na base toda.
-    select m.valor as fone8 from dados.marcacoes_teste m
-     where m.chave = d.chave and m.desmarcado_em is null and m.tipo = 'fone'
-    union
-    select bl.fone8 from bl
-     where bl.fone8 in (select c.fone8 from bl c
-                          join dados.marcacoes_teste m on m.chave = d.chave and m.desmarcado_em is null
-                                                      and m.tipo = 'email' and m.valor = c.email)
-     group by bl.fone8
-    having bool_and(dados.teste_ativo(d.chave, bl.email, bl.whatsapp))
-  ), wh_todos as (   -- toda entrada que o webhook já viu (para saber quem a foto precisa cobrir)
-    select distinct grp.id as grupo_id, right(j.fone_key, 8) as fone8
-      from crm.evento_jornada j
-      join grp on grp.sendflow_campanha = j.tag
-     where j.fonte = 'sendflow' and j.tipo = 'entrada' and j.fone_key is not null
-  ), wh as (
-    select distinct grp.id as grupo_id, right(j.fone_key, 8) as fone8
-      from crm.evento_jornada j
-      join grp on grp.sendflow_campanha = j.tag
-     where j.fonte = 'sendflow' and j.tipo = 'entrada' and j.fone_key is not null
-       and j.ocorreu_em >= v_de and j.ocorreu_em < v_ate
-  ), fo as (   -- foto: só quem o webhook nunca viu entrar naquele grupo
-    select distinct p.grupo_id, p.fone8
-      from dados.grupo_participantes p
-      join grp on grp.id = p.grupo_id
-     where p.visto_primeiro_em >= v_de and p.visto_primeiro_em < v_ate
-       and not exists (select 1 from wh_todos w where w.grupo_id = p.grupo_id and w.fone8 = p.fone8)
-  ), ent as (
-    select x.grupo_id, x.fone8, bool_or(x.via = 'webhook') as via_webhook
-      from (select grupo_id, fone8, 'webhook' as via from wh union all select grupo_id, fone8, 'foto' from fo) x
-     where p_incluir_teste or x.fone8 not in (select fone8 from tst)
-     group by x.grupo_id, x.fone8
-  ), gcg as (   -- 20261013225100: grupo da consultoria (papel 'lista', congelado); fica FORA do card, vira linha à parte
-    select g.id, g.sendflow_campanha from dados.dashboard_grupos g where g.chave = d.chave and g.papel = 'lista'
-  ), gc as (     -- quem está ou esteve no grupo da consultoria, em qualquer data (foto ou entrada do webhook)
-    select x.fone8 from (
-      select p.fone8 from dados.grupo_participantes p join gcg on gcg.id = p.grupo_id where p.fone8 is not null
-      union
-      select right(j.fone_key, 8) from crm.evento_jornada j join gcg on gcg.sendflow_campanha = j.tag
-       where j.fonte = 'sendflow' and j.tipo = 'entrada' and j.fone_key is not null) x
-     where p_incluir_teste or x.fone8 not in (select fone8 from tst)
-  ), ld as (
-    select l.*
-      from dados.black_leads l
-     where l.criado_em >= v_de and l.criado_em < v_ate
-       and (p_incluir_teste or not dados.teste_ativo(d.chave, l.email, l.whatsapp))
-       and dados.black_no_recorte(v_rec, l.porta, l.isca, l.campanha_id, l.conjunto_id, l.anuncio_id)
-  ), pessoa as (   -- classe da pessoa = a do envio mais recente que tem profissão
-    select ld.pessoa_chave,
-           (array_agg(ld.profissao_classe order by ld.criado_em desc, ld.lead_id desc) filter (where ld.profissao_classe is not null))[1] as classe,
-           max(ld.fone8) as fone8
-      from ld group by ld.pessoa_chave
-  )
-  select jsonb_build_object(
-    'periodo', jsonb_build_object('de', (v_de at time zone 'America/Sao_Paulo')::date, 'ate', ((v_ate at time zone 'America/Sao_Paulo')::date - 1)),
-    'recorte', v_rec,
-    'incluir_teste', p_incluir_teste,
-    'grupos', coalesce((select jsonb_agg(jsonb_build_object(
-        'campanha', grp.sendflow_campanha, 'segmento', grp.segmento,
-        'unicos', (select count(*) from ent where ent.grupo_id = grp.id),
-        'unicos_webhook', (select count(*) from ent where ent.grupo_id = grp.id and ent.via_webhook),
-        'unicos_so_foto', (select count(*) from ent where ent.grupo_id = grp.id and not ent.via_webhook),
-        'unicos_cruzados', case when v_rec is null then null else
-            (select count(*) from pessoa pe where pe.fone8 is not null
-                and exists (select 1 from ent where ent.grupo_id = grp.id and ent.fone8 = pe.fone8)) end
-      ) order by grp.segmento, grp.sendflow_campanha) from grp), '[]'::jsonb),
-    'unicos_grupos_mql', (select count(distinct ent.fone8) from ent join grp on grp.id = ent.grupo_id where grp.segmento in ('advogado', 'contador')),
-    'unicos_grupos_total', (select count(distinct ent.fone8) from ent),
-    'unicos_cruzados_mql', case when v_rec is null then null else
-        (select count(*) from pessoa pe where pe.fone8 is not null and exists
-           (select 1 from ent join grp on grp.id = ent.grupo_id where grp.segmento in ('advogado', 'contador') and ent.fone8 = pe.fone8)) end,
-    -- 20261013225100: pessoas do recorte (mesmo denominador do card) que estão ou estiveram no grupo da consultoria
-    'grupo_consultoria', case when not exists (select 1 from gcg) then null else jsonb_build_object(
-        'campanhas', (select jsonb_agg(gcg.sendflow_campanha order by gcg.sendflow_campanha) from gcg),
-        'membros', (select count(*) from gc),
-        'leads_no_grupo', (select count(*) from pessoa pe where pe.fone8 in (select gc.fone8 from gc)),
-        'mql_no_grupo', (select count(*) from pessoa pe where pe.classe in ('advogado', 'contador', 'estudante_direito')
-                            and pe.fone8 in (select gc.fone8 from gc))) end,
-    'leads', jsonb_build_object(
-        'unicos', (select count(*) from pessoa),
-        'mql', (select count(*) from pessoa where classe in ('advogado', 'contador', 'estudante_direito')),
-        'advogado', (select count(*) from pessoa where classe = 'advogado'),
-        'estudante_direito', (select count(*) from pessoa where classe = 'estudante_direito'),
-        'advogado_mais_estudante', (select count(*) from pessoa where classe in ('advogado', 'estudante_direito')),
-        'contador', (select count(*) from pessoa where classe = 'contador'),
-        'outros', (select count(*) from pessoa where classe = 'outros'),
-        'sem_profissao', (select count(*) from pessoa where classe is null),
-        'nao_mql', (select count(*) from pessoa where classe = 'outros' or classe is null)),
-    'atualizado', jsonb_build_object(
-        'ultimo_evento_webhook', (select max(j.ocorreu_em) from crm.evento_jornada j join grp on grp.sendflow_campanha = j.tag where j.fonte = 'sendflow'),
-        'ultima_foto', (select max(p.visto_ultimo_em) from dados.grupo_participantes p join grp on grp.id = p.grupo_id))
-  ) into r;
-  return r;
-end
-$function$;
-
-revoke execute on function public.dados_black_grupo(text, date, date, boolean, jsonb) from public, anon, service_role;
-grant execute on function public.dados_black_grupo(text, date, date, boolean, jsonb) to authenticated;

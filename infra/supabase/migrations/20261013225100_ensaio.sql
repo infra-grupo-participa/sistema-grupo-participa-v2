@@ -1,8 +1,17 @@
--- Ensaio de 20261013225100 (transação desfeita), versão aprovada pelo Victor em 13/10 noite: início 04/10, parciais pelo
--- interruptor das listas, grupo da consultoria à parte. Prova: chaves antigas de dados_black_grupo iguais; perfil com o
--- Respondi como cadastro (nenhum pago a mais); listas e planilha iguais; reversão volta tudo (funções por md5, view pelos dados).
+-- Ensaio de 20261013225100 (B) e 20261013225200 (C) em sequência (transação desfeita), versão da correção do Victor
+-- das 21h de 13/10: o grupo da consultoria não conta em nada. Prova: o Respondi entra como cadastro sem pago a mais;
+-- entrou_grupo_em passa a ser só grupo da Black e bate com uma conta independente; listas e planilha iguais; reversão
+-- das duas volta tudo (funções por md5, view pelos dados).
 begin;
 create temp table _z_out (em serial, passo text, linha text);
+create function pg_temp.no_black(p_fone8 text) returns boolean language sql stable as $f$
+  select p_fone8 is not null and (
+    exists (select 1 from dados.grupo_participantes gp join dados.dashboard_grupos dg on dg.id = gp.grupo_id
+             where dg.chave = 'black-friday-2026-10' and dg.papel = 'dashboard' and gp.fone8 = p_fone8)
+    or exists (select 1 from crm.evento_jornada j join dados.dashboard_grupos dg on dg.sendflow_campanha = j.tag
+                where dg.chave = 'black-friday-2026-10' and dg.papel = 'dashboard' and j.fonte = 'sendflow' and j.tipo = 'entrada'
+                  and right(j.fone_key, 8) = p_fone8))
+$f$;
 do $a$
 declare v text;
 begin
@@ -12,14 +21,22 @@ begin
 end
 $a$;
 
-create temp table _a as select
-  public.dados_black_grupo('black-friday-2026-10', null, null, false, null) as g,
-  public.dados_black_grupo('black-friday-2026-10', null, null, false, '{"tipo":"porta","valor":"consultoria"}'::jsonb) as gr,
-  md5((dados.black_base_pessoas() #- '{resumo,gerado_em}')::text) || ' / ' || md5((dados.black_lista_disparo_montar() #- '{resumo,gerado_em}')::text) as listas,
-  (select md5(string_agg(x::text, '|' order by x.lead_id)) from dados.black_leads x) as view_dados,
-  (select string_agg(md5(prosrc), ' ' order by oid) from pg_proc where oid in ('dados.black_base_pessoas()'::regprocedure, 'dados.black_lista_disparo_montar()'::regprocedure, 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure)) as fn;
-insert into pg_temp._z_out(passo, linha) select '1 antes perfil linhas/pessoas/pagos/pessoas consultoria', (select count(*) || ' / ' || count(distinct pessoa_id) || ' / ' || count(*) filter (where canal is not null) || ' / ' || count(distinct pessoa_id) filter (where porta = 'consultoria') from public.dados_black_perfil('black-friday-2026-10', null, null, false));
-insert into pg_temp._z_out(passo, linha) select '1 antes card', (select (g->>'unicos_grupos_mql') || ' / ' || (g->'leads'->>'mql') from pg_temp._a);
+create temp table _za as select md5((dados.black_base_pessoas() #- '{resumo,gerado_em}')::text) || ' / ' || md5((dados.black_lista_disparo_montar() #- '{resumo,gerado_em}')::text) as listas, (select md5(string_agg(x::text, '|' order by x.lead_id)) from dados.black_leads x) as view_dados, (select string_agg(md5(prosrc), ' ' order by oid) from pg_proc where oid in ('dados.black_base_pessoas()'::regprocedure, 'dados.black_lista_disparo_montar()'::regprocedure, 'public.dados_black_perfil(text,date,date,boolean)'::regprocedure)) as fn;
+
+drop table if exists pg_temp._zperfil;
+create temp table _zperfil as select p.*, l.fone8 from public.dados_black_perfil('black-friday-2026-10', null, null, false) p join dados.black_leads l on l.lead_id = p.lead_id;
+insert into pg_temp._z_out(passo, linha) select '1 antes pessoas / MQL / MQL no grupo pelo perfil / MQL no grupo da Black (conta à parte)',
+  (select count(*) || ' / ' || count(*) filter (where m) || ' / ' || count(*) filter (where m and g) || ' / ' || count(*) filter (where m and b)
+     from (select pessoa_id, bool_or(mql) m, bool_or(entrou_grupo_em is not null) g, bool_or(pg_temp.no_black(fone8)) b from pg_temp._zperfil group by pessoa_id) z);
+insert into pg_temp._z_out(passo, linha) select '1 antes pagos / no grupo pelo perfil / no grupo da Black (conta à parte)',
+  (select count(*) || ' / ' || count(*) filter (where g) || ' / ' || count(*) filter (where b)
+     from (select pessoa_id, bool_or(entrou_grupo_em is not null) g, bool_or(pg_temp.no_black(fone8)) b from pg_temp._zperfil where canal is not null group by pessoa_id) z);
+insert into pg_temp._z_out(passo, linha) select '1 antes pessoas da consultoria: só página / só Respondi / ambos',
+  (select count(*) filter (where pg and not rp) || ' / ' || count(*) filter (where rp and not pg) || ' / ' || count(*) filter (where pg and rp)
+     from (select pessoa_id, bool_or(pagina = 'consultoria') pg, bool_or(pagina = 'consultoria_respondi') rp from pg_temp._zperfil where porta = 'consultoria' group by pessoa_id) z);
+insert into pg_temp._z_out(passo, linha) select '1 antes envios: total / Respondi', (select count(*) || ' / ' || count(*) filter (where pagina = 'consultoria_respondi') from pg_temp._zperfil);
+insert into pg_temp._z_out(passo, linha) select '1 antes card (regra da tela)', (select (g->>'unicos_grupos_mql') || ' / ' || (g->'leads'->>'mql') from (select public.dados_black_grupo('black-friday-2026-10', null, null, false, null) g) z);
+
 -- 20261013225100: cadastros da consultoria que vieram do Respondi entram no dashboard da Black como CADASTRO
 --
 -- POR QUE: dados.black_leads só lia a página nova da consultoria (metodo.consultoria_aplicacoes, desde 12/10 18h14). As
@@ -31,10 +48,8 @@ insert into pg_temp._z_out(passo, linha) select '1 antes card', (select (g->>'un
 --     hoje false). Sem UTM: canal sempre nulo, nunca é lead pago. campos.parcial diz se a resposta é parcial.
 --  2. dados.black_base_pessoas e dados.black_lista_disparo_montar passam a ignorar esse ramo, porque já leem o Respondi
 --     pelo ramo próprio: as listas da Mensageria e a planilha ficam iguais.
---  3. public.dados_black_grupo devolve 'grupo_consultoria' (decisão do Victor, 13/10: o card de ingresso fica só com o
---     grupo da Black e mostra à parte "no grupo da consultoria: X"): membros, leads_no_grupo e mql_no_grupo (pessoas do
---     recorte, o mesmo denominador do card). Só contagem, sem dado pessoal. Nenhuma chave existente muda.
--- DECISÕES DO VICTOR (13/10 noite): início do dashboard continua 04/10; parciais pelo interruptor das listas.
+-- DECISÕES DO VICTOR (13/10 noite): início do dashboard continua 04/10 (o Respondi de antes fica fora pelo periodo_inicio);
+--   parciais pelo interruptor das listas; o grupo da consultoria NÃO conta em nada do dashboard (correção das 21h).
 -- ATENÇÃO: as RPCs da tela filtram criado_em a partir de dados.dashboards.periodo_inicio (04/10); as respostas de 29/09
 --   a 03/10 só aparecem com p_de anterior ou com o início do dashboard mudado (decisão do Victor, fora desta migration).
 -- AS 5 PERGUNTAS: escala = + até 664 linhas (respondi.respostas por form_slug, índice respostas_form_idx; o form parou em
@@ -48,9 +63,8 @@ do $g$
 begin
   if md5(pg_get_viewdef('dados.black_leads'::regclass)) <> '5ce616621e652aaf79445444620f9798'
      or (select md5(prosrc) from pg_proc where oid = 'dados.black_base_pessoas()'::regprocedure) <> '5c5662907874de3e301e6710adf6eb56'
-     or (select md5(prosrc) from pg_proc where oid = 'dados.black_lista_disparo_montar()'::regprocedure) <> '37f944836201dd0c7cbf15ce77539c16'
-     or (select md5(prosrc) from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> 'd01f477c89b3aa735fd90f393bfbb26f' then
-    raise exception '20261013225100: definição viva mudou (black_leads, black_base_pessoas, black_lista_disparo_montar ou dados_black_grupo). Reler.';
+     or (select md5(prosrc) from pg_proc where oid = 'dados.black_lista_disparo_montar()'::regprocedure) <> '37f944836201dd0c7cbf15ce77539c16' then
+    raise exception '20261013225100: definição viva mudou (black_leads, black_base_pessoas, ou black_lista_disparo_montar). Reler.';
   end if;
 end
 $g$;
@@ -612,145 +626,156 @@ $function$;
 revoke execute on function dados.black_base_pessoas() from public, anon, authenticated, service_role;
 revoke execute on function dados.black_lista_disparo_montar() from public, anon, authenticated, service_role;
 
-CREATE OR REPLACE FUNCTION public.dados_black_grupo(p_chave text, p_de date DEFAULT NULL::date, p_ate date DEFAULT NULL::date, p_incluir_teste boolean DEFAULT false, p_recorte jsonb DEFAULT NULL::jsonb)
- RETURNS jsonb
+-- 20261013225200: entrou_grupo_em do dashboard da Black passa a contar só os grupos da Black
+--
+-- POR QUE: public.dados_black_perfil lia dados.v_grupo_pessoas_todos, que junta TODOS os grupos da chave, inclusive o da
+-- consultoria (dashboard_grupos.papel = 'lista', congelado, 464 pessoas). Tudo o que a tela calcula com entrou_grupo_em
+-- (taxa de grupo em 48h, funil do criativo, Histórico, tabela de leads) contava a entrada no grupo da consultoria. Medido
+-- em 13/10: 134 MQL "no grupo" pelo perfil x 97 só no grupo da Black. Migration aprovada pelo Victor em 13/10 (21h): o
+-- grupo da consultoria não conta em nada; sem campo novo para ele.
+-- O QUE FAZ: troca só o CTE g (a origem de entrou_grupo_em e entrada_grupo_aproximada) por grupos papel = 'dashboard',
+-- com a mesma regra da view. Assinatura, colunas e ACL iguais.
+-- AS 5 PERGUNTAS: escala = eventos do webhook dos 3 grupos da Black (tag) + foto dos 3 grupos (em vez da view de todos os
+--   grupos da chave: lê menos); índice = os mesmos que a view usava (crm.evento_jornada por tag, grupo_participantes por
+--   grupo); frequência e repetição = as da tela, nenhuma chamada nova; reversão = 20261013225200_reversao.sql.
+
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
+
+do $g$
+begin
+  if (select md5(prosrc) from pg_proc where oid = 'public.dados_black_perfil(text,date,date,boolean)'::regprocedure) <> '9813b62c190f3dfee29b8169008ca8da' then
+    raise exception '20261013225200: corpo vivo de dados_black_perfil mudou. Reler a definição viva.';
+  end if;
+end
+$g$;
+
+CREATE OR REPLACE FUNCTION public.dados_black_perfil(p_chave text, p_de date DEFAULT NULL::date, p_ate date DEFAULT NULL::date, p_incluir_teste boolean DEFAULT false)
+ RETURNS TABLE(lead_id text, pessoa_id text, criado_em timestamp with time zone, primeira_porta boolean, pagina text, porta text, isca text, campanha_id text, conjunto_id text, anuncio_id text, canal text, utm_source text, utm_medium text, utm_campaign text, utm_content text, utm_term text, profissao text, profissao_bruta text, mql boolean, uf text, entrou_grupo_em timestamp with time zone, entrada_grupo_aproximada boolean, teste boolean, parece_teste boolean, a_corrigir text[], campos jsonb)
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO ''
 AS $function$
--- 20261013225100: devolve também 'grupo_consultoria' (pessoas do recorte que estão no grupo da consultoria, linha à parte do card).
+#variable_conflict use_column
 declare
-  d dados.dashboards := dados.black_evento(p_chave);
-  v_rec jsonb := dados.black_recorte_valido(p_recorte);
+  d dados.dashboards := dados.black_evento(p_chave);   -- 42501 sem acesso, P0002 fora do cadastro ou outro modelo
   v_de timestamptz := (coalesce(p_de, d.periodo_inicio)::timestamp at time zone 'America/Sao_Paulo');
   v_ate timestamptz := ((coalesce(p_ate, (now() at time zone 'America/Sao_Paulo')::date) + 1)::timestamp at time zone 'America/Sao_Paulo');
-  r jsonb;
+  v_sal text := gen_random_uuid()::text;   -- pessoa_id só vale dentro desta resposta
 begin
-  with grp as (
-    select g.id, g.sendflow_campanha, g.sendflow_release_id,
-           case when g.sendflow_campanha ~ ' - Advogados$' then 'advogado'
-                when g.sendflow_campanha ~ ' - Contadores$' then 'contador'
-                when g.sendflow_campanha ~ ' - Outros$' then 'outros' end as segmento
-      from dados.dashboard_grupos g
-     where g.chave = d.chave
-       and g.papel = 'dashboard'   -- 20261013172751: grupo só de lista de disparo (ex.: consultoria) fica fora dos cards
-  ), bl as materialized (   -- 20261013023136: telefone dos envios da Black, lido uma vez só
-    select l.fone8, l.email, l.whatsapp from dados.black_leads l where l.fone8 is not null
-  ), tst as (
-    -- 20261013023136: fora do grupo, (1) o telefone marcado como teste e (2) o telefone cujos envios da Black são TODOS
-    -- teste (dados.teste_ativo: marcação por e-mail ou por fone), olhando todos os envios da Black, não só os do período.
-    -- Telefone misto (um envio teste e outro não) continua contando até decisão do Victor (docs/dashboard-black/README.md).
-    -- teste_ativo só roda nos envios dos telefones candidatos (os que têm algum envio de e-mail marcado), não na base toda.
-    select m.valor as fone8 from dados.marcacoes_teste m
-     where m.chave = d.chave and m.desmarcado_em is null and m.tipo = 'fone'
-    union
-    select bl.fone8 from bl
-     where bl.fone8 in (select c.fone8 from bl c
-                          join dados.marcacoes_teste m on m.chave = d.chave and m.desmarcado_em is null
-                                                      and m.tipo = 'email' and m.valor = c.email)
-     group by bl.fone8
-    having bool_and(dados.teste_ativo(d.chave, bl.email, bl.whatsapp))
-  ), wh_todos as (   -- toda entrada que o webhook já viu (para saber quem a foto precisa cobrir)
-    select distinct grp.id as grupo_id, right(j.fone_key, 8) as fone8
-      from crm.evento_jornada j
-      join grp on grp.sendflow_campanha = j.tag
-     where j.fonte = 'sendflow' and j.tipo = 'entrada' and j.fone_key is not null
-  ), wh as (
-    select distinct grp.id as grupo_id, right(j.fone_key, 8) as fone8
-      from crm.evento_jornada j
-      join grp on grp.sendflow_campanha = j.tag
-     where j.fonte = 'sendflow' and j.tipo = 'entrada' and j.fone_key is not null
-       and j.ocorreu_em >= v_de and j.ocorreu_em < v_ate
-  ), fo as (   -- foto: só quem o webhook nunca viu entrar naquele grupo
-    select distinct p.grupo_id, p.fone8
-      from dados.grupo_participantes p
-      join grp on grp.id = p.grupo_id
-     where p.visto_primeiro_em >= v_de and p.visto_primeiro_em < v_ate
-       and not exists (select 1 from wh_todos w where w.grupo_id = p.grupo_id and w.fone8 = p.fone8)
-  ), ent as (
-    select x.grupo_id, x.fone8, bool_or(x.via = 'webhook') as via_webhook
-      from (select grupo_id, fone8, 'webhook' as via from wh union all select grupo_id, fone8, 'foto' from fo) x
-     where p_incluir_teste or x.fone8 not in (select fone8 from tst)
-     group by x.grupo_id, x.fone8
-  ), gcg as (   -- 20261013225100: grupo da consultoria (papel 'lista', congelado); fica FORA do card, vira linha à parte
-    select g.id, g.sendflow_campanha from dados.dashboard_grupos g where g.chave = d.chave and g.papel = 'lista'
-  ), gc as (     -- quem está ou esteve no grupo da consultoria, em qualquer data (foto ou entrada do webhook)
-    select x.fone8 from (
-      select p.fone8 from dados.grupo_participantes p join gcg on gcg.id = p.grupo_id where p.fone8 is not null
-      union
-      select right(j.fone_key, 8) from crm.evento_jornada j join gcg on gcg.sendflow_campanha = j.tag
-       where j.fonte = 'sendflow' and j.tipo = 'entrada' and j.fone_key is not null) x
-     where p_incluir_teste or x.fone8 not in (select fone8 from tst)
-  ), ld as (
-    select l.*
+  return query
+  with l as (
+    select l.*, dados.teste_ativo(d.chave, l.email, l.whatsapp) as t,
+           row_number() over (partition by l.pessoa_chave order by l.criado_em, l.lead_id) = 1 as primeira
       from dados.black_leads l
-     where l.criado_em >= v_de and l.criado_em < v_ate
-       and (p_incluir_teste or not dados.teste_ativo(d.chave, l.email, l.whatsapp))
-       and dados.black_no_recorte(v_rec, l.porta, l.isca, l.campanha_id, l.conjunto_id, l.anuncio_id)
-  ), pessoa as (   -- classe da pessoa = a do envio mais recente que tem profissão
-    select ld.pessoa_chave,
-           (array_agg(ld.profissao_classe order by ld.criado_em desc, ld.lead_id desc) filter (where ld.profissao_classe is not null))[1] as classe,
-           max(ld.fone8) as fone8
-      from ld group by ld.pessoa_chave
+  ), g as (
+    -- 20261013225200: só os grupos da Black (dashboard_grupos.papel = 'dashboard'). Antes lia dados.v_grupo_pessoas_todos,
+    -- que junta todos os grupos da chave, e contava a entrada no grupo da consultoria (papel 'lista') como entrada no
+    -- grupo (decisão do Victor, 13/10: o grupo da consultoria não conta em nada). Mesma regra da view: entrada pelo
+    -- webhook; sem ela, a 1ª vez visto na foto (limitada pela saída do webhook) e marcada como aproximada.
+    with gd as (
+      select x.id, x.sendflow_campanha from dados.dashboard_grupos x where x.chave = d.chave and x.papel = 'dashboard'
+    ), ev as (
+      select right(j.fone_key, 8) as fone8,
+             min(j.ocorreu_em) filter (where j.tipo = 'entrada') as entrou_em,
+             max(j.ocorreu_em) filter (where j.tipo = 'saida') as saiu_em
+        from crm.evento_jornada j join gd on gd.sendflow_campanha = j.tag
+       where j.fonte = 'sendflow' and j.tipo in ('entrada', 'saida') and j.fone_key is not null
+       group by right(j.fone_key, 8)
+    ), fo as (
+      select p.fone8, min(p.visto_primeiro_em) as visto
+        from dados.grupo_participantes p join gd on gd.id = p.grupo_id
+       where p.fone8 is not null
+       group by p.fone8
+    ), u as (
+      select coalesce(ev.fone8, fo.fone8) as fone8,
+             coalesce(ev.entrou_em, case when fo.fone8 is not null then least(fo.visto, ev.saiu_em) end) as entrou_em,
+             (ev.entrou_em is null and fo.visto is not null) as aprox
+        from ev full join fo on fo.fone8 = ev.fone8
+    )
+    select u.fone8, u.entrou_em, case when u.entrou_em is not null then u.aprox end as aprox
+      from u
   )
-  select jsonb_build_object(
-    'periodo', jsonb_build_object('de', (v_de at time zone 'America/Sao_Paulo')::date, 'ate', ((v_ate at time zone 'America/Sao_Paulo')::date - 1)),
-    'recorte', v_rec,
-    'incluir_teste', p_incluir_teste,
-    'grupos', coalesce((select jsonb_agg(jsonb_build_object(
-        'campanha', grp.sendflow_campanha, 'segmento', grp.segmento,
-        'unicos', (select count(*) from ent where ent.grupo_id = grp.id),
-        'unicos_webhook', (select count(*) from ent where ent.grupo_id = grp.id and ent.via_webhook),
-        'unicos_so_foto', (select count(*) from ent where ent.grupo_id = grp.id and not ent.via_webhook),
-        'unicos_cruzados', case when v_rec is null then null else
-            (select count(*) from pessoa pe where pe.fone8 is not null
-                and exists (select 1 from ent where ent.grupo_id = grp.id and ent.fone8 = pe.fone8)) end
-      ) order by grp.segmento, grp.sendflow_campanha) from grp), '[]'::jsonb),
-    'unicos_grupos_mql', (select count(distinct ent.fone8) from ent join grp on grp.id = ent.grupo_id where grp.segmento in ('advogado', 'contador')),
-    'unicos_grupos_total', (select count(distinct ent.fone8) from ent),
-    'unicos_cruzados_mql', case when v_rec is null then null else
-        (select count(*) from pessoa pe where pe.fone8 is not null and exists
-           (select 1 from ent join grp on grp.id = ent.grupo_id where grp.segmento in ('advogado', 'contador') and ent.fone8 = pe.fone8)) end,
-    -- 20261013225100: pessoas do recorte (mesmo denominador do card) que estão ou estiveram no grupo da consultoria
-    'grupo_consultoria', case when not exists (select 1 from gcg) then null else jsonb_build_object(
-        'campanhas', (select jsonb_agg(gcg.sendflow_campanha order by gcg.sendflow_campanha) from gcg),
-        'membros', (select count(*) from gc),
-        'leads_no_grupo', (select count(*) from pessoa pe where pe.fone8 in (select gc.fone8 from gc)),
-        'mql_no_grupo', (select count(*) from pessoa pe where pe.classe in ('advogado', 'contador', 'estudante_direito')
-                            and pe.fone8 in (select gc.fone8 from gc))) end,
-    'leads', jsonb_build_object(
-        'unicos', (select count(*) from pessoa),
-        'mql', (select count(*) from pessoa where classe in ('advogado', 'contador', 'estudante_direito')),
-        'advogado', (select count(*) from pessoa where classe = 'advogado'),
-        'estudante_direito', (select count(*) from pessoa where classe = 'estudante_direito'),
-        'advogado_mais_estudante', (select count(*) from pessoa where classe in ('advogado', 'estudante_direito')),
-        'contador', (select count(*) from pessoa where classe = 'contador'),
-        'outros', (select count(*) from pessoa where classe = 'outros'),
-        'sem_profissao', (select count(*) from pessoa where classe is null),
-        'nao_mql', (select count(*) from pessoa where classe = 'outros' or classe is null)),
-    'atualizado', jsonb_build_object(
-        'ultimo_evento_webhook', (select max(j.ocorreu_em) from crm.evento_jornada j join grp on grp.sendflow_campanha = j.tag where j.fonte = 'sendflow'),
-        'ultima_foto', (select max(p.visto_ultimo_em) from dados.grupo_participantes p join grp on grp.id = p.grupo_id))
-  ) into r;
-  return r;
+  select l.lead_id, md5(v_sal || l.pessoa_chave), l.criado_em, l.primeira, l.pagina, l.porta, l.isca,
+         l.campanha_id, l.conjunto_id, l.anuncio_id, l.canal,
+         l.utm_source, l.utm_medium, l.utm_campaign, l.utm_content, l.utm_term,
+         l.profissao_classe, l.profissao, l.mql, l.uf,
+         g.entrou_em, g.aprox,
+         l.t, l.parece_teste, l.a_corrigir, l.campos
+    from l
+    left join g on g.fone8 = l.fone8
+   where l.criado_em >= v_de and l.criado_em < v_ate
+     and (p_incluir_teste or not l.t)
+   order by l.criado_em, l.lead_id;
 end
 $function$;
 
-revoke execute on function public.dados_black_grupo(text, date, date, boolean, jsonb) from public, anon, service_role;
-grant execute on function public.dados_black_grupo(text, date, date, boolean, jsonb) to authenticated;
+revoke execute on function public.dados_black_perfil(text, date, date, boolean) from public, anon, service_role;
+grant execute on function public.dados_black_perfil(text, date, date, boolean) to authenticated;
 
-insert into pg_temp._z_out(passo, linha) select '2 depois perfil linhas/pessoas/pagos/pessoas consultoria', (select count(*) || ' / ' || count(distinct pessoa_id) || ' / ' || count(*) filter (where canal is not null) || ' / ' || count(distinct pessoa_id) filter (where porta = 'consultoria') from public.dados_black_perfil('black-friday-2026-10', null, null, false));
-insert into pg_temp._z_out(passo, linha) select '2 depois perfil por página (envios)', (select string_agg(pagina || ' ' || n, ', ' order by pagina) from (select pagina, count(*) n from public.dados_black_perfil('black-friday-2026-10', null, null, false) group by pagina) z);
-create temp table _d as select public.dados_black_grupo('black-friday-2026-10', null, null, false, null) as g,
-  public.dados_black_grupo('black-friday-2026-10', null, null, false, '{"tipo":"porta","valor":"consultoria"}'::jsonb) as gr;
-insert into pg_temp._z_out(passo, linha) select '3 grupo: chaves antigas iguais (fora leads, que muda de propósito)', ((select (g - 'grupo_consultoria' - 'leads') from pg_temp._d) = (select (g - 'leads') from pg_temp._a))::text;
-insert into pg_temp._z_out(passo, linha) select '3 card depois', (select (g->>'unicos_grupos_mql') || ' / ' || (g->'leads'->>'mql') || ' | grupo_consultoria ' || (g->'grupo_consultoria')::text from pg_temp._d);
-insert into pg_temp._z_out(passo, linha) select '3 recorte Consultoria', (select 'antes mql ' || (a.gr->'leads'->>'mql') || ' | depois mql ' || (d.gr->'leads'->>'mql') || ' cruzados_mql ' || coalesce(d.gr->>'unicos_cruzados_mql','-') || ' | grupo_consultoria ' || (d.gr->'grupo_consultoria')::text from pg_temp._a a, pg_temp._d d);
-insert into pg_temp._z_out(passo, linha) select '4 listas iguais', ((md5((dados.black_base_pessoas() #- '{resumo,gerado_em}')::text) || ' / ' || md5((dados.black_lista_disparo_montar() #- '{resumo,gerado_em}')::text)) = (select listas from pg_temp._a))::text;
-insert into pg_temp._z_out(passo, linha) select '5 ramo novo: linhas / parciais / teste / canal', (select count(*) || ' / ' || count(*) filter (where (campos->>'parcial')::boolean) || ' / ' || count(*) filter (where teste) || ' / ' || count(*) filter (where canal is not null) from dados.black_leads where pagina = 'consultoria_respondi');
-insert into pg_temp._z_out(passo, linha) select '6 ACL grupo/perfil, sobrecargas grupo', (select string_agg(coalesce(proacl::text,'NULL'), ' / ' order by proname) from pg_proc where oid in ('public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure, 'public.dados_black_perfil(text,date,date,boolean)'::regprocedure)) || ' | ' || (select count(*) from pg_proc where proname = 'dados_black_grupo');
-insert into pg_temp._z_out(passo, linha) select '6 view opções e ACL', (select coalesce(array_to_string(reloptions, ','), '-') || ' | ' || coalesce(relacl::text, 'NULL') from pg_class where oid = 'dados.black_leads'::regclass);
--- Reversão de 20261013225100: view, as 2 funções das listas e dados_black_grupo voltam ao corpo de antes.
+
+drop table if exists pg_temp._zperfil;
+create temp table _zperfil as select p.*, l.fone8 from public.dados_black_perfil('black-friday-2026-10', null, null, false) p join dados.black_leads l on l.lead_id = p.lead_id;
+insert into pg_temp._z_out(passo, linha) select '2 depois B+C pessoas / MQL / MQL no grupo pelo perfil / MQL no grupo da Black (conta à parte)',
+  (select count(*) || ' / ' || count(*) filter (where m) || ' / ' || count(*) filter (where m and g) || ' / ' || count(*) filter (where m and b)
+     from (select pessoa_id, bool_or(mql) m, bool_or(entrou_grupo_em is not null) g, bool_or(pg_temp.no_black(fone8)) b from pg_temp._zperfil group by pessoa_id) z);
+insert into pg_temp._z_out(passo, linha) select '2 depois B+C pagos / no grupo pelo perfil / no grupo da Black (conta à parte)',
+  (select count(*) || ' / ' || count(*) filter (where g) || ' / ' || count(*) filter (where b)
+     from (select pessoa_id, bool_or(entrou_grupo_em is not null) g, bool_or(pg_temp.no_black(fone8)) b from pg_temp._zperfil where canal is not null group by pessoa_id) z);
+insert into pg_temp._z_out(passo, linha) select '2 depois B+C pessoas da consultoria: só página / só Respondi / ambos',
+  (select count(*) filter (where pg and not rp) || ' / ' || count(*) filter (where rp and not pg) || ' / ' || count(*) filter (where pg and rp)
+     from (select pessoa_id, bool_or(pagina = 'consultoria') pg, bool_or(pagina = 'consultoria_respondi') rp from pg_temp._zperfil where porta = 'consultoria' group by pessoa_id) z);
+insert into pg_temp._z_out(passo, linha) select '2 depois B+C envios: total / Respondi', (select count(*) || ' / ' || count(*) filter (where pagina = 'consultoria_respondi') from pg_temp._zperfil);
+insert into pg_temp._z_out(passo, linha) select '2 depois B+C card (regra da tela)', (select (g->>'unicos_grupos_mql') || ' / ' || (g->'leads'->>'mql') from (select public.dados_black_grupo('black-friday-2026-10', null, null, false, null) g) z);
+
+insert into pg_temp._z_out(passo, linha) select '3 listas iguais', ((md5((dados.black_base_pessoas() #- '{resumo,gerado_em}')::text) || ' / ' || md5((dados.black_lista_disparo_montar() #- '{resumo,gerado_em}')::text)) = (select listas from pg_temp._za))::text;
+insert into pg_temp._z_out(passo, linha) select '3 perfil: linhas com entrada aproximada / com entrada', (select count(*) filter (where entrada_grupo_aproximada) || ' / ' || count(*) filter (where entrou_grupo_em is not null) from pg_temp._zperfil);
+insert into pg_temp._z_out(passo, linha) select '4 ACL perfil, sobrecargas perfil', (select coalesce(proacl::text,'NULL') from pg_proc where oid = 'public.dados_black_perfil(text,date,date,boolean)'::regprocedure) || ' | ' || (select count(*) from pg_proc where proname = 'dados_black_perfil');
+insert into pg_temp._z_out(passo, linha) select '4 view opções e ACL', (select coalesce(array_to_string(reloptions, ','), '-') || ' | ' || coalesce(relacl::text, 'NULL') from pg_class where oid = 'dados.black_leads'::regclass);
+-- Reversão de 20261013225200: dados_black_perfil volta a ler dados.v_grupo_pessoas_todos (todos os grupos da chave).
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
+CREATE OR REPLACE FUNCTION public.dados_black_perfil(p_chave text, p_de date DEFAULT NULL::date, p_ate date DEFAULT NULL::date, p_incluir_teste boolean DEFAULT false)
+ RETURNS TABLE(lead_id text, pessoa_id text, criado_em timestamp with time zone, primeira_porta boolean, pagina text, porta text, isca text, campanha_id text, conjunto_id text, anuncio_id text, canal text, utm_source text, utm_medium text, utm_campaign text, utm_content text, utm_term text, profissao text, profissao_bruta text, mql boolean, uf text, entrou_grupo_em timestamp with time zone, entrada_grupo_aproximada boolean, teste boolean, parece_teste boolean, a_corrigir text[], campos jsonb)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+declare
+  d dados.dashboards := dados.black_evento(p_chave);   -- 42501 sem acesso, P0002 fora do cadastro ou outro modelo
+  v_de timestamptz := (coalesce(p_de, d.periodo_inicio)::timestamp at time zone 'America/Sao_Paulo');
+  v_ate timestamptz := ((coalesce(p_ate, (now() at time zone 'America/Sao_Paulo')::date) + 1)::timestamp at time zone 'America/Sao_Paulo');
+  v_sal text := gen_random_uuid()::text;   -- pessoa_id só vale dentro desta resposta
+begin
+  return query
+  with l as (
+    select l.*, dados.teste_ativo(d.chave, l.email, l.whatsapp) as t,
+           row_number() over (partition by l.pessoa_chave order by l.criado_em, l.lead_id) = 1 as primeira
+      from dados.black_leads l
+  ), g as (
+    select e.fone8, min(e.entrou_em) as entrou_em, bool_or(e.entrada_aproximada) filter (where e.entrou_em is not null) as aprox
+      from dados.v_grupo_pessoas_todos e
+     where e.chave = d.chave
+     group by e.fone8
+  )
+  select l.lead_id, md5(v_sal || l.pessoa_chave), l.criado_em, l.primeira, l.pagina, l.porta, l.isca,
+         l.campanha_id, l.conjunto_id, l.anuncio_id, l.canal,
+         l.utm_source, l.utm_medium, l.utm_campaign, l.utm_content, l.utm_term,
+         l.profissao_classe, l.profissao, l.mql, l.uf,
+         g.entrou_em, g.aprox,
+         l.t, l.parece_teste, l.a_corrigir, l.campos
+    from l
+    left join g on g.fone8 = l.fone8
+   where l.criado_em >= v_de and l.criado_em < v_ate
+     and (p_incluir_teste or not l.t)
+   order by l.criado_em, l.lead_id;
+end
+$function$;
+revoke execute on function public.dados_black_perfil(text, date, date, boolean) from public, anon, service_role;
+grant execute on function public.dados_black_perfil(text, date, date, boolean) to authenticated;
+
+-- Reversão de 20261013225100: view e as 2 funções das listas voltam ao corpo de antes.
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
 create or replace view dados.black_leads with (security_invoker = true) as
@@ -1285,115 +1310,7 @@ end
 $function$;
 revoke execute on function dados.black_base_pessoas() from public, anon, authenticated, service_role;
 revoke execute on function dados.black_lista_disparo_montar() from public, anon, authenticated, service_role;
-CREATE OR REPLACE FUNCTION public.dados_black_grupo(p_chave text, p_de date DEFAULT NULL::date, p_ate date DEFAULT NULL::date, p_incluir_teste boolean DEFAULT false, p_recorte jsonb DEFAULT NULL::jsonb)
- RETURNS jsonb
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO ''
-AS $function$
-declare
-  d dados.dashboards := dados.black_evento(p_chave);
-  v_rec jsonb := dados.black_recorte_valido(p_recorte);
-  v_de timestamptz := (coalesce(p_de, d.periodo_inicio)::timestamp at time zone 'America/Sao_Paulo');
-  v_ate timestamptz := ((coalesce(p_ate, (now() at time zone 'America/Sao_Paulo')::date) + 1)::timestamp at time zone 'America/Sao_Paulo');
-  r jsonb;
-begin
-  with grp as (
-    select g.id, g.sendflow_campanha, g.sendflow_release_id,
-           case when g.sendflow_campanha ~ ' - Advogados$' then 'advogado'
-                when g.sendflow_campanha ~ ' - Contadores$' then 'contador'
-                when g.sendflow_campanha ~ ' - Outros$' then 'outros' end as segmento
-      from dados.dashboard_grupos g
-     where g.chave = d.chave
-       and g.papel = 'dashboard'   -- 20261013172751: grupo só de lista de disparo (ex.: consultoria) fica fora dos cards
-  ), bl as materialized (   -- 20261013023136: telefone dos envios da Black, lido uma vez só
-    select l.fone8, l.email, l.whatsapp from dados.black_leads l where l.fone8 is not null
-  ), tst as (
-    -- 20261013023136: fora do grupo, (1) o telefone marcado como teste e (2) o telefone cujos envios da Black são TODOS
-    -- teste (dados.teste_ativo: marcação por e-mail ou por fone), olhando todos os envios da Black, não só os do período.
-    -- Telefone misto (um envio teste e outro não) continua contando até decisão do Victor (docs/dashboard-black/README.md).
-    -- teste_ativo só roda nos envios dos telefones candidatos (os que têm algum envio de e-mail marcado), não na base toda.
-    select m.valor as fone8 from dados.marcacoes_teste m
-     where m.chave = d.chave and m.desmarcado_em is null and m.tipo = 'fone'
-    union
-    select bl.fone8 from bl
-     where bl.fone8 in (select c.fone8 from bl c
-                          join dados.marcacoes_teste m on m.chave = d.chave and m.desmarcado_em is null
-                                                      and m.tipo = 'email' and m.valor = c.email)
-     group by bl.fone8
-    having bool_and(dados.teste_ativo(d.chave, bl.email, bl.whatsapp))
-  ), wh_todos as (   -- toda entrada que o webhook já viu (para saber quem a foto precisa cobrir)
-    select distinct grp.id as grupo_id, right(j.fone_key, 8) as fone8
-      from crm.evento_jornada j
-      join grp on grp.sendflow_campanha = j.tag
-     where j.fonte = 'sendflow' and j.tipo = 'entrada' and j.fone_key is not null
-  ), wh as (
-    select distinct grp.id as grupo_id, right(j.fone_key, 8) as fone8
-      from crm.evento_jornada j
-      join grp on grp.sendflow_campanha = j.tag
-     where j.fonte = 'sendflow' and j.tipo = 'entrada' and j.fone_key is not null
-       and j.ocorreu_em >= v_de and j.ocorreu_em < v_ate
-  ), fo as (   -- foto: só quem o webhook nunca viu entrar naquele grupo
-    select distinct p.grupo_id, p.fone8
-      from dados.grupo_participantes p
-      join grp on grp.id = p.grupo_id
-     where p.visto_primeiro_em >= v_de and p.visto_primeiro_em < v_ate
-       and not exists (select 1 from wh_todos w where w.grupo_id = p.grupo_id and w.fone8 = p.fone8)
-  ), ent as (
-    select x.grupo_id, x.fone8, bool_or(x.via = 'webhook') as via_webhook
-      from (select grupo_id, fone8, 'webhook' as via from wh union all select grupo_id, fone8, 'foto' from fo) x
-     where p_incluir_teste or x.fone8 not in (select fone8 from tst)
-     group by x.grupo_id, x.fone8
-  ), ld as (
-    select l.*
-      from dados.black_leads l
-     where l.criado_em >= v_de and l.criado_em < v_ate
-       and (p_incluir_teste or not dados.teste_ativo(d.chave, l.email, l.whatsapp))
-       and dados.black_no_recorte(v_rec, l.porta, l.isca, l.campanha_id, l.conjunto_id, l.anuncio_id)
-  ), pessoa as (   -- classe da pessoa = a do envio mais recente que tem profissão
-    select ld.pessoa_chave,
-           (array_agg(ld.profissao_classe order by ld.criado_em desc, ld.lead_id desc) filter (where ld.profissao_classe is not null))[1] as classe,
-           max(ld.fone8) as fone8
-      from ld group by ld.pessoa_chave
-  )
-  select jsonb_build_object(
-    'periodo', jsonb_build_object('de', (v_de at time zone 'America/Sao_Paulo')::date, 'ate', ((v_ate at time zone 'America/Sao_Paulo')::date - 1)),
-    'recorte', v_rec,
-    'incluir_teste', p_incluir_teste,
-    'grupos', coalesce((select jsonb_agg(jsonb_build_object(
-        'campanha', grp.sendflow_campanha, 'segmento', grp.segmento,
-        'unicos', (select count(*) from ent where ent.grupo_id = grp.id),
-        'unicos_webhook', (select count(*) from ent where ent.grupo_id = grp.id and ent.via_webhook),
-        'unicos_so_foto', (select count(*) from ent where ent.grupo_id = grp.id and not ent.via_webhook),
-        'unicos_cruzados', case when v_rec is null then null else
-            (select count(*) from pessoa pe where pe.fone8 is not null
-                and exists (select 1 from ent where ent.grupo_id = grp.id and ent.fone8 = pe.fone8)) end
-      ) order by grp.segmento, grp.sendflow_campanha) from grp), '[]'::jsonb),
-    'unicos_grupos_mql', (select count(distinct ent.fone8) from ent join grp on grp.id = ent.grupo_id where grp.segmento in ('advogado', 'contador')),
-    'unicos_grupos_total', (select count(distinct ent.fone8) from ent),
-    'unicos_cruzados_mql', case when v_rec is null then null else
-        (select count(*) from pessoa pe where pe.fone8 is not null and exists
-           (select 1 from ent join grp on grp.id = ent.grupo_id where grp.segmento in ('advogado', 'contador') and ent.fone8 = pe.fone8)) end,
-    'leads', jsonb_build_object(
-        'unicos', (select count(*) from pessoa),
-        'mql', (select count(*) from pessoa where classe in ('advogado', 'contador', 'estudante_direito')),
-        'advogado', (select count(*) from pessoa where classe = 'advogado'),
-        'estudante_direito', (select count(*) from pessoa where classe = 'estudante_direito'),
-        'advogado_mais_estudante', (select count(*) from pessoa where classe in ('advogado', 'estudante_direito')),
-        'contador', (select count(*) from pessoa where classe = 'contador'),
-        'outros', (select count(*) from pessoa where classe = 'outros'),
-        'sem_profissao', (select count(*) from pessoa where classe is null),
-        'nao_mql', (select count(*) from pessoa where classe = 'outros' or classe is null)),
-    'atualizado', jsonb_build_object(
-        'ultimo_evento_webhook', (select max(j.ocorreu_em) from crm.evento_jornada j join grp on grp.sendflow_campanha = j.tag where j.fonte = 'sendflow'),
-        'ultima_foto', (select max(p.visto_ultimo_em) from dados.grupo_participantes p join grp on grp.id = p.grupo_id))
-  ) into r;
-  return r;
-end
-$function$;
-revoke execute on function public.dados_black_grupo(text, date, date, boolean, jsonb) from public, anon, service_role;
-grant execute on function public.dados_black_grupo(text, date, date, boolean, jsonb) to authenticated;
 
-insert into pg_temp._z_out(passo, linha) select '7 reversão: funções iguais / dados da view iguais', ((select string_agg(md5(prosrc), ' ' order by oid) from pg_proc where oid in ('dados.black_base_pessoas()'::regprocedure, 'dados.black_lista_disparo_montar()'::regprocedure, 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure)) = (select fn from pg_temp._a))::text || ' / ' || ((select md5(string_agg(x::text, '|' order by x.lead_id)) from dados.black_leads x) = (select view_dados from pg_temp._a))::text;
+insert into pg_temp._z_out(passo, linha) select '5 reversão C+B: funções iguais / dados da view iguais', ((select string_agg(md5(prosrc), ' ' order by oid) from pg_proc where oid in ('dados.black_base_pessoas()'::regprocedure, 'dados.black_lista_disparo_montar()'::regprocedure, 'public.dados_black_perfil(text,date,date,boolean)'::regprocedure)) = (select fn from pg_temp._za))::text || ' / ' || ((select md5(string_agg(x::text, '|' order by x.lead_id)) from dados.black_leads x) = (select view_dados from pg_temp._za))::text;
 select passo, linha from pg_temp._z_out order by em, passo;
 rollback;

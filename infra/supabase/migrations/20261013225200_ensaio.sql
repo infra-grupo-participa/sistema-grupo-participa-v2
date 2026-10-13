@@ -1,0 +1,1 @@
+-- O ensaio da C roda junto com o da B, em sequência: ver 20261013225100_ensaio.sql.

@@ -530,11 +530,11 @@ O que vale para o repositório:
 - **Respondi da consultoria como cadastro:** migration `20261013225100` (ramo `consultoria_respondi` na
   `dados.black_leads` com a regra da lista de disparo: todo o `JmSmjBBS`, com contato, parcial pelo interruptor
   `dados.black_lista_config.incluir_respondi_parcial`; sem canal; listas da Mensageria iguais). Decisões do Victor
-  (13/10 noite): início do dashboard continua 04/10; card "Ingresso no grupo" só com o grupo da Black e linha à parte
-  "no grupo da consultoria" (`dados_black_grupo.grupo_consultoria.mql_no_grupo` de `leads.mql`). Detalhe no explain.
-- **`entrou_grupo_em` do perfil conta o grupo da consultoria** (lê `dados.v_grupo_pessoas_todos`, que junta todos os
-  grupos da chave): infla a taxa de grupo em 48h, o funil do criativo e o Histórico. Correção (migration C) espera
-  decisão do Victor.
+  (13/10 noite): início do dashboard continua 04/10; o grupo da consultoria não conta em nada (card de ingresso só
+  com o grupo da Black, sem linha extra).
+- **`entrou_grupo_em` só com o grupo da Black:** migration `20261013225200` (C). Antes o perfil lia
+  `dados.v_grupo_pessoas_todos`, que junta todos os grupos da chave, e contava o grupo da consultoria na taxa de grupo
+  em 48h, no funil do criativo e no Histórico (135 MQL "no grupo" contra 98 de verdade, com a B).
 - **Páginas:** `mapearTrafego` fixa `paginas: []` e `paginaId: null`, e a coleta do Meta não traz a URL de destino
   (só `url_tags`). Curto prazo: página pelos leads pagos do anúncio. Definitivo: a Edge `trafego-meta` pedir o link do
   criativo (coluna nova).
