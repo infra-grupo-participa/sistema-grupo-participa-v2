@@ -296,7 +296,7 @@ fonte: a tela usa `campanha`. Nulo é "sem dado", nunca zero; as taxas são calc
   - Nulo é "sem dado".
   - Contrato completo: `infra/supabase/migrations/20261009230000.explain.md`.
 
-## Vendas da Sessão de Viabilidade (`dados_atm_sv_vendas`, PENDENTE DE APLICAÇÃO)
+## Vendas da Sessão de Viabilidade (`dados_atm_sv_vendas`, APLICADA em 13/10/2026)
 
 **Situação (13/10/2026): contrato combinado, migration `20261013190752` escrita em outra frente, NÃO aplicada em produção.** Até ser
 aplicada, a tela recebe `PGRST202` e mostra "sem dado ainda". Card ClickUp 17tya50ga3c. Quem lê: aba Vendas do modal da
@@ -324,7 +324,7 @@ Sessão de Viabilidade (`carregarAtmSvVendas` em `web/modules/infra/atm/infrastr
   por período, com `vendas_teste` para a nota de vendas de teste fora do total.
 - `p_incluir_teste = false` (padrão) não devolve as linhas de teste; a tela só pede `true` para master.
 - Dado pessoal: a tela só chama a RPC para quem tem a capacidade `contato.ver`. O gate também está no banco, na migration
-  `infra/supabase/migrations/20261013190752_dados_atm_sv_vendas.sql` (não aplicada): `dados.atm_cadastro` (equipe e
+  `infra/supabase/migrations/20261013190752_dados_atm_sv_vendas.sql` (aplicada): `dados.atm_cadastro` (equipe e
   chave), `acesso.tem('contato.ver')` e `p_incluir_teste = true` só para master, todos com `42501`.
 - Erros que a tela trata: `PGRST202` (função ainda não aplicada) vira "sem dado ainda"; `42501` (sem permissão, inclusive
   perda de `contato.ver` no meio da sessão) limpa a lista e mostra "Lista indisponível"; `P0002`, `22023` e qualquer outro

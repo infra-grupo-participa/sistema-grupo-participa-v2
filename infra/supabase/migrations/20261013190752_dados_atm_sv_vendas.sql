@@ -1,6 +1,8 @@
 -- 20261013190752: lista de vendas (histórico) da seção "Sessão de Viabilidade" do dashboard ATM
 --
--- STATUS: NÃO APLICADA. Escrita e ensaiada (BEGIN ... ROLLBACK) em 13/10/2026; aplicar só com ok do Victor/JP.
+-- STATUS: APLICADA em produção em 13/10/2026 (ok do Victor, alinhado com o JP), versão 20261013190752, com a linha em
+-- supabase_migrations.schema_migrations na mesma transação; md5 gravado = ae5312df56af3c0959a1bd3c17d129ae = este arquivo antes desta
+-- troca de STATUS. Escrita e ensaiada (BEGIN ... ROLLBACK) em 13/10/2026.
 -- Ensaio: 20261013190752_ensaio.sql. Reversão: 20261013190752_reversao.sql. Situação e prova: 20261013190752.explain.md.
 -- Depende de 20261008191000 (marcação de teste) e 20261007180503 (schema acesso), já aplicadas.
 --

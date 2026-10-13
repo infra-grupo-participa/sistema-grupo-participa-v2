@@ -26,7 +26,7 @@ insert into pg_temp._z_out (passo, linha)
 -- ===== migration (corpo de 20261013190752_dados_atm_sv_vendas.sql, sem o notify) =====
 -- 20261013190752: lista de vendas (histórico) da seção "Sessão de Viabilidade" do dashboard ATM
 --
--- STATUS: NÃO APLICADA. Escrita e ensaiada (BEGIN ... ROLLBACK) em 13/10/2026; aplicar só com ok do Victor/JP.
+-- STATUS: APLICADA em 13/10/2026 (veja a migration). Este arquivo é só o ensaio, sempre desfeito (ROLLBACK).
 -- Ensaio: 20261013190752_ensaio.sql. Reversão: 20261013190752_reversao.sql. Situação e prova: 20261013190752.explain.md.
 -- Depende de 20261008191000 (marcação de teste) e 20261007180503 (schema acesso), já aplicadas.
 --
