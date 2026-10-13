@@ -1,6 +1,6 @@
 import json,glob,os,re,urllib.request,unicodedata
 from fam import familia
-WS={160:'Holding Masters',161:'Diamante',162:'Aurum',3380:'Acelera Holding',574:'Holding Total'}
+WS={160:'Holding Masters',161:'Diamante',162:'Aurum',3380:'Acelera Holding',574:'Holding Total',3504:'Consultoria Ao Vivo'}
 env={};[env.__setitem__(*l.strip().split('=',1)) for l in open(os.environ['RESPONDI_SUPABASE_ENV'],encoding='utf-8') if '=' in l and not l.startswith('#')]
 URL=[v for k,v in env.items() if k.endswith('SUPABASE_URL')][0].strip('"');KEY=env['SUPABASE_SERVICE_ROLE_KEY'].strip('"')
 assert 'mbvybujpkwuorhtdzcde' in URL

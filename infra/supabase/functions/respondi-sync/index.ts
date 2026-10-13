@@ -10,7 +10,13 @@ import { familia, formulario, resposta } from "./normaliza.ts";
 
 const sql = postgres(Deno.env.get("SUPABASE_DB_URL")!, { max: 2, prepare: false, idle_timeout: 20 });
 const API = "https://api.respondi.app/api/";
-const TIMES = [160, 161, 162, 3380, 574];
+// 3504 = "Consultoria Ao Vivo" (13/10/2026): aplicação da consultoria da Black (lista de disparo, migration 20261013174100).
+// Formulário público: desse time só entra o slug da lista abaixo (formulário novo lá não entra sozinho no casar/aplicar).
+const TIMES = [160, 161, 162, 3380, 574, 3504];
+const SO_ESTES: Record<number, string[]> = { 3504: ["JmSmjBBS"] };
+// Formulário de captação de lead: entra também quem NÃO terminou mas deixou contato (pedido do Victor, 13/10/2026).
+// A parcial vai com dados.parcial = true; a lista decide o que fazer com ela. Os outros formulários seguem só concluídos.
+const COM_PARCIAIS = new Set(["JmSmjBBS"]);
 const ORCAMENTO_MS = 110_000; // não começa página nova depois disso
 const PRAZO_REDE_MS = 125_000; // nenhuma chamada ao Respondi passa daqui: sobram ~25 s (volta ao 160, casar, aplicar) dos 150 s
 const RQ_MAX_MS = 30_000;
@@ -115,7 +121,7 @@ async function baixar(jwt: string, f: Obj, time: number, fam: string, n: number,
       return false;
     }
     let d: Obj;
-    try { d = await rq(t0 + PRAZO_REDE_MS, jwt, "GET", `answers/form/${encodeURIComponent(f.slug)}?page=${p}&completed=1`); }
+    try { d = await rq(t0 + PRAZO_REDE_MS, jwt, "GET", `answers/form/${encodeURIComponent(f.slug)}?page=${p}${COM_PARCIAIS.has(String(f.slug)) ? "" : "&completed=1"}`); }
     catch (e) { if (e instanceof SemPrazo) { await descarrega(); return false; } throw e; }
     const rs: Obj[] = d?.data?.respondents ?? [];
     if (p === 1) {
@@ -125,6 +131,7 @@ async function baixar(jwt: string, f: Obj, time: number, fam: string, n: number,
     if (!rs.length) break;
     for (const r of rs) {
       const l = resposta(r, f.slug, flds, fam, tc);
+      if (l && COM_PARCIAIS.has(String(f.slug)) && !r.completed_at) l.dados.parcial = true;
       if (l) lote.set(String(l.uuid), l);
       if (lote.size >= LOTE) await descarrega();
     }
@@ -180,6 +187,7 @@ Deno.serve(async (req) => {
           forms = (await listar(t0 + PRAZO_REDE_MS, jwt))
             .map((f) => ({ f, fam: familia(String(f.name ?? "")), n: Number(f.respondents_count) || 0 }))
             .filter((x) => x.fam && x.f.draft_of == null && x.n > 0 && x.f.slug)
+            .filter((x) => !SO_ESTES[time] || SO_ESTES[time].includes(String(x.f.slug)))
             .sort((a, b) => a.n - b.n); // menores primeiro: um formulário gigante não segura os outros
         } catch (e) {
           if (!(e instanceof SemPrazo)) throw e;

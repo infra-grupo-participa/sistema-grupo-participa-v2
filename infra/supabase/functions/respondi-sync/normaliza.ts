@@ -5,7 +5,7 @@
 type Obj = Record<string, any>;
 
 export const WS: Record<number, string> = {
-  160: "Holding Masters", 161: "Diamante", 162: "Aurum", 3380: "Acelera Holding", 574: "Holding Total",
+  160: "Holding Masters", 161: "Diamante", 162: "Aurum", 3380: "Acelera Holding", 574: "Holding Total", 3504: "Consultoria Ao Vivo",
 };
 
 export function familia(nome: string): string | null {
