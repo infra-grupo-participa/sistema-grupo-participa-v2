@@ -1,18 +1,5 @@
--- 20261013001500: foto do grupo do SendFlow abre no máximo UMA exportação por ciclo
---
--- STATUS: ver 20261013001500.explain.md. Ensaio: 20261013001500_ensaio.sql. Reversão: 20261013001500_reversao.sql.
---
--- POR QUE (diagnóstico do Maestro, autorizado pelo Victor, 13/10/2026 ~00:10 UTC)
---   dados.grupo_foto_ciclo() abria no mesmo minuto a foto de todos os grupos elegíveis. O export-leads do SendFlow
---   tem limite por minuto: só uma passava e as outras levavam "export-leads: http 403". Sem ORDER BY, a mesma
---   campanha (BF26 - Live 03/11 - Outros) ficava sempre de fora e nunca teve foto.
---
--- O QUE FAZ
---   CREATE OR REPLACE de dados.grupo_foto_ciclo() com o corpo que está no banco (lido por pg_get_functiondef em
---   13/10/2026 00:1x UTC) e uma só mudança, no bloco "foto nova": ORDER BY (última foto concluída mais antiga,
---   nulls first; depois última tentativa mais antiga, nulls first; depois id) e LIMIT 1. Com o cron de 2 em 2 min e
---   a trava de 9 min por grupo, os 4 grupos ativos ficam com foto a cada ~10 min, um por ciclo.
---   Assinatura, dono, ACL (só postgres), search_path e o resto do corpo ficam iguais.
+-- Reversão de 20261013001456: volta dados.grupo_foto_ciclo() ao corpo lido no banco antes da mudança
+-- (todas as fotos elegíveis abertas no mesmo ciclo). Não apaga nada de dados.grupo_fotos.
 
 CREATE OR REPLACE FUNCTION dados.grupo_foto_ciclo()
  RETURNS text
@@ -20,7 +7,6 @@ CREATE OR REPLACE FUNCTION dados.grupo_foto_ciclo()
  SET search_path TO ''
 AS $function$
 -- 20261008200000: exportar -> baixar -> processar; uma foto nova por grupo a cada 10 min (9 de folga para o cron)
--- 20261013001500: só uma foto nova por ciclo (limite por minuto do export-leads do SendFlow)
 declare
   r record;
   v_chave_api text;
@@ -100,18 +86,11 @@ begin
   if v_chave_api is null then
     return format('feitas %s, erros %s; sem segredo sendflow_api_key no Vault: nenhuma foto nova', v_feitas, v_erros);
   end if;
-  -- 20261013001500: no máximo UMA foto nova por ciclo. O SendFlow limita export-leads por minuto: abrir todas no
-  -- mesmo minuto fazia só uma passar e as outras levarem 403 (e, sem ordem, sempre a mesma ficava de fora).
-  -- Vai primeiro quem tem a última foto concluída mais antiga (quem nunca concluiu antes), depois a tentativa mais antiga.
   for r in
     select g.* from dados.dashboard_grupos g join dados.dashboards d on d.chave = g.chave
      where d.ativo and g.sendflow_release_id is not null
        and not exists (select 1 from dados.grupo_fotos f where f.grupo_id = g.id and f.etapa in ('exportar', 'baixar'))
        and not exists (select 1 from dados.grupo_fotos f where f.grupo_id = g.id and f.iniciado_em > now() - interval '9 minutes')
-     order by (select max(f.iniciado_em) from dados.grupo_fotos f where f.grupo_id = g.id and f.etapa = 'feito') asc nulls first,
-              (select max(f.iniciado_em) from dados.grupo_fotos f where f.grupo_id = g.id) asc nulls first,
-              g.id
-     limit 1
   loop
     insert into dados.grupo_fotos (grupo_id, req_exportar)
     values (r.id, ops.cron_post('dados-grupo-foto',
