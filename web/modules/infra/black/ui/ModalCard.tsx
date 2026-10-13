@@ -14,7 +14,7 @@ import { FASES, FUNIS, ROTULO_CANAL, ROTULO_FASE, ROTULO_FUNIL, type DesempenhoD
 import type { FormatoMetrica } from '../domain/jornada';
 import type { DadosTela } from './contexto';
 import { BarrasFase, GraficoLinha } from './graficos';
-import { Chip, formatar, Numero } from './pecas';
+import { Chip, formatar, MODAL_TELA_CHEIA, Numero } from './pecas';
 import { PerfilLeads } from './perfil/PerfilLeads';
 
 export type SubAbaModal = 'funil' | 'canal' | 'fase' | 'dia' | 'criativo' | 'perfil';
@@ -70,7 +70,7 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
   };
 
   return (
-    <Modal open onClose={onClose} title={card.rotulo} width="max-w-3xl">
+    <Modal open onClose={onClose} title={card.rotulo} width={`max-w-3xl ${MODAL_TELA_CHEIA}`}>
       <div className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <span className="text-2xl font-bold text-[var(--fg)]"><Numero valor={card.medir(d.dias, d.linhas)} formato={card.formato} /></span>
@@ -188,7 +188,7 @@ function PorCriativo({ d, card, onIr }: { d: DadosTela; card: CardDef; onIr: (id
         {visiveis.length === 0 && <li className="px-2 text-sm text-[var(--fg-3)]">{termo ? 'Nenhum criativo com esse nome.' : 'Sem dado no recorte.'}</li>}
       </ol>
       {!termo && base.length > TOPO_CRIATIVOS && (
-        <button type="button" onClick={() => setTodos((t) => !t)} className="text-xs text-[var(--accent)] underline-offset-2 hover:underline">
+        <button type="button" onClick={() => setTodos((t) => !t)} className="text-xs text-[var(--accent)] underline-offset-2 hover:underline max-md:min-h-11">
           {todos ? `Mostrar só o top ${TOPO_CRIATIVOS}` : `Mostrar todos os ${base.length}`}
         </button>
       )}

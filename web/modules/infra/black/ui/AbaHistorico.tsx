@@ -65,12 +65,12 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
           <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-[var(--fg-3)]">
             <span className="sr-only">Dia</span>
             <input type="range" min={0} max={ultimo} value={i} onChange={(e) => { setTocando(false); setEscolhido(Number(e.target.value)); }}
-              aria-valuetext={dataCurta(dia.dia)} className="min-w-0 flex-1 accent-[var(--accent)]" />
+              aria-valuetext={dataCurta(dia.dia)} className="min-w-0 flex-1 accent-[var(--accent)] max-md:h-11" />
             <span className="w-12 shrink-0 text-right font-semibold tabular text-[var(--fg)]">{dataCurta(dia.dia)}</span>
           </label>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-3 max-sm:grid-cols-1 lg:grid-cols-4">
           <KpiCard label="Investimento do dia" value={moeda(dia.gasto)} bar="yellow" hint="Funil e canal do seletor" />
           <KpiCard label="Cadastros do dia" value={inteiro(dia.cadastros)} bar="accent" hint={`${inteiro(dia.leadsPagos)} vieram de anúncio`} />
           <KpiCard label="Pessoas novas no dia" value={inteiro(dia.pessoasNovas)} bar="green" hint="Primeira vez na lista" />

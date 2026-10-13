@@ -83,13 +83,13 @@ export function AbaMensageria({ d }: { d: DadosTela }) {
       </div>
 
       <SectionCard title="Canais pagos, lado a lado" subtitle="Custo do envio: total e por mensagem enviada. Taxas sobre a base indicada em cada linha.">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 xl:grid-cols-3">
           {(['api', 'sms', 'ligacao'] as const).map((k, i) => <CartaoCanal key={k} c={canal(k)} k={k} i={i} onVer={() => trocar(k)} />)}
         </div>
       </SectionCard>
 
       <SectionCard title="Canais sem custo" subtitle="Grupo e e-mail não têm custo por envio; cada um com as métricas que mede.">
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 lg:grid-cols-2">
           {(['grupo', 'email'] as const).map((k, i) => <CartaoCanal key={k} c={canal(k)} k={k} i={i} onVer={() => trocar(k)} />)}
         </div>
         {semCusto.length === 0 && <p className="mt-2 text-xs text-[var(--fg-3)]">Sem envio de grupo nem de e-mail no período.</p>}
@@ -110,7 +110,7 @@ export function AbaMensageria({ d }: { d: DadosTela }) {
         </div>
         {lista.length > limite && (
           <button type="button" onClick={() => setLimite((l) => l + POR_PAGINA)}
-            className="gp-press mt-3 rounded-[var(--r-md)] border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--fg-2)] hover:bg-[var(--surface-3)] hover:text-[var(--fg)]">
+            className="gp-press mt-3 rounded-[var(--r-md)] border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--fg-2)] hover:bg-[var(--surface-3)] hover:text-[var(--fg)] max-md:min-h-11">
             Mostrar mais ({formatar(lista.length - limite, 'int')} restantes)
           </button>
         )}
@@ -165,7 +165,7 @@ function CartaoCanal({ c, k, i, onVer }: { c: CanalMensageria | null; k: CanalDi
           </dl>
         </>
       )}
-      <button type="button" onClick={onVer} className="mt-2 self-start text-xs text-[var(--accent)] underline-offset-2 hover:underline">Ver os envios de {d.curto}</button>
+      <button type="button" onClick={onVer} className="mt-2 self-start text-xs text-[var(--accent)] underline-offset-2 hover:underline max-md:mt-0 max-md:min-h-11">Ver os envios de {d.curto}</button>
     </section>
   );
 }
@@ -177,7 +177,7 @@ function Envio({ e }: { e: EnvioMensageria }) {
     <details className="group rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-1)]">
       <summary className="cursor-pointer list-none p-3 marker:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] sm:p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 max-md:basis-full">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--fg-2)]">{d.curto}</span>
               <time dateTime={e.enviadoEm} className="text-xs text-[var(--fg-3)]">{dataHora(e.enviadoEm)}</time>

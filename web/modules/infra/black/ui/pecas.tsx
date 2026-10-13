@@ -27,6 +27,11 @@ const PCT = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFr
 
 export const SEM_DADO = 'Sem dado';
 
+/** Abaixo de 1280 px o rótulo com `truncate` (KpiCard e listas) quebra linha em vez de cortar: nome é string exata da fonte. */
+export const ROTULO_INTEIRO = 'max-xl:[&_.truncate]:overflow-visible max-xl:[&_.truncate]:whitespace-normal max-xl:[&_.truncate]:break-words';
+/** Somado ao `width` do Modal: abaixo de 768 px o modal ocupa a tela inteira (o centro do overlay absorve o respiro de 16 px). */
+export const MODAL_TELA_CHEIA = 'max-md:h-dvh max-md:max-h-dvh max-md:w-screen max-md:max-w-none max-md:shrink-0 max-md:rounded-none max-md:border-0';
+
 /** Formata um valor. Taxas chegam como fração (0,123 = 12,3%). null = "Sem dado". */
 export function formatar(v: Valor, formato: FormatoMetrica): string {
   if (v === null || !Number.isFinite(v)) return SEM_DADO;

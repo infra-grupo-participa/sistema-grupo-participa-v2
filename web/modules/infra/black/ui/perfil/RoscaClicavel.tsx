@@ -40,7 +40,7 @@ export function RoscaClicavel({ titulo, nota, itens, selecionado, onSelect }: {
           {itens.map((c, i) => (
             <li key={c.valor}>
               <button type="button" aria-pressed={selecionado === c.valor} onClick={() => onSelect(c.valor)}
-                className={'flex w-full min-w-0 items-center gap-2 rounded-[var(--r-sm)] px-1 py-0.5 text-left text-xs atm-historico-interativo ' + (selecionado !== null && selecionado !== c.valor ? 'opacity-50' : '')}>
+                className={'flex w-full min-w-0 items-center gap-2 rounded-[var(--r-sm)] px-1 py-0.5 text-left text-xs atm-historico-interativo max-md:min-h-11 ' + (selecionado !== null && selecionado !== c.valor ? 'opacity-50' : '')}>
                 <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: cor(c, i) }} />
                 <span className="min-w-0 flex-1 break-words text-[var(--fg-2)]">{c.rotulo}</span>
                 <span className="tabular text-[var(--fg)]">{inteiro(c.quantidade)}</span>
@@ -69,7 +69,7 @@ export function BarrasClicaveis({ titulo, nota, itens, selecionado, onSelect, ma
         {visiveis.map((c) => (
           <li key={c.valor}>
             <button type="button" aria-pressed={selecionado === c.valor} onClick={() => onSelect(c.valor)} title={`${c.rotulo}: ${inteiro(c.quantidade)} (${fatia(c.quantidade, total)})`}
-              className={'block w-full min-w-0 rounded-[var(--r-sm)] text-left atm-historico-interativo ' + (selecionado !== null && selecionado !== c.valor ? 'opacity-50' : '')}>
+              className={'block w-full min-w-0 rounded-[var(--r-sm)] text-left atm-historico-interativo max-md:min-h-11 ' + (selecionado !== null && selecionado !== c.valor ? 'opacity-50' : '')}>
               <span className="flex items-baseline justify-between gap-2 text-xs">
                 <span className="min-w-0 break-words text-[var(--fg-2)]">{c.rotulo}</span>
                 <span className="shrink-0 tabular text-[var(--fg)]">{inteiro(c.quantidade)}</span>

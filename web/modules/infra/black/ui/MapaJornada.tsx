@@ -1,7 +1,7 @@
 'use client';
 
-// Mapa da Jornada (fluxograma do Arthur, vivo). SVG só de 640 px para cima; abaixo disso, a lista de etapas na
-// mesma ordem. Espessura da seta = sqrt(volume), fluxo animado só sem movimento reduzido. O filtro de funil apaga
+// Mapa da Jornada (fluxograma do Arthur, vivo). SVG só de 1280 px para cima (abaixo disso o texto do SVG fica
+// ilegível); abaixo, a lista de etapas na mesma ordem. Espessura da seta = sqrt(volume), fluxo animado só sem movimento reduzido. O filtro de funil apaga
 // os outros caminhos (opacidade 0,25, fora do teclado), sem tirá-los do lugar.
 import { useId, type KeyboardEvent } from 'react';
 import {
@@ -74,7 +74,7 @@ export function MapaJornada({ metricas, funil, ativo, onAbrir }: { metricas: Map
 
   return (
     <>
-      <svg viewBox={`0 0 ${VIEWBOX_JORNADA.largura} ${VIEWBOX_JORNADA.altura}`} className="hidden h-auto w-full sm:block" role="group" aria-label="Jornada do lead">
+      <svg viewBox={`0 0 ${VIEWBOX_JORNADA.largura} ${VIEWBOX_JORNADA.altura}`} className="hidden h-auto w-full xl:block" role="group" aria-label="Jornada do lead">
         <defs>
           <marker id={`ponta-${seta}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
             <path d="M0 0 L10 5 L0 10 z" fill="var(--fg-3)" />
@@ -116,8 +116,8 @@ export function MapaJornada({ metricas, funil, ativo, onAbrir }: { metricas: Map
         ))}
       </svg>
 
-      {/* Abaixo de 640 px: as etapas em lista, na ordem do mapa. */}
-      <ol className="space-y-2 sm:hidden">
+      {/* Abaixo de 1280 px: as etapas em lista, na ordem do mapa. */}
+      <ol className="space-y-2 xl:hidden">
         {NOS.filter((n) => !noApagado(n, funil)).map((n) => {
           const { resumo, semDado } = linhasDoNo(n, metricas[n.id] ?? []);
           return (

@@ -164,6 +164,36 @@ região, utm_source, página, base de origem, isca; tudo clicável e encadeado; 
   12/10: nenhuma conta do dashboard usa MQL hoje; "MQL" só aparece como rótulo de temperatura de base, string da fonte.
 - Falha de bloco: segura o último valor, esmaece e mostra a idade da leitura.
 
+## Mobile (13/10/2026)
+
+O desktop (1440 px) ficou idêntico ao anterior: toda mudança é variante `max-*` (só abaixo do breakpoint) ou troca de
+breakpoint que dá o mesmo CSS a partir de 1280 px. Conteúdo, tokens e regras de cálculo não mudaram.
+
+O que foi ajustado:
+- Abas principais quebram linha abaixo de 768 px (nenhuma fica escondida atrás da rolagem) e ganham 44 px de altura.
+- Rótulo que era cortado com reticências (`truncate` do KpiCard e das listas) quebra linha abaixo de 1280 px:
+  `ROTULO_INTEIRO` em `ui/pecas.tsx`, aplicado na raiz do dashboard e no corpo da gaveta (que é portal).
+- Modal de card e modal de tabela ocupam a tela inteira abaixo de 768 px (`MODAL_TELA_CHEIA`, somado ao `width`).
+- Funil macro: duas colunas no celular, três a partir de 1024 px, cinco com linhas iguais a partir de 1280 px. O card
+  Ingresso no grupo ocupa a linha inteira abaixo de 1280 px, com a lista por grupo dentro da moldura.
+- Investimento no período empilha até 1023 px; Campanhas e conjuntos ficam um embaixo do outro até 1279 px, e os
+  três números de cada cartão passam a duas colunas abaixo de 640 px (o valor não quebra no meio).
+- Mapa da Jornada: o SVG só aparece a partir de 1280 px; abaixo, a lista de etapas que já existia.
+- CPL por etapa: no celular o nome da etapa fica na primeira linha e o cálculo desce para a segunda.
+- Mensageria: canais pagos lado a lado só a partir de 1280 px, canais sem custo a partir de 1024 px; no envio, o
+  "Ver detalhes" desce para baixo do título no celular. Histórico: os quatro KPIs do dia em uma coluna abaixo de 640 px.
+- Área de toque de 44 px no celular: Atualizar, Filtrar, Ver os envios, Mostrar mais, Limpar e chips do filtro,
+  Anterior/Próxima da tabela, linhas das legendas do Perfil e a régua do Histórico.
+
+Como testar: `npm run dev` em `web/` e abrir o dashboard no DevTools em modo dispositivo. Larguras conferidas por foto
+(Playwright): 360, 375, 390, 414, 768 e 1440 px, cada aba, o modal de Leads (com Perfil e tabela), o modal de MQLs, a
+gaveta de etapa e a de criativo. Em 360 a 768 px nenhum elemento passa da largura da tela. O 1440 foi comparado pixel a
+pixel com o antes: idêntico, fora o relógio "Lido às".
+
+Ficou de fora (a decidir): as barras do gráfico do Histórico seguem com 10 px de largura (a régua é o controle no
+celular); a lista de estados do mapa do Perfil tem 24 px de altura; e no desktop a lista do card Ingresso no grupo
+continua vazando para baixo da moldura (corrigir mudaria o 1440).
+
 ## Decisões
 
 - **Profissão com 4 respostas e MQL com estudante (Victor, 12/10/2026, noite).** Advogado, contador, estudante de

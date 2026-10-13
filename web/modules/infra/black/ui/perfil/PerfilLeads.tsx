@@ -50,7 +50,7 @@ export function PerfilLeads({ d, linhas, ocultar = [] }: { d: DadosTela; linhas:
             {i > 0 && <span aria-hidden="true" className="text-[var(--fg-3)]">→</span>}
             {p.item ? (
               <button type="button" onClick={() => alternar(p.item!.dim, p.item!.valor)} title="Tirar este filtro"
-                className="rounded-full border border-[var(--border-accent)] bg-[var(--surface-3)] px-2 py-0.5 text-[var(--fg)]">
+                className="rounded-full border border-[var(--border-accent)] bg-[var(--surface-3)] px-2 py-0.5 text-[var(--fg)] max-md:min-h-11">
                 {p.rotulo} <span className="tabular text-[var(--accent)]">{inteiro(p.quantidade)}</span> <span aria-hidden="true">×</span>
               </button>
             ) : (
@@ -58,7 +58,7 @@ export function PerfilLeads({ d, linhas, ocultar = [] }: { d: DadosTela; linhas:
             )}
           </span>
         ))}
-        {filtro.length > 0 && <button type="button" onClick={() => setFiltro([])} className="text-[var(--accent)] underline-offset-2 hover:underline">Limpar</button>}
+        {filtro.length > 0 && <button type="button" onClick={() => setFiltro([])} className="text-[var(--accent)] underline-offset-2 hover:underline max-md:min-h-11 max-md:px-2">Limpar</button>}
       </nav>
 
       <div role="tabpanel" id={idsAba(`perfil-${base}`, 'resumo').panel} aria-labelledby={idsAba(`perfil-${base}`, 'resumo').tab} hidden={sub !== 'resumo'}>

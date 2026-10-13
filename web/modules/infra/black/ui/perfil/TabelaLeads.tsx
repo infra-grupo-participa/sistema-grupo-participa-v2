@@ -111,7 +111,7 @@ export function TabelaLeads({ d, linhas }: { d: DadosTela; linhas: LinhaPerfil[]
       </DataTable>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--fg-3)]">
         <span>* Estado pelo DDD do telefone. {inteiro(ordenadas.length)} cadastros, página {atual + 1} de {paginas}.</span>
-        <span className="flex gap-2">
+        <span className="flex gap-2 max-md:[&_button]:min-h-11">
           <Button variant="ghost" size="sm" disabled={atual === 0} onClick={() => setPagina(atual - 1)}>Anterior</Button>
           <Button variant="ghost" size="sm" disabled={atual >= paginas - 1} onClick={() => setPagina(atual + 1)}>Próxima</Button>
         </span>

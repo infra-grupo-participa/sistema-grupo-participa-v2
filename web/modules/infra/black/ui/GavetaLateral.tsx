@@ -12,6 +12,7 @@ import { NO } from '../domain/jornada';
 import type { AlvoGaveta, DadosTela } from './contexto';
 import { GavetaCriativo } from './GavetaCriativo';
 import { GavetaEtapa } from './GavetaEtapa';
+import { ROTULO_INTEIRO } from './pecas';
 
 const FOCAVEL = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
@@ -64,7 +65,7 @@ export function GavetaLateral({ d, alvo, onClose, onTrocar }: { d: DadosTela; al
             <Icon name="x" /><span>Fechar</span>
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+        <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 ${ROTULO_INTEIRO}`}>
           {alvo.tipo === 'etapa'
             ? <GavetaEtapa key={alvo.id} d={d} id={alvo.id} onTrocar={onTrocar} />
             : <GavetaCriativo key={alvo.id} d={d} id={alvo.id} />}

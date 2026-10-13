@@ -16,7 +16,7 @@ import { filtrarDias, filtrarLinhas, indexar } from '../domain/metricas';
 import { diaDe, diasDoPeriodo, escreverRecorte, periodoDe } from '../domain/recorte';
 import type { AbaBlack, ConfigBlack, GrupoResumoBlack, LinhaPerfil, Marcos, MensageriaBlack, Recorte, Resultado, TotalPeriodo, TrafegoBlack } from '../domain/tipos';
 import type { AlvoGaveta, DadosTela } from './contexto';
-import { AvisoBloco } from './pecas';
+import { AvisoBloco, ROTULO_INTEIRO } from './pecas';
 import { SeletorGlobal } from './SeletorGlobal';
 import { AbaVisaoGeral } from './AbaVisaoGeral';
 import { AbaJornada } from './AbaJornada';
@@ -35,6 +35,9 @@ const ABAS_TELA: { k: AbaBlack; l: string }[] = [
   { k: 'mensageria', l: 'Mensageria' },
   { k: 'historico', l: 'Histórico' },
 ];
+
+// Abaixo de 768 px as cinco abas quebram linha (nenhuma fica escondida atrás da rolagem) e ganham altura de toque.
+const ABAS_NO_CELULAR = 'max-md:[&>[role=tablist]]:flex-wrap max-md:[&>[role=tablist]>[role=tab]]:min-h-11';
 
 interface Bloco<T> { data: T | null; semDado: boolean; erro: string | null; aviso: string | null; lidoEm: Date | null }
 const vazio = <T,>(): Bloco<T> => ({ data: null, semDado: false, erro: null, aviso: null, lidoEm: null });
@@ -190,7 +193,7 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
   const ids = (k: AbaBlack) => idsAba('black-principal', k);
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-4 overflow-x-clip">
+    <div className={`mx-auto w-full max-w-7xl space-y-4 overflow-x-clip ${ROTULO_INTEIRO}`}>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Infra / Dashboards / CSM</div>
@@ -200,7 +203,7 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
             {trafego.data?.coletadoEm ? `Tráfego coletado em ${dataHora(trafego.data.coletadoEm)}.` : 'Coleta do tráfego: sem dado.'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-md:[&_button]:min-h-11">
           {lidoEm && <span className="text-xs text-[var(--fg-3)]">Lido às {horaCurta(lidoEm)}</span>}
           <Button variant="ghost" size="sm" onClick={() => setVersao((v) => v + 1)} disabled={lendo || !fonte} aria-label="Atualizar os dados">
             <span className="inline-flex items-center gap-1.5"><Icon name="refresh" size={14} />{lendo ? 'Lendo…' : 'Atualizar'}</span>
@@ -233,7 +236,7 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
       ) : !dados ? (
         <SectionCard title="Sem dado"><EmptyState title="Não há leitura para mostrar" hint="Tente Atualizar." /></SectionCard>
       ) : (
-        <div className={esmaecido ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
+        <div className={(esmaecido ? 'opacity-60 transition-opacity' : 'transition-opacity') + ' ' + ABAS_NO_CELULAR}>
           <Tabs tabs={ABAS_TELA} active={recorte.aba} onChange={(k) => irPara({ aba: k as AbaBlack })} idBase="black-principal" label="Seções do dashboard" />
           {ABAS_TELA.map(({ k }) => (
             <section key={k} role="tabpanel" id={ids(k).panel} aria-labelledby={ids(k).tab} hidden={recorte.aba !== k} className="atm-historico-panel-enter">
