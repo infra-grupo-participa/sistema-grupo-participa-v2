@@ -143,7 +143,8 @@ describe('coleta Meta por conjunto e anúncio (respostas simuladas)', () => {
     expect(r.descartadas).toBe(1);
     expect(r.linhas.map((l) => l.anuncio)).toEqual(['900000000000401', '900000000000402', '900000000000403']);
     const camp = paraDesempenho([insights[0]]).linhas[0];
-    const { campanha: _c, ...semCampanha } = camp;
+    const semCampanha: Partial<typeof camp> = { ...camp };
+    delete semCampanha.campanha;
     expect(r.linhas[0]).toEqual({ ...semCampanha, anuncio: '900000000000401' });
     expect(r.linhas[0]).toMatchObject({ gasto: 10.5, leads: 3, alcance: 800, frequencia: 1.25, cliques_saida: 28, video_p100: 50 });
     expect('campanha' in r.linhas[0]).toBe(false);
