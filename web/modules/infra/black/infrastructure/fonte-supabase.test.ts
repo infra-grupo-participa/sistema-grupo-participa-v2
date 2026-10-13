@@ -29,6 +29,19 @@ describe('mapeadores das RPCs da Black', () => {
     expect(data.anuncioDesde).toBe('2026-10-08');
     expect(data.gastoCampanhas?.find((g) => g.campanhaId === '101')?.gasto).toBeCloseTo(130, 6);
   });
+  it('funil C1 provisório pelo nome: ANTECIPAÇÃO e MANIFESTO sem etapa viram C1; com etapa no nome, o banco manda', () => {
+    const camp = (id: string, nome: string, etapa: string | null, subtipo: string | null = null) =>
+      ({ id, nome, plataforma: 'meta', status: 'ACTIVE', objetivo: 'VIDEO', conta: 'c', projeto_id: 1, etapa, subtipo, conflito: false });
+    const { data } = mapearTrafego({ ...RESPOSTA_TRAFEGO, campanhas: [
+      camp('1', 'CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ | ABO | THRUPLAY', null),
+      camp('2', 'CF | BF26 | AQUECIMENTO | MANIFESTO | META | PQ | ABO | THRUPLAY', null),
+      camp('3', 'BF26 | CPF01 | META | IG | MORNO | ABO | LEAD', null),
+      camp('4', 'CF | BF26 | C2 | ANTECIPAÇÃO | ISCA | META', 'C2', 'ISCA'),
+      camp('5', 'CF | BF26 | C1 | CORTES | META', 'C1', 'CORTES'),
+    ] });
+    expect(data.campanhas.map((c) => [c.id, c.funil])).toEqual([['1', 'c1'], ['2', 'c1'], ['3', null], ['4', 'iscas'], ['5', 'c1']]);
+    expect(data.campanhas.map((c) => [c.id, c.fase])).toEqual([['1', 'antecipacao'], ['2', 'aquecimento'], ['3', 'captacao'], ['4', 'antecipacao'], ['5', null]]);
+  });
   it('tráfego sem campanhas ou resposta inválida = semDado', () => {
     expect(mapearTrafego({ campanhas: [] }).semDado).toBe(true);
     expect(mapearTrafego(null).semDado).toBe(true);
