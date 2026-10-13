@@ -53,6 +53,29 @@ describe('leitura e marcação do dashboard ATM', () => {
     expect(resultado.data.resumo.investimentoTotal).toEqual({ valor: 75, semDado: false });
   });
 
+  it('ROAS chega em vezes e não é dividido por 100; CPL e CAC continuam em centavos', async () => {
+    mocks.rpc.mockResolvedValue({ data: [{ investimento_total_centavos: 112050, cpl_centavos: 1155, cac_centavos: 56025, roas_liquido: 4.82 }], error: null });
+
+    const resultado = await carregarAtmResumo('atm-elaine-1-2026-10');
+
+    expect(resultado.data.resumo.roas).toEqual({ valor: 4.82, semDado: false });
+    expect(resultado.data.resumo.cpl).toEqual({ valor: 11.55, semDado: false });
+    expect(resultado.data.resumo.cac).toEqual({ valor: 560.25, semDado: false });
+  });
+
+  it('pré-checkout e vendas: zero do banco é zero medido, nulo é sem dado', async () => {
+    mocks.rpc.mockResolvedValue({ data: [{ pre_checkout_pessoas: 1, vendas: 0, conversao_pre_checkout_pct: 0 }], error: null });
+    const hoje = await carregarAtmResumo('atm-elaine-1-2026-10');
+    expect(hoje.data.resumo.preCheckout).toEqual({ valor: 1, semDado: false });
+    expect(hoje.data.resumo.vendas).toEqual({ valor: 0, semDado: false });
+    expect(hoje.data.resumo.conversaoPreCheckout).toEqual({ valor: 0, semDado: false });
+
+    mocks.rpc.mockResolvedValue({ data: [{ pre_checkout_pessoas: 0, vendas: null, conversao_pre_checkout_pct: null }], error: null });
+    const semOferta = await carregarAtmResumo('atm-elaine-1-2026-10');
+    expect(semOferta.data.resumo.vendas).toEqual({ valor: 0, semDado: true });
+    expect(semOferta.data.resumo.conversaoPreCheckout).toEqual({ valor: 0, semDado: true });
+  });
+
   it('oculta CPL, CAC e ROAS antigos enquanto o resumo não informar investimento total', async () => {
     mocks.rpc.mockResolvedValue({ data: [{ cpl_centavos: 1200, cac_centavos: 4000, roas_liquido: 2.5 }], error: null });
 

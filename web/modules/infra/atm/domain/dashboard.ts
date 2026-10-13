@@ -19,13 +19,17 @@ export const CANAIS_DISPARO_ATM: { canal: CanalDisparoAtm; rotulo: string }[] = 
   { canal: 'email', rotulo: 'E-mail' },
 ];
 
+/**
+ * Cards do funil, na ordem da tela. "Custo com disparo" saiu em 13/10/2026 (pedido do Victor): o custo de disparo já
+ * entra no Investimento geral (`investimento_total_centavos` = disparo + tráfego, que mostra a parcela Disparo) e no
+ * CPL/CAC/ROAS, todos calculados pelo banco em `dados_atm_resumo` (migration 20261009230000).
+ */
 export const METRICAS_RESUMO_ATM: { chave: keyof ResumoAtm; rotulo: string; formato: 'inteiro' | 'percentual' | 'moeda' | 'multiplicador' }[] = [
   { chave: 'disparos', rotulo: 'Disparos', formato: 'inteiro' },
   { chave: 'leads', rotulo: 'Leads', formato: 'inteiro' },
   { chave: 'ingressosGrupo', rotulo: 'Ingresso no grupo', formato: 'inteiro' },
   { chave: 'percentualIngressoGrupo', rotulo: '% ingresso no grupo', formato: 'percentual' },
   { chave: 'taxaEvasao', rotulo: 'Taxa de evasão', formato: 'percentual' },
-  { chave: 'custoDisparo', rotulo: 'Custo com disparo', formato: 'moeda' },
   { chave: 'cpl', rotulo: 'CPL', formato: 'moeda' },
   { chave: 'preCheckout', rotulo: 'PRÉ-CHECKOUT', formato: 'inteiro' },
   { chave: 'vendas', rotulo: 'Vendas', formato: 'inteiro' },
@@ -108,6 +112,30 @@ export function rotuloValorResumoLead(valor: unknown): string {
 /** Na tela, `descartado` (estava na aba Descartados de uma lista) aparece como "Outros" (pedido do Victor, 08/10/2026). */
 export function rotuloListaOrigem(listaOrigem: string | null): string | null {
   return listaOrigem === 'descartado' ? 'Outros' : listaOrigem;
+}
+
+/** Cards do funil que abrem lista. Os outros não abrem modal. */
+export type ModalFunilAtm = 'leads' | 'preCheckout' | 'vendas';
+
+export function modalDoCardAtm(chave: keyof ResumoAtm): ModalFunilAtm | null {
+  return chave === 'leads' || chave === 'preCheckout' || chave === 'vendas' ? chave : null;
+}
+
+const SEM_DADO: MetricaAtm = { valor: 0, semDado: true };
+
+/**
+ * Métrica exibida em cada card, sempre o valor que o banco devolveu (zero do banco é zero medido).
+ * Resumo ainda não lido: "sem dado". A taxa de conversão do pré-checkout é a do banco
+ * (`conversao_pre_checkout_pct` = compradores distintos ÷ `pre_checkout_pessoas` × 100); a tela não recalcula,
+ * só garante que, sem denominador (pré-checkout nulo ou zero), ela fica "sem dado" e nunca 0%.
+ */
+export function metricaDoCardAtm(resumo: ResumoAtm | null | undefined, chave: keyof ResumoAtm): MetricaAtm {
+  if (!resumo) return SEM_DADO;
+  if (chave === 'conversaoPreCheckout') {
+    const denominador = resumo.preCheckout;
+    if (denominador.semDado || !(denominador.valor > 0)) return SEM_DADO;
+  }
+  return resumo[chave] ?? SEM_DADO;
 }
 
 export function montarAvisosTesteAtm(periodo: PeriodoAplicadoAtm | null | undefined): AvisoTesteAtm[] {
