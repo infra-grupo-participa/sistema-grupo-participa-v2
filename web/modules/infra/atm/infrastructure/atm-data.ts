@@ -2,7 +2,7 @@
 
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import { dashboardAtmSemDado, type DashboardAtm, type LeadAtm, type NumeroGrupoAtm, type PeriodoAplicadoAtm } from '../domain/dashboard';
+import { dashboardAtmSemDado, type DashboardAtm, type LeadAtm, type NumeroGrupoAtm, type PeriodoAplicadoAtm, type PessoaPreCheckoutAtm } from '../domain/dashboard';
 import type { DatasPeriodoAtm } from '../domain/periodo';
 import type { VendaSessaoViabilidade } from '../domain/sessao-viabilidade';
 
@@ -10,8 +10,10 @@ export type Resultado<T> = {
   data: T;
   semDado: boolean;
   erro: string | null;
-  /** Só a leitura da SV preenche: o banco recusou (42501), a permissão se perdeu e a última lista não pode ficar na tela. */
+  /** O banco recusou (42501): a permissão se perdeu e a última lista não pode ficar na tela. */
   semPermissao?: boolean;
+  /** A função não existe no banco (PGRST202). Só aqui a tela pode dizer "indisponível" / "não publicada". */
+  naoPublicada?: boolean;
 };
 export type ResultadoAcao = { data: number | null; erro: string | null };
 export type DisparoDetalheAtm = {
@@ -136,7 +138,10 @@ async function rpc(nome: string, chave: string, periodo?: DatasPeriodoAtm, adici
     const { data, error } = await createBrowserSupabase().rpc(nome, argumentos);
     if (error) {
       logQueryError(nome, { message: error.code || 'SEM_CODIGO' });
-      return { data: [], semDado: error.code === 'PGRST202', erro: mensagemLeitura(error.code) };
+      const r: Resultado<Linha[]> = { data: [], semDado: true, erro: mensagemLeitura(error.code) };
+      if (error.code === 'PGRST202') r.naoPublicada = true;
+      if (error.code === '42501') r.semPermissao = true;
+      return r;
     }
     return { data: linhas(data), semDado: false, erro: null };
   } catch {
@@ -144,6 +149,37 @@ async function rpc(nome: string, chave: string, periodo?: DatasPeriodoAtm, adici
     return { data: [], semDado: true, erro: 'Falha de conexão ao carregar este bloco. Os últimos dados disponíveis foram mantidos.' };
   }
 }
+
+/** Corrida contra o relógio: a leitura que não volta em `ms` vira falha com aviso (a tela mantém a última lista). */
+async function comTempoLimite(nome: string, leitura: Promise<Resultado<Linha[]>>, ms: number, mensagem: string): Promise<Resultado<Linha[]>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const esgotou = new Promise<Resultado<Linha[]>>((resolve) => {
+    timer = setTimeout(() => {
+      logQueryError(nome, { message: 'TIMEOUT' });
+      resolve({ data: [], semDado: true, erro: mensagem });
+    }, ms);
+  });
+  try {
+    return await Promise.race([leitura, esgotou]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Só os marcadores de estado da leitura (sem `data`), para os carregadores que remapeiam as linhas. */
+function estadoDaLeitura(r: Resultado<unknown>): Pick<Resultado<unknown>, 'semDado' | 'erro' | 'semPermissao' | 'naoPublicada'> {
+  const e: Pick<Resultado<unknown>, 'semDado' | 'erro' | 'semPermissao' | 'naoPublicada'> = { semDado: r.semDado, erro: r.erro };
+  if (r.semPermissao) e.semPermissao = true;
+  if (r.naoPublicada) e.naoPublicada = true;
+  return e;
+}
+
+/**
+ * Tempo limite das listas dos modais (leads, grupo, pré-checkout). Medido em 13/10/2026: 4,3 a 5,2 s por RPC;
+ * 20 s dá folga de 4x sem deixar o modal girando para sempre.
+ */
+export const TEMPO_LIMITE_LISTAS_MS = 20_000;
+const MENSAGEM_TEMPO_LISTA = 'A lista demorou a responder. Os últimos dados disponíveis foram mantidos.';
 
 export async function carregarAtmResumo(chave: string, periodo?: DatasPeriodoAtm): Promise<Resultado<DashboardAtm>> {
   const r = await rpc('dados_atm_resumo', chave, periodo);
@@ -199,35 +235,51 @@ export async function carregarAtmSerie(chave: string, periodo?: DatasPeriodoAtm)
   return rpc('dados_atm_serie_diaria', chave, periodo);
 }
 
-export async function carregarAtmLeads(chave: string, periodo?: DatasPeriodoAtm, incluirTeste = false): Promise<Resultado<LeadAtm[]>> {
-  const r = await rpc('dados_atm_leads', chave, periodo, { p_incluir_teste: incluirTeste });
+/** Uma linha de `dados_atm_leads` (e de `dados_atm_pre_checkout`, que tem as mesmas colunas) no tipo de pessoa da tela. */
+function pessoaAtm(x: Linha, i: number): LeadAtm {
   return {
-    data: r.data.map((x, i) => ({
-      id: String(x.pessoa_id ?? x.email ?? x.telefone ?? i),
-      pessoaId: typeof x.pessoa_id === 'string' ? x.pessoa_id : null,
-      dataHora: typeof x.primeiro_em === 'string' ? x.primeiro_em : null,
-      nome: typeof x.nome === 'string' ? x.nome : null,
-      email: typeof x.email === 'string' ? x.email : null,
-      telefone: typeof x.telefone === 'string' ? x.telefone : null,
-      teste: x.teste === true,
-      entrouGrupo: booleano(x.entrou_grupo),
-      aluno: booleano(x.eh_aluno),
-      instrucao: typeof x.instrucao === 'string' ? x.instrucao : null,
-      turma: typeof x.turma === 'string' ? x.turma : null,
-      utmSource: typeof x.utm_source === 'string' ? x.utm_source : null,
-      estado: typeof x.estado === 'string' ? x.estado : null,
-      listaOrigem: typeof x.lista_origem === 'string' ? x.lista_origem : null,
-      seminarioOrigem: typeof x.seminario_origem === 'string' ? x.seminario_origem : null,
-      noPreCheckout: booleano(x.no_pre_checkout),
-      comprou: booleano(x.comprou),
-    })),
-    semDado: r.semDado,
-    erro: r.erro,
+    id: String(x.pessoa_id ?? x.email ?? x.telefone ?? i),
+    pessoaId: typeof x.pessoa_id === 'string' ? x.pessoa_id : null,
+    dataHora: typeof x.primeiro_em === 'string' ? x.primeiro_em : null,
+    nome: typeof x.nome === 'string' ? x.nome : null,
+    email: typeof x.email === 'string' ? x.email : null,
+    telefone: typeof x.telefone === 'string' ? x.telefone : null,
+    teste: x.teste === true,
+    entrouGrupo: booleano(x.entrou_grupo),
+    aluno: booleano(x.eh_aluno),
+    instrucao: typeof x.instrucao === 'string' ? x.instrucao : null,
+    turma: typeof x.turma === 'string' ? x.turma : null,
+    utmSource: typeof x.utm_source === 'string' ? x.utm_source : null,
+    estado: typeof x.estado === 'string' ? x.estado : null,
+    listaOrigem: typeof x.lista_origem === 'string' ? x.lista_origem : null,
+    seminarioOrigem: typeof x.seminario_origem === 'string' ? x.seminario_origem : null,
+    noPreCheckout: booleano(x.no_pre_checkout),
+    comprou: booleano(x.comprou),
   };
 }
 
-export async function carregarAtmGrupo(chave: string, periodo?: DatasPeriodoAtm, incluirTeste = false): Promise<Resultado<NumeroGrupoAtm[]>> {
-  const r = await rpc('dados_atm_grupo_numeros', chave, periodo, { p_incluir_teste: incluirTeste });
+export async function carregarAtmLeads(chave: string, periodo?: DatasPeriodoAtm, incluirTeste = false, tempoLimiteMs = TEMPO_LIMITE_LISTAS_MS): Promise<Resultado<LeadAtm[]>> {
+  const r = await comTempoLimite('dados_atm_leads', rpc('dados_atm_leads', chave, periodo, { p_incluir_teste: incluirTeste }), tempoLimiteMs, MENSAGEM_TEMPO_LISTA);
+  return { data: r.data.map(pessoaAtm), ...estadoDaLeitura(r) };
+}
+
+export const MENSAGEM_PRE_CHECKOUT_NAO_PUBLICADA = 'A lista de pré-checkout ainda não foi publicada no banco.';
+
+/**
+ * Lista de pré-checkout (`public.dados_atm_pre_checkout(p_chave, p_de, p_ate, p_incluir_teste)`, A PUBLICAR em 13/10/2026):
+ * mesmas colunas de `dados_atm_leads`, com `primeiro_em` = data do pré-checkout, mais `eh_lead`. Contrato em
+ * docs/dashboard-atm/MODELO-DE-DADOS.md. Função ainda inexistente (`PGRST202`) devolve `naoPublicada` com aviso honesto.
+ */
+export async function carregarAtmPreCheckout(chave: string, periodo?: DatasPeriodoAtm, incluirTeste = false, tempoLimiteMs = TEMPO_LIMITE_LISTAS_MS): Promise<Resultado<PessoaPreCheckoutAtm[]>> {
+  const nome = 'dados_atm_pre_checkout';
+  const r = await comTempoLimite(nome, rpc(nome, chave, periodo, { p_incluir_teste: incluirTeste }), tempoLimiteMs, MENSAGEM_TEMPO_LISTA);
+  const estado = estadoDaLeitura(r);
+  if (estado.naoPublicada) estado.erro = MENSAGEM_PRE_CHECKOUT_NAO_PUBLICADA;
+  return { data: r.data.map((x, i) => ({ ...pessoaAtm(x, i), ehLead: booleano(x.eh_lead) })), ...estado };
+}
+
+export async function carregarAtmGrupo(chave: string, periodo?: DatasPeriodoAtm, incluirTeste = false, tempoLimiteMs = TEMPO_LIMITE_LISTAS_MS): Promise<Resultado<NumeroGrupoAtm[]>> {
+  const r = await comTempoLimite('dados_atm_grupo_numeros', rpc('dados_atm_grupo_numeros', chave, periodo, { p_incluir_teste: incluirTeste }), tempoLimiteMs, MENSAGEM_TEMPO_LISTA);
   return {
     data: r.data.map((x) => ({
       foneKey: typeof x.fone_key === 'string' ? x.fone_key : '',
@@ -239,8 +291,7 @@ export async function carregarAtmGrupo(chave: string, periodo?: DatasPeriodoAtm,
       teste: x.teste === true,
       testeMotivo: typeof x.teste_motivo === 'string' ? x.teste_motivo : null,
     })),
-    semDado: r.semDado,
-    erro: r.erro,
+    ...estadoDaLeitura(r),
   };
 }
 
@@ -251,23 +302,12 @@ const MENSAGEM_TEMPO_SV_VENDAS = 'As vendas da Sessão de Viabilidade demoraram 
  * Vendas da Sessão de Viabilidade (`public.dados_atm_sv_vendas`). Contrato em docs/dashboard-atm/MODELO-DE-DADOS.md.
  * Qualquer falha devolve `semDado: true` com lista vazia: quem chama mantém a última lista e só mostra o aviso,
  * exceto `semPermissao: true` (42501), em que a lista anterior deve ser descartada.
- * RPC ainda não aplicada (`PGRST202`) = "sem dado ainda", sem mensagem de erro.
+ * RPC ainda não aplicada (`PGRST202`) = `naoPublicada`, sem mensagem de erro.
  */
 export async function carregarAtmSvVendas(chave: string, incluirTeste = false, tempoLimiteMs = TEMPO_LIMITE_SV_VENDAS_MS): Promise<Resultado<VendaSessaoViabilidade[]>> {
   const nome = 'dados_atm_sv_vendas';
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const esgotou = new Promise<Resultado<Linha[]>>((resolve) => {
-    timer = setTimeout(() => {
-      logQueryError(nome, { message: 'TIMEOUT' });
-      resolve({ data: [], semDado: true, erro: MENSAGEM_TEMPO_SV_VENDAS });
-    }, tempoLimiteMs);
-  });
-  const r = await Promise.race([rpc(nome, chave, undefined, { p_incluir_teste: incluirTeste }), esgotou]);
-  clearTimeout(timer);
-  if (r.semDado || r.erro) {
-    const semPermissao = r.erro === MENSAGEM_SEM_PERMISSAO_LEITURA;
-    return semPermissao ? { data: [], semDado: true, erro: r.erro, semPermissao } : { data: [], semDado: true, erro: r.erro };
-  }
+  const r = await comTempoLimite(nome, rpc(nome, chave, undefined, { p_incluir_teste: incluirTeste }), tempoLimiteMs, MENSAGEM_TEMPO_SV_VENDAS);
+  if (r.semDado || r.erro) return { data: [], ...estadoDaLeitura({ ...r, semDado: true }) };
   return {
     data: r.data.map((x, i) => ({
       id: texto(x.transacao) ?? `linha-${i}`,

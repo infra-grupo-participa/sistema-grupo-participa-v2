@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Card, KpiCard, SectionCard, EmptyState, ConfirmDialog, Tabs, idsAba } from '@/shared/ui/components';
-import { Modal } from '@/shared/ui/components/Modal';
+import { Card, KpiCard, SectionCard, EmptyState, Tabs, idsAba } from '@/shared/ui/components';
 import {
   carregarAtmCanais,
   carregarAtmComparecimento,
@@ -10,8 +9,10 @@ import {
   carregarAtmGrupo,
   carregarAtmLeads,
   carregarAtmPosLive,
+  carregarAtmPreCheckout,
   carregarAtmResumo,
   carregarAtmSerie,
+  carregarAtmSvVendas,
   carregarAtmTrafego,
   desmarcarAtmTeste,
   marcarAtmTeste,
@@ -20,28 +21,19 @@ import {
   type DadosTrafegoAtm,
   type Resultado,
 } from '../infrastructure/atm-data';
-import { CANAIS_DISPARO_ATM, METRICAS_RESUMO_ATM, metricaDoCardAtm, modalDoCardAtm, montarAvisosTesteAtm, rotuloListaOrigem, rotuloValorResumoLead, type DashboardAtm, type LeadAtm, type NumeroGrupoAtm, type ResumoAtm } from '../domain/dashboard';
+import { CANAIS_DISPARO_ATM, METRICAS_RESUMO_ATM, metricaDoCardAtm, modalDoCardAtm, montarAvisosTesteAtm, type DashboardAtm, type LeadAtm, type ModalFunilAtm, type NumeroGrupoAtm, type PessoaPreCheckoutAtm, type ResumoAtm } from '../domain/dashboard';
 import type { RegistroAtm } from '../domain/registro';
+import type { VendaSessaoViabilidade } from '../domain/sessao-viabilidade';
 import { dataPtBr, datasDoPeriodo, type PresetPeriodoAtm } from '../domain/periodo';
-import { RoscaCategorias } from '@/modules/infra/dados/ui/viz/RoscaCategorias';
 import { DisparosDetalhe } from './DisparosDetalhe';
 import { HistoricoAtm } from './HistoricoAtm';
 import { TrafegoAtm } from './TrafegoAtm';
-import { ModalPreCheckoutAtm, ModalVendasAtm, useVendasSvAtm } from './ModaisFunilAtm';
+import { ModalLeadsAtm, ModalPreCheckoutAtm, ModalVendasAtm } from './ModaisFunilAtm';
+import { chaveListaAtm, criarCarregadorListasAtm } from './carregador-listas';
+import { useListaAtm } from './useListaAtm';
 
 type Linha = Record<string, unknown>;
-type PedidoAtualizacao = { periodo: ReturnType<typeof datasDoPeriodo>; detalhado: boolean; modal: boolean; isMaster: boolean };
-type PropsModalLeads = {
-  open: boolean;
-  onClose: () => void;
-  result: Resultado<LeadAtm[]>;
-  grupo: Resultado<NumeroGrupoAtm[]>;
-  serie: Linha[];
-  periodoLabel: string;
-  isMaster: boolean;
-  onToggleLead: (lead: LeadAtm, teste: boolean) => Promise<string | null>;
-  onToggleGrupo: (grupo: NumeroGrupoAtm, teste: boolean) => Promise<string | null>;
-};
+type PedidoAtualizacao = { periodo: ReturnType<typeof datasDoPeriodo>; detalhado: boolean };
 
 const inteiro = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -58,84 +50,28 @@ const TITULO_CARD: Partial<Record<keyof ResumoAtm, string>> = {
   vendas: 'dados_atm_resumo.vendas · clique para ver a lista',
   conversaoPreCheckout: 'dados_atm_resumo.conversao_pre_checkout_pct = compradores distintos ÷ pré-checkout × 100',
 };
-function dataHora(iso: string | null) { return iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'Não lançado'; }
-
-function GraficoLeads({ rows }: { rows: Linha[] }) {
-  if (!rows.length) return <EmptyState title="Sem evolução de leads" hint="sem dado ainda" />;
-  const nums = rows.map((r) => valor(r.leads) ?? 0);
-  const max = Math.max(1, ...nums);
-  const width = Math.max(360, rows.length * 38);
-  return <div className="overflow-x-auto"><svg width={width} height="190" viewBox={'0 0 ' + width + ' 190'} role="img" aria-label="Evolução diária de leads">
-    {rows.map((r, i) => { const x = i * 38 + 8; const n = nums[i]; const h = n / max * 130; return <g key={String(r.dia)}><rect x={x} y={145 - h} width="22" height={h} rx="3" fill="var(--accent)" /><text x={x + 11} y="166" textAnchor="middle" fontSize="9" fill="var(--fg-3)">{String(r.dia).slice(5)}</text><title>{String(r.dia) + ': ' + n}</title></g>; })}
-  </svg></div>;
-}
-
-function ModalLeads({ open, onClose, result, grupo, serie, periodoLabel, isMaster, onToggleLead, onToggleGrupo }: PropsModalLeads) {
-  const [aba, setAba] = useState('Leads');
-  const [alvoLead, setAlvoLead] = useState<LeadAtm | null>(null);
-  const [alvoGrupo, setAlvoGrupo] = useState<NumeroGrupoAtm | null>(null);
-  const [salvando, setSalvando] = useState<string | null>(null);
-  const [erroAcao, setErroAcao] = useState<string | null>(null);
-  const leadsAtivos = useMemo(() => result.data.filter((lead) => !lead.teste), [result.data]);
-  const distribuicoes = useMemo(() => {
-    const campos: [keyof LeadAtm, string][] = [['entrouGrupo', 'Entrou no grupo?'], ['aluno', 'É aluno?'], ['utmSource', 'utm_source'], ['estado', 'Estado'], ['listaOrigem', 'Lista de origem'], ['seminarioOrigem', 'Seminário de origem']];
-    return campos.map(([campo, nome]) => ({ nome, valores: Object.entries(leadsAtivos.reduce<Record<string, number>>((a, lead) => { const k = rotuloValorResumoLead(campo === 'listaOrigem' ? rotuloListaOrigem(lead.listaOrigem) : lead[campo]); a[k] = (a[k] ?? 0) + 1; return a; }, {})) }));
-  }, [leadsAtivos]);
-
-  const mudarLead = async (lead: LeadAtm, teste: boolean) => {
-    if (salvando) return;
-    setSalvando(lead.id); setErroAcao(null);
-    const erro = await onToggleLead(lead, teste);
-    setSalvando(null);
-    if (erro) setErroAcao(erro);
-    setAlvoLead(null);
-  };
-  const mudarGrupo = async (numero: NumeroGrupoAtm, teste: boolean) => {
-    if (salvando) return;
-    setSalvando(numero.foneKey); setErroAcao(null);
-    const erro = await onToggleGrupo(numero, teste);
-    setSalvando(null);
-    if (erro) setErroAcao(erro);
-  };
-
-  return <Modal open={open} onClose={onClose} title="Leads do Seminário ATM" width="max-w-6xl">
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      {['Leads', 'Grupo', 'Evolução', 'Resumo'].map((nome) => <button key={nome} type="button" onClick={() => setAba(nome)} className={'rounded-[var(--r-md)] px-3 py-2 text-sm ' + (aba === nome ? 'bg-[var(--accent)] text-black font-semibold' : 'bg-[var(--surface-3)] text-[var(--fg-2)]')}>{nome}</button>)}
-      <span className="ml-auto self-center text-xs text-[var(--fg-3)]">{inteiro.format(leadsAtivos.length)} leads válidos · {periodoLabel}</span>
-    </div>
-    {erroAcao && <p role="alert" className="mb-3 rounded border border-[var(--red)]/40 p-3 text-sm text-[var(--red)]">{erroAcao}</p>}
-    {aba === 'Evolução' ? <GraficoLeads rows={serie} /> : aba === 'Resumo' ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{distribuicoes.map((g) => <RoscaCategorias key={g.nome} titulo={g.nome} rotuloCentro="leads" fatias={g.valores.map(([rotulo, quantidade]) => ({ rotulo, quantidade }))} />)}</div> : aba === 'Grupo' ? <>
-      {grupo.erro && <p role="alert" className="mb-3 text-sm text-[var(--yellow)]">{grupo.erro}</p>}
-      {grupo.semDado ? <EmptyState title="Números do grupo indisponíveis" hint="sem dado ainda" /> : grupo.data.length === 0 ? <EmptyState title="Nenhum número entrou no grupo neste período" /> : <div className="max-h-[65vh] overflow-auto"><table className="w-full text-sm"><thead className="sticky top-0 bg-[var(--surface-3)]"><tr>{['Entrada', 'Nome', 'Telefone', 'No grupo?', 'É lead?', ...(isMaster ? ['Teste', 'Ação'] : [])].map((h) => <th key={h} className="p-2 text-left text-xs">{h}</th>)}</tr></thead><tbody>{grupo.data.map((numero) => <tr key={numero.foneKey} className={'border-t border-[var(--border)] ' + (numero.teste ? 'opacity-60' : '')}><td className="whitespace-nowrap p-2">{dataHora(numero.entrouEm)}</td><td className="p-2">{numero.nome ?? 'Não lançado'}</td><td className="whitespace-nowrap p-2">{numero.foneKey}</td><td className="p-2">{numero.noGrupo == null ? 'Não lançado' : numero.noGrupo ? 'Sim' : 'Não'}</td><td className="p-2">{numero.ehLead == null ? 'Não lançado' : numero.ehLead ? 'Sim' : 'Não'}</td>{isMaster && <><td className="p-2">{numero.teste ? <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] uppercase">teste{numero.testeMotivo === 'equipe' ? ' · equipe' : ''}</span> : 'Não'}</td><td className="p-2"><button type="button" disabled={salvando === numero.foneKey} onClick={() => { setErroAcao(null); if (numero.teste) void mudarGrupo(numero, false); else setAlvoGrupo(numero); }} className="whitespace-nowrap rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-3)] disabled:opacity-50">{salvando === numero.foneKey ? 'Salvando…' : numero.teste ? 'Desmarcar teste' : 'Marcar como teste'}</button></td></>}</tr>)}</tbody></table></div>}
-    </> : result.erro ? <p role="alert" className="text-sm text-[var(--yellow)]">{result.erro}</p> : result.semDado ? <EmptyState title="Leads indisponíveis" hint="sem dado ainda" /> : aba === 'Leads' ? result.data.length === 0 ? <EmptyState title="Nenhum lead neste período" /> : <div className="max-h-[65vh] overflow-auto"><table className="w-full text-sm"><thead className="sticky top-0 bg-[var(--surface-3)]"><tr>{['Data', 'Nome', 'E-mail', 'Telefone', 'Entrou no grupo?', 'É aluno?', 'utm_source', 'Estado', 'Lista de origem', 'Seminário de origem', ...(isMaster ? ['Teste', 'Ação'] : [])].map((h) => <th key={h} className="p-2 text-left text-xs">{h}</th>)}</tr></thead><tbody>{result.data.map((lead) => <tr key={lead.id} className={'border-t border-[var(--border)] ' + (lead.teste ? 'opacity-60' : '')}><td className="whitespace-nowrap p-2">{dataHora(lead.dataHora)}</td><td className="p-2">{lead.nome ?? 'Não lançado'}</td><td className="p-2">{lead.email ?? 'Não lançado'}</td><td className="whitespace-nowrap p-2">{lead.telefone ?? 'Não lançado'}</td><td className="p-2">{lead.entrouGrupo == null ? 'Sem dado' : lead.entrouGrupo ? 'Sim' : 'Não'}</td><td className="p-2">{lead.aluno == null ? 'Sem dado' : lead.aluno ? 'Sim' : 'Não'}</td><td className="p-2">{lead.utmSource ?? 'Não lançado'}</td><td className="p-2">{lead.estado ?? 'Não lançado'}</td><td className="p-2">{rotuloListaOrigem(lead.listaOrigem) ?? 'Não lançado'}</td><td className="p-2">{lead.seminarioOrigem ?? 'Não lançado'}</td>{isMaster && <><td className="p-2">{lead.teste ? <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] uppercase">teste</span> : 'Não'}</td><td className="p-2">{(lead.email || lead.telefone) && <button type="button" disabled={salvando === lead.id} onClick={() => { setErroAcao(null); if (lead.teste) void mudarLead(lead, false); else setAlvoLead(lead); }} className="whitespace-nowrap rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-3)] disabled:opacity-50">{salvando === lead.id ? 'Salvando…' : lead.teste ? 'Desmarcar teste' : 'Marcar como teste'}</button>}</td></>}</tr>)}</tbody></table></div> : null}
-    {alvoLead && <ConfirmDialog title="Marcar lead como teste" confirmLabel="Marcar como teste" cancelLabel="Cancelar" onCancel={() => setAlvoLead(null)} onConfirm={() => void mudarLead(alvoLead, true)} message="Esta marcação vale para este Seminário ATM. O lead e os dados relacionados deixam de contar nos indicadores deste evento. Quer continuar?" />}
-    {alvoGrupo && <ConfirmDialog title="Marcar número do grupo como teste" confirmLabel="Marcar como teste" cancelLabel="Cancelar" onCancel={() => setAlvoGrupo(null)} onConfirm={() => { const alvo = alvoGrupo; setAlvoGrupo(null); void mudarGrupo(alvo, true); }} message="Esta marcação vale para este Seminário ATM. O número e os dados relacionados deixam de contar nos indicadores deste evento. Quer continuar?" />}
-  </Modal>;
-}
-
 export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato = false, mostrarAvisoTeste = false }: { projeto: RegistroAtm; isMaster?: boolean; podeVerContato?: boolean; mostrarAvisoTeste?: boolean }) {
   const [resumo, setResumo] = useState<DashboardAtm | null>(null);
   const [serie, setSerie] = useState<Linha[]>([]);
-  const [leads, setLeads] = useState<Resultado<LeadAtm[]>>({ data: [], semDado: true, erro: null });
-  const [grupo, setGrupo] = useState<Resultado<NumeroGrupoAtm[]>>({ data: [], semDado: true, erro: null });
   const [canais, setCanais] = useState<Resultado<Linha[]>>({ data: [], semDado: true, erro: null });
   const [disparosDetalhe, setDisparosDetalhe] = useState<Resultado<DisparoDetalheAtm[]>>({ data: [], semDado: true, erro: null });
   const [trafego, setTrafego] = useState<Resultado<DadosTrafegoAtm>>({ data: trafegoAtmSemDado(), semDado: true, erro: null });
   const [comparecimento, setComparecimento] = useState<Resultado<Linha[]>>({ data: [], semDado: true, erro: null });
   const [posLive, setPosLive] = useState<Resultado<Linha[]>>({ data: [], semDado: true, erro: null });
   const [canalAtivo, setCanalAtivo] = useState('whatsapp_api');
-  const [modal, setModal] = useState(false);
-  // Modais dos cards Pré-checkout e Vendas do funil (13/10/2026). O de leads segue em `modal`, que também liga a leitura de leads e grupo.
-  const [modalFunil, setModalFunil] = useState<'preCheckout' | 'vendas' | null>(null);
-  const vendasSv = useVendasSvAtm(projeto.chave, isMaster, podeVerContato);
+  // Modal aberto (Leads, Pré-checkout ou Vendas). Cada um lê a sua lista sozinho, fora do refresh grande da página
+  // (correção de 13/10/2026: antes a lista de leads esperava o refresh inteiro e o modal abria em "0 leads · indisponível").
+  const [modal, setModal] = useState<ModalFunilAtm | null>(null);
   const [periodoSelecionado, setPeriodoSelecionado] = useState<PresetPeriodoAtm>('evento');
+  const [incluirTeste, setIncluirTeste] = useState(isMaster);
+  const [versaoListas, setVersaoListas] = useState(0);
+  const [listas] = useState(criarCarregadorListasAtm);
   const [atualizado, setAtualizado] = useState<Date | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [atualizando, setAtualizando] = useState(false);
   const emCurso = useRef(false);
   const pedidoPendente = useRef<PedidoAtualizacao | null>(null);
   const atualizarRef = useRef<(detalhado?: boolean) => Promise<void>>(async () => {});
-  const modalAtual = useRef(false);
   const periodoAtual = useRef<PresetPeriodoAtm>('evento');
   const [abaPrincipal, setAbaPrincipal] = useState<'edicao' | 'trafego' | 'historico'>('edicao');
   // O histórico só é lido na primeira vez que a aba é aberta; depois fica montado para não reler a cada troca.
@@ -146,7 +82,7 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
   const idsHistorico = idsAba('atm-principal', 'historico');
 
   const atualizar = useCallback(async (detalhado = false) => {
-    const pedido: PedidoAtualizacao = { periodo: datasDoPeriodo(periodoSelecionado), detalhado, modal: modalAtual.current, isMaster };
+    const pedido: PedidoAtualizacao = { periodo: datasDoPeriodo(periodoSelecionado), detalhado };
     if (emCurso.current) {
       pedidoPendente.current = { ...pedido, detalhado: pedido.detalhado || pedidoPendente.current?.detalhado === true };
       return;
@@ -174,10 +110,6 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
             carregarAtmComparecimento(projeto.chave).then((result) => { if (!result.semDado) { setComparecimento(result); teveLeitura = true; } else if (result.erro) setComparecimento((prev) => ({ ...prev, erro: result.erro })); if (result.erro) erros.push(result.erro); }),
             carregarAtmPosLive(projeto.chave).then((result) => { if (!result.semDado) { setPosLive(result); teveLeitura = true; } else if (result.erro) setPosLive((prev) => ({ ...prev, erro: result.erro })); if (result.erro) erros.push(result.erro); }),
           ];
-          if (atual.modal) {
-            pedidos.push(carregarAtmLeads(projeto.chave, atual.periodo, atual.isMaster).then((result) => { if (!result.semDado) { setLeads(result); teveLeitura = true; } else if (result.erro) setLeads((prev) => ({ ...prev, erro: result.erro })); if (result.erro) erros.push(result.erro); }));
-            pedidos.push(carregarAtmGrupo(projeto.chave, atual.periodo, atual.isMaster).then((result) => { if (!result.semDado) { setGrupo(result); teveLeitura = true; } else if (result.erro) setGrupo((prev) => ({ ...prev, erro: result.erro })); if (result.erro) erros.push(result.erro); }));
-          }
           await Promise.all(pedidos);
         }
         setErro(erros[0] ?? null);
@@ -189,7 +121,7 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
       emCurso.current = false;
       setAtualizando(false);
     }
-  }, [isMaster, periodoSelecionado, projeto.chave]);
+  }, [periodoSelecionado, projeto.chave]);
 
   useEffect(() => { atualizarRef.current = atualizar; }, [atualizar]);
   useEffect(() => {
@@ -204,41 +136,53 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
     periodoAtual.current = periodoSelecionado;
     void atualizarRef.current(true);
   }, [periodoSelecionado]);
-  useEffect(() => {
-    const abriu = modal && !modalAtual.current;
-    modalAtual.current = modal;
-    if (abriu) void atualizarRef.current(true);
-  }, [modal]);
 
-  const atualizarTudo = async () => { await atualizar(true); };
-  const toggleLead = async (lead: LeadAtm, teste: boolean): Promise<string | null> => {
-    if (!isMaster) return 'Só masters podem marcar ou desmarcar testes.';
-    const result = teste
-      ? await marcarAtmTeste(projeto.chave, lead.email, lead.telefone)
-      : await desmarcarAtmTeste(projeto.chave, lead.email, lead.telefone);
+  // Listas dos modais: chave = (RPC, evento, período, incluir teste). Mudar o período com o modal aberto muda a chave e
+  // dispara a leitura; reabrir mostra a última lista da chave na hora e revalida. Só masters pedem as linhas de teste.
+  const periodoLista = useMemo(() => datasDoPeriodo(periodoSelecionado), [periodoSelecionado]);
+  const comTeste = isMaster && incluirTeste;
+  const chaveDe = (rpc: string, periodo: typeof periodoLista | null, aberto: boolean) => (aberto ? chaveListaAtm(rpc, projeto.chave, periodo, comTeste) : null);
+  const listaLeads = useListaAtm<LeadAtm>(listas, chaveDe('dados_atm_leads', periodoLista, modal === 'leads'), () => carregarAtmLeads(projeto.chave, periodoLista, comTeste), versaoListas);
+  const grupoPeriodo = useListaAtm<NumeroGrupoAtm>(listas, chaveDe('dados_atm_grupo_numeros', periodoLista, modal === 'leads'), () => carregarAtmGrupo(projeto.chave, periodoLista, comTeste), versaoListas);
+  // Pré-checkout e Vendas cruzam com o grupo do evento inteiro (quem está ou esteve no grupo, qualquer que seja o período).
+  const grupoEvento = useListaAtm<NumeroGrupoAtm>(listas, chaveDe('dados_atm_grupo_numeros', null, (modal === 'preCheckout' || modal === 'vendas') && podeVerContato), () => carregarAtmGrupo(projeto.chave, undefined, comTeste), versaoListas);
+  const listaPreCheckout = useListaAtm<PessoaPreCheckoutAtm>(listas, chaveDe('dados_atm_pre_checkout', periodoLista, modal === 'preCheckout' && podeVerContato), () => carregarAtmPreCheckout(projeto.chave, periodoLista, comTeste), versaoListas);
+  const listaVendas = useListaAtm<VendaSessaoViabilidade>(listas, chaveDe('dados_atm_sv_vendas', null, modal === 'vendas' && podeVerContato), () => carregarAtmSvVendas(projeto.chave, comTeste), versaoListas);
+
+  const atualizarTudo = async () => { setVersaoListas((v) => v + 1); await atualizar(true); };
+  /** Depois de marcar/desmarcar teste: relê as listas abertas (o que se espera) e o resumo dos cards (por trás). */
+  const depoisDaMarcacao = (result: { erro: string | null }): string | null => {
     if (result.erro) return result.erro;
-    await atualizar(true);
+    setVersaoListas((v) => v + 1);
+    void atualizar(true);
     return null;
   };
+  const SO_MASTER = 'Só masters podem marcar ou desmarcar testes.';
+  const toggleLead = async (lead: LeadAtm, teste: boolean): Promise<string | null> => {
+    if (!isMaster) return SO_MASTER;
+    return depoisDaMarcacao(teste ? await marcarAtmTeste(projeto.chave, lead.email, lead.telefone) : await desmarcarAtmTeste(projeto.chave, lead.email, lead.telefone));
+  };
   const toggleGrupo = async (numero: NumeroGrupoAtm, teste: boolean): Promise<string | null> => {
-    if (!isMaster) return 'Só masters podem marcar ou desmarcar testes.';
-    const result = teste
-      ? await marcarAtmTeste(projeto.chave, null, numero.foneKey)
-      : await desmarcarAtmTeste(projeto.chave, null, numero.foneKey);
-    if (result.erro) return result.erro;
-    await atualizar(true);
-    return null;
+    if (!isMaster) return SO_MASTER;
+    return depoisDaMarcacao(teste ? await marcarAtmTeste(projeto.chave, null, numero.foneKey) : await desmarcarAtmTeste(projeto.chave, null, numero.foneKey));
+  };
+  // Pré-checkout: marca pelo e-mail; só sem e-mail vai o telefone (o ramo de telefone do banco casa pelos 8 últimos dígitos).
+  const togglePessoa = async (pessoa: PessoaPreCheckoutAtm, teste: boolean): Promise<string | null> => {
+    if (!isMaster) return SO_MASTER;
+    const telefone = pessoa.email ? null : pessoa.telefone;
+    return depoisDaMarcacao(teste ? await marcarAtmTeste(projeto.chave, pessoa.email, telefone) : await desmarcarAtmTeste(projeto.chave, pessoa.email, telefone));
+  };
+  // Vendas: só pelo e-mail da venda (o ramo de telefone do banco não consulta vendas).
+  const toggleVenda = async (venda: VendaSessaoViabilidade, teste: boolean): Promise<string | null> => {
+    if (!isMaster) return SO_MASTER;
+    if (!venda.email) return 'Esta venda não tem e-mail: a marcação é feita pelo e-mail.';
+    return depoisDaMarcacao(teste ? await marcarAtmTeste(projeto.chave, venda.email, null) : await desmarcarAtmTeste(projeto.chave, venda.email, null));
   };
 
   const linhasResumo = useMemo(() => METRICAS_RESUMO_ATM.map((m) => ({ ...m, metrica: metricaDoCardAtm(resumo?.resumo, m.chave) })), [resumo]);
   // Resumo ainda não lido na primeira carga: o card diz que está carregando em vez de "Não lançado".
   const carregandoResumo = resumo === null && atualizando;
-  const abrirCard = (chave: keyof ResumoAtm) => {
-    const alvo = modalDoCardAtm(chave);
-    if (alvo === 'leads') setModal(true);
-    else if (alvo === 'vendas') { setModalFunil('vendas'); void vendasSv.carregar(); }
-    else if (alvo === 'preCheckout') setModalFunil('preCheckout');
-  };
+  const abrirCard = (chave: keyof ResumoAtm) => { const alvo = modalDoCardAtm(chave); if (alvo) setModal(alvo); };
   const canal = canais.data.find((x) => x.canal === canalAtivo);
   const sessao = comparecimento.data[0];
   const ciclo = (nome: string) => posLive.data.find((x) => x.ciclo === nome);
@@ -248,6 +192,10 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
   const investimentoTotal = resumo?.resumo.investimentoTotal;
   const custoDisparoInvestimento = resumo?.resumo.custoDisparo;
   const custoTrafegoInvestimento = resumo?.resumo.custoTrafego;
+  // Período aplicado para o eixo da Evolução e o recorte das vendas: as datas pedidas; no "período do evento" (datas nulas),
+  // as que o resumo devolveu (início e fim do cadastro do evento, a mesma janela que o banco usa no card).
+  const periodoModal = { de: periodoLista.p_de ?? resumo?.periodo.de ?? null, ate: periodoLista.p_ate ?? resumo?.periodo.ate ?? null };
+  const comumModal = { onClose: () => setModal(null), periodoLabel: intervalo, periodo: periodoModal, isMaster, incluirTeste: comTeste, onIncluirTeste: setIncluirTeste };
 
   return <div className="max-w-7xl space-y-5">
     <header><div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Infra / Dashboards / Escritório / Seminário ATM</div><h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">{projeto.rotulo}</h1><p className="mt-1 text-sm text-[var(--fg-2)]">Chave {projeto.chave} · {atualizado ? 'atualizado às ' + atualizado.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'aguardando leitura'}</p></header>
@@ -294,9 +242,9 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
       {posLive.erro && <p role="status" className="mb-3 text-sm text-[var(--yellow)]">{posLive.erro}</p>}
       {posLive.data.length ? <div className="grid gap-4 md:grid-cols-2">{(['aberto', 'fechado'] as const).map((nome) => { const p = ciclo(nome); return <div key={nome} className="rounded-[var(--r-md)] border border-[var(--border)] p-4"><h3 className="font-semibold capitalize">Ciclo {nome}</h3><div className="mt-3 grid grid-cols-2 gap-3"><KpiCard label="Vendas" value={renderVal(p?.vendas, 'inteiro')} hint={p?.vendas == null ? 'sem dado ainda' : undefined} /><KpiCard label="Conversão" value={renderVal(p?.conversao_pct, 'percentual')} hint={p?.conversao_pct == null ? 'sem dado ainda' : undefined} /></div></div>; })}</div> : <EmptyState title="Pós-live sem dados" hint="sem dado ainda" />}
     </SectionCard>
-    <ModalPreCheckoutAtm open={modalFunil === 'preCheckout'} onClose={() => setModalFunil(null)} preCheckout={metricaDoCardAtm(resumo?.resumo, 'preCheckout')} periodoLabel={intervalo} podeVerContato={podeVerContato} />
-    <ModalVendasAtm open={modalFunil === 'vendas'} onClose={() => setModalFunil(null)} chave={projeto.chave} vendas={metricaDoCardAtm(resumo?.resumo, 'vendas')} vendasTeste={resumo?.periodo.vendasTeste ?? null} periodoLabel={intervalo} podeVerContato={podeVerContato} isMaster={isMaster} sv={vendasSv} onTesteAlterado={() => atualizar(true)} />
-    <ModalLeads open={modal} onClose={() => setModal(false)} result={leads} grupo={grupo} serie={serie} periodoLabel={intervalo} isMaster={isMaster} onToggleLead={toggleLead} onToggleGrupo={toggleGrupo} />
+    <ModalLeadsAtm {...comumModal} open={modal === 'leads'} card={metricaDoCardAtm(resumo?.resumo, 'leads')} lista={listaLeads} grupo={grupoPeriodo} onToggleLead={toggleLead} onToggleGrupo={toggleGrupo} />
+    <ModalPreCheckoutAtm {...comumModal} open={modal === 'preCheckout'} card={metricaDoCardAtm(resumo?.resumo, 'preCheckout')} lista={listaPreCheckout} grupo={grupoEvento} podeVerContato={podeVerContato} onTogglePessoa={togglePessoa} />
+    <ModalVendasAtm {...comumModal} open={modal === 'vendas'} card={metricaDoCardAtm(resumo?.resumo, 'vendas')} lista={listaVendas} grupo={grupoEvento} podeVerContato={podeVerContato} vendasTeste={resumo?.periodo.vendasTeste ?? null} onToggleVenda={toggleVenda} />
     </div>
     <div role="tabpanel" id={idsTrafego.panel} aria-labelledby={idsTrafego.tab} hidden={abaPrincipal !== 'trafego'}>
       {abaPrincipal === 'trafego' && <TrafegoAtm result={trafego} />}
