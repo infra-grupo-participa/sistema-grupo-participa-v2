@@ -527,14 +527,15 @@ O que vale para o repositório:
   live"; deve ir para o nó Manifesto. Usar o `subtipo` que a RPC já devolve.
 - **Alcance e frequência:** a RPC não mandava total; migration `20261013225000` acrescenta `totais` (período inteiro da
   campanha, `mkt_trafego.desempenho_total`). Front: `mapearTrafego` deixa de fixar `totais: []`.
-- **Respondi da consultoria como cadastro:** migration `20261013225100` (ramo `consultoria_respondi` na
-  `dados.black_leads` com a regra da lista de disparo: todo o `JmSmjBBS`, com contato, parcial pelo interruptor
-  `dados.black_lista_config.incluir_respondi_parcial`; sem canal; listas da Mensageria iguais). Decisões do Victor
-  (13/10 noite): início do dashboard continua 04/10; o grupo da consultoria não conta em nada (card de ingresso só
-  com o grupo da Black, sem linha extra).
+- **Respondi da consultoria: DESCARTADO** (decisão do Victor, 13/10 ~21h05). Os leads do Respondi da consultoria ficam
+  fora do dashboard da Black, que conta só os leads e os grupos da Black. A migration `20261013225100` nunca foi aplicada;
+  o registro do que foi proposto está em `infra/supabase/migrations/20261013225100.explain.md`.
+- **Regra de MQL (decisão do Victor, 13/10 noite):** a pessoa é MQL pela profissão do **envio mais recente** que tem
+  profissão, em todo o dashboard. O banco já usa essa regra (`dados_black_grupo`); o `mqlDoRecorte` do front
+  (`domain/metricas.ts`, hoje "algum envio MQL") muda para ela.
 - **`entrou_grupo_em` só com o grupo da Black:** migration `20261013225200` (C). Antes o perfil lia
   `dados.v_grupo_pessoas_todos`, que junta todos os grupos da chave, e contava o grupo da consultoria na taxa de grupo
-  em 48h, no funil do criativo e no Histórico (135 MQL "no grupo" contra 98 de verdade, com a B).
+  em 48h, no funil do criativo e no Histórico (aplicada em 13/10 às 23:10 UTC: 135 MQL "no grupo" pelo perfil passou a 97, igual à conta só com o grupo da Black).
 - **Páginas:** `mapearTrafego` fixa `paginas: []` e `paginaId: null`, e a coleta do Meta não traz a URL de destino
   (só `url_tags`). Curto prazo: página pelos leads pagos do anúncio. Definitivo: a Edge `trafego-meta` pedir o link do
   criativo (coluna nova).
