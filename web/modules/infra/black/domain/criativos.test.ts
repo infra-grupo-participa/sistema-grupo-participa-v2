@@ -3,7 +3,8 @@ import { baseFicticia } from '../infrastructure/fixtures/gerador';
 import { CONFIG_BLACK } from '../infrastructure/fixtures/catalogo';
 import { conversaoPagina, ctr, agregar, indexar, ingressoGrupoGeral, mqlDoRecorte } from './metricas';
 import { anunciosDoCriativo, funilCriativo, idDoCriativo, ORDENS_GALERIA, ordenar, painel, resumir, serieDiariaAnuncio, valorOrdem } from './criativos';
-import { recorteDaTela } from './grupo';
+import { recorteDaTela, TETO_RECORTE_ANUNCIO } from './grupo';
+import { grupoDemo } from '../infrastructure/fixtures/fonte-fixtures';
 
 const b = baseFicticia();
 const idx = indexar(b);
@@ -71,12 +72,14 @@ describe('criativo = anúncios de mesmo nome', () => {
     const so = serieDiariaAnuncio(trio[0], ba.dias, ba.linhas, dias); // texto simples continua valendo
     expect(so.reduce((x, d) => x + d.gasto, 0)).toBeLessThan(total);
   });
-  it('recorte do grupo: criativo em vários anúncios sem conjunto avisa; com conjunto manda o id do Meta do anúncio', () => {
+  it('recorte do grupo: criativo em vários anúncios manda a lista de ids do Meta; com conjunto manda o id do anúncio', () => {
     const t = { campanhas: ba.campanhas, conjuntos: ba.conjuntos, paginas: [],
       anuncios: ba.anuncios.map((a) => ({ ...a, idExterno: `meta-${a.id}` })) };
     const sem = recorteDaTela({ funil: 'todos', canal: 'todos', criativos: { anuncio: trio[0] } }, t);
-    expect(sem.ok).toBe(false);
-    if (!sem.ok) expect(sem.motivo).toContain('Escolha também um conjunto');
+    // todos os anúncios do criativo, ordenados e sem repetição, numa chamada só
+    expect(sem).toEqual({ ok: true, recorte: { tipo: 'anuncio', valor: trio.map((id) => `meta-${id}`).sort().join(',') }, descricao: `Anúncio: ${NOME}` });
+    // escolher qualquer um dos anúncios do criativo dá o mesmo recorte
+    expect(recorteDaTela({ funil: 'todos', canal: 'todos', criativos: { anuncio: trio[2] } }, t)).toEqual(sem);
     const cj = ix.anuncio.get(trio[1])!.conjuntoId;
     const com = recorteDaTela({ funil: 'todos', canal: 'todos', criativos: { anuncio: trio[0], conjunto: cj } }, t);
     expect(com.ok).toBe(true);
@@ -85,6 +88,55 @@ describe('criativo = anúncios de mesmo nome', () => {
     const unico = ba.anuncios.find((a) => !trio.includes(a.id))!;
     const um = recorteDaTela({ funil: 'todos', canal: 'todos', criativos: { anuncio: unico.id } }, t);
     expect(um.ok && um.recorte).toEqual({ tipo: 'anuncio', valor: `meta-${unico.id}` });
+  });
+});
+
+describe('recorte do grupo: teto de 2000 caracteres da lista de ids', () => {
+  // Ids de 18 dígitos (o tamanho real do Meta): 105 dão 1994 caracteres; mais um de 5 dígitos fecha 2000 exatos.
+  const id18 = (i: number) => `1${String(i).padStart(17, '0')}`;
+  const tr = (ids: string[]) => ({
+    campanhas: [], conjuntos: [], paginas: [],
+    anuncios: ids.map((idExterno, i) => ({ id: `a${i}`, conjuntoId: `c${i}`, nome: 'MESMO NOME', formato: null, paginaId: null,
+      miniaturaUrl: null, linkPrevia: null, linkGerenciador: null, idExterno })),
+  }) as unknown as Parameters<typeof recorteDaTela>[1];
+  const r = (ids: string[]) => recorteDaTela({ funil: 'todos', canal: 'todos', criativos: { anuncio: 'a0' } }, tr(ids));
+  const ids105 = Array.from({ length: 105 }, (_, i) => id18(i));
+
+  it('lista com exatamente 2000 caracteres vai ao servidor', () => {
+    const x = r([...ids105, '12345']);
+    expect(x.ok).toBe(true);
+    if (x.ok) {
+      expect(x.recorte?.tipo).toBe('anuncio');
+      expect(x.recorte?.valor.length).toBe(TETO_RECORTE_ANUNCIO);
+      expect(x.recorte?.valor.split(',')).toHaveLength(106);
+    }
+  });
+  it('lista com 2001 caracteres não vai: Sem dado com o motivo, nunca número de outro recorte', () => {
+    const x = r([...ids105, '123456']);
+    expect(x.ok).toBe(false);
+    if (!x.ok) {
+      expect(x.motivo).toContain('2000 caracteres');
+      expect(x.motivo).toContain('"MESMO NOME"');
+      expect(x.motivo).toContain('106 anúncios');
+    }
+  });
+  it('id repetido entra uma vez só e a ordem não muda a chamada', () => {
+    const a = r(['300', '100', '200', '100']);
+    const b2 = r(['100', '200', '300']);
+    expect(a).toEqual(b2);
+    expect(a.ok && a.recorte).toEqual({ tipo: 'anuncio', valor: '100,200,300' });
+  });
+  it('demo: a lista soma os anúncios do criativo como o servidor (cada pessoa uma vez)', () => {
+    const p = { de: '2000-01-01', ate: '2999-12-31' };
+    const limite = Date.parse('2999-12-31T23:59:59Z');
+    const ids = [...new Set(b.linhas.map((l) => l.anuncioMeta ?? l.anuncioId).filter((x): x is string => !!x))].slice(0, 2);
+    expect(ids).toHaveLength(2);
+    const um = (v: string) => grupoDemo(b.linhas, p, { tipo: 'anuncio', valor: v }, limite).leads.unicos ?? 0;
+    const lista = grupoDemo(b.linhas, p, { tipo: 'anuncio', valor: ids.join(',') }, limite).leads.unicos ?? 0;
+    const pessoas = new Set(b.linhas.filter((l) => !l.teste && ids.includes((l.anuncioMeta ?? l.anuncioId) ?? '')).map((l) => l.pessoaId));
+    expect(lista).toBe(pessoas.size);
+    expect(lista).toBeGreaterThanOrEqual(Math.max(um(ids[0]), um(ids[1])));
+    expect(lista).toBeLessThanOrEqual(um(ids[0]) + um(ids[1]));
   });
 });
 

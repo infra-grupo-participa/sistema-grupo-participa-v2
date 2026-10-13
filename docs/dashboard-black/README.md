@@ -292,18 +292,26 @@ cujos envios da Black são **todos** teste (`dados.teste_ativo`, todos os envios
 - Detalhe, números por fase e a aplicação: [`20261013024435.explain.md`](../../infra/supabase/migrations/20261013024435.explain.md).
   Reverter: `20261013024435_reversao.sql` (recusa se o corpo vivo não for o desta migration).
 
-## Banco: recorte de criativo com vários anúncios e `metaads` como Meta (NÃO APLICADA)
+## Banco: recorte de criativo com vários anúncios e `metaads` como Meta (APLICADA 13/10)
 
-**`20261013140000`**, branch `victor-black-recorte-lista`. **Não aplicada**; ensaiada contra produção em 13/10/2026 11:48 UTC
-numa transação desfeita (3 rodadas verdes). Falta o pentester e a aplicação (fase 2).
+**`20261013120148`** (arquivos nasceram como `20261013140000`). **Aplicada em 13/10/2026 às 12:01 UTC** pela Management
+API, depois do ensaio em transação desfeita (43 de 43 `true` às 11:55 UTC) e da aprovação do pentester. Conferido em
+produção: sem recorte nada mudou (92/31/44, 193 únicos, 129 MQL); a lista de anúncios de um criativo passou a devolver
+número (`ADV_BF26_09_PROVA_SOCIAL_A`: 3/3, antes 0/0).
 
 - Recorte `{"tipo":"anuncio"}` passa a aceitar uma lista de ids do Meta separados por vírgula (só dígitos e vírgula, até
   2000 caracteres): criativo = anúncios de mesmo nome em vários conjuntos. Os outros tipos não mudam.
 - `utm_source=metaads` passa a ser canal `meta` e deixa de cair em `utm_campaign_fora_do_padrao`: no ensaio, 8 envios
   (8 pessoas) mudam de canal; nenhum outro envio nem coluna muda; `dados_black_grupo` sem recorte fica igual.
-- A tela (`domain/grupo.ts`) só passa a mandar a lista **depois** de aplicada: antes disso o servidor recusa (22023).
+- **O que muda na tela** (já nesta branch): escolhido um criativo em Criativos, os cards de MQL e de ingresso no grupo
+  passam a somar todos os anúncios de mesmo nome (cada pessoa conta uma vez, conta do servidor), em vez de "Sem dado,
+  escolha também um conjunto". Com conjunto ou campanha escolhidos, a lista se reduz aos anúncios deles. Lista acima de
+  2000 caracteres (cerca de 105 anúncios) continua "Sem dado", com o motivo; nunca um número de outro recorte.
+- **Ordem obrigatória:** aplicar a migration antes de a tela ir para a `main`. Antes de aplicada, o servidor compara a
+  lista inteira como se fosse um id só: até 200 caracteres ela é aceita e **devolve 0** (número errado, sem erro); acima
+  disso, 22023.
 - Detalhe, guarda corrigida (md5 vivos), números e caminho de aplicação:
-  [`20261013140000.explain.md`](../../infra/supabase/migrations/20261013140000.explain.md).
+  [`20261013120148.explain.md`](../../infra/supabase/migrations/20261013120148.explain.md).
 
 ## Banco: ingresso no grupo (webhook n8n e backfill)
 

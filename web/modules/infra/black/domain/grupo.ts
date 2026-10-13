@@ -20,6 +20,12 @@ export type RecorteServidor = { ok: true; recorte: RecorteGrupo | null; descrica
 const PORTA_DO_FUNIL: Record<'consultoria' | 'iscas' | 'c3', Porta> = { consultoria: 'consultoria', iscas: 'isca', c3: 'inscricao_direta' };
 
 /**
+ * Teto do valor do recorte de anúncio no servidor (dados.black_recorte_valido, migration 20261013120148): ids do Meta
+ * separados por vírgula, até 2000 caracteres. Passou disso, a tela não manda (o servidor recusaria com 22023).
+ */
+export const TETO_RECORTE_ANUNCIO = 2000;
+
+/**
  * Nó ou filtro da tela -> p_recorte. Prioridade do mais fino para o mais grosso: anúncio, conjunto, campanha
  * (sempre o id do Meta, o que vem depois do | na utm; o id interno de mkt_trafego não serve), isca, porta e funil.
  * Sem nada escolhido = null (conta simples, sem cruzar). O grupo não tem recorte por canal: com canal escolhido,
@@ -60,17 +66,19 @@ export function recorteDaTela(r: Pick<Recorte, 'funil' | 'canal' | 'criativos'>,
   if (t && f.anuncio) {
     const a = t.anuncios.find((x) => x.id === f.anuncio);
     if (!a) return { ok: false, motivo: 'O anúncio escolhido não está no tráfego do período.' };
-    // O criativo é o conjunto de anúncios de mesmo nome (um por conjunto). Com conjunto ou campanha escolhidos sobra
-    // um só; sem eles, o servidor (um id do Meta por recorte) não consegue somar vários anúncios.
+    // O criativo é o conjunto de anúncios de mesmo nome (um por conjunto), filtrado pelo conjunto ou pela campanha se
+    // escolhidos. O servidor soma a lista de ids do Meta ("id1,id2"), contando cada pessoa uma vez.
     const irmaos = t.anuncios.filter((x) => x.nome === a.nome
       && (!f.conjunto || x.conjuntoId === f.conjunto)
       && (!f.campanha || t.conjuntos.find((c) => c.id === x.conjuntoId)?.campanhaId === f.campanha));
     const alvos = irmaos.length > 0 ? irmaos : [a];
     if (alvos.some((x) => !x.idExterno)) return { ok: false, motivo: `O anúncio "${a.nome}" não tem o id do Meta no tráfego.` };
-    if (alvos.length > 1) {
-      return { ok: false, motivo: `O criativo "${a.nome}" roda em ${alvos.length} anúncios do Meta e o servidor do grupo só aceita um por vez. Escolha também um conjunto.` };
+    // ordenados e sem repetição: a mesma escolha dá sempre a mesma chave (chaveRecorte) e a mesma chamada
+    const valor = [...new Set(alvos.flatMap((x) => (x.idExterno ? [x.idExterno] : [])))].sort().join(',');
+    if (valor.length > TETO_RECORTE_ANUNCIO) {
+      return { ok: false, motivo: `O criativo "${a.nome}" roda em ${alvos.length} anúncios do Meta e a lista de ids passa de ${TETO_RECORTE_ANUNCIO} caracteres, o limite do servidor do grupo. Escolha também um conjunto.` };
     }
-    return com(recorteGrupoDe({ ...base, anuncioMeta: alvos[0].idExterno }), `Anúncio: ${a.nome}`);
+    return com(recorteGrupoDe({ ...base, anuncioMeta: valor }), `Anúncio: ${a.nome}`);
   }
   if (t && f.conjunto) {
     const j = t.conjuntos.find((x) => x.id === f.conjunto);

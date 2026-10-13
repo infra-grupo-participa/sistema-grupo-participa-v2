@@ -51,7 +51,8 @@ function noRecorte(l: LinhaPerfil, r: RecorteGrupo | null): boolean {
   if (r.tipo === 'isca') return l.isca === r.valor;
   if (r.tipo === 'campanha') return (l.campanhaMeta ?? l.campanhaId) === r.valor;
   if (r.tipo === 'conjunto') return (l.conjuntoMeta ?? l.conjuntoId) === r.valor;
-  return (l.anuncioMeta ?? l.anuncioId) === r.valor;
+  // anúncio: lista de ids separados por vírgula (os anúncios de um criativo), como no servidor desde 20261013120148
+  return r.valor.split(',').includes((l.anuncioMeta ?? l.anuncioId) ?? '');
 }
 
 /**
