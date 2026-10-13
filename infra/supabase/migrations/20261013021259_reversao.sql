@@ -1,23 +1,8 @@
--- 20261013014209: dados_black_trafego devolve o id do Meta da campanha e do conjunto.
--- Pedido do Maestro (13/10/2026): a tela da Black já lê esses campos para o recorte do grupo por campanha e por conjunto
--- (commit da16e6f, branch victor-black-dashboard). Muda só isto:
---   - cada item de "campanhas" ganha a chave "campanha_externa" (mkt_trafego.campanhas.campanha_externa, text not null);
---   - cada item de "conjuntos" ganha a chave "conjunto_externa" (mkt_trafego.conjuntos.conjunto_externa, text not null).
--- Nenhuma outra chave, filtro, junção ou total muda (o ensaio prova: resultado sem as 2 chaves novas = resultado de antes,
--- e os totais de gasto por etapa são iguais). Dono, ACL, security definer e search_path iguais.
--- Pré-requisito: corpo vivo igual ao gravado por 20261012231649 (md5 conferido abaixo).
--- Reversão: 20261013014209_reversao.sql.
-
+-- Reversão de 20261013021259. Numa transação (o arquivo não abre nem fecha uma).
+-- Devolve dados_black_trafego ao corpo exato gravado por 20261012231649 (lido no banco em 13/10/2026 ~01:40 UTC):
+-- "campanhas" e "conjuntos" deixam de trazer campanha_externa e conjunto_externa. Não toca em dado.
+-- Efeito na tela: o recorte do grupo por campanha e por conjunto volta a mostrar "Sem dado" com o motivo.
 set local lock_timeout = '5s';
-set local statement_timeout = '60s';
-
-do $g$
-begin
-  if (select md5(prosrc) from pg_proc where oid = 'public.dados_black_trafego(text,date,date)'::regprocedure) <> '10e1a38a90f878884abe055aadaa4c39' then
-    raise exception '20261013014209: corpo vivo de dados_black_trafego mudou. Reler.';
-  end if;
-end
-$g$;
 
 CREATE OR REPLACE FUNCTION public.dados_black_trafego(p_chave text, p_de date DEFAULT NULL::date, p_ate date DEFAULT NULL::date)
  RETURNS jsonb
@@ -35,7 +20,6 @@ begin
     -- 20261013100000: campanhas do projeto do cadastro; a campanha sem projeto_id (o CPF01 hoje; ver o explain) entra
     -- quando um dos termos entre barras do nome é a sigla do projeto (BF26). O termo vem do cadastro, não fica fixo aqui.
     select c.id, c.nome, c.plataforma, c.status_plataforma, c.objetivo, c.projeto_id, ct.nome as conta,
-           c.campanha_externa,   -- 20261013014209: id da campanha no Meta (recorte do grupo por campanha)
            e.etapa, e.subtipo, e.conflito
       from mkt_trafego.campanhas c
       join mkt_trafego.contas ct on ct.id = c.conta_id and ct.moeda = 'BRL'
@@ -45,7 +29,7 @@ begin
         or (c.projeto_id is null
             and exists (select 1 from unnest(string_to_array(c.nome, '|')) t where upper(btrim(t)) = upper(p.sigla)))
   ),
-  cj as (select j.id, j.campanha_id, j.nome, j.status_plataforma, j.meta_otimizacao, j.conjunto_externa   -- 20261013014209
+  cj as (select j.id, j.campanha_id, j.nome, j.status_plataforma, j.meta_otimizacao
            from mkt_trafego.conjuntos j join c on c.id = j.campanha_id),
   an as (select a.id, a.conjunto_id, a.nome, a.status_plataforma, a.anuncio_externa, a.video_id
            from mkt_trafego.anuncios a join cj on cj.id = a.conjunto_id),
@@ -60,12 +44,11 @@ begin
     'anuncio_desde', (select min(x.dia) from mkt_trafego.desempenho_anuncio_dia x join an on an.id = x.anuncio_id),
     'campanhas', coalesce((select jsonb_agg(jsonb_build_object(
       'id', c.id, 'nome', c.nome, 'plataforma', c.plataforma, 'status', c.status_plataforma, 'objetivo', c.objetivo,
-      'conta', c.conta, 'projeto_id', c.projeto_id, 'etapa', c.etapa, 'subtipo', c.subtipo, 'conflito', c.conflito,
-      'campanha_externa', c.campanha_externa
+      'conta', c.conta, 'projeto_id', c.projeto_id, 'etapa', c.etapa, 'subtipo', c.subtipo, 'conflito', c.conflito
     ) order by c.nome) from c), '[]'::jsonb),
     'conjuntos', coalesce((select jsonb_agg(jsonb_build_object(
       'id', j.id, 'campanha_id', j.campanha_id, 'nome', j.nome, 'status', j.status_plataforma,
-      'meta_otimizacao', j.meta_otimizacao, 'conjunto_externa', j.conjunto_externa
+      'meta_otimizacao', j.meta_otimizacao
     ) order by j.nome, j.id) from cj j), '[]'::jsonb),
     'anuncios', coalesce((select jsonb_agg(jsonb_build_object(
       'id', a.id, 'conjunto_id', a.conjunto_id, 'nome', a.nome, 'status', a.status_plataforma,
@@ -92,15 +75,13 @@ begin
 end
 $function$;
 
--- grants de antes (create or replace mantém; reafirmados)
 revoke all on function public.dados_black_trafego(text, date, date) from public, anon, service_role;
 grant execute on function public.dados_black_trafego(text, date, date) to authenticated;
 
 do $c$
 begin
-  if (select proacl::text from pg_proc where oid = 'public.dados_black_trafego(text,date,date)'::regprocedure) <> '{postgres=X/postgres,authenticated=X/postgres}'
-     or not (select prosecdef from pg_proc where oid = 'public.dados_black_trafego(text,date,date)'::regprocedure) then
-    raise exception '20261013014209: permissão de dados_black_trafego errada';
+  if (select md5(prosrc) from pg_proc where oid = 'public.dados_black_trafego(text,date,date)'::regprocedure) <> '10e1a38a90f878884abe055aadaa4c39' then
+    raise exception 'reversão 20261013021259: corpo de dados_black_trafego não voltou ao de antes';
   end if;
 end
 $c$;

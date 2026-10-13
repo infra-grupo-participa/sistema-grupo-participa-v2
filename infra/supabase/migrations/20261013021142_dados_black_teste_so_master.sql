@@ -1,4 +1,4 @@
--- 20261013013625: na Black (modelo jornada-captacao, chave black-friday-2026-10), marcar e desmarcar teste só para master.
+-- 20261013021142: na Black (modelo jornada-captacao, chave black-friday-2026-10), marcar e desmarcar teste só para master.
 -- Achado do pentester (13/10/2026): no ramo da Black, dados_marcar_teste e dados_desmarcar_teste só exigiam a equipe
 -- (black_evento -> black_cadastro -> dados.cadastro -> gp_eh_equipe), não master. O presencial já exige
 -- acesso.eh_master() (dados_presencial_marcar_teste). Esta migration:
@@ -9,7 +9,7 @@
 --   3. O desmarcar continua preso ao evento: o update só toca linhas com m.chave = d.chave, e d.chave vem de
 --      black_evento (só 'black-friday-2026-10'). Nada muda em dados_testes nem nas RPCs dados_black_* de leitura.
 -- Pré-requisito: corpo vivo das duas RPCs igual ao gravado por 20261012234606 (md5 conferido abaixo).
--- Reversão: 20261013013625_reversao.sql.
+-- Reversão: 20261013021142_reversao.sql.
 
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
@@ -17,16 +17,16 @@ set local statement_timeout = '60s';
 do $g$
 begin
   if to_regprocedure('dados.black_evento(text)') is null then
-    raise exception '20261013013625: dados.black_evento não existe (aplicar 20261012234606 antes).';
+    raise exception '20261013021142: dados.black_evento não existe (aplicar 20261012234606 antes).';
   end if;
   if to_regprocedure('acesso.eh_master()') is null or to_regprocedure('acesso.eu()') is null then
-    raise exception '20261013013625: acesso.eh_master() ou acesso.eu() não existe.';
+    raise exception '20261013021142: acesso.eh_master() ou acesso.eu() não existe.';
   end if;
   if (select md5(prosrc) from pg_proc where oid = 'public.dados_marcar_teste(text,text,text,text)'::regprocedure) <> '05d7fecb174f8b16fa9cb3abcd7cea44'
      or (select md5(prosrc) from pg_proc where oid = 'public.dados_desmarcar_teste(text,text,text)'::regprocedure) <> '1e715847e3e96a74b01cfa0a9260afc0'
      or (select md5(prosrc) from pg_proc where oid = 'dados.black_evento(text)'::regprocedure) <> '0f6a30a86f69abf4a4981a1efd885f87'
      or (select md5(prosrc) from pg_proc where oid = 'dados.atm_cadastro(text)'::regprocedure) <> '0501ccd5647a89b44c7b9c02dc4ad8ca' then
-    raise exception '20261013013625: corpo vivo de dados_marcar_teste, dados_desmarcar_teste, black_evento ou atm_cadastro mudou. Reler.';
+    raise exception '20261013021142: corpo vivo de dados_marcar_teste, dados_desmarcar_teste, black_evento ou atm_cadastro mudou. Reler.';
   end if;
 end
 $g$;
@@ -39,7 +39,7 @@ create or replace function dados.black_evento_master(p_chave text)
  set search_path to ''
 as $function$
 begin
-  -- 20261013013625: marcar e desmarcar teste na Black só para master
+  -- 20261013021142: marcar e desmarcar teste na Black só para master
   if acesso.eu() is null or not coalesce(acesso.eh_master(), false) then
     raise exception 'sem acesso' using errcode = '42501';
   end if;
@@ -57,7 +57,7 @@ create or replace function public.dados_marcar_teste(p_chave text, p_email text 
 as $function$
 declare
   -- 20261012234606: ramo da Black (jornada-captacao); os outros modelos seguem por atm_cadastro, como antes
-  -- 20261013013625: na Black só master (42501); o ramo do ATM não mudou
+  -- 20261013021142: na Black só master (42501); o ramo do ATM não mudou
   v_black boolean := exists (select 1 from dados.dashboards x where x.chave = p_chave and x.modelo = 'jornada-captacao');
   d dados.dashboards := case when v_black then dados.black_evento_master(p_chave) else dados.atm_cadastro(p_chave) end;   -- Black: 42501 não master; ATM: 42501 não equipe; P0002 chave fora do cadastro ou outro modelo
   v_email text := nullif(lower(btrim(p_email)), '');
@@ -111,7 +111,7 @@ create or replace function public.dados_desmarcar_teste(p_chave text, p_email te
 as $function$
 declare
   -- 20261012234606: ramo da Black (jornada-captacao); os outros modelos seguem por atm_cadastro, como antes
-  -- 20261013013625: na Black só master (42501); o ramo do ATM não mudou
+  -- 20261013021142: na Black só master (42501); o ramo do ATM não mudou
   d dados.dashboards := case when exists (select 1 from dados.dashboards x where x.chave = p_chave and x.modelo = 'jornada-captacao')
                              then dados.black_evento_master(p_chave) else dados.atm_cadastro(p_chave) end;
   v_email text := nullif(lower(btrim(p_email)), '');
@@ -142,17 +142,17 @@ do $c$
 begin
   if exists (select 1 from pg_proc where oid = 'dados.black_evento_master(text)'::regprocedure
               and (proacl is null or proacl::text <> '{postgres=X/postgres}' or prosecdef)) then
-    raise exception '20261013013625: black_evento_master com permissão errada';
+    raise exception '20261013021142: black_evento_master com permissão errada';
   end if;
   if (select prosrc from pg_proc where oid = 'public.dados_marcar_teste(text,text,text,text)'::regprocedure) not like '%dados.black_evento_master(p_chave)%'
      or (select prosrc from pg_proc where oid = 'public.dados_desmarcar_teste(text,text,text)'::regprocedure) not like '%dados.black_evento_master(p_chave)%' then
-    raise exception '20261013013625: ramo da Black sem a trava de master';
+    raise exception '20261013021142: ramo da Black sem a trava de master';
   end if;
   if has_function_privilege('anon', 'public.dados_marcar_teste(text,text,text,text)', 'execute')
      or has_function_privilege('anon', 'public.dados_desmarcar_teste(text,text,text)', 'execute')
      or not has_function_privilege('authenticated', 'public.dados_marcar_teste(text,text,text,text)', 'execute')
      or not has_function_privilege('authenticated', 'public.dados_desmarcar_teste(text,text,text)', 'execute') then
-    raise exception '20261013013625: permissões das RPCs de teste erradas';
+    raise exception '20261013021142: permissões das RPCs de teste erradas';
   end if;
 end
 $c$;

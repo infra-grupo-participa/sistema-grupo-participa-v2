@@ -1,4 +1,4 @@
--- Ensaio de 20261013014209 (transação desfeita, REPEATABLE READ). dados_black_trafego com campanha_externa e conjunto_externa.
+-- Ensaio de 20261013021259 (transação desfeita, REPEATABLE READ). dados_black_trafego com campanha_externa e conjunto_externa.
 -- Prova: (1) depois, o resultado sem as 2 chaves novas é idêntico ao de antes (todo o período e 10 a 12/10);
 -- (2) os totais de gasto por etapa e subtipo (por campanha e por anúncio) são iguais antes, depois e depois da reversão;
 -- (3) todas as campanhas e conjuntos trazem o id novo, e ele bate com a tabela de origem; (4) as travas (P0002, 42501)
@@ -65,8 +65,8 @@ end $x$;
 reset role;
 select set_config('request.jwt.claims', '{}', true);
 
--- ===== 2. MIGRATION (texto de 20261013014209_dados_black_trafego_ids_meta.sql) =====
--- 20261013014209: dados_black_trafego devolve o id do Meta da campanha e do conjunto.
+-- ===== 2. MIGRATION (texto de 20261013021259_dados_black_trafego_ids_meta.sql) =====
+-- 20261013021259: dados_black_trafego devolve o id do Meta da campanha e do conjunto.
 -- Pedido do Maestro (13/10/2026): a tela da Black já lê esses campos para o recorte do grupo por campanha e por conjunto
 -- (commit da16e6f, branch victor-black-dashboard). Muda só isto:
 --   - cada item de "campanhas" ganha a chave "campanha_externa" (mkt_trafego.campanhas.campanha_externa, text not null);
@@ -74,7 +74,7 @@ select set_config('request.jwt.claims', '{}', true);
 -- Nenhuma outra chave, filtro, junção ou total muda (o ensaio prova: resultado sem as 2 chaves novas = resultado de antes,
 -- e os totais de gasto por etapa são iguais). Dono, ACL, security definer e search_path iguais.
 -- Pré-requisito: corpo vivo igual ao gravado por 20261012231649 (md5 conferido abaixo).
--- Reversão: 20261013014209_reversao.sql.
+-- Reversão: 20261013021259_reversao.sql.
 
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
@@ -82,7 +82,7 @@ set local statement_timeout = '60s';
 do $g$
 begin
   if (select md5(prosrc) from pg_proc where oid = 'public.dados_black_trafego(text,date,date)'::regprocedure) <> '10e1a38a90f878884abe055aadaa4c39' then
-    raise exception '20261013014209: corpo vivo de dados_black_trafego mudou. Reler.';
+    raise exception '20261013021259: corpo vivo de dados_black_trafego mudou. Reler.';
   end if;
 end
 $g$;
@@ -103,7 +103,7 @@ begin
     -- 20261013100000: campanhas do projeto do cadastro; a campanha sem projeto_id (o CPF01 hoje; ver o explain) entra
     -- quando um dos termos entre barras do nome é a sigla do projeto (BF26). O termo vem do cadastro, não fica fixo aqui.
     select c.id, c.nome, c.plataforma, c.status_plataforma, c.objetivo, c.projeto_id, ct.nome as conta,
-           c.campanha_externa,   -- 20261013014209: id da campanha no Meta (recorte do grupo por campanha)
+           c.campanha_externa,   -- 20261013021259: id da campanha no Meta (recorte do grupo por campanha)
            e.etapa, e.subtipo, e.conflito
       from mkt_trafego.campanhas c
       join mkt_trafego.contas ct on ct.id = c.conta_id and ct.moeda = 'BRL'
@@ -113,7 +113,7 @@ begin
         or (c.projeto_id is null
             and exists (select 1 from unnest(string_to_array(c.nome, '|')) t where upper(btrim(t)) = upper(p.sigla)))
   ),
-  cj as (select j.id, j.campanha_id, j.nome, j.status_plataforma, j.meta_otimizacao, j.conjunto_externa   -- 20261013014209
+  cj as (select j.id, j.campanha_id, j.nome, j.status_plataforma, j.meta_otimizacao, j.conjunto_externa   -- 20261013021259
            from mkt_trafego.conjuntos j join c on c.id = j.campanha_id),
   an as (select a.id, a.conjunto_id, a.nome, a.status_plataforma, a.anuncio_externa, a.video_id
            from mkt_trafego.anuncios a join cj on cj.id = a.conjunto_id),
@@ -168,7 +168,7 @@ do $c$
 begin
   if (select proacl::text from pg_proc where oid = 'public.dados_black_trafego(text,date,date)'::regprocedure) <> '{postgres=X/postgres,authenticated=X/postgres}'
      or not (select prosecdef from pg_proc where oid = 'public.dados_black_trafego(text,date,date)'::regprocedure) then
-    raise exception '20261013014209: permissão de dados_black_trafego errada';
+    raise exception '20261013021259: permissão de dados_black_trafego errada';
   end if;
 end
 $c$;
@@ -209,8 +209,8 @@ end $x$;
 reset role;
 select set_config('request.jwt.claims', '{}', true);
 
--- ===== 3. REVERSÃO (texto de 20261013014209_reversao.sql) =====
--- Reversão de 20261013014209. Numa transação (o arquivo não abre nem fecha uma).
+-- ===== 3. REVERSÃO (texto de 20261013021259_reversao.sql) =====
+-- Reversão de 20261013021259. Numa transação (o arquivo não abre nem fecha uma).
 -- Devolve dados_black_trafego ao corpo exato gravado por 20261012231649 (lido no banco em 13/10/2026 ~01:40 UTC):
 -- "campanhas" e "conjuntos" deixam de trazer campanha_externa e conjunto_externa. Não toca em dado.
 -- Efeito na tela: o recorte do grupo por campanha e por conjunto volta a mostrar "Sem dado" com o motivo.
@@ -293,7 +293,7 @@ grant execute on function public.dados_black_trafego(text, date, date) to authen
 do $c$
 begin
   if (select md5(prosrc) from pg_proc where oid = 'public.dados_black_trafego(text,date,date)'::regprocedure) <> '10e1a38a90f878884abe055aadaa4c39' then
-    raise exception 'reversão 20261013014209: corpo de dados_black_trafego não voltou ao de antes';
+    raise exception 'reversão 20261013021259: corpo de dados_black_trafego não voltou ao de antes';
   end if;
 end
 $c$;

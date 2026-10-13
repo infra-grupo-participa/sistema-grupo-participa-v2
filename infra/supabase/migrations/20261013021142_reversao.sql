@@ -1,4 +1,4 @@
--- Reversão de 20261013013625 (Black: marcar/desmarcar teste só master). Numa transação (o arquivo não abre nem fecha uma).
+-- Reversão de 20261013021142 (Black: marcar/desmarcar teste só master). Numa transação (o arquivo não abre nem fecha uma).
 -- Devolve dados_marcar_teste e dados_desmarcar_teste ao corpo exato gravado por 20261012234606 (lido no banco em
 -- 13/10/2026 ~01:35 UTC; o comentário de dentro ainda diz 20261013130000, nome antigo do arquivo) e apaga
 -- dados.black_evento_master. Não apaga dado: as marcações feitas por master depois da aplicação ficam.
@@ -95,7 +95,7 @@ begin
   if (select md5(prosrc) from pg_proc where oid = 'public.dados_marcar_teste(text,text,text,text)'::regprocedure) <> '05d7fecb174f8b16fa9cb3abcd7cea44'
      or (select md5(prosrc) from pg_proc where oid = 'public.dados_desmarcar_teste(text,text,text)'::regprocedure) <> '1e715847e3e96a74b01cfa0a9260afc0'
      or to_regprocedure('dados.black_evento_master(text)') is not null then
-    raise exception 'reversão 20261013013625: corpo das RPCs de teste não voltou ao de antes';
+    raise exception 'reversão 20261013021142: corpo das RPCs de teste não voltou ao de antes';
   end if;
 end
 $c$;
