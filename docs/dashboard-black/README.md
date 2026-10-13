@@ -261,9 +261,10 @@ Efeito na tela: marcar/desmarcar teste na Black dá "sem acesso" para quem não 
 e por conjunto passa a receber o id do Meta que a tela lê (a tela em si não foi aberta nesta conferência, só a RPC).
 Reverter: os `_reversao.sql` de cada uma.
 
-## Banco: telefone de teste fora do grupo (13/10, NÃO aplicada)
+## Banco: telefone de teste fora do grupo (13/10, aplicada)
 
-**`20261013023136`** (escrita e ensaiada em transação desfeita; aplicar depois da revisão). `dados_black_grupo` só tirava
+**`20261013024435`**, aprovada pelo pentester e **aplicada em produção em 13/10/2026 às 02:44:35 UTC** (escrita como
+`20261013023136`; arquivos renomeados para a versão gravada). `dados_black_grupo` só tirava
 do grupo a marcação de teste **por fone**, mas as marcações da Black são **por e-mail**: os telefones de teste entravam
 nos cards do grupo (auditoria de 13/10). Regra nova, só no CTE `tst`: além da marcação por fone, sai do grupo o telefone
 cujos envios da Black são **todos** teste (`dados.teste_ativo`, todos os envios da Black, não só os do período).
@@ -273,8 +274,11 @@ cujos envios da Black são **todos** teste (`dados.teste_ativo`, todos os envios
 - Ensaio (13/10 ~02:40 UTC, todo o período, sem teste): Advogados/Contadores/Outros **90/33/44 → 88/31/42**, únicos nos
   grupos de MQL **112 → 110**. Em cada grupo saem os 2 telefones só de teste; o misto (1 em cada grupo) fica. Leads,
   cruzados e `p_incluir_teste = true` sem mudança. Custo: +~10 ms por chamada (24 → 33 ms).
-- Detalhe, números por fase e como aplicar: [`20261013023136.explain.md`](../../infra/supabase/migrations/20261013023136.explain.md).
-  Reverter: `20261013023136_reversao.sql`.
+- **Conferido em produção logo depois** (02:45 UTC, transação desfeita, como master): **88/31/42**, MQL nos grupos **110**,
+  total nos grupos **144**; leads 171 únicos / 114 MQL, iguais a antes; travas iguais (chave do ATM P0002, fora da equipe
+  e anon 42501). Os cards **Ingresso no grupo** passam a mostrar esses números (a tela em si não foi aberta, só a RPC).
+- Detalhe, números por fase e a aplicação: [`20261013024435.explain.md`](../../infra/supabase/migrations/20261013024435.explain.md).
+  Reverter: `20261013024435_reversao.sql` (recusa se o corpo vivo não for o desta migration).
 
 ## Banco: ingresso no grupo (webhook n8n e backfill)
 
@@ -350,9 +354,9 @@ sem quebrar a tela. Os mapeadores são puros e testados sem rede contra resposta
   `mkt_trafego.campanhas` e `mkt_trafego.conjuntos`; hoje a função só devolve `anuncio_externa`). O adaptador já
   lê os dois campos (`idExterno`): basta a função passar a mandar, sem mudar a tela.
 - A fórmula é a do contrato da B e não muda: únicos no grupo ÷ leads únicos, mesmo que dê 100% ou passe disso.
-- **Teste no grupo:** fica fora do numerador o telefone marcado como teste e, com a `20261013023136` (ainda não
-  aplicada), o telefone cujos envios da Black são todos teste. Telefone misto (envio teste e envio não teste) conta até
-  o Victor decidir (ver "A corrigir"). Antes dela, telefone de teste marcado só por e-mail entra no grupo.
+- **Teste no grupo:** fica fora do numerador o telefone marcado como teste e, desde a `20261013024435` (aplicada em
+  13/10), o telefone cujos envios da Black são todos teste. Telefone misto (envio teste e envio não teste) conta até
+  o Victor decidir (ver "A corrigir").
 - Os outros cards da Visão geral seguem filtrando só por funil e canal; só os dois cards do grupo seguem o item de
   Criativos (por isso o rótulo "Recorte:").
 - **Marcar e desmarcar teste** (só master, tabela de leads): as **duas** ações pedem confirmação antes de gravar
@@ -403,7 +407,7 @@ antes, deu 191 / 165 e MQL 112).
 - Consultoria: um telefone aparece em 4 envios com dois e-mails diferentes (12/10). Os 2 envios de um e-mail estão
   marcados como teste, os 2 do outro não (a marcação foi por e-mail). Nada foi marcado ou desmarcado: o Victor
   decide se é a mesma pessoa de teste. Até lá, esse telefone **continua contando no grupo** também depois da
-  `20261013023136` (ela só tira o telefone cujos envios são todos teste). Em 13/10 ~02:30 UTC havia 2 telefones mistos
+  `20261013024435` (ela só tira o telefone cujos envios são todos teste). Em 13/10 ~02:30 UTC havia 2 telefones mistos
   na base, 1 deles nos grupos (contagem feita para o ensaio; qual dos 2 é o caso acima não foi conferido).
 - `utm_campaign=disparo` e `utm_campaign=grupoantigo` fora do padrão (`utm_campaign_fora_do_padrao`).
 - `utm_term` trazendo o placement.

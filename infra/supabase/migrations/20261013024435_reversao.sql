@@ -1,8 +1,18 @@
--- Reversão de 20261013023136. Numa transação (o arquivo não abre nem fecha uma).
+-- Reversão de 20261013024435. Numa transação (o arquivo não abre nem fecha uma).
 -- Devolve dados_black_grupo ao corpo exato gravado por 20261012234606 (lido no banco em 13/10/2026 ~02:30 UTC, md5
 -- ab8582e6603773f480b4b7d0ef14fb27): o grupo volta a excluir só a marcação de teste do tipo fone. Não toca em dado.
 -- Efeito na tela: o telefone cujos envios são todos teste (marcados por e-mail) volta a contar nos cards do grupo.
+-- Guarda (pedido do pentester): só roda se o corpo vivo for o gravado por 20261013024435 (md5 96b769d2…); se alguém
+-- mudou a função depois, a reversão recusa em vez de apagar a mudança de outra pessoa.
 set local lock_timeout = '5s';
+
+do $g$
+begin
+  if (select md5(prosrc) from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> '96b769d2f4a22b557a3a0a4ed97ac470' then
+    raise exception 'reversão 20261013024435: corpo vivo de dados_black_grupo não é o gravado por 20261013024435 (md5 96b769d2…). Reler antes de reverter.';
+  end if;
+end
+$g$;
 
 CREATE OR REPLACE FUNCTION public.dados_black_grupo(p_chave text, p_de date DEFAULT NULL::date, p_ate date DEFAULT NULL::date, p_incluir_teste boolean DEFAULT false, p_recorte jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
@@ -104,11 +114,11 @@ grant execute on function public.dados_black_grupo(text, date, date, boolean, js
 do $c$
 begin
   if (select md5(prosrc) from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> 'ab8582e6603773f480b4b7d0ef14fb27' then
-    raise exception 'reversão 20261013023136: corpo de dados_black_grupo não voltou ao de antes';
+    raise exception 'reversão 20261013024435: corpo de dados_black_grupo não voltou ao de antes';
   end if;
   if (select proacl::text from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> '{postgres=X/postgres,authenticated=X/postgres}'
      or not (select prosecdef from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) then
-    raise exception 'reversão 20261013023136: permissão de dados_black_grupo errada';
+    raise exception 'reversão 20261013024435: permissão de dados_black_grupo errada';
   end if;
 end
 $c$;

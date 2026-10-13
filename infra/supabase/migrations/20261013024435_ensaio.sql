@@ -1,17 +1,23 @@
--- Ensaio de 20261013023136 (transação desfeita, REPEATABLE READ). dados_black_grupo: fora do grupo o telefone só de teste.
+-- Ensaio de 20261013024435 (transação desfeita, REPEATABLE READ). dados_black_grupo: fora do grupo o telefone só de teste.
 -- Prova: (1) depois, em cada grupo, sai exatamente o número de telefones do grupo cujos envios da Black são todos teste
 -- (contado direto da origem, sem a RPC), e o telefone misto continua contando; (2) leads, cruzados (com recorte) e o
 -- resultado com p_incluir_teste = true são idênticos ao de antes; (3) as travas (P0002, 42501) dão a mesma resposta;
 -- (4) a reversão volta o corpo ao md5 de antes e o resultado ao de antes.
 -- Só contagens, sqlstate e md5: nenhum dado pessoal sai do ensaio. Gerado por um script a partir da migration e da
 -- reversão (o texto delas entra aqui sem mudança).
+-- Aplicada em 13/10/2026 02:44:35 UTC: no banco de agora a guarda da migration (md5 ab8582e6…) recusa. Para reensaiar,
+-- cole o texto de 20261013024435_reversao.sql logo depois do begin abaixo (volta o corpo de antes dentro desta transação).
+-- M (master) é buscado no banco; o uid de "fora da equipe" é fictício de propósito.
 begin transaction isolation level repeatable read;
 create temp table _z_out (em bigserial, passo text, linha text) on commit drop;
 create temp table _z_r (fase text, caso text, r jsonb) on commit drop;
 grant all on pg_temp._z_out, pg_temp._z_r to authenticated, anon;
 grant all on sequence pg_temp._z_out_em_seq to authenticated, anon;
+-- M = um master ativo da equipe, buscado no banco (sem UUID gravado no arquivo)
+select set_config('ensaio.m', coalesce((select m.perfil_id::text from acesso.master m join public.perfis p on p.id = m.perfil_id
+  where p.status = 'ativo' and p.email ilike '%@advmais.com' order by m.perfil_id limit 1), ''), true);
 do $q$ begin
-  if not exists (select 1 from acesso.master where perfil_id = '81d2eaee-cce1-4058-8714-439b0fc6f970') then raise exception 'ensaio: M não é master'; end if;
+  if current_setting('ensaio.m') = '' then raise exception 'ensaio: nenhum master ativo da equipe no banco'; end if;
 end $q$;
 -- contas por grupo direto da origem, todo o período da Black (mesmas janelas e união webhook + foto da RPC)
 create temp table _z_orig on commit drop as
@@ -49,7 +55,7 @@ create function pg_temp.z_num(r jsonb) returns jsonb language sql immutable as $
 $f$;
 -- ===== 1. ANTES =====
 reset role;
-select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated","email":"ensaio@ensaio"}', true);
+select set_config('request.jwt.claims', jsonb_build_object('sub', current_setting('ensaio.m'), 'role', 'authenticated', 'email', 'ensaio@ensaio')::text, true);
 set local role authenticated;
 insert into pg_temp._z_r (fase, caso, r) select 'antes', 'todo', public.dados_black_grupo('black-friday-2026-10', null, null, false, null);
 insert into pg_temp._z_r (fase, caso, r) select 'antes', '10a12', public.dados_black_grupo('black-friday-2026-10', '2026-10-10', '2026-10-12', false, null);
@@ -82,8 +88,8 @@ exception when others then insert into pg_temp._z_out (passo, linha) values ('B 
 reset role;
 select set_config('request.jwt.claims', '{}', true);
 
--- ===== 2. MIGRATION (texto de 20261013023136_dados_black_grupo_teste_por_email.sql) =====
--- 20261013023136: dados_black_grupo tira do grupo o telefone cujos envios da Black são todos teste.
+-- ===== 2. MIGRATION (texto de 20261013024435_dados_black_grupo_teste_por_email.sql) =====
+-- 20261013024435: dados_black_grupo tira do grupo o telefone cujos envios da Black são todos teste.
 -- Auditoria de 13/10/2026 (só SELECT): a RPC só excluía do grupo a marcação de teste do tipo fone
 -- (dados.marcacoes_teste.tipo = 'fone'), mas as marcações da Black são por e-mail. Resultado: telefone de teste
 -- contado nos grupos (Advogados/Contadores/Outros 90/33/43 em vez de 87/30/40; únicos nos grupos de MQL 112 em vez de 109).
@@ -94,7 +100,7 @@ select set_config('request.jwt.claims', '{}', true);
 -- (docs/dashboard-black/README.md, "A corrigir"). Com p_incluir_teste = true nada muda (o filtro não se aplica).
 -- Leads, recorte, cruzados, assinatura, dono, ACL, security definer e search_path iguais.
 -- Pré-requisito: corpo vivo igual ao gravado por 20261012234606 (md5 conferido abaixo).
--- Ensaio: 20261013023136_ensaio.sql. Reversão: 20261013023136_reversao.sql. Detalhe: 20261013023136.explain.md.
+-- Ensaio: 20261013024435_ensaio.sql. Reversão: 20261013024435_reversao.sql. Detalhe: 20261013024435.explain.md.
 
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
@@ -102,10 +108,10 @@ set local statement_timeout = '60s';
 do $g$
 begin
   if to_regclass('dados.black_leads') is null or to_regprocedure('dados.teste_ativo(text,text,text)') is null then
-    raise exception '20261013023136: dados.black_leads ou dados.teste_ativo não existe.';
+    raise exception '20261013024435: dados.black_leads ou dados.teste_ativo não existe.';
   end if;
   if (select md5(prosrc) from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> 'ab8582e6603773f480b4b7d0ef14fb27' then
-    raise exception '20261013023136: corpo vivo de dados_black_grupo mudou. Reler.';
+    raise exception '20261013024435: corpo vivo de dados_black_grupo mudou. Reler.';
   end if;
 end
 $g$;
@@ -226,14 +232,14 @@ begin
      or not (select prosecdef from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure)
      or (select pg_get_userbyid(proowner) from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> 'postgres'
      or (select proconfig::text from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> '{"search_path=\"\""}' then
-    raise exception '20261013023136: permissão, dono ou search_path de dados_black_grupo errado';
+    raise exception '20261013024435: permissão, dono ou search_path de dados_black_grupo errado';
   end if;
 end
 $c$;
 
 -- ===== fim da migration =====
 reset role;
-select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated","email":"ensaio@ensaio"}', true);
+select set_config('request.jwt.claims', jsonb_build_object('sub', current_setting('ensaio.m'), 'role', 'authenticated', 'email', 'ensaio@ensaio')::text, true);
 set local role authenticated;
 insert into pg_temp._z_r (fase, caso, r) select 'depois', 'todo', public.dados_black_grupo('black-friday-2026-10', null, null, false, null);
 insert into pg_temp._z_r (fase, caso, r) select 'depois', '10a12', public.dados_black_grupo('black-friday-2026-10', '2026-10-10', '2026-10-12', false, null);
@@ -266,12 +272,22 @@ exception when others then insert into pg_temp._z_out (passo, linha) values ('B 
 reset role;
 select set_config('request.jwt.claims', '{}', true);
 
--- ===== 3. REVERSÃO (texto de 20261013023136_reversao.sql) =====
--- Reversão de 20261013023136. Numa transação (o arquivo não abre nem fecha uma).
+-- ===== 3. REVERSÃO (texto de 20261013024435_reversao.sql) =====
+-- Reversão de 20261013024435. Numa transação (o arquivo não abre nem fecha uma).
 -- Devolve dados_black_grupo ao corpo exato gravado por 20261012234606 (lido no banco em 13/10/2026 ~02:30 UTC, md5
 -- ab8582e6603773f480b4b7d0ef14fb27): o grupo volta a excluir só a marcação de teste do tipo fone. Não toca em dado.
 -- Efeito na tela: o telefone cujos envios são todos teste (marcados por e-mail) volta a contar nos cards do grupo.
+-- Guarda (pedido do pentester): só roda se o corpo vivo for o gravado por 20261013024435 (md5 96b769d2…); se alguém
+-- mudou a função depois, a reversão recusa em vez de apagar a mudança de outra pessoa.
 set local lock_timeout = '5s';
+
+do $g$
+begin
+  if (select md5(prosrc) from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> '96b769d2f4a22b557a3a0a4ed97ac470' then
+    raise exception 'reversão 20261013024435: corpo vivo de dados_black_grupo não é o gravado por 20261013024435 (md5 96b769d2…). Reler antes de reverter.';
+  end if;
+end
+$g$;
 
 CREATE OR REPLACE FUNCTION public.dados_black_grupo(p_chave text, p_de date DEFAULT NULL::date, p_ate date DEFAULT NULL::date, p_incluir_teste boolean DEFAULT false, p_recorte jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
@@ -373,18 +389,18 @@ grant execute on function public.dados_black_grupo(text, date, date, boolean, js
 do $c$
 begin
   if (select md5(prosrc) from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> 'ab8582e6603773f480b4b7d0ef14fb27' then
-    raise exception 'reversão 20261013023136: corpo de dados_black_grupo não voltou ao de antes';
+    raise exception 'reversão 20261013024435: corpo de dados_black_grupo não voltou ao de antes';
   end if;
   if (select proacl::text from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> '{postgres=X/postgres,authenticated=X/postgres}'
      or not (select prosecdef from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) then
-    raise exception 'reversão 20261013023136: permissão de dados_black_grupo errada';
+    raise exception 'reversão 20261013024435: permissão de dados_black_grupo errada';
   end if;
 end
 $c$;
 
 -- ===== fim da reversão =====
 reset role;
-select set_config('request.jwt.claims', '{"sub":"81d2eaee-cce1-4058-8714-439b0fc6f970","role":"authenticated","email":"ensaio@ensaio"}', true);
+select set_config('request.jwt.claims', jsonb_build_object('sub', current_setting('ensaio.m'), 'role', 'authenticated', 'email', 'ensaio@ensaio')::text, true);
 set local role authenticated;
 insert into pg_temp._z_r (fase, caso, r) select 'reversao', 'todo', public.dados_black_grupo('black-friday-2026-10', null, null, false, null);
 insert into pg_temp._z_r (fase, caso, r) select 'reversao', '10a12', public.dados_black_grupo('black-friday-2026-10', '2026-10-10', '2026-10-12', false, null);

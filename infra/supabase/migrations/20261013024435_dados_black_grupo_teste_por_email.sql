@@ -1,4 +1,4 @@
--- 20261013023136: dados_black_grupo tira do grupo o telefone cujos envios da Black são todos teste.
+-- 20261013024435: dados_black_grupo tira do grupo o telefone cujos envios da Black são todos teste.
 -- Auditoria de 13/10/2026 (só SELECT): a RPC só excluía do grupo a marcação de teste do tipo fone
 -- (dados.marcacoes_teste.tipo = 'fone'), mas as marcações da Black são por e-mail. Resultado: telefone de teste
 -- contado nos grupos (Advogados/Contadores/Outros 90/33/43 em vez de 87/30/40; únicos nos grupos de MQL 112 em vez de 109).
@@ -9,7 +9,7 @@
 -- (docs/dashboard-black/README.md, "A corrigir"). Com p_incluir_teste = true nada muda (o filtro não se aplica).
 -- Leads, recorte, cruzados, assinatura, dono, ACL, security definer e search_path iguais.
 -- Pré-requisito: corpo vivo igual ao gravado por 20261012234606 (md5 conferido abaixo).
--- Ensaio: 20261013023136_ensaio.sql. Reversão: 20261013023136_reversao.sql. Detalhe: 20261013023136.explain.md.
+-- Ensaio: 20261013024435_ensaio.sql. Reversão: 20261013024435_reversao.sql. Detalhe: 20261013024435.explain.md.
 
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
@@ -17,10 +17,10 @@ set local statement_timeout = '60s';
 do $g$
 begin
   if to_regclass('dados.black_leads') is null or to_regprocedure('dados.teste_ativo(text,text,text)') is null then
-    raise exception '20261013023136: dados.black_leads ou dados.teste_ativo não existe.';
+    raise exception '20261013024435: dados.black_leads ou dados.teste_ativo não existe.';
   end if;
   if (select md5(prosrc) from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> 'ab8582e6603773f480b4b7d0ef14fb27' then
-    raise exception '20261013023136: corpo vivo de dados_black_grupo mudou. Reler.';
+    raise exception '20261013024435: corpo vivo de dados_black_grupo mudou. Reler.';
   end if;
 end
 $g$;
@@ -141,7 +141,7 @@ begin
      or not (select prosecdef from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure)
      or (select pg_get_userbyid(proowner) from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> 'postgres'
      or (select proconfig::text from pg_proc where oid = 'public.dados_black_grupo(text,date,date,boolean,jsonb)'::regprocedure) <> '{"search_path=\"\""}' then
-    raise exception '20261013023136: permissão, dono ou search_path de dados_black_grupo errado';
+    raise exception '20261013024435: permissão, dono ou search_path de dados_black_grupo errado';
   end if;
 end
 $c$;
