@@ -6,13 +6,14 @@ import { Modal } from '@/shared/ui/components/Modal';
 import {
   contarVendasSessaoViabilidade,
   conversaoSessaoViabilidade,
+  listaAposLeituraSv,
   dataDaVendaSessaoViabilidade,
   notaVendasTesteForaDoTotal,
   valorDaVendaSessaoViabilidade,
   type VendaSessaoViabilidade,
 } from '../domain/sessao-viabilidade';
 import type { MetricaAtm } from '../domain/dashboard';
-import { carregarAtmSvVendas, desmarcarAtmTeste, marcarAtmTeste, type Resultado } from '../infrastructure/atm-data';
+import { carregarAtmSvVendas, desmarcarAtmTestePorEmail, marcarAtmTestePorEmail, type Resultado } from '../infrastructure/atm-data';
 
 type AbaSv = 'vendas' | 'precheckout' | 'resumo';
 
@@ -54,9 +55,10 @@ export function SessaoViabilidade({ chave, vendas, vendasTeste, periodoLabel, po
   const conversao = conversaoSessaoViabilidade(vendas, preCheckoutsUnicos);
   const notaTeste = notaVendasTesteForaDoTotal(vendasTeste);
   const contagem = contarVendasSessaoViabilidade(lista.data);
+  const listaSemPermissao = lista.semPermissao === true;
   const desatualizada = lista.erro !== null && lidoEm !== null;
 
-  // Só pede a lista (que traz dado pessoal) para quem pode ver contato. Falha mantém a última lista.
+  // Só pede a lista (que traz dado pessoal) para quem pode ver contato. Falha mantém a última lista, menos a perda de permissão (42501), que limpa.
   const carregar = async (comTeste: boolean) => {
     if (!podeVerContato) return;
     const id = ++pedidoAtual.current;
@@ -64,8 +66,9 @@ export function SessaoViabilidade({ chave, vendas, vendasTeste, periodoLabel, po
     const r = await carregarAtmSvVendas(chave, isMaster && comTeste);
     if (id !== pedidoAtual.current) return;
     setCarregando(false);
-    if (!r.semDado) { setLista(r); setLidoEm(new Date()); }
-    else setLista((anterior) => ({ ...anterior, erro: r.erro }));
+    setLista((anterior) => listaAposLeituraSv(anterior, r));
+    if (!r.semDado) setLidoEm(new Date());
+    else if (r.semPermissao) setLidoEm(null);
   };
 
   const abrir = (proxima: AbaSv) => {
@@ -83,9 +86,10 @@ export function SessaoViabilidade({ chave, vendas, vendasTeste, periodoLabel, po
   const mudarTeste = async (venda: VendaSessaoViabilidade, teste: boolean) => {
     if (salvando || !isMaster) return;
     setSalvando(venda.id); setErroAcao(null);
+    if (!venda.email) { setSalvando(null); setAlvo(null); setErroAcao('Esta venda não tem e-mail: a marcação é feita pelo e-mail.'); return; }
     const r = teste
-      ? await marcarAtmTeste(chave, venda.email, venda.telefone)
-      : await desmarcarAtmTeste(chave, venda.email, venda.telefone);
+      ? await marcarAtmTestePorEmail(chave, venda.email)
+      : await desmarcarAtmTestePorEmail(chave, venda.email);
     setSalvando(null);
     setAlvo(null);
     if (r.erro) { setErroAcao(r.erro); return; }
@@ -126,27 +130,29 @@ export function SessaoViabilidade({ chave, vendas, vendasTeste, periodoLabel, po
           <p className="mb-3 text-xs text-[var(--fg-3)]">A lista não recebe o período selecionado. O card Total de vendas segue o período aplicado: {periodoLabel}.</p>
           {lista.erro && <p role="status" className="mb-3 rounded border border-[var(--yellow)]/40 p-3 text-sm text-[var(--yellow)]">{lista.erro}{desatualizada ? ' A lista abaixo é a última lida.' : ''}</p>}
           {erroAcao && <p role="alert" className="mb-3 rounded border border-[var(--red)]/40 p-3 text-sm text-[var(--red)]">{erroAcao}</p>}
-          {lista.semDado
+          {listaSemPermissao
+            ? <EmptyState title="Lista indisponível" hint="A permissão para ler esta lista foi perdida. Recarregue a página ou entre de novo." />
+            : lista.semDado
             ? <EmptyState title="Vendas da Sessão de Viabilidade" hint="sem dado ainda" />
             : lista.data.length === 0
               ? <EmptyState title="Nenhuma venda da Sessão de Viabilidade" />
               : <div className={'max-h-[65vh] overflow-auto ' + (desatualizada ? 'opacity-60' : '')}>
-                <DataTable minWidth={isMaster ? 1320 : 1160}>
-                  <Thead><Th>Data do evento</Th><Th>Nome</Th><Th>E-mail</Th><Th>Telefone</Th><Th>Status</Th><Th>Valor bruto</Th><Th>Valor líquido</Th><Th>Oferta</Th><Th>Transação</Th>{isMaster && <><Th>Teste</Th><Th>Ação</Th></>}</Thead>
+                <DataTable minWidth={isMaster ? 1120 : 1000}>
+                  <Thead><Th>Data do evento</Th><Th>Nome</Th><Th>E-mail</Th><Th>Telefone</Th><Th>Status</Th><Th>Valor bruto</Th><Th>Valor líquido</Th><Th>Oferta</Th>{isMaster && <><Th>Teste</Th><Th>Ação</Th></>}<Th>Transação</Th></Thead>
                   <tbody>{lista.data.map((venda) => <Tr key={venda.id} className={venda.teste ? 'opacity-60' : ''}>
                     <Td className="whitespace-nowrap">{dataDaVendaSessaoViabilidade(venda) ?? 'Sem dado'}</Td>
-                    <Td>{venda.nome ?? 'Sem dado'}</Td>
+                    <Td className="whitespace-nowrap">{venda.nome ?? 'Sem dado'}</Td>
                     <Td>{venda.email ?? 'Sem dado'}</Td>
                     <Td className="whitespace-nowrap">{venda.telefone ?? 'Sem dado'}</Td>
                     <Td>{venda.status ?? 'Sem dado'}</Td>
                     <Td className="whitespace-nowrap tabular">{valorDaVendaSessaoViabilidade(venda.valorBruto, venda.moeda) ?? 'Sem dado'}</Td>
                     <Td className="whitespace-nowrap tabular">{valorDaVendaSessaoViabilidade(venda.valorLiquido, venda.moeda) ?? 'Sem dado'}</Td>
-                    <Td>{venda.ofertaCodigo ?? 'Sem dado'}</Td>
-                    <Td className="whitespace-nowrap">{venda.transacao ?? 'Sem dado'}</Td>
+                    <Td className="whitespace-nowrap">{venda.ofertaCodigo ?? 'Sem dado'}</Td>
                     {isMaster && <>
                       <Td>{venda.teste ? <Badge tone="warning">TESTE</Badge> : 'Não'}</Td>
-                      <Td>{(venda.email || venda.telefone) ? <button type="button" disabled={salvando === venda.id} onClick={() => { setErroAcao(null); if (venda.teste) void mudarTeste(venda, false); else setAlvo(venda); }} className="whitespace-nowrap rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-3)] disabled:opacity-50">{salvando === venda.id ? 'Salvando…' : venda.teste ? 'Desmarcar teste' : 'Marcar como teste'}</button> : 'Sem e-mail e telefone'}</Td>
+                      <Td>{venda.email ? <button type="button" disabled={salvando === venda.id} onClick={() => { setErroAcao(null); if (venda.teste) void mudarTeste(venda, false); else setAlvo(venda); }} className="whitespace-nowrap rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-3)] disabled:opacity-50">{salvando === venda.id ? 'Salvando…' : venda.teste ? 'Desmarcar teste' : 'Marcar como teste'}</button> : 'Sem e-mail'}</Td>
                     </>}
+                    <Td className="max-w-[8rem] truncate"><span title={venda.transacao ?? undefined}>{venda.transacao ?? 'Sem dado'}</span></Td>
                   </Tr>)}</tbody>
                 </DataTable>
               </div>}
@@ -170,7 +176,7 @@ export function SessaoViabilidade({ chave, vendas, vendasTeste, periodoLabel, po
         </div>
         <Card className="p-4"><p className="text-sm text-[var(--fg-2)]">Total de vendas vem de dados_atm_resumo.vendas, já sem as vendas marcadas como teste. A conversão fica sem dado enquanto o pré-checkout da sessão for mockup.</p></Card>
       </div>}
-      {alvo && <ConfirmDialog title="Marcar venda como teste" confirmLabel="Marcar como teste" cancelLabel="Cancelar" onCancel={() => setAlvo(null)} onConfirm={() => void mudarTeste(alvo, true)} message="Esta marcação vale para este Seminário ATM e usa o e-mail e o telefone desta linha: a pessoa e os dados relacionados deixam de contar nos indicadores deste evento. Quer continuar?" />}
+      {alvo && <ConfirmDialog title="Marcar venda como teste" confirmLabel="Marcar como teste" cancelLabel="Cancelar" onCancel={() => setAlvo(null)} onConfirm={() => void mudarTeste(alvo, true)} message="Esta marcação vale para este Seminário ATM e é feita pelo e-mail desta linha: a pessoa e os dados relacionados deixam de contar nos indicadores deste evento. Quer continuar?" />}
     </Modal>
   </>;
 }

@@ -6,7 +6,13 @@ import { dashboardAtmSemDado, type DashboardAtm, type LeadAtm, type NumeroGrupoA
 import type { DatasPeriodoAtm } from '../domain/periodo';
 import type { VendaSessaoViabilidade } from '../domain/sessao-viabilidade';
 
-export type Resultado<T> = { data: T; semDado: boolean; erro: string | null };
+export type Resultado<T> = {
+  data: T;
+  semDado: boolean;
+  erro: string | null;
+  /** Só a leitura da SV preenche: o banco recusou (42501), a permissão se perdeu e a última lista não pode ficar na tela. */
+  semPermissao?: boolean;
+};
 export type ResultadoAcao = { data: number | null; erro: string | null };
 export type DisparoDetalheAtm = {
   id: number | null;
@@ -113,9 +119,11 @@ function linhas(v: unknown): Linha[] {
   return v.filter((x): x is Linha => typeof x === 'object' && x !== null);
 }
 
+const MENSAGEM_SEM_PERMISSAO_LEITURA = 'Sem permissão para ler este dashboard.';
+
 function mensagemLeitura(codigo?: string): string | null {
   if (codigo === 'PGRST202') return null;
-  if (codigo === '42501') return 'Sem permissão para ler este dashboard.';
+  if (codigo === '42501') return MENSAGEM_SEM_PERMISSAO_LEITURA;
   if (codigo === 'P0002') return 'Dashboard ou identificador não encontrado neste evento.';
   if (codigo === '22023') return 'Período inválido ou acima do limite de 400 dias.';
   return 'Não foi possível carregar os dados agora.';
@@ -240,7 +248,8 @@ const MENSAGEM_TEMPO_SV_VENDAS = 'As vendas da Sessão de Viabilidade demoraram 
 
 /**
  * Vendas da Sessão de Viabilidade (`public.dados_atm_sv_vendas`). Contrato em docs/dashboard-atm/MODELO-DE-DADOS.md.
- * Qualquer falha devolve `semDado: true` com lista vazia: quem chama mantém a última lista e só mostra o aviso.
+ * Qualquer falha devolve `semDado: true` com lista vazia: quem chama mantém a última lista e só mostra o aviso,
+ * exceto `semPermissao: true` (42501), em que a lista anterior deve ser descartada.
  * RPC ainda não aplicada (`PGRST202`) = "sem dado ainda", sem mensagem de erro.
  */
 export async function carregarAtmSvVendas(chave: string, incluirTeste = false, tempoLimiteMs = TEMPO_LIMITE_SV_VENDAS_MS): Promise<Resultado<VendaSessaoViabilidade[]>> {
@@ -254,7 +263,10 @@ export async function carregarAtmSvVendas(chave: string, incluirTeste = false, t
   });
   const r = await Promise.race([rpc(nome, chave, undefined, { p_incluir_teste: incluirTeste }), esgotou]);
   clearTimeout(timer);
-  if (r.semDado || r.erro) return { data: [], semDado: true, erro: r.erro };
+  if (r.semDado || r.erro) {
+    const semPermissao = r.erro === MENSAGEM_SEM_PERMISSAO_LEITURA;
+    return semPermissao ? { data: [], semDado: true, erro: r.erro, semPermissao } : { data: [], semDado: true, erro: r.erro };
+  }
   return {
     data: r.data.map((x, i) => ({
       id: texto(x.transacao) ?? `linha-${i}`,
@@ -279,6 +291,15 @@ export async function carregarAtmSvVendas(chave: string, incluirTeste = false, t
 
 export async function marcarAtmTeste(chave: string, email: string | null, telefone: string | null): Promise<ResultadoAcao> {
   return chamarAcao('dados_marcar_teste', { p_chave: chave, p_email: email, p_telefone: telefone, p_motivo: 'teste' });
+}
+
+/** Marcação da SV: só o e-mail da venda. O ramo de telefone do banco não consulta vendas e casa pelos 8 últimos dígitos. */
+export async function marcarAtmTestePorEmail(chave: string, email: string): Promise<ResultadoAcao> {
+  return marcarAtmTeste(chave, email, null);
+}
+
+export async function desmarcarAtmTestePorEmail(chave: string, email: string): Promise<ResultadoAcao> {
+  return desmarcarAtmTeste(chave, email, null);
 }
 
 export async function desmarcarAtmTeste(chave: string, email: string | null, telefone: string | null): Promise<ResultadoAcao> {

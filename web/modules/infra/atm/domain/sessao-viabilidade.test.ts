@@ -3,6 +3,7 @@ import {
   contarVendasSessaoViabilidade,
   conversaoSessaoViabilidade,
   dataDaVendaSessaoViabilidade,
+  listaAposLeituraSv,
   notaVendasTesteForaDoTotal,
   valorDaVendaSessaoViabilidade,
   vendasValidasSessaoViabilidade,
@@ -58,5 +59,31 @@ describe('vendas da Sessão de Viabilidade', () => {
     expect(valorDaVendaSessaoViabilidade(0, 'BRL')?.replace(/\s/g, ' ')).toBe('R$ 0,00');
     expect(valorDaVendaSessaoViabilidade(1234.5, null)).toBe('1.234,50');
     expect(valorDaVendaSessaoViabilidade(10, 'R$')).toBe('10,00 R$');
+  });
+});
+
+describe('listaAposLeituraSv', () => {
+  const anterior = { data: [venda({ id: 'a' })], semDado: false, erro: null };
+
+  it('sucesso substitui a lista', () => {
+    const nova = { data: [venda({ id: 'b' })], semDado: false, erro: null };
+    expect(listaAposLeituraSv(anterior, nova)).toEqual(nova);
+  });
+
+  it('permissão perdida (42501) limpa a lista e marca semPermissao', () => {
+    const r = listaAposLeituraSv(anterior, { data: [], semDado: true, erro: 'Sem permissão para ler este dashboard.', semPermissao: true });
+    expect(r).toEqual({ data: [], semDado: true, erro: 'Sem permissão para ler este dashboard.', semPermissao: true });
+  });
+
+  it('outra falha preserva a última lista e só troca o aviso', () => {
+    const r = listaAposLeituraSv(anterior, { data: [], semDado: true, erro: 'Falha de conexão.' });
+    expect(r.data).toBe(anterior.data);
+    expect(r).toEqual({ data: anterior.data, semDado: false, erro: 'Falha de conexão.' });
+    expect(r.semPermissao).toBeUndefined();
+  });
+
+  it('leitura bem-sucedida depois de perder a permissão tira a marca', () => {
+    const r = listaAposLeituraSv({ data: [], semDado: true, erro: 'x', semPermissao: true }, { data: [], semDado: false, erro: null });
+    expect(r.semPermissao).toBeUndefined();
   });
 });

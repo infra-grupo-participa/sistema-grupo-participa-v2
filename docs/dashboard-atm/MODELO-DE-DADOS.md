@@ -311,8 +311,8 @@ Sessão de Viabilidade (`carregarAtmSvVendas` em `web/modules/infra/atm/infrastr
 | `pedido_em` | `timestamptz` | lido, não exibido |
 | `dia_aprovado` | `date` | Data do evento quando `aprovado_em` vier nulo |
 | `nome` | `text` | Nome |
-| `email` | `text` | E-mail; vai para `dados_marcar_teste` / `dados_desmarcar_teste` |
-| `telefone` | `text` | Telefone; vai para as mesmas RPCs de teste |
+| `email` | `text` | E-mail; vai para `dados_marcar_teste` / `dados_desmarcar_teste` (a marcação pela SV é só por e-mail) |
+| `telefone` | `text` | Telefone, só exibido. Não vai para as RPCs de teste (o ramo de telefone de `dados.atm_pertence` não consulta vendas e marca pelos 8 últimos dígitos, podendo atingir outra pessoa); pode vir nulo, a Hotmart nem sempre manda |
 | `valor_bruto` | `numeric` | Valor bruto, na `moeda` da linha (unidade da moeda, não centavos) |
 | `valor_liquido` | `numeric` | Valor líquido, idem |
 | `moeda` | `text` | formata os valores; nula = número sem símbolo |
@@ -326,5 +326,7 @@ Sessão de Viabilidade (`carregarAtmSvVendas` em `web/modules/infra/atm/infrastr
 - Dado pessoal: a tela só chama a RPC para quem tem a capacidade `contato.ver`. O gate também está no banco, na migration
   `infra/supabase/migrations/20261013190752_dados_atm_sv_vendas.sql` (não aplicada): `dados.atm_cadastro` (equipe e
   chave), `acesso.tem('contato.ver')` e `p_incluir_teste = true` só para master, todos com `42501`.
-- Erros que a tela trata: `PGRST202` (função ainda não aplicada) vira "sem dado ainda"; `42501`, `P0002`, `22023` e
-  qualquer outro viram aviso com a última lista mantida. Quais desses a RPC levanta: confirmar na migration.
+- Erros que a tela trata: `PGRST202` (função ainda não aplicada) vira "sem dado ainda"; `42501` (sem permissão, inclusive
+  perda de `contato.ver` no meio da sessão) limpa a lista e mostra "Lista indisponível"; `P0002`, `22023` e qualquer outro
+  viram aviso com a última lista mantida. A RPC levanta `42501` (fora da equipe, sem `contato.ver`, teste sem ser master)
+  e `P0002` (chave que não é do modelo ATM).

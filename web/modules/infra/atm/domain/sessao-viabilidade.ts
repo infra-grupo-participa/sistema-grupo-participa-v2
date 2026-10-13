@@ -68,3 +68,15 @@ export function valorDaVendaSessaoViabilidade(valor: number | null, moeda: strin
     return `${numero} ${moeda}`;
   }
 }
+
+export type ListaSv<T> = { data: T[]; semDado: boolean; erro: string | null; semPermissao?: boolean };
+
+/**
+ * Estado da lista depois de uma leitura. Sucesso substitui; permissão perdida (42501) limpa a lista;
+ * qualquer outra falha preserva a última lista e só troca o aviso.
+ */
+export function listaAposLeituraSv<T>(anterior: ListaSv<T>, leitura: ListaSv<T>): ListaSv<T> {
+  if (!leitura.semDado) return { data: leitura.data, semDado: false, erro: leitura.erro };
+  if (leitura.semPermissao) return { data: [], semDado: true, erro: leitura.erro, semPermissao: true };
+  return { data: anterior.data, semDado: anterior.semDado, erro: leitura.erro };
+}

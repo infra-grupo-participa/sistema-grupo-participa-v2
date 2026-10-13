@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock('@/shared/infrastructure/supabase/browser-client', () => ({ createBrowserSupabase: () => ({ rpc: mocks.rpc }) }));
 vi.mock('@/shared/infrastructure/supabase/query-log', () => ({ logQueryError: vi.fn() }));
 
-import { carregarAtmDisparosLista, carregarAtmGrupo, carregarAtmSvVendas, carregarAtmLeads, carregarAtmResumo, carregarAtmTrafego, desmarcarAtmTeste, marcarAtmTeste } from './atm-data';
+import { carregarAtmDisparosLista, desmarcarAtmTestePorEmail, marcarAtmTestePorEmail, carregarAtmGrupo, carregarAtmSvVendas, carregarAtmLeads, carregarAtmResumo, carregarAtmTrafego, desmarcarAtmTeste, marcarAtmTeste } from './atm-data';
 
 describe('leitura e marcação do dashboard ATM', () => {
   beforeEach(() => mocks.rpc.mockReset());
@@ -190,6 +190,22 @@ describe('leitura e marcação do dashboard ATM', () => {
   });
 });
 
+describe('marcação de teste da SV (só e-mail)', () => {
+  beforeEach(() => { mocks.rpc.mockReset(); });
+
+  it('marca mandando p_telefone nulo', async () => {
+    mocks.rpc.mockResolvedValue({ data: 1, error: null });
+    expect(await marcarAtmTestePorEmail('atm-elaine-1-2026-10', 'qa@example.com')).toEqual({ data: 1, erro: null });
+    expect(mocks.rpc).toHaveBeenCalledWith('dados_marcar_teste', { p_chave: 'atm-elaine-1-2026-10', p_email: 'qa@example.com', p_telefone: null, p_motivo: 'teste' });
+  });
+
+  it('desmarca mandando p_telefone nulo', async () => {
+    mocks.rpc.mockResolvedValue({ data: 1, error: null });
+    await desmarcarAtmTestePorEmail('atm-elaine-1-2026-10', 'qa@example.com');
+    expect(mocks.rpc).toHaveBeenCalledWith('dados_desmarcar_teste', { p_chave: 'atm-elaine-1-2026-10', p_email: 'qa@example.com', p_telefone: null });
+  });
+});
+
 describe('vendas da Sessão de Viabilidade (dados_atm_sv_vendas)', () => {
   // Com chaves: devolver o mock faria o Vitest chamá-lo como limpeza depois de cada teste.
   beforeEach(() => { mocks.rpc.mockReset(); });
@@ -228,7 +244,14 @@ describe('vendas da Sessão de Viabilidade (dados_atm_sv_vendas)', () => {
 
   it('trata recusa do banco como sem dado com aviso, para a tela manter a última lista', async () => {
     mocks.rpc.mockResolvedValue({ data: null, error: { code: '42501' } });
-    expect(await carregarAtmSvVendas('atm-elaine-1-2026-10')).toEqual({ data: [], semDado: true, erro: 'Sem permissão para ler este dashboard.' });
+    expect(await carregarAtmSvVendas('atm-elaine-1-2026-10')).toEqual({ data: [], semDado: true, erro: 'Sem permissão para ler este dashboard.', semPermissao: true });
+  });
+
+  it('só 42501 marca semPermissao; outras falhas não', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: 'XX000' } });
+    const r = await carregarAtmSvVendas('atm-elaine-1-2026-10');
+    expect(r.semPermissao).toBeUndefined();
+    expect(r.erro).toBe('Não foi possível carregar os dados agora.');
   });
 
   it('trata falha de rede como sem dado com aviso', async () => {
