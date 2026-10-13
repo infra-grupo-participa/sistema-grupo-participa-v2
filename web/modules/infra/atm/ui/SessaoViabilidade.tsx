@@ -138,7 +138,7 @@ export function SessaoViabilidade({ chave, vendas, vendasTeste, periodoLabel, po
               ? <EmptyState title="Nenhuma venda da Sessão de Viabilidade" />
               : <div className={'max-h-[65vh] overflow-auto ' + (desatualizada ? 'opacity-60' : '')}>
                 <DataTable minWidth={isMaster ? 1040 : 900}>
-                  <Thead><Th className="px-2!">Data do evento</Th><Th className="px-2!">Nome</Th><Th className="px-2!">E-mail</Th><Th className="px-2!">Telefone</Th><Th className="px-2!">Status</Th><Th className="px-2!">Bruto / líquido</Th><Th className="px-2!">Oferta</Th>{isMaster && <><Th className="px-2!">Teste</Th><Th className="px-2!">Ação</Th></>}</Thead>
+                  <Thead><Th className="px-2!">Data da venda</Th><Th className="px-2!">Nome</Th><Th className="px-2!">E-mail</Th><Th className="px-2!">Telefone</Th><Th className="px-2!">Status</Th><Th className="px-2!">Bruto / líquido</Th><Th className="px-2!">Oferta</Th>{isMaster && <><Th className="px-2!">Teste</Th><Th className="px-2!">Ação</Th></>}</Thead>
                   <tbody>{lista.data.map((venda) => <Tr key={venda.id} className={venda.teste ? 'opacity-60' : ''}>
                     <Td className="px-2! whitespace-nowrap">{dataDaVendaSessaoViabilidade(venda) ?? 'Sem dado'}</Td>
                     <Td className="px-2! whitespace-nowrap"><div>{venda.nome ?? 'Sem dado'}</div><div className="text-[10px] text-[var(--fg-3)]" title="Transação">{venda.transacao ?? 'Transação: sem dado'}</div></Td>

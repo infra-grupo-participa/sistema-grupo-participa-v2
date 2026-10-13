@@ -307,9 +307,9 @@ Sessão de Viabilidade (`carregarAtmSvVendas` em `web/modules/infra/atm/infrastr
 | Coluna | Tipo | Na tela |
 |---|---|---|
 | `transacao` | `text` | Transação (também a chave da linha) |
-| `aprovado_em` | `timestamptz` | Data do evento (data da venda), em America/Sao_Paulo |
+| `aprovado_em` | `timestamptz` | Data da venda, em America/Sao_Paulo |
 | `pedido_em` | `timestamptz` | lido, não exibido |
-| `dia_aprovado` | `date` | Data do evento quando `aprovado_em` vier nulo |
+| `dia_aprovado` | `date` | Data da venda quando `aprovado_em` vier nulo |
 | `nome` | `text` | Nome |
 | `email` | `text` | E-mail; vai para `dados_marcar_teste` / `dados_desmarcar_teste` (a marcação pela SV é só por e-mail) |
 | `telefone` | `text` | Telefone, só exibido. Não vai para as RPCs de teste (o ramo de telefone de `dados.atm_pertence` não consulta vendas e marca pelos 8 últimos dígitos, podendo atingir outra pessoa); pode vir nulo, a Hotmart nem sempre manda |

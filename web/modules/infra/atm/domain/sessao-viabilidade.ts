@@ -44,7 +44,7 @@ export function notaVendasTesteForaDoTotal(vendasTeste: number | null | undefine
   return vendasTeste === 1 ? '1 venda de teste fora do total' : `${vendasTeste.toLocaleString('pt-BR')} vendas de teste fora do total`;
 }
 
-/** "Data do evento" da tabela = data da venda: `aprovado_em` em São Paulo; sem ele, `dia_aprovado`; sem os dois, nulo. */
+/** "Data da venda" da tabela de vendas (decisão do Victor, 13/10: a visão de pré-checkout usa a data do pré-checkout): `aprovado_em` em São Paulo; sem ele, `dia_aprovado`; sem os dois, nulo. */
 export function dataDaVendaSessaoViabilidade(venda: Pick<VendaSessaoViabilidade, 'aprovadoEm' | 'diaAprovado'>): string | null {
   if (venda.aprovadoEm) {
     const data = new Date(venda.aprovadoEm);
