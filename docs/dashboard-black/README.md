@@ -513,6 +513,30 @@ hora. Migration `20261013174100`; o detalhe da regra está em `infra/supabase/mi
   - ou fechar a porta com `update dados.black_lista_config set chave_sha256 = null`.
 - **Reversão completa:** `20261013174100_reversao.sql` e depois desligar o gatilho.
 
+## Conferência de dado tela x fonte e correções (13/10/2026, noite, NÃO aplicadas)
+
+Pedido do Victor (12 itens). Relatório completo, com tela x fonte por etapa, fica no cérebro (entrega do Galego de 13/10).
+O que vale para o repositório:
+
+- **CPL geral** (`domain/metricas.ts`, `cplPlacar`): hoje soma as campanhas com o bloco `LEAD` no nome, o que inclui a
+  C3 ENTRESAFRA (R$ 596,05 sem nenhum lead pago na base), e divide por **todos** os pagos (14, todos da campanha
+  479754). Deve ser: gasto das campanhas de captação C2/C3 (pela etapa do banco, sem remarketing) ÷ leads pagos
+  **dessas** campanhas. A ENTRESAFRA entrar ou não é decisão do Victor.
+- **Jornada, C1** (`domain/jornada.ts`): "Cortes das consultorias" soma todo o C1 (Teaser + Manifesto); deve ser só a
+  campanha de cortes (hoje nenhuma com gasto). O Manifesto pago (fase AQUECIMENTO no nome) cai no "Lembrete de cada
+  live"; deve ir para o nó Manifesto. Usar o `subtipo` que a RPC já devolve.
+- **Alcance e frequência:** a RPC não mandava total; migration `20261013225000` acrescenta `totais` (período inteiro da
+  campanha, `mkt_trafego.desempenho_total`). Front: `mapearTrafego` deixa de fixar `totais: []`.
+- **Respondi da consultoria como cadastro:** migration `20261013225100` (ramo `consultoria_respondi` na
+  `dados.black_leads`, completas desde 04/10, sem canal; listas da Mensageria iguais). Decisões abertas: janela e
+  parciais. Efeito: ingresso no grupo sem recorte cai (quem aplicou pelo Respondi está no grupo da consultoria).
+- **Páginas:** `mapearTrafego` fixa `paginas: []` e `paginaId: null`, e a coleta do Meta não traz a URL de destino
+  (só `url_tags`). Curto prazo: página pelos leads pagos do anúncio. Definitivo: a Edge `trafego-meta` pedir o link do
+  criativo (coluna nova).
+- **Meta acumulada do Histórico:** sempre nula na fonte real (`configReal`: `inicioCaptacao` e `metaLeadsDia` nulos);
+  depende do Victor dizer o início da captação e a meta diária.
+- **Google Ads:** sem fonte no banco (`mkt_trafego` só tem Meta).
+
 ## Contrato da fonte (`application/ports.ts`)
 
 `FonteDadosBlack` com `modo` (`'demonstracao' | 'real'`), `agora()` e métodos que devolvem
