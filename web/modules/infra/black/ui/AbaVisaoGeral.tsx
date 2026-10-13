@@ -9,8 +9,8 @@ import { cardMql, cardsGrupo, ROTULO_CRUZADO } from '../domain/grupo';
 import { avaliarFaixa } from '../domain/meta';
 import { diaDe } from '../domain/recorte';
 import {
-  agregar, connectRate, conversaoPagina, cpc, cplDo, cplPlacar, cplPorEtapa, cplRemarketing, cpm, ctr, custoPorVisualizacao,
-  dividir, ehCaptacao, farolCpl, filtrarDias, filtrarLinhas, gastoDe, ingressoGrupo, pessoasUnicas, somar,
+  agregar, connectRate, conversaoPagina, cpc, cplDo, cplPlacar, cplPorEtapa, cpm, ctr, custoPorVisualizacao,
+  dividir, ehCaptacao, ehPago, farolCpl, filtrarDias, filtrarLinhas, gastoDe, ingressoGrupo, pessoasUnicas, somar,
   taxaVideo75, type Taxa as TipoTaxa,
 } from '../domain/metricas';
 import { FUNIS, PROFISSOES_MQL, ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
@@ -18,6 +18,8 @@ import type { DadosTela } from './contexto';
 import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
 import { Farol, formatar, IndicadorMeta, MODAL_TELA_CHEIA, moeda, Numero, SeloFicticio, Taxa } from './pecas';
 import { TabelaLeads } from './perfil/TabelaLeads';
+import { investimentoCaptacao } from '../domain/custo-captacao';
+import { INCLUIR_ENTRESAFRA_NO_CPL } from '../domain/decisoes';
 
 const TODAS: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo', 'perfil'];
 const TRAFEGO: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo'];
@@ -31,9 +33,6 @@ const valorTaxa = (t: TipoTaxa): Valor => t.valor;
 const MOLDURA_COM_LISTA = ' overflow-hidden border border-l-4 border-[var(--border)] border-l-[var(--accent)] bg-[var(--surface-2)]'
   + ' [&>*:first-child]:!rounded-none [&>*:first-child]:!border-0 [&>*:first-child]:!shadow-none';
 const GRADE_MACRO = 'grid grid-cols-2 gap-3 lg:grid-cols-3 xl:auto-rows-fr xl:grid-cols-5';
-// Linha de CPL: no celular o nome da etapa fica com a primeira linha e o cálculo desce para a segunda.
-const ROTULO_LINHA_CPL = 'max-md:min-w-[10rem] ';
-
 function Cartao({ onAbrir, titulo, children, cheio = false }: { onAbrir?: () => void; titulo: string; children: ReactNode; cheio?: boolean | 'xl' }) {
   // `cheio`: o card ocupa a altura toda da célula (grade com linhas iguais no funil macro). 'xl': card com lista embaixo
   // do número; só a moldura de fora ocupa a célula (a partir de 1280 px), o KpiCard e a lista ficam com a altura natural.
@@ -45,6 +44,33 @@ function Cartao({ onAbrir, titulo, children, cheio = false }: { onAbrir?: () => 
       className={'atm-historico-card atm-historico-interativo min-w-0 cursor-pointer' + altura + '  rounded-[var(--r-lg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]'}>
       {children}
     </div>
+  );
+}
+
+function EtapaFechada({ titulo, gasto, leads, cpl, aberta, onToggle, onAbrir, children }: {
+  titulo: string; gasto: Valor; leads: Valor; cpl: { valor: Valor; gasto: Valor; leadsPagos: number } | null;
+  aberta: boolean; onToggle: () => void; onAbrir: () => void; children: ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)]">
+      <button type="button" aria-expanded={aberta} onClick={onToggle}
+        className="atm-historico-interativo flex min-h-14 w-full flex-wrap items-center gap-x-4 gap-y-2 p-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]">
+        <span className="min-w-32 flex-1 font-semibold text-[var(--fg)]">{titulo}</span>
+        <span className="text-xs text-[var(--fg-2)]">Investimento <strong className="ml-1 tabular text-[var(--fg)]"><Numero valor={gasto} formato="brl" animado={false} /></strong></span>
+        {leads !== null && <span className="text-xs text-[var(--fg-2)]">Leads pagos <strong className="ml-1 tabular text-[var(--fg)]">{formatar(leads, 'int')}</strong></span>}
+        {cpl?.valor !== null && cpl && <span className="text-xs text-[var(--fg-2)]">CPL <strong className="ml-1 tabular text-[var(--fg)]">{moeda(cpl.valor)}</strong></span>}
+        <span aria-hidden="true" className="ml-auto text-lg leading-none text-[var(--accent)]">{aberta ? '−' : '+'}</span>
+      </button>
+      {aberta && (
+        <div className="border-t border-[var(--border)] p-3">
+          {children}
+          <button type="button" onClick={onAbrir}
+            className="mt-3 min-h-10 rounded-[var(--r-md)] border border-[var(--border-accent)] px-3 text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent-subtle)]">
+            Ver campanhas e conjuntos
+          </button>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -83,8 +109,11 @@ function CardIngresso({ d, onAbrir }: { d: DadosTela; onAbrir: () => void }) {
   return (
     <Cartao cheio="xl" titulo="Ingresso no grupo" onAbrir={onAbrir}>
       <KpiCard label="Ingresso no grupo" title="Únicos nos grupos de Advogados e Contadores ÷ leads MQL (dados_black_grupo)."
-        value={c ? <span className="inline-flex flex-wrap items-baseline gap-x-2"><Taxa taxa={c.geral} /><IndicadorMeta valor={c.geral.valor} meta={d.config.metas.ingressoGrupo} formato="pct" /></span> : <Numero valor={null} formato="pct" falta={falta} />}
+        value={c ? <span className="inline-flex flex-wrap items-baseline gap-x-2"><Taxa taxa={c.geral} className="text-3xl font-bold tracking-tight text-[var(--fg)] no-underline" /><IndicadorMeta valor={c.geral.valor} meta={d.config.metas.ingressoGrupo} formato="pct" /></span> : <Numero valor={null} formato="pct" falta={falta} />}
         hint={c ? (c.cruzado ? ROTULO_CRUZADO : 'MQL no grupo ÷ leads MQL.') : falta} />
+      {c?.geral.valor !== null && c?.geral.valor !== undefined && (
+        <div className="-mt-2 px-4 pb-3"><ProgressBar value={c.geral.valor * 100} ariaLabel={`Ingresso no grupo ${formatar(c.geral.valor, 'pct')}`} /></div>
+      )}
       {c && (
         <ul className="-mt-2 px-4 pb-3 text-xs">
           {c.linhas.map((x) => (
@@ -102,6 +131,7 @@ function CardIngresso({ d, onAbrir }: { d: DadosTela; onAbrir: () => void }) {
 
 export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const [aberto, setAberto] = useState<CardDef | null>(null);
+  const [etapaAberta, setEtapaAberta] = useState<string | null>(null);
   const [tabela, setTabela] = useState<TabelaAberta | null>(null);
   // Sem fonte de cadastros, número de lead é "Sem dado" (nunca o zero de uma lista vazia).
   const semLeads = d.perfilSemDado;
@@ -114,12 +144,12 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const linhasAteAgora = filtrarLinhas(d.linhasTodas, filtro);
   const leadsAteAgora: Valor = semLeads ? null : pessoasUnicas(linhasAteAgora);
   const gastoAteHoje = gastoDe(diasAteHoje);
-  const placar = cplPlacar(d.dias, d.linhas, idx);
+  const placar = cplPlacar(d.dias, d.linhas, idx, d.trafegoPeriodo.gastoCampanhas, INCLUIR_ENTRESAFRA_NO_CPL, filtro);
 
   const cardLeads: CardDef = { id: 'leads', rotulo: 'Leads (pessoas únicas)', formato: 'int', medir: (_, l) => pessoasUnicas(l), aplica: TODAS,
     dica: 'No detalhe, o recorte é o período escolhido no topo. Uma pessoa com duas portas conta uma vez.' };
-  const cardCpl: CardDef = { id: 'cpl', rotulo: 'CPL geral', formato: 'brl', medir: (x, l) => cplPlacar(x, l, idx).valor, aplica: TRAFEGO, menorMelhor: true,
-    dica: 'Gasto de captação e remarketing ÷ leads que vieram de anúncio, no mesmo período (regra provisória, BLOQUEIO 3).' };
+  const cardCpl: CardDef = { id: 'cpl', rotulo: 'CPL geral', formato: 'brl', medir: (x, l) => cplPlacar(x, l, idx, d.trafegoPeriodo.gastoCampanhas, INCLUIR_ENTRESAFRA_NO_CPL, filtro).valor, aplica: TRAFEGO, menorMelhor: true,
+    dica: 'Investimento em captação C2/C3 ÷ leads pagos dessas etapas, no mesmo período. Remarketing fica fora. Entresafra desligada até importação dos leads daquele período.' };
   const cardGasto: CardDef = { id: 'gasto', rotulo: 'Gasto de tráfego', formato: 'brl', medir: (x) => (x.length ? gastoDe(x) : null), aplica: TRAFEGO,
     dica: 'No detalhe, o recorte é o período escolhido no topo.' };
 
@@ -172,7 +202,10 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   // ─── Faixa 4: funis lado a lado ─────────────────────────────────────────────────────────────────────────
   const diasCanal = filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: 'todos', canal: recorte.canal });
   const linhasCanal = filtrarLinhas(d.linhasPeriodoSemFiltro, { funil: 'todos', canal: recorte.canal });
-  const etapas = [...cplPorEtapa(d.dias, d.linhas, idx), { chave: 'remarketing', rotulo: 'Remarketing', nivel: 'etapa' as const, funil: 'c3' as Funil, cpl: cplRemarketing(d.dias, d.linhas, idx) }];
+  const etapas = cplPorEtapa(d.dias, d.linhas, idx, d.trafegoPeriodo.gastoCampanhas);
+  const investimento = investimentoCaptacao(d.trafegoPeriodo, d.periodo);
+  const c1Dias = filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: 'c1', canal: recorte.canal });
+  const abrirEtapa = (funil: Funil) => d.irPara({ aba: 'criativos', funil, criativos: {} });
 
   return (
     <div className="space-y-5">
@@ -192,7 +225,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           <Cartao titulo={cardCpl.rotulo} onAbrir={abrir(cardCpl)}>
             <KpiCard label="CPL geral" bar={estadoCpl === 'sem' ? 'gray' : estadoCpl === 'bom' ? 'green' : estadoCpl === 'atencao' ? 'yellow' : 'red'}
               value={<span className="inline-flex items-center gap-2"><Numero valor={placar.valor} formato="brl" falta="sem leads pagos no recorte" /><IndicadorMeta valor={placar.valor} ideal={config.reguaCpl?.meta ?? null} meta={config.cplAlvoMedio} formato="brl" /></span>}
-              hint={`Gasto de captação e remarketing ÷ leads que vieram de anúncio: ${moeda(placar.gasto)} ÷ ${formatar(placar.leadsPagos, 'int')}. Alvo ${config.cplAlvoMedio === null ? 'sem cadastro' : moeda(config.cplAlvoMedio)}.`} />
+              hint={`Captação C2/C3 ÷ leads pagos C2/C3: ${moeda(placar.gasto)} ÷ ${formatar(placar.leadsPagos, 'int')}. Entresafra excluída. Alvo ${config.cplAlvoMedio === null ? 'sem cadastro' : moeda(config.cplAlvoMedio)}.`} />
           </Cartao>
           <Cartao titulo={cardGasto.rotulo} onAbrir={abrir(cardGasto)}>
             <KpiCard label="Verba contra o orçamento" bar="yellow"
@@ -225,6 +258,13 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
         ) : (
           <>
             <ol className={GRADE_MACRO}>
+              <li key="investimento-captacao" className="min-w-0">
+                <Cartao cheio titulo="Investimento em captação">
+                  <KpiCard label="Investimento em captação" bar="accent"
+                    value={<Numero valor={investimento.total} formato="brl" falta="sem dado no período" />}
+                    hint={`Google Ads ${investimento.google === null ? 'sem fonte' : moeda(investimento.google)} · Meta Ads ${moeda(investimento.meta)}. Só campanhas LEAD em C2/C3, sem remarketing.`} />
+                </Cartao>
+              </li>
               {cards3.flatMap(({ c, valor, hint }) => [
                 <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={abrir(c)}><KpiCard label={c.rotulo} value={indicador[c.id] ? <span className="inline-flex flex-wrap items-baseline gap-x-2">{valor}{indicador[c.id]}</span> : valor} hint={hint} /></Cartao></li>,
                 // MQLs logo depois da conversão da página; o Ingresso no grupo vem em seguida (pedido de 13/10).
@@ -252,24 +292,47 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
             return (
               <SectionCard key={f} title={ROTULO_FUNIL[f]} className={apagado ? 'opacity-40' : ''}
                 right={<button type="button" className="text-xs text-[var(--accent)] underline-offset-2 hover:underline max-md:-my-3 max-md:-mr-3 max-md:min-h-11 max-md:px-3" onClick={() => d.irPara({ funil: f })}>Filtrar</button>}>
-                {f === 'c1' ? <ColunaC1 d={d} dias={df} /> : <ColunaCaptacao d={d} dias={df} linhas={lf} />}
+                {f === 'c1' ? <ColunaC1 d={d} dias={df} /> : <ColunaCaptacao d={d} dias={df} linhas={lf} funil={f} />}
               </SectionCard>
             );
           })}
         </div>
 
-        <SectionCard className="mt-3" title="CPL por etapa" subtitle={`Fase de captação; remarketing à parte. ${config.reguaCpl ? `Farol: meta ${moeda(config.reguaCpl.meta)}, teto ${moeda(config.reguaCpl.teto)}.` : 'Farol: régua de CPL sem cadastro.'}`}>
-          <ul className="divide-y divide-[var(--border-faint)]">
-            <LinhaC1 dias={filtrarDias(d.dias, idx, { funil: 'c1', canal: 'todos' })} />
-            {etapas.map((e) => (
-              <li key={e.chave} className={'flex flex-wrap items-center gap-x-3 gap-y-0.5 py-2 text-sm ' + (e.nivel === 'etapa' ? '' : 'pl-4')}>
-                <Farol farol={farolCpl(e.cpl.valor, config.reguaCpl)} />
-                <span className={'min-w-0 flex-1 break-words ' + ROTULO_LINHA_CPL + (e.nivel === 'etapa' ? 'font-semibold text-[var(--fg)]' : 'text-[var(--fg-2)]')}>{e.rotulo}</span>
-                <span className="text-xs text-[var(--fg-3)] max-md:ml-auto">{moeda(e.cpl.gasto)} ÷ {formatar(e.cpl.leadsPagos, 'int')}</span>
-                <span className="w-24 text-right"><Numero valor={e.cpl.valor} formato="brl" animado={false} /></span>
-              </li>
-            ))}
-          </ul>
+        <SectionCard className="mt-3" title="CPL por etapa" subtitle={`Abra uma etapa para ver o cálculo e os detalhes de campanha. ${config.reguaCpl ? `Farol: meta ${moeda(config.reguaCpl.meta)}, teto ${moeda(config.reguaCpl.teto)}.` : 'Farol: régua de CPL sem cadastro.'}`}>
+          <div className="space-y-2">
+            <EtapaFechada titulo="C1 · Distribuição" gasto={c1Dias.length ? gastoDe(c1Dias) : null} leads={null} cpl={null}
+              aberta={etapaAberta === 'c1'} onToggle={() => setEtapaAberta((v) => v === 'c1' ? null : 'c1')}
+              onAbrir={() => abrirEtapa('c1')}>
+              <CampanhasC1 d={d} />
+              <AlcanceFrequenciaCampanhas d={d} funil="c1" />
+            </EtapaFechada>
+            {(['consultoria', 'iscas', 'c3'] as const).map((funil) => {
+              const chave = funil === 'consultoria' ? 'consultoria' : funil;
+              const principal = etapas.find((e) => e.chave === chave)?.cpl ?? null;
+              const rotulo = funil === 'consultoria' ? 'Consultoria' : funil === 'iscas' ? 'Iscas' : 'C3';
+              const itens = etapas.filter((e) => e.funil === funil && e.nivel !== 'etapa');
+              const gasto = principal?.gasto;
+              return (
+                <EtapaFechada key={funil} titulo={rotulo} gasto={gasto != null && (gasto > 0 || principal?.leadsPagos) ? gasto : null}
+                  leads={principal?.leadsPagos ?? null} cpl={principal} aberta={etapaAberta === funil}
+                  onToggle={() => setEtapaAberta((v) => v === funil ? null : funil)} onAbrir={() => abrirEtapa(funil)}>
+                  {funil === 'consultoria' && <AlcanceFrequenciaCampanhas d={d} funil="consultoria" />}
+                  <CampanhasEtapa d={d} funil={funil} />
+                  {itens.map((e) => (
+                    <div key={e.chave} className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-faint)] py-2 text-sm">
+                      <span className="min-w-0 break-words font-medium text-[var(--fg-2)]">{e.rotulo}</span>
+                      <span className="flex flex-wrap items-center gap-3 text-xs text-[var(--fg-2)]">
+                        <span>Investimento <Numero valor={e.cpl.gasto !== null && e.cpl.gasto > 0 ? e.cpl.gasto : null} formato="brl" animado={false} /></span>
+                        <span>Leads pagos <Numero valor={e.cpl.leadsPagos > 0 ? e.cpl.leadsPagos : null} formato="int" animado={false} /></span>
+                        {e.cpl.valor !== null && <span className="font-semibold text-[var(--fg)]">CPL {moeda(e.cpl.valor)}</span>}
+                      </span>
+                    </div>
+                  ))}
+                  {principal?.valor !== null && principal && principal.gasto !== null && <p className="border-t border-[var(--border-faint)] py-2 text-xs text-[var(--fg-2)]">Cálculo do CPL: {moeda(principal.gasto)} ÷ {formatar(principal.leadsPagos, 'int')} leads pagos.</p>}
+                </EtapaFechada>
+              );
+            })}
+          </div>
         </SectionCard>
       </section>
 
@@ -286,24 +349,131 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   );
 }
 
-/** C1 não gera lead: a linha mostra o custo que se aplica a ele (CPM e custo por visualização), sem farol de CPL. */
-function LinhaC1({ dias }: { dias: DesempenhoDia[] }) {
-  const a = agregar(dias);
+function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
+  return <div className="flex items-baseline justify-between gap-3 py-1 text-sm"><span className="text-[var(--fg-3)]">{rotulo}</span><span className="text-right text-[var(--fg)]">{children}</span></div>;
+}
+
+function CampanhasEtapa({ d, funil }: { d: DadosTela; funil: Funil }) {
+  const campanhas = d.trafegoPeriodo.campanhas.filter((c) => (funil === 'iscas'
+    ? c.funil === 'c3' && c.fase === 'captacao' && (c.subtipo === 'ISCA' || d.trafegoPeriodo.conjuntos.some((j) => j.campanhaId === c.id && j.isca !== null))
+    : c.funil === funil && c.fase === 'captacao'));
+  if (campanhas.length === 0) return <p className="py-2 text-xs text-[var(--fg-3)]">Sem campanha de captação com dado neste recorte.</p>;
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-2 text-sm">
-      <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full border border-[var(--border-strong)]" />
-      <span className={'min-w-0 flex-1 break-words ' + ROTULO_LINHA_CPL}>
-        <span className="font-semibold text-[var(--fg)]">C1</span>
-        <span className="ml-2 text-xs text-[var(--fg-3)]">distribuição, não gera lead: não é CPL</span>
-      </span>
-      <span className="text-xs text-[var(--fg-3)] max-md:ml-auto">CPM <Numero valor={dias.length ? cpm(a) : null} formato="brl" animado={false} className="text-[var(--fg)]" /></span>
-      <span className="text-xs text-[var(--fg-3)]" title="Custo por visualização = gasto ÷ ThruPlay">Por visualização <Numero valor={custoPorVisualizacao(a)} formato="brl" falta="ThruPlay" animado={false} className="text-sm text-[var(--fg)]" /></span>
-    </li>
+    <ul className="divide-y divide-[var(--border-faint)]">
+      {campanhas.map((campanha) => {
+        const dias = d.dias.filter((x) => d.idx.campanhaDoAnuncio(x.anuncioId)?.id === campanha.id);
+        const leads = d.linhas.filter((l) => l.campanhaId === campanha.id && ehPago(l));
+        const custo = d.trafegoPeriodo.gastoCampanhas === undefined
+          ? dias.length ? gastoDe(dias) : null
+          : d.trafegoPeriodo.gastoCampanhas.find((x) => x.campanhaId === campanha.id)?.gasto ?? null;
+        const resultado = custo !== null && leads.length ? custo / leads.length : null;
+        const conhecidas = leads.filter((l) => l.mql !== null && l.mql !== undefined);
+        const mql = conhecidas.length ? dividir(conhecidas.filter((l) => l.mql === true).length, conhecidas.length) : null;
+        const agregado = agregar(dias);
+        return (
+          <li key={campanha.id} className="py-2">
+            <p className="break-words text-sm font-medium text-[var(--fg)]">{campanha.nome}</p>
+            <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs sm:grid-cols-3">
+              <Par rotulo="Investimento"><Numero valor={custo} formato="brl" animado={false} /></Par>
+              <Par rotulo="Leads pagos"><Numero valor={leads.length} formato="int" animado={false} /></Par>
+              {resultado !== null && <Par rotulo="CPL"><Numero valor={resultado} formato="brl" animado={false} /></Par>}
+              <Par rotulo="CTR"><Taxa taxa={ctr(agregado)} /></Par>
+              <Par rotulo="Views da página"><Numero valor={agregado.lpv.valor} formato="int" animado={false} /></Par>
+              {mql !== null && <Par rotulo="% MQL dos pagos"><Numero valor={mql} formato="pct" animado={false} /></Par>}
+            </div>
+            <DetalhesConjuntos d={d} campanhaId={campanha.id} distribuicao={false} />
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
-function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
-  return <div className="flex items-baseline justify-between gap-3 py-1 text-sm"><span className="text-[var(--fg-3)]">{rotulo}</span><span className="text-right text-[var(--fg)]">{children}</span></div>;
+function CampanhasC1({ d }: { d: DadosTela }) {
+  const campanhas = d.trafegoPeriodo.campanhas.filter((c) => c.funil === 'c1'
+    && d.dias.some((x) => d.idx.campanhaDoAnuncio(x.anuncioId)?.id === c.id));
+  if (campanhas.length === 0) return <p className="py-2 text-xs text-[var(--fg-3)]">Sem campanha C1 com dado neste recorte.</p>;
+  return <ul className="divide-y divide-[var(--border-faint)]">{campanhas.map((campanha) => {
+    const dias = d.dias.filter((x) => d.idx.campanhaDoAnuncio(x.anuncioId)?.id === campanha.id);
+    const a = agregar(dias);
+    const gasto = d.trafegoPeriodo.gastoCampanhas?.find((x) => x.campanhaId === campanha.id)?.gasto ?? (dias.length ? gastoDe(dias) : null);
+    return <li key={campanha.id} className="py-2">
+      <p className="break-words text-sm font-medium text-[var(--fg)]">{campanha.nome}</p>
+      <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs sm:grid-cols-3">
+        <Par rotulo="Investimento"><Numero valor={gasto} formato="brl" animado={false} /></Par>
+        <Par rotulo="Impressões"><Numero valor={dias.length ? a.impressoes : null} formato="int" animado={false} /></Par>
+        <Par rotulo="Cliques"><Numero valor={a.cliques.valor} formato="int" animado={false} /></Par>
+        <Par rotulo="CPM"><Numero valor={dias.length ? cpm(a) : null} formato="brl" animado={false} /></Par>
+        <Par rotulo="Custo por visualização"><Numero valor={custoPorVisualizacao(a)} formato="brl" falta="ThruPlay" animado={false} /></Par>
+      </div>
+      <DetalhesConjuntos d={d} campanhaId={campanha.id} distribuicao />
+    </li>;
+  })}</ul>;
+}
+
+function DetalhesConjuntos({ d, campanhaId, distribuicao }: { d: DadosTela; campanhaId: string; distribuicao: boolean }) {
+  const conjuntos = d.trafegoPeriodo.conjuntos.filter((cj) => cj.campanhaId === campanhaId);
+  const linhas = conjuntos.map((cj) => {
+    const ids = new Set(d.trafegoPeriodo.anuncios.filter((a) => a.conjuntoId === cj.id).map((a) => a.id));
+    const dias = d.dias.filter((dia) => ids.has(dia.anuncioId));
+    const leads = d.linhas.filter((l) => l.conjuntoId === cj.id && ehPago(l));
+    return { cj, dias, leads };
+  }).filter((x) => x.dias.length > 0 || x.leads.length > 0);
+  if (linhas.length === 0) return null;
+  return <ul className="mt-2 divide-y divide-[var(--border-faint)] border-l-2 border-[var(--border)] pl-3">
+    {linhas.map(({ cj, dias, leads }) => {
+      const a = agregar(dias);
+      const custo = dias.length ? gastoDe(dias) : null;
+      const conhecidas = leads.filter((l) => l.mql !== null && l.mql !== undefined);
+      const mql = conhecidas.length ? dividir(conhecidas.filter((l) => l.mql === true).length, conhecidas.length) : null;
+      const cplSet = custo !== null && leads.length > 0 ? custo / leads.length : null;
+      return <li key={cj.id} className="py-2">
+        <p className="break-words text-xs font-medium text-[var(--fg-2)]">{cj.nome}</p>
+        <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs sm:grid-cols-3">
+          <Par rotulo="Investimento"><Numero valor={custo} formato="brl" animado={false} /></Par>
+          <Par rotulo="Impressões"><Numero valor={dias.length ? a.impressoes : null} formato="int" animado={false} /></Par>
+          <Par rotulo="Cliques"><Numero valor={a.cliques.valor} formato="int" animado={false} /></Par>
+          <Par rotulo="CTR"><Taxa taxa={ctr(a)} /></Par>
+          {!distribuicao && <>
+            <Par rotulo="Leads pagos"><Numero valor={leads.length} formato="int" animado={false} /></Par>
+            {leads.length > 0 && cplSet !== null && <Par rotulo="CPL"><Numero valor={cplSet} formato="brl" animado={false} /></Par>}
+            {mql !== null && <Par rotulo="% MQL dos pagos"><Numero valor={mql} formato="pct" animado={false} /></Par>}
+            <Par rotulo="Views da página"><Numero valor={a.lpv.valor} formato="int" animado={false} /></Par>
+          </>}
+          {distribuicao && <>
+            <Par rotulo="CPM"><Numero valor={dias.length ? cpm(a) : null} formato="brl" animado={false} /></Par>
+            <Par rotulo="Custo por visualização"><Numero valor={custoPorVisualizacao(a)} formato="brl" falta="ThruPlay" animado={false} /></Par>
+          </>}
+        </div>
+      </li>;
+    })}
+  </ul>;
+}
+
+function Par({ rotulo, children }: { rotulo: string; children: ReactNode }) {
+  return <span className="flex min-w-0 flex-col"><span className="truncate text-[10px] uppercase tracking-wide text-[var(--fg-3)]">{rotulo}</span><span className="text-[var(--fg)]">{children}</span></span>;
+}
+
+function AlcanceFrequenciaCampanhas({ d, funil }: { d: DadosTela; funil: Funil }) {
+  const campanhas = d.trafegoPeriodo.campanhas.filter((c) => c.funil === funil);
+  return (
+    <div className="mt-2 space-y-2 border-t border-[var(--border-faint)] pt-2">
+      {campanhas.length === 0 ? (
+        <p className="text-xs text-[var(--fg-3)]">Alcance e frequência: Sem dado, sem campanha com veiculação neste funil.</p>
+      ) : campanhas.map((campanha) => {
+        const t = d.totaisPeriodo.find((x) => x.nivel === 'campanha' && x.id === campanha.id);
+        return (
+          <div key={campanha.id} className="grid grid-cols-2 gap-x-3 text-xs">
+            <p className="col-span-2 break-words font-medium text-[var(--fg-2)]">{campanha.nome}</p>
+            <p className="text-[var(--fg-3)]">Alcance <strong className="text-[var(--fg)]"><Numero valor={t?.alcance ?? null} formato="int" falta="sem total da campanha" animado={false} /></strong></p>
+            <p className="text-[var(--fg-3)]">Frequência <strong className="text-[var(--fg)]"><Numero valor={t?.frequencia ?? null} formato="dec" falta="sem total da campanha" animado={false} /></strong></p>
+            <p className="col-span-2 text-[11px] text-[var(--fg-3)]">Período da campanha: {t?.de && t.ate ? `de ${dataBr(t.de)} a ${dataBr(t.ate)}` : 'Sem dado'}</p>
+          </div>
+        );
+      })}
+      {campanhas.length > 1 && <p className="text-[11px] text-[var(--fg-3)]">Não há total combinado: alcance e frequência não se somam entre campanhas.</p>}
+    </div>
+  );
 }
 
 function ColunaC1({ d, dias }: { d: DadosTela; dias: DesempenhoDia[] }) {
@@ -318,6 +488,7 @@ function ColunaC1({ d, dias }: { d: DadosTela; dias: DesempenhoDia[] }) {
       <Linha rotulo="Impressões"><Numero valor={dias.length ? a.impressoes : null} formato="int" animado={false} /></Linha>
       <Linha rotulo="Alcance"><Numero valor={total?.alcance ?? null} formato="int" falta={falta} animado={false} /></Linha>
       <Linha rotulo="Frequência"><Numero valor={total?.frequencia ?? null} formato="dec" falta={falta} animado={false} /></Linha>
+      {total?.de && total.ate && <Linha rotulo="Período da campanha">de {dataBr(total.de)} a {dataBr(total.ate)}</Linha>}
       <Linha rotulo="CPM"><Numero valor={dias.length ? cpm(a) : null} formato="brl" animado={false} /></Linha>
       <Linha rotulo="Vídeo 75%"><Taxa taxa={taxaVideo75(a)} /></Linha>
       <Linha rotulo="Custo por visualização"><Numero valor={custoPorVisualizacao(a)} formato="brl" falta="ThruPlay" animado={false} /></Linha>
@@ -326,11 +497,19 @@ function ColunaC1({ d, dias }: { d: DadosTela; dias: DesempenhoDia[] }) {
   );
 }
 
-function ColunaCaptacao({ d, dias, linhas }: { d: DadosTela; dias: DesempenhoDia[]; linhas: LinhaPerfil[] }) {
+function ColunaCaptacao({ d, dias, linhas, funil }: { d: DadosTela; dias: DesempenhoDia[]; linhas: LinhaPerfil[]; funil: Funil }) {
   const c = cplDo(dias, linhas);
+  const campanhas = [...new Set(dias.map((x) => d.idx.campanhaDoAnuncio(x.anuncioId)?.id).filter((x): x is string => Boolean(x)))];
+  const total = campanhas.length === 1 ? d.totaisPeriodo.find((t) => t.nivel === 'campanha' && t.id === campanhas[0]) : undefined;
+  const falta = campanhas.length > 1 ? 'alcance não soma entre campanhas' : funil === 'consultoria' && campanhas.length === 0 ? 'sem campanha com veiculação' : 'alcance do período';
   return (
     <div className="divide-y divide-[var(--border-faint)]">
       <Linha rotulo="Gasto"><Numero valor={dias.length ? c.gasto : null} formato="brl" animado={false} /></Linha>
+      {funil === 'consultoria' && <>
+        <Linha rotulo="Alcance"><Numero valor={total?.alcance ?? null} formato="int" falta={falta} animado={false} /></Linha>
+        <Linha rotulo="Frequência"><Numero valor={total?.frequencia ?? null} formato="dec" falta={falta.replace('alcance', 'frequência')} animado={false} /></Linha>
+        {total?.de && total.ate && <Linha rotulo="Período da campanha">de {dataBr(total.de)} a {dataBr(total.ate)}</Linha>}
+      </>}
       <Linha rotulo="Cadastros"><Numero valor={linhas.length} formato="int" animado={false} /></Linha>
       <Linha rotulo="Leads pagos"><Numero valor={c.leadsPagos} formato="int" animado={false} /></Linha>
       <Linha rotulo="CPL"><span className="inline-flex items-center gap-1.5"><Numero valor={c.valor} formato="brl" animado={false} /><Farol farol={farolCpl(c.valor, d.config.reguaCpl)} /></span></Linha>
@@ -339,6 +518,8 @@ function ColunaCaptacao({ d, dias, linhas }: { d: DadosTela; dias: DesempenhoDia
     </div>
   );
 }
+
+const dataBr = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 
 /** Campanhas sem o código de etapa no nome: nome exato da fonte, gasto fora dos funis. A etapa nunca é deduzida. */
 function SemEtapa({ d }: { d: DadosTela }) {

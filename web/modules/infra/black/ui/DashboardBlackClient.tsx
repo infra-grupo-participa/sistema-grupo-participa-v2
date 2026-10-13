@@ -11,10 +11,11 @@ import { Icon } from '@/shared/ui/icons';
 import type { FonteDadosBlack } from '../application/ports';
 import { obterFonte } from '../infrastructure/fonte';
 import { alinharIds } from '../domain/alinhar';
+import { mapearPaginasPorLeadsPagos } from '../domain/paginas-leads';
 import { chaveRecorte, recorteDaTela } from '../domain/grupo';
 import { filtrarDias, filtrarLinhas, indexar } from '../domain/metricas';
 import { diaDe, diasDoPeriodo, escreverRecorte, periodoDe } from '../domain/recorte';
-import type { AbaBlack, ConfigBlack, GrupoResumoBlack, LinhaPerfil, Marcos, MensageriaBlack, Recorte, Resultado, TotalPeriodo, TrafegoBlack } from '../domain/tipos';
+import type { AbaBlack, ConfigBlack, GrupoResumoBlack, LinhaPerfil, Marcos, MensageriaBlack, Recorte, Resultado, TrafegoBlack } from '../domain/tipos';
 import type { AlvoGaveta, DadosTela } from './contexto';
 import { AvisoBloco, ROTULO_INTEIRO } from './pecas';
 import { SeletorGlobal } from './SeletorGlobal';
@@ -75,7 +76,7 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
   const [erroFonte, setErroFonte] = useState<string | null>(null);
   const [config, setConfig] = useState<Bloco<ConfigBlack>>(vazio);
   const [trafego, setTrafego] = useState<Bloco<TrafegoBlack>>(vazio);
-  const [totais, setTotais] = useState<Bloco<TotalPeriodo[]>>(vazio);
+  const [trafegoPeriodo, setTrafegoPeriodo] = useState<Bloco<TrafegoBlack>>(vazio);
   const [perfil, setPerfil] = useState<Bloco<LinhaPerfil[]>>(vazio);
   const [mensageria, setMensageria] = useState<Bloco<MensageriaBlack>>(vazio);
   const [marcos, setMarcos] = useState<Bloco<Marcos>>(vazio);
@@ -95,7 +96,8 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
   // Período escolhido, calculado só quando a config chega.
   const agora = useMemo(() => (fonte ? fonte.agora() : null), [fonte, versao]); // eslint-disable-line react-hooks/exhaustive-deps
   const cfg = config.data;
-  const periodo = useMemo(() => (cfg && agora ? periodoDe(recorte.periodo, agora, cfg) : null), [cfg, agora, recorte.periodo]);
+  const periodo = useMemo(() => (cfg && agora ? periodoDe(recorte.periodo, agora, cfg, recorte.periodoPersonalizado) : null),
+    [cfg, agora, recorte.periodo, recorte.periodoPersonalizado]);
   const completo = useMemo(() => (cfg && agora ? periodoDe('desde-inicio', agora, cfg) : null), [cfg, agora]);
 
   // 1) config
@@ -113,10 +115,7 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
     const marca = `${de}|${ate}|${inicio}|${hoje}|${versao}`;
     Promise.all([
       lerBloco('o tráfego', () => fonte.trafego(chave, completo), setTrafego),
-      lerBloco('o alcance do período', async () => {
-        const r = await fonte.trafego(chave, periodo);
-        return { data: r.data.totais, semDado: r.semDado, erro: r.erro };
-      }, setTotais),
+      lerBloco('o tráfego do período', () => fonte.trafego(chave, periodo), setTrafegoPeriodo),
       // Master recebe também os testes (para ver e desmarcar); a tela tira os testes de todas as contas.
       lerBloco('os cadastros', () => fonte.perfil(chave, completo, { incluirTeste: isMaster }), setPerfil),
       lerBloco('a mensageria', () => fonte.mensageria(chave, periodo), setMensageria),
@@ -157,20 +156,24 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
 
   const dados = useMemo<DadosTela | null>(() => {
     if (!fonte || !cfg || !agora || !periodo || !trafego.data || !perfil.data) return null;
-    const t = trafego.data;
-    const idx = indexar(t);
-    const diasPeriodoSemFiltro = t.dias.filter((d) => d.dia >= periodo.de && d.dia <= periodo.ate);
+    const tBase = trafego.data;
+    const linhasBase = alinharIds(perfil.data, tBase);
     // O lead traz os ids do Meta; o tráfego, os internos. Casa pelo anúncio (domain/alinhar.ts).
-    const linhasBase = alinharIds(perfil.data, t);
     const linhasTodas = linhasBase.filter((l) => !l.teste);
     const noPeriodo = (l: LinhaPerfil) => { const d = diaDe(l.criadoEm); return d >= periodo.de && d <= periodo.ate; };
     const linhasPeriodoSemFiltro = linhasTodas.filter((l) => { const d = diaDe(l.criadoEm); return d >= periodo.de && d <= periodo.ate; });
     const filtro = { funil: recorte.funil, canal: recorte.canal };
+    const linhas = filtrarLinhas(linhasPeriodoSemFiltro, filtro);
+    // A atribuição de página precisa respeitar o período e os filtros atuais: sem lead pago no recorte não se mede página.
+    const t = mapearPaginasPorLeadsPagos(tBase, linhas);
+    const tPeriodo = mapearPaginasPorLeadsPagos(trafegoPeriodo.data ?? tBase, linhas);
+    const idx = indexar(t);
+    const diasPeriodoSemFiltro = t.dias.filter((d) => d.dia >= periodo.de && d.dia <= periodo.ate);
     return {
       chave, fonte, config: cfg, agora, recorte, periodo, diasPeriodo: diasDoPeriodo(periodo),
-      trafego: t, totaisPeriodo: totais.data ?? [], idx, paginas: new Map(t.paginas.map((p) => [p.id, p])),
+      trafego: t, trafegoPeriodo: tPeriodo, totaisPeriodo: tPeriodo.totais, idx, paginas: new Map(t.paginas.map((p) => [p.id, p])),
       diasTodos: t.dias, diasPeriodoSemFiltro, dias: filtrarDias(diasPeriodoSemFiltro, idx, filtro),
-      linhasTodas, linhasPeriodoSemFiltro, linhas: filtrarLinhas(linhasPeriodoSemFiltro, filtro),
+      linhasTodas, linhasPeriodoSemFiltro, linhas,
       mensageria: mensageria.data, mensageriaSemDado: mensageria.semDado || mensageria.data === null, marcos: marcos.data,
       perfilSemDado: perfil.semDado, avisoPerfil: perfil.aviso,
       linhasTeste: isMaster ? linhasBase.filter((l) => l.teste && noPeriodo(l)) : [],
@@ -180,11 +183,11 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
       isMaster, recarregar: () => setVersao((v) => v + 1),
       irPara, abrirGaveta: setGaveta,
     };
-  }, [fonte, cfg, agora, periodo, trafego.data, perfil.data, perfil.semDado, perfil.aviso, totais.data, mensageria.data, mensageria.semDado, marcos.data, grupo, alvoGrupo, isMaster, recorte, chave, irPara]);
+  }, [fonte, cfg, agora, periodo, trafego.data, perfil.data, perfil.semDado, perfil.aviso, trafegoPeriodo.data, mensageria.data, mensageria.semDado, marcos.data, grupo, alvoGrupo, isMaster, recorte, chave, irPara]);
 
   const marcaAtual = de && ate && inicio && hoje ? `${de}|${ate}|${inicio}|${hoje}|${versao}` : null;
   const lendo = marcaAtual !== null && lida !== marcaAtual;
-  const erros = [config, trafego, totais, perfil, mensageria, marcos, grupo].filter((b) => b.erro);
+  const erros = [config, trafego, trafegoPeriodo, perfil, mensageria, marcos, grupo].filter((b) => b.erro);
   const avisos = ([['Tráfego', trafego], ['Cadastros', perfil], ['Grupo', grupo]] as const).filter(([, b]) => b.aviso && !b.erro);
   const esmaecido = Boolean(trafego.erro || perfil.erro || config.erro);
   const lidoEm = trafego.lidoEm ?? perfil.lidoEm;
@@ -218,7 +221,8 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
         </div>
       )}
 
-      <SeletorGlobal funil={recorte.funil} periodo={recorte.periodo} canal={recorte.canal} datas={periodo} onChange={irPara} />
+      <SeletorGlobal funil={recorte.funil} periodo={recorte.periodo} canal={recorte.canal} datas={periodo}
+        inicio={cfg?.inicio} fim={completo?.ate} onChange={irPara} />
 
       {erroFonte && <p role="alert" className="text-sm text-[var(--red)]">{erroFonte}</p>}
       {erros.map((b) => <AvisoBloco key={b.erro} erro={b.erro} lidoEm={b.lidoEm} agora={relogioTela} />)}

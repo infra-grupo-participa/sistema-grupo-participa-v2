@@ -3,10 +3,10 @@
 import { deslocarDia, hojeEmSaoPaulo } from '@/modules/infra/atm/domain/periodo';
 import type { AbaBlack, ConfigBlack, FiltroCanal, FiltroCriativos, FiltroFunil, Periodo, Recorte } from './tipos';
 
-export const PERIODOS = ['hoje', '7d', 'desde-inicio', 'semana'] as const;
+export const PERIODOS = ['hoje', '7d', 'desde-inicio', 'semana', 'personalizado'] as const;
 export type ChavePeriodo = (typeof PERIODOS)[number];
 export const ROTULO_PERIODO: Record<ChavePeriodo, string> = {
-  hoje: 'Hoje', '7d': '7 dias', 'desde-inicio': 'Desde o início', semana: 'Semana do ciclo',
+  hoje: 'Hoje', '7d': '7 dias', 'desde-inicio': 'Desde o início', semana: 'Semana do ciclo', personalizado: 'Personalizado',
 };
 
 const FUNIS_FILTRO: readonly FiltroFunil[] = ['todos', 'c1', 'consultoria', 'iscas', 'c3'];
@@ -33,10 +33,15 @@ export function lerRecorte(p: Params): Recorte {
   if (cj) criativos.conjunto = cj;
   if (cr) criativos.anuncio = cr;
   if (pg) criativos.pagina = pg;
+  const periodo = umDe(ler(p, 'periodo'), PERIODOS, RECORTE_PADRAO.periodo);
+  const de = ler(p, 'de'); const ate = ler(p, 'ate');
+  const periodoPersonalizado = periodo === 'personalizado' && de && ate && diaValido(de) && diaValido(ate) && de <= ate
+    ? { de, ate } : null;
   return {
     funil: umDe(ler(p, 'funil'), FUNIS_FILTRO, RECORTE_PADRAO.funil),
     canal: umDe(ler(p, 'canal'), CANAIS_FILTRO, RECORTE_PADRAO.canal),
-    periodo: umDe(ler(p, 'periodo'), PERIODOS, 'desde-inicio'),
+    periodo: periodo === 'personalizado' && !periodoPersonalizado ? RECORTE_PADRAO.periodo : periodo,
+    ...(periodoPersonalizado ? { periodoPersonalizado } : {}),
     aba: umDe(ler(p, 'aba'), ABAS, RECORTE_PADRAO.aba),
     criativos,
   };
@@ -46,11 +51,14 @@ export function lerRecorte(p: Params): Recorte {
 export function escreverRecorte(r: Recorte, extras?: URLSearchParams): string {
   const q = new URLSearchParams();
   q.set('funil', r.funil); q.set('periodo', r.periodo); q.set('canal', r.canal); q.set('aba', r.aba);
+  if (r.periodo === 'personalizado' && r.periodoPersonalizado) {
+    q.set('de', r.periodoPersonalizado.de); q.set('ate', r.periodoPersonalizado.ate);
+  }
   if (r.criativos.campanha) q.set('cp', r.criativos.campanha);
   if (r.criativos.conjunto) q.set('cj', r.criativos.conjunto);
   if (r.criativos.anuncio) q.set('cr', r.criativos.anuncio);
   if (r.criativos.pagina) q.set('pg', r.criativos.pagina);
-  if (extras) for (const [k, v] of extras) if (!['funil', 'periodo', 'canal', 'aba', 'cp', 'cj', 'cr', 'pg'].includes(k)) q.set(k, v);
+  if (extras) for (const [k, v] of extras) if (!['funil', 'periodo', 'canal', 'aba', 'de', 'ate', 'cp', 'cj', 'cr', 'pg'].includes(k)) q.set(k, v);
   return q.toString();
 }
 
@@ -68,10 +76,15 @@ export function segundaDaSemana(iso: string): string {
  * Datas do período no fuso de São Paulo, presas entre o início do projeto e o fim do projeto
  * (último dia de config.semanas, ou hoje). Se hoje é antes do início, devolve o primeiro dia.
  */
-export function periodoDe(chave: string, agora: Date, config: Pick<ConfigBlack, 'inicio' | 'semanas'>): Periodo {
+export function periodoDe(chave: string, agora: Date, config: Pick<ConfigBlack, 'inicio' | 'semanas'>, personalizado?: Periodo | null): Periodo {
   const fimProjeto = config.semanas.length ? config.semanas[config.semanas.length - 1].ate : hojeEmSaoPaulo(agora);
   const hoje = max(config.inicio, min(hojeEmSaoPaulo(agora), fimProjeto));
   const k = umDe(chave, PERIODOS, 'desde-inicio');
+  if (k === 'personalizado' && personalizado && diaValido(personalizado.de) && diaValido(personalizado.ate) && personalizado.de <= personalizado.ate) {
+    const de = max(config.inicio, personalizado.de);
+    const ate = min(hoje, personalizado.ate);
+    if (de <= ate) return { de, ate };
+  }
   if (k === 'hoje') return { de: hoje, ate: hoje };
   if (k === '7d') return { de: max(config.inicio, deslocarDia(hoje, -6)), ate: hoje };
   if (k === 'semana') {
@@ -79,6 +92,12 @@ export function periodoDe(chave: string, agora: Date, config: Pick<ConfigBlack, 
     return s ? { de: max(config.inicio, s.de), ate: hoje } : { de: max(config.inicio, segundaDaSemana(hoje)), ate: hoje };
   }
   return { de: config.inicio, ate: hoje };
+}
+
+function diaValido(dia: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) return false;
+  const d = new Date(`${dia}T00:00:00Z`);
+  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === dia;
 }
 
 /** Dias do período, inclusivo. */

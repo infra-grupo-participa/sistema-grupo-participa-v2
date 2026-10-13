@@ -27,4 +27,14 @@ describe('histórico', () => {
     const cheia = serieHistorico(b.dias, b.linhas, todos, CONFIG_BLACK);
     expect(s[s.length - 1].pessoasAcumuladas).toBe(cheia[cheia.length - 1].pessoasAcumuladas);
   });
+  it('série diária alinha MQL e ingresso no grupo à coorte de cadastro, sem duplicar pessoas', () => {
+    const original = b.linhas[0];
+    const linhas = [
+      { ...original, pessoaId: 'coorte-a', criadoEm: '2026-10-05T10:00:00-03:00', mql: true, entrouGrupoEm: '2026-10-08T10:00:00-03:00' },
+      { ...original, pessoaId: 'coorte-a', criadoEm: '2026-10-05T11:00:00-03:00', mql: true, entrouGrupoEm: null },
+      { ...original, pessoaId: 'coorte-b', criadoEm: '2026-10-05T12:00:00-03:00', mql: false, entrouGrupoEm: null },
+    ];
+    const [dia] = serieHistorico([], linhas, ['2026-10-05'], CONFIG_BLACK);
+    expect([dia.pessoasNovas, dia.mql, dia.mqlBase, dia.ingressoGrupo]).toEqual([2, 1, 2, 1]);
+  });
 });

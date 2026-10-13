@@ -217,9 +217,15 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
     const id = texto(d.campanha_id); const g = reais(d.gasto_centavos);
     if (id && g !== null) porCampanha.set(id, (porCampanha.get(id) ?? 0) + g);
   }
+  const totais = linhas(r.totais).flatMap((t) => {
+    const id = texto(t.campanha_id); const alcance = num(t.alcance); const frequencia = num(t.frequencia);
+    if (!id) return [];
+    return [{ nivel: 'campanha' as const, id, alcance, frequencia, de: texto(t.de), ate: texto(t.ate), gasto: reais(t.gasto_centavos),
+      impressoes: num(t.impressoes), coletadoEm: texto(t.coletado_em) }];
+  });
   return {
     data: {
-      campanhas, conjuntos, anuncios, paginas: [], dias, totais: [], coletadoEm: texto(r.coletado_em),
+      campanhas, conjuntos, anuncios, paginas: [], dias, totais, coletadoEm: texto(r.coletado_em),
       anuncioDesde: texto(r.anuncio_desde), gastoCampanhas: [...porCampanha].map(([campanhaId, gasto]) => ({ campanhaId, gasto })),
     },
     semDado: campanhas.length === 0,

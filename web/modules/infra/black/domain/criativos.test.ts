@@ -192,6 +192,26 @@ describe('criativos e páginas', () => {
     // As ordens mudam a galeria de verdade: o topo por CTR não é o topo por gasto.
     expect(ordenar(itens, 'ctr')[0].id).not.toBe(ordenar(itens, 'gasto')[0].id);
   });
+  it('ordem por percentual MQL é decrescente e põe sem dado no fim', () => {
+    const itens = painel('anuncio', {}, b.dias, b.linhas, idx, regua, nomePagina);
+    const ordenados = ordenar(itens, 'mql');
+    const valores = ordenados.map((x) => valorOrdem(x, 'mql'));
+    const corte = valores.indexOf(null) === -1 ? valores.length : valores.indexOf(null);
+    expect(valores.slice(corte).every((x) => x === null)).toBe(true);
+    for (let i = 1; i < corte; i += 1) expect(valores[i]!).toBeLessThanOrEqual(valores[i - 1]!);
+    const base = itens[0];
+    expect(valorOrdem({ ...base, resumo: { ...base.resumo, leadsPagos: 4, mql: { ...base.resumo.mql, valor: 0.9 } } }, 'mql')).toBeNull();
+    expect(valorOrdem({ ...base, resumo: { ...base.resumo, leadsPagos: 5, mql: { ...base.resumo.mql, valor: 0.9 } } }, 'mql')).toBe(0.9);
+  });
+  it('percentual MQL do criativo usa somente leads pagos e não inclui cadastros orgânicos', () => {
+    const dias = b.dias.slice(0, 1);
+    const pagos = [
+      { ...b.linhas.find((l) => l.origem === 'pago')!, pessoaId: 'pago-mql', mql: true },
+      { ...b.linhas.find((l) => l.origem === 'pago')!, pessoaId: 'pago-nao-mql', mql: false },
+    ];
+    const organico = { ...pagos[0], pessoaId: 'organico-mql', origem: 'organico' as const, mql: true };
+    expect(resumir(dias, [...pagos, organico], idx, regua, false).mql).toMatchObject({ num: 1, den: 2, valor: 0.5 });
+  });
   it('série diária do anúncio fecha com o resumo', () => {
     const a = painel('anuncio', { campanha: 'cp-iscas' }, b.dias, b.linhas, idx, regua, nomePagina)[0];
     const dias = [...new Set(b.dias.map((d) => d.dia))].sort();

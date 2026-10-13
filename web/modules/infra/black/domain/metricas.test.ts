@@ -78,17 +78,36 @@ describe('CPL', () => {
     expect(cplDo(dias, leads)).toEqual({ gasto: 380, leadsPagos: 4, valor: 95 });
     expect(cplDo([], []).valor).toBeNull();
   });
-  it('placar = gasto de captação + remarketing ÷ leads pagos', () => {
-    expect(cplPlacar(dias, leads, idx)).toEqual({ gasto: 280, leadsPagos: 4, valor: 70 });
+  it('CPL geral inclui só captação C2/C3 e leads pagos dessas etapas', () => {
+    expect(cplPlacar(dias, leads, idx)).toEqual({ gasto: 250, leadsPagos: 3, valor: 250 / 3 });
   });
-  it('por etapa: iscas, por isca, C3 sem o remarketing, conjunto com o nome da fonte', () => {
+  it('Entresafra depende de um parâmetro explícito e fica desligada por padrão', () => {
+    const entresafra: Campanha = { id: 'k5', nome: 'CF | BF26 | C3 | ENTRESAFRA | LEAD', canal: 'meta', funil: 'c3', fase: 'captacao', etapa: 'C3' };
+    const ix = indexar({ campanhas: [...campanhas, entresafra], conjuntos, anuncios });
+    const gastoCampanhas = [{ campanhaId: 'k3', gasto: 50 }, { campanhaId: 'k5', gasto: 600 }];
+    const linhas = [...leads, linha({ leadId: 'l6', pessoaId: 'p6', campanhaId: 'k5', origem: 'pago' })];
+    expect(cplPlacar(dias, linhas, ix, gastoCampanhas)).toMatchObject({ gasto: 50, leadsPagos: 3, valor: 50 / 3 });
+    expect(cplPlacar(dias, linhas, ix, gastoCampanhas, false)).toMatchObject({ gasto: 50, leadsPagos: 3, valor: 50 / 3 });
+    expect(cplPlacar(dias, linhas, ix, gastoCampanhas, true)).toMatchObject({ gasto: 650, leadsPagos: 4, valor: 162.5 });
+  });
+  it('por etapa: Iscas só C3, C3 sem remarketing, conjunto com nome da fonte', () => {
     const por = Object.fromEntries(cplPorEtapa(dias, leads, idx).map((x) => [x.chave, x]));
-    expect(por.iscas.cpl).toEqual({ gasto: 200, leadsPagos: 2, valor: 100 });
-    expect(por['isca:Fluxograma'].cpl.valor).toBe(100);
+    expect(por.iscas.cpl).toEqual({ gasto: null, leadsPagos: 0, valor: null });
+    expect(por['isca:Fluxograma']).toBeUndefined();
     expect(por.c3.cpl).toEqual({ gasto: 50, leadsPagos: 1, valor: 50 });
     expect(por['conjunto:j3'].rotulo).toBe('J3 GOOGLE');
     expect(por.consultoria.cpl.valor).toBeNull();
     expect(cplRemarketing(dias, leads, idx)).toEqual({ gasto: 30, leadsPagos: 1, valor: 30 });
+  });
+  it('Iscas conta conjuntos marcados dentro de campanhas C3, nunca campanhas C2', () => {
+    const campanhaC3Isca: Campanha = { id: 'k5', nome: 'CF | BF26 | C3 | ISCA | LEAD', canal: 'meta', funil: 'c3', fase: 'captacao', etapa: 'C3', subtipo: 'ISCA' };
+    const conjuntoC3Isca: Conjunto = { id: 'j5', campanhaId: 'k5', nome: 'C3 CHECKUP', isca: 'Checkup', conjuntoC3: null };
+    const anuncioC3Isca = ad('a5', 'j5');
+    const idxC3Isca = indexar({ campanhas: [...campanhas, campanhaC3Isca], conjuntos: [...conjuntos, conjuntoC3Isca], anuncios: [...anuncios, anuncioC3Isca] });
+    const leadC3Isca = linha({ leadId: 'l6', pessoaId: 'p6', funil: 'c3', campanhaId: 'k5', conjuntoId: 'j5', anuncioId: 'a5', isca: 'Checkup' });
+    const por = Object.fromEntries(cplPorEtapa([dia('a5', 20, 100, 10, 5)], [leadC3Isca], idxC3Isca).map((x) => [x.chave, x]));
+    expect(por.iscas.cpl).toEqual({ gasto: 20, leadsPagos: 1, valor: 20 });
+    expect(por['isca:Checkup'].cpl).toEqual({ gasto: 20, leadsPagos: 1, valor: 20 });
   });
   it('farol pela régua 15/20', () => {
     const r = { meta: 15, teto: 20 };

@@ -1,6 +1,7 @@
 // Métricas do dashboard da Black. Regra única: razão = soma sobre soma, numerador e denominador no MESMO
 // recorte e só nas linhas em que os dois são conhecidos. Sem dado (null) nunca vira zero.
 import { FASES, ISCAS } from './tipos';
+import { INCLUIR_ENTRESAFRA_NO_CPL } from './decisoes';
 import type { Anuncio, Campanha, Conjunto, DesempenhoDia, Fase, FiltroCanal, FiltroFunil, Funil, LinhaPerfil, ReguaCpl, TrafegoBlack, Valor } from './tipos';
 
 /** Divisão segura: null ou zero no denominador = null (sem dado), null no numerador = null. */
@@ -203,19 +204,36 @@ export function filtrarLinhas(linhas: readonly LinhaPerfil[], f: FiltroBase): Li
 
 export const gastoDe = (dias: readonly DesempenhoDia[]) => dias.reduce((s, d) => s + d.gasto, 0);
 
-export interface Cpl { gasto: number; leadsPagos: number; valor: Valor }
+export interface Cpl { gasto: Valor; leadsPagos: number; valor: Valor }
 /** CPL de um recorte: dias e linhas JÁ filtrados pelo mesmo critério. */
 export function cplDo(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[]): Cpl {
-  const gasto = gastoDe(dias);
+  const gasto = dias.length ? gastoDe(dias) : null;
   const leadsPagos = linhas.filter(ehPago).length;
-  return { gasto, leadsPagos, valor: cpl(dias.length ? gasto : null, leadsPagos) };
+  return { gasto, leadsPagos, valor: cpl(gasto, leadsPagos) };
 }
 
-/** Fases que entram no CPL do placar (provisório, BLOQUEIO 3): captação + remarketing. */
-export const FASES_PLACAR: readonly Fase[] = ['captacao', 'remarketing'];
-export function cplPlacar(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego): Cpl {
-  const d = dias.filter((x) => { const f = idx.campanhaDoAnuncio(x.anuncioId)?.fase; return f !== undefined && f !== null && FASES_PLACAR.includes(f); });
-  return cplDo(d, linhas);
+/** CPL geral: campanhas de C2/C3 em captação, sem remarketing, e só leads pagos atribuídos a elas. */
+export function cplPlacar(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego,
+  gastoCampanhas?: readonly { campanhaId: string; gasto: number }[], incluirEntresafra = INCLUIR_ENTRESAFRA_NO_CPL,
+  filtro: FiltroBase = { funil: 'todos', canal: 'todos' }): Cpl {
+  const elegivel = (c: Campanha | null) => c !== null && c.fase !== 'remarketing'
+    && (c.etapa === 'C2' || c.etapa === 'C3' || (c.etapa === undefined && c.fase === 'captacao' && ehCaptacao(c.funil)));
+  const passaFunil = (c: Campanha) => filtro.funil === 'todos' || c.funil === filtro.funil
+    || (filtro.funil === 'iscas' && c.funil === 'c3' && c.subtipo === 'ISCA');
+  const candidatas = [...idx.campanha.values()].filter((c) => elegivel(c) && passaFunil(c)
+    && (filtro.canal === 'todos' || c.canal === filtro.canal));
+  const campanhas = new Set(candidatas
+    .filter((c) => incluirEntresafra !== false || !/ENTRESAFRA/i.test(c.nome))
+    .map((c) => c.id));
+  const l = linhas.filter((x) => x.campanhaId !== null && campanhas.has(x.campanhaId));
+  if (gastoCampanhas) {
+    const gastos = gastoCampanhas.filter((x) => campanhas.has(x.campanhaId));
+    const gasto = gastos.length ? gastos.reduce((s, x) => s + x.gasto, 0) : null;
+    const leadsPagos = l.filter(ehPago).length;
+    return { gasto, leadsPagos, valor: cpl(gasto, leadsPagos) };
+  }
+  const d = dias.filter((x) => { const c = idx.campanhaDoAnuncio(x.anuncioId); return c !== null && campanhas.has(c.id); });
+  return cplDo(d, l);
 }
 
 export interface LinhaCplEtapa { chave: string; rotulo: string; nivel: 'etapa' | 'isca' | 'conjunto'; funil: Funil; cpl: Cpl }
@@ -224,22 +242,33 @@ export interface LinhaCplEtapa { chave: string; rotulo: string; nivel: 'etapa' |
  * Só campanhas da fase de captação (o remarketing tem linha própria). Gasto da etapa ÷ leads pagos atribuídos às
  * mesmas campanhas/conjuntos. Rótulo do conjunto = nome exato da fonte.
  */
-export function cplPorEtapa(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego): LinhaCplEtapa[] {
-  const recorte = (ok: (c: Campanha, cj: Conjunto | null) => boolean) => cplDo(
-    dias.filter((d) => { const c = idx.campanhaDoAnuncio(d.anuncioId); return c !== null && ok(c, idx.conjuntoDoAnuncio(d.anuncioId)); }),
-    linhas.filter((l) => {
+export function cplPorEtapa(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego,
+  gastoCampanhas?: readonly { campanhaId: string; gasto: number }[]): LinhaCplEtapa[] {
+  const recorte = (ok: (c: Campanha, cj: Conjunto | null) => boolean, usarGastoCampanhas = true) => {
+    const ids = new Set([...idx.campanha.values()].filter((c) => ok(c, null)).map((c) => c.id));
+    const ds = dias.filter((d) => {
+      const c = idx.campanhaDoAnuncio(d.anuncioId);
+      return c !== null && (gastoCampanhas && usarGastoCampanhas ? ids.has(c.id) : ok(c, idx.conjuntoDoAnuncio(d.anuncioId)));
+    });
+    const ls = linhas.filter((l) => {
       const c = l.campanhaId ? idx.campanha.get(l.campanhaId) : undefined;
       return c !== undefined && ok(c, l.conjuntoId ? idx.conjunto.get(l.conjuntoId) ?? null : null);
-    }),
-  );
+    });
+    if (!gastoCampanhas || !usarGastoCampanhas) return cplDo(ds, ls);
+    const custos = gastoCampanhas.filter((x) => ids.has(x.campanhaId));
+    const gasto = custos.length ? custos.reduce((s, x) => s + x.gasto, 0) : null;
+    const leadsPagos = ls.filter(ehPago).length;
+    return { gasto, leadsPagos, valor: cpl(gasto, leadsPagos) };
+  };
   const captacao = (f: Funil) => (c: Campanha) => c.funil === f && c.fase === 'captacao';
+  const iscaC3 = (c: Campanha, cj: Conjunto | null) => captacao('c3')(c) && (c.subtipo === 'ISCA' || cj?.isca !== null && cj?.isca !== undefined);
   const out: LinhaCplEtapa[] = [
     { chave: 'consultoria', rotulo: 'Consultoria', nivel: 'etapa', funil: 'consultoria', cpl: recorte(captacao('consultoria')) },
-    { chave: 'iscas', rotulo: 'Iscas', nivel: 'etapa', funil: 'iscas', cpl: recorte(captacao('iscas')) },
+    { chave: 'iscas', rotulo: 'Iscas · C3', nivel: 'etapa', funil: 'iscas', cpl: recorte(iscaC3) },
   ];
   for (const isca of ISCAS) {
-    const cpl = recorte((c, cj) => captacao('iscas')(c) && cj?.isca === isca);
-    if (cpl.gasto > 0 || cpl.leadsPagos > 0) out.push({ chave: `isca:${isca}`, rotulo: isca, nivel: 'isca', funil: 'iscas', cpl });
+    const calculo = recorte((c, cj) => iscaC3(c, cj) && cj?.isca === isca, false);
+    if ((calculo.gasto ?? 0) > 0 || calculo.leadsPagos > 0) out.push({ chave: `isca:${isca}`, rotulo: isca, nivel: 'isca', funil: 'iscas', cpl: calculo });
   }
   out.push({ chave: 'c3', rotulo: 'C3', nivel: 'etapa', funil: 'c3', cpl: recorte(captacao('c3')) });
   const conjuntosC3 = new Map<string, string>();
@@ -248,7 +277,7 @@ export function cplPorEtapa(dias: readonly DesempenhoDia[], linhas: readonly Lin
     if (c && cj && captacao('c3')(c)) conjuntosC3.set(cj.id, cj.nome);
   }
   for (const [id, nome] of conjuntosC3) {
-    out.push({ chave: `conjunto:${id}`, rotulo: nome, nivel: 'conjunto', funil: 'c3', cpl: recorte((c, cj) => captacao('c3')(c) && cj?.id === id) });
+    out.push({ chave: `conjunto:${id}`, rotulo: nome, nivel: 'conjunto', funil: 'c3', cpl: recorte((c, cj) => captacao('c3')(c) && cj?.id === id, false) });
   }
   return out;
 }

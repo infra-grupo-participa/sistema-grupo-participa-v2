@@ -21,7 +21,7 @@ export type Profissao = 'advogado' | 'contador' | 'estudante_direito' | 'outros'
 /** AAAA-MM-DD no fuso de São Paulo, inclusivo nas duas pontas. */
 export interface Periodo { de: string; ate: string }
 export interface FiltroCriativos { campanha?: string; conjunto?: string; anuncio?: string; pagina?: string }
-export interface Recorte { funil: FiltroFunil; canal: FiltroCanal; periodo: string; aba: AbaBlack; criativos: FiltroCriativos }
+export interface Recorte { funil: FiltroFunil; canal: FiltroCanal; periodo: string; periodoPersonalizado?: Periodo | null; aba: AbaBlack; criativos: FiltroCriativos }
 
 /** Régua de CPL do Caio (meta e teto, em reais). */
 export interface ReguaCpl { meta: number; teto: number }
@@ -85,7 +85,11 @@ export interface DesempenhoDia {
   videoP50: Valor; videoP75: Valor; thruplay: Valor;
 }
 /** Alcance e frequência do período inteiro: não somam entre dias nem entre campanhas. */
-export interface TotalPeriodo { nivel: 'campanha' | 'conjunto' | 'anuncio'; id: string; alcance: Valor; frequencia: Valor }
+export interface TotalPeriodo {
+  nivel: 'campanha' | 'conjunto' | 'anuncio'; id: string; alcance: Valor; frequencia: Valor;
+  /** Só campanha: intervalo do total salvo em mkt_trafego.desempenho_total. */
+  de?: string | null; ate?: string | null; gasto?: Valor; impressoes?: Valor; coletadoEm?: string | null;
+}
 export interface TrafegoBlack {
   campanhas: Campanha[]; conjuntos: Conjunto[]; anuncios: Anuncio[]; paginas: Pagina[];
   dias: DesempenhoDia[]; totais: TotalPeriodo[]; coletadoEm: string | null;

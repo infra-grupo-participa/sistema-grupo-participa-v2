@@ -33,6 +33,20 @@ describe('mapeadores das RPCs da Black', () => {
     expect(data.anuncioDesde).toBe('2026-10-08');
     expect(data.gastoCampanhas?.find((g) => g.campanhaId === '101')?.gasto).toBeCloseTo(130, 6);
   });
+  it('mapeia totais por campanha sem somar alcance nem frequência', () => {
+    const { data } = mapearTrafego({ ...RESPOSTA_TRAFEGO, totais: [
+      { campanha_id: 103, de: '2026-10-04', ate: '2026-10-13', gasto_centavos: 1511020, impressoes: 921921,
+        alcance: 200722, frequencia: 4.593, coletado_em: '2026-10-13T22:15:00Z' },
+      { campanha_id: 101, de: '2026-10-10', ate: '2026-10-13', gasto_centavos: null, impressoes: null,
+        alcance: null, frequencia: null, coletado_em: '2026-10-13T22:15:00Z' },
+    ] });
+    expect(data.totais).toEqual([
+      { nivel: 'campanha', id: '103', de: '2026-10-04', ate: '2026-10-13', gasto: 15110.2, impressoes: 921921,
+        alcance: 200722, frequencia: 4.593, coletadoEm: '2026-10-13T22:15:00Z' },
+      { nivel: 'campanha', id: '101', de: '2026-10-10', ate: '2026-10-13', gasto: null, impressoes: null,
+        alcance: null, frequencia: null, coletadoEm: '2026-10-13T22:15:00Z' },
+    ]);
+  });
   it('funil C1 provisório pelo nome: ANTECIPAÇÃO e MANIFESTO sem etapa viram C1; com etapa no nome, o banco manda', () => {
     const camp = (id: string, nome: string, etapa: string | null, subtipo: string | null = null) =>
       ({ id, nome, plataforma: 'meta', status: 'ACTIVE', objetivo: 'VIDEO', conta: 'c', projeto_id: 1, etapa, subtipo, conflito: false });

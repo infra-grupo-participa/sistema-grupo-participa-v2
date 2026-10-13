@@ -16,16 +16,18 @@ import { Chip, Farol, formatar, moeda } from './pecas';
 
 const CTR2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const ctrTexto = (v: Valor) => (v === null ? 'Sem dado' : `${CTR2.format(v * 100)}%`);
-const NOME_VALOR: Record<OrdemGaleria, string> = { leads: 'Leads pagos', cpl: 'CPL', ctr: 'CTR', gasto: 'Gasto' };
+const NOME_VALOR: Record<OrdemGaleria, string> = { leads: 'Leads pagos', cpl: 'CPL', ctr: 'CTR', gasto: 'Gasto', mql: '% MQL' };
 const EXPLICA: Record<OrdemGaleria, string> = {
   leads: 'do maior para o menor número de leads pagos; criativo de distribuição (C1) vai para o fim',
   cpl: 'do menor para o maior CPL; criativo sem CPL (distribuição, C1) vai para o fim',
   ctr: 'do maior para o menor CTR (cliques no link ÷ impressões); sem clique medido vai para o fim',
   gasto: 'do maior para o menor investimento no período',
+  mql: 'da maior para a menor proporção de pessoas MQL entre os cadastros do criativo',
 };
 
 function textoValor(ordem: OrdemGaleria, v: Valor): string {
   if (ordem === 'ctr') return ctrTexto(v);
+  if (ordem === 'mql') return v === null ? 'Sem dado' : `${(v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
   if (ordem === 'leads') return formatar(v, 'int');
   return formatar(v, 'brl');
 }
@@ -47,6 +49,7 @@ export function GaleriaCriativos({ itens, anuncio, selecionado, ativo, onAbrir }
           const a = anuncio(it.id); const r = it.resumo;
           const apagado = selecionado !== null && selecionado !== it.id;
           const v = valorOrdem(it, ordem);
+          const mqlSemPosicao = ordem === 'mql' && (r.leadsPagos < 5 || v === null);
           const miniatura = safeHttpUrl(a?.miniaturaUrl);
           return (
             <li key={it.id} className="atm-historico-card min-w-0">
@@ -59,9 +62,11 @@ export function GaleriaCriativos({ itens, anuncio, selecionado, ativo, onAbrir }
                     ? <img src={miniatura} alt={`Miniatura de ${it.nome}`} loading="lazy" className="block aspect-[8/5] w-full object-cover" />
                     : <MiniaturaFicticia id={it.id} formato={a?.formato ?? null} className="rounded-none" />}
                   <span className="absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-[var(--scrim)] px-2 py-0.5 text-[11px] font-semibold text-[var(--fg)]">
-                    <span className="tabular">{pos + 1}º</span>
-                    <span className="text-[var(--fg-2)]">{NOME_VALOR[ordem]}</span>
-                    <span className={'tabular ' + (v === null ? 'text-[var(--fg-3)]' : 'text-[var(--accent)]')}>{v === null ? 'Sem dado' : textoValor(ordem, v)}</span>
+                    <span className="tabular">{mqlSemPosicao ? '—' : `${pos + 1}º`}</span>
+                  <span className="text-[var(--fg-2)]">{NOME_VALOR[ordem]}</span>
+                    <span className={'tabular ' + (v === null ? 'text-[var(--fg-3)]' : 'text-[var(--accent)]')}>
+                      {ordem === 'mql' && r.leadsPagos < 5 ? 'menos de 5 leads' : v === null ? 'Sem dado' : textoValor(ordem, v)}
+                    </span>
                   </span>
                   <span className="absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-x-3 gap-y-0.5 bg-[var(--scrim)] px-2 py-1 text-[11px] text-[var(--fg)]">
                     <span className="tabular">{moeda(r.gasto)}</span>
@@ -72,9 +77,9 @@ export function GaleriaCriativos({ itens, anuncio, selecionado, ativo, onAbrir }
                   </span>
                 </span>
                 <span className="block p-2.5">
-                  <span className="block break-words text-xs font-semibold text-[var(--fg)]">{it.nome}</span>
-                  <span className="mt-1 block text-[11px] text-[var(--fg-3)]">
-                    {r.distribuicao ? `${formatar(r.impressoes, 'int')} impressões` : `${formatar(r.leadsPagos, 'int')} leads pagos · ${formatar(r.leads, 'int')} cadastros`}
+                  <span className="block break-words text-sm font-semibold leading-snug text-[var(--fg)]">{it.nome}</span>
+                  <span className="mt-1 block text-xs text-[var(--fg-2)]">
+                    {r.distribuicao ? `${formatar(r.impressoes, 'int')} impressões` : <><strong className="font-semibold text-[var(--fg)]">{formatar(r.leadsPagos, 'int')} leads pagos</strong><span className="text-[var(--fg-2)]"> · {formatar(r.leads, 'int')} cadastros</span></>}
                   </span>
                 </span>
               </button>

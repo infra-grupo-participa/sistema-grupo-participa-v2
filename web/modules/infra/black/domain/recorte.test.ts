@@ -23,6 +23,14 @@ describe('lerRecorte', () => {
     const r = lerRecorte({ funil: 'iscas', periodo: '7d', canal: 'meta', aba: 'criativos', cp: 'cp_1', cj: 'cj_2', cr: 'ad_3', pg: 'pg_4' });
     expect(lerRecorte(new URLSearchParams(escreverRecorte(r)))).toEqual(r);
   });
+  it('preserva o período personalizado na URL e rejeita datas inválidas', () => {
+    const r = lerRecorte(new URLSearchParams('periodo=personalizado&de=2026-10-05&ate=2026-10-10'));
+    expect(r.periodo).toBe('personalizado');
+    expect(r.periodoPersonalizado).toEqual({ de: '2026-10-05', ate: '2026-10-10' });
+    expect(lerRecorte(new URLSearchParams(escreverRecorte(r)))).toEqual(r);
+    expect(lerRecorte({ periodo: 'personalizado', de: '2026-02-30', ate: '2026-10-10' }).periodo).toBe('desde-inicio');
+    expect(lerRecorte({ periodo: 'personalizado', de: '2026-10-10', ate: '2026-10-05' }).periodo).toBe('desde-inicio');
+  });
   it('preserva parâmetro alheio (relogio) e array do Next', () => {
     const q = escreverRecorte(RECORTE_PADRAO, new URLSearchParams('relogio=2026-10-20&funil=c1'));
     expect(q).toBe('funil=todos&periodo=desde-inicio&canal=todos&aba=visao&relogio=2026-10-20');
@@ -35,6 +43,12 @@ describe('periodoDe', () => {
     expect(periodoDe('hoje', AGORA, CONFIG)).toEqual({ de: '2026-11-03', ate: '2026-11-03' });
     expect(periodoDe('7d', AGORA, CONFIG)).toEqual({ de: '2026-10-28', ate: '2026-11-03' });
     expect(periodoDe('desde-inicio', AGORA, CONFIG)).toEqual({ de: '2026-10-04', ate: '2026-11-03' });
+  });
+  it('aplica período personalizado inclusive e limita ao projeto e a hoje', () => {
+    expect(periodoDe('personalizado', AGORA, CONFIG, { de: '2026-10-05', ate: '2026-10-10' }))
+      .toEqual({ de: '2026-10-05', ate: '2026-10-10' });
+    expect(periodoDe('personalizado', AGORA, CONFIG, { de: '2026-10-01', ate: '2026-11-10' }))
+      .toEqual({ de: '2026-10-04', ate: '2026-11-03' });
   });
   it('semana do ciclo pela config', () => {
     expect(periodoDe('semana', new Date('2026-10-29T12:00:00-03:00'), CONFIG)).toEqual({ de: '2026-10-26', ate: '2026-10-29' });

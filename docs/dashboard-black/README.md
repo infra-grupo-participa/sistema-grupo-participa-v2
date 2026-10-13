@@ -660,3 +660,71 @@ antes, deu 191 / 165 e MQL 112).
 - Filtro cruzado no cliente não escala para 150 mil leads.
 - DDD 42: a tabela `dados.ddd_uf` diz PR (espelhada aqui); a BrasilAPI diz SC.
 - Base da casa no config = 188.013; o desenho fala em "cerca de 189 mil".
+
+## Redesign e correções com base no relatório de dados (13/10/2026)
+
+Esta seção substitui descrições anteriores que atribuíam os números de C1 ou o CPL de forma incorreta. O front não
+fixa os valores do relatório: continua lendo as RPCs, com os filtros escolhidos. Nenhum dado pessoal foi copiado.
+
+### Regras implementadas
+
+- **C1 na Jornada:** Teaser e Manifesto filtram `etapa_black = C1` pelo `subtipo` exato (`TEASER` e `MANIFESTO`).
+  Cortes exige `subtipo = CORTES`; sem campanha marcada assim, aparece Sem dado. Lembrete exige fase
+  `AQUECIMENTO` e campanha fora de C1. O nó Assistiu 75% usa o C1 inteiro. Não inferir subtipo pelo nome.
+- **Alcance e frequência:** `mapearTrafego` lê `r.totais`, chave `campanha_id` convertida para string, datas `de`/`ate`,
+  alcance, frequência e demais campos da migration A. Os totais são de toda a campanha, não do filtro atual. A tela
+  os mostra por campanha como “Período da campanha: de X a Y”; nunca soma alcance/frequência de campanhas distintas.
+- **Páginas:** cada anúncio só recebe uma página quando os leads pagos daquele anúncio, dentro do período e dos filtros
+  atuais, apontam todos para o mesmo texto exato de `dados_black_perfil.pagina`. Sem lead pago = “Página não medida”.
+  Se os leads do mesmo anúncio apontarem para mais de uma página, não atribui uma página. URL de destino não existe
+  na coleta atual e não é inventada. A correção definitiva depende da Edge Meta obter `link_destino`.
+- **MQL por criativo:** taxa = leads pagos MQL ÷ leads pagos com MQL conhecido. O ranking por MQL usa piso de cinco
+  leads pagos. Abaixo disso, o cartão vai ao fim, sem posição e com “menos de 5 leads”. A ordem não indica resultado
+  confiável para amostras pequenas.
+- **CPL geral:** campanhas de captação C2/C3 ÷ leads pagos atribuídos a essas campanhas. Remarketing fica fora.
+  `domain/decisoes.ts` tem o único parâmetro `INCLUIR_ENTRESAFRA_NO_CPL`, agora `false`, conforme decisão do Victor:
+  a campanha da Entresafra sai do cálculo até os leads daquele período serem importados. Mudança futura fica em um
+  único ponto.
+- **CPL por etapa:** sanfona fechada, uma etapa aberta de cada vez. C1 não mostra CPL, mostra CPM e custo por
+  visualização; campanha e conjunto exibem investimento, impressões, cliques, CTR, views de página e leads pagos;
+  MQL e CPL só aparecem quando há base para o cálculo. Iscas considera apenas Iscas C3.
+- **Histórico:** gráfico e detalhe mostram investimento do dia e leads acumulados, sem linha nem projeção de meta.
+- **Investimento em captação:** card em primeiro lugar no Funil macro. Separa Meta e Google. A fonte atual não entrega
+  investimento Google: aparece “sem fonte”, não zero; o total fica sem dado enquanto uma fonte estiver faltando.
+- **Janela e cadastros:** Respondi `consultoria_respondi` não foi mapeado. A migration B continua aguardando decisão.
+
+### Tela x fonte conferida no relatório do Galego
+
+Período padrão conferido no relatório: 04 a 13/10/2026, sem teste. Os valores abaixo descrevem a fonte e as fórmulas; a
+conferência visual autenticada continua pendente.
+
+| Área da tela | Regra/campo | Fonte informada no relatório | Valores de referência |
+|---|---|---|---|
+| Leads pagos e CPL | Leads com canal pago; investimento das campanhas elegíveis, com Entresafra desligada | `dados_black_perfil`, `dados_black_trafego.gastoCampanhas` | 14 leads pagos; R$ 347,97 ÷ 14 = R$ 24,86. O custo com Entresafra seria R$ 944,02, mas não entra no CPL agora. |
+| Investimento em captação | Nome contém LEAD, etapa C2/C3, sem remarketing; separado por canal | `campanhas[].nome`, `campanhas[].etapa`, `gastoCampanhas` | Meta R$ 944,02; Google sem fonte; total sem dado até existir fonte Google. |
+| Teaser / Manifesto / Cortes / Lembrete | Subtipo C1 exato / fase AQUECIMENTO fora de C1 | `campanhas[].etapa`, `campanhas[].subtipo`, `campanhas[].fase` | Teaser R$ 15.110,20; Manifesto R$ 3.680,40; Cortes sem dado; Lembrete sem valor de Manifesto atribuído. |
+| Alcance e frequência C1 | Total separado por campanha, com intervalo próprio | `dados_black_trafego.totais` | Teaser 200.722 / 4,5930 (04 a 13/10); Manifesto 50.897 / 2,3904 (07 a 13/10). Não somar. |
+| C3, páginas e leads | Página de lead pago do anúncio; anúncio sem lead fica não medido | `dados_black_perfil.pagina` por `anuncio_id` | 9 anúncios com lead pago apontam para `captacao`; C2 não tem campanha com veiculação. |
+| MQL e grupo | MQL da fonte; pessoas únicas MQL e entradas no grupo | `dados_black_perfil.mql`, `dados_black_perfil.entrou_grupo_em` | 151/222 MQL (68,0%); ingresso 117/151 = 77,5% na regra sem recorte. |
+| Histórico, 13/10 | Métricas por dia; acumulado por primeira data da pessoa | `dias_anuncio`, `dados_black_perfil` | Investimento R$ 927,25; C3 R$ 370,74; 6.666 impressões, 90 cliques, 81 LPV; 60 cadastros, 50 pessoas novas, 37 novas MQL, 14 pagos, 9 pagos MQL, 41 entradas no grupo. |
+| C1 no CPL por etapa | CPM e custo por visualização; nunca CPL | `dias_anuncio` | Teaser R$ 15.110,20 / 921.921 impressões; Manifesto R$ 3.680,40 / 121.662 impressões. Cortes sem subtipo CORTES = Sem dado. |
+| C3 no CPL por etapa | Campanha e conjunto; CPL só quando há lead pago | `dias_anuncio`, `dados_black_perfil`, ids externos de conjunto | Campanha 479754: R$ 333,50, 5.983 impressões, 82 cliques, CTR 1,37%, 74 LPV, 14 pagos, CPL R$ 23,82. Campanha 587257: R$ 14,26 em anúncios, 132 impressões, 2 cliques, 0 pagos. |
+
+**Diferença em aberto:** o relatório do Galego atualiza Consultoria para 73 envios / 62 pessoas; a orientação anterior do
+Victor preserva 72. O front não fixa nenhum desses totais e não adiciona Respondi. Confirmar qual número de negócio
+deve ser comunicado antes de qualquer ajuste de fonte ou rótulo.
+
+### Testes desta atualização
+
+```bash
+cd web
+npx vitest run modules/infra/black
+npx tsc --noEmit
+npx eslint modules/infra/black
+npm run lint:tokens
+npm run build
+```
+
+Pendências para fechar a validação: conferir a tela autenticada em 1280 px e 375 px, nos temas claro e escuro, e
+registrar os prints em `.maestri/entregas/black-dashboard-v2/`. A sessão local disponível está no login; não houve
+credencial QA autorizada para abrir os dados do dashboard nesta rodada.
