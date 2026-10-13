@@ -11,7 +11,7 @@ Pedido do Victor Hugo (12/10/2026). Desenho e plano técnico no cérebro do Vict
   `20261012231649` (cadastro e `dados_black_trafego`), C `20261012233334` (trava de modelo nas RPCs
   presenciais), B `20261012234606` (`dados_black_perfil`, `dados_black_leads`, `dados_black_grupo`, marcar teste)
   e a foto do grupo `20261013001456`. Detalhe de cada método na seção "Fonte real" abaixo.
-- **Não mergeado, sem push.** A decisão de levar para a `main` (deploy automático) é do Maestro/Victor no fim.
+- **Na `main` e no ar** (deploy automático da Hostinger a cada push na `main`).
 - A demonstração (dado fictício) continua existindo só em dev com `NEXT_PUBLIC_BLACK_DEMO=1`.
 - Fora do módulo, a branch toca 3 arquivos: a rota `app/(admin)/infra/dashboards/csm/[chave]/page.tsx`
   (desvia o modelo `jornada-captacao`), uma linha no `modules/infra/dados/domain/registro.ts` e a flag
@@ -192,8 +192,19 @@ gaveta de etapa e a de criativo. Em 360 a 768 px nenhum elemento passa da largur
 pixel com o antes: idêntico, fora o relógio "Lido às".
 
 Ficou de fora (a decidir): as barras do gráfico do Histórico seguem com 10 px de largura (a régua é o controle no
-celular); a lista de estados do mapa do Perfil tem 24 px de altura; e no desktop a lista do card Ingresso no grupo
-continua vazando para baixo da moldura (corrigir mudaria o 1440).
+celular); e a lista de estados do mapa do Perfil tem 24 px de altura.
+
+### Card Ingresso no grupo e modal descentralizado (13/10/2026, pedido do Victor)
+
+- **Card:** no desktop a lista por grupo (Advogados, Contadores, Outros) vazava para baixo da moldura, por cima da seção
+  seguinte. Causa: `[&>*]:h-full` dava a altura toda da célula ao KpiCard e a lista ficava fora. Agora a moldura vai
+  para fora em qualquer largura (`MOLDURA_COM_LISTA` em `ui/AbaVisaoGeral.tsx`) e só ela ocupa a célula.
+- **Modal:** o modal dos cards do funil macro abria no meio da aba, lá embaixo, e não no meio da tela. Causa: a animação
+  de entrada do painel (`.atm-historico-panel-enter`, em `app/globals.css`) usava `both` e deixava um `transform` preso
+  no painel; elemento com `transform` vira o bloco de referência do `position: fixed`. Trocado para `backwards`: a
+  animação é a mesma e nada fica preso. Vale também para os modais e gavetas do ATM, que usam a mesma classe.
+- Como testar: abrir a Visão geral a 1440 px, conferir a lista dentro do card e clicar num card do funil macro com a
+  página rolada até o funil: o modal tem que abrir no centro da tela.
 
 ## Decisões
 

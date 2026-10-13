@@ -27,18 +27,18 @@ const capLinhas = (linhas: LinhaPerfil[]) => linhas.filter((l) => ehCaptacao(l.f
 const valorTaxa = (t: TipoTaxa): Valor => t.valor;
 // Funil macro: cinco colunas com linhas iguais a partir de 1280 px; abaixo, duas (três a partir de 1024) com a altura
 // de cada linha, e o Ingresso no grupo (card com a lista por grupo) ocupa a linha inteira.
-// Abaixo de 1280 px o card com lista embaixo do número (Ingresso no grupo) ganha a moldura do KpiCard por fora, para a
-// lista ficar dentro dela; a moldura do KpiCard de dentro some. A partir de 1280 px nada muda.
-const MOLDURA_ABAIXO_XL = ' max-xl:overflow-hidden max-xl:border max-xl:border-l-4 max-xl:border-[var(--border)] max-xl:border-l-[var(--accent)] max-xl:bg-[var(--surface-2)]'
-  + ' max-xl:[&>*:first-child]:!rounded-none max-xl:[&>*:first-child]:!border-0 max-xl:[&>*:first-child]:!shadow-none';
+// Card com lista embaixo do número (Ingresso no grupo): a moldura do KpiCard vai para fora, para a lista ficar dentro
+// dela em qualquer largura; a moldura do KpiCard de dentro some. A partir de 1280 px a moldura de fora ocupa a célula.
+const MOLDURA_COM_LISTA = ' overflow-hidden border border-l-4 border-[var(--border)] border-l-[var(--accent)] bg-[var(--surface-2)]'
+  + ' [&>*:first-child]:!rounded-none [&>*:first-child]:!border-0 [&>*:first-child]:!shadow-none';
 const GRADE_MACRO = 'grid grid-cols-2 gap-3 lg:grid-cols-3 xl:auto-rows-fr xl:grid-cols-5';
 // Linha de CPL: no celular o nome da etapa fica com a primeira linha e o cálculo desce para a segunda.
 const ROTULO_LINHA_CPL = 'max-md:min-w-[10rem] ';
 
 function Cartao({ onAbrir, titulo, children, cheio = false }: { onAbrir?: () => void; titulo: string; children: ReactNode; cheio?: boolean | 'xl' }) {
-  // `cheio`: o card ocupa a altura toda da célula (grade com linhas iguais no funil macro). 'xl': só a partir de
-  // 1280 px; abaixo, altura natural (card com lista embaixo do número, que senão vaza para fora da célula).
-  const altura = cheio === 'xl' ? ' xl:h-full xl:[&>*]:h-full' + MOLDURA_ABAIXO_XL : cheio ? ' h-full [&>*]:h-full' : '';
+  // `cheio`: o card ocupa a altura toda da célula (grade com linhas iguais no funil macro). 'xl': card com lista embaixo
+  // do número; só a moldura de fora ocupa a célula (a partir de 1280 px), o KpiCard e a lista ficam com a altura natural.
+  const altura = cheio === 'xl' ? ' xl:h-full' + MOLDURA_COM_LISTA : cheio ? ' h-full [&>*]:h-full' : '';
   if (!onAbrir) return <div className={'min-w-0' + altura}>{children}</div>;
   return (
     <div role="button" tabIndex={0} aria-label={`Abrir detalhe: ${titulo}`} onClick={onAbrir}

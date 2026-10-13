@@ -316,7 +316,9 @@ body {
 /* Entrada de listas/grids — stagger sutil (delay aplicado por índice via style inline).
    Reveal informacional discreto (sem overshoot), fiel ao painel operacional. */
 .gp-rise { animation: gp-rise 280ms var(--ease-out) both; }
-.atm-historico-panel-enter { animation: atm-historico-panel 220ms var(--ease-out) both; }
+/* backwards, não both: o transform não fica preso no painel depois da animação. Com ele preso, o painel vira o bloco de
+   referência do position: fixed e o modal aberto dentro dele centra no painel (lá embaixo), não na tela. */
+.atm-historico-panel-enter { animation: atm-historico-panel 220ms var(--ease-out) backwards; }
 .atm-historico-barra, .atm-historico-funil-bar { transform-box: fill-box; transform-origin: left center; animation: atm-historico-grow 620ms var(--ease-out) both; }
 .atm-historico-interativo { transition: opacity 180ms ease, filter 180ms ease, transform 180ms ease, box-shadow 180ms ease; }
 .atm-historico-interativo:hover, .atm-historico-interativo:focus-visible { filter: brightness(1.14); transform: scale(1.012); box-shadow: var(--shadow-sm); }
