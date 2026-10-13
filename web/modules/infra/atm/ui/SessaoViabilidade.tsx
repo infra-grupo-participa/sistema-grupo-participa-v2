@@ -1,54 +1,176 @@
 'use client';
 
-import { useState } from 'react';
-import { Card, DataTable, EmptyState, KpiCard, SectionCard, Tabs, Td, Th, Thead, Tr } from '@/shared/ui/components';
+import { useRef, useState } from 'react';
+import { Badge, Card, ConfirmDialog, DataTable, EmptyState, KpiCard, SectionCard, Tabs, Td, Th, Thead, Toggle, Tr } from '@/shared/ui/components';
 import { Modal } from '@/shared/ui/components/Modal';
-import { conversaoSessaoViabilidade } from '../domain/sessao-viabilidade';
+import {
+  contarVendasSessaoViabilidade,
+  conversaoSessaoViabilidade,
+  dataDaVendaSessaoViabilidade,
+  notaVendasTesteForaDoTotal,
+  valorDaVendaSessaoViabilidade,
+  type VendaSessaoViabilidade,
+} from '../domain/sessao-viabilidade';
 import type { MetricaAtm } from '../domain/dashboard';
+import { carregarAtmSvVendas, desmarcarAtmTeste, marcarAtmTeste, type Resultado } from '../infrastructure/atm-data';
+
+type AbaSv = 'vendas' | 'precheckout' | 'resumo';
 
 const inteiro = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+const CLASSE_CARD = 'text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] rounded-[var(--r-lg)]';
 
 function formatarMetrica(metrica: MetricaAtm) {
   return metrica.semDado ? 'Sem dado' : inteiro.format(metrica.valor);
 }
 
-export function SessaoViabilidade({ vendas, podeVerContato, isMaster }: {
+function SeloMockup() {
+  return <Badge tone="warning">MOCKUP</Badge>;
+}
+
+export function SessaoViabilidade({ chave, vendas, vendasTeste, periodoLabel, podeVerContato, isMaster, onTesteAlterado }: {
+  chave: string;
   vendas: MetricaAtm;
+  /** `dados_atm_resumo.vendas_teste`: vendas que a marcação de teste tirou do total. */
+  vendasTeste: number | null;
+  periodoLabel: string;
   podeVerContato: boolean;
   isMaster: boolean;
+  /** Releitura do resumo depois de marcar ou desmarcar teste (o card Total de vendas vem dele). */
+  onTesteAlterado: () => Promise<void>;
 }) {
   const [aberto, setAberto] = useState(false);
-  const [aba, setAba] = useState('tabela');
+  const [aba, setAba] = useState<AbaSv>('vendas');
+  const [incluirTeste, setIncluirTeste] = useState(isMaster);
+  const [lista, setLista] = useState<Resultado<VendaSessaoViabilidade[]>>({ data: [], semDado: true, erro: null });
+  const [lidoEm, setLidoEm] = useState<Date | null>(null);
+  const [carregando, setCarregando] = useState(false);
+  const [alvo, setAlvo] = useState<VendaSessaoViabilidade | null>(null);
+  const [salvando, setSalvando] = useState<string | null>(null);
+  const [erroAcao, setErroAcao] = useState<string | null>(null);
+  const pedidoAtual = useRef(0);
+
+  // Pré-checkout da SV ainda não tem fonte: fica nulo (mockup), e a conversão herda o "Sem dado".
   const preCheckoutsUnicos: number | null = null;
   const conversao = conversaoSessaoViabilidade(vendas, preCheckoutsUnicos);
+  const notaTeste = notaVendasTesteForaDoTotal(vendasTeste);
+  const contagem = contarVendasSessaoViabilidade(lista.data);
+  const desatualizada = lista.erro !== null && lidoEm !== null;
+
+  // Só pede a lista (que traz dado pessoal) para quem pode ver contato. Falha mantém a última lista.
+  const carregar = async (comTeste: boolean) => {
+    if (!podeVerContato) return;
+    const id = ++pedidoAtual.current;
+    setCarregando(true);
+    const r = await carregarAtmSvVendas(chave, isMaster && comTeste);
+    if (id !== pedidoAtual.current) return;
+    setCarregando(false);
+    if (!r.semDado) { setLista(r); setLidoEm(new Date()); }
+    else setLista((anterior) => ({ ...anterior, erro: r.erro }));
+  };
+
+  const abrir = (proxima: AbaSv) => {
+    setAba(proxima);
+    setErroAcao(null);
+    setAberto(true);
+    void carregar(incluirTeste);
+  };
+
+  const trocarInclusao = (valor: boolean) => {
+    setIncluirTeste(valor);
+    void carregar(valor);
+  };
+
+  const mudarTeste = async (venda: VendaSessaoViabilidade, teste: boolean) => {
+    if (salvando || !isMaster) return;
+    setSalvando(venda.id); setErroAcao(null);
+    const r = teste
+      ? await marcarAtmTeste(chave, venda.email, venda.telefone)
+      : await desmarcarAtmTeste(chave, venda.email, venda.telefone);
+    setSalvando(null);
+    setAlvo(null);
+    if (r.erro) { setErroAcao(r.erro); return; }
+    await Promise.all([carregar(incluirTeste), onTesteAlterado()]);
+  };
 
   return <>
-    <SectionCard title="Sessão de Viabilidade" subtitle="Pré-checkouts únicos por e-mail, vendas e conversão. A lista será ligada à fonte própria da sessão.">
+    <SectionCard
+      title="Sessão de Viabilidade"
+      subtitle="Total de vendas, pré-checkouts únicos por e-mail e conversão do pré-checkout."
+      right={<span className="inline-flex items-center gap-2 text-xs text-[var(--fg-3)]">Pré-checkout em <SeloMockup /></span>}
+    >
       <div className="grid gap-3 sm:grid-cols-3">
-        <button type="button" onClick={() => setAberto(true)} className="text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] rounded-[var(--r-lg)]">
-          <KpiCard label="Pré-checkouts únicos" value="Sem dado" hint="sem dado ainda · fonte não ligada" />
+        <button type="button" onClick={() => abrir('vendas')} className={CLASSE_CARD}>
+          <KpiCard label="Total de vendas" value={formatarMetrica(vendas)} hint={vendas.semDado ? 'sem dado ainda' : notaTeste ?? (vendasTeste === 0 ? 'nenhuma venda de teste no período' : 'dados_atm_resumo')} bar="green" title={`dados_atm_resumo.vendas · ${periodoLabel}`} />
         </button>
-        <button type="button" onClick={() => setAberto(true)} className="text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] rounded-[var(--r-lg)]">
-          <KpiCard label="Total de vendas" value={formatarMetrica(vendas)} hint={vendas.semDado ? 'sem dado ainda · oferta não cadastrada' : 'dados_atm_resumo'} bar="green" />
+        <button type="button" onClick={() => abrir('precheckout')} className={CLASSE_CARD}>
+          <KpiCard label="Pré-checkouts únicos" value={<span className="inline-flex flex-wrap items-center gap-2">Sem dado <SeloMockup /></span>} hint="mockup · fonte da sessão ainda não ligada" />
         </button>
-        <button type="button" onClick={() => setAberto(true)} className="text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] rounded-[var(--r-lg)]">
-          <KpiCard label="Conversão do pré-checkout" value={conversao.semDado ? 'Sem dado' : `${conversao.valor.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`} hint="vendas ÷ pré-checkouts únicos" />
+        <button type="button" onClick={() => abrir('resumo')} className={CLASSE_CARD}>
+          <KpiCard label="Conversão do pré-checkout" value={conversao.semDado ? 'Sem dado' : `${conversao.valor.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`} hint="vendas ÷ pré-checkouts únicos · depende do pré-checkout (mockup)" />
         </button>
       </div>
-      {!podeVerContato && <p className="mt-3 text-xs text-[var(--fg-3)]">Dados pessoais da lista exigem a capacidade contato.ver.</p>}
-      {podeVerContato && isMaster && <p className="mt-3 text-xs text-[var(--fg-3)]">A marcação de teste ficará disponível por pessoa quando a fonte da sessão for ligada.</p>}
+      {!podeVerContato && <p className="mt-3 text-xs text-[var(--fg-3)]">A lista de vendas com dados pessoais exige a capacidade contato.ver.</p>}
     </SectionCard>
 
-    <Modal open={aberto} onClose={() => setAberto(false)} title="Pré-checkout da Sessão de Viabilidade" width="max-w-6xl">
-      <Tabs tabs={[{ k: 'tabela', l: 'Pessoas' }, { k: 'resumo', l: 'Resumo' }]} active={aba} onChange={setAba} label="Visões do pré-checkout da Sessão de Viabilidade" />
-      {aba === 'tabela' ? podeVerContato ? <>
-        <div className="mt-4">
-          <DataTable minWidth={isMaster ? 1120 : 1040}>
-            <Thead><Th>Data do evento</Th><Th>Nome</Th><Th>E-mail</Th><Th>Telefone</Th><Th>Data do pré-checkout</Th><Th>Comprou?</Th><Th>Status da compra</Th><Th>Oferta</Th>{isMaster && <Th>Ação</Th>}</Thead>
-            <tbody><tr><td colSpan={isMaster ? 9 : 8} className="p-0"><EmptyState title="Pré-checkout da sessão ainda sem dados" hint="A fonte própria de pré-checkouts da Sessão de Viabilidade ainda não foi ligada. Nenhum contato foi carregado." /></td></tr></tbody>
-          </DataTable>
+    <Modal open={aberto} onClose={() => setAberto(false)} title="Sessão de Viabilidade" width="max-w-6xl">
+      <Tabs tabs={[{ k: 'vendas', l: 'Vendas' }, { k: 'precheckout', l: 'Pré-checkout · MOCKUP' }, { k: 'resumo', l: 'Resumo' }]} active={aba} onChange={(k) => setAba(k === 'precheckout' ? 'precheckout' : k === 'resumo' ? 'resumo' : 'vendas')} label="Visões da Sessão de Viabilidade" />
+
+      {aba === 'vendas' && (!podeVerContato
+        ? <EmptyState title="Lista indisponível" hint="A capacidade contato.ver é necessária para visualizar dados pessoais." />
+        : <>
+          <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-[var(--fg-3)]">
+            {isMaster && <Toggle checked={incluirTeste} onChange={trocarInclusao} disabled={carregando} label="Incluir testes" />}
+            <span>{lista.semDado ? 'sem dado ainda' : `${inteiro.format(contagem.validas)} vendas válidas na lista${incluirTeste && isMaster ? ` · ${inteiro.format(contagem.teste)} de teste fora das contagens` : ''}`}</span>
+            <span className="ml-auto">{carregando ? 'Carregando…' : lidoEm ? `lista lida às ${lidoEm.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}` : ''}</span>
+          </div>
+          <p className="mb-3 text-xs text-[var(--fg-3)]">A lista não recebe o período selecionado. O card Total de vendas segue o período aplicado: {periodoLabel}.</p>
+          {lista.erro && <p role="status" className="mb-3 rounded border border-[var(--yellow)]/40 p-3 text-sm text-[var(--yellow)]">{lista.erro}{desatualizada ? ' A lista abaixo é a última lida.' : ''}</p>}
+          {erroAcao && <p role="alert" className="mb-3 rounded border border-[var(--red)]/40 p-3 text-sm text-[var(--red)]">{erroAcao}</p>}
+          {lista.semDado
+            ? <EmptyState title="Vendas da Sessão de Viabilidade" hint="sem dado ainda" />
+            : lista.data.length === 0
+              ? <EmptyState title="Nenhuma venda da Sessão de Viabilidade" />
+              : <div className={'max-h-[65vh] overflow-auto ' + (desatualizada ? 'opacity-60' : '')}>
+                <DataTable minWidth={isMaster ? 1320 : 1160}>
+                  <Thead><Th>Data do evento</Th><Th>Nome</Th><Th>E-mail</Th><Th>Telefone</Th><Th>Status</Th><Th>Valor bruto</Th><Th>Valor líquido</Th><Th>Oferta</Th><Th>Transação</Th>{isMaster && <><Th>Teste</Th><Th>Ação</Th></>}</Thead>
+                  <tbody>{lista.data.map((venda) => <Tr key={venda.id} className={venda.teste ? 'opacity-60' : ''}>
+                    <Td className="whitespace-nowrap">{dataDaVendaSessaoViabilidade(venda) ?? 'Sem dado'}</Td>
+                    <Td>{venda.nome ?? 'Sem dado'}</Td>
+                    <Td>{venda.email ?? 'Sem dado'}</Td>
+                    <Td className="whitespace-nowrap">{venda.telefone ?? 'Sem dado'}</Td>
+                    <Td>{venda.status ?? 'Sem dado'}</Td>
+                    <Td className="whitespace-nowrap tabular">{valorDaVendaSessaoViabilidade(venda.valorBruto, venda.moeda) ?? 'Sem dado'}</Td>
+                    <Td className="whitespace-nowrap tabular">{valorDaVendaSessaoViabilidade(venda.valorLiquido, venda.moeda) ?? 'Sem dado'}</Td>
+                    <Td>{venda.ofertaCodigo ?? 'Sem dado'}</Td>
+                    <Td className="whitespace-nowrap">{venda.transacao ?? 'Sem dado'}</Td>
+                    {isMaster && <>
+                      <Td>{venda.teste ? <Badge tone="warning">TESTE</Badge> : 'Não'}</Td>
+                      <Td>{(venda.email || venda.telefone) ? <button type="button" disabled={salvando === venda.id} onClick={() => { setErroAcao(null); if (venda.teste) void mudarTeste(venda, false); else setAlvo(venda); }} className="whitespace-nowrap rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-3)] disabled:opacity-50">{salvando === venda.id ? 'Salvando…' : venda.teste ? 'Desmarcar teste' : 'Marcar como teste'}</button> : 'Sem e-mail e telefone'}</Td>
+                    </>}
+                  </Tr>)}</tbody>
+                </DataTable>
+              </div>}
+          {isMaster && !lista.semDado && <p className="mt-2 text-xs text-[var(--fg-3)]">Linha marcada TESTE fica fora de todas as contagens deste evento (marcação em dados.marcacoes_teste).</p>}
+        </>)}
+
+      {aba === 'precheckout' && <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--fg-2)]"><SeloMockup /><span>Visão de pré-checkout da Sessão de Viabilidade em mockup: sem fonte ligada, sem número e sem contato.</span></div>
+        <DataTable minWidth={760}>
+          <Thead><Th>Data do pré-checkout</Th><Th>Nome</Th><Th>E-mail</Th><Th>Telefone</Th><Th>Comprou?</Th></Thead>
+          <tbody><tr><td colSpan={5} className="p-0"><EmptyState title="Pré-checkout da sessão sem fonte" hint="MOCKUP · a regra pedida é pré-checkouts únicos por e-mail. Os campos desta tabela dependem da fonte que ainda será definida." /></td></tr></tbody>
+        </DataTable>
+      </div>}
+
+      {aba === 'resumo' && <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard label="Total de vendas" value={formatarMetrica(vendas)} hint={`dados_atm_resumo · ${periodoLabel}`} bar="green" />
+          <KpiCard label="Vendas de teste fora" value={vendasTeste == null ? 'Sem dado' : inteiro.format(vendasTeste)} hint="dados_atm_resumo.vendas_teste" />
+          <KpiCard label="Pré-checkouts únicos" value={<span className="inline-flex flex-wrap items-center gap-2">Sem dado <SeloMockup /></span>} hint="mockup" />
+          <KpiCard label="Conversão do pré-checkout" value={conversao.semDado ? 'Sem dado' : `${conversao.valor.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`} hint="vendas ÷ pré-checkouts únicos" />
         </div>
-      </> : <EmptyState title="Lista indisponível" hint="A capacidade contato.ver é necessária para visualizar dados pessoais." /> : <div className="mt-4"><Card className="p-4"><h3 className="text-sm font-semibold text-[var(--fg)]">Resumo</h3><p className="mt-2 text-sm text-[var(--fg-2)]">sem dado ainda · o resumo por situação será preenchido quando a fonte própria for conectada.</p></Card></div>}
+        <Card className="p-4"><p className="text-sm text-[var(--fg-2)]">Total de vendas vem de dados_atm_resumo.vendas, já sem as vendas marcadas como teste. A conversão fica sem dado enquanto o pré-checkout da sessão for mockup.</p></Card>
+      </div>}
+      {alvo && <ConfirmDialog title="Marcar venda como teste" confirmLabel="Marcar como teste" cancelLabel="Cancelar" onCancel={() => setAlvo(null)} onConfirm={() => void mudarTeste(alvo, true)} message="Esta marcação vale para este Seminário ATM e usa o e-mail e o telefone desta linha: a pessoa e os dados relacionados deixam de contar nos indicadores deste evento. Quer continuar?" />}
     </Modal>
   </>;
 }

@@ -4,6 +4,7 @@ import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import { dashboardAtmSemDado, type DashboardAtm, type LeadAtm, type NumeroGrupoAtm, type PeriodoAplicadoAtm } from '../domain/dashboard';
 import type { DatasPeriodoAtm } from '../domain/periodo';
+import type { VendaSessaoViabilidade } from '../domain/sessao-viabilidade';
 
 export type Resultado<T> = { data: T; semDado: boolean; erro: string | null };
 export type ResultadoAcao = { data: number | null; erro: string | null };
@@ -231,6 +232,48 @@ export async function carregarAtmGrupo(chave: string, periodo?: DatasPeriodoAtm,
     })),
     semDado: r.semDado,
     erro: r.erro,
+  };
+}
+
+export const TEMPO_LIMITE_SV_VENDAS_MS = 15_000;
+const MENSAGEM_TEMPO_SV_VENDAS = 'As vendas da Sessão de Viabilidade demoraram a responder. Os últimos dados disponíveis foram mantidos.';
+
+/**
+ * Vendas da Sessão de Viabilidade (`public.dados_atm_sv_vendas`). Contrato em docs/dashboard-atm/MODELO-DE-DADOS.md.
+ * Qualquer falha devolve `semDado: true` com lista vazia: quem chama mantém a última lista e só mostra o aviso.
+ * RPC ainda não aplicada (`PGRST202`) = "sem dado ainda", sem mensagem de erro.
+ */
+export async function carregarAtmSvVendas(chave: string, incluirTeste = false, tempoLimiteMs = TEMPO_LIMITE_SV_VENDAS_MS): Promise<Resultado<VendaSessaoViabilidade[]>> {
+  const nome = 'dados_atm_sv_vendas';
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const esgotou = new Promise<Resultado<Linha[]>>((resolve) => {
+    timer = setTimeout(() => {
+      logQueryError(nome, { message: 'TIMEOUT' });
+      resolve({ data: [], semDado: true, erro: MENSAGEM_TEMPO_SV_VENDAS });
+    }, tempoLimiteMs);
+  });
+  const r = await Promise.race([rpc(nome, chave, undefined, { p_incluir_teste: incluirTeste }), esgotou]);
+  clearTimeout(timer);
+  if (r.semDado || r.erro) return { data: [], semDado: true, erro: r.erro };
+  return {
+    data: r.data.map((x, i) => ({
+      id: texto(x.transacao) ?? `linha-${i}`,
+      transacao: texto(x.transacao),
+      aprovadoEm: texto(x.aprovado_em),
+      pedidoEm: texto(x.pedido_em),
+      diaAprovado: texto(x.dia_aprovado),
+      nome: texto(x.nome),
+      email: texto(x.email),
+      telefone: texto(x.telefone),
+      valorBruto: num(x.valor_bruto),
+      valorLiquido: num(x.valor_liquido),
+      moeda: texto(x.moeda),
+      status: texto(x.status),
+      ofertaCodigo: texto(x.oferta_codigo),
+      teste: x.teste === true,
+    })),
+    semDado: false,
+    erro: null,
   };
 }
 

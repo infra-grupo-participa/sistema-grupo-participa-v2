@@ -180,22 +180,39 @@ O cartão Escritório em Infra > Dashboards saiu do estado "Em breve" (`emBreve`
 - A aba Tráfego abre com um funil em barras no padrão do Histórico: Impressões, Vídeo plays, 25%, 50%, 75%, 100%, Cliques no link e Visualizações de página. A base é a impressão; a passagem entre etapas e o "% das impressões" são cálculo da tela. Etapa sem dado na API aparece como "Sem dado" e não calcula passagem.
 - Alcance e frequência ficam fora do funil (são pessoas, não ações) e aparecem nos cards, só quando a RPC não manda `alcance_motivo`.
 - Publicado junto com o banco do Galego (branch `victor-atm-trafego-banco`) e a tela do JP (branch `victor-atm-trafego-tela`). Card ClickUp 17tya50fugc.
-# Sessão de Viabilidade no ATM
 
-## Mockup inicial · 13/10/2026
+## Sessão de Viabilidade no ATM
 
-Foi adicionada à tela da chave `atm-elaine-1-2026-10` a seção **Sessão de Viabilidade**, com três cards clicáveis: **Pré-checkouts únicos**, **Total de vendas** e **Conversão do pré-checkout**. O modal usa o componente compartilhado e abre nas abas **Pessoas** (tabela primeiro) e **Resumo**.
+Card ClickUp 17tya50ga3c. Branch `victor-atm-sv-precheckout`. Componente `web/modules/infra/atm/ui/SessaoViabilidade.tsx`, regra pura em `web/modules/infra/atm/domain/sessao-viabilidade.ts`, leitura em `carregarAtmSvVendas` (`web/modules/infra/atm/infrastructure/atm-data.ts`).
 
-Esta entrega é um mockup honesto, sem lista de pessoas nem contagens fictícias:
+### 13/10/2026: mockup inicial (JP, commit 672d728)
 
-- Pré-checkouts únicos: `sem dado ainda` até existir a fonte própria da sessão. A regra solicitada é um e-mail único.
-- Total de vendas: lê `dados_atm_resumo.vendas` já carregado pelo dashboard. Quando não houver oferta cadastrada, mantém `sem dado ainda`, conforme o contrato do ATM. O código da oferta não é definido nesta tela.
-- Conversão: vendas ÷ pré-checkouts únicos, calculada em `web/modules/infra/atm/domain/sessao-viabilidade.ts`; permanece `sem dado` se qualquer fonte estiver ausente ou se o denominador for zero.
-- A tabela reserva as colunas Data do evento, Nome, E-mail, Telefone, Data do pré-checkout, Comprou?, Status da compra e Oferta. A fonte ainda precisa confirmar quais campos existem; nenhum contato é carregado pelo mockup.
-- O servidor passa `contato.ver` como permissão para revelar a lista pessoal. O modal oculta a tabela quando a capacidade não está presente.
+Seção **Sessão de Viabilidade** abaixo dos cards gerais, com três cards clicáveis (Pré-checkouts únicos, Total de vendas, Conversão do pré-checkout), modal no componente compartilhado, função `conversaoSessaoViabilidade` e a capacidade `contato.ver` passada pelo servidor (`podeVerContato`).
 
-### Ainda falta ligar
+### 13/10/2026: vendas ligadas ao banco e pré-checkout em mockup
 
-O contrato atual em `MODELO-DE-DADOS.md` não especifica uma lista própria de pré-checkouts da Sessão de Viabilidade: `dados_atm_leads` é a lista geral de leads e tem apenas o indicador `no_pre_checkout`. Não usar essa lista como se fosse a lista da SV. Falta confirmar com o Galego a RPC/fonte para e-mails únicos e os campos disponíveis, como a oferta da sessão será identificada sem código inventado e se `dados_marcar_teste` / `dados_desmarcar_teste` atende à marcação por pessoa na SV. A ação de marcar teste fica pendente desse contrato; não há botão falso no mockup.
+O que foi feito, continuando o mockup:
 
-Como testar: abrir o dashboard ATM e localizar a seção abaixo dos cards gerais. Os cards abrem o modal; a aba Pessoas mostra o estado vazio sem contatos; a aba Resumo informa que os dados ainda não foram conectados. Verificar também o gate `contato.ver` no servidor e a conversão unitária da fórmula. Não é preciso alterar o banco.
+- **Total de vendas** (card): `dados_atm_resumo.vendas`, já carregado pelo dashboard e no período aplicado. A nota abaixo do número vem de `dados_atm_resumo.vendas_teste` ("N vendas de teste fora do total"); zero mostra "nenhuma venda de teste no período", nulo não afirma nada.
+- **Histórico de vendas** (1ª aba do modal, "Vendas"): tabela ligada à RPC nova `public.dados_atm_sv_vendas(p_chave, p_incluir_teste)`. Colunas: Data do evento (data da venda: `aprovado_em` em São Paulo, ou `dia_aprovado`), Nome, E-mail, Telefone, Status, Valor bruto, Valor líquido (na `moeda` da linha; sem moeda sai só o número), Oferta (`oferta_codigo`), Transação. Para master: colunas Teste e Ação.
+- **Teste vale no banco**: o botão Marcar/Desmarcar teste chama as RPCs que já existem, `dados_marcar_teste` / `dados_desmarcar_teste`, com o e-mail e o telefone da linha (gravam em `dados.marcacoes_teste`). Marcar pede confirmação, como no modal de leads. Depois da ação, a lista e o resumo são relidos. Nenhum dado de teste foi criado.
+- **Incluir testes**: alternador só para master (`Toggle` compartilhado), ligado por padrão, igual ao modal de leads (que pede `p_incluir_teste = isMaster`). Linha com `teste = true` aparece esmaecida, com o selo **TESTE**, e fica fora da contagem "vendas válidas na lista".
+- **Dado pessoal**: sem `contato.ver`, a aba Vendas mostra "Lista indisponível" e a RPC **não é chamada** (o dado pessoal não chega ao navegador).
+- **Pré-checkout**: aba "Pré-checkout · MOCKUP" e card "Pré-checkouts únicos" com o selo **MOCKUP** visível, sem número e sem contato. A regra pedida continua sendo pré-checkouts únicos por e-mail.
+- **Conversão do pré-checkout** = vendas ÷ pré-checkouts únicos (`conversaoSessaoViabilidade`). Enquanto o pré-checkout for mockup (nulo), aparece "Sem dado".
+- **Resumo** (3ª aba): Total de vendas, Vendas de teste fora, Pré-checkouts únicos (MOCKUP) e Conversão.
+
+**Situação.** A RPC `dados_atm_sv_vendas` tem migration pronta em outra frente e **NÃO está aplicada** em produção. Até ser aplicada, a tela degrada para "sem dado ainda": `PGRST202` (função inexistente) vira lista vazia sem mensagem de erro. Recusa do banco, falha de rede ou mais de 15 s sem resposta viram aviso amarelo, e a última lista lida continua na tela, esmaecida, com o horário da leitura. Nada foi publicado.
+
+**Como testar.**
+
+1. Em `web/`: `npx vitest run modules/infra/atm` (domínio da SV e leitura da RPC: contrato, `PGRST202`, `42501`, rede e tempo limite), `npx tsc --noEmit`, `npx eslint modules/infra/atm`.
+2. Antes da migration: abrir o dashboard da chave `atm-elaine-1-2026-10`, clicar em Total de vendas. A aba Vendas deve mostrar "sem dado ainda", sem quebrar; o card Total de vendas segue o resumo.
+3. Depois da migration aplicada, logado como master com `contato.ver`: conferir a quantidade de linhas sem teste contra a fonte (Hotmart) e contra o card Total de vendas no período do evento; marcar uma venda como teste e conferir que o card cai em 1 e a nota "venda de teste fora do total" aparece; desmarcar e conferir a volta.
+4. Logado sem `contato.ver`: a aba Vendas mostra "Lista indisponível" e, na aba Rede do navegador, não há chamada a `dados_atm_sv_vendas`.
+
+**O que falta.**
+
+- Aplicar a migration de `dados_atm_sv_vendas` (outra frente) e conferir a tela contra a fonte.
+- A RPC não recebe período: a lista é a que a RPC devolver, e o card Total de vendas segue o período selecionado. A tela avisa isso. Se a lista e o card divergirem no período do evento, decidir qual manda antes de mostrar à liderança.
+- Fonte própria dos pré-checkouts da Sessão de Viabilidade (e-mails únicos). `dados_atm_leads.no_pre_checkout` é da lista geral de leads e não deve ser usado como lista da SV. Sem essa fonte, o card, a aba e a conversão continuam em MOCKUP / "Sem dado".

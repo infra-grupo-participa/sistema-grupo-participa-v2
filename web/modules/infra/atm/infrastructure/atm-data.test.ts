@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock('@/shared/infrastructure/supabase/browser-client', () => ({ createBrowserSupabase: () => ({ rpc: mocks.rpc }) }));
 vi.mock('@/shared/infrastructure/supabase/query-log', () => ({ logQueryError: vi.fn() }));
 
-import { carregarAtmDisparosLista, carregarAtmGrupo, carregarAtmLeads, carregarAtmResumo, carregarAtmTrafego, desmarcarAtmTeste, marcarAtmTeste } from './atm-data';
+import { carregarAtmDisparosLista, carregarAtmGrupo, carregarAtmSvVendas, carregarAtmLeads, carregarAtmResumo, carregarAtmTrafego, desmarcarAtmTeste, marcarAtmTeste } from './atm-data';
 
 describe('leitura e marcação do dashboard ATM', () => {
   beforeEach(() => mocks.rpc.mockReset());
@@ -187,5 +187,66 @@ describe('leitura e marcação do dashboard ATM', () => {
     expect(await marcarAtmTeste('atm-elaine-1-2026-10', 'qa@example.com', null)).toEqual({
       data: null, erro: 'Seu usuário não tem permissão para marcar testes neste dashboard.',
     });
+  });
+});
+
+describe('vendas da Sessão de Viabilidade (dados_atm_sv_vendas)', () => {
+  // Com chaves: devolver o mock faria o Vitest chamá-lo como limpeza depois de cada teste.
+  beforeEach(() => { mocks.rpc.mockReset(); });
+  afterEach(() => vi.useRealTimers());
+
+  it('chama a RPC só com chave e inclusão de teste e mapeia o contrato, preservando nulos', async () => {
+    mocks.rpc.mockResolvedValue({ data: [
+      { transacao: 'HP-fixture-1', aprovado_em: '2026-10-14T01:30:00Z', pedido_em: '2026-10-14T01:20:00Z', dia_aprovado: '2026-10-13', nome: 'QA', email: 'qa@example.com', telefone: '5511999999999', valor_bruto: '10.50', valor_liquido: null, moeda: 'BRL', status: 'APPROVED', oferta_codigo: 'fixture', teste: true },
+      { transacao: null, aprovado_em: null, pedido_em: null, dia_aprovado: null, nome: null, email: null, telefone: null, valor_bruto: null, valor_liquido: null, moeda: null, status: null, oferta_codigo: null, teste: null },
+    ], error: null });
+
+    const resultado = await carregarAtmSvVendas('atm-elaine-1-2026-10', true);
+
+    expect(mocks.rpc).toHaveBeenCalledWith('dados_atm_sv_vendas', { p_chave: 'atm-elaine-1-2026-10', p_incluir_teste: true });
+    expect(resultado.semDado).toBe(false);
+    expect(resultado.erro).toBeNull();
+    expect(resultado.data[0]).toEqual({
+      id: 'HP-fixture-1', transacao: 'HP-fixture-1', aprovadoEm: '2026-10-14T01:30:00Z', pedidoEm: '2026-10-14T01:20:00Z', diaAprovado: '2026-10-13',
+      nome: 'QA', email: 'qa@example.com', telefone: '5511999999999', valorBruto: 10.5, valorLiquido: null, moeda: 'BRL', status: 'APPROVED',
+      ofertaCodigo: 'fixture', teste: true,
+    });
+    expect(resultado.data[1]).toMatchObject({ id: 'linha-1', transacao: null, valorBruto: null, moeda: null, teste: false });
+  });
+
+  it('não pede testes por padrão', async () => {
+    mocks.rpc.mockResolvedValue({ data: [], error: null });
+    const resultado = await carregarAtmSvVendas('atm-elaine-1-2026-10');
+    expect(mocks.rpc).toHaveBeenCalledWith('dados_atm_sv_vendas', { p_chave: 'atm-elaine-1-2026-10', p_incluir_teste: false });
+    expect(resultado).toEqual({ data: [], semDado: false, erro: null });
+  });
+
+  it('trata a RPC ainda não aplicada como sem dado, sem mensagem de erro', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } });
+    expect(await carregarAtmSvVendas('atm-elaine-1-2026-10')).toEqual({ data: [], semDado: true, erro: null });
+  });
+
+  it('trata recusa do banco como sem dado com aviso, para a tela manter a última lista', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: '42501' } });
+    expect(await carregarAtmSvVendas('atm-elaine-1-2026-10')).toEqual({ data: [], semDado: true, erro: 'Sem permissão para ler este dashboard.' });
+  });
+
+  it('trata falha de rede como sem dado com aviso', async () => {
+    mocks.rpc.mockImplementation(async () => { throw new Error('offline'); });
+    const resultado = await carregarAtmSvVendas('atm-elaine-1-2026-10');
+    expect(resultado.semDado).toBe(true);
+    expect(resultado.data).toEqual([]);
+    expect(resultado.erro).toMatch(/Falha de conexão/);
+  });
+
+  it('desiste depois do tempo limite em vez de travar o bloco', async () => {
+    vi.useFakeTimers();
+    mocks.rpc.mockReturnValue(new Promise(() => {}));
+    const pendente = carregarAtmSvVendas('atm-elaine-1-2026-10', false, 1000);
+    await vi.advanceTimersByTimeAsync(1000);
+    const resultado = await pendente;
+    expect(resultado.semDado).toBe(true);
+    expect(resultado.data).toEqual([]);
+    expect(resultado.erro).toMatch(/demoraram a responder/);
   });
 });
