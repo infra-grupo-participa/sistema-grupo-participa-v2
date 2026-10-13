@@ -159,9 +159,9 @@ export async function carregarAtmResumo(chave: string, periodo?: DatasPeriodoAtm
     return { valor: n === null ? 0 : n / 100, semDado: n === null };
   };
   const investimentoTotalCentavos = num(row.investimento_total_centavos);
-  const metricaDependenteDoInvestimento = (key: string) => investimentoTotalCentavos === null
+  const metricaDependenteDoInvestimento = (key: string, emCentavos = true) => investimentoTotalCentavos === null
     ? { valor: 0, semDado: true }
-    : valorCentavos(key);
+    : emCentavos ? valorCentavos(key) : valor(key);
   const periodoAplicado: PeriodoAplicadoAtm = {
     de: typeof row.periodo_de === 'string' ? row.periodo_de : null,
     ate: typeof row.periodo_ate === 'string' ? row.periodo_ate : null,
@@ -185,7 +185,8 @@ export async function carregarAtmResumo(chave: string, periodo?: DatasPeriodoAtm
         conversaoPreCheckout: valor('conversao_pre_checkout_pct'),
         cac: metricaDependenteDoInvestimento('cac_centavos'),
         faturamentoBruto: valor('receita_bruta'), faturamentoLiquido: valor('receita_liquida'),
-        roas: metricaDependenteDoInvestimento('roas_liquido'),
+        // roas_liquido já vem em vezes (numeric(10,2), receita em reais × 100 ÷ investimento em centavos): não divide por 100.
+        roas: metricaDependenteDoInvestimento('roas_liquido', false),
       },
       semDado: false,
     },

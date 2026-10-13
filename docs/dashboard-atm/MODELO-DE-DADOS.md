@@ -326,9 +326,9 @@ fonte: a tela usa `campanha`. Nulo é "sem dado", nunca zero; as taxas são calc
 
 ## Vendas da Sessão de Viabilidade (`dados_atm_sv_vendas`, APLICADA em 13/10/2026)
 
-**Situação (13/10/2026): contrato combinado, migration `20261013190752` escrita em outra frente, NÃO aplicada em produção.** Até ser
-aplicada, a tela recebe `PGRST202` e mostra "sem dado ainda". Card ClickUp 17tya50ga3c. Quem lê: aba Vendas do modal da
-Sessão de Viabilidade (`carregarAtmSvVendas` em `web/modules/infra/atm/infrastructure/atm-data.ts`).
+**Situação: APLICADA em produção em 13/10/2026** (versão `20261013190752`). Se a função sumir, a tela recebe `PGRST202` e
+mostra "sem dado ainda". Card ClickUp 17tya50ga3c. Quem lê: modal do card Vendas do funil (desde 13/10/2026, 18h35; antes,
+a seção separada da Sessão de Viabilidade), por `carregarAtmSvVendas` em `web/modules/infra/atm/infrastructure/atm-data.ts`.
 
 `public.dados_atm_sv_vendas(p_chave text, p_incluir_teste boolean default false)`, 1 linha por venda:
 
@@ -358,3 +358,31 @@ Sessão de Viabilidade (`carregarAtmSvVendas` em `web/modules/infra/atm/infrastr
   perda de `contato.ver` no meio da sessão) limpa a lista e mostra "Lista indisponível"; `P0002`, `22023` e qualquer outro
   viram aviso com a última lista mantida. A RPC levanta `42501` (fora da equipe, sem `contato.ver`, teste sem ser master)
   e `P0002` (chave que não é do modelo ATM).
+
+## Lista de pré-checkout: RPC que falta (13/10/2026)
+
+O card Pré-checkout lê `dados_atm_resumo.pre_checkout_pessoas` (conta de `dados.atm_pre_checkout` no período). A lista de
+quem preencheu o formulário **não tem RPC pública**: `dados.atm_pre_checkout` é interna; `dados_atm_leads.no_pre_checkout`
+só cobre quem é lead da lista do AC (quem fez pré-checkout sem ser lead não aparece); `dados_presencial_leads` dá P0002 para
+chave de outro modelo desde `20261012233334`. Por isso o modal mostra "Lista ainda não ligada". Proposta para o back-end
+(não criada):
+
+`public.dados_atm_pre_checkout(p_chave text, p_incluir_teste boolean default false)`, período opcional `p_de date, p_ate date`
+como no resumo, ordem `primeiro_em desc`, 1 linha por e-mail:
+
+| coluna | tipo | de onde |
+|---|---|---|
+| `email` | `text` | `dados.pre_checkout_todos` (o mesmo de `dados.atm_pre_checkout`) |
+| `nome` | `text` | idem |
+| `telefone` | `text` | idem |
+| `primeiro_em` | `timestamptz` | idem (Data do pré-checkout) |
+| `fonte` | `text` | idem |
+| `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` | `text` | idem |
+| `comprou` | `boolean` | e-mail em `dados.atm_vendas` (mesma regra das contagens); nulo sem `oferta_codigo` |
+| `teste` | `boolean` | `dados.teste_ativo(p_chave, email, telefone)` |
+
+- Linhas sem teste com `p_incluir_teste = false` iguais, em número, a `pre_checkout_pessoas` no mesmo período.
+- Gate igual ao de `dados_atm_sv_vendas`: `dados.atm_cadastro` (equipe e modelo `seminario-atm`), `contato.ver`
+  (master sempre), `p_incluir_teste = true` só master, tudo `42501`; `security definer`, `search_path ''`, execute só
+  `authenticated`.
+

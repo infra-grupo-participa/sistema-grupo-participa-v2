@@ -20,14 +20,14 @@ import {
   type DadosTrafegoAtm,
   type Resultado,
 } from '../infrastructure/atm-data';
-import { CANAIS_DISPARO_ATM, METRICAS_RESUMO_ATM, montarAvisosTesteAtm, rotuloListaOrigem, rotuloValorResumoLead, type DashboardAtm, type LeadAtm, type NumeroGrupoAtm } from '../domain/dashboard';
+import { CANAIS_DISPARO_ATM, METRICAS_RESUMO_ATM, metricaDoCardAtm, modalDoCardAtm, montarAvisosTesteAtm, rotuloListaOrigem, rotuloValorResumoLead, type DashboardAtm, type LeadAtm, type NumeroGrupoAtm, type ResumoAtm } from '../domain/dashboard';
 import type { RegistroAtm } from '../domain/registro';
 import { dataPtBr, datasDoPeriodo, type PresetPeriodoAtm } from '../domain/periodo';
 import { RoscaCategorias } from '@/modules/infra/dados/ui/viz/RoscaCategorias';
 import { DisparosDetalhe } from './DisparosDetalhe';
 import { HistoricoAtm } from './HistoricoAtm';
 import { TrafegoAtm } from './TrafegoAtm';
-import { SessaoViabilidade } from './SessaoViabilidade';
+import { ModalPreCheckoutAtm, ModalVendasAtm, useVendasSvAtm } from './ModaisFunilAtm';
 
 type Linha = Record<string, unknown>;
 type PedidoAtualizacao = { periodo: ReturnType<typeof datasDoPeriodo>; detalhado: boolean; modal: boolean; isMaster: boolean };
@@ -52,6 +52,12 @@ function formatar(v: number, tipo: string) {
   if (tipo === 'multiplicador') return v.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + 'x';
   return inteiro.format(v);
 }
+/** Dica (tooltip) dos cards do funil que têm fonte ou regra a explicar. */
+const TITULO_CARD: Partial<Record<keyof ResumoAtm, string>> = {
+  preCheckout: 'dados_atm_resumo.pre_checkout_pessoas · clique para ver a lista',
+  vendas: 'dados_atm_resumo.vendas · clique para ver a lista',
+  conversaoPreCheckout: 'dados_atm_resumo.conversao_pre_checkout_pct = compradores distintos ÷ pré-checkout × 100',
+};
 function dataHora(iso: string | null) { return iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'Não lançado'; }
 
 function GraficoLeads({ rows }: { rows: Linha[] }) {
@@ -119,6 +125,9 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
   const [posLive, setPosLive] = useState<Resultado<Linha[]>>({ data: [], semDado: true, erro: null });
   const [canalAtivo, setCanalAtivo] = useState('whatsapp_api');
   const [modal, setModal] = useState(false);
+  // Modais dos cards Pré-checkout e Vendas do funil (13/10/2026). O de leads segue em `modal`, que também liga a leitura de leads e grupo.
+  const [modalFunil, setModalFunil] = useState<'preCheckout' | 'vendas' | null>(null);
+  const vendasSv = useVendasSvAtm(projeto.chave, isMaster, podeVerContato);
   const [periodoSelecionado, setPeriodoSelecionado] = useState<PresetPeriodoAtm>('evento');
   const [atualizado, setAtualizado] = useState<Date | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -221,7 +230,15 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
     return null;
   };
 
-  const linhasResumo = useMemo(() => METRICAS_RESUMO_ATM.map((m) => ({ ...m, metrica: resumo?.resumo[m.chave] ?? { valor: 0, semDado: true } })), [resumo]);
+  const linhasResumo = useMemo(() => METRICAS_RESUMO_ATM.map((m) => ({ ...m, metrica: metricaDoCardAtm(resumo?.resumo, m.chave) })), [resumo]);
+  // Resumo ainda não lido na primeira carga: o card diz que está carregando em vez de "Não lançado".
+  const carregandoResumo = resumo === null && atualizando;
+  const abrirCard = (chave: keyof ResumoAtm) => {
+    const alvo = modalDoCardAtm(chave);
+    if (alvo === 'leads') setModal(true);
+    else if (alvo === 'vendas') { setModalFunil('vendas'); void vendasSv.carregar(); }
+    else if (alvo === 'preCheckout') setModalFunil('preCheckout');
+  };
   const canal = canais.data.find((x) => x.canal === canalAtivo);
   const sessao = comparecimento.data[0];
   const ciclo = (nome: string) => posLive.data.find((x) => x.ciclo === nome);
@@ -258,9 +275,8 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
           <div className="flex items-center justify-between gap-2"><span className="text-[var(--fg-3)]">Tráfego</span><strong className="tabular text-[var(--fg)]">{!custoTrafegoInvestimento || custoTrafegoInvestimento.semDado ? 'Sem dado' : moeda.format(custoTrafegoInvestimento.valor)}</strong></div>
         </div>
       </Card>
-      {linhasResumo.map((m) => <button key={m.chave} type="button" onClick={() => { if (m.chave === 'leads') setModal(true); }} className="text-left"><KpiCard label={m.rotulo} value={m.metrica.semDado ? 'Não lançado' : formatar(m.metrica.valor, m.formato)} hint={m.metrica.semDado ? 'sem dado ainda' : undefined} bar={m.chave === 'vendas' ? 'green' : 'accent'} /></button>)}
+      {linhasResumo.map((m) => <button key={m.chave} type="button" onClick={() => abrirCard(m.chave)} className="text-left"><KpiCard label={m.rotulo} value={m.metrica.semDado ? (carregandoResumo ? 'Carregando…' : 'Não lançado') : formatar(m.metrica.valor, m.formato)} hint={m.metrica.semDado && !carregandoResumo ? 'sem dado ainda' : undefined} bar={m.chave === 'vendas' ? 'green' : 'accent'} title={TITULO_CARD[m.chave] ? `${TITULO_CARD[m.chave]} · ${intervalo}` : undefined} /></button>)}
     </div>
-    <SessaoViabilidade chave={projeto.chave} vendas={resumo?.resumo.vendas ?? { valor: 0, semDado: true }} vendasTeste={resumo?.periodo.vendasTeste ?? null} periodoLabel={intervalo} podeVerContato={podeVerContato} isMaster={isMaster} onTesteAlterado={() => atualizar(true)} />
     <SectionCard title="Evolução diária" subtitle={`Leads, grupo, pré-checkout, vendas, faturamento e custo. ${intervalo}`}>
       {serie.length ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs text-[var(--fg-3)]">{['Dia', 'Leads', 'Ingresso no grupo', 'Saídas', 'Pré-checkout', 'Vendas', 'Faturamento bruto', 'Custo disparo'].map((x) => <th key={x} className="p-2">{x}</th>)}</tr></thead><tbody>{serie.map((r) => <tr key={String(r.dia)} className="border-t border-[var(--border)]">{['dia', 'leads', 'grupo_entradas', 'grupo_saidas', 'pre_checkout', 'vendas', 'receita_bruta', 'custo_disparo_centavos'].map((k) => <td key={k} className="p-2">{k === 'dia' ? String(r[k] ?? '') : renderVal(k === 'custo_disparo_centavos' && valor(r[k]) != null ? (valor(r[k]) ?? 0) / 100 : r[k], k === 'receita_bruta' || k === 'custo_disparo_centavos' ? 'moeda' : 'inteiro')}</td>)}</tr>)}</tbody></table></div> : <EmptyState title="Sem série disponível" hint="sem dado ainda" />}
     </SectionCard>
@@ -278,6 +294,8 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
       {posLive.erro && <p role="status" className="mb-3 text-sm text-[var(--yellow)]">{posLive.erro}</p>}
       {posLive.data.length ? <div className="grid gap-4 md:grid-cols-2">{(['aberto', 'fechado'] as const).map((nome) => { const p = ciclo(nome); return <div key={nome} className="rounded-[var(--r-md)] border border-[var(--border)] p-4"><h3 className="font-semibold capitalize">Ciclo {nome}</h3><div className="mt-3 grid grid-cols-2 gap-3"><KpiCard label="Vendas" value={renderVal(p?.vendas, 'inteiro')} hint={p?.vendas == null ? 'sem dado ainda' : undefined} /><KpiCard label="Conversão" value={renderVal(p?.conversao_pct, 'percentual')} hint={p?.conversao_pct == null ? 'sem dado ainda' : undefined} /></div></div>; })}</div> : <EmptyState title="Pós-live sem dados" hint="sem dado ainda" />}
     </SectionCard>
+    <ModalPreCheckoutAtm open={modalFunil === 'preCheckout'} onClose={() => setModalFunil(null)} preCheckout={metricaDoCardAtm(resumo?.resumo, 'preCheckout')} periodoLabel={intervalo} podeVerContato={podeVerContato} />
+    <ModalVendasAtm open={modalFunil === 'vendas'} onClose={() => setModalFunil(null)} chave={projeto.chave} vendas={metricaDoCardAtm(resumo?.resumo, 'vendas')} vendasTeste={resumo?.periodo.vendasTeste ?? null} periodoLabel={intervalo} podeVerContato={podeVerContato} isMaster={isMaster} sv={vendasSv} onTesteAlterado={() => atualizar(true)} />
     <ModalLeads open={modal} onClose={() => setModal(false)} result={leads} grupo={grupo} serie={serie} periodoLabel={intervalo} isMaster={isMaster} onToggleLead={toggleLead} onToggleGrupo={toggleGrupo} />
     </div>
     <div role="tabpanel" id={idsTrafego.panel} aria-labelledby={idsTrafego.tab} hidden={abaPrincipal !== 'trafego'}>

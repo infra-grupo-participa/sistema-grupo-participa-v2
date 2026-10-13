@@ -15,15 +15,16 @@ Os cards aparecem na ordem do briefing:
 3. Ingresso no grupo
 4. % ingresso no grupo
 5. Taxa de evasão
-6. Custo com disparo
-7. CPL
-8. Pré-checkout
-9. Vendas
-10. Taxa de conversão do pré-checkout
-11. CAC
-12. Faturamento bruto
-13. Faturamento líquido
-14. ROAS
+6. CPL
+7. Pré-checkout (abre a lista de pré-checkout)
+8. Vendas (abre a lista de vendas da Sessão de Viabilidade)
+9. Taxa de conversão do pré-checkout
+10. CAC
+11. Faturamento bruto
+12. Faturamento líquido
+13. ROAS
+
+Antes deles vem o card Investimento geral (com as parcelas Disparo e Tráfego). O card "Custo com disparo" saiu em 13/10/2026 (ver "Funil com Pré-checkout e Vendas" abaixo).
 
 O front lê somente RPCs Supabase com a chave do dashboard:
 
@@ -181,9 +182,34 @@ O cartão Escritório em Infra > Dashboards saiu do estado "Em breve" (`emBreve`
 - Alcance e frequência ficam fora do funil (são pessoas, não ações) e aparecem nos cards, só quando a RPC não manda `alcance_motivo`.
 - Publicado junto com o banco do Galego (branch `victor-atm-trafego-banco`) e a tela do JP (branch `victor-atm-trafego-tela`). Card ClickUp 17tya50fugc.
 
-## Sessão de Viabilidade no ATM
+## Funil com Pré-checkout e Vendas (13/10/2026, 18h35, branch `victor-atm-funil-sv`)
 
-Card ClickUp 17tya50ga3c. Branch `victor-atm-sv-precheckout`. Componente `web/modules/infra/atm/ui/SessaoViabilidade.tsx`, regra pura em `web/modules/infra/atm/domain/sessao-viabilidade.ts`, leitura em `carregarAtmSvVendas` (`web/modules/infra/atm/infrastructure/atm-data.ts`).
+**Pedido do Victor (13/10/2026, 18h35).** A seção separada "Sessão de Viabilidade" (barra com 3 cards e modal) não era o que ele queria. Decisões:
+
+1. **Seção "Sessão de Viabilidade" removida da página.** O componente `SessaoViabilidade.tsx` foi apagado; a lista de vendas e a marcação de teste foram reaproveitadas no modal do card Vendas (`web/modules/infra/atm/ui/ModaisFunilAtm.tsx`).
+2. **Cards Pré-checkout e Vendas do funil** continuam lendo `dados_atm_resumo.pre_checkout_pessoas` e `dados_atm_resumo.vendas`. Zero do banco aparece como zero; "Não lançado / sem dado ainda" só quando a coluna vem nula (vendas é nula quando o cadastro não tem `oferta_codigo`) ou quando o resumo não foi lido. Na primeira carga, enquanto o resumo não chega, os cards dizem "Carregando…" em vez de "Não lançado".
+3. **Modais dos dois cards**, no padrão do card Leads (componente `Modal`, `DataTable`):
+   - **Vendas:** lista de `public.dados_atm_sv_vendas` (Data da venda, Nome com a transação embaixo, E-mail, Telefone, Status, Bruto / líquido, Oferta; para master, Teste e Ação). "Incluir testes" e marcar/desmarcar teste só para master, pelo e-mail da linha. Sem `contato.ver` a RPC não é chamada e o modal mostra "Lista indisponível". A nota "N vendas de teste fora do total" (`vendas_teste`) aparece só para master. A lista não tem período; o modal avisa.
+   - **Pré-checkout:** mostra o número do card e a tabela com as colunas pedidas (Data do pré-checkout, Nome, E-mail, Telefone, Comprou?, utm_source) no estado **"Lista ainda não ligada"**, sem linha e sem número inventado: não existe RPC pública com a lista de pré-checkout do ATM (ver MODELO-DE-DADOS.md, "Lista de pré-checkout: RPC que falta").
+4. **Taxa de conversão do pré-checkout:** o card já existia e continua usando a regra do banco, `conversao_pre_checkout_pct` = **compradores distintos (e-mail) ÷ `pre_checkout_pessoas` × 100** (migration `20261009230000`). A hipótese do Victor era vendas ÷ pré-checkout, e a tela antiga da SV calculava vendas ÷ pré-checkouts únicos. **Diferença:** o banco conta pessoas que compraram (um e-mail com duas vendas conta 1), a hipótese conta transações (conta 2). Nenhuma das duas exige que o comprador tenha passado pelo pré-checkout (essa conta existe no banco como `compradores_no_pre_checkout`, sem card). A tela não recalcula: sem denominador (pré-checkout nulo ou 0) mostra "Não lançado / sem dado ainda", nunca 0% (`metricaDoCardAtm` em `domain/dashboard.ts`). A dica do card mostra a fórmula. Se o Victor quiser vendas ÷ pré-checkout, a mudança é no banco, não na tela.
+5. **Card "Custo com disparo" removido.** Conferido antes na migration `20261009230000` (`dados_atm_resumo`): `investimento_total_centavos = coalesce(custo de disparo, 0) + custo de tráfego`, e CPL, CAC e ROAS são calculados sobre esse total. O custo de disparo continua visível como a parcela "Disparo" do card Investimento geral e na coluna "Custo disparo" da Evolução diária.
+
+**Correção junto (achada no print):** o card ROAS dividia `roas_liquido` por 100 desde o commit `af9b51f` (era tratado como centavos). `roas_liquido` já vem em vezes (`numeric(10,2)`), então um ROAS de 4,82x aparecia como 0,05x. Corrigido em `carregarAtmResumo` (`infrastructure/atm-data.ts`), com teste.
+
+**Situação:** não publicado. Nenhuma mudança de banco.
+
+**Como testar.**
+1. Em `web/`: `npx vitest run modules/infra/atm` (cards do funil, `metricaDoCardAtm`, zero contra nulo, ROAS), `npx tsc --noEmit`, `npx eslint modules/infra/atm`, `npm run lint:tokens`, `npm run build`.
+2. Logado, abrir a chave `atm-elaine-1-2026-10`: não há seção "Sessão de Viabilidade" nem card "Custo com disparo"; Pré-checkout e Vendas mostram o número do resumo (13/10, 18h35: 1 e 0); a taxa mostra o `conversao_pre_checkout_pct` do banco.
+3. Clicar em Vendas: a lista bate com o card no período do evento (descontadas as de teste). Como master, marcar e desmarcar uma venda de teste e ver o card mudar.
+4. Clicar em Pré-checkout: aparece o número e "Lista ainda não ligada".
+5. Logado sem `contato.ver`: os dois modais mostram "Lista indisponível" e não há chamada a `dados_atm_sv_vendas` na aba Rede.
+
+**O que falta:** a RPC da lista de pré-checkout (banco) e, depois dela, ligar o modal.
+
+## Sessão de Viabilidade no ATM (substituída em 13/10/2026, 18h35)
+
+Esta seção descreve a versão anterior, em seção separada, que saiu da página: ver "Funil com Pré-checkout e Vendas" acima. Card ClickUp 17tya50ga3c. Branch `victor-atm-sv-precheckout`. Componente `web/modules/infra/atm/ui/SessaoViabilidade.tsx`, regra pura em `web/modules/infra/atm/domain/sessao-viabilidade.ts`, leitura em `carregarAtmSvVendas` (`web/modules/infra/atm/infrastructure/atm-data.ts`).
 
 ### 13/10/2026: mockup inicial (JP, commit 672d728)
 
