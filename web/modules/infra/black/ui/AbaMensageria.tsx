@@ -1,6 +1,7 @@
 'use client';
 
-// Aba 4, Mensageria (dado fictício com selo; auditoria do Victor em 12/10). Cada envio tem um objetivo próprio,
+// Aba 4, Mensageria. Topo: listas para disparo, dado REAL (BlocoListas.tsx, 13/10). Abaixo, os envios (dado fictício com
+// selo; auditoria do Victor em 12/10). Cada envio tem um objetivo próprio,
 // então o custo é do envio (custo total e custo por mensagem enviada), não de um resultado depois dele: o
 // "custo por ingresso" saiu. Cinco canais: API, SMS e ligação (pagos, lado a lado) e grupo e e-mail (sem custo,
 // com métricas próprias). Embaixo, a lista de envios no padrão do ATM (`atm/ui/DisparosDetalhe.tsx`), com filtro
@@ -11,6 +12,7 @@ import { dividir, somar, taxa } from '../domain/metricas';
 import { CANAIS_DISPARO, CANAL_PAGO } from '../domain/tipos';
 import type { CanalDisparo, CanalMensageria, EnvioMensageria, MetricasDisparo, Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
+import { BlocoListas } from './BlocoListas';
 import { Chip, formatar, Numero, SeloFicticio, Taxa } from './pecas';
 
 /** Rótulo de cada métrica no canal; null = o canal não mede (a linha não aparece). */
@@ -50,7 +52,17 @@ function dataHora(v: string): string {
   return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}` : v;
 }
 
+/** Topo da aba: as listas para disparo (dado real); embaixo, os envios, canais e custo (ainda fictício). */
 export function AbaMensageria({ d }: { d: DadosTela }) {
+  return (
+    <div className="space-y-6">
+      <BlocoListas chave={d.chave} demo={d.fonte.modo === 'demonstracao'} />
+      <Envios d={d} />
+    </div>
+  );
+}
+
+function Envios({ d }: { d: DadosTela }) {
   const m = d.mensageria;
   const [filtro, setFiltro] = useState<CanalDisparo | 'todos'>('todos');
   const [limite, setLimite] = useState(POR_PAGINA);

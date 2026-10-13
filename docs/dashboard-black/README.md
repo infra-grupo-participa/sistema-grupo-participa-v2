@@ -410,6 +410,65 @@ concluída mais antiga. Cada grupo fica com foto a cada ~10 min.
 - O CNHF não muda: `controle` e o hook `sendflow-webhook` continuam intactos. O Victor desliga no painel do SendFlow os
   hooks de campanha BF26 que estiverem apontando para lá, quando houver.
 
+## Listas para disparo na Mensageria (Fase 1, 13/10/2026)
+
+Topo da aba **Mensageria**, com **dado real**, separado dos blocos de envios que têm o selo de dado fictício
+(`ui/BlocoListas.tsx`). As decisões do Victor de 13/10 estão em `Projetos/dashboard-black-friday/CONCEPCAO-LISTAS-MENSAGERIA.md`,
+no cérebro dele. A migration é a `20261013180931`; o detalhe e a prova estão em
+`infra/supabase/migrations/20261013180931.explain.md`.
+
+- **As 3 listas** (um cartão cada, com a contagem de agora, "atualizado há X min" e os botões **Baixar CSV** e **Ver**):
+  1. **Live de consultoria**: todo mundo de todas as fontes, só o geral.
+  2. **Fora do grupo da Black**, com as guias Geral, Advogado, Contador e Outros:
+     - Advogado inclui estudante de direito;
+     - Outros inclui quem não tem profissão, e a tela diz quantos são;
+     - quem saiu do grupo também está aqui;
+     - aviso fixo: "fora do grupo = sem registro de entrada".
+  3. **Saíram do grupo**: da Black ou da consultoria. O CSV traz "Grupo de onde saiu" (Black ou Consultoria e o
+     subgrupo) e "Segmento". Também tem guias por segmento.
+- **CSV:**
+  - colunas `Nome, Email, Telefone`, com BOM e escape, como no `ForaDoGrupo.vue` do CNHF;
+  - nome do arquivo `black_<lista>[_<segmento>]_AAAA-MM-DD_HHhMM.csv`, no horário de Brasília;
+  - o telefone fora do padrão (DDI estrangeiro, número quebrado, sem o 9 ou sem telefone) nunca entra no CSV principal.
+    Ele sai num arquivo à parte, `..._fora-do-padrao_...`, com a coluna Motivo.
+- **Ver** abre a gaveta lateral (`PainelLateral` em `ui/GavetaLateral.tsx`) com:
+  - busca por nome, e-mail ou telefone;
+  - segmento, situação nos dois grupos e as fontes de cada pessoa.
+- **Regras (no banco, sem opção na tela):**
+  - uma pessoa por linha (telefone, 8 últimos dígitos, ou e-mail);
+  - sem teste;
+  - **sem a Turma Especial**: a tela mostra quantos foram removidos;
+  - grupo da consultoria congelado; "fora do grupo" é sempre em relação ao grupo da Black.
+- **De onde vem cada fonte:**
+  - **captação:** `metodo.pesquisa_respostas` com origem `metodo-perfeito`;
+  - **isca:** `metodo.pesquisa_respostas` (fluxograma), `rede.diagnosticos` (checkup) e `rede.futurometros`;
+  - **página da consultoria:** `metodo.consultoria_aplicacoes`. Essas três já chegam pela view `dados.black_leads`.
+  - **Respondi da consultoria:** `JmSmjBBS`, workspace 3504, pelo `respondi-sync` diário, incluindo as parciais que
+    deixaram contato;
+  - **grupo da Black:** os 3 grupos BF26, pela foto do SendFlow e pelo webhook;
+  - **grupo da consultoria:** "Consultoria ao Vivo - Aberto", pelo histórico do SendFlow carregado em 13/10 e pela foto.
+    O SendFlow não exporta os subgrupos cheios (#1 e #2).
+  - **Turma Especial:** `dados.turma_especial_chaves`, só os hashes.
+- **Permissão:**
+  - os números dos cartões aparecem para quem acessa o dashboard;
+  - Ver e Baixar exigem a capacidade **`contato.ver`**. Os masters têm sempre; para os outros, liga com
+    `acesso_capacidade_definir`, e quem recebe é decisão do Victor.
+  - Sem a permissão, a tela diz o que pedir.
+- **Log:**
+  - cada Ver e cada Baixar grava em `dados.black_lista_downloads` quem, ação, lista, segmento, linhas e quando;
+  - o registro é gravado pelo banco, não pela tela;
+  - consulta: `select * from dados.black_lista_downloads order by em desc`.
+- **Recarregar a Turma Especial** quando a planilha da Isabela mudar:
+  - o script lê a aba Página1 com a conta Google do Victor, calcula o sha256 na máquina e regrava a tabela inteira;
+  - o roteiro está no explain da migration;
+  - ainda não é automático: risco anotado.
+- **Como testar:**
+  1. Abrir `/infra/dashboards/csm/black-friday-2026-10?aba=mensageria` com um master.
+  2. Conferir os cartões e baixar um CSV. A linha nova aparece no log.
+  3. Com um usuário da equipe que não é master, Ver e Baixar respondem "sem permissão".
+- **Planilha automática** (seção abaixo): continua como está, também sem a Turma Especial. **O Apps Script de hora em
+  hora é opcional.** Ele não precisa ser instalado, porque o botão do dashboard resolve.
+
 ## Lista de disparo automática (13/10/2026)
 
 Planilha: "[BLACK FRIDAY/26] LISTA DISPARO LIVE CONSULTORIA 13/10"
@@ -433,7 +492,7 @@ hora. Migration `20261013174100`; o detalhe da regra está em `infra/supabase/mi
   - quem só está no grupo entra com nome e e-mail vazios;
   - a Turma Especial (planilha da Isabela) sai no Apps Script, por e-mail ou telefone. Não há casamento por documento,
     porque nenhuma fonte da lista pede CPF.
-- **Caminho:**
+- **Caminho (OPCIONAL desde 13/10: o botão da Mensageria substitui):**
   - o Apps Script `infra/apps-script/black-lista-disparo/Codigo.gs` é um projeto separado, só do Victor e não
     compartilhado;
   - ele chama `public.black_lista_disparo(p_chave)`, que dá acesso só ao anon. A chave é gerada no próprio Apps Script e

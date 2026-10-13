@@ -5,7 +5,7 @@
 // o cabeçalho da gaveta, com o botão Fechar, ficava escondido atrás da barra. Agora: botão X fixo no topo (o
 // cabeçalho não rola; só o corpo rola), Esc fecha, clique fora (no fundo) fecha, o foco fica preso na gaveta e
 // volta a quem abriu ao fechar.
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '@/shared/ui/icons';
 import { NO } from '../domain/jornada';
@@ -17,10 +17,25 @@ import { ROTULO_INTEIRO } from './pecas';
 const FOCAVEL = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 export function GavetaLateral({ d, alvo, onClose, onTrocar }: { d: DadosTela; alvo: AlvoGaveta | null; onClose: () => void; onTrocar: (a: AlvoGaveta) => void }) {
+  const nome = !alvo ? '' : alvo.tipo === 'etapa' ? NO.get(alvo.id)?.titulo ?? 'Etapa' : d.idx.anuncio.get(alvo.id)?.nome ?? 'Criativo';
+  const tipo = alvo?.tipo === 'etapa' ? 'Etapa da jornada' : 'Criativo';
+  return (
+    <PainelLateral aberta={alvo !== null} tipo={tipo} titulo={nome} onClose={onClose}>
+      {alvo && (alvo.tipo === 'etapa'
+        ? <GavetaEtapa key={alvo.id} d={d} id={alvo.id} onTrocar={onTrocar} />
+        : <GavetaCriativo key={alvo.id} d={d} id={alvo.id} />)}
+    </PainelLateral>
+  );
+}
+
+/** A casca da gaveta (portal, foco preso, Esc, clique fora, botão Fechar fixo). Usada pela Jornada, pelos criativos e
+ *  pelas listas de disparo da Mensageria. */
+export function PainelLateral({ aberta, tipo, titulo: nome, onClose, children }: {
+  aberta: boolean; tipo: string; titulo: ReactNode; onClose: () => void; children: ReactNode;
+}) {
   const titulo = useId();
   const fechar = useRef<HTMLButtonElement>(null);
   const painel = useRef<HTMLElement>(null);
-  const aberta = alvo !== null;
   const fecharRef = useRef(onClose);
   useEffect(() => { fecharRef.current = onClose; });
 
@@ -44,10 +59,8 @@ export function GavetaLateral({ d, alvo, onClose, onTrocar }: { d: DadosTela; al
     };
   }, [aberta]);
 
-  // A gaveta só abre por clique (alvo começa nulo no servidor), então o document já existe aqui.
-  if (!alvo || typeof document === 'undefined') return null;
-  const nome = alvo.tipo === 'etapa' ? NO.get(alvo.id)?.titulo ?? 'Etapa' : d.idx.anuncio.get(alvo.id)?.nome ?? 'Criativo';
-  const tipo = alvo.tipo === 'etapa' ? 'Etapa da jornada' : 'Criativo';
+  // A gaveta só abre por clique (começa fechada no servidor), então o document já existe aqui.
+  if (!aberta || typeof document === 'undefined') return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[1000]">
@@ -66,9 +79,7 @@ export function GavetaLateral({ d, alvo, onClose, onTrocar }: { d: DadosTela; al
           </button>
         </header>
         <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 ${ROTULO_INTEIRO}`}>
-          {alvo.tipo === 'etapa'
-            ? <GavetaEtapa key={alvo.id} d={d} id={alvo.id} onTrocar={onTrocar} />
-            : <GavetaCriativo key={alvo.id} d={d} id={alvo.id} />}
+          {children}
         </div>
       </aside>
     </div>,
