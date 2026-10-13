@@ -33,6 +33,13 @@ describe('mapeadores das RPCs da Black', () => {
     expect(data.anuncioDesde).toBe('2026-10-08');
     expect(data.gastoCampanhas?.find((g) => g.campanhaId === '101')?.gasto).toBeCloseTo(130, 6);
   });
+  it('marca como zero confirmado somente a campanha validada pelo Galego', () => {
+    const { data } = mapearTrafego({ ...RESPOSTA_TRAFEGO, campanhas: [
+      { id: 454295, nome: 'CF | BF26 | C3 | META | PQ | ABO | LEAD', plataforma: 'meta', etapa: 'C3', subtipo: null },
+      { id: 454296, nome: 'Outra campanha', plataforma: 'meta', etapa: 'C3', subtipo: null },
+    ], dias_campanha: [] });
+    expect(data.campanhas.map((c) => c.gastoZeroConfirmado)).toEqual([true, false]);
+  });
   it('mapeia totais por campanha sem somar alcance nem frequência', () => {
     const { data } = mapearTrafego({ ...RESPOSTA_TRAFEGO, totais: [
       { campanha_id: 103, de: '2026-10-04', ate: '2026-10-13', gasto_centavos: 1511020, impressoes: 921921,

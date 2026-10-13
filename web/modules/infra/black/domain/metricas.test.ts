@@ -81,6 +81,14 @@ describe('CPL', () => {
   it('CPL geral inclui só captação C2/C3 e leads pagos dessas etapas', () => {
     expect(cplPlacar(dias, leads, idx)).toEqual({ gasto: 250, leadsPagos: 3, valor: 250 / 3 });
   });
+  it('CPL inclui campanha C2 sem LEAD no nome usando a etapa do banco', () => {
+    const c2: Campanha = { id: 'k5', nome: 'CF | BF26 | C2 | CONSULTORIA', canal: 'meta', funil: 'consultoria', etapa: 'C2', fase: null };
+    const ix = indexar({ campanhas: [...campanhas, c2], conjuntos, anuncios });
+    const l = linha({ leadId: 'l6', campanhaId: 'k5', funil: 'consultoria', origem: 'pago' });
+    expect(cplPlacar([], [l], ix, [{ campanhaId: 'k5', gasto: 80 }])).toEqual({ gasto: 80, leadsPagos: 1, valor: 80 });
+    expect(cplPorEtapa([], [l], ix, [{ campanhaId: 'k5', gasto: 80 }]).find((x) => x.chave === 'consultoria')?.cpl)
+      .toEqual({ gasto: 80, leadsPagos: 1, valor: 80 });
+  });
   it('Entresafra depende de um parâmetro explícito e fica desligada por padrão', () => {
     const entresafra: Campanha = { id: 'k5', nome: 'CF | BF26 | C3 | ENTRESAFRA | LEAD', canal: 'meta', funil: 'c3', fase: 'captacao', etapa: 'C3' };
     const ix = indexar({ campanhas: [...campanhas, entresafra], conjuntos, anuncios });

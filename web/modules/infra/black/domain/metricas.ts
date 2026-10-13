@@ -231,6 +231,7 @@ export function cplPlacar(dias: readonly DesempenhoDia[], linhas: readonly Linha
   gastoCampanhas?: readonly { campanhaId: string; gasto: number }[], incluirEntresafra = INCLUIR_ENTRESAFRA_NO_CPL,
   filtro: FiltroBase = { funil: 'todos', canal: 'todos' }): Cpl {
   const elegivel = (c: Campanha | null) => c !== null && c.fase !== 'remarketing'
+    && !/REMARKETING/i.test(c.nome)
     && (c.etapa === 'C2' || c.etapa === 'C3' || (c.etapa === undefined && c.fase === 'captacao' && ehCaptacao(c.funil)));
   const passaFunil = (c: Campanha) => filtro.funil === 'todos' || c.funil === filtro.funil
     || (filtro.funil === 'iscas' && c.funil === 'c3' && c.subtipo === 'ISCA');
@@ -274,7 +275,9 @@ export function cplPorEtapa(dias: readonly DesempenhoDia[], linhas: readonly Lin
     const leadsPagos = ls.filter(ehPago).length;
     return { gasto, leadsPagos, valor: cpl(gasto, leadsPagos) };
   };
-  const captacao = (f: Funil) => (c: Campanha) => c.funil === f && c.fase === 'captacao';
+  const captacao = (f: Funil) => (c: Campanha) => c.funil === f
+    && (c.etapa === 'C2' || c.etapa === 'C3' || (c.etapa === undefined && c.fase === 'captacao'))
+    && c.fase !== 'remarketing' && !/REMARKETING/i.test(c.nome) && !/ENTRESAFRA/i.test(c.nome);
   const iscaC3 = (c: Campanha, cj: Conjunto | null) => captacao('c3')(c) && (c.subtipo === 'ISCA' || cj?.isca !== null && cj?.isca !== undefined);
   const out: LinhaCplEtapa[] = [
     { chave: 'consultoria', rotulo: 'Consultoria', nivel: 'etapa', funil: 'consultoria', cpl: recorte(captacao('consultoria')) },

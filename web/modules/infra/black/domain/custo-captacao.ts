@@ -14,11 +14,10 @@ export interface InvestimentoCaptacao {
   campanhasGoogleTotal: number;
   campanhasMeta: string[];
   campanhasGoogle: string[];
-  campanhasSemLead: string[];
+  campanhasZeroConfirmado: string[];
   campanhasRemarketing: string[];
 }
 
-const temLead = (nome: string) => nome.toLocaleUpperCase('pt-BR').includes('LEAD');
 const ehRemarketing = (nome: string, fase: string | null) => fase === 'remarketing'
   || nome.toLocaleUpperCase('pt-BR').includes('REMARKETING');
 
@@ -29,15 +28,13 @@ function pertenceACaptacao(c: TrafegoBlack['campanhas'][number]): boolean {
   return c.funil === 'consultoria' || c.funil === 'iscas' || c.funil === 'c3';
 }
 
-/** Investimento por campanhas com LEAD em C2/C3, separado por plataforma; sem gasto medido fica null. */
+/** Investimento de campanhas das etapas C2/C3, sem remarketing, separado por plataforma. */
 export function investimentoCaptacao(trafego: TrafegoBlack, periodo: Periodo): InvestimentoCaptacao {
   const idx = indexar(trafego);
   const elegiveis: typeof trafego.campanhas = [];
-  const semLead: typeof trafego.campanhas = [];
   const remarketing: typeof trafego.campanhas = [];
   for (const campanha of trafego.campanhas) {
     if (!pertenceACaptacao(campanha)) continue;
-    if (!temLead(campanha.nome)) { semLead.push(campanha); continue; }
     if (ehRemarketing(campanha.nome, campanha.fase)) { remarketing.push(campanha); continue; }
     elegiveis.push(campanha);
   }
@@ -62,15 +59,18 @@ export function investimentoCaptacao(trafego: TrafegoBlack, periodo: Periodo): I
   const soma = (canal: 'meta' | 'google'): { valor: Valor; medido: Valor; medidas: number; total: number; nomes: string[] } => {
     const campanhas = elegiveis.filter((c) => c.canal === canal);
     const nomes = campanhas.map((c) => c.nome).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    const conhecidas = campanhas.filter((c) => medido.has(c.id));
+    const conhecidas = campanhas.filter((c) => medido.has(c.id) || c.gastoZeroConfirmado === true);
+    for (const campanha of conhecidas) {
+      if (!medido.has(campanha.id) && campanha.gastoZeroConfirmado) gastoPorCampanha.set(campanha.id, 0);
+    }
     const subtotal = conhecidas.reduce((s, c) => s + (gastoPorCampanha.get(c.id) ?? 0), 0);
-    const medidoConhecido = conhecidas.length > 0 ? subtotal : null;
-    const valor = nomes.length === 0 || conhecidas.length !== campanhas.length || subtotal <= 0 ? null : subtotal;
+    const medidoConhecido = campanhas.length === 0 ? 0 : conhecidas.length > 0 ? subtotal : null;
+    const valor = campanhas.length === 0 ? 0 : conhecidas.length !== campanhas.length ? null : subtotal;
     return { valor, medido: medidoConhecido, medidas: conhecidas.length, total: campanhas.length, nomes };
   };
 
   const meta = soma('meta'); const google = soma('google');
-  // A fonte real atual só entrega Meta. Canal ausente significa sem fonte, não gasto zero.
+  // Canal sem campanha cadastrada é gasto zero. Campanha existente sem medida continua sem dado/parcial.
   const total = meta.valor !== null && google.valor !== null ? meta.valor + google.valor : null;
   return {
     meta: meta.valor, google: google.valor, total,
@@ -78,7 +78,8 @@ export function investimentoCaptacao(trafego: TrafegoBlack, periodo: Periodo): I
     campanhasMetaMedidas: meta.medidas, campanhasGoogleMedidas: google.medidas,
     campanhasMetaTotal: meta.total, campanhasGoogleTotal: google.total,
     campanhasMeta: meta.nomes, campanhasGoogle: google.nomes,
-    campanhasSemLead: semLead.map((c) => c.nome).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    campanhasZeroConfirmado: elegiveis.filter((c) => c.gastoZeroConfirmado === true && gastoPorCampanha.get(c.id) === 0)
+      .map((c) => c.nome).sort((a, b) => a.localeCompare(b, 'pt-BR')),
     campanhasRemarketing: remarketing.map((c) => c.nome).sort((a, b) => a.localeCompare(b, 'pt-BR')),
   };
 }

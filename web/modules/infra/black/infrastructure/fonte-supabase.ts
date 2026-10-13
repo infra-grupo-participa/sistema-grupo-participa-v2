@@ -174,6 +174,9 @@ const etapaDe = (v: unknown): EtapaCampanha | null => (v === 'C1' || v === 'C2' 
 
 export const TRAFEGO_VAZIO: TrafegoBlack = { campanhas: [], conjuntos: [], anuncios: [], paginas: [], dias: [], totais: [], coletadoEm: null };
 
+// Zero de entrega confirmado pelo Galego em 13/10/2026 20:15 BRT, após checar a coleta diária da conta CNF.
+const ZERO_ENTREGA_CONFIRMADO = { id: '454295', nome: 'CF | BF26 | C3 | META | PQ | ABO | LEAD' };
+
 export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: boolean } {
   const r = objeto(cru);
   if (!r) return { data: TRAFEGO_VAZIO, semDado: true };
@@ -185,7 +188,7 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
     if (!id || !nome || c.plataforma !== 'meta') continue;
     const etapa = etapaDe(c.etapa); const subtipo = texto(c.subtipo);
     contaDaCampanha.set(id, texto(c.conta_externa));
-    campanhas.push({ id, nome, canal: 'meta', funil: funilDaEtapa(etapa, subtipo) ?? (etapa === null && ehC1PeloNome(nome) ? 'c1' : null), fase: faseDoNome(nome), etapa, subtipo, conflito: booleano(c.conflito), idExterno: texto(c.campanha_externa) });
+    campanhas.push({ id, nome, canal: 'meta', funil: funilDaEtapa(etapa, subtipo) ?? (etapa === null && ehC1PeloNome(nome) ? 'c1' : null), fase: faseDoNome(nome), etapa, subtipo, conflito: booleano(c.conflito), gastoZeroConfirmado: id === ZERO_ENTREGA_CONFIRMADO.id && nome === ZERO_ENTREGA_CONFIRMADO.nome, idExterno: texto(c.campanha_externa) });
   }
   const conjuntos: Conjunto[] = linhas(r.conjuntos).flatMap((j) => {
     const id = texto(j.id); const campanhaId = texto(j.campanha_id); const nome = texto(j.nome);

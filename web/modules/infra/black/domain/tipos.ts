@@ -64,6 +64,8 @@ export interface Campanha {
   id: string; nome: string; canal: Canal; funil: Funil | null; fase: Fase | null;
   /** Só a fonte real preenche: etapa e subtipo como vêm do banco, e se o nome tem dois subtipos (conflito). */
   etapa?: EtapaCampanha | null; subtipo?: string | null; conflito?: boolean | null;
+  /** O Galego confirmou coleta concluída sem entrega para esta campanha até 13/10/2026 20:15 BRT. */
+  gastoZeroConfirmado?: boolean;
   /** Id da campanha no Meta (mkt_trafego.campanhas.campanha_externa), quando dados_black_trafego devolver. */
   idExterno?: string | null;
 }

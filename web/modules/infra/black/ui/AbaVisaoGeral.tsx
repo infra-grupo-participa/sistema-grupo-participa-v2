@@ -206,6 +206,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const etapas = cplPorEtapa(d.dias, d.linhas, idx, d.trafegoPeriodo.gastoCampanhas);
   const investimento = investimentoCaptacao(d.trafegoPeriodo, d.periodo);
   const rotuloInvestimentoCanal = (nome: string, completo: Valor, medido: Valor, campanhasMedidas: number, campanhasTotal: number, semFonte: boolean) => {
+    if (campanhasTotal === 0) return `${nome} sem campanha · ${moeda(0)}`;
     if (completo !== null) return `${nome} ${moeda(completo)}`;
     if (medido !== null) return `${nome} ${moeda(medido)} medidos (${campanhasMedidas}/${campanhasTotal} campanhas); parcial`;
     return `${nome} ${semFonte ? 'sem fonte' : 'sem dado'}`;
@@ -214,6 +215,9 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
     rotuloInvestimentoCanal('Meta Ads', investimento.meta, investimento.metaMedido, investimento.campanhasMetaMedidas, investimento.campanhasMetaTotal, investimento.campanhasMeta.length === 0),
     rotuloInvestimentoCanal('Google Ads', investimento.google, investimento.googleMedido, investimento.campanhasGoogleMedidas, investimento.campanhasGoogleTotal, investimento.campanhasGoogle.length === 0),
   ].join(' · ');
+  const notaZeroConfirmado = investimento.campanhasZeroConfirmado.length
+    ? ` Sem entrega, coleta do Meta concluída até 13/10 às 20:15 BRT: ${investimento.campanhasZeroConfirmado.join('; ')} = R$ 0,00.`
+    : '';
   const c1Dias = filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: 'c1', canal: recorte.canal });
   const abrirEtapa = (funil: Funil) => d.irPara({ aba: 'criativos', funil, criativos: {} });
 
@@ -272,7 +276,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
                 <Cartao cheio titulo="Investimento em captação">
                   <KpiCard label="Investimento em captação" bar="accent"
                     value={<Numero valor={investimento.total} formato="brl" falta="sem dado no período" />}
-                    hint={`${detalheInvestimento}. Total ${investimento.total === null ? 'sem dado por fonte incompleta' : 'das campanhas medidas'}. Só campanhas LEAD em C2/C3, sem remarketing; inclui Entresafra, excluída do CPL geral.`} />
+                    hint={`${detalheInvestimento}. Total ${investimento.total === null ? 'sem dado por fonte incompleta' : 'das campanhas C2/C3'}.${notaZeroConfirmado} Sem remarketing. Inclui Entresafra, excluída do CPL geral.`} />
                 </Cartao>
               </li>
               {cards3.flatMap(({ c, valor, hint }) => [
