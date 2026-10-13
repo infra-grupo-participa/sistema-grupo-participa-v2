@@ -15,7 +15,7 @@ import { grupoSemDado } from '../domain/grupo';
 import { faseDoNome } from '../domain/fase-campanha';
 import {
   FASES, ISCAS,
-  type Anuncio, type Campanha, type ConfigBlack, type Conjunto, type DesempenhoDia, type EtapaCampanha, type Funil,
+  type Anuncio, type Campanha, type ConfigBlack, type Conjunto, type DesempenhoDia, type EtapaCampanha, type Fase, type Funil,
   type GrupoBlack, type GrupoResumoBlack, type Isca, type LeadDetalhe, type LinhaPerfil, type Marcos, type MensageriaBlack,
   type Porta, type Profissao, type RecorteGrupo, type Resultado, type ResultadoAcao, type SegmentoGrupo, type TrafegoBlack,
   type Valor,
@@ -107,23 +107,38 @@ async function chamarAcao(nome: string, args: Record<string, unknown>): Promise<
 // ---------- config ----------
 
 /**
- * O que existe no cadastro (dados.dashboards, migration 20261012231649): só o início do período. As metas (leads,
- * CPL, orçamento, régua, live) estão só no plano, sem tabela: ficam null e a tela mostra "Sem dado".
+ * O que existe no cadastro (dados.dashboards, migration 20261012231649): só o início do período. Orçamento e live vêm da
+ * constante ORCAMENTO abaixo. As metas de leads, CPL e régua estão só no plano, sem tabela: ficam null ("Sem dado").
  */
 const CADASTRO: Record<string, { inicio: string }> = { 'black-friday-2026-10': { inicio: '2026-10-04' } };
+
+/**
+ * Orçamento de tráfego e data da live, passados pelo Victor em 13/10/2026 (tabela "Orçamento de tráfego, Black Friday
+ * 2026", sem o imposto do Meta, que é contabilizado à parte). Ainda não há tabela no banco: ficam aqui, no adaptador,
+ * como o início do período. Captação (220.000) = C2 Iscas 70.000 + C3 Convite direto 150.000; a tela só tem a fase.
+ * Live e abertura do carrinho: 03/11/2026 às 19h30 (PLANO-DASHBOARD-JORNADA.md).
+ */
+const ORCAMENTO: Record<string, { total: number; reserva: number; liveEm: string; porFase: Record<Fase, number> }> = {
+  'black-friday-2026-10': {
+    total: 428571, reserva: 16496, liveEm: '2026-11-03T19:30:00-03:00',
+    porFase: { antecipacao: 17591, distribuicao: 47575, captacao: 220000, aquecimento: 26909, remarketing: 30000, live_carrinho: 70000 },
+  },
+};
 
 export function configReal(chave: string): Resultado<ConfigBlack> {
   const c = CADASTRO[chave];
   const previstoPorFase = Object.fromEntries(FASES.map((f) => [f, null])) as ConfigBlack['previstoPorFase'];
+  const orc = c ? ORCAMENTO[chave] : undefined;
+  if (orc) for (const f of FASES) previstoPorFase[f] = orc.porFase[f];
   const data: ConfigBlack = {
-    chave, inicio: c?.inicio ?? '', inicioCaptacao: null, liveEm: null, metaLeads: null, metaLeadsDia: null,
-    cplAlvoMedio: null, reguaCpl: null, orcamentoTotal: null, previstoPorFase, reserva: null, baseDaCasa: null, semanas: [],
+    chave, inicio: c?.inicio ?? '', inicioCaptacao: null, liveEm: orc?.liveEm ?? null, metaLeads: null, metaLeadsDia: null,
+    cplAlvoMedio: null, reguaCpl: null, orcamentoTotal: orc?.total ?? null, previstoPorFase, reserva: orc?.reserva ?? null, baseDaCasa: null, semanas: [],
     fontes: {
       Cadastro: 'dados.dashboards.periodo_inicio (migration 20261012231649): início do período, 04/10/2026.',
       Tráfego: 'dados_black_trafego (mkt_trafego, coleta do Meta).',
       Leads: 'dados_black_perfil e dados_black_leads (migration 20261012234606).',
       Grupo: 'dados_black_grupo (webhook do SendFlow e foto dos grupos, migration 20261012234606).',
-      Metas: 'Sem cadastro no banco: metas de leads, CPL, orçamento e data da live ficam "Sem dado".',
+      Metas: 'Orçamento por fase, total, reserva e data da live: passados pelo Victor em 13/10/2026 (no adaptador). Metas de leads, CPL e régua: sem cadastro, ficam "Sem dado".',
     },
   };
   if (!c) return { data, semDado: true, erro: 'Dashboard não encontrado neste cadastro.' };

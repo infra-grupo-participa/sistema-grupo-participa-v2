@@ -59,11 +59,19 @@ describe('mapeadores das RPCs da Black', () => {
     expect([a.anuncioId, a.conjuntoId, a.campanhaId]).toEqual(['301', '201', '101']);
     expect([b.anuncioId, b.conjuntoId, b.campanhaId]).toEqual([null, null, null]);
   });
-  it('config: só o início cadastrado; metas null; chave desconhecida dá erro', () => {
+  it('config: início, orçamento por fase e live cadastrados; metas de leads e CPL null; chave desconhecida dá erro', () => {
     const c = configReal(CHAVE_BLACK);
     expect(c.semDado).toBe(false);
     expect(c.data.inicio).toBe('2026-10-04');
-    expect([c.data.metaLeads, c.data.cplAlvoMedio, c.data.orcamentoTotal, c.data.liveEm, c.data.reguaCpl]).toEqual([null, null, null, null, null]);
+    expect([c.data.metaLeads, c.data.cplAlvoMedio, c.data.reguaCpl]).toEqual([null, null, null]);
+    expect(c.data.liveEm).toBe('2026-11-03T19:30:00-03:00');
+    expect(c.data.orcamentoTotal).toBe(428571);
+    expect(c.data.reserva).toBe(16496);
+    expect(c.data.previstoPorFase).toEqual({
+      antecipacao: 17591, distribuicao: 47575, captacao: 220000, aquecimento: 26909, remarketing: 30000, live_carrinho: 70000,
+    });
+    // as 6 fases + a reserva fecham o total da tabela
+    expect(Object.values(c.data.previstoPorFase).reduce((s, v) => s + (v ?? 0), 0) + (c.data.reserva ?? 0)).toBe(428571);
     expect(configReal('outra').erro).not.toBeNull();
   });
 });
