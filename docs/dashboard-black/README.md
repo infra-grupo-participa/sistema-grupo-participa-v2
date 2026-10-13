@@ -410,6 +410,46 @@ concluída mais antiga. Cada grupo fica com foto a cada ~10 min.
 - O CNHF não muda: `controle` e o hook `sendflow-webhook` continuam intactos. O Victor desliga no painel do SendFlow os
   hooks de campanha BF26 que estiverem apontando para lá, quando houver.
 
+## Lista de disparo automática (13/10/2026)
+
+Planilha: "[BLACK FRIDAY/26] LISTA DISPARO LIVE CONSULTORIA 13/10"
+([`1Ym6Lq6y228Xgipn6JAVgCOH6pHmkXKZFxNfd2j3yjEo`](https://docs.google.com/spreadsheets/d/1Ym6Lq6y228Xgipn6JAVgCOH6pHmkXKZFxNfd2j3yjEo/edit)).
+O link e o cabeçalho são os mesmos da versão manual: na aba "Lista", `Nome | Email | Telefone`; na aba "Telefone fora do
+padrao", `Nome | Email | Telefone (como veio) | Motivo`. Pedido do Victor, com ok em 13/10. A lista é atualizada de hora em
+hora. Migration `20261013174100`; o detalhe da regra está em `infra/supabase/migrations/20261013174100.explain.md`.
+
+- **O que é:** a união deduplicada de todos os leads da Black, sem teste e sem a Turma Especial.
+- **Fontes:**
+  - `dados.black_leads`: captação `metodo-perfeito`, iscas e página nova da consultoria;
+  - Respondi `JmSmjBBS`, a aplicação da consultoria, workspace 3504. O `respondi-sync` passou a ler esse workspace, só
+    esse slug, uma vez por dia às 09:10 UTC;
+  - os 3 grupos BF26 e o grupo "Consultoria ao Vivo - Aberto" do SendFlow, pela foto a cada ~10 min e pelo webhook.
+    O grupo da consultoria tem `papel = 'lista'` em `dados.dashboard_grupos`, por isso não entra nos cards.
+- **Regra:**
+  - a mesma pessoa é reconhecida pelo telefone (8 últimos dígitos) **ou** pelo e-mail;
+  - teste sai: marcação, `parece_teste` e, no grupo, o telefone cujos registros são todos teste;
+  - telefone no formato `55` + DDD + número;
+  - DDI estrangeiro, DDD inválido ou tamanho errado vão para a aba "Telefone fora do padrao", com o motivo;
+  - quem só está no grupo entra com nome e e-mail vazios;
+  - a Turma Especial (planilha da Isabela) sai no Apps Script, por e-mail ou telefone. Não há casamento por documento,
+    porque nenhuma fonte da lista pede CPF.
+- **Caminho:**
+  - o Apps Script `infra/apps-script/black-lista-disparo/Codigo.gs` é um projeto separado, só do Victor e não
+    compartilhado;
+  - ele chama `public.black_lista_disparo(p_chave)`, que dá acesso só ao anon. A chave é gerada no próprio Apps Script e
+    o banco guarda só o sha256, em `dados.black_lista_config`;
+  - a porta aceita no máximo 1 leitura a cada 5 min;
+  - cada leitura grava só contagens em `dados.black_lista_leituras`;
+  - a guarda de queda faz o script não gravar nada se a lista nova vier menor que a metade da atual.
+- **Como testar:**
+  - `select dados.black_lista_disparo_montar()->'resumo'` no SQL editor, que roda como postgres e devolve só contagens;
+  - `select * from dados.black_lista_leituras order by id desc` mostra as leituras do gatilho;
+  - na planilha, a aba "Lista" muda a cada hora.
+- **Desligar:**
+  - no projeto do Apps Script, Acionadores, apagar o de `atualizar`;
+  - ou fechar a porta com `update dados.black_lista_config set chave_sha256 = null`.
+- **Reversão completa:** `20261013174100_reversao.sql` e depois desligar o gatilho.
+
 ## Contrato da fonte (`application/ports.ts`)
 
 `FonteDadosBlack` com `modo` (`'demonstracao' | 'real'`), `agora()` e métodos que devolvem

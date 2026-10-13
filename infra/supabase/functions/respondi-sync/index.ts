@@ -10,7 +10,10 @@ import { familia, formulario, resposta } from "./normaliza.ts";
 
 const sql = postgres(Deno.env.get("SUPABASE_DB_URL")!, { max: 2, prepare: false, idle_timeout: 20 });
 const API = "https://api.respondi.app/api/";
-const TIMES = [160, 161, 162, 3380, 574];
+// 3504 = "Consultoria Ao Vivo" (13/10/2026): aplicação da consultoria da Black (lista de disparo, migration 20261013174100).
+// Formulário público: desse time só entra o slug da lista abaixo (formulário novo lá não entra sozinho no casar/aplicar).
+const TIMES = [160, 161, 162, 3380, 574, 3504];
+const SO_ESTES: Record<number, string[]> = { 3504: ["JmSmjBBS"] };
 const ORCAMENTO_MS = 110_000; // não começa página nova depois disso
 const PRAZO_REDE_MS = 125_000; // nenhuma chamada ao Respondi passa daqui: sobram ~25 s (volta ao 160, casar, aplicar) dos 150 s
 const RQ_MAX_MS = 30_000;
@@ -180,6 +183,7 @@ Deno.serve(async (req) => {
           forms = (await listar(t0 + PRAZO_REDE_MS, jwt))
             .map((f) => ({ f, fam: familia(String(f.name ?? "")), n: Number(f.respondents_count) || 0 }))
             .filter((x) => x.fam && x.f.draft_of == null && x.n > 0 && x.f.slug)
+            .filter((x) => !SO_ESTES[time] || SO_ESTES[time].includes(String(x.f.slug)))
             .sort((a, b) => a.n - b.n); // menores primeiro: um formulário gigante não segura os outros
         } catch (e) {
           if (!(e instanceof SemPrazo)) throw e;
