@@ -333,8 +333,9 @@ antes, deu 191 / 165 e MQL 112).
 
 - Profissão vazia no checkup e no futurômetro.
 - Consultoria: os envios de 12/10 antes das 20h35 chegaram sem UTM.
-- Um telefone aparece em envios com dois e-mails diferentes: os de um e-mail estão marcados como teste, os do
-  outro não (a marcação foi por e-mail). Conferir se é a mesma pessoa de teste.
+- Consultoria: um telefone aparece em 4 envios com dois e-mails diferentes (12/10). Os 2 envios de um e-mail estão
+  marcados como teste, os 2 do outro não (a marcação foi por e-mail). Nada foi marcado ou desmarcado: o Victor
+  decide se é a mesma pessoa de teste.
 - `utm_campaign=disparo` e `utm_campaign=grupoantigo` fora do padrão (`utm_campaign_fora_do_padrao`).
 - `utm_term` trazendo o placement.
 - CPF01 com `projeto_id` nulo.
