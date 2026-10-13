@@ -1,5 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { avaliarFaixa, avaliarMeta } from './meta';
+import { avaliarFaixa, avaliarMeta, distanciaDaMeta } from './meta';
+
+describe('distanciaDaMeta', () => {
+  it('acima da meta', () => {
+    expect(distanciaDaMeta(1.42)).toBe('42% acima da meta');
+    expect(distanciaDaMeta(1.0776)).toBe('8% acima da meta');
+  });
+  it('abaixo da meta', () => {
+    expect(distanciaDaMeta(0.8)).toBe('20% abaixo da meta');
+    expect(distanciaDaMeta(0)).toBe('100% abaixo da meta');
+  });
+  it('exatamente na meta', () => {
+    expect(distanciaDaMeta(1)).toBe('na meta');
+  });
+  it('menos de 1% usa uma casa decimal, para não dizer "0%" sem ter batido a meta', () => {
+    expect(distanciaDaMeta(0.992)).toBe('0,8% abaixo da meta');
+    expect(distanciaDaMeta(1.004)).toBe('0,4% acima da meta');
+  });
+  it('sem dado: null', () => {
+    expect(distanciaDaMeta(null)).toBeNull();
+    expect(distanciaDaMeta(Number.NaN)).toBeNull();
+  });
+});
 
 describe('avaliarFaixa (CPL: ideal R$ 15, limite R$ 16,70)', () => {
   it('até o ideal é bom', () => {

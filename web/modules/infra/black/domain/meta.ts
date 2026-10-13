@@ -24,6 +24,21 @@ export function avaliarFaixa(valor: Valor, ideal: Valor, limite: Valor): Avaliac
   return { estado, pctDaMeta: valor / limite };
 }
 
+/**
+ * Distância da meta em texto (Victor, 13/10/2026): "42% acima da meta", "20% abaixo da meta", "na meta".
+ * Acima/abaixo é o lado numérico da meta, não bom ou ruim (CPL abaixo da meta é bom). Inteiro; abaixo de 1% usa uma casa
+ * decimal para não escrever "0% abaixo" quando ainda não bateu a meta. Sem `pctDaMeta`: null.
+ */
+export function distanciaDaMeta(pctDaMeta: Valor): string | null {
+  if (pctDaMeta === null || !Number.isFinite(pctDaMeta)) return null;
+  const dif = (pctDaMeta - 1) * 100;
+  const abs = Math.abs(dif);
+  if (abs < 0.05) return 'na meta';
+  const casas = abs < 1 ? 1 : 0;
+  const n = abs.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+  return `${n}% ${dif > 0 ? 'acima' : 'abaixo'} da meta`;
+}
+
 export function avaliarMeta(valor: Valor, meta: Valor, menorMelhor: boolean, tolerancia = TOLERANCIA_META): AvaliacaoMeta {
   if (valor === null || meta === null || !Number.isFinite(valor) || !Number.isFinite(meta) || meta <= 0) {
     return { estado: 'sem', pctDaMeta: null };

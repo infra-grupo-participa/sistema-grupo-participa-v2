@@ -6,7 +6,7 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { Farol as TipoFarol, Taxa as TipoTaxa } from '../domain/metricas';
 import type { FormatoMetrica } from '../domain/jornada';
-import { avaliarFaixa, avaliarMeta } from '../domain/meta';
+import { avaliarFaixa, avaliarMeta, distanciaDaMeta } from '../domain/meta';
 import type { Valor } from '../domain/tipos';
 
 const CONSULTA_MOVIMENTO = '(prefers-reduced-motion: reduce)';
@@ -119,7 +119,7 @@ export function IndicadorMeta({ valor, meta, ideal, menorMelhor = false, formato
   }
   const rotulo = a.estado === 'bom' ? 'Bom' : a.estado === 'atencao' ? 'Atenção' : 'Ruim';
   const cor = a.estado === 'bom' ? 'var(--green)' : a.estado === 'atencao' ? 'var(--yellow)' : 'var(--red)';
-  const pctMeta = `${INTEIRO.format((a.pctDaMeta ?? 0) * 100)}% da meta`;
+  const pctMeta = distanciaDaMeta(a.pctDaMeta) ?? 'sem comparação';
   const dica = `${rotulo}: ${formatar(valor, formato)} contra ${faixa ? `ideal de ${formatar(ideal, formato)} e limite de ${formatar(meta, formato)}` : `meta de ${formatar(meta, formato)}`} (${pctMeta}). ${menorMelhor || faixa ? 'Quanto menor, melhor.' : 'Quanto maior, melhor.'}`;
   return (
     <span title={dica} className={'inline-flex flex-wrap items-center gap-x-1.5 text-[11px] font-normal text-[var(--fg-2)] ' + className}>
