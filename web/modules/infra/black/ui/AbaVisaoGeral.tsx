@@ -13,10 +13,11 @@ import {
   dividir, ehCaptacao, ehPago, farolCpl, filtrarDias, filtrarLinhas, gastoDe, ingressoGrupo, pessoasUnicas, somar,
   taxaVideo75, type Taxa as TipoTaxa,
 } from '../domain/metricas';
-import { FUNIS, PROFISSOES_MQL, ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
+import { FUNIS, ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
+import { ehMqlPorProfissao, enviosMaisRecentesPorPessoa, enviosMqlMaisRecentes } from '../domain/metricas';
 import type { DadosTela } from './contexto';
 import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
-import { Farol, formatar, IndicadorMeta, MODAL_TELA_CHEIA, moeda, Numero, SeloFicticio, Taxa } from './pecas';
+import { Farol, formatar, IndicadorMeta, MODAL_TELA_CHEIA, moeda, Numero, Taxa } from './pecas';
 import { TabelaLeads } from './perfil/TabelaLeads';
 import { investimentoCaptacao } from '../domain/custo-captacao';
 import { INCLUIR_ENTRESAFRA_NO_CPL } from '../domain/decisoes';
@@ -170,7 +171,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   // Ordem pedida pelo Victor (12/10): Impressões, CPM, Cliques, CTR, CPC, Visualizações, Connect, Inscrições, Conversão. O card Grupo em 48h saiu em 13/10: fica a taxa de Ingresso no grupo.
   const cards3: { c: CardDef; valor: ReactNode; hint?: string }[] = [
     { c: { id: 'imp', rotulo: 'Impressões', formato: 'int', medir: medirCap((a) => a.impressoes), aplica: TRAFEGO }, valor: <Numero valor={dCap.length ? aCap.impressoes : null} formato="int" /> },
-    { c: { id: 'cpm', rotulo: 'CPM', formato: 'brl', medir: medirCap(cpm), aplica: TRAFEGO, menorMelhor: true, dica: 'Custo por mil impressões: gasto ÷ impressões × 1000.' }, valor: <Numero valor={dCap.length ? cpm(aCap) : null} formato="brl" />, hint: 'Custo por mil impressões.' },
+    { c: { id: 'cpm', rotulo: 'CPM', formato: 'brl', medir: medirCap(cpm), aplica: TRAFEGO, menorMelhor: true, dica: 'Custo por mil impressões: gasto ÷ impressões × 1000.' }, valor: <Numero valor={dCap.length ? cpm(aCap) : null} formato="brl" />, hint: dCap.length ? `Gasto diário por anúncio: ${moeda(aCap.gasto)} ÷ ${formatar(aCap.impressoes, 'int')} impressões × 1.000.` : 'Sem dado de gasto ou impressões no período.' },
     { c: { id: 'cliques', rotulo: 'Cliques no link', formato: 'int', medir: (x) => agregar(capDias(x, d)).cliques.valor, aplica: TRAFEGO }, valor: <Numero valor={aCap.cliques.valor} formato="int" /> },
     { c: { id: 'ctr', rotulo: 'CTR', formato: 'pct', medir: (x) => valorTaxa(ctr(agregar(capDias(x, d)))), aplica: TRAFEGO, dica: 'Cliques no link ÷ impressões.' }, valor: <Taxa taxa={ctr(aCap)} /> },
     { c: { id: 'cpc', rotulo: 'CPC', formato: 'brl', medir: medirCap(cpc), aplica: TRAFEGO, menorMelhor: true, dica: 'Custo por clique: gasto ÷ cliques no link, só nas linhas com clique medido.' }, valor: <Numero valor={dCap.length ? cpc(aCap) : null} formato="brl" />, hint: 'Custo por clique no link.' },
@@ -192,7 +193,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   };
 
   // Tabelas dos cards MQLs e Ingresso: os envios do período e do nó (cada envio é uma linha; o card conta pessoas).
-  const linhasMql = d.linhas.filter((l) => (l.mql ?? (l.profissao !== null && PROFISSOES_MQL.has(l.profissao))) === true);
+  const linhasMql = enviosMqlMaisRecentes(d.linhas);
   const linhasGrupo = d.linhas.filter((l) => l.entrouGrupoEm !== null && diaDe(l.entrouGrupoEm) >= d.periodo.de && diaDe(l.entrouGrupoEm) <= d.periodo.ate);
   const abrirMql = () => setTabela({ titulo: 'MQLs', linhas: linhasMql,
     nota: 'Envios de advogado, contador ou estudante de Direito no período e no nó. O card conta pessoas únicas (a classe é a do envio mais recente com profissão).' });
@@ -204,6 +205,15 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const linhasCanal = filtrarLinhas(d.linhasPeriodoSemFiltro, { funil: 'todos', canal: recorte.canal });
   const etapas = cplPorEtapa(d.dias, d.linhas, idx, d.trafegoPeriodo.gastoCampanhas);
   const investimento = investimentoCaptacao(d.trafegoPeriodo, d.periodo);
+  const rotuloInvestimentoCanal = (nome: string, completo: Valor, medido: Valor, campanhasMedidas: number, campanhasTotal: number, semFonte: boolean) => {
+    if (completo !== null) return `${nome} ${moeda(completo)}`;
+    if (medido !== null) return `${nome} ${moeda(medido)} medidos (${campanhasMedidas}/${campanhasTotal} campanhas); parcial`;
+    return `${nome} ${semFonte ? 'sem fonte' : 'sem dado'}`;
+  };
+  const detalheInvestimento = [
+    rotuloInvestimentoCanal('Meta Ads', investimento.meta, investimento.metaMedido, investimento.campanhasMetaMedidas, investimento.campanhasMetaTotal, investimento.campanhasMeta.length === 0),
+    rotuloInvestimentoCanal('Google Ads', investimento.google, investimento.googleMedido, investimento.campanhasGoogleMedidas, investimento.campanhasGoogleTotal, investimento.campanhasGoogle.length === 0),
+  ].join(' · ');
   const c1Dias = filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: 'c1', canal: recorte.canal });
   const abrirEtapa = (funil: Funil) => d.irPara({ aba: 'criativos', funil, criativos: {} });
 
@@ -244,7 +254,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           </Cartao>
           <Cartao titulo="Disparo" onAbrir={() => d.irPara({ aba: 'mensageria' })}>
             <KpiCard label="Investimento com disparo" bar="purple"
-              value={<span className="inline-flex flex-wrap items-center gap-2"><Numero valor={custoDisparo?.valor ?? null} formato="brl" falta="custo de disparo" />{d.mensageria && <SeloFicticio />}</span>}
+              value={<Numero valor={custoDisparo?.valor ?? null} formato="brl" falta="custo de disparo" />}
               hint={`API ${moeda(custoCanal('api'))} · SMS ${moeda(custoCanal('sms'))} · Ligação ${moeda(custoCanal('ligacao'))}`} />
           </Cartao>
         </div>
@@ -262,7 +272,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
                 <Cartao cheio titulo="Investimento em captação">
                   <KpiCard label="Investimento em captação" bar="accent"
                     value={<Numero valor={investimento.total} formato="brl" falta="sem dado no período" />}
-                    hint={`Google Ads ${investimento.google === null ? 'sem fonte' : moeda(investimento.google)} · Meta Ads ${moeda(investimento.meta)}. Só campanhas LEAD em C2/C3, sem remarketing.`} />
+                    hint={`${detalheInvestimento}. Total ${investimento.total === null ? 'sem dado por fonte incompleta' : 'das campanhas medidas'}. Só campanhas LEAD em C2/C3, sem remarketing; inclui Entresafra, excluída do CPL geral.`} />
                 </Cartao>
               </li>
               {cards3.flatMap(({ c, valor, hint }) => [
@@ -367,8 +377,8 @@ function CampanhasEtapa({ d, funil }: { d: DadosTela; funil: Funil }) {
           ? dias.length ? gastoDe(dias) : null
           : d.trafegoPeriodo.gastoCampanhas.find((x) => x.campanhaId === campanha.id)?.gasto ?? null;
         const resultado = custo !== null && leads.length ? custo / leads.length : null;
-        const conhecidas = leads.filter((l) => l.mql !== null && l.mql !== undefined);
-        const mql = conhecidas.length ? dividir(conhecidas.filter((l) => l.mql === true).length, conhecidas.length) : null;
+        const conhecidos = enviosMaisRecentesPorPessoa(leads);
+        const mql = conhecidos.length ? dividir(conhecidos.filter(ehMqlPorProfissao).length, conhecidos.length) : null;
         const agregado = agregar(dias);
         return (
           <li key={campanha.id} className="py-2">
@@ -424,8 +434,8 @@ function DetalhesConjuntos({ d, campanhaId, distribuicao }: { d: DadosTela; camp
     {linhas.map(({ cj, dias, leads }) => {
       const a = agregar(dias);
       const custo = dias.length ? gastoDe(dias) : null;
-      const conhecidas = leads.filter((l) => l.mql !== null && l.mql !== undefined);
-      const mql = conhecidas.length ? dividir(conhecidas.filter((l) => l.mql === true).length, conhecidas.length) : null;
+      const conhecidos = enviosMaisRecentesPorPessoa(leads);
+      const mql = conhecidos.length ? dividir(conhecidos.filter(ehMqlPorProfissao).length, conhecidos.length) : null;
       const cplSet = custo !== null && leads.length > 0 ? custo / leads.length : null;
       return <li key={cj.id} className="py-2">
         <p className="break-words text-xs font-medium text-[var(--fg-2)]">{cj.nome}</p>

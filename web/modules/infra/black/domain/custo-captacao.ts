@@ -5,6 +5,13 @@ export interface InvestimentoCaptacao {
   meta: Valor;
   google: Valor;
   total: Valor;
+  /** Soma conhecida por canal; pode ser parcial quando a RPC não trouxe valor para todas as campanhas elegíveis. */
+  metaMedido: Valor;
+  googleMedido: Valor;
+  campanhasMetaMedidas: number;
+  campanhasGoogleMedidas: number;
+  campanhasMetaTotal: number;
+  campanhasGoogleTotal: number;
   campanhasMeta: string[];
   campanhasGoogle: string[];
   campanhasSemLead: string[];
@@ -52,12 +59,14 @@ export function investimentoCaptacao(trafego: TrafegoBlack, periodo: Periodo): I
     }
   }
 
-  const soma = (canal: 'meta' | 'google'): { valor: Valor; nomes: string[] } => {
+  const soma = (canal: 'meta' | 'google'): { valor: Valor; medido: Valor; medidas: number; total: number; nomes: string[] } => {
     const campanhas = elegiveis.filter((c) => c.canal === canal);
     const nomes = campanhas.map((c) => c.nome).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    if (nomes.length === 0 || campanhas.some((c) => !medido.has(c.id))) return { valor: null, nomes };
-    const total = campanhas.reduce((s, c) => s + (gastoPorCampanha.get(c.id) ?? 0), 0);
-    return { valor: total > 0 ? total : null, nomes };
+    const conhecidas = campanhas.filter((c) => medido.has(c.id));
+    const subtotal = conhecidas.reduce((s, c) => s + (gastoPorCampanha.get(c.id) ?? 0), 0);
+    const medidoConhecido = conhecidas.length > 0 ? subtotal : null;
+    const valor = nomes.length === 0 || conhecidas.length !== campanhas.length || subtotal <= 0 ? null : subtotal;
+    return { valor, medido: medidoConhecido, medidas: conhecidas.length, total: campanhas.length, nomes };
   };
 
   const meta = soma('meta'); const google = soma('google');
@@ -65,6 +74,9 @@ export function investimentoCaptacao(trafego: TrafegoBlack, periodo: Periodo): I
   const total = meta.valor !== null && google.valor !== null ? meta.valor + google.valor : null;
   return {
     meta: meta.valor, google: google.valor, total,
+    metaMedido: meta.medido, googleMedido: google.medido,
+    campanhasMetaMedidas: meta.medidas, campanhasGoogleMedidas: google.medidas,
+    campanhasMetaTotal: meta.total, campanhasGoogleTotal: google.total,
     campanhasMeta: meta.nomes, campanhasGoogle: google.nomes,
     campanhasSemLead: semLead.map((c) => c.nome).sort((a, b) => a.localeCompare(b, 'pt-BR')),
     campanhasRemarketing: remarketing.map((c) => c.nome).sort((a, b) => a.localeCompare(b, 'pt-BR')),

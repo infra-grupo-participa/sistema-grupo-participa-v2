@@ -725,6 +725,25 @@ npm run lint:tokens
 npm run build
 ```
 
-Pendências para fechar a validação: conferir a tela autenticada em 1280 px e 375 px, nos temas claro e escuro, e
-registrar os prints em `.maestri/entregas/black-dashboard-v2/`. A sessão local disponível está no login; não houve
-credencial QA autorizada para abrir os dados do dashboard nesta rodada.
+Os prints autenticados pós-migration C e o registro de números vistos ficam em `.maestri/entregas/black-dashboard-v2/`.
+Esta revisão acrescenta a trilha de cálculo e a indicação explícita de valores parciais; o relatório de entrega informa
+o que foi validado e as diferenças de agregação ainda pendentes.
+
+### Revisão dos cards de investimento · 13/10/2026
+
+- **CPL geral:** numerador em `dados_black_trafego.dias_campanha[].gasto_centavos`, mapeado como `gastoCampanhas`; o front filtra campanhas classificadas em C2/C3, tira remarketing e Entresafra (`INCLUIR_ENTRESAFRA_NO_CPL = false`). Denominador: linhas de `dados_black_perfil` com `origem = 'pago'`, vinculadas às mesmas campanhas. Assim, os R$ 358,21 do print eram o investimento da cesta elegível ao CPL, não o CPM nem o gasto total de todas as campanhas C2/C3.
+- **Investimento em captação:** usa também `dados_black_trafego.dias_campanha[].gasto_centavos`, mas a cesta é mais ampla: campanhas LEAD de C2/C3, sem remarketing, incluindo Entresafra. O cartão deixa explícita essa diferença. Enquanto faltar cobertura de campanha ou fonte de canal, o total fica Sem dado e o subtotal medido é identificado como parcial.
+- **Investimento em captação:** usa o mesmo campo de gasto por campanha, mas sua cesta é determinada por `campanhas[].nome` contendo `LEAD`, `campanhas[].etapa` C2/C3 e ausência de remarketing. Não exclui Entresafra. O valor completo por canal só é conhecido se todas as campanhas elegíveis daquele canal tiverem valor na RPC. Se a resposta trouxer só parte delas, a tela mostra o subtotal medido e a cobertura `x/y campanhas`, marcado como parcial. O total continua Sem dado enquanto Meta ou Google estiver sem fonte ou incompleto.
+- **CPM:** calculado sobre as linhas de `dados_black_trafego.dias_anuncio`, campos `gasto_centavos` e `impressoes`, para os funis de captação que entraram no filtro da tela: `Σ gasto ÷ Σ impressões × 1.000`. A dica do card expõe o numerador e o denominador exatos usados. Não usa o gasto do CPL nem o gasto de todas as etapas.
+- **Investimento em tráfego:** soma `dias_anuncio[].gasto_centavos` do período selecionado, em todos os funis/canais presentes na fonte. Não deve ser interpretado como gasto de captação.
+- **Investimento com disparo:** a fonte da Black ainda retorna `semFonte` com canais vazios. A tela mostra Sem dado sem selo fictício. O selo fica reservado a dados de demonstração efetivamente carregados.
+- **Como testar:** `npx vitest run modules/infra/black/domain/custo-captacao.test.ts`; abrir a Visão Geral em claro e conferir a dica do CPM e a cobertura de campanhas do card de captação. Para conciliar totais atuais, comparar o payload de `dados_black_trafego` e `dados_black_perfil` com o período exibido.
+
+**Exemplo da leitura ao vivo da revisão (20:31 BRT, 13/10):** CPL R$ 380,75 ÷ 15 = R$ 25,38; captação Meta R$ 976,84 medidos em 3/4 campanhas e Google sem fonte, portanto o total de captação permanece Sem dado; CPM R$ 46,21 com R$ 977,21 de gasto por anúncio ÷ 21.149 impressões × 1.000. O tráfego total do período era R$ 19.822,10 (todas as etapas). O Galego confirmou que o custo por campanha é a medida para investimento total; o CPM usa a quebra por anúncio. Esses dois agregados diferiam em R$ 0,37, atribuídos à diferença de granularidade. O CPM de R$ 45,85 no print anterior, com 20.806 impressões, implica cerca de R$ 953,96; como o CPM estava arredondado a duas casas, não é possível recuperar o numerador exato daquela leitura. A dica nova expõe o numerador bruto da leitura atual.
+
+### Regra B de MQL e decisão sobre Respondi · 13/10/2026
+
+- **MQL em toda a tela:** usar a profissão do envio mais recente da pessoa, conforme `dados_black_grupo` (regra B). `domain/metricas.ts` expõe `enviosMaisRecentesPorPessoa`, `ehMqlPorProfissao` e `mqlDoRecorte`; a classificação não usa o booleano `LinhaPerfil.mql`, que representa a regra anterior. Isso se aplica aos percentuais de criativos, Perfil, funil do criativo, cartões por campanha/conjunto e Histórico. Pessoa sem profissão MQL no envio mais recente fica fora do numerador; pessoas únicas continuam no denominador. Empate de horário mantém a primeira linha recebida.
+- **Conferência:** em leitura às 20:31 BRT, Galego confirmou 228 pessoas e 154 MQL em `dados_black_grupo.leads.unicos` e `.mql`, regra B. Os 153 eram da foto anterior às 20:18; entrou uma pessoa depois. O teste unitário cobre um caso em que profissão anterior de MQL é substituída por profissão posterior não MQL. O modal MQL lista um envio mais recente por pessoa conforme a mesma classificação.
+- **Respondi da consultoria:** decisão do Victor em 13/10: não entra na Black. A tela não consome `pagina='consultoria_respondi'`, não soma esses cadastros e não apresenta seus campos. A migration B citada em histórico deste README não autoriza inclusão na tela.
+- **Como testar:** `npx vitest run modules/infra/black/domain`; abrir Visão Geral, Criativos e Histórico; comparar o placar MQL com `dados_black_grupo` e verificar que o modal MQL apresenta pessoas pelo envio mais recente.

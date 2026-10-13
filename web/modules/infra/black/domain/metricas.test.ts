@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   agregar, connectRate, cpc, cpm, conversaoPagina, cplDo, cplPlacar, cplPorEtapa, cplRemarketing, ctr, dividir, farolCpl, filtrarDias,
-  filtrarLinhas, indexar, ingressoGrupo, pessoasUnicas, somar,
+  filtrarLinhas, indexar, ingressoGrupo, mqlDoRecorte, pessoasUnicas, somar,
 } from './metricas';
 import type { Anuncio, Campanha, Conjunto, DesempenhoDia, LinhaPerfil } from './tipos';
 
@@ -140,6 +140,15 @@ describe('grupo e pessoas', () => {
     const t = ingressoGrupo(ls, 2, new Date('2026-10-12T12:30:00-03:00'));
     expect(t.num).toBe(1);
     expect(t.den).toBe(3);
+  });
+  it('MQL usa a profissão do envio mais recente, não o booleano mql de envios antigos', () => {
+    const ls = [
+      linha({ pessoaId: 'a', criadoEm: '2026-10-12T10:00:00-03:00', profissao: 'advogado', mql: true }),
+      linha({ pessoaId: 'a', criadoEm: '2026-10-12T11:00:00-03:00', profissao: 'outros', mql: true }),
+      linha({ pessoaId: 'b', criadoEm: '2026-10-12T10:30:00-03:00', profissao: 'contador', mql: false }),
+      linha({ pessoaId: 'c', criadoEm: '2026-10-12T09:00:00-03:00', profissao: null, mql: true }),
+    ];
+    expect(mqlDoRecorte(ls)).toMatchObject({ num: 1, den: 3, valor: 1 / 3, nota: 'Regra B: profissão do envio mais recente ÷ pessoas únicas do recorte.' });
   });
 });
 

@@ -105,6 +105,13 @@ describe('mapeadores das RPCs da Black', () => {
     expect(b.aCorrigir).toEqual(['profissao_vazia', 'utm_campaign_fora_do_padrao']);
     expect(b.pareceTeste).toBe(true);
   });
+  it('perfil: descarta a página Respondi da consultoria por decisão do Victor', () => {
+    const r = mapearPerfil([
+      { lead_id: 'l-black', pessoa_id: 'p1', criado_em: '2026-10-13T10:00:00Z', pagina: 'captacao' },
+      { lead_id: 'l-consultoria', pessoa_id: 'p2', criado_em: '2026-10-13T10:00:00Z', pagina: 'consultoria_respondi' },
+    ]);
+    expect(r.data.map((l) => l.leadId)).toEqual(['l-black']);
+  });
   it('leads e grupo', () => {
     expect(mapearLeads(RESPOSTA_LEADS).data[0].leadId).toBe('captacao:1');
     const g = mapearGrupo(RESPOSTA_GRUPO).data;

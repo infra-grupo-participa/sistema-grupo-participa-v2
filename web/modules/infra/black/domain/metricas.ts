@@ -1,6 +1,6 @@
 // Métricas do dashboard da Black. Regra única: razão = soma sobre soma, numerador e denominador no MESMO
 // recorte e só nas linhas em que os dois são conhecidos. Sem dado (null) nunca vira zero.
-import { FASES, ISCAS } from './tipos';
+import { FASES, ISCAS, PROFISSOES_MQL } from './tipos';
 import { INCLUIR_ENTRESAFRA_NO_CPL } from './decisoes';
 import type { Anuncio, Campanha, Conjunto, DesempenhoDia, Fase, FiltroCanal, FiltroFunil, Funil, LinhaPerfil, ReguaCpl, TrafegoBlack, Valor } from './tipos';
 
@@ -140,15 +140,29 @@ const HORA = 3_600_000;
  * já fechou em `agora` (não pune quem se cadastrou há 1 hora); numerador = dessas, quem entrou dentro da janela.
  * Quem já estava no grupo antes do cadastro conta como dentro.
  */
-/**
- * MQL do recorte (Victor, 13/10/2026): pessoas únicas que são MQL (advogado, contador ou estudante de Direito, o
- * `mql` que o banco calcula) ÷ pessoas únicas do recorte. A pessoa conta uma vez, mesmo com mais de um envio.
- * Linha sem `mql` (o demo não manda em todas) não conta como MQL.
- */
+/** MQL = profissão do envio mais recente da pessoa, como dados_black_grupo (regra B). */
+export const ehMqlPorProfissao = (l: LinhaPerfil): boolean => l.profissao !== null && PROFISSOES_MQL.has(l.profissao);
+
+/** Retorna um envio por pessoa, escolhido pela maior data de criação; empate preserva a primeira linha recebida. */
+export function enviosMaisRecentesPorPessoa(linhas: readonly LinhaPerfil[]): LinhaPerfil[] {
+  const maisRecentes = new Map<string, LinhaPerfil>();
+  for (const linha of linhas) {
+    const atual = maisRecentes.get(linha.pessoaId);
+    if (!atual || Date.parse(linha.criadoEm) > Date.parse(atual.criadoEm)) maisRecentes.set(linha.pessoaId, linha);
+  }
+  return [...maisRecentes.values()];
+}
+
+/** Regra B do Victor (13/10/2026): profissão do envio mais recente, uma pessoa por linha. */
 export function mqlDoRecorte(linhas: readonly LinhaPerfil[]): Taxa {
-  const todas = new Set<string>(); const mql = new Set<string>();
-  for (const l of linhas) { todas.add(l.pessoaId); if (l.mql) mql.add(l.pessoaId); }
-  return taxa(mql.size, todas.size, 'Pessoas únicas MQL ÷ pessoas únicas do recorte.');
+  const ultimos = enviosMaisRecentesPorPessoa(linhas);
+  return taxa(ultimos.filter(ehMqlPorProfissao).length, ultimos.length,
+    'Regra B: profissão do envio mais recente ÷ pessoas únicas do recorte.');
+}
+
+/** Linhas mais recentes das pessoas classificadas como MQL pela regra B. */
+export function enviosMqlMaisRecentes(linhas: readonly LinhaPerfil[]): LinhaPerfil[] {
+  return enviosMaisRecentesPorPessoa(linhas).filter(ehMqlPorProfissao);
 }
 
 /**

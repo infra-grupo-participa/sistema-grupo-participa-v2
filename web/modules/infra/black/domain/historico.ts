@@ -3,7 +3,8 @@
 // Leads da meta = pessoas únicas na lista (a meta é "15.000 leads na lista do Método Perfeito").
 import { deslocarDia } from '@/modules/infra/atm/domain/periodo';
 import { diaDe } from './recorte';
-import { PROFISSOES_MQL, type ConfigBlack, type DesempenhoDia, type LinhaPerfil, type Valor } from './tipos';
+import { ehMqlPorProfissao } from './metricas';
+import type { ConfigBlack, DesempenhoDia, LinhaPerfil, Valor } from './tipos';
 
 export interface DiaHistorico {
   dia: string;
@@ -44,18 +45,17 @@ export function serieHistorico(
     if (d.landingPageViews !== null) x.l = (x.l ?? 0) + d.landingPageViews;
     porDia.set(d.dia, x);
   }
-  const pessoas = new Map<string, { dia: string; mql: boolean | null; grupo: boolean }>();
+  const pessoas = new Map<string, { dia: string; envioMaisRecente: LinhaPerfil; grupo: boolean }>();
   const cad = new Map<string, { n: number; p: number }>();
   for (const l of linhas) {
     const dia = diaDe(l.criadoEm);
     const c = cad.get(dia) ?? { n: 0, p: 0 };
     c.n += 1; if (l.origem === 'pago') c.p += 1; cad.set(dia, c);
-    const mql = l.mql ?? (l.profissao === null ? null : PROFISSOES_MQL.has(l.profissao));
     const atual = pessoas.get(l.pessoaId);
-    if (!atual) pessoas.set(l.pessoaId, { dia, mql, grupo: l.entrouGrupoEm !== null });
+    if (!atual) pessoas.set(l.pessoaId, { dia, envioMaisRecente: l, grupo: l.entrouGrupoEm !== null });
     else {
       if (dia < atual.dia) atual.dia = dia;
-      if (mql === true || (mql === false && atual.mql === null)) atual.mql = mql;
+      if (Date.parse(l.criadoEm) > Date.parse(atual.envioMaisRecente.criadoEm)) atual.envioMaisRecente = l;
       atual.grupo ||= l.entrouGrupoEm !== null;
     }
   }
@@ -63,7 +63,8 @@ export function serieHistorico(
   for (const pessoa of pessoas.values()) {
     const item = novas.get(pessoa.dia) ?? { pessoas: 0, mql: 0, mqlConhecidos: 0, grupo: 0 };
     item.pessoas += 1;
-    if (pessoa.mql !== null) { item.mqlConhecidos += 1; if (pessoa.mql) item.mql += 1; }
+    item.mqlConhecidos += 1;
+    if (ehMqlPorProfissao(pessoa.envioMaisRecente)) item.mql += 1;
     if (pessoa.grupo) item.grupo += 1;
     novas.set(pessoa.dia, item);
   }

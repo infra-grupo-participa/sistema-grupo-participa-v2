@@ -333,6 +333,8 @@ const FUNIL_DA_PORTA: Record<Porta, Funil> = { inscricao_direta: 'c3', consultor
 
 export function mapearPerfil(cru: unknown): { data: LinhaPerfil[]; semDado: boolean } {
   const data = linhas(cru).flatMap((x): LinhaPerfil[] => {
+    // Decisão do Victor (13/10/2026): cadastros Respondi da consultoria não pertencem à Black.
+    if (x.pagina === 'consultoria_respondi') return [];
     const leadId = texto(x.lead_id); const pessoaId = texto(x.pessoa_id); const criadoEm = texto(x.criado_em);
     if (!leadId || !pessoaId || !criadoEm) return [];
     const porta = PORTAS.includes(x.porta as Porta) ? (x.porta as Porta) : null;

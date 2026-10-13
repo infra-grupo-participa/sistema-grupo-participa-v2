@@ -2,7 +2,7 @@
 // cruzado. Cada painel vê os filtros dos OUTROS painéis (o próprio só destaca), para o escolhido continuar
 // enxergando os irmãos. Métricas por soma sobre soma, no mesmo recorte de dias e leads.
 import {
-  agregar, connectRate, conversaoPagina, cpl, cpm, ctr, custoPorVisualizacao, ehPago, farolCpl, ingressoGrupoGeral, mqlDoRecorte, taxa, taxaVideo75,
+  agregar, connectRate, conversaoPagina, cpl, cpm, ctr, custoPorVisualizacao, ehPago, enviosMaisRecentesPorPessoa, ehMqlPorProfissao, farolCpl, ingressoGrupoGeral, mqlDoRecorte, taxa, taxaVideo75,
   type Farol, type IndiceTrafego, type Taxa,
 } from './metricas';
 import { diaDe } from './recorte';
@@ -58,13 +58,13 @@ export function resumir(
   const pagos = linhas.filter(ehPago).length;
   // A proporção por criativo é exatamente sobre leads pagos (a mesma base do CPL), não sobre todos os cadastros.
   const linhasPagas = linhas.filter(ehPago);
-  const linhasComMql = linhasPagas.filter((l) => l.mql !== null && l.mql !== undefined);
+  const linhasComMql = enviosMaisRecentesPorPessoa(linhasPagas);
   const valorCpl = distribuicao ? null : cpl(dias.length ? a.gasto : null, pagos);
   return {
     gasto: a.gasto, impressoes: a.impressoes, cpm: cpm(a), cliques: a.cliques.valor, ctr: ctr(a), lpv: a.lpv.valor,
     connect: connectRate(dias, idx), leads: linhas.length, leadsPagos: pagos,
-    mql: linhasComMql.length ? taxa(linhasComMql.filter((l) => l.mql === true).length, linhasComMql.length,
-      linhasComMql.length < linhasPagas.length ? 'Base: leads pagos com MQL conhecido; há leads pagos sem essa informação.' : 'Leads pagos MQL ÷ leads pagos do criativo.')
+    mql: linhasComMql.length ? taxa(linhasComMql.filter(ehMqlPorProfissao).length, linhasComMql.length,
+      'Regra B: profissão do envio mais recente entre pessoas com lead pago neste criativo.')
       : taxa(null, null, 'MQL sem dado no cadastro.'), cpl: valorCpl,
     farol: distribuicao ? 'sem' : farolCpl(valorCpl, regua), video75: taxaVideo75(a), custoVisualizacao: custoPorVisualizacao(a), distribuicao,
   };

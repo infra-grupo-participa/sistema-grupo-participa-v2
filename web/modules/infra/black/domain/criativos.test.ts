@@ -5,6 +5,7 @@ import { conversaoPagina, ctr, agregar, indexar, ingressoGrupoGeral, mqlDoRecort
 import { anunciosDoCriativo, funilCriativo, idDoCriativo, ORDENS_GALERIA, ordenar, painel, resumir, serieDiariaAnuncio, valorOrdem } from './criativos';
 import { recorteDaTela, TETO_RECORTE_ANUNCIO } from './grupo';
 import { grupoDemo } from '../infrastructure/fixtures/fonte-fixtures';
+import type { LinhaPerfil } from './tipos';
 
 const b = baseFicticia();
 const idx = indexar(b);
@@ -206,8 +207,8 @@ describe('criativos e páginas', () => {
   it('percentual MQL do criativo usa somente leads pagos e não inclui cadastros orgânicos', () => {
     const dias = b.dias.slice(0, 1);
     const pagos = [
-      { ...b.linhas.find((l) => l.origem === 'pago')!, pessoaId: 'pago-mql', mql: true },
-      { ...b.linhas.find((l) => l.origem === 'pago')!, pessoaId: 'pago-nao-mql', mql: false },
+      { ...b.linhas.find((l) => l.origem === 'pago')!, pessoaId: 'pago-mql', profissao: 'advogado' as const, mql: false },
+      { ...b.linhas.find((l) => l.origem === 'pago')!, pessoaId: 'pago-nao-mql', profissao: 'outros' as const, mql: true },
     ];
     const organico = { ...pagos[0], pessoaId: 'organico-mql', origem: 'organico' as const, mql: true };
     expect(resumir(dias, [...pagos, organico], idx, regua, false).mql).toMatchObject({ num: 1, den: 2, valor: 0.5 });
@@ -235,9 +236,9 @@ describe('criativos e páginas', () => {
     expect(f[5].ponte!.taxa).toEqual(ingressoGrupoGeral(linhas));
     expect(f[5].valor).toBe(f[5].ponte!.taxa.num);
   });
-  it('MQL e ingresso: pessoas únicas, ingresso sobre os leads gerais e sem janela de horas', () => {
-    const L = (pessoaId: string, mql: boolean | null, entrou: string | null) => ({ ...b.linhas[0], leadId: `l-${pessoaId}-${Math.random()}`, pessoaId, mql, entrouGrupoEm: entrou });
-    const t = [L('a', true, '2026-10-05T10:00:00Z'), L('a', true, null), L('b', false, '2026-10-30T10:00:00Z'), L('c', true, null), L('d', null, null)];
+  it('MQL e ingresso: pessoas únicas, ingresso sobre leads gerais e MQL pela profissão mais recente', () => {
+    const L = (pessoaId: string, profissao: LinhaPerfil['profissao'], entrou: string | null, criadoEm = '2026-10-05T10:00:00Z') => ({ ...b.linhas[0], leadId: `l-${pessoaId}-${criadoEm}`, pessoaId, profissao, entrouGrupoEm: entrou, criadoEm });
+    const t = [L('a', 'advogado', '2026-10-05T10:00:00Z'), L('a', 'outros', null, '2026-10-05T11:00:00Z'), L('b', 'contador', '2026-10-30T10:00:00Z'), L('c', 'estudante_direito', null), L('d', null, null)];
     const m = mqlDoRecorte(t);
     expect(m.num).toBe(2); expect(m.den).toBe(4); expect(m.valor).toBeCloseTo(0.5, 9);
     const g = ingressoGrupoGeral(t); // a e b entraram, qualquer data; base = os 4 leads (não só os MQL)
