@@ -209,6 +209,20 @@ qualquer tela que passe esses nomes por ele vai recusá-los.
 `dados_black_grupo` (com recorte `{"tipo","valor"}`), mais a marcação de teste com ramo por modelo. Regras de MQL,
 ingresso único no grupo e "A corrigir", números e ensaio: [`20261012234606.explain.md`](../../infra/supabase/migrations/20261012234606.explain.md).
 
+## Banco: marcar teste só master e ids do Meta no tráfego (13/10, NÃO aplicadas)
+
+Duas migrations escritas e ensaiadas em ROLLBACK (verde), **à espera da revisão do pentester e da aplicação**:
+
+- **`20261013013625`** (achado bloqueante do pentester): na Black, `dados_marcar_teste` e `dados_desmarcar_teste` passam a
+  exigir master (`acesso.eh_master()`, 42501 para os demais), como o presencial. O ATM fica igual (pendência registrada
+  para decisão). O desmarcar só toca marcação da própria chave. Detalhe: [`20261013013625.explain.md`](../../infra/supabase/migrations/20261013013625.explain.md).
+- **`20261013014209`**: `dados_black_trafego` passa a devolver `campanha_externa` (em cada item de `campanhas`) e
+  `conjunto_externa` (em cada item de `conjuntos`), que a tela já lê para o recorte por campanha e conjunto. Nada mais
+  muda (retorno sem as 2 chaves = retorno de antes; gasto por etapa igual). Detalhe: [`20261013014209.explain.md`](../../infra/supabase/migrations/20261013014209.explain.md).
+
+Efeito na tela, quando aplicadas: marcar/desmarcar teste na Black dá "sem acesso" para quem não é master; o recorte do
+grupo por campanha e por conjunto deixa de mostrar "Sem dado".
+
 ## Banco: ingresso no grupo (webhook n8n e backfill)
 
 Não tem migration: usa o caminho que já existe para o ATM. Situação em 12/10/2026: **o n8n foi publicado às 23:55 UTC
