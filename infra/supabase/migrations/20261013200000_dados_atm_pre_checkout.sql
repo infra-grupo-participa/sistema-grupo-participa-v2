@@ -1,6 +1,8 @@
 -- 20261013200000: lista de quem preencheu o pré-checkout da Sessão de Viabilidade (modal do card "Pré-checkout" do ATM)
 --
--- STATUS: NÃO APLICADA. Escrita e ensaiada (BEGIN ... ROLLBACK) em 13/10/2026. Aplicar só com ok do Victor e do JP.
+-- STATUS: APLICADA em produção em 13/10/2026 (ok do Victor), versão 20261013200000, com a linha em
+-- supabase_migrations.schema_migrations na mesma transação; md5 gravado = 5a68a9a110ec297553210d03df8a3347 = este arquivo antes desta
+-- troca de STATUS. Escrita e ensaiada (BEGIN ... ROLLBACK) em 13/10/2026.
 -- Ensaio: 20261013200000_ensaio.sql. Reversão: 20261013200000_reversao.sql. Situação e prova: 20261013200000.explain.md.
 -- Depende de 20261008191000 (marcação de teste), 20261008161000 (dados.atm_leads) e 20261007180503 (schema acesso), já aplicadas.
 -- Ao aplicar pelo MCP, a versão é gravada pelo relógio: renomear os 4 arquivos para a versão de schema_migrations.

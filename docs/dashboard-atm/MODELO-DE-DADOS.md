@@ -363,11 +363,10 @@ a seção separada da Sessão de Viabilidade), por `carregarAtmSvVendas` em `web
   viram aviso com a última lista mantida. A RPC levanta `42501` (fora da equipe, sem `contato.ver`, teste sem ser master)
   e `P0002` (chave que não é do modelo ATM).
 
-## Lista de pré-checkout: `dados_atm_pre_checkout` (A PUBLICAR, 13/10/2026)
+## Lista de pré-checkout: `dados_atm_pre_checkout` (APLICADA, 13/10/2026)
 
-**Situação: A PUBLICAR.** A função é criada por outra frente (back-end) e **ainda não está no banco** em 13/10/2026, ~19h.
-A tela já está ligada a ela (`carregarAtmPreCheckout` em `web/modules/infra/atm/infrastructure/atm-data.ts`): enquanto não
-existir, o PostgREST devolve `PGRST202` e o modal do card Pré-checkout mostra "A lista de pré-checkout ainda não foi
+**Situação: APLICADA** em produção em 13/10/2026 às 19h12 (migration `20261013200000`).
+A tela está ligada a ela (`carregarAtmPreCheckout` em `web/modules/infra/atm/infrastructure/atm-data.ts`): se a função sumir (reversão), o PostgREST devolve `PGRST202` e o modal do card Pré-checkout mostra "A lista de pré-checkout ainda não foi
 publicada no banco." (estado transitório, sem número inventado). Quem lê: modal do card Pré-checkout do funil.
 
 Por que precisa de RPC própria: `dados.atm_pre_checkout` é interna; `dados_atm_leads.no_pre_checkout` só cobre quem é lead
