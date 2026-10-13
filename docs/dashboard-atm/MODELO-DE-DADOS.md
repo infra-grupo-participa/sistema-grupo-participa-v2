@@ -110,6 +110,33 @@ Aba "Histórico". Situação da aplicação: `infra/supabase/migrations/20261009
   `pre_checkout`. CAC, ROAS, CPL, conversões e retenção são calculados na tela, nunca gravados.
 - A edição OUT/26 entra depois do ciclo fechado, pelo passo SQL da seção 4 do `.explain.md`.
 
+## 0d. Venda do escritório em tempo real (20261013193000, 13/10/2026): NÃO APLICADA
+
+**Situação:** migration, ensaio, reversão e edge escritos e ensaiados em transação desfeita; **nada aplicado em produção,
+edge não publicada, webhook não cadastrado na Hotmart.** Enquanto isso, a venda do ATM continua de hora em hora.
+
+- **Caminho:** Hotmart (conta escritório) → edge `hotmart-escritorio-webhook` (header `x-hotmart-hottok` contra o secret
+  `HOTMART_HOTTOK_ESCRITORIO`) → `dados.hotmart_ao_vivo_gravar` → tabela-ponte `dados.hotmart_ao_vivo` (uma linha por
+  conta + transação, último evento) → ramo `ao_vivo` de `dados.transacoes`, que só vale para conta diferente de `academy`
+  e só enquanto o espelho `fin.hotmart_transacoes` não tem a transação. Nenhuma RPC do ATM mudou; a tela já relê a cada 60 s.
+- **Não duplica:** mesma transação no webhook e no espelho aparece 1 vez (o espelho manda); o mesmo evento 2x não muda a
+  linha; evento antigo depois do novo não volta o status.
+- **Ponte não acumula:** cron diário `dados-hotmart-ao-vivo-limpar` (05:37 UTC) apaga a linha cujo par no espelho foi visto
+  há mais de 24 h.
+- **Alerta:** `dados.hotmart_ao_vivo_sem_espelho(3)` lista venda paga do webhook sem par no espelho há mais de 3 h (venda
+  forjada com hottok vazado, ou sync parado). **Ainda não ligada a canal nenhum: até o dono do alerta decidir onde ligar,
+  uma venda forjada aparece no ATM e ninguém é avisado** (ver o `.explain.md`).
+- **Payload fora da regra não entra:** tipo e faixa de todo número e data são conferidos na edge e de novo no banco
+  (`dados.hotmart_ao_vivo_payload_ok`); se uma linha fora da regra aparecer na ponte, a leitura a ignora em vez de cair.
+- **Ordem para ligar:** migration → secret → deploy da edge → cadastro do webhook na Hotmart (versão 2.0.0, eventos
+  `PURCHASE_APPROVED`, `PURCHASE_COMPLETE`, `PURCHASE_CANCELED`, `PURCHASE_BILLET_PRINTED`, `PURCHASE_DELAYED`,
+  `PURCHASE_REFUNDED`, `PURCHASE_EXPIRED`, `PURCHASE_PROTEST`, `PURCHASE_CHARGEBACK`; sem `PURCHASE_OUT_OF_SHOPPING_CART`).
+- **Como testar depois de ligar:** a venda nova aparece em `dados.atm_vendas` em segundos; depois do minuto 7 da hora
+  seguinte, contagem e receita continuam iguais (a linha passou a vir do espelho).
+- **Desligar:** tirar o webhook na Hotmart ou apagar o secret (a edge responde 503). Desfazer no banco:
+  `infra/supabase/migrations/20261013193000_reversao.sql` (só reverte se o corpo vivo de `dados.transacoes` ainda for o
+  desta migration). Detalhe e provas: `20261013193000.explain.md`.
+
 ## 1. De onde vem cada número
 
 | Card / coluna | Fonte no banco | Regra |
@@ -121,7 +148,7 @@ Aba "Histórico". Situação da aplicação: `infra/supabase/migrations/20261009
 | Taxa de evasão | saídas ÷ entradas × 100 | saída só conta para quem entrou e saiu depois de entrar |
 | CPL | custo de disparo ÷ leads (sem teste) | só com custo completo (nenhum disparo de canal pago sem custo; e-mail e grupo não têm custo por disparo, 20261009210000); senão nulo |
 | Pré-checkout | `dados.pre_checkout` (evento `pre_checkout` do projeto + lista do AC `lista_ac`) | o mesmo do dashboard presencial |
-| Vendas | `fin.hotmart_transacoes` da oferta do cadastro (conta `escritorio`), pagas, 1ª cobrança, pedido a partir de `vendas_desde` | nulo enquanto a oferta não estiver no cadastro. Atualiza de hora em hora (o webhook em tempo real só cobre a conta academy) |
+| Vendas | `fin.hotmart_transacoes` da oferta do cadastro (conta `escritorio`), pagas, 1ª cobrança, pedido a partir de `vendas_desde` | nulo enquanto a oferta não estiver no cadastro. **Hoje (situação vigente): atualiza de hora em hora** (sync do Financeiro). **Regra nova, NÃO APLICADA** (migration `20261013193000`, edge `hotmart-escritorio-webhook`): a venda do escritório aparece em segundos pela ponte `dados.hotmart_ao_vivo`; quando o sync traz a transação, a linha da ponte sai da leitura e o espelho manda (nada conta 2x). Ver seção 0d |
 | Taxa de conversão do pré-checkout | compradores ÷ pré-checkout × 100 | mesma regra do presencial |
 | CAC | custo ÷ vendas | só com custo completo |
 | Faturamento bruto / líquido | vendas pagas em BRL | bruto = valor base; líquido = líquido do produtor (regra do presencial) |
@@ -247,7 +274,7 @@ Lista de vendas, se a tela quiser: `dados_presencial_vendas(p_chave)` serve para
 | Disparos, custo, CPL, CAC, ROAS | projeto 75 (`ATMEL126`) | `[ATMEL126]` no nome das campanhas; custo lançado |
 | Grupo, % ingresso, evasão | banco pronto (08/10) | colar a URL no SendHook da campanha `ATM 10/26` |
 | Pré-checkout | sem fonte | lista do gateway Guardiões do Legado ou a rota de captura |
-| Vendas, faturamento | oferta `mqquvrtc` (provisória) | confirmar a oferta definitiva (Arthur, 86aktf1c3) |
+| Vendas, faturamento | oferta `a4chzrru` no cadastro (13/10/2026; antes `mqquvrtc`, que é a da edição de setembro) | confirmar a oferta definitiva (Arthur, 86aktf1c3) |
 | Lista e seminário de origem | carregadas (131.515 e 2.316) | nada |
 | Comparecimento | só a live cadastrada | hora do replay e do triplay; pico, equipe e relatório do Zoom depois da live |
 
