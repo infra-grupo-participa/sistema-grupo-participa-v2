@@ -2,15 +2,20 @@
 // ao servidor (p_recorte). As contas de pessoa única e de ingresso são do servidor; aqui só a razão, soma sobre
 // soma do mesmo período e do mesmo recorte. Divisão por zero ou por null = Sem dado, nunca zero.
 import { taxa, type Taxa } from './metricas';
-import type {
-  FiltroCanal, FiltroFunil, GrupoResumoBlack, Isca, Porta, RecorteGrupo, SegmentoGrupo, Valor,
+import {
+  ROTULO_FUNIL,
+  type FiltroCanal, type FiltroFunil, type GrupoResumoBlack, type Isca, type Porta, type Recorte, type RecorteGrupo,
+  type SegmentoGrupo, type TrafegoBlack, type Valor,
 } from './tipos';
 
 /** Rótulo dos cards quando há recorte: a conta passa a ser cruzada (dos leads do recorte, quem está no grupo). */
 export const ROTULO_CRUZADO = 'dos leads deste nó, quantos estão no grupo';
 
-/** Recorte pronto para o servidor, ou o motivo de não haver (o card mostra Sem dado com o motivo). */
-export type RecorteServidor = { ok: true; recorte: RecorteGrupo | null } | { ok: false; motivo: string };
+/**
+ * Recorte pronto para o servidor, ou o motivo de não haver (o card mostra Sem dado com o motivo).
+ * `descricao` = o que o card mostra do recorte (nome exato do item escolhido); ausente sem recorte.
+ */
+export type RecorteServidor = { ok: true; recorte: RecorteGrupo | null; descricao?: string } | { ok: false; motivo: string };
 
 const PORTA_DO_FUNIL: Record<'consultoria' | 'iscas' | 'c3', Porta> = { consultoria: 'consultoria', iscas: 'isca', c3: 'inscricao_direta' };
 
@@ -33,6 +38,52 @@ export function recorteGrupoDe(n: {
   if (n.funil === 'todos') return { ok: true, recorte: null };
   if (n.funil === 'c1') return { ok: false, motivo: 'O C1 é distribuição: não gera cadastro nem entrada no grupo.' };
   return { ok: true, recorte: { tipo: 'porta', valor: PORTA_DO_FUNIL[n.funil] } };
+}
+
+type TrafegoIds = Pick<TrafegoBlack, 'campanhas' | 'conjuntos' | 'anuncios' | 'paginas'>;
+
+/**
+ * Recorte da tela inteira -> p_recorte. O item escolhido em Criativos (anúncio, conjunto, campanha, página) vence o
+ * funil, do mais fino para o mais grosso. O servidor só entende o id do Meta: o anúncio traz o dele
+ * (anuncio_externa); campanha e conjunto só quando dados_black_trafego devolver campanha_externa / conjunto_externa.
+ * Sem o id do Meta, Sem dado com o motivo: nunca o número do funil no lugar (seria outro recorte) e nunca o id
+ * deduzido pelos leads.
+ */
+export function recorteDaTela(r: Pick<Recorte, 'funil' | 'canal' | 'criativos'>, t: TrafegoIds | null): RecorteServidor {
+  const base = { funil: r.funil, canal: r.canal };
+  if (r.canal !== 'todos') return recorteGrupoDe(base);
+  const f = r.criativos;
+  const com = (x: RecorteServidor, descricao: string): RecorteServidor => (x.ok ? { ...x, descricao } : x);
+  if ((f.anuncio || f.conjunto || f.campanha || f.pagina) && !t) {
+    return { ok: false, motivo: 'Aguardando o tráfego para achar o id do Meta do item escolhido.' };
+  }
+  if (t && f.anuncio) {
+    const a = t.anuncios.find((x) => x.id === f.anuncio);
+    if (!a) return { ok: false, motivo: 'O anúncio escolhido não está no tráfego do período.' };
+    if (!a.idExterno) return { ok: false, motivo: `O anúncio "${a.nome}" não tem o id do Meta no tráfego.` };
+    return com(recorteGrupoDe({ ...base, anuncioMeta: a.idExterno }), `Anúncio: ${a.nome}`);
+  }
+  if (t && f.conjunto) {
+    const j = t.conjuntos.find((x) => x.id === f.conjunto);
+    if (!j) return { ok: false, motivo: 'O conjunto escolhido não está no tráfego do período.' };
+    if (!j.idExterno) return { ok: false, motivo: `O tráfego ainda não devolve o id do Meta do conjunto "${j.nome}" (conjunto_externa).` };
+    return com(recorteGrupoDe({ ...base, conjuntoMeta: j.idExterno }), `Conjunto: ${j.nome}`);
+  }
+  if (t && f.campanha) {
+    const c = t.campanhas.find((x) => x.id === f.campanha);
+    if (!c) return { ok: false, motivo: 'A campanha escolhida não está no tráfego do período.' };
+    if (!c.idExterno) return { ok: false, motivo: `O tráfego ainda não devolve o id do Meta da campanha "${c.nome}" (campanha_externa).` };
+    return com(recorteGrupoDe({ ...base, campanhaMeta: c.idExterno }), `Campanha: ${c.nome}`);
+  }
+  if (t && f.pagina) {
+    const p = t.paginas.find((x) => x.id === f.pagina);
+    if (!p) return { ok: false, motivo: 'A página escolhida não está no tráfego do período.' };
+    if (p.isca) return com(recorteGrupoDe({ ...base, isca: p.isca }), `Página: ${p.rotulo}`);
+    if (p.porta) return com(recorteGrupoDe({ ...base, porta: p.porta }), `Página: ${p.rotulo}`);
+    return { ok: false, motivo: `A página "${p.rotulo}" não tem porta nem isca: o servidor não tem esse recorte.` };
+  }
+  const x = recorteGrupoDe(base);
+  return r.funil === 'todos' ? x : com(x, `Funil: ${ROTULO_FUNIL[r.funil]}`);
 }
 
 /** Chave estável do recorte (para a releitura do bloco do grupo). */

@@ -41,8 +41,11 @@ export interface DadosTela {
   avisoPerfil: string | null;
   /** Só master: envios marcados como teste no período (para ver e desmarcar). Vazio para os demais. */
   linhasTeste: LinhaPerfil[];
-  /** dados_black_grupo do período e do nó da tela. `motivo` = por que não há número neste recorte (ex.: canal). */
-  grupo: { data: GrupoResumoBlack | null; semDado: boolean; aviso: string | null; motivo: string | null; erro: string | null };
+  /**
+   * dados_black_grupo do período e do nó da tela. `motivo` = por que não há número neste recorte (ex.: canal);
+   * `descricao` = o recorte aplicado, com o nome exato do item (ex.: "Anúncio: <nome>"), null sem recorte.
+   */
+  grupo: { data: GrupoResumoBlack | null; semDado: boolean; aviso: string | null; motivo: string | null; erro: string | null; descricao: string | null };
   isMaster: boolean;
   /** Relê todos os blocos (depois de marcar ou desmarcar teste). */
   recarregar: () => void;

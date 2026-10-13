@@ -2,7 +2,7 @@
 
 // Tabela de leads do recorte, só ao abrir a sub-aba e 50 por página: nome, e-mail e telefone saem da fonte
 // sob demanda (dado pessoal não vem junto do perfil). Falha na leitura segura a página anterior.
-// Master marca e desmarca teste por linha (padrão do ATM: confirmação antes de marcar, recarrega depois). O
+// Master marca e desmarca teste por linha (padrão do ATM: confirmação antes de marcar e antes de desmarcar, recarrega depois). O
 // `parece_teste` do banco só aparece como sugestão: nada é marcado sozinho.
 import { useEffect, useState } from 'react';
 import { Button, ConfirmDialog, DataTable, Td, Th, Thead, Tr } from '@/shared/ui/components';
@@ -18,7 +18,7 @@ export function TabelaLeads({ d, linhas }: { d: DadosTela; linhas: LinhaPerfil[]
   const [pagina, setPagina] = useState(0);
   const [lido, setLido] = useState<{ marca: string; detalhes: Map<string, LeadDetalhe>; erro: string | null } | null>(null);
   const [verTestes, setVerTestes] = useState(false);
-  const [alvo, setAlvo] = useState<LeadDetalhe | null>(null);
+  const [alvo, setAlvo] = useState<{ lead: LeadDetalhe; teste: boolean } | null>(null);
   const [salvando, setSalvando] = useState<string | null>(null);
   const [erroAcao, setErroAcao] = useState<string | null>(null);
   const master = d.isMaster;
@@ -96,7 +96,7 @@ export function TabelaLeads({ d, linhas }: { d: DadosTela; linhas: LinhaPerfil[]
                     <Td className="text-xs">
                       {x && (x.email || x.telefone) && (
                         <button type="button" disabled={salvando === l.leadId}
-                          onClick={() => { setErroAcao(null); if (l.teste) void mudar(x, false); else setAlvo(x); }}
+                          onClick={() => { setErroAcao(null); setAlvo({ lead: x, teste: !l.teste }); }}
                           className="whitespace-nowrap rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-3)] disabled:opacity-50">
                           {salvando === l.leadId ? 'Salvando…' : l.teste ? 'Desmarcar teste' : 'Marcar como teste'}
                         </button>
@@ -116,11 +116,15 @@ export function TabelaLeads({ d, linhas }: { d: DadosTela; linhas: LinhaPerfil[]
           <Button variant="ghost" size="sm" disabled={atual >= paginas - 1} onClick={() => setPagina(atual + 1)}>Próxima</Button>
         </span>
       </div>
-      {alvo && (
+      {alvo && (alvo.teste ? (
         <ConfirmDialog title="Marcar lead como teste" confirmLabel="Marcar como teste" cancelLabel="Cancelar"
-          onCancel={() => setAlvo(null)} onConfirm={() => void mudar(alvo, true)}
+          onCancel={() => setAlvo(null)} onConfirm={() => void mudar(alvo.lead, true)}
           message="Esta marcação vale para esta Black Friday. A pessoa (pelo e-mail e pelo telefone) e os dados relacionados deixam de contar nos indicadores deste evento. Quer continuar?" />
-      )}
+      ) : (
+        <ConfirmDialog title="Desmarcar teste" confirmLabel="Desmarcar teste" cancelLabel="Cancelar"
+          onCancel={() => setAlvo(null)} onConfirm={() => void mudar(alvo.lead, false)}
+          message="A pessoa (pelo e-mail e pelo telefone) e os dados relacionados voltam a contar nos indicadores desta Black Friday. Quer continuar?" />
+      ))}
     </div>
   );
 }

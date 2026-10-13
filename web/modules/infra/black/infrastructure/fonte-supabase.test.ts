@@ -5,7 +5,8 @@ vi.mock('@/shared/infrastructure/supabase/browser-client', () => ({ createBrowse
 vi.mock('@/shared/infrastructure/supabase/query-log', () => ({ logQueryError: vi.fn() }));
 
 import { alinharIds } from '../domain/alinhar';
-import { cardMql, cardsGrupo, grupoSemDado, recorteGrupoDe, ROTULO_CRUZADO } from '../domain/grupo';
+import { cardMql, cardsGrupo, grupoSemDado, recorteDaTela, recorteGrupoDe, ROTULO_CRUZADO } from '../domain/grupo';
+import type { FiltroCriativos } from '../domain/tipos';
 import { CHAVE_BLACK } from './fixtures/catalogo';
 import { criarFonteFixtures } from './fixtures/fonte-fixtures';
 import {
@@ -104,6 +105,62 @@ describe('cards de MQL e de grupo', () => {
     expect(recorteGrupoDe({ funil: 'consultoria', canal: 'todos' })).toEqual({ ok: true, recorte: { tipo: 'porta', valor: 'consultoria' } });
     expect(recorteGrupoDe({ funil: 'iscas', canal: 'todos', anuncioMeta: '990001', campanhaMeta: '880001' }))
       .toEqual({ ok: true, recorte: { tipo: 'anuncio', valor: '990001' } });
+  });
+  it('recorteDaTela: item de Criativos vira o id do Meta; sem id = motivo, nunca o funil no lugar', () => {
+    const t = {
+      campanhas: [
+        { id: '101', nome: 'CAMP A', idExterno: '880001' },
+        { id: '102', nome: 'CAMP B', idExterno: null },
+      ],
+      conjuntos: [
+        { id: '201', campanhaId: '101', nome: 'CONJ A', idExterno: '770001' },
+        { id: '202', campanhaId: '102', nome: 'CONJ B' },
+      ],
+      anuncios: [
+        { id: '301', nome: 'AD 01', idExterno: '990001' },
+        { id: '302', nome: 'AD 02', idExterno: null },
+      ],
+      paginas: [
+        { id: 'p1', rotulo: 'Isca X', isca: 'checklist', porta: 'isca' },
+        { id: 'p2', rotulo: 'Consultoria', isca: null, porta: 'consultoria' },
+        { id: 'p3', rotulo: 'Sem porta', isca: null, porta: null },
+      ],
+    } as unknown as Parameters<typeof recorteDaTela>[1];
+    const r = (criativos: FiltroCriativos, funil: 'todos' | 'consultoria' = 'todos', canal: 'todos' | 'meta' = 'todos') =>
+      recorteDaTela({ funil, canal, criativos }, t);
+
+    expect(r({ anuncio: '301' })).toEqual({ ok: true, recorte: { tipo: 'anuncio', valor: '990001' }, descricao: 'Anúncio: AD 01' });
+    expect(r({ anuncio: '302' }).ok).toBe(false);
+    expect(r({ conjunto: '201' })).toEqual({ ok: true, recorte: { tipo: 'conjunto', valor: '770001' }, descricao: 'Conjunto: CONJ A' });
+    const semConj = r({ conjunto: '202' });
+    expect(semConj.ok).toBe(false);
+    if (!semConj.ok) expect(semConj.motivo).toContain('conjunto_externa');
+    expect(r({ campanha: '101' })).toEqual({ ok: true, recorte: { tipo: 'campanha', valor: '880001' }, descricao: 'Campanha: CAMP A' });
+    const semCamp = r({ campanha: '102' }, 'consultoria');
+    expect(semCamp.ok).toBe(false);
+    if (!semCamp.ok) expect(semCamp.motivo).toContain('campanha_externa');
+    expect(r({ anuncio: '301', campanha: '102' })).toMatchObject({ ok: true, recorte: { tipo: 'anuncio' } });
+    expect(r({ pagina: 'p1' })).toEqual({ ok: true, recorte: { tipo: 'isca', valor: 'checklist' }, descricao: 'Página: Isca X' });
+    expect(r({ pagina: 'p2' })).toEqual({ ok: true, recorte: { tipo: 'porta', valor: 'consultoria' }, descricao: 'Página: Consultoria' });
+    expect(r({ pagina: 'p3' }).ok).toBe(false);
+    expect(r({ anuncio: '999' }).ok).toBe(false);
+    expect(r({ anuncio: '301' }, 'todos', 'meta').ok).toBe(false);
+    expect(r({}, 'consultoria')).toEqual({ ok: true, recorte: { tipo: 'porta', valor: 'consultoria' }, descricao: expect.stringMatching(/^Funil: /) });
+    expect(r({})).toEqual({ ok: true, recorte: null });
+    const aguardando = recorteDaTela({ funil: 'todos', canal: 'todos', criativos: { anuncio: '301' } }, null);
+    expect(aguardando.ok).toBe(false);
+    if (!aguardando.ok) expect(aguardando.motivo).toContain('Aguardando');
+  });
+  it('tráfego: campanha_externa e conjunto_externa viram idExterno; ausente = null', () => {
+    const resp = structuredClone(RESPOSTA_TRAFEGO) as Record<string, unknown>;
+    const camps = resp.campanhas as Record<string, unknown>[];
+    const conjs = resp.conjuntos as Record<string, unknown>[];
+    camps[0].campanha_externa = '880001';
+    conjs[0].conjunto_externa = '770001';
+    const { data } = mapearTrafego(resp);
+    expect(data.campanhas[0].idExterno).toBe('880001');
+    expect(data.campanhas[1].idExterno ?? null).toBeNull();
+    expect(data.conjuntos[0].idExterno).toBe('770001');
   });
 });
 

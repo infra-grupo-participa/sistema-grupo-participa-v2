@@ -11,7 +11,7 @@ import { Icon } from '@/shared/ui/icons';
 import type { FonteDadosBlack } from '../application/ports';
 import { obterFonte } from '../infrastructure/fonte';
 import { alinharIds } from '../domain/alinhar';
-import { chaveRecorte, recorteGrupoDe } from '../domain/grupo';
+import { chaveRecorte, recorteDaTela } from '../domain/grupo';
 import { filtrarDias, filtrarLinhas, indexar } from '../domain/metricas';
 import { diaDe, diasDoPeriodo, escreverRecorte, periodoDe } from '../domain/recorte';
 import type { AbaBlack, ConfigBlack, GrupoResumoBlack, LinhaPerfil, Marcos, MensageriaBlack, Recorte, Resultado, TotalPeriodo, TrafegoBlack } from '../domain/tipos';
@@ -122,8 +122,13 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
     return () => { vivo = false; };
   }, [fonte, chave, de, ate, inicio, hoje, versao, isMaster]);
 
-  // 3) grupo: período e nó (funil/canal) da tela vão ao servidor (p_recorte); sem teste.
-  const alvoGrupo = useMemo(() => recorteGrupoDe({ funil: recorte.funil, canal: recorte.canal }), [recorte.funil, recorte.canal]);
+  // 3) grupo: período e nó da tela (funil, ou o anúncio/conjunto/campanha/página escolhido, pelo id do Meta) vão ao
+  // servidor (p_recorte); sem teste.
+  const { campanha: fCampanha, conjunto: fConjunto, anuncio: fAnuncio, pagina: fPagina } = recorte.criativos;
+  const alvoGrupo = useMemo(
+    () => recorteDaTela({ funil: recorte.funil, canal: recorte.canal, criativos: { campanha: fCampanha, conjunto: fConjunto, anuncio: fAnuncio, pagina: fPagina } }, trafego.data),
+    [recorte.funil, recorte.canal, fCampanha, fConjunto, fAnuncio, fPagina, trafego.data],
+  );
   const marcaRecorte = alvoGrupo.ok ? chaveRecorte(alvoGrupo.recorte) : 'sem-numero';
   useEffect(() => {
     if (!fonte || !de || !ate || !alvoGrupo.ok) return;
@@ -167,8 +172,8 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
       perfilSemDado: perfil.semDado, avisoPerfil: perfil.aviso,
       linhasTeste: isMaster ? linhasBase.filter((l) => l.teste && noPeriodo(l)) : [],
       grupo: alvoGrupo.ok
-        ? { data: grupo.data, semDado: grupo.semDado || grupo.data === null, aviso: grupo.aviso, motivo: null, erro: grupo.erro }
-        : { data: null, semDado: true, aviso: null, motivo: alvoGrupo.motivo, erro: null },
+        ? { data: grupo.data, semDado: grupo.semDado || grupo.data === null, aviso: grupo.aviso, motivo: null, erro: grupo.erro, descricao: alvoGrupo.descricao ?? null }
+        : { data: null, semDado: true, aviso: null, motivo: alvoGrupo.motivo, erro: null, descricao: null },
       isMaster, recarregar: () => setVersao((v) => v + 1),
       irPara, abrirGaveta: setGaveta,
     };

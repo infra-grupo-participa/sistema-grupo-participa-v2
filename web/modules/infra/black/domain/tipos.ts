@@ -58,8 +58,14 @@ export interface Campanha {
   id: string; nome: string; canal: Canal; funil: Funil | null; fase: Fase | null;
   /** Só a fonte real preenche: etapa e subtipo como vêm do banco, e se o nome tem dois subtipos (conflito). */
   etapa?: EtapaCampanha | null; subtipo?: string | null; conflito?: boolean | null;
+  /** Id da campanha no Meta (mkt_trafego.campanhas.campanha_externa), quando dados_black_trafego devolver. */
+  idExterno?: string | null;
 }
-export interface Conjunto { id: string; campanhaId: string; nome: string; isca: Isca | null; conjuntoC3: ConjuntoC3 | null }
+export interface Conjunto {
+  id: string; campanhaId: string; nome: string; isca: Isca | null; conjuntoC3: ConjuntoC3 | null;
+  /** Id do conjunto no Meta (mkt_trafego.conjuntos.conjunto_externa), quando dados_black_trafego devolver. */
+  idExterno?: string | null;
+}
 export interface Anuncio {
   id: string; conjuntoId: string; nome: string; formato: 'video' | 'imagem' | null;
   paginaId: string | null; miniaturaUrl: string | null; linkPrevia: string | null; linkGerenciador: string | null;

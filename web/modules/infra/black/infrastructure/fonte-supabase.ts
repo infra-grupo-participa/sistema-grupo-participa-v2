@@ -153,11 +153,11 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
     // O banco só aceita 'meta' em mkt_trafego; outra plataforma não tem lugar na tela e fica de fora.
     if (!id || !nome || c.plataforma !== 'meta') continue;
     const etapa = etapaDe(c.etapa); const subtipo = texto(c.subtipo);
-    campanhas.push({ id, nome, canal: 'meta', funil: funilDaEtapa(etapa, subtipo), fase: null, etapa, subtipo, conflito: booleano(c.conflito) });
+    campanhas.push({ id, nome, canal: 'meta', funil: funilDaEtapa(etapa, subtipo), fase: null, etapa, subtipo, conflito: booleano(c.conflito), idExterno: texto(c.campanha_externa) });
   }
   const conjuntos: Conjunto[] = linhas(r.conjuntos).flatMap((j) => {
     const id = texto(j.id); const campanhaId = texto(j.campanha_id); const nome = texto(j.nome);
-    return id && campanhaId && nome ? [{ id, campanhaId, nome, isca: null, conjuntoC3: null }] : [];
+    return id && campanhaId && nome ? [{ id, campanhaId, nome, isca: null, conjuntoC3: null, idExterno: texto(j.conjunto_externa) }] : [];
   });
   const anuncios: Anuncio[] = linhas(r.anuncios).flatMap((a) => {
     const id = texto(a.id); const conjuntoId = texto(a.conjunto_id); const nome = texto(a.nome);

@@ -60,6 +60,7 @@ function CardMql({ d, onAbrir }: { d: DadosTela; onAbrir: () => void }) {
       <KpiCard label="MQLs" title="dados_black_grupo: leads.mql e leads.unicos (pessoas únicas do período e do nó, sem teste)."
         value={<Numero valor={c?.total ?? null} formato="int" falta={falta} />}
         hint={c ? `${c.taxa.valor === null ? 'Sem dado' : formatar(c.taxa.valor, 'pct')} dos leads (${formatar(c.taxa.num, 'int')} ÷ ${formatar(c.taxa.den, 'int')}).` : falta} />
+      {c && d.grupo.descricao && <p className="-mt-2 px-4 pb-3 text-xs text-[var(--fg-3)]">Recorte: {d.grupo.descricao}</p>}
     </Cartao>
   );
 }
@@ -82,6 +83,7 @@ function CardIngresso({ d, onAbrir }: { d: DadosTela; onAbrir: () => void }) {
               <span className="text-right text-[var(--fg)]"><Taxa taxa={x.taxa} /> <span className="text-[var(--fg-3)]">{formatar(x.taxa.num, 'int')} ÷ {formatar(x.taxa.den, 'int')}</span></span>
             </li>
           ))}
+          {d.grupo.descricao && <li className="pt-1 text-[var(--fg-3)]">Recorte: {d.grupo.descricao}</li>}
         </ul>
       )}
     </Cartao>

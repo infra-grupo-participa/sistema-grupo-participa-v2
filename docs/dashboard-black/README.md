@@ -271,20 +271,49 @@ sem quebrar a tela. Os mapeadores são puros e testados sem rede contra resposta
   `grupos[advogado].unicos ÷ leads.advogado_mais_estudante`; Contadores = `grupos[contador].unicos ÷ leads.contador`;
   Outros (não MQL) = `grupos[outros].unicos ÷ leads.nao_mql`. Zero ou null no denominador = "Sem dado".
   Mais de um grupo no mesmo segmento = "Sem dado" (somar contaria a mesma pessoa duas vezes).
-- **Recorte** (`domain/grupo.ts`, `recorteGrupoDe`): funil da tela → `p_recorte` `{tipo: 'porta', valor}`
-  (C3 = `inscricao_direta`, Consultoria = `consultoria`, Iscas = `isca`); "Todos" = `null` (conta simples, sem cruzar).
-  Com recorte, os numeradores passam a ser `unicos_cruzados` / `unicos_cruzados_mql`, com o rótulo
-  "dos leads deste nó, quantos estão no grupo". C1 e filtro por canal não têm recorte no servidor: o card mostra
-  "Sem dado" com o motivo. A função já aceita isca, campanha, conjunto e anúncio (ids do Meta), mas a tela ainda
-  só manda funil.
+- **Recorte** (`domain/grupo.ts`, `recorteDaTela` sobre `recorteGrupoDe`): o item escolhido em Criativos vence o
+  funil, do mais fino para o mais grosso: **anúncio, conjunto, campanha, página, funil**. Anúncio, conjunto e
+  campanha vão como `{tipo, valor}` com o **id do Meta** (`anuncio_externa`, `conjunto_externa`,
+  `campanha_externa`, o que vem depois do `|` na utm); o id interno de `mkt_trafego` não serve e o id nunca é
+  deduzido pelos leads. Página vai como `isca` (se tiver) ou `porta`. Funil vai como `porta` (C3 =
+  `inscricao_direta`, Consultoria = `consultoria`, Iscas = `isca`); "Todos" sem item escolhido = `null` (conta
+  simples, sem cruzar). Com recorte, os numeradores passam a ser `unicos_cruzados` / `unicos_cruzados_mql`, com o
+  rótulo "dos leads deste nó, quantos estão no grupo", e os dois cards mostram **"Recorte: <nome exato do item>"**
+  (ex.: "Anúncio: <nome do anúncio>", "Funil: Consultoria").
+- Sem número (o card mostra "Sem dado" com o motivo, nunca o número de outro recorte): C1; filtro por canal; item
+  que não está no tráfego do período; anúncio sem `anuncio_externa`; e **campanha ou conjunto enquanto
+  `dados_black_trafego` não devolver `campanha_externa` / `conjunto_externa`** (as colunas existem em
+  `mkt_trafego.campanhas` e `mkt_trafego.conjuntos`; hoje a função só devolve `anuncio_externa`). O adaptador já
+  lê os dois campos (`idExterno`): basta a função passar a mandar, sem mudar a tela.
+- A fórmula é a do contrato da B e não muda: únicos no grupo ÷ leads únicos, mesmo que dê 100% ou passe disso.
+- Os outros cards da Visão geral seguem filtrando só por funil e canal; só os dois cards do grupo seguem o item de
+  Criativos (por isso o rótulo "Recorte:").
+- **Marcar e desmarcar teste** (só master, tabela de leads): as **duas** ações pedem confirmação antes de gravar
+  (ressalva do pentester, 13/10).
 - Os dois cards abrem a tabela de leads filtrada (envios MQL; envios cuja pessoa entrou no grupo no período).
 
-### Conferência contra o banco (13/10/2026 ~01h30 UTC, período 04/10 a 12/10, sem teste)
+### Conferência contra o banco (13/10/2026 ~01h35 UTC, período 04/10 a 12/10, sem teste)
 
-`dados_black_perfil`: 191 envios, 165 pessoas (captação 172 envios / 155 pessoas; consultoria 17 / 13;
-checkup 1 / 1; futurômetro 1 / 1). `dados_black_grupo`: leads únicos 165, MQL 112 (advogado 84, contador 28,
-estudante de Direito 0), não MQL 53 (outros 40, sem profissão 13). Grupos: Advogados 90, Contadores 33, Outros 43;
-únicos nos grupos de MQL 112, total 145. 14 envios marcados como teste. Os números mudam com a captação.
+Recontado **direto da origem**, sem passar pelas RPCs (tabelas de cada página, `dados.black_leads`,
+`dados.marcacoes_teste`, `crm.evento_jornada` e `dados.grupo_participantes`), e comparado com as RPCs. Bateu tudo:
+
+| Medida | Origem | RPC |
+|---|---|---|
+| Envios / pessoas (sem teste) | 194 / 166 | 194 / 166 (`dados_black_perfil`) |
+| Captação | 176 brutos, 172 / 155 | 172 / 155 |
+| Consultoria | 25 brutos, 20 / 16 | 20 / 16 |
+| Checkup | 5 brutos, 1 / 1 | 1 / 1 |
+| Futurômetro | 2 brutos, 1 / 1 | 1 / 1 |
+| Fluxograma | 0 | 0 |
+| MQL (advogado 84, contador 29, estudante 0) | 113 | 113 |
+| Não MQL (outros 40, sem profissão 13) | 53 | 53 |
+| Grupo Advogados (webhook 48, foto 90, união 90) | 90 | 90 |
+| Grupo Contadores (webhook 16, foto 33, união 33) | 33 | 33 |
+| Grupo Outros (webhook 39, foto 42, união 43) | 43 | 43 |
+| Únicos nos grupos de MQL / total | | 112 / 145 |
+
+Ingresso no grupo sem recorte = 112 ÷ 113 (99,1%). Os números mudam com a captação (a conferência anterior, ~1h
+antes, deu 191 / 165 e MQL 112).
 
 ### Nó a nó
 
@@ -292,7 +321,7 @@ estudante de Direito 0), não MQL 53 (outros 40, sem profissão 13). Grupos: Adv
 |---|---|---|---|
 | Captação (C3, página `captacao`) | inscrições, MQL e grupo do funil C3 | `dados_black_perfil.pagina = 'captacao'`, `porta = 'inscricao_direta'`; grupo com `p_recorte {porta, inscricao_direta}` | teste fora por padrão; sem UTM conta como não pago; telefone sem DDD fica sem UF |
 | Método Perfeito | Sem dado | sem fonte ligada à Black | não sei se é página própria da Black: precisa confirmar |
-| Consultoria | funil Consultoria | `pagina = 'consultoria'`, `porta = 'consultoria'` | chega **sem UTM** (`a_corrigir` = `sem_utm`) |
+| Consultoria | funil Consultoria | `pagina = 'consultoria'`, `porta = 'consultoria'` | os primeiros envios (12/10 até 20h35) chegaram **sem UTM** (`a_corrigir` = `sem_utm`); a partir daí, com `utm_source=sendflow` |
 | Futurômetro | iscas | `pagina = 'futurometro'`, `isca = 'Futurômetro'` | **profissão vazia** (`profissao_vazia`), cai em não MQL |
 | Checkup | iscas | `pagina = 'checkup'`, `isca = 'Checkup'` | **profissão vazia**, cai em não MQL |
 | Fluxograma | iscas | `pagina = 'fluxograma'`, `isca = 'Fluxograma'` | sem envio no período da conferência |
@@ -303,7 +332,9 @@ estudante de Direito 0), não MQL 53 (outros 40, sem profissão 13). Grupos: Adv
 ## A corrigir (na fonte, não na tela)
 
 - Profissão vazia no checkup e no futurômetro.
-- Consultoria sem UTM.
+- Consultoria: os envios de 12/10 antes das 20h35 chegaram sem UTM.
+- Um telefone aparece em envios com dois e-mails diferentes: os de um e-mail estão marcados como teste, os do
+  outro não (a marcação foi por e-mail). Conferir se é a mesma pessoa de teste.
 - `utm_campaign=disparo` e `utm_campaign=grupoantigo` fora do padrão (`utm_campaign_fora_do_padrao`).
 - `utm_term` trazendo o placement.
 - CPF01 com `projeto_id` nulo.
