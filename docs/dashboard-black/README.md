@@ -443,8 +443,11 @@ no cérebro dele. A migration é a `20261013180931`; o detalhe e a prova estão 
   - **captação:** `metodo.pesquisa_respostas` com origem `metodo-perfeito`;
   - **isca:** `metodo.pesquisa_respostas` (fluxograma), `rede.diagnosticos` (checkup) e `rede.futurometros`;
   - **página da consultoria:** `metodo.consultoria_aplicacoes`. Essas três já chegam pela view `dados.black_leads`.
-  - **Respondi da consultoria:** `JmSmjBBS`, workspace 3504, pelo `respondi-sync` diário, incluindo as parciais que
-    deixaram contato;
+  - **Respondi da consultoria:** `JmSmjBBS`, workspace 3504, pelo `respondi-sync` diário.
+    - Quem não terminou o formulário fica **fora** das listas, da planilha e do CSV ("por enquanto não", Victor, 13/10;
+      migration `20261013183618`).
+    - Essas respostas continuam no banco, marcadas como incompletas.
+    - Para religar: `update dados.black_lista_config set incluir_respondi_parcial = true`.
   - **grupo da Black:** os 3 grupos BF26, pela foto do SendFlow e pelo webhook;
   - **grupo da consultoria:** "Consultoria ao Vivo - Aberto", pelo histórico do SendFlow carregado em 13/10 e pela foto.
     O SendFlow não exporta os subgrupos cheios (#1 e #2).
@@ -453,6 +456,7 @@ no cérebro dele. A migration é a `20261013180931`; o detalhe e a prova estão 
   - os números dos cartões aparecem para quem acessa o dashboard;
   - Ver e Baixar exigem a capacidade **`contato.ver`**. Os masters têm sempre; para os outros, liga com
     `acesso_capacidade_definir`, e quem recebe é decisão do Victor.
+  - Em 13/10, por decisão do Victor, receberam `contato.ver`: Victor, Arthur, João Pedro (JP) e Jéssica.
   - Sem a permissão, a tela diz o que pedir.
 - **Log:**
   - cada Ver e cada Baixar grava em `dados.black_lista_downloads` quem, ação, lista, segmento, linhas e quando;
