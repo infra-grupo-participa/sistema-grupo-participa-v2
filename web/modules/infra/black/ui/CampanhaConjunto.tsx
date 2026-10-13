@@ -24,7 +24,7 @@ export function CampanhaConjunto({ campanhas, conjuntos, campanha, conjunto, cha
   const maxCampanha = Math.max(1, ...campanhas.map((i) => i.resumo.gasto));
   const maxConjunto = Math.max(1, ...conjuntos.map((i) => i.resumo.gasto));
   return (
-    <div className="grid gap-6 md:grid-cols-2">
+    <div className="grid gap-6 xl:grid-cols-2">
       <section aria-labelledby="black-cc-campanhas" className="min-w-0">
         <h3 id="black-cc-campanhas" className="text-sm font-semibold text-[var(--fg)]">Campanhas</h3>
         <p className="mb-2 text-xs text-[var(--fg-3)]">Clique numa campanha para ver só os conjuntos dela ao lado.</p>
@@ -122,7 +122,7 @@ function Cartao({ it, sel, apagado, max, i, onClick, rotulo }: {
       className={'atm-historico-card atm-historico-interativo block w-full rounded-[var(--r-lg)] border bg-[var(--surface-2)] p-3 text-left '
         + (sel ? 'border-[var(--accent)] ' : 'border-[var(--border)] hover:border-[var(--border-accent)] ') + (apagado ? 'opacity-60' : '')}>
       <span className={'block break-words text-xs ' + (sel ? 'font-semibold text-[var(--fg)]' : 'text-[var(--fg-2)]')}>{it.nome}</span>
-      <span className="mt-2 grid grid-cols-3 gap-2">
+      <span className="mt-2 grid grid-cols-3 gap-2 max-sm:grid-cols-2">
         <Destaque r="Gasto">{moeda(r.gasto)}</Destaque>
         {r.distribuicao
           ? <Destaque r="Custo por visualização" dica="Distribuição (C1): não gera lead, não tem CPL. Gasto ÷ ThruPlay.">{formatar(r.custoVisualizacao, 'brl')}</Destaque>
@@ -144,7 +144,7 @@ function Destaque({ r, dica, children }: { r: string; dica?: string; children: R
   return (
     <span className="flex min-w-0 flex-col" title={dica}>
       <span className="truncate text-[10px] uppercase tracking-wide text-[var(--fg-3)]">{r}</span>
-      <span className="tabular text-base font-bold leading-tight text-[var(--fg)]">{children}</span>
+      <span className="tabular text-base font-bold leading-tight text-[var(--fg)] max-md:break-words max-md:text-sm">{children}</span>
     </span>
   );
 }

@@ -16,7 +16,7 @@ import { FASES, FUNIS, PROFISSOES_MQL, ROTULO_FASE, ROTULO_FUNIL, type Desempenh
 import type { DadosTela } from './contexto';
 import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
 import { BarrasFase } from './graficos';
-import { Farol, formatar, moeda, Numero, SeloFicticio, Taxa } from './pecas';
+import { Farol, formatar, MODAL_TELA_CHEIA, moeda, Numero, SeloFicticio, Taxa } from './pecas';
 import { TabelaLeads } from './perfil/TabelaLeads';
 
 const TODAS: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo', 'perfil'];
@@ -24,10 +24,20 @@ const TRAFEGO: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo'];
 const capDias = (dias: DesempenhoDia[], d: DadosTela) => dias.filter((x) => ehCaptacao(d.idx.campanhaDoAnuncio(x.anuncioId)?.funil));
 const capLinhas = (linhas: LinhaPerfil[]) => linhas.filter((l) => ehCaptacao(l.funil));
 const valorTaxa = (t: TipoTaxa): Valor => t.valor;
+// Funil macro: cinco colunas com linhas iguais a partir de 1280 px; abaixo, duas (três a partir de 1024) com a altura
+// de cada linha, e o Ingresso no grupo (card com a lista por grupo) ocupa a linha inteira.
+// Abaixo de 1280 px o card com lista embaixo do número (Ingresso no grupo) ganha a moldura do KpiCard por fora, para a
+// lista ficar dentro dela; a moldura do KpiCard de dentro some. A partir de 1280 px nada muda.
+const MOLDURA_ABAIXO_XL = ' max-xl:overflow-hidden max-xl:border max-xl:border-l-4 max-xl:border-[var(--border)] max-xl:border-l-[var(--accent)] max-xl:bg-[var(--surface-2)]'
+  + ' max-xl:[&>*:first-child]:!rounded-none max-xl:[&>*:first-child]:!border-0 max-xl:[&>*:first-child]:!shadow-none';
+const GRADE_MACRO = 'grid grid-cols-2 gap-3 lg:grid-cols-3 xl:auto-rows-fr xl:grid-cols-5';
+// Linha de CPL: no celular o nome da etapa fica com a primeira linha e o cálculo desce para a segunda.
+const ROTULO_LINHA_CPL = 'max-md:min-w-[10rem] ';
 
-function Cartao({ onAbrir, titulo, children, cheio = false }: { onAbrir?: () => void; titulo: string; children: ReactNode; cheio?: boolean }) {
-  // `cheio`: o card ocupa a altura toda da célula (grade com linhas iguais no funil macro).
-  const altura = cheio ? ' h-full [&>*]:h-full' : '';
+function Cartao({ onAbrir, titulo, children, cheio = false }: { onAbrir?: () => void; titulo: string; children: ReactNode; cheio?: boolean | 'xl' }) {
+  // `cheio`: o card ocupa a altura toda da célula (grade com linhas iguais no funil macro). 'xl': só a partir de
+  // 1280 px; abaixo, altura natural (card com lista embaixo do número, que senão vaza para fora da célula).
+  const altura = cheio === 'xl' ? ' xl:h-full xl:[&>*]:h-full' + MOLDURA_ABAIXO_XL : cheio ? ' h-full [&>*]:h-full' : '';
   if (!onAbrir) return <div className={'min-w-0' + altura}>{children}</div>;
   return (
     <div role="button" tabIndex={0} aria-label={`Abrir detalhe: ${titulo}`} onClick={onAbrir}
@@ -71,7 +81,7 @@ function CardIngresso({ d, onAbrir }: { d: DadosTela; onAbrir: () => void }) {
   const falta = d.grupo.motivo ?? d.grupo.aviso ?? 'grupo';
   const c = g ? cardsGrupo(g) : null;
   return (
-    <Cartao cheio titulo="Ingresso no grupo" onAbrir={onAbrir}>
+    <Cartao cheio="xl" titulo="Ingresso no grupo" onAbrir={onAbrir}>
       <KpiCard label="Ingresso no grupo" title="Únicos nos grupos de Advogados e Contadores ÷ leads MQL (dados_black_grupo)."
         value={c ? <Taxa taxa={c.geral} /> : <Numero valor={null} formato="pct" falta={falta} />}
         hint={c ? (c.cruzado ? ROTULO_CRUZADO : 'MQL no grupo ÷ leads MQL.') : falta} />
@@ -188,7 +198,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
 
       <section aria-labelledby="vg-invest">
         <h2 id="vg-invest" className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)]">Investimento no período</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
           <KpiCard label="Total" value={<Numero valor={total} formato="brl" />} hint={notaTotal} bar="accent" />
           <Cartao titulo="Tráfego" onAbrir={abrir(cardGasto)}>
             <KpiCard label="Tráfego" value={<Numero valor={d.dias.length ? gastoPeriodo : null} formato="brl" />} hint={`Meta ${moeda(porCanal('meta'))} · Google ${moeda(porCanal('google'))}`} bar="accent" />
@@ -212,17 +222,17 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           <p className="rounded-[var(--r-md)] border border-dashed border-[var(--border-strong)] p-4 text-sm text-[var(--fg-3)]">O C1 é distribuição: não tem página, inscrição nem connect rate. Veja os funis lado a lado abaixo.</p>
         ) : (
           <>
-            <ol className="grid auto-rows-fr grid-cols-2 gap-3 md:grid-cols-5">
+            <ol className={GRADE_MACRO}>
               {cards3.flatMap(({ c, valor, hint }) => [
                 <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={abrir(c)}><KpiCard label={c.rotulo} value={valor} hint={hint} /></Cartao></li>,
                 // MQLs logo depois da conversão da página; o Ingresso no grupo vem em seguida (pedido de 13/10).
                 ...(c.id === 'conv' ? [
                   <li key="mql" className="min-w-0"><CardMql d={d} onAbrir={abrirMql} /></li>,
-                  <li key="ingresso" className="min-w-0"><CardIngresso d={d} onAbrir={abrirGrupo} /></li>,
+                  <li key="ingresso" className="col-span-2 min-w-0 lg:col-span-3 xl:col-span-1"><CardIngresso d={d} onAbrir={abrirGrupo} /></li>,
                 ] : []),
               ])}
             </ol>
-            <div className="mt-3 grid auto-rows-fr grid-cols-2 gap-3 md:grid-cols-5">
+            <div className={'mt-3 ' + GRADE_MACRO}>
               <Cartao cheio titulo="Presença na live"><KpiCard label="Presença na live" value={<Numero valor={d.marcos?.presencaLive ?? null} formato="int" falta="presença da live ainda sem fonte" />} bar="gray" /></Cartao>
               <Cartao cheio titulo="Vendas"><KpiCard label="Vendas" value={<Numero valor={d.marcos?.vendas ?? null} formato="int" falta="vendas ainda sem fonte" />} bar="gray" /></Cartao>
             </div>
@@ -239,7 +249,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
             const apagado = recorte.funil !== 'todos' && recorte.funil !== f;
             return (
               <SectionCard key={f} title={ROTULO_FUNIL[f]} className={apagado ? 'opacity-40' : ''}
-                right={<button type="button" className="text-xs text-[var(--accent)] underline-offset-2 hover:underline" onClick={() => d.irPara({ funil: f })}>Filtrar</button>}>
+                right={<button type="button" className="text-xs text-[var(--accent)] underline-offset-2 hover:underline max-md:-my-3 max-md:-mr-3 max-md:min-h-11 max-md:px-3" onClick={() => d.irPara({ funil: f })}>Filtrar</button>}>
                 {f === 'c1' ? <ColunaC1 d={d} dias={df} /> : <ColunaCaptacao d={d} dias={df} linhas={lf} />}
               </SectionCard>
             );
@@ -252,8 +262,8 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
             {etapas.map((e) => (
               <li key={e.chave} className={'flex flex-wrap items-center gap-x-3 gap-y-0.5 py-2 text-sm ' + (e.nivel === 'etapa' ? '' : 'pl-4')}>
                 <Farol farol={farolCpl(e.cpl.valor, config.reguaCpl)} />
-                <span className={'min-w-0 flex-1 break-words ' + (e.nivel === 'etapa' ? 'font-semibold text-[var(--fg)]' : 'text-[var(--fg-2)]')}>{e.rotulo}</span>
-                <span className="text-xs text-[var(--fg-3)]">{moeda(e.cpl.gasto)} ÷ {formatar(e.cpl.leadsPagos, 'int')}</span>
+                <span className={'min-w-0 flex-1 break-words ' + ROTULO_LINHA_CPL + (e.nivel === 'etapa' ? 'font-semibold text-[var(--fg)]' : 'text-[var(--fg-2)]')}>{e.rotulo}</span>
+                <span className="text-xs text-[var(--fg-3)] max-md:ml-auto">{moeda(e.cpl.gasto)} ÷ {formatar(e.cpl.leadsPagos, 'int')}</span>
                 <span className="w-24 text-right"><Numero valor={e.cpl.valor} formato="brl" animado={false} /></span>
               </li>
             ))}
@@ -265,7 +275,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
 
       <ModalCard d={d} card={aberto} onClose={() => setAberto(null)} />
       {tabela && (
-        <Modal open onClose={() => setTabela(null)} title={tabela.titulo} width="max-w-5xl">
+        <Modal open onClose={() => setTabela(null)} title={tabela.titulo} width={`max-w-5xl ${MODAL_TELA_CHEIA}`}>
           <p className="mb-2 text-xs text-[var(--fg-3)]">{tabela.nota}</p>
           <TabelaLeads d={d} linhas={tabela.linhas} />
         </Modal>
@@ -280,11 +290,11 @@ function LinhaC1({ dias }: { dias: DesempenhoDia[] }) {
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-2 text-sm">
       <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full border border-[var(--border-strong)]" />
-      <span className="min-w-0 flex-1 break-words">
+      <span className={'min-w-0 flex-1 break-words ' + ROTULO_LINHA_CPL}>
         <span className="font-semibold text-[var(--fg)]">C1</span>
         <span className="ml-2 text-xs text-[var(--fg-3)]">distribuição, não gera lead: não é CPL</span>
       </span>
-      <span className="text-xs text-[var(--fg-3)]">CPM <Numero valor={dias.length ? cpm(a) : null} formato="brl" animado={false} className="text-[var(--fg)]" /></span>
+      <span className="text-xs text-[var(--fg-3)] max-md:ml-auto">CPM <Numero valor={dias.length ? cpm(a) : null} formato="brl" animado={false} className="text-[var(--fg)]" /></span>
       <span className="text-xs text-[var(--fg-3)]" title="Custo por visualização = gasto ÷ ThruPlay">Por visualização <Numero valor={custoPorVisualizacao(a)} formato="brl" falta="ThruPlay" animado={false} className="text-sm text-[var(--fg)]" /></span>
     </li>
   );

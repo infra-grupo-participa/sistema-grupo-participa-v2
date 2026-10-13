@@ -20,12 +20,12 @@ export function TrilhaFiltro({ filtro, nome, onTirar, onLimpar }: {
         <span key={k} className="inline-flex min-w-0 items-center gap-1.5">
           {i > 0 && <span aria-hidden="true" className="text-[var(--fg-3)]">›</span>}
           <button type="button" onClick={() => onTirar(k)} title={`Tirar o filtro de ${l.toLowerCase()}`}
-            className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-[var(--border-accent)] bg-[var(--surface-3)] px-2 py-0.5 text-left text-[var(--fg)]">
+            className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-[var(--border-accent)] bg-[var(--surface-3)] px-2 py-0.5 text-left text-[var(--fg)] max-md:min-h-11 max-md:py-1">
             <span className="text-[var(--fg-3)]">{l}:</span> <span className="break-all">{nome(k, filtro[k]!)}</span> <span aria-hidden="true">×</span>
           </button>
         </span>
       ))}
-      {ativos.length > 0 && <button type="button" onClick={onLimpar} className="text-[var(--accent)] underline-offset-2 hover:underline">Limpar</button>}
+      {ativos.length > 0 && <button type="button" onClick={onLimpar} className="text-[var(--accent)] underline-offset-2 hover:underline max-md:min-h-11 max-md:px-2">Limpar</button>}
     </nav>
   );
 }
