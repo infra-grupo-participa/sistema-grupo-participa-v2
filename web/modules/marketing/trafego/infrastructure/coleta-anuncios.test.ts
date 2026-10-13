@@ -110,6 +110,11 @@ describe('coleta Meta por conjunto e anúncio (respostas simuladas)', () => {
     expect(u.toString()).not.toContain('token');
   });
 
+  it('pede a miniatura em 1080 (sem tamanho o Meta devolve 64x64) e mantém os campos do criativo', () => {
+    expect(CAMPOS_ANUNCIO).toContain('creative.thumbnail_width(1080).thumbnail_height(1080){id,thumbnail_url,video_id,url_tags}');
+    for (const c of ['id', 'name', 'effective_status', 'adset_id', 'campaign_id']) expect(CAMPOS_ANUNCIO.split(',')).toContain(c);
+  });
+
   it('cadastro na conta (act_<conta>/ads|adsets) com filtering id IN em blocos de 50 e todos os status; nunca ?ids=', () => {
     const ids = Array.from({ length: 51 }, (_, k) => String(900000000000000 + k));
     const urls = urlCadastro('v23.0', '000555', 'ads', [...ids, ids[0], 'abc', '1;drop'], CAMPOS_ANUNCIO);

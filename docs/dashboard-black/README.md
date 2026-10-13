@@ -325,6 +325,24 @@ número (`ADV_BF26_09_PROVA_SOCIAL_A`: 3/3, antes 0/0).
 - Detalhe, guarda corrigida (md5 vivos), números e caminho de aplicação:
   [`20261013120148.explain.md`](../../infra/supabase/migrations/20261013120148.explain.md).
 
+## Miniatura em 1080 em vez de 64x64 (13/10, publicada)
+
+As miniaturas dos cartões de criativo apareciam borradas. A coleta (`infra/supabase/functions/trafego-meta/anuncios.ts`)
+pedia `creative{thumbnail_url}` sem tamanho, e o Meta devolve 64x64 nesse caso (média de 1,4 KB no bucket).
+
+- **Coleta:** `CAMPOS_ANUNCIO` passa a pedir `creative.thumbnail_width(1080).thumbnail_height(1080){...}`
+  (`LADO_MINIATURA`). Testado na v23.0 e v24.0 com `/act_<conta>/ads` e filtering: os demais campos voltam iguais, e as
+  imagens vêm em 1080x1080 com 43 a 113 KB, abaixo do teto de 1 MB da coleta. Teste novo em
+  `web/modules/marketing/trafego/infrastructure/coleta-anuncios.test.ts`.
+- **Edge `trafego-meta` publicada** (versão 11) em 13/10/2026 às 12:51 UTC (`npx supabase functions deploy trafego-meta
+  --use-api --no-verify-jwt`, a partir de `infra/`).
+- **As 83 miniaturas que já existiam foram regravadas** às 12:54 UTC no mesmo caminho (`meta/<conta>/<criativo>.jpg`,
+  `x-upsert`), com a imagem de 1080 do mesmo criativo (só host `*.fbcdn.net`, mesmo tipo pelos bytes). Sem mudança no
+  banco: a coleta só baixa miniatura de criativo que ainda não tem, então ela não trocaria as antigas sozinha. Depois:
+  média de 71 KB, mínima de 41 KB. A tela não mudou (a galeria já carrega com `loading="lazy"`).
+- **Voltar:** reverter o commit e publicar a Edge de novo. As antigas de 64x64 ficaram guardadas fora do repo (não
+  há motivo para voltar a elas).
+
 ## Banco e tela: miniatura e "Abrir no Gerenciador" nos criativos (APLICADA 13/10)
 
 Branch `victor-black-miniatura`. Na aba "Criativos e páginas", os cartões (galeria e gaveta) não mostravam a miniatura

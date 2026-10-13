@@ -20,7 +20,8 @@
 //               actions + CAMPOS_DISTRIBUICAO (os mesmos campos da coleta por campanha)
 //   GET /act_<conta>/adsets?fields=id,name,effective_status,campaign_id,optimization_goal
 //       &filtering=[{id IN <até 50 conjuntos>},{effective_status IN STATUS_CADASTRO}]&limit=50
-//   GET /act_<conta>/ads?fields=id,name,effective_status,adset_id,campaign_id,creative{id,thumbnail_url,video_id,url_tags}
+//   GET /act_<conta>/ads?fields=id,name,effective_status,adset_id,campaign_id,
+//       creative.thumbnail_width(1080).thumbnail_height(1080){id,thumbnail_url,video_id,url_tags}
 //       &filtering=[{id IN <até 50 anúncios>},{effective_status IN STATUS_CADASTRO}]&limit=50
 // As duas seguem paging.next (lerPaginas). Até 12/10/2026 o cadastro saía de GET /?ids=, que o Meta passou a recusar
 // em TODA versão (HTTP 500, code 100, "The ids query parameter is deprecated in v26.0+", rodada 158; explain seção 11).
@@ -182,7 +183,12 @@ export function urlInsightsAnuncio(versao: string, conta: string, de: string, at
 }
 
 export const CAMPOS_CONJUNTO = 'id,name,effective_status,campaign_id,optimization_goal';
-export const CAMPOS_ANUNCIO = 'id,name,effective_status,adset_id,campaign_id,creative{id,thumbnail_url,video_id,url_tags}';
+// 13/10/2026: sem thumbnail_width/height o Meta devolve thumbnail_url de 64x64 (média de 1,4 KB no bucket), borrada nos
+// cartões de criativo. Com 1080 vem 1080x1080, de 43 a 113 KB (medido em 12 criativos da Black), abaixo de
+// MINIATURA_MAX_BYTES. Testado na v23.0 e v24.0 com /act_<conta>/ads e filtering: os demais campos voltam iguais.
+export const LADO_MINIATURA = 1080;
+export const CAMPOS_ANUNCIO = 'id,name,effective_status,adset_id,campaign_id,' +
+  `creative.thumbnail_width(${LADO_MINIATURA}).thumbnail_height(${LADO_MINIATURA}){id,thumbnail_url,video_id,url_tags}`;
 
 /**
  * Status para o filtro do cadastro: a lista que o próprio Meta devolveu ao recusar um valor inválido em
