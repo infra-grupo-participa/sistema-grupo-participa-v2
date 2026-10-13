@@ -8,6 +8,7 @@
 // Função que ainda não existe no banco (PGRST202 / 42883) NÃO é falha: devolve semDado com o aviso
 // "Fonte ainda não ligada" e a tela mostra "Sem dado". Qualquer outro erro vem em `erro` (a tela segura a última
 // leitura e esmaece). Os mapeadores são puros e exportados para os testes (respostas cruas em respostas-rpc-black.ts).
+import { safeHttpUrl } from '@/shared/domain/url-segura';
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type { FonteDadosBlack } from '../application/ports';
@@ -17,7 +18,7 @@ import {
   FASES, ISCAS,
   type Anuncio, type Campanha, type ConfigBlack, type Conjunto, type DesempenhoDia, type EtapaCampanha, type Fase, type Funil,
   type GrupoBlack, type GrupoResumoBlack, type MetasCard, type Isca, type LeadDetalhe, type LinhaPerfil, type Marcos, type MensageriaBlack,
-  type Porta, type Profissao, type RecorteGrupo, type Resultado, type ResultadoAcao, type SegmentoGrupo, type TrafegoBlack,
+  type Periodo, type Porta, type Profissao, type RecorteGrupo, type Resultado, type ResultadoAcao, type SegmentoGrupo, type TrafegoBlack,
   type Valor,
 } from '../domain/tipos';
 
@@ -177,22 +178,29 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
   const r = objeto(cru);
   if (!r) return { data: TRAFEGO_VAZIO, semDado: true };
   const campanhas: Campanha[] = [];
+  const contaDaCampanha = new Map<string, string | null>();
   for (const c of linhas(r.campanhas)) {
     const id = texto(c.id); const nome = texto(c.nome);
     // O banco só aceita 'meta' em mkt_trafego; outra plataforma não tem lugar na tela e fica de fora.
     if (!id || !nome || c.plataforma !== 'meta') continue;
     const etapa = etapaDe(c.etapa); const subtipo = texto(c.subtipo);
+    contaDaCampanha.set(id, texto(c.conta_externa));
     campanhas.push({ id, nome, canal: 'meta', funil: funilDaEtapa(etapa, subtipo) ?? (etapa === null && ehC1PeloNome(nome) ? 'c1' : null), fase: faseDoNome(nome), etapa, subtipo, conflito: booleano(c.conflito), idExterno: texto(c.campanha_externa) });
   }
   const conjuntos: Conjunto[] = linhas(r.conjuntos).flatMap((j) => {
     const id = texto(j.id); const campanhaId = texto(j.campanha_id); const nome = texto(j.nome);
     return id && campanhaId && nome ? [{ id, campanhaId, nome, isca: null, conjuntoC3: null, idExterno: texto(j.conjunto_externa) }] : [];
   });
+  const campanhaDoConjunto = new Map(conjuntos.map((j) => [j.id, j.campanhaId]));
   const anuncios: Anuncio[] = linhas(r.anuncios).flatMap((a) => {
     const id = texto(a.id); const conjuntoId = texto(a.conjunto_id); const nome = texto(a.nome);
-    return id && conjuntoId && nome
-      ? [{ id, conjuntoId, nome, formato: null, paginaId: null, miniaturaUrl: null, linkPrevia: null, linkGerenciador: null, idExterno: texto(a.anuncio_externa) }]
-      : [];
+    if (!id || !conjuntoId || !nome) return [];
+    const idExterno = texto(a.anuncio_externa);
+    const campanhaId = campanhaDoConjunto.get(conjuntoId);
+    const conta = campanhaId ? contaDaCampanha.get(campanhaId) ?? null : null;
+    // miniaturaUrl é preenchida depois, em fonteSupabaseBlack.trafego (URL assinada do bucket privado). linkPrevia: a
+    // coleta do Meta não traz link de prévia (docs/dashboard-black/README.md); fica null, botão desligado.
+    return [{ id, conjuntoId, nome, formato: null, paginaId: null, miniaturaUrl: null, linkPrevia: null, linkGerenciador: linkGerenciadorMeta(conta, idExterno), idExterno }];
   });
   const dias: DesempenhoDia[] = linhas(r.dias_anuncio).flatMap((d) => {
     const anuncioId = texto(d.anuncio_id); const dia = texto(d.dia); const gasto = reais(d.gasto_centavos); const impressoes = num(d.impressoes);
@@ -216,6 +224,99 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
     },
     semDado: campanhas.length === 0,
   };
+}
+
+// ---------- miniatura e link do Gerenciador ----------
+
+const ID_META = /^[0-9]{1,30}$/;
+
+/**
+ * "Abrir no Gerenciador": o anúncio no Gerenciador de Anúncios do Meta, pela conta (`act`, mkt_trafego.contas.conta_externa)
+ * e pelo id do anúncio (mkt_trafego.anuncios.anuncio_externa). Só com os dois ids numéricos; qualquer outra coisa = sem link.
+ */
+export function linkGerenciadorMeta(contaExterna: string | null, anuncioExterna: string | null): string | null {
+  if (!contaExterna || !anuncioExterna || !ID_META.test(contaExterna) || !ID_META.test(anuncioExterna)) return null;
+  return safeHttpUrl(
+    `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${encodeURIComponent(contaExterna)}&selected_ad_ids=${encodeURIComponent(anuncioExterna)}`,
+    ['facebook.com'],
+  );
+}
+
+export const BUCKET_MINIATURAS = 'trafego-miniaturas';
+/** Formato que a coleta grava (Edge trafego-meta): meta/<conta>/<criativo>.<ext>. Outro texto não vira pedido ao Storage. */
+const CAMINHO_MINIATURA = /^meta\/[0-9]{1,30}\/[A-Za-z0-9_-]{1,100}\.(jpg|jpeg|png|webp|gif)$/;
+
+/** id do anúncio -> caminho da miniatura no bucket privado (anuncios[].miniatura_caminho, migration 20261013114630). */
+export function caminhosMiniatura(cru: unknown): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const a of linhas(objeto(cru)?.anuncios)) {
+    const id = texto(a.id); const c = texto(a.miniatura_caminho);
+    if (id && c && CAMINHO_MINIATURA.test(c)) m.set(id, c);
+  }
+  return m;
+}
+
+/**
+ * URL assinada, curta, com a sessão do usuário (a policy trafego_miniaturas_ler decide quem lê), como o crm-midia.
+ * Cache por caminho: a tela relê o tráfego a cada 5 min (e duas vezes por leitura); a URL só é renovada quando falta
+ * menos de MINIATURA_RENOVA_S para vencer, para não reassinar nem baixar de novo as imagens a cada leitura.
+ */
+export const MINIATURA_TTL_S = 900;
+const MINIATURA_RENOVA_S = 420;
+const assinadas = new Map<string, { url: Promise<string | null>; expiraEm: number }>();
+
+/** Só para os testes. */
+export function limparCacheMiniaturas(): void {
+  assinadas.clear();
+}
+
+export async function assinarMiniaturas(caminhos: readonly string[], agora: number = Date.now()): Promise<Map<string, string>> {
+  const unicos = [...new Set(caminhos)];
+  const faltam = unicos.filter((c) => {
+    const a = assinadas.get(c);
+    return !a || a.expiraEm - agora < MINIATURA_RENOVA_S * 1000;
+  });
+  if (faltam.length) {
+    const lote = (async (): Promise<Map<string, string>> => {
+      try {
+        const { data, error } = await createBrowserSupabase().storage.from(BUCKET_MINIATURAS).createSignedUrls(faltam, MINIATURA_TTL_S);
+        if (error || !Array.isArray(data)) {
+          logQueryError(BUCKET_MINIATURAS, { message: 'falha ao assinar miniaturas' });
+          return new Map();
+        }
+        return new Map(data.flatMap((d) => (d.path && d.signedUrl && !d.error ? [[d.path, d.signedUrl] as const] : [])));
+      } catch {
+        logQueryError(BUCKET_MINIATURAS, { message: 'falha de conexão' });
+        return new Map();
+      }
+    })();
+    for (const c of faltam) assinadas.set(c, { url: lote.then((m) => m.get(c) ?? null), expiraEm: agora + MINIATURA_TTL_S * 1000 });
+  }
+  const saida = new Map<string, string>();
+  await Promise.all(unicos.map(async (c) => {
+    const item = assinadas.get(c);
+    const url = item ? safeHttpUrl(await item.url) : null;
+    if (url) saida.set(c, url);
+    // Sem URL (sem acesso, objeto ausente, falha): não fica no cache, a próxima leitura tenta de novo.
+    else if (assinadas.get(c) === item) assinadas.delete(c);
+  }));
+  return saida;
+}
+
+async function trafegoComMiniaturas(chave: string, p: Periodo): Promise<Resultado<TrafegoBlack>> {
+  let caminhos = new Map<string, string>();
+  const r = await ler('dados_black_trafego', { p_chave: chave, p_de: p.de, p_ate: p.ate }, TRAFEGO_VAZIO, (cru) => {
+    caminhos = caminhosMiniatura(cru);
+    return mapearTrafego(cru);
+  });
+  if (r.erro || caminhos.size === 0) return r;
+  const urls = await assinarMiniaturas([...caminhos.values()]);
+  if (urls.size === 0) return r;
+  const anuncios = r.data.anuncios.map((a) => {
+    const c = caminhos.get(a.id); const url = c ? urls.get(c) : undefined;
+    return url ? { ...a, miniaturaUrl: url } : a;
+  });
+  return { ...r, data: { ...r.data, anuncios } };
 }
 
 // ---------- perfil ----------
@@ -304,7 +405,7 @@ export const fonteSupabaseBlack: FonteDadosBlack = {
   modo: 'real',
   agora: () => new Date(),
   config: (chave) => Promise.resolve(configReal(chave)),
-  trafego: (chave, p) => ler('dados_black_trafego', { p_chave: chave, p_de: p.de, p_ate: p.ate }, TRAFEGO_VAZIO, mapearTrafego),
+  trafego: (chave, p) => trafegoComMiniaturas(chave, p),
   perfil: (chave, p, opcoes) =>
     ler('dados_black_perfil', { p_chave: chave, p_de: p.de, p_ate: p.ate, p_incluir_teste: opcoes?.incluirTeste === true }, [] as LinhaPerfil[], mapearPerfil),
   leads: (chave, leadIds) =>

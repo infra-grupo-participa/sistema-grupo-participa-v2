@@ -5,7 +5,10 @@
 // Auditoria de 12/10: a ordem existia, mas não se via (CTR com uma casa decimal deixava quase todos em "1,1%" e
 // o topo era o mesmo em três ordens). Agora cada cartão mostra a posição e o valor que a ordem usa, em destaque,
 // e o CTR sai com duas casas.
+// Miniatura: a real (URL assinada do bucket trafego-miniaturas, validada por safeHttpUrl) no mesmo quadro 16:10 da
+// fictícia; sem ela (demonstração, sem acesso, coleta sem imagem), a fictícia de antes.
 import { useState } from 'react';
+import { safeHttpUrl } from '@/shared/domain/url-segura';
 import { ORDENS_GALERIA, ROTULO_ORDEM, ordenar, valorOrdem, type ItemPainel, type OrdemGaleria } from '../domain/criativos';
 import type { Anuncio, Valor } from '../domain/tipos';
 import { MiniaturaFicticia } from './MiniaturaFicticia';
@@ -44,13 +47,17 @@ export function GaleriaCriativos({ itens, anuncio, selecionado, ativo, onAbrir }
           const a = anuncio(it.id); const r = it.resumo;
           const apagado = selecionado !== null && selecionado !== it.id;
           const v = valorOrdem(it, ordem);
+          const miniatura = safeHttpUrl(a?.miniaturaUrl);
           return (
             <li key={it.id} className="atm-historico-card min-w-0">
               <button type="button" onClick={() => onAbrir(it.id)} aria-pressed={ativo === it.id}
                 className={'atm-historico-interativo block w-full overflow-hidden rounded-[var(--r-lg)] border bg-[var(--surface-2)] text-left '
                   + (ativo === it.id ? 'border-[var(--accent)] ' : 'border-[var(--border)] hover:border-[var(--border-accent)] ') + (apagado ? 'opacity-50' : '')}>
                 <span className="relative block">
-                  <MiniaturaFicticia id={it.id} formato={a?.formato ?? null} className="rounded-none" />
+                  {miniatura
+                    // eslint-disable-next-line @next/next/no-img-element -- URL assinada do Storage, já validada por safeHttpUrl
+                    ? <img src={miniatura} alt={`Miniatura de ${it.nome}`} loading="lazy" className="block aspect-[8/5] w-full object-cover" />
+                    : <MiniaturaFicticia id={it.id} formato={a?.formato ?? null} className="rounded-none" />}
                   <span className="absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-[var(--scrim)] px-2 py-0.5 text-[11px] font-semibold text-[var(--fg)]">
                     <span className="tabular">{pos + 1}º</span>
                     <span className="text-[var(--fg-2)]">{NOME_VALOR[ordem]}</span>

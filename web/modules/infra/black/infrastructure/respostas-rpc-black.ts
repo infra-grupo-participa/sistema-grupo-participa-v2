@@ -3,7 +3,8 @@
 // campanha seguem o padrão do tráfego, mas os ids são inventados para o teste. Não é importado por código de tela.
 // Contrato de cada campo: docs/dashboard-black/README.md.
 
-/** dados_black_trafego (migration 20261012231649). Valores em centavos; métricas que o Meta não mandou vêm null. */
+/** dados_black_trafego (migration 20261012231649; conta_externa e miniatura_caminho desde 20261013114630). Valores em centavos;
+ * métricas que o Meta não mandou vêm null. */
 export const RESPOSTA_TRAFEGO = {
   periodo_de: '2026-10-04',
   periodo_ate: '2026-10-12',
@@ -11,16 +12,16 @@ export const RESPOSTA_TRAFEGO = {
   coletado_em: '2026-10-12T22:00:00+00:00',
   anuncio_desde: '2026-10-08',
   campanhas: [
-    { id: '101', nome: 'CF | BF26 | C2 | META | ISCA | ABO | LEAD', plataforma: 'meta', status: 'ACTIVE', objetivo: 'LEADS', conta: 'conta-teste', projeto_id: 1, etapa: 'C2', subtipo: 'ISCA', conflito: false },
-    { id: '102', nome: 'CF | BF26 | TEASER', plataforma: 'meta', status: 'ACTIVE', objetivo: 'VIDEO', conta: 'conta-teste', projeto_id: 1, etapa: null, subtipo: null, conflito: false },
-    { id: '103', nome: 'CF | BF26 | C1 | META | DISTRIBUICAO', plataforma: 'meta', status: 'PAUSED', objetivo: 'VIDEO', conta: 'conta-teste', projeto_id: 1, etapa: 'C1', subtipo: null, conflito: false },
+    { id: '101', nome: 'CF | BF26 | C2 | META | ISCA | ABO | LEAD', plataforma: 'meta', status: 'ACTIVE', objetivo: 'LEADS', conta: 'conta-teste', conta_externa: '1234567890', projeto_id: 1, etapa: 'C2', subtipo: 'ISCA', conflito: false },
+    { id: '102', nome: 'CF | BF26 | TEASER', plataforma: 'meta', status: 'ACTIVE', objetivo: 'VIDEO', conta: 'conta-teste', conta_externa: '1234567890', projeto_id: 1, etapa: null, subtipo: null, conflito: false },
+    { id: '103', nome: 'CF | BF26 | C1 | META | DISTRIBUICAO', plataforma: 'meta', status: 'PAUSED', objetivo: 'VIDEO', conta: 'conta-teste', conta_externa: '1234567890', projeto_id: 1, etapa: 'C1', subtipo: null, conflito: false },
   ],
   conjuntos: [
     { id: '201', campanha_id: '101', nome: 'CJ ISCA 01', status: 'ACTIVE', meta_otimizacao: 'LEAD' },
   ],
   anuncios: [
-    { id: '301', conjunto_id: '201', nome: 'AD ISCA 01', status: 'ACTIVE', anuncio_externa: '990001', video_id: null },
-    { id: '302', conjunto_id: '201', nome: 'AD ISCA 02', status: 'ACTIVE', anuncio_externa: null, video_id: null },
+    { id: '301', conjunto_id: '201', nome: 'AD ISCA 01', status: 'ACTIVE', anuncio_externa: '990001', video_id: null, miniatura_caminho: 'meta/1234567890/555001.jpg' },
+    { id: '302', conjunto_id: '201', nome: 'AD ISCA 02', status: 'ACTIVE', anuncio_externa: null, video_id: null, miniatura_caminho: null },
   ],
   dias_campanha: [
     { campanha_id: '101', dia: '2026-10-10', gasto_centavos: 12345 },

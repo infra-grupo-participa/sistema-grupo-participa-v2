@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }));
-vi.mock('@/shared/infrastructure/supabase/browser-client', () => ({ createBrowserSupabase: () => ({ rpc }) }));
+const { rpc, createSignedUrls } = vi.hoisted(() => ({ rpc: vi.fn(), createSignedUrls: vi.fn() }));
+vi.mock('@/shared/infrastructure/supabase/browser-client', () => ({
+  createBrowserSupabase: () => ({ rpc, storage: { from: (bucket: string) => (bucket === 'trafego-miniaturas' ? { createSignedUrls } : {}) } }),
+}));
 vi.mock('@/shared/infrastructure/supabase/query-log', () => ({ logQueryError: vi.fn() }));
 
 import { alinharIds } from '../domain/alinhar';
@@ -10,11 +12,13 @@ import type { FiltroCriativos } from '../domain/tipos';
 import { CHAVE_BLACK } from './fixtures/catalogo';
 import { criarFonteFixtures } from './fixtures/fonte-fixtures';
 import {
-  AVISO_NAO_LIGADA, configReal, fonteSupabaseBlack, mapearGrupo, mapearLeads, mapearPerfil, mapearTrafego,
+  AVISO_NAO_LIGADA, assinarMiniaturas, caminhosMiniatura, configReal, fonteSupabaseBlack, limparCacheMiniaturas, linkGerenciadorMeta,
+  mapearGrupo, mapearLeads, mapearPerfil, mapearTrafego, MINIATURA_TTL_S,
 } from './fonte-supabase';
 import { RESPOSTA_GRUPO, RESPOSTA_LEADS, RESPOSTA_PERFIL, RESPOSTA_TRAFEGO } from './respostas-rpc-black';
 
 const P = { de: '2026-10-04', ate: '2026-10-12' };
+const semChave = (o: object, k: string) => Object.fromEntries(Object.entries(o).filter(([c]) => c !== k));
 
 describe('mapeadores das RPCs da Black', () => {
   it('tráfego: centavos viram reais, sem etapa = funil null, métrica ausente continua null', () => {
@@ -41,6 +45,34 @@ describe('mapeadores das RPCs da Black', () => {
     ] });
     expect(data.campanhas.map((c) => [c.id, c.funil])).toEqual([['1', 'c1'], ['2', 'c1'], ['3', null], ['4', 'iscas'], ['5', 'c1']]);
     expect(data.campanhas.map((c) => [c.id, c.fase])).toEqual([['1', 'antecipacao'], ['2', 'aquecimento'], ['3', 'captacao'], ['4', 'antecipacao'], ['5', null]]);
+  });
+  it('tráfego: link do Gerenciador pela conta da campanha e o id do anúncio; sem id do anúncio = sem link; prévia e miniatura null', () => {
+    const { data } = mapearTrafego(RESPOSTA_TRAFEGO);
+    const a = data.anuncios.find((x) => x.id === '301'); const b = data.anuncios.find((x) => x.id === '302');
+    expect(a?.linkGerenciador).toBe('https://adsmanager.facebook.com/adsmanager/manage/ads?act=1234567890&selected_ad_ids=990001');
+    expect(b?.linkGerenciador).toBeNull();
+    expect([a?.linkPrevia, a?.miniaturaUrl]).toEqual([null, null]);
+    // RPC antiga (sem conta_externa): sem link, nada inventado
+    const semConta = mapearTrafego({ ...RESPOSTA_TRAFEGO, campanhas: RESPOSTA_TRAFEGO.campanhas.map((c) => semChave(c, 'conta_externa')) });
+    expect(semConta.data.anuncios.find((x) => x.id === '301')?.linkGerenciador).toBeNull();
+  });
+  it('linkGerenciadorMeta só aceita os dois ids numéricos', () => {
+    expect(linkGerenciadorMeta('act_1234567890', '990001')).toBeNull();
+    expect(linkGerenciadorMeta('1234567890', '99a')).toBeNull();
+    expect(linkGerenciadorMeta('1234567890', '990001&x=1')).toBeNull();
+    expect(linkGerenciadorMeta(null, '990001')).toBeNull();
+    expect(linkGerenciadorMeta('1', '2')).toBe('https://adsmanager.facebook.com/adsmanager/manage/ads?act=1&selected_ad_ids=2');
+  });
+  it('caminhosMiniatura: só o formato da coleta (meta/<conta>/<criativo>.<ext>); URL, ../ e vazio ficam fora', () => {
+    const m = caminhosMiniatura({ anuncios: [
+      { id: '1', miniatura_caminho: 'meta/1570090828117070/1234567890123456.jpg' },
+      { id: '2', miniatura_caminho: '../meta/1/2.jpg' },
+      { id: '3', miniatura_caminho: 'https://scontent.xx.fbcdn.net/x.jpg' },
+      { id: '4', miniatura_caminho: null },
+      { id: '5', miniatura_caminho: 'meta/1/2.jpg/../../x.jpg' },
+    ] });
+    expect([...m]).toEqual([['1', 'meta/1570090828117070/1234567890123456.jpg']]);
+    expect(caminhosMiniatura(RESPOSTA_TRAFEGO).get('301')).toBe('meta/1234567890/555001.jpg');
   });
   it('tráfego sem campanhas ou resposta inválida = semDado', () => {
     expect(mapearTrafego({ campanhas: [] }).semDado).toBe(true);
@@ -190,7 +222,48 @@ describe('cards de MQL e de grupo', () => {
 });
 
 describe('fonte real (Supabase simulado)', () => {
-  beforeEach(() => rpc.mockReset());
+  beforeEach(() => { rpc.mockReset(); createSignedUrls.mockReset(); limparCacheMiniaturas(); });
+
+  const URL_ASSINADA = 'https://projeto.supabase.co/storage/v1/object/sign/trafego-miniaturas/meta/1234567890/555001.jpg?token=t';
+  it('tráfego: miniatura vira URL assinada (lote, 900 s) só no anúncio que tem caminho; a próxima leitura usa o cache', async () => {
+    rpc.mockResolvedValue({ data: RESPOSTA_TRAFEGO, error: null });
+    createSignedUrls.mockResolvedValue({ data: [{ path: 'meta/1234567890/555001.jpg', signedUrl: URL_ASSINADA, error: null }], error: null });
+    const t = await fonteSupabaseBlack.trafego(CHAVE_BLACK, P);
+    expect(createSignedUrls).toHaveBeenCalledWith(['meta/1234567890/555001.jpg'], MINIATURA_TTL_S);
+    expect(t.erro).toBeNull();
+    expect(t.data.anuncios.find((a) => a.id === '301')?.miniaturaUrl).toBe(URL_ASSINADA);
+    expect(t.data.anuncios.find((a) => a.id === '302')?.miniaturaUrl).toBeNull();
+    await fonteSupabaseBlack.trafego(CHAVE_BLACK, P);
+    expect(createSignedUrls).toHaveBeenCalledTimes(1);
+  });
+  it('miniatura: renova perto de vencer; sem acesso ou falha = fictícia (null), sem erro na tela, e tenta de novo depois', async () => {
+    createSignedUrls.mockResolvedValue({ data: [{ path: 'meta/1/2.jpg', signedUrl: URL_ASSINADA, error: null }], error: null });
+    const t0 = 1_000_000;
+    await assinarMiniaturas(['meta/1/2.jpg'], t0);
+    await assinarMiniaturas(['meta/1/2.jpg'], t0 + 300_000);
+    expect(createSignedUrls).toHaveBeenCalledTimes(1);
+    await assinarMiniaturas(['meta/1/2.jpg'], t0 + 600_000);
+    expect(createSignedUrls).toHaveBeenCalledTimes(2);
+
+    limparCacheMiniaturas(); createSignedUrls.mockReset();
+    createSignedUrls.mockResolvedValue({ data: [{ path: 'meta/1/2.jpg', signedUrl: null, error: 'Either the object does not exist or you do not have access to it' }], error: null });
+    expect((await assinarMiniaturas(['meta/1/2.jpg'], t0)).size).toBe(0);
+    await assinarMiniaturas(['meta/1/2.jpg'], t0 + 1);
+    expect(createSignedUrls).toHaveBeenCalledTimes(2);
+
+    rpc.mockResolvedValue({ data: RESPOSTA_TRAFEGO, error: null });
+    createSignedUrls.mockResolvedValue({ data: null, error: { message: 'x' } });
+    const t = await fonteSupabaseBlack.trafego(CHAVE_BLACK, P);
+    expect([t.erro, t.data.anuncios.find((a) => a.id === '301')?.miniaturaUrl]).toEqual([null, null]);
+    createSignedUrls.mockRejectedValue(new Error('rede'));
+    expect((await fonteSupabaseBlack.trafego(CHAVE_BLACK, P)).erro).toBeNull();
+  });
+  it('tráfego sem caminho de miniatura (RPC antiga) não chama o Storage', async () => {
+    rpc.mockResolvedValue({ data: { ...RESPOSTA_TRAFEGO, anuncios: RESPOSTA_TRAFEGO.anuncios.map((a) => semChave(a, 'miniatura_caminho')) }, error: null });
+    const t = await fonteSupabaseBlack.trafego(CHAVE_BLACK, P);
+    expect(createSignedUrls).not.toHaveBeenCalled();
+    expect(t.data.anuncios.every((a) => a.miniaturaUrl === null)).toBe(true);
+  });
 
   it('função inexistente (PGRST202 e 42883) = semDado com aviso, sem erro', async () => {
     rpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202' } });

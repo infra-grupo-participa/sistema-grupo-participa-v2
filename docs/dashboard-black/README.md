@@ -313,6 +313,43 @@ número (`ADV_BF26_09_PROVA_SOCIAL_A`: 3/3, antes 0/0).
 - Detalhe, guarda corrigida (md5 vivos), números e caminho de aplicação:
   [`20261013120148.explain.md`](../../infra/supabase/migrations/20261013120148.explain.md).
 
+## Banco e tela: miniatura e "Abrir no Gerenciador" nos criativos (13/10, NÃO aplicada)
+
+Branch `victor-black-miniatura`. Na aba "Criativos e páginas", os cartões (galeria e gaveta) não mostravam a miniatura
+nem os links "Ver anúncio" e "Abrir no Gerenciador": o adaptador gravava os três como `null` fixo. Nada foi redesenhado;
+os campos que já existiam na tela passam a receber dado real.
+
+- **Migration `20261013114630`** (escrita, ensaiada, **NÃO aplicada**; falta o APROVADO do pentester):
+  `dados_black_trafego` devolve `miniatura_caminho` em cada anúncio e `conta_externa` em cada campanha; função
+  `public.trafego_miniatura_pode_ver` e policy `trafego_miniaturas_ler` (só `SELECT`, só `authenticated`, só o bucket
+  privado `trafego-miniaturas`): a equipe lê só as miniaturas dos anúncios da Black que ela vê, como o anexo do CRM
+  (`crm-midia`). Ensaio em produção, transação desfeita: equipe vê 63 objetos (exatamente as miniaturas da Black, de 80
+  no bucket), fora da equipe e anon 0; resultado da RPC sem as 2 chaves novas igual ao de antes; ATM com o mesmo md5 nas
+  3 fases; `url_tags` fora. Por que esta via, números e como aplicar:
+  [`20261013114630.explain.md`](../../infra/supabase/migrations/20261013114630.explain.md).
+- **Miniatura (tela).** `fonte-supabase.ts` pede ao Storage, em lote, URLs assinadas de 900 s para os caminhos
+  distintos (`createSignedUrls`, com a sessão do usuário) e guarda em cache por caminho, renovando quando faltam menos
+  de 420 s: a releitura de 5 min não reassina nem baixa as imagens de novo. A galeria mostra a imagem no mesmo quadro
+  16:10 da fictícia; a gaveta já mostrava quando havia URL. Sem URL (demonstração, sem acesso, caminho fora do formato
+  `meta/<conta>/<criativo>.<ext>`, falha), fica a miniatura fictícia de antes, sem erro na tela.
+- **"Abrir no Gerenciador".** `https://adsmanager.facebook.com/adsmanager/manage/ads?act=<conta_externa>&selected_ad_ids=<anuncio_externa>`,
+  montado só com os dois ids numéricos (senão, sem link) e validado por `safeHttpUrl` (host `facebook.com`). Criativo
+  em vários conjuntos usa o anúncio que representa o cartão (o de menor id do grupo de mesmo nome). **Não conferido
+  abrindo no Meta com login**: o formato da URL precisa ser confirmado por quem tem acesso à conta.
+- **"Ver anúncio" continua desligado** ("sem link na fonte"). A coleta (`infra/supabase/functions/trafego-meta/anuncios.ts`,
+  `CAMPOS_ANUNCIO`) não pede `preview_shareable_link`, `effective_object_story_id` nem permalink. Para ligar faltaria:
+  pedir um desses campos na Edge, coluna nova em `mkt_trafego.anuncios`, gravar em `trafego_anuncios_receber` e devolver
+  na RPC. Não feito, por pedido (sem mexer na Edge agora).
+- **Ordem segura.** A tela pode ir para a `main` antes da migration: sem `miniatura_caminho` ela não chama o Storage e
+  sem `conta_externa` não monta link (testado). Depois da migration, os dois ligam sozinhos.
+- **Como testar.** `cd web && npx vitest run modules/infra/black` (testes novos em `infrastructure/fonte-supabase.test.ts`:
+  link do Gerenciador, ids não numéricos, formato do caminho, lote, cache, renovação, sem acesso e RPC antiga). Depois
+  de aplicada: abrir a aba "Criativos e páginas" logado como equipe e ver as imagens nos cartões e o botão "Abrir no
+  Gerenciador" ligado; no DevTools, um único `POST .../storage/v1/object/sign/trafego-miniaturas` por ~10 min.
+- **Falta:** APROVADO do pentester, aplicar, renomear os arquivos para a versão gravada, abrir a tela com dado real e
+  conferir o link do Gerenciador com login no Meta. Reverter: `20261013114630_reversao.sql` (a tela volta sozinha à
+  fictícia e ao botão desligado).
+
 ## Banco: ingresso no grupo (webhook n8n e backfill)
 
 Não tem migration: usa o caminho que já existe para o ATM. Situação em 12/10/2026: **o n8n foi publicado às 23:55 UTC
@@ -358,7 +395,7 @@ sem quebrar a tela. Os mapeadores são puros e testados sem rede contra resposta
 | Método | De onde vem | Observações |
 |---|---|---|
 | `config(chave)` | `dados.dashboards.periodo_inicio` (A): início 04/10/2026, fixo no adaptador | Metas de leads, CPL, régua, orçamento, reserva, previsto por fase, base da casa e data da live **não têm cadastro no banco**: ficam `null` e a tela mostra "Sem dado" / "sem cadastro". Nunca inventadas. |
-| `trafego(chave, p)` | `dados_black_trafego(p_chave, p_de, p_ate)` (A) | Centavos viram reais. Métrica que a API não mandou continua `null`. Etapa C1 → funil C1; C2 + subtipo CONSULTORIA → consultoria; C2 + ISCA → iscas; C3 → C3; **etapa null → "Sem etapa"** (seção própria na Visão geral, com o nome exato da campanha e o gasto). `subtipo` e `conflito` preservados. Só plataforma `meta`. |
+| `trafego(chave, p)` | `dados_black_trafego(p_chave, p_de, p_ate)` (A) | Centavos viram reais. Métrica que a API não mandou continua `null`. Etapa C1 → funil C1; C2 + subtipo CONSULTORIA → consultoria; C2 + ISCA → iscas; C3 → C3; **etapa null → "Sem etapa"** (seção própria na Visão geral, com o nome exato da campanha e o gasto). `subtipo` e `conflito` preservados. Só plataforma `meta`. Desde `20261013114630` (não aplicada): miniatura por URL assinada do bucket `trafego-miniaturas` (cache de 900 s) e "Abrir no Gerenciador" pela `conta_externa` + `anuncio_externa`; "Ver anúncio" sem fonte. |
 | `perfil(chave, p, {incluirTeste})` | `dados_black_perfil` (B) | Uma linha por envio, sem dado pessoal. Os ids do Meta da utm (`campanha_id`, `conjunto_id`, `anuncio_id`) casam com o tráfego pelo anúncio (`domain/alinhar.ts`). Master recebe também os testes (para ver e desmarcar); a tela tira os testes de todas as contas. |
 | `leads(chave, ids)` | `dados_black_leads` (B) | Nome, e-mail e telefone só ao abrir a tabela, 50 por página (a RPC aceita até 500). |
 | `grupo(chave, p, recorte)` | `dados_black_grupo` (B), sempre `p_incluir_teste = false` | Alimenta os cards **MQLs** e **Ingresso no grupo**. |

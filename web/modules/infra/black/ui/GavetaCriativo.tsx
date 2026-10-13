@@ -37,7 +37,7 @@ export function GavetaCriativo({ d, id }: { d: DadosTela; id: string }) {
     <div className="space-y-4">
       <div className="mx-auto max-w-xs">
         {miniatura
-          // eslint-disable-next-line @next/next/no-img-element -- miniatura externa do Meta, já validada por safeHttpUrl
+          // eslint-disable-next-line @next/next/no-img-element -- URL assinada do Storage (bucket trafego-miniaturas), já validada por safeHttpUrl
           ? <img src={miniatura} alt={`Miniatura de ${a.nome}`} className="block w-full rounded-[var(--r-md)]" />
           : <MiniaturaFicticia id={a.id} formato={a.formato} />}
       </div>
