@@ -322,3 +322,38 @@ fonte: a tela usa `campanha`. Nulo é "sem dado", nunca zero; as taxas são calc
   - Alcance não soma por dia: o total vem do período inteiro da campanha (API) e só aparece quando o período pedido cobre a campanha toda.
   - Nulo é "sem dado".
   - Contrato completo: `infra/supabase/migrations/20261009230000.explain.md`.
+
+## Vendas da Sessão de Viabilidade (`dados_atm_sv_vendas`, APLICADA em 13/10/2026)
+
+**Situação (13/10/2026): contrato combinado, migration `20261013190752` escrita em outra frente, NÃO aplicada em produção.** Até ser
+aplicada, a tela recebe `PGRST202` e mostra "sem dado ainda". Card ClickUp 17tya50ga3c. Quem lê: aba Vendas do modal da
+Sessão de Viabilidade (`carregarAtmSvVendas` em `web/modules/infra/atm/infrastructure/atm-data.ts`).
+
+`public.dados_atm_sv_vendas(p_chave text, p_incluir_teste boolean default false)`, 1 linha por venda:
+
+| Coluna | Tipo | Na tela |
+|---|---|---|
+| `transacao` | `text` | Transação (também a chave da linha) |
+| `aprovado_em` | `timestamptz` | Data da venda, em America/Sao_Paulo |
+| `pedido_em` | `timestamptz` | lido, não exibido |
+| `dia_aprovado` | `date` | Data da venda quando `aprovado_em` vier nulo |
+| `nome` | `text` | Nome |
+| `email` | `text` | E-mail; vai para `dados_marcar_teste` / `dados_desmarcar_teste` (a marcação pela SV é só por e-mail) |
+| `telefone` | `text` | Telefone, só exibido. Não vai para as RPCs de teste (o ramo de telefone de `dados.atm_pertence` não consulta vendas e marca pelos 8 últimos dígitos, podendo atingir outra pessoa); pode vir nulo, a Hotmart nem sempre manda |
+| `valor_bruto` | `numeric` | Valor bruto, na `moeda` da linha (unidade da moeda, não centavos) |
+| `valor_liquido` | `numeric` | Valor líquido, idem |
+| `moeda` | `text` | formata os valores; nula = número sem símbolo |
+| `status` | `text` | Status, string exata da fonte |
+| `oferta_codigo` | `text` | Oferta, string exata da fonte |
+| `teste` | `boolean` | `true` = fora das contas por teste (regra exata na migration; a marcação pela tela grava em `dados.marcacoes_teste`): selo TESTE, fora das contagens |
+
+- Sem período (`p_de`/`p_ate` não existem nesta RPC). O total do card continua sendo `dados_atm_resumo.vendas`, que é
+  por período, com `vendas_teste` para a nota de vendas de teste fora do total.
+- `p_incluir_teste = false` (padrão) não devolve as linhas de teste; a tela só pede `true` para master.
+- Dado pessoal: a tela só chama a RPC para quem tem a capacidade `contato.ver`. O gate também está no banco, na migration
+  `infra/supabase/migrations/20261013190752_dados_atm_sv_vendas.sql` (aplicada): `dados.atm_cadastro` (equipe e
+  chave), `acesso.tem('contato.ver')` e `p_incluir_teste = true` só para master, todos com `42501`.
+- Erros que a tela trata: `PGRST202` (função ainda não aplicada) vira "sem dado ainda"; `42501` (sem permissão, inclusive
+  perda de `contato.ver` no meio da sessão) limpa a lista e mostra "Lista indisponível"; `P0002`, `22023` e qualquer outro
+  viram aviso com a última lista mantida. A RPC levanta `42501` (fora da equipe, sem `contato.ver`, teste sem ser master)
+  e `P0002` (chave que não é do modelo ATM).

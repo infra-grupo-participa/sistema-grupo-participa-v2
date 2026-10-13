@@ -4,8 +4,15 @@ import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import { dashboardAtmSemDado, type DashboardAtm, type LeadAtm, type NumeroGrupoAtm, type PeriodoAplicadoAtm } from '../domain/dashboard';
 import type { DatasPeriodoAtm } from '../domain/periodo';
+import type { VendaSessaoViabilidade } from '../domain/sessao-viabilidade';
 
-export type Resultado<T> = { data: T; semDado: boolean; erro: string | null };
+export type Resultado<T> = {
+  data: T;
+  semDado: boolean;
+  erro: string | null;
+  /** Só a leitura da SV preenche: o banco recusou (42501), a permissão se perdeu e a última lista não pode ficar na tela. */
+  semPermissao?: boolean;
+};
 export type ResultadoAcao = { data: number | null; erro: string | null };
 export type DisparoDetalheAtm = {
   id: number | null;
@@ -112,9 +119,11 @@ function linhas(v: unknown): Linha[] {
   return v.filter((x): x is Linha => typeof x === 'object' && x !== null);
 }
 
+const MENSAGEM_SEM_PERMISSAO_LEITURA = 'Sem permissão para ler este dashboard.';
+
 function mensagemLeitura(codigo?: string): string | null {
   if (codigo === 'PGRST202') return null;
-  if (codigo === '42501') return 'Sem permissão para ler este dashboard.';
+  if (codigo === '42501') return MENSAGEM_SEM_PERMISSAO_LEITURA;
   if (codigo === 'P0002') return 'Dashboard ou identificador não encontrado neste evento.';
   if (codigo === '22023') return 'Período inválido ou acima do limite de 400 dias.';
   return 'Não foi possível carregar os dados agora.';
@@ -234,8 +243,63 @@ export async function carregarAtmGrupo(chave: string, periodo?: DatasPeriodoAtm,
   };
 }
 
+export const TEMPO_LIMITE_SV_VENDAS_MS = 15_000;
+const MENSAGEM_TEMPO_SV_VENDAS = 'As vendas da Sessão de Viabilidade demoraram a responder. Os últimos dados disponíveis foram mantidos.';
+
+/**
+ * Vendas da Sessão de Viabilidade (`public.dados_atm_sv_vendas`). Contrato em docs/dashboard-atm/MODELO-DE-DADOS.md.
+ * Qualquer falha devolve `semDado: true` com lista vazia: quem chama mantém a última lista e só mostra o aviso,
+ * exceto `semPermissao: true` (42501), em que a lista anterior deve ser descartada.
+ * RPC ainda não aplicada (`PGRST202`) = "sem dado ainda", sem mensagem de erro.
+ */
+export async function carregarAtmSvVendas(chave: string, incluirTeste = false, tempoLimiteMs = TEMPO_LIMITE_SV_VENDAS_MS): Promise<Resultado<VendaSessaoViabilidade[]>> {
+  const nome = 'dados_atm_sv_vendas';
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const esgotou = new Promise<Resultado<Linha[]>>((resolve) => {
+    timer = setTimeout(() => {
+      logQueryError(nome, { message: 'TIMEOUT' });
+      resolve({ data: [], semDado: true, erro: MENSAGEM_TEMPO_SV_VENDAS });
+    }, tempoLimiteMs);
+  });
+  const r = await Promise.race([rpc(nome, chave, undefined, { p_incluir_teste: incluirTeste }), esgotou]);
+  clearTimeout(timer);
+  if (r.semDado || r.erro) {
+    const semPermissao = r.erro === MENSAGEM_SEM_PERMISSAO_LEITURA;
+    return semPermissao ? { data: [], semDado: true, erro: r.erro, semPermissao } : { data: [], semDado: true, erro: r.erro };
+  }
+  return {
+    data: r.data.map((x, i) => ({
+      id: texto(x.transacao) ?? `linha-${i}`,
+      transacao: texto(x.transacao),
+      aprovadoEm: texto(x.aprovado_em),
+      pedidoEm: texto(x.pedido_em),
+      diaAprovado: texto(x.dia_aprovado),
+      nome: texto(x.nome),
+      email: texto(x.email),
+      telefone: texto(x.telefone),
+      valorBruto: num(x.valor_bruto),
+      valorLiquido: num(x.valor_liquido),
+      moeda: texto(x.moeda),
+      status: texto(x.status),
+      ofertaCodigo: texto(x.oferta_codigo),
+      teste: x.teste === true,
+    })),
+    semDado: false,
+    erro: null,
+  };
+}
+
 export async function marcarAtmTeste(chave: string, email: string | null, telefone: string | null): Promise<ResultadoAcao> {
   return chamarAcao('dados_marcar_teste', { p_chave: chave, p_email: email, p_telefone: telefone, p_motivo: 'teste' });
+}
+
+/** Marcação da SV: só o e-mail da venda. O ramo de telefone do banco não consulta vendas e casa pelos 8 últimos dígitos. */
+export async function marcarAtmTestePorEmail(chave: string, email: string): Promise<ResultadoAcao> {
+  return marcarAtmTeste(chave, email, null);
+}
+
+export async function desmarcarAtmTestePorEmail(chave: string, email: string): Promise<ResultadoAcao> {
+  return desmarcarAtmTeste(chave, email, null);
 }
 
 export async function desmarcarAtmTeste(chave: string, email: string | null, telefone: string | null): Promise<ResultadoAcao> {

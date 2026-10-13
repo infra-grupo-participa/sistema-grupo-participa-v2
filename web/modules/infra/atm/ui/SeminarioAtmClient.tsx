@@ -27,6 +27,7 @@ import { RoscaCategorias } from '@/modules/infra/dados/ui/viz/RoscaCategorias';
 import { DisparosDetalhe } from './DisparosDetalhe';
 import { HistoricoAtm } from './HistoricoAtm';
 import { TrafegoAtm } from './TrafegoAtm';
+import { SessaoViabilidade } from './SessaoViabilidade';
 
 type Linha = Record<string, unknown>;
 type PedidoAtualizacao = { periodo: ReturnType<typeof datasDoPeriodo>; detalhado: boolean; modal: boolean; isMaster: boolean };
@@ -106,7 +107,7 @@ function ModalLeads({ open, onClose, result, grupo, serie, periodoLabel, isMaste
   </Modal>;
 }
 
-export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTeste = false }: { projeto: RegistroAtm; isMaster?: boolean; mostrarAvisoTeste?: boolean }) {
+export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato = false, mostrarAvisoTeste = false }: { projeto: RegistroAtm; isMaster?: boolean; podeVerContato?: boolean; mostrarAvisoTeste?: boolean }) {
   const [resumo, setResumo] = useState<DashboardAtm | null>(null);
   const [serie, setSerie] = useState<Linha[]>([]);
   const [leads, setLeads] = useState<Resultado<LeadAtm[]>>({ data: [], semDado: true, erro: null });
@@ -259,6 +260,7 @@ export function SeminarioAtmClient({ projeto, isMaster = false, mostrarAvisoTest
       </Card>
       {linhasResumo.map((m) => <button key={m.chave} type="button" onClick={() => { if (m.chave === 'leads') setModal(true); }} className="text-left"><KpiCard label={m.rotulo} value={m.metrica.semDado ? 'Não lançado' : formatar(m.metrica.valor, m.formato)} hint={m.metrica.semDado ? 'sem dado ainda' : undefined} bar={m.chave === 'vendas' ? 'green' : 'accent'} /></button>)}
     </div>
+    <SessaoViabilidade chave={projeto.chave} vendas={resumo?.resumo.vendas ?? { valor: 0, semDado: true }} vendasTeste={resumo?.periodo.vendasTeste ?? null} periodoLabel={intervalo} podeVerContato={podeVerContato} isMaster={isMaster} onTesteAlterado={() => atualizar(true)} />
     <SectionCard title="Evolução diária" subtitle={`Leads, grupo, pré-checkout, vendas, faturamento e custo. ${intervalo}`}>
       {serie.length ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs text-[var(--fg-3)]">{['Dia', 'Leads', 'Ingresso no grupo', 'Saídas', 'Pré-checkout', 'Vendas', 'Faturamento bruto', 'Custo disparo'].map((x) => <th key={x} className="p-2">{x}</th>)}</tr></thead><tbody>{serie.map((r) => <tr key={String(r.dia)} className="border-t border-[var(--border)]">{['dia', 'leads', 'grupo_entradas', 'grupo_saidas', 'pre_checkout', 'vendas', 'receita_bruta', 'custo_disparo_centavos'].map((k) => <td key={k} className="p-2">{k === 'dia' ? String(r[k] ?? '') : renderVal(k === 'custo_disparo_centavos' && valor(r[k]) != null ? (valor(r[k]) ?? 0) / 100 : r[k], k === 'receita_bruta' || k === 'custo_disparo_centavos' ? 'moeda' : 'inteiro')}</td>)}</tr>)}</tbody></table></div> : <EmptyState title="Sem série disponível" hint="sem dado ainda" />}
     </SectionCard>
