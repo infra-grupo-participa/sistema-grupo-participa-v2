@@ -211,8 +211,15 @@ ingresso único no grupo e "A corrigir", números e ensaio: [`20261012234606.exp
 
 ## Banco: ingresso no grupo (webhook n8n e backfill)
 
-Não tem migration: usa o caminho que já existe para o ATM. Situação em 12/10/2026: **o n8n está em revisão do
-pentester e ainda não foi publicado; o backfill foi ensaiado e ainda não foi aplicado.**
+Não tem migration: usa o caminho que já existe para o ATM. Situação em 12/10/2026: **o n8n foi publicado às 23:55 UTC
+(aprovado pelo pentester na 4ª rodada, testado nos caminhos verde e de recusa, teste apagado) e o backfill foi
+aplicado às 23:56 UTC (111 eventos).** Reverter o backfill: `delete from crm.evento_jornada where fonte='sendflow' and
+tag like 'BF26 - %' and ocorreu_em < '2026-10-12 23:50+00'`.
+
+Checagem de 12/10 ~23:58 UTC: os telefones com data na planilha batem com o banco (Advogados 47, Contadores 16,
+Outros 39). A foto do grupo bate com o total da planilha em Advogados (89) e Contadores (33). Risco: o SendFlow devolve
+`export-leads: http 403` para duas das três BF26 em cada ciclo do cron `dados-grupo-foto`, então cada foto atualiza só
+de ~30 em ~30 min.
 
 - **Ao vivo.** SendHook das 3 campanhas BF26 → n8n `B7RBTJkAl9ynPNZh` (`/webhook/bf26-grupo-whatsapp`) → "Filtro BF26"
   → POST na Edge `crm-integracao-webhook/sendflow` (header `x-webhook-secret`) → `crm.evento_jornada` (fonte
@@ -222,7 +229,7 @@ pentester e ainda não foi publicado; o backfill foi ensaiado e ainda não foi a
   número, grupo e `createdAt` a até ±2 dias, e reconstrói o corpo. O que ele recusa vai só para a planilha e aparece
   como erro.
 - **Histórico.** A aba "Ingressos Whatsapp" da LEADS [BF26] entra em `crm.evento_jornada` com dedup de ±60 s. No
-  ensaio em ROLLBACK foram 111 eventos (Advogados 52 entradas e 1 saída, Contadores 17, Outros 40 e 1). A linha sem
+  ensaio e na aplicação foram 111 eventos (Advogados 52 entradas e 1 saída, Contadores 17, Outros 40 e 1). A linha sem
   data fica de fora, porque quem cobre essa pessoa é a foto do grupo (`dados.grupo_participantes`).
 - **A reconciliação `dvYnvsyyYofowmQ3` continua só na planilha.** O que ela recupera não tem hora. No banco, quem
   reconcilia é a foto.
