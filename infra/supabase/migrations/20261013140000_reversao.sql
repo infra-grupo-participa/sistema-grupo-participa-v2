@@ -1,9 +1,12 @@
 -- Reversão de 20261013140000. Numa transação (o arquivo não abre nem fecha uma).
--- Devolve black_no_recorte, black_recorte_valido e a view dados.black_leads ao que 20261012234606 gravou.
+-- Devolve black_no_recorte, black_recorte_valido e a view dados.black_leads ao que 20261012234606 gravou, byte a byte como
+-- estava no banco (o corpo vivo das funções traz o comentário "20261013130000", número com que 20261012234606 foi escrita;
+-- md5 de volta: 72b790f3…, f445e3dd… e view 2054c3da…, conferido no fim).
 -- Efeito na tela: o recorte de anúncio volta a aceitar um id só (criativo em vários conjuntos volta a pedir um conjunto) e
 -- utm_source=metaads volta a não contar como Meta. Não toca em dado.
--- Guarda: só roda se os corpos vivos forem os gravados por 20261013140000 (md5 d315533c… e 71d6b291…).
+-- Guarda: só roda se os corpos vivos forem os gravados por 20261013140000 (md5 d315533c…, 71d6b291… e view 5ce61662…).
 set local lock_timeout = '5s';
+set local statement_timeout = '60s';
 
 do $g$
 begin
@@ -12,6 +15,10 @@ begin
   end if;
   if (select md5(prosrc) from pg_proc where oid = 'dados.black_recorte_valido(jsonb)'::regprocedure) <> '71d6b291d608911d1507e22bc9c850e2' then
     raise exception 'reversão 20261013140000: corpo vivo de dados.black_recorte_valido não é o gravado por 20261013140000. Reler antes de reverter.';
+  end if;
+  -- pg_get_viewdef depende do search_path da sessão; lido com o padrão do projeto ("$user", public, extensions)
+  if md5(pg_get_viewdef('dados.black_leads'::regclass)) <> '5ce616621e652aaf79445444620f9798' then
+    raise exception 'reversão 20261013140000: definição viva de dados.black_leads não é a gravada por 20261013140000. Reler antes de reverter.';
   end if;
 end
 $g$;
@@ -23,7 +30,7 @@ create or replace function dados.black_no_recorte(p_recorte jsonb, p_porta text,
  immutable
  set search_path to ''
 as $function$
-  -- 20261012234606
+  -- 20261013130000
   select p_recorte is null
       or (p_recorte ->> 'valor') = case p_recorte ->> 'tipo'
            when 'porta' then p_porta when 'isca' then p_isca when 'campanha' then p_campanha_id
@@ -38,7 +45,7 @@ create or replace function dados.black_recorte_valido(p_recorte jsonb)
  set search_path to ''
 as $function$
 begin
-  -- 20261012234606: null, {} e jsonb null = sem recorte
+  -- 20261013130000: null, {} e jsonb null = sem recorte
   if p_recorte is null or p_recorte = '{}'::jsonb or jsonb_typeof(p_recorte) = 'null' then return null; end if;
   if jsonb_typeof(p_recorte) <> 'object'
      or exists (select 1 from jsonb_object_keys(p_recorte) k where k not in ('tipo', 'valor'))
@@ -133,3 +140,14 @@ select n.pagina || ':' || n.id_fonte as lead_id,
        n.campos
   from n;
 revoke all on dados.black_leads from public, anon, authenticated, service_role;
+
+-- conferência: voltou ao que estava no banco antes de 20261013140000
+do $c$
+begin
+  if (select md5(prosrc) from pg_proc where oid = 'dados.black_no_recorte(jsonb,text,text,text,text,text)'::regprocedure) <> '72b790f32645801faba5fc3563338d8c'
+     or (select md5(prosrc) from pg_proc where oid = 'dados.black_recorte_valido(jsonb)'::regprocedure) <> 'f445e3dd27a3b268e17b6f3cd0e8b61d'
+     or md5(pg_get_viewdef('dados.black_leads'::regclass)) <> '2054c3dad0aeb1fb1351bacb693d56b9' then
+    raise exception 'reversão 20261013140000: corpos não voltaram ao de antes';
+  end if;
+end
+$c$;

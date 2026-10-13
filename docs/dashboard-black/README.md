@@ -292,6 +292,19 @@ cujos envios da Black são **todos** teste (`dados.teste_ativo`, todos os envios
 - Detalhe, números por fase e a aplicação: [`20261013024435.explain.md`](../../infra/supabase/migrations/20261013024435.explain.md).
   Reverter: `20261013024435_reversao.sql` (recusa se o corpo vivo não for o desta migration).
 
+## Banco: recorte de criativo com vários anúncios e `metaads` como Meta (NÃO APLICADA)
+
+**`20261013140000`**, branch `victor-black-recorte-lista`. **Não aplicada**; ensaiada contra produção em 13/10/2026 11:48 UTC
+numa transação desfeita (3 rodadas verdes). Falta o pentester e a aplicação (fase 2).
+
+- Recorte `{"tipo":"anuncio"}` passa a aceitar uma lista de ids do Meta separados por vírgula (só dígitos e vírgula, até
+  2000 caracteres): criativo = anúncios de mesmo nome em vários conjuntos. Os outros tipos não mudam.
+- `utm_source=metaads` passa a ser canal `meta` e deixa de cair em `utm_campaign_fora_do_padrao`: no ensaio, 8 envios
+  (8 pessoas) mudam de canal; nenhum outro envio nem coluna muda; `dados_black_grupo` sem recorte fica igual.
+- A tela (`domain/grupo.ts`) só passa a mandar a lista **depois** de aplicada: antes disso o servidor recusa (22023).
+- Detalhe, guarda corrigida (md5 vivos), números e caminho de aplicação:
+  [`20261013140000.explain.md`](../../infra/supabase/migrations/20261013140000.explain.md).
+
 ## Banco: ingresso no grupo (webhook n8n e backfill)
 
 Não tem migration: usa o caminho que já existe para o ATM. Situação em 12/10/2026: **o n8n foi publicado às 23:55 UTC

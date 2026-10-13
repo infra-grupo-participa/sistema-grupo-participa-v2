@@ -1,17 +1,26 @@
 -- 20261013140000: dashboard da Black. (1) o recorte de ANÚNCIO aceita vários ids do Meta (criativo = anúncios de mesmo nome);
 -- (2) utm_source=metaads passa a valer como canal Meta. Numa transação (o arquivo não abre nem fecha uma).
--- NÃO APLICADA. Escrita em 13/10/2026 (UTC) na branch victor-black-funil-mql-grupo; só o Victor/João aplicam.
+-- Escrita em 13/10/2026 (UTC) na branch victor-black-funil-mql-grupo; guarda corrigida e ensaiada contra produção na branch
+-- victor-black-recorte-lista (ver 20261013140000.explain.md). Só o Victor/João aplicam.
 -- Não muda tabela nem dado, só 2 funções internas e 1 view (sem leitura para anon/authenticated).
+-- Ensaio: 20261013140000_ensaio.sql. Reversão: 20261013140000_reversao.sql.
 set local lock_timeout = '5s';
+set local statement_timeout = '60s';
 
--- guarda: as duas funções precisam estar como a migration 20261012234606 deixou (senão alguém mudou depois)
+-- guarda: as duas funções e a view precisam estar como a migration 20261012234606 deixou no banco (senão alguém mudou
+-- depois). md5 lidos no banco em 13/10/2026: o corpo vivo das funções traz o comentário "20261013130000" (número com que
+-- 20261012234606 foi escrita), por isso o md5 do texto do arquivo 20261012234606 (1cdc4228…, 394cb0ae…) não serve aqui.
 do $g$
 begin
-  if (select md5(prosrc) from pg_proc where oid = 'dados.black_no_recorte(jsonb,text,text,text,text,text)'::regprocedure) <> '1cdc422828e0988e16c95de78c87e052' then
-    raise exception 'migration 20261013140000: corpo vivo de dados.black_no_recorte não é o gravado por 20261012234606 (md5 1cdc4228…). Reler antes de aplicar.';
+  if (select md5(prosrc) from pg_proc where oid = 'dados.black_no_recorte(jsonb,text,text,text,text,text)'::regprocedure) <> '72b790f32645801faba5fc3563338d8c' then
+    raise exception 'migration 20261013140000: corpo vivo de dados.black_no_recorte não é o gravado por 20261012234606 (md5 72b790f3…). Reler antes de aplicar.';
   end if;
-  if (select md5(prosrc) from pg_proc where oid = 'dados.black_recorte_valido(jsonb)'::regprocedure) <> '394cb0aebe3d877f775e679459511be5' then
-    raise exception 'migration 20261013140000: corpo vivo de dados.black_recorte_valido não é o gravado por 20261012234606 (md5 394cb0ae…). Reler antes de aplicar.';
+  if (select md5(prosrc) from pg_proc where oid = 'dados.black_recorte_valido(jsonb)'::regprocedure) <> 'f445e3dd27a3b268e17b6f3cd0e8b61d' then
+    raise exception 'migration 20261013140000: corpo vivo de dados.black_recorte_valido não é o gravado por 20261012234606 (md5 f445e3dd…). Reler antes de aplicar.';
+  end if;
+  -- pg_get_viewdef depende do search_path da sessão; lido com o padrão do projeto ("$user", public, extensions)
+  if md5(pg_get_viewdef('dados.black_leads'::regclass)) <> '2054c3dad0aeb1fb1351bacb693d56b9' then
+    raise exception 'migration 20261013140000: definição viva de dados.black_leads não é a gravada por 20261012234606 (md5 2054c3da…). Reler antes de aplicar.';
   end if;
 end
 $g$;
@@ -142,3 +151,14 @@ select n.pagina || ':' || n.id_fonte as lead_id,
        n.campos
   from n;
 revoke all on dados.black_leads from public, anon, authenticated, service_role;
+
+-- conferência: o banco ficou com o texto deste arquivo (md5 medidos no ensaio de 13/10/2026; a reversão confere os mesmos)
+do $c$
+begin
+  if (select md5(prosrc) from pg_proc where oid = 'dados.black_no_recorte(jsonb,text,text,text,text,text)'::regprocedure) <> 'd315533cdfbaab649da865a688c45b08'
+     or (select md5(prosrc) from pg_proc where oid = 'dados.black_recorte_valido(jsonb)'::regprocedure) <> '71d6b291d608911d1507e22bc9c850e2'
+     or md5(pg_get_viewdef('dados.black_leads'::regclass)) <> '5ce616621e652aaf79445444620f9798' then
+    raise exception 'migration 20261013140000: o banco não ficou com o texto desta migration';
+  end if;
+end
+$c$;
