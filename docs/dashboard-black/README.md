@@ -65,7 +65,7 @@ R$ 428.571,00; CPL do placar R$ 14,61 = R$ 192.079,46 ÷ 13.145; soma das 6 fase
   (as duas usam `ui/GavetaLateral.tsx`). Troca de decisão: a gaveta passou a ter fundo escurecido, porque o
   clique fora precisa fechar.
 - **Visão geral.** "CPL do placar" virou **"CPL geral"**, com a dica em linguagem simples (gasto de captação e
-  remarketing ÷ leads que vieram de anúncio); a conta não mudou. O gráfico **por fase** (card de investimento e
+  remarketing ÷ leads que vieram de anúncio); a conta não mudou. O gráfico **por fase** (card de investimento até 13/10 e
   sub-aba do modal) virou `BarrasFase` em `ui/graficos.tsx`: barras grossas, uma cor por fase sem vermelho
   (azul, ouro, roxo, verde-água, lilás e verde, tokens `--info`, `--nivel-ouro`, `--purple`, `--cyan`,
   `--nivel-diamante`, `--green`), entrada animada, dica com o valor ao passar o mouse ou focar, marca do previsto
