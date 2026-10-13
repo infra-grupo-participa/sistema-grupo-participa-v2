@@ -12,6 +12,7 @@ import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type { FonteDadosBlack } from '../application/ports';
 import { grupoSemDado } from '../domain/grupo';
+import { faseDoNome } from '../domain/fase-campanha';
 import {
   FASES, ISCAS,
   type Anuncio, type Campanha, type ConfigBlack, type Conjunto, type DesempenhoDia, type EtapaCampanha, type Funil,
@@ -153,7 +154,7 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
     // O banco só aceita 'meta' em mkt_trafego; outra plataforma não tem lugar na tela e fica de fora.
     if (!id || !nome || c.plataforma !== 'meta') continue;
     const etapa = etapaDe(c.etapa); const subtipo = texto(c.subtipo);
-    campanhas.push({ id, nome, canal: 'meta', funil: funilDaEtapa(etapa, subtipo), fase: null, etapa, subtipo, conflito: booleano(c.conflito), idExterno: texto(c.campanha_externa) });
+    campanhas.push({ id, nome, canal: 'meta', funil: funilDaEtapa(etapa, subtipo), fase: faseDoNome(nome), etapa, subtipo, conflito: booleano(c.conflito), idExterno: texto(c.campanha_externa) });
   }
   const conjuntos: Conjunto[] = linhas(r.conjuntos).flatMap((j) => {
     const id = texto(j.id); const campanhaId = texto(j.campanha_id); const nome = texto(j.nome);
