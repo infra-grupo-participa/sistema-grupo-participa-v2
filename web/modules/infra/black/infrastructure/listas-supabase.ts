@@ -65,7 +65,11 @@ export function mensagemErro(code: string | undefined): string {
 export async function lerResumoListas(chave: string): Promise<{ data: ResumoListas | null; erro: string | null }> {
   try {
     const { data, error } = await createBrowserSupabase().rpc('dados_black_listas_resumo', { p_chave: chave });
-    if (error) { logQueryError('dados_black_listas_resumo', { message: error.code ?? 'erro' }); return { data: null, erro: mensagemErro(error.code) }; }
+    if (error) {
+      logQueryError('dados_black_listas_resumo', { message: error.code ?? 'erro' });
+      // 42501 no resumo = sem acesso ao dashboard (não é falta de contato.ver)
+      return { data: null, erro: error.code === '42501' ? 'Sem permissão para ler este dashboard.' : mensagemErro(error.code) };
+    }
     return { data: mapearResumo(data), erro: null };
   } catch {
     logQueryError('dados_black_listas_resumo', { message: 'falha de conexão' });

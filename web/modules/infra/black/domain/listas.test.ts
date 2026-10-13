@@ -39,6 +39,11 @@ describe('listas de disparo', () => {
     expect(filtrarBusca(l, '8888').length).toBe(1);
     expect(filtrarBusca(l, '').length).toBe(2);
   });
+  it('valor que vira fórmula ganha apóstrofo', () => {
+    expect(celula('=HYPERLINK("x")')).toBe(`"'=HYPERLINK(""x"")"`);
+    for (const c of ['+1', '-1', '@a', '\tx']) expect(celula(c).startsWith("'")).toBe(true);
+    expect(celula('5511900000001')).toBe('5511900000001');
+  });
   it('célula sem caractere especial fica como está', () => { expect(celula('abc')).toBe('abc'); expect(celula(null)).toBe(''); });
   it('há quanto tempo', () => {
     const a = new Date('2026-10-13T12:00:00Z');

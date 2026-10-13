@@ -77,9 +77,12 @@ export function grupoSaida(p: PessoaLista): string {
   return partes.join('; ');
 }
 
-/** Escape de CSV (vírgula como separador): aspas em volta quando há vírgula, ponto e vírgula, aspas ou quebra de linha. */
+/** Escape de CSV (vírgula como separador): aspas em volta quando há vírgula, ponto e vírgula, aspas ou quebra de linha.
+ *  Valor que começa com = + - @ tab ou retorno ganha um ' na frente: o nome vem de formulário público e viraria fórmula
+ *  no Excel ou no Google Sheets (pentester, 13/10). */
 export function celula(v: unknown): string {
-  const s = String(v ?? '');
+  const bruto = String(v ?? '');
+  const s = /^[=+\-@\t\r]/.test(bruto) ? `'${bruto}` : bruto;
   return /[",;\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
