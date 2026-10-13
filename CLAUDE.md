@@ -131,6 +131,7 @@ cd web && npm install && npm run dev   # http://localhost:3000
 
 ### Módulos (`web/modules/`)
 `alunos`, `placas`, `depoimentos`, `financeiro`, `remocao-acessos`, `usuarios`, `marketing` (só esqueleto).
+- `infra/laboratorio`: Laboratório de decisões e testes (`/infra/laboratorio`, schema `lab` fechado + RPCs `public.lab_*`; `docs/projetos/laboratorio/`).
 
 ### Camadas (regra de dependência)
 - **domain**: regra pura — sem Next, sem Supabase. Testável.

@@ -200,6 +200,10 @@ export function Sidebar({ user }: { user: GpUser }) {
               <span className={iconBoxCls(cur === '/infra/dashboards' || cur.startsWith('/infra/dashboards/'))}><Icon name="chart" /></span>
               <span>Dashboards</span>
             </Link>
+            <Link href="/infra/laboratorio" className={itemCls(cur.startsWith('/infra/laboratorio'))}>
+              <span className={iconBoxCls(cur.startsWith('/infra/laboratorio'))}><Icon name="target" /></span>
+              <span>Laboratório</span>
+            </Link>
           </Group>
           <Divider />
         </>
