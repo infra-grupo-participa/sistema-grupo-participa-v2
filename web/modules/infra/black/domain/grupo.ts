@@ -60,8 +60,17 @@ export function recorteDaTela(r: Pick<Recorte, 'funil' | 'canal' | 'criativos'>,
   if (t && f.anuncio) {
     const a = t.anuncios.find((x) => x.id === f.anuncio);
     if (!a) return { ok: false, motivo: 'O anúncio escolhido não está no tráfego do período.' };
-    if (!a.idExterno) return { ok: false, motivo: `O anúncio "${a.nome}" não tem o id do Meta no tráfego.` };
-    return com(recorteGrupoDe({ ...base, anuncioMeta: a.idExterno }), `Anúncio: ${a.nome}`);
+    // O criativo é o conjunto de anúncios de mesmo nome (um por conjunto). Com conjunto ou campanha escolhidos sobra
+    // um só; sem eles, o servidor (um id do Meta por recorte) não consegue somar vários anúncios.
+    const irmaos = t.anuncios.filter((x) => x.nome === a.nome
+      && (!f.conjunto || x.conjuntoId === f.conjunto)
+      && (!f.campanha || t.conjuntos.find((c) => c.id === x.conjuntoId)?.campanhaId === f.campanha));
+    const alvos = irmaos.length > 0 ? irmaos : [a];
+    if (alvos.some((x) => !x.idExterno)) return { ok: false, motivo: `O anúncio "${a.nome}" não tem o id do Meta no tráfego.` };
+    if (alvos.length > 1) {
+      return { ok: false, motivo: `O criativo "${a.nome}" roda em ${alvos.length} anúncios do Meta e o servidor do grupo só aceita um por vez. Escolha também um conjunto.` };
+    }
+    return com(recorteGrupoDe({ ...base, anuncioMeta: alvos[0].idExterno }), `Anúncio: ${a.nome}`);
   }
   if (t && f.conjunto) {
     const j = t.conjuntos.find((x) => x.id === f.conjunto);

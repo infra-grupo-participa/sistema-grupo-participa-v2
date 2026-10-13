@@ -8,7 +8,7 @@
 // recorte. Cada painel continua vendo os filtros dos outros e só destaca o seu próprio.
 import { useMemo } from 'react';
 import { SectionCard } from '@/shared/ui/components';
-import { painel, type PainelCriativos } from '../domain/criativos';
+import { idDoCriativo, painel, type PainelCriativos } from '../domain/criativos';
 import { taxa } from '../domain/metricas';
 import type { FiltroCriativos } from '../domain/tipos';
 import { CampanhaConjunto } from './CampanhaConjunto';
@@ -51,7 +51,7 @@ export function AbaCriativosPaginas({ d, gaveta }: { d: DadosTela; gaveta?: Alvo
           onCampanha={escolherCampanha} onConjunto={(id) => alternar('conjunto', id)} />
       </SectionCard>
       <SectionCard title="Criativos" subtitle="Clique para abrir o detalhe (miniatura, funil, curva diária e links).">
-        <GaleriaCriativos itens={paineis.anuncio} anuncio={(id) => d.idx.anuncio.get(id)} selecionado={f.anuncio ?? null}
+        <GaleriaCriativos itens={paineis.anuncio} anuncio={(id) => d.idx.anuncio.get(id)} selecionado={f.anuncio ? idDoCriativo(d.idx, f.anuncio) : null}
           ativo={gaveta?.tipo === 'criativo' ? gaveta.id : null} onAbrir={abrirCriativo} />
       </SectionCard>
       <SectionCard title="Páginas" subtitle="Um cartão por página de destino. Clique para filtrar os criativos que levam a ela.">

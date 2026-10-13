@@ -6,7 +6,7 @@
 // demonstração os botões ficam desabilitados.
 import { useMemo } from 'react';
 import { safeHttpUrl } from '@/shared/domain/url-segura';
-import { funilCriativo, resumir, serieDiariaAnuncio } from '../domain/criativos';
+import { anunciosDoCriativo, funilCriativo, resumir, serieDiariaAnuncio } from '../domain/criativos';
 import type { DadosTela } from './contexto';
 import { FunilTrapezio, GraficoInvestimentoLeads } from './graficos';
 import { MiniaturaFicticia } from './MiniaturaFicticia';
@@ -15,16 +15,19 @@ import { Farol, Numero, Taxa } from './pecas';
 export function GavetaCriativo({ d, id }: { d: DadosTela; id: string }) {
   const a = d.idx.anuncio.get(id);
   const dados = useMemo(() => {
-    const dias = d.diasPeriodoSemFiltro.filter((x) => x.anuncioId === id);
-    const linhas = d.linhasPeriodoSemFiltro.filter((l) => l.anuncioId === id);
-    const c = d.idx.campanhaDoAnuncio(id);
-    const distribuicao = c === null || c.funil === 'c1' || c.funil === null;
+    // Criativo = todos os anúncios de mesmo nome (um por conjunto): a gaveta soma os conjuntos onde ele roda.
+    const ids = anunciosDoCriativo(d.idx, id); const conjunto = new Set(ids);
+    const dias = d.diasPeriodoSemFiltro.filter((x) => conjunto.has(x.anuncioId));
+    const linhas = d.linhasPeriodoSemFiltro.filter((l) => l.anuncioId !== null && conjunto.has(l.anuncioId));
+    const camps = ids.map((x) => d.idx.campanhaDoAnuncio(x));
+    const distribuicao = camps.every((c) => c === null || c.funil === 'c1' || c.funil === null);
     const resumo = resumir(dias, linhas, d.idx, d.config.reguaCpl, distribuicao);
-    return { dias, linhas, distribuicao, resumo, funil: funilCriativo(resumo, dias, linhas, d.idx, d.agora), serie: serieDiariaAnuncio(id, dias, linhas, d.diasPeriodo) };
+    return { ids, dias, linhas, distribuicao, resumo, funil: funilCriativo(resumo, dias, linhas, d.idx, d.agora), serie: serieDiariaAnuncio(ids, dias, linhas, d.diasPeriodo) };
   }, [d, id]);
   if (!a) return <p className="text-sm text-[var(--fg-3)]">Criativo não encontrado no catálogo.</p>;
-  const cj = d.idx.conjunto.get(a.conjuntoId);
-  const camp = cj ? d.idx.campanha.get(cj.campanhaId) : undefined;
+  // Onde o criativo roda: nomes exatos das campanhas e dos conjuntos (sem repetir), na ordem dos anúncios.
+  const conjuntos = [...new Set(dados.ids.map((x) => d.idx.conjuntoDoAnuncio(x)).filter((c): c is NonNullable<typeof c> => c !== null))];
+  const campanhas = [...new Set(conjuntos.map((c) => d.idx.campanha.get(c.campanhaId)?.nome).filter((n): n is string => Boolean(n)))];
   const pagina = a.paginaId ? d.paginas.get(a.paginaId) : undefined;
   const r = dados.resumo;
   const demo = d.fonte.modo === 'demonstracao';
@@ -40,8 +43,8 @@ export function GavetaCriativo({ d, id }: { d: DadosTela; id: string }) {
       </div>
 
       <dl className="space-y-1 text-xs">
-        <div><dt className="inline text-[var(--fg-3)]">Campanha: </dt><dd className="inline break-words text-[var(--fg-2)]">{camp?.nome ?? 'Não informado'}</dd></div>
-        <div><dt className="inline text-[var(--fg-3)]">Conjunto: </dt><dd className="inline break-words text-[var(--fg-2)]">{cj?.nome ?? 'Não informado'}</dd></div>
+        <div><dt className="inline text-[var(--fg-3)]">Campanha: </dt><dd className="inline break-words text-[var(--fg-2)]">{campanhas.length ? campanhas.join(' · ') : 'Não informado'}</dd></div>
+        <div><dt className="inline text-[var(--fg-3)]">{conjuntos.length > 1 ? `Conjuntos (${conjuntos.length}): ` : 'Conjunto: '}</dt><dd className="inline break-words text-[var(--fg-2)]">{conjuntos.length ? conjuntos.map((c) => c.nome).join(' · ') : 'Não informado'}</dd></div>
         <div><dt className="inline text-[var(--fg-3)]">Página: </dt><dd className="inline break-words text-[var(--fg-2)]">{pagina?.rotulo ?? 'Sem página (distribuição)'}</dd></div>
       </dl>
 

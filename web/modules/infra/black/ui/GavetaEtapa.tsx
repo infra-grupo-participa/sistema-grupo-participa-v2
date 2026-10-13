@@ -66,7 +66,7 @@ export function GavetaEtapa({ d, id, onTrocar }: { d: DadosTela; id: string; onT
               <ul className="atm-historico-panel-enter space-y-2">
                 {itens.map((it) => {
                   const r = it.resumo;
-                  const total = d.totaisPeriodo.find((t) => t.nivel === 'anuncio' && t.id === it.id);
+                  const total = it.anuncios.length === 1 ? d.totaisPeriodo.find((t) => t.nivel === 'anuncio' && t.id === it.id) : undefined; // alcance e frequência não somam entre anúncios
                   return (
                     <li key={it.id}>
                       <button type="button" onClick={() => abrirCriativo(it.id)}

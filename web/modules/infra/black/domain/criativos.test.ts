@@ -2,12 +2,91 @@ import { describe, expect, it } from 'vitest';
 import { baseFicticia } from '../infrastructure/fixtures/gerador';
 import { CONFIG_BLACK } from '../infrastructure/fixtures/catalogo';
 import { conversaoPagina, ctr, agregar, indexar, ingressoGrupo } from './metricas';
-import { funilCriativo, ORDENS_GALERIA, ordenar, painel, resumir, serieDiariaAnuncio, valorOrdem } from './criativos';
+import { anunciosDoCriativo, funilCriativo, idDoCriativo, ORDENS_GALERIA, ordenar, painel, resumir, serieDiariaAnuncio, valorOrdem } from './criativos';
+import { recorteDaTela } from './grupo';
 
 const b = baseFicticia();
 const idx = indexar(b);
 const regua = CONFIG_BLACK.reguaCpl;
 const nomePagina = (id: string) => id;
+
+describe('criativo = anúncios de mesmo nome', () => {
+  // Os fixtures dão um nome por conjunto. No Meta o mesmo criativo vira um anúncio por conjunto: aqui três anúncios de
+  // conjuntos diferentes da campanha de iscas passam a ter o mesmo nome, como na planilha real (74 anúncios, 18 nomes).
+  const NOME = 'FICTÍCIO CRIATIVO COMPARTILHADO';
+  const doisConj = b.conjuntos.filter((c) => c.campanhaId === 'cp-iscas').slice(0, 3);
+  const trio = doisConj.map((c) => b.anuncios.find((a) => a.conjuntoId === c.id)!.id).sort();
+  const ba = { ...b, anuncios: b.anuncios.map((a) => (trio.includes(a.id) ? { ...a, nome: NOME } : a)) };
+  const ix = indexar(ba);
+  const itens = () => painel('anuncio', {}, ba.dias, ba.linhas, ix, regua, nomePagina);
+
+  it('preparo: três anúncios, em conjuntos diferentes, com o mesmo nome', () => {
+    expect(trio).toHaveLength(3);
+    expect(new Set(trio.map((id) => ix.anuncio.get(id)!.conjuntoId)).size).toBe(3);
+  });
+  it('a galeria tem um cartão por nome, com o nome exato, e esses três viram um só', () => {
+    const lista = itens();
+    expect(lista.length).toBe(new Set(lista.map((i) => i.nome)).size);
+    expect(lista.length).toBe(ba.anuncios.length - 2);
+    const it = lista.find((i) => i.nome === NOME)!;
+    expect([...it.anuncios].sort()).toEqual(trio);
+  });
+  it('o cartão soma os conjuntos: gasto do criativo = soma do gasto dos três anúncios', () => {
+    const it = itens().find((i) => i.nome === NOME)!;
+    const soma = ba.dias.filter((d) => trio.includes(d.anuncioId)).reduce((s, d) => s + d.gasto, 0);
+    expect(soma).toBeGreaterThan(0);
+    expect(it.resumo.gasto).toBeCloseTo(soma, 6);
+  });
+  it('soma de todos os cartões = gasto total (nada some nem conta duas vezes)', () => {
+    expect(itens().reduce((s, i) => s + i.resumo.gasto, 0)).toBeCloseTo(ba.dias.reduce((s, d) => s + d.gasto, 0), 4);
+  });
+  it('o id do cartão é o mesmo para qualquer anúncio do grupo (o menor id); id desconhecido volta ele mesmo', () => {
+    expect(idDoCriativo(ix, trio[2])).toBe(trio[0]);
+    expect(idDoCriativo(ix, trio[1])).toBe(trio[0]);
+    expect([...anunciosDoCriativo(ix, trio[1])].sort()).toEqual(trio);
+    expect(anunciosDoCriativo(ix, 'nao-existe')).toEqual(['nao-existe']);
+  });
+  it('nome diferente não agrupa, mesmo parecido (nome exato)', () => {
+    const outro = ba.anuncios.find((a) => !trio.includes(a.id))!;
+    const bb = { ...ba, anuncios: ba.anuncios.map((a) => (a.id === outro.id ? { ...a, nome: NOME + ' ' } : a)) };
+    expect(anunciosDoCriativo(indexar(bb), outro.id)).toEqual([outro.id]);
+  });
+  it('escolher o criativo filtra os conjuntos por todos os anúncios dele, não só por um', () => {
+    const conj = painel('conjunto', { anuncio: trio[2] }, ba.dias, ba.linhas, ix, regua, nomePagina);
+    expect(new Set(conj.map((c) => c.id))).toEqual(new Set(trio.map((id) => ix.anuncio.get(id)!.conjuntoId)));
+  });
+  it('criativo + conjunto: sobra o anúncio daquele conjunto', () => {
+    const cj = ix.anuncio.get(trio[1])!.conjuntoId;
+    const lista = painel('anuncio', { anuncio: trio[0], conjunto: cj }, ba.dias, ba.linhas, ix, regua, nomePagina);
+    // o conjunto tem outro anúncio além do compartilhado; o compartilhado traz só o anúncio daquele conjunto
+    expect(lista.map((i) => i.anuncios.length)).toEqual(lista.map(() => 1));
+    expect(lista.find((i) => i.nome === NOME)!.anuncios).toEqual([trio[1]]);
+    expect(lista.every((i) => i.anuncios.every((id) => ix.anuncio.get(id)!.conjuntoId === cj))).toBe(true);
+  });
+  it('série diária aceita vários anúncios e soma o gasto deles, dia a dia', () => {
+    const dias = [...new Set(ba.dias.map((d) => d.dia))].sort();
+    const s = serieDiariaAnuncio(trio, ba.dias, ba.linhas, dias);
+    const total = ba.dias.filter((d) => trio.includes(d.anuncioId)).reduce((x, d) => x + d.gasto, 0);
+    expect(s.reduce((x, d) => x + d.gasto, 0)).toBeCloseTo(total, 6);
+    const so = serieDiariaAnuncio(trio[0], ba.dias, ba.linhas, dias); // texto simples continua valendo
+    expect(so.reduce((x, d) => x + d.gasto, 0)).toBeLessThan(total);
+  });
+  it('recorte do grupo: criativo em vários anúncios sem conjunto avisa; com conjunto manda o id do Meta do anúncio', () => {
+    const t = { campanhas: ba.campanhas, conjuntos: ba.conjuntos, paginas: [],
+      anuncios: ba.anuncios.map((a) => ({ ...a, idExterno: `meta-${a.id}` })) };
+    const sem = recorteDaTela({ funil: 'todos', canal: 'todos', criativos: { anuncio: trio[0] } }, t);
+    expect(sem.ok).toBe(false);
+    if (!sem.ok) expect(sem.motivo).toContain('Escolha também um conjunto');
+    const cj = ix.anuncio.get(trio[1])!.conjuntoId;
+    const com = recorteDaTela({ funil: 'todos', canal: 'todos', criativos: { anuncio: trio[0], conjunto: cj } }, t);
+    expect(com.ok).toBe(true);
+    if (com.ok) expect(com.recorte).toEqual({ tipo: 'anuncio', valor: `meta-${trio[1]}` });
+    // criativo de um anúncio só continua mandando o id dele
+    const unico = ba.anuncios.find((a) => !trio.includes(a.id))!;
+    const um = recorteDaTela({ funil: 'todos', canal: 'todos', criativos: { anuncio: unico.id } }, t);
+    expect(um.ok && um.recorte).toEqual({ tipo: 'anuncio', valor: `meta-${unico.id}` });
+  });
+});
 
 describe('criativos e páginas', () => {
   it('painel de campanhas: soma do gasto = gasto total; nome = string exata da campanha', () => {

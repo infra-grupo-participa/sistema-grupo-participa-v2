@@ -8,6 +8,7 @@
 import { useMemo, useState } from 'react';
 import { Modal, SearchInput } from '@/shared/ui/components';
 import { deslocarDia } from '@/modules/infra/atm/domain/periodo';
+import { anunciosDoCriativo, idDoCriativo } from '../domain/criativos';
 import { filtrarDias, filtrarLinhas } from '../domain/metricas';
 import { diaDe } from '../domain/recorte';
 import { FASES, FUNIS, ROTULO_CANAL, ROTULO_FASE, ROTULO_FUNIL, type DesempenhoDia, type LinhaPerfil, type Valor } from '../domain/tipos';
@@ -143,11 +144,15 @@ function PorCriativo({ d, card, onIr }: { d: DadosTela; card: CardDef; onIr: (id
   const [todos, setTodos] = useState(false);
   const [menor, setMenor] = useState(Boolean(card.menorMelhor));
   const base = useMemo(() => {
-    const ids = [...new Set(d.dias.map((x) => x.anuncioId))];
-    return ids.map((id) => ({
-      chave: id, anuncioId: id, rotulo: d.idx.anuncio.get(id)?.nome ?? id,
-      valor: card.medir(d.dias.filter((x) => x.anuncioId === id), d.linhas.filter((l) => l.anuncioId === id)),
-    }));
+    // Um item por criativo (anúncios de mesmo nome somados), não um por anúncio/conjunto.
+    const ids = [...new Set(d.dias.map((x) => idDoCriativo(d.idx, x.anuncioId)))];
+    return ids.map((id) => {
+      const doCriativo = new Set(anunciosDoCriativo(d.idx, id));
+      return {
+        chave: id, anuncioId: id, rotulo: d.idx.anuncio.get(id)?.nome ?? 'Criativo sem nome',
+        valor: card.medir(d.dias.filter((x) => doCriativo.has(x.anuncioId)), d.linhas.filter((l) => l.anuncioId !== null && doCriativo.has(l.anuncioId))),
+      };
+    });
   }, [d, card]);
   const ordenada = useMemo(() => [...base].sort((a, b) => {
     if (a.valor === null) return b.valor === null ? 0 : 1;

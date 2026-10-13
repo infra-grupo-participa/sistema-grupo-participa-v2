@@ -10,12 +10,36 @@ import type { Anuncio, DesempenhoDia, FiltroCriativos, LinhaPerfil, ReguaCpl, Va
 
 export type PainelCriativos = 'campanha' | 'conjunto' | 'anuncio' | 'pagina';
 
+/**
+ * Criativo = todos os anúncios com o MESMO NOME, exato (Victor, 13/10/2026). No Meta o mesmo criativo vira um anúncio
+ * por conjunto (74 anúncios para 18 nomes em 04-12/10); a tela mostra um cartão por nome, somando os conjuntos onde ele
+ * roda. O id do cartão (e o `cr` da URL) é o do primeiro anúncio do grupo, em ordem de id, para ser estável.
+ * Nome vazio não agrupa: cada anúncio sem nome é um criativo.
+ */
+const GRUPOS_POR_NOME = new WeakMap<object, Map<string, string[]>>();
+function irmaosPorNome(idx: IndiceTrafego): Map<string, string[]> {
+  const guardado = GRUPOS_POR_NOME.get(idx.anuncio);
+  if (guardado) return guardado;
+  const m = new Map<string, string[]>();
+  for (const a of idx.anuncio.values()) { if (!a.nome) continue; (m.get(a.nome) ?? m.set(a.nome, []).get(a.nome)!).push(a.id); }
+  for (const ids of m.values()) ids.sort();
+  GRUPOS_POR_NOME.set(idx.anuncio, m);
+  return m;
+}
+/** Todos os anúncios do mesmo criativo (inclui o próprio). Id desconhecido: só ele. */
+export function anunciosDoCriativo(idx: IndiceTrafego, anuncioId: string): string[] {
+  const a = idx.anuncio.get(anuncioId);
+  return a?.nome ? irmaosPorNome(idx).get(a.nome) ?? [anuncioId] : [anuncioId];
+}
+/** Id que representa o criativo (o menor id entre os anúncios de mesmo nome). */
+export const idDoCriativo = (idx: IndiceTrafego, anuncioId: string): string => anunciosDoCriativo(idx, anuncioId)[0];
+
 /** O anúncio passa no filtro, ignorando o painel `exceto`. */
 export function anuncioPassa(a: Anuncio, f: FiltroCriativos, idx: IndiceTrafego, exceto?: PainelCriativos): boolean {
   const cj = idx.conjunto.get(a.conjuntoId);
   if (exceto !== 'campanha' && f.campanha && cj?.campanhaId !== f.campanha) return false;
   if (exceto !== 'conjunto' && f.conjunto && a.conjuntoId !== f.conjunto) return false;
-  if (exceto !== 'anuncio' && f.anuncio && a.id !== f.anuncio) return false;
+  if (exceto !== 'anuncio' && f.anuncio && idDoCriativo(idx, a.id) !== idDoCriativo(idx, f.anuncio)) return false;
   if (exceto !== 'pagina' && f.pagina && a.paginaId !== f.pagina) return false;
   return true;
 }
@@ -59,7 +83,7 @@ export function painel(
     let id: string | null = null; let nome = '';
     if (qual === 'campanha') { const c = cj ? idx.campanha.get(cj.campanhaId) : undefined; if (c) { id = c.id; nome = c.nome; } }
     else if (qual === 'conjunto') { if (cj) { id = cj.id; nome = cj.nome; } }
-    else if (qual === 'anuncio') { id = a.id; nome = a.nome; }
+    else if (qual === 'anuncio') { id = idDoCriativo(idx, a.id); nome = a.nome; }
     else if (a.paginaId) { id = a.paginaId; nome = nomePagina(a.paginaId); }
     if (id === null) continue;
     const g = grupos.get(id) ?? { nome, anuncios: new Set<string>() };
@@ -137,9 +161,10 @@ export function funilCriativo(
 }
 
 /** Série diária do criativo: investimento, impressões e leads pagos por dia do período (dia sem nada = 0). */
-export function serieDiariaAnuncio(anuncioId: string, dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], periodo: readonly string[]) {
+export function serieDiariaAnuncio(anuncio: string | readonly string[], dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], periodo: readonly string[]) {
+  const alvo = new Set(typeof anuncio === 'string' ? [anuncio] : anuncio);
   const g = new Map<string, number>(); const imp = new Map<string, number>(); const ld = new Map<string, number>();
-  for (const d of dias) if (d.anuncioId === anuncioId) { g.set(d.dia, (g.get(d.dia) ?? 0) + d.gasto); imp.set(d.dia, (imp.get(d.dia) ?? 0) + d.impressoes); }
-  for (const l of linhas) if (l.anuncioId === anuncioId && ehPago(l)) { const k = diaDe(l.criadoEm); ld.set(k, (ld.get(k) ?? 0) + 1); }
+  for (const d of dias) if (alvo.has(d.anuncioId)) { g.set(d.dia, (g.get(d.dia) ?? 0) + d.gasto); imp.set(d.dia, (imp.get(d.dia) ?? 0) + d.impressoes); }
+  for (const l of linhas) if (l.anuncioId !== null && alvo.has(l.anuncioId) && ehPago(l)) { const k = diaDe(l.criadoEm); ld.set(k, (ld.get(k) ?? 0) + 1); }
   return periodo.map((dia) => ({ dia, gasto: g.get(dia) ?? 0, impressoes: imp.get(dia) ?? 0, leads: ld.get(dia) ?? 0 }));
 }
