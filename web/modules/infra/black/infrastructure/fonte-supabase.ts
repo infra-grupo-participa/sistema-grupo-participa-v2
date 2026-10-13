@@ -17,7 +17,7 @@ import { ehC1PeloNome, faseDoNome } from '../domain/fase-campanha';
 import {
   FASES, ISCAS,
   type Anuncio, type Campanha, type ConfigBlack, type Conjunto, type DesempenhoDia, type EtapaCampanha, type Fase, type Funil,
-  type GrupoBlack, type GrupoResumoBlack, type MetasCard, type Isca, type LeadDetalhe, type LinhaPerfil, type Marcos, type MensageriaBlack,
+  type GrupoBlack, type GrupoResumoBlack, type GastoCampanhaDia, type MetasCard, type Isca, type LeadDetalhe, type LinhaPerfil, type Marcos, type MensageriaBlack,
   type Periodo, type Porta, type Profissao, type RecorteGrupo, type Resultado, type ResultadoAcao, type SegmentoGrupo, type TrafegoBlack,
   type Valor,
 } from '../domain/tipos';
@@ -212,15 +212,19 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
       videoP50: num(d.video_p50), videoP75: num(d.video_p75), thruplay: num(d.video_thruplay),
     }];
   });
+  const gastosCampanhasPorDia: GastoCampanhaDia[] = linhas(r.dias_campanha).flatMap((d) => {
+    const campanhaId = texto(d.campanha_id); const dia = texto(d.dia); const gasto = reais(d.gasto_centavos);
+    return campanhaId && dia && gasto !== null ? [{ campanhaId, dia: dia.slice(0, 10), gasto }] : [];
+  });
   const porCampanha = new Map<string, number>();
-  for (const d of linhas(r.dias_campanha)) {
-    const id = texto(d.campanha_id); const g = reais(d.gasto_centavos);
-    if (id && g !== null) porCampanha.set(id, (porCampanha.get(id) ?? 0) + g);
+  for (const d of gastosCampanhasPorDia) {
+    porCampanha.set(d.campanhaId, (porCampanha.get(d.campanhaId) ?? 0) + d.gasto);
   }
   return {
     data: {
       campanhas, conjuntos, anuncios, paginas: [], dias, totais: [], coletadoEm: texto(r.coletado_em),
       anuncioDesde: texto(r.anuncio_desde), gastoCampanhas: [...porCampanha].map(([campanhaId, gasto]) => ({ campanhaId, gasto })),
+      ...(Array.isArray(r.dias_campanha) ? { gastoCampanhasPorDia: gastosCampanhasPorDia } : {}),
     },
     semDado: campanhas.length === 0,
   };

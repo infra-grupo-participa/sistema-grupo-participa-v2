@@ -32,6 +32,11 @@ describe('mapeadores das RPCs da Black', () => {
     expect(data.anuncios.find((a) => a.id === '301')?.idExterno).toBe('990001');
     expect(data.anuncioDesde).toBe('2026-10-08');
     expect(data.gastoCampanhas?.find((g) => g.campanhaId === '101')?.gasto).toBeCloseTo(130, 6);
+    expect(data.gastoCampanhasPorDia).toEqual([
+      { campanhaId: '101', dia: '2026-10-10', gasto: 123.45 },
+      { campanhaId: '101', dia: '2026-10-11', gasto: 6.55 },
+      { campanhaId: '102', dia: '2026-10-11', gasto: 1000 },
+    ]);
   });
   it('funil C1 provisório pelo nome: ANTECIPAÇÃO e MANIFESTO sem etapa viram C1; com etapa no nome, o banco manda', () => {
     const camp = (id: string, nome: string, etapa: string | null, subtipo: string | null = null) =>

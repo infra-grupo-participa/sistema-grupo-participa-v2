@@ -6,6 +6,7 @@
 import { useState, type ReactNode } from 'react';
 import { KpiCard, Modal, ProgressBar, SectionCard } from '@/shared/ui/components';
 import { cardMql, cardsGrupo, ROTULO_CRUZADO } from '../domain/grupo';
+import { custoCaptacaoBlack } from '../domain/custo-captacao';
 import { avaliarFaixa } from '../domain/meta';
 import { diaDe } from '../domain/recorte';
 import {
@@ -136,6 +137,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   // ─── Faixa 3: funil macro (só captação) ─────────────────────────────────────────────────────────────────
   const dCap = capDias(d.dias, d); const lCap = capLinhas(d.linhas);
   const aCap = agregar(dCap);
+  const investimentoCaptacao = custoCaptacaoBlack(d.trafego, d.periodo);
   const medirCap = (f: (a: ReturnType<typeof agregar>) => Valor) => (x: DesempenhoDia[]) => { const c = capDias(x, d); return c.length ? f(agregar(c)) : null; };
   // Ordem pedida pelo Victor (12/10): Impressões, CPM, Cliques, CTR, CPC, Visualizações, Connect, Inscrições, Conversão. O card Grupo em 48h saiu em 13/10: fica a taxa de Ingresso no grupo.
   const cards3: { c: CardDef; valor: ReactNode; hint?: string }[] = [
@@ -225,6 +227,13 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
         ) : (
           <>
             <ol className={GRADE_MACRO}>
+              <li key="custo-captacao" className="min-w-0">
+                <Cartao cheio titulo="Custo com captação">
+                  <KpiCard label="Custo com captação" title="Gasto por campanha no período selecionado; nomes com LEAD em etapa C2 ou C3, conforme a classificação do banco. Remarketing, C1, disparo e Sem etapa ficam fora."
+                    value={<Numero valor={investimentoCaptacao.total} formato="brl" falta="sem gasto de captação no período" />}
+                    hint={`C2 ${moeda(investimentoCaptacao.c2)} · C3 ${moeda(investimentoCaptacao.c3)}`} />
+                </Cartao>
+              </li>
               {cards3.flatMap(({ c, valor, hint }) => [
                 <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={abrir(c)}><KpiCard label={c.rotulo} value={indicador[c.id] ? <span className="inline-flex flex-wrap items-baseline gap-x-2">{valor}{indicador[c.id]}</span> : valor} hint={hint} /></Cartao></li>,
                 // MQLs logo depois da conversão da página; o Ingresso no grupo vem em seguida (pedido de 13/10).

@@ -84,6 +84,8 @@ export interface DesempenhoDia {
   cliquesLink: Valor; landingPageViews: Valor; alcance: Valor; frequencia: Valor;
   videoP50: Valor; videoP75: Valor; thruplay: Valor;
 }
+/** Gasto diário por campanha, fonte `dados_black_trafego.dias_campanha`; necessário quando não há quebra por anúncio. */
+export interface GastoCampanhaDia { campanhaId: string; dia: string; gasto: number }
 /** Alcance e frequência do período inteiro: não somam entre dias nem entre campanhas. */
 export interface TotalPeriodo { nivel: 'campanha' | 'conjunto' | 'anuncio'; id: string; alcance: Valor; frequencia: Valor }
 export interface TrafegoBlack {
@@ -93,6 +95,8 @@ export interface TrafegoBlack {
   anuncioDesde?: string | null;
   /** Fonte real: gasto do período por campanha (dias_campanha), em reais. Confere com a soma por anúncio. */
   gastoCampanhas?: { campanhaId: string; gasto: number }[];
+  /** Fonte real: gasto diário por campanha. O filtro de período da tela usa esta quebra, sem inferir por anúncio. */
+  gastoCampanhasPorDia?: GastoCampanhaDia[];
 }
 
 /** Uma linha por cadastro (porta). Sem dado pessoal: nome, e-mail e telefone só em LeadDetalhe. */

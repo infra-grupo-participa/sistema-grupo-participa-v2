@@ -527,3 +527,11 @@ antes, deu 191 / 165 e MQL 112).
 - Filtro cruzado no cliente não escala para 150 mil leads.
 - DDD 42: a tabela `dados.ddd_uf` diz PR (espelhada aqui); a BrasilAPI diz SC.
 - Base da casa no config = 188.013; o desenho fala em "cerca de 189 mil".
+
+## Custo com captação no Funil macro (13/10/2026, pedido do Victor)
+
+- **O que mudou:** entrou o card **Custo com captação** como primeiro card do Funil macro, antes de Impressões. O valor principal é o total; a linha menor mostra `C2 R$ X · C3 R$ Y`.
+- **Regra exata:** usa campanhas cuja classificação de etapa veio do banco (`etapa_black`, mapeada em `Campanha.etapa`), com etapa C2 ou C3 e nome contendo `LEAD` (sem diferenciar maiúsculas/minúsculas). A separação C2/C3 não é deduzida pela tela. Exclui C1, Sem etapa, campanhas sem `LEAD`, campanhas classificadas como remarketing e disparos.
+- **Fonte e período:** gasto diário por campanha em `dados_black_trafego.dias_campanha`; a tela soma somente os dias entre `periodo.de` e `periodo.ate`, inclusivos. O período padrão segue a seleção do topo, atualmente **Desde o início**. Sem gasto positivo medido no recorte, mostra **Sem dado**, nunca zero inventado. Se C2 ou C3 não tiver valor medido, o total também fica Sem dado para evitar soma incompleta.
+- **Implementação:** o mapeador preserva a quebra campanha/dia em `TrafegoBlack.gastoCampanhasPorDia`; `domain/custo-captacao.ts` seleciona C2/C3 com LEAD e exclui remarketing. Não altera banco nem RPCs.
+- **Como testar:** `cd web && npx vitest run modules/infra/black/domain/custo-captacao.test.ts modules/infra/black/infrastructure/fonte-supabase.test.ts`. Os testes cobrem C2/C3 com LEAD, campanhas sem LEAD, C1, Sem etapa, remarketing e datas fora do período.
