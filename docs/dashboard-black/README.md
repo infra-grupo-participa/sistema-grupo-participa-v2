@@ -432,7 +432,10 @@ Checagem de 12/10 ~23:58 UTC: os telefones com data na planilha batem com o banc
 Outros 39). A foto do grupo bate com o total da planilha em Advogados (89) e Contadores (33). Risco: o SendFlow devolve
 `export-leads: http 403` para duas das três BF26 em cada ciclo do cron `dados-grupo-foto`. **Corrigido pela migration
 `20261013001456`** (aplicada em 13/10 às 00:14 UTC): o ciclo abre no máximo uma foto, primeiro a de quem tem a foto
-concluída mais antiga. Cada grupo fica com foto a cada ~10 min.
+concluída mais antiga. Cada grupo ficava com foto a cada ~10 min. **Mudou em 14/10** (decisão do Victor, migrations
+`20261014180000` e `20261014180200`): o webhook é a fonte; o export vira complemento, **um por campanha por dia às 23h BRT**,
+pela conta de final 2536, só com `foto_ate` preenchido. As 3 BF26 estão com `foto_ate` nulo (sem export) até a 2536
+entrar nos grupos; depois, até 05/11, sem export em 03/11 (dia da live).
 
 - **Ao vivo.** SendHook das 3 campanhas BF26 → n8n `B7RBTJkAl9ynPNZh` (`/webhook/bf26-grupo-whatsapp`) → "Filtro BF26"
   → POST na Edge `crm-integracao-webhook/sendflow` (header `x-webhook-secret`) → `crm.evento_jornada` (fonte
@@ -528,7 +531,8 @@ hora. Migration `20261013174100`; o detalhe da regra está em `infra/supabase/mi
   - `dados.black_leads`: captação `metodo-perfeito`, iscas e página nova da consultoria;
   - Respondi `JmSmjBBS`, a aplicação da consultoria, workspace 3504. O `respondi-sync` passou a ler esse workspace, só
     esse slug, uma vez por dia às 09:10 UTC;
-  - os 3 grupos BF26 e o grupo "Consultoria ao Vivo - Aberto" do SendFlow, pela foto a cada ~10 min e pelo webhook.
+  - os 3 grupos BF26 e o grupo "Consultoria ao Vivo - Aberto" do SendFlow, pelo webhook e pela foto (a cada ~10 min até 14/10; depois, export diário, ver acima). O grupo da consultoria saiu do
+    export em 14/10 (`foto_ate` nulo).
     O grupo da consultoria tem `papel = 'lista'` em `dados.dashboard_grupos`, por isso não entra nos cards.
 - **Regra:**
   - a mesma pessoa é reconhecida pelo telefone (8 últimos dígitos) **ou** pelo e-mail;
