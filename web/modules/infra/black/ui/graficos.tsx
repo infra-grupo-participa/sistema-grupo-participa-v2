@@ -211,6 +211,7 @@ export function FunilTrapezio({ etapas, rotulo }: { etapas: EtapaFunil[]; rotulo
         {etapas.map((e, i) => {
           const y0 = i * F_LINHA; const y1 = y0 + F_FATIA; const a = larg(i) / 2; const b = larg(i + 1) / 2;
           const sem = e.valor === null;
+          const rotulo = e.rotulo.split(' · ');
           return (
             <g key={e.chave} className={menos ? undefined : 'gp-fade-in'} tabIndex={0} aria-label={`${e.rotulo}: ${formatar(e.valor, 'int')}`}
               style={{ ...anima(i * 80), opacity: apagada(i) ? 0.72 : 1, transition: transicao, cursor: 'pointer', outline: 'none' }}
@@ -219,8 +220,10 @@ export function FunilTrapezio({ etapas, rotulo }: { etapas: EtapaFunil[]; rotulo
               <polygon points={`${cx - a},${y0} ${cx + a},${y0} ${cx + b},${y1} ${cx - b},${y1}`}
                 fill={sem ? 'var(--surface-4)' : 'var(--accent-subtle)'} stroke={sem ? 'var(--border-strong)' : 'var(--accent)'}
                 strokeWidth={ativa === i ? 3.5 : 1.5} strokeLinejoin="round" style={{ transition: transicao }} />
-              <text x={cx} y={y0 + 18} textAnchor="middle" fontSize={11} fill="var(--fg-2)">{e.rotulo}</text>
-              <text x={cx} y={y0 + 37} textAnchor="middle" fontSize={16} fontWeight={700} fill={sem ? 'var(--fg-3)' : 'var(--fg)'} className="tabular">{formatar(e.valor, 'int')}</text>
+              <text x={cx} y={y0 + (rotulo.length > 1 ? 13 : 18)} textAnchor="middle" fontSize={rotulo.length > 1 ? 10 : 11} fill="var(--fg-2)">
+                {rotulo.map((parte, j) => <tspan key={`${e.chave}-${j}`} x={cx} dy={j === 0 ? 0 : 11}>{parte}</tspan>)}
+              </text>
+              <text x={cx} y={y0 + (rotulo.length > 1 ? 43 : 37)} textAnchor="middle" fontSize={16} fontWeight={700} fill={sem ? 'var(--fg-3)' : 'var(--fg)'} className="tabular">{formatar(e.valor, 'int')}</text>
             </g>
           );
         })}
