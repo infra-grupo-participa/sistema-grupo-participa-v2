@@ -24,7 +24,9 @@ export function DisparosClient() {
   const { sessao, vendedores, nomeDe, gestor, leitor } = useEquipe();
   const fichasQ = useDados(() => repo.fichas());
   const templatesQ = useDados(() => repo.templates());
-  const contatosQ = useDados(() => repo.contatos());
+  const [nova, setNova] = useState(false);
+  // Contatos só para montar a lista da ficha nova: com a base inteira (mais de 10 mil) a tela não pode depender deles.
+  const contatosQ = useDados(() => (nova ? repo.contatos() : Promise.resolve(null)), [nova]);
   const negociosQ = useDados(() => repo.negocios());
   // Só o teto de destinatários; se falhar, a ficha segue (o banco confere o limite ao salvar).
   const { dados: whatsapp } = useDados(() => repo.whatsappStatus());
@@ -34,8 +36,9 @@ export function DisparosClient() {
   const { dados: negocios } = negociosQ;
   const [aba, setAba] = useAbaHash<Aba>(ABAS, 'fichas');
   const [aberta, setAberta] = useState<string | null>(null);
-  const [nova, setNova] = useState(false);
   const { toast, flash } = useFlash();
+  const carregandoContatos = nova && !contatos && !contatosQ.erro;
+  const erroContatos = nova && !contatos ? contatosQ.erro : null;
 
   const eu = vendedores.find((v) => v.id === sessao?.vendedorId) ?? null;
   const podeDisparar = !leitor && !!eu?.disparaApi;
@@ -77,12 +80,14 @@ export function DisparosClient() {
     return { erro: r.msg ?? 'Não foi possível gerar o link.' };
   }
 
-  const carregando = !fichas || !templates || !contatos || !negocios || !sessao;
-  const erro = fichasQ.erro ?? templatesQ.erro ?? contatosQ.erro ?? negociosQ.erro;
-  const tentarDeNovo = () => { fichasQ.recarregar(); templatesQ.recarregar(); contatosQ.recarregar(); negociosQ.recarregar(); };
+  const carregando = !fichas || !templates || !negocios || !sessao;
+  const erro = fichasQ.erro ?? templatesQ.erro ?? negociosQ.erro;
+  const tentarDeNovo = () => { fichasQ.recarregar(); templatesQ.recarregar(); negociosQ.recarregar(); };
   const botaoNova = (
     <span title={podeDisparar ? undefined : leitor ? 'Acesso só de leitura.' : 'Seu usuário não opera disparo por API. Peça ao Jonathan.'}>
-      <Button size="sm" disabled={!podeDisparar} onClick={() => setNova(true)}><Icon name="plus" size={14} /> Nova ficha</Button>
+      <Button size="sm" disabled={!podeDisparar || carregandoContatos} onClick={() => setNova(true)}>
+        <Icon name="plus" size={14} /> {carregandoContatos ? 'Carregando contatos…' : 'Nova ficha'}
+      </Button>
     </span>
   );
 
@@ -121,6 +126,7 @@ export function DisparosClient() {
         ]}
       />
 
+      {erroContatos && <EstadoErro mensagem={`Nova ficha: ${erroContatos}`} onTentar={contatosQ.recarregar} />}
       {erro && carregando ? <EstadoErro mensagem={erro} onTentar={tentarDeNovo} /> : carregando ? <Loading /> : (
         <>
           {aba === 'fichas' && (

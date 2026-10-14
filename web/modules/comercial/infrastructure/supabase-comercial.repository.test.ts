@@ -35,16 +35,22 @@ describe('contatos(): leitura em lotes de 500', () => {
     expect(rpc.mock.calls.map(([, a]) => a?.p_offset)).toEqual([0, 500, 1000, 1500, 2000, 2500]);
   });
 
-  it('exatamente 10.000 contatos ainda carregam', async () => {
-    const { r, rpc } = repoCom(10_000);
-    expect(await r.contatos()).toHaveLength(10_000);
-    expect(rpc).toHaveBeenCalledTimes(20);
+  it('acima de 10.000 (base de 14/10) carrega', async () => {
+    const { r, rpc } = repoCom(10_001);
+    expect(await r.contatos()).toHaveLength(10_001);
+    expect(rpc).toHaveBeenCalledTimes(21);
   });
 
-  it('acima de 10.000 para com mensagem clara (não corta calado)', async () => {
-    const { r, rpc } = repoCom(10_001);
-    await expect(r.contatos()).rejects.toThrow('Lista grande demais para carregar de uma vez (crm_contatos: mais de 10.000 contatos).');
-    expect(rpc).toHaveBeenCalledTimes(20);
+  it('exatamente 30.000 contatos ainda carregam', async () => {
+    const { r, rpc } = repoCom(30_000);
+    expect(await r.contatos()).toHaveLength(30_000);
+    expect(rpc).toHaveBeenCalledTimes(60);
+  });
+
+  it('acima de 30.000 para com mensagem clara (não corta calado)', async () => {
+    const { r, rpc } = repoCom(30_001);
+    await expect(r.contatos()).rejects.toThrow('Lista grande demais para carregar de uma vez (crm_contatos: mais de 30.000 contatos).');
+    expect(rpc).toHaveBeenCalledTimes(60);
   });
 });
 

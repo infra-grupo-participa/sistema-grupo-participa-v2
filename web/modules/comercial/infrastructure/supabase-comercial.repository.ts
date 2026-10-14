@@ -51,11 +51,11 @@ import { painelPadrao, preferenciasPadrao } from './mock-dados';
 const PAGINA_NEGOCIOS = 2000;
 // Busca de contatos no servidor: até 50 por termo (a tela mostra os primeiros; refinar o termo acha o resto).
 const LIMITE_BUSCA_CONTATOS = 50;
-// Contatos: 500 é o máximo que `crm_contatos` aceita por chamada. Teto próprio de 20 páginas (10.000 contatos):
-// a lista de um gestor (2.648 em 06/10/2026) cabe em 6 chamadas. Ajuste rápido; a correção definitiva é a lista
-// paginada no banco (docs/projetos/comercial/ajuste-rapido-2026-10-06.md).
+// Contatos: 500 é o máximo que `crm_contatos` aceita por chamada. Teto próprio de 60 páginas (30.000 contatos):
+// em 14/10/2026 a base passou de 10.000 e a tela Disparos parou (era 20 páginas). Ajuste rápido; a correção
+// definitiva é a lista paginada no banco (docs/projetos/comercial/ajuste-rapido-2026-10-06.md).
 const PAGINA_CONTATOS = 500;
-const MAX_PAGINAS_CONTATOS = 20;
+const MAX_PAGINAS_CONTATOS = 60;
 const PAGINA_ATIVIDADES = 2000;
 const MAX_PAGINAS = 25;
 // crm_contatos_por_ids aceita até 1.000 ids por chamada.
