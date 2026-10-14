@@ -31,6 +31,7 @@ import { TrafegoAtm } from './TrafegoAtm';
 import { ModalLeadsAtm, ModalPreCheckoutAtm, ModalVendasAtm } from './ModaisFunilAtm';
 import { chaveListaAtm, criarCarregadorListasAtm } from './carregador-listas';
 import { useListaAtm } from './useListaAtm';
+import { AJUDA_EQUIPE, CARDS_COMPARECIMENTO } from '../domain/comparecimento';
 
 type Linha = Record<string, unknown>;
 type PedidoAtualizacao = { periodo: ReturnType<typeof datasDoPeriodo>; detalhado: boolean };
@@ -236,7 +237,7 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
     </SectionCard>
     <SectionCard title="Comparecimento" subtitle="Dados por sessão, conforme cadastro no banco. Este bloco considera o evento inteiro.">
       {comparecimento.erro && <p role="status" className="mb-3 text-sm text-[var(--yellow)]">{comparecimento.erro}</p>}
-      {comparecimento.data.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[['Pico de audiência', 'pico_audiencia', 'inteiro'], ['Comparecimento do grupo', 'presentes_grupo', 'inteiro'], ['Comparecimento dos leads', 'presentes_leads', 'inteiro'], ['Total de leads', 'total_leads', 'inteiro'], ['Total no grupo', 'total_grupo', 'inteiro'], ['Pessoas da equipe na sala', 'equipe_na_sala', 'inteiro'], ['Vendas', 'vendas', 'inteiro'], ['Conversão', 'conversao_pct', 'percentual'], ['Conversão no grupo', 'conversao_grupo_pct', 'percentual'], ['Conversão sobre o pico', 'conversao_pico_pct', 'percentual']].map(([label, key, tipo]) => { const n = valor(sessao?.[key]); return <KpiCard key={key} label={label} value={renderVal(n, tipo)} hint={n == null ? 'sem dado ainda' : undefined} />; })}</div> : <EmptyState title="Comparecimento ainda não lançado" hint="sem dado ainda" />}
+      {comparecimento.data.length ? <><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{CARDS_COMPARECIMENTO.map((c) => { const n = valor(sessao?.[c.chave]); return <KpiCard key={c.chave} label={c.rotulo} value={renderVal(n, c.tipo)} hint={n == null ? 'sem dado ainda' : c.ajuda} />; })}</div><p className="mt-3 text-sm text-[var(--fg-3)]">{AJUDA_EQUIPE}</p></> : <EmptyState title="Comparecimento ainda não lançado" hint="sem dado ainda" />}
     </SectionCard>
     <SectionCard title="Pós-live" subtitle="Vendas e conversão em ciclos separados. Este bloco considera o evento inteiro.">
       {posLive.erro && <p role="status" className="mb-3 text-sm text-[var(--yellow)]">{posLive.erro}</p>}
