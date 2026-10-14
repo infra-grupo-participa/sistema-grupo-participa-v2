@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { baseFicticia } from '../infrastructure/fixtures/gerador';
 import { CONFIG_BLACK } from '../infrastructure/fixtures/catalogo';
-import { conversaoPagina, ctr, agregar, indexar, ingressoGrupoGeral, mqlDoRecorte } from './metricas';
+import { ctr, agregar, indexar, mqlDoRecorte } from './metricas';
+import { conversaoPagina, ingressoGrupoGeral, mql } from './numeros';
 import { anunciosDoCriativo, funilCriativo, idDoCriativo, ORDENS_GALERIA, ordenar, painel, resumir, serieDiariaAnuncio, valorOrdem } from './criativos';
 import { recorteDaTela, TETO_RECORTE_ANUNCIO } from './grupo';
 import { grupoDemo } from '../infrastructure/fixtures/fonte-fixtures';
@@ -223,17 +224,17 @@ describe('criativos e páginas', () => {
     const a = painel('anuncio', { campanha: 'cp-iscas' }, b.dias, b.linhas, idx, regua, nomePagina)[0];
     const dias = b.dias.filter((d) => a.anuncios.includes(d.anuncioId)); const linhas = b.linhas.filter((l) => l.anuncioId !== null && a.anuncios.includes(l.anuncioId));
     const r = resumir(dias, linhas, idx, regua, false);
-    const f = funilCriativo(r, dias, linhas, idx);
-    expect(f.map((e) => e.rotulo)).toEqual(['Impressões', 'Cliques', 'Views da página', 'Leads pagos', 'Total de MQL', 'Ingresso no grupo']);
+    const f = funilCriativo(r, dias, linhas);
+    expect(f.map((e) => e.rotulo)).toEqual(['Impressões', 'Cliques', 'Views da página', 'Leads pagos', 'Total de MQL', 'Ingresso geral · todos os leads']);
     expect(f[0].ponte).toBeNull();
     expect(f[1].ponte!.taxa).toEqual(ctr(agregar(dias)));
     expect(f[1].ponte!.taxa.valor).toBeCloseTo(r.cliques! / dias.filter((d) => d.cliquesLink !== null).reduce((s, d) => s + d.impressoes, 0), 9);
     expect(f[2].ponte!.taxa).toEqual(r.connect);
     expect(f[3].ponte!.taxa).toEqual(conversaoPagina(dias, linhas, idx));
     expect(f[4].ponte!.rotulo).toBe('% de MQL');
-    expect(f[4].ponte!.taxa).toEqual(mqlDoRecorte(linhas));
+    expect(f[4].ponte!.taxa).toMatchObject({ ...mql(linhas), nota: mql(linhas).nota });
     expect(f[4].valor).toBe(f[4].ponte!.taxa.num);
-    expect(f[5].ponte!.taxa).toEqual(ingressoGrupoGeral(linhas));
+    expect(f[5].ponte!.taxa).toMatchObject(ingressoGrupoGeral(linhas));
     expect(f[5].valor).toBe(f[5].ponte!.taxa.num);
   });
   it('MQL e ingresso: pessoas únicas, ingresso sobre leads gerais e MQL pela profissão mais recente', () => {
@@ -248,7 +249,7 @@ describe('criativos e páginas', () => {
   });
   it('funil do criativo (C1, distribuição): impressões → vídeo 75%', () => {
     const c1 = painel('anuncio', {}, b.dias, b.linhas, idx, regua, nomePagina).find((x) => idx.campanhaDoAnuncio(x.id)?.funil === 'c1')!;
-    const f = funilCriativo(c1.resumo, [], [], idx);
+    const f = funilCriativo(c1.resumo, [], []);
     expect(f.map((e) => e.chave)).toEqual(['impressoes', 'video75']);
     expect(f[1].ponte!.taxa).toEqual(c1.resumo.video75);
   });

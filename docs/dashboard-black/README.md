@@ -219,6 +219,15 @@ celular); e a lista de estados do mapa do Perfil tem 24 px de altura.
   continuam no período escolhido no topo; os quatro de cima, do início até agora).
 - Como testar: abrir a Visão geral a 1440 px e conferir que os sete cards e o começo do funil macro aparecem sem rolar.
 
+### Placar e funil macro v3 (14/10/2026, pedido do Victor)
+
+- O placar começa com **Investimento total**, **Investimento em tráfego** e **Investimento com disparo**, lado a lado. Total e tráfego mostram valor, barra e percentual contra `ORCAMENTO.total` (R$ 428.571,00). Até existir limite separado para disparos, o total reutiliza esse mesmo orçamento; esse uso provisório está comentado no card. Disparo conserva `Sem dado` quando o custo não foi lançado, mostra a barra vazia e `limite sem cadastro`; não há selo de dado fictício.
+- **Leads contra a meta** conta pessoas únicas de todas as portas desde o início do projeto e ignora filtros do período, funil e canal. A meta aparece no card com valor, percentual e barra. A linha `N do tráfego` usa pessoas pagas únicas atribuídas às campanhas elegíveis C2/C3.
+- **CPL geral** sai do placar e passa ao primeiro trecho do Funil macro, logo depois de Investimento em captação. O numerador é o investimento C2/C3 do período selecionado; o divisor são pessoas pagas únicas atribuídas às mesmas campanhas e ao mesmo filtro de funil/canal. A classificação de campanha segue `etapa_black`; ENTRESAFRA, remarketing e `consultoria_respondi` ficam fora.
+- **Inscrições** no Funil macro contam pessoas únicas atribuídas às campanhas elegíveis C2/C3 no período escolhido, em todas as portas. Cadastro repetido não aumenta a contagem.
+- O card `Verba contra o orçamento` e o card grande `Até a live` foram removidos. Quando a live ainda está no futuro, aparece apenas uma contagem pequena no canto do título do placar.
+- Como testar: selecione períodos diferentes e confirme que Leads contra a meta não muda, enquanto Inscrições, N do tráfego e CPL seguem o período e os filtros globais. No modo de demonstração, repita em 1280 e 375 px, nos temas claro e escuro. Testes de deduplicação e exclusão de `consultoria_respondi`: `domain/metricas.test.ts`.
+
 ## Decisões
 
 ### Revisão visual da Black (14/10/2026)
@@ -818,3 +827,24 @@ o que foi validado e as diferenças de agregação ainda pendentes.
 - Conferido no portal local com dados reais em viewport de 1280 px, tema claro e escuro. Capturas: `screenshots-2026-10-14/revisao-maestro-2/ingresso-1280-light.png` e `ingresso-1280-dark.png`.
 - Testes: componente validado na tela local; executar `npx vitest run modules/infra/black`, `npx tsc --noEmit`, `npx eslint modules/infra/black/ui/AbaVisaoGeral.tsx`, `npm run lint:tokens` e `npm run build`.
 - Estado: correção local na worktree `victor-black-visual-2`, sem commit ou publicação.
+
+
+### Potencial de MQL e Histórico no estilo do funil de Criativos (14/10/2026, acréscimo do Victor)
+
+- **Potencial de MQL** aparece ao lado do card MQLs no Funil macro. Os dois usam a Regra B (profissão do envio mais recente) e o recorte de pessoas únicas atribuídas a C2/C3 no período selecionado; potencial = MQL ÷ pessoas do recorte. O cálculo único é `mqlDoRecorte` (`domain/metricas.ts`) e o mesmo resultado alimenta o total de MQL e a taxa.
+- No **Histórico**, o botão de reprodução automática foi removido. A régua de datas continua permitindo navegar pelos dias; o funil usa o componente SVG `FunilTrapezio` compartilhado com Criativos e destaca uma etapa sob foco ou cursor. O gráfico de investimento continua com barras e linha, e o acumulado de pessoas usa `pessoasUnicas`, de todas as portas e sem filtro, para bater com Leads contra a meta.
+- Métricas compartilhadas: pessoas únicas em `pessoasUnicas`; CPL de captação em `cplPlacar` (com `cpl` para divisão); CPLs por etapa também deduplicam com `cplDo`; conversão de página deduplica com `conversaoPagina`; connect rate usa `connectRate`; investimento de captação usa `investimentoCaptacao`. Inscrições do Funil macro contam pessoas únicas atribuídas a C2/C3.
+- Para revisar: no período `desde-inicio`, comparar Leads contra a meta com o acumulado do Histórico; mudar período e filtro e confirmar que Inscrições, MQL e Potencial de MQL acompanham o recorte; passar o cursor por cada etapa do funil do Histórico. Testes: `domain/metricas.test.ts` e `domain/historico.test.ts`.
+
+### Placar v3, funções centrais e alias de ISCAS (14/10/2026)
+
+- `domain/numeros.ts` reúne o cálculo e o rótulo de recorte para pessoas únicas, inscrições C2/C3, pagos atribuídos a campanhas C2/C3, investimento por campanha (`dias_campanha`), CPL de captação, MQL do servidor, potencial de MQL, connect rate, conversão da página e as três métricas de ingresso no grupo. Cards explicitam período, campanhas C2/C3 ou base de pessoas conforme a métrica.
+- Leads acumulados no Histórico usam `acumuladoLeadsPessoas`, a mesma regra de pessoa única de `leadsPessoas`, processada em uma passagem por eficiência. O número diário de pagos também deduplica por pessoa. MQL escolhe o envio mais recente que tem profissão, alinhado à regra do servidor; pessoas sem profissão continuam na base do denominador.
+- Visão Geral e Criativos/Páginas compartilham os cálculos de connect rate e conversão da página. O gasto de investimento em tráfego usa a soma por campanha de `dados_black_trafego.dias_campanha`; campanhas de Entresafra ficam fora e ausência de dado sem confirmação não vira zero.
+- O placar começa com Investimento total, Investimento em tráfego e Investimento com disparo, cada um com barra contra o limite visível. CPL sai do placar e entra no Funil macro; Inscrições são pessoas únicas C2/C3; o potencial de MQL mostra MQL ÷ base única do mesmo recorte. `cplCaptacao` recebe gasto de campanha e pagadores únicos atribuídos ao recorte em Visão Geral e Jornada.
+- No Histórico, a reprodução automática foi removida. A régua escolhe o dia; o funil escalonado realça a etapa em hover/foco e usa connect rate e conversão de página compartilhados com a Visão Geral.
+- O painel da aba Histórico não usa mais a animação inicial que podia manter todo o conteúdo transparente quando a página estava em segundo plano. Assim, a régua, o funil e as séries continuam visíveis em retomadas e capturas do navegador.
+- O campo `mkt_trafego.etapa_black` classifica subtipo por token exato. A migration `20261014130200` foi aplicada em produção em 14/10/2026 às 13:17:38 UTC e adiciona `ISCAS` como alias de `ISCA`; a tela recebe a classificação pela RPC existente `dados_black_trafego`. Ensaio, hashes, reversão e comprovação estão em `infra/supabase/migrations/20261014130200.explain.md`.
+- Na leitura ao vivo registrada às 13:27 UTC, a campanha `CF | BF26 | C2 | ISCAS | CAPTAÇÃO | META | PQ | ABO | LEAD` aparece como C2 / ISCA, com R$ 52,02 e 9 leads pagos. O total de tráfego sem Entresafra é R$ 20.177,70. Os valores R$ 43,69, 6 leads e R$ 20.109,28 eram de uma fotografia anterior e já não correspondem à fonte atual.
+- Fonte das métricas financeiras: `dados_black_trafego.dias_campanha`; leads e profissão: `dados_black_perfil`; ingresso agregado por grupos: `dados_black_grupo`. Para valores reais atuais, conferir as RPCs com o Galego; contagens variam com novas inscrições e coletas.
+- Como testar: `npx vitest run modules/infra/black/domain/numeros.test.ts modules/infra/black/domain/metricas.test.ts modules/infra/black/domain/historico.test.ts modules/infra/black/domain/criativos.test.ts modules/infra/black/domain/jornada.test.ts`, `npx tsc --noEmit` e abrir a Black local. A migration tem ensaio e reversão próprios em `infra/supabase/migrations/20261014130200_*.sql`.

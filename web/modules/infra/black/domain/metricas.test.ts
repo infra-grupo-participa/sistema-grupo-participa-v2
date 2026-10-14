@@ -66,9 +66,10 @@ describe('agregados', () => {
   it('connect rate só do C1 é sem dado', () => {
     expect(connectRate([dias[0]], idx).valor).toBeNull();
   });
-  it('conversão da página = inscrições pagas dos anúncios com LPV ÷ Σ LPV', () => {
+  it('conversão da página = pessoas pagas únicas dos anúncios com LPV ÷ Σ LPV', () => {
     const t = conversaoPagina(dias, leads, idx);
     expect(t.num).toBe(3);
+    expect(conversaoPagina(dias, [...leads, linha({ leadId: 'l-extra', pessoaId: 'p2', campanhaId: 'k2', anuncioId: 'a2' })], idx).num).toBe(3);
     expect(t.den).toBe(78);
   });
 });
@@ -77,9 +78,15 @@ describe('CPL', () => {
   it('soma sobre soma e só leads pagos', () => {
     expect(cplDo(dias, leads)).toEqual({ gasto: 380, leadsPagos: 4, valor: 95 });
     expect(cplDo([], []).valor).toBeNull();
+    expect(cplDo([], [...leads, linha({ leadId: 'l7', pessoaId: 'p2', origem: 'pago' })]).leadsPagos).toBe(4);
   });
   it('CPL geral inclui só captação C2/C3 e leads pagos dessas etapas', () => {
     expect(cplPlacar(dias, leads, idx)).toEqual({ gasto: 250, leadsPagos: 3, valor: 250 / 3 });
+  });
+  it('CPL conta pessoas pagas únicas e exclui a porta consultoria_respondi', () => {
+    const duplicada = linha({ leadId: 'l-extra', pessoaId: 'p2', campanhaId: 'k2', origem: 'pago', funil: 'iscas' });
+    const respondi = linha({ leadId: 'l-respondi', pessoaId: 'p-novo', campanhaId: 'k2', origem: 'pago', pagina: 'consultoria_respondi' });
+    expect(cplPlacar(dias, [...leads, duplicada, respondi], idx)).toEqual({ gasto: 250, leadsPagos: 3, valor: 250 / 3 });
   });
   it('CPL inclui campanha C2 sem LEAD no nome usando a etapa do banco', () => {
     const c2: Campanha = { id: 'k5', nome: 'CF | BF26 | C2 | CONSULTORIA', canal: 'meta', funil: 'consultoria', etapa: 'C2', fase: null };
@@ -100,23 +107,24 @@ describe('CPL', () => {
     expect(cplPlacar([...dias, diaEntresafra], linhas, ix, gastoCampanhas)).toMatchObject({ gasto: 50, leadsPagos: 3, valor: 50 / 3 });
     expect(filtrarDias([...dias, diaEntresafra], ix, { funil: 'todos', canal: 'todos' })).not.toContain(diaEntresafra);
   });
-  it('por etapa: Iscas só C3, C3 sem remarketing, conjunto com nome da fonte', () => {
+  it('por etapa: Iscas soma C2 e C3 sem remarketing, conjunto mantém nome da fonte', () => {
     const por = Object.fromEntries(cplPorEtapa(dias, leads, idx).map((x) => [x.chave, x]));
-    expect(por.iscas.cpl).toEqual({ gasto: null, leadsPagos: 0, valor: null });
-    expect(por['isca:Fluxograma']).toBeUndefined();
+    expect(por.iscas.rotulo).toBe('Iscas');
+    expect(por.iscas.cpl).toEqual({ gasto: 200, leadsPagos: 2, valor: 100 });
+    expect(por['isca:Fluxograma'].cpl).toEqual({ gasto: 200, leadsPagos: 2, valor: 100 });
     expect(por.c3.cpl).toEqual({ gasto: 50, leadsPagos: 1, valor: 50 });
     expect(por['conjunto:j3'].rotulo).toBe('J3 GOOGLE');
     expect(por.consultoria.cpl.valor).toBeNull();
     expect(cplRemarketing(dias, leads, idx)).toEqual({ gasto: 30, leadsPagos: 1, valor: 30 });
   });
-  it('Iscas conta conjuntos marcados dentro de campanhas C3, nunca campanhas C2', () => {
+  it('Iscas agrega campanha C2 e isca de C3 sem dupla contagem', () => {
     const campanhaC3Isca: Campanha = { id: 'k5', nome: 'CF | BF26 | C3 | ISCA | LEAD', canal: 'meta', funil: 'c3', fase: 'captacao', etapa: 'C3', subtipo: 'ISCA' };
     const conjuntoC3Isca: Conjunto = { id: 'j5', campanhaId: 'k5', nome: 'C3 CHECKUP', isca: 'Checkup', conjuntoC3: null };
     const anuncioC3Isca = ad('a5', 'j5');
     const idxC3Isca = indexar({ campanhas: [...campanhas, campanhaC3Isca], conjuntos: [...conjuntos, conjuntoC3Isca], anuncios: [...anuncios, anuncioC3Isca] });
     const leadC3Isca = linha({ leadId: 'l6', pessoaId: 'p6', funil: 'c3', campanhaId: 'k5', conjuntoId: 'j5', anuncioId: 'a5', isca: 'Checkup' });
-    const por = Object.fromEntries(cplPorEtapa([dia('a5', 20, 100, 10, 5)], [leadC3Isca], idxC3Isca).map((x) => [x.chave, x]));
-    expect(por.iscas.cpl).toEqual({ gasto: 20, leadsPagos: 1, valor: 20 });
+    const por = Object.fromEntries(cplPorEtapa([dia('a2', 200, 5000, 100, 70), dia('a5', 20, 100, 10, 5)], [...leads.slice(0, 2), leadC3Isca], idxC3Isca).map((x) => [x.chave, x]));
+    expect(por.iscas.cpl).toEqual({ gasto: 220, leadsPagos: 3, valor: 220 / 3 });
     expect(por['isca:Checkup'].cpl).toEqual({ gasto: 20, leadsPagos: 1, valor: 20 });
   });
   it('farol pela régua 15/20', () => {
@@ -159,6 +167,14 @@ describe('grupo e pessoas', () => {
       linha({ pessoaId: 'c', criadoEm: '2026-10-12T09:00:00-03:00', profissao: null, mql: true }),
     ];
     expect(mqlDoRecorte(ls)).toMatchObject({ num: 1, den: 3, valor: 1 / 3, nota: 'Regra B: profissão do envio mais recente ÷ pessoas únicas do recorte.' });
+  });
+  it('ignora envios sem profissão ao escolher o envio mais recente, como o servidor', () => {
+    const ls = [
+      linha({ pessoaId: 'a', criadoEm: '2026-10-12T10:00:00-03:00', profissao: 'advogado' }),
+      linha({ pessoaId: 'a', criadoEm: '2026-10-12T11:00:00-03:00', profissao: null }),
+      linha({ pessoaId: 'b', criadoEm: '2026-10-12T10:30:00-03:00', profissao: 'outros' }),
+    ];
+    expect(mqlDoRecorte(ls)).toMatchObject({ num: 1, den: 2, valor: 0.5 });
   });
 });
 

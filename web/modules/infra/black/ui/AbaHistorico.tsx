@@ -4,66 +4,49 @@
 // movimento reduzido) e o gráfico do período: investimento por dia em barras, pessoas únicas acumuladas desde o
 // início do projeto. O funil do dia é só da
 // captação (C2 e C3), como na Visão geral; o investimento e o acumulado seguem o funil e o canal do seletor.
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { KpiCard, SectionCard } from '@/shared/ui/components';
-import { ehCaptacao, filtrarDias, filtrarLinhas, taxa } from '../domain/metricas';
+import { agregar, cpm, ctr, ehCaptacao, ehEntresafraCampanha, filtrarDias, filtrarLinhas, linhasCaptacao, taxa } from '../domain/metricas';
+import { connectRate, conversaoPagina } from '../domain/numeros';
 import { serieHistorico, type DiaHistorico } from '../domain/historico';
 import { diaDe } from '../domain/recorte';
-import type { Valor } from '../domain/tipos';
+import { FunilTrapezio } from './graficos';
+import type { EtapaFunil } from '../domain/criativos';
 import type { DadosTela } from './contexto';
-import { inteiro, moeda, Numero, Taxa, usePrefereMenosMovimento } from './pecas';
+import { inteiro, moeda } from './pecas';
 
 const dataCurta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
-const PASSO_MS = 900;
 
 export function AbaHistorico({ d }: { d: DadosTela }) {
-  const reduzido = usePrefereMenosMovimento();
   const { serie, serieCap } = useMemo(() => {
     const fim = d.diasPeriodo[d.diasPeriodo.length - 1] ?? '';
     const f = { funil: d.recorte.funil, canal: d.recorte.canal };
     const dias = filtrarDias(d.diasTodos, d.idx, f);
-    const linhas = filtrarLinhas(d.linhasTodas, f).filter((l) => diaDe(l.criadoEm) <= fim);
+    const todas = d.linhasTodas.filter((l) => l.pagina !== 'consultoria_respondi' && diaDe(l.criadoEm) <= fim);
+    const linhas = filtrarLinhas(todas, f);
+    const linhasCap = linhasCaptacao(linhas, d.idx);
+    const diasCap = dias.filter((x) => ehCaptacao(d.idx.campanhaDoAnuncio(x.anuncioId)?.funil));
     const cfg = { inicioCaptacao: d.config.inicioCaptacao, metaLeadsDia: d.config.metaLeadsDia };
     return {
-      serie: serieHistorico(dias, linhas, d.diasPeriodo, cfg),
-      serieCap: serieHistorico(dias.filter((x) => ehCaptacao(d.idx.campanhaDoAnuncio(x.anuncioId)?.funil)), linhas.filter((l) => ehCaptacao(l.funil)), d.diasPeriodo, cfg),
+      serie: serieHistorico(dias, linhas, d.diasPeriodo, cfg, todas),
+      serieCap: serieHistorico(diasCap, linhasCap, d.diasPeriodo, cfg, todas),
     };
   }, [d.diasTodos, d.linhasTodas, d.idx, d.recorte.funil, d.recorte.canal, d.diasPeriodo, d.config.inicioCaptacao, d.config.metaLeadsDia]);
 
   const ultimo = serie.length - 1;
   const [escolhido, setEscolhido] = useState<number | null>(null);
-  const [tocando, setTocando] = useState(false);
   const i = escolhido === null ? ultimo : Math.min(escolhido, ultimo);
-  const rodando = tocando && !reduzido && ultimo > 0;
-
-  useEffect(() => {
-    if (!rodando) return;
-    const t = window.setInterval(() => {
-      setEscolhido((atual) => {
-        const prox = (atual === null || atual >= ultimo ? -1 : atual) + 1;
-        return prox;
-      });
-    }, PASSO_MS);
-    return () => window.clearInterval(t);
-  }, [rodando, ultimo]);
-
   if (serie.length === 0) return <p className="text-sm text-[var(--fg-3)]">Sem dia no período.</p>;
   const dia = serie[i];
   const cap = serieCap[i];
 
   return (
     <div className="space-y-4">
-      <SectionCard title="Dia a dia" subtitle="Arraste a régua ou toque play para o funil andar pelos dias do período.">
+      <SectionCard title="Dia a dia" subtitle="Arraste a régua para ver o funil de cada dia do período.">
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={() => { if (escolhido === null || escolhido >= ultimo) setEscolhido(0); setTocando((x) => !x); }}
-            disabled={reduzido || ultimo === 0} aria-pressed={rodando}
-            title={reduzido ? 'Animação desligada (o sistema pede menos movimento)' : undefined}
-            className="inline-flex min-h-9 items-center rounded-[var(--r-md)] border border-[var(--border-accent)] px-3 text-xs text-[var(--fg)] hover:bg-[var(--surface-3)] disabled:cursor-not-allowed disabled:opacity-50">
-            {rodando ? 'Pausar' : 'Tocar'}
-          </button>
           <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-[var(--fg-3)]">
             <span className="sr-only">Dia</span>
-            <input type="range" min={0} max={ultimo} value={i} onChange={(e) => { setTocando(false); setEscolhido(Number(e.target.value)); }}
+            <input type="range" min={0} max={ultimo} value={i} onChange={(e) => setEscolhido(Number(e.target.value))}
               aria-valuetext={dataCurta(dia.dia)} className="min-w-0 flex-1 accent-[var(--accent)] max-md:h-11" />
             <span className="w-12 shrink-0 text-right font-semibold tabular text-[var(--fg)]">{dataCurta(dia.dia)}</span>
           </label>
@@ -73,65 +56,38 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
           <KpiCard label="Investimento do dia" value={moeda(dia.gasto)} bar="yellow" title="No funil e canal selecionados." />
           <KpiCard label="Cadastros do dia" value={inteiro(dia.cadastros)} bar="accent" title={`${inteiro(dia.leadsPagos)} vieram de anúncio.`} />
           <KpiCard label="Pessoas novas no dia" value={inteiro(dia.pessoasNovas)} bar="green" title="Pessoas que aparecem pela primeira vez na lista neste dia." />
-          <KpiCard label="Leads acumulados" value={inteiro(dia.pessoasAcumuladas)} bar="green" title="Pessoas únicas desde o início do projeto." />
+          <KpiCard label="Leads acumulados" value={inteiro(dia.pessoasAcumuladas)} bar="green" title="Pessoas únicas de todas as portas desde o início; igual ao card Leads contra a meta." />
         </div>
 
-        <FunilDia key={dia.dia} dia={cap} />
+        <FunilDia key={dia.dia} dia={cap} dados={d} />
       </SectionCard>
 
-      <SectionCard title="Investimento e leads acumulados" subtitle="Barras: investimento do dia. Linha: pessoas únicas acumuladas desde o início.">
-        <Grafico serie={serie} ativo={i} onEscolher={(k) => { setTocando(false); setEscolhido(k); }} />
+      <SectionCard title="Investimento e leads acumulados" subtitle="Barras: investimento do dia no filtro escolhido. Linha: pessoas únicas de todas as portas acumuladas desde o início.">
+        <Grafico serie={serie} ativo={i} onEscolher={setEscolhido} />
       </SectionCard>
     </div>
   );
 }
 
-function FunilDia({ dia }: { dia: DiaHistorico }) {
-  const cpmDia = dia.impressoes > 0 ? dia.gasto * 1000 / dia.impressoes : null;
-  const etapas: { rotulo: string; valor: Valor; pontes: { rotulo: string; taxa?: ReturnType<typeof taxa>; valor?: Valor; formato?: 'brl' }[] }[] = [
-    { rotulo: 'Impressões', valor: dia.impressoes, pontes: [] },
-    { rotulo: 'Cliques no link', valor: dia.cliques, pontes: [
-      { rotulo: 'CTR', taxa: taxa(dia.cliques, dia.impressoes) }, { rotulo: 'CPM', valor: cpmDia, formato: 'brl' },
-    ] },
-    { rotulo: 'Views da página', valor: dia.lpv, pontes: [{ rotulo: 'Connect rate', taxa: taxa(dia.lpv, dia.cliques) }] },
-    { rotulo: 'Leads pagos', valor: dia.leadsPagos, pontes: [{ rotulo: 'Conversão da página', taxa: taxa(dia.leadsPagos, dia.lpv) }] },
-    { rotulo: 'MQL entre leads pagos', valor: dia.mqlPagos, pontes: [{ rotulo: '% MQL dos pagos', taxa: taxa(dia.mqlPagos, dia.mqlPagosBase) }] },
-    { rotulo: 'Ingresso no grupo · MQL pagos', valor: dia.ingressoGrupoPagosMql, pontes: [{ rotulo: '% ingresso dos MQL pagos', taxa: taxa(dia.ingressoGrupoPagosMql, dia.mqlPagos) }] },
+function FunilDia({ dia, dados }: { dia: DiaHistorico; dados: DadosTela }) {
+  const dias = dados.diasTodos.filter((x) => x.dia === dia.dia && !ehEntresafraCampanha(dados.idx.campanhaDoAnuncio(x.anuncioId))
+    && ehCaptacao(dados.idx.campanhaDoAnuncio(x.anuncioId)?.funil));
+  const linhas = linhasCaptacao(dados.linhasTodas.filter((l) => l.pagina !== 'consultoria_respondi' && diaDe(l.criadoEm) === dia.dia), dados.idx);
+  const agregado = agregar(dias);
+  const inscricoes = conversaoPagina(dias, linhas, dados.idx);
+  const etapas: EtapaFunil[] = [
+    { chave: 'impressoes', rotulo: 'Impressões', valor: agregado.impressoes, ponte: null },
+    { chave: 'cliques', rotulo: 'Cliques no link', valor: agregado.cliques.valor, ponte: { rotulo: 'CTR', taxa: ctr(agregado) } },
+    { chave: 'lpv', rotulo: 'Views da página', valor: agregado.lpv.valor, ponte: { rotulo: 'Connect rate', taxa: connectRate(dias, dados.idx) } },
+    { chave: 'leads', rotulo: 'Leads pagos', valor: inscricoes.num, ponte: { rotulo: 'Conversão da página', taxa: inscricoes } },
+    { chave: 'mql', rotulo: 'MQL entre leads pagos', valor: dia.mqlPagos, ponte: { rotulo: '% MQL dos pagos', taxa: taxa(dia.mqlPagos, dia.mqlPagosBase) } },
+    { chave: 'grupo', rotulo: 'Ingresso no grupo · MQL pagos', valor: dia.ingressoGrupoPagosMql, ponte: { rotulo: '% ingresso dos MQL pagos', taxa: taxa(dia.ingressoGrupoPagosMql, dia.mqlPagos) } },
   ];
-  const max = Math.max(1, ...etapas.map((e) => e.valor ?? 0));
-  const larguras: number[] = [];
-  etapas.forEach((etapa, k) => {
-    const relativa = etapa.valor === null ? 0 : Math.log1p(Math.max(0, etapa.valor)) / Math.log1p(max);
-    const dinamica = 32 + relativa * 64;
-    const teto = k === 0 ? 96 : larguras[k - 1] - 7;
-    const larguraMinima = 24 + (etapas.length - 1 - k) * 7;
-    larguras.push(Math.max(larguraMinima, Math.min(dinamica, teto)));
-  });
   return (
     <section aria-label="Funil do dia (captação)" className="mt-4">
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)]">Funil do dia · só C2 e C3</h3>
-      <ol className="mx-auto max-w-3xl space-y-1">
-        {etapas.map((e, k) => (
-          <li key={e.rotulo}>
-            <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
-              <span className="font-medium text-[var(--fg-2)]">{e.rotulo}</span>
-              <span className="font-bold tabular text-[var(--fg)]"><Numero valor={e.valor} formato="int" animado={false} /></span>
-            </div>
-            <svg viewBox="0 0 360 30" preserveAspectRatio="none" className="mt-1 h-8 w-full" role="img" aria-label={`${e.rotulo}: ${e.valor === null ? 'Sem dado' : inteiro(e.valor)}`}>
-              <polygon points={`${180-larguras[k]*1.8},0 ${180+larguras[k]*1.8},0 ${180+(larguras[k]-2)*1.8},30 ${180-(larguras[k]-2)*1.8},30`}
-                fill="var(--accent)" fillOpacity={e.valor === null ? 0.12 : Math.max(0.22, 0.72 - k * 0.08)} stroke="var(--border-accent)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-            </svg>
-            {etapas[k + 1]?.pontes.length ? (
-              <dl className="-mt-0.5 mb-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-[var(--r-sm)] bg-[var(--surface-1)] px-2 py-1.5 text-[11px]">
-                {etapas[k + 1].pontes.map((ponte) => <div key={ponte.rotulo} className="flex items-baseline gap-1.5">
-                  <dt className="text-[var(--fg-3)]">{ponte.rotulo}</dt>
-                  <dd className="font-semibold tabular text-[var(--fg)]">{ponte.taxa ? <Taxa taxa={ponte.taxa} /> : <Numero valor={ponte.valor ?? null} formato={ponte.formato ?? 'int'} animado={false} />}</dd>
-                </div>)}
-              </dl>
-            ) : null}
-          </li>
-        ))}
-      </ol>
+      <div className="mx-auto max-w-3xl"><FunilTrapezio etapas={etapas} rotulo="Funil do dia · só C2 e C3" /></div>
+      <p className="mt-2 text-center text-xs text-[var(--fg-3)]">CPM: {moeda(cpm(agregado))}</p>
     </section>
   );
 }

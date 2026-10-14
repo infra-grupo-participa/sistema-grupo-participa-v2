@@ -9,7 +9,6 @@
 import { useMemo } from 'react';
 import { SectionCard } from '@/shared/ui/components';
 import { idDoCriativo, painel, type PainelCriativos } from '../domain/criativos';
-import { taxa } from '../domain/metricas';
 import type { FiltroCriativos } from '../domain/tipos';
 import { CampanhaConjunto } from './CampanhaConjunto';
 import type { AlvoGaveta, DadosTela } from './contexto';
@@ -68,7 +67,7 @@ export function AbaCriativosPaginas({ d, gaveta }: { d: DadosTela; gaveta?: Alvo
                   <span className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                     <Par r="Views da página"><Numero valor={r.lpv} formato="int" falta="view da página" animado={false} /></Par>
                     <Par r="Inscrições pagas"><Numero valor={r.leadsPagos} formato="int" animado={false} /></Par>
-                    <Par r="Conversão da página"><Taxa taxa={taxa(r.leadsPagos, r.lpv)} /></Par>
+                    <Par r="Conversão da página"><Taxa taxa={r.conversao} /></Par>
                     <Par r="Connect rate"><Taxa taxa={r.connect} /></Par>
                   </span>
                 </button>

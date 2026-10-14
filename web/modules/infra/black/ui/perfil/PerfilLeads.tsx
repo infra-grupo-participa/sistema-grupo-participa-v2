@@ -5,7 +5,8 @@
 // região e estado encadeados. Conta CADASTROS; pessoas únicas aparecem à parte.
 import { useId, useMemo, useState } from 'react';
 import { Tabs, idsAba } from '@/shared/ui/components';
-import { JANELAS_GRUPO, ingressoGrupo, pessoasUnicas } from '../../domain/metricas';
+import { JANELAS_GRUPO } from '../../domain/metricas';
+import { ingressoGrupoJanela, leadsPessoas } from '../../domain/numeros';
 import {
   DIMENSOES_PERFIL, SEM_VALOR, alternarPerfil, aplicarPerfil, contarPor, evolucaoPorDia, porUf, trilhaPerfil,
   type DimensaoId, type FiltroPerfil,
@@ -66,8 +67,8 @@ export function PerfilLeads({ d, linhas, ocultar = [] }: { d: DadosTela; linhas:
           <div className="space-y-4 atm-historico-panel-enter">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               <Mini rotulo="Cadastros" valor={inteiro(filtradas.length)} />
-              <Mini rotulo="Pessoas únicas" valor={inteiro(pessoasUnicas(filtradas))} />
-              {JANELAS_GRUPO.map((h) => <Mini key={h} rotulo={`Grupo em ${h}h`} valor={<Taxa taxa={ingressoGrupo(filtradas, h, d.agora)} />} />)}
+              <Mini rotulo="Pessoas únicas" valor={inteiro(leadsPessoas(filtradas).valor)} />
+              {JANELAS_GRUPO.map((h) => <Mini key={h} rotulo={`Ingresso em ${h}h · coorte madura`} valor={<Taxa taxa={ingressoGrupoJanela(filtradas, h, d.agora)} />} />)}
             </div>
             <div className="grid gap-5 md:grid-cols-2">
               {dimensoes.map(({ dim, itens }) => (itens.length <= LIMITE_ROSCA

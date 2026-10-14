@@ -240,7 +240,7 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
         <div className={(esmaecido ? 'opacity-60 transition-opacity' : 'transition-opacity') + ' ' + ABAS_NO_CELULAR}>
           <Tabs tabs={ABAS_TELA} active={recorte.aba} onChange={(k) => irPara({ aba: k as AbaBlack })} idBase="black-principal" label="Seções do dashboard" />
           {ABAS_TELA.map(({ k }) => (
-            <section key={k} role="tabpanel" id={ids(k).panel} aria-labelledby={ids(k).tab} hidden={recorte.aba !== k} className="atm-historico-panel-enter">
+            <section key={k} role="tabpanel" id={ids(k).panel} aria-labelledby={ids(k).tab} hidden={recorte.aba !== k}>
               {recorte.aba === k && k === 'visao' && <AbaVisaoGeral d={dados} />}
               {recorte.aba === k && k === 'jornada' && <AbaJornada d={dados} gaveta={gaveta} />}
               {recorte.aba === k && k === 'criativos' && <AbaCriativosPaginas d={dados} gaveta={gaveta} />}
