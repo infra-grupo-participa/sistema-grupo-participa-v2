@@ -59,7 +59,7 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
           <KpiCard label="Leads acumulados" value={inteiro(dia.pessoasAcumuladas)} bar="green" title="Pessoas únicas de todas as portas desde o início; igual ao card Leads contra a meta." />
         </div>
 
-        <FunilDia key={dia.dia} dia={cap} dados={d} />
+        <FunilDia key={dia.dia} dia={dia} cap={cap} dados={d} />
       </SectionCard>
 
       <SectionCard title="Investimento e leads acumulados" subtitle="Barras: investimento do dia no filtro escolhido. Linha: pessoas únicas de todas as portas acumuladas desde o início.">
@@ -69,7 +69,7 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
   );
 }
 
-function FunilDia({ dia, dados }: { dia: DiaHistorico; dados: DadosTela }) {
+function FunilDia({ dia, cap, dados }: { dia: DiaHistorico; cap: DiaHistorico; dados: DadosTela }) {
   const dias = dados.diasTodos.filter((x) => x.dia === dia.dia && !ehEntresafraCampanha(dados.idx.campanhaDoAnuncio(x.anuncioId))
     && ehCaptacao(dados.idx.campanhaDoAnuncio(x.anuncioId)?.funil));
   const linhas = linhasCaptacao(dados.linhasTodas.filter((l) => l.pagina !== 'consultoria_respondi' && diaDe(l.criadoEm) === dia.dia), dados.idx);
@@ -80,13 +80,13 @@ function FunilDia({ dia, dados }: { dia: DiaHistorico; dados: DadosTela }) {
     { chave: 'cliques', rotulo: 'Cliques no link', valor: agregado.cliques.valor, ponte: { rotulo: 'CTR', taxa: ctr(agregado) } },
     { chave: 'lpv', rotulo: 'Views da página', valor: agregado.lpv.valor, ponte: { rotulo: 'Connect rate', taxa: connectRate(dias, dados.idx) } },
     { chave: 'leads', rotulo: 'Leads pagos', valor: inscricoes.num, ponte: { rotulo: 'Conversão da página', taxa: inscricoes } },
-    { chave: 'mql', rotulo: 'MQL entre leads pagos', valor: dia.mqlPagos, ponte: { rotulo: '% MQL dos pagos', taxa: taxa(dia.mqlPagos, dia.mqlPagosBase) } },
-    { chave: 'grupo', rotulo: 'Ingresso no grupo · MQL pagos', valor: dia.ingressoGrupoPagosMql, ponte: { rotulo: '% ingresso dos MQL pagos', taxa: taxa(dia.ingressoGrupoPagosMql, dia.mqlPagos) } },
+    { chave: 'mql', rotulo: 'MQL entre leads pagos', valor: cap.mqlPagos, ponte: { rotulo: '% MQL dos pagos', taxa: taxa(cap.mqlPagos, cap.mqlPagosBase) } },
+    { chave: 'grupo', rotulo: 'Ingresso no grupo · todos os leads', valor: dia.ingressoGrupo, subtexto: `de ${inteiro(dia.pessoasNovas)} leads do dia`, ponte: { rotulo: '% ingresso de todos os leads', taxa: taxa(dia.ingressoGrupo, dia.pessoasNovas) } },
   ];
   return (
-    <section aria-label="Funil do dia (captação)" className="mt-4">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)]">Funil do dia · só C2 e C3</h3>
-      <div className="mx-auto max-w-3xl"><FunilTrapezio etapas={etapas} rotulo="Funil do dia · só C2 e C3" /></div>
+    <section aria-label="Funil do dia: tráfego C2/C3 e ingresso de todos os leads" className="mt-4">
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)]">Funil do dia · tráfego C2/C3 + ingresso geral</h3>
+      <div className="mx-auto max-w-3xl"><FunilTrapezio etapas={etapas} rotulo="Funil do dia · tráfego C2/C3 e ingresso de todos os leads" /></div>
       <p className="mt-2 text-center text-xs text-[var(--fg-3)]">CPM: {moeda(cpm(agregado))}</p>
     </section>
   );

@@ -139,7 +139,7 @@ export function ordenar(itens: readonly ItemPainel[], ordem: OrdemGaleria): Item
 }
 
 /** Etapa do funil do criativo. `ponte` = taxa de passagem da etapa ANTERIOR para esta (a primeira não tem). */
-export interface EtapaFunil { chave: string; rotulo: string; valor: Valor; ponte: { rotulo: string; taxa: Taxa } | null }
+export interface EtapaFunil { chave: string; rotulo: string; valor: Valor; ponte: { rotulo: string; taxa: Taxa } | null; subtexto?: string }
 
 /**
  * Funil do criativo (12/10, trapézios). Captação: impressões → cliques → views da página → leads pagos → total de MQL

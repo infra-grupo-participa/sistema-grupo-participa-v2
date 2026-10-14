@@ -201,22 +201,23 @@ export function FunilTrapezio({ etapas, rotulo }: { etapas: EtapaFunil[]; rotulo
   const apagada = (i: number) => ativa !== null && ativa !== i;
   const transicao = menos ? undefined : 'opacity 150ms ease, stroke-width 150ms ease';
   const larg = (i: number) => F_FUNIL * (1 - (1 - F_ESTREITO) * (i / n));
-  const altura = n * F_LINHA - (F_LINHA - F_FATIA);
+  const extraFinal = etapas[n - 1]?.subtexto ? 18 : 0;
+  const altura = n * F_LINHA - (F_LINHA - F_FATIA) + extraFinal;
   const meio = (F_LINHA - F_FATIA) / 2;
   const anima = (atraso: number) => (menos ? undefined : { animationDelay: `${atraso}ms`, animationFillMode: 'backwards' as const });
   return (
     <figure className="m-0">
       <svg viewBox={`0 0 ${F_LARG} ${altura}`} className="block h-auto w-full" role="img"
-        aria-label={`${rotulo}: ${etapas.map((e) => `${e.rotulo} ${formatar(e.valor, 'int')}${e.ponte ? ` (${e.ponte.rotulo} ${formatar(e.ponte.taxa.valor, 'pct')})` : ''}`).join(', ')}`}>
+        aria-label={`${rotulo}: ${etapas.map((e) => `${e.rotulo} ${formatar(e.valor, 'int')}${e.subtexto ? `, ${e.subtexto}` : ''}${e.ponte ? ` (${e.ponte.rotulo} ${formatar(e.ponte.taxa.valor, 'pct')})` : ''}`).join(', ')}`}>
         {etapas.map((e, i) => {
-          const y0 = i * F_LINHA; const y1 = y0 + F_FATIA; const a = larg(i) / 2; const b = larg(i + 1) / 2;
+          const y0 = i * F_LINHA; const y1 = y0 + F_FATIA + (i === n - 1 ? extraFinal : 0); const a = larg(i) / 2; const b = larg(i + 1) / 2;
           const sem = e.valor === null;
           const rotulo = e.rotulo.split(' · ');
           return (
-            <g key={e.chave} className={menos ? undefined : 'gp-fade-in'} tabIndex={0} aria-label={`${e.rotulo}: ${formatar(e.valor, 'int')}`}
+            <g key={e.chave} className={menos ? undefined : 'gp-fade-in'} tabIndex={0} aria-label={`${e.rotulo}: ${formatar(e.valor, 'int')}${e.subtexto ? `, ${e.subtexto}` : ''}`}
               style={{ ...anima(i * 80), opacity: apagada(i) ? 0.72 : 1, transition: transicao, cursor: 'pointer', outline: 'none' }}
               onMouseEnter={() => setAtiva(i)} onMouseLeave={() => setAtiva(null)} onFocus={() => setAtiva(i)} onBlur={() => setAtiva(null)}>
-              <title>{`${e.rotulo}: ${formatar(e.valor, 'int')}`}</title>
+              <title>{`${e.rotulo}: ${formatar(e.valor, 'int')}${e.subtexto ? `, ${e.subtexto}` : ''}`}</title>
               <polygon points={`${cx - a},${y0} ${cx + a},${y0} ${cx + b},${y1} ${cx - b},${y1}`}
                 fill={sem ? 'var(--surface-4)' : 'var(--accent-subtle)'} stroke={sem ? 'var(--border-strong)' : 'var(--accent)'}
                 strokeWidth={ativa === i ? 3.5 : 1.5} strokeLinejoin="round" style={{ transition: transicao }} />
@@ -224,6 +225,7 @@ export function FunilTrapezio({ etapas, rotulo }: { etapas: EtapaFunil[]; rotulo
                 {rotulo.map((parte, j) => <tspan key={`${e.chave}-${j}`} x={cx} dy={j === 0 ? 0 : 11}>{parte}</tspan>)}
               </text>
               <text x={cx} y={y0 + (rotulo.length > 1 ? 43 : 37)} textAnchor="middle" fontSize={16} fontWeight={700} fill={sem ? 'var(--fg-3)' : 'var(--fg)'} className="tabular">{formatar(e.valor, 'int')}</text>
+              {e.subtexto && <text x={cx} y={y0 + 57} textAnchor="middle" fontSize={8.5} fill="var(--fg-2)">{e.subtexto}</text>}
             </g>
           );
         })}
@@ -250,7 +252,7 @@ export function FunilTrapezio({ etapas, rotulo }: { etapas: EtapaFunil[]; rotulo
         <tbody>
           {etapas.map((e) => (
             <tr key={e.chave}>
-              <th scope="row">{e.rotulo}</th><td>{formatar(e.valor, 'int')}</td>
+              <th scope="row">{e.rotulo}</th><td>{formatar(e.valor, 'int')}{e.subtexto ? `, ${e.subtexto}` : ''}</td>
               <td>{e.ponte ? `${e.ponte.rotulo}: ${formatar(e.ponte.taxa.valor, 'pct')} (${dicaTaxa(e.ponte.taxa)})` : ''}</td>
             </tr>
           ))}
