@@ -23,28 +23,21 @@ Este documento fica no repositório para quem trabalha aqui sem acesso ao céreb
 
 ## Migrations (`infra/supabase/migrations/`)
 
-| Migration | O que faz | Grupo | Situação |
-|---|---|---|---|
-| 20261014160200 | `pessoas.eventos` + evento/turma/fonte; `pessoas.relacoes` (sócio de); `pessoas.vw_oferta` | A | ver tabela de situação abaixo |
-| 20261014160300 | índices (único por fonte, por evento, por turma), `concurrently` | A | idem |
-| 20261014170000 | carga do ActiveCampaign: estágio, controle, chave de desligar, funções | A | idem |
-| 20261014160000 | `fin.eventos.chave` | B | não aplicada (próxima noite) |
-| 20261014160100 | `evento_id` em `mkt.projetos`, `ht_editions`, `controle.evento`, `ht.cohorts`; `thb_turmas.chave` | B | idem |
-| 20261014160400 | tipo das ofertas | B | idem |
-| 20261014160450 | `fin.eventos.captacao_inicio` (HT20 01/01, HT21 13/03) | B | idem |
-| 20261014160500 | evento ATM de setembro | B | idem |
-| 20261014160510 | evento 59 = HT21 | B | idem |
+| Versão gravada | Arquivo antes | O que faz | Grupo | Situação |
+|---|---|---|---|---|
+| 20261014150003 | 160200 | `pessoas.eventos` + evento/turma/fonte; `pessoas.relacoes` (sócio de); `pessoas.vw_oferta` | A | **aplicada 14/10 ~15:00 UTC** |
+| (não registrada) | 160300 | índices `concurrently` (único por fonte, por evento, por turma); um por chamada, fora de transação | A | **aplicada 14/10 ~15:01 UTC**, 3 válidos |
+| 20261014150034 | 170000 | carga do ActiveCampaign: estágio, controle, chave de desligar (com data de fim), funções, regra das listas de SV | A | **aplicada 14/10 ~15:00 UTC** |
+| 20261014150135 | 160000 | `fin.eventos.chave` (87 chaves aprovadas pelo Victor) | B | **aplicada 14/10 ~15:01 UTC** (aceite do JP) |
+| 20261014150138 | 160100 | `evento_id` em `mkt.projetos`, `ht_editions`, `controle.evento`, `ht.cohorts`; `thb_turmas.chave` | B | **aplicada** |
+| 20261014150141 | 160400 | tipo das ofertas (`pessoas.oferta_tipo`, 68 pelo nome) | B | **aplicada** |
+| 20261014150144 | 160450 | `fin.eventos.captacao_inicio` (HT20 01/01, HT21 13/03) | B | **aplicada** |
+| 20261014150148 | 160500 | evento ATM de setembro (`atm-2-2026-09`) | B | **aplicada** |
+| 20261014150150 | 160510 | evento 59 = HT21 | B | **aplicada** |
+| (a aplicar) | 170100 | cargas das fontes do banco (Hotmart por conta, Central, T1-T40, HM, Respondi, leads, CRM) | C | escrita e ensaiada; espera o pentester |
 
-Cada uma tem `.explain.md`, ensaio (`*_ensaio.sql`, transação desfeita) e `*_reversao.sql`. Grupo A = só schema
-`pessoas` (revisado pelo pentester). Grupo B = schema `fin` (aceite do JP).
-
-## Situação
-
-| Data | O quê |
-|---|---|
-| 14/10/2026 | escrito, ensaiado, revisado (pentester aprovou o grupo A no commit `c823975`); **nada aplicado ainda** |
-
-> Atualizar esta tabela a cada aplicação, com a versão gravada em `supabase_migrations.schema_migrations`.
+Os arquivos foram renomeados para a versão gravada em `supabase_migrations.schema_migrations` (guia 6.3); o primeiro
+comentário de cada um diz o nome antigo. Cada uma tem `.explain.md`, ensaio e reversão.
 
 ## Carga do ActiveCampaign
 

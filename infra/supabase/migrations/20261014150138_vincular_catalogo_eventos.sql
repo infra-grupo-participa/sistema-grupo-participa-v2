@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150138 (o arquivo se chamava 20261014160100; renomeado conforme o guia 6.3).
 -- 20261014160100: as outras tabelas de evento passam a apontar para o catálogo oficial (fin.eventos)
 --
 -- STATUS: NÃO APLICADA. Terminal Censo (pessoa única, ETAPA 2), 14/10/2026. Depende de 20261014160000.

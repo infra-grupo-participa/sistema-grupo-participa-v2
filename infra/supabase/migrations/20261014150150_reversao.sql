@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150150 (o arquivo se chamava 20261014160510; renomeado conforme o guia 6.3).
 -- Reversão de 20261014160510.
 set local lock_timeout = '5s';
 update public.ht_editions set evento_id = null where edition_number in (21, 22);

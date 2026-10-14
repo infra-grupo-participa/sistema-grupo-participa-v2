@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150141 (o arquivo se chamava 20261014160400; renomeado conforme o guia 6.3).
 -- Reversão de 20261014160400: a view volta à definição da 20261014160200; a tabela sai (com as conferências humanas
 -- que tiver: exportar antes se já houver linhas com regra 'conferencia_humana').
 set local lock_timeout = '5s';

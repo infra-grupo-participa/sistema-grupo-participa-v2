@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150135 (o arquivo se chamava 20261014160000; renomeado conforme o guia 6.3).
 -- 20261014160000: chave da casa (nome-curto-aaaa-mm) no catálogo oficial de eventos, fin.eventos
 --
 -- STATUS: NÃO APLICADA. Escrita pelo terminal Censo (pessoa única, ETAPA 2) em 14/10/2026. Aplicar só com o ok do

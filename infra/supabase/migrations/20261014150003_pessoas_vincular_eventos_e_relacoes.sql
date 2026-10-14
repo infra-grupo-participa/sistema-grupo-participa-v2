@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150003 (o arquivo se chamava 20261014160200; renomeado conforme o guia 6.3).
 -- 20261014160200: linha do tempo da pessoa ligada ao evento oficial e à fonte; relação "sócio de"; mapa de ofertas
 --
 -- STATUS: NÃO APLICADA. Terminal Censo (pessoa única, ETAPA 2), 14/10/2026. NÃO depende de 160000/160100 (desacoplada em

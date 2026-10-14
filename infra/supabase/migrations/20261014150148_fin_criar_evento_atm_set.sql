@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150148 (o arquivo se chamava 20261014160500; renomeado conforme o guia 6.3).
 -- 20261014160500: o Seminário ATM de setembro de 2026 entra no catálogo oficial de eventos
 --
 -- STATUS: NÃO APLICADA. Terminal Censo (pessoa única, ETAPA 2B), 14/10/2026. Depende de 20261014160000.

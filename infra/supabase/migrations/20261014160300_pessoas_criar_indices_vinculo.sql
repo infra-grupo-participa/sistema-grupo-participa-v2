@@ -1,3 +1,5 @@
+-- APLICADA em 14/10/2026 ~15:01 UTC, um índice por chamada pela Management API (/database/query, fora de transação);
+-- os 3 conferidos válidos (indisvalid). Não fica em schema_migrations: concurrently não roda dentro da transação do registro.
 -- 20261014160300: índices da linha do tempo para a carga repetível e para a leitura por evento/turma
 --
 -- STATUS: NÃO APLICADA. Terminal Censo (pessoa única, ETAPA 2), 14/10/2026. Depende de 20261014160200.

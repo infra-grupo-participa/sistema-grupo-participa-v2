@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150141 (o arquivo se chamava 20261014160400; renomeado conforme o guia 6.3).
 -- 20261014160400: tipo de cada oferta (sinal, saldo, integral, renovacao) para "pagou só o sinal" do HM e do Aurum
 --
 -- STATUS: NÃO APLICADA. Terminal Censo (pessoa única, ETAPA 2B), 14/10/2026. Depende de 20261014160200 (pessoas.vw_oferta).

@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150148 (o arquivo se chamava 20261014160500; renomeado conforme o guia 6.3).
 -- NOTA (14/10/2026): a 160600 medida na foto C foi DESCARTADA por causa deste resultado; o Victor aprovou guardar a
 -- captação em fin.eventos.captacao_inicio (20261014160450) e manter `inicio` como o dia do evento. A foto B usa o HT21
 -- com início 13/03, que também foi descartado: a 160510 espera o dia do evento do HT21. Mantido como prova.

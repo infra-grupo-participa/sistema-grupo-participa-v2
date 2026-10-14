@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150034 (o arquivo se chamava 20261014170000; renomeado conforme o guia 6.3).
 -- 20261014170000: estrutura da carga do ActiveCampaign completo para a pessoa única (estágio, controle, funções)
 --
 -- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende SÓ de 20261014160200 e 160300 (pessoas.eventos.fonte_tabela/

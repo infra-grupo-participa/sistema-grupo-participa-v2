@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150150 (o arquivo se chamava 20261014160510; renomeado conforme o guia 6.3).
 -- 20261014160510: o evento 59 é o HT21 (06 a 12/04/2026)
 --
 -- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 160000, 160100 e 160450.

@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150003 (o arquivo se chamava 20261014160200; renomeado conforme o guia 6.3).
 -- Reversão de 20261014160200. Só depois de desfeita a carga que usa as colunas (linhas com fonte_tabela).
 -- Os CHECKs voltam ao texto vivo de 14/10/2026; se já houver linha com tipo 'resposta' ou fonte/origem 'respondi',
 -- o add constraint falha: apagar ou reclassificar essas linhas é decisão do Maestro, não desta reversão.

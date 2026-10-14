@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150034 (o arquivo se chamava 20261014170000; renomeado conforme o guia 6.3).
 -- Ensaio de 20261014170000 (estrutura da carga do ActiveCampaign) com a cadeia SÓ de pessoas: 20261014160200 e os índices
 -- da 160300 (sem concurrently), numa transação DESFEITA. Nada do schema fin é alterado (160000/160100 não entram: esperam o
 -- aceite do JP). Contatos FICTÍCIOS (e-mails @exemplo.invalid, sem dado pessoal), mais 1 contato que reaproveita um e-mail

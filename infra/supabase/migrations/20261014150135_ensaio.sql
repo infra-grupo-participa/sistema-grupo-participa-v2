@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150135 (o arquivo se chamava 20261014160000; renomeado conforme o guia 6.3).
 -- Ensaio de 20261014160000, 160100, 160200 e 160300 em sequência, numa transação DESFEITA (rollback), com o estado
 -- antes, os testes, e depois as reversões na ordem inversa conferindo que tudo volta.
 -- Rodar com: python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio <este arquivo>

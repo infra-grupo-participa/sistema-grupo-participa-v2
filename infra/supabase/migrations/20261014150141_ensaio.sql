@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150141 (o arquivo se chamava 20261014160400; renomeado conforme o guia 6.3).
 -- Ensaio ESTRUTURAL da ETAPA 2B: aplica a cadeia 160000 a 160300 (já ensaiada no 20261014160000_ensaio.sql) e depois
 -- 160400, 160450, 160500 e 160510, confere, e reverte 160510 -> 160400 conferindo que voltam. Transação DESFEITA.
 -- Rápido (sem chamar os funis). O efeito de datas nos funis está no 20261014160500_ensaio_impacto.sql.

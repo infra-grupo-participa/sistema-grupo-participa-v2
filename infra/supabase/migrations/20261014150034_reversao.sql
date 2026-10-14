@@ -1,3 +1,4 @@
+-- APLICADA em 14/10/2026 com a versão gravada 20261014150034 (o arquivo se chamava 20261014170000; renomeado conforme o guia 6.3).
 -- Reversão de 20261014170000 (estrutura da carga do ActiveCampaign).
 -- ANTES de rodar, se a carga já tiver rodado, decidir o que fazer com o que ela gravou FORA do estágio (a reversão NÃO
 -- apaga pessoa: pessoa nunca se apaga, regra I-03). Para medir:
