@@ -1,0 +1,1 @@
+-- O ensaio de 20261014010100 roda junto com o de 20261014010000, em sequência: ver 20261014010000_ensaio.sql.
