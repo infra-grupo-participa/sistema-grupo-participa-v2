@@ -19,6 +19,9 @@
 --   | carga_respondi                  | respondi.respostas             | resposta (+ sócio de nos formulários de sócio)        |
 --   | carga_leads                     | workbook.cnhf_leads_captacao, workbook.leads, dados.black_leads | lead (+ mql na Black) |
 --   | carga_crm_negocio               | crm.negocio                    | crm (linha, status)                                   |
+-- MODO "SÓ NOVOS" (p_novos = true, usado pela rotina de hora em hora): ignora o cursor e pega as linhas da fonte que
+--   ainda não têm o seu evento (anti-join pelo índice eventos_fonte_unico); não mexe no cursor da carga inicial. O cursor por
+--   id não serve para o incremental: id é uuid/texto e um id novo pode ser "menor" que o cursor.
 -- DECISÕES:
 --   - Hotmart: o evento NÃO copia valor nem nome da oferta (o dinheiro fica em fin.hotmart_transacoes; o tipo da oferta
 --     na pessoas.vw_oferta). As linhas que o webhook já gravou (ref_tipo 'hotmart.transacao', sem fonte_id) recebem
@@ -42,7 +45,7 @@ begin
   if to_regprocedure('pessoas.casar_email(text,text,text,text)') is null or to_regclass('pessoas.eventos_fonte_unico') is null then
     raise exception '20261014170100: falta 20261014170000/160300.';
   end if;
-  if to_regprocedure('pessoas.carga_fin_hotmart(bigint,text,integer)') is not null then
+  if to_regprocedure('pessoas.carga_fin_hotmart(bigint,text,integer,boolean)') is not null then
     raise exception '20261014170100: já aplicada.';
   end if;
 end
@@ -84,7 +87,7 @@ begin
 end $f$;
 
 -- ======================= Hotmart =======================
-create function pessoas.carga_fin_hotmart(p_execucao bigint, p_conta text, p_limite integer default 1000) returns jsonb
+create function pessoas.carga_fin_hotmart(p_execucao bigint, p_conta text, p_limite integer default 1000, p_novos boolean default false) returns jsonb
 language plpgsql set search_path to '' as $f$
 -- Uma execução por conta (fontes hotmart_academy e hotmart_escritorio). Toda leitura da tabela de transações segue a forma
 -- canônica que a trava fin.trava_conta_hotmart exige (regra 9 do plano de ação): (select * from ... where conta = p_conta).
@@ -102,7 +105,13 @@ begin
   delete from pg_temp._carga_hm_lote; delete from pg_temp._carga_hm_ev;
   insert into pg_temp._carga_hm_lote
   select t.transacao from (select * from fin.hotmart_transacoes where conta = p_conta) t
-   where t.transacao > v_cur order by t.transacao limit p_limite;
+   where (not p_novos and t.transacao > v_cur)
+      or (p_novos and not exists (select 1 from pessoas.eventos e
+                                   where e.fonte_tabela = v_tab and e.fonte_id = t.transacao
+                                     and e.tipo = case when t.status in ('COMPLETE', 'APPROVED') then 'compra'
+                                                       when t.status in ('REFUNDED', 'CHARGEBACK', 'PARTIALLY_REFUNDED', 'PROTESTED') then 'reembolso'
+                                                       else 'checkout' end))
+   order by t.transacao limit p_limite;
   -- evento pela regra do financeiro (mesma janela/oferta que os funis usam), por lote de e-mails
   insert into pg_temp._carga_hm_ev
   select distinct on (j.transacao) j.transacao, j.evento_id
@@ -138,11 +147,11 @@ begin
     on conflict (fonte_tabela, fonte_id, tipo) where fonte_id is not null do nothing;
     get diagnostics n_x = row_count; n_e := n_e + n_x;
   end loop;
-  return pessoas._carga_lote_fim(p_execucao, v_de, v_ate, n_l, n_n, n_c, n_s, n_e, 0, v_t0);
+  return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, n_n, n_c, n_s, n_e, 0, v_t0);
 end $f$;
 
 -- ======================= Central de Alunos (matrícula viva) =======================
-create function pessoas.carga_thb_alunos(p_execucao bigint, p_limite integer default 1000) returns jsonb
+create function pessoas.carga_thb_alunos(p_execucao bigint, p_limite integer default 1000, p_novos boolean default false) returns jsonb
 language plpgsql set search_path to '' as $f$
 declare
   v_t0 timestamptz := clock_timestamp(); v_cur text; r record; v_p uuid; v_tit uuid;
@@ -150,7 +159,12 @@ declare
 begin
   v_cur := coalesce(pessoas._carga_exigir(p_execucao, 'thb_alunos'), '');
   for r in select a.id, a.turma_id, a.turma_aurum_id, a.data_entrada_thb, a.data_compra, a.situacao_acesso, a.eh_socio, a.socio_de_aluno_id
-             from public.thb_alunos a where a.id::text > v_cur order by a.id::text limit p_limite loop
+             from public.thb_alunos a
+            where (not p_novos and a.id::text > v_cur)
+               or (p_novos and (not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'public.thb_alunos' and e.fonte_id = a.id::text and e.tipo = 'ativacao')
+                                or (a.turma_aurum_id is not null
+                                    and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'public.thb_alunos' and e.fonte_id = a.id::text || ':aurum' and e.tipo = 'ativacao'))))
+            order by a.id::text limit p_limite loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.id::text); v_ate := r.id::text;
     v_p := pessoas.pessoa_do_aluno(r.id);
     if v_p is null then continue; end if;
@@ -178,11 +192,11 @@ begin
       end if;
     end if;
   end loop;
-  return pessoas._carga_lote_fim(p_execucao, v_de, v_ate, n_l, 0, n_c, n_l - n_c, n_e, n_r, v_t0);
+  return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, 0, n_c, n_l - n_c, n_e, n_r, v_t0);
 end $f$;
 
 -- ======================= T1-T40 (espelho da planilha "Alunos e sócios T1 - T40") =======================
-create function pessoas.carga_aluno_historico(p_execucao bigint, p_limite integer default 1000) returns jsonb
+create function pessoas.carga_aluno_historico(p_execucao bigint, p_limite integer default 1000, p_novos boolean default false) returns jsonb
 language plpgsql set search_path to '' as $f$
 declare
   v_t0 timestamptz := clock_timestamp(); v_cur text; r record; v jsonb; v_p uuid; v_chave text; v_quando timestamptz;
@@ -192,7 +206,10 @@ begin
   -- cursor = md5(e-mail):turma (o espelho é regravado todo dia e os ids mudam)
   for r in select md5(h.email_norm) || ':' || coalesce(h.turma, '') k, h.*
              from controle.aluno_historico h
-            where h.email_norm is not null and md5(h.email_norm) || ':' || coalesce(h.turma, '') > v_cur
+            where h.email_norm is not null
+              and ((not p_novos and md5(h.email_norm) || ':' || coalesce(h.turma, '') > v_cur)
+                   or (p_novos and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'controle.aluno_historico'
+                                                 and e.fonte_id = md5(h.email_norm) || ':' || coalesce(h.turma, '') and e.tipo = 'ativacao')))
             order by 1 limit p_limite loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.k); v_ate := r.k;
     v := pessoas.casar_email(r.nome, r.email_norm, null, 'importacao');
@@ -218,11 +235,11 @@ begin
       get diagnostics n_x = row_count; n_e := n_e + n_x;
     end if;
   end loop;
-  return pessoas._carga_lote_fim(p_execucao, v_de, v_ate, n_l, n_n, n_c, n_s, n_e, 0, v_t0);
+  return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, n_n, n_c, n_s, n_e, 0, v_t0);
 end $f$;
 
 -- ======================= Operação HM =======================
-create function pessoas.carga_contatos_hm(p_execucao bigint, p_limite integer default 1000) returns jsonb
+create function pessoas.carga_contatos_hm(p_execucao bigint, p_limite integer default 1000, p_novos boolean default false) returns jsonb
 language plpgsql set search_path to '' as $f$
 declare
   v_t0 timestamptz := clock_timestamp(); v_cur text; r record; v_p uuid;
@@ -231,7 +248,10 @@ begin
   v_cur := coalesce(pessoas._carga_exigir(p_execucao, 'contatos_hm'), '');
   for r in select c.id, c.comprador_id, c.aluno_id, c.produto, c.turma_origem, c.estagio_id, c.entrada_em, c.criado_em,
                   c.quitado_em, c.cancelamento_efetivado_em
-             from cs.contatos_hm c where c.id::text > v_cur order by c.id::text limit p_limite loop
+             from cs.contatos_hm c
+            where (not p_novos and c.id::text > v_cur)
+               or (p_novos and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'cs.contatos_hm' and e.fonte_id = c.id::text and e.tipo = 'crm'))
+            order by c.id::text limit p_limite loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.id::text); v_ate := r.id::text;
     v_p := coalesce(case when r.aluno_id is not null then pessoas.pessoa_do_aluno(r.aluno_id) end,
                     case when r.comprador_id is not null then pessoas.pessoa_do_comprador(r.comprador_id) end);
@@ -246,10 +266,10 @@ begin
     on conflict (fonte_tabela, fonte_id, tipo) where fonte_id is not null do nothing;
     get diagnostics n_x = row_count; n_e := n_e + n_x;
   end loop;
-  return pessoas._carga_lote_fim(p_execucao, v_de, v_ate, n_l, 0, n_c, n_l - n_c, n_e, 0, v_t0);
+  return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, 0, n_c, n_l - n_c, n_e, 0, v_t0);
 end $f$;
 
-create function pessoas.carga_hm_socios(p_execucao bigint, p_limite integer default 1000) returns jsonb
+create function pessoas.carga_hm_socios(p_execucao bigint, p_limite integer default 1000, p_novos boolean default false) returns jsonb
 language plpgsql set search_path to '' as $f$
 declare
   v_t0 timestamptz := clock_timestamp(); v_cur text; r record; v jsonb; v_p uuid; v_tit uuid;
@@ -258,7 +278,9 @@ begin
   v_cur := coalesce(pessoas._carga_exigir(p_execucao, 'hm_socios'), '');
   for r in select s.id, s.nome, s.email, s.telefone, s.aluno_id, s.criado_em, c.comprador_id t_comprador, c.aluno_id t_aluno, c.turma_origem
              from cs.hm_socios s left join cs.contatos_hm c on c.id = s.contato_hm_id
-            where s.id::text > v_cur order by s.id::text limit p_limite loop
+            where (not p_novos and s.id::text > v_cur)
+               or (p_novos and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'cs.hm_socios' and e.fonte_id = s.id::text and e.tipo = 'vinculo'))
+            order by s.id::text limit p_limite loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.id::text); v_ate := r.id::text;
     if r.aluno_id is not null then
       v_p := pessoas.pessoa_do_aluno(r.aluno_id); n_c := n_c + 1;
@@ -281,11 +303,11 @@ begin
       get diagnostics n_x = row_count; n_r := n_r + n_x;
     end if;
   end loop;
-  return pessoas._carga_lote_fim(p_execucao, v_de, v_ate, n_l, n_n, n_c, n_s, n_e, n_r, v_t0);
+  return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, n_n, n_c, n_s, n_e, n_r, v_t0);
 end $f$;
 
 -- ======================= Respondi =======================
-create function pessoas.carga_respondi(p_execucao bigint, p_limite integer default 1000) returns jsonb
+create function pessoas.carga_respondi(p_execucao bigint, p_limite integer default 1000, p_novos boolean default false) returns jsonb
 language plpgsql set search_path to '' as $f$
 declare
   v_t0 timestamptz := clock_timestamp(); v_cur text; r record; v jsonb; v_p uuid; v_s uuid; v_turma smallint;
@@ -294,7 +316,9 @@ begin
   v_cur := coalesce(pessoas._carga_exigir(p_execucao, 'respondi'), '');
   for r in select x.uuid, x.form_slug, x.respondido_em, x.email, x.telefone, x.dados, f.familia, f.turma_codigo f_turma
              from respondi.respostas x left join respondi.formularios f on f.slug = x.form_slug
-            where x.uuid::text > v_cur order by x.uuid::text limit p_limite loop
+            where (not p_novos and x.uuid::text > v_cur)
+               or (p_novos and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'respondi.respostas' and e.fonte_id = x.uuid::text and e.tipo = 'resposta'))
+            order by x.uuid::text limit p_limite loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.uuid::text); v_ate := r.uuid::text;
     v := pessoas.casar_email(r.dados->>'nome', coalesce(r.email, r.dados->>'email'), coalesce(r.telefone, r.dados->>'telefone'), 'respondi');
     v_p := (v->>'pessoa_id')::uuid;
@@ -325,11 +349,11 @@ begin
       end if;
     end if;
   end loop;
-  return pessoas._carga_lote_fim(p_execucao, v_de, v_ate, n_l, n_n, n_c, n_s, n_e, n_r, v_t0);
+  return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, n_n, n_c, n_s, n_e, n_r, v_t0);
 end $f$;
 
 -- ======================= leads de evento =======================
-create function pessoas.carga_leads(p_execucao bigint, p_fonte text, p_limite integer default 1000) returns jsonb
+create function pessoas.carga_leads(p_execucao bigint, p_fonte text, p_limite integer default 1000, p_novos boolean default false) returns jsonb
 language plpgsql set search_path to '' as $f$
 declare
   v_t0 timestamptz := clock_timestamp(); v_cur text; r record; v jsonb; v_p uuid;
@@ -342,15 +366,19 @@ begin
     select x.id::text k, x.email, coalesce(x.telefone_e164, x.telefone) tel, x.nome, x.captado_em quando, false mql,
            jsonb_strip_nulls(jsonb_build_object('edicao', left(x.edicao, 40), 'utm_campaign', left(x.utm_campaign, 120), 'pagina', left(x.pagina, 120))) det,
            'workbook.cnhf_leads_captacao' tab, v_cnhf ev
-      from workbook.cnhf_leads_captacao x where p_fonte = 'leads_cnhf' and x.id::text > v_cur
+      from workbook.cnhf_leads_captacao x where p_fonte = 'leads_cnhf'
+       and ((not p_novos and x.id::text > v_cur) or (p_novos and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'workbook.cnhf_leads_captacao' and e.fonte_id = x.id::text and e.tipo = 'lead')))
     union all
     select x.id::text, x.email, x.telefone, x.nome, x.criado_em, false,
            jsonb_strip_nulls(jsonb_build_object('origem', left(x.origem, 120))), 'workbook.leads', null::bigint
-      from workbook.leads x where p_fonte = 'leads_workbook' and x.id::text > v_cur
+      from workbook.leads x where p_fonte = 'leads_workbook'
+       and ((not p_novos and x.id::text > v_cur) or (p_novos and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'workbook.leads' and e.fonte_id = x.id::text and e.tipo = 'lead')))
     union all
     select x.lead_id, x.email, x.whatsapp, x.nome, x.criado_em, coalesce(x.mql, false),
            jsonb_strip_nulls(jsonb_build_object('pagina', left(x.pagina, 120), 'utm_campaign', left(x.utm_campaign, 120))), 'dados.black_leads', null::bigint
-      from dados.black_leads x where p_fonte = 'leads_black' and x.lead_id > v_cur and not coalesce(x.teste, false) and not coalesce(x.parece_teste, false)
+      from dados.black_leads x where p_fonte = 'leads_black'
+       and ((not p_novos and x.lead_id > v_cur) or (p_novos and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'dados.black_leads' and e.fonte_id = left(x.lead_id, 120) and e.tipo = 'lead')))
+       and not coalesce(x.teste, false) and not coalesce(x.parece_teste, false)
     order by 1 limit p_limite
   loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.k); v_ate := r.k;
@@ -369,11 +397,11 @@ begin
       get diagnostics n_x = row_count; n_e := n_e + n_x;
     end if;
   end loop;
-  return pessoas._carga_lote_fim(p_execucao, v_de, v_ate, n_l, n_n, n_c, n_s, n_e, 0, v_t0);
+  return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, n_n, n_c, n_s, n_e, 0, v_t0);
 end $f$;
 
 -- ======================= CRM =======================
-create function pessoas.carga_crm_negocio(p_execucao bigint, p_limite integer default 1000) returns jsonb
+create function pessoas.carga_crm_negocio(p_execucao bigint, p_limite integer default 1000, p_novos boolean default false) returns jsonb
 language plpgsql set search_path to '' as $f$
 declare
   v_t0 timestamptz := clock_timestamp(); v_cur text; r record; v_p uuid;
@@ -381,7 +409,10 @@ declare
 begin
   v_cur := coalesce(pessoas._carga_exigir(p_execucao, 'crm_negocio'), '');
   for r in select n.id, n.pessoa_id, n.linha, n.status, n.origem, n.criado_em
-             from crm.negocio n where n.id::text > v_cur order by n.id::text limit p_limite loop
+             from crm.negocio n
+            where (not p_novos and n.id::text > v_cur)
+               or (p_novos and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'crm.negocio' and e.fonte_id = n.id::text and e.tipo = 'crm'))
+            order by n.id::text limit p_limite loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.id::text); v_ate := r.id::text;
     v_p := pessoas.atual(r.pessoa_id);
     if v_p is null then continue; end if;
@@ -392,15 +423,15 @@ begin
     on conflict (fonte_tabela, fonte_id, tipo) where fonte_id is not null do nothing;
     get diagnostics n_x = row_count; n_e := n_e + n_x;
   end loop;
-  return pessoas._carga_lote_fim(p_execucao, v_de, v_ate, n_l, 0, n_c, n_l - n_c, n_e, 0, v_t0);
+  return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, 0, n_c, n_l - n_c, n_e, 0, v_t0);
 end $f$;
 
 revoke all on function pessoas._carga_exigir(bigint, text),
   pessoas._carga_lote_fim(bigint, text, text, int, int, int, int, int, int, timestamptz),
-  pessoas.carga_fin_hotmart(bigint, text, integer), pessoas.carga_thb_alunos(bigint, integer),
-  pessoas.carga_aluno_historico(bigint, integer), pessoas.carga_contatos_hm(bigint, integer),
-  pessoas.carga_hm_socios(bigint, integer), pessoas.carga_respondi(bigint, integer),
-  pessoas.carga_leads(bigint, text, integer), pessoas.carga_crm_negocio(bigint, integer)
+  pessoas.carga_fin_hotmart(bigint, text, integer, boolean), pessoas.carga_thb_alunos(bigint, integer, boolean),
+  pessoas.carga_aluno_historico(bigint, integer, boolean), pessoas.carga_contatos_hm(bigint, integer, boolean),
+  pessoas.carga_hm_socios(bigint, integer, boolean), pessoas.carga_respondi(bigint, integer, boolean),
+  pessoas.carga_leads(bigint, text, integer, boolean), pessoas.carga_crm_negocio(bigint, integer, boolean)
   from public, anon, authenticated, service_role;
 
 do $g$
