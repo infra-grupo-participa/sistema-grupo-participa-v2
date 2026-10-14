@@ -120,7 +120,7 @@ export function traduzirCampanha(nome: string | null | undefined, listas: Listas
   if (partes.length >= 4 && (ETIQUETA_RE.test(ultimoCampo) || (listas.etiquetas ?? []).some((e) => e.toLowerCase() === ultimoCampo))) {
     etiqueta = ultimoCampo;
     partes = partes.slice(0, -1);
-    semEtiqueta = semId.replace(/\|[^|]*$/, '');
+    semEtiqueta = semId.replace(/\|[^|]*$/, '').trim();
   }
   const vazio = (erro: ErroCampanha, campos: number): CampanhaTraduzida => ({
     padrao: false, gestor: null, projeto: null, objetivo: null, descricao: null, descricaoPartes: [], pagina: null,

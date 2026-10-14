@@ -115,6 +115,13 @@ resumo que o sistema usa; **se divergir, vale o gp-operacoes** (e este resumo pr
 Ex.: `RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1`. Lido por `mkt.campanha_traduzir` e
 `web/modules/marketing/projetos/domain/campanha.ts` (a mesma regra nos dois; a do banco é a da migration 20261006e).
 
+**Etiqueta do ClickUp no fim (decisão de 14/10/2026):** toda campanha do Meta ganha ` | <etiqueta-clickup>` no fim, ex.:
+`CF | BF26 | LEADS | ADVOGADOS | AK1 | black-friday-2026-10`. O último campo é a etiqueta quando é igual a uma
+`mkt.projetos.etiqueta_clickup` ou tem o formato `slug-AAAA-MM`; ela sai antes de ler a página e a descrição (que ficam
+iguais às do nome sem etiqueta) e volta no campo `etiqueta`. No `utm_campaign` vem `nome | etiqueta|id`. Banco: migration
+`20261014190000` (**NÃO APLICADA**, espera o ok do Victor; sem ela, a coleta apaga o `pagina_id` das campanhas renomeadas);
+TS: `campanha.ts` e `campanha.test.ts`. Detalhe: `infra/supabase/migrations/20261014190000.explain.md`.
+
 **Revisão do Victor (06/10/2026), migration 20261006e (NÃO APLICADA):**
 
 - A **DESCRIÇÃO é tudo o que vem depois do OBJETIVO** e pode ter várias partes separadas por ` | `. Ex. real (Black
