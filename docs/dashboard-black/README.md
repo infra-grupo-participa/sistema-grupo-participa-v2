@@ -465,6 +465,9 @@ no cérebro dele. A migration é a `20261013180931`; o detalhe e a prova estão 
   - **captação:** `metodo.pesquisa_respostas` com origem `metodo-perfeito`;
   - **isca:** `metodo.pesquisa_respostas` (fluxograma), `rede.diagnosticos` (checkup) e `rede.futurometros`;
   - **página da consultoria:** `metodo.consultoria_aplicacoes`. Essas três já chegam pela view `dados.black_leads`.
+  - **Fora deste placar:** origem `dp4-thb-vencidos` (Black do THB para acesso vencido, páginas `/dp4` e `/renovacao`
+    do timeholdingbrasil.com.br). É outro projeto, com a etiqueta `black-thb-2026-10` gravada em
+    `pesquisa_respostas.etiqueta` pelo de-para `metodo.origem_etiqueta` (migration `20261014200000`).
   - **Respondi da consultoria:** `JmSmjBBS`, workspace 3504, pelo `respondi-sync` diário.
     - Quem não terminou o formulário fica **fora** das listas, da planilha e do CSV ("por enquanto não", Victor, 13/10;
       migration `20261013183618`).
