@@ -60,12 +60,17 @@ export interface ConfigBlack {
 
 /** Etapa do nome da campanha (mkt_trafego.etapa_black): C1, C2 ou C3; null = sem o código no nome ("Sem etapa"). */
 export type EtapaCampanha = 'C1' | 'C2' | 'C3';
+export type EstadoColetaCampanha = 'atual' | 'falha_recente' | 'velha' | 'sem_coleta';
+export interface EstadoColetaConta {
+  estado: EstadoColetaCampanha; ultimaOkEm: string | null; ultimaFalhaEm: string | null;
+  validadeMin: number | null;
+}
 export interface Campanha {
   id: string; nome: string; canal: Canal; funil: Funil | null; fase: Fase | null;
   /** Só a fonte real preenche: etapa e subtipo como vêm do banco, e se o nome tem dois subtipos (conflito). */
   etapa?: EtapaCampanha | null; subtipo?: string | null; conflito?: boolean | null;
-  /** O Galego confirmou coleta concluída sem entrega para esta campanha até 13/10/2026 20:15 BRT. */
-  gastoZeroConfirmado?: boolean;
+  /** Prova de cobertura de coleta por conta, contrato proposto da RPC dados_black_trafego. */
+  primeiraVistaEm?: string | null; coleta?: EstadoColetaConta | null; semEntregaComprovada?: boolean;
   /** Id da campanha no Meta (mkt_trafego.campanhas.campanha_externa), quando dados_black_trafego devolver. */
   idExterno?: string | null;
 }

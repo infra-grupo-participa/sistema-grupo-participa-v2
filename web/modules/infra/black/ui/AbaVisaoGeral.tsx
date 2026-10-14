@@ -215,9 +215,15 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
     rotuloInvestimentoCanal('Meta Ads', investimento.meta, investimento.metaMedido, investimento.campanhasMetaMedidas, investimento.campanhasMetaTotal, investimento.campanhasMeta.length === 0),
     rotuloInvestimentoCanal('Google Ads', investimento.google, investimento.googleMedido, investimento.campanhasGoogleMedidas, investimento.campanhasGoogleTotal, investimento.campanhasGoogle.length === 0),
   ].join(' · ');
-  const notaZeroConfirmado = investimento.campanhasZeroConfirmado.length
-    ? ` Sem entrega, coleta do Meta concluída até 13/10 às 20:15 BRT: ${investimento.campanhasZeroConfirmado.join('; ')} = R$ 0,00.`
-    : '';
+  const horaColeta = (iso: string | null) => iso
+    ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+    : 'hora da coleta sem dado';
+  const detalhesCobertura = [
+    ...investimento.zerosMeta.map((c) => `${c.nome}: sem entrega, coleta ok às ${horaColeta(c.coletaEm)}`),
+    ...investimento.zerosGoogle.map((c) => `${c.nome}: sem entrega, coleta ok às ${horaColeta(c.coletaEm)}`),
+    ...investimento.semDadoMeta.map((c) => `${c.nome}: Sem dado (${c.motivo}${c.coletaEm ? `, coleta às ${horaColeta(c.coletaEm)}` : ''})`),
+    ...investimento.semDadoGoogle.map((c) => `${c.nome}: Sem dado (${c.motivo}${c.coletaEm ? `, coleta às ${horaColeta(c.coletaEm)}` : ''})`),
+  ].join(' · ');
   const c1Dias = filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: 'c1', canal: recorte.canal });
   const abrirEtapa = (funil: Funil) => d.irPara({ aba: 'criativos', funil, criativos: {} });
 
@@ -276,7 +282,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
                 <Cartao cheio titulo="Investimento em captação">
                   <KpiCard label="Investimento em captação" bar="accent"
                     value={<Numero valor={investimento.total} formato="brl" falta="sem dado no período" />}
-                    hint={`${detalheInvestimento}. Total ${investimento.total === null ? 'sem dado por fonte incompleta' : 'das campanhas C2/C3'}.${notaZeroConfirmado} Sem remarketing. Inclui Entresafra, excluída do CPL geral.`} />
+                    hint={`${detalheInvestimento}.${detalhesCobertura ? ` ${detalhesCobertura}.` : ''} Total ${investimento.total === null ? 'sem dado por fonte incompleta' : 'das campanhas C2/C3'}. Sem remarketing. Inclui Entresafra, excluída do CPL geral.`} />
                 </Cartao>
               </li>
               {cards3.flatMap(({ c, valor, hint }) => [

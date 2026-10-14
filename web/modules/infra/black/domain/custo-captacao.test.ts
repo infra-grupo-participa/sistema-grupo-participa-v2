@@ -30,8 +30,8 @@ describe('investimento de captação', () => {
       campanhasMetaTotal: 2, campanhasGoogleTotal: 1,
       campanhasMeta: ['CF | BF26 | C2 | CONSULTORIA', 'CF | BF26 | LEADS | C2 | CONSULTORIA'],
       campanhasGoogle: ['CF | BF26 | LEAD | C3 | CAPTACAO'],
+      zerosMeta: [], zerosGoogle: [], semDadoMeta: [], semDadoGoogle: [],
       campanhasRemarketing: ['CF | BF26 | LEAD | C3 | REMARKETING'],
-      campanhasZeroConfirmado: [],
     });
   });
 
@@ -54,21 +54,6 @@ describe('investimento de captação', () => {
     expect([r.meta, r.google, r.total]).toEqual([0, 75, 75]);
   });
 
-  it('inclui zero confirmado sem linha e explica qual campanha foi validada', () => {
-    const campanhasComZero = campanhas.map((c) => c.id === 'c2' ? { ...c, gastoZeroConfirmado: true } : c);
-    const base = trafego([]);
-    const r = investimentoCaptacao({ ...base, campanhas: campanhasComZero.slice(0, 1) }, { de: '2026-10-04', ate: '2026-10-13' });
-    expect([r.meta, r.google, r.total]).toEqual([0, 0, 0]);
-    expect(r.campanhasZeroConfirmado).toEqual(['CF | BF26 | LEADS | C2 | CONSULTORIA']);
-  });
-
-  it('ignora a anotação de zero confirmado se já há gasto positivo medido', () => {
-    const base = trafego([{ campanhaId: 'c2', gasto: 50 }]);
-    const r = investimentoCaptacao({ ...base, campanhas: campanhas.slice(0, 2).map((c) => c.id === 'c2' ? { ...c, gastoZeroConfirmado: true } : c) },
-      { de: '2026-10-04', ate: '2026-10-13' });
-    expect(r.campanhasZeroConfirmado).toEqual([]);
-  });
-
   it('mantém subtotal de Meta explícito quando falta gasto de uma campanha elegível', () => {
     const base = trafego([{ campanhaId: 'c2', gasto: 125 }]);
     const r = investimentoCaptacao({ ...base, campanhas: [...base.campanhas, { ...campanhas[0], id: 'c2-extra' }] },
@@ -77,5 +62,28 @@ describe('investimento de captação', () => {
     expect(r.metaMedido).toBe(125);
     expect([r.campanhasMetaMedidas, r.campanhasMetaTotal]).toEqual([1, 2]);
     expect(r.total).toBeNull();
+  });
+
+  it('só considera zero quando a RPC confirma sem entrega para aquela campanha', () => {
+    const lista: Campanha[] = [
+      { ...campanhas[0], id: 'c2-zero', nome: 'C2 nova', semEntregaComprovada: true, primeiraVistaEm: '2026-10-05T09:00:00Z',
+        coleta: { estado: 'atual', ultimaOkEm: '2026-10-10T13:00:00Z', ultimaFalhaEm: null, validadeMin: 75 } },
+      { ...campanhas[0], id: 'c2-pendente', nome: 'C2 sem linha', semEntregaComprovada: false, primeiraVistaEm: '2026-10-10T13:00:00Z',
+        coleta: { estado: 'atual', ultimaOkEm: '2026-10-10T12:00:00Z', ultimaFalhaEm: null, validadeMin: 75 } },
+    ];
+    const r = investimentoCaptacao(trafego([], lista.slice(0, 1)), { de: '2026-10-05', ate: '2026-10-10' });
+    expect([r.meta, r.total]).toEqual([0, 0]);
+    expect(r.zerosMeta).toEqual([{ nome: 'C2 nova', coletaEm: '2026-10-10T13:00:00Z' }]);
+    const parcial = investimentoCaptacao(trafego([], lista), { de: '2026-10-05', ate: '2026-10-10' });
+    expect([parcial.meta, parcial.total]).toEqual([null, null]);
+    expect(parcial.semDadoMeta).toEqual([{ nome: 'C2 sem linha', motivo: 'última coleta ok anterior à primeira observação da campanha', coletaEm: '2026-10-10T12:00:00Z' }]);
+  });
+
+  it('não transforma campanha com falha recente em zero, mesmo se há coleta ok antiga', () => {
+    const c = { ...campanhas[0], semEntregaComprovada: false, primeiraVistaEm: '2026-10-05T09:00:00Z',
+      coleta: { estado: 'falha_recente' as const, ultimaOkEm: '2026-10-10T13:00:00Z', ultimaFalhaEm: '2026-10-10T14:00:00Z', validadeMin: 75 } };
+    const r = investimentoCaptacao(trafego([], [c]), { de: '2026-10-05', ate: '2026-10-10' });
+    expect([r.meta, r.total, r.zerosMeta.length]).toEqual([null, null, 0]);
+    expect(r.semDadoMeta[0]?.motivo).toContain('última coleta da conta falhou');
   });
 });

@@ -14,12 +14,22 @@ export interface InvestimentoCaptacao {
   campanhasGoogleTotal: number;
   campanhasMeta: string[];
   campanhasGoogle: string[];
-  campanhasZeroConfirmado: string[];
+  zerosMeta: { nome: string; coletaEm: string | null }[];
+  zerosGoogle: { nome: string; coletaEm: string | null }[];
+  semDadoMeta: { nome: string; motivo: string; coletaEm: string | null }[];
+  semDadoGoogle: { nome: string; motivo: string; coletaEm: string | null }[];
   campanhasRemarketing: string[];
 }
 
 const ehRemarketing = (nome: string, fase: string | null) => fase === 'remarketing'
   || nome.toLocaleUpperCase('pt-BR').includes('REMARKETING');
+
+function coletaComprovaZero(c: TrafegoBlack['campanhas'][number]): boolean {
+  const primeiraVista = c.primeiraVistaEm ? Date.parse(c.primeiraVistaEm) : NaN;
+  const ultimaOk = c.coleta?.ultimaOkEm ? Date.parse(c.coleta.ultimaOkEm) : NaN;
+  return c.semEntregaComprovada === true && c.coleta?.estado === 'atual'
+    && Number.isFinite(primeiraVista) && Number.isFinite(ultimaOk) && ultimaOk > primeiraVista;
+}
 
 function pertenceACaptacao(c: TrafegoBlack['campanhas'][number]): boolean {
   // Na fonte real, etapa vem do campo mkt_trafego.etapa_black. O fallback atende somente aos fixtures antigos.
@@ -56,17 +66,47 @@ export function investimentoCaptacao(trafego: TrafegoBlack, periodo: Periodo): I
     }
   }
 
-  const soma = (canal: 'meta' | 'google'): { valor: Valor; medido: Valor; medidas: number; total: number; nomes: string[] } => {
+  // Só prova genérica fornecida pelo banco pode converter ausência de linha em zero.
+  const zerosValidados = new Map<string, string | null>();
+  for (const campanha of elegiveis) {
+    if (!medido.has(campanha.id) && coletaComprovaZero(campanha)) {
+      medido.add(campanha.id);
+      gastoPorCampanha.set(campanha.id, 0);
+      zerosValidados.set(campanha.id, campanha.coleta?.ultimaOkEm ?? null);
+    }
+  }
+
+  const motivoSemDado = (c: typeof elegiveis[number]) => {
+    if (c.semEntregaComprovada === undefined) return 'metadados de coleta ainda não disponíveis na fonte';
+    if (!c.primeiraVistaEm) return 'campanha ainda não vista pelo coletor';
+    if (c.semEntregaComprovada && !coletaComprovaZero(c)) return 'fonte sem evidência consistente de coleta após a primeira observação';
+    switch (c.coleta?.estado) {
+      case 'falha_recente': return 'última coleta da conta falhou';
+      case 'velha': return 'coleta antiga';
+      case 'sem_coleta': return 'conta sem coleta registrada';
+      case 'atual': return c.coleta.ultimaOkEm && c.coleta.ultimaOkEm <= c.primeiraVistaEm
+        ? 'última coleta ok anterior à primeira observação da campanha'
+        : 'coleta atual sem confirmação de ausência de entrega';
+      default: return 'coleta sem confirmação';
+    }
+  };
+
+  const soma = (canal: 'meta' | 'google'): { valor: Valor; medido: Valor; medidas: number; total: number; nomes: string[];
+    zeros: { nome: string; coletaEm: string | null }[]; faltantes: { nome: string; motivo: string; coletaEm: string | null }[] } => {
     const campanhas = elegiveis.filter((c) => c.canal === canal);
     const nomes = campanhas.map((c) => c.nome).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    const conhecidas = campanhas.filter((c) => medido.has(c.id) || c.gastoZeroConfirmado === true);
-    for (const campanha of conhecidas) {
-      if (!medido.has(campanha.id) && campanha.gastoZeroConfirmado) gastoPorCampanha.set(campanha.id, 0);
-    }
+    const conhecidas = campanhas.filter((c) => medido.has(c.id));
     const subtotal = conhecidas.reduce((s, c) => s + (gastoPorCampanha.get(c.id) ?? 0), 0);
     const medidoConhecido = campanhas.length === 0 ? 0 : conhecidas.length > 0 ? subtotal : null;
     const valor = campanhas.length === 0 ? 0 : conhecidas.length !== campanhas.length ? null : subtotal;
-    return { valor, medido: medidoConhecido, medidas: conhecidas.length, total: campanhas.length, nomes };
+    return {
+      valor, medido: medidoConhecido, medidas: conhecidas.length, total: campanhas.length, nomes,
+      zeros: campanhas.filter((c) => zerosValidados.has(c.id)).map((c) => ({ nome: c.nome, coletaEm: zerosValidados.get(c.id) ?? null })),
+      faltantes: campanhas.filter((c) => !medido.has(c.id)).map((c) => ({
+        nome: c.nome, motivo: motivoSemDado(c),
+        coletaEm: c.coleta?.estado === 'falha_recente' ? c.coleta.ultimaFalhaEm : c.coleta?.ultimaOkEm ?? null,
+      })),
+    };
   };
 
   const meta = soma('meta'); const google = soma('google');
@@ -78,8 +118,7 @@ export function investimentoCaptacao(trafego: TrafegoBlack, periodo: Periodo): I
     campanhasMetaMedidas: meta.medidas, campanhasGoogleMedidas: google.medidas,
     campanhasMetaTotal: meta.total, campanhasGoogleTotal: google.total,
     campanhasMeta: meta.nomes, campanhasGoogle: google.nomes,
-    campanhasZeroConfirmado: elegiveis.filter((c) => c.gastoZeroConfirmado === true && gastoPorCampanha.get(c.id) === 0)
-      .map((c) => c.nome).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    zerosMeta: meta.zeros, zerosGoogle: google.zeros, semDadoMeta: meta.faltantes, semDadoGoogle: google.faltantes,
     campanhasRemarketing: remarketing.map((c) => c.nome).sort((a, b) => a.localeCompare(b, 'pt-BR')),
   };
 }

@@ -17,6 +17,7 @@ import { ehC1PeloNome, faseDoNome } from '../domain/fase-campanha';
 import {
   FASES, ISCAS,
   type Anuncio, type Campanha, type ConfigBlack, type Conjunto, type DesempenhoDia, type EtapaCampanha, type Fase, type Funil,
+  type EstadoColetaCampanha,
   type GrupoBlack, type GrupoResumoBlack, type MetasCard, type Isca, type LeadDetalhe, type LinhaPerfil, type Marcos, type MensageriaBlack,
   type Periodo, type Porta, type Profissao, type RecorteGrupo, type Resultado, type ResultadoAcao, type SegmentoGrupo, type TrafegoBlack,
   type Valor,
@@ -174,9 +175,6 @@ const etapaDe = (v: unknown): EtapaCampanha | null => (v === 'C1' || v === 'C2' 
 
 export const TRAFEGO_VAZIO: TrafegoBlack = { campanhas: [], conjuntos: [], anuncios: [], paginas: [], dias: [], totais: [], coletadoEm: null };
 
-// Zero de entrega confirmado pelo Galego em 13/10/2026 20:15 BRT, após checar a coleta diária da conta CNF.
-const ZERO_ENTREGA_CONFIRMADO = { id: '454295', nome: 'CF | BF26 | C3 | META | PQ | ABO | LEAD' };
-
 export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: boolean } {
   const r = objeto(cru);
   if (!r) return { data: TRAFEGO_VAZIO, semDado: true };
@@ -188,7 +186,19 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
     if (!id || !nome || c.plataforma !== 'meta') continue;
     const etapa = etapaDe(c.etapa); const subtipo = texto(c.subtipo);
     contaDaCampanha.set(id, texto(c.conta_externa));
-    campanhas.push({ id, nome, canal: 'meta', funil: funilDaEtapa(etapa, subtipo) ?? (etapa === null && ehC1PeloNome(nome) ? 'c1' : null), fase: faseDoNome(nome), etapa, subtipo, conflito: booleano(c.conflito), gastoZeroConfirmado: id === ZERO_ENTREGA_CONFIRMADO.id && nome === ZERO_ENTREGA_CONFIRMADO.nome, idExterno: texto(c.campanha_externa) });
+    const coleta = objeto(c.coleta);
+    const estadoColeta = coleta?.estado;
+    const estadosValidos: EstadoColetaCampanha[] = ['atual', 'falha_recente', 'velha', 'sem_coleta'];
+    campanhas.push({
+      id, nome, canal: 'meta', funil: funilDaEtapa(etapa, subtipo) ?? (etapa === null && ehC1PeloNome(nome) ? 'c1' : null),
+      fase: faseDoNome(nome), etapa, subtipo, conflito: booleano(c.conflito), idExterno: texto(c.campanha_externa),
+      primeiraVistaEm: texto(c.primeira_vista_em),
+      coleta: coleta && estadosValidos.includes(estadoColeta as EstadoColetaCampanha) ? {
+        estado: estadoColeta as EstadoColetaCampanha, ultimaOkEm: texto(coleta.ultima_ok_em),
+        ultimaFalhaEm: texto(coleta.ultima_falha_em), validadeMin: num(coleta.validade_min),
+      } : null,
+      semEntregaComprovada: booleano(c.sem_entrega_comprovada) ?? undefined,
+    });
   }
   const conjuntos: Conjunto[] = linhas(r.conjuntos).flatMap((j) => {
     const id = texto(j.id); const campanhaId = texto(j.campanha_id); const nome = texto(j.nome);
