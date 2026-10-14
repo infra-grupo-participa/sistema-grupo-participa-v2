@@ -23,6 +23,12 @@ export default async function CsmDashboardsPage() {
               ico="chart"
             />
           ))}
+          <CartaoModulo
+            href="/infra/dashboards/csm/acoes-black"
+            label="Ações da Black Friday"
+            descricao="Acompanhamento das ações de renovação e ofertas da Black Friday."
+            ico="chart"
+          />
         </div>
       ) : (
         <p className="mt-6 text-sm text-[var(--fg-2)]">Nenhum dashboard disponível para seu acesso.</p>
