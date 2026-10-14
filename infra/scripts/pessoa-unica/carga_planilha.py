@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Carga da planilha "Alunos T1-T42 Ativação" para a pessoa única (migration 20261014170200).
+"""Carga da planilha "Alunos T1-T42 Ativação" para a pessoa única (migration 20261014210200).
 
 Lê as abas de turma (nome começa com T<n>) e de sócios (nome começa com "Sócios") pela conta Google do Victor
 (~/.mcp-google-sheets, a mesma do MCP local), reconhece as colunas pelo cabeçalho e manda SÓ e-mail, telefone, nome,

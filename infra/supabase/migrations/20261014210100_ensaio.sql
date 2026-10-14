@@ -1,4 +1,4 @@
--- Ensaio de 20261014170300 (manter vivo) com a 20261014170100 antes sobre o banco com os grupos A e B APLICADOS (14/10/2026), numa
+-- Ensaio de 20261014210100 (cargas das fontes do banco) sobre o banco com os grupos A e B APLICADOS (14/10/2026), numa
 -- transação DESFEITA. Lê as tabelas reais DENTRO do banco: o texto deste ensaio não tem dado pessoal e a saída é só contagem;
 -- erro numa fonte é capturado aqui dentro e só o SQLSTATE sai.
 -- Rodar com: python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio <este arquivo>
@@ -7,12 +7,12 @@ set local lock_timeout = '5s';
 set local statement_timeout = '150s';
 create temp table _z_out (em serial, passo text, linha text);
 insert into pg_temp._z_out(passo, linha) select '00 antes', (select jsonb_build_object('pessoas', (select count(*) from pessoas.pessoas), 'eventos', (select count(*) from pessoas.eventos), 'revisao', (select count(*) from pessoas.revisao))::text);
--- ===== 20261014170100 =====
--- 20261014170100: cargas das fontes que já moram no banco (Hotmart, Central, T1-T40, HM, Respondi, leads, CRM)
+-- ===== 20261014210100 =====
+-- 20261014210100: cargas das fontes que já moram no banco (Hotmart, Central, T1-T40, HM, Respondi, leads, CRM)
 --
 -- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014160200, 160300 e 170000 (controle de
 --   carga, pessoas.casar_email, pessoas.relacoes, índice eventos_fonte_unico). Não depende do schema fin (só lê).
---   Ensaio: 20261014170100_ensaio.sql. Script: infra/scripts/pessoa-unica/carga_fontes.py. Detalhe: 20261014170100.explain.md.
+--   Ensaio: 20261014210100_ensaio.sql. Script: infra/scripts/pessoa-unica/carga_fontes.py. Detalhe: 20261014210100.explain.md.
 --
 -- POR QUE: PLANO da pessoa única, passo 4 (carga por fonte, em lotes) e o modelo da história da pessoa do Victor
 --   (14/10/2026): lead, checkout e compra separados por evento; matrícula por turma; sócio de; CRM; Respondi.
@@ -44,7 +44,7 @@ insert into pg_temp._z_out(passo, linha) select '00 antes', (select jsonb_build_
 --     320, detalhe pequeno): erro de CHECK grava a linha no log.
 -- AS 5 PERGUNTAS: escala = ~58 mil transações, ~1,9 mil alunos, ~7,6 mil T1-T40, ~400 HM, ~23 mil respostas, ~40 mil
 --   leads, ~1,5 mil negócios; índice = PK de cada fonte para o cursor + eventos_fonte_unico; frequência = 1 carga + o
---   incremental (manter vivo, desenho no explain); repetição = idempotente; reversão = 20261014170100_reversao.sql.
+--   incremental (manter vivo, desenho no explain); repetição = idempotente; reversão = 20261014210100_reversao.sql.
 -- ACESSO: funções SECURITY INVOKER, sem execute para public/anon/authenticated/service_role.
 
 set local lock_timeout = '5s';
@@ -52,16 +52,16 @@ set local lock_timeout = '5s';
 do $g$
 begin
   if to_regprocedure('pessoas.casar_email(text,text,text,text)') is null or to_regclass('pessoas.eventos_fonte_unico') is null then
-    raise exception '20261014170100: falta 20261014170000/160300.';
+    raise exception '20261014210100: falta 20261014170000/160300.';
   end if;
   if to_regprocedure('pessoas.carga_fin_hotmart(bigint,text,integer,boolean)') is not null then
-    raise exception '20261014170100: já aplicada.';
+    raise exception '20261014210100: já aplicada.';
   end if;
 end
 $g$;
 
 insert into pessoas.carga_chave (fonte, ligada, por)
-select f, true, 'migration 20261014170100'
+select f, true, 'migration 20261014210100'
   from unnest(array['hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios', 'respondi', 'leads_cnhf',
                     'leads_workbook', 'leads_black', 'crm_negocio']) f
 on conflict (fonte) do nothing;
@@ -448,142 +448,42 @@ begin
   if exists (select 1 from pg_proc p where p.pronamespace = 'pessoas'::regnamespace
                and (p.proname like 'carga%' or p.proname like '\_carga%')
                and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))) then
-    raise exception '20261014170100: função de carga ficou executável por anon/authenticated.';
+    raise exception '20261014210100: função de carga ficou executável por anon/authenticated.';
   end if;
 end
 $g$;
 
--- ===== 20261014170300 =====
--- 20261014170300: manter a pessoa única viva (rotina de hora em hora só no banco + agendamento do delta diário do AC)
---
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150034 (ex-170000) e 170100.
---   Ensaio: 20261014170300_ensaio.sql. Detalhe: 20261014170300.explain.md.
---
--- POR QUE: "temos q configurar isso tbm pra ficar funcional" (Victor, 14/10/2026). Regras do Maestro/Victor: incremental,
---   leve (máquina de ~1 GB), minuto vazio, chave de desligar; rotina EXTERNA (AC) nasce desligada, 1×/dia de madrugada,
---   teto de chamadas no código e data de fim gravada (padrão 31/12/2026).
--- O QUE FAZ:
---   1. pessoas.carga_incremental(p_limite): para cada fonte do banco (Hotmart das 2 contas, Central, T1-T40, HM, sócios do
---      HM, Respondi, leads, CRM), roda a carga no modo "só novos" (linhas sem o seu evento), até p_limite por fonte. Pula a
---      fonte que (a) está com a chave desligada, (b) tem carga inicial aberta ou (c) ainda não terminou a carga inicial.
---      Erro numa fonte: fecha aquela execução como 'erro' com o SQLSTATE e segue as outras.
---      Hotmart e Respondi NÃO têm rotina externa: o webhook da Hotmart e o respondi-sync já põem o dado no banco; esta
---      rotina só lê o banco.
---   2. Job pg_cron 'pessoas-incremental' às :50 de toda hora, CRIADO DESLIGADO (active = false). Liga depois da carga
---      inicial, com o roteiro.
---   3. Job pg_cron 'pessoas-ac-delta' às 05:40 UTC (02:40 em Brasília), CRIADO DESLIGADO, chamando a Edge Function
---      pessoas-ac-delta (código no repo, a publicar). Chave 'activecampaign_delta' nasce desligada, com fim 31/12/2026.
---      A Edge usa a chave do AC do Vault (activecampaign_api_key) e o segredo do cron já existente (cron_webhook_secret).
--- AS 5 PERGUNTAS: escala = dezenas de linhas novas por hora (contra ~58 mil transações e ~40 mil leads de base: o anti-join
---   pelo índice único custa ~1 ms por mil linhas lidas); índice = eventos_fonte_unico; frequência = 24×/dia (só banco) e
---   1×/dia (AC); repetição = idempotente; reversão = 20261014170300_reversao.sql (desagenda os 2 jobs e tira a função).
-
-set local lock_timeout = '5s';
-
-do $g$
+-- ===== testes: cada fonte, 200 linhas reais, depois a MESMA faixa de novo (idempotente) =====
+do $t$
+declare f text; v_e bigint; r1 jsonb; r2 jsonb; t0 timestamptz;
 begin
-  if to_regprocedure('pessoas.carga_thb_alunos(bigint,integer,boolean)') is null then
-    raise exception '20261014170300: falta 20261014170100 (cargas das fontes com modo só novos).';
-  end if;
-  if exists (select 1 from cron.job where jobname in ('pessoas-incremental', 'pessoas-ac-delta')) then
-    raise exception '20261014170300: jobs já existem.';
-  end if;
-end
-$g$;
-
-insert into pessoas.carga_chave (fonte, ligada, ate, por) values
-  ('incremental', true, null, 'migration 20261014170300 (o job nasce desligado; esta chave é a segunda trava)'),
-  ('activecampaign_delta', false, date '2026-12-31', 'migration 20261014170300: rotina externa, liga só com ok do Victor')
-on conflict (fonte) do nothing;
-
-create function pessoas.carga_incremental(p_limite integer default 200) returns jsonb
-language plpgsql set search_path to '' as $f$
-declare
-  f text; v_e bigint; r jsonb; v_saida jsonb := '{}';
-begin
-  if not pessoas.carga_ligada('incremental') then return jsonb_build_object('desligada', true); end if;
-  if p_limite not between 1 and 1000 then raise exception 'limite entre 1 e 1.000' using errcode = '22023'; end if;
-  foreach f in array array['hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios',
-                           'respondi', 'leads_cnhf', 'leads_workbook', 'leads_black', 'crm_negocio'] loop
-    if not pessoas.carga_ligada(f) then v_saida := v_saida || jsonb_build_object(f, 'desligada'); continue; end if;
-    if exists (select 1 from pessoas.carga_execucao where fonte = f and status in ('rodando', 'parada')) then
-      v_saida := v_saida || jsonb_build_object(f, 'carga aberta'); continue;
-    end if;
-    if not exists (select 1 from pessoas.carga_execucao where fonte = f and fase = 'pessoas' and status = 'ok' and coalesce(por, '') <> 'incremental') then
-      v_saida := v_saida || jsonb_build_object(f, 'sem carga inicial'); continue;
-    end if;
+  foreach f in array array['hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios', 'respondi', 'leads_cnhf', 'leads_workbook', 'leads_black', 'crm_negocio'] loop
     begin
-      v_e := (pessoas.carga_abrir(f, 'pessoas', 'incremental')->>'execucao')::bigint;
-      r := case f
-             when 'hotmart_academy'    then pessoas.carga_fin_hotmart(v_e, 'academy', p_limite, true)
-             when 'hotmart_escritorio' then pessoas.carga_fin_hotmart(v_e, 'escritorio', p_limite, true)
-             when 'thb_alunos'         then pessoas.carga_thb_alunos(v_e, p_limite, true)
-             when 'aluno_historico'    then pessoas.carga_aluno_historico(v_e, p_limite, true)
-             when 'contatos_hm'        then pessoas.carga_contatos_hm(v_e, p_limite, true)
-             when 'hm_socios'          then pessoas.carga_hm_socios(v_e, p_limite, true)
-             when 'respondi'           then pessoas.carga_respondi(v_e, p_limite, true)
-             when 'crm_negocio'        then pessoas.carga_crm_negocio(v_e, p_limite, true)
-             else pessoas.carga_leads(v_e, f, p_limite, true) end;
+      t0 := clock_timestamp();
+      v_e := (pessoas.carga_abrir(f, 'pessoas', 'ensaio')->>'execucao')::bigint;
+      r1 := case f when 'hotmart_academy' then pessoas.carga_fin_hotmart(v_e, 'academy', 200) when 'hotmart_escritorio' then pessoas.carga_fin_hotmart(v_e, 'escritorio', 200) when 'thb_alunos' then pessoas.carga_thb_alunos(v_e, 200)
+                   when 'aluno_historico' then pessoas.carga_aluno_historico(v_e, 200) when 'contatos_hm' then pessoas.carga_contatos_hm(v_e, 200)
+                   when 'hm_socios' then pessoas.carga_hm_socios(v_e, 200) when 'respondi' then pessoas.carga_respondi(v_e, 200)
+                   when 'crm_negocio' then pessoas.carga_crm_negocio(v_e, 200) else pessoas.carga_leads(v_e, f, 200) end;
+      update pessoas.carga_execucao set cursor = null where id = v_e;   -- volta ao começo: mesma faixa
+      r2 := case f when 'hotmart_academy' then pessoas.carga_fin_hotmart(v_e, 'academy', 200) when 'hotmart_escritorio' then pessoas.carga_fin_hotmart(v_e, 'escritorio', 200) when 'thb_alunos' then pessoas.carga_thb_alunos(v_e, 200)
+                   when 'aluno_historico' then pessoas.carga_aluno_historico(v_e, 200) when 'contatos_hm' then pessoas.carga_contatos_hm(v_e, 200)
+                   when 'hm_socios' then pessoas.carga_hm_socios(v_e, 200) when 'respondi' then pessoas.carga_respondi(v_e, 200)
+                   when 'crm_negocio' then pessoas.carga_crm_negocio(v_e, 200) else pessoas.carga_leads(v_e, f, 200) end;
       perform pessoas.carga_fechar(v_e, 'ok');
-      v_saida := v_saida || jsonb_build_object(f, (r->>'lidas')::int);
+      insert into pg_temp._z_out(passo, linha) values ('10 ' || f, '1ª: ' || (r1 - 'ms')::text || ' | 2ª (mesma faixa): eventos ' || (r2->>'eventos') || ', novas ' || (r2->>'pessoas_novas') || ', relações ' || (r2->>'relacoes') || ' | ' || (extract(epoch from clock_timestamp() - t0) * 1000)::int || ' ms');
     exception when others then
-      -- a subtransação desfez o lote E a execução aberta nele; registra uma execução 'erro' (só o código) fora dela
-      v_saida := v_saida || jsonb_build_object(f, 'erro ' || sqlstate);
-      insert into pessoas.carga_execucao (fonte, fase, status, erro, por, terminada_em)
-      values (f, 'pessoas', 'erro', 'incremental: ' || sqlstate, 'incremental', now());
+      insert into pg_temp._z_out(passo, linha) values ('10 ' || f, 'ERRO ' || sqlstate);
     end;
   end loop;
-  return v_saida;
-end $f$;
-revoke all on function pessoas.carga_incremental(integer) from public, anon, authenticated, service_role;
-
--- jobs: criados e desligados na mesma migration
-select cron.schedule('pessoas-incremental', '50 * * * *',
-  $c$ set statement_timeout = '120s'; select pessoas.carga_incremental(200) $c$);
-select cron.schedule('pessoas-ac-delta', '40 5 * * *',
-  $c$ select ops.cron_post('pessoas-ac-delta',
-       url := 'https://mbvybujpkwuorhtdzcde.supabase.co/functions/v1/pessoas-ac-delta',
-       body := '{}'::jsonb,
-       headers := jsonb_build_object('Content-Type', 'application/json',
-                                     'x-webhook-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'cron_webhook_secret')),
-       timeout_milliseconds := 150000) $c$);
-select cron.alter_job(j.jobid, active := false) from cron.job j where j.jobname in ('pessoas-incremental', 'pessoas-ac-delta');
-
-do $g$
-begin
-  if (select count(*) from cron.job where jobname in ('pessoas-incremental', 'pessoas-ac-delta') and not active) <> 2 then
-    raise exception '20261014170300: os 2 jobs tinham de nascer desligados.';
-  end if;
-  if has_function_privilege('anon', 'pessoas.carga_incremental(integer)', 'execute')
-     or has_function_privilege('authenticated', 'pessoas.carga_incremental(integer)', 'execute') then
-    raise exception '20261014170300: carga_incremental executável por anon/authenticated.';
-  end if;
-end
-$g$;
-
--- ===== testes =====
-insert into pg_temp._z_out(passo, linha) select '10 jobs criados (nome / horário / ativo)', string_agg(jobname || ' ' || schedule || ' ' || active, ' | ' order by jobname) from cron.job where jobname in ('pessoas-incremental', 'pessoas-ac-delta');
-insert into pg_temp._z_out(passo, linha) select '11 chaves: incremental / delta do AC (ligada, fim)', (select ligada::text from pessoas.carga_chave where fonte = 'incremental') || ' / ' || (select ligada || ' até ' || ate from pessoas.carga_chave where fonte = 'activecampaign_delta');
-insert into pg_temp._z_out(passo, linha) select '12 incremental antes da carga inicial (esperado: sem carga inicial em todas)', pessoas.carga_incremental(20)::text;
--- simula a carga inicial de 2 fontes (50 linhas cada) e roda o incremental
-do $t$ declare v bigint; begin
-  v := (pessoas.carga_abrir('thb_alunos', 'pessoas', 'ensaio-inicial')->>'execucao')::bigint; perform pessoas.carga_thb_alunos(v, 50); perform pessoas.carga_fechar(v, 'ok');
-  v := (pessoas.carga_abrir('crm_negocio', 'pessoas', 'ensaio-inicial')->>'execucao')::bigint; perform pessoas.carga_crm_negocio(v, 50); perform pessoas.carga_fechar(v, 'ok');
 end $t$;
-insert into pg_temp._z_out(passo, linha) select '13 eventos thb_alunos/crm depois da "carga inicial" de 50', (select count(*) from pessoas.eventos where fonte_tabela = 'public.thb_alunos') || ' / ' || (select count(*) from pessoas.eventos where fonte_tabela = 'crm.negocio');
-insert into pg_temp._z_out(passo, linha) select '14 incremental (limite 20): só os novos', pessoas.carga_incremental(20)::text;
-insert into pg_temp._z_out(passo, linha) select '15 eventos thb_alunos/crm depois do incremental (+20 cada, sem repetir os 50)', (select count(*) from pessoas.eventos where fonte_tabela = 'public.thb_alunos') || ' / ' || (select count(*) from pessoas.eventos where fonte_tabela = 'crm.negocio');
-insert into pg_temp._z_out(passo, linha) select '16 cursor da carga inicial intacto depois do incremental', (select count(*) from pessoas.carga_execucao where fonte = 'thb_alunos' and por = 'ensaio-inicial' and cursor is not null)::text;
-update pessoas.carga_chave set ligada = false where fonte = 'incremental';
-insert into pg_temp._z_out(passo, linha) select '17 incremental com a chave desligada', pessoas.carga_incremental(20)::text;
-insert into pg_temp._z_out(passo, linha) select '18 carga_incremental executável por anon/authenticated', (has_function_privilege('anon', 'pessoas.carga_incremental(integer)', 'execute') or has_function_privilege('authenticated', 'pessoas.carga_incremental(integer)', 'execute'))::text;
--- ===== reversões =====
--- Reversão de 20261014170300 (rotinas de manter vivo). Não apaga dado carregado.
-set local lock_timeout = '5s';
-select cron.unschedule(j.jobid) from cron.job j where j.jobname in ('pessoas-incremental', 'pessoas-ac-delta');
-drop function if exists pessoas.carga_incremental(integer);
-delete from pessoas.carga_chave where fonte in ('incremental', 'activecampaign_delta') and por like 'migration 20261014170300%';
--- Reversão de 20261014170100 (cargas das fontes). NÃO apaga pessoa nem evento já carregado (regra I-03): os eventos das
+insert into pg_temp._z_out(passo, linha) select '20 eventos por fonte e tipo', string_agg(fonte_tabela || '/' || tipo || ' ' || n, ', ' order by fonte_tabela, tipo) from (select fonte_tabela, tipo, count(*) n from pessoas.eventos where fonte_tabela is not null group by 1, 2) x;
+insert into pg_temp._z_out(passo, linha) select '21 hotmart: com evento do catálogo / linhas do webhook que ganharam fonte (sem duplicar)', (select count(*) from pessoas.eventos where fonte_tabela = 'fin.hotmart_transacoes' and evento_id is not null) || ' / ' || (select count(*) from pessoas.eventos where fonte_tabela = 'fin.hotmart_transacoes' and fonte = 'hotmart' and detalhe ? 'classe');
+insert into pg_temp._z_out(passo, linha) select '22 relações sócio de', count(*)::text from pessoas.relacoes;
+insert into pg_temp._z_out(passo, linha) select '23 revisões novas', (select count(*) from pessoas.revisao)::text;
+insert into pg_temp._z_out(passo, linha) select '24 funções executáveis por anon/authenticated', count(*)::text from pg_proc p where p.pronamespace = 'pessoas'::regnamespace and (p.proname like 'carga%' or p.proname like '\_carga%' or p.proname = 'casar_email') and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'));
+-- ===== reversão da 170100 =====
+-- Reversão de 20261014210100 (cargas das fontes). NÃO apaga pessoa nem evento já carregado (regra I-03): os eventos das
 -- cargas ficam identificados por fonte_tabela; medir antes com
 --   select fonte_tabela, count(*) from pessoas.eventos where fonte_tabela is not null group by 1;
 set local lock_timeout = '5s';
@@ -598,8 +498,8 @@ drop function if exists pessoas.carga_fin_hotmart(bigint, text, integer, boolean
 drop function if exists pessoas._carga_lote_fim(bigint, text, text, int, int, int, int, int, int, timestamptz);
 drop function if exists pessoas._carga_exigir(bigint, text);
 delete from pessoas.carga_chave where fonte in ('hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios', 'respondi',
-  'leads_cnhf', 'leads_workbook', 'leads_black', 'crm_negocio') and por = 'migration 20261014170100';
+  'leads_cnhf', 'leads_workbook', 'leads_black', 'crm_negocio') and por = 'migration 20261014210100';
 
-insert into pg_temp._z_out(passo, linha) select '90 depois das reversões: jobs / função', (select count(*) from cron.job where jobname in ('pessoas-incremental', 'pessoas-ac-delta')) || ' / ' || coalesce(to_regprocedure('pessoas.carga_incremental(integer)')::text, 'não');
+insert into pg_temp._z_out(passo, linha) select '90 depois da reversão: funções da 170100 que sobram', count(*)::text from pg_proc where pronamespace = 'pessoas'::regnamespace and proname in ('carga_fin_hotmart','carga_thb_alunos','carga_aluno_historico','carga_contatos_hm','carga_hm_socios','carga_respondi','carga_leads','carga_crm_negocio','_carga_exigir','_carga_lote_fim');
 select passo, linha from pg_temp._z_out order by em, passo;
 rollback;

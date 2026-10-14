@@ -1,7 +1,15 @@
--- 20261014170200: carga da planilha "Alunos T1-T42 Ativação" (alunos e sócios por turma) para a pessoa única
+-- Ensaio de 20261014210200 (planilha de ativação) com dado FICTÍCIO (@exemplo.invalid), numa transação DESFEITA, sobre o
+-- banco com os grupos A e B aplicados.
+-- Rodar com: python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio <este arquivo>
+begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
+create temp table _z_out (em serial, passo text, linha text);
+-- ===== 20261014210200 =====
+-- 20261014210200: carga da planilha "Alunos T1-T42 Ativação" (alunos e sócios por turma) para a pessoa única
 --
 -- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150034 (ex-170000: controle de carga,
---   casar_email) e de pessoas.relacoes (20261014150003). Ensaio: 20261014170200_ensaio.sql (dado fictício).
+--   casar_email) e de pessoas.relacoes (20261014150003). Ensaio: 20261014210200_ensaio.sql (dado fictício).
 --   Script: infra/scripts/pessoa-unica/carga_planilha.py (lê a planilha com a conta do Victor, manda as linhas como parâmetro).
 --
 -- POR QUE: fonte nova do Victor (14/10/2026): planilha 1bxr71O3UKo0fdPfNXPEYNs9ZWrHNooXALxmvCXa6Ak8. A base compilada
@@ -19,22 +27,21 @@
 --   com o texto em detalhe.turma (pergunta: criar T42 em thb_turmas é decisão do dono da Central).
 -- AS 5 PERGUNTAS: escala = ~9 mil linhas (8.834 e-mails em 104 abas, censo ETAPA 1); índice = PK chave + parcial dos
 --   pendentes; frequência = 1 carga + recarga manual quando a planilha mudar; repetição = idempotente; reversão =
---   20261014170200_reversao.sql (estágio e funções saem; pessoa não se apaga).
+--   20261014210200_reversao.sql (estágio e funções saem; pessoa não se apaga).
 -- ACESSO: RLS ligada, sem policy e sem grant; funções SECURITY INVOKER sem execute para anon/authenticated/service_role.
 
 set local lock_timeout = '5s';
-set local statement_timeout = '30s';
 
 do $g$
 begin
   if to_regprocedure('pessoas.casar_email(text,text,text,text)') is null or to_regclass('pessoas.relacoes') is null then
-    raise exception '20261014170200: falta a estrutura da carga (20261014150034) ou pessoas.relacoes (20261014150003).';
+    raise exception '20261014210200: falta a estrutura da carga (20261014150034) ou pessoas.relacoes (20261014150003).';
   end if;
-  if to_regclass('pessoas.planilha_linha') is not null then raise exception '20261014170200: já aplicada.'; end if;
+  if to_regclass('pessoas.planilha_linha') is not null then raise exception '20261014210200: já aplicada.'; end if;
 end
 $g$;
 
-insert into pessoas.carga_chave (fonte, ligada, por) values ('ativacao_planilha', true, 'migration 20261014170200')
+insert into pessoas.carga_chave (fonte, ligada, por) values ('ativacao_planilha', true, 'migration 20261014210200')
 on conflict (fonte) do nothing;
 
 create table pessoas.planilha_linha (
@@ -183,7 +190,42 @@ begin
   if has_function_privilege('anon', 'pessoas.carga_planilha_estagio(bigint,text,jsonb)', 'execute')
      or has_function_privilege('authenticated', 'pessoas.carga_planilha_pessoas(bigint,integer)', 'execute')
      or has_table_privilege('anon', 'pessoas.planilha_linha', 'select') or has_table_privilege('authenticated', 'pessoas.planilha_linha', 'select') then
-    raise exception '20261014170200: algo da carga da planilha ficou aberto para anon/authenticated.';
+    raise exception '20261014210200: algo da carga da planilha ficou aberto para anon/authenticated.';
   end if;
 end
 $g$;
+
+-- ===== testes =====
+create temp table _z_l as select '[
+ {"aba":"T42 - HT 32 - Set/26","papel":"aluno","turma":"T42","email":"ensaio-a1@exemplo.invalid","nome":"Aluno Um","telefone":"(11) 99999-0001","data":"2026-09-20"},
+ {"aba":"T41 - Acelera Holding - Set/26","papel":"aluno","turma":"T41","email":"ensaio-a2@exemplo.invalid","nome":"Aluno Dois"},
+ {"aba":"T41 - Acelera Holding - Set/26","papel":"aluno","turma":"T41","email":"ENSAIO-A2@exemplo.invalid ","nome":"Aluno Dois repetido"},
+ {"aba":"Sócios T42 -  Set/26","papel":"socio","turma":"T42","email":"ensaio-s1@exemplo.invalid","nome":"Sócio Um","titular_email":"ensaio-a1@exemplo.invalid","titular_nome":"Aluno Um"},
+ {"aba":"Sócios T42 -  Set/26","papel":"socio","turma":"T42","email":"ensaio-s2@exemplo.invalid","nome":"Sócio sem titular"},
+ {"aba":"T42 - HT 32 - Set/26","papel":"aluno","turma":"T42","email":"nao-e-email","nome":"Inválido"},
+ {"aba":"T42 - HT 32 - Set/26","papel":"chefe","turma":"X9","email":"ensaio-a3@exemplo.invalid","data":"2026-02-30"}
+]'::jsonb j;
+create temp table _z_e as select (pessoas.carga_abrir('ativacao_planilha', 'estagio', 'ensaio')->>'execucao')::bigint id;
+insert into pg_temp._z_out(passo, linha) select '10 estágio 1ª passada (esperado 4 inseridas: a1, a2 uma vez, s1, s2 sem titular)', pessoas.carga_planilha_estagio((select id from pg_temp._z_e), '1bxr71O3UKo0fdPfNXPEYNs9ZWrHNooXALxmvCXa6Ak8', (select j from pg_temp._z_l))::text;
+insert into pg_temp._z_out(passo, linha) select '11 estágio 2ª passada (0 inseridas)', pessoas.carga_planilha_estagio((select id from pg_temp._z_e), '1bxr71O3UKo0fdPfNXPEYNs9ZWrHNooXALxmvCXa6Ak8', (select j from pg_temp._z_l))::text;
+select pessoas.carga_fechar((select id from pg_temp._z_e), 'ok');
+create temp table _z_p as select (pessoas.carga_abrir('ativacao_planilha', 'pessoas', 'ensaio')->>'execucao')::bigint id;
+insert into pg_temp._z_out(passo, linha) select '20 pessoas', pessoas.carga_planilha_pessoas((select id from pg_temp._z_p), 1000)::text;
+update pessoas.planilha_linha set pendente = true;
+insert into pg_temp._z_out(passo, linha) select '21 reprocessar (0 eventos, 0 relações novas)', pessoas.carga_planilha_pessoas((select id from pg_temp._z_p), 1000)::text;
+insert into pg_temp._z_out(passo, linha) select '22 eventos (ativacao 2, vinculo 2) / relação sócio de (1: só quem tem e-mail do titular)', (select string_agg(tipo || ' ' || n, ', ' order by tipo) from (select tipo, count(*) n from pessoas.eventos where fonte_tabela = 'pessoas.planilha_linha' group by 1) x) || ' / ' || (select count(*) from pessoas.relacoes where fonte_tabela = 'pessoas.planilha_linha');
+insert into pg_temp._z_out(passo, linha) select '23 T41 com turma_id / T42 sem turma_id e com o texto', (select count(*) from pessoas.eventos e join public.thb_turmas t on t.id = e.turma_id where e.fonte_tabela = 'pessoas.planilha_linha' and t.codigo = 'T41') || ' / ' || (select count(*) from pessoas.eventos where fonte_tabela = 'pessoas.planilha_linha' and turma_id is null and detalhe->>'turma' = 'T42');
+insert into pg_temp._z_out(passo, linha) select '25 sócio sem titular: vínculo com titular_pendente', (select count(*) from pessoas.eventos where fonte_tabela = 'pessoas.planilha_linha' and detalhe->>'titular_pendente' = 'true')::text;
+insert into pg_temp._z_out(passo, linha) select '24 nada aberto para anon/authenticated', (not has_table_privilege('anon', 'pessoas.planilha_linha', 'select') and not has_function_privilege('authenticated', 'pessoas.carga_planilha_pessoas(bigint,integer)', 'execute'))::text;
+-- ===== reversão =====
+-- Reversão de 20261014210200 (carga da planilha de ativação). NÃO apaga pessoa nem evento já carregado; medir antes com
+--   select count(*) from pessoas.eventos where fonte_tabela = 'pessoas.planilha_linha';
+set local lock_timeout = '5s';
+drop function if exists pessoas.carga_planilha_pessoas(bigint, integer);
+drop function if exists pessoas.carga_planilha_estagio(bigint, text, jsonb);
+drop table if exists pessoas.planilha_linha;
+delete from pessoas.carga_chave where fonte = 'ativacao_planilha' and por = 'migration 20261014210200';
+
+insert into pg_temp._z_out(passo, linha) select '90 depois da reversão', coalesce(to_regclass('pessoas.planilha_linha')::text, 'sem estágio') || ' / ' || coalesce(to_regprocedure('pessoas.carga_planilha_pessoas(bigint,integer)')::text, 'sem função');
+select passo, linha from pg_temp._z_out order by em, passo;
+rollback;
