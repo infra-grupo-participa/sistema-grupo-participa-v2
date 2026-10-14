@@ -1,6 +1,6 @@
 -- 20261014210300: manter a pessoa única viva (rotina de hora em hora só no banco + agendamento do delta diário do AC)
 --
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150034 (ex-170000) e 170100.
+-- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150034 (ex-170000) e 20261014210100.
 --   Ensaio: 20261014210300_ensaio.sql. Detalhe: 20261014210300.explain.md.
 --
 -- POR QUE: "temos q configurar isso tbm pra ficar funcional" (Victor, 14/10/2026). Regras do Maestro/Victor: incremental,
@@ -18,6 +18,9 @@
 --   3. Job pg_cron 'pessoas-ac-delta' às 05:40 UTC (02:40 em Brasília), CRIADO DESLIGADO, chamando a Edge Function
 --      pessoas-ac-delta (código no repo, a publicar). Chave 'activecampaign_delta' nasce desligada, com fim 31/12/2026.
 --      A Edge usa a chave do AC do Vault (activecampaign_api_key) e o segredo do cron já existente (cron_webhook_secret).
+-- PENDÊNCIA (achado 7 do pentester, 14/10/2026): se uma rodada passar dos 120 s do statement_timeout, a hora inteira é
+--   desfeita sem registro em pessoas.carga_execucao. Mitigação hoje: limite de 200 por fonte. Corrigir depois (uma chamada
+--   por fonte, ou registro fora da transação).
 -- AS 5 PERGUNTAS: escala = dezenas de linhas novas por hora (contra ~58 mil transações e ~40 mil leads de base: o anti-join
 --   pelo índice único custa ~1 ms por mil linhas lidas); índice = eventos_fonte_unico; frequência = 24×/dia (só banco) e
 --   1×/dia (AC); repetição = idempotente; reversão = 20261014210300_reversao.sql (desagenda os 2 jobs e tira a função).

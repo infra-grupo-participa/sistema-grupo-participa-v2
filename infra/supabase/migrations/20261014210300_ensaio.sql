@@ -1,6 +1,5 @@
--- Ensaio de 20261014210300 (manter vivo) com a 20261014210100 antes sobre o banco com os grupos A e B APLICADOS (14/10/2026), numa
--- transação DESFEITA. Lê as tabelas reais DENTRO do banco: o texto deste ensaio não tem dado pessoal e a saída é só contagem;
--- erro numa fonte é capturado aqui dentro e só o SQLSTATE sai.
+-- Ensaio de 20261014210300 (manter vivo) com a 20261014210100 antes, sobre o banco com os grupos A e B aplicados, numa
+-- transação DESFEITA. Só contagens.
 -- Rodar com: python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio <este arquivo>
 begin;
 set local lock_timeout = '5s';
@@ -10,8 +9,8 @@ insert into pg_temp._z_out(passo, linha) select '00 antes', (select jsonb_build_
 -- ===== 20261014210100 =====
 -- 20261014210100: cargas das fontes que já moram no banco (Hotmart, Central, T1-T40, HM, Respondi, leads, CRM)
 --
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014160200, 160300 e 170000 (controle de
---   carga, pessoas.casar_email, pessoas.relacoes, índice eventos_fonte_unico). Não depende do schema fin (só lê).
+-- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150003 (ex-160200), dos índices da 160300 e
+--   de 20261014150034 (ex-170000: controle de carga, pessoas.casar_email, pessoas.relacoes, índice eventos_fonte_unico). Não depende do schema fin (só lê).
 --   Ensaio: 20261014210100_ensaio.sql. Script: infra/scripts/pessoa-unica/carga_fontes.py. Detalhe: 20261014210100.explain.md.
 --
 -- POR QUE: PLANO da pessoa única, passo 4 (carga por fonte, em lotes) e o modelo da história da pessoa do Victor
@@ -52,7 +51,7 @@ set local lock_timeout = '5s';
 do $g$
 begin
   if to_regprocedure('pessoas.casar_email(text,text,text,text)') is null or to_regclass('pessoas.eventos_fonte_unico') is null then
-    raise exception '20261014210100: falta 20261014170000/160300.';
+    raise exception '20261014210100: falta 20261014150034 (ex-170000) ou os índices da 160300.';
   end if;
   if to_regprocedure('pessoas.carga_fin_hotmart(bigint,text,integer,boolean)') is not null then
     raise exception '20261014210100: já aplicada.';
@@ -65,6 +64,15 @@ select f, true, 'migration 20261014210100'
   from unnest(array['hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios', 'respondi', 'leads_cnhf',
                     'leads_workbook', 'leads_black', 'crm_negocio']) f
 on conflict (fonte) do nothing;
+
+-- achado 4 do pentester (14/10/2026): e-mail que, normalizado, passa de 320 caracteres estouraria o CHECK de
+-- pessoas.identificadores e o DETAIL com o valor iria ao log. Aqui ele vira "sem e-mail" e a linha é pulada (contada).
+create function pessoas._casar_email_seguro(p_nome text, p_email text, p_telefone text, p_origem text) returns jsonb
+language sql set search_path to '' as $f$
+  select pessoas.casar_email(p_nome,
+                             case when length(pessoas.norm_email(left(p_email, 1000))) <= 320 then left(p_email, 1000) end,
+                             left(p_telefone, 40), p_origem);
+$f$;
 
 -- execução aberta da fonte (e chave ligada); devolve o cursor
 create function pessoas._carga_exigir(p_execucao bigint, p_fonte text) returns text
@@ -134,7 +142,7 @@ begin
   for r in select t.* from (select * from fin.hotmart_transacoes where conta = p_conta) t
              join pg_temp._carga_hm_lote l using (transacao) order by t.transacao loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.transacao); v_ate := r.transacao;
-    v := pessoas.casar_email(r.comprador_nome, r.comprador_email, r.comprador_telefone, 'hotmart');
+    v := pessoas._casar_email_seguro(r.comprador_nome, r.comprador_email, r.comprador_telefone, 'hotmart');
     v_p := (v->>'pessoa_id')::uuid;
     if v_p is null then n_s := n_s + 1; continue; end if;
     if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -221,7 +229,7 @@ begin
                                                  and e.fonte_id = md5(h.email_norm) || ':' || coalesce(h.turma, '') and e.tipo = 'ativacao')))
             order by 1 limit p_limite loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.k); v_ate := r.k;
-    v := pessoas.casar_email(r.nome, r.email_norm, null, 'importacao');
+    v := pessoas._casar_email_seguro(r.nome, r.email_norm, null, 'importacao');
     v_p := (v->>'pessoa_id')::uuid;
     if v_p is null then n_s := n_s + 1; continue; end if;
     if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -294,7 +302,7 @@ begin
     if r.aluno_id is not null then
       v_p := pessoas.pessoa_do_aluno(r.aluno_id); n_c := n_c + 1;
     else
-      v := pessoas.casar_email(r.nome, r.email, r.telefone, 'importacao');
+      v := pessoas._casar_email_seguro(r.nome, r.email, r.telefone, 'importacao');
       v_p := (v->>'pessoa_id')::uuid;
       if v_p is null then n_s := n_s + 1; continue; end if;
       if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -329,7 +337,7 @@ begin
                or (p_novos and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'respondi.respostas' and e.fonte_id = x.uuid::text and e.tipo = 'resposta'))
             order by x.uuid::text limit p_limite loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.uuid::text); v_ate := r.uuid::text;
-    v := pessoas.casar_email(r.dados->>'nome', coalesce(r.email, r.dados->>'email'), coalesce(r.telefone, r.dados->>'telefone'), 'respondi');
+    v := pessoas._casar_email_seguro(r.dados->>'nome', coalesce(r.email, r.dados->>'email'), coalesce(r.telefone, r.dados->>'telefone'), 'respondi');
     v_p := (v->>'pessoa_id')::uuid;
     if v_p is null then n_s := n_s + 1; continue; end if;
     if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -342,7 +350,7 @@ begin
     get diagnostics n_x = row_count; n_e := n_e + n_x;
     -- formulário de sócio: o sócio vira pessoa (por e-mail) e "sócio de" quem respondeu (o titular)
     if pessoas.norm_email(r.dados->>'socio_email') is not null then
-      v := pessoas.casar_email(r.dados->>'socio_nome', r.dados->>'socio_email', r.dados->>'socio_telefone', 'respondi');
+      v := pessoas._casar_email_seguro(r.dados->>'socio_nome', r.dados->>'socio_email', r.dados->>'socio_telefone', 'respondi');
       v_s := (v->>'pessoa_id')::uuid;
       if v_s is not null and v_s <> v_p then
         if (v->>'nova')::boolean then n_n := n_n + 1; end if;
@@ -391,7 +399,7 @@ begin
     order by 1 limit p_limite
   loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.k); v_ate := r.k;
-    v := pessoas.casar_email(r.nome, r.email, r.tel, 'formulario');
+    v := pessoas._casar_email_seguro(r.nome, r.email, r.tel, 'formulario');
     v_p := (v->>'pessoa_id')::uuid;
     if v_p is null then n_s := n_s + 1; continue; end if;
     if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -435,7 +443,7 @@ begin
   return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, 0, n_c, n_l - n_c, n_e, 0, v_t0);
 end $f$;
 
-revoke all on function pessoas._carga_exigir(bigint, text),
+revoke all on function pessoas._casar_email_seguro(text, text, text, text), pessoas._carga_exigir(bigint, text),
   pessoas._carga_lote_fim(bigint, text, text, int, int, int, int, int, int, timestamptz),
   pessoas.carga_fin_hotmart(bigint, text, integer, boolean), pessoas.carga_thb_alunos(bigint, integer, boolean),
   pessoas.carga_aluno_historico(bigint, integer, boolean), pessoas.carga_contatos_hm(bigint, integer, boolean),
@@ -456,7 +464,7 @@ $g$;
 -- ===== 20261014210300 =====
 -- 20261014210300: manter a pessoa única viva (rotina de hora em hora só no banco + agendamento do delta diário do AC)
 --
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150034 (ex-170000) e 170100.
+-- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150034 (ex-170000) e 20261014210100.
 --   Ensaio: 20261014210300_ensaio.sql. Detalhe: 20261014210300.explain.md.
 --
 -- POR QUE: "temos q configurar isso tbm pra ficar funcional" (Victor, 14/10/2026). Regras do Maestro/Victor: incremental,
@@ -474,6 +482,9 @@ $g$;
 --   3. Job pg_cron 'pessoas-ac-delta' às 05:40 UTC (02:40 em Brasília), CRIADO DESLIGADO, chamando a Edge Function
 --      pessoas-ac-delta (código no repo, a publicar). Chave 'activecampaign_delta' nasce desligada, com fim 31/12/2026.
 --      A Edge usa a chave do AC do Vault (activecampaign_api_key) e o segredo do cron já existente (cron_webhook_secret).
+-- PENDÊNCIA (achado 7 do pentester, 14/10/2026): se uma rodada passar dos 120 s do statement_timeout, a hora inteira é
+--   desfeita sem registro em pessoas.carga_execucao. Mitigação hoje: limite de 200 por fonte. Corrigir depois (uma chamada
+--   por fonte, ou registro fora da transação).
 -- AS 5 PERGUNTAS: escala = dezenas de linhas novas por hora (contra ~58 mil transações e ~40 mil leads de base: o anti-join
 --   pelo índice único custa ~1 ms por mil linhas lidas); índice = eventos_fonte_unico; frequência = 24×/dia (só banco) e
 --   1×/dia (AC); repetição = idempotente; reversão = 20261014210300_reversao.sql (desagenda os 2 jobs e tira a função).
@@ -597,6 +608,7 @@ drop function if exists pessoas.carga_thb_alunos(bigint, integer, boolean);
 drop function if exists pessoas.carga_fin_hotmart(bigint, text, integer, boolean);
 drop function if exists pessoas._carga_lote_fim(bigint, text, text, int, int, int, int, int, int, timestamptz);
 drop function if exists pessoas._carga_exigir(bigint, text);
+drop function if exists pessoas._casar_email_seguro(text, text, text, text);
 delete from pessoas.carga_chave where fonte in ('hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios', 'respondi',
   'leads_cnhf', 'leads_workbook', 'leads_black', 'crm_negocio') and por = 'migration 20261014210100';
 

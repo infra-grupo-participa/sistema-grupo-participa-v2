@@ -180,10 +180,15 @@ revoke all on function pessoas.carga_planilha_estagio(bigint, text, jsonb), pess
 
 do $g$
 begin
-  if has_function_privilege('anon', 'pessoas.carga_planilha_estagio(bigint,text,jsonb)', 'execute')
-     or has_function_privilege('authenticated', 'pessoas.carga_planilha_pessoas(bigint,integer)', 'execute')
-     or has_table_privilege('anon', 'pessoas.planilha_linha', 'select') or has_table_privilege('authenticated', 'pessoas.planilha_linha', 'select') then
-    raise exception '20261014210200: algo da carga da planilha ficou aberto para anon/authenticated.';
+  -- achado 6 do pentester: confere TODOS os objetos novos contra anon, authenticated e service_role
+  if exists (select 1 from unnest(array['anon', 'authenticated', 'service_role']) r(papel)
+              where has_function_privilege(r.papel, 'pessoas.carga_planilha_estagio(bigint,text,jsonb)', 'execute')
+                 or has_function_privilege(r.papel, 'pessoas.carga_planilha_pessoas(bigint,integer)', 'execute')
+                 or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'select')
+                 or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'insert')
+                 or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'update')
+                 or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'delete')) then
+    raise exception '20261014210200: algo da carga da planilha ficou aberto para anon/authenticated/service_role.';
   end if;
 end
 $g$;

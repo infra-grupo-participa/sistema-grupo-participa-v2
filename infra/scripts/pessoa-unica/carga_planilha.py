@@ -58,7 +58,7 @@ def papel_da_aba(aba):
     return None
 
 
-PROIBIDA = re.compile(r'documento|cpf|rg\b|endere|cep|bairro|n[úu]mero$|complemento', re.I)
+PROIBIDA = re.compile(r'documento|cpf|cnpj|rg\b|identidade|passaporte|nascimento|endere|cep|bairro|n[úu]mero$|complemento', re.I)
 
 
 def colunas(v, papel):
@@ -131,8 +131,10 @@ def linhas(titulos, dados):
                           'nome': cel(r, 'nome') or None, 'titular_email': tit if E.match(tit) else None,
                           'titular_nome': cel(r, 'titular_nome') or None, 'data': data_iso(cel(r, 'data'))})
             n += 1
-        cab = v[ini - 1] if ini > 0 and col.get('nome') is not None or True else []
-        resumo.append((aba, papel, turma_da_aba(aba), {k: (('col ' + str(i)) if i is not None else None) for k, i in col.items()}, n))
+        titulos_cab = [(c or '').strip() for c in v[ini - 1]] if ini > 0 else []
+        resumo.append((aba, papel, turma_da_aba(aba),
+                       {k: (repr(titulos_cab[i]) if i is not None and i < len(titulos_cab) else (('coluna ' + str(i) + ' (sem cabeçalho)') if i is not None else None))
+                        for k, i in col.items()}, n))
     return resumo, todas
 
 

@@ -12,5 +12,6 @@ drop function if exists pessoas.carga_thb_alunos(bigint, integer, boolean);
 drop function if exists pessoas.carga_fin_hotmart(bigint, text, integer, boolean);
 drop function if exists pessoas._carga_lote_fim(bigint, text, text, int, int, int, int, int, int, timestamptz);
 drop function if exists pessoas._carga_exigir(bigint, text);
+drop function if exists pessoas._casar_email_seguro(text, text, text, text);
 delete from pessoas.carga_chave where fonte in ('hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios', 'respondi',
   'leads_cnhf', 'leads_workbook', 'leads_black', 'crm_negocio') and por = 'migration 20261014210100';

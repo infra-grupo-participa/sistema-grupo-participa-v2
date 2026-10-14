@@ -84,3 +84,8 @@ verify_jwt = false
 # Authorization; autentica pelo header x-crm-chave (Vault crm_whatsapp_envio_chave), fail-closed.
 [functions.crm-evolution-enviar]
 verify_jwt = false
+
+# pessoas-ac-delta: chamada 1×/dia pelo cron pessoas-ac-delta via ops.cron_post, sem Authorization; autentica pelo header
+# x-webhook-secret (Vault cron_webhook_secret), fail-closed. Só POST. NÃO publicada (pentester, 14/10/2026).
+[functions.pessoas-ac-delta]
+verify_jwt = false

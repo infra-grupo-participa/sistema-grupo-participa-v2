@@ -1,7 +1,7 @@
 -- 20261014210100: cargas das fontes que já moram no banco (Hotmart, Central, T1-T40, HM, Respondi, leads, CRM)
 --
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014160200, 160300 e 170000 (controle de
---   carga, pessoas.casar_email, pessoas.relacoes, índice eventos_fonte_unico). Não depende do schema fin (só lê).
+-- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150003 (ex-160200), dos índices da 160300 e
+--   de 20261014150034 (ex-170000: controle de carga, pessoas.casar_email, pessoas.relacoes, índice eventos_fonte_unico). Não depende do schema fin (só lê).
 --   Ensaio: 20261014210100_ensaio.sql. Script: infra/scripts/pessoa-unica/carga_fontes.py. Detalhe: 20261014210100.explain.md.
 --
 -- POR QUE: PLANO da pessoa única, passo 4 (carga por fonte, em lotes) e o modelo da história da pessoa do Victor
@@ -43,7 +43,7 @@ set local statement_timeout = '30s';
 do $g$
 begin
   if to_regprocedure('pessoas.casar_email(text,text,text,text)') is null or to_regclass('pessoas.eventos_fonte_unico') is null then
-    raise exception '20261014210100: falta 20261014170000/160300.';
+    raise exception '20261014210100: falta 20261014150034 (ex-170000) ou os índices da 160300.';
   end if;
   if to_regprocedure('pessoas.carga_fin_hotmart(bigint,text,integer,boolean)') is not null then
     raise exception '20261014210100: já aplicada.';
@@ -56,6 +56,15 @@ select f, true, 'migration 20261014210100'
   from unnest(array['hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios', 'respondi', 'leads_cnhf',
                     'leads_workbook', 'leads_black', 'crm_negocio']) f
 on conflict (fonte) do nothing;
+
+-- achado 4 do pentester (14/10/2026): e-mail que, normalizado, passa de 320 caracteres estouraria o CHECK de
+-- pessoas.identificadores e o DETAIL com o valor iria ao log. Aqui ele vira "sem e-mail" e a linha é pulada (contada).
+create function pessoas._casar_email_seguro(p_nome text, p_email text, p_telefone text, p_origem text) returns jsonb
+language sql set search_path to '' as $f$
+  select pessoas.casar_email(p_nome,
+                             case when length(pessoas.norm_email(left(p_email, 1000))) <= 320 then left(p_email, 1000) end,
+                             left(p_telefone, 40), p_origem);
+$f$;
 
 -- execução aberta da fonte (e chave ligada); devolve o cursor
 create function pessoas._carga_exigir(p_execucao bigint, p_fonte text) returns text
@@ -125,7 +134,7 @@ begin
   for r in select t.* from (select * from fin.hotmart_transacoes where conta = p_conta) t
              join pg_temp._carga_hm_lote l using (transacao) order by t.transacao loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.transacao); v_ate := r.transacao;
-    v := pessoas.casar_email(r.comprador_nome, r.comprador_email, r.comprador_telefone, 'hotmart');
+    v := pessoas._casar_email_seguro(r.comprador_nome, r.comprador_email, r.comprador_telefone, 'hotmart');
     v_p := (v->>'pessoa_id')::uuid;
     if v_p is null then n_s := n_s + 1; continue; end if;
     if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -212,7 +221,7 @@ begin
                                                  and e.fonte_id = md5(h.email_norm) || ':' || coalesce(h.turma, '') and e.tipo = 'ativacao')))
             order by 1 limit p_limite loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.k); v_ate := r.k;
-    v := pessoas.casar_email(r.nome, r.email_norm, null, 'importacao');
+    v := pessoas._casar_email_seguro(r.nome, r.email_norm, null, 'importacao');
     v_p := (v->>'pessoa_id')::uuid;
     if v_p is null then n_s := n_s + 1; continue; end if;
     if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -285,7 +294,7 @@ begin
     if r.aluno_id is not null then
       v_p := pessoas.pessoa_do_aluno(r.aluno_id); n_c := n_c + 1;
     else
-      v := pessoas.casar_email(r.nome, r.email, r.telefone, 'importacao');
+      v := pessoas._casar_email_seguro(r.nome, r.email, r.telefone, 'importacao');
       v_p := (v->>'pessoa_id')::uuid;
       if v_p is null then n_s := n_s + 1; continue; end if;
       if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -320,7 +329,7 @@ begin
                or (p_novos and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'respondi.respostas' and e.fonte_id = x.uuid::text and e.tipo = 'resposta'))
             order by x.uuid::text limit p_limite loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.uuid::text); v_ate := r.uuid::text;
-    v := pessoas.casar_email(r.dados->>'nome', coalesce(r.email, r.dados->>'email'), coalesce(r.telefone, r.dados->>'telefone'), 'respondi');
+    v := pessoas._casar_email_seguro(r.dados->>'nome', coalesce(r.email, r.dados->>'email'), coalesce(r.telefone, r.dados->>'telefone'), 'respondi');
     v_p := (v->>'pessoa_id')::uuid;
     if v_p is null then n_s := n_s + 1; continue; end if;
     if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -333,7 +342,7 @@ begin
     get diagnostics n_x = row_count; n_e := n_e + n_x;
     -- formulário de sócio: o sócio vira pessoa (por e-mail) e "sócio de" quem respondeu (o titular)
     if pessoas.norm_email(r.dados->>'socio_email') is not null then
-      v := pessoas.casar_email(r.dados->>'socio_nome', r.dados->>'socio_email', r.dados->>'socio_telefone', 'respondi');
+      v := pessoas._casar_email_seguro(r.dados->>'socio_nome', r.dados->>'socio_email', r.dados->>'socio_telefone', 'respondi');
       v_s := (v->>'pessoa_id')::uuid;
       if v_s is not null and v_s <> v_p then
         if (v->>'nova')::boolean then n_n := n_n + 1; end if;
@@ -382,7 +391,7 @@ begin
     order by 1 limit p_limite
   loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.k); v_ate := r.k;
-    v := pessoas.casar_email(r.nome, r.email, r.tel, 'formulario');
+    v := pessoas._casar_email_seguro(r.nome, r.email, r.tel, 'formulario');
     v_p := (v->>'pessoa_id')::uuid;
     if v_p is null then n_s := n_s + 1; continue; end if;
     if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -426,7 +435,7 @@ begin
   return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, 0, n_c, n_l - n_c, n_e, 0, v_t0);
 end $f$;
 
-revoke all on function pessoas._carga_exigir(bigint, text),
+revoke all on function pessoas._casar_email_seguro(text, text, text, text), pessoas._carga_exigir(bigint, text),
   pessoas._carga_lote_fim(bigint, text, text, int, int, int, int, int, int, timestamptz),
   pessoas.carga_fin_hotmart(bigint, text, integer, boolean), pessoas.carga_thb_alunos(bigint, integer, boolean),
   pessoas.carga_aluno_historico(bigint, integer, boolean), pessoas.carga_contatos_hm(bigint, integer, boolean),

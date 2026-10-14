@@ -3,8 +3,9 @@
 -- Rodar com: python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio <este arquivo>
 begin;
 set local lock_timeout = '5s';
-set local statement_timeout = '60s';
+set local statement_timeout = '150s';
 create temp table _z_out (em serial, passo text, linha text);
+insert into pg_temp._z_out(passo, linha) select '00 antes', (select jsonb_build_object('pessoas', (select count(*) from pessoas.pessoas), 'eventos', (select count(*) from pessoas.eventos), 'revisao', (select count(*) from pessoas.revisao))::text);
 -- ===== 20261014210200 =====
 -- 20261014210200: carga da planilha "Alunos T1-T42 Ativação" (alunos e sócios por turma) para a pessoa única
 --
@@ -187,10 +188,15 @@ revoke all on function pessoas.carga_planilha_estagio(bigint, text, jsonb), pess
 
 do $g$
 begin
-  if has_function_privilege('anon', 'pessoas.carga_planilha_estagio(bigint,text,jsonb)', 'execute')
-     or has_function_privilege('authenticated', 'pessoas.carga_planilha_pessoas(bigint,integer)', 'execute')
-     or has_table_privilege('anon', 'pessoas.planilha_linha', 'select') or has_table_privilege('authenticated', 'pessoas.planilha_linha', 'select') then
-    raise exception '20261014210200: algo da carga da planilha ficou aberto para anon/authenticated.';
+  -- achado 6 do pentester: confere TODOS os objetos novos contra anon, authenticated e service_role
+  if exists (select 1 from unnest(array['anon', 'authenticated', 'service_role']) r(papel)
+              where has_function_privilege(r.papel, 'pessoas.carga_planilha_estagio(bigint,text,jsonb)', 'execute')
+                 or has_function_privilege(r.papel, 'pessoas.carga_planilha_pessoas(bigint,integer)', 'execute')
+                 or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'select')
+                 or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'insert')
+                 or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'update')
+                 or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'delete')) then
+    raise exception '20261014210200: algo da carga da planilha ficou aberto para anon/authenticated/service_role.';
   end if;
 end
 $g$;

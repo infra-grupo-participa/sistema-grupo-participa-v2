@@ -1,6 +1,6 @@
--- Ensaio de 20261014210100 (cargas das fontes do banco) sobre o banco com os grupos A e B APLICADOS (14/10/2026), numa
--- transação DESFEITA. Lê as tabelas reais DENTRO do banco: o texto deste ensaio não tem dado pessoal e a saída é só contagem;
--- erro numa fonte é capturado aqui dentro e só o SQLSTATE sai.
+-- Ensaio de 20261014210100 (cargas das fontes do banco) sobre o banco com os grupos A e B APLICADOS, numa transação DESFEITA.
+-- Lê as tabelas reais DENTRO do banco: o texto deste ensaio não tem dado pessoal e a saída é só contagem; erro numa fonte é
+-- capturado aqui dentro e só o SQLSTATE sai.
 -- Rodar com: python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio <este arquivo>
 begin;
 set local lock_timeout = '5s';
@@ -10,8 +10,8 @@ insert into pg_temp._z_out(passo, linha) select '00 antes', (select jsonb_build_
 -- ===== 20261014210100 =====
 -- 20261014210100: cargas das fontes que já moram no banco (Hotmart, Central, T1-T40, HM, Respondi, leads, CRM)
 --
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014160200, 160300 e 170000 (controle de
---   carga, pessoas.casar_email, pessoas.relacoes, índice eventos_fonte_unico). Não depende do schema fin (só lê).
+-- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150003 (ex-160200), dos índices da 160300 e
+--   de 20261014150034 (ex-170000: controle de carga, pessoas.casar_email, pessoas.relacoes, índice eventos_fonte_unico). Não depende do schema fin (só lê).
 --   Ensaio: 20261014210100_ensaio.sql. Script: infra/scripts/pessoa-unica/carga_fontes.py. Detalhe: 20261014210100.explain.md.
 --
 -- POR QUE: PLANO da pessoa única, passo 4 (carga por fonte, em lotes) e o modelo da história da pessoa do Victor
@@ -52,7 +52,7 @@ set local lock_timeout = '5s';
 do $g$
 begin
   if to_regprocedure('pessoas.casar_email(text,text,text,text)') is null or to_regclass('pessoas.eventos_fonte_unico') is null then
-    raise exception '20261014210100: falta 20261014170000/160300.';
+    raise exception '20261014210100: falta 20261014150034 (ex-170000) ou os índices da 160300.';
   end if;
   if to_regprocedure('pessoas.carga_fin_hotmart(bigint,text,integer,boolean)') is not null then
     raise exception '20261014210100: já aplicada.';
@@ -65,6 +65,15 @@ select f, true, 'migration 20261014210100'
   from unnest(array['hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios', 'respondi', 'leads_cnhf',
                     'leads_workbook', 'leads_black', 'crm_negocio']) f
 on conflict (fonte) do nothing;
+
+-- achado 4 do pentester (14/10/2026): e-mail que, normalizado, passa de 320 caracteres estouraria o CHECK de
+-- pessoas.identificadores e o DETAIL com o valor iria ao log. Aqui ele vira "sem e-mail" e a linha é pulada (contada).
+create function pessoas._casar_email_seguro(p_nome text, p_email text, p_telefone text, p_origem text) returns jsonb
+language sql set search_path to '' as $f$
+  select pessoas.casar_email(p_nome,
+                             case when length(pessoas.norm_email(left(p_email, 1000))) <= 320 then left(p_email, 1000) end,
+                             left(p_telefone, 40), p_origem);
+$f$;
 
 -- execução aberta da fonte (e chave ligada); devolve o cursor
 create function pessoas._carga_exigir(p_execucao bigint, p_fonte text) returns text
@@ -134,7 +143,7 @@ begin
   for r in select t.* from (select * from fin.hotmart_transacoes where conta = p_conta) t
              join pg_temp._carga_hm_lote l using (transacao) order by t.transacao loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.transacao); v_ate := r.transacao;
-    v := pessoas.casar_email(r.comprador_nome, r.comprador_email, r.comprador_telefone, 'hotmart');
+    v := pessoas._casar_email_seguro(r.comprador_nome, r.comprador_email, r.comprador_telefone, 'hotmart');
     v_p := (v->>'pessoa_id')::uuid;
     if v_p is null then n_s := n_s + 1; continue; end if;
     if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -221,7 +230,7 @@ begin
                                                  and e.fonte_id = md5(h.email_norm) || ':' || coalesce(h.turma, '') and e.tipo = 'ativacao')))
             order by 1 limit p_limite loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.k); v_ate := r.k;
-    v := pessoas.casar_email(r.nome, r.email_norm, null, 'importacao');
+    v := pessoas._casar_email_seguro(r.nome, r.email_norm, null, 'importacao');
     v_p := (v->>'pessoa_id')::uuid;
     if v_p is null then n_s := n_s + 1; continue; end if;
     if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -294,7 +303,7 @@ begin
     if r.aluno_id is not null then
       v_p := pessoas.pessoa_do_aluno(r.aluno_id); n_c := n_c + 1;
     else
-      v := pessoas.casar_email(r.nome, r.email, r.telefone, 'importacao');
+      v := pessoas._casar_email_seguro(r.nome, r.email, r.telefone, 'importacao');
       v_p := (v->>'pessoa_id')::uuid;
       if v_p is null then n_s := n_s + 1; continue; end if;
       if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -329,7 +338,7 @@ begin
                or (p_novos and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'respondi.respostas' and e.fonte_id = x.uuid::text and e.tipo = 'resposta'))
             order by x.uuid::text limit p_limite loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.uuid::text); v_ate := r.uuid::text;
-    v := pessoas.casar_email(r.dados->>'nome', coalesce(r.email, r.dados->>'email'), coalesce(r.telefone, r.dados->>'telefone'), 'respondi');
+    v := pessoas._casar_email_seguro(r.dados->>'nome', coalesce(r.email, r.dados->>'email'), coalesce(r.telefone, r.dados->>'telefone'), 'respondi');
     v_p := (v->>'pessoa_id')::uuid;
     if v_p is null then n_s := n_s + 1; continue; end if;
     if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -342,7 +351,7 @@ begin
     get diagnostics n_x = row_count; n_e := n_e + n_x;
     -- formulário de sócio: o sócio vira pessoa (por e-mail) e "sócio de" quem respondeu (o titular)
     if pessoas.norm_email(r.dados->>'socio_email') is not null then
-      v := pessoas.casar_email(r.dados->>'socio_nome', r.dados->>'socio_email', r.dados->>'socio_telefone', 'respondi');
+      v := pessoas._casar_email_seguro(r.dados->>'socio_nome', r.dados->>'socio_email', r.dados->>'socio_telefone', 'respondi');
       v_s := (v->>'pessoa_id')::uuid;
       if v_s is not null and v_s <> v_p then
         if (v->>'nova')::boolean then n_n := n_n + 1; end if;
@@ -391,7 +400,7 @@ begin
     order by 1 limit p_limite
   loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.k); v_ate := r.k;
-    v := pessoas.casar_email(r.nome, r.email, r.tel, 'formulario');
+    v := pessoas._casar_email_seguro(r.nome, r.email, r.tel, 'formulario');
     v_p := (v->>'pessoa_id')::uuid;
     if v_p is null then n_s := n_s + 1; continue; end if;
     if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
@@ -435,7 +444,7 @@ begin
   return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, 0, n_c, n_l - n_c, n_e, 0, v_t0);
 end $f$;
 
-revoke all on function pessoas._carga_exigir(bigint, text),
+revoke all on function pessoas._casar_email_seguro(text, text, text, text), pessoas._carga_exigir(bigint, text),
   pessoas._carga_lote_fim(bigint, text, text, int, int, int, int, int, int, timestamptz),
   pessoas.carga_fin_hotmart(bigint, text, integer, boolean), pessoas.carga_thb_alunos(bigint, integer, boolean),
   pessoas.carga_aluno_historico(bigint, integer, boolean), pessoas.carga_contatos_hm(bigint, integer, boolean),
@@ -477,12 +486,13 @@ begin
     end;
   end loop;
 end $t$;
+insert into pg_temp._z_out(passo, linha) select '19 e-mail de 400 caracteres no casar seguro (esperado: sem_email, sem erro)', pessoas._casar_email_seguro('X', repeat('a', 400) || '@exemplo.invalid', null, 'importacao')::text;
 insert into pg_temp._z_out(passo, linha) select '20 eventos por fonte e tipo', string_agg(fonte_tabela || '/' || tipo || ' ' || n, ', ' order by fonte_tabela, tipo) from (select fonte_tabela, tipo, count(*) n from pessoas.eventos where fonte_tabela is not null group by 1, 2) x;
 insert into pg_temp._z_out(passo, linha) select '21 hotmart: com evento do catálogo / linhas do webhook que ganharam fonte (sem duplicar)', (select count(*) from pessoas.eventos where fonte_tabela = 'fin.hotmart_transacoes' and evento_id is not null) || ' / ' || (select count(*) from pessoas.eventos where fonte_tabela = 'fin.hotmart_transacoes' and fonte = 'hotmart' and detalhe ? 'classe');
 insert into pg_temp._z_out(passo, linha) select '22 relações sócio de', count(*)::text from pessoas.relacoes;
 insert into pg_temp._z_out(passo, linha) select '23 revisões novas', (select count(*) from pessoas.revisao)::text;
 insert into pg_temp._z_out(passo, linha) select '24 funções executáveis por anon/authenticated', count(*)::text from pg_proc p where p.pronamespace = 'pessoas'::regnamespace and (p.proname like 'carga%' or p.proname like '\_carga%' or p.proname = 'casar_email') and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'));
--- ===== reversão da 170100 =====
+-- ===== reversão da 20261014210100 =====
 -- Reversão de 20261014210100 (cargas das fontes). NÃO apaga pessoa nem evento já carregado (regra I-03): os eventos das
 -- cargas ficam identificados por fonte_tabela; medir antes com
 --   select fonte_tabela, count(*) from pessoas.eventos where fonte_tabela is not null group by 1;
@@ -497,9 +507,10 @@ drop function if exists pessoas.carga_thb_alunos(bigint, integer, boolean);
 drop function if exists pessoas.carga_fin_hotmart(bigint, text, integer, boolean);
 drop function if exists pessoas._carga_lote_fim(bigint, text, text, int, int, int, int, int, int, timestamptz);
 drop function if exists pessoas._carga_exigir(bigint, text);
+drop function if exists pessoas._casar_email_seguro(text, text, text, text);
 delete from pessoas.carga_chave where fonte in ('hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios', 'respondi',
   'leads_cnhf', 'leads_workbook', 'leads_black', 'crm_negocio') and por = 'migration 20261014210100';
 
-insert into pg_temp._z_out(passo, linha) select '90 depois da reversão: funções da 170100 que sobram', count(*)::text from pg_proc where pronamespace = 'pessoas'::regnamespace and proname in ('carga_fin_hotmart','carga_thb_alunos','carga_aluno_historico','carga_contatos_hm','carga_hm_socios','carga_respondi','carga_leads','carga_crm_negocio','_carga_exigir','_carga_lote_fim');
+insert into pg_temp._z_out(passo, linha) select '90 depois da reversão: funções da 210100 que sobram', count(*)::text from pg_proc where pronamespace = 'pessoas'::regnamespace and proname in ('carga_fin_hotmart','carga_thb_alunos','carga_aluno_historico','carga_contatos_hm','carga_hm_socios','carga_respondi','carga_leads','carga_crm_negocio','_carga_exigir','_carga_lote_fim','_casar_email_seguro');
 select passo, linha from pg_temp._z_out order by em, passo;
 rollback;

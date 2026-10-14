@@ -10,12 +10,13 @@
 //   3. lê os contatos atualizados desde o último delta (filters[updated_after], paginado por id), até TETO_PAGINAS páginas
 //      de 100, e grava no estágio por pessoas.carga_ac_estagio (lote como parâmetro ligado, nunca no texto do SQL);
 //   4. passa o estágio pendente para pessoas por pessoas.carga_ac_pessoas, até o orçamento de tempo.
-// Teto: 2 + TETO_PAGINAS = 42 chamadas ao AC por dia, no máximo. Dia comum (medido em 14/10/2026): 2,4 a 3,8 mil contatos
+// Teto: TETO_CHAMADAS = 42 requisições ao AC por execução, contando listas, páginas e tentativas (contador em ac()). Dia comum (medido em 14/10/2026): 2,4 a 3,8 mil contatos
 // atualizados = 25 a 38 páginas. Se o teto bater, a execução fica 'parada' e o dia seguinte continua do cursor.
 // Chave do AC: Vault activecampaign_api_key (nunca impressa). Erro sai só com o código.
 import postgres from "npm:postgres@3.4.4";
 
-const TETO_PAGINAS = 40;          // teto de chamadas de contatos por execução (regra do Victor: teto no código)
+const TETO_PAGINAS = 40;          // teto de páginas de contatos por execução
+const TETO_CHAMADAS = 42;         // teto de REQUISIÇÕES ao AC por execução, contando tentativas (regra do Victor; achado 1 do pentester)
 const ORCAMENTO_MS = 110_000;     // a Edge tem 150 s; não começa trabalho novo depois disto
 const PAUSA_AC_MS = 500;          // entre páginas do AC (< 2 req/s)
 const LOTE_ESTAGIO = 500;         // contatos por chamada a carga_ac_estagio
@@ -24,6 +25,7 @@ const espera = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 const json = (corpo: unknown, status = 200) =>
   new Response(JSON.stringify(corpo), { status, headers: { "Content-Type": "application/json" } });
 type Obj = Record<string, any>;
+class TetoAtingido extends Error {}
 
 function igual(a: string, b: string) {
   if (a.length !== b.length) return false;
@@ -63,6 +65,7 @@ function montarLote(p: Obj, campos: Map<string, string>) {
 }
 
 Deno.serve(async (req) => {
+  if (req.method !== "POST") return json({ erro: "método não permitido" }, 405);   // achado 3 do pentester
   const t0 = Date.now();
   let eid: number | null = null;
   try {
@@ -85,6 +88,7 @@ Deno.serve(async (req) => {
     let chamadas = 0;
     const ac = async (caminho: string) => {
       for (let t = 0; t < 3; t++) {
+        if (chamadas >= TETO_CHAMADAS) throw new TetoAtingido();
         const r = await fetch(`${base}/api/3/${caminho}`, { headers: { "Api-Token": k.k, Accept: "application/json" },
                                                            signal: AbortSignal.timeout(30_000) });
         chamadas++;
@@ -118,9 +122,15 @@ Deno.serve(async (req) => {
     let [desde, ultimo] = cursor.split("|");
     const hoje = new Date().toISOString().slice(0, 10);
     let lote: Obj[] = [], paginas = 0, fim = false;
-    while (paginas < TETO_PAGINAS && Date.now() - t0 < ORCAMENTO_MS * 0.7) {
-      const pg = await ac(`contacts?limit=100&orders[id]=ASC&id_greater=${ultimo}&filters[updated_after]=${desde}` +
+    while (paginas < TETO_PAGINAS && chamadas < TETO_CHAMADAS && Date.now() - t0 < ORCAMENTO_MS * 0.7) {
+      let pg: Obj;
+      try {
+        pg = await ac(`contacts?limit=100&orders[id]=ASC&id_greater=${ultimo}&filters[updated_after]=${desde}` +
                           `&include=contactLists,contactTags,fieldValues`);
+      } catch (e) {
+        if (e instanceof TetoAtingido) break;
+        throw e;
+      }
       paginas++;
       const novos = montarLote(pg, campos);
       if (novos.length === 0) { fim = true; break; }
