@@ -1,0 +1,45 @@
+# Ações da Black Friday
+
+## Implementação inicial · 14/10/2026
+
+Foi criado o card `Ações da Black Friday` em Infra > Dashboards > CSM e uma tela dirigida pelo registro de ações em `web/modules/infra/acoes/domain/registro.ts`.
+
+O registro ativo é `THB vencidos`, com etiqueta `black-thb-2026-10` e origem `renovacao-thb-vencidos`. `THB a vencer` e `Aurum` aparecem como “em breve”; nenhuma etiqueta ou oferta foi inventada para elas. A oferta Hotmart de Holding Masters segue nula no registro até o Victor fornecer o código.
+
+### Conteúdo e fontes
+
+- **Cards:** usam `public.dados_atm_resumo` pelo carregador do ATM, com a etiqueta do registro e período nulo (período do cadastro). Investimento usa `custo_disparo_centavos`, nunca `investimento_total_centavos`. Leads, grupo, CPL, pré-checkouts e taxas vêm dos campos mapeados pelo ATM: `disparos_qtd`, `leads`, `grupo_entradas`, `grupo_pct`, `evasao_pct`, `cpl_centavos`, `pre_checkout_pessoas` e `conversao_pre_checkout_pct`. `custo_completo = false` indica custo de disparo pago faltando; nessa condição o CPL permanece sem dado. O contrato informa `grupo_tem_fonte = true`.
+- **Venda e receita:** `vendas`, `cac_centavos`, `receita_bruta`, `receita_liquida` e `roas_liquido` vêm do resumo. Enquanto `ofertaHotmart` no registro for nula, a tela mostra “Aguardando oferta”; nenhum zero é apresentado nesses cards.
+- **Evolução diária:** `public.dados_atm_serie_diaria`, campos `dia`, `custo_disparo_centavos`, `grupo_entradas`, `pre_checkout` e `vendas`.
+- **Canais e detalhe dos disparos:** `public.dados_atm_disparos_canais` e `public.dados_atm_disparos_lista`. Os nomes das abas e o componente de detalhe são compartilhados com o ATM. O detalhe só carrega os campos retornados pelo banco.
+- **Comparecimento:** `public.dados_atm_comparecimento`, com uma sessão para o evento.
+- **Grupo:** a fonte de negócio indicada no pedido é a campanha SendFlow `R89eeAMF6pccfKbE9RYR`. A tela só a lê pelos dados publicados nas RPCs; não chama o SendFlow.
+- **Pré-checkout e vendas:** a oferta Holding Masters ainda não existe, portanto o código da oferta permanece nulo. Não se presume uma oferta.
+
+As RPCs e os formatos são os mesmos do “Esta edição” do ATM; o front reutiliza os carregadores, tipos, rótulos de canal, cartões e `DisparosDetalhe`. Não há RPC nova para Ações da Black.
+
+O botão “Atualizar” e o polling de 60 segundos (apenas com a aba visível) releem cada bloco em paralelo. Respostas incompletas mantêm o último dado válido daquele bloco. Uma nova atualização não começa enquanto outra está ativa.
+
+### Estado do cadastro
+
+Na primeira versão do front, a etiqueta ainda não estava cadastrada no banco. O retorno `P0002` aparece como “Dashboard em preparação”, sem erro de tela ou zeros. Ao cadastrar a etiqueta, o mesmo fluxo carregará os dados. Falhas de leitura mantêm o último resultado bom por bloco. As abas THB a vencer e Aurum não têm etiqueta e não fazem chamadas RPC.
+
+### Replicar para a próxima ação
+
+1. Acrescente uma linha a `registroAcoesBlack` com nome e estado.
+2. Preencha `etiqueta`, `origem` e `ofertaHotmart` somente com identificadores fornecidos para aquela ação. Para “em breve”, mantenha esses campos nulos.
+3. Quando a oferta estiver definida, registre o código em `ofertaHotmart`; vendas, CAC, receitas e ROAS deixam de ficar “Aguardando oferta”.
+4. O mesmo front usa as RPCs ATM via `infrastructure/dados.ts`. Se uma futura ação exigir contrato diferente, documente-o antes de criar um adaptador.
+
+### Como testar
+
+- `npx vitest run modules/infra/acoes` verifica o mapeamento de custo, a espera por oferta, a chamada com etiqueta e a ausência de chamadas para abas sem etiqueta.
+- `npx tsc --noEmit`, `npm run lint:tokens` e `npm run build` verificam tipos, tokens e compilação.
+- Abra Infra > Dashboards > CSM > Ações da Black Friday. Confira THB vencidos, os cartões e o detalhe de disparos; selecione THB a vencer e Aurum e confirme o aviso “Ação em breve”.
+- Com a etiqueta cadastrada, THB vencidos deve carregar os dados publicados nas RPCs. Se a chave não existir, a tela mostra “Dashboard em preparação”.
+
+## Validação com a etiqueta cadastrada · 14/10/2026
+
+A etiqueta `black-thb-2026-10` foi cadastrada no projeto 87. Na conferência em localhost, o resumo retornou 3 leads e 1 ingresso no grupo; pré-checkout ficou em 0. Vendas e métricas financeiras dependentes da oferta aparecem como “Aguardando oferta”. Investimento e CPL aparecem como “Sem dado” enquanto o custo de disparo não está sincronizado. A série do dia mostrou uma entrada no grupo e nenhum pré-checkout. Comparecimento carregou, preservando “Sem dado” para medidas ainda ausentes.
+
+A leitura manual em 14/10 confirmou os mesmos dados após clicar em Atualizar. O custo de disparo permanece pendente de sincronização. A oferta ainda não foi configurada. Os dados acima são retrato da validação, não valores fixos na tela.
