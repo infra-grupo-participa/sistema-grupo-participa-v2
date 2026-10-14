@@ -58,6 +58,11 @@ const CONSULTORIA = {
 const TAG_CONSULTORIA = "";
 // 13/10/2026: /dp4 (Black THB Vencidos, Reunião Direto ao Ponto 14/10). Lista e tag próprias (Vulcano criou).
 const DP4 = { lista: "622", tag: "899" }; // [BLACK THB VENCIDOS] REUNIÃO 14/10 e [BF26] THB Vencidos Reunião 14/10
+// 14/10/2026: página que manda a ação "reuniao" -> origem em pesquisa_respostas. Sem entrada: "dp4-thb-vencidos".
+// A chave é a página sem protocolo, sem www, sem ?query/#âncora e sem barra final, em minúsculas.
+const ORIGEM_POR_PAGINA: Record<string, string> = { "timeholdingbrasil.com.br/renovacao": "renovacao-thb-vencidos" };
+const chavePagina = (v: string) =>
+  v.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/[?#].*$/, "").replace(/\/+$/, "");
 const AREA: Record<string, "advogados" | "contadores" | "outros"> = { "Advogado(a)": "advogados", "Contador(a)": "contadores", Outros: "outros" };
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { db: { schema: "metodo" } });
@@ -389,8 +394,11 @@ Deno.serve(async (req) => {
     const utm: Record<string, string | null> = {};
     for (const k of ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"]) utm[k] = txt(p[k]) || null;
     const pagina = txt(p.pagina, 200) || "timeholdingbrasil.com.br/dp4";
+    // 14/10/2026: a /renovacao (cópia da dp4 para a reunião de 16/10) grava com origem própria, separada da /dp4.
+    // A etiqueta do projeto vem do banco (metodo.origem_etiqueta, migration 20261014200000).
+    const origem = ORIGEM_POR_PAGINA[chavePagina(pagina)] ?? "dp4-thb-vencidos";
     const { data, error } = await db.from("pesquisa_respostas")
-      .insert({ nome, email, whatsapp: zap, origem: "dp4-thb-vencidos", token: crypto.randomUUID().replace(/-/g, ""), ...utm })
+      .insert({ nome, email, whatsapp: zap, origem, token: crypto.randomUUID().replace(/-/g, ""), ...utm })
       .select("id").single();
     if (error || !data) return resposta({ ok: false, erro: "banco" }, 500);
     await registraActive(data.id, () =>
