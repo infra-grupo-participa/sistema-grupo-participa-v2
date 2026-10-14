@@ -1,7 +1,7 @@
 -- 20261014170000: estrutura da carga do ActiveCampaign completo para a pessoa única (estágio, controle, funções)
 --
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014160000 a 160300 (fin.eventos.chave,
---   pessoas.eventos.fonte_tabela/fonte_id e o índice único eventos_fonte_unico da 160300, que o on conflict usa).
+-- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende SÓ de 20261014160200 e 160300 (pessoas.eventos.fonte_tabela/
+--   fonte_id e o índice único eventos_fonte_unico, que o on conflict usa). Não depende de nada no schema fin.
 --   Ensaio: 20261014170000_ensaio.sql (cadeia inteira + amostra real de 300 contatos, transação desfeita).
 --   Script da carga: infra/scripts/pessoa-unica/carga_ac.py. Detalhe: 20261014170000.explain.md.
 --
@@ -51,6 +51,13 @@ begin
   end if;
   if not exists (select 1 from information_schema.columns where table_schema = 'pessoas' and table_name = 'eventos' and column_name = 'fonte_id') then
     raise exception '20261014170000: falta 20261014160200 (pessoas.eventos.fonte_id).';
+  end if;
+  if to_regclass('pessoas.eventos_fonte_unico') is null then
+    raise exception '20261014170000: falta 20261014160300 (índice pessoas.eventos_fonte_unico).';
+  end if;
+  if (select nome from fin.eventos where id = 89) is distinct from 'Imersão Holding Total (HT32)'
+     or (select nome from fin.eventos where id = 101) is distinct from 'Clínica Internacional de Holding Familiar' then
+    raise exception '20261014170000: eventos 89/101 do catálogo mudaram. Reler as listas de pré-checkout.';
   end if;
 end
 $g$;
@@ -164,10 +171,10 @@ insert into pessoas.ac_lista_papel (lista_id, papel, evento_id, fonte) values
   (623, 'sv_pre_checkout', null, 'Victor 14/10/2026: todas as listas de Sessão de Viabilidade contam'),
   (582, 'pre_checkout', null, 'nome da lista diz pré-checkout'),
   (584, 'pre_checkout', null, 'nome da lista diz pré-checkout'),
-  (590, 'pre_checkout', (select id from fin.eventos where chave = 'ht32-2026-09'), 'nome da lista diz pré-checkout e HT/SET26'),
-  (593, 'pre_checkout', (select id from fin.eventos where chave = 'ht32-2026-09'), 'nome da lista diz pré-checkout e HT 32'),
+  (590, 'pre_checkout', 89, 'nome da lista diz pré-checkout e HT/SET26; fin.eventos 89 = Imersão Holding Total (HT32)'),
+  (593, 'pre_checkout', 89, 'nome da lista diz pré-checkout e HT 32; fin.eventos 89 = Imersão Holding Total (HT32)'),
   (608, 'pre_checkout', null, 'nome da lista diz pré-checkout'),
-  (614, 'pre_checkout', (select id from fin.eventos where chave = 'clinica-miami-2026-12'), 'nome da lista diz pré-checkout e Clínica Dez/26; migration 20261007152751');
+  (614, 'pre_checkout', 101, 'nome da lista diz pré-checkout e Clínica Dez/26; fin.eventos 101 = Clínica Internacional de Holding Familiar; migration 20261007152751');
 
 create table pessoas.ac_contato (
   contact_id         integer primary key,

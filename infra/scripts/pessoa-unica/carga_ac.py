@@ -16,9 +16,11 @@ Uso:
 Segurança e regras (Manual de banco; censo-capacidade-ac.md):
   - Uma conexão por vez (Management API do Supabase, uma chamada SQL por lote). Nunca em paralelo.
   - Pausa entre páginas do AC (0,5 s) e entre lotes no banco (2 s).
-  - Antes de cada lote: chave pessoas.carga_chave ligada? conexões abertas <= 50? alerta do vigia (ops.banco_alerta) nos
-    últimos 10 min? Último lote demorou mais que --lento s? Se algo falhar: espera 60 s e tenta de novo (3 vezes); depois
-    fecha a execução como 'parada' e sai. Rodar de novo retoma do cursor.
+  - Antes de cada lote: chave pessoas.carga_chave ligada? disco usado <= 6 GB (Management API; passou = para na hora)?
+    RAM livre na máquina do banco >= --ram-min MB (métrica node_memory_MemAvailable_bytes, com a service role)? conexões
+    abertas <= 50? alerta do vigia (ops.banco_alerta) nos últimos 10 min? último lote abaixo de --lento s? Sem leitura de
+    disco/RAM conta como falha. Se algo falhar: espera 60 s e tenta de novo (3 vezes); depois fecha a execução como
+    'parada' e sai. Rodar de novo retoma do cursor.
   - Chave do AC: lida do Vault (activecampaign_api_key) a cada execução; nunca impressa nem gravada.
   - Saída e log só com contagens. Nenhum e-mail, nome ou telefone é impresso nem gravado em arquivo.
 Credencial do Supabase (Management API): variável SUPABASE_ACCESS_TOKEN, ou --env-file com SUPABASE_ACESS_TOKEN=... (padrão
@@ -49,9 +51,37 @@ def token(env_file):
     sys.exit('sem credencial do Supabase: defina SUPABASE_ACCESS_TOKEN ou --env-file')
 
 
+def chave_metricas(env_file):
+    k = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+    if not k and env_file and Path(env_file).exists():
+        m = re.search(r'^SUPABASE_SERVICE_ROLE_KEY=(.*)$', Path(env_file).read_text(encoding='utf-8'), re.M)
+        k = m.group(1).strip().strip('"') if m else None
+    if not k:
+        sys.exit('sem SUPABASE_SERVICE_ROLE_KEY: sem ela não dá para medir a RAM entre lotes (regra da carga)')
+    return k
+
+
 class Banco:
-    def __init__(self, tok):
+    def __init__(self, tok, chave_met=None):
         self.tok = tok
+        self.chave_met = chave_met
+
+    def disco_usado_gb(self):
+        r = urllib.request.Request(f'https://api.supabase.com/v1/projects/{PROJETO}/config/disk/util',
+                                   headers={'Authorization': 'Bearer ' + self.tok, 'User-Agent': UA})
+        with urllib.request.urlopen(r, timeout=30) as x:
+            return int(json.loads(x.read())['metrics']['fs_used_bytes']) / 1e9
+
+    def ram_livre_mb(self):
+        import base64
+        r = urllib.request.Request(f'https://{PROJETO}.supabase.co/customer/v1/privileged/metrics',
+                                   headers={'Authorization': 'Basic ' + base64.b64encode(f'service_role:{self.chave_met}'.encode()).decode(),
+                                            'User-Agent': UA})
+        with urllib.request.urlopen(r, timeout=30) as x:
+            for l in x.read().decode().splitlines():
+                if l.startswith('node_memory_MemAvailable_bytes{'):
+                    return float(l.rsplit(' ', 1)[1]) / 1e6
+        raise RuntimeError('métrica node_memory_MemAvailable_bytes não encontrada')
 
     def sql(self, q, timeout=120):
         r = urllib.request.Request(f'https://api.supabase.com/v1/projects/{PROJETO}/database/query',
@@ -153,13 +183,28 @@ def montar_lote(pagina, campos):
 
 
 # ---------------------------------------------------------------- saúde do banco
-def saude(banco, ultimo_ms, lento_s):
+DISCO_MAX_GB = 6.0      # regra do Maestro (14/10/2026): parar se o disco passar de 6 GB
+ULTIMA = {}
+
+
+def saude(banco, ultimo_ms, lento_s, ram_min_mb):
+    """None = pode seguir; 'desligada' / 'disco' = parar já; outro texto = esperar e tentar de novo."""
     r = banco.sql("""select (select count(*) from pg_stat_activity) conexoes,
                             (select count(*) from ops.banco_alerta where criado_em > now() - interval '10 minutes') alertas,
                             pessoas.carga_ligada('activecampaign') ligada""")[0]
-    motivos = []
     if not r['ligada']:
         return 'desligada'
+    try:
+        disco = banco.disco_usado_gb()
+        ram = banco.ram_livre_mb()
+    except Exception as e:
+        return f'sem leitura de disco/RAM ({str(e)[:80]})'   # falha fechada: espera e tenta de novo; 4 falhas = para
+    ULTIMA.update(disco_gb=round(disco, 2), ram_livre_mb=round(ram), conexoes=int(r['conexoes']))
+    if disco > DISCO_MAX_GB:
+        return 'disco'
+    motivos = []
+    if ram < ram_min_mb:
+        motivos.append(f'RAM livre {ram:.0f} MB')
     if int(r['conexoes']) > 50:
         motivos.append(f"conexões {r['conexoes']}")
     if int(r['alertas']) > 0:
@@ -169,18 +214,21 @@ def saude(banco, ultimo_ms, lento_s):
     return '; '.join(motivos) or None
 
 
-def esperar_saude(banco, ultimo_ms, lento_s):
-    for t in range(4):
-        m = saude(banco, ultimo_ms if t == 0 else None, lento_s)
+def esperar_saude(banco, ultimo_ms, lento_s, ram_min_mb):
+    for tentativa in range(4):
+        m = saude(banco, ultimo_ms if tentativa == 0 else None, lento_s, ram_min_mb)
         if m is None:
             return True
         if m == 'desligada':
             log('chave pessoas.carga_chave desligada: parando')
             return False
-        if t == 3:
-            log(f'banco segue lento ({m}): parando para retomar depois')
+        if m == 'disco':
+            log(f"disco usado {ULTIMA.get('disco_gb')} GB passou de {DISCO_MAX_GB} GB: parando")
             return False
-        log(f'banco lento ({m}): esperando 60 s')
+        if tentativa == 3:
+            log(f'banco segue sem folga ({m}): parando para retomar depois')
+            return False
+        log(f'banco sem folga ({m}): esperando 60 s')
         time.sleep(60)
     return False
 
@@ -198,7 +246,7 @@ def fase_catalogo(banco, ac, por):
     log(f'catálogo: {len(itens)} itens lidos, {n} gravados/atualizados')
 
 
-def fase_estagio(banco, ac, por, lote_n, max_lotes, lento_s):
+def fase_estagio(banco, ac, por, lote_n, max_lotes, lento_s, ram_min_mb):
     ex = banco.um(f"select pessoas.carga_abrir('{FONTE}', 'estagio', '{por}')")
     eid, cursor = ex['execucao'], int(ex['cursor'] or 0)
     log(f"estágio: execução {eid} {'retomada do contato ' + str(cursor) if ex['retomada'] else 'nova'}")
@@ -209,7 +257,7 @@ def fase_estagio(banco, ac, por, lote_n, max_lotes, lento_s):
             banco.sql(f"select pessoas.carga_fechar({eid}, 'parada', 'max-lotes atingido')")
             log('max-lotes atingido: execução parada (retoma do cursor)')
             return
-        if not esperar_saude(banco, ultimo_ms, lento_s):
+        if not esperar_saude(banco, ultimo_ms, lento_s, ram_min_mb):
             banco.sql(f"select pessoas.carga_fechar({eid}, 'parada', 'banco lento ou chave desligada')")
             return
         lote, fim = [], False
@@ -227,7 +275,8 @@ def fase_estagio(banco, ac, por, lote_n, max_lotes, lento_s):
             ultimo_ms = r['ms']
             lotes += 1
             log(f"estágio lote {lotes}: {r['lidas']} lidos, {r['inseridas']} novos, {r['atualizadas']} atualizados, "
-                f"{r['iguais']} iguais, {r['ms']} ms (cursor {cursor}, {ac.chamadas} chamadas AC, {time.time() - t0:.0f} s)")
+                f"{r['iguais']} iguais, {r['ms']} ms (cursor {cursor}, {ac.chamadas} chamadas AC, {time.time() - t0:.0f} s; "
+                f"disco {ULTIMA.get('disco_gb')} GB, RAM livre {ULTIMA.get('ram_livre_mb')} MB, conexões {ULTIMA.get('conexoes')})")
             time.sleep(2)
         if fim:
             banco.sql(f"select pessoas.carga_fechar({eid}, 'ok')")
@@ -235,7 +284,7 @@ def fase_estagio(banco, ac, por, lote_n, max_lotes, lento_s):
             return
 
 
-def fase_pessoas(banco, por, lote_n, max_lotes, lento_s):
+def fase_pessoas(banco, por, lote_n, max_lotes, lento_s, ram_min_mb):
     ex = banco.um(f"select pessoas.carga_abrir('{FONTE}', 'pessoas', '{por}')")
     eid = ex['execucao']
     log(f"pessoas: execução {eid} {'retomada' if ex['retomada'] else 'nova'}")
@@ -245,14 +294,15 @@ def fase_pessoas(banco, por, lote_n, max_lotes, lento_s):
             banco.sql(f"select pessoas.carga_fechar({eid}, 'parada', 'max-lotes atingido')")
             log('max-lotes atingido: execução parada')
             return
-        if not esperar_saude(banco, ultimo_ms, lento_s):
+        if not esperar_saude(banco, ultimo_ms, lento_s, ram_min_mb):
             banco.sql(f"select pessoas.carga_fechar({eid}, 'parada', 'banco lento ou chave desligada')")
             return
         r = banco.um(f'select pessoas.carga_ac_pessoas({eid}, {lote_n})')
         ultimo_ms = r['ms']
         lotes += 1
         log(f"pessoas lote {lotes}: {r['lidas']} lidos, {r['pessoas_novas']} pessoas novas, {r['casadas']} casadas, "
-            f"{r['sem_email']} sem e-mail, {r['revisao']} revisão, {r['eventos']} eventos, {r['ms']} ms, restam {r['restam']}")
+            f"{r['sem_email']} sem e-mail, {r['revisao']} revisão, {r['eventos']} eventos, {r['ms']} ms, restam {r['restam']}; "
+            f"disco {ULTIMA.get('disco_gb')} GB, RAM livre {ULTIMA.get('ram_livre_mb')} MB, conexões {ULTIMA.get('conexoes')}")
         if r['lidas'] == 0 or r['restam'] == 0:
             banco.sql(f"select pessoas.carga_fechar({eid}, 'ok')")
             log('pessoas: estágio todo processado')
@@ -266,8 +316,7 @@ def ensaio(banco, ac, n, dir_mig):
     transação que termina em erro proposital: nada fica gravado. Imprime só contagens."""
     d = Path(dir_mig)
     corpo = lambda f: re.sub(r"set local statement_timeout = '30s';\n", '', (d / f).read_text(encoding='utf-8'))
-    migs = ['20261014160000_fin_criar_chave_eventos.sql', '20261014160100_vincular_catalogo_eventos.sql',
-            '20261014160200_pessoas_vincular_eventos_e_relacoes.sql']
+    migs = ['20261014160200_pessoas_vincular_eventos_e_relacoes.sql']   # só pessoas: nada do fin (espera o JP)
     idx = """create unique index eventos_fonte_unico on pessoas.eventos (fonte_tabela, fonte_id, tipo) where fonte_id is not null;
 create index eventos_evento_idx on pessoas.eventos (evento_id, tipo, quando) where evento_id is not null;
 create index eventos_turma_idx on pessoas.eventos (turma_id, tipo) where turma_id is not null;\n"""
@@ -346,6 +395,7 @@ def main():
     a.add_argument('--lote', type=int, default=1000)
     a.add_argument('--max-lotes', type=int, default=0)
     a.add_argument('--lento', type=float, default=15.0, help='segundos: lote mais lento que isto conta como banco lento')
+    a.add_argument('--ram-min', type=float, default=150.0, help='MB de RAM livre na máquina do banco abaixo dos quais o lote espera')
     a.add_argument('--migrations', default=str(Path(__file__).resolve().parents[2] / 'supabase/migrations'))
     a.add_argument('--env-file', default=next((str(p / 'controle-de-eventos/.env') for p in Path(__file__).resolve().parents
                                                if (p / 'controle-de-eventos/.env').exists()), None))
@@ -355,7 +405,7 @@ def main():
         sys.exit('--lote entre 1 e 2000')
     if not re.fullmatch(r'[A-Za-z0-9_.\-]{1,60}', x.por):
         sys.exit('--por inválido')
-    banco = Banco(token(x.env_file))
+    banco = Banco(token(x.env_file), None if (x.status or x.ensaio) else chave_metricas(x.env_file))
     if x.status:
         return status(banco)
     ac = AC(banco)
@@ -364,9 +414,9 @@ def main():
     if x.rodar in ('catalogo', 'tudo'):
         fase_catalogo(banco, ac, x.por)
     if x.rodar in ('estagio', 'tudo'):
-        fase_estagio(banco, ac, x.por, x.lote, x.max_lotes, x.lento)
+        fase_estagio(banco, ac, x.por, x.lote, x.max_lotes, x.lento, x.ram_min)
     if x.rodar in ('pessoas', 'tudo'):
-        fase_pessoas(banco, x.por, x.lote, x.max_lotes, x.lento)
+        fase_pessoas(banco, x.por, x.lote, x.max_lotes, x.lento, x.ram_min)
     if x.rodar:
         status(banco)
 

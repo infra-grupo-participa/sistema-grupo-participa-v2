@@ -1,326 +1,19 @@
--- Ensaio de 20261014170000 (estrutura da carga do ActiveCampaign), com a cadeia 160000 a 160300 antes (índices sem
--- concurrently), numa transação DESFEITA. Contatos FICTÍCIOS (e-mails @exemplo.invalid, sem dado pessoal), mais 1 contato
--- que reaproveita um e-mail que já existe em pessoas.identificadores (lido dentro da transação, nunca escrito aqui) para
--- provar o casamento. A prova com amostra REAL do AC fica no script: infra/scripts/pessoa-unica/carga_ac.py --ensaio 100.
+-- Ensaio de 20261014170000 (estrutura da carga do ActiveCampaign) com a cadeia SÓ de pessoas: 20261014160200 e os índices
+-- da 160300 (sem concurrently), numa transação DESFEITA. Nada do schema fin é alterado (160000/160100 não entram: esperam o
+-- aceite do JP). Contatos FICTÍCIOS (e-mails @exemplo.invalid, sem dado pessoal), mais 1 contato que reaproveita um e-mail
+-- que já existe em pessoas.identificadores (lido dentro da transação, nunca escrito aqui) para provar o casamento.
+-- A prova com amostra REAL do AC fica no script: infra/scripts/pessoa-unica/carga_ac.py --ensaio 100.
 -- Rodar com: python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio <este arquivo>
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
 create temp table _z_out (em serial, passo text, linha text);
-create temp table _z_emails as select distinct lower(btrim(comprador_email)) e from fin.hotmart_transacoes
-  where comprador_email is not null and conta = 'academy' order by 1 limit 40;
-create temp table _z_assin as select p.oid::regprocedure::text f, pg_get_function_result(p.oid) r from pg_proc p where p.prosrc ~* 'fin\.eventos\M';
-insert into pg_temp._z_out(passo, linha) select '01 antes: fin.eventos / pessoas.eventos / thb_turmas', (select count(*) from fin.eventos) || ' / ' || (select count(*) from pessoas.eventos) || ' / ' || (select count(*) from public.thb_turmas);
-insert into pg_temp._z_out(passo, linha) select '02 antes: md5 trajetoria_nucleo(40 e-mails)', (select md5(string_agg(t::text, '|' order by t::text)) || ' (' || count(*) || ' linhas)' from fin.trajetoria_nucleo((select array_agg(e) from pg_temp._z_emails)) t);
-create temp table _z_traj as select md5(string_agg(t::text, '|' order by t::text)) h from fin.trajetoria_nucleo((select array_agg(e) from pg_temp._z_emails)) t;
-
--- ===== 20261014160000 =====
--- 20261014160000: chave da casa (nome-curto-aaaa-mm) no catálogo oficial de eventos, fin.eventos
---
--- STATUS: NÃO APLICADA. Escrita pelo terminal Censo (pessoa única, ETAPA 2) em 14/10/2026. Aplicar só com o ok do
---   Maestro. Ensaio: 20261014160000_ensaio.sql (cobre 160000, 160100 e 160200). Detalhe: 20261014160000.explain.md.
---
--- POR QUE: decisão do Victor de 14/10/2026 (Projetos/sistema-unico/pessoa-unica/PLANO.md, decisão 3; item C-03 do
---   plano de ação do banco): fin.eventos é o catálogo oficial de eventos e ganha a chave única da casa no padrão
---   nome-curto-aaaa-mm, a mesma string usada no ClickUp, no Slack, no Drive e no utm_campaign.
--- O QUE FAZ:
---   1. coluna fin.eventos.chave (text, nullable) com CHECK do padrão;
---   2. índice único na chave (a tabela tem 87 linhas: lock instantâneo, por isso dentro da transação e sem CONCURRENTLY);
---   3. preenche as 87 linhas. Regra (aaaa-mm = mês de `inicio`):
---      holding_total = htN (N do nome "(HTn)"); jornada = jornada-<turma_hm>; seminario_marcio = sem-marcio;
---      seminario_elaine = sem-elaine; encontro_thb = ethb; diamantes; clinica; imersao; aurum-plus; congresso-thb;
---      certificacao-holding-pro; encontro-acelera; cnhf; residencia; workshop-residencia.
---      Casos especiais: 16 ht-imersao-mundial, 85 e 88 ht-atm, 66 live-hm, 67 reuniao-hm-ex-alunos.
---      Chave que já existe em outro catálogo é reaproveitada (cada fato tem um endereço só):
---      101 = clinica-miami-2026-12 (mkt.projetos.etiqueta_clickup do CNFMIAMI26), 68 = atm-1-2026-07
---      (dados.edicoes_historico). A lista é PROPOSTA ao Victor, dono do padrão de dados: ele aprova antes de aplicar.
--- O QUE NÃO FAZ: não mexe em `codigo` (o fin.resolver_ofertas_eventos usa nome + codigo para achar evento de oferta
---   e o fin.sincronizar_eventos_ht lê o padrão HTn: mudar codigo muda o financeiro). Não cria evento novo.
--- AS 5 PERGUNTAS: escala = 87 linhas, cresce ~2 por mês; índice = o único da chave; frequência = única (linha nova
---   nasce com chave nula até alguém preencher; ver pendência no explain); repetição = nenhuma; reversão =
---   20261014160000_reversao.sql (drop do índice e da coluna).
--- LEITORES: 16 funções leem fin.eventos (catálogo pg_proc); 5 usam e.* em CTE. O ensaio confere que a assinatura de
---   retorno delas não muda e que fin.trajetoria_nucleo devolve o mesmo resultado antes e depois.
-
-set local lock_timeout = '5s';
-
-do $g$
-begin
-  if (select count(*) from fin.eventos) <> 87 then
-    raise exception '20261014160000: fin.eventos não tem 87 linhas. Reler e refazer a lista de chaves.';
-  end if;
-  if exists (select 1 from information_schema.columns where table_schema = 'fin' and table_name = 'eventos' and column_name = 'chave') then
-    raise exception '20261014160000: fin.eventos.chave já existe.';
-  end if;
-end
-$g$;
-
-alter table fin.eventos
-  add column chave text
-  constraint eventos_chave_padrao_check check (chave is null or chave ~ '^[a-z0-9]+(-[a-z0-9]+)*-[0-9]{4}-(0[1-9]|1[0-2])$');
-
-create unique index eventos_chave_key on fin.eventos (chave);
-
-comment on column fin.eventos.chave is 'Chave da casa nome-curto-aaaa-mm (decisão do Victor, 14/10/2026). Mesma string no ClickUp, Slack, Drive e utm_campaign. '
-  'Única. Nula enquanto ninguém preencher (linha automática do fin.sincronizar_eventos_ht nasce sem chave).';
-
-update fin.eventos e
-   set chave = v.chave
-  from (values
-    (1, 'jornada-t5-2020-06'),
-    (2, 'jornada-t6-2020-08'),
-    (3, 'jornada-t7-2020-11'),
-    (4, 'jornada-t8-2021-02'),
-    (5, 'jornada-t9-2021-03'),
-    (6, 'jornada-t10-2021-05'),
-    (7, 'jornada-t11-2021-08'),
-    (8, 'jornada-t14-2022-01'),
-    (9, 'sem-marcio-2022-02'),
-    (10, 'jornada-t15-2022-03'),
-    (11, 'sem-marcio-2022-04'),
-    (12, 'jornada-t16-2022-05'),
-    (13, 'sem-marcio-2022-06'),
-    (14, 'jornada-t17-2022-07'),
-    (15, 'sem-marcio-2022-10'),
-    (16, 'ht-imersao-mundial-2022-12'),
-    (17, 'certificacao-holding-pro-2023-01'),
-    (18, 'sem-marcio-2023-02'),
-    (19, 'ht2-2023-03'),
-    (20, 'ht3-2023-05'),
-    (21, 'ethb-2023-07'),
-    (22, 'ht4-2023-08'),
-    (23, 'ht5-2023-09'),
-    (24, 'sem-marcio-2023-10'),
-    (25, 'ht6-2023-11'),
-    (26, 'diamantes-2023-11'),
-    (27, 'ht7-2024-01'),
-    (28, 'sem-marcio-2024-02'),
-    (29, 'ht8-2024-03'),
-    (30, 'ht9-2024-05'),
-    (31, 'ethb-2024-07'),
-    (32, 'ht10-2024-08'),
-    (33, 'sem-marcio-2024-09'),
-    (34, 'ht11-2024-11'),
-    (35, 'clinica-2024-11'),
-    (36, 'ethb-2024-12'),
-    (37, 'ht12-2025-02'),
-    (38, 'sem-marcio-2025-03'),
-    (39, 'ht13-2025-05'),
-    (40, 'ht14-2025-07'),
-    (41, 'clinica-2025-07'),
-    (42, 'aurum-plus-2025-07'),
-    (43, 'congresso-thb-2025-07'),
-    (44, 'sem-elaine-2025-08'),
-    (45, 'ht15-2025-09'),
-    (46, 'sem-elaine-2025-09'),
-    (47, 'ht16-2025-10'),
-    (48, 'residencia-2025-10'),
-    (49, 'aurum-plus-2025-11'),
-    (50, 'ht17-2025-11'),
-    (51, 'diamantes-2025-12'),
-    (52, 'ethb-2025-12'),
-    (53, 'ht18-2026-01'),
-    (54, 'sem-marcio-2026-02'),
-    (55, 'ht19-2026-02'),
-    (56, 'clinica-2026-03'),
-    (57, 'ht20-2026-03'),
-    (58, 'workshop-residencia-2026-04'),
-    (59, 'ht21-2026-04'),
-    (60, 'imersao-2026-04'),
-    (61, 'clinica-2026-04'),
-    (62, 'sem-elaine-2026-04'),
-    (63, 'imersao-2026-06'),
-    (64, 'clinica-2026-06'),
-    (65, 'sem-elaine-2026-06'),
-    (66, 'live-hm-2026-06'),
-    (67, 'reuniao-hm-ex-alunos-2026-07'),
-    (68, 'atm-1-2026-07'),
-    (69, 'aurum-plus-2026-07'),
-    (70, 'sem-elaine-2026-07'),
-    (71, 'ethb-2026-08'),
-    (72, 'cnhf-2026-08'),
-    (73, 'jornada-t12-2021-10'),
-    (74, 'jornada-t13-2021-12'),
-    (85, 'ht-atm-2026-07'),
-    (86, 'ht29-2026-07'),
-    (87, 'ht30-2026-08'),
-    (88, 'ht-atm-2026-08'),
-    (89, 'ht32-2026-09'),
-    (90, 'ht23-2026-04'),
-    (91, 'ht24-2026-04'),
-    (92, 'ht25-2026-05'),
-    (93, 'ht26-2026-05'),
-    (94, 'ht27-2026-06'),
-    (95, 'ht28-2026-06'),
-    (96, 'encontro-acelera-2026-09'),
-    (101, 'clinica-miami-2026-12')
-  ) as v(id, chave)
- where e.id = v.id
-   and e.chave is distinct from v.chave;
-
-do $g$
-begin
-  if (select count(*) from fin.eventos where chave is not null) <> 87 then
-    raise exception '20261014160000: nem todas as 87 linhas receberam chave.';
-  end if;
-end
-$g$;
-
--- ===== 20261014160100 =====
--- 20261014160100: as outras tabelas de evento passam a apontar para o catálogo oficial (fin.eventos)
---
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única, ETAPA 2), 14/10/2026. Depende de 20261014160000.
---   Ensaio: 20261014160000_ensaio.sql. Detalhe: 20261014160000.explain.md.
---
--- POR QUE: PLANO da pessoa única, decisão 3: as 6 tabelas de evento ganham vínculo para fin.eventos, sem apagar nada.
--- O QUE FAZ (só acrescenta; colunas nullable, FK NOT VALID):
---   mkt.projetos.evento_id      -> fin.eventos(id). Preenche só o que a fonte diz: CNFMIAMI26 (id 68) = evento 101
---                                  (fin.eventos.fonte cita "mkt.projetos CNFMIAMI26"). Os outros 6 projetos não têm
---                                  linha no catálogo: ficam nulos e viram pergunta.
---   public.ht_editions.evento_id -> fin.eventos(id). Casa pelo número da edição: fin.eventos de holding_total com
---                                  codigo 'HTn' ou nome com '(HTn)'. A edição só recebe se houver exatamente 1 evento
---                                  (21 e 22 caem no evento 59 "HT21/HT22" e ficam nulas: pergunta).
---   controle.evento.evento_id    -> fin.eventos(id). lancamento-parceria-ago-2026 = evento 72 (CNHF), mesmo dia de
---                                  início (aulas_inicio = inicio = 24/08/2026) e mesma categoria de lançamento.
---   ht.cohorts.evento_id         -> fin.eventos(id). Só a coluna: as 3 linhas (1 turma, 1 modelo, 1 teste) não têm
---                                  fonte que diga o evento. Pergunta.
---   public.thb_turmas.chave      -> chave da turma (thb-tN-aaaa-mm), única. Turma não é evento do catálogo (não tem
---                                  data de início e fim; incluir turmas em fin.eventos mudaria 16 leitores do
---                                  financeiro). Fonte do mês: aba "Datas das turmas" da planilha "Alunos T1-T42
---                                  Ativação" (T1 a T37 e T17R); "T29.2 Nov/24" (nome da aba da turma na mesma
---                                  planilha); T39, T40 e T41 = mês de sale_start_at da própria thb_turmas. Ficam nulas
---                                  (pergunta): T38 (aba diz Mar/26, sale_start_at diz 12/04/2026) e A1 a A10, A8R.
---   cs.eventos                   -> NÃO recebe coluna: as 5 linhas são linhas de produto (HT, SEM, HM, CNHF, ACELERA),
---                                  não edições. Pergunta ao Maestro.
---   dados.edicoes_historico      -> já tem chave; atm-1-2026-07 é a mesma string da chave do evento 68 (vínculo pelo
---                                  próprio texto, sem coluna nova).
--- AS 5 PERGUNTAS: escala = 7 + 21 + 1 + 3 + 54 linhas; índice = único em thb_turmas.chave (54 linhas); FKs sem índice
---   nas tabelas de 1 a 21 linhas (seq scan vence); frequência = única; repetição = nenhuma;
---   reversão = 20261014160100_reversao.sql.
--- LEITORES: as tabelas são lidas por select('*') no front (ht_editions, thb_turmas): coluna nova aparece no JSON e não
---   quebra nada. O ensaio confere que nenhuma view depende de * dessas tabelas.
-
-set local lock_timeout = '5s';
-
-do $g$
-begin
-  if not exists (select 1 from information_schema.columns where table_schema = 'fin' and table_name = 'eventos' and column_name = 'chave') then
-    raise exception '20261014160100: falta 20261014160000 (fin.eventos.chave).';
-  end if;
-  if (select count(*) from mkt.projetos) <> 7 or (select count(*) from public.ht_editions) <> 21
-     or (select count(*) from controle.evento) <> 1 or (select count(*) from ht.cohorts) <> 3
-     or (select count(*) from public.thb_turmas) <> 54 then
-    raise exception '20261014160100: contagem das tabelas de evento mudou. Reler.';
-  end if;
-  if (select sigla from mkt.projetos where id = 68) is distinct from 'CNFMIAMI26'
-     or (select slug from controle.evento) is distinct from 'lancamento-parceria-ago-2026'
-     or (select chave from fin.eventos where id = 72) is distinct from 'cnhf-2026-08'
-     or (select chave from fin.eventos where id = 101) is distinct from 'clinica-miami-2026-12' then
-    raise exception '20261014160100: premissa de vínculo não confere. Reler.';
-  end if;
-end
-$g$;
-
-alter table mkt.projetos   add column evento_id bigint;
-alter table mkt.projetos   add constraint projetos_evento_id_fkey foreign key (evento_id) references fin.eventos(id) on delete restrict not valid;
-alter table public.ht_editions add column evento_id bigint;
-alter table public.ht_editions add constraint ht_editions_evento_id_fkey foreign key (evento_id) references fin.eventos(id) on delete restrict not valid;
-alter table controle.evento add column evento_id bigint;
-alter table controle.evento add constraint evento_evento_id_fkey foreign key (evento_id) references fin.eventos(id) on delete restrict not valid;
-alter table ht.cohorts     add column evento_id bigint;
-alter table ht.cohorts     add constraint cohorts_evento_id_fkey foreign key (evento_id) references fin.eventos(id) on delete restrict not valid;
-alter table public.thb_turmas add column chave text
-  constraint thb_turmas_chave_padrao_check check (chave is null or chave ~ '^thb-[a-z0-9]+(-[a-z0-9]+)*-[0-9]{4}-(0[1-9]|1[0-2])$');
-create unique index thb_turmas_chave_key on public.thb_turmas (chave);
-
-comment on column mkt.projetos.evento_id is 'Evento oficial do catálogo (fin.eventos). Pessoa única, 14/10/2026.';
-comment on column public.ht_editions.evento_id is 'Evento oficial do catálogo (fin.eventos). Pessoa única, 14/10/2026.';
-comment on column controle.evento.evento_id is 'Evento oficial do catálogo (fin.eventos). Pessoa única, 14/10/2026.';
-comment on column ht.cohorts.evento_id is 'Evento oficial do catálogo (fin.eventos). Pessoa única, 14/10/2026.';
-comment on column public.thb_turmas.chave is 'Chave da turma thb-tN-aaaa-mm (mês de abertura do carrinho). Pessoa única, 14/10/2026.';
-
-update mkt.projetos set evento_id = 101 where id = 68 and evento_id is distinct from 101;
-update controle.evento set evento_id = 72 where slug = 'lancamento-parceria-ago-2026' and evento_id is distinct from 72;
-
-update public.ht_editions h
-   set evento_id = m.evento_id
-  from (
-    select h2.id, min(e.id) evento_id
-      from public.ht_editions h2
-      join fin.eventos e
-        on e.categoria = 'holding_total'
-       and (e.codigo = 'HT' || h2.edition_number or e.nome ~ ('\mHT' || h2.edition_number || '\M'))
-     group by h2.id
-    having count(*) = 1
-  ) m
- where h.id = m.id
-   and h.evento_id is distinct from m.evento_id
-   and h.edition_number not in (21, 22);   -- evento 59 junta HT21 e HT22: pergunta, não palpite
-
-update public.thb_turmas t
-   set chave = v.chave
-  from (values
-    ('T1', 'thb-t1-2019-10'),
-    ('T2', 'thb-t2-2019-12'),
-    ('T3', 'thb-t3-2020-01'),
-    ('T4', 'thb-t4-2020-04'),
-    ('T5', 'thb-t5-2020-06'),
-    ('T6', 'thb-t6-2020-08'),
-    ('T7', 'thb-t7-2020-11'),
-    ('T8', 'thb-t8-2021-01'),
-    ('T9', 'thb-t9-2021-03'),
-    ('T10', 'thb-t10-2021-05'),
-    ('T11', 'thb-t11-2021-08'),
-    ('T12', 'thb-t12-2021-10'),
-    ('T13', 'thb-t13-2021-12'),
-    ('T14', 'thb-t14-2022-01'),
-    ('T15', 'thb-t15-2022-03'),
-    ('T16', 'thb-t16-2022-05'),
-    ('T17', 'thb-t17-2022-07'),
-    ('T17R', 'thb-t17r-2022-10'),
-    ('T18', 'thb-t18-2022-12'),
-    ('T19', 'thb-t19-2023-01'),
-    ('T20', 'thb-t20-2023-04'),
-    ('T21', 'thb-t21-2023-05'),
-    ('T22', 'thb-t22-2023-08'),
-    ('T23', 'thb-t23-2023-09'),
-    ('T24', 'thb-t24-2023-11'),
-    ('T25', 'thb-t25-2024-01'),
-    ('T26', 'thb-t26-2024-03'),
-    ('T27', 'thb-t27-2024-05'),
-    ('T28', 'thb-t28-2024-08'),
-    ('T29', 'thb-t29-2024-11'),
-    ('T30', 'thb-t30-2025-02'),
-    ('T31', 'thb-t31-2025-05'),
-    ('T32', 'thb-t32-2025-07'),
-    ('T33', 'thb-t33-2025-09'),
-    ('T34', 'thb-t34-2025-10'),
-    ('T35', 'thb-t35-2025-11'),
-    ('T36', 'thb-t36-2026-01'),
-    ('T37', 'thb-t37-2026-02'),
-    ('T29.2', 'thb-t29-2-2024-11'),
-    ('T39', 'thb-t39-2026-06'),
-    ('T40', 'thb-t40-2026-07'),
-    ('T41', 'thb-t41-2026-09')
-  ) as v(codigo, chave)
- where t.codigo = v.codigo
-   and t.chave is distinct from v.chave;
-
-do $g$
-begin
-  if (select count(*) from public.thb_turmas where chave is not null) <> 42 then
-    raise exception '20261014160100: esperava 42 turmas com chave.';
-  end if;
-  if (select count(*) from public.ht_editions where evento_id is not null) <> 10 then
-    raise exception '20261014160100: esperava 10 edições do HT ligadas (20, 23 a 30 e 32).';
-  end if;
-end
-$g$;
-
+insert into pg_temp._z_out(passo, linha) select '01 antes: fin.eventos tem chave? (esperado 0)', count(*)::text from information_schema.columns where table_schema = 'fin' and table_name = 'eventos' and column_name = 'chave';
 -- ===== 20261014160200 =====
 -- 20261014160200: linha do tempo da pessoa ligada ao evento oficial e à fonte; relação "sócio de"; mapa de ofertas
 --
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única, ETAPA 2), 14/10/2026. Depende de 20261014160000 e 160100.
+-- STATUS: NÃO APLICADA. Terminal Censo (pessoa única, ETAPA 2), 14/10/2026. NÃO depende de 160000/160100 (desacoplada em
+--   14/10 para a carga do AC poder rodar sem mexer no schema fin, que espera o aceite do JP). Só lê fin (FK e view).
 --   Ensaio: 20261014160000_ensaio.sql. Índices: 20261014160300 (CONCURRENTLY, arquivo próprio). Detalhe: 20261014160000.explain.md.
 --
 -- POR QUE: PLANO da pessoa única, decisões 4 e 5 (linha do tempo = pessoas.eventos, com vínculo ao evento oficial e à
@@ -353,12 +46,6 @@ set local lock_timeout = '5s';
 
 do $g$
 begin
-  if (select chave from fin.eventos where id = 72) is distinct from 'cnhf-2026-08' then
-    raise exception '20261014160200: falta 20261014160000.';
-  end if;
-  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'thb_turmas' and column_name = 'chave') then
-    raise exception '20261014160200: falta 20261014160100.';
-  end if;
   if exists (select 1 from information_schema.columns where table_schema = 'pessoas' and table_name = 'eventos' and column_name in ('evento_id', 'turma_id', 'fonte_tabela', 'fonte_id'))
      or to_regclass('pessoas.relacoes') is not null or to_regclass('pessoas.vw_oferta') is not null then
     raise exception '20261014160200: algo desta migration já existe.';
@@ -436,17 +123,14 @@ comment on view pessoas.vw_oferta is 'Oferta -> nome exato -> produto -> tipo (s
   'Pessoa única, 14/10/2026.';
 
 -- ===== 20261014160300 (sem concurrently) =====
-
 create unique index eventos_fonte_unico on pessoas.eventos (fonte_tabela, fonte_id, tipo) where fonte_id is not null;
 create index eventos_evento_idx on pessoas.eventos (evento_id, tipo, quando) where evento_id is not null;
 create index eventos_turma_idx on pessoas.eventos (turma_id, tipo) where turma_id is not null;
-
-
 -- ===== 20261014170000 =====
 -- 20261014170000: estrutura da carga do ActiveCampaign completo para a pessoa única (estágio, controle, funções)
 --
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014160000 a 160300 (fin.eventos.chave,
---   pessoas.eventos.fonte_tabela/fonte_id e o índice único eventos_fonte_unico da 160300, que o on conflict usa).
+-- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende SÓ de 20261014160200 e 160300 (pessoas.eventos.fonte_tabela/
+--   fonte_id e o índice único eventos_fonte_unico, que o on conflict usa). Não depende de nada no schema fin.
 --   Ensaio: 20261014170000_ensaio.sql (cadeia inteira + amostra real de 300 contatos, transação desfeita).
 --   Script da carga: infra/scripts/pessoa-unica/carga_ac.py. Detalhe: 20261014170000.explain.md.
 --
@@ -495,6 +179,13 @@ begin
   end if;
   if not exists (select 1 from information_schema.columns where table_schema = 'pessoas' and table_name = 'eventos' and column_name = 'fonte_id') then
     raise exception '20261014170000: falta 20261014160200 (pessoas.eventos.fonte_id).';
+  end if;
+  if to_regclass('pessoas.eventos_fonte_unico') is null then
+    raise exception '20261014170000: falta 20261014160300 (índice pessoas.eventos_fonte_unico).';
+  end if;
+  if (select nome from fin.eventos where id = 89) is distinct from 'Imersão Holding Total (HT32)'
+     or (select nome from fin.eventos where id = 101) is distinct from 'Clínica Internacional de Holding Familiar' then
+    raise exception '20261014170000: eventos 89/101 do catálogo mudaram. Reler as listas de pré-checkout.';
   end if;
 end
 $g$;
@@ -608,10 +299,10 @@ insert into pessoas.ac_lista_papel (lista_id, papel, evento_id, fonte) values
   (623, 'sv_pre_checkout', null, 'Victor 14/10/2026: todas as listas de Sessão de Viabilidade contam'),
   (582, 'pre_checkout', null, 'nome da lista diz pré-checkout'),
   (584, 'pre_checkout', null, 'nome da lista diz pré-checkout'),
-  (590, 'pre_checkout', (select id from fin.eventos where chave = 'ht32-2026-09'), 'nome da lista diz pré-checkout e HT/SET26'),
-  (593, 'pre_checkout', (select id from fin.eventos where chave = 'ht32-2026-09'), 'nome da lista diz pré-checkout e HT 32'),
+  (590, 'pre_checkout', 89, 'nome da lista diz pré-checkout e HT/SET26; fin.eventos 89 = Imersão Holding Total (HT32)'),
+  (593, 'pre_checkout', 89, 'nome da lista diz pré-checkout e HT 32; fin.eventos 89 = Imersão Holding Total (HT32)'),
   (608, 'pre_checkout', null, 'nome da lista diz pré-checkout'),
-  (614, 'pre_checkout', (select id from fin.eventos where chave = 'clinica-miami-2026-12'), 'nome da lista diz pré-checkout e Clínica Dez/26; migration 20261007152751');
+  (614, 'pre_checkout', 101, 'nome da lista diz pré-checkout e Clínica Dez/26; fin.eventos 101 = Clínica Internacional de Holding Familiar; migration 20261007152751');
 
 create table pessoas.ac_contato (
   contact_id         integer primary key,
@@ -972,6 +663,7 @@ drop table if exists pessoas.carga_lote;
 drop table if exists pessoas.carga_execucao;
 drop table if exists pessoas.carga_chave;
 
+insert into pg_temp._z_out(passo, linha) select '28 schema fin intocado (chave, captacao_inicio)', count(*)::text from information_schema.columns where table_schema = 'fin' and table_name = 'eventos' and column_name in ('chave', 'captacao_inicio');
 insert into pg_temp._z_out(passo, linha) select '90 depois da reversão: objetos da carga que sobram', count(*)::text from pg_class where relnamespace = 'pessoas'::regnamespace and relname in ('carga_chave','carga_execucao','carga_lote','ac_catalogo','ac_campo_carga','ac_lista_papel','ac_contato');
 select passo, linha from pg_temp._z_out order by em, passo;
 rollback;

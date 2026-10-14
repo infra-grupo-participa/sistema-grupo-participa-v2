@@ -1,6 +1,7 @@
 -- 20261014160200: linha do tempo da pessoa ligada ao evento oficial e à fonte; relação "sócio de"; mapa de ofertas
 --
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única, ETAPA 2), 14/10/2026. Depende de 20261014160000 e 160100.
+-- STATUS: NÃO APLICADA. Terminal Censo (pessoa única, ETAPA 2), 14/10/2026. NÃO depende de 160000/160100 (desacoplada em
+--   14/10 para a carga do AC poder rodar sem mexer no schema fin, que espera o aceite do JP). Só lê fin (FK e view).
 --   Ensaio: 20261014160000_ensaio.sql. Índices: 20261014160300 (CONCURRENTLY, arquivo próprio). Detalhe: 20261014160000.explain.md.
 --
 -- POR QUE: PLANO da pessoa única, decisões 4 e 5 (linha do tempo = pessoas.eventos, com vínculo ao evento oficial e à
@@ -34,12 +35,6 @@ set local statement_timeout = '30s';
 
 do $g$
 begin
-  if (select chave from fin.eventos where id = 72) is distinct from 'cnhf-2026-08' then
-    raise exception '20261014160200: falta 20261014160000.';
-  end if;
-  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'thb_turmas' and column_name = 'chave') then
-    raise exception '20261014160200: falta 20261014160100.';
-  end if;
   if exists (select 1 from information_schema.columns where table_schema = 'pessoas' and table_name = 'eventos' and column_name in ('evento_id', 'turma_id', 'fonte_tabela', 'fonte_id'))
      or to_regclass('pessoas.relacoes') is not null or to_regclass('pessoas.vw_oferta') is not null then
     raise exception '20261014160200: algo desta migration já existe.';
