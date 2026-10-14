@@ -65,6 +65,20 @@ O canal selecionado no topo do bloco Disparos filtra tanto os totais quanto a li
 mensageria"); o e-mail vem da integração do ActiveCampaign. Lançou custo ou disparo na planilha: aparece no dashboard em
 até 10 minutos. Quando a planilha não traz ENVIADOS, o disparo entra com 0 enviados (e o custo) até alguém preencher.
 
+**Aba GRUPO fora da sync (14/10/2026).**
+- **O que aconteceu:** a aba `GRUPO` da planilha virou `GRUPO ANTIGOS` e `GRUPO NOVO`. A sync lê as abas num lote só, e o
+  nome que deixou de existir derrubou o lote inteiro (`google_400`). Por isso API, SMS e LIGAÇÃO ficaram sem sincronizar de
+  14:46 a 20:26 UTC.
+- **Correção mínima (ok do Maestro, 14/10 20:24 UTC):** `GRUPO` saiu do mapa em `mkt_mensageria.planilhas` (id 1). A rodada
+  das 20:26 UTC voltou `ok`, com API, SMS e LIGAÇÃO lidas.
+- **O que ficou:** os 2 disparos de grupo que já tinham vindo da planilha continuam no banco. Os disparos de grupo que
+  chegam pela API do SendFlow (campanha "ATM 10/26") não dependem da planilha.
+- **Pendente, decisão do Victor:** mapear `GRUPO ANTIGOS` e `GRUPO NOVO`. Cuidados:
+  - as linhas "Troca de nome do grupo" não têm hora e seriam recusadas;
+  - os envios da planilha podem contar em dobro com os disparos de grupo da API do SendFlow.
+- **Para voltar ao mapa antigo:** repor a aba `GRUPO` no mapa. Antes, a planilha precisa voltar a ter uma aba com esse
+  nome.
+
 ### Aba Tráfego
 
 A aba usa `dados_atm_trafego(p_chave, p_de, p_ate)`, que retorna JSON com período, coleta, totais, série diária e campanhas. A migration `20261009230000` e a coleta `trafego-meta` foram aplicadas/publicadas em 09/10/2026, conforme atualização do Galego. Para ATM OUT/26, ele informou 1.448 impressões, alcance 993, frequência 1,4582, 1.310 plays, 147 ThruPlay, engajamento 564 e nenhum clique no link. CTR informado 0,00; CPC, visualizações da página e cliques de saída vieram nulos porque a API não enviou esses campos. A tela preserva nulos como “Sem dado”.
