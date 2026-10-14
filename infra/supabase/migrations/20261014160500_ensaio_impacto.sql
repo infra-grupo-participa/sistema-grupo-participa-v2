@@ -1,3 +1,6 @@
+-- NOTA (14/10/2026): a 160600 medida na foto C foi DESCARTADA por causa deste resultado; o Victor aprovou guardar a
+-- captação em fin.eventos.captacao_inicio (20261014160450) e manter `inicio` como o dia do evento. A foto B usa o HT21
+-- com início 13/03, que também foi descartado: a 160510 espera o dia do evento do HT21. Mantido como prova.
 -- Ensaio de IMPACTO de 20261014160500 (HT21/HT22 e ATM de setembro) e 20261014160600 (HT20 começa em 01/01) nos
 -- leitores do financeiro, numa transação DESFEITA. Sem DDL: aplica só as mudanças de linha de fin.eventos (sem a coluna
 -- chave, que é da 160000), para não segurar lock exclusivo. Lock só nas linhas 57 e 59 durante ~30 s.
