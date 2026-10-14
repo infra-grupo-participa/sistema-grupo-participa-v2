@@ -15,7 +15,7 @@ describe('nome de campanha: válidos', () => {
     const r = t('RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1');
     expect(r).toEqual({
       padrao: true, gestor: 'RS', projeto: 'PB26', objetivo: 'LEADS', descricao: 'TESTE DE ESCRITÓRIOS',
-      descricaoPartes: ['TESTE DE ESCRITÓRIOS'], pagina: 'ak1', campos: 5,
+      descricaoPartes: ['TESTE DE ESCRITÓRIOS'], pagina: 'ak1', etiqueta: null, campos: 5,
       erros: [], avisos: [], nomeCanonico: 'RS | PB26 | LEADS | TESTE DE ESCRITÓRIOS | AK1',
     });
   });
@@ -159,5 +159,53 @@ describe('formulários', () => {
   it('validarCodigoPagina', () => {
     for (const c of ['ak1', 'AK1', 'bl2', 'ak1-b', 'jt10', 'ak21', '']) expect(validarCodigoPagina(c), c).toBeNull();
     for (const c of ['a1', 'ak', 'ak1b', 'ak1-bb', 'abc1', 'obrigado']) expect(validarCodigoPagina(c), c).not.toBeNull();
+  });
+});
+
+describe('etiqueta do ClickUp no fim (20261014190000)', () => {
+  const L: ListasCampanha = { ...LISTAS, etiquetas: ['black-friday-2026-10', 'sem-set-2026'] };
+  it('nome antigo com página e o mesmo nome com etiqueta: mesma página, mesma descrição', () => {
+    const antigo = t('CF | BF26 | LEADS | ADVOGADOS | AK1', L);
+    const novo = t('CF | BF26 | LEADS | ADVOGADOS | AK1 | black-friday-2026-10', L);
+    expect(novo.pagina).toBe('ak1');
+    expect(novo.pagina).toBe(antigo.pagina);
+    expect(novo.descricao).toBe(antigo.descricao);
+    expect(novo.descricaoPartes).toEqual(antigo.descricaoPartes);
+    expect(novo.etiqueta).toBe('black-friday-2026-10');
+    expect(novo.campos).toBe(antigo.campos);
+    expect(novo.padrao).toBe(true);
+    expect(novo.avisos).toEqual([]);
+    expect(novo.nomeCanonico).toBe('CF | BF26 | LEADS | ADVOGADOS | AK1 | black-friday-2026-10');
+  });
+  it('descrição de várias partes sem página: a etiqueta não vira parte da descrição', () => {
+    const r = t('CF | BF26 | DISTRIBUIÇÃO | TEASER | META | PQ | black-friday-2026-10', L);
+    expect(r.descricao).toBe('TEASER | META | PQ');
+    expect(r.pagina).toBeNull();
+    expect(r.etiqueta).toBe('black-friday-2026-10');
+  });
+  it('etiqueta cadastrada fora do formato slug-AAAA-MM (sem-set-2026) também é reconhecida pela lista', () => {
+    const r = t('CF | SEMSET26 | LEADS | X | AK1 | sem-set-2026', L);
+    expect(r.etiqueta).toBe('sem-set-2026');
+    expect(r.pagina).toBe('ak1');
+  });
+  it('sem lista, só o formato: etiqueta desconhecida no formato é reconhecida', () => {
+    const r = t('CF | BF26 | LEADS | X | AK1 | outra-coisa-2027-01');
+    expect(r.etiqueta).toBe('outra-coisa-2027-01');
+    expect(r.pagina).toBe('ak1');
+  });
+  it('utm_campaign nome | etiqueta|id: o id sai, a etiqueta sai, a página fica', () => {
+    const r = t('CF | BF26 | LEADS | X | AK1 | black-friday-2026-10|120256028497250221', L);
+    expect(r.pagina).toBe('ak1');
+    expect(r.etiqueta).toBe('black-friday-2026-10');
+  });
+  it('último campo que não é etiqueta continua na descrição (nada muda para nome sem etiqueta)', () => {
+    const r = t('CF | BF26 | LEADS | ADVOGADOS | CONVITE', L);
+    expect(r.etiqueta).toBeNull();
+    expect(r.descricao).toBe('ADVOGADOS | CONVITE');
+  });
+  it('com só 3 campos antes, a etiqueta não deixa o nome sem descrição sem aviso', () => {
+    const r = t('CF | BF26 | LEADS | black-friday-2026-10', L);
+    expect(r.etiqueta).toBe('black-friday-2026-10');
+    expect(r.erros).toContain('descricao_vazia');
   });
 });

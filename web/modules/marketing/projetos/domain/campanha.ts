@@ -8,6 +8,12 @@
 // ÚLTIMO campo, com pelo menos uma parte de descrição antes, e só no formato do slug da casa (ak1, bl2, jt10, ak1-b);
 // senão o último campo é parte da descrição.
 //
+// ETIQUETA NO FIM (decisão de 14/10/2026): toda campanha do Meta ganha " | <etiqueta-clickup>" no fim, ex.:
+//   CF | BF26 | LEADS | ADVOGADOS | AK1 | black-friday-2026-10
+// O último campo é a etiqueta quando é igual a uma etiqueta cadastrada (mkt.projetos.etiqueta_clickup, por parâmetro em
+// `etiquetas`) ou tem o formato slug-AAAA-MM. Ela sai antes de ler a página e a descrição (que continuam iguais às do nome
+// sem etiqueta) e volta em `etiqueta`. Banco: mkt.campanha_traduzir, migration 20261014190000.
+//
 // A MESMA regra existe no banco (mkt.campanha_traduzir, migration 20261006e, que trocou a da 20261005m). Mudou aqui,
 // muda lá (e o contrário). As listas (gestores, objetivos, projetos) moram no banco (mkt.campanha_gestores,
 // mkt.campanha_objetivos, mkt.projetos) e chegam por parâmetro: este arquivo não guarda cópia delas.
@@ -34,7 +40,12 @@ export interface ListasCampanha {
   objetivos: string[];
   /** Siglas cadastradas. Ausente = não confere se o projeto existe (só o formato). */
   projetos?: string[];
+  /** Etiquetas do ClickUp cadastradas (mkt.projetos.etiqueta_clickup). Ausente = só o formato slug-AAAA-MM. */
+  etiquetas?: string[];
 }
+
+/** Formato da etiqueta do ClickUp no fim do nome: slug com o mês no fim (black-friday-2026-10, atm-elaine-1-2026-10). */
+export const ETIQUETA_RE = /^[a-z0-9]+(-[a-z0-9]+)*-20[0-9]{2}-[0-9]{2}$/;
 
 export interface CampanhaTraduzida {
   /** true = nenhum erro. "Fora do padrão" = false. */
@@ -47,7 +58,9 @@ export interface CampanhaTraduzida {
   descricaoPartes: string[];
   /** Código da página em minúsculas (como em mkt.paginas.codigo), ou null sem página. */
   pagina: string | null;
-  /** Quantos campos (separados por |) o nome tem. */
+  /** Etiqueta do ClickUp lida no último campo (minúsculas), ou null. Não conta em `campos`. */
+  etiqueta: string | null;
+  /** Quantos campos (separados por |) o nome tem, sem a etiqueta. */
   campos: number;
   erros: ErroCampanha[];
   avisos: AvisoCampanha[];
@@ -98,10 +111,20 @@ const SLUG_PAGINA = CODIGO_PAGINA_RE;
 export function traduzirCampanha(nome: string | null | undefined, listas: ListasCampanha): CampanhaTraduzida {
   const bruto = nome ?? '';
   // utm_campaign no formato nome|id (gp-operacoes): o id da plataforma no fim não é parte do nome (igual ao banco, 20261006e)
-  const partes = bruto.replace(/\|\s*[0-9]{6,}\s*$/, '').split('|').map(limpa);
+  const semId = bruto.replace(/\|\s*[0-9]{6,}\s*$/, '');
+  let partes = semId.split('|').map(limpa);
+  // 20261014190000: etiqueta do ClickUp no último campo sai antes de ler página e descrição (igual ao banco)
+  let etiqueta: string | null = null;
+  let semEtiqueta = semId;
+  const ultimoCampo = (partes[partes.length - 1] ?? '').toLowerCase();
+  if (partes.length >= 4 && (ETIQUETA_RE.test(ultimoCampo) || (listas.etiquetas ?? []).some((e) => e.toLowerCase() === ultimoCampo))) {
+    etiqueta = ultimoCampo;
+    partes = partes.slice(0, -1);
+    semEtiqueta = semId.replace(/\|[^|]*$/, '');
+  }
   const vazio = (erro: ErroCampanha, campos: number): CampanhaTraduzida => ({
-    padrao: false, gestor: null, projeto: null, objetivo: null, descricao: null, descricaoPartes: [], pagina: null, campos,
-    erros: [erro], avisos: [], nomeCanonico: null,
+    padrao: false, gestor: null, projeto: null, objetivo: null, descricao: null, descricaoPartes: [], pagina: null,
+    etiqueta, campos, erros: [erro], avisos: [], nomeCanonico: null,
   });
   if (bruto.trim() === '') return vazio('vazio', 0);
   if (partes.length < 3) return vazio('numero_de_campos', partes.length);
@@ -132,11 +155,14 @@ export function traduzirCampanha(nome: string | null | undefined, listas: Listas
   if (descricao === '') erros.push('descricao_vazia');
   else if (descricaoPartes.includes('')) erros.push('campo_vazio');
 
-  const nomeCanonico = [gestor, projeto, objetivo, ...descricaoPartes, ...(pagina !== null ? [pagina.toUpperCase()] : [])].join(' | ');
-  if (bruto !== bruto.toUpperCase()) avisos.push('minusculas');
-  if (semAcento(bruto) !== semAcento(nomeCanonico)) avisos.push('espacos_extras');
+  const nomeBase = [gestor, projeto, objetivo, ...descricaoPartes, ...(pagina !== null ? [pagina.toUpperCase()] : [])].join(' | ');
+  // avisos de forma olham o nome sem a etiqueta (a etiqueta é em minúsculas por padrão)
+  if (semEtiqueta !== semEtiqueta.toUpperCase()) avisos.push('minusculas');
+  if (semAcento(semEtiqueta) !== semAcento(nomeBase)) avisos.push('espacos_extras');
+  const nomeCanonico = etiqueta !== null ? `${nomeBase} | ${etiqueta}` : nomeBase;
 
   return {
-    padrao: erros.length === 0, gestor, projeto, objetivo, descricao, descricaoPartes, pagina, campos: partes.length, erros, avisos, nomeCanonico,
+    padrao: erros.length === 0, gestor, projeto, objetivo, descricao, descricaoPartes, pagina, etiqueta, campos: partes.length,
+    erros, avisos, nomeCanonico,
   };
 }
