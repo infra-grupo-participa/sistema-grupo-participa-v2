@@ -886,3 +886,12 @@ o que foi validado e as diferenças de agregação ainda pendentes.
 - **Testes:** `domain/recorte.test.ts` verifica o modo na URL e a volta ao padrão; `domain/historico.test.ts` cobre soma por coorte, pessoas únicas e ingresso posterior ao primeiro cadastro; `infrastructure/fonte-supabase.test.ts` verifica o mapeamento do novo contrato de grupos com dados sintéticos. A conferência visual foi feita no portal local com leitura real, sem abrir tabela de leads. Não houve consulta direta nem alteração no banco.
 - **Atualização de fonte (16:34 UTC):** RPC agora traz os cruzamentos por grupo e a união; mapeamento e resumo usam esses campos. Teste de mapeamento sintético incluído. Valores de produção conferidos na sessão visual, sem consulta direta ao banco.
 - **Estado:** código preparado na branch `victor-black-v5-leads-grupos`, aguardando revisão do Maestro. Sem alteração de banco.
+
+### Regra da taxa geral de ingresso · 14/10/2026
+
+- A taxa geral da Visão Geral e o resumo geral de leads usam `dados_black_grupo.ingresso_geral`, que contém `numeros_unicos_no_grupo`, `leads_unicos` e `pct`. A fórmula exibida é **números únicos que entraram no grupo ÷ leads únicos**; não se cruza o telefone de cada membro com os leads.
+- O percentual é recebido em pontos percentuais e convertido para a fração usada pelos componentes de taxa. Numerador e denominador também vêm do objeto para os detalhes do cartão.
+- Quando `p_recorte` é aplicado, a RPC devolve `ingresso_geral = null`; o front mantém o cálculo cruzado já existente para tráfego, canal, criativo e MQL. O detalhe de tráfego do placar segue cruzado mesmo na visão geral.
+- Se a resposta antiga não tiver o campo, a tela mantém a métrica legada durante atualização gradual; se o campo vier explicitamente null sem recorte, mostra Sem dado. Nenhum null vira zero.
+- Mapeamento: `web/modules/infra/black/infrastructure/fonte-supabase.ts` (`mapearGrupo`). Cálculo e seleção por recorte: `web/modules/infra/black/domain/numeros.ts` (`ingressoGrupoGeral`).
+- Testes: `npx vitest run modules/infra/black/domain/numeros.test.ts modules/infra/black/infrastructure/fonte-supabase.test.ts`.

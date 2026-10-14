@@ -135,8 +135,15 @@ export function ingressoGrupoMql(grupo: GrupoResumoBlack): Numero {
   return taxaNumerica(r, 'pessoas únicas nos grupos de Advogados e Contadores ÷ MQL do recorte do servidor');
 }
 
-/** Ingresso geral: qualquer pessoa única do recorte que entrou em grupo ÷ todas as pessoas únicas. */
-export function ingressoGrupoGeral(linhas: readonly LinhaPerfil[]): Numero {
+/** Ingresso geral: usa o total agregado da RPC sem cruzamento; recortes continuam calculados por perfil cruzado. */
+export function ingressoGrupoGeral(linhas: readonly LinhaPerfil[], grupo?: GrupoResumoBlack | null): Numero {
+  if (grupo?.recorte === null && grupo.ingressoGeral !== undefined) {
+    const ingresso = grupo.ingressoGeral;
+    if (ingresso === null) return numero(null, null, null, 'números únicos que entraram no grupo ÷ leads únicos');
+    return numero(ingresso.pct === null ? null : ingresso.pct / 100,
+      ingresso.numerosUnicosNoGrupo, ingresso.leadsUnicos,
+      'números únicos que entraram no grupo ÷ leads únicos');
+  }
   return taxaNumerica(calcularIngressoGeral(linhas), 'pessoas únicas que entraram em grupo ÷ pessoas únicas do recorte');
 }
 

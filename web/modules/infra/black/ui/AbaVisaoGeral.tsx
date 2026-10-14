@@ -145,7 +145,7 @@ function CardIngresso({ geral, trafego, grupo, onAbrir }: { geral: ReturnType<ty
             </li>
           </ul>
         </div>}
-        title="Ingresso geral e do tráfego: pessoas únicas com dados_black_perfil.entrou_grupo_em ÷ respectivas pessoas únicas. Segmentos: dados_black_grupo.grupos[].leads_no_grupo ÷ leads_do_segmento. A união e as pessoas em mais de um grupo vêm dos campos leads_em_algum_grupo e leads_em_mais_de_um_grupo." />
+        title="Ingresso geral: números únicos que entraram no grupo ÷ leads únicos (dados_black_grupo.ingresso_geral, sem cruzar telefones). O tráfego e os recortes por pessoa continuam cruzados. Segmentos: dados_black_grupo.grupos[].leads_no_grupo ÷ leads_do_segmento. A união e as pessoas em mais de um grupo vêm dos campos leads_em_algum_grupo e leads_em_mais_de_um_grupo." />
     </Cartao>
   );
 }
@@ -194,7 +194,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const resultadoMqlTrafego = mqlNumero(lTrafegoPago, 'pessoas únicas pagas atribuídas a C2/C3 no período');
   const percentualMqlGeral = taxaMql(lGeral, 'pessoas únicas de todas as portas no período selecionado');
   const percentualMqlTrafego = taxaMql(lTrafegoPago, 'pessoas únicas pagas atribuídas a C2/C3 no período');
-  const ingressoGeral = ingressoGrupoGeral(lGeral);
+  const ingressoGeral = ingressoGrupoGeral(lGeral, d.grupo.data);
   const ingressoTrafego = ingressoGrupoGeral(lTrafegoPago);
   const aCap = agregar(dCap);
   const medirCap = (f: (a: ReturnType<typeof agregar>) => Valor) => (x: DesempenhoDia[]) => { const c = capDias(x, d); return c.length ? f(agregar(c)) : null; };

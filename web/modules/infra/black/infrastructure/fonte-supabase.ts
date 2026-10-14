@@ -393,6 +393,7 @@ export function mapearGrupo(cru: unknown): { data: GrupoResumoBlack; semDado: bo
   const r = objeto(cru);
   if (!r) return { data: grupoSemDado(), semDado: true };
   const periodo = objeto(r.periodo); const leads = objeto(r.leads); const at = objeto(r.atualizado); const rec = objeto(r.recorte);
+  const ingresso = objeto(r.ingresso_geral);
   const recorte: RecorteGrupo | null = rec && typeof rec.tipo === 'string' && typeof rec.valor === 'string'
     ? { tipo: rec.tipo as RecorteGrupo['tipo'], valor: rec.valor } : null;
   const grupos: GrupoBlack[] = linhas(r.grupos).flatMap((g) => {
@@ -414,6 +415,10 @@ export function mapearGrupo(cru: unknown): { data: GrupoResumoBlack; semDado: bo
   return {
     data: {
       periodo: { de: texto(periodo?.de), ate: texto(periodo?.ate) }, recorte, grupos,
+      ingressoGeral: r.ingresso_geral === undefined ? undefined : ingresso ? {
+        numerosUnicosNoGrupo: num(ingresso.numeros_unicos_no_grupo),
+        leadsUnicos: num(ingresso.leads_unicos), pct: num(ingresso.pct),
+      } : null,
       unicosGruposMql: num(r.unicos_grupos_mql), unicosGruposTotal: num(r.unicos_grupos_total), unicosCruzadosMql: num(r.unicos_cruzados_mql),
       leadsEmAlgumGrupo: num(r.leads_em_algum_grupo), leadsEmMaisDeUmGrupo: num(r.leads_em_mais_de_um_grupo),
       leads: {

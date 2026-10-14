@@ -1,9 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { baseFicticia } from '../infrastructure/fixtures/gerador';
-import { cplCaptacao, leadsDoTrafego, leadsPessoas, mql, taxaMql } from './numeros';
+import { cplCaptacao, ingressoGrupoGeral, leadsDoTrafego, leadsPessoas, mql, taxaMql } from './numeros';
 import { indexar } from './metricas';
+import { grupoSemDado } from './grupo';
 
 describe('números canônicos da Black', () => {
+  it('usa ingresso_geral do banco sem cruzar membros com leads e mantém cruzados os recortes', () => {
+    const linhas = baseFicticia().linhas.slice(0, 2);
+    const base = grupoSemDado();
+    const geral = ingressoGrupoGeral(linhas, { ...base, ingressoGeral: { numerosUnicosNoGrupo: 169, leadsUnicos: 259, pct: 65.3 } });
+    expect(geral).toMatchObject({ valor: 0.653, num: 169, den: 259, recorte: 'números únicos que entraram no grupo ÷ leads únicos' });
+
+    const recortado = ingressoGrupoGeral(linhas, {
+      ...base, recorte: { tipo: 'porta', valor: 'isca' },
+      ingressoGeral: { numerosUnicosNoGrupo: 169, leadsUnicos: 259, pct: 65.3 },
+    });
+    expect(recortado.valor).not.toBe(0.653);
+    expect(recortado.recorte).toContain('pessoas únicas que entraram em grupo');
+
+    const semCampo = ingressoGrupoGeral(linhas, { ...base, ingressoGeral: undefined });
+    expect(semCampo.valor).toBe(ingressoGrupoGeral(linhas).valor);
+    expect(ingressoGrupoGeral(linhas, { ...base, ingressoGeral: null }).valor).toBeNull();
+  });
+
   it('conta pessoas, pagos atribuídos e % de MQL sem duplicar cadastros', () => {
     const fixture = baseFicticia();
     const idx = indexar(fixture);
