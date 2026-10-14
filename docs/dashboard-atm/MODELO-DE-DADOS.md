@@ -252,8 +252,9 @@ vendas integer, conversao_pct numeric, conversao_grupo_pct numeric, conversao_pi
   lançados.
 - `vendas` da sessão: aprovadas entre o início dela e o início da próxima (a última vai até `ciclo_fecha_em` ou agora).
 - Conversão = vendas ÷ leads; no grupo = vendas ÷ grupo; sobre o pico = vendas ÷ pico.
-- **A confirmar com o Victor:** qual comparecimento a tela mostra (pico ÷ leads, como parece ser a planilha de julho, ou
-  presentes ÷ leads, medido por pessoa). As duas colunas vêm prontas.
+- **Decidido em 14/10/2026:** a tela mostra o comparecimento por pico (pico ÷ leads e pico ÷ grupo, a conta da planilha), com o
+  pico já sem a equipe (máximo da série do Zoom menos `equipe_na_sala`). `presentes*` (por pessoa, relatório do Zoom) ficam
+  para quando `dados.sessao_presencas` for carregada. Ver `README.md`, seção "Comparecimento do dia 1".
 
 ### 2.6 `dados_atm_pos_live` (2 linhas: `fechado`, `aberto`)
 

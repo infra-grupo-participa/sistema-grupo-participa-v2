@@ -283,3 +283,19 @@ do grupo. Correção: `l as materialized`; resultados idênticos (md5) e cada RP
 `dados_atm_leads` passa a exigir `contato.ver` e só master pede teste (como `dados_atm_pre_checkout`); a chave de
 serviço segue com acesso por causa da TV do dashboard-ht. Detalhes, tempos e permissões em
 `infra/supabase/migrations/20261013233000.explain.md`.
+
+## Comparecimento do dia 1 do ATM 1 OUT/26 (14/10/2026)
+
+**O que foi feito.** A seção Comparecimento do dashboard do ATM lê `dados_atm_comparecimento(p_chave)`, que vem de `dados.sessoes` (pico e equipe) e `dados.sessao_presencas` (relatório do Zoom, por pessoa). Só havia a sessão `live` de 13/10 22:30 UTC, sem pico nem equipe, então a seção ficava vazia. Foi lançado o pico do dia 1 e a tela passou a mostrar o comparecimento por pico.
+
+**De onde veio o dado.** Planilha `[ATM 1 ELAINE - OUT/2026] LEADS SESSÃO DE VIABILIDADE`, aba `Comparecimento`, série por minuto do Zoom de 19:30 a 21:30 (25 pontos): máximo **73 às 20:25**. Eram **5 pessoas da equipe** na live, que não estavam lançadas na planilha (`equipe` vazia). A planilha calcula `pico = MÁXIMO(série) − equipe`, então o pico lançado é **73 − 5 = 68**, com `equipe_na_sala = 5`. Os dois números e a conta ficam em `dados.sessoes.obs` da sessão.
+
+**Banco.** Sem migration: é dado, uma linha de `dados.sessoes` (`id 7fbe2cef-4e5f-4f45-85f5-f7772c5698d3`, chave `atm-elaine-1-2026-10`, tipo `live`). Estado anterior: `pico_audiencia`, `equipe_na_sala` e `obs` nulos. Depois: 68, 5 e o texto da fonte. O `UPDATE` só atua se pico e equipe ainda estiverem nulos. Como voltar: `update dados.sessoes set pico_audiencia = null, equipe_na_sala = null, obs = null where id = '7fbe2cef-4e5f-4f45-85f5-f7772c5698d3';`.
+
+**Tela.** `web/modules/infra/atm/domain/comparecimento.ts` define os cards da seção (antes estavam soltos no componente). Os cards "Comparecimento dos leads" e "Comparecimento do grupo" liam `presentes_leads`/`presentes_grupo`, que dependem do relatório do Zoom por pessoa e continuam sem dado; agora leem `pico_sobre_leads_pct` (pico ÷ leads) e `pico_sobre_grupo_pct` (pico ÷ grupo), a mesma conta da planilha. A seção ganhou o texto de ajuda: o pico já está sem as pessoas da equipe, que não contam como comparecimento nem como pessoa única. Quando o relatório do Zoom por pessoa for carregado, `presentes*` voltam como cards próprios (decisão do Victor).
+
+**Números do dia da implantação (leitura de 14/10 19:16 UTC):** pico 68, equipe 5, leads 442, grupo 362, comparecimento 15,38% dos leads e 18,78% do grupo, vendas 0. A planilha mostrava 434 leads e 329 no grupo (foto anterior) e 73 de pico sem descontar a equipe (16,82% e 22,19%), por isso os percentuais diferem.
+
+**Como testar.** `npx vitest run modules/infra/atm` (inclui `domain/comparecimento.test.ts`), `npx tsc --noEmit`, `npx eslint` nos dois arquivos, `npm run lint:tokens`. Na tela: abrir Infra > Dashboards > Escritório > ATM (`atm-elaine-1-2026-10`) e conferir a seção Comparecimento. Rotina de conferência no banco: `select pico_audiencia, equipe_na_sala, pico_sobre_leads_pct, pico_sobre_grupo_pct from public.dados_atm_comparecimento('atm-elaine-1-2026-10')`.
+
+**O que falta.** Replay (15/10) e triplay: cadastrar as sessões em `dados.sessoes` e lançar pico e equipe depois de cada uma; relatório do Zoom por pessoa em `dados.sessao_presencas`; a planilha continua sem a equipe lançada (`equipe` vazio na aba `Comparecimento`).
