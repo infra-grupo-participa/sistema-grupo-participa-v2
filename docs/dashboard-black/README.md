@@ -829,12 +829,12 @@ o que foi validado e as diferenças de agregação ainda pendentes.
 - Estado: correção local na worktree `victor-black-visual-2`, sem commit ou publicação.
 
 
-### Potencial de MQL e Histórico no estilo do funil de Criativos (14/10/2026, acréscimo do Victor)
+### % de MQL e Histórico no estilo do funil de Criativos (14/10/2026, acréscimo do Victor)
 
-- **Potencial de MQL** aparece ao lado do card MQLs no Funil macro. Os dois usam a Regra B (profissão do envio mais recente) e o recorte de pessoas únicas atribuídas a C2/C3 no período selecionado; potencial = MQL ÷ pessoas do recorte. O cálculo único é `mqlDoRecorte` (`domain/metricas.ts`) e o mesmo resultado alimenta o total de MQL e a taxa.
+- **% de MQL** aparece ao lado do card MQLs no Funil macro. O rótulo anterior “Potencial de MQL” foi substituído para nomear diretamente a taxa exibida. O cálculo não muda: Regra B (profissão do envio mais recente com profissão) e MQL ÷ pessoas únicas de cada recorte. O cartão compara a taxa geral e a parcela C2/C3 com a meta de 60% definida pelo Victor, usando o mesmo farol do placar. O cálculo único é `mqlDoRecorte` (`domain/metricas.ts`) e o mesmo resultado alimenta o total de MQL e a taxa.
 - No **Histórico**, o botão de reprodução automática foi removido. A régua de datas continua permitindo navegar pelos dias; o funil usa o componente SVG `FunilTrapezio` compartilhado com Criativos e destaca uma etapa sob foco ou cursor. O gráfico de investimento continua com barras e linha, e o acumulado de pessoas usa `pessoasUnicas`, de todas as portas e sem filtro, para bater com Leads contra a meta.
 - Métricas compartilhadas: pessoas únicas em `pessoasUnicas`; CPL de captação em `cplPlacar` (com `cpl` para divisão); CPLs por etapa também deduplicam com `cplDo`; conversão de página deduplica com `conversaoPagina`; connect rate usa `connectRate`; investimento de captação usa `investimentoCaptacao`. Inscrições do Funil macro contam pessoas únicas atribuídas a C2/C3.
-- Para revisar: no período `desde-inicio`, comparar Leads contra a meta com o acumulado do Histórico; mudar período e filtro e confirmar que Inscrições, MQL e Potencial de MQL acompanham o recorte; passar o cursor por cada etapa do funil do Histórico. Testes: `domain/metricas.test.ts` e `domain/historico.test.ts`.
+- Para revisar: no período `desde-inicio`, comparar Leads contra a meta com o acumulado do Histórico; mudar período e filtro e confirmar que Inscrições, MQL e % de MQL acompanham o recorte; passar o cursor por cada etapa do funil do Histórico. Testes: `domain/metricas.test.ts` e `domain/historico.test.ts`.
 
 ### Placar v3, funções centrais e alias de ISCAS (14/10/2026)
 

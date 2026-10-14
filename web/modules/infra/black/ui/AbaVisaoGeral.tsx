@@ -98,12 +98,17 @@ function CardMql({ geral, trafego, onAbrir }: { geral: ReturnType<typeof mqlNume
 }
 
 function CardPotencialMql({ geral, trafego, onAbrir }: { geral: ReturnType<typeof potencialMqlNumero>; trafego: ReturnType<typeof potencialMqlNumero>; onAbrir: () => void }) {
+  const meta = 0.6;
   return (
-    <Cartao cheio titulo="% MQL" onAbrir={onAbrir}>
+    <Cartao cheio titulo="% MQL" onAbrir={onAbrir} className="min-h-[168px]">
       <KpiCard label="% MQL" value={<Taxa taxa={geral} className="text-2xl font-bold tracking-tight text-[var(--fg)] no-underline" />}
         valueClassName="text-2xl sm:text-3xl"
-        hint={<div className="space-y-2">{geral.valor !== null && <ProgressBar value={geral.valor * 100} ariaLabel={`MQL geral ${formatar(geral.valor, 'pct')}`} />}<span>Tráfego C2/C3: <strong className="tabular text-[var(--fg)]"><Taxa taxa={trafego} /></strong></span></div>}
-        title={`Geral: ${formatar(geral.num, 'int')} MQL ÷ ${formatar(geral.den, 'int')} leads. Tráfego: ${formatar(trafego.num, 'int')} MQL ÷ ${formatar(trafego.den, 'int')} leads pagos C2/C3. Regra B; fonte dados_black_perfil.`} />
+        className="!overflow-visible"
+        hint={<div className="space-y-1 leading-snug">
+          <div className="flex flex-wrap items-center gap-x-1"><span>Geral · meta 60%</span><IndicadorMeta valor={geral.valor} meta={meta} formato="pct" compacto /></div>
+          <div className="flex flex-wrap items-center gap-x-1"><span>Tráfego C2/C3: <strong className="tabular text-[var(--fg)]"><Taxa taxa={trafego} /></strong> · meta 60%</span><IndicadorMeta valor={trafego.valor} meta={meta} formato="pct" compacto /></div>
+        </div>}
+        title={`% de MQL. Geral: ${formatar(geral.num, 'int')} MQL ÷ ${formatar(geral.den, 'int')} leads. Tráfego: ${formatar(trafego.num, 'int')} MQL ÷ ${formatar(trafego.den, 'int')} leads pagos C2/C3. Meta geral e de tráfego: 60%. Regra B; fonte dados_black_perfil.`} />
     </Cartao>
   );
 }

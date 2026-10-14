@@ -60,6 +60,11 @@ describe('avaliarMeta', () => {
     expect(r.estado).toBe('ruim');
     expect(r.pctDaMeta).toBeCloseTo(0.8333, 3);
   });
+  it('compara MQL geral e tráfego com a meta comum de 60%', () => {
+    expect(avaliarMeta(0.673, 0.6, false).estado).toBe('bom');
+    expect(avaliarMeta(0.629, 0.6, false).estado).toBe('bom');
+    expect(avaliarMeta(0.55, 0.6, false).estado).toBe('atencao');
+  });
   it('menor melhor: no teto ou abaixo é bom; até 10% acima é atenção; além é ruim', () => {
     expect(avaliarMeta(16.7, 16.7, true).estado).toBe('bom');
     expect(avaliarMeta(12, 16.7, true).estado).toBe('bom');
