@@ -154,6 +154,7 @@ mais usado**; se estiver na Hostinger, pode remover.
 | `comercial_adicionar_nota` | operar | Nota interna na pessoa/negócio | `crm_adicionar_nota` |
 | `comercial_concluir_atividade` | operar | Conclui atividade com resultado | `crm_concluir_atividade` |
 | `comercial_mover_etapa` | operar | Move negócio (Ganho recusado; campos obrigatórios exigidos) | `crm_mover_etapa` |
+| `comercial_criar_negocio` | operar | Abre negócio na 1ª etapa do funil, dono pela distribuição; recusa opt-out e 2º aberto no mesmo funil (20261014a) | `crm_criar_negocio` |
 | `comercial_reabrir_atividade` | operar | Desfaz a conclusão (dono da atividade ou gestor) | `crm_reabrir_atividade` |
 | `comercial_criar_contato` | operar | Nome + telefone e/ou e-mail; duplicado devolve o existente (`nova=false`), sem trocar dono | `crm_criar_contato` |
 | `comercial_editar_contato` | operar | Nome, telefone, e-mail, cidade/UF, perfil, holding, empresa, observação (D6) | `crm_editar_contato` |

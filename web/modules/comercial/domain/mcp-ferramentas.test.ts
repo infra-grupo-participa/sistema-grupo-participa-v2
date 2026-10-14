@@ -10,11 +10,11 @@ const GEST = { perfilId: U2, papel: 'gestor' as const };
 const CONSULTAS_WHATSAPP = ['comercial_numeros_whatsapp', 'comercial_templates_whatsapp', 'comercial_situacao_conversa'];
 
 describe('mcp: catálogo', () => {
-  it('15 de leitura (3 do playbook) + 14 no escopo operar (10 escritas + 4 do WhatsApp), nomes válidos para o MCP e para crm.mcp_chamada', () => {
-    expect(FERRAMENTAS).toHaveLength(29);
+  it('15 de leitura (3 do playbook) + 15 no escopo operar (11 escritas + 4 do WhatsApp), nomes válidos para o MCP e para crm.mcp_chamada', () => {
+    expect(FERRAMENTAS).toHaveLength(30);
     expect(FERRAMENTAS.filter((x) => x.escopo === 'ler')).toHaveLength(15);
     expect(FERRAMENTAS.filter((x) => x.escopo === 'operar').map((x) => x.name).sort())
-      .toEqual(['comercial_adicionar_nota', 'comercial_concluir_atividade', 'comercial_criar_atividade', 'comercial_criar_contato',
+      .toEqual(['comercial_adicionar_nota', 'comercial_concluir_atividade', 'comercial_criar_atividade', 'comercial_criar_contato', 'comercial_criar_negocio',
         'comercial_editar_contato', 'comercial_enviar_whatsapp', 'comercial_mover_etapa', 'comercial_numeros_whatsapp',
         'comercial_preencher_campos', 'comercial_reabrir_atividade', 'comercial_situacao_conversa', 'comercial_tag_adicionar', 'comercial_tag_remover',
         'comercial_templates_whatsapp']);
@@ -28,12 +28,12 @@ describe('mcp: catálogo', () => {
     const nomes = FERRAMENTAS.map((x) => x.name).filter((n) => n !== 'comercial_enviar_whatsapp').join(' ');
     expect(nomes).not.toMatch(/ganho|perdido|transferir|disparo|enviar|exportar|funil_salvar|oferta|apagar|excluir|massa/);
   });
-  it('toda RPC usada está na lista fechada de public.crm_mcp_rpc (migrations 20261008150823, 20261008222038, 20261008233100 e 20261009153128)', () => {
+  it('toda RPC usada está na lista fechada de public.crm_mcp_rpc (migrations 20261008150823, 20261008222038, 20261008233100, 20261009153128 e 20261014a)', () => {
     const LISTA = ['crm_funis', 'crm_funil_resumo', 'crm_negocios', 'crm_contatos', 'crm_jornada', 'crm_atividades',
       'crm_desempenho', 'crm_mensagens', 'crm_criar_atividade', 'crm_adicionar_nota', 'crm_mover_etapa', 'crm_concluir_atividade',
       'crm_criar_contato', 'crm_editar_contato', 'crm_tags_contato', 'crm_reabrir_atividade',
       'crm_mcp_numeros', 'crm_mcp_templates', 'crm_mcp_situacao_conversa', 'crm_mcp_enviar_whatsapp',
-      'crm_mcp_negocio_campos', 'crm_mcp_preencher_campos', 'crm_mcp_lead'];
+      'crm_mcp_negocio_campos', 'crm_mcp_preencher_campos', 'crm_mcp_lead', 'crm_criar_negocio'];
     const args = { funil_id: U1, pessoa_id: U1, negocio_id: U1, etapa_id: U2, atividade_id: U1, busca: 'ana', tipo: 'ligacao', titulo: 't', texto: 't',
       vence_em: '2026-10-06T10:00', nome: 'Ana Souza', email: 'ana@exemplo.com', tags: ['vip'], contato_id: U1, chave_idempotencia: U2,
       campos: { perfil_profissional: 'contador' }, link: `https://grupoparticipa.app.br/comercial/conversas?contato=${U1}` };
@@ -100,6 +100,16 @@ describe('mcp: validação de argumentos', () => {
     expect(mv.ok && f('comercial_mover_etapa').plano(mv.valor, new Date())).toEqual([{ rpc: 'crm_mover_etapa', params: { p_negocio: U1, p_etapa: U2 } }]);
     const nt = f('comercial_adicionar_nota').validar({ pessoa_id: U1, texto: 'oi' });
     expect(nt.ok && f('comercial_adicionar_nota').plano(nt.valor, new Date())).toEqual([{ rpc: 'crm_adicionar_nota', params: { p_pessoa: U1, p_negocio: null, p_texto: 'oi' } }]);
+  });
+  it('criar negócio: contato + funil, sem etapa nem dono no pedido (o banco usa a 1ª etapa e a distribuição)', () => {
+    const cn = f('comercial_criar_negocio');
+    const v = cn.validar({ pessoa_id: U1, funil_id: U2 });
+    expect(v.ok && cn.plano(v.valor, new Date())).toEqual([{ rpc: 'crm_criar_negocio', params: { p_pessoa: U1, p_funil: U2 } }]);
+    expect(cn.validar({ pessoa_id: U1 }).ok).toBe(false);
+    expect(cn.validar({ pessoa_id: 'x', funil_id: U2 }).ok).toBe(false);
+    expect(cn.escrita).toBe(true);
+    expect(cn.resultado([{ ok: true, negocioId: U2, donoId: null }], {}, new Date(), { perfilId: U1, papel: 'gestor' }))
+      .toEqual({ ok: true, negocioId: U2, donoId: null });
   });
   it('limites numéricos', () => {
     expect(f('comercial_negocios_por_etapa').validar({ funil_id: U1, limite: 500 }).ok).toBe(false);
