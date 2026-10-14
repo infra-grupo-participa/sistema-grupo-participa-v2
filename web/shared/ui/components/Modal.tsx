@@ -16,8 +16,8 @@ export function Modal({ open = true, onClose, title, children, footer, width = '
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-[2px] gp-overlay-in" />
+    <div className="fixed inset-0 z-[1000] flex min-h-dvh items-center justify-center p-4">
+      <button aria-label="Fechar" onClick={onClose} className="absolute inset-y-0 left-0 -right-4 h-full bg-[var(--scrim)] backdrop-blur-[2px] gp-overlay-in" />
       <div className={`relative w-full ${width} max-h-[90vh] overflow-y-auto rounded-[var(--r-xl)] border border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[var(--highlight-surface),var(--shadow-overlay)] gp-modal-in overscroll-contain`}>
         {title && (
           <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-2)_88%,transparent)] backdrop-blur-md px-5 py-3.5">

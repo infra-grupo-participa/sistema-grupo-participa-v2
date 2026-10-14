@@ -5,7 +5,7 @@
 // por etapa. O gráfico por fase saiu da visão geral em 13/10 (pedido do Victor): fica no detalhe do card de tráfego. Razão = soma sobre soma no mesmo recorte; sem dado = "Sem dado", nunca zero.
 import { useState, type ReactNode } from 'react';
 import { KpiCard, Modal, ProgressBar, SectionCard } from '@/shared/ui/components';
-import { cardMql, cardsGrupo, ROTULO_CRUZADO } from '../domain/grupo';
+import { cardMql, cardsGrupo } from '../domain/grupo';
 import { avaliarFaixa } from '../domain/meta';
 import { diaDe } from '../domain/recorte';
 import {
@@ -36,16 +36,16 @@ const valorTaxa = (t: TipoTaxa): Valor => t.valor;
 // dela em qualquer largura; a moldura do KpiCard de dentro some. A partir de 1280 px a moldura de fora ocupa a célula.
 const MOLDURA_COM_LISTA = ' overflow-hidden border border-l-4 border-[var(--border)] border-l-[var(--accent)] bg-[var(--surface-2)]'
   + ' [&>*:first-child]:!rounded-none [&>*:first-child]:!border-0 [&>*:first-child]:!shadow-none';
-const GRADE_MACRO = 'grid grid-cols-2 gap-3 lg:grid-cols-3 xl:auto-rows-fr xl:grid-cols-5';
-function Cartao({ onAbrir, titulo, children, cheio = false }: { onAbrir?: () => void; titulo: string; children: ReactNode; cheio?: boolean | 'xl' }) {
+const GRADE_MACRO = 'grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5';
+function Cartao({ onAbrir, titulo, children, cheio = false, className = '' }: { onAbrir?: () => void; titulo: string; children: ReactNode; cheio?: boolean | 'xl'; className?: string }) {
   // `cheio`: o card ocupa a altura toda da célula (grade com linhas iguais no funil macro). 'xl': card com lista embaixo
   // do número; só a moldura de fora ocupa a célula (a partir de 1280 px), o KpiCard e a lista ficam com a altura natural.
   const altura = cheio === 'xl' ? ' xl:h-full' + MOLDURA_COM_LISTA : cheio ? ' h-full [&>*]:h-full' : '';
-  if (!onAbrir) return <div className={'min-w-0' + altura}>{children}</div>;
+  if (!onAbrir) return <div className={`min-w-0${altura} ${className}`}>{children}</div>;
   return (
     <div role="button" tabIndex={0} aria-label={`Abrir detalhe: ${titulo}`} onClick={onAbrir}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAbrir(); } }}
-      className={'atm-historico-card atm-historico-interativo min-w-0 cursor-pointer' + altura + '  rounded-[var(--r-lg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]'}>
+      className={`atm-historico-card atm-historico-interativo min-w-0 cursor-pointer${altura} rounded-[var(--r-lg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${className}`}>
       {children}
     </div>
   );
@@ -97,10 +97,11 @@ function CardMql({ d, onAbrir }: { d: DadosTela; onAbrir: () => void }) {
   const c = g ? cardMql(g) : null;
   return (
     <Cartao cheio titulo="MQLs" onAbrir={onAbrir}>
-      <KpiCard label="MQLs" title="dados_black_grupo: leads.mql e leads.unicos (pessoas únicas do período e do nó, sem teste)."
-        value={<span className="inline-flex flex-wrap items-baseline gap-x-2"><Numero valor={c?.total ?? null} formato="int" falta={falta} />{c && <IndicadorMeta valor={c.taxa.valor} meta={d.config.metas.mql} formato="pct" />}</span>}
-        hint={c ? `${c.taxa.valor === null ? 'Sem dado' : formatar(c.taxa.valor, 'pct')} dos leads (${formatar(c.taxa.num, 'int')} ÷ ${formatar(c.taxa.den, 'int')}).` : falta} />
-      {c && d.grupo.descricao && <p className="-mt-2 px-4 pb-3 text-xs text-[var(--fg-3)]">Recorte: {d.grupo.descricao}</p>}
+      <KpiCard label="MQLs"
+        valueClassName="text-2xl sm:text-3xl"
+        value={<span className="inline-flex flex-wrap items-baseline gap-x-2"><Numero valor={c?.total ?? null} formato="int" falta={falta} />{c && <IndicadorMeta valor={c.taxa.valor} meta={d.config.metas.mql} formato="pct" compacto />}</span>}
+        title={c ? `dados_black_grupo: leads.mql ÷ leads.unicos. ${d.grupo.descricao ?? ''}` : falta} />
+      {c?.taxa.valor !== null && c?.taxa.valor !== undefined && <div className="-mt-2 px-4 pb-3"><ProgressBar value={c.taxa.valor * 100} ariaLabel={`MQL: ${formatar(c.taxa.valor, 'pct')}`} /></div>}
     </Cartao>
   );
 }
@@ -112,21 +113,22 @@ function CardIngresso({ d, onAbrir }: { d: DadosTela; onAbrir: () => void }) {
   const c = g ? cardsGrupo(g) : null;
   return (
     <Cartao cheio="xl" titulo="Ingresso no grupo" onAbrir={onAbrir}>
-      <KpiCard label="Ingresso no grupo" title="Únicos nos grupos de Advogados e Contadores ÷ leads MQL (dados_black_grupo)."
-        value={c ? <span className="inline-flex flex-wrap items-baseline gap-x-2"><Taxa taxa={c.geral} className="text-3xl font-bold tracking-tight text-[var(--fg)] no-underline" /><IndicadorMeta valor={c.geral.valor} meta={d.config.metas.ingressoGrupo} formato="pct" /></span> : <Numero valor={null} formato="pct" falta={falta} />}
-        hint={c ? (c.cruzado ? ROTULO_CRUZADO : 'MQL no grupo ÷ leads MQL.') : falta} />
+      <KpiCard label="Ingresso no grupo"
+        valueClassName="text-2xl sm:text-3xl"
+        value={c ? <span className="inline-flex flex-wrap items-baseline gap-x-2"><Taxa taxa={c.geral} className="text-3xl font-bold tracking-tight text-[var(--fg)] no-underline" /><IndicadorMeta valor={c.geral.valor} meta={d.config.metas.ingressoGrupo} formato="pct" compacto /></span> : <Numero valor={null} formato="pct" falta={falta} />}
+        title={`Únicos nos grupos de Advogados e Contadores ÷ leads MQL (dados_black_grupo). ${d.grupo.descricao ?? falta}`} />
       {c?.geral.valor !== null && c?.geral.valor !== undefined && (
         <div className="-mt-2 px-4 pb-3"><ProgressBar value={c.geral.valor * 100} ariaLabel={`Ingresso no grupo ${formatar(c.geral.valor, 'pct')}`} /></div>
       )}
       {c && (
-        <ul className="-mt-2 px-4 pb-3 text-xs">
+        <ul className="space-y-2 px-4 pb-4 text-xs">
           {c.linhas.map((x) => (
-            <li key={x.segmento} className="flex items-baseline justify-between gap-2 py-0.5">
-              <span className="text-[var(--fg-3)]">{x.rotulo}</span>
+            <li key={x.segmento} className="grid min-w-0 grid-cols-1 gap-y-1">
+              <span className="min-w-0 break-words font-medium leading-tight text-[var(--fg-2)]">{x.rotulo}</span>
               <span className="text-right text-[var(--fg)]"><Taxa taxa={x.taxa} /> <span className="text-[var(--fg-3)]">{formatar(x.taxa.num, 'int')} ÷ {formatar(x.taxa.den, 'int')}</span></span>
+              {x.taxa.valor !== null && <ProgressBar value={x.taxa.valor * 100} ariaLabel={`${x.rotulo}: ${formatar(x.taxa.valor, 'pct')}`} />}
             </li>
           ))}
-          {d.grupo.descricao && <li className="pt-1 text-[var(--fg-3)]">Recorte: {d.grupo.descricao}</li>}
         </ul>
       )}
     </Cartao>
@@ -135,6 +137,7 @@ function CardIngresso({ d, onAbrir }: { d: DadosTela; onAbrir: () => void }) {
 
 export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const [aberto, setAberto] = useState<CardDef | null>(null);
+  const [detalheCaptacao, setDetalheCaptacao] = useState(false);
   const [etapaAberta, setEtapaAberta] = useState<string | null>(null);
   const [tabela, setTabela] = useState<TabelaAberta | null>(null);
   // Sem fonte de cadastros, número de lead é "Sem dado" (nunca o zero de uma lista vazia).
@@ -165,7 +168,6 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const total = disparoAplica && custoDisparo?.valor != null ? gastoPeriodo + custoDisparo.valor : gastoPeriodo;
   const notaTotal = `${!disparoAplica ? 'Disparo não se divide por funil nem canal: fora da soma.'
     : custoDisparo?.valor == null ? 'Custo de disparo sem dado: fora da soma.' : 'Tráfego + disparo (disparo fictício).'} ${NOTA_ENTRESAFRA}.`;
-  const custoCanal = (k: 'api' | 'sms' | 'ligacao') => d.mensageria?.canais.find((c) => c.canal === k)?.custo ?? null;
 
   // ─── Faixa 3: funil macro (só captação) ─────────────────────────────────────────────────────────────────
   const dCap = capDias(d.dias, d); const lCap = capLinhas(d.linhas);
@@ -174,10 +176,10 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   // Ordem pedida pelo Victor (12/10): Impressões, CPM, Cliques, CTR, CPC, Visualizações, Connect, Inscrições, Conversão. O card Grupo em 48h saiu em 13/10: fica a taxa de Ingresso no grupo.
   const cards3: { c: CardDef; valor: ReactNode; hint?: string }[] = [
     { c: { id: 'imp', rotulo: 'Impressões', formato: 'int', medir: medirCap((a) => a.impressoes), aplica: TRAFEGO }, valor: <Numero valor={dCap.length ? aCap.impressoes : null} formato="int" /> },
-    { c: { id: 'cpm', rotulo: 'CPM', formato: 'brl', medir: medirCap(cpm), aplica: TRAFEGO, menorMelhor: true, dica: 'Custo por mil impressões: gasto ÷ impressões × 1000.' }, valor: <Numero valor={dCap.length ? cpm(aCap) : null} formato="brl" />, hint: dCap.length ? `Gasto diário por anúncio: ${moeda(aCap.gasto)} ÷ ${formatar(aCap.impressoes, 'int')} impressões × 1.000.` : 'Sem dado de gasto ou impressões no período.' },
+    { c: { id: 'cpm', rotulo: 'CPM', formato: 'brl', medir: medirCap(cpm), aplica: TRAFEGO, menorMelhor: true, dica: 'Custo por mil impressões: gasto ÷ impressões × 1000.' }, valor: <Numero valor={dCap.length ? cpm(aCap) : null} formato="brl" /> },
     { c: { id: 'cliques', rotulo: 'Cliques no link', formato: 'int', medir: (x) => agregar(capDias(x, d)).cliques.valor, aplica: TRAFEGO }, valor: <Numero valor={aCap.cliques.valor} formato="int" /> },
     { c: { id: 'ctr', rotulo: 'CTR', formato: 'pct', medir: (x) => valorTaxa(ctr(agregar(capDias(x, d)))), aplica: TRAFEGO, dica: 'Cliques no link ÷ impressões.' }, valor: <Taxa taxa={ctr(aCap)} /> },
-    { c: { id: 'cpc', rotulo: 'CPC', formato: 'brl', medir: medirCap(cpc), aplica: TRAFEGO, menorMelhor: true, dica: 'Custo por clique: gasto ÷ cliques no link, só nas linhas com clique medido.' }, valor: <Numero valor={dCap.length ? cpc(aCap) : null} formato="brl" />, hint: 'Custo por clique no link.' },
+    { c: { id: 'cpc', rotulo: 'CPC', formato: 'brl', medir: medirCap(cpc), aplica: TRAFEGO, menorMelhor: true, dica: 'Custo por clique: gasto ÷ cliques no link, só nas linhas com clique medido.' }, valor: <Numero valor={dCap.length ? cpc(aCap) : null} formato="brl" /> },
     { c: { id: 'lpv', rotulo: 'Visualizações da página', formato: 'int', medir: (x) => agregar(capDias(x, d)).lpv.valor, aplica: TRAFEGO }, valor: <Numero valor={aCap.lpv.valor} formato="int" />, hint: aCap.lpv.conhecidos < aCap.lpv.total ? 'Parcial: Google sem LPV.' : undefined },
     { c: { id: 'connect', rotulo: 'Connect rate', formato: 'pct', medir: (x) => valorTaxa(connectRate(x, idx)), aplica: TRAFEGO, dica: 'Σ views da página ÷ Σ cliques, só nas linhas com as duas métricas.' }, valor: <Taxa taxa={connectRate(d.dias, idx)} /> },
     { c: { id: 'insc', rotulo: 'Inscrições', formato: 'int', medir: (_, l) => capLinhas(l).length, aplica: TODAS, dica: 'Cadastros de C2 e C3 (todas as portas).' }, valor: <Numero valor={semLeads ? null : lCap.length} formato="int" falta={d.avisoPerfil ?? undefined} />, hint: `${formatar(lCap.filter((l) => l.origem === 'pago').length, 'int')} de tráfego pago` },
@@ -188,11 +190,11 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const m = config.metas;
   const estadoCpl = avaliarFaixa(placar.valor, config.reguaCpl?.meta ?? null, config.cplAlvoMedio).estado;
   const indicador: Record<string, ReactNode> = {
-    cpm: <IndicadorMeta valor={dCap.length ? cpm(aCap) : null} meta={m.cpm} menorMelhor formato="brl" />,
-    ctr: <IndicadorMeta valor={ctr(aCap).valor} meta={m.ctr} formato="pct" />,
-    cpc: <IndicadorMeta valor={dCap.length ? cpc(aCap) : null} meta={m.cpc} menorMelhor formato="brl" />,
-    connect: <IndicadorMeta valor={connectRate(d.dias, idx).valor} meta={m.connectRate} formato="pct" />,
-    conv: <IndicadorMeta valor={conversaoPagina(d.dias, d.linhas, idx).valor} meta={m.conversaoPagina} formato="pct" />,
+    cpm: <IndicadorMeta valor={dCap.length ? cpm(aCap) : null} meta={m.cpm} menorMelhor formato="brl" compacto />,
+    ctr: <IndicadorMeta valor={ctr(aCap).valor} meta={m.ctr} formato="pct" compacto />,
+    cpc: <IndicadorMeta valor={dCap.length ? cpc(aCap) : null} meta={m.cpc} menorMelhor formato="brl" compacto />,
+    connect: <IndicadorMeta valor={connectRate(d.dias, idx).valor} meta={m.connectRate} formato="pct" compacto />,
+    conv: <IndicadorMeta valor={conversaoPagina(d.dias, d.linhas, idx).valor} meta={m.conversaoPagina} formato="pct" compacto />,
   };
 
   // Tabelas dos cards MQLs e Ingresso: os envios do período e do nó (cada envio é uma linha; o card conta pessoas).
@@ -234,41 +236,40 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
     <div className="space-y-5">
       <section aria-labelledby="vg-placar">
         <h2 id="vg-placar" className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)]">Placar</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <KpiCard label="Até a live" value={config.liveEm ? tempoAte(config.liveEm, d.agora) : 'Sem dado'}
-            hint={config.liveEm ? `Live em ${dataHora(config.liveEm)}` : 'Data da live sem cadastro.'} bar={config.liveEm ? 'purple' : 'gray'} />
-          <Cartao titulo={cardLeads.rotulo} onAbrir={abrir(cardLeads)}>
-            <KpiCard label="Leads contra a meta" bar="accent" title={config.fontes.plano}
-              value={<><Numero valor={leadsAteAgora} formato="int" falta={d.avisoPerfil ?? undefined} /> <span className="text-sm font-normal text-[var(--fg-3)]">de {config.metaLeads === null ? 'meta sem cadastro' : formatar(config.metaLeads, 'int')}</span></>}
-              hint={`Pessoas únicas do início até agora. ${config.metaLeads === null ? 'Meta: Sem dado.' : `${formatar(dividir(leadsAteAgora, config.metaLeads), 'pct')} da meta.`}`} />
-            {config.metaLeads !== null && leadsAteAgora !== null && (
-              <div className="-mt-2 px-4 pb-3"><ProgressBar value={(leadsAteAgora / config.metaLeads) * 100} ariaLabel={`${formatar(leadsAteAgora, 'int')} de ${formatar(config.metaLeads, 'int')} leads`} valueNow={leadsAteAgora} valueMin={0} valueMax={config.metaLeads} /></div>
-            )}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+          <Cartao className="md:col-span-2" cheio titulo="Investimento em captação" onAbrir={() => setDetalheCaptacao(true)}>
+            <KpiCard className="h-full" label="Investimento em captação" bar="accent" valueClassName="text-2xl sm:text-3xl"
+              title={`${detalheInvestimento}. ${detalhesCobertura || 'Sem campanha sem entrega ou cobertura pendente neste período.'} Total das campanhas de captação C2/C3, sem remarketing. ${NOTA_ENTRESAFRA}.`}
+              value={<Numero valor={investimento.total} formato="brl" falta="sem dado no período" />}
+              hint={<div className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-[11px] font-medium text-[var(--fg-2)]"><span>Meta Ads · {moeda(investimento.meta)}</span><span>Google Ads · {moeda(investimento.google)}</span></div>} />
           </Cartao>
-          <Cartao titulo={cardCpl.rotulo} onAbrir={abrir(cardCpl)}>
-            <KpiCard label="CPL geral" bar={estadoCpl === 'sem' ? 'gray' : estadoCpl === 'bom' ? 'green' : estadoCpl === 'atencao' ? 'yellow' : 'red'}
-              value={<span className="inline-flex items-center gap-2"><Numero valor={placar.valor} formato="brl" falta="sem leads pagos no recorte" /><IndicadorMeta valor={placar.valor} ideal={config.reguaCpl?.meta ?? null} meta={config.cplAlvoMedio} formato="brl" /></span>}
-              hint={`Captação C2/C3 ÷ leads pagos C2/C3: ${moeda(placar.gasto)} ÷ ${formatar(placar.leadsPagos, 'int')}. ${NOTA_ENTRESAFRA}. Alvo ${config.cplAlvoMedio === null ? 'sem cadastro' : moeda(config.cplAlvoMedio)}.`} />
+          <KpiCard className="h-full md:col-span-2" label="Até a live" value={config.liveEm ? tempoAte(config.liveEm, d.agora) : 'Sem dado'} valueClassName="text-2xl sm:text-3xl"
+            title={config.liveEm ? `Live em ${dataHora(config.liveEm)}` : 'Data da live sem cadastro.'} bar={config.liveEm ? 'purple' : 'gray'} />
+          <Cartao className="md:col-span-2" cheio titulo={cardLeads.rotulo} onAbrir={abrir(cardLeads)}>
+            <KpiCard className="h-full" label="Leads contra a meta" bar="accent" title={`${config.fontes.plano} Pessoas únicas desde o início. Meta: ${config.metaLeads === null ? 'sem cadastro' : formatar(config.metaLeads, 'int')}.`} valueClassName="text-2xl sm:text-3xl"
+              value={<Numero valor={leadsAteAgora} formato="int" falta={d.avisoPerfil ?? undefined} />}
+              hint={config.metaLeads !== null && leadsAteAgora !== null ? <ProgressBar value={(leadsAteAgora / config.metaLeads) * 100} ariaLabel={`${formatar(leadsAteAgora, 'int')} de ${formatar(config.metaLeads, 'int')} leads`} valueNow={leadsAteAgora} valueMin={0} valueMax={config.metaLeads} /> : undefined} />
           </Cartao>
-          <Cartao titulo={cardGasto.rotulo} onAbrir={abrir(cardGasto)}>
-            <KpiCard label="Verba contra o orçamento" bar="yellow"
-              value={<><Numero valor={gastoAteHoje} formato="brl" /> <span className="text-sm font-normal text-[var(--fg-3)]">de {config.orcamentoTotal === null ? 'orçamento sem cadastro' : moeda(config.orcamentoTotal)}</span></>}
-              hint={`Tráfego do início até hoje. ${config.orcamentoTotal === null ? 'Orçamento: Sem dado.' : `${formatar(dividir(gastoAteHoje, config.orcamentoTotal), 'pct')} do orçamento.`} ${NOTA_ENTRESAFRA}.`} />
-            {config.orcamentoTotal !== null && (
-              <div className="-mt-2 px-4 pb-3"><ProgressBar value={(gastoAteHoje / config.orcamentoTotal) * 100} tone="yellow" ariaLabel={`${moeda(gastoAteHoje)} de ${moeda(config.orcamentoTotal)}`} /></div>
-            )}
+          <Cartao className="md:col-span-3" cheio titulo={cardCpl.rotulo} onAbrir={abrir(cardCpl)}>
+            <KpiCard className="h-full" label="CPL geral" bar={estadoCpl === 'sem' ? 'gray' : estadoCpl === 'bom' ? 'green' : estadoCpl === 'atencao' ? 'yellow' : 'red'} title={`${cardCpl.dica} ${moeda(placar.gasto)} ÷ ${formatar(placar.leadsPagos, 'int')} leads pagos. Alvo ${config.cplAlvoMedio === null ? 'sem cadastro' : moeda(config.cplAlvoMedio)}.`} valueClassName="text-2xl sm:text-3xl"
+              value={<span className="inline-flex items-center gap-2"><Numero valor={placar.valor} formato="brl" falta="sem leads pagos no recorte" /><IndicadorMeta valor={placar.valor} ideal={config.reguaCpl?.meta ?? null} meta={config.cplAlvoMedio} formato="brl" compacto /></span>} />
+          </Cartao>
+          <Cartao className="md:col-span-3" cheio titulo={cardGasto.rotulo} onAbrir={abrir(cardGasto)}>
+            <KpiCard className="h-full" label="Verba contra o orçamento" bar="yellow" title={`Tráfego acumulado desde o início. ${config.orcamentoTotal === null ? 'Orçamento sem cadastro.' : `${formatar(dividir(gastoAteHoje, config.orcamentoTotal), 'pct')} do orçamento.`} ${NOTA_ENTRESAFRA}.`} valueClassName="text-2xl sm:text-3xl"
+              value={<Numero valor={gastoAteHoje} formato="brl" falta="investimento sem dado" />}
+              hint={config.orcamentoTotal !== null ? <ProgressBar value={(gastoAteHoje / config.orcamentoTotal) * 100} tone="yellow" ariaLabel={`${moeda(gastoAteHoje)} de ${moeda(config.orcamentoTotal)}`} /> : undefined} />
           </Cartao>
         </div>
-        {/* Investimento do período, na mesma faixa do placar: os sete cards ficam na primeira dobra (pedido de 13/10). */}
+        {/* Demais valores do período; captação abre o placar como primeiro card. */}
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <KpiCard label="Investimento total" value={<Numero valor={total} formato="brl" />} hint={notaTotal} bar="accent" />
+          <KpiCard label="Investimento total" value={<Numero valor={total} formato="brl" />} valueClassName="text-2xl sm:text-3xl" title={notaTotal} bar="accent" />
           <Cartao titulo="Tráfego" onAbrir={abrir(cardGasto)}>
-            <KpiCard label="Investimento em tráfego" value={<Numero valor={d.dias.length ? gastoPeriodo : null} formato="brl" />} hint={`Meta ${moeda(porCanal('meta'))} · Google ${moeda(porCanal('google'))}. ${NOTA_ENTRESAFRA}.`} bar="accent" />
+            <KpiCard label="Investimento em tráfego" value={<Numero valor={d.dias.length ? gastoPeriodo : null} formato="brl" />} valueClassName="text-2xl sm:text-3xl" title={`Meta Ads ${moeda(porCanal('meta'))} · Google Ads ${moeda(porCanal('google'))}. ${NOTA_ENTRESAFRA}`} bar="accent" />
           </Cartao>
           <Cartao titulo="Disparo" onAbrir={() => d.irPara({ aba: 'mensageria' })}>
             <KpiCard label="Investimento com disparo" bar="purple"
               value={<Numero valor={custoDisparo?.valor ?? null} formato="brl" falta="custo de disparo" />}
-              hint={`API ${moeda(custoCanal('api'))} · SMS ${moeda(custoCanal('sms'))} · Ligação ${moeda(custoCanal('ligacao'))}`} />
+              title={notaTotal} />
           </Cartao>
         </div>
       </section>
@@ -281,15 +282,8 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
         ) : (
           <>
             <ol className={GRADE_MACRO}>
-              <li key="investimento-captacao" className="min-w-0">
-                <Cartao cheio titulo="Investimento em captação">
-                  <KpiCard label="Investimento em captação" bar="accent"
-                    value={<Numero valor={investimento.total} formato="brl" falta="sem dado no período" />}
-                    hint={`${detalheInvestimento}.${detalhesCobertura ? ` ${detalhesCobertura}.` : ''} Total ${investimento.total === null ? 'sem dado por fonte incompleta' : 'das campanhas C2/C3'}. Sem remarketing. ${NOTA_ENTRESAFRA}.`} />
-                </Cartao>
-              </li>
               {cards3.flatMap(({ c, valor, hint }) => [
-                <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={abrir(c)}><KpiCard label={c.rotulo} value={indicador[c.id] ? <span className="inline-flex flex-wrap items-baseline gap-x-2">{valor}{indicador[c.id]}</span> : valor} hint={hint} /></Cartao></li>,
+                <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={abrir(c)}><KpiCard label={c.rotulo} title={`${c.dica ?? ''} ${hint ?? ''}`} bar={c.id === 'ctr' || c.id === 'connect' || c.id === 'conv' ? 'green' : c.id === 'cpm' || c.id === 'cpc' ? 'yellow' : c.id === 'lpv' ? 'purple' : 'accent'} valueClassName="text-2xl sm:text-3xl" value={indicador[c.id] ? <span className="inline-flex flex-wrap items-baseline gap-x-2">{valor}{indicador[c.id]}</span> : valor} /></Cartao></li>,
                 // MQLs logo depois da conversão da página; o Ingresso no grupo vem em seguida (pedido de 13/10).
                 ...(c.id === 'conv' ? [
                   <li key="mql" className="min-w-0"><CardMql d={d} onAbrir={abrirMql} /></li>,
@@ -321,7 +315,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           })}
         </div>
 
-        <SectionCard className="mt-3" title="CPL por etapa" subtitle={`Abra uma etapa para ver o cálculo e os detalhes de campanha. ${config.reguaCpl ? `Farol: meta ${moeda(config.reguaCpl.meta)}, teto ${moeda(config.reguaCpl.teto)}.` : 'Farol: régua de CPL sem cadastro.'} ${NOTA_ENTRESAFRA}.`}>
+        <SectionCard className="mt-3" title="CPL por etapa" subtitle="Expanda uma etapa para ver campanhas, conjuntos e métricas. Etapas sem CPL não exibem esse indicador.">
           <div className="space-y-2">
             <EtapaFechada titulo="C1 · Distribuição" gasto={c1Dias.length ? gastoDe(c1Dias) : null} leads={null} cpl={null}
               aberta={etapaAberta === 'c1'} onToggle={() => setEtapaAberta((v) => v === 'c1' ? null : 'c1')}
@@ -362,6 +356,19 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
       <SemEtapa d={d} />
 
       <ModalCard d={d} card={aberto} onClose={() => setAberto(null)} />
+      {detalheCaptacao && (
+        <Modal open onClose={() => setDetalheCaptacao(false)} title="Investimento em captação" width={`max-w-xl ${MODAL_TELA_CHEIA}`}>
+          <div className="space-y-3 text-sm text-[var(--fg-2)]">
+            <p className="text-2xl font-bold tabular text-[var(--fg)]"><Numero valor={investimento.total} formato="brl" falta="sem dado por cobertura incompleta" /></p>
+            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-1)] p-3"><dt className="text-xs text-[var(--fg-3)]">Meta Ads</dt><dd className="mt-1 font-semibold tabular text-[var(--fg)]"><Numero valor={investimento.meta} formato="brl" /></dd></div>
+              <div className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-1)] p-3"><dt className="text-xs text-[var(--fg-3)]">Google Ads</dt><dd className="mt-1 font-semibold tabular text-[var(--fg)]"><Numero valor={investimento.google} formato="brl" /></dd></div>
+            </dl>
+            {detalhesCobertura && <p className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-1)] p-3">{detalhesCobertura}.</p>}
+            <p className="border-t border-[var(--border)] pt-3 text-xs text-[var(--fg-3)]">Total das campanhas de captação C2/C3, sem remarketing. {NOTA_ENTRESAFRA}.</p>
+          </div>
+        </Modal>
+      )}
       {tabela && (
         <Modal open onClose={() => setTabela(null)} title={tabela.titulo} width={`max-w-5xl ${MODAL_TELA_CHEIA}`}>
           <p className="mb-2 text-xs text-[var(--fg-3)]">{tabela.nota}</p>
