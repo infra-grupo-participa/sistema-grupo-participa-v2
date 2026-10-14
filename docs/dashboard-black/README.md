@@ -513,6 +513,36 @@ hora. Migration `20261013174100`; o detalhe da regra está em `infra/supabase/mi
   - ou fechar a porta com `update dados.black_lista_config set chave_sha256 = null`.
 - **Reversão completa:** `20261013174100_reversao.sql` e depois desligar o gatilho.
 
+## Conferência de dado tela x fonte e correções (13/10/2026, noite, NÃO aplicadas)
+
+Pedido do Victor (12 itens). Relatório completo, com tela x fonte por etapa, fica no cérebro (entrega do Galego de 13/10).
+O que vale para o repositório:
+
+- **CPL geral** (`domain/metricas.ts`, `cplPlacar`): hoje soma as campanhas com o bloco `LEAD` no nome, o que inclui a
+  C3 ENTRESAFRA (R$ 596,05 sem nenhum lead pago na base), e divide por **todos** os pagos (14, todos da campanha
+  479754). Deve ser: gasto das campanhas de captação C2/C3 (pela etapa do banco, sem remarketing) ÷ leads pagos
+  **dessas** campanhas. A ENTRESAFRA entrar ou não é decisão do Victor.
+- **Jornada, C1** (`domain/jornada.ts`): "Cortes das consultorias" soma todo o C1 (Teaser + Manifesto); deve ser só a
+  campanha de cortes (hoje nenhuma com gasto). O Manifesto pago (fase AQUECIMENTO no nome) cai no "Lembrete de cada
+  live"; deve ir para o nó Manifesto. Usar o `subtipo` que a RPC já devolve.
+- **Alcance e frequência:** a RPC não mandava total; migration `20261013225000` acrescenta `totais` (período inteiro da
+  campanha, `mkt_trafego.desempenho_total`). Front: `mapearTrafego` deixa de fixar `totais: []`.
+- **Respondi da consultoria: DESCARTADO** (decisão do Victor, 13/10 ~21h05). Os leads do Respondi da consultoria ficam
+  fora do dashboard da Black, que conta só os leads e os grupos da Black. A migration `20261013225100` nunca foi aplicada;
+  o registro do que foi proposto está em `infra/supabase/migrations/20261013225100.explain.md`.
+- **Regra de MQL (decisão do Victor, 13/10 noite):** a pessoa é MQL pela profissão do **envio mais recente** que tem
+  profissão, em todo o dashboard. O banco já usa essa regra (`dados_black_grupo`); o `mqlDoRecorte` do front
+  (`domain/metricas.ts`, hoje "algum envio MQL") muda para ela.
+- **`entrou_grupo_em` só com o grupo da Black:** migration `20261013225200` (C). Antes o perfil lia
+  `dados.v_grupo_pessoas_todos`, que junta todos os grupos da chave, e contava o grupo da consultoria na taxa de grupo
+  em 48h, no funil do criativo e no Histórico (aplicada em 13/10 às 23:10 UTC: 135 MQL "no grupo" pelo perfil passou a 97, igual à conta só com o grupo da Black).
+- **Páginas:** `mapearTrafego` fixa `paginas: []` e `paginaId: null`, e a coleta do Meta não traz a URL de destino
+  (só `url_tags`). Curto prazo: página pelos leads pagos do anúncio. Definitivo: a Edge `trafego-meta` pedir o link do
+  criativo (coluna nova).
+- **Meta acumulada do Histórico:** sempre nula na fonte real (`configReal`: `inicioCaptacao` e `metaLeadsDia` nulos);
+  depende do Victor dizer o início da captação e a meta diária.
+- **Google Ads:** sem fonte no banco (`mkt_trafego` só tem Meta).
+
 ## Contrato da fonte (`application/ports.ts`)
 
 `FonteDadosBlack` com `modo` (`'demonstracao' | 'real'`), `agora()` e métodos que devolvem

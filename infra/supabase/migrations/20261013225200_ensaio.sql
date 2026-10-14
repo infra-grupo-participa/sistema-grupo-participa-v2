@@ -1,0 +1,3 @@
+-- O ensaio da 20261013225200 (C) foi feito em sequência com a 20261013225100 (B), no arquivo 20261013225100_ensaio.sql.
+-- A B foi DESCARTADA (13/10, decisão do Victor) e seus arquivos saíram da pasta; o ensaio continua no histórico do git
+-- (commit 72a8225). A prova da C sozinha, depois de aplicada, está em 20261013225200.explain.md.
