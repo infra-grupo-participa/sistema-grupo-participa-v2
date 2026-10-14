@@ -17,7 +17,9 @@ export function SeletorGlobal({ funil, periodo, canal, datas, inicio, fim, onCha
         Funil
         <select className={SELECT} value={funil} onChange={(e) => onChange({ funil: e.target.value as FiltroFunil })}>
           <option value="todos">Todos</option>
-          {FUNIS.map((f) => <option key={f} value={f}>{ROTULO_FUNIL[f]}</option>)}
+          <option value="c1">C1</option>
+          <option value="c2" title="Consultoria e Iscas">C2</option>
+          {FUNIS.filter((f) => f !== 'c1').map((f) => <option key={f} value={f}>{ROTULO_FUNIL[f]}</option>)}
         </select>
       </label>
       <label className="grid min-w-[9rem] flex-1 gap-1 text-xs text-[var(--fg-2)] sm:flex-none">

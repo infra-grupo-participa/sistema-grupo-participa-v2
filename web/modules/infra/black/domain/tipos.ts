@@ -5,7 +5,8 @@
 export type Valor = number | null;
 
 export type Funil = 'c1' | 'consultoria' | 'iscas' | 'c3';
-export type FiltroFunil = 'todos' | Funil;
+/** C2 é o agrupamento das portas Consultoria e Iscas no filtro global. */
+export type FiltroFunil = 'todos' | 'c2' | Funil;
 export type Canal = 'meta' | 'google';
 export type FiltroCanal = 'todos' | Canal;
 /** As 6 fases do Caio (CONCEPCAO-TRAFEGO-CAIO.md). NÃO são os códigos de mkt_trafego.fases. */
@@ -209,6 +210,7 @@ export const ISCAS: readonly Isca[] = ['Fluxograma', 'Futurômetro', 'Checkup'];
 export const CONJUNTOS_C3: readonly ConjuntoC3[] = ['base', 'quente', 'aberto'];
 
 export const ROTULO_FUNIL: Record<Funil, string> = { c1: 'C1', consultoria: 'Consultoria', iscas: 'Iscas', c3: 'C3' };
+export const ROTULO_FILTRO_FUNIL: Record<FiltroFunil, string> = { todos: 'Todos', c1: 'C1', c2: 'C2', consultoria: 'Consultoria', iscas: 'Iscas', c3: 'C3' };
 export const ROTULO_FASE: Record<Fase, string> = {
   antecipacao: '0. Antecipação', distribuicao: '1. Distribuição', captacao: '2. Captação',
   aquecimento: '3. Aquecimento', remarketing: '4. Remarketing', live_carrinho: '5. Live e carrinho',

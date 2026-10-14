@@ -23,6 +23,11 @@ describe('lerRecorte', () => {
     const r = lerRecorte({ funil: 'iscas', periodo: '7d', canal: 'meta', aba: 'criativos', cp: 'cp_1', cj: 'cj_2', cr: 'ad_3', pg: 'pg_4' });
     expect(lerRecorte(new URLSearchParams(escreverRecorte(r)))).toEqual(r);
   });
+  it('abre o filtro agregado C2 pela URL e preserva ao serializar', () => {
+    const r = lerRecorte(new URLSearchParams('funil=c2'));
+    expect(r.funil).toBe('c2');
+    expect(lerRecorte(new URLSearchParams(escreverRecorte(r))).funil).toBe('c2');
+  });
   it('preserva o período personalizado na URL e rejeita datas inválidas', () => {
     const r = lerRecorte(new URLSearchParams('periodo=personalizado&de=2026-10-05&ate=2026-10-10'));
     expect(r.periodo).toBe('personalizado');

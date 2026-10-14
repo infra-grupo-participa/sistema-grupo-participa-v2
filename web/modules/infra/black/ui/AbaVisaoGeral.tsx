@@ -16,7 +16,7 @@ import type { DadosTela } from './contexto';
 import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
 import { Farol, formatar, IndicadorMeta, MODAL_TELA_CHEIA, moeda, Numero, Taxa } from './pecas';
 import { TabelaLeads } from './perfil/TabelaLeads';
-import { cplCaptacao, connectRate as connectRateNumero, conversaoPagina as conversaoPaginaNumero, gastoCampanha, investimentoTrafego, leadsDoTrafego, leadsPessoas, mql as mqlNumero, potencialMql as potencialMqlNumero, investimentoDeCaptacao, ingressoGrupoGeral } from '../domain/numeros';
+import { cplCaptacao, connectRate as connectRateNumero, conversaoPagina as conversaoPaginaNumero, gastoCampanha, investimentoTrafego, leadsDoTrafego, leadsPessoas, mql as mqlNumero, taxaMql, investimentoDeCaptacao, ingressoGrupoGeral } from '../domain/numeros';
 
 const TODAS: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo', 'perfil'];
 const TRAFEGO: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo'];
@@ -97,11 +97,11 @@ function CardMql({ geral, trafego, onAbrir }: { geral: ReturnType<typeof mqlNume
   );
 }
 
-function CardPotencialMql({ geral, trafego, onAbrir }: { geral: ReturnType<typeof potencialMqlNumero>; trafego: ReturnType<typeof potencialMqlNumero>; onAbrir: () => void }) {
+function CardPercentualMql({ geral, trafego, onAbrir }: { geral: ReturnType<typeof taxaMql>; trafego: ReturnType<typeof taxaMql>; onAbrir: () => void }) {
   const meta = 0.6;
   return (
-    <Cartao cheio titulo="% MQL" onAbrir={onAbrir} className="min-h-[168px]">
-      <KpiCard label="% MQL" value={<Taxa taxa={geral} className="text-2xl font-bold tracking-tight text-[var(--fg)] no-underline" />}
+    <Cartao cheio titulo="% de MQL" onAbrir={onAbrir} className="min-h-[168px]">
+      <KpiCard label="% de MQL" value={<Taxa taxa={geral} className="text-2xl font-bold tracking-tight text-[var(--fg)] no-underline" />}
         valueClassName="text-2xl sm:text-3xl"
         className="!overflow-visible"
         hint={<div className="space-y-1 leading-snug">
@@ -167,8 +167,8 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const lGeral = d.linhas.filter((l) => l.pagina !== 'consultoria_respondi');
   const resultadoMqlGeral = mqlNumero(lGeral, 'pessoas únicas de todas as portas no período selecionado');
   const resultadoMqlTrafego = mqlNumero(lTrafegoPago, 'pessoas únicas pagas atribuídas a C2/C3 no período');
-  const potencialMqlGeral = potencialMqlNumero(lGeral, 'pessoas únicas de todas as portas no período selecionado');
-  const potencialMqlTrafego = potencialMqlNumero(lTrafegoPago, 'pessoas únicas pagas atribuídas a C2/C3 no período');
+  const percentualMqlGeral = taxaMql(lGeral, 'pessoas únicas de todas as portas no período selecionado');
+  const percentualMqlTrafego = taxaMql(lTrafegoPago, 'pessoas únicas pagas atribuídas a C2/C3 no período');
   const ingressoGeral = ingressoGrupoGeral(lGeral);
   const ingressoTrafego = ingressoGrupoGeral(lTrafegoPago);
   const aCap = agregar(dCap);
@@ -210,6 +210,8 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const linhasGrupo = lGeral.filter((l) => l.entrouGrupoEm !== null && diaDe(l.entrouGrupoEm) >= d.periodo.de && diaDe(l.entrouGrupoEm) <= d.periodo.ate);
   const abrirMql = () => setTabela({ titulo: 'MQLs', linhas: linhasMql,
     nota: 'MQL pela Regra B: profissão do envio mais recente com profissão, uma pessoa por lead, de todas as portas no período selecionado.' });
+  const abrirPctMql = () => setTabela({ titulo: '% de MQL', linhas: linhasMql,
+    nota: 'Pessoas usadas no cálculo da taxa: MQL pela Regra B dividido por pessoas únicas do recorte. A meta de 60% vale para a base geral e para C2/C3.' });
   const abrirGrupo = () => setTabela({ titulo: 'Ingresso no grupo', linhas: linhasGrupo,
     nota: 'Leads de todas as portas que entraram em algum grupo no período. O card usa pessoas únicas de dados_black_perfil.entrou_grupo_em.' });
 
@@ -271,7 +273,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
                 // MQLs logo depois da conversão da página; o Ingresso no grupo vem em seguida (pedido de 13/10).
                 ...(c.id === 'conv' ? [
                   <li key="mql" className="min-w-0"><CardMql geral={resultadoMqlGeral} trafego={resultadoMqlTrafego} onAbrir={abrirMql} /></li>,
-                  <li key="mql-potencial" className="min-w-0"><CardPotencialMql geral={potencialMqlGeral} trafego={potencialMqlTrafego} onAbrir={abrirMql} /></li>,
+                  <li key="mql-percentual" className="min-w-0"><CardPercentualMql geral={percentualMqlGeral} trafego={percentualMqlTrafego} onAbrir={abrirPctMql} /></li>,
                   <li key="ingresso" className="min-w-0"><CardIngresso geral={ingressoGeral} trafego={ingressoTrafego} onAbrir={abrirGrupo} /></li>,
                 ] : []),
               ])}
@@ -290,10 +292,11 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           {FUNIS.map((f) => {
             const df = filtrarDias(diasCanal, idx, { funil: f, canal: 'todos' });
             const lf = filtrarLinhas(linhasCanal, { funil: f, canal: 'todos' });
-            const apagado = recorte.funil !== 'todos' && recorte.funil !== f;
+            const selecionado = recorte.funil === f || (recorte.funil === 'c2' && (f === 'consultoria' || f === 'iscas'));
+            const apagado = recorte.funil !== 'todos' && !selecionado;
             return (
               <SectionCard key={f} title={ROTULO_FUNIL[f]} className={apagado ? 'opacity-40' : ''}
-                right={<button type="button" className="text-xs text-[var(--accent)] underline-offset-2 hover:underline max-md:-my-3 max-md:-mr-3 max-md:min-h-11 max-md:px-3" onClick={() => d.irPara({ funil: f })}>Filtrar</button>}>
+                right={<button type="button" className="text-xs text-[var(--accent)] underline-offset-2 hover:underline max-md:-my-3 max-md:-mr-3 max-md:min-h-11 max-md:px-3" onClick={() => d.irPara({ funil: selecionado && recorte.funil !== 'todos' ? 'todos' : f })}>{selecionado && recorte.funil !== 'todos' ? 'Limpar filtro' : 'Filtrar'}</button>}>
                 {f === 'c1' ? <ColunaC1 d={d} dias={df} /> : <ColunaCaptacao d={d} dias={df} linhas={lf} funil={f} />}
               </SectionCard>
             );

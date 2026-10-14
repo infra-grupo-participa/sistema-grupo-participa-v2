@@ -46,6 +46,9 @@ describe('jornada', () => {
     expect(noApagado(NO.get('remarketing')!, 'c3')).toBe(false);
     expect(noApagado(NO.get('lista')!, 'c1')).toBe(false);
     expect(NOS.every((n) => !noApagado(n, 'todos'))).toBe(true);
+    expect(noApagado(NO.get('pagina-isca')!, 'c2')).toBe(false);
+    expect(noApagado(NO.get('aplicacao-consultoria')!, 'c2')).toBe(false);
+    expect(noApagado(NO.get('captacao-direta')!, 'c2')).toBe(true);
   });
   it('espessura de 2 a 14 px pela raiz do volume; resumo segue a ordem do nó', () => {
     expect(espessura(null, 100)).toBe(2);

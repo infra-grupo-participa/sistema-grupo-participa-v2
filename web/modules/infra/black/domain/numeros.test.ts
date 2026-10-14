@@ -1,22 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { baseFicticia } from '../infrastructure/fixtures/gerador';
-import { cplCaptacao, leadsDoTrafego, leadsPessoas, mql, potencialMql } from './numeros';
+import { cplCaptacao, leadsDoTrafego, leadsPessoas, mql, taxaMql } from './numeros';
 import { indexar } from './metricas';
 
 describe('números canônicos da Black', () => {
-  it('conta pessoas, pagos atribuídos e potencial de MQL sem duplicar cadastros', () => {
+  it('conta pessoas, pagos atribuídos e % de MQL sem duplicar cadastros', () => {
     const fixture = baseFicticia();
     const idx = indexar(fixture);
     const pessoas = leadsPessoas(fixture.linhas);
     const pagos = leadsDoTrafego(fixture.linhas, idx);
     const resultadoMql = mql(fixture.linhas);
-    const potencial = potencialMql(fixture.linhas);
+    const percentual = taxaMql(fixture.linhas);
 
     expect(pessoas.valor).toBe(new Set(fixture.linhas.map((linha) => linha.pessoaId)).size);
     expect(pagos.valor).toBeLessThanOrEqual(pessoas.valor!);
-    expect(potencial.num).toBe(resultadoMql.num);
-    expect(potencial.den).toBe(pessoas.valor);
-    expect(potencial.valor).toBeCloseTo((resultadoMql.num as number) / (pessoas.valor as number));
+    expect(percentual.num).toBe(resultadoMql.num);
+    expect(percentual.den).toBe(pessoas.valor);
+    expect(percentual.valor).toBeCloseTo((resultadoMql.num as number) / (pessoas.valor as number));
     expect(pagos.recorte).toContain('pessoas únicas');
   });
 

@@ -15,7 +15,7 @@ import { mapearPaginasPorLeadsPagos } from '../domain/paginas-leads';
 import { chaveRecorte, recorteDaTela } from '../domain/grupo';
 import { filtrarDias, filtrarLinhas, indexar } from '../domain/metricas';
 import { diaDe, diasDoPeriodo, escreverRecorte, periodoDe } from '../domain/recorte';
-import type { AbaBlack, ConfigBlack, GrupoResumoBlack, LinhaPerfil, Marcos, MensageriaBlack, Recorte, Resultado, TrafegoBlack } from '../domain/tipos';
+import { ROTULO_FILTRO_FUNIL, type AbaBlack, type ConfigBlack, type GrupoResumoBlack, type LinhaPerfil, type Marcos, type MensageriaBlack, type Recorte, type Resultado, type TrafegoBlack } from '../domain/tipos';
 import type { AlvoGaveta, DadosTela } from './contexto';
 import { AvisoBloco, ROTULO_INTEIRO } from './pecas';
 import { SeletorGlobal } from './SeletorGlobal';
@@ -220,6 +220,13 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
 
       <SeletorGlobal funil={recorte.funil} periodo={recorte.periodo} canal={recorte.canal} datas={periodo}
         inicio={cfg?.inicio} fim={completo?.ate} onChange={irPara} />
+
+      {recorte.funil !== 'todos' && <div role="status" aria-label={`Filtrando por ${ROTULO_FILTRO_FUNIL[recorte.funil]}`}
+        className="sticky top-16 z-30 flex items-center justify-between gap-3 rounded-[var(--r-md)] border border-[var(--border-accent)] bg-[var(--surface-2)] px-3 py-2 text-sm shadow-[var(--shadow-sm)]">
+        <span className="min-w-0 truncate text-[var(--fg-2)]">Filtrando: <strong className="text-[var(--fg)]">{ROTULO_FILTRO_FUNIL[recorte.funil]}</strong></span>
+        <button type="button" className="min-h-9 shrink-0 rounded-[var(--r-sm)] px-2 font-semibold text-[var(--accent)] hover:bg-[var(--accent-subtle)]"
+          onClick={() => irPara({ funil: 'todos' })}>Limpar</button>
+      </div>}
 
       {erroFonte && <p role="alert" className="text-sm text-[var(--red)]">{erroFonte}</p>}
       {erros.map((b) => <AvisoBloco key={b.erro} erro={b.erro} lidoEm={b.lidoEm} agora={relogioTela} />)}

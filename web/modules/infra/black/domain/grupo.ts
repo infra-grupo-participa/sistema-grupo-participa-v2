@@ -3,7 +3,7 @@
 // soma do mesmo período e do mesmo recorte. Divisão por zero ou por null = Sem dado, nunca zero.
 import { taxa, type Taxa } from './metricas';
 import {
-  ROTULO_FUNIL,
+  ROTULO_FILTRO_FUNIL,
   type FiltroCanal, type FiltroFunil, type GrupoResumoBlack, type Isca, type Porta, type Recorte, type RecorteGrupo,
   type SegmentoGrupo, type TrafegoBlack, type Valor,
 } from './tipos';
@@ -43,6 +43,7 @@ export function recorteGrupoDe(n: {
   if (n.porta) return { ok: true, recorte: { tipo: 'porta', valor: n.porta } };
   if (n.funil === 'todos') return { ok: true, recorte: null };
   if (n.funil === 'c1') return { ok: false, motivo: 'O C1 é distribuição: não gera cadastro nem entrada no grupo.' };
+  if (n.funil === 'c2') return { ok: false, motivo: 'A fonte do grupo não oferece o recorte combinado C2 (Consultoria + Iscas).' };
   return { ok: true, recorte: { tipo: 'porta', valor: PORTA_DO_FUNIL[n.funil] } };
 }
 
@@ -100,7 +101,7 @@ export function recorteDaTela(r: Pick<Recorte, 'funil' | 'canal' | 'criativos'>,
     return { ok: false, motivo: `A página "${p.rotulo}" não tem porta nem isca: o servidor não tem esse recorte.` };
   }
   const x = recorteGrupoDe(base);
-  return r.funil === 'todos' ? x : com(x, `Funil: ${ROTULO_FUNIL[r.funil]}`);
+  return r.funil === 'todos' ? x : com(x, `Funil: ${ROTULO_FILTRO_FUNIL[r.funil]}`);
 }
 
 /** Chave estável do recorte (para a releitura do bloco do grupo). */

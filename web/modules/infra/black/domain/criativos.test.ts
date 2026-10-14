@@ -91,6 +91,11 @@ describe('criativo = anúncios de mesmo nome', () => {
     const um = recorteDaTela({ funil: 'todos', canal: 'todos', criativos: { anuncio: unico.id } }, t);
     expect(um.ok && um.recorte).toEqual({ tipo: 'anuncio', valor: `meta-${unico.id}` });
   });
+  it('recorte C2 mantém Sem dado no bloco de grupo, que não aceita combinar Consultoria e Iscas', () => {
+    expect(recorteDaTela({ funil: 'c2', canal: 'todos', criativos: {} }, null)).toEqual({
+      ok: false, motivo: 'A fonte do grupo não oferece o recorte combinado C2 (Consultoria + Iscas).',
+    });
+  });
 });
 
 describe('recorte do grupo: teto de 2000 caracteres da lista de ids', () => {
