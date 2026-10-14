@@ -7,6 +7,7 @@
 import { useMemo } from 'react';
 import { safeHttpUrl } from '@/shared/domain/url-segura';
 import { anunciosDoCriativo, funilCriativo, resumir, serieDiariaAnuncio } from '../domain/criativos';
+import { filtrarDias } from '../domain/metricas';
 import type { DadosTela } from './contexto';
 import { FunilTrapezio, GraficoInvestimentoLeads } from './graficos';
 import { MiniaturaFicticia } from './MiniaturaFicticia';
@@ -17,7 +18,7 @@ export function GavetaCriativo({ d, id }: { d: DadosTela; id: string }) {
   const dados = useMemo(() => {
     // Criativo = todos os anúncios de mesmo nome (um por conjunto): a gaveta soma os conjuntos onde ele roda.
     const ids = anunciosDoCriativo(d.idx, id); const conjunto = new Set(ids);
-    const dias = d.diasPeriodoSemFiltro.filter((x) => conjunto.has(x.anuncioId));
+    const dias = filtrarDias(d.diasPeriodoSemFiltro.filter((x) => conjunto.has(x.anuncioId)), d.idx, { funil: 'todos', canal: 'todos' });
     const linhas = d.linhasPeriodoSemFiltro.filter((l) => l.anuncioId !== null && conjunto.has(l.anuncioId));
     const camps = ids.map((x) => d.idx.campanhaDoAnuncio(x));
     const distribuicao = camps.every((c) => c === null || c.funil === 'c1' || c.funil === null);

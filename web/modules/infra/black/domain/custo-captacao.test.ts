@@ -9,6 +9,7 @@ const campanhas: Campanha[] = [
   { id: 'remarketing', nome: 'CF | BF26 | LEAD | C3 | REMARKETING', canal: 'meta', funil: 'c3', etapa: 'C3', fase: 'remarketing' },
   { id: 'c1', nome: 'CF | BF26 | LEAD | C1', canal: 'meta', funil: 'c1', etapa: 'C1', fase: 'distribuicao' },
   { id: 'sem-etapa', nome: 'CF | BF26 | LEAD', canal: 'meta', funil: null, etapa: null, fase: 'captacao' },
+  { id: 'entresafra', nome: 'CF | BF26 | C3 | ENTRESAFRA | META | MORNO | ABO | LEAD', canal: 'meta', funil: 'c3', etapa: 'C3', fase: 'captacao' },
 ];
 
 const trafego = (gastoCampanhas: NonNullable<TrafegoBlack['gastoCampanhas']>, campanhaList: Campanha[] = campanhas.slice(0, 2)): TrafegoBlack => ({
@@ -16,11 +17,12 @@ const trafego = (gastoCampanhas: NonNullable<TrafegoBlack['gastoCampanhas']>, ca
 });
 
 describe('investimento de captação', () => {
-  it('soma por etapa C2/C3 mesmo sem LEAD no nome e exclui remarketing/C1/Sem etapa', () => {
+  it('soma por etapa C2/C3 mesmo sem LEAD no nome e exclui remarketing/C1/Sem etapa/Entresafra', () => {
     const r = investimentoCaptacao(trafego([
       { campanhaId: 'c2', gasto: 125 }, { campanhaId: 'c3', gasto: 75 },
       { campanhaId: 'sem-lead', gasto: 9000 }, { campanhaId: 'remarketing', gasto: 8000 },
       { campanhaId: 'c1', gasto: 7000 }, { campanhaId: 'sem-etapa', gasto: 6000 },
+      { campanhaId: 'entresafra', gasto: 50000 },
     ], campanhas), { de: '2026-10-05', ate: '2026-10-10' });
 
     expect(r).toEqual({
@@ -76,7 +78,7 @@ describe('investimento de captação', () => {
     expect(r.zerosMeta).toEqual([{ nome: 'C2 nova', coletaEm: '2026-10-10T13:00:00Z' }]);
     const parcial = investimentoCaptacao(trafego([], lista), { de: '2026-10-05', ate: '2026-10-10' });
     expect([parcial.meta, parcial.total]).toEqual([null, null]);
-    expect(parcial.semDadoMeta).toEqual([{ nome: 'C2 sem linha', motivo: 'última coleta ok anterior à primeira observação da campanha', coletaEm: '2026-10-10T12:00:00Z' }]);
+    expect(parcial.semDadoMeta).toEqual([{ nome: 'C2 sem linha', motivo: 'coleta atual sem confirmação de ausência de entrega', coletaEm: '2026-10-10T12:00:00Z' }]);
   });
 
   it('não transforma campanha com falha recente em zero, mesmo se há coleta ok antiga', () => {

@@ -10,7 +10,7 @@ import { avaliarFaixa } from '../domain/meta';
 import { diaDe } from '../domain/recorte';
 import {
   agregar, connectRate, conversaoPagina, cpc, cplDo, cplPlacar, cplPorEtapa, cpm, ctr, custoPorVisualizacao,
-  dividir, ehCaptacao, ehPago, farolCpl, filtrarDias, filtrarLinhas, gastoDe, ingressoGrupo, pessoasUnicas, somar,
+  dividir, ehCaptacao, ehEntresafraCampanha, ehPago, farolCpl, filtrarDias, filtrarLinhas, gastoDe, ingressoGrupo, pessoasUnicas, somar,
   taxaVideo75, type Taxa as TipoTaxa,
 } from '../domain/metricas';
 import { FUNIS, ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
@@ -20,11 +20,14 @@ import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
 import { Farol, formatar, IndicadorMeta, MODAL_TELA_CHEIA, moeda, Numero, Taxa } from './pecas';
 import { TabelaLeads } from './perfil/TabelaLeads';
 import { investimentoCaptacao } from '../domain/custo-captacao';
-import { INCLUIR_ENTRESAFRA_NO_CPL } from '../domain/decisoes';
 
 const TODAS: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo', 'perfil'];
 const TRAFEGO: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo'];
-const capDias = (dias: DesempenhoDia[], d: DadosTela) => dias.filter((x) => ehCaptacao(d.idx.campanhaDoAnuncio(x.anuncioId)?.funil));
+const capDias = (dias: DesempenhoDia[], d: DadosTela) => dias.filter((x) => {
+  const campanha = d.idx.campanhaDoAnuncio(x.anuncioId);
+  return ehCaptacao(campanha?.funil) && !ehEntresafraCampanha(campanha);
+});
+const NOTA_ENTRESAFRA = 'Entresafra fora de todos os gastos (decisão do Victor)';
 const capLinhas = (linhas: LinhaPerfil[]) => linhas.filter((l) => ehCaptacao(l.funil));
 const valorTaxa = (t: TipoTaxa): Valor => t.valor;
 // Funil macro: cinco colunas com linhas iguais a partir de 1280 px; abaixo, duas (três a partir de 1024) com a altura
@@ -145,14 +148,14 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const linhasAteAgora = filtrarLinhas(d.linhasTodas, filtro);
   const leadsAteAgora: Valor = semLeads ? null : pessoasUnicas(linhasAteAgora);
   const gastoAteHoje = gastoDe(diasAteHoje);
-  const placar = cplPlacar(d.dias, d.linhas, idx, d.trafegoPeriodo.gastoCampanhas, INCLUIR_ENTRESAFRA_NO_CPL, filtro);
+  const placar = cplPlacar(d.dias, d.linhas, idx, d.trafegoPeriodo.gastoCampanhas, filtro);
 
   const cardLeads: CardDef = { id: 'leads', rotulo: 'Leads (pessoas únicas)', formato: 'int', medir: (_, l) => pessoasUnicas(l), aplica: TODAS,
     dica: 'No detalhe, o recorte é o período escolhido no topo. Uma pessoa com duas portas conta uma vez.' };
-  const cardCpl: CardDef = { id: 'cpl', rotulo: 'CPL geral', formato: 'brl', medir: (x, l) => cplPlacar(x, l, idx, d.trafegoPeriodo.gastoCampanhas, INCLUIR_ENTRESAFRA_NO_CPL, filtro).valor, aplica: TRAFEGO, menorMelhor: true,
-    dica: 'Investimento em captação C2/C3 ÷ leads pagos dessas etapas, no mesmo período. Remarketing fica fora. Entresafra desligada até importação dos leads daquele período.' };
+  const cardCpl: CardDef = { id: 'cpl', rotulo: 'CPL geral', formato: 'brl', medir: (x, l) => cplPlacar(x, l, idx, d.trafegoPeriodo.gastoCampanhas, filtro).valor, aplica: TRAFEGO, menorMelhor: true,
+    dica: `Investimento em captação C2/C3 ÷ leads pagos dessas etapas, no mesmo período. Remarketing fica fora. ${NOTA_ENTRESAFRA}.` };
   const cardGasto: CardDef = { id: 'gasto', rotulo: 'Gasto de tráfego', formato: 'brl', medir: (x) => (x.length ? gastoDe(x) : null), aplica: TRAFEGO,
-    dica: 'No detalhe, o recorte é o período escolhido no topo.' };
+    dica: `No detalhe, o recorte é o período escolhido no topo. ${NOTA_ENTRESAFRA}.` };
 
   // ─── Faixa 2: investimento (período) ────────────────────────────────────────────────────────────────────
   const gastoPeriodo = gastoDe(d.dias);
@@ -160,8 +163,8 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const disparoAplica = recorte.funil === 'todos' && recorte.canal === 'todos';
   const custoDisparo = d.mensageria ? somar(d.mensageria.canais.map((c) => c.custo)) : null;
   const total = disparoAplica && custoDisparo?.valor != null ? gastoPeriodo + custoDisparo.valor : gastoPeriodo;
-  const notaTotal = !disparoAplica ? 'Disparo não se divide por funil nem canal: fora da soma.'
-    : custoDisparo?.valor == null ? 'Custo de disparo sem dado: fora da soma.' : 'Tráfego + disparo (disparo fictício).';
+  const notaTotal = `${!disparoAplica ? 'Disparo não se divide por funil nem canal: fora da soma.'
+    : custoDisparo?.valor == null ? 'Custo de disparo sem dado: fora da soma.' : 'Tráfego + disparo (disparo fictício).'} ${NOTA_ENTRESAFRA}.`;
   const custoCanal = (k: 'api' | 'sms' | 'ligacao') => d.mensageria?.canais.find((c) => c.canal === k)?.custo ?? null;
 
   // ─── Faixa 3: funil macro (só captação) ─────────────────────────────────────────────────────────────────
@@ -245,12 +248,12 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           <Cartao titulo={cardCpl.rotulo} onAbrir={abrir(cardCpl)}>
             <KpiCard label="CPL geral" bar={estadoCpl === 'sem' ? 'gray' : estadoCpl === 'bom' ? 'green' : estadoCpl === 'atencao' ? 'yellow' : 'red'}
               value={<span className="inline-flex items-center gap-2"><Numero valor={placar.valor} formato="brl" falta="sem leads pagos no recorte" /><IndicadorMeta valor={placar.valor} ideal={config.reguaCpl?.meta ?? null} meta={config.cplAlvoMedio} formato="brl" /></span>}
-              hint={`Captação C2/C3 ÷ leads pagos C2/C3: ${moeda(placar.gasto)} ÷ ${formatar(placar.leadsPagos, 'int')}. Entresafra excluída. Alvo ${config.cplAlvoMedio === null ? 'sem cadastro' : moeda(config.cplAlvoMedio)}.`} />
+              hint={`Captação C2/C3 ÷ leads pagos C2/C3: ${moeda(placar.gasto)} ÷ ${formatar(placar.leadsPagos, 'int')}. ${NOTA_ENTRESAFRA}. Alvo ${config.cplAlvoMedio === null ? 'sem cadastro' : moeda(config.cplAlvoMedio)}.`} />
           </Cartao>
           <Cartao titulo={cardGasto.rotulo} onAbrir={abrir(cardGasto)}>
             <KpiCard label="Verba contra o orçamento" bar="yellow"
               value={<><Numero valor={gastoAteHoje} formato="brl" /> <span className="text-sm font-normal text-[var(--fg-3)]">de {config.orcamentoTotal === null ? 'orçamento sem cadastro' : moeda(config.orcamentoTotal)}</span></>}
-              hint={`Tráfego do início até hoje. ${config.orcamentoTotal === null ? 'Orçamento: Sem dado.' : `${formatar(dividir(gastoAteHoje, config.orcamentoTotal), 'pct')} do orçamento.`}`} />
+              hint={`Tráfego do início até hoje. ${config.orcamentoTotal === null ? 'Orçamento: Sem dado.' : `${formatar(dividir(gastoAteHoje, config.orcamentoTotal), 'pct')} do orçamento.`} ${NOTA_ENTRESAFRA}.`} />
             {config.orcamentoTotal !== null && (
               <div className="-mt-2 px-4 pb-3"><ProgressBar value={(gastoAteHoje / config.orcamentoTotal) * 100} tone="yellow" ariaLabel={`${moeda(gastoAteHoje)} de ${moeda(config.orcamentoTotal)}`} /></div>
             )}
@@ -260,7 +263,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <KpiCard label="Investimento total" value={<Numero valor={total} formato="brl" />} hint={notaTotal} bar="accent" />
           <Cartao titulo="Tráfego" onAbrir={abrir(cardGasto)}>
-            <KpiCard label="Investimento em tráfego" value={<Numero valor={d.dias.length ? gastoPeriodo : null} formato="brl" />} hint={`Meta ${moeda(porCanal('meta'))} · Google ${moeda(porCanal('google'))}`} bar="accent" />
+            <KpiCard label="Investimento em tráfego" value={<Numero valor={d.dias.length ? gastoPeriodo : null} formato="brl" />} hint={`Meta ${moeda(porCanal('meta'))} · Google ${moeda(porCanal('google'))}. ${NOTA_ENTRESAFRA}.`} bar="accent" />
           </Cartao>
           <Cartao titulo="Disparo" onAbrir={() => d.irPara({ aba: 'mensageria' })}>
             <KpiCard label="Investimento com disparo" bar="purple"
@@ -282,7 +285,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
                 <Cartao cheio titulo="Investimento em captação">
                   <KpiCard label="Investimento em captação" bar="accent"
                     value={<Numero valor={investimento.total} formato="brl" falta="sem dado no período" />}
-                    hint={`${detalheInvestimento}.${detalhesCobertura ? ` ${detalhesCobertura}.` : ''} Total ${investimento.total === null ? 'sem dado por fonte incompleta' : 'das campanhas C2/C3'}. Sem remarketing. Inclui Entresafra, excluída do CPL geral.`} />
+                    hint={`${detalheInvestimento}.${detalhesCobertura ? ` ${detalhesCobertura}.` : ''} Total ${investimento.total === null ? 'sem dado por fonte incompleta' : 'das campanhas C2/C3'}. Sem remarketing. ${NOTA_ENTRESAFRA}.`} />
                 </Cartao>
               </li>
               {cards3.flatMap(({ c, valor, hint }) => [
@@ -318,7 +321,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           })}
         </div>
 
-        <SectionCard className="mt-3" title="CPL por etapa" subtitle={`Abra uma etapa para ver o cálculo e os detalhes de campanha. ${config.reguaCpl ? `Farol: meta ${moeda(config.reguaCpl.meta)}, teto ${moeda(config.reguaCpl.teto)}.` : 'Farol: régua de CPL sem cadastro.'}`}>
+        <SectionCard className="mt-3" title="CPL por etapa" subtitle={`Abra uma etapa para ver o cálculo e os detalhes de campanha. ${config.reguaCpl ? `Farol: meta ${moeda(config.reguaCpl.meta)}, teto ${moeda(config.reguaCpl.teto)}.` : 'Farol: régua de CPL sem cadastro.'} ${NOTA_ENTRESAFRA}.`}>
           <div className="space-y-2">
             <EtapaFechada titulo="C1 · Distribuição" gasto={c1Dias.length ? gastoDe(c1Dias) : null} leads={null} cpl={null}
               aberta={etapaAberta === 'c1'} onToggle={() => setEtapaAberta((v) => v === 'c1' ? null : 'c1')}
@@ -374,7 +377,7 @@ function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
 }
 
 function CampanhasEtapa({ d, funil }: { d: DadosTela; funil: Funil }) {
-  const campanhas = d.trafegoPeriodo.campanhas.filter((c) => (funil === 'iscas'
+  const campanhas = d.trafegoPeriodo.campanhas.filter((c) => !ehEntresafraCampanha(c) && (funil === 'iscas'
     ? c.funil === 'c3' && c.fase === 'captacao' && (c.subtipo === 'ISCA' || d.trafegoPeriodo.conjuntos.some((j) => j.campanhaId === c.id && j.isca !== null))
     : c.funil === funil && c.fase === 'captacao'));
   if (campanhas.length === 0) return <p className="py-2 text-xs text-[var(--fg-3)]">Sem campanha de captação com dado neste recorte.</p>;

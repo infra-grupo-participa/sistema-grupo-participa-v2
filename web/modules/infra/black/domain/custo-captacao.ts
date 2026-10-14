@@ -1,4 +1,4 @@
-import { indexar } from './metricas';
+import { ehEntresafraCampanha, indexar } from './metricas';
 import type { Periodo, TrafegoBlack, Valor } from './tipos';
 
 export interface InvestimentoCaptacao {
@@ -25,10 +25,8 @@ const ehRemarketing = (nome: string, fase: string | null) => fase === 'remarketi
   || nome.toLocaleUpperCase('pt-BR').includes('REMARKETING');
 
 function coletaComprovaZero(c: TrafegoBlack['campanhas'][number]): boolean {
-  const primeiraVista = c.primeiraVistaEm ? Date.parse(c.primeiraVistaEm) : NaN;
-  const ultimaOk = c.coleta?.ultimaOkEm ? Date.parse(c.coleta.ultimaOkEm) : NaN;
-  return c.semEntregaComprovada === true && c.coleta?.estado === 'atual'
-    && Number.isFinite(primeiraVista) && Number.isFinite(ultimaOk) && ultimaOk > primeiraVista;
+  // A RPC é a fonte de verdade para a prova de ausência de entrega; não reproduzir sua regra no cliente.
+  return c.semEntregaComprovada === true;
 }
 
 function pertenceACaptacao(c: TrafegoBlack['campanhas'][number]): boolean {
@@ -45,6 +43,7 @@ export function investimentoCaptacao(trafego: TrafegoBlack, periodo: Periodo): I
   const remarketing: typeof trafego.campanhas = [];
   for (const campanha of trafego.campanhas) {
     if (!pertenceACaptacao(campanha)) continue;
+    if (ehEntresafraCampanha(campanha)) continue;
     if (ehRemarketing(campanha.nome, campanha.fase)) { remarketing.push(campanha); continue; }
     elegiveis.push(campanha);
   }
@@ -79,14 +78,12 @@ export function investimentoCaptacao(trafego: TrafegoBlack, periodo: Periodo): I
   const motivoSemDado = (c: typeof elegiveis[number]) => {
     if (c.semEntregaComprovada === undefined) return 'metadados de coleta ainda não disponíveis na fonte';
     if (!c.primeiraVistaEm) return 'campanha ainda não vista pelo coletor';
-    if (c.semEntregaComprovada && !coletaComprovaZero(c)) return 'fonte sem evidência consistente de coleta após a primeira observação';
+    if (c.semEntregaComprovada && !coletaComprovaZero(c)) return 'fonte sem confirmação de ausência de entrega';
     switch (c.coleta?.estado) {
       case 'falha_recente': return 'última coleta da conta falhou';
       case 'velha': return 'coleta antiga';
       case 'sem_coleta': return 'conta sem coleta registrada';
-      case 'atual': return c.coleta.ultimaOkEm && c.coleta.ultimaOkEm <= c.primeiraVistaEm
-        ? 'última coleta ok anterior à primeira observação da campanha'
-        : 'coleta atual sem confirmação de ausência de entrega';
+      case 'atual': return 'coleta atual sem confirmação de ausência de entrega';
       default: return 'coleta sem confirmação';
     }
   };

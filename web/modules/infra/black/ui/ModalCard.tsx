@@ -24,6 +24,8 @@ const SUBABAS: { k: SubAbaModal; l: string }[] = [
   { k: 'dia', l: 'Por dia' }, { k: 'criativo', l: 'Por criativo' }, { k: 'perfil', l: 'Perfil' },
 ];
 const TOPO_CRIATIVOS = 10;
+const NOTA_ENTRESAFRA = 'Entresafra fora de todos os gastos (decisão do Victor)';
+const CARDS_DE_TRAFEGO = new Set(['gasto', 'cpl', 'imp', 'cpm', 'cliques', 'ctr', 'cpc', 'lpv', 'connect', 'conv']);
 
 export interface CardDef {
   id: string;
@@ -80,7 +82,7 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
             {variacao !== null ? ` · variação ${variacao >= 0 ? '+' : ''}${formatar(variacao, 'pct')}` : ''}
           </span>
         </div>
-        {card.dica && <p className="text-xs text-[var(--fg-3)]">{card.dica}</p>}
+        {(card.dica || CARDS_DE_TRAFEGO.has(card.id)) && <p className="text-xs text-[var(--fg-3)]">{[card.dica, CARDS_DE_TRAFEGO.has(card.id) && !card.dica?.includes(NOTA_ENTRESAFRA) ? NOTA_ENTRESAFRA : null].filter(Boolean).join(' ')}</p>}
 
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Detalhar por">
           {SUBABAS.map((s) => (
@@ -100,13 +102,13 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
             <div className="pt-2">
               <BarrasFase formato={card.formato} itens={FASES.map((f) => ({
                 fase: f, rotulo: ROTULO_FASE[f],
-                valor: card.medir(d.dias.filter((x) => idx.campanhaDoAnuncio(x.anuncioId)?.fase === f), d.linhas.filter((l) => (l.campanhaId ? idx.campanha.get(l.campanhaId)?.fase : null) === f)),
+                valor: card.medir(filtrarDias(d.dias.filter((x) => idx.campanhaDoAnuncio(x.anuncioId)?.fase === f), idx, { funil: 'todos', canal: 'todos' }), d.linhas.filter((l) => (l.campanhaId ? idx.campanha.get(l.campanhaId)?.fase : null) === f)),
               }))} />
             </div>
           ) : ativa === 'dia' ? (
             <GraficoLinha rotuloSerie={card.rotulo} formato={card.formato} pontos={d.diasPeriodo.map((dia) => ({
               chave: dia, rotulo: dataCurta(dia),
-              valor: card.medir(d.dias.filter((x) => x.dia === dia), d.linhas.filter((l) => diaDe(l.criadoEm) === dia)),
+              valor: card.medir(filtrarDias(d.dias.filter((x) => x.dia === dia), idx, { funil: 'todos', canal: 'todos' }), d.linhas.filter((l) => diaDe(l.criadoEm) === dia)),
             }))} />
           ) : ativa === 'criativo' ? (
             <PorCriativo d={d} card={card} onIr={(id) => { onClose(); d.irPara({ aba: 'criativos', criativos: { anuncio: id } }); d.abrirGaveta({ tipo: 'criativo', id }); }} />
@@ -150,7 +152,7 @@ function PorCriativo({ d, card, onIr }: { d: DadosTela; card: CardDef; onIr: (id
       const doCriativo = new Set(anunciosDoCriativo(d.idx, id));
       return {
         chave: id, anuncioId: id, rotulo: d.idx.anuncio.get(id)?.nome ?? 'Criativo sem nome',
-        valor: card.medir(d.dias.filter((x) => doCriativo.has(x.anuncioId)), d.linhas.filter((l) => l.anuncioId !== null && doCriativo.has(l.anuncioId))),
+        valor: card.medir(filtrarDias(d.dias.filter((x) => doCriativo.has(x.anuncioId)), d.idx, { funil: 'todos', canal: 'todos' }), d.linhas.filter((l) => l.anuncioId !== null && doCriativo.has(l.anuncioId))),
       };
     });
   }, [d, card]);

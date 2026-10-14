@@ -89,14 +89,16 @@ describe('CPL', () => {
     expect(cplPorEtapa([], [l], ix, [{ campanhaId: 'k5', gasto: 80 }]).find((x) => x.chave === 'consultoria')?.cpl)
       .toEqual({ gasto: 80, leadsPagos: 1, valor: 80 });
   });
-  it('Entresafra depende de um parâmetro explícito e fica desligada por padrão', () => {
+  it('Entresafra fica fora do CPL e de todas as métricas de tráfego', () => {
     const entresafra: Campanha = { id: 'k5', nome: 'CF | BF26 | C3 | ENTRESAFRA | LEAD', canal: 'meta', funil: 'c3', fase: 'captacao', etapa: 'C3' };
-    const ix = indexar({ campanhas: [...campanhas, entresafra], conjuntos, anuncios });
+    const conjuntoEntresafra: Conjunto = { id: 'j5', campanhaId: 'k5', nome: 'Entresafra', isca: null, conjuntoC3: null };
+    const anuncioEntresafra = ad('a5', 'j5');
+    const ix = indexar({ campanhas: [...campanhas, entresafra], conjuntos: [...conjuntos, conjuntoEntresafra], anuncios: [...anuncios, anuncioEntresafra] });
     const gastoCampanhas = [{ campanhaId: 'k3', gasto: 50 }, { campanhaId: 'k5', gasto: 600 }];
     const linhas = [...leads, linha({ leadId: 'l6', pessoaId: 'p6', campanhaId: 'k5', origem: 'pago' })];
-    expect(cplPlacar(dias, linhas, ix, gastoCampanhas)).toMatchObject({ gasto: 50, leadsPagos: 3, valor: 50 / 3 });
-    expect(cplPlacar(dias, linhas, ix, gastoCampanhas, false)).toMatchObject({ gasto: 50, leadsPagos: 3, valor: 50 / 3 });
-    expect(cplPlacar(dias, linhas, ix, gastoCampanhas, true)).toMatchObject({ gasto: 650, leadsPagos: 4, valor: 162.5 });
+    const diaEntresafra = dia('a5', 600, 4000, 75, 50);
+    expect(cplPlacar([...dias, diaEntresafra], linhas, ix, gastoCampanhas)).toMatchObject({ gasto: 50, leadsPagos: 3, valor: 50 / 3 });
+    expect(filtrarDias([...dias, diaEntresafra], ix, { funil: 'todos', canal: 'todos' })).not.toContain(diaEntresafra);
   });
   it('por etapa: Iscas só C3, C3 sem remarketing, conjunto com nome da fonte', () => {
     const por = Object.fromEntries(cplPorEtapa(dias, leads, idx).map((x) => [x.chave, x]));

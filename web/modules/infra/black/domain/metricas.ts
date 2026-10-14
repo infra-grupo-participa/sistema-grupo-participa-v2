@@ -1,7 +1,6 @@
 // Métricas do dashboard da Black. Regra única: razão = soma sobre soma, numerador e denominador no MESMO
 // recorte e só nas linhas em que os dois são conhecidos. Sem dado (null) nunca vira zero.
 import { FASES, ISCAS, PROFISSOES_MQL } from './tipos';
-import { INCLUIR_ENTRESAFRA_NO_CPL } from './decisoes';
 import type { Anuncio, Campanha, Conjunto, DesempenhoDia, Fase, FiltroCanal, FiltroFunil, Funil, LinhaPerfil, ReguaCpl, TrafegoBlack, Valor } from './tipos';
 
 /** Divisão segura: null ou zero no denominador = null (sem dado), null no numerador = null. */
@@ -200,12 +199,16 @@ export const pessoasUnicas = (linhas: readonly LinhaPerfil[]) => new Set(linhas.
 // ─── Recorte por funil e canal, e CPL por etapa ────────────────────────────────────────────────────────────
 export interface FiltroBase { funil: FiltroFunil; canal: FiltroCanal }
 
+/** A campanha da Entresafra não participa de nenhum gasto ou métrica de tráfego deste dashboard. */
+export function ehEntresafraCampanha(c: Campanha | null | undefined): boolean {
+  return !!c && (c.subtipo?.toLocaleUpperCase('pt-BR') === 'ENTRESAFRA' || /\bENTRESAFRA\b/i.test(c.nome));
+}
+
 /** Linhas de desempenho do funil e do canal escolhidos (pela campanha do anúncio). */
 export function filtrarDias(dias: readonly DesempenhoDia[], idx: IndiceTrafego, f: FiltroBase): DesempenhoDia[] {
-  if (f.funil === 'todos' && f.canal === 'todos') return [...dias];
   return dias.filter((d) => {
     const c = idx.campanhaDoAnuncio(d.anuncioId);
-    if (!c) return false;
+    if (!c || ehEntresafraCampanha(c)) return false;
     return (f.funil === 'todos' || c.funil === f.funil) && (f.canal === 'todos' || c.canal === f.canal);
   });
 }
@@ -228,18 +231,16 @@ export function cplDo(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerf
 
 /** CPL geral: campanhas de C2/C3 em captação, sem remarketing, e só leads pagos atribuídos a elas. */
 export function cplPlacar(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego,
-  gastoCampanhas?: readonly { campanhaId: string; gasto: number }[], incluirEntresafra = INCLUIR_ENTRESAFRA_NO_CPL,
+  gastoCampanhas?: readonly { campanhaId: string; gasto: number }[],
   filtro: FiltroBase = { funil: 'todos', canal: 'todos' }): Cpl {
-  const elegivel = (c: Campanha | null) => c !== null && c.fase !== 'remarketing'
+  const elegivel = (c: Campanha | null) => c !== null && !ehEntresafraCampanha(c) && c.fase !== 'remarketing'
     && !/REMARKETING/i.test(c.nome)
     && (c.etapa === 'C2' || c.etapa === 'C3' || (c.etapa === undefined && c.fase === 'captacao' && ehCaptacao(c.funil)));
   const passaFunil = (c: Campanha) => filtro.funil === 'todos' || c.funil === filtro.funil
     || (filtro.funil === 'iscas' && c.funil === 'c3' && c.subtipo === 'ISCA');
   const candidatas = [...idx.campanha.values()].filter((c) => elegivel(c) && passaFunil(c)
     && (filtro.canal === 'todos' || c.canal === filtro.canal));
-  const campanhas = new Set(candidatas
-    .filter((c) => incluirEntresafra !== false || !/ENTRESAFRA/i.test(c.nome))
-    .map((c) => c.id));
+  const campanhas = new Set(candidatas.map((c) => c.id));
   const l = linhas.filter((x) => x.campanhaId !== null && campanhas.has(x.campanhaId));
   if (gastoCampanhas) {
     const gastos = gastoCampanhas.filter((x) => campanhas.has(x.campanhaId));
@@ -277,7 +278,7 @@ export function cplPorEtapa(dias: readonly DesempenhoDia[], linhas: readonly Lin
   };
   const captacao = (f: Funil) => (c: Campanha) => c.funil === f
     && (c.etapa === 'C2' || c.etapa === 'C3' || (c.etapa === undefined && c.fase === 'captacao'))
-    && c.fase !== 'remarketing' && !/REMARKETING/i.test(c.nome) && !/ENTRESAFRA/i.test(c.nome);
+    && c.fase !== 'remarketing' && !/REMARKETING/i.test(c.nome) && !ehEntresafraCampanha(c);
   const iscaC3 = (c: Campanha, cj: Conjunto | null) => captacao('c3')(c) && (c.subtipo === 'ISCA' || cj?.isca !== null && cj?.isca !== undefined);
   const out: LinhaCplEtapa[] = [
     { chave: 'consultoria', rotulo: 'Consultoria', nivel: 'etapa', funil: 'consultoria', cpl: recorte(captacao('consultoria')) },

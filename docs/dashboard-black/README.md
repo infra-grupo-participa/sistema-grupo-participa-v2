@@ -682,9 +682,8 @@ fixa os valores do relatório: continua lendo as RPCs, com os filtros escolhidos
   leads pagos. Abaixo disso, o cartão vai ao fim, sem posição e com “menos de 5 leads”. A ordem não indica resultado
   confiável para amostras pequenas.
 - **CPL geral:** campanhas de captação C2/C3 ÷ leads pagos atribuídos a essas campanhas. Remarketing fica fora.
-  `domain/decisoes.ts` tem o único parâmetro `INCLUIR_ENTRESAFRA_NO_CPL`, agora `false`, conforme decisão do Victor:
-  a campanha da Entresafra sai do cálculo até os leads daquele período serem importados. Mudança futura fica em um
-  único ponto.
+  Na versão inicial desta revisão, Entresafra era excluída apenas do CPL. Essa regra foi substituída pela decisão de
+  14/10/2026: Entresafra sai de todos os gastos e métricas de tráfego.
 - **CPL por etapa:** sanfona fechada, uma etapa aberta de cada vez. C1 não mostra CPL, mostra CPM e custo por
   visualização; campanha e conjunto exibem investimento, impressões, cliques, CTR, views de página e leads pagos;
   MQL e CPL só aparecem quando há base para o cálculo. Iscas considera apenas Iscas C3.
@@ -700,8 +699,8 @@ conferência visual autenticada continua pendente.
 
 | Área da tela | Regra/campo | Fonte informada no relatório | Valores de referência |
 |---|---|---|---|
-| Leads pagos e CPL | Leads com canal pago; investimento das campanhas elegíveis, com Entresafra desligada | `dados_black_perfil`, `dados_black_trafego.gastoCampanhas` | 14 leads pagos; R$ 347,97 ÷ 14 = R$ 24,86. O custo com Entresafra seria R$ 944,02, mas não entra no CPL agora. |
-| Investimento em captação | Nome contém LEAD, etapa C2/C3, sem remarketing; separado por canal | `campanhas[].nome`, `campanhas[].etapa`, `gastoCampanhas` | Meta R$ 944,02; Google sem fonte; total sem dado até existir fonte Google. |
+| Leads pagos e CPL | Leads com canal pago; investimento das campanhas elegíveis, com Entresafra desligada | `dados_black_perfil`, `dados_black_trafego.gastoCampanhas` | Valores históricos da leitura de 13/10, substituídos pela correção global de 14/10. |
+| Investimento em captação | Etapa C2/C3, sem remarketing nem Entresafra; separado por canal | `campanhas[].etapa`, `gastoCampanhas` | Valores históricos da leitura de 13/10, substituídos pela correção global de 14/10. |
 | Teaser / Manifesto / Cortes / Lembrete | Subtipo C1 exato / fase AQUECIMENTO fora de C1 | `campanhas[].etapa`, `campanhas[].subtipo`, `campanhas[].fase` | Teaser R$ 15.110,20; Manifesto R$ 3.680,40; Cortes sem dado; Lembrete sem valor de Manifesto atribuído. |
 | Alcance e frequência C1 | Total separado por campanha, com intervalo próprio | `dados_black_trafego.totais` | Teaser 200.722 / 4,5930 (04 a 13/10); Manifesto 50.897 / 2,3904 (07 a 13/10). Não somar. |
 | C3, páginas e leads | Página de lead pago do anúncio; anúncio sem lead fica não medido | `dados_black_perfil.pagina` por `anuncio_id` | 9 anúncios com lead pago apontam para `captacao`; C2 não tem campanha com veiculação. |
@@ -731,7 +730,7 @@ o que foi validado e as diferenças de agregação ainda pendentes.
 
 ### Revisão dos cards de investimento · 13/10/2026
 
-- **CPL geral:** numerador em `dados_black_trafego.dias_campanha[].gasto_centavos`, mapeado como `gastoCampanhas`; o front filtra campanhas classificadas em C2/C3, tira remarketing e Entresafra (`INCLUIR_ENTRESAFRA_NO_CPL = false`). Denominador: linhas de `dados_black_perfil` com `origem = 'pago'`, vinculadas às mesmas campanhas. Assim, os R$ 358,21 do print eram o investimento da cesta elegível ao CPL, não o CPM nem o gasto total de todas as campanhas C2/C3.
+- **CPL geral:** numerador em `dados_black_trafego.dias_campanha[].gasto_centavos`, mapeado como `gastoCampanhas`; o front filtra campanhas classificadas em C2/C3 e tira remarketing e Entresafra. Denominador: linhas de `dados_black_perfil` com `origem = 'pago'`, vinculadas às mesmas campanhas. Os números citados neste parágrafo registram a leitura histórica do print e não são os valores vigentes.
 - **Investimento em captação:** a primeira versão do critério e da cobertura descrita nesta revisão foi substituída pela atualização "Investimento de captação fechado com coleta validada" abaixo. A decisão nova fecha Google em zero quando não há campanha e reconhece o zero Meta validado pelo Galego.
 - **CPM:** calculado sobre as linhas de `dados_black_trafego.dias_anuncio`, campos `gasto_centavos` e `impressoes`, para os funis de captação que entraram no filtro da tela: `Σ gasto ÷ Σ impressões × 1.000`. A dica do card expõe o numerador e o denominador exatos usados. Não usa o gasto do CPL nem o gasto de todas as etapas.
 - **Investimento em tráfego:** soma `dias_anuncio[].gasto_centavos` do período selecionado, em todos os funis/canais presentes na fonte. Não deve ser interpretado como gasto de captação.
@@ -750,16 +749,24 @@ o que foi validado e as diferenças de agregação ainda pendentes.
 ### Investimento de captação fechado com coleta validada · 13/10/2026
 
 - **Critério atualizado:** captação é determinada por `dados_black_trafego.campanhas[].etapa` C2 ou C3, sem remarketing. A presença de `LEAD` no nome não é requisito. Isso vale para Investimento em captação e CPL, inclusive para a futura C2 de Consultoria mesmo que o nome não contenha `LEAD`.
-- **CPL:** o numerador segue `dados_black_trafego.dias_campanha[].gasto_centavos` para campanhas C2/C3 sem remarketing e continua excluindo Entresafra por `INCLUIR_ENTRESAFRA_NO_CPL = false`. O denominador são os leads pagos vinculados às mesmas campanhas em `dados_black_perfil` (`origem = 'pago'`).
-- **Investimento:** usa o mesmo gasto por campanha, inclui Entresafra e informa essa diferença na dica do card. Google sem campanha cadastrada é exibido como `sem campanha · R$ 0,00`, conforme decisão do Victor em 12/10.
-- **Zero de entrega:** não é fixado por id nem nome de campanha. O caso só pode virar R$ 0,00 quando a fonte comprovar coleta bem-sucedida da conta após a primeira observação da campanha e dentro da validade definida para a coleta. O detalhe deve mostrar o nome exato e o horário da coleta. Aguardando o contrato/migration do Galego para transportar esses metadados na RPC.
-- **Total:** quando todas as campanhas C2/C3 têm desempenho ou zero validado pela fonte, soma Meta + Google. Campanha sem medida e sem confirmação atual continua parcial; ausência de dado não vira zero por padrão.
+- **CPL:** o numerador segue `dados_black_trafego.dias_campanha[].gasto_centavos` para campanhas C2/C3 sem remarketing nem Entresafra. O denominador são os leads pagos vinculados às mesmas campanhas em `dados_black_perfil` (`origem = 'pago'`).
+- **Investimento:** usa o gasto por campanha para C2/C3 sem remarketing nem Entresafra, em todos os cards e métricas de tráfego. Google sem campanha cadastrada é exibido como `sem campanha · R$ 0,00`, conforme decisão do Victor em 12/10.
+- **Zero de entrega:** `dados_black_trafego.campanhas[].sem_entrega_comprovada` é a fonte de verdade. Sem linha de desempenho e com o campo verdadeiro, a campanha vale R$ 0,00; sem prova continua Sem dado. O detalhe mostra o nome exato e o horário de coleta da RPC.
+- **Total:** quando todas as campanhas C2/C3, exceto Entresafra e remarketing, têm desempenho ou zero validado pela fonte, soma Meta + Google. Campanha sem medida e sem confirmação continua parcial; ausência de dado não vira zero por padrão.
 - **Como testar:** `npx vitest run modules/infra/black/domain/custo-captacao.test.ts modules/infra/black/domain/metricas.test.ts modules/infra/black/infrastructure/fonte-supabase.test.ts`; na Visão Geral, conferir o total, Google sem campanha e o nome exato e horário de coleta que a fonte devolver para cada campanha sem entrega. `npm run lint:tokens`, `npx tsc --noEmit` e `npm run build`.
 
-#### Estado de coleta genérico preparado · 13/10/2026
+#### Estado de coleta genérico · histórico de 13/10/2026
 
-- O adaptador aceita `campanhas[].primeira_vista_em`, `campanhas[].coleta` (`estado`, `ultima_ok_em`, `ultima_falha_em`, `validade_min`, `dias_periodo`, `dias_com_coleta_ok`) e `campanhas[].sem_entrega_comprovada`.
+- O adaptador mapeia `campanhas[].primeira_vista_em`, `campanhas[].coleta` (`estado`, `ultima_ok_em`, `ultima_falha_em`, `validade_min`) e `campanhas[].sem_entrega_comprovada`.
 - Ausência de linha de gasto só vira zero quando `sem_entrega_comprovada = true`, calculado pela fonte para a campanha e período. Estado de falha, coleta velha, sem coleta ou cobertura incompleta permanece “Sem dado”. O detalhe do card mostra nome exato e horário da coleta validada, ou o motivo explícito da pendência.
-- Contrato mais recente proposto pelo Galego: `primeira_vista_em`, `coleta.estado/ultima_ok_em/ultima_falha_em/validade_min` e `sem_entrega_comprovada`; validade de 75 minutos. A proposta ainda não está no ar e aguarda pentester e aprovação. Até a RPC expor os campos, ausência sem linha permanece “Sem dado”. A proposta anterior `20261013235500` também não foi aplicada; o explain atualizado fica em `20261014000000.explain.md` na branch `victor-black-dados-v2`.
+- Naquele registro, o contrato ainda aguardava aplicação. O estado atual é descrito na seção de 14/10 abaixo.
 - A tela não conhece IDs ou nomes especiais para determinar zero. Campanhas novas seguem o mesmo contrato automaticamente.
 - Como testar: mapeador em `infrastructure/fonte-supabase.test.ts`; regra genérica, campanha validada, cobertura incompleta e falha recente em `domain/custo-captacao.test.ts`.
+
+### Correção global de Entresafra e confirmação de zero · 14/10/2026
+
+- **Decisão do Victor:** a campanha `CF | BF26 | C3 | ENTRESAFRA | META | MORNO | ABO | LEAD` fica fora de todo gasto do dashboard. Não entra no Investimento em captação, Investimento total, Investimento em tráfego, Verba contra o orçamento, CPL, CPM, CPC, CTR, impressões, cliques ou outros agregados do funil macro. Os filtros de desempenho removem os dias da campanha também nos detalhes e na gaveta de criativo. O filtro é por subtipo `ENTRESAFRA` ou pelo token exato `ENTRESAFRA` no nome, sem ID fixo.
+- Cards e detalhes exibem a nota **“Entresafra fora de todos os gastos (decisão do Victor)”**.
+- A regra de zero vem de `dados_black_trafego.campanhas[].sem_entrega_comprovada`, mapeada para `semEntregaComprovada`. A RPC foi aplicada pelo Galego em 14/10/2026. O front não fixa ID ou nome para converter ausência de linha em R$ 0,00.
+- Conferência necessária após a atualização: registrar na entrega os valores anteriores e os novos valores lidos na tela, separando Investimento em captação, Investimento total, Investimento em tráfego, Verba contra o orçamento, CPL, CPM, CPC, CTR, impressões e cliques. Os números do snapshot antigo não são reutilizados como leitura atual.
+- Testes: `npx vitest run modules/infra/black/domain/metricas.test.ts modules/infra/black/domain/custo-captacao.test.ts`; verificar também a tela de Visão Geral e o detalhe dos cards. Nenhum dado pessoal deve aparecer em print ou relatório.
