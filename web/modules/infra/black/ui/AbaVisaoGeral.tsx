@@ -189,6 +189,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
 
   // ─── Faixa 3: funil macro (só captação) ─────────────────────────────────────────────────────────────────
   const dCap = capDias(d.dias, d); const lCap = capLinhas(d.linhas, d); const lTrafegoPago = lCap.filter(ehPago);
+  const leadsTrafegoNoFunil = semLeads ? null : leadsDoTrafego(lCap, idx).valor;
   const lGeral = d.linhas.filter((l) => l.pagina !== 'consultoria_respondi');
   const resultadoMqlGeral = mqlNumero(lGeral, 'pessoas únicas de todas as portas no período selecionado');
   const resultadoMqlTrafego = mqlNumero(lTrafegoPago, 'pessoas únicas pagas atribuídas a C2/C3 no período');
@@ -199,7 +200,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const aCap = agregar(dCap);
   const medirCap = (f: (a: ReturnType<typeof agregar>) => Valor) => (x: DesempenhoDia[]) => { const c = capDias(x, d); return c.length ? f(agregar(c)) : null; };
   // Ordem pedida pelo Victor (12/10): Impressões, CPM, Cliques, CTR, CPC, Visualizações, Connect, Inscrições, Conversão. O card Grupo em 48h saiu em 13/10: fica a taxa de Ingresso no grupo.
-  const cards3: { c: CardDef; valor: ReactNode; hint?: string }[] = [
+  const cards3: { c: CardDef; valor: ReactNode; hint?: ReactNode }[] = [
     { c: { id: 'investimento-captacao', rotulo: 'Investimento em captação', formato: 'brl', medir: () => investimento.total, aplica: TRAFEGO,
       dica: `Campanhas C2/C3, sem remarketing. ${NOTA_ENTRESAFRA}.` },
       valor: <Numero valor={investimento.total} formato="brl" falta="sem dado por cobertura incompleta" />,
@@ -215,7 +216,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
     { c: { id: 'lpv', rotulo: 'Visualizações da página', formato: 'int', medir: (x) => agregar(capDias(x, d)).lpv.valor, aplica: TRAFEGO }, valor: <Numero valor={aCap.lpv.valor} formato="int" />, hint: aCap.lpv.conhecidos < aCap.lpv.total ? 'Parcial: Google sem LPV.' : undefined },
     { c: { id: 'connect', rotulo: 'Connect rate', formato: 'pct', medir: (x) => connectRateNumero(x, idx).valor, aplica: TRAFEGO,
       dica: 'dados_black_trafego.dias_anuncio: soma de views da página ÷ soma de cliques no link em C2/C3, somente nas linhas com os dois campos. O percentual mostra numerador e denominador ao passar o cursor.' }, valor: <Taxa taxa={connectRateNumero(d.dias, idx)} /> },
-    { c: cardLeads, valor: <Numero valor={semLeads ? null : leadsPessoas(lGeral).valor} formato="int" falta={d.avisoPerfil ?? undefined} />, hint: `Do tráfego C2/C3: ${formatar(leadsDoTrafego(lCap, idx).valor, 'int')}` },
+    { c: cardLeads, valor: <Numero valor={semLeads ? null : leadsPessoas(lGeral).valor} formato="int" falta={d.avisoPerfil ?? undefined} />, hint: <span>Do tráfego C2/C3: <strong className="tabular text-[var(--fg)]"><Numero valor={leadsTrafegoNoFunil} formato="int" falta={d.avisoPerfil ?? undefined} /></strong></span> },
     { c: { id: 'conv', rotulo: 'Conversão da página', formato: 'pct', medir: (x, l) => conversaoPaginaNumero(x, l, idx).valor, aplica: TRAFEGO, dica: 'Inscrições pagas ÷ views da página, dos mesmos anúncios.' }, valor: <Taxa taxa={conversaoPaginaNumero(d.dias, d.linhas, idx)} /> },
   ];
 
@@ -293,8 +294,8 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           <>
             <ol className={GRADE_MACRO}>
               {cards3.flatMap(({ c, valor, hint }) => [
-                <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={c.id === 'investimento-captacao' ? () => setDetalheCaptacao(true) : abrir(c)}><KpiCard label={c.rotulo} title={`${c.dica ?? ''} ${hint ?? ''}${c.id === 'investimento-captacao' && detalhesCobertura ? ` ${detalhesCobertura}` : ''}`} bar={c.id === 'ctr' || c.id === 'connect' || c.id === 'conv' ? 'green' : c.id === 'cpm' || c.id === 'cpc' || c.id === 'cpl' ? 'yellow' : c.id === 'lpv' ? 'purple' : 'accent'} valueClassName={c.id === 'investimento-captacao' ? 'whitespace-nowrap text-[clamp(1.125rem,2.2vw,1.875rem)]' : 'text-2xl sm:text-3xl'} value={indicador[c.id] ? <span className="inline-flex flex-wrap items-baseline gap-x-2">{valor}{indicador[c.id]}</span> : valor}
-                  hint={c.id === 'investimento-captacao' ? <span className="block">Meta Ads {moeda(investimento.meta)} · Google Ads {moeda(investimento.google)}</span> : undefined} /></Cartao></li>,
+                <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={c.id === 'investimento-captacao' ? () => setDetalheCaptacao(true) : abrir(c)}><KpiCard label={c.rotulo} title={`${c.dica ?? ''} ${typeof hint === 'string' ? hint : ''}${c.id === 'investimento-captacao' && detalhesCobertura ? ` ${detalhesCobertura}` : ''}`} bar={c.id === 'ctr' || c.id === 'connect' || c.id === 'conv' ? 'green' : c.id === 'cpm' || c.id === 'cpc' || c.id === 'cpl' ? 'yellow' : c.id === 'lpv' ? 'purple' : 'accent'} valueClassName={c.id === 'investimento-captacao' ? 'whitespace-nowrap text-[clamp(1.125rem,2.2vw,1.875rem)]' : 'text-2xl sm:text-3xl'} value={indicador[c.id] ? <span className="inline-flex flex-wrap items-baseline gap-x-2">{valor}{indicador[c.id]}</span> : valor}
+                  hint={c.id === 'investimento-captacao' ? <span className="block">Meta Ads {moeda(investimento.meta)} · Google Ads {moeda(investimento.google)}</span> : c.id === 'leads' ? hint : undefined} /></Cartao></li>,
                 // MQLs logo depois da conversão da página; o Ingresso no grupo vem em seguida (pedido de 13/10).
                 ...(c.id === 'conv' ? [
                   <li key="mql" className="min-w-0"><CardMql geral={resultadoMqlGeral} trafego={resultadoMqlTrafego} onAbrir={abrirMql} /></li>,
