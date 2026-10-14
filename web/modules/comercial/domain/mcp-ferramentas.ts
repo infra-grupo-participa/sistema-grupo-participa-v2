@@ -543,6 +543,26 @@ export const FERRAMENTAS: DefFerramenta[] = [
     resultado: ([r]) => (r && typeof r === 'object' ? (r as Obj) : {}),
   },
   {
+    name: 'comercial_criar_negocio',
+    title: 'Criar negócio no funil',
+    description: 'Abre um negócio para um contato num funil, pela mesma regra do botão "Novo negócio" da tela: entra na PRIMEIRA '
+      + 'etapa do funil (veja comercial_listar_funis) e o dono vem da distribuição do funil. Recusa se o contato já tem negócio '
+      + 'aberto nesse funil ou pediu para não receber contato. Ache o contato com comercial_buscar_pessoa ou cadastre com '
+      + 'comercial_criar_contato antes.',
+    escopo: 'operar',
+    escrita: true,
+    inputSchema: {
+      type: 'object',
+      properties: { pessoa_id: SCHEMA_UUID, funil_id: SCHEMA_UUID },
+      required: ['pessoa_id', 'funil_id'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    validar: validarCom((a) => ({ pessoa_id: uuid(a, 'pessoa_id', true), funil_id: uuid(a, 'funil_id', true) })),
+    plano: (a) => [{ rpc: 'crm_criar_negocio', params: { p_pessoa: a.pessoa_id, p_funil: a.funil_id } }],
+    resultado: resultadoRpc,
+  },
+  {
     name: 'comercial_criar_contato',
     title: 'Criar contato',
     description: 'Cadastra um contato (nome + telefone e/ou e-mail). Antes, confere duplicidade como a tela: se o e-mail ou o '
