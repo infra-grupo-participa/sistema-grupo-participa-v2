@@ -10,13 +10,17 @@
 //   3. lê os contatos atualizados desde o último delta (filters[updated_after], paginado por id), até TETO_PAGINAS páginas
 //      de 100, e grava no estágio por pessoas.carga_ac_estagio (lote como parâmetro ligado, nunca no texto do SQL);
 //   4. passa o estágio pendente para pessoas por pessoas.carga_ac_pessoas, até o orçamento de tempo.
-// Teto: TETO_CHAMADAS = 42 requisições ao AC por execução, contando listas, páginas e tentativas (contador em ac()). Dia comum (medido em 14/10/2026): 2,4 a 3,8 mil contatos
+// Teto: TETO_DIA = 42 requisições ao AC por dia UTC, somando execuções (manual, repetida ou do cron) e tentativas; cada
+// requisição é gravada em pessoas.carga_lote (detalhe chamada_ac) da execução do delta ANTES de sair; uma só execução por vez
+// (pg_try_advisory_lock). Dia comum (medido em 14/10/2026): 2,4 a 3,8 mil contatos
 // atualizados = 25 a 38 páginas. Se o teto bater, a execução fica 'parada' e o dia seguinte continua do cursor.
 // Chave do AC: Vault activecampaign_api_key (nunca impressa). Erro sai só com o código.
 import postgres from "npm:postgres@3.4.4";
 
 const TETO_PAGINAS = 40;          // teto de páginas de contatos por execução
-const TETO_CHAMADAS = 42;         // teto de REQUISIÇÕES ao AC por execução, contando tentativas (regra do Victor; achado 1 do pentester)
+const TETO_DIA = 42;              // teto de REQUISIÇÕES ao AC POR DIA (UTC), somando todas as execuções e tentativas (regra do Victor;
+                                  // achado A1 do pentester, 2ª revisão). Cada requisição vira uma linha em pessoas.carga_lote antes de sair.
+const RQ_TIMEOUT_MS = 15_000;     // 3 tentativas de 15 s cabem nos 150 s da Edge
 const ORCAMENTO_MS = 110_000;     // a Edge tem 150 s; não começa trabalho novo depois disto
 const PAUSA_AC_MS = 500;          // entre páginas do AC (< 2 req/s)
 const LOTE_ESTAGIO = 500;         // contatos por chamada a carga_ac_estagio
@@ -68,6 +72,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ erro: "método não permitido" }, 405);   // achado 3 do pentester
   const t0 = Date.now();
   let eid: number | null = null;
+  let travado = false;
   try {
     const [seg] = await sql`select decrypted_secret s from vault.decrypted_secrets where name = 'cron_webhook_secret'`;
     if (!seg?.s || !igual(req.headers.get("x-webhook-secret") ?? "", seg.s)) return json({ erro: "não autorizado" }, 401);
@@ -81,17 +86,30 @@ Deno.serve(async (req) => {
                   and coalesce(por, '') <> 'delta') aberta`;
     if (!ini.feita || ini.aberta) return json({ ok: true, aguardando: ini.aberta ? "carga do script aberta" : "sem carga inicial" });
 
+    // uma execução por vez (POST manual, repetido ou simultâneo ao cron)
+    const [lk] = await sql`select pg_try_advisory_lock(hashtext('pessoas-ac-delta')) ok`;
+    if (!lk.ok) return json({ ok: false, ocupado: true }, 409);
+    travado = true;
+
     const [k] = await sql`select (select decrypted_secret from vault.decrypted_secrets where name = 'activecampaign_api_key') k,
                                  (select description from vault.secrets where name = 'activecampaign_api_key') d`;
     const base = String(k?.d ?? "").match(/https:\/\/[a-z0-9]+\.api-us1\.com/)?.[0];
     if (!k?.k || !base) return json({ erro: "sem chave do AC no Vault" }, 500);
+    // a execução do estágio abre ANTES da 1ª chamada: toda requisição fica gravada nela
+    const [ab] = await sql`select pessoas.carga_abrir('activecampaign', 'estagio', 'delta') v`;
+    eid = ab.v.execucao;
     let chamadas = 0;
     const ac = async (caminho: string) => {
       for (let t = 0; t < 3; t++) {
-        if (chamadas >= TETO_CHAMADAS) throw new TetoAtingido();
-        const r = await fetch(`${base}/api/3/${caminho}`, { headers: { "Api-Token": k.k, Accept: "application/json" },
-                                                           signal: AbortSignal.timeout(30_000) });
+        const [uso] = await sql`select count(*)::int n from pessoas.carga_lote l join pessoas.carga_execucao e on e.id = l.execucao_id
+                                 where e.fonte = 'activecampaign' and e.por = 'delta' and l.detalhe ? 'chamada_ac'
+                                   and l.em >= (date_trunc('day', now() at time zone 'utc') at time zone 'utc')`;
+        if (uso.n + 1 > TETO_DIA) throw new TetoAtingido();
+        if (Date.now() - t0 > ORCAMENTO_MS) throw new TetoAtingido();
+        await sql`insert into pessoas.carga_lote (execucao_id, detalhe) values (${eid}, ${sql.json({ chamada_ac: 1 })})`;
         chamadas++;
+        const r = await fetch(`${base}/api/3/${caminho}`, { headers: { "Api-Token": k.k, Accept: "application/json" },
+                                                           signal: AbortSignal.timeout(RQ_TIMEOUT_MS) });
         if (r.ok) return await r.json();
         await r.body?.cancel();
         if (r.status !== 429 && r.status < 500) throw new Error(`AC HTTP ${r.status}`);
@@ -103,7 +121,15 @@ Deno.serve(async (req) => {
     // 2. listas (catálogo)
     const listas: Obj[] = [];
     for (let off = 0; off < 1000; off += 100) {
-      const j = await ac(`lists?limit=100&offset=${off}`);
+      let j: Obj;
+      try { j = await ac(`lists?limit=100&offset=${off}`); } catch (e) {
+        if (e instanceof TetoAtingido) {
+          await sql`select pessoas.carga_fechar(${eid}, 'parada', 'teto diário de chamadas ao AC')`;
+          eid = null;
+          return json({ ok: true, teto_do_dia: true, chamadas_ac: chamadas });
+        }
+        throw e;
+      }
       listas.push(...(j.lists ?? []).map((l: Obj) => ({ tipo: "lista", id: Number(l.id), nome: l.name })));
       await espera(PAUSA_AC_MS);
       if (off + 100 >= Number(j.meta?.total ?? 0)) break;
@@ -113,8 +139,6 @@ Deno.serve(async (req) => {
     // 3. estágio: cursor "aaaa-mm-dd|ultimo_id" da execução aberta (retomada) ou do último delta ok
     const campos = new Map<string, string>(
       (await sql`select field_id, perstag from pessoas.ac_campo_carga`).map((r: Obj) => [String(r.field_id), r.perstag]));
-    const [ab] = await sql`select pessoas.carga_abrir('activecampaign', 'estagio', 'delta') v`;
-    eid = ab.v.execucao;
     let cursor: string = ab.v.cursor ??
       (await sql`select cursor from pessoas.carga_execucao where fonte = 'activecampaign' and fase = 'estagio'
                    and por = 'delta' and status = 'ok' order by id desc limit 1`)[0]?.cursor ??
@@ -122,7 +146,7 @@ Deno.serve(async (req) => {
     let [desde, ultimo] = cursor.split("|");
     const hoje = new Date().toISOString().slice(0, 10);
     let lote: Obj[] = [], paginas = 0, fim = false;
-    while (paginas < TETO_PAGINAS && chamadas < TETO_CHAMADAS && Date.now() - t0 < ORCAMENTO_MS * 0.7) {
+    while (paginas < TETO_PAGINAS && Date.now() - t0 < ORCAMENTO_MS * 0.7) {
       let pg: Obj;
       try {
         pg = await ac(`contacts?limit=100&orders[id]=ASC&id_greater=${ultimo}&filters[updated_after]=${desde}` +
@@ -166,10 +190,14 @@ Deno.serve(async (req) => {
     return json({ ok: true, chamadas_ac: chamadas, paginas, fim_do_dia: fim, restam, ms: Date.now() - t0 });
   } catch (e) {
     // só o código: nunca a mensagem do banco (pode trazer DETAIL com dado) nem a do AC
-    const codigo = String((e as Obj)?.code ?? (e as Error)?.message ?? "erro").slice(0, 40);
+    const sqlstate = String((e as Obj)?.code ?? "");
+    const msg = String((e as Error)?.message ?? "");
+    const codigo = /^[0-9A-Z]{5}$/.test(sqlstate) ? `sql ${sqlstate}` : (/^AC HTTP \d{3}$/.test(msg) ? msg : "erro");
     if (eid !== null) {
       try { await sql`select pessoas.carga_fechar(${eid}, 'erro', ${"delta: " + codigo})`; } catch { /* segue */ }
     }
     return json({ erro: codigo }, 500);
+  } finally {
+    if (travado) { try { await sql`select pg_advisory_unlock(hashtext('pessoas-ac-delta'))`; } catch { /* a conexão fecha */ } }
   }
 });
