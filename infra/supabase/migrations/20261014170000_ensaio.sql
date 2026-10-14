@@ -232,6 +232,7 @@ alter table pessoas.carga_lote enable row level security;
 create table pessoas.carga_chave (
   fonte  text primary key check (fonte ~ '^[a-z_]+$'),
   ligada boolean not null,
+  ate    date,                     -- data de fim: depois dela a fonte fica desligada sozinha (rotina externa: regra do Victor)
   por    text check (por is null or length(por) <= 80),
   em     timestamptz not null default now()
 );
@@ -339,7 +340,7 @@ revoke all on pessoas.carga_chave, pessoas.carga_execucao, pessoas.carga_lote, p
 -- ===================== funções =====================
 create function pessoas.carga_ligada(p_fonte text) returns boolean
 language sql stable set search_path to '' as $f$
-  select coalesce((select ligada from pessoas.carga_chave where fonte = p_fonte), false);
+  select coalesce((select ligada and (ate is null or current_date <= ate) from pessoas.carga_chave where fonte = p_fonte), false);
 $f$;
 
 create function pessoas.carga_contagem() returns jsonb
@@ -396,6 +397,13 @@ begin
   on conflict (tipo, id) do update set nome = excluded.nome, extra = excluded.extra, visto_em = now()
    where (pessoas.ac_catalogo.nome, pessoas.ac_catalogo.extra) is distinct from (excluded.nome, excluded.extra);
   get diagnostics n = row_count;
+  -- regra do Victor (14/10/2026): TODA lista de Sessão de Viabilidade do AC é pré-checkout da SV, inclusive as que forem
+  -- criadas depois. Lista nova com esse nome entra sozinha em ac_lista_papel (as que já estão lá não mudam).
+  insert into pessoas.ac_lista_papel (lista_id, papel, fonte)
+  select c.id, 'sv_pre_checkout', 'regra: nome da lista contém Sessão de Viabilidade (Victor 14/10/2026)'
+    from pessoas.ac_catalogo c
+   where c.tipo = 'lista' and c.nome ~* 'sess(ã|a)o de viabilidade'
+  on conflict (lista_id) do nothing;
   return n;
 end $f$;
 
@@ -706,6 +714,11 @@ insert into pg_temp._z_out(passo, linha) select '14 lote hostil (esperado: sem e
   jsonb_build_object('id', 900000101, 'email', 'ensaio-dup@exemplo.invalid')), 'hostil')::text;
 insert into pg_temp._z_out(passo, linha) select '15 lote hostil gravado: e-mail nulo / nome <= 160 / listas válidas / campos {}', (select (email is null)::text || ' / ' || (length(coalesce(nome,'')) <= 160)::text from pessoas.ac_contato where contact_id = 900000101) || ' / ' || (select listas::text || ' / ' || campos::text || ' / ' || tags::text from pessoas.ac_contato where contact_id = 900000102);
 delete from pessoas.ac_contato where contact_id in (900000101, 900000102);
+create temp table _z_cat as select pessoas.carga_ac_catalogo('[{"tipo":"lista","id":999001,"nome":"Sessão de Viabilidade ENSAIO"},{"tipo":"lista","id":999002,"nome":"Outra lista"},{"tipo":"lista","id":412,"nome":"Sessão de Viabilidade"}]'::jsonb) n;
+insert into pg_temp._z_out(passo, linha) select '16 catálogo: lista nova de SV entra como pré-checkout sozinha (esperado 999001 = sv_pre_checkout, 999002 = nenhum, 15 listas)',
+  (select n from pg_temp._z_cat)::text || ' gravados / 999001: ' || coalesce((select papel from pessoas.ac_lista_papel where lista_id = 999001), 'nenhum')
+  || ' / 999002: ' || coalesce((select papel from pessoas.ac_lista_papel where lista_id = 999002), 'nenhum')
+  || ' / listas com papel: ' || (select count(*) from pessoas.ac_lista_papel);
 insert into pg_temp._z_out(passo, linha) select '13 retomada: carga_abrir de novo devolve o cursor', pessoas.carga_abrir('activecampaign', 'estagio', 'ensaio')::text;
 select pessoas.carga_fechar((select id from pg_temp._z_e), 'ok');
 create temp table _z_p as select (pessoas.carga_abrir('activecampaign', 'pessoas', 'ensaio')->>'execucao')::bigint id;
@@ -726,6 +739,9 @@ do $t$ begin
     insert into pg_temp._z_out(passo, linha) values ('32 lote de 501 no ensaio', 'ACEITOU (ERRO)');
   exception when invalid_parameter_value then insert into pg_temp._z_out(passo, linha) values ('32 lote de 501 no ensaio', 'recusado (ok)'); end;
 end $t$;
+update pessoas.carga_chave set ate = current_date - 1 where fonte = 'activecampaign';
+insert into pg_temp._z_out(passo, linha) select '33 data de fim vencida desliga sozinha', (not pessoas.carga_ligada('activecampaign'))::text;
+update pessoas.carga_chave set ate = null where fonte = 'activecampaign';
 update pessoas.carga_chave set ligada = false;
 do $t$ begin
   begin perform pessoas.carga_ac_estagio((select id from pg_temp._z_e), '[]'::jsonb, 'x');

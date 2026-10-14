@@ -104,6 +104,7 @@ alter table pessoas.carga_lote enable row level security;
 create table pessoas.carga_chave (
   fonte  text primary key check (fonte ~ '^[a-z_]+$'),
   ligada boolean not null,
+  ate    date,                     -- data de fim: depois dela a fonte fica desligada sozinha (rotina externa: regra do Victor)
   por    text check (por is null or length(por) <= 80),
   em     timestamptz not null default now()
 );
@@ -211,7 +212,7 @@ revoke all on pessoas.carga_chave, pessoas.carga_execucao, pessoas.carga_lote, p
 -- ===================== funções =====================
 create function pessoas.carga_ligada(p_fonte text) returns boolean
 language sql stable set search_path to '' as $f$
-  select coalesce((select ligada from pessoas.carga_chave where fonte = p_fonte), false);
+  select coalesce((select ligada and (ate is null or current_date <= ate) from pessoas.carga_chave where fonte = p_fonte), false);
 $f$;
 
 create function pessoas.carga_contagem() returns jsonb
@@ -268,6 +269,13 @@ begin
   on conflict (tipo, id) do update set nome = excluded.nome, extra = excluded.extra, visto_em = now()
    where (pessoas.ac_catalogo.nome, pessoas.ac_catalogo.extra) is distinct from (excluded.nome, excluded.extra);
   get diagnostics n = row_count;
+  -- regra do Victor (14/10/2026): TODA lista de Sessão de Viabilidade do AC é pré-checkout da SV, inclusive as que forem
+  -- criadas depois. Lista nova com esse nome entra sozinha em ac_lista_papel (as que já estão lá não mudam).
+  insert into pessoas.ac_lista_papel (lista_id, papel, fonte)
+  select c.id, 'sv_pre_checkout', 'regra: nome da lista contém Sessão de Viabilidade (Victor 14/10/2026)'
+    from pessoas.ac_catalogo c
+   where c.tipo = 'lista' and c.nome ~* 'sess(ã|a)o de viabilidade'
+  on conflict (lista_id) do nothing;
   return n;
 end $f$;
 
