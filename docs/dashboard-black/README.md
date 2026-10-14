@@ -12,7 +12,8 @@ Pedido do Victor Hugo (12/10/2026). Desenho e plano técnico no cérebro do Vict
   presenciais), B `20261012234606` (`dados_black_perfil`, `dados_black_leads`, `dados_black_grupo`, marcar teste)
   e a foto do grupo `20261013001456`; depois, o recorte com lista `20261013120148` e a miniatura dos criativos
   `20261013121212` (13/10). Detalhe de cada método na seção "Fonte real" abaixo.
-- **Na `main` e no ar** (deploy automático da Hostinger a cada push na `main`).
+- **Publicado em produção em 13/10/2026**, após os PRs #14 e #15, ambos com CI verde.
+- O deploy da Hostinger é automático a cada push na `main`.
 - A demonstração (dado fictício) continua existindo só em dev com `NEXT_PUBLIC_BLACK_DEMO=1`.
 - Fora do módulo, a branch toca 3 arquivos: a rota `app/(admin)/infra/dashboards/csm/[chave]/page.tsx`
   (desvia o modelo `jornada-captacao`), uma linha no `modules/infra/dados/domain/registro.ts` e a flag
