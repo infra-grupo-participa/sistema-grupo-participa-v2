@@ -70,11 +70,10 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-3 max-sm:grid-cols-1 lg:grid-cols-4">
-          <KpiCard label="Investimento do dia" value={moeda(dia.gasto)} bar="yellow" hint="Funil e canal do seletor" />
-          <KpiCard label="Cadastros do dia" value={inteiro(dia.cadastros)} bar="accent" hint={`${inteiro(dia.leadsPagos)} vieram de anúncio`} />
-          <KpiCard label="Pessoas novas no dia" value={inteiro(dia.pessoasNovas)} bar="green" hint="Primeira vez na lista" />
-          <KpiCard label="Leads acumulados" value={inteiro(dia.pessoasAcumuladas)} bar="green"
-            hint="Pessoas únicas desde o início do projeto." />
+          <KpiCard label="Investimento do dia" value={moeda(dia.gasto)} bar="yellow" title="No funil e canal selecionados." />
+          <KpiCard label="Cadastros do dia" value={inteiro(dia.cadastros)} bar="accent" title={`${inteiro(dia.leadsPagos)} vieram de anúncio.`} />
+          <KpiCard label="Pessoas novas no dia" value={inteiro(dia.pessoasNovas)} bar="green" title="Pessoas que aparecem pela primeira vez na lista neste dia." />
+          <KpiCard label="Leads acumulados" value={inteiro(dia.pessoasAcumuladas)} bar="green" title="Pessoas únicas desde o início do projeto." />
         </div>
 
         <FunilDia key={dia.dia} dia={cap} />
@@ -96,38 +95,43 @@ function FunilDia({ dia }: { dia: DiaHistorico }) {
     ] },
     { rotulo: 'Views da página', valor: dia.lpv, pontes: [{ rotulo: 'Connect rate', taxa: taxa(dia.lpv, dia.cliques) }] },
     { rotulo: 'Leads pagos', valor: dia.leadsPagos, pontes: [{ rotulo: 'Conversão da página', taxa: taxa(dia.leadsPagos, dia.lpv) }] },
-    { rotulo: 'MQL', valor: dia.mql, pontes: [{ rotulo: '% MQL', taxa: taxa(dia.mql, dia.mqlBase) }] },
-    { rotulo: 'Ingresso no grupo', valor: dia.ingressoGrupo, pontes: [{ rotulo: '% ingresso no grupo', taxa: taxa(dia.ingressoGrupo, dia.pessoasNovas) }] },
+    { rotulo: 'MQL entre leads pagos', valor: dia.mqlPagos, pontes: [{ rotulo: '% MQL dos pagos', taxa: taxa(dia.mqlPagos, dia.mqlPagosBase) }] },
+    { rotulo: 'Ingresso no grupo · MQL pagos', valor: dia.ingressoGrupoPagosMql, pontes: [{ rotulo: '% ingresso dos MQL pagos', taxa: taxa(dia.ingressoGrupoPagosMql, dia.mqlPagos) }] },
   ];
-  const max = Math.max(1, dia.impressoes);
+  const max = Math.max(1, ...etapas.map((e) => e.valor ?? 0));
+  const larguras: number[] = [];
+  etapas.forEach((etapa, k) => {
+    const relativa = etapa.valor === null ? 0 : Math.log1p(Math.max(0, etapa.valor)) / Math.log1p(max);
+    const dinamica = 32 + relativa * 64;
+    const teto = k === 0 ? 96 : larguras[k - 1] - 7;
+    const larguraMinima = 24 + (etapas.length - 1 - k) * 7;
+    larguras.push(Math.max(larguraMinima, Math.min(dinamica, teto)));
+  });
   return (
     <section aria-label="Funil do dia (captação)" className="mt-4">
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)]">Funil do dia · só C2 e C3</h3>
-      <ol className="space-y-2">
+      <ol className="mx-auto max-w-3xl space-y-1">
         {etapas.map((e, k) => (
           <li key={e.rotulo}>
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
-              <span className="text-[var(--fg-2)]">{e.rotulo}</span>
-              <span className="flex items-baseline gap-2">
-                <Numero valor={e.valor} formato="int" animado={false} />
-              </span>
+              <span className="font-medium text-[var(--fg-2)]">{e.rotulo}</span>
+              <span className="font-bold tabular text-[var(--fg)]"><Numero valor={e.valor} formato="int" animado={false} /></span>
             </div>
-            <div className="mt-0.5 h-2 overflow-hidden rounded-full bg-[var(--surface-4)]" aria-hidden="true">
-              {e.valor !== null && <div className="atm-historico-funil-bar h-full rounded-full bg-[var(--accent)]"
-                style={{ width: `${Math.max(e.valor > 0 ? 1.5 : 0, (e.valor / max) * 100)}%`, animationDelay: `${k * 90}ms` }} />}
-            </div>
+            <svg viewBox="0 0 360 30" preserveAspectRatio="none" className="mt-1 h-8 w-full" role="img" aria-label={`${e.rotulo}: ${e.valor === null ? 'Sem dado' : inteiro(e.valor)}`}>
+              <polygon points={`${180-larguras[k]*1.8},0 ${180+larguras[k]*1.8},0 ${180+(larguras[k]-2)*1.8},30 ${180-(larguras[k]-2)*1.8},30`}
+                fill="var(--accent)" fillOpacity={e.valor === null ? 0.12 : Math.max(0.22, 0.72 - k * 0.08)} stroke="var(--border-accent)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+            </svg>
+            {etapas[k + 1]?.pontes.length ? (
+              <dl className="-mt-0.5 mb-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-[var(--r-sm)] bg-[var(--surface-1)] px-2 py-1.5 text-[11px]">
+                {etapas[k + 1].pontes.map((ponte) => <div key={ponte.rotulo} className="flex items-baseline gap-1.5">
+                  <dt className="text-[var(--fg-3)]">{ponte.rotulo}</dt>
+                  <dd className="font-semibold tabular text-[var(--fg)]">{ponte.taxa ? <Taxa taxa={ponte.taxa} /> : <Numero valor={ponte.valor ?? null} formato={ponte.formato ?? 'int'} animado={false} />}</dd>
+                </div>)}
+              </dl>
+            ) : null}
           </li>
         ))}
       </ol>
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
-        {etapas.flatMap((etapa) => etapa.pontes.map((ponte) => (
-          <div key={`${etapa.rotulo}-${ponte.rotulo}`} className="flex items-baseline justify-between gap-2 border-t border-[var(--border-faint)] pt-2">
-            <dt className="text-[var(--fg-3)]">{ponte.rotulo}</dt>
-            <dd className="font-semibold text-[var(--fg)]">{ponte.taxa ? <Taxa taxa={ponte.taxa} /> : <Numero valor={ponte.valor ?? null} formato={ponte.formato ?? 'int'} animado={false} />}</dd>
-          </div>
-        )))}
-      </dl>
-      <p className="mt-2 text-[11px] text-[var(--fg-3)]">MQL e ingresso no grupo seguem as pessoas únicas cadastradas neste dia; o grupo conta quem já entrou, mesmo antes do cadastro. Alcance e frequência não são somados por dia.</p>
     </section>
   );
 }

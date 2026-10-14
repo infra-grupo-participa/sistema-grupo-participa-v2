@@ -12,7 +12,7 @@ import { safeHttpUrl } from '@/shared/domain/url-segura';
 import { ORDENS_GALERIA, ROTULO_ORDEM, ordenar, valorOrdem, type ItemPainel, type OrdemGaleria } from '../domain/criativos';
 import type { Anuncio, Valor } from '../domain/tipos';
 import { MiniaturaFicticia } from './MiniaturaFicticia';
-import { Chip, Farol, formatar, moeda } from './pecas';
+import { Farol, formatar, moeda } from './pecas';
 
 const CTR2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const ctrTexto = (v: Valor) => (v === null ? 'Sem dado' : `${CTR2.format(v * 100)}%`);
@@ -36,11 +36,21 @@ export function GaleriaCriativos({ itens, anuncio, selecionado, ativo, onAbrir }
   itens: ItemPainel[]; anuncio: (id: string) => Anuncio | undefined; selecionado: string | null; ativo: string | null; onAbrir: (id: string) => void;
 }) {
   const [ordem, setOrdem] = useState<OrdemGaleria>('leads');
+  const [ordenacaoAberta, setOrdenacaoAberta] = useState(false);
   const lista = ordenar(itens, ordem);
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Ordenar criativos">
-        {ORDENS_GALERIA.map((o) => <Chip key={o} ativo={ordem === o} onClick={() => setOrdem(o)}>{ROTULO_ORDEM[o]}</Chip>)}
+      <div className="relative">
+        <button type="button" aria-haspopup="listbox" aria-expanded={ordenacaoAberta} onClick={() => setOrdenacaoAberta((v) => !v)}
+          className="min-h-10 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm font-semibold text-[var(--fg)] hover:border-[var(--border-accent)]">
+          Ordenar: {ROTULO_ORDEM[ordem]} <span aria-hidden="true" className="ml-1">{ordenacaoAberta ? '▴' : '▾'}</span>
+        </button>
+        {ordenacaoAberta && <div role="listbox" aria-label="Ordenar criativos" className="absolute left-0 top-full z-20 mt-1 min-w-56 overflow-hidden rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-1 shadow-[var(--shadow-overlay)]">
+          {ORDENS_GALERIA.map((o) => <button key={o} type="button" role="option" aria-selected={ordem === o} onClick={() => { setOrdem(o); setOrdenacaoAberta(false); }}
+            className={'block min-h-10 w-full rounded-[var(--r-sm)] px-3 text-left text-sm ' + (ordem === o ? 'bg-[var(--accent-subtle)] font-semibold text-[var(--fg)]' : 'text-[var(--fg-2)] hover:bg-[var(--surface-3)] hover:text-[var(--fg)]')}>
+            {ROTULO_ORDEM[o]}
+          </button>)}
+        </div>}
       </div>
       <p className="text-xs text-[var(--fg-3)]" aria-live="polite">Ordem: {EXPLICA[ordem]}.</p>
       {lista.length === 0 && <p className="text-sm text-[var(--fg-3)]">Nenhum criativo veiculado neste recorte.</p>}
@@ -61,14 +71,14 @@ export function GaleriaCriativos({ itens, anuncio, selecionado, ativo, onAbrir }
                     // eslint-disable-next-line @next/next/no-img-element -- URL assinada do Storage, já validada por safeHttpUrl
                     ? <img src={miniatura} alt={`Miniatura de ${it.nome}`} loading="lazy" className="block aspect-[8/5] w-full object-cover" />
                     : <MiniaturaFicticia id={it.id} formato={a?.formato ?? null} className="rounded-none" />}
-                  <span className="absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-[var(--scrim)] px-2 py-0.5 text-[11px] font-semibold text-[var(--fg)]">
+                  <span className="absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-2 py-0.5 text-[11px] font-bold text-[var(--fg)] shadow-[var(--shadow-sm)]">
                     <span className="tabular">{mqlSemPosicao ? '—' : `${pos + 1}º`}</span>
-                  <span className="text-[var(--fg-2)]">{NOME_VALOR[ordem]}</span>
-                    <span className={'tabular ' + (v === null ? 'text-[var(--fg-3)]' : 'text-[var(--accent)]')}>
+                    <span className="text-[var(--fg)]">{NOME_VALOR[ordem]}</span>
+                    <span className="tabular text-[var(--fg)]">
                       {ordem === 'mql' && r.leadsPagos < 5 ? 'menos de 5 leads' : v === null ? 'Sem dado' : textoValor(ordem, v)}
                     </span>
                   </span>
-                  <span className="absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-x-3 gap-y-0.5 bg-[var(--scrim)] px-2 py-1 text-[11px] text-[var(--fg)]">
+                  <span className="absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-[var(--border)] bg-[var(--surface-1)] px-2 py-1 text-[11px] font-medium text-[var(--fg)] shadow-[var(--shadow-sm)]">
                     <span className="tabular">{moeda(r.gasto)}</span>
                     <span className="tabular" title="CTR: cliques no link ÷ impressões">CTR {ctrTexto(r.ctr.valor)}</span>
                     {r.distribuicao
@@ -76,10 +86,10 @@ export function GaleriaCriativos({ itens, anuncio, selecionado, ativo, onAbrir }
                       : <span className="inline-flex items-center gap-1 tabular">CPL {formatar(r.cpl, 'brl')} <Farol farol={r.farol} /></span>}
                   </span>
                 </span>
-                <span className="block p-2.5">
-                  <span className="block break-words text-sm font-semibold leading-snug text-[var(--fg)]">{it.nome}</span>
+                <span className="block border-t border-[var(--border)] bg-[var(--surface-1)] p-3">
+                  <span className="block break-words text-sm font-bold leading-snug text-[var(--fg)]">{it.nome}</span>
                   <span className="mt-1 block text-xs text-[var(--fg-2)]">
-                    {r.distribuicao ? `${formatar(r.impressoes, 'int')} impressões` : <><strong className="font-semibold text-[var(--fg)]">{formatar(r.leadsPagos, 'int')} leads pagos</strong><span className="text-[var(--fg-2)]"> · {formatar(r.leads, 'int')} cadastros</span></>}
+                    {r.distribuicao ? `${formatar(r.impressoes, 'int')} impressões` : <><strong className="font-bold text-[var(--fg)]">{formatar(r.leadsPagos, 'int')} leads pagos</strong><span className="text-[var(--fg-2)]"> · {formatar(r.leads, 'int')} cadastros</span></>}
                   </span>
                 </span>
               </button>

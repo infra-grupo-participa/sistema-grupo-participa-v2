@@ -28,10 +28,10 @@ const PCT = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFr
 
 export const SEM_DADO = 'Sem dado';
 
-/** Abaixo de 1280 px o rótulo com `truncate` (KpiCard e listas) quebra linha em vez de cortar: nome é string exata da fonte. */
-export const ROTULO_INTEIRO = 'max-xl:[&_.truncate]:overflow-visible max-xl:[&_.truncate]:whitespace-normal max-xl:[&_.truncate]:break-words';
+/** Até 1320 px o rótulo com `truncate` (KpiCard e listas) quebra linha em vez de cortar: nome é string exata da fonte. */
+export const ROTULO_INTEIRO = 'max-[1320px]:[&_.truncate]:overflow-visible max-[1320px]:[&_.truncate]:whitespace-normal max-[1320px]:[&_.truncate]:break-words';
 /** Somado ao `width` do Modal: abaixo de 768 px o modal ocupa a tela inteira (o centro do overlay absorve o respiro de 16 px). */
-export const MODAL_TELA_CHEIA = 'max-md:h-dvh max-md:max-h-dvh max-md:w-screen max-md:max-w-none max-md:shrink-0 max-md:rounded-none max-md:border-0';
+export const MODAL_TELA_CHEIA = 'max-md:max-h-[calc(100dvh-2rem)] max-md:w-[calc(100vw-2rem)] max-md:max-w-none max-md:shrink-0';
 
 /** Formata um valor. Taxas chegam como fração (0,123 = 12,3%). null = "Sem dado". */
 export function formatar(v: Valor, formato: FormatoMetrica): string {
@@ -107,9 +107,9 @@ export const corFarol = (f: TipoFarol) => COR_FAROL[f];
  * Indicador de meta de um card com fórmula: bolinha + "Bom"/"Atenção"/"Ruim" + % da meta + a meta. A cor nunca vai sozinha (o
  * texto diz o estado). Sem valor ou sem meta, mostra "Sem meta" em vez de sumir.
  */
-export function IndicadorMeta({ valor, meta, ideal, menorMelhor = false, formato, className = '' }: {
+export function IndicadorMeta({ valor, meta, ideal, menorMelhor = false, formato, className = '', compacto = false }: {
   valor: Valor; meta: Valor; /** Com `ideal`, vira faixa de duas linhas (ideal e `meta` como limite); só para menor-melhor. */ ideal?: Valor;
-  menorMelhor?: boolean; formato: FormatoMetrica; className?: string;
+  menorMelhor?: boolean; formato: FormatoMetrica; className?: string; compacto?: boolean;
 }) {
   const faixa = ideal !== undefined;
   const a = faixa ? avaliarFaixa(valor, ideal, meta) : avaliarMeta(valor, meta, menorMelhor);
@@ -126,7 +126,7 @@ export function IndicadorMeta({ valor, meta, ideal, menorMelhor = false, formato
       <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: cor }} />
       <span className="font-semibold text-[var(--fg)]">{rotulo}</span>
       <span>{pctMeta}</span>
-      <span className="text-[var(--fg-3)]">{faixa ? `· ideal ${formatar(ideal, formato)}, máx. ${formatar(meta, formato)}` : `· meta ${formatar(meta, formato)}`}</span>
+      {!compacto && <span className="text-[var(--fg-3)]">{faixa ? `· ideal ${formatar(ideal, formato)}, máx. ${formatar(meta, formato)}` : `· meta ${formatar(meta, formato)}`}</span>}
     </span>
   );
 }

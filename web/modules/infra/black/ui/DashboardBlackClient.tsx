@@ -201,14 +201,11 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
         <div className="min-w-0">
           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Infra / Dashboards / CSM</div>
           <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">{titulo}</h1>
-          <p className="mt-1 text-sm text-[var(--fg-2)]">
-            {cfg?.liveEm ? `Live em ${dataHora(cfg.liveEm)}. ` : ''}
-            {trafego.data?.coletadoEm ? `Tráfego coletado em ${dataHora(trafego.data.coletadoEm)}.` : 'Coleta do tráfego: sem dado.'}
-          </p>
         </div>
         <div className="flex items-center gap-2 max-md:[&_button]:min-h-11">
           {lidoEm && <span className="text-xs text-[var(--fg-3)]">Lido às {horaCurta(lidoEm)}</span>}
-          <Button variant="ghost" size="sm" onClick={() => setVersao((v) => v + 1)} disabled={lendo || !fonte} aria-label="Atualizar os dados">
+          <Button variant="ghost" size="sm" onClick={() => setVersao((v) => v + 1)} disabled={lendo || !fonte} aria-label="Atualizar os dados"
+            title={`${cfg?.liveEm ? `Live em ${dataHora(cfg.liveEm)}. ` : ''}${trafego.data?.coletadoEm ? `Tráfego coletado em ${dataHora(trafego.data.coletadoEm)}.` : 'Coleta do tráfego: sem dado.'}`}>
             <span className="inline-flex items-center gap-1.5"><Icon name="refresh" size={14} />{lendo ? 'Lendo…' : 'Atualizar'}</span>
           </Button>
         </div>
