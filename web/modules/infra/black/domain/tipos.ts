@@ -22,7 +22,7 @@ export type Profissao = 'advogado' | 'contador' | 'estudante_direito' | 'outros'
 /** AAAA-MM-DD no fuso de São Paulo, inclusivo nas duas pontas. */
 export interface Periodo { de: string; ate: string }
 export interface FiltroCriativos { campanha?: string; conjunto?: string; anuncio?: string; pagina?: string }
-export interface Recorte { funil: FiltroFunil; canal: FiltroCanal; periodo: string; periodoPersonalizado?: Periodo | null; aba: AbaBlack; criativos: FiltroCriativos }
+export interface Recorte { funil: FiltroFunil; canal: FiltroCanal; periodo: string; periodoPersonalizado?: Periodo | null; aba: AbaBlack; criativos: FiltroCriativos; historicoModo?: 'dia-a-dia' | 'geral' }
 
 /** Régua de CPL do Caio (meta e teto, em reais). */
 export interface ReguaCpl { meta: number; teto: number }
@@ -183,6 +183,8 @@ export interface GrupoBlack {
   unicos: Valor; unicosWebhook: Valor; unicosSoFoto: Valor;
   /** Dos leads do recorte, quantos estão neste grupo. null sem recorte. */
   unicosCruzados: Valor;
+  leadsNoGrupo?: Valor; leadsDoSegmento?: Valor;
+  leadsNoGrupoPorClasse?: { advogado: Valor; estudanteDireito: Valor; contador: Valor; outros: Valor; semProfissao: Valor };
 }
 /** Leads únicos (pessoa por telefone, 8 últimos dígitos; senão e-mail) do período e do recorte, sem teste. */
 export interface LeadsGrupoBlack {
@@ -200,6 +202,7 @@ export interface GrupoResumoBlack {
   unicosGruposMql: Valor; unicosGruposTotal: Valor;
   /** Dos leads MQL do recorte, quantos estão nos grupos de MQL. null sem recorte. */
   unicosCruzadosMql: Valor;
+  leadsEmAlgumGrupo?: Valor; leadsEmMaisDeUmGrupo?: Valor;
   leads: LeadsGrupoBlack;
   atualizado: { ultimoEventoWebhook: string | null; ultimaFoto: string | null };
 }

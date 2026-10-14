@@ -36,6 +36,14 @@ describe('lerRecorte', () => {
     expect(lerRecorte({ periodo: 'personalizado', de: '2026-02-30', ate: '2026-10-10' }).periodo).toBe('desde-inicio');
     expect(lerRecorte({ periodo: 'personalizado', de: '2026-10-10', ate: '2026-10-05' }).periodo).toBe('desde-inicio');
   });
+  it('guarda o modo Geral do Histórico na URL e volta ao Dia a dia', () => {
+    const geral = lerRecorte(new URLSearchParams('aba=historico&historico=geral'));
+    expect(geral.historicoModo).toBe('geral');
+    expect(lerRecorte(new URLSearchParams(escreverRecorte(geral)))).toEqual(geral);
+    const dia = { ...geral, historicoModo: 'dia-a-dia' as const };
+    expect(escreverRecorte(dia)).not.toContain('historico=');
+    expect(lerRecorte(new URLSearchParams(escreverRecorte(dia))).historicoModo).toBe('dia-a-dia');
+  });
   it('preserva parâmetro alheio (relogio) e array do Next', () => {
     const q = escreverRecorte(RECORTE_PADRAO, new URLSearchParams('relogio=2026-10-20&funil=c1'));
     expect(q).toBe('funil=todos&periodo=desde-inicio&canal=todos&aba=visao&relogio=2026-10-20');

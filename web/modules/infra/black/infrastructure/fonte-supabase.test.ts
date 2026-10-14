@@ -103,6 +103,18 @@ describe('mapeadores das RPCs da Black', () => {
     expect(mapearTrafego({ campanhas: [] }).semDado).toBe(true);
     expect(mapearTrafego(null).semDado).toBe(true);
   });
+  it('mapeia cruzamentos de leads por segmento e sobreposições da RPC de grupos', () => {
+    const { data } = mapearGrupo({ ...RESPOSTA_GRUPO,
+      leads_em_algum_grupo: 9, leads_em_mais_de_um_grupo: 1,
+      grupos: RESPOSTA_GRUPO.grupos.map((g, i) => ({ ...g,
+        leads_no_grupo: [4, 2, 3][i], leads_do_segmento: [6, 4, 5][i],
+        leads_no_grupo_por_classe: { advogado: i === 0 ? 4 : 0, estudante_direito: 0, contador: i === 1 ? 2 : 0, outros: i === 2 ? 3 : 0, sem_profissao: 0 },
+      })),
+    });
+    expect(data.grupos.map((g) => [g.leadsNoGrupo, g.leadsDoSegmento])).toEqual([[4, 6], [2, 4], [3, 5]]);
+    expect(data.leadsEmAlgumGrupo).toBe(9);
+    expect(data.leadsEmMaisDeUmGrupo).toBe(1);
+  });
   it('perfil: funil pela porta, ids do Meta à parte, ids internos null, linha sem lead_id fora', () => {
     const { data } = mapearPerfil(RESPOSTA_PERFIL);
     expect(data).toHaveLength(2);

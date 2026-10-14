@@ -8,7 +8,7 @@ import { KpiCard, Modal, ProgressBar, SectionCard } from '@/shared/ui/components
 import { diaDe } from '../domain/recorte';
 import {
   agregar, cpc, cplPorEtapa, cpm, ctr, custoPorVisualizacao,
-  dividir, ehCaptacao, ehEntresafraCampanha, ehPago, enviosMqlMaisRecentes, farolCpl, filtrarDias, filtrarLinhas, gastoDe, ingressoGrupo, linhasCaptacao, somar,
+  dividir, ehCaptacao, ehEntresafraCampanha, ehPago, enviosMqlMaisRecentes, farolCpl, filtrarDias, filtrarLinhas, gastoDe, ingressoGrupo, linhasCaptacao, somar, taxa as construirTaxa,
   taxaVideo75, type Taxa as TipoTaxa,
 } from '../domain/metricas';
 import { FUNIS, ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
@@ -16,6 +16,7 @@ import type { DadosTela } from './contexto';
 import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
 import { Farol, formatar, IndicadorMeta, MODAL_TELA_CHEIA, moeda, Numero, Taxa } from './pecas';
 import { TabelaLeads } from './perfil/TabelaLeads';
+import { ResumoLeads } from './ResumoLeads';
 import { cplCaptacao, connectRate as connectRateNumero, conversaoPagina as conversaoPaginaNumero, gastoCampanha, investimentoTrafego, leadsDoTrafego, leadsPessoas, mql as mqlNumero, taxaMql, investimentoDeCaptacao, ingressoGrupoGeral } from '../domain/numeros';
 
 const TODAS: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo', 'perfil'];
@@ -114,14 +115,37 @@ function CardPercentualMql({ geral, trafego, onAbrir }: { geral: ReturnType<type
 }
 
 /** Ingresso usa a pessoa única do perfil, inclusive não MQL e sem campanha. */
-function CardIngresso({ geral, trafego, onAbrir }: { geral: ReturnType<typeof ingressoGrupoGeral>; trafego: ReturnType<typeof ingressoGrupoGeral>; onAbrir: () => void }) {
+function CardIngresso({ geral, trafego, grupo, onAbrir }: { geral: ReturnType<typeof ingressoGrupoGeral>; trafego: ReturnType<typeof ingressoGrupoGeral>; grupo: DadosTela['grupo']['data']; onAbrir: () => void }) {
+  const linhasGrupo = ([
+    ['advogado', 'Advogados', 'Denominador: leads advogado + estudante de Direito (leads_do_segmento).'],
+    ['contador', 'Contadores', 'Denominador: leads contadores (leads_do_segmento).'],
+    ['outros', 'Outros', 'Denominador: leads do segmento Outros (leads_do_segmento).'],
+  ] as const).map(([segmento, nome, dica]) => {
+    const matches = grupo?.grupos.filter((g) => g.segmento === segmento) ?? [];
+    const item = matches.length === 1 ? matches[0] : null;
+    return { nome, dica, taxa: item ? construirTaxa(item.leadsNoGrupo ?? null, item.leadsDoSegmento ?? null,
+      matches.length > 1 ? 'Há mais de um grupo neste segmento; não se soma para evitar duplicidade.' : null) : null };
+  });
+  const multiGrupo = grupo?.leadsEmMaisDeUmGrupo;
   return (
     <Cartao cheio titulo="Ingresso no grupo" onAbrir={onAbrir}>
       <KpiCard label="Ingresso no grupo · todos os leads"
         valueClassName="text-2xl sm:text-3xl"
         value={<Taxa taxa={geral} className="text-2xl font-bold tracking-tight text-[var(--fg)] no-underline" />}
-        hint={<div className="space-y-2">{geral.valor !== null && <ProgressBar value={geral.valor * 100} ariaLabel={`Ingresso no grupo geral ${formatar(geral.valor, 'pct')}`} />}<span>Tráfego C2/C3: <strong className="tabular text-[var(--fg)]"><Taxa taxa={trafego} /></strong></span></div>}
-        title={`Geral: ${formatar(geral.num, 'int')} pessoas únicas que entraram ÷ ${formatar(geral.den, 'int')} leads. Fonte dados_black_perfil.entrou_grupo_em; inclui entrada aproximada.`} />
+        hint={<div className="space-y-2">
+          {geral.valor !== null && <ProgressBar value={geral.valor * 100} ariaLabel={`Ingresso no grupo geral ${formatar(geral.valor, 'pct')}`} />}
+          <p>Geral: <strong className="tabular text-[var(--fg)]">{formatar(geral.num, 'int')} / {formatar(geral.den, 'int')} · <Taxa taxa={geral} /></strong></p>
+          <p>Do tráfego: <strong className="tabular text-[var(--fg)]">{formatar(trafego.num, 'int')} / {formatar(trafego.den, 'int')} · <Taxa taxa={trafego} /></strong></p>
+          <ul className="border-t border-[var(--border-faint)] pt-1 text-[11px] text-[var(--fg-2)]">
+            {linhasGrupo.map(({ nome, dica, taxa: t }) => <li key={nome} title={dica} className="whitespace-nowrap text-[10px]">
+              <span>{nome}: </span><span className="font-semibold tabular">{t ? <><Taxa taxa={t} /> · {formatar(t.num, 'int')} / {formatar(t.den, 'int')}</> : 'Sem dado'}</span>
+            </li>)}
+            <li className="text-[var(--fg-3)]">
+              {multiGrupo === null || multiGrupo === undefined ? 'Sem dado de sobreposição entre grupos.' : `${formatar(multiGrupo, 'int')} pessoas em mais de um grupo`}
+            </li>
+          </ul>
+        </div>}
+        title="Ingresso geral e do tráfego: pessoas únicas com dados_black_perfil.entrou_grupo_em ÷ respectivas pessoas únicas. Segmentos: dados_black_grupo.grupos[].leads_no_grupo ÷ leads_do_segmento. A união e as pessoas em mais de um grupo vêm dos campos leads_em_algum_grupo e leads_em_mais_de_um_grupo." />
     </Cartao>
   );
 }
@@ -139,6 +163,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
 
   // ─── Faixa 1: placar (do início até agora) ──────────────────────────────────────────────────────────────
   const leadsAteAgora: Valor = semLeads ? null : leadsPessoas(d.linhasTodas.filter((l) => l.pagina !== 'consultoria_respondi'), 'pessoas únicas desde o início').valor;
+  const leadsTrafegoAteAgora = semLeads ? null : leadsDoTrafego(d.linhasTodas.filter((l) => l.pagina !== 'consultoria_respondi'), idx).valor;
   const leadsDeCampanha = leadsDoTrafego(d.linhas, idx, filtro);
   const investimentoCaptacao = investimentoDeCaptacao(d.trafegoPeriodo, d.periodo, filtro);
   const placar = cplCaptacao(investimentoCaptacao.total, leadsDeCampanha);
@@ -254,7 +279,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           <Cartao titulo={cardLeads.rotulo} onAbrir={abrir(cardLeads)}>
             <KpiCard label="Leads contra a meta" bar="accent" title={`${config.fontes.plano} Pessoas únicas de todas as portas desde o início, sem aplicar o filtro de período. Meta: ${config.metaLeads === null ? 'sem cadastro' : formatar(config.metaLeads, 'int')}.`} valueClassName="text-2xl sm:text-3xl"
               value={<span className="flex flex-wrap items-baseline gap-x-2"><Numero valor={leadsAteAgora} formato="int" falta={d.avisoPerfil ?? undefined} />{config.metaLeads !== null && leadsAteAgora !== null && <span className="text-base font-medium text-[var(--fg-2)]">de {formatar(config.metaLeads, 'int')} · {formatar(dividir(leadsAteAgora, config.metaLeads), 'pct')}</span>}</span>}
-              hint={<div className="space-y-2">{config.metaLeads !== null && leadsAteAgora !== null && <ProgressBar value={(leadsAteAgora / config.metaLeads) * 100} ariaLabel={`${formatar(leadsAteAgora, 'int')} de ${formatar(config.metaLeads, 'int')} leads`} valueNow={leadsAteAgora} valueMin={0} valueMax={config.metaLeads} />}<p className="text-xs text-[var(--fg-2)]">Do tráfego C2/C3 no período: <strong className="tabular text-[var(--fg)]">{formatar(placar.den, 'int')}</strong></p></div>} />
+              hint={<div className="space-y-2">{config.metaLeads !== null && leadsAteAgora !== null && <ProgressBar value={(leadsAteAgora / config.metaLeads) * 100} ariaLabel={`${formatar(leadsAteAgora, 'int')} de ${formatar(config.metaLeads, 'int')} leads`} valueNow={leadsAteAgora} valueMin={0} valueMax={config.metaLeads} />}<p className="text-xs text-[var(--fg-2)]">Do tráfego C2/C3: <strong className="tabular text-[var(--fg)]">{formatar(leadsTrafegoAteAgora, 'int')}</strong></p></div>} />
           </Cartao>
         </div>
       </section>
@@ -274,7 +299,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
                 ...(c.id === 'conv' ? [
                   <li key="mql" className="min-w-0"><CardMql geral={resultadoMqlGeral} trafego={resultadoMqlTrafego} onAbrir={abrirMql} /></li>,
                   <li key="mql-percentual" className="min-w-0"><CardPercentualMql geral={percentualMqlGeral} trafego={percentualMqlTrafego} onAbrir={abrirPctMql} /></li>,
-                  <li key="ingresso" className="min-w-0"><CardIngresso geral={ingressoGeral} trafego={ingressoTrafego} onAbrir={abrirGrupo} /></li>,
+                  <li key="ingresso" className="col-span-2 min-w-0 lg:col-span-1"><CardIngresso geral={ingressoGeral} trafego={ingressoTrafego} grupo={d.grupo.data} onAbrir={abrirGrupo} /></li>,
                 ] : []),
               ])}
             </ol>
@@ -360,6 +385,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
       {tabela && (
         <Modal open onClose={() => setTabela(null)} title={tabela.titulo} width={`max-w-5xl ${MODAL_TELA_CHEIA}`}>
           <p className="mb-2 text-xs text-[var(--fg-3)]">{tabela.nota}</p>
+          <div className="mb-3"><ResumoLeads linhas={d.linhas.filter((l) => l.pagina !== 'consultoria_respondi')} idx={d.idx} grupo={d.grupo.data} compacto semDado={d.perfilSemDado} /></div>
           <TabelaLeads d={d} linhas={tabela.linhas} />
         </Modal>
       )}
