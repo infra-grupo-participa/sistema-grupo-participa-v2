@@ -50,6 +50,7 @@ export const VIEWBOX_JORNADA = { largura: 1100, altura: 1900 } as const;
 
 const naFase = (f: Campanha['fase']) => (c: Campanha) => c.fase === f;
 const captacao = (f: Funil) => (c: Campanha) => c.funil === f && c.fase === 'captacao';
+const subtipoC1 = (subtipo: string) => (c: Campanha) => c.etapa === 'C1' && c.subtipo === subtipo;
 const leadDa = (pred: (c: Campanha) => boolean) => (l: LinhaPerfil, idx: IndiceTrafego) => {
   const c = l.campanhaId ? idx.campanha.get(l.campanhaId) : undefined;
   return c !== undefined && pred(c);
@@ -59,10 +60,10 @@ const RESUMO_DISTRIBUICAO = ['Investimento', 'Impressões', 'Custo por visualiza
 
 export const NOS: readonly DefinicaoNo[] = [
   { id: 'publico-frio', kicker: null, titulo: 'Público frio', sub: [], forma: 'pilula', x: 430, y: 20, w: 240, h: 46, funis: ['c1'], recorte: null },
-  { id: 'manifesto', kicker: 'C1', titulo: 'Manifesto', sub: ['um capítulo por segunda'], forma: 'caixa', x: 35, y: 110, w: 230, h: 120, funis: ['c1'], recorte: null, semFonte: 'Orgânico: sem fonte no dashboard.' },
-  { id: 'teaser', kicker: 'C1', titulo: 'Teaser', sub: ['distribuído separado'], forma: 'caixa', x: 295, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { campanha: naFase('antecipacao'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
+  { id: 'manifesto', kicker: 'C1', titulo: 'Manifesto', sub: ['um capítulo por segunda'], forma: 'caixa', x: 35, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { campanha: subtipoC1('MANIFESTO'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
+  { id: 'teaser', kicker: 'C1', titulo: 'Teaser', sub: ['distribuído separado'], forma: 'caixa', x: 295, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { campanha: subtipoC1('TEASER'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
   { id: 'reels', kicker: 'C1 · orgânico', titulo: 'Reels do Marcio', sub: ['quem consome 75% entra no C2'], forma: 'caixa', x: 555, y: 110, w: 230, h: 120, funis: ['c1'], recorte: null, semFonte: 'Orgânico: sem fonte no dashboard.' },
-  { id: 'cortes', kicker: 'C1 · novo', titulo: 'Cortes das consultorias', sub: ['4 por live, no YouTube e impulsionados'], forma: 'caixa', destaque: true, x: 815, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { campanha: (c) => c.funil === 'c1', linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
+  { id: 'cortes', kicker: 'C1 · novo', titulo: 'Cortes das consultorias', sub: ['4 por live, no YouTube e impulsionados'], forma: 'caixa', destaque: true, x: 815, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { campanha: subtipoC1('CORTES'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
   { id: 'assistiu-75', kicker: null, titulo: 'Assistiu 75%?', sub: [], forma: 'decisao', x: 450, y: 262, w: 200, h: 112, funis: ['c1'], recorte: { campanha: (c) => c.funil === 'c1', linha: null, distribuicao: true }, resumo: ['Vídeo 75%', 'Taxa de 75%'] },
   { id: 'segue-c1', kicker: null, titulo: 'segue vendo C1', sub: [], forma: 'pilula', x: 170, y: 298, w: 154, h: 40, funis: ['c1'], recorte: null },
   { id: 'base-da-casa', kicker: null, titulo: 'Base da casa', sub: ['cerca de 189 mil leads'], forma: 'pilula', x: 800, y: 274, w: 240, h: 104, funis: ['c3'], recorte: null, resumo: ['Tamanho da base', 'Já na base e cadastrados'] },
@@ -77,7 +78,7 @@ export const NOS: readonly DefinicaoNo[] = [
   { id: 'lista', kicker: 'Ponto de encontro', titulo: 'Lista do Método Perfeito', sub: ['uma pessoa, uma régua', 'reconhecida por e-mail ou pelos 8 últimos dígitos'], forma: 'caixa', destaque: true, x: 380, y: 1000, w: 340, h: 140, funis: [], recorte: { campanha: () => true, linha: () => true }, resumo: ['Pessoas', 'Cadastros', 'Da meta de 15 mil'] },
   { id: 'grupos', kicker: 'WhatsApp · ver links', titulo: 'Grupos por profissão', sub: ['em silêncio até 31/10'], forma: 'caixa', x: 70, y: 1190, w: 240, h: 132, funis: [], recorte: { campanha: () => false, linha: () => true }, resumo: ['Em 2h', 'Em 24h', 'Em 48h'] },
   { id: 'regua', kicker: 'API · ver mensageria', titulo: 'Régua do aquecimento', sub: ['boas-vindas e convites da semana'], forma: 'caixa', x: 430, y: 1190, w: 240, h: 132, funis: [], recorte: null, semFonte: 'Mensageria por API: sem fonte ligada.', resumo: ['Enviados', 'Entregues', 'Custo'] },
-  { id: 'lembrete', kicker: 'Tráfego', titulo: 'Lembrete de cada live', sub: ['é amanhã · é hoje · ao vivo'], forma: 'caixa', x: 800, y: 1190, w: 240, h: 132, funis: [], recorte: { campanha: naFase('aquecimento'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
+  { id: 'lembrete', kicker: 'Tráfego', titulo: 'Lembrete de cada live', sub: ['é amanhã · é hoje · ao vivo'], forma: 'caixa', x: 800, y: 1190, w: 240, h: 132, funis: [], recorte: { campanha: (c) => c.fase === 'aquecimento' && c.funil !== 'c1' && c.etapa !== 'C1', linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
   // Ciclo semanal (painel "Toda semana · 13 a 29/10"): sem fonte por etapa nesta versão.
   { id: 'seg', kicker: 'Segunda · API', titulo: 'Consultoria é amanhã', sub: ['e convite para aplicar'], forma: 'caixa', x: 70, y: 1416, w: 210, h: 100, funis: [], recorte: null, semFonte: 'Sem fonte por dia da semana.' },
   { id: 'ter', kicker: 'Terça · 19h30 · YouTube', titulo: 'Consultoria ao vivo', sub: ['a dor da semana em casos', '+ fake live no Insta'], forma: 'caixa', destaque: true, x: 320, y: 1416, w: 210, h: 100, funis: [], recorte: null, semFonte: 'Presença nas lives: sem fonte ainda.' },
@@ -211,8 +212,8 @@ export function calcularJornada(args: {
   for (const n of NOS) out[n.id] = [];
   const rec = (id: string) => recortarNo(NO.get(id)!, dias, linhas, idx);
 
-  for (const id of ['teaser', 'cortes', 'lembrete']) out[id] = metricasDistribuicao(rec(id).dias);
-  const c1 = rec('cortes').dias;
+  for (const id of ['manifesto', 'teaser', 'cortes', 'lembrete']) out[id] = metricasDistribuicao(rec(id).dias);
+  const c1 = dias.filter((d) => { const campanha = idx.campanhaDoAnuncio(d.anuncioId); return campanha?.funil === 'c1' || campanha?.etapa === 'C1'; });
   if (c1.length) {
     const v75 = taxaVideo75(agregar(c1));
     out['assistiu-75'] = [m('Vídeo 75%', v75.num, 'int', { taxa: v75 }), m('Taxa de 75%', v75.valor, 'pct', { taxa: v75 })];

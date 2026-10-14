@@ -660,3 +660,113 @@ antes, deu 191 / 165 e MQL 112).
 - Filtro cruzado no cliente não escala para 150 mil leads.
 - DDD 42: a tabela `dados.ddd_uf` diz PR (espelhada aqui); a BrasilAPI diz SC.
 - Base da casa no config = 188.013; o desenho fala em "cerca de 189 mil".
+
+## Redesign e correções com base no relatório de dados (13/10/2026)
+
+Esta seção substitui descrições anteriores que atribuíam os números de C1 ou o CPL de forma incorreta. O front não
+fixa os valores do relatório: continua lendo as RPCs, com os filtros escolhidos. Nenhum dado pessoal foi copiado.
+
+### Regras implementadas
+
+- **C1 na Jornada:** Teaser e Manifesto filtram `etapa_black = C1` pelo `subtipo` exato (`TEASER` e `MANIFESTO`).
+  Cortes exige `subtipo = CORTES`; sem campanha marcada assim, aparece Sem dado. Lembrete exige fase
+  `AQUECIMENTO` e campanha fora de C1. O nó Assistiu 75% usa o C1 inteiro. Não inferir subtipo pelo nome.
+- **Alcance e frequência:** `mapearTrafego` lê `r.totais`, chave `campanha_id` convertida para string, datas `de`/`ate`,
+  alcance, frequência e demais campos da migration A. Os totais são de toda a campanha, não do filtro atual. A tela
+  os mostra por campanha como “Período da campanha: de X a Y”; nunca soma alcance/frequência de campanhas distintas.
+- **Páginas:** cada anúncio só recebe uma página quando os leads pagos daquele anúncio, dentro do período e dos filtros
+  atuais, apontam todos para o mesmo texto exato de `dados_black_perfil.pagina`. Sem lead pago = “Página não medida”.
+  Se os leads do mesmo anúncio apontarem para mais de uma página, não atribui uma página. URL de destino não existe
+  na coleta atual e não é inventada. A correção definitiva depende da Edge Meta obter `link_destino`.
+- **MQL por criativo:** taxa = leads pagos MQL ÷ leads pagos com MQL conhecido. O ranking por MQL usa piso de cinco
+  leads pagos. Abaixo disso, o cartão vai ao fim, sem posição e com “menos de 5 leads”. A ordem não indica resultado
+  confiável para amostras pequenas.
+- **CPL geral:** campanhas de captação C2/C3 ÷ leads pagos atribuídos a essas campanhas. Remarketing fica fora.
+  Na versão inicial desta revisão, Entresafra era excluída apenas do CPL. Essa regra foi substituída pela decisão de
+  14/10/2026: Entresafra sai de todos os gastos e métricas de tráfego.
+- **CPL por etapa:** sanfona fechada, uma etapa aberta de cada vez. C1 não mostra CPL, mostra CPM e custo por
+  visualização; campanha e conjunto exibem investimento, impressões, cliques, CTR, views de página e leads pagos;
+  MQL e CPL só aparecem quando há base para o cálculo. Iscas considera apenas Iscas C3.
+- **Histórico:** gráfico e detalhe mostram investimento do dia e leads acumulados, sem linha nem projeção de meta.
+- **Investimento em captação:** card em primeiro lugar no Funil macro. Separa Meta e Google. A fonte atual não entrega
+  investimento Google: aparece “sem fonte”, não zero; o total fica sem dado enquanto uma fonte estiver faltando.
+- **Janela e cadastros:** Respondi `consultoria_respondi` não foi mapeado. A migration B continua aguardando decisão.
+
+### Tela x fonte conferida no relatório do Galego
+
+Período padrão conferido no relatório: 04 a 13/10/2026, sem teste. Os valores abaixo descrevem a fonte e as fórmulas; a
+conferência visual autenticada continua pendente.
+
+| Área da tela | Regra/campo | Fonte informada no relatório | Valores de referência |
+|---|---|---|---|
+| Leads pagos e CPL | Leads com canal pago; investimento das campanhas elegíveis, com Entresafra desligada | `dados_black_perfil`, `dados_black_trafego.gastoCampanhas` | Valores históricos da leitura de 13/10, substituídos pela correção global de 14/10. |
+| Investimento em captação | Etapa C2/C3, sem remarketing nem Entresafra; separado por canal | `campanhas[].etapa`, `gastoCampanhas` | Valores históricos da leitura de 13/10, substituídos pela correção global de 14/10. |
+| Teaser / Manifesto / Cortes / Lembrete | Subtipo C1 exato / fase AQUECIMENTO fora de C1 | `campanhas[].etapa`, `campanhas[].subtipo`, `campanhas[].fase` | Teaser R$ 15.110,20; Manifesto R$ 3.680,40; Cortes sem dado; Lembrete sem valor de Manifesto atribuído. |
+| Alcance e frequência C1 | Total separado por campanha, com intervalo próprio | `dados_black_trafego.totais` | Teaser 200.722 / 4,5930 (04 a 13/10); Manifesto 50.897 / 2,3904 (07 a 13/10). Não somar. |
+| C3, páginas e leads | Página de lead pago do anúncio; anúncio sem lead fica não medido | `dados_black_perfil.pagina` por `anuncio_id` | 9 anúncios com lead pago apontam para `captacao`; C2 não tem campanha com veiculação. |
+| MQL e grupo | MQL da fonte; pessoas únicas MQL e entradas no grupo | `dados_black_perfil.mql`, `dados_black_perfil.entrou_grupo_em` | 151/222 MQL (68,0%); ingresso 117/151 = 77,5% na regra sem recorte. |
+| Histórico, 13/10 | Métricas por dia; acumulado por primeira data da pessoa | `dias_anuncio`, `dados_black_perfil` | Investimento R$ 927,25; C3 R$ 370,74; 6.666 impressões, 90 cliques, 81 LPV; 60 cadastros, 50 pessoas novas, 37 novas MQL, 14 pagos, 9 pagos MQL, 41 entradas no grupo. |
+| C1 no CPL por etapa | CPM e custo por visualização; nunca CPL | `dias_anuncio` | Teaser R$ 15.110,20 / 921.921 impressões; Manifesto R$ 3.680,40 / 121.662 impressões. Cortes sem subtipo CORTES = Sem dado. |
+| C3 no CPL por etapa | Campanha e conjunto; CPL só quando há lead pago | `dias_anuncio`, `dados_black_perfil`, ids externos de conjunto | Campanha 479754: R$ 333,50, 5.983 impressões, 82 cliques, CTR 1,37%, 74 LPV, 14 pagos, CPL R$ 23,82. Campanha 587257: R$ 14,26 em anúncios, 132 impressões, 2 cliques, 0 pagos. |
+
+**Diferença em aberto:** o relatório do Galego atualiza Consultoria para 73 envios / 62 pessoas; a orientação anterior do
+Victor preserva 72. O front não fixa nenhum desses totais e não adiciona Respondi. Confirmar qual número de negócio
+deve ser comunicado antes de qualquer ajuste de fonte ou rótulo.
+
+### Testes desta atualização
+
+```bash
+cd web
+npx vitest run modules/infra/black
+npx tsc --noEmit
+npx eslint modules/infra/black
+npm run lint:tokens
+npm run build
+```
+
+Os prints autenticados pós-migration C e o registro de números vistos ficam em `.maestri/entregas/black-dashboard-v2/`.
+Esta revisão acrescenta a trilha de cálculo e a indicação explícita de valores parciais; o relatório de entrega informa
+o que foi validado e as diferenças de agregação ainda pendentes.
+
+### Revisão dos cards de investimento · 13/10/2026
+
+- **CPL geral:** numerador em `dados_black_trafego.dias_campanha[].gasto_centavos`, mapeado como `gastoCampanhas`; o front filtra campanhas classificadas em C2/C3 e tira remarketing e Entresafra. Denominador: linhas de `dados_black_perfil` com `origem = 'pago'`, vinculadas às mesmas campanhas. Os números citados neste parágrafo registram a leitura histórica do print e não são os valores vigentes.
+- **Investimento em captação:** a primeira versão do critério e da cobertura descrita nesta revisão foi substituída pela atualização "Investimento de captação fechado com coleta validada" abaixo. A decisão nova fecha Google em zero quando não há campanha e reconhece o zero Meta validado pelo Galego.
+- **CPM:** calculado sobre as linhas de `dados_black_trafego.dias_anuncio`, campos `gasto_centavos` e `impressoes`, para os funis de captação que entraram no filtro da tela: `Σ gasto ÷ Σ impressões × 1.000`. A dica do card expõe o numerador e o denominador exatos usados. Não usa o gasto do CPL nem o gasto de todas as etapas.
+- **Investimento em tráfego:** soma `dias_anuncio[].gasto_centavos` do período selecionado, em todos os funis/canais presentes na fonte. Não deve ser interpretado como gasto de captação.
+- **Investimento com disparo:** a fonte da Black ainda retorna `semFonte` com canais vazios. A tela mostra Sem dado sem selo fictício. O selo fica reservado a dados de demonstração efetivamente carregados.
+- **Como testar:** `npx vitest run modules/infra/black/domain/custo-captacao.test.ts`; abrir a Visão Geral em claro e conferir a dica do CPM e a cobertura de campanhas do card de captação. Para conciliar totais atuais, comparar o payload de `dados_black_trafego` e `dados_black_perfil` com o período exibido.
+
+**Exemplo da leitura ao vivo da revisão (20:31 BRT, 13/10):** CPL R$ 380,75 ÷ 15 = R$ 25,38; captação Meta R$ 976,84 medidos em 3/4 campanhas e Google sem fonte, portanto o total de captação permanece Sem dado; CPM R$ 46,21 com R$ 977,21 de gasto por anúncio ÷ 21.149 impressões × 1.000. O tráfego total do período era R$ 19.822,10 (todas as etapas). O Galego confirmou que o custo por campanha é a medida para investimento total; o CPM usa a quebra por anúncio. Esses dois agregados diferiam em R$ 0,37, atribuídos à diferença de granularidade. O CPM de R$ 45,85 no print anterior, com 20.806 impressões, implica cerca de R$ 953,96; como o CPM estava arredondado a duas casas, não é possível recuperar o numerador exato daquela leitura. A dica nova expõe o numerador bruto da leitura atual.
+
+### Regra B de MQL e decisão sobre Respondi · 13/10/2026
+
+- **MQL em toda a tela:** usar a profissão do envio mais recente da pessoa, conforme `dados_black_grupo` (regra B). `domain/metricas.ts` expõe `enviosMaisRecentesPorPessoa`, `ehMqlPorProfissao` e `mqlDoRecorte`; a classificação não usa o booleano `LinhaPerfil.mql`, que representa a regra anterior. Isso se aplica aos percentuais de criativos, Perfil, funil do criativo, cartões por campanha/conjunto e Histórico. Pessoa sem profissão MQL no envio mais recente fica fora do numerador; pessoas únicas continuam no denominador. Empate de horário mantém a primeira linha recebida.
+- **Conferência:** em leitura às 20:31 BRT, Galego confirmou 228 pessoas e 154 MQL em `dados_black_grupo.leads.unicos` e `.mql`, regra B. Os 153 eram da foto anterior às 20:18; entrou uma pessoa depois. O teste unitário cobre um caso em que profissão anterior de MQL é substituída por profissão posterior não MQL. O modal MQL lista um envio mais recente por pessoa conforme a mesma classificação.
+- **Respondi da consultoria:** decisão do Victor em 13/10: não entra na Black. A tela não consome `pagina='consultoria_respondi'`, não soma esses cadastros e não apresenta seus campos. A migration B citada em histórico deste README não autoriza inclusão na tela.
+- **Como testar:** `npx vitest run modules/infra/black/domain`; abrir Visão Geral, Criativos e Histórico; comparar o placar MQL com `dados_black_grupo` e verificar que o modal MQL apresenta pessoas pelo envio mais recente.
+
+### Investimento de captação fechado com coleta validada · 13/10/2026
+
+- **Critério atualizado:** captação é determinada por `dados_black_trafego.campanhas[].etapa` C2 ou C3, sem remarketing. A presença de `LEAD` no nome não é requisito. Isso vale para Investimento em captação e CPL, inclusive para a futura C2 de Consultoria mesmo que o nome não contenha `LEAD`.
+- **CPL:** o numerador segue `dados_black_trafego.dias_campanha[].gasto_centavos` para campanhas C2/C3 sem remarketing nem Entresafra. O denominador são os leads pagos vinculados às mesmas campanhas em `dados_black_perfil` (`origem = 'pago'`).
+- **Investimento:** usa o gasto por campanha para C2/C3 sem remarketing nem Entresafra, em todos os cards e métricas de tráfego. Google sem campanha cadastrada é exibido como `sem campanha · R$ 0,00`, conforme decisão do Victor em 12/10.
+- **Zero de entrega:** `dados_black_trafego.campanhas[].sem_entrega_comprovada` é a fonte de verdade. Sem linha de desempenho e com o campo verdadeiro, a campanha vale R$ 0,00; sem prova continua Sem dado. O detalhe mostra o nome exato e o horário de coleta da RPC.
+- **Total:** quando todas as campanhas C2/C3, exceto Entresafra e remarketing, têm desempenho ou zero validado pela fonte, soma Meta + Google. Campanha sem medida e sem confirmação continua parcial; ausência de dado não vira zero por padrão.
+- **Como testar:** `npx vitest run modules/infra/black/domain/custo-captacao.test.ts modules/infra/black/domain/metricas.test.ts modules/infra/black/infrastructure/fonte-supabase.test.ts`; na Visão Geral, conferir o total, Google sem campanha e o nome exato e horário de coleta que a fonte devolver para cada campanha sem entrega. `npm run lint:tokens`, `npx tsc --noEmit` e `npm run build`.
+
+#### Estado de coleta genérico · histórico de 13/10/2026
+
+- O adaptador mapeia `campanhas[].primeira_vista_em`, `campanhas[].coleta` (`estado`, `ultima_ok_em`, `ultima_falha_em`, `validade_min`) e `campanhas[].sem_entrega_comprovada`.
+- Ausência de linha de gasto só vira zero quando `sem_entrega_comprovada = true`, calculado pela fonte para a campanha e período. Estado de falha, coleta velha, sem coleta ou cobertura incompleta permanece “Sem dado”. O detalhe do card mostra nome exato e horário da coleta validada, ou o motivo explícito da pendência.
+- Naquele registro, o contrato ainda aguardava aplicação. O estado atual é descrito na seção de 14/10 abaixo.
+- A tela não conhece IDs ou nomes especiais para determinar zero. Campanhas novas seguem o mesmo contrato automaticamente.
+- Como testar: mapeador em `infrastructure/fonte-supabase.test.ts`; regra genérica, campanha validada, cobertura incompleta e falha recente em `domain/custo-captacao.test.ts`.
+
+### Correção global de Entresafra e confirmação de zero · 14/10/2026
+
+- **Decisão do Victor:** a campanha `CF | BF26 | C3 | ENTRESAFRA | META | MORNO | ABO | LEAD` fica fora de todo gasto do dashboard. Não entra no Investimento em captação, Investimento total, Investimento em tráfego, Verba contra o orçamento, CPL, CPM, CPC, CTR, impressões, cliques ou outros agregados do funil macro. Os filtros de desempenho removem os dias da campanha também nos detalhes e na gaveta de criativo. O filtro é por subtipo `ENTRESAFRA` ou pelo token exato `ENTRESAFRA` no nome, sem ID fixo.
+- Cards e detalhes exibem a nota **“Entresafra fora de todos os gastos (decisão do Victor)”**.
+- A regra de zero vem de `dados_black_trafego.campanhas[].sem_entrega_comprovada`, mapeada para `semEntregaComprovada`. A RPC foi aplicada pelo Galego em 14/10/2026. O front não fixa ID ou nome para converter ausência de linha em R$ 0,00.
+- Conferência necessária após a atualização: registrar na entrega os valores anteriores e os novos valores lidos na tela, separando Investimento em captação, Investimento total, Investimento em tráfego, Verba contra o orçamento, CPL, CPM, CPC, CTR, impressões e cliques. Os números do snapshot antigo não são reutilizados como leitura atual.
+- Testes: `npx vitest run modules/infra/black/domain/metricas.test.ts modules/infra/black/domain/custo-captacao.test.ts`; verificar também a tela de Visão Geral e o detalhe dos cards. Nenhum dado pessoal deve aparecer em print ou relatório.

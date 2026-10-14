@@ -21,7 +21,7 @@ export type Profissao = 'advogado' | 'contador' | 'estudante_direito' | 'outros'
 /** AAAA-MM-DD no fuso de São Paulo, inclusivo nas duas pontas. */
 export interface Periodo { de: string; ate: string }
 export interface FiltroCriativos { campanha?: string; conjunto?: string; anuncio?: string; pagina?: string }
-export interface Recorte { funil: FiltroFunil; canal: FiltroCanal; periodo: string; aba: AbaBlack; criativos: FiltroCriativos }
+export interface Recorte { funil: FiltroFunil; canal: FiltroCanal; periodo: string; periodoPersonalizado?: Periodo | null; aba: AbaBlack; criativos: FiltroCriativos }
 
 /** Régua de CPL do Caio (meta e teto, em reais). */
 export interface ReguaCpl { meta: number; teto: number }
@@ -60,10 +60,17 @@ export interface ConfigBlack {
 
 /** Etapa do nome da campanha (mkt_trafego.etapa_black): C1, C2 ou C3; null = sem o código no nome ("Sem etapa"). */
 export type EtapaCampanha = 'C1' | 'C2' | 'C3';
+export type EstadoColetaCampanha = 'atual' | 'falha_recente' | 'velha' | 'sem_coleta';
+export interface EstadoColetaConta {
+  estado: EstadoColetaCampanha; ultimaOkEm: string | null; ultimaFalhaEm: string | null;
+  validadeMin: number | null;
+}
 export interface Campanha {
   id: string; nome: string; canal: Canal; funil: Funil | null; fase: Fase | null;
   /** Só a fonte real preenche: etapa e subtipo como vêm do banco, e se o nome tem dois subtipos (conflito). */
   etapa?: EtapaCampanha | null; subtipo?: string | null; conflito?: boolean | null;
+  /** Prova de cobertura de coleta por conta, contrato proposto da RPC dados_black_trafego. */
+  primeiraVistaEm?: string | null; coleta?: EstadoColetaConta | null; semEntregaComprovada?: boolean;
   /** Id da campanha no Meta (mkt_trafego.campanhas.campanha_externa), quando dados_black_trafego devolver. */
   idExterno?: string | null;
 }
@@ -85,7 +92,11 @@ export interface DesempenhoDia {
   videoP50: Valor; videoP75: Valor; thruplay: Valor;
 }
 /** Alcance e frequência do período inteiro: não somam entre dias nem entre campanhas. */
-export interface TotalPeriodo { nivel: 'campanha' | 'conjunto' | 'anuncio'; id: string; alcance: Valor; frequencia: Valor }
+export interface TotalPeriodo {
+  nivel: 'campanha' | 'conjunto' | 'anuncio'; id: string; alcance: Valor; frequencia: Valor;
+  /** Só campanha: intervalo do total salvo em mkt_trafego.desempenho_total. */
+  de?: string | null; ate?: string | null; gasto?: Valor; impressoes?: Valor; coletadoEm?: string | null;
+}
 export interface TrafegoBlack {
   campanhas: Campanha[]; conjuntos: Conjunto[]; anuncios: Anuncio[]; paginas: Pagina[];
   dias: DesempenhoDia[]; totais: TotalPeriodo[]; coletadoEm: string | null;

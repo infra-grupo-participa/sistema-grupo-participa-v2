@@ -83,8 +83,8 @@ const cj = (id: string, campanhaId: string, nome: string, isca: Isca | null = nu
 const videos = (prefixo: string, n: number) => Array.from({ length: n }, (_, i) => ({ nome: `${prefixo} ${String(i + 1).padStart(2, '0')}`, formato: 'video' as const }));
 
 export const CAMPANHAS: readonly Campanha[] = [
-  { id: 'cp-antecipacao', nome: 'ZZ | BF26 | ANTECIPAÇÃO | FICTÍCIO TEASER', canal: 'meta', funil: null, fase: 'antecipacao' },
-  { id: 'cp-distribuicao', nome: 'ZZ | BF26 | DISTRIBUIÇÃO | FICTÍCIO C1 CORTES', canal: 'meta', funil: 'c1', fase: 'distribuicao' },
+  { id: 'cp-antecipacao', nome: 'ZZ | BF26 | ANTECIPAÇÃO | FICTÍCIO TEASER', canal: 'meta', funil: null, fase: 'antecipacao', etapa: 'C1', subtipo: 'TEASER' },
+  { id: 'cp-distribuicao', nome: 'ZZ | BF26 | DISTRIBUIÇÃO | FICTÍCIO C1 CORTES', canal: 'meta', funil: 'c1', fase: 'distribuicao', etapa: 'C1' },
   { id: 'cp-consultoria', nome: 'ZZ | BF26 | LEADS | FICTÍCIO C2 CONSULTORIA', canal: 'meta', funil: 'consultoria', fase: 'captacao' },
   { id: 'cp-iscas', nome: 'ZZ | BF26 | LEADS | FICTÍCIO C2 ISCAS', canal: 'meta', funil: 'iscas', fase: 'captacao' },
   { id: 'cp-c3', nome: 'ZZ | BF26 | LEADS | FICTÍCIO C3 CONVITE', canal: 'meta', funil: 'c3', fase: 'captacao' },

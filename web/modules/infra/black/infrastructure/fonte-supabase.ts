@@ -17,6 +17,7 @@ import { ehC1PeloNome, faseDoNome } from '../domain/fase-campanha';
 import {
   FASES, ISCAS,
   type Anuncio, type Campanha, type ConfigBlack, type Conjunto, type DesempenhoDia, type EtapaCampanha, type Fase, type Funil,
+  type EstadoColetaCampanha,
   type GrupoBlack, type GrupoResumoBlack, type MetasCard, type Isca, type LeadDetalhe, type LinhaPerfil, type Marcos, type MensageriaBlack,
   type Periodo, type Porta, type Profissao, type RecorteGrupo, type Resultado, type ResultadoAcao, type SegmentoGrupo, type TrafegoBlack,
   type Valor,
@@ -185,7 +186,19 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
     if (!id || !nome || c.plataforma !== 'meta') continue;
     const etapa = etapaDe(c.etapa); const subtipo = texto(c.subtipo);
     contaDaCampanha.set(id, texto(c.conta_externa));
-    campanhas.push({ id, nome, canal: 'meta', funil: funilDaEtapa(etapa, subtipo) ?? (etapa === null && ehC1PeloNome(nome) ? 'c1' : null), fase: faseDoNome(nome), etapa, subtipo, conflito: booleano(c.conflito), idExterno: texto(c.campanha_externa) });
+    const coleta = objeto(c.coleta);
+    const estadoColeta = coleta?.estado;
+    const estadosValidos: EstadoColetaCampanha[] = ['atual', 'falha_recente', 'velha', 'sem_coleta'];
+    campanhas.push({
+      id, nome, canal: 'meta', funil: funilDaEtapa(etapa, subtipo) ?? (etapa === null && ehC1PeloNome(nome) ? 'c1' : null),
+      fase: faseDoNome(nome), etapa, subtipo, conflito: booleano(c.conflito), idExterno: texto(c.campanha_externa),
+      primeiraVistaEm: texto(c.primeira_vista_em),
+      coleta: coleta && estadosValidos.includes(estadoColeta as EstadoColetaCampanha) ? {
+        estado: estadoColeta as EstadoColetaCampanha, ultimaOkEm: texto(coleta.ultima_ok_em),
+        ultimaFalhaEm: texto(coleta.ultima_falha_em), validadeMin: num(coleta.validade_min),
+      } : null,
+      semEntregaComprovada: booleano(c.sem_entrega_comprovada) ?? undefined,
+    });
   }
   const conjuntos: Conjunto[] = linhas(r.conjuntos).flatMap((j) => {
     const id = texto(j.id); const campanhaId = texto(j.campanha_id); const nome = texto(j.nome);
@@ -217,9 +230,15 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
     const id = texto(d.campanha_id); const g = reais(d.gasto_centavos);
     if (id && g !== null) porCampanha.set(id, (porCampanha.get(id) ?? 0) + g);
   }
+  const totais = linhas(r.totais).flatMap((t) => {
+    const id = texto(t.campanha_id); const alcance = num(t.alcance); const frequencia = num(t.frequencia);
+    if (!id) return [];
+    return [{ nivel: 'campanha' as const, id, alcance, frequencia, de: texto(t.de), ate: texto(t.ate), gasto: reais(t.gasto_centavos),
+      impressoes: num(t.impressoes), coletadoEm: texto(t.coletado_em) }];
+  });
   return {
     data: {
-      campanhas, conjuntos, anuncios, paginas: [], dias, totais: [], coletadoEm: texto(r.coletado_em),
+      campanhas, conjuntos, anuncios, paginas: [], dias, totais, coletadoEm: texto(r.coletado_em),
       anuncioDesde: texto(r.anuncio_desde), gastoCampanhas: [...porCampanha].map(([campanhaId, gasto]) => ({ campanhaId, gasto })),
     },
     semDado: campanhas.length === 0,
@@ -327,6 +346,8 @@ const FUNIL_DA_PORTA: Record<Porta, Funil> = { inscricao_direta: 'c3', consultor
 
 export function mapearPerfil(cru: unknown): { data: LinhaPerfil[]; semDado: boolean } {
   const data = linhas(cru).flatMap((x): LinhaPerfil[] => {
+    // Decisão do Victor (13/10/2026): cadastros Respondi da consultoria não pertencem à Black.
+    if (x.pagina === 'consultoria_respondi') return [];
     const leadId = texto(x.lead_id); const pessoaId = texto(x.pessoa_id); const criadoEm = texto(x.criado_em);
     if (!leadId || !pessoaId || !criadoEm) return [];
     const porta = PORTAS.includes(x.porta as Porta) ? (x.porta as Porta) : null;

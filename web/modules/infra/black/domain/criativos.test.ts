@@ -5,6 +5,7 @@ import { conversaoPagina, ctr, agregar, indexar, ingressoGrupoGeral, mqlDoRecort
 import { anunciosDoCriativo, funilCriativo, idDoCriativo, ORDENS_GALERIA, ordenar, painel, resumir, serieDiariaAnuncio, valorOrdem } from './criativos';
 import { recorteDaTela, TETO_RECORTE_ANUNCIO } from './grupo';
 import { grupoDemo } from '../infrastructure/fixtures/fonte-fixtures';
+import type { LinhaPerfil } from './tipos';
 
 const b = baseFicticia();
 const idx = indexar(b);
@@ -192,6 +193,26 @@ describe('criativos e páginas', () => {
     // As ordens mudam a galeria de verdade: o topo por CTR não é o topo por gasto.
     expect(ordenar(itens, 'ctr')[0].id).not.toBe(ordenar(itens, 'gasto')[0].id);
   });
+  it('ordem por percentual MQL é decrescente e põe sem dado no fim', () => {
+    const itens = painel('anuncio', {}, b.dias, b.linhas, idx, regua, nomePagina);
+    const ordenados = ordenar(itens, 'mql');
+    const valores = ordenados.map((x) => valorOrdem(x, 'mql'));
+    const corte = valores.indexOf(null) === -1 ? valores.length : valores.indexOf(null);
+    expect(valores.slice(corte).every((x) => x === null)).toBe(true);
+    for (let i = 1; i < corte; i += 1) expect(valores[i]!).toBeLessThanOrEqual(valores[i - 1]!);
+    const base = itens[0];
+    expect(valorOrdem({ ...base, resumo: { ...base.resumo, leadsPagos: 4, mql: { ...base.resumo.mql, valor: 0.9 } } }, 'mql')).toBeNull();
+    expect(valorOrdem({ ...base, resumo: { ...base.resumo, leadsPagos: 5, mql: { ...base.resumo.mql, valor: 0.9 } } }, 'mql')).toBe(0.9);
+  });
+  it('percentual MQL do criativo usa somente leads pagos e não inclui cadastros orgânicos', () => {
+    const dias = b.dias.slice(0, 1);
+    const pagos = [
+      { ...b.linhas.find((l) => l.origem === 'pago')!, pessoaId: 'pago-mql', profissao: 'advogado' as const, mql: false },
+      { ...b.linhas.find((l) => l.origem === 'pago')!, pessoaId: 'pago-nao-mql', profissao: 'outros' as const, mql: true },
+    ];
+    const organico = { ...pagos[0], pessoaId: 'organico-mql', origem: 'organico' as const, mql: true };
+    expect(resumir(dias, [...pagos, organico], idx, regua, false).mql).toMatchObject({ num: 1, den: 2, valor: 0.5 });
+  });
   it('série diária do anúncio fecha com o resumo', () => {
     const a = painel('anuncio', { campanha: 'cp-iscas' }, b.dias, b.linhas, idx, regua, nomePagina)[0];
     const dias = [...new Set(b.dias.map((d) => d.dia))].sort();
@@ -215,9 +236,9 @@ describe('criativos e páginas', () => {
     expect(f[5].ponte!.taxa).toEqual(ingressoGrupoGeral(linhas));
     expect(f[5].valor).toBe(f[5].ponte!.taxa.num);
   });
-  it('MQL e ingresso: pessoas únicas, ingresso sobre os leads gerais e sem janela de horas', () => {
-    const L = (pessoaId: string, mql: boolean | null, entrou: string | null) => ({ ...b.linhas[0], leadId: `l-${pessoaId}-${Math.random()}`, pessoaId, mql, entrouGrupoEm: entrou });
-    const t = [L('a', true, '2026-10-05T10:00:00Z'), L('a', true, null), L('b', false, '2026-10-30T10:00:00Z'), L('c', true, null), L('d', null, null)];
+  it('MQL e ingresso: pessoas únicas, ingresso sobre leads gerais e MQL pela profissão mais recente', () => {
+    const L = (pessoaId: string, profissao: LinhaPerfil['profissao'], entrou: string | null, criadoEm = '2026-10-05T10:00:00Z') => ({ ...b.linhas[0], leadId: `l-${pessoaId}-${criadoEm}`, pessoaId, profissao, entrouGrupoEm: entrou, criadoEm });
+    const t = [L('a', 'advogado', '2026-10-05T10:00:00Z'), L('a', 'outros', null, '2026-10-05T11:00:00Z'), L('b', 'contador', '2026-10-30T10:00:00Z'), L('c', 'estudante_direito', null), L('d', null, null)];
     const m = mqlDoRecorte(t);
     expect(m.num).toBe(2); expect(m.den).toBe(4); expect(m.valor).toBeCloseTo(0.5, 9);
     const g = ingressoGrupoGeral(t); // a e b entraram, qualquer data; base = os 4 leads (não só os MQL)

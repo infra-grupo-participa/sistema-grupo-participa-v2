@@ -18,6 +18,8 @@ export interface DadosTela {
   diasPeriodo: string[];
   /** Catálogo (campanhas, conjuntos, anúncios, páginas) e os dias do INÍCIO do projeto até hoje. */
   trafego: TrafegoBlack;
+  /** Leitura do período atual, incluindo gasto por campanha para investimento de captação com corte correto. */
+  trafegoPeriodo: TrafegoBlack;
   /** Alcance e frequência do período escolhido (não somam entre dias). */
   totaisPeriodo: TotalPeriodo[];
   idx: IndiceTrafego;

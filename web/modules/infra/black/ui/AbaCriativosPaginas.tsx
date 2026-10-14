@@ -54,8 +54,8 @@ export function AbaCriativosPaginas({ d, gaveta }: { d: DadosTela; gaveta?: Alvo
         <GaleriaCriativos itens={paineis.anuncio} anuncio={(id) => d.idx.anuncio.get(id)} selecionado={f.anuncio ? idDoCriativo(d.idx, f.anuncio) : null}
           ativo={gaveta?.tipo === 'criativo' ? gaveta.id : null} onAbrir={abrirCriativo} />
       </SectionCard>
-      <SectionCard title="Páginas" subtitle="Um cartão por página de destino. Clique para filtrar os criativos que levam a ela.">
-        {paineis.pagina.length === 0 && <p className="text-sm text-[var(--fg-3)]">Nenhuma página com veiculação neste recorte (o C1 não tem página).</p>}
+      <SectionCard title="Páginas" subtitle="Origem da página vem dos leads pagos atribuídos a cada anúncio. Clique para filtrar os criativos relacionados.">
+        {paineis.pagina.length === 0 && <p className="text-sm text-[var(--fg-3)]">Página não medida: sem lead pago com origem de página neste recorte. O C1 não tem página de conversão.</p>}
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {paineis.pagina.map((it) => {
             const p = d.paginas.get(it.id); const r = it.resumo; const sel = f.pagina === it.id;
