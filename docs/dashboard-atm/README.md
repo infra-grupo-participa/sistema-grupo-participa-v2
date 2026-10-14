@@ -274,3 +274,12 @@ O que foi feito, continuando o mockup:
 - Aplicar a migration de `dados_atm_sv_vendas` (outra frente) e conferir a tela contra a fonte.
 - A RPC não recebe período: a lista é a que a RPC devolver, e o card Total de vendas segue o período selecionado. A tela avisa isso. Se a lista e o card divergirem no período do evento, decidir qual manda antes de mostrar à liderança.
 - Fonte própria dos pré-checkouts da Sessão de Viabilidade (e-mails únicos). `dados_atm_leads.no_pre_checkout` é da lista geral de leads e não deve ser usado como lista da SV. Sem essa fonte, o card, a aba e a conversão continuam em MOCKUP / "Sem dado".
+
+## Lentidão do dashboard e `contato.ver` em `dados_atm_leads` (13/10/2026, migration `20261013233000`)
+
+O refresh e o modal de Leads levavam ~5 s por RPC (`dados_atm_grupo_numeros` ~6 s). Causa: em `dados.atm_leads` e
+`dados_atm_grupo_numeros`, o CTE `l` era embutido e `controle.fone_key` era recalculado para cada par lead x pessoa
+do grupo. Correção: `l as materialized`; resultados idênticos (md5) e cada RPC abaixo de 0,5 s. Junto,
+`dados_atm_leads` passa a exigir `contato.ver` e só master pede teste (como `dados_atm_pre_checkout`); a chave de
+serviço segue com acesso por causa da TV do dashboard-ht. Detalhes, tempos e permissões em
+`infra/supabase/migrations/20261013233000.explain.md`.
