@@ -3,8 +3,9 @@
 -- black-thb-2026-10, está na 20261014210100). A tela reaproveita as RPCs do "Esta edição" do ATM (dados_atm_*), sem RPC nova.
 --   1. modelo 'acao-black' no check de dados.dashboards; dados.atm_cadastro aceita 'seminario-atm' e 'acao-black'.
 --   2. dados.leads_todos ganha a fonte 'pagina': metodo.pesquisa_respostas com etiqueta = chave (origem 'teste' = teste).
---   3. mkt_mensageria.planilha_sync_receber ganha duas opções POR ABA, só para quem as pede no mapa (o ATM não pede):
---      "ano" (data dd/mm sem ano) e "hora_faixa" (hora "09H-18H" lida pelo início).
+--   3. mkt_mensageria.planilha_sync_receber ganha três opções POR ABA, só para quem as pede no mapa (o ATM não pede):
+--      "ano" (data dd/mm sem ano), "hora_faixa" (hora "09H-18H" lida pelo início) e "lista_fixa" (público fixo da aba
+--      que não tem coluna de público).
 -- Guardas pelos md5 vivos. Reversão: 20261014210000_reversao.sql. Ver 20261014210000.explain.md.
 
 do $g$
@@ -225,7 +226,8 @@ begin
                               then mkt_mensageria.planilha_hora(split_part(v_get ->> 'hora', '-', 1)) end,
                          v_get ->> 'hora');
       v_camp := left(v_get ->> 'campanha', 300);
-      v_lista := v_get ->> 'lista';
+      -- 20261014210000: aba sem coluna de público usa "lista_fixa" do mapa (ex.: GRUPOS THB = os grupos do THB). Só quem pede.
+      v_lista := coalesce(v_get ->> 'lista', v_cfg ->> 'lista_fixa');
       v_link := v_get ->> 'link';
       -- "copy" é o texto-modelo que a planilha traz na coluna COPY UTILIZADA: não é copy.
       v_copy := case when lower(coalesce(v_get ->> 'copy', '')) in ('', 'copy') then null else v_get ->> 'copy' end;

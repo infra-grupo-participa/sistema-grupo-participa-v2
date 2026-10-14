@@ -13,8 +13,9 @@ insert into pg_temp._z_out(passo, linha) select '1b antes: resumo ATM', md5((sel
 -- black-thb-2026-10, está na 20261014210100). A tela reaproveita as RPCs do "Esta edição" do ATM (dados_atm_*), sem RPC nova.
 --   1. modelo 'acao-black' no check de dados.dashboards; dados.atm_cadastro aceita 'seminario-atm' e 'acao-black'.
 --   2. dados.leads_todos ganha a fonte 'pagina': metodo.pesquisa_respostas com etiqueta = chave (origem 'teste' = teste).
---   3. mkt_mensageria.planilha_sync_receber ganha duas opções POR ABA, só para quem as pede no mapa (o ATM não pede):
---      "ano" (data dd/mm sem ano) e "hora_faixa" (hora "09H-18H" lida pelo início).
+--   3. mkt_mensageria.planilha_sync_receber ganha três opções POR ABA, só para quem as pede no mapa (o ATM não pede):
+--      "ano" (data dd/mm sem ano), "hora_faixa" (hora "09H-18H" lida pelo início) e "lista_fixa" (público fixo da aba
+--      que não tem coluna de público).
 -- Guardas pelos md5 vivos. Reversão: 20261014210000_reversao.sql. Ver 20261014210000.explain.md.
 
 do $g$
@@ -235,7 +236,8 @@ begin
                               then mkt_mensageria.planilha_hora(split_part(v_get ->> 'hora', '-', 1)) end,
                          v_get ->> 'hora');
       v_camp := left(v_get ->> 'campanha', 300);
-      v_lista := v_get ->> 'lista';
+      -- 20261014210000: aba sem coluna de público usa "lista_fixa" do mapa (ex.: GRUPOS THB = os grupos do THB). Só quem pede.
+      v_lista := coalesce(v_get ->> 'lista', v_cfg ->> 'lista_fixa');
       v_link := v_get ->> 'link';
       -- "copy" é o texto-modelo que a planilha traz na coluna COPY UTILIZADA: não é copy.
       v_copy := case when lower(coalesce(v_get ->> 'copy', '')) in ('', 'copy') then null else v_get ->> 'copy' end;
@@ -389,12 +391,155 @@ $function$;
 insert into pg_temp._z_out(passo, linha) select '2 depois: leads_todos iguais?', string_agg(a.chave || ' ' || (a.m is not distinct from (select md5(string_agg(t::text, '|' order by t.email)) from dados.dashboards d, dados.leads_todos(d.chave, d.projeto_id, d.lista_ac_leads) t where d.chave = a.chave))::text, ', ' order by a.chave) from pg_temp._z_antes a;
 insert into pg_temp._z_out(passo, linha) select '2b depois: resumo ATM igual?', (md5((select jsonb_object_agg(k, v) from jsonb_each(to_jsonb(r)) e(k, v) where v <> to_jsonb(now()))::text) = (select linha from pg_temp._z_out where passo = '1b antes: resumo ATM'))::text from public.dados_atm_resumo('atm-elaine-1-2026-10', null, null) r;
 insert into pg_temp._z_out(passo, linha) select '2c md5 novos', string_agg(p.oid::regprocedure::text || '=' || md5(p.prosrc), ' ; ') from pg_proc p where p.oid in ('dados.atm_cadastro(text)'::regprocedure, 'dados.leads_todos(text,bigint,text)'::regprocedure, 'mkt_mensageria.planilha_sync_receber(bigint,jsonb)'::regprocedure);
+-- 20261014230000: a regra [SIGLA] do mkt_mensageria.api_item passa a aceitar também a ETIQUETA do projeto entre colchetes
+-- (ex.: "[black-thb-2026-10] [API] [14/10 17H] CONVITE"), pedido do Victor (14/10: etiqueta do ClickUp em tudo). A sigla
+-- continua casando como antes. A etiqueta casa pela string exata (minúsculas), não pela forma normalizada.
+-- Reversão: 20261014230000_reversao.sql. Ver 20261014210000.explain.md (seção da sigla).
+
+do $g$
+begin
+  if (select md5(prosrc) from pg_proc where oid = 'mkt_mensageria.api_item(text,bigint,jsonb)'::regprocedure)
+      is distinct from 'fc02a3811c270716a92ff33e2770c971' then
+    raise exception '20261014230000: corpo vivo de api_item mudou; revisar';
+  end if;
+end
+$g$;
+
+CREATE OR REPLACE FUNCTION mkt_mensageria.api_item(p_fonte text, p_ferr_fixa bigint, p_item jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO ''
+AS $function$
+declare
+  v_ext text;
+  d mkt_mensageria.disparos%rowtype;
+  v_existe boolean;
+  v_campanha text;
+  v_proj bigint;
+  v_nproj integer;
+  v_sigla text;
+  v_ferr bigint;
+  v_txt text;
+  v_num bigint;
+  v_canon jsonb;
+  k text;
+  r jsonb;
+  v_motivo text;
+  v_proj_grupo bigint;
+  v_n_grupo integer;
+begin
+  if p_item is null or jsonb_typeof(p_item) <> 'object' then
+    return jsonb_build_object('motivo', 'Item não é um objeto JSON.');
+  end if;
+  v_ext := btrim(coalesce(p_item ->> 'id_externo', ''));
+  if v_ext = '' or length(v_ext) > 200 then
+    return jsonb_build_object('motivo', 'id_externo ausente ou com mais de 200 caracteres.');
+  end if;
+
+  select * into d from mkt_mensageria.disparos x where x.origem_sistema = p_fonte and x.id_externo = v_ext;
+  v_existe := found;
+  if v_existe and d.arquivado_em is not null then
+    return jsonb_build_object('id_externo', v_ext, 'arquivado', true);   -- arquivado pela tela: a API não mexe
+  end if;
+  if v_existe and d.anonimizado_em is not null then
+    return jsonb_build_object('id_externo', v_ext, 'arquivado', true);   -- LGPD: anonimizado, a API não regrava nada
+  end if;
+
+  v_campanha := nullif(left(btrim(coalesce(p_item ->> 'campanha', '')), 300), '');
+  if v_campanha is null and v_existe then v_campanha := d.campanha; end if;
+  -- [SIGLA]: o conteúdo de um colchete que seja sigla cadastrada, comparado só por letras e dígitos (João, 06/10:
+  -- [PB/26] = PB26, [HT 33] = HT33; [HT] sem edição não casa). Nenhuma, ou duas siglas diferentes = sem projeto.
+  select min(pr.id), count(distinct pr.id) into v_proj, v_nproj
+    from regexp_matches(coalesce(v_campanha, ''), '\[([^][]{1,40})\]', 'g') m
+    join mkt.projetos pr
+      on (regexp_replace(upper(pr.sigla), '[^A-Z0-9]', '', 'g') = regexp_replace(upper(m[1]), '[^A-Z0-9]', '', 'g')
+          and regexp_replace(upper(m[1]), '[^A-Z0-9]', '', 'g') <> '')
+         -- 20261014230000 (Victor, 14/10: "a etiqueta do clickup em tudo"): o colchete também casa com a ETIQUETA exata do
+         -- projeto (ex.: [black-thb-2026-10]). Colchete até 40 caracteres para caber a etiqueta; sigla tem no máximo 14.
+         or (pr.etiqueta_clickup is not null and lower(btrim(m[1])) = pr.etiqueta_clickup);
+  if v_nproj <> 1 then v_proj := null; end if;
+  -- 20261014150000: disparo de grupo do SendFlow sem [SIGLA] herda o projeto pela campanha cadastrada no dashboard
+  -- (dados.dashboard_grupos, papel 'dashboard'). Só quando a campanha leva a exatamente um projeto. Ex.: "ATM 10/26" -> 75.
+  if v_proj is null and p_fonte = 'sendflow' and v_campanha is not null then
+    select min(db.projeto_id), count(distinct db.projeto_id) into v_proj_grupo, v_n_grupo
+      from dados.dashboard_grupos dg
+      join dados.dashboards db on db.chave = dg.chave
+     where dg.papel = 'dashboard' and db.projeto_id is not null
+       and lower(btrim(dg.sendflow_campanha)) = lower(v_campanha);
+    if v_n_grupo = 1 then v_proj := v_proj_grupo; end if;
+  end if;
+  -- 20261014180100 (Victor, 14/10): campanha de teste nunca ganha projeto, nem por [SIGLA] nem pelo grupo do dashboard.
+  -- "teste" ou "testes" como palavra (sem diferenciar maiúscula; "_" e "-" separam): [TESTE], TESTE - x, TESTE_DE_X.
+  -- "testemunho" não casa. O projeto já gravado à mão continua (o api_upsert não troca projeto gravado).
+  if v_campanha ~* '(^|[^[:alpha:]])testes?([^[:alpha:]]|$)' then v_proj := null; end if;
+  if v_existe and d.projeto_id is not null then v_proj := d.projeto_id; end if;
+  select pr.sigla into v_sigla from mkt.projetos pr where pr.id = v_proj;
+
+  if p_ferr_fixa is not null then
+    v_ferr := p_ferr_fixa;
+  else
+    v_txt := btrim(coalesce(p_item ->> 'ferramenta', ''));
+    if v_txt <> '' then
+      select f.id into v_ferr from mkt_mensageria.ferramentas f where lower(f.nome) = lower(v_txt);
+      if v_ferr is null then
+        return jsonb_build_object('id_externo', v_ext, 'motivo', 'Ferramenta "' || left(v_txt, 60) || '" não cadastrada.');
+      end if;
+    elsif v_existe then
+      v_ferr := d.ferramenta_id;
+    end if;
+  end if;
+
+  v_txt := regexp_replace(coalesce(p_item ->> 'numero', ''), '[\s().-]', '', 'g');
+  if v_txt <> '' then
+    if left(v_txt, 1) <> '+' then v_txt := '+' || v_txt; end if;
+    select nu.id into v_num from mkt_mensageria.numeros nu where nu.numero = v_txt;
+    if v_num is null then
+      return jsonb_build_object('id_externo', v_ext, 'motivo', 'Número ' || left(v_txt, 20) || ' não cadastrado em Números.');
+    end if;
+  elsif v_existe then
+    v_num := d.numero_id;
+  end if;
+
+  v_canon := case when v_existe then jsonb_build_object(
+      'enviado_em', d.enviado_em, 'canal', d.canal, 'tipo', d.tipo, 'copy_texto', d.copy_texto, 'copy_link', d.copy_link,
+      'publico_lista', d.publico_lista, 'publico_origem', d.publico_origem, 'tamanho_lista', d.tamanho_lista,
+      'entregues', d.entregues, 'lidas', d.lidas, 'cliques', d.cliques, 'falhas', d.falhas,
+      'custo_centavos', d.custo_centavos, 'disparado_por', d.disparado_por)
+    else '{}'::jsonb end;
+  foreach k in array array['enviado_em', 'canal', 'tipo', 'copy_texto', 'copy_link', 'publico_lista', 'publico_origem',
+                           'tamanho_lista', 'entregues', 'lidas', 'cliques', 'falhas', 'custo_centavos', 'disparado_por'] loop
+    if jsonb_typeof(p_item -> k) is not null and jsonb_typeof(p_item -> k) <> 'null'
+       and not (k in ('tipo', 'custo_centavos') and jsonb_typeof(v_canon -> k) is not null and jsonb_typeof(v_canon -> k) <> 'null') then
+      v_canon := v_canon || jsonb_build_object(k, p_item -> k);
+    end if;
+  end loop;
+  v_canon := v_canon || jsonb_build_object('projeto', coalesce(v_sigla, ''), 'ferramenta_id', v_ferr::text,
+                                           'numero_id', v_num::text);
+  if nullif(btrim(coalesce(v_canon ->> 'disparado_por', '')), '') is null then
+    v_canon := v_canon || jsonb_build_object('disparado_por', 'api:' || p_fonte);
+  end if;
+
+  r := mkt_mensageria.disparo_validar(v_canon);
+  select left(string_agg(x ->> 'campo' || ': ' || (x ->> 'msg'), '; '), 500) into v_motivo
+    from jsonb_array_elements(r -> 'erros') x
+   where x ->> 'campo' <> 'projeto';
+  if v_motivo is not null then
+    return jsonb_build_object('id_externo', v_ext, 'motivo', v_motivo);
+  end if;
+  return jsonb_build_object('id_externo', v_ext, 'existe', v_existe,
+    'v', (r -> 'v') || jsonb_build_object('projeto_id', v_proj, 'campanha', v_campanha, 'id_externo', v_ext));
+end
+$function$;
+
 -- 20261014210100: cadastro da primeira ação do dashboard "Ações da Black Friday": THB com acesso vencido
 -- (etiqueta black-thb-2026-10). Depende da 20261014210000.
 --
--- STATUS: NÃO APLICADA. TRAVADA DE PROPÓSITO até alguém preencher a SIGLA (v_sigla abaixo). A sigla é decisão do Victor
--- (dono do padrão de nomenclatura), como foi a ATMEL126 do ATM, e tem de casar com '^[A-Z]{2,10}[0-9]{2,4}$'.
--- Ensaio: 20261014210000_ensaio.sql (com sigla fictícia só dentro da transação).
+-- Ok do Victor (14/10, liberado pelo Maestro). Identificador do projeto em tudo = a ETIQUETA black-thb-2026-10 (o
+-- [black-thb-2026-10] no nome do disparo casa pelo api_item desde a 20261014230000). A coluna sigla de mkt.projetos é
+-- obrigatória e tem formato próprio ('^[A-Z]{2,10}[0-9]{2,4}$'), então leva o valor técnico BTHBV26 (aceito pelo Victor:
+-- "a sigla até poderia ser essa, mas precisamos usar aquela etiqueta do clickup em tudo"). Ninguém precisa digitá-la.
+-- Ensaio: 20261014210000_ensaio.sql.
 --
 -- O QUE CADASTRA (cada valor com a fonte)
 --   mkt.projetos ......... etiqueta black-thb-2026-10 (card 17tya50gmcm e PEDIDO); nome "Black do THB com acesso vencido"
@@ -410,20 +555,22 @@ insert into pg_temp._z_out(passo, linha) select '2c md5 novos', string_agg(p.oid
 --                          (decisão do Victor, 14/10). O papel dashboard também faz o disparo de grupo do SendFlow desta
 --                          campanha herdar o projeto (20261014150000).
 --   mkt_mensageria.planilhas  [BF26 THB VENCIDOS] MENSAGERIA, DESLIGADA (ativa = false): ligar é uma rotina lendo o
---                          Google Sheets a cada 10 min, só com ok do Victor. Abas API, E-MAIL, GRUPO DA REUNIÃO e LIGAÇÃO,
---                          com "ano" 2026 (a planilha escreve a data sem ano) e "hora_faixa" na LIGAÇÃO. Ferramentas pelo
+--                          Google Sheets a cada 10 min, só com ok do Victor. Abas API, E-MAIL, GRUPO DA REUNIÃO, GRUPOS THB e
+--                          LIGAÇÃO, com "ano" 2026 (a planilha escreve a data sem ano) e "hora_faixa" na LIGAÇÃO. Ferramentas pelo
 --                          precedente do ATM: API = Infobip (8), LIGAÇÃO = Ligue Lead (10); E-MAIL = ActiveCampaign (3);
 --                          GRUPO = SendFlow (1). A coluna TIPO desta planilha é DISPARO/AUTOMAÇÃO (não o tipo de template
 --                          da API), então não entra no mapa; fica só na conferência do
---                          cabeçalho. Na API, o tipo vem da coluna CATEGORIA META (J), que tem de trazer utility ou marketing. Fora: GRUPOS THB (é lista de grupos, não registro de disparo) e SMS (não
---                          há aba de registro; só o link na aba LINKS).
+--                          cabeçalho. Na API, o tipo vem da coluna CATEGORIA META (J), que tem de trazer utility ou marketing.
+--                          GRUPOS THB: os disparos nos grupos do THB ficam na mesma aba, com cabeçalho na LINHA 10 (as
+--                          linhas 1 a 9 são a lista dos grupos) e a coluna NOME DA MENSAGEM em D (incluída em 14/10).
+--                          Fora: SMS (o Victor decidiu em 14/10 que a ação não tem SMS).
 --
 -- PARA VOLTAR: 20261014210100_reversao.sql.
 
 
 do $c$
 declare
-  v_sigla   text := 'ZZENSAIO99';   -- PREENCHER com a sigla aprovada pelo Victor
+  v_sigla   text := 'BTHBV26';   -- técnica; o identificador é a etiqueta (ver cabeçalho)
   v_chave   text := 'black-thb-2026-10';
   v_proj    bigint;
   v_cab     jsonb := '{"B": "DATA", "C": "HORÁRIO", "D": "NOME DA MENSAGEM", "F": "LISTA/SEGMENTO", "G": "LINK", "H": "COPY (link do doc)"}';
@@ -490,6 +637,13 @@ begin
                      "custo": "W"}'::jsonb,
         'cabecalho', v_cab || '{"L": "STATUS", "M": "ENVIADOS", "N": "ENTREGUES", "P": "ABERTOS/LIDAS", "R": "CLIQUES",
                                 "T": "FALHAS", "V": "TIPO (DISPARO ou AUTOMAÇÃO)", "W": "CUSTO (R$)"}'::jsonb),
+      jsonb_build_object('aba', 'GRUPOS THB', 'canal', 'grupo', 'ferramenta_id', 1, 'cabecalho_linha', 10, 'ano', 2026,
+        'lista_fixa', 'Grupos THB',
+        'colunas', '{"data": "B", "hora": "C", "campanha": "D", "link": "F", "copy": "G", "status": "J",
+                     "tamanho_lista": "K", "entregues": "L", "lidas": "N", "cliques": "P", "falhas": "R", "custo": "U"}'::jsonb,
+        'cabecalho', '{"A": "ETAPA", "B": "DATA", "C": "HORÁRIO", "D": "NOME DA MENSAGEM", "E": "OBJETIVO", "F": "LINK",
+                       "G": "COPY (link do doc)", "J": "STATUS", "K": "ENVIADOS", "L": "ENTREGUES", "N": "ABERTOS/LIDAS",
+                       "P": "CLIQUES", "R": "FALHAS", "T": "TIPO (DISPARO ou AUTOMAÇÃO)", "U": "CUSTO (R$)"}'::jsonb),
       jsonb_build_object('aba', 'LIGAÇÃO', 'canal', 'ligacao', 'ferramenta_id', 10, 'cabecalho_linha', 1, 'ano', 2026,
         'hora_faixa', true,
         'colunas', '{"data": "B", "hora": "C", "campanha": "D", "lista": "F", "link": "G", "copy": "H", "status": "L",
@@ -501,375 +655,6 @@ $c$;
 insert into pg_temp._z_out(passo, linha) select '3 cadastro', (select jsonb_build_object('projeto', pr.sigla, 'modelo', d.modelo, 'conta', d.conta_hotmart, 'oferta', d.oferta_codigo, 'sessoes', (select count(*) from dados.sessoes s where s.chave = d.chave), 'grupos', (select count(*) from dados.dashboard_grupos g where g.chave = d.chave), 'planilha_ativa', (select ativa from mkt_mensageria.planilhas where projeto_id = d.projeto_id))::text from dados.dashboards d join mkt.projetos pr on pr.id = d.projeto_id where d.chave = 'black-thb-2026-10');
 insert into pg_temp._z_out(passo, linha) select '3b leads da ação (fonte página)', (select jsonb_build_object('total', count(*), 'teste', count(*) filter (where teste), 'fonte', string_agg(distinct fonte, ','))::text from dados.leads_todos('black-thb-2026-10', (select projeto_id from dados.dashboards where chave='black-thb-2026-10'), null));
 insert into pg_temp._z_out(passo, linha) select '3c resumo da ação (sem planilha)', (select to_jsonb(r)::text from public.dados_atm_resumo('black-thb-2026-10', null, null) r);
-savepoint antes_da_reversao;
--- Reversão da 20261014210100: apaga o cadastro da ação black-thb-2026-10 (planilha de mensageria, grupo, sessão, linha de
--- dados.dashboards e o projeto). Para se algum disparo ainda apontar para o projeto: arquivar antes (sem_delete).
-do $g$
-declare v_proj bigint := (select id from mkt.projetos where etiqueta_clickup = 'black-thb-2026-10');
-begin
-  if v_proj is null then raise exception 'reversão 20261014210100: projeto não existe; nada a reverter'; end if;
-  if exists (select 1 from mkt_mensageria.disparos where projeto_id = v_proj) then
-    raise exception 'reversão 20261014210100: há disparos no projeto; revisar antes de apagar';
-  end if;
-  delete from mkt_mensageria.planilhas where projeto_id = v_proj;
-  delete from dados.dashboard_grupos where chave = 'black-thb-2026-10';
-  delete from dados.sessoes where chave = 'black-thb-2026-10';
-  delete from dados.dashboards where chave = 'black-thb-2026-10';
-  delete from mkt.projetos where id = v_proj;
-end
-$g$;
-delete from supabase_migrations.schema_migrations where version = '20261014210100';
--- Reversão da 20261014210000: volta dados.atm_cadastro, dados.leads_todos e mkt_mensageria.planilha_sync_receber ao corpo
--- de antes e tira 'acao-black' do check. Reverter ANTES a 20261014210100 (cadastro), se ela tiver sido aplicada.
-do $g$
-begin
-  if exists (select 1 from dados.dashboards where modelo = 'acao-black') then
-    raise exception 'reversão 20261014210000: há dashboard acao-black; reverter antes a 20261014210100';
-  end if;
-  if (select md5(prosrc) from pg_proc where oid = 'dados.atm_cadastro(text)'::regprocedure) <> 'e63ce1c2f24d6b8535fcf80dda88ad48'
-     or (select md5(prosrc) from pg_proc where oid = 'dados.leads_todos(text,bigint,text)'::regprocedure) <> 'f106bf124249e3d14548654dbd33d702'
-     or (select md5(prosrc) from pg_proc where oid = 'mkt_mensageria.planilha_sync_receber(bigint,jsonb)'::regprocedure) <> '51406ca73a9efdaca49a5a794a56ba97' then
-    raise exception 'reversão 20261014210000: alguma função mudou depois da 210000; revisar';
-  end if;
-end
-$g$;
-
-alter table dados.dashboards drop constraint dashboards_modelo_check;
-alter table dados.dashboards add constraint dashboards_modelo_check
-  check (modelo = any (array['presencial-base', 'seminario-atm', 'jornada-captacao']));
-
-CREATE OR REPLACE FUNCTION dados.atm_cadastro(p_chave text)
- RETURNS dados.dashboards
- LANGUAGE plpgsql
- STABLE
- SET search_path TO ''
-AS $function$
-declare
-  r dados.dashboards := dados.cadastro(p_chave);   -- 42501 sem acesso, P0002 chave fora do cadastro
-begin
-  if r.modelo is distinct from 'seminario-atm' then
-    raise exception 'dashboard de outro modelo' using errcode = 'P0002';
-  end if;
-  return r;
-end
-$function$;
-
-CREATE OR REPLACE FUNCTION dados.leads_todos(p_chave text, p_projeto_id bigint, p_lista text)
- RETURNS TABLE(email text, nome text, telefone text, primeiro_em timestamp with time zone, fonte text, utm_source text, utm_medium text, utm_campaign text, utm_content text, utm_term text, pessoa_id uuid, teste boolean)
- LANGUAGE sql
- STABLE
- SET search_path TO ''
-AS $function$
-  -- 20261008161000; UTM do AC (dados.ac_utm) quando não há da rota de captura em 20261008210000
-  with passagens as (
-    -- sistema (rota /api/captura/lead -> pessoas.registrar, tipo lead)
-    select em.chave as email, p.nome, tel.valor as telefone, e.quando, 'sistema'::text as fonte,
-           o.utm_source, o.utm_medium, o.utm_campaign, o.utm_content, o.utm_term,
-           p.id as pessoa_id, coalesce(p.teste, false) as teste
-      from pessoas.eventos e
-      join pessoas.pessoas p on p.id = pessoas.atual(e.pessoa_id)
-      cross join lateral (select i.chave from pessoas.identificadores i
-                           where i.pessoa_id in (e.pessoa_id, p.id) and i.tipo = 'email' order by i.criado_em desc limit 1) em
-      left join lateral (select i.valor from pessoas.identificadores i
-                          where i.pessoa_id in (e.pessoa_id, p.id) and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
-      left join pessoas.origens o on o.id = e.origem_id
-     where e.tipo = 'lead'
-       and (e.projeto_id = p_projeto_id or e.detalhe ->> 'chave_evento' = p_chave)
-    union all
-    -- ActiveCampaign (entrada na lista de leads da edição)
-    select j.email_norm, nullif(btrim(j.nome), ''), tel.valor, j.ocorreu_em, 'activecampaign',
-           au.utm_source, au.utm_medium, au.utm_campaign, au.utm_content, au.utm_term,
-           p.id, coalesce(p.teste, false)
-      from crm.evento_jornada j
-      left join dados.ac_utm au on au.lista = p_lista and au.email_norm = lower(btrim(j.email_norm))
-      left join pessoas.pessoas p on p.id = pessoas.atual(j.pessoa_id)
-      left join lateral (select i.valor from pessoas.identificadores i
-                          where i.pessoa_id in (j.pessoa_id, p.id) and i.tipo = 'telefone' order by i.criado_em desc limit 1) tel on true
-     where p_lista is not null and j.fonte = 'activecampaign' and j.lista = p_lista and j.email_norm is not null
-  ), limpo as (
-    select lower(btrim(x.email)) as email, nullif(btrim(x.nome), '') as nome, nullif(btrim(x.telefone), '') as telefone,
-           x.quando, x.fonte, x.utm_source, x.utm_medium, x.utm_campaign, x.utm_content, x.utm_term, x.pessoa_id, x.teste
-      from passagens x
-     where nullif(btrim(x.email), '') is not null and lower(btrim(x.email)) not like '%@exemplo.invalid'
-  )
-  select l.email,
-         (select y.nome from limpo y where y.email = l.email and y.nome is not null order by y.quando desc limit 1),
-         (select y.telefone from limpo y where y.email = l.email and y.telefone is not null order by y.quando desc limit 1),
-         min(l.quando),
-         case when bool_and(l.fonte = 'sistema') then 'sistema'
-              when bool_and(l.fonte = 'activecampaign') then 'activecampaign' else 'ambos' end,
-         u.utm_source, u.utm_medium, u.utm_campaign, u.utm_content, u.utm_term,
-         (select y.pessoa_id from limpo y where y.email = l.email and y.pessoa_id is not null
-           order by y.teste desc, y.quando desc limit 1),
-         bool_or(l.teste)
-    from limpo l
-    left join lateral (select y.utm_source, y.utm_medium, y.utm_campaign, y.utm_content, y.utm_term
-                         from limpo y
-                        where y.email = l.email
-                          and coalesce(y.utm_source, y.utm_medium, y.utm_campaign, y.utm_content, y.utm_term) is not null
-                        order by (y.fonte = 'sistema') desc, y.quando limit 1) u on true
-   group by l.email, u.utm_source, u.utm_medium, u.utm_campaign, u.utm_content, u.utm_term
-$function$;
-
-CREATE OR REPLACE FUNCTION mkt_mensageria.planilha_sync_receber(p_planilha bigint, p_abas jsonb)
- RETURNS jsonb
- LANGUAGE plpgsql
- SET search_path TO ''
-AS $function$
-declare
-  c_motivo constant text := 'Sync da planilha: a linha saiu da planilha ou deixou de valer';
-  c_max_poda constant int := 5;
-  -- Tetos contra colagem errada ou abuso de quem edita a planilha (achado MÉDIO 1 do pentester, 11/10/2026):
-  -- mais de 20 disparos novos numa aba de uma vez suspende a aba inteira na rodada; custo acima de R$ 50.000,00
-  -- numa linha é recusado (o maior lançado até hoje no ATM é R$ 1.032,08).
-  c_max_ins constant int := 20;
-  c_max_custo constant bigint := 5000000;
-  p mkt_mensageria.planilhas;
-  v_sigla text;
-  v_cfg jsonb;
-  v_aba jsonb;
-  v_nome text;
-  v_ferr text;
-  v_hdr int;
-  v_vals jsonb;
-  v_cab_ok boolean;
-  v_row jsonb;
-  v_n int;
-  v_get jsonb;
-  v_data text; v_hora text; v_status text; v_tam text; v_custo text; v_camp text; v_lista text; v_copy text; v_link text;
-  -- 20261014140000: linha sem copy nem link entra com este texto (antes era recusada calada).
-  c_sem_copy constant text := 'Copy não registrada na planilha: a coluna COPY UTILIZADA traz só o texto-modelo e LINKS está vazia.';
-  v_copy_val text;
-  v_dia date;
-  v_chave text;
-  v_chaves text[];
-  v_r jsonb;
-  v_v jsonb;
-  v_id bigint;
-  v_d mkt_mensageria.disparos;
-  v_upd int;
-  v_poda bigint[];
-  v_abas_res jsonb := '[]'::jsonb;
-  v_recusas jsonb := '[]'::jsonb;
-  v_lidas int := 0; v_qualif int := 0; v_ins int := 0; v_ado int := 0; v_atu int := 0; v_inal int := 0;
-  v_desarq int := 0; v_arq int := 0; v_ign int := 0;
-  v_ins_aba int;
-  v_salvo int[];
-  v_recusas_salvo jsonb;
-  v_ok boolean := true;
-  v_erro text;
-  v_resumo jsonb;
-begin
-  select * into p from mkt_mensageria.planilhas where id = p_planilha;
-  if p.id is null then raise exception 'planilha % não cadastrada', p_planilha; end if;
-  if not p.ativa then return jsonb_build_object('ok', true, 'desligada', true); end if;
-  perform pg_advisory_xact_lock(hashtext('mkt_mensageria.planilha_sync'), p.id::int);
-  perform set_config('mkt_mensageria.autor_api', 'api:planilha', true);
-  select pr.sigla into v_sigla from mkt.projetos pr where pr.id = p.projeto_id;
-
-  for v_cfg in select * from jsonb_array_elements(p.abas) loop
-    v_nome := v_cfg ->> 'aba';
-    select a into v_aba from jsonb_array_elements(coalesce(p_abas, '[]'::jsonb)) a where a ->> 'aba' = v_nome limit 1;
-    v_hdr := coalesce((v_cfg ->> 'cabecalho_linha')::int, 1);
-    v_vals := v_aba -> 'valores';
-    -- Cabeçalho tem de bater coluna a coluna: se o time mexer no layout, a aba para (e não poda) até alguém ajustar o
-    -- mapa. Foi o deslocamento de colunas que zerou a aba API do CNHF em 13/08/2026 no ingest antigo.
-    v_cab_ok := v_aba is not null and v_aba ? 'valores' and jsonb_typeof(v_vals) = 'array'
-                and jsonb_array_length(v_vals) >= v_hdr
-                and not exists (select 1 from jsonb_each_text(v_cfg -> 'cabecalho') h
-                                 where mkt_mensageria.planilha_texto(v_vals -> (v_hdr - 1) ->> mkt_mensageria.planilha_coluna(h.key))
-                                       is distinct from mkt_mensageria.planilha_texto(h.value));
-    if not v_cab_ok then
-      v_ok := false;
-      v_abas_res := v_abas_res || jsonb_build_object('aba', v_nome, 'cabecalho_ok', false,
-                      'erro', coalesce(left(v_aba ->> 'erro', 200), case when v_aba is null then 'aba não veio' else 'cabeçalho diferente do mapa' end));
-      continue;
-    end if;
-    select f.nome into v_ferr from mkt_mensageria.ferramentas f where f.id = (v_cfg ->> 'ferramenta_id')::bigint;
-    v_chaves := '{}';
-    v_ins_aba := 0;
-    v_salvo := array[v_lidas, v_qualif, v_ins, v_ado, v_atu, v_inal, v_desarq, v_ign];
-    v_recusas_salvo := v_recusas;
-
-    begin  -- bloco da aba: estourou o teto de inserções, tudo desta aba nesta rodada é desfeito
-    for v_row, v_n in select r, n::int from jsonb_array_elements(v_vals) with ordinality t(r, n) where n > v_hdr loop
-      v_lidas := v_lidas + 1;
-      -- Valor da célula pelo campo do mapa (null se o campo não está no mapa ou a célula não veio).
-      v_get := (select coalesce(jsonb_object_agg(c.key, nullif(btrim(v_row ->> mkt_mensageria.planilha_coluna(c.value)), '')), '{}'::jsonb)
-                  from jsonb_each_text(v_cfg -> 'colunas') c);
-      v_data := v_get ->> 'data'; v_status := mkt_mensageria.planilha_texto(v_get ->> 'status');
-      v_tam := v_get ->> 'tamanho_lista'; v_custo := v_get ->> 'custo';
-      v_dia := case when v_data ~ '^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}$'
-                    then (select make_date(m[3]::int, m[2]::int, m[1]::int) from regexp_match(v_data, '^([0-9]+)/([0-9]+)/([0-9]+)$') m) end;
-      -- Regra da linha que entra.
-      if v_dia is null or v_dia < p.desde or (p.ate is not null and v_dia > p.ate)
-         or not (v_status like 'ENVIAD%'
-                 or coalesce(mkt_mensageria.inteiro_br(v_tam), 0) > 0
-                 or coalesce(mkt_mensageria.centavos_br(v_custo), 0) > 0) then
-        v_ign := v_ign + 1;
-        continue;
-      end if;
-      v_qualif := v_qualif + 1;
-      -- 20261014140000: hora de agenda ilegível (ex.: "-") cai na coluna opcional hora_envio do mapa (a aba API tem
-      -- a 2ª coluna HORÁRIO). Sem nenhuma das duas, segue a hora crua e a linha é recusada como antes.
-      v_hora := coalesce(mkt_mensageria.planilha_hora(v_get ->> 'hora'), mkt_mensageria.planilha_hora(v_get ->> 'hora_envio'),
-                         v_get ->> 'hora');
-      v_camp := left(v_get ->> 'campanha', 300);
-      v_lista := v_get ->> 'lista';
-      v_link := v_get ->> 'link';
-      -- "copy" é o texto-modelo que a planilha traz na coluna COPY UTILIZADA: não é copy.
-      v_copy := case when lower(coalesce(v_get ->> 'copy', '')) in ('', 'copy') then null else v_get ->> 'copy' end;
-      v_copy_val := case when v_copy is null and v_link is null then c_sem_copy else v_copy end;
-      v_chave := v_nome || '|' || btrim(v_data) || '|' || coalesce(v_hora, '') || '|'
-                 || mkt_mensageria.planilha_texto(v_camp) || '|' || mkt_mensageria.planilha_texto(v_lista);
-      -- Duas linhas iguais na mesma aba: a 2ª vira chave#2 (na ordem da planilha).
-      if v_chave = any(v_chaves) then
-        v_chave := v_chave || '#' || (select count(*) + 1 from unnest(v_chaves) k
-                                          where k = v_chave or left(k, length(v_chave) + 1) = v_chave || '#');
-      end if;
-      v_chaves := array_append(v_chaves, v_chave);
-
-      begin
-        v_r := mkt_mensageria.importar_linha(jsonb_build_object(
-          'data', v_data, 'hora', v_hora, 'ferramenta', v_ferr, 'canal', v_cfg ->> 'canal', 'tipo', v_get ->> 'tipo',
-          'projeto', v_sigla, 'copy_texto', v_copy_val, 'copy_link', v_link, 'publico_lista', v_lista,
-          'tamanho_lista', coalesce(v_tam, '0'), 'entregues', v_get ->> 'entregues', 'lidas', v_get ->> 'lidas',
-          'cliques', v_get ->> 'cliques', 'falhas', v_get ->> 'falhas', 'custo', v_custo,
-          'disparado_por', 'planilha mensageria'), v_n);
-        if jsonb_typeof(v_r -> 'v') <> 'object' then
-          v_recusas := v_recusas || jsonb_build_object('aba', v_nome, 'linha', v_n,
-                         'motivo', (select string_agg(e ->> 'campo' || ': ' || (e ->> 'msg'), '; ') from jsonb_array_elements(v_r -> 'erros') e));
-          continue;
-        end if;
-        v_v := v_r -> 'v';
-        if (v_v ->> 'custo_centavos')::bigint > c_max_custo then
-          v_recusas := v_recusas || jsonb_build_object('aba', v_nome, 'linha', v_n,
-                         'motivo', 'custo acima de R$ 50.000,00 numa linha: conferir na planilha');
-          continue;
-        end if;
-
-        select pl.disparo_id into v_id from mkt_mensageria.planilha_linhas pl where pl.planilha_id = p.id and pl.chave = v_chave;
-        if v_id is null then
-          -- Adoção: o mesmo disparo já lançado à mão ou por importação, ainda sem vínculo.
-          select d.id into v_id from mkt_mensageria.disparos d
-           where d.projeto_id = p.projeto_id and d.canal = v_v ->> 'canal'
-             and d.enviado_em = (v_v ->> 'enviado_em')::timestamptz and d.publico_lista = v_v ->> 'publico_lista'
-             and d.origem in ('manual', 'planilha') and d.arquivado_em is null and d.anonimizado_em is null
-             and not exists (select 1 from mkt_mensageria.planilha_linhas x where x.disparo_id = d.id)
-           order by d.id limit 1;
-          if v_id is not null then
-            insert into mkt_mensageria.planilha_linhas (planilha_id, chave, aba, disparo_id, linha, visto_em)
-            values (p.id, v_chave, v_nome, v_id, v_n, now());
-            v_ado := v_ado + 1;
-          else
-            insert into mkt_mensageria.disparos (enviado_em, projeto_id, canal, ferramenta_id, tipo, copy_texto, copy_link,
-                   publico_lista, tamanho_lista, entregues, lidas, cliques, falhas, custo_centavos, disparado_por,
-                   retorno_em, origem, campanha)
-            values ((v_v ->> 'enviado_em')::timestamptz, p.projeto_id, v_v ->> 'canal', (v_v ->> 'ferramenta_id')::bigint,
-                    v_v ->> 'tipo', v_v ->> 'copy_texto', v_v ->> 'copy_link', v_v ->> 'publico_lista',
-                    (v_v ->> 'tamanho_lista')::int, (v_v ->> 'entregues')::int, (v_v ->> 'lidas')::int,
-                    (v_v ->> 'cliques')::int, (v_v ->> 'falhas')::int, (v_v ->> 'custo_centavos')::int, v_v ->> 'disparado_por',
-                    case when coalesce(v_v ->> 'entregues', v_v ->> 'lidas', v_v ->> 'cliques', v_v ->> 'falhas',
-                                       v_v ->> 'custo_centavos') is not null then now() end,
-                    'planilha', v_camp)
-            returning id into v_id;
-            insert into mkt_mensageria.planilha_linhas (planilha_id, chave, aba, disparo_id, linha, visto_em)
-            values (p.id, v_chave, v_nome, v_id, v_n, now());
-            v_ins := v_ins + 1;
-            v_ins_aba := v_ins_aba + 1;
-            if v_ins_aba > c_max_ins then raise exception 'mkt_planilha_limite_insercao'; end if;
-            continue;
-          end if;
-        end if;
-
-        select * into v_d from mkt_mensageria.disparos where id = v_id for update;
-        update mkt_mensageria.planilha_linhas set linha = v_n, visto_em = now() where planilha_id = p.id and chave = v_chave;
-        if v_d.anonimizado_em is not null or (v_d.arquivado_em is not null and v_d.arquivado_motivo <> c_motivo) then
-          v_inal := v_inal + 1;   -- anonimizado ou arquivado por alguém: o sync não mexe
-          continue;
-        end if;
-        if v_d.arquivado_em is not null then v_desarq := v_desarq + 1; end if;
-        -- Célula vazia mantém o gravado; preenchida vence (a planilha é a fonte destes disparos).
-        update mkt_mensageria.disparos d set
-               arquivado_em = null, arquivado_motivo = null,
-               campanha = coalesce(v_camp, d.campanha),
-               tipo = coalesce(v_v ->> 'tipo', d.tipo),
-               copy_texto = coalesce(case when v_copy is not null then v_v ->> 'copy_texto' end, d.copy_texto),
-               copy_link = coalesce(v_v ->> 'copy_link', d.copy_link),
-               tamanho_lista = coalesce(case when v_tam is not null then (v_v ->> 'tamanho_lista')::int end, d.tamanho_lista),
-               entregues = coalesce((v_v ->> 'entregues')::int, d.entregues),
-               lidas = coalesce((v_v ->> 'lidas')::int, d.lidas),
-               cliques = coalesce((v_v ->> 'cliques')::int, d.cliques),
-               falhas = coalesce((v_v ->> 'falhas')::int, d.falhas),
-               custo_centavos = coalesce((v_v ->> 'custo_centavos')::int, d.custo_centavos),
-               retorno_em = coalesce(d.retorno_em,
-                              case when coalesce(v_v ->> 'entregues', v_v ->> 'lidas', v_v ->> 'cliques', v_v ->> 'falhas',
-                                                 v_v ->> 'custo_centavos') is not null then now() end)
-         where d.id = v_id
-           and (d.arquivado_em, d.campanha, d.tipo, d.copy_texto, d.copy_link, d.tamanho_lista, d.entregues, d.lidas,
-                d.cliques, d.falhas, d.custo_centavos)
-               is distinct from
-               (null::timestamptz, coalesce(v_camp, d.campanha), coalesce(v_v ->> 'tipo', d.tipo),
-                coalesce(case when v_copy is not null then v_v ->> 'copy_texto' end, d.copy_texto), coalesce(v_v ->> 'copy_link', d.copy_link),
-                coalesce(case when v_tam is not null then (v_v ->> 'tamanho_lista')::int end, d.tamanho_lista),
-                coalesce((v_v ->> 'entregues')::int, d.entregues), coalesce((v_v ->> 'lidas')::int, d.lidas),
-                coalesce((v_v ->> 'cliques')::int, d.cliques), coalesce((v_v ->> 'falhas')::int, d.falhas),
-                coalesce((v_v ->> 'custo_centavos')::int, d.custo_centavos));
-        get diagnostics v_upd = row_count;
-        if v_upd > 0 then v_atu := v_atu + 1; else v_inal := v_inal + 1; end if;
-      exception when others then
-        if sqlerrm = 'mkt_planilha_limite_insercao' then raise; end if;
-        v_recusas := v_recusas || jsonb_build_object('aba', v_nome, 'linha', v_n, 'motivo', left(sqlerrm, 200));
-      end;
-    end loop;
-
-    -- Poda: disparo vinculado a esta aba cuja linha não veio mais (ou deixou de valer) vai para o arquivo.
-    select coalesce(array_agg(pl.disparo_id), '{}') into v_poda
-      from mkt_mensageria.planilha_linhas pl join mkt_mensageria.disparos d on d.id = pl.disparo_id
-     where pl.planilha_id = p.id and pl.aba = v_nome and not (pl.chave = any(v_chaves))
-       and d.arquivado_em is null and d.anonimizado_em is null;
-    if cardinality(v_poda) > c_max_poda then
-      -- Muitas de uma vez parece leitura quebrada, não decisão do time: não arquiva e acusa.
-      v_ok := false;
-      v_abas_res := v_abas_res || jsonb_build_object('aba', v_nome, 'cabecalho_ok', true,
-                      'erro', 'poda suspensa: ' || cardinality(v_poda) || ' disparos sairiam de uma vez (limite ' || c_max_poda || ')');
-    else
-      update mkt_mensageria.disparos set arquivado_em = now(), arquivado_motivo = c_motivo where id = any(v_poda);
-      v_arq := v_arq + cardinality(v_poda);
-      v_abas_res := v_abas_res || jsonb_build_object('aba', v_nome, 'cabecalho_ok', true, 'arquivados', cardinality(v_poda));
-    end if;
-    exception when raise_exception then
-      if sqlerrm <> 'mkt_planilha_limite_insercao' then raise; end if;
-      select v_salvo[1], v_salvo[2], v_salvo[3], v_salvo[4], v_salvo[5], v_salvo[6], v_salvo[7], v_salvo[8]
-        into v_lidas, v_qualif, v_ins, v_ado, v_atu, v_inal, v_desarq, v_ign;
-      v_recusas := v_recusas_salvo;
-      v_ok := false;
-      v_abas_res := v_abas_res || jsonb_build_object('aba', v_nome, 'cabecalho_ok', true,
-                      'erro', 'aba suspensa: mais de ' || c_max_ins || ' disparos novos de uma vez; nada desta aba foi gravado');
-    end;
-  end loop;
-
-  -- 20261014140000: linha recusada é falha da rodada (ok = false, a Edge responde 502 e o vigia enxerga). Antes a rodada
-  -- fechava ok com recusas, e 6 disparos pagos do ATM ficaram fora do banco sem ninguém ver.
-  if jsonb_array_length(v_recusas) > 0 then v_ok := false; end if;
-  v_erro := (select left(string_agg(x, '; '), 500) from (
-               select (a ->> 'aba') || ': ' || (a ->> 'erro') as x from jsonb_array_elements(v_abas_res) a where a ? 'erro'
-               union all
-               select jsonb_array_length(v_recusas) || ' linha(s) recusada(s): ver resumo.recusas'
-                where jsonb_array_length(v_recusas) > 0) e);
-  v_resumo := jsonb_build_object('lidas', v_lidas, 'ignoradas', v_ign, 'qualificadas', v_qualif, 'inseridos', v_ins,
-                'adotados', v_ado, 'atualizados', v_atu, 'inalterados', v_inal, 'desarquivados', v_desarq,
-                'arquivados', v_arq, 'recusadas', jsonb_array_length(v_recusas),
-                'recusas', (select coalesce(jsonb_agg(x), '[]'::jsonb) from (select x from jsonb_array_elements(v_recusas) x limit 100) s),
-                'abas', v_abas_res);
-  insert into mkt_mensageria.planilha_execucoes (planilha_id, ok, resumo, erro) values (p.id, v_ok, v_resumo, v_erro);
-  return jsonb_build_object('ok', v_ok, 'planilha', p.nome) || v_resumo;
-end
-$function$;
-
-delete from supabase_migrations.schema_migrations where version = '20261014210000';
-insert into pg_temp._z_out(passo, linha) select '5 depois da reversão', string_agg(p.oid::regprocedure::text || '=' || left(md5(p.prosrc), 8), ' ; ') || ' / check ' || (select pg_get_constraintdef(oid) from pg_constraint where conname = 'dashboards_modelo_check') || ' / projeto ' || (select count(*) from mkt.projetos where etiqueta_clickup = 'black-thb-2026-10')::text from pg_proc p where p.oid in ('dados.atm_cadastro(text)'::regprocedure, 'dados.leads_todos(text,bigint,text)'::regprocedure, 'mkt_mensageria.planilha_sync_receber(bigint,jsonb)'::regprocedure);
-rollback to savepoint antes_da_reversao;
 -- sync simulada (planilha ligada só nesta transação)
 update mkt_mensageria.planilhas set ativa = true where planilha_id = '1J5QFTBEALI1TiqQ6FiAcbEtgTRB0OxhXo75zyAI9R2Q';
 insert into pg_temp._z_out(passo, linha) select '4 sync simulada', (select (r - 'abas')::text || ' / abas ' || (r -> 'abas')::text from (select mkt_mensageria.planilha_sync_receber(p.id, jsonb_build_array(
@@ -882,6 +667,19 @@ insert into pg_temp._z_out(passo, linha) select '4 sync simulada', (select (r - 
     jsonb_build_array('CONVITE','14/10','14H','[BF26 THB VENCIDOS] [E-MAIL] ENSAIO','','Público','https://dominiodometodo.com.br/oportunidade/','https://docs.google.com/d','','','','ENVIADO','386','380','','100','','30','','6','','DISPARO',''))),
   jsonb_build_object('aba', 'GRUPO DA REUNIÃO', 'valores', jsonb_build_array(
     jsonb_build_array('ETAPA','DATA','HORÁRIO','NOME DA MENSAGEM','OBJETIVO','LISTA/SEGMENTO','LINK','COPY (link do doc)','VERSÃO OU ASSUNTO','RESPONSÁVEL','AGENDADO?','STATUS','ENVIADOS','ENTREGUES','% ENTREGA','ABERTOS/LIDAS','% ABERTURA','CLIQUES','% CLIQUE','FALHAS','% FALHAS','TIPO (DISPARO ou AUTOMAÇÃO)','CUSTO (R$)'))),
+  jsonb_build_object('aba', 'GRUPOS THB', 'valores', jsonb_build_array(
+    jsonb_build_array('GRUPOS'),
+    jsonb_build_array('THB #1','T1','https://chat.whatsapp.com/x1'),
+    jsonb_build_array('THB #2','T2','https://chat.whatsapp.com/x2'),
+    jsonb_build_array('THB #3','T3','https://chat.whatsapp.com/x3'),
+    jsonb_build_array('THB #4','T4','https://chat.whatsapp.com/x4'),
+    jsonb_build_array('THB #5','T5','https://chat.whatsapp.com/x5'),
+    jsonb_build_array('THB #6','T6','https://chat.whatsapp.com/x6'),
+    jsonb_build_array('THB #7','T7','https://chat.whatsapp.com/x7'),
+    jsonb_build_array('THB #8','T8','https://chat.whatsapp.com/x8'),
+    jsonb_build_array('ETAPA','DATA','HORÁRIO','NOME DA MENSAGEM','OBJETIVO','LINK','COPY (link do doc)','RESPONSÁVEL','AGENDADO?','STATUS','ENVIADOS','ENTREGUES','% ENTREGA','ABERTOS/LIDAS','% ABERTURA','CLIQUES','% CLIQUE','FALHAS','% FALHAS','TIPO (DISPARO ou AUTOMAÇÃO)','CUSTO (R$)'),
+    jsonb_build_array('CONVITE','14/10','18H','[black-thb-2026-10] [GRUPOS THB] [14/10 18H] MSG 1 CONVITE','MSG 1 CONVITE: x','https://o.timeholdingbrasil.com.br/renov-grupo','https://docs.google.com/d','Thomas','NÃO','ENVIADO','1200','','','','','','','','','DISPARO',''),
+    jsonb_build_array('CONVITE','14/10','20H30','[black-thb-2026-10] [GRUPOS THB] [14/10 20H30] MSG 2','MSG 2: x','https://o.timeholdingbrasil.com.br/renov-grupo','https://docs.google.com/d','Thomas','NÃO','APROVADA','','','','','','','','','','DISPARO',''))),
   jsonb_build_object('aba', 'LIGAÇÃO', 'valores', jsonb_build_array(
     jsonb_build_array('ETAPA','DATA','HORÁRIO','NOME DA MENSAGEM','OBJETIVO','LISTA/SEGMENTO','LINK','COPY (link do doc)','VERSÃO OU ASSUNTO','RESPONSÁVEL','AGENDADO?','STATUS','QTD LIGAÇÕES','ATENDIDOS','% ATENDIMENTO','CONFIRMADOS','% CONFIRMAÇÃO','DURAÇÃO','CUSTO (R$)'),
     jsonb_build_array('AQUECIMENTO','15/10','09H-18H','[BF26 THB VENCIDOS] [LIGAÇÃO] ENSAIO','','Público','https://dominiodometodo.com.br/oportunidade/','https://docs.google.com/d','','','','FEITO','50','20','','','','','40,00')))
@@ -896,5 +694,7 @@ insert into pg_temp._z_out(passo, linha) select '4e sem ano: e-mail', (select js
     jsonb_build_array('ETAPA','DATA','HORÁRIO','NOME DA MENSAGEM','OBJETIVO','LISTA/SEGMENTO','LINK','COPY (link do doc)','VERSÃO OU ASSUNTO','RESPONSÁVEL','AGENDADO?','STATUS','ENVIADOS','ENTREGUES','% ENTREGA','ABERTOS/LIDAS','% ABERTURA','CLIQUES','% CLIQUE','FALHAS','% FALHAS','TIPO (DISPARO ou AUTOMAÇÃO)','CUSTO (R$)'),
     jsonb_build_array('CONVITE','15/10','10H','[BF26 THB VENCIDOS] [E-MAIL] ENSAIO 2','','Público','x','https://docs.google.com/d','','','','ENVIADO','10','','','','','','','','','DISPARO','')))
 )) r from mkt_mensageria.planilhas p where p.planilha_id = '1J5QFTBEALI1TiqQ6FiAcbEtgTRB0OxhXo75zyAI9R2Q') z);
+insert into pg_temp._z_out(passo, linha) select '4f grupos THB gravados', (select count(*)::text || ' / ' || string_agg(campanha, ' | ') from mkt_mensageria.disparos where projeto_id = (select projeto_id from dados.dashboards where chave='black-thb-2026-10') and campanha like '%GRUPOS THB%');
+insert into pg_temp._z_out(passo, linha) select '6 api_item: [black-thb-2026-10] -> projeto', (select string_agg(c || ' => ' || coalesce((select pr.etiqueta_clickup from mkt.projetos pr where pr.id = (select case when count(distinct p2.id) = 1 then min(p2.id) end from regexp_matches(c, '\[([^][]{1,40})\]', 'g') m join mkt.projetos p2 on (regexp_replace(upper(p2.sigla), '[^A-Z0-9]', '', 'g') = regexp_replace(upper(m[1]), '[^A-Z0-9]', '', 'g') and regexp_replace(upper(m[1]), '[^A-Z0-9]', '', 'g') <> '') or (p2.etiqueta_clickup is not null and lower(btrim(m[1])) = p2.etiqueta_clickup))), 'nulo'), ' | ') from unnest(array['[black-thb-2026-10] [API] [14/10 17H] CONVITE', '[BTHBV26] x', '[BF26] Convite live']) c);
 select passo, linha from pg_temp._z_out order by em, passo;
 rollback;

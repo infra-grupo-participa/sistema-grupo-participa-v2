@@ -1,9 +1,11 @@
 -- 20261014210100: cadastro da primeira ação do dashboard "Ações da Black Friday": THB com acesso vencido
 -- (etiqueta black-thb-2026-10). Depende da 20261014210000.
 --
--- STATUS: NÃO APLICADA. TRAVADA DE PROPÓSITO até alguém preencher a SIGLA (v_sigla abaixo). A sigla é decisão do Victor
--- (dono do padrão de nomenclatura), como foi a ATMEL126 do ATM, e tem de casar com '^[A-Z]{2,10}[0-9]{2,4}$'.
--- Ensaio: 20261014210000_ensaio.sql (com sigla fictícia só dentro da transação).
+-- Ok do Victor (14/10, liberado pelo Maestro). Identificador do projeto em tudo = a ETIQUETA black-thb-2026-10 (o
+-- [black-thb-2026-10] no nome do disparo casa pelo api_item desde a 20261014230000). A coluna sigla de mkt.projetos é
+-- obrigatória e tem formato próprio ('^[A-Z]{2,10}[0-9]{2,4}$'), então leva o valor técnico BTHBV26 (aceito pelo Victor:
+-- "a sigla até poderia ser essa, mas precisamos usar aquela etiqueta do clickup em tudo"). Ninguém precisa digitá-la.
+-- Ensaio: 20261014210000_ensaio.sql.
 --
 -- O QUE CADASTRA (cada valor com a fonte)
 --   mkt.projetos ......... etiqueta black-thb-2026-10 (card 17tya50gmcm e PEDIDO); nome "Black do THB com acesso vencido"
@@ -19,13 +21,15 @@
 --                          (decisão do Victor, 14/10). O papel dashboard também faz o disparo de grupo do SendFlow desta
 --                          campanha herdar o projeto (20261014150000).
 --   mkt_mensageria.planilhas  [BF26 THB VENCIDOS] MENSAGERIA, DESLIGADA (ativa = false): ligar é uma rotina lendo o
---                          Google Sheets a cada 10 min, só com ok do Victor. Abas API, E-MAIL, GRUPO DA REUNIÃO e LIGAÇÃO,
---                          com "ano" 2026 (a planilha escreve a data sem ano) e "hora_faixa" na LIGAÇÃO. Ferramentas pelo
+--                          Google Sheets a cada 10 min, só com ok do Victor. Abas API, E-MAIL, GRUPO DA REUNIÃO, GRUPOS THB e
+--                          LIGAÇÃO, com "ano" 2026 (a planilha escreve a data sem ano) e "hora_faixa" na LIGAÇÃO. Ferramentas pelo
 --                          precedente do ATM: API = Infobip (8), LIGAÇÃO = Ligue Lead (10); E-MAIL = ActiveCampaign (3);
 --                          GRUPO = SendFlow (1). A coluna TIPO desta planilha é DISPARO/AUTOMAÇÃO (não o tipo de template
 --                          da API), então não entra no mapa; fica só na conferência do
---                          cabeçalho. Na API, o tipo vem da coluna CATEGORIA META (J), que tem de trazer utility ou marketing. Fora: GRUPOS THB (é lista de grupos, não registro de disparo) e SMS (não
---                          há aba de registro; só o link na aba LINKS).
+--                          cabeçalho. Na API, o tipo vem da coluna CATEGORIA META (J), que tem de trazer utility ou marketing.
+--                          GRUPOS THB: os disparos nos grupos do THB ficam na mesma aba, com cabeçalho na LINHA 10 (as
+--                          linhas 1 a 9 são a lista dos grupos) e a coluna NOME DA MENSAGEM em D (incluída em 14/10).
+--                          Fora: SMS (o Victor decidiu em 14/10 que a ação não tem SMS).
 --
 -- PARA VOLTAR: 20261014210100_reversao.sql.
 
@@ -34,7 +38,7 @@ set local statement_timeout = '30s';
 
 do $c$
 declare
-  v_sigla   text := null;   -- PREENCHER com a sigla aprovada pelo Victor
+  v_sigla   text := 'BTHBV26';   -- técnica; o identificador é a etiqueta (ver cabeçalho)
   v_chave   text := 'black-thb-2026-10';
   v_proj    bigint;
   v_cab     jsonb := '{"B": "DATA", "C": "HORÁRIO", "D": "NOME DA MENSAGEM", "F": "LISTA/SEGMENTO", "G": "LINK", "H": "COPY (link do doc)"}';
@@ -101,6 +105,13 @@ begin
                      "custo": "W"}'::jsonb,
         'cabecalho', v_cab || '{"L": "STATUS", "M": "ENVIADOS", "N": "ENTREGUES", "P": "ABERTOS/LIDAS", "R": "CLIQUES",
                                 "T": "FALHAS", "V": "TIPO (DISPARO ou AUTOMAÇÃO)", "W": "CUSTO (R$)"}'::jsonb),
+      jsonb_build_object('aba', 'GRUPOS THB', 'canal', 'grupo', 'ferramenta_id', 1, 'cabecalho_linha', 10, 'ano', 2026,
+        'lista_fixa', 'Grupos THB',
+        'colunas', '{"data": "B", "hora": "C", "campanha": "D", "link": "F", "copy": "G", "status": "J",
+                     "tamanho_lista": "K", "entregues": "L", "lidas": "N", "cliques": "P", "falhas": "R", "custo": "U"}'::jsonb,
+        'cabecalho', '{"A": "ETAPA", "B": "DATA", "C": "HORÁRIO", "D": "NOME DA MENSAGEM", "E": "OBJETIVO", "F": "LINK",
+                       "G": "COPY (link do doc)", "J": "STATUS", "K": "ENVIADOS", "L": "ENTREGUES", "N": "ABERTOS/LIDAS",
+                       "P": "CLIQUES", "R": "FALHAS", "T": "TIPO (DISPARO ou AUTOMAÇÃO)", "U": "CUSTO (R$)"}'::jsonb),
       jsonb_build_object('aba', 'LIGAÇÃO', 'canal', 'ligacao', 'ferramenta_id', 10, 'cabecalho_linha', 1, 'ano', 2026,
         'hora_faixa', true,
         'colunas', '{"data": "B", "hora": "C", "campanha": "D", "lista": "F", "link": "G", "copy": "H", "status": "L",

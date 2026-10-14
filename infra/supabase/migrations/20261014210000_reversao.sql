@@ -7,7 +7,7 @@ begin
   end if;
   if (select md5(prosrc) from pg_proc where oid = 'dados.atm_cadastro(text)'::regprocedure) <> 'e63ce1c2f24d6b8535fcf80dda88ad48'
      or (select md5(prosrc) from pg_proc where oid = 'dados.leads_todos(text,bigint,text)'::regprocedure) <> 'f106bf124249e3d14548654dbd33d702'
-     or (select md5(prosrc) from pg_proc where oid = 'mkt_mensageria.planilha_sync_receber(bigint,jsonb)'::regprocedure) <> '51406ca73a9efdaca49a5a794a56ba97' then
+     or (select md5(prosrc) from pg_proc where oid = 'mkt_mensageria.planilha_sync_receber(bigint,jsonb)'::regprocedure) <> '92de0a2b08a483db803bd7cb28b6bd4e' then
     raise exception 'reversão 20261014210000: alguma função mudou depois da 210000; revisar';
   end if;
 end

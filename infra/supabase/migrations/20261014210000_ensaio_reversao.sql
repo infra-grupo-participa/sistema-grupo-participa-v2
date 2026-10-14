@@ -13,8 +13,9 @@ insert into pg_temp._z_out(passo, linha) select '1b antes: resumo ATM', md5((sel
 -- black-thb-2026-10, está na 20261014210100). A tela reaproveita as RPCs do "Esta edição" do ATM (dados_atm_*), sem RPC nova.
 --   1. modelo 'acao-black' no check de dados.dashboards; dados.atm_cadastro aceita 'seminario-atm' e 'acao-black'.
 --   2. dados.leads_todos ganha a fonte 'pagina': metodo.pesquisa_respostas com etiqueta = chave (origem 'teste' = teste).
---   3. mkt_mensageria.planilha_sync_receber ganha duas opções POR ABA, só para quem as pede no mapa (o ATM não pede):
---      "ano" (data dd/mm sem ano) e "hora_faixa" (hora "09H-18H" lida pelo início).
+--   3. mkt_mensageria.planilha_sync_receber ganha três opções POR ABA, só para quem as pede no mapa (o ATM não pede):
+--      "ano" (data dd/mm sem ano), "hora_faixa" (hora "09H-18H" lida pelo início) e "lista_fixa" (público fixo da aba
+--      que não tem coluna de público).
 -- Guardas pelos md5 vivos. Reversão: 20261014210000_reversao.sql. Ver 20261014210000.explain.md.
 
 do $g$
@@ -235,7 +236,8 @@ begin
                               then mkt_mensageria.planilha_hora(split_part(v_get ->> 'hora', '-', 1)) end,
                          v_get ->> 'hora');
       v_camp := left(v_get ->> 'campanha', 300);
-      v_lista := v_get ->> 'lista';
+      -- 20261014210000: aba sem coluna de público usa "lista_fixa" do mapa (ex.: GRUPOS THB = os grupos do THB). Só quem pede.
+      v_lista := coalesce(v_get ->> 'lista', v_cfg ->> 'lista_fixa');
       v_link := v_get ->> 'link';
       -- "copy" é o texto-modelo que a planilha traz na coluna COPY UTILIZADA: não é copy.
       v_copy := case when lower(coalesce(v_get ->> 'copy', '')) in ('', 'copy') then null else v_get ->> 'copy' end;
@@ -386,12 +388,155 @@ begin
   return jsonb_build_object('ok', v_ok, 'planilha', p.nome) || v_resumo;
 end
 $function$;
+-- 20261014230000: a regra [SIGLA] do mkt_mensageria.api_item passa a aceitar também a ETIQUETA do projeto entre colchetes
+-- (ex.: "[black-thb-2026-10] [API] [14/10 17H] CONVITE"), pedido do Victor (14/10: etiqueta do ClickUp em tudo). A sigla
+-- continua casando como antes. A etiqueta casa pela string exata (minúsculas), não pela forma normalizada.
+-- Reversão: 20261014230000_reversao.sql. Ver 20261014210000.explain.md (seção da sigla).
+
+do $g$
+begin
+  if (select md5(prosrc) from pg_proc where oid = 'mkt_mensageria.api_item(text,bigint,jsonb)'::regprocedure)
+      is distinct from 'fc02a3811c270716a92ff33e2770c971' then
+    raise exception '20261014230000: corpo vivo de api_item mudou; revisar';
+  end if;
+end
+$g$;
+
+CREATE OR REPLACE FUNCTION mkt_mensageria.api_item(p_fonte text, p_ferr_fixa bigint, p_item jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO ''
+AS $function$
+declare
+  v_ext text;
+  d mkt_mensageria.disparos%rowtype;
+  v_existe boolean;
+  v_campanha text;
+  v_proj bigint;
+  v_nproj integer;
+  v_sigla text;
+  v_ferr bigint;
+  v_txt text;
+  v_num bigint;
+  v_canon jsonb;
+  k text;
+  r jsonb;
+  v_motivo text;
+  v_proj_grupo bigint;
+  v_n_grupo integer;
+begin
+  if p_item is null or jsonb_typeof(p_item) <> 'object' then
+    return jsonb_build_object('motivo', 'Item não é um objeto JSON.');
+  end if;
+  v_ext := btrim(coalesce(p_item ->> 'id_externo', ''));
+  if v_ext = '' or length(v_ext) > 200 then
+    return jsonb_build_object('motivo', 'id_externo ausente ou com mais de 200 caracteres.');
+  end if;
+
+  select * into d from mkt_mensageria.disparos x where x.origem_sistema = p_fonte and x.id_externo = v_ext;
+  v_existe := found;
+  if v_existe and d.arquivado_em is not null then
+    return jsonb_build_object('id_externo', v_ext, 'arquivado', true);   -- arquivado pela tela: a API não mexe
+  end if;
+  if v_existe and d.anonimizado_em is not null then
+    return jsonb_build_object('id_externo', v_ext, 'arquivado', true);   -- LGPD: anonimizado, a API não regrava nada
+  end if;
+
+  v_campanha := nullif(left(btrim(coalesce(p_item ->> 'campanha', '')), 300), '');
+  if v_campanha is null and v_existe then v_campanha := d.campanha; end if;
+  -- [SIGLA]: o conteúdo de um colchete que seja sigla cadastrada, comparado só por letras e dígitos (João, 06/10:
+  -- [PB/26] = PB26, [HT 33] = HT33; [HT] sem edição não casa). Nenhuma, ou duas siglas diferentes = sem projeto.
+  select min(pr.id), count(distinct pr.id) into v_proj, v_nproj
+    from regexp_matches(coalesce(v_campanha, ''), '\[([^][]{1,40})\]', 'g') m
+    join mkt.projetos pr
+      on (regexp_replace(upper(pr.sigla), '[^A-Z0-9]', '', 'g') = regexp_replace(upper(m[1]), '[^A-Z0-9]', '', 'g')
+          and regexp_replace(upper(m[1]), '[^A-Z0-9]', '', 'g') <> '')
+         -- 20261014230000 (Victor, 14/10: "a etiqueta do clickup em tudo"): o colchete também casa com a ETIQUETA exata do
+         -- projeto (ex.: [black-thb-2026-10]). Colchete até 40 caracteres para caber a etiqueta; sigla tem no máximo 14.
+         or (pr.etiqueta_clickup is not null and lower(btrim(m[1])) = pr.etiqueta_clickup);
+  if v_nproj <> 1 then v_proj := null; end if;
+  -- 20261014150000: disparo de grupo do SendFlow sem [SIGLA] herda o projeto pela campanha cadastrada no dashboard
+  -- (dados.dashboard_grupos, papel 'dashboard'). Só quando a campanha leva a exatamente um projeto. Ex.: "ATM 10/26" -> 75.
+  if v_proj is null and p_fonte = 'sendflow' and v_campanha is not null then
+    select min(db.projeto_id), count(distinct db.projeto_id) into v_proj_grupo, v_n_grupo
+      from dados.dashboard_grupos dg
+      join dados.dashboards db on db.chave = dg.chave
+     where dg.papel = 'dashboard' and db.projeto_id is not null
+       and lower(btrim(dg.sendflow_campanha)) = lower(v_campanha);
+    if v_n_grupo = 1 then v_proj := v_proj_grupo; end if;
+  end if;
+  -- 20261014180100 (Victor, 14/10): campanha de teste nunca ganha projeto, nem por [SIGLA] nem pelo grupo do dashboard.
+  -- "teste" ou "testes" como palavra (sem diferenciar maiúscula; "_" e "-" separam): [TESTE], TESTE - x, TESTE_DE_X.
+  -- "testemunho" não casa. O projeto já gravado à mão continua (o api_upsert não troca projeto gravado).
+  if v_campanha ~* '(^|[^[:alpha:]])testes?([^[:alpha:]]|$)' then v_proj := null; end if;
+  if v_existe and d.projeto_id is not null then v_proj := d.projeto_id; end if;
+  select pr.sigla into v_sigla from mkt.projetos pr where pr.id = v_proj;
+
+  if p_ferr_fixa is not null then
+    v_ferr := p_ferr_fixa;
+  else
+    v_txt := btrim(coalesce(p_item ->> 'ferramenta', ''));
+    if v_txt <> '' then
+      select f.id into v_ferr from mkt_mensageria.ferramentas f where lower(f.nome) = lower(v_txt);
+      if v_ferr is null then
+        return jsonb_build_object('id_externo', v_ext, 'motivo', 'Ferramenta "' || left(v_txt, 60) || '" não cadastrada.');
+      end if;
+    elsif v_existe then
+      v_ferr := d.ferramenta_id;
+    end if;
+  end if;
+
+  v_txt := regexp_replace(coalesce(p_item ->> 'numero', ''), '[\s().-]', '', 'g');
+  if v_txt <> '' then
+    if left(v_txt, 1) <> '+' then v_txt := '+' || v_txt; end if;
+    select nu.id into v_num from mkt_mensageria.numeros nu where nu.numero = v_txt;
+    if v_num is null then
+      return jsonb_build_object('id_externo', v_ext, 'motivo', 'Número ' || left(v_txt, 20) || ' não cadastrado em Números.');
+    end if;
+  elsif v_existe then
+    v_num := d.numero_id;
+  end if;
+
+  v_canon := case when v_existe then jsonb_build_object(
+      'enviado_em', d.enviado_em, 'canal', d.canal, 'tipo', d.tipo, 'copy_texto', d.copy_texto, 'copy_link', d.copy_link,
+      'publico_lista', d.publico_lista, 'publico_origem', d.publico_origem, 'tamanho_lista', d.tamanho_lista,
+      'entregues', d.entregues, 'lidas', d.lidas, 'cliques', d.cliques, 'falhas', d.falhas,
+      'custo_centavos', d.custo_centavos, 'disparado_por', d.disparado_por)
+    else '{}'::jsonb end;
+  foreach k in array array['enviado_em', 'canal', 'tipo', 'copy_texto', 'copy_link', 'publico_lista', 'publico_origem',
+                           'tamanho_lista', 'entregues', 'lidas', 'cliques', 'falhas', 'custo_centavos', 'disparado_por'] loop
+    if jsonb_typeof(p_item -> k) is not null and jsonb_typeof(p_item -> k) <> 'null'
+       and not (k in ('tipo', 'custo_centavos') and jsonb_typeof(v_canon -> k) is not null and jsonb_typeof(v_canon -> k) <> 'null') then
+      v_canon := v_canon || jsonb_build_object(k, p_item -> k);
+    end if;
+  end loop;
+  v_canon := v_canon || jsonb_build_object('projeto', coalesce(v_sigla, ''), 'ferramenta_id', v_ferr::text,
+                                           'numero_id', v_num::text);
+  if nullif(btrim(coalesce(v_canon ->> 'disparado_por', '')), '') is null then
+    v_canon := v_canon || jsonb_build_object('disparado_por', 'api:' || p_fonte);
+  end if;
+
+  r := mkt_mensageria.disparo_validar(v_canon);
+  select left(string_agg(x ->> 'campo' || ': ' || (x ->> 'msg'), '; '), 500) into v_motivo
+    from jsonb_array_elements(r -> 'erros') x
+   where x ->> 'campo' <> 'projeto';
+  if v_motivo is not null then
+    return jsonb_build_object('id_externo', v_ext, 'motivo', v_motivo);
+  end if;
+  return jsonb_build_object('id_externo', v_ext, 'existe', v_existe,
+    'v', (r -> 'v') || jsonb_build_object('projeto_id', v_proj, 'campanha', v_campanha, 'id_externo', v_ext));
+end
+$function$;
+
 -- 20261014210100: cadastro da primeira ação do dashboard "Ações da Black Friday": THB com acesso vencido
 -- (etiqueta black-thb-2026-10). Depende da 20261014210000.
 --
--- STATUS: NÃO APLICADA. TRAVADA DE PROPÓSITO até alguém preencher a SIGLA (v_sigla abaixo). A sigla é decisão do Victor
--- (dono do padrão de nomenclatura), como foi a ATMEL126 do ATM, e tem de casar com '^[A-Z]{2,10}[0-9]{2,4}$'.
--- Ensaio: 20261014210000_ensaio.sql (com sigla fictícia só dentro da transação).
+-- Ok do Victor (14/10, liberado pelo Maestro). Identificador do projeto em tudo = a ETIQUETA black-thb-2026-10 (o
+-- [black-thb-2026-10] no nome do disparo casa pelo api_item desde a 20261014230000). A coluna sigla de mkt.projetos é
+-- obrigatória e tem formato próprio ('^[A-Z]{2,10}[0-9]{2,4}$'), então leva o valor técnico BTHBV26 (aceito pelo Victor:
+-- "a sigla até poderia ser essa, mas precisamos usar aquela etiqueta do clickup em tudo"). Ninguém precisa digitá-la.
+-- Ensaio: 20261014210000_ensaio.sql.
 --
 -- O QUE CADASTRA (cada valor com a fonte)
 --   mkt.projetos ......... etiqueta black-thb-2026-10 (card 17tya50gmcm e PEDIDO); nome "Black do THB com acesso vencido"
@@ -407,20 +552,22 @@ $function$;
 --                          (decisão do Victor, 14/10). O papel dashboard também faz o disparo de grupo do SendFlow desta
 --                          campanha herdar o projeto (20261014150000).
 --   mkt_mensageria.planilhas  [BF26 THB VENCIDOS] MENSAGERIA, DESLIGADA (ativa = false): ligar é uma rotina lendo o
---                          Google Sheets a cada 10 min, só com ok do Victor. Abas API, E-MAIL, GRUPO DA REUNIÃO e LIGAÇÃO,
---                          com "ano" 2026 (a planilha escreve a data sem ano) e "hora_faixa" na LIGAÇÃO. Ferramentas pelo
+--                          Google Sheets a cada 10 min, só com ok do Victor. Abas API, E-MAIL, GRUPO DA REUNIÃO, GRUPOS THB e
+--                          LIGAÇÃO, com "ano" 2026 (a planilha escreve a data sem ano) e "hora_faixa" na LIGAÇÃO. Ferramentas pelo
 --                          precedente do ATM: API = Infobip (8), LIGAÇÃO = Ligue Lead (10); E-MAIL = ActiveCampaign (3);
 --                          GRUPO = SendFlow (1). A coluna TIPO desta planilha é DISPARO/AUTOMAÇÃO (não o tipo de template
 --                          da API), então não entra no mapa; fica só na conferência do
---                          cabeçalho. Na API, o tipo vem da coluna CATEGORIA META (J), que tem de trazer utility ou marketing. Fora: GRUPOS THB (é lista de grupos, não registro de disparo) e SMS (não
---                          há aba de registro; só o link na aba LINKS).
+--                          cabeçalho. Na API, o tipo vem da coluna CATEGORIA META (J), que tem de trazer utility ou marketing.
+--                          GRUPOS THB: os disparos nos grupos do THB ficam na mesma aba, com cabeçalho na LINHA 10 (as
+--                          linhas 1 a 9 são a lista dos grupos) e a coluna NOME DA MENSAGEM em D (incluída em 14/10).
+--                          Fora: SMS (o Victor decidiu em 14/10 que a ação não tem SMS).
 --
 -- PARA VOLTAR: 20261014210100_reversao.sql.
 
 
 do $c$
 declare
-  v_sigla   text := 'ZZENSAIO99';   -- PREENCHER com a sigla aprovada pelo Victor
+  v_sigla   text := 'BTHBV26';   -- técnica; o identificador é a etiqueta (ver cabeçalho)
   v_chave   text := 'black-thb-2026-10';
   v_proj    bigint;
   v_cab     jsonb := '{"B": "DATA", "C": "HORÁRIO", "D": "NOME DA MENSAGEM", "F": "LISTA/SEGMENTO", "G": "LINK", "H": "COPY (link do doc)"}';
@@ -487,6 +634,13 @@ begin
                      "custo": "W"}'::jsonb,
         'cabecalho', v_cab || '{"L": "STATUS", "M": "ENVIADOS", "N": "ENTREGUES", "P": "ABERTOS/LIDAS", "R": "CLIQUES",
                                 "T": "FALHAS", "V": "TIPO (DISPARO ou AUTOMAÇÃO)", "W": "CUSTO (R$)"}'::jsonb),
+      jsonb_build_object('aba', 'GRUPOS THB', 'canal', 'grupo', 'ferramenta_id', 1, 'cabecalho_linha', 10, 'ano', 2026,
+        'lista_fixa', 'Grupos THB',
+        'colunas', '{"data": "B", "hora": "C", "campanha": "D", "link": "F", "copy": "G", "status": "J",
+                     "tamanho_lista": "K", "entregues": "L", "lidas": "N", "cliques": "P", "falhas": "R", "custo": "U"}'::jsonb,
+        'cabecalho', '{"A": "ETAPA", "B": "DATA", "C": "HORÁRIO", "D": "NOME DA MENSAGEM", "E": "OBJETIVO", "F": "LINK",
+                       "G": "COPY (link do doc)", "J": "STATUS", "K": "ENVIADOS", "L": "ENTREGUES", "N": "ABERTOS/LIDAS",
+                       "P": "CLIQUES", "R": "FALHAS", "T": "TIPO (DISPARO ou AUTOMAÇÃO)", "U": "CUSTO (R$)"}'::jsonb),
       jsonb_build_object('aba', 'LIGAÇÃO', 'canal', 'ligacao', 'ferramenta_id', 10, 'cabecalho_linha', 1, 'ano', 2026,
         'hora_faixa', true,
         'colunas', '{"data": "B", "hora": "C", "campanha": "D", "lista": "F", "link": "G", "copy": "H", "status": "L",
@@ -515,6 +669,141 @@ begin
 end
 $g$;
 delete from supabase_migrations.schema_migrations where version = '20261014210100';
+-- Reversão da 20261014230000: volta api_item ao corpo fc02a381 (só sigla, colchete até 20).
+do $g$
+begin
+  if (select md5(prosrc) from pg_proc where oid = 'mkt_mensageria.api_item(text,bigint,jsonb)'::regprocedure)
+      is distinct from 'ef0c326e519d4a7c8721b2aa113dc2b0' then
+    raise exception 'reversão 20261014230000: corpo vivo não é o da 230000; revisar';
+  end if;
+end
+$g$;
+
+CREATE OR REPLACE FUNCTION mkt_mensageria.api_item(p_fonte text, p_ferr_fixa bigint, p_item jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO ''
+AS $function$
+declare
+  v_ext text;
+  d mkt_mensageria.disparos%rowtype;
+  v_existe boolean;
+  v_campanha text;
+  v_proj bigint;
+  v_nproj integer;
+  v_sigla text;
+  v_ferr bigint;
+  v_txt text;
+  v_num bigint;
+  v_canon jsonb;
+  k text;
+  r jsonb;
+  v_motivo text;
+  v_proj_grupo bigint;
+  v_n_grupo integer;
+begin
+  if p_item is null or jsonb_typeof(p_item) <> 'object' then
+    return jsonb_build_object('motivo', 'Item não é um objeto JSON.');
+  end if;
+  v_ext := btrim(coalesce(p_item ->> 'id_externo', ''));
+  if v_ext = '' or length(v_ext) > 200 then
+    return jsonb_build_object('motivo', 'id_externo ausente ou com mais de 200 caracteres.');
+  end if;
+
+  select * into d from mkt_mensageria.disparos x where x.origem_sistema = p_fonte and x.id_externo = v_ext;
+  v_existe := found;
+  if v_existe and d.arquivado_em is not null then
+    return jsonb_build_object('id_externo', v_ext, 'arquivado', true);   -- arquivado pela tela: a API não mexe
+  end if;
+  if v_existe and d.anonimizado_em is not null then
+    return jsonb_build_object('id_externo', v_ext, 'arquivado', true);   -- LGPD: anonimizado, a API não regrava nada
+  end if;
+
+  v_campanha := nullif(left(btrim(coalesce(p_item ->> 'campanha', '')), 300), '');
+  if v_campanha is null and v_existe then v_campanha := d.campanha; end if;
+  -- [SIGLA]: o conteúdo de um colchete que seja sigla cadastrada, comparado só por letras e dígitos (João, 06/10:
+  -- [PB/26] = PB26, [HT 33] = HT33; [HT] sem edição não casa). Nenhuma, ou duas siglas diferentes = sem projeto.
+  select min(pr.id), count(distinct pr.id) into v_proj, v_nproj
+    from regexp_matches(coalesce(v_campanha, ''), '\[([^][]{1,20})\]', 'g') m
+    join mkt.projetos pr
+      on regexp_replace(upper(pr.sigla), '[^A-Z0-9]', '', 'g') = regexp_replace(upper(m[1]), '[^A-Z0-9]', '', 'g')
+     and regexp_replace(upper(m[1]), '[^A-Z0-9]', '', 'g') <> '';
+  if v_nproj <> 1 then v_proj := null; end if;
+  -- 20261014150000: disparo de grupo do SendFlow sem [SIGLA] herda o projeto pela campanha cadastrada no dashboard
+  -- (dados.dashboard_grupos, papel 'dashboard'). Só quando a campanha leva a exatamente um projeto. Ex.: "ATM 10/26" -> 75.
+  if v_proj is null and p_fonte = 'sendflow' and v_campanha is not null then
+    select min(db.projeto_id), count(distinct db.projeto_id) into v_proj_grupo, v_n_grupo
+      from dados.dashboard_grupos dg
+      join dados.dashboards db on db.chave = dg.chave
+     where dg.papel = 'dashboard' and db.projeto_id is not null
+       and lower(btrim(dg.sendflow_campanha)) = lower(v_campanha);
+    if v_n_grupo = 1 then v_proj := v_proj_grupo; end if;
+  end if;
+  -- 20261014180100 (Victor, 14/10): campanha de teste nunca ganha projeto, nem por [SIGLA] nem pelo grupo do dashboard.
+  -- "teste" ou "testes" como palavra (sem diferenciar maiúscula; "_" e "-" separam): [TESTE], TESTE - x, TESTE_DE_X.
+  -- "testemunho" não casa. O projeto já gravado à mão continua (o api_upsert não troca projeto gravado).
+  if v_campanha ~* '(^|[^[:alpha:]])testes?([^[:alpha:]]|$)' then v_proj := null; end if;
+  if v_existe and d.projeto_id is not null then v_proj := d.projeto_id; end if;
+  select pr.sigla into v_sigla from mkt.projetos pr where pr.id = v_proj;
+
+  if p_ferr_fixa is not null then
+    v_ferr := p_ferr_fixa;
+  else
+    v_txt := btrim(coalesce(p_item ->> 'ferramenta', ''));
+    if v_txt <> '' then
+      select f.id into v_ferr from mkt_mensageria.ferramentas f where lower(f.nome) = lower(v_txt);
+      if v_ferr is null then
+        return jsonb_build_object('id_externo', v_ext, 'motivo', 'Ferramenta "' || left(v_txt, 60) || '" não cadastrada.');
+      end if;
+    elsif v_existe then
+      v_ferr := d.ferramenta_id;
+    end if;
+  end if;
+
+  v_txt := regexp_replace(coalesce(p_item ->> 'numero', ''), '[\s().-]', '', 'g');
+  if v_txt <> '' then
+    if left(v_txt, 1) <> '+' then v_txt := '+' || v_txt; end if;
+    select nu.id into v_num from mkt_mensageria.numeros nu where nu.numero = v_txt;
+    if v_num is null then
+      return jsonb_build_object('id_externo', v_ext, 'motivo', 'Número ' || left(v_txt, 20) || ' não cadastrado em Números.');
+    end if;
+  elsif v_existe then
+    v_num := d.numero_id;
+  end if;
+
+  v_canon := case when v_existe then jsonb_build_object(
+      'enviado_em', d.enviado_em, 'canal', d.canal, 'tipo', d.tipo, 'copy_texto', d.copy_texto, 'copy_link', d.copy_link,
+      'publico_lista', d.publico_lista, 'publico_origem', d.publico_origem, 'tamanho_lista', d.tamanho_lista,
+      'entregues', d.entregues, 'lidas', d.lidas, 'cliques', d.cliques, 'falhas', d.falhas,
+      'custo_centavos', d.custo_centavos, 'disparado_por', d.disparado_por)
+    else '{}'::jsonb end;
+  foreach k in array array['enviado_em', 'canal', 'tipo', 'copy_texto', 'copy_link', 'publico_lista', 'publico_origem',
+                           'tamanho_lista', 'entregues', 'lidas', 'cliques', 'falhas', 'custo_centavos', 'disparado_por'] loop
+    if jsonb_typeof(p_item -> k) is not null and jsonb_typeof(p_item -> k) <> 'null'
+       and not (k in ('tipo', 'custo_centavos') and jsonb_typeof(v_canon -> k) is not null and jsonb_typeof(v_canon -> k) <> 'null') then
+      v_canon := v_canon || jsonb_build_object(k, p_item -> k);
+    end if;
+  end loop;
+  v_canon := v_canon || jsonb_build_object('projeto', coalesce(v_sigla, ''), 'ferramenta_id', v_ferr::text,
+                                           'numero_id', v_num::text);
+  if nullif(btrim(coalesce(v_canon ->> 'disparado_por', '')), '') is null then
+    v_canon := v_canon || jsonb_build_object('disparado_por', 'api:' || p_fonte);
+  end if;
+
+  r := mkt_mensageria.disparo_validar(v_canon);
+  select left(string_agg(x ->> 'campo' || ': ' || (x ->> 'msg'), '; '), 500) into v_motivo
+    from jsonb_array_elements(r -> 'erros') x
+   where x ->> 'campo' <> 'projeto';
+  if v_motivo is not null then
+    return jsonb_build_object('id_externo', v_ext, 'motivo', v_motivo);
+  end if;
+  return jsonb_build_object('id_externo', v_ext, 'existe', v_existe,
+    'v', (r -> 'v') || jsonb_build_object('projeto_id', v_proj, 'campanha', v_campanha, 'id_externo', v_ext));
+end
+$function$;
+
+delete from supabase_migrations.schema_migrations where version = '20261014230000';
 -- Reversão da 20261014210000: volta dados.atm_cadastro, dados.leads_todos e mkt_mensageria.planilha_sync_receber ao corpo
 -- de antes e tira 'acao-black' do check. Reverter ANTES a 20261014210100 (cadastro), se ela tiver sido aplicada.
 do $g$
@@ -524,7 +813,7 @@ begin
   end if;
   if (select md5(prosrc) from pg_proc where oid = 'dados.atm_cadastro(text)'::regprocedure) <> 'e63ce1c2f24d6b8535fcf80dda88ad48'
      or (select md5(prosrc) from pg_proc where oid = 'dados.leads_todos(text,bigint,text)'::regprocedure) <> 'f106bf124249e3d14548654dbd33d702'
-     or (select md5(prosrc) from pg_proc where oid = 'mkt_mensageria.planilha_sync_receber(bigint,jsonb)'::regprocedure) <> '51406ca73a9efdaca49a5a794a56ba97' then
+     or (select md5(prosrc) from pg_proc where oid = 'mkt_mensageria.planilha_sync_receber(bigint,jsonb)'::regprocedure) <> '92de0a2b08a483db803bd7cb28b6bd4e' then
     raise exception 'reversão 20261014210000: alguma função mudou depois da 210000; revisar';
   end if;
 end
@@ -864,7 +1153,7 @@ end
 $function$;
 
 delete from supabase_migrations.schema_migrations where version = '20261014210000';
-insert into pg_temp._z_out(passo, linha) select '5 depois da reversão', string_agg(p.oid::regprocedure::text || '=' || left(md5(p.prosrc), 8), ' ; ') || ' / check ' || (select pg_get_constraintdef(oid) from pg_constraint where conname = 'dashboards_modelo_check') || ' / projeto ' || (select count(*) from mkt.projetos where etiqueta_clickup = 'black-thb-2026-10')::text from pg_proc p where p.oid in ('dados.atm_cadastro(text)'::regprocedure, 'dados.leads_todos(text,bigint,text)'::regprocedure, 'mkt_mensageria.planilha_sync_receber(bigint,jsonb)'::regprocedure);
+insert into pg_temp._z_out(passo, linha) select '5 depois da reversão', string_agg(p.oid::regprocedure::text || '=' || left(md5(p.prosrc), 8), ' ; ') || ' / check ' || (select pg_get_constraintdef(oid) from pg_constraint where conname = 'dashboards_modelo_check') || ' / projeto ' || (select count(*) from mkt.projetos where etiqueta_clickup = 'black-thb-2026-10')::text from pg_proc p where p.oid in ('dados.atm_cadastro(text)'::regprocedure, 'dados.leads_todos(text,bigint,text)'::regprocedure, 'mkt_mensageria.planilha_sync_receber(bigint,jsonb)'::regprocedure, 'mkt_mensageria.api_item(text,bigint,jsonb)'::regprocedure);
 insert into pg_temp._z_out(passo, linha) select '5b leads_todos e resumo ATM de volta?', string_agg(a.chave || ' ' || (a.m is not distinct from (select md5(string_agg(t::text, '|' order by t.email)) from dados.dashboards d, dados.leads_todos(d.chave, d.projeto_id, d.lista_ac_leads) t where d.chave = a.chave))::text, ', ' order by a.chave) || ' / resumo ATM ' || (select (md5((select jsonb_object_agg(k, v) from jsonb_each(to_jsonb(r)) e(k, v) where v <> to_jsonb(now()))::text) = (select linha from pg_temp._z_out where passo = '1b antes: resumo ATM'))::text from public.dados_atm_resumo('atm-elaine-1-2026-10', null, null) r) from pg_temp._z_antes a;
 select passo, linha from pg_temp._z_out order by em, passo;
 rollback;
