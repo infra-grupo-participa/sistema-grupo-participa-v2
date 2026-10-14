@@ -404,6 +404,23 @@ os campos que já existiam na tela passam a receber dado real.
   Reverter: `20261013121212_reversao.sql` (a tela volta sozinha à
   fictícia e ao botão desligado).
 
+## Regra da taxa geral de ingresso no grupo (14/10/2026, Victor)
+- **Regra, sem exceção:** taxa geral = **números únicos que entraram nos grupos da campanha** (sem os telefones de teste e
+  equipe marcados) ÷ **leads únicos**. **Não** se exige que o telefone do membro cruze com o do lead, porque a pessoa erra
+  dígito ou entra com outro número. O cruzamento continua só nos recortes por pessoa (MQL no grupo, canal, criativo).
+- **Antes:** o card da Visão Geral calculava na tela (`ingressoGrupoGeral`, em `domain/numeros.ts`) sobre as linhas de
+  `dados_black_perfil`, contando só o lead cujo telefone casava com um membro: 146/258 = 56,6% em 14/10.
+- **Agora:** `dados_black_grupo` devolve `ingresso_geral = {numeros_unicos_no_grupo, leads_unicos, pct}` (migration
+  `20261014220000`, aplicada em 14/10/2026 às 20:07 UTC). Vem só **sem recorte**; com recorte vem nulo, e a tela segue
+  cruzada. Às 20:07 UTC: 169/259 = 65,3%.
+- **Tela:** o card geral da Visão Geral passa a ler `ingresso_geral`. Ajuste pedido ao JP em 14/10, que dirá na
+  branch dele quando estiver feito. Texto de ajuda: "números únicos que entraram no grupo ÷ leads únicos".
+- **ATM e Ações da Black já seguem a regra:** `dados_atm_resumo.grupo_pct` = entradas no grupo ÷ leads, sem cruzar
+  (ATM em 14/10: 362/442 = 81,90%).
+- **Equipe:** só sai da conta o telefone marcado como teste ou equipe. Na Black, em 14/10, a equipe estava marcada só por
+  e-mail (6) e nenhum telefone. Um número da equipe no grupo sem cadastro entra nos únicos até ser marcado na tela de
+  testes.
+
 ## Banco: ingresso no grupo (webhook n8n e backfill)
 
 Não tem migration: usa o caminho que já existe para o ATM. Situação em 12/10/2026: **o n8n foi publicado às 23:55 UTC
