@@ -23,9 +23,11 @@ describe('base fictícia', () => {
     expect(porFunil.reduce((s, n) => s + n, 0) + naoPagos).toBe(b.linhas.length);
     expect(pagos.some((l) => l.funil === 'c1')).toBe(false);
   });
-  it('Iscas não inclui a campanha C2 da demonstração, pois só C3 pode compor a etapa', () => {
+  it('Iscas inclui a campanha C2 de demonstração no recorte por etapa', () => {
     const iscas = cplPorEtapa(b.dias, b.linhas, idx).find((e) => e.chave === 'iscas')!;
-    expect(iscas.cpl).toEqual({ gasto: null, leadsPagos: 0, valor: null });
+    expect(iscas.rotulo).toBe('Iscas');
+    expect(iscas.cpl.gasto).toBeGreaterThan(0);
+    expect(iscas.cpl.leadsPagos).toBeGreaterThan(0);
   });
   it('C1 sem clique (connect rate sem dado) e Google sem LPV (fica fora, com nota)', () => {
     const c1 = b.dias.filter((d) => idx.campanhaDoAnuncio(d.anuncioId)?.funil === 'c1');

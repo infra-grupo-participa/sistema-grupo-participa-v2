@@ -1,4 +1,4 @@
-import { ehEntresafraCampanha, indexar } from './metricas';
+import { ehEntresafraCampanha, type FiltroBase } from './metricas';
 import type { Periodo, TrafegoBlack, Valor } from './tipos';
 
 export interface InvestimentoCaptacao {
@@ -37,12 +37,15 @@ function pertenceACaptacao(c: TrafegoBlack['campanhas'][number]): boolean {
 }
 
 /** Investimento de campanhas das etapas C2/C3, sem remarketing, separado por plataforma. */
-export function investimentoCaptacao(trafego: TrafegoBlack, periodo: Periodo): InvestimentoCaptacao {
-  const idx = indexar(trafego);
+export function investimentoCaptacao(trafego: TrafegoBlack, _periodo: Periodo, filtro?: FiltroBase): InvestimentoCaptacao {
+  // `trafego` já vem filtrado para o período solicitado pela camada de dados.
+  void _periodo;
   const elegiveis: typeof trafego.campanhas = [];
   const remarketing: typeof trafego.campanhas = [];
   for (const campanha of trafego.campanhas) {
     if (!pertenceACaptacao(campanha)) continue;
+    if (filtro?.funil && filtro.funil !== 'todos' && campanha.funil !== filtro.funil) continue;
+    if (filtro?.canal && filtro.canal !== 'todos' && campanha.canal !== filtro.canal) continue;
     if (ehEntresafraCampanha(campanha)) continue;
     if (ehRemarketing(campanha.nome, campanha.fase)) { remarketing.push(campanha); continue; }
     elegiveis.push(campanha);
@@ -50,19 +53,9 @@ export function investimentoCaptacao(trafego: TrafegoBlack, periodo: Periodo): I
 
   const gastoPorCampanha = new Map<string, number>();
   const medido = new Set<string>();
-  if (trafego.gastoCampanhas !== undefined) {
-    for (const linha of trafego.gastoCampanhas) {
-      gastoPorCampanha.set(linha.campanhaId, linha.gasto);
-      medido.add(linha.campanhaId);
-    }
-  } else {
-    for (const dia of trafego.dias) {
-      if (dia.dia < periodo.de || dia.dia > periodo.ate) continue;
-      const campanha = idx.campanhaDoAnuncio(dia.anuncioId);
-      if (!campanha) continue;
-      gastoPorCampanha.set(campanha.id, (gastoPorCampanha.get(campanha.id) ?? 0) + dia.gasto);
-      medido.add(campanha.id);
-    }
+  for (const linha of trafego.gastoCampanhas ?? []) {
+    gastoPorCampanha.set(linha.campanhaId, linha.gasto);
+    medido.add(linha.campanhaId);
   }
 
   // Só prova genérica fornecida pelo banco pode converter ausência de linha em zero.

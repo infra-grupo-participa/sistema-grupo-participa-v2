@@ -2,9 +2,10 @@
 // cruzado. Cada painel vê os filtros dos OUTROS painéis (o próprio só destaca), para o escolhido continuar
 // enxergando os irmãos. Métricas por soma sobre soma, no mesmo recorte de dias e leads.
 import {
-  agregar, connectRate, conversaoPagina, cpl, cpm, ctr, custoPorVisualizacao, ehPago, enviosMaisRecentesPorPessoa, ehMqlPorProfissao, farolCpl, ingressoGrupoGeral, mqlDoRecorte, taxa, taxaVideo75,
+  agregar, cpm, ctr, custoPorVisualizacao, ehPago, farolCpl, taxaVideo75,
   type Farol, type IndiceTrafego, type Taxa,
 } from './metricas';
+import { connectRate, conversaoPagina, cplCaptacao, ingressoGrupoGeral, leadsDoTrafego, leadsPessoas, mql } from './numeros';
 import { diaDe } from './recorte';
 import type { Anuncio, DesempenhoDia, FiltroCriativos, LinhaPerfil, ReguaCpl, Valor } from './tipos';
 
@@ -46,7 +47,7 @@ export function anuncioPassa(a: Anuncio, f: FiltroCriativos, idx: IndiceTrafego,
 
 export interface ResumoCriativo {
   gasto: number; impressoes: number; cpm: Valor; cliques: Valor; ctr: Taxa; lpv: Valor; connect: Taxa;
-  leads: number; leadsPagos: number; mql: Taxa; cpl: Valor; farol: Farol; video75: Taxa; custoVisualizacao: Valor;
+  leads: number; leadsPagos: number; mql: Taxa; conversao: Taxa & { recorte: string }; cpl: Valor; farol: Farol; video75: Taxa; custoVisualizacao: Valor;
   /** true = distribuição (C1/antecipação): a métrica principal é custo por visualização, não CPL. */
   distribuicao: boolean;
 }
@@ -55,17 +56,18 @@ export function resumir(
   dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego, regua: ReguaCpl | null, distribuicao: boolean,
 ): ResumoCriativo {
   const a = agregar(dias);
-  const pagos = linhas.filter(ehPago).length;
+  const pagos = leadsDoTrafego(linhas, idx).valor ?? 0;
   // A proporção por criativo é exatamente sobre leads pagos (a mesma base do CPL), não sobre todos os cadastros.
   const linhasPagas = linhas.filter(ehPago);
-  const linhasComMql = enviosMaisRecentesPorPessoa(linhasPagas);
-  const valorCpl = distribuicao ? null : cpl(dias.length ? a.gasto : null, pagos);
+  const resultadoMql = mql(linhasPagas, 'pessoas únicas pagas neste criativo');
+  const conversao = conversaoPagina(dias, linhas, idx);
+  const valorCpl = distribuicao ? null : cplCaptacao(dias.length ? a.gasto : null, {
+    valor: pagos, num: pagos, den: null, recorte: 'pessoas únicas pagas neste criativo', nota: null,
+  }).valor;
   return {
     gasto: a.gasto, impressoes: a.impressoes, cpm: cpm(a), cliques: a.cliques.valor, ctr: ctr(a), lpv: a.lpv.valor,
-    connect: connectRate(dias, idx), leads: linhas.length, leadsPagos: pagos,
-    mql: linhasComMql.length ? taxa(linhasComMql.filter(ehMqlPorProfissao).length, linhasComMql.length,
-      'Regra B: profissão do envio mais recente entre pessoas com lead pago neste criativo.')
-      : taxa(null, null, 'MQL sem dado no cadastro.'), cpl: valorCpl,
+    connect: connectRate(dias, idx), leads: leadsPessoas(linhas).valor ?? 0, leadsPagos: pagos,
+    mql: resultadoMql, conversao, cpl: valorCpl,
     farol: distribuicao ? 'sem' : farolCpl(valorCpl, regua), video75: taxaVideo75(a), custoVisualizacao: custoPorVisualizacao(a), distribuicao,
   };
 }
@@ -147,7 +149,7 @@ export interface EtapaFunil { chave: string; rotulo: string; valor: Valor; ponte
  * Atenção: MQL e ingresso contam pessoas únicas de TODOS os leads do criativo (pagos ou não), não só os pagos.
  */
 export function funilCriativo(
-  r: ResumoCriativo, dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego,
+  r: ResumoCriativo, dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[],
 ): EtapaFunil[] {
   if (r.distribuicao) {
     return [
@@ -155,17 +157,19 @@ export function funilCriativo(
       { chave: 'video75', rotulo: 'Vídeo 75%', valor: r.video75.num, ponte: { rotulo: 'Taxa de vídeo 75%', taxa: r.video75 } },
     ];
   }
-  const mql = mqlDoRecorte(linhas);
+  const mql = resumoMql(linhas);
   const grupo = ingressoGrupoGeral(linhas);
   return [
     { chave: 'impressoes', rotulo: 'Impressões', valor: r.impressoes, ponte: null },
     { chave: 'cliques', rotulo: 'Cliques', valor: r.cliques, ponte: { rotulo: 'CTR', taxa: r.ctr } },
     { chave: 'lpv', rotulo: 'Views da página', valor: r.lpv, ponte: { rotulo: 'Connect rate', taxa: r.connect } },
-    { chave: 'leads', rotulo: 'Leads pagos', valor: r.leadsPagos, ponte: { rotulo: 'Conversão da página', taxa: conversaoPagina(dias, linhas, idx) } },
+    { chave: 'leads', rotulo: 'Leads pagos', valor: r.leadsPagos, ponte: { rotulo: 'Conversão da página', taxa: r.conversao } },
     { chave: 'mql', rotulo: 'Total de MQL', valor: mql.num, ponte: { rotulo: '% de MQL', taxa: mql } },
-    { chave: 'grupo', rotulo: 'Ingresso no grupo', valor: grupo.num, ponte: { rotulo: 'Taxa de ingresso no grupo', taxa: grupo } },
+    { chave: 'grupo', rotulo: 'Ingresso geral · todos os leads', valor: grupo.num, ponte: { rotulo: 'Taxa geral de ingresso', taxa: grupo } },
   ];
 }
+
+function resumoMql(linhas: readonly LinhaPerfil[]) { return mql(linhas); }
 
 /** Série diária do criativo: investimento, impressões e leads pagos por dia do período (dia sem nada = 0). */
 export function serieDiariaAnuncio(anuncio: string | readonly string[], dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], periodo: readonly string[]) {

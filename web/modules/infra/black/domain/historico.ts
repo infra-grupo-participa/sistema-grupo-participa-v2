@@ -3,7 +3,8 @@
 // Leads da meta = pessoas únicas na lista (a meta é "15.000 leads na lista do Método Perfeito").
 import { deslocarDia } from '@/modules/infra/atm/domain/periodo';
 import { diaDe } from './recorte';
-import { ehMqlPorProfissao, ehPago } from './metricas';
+import { ehPago, enviosMqlMaisRecentes } from './metricas';
+import { acumuladoLeadsPessoas } from './numeros';
 import type { ConfigBlack, DesempenhoDia, LinhaPerfil, Valor } from './tipos';
 
 export interface DiaHistorico {
@@ -36,6 +37,7 @@ export const metaAcumuladaAte = (dia: string, cfg: Pick<ConfigBlack, 'inicioCapt
 export function serieHistorico(
   dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], periodo: readonly string[],
   cfg: Pick<ConfigBlack, 'inicioCaptacao' | 'metaLeadsDia'>,
+  linhasAcumuladas: readonly LinhaPerfil[] = linhas,
 ): DiaHistorico[] {
   const porDia = new Map<string, { g: number; i: number; c: number | null; l: number | null }>();
   for (const d of dias) {
@@ -45,54 +47,54 @@ export function serieHistorico(
     if (d.landingPageViews !== null) x.l = (x.l ?? 0) + d.landingPageViews;
     porDia.set(d.dia, x);
   }
-  const pessoas = new Map<string, { dia: string; envioMaisRecente: LinhaPerfil; grupo: boolean; primeiroPagoDia: string | null }>();
-  const cad = new Map<string, { n: number; p: number }>();
+  const pessoas = new Map<string, { dia: string; grupo: boolean; primeiroPagoDia: string | null }>();
+  const mqlIds = new Set(enviosMqlMaisRecentes(linhas).map((l) => l.pessoaId));
+  const cad = new Map<string, { n: number; pagos: Set<string> }>();
   for (const l of linhas) {
     const dia = diaDe(l.criadoEm);
-    const c = cad.get(dia) ?? { n: 0, p: 0 };
-    c.n += 1; if (l.origem === 'pago') c.p += 1; cad.set(dia, c);
+    const c = cad.get(dia) ?? { n: 0, pagos: new Set<string>() };
+    c.n += 1; if (l.origem === 'pago') c.pagos.add(l.pessoaId); cad.set(dia, c);
     const atual = pessoas.get(l.pessoaId);
-    if (!atual) pessoas.set(l.pessoaId, { dia, envioMaisRecente: l, grupo: l.entrouGrupoEm !== null, primeiroPagoDia: ehPago(l) ? dia : null });
+    if (!atual) pessoas.set(l.pessoaId, { dia, grupo: l.entrouGrupoEm !== null, primeiroPagoDia: ehPago(l) ? dia : null });
     else {
       if (dia < atual.dia) atual.dia = dia;
-      if (Date.parse(l.criadoEm) > Date.parse(atual.envioMaisRecente.criadoEm)) atual.envioMaisRecente = l;
       atual.grupo ||= l.entrouGrupoEm !== null;
       if (ehPago(l) && (atual.primeiroPagoDia === null || dia < atual.primeiroPagoDia)) atual.primeiroPagoDia = dia;
     }
   }
   const novas = new Map<string, { pessoas: number; mql: number; mqlConhecidos: number; grupo: number }>();
-  const pagos = new Map<string, { mql: number; grupoMql: number }>();
-  for (const pessoa of pessoas.values()) {
+  const pagos = new Map<string, { pessoas: Set<string>; mql: Set<string>; grupoMql: Set<string> }>();
+  for (const [pessoaId, pessoa] of pessoas) {
     const item = novas.get(pessoa.dia) ?? { pessoas: 0, mql: 0, mqlConhecidos: 0, grupo: 0 };
     item.pessoas += 1;
     item.mqlConhecidos += 1;
-    if (ehMqlPorProfissao(pessoa.envioMaisRecente)) item.mql += 1;
+    const ehMql = mqlIds.has(pessoaId);
+    if (ehMql) item.mql += 1;
     if (pessoa.grupo) item.grupo += 1;
     novas.set(pessoa.dia, item);
     if (pessoa.primeiroPagoDia !== null) {
-      const pagosDoDia = pagos.get(pessoa.primeiroPagoDia) ?? { mql: 0, grupoMql: 0 };
-      if (ehMqlPorProfissao(pessoa.envioMaisRecente)) {
-        pagosDoDia.mql += 1;
-        if (pessoa.grupo) pagosDoDia.grupoMql += 1;
+      const pagosDoDia = pagos.get(pessoa.primeiroPagoDia) ?? { pessoas: new Set<string>(), mql: new Set<string>(), grupoMql: new Set<string>() };
+      pagosDoDia.pessoas.add(pessoaId);
+      if (ehMql) {
+        pagosDoDia.mql.add(pessoaId);
+        if (pessoa.grupo) pagosDoDia.grupoMql.add(pessoaId);
       }
       pagos.set(pessoa.primeiroPagoDia, pagosDoDia);
     }
   }
-  const ini = periodo[0] ?? '';
-  let acumulado = 0;
-  for (const [dia, n] of novas) if (dia < ini) acumulado += n.pessoas;
-  return periodo.map((dia) => {
+  const acumulados = acumuladoLeadsPessoas(linhasAcumuladas, periodo);
+  return periodo.map((dia, indice) => {
     const t = porDia.get(dia);
     const c = cad.get(dia);
     const cohort = novas.get(dia);
     const pn = cohort?.pessoas ?? 0;
-    acumulado += pn;
     return {
       dia, gasto: t?.g ?? 0, impressoes: t?.i ?? 0, cliques: t?.c ?? null, lpv: t?.l ?? null,
-      cadastros: c?.n ?? 0, leadsPagos: c?.p ?? 0, pessoasNovas: pn, pessoasAcumuladas: acumulado,
+      cadastros: c?.n ?? 0, leadsPagos: c?.pagos.size ?? 0, pessoasNovas: pn,
+      pessoasAcumuladas: acumulados[indice] ?? 0,
       mql: cohort?.mqlConhecidos ? cohort.mql : null, mqlBase: cohort?.mqlConhecidos ?? null,
-      mqlPagos: c ? (pagos.get(dia)?.mql ?? 0) : null, mqlPagosBase: c?.p ?? null,
-      ingressoGrupoPagosMql: c ? (pagos.get(dia)?.grupoMql ?? 0) : null,
+      mqlPagos: c ? (pagos.get(dia)?.mql.size ?? 0) : null, mqlPagosBase: c ? (pagos.get(dia)?.pessoas.size ?? 0) : null,
+      ingressoGrupoPagosMql: c ? (pagos.get(dia)?.grupoMql.size ?? 0) : null,
       ingressoGrupo: cohort ? cohort.grupo : null,
       metaAcumulada: metaAcumuladaAte(dia, cfg),
     };

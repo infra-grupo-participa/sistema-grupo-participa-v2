@@ -4,9 +4,10 @@
 // redistribuída para caber os números (mesmas colunas, linhas mais altas). Nó sem fonte de dado mostra
 // "Sem dado" com o motivo; nunca zero.
 import {
-  agregar, connectRate, conversaoPagina, cplDo, cpm, ctr, custoPorVisualizacao, ehPago, ingressoGrupo, pessoasUnicas, taxa, taxaVideo75,
+  agregar, cpm, ctr, custoPorVisualizacao, taxa, taxaVideo75,
   type IndiceTrafego, type Taxa,
 } from './metricas';
+import { connectRate, conversaoPagina, cplCaptacao, ingressoGrupoJanela, leadsDoTrafego, leadsPagosUnicos, leadsPessoas } from './numeros';
 import type { Campanha, ConfigBlack, DesempenhoDia, FiltroFunil, Funil, LinhaPerfil, MensageriaBlack, Valor } from './tipos';
 
 export type FormatoMetrica = 'int' | 'brl' | 'pct' | 'dec';
@@ -177,7 +178,8 @@ export function metricasDistribuicao(dias: readonly DesempenhoDia[]): MetricaNo[
 export function metricasCaptacao(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego, rotuloLeads = 'Leads pagos'): MetricaNo[] {
   if (dias.length === 0 && linhas.length === 0) return [];
   const a = agregar(dias);
-  const c = cplDo(dias, linhas);
+  const leads = leadsPagosUnicos(linhas);
+  const c = cplCaptacao(dias.length ? a.gasto : null, leads);
   const cr = connectRate(dias, idx);
   const conv = conversaoPagina(dias, linhas, idx);
   const t = ctr(a);
@@ -185,8 +187,8 @@ export function metricasCaptacao(dias: readonly DesempenhoDia[], linhas: readonl
     m('Investimento', dias.length ? a.gasto : null, 'brl'), m('Impressões', dias.length ? a.impressoes : null, 'int'),
     m('Cliques', a.cliques.valor, 'int'), m('CTR', t.valor, 'pct', { taxa: t }),
     m('Views da página', a.lpv.valor, 'int'), m('Connect rate', cr.valor, 'pct', { taxa: cr, nota: cr.nota ?? undefined }),
-    m(rotuloLeads, c.leadsPagos, 'int'), m('Conversão da página', conv.valor, 'pct', { taxa: conv, nota: conv.nota ?? undefined }),
-    m('CPL', c.valor, 'brl', { taxa: taxa(c.gasto, c.leadsPagos) }),
+    m(rotuloLeads, leads.valor, 'int'), m('Conversão da página', conv.valor, 'pct', { taxa: conv, nota: conv.nota ?? undefined }),
+    m('CPL', c.valor, 'brl', { taxa: c, nota: c.nota ?? undefined }),
   ];
 }
 
@@ -233,11 +235,13 @@ export function calcularJornada(args: {
   const rmk = rec('remarketing');
   out.remarketing = metricasCaptacao(rmk.dias, rmk.linhas, idx);
   const ins = rec('inscricao');
+  const pessoasInscricao = leadsPessoas(ins.linhas).valor ?? 0;
+  const pagosInscricao = leadsDoTrafego(ins.linhas, idx).valor ?? 0;
   out.inscricao = [
-    m('Inscrições', ins.linhas.length, 'int'), m('Pagas', ins.linhas.filter(ehPago).length, 'int'),
-    m('Fora do tráfego', ins.linhas.filter((l) => !ehPago(l)).length, 'int', { nota: 'Orgânico, base por API e grupo legado' }),
+    m('Inscrições', pessoasInscricao, 'int'), m('Pagas', pagosInscricao, 'int'),
+    m('Fora do tráfego', pessoasInscricao - pagosInscricao, 'int', { nota: 'Orgânico, base por API e grupo legado' }),
   ];
-  const pessoas = pessoasUnicas(linhasDoFunil);
+  const pessoas = leadsPessoas(linhasDoFunil).valor ?? 0;
   const daMeta = taxa(pessoas, config.metaLeads);
   out.lista = [
     m('Pessoas', pessoas, 'int', { nota: 'Pessoas únicas (um lead com duas portas conta uma vez)' }),
@@ -245,8 +249,8 @@ export function calcularJornada(args: {
     m('Da meta de 15 mil', daMeta.valor, 'pct', { taxa: daMeta }),
   ];
   out.grupos = ([2, 12, 24, 48] as const).map((h) => {
-    const t = ingressoGrupo(linhasDoFunil, h, agora);
-    return m(`Em ${h}h`, t.valor, 'pct', { taxa: t, nota: t.nota ?? undefined });
+    const t = ingressoGrupoJanela(linhasDoFunil, h, agora);
+    return m(`Ingresso em ${h}h · coorte madura`, t.valor, 'pct', { taxa: t, nota: t.nota ?? undefined });
   });
   const api = mensageria?.canais.find((c) => c.canal === 'api') ?? null;
   if (api) out.regua = [m('Enviados', api.enviados, 'int'), m('Entregues', api.entregues, 'int'), m('Custo', api.custo, 'brl')];

@@ -179,7 +179,7 @@ export function GraficoLinha({ pontos, formato, rotuloSerie }: { pontos: PontoLi
           <span className="text-[var(--fg-3)]">{p.rotulo} · </span><strong className="tabular text-[var(--fg)]">{formatar(p.valor, formato)}</strong>
         </div>
       )}
-      <table className="sr-only">
+      <table className="sr-only table-fixed w-px max-w-px overflow-hidden" style={{ position: 'fixed', top: 0, left: 0 }}>
         <caption>{rotuloSerie} por dia</caption>
         <tbody>{pontos.map((pt) => <tr key={pt.chave}><th scope="row">{pt.rotulo}</th><td>{formatar(pt.valor, formato)}</td></tr>)}</tbody>
       </table>
@@ -213,7 +213,7 @@ export function FunilTrapezio({ etapas, rotulo }: { etapas: EtapaFunil[]; rotulo
           const sem = e.valor === null;
           return (
             <g key={e.chave} className={menos ? undefined : 'gp-fade-in'} tabIndex={0} aria-label={`${e.rotulo}: ${formatar(e.valor, 'int')}`}
-              style={{ ...anima(i * 80), opacity: apagada(i) ? 0.4 : 1, transition: transicao, cursor: 'pointer', outline: 'none' }}
+              style={{ ...anima(i * 80), opacity: apagada(i) ? 0.72 : 1, transition: transicao, cursor: 'pointer', outline: 'none' }}
               onMouseEnter={() => setAtiva(i)} onMouseLeave={() => setAtiva(null)} onFocus={() => setAtiva(i)} onBlur={() => setAtiva(null)}>
               <title>{`${e.rotulo}: ${formatar(e.valor, 'int')}`}</title>
               <polygon points={`${cx - a},${y0} ${cx + a},${y0} ${cx + b},${y1} ${cx - b},${y1}`}
@@ -230,7 +230,7 @@ export function FunilTrapezio({ etapas, rotulo }: { etapas: EtapaFunil[]; rotulo
           const sem = e.ponte.taxa.valor === null;
           return (
             <g key={`ponte-${e.chave}`} className={menos ? undefined : 'gp-fade-in'}
-              style={{ ...anima(i * 80 + 40), opacity: apagada(i) ? 0.4 : 1, transition: transicao }}>
+              style={{ ...anima(i * 80 + 40), opacity: apagada(i) ? 0.72 : 1, transition: transicao }}>
               <title>{`${e.ponte.rotulo}: ${formatar(e.ponte.taxa.valor, 'pct')}. ${dicaTaxa(e.ponte.taxa)}`}</title>
               <circle cx={borda} cy={y} r={3} fill="var(--accent)" />
               <line x1={borda} x2={px} y1={y} y2={y} stroke="var(--border-strong)" strokeDasharray="3 3" />
