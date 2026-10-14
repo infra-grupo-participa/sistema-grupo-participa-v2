@@ -34,8 +34,8 @@ Sinal de live (escrita bem acima da média, conexões perto de 50, alerta do vig
 ## 1. Aplicar 170100, 170200 e 170300 (só se o pentester aprovou)
 
 Pelo `aplicar.py` da sessão ou pela Management API (`/database/migrations`, `begin`/`commit`), nesta ordem:
-`20261014210100_pessoas_criar_cargas_fontes.sql` → `20261014210200_pessoas_criar_carga_planilha_ativacao.sql` →
-`20261014210300_pessoas_criar_rotinas_manter_vivo.sql`. Depois de cada uma: anotar a versão gravada em
+`20261014152236_pessoas_criar_cargas_fontes.sql` → `20261014152239_pessoas_criar_carga_planilha_ativacao.sql` →
+`20261014152242_pessoas_criar_rotinas_manter_vivo.sql`. Depois de cada uma: anotar a versão gravada em
 `supabase_migrations.schema_migrations` e renomear o arquivo para ela. Os 2 jobs da 170300 nascem **desligados**.
 Sem o ok do pentester: pular os passos 1, 3 e 4 e fazer só o passo 2.
 

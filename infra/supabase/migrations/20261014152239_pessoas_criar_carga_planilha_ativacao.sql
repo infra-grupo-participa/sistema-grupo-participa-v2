@@ -1,7 +1,8 @@
--- 20261014210200: carga da planilha "Alunos T1-T42 Ativação" (alunos e sócios por turma) para a pessoa única
+-- APLICADA em 14/10/2026 ~15:22 UTC com a versão gravada 20261014152239 (o arquivo se chamava 20261014210200; renomeado conforme o guia 6.3).
+-- 20261014152239: carga da planilha "Alunos T1-T42 Ativação" (alunos e sócios por turma) para a pessoa única
 --
 -- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150034 (ex-170000: controle de carga,
---   casar_email) e de pessoas.relacoes (20261014150003). Ensaio: 20261014210200_ensaio.sql (dado fictício).
+--   casar_email) e de pessoas.relacoes (20261014150003). Ensaio: 20261014152239_ensaio.sql (dado fictício).
 --   Script: infra/scripts/pessoa-unica/carga_planilha.py (lê a planilha com a conta do Victor, manda as linhas como parâmetro).
 --
 -- POR QUE: fonte nova do Victor (14/10/2026): planilha 1bxr71O3UKo0fdPfNXPEYNs9ZWrHNooXALxmvCXa6Ak8. A base compilada
@@ -19,7 +20,7 @@
 --   com o texto em detalhe.turma (pergunta: criar T42 em thb_turmas é decisão do dono da Central).
 -- AS 5 PERGUNTAS: escala = ~9 mil linhas (8.834 e-mails em 104 abas, censo ETAPA 1); índice = PK chave + parcial dos
 --   pendentes; frequência = 1 carga + recarga manual quando a planilha mudar; repetição = idempotente; reversão =
---   20261014210200_reversao.sql (estágio e funções saem; pessoa não se apaga).
+--   20261014152239_reversao.sql (estágio e funções saem; pessoa não se apaga).
 -- ACESSO: RLS ligada, sem policy e sem grant; funções SECURITY INVOKER sem execute para anon/authenticated/service_role.
 
 set local lock_timeout = '5s';
@@ -28,13 +29,13 @@ set local statement_timeout = '30s';
 do $g$
 begin
   if to_regprocedure('pessoas.casar_email(text,text,text,text)') is null or to_regclass('pessoas.relacoes') is null then
-    raise exception '20261014210200: falta a estrutura da carga (20261014150034) ou pessoas.relacoes (20261014150003).';
+    raise exception '20261014152239: falta a estrutura da carga (20261014150034) ou pessoas.relacoes (20261014150003).';
   end if;
-  if to_regclass('pessoas.planilha_linha') is not null then raise exception '20261014210200: já aplicada.'; end if;
+  if to_regclass('pessoas.planilha_linha') is not null then raise exception '20261014152239: já aplicada.'; end if;
 end
 $g$;
 
-insert into pessoas.carga_chave (fonte, ligada, por) values ('ativacao_planilha', true, 'migration 20261014210200')
+insert into pessoas.carga_chave (fonte, ligada, por) values ('ativacao_planilha', true, 'migration 20261014152239')
 on conflict (fonte) do nothing;
 
 create table pessoas.planilha_linha (
@@ -188,7 +189,7 @@ begin
                  or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'insert')
                  or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'update')
                  or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'delete')) then
-    raise exception '20261014210200: algo da carga da planilha ficou aberto para anon/authenticated/service_role.';
+    raise exception '20261014152239: algo da carga da planilha ficou aberto para anon/authenticated/service_role.';
   end if;
 end
 $g$;

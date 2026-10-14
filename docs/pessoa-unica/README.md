@@ -34,7 +34,9 @@ Este documento fica no repositório para quem trabalha aqui sem acesso ao céreb
 | 20261014150144 | 160450 | `fin.eventos.captacao_inicio` (HT20 01/01, HT21 13/03) | B | **aplicada** |
 | 20261014150148 | 160500 | evento ATM de setembro (`atm-2-2026-09`) | B | **aplicada** |
 | 20261014150150 | 160510 | evento 59 = HT21 | B | **aplicada** |
-| (a aplicar) | 170100 | cargas das fontes do banco (Hotmart por conta, Central, T1-T40, HM, Respondi, leads, CRM) | C | escrita e ensaiada; espera o pentester |
+| 20261014152236 | 170100 → 210100 | cargas das fontes do banco (Hotmart por conta, Central, T1-T40, HM, Respondi, leads, CRM) + modo só novos | C | **aplicada 14/10 ~15:22 UTC** (pentester liberou) |
+| 20261014152239 | 170200 → 210200 | planilha "Alunos T1-T42 Ativação" (estágio e carga, sem CPF) | C | **aplicada** |
+| 20261014152242 | 170300 → 210300 | rotina de hora em hora + agendamento do delta do AC; os 2 jobs **desligados** | C | **aplicada** |
 
 Os arquivos foram renomeados para a versão gravada em `supabase_migrations.schema_migrations` (guia 6.3); o primeiro
 comentário de cada um diz o nome antigo. Cada uma tem `.explain.md`, ensaio e reversão.

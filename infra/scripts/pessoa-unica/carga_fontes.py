@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cargas das fontes que já moram no banco para a pessoa única (migration 20261014210100).
+"""Cargas das fontes que já moram no banco para a pessoa única (migration 20261014152236).
 
 Fontes, na ordem: hotmart_academy, hotmart_escritorio, thb_alunos, aluno_historico, contatos_hm, hm_socios, respondi,
 leads_cnhf, leads_workbook, leads_black, crm_negocio. Cada uma retoma de onde parou (cursor em pessoas.carga_execucao).

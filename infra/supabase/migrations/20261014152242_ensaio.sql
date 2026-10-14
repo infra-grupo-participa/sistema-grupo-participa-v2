@@ -1,4 +1,5 @@
--- Ensaio de 20261014210300 (manter vivo) com a 20261014210100 antes, sobre o banco com os grupos A e B aplicados, numa
+-- APLICADA em 14/10/2026 ~15:22 UTC com a versão gravada 20261014152242 (o arquivo se chamava 20261014210300; renomeado conforme o guia 6.3).
+-- Ensaio de 20261014152242 (manter vivo) com a 20261014152236 antes, sobre o banco com os grupos A e B aplicados, numa
 -- transação DESFEITA. Só contagens.
 -- Rodar com: python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio <este arquivo>
 begin;
@@ -6,12 +7,12 @@ set local lock_timeout = '5s';
 set local statement_timeout = '150s';
 create temp table _z_out (em serial, passo text, linha text);
 insert into pg_temp._z_out(passo, linha) select '00 antes', (select jsonb_build_object('pessoas', (select count(*) from pessoas.pessoas), 'eventos', (select count(*) from pessoas.eventos), 'revisao', (select count(*) from pessoas.revisao))::text);
--- ===== 20261014210100 =====
--- 20261014210100: cargas das fontes que já moram no banco (Hotmart, Central, T1-T40, HM, Respondi, leads, CRM)
+-- ===== 20261014152236 =====
+-- 20261014152236: cargas das fontes que já moram no banco (Hotmart, Central, T1-T40, HM, Respondi, leads, CRM)
 --
 -- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150003 (ex-160200), dos índices da 160300 e
 --   de 20261014150034 (ex-170000: controle de carga, pessoas.casar_email, pessoas.relacoes, índice eventos_fonte_unico). Não depende do schema fin (só lê).
---   Ensaio: 20261014210100_ensaio.sql. Script: infra/scripts/pessoa-unica/carga_fontes.py. Detalhe: 20261014210100.explain.md.
+--   Ensaio: 20261014152236_ensaio.sql. Script: infra/scripts/pessoa-unica/carga_fontes.py. Detalhe: 20261014152236.explain.md.
 --
 -- POR QUE: PLANO da pessoa única, passo 4 (carga por fonte, em lotes) e o modelo da história da pessoa do Victor
 --   (14/10/2026): lead, checkout e compra separados por evento; matrícula por turma; sócio de; CRM; Respondi.
@@ -43,7 +44,7 @@ insert into pg_temp._z_out(passo, linha) select '00 antes', (select jsonb_build_
 --     320, detalhe pequeno): erro de CHECK grava a linha no log.
 -- AS 5 PERGUNTAS: escala = ~58 mil transações, ~1,9 mil alunos, ~7,6 mil T1-T40, ~400 HM, ~23 mil respostas, ~40 mil
 --   leads, ~1,5 mil negócios; índice = PK de cada fonte para o cursor + eventos_fonte_unico; frequência = 1 carga + o
---   incremental (manter vivo, desenho no explain); repetição = idempotente; reversão = 20261014210100_reversao.sql.
+--   incremental (manter vivo, desenho no explain); repetição = idempotente; reversão = 20261014152236_reversao.sql.
 -- ACESSO: funções SECURITY INVOKER, sem execute para public/anon/authenticated/service_role.
 
 set local lock_timeout = '5s';
@@ -51,16 +52,16 @@ set local lock_timeout = '5s';
 do $g$
 begin
   if to_regprocedure('pessoas.casar_email(text,text,text,text)') is null or to_regclass('pessoas.eventos_fonte_unico') is null then
-    raise exception '20261014210100: falta 20261014150034 (ex-170000) ou os índices da 160300.';
+    raise exception '20261014152236: falta 20261014150034 (ex-170000) ou os índices da 160300.';
   end if;
   if to_regprocedure('pessoas.carga_fin_hotmart(bigint,text,integer,boolean)') is not null then
-    raise exception '20261014210100: já aplicada.';
+    raise exception '20261014152236: já aplicada.';
   end if;
 end
 $g$;
 
 insert into pessoas.carga_chave (fonte, ligada, por)
-select f, true, 'migration 20261014210100'
+select f, true, 'migration 20261014152236'
   from unnest(array['hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios', 'respondi', 'leads_cnhf',
                     'leads_workbook', 'leads_black', 'crm_negocio']) f
 on conflict (fonte) do nothing;
@@ -456,16 +457,16 @@ begin
   if exists (select 1 from pg_proc p where p.pronamespace = 'pessoas'::regnamespace
                and (p.proname like 'carga%' or p.proname like '\_carga%')
                and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))) then
-    raise exception '20261014210100: função de carga ficou executável por anon/authenticated.';
+    raise exception '20261014152236: função de carga ficou executável por anon/authenticated.';
   end if;
 end
 $g$;
 
--- ===== 20261014210300 =====
--- 20261014210300: manter a pessoa única viva (rotina de hora em hora só no banco + agendamento do delta diário do AC)
+-- ===== 20261014152242 =====
+-- 20261014152242: manter a pessoa única viva (rotina de hora em hora só no banco + agendamento do delta diário do AC)
 --
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150034 (ex-170000) e 20261014210100.
---   Ensaio: 20261014210300_ensaio.sql. Detalhe: 20261014210300.explain.md.
+-- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150034 (ex-170000) e 20261014152236.
+--   Ensaio: 20261014152242_ensaio.sql. Detalhe: 20261014152242.explain.md.
 --
 -- POR QUE: "temos q configurar isso tbm pra ficar funcional" (Victor, 14/10/2026). Regras do Maestro/Victor: incremental,
 --   leve (máquina de ~1 GB), minuto vazio, chave de desligar; rotina EXTERNA (AC) nasce desligada, 1×/dia de madrugada,
@@ -487,24 +488,24 @@ $g$;
 --   por fonte, ou registro fora da transação).
 -- AS 5 PERGUNTAS: escala = dezenas de linhas novas por hora (contra ~58 mil transações e ~40 mil leads de base: o anti-join
 --   pelo índice único custa ~1 ms por mil linhas lidas); índice = eventos_fonte_unico; frequência = 24×/dia (só banco) e
---   1×/dia (AC); repetição = idempotente; reversão = 20261014210300_reversao.sql (desagenda os 2 jobs e tira a função).
+--   1×/dia (AC); repetição = idempotente; reversão = 20261014152242_reversao.sql (desagenda os 2 jobs e tira a função).
 
 set local lock_timeout = '5s';
 
 do $g$
 begin
   if to_regprocedure('pessoas.carga_thb_alunos(bigint,integer,boolean)') is null then
-    raise exception '20261014210300: falta 20261014210100 (cargas das fontes com modo só novos).';
+    raise exception '20261014152242: falta 20261014152236 (cargas das fontes com modo só novos).';
   end if;
   if exists (select 1 from cron.job where jobname in ('pessoas-incremental', 'pessoas-ac-delta')) then
-    raise exception '20261014210300: jobs já existem.';
+    raise exception '20261014152242: jobs já existem.';
   end if;
 end
 $g$;
 
 insert into pessoas.carga_chave (fonte, ligada, ate, por) values
-  ('incremental', true, null, 'migration 20261014210300 (o job nasce desligado; esta chave é a segunda trava)'),
-  ('activecampaign_delta', false, date '2026-12-31', 'migration 20261014210300: rotina externa, liga só com ok do Victor')
+  ('incremental', true, null, 'migration 20261014152242 (o job nasce desligado; esta chave é a segunda trava)'),
+  ('activecampaign_delta', false, date '2026-12-31', 'migration 20261014152242: rotina externa, liga só com ok do Victor')
 on conflict (fonte) do nothing;
 
 create function pessoas.carga_incremental(p_limite integer default 200) returns jsonb
@@ -563,11 +564,11 @@ select cron.alter_job(j.jobid, active := false) from cron.job j where j.jobname 
 do $g$
 begin
   if (select count(*) from cron.job where jobname in ('pessoas-incremental', 'pessoas-ac-delta') and not active) <> 2 then
-    raise exception '20261014210300: os 2 jobs tinham de nascer desligados.';
+    raise exception '20261014152242: os 2 jobs tinham de nascer desligados.';
   end if;
   if has_function_privilege('anon', 'pessoas.carga_incremental(integer)', 'execute')
      or has_function_privilege('authenticated', 'pessoas.carga_incremental(integer)', 'execute') then
-    raise exception '20261014210300: carga_incremental executável por anon/authenticated.';
+    raise exception '20261014152242: carga_incremental executável por anon/authenticated.';
   end if;
 end
 $g$;
@@ -589,12 +590,12 @@ update pessoas.carga_chave set ligada = false where fonte = 'incremental';
 insert into pg_temp._z_out(passo, linha) select '17 incremental com a chave desligada', pessoas.carga_incremental(20)::text;
 insert into pg_temp._z_out(passo, linha) select '18 carga_incremental executável por anon/authenticated', (has_function_privilege('anon', 'pessoas.carga_incremental(integer)', 'execute') or has_function_privilege('authenticated', 'pessoas.carga_incremental(integer)', 'execute'))::text;
 -- ===== reversões =====
--- Reversão de 20261014210300 (rotinas de manter vivo). Não apaga dado carregado.
+-- Reversão de 20261014152242 (rotinas de manter vivo). Não apaga dado carregado.
 set local lock_timeout = '5s';
 select cron.unschedule(j.jobid) from cron.job j where j.jobname in ('pessoas-incremental', 'pessoas-ac-delta');
 drop function if exists pessoas.carga_incremental(integer);
-delete from pessoas.carga_chave where fonte in ('incremental', 'activecampaign_delta') and por like 'migration 20261014210300%';
--- Reversão de 20261014210100 (cargas das fontes). NÃO apaga pessoa nem evento já carregado (regra I-03): os eventos das
+delete from pessoas.carga_chave where fonte in ('incremental', 'activecampaign_delta') and por like 'migration 20261014152242%';
+-- Reversão de 20261014152236 (cargas das fontes). NÃO apaga pessoa nem evento já carregado (regra I-03): os eventos das
 -- cargas ficam identificados por fonte_tabela; medir antes com
 --   select fonte_tabela, count(*) from pessoas.eventos where fonte_tabela is not null group by 1;
 set local lock_timeout = '5s';
@@ -610,7 +611,7 @@ drop function if exists pessoas._carga_lote_fim(bigint, text, text, int, int, in
 drop function if exists pessoas._carga_exigir(bigint, text);
 drop function if exists pessoas._casar_email_seguro(text, text, text, text);
 delete from pessoas.carga_chave where fonte in ('hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios', 'respondi',
-  'leads_cnhf', 'leads_workbook', 'leads_black', 'crm_negocio') and por = 'migration 20261014210100';
+  'leads_cnhf', 'leads_workbook', 'leads_black', 'crm_negocio') and por = 'migration 20261014152236';
 
 insert into pg_temp._z_out(passo, linha) select '90 depois das reversões: jobs / função', (select count(*) from cron.job where jobname in ('pessoas-incremental', 'pessoas-ac-delta')) || ' / ' || coalesce(to_regprocedure('pessoas.carga_incremental(integer)')::text, 'não');
 select passo, linha from pg_temp._z_out order by em, passo;

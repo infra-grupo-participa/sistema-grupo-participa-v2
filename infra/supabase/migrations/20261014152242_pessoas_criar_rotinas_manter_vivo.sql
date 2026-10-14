@@ -1,7 +1,8 @@
--- 20261014210300: manter a pessoa única viva (rotina de hora em hora só no banco + agendamento do delta diário do AC)
+-- APLICADA em 14/10/2026 ~15:22 UTC com a versão gravada 20261014152242 (o arquivo se chamava 20261014210300; renomeado conforme o guia 6.3).
+-- 20261014152242: manter a pessoa única viva (rotina de hora em hora só no banco + agendamento do delta diário do AC)
 --
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150034 (ex-170000) e 20261014210100.
---   Ensaio: 20261014210300_ensaio.sql. Detalhe: 20261014210300.explain.md.
+-- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150034 (ex-170000) e 20261014152236.
+--   Ensaio: 20261014152242_ensaio.sql. Detalhe: 20261014152242.explain.md.
 --
 -- POR QUE: "temos q configurar isso tbm pra ficar funcional" (Victor, 14/10/2026). Regras do Maestro/Victor: incremental,
 --   leve (máquina de ~1 GB), minuto vazio, chave de desligar; rotina EXTERNA (AC) nasce desligada, 1×/dia de madrugada,
@@ -23,7 +24,7 @@
 --   por fonte, ou registro fora da transação).
 -- AS 5 PERGUNTAS: escala = dezenas de linhas novas por hora (contra ~58 mil transações e ~40 mil leads de base: o anti-join
 --   pelo índice único custa ~1 ms por mil linhas lidas); índice = eventos_fonte_unico; frequência = 24×/dia (só banco) e
---   1×/dia (AC); repetição = idempotente; reversão = 20261014210300_reversao.sql (desagenda os 2 jobs e tira a função).
+--   1×/dia (AC); repetição = idempotente; reversão = 20261014152242_reversao.sql (desagenda os 2 jobs e tira a função).
 
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
@@ -31,17 +32,17 @@ set local statement_timeout = '30s';
 do $g$
 begin
   if to_regprocedure('pessoas.carga_thb_alunos(bigint,integer,boolean)') is null then
-    raise exception '20261014210300: falta 20261014210100 (cargas das fontes com modo só novos).';
+    raise exception '20261014152242: falta 20261014152236 (cargas das fontes com modo só novos).';
   end if;
   if exists (select 1 from cron.job where jobname in ('pessoas-incremental', 'pessoas-ac-delta')) then
-    raise exception '20261014210300: jobs já existem.';
+    raise exception '20261014152242: jobs já existem.';
   end if;
 end
 $g$;
 
 insert into pessoas.carga_chave (fonte, ligada, ate, por) values
-  ('incremental', true, null, 'migration 20261014210300 (o job nasce desligado; esta chave é a segunda trava)'),
-  ('activecampaign_delta', false, date '2026-12-31', 'migration 20261014210300: rotina externa, liga só com ok do Victor')
+  ('incremental', true, null, 'migration 20261014152242 (o job nasce desligado; esta chave é a segunda trava)'),
+  ('activecampaign_delta', false, date '2026-12-31', 'migration 20261014152242: rotina externa, liga só com ok do Victor')
 on conflict (fonte) do nothing;
 
 create function pessoas.carga_incremental(p_limite integer default 200) returns jsonb
@@ -100,11 +101,11 @@ select cron.alter_job(j.jobid, active := false) from cron.job j where j.jobname 
 do $g$
 begin
   if (select count(*) from cron.job where jobname in ('pessoas-incremental', 'pessoas-ac-delta') and not active) <> 2 then
-    raise exception '20261014210300: os 2 jobs tinham de nascer desligados.';
+    raise exception '20261014152242: os 2 jobs tinham de nascer desligados.';
   end if;
   if has_function_privilege('anon', 'pessoas.carga_incremental(integer)', 'execute')
      or has_function_privilege('authenticated', 'pessoas.carga_incremental(integer)', 'execute') then
-    raise exception '20261014210300: carga_incremental executável por anon/authenticated.';
+    raise exception '20261014152242: carga_incremental executável por anon/authenticated.';
   end if;
 end
 $g$;

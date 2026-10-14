@@ -1,4 +1,5 @@
--- Ensaio de 20261014210200 (planilha de ativação) com dado FICTÍCIO (@exemplo.invalid), numa transação DESFEITA, sobre o
+-- APLICADA em 14/10/2026 ~15:22 UTC com a versão gravada 20261014152239 (o arquivo se chamava 20261014210200; renomeado conforme o guia 6.3).
+-- Ensaio de 20261014152239 (planilha de ativação) com dado FICTÍCIO (@exemplo.invalid), numa transação DESFEITA, sobre o
 -- banco com os grupos A e B aplicados.
 -- Rodar com: python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio <este arquivo>
 begin;
@@ -6,11 +7,11 @@ set local lock_timeout = '5s';
 set local statement_timeout = '150s';
 create temp table _z_out (em serial, passo text, linha text);
 insert into pg_temp._z_out(passo, linha) select '00 antes', (select jsonb_build_object('pessoas', (select count(*) from pessoas.pessoas), 'eventos', (select count(*) from pessoas.eventos), 'revisao', (select count(*) from pessoas.revisao))::text);
--- ===== 20261014210200 =====
--- 20261014210200: carga da planilha "Alunos T1-T42 Ativação" (alunos e sócios por turma) para a pessoa única
+-- ===== 20261014152239 =====
+-- 20261014152239: carga da planilha "Alunos T1-T42 Ativação" (alunos e sócios por turma) para a pessoa única
 --
 -- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 20261014150034 (ex-170000: controle de carga,
---   casar_email) e de pessoas.relacoes (20261014150003). Ensaio: 20261014210200_ensaio.sql (dado fictício).
+--   casar_email) e de pessoas.relacoes (20261014150003). Ensaio: 20261014152239_ensaio.sql (dado fictício).
 --   Script: infra/scripts/pessoa-unica/carga_planilha.py (lê a planilha com a conta do Victor, manda as linhas como parâmetro).
 --
 -- POR QUE: fonte nova do Victor (14/10/2026): planilha 1bxr71O3UKo0fdPfNXPEYNs9ZWrHNooXALxmvCXa6Ak8. A base compilada
@@ -28,7 +29,7 @@ insert into pg_temp._z_out(passo, linha) select '00 antes', (select jsonb_build_
 --   com o texto em detalhe.turma (pergunta: criar T42 em thb_turmas é decisão do dono da Central).
 -- AS 5 PERGUNTAS: escala = ~9 mil linhas (8.834 e-mails em 104 abas, censo ETAPA 1); índice = PK chave + parcial dos
 --   pendentes; frequência = 1 carga + recarga manual quando a planilha mudar; repetição = idempotente; reversão =
---   20261014210200_reversao.sql (estágio e funções saem; pessoa não se apaga).
+--   20261014152239_reversao.sql (estágio e funções saem; pessoa não se apaga).
 -- ACESSO: RLS ligada, sem policy e sem grant; funções SECURITY INVOKER sem execute para anon/authenticated/service_role.
 
 set local lock_timeout = '5s';
@@ -36,13 +37,13 @@ set local lock_timeout = '5s';
 do $g$
 begin
   if to_regprocedure('pessoas.casar_email(text,text,text,text)') is null or to_regclass('pessoas.relacoes') is null then
-    raise exception '20261014210200: falta a estrutura da carga (20261014150034) ou pessoas.relacoes (20261014150003).';
+    raise exception '20261014152239: falta a estrutura da carga (20261014150034) ou pessoas.relacoes (20261014150003).';
   end if;
-  if to_regclass('pessoas.planilha_linha') is not null then raise exception '20261014210200: já aplicada.'; end if;
+  if to_regclass('pessoas.planilha_linha') is not null then raise exception '20261014152239: já aplicada.'; end if;
 end
 $g$;
 
-insert into pessoas.carga_chave (fonte, ligada, por) values ('ativacao_planilha', true, 'migration 20261014210200')
+insert into pessoas.carga_chave (fonte, ligada, por) values ('ativacao_planilha', true, 'migration 20261014152239')
 on conflict (fonte) do nothing;
 
 create table pessoas.planilha_linha (
@@ -196,7 +197,7 @@ begin
                  or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'insert')
                  or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'update')
                  or has_table_privilege(r.papel, 'pessoas.planilha_linha', 'delete')) then
-    raise exception '20261014210200: algo da carga da planilha ficou aberto para anon/authenticated/service_role.';
+    raise exception '20261014152239: algo da carga da planilha ficou aberto para anon/authenticated/service_role.';
   end if;
 end
 $g$;
@@ -224,13 +225,13 @@ insert into pg_temp._z_out(passo, linha) select '23 T41 com turma_id / T42 sem t
 insert into pg_temp._z_out(passo, linha) select '25 sócio sem titular: vínculo com titular_pendente', (select count(*) from pessoas.eventos where fonte_tabela = 'pessoas.planilha_linha' and detalhe->>'titular_pendente' = 'true')::text;
 insert into pg_temp._z_out(passo, linha) select '24 nada aberto para anon/authenticated', (not has_table_privilege('anon', 'pessoas.planilha_linha', 'select') and not has_function_privilege('authenticated', 'pessoas.carga_planilha_pessoas(bigint,integer)', 'execute'))::text;
 -- ===== reversão =====
--- Reversão de 20261014210200 (carga da planilha de ativação). NÃO apaga pessoa nem evento já carregado; medir antes com
+-- Reversão de 20261014152239 (carga da planilha de ativação). NÃO apaga pessoa nem evento já carregado; medir antes com
 --   select count(*) from pessoas.eventos where fonte_tabela = 'pessoas.planilha_linha';
 set local lock_timeout = '5s';
 drop function if exists pessoas.carga_planilha_pessoas(bigint, integer);
 drop function if exists pessoas.carga_planilha_estagio(bigint, text, jsonb);
 drop table if exists pessoas.planilha_linha;
-delete from pessoas.carga_chave where fonte = 'ativacao_planilha' and por = 'migration 20261014210200';
+delete from pessoas.carga_chave where fonte = 'ativacao_planilha' and por = 'migration 20261014152239';
 
 insert into pg_temp._z_out(passo, linha) select '90 depois da reversão', coalesce(to_regclass('pessoas.planilha_linha')::text, 'sem estágio') || ' / ' || coalesce(to_regprocedure('pessoas.carga_planilha_pessoas(bigint,integer)')::text, 'sem função');
 select passo, linha from pg_temp._z_out order by em, passo;

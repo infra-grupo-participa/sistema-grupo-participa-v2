@@ -1,4 +1,4 @@
-// pessoas-ac-delta: delta diário do ActiveCampaign para a pessoa única (migrations 20261014150034 e 20261014210300).
+// pessoas-ac-delta: delta diário do ActiveCampaign para a pessoa única (migrations 20261014150034 e 20261014152242).
 //
 // Chamada: 1×/dia pelo job pg_cron 'pessoas-ac-delta' (05:40 UTC = 02:40 em Brasília), POST com o header
 // x-webhook-secret = Vault cron_webhook_secret (o mesmo dos outros crons de ingestão). O job NASCE DESLIGADO e a chave
