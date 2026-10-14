@@ -1,14 +1,7 @@
--- Ensaio ESTRUTURAL da ETAPA 2B: aplica a cadeia 160000 a 160300 (já ensaiada) e depois 160400, 160450, 160500 e 160510 (esta só pela guarda: falta a data do HT21),
--- confere, e reverte 160500 -> 160400 conferindo que voltam. Transação DESFEITA. Rápido (sem chamar os funis):
--- o efeito nos leitores do financeiro está no 20261014160500_ensaio_impacto.sql.
+-- Ensaio ESTRUTURAL da ETAPA 2B: aplica a cadeia 160000 a 160300 (já ensaiada no 20261014160000_ensaio.sql) e depois
+-- 160400, 160450, 160500 e 160510, confere, e reverte 160510 -> 160400 conferindo que voltam. Transação DESFEITA.
+-- Rápido (sem chamar os funis). O efeito de datas nos funis está no 20261014160500_ensaio_impacto.sql.
 -- Rodar com: python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio <este arquivo>
--- [cadeia da ETAPA 2, igual ao 20261014160000_ensaio.sql] Ensaio de 20261014160000, 160100, 160200 e 160300 em sequência, numa transação DESFEITA (rollback), com o estado
--- antes, os testes, e depois as reversões na ordem inversa conferindo que tudo volta.
--- Rodar com: python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio <este arquivo>
--- (o runner troca o select final por um RAISE: a transação aborta e nada fica gravado).
--- Os índices da 160300 entram aqui SEM concurrently (dentro de transação não dá); a prova do on conflict é a mesma.
--- Esperados: 87 chaves; 42 turmas; 10 edições do HT; 1 projeto; 1 controle.evento; on conflict mantém 1 linha;
--- relação consigo mesma recusada; leitores do financeiro com a mesma assinatura e o mesmo resultado; reversões zeram tudo.
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
@@ -36,7 +29,7 @@ create temp table _z_traj as select md5(string_agg(t::text, '|' order by t::text
 --      holding_total = htN (N do nome "(HTn)"); jornada = jornada-<turma_hm>; seminario_marcio = sem-marcio;
 --      seminario_elaine = sem-elaine; encontro_thb = ethb; diamantes; clinica; imersao; aurum-plus; congresso-thb;
 --      certificacao-holding-pro; encontro-acelera; cnhf; residencia; workshop-residencia.
---      Casos especiais: 16 ht-imersao-mundial, 59 ht21-ht22, 85 e 88 ht-atm, 66 live-hm, 67 reuniao-hm-ex-alunos.
+--      Casos especiais: 16 ht-imersao-mundial, 85 e 88 ht-atm, 66 live-hm, 67 reuniao-hm-ex-alunos.
 --      Chave que já existe em outro catálogo é reaproveitada (cada fato tem um endereço só):
 --      101 = clinica-miami-2026-12 (mkt.projetos.etiqueta_clickup do CNFMIAMI26), 68 = atm-1-2026-07
 --      (dados.edicoes_historico). A lista é PROPOSTA ao Victor, dono do padrão de dados: ele aprova antes de aplicar.
@@ -131,7 +124,7 @@ update fin.eventos e
     (56, 'clinica-2026-03'),
     (57, 'ht20-2026-03'),
     (58, 'workshop-residencia-2026-04'),
-    (59, 'ht21-ht22-2026-04'),
+    (59, 'ht21-2026-04'),
     (60, 'imersao-2026-04'),
     (61, 'clinica-2026-04'),
     (62, 'sem-elaine-2026-04'),
@@ -617,10 +610,12 @@ end $t$;
 --
 -- POR QUE: decisão do Victor, 14/10/2026 (censo-etapa2b.md, respostas): "HT20 começa em 01/01/2026" e "13/03 é o início
 --   da captação do HT21" são datas de CAPTAÇÃO. Ficam em coluna própria; `inicio` continua sendo o dia do evento.
--- O QUE FAZ: coluna fin.eventos.captacao_inicio (date, nula, sem default) e HT20 (evento 57) = 01/01/2026
---   (fonte: public.ht_editions 20, event_start_date). O HT21 (13/03/2026) recebe a data na 20261014160510, quando o
---   evento existir. Nenhum leitor do fin lê a coluna: nenhum número muda (provado no ensaio estrutural).
--- AS 5 PERGUNTAS: escala = 87 linhas, 1 preenchida; índice = nenhum (ninguém filtra por ela); frequência = única;
+-- O QUE FAZ: coluna fin.eventos.captacao_inicio (date, nula, sem default).
+--   HT20 (evento 57, dia do evento 14/03/2026, que fica): captação 01/01/2026 (Victor; public.ht_editions 20 event_start_date).
+--   HT21 (evento 59, dia do evento 06 a 12/04/2026, que fica): captação 13/03/2026 (Victor; public.ht_editions 21
+--   event_start_date; dashboard-ht SR_EDITIONS 'HT 21' começa em 2026-03-13).
+--   Nenhum leitor do fin lê a coluna: nenhum número muda (provado no ensaio estrutural).
+-- AS 5 PERGUNTAS: escala = 87 linhas, 2 preenchidas; índice = nenhum (ninguém filtra por ela); frequência = única;
 --   repetição = nenhuma; reversão = 20261014160450_reversao.sql.
 
 set local lock_timeout = '5s';
@@ -630,8 +625,9 @@ begin
   if exists (select 1 from information_schema.columns where table_schema = 'fin' and table_name = 'eventos' and column_name = 'captacao_inicio') then
     raise exception '20261014160450: fin.eventos.captacao_inicio já existe.';
   end if;
-  if (select nome || '|' || inicio from fin.eventos where id = 57) is distinct from 'Holding Total (HT20)|2026-03-14' then
-    raise exception '20261014160450: evento 57 não está como esperado. Reler.';
+  if (select nome || '|' || inicio from fin.eventos where id = 57) is distinct from 'Holding Total (HT20)|2026-03-14'
+     or (select inicio || '|' || fim from fin.eventos where id = 59) is distinct from '2026-04-06|2026-04-12' then
+    raise exception '20261014160450: eventos 57 ou 59 não estão como esperado. Reler.';
   end if;
 end
 $g$;
@@ -639,11 +635,11 @@ $g$;
 alter table fin.eventos add column captacao_inicio date;
 comment on column fin.eventos.captacao_inicio is 'Início da captação do evento (não é o dia do evento: esse é `inicio`, que os funis usam para ordenar). '
   'Decisão do Victor, 14/10/2026.';
-update fin.eventos set captacao_inicio = date '2026-01-01' where id = 57 and captacao_inicio is distinct from date '2026-01-01';
+update fin.eventos e
+   set captacao_inicio = v.captacao
+  from (values (57, date '2026-01-01'), (59, date '2026-03-13')) as v(id, captacao)
+ where e.id = v.id and e.captacao_inicio is distinct from v.captacao;
 
-insert into pg_temp._z_out(passo, linha) select '45 captacao_inicio preenchida', string_agg(id || '=' || captacao_inicio, ',') from fin.eventos where captacao_inicio is not null;
-insert into pg_temp._z_out(passo, linha) select '46 assinaturas dos leitores de fin.eventos iguais (com captacao_inicio)', (select count(*) from pg_temp._z_assin a join pg_proc p on p.oid = a.f::regprocedure where pg_get_function_result(p.oid) = a.r) || ' de ' || (select count(*) from pg_temp._z_assin);
-insert into pg_temp._z_out(passo, linha) select '47 trajetoria_nucleo igual (com captacao_inicio)', ((select md5(string_agg(t::text, '|' order by t::text)) from fin.trajetoria_nucleo((select array_agg(e) from pg_temp._z_emails)) t) = (select h from pg_temp._z_traj))::text;
 -- ===== 20261014160500 =====
 -- 20261014160500: o Seminário ATM de setembro de 2026 entra no catálogo oficial de eventos
 --
@@ -679,184 +675,74 @@ values ('Seminário ATM (Dra. Elaine, set/2026)', 'seminario_elaine', 'escritori
         'gp-operacoes projetos/2026-09-seminario-atm (concepcao.md, oferta-do-fechamento.md)',
         'Live 09/09 19h, replay 10/09 e treplay 11/09 (internos). venda_ate = última exibição: confirmar.', false, 'atm-2-2026-09');
 
--- ===== 20261014160510 com os valores nulos: a guarda tem que abortar =====
-do $t$ begin
-  begin
-    execute $sql$-- 20261014160510: HT21 e HT22 viram dois eventos
+-- ===== 20261014160510 =====
+-- 20261014160510: o evento 59 é o HT21 (06 a 12/04/2026)
 --
--- ⚠ ESPERANDO A DATA DO EVENTO DO HT21 (Victor, 14/10/2026: "não inventar, deixar a migration esperando esse valor").
---   Preencher os 3 valores no bloco "VALORES A PREENCHER" abaixo (dia do evento, fim e fim da venda) e rodar o ensaio
---   de impacto de novo antes de aplicar: o HT21 precisa ficar DEPOIS do HT20 (14/03) e ANTES do HT22 (06/04) na ordem
---   por `inicio`, senão os funis do financeiro trocam ingressos de evento (ensaio de 14/10: com 13/03 o HT20 ia a 0).
---   Enquanto os valores estiverem nulos, a guarda aborta.
+-- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 160000, 160100 e 160450.
+--   Mexe em fin.eventos (nome de 1 linha): aplicar com o aceite do JP (dono do fin) e o ok do Maestro.
 --
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única, ETAPA 2B), 14/10/2026. Depende de 160000, 160100, 160450 e 160500.
---   MEXE NO FINANCEIRO (linhas de fin.eventos): aplicar só com o aceite do dono do fin (JP) e o ok do Maestro.
---   Ensaios: 20261014160400_ensaio.sql (estrutura) e 20261014160500_ensaio_impacto.sql (leitores do fin antes e depois; o ensaio de impacto aplica a 160500 e a 160510 juntas na foto B).
---
--- POR QUE (decisões do Victor, 14/10/2026, _contexto/decisoes/2026-10-pessoa-unica.md):
---   - "separar o evento 59 em dois": hoje o 59 se chama "Holding Total (HT21/HT22, abr/2026)".
+-- POR QUE: correção do Victor, 14/10/2026 ~15h10 (PEDIDO-ETAPA2B-respostas.md): o HT21 foi de 06 a 12/04/2026, "foi
+--   onde começou o LPSG"; a captação começou em 13/03/2026 (gravada na 160450). Confere com a série do gp-operacoes
+--   (serie-historica-holding-total.md: HT21 = 6 a 12/abr/26) e com a planilha "Mapeamento Histórico de Eventos"
+--   (HT21 "Curso de Aplicação Prática", 06 a 12/04, confirmado). DIVERGÊNCIA registrada, sem mexer: public.ht_editions
+--   e o SR_EDITIONS do dashboard-ht chamam esse período de HT22.
 -- O QUE FAZ:
---   1. Evento 59 vira só o HT22: nome "Holding Total (HT22)", chave ht22-2026-04. Datas ficam (06 a 12/04/2026 =
---      public.ht_editions 22, sale_start_at 06/04 e sale_end_at 12/04). `codigo` (T39/T40) e turma_hm ficam: são lidos
---      pelo financeiro (resolver de ofertas). fin.acoes 105 (T39, 06/04 a 01/05) continua apontando para o 59.
---   2. Evento novo HT21: inicio, fim e venda_ate = A PREENCHER (dia do evento; nenhuma fonte dá hoje).
---      captacao_inicio = 13/03/2026 (public.ht_editions 21 event_start_date; dashboard-ht SR_EDITIONS 'HT 21' de
---      2026-03-13 a 2026-04-05; Victor: 13/03 é o início da captação do HT21). codigo 'HT21'
---      (padrão que o fin.sincronizar_eventos_ht lê; o máximo segue HT32). turma_hm nula (fontes divergem: fin.acoes
---      89 põe a janela 14/03 a 06/04 na T38; thb_turmas liga a T38 ao HT22). chave ht21-<aaaa-mm do dia do evento>.
---   3. public.ht_editions 21 -> HT21 novo; 22 -> evento 59.
--- O QUE NÃO FAZ: não mexe em fin.acoes nem em fin.evento_ofertas. Hoje as vendas de 14/03 a 05/04 caem na ação 89
---   (HT20/T38); separar a atribuição do HT21 é decisão do dono do fin (pergunta no relatório).
--- AS 5 PERGUNTAS: escala = 1 update + 1 insert em 88 linhas; índice = PK e chave; frequência = única; repetição =
---   nenhuma; reversão = 20261014160510_reversao.sql. Efeito nos leitores do fin medido no ensaio de impacto.
-
-
--- ===== VALORES A PREENCHER (dia do evento do HT21; a chave sai do mês de `inicio`) =====
-create temp table _ht21 on commit drop as
-select null::date as inicio, null::date as fim, null::date as venda_ate;
-
-do $g$
-begin
-  if (select nome || '|' || inicio || '|' || fim || '|' || coalesce(chave, '') from fin.eventos where id = 59)
-     is distinct from 'Holding Total (HT21/HT22, abr/2026)|2026-04-06|2026-04-12|ht21-ht22-2026-04' then
-    raise exception '20261014160510: evento 59 não está como esperado. Reler.';
-  end if;
-  if (select inicio is null or fim is null or venda_ate is null from pg_temp._ht21) then
-    raise exception '20261014160510: falta a data do evento do HT21 (inicio, fim, venda_ate). Pedir ao Victor; não inventar.';
-  end if;
-  if not (select inicio > date '2026-03-14' and inicio < date '2026-04-06' and fim >= inicio and venda_ate >= inicio from pg_temp._ht21) then
-    raise exception '20261014160510: o dia do HT21 precisa ficar entre o HT20 (14/03) e o HT22 (06/04), com fim e venda_ate depois dele.';
-  end if;
-  if exists (select 1 from fin.eventos where chave ~ '^ht21-[0-9]{4}-[0-9]{2}$' or codigo = 'HT21') then
-    raise exception '20261014160510: HT21 já existe.';
-  end if;
-end
-$g$;
-
-update fin.eventos
-   set nome = 'Holding Total (HT22)',
-       chave = 'ht22-2026-04',
-       observacao = 'Era "Holding Total (HT21/HT22, abr/2026)" com a nota "HT21 e HT22 no mesmo período; HT22: 25 ingressos". '
-                    'Separado em 14/10/2026 por decisão do Victor: este é o HT22; o HT21 virou evento próprio.'
- where id = 59;
-
-insert into fin.eventos (nome, categoria, setor, inicio, fim, venda_ate, captacao_inicio, codigo, fonte, observacao, automatico, chave)
-select 'Holding Total (HT21)', 'holding_total', 'educacao', h.inicio, h.fim, h.venda_ate, date '2026-03-13', 'HT21',
-       'public.ht_editions 21 + dashboard-ht SR_EDITIONS + decisão do Victor 14/10/2026',
-       'Separado do evento 59 em 14/10/2026. captacao_inicio 13/03/2026.', false, 'ht21-' || to_char(h.inicio, 'YYYY-MM')
-  from pg_temp._ht21 h;
-
-update public.ht_editions h
-   set evento_id = e.id
-  from fin.eventos e
- where (h.edition_number = 21 and e.codigo = 'HT21' and e.categoria = 'holding_total') or (h.edition_number = 22 and e.chave = 'ht22-2026-04')
-   and h.evento_id is distinct from e.id;
-
-do $g$
-begin
-  if (select count(*) from fin.eventos) <> 89 or (select count(*) from public.ht_editions where evento_id is not null) <> 12 then
-    raise exception '20261014160510: contagem final não confere (89 eventos com o ATM de setembro, 12 edições ligadas).';
-  end if;
-end
-$g$;
-$sql$;
-    insert into pg_temp._z_out(passo, linha) values ('55 160510 sem a data do HT21', 'RODOU (ERRO)');
-  exception when raise_exception then insert into pg_temp._z_out(passo, linha) values ('55 160510 sem a data do HT21', 'abortou pela guarda (ok): ' || left(sqlerrm, 60));
-  end;
-end $t$;
-drop table if exists pg_temp._ht21;
--- ===== 20261014160510 com DATA FICTÍCIA (só para provar o caminho; não é dado) =====
--- 20261014160510: HT21 e HT22 viram dois eventos
---
--- ⚠ ESPERANDO A DATA DO EVENTO DO HT21 (Victor, 14/10/2026: "não inventar, deixar a migration esperando esse valor").
---   Preencher os 3 valores no bloco "VALORES A PREENCHER" abaixo (dia do evento, fim e fim da venda) e rodar o ensaio
---   de impacto de novo antes de aplicar: o HT21 precisa ficar DEPOIS do HT20 (14/03) e ANTES do HT22 (06/04) na ordem
---   por `inicio`, senão os funis do financeiro trocam ingressos de evento (ensaio de 14/10: com 13/03 o HT20 ia a 0).
---   Enquanto os valores estiverem nulos, a guarda aborta.
---
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única, ETAPA 2B), 14/10/2026. Depende de 160000, 160100, 160450 e 160500.
---   MEXE NO FINANCEIRO (linhas de fin.eventos): aplicar só com o aceite do dono do fin (JP) e o ok do Maestro.
---   Ensaios: 20261014160400_ensaio.sql (estrutura) e 20261014160500_ensaio_impacto.sql (leitores do fin antes e depois; o ensaio de impacto aplica a 160500 e a 160510 juntas na foto B).
---
--- POR QUE (decisões do Victor, 14/10/2026, _contexto/decisoes/2026-10-pessoa-unica.md):
---   - "separar o evento 59 em dois": hoje o 59 se chama "Holding Total (HT21/HT22, abr/2026)".
--- O QUE FAZ:
---   1. Evento 59 vira só o HT22: nome "Holding Total (HT22)", chave ht22-2026-04. Datas ficam (06 a 12/04/2026 =
---      public.ht_editions 22, sale_start_at 06/04 e sale_end_at 12/04). `codigo` (T39/T40) e turma_hm ficam: são lidos
---      pelo financeiro (resolver de ofertas). fin.acoes 105 (T39, 06/04 a 01/05) continua apontando para o 59.
---   2. Evento novo HT21: inicio, fim e venda_ate = A PREENCHER (dia do evento; nenhuma fonte dá hoje).
---      captacao_inicio = 13/03/2026 (public.ht_editions 21 event_start_date; dashboard-ht SR_EDITIONS 'HT 21' de
---      2026-03-13 a 2026-04-05; Victor: 13/03 é o início da captação do HT21). codigo 'HT21'
---      (padrão que o fin.sincronizar_eventos_ht lê; o máximo segue HT32). turma_hm nula (fontes divergem: fin.acoes
---      89 põe a janela 14/03 a 06/04 na T38; thb_turmas liga a T38 ao HT22). chave ht21-<aaaa-mm do dia do evento>.
---   3. public.ht_editions 21 -> HT21 novo; 22 -> evento 59.
--- O QUE NÃO FAZ: não mexe em fin.acoes nem em fin.evento_ofertas. Hoje as vendas de 14/03 a 05/04 caem na ação 89
---   (HT20/T38); separar a atribuição do HT21 é decisão do dono do fin (pergunta no relatório).
--- AS 5 PERGUNTAS: escala = 1 update + 1 insert em 88 linhas; índice = PK e chave; frequência = única; repetição =
---   nenhuma; reversão = 20261014160510_reversao.sql. Efeito nos leitores do fin medido no ensaio de impacto.
+--   1. fin.eventos 59: nome "Holding Total (HT21/HT22, abr/2026)" -> "Holding Total (HT21)"; observação registra a
+--      troca. Datas, codigo (T39/T40) e turma_hm (T39) ficam: o resolver de ofertas lê nome + código, e datas iguais =
+--      funis iguais. A chave já nasce ht21-2026-04 na 160000.
+--   2. public.ht_editions 21 e 22 -> evento 59 (PROPOSTA: a 21 tem o 13/03, que é a captação do HT21, e a 22 tem
+--      06 a 12/04, que é o evento do HT21; pergunta no relatório). Nenhum nome do ht_editions muda.
+-- O QUE NÃO FAZ: não cria HT22. A planilha "Mapeamento Histórico de Eventos" lista um "Holding Total – Edição HT22"
+--   realizado (pasta "05) HT22 (T40 - ABR)", 25 ingressos), mas com a nota "NÃO IDENTIFICADO ... nenhum documento traz
+--   a data própria". Sem data, não há linha: pergunta ao Victor.
+-- AS 5 PERGUNTAS: escala = 1 linha em fin.eventos + 2 em ht_editions; índice = PK; frequência = única; repetição =
+--   nenhuma; reversão = 20261014160510_reversao.sql. Funis: nenhuma data muda (o ensaio confere o md5 da trajetória).
 
 set local lock_timeout = '5s';
 
--- ===== VALORES A PREENCHER (dia do evento do HT21; a chave sai do mês de `inicio`) =====
-create temp table _ht21 on commit drop as
-select date '2026-04-04' as inicio, date '2026-04-05' as fim, date '2026-04-05' as venda_ate;  -- DATA FICTÍCIA SÓ DO ENSAIO (prova o caminho)
-
 do $g$
 begin
   if (select nome || '|' || inicio || '|' || fim || '|' || coalesce(chave, '') from fin.eventos where id = 59)
-     is distinct from 'Holding Total (HT21/HT22, abr/2026)|2026-04-06|2026-04-12|ht21-ht22-2026-04' then
-    raise exception '20261014160510: evento 59 não está como esperado. Reler.';
+     is distinct from 'Holding Total (HT21/HT22, abr/2026)|2026-04-06|2026-04-12|ht21-2026-04' then
+    raise exception '20261014160510: evento 59 não está como esperado (falta 160000?). Reler.';
   end if;
-  if (select inicio is null or fim is null or venda_ate is null from pg_temp._ht21) then
-    raise exception '20261014160510: falta a data do evento do HT21 (inicio, fim, venda_ate). Pedir ao Victor; não inventar.';
-  end if;
-  if not (select inicio > date '2026-03-14' and inicio < date '2026-04-06' and fim >= inicio and venda_ate >= inicio from pg_temp._ht21) then
-    raise exception '20261014160510: o dia do HT21 precisa ficar entre o HT20 (14/03) e o HT22 (06/04), com fim e venda_ate depois dele.';
-  end if;
-  if exists (select 1 from fin.eventos where chave ~ '^ht21-[0-9]{4}-[0-9]{2}$' or codigo = 'HT21') then
-    raise exception '20261014160510: HT21 já existe.';
+  if (select captacao_inicio from fin.eventos where id = 59) is distinct from date '2026-03-13' then
+    raise exception '20261014160510: falta 20261014160450 (captação do HT21).';
   end if;
 end
 $g$;
 
 update fin.eventos
-   set nome = 'Holding Total (HT22)',
-       chave = 'ht22-2026-04',
+   set nome = 'Holding Total (HT21)',
        observacao = 'Era "Holding Total (HT21/HT22, abr/2026)" com a nota "HT21 e HT22 no mesmo período; HT22: 25 ingressos". '
-                    'Separado em 14/10/2026 por decisão do Victor: este é o HT22; o HT21 virou evento próprio.'
- where id = 59;
+                    'Corrigido em 14/10/2026 (Victor): este é o HT21, evento de 06 a 12/04/2026, captação desde 13/03/2026. '
+                    'public.ht_editions e o SR_EDITIONS chamam este período de HT22 (divergência registrada).'
+ where id = 59
+   and nome is distinct from 'Holding Total (HT21)';
 
-insert into fin.eventos (nome, categoria, setor, inicio, fim, venda_ate, captacao_inicio, codigo, fonte, observacao, automatico, chave)
-select 'Holding Total (HT21)', 'holding_total', 'educacao', h.inicio, h.fim, h.venda_ate, date '2026-03-13', 'HT21',
-       'public.ht_editions 21 + dashboard-ht SR_EDITIONS + decisão do Victor 14/10/2026',
-       'Separado do evento 59 em 14/10/2026. captacao_inicio 13/03/2026.', false, 'ht21-' || to_char(h.inicio, 'YYYY-MM')
-  from pg_temp._ht21 h;
-
-update public.ht_editions h
-   set evento_id = e.id
-  from fin.eventos e
- where (h.edition_number = 21 and e.codigo = 'HT21' and e.categoria = 'holding_total') or (h.edition_number = 22 and e.chave = 'ht22-2026-04')
-   and h.evento_id is distinct from e.id;
+update public.ht_editions
+   set evento_id = 59
+ where edition_number in (21, 22)
+   and evento_id is distinct from 59;
 
 do $g$
 begin
-  if (select count(*) from fin.eventos) <> 89 or (select count(*) from public.ht_editions where evento_id is not null) <> 12 then
-    raise exception '20261014160510: contagem final não confere (89 eventos com o ATM de setembro, 12 edições ligadas).';
+  if (select count(*) from public.ht_editions where evento_id is not null) <> 12 then
+    raise exception '20261014160510: esperava 12 edições do HT ligadas.';
   end if;
 end
 $g$;
 
-insert into pg_temp._z_out(passo, linha) select '56 [data fictícia] eventos HT20/HT21/HT22/ATM', string_agg(id || ' ' || chave || ' ' || inicio || ' capt ' || coalesce(captacao_inicio::text,'-'), ' | ' order by inicio) from fin.eventos where chave in ('ht20-2026-03','ht22-2026-04','atm-2-2026-09') or codigo = 'HT21';
-insert into pg_temp._z_out(passo, linha) select '57 [data fictícia] ht_editions 20/21/22', string_agg(h.edition_number || '=' || coalesce(e.chave,'-'), ' ' order by h.edition_number) from public.ht_editions h left join fin.eventos e on e.id = h.evento_id where h.edition_number in (20,21,22);
-insert into pg_temp._z_out(passo, linha) select '58 fin.eventos total / chaves distintas', count(*) || ' / ' || count(distinct chave) from fin.eventos;
+insert into pg_temp._z_out(passo, linha) select '50 HT20 / HT21 / ATM SET', string_agg(id || ' ' || nome || ' ' || chave || ' evento ' || inicio || '..' || fim || ' captação ' || coalesce(captacao_inicio::text,'-'), ' | ' order by inicio) from fin.eventos where id in (57, 59) or chave = 'atm-2-2026-09';
+insert into pg_temp._z_out(passo, linha) select '51 ht_editions 20/21/22 -> chave', string_agg(h.edition_number || '=' || coalesce(e.chave,'-'), ' ' order by h.edition_number) from public.ht_editions h left join fin.eventos e on e.id = h.evento_id where h.edition_number in (20,21,22);
+insert into pg_temp._z_out(passo, linha) select '52 fin.eventos total / chaves distintas', count(*) || ' / ' || count(distinct chave) from fin.eventos;
+insert into pg_temp._z_out(passo, linha) select '53 assinaturas dos 16 leitores de fin.eventos iguais', (select count(*) from pg_temp._z_assin a join pg_proc p on p.oid = a.f::regprocedure where pg_get_function_result(p.oid) = a.r) || ' de ' || (select count(*) from pg_temp._z_assin);
+insert into pg_temp._z_out(passo, linha) select '54 trajetoria_nucleo igual depois de tudo (datas não mudaram)', ((select md5(string_agg(t::text, '|' order by t::text)) from fin.trajetoria_nucleo((select array_agg(e) from pg_temp._z_emails)) t) = (select h from pg_temp._z_traj))::text;
 -- ===== reversões 160510 -> 160400 =====
--- Reversão de 20261014160510. Só funciona se nada apontar para o HT21 novo (FK restrict).
+-- Reversão de 20261014160510.
 set local lock_timeout = '5s';
 update public.ht_editions set evento_id = null where edition_number in (21, 22);
-delete from fin.eventos where categoria = 'holding_total' and codigo = 'HT21' and chave ~ '^ht21-[0-9]{4}-[0-9]{2}$';
-update fin.eventos set nome = 'Holding Total (HT21/HT22, abr/2026)', chave = 'ht21-ht22-2026-04',
-       observacao = 'HT21 e HT22 no mesmo período; HT22: 25 ingressos'
+update fin.eventos set nome = 'Holding Total (HT21/HT22, abr/2026)', observacao = 'HT21 e HT22 no mesmo período; HT22: 25 ingressos'
  where id = 59;
 -- Reversão de 20261014160500. Só funciona se nada apontar para o evento (FK restrict).
 set local lock_timeout = '5s';

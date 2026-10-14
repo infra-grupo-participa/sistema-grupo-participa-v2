@@ -13,7 +13,8 @@
 --      holding_total = htN (N do nome "(HTn)"); jornada = jornada-<turma_hm>; seminario_marcio = sem-marcio;
 --      seminario_elaine = sem-elaine; encontro_thb = ethb; diamantes; clinica; imersao; aurum-plus; congresso-thb;
 --      certificacao-holding-pro; encontro-acelera; cnhf; residencia; workshop-residencia.
---      Casos especiais: 16 ht-imersao-mundial, 59 ht21-ht22, 85 e 88 ht-atm, 66 live-hm, 67 reuniao-hm-ex-alunos.
+--      Casos especiais: 16 ht-imersao-mundial, 85 e 88 ht-atm, 66 live-hm, 67 reuniao-hm-ex-alunos.
+--      59 = ht21-2026-04 (correção do Victor, 14/10/2026: o 59, de 06 a 12/04, é o HT21).
 --      Chave que já existe em outro catálogo é reaproveitada (cada fato tem um endereço só):
 --      101 = clinica-miami-2026-12 (mkt.projetos.etiqueta_clickup do CNFMIAMI26), 68 = atm-1-2026-07
 --      (dados.edicoes_historico). A lista é PROPOSTA ao Victor, dono do padrão de dados: ele aprova antes de aplicar.
@@ -109,7 +110,7 @@ update fin.eventos e
     (56, 'clinica-2026-03'),
     (57, 'ht20-2026-03'),
     (58, 'workshop-residencia-2026-04'),
-    (59, 'ht21-ht22-2026-04'),
+    (59, 'ht21-2026-04'),
     (60, 'imersao-2026-04'),
     (61, 'clinica-2026-04'),
     (62, 'sem-elaine-2026-04'),
