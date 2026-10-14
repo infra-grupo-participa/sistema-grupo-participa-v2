@@ -401,12 +401,21 @@ export function mapearGrupo(cru: unknown): { data: GrupoResumoBlack; semDado: bo
     return [{
       campanha, segmento: SEGMENTOS.includes(g.segmento as SegmentoGrupo) ? (g.segmento as SegmentoGrupo) : null,
       unicos: num(g.unicos), unicosWebhook: num(g.unicos_webhook), unicosSoFoto: num(g.unicos_so_foto), unicosCruzados: num(g.unicos_cruzados),
+      leadsNoGrupo: num(g.leads_no_grupo), leadsDoSegmento: num(g.leads_do_segmento),
+      leadsNoGrupoPorClasse: {
+        advogado: num(objeto(g.leads_no_grupo_por_classe)?.advogado),
+        estudanteDireito: num(objeto(g.leads_no_grupo_por_classe)?.estudante_direito),
+        contador: num(objeto(g.leads_no_grupo_por_classe)?.contador),
+        outros: num(objeto(g.leads_no_grupo_por_classe)?.outros),
+        semProfissao: num(objeto(g.leads_no_grupo_por_classe)?.sem_profissao),
+      },
     }];
   });
   return {
     data: {
       periodo: { de: texto(periodo?.de), ate: texto(periodo?.ate) }, recorte, grupos,
       unicosGruposMql: num(r.unicos_grupos_mql), unicosGruposTotal: num(r.unicos_grupos_total), unicosCruzadosMql: num(r.unicos_cruzados_mql),
+      leadsEmAlgumGrupo: num(r.leads_em_algum_grupo), leadsEmMaisDeUmGrupo: num(r.leads_em_mais_de_um_grupo),
       leads: {
         unicos: num(leads?.unicos), mql: num(leads?.mql), advogado: num(leads?.advogado), estudanteDireito: num(leads?.estudante_direito),
         advogadoMaisEstudante: num(leads?.advogado_mais_estudante), contador: num(leads?.contador), outros: num(leads?.outros),

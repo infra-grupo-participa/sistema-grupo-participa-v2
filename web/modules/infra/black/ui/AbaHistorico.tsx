@@ -14,6 +14,7 @@ import { FunilTrapezio } from './graficos';
 import type { EtapaFunil } from '../domain/criativos';
 import type { DadosTela } from './contexto';
 import { inteiro, moeda } from './pecas';
+import { ResumoLeads } from './ResumoLeads';
 
 const dataCurta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
@@ -39,10 +40,43 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
   if (serie.length === 0) return <p className="text-sm text-[var(--fg-3)]">Sem dia no período.</p>;
   const dia = serie[i];
   const cap = serieCap[i];
+  const modoGeral = d.recorte.historicoModo === 'geral';
+  const inicio = d.diasPeriodo[0]; const fim = d.diasPeriodo[d.diasPeriodo.length - 1];
+  const filtro = { funil: d.recorte.funil, canal: d.recorte.canal };
+  const diasCapPeriodo = filtrarDias(d.diasTodos.filter((x) => x.dia >= inicio && x.dia <= fim), d.idx, filtro)
+    .filter((x) => ehCaptacao(d.idx.campanhaDoAnuncio(x.anuncioId)?.funil));
+  const linhasPeriodo = filtrarLinhas(d.linhasTodas.filter((l) => diaDe(l.criadoEm) >= inicio && diaDe(l.criadoEm) <= fim && l.pagina !== 'consultoria_respondi'), filtro);
+  const linhasCapPeriodo = linhasCaptacao(linhasPeriodo, d.idx);
+  const agregadoGeral = agregar(diasCapPeriodo);
+  const mqlPagoGeral = d.perfilSemDado ? null : somaConhecida(serieCap.map((x) => x.mqlPagos));
+  const mqlPagoBase = d.perfilSemDado ? null : somaConhecida(serieCap.map((x) => x.mqlPagosBase));
+  const leadsTotalPeriodo = d.perfilSemDado ? null : somaConhecida(serie.map((x) => x.pessoasNovas));
+  const ingressoTotalPeriodo = d.perfilSemDado ? null : somaConhecida(serie.map((x) => x.ingressoGrupo));
+  const leadsTrafegoPeriodo = d.perfilSemDado ? null : somaConhecida(serieCap.map((x) => x.leadsPagos));
 
   return (
     <div className="space-y-4">
-      <SectionCard title="Dia a dia" subtitle="Arraste a régua para ver o funil de cada dia do período.">
+      <SectionCard title="Histórico · funil" subtitle={modoGeral ? 'O funil soma o período inteiro com os filtros ativos.' : 'Arraste a régua para ver o funil de cada dia do período.'}>
+        <div className="mb-3 inline-flex rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-1" role="group" aria-label="Modo do funil do Histórico">
+          {(['dia-a-dia', 'geral'] as const).map((modo) => <button key={modo} type="button" aria-pressed={(modo === 'geral') === modoGeral}
+            onClick={() => d.irPara({ historicoModo: modo })}
+            className={`min-h-10 rounded-[var(--r-sm)] px-3 text-sm font-semibold ${((modo === 'geral') === modoGeral) ? 'bg-[var(--surface-1)] text-[var(--fg)] shadow-sm' : 'text-[var(--fg-2)] hover:text-[var(--fg)]'}`}>
+            {modo === 'dia-a-dia' ? 'Dia a dia' : 'Geral'}
+          </button>)}
+        </div>
+        {modoGeral ? (
+          <>
+            <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <KpiCard label="Leads totais" value={inteiro(leadsTotalPeriodo)} bar="accent" title="Pessoas únicas pela data do primeiro cadastro no período, após filtro de funil e canal." hint={<span>Do tráfego C2/C3: <strong>{inteiro(leadsTrafegoPeriodo)}</strong></span>} />
+              <KpiCard label="Ingresso no grupo geral" value={<span>{inteiro(ingressoTotalPeriodo)} · {formatarTaxa(taxa(ingressoTotalPeriodo, leadsTotalPeriodo).valor)}</span>} bar="green" title={`${inteiro(ingressoTotalPeriodo)} pessoas únicas que entraram em algum grupo ÷ ${inteiro(leadsTotalPeriodo)} leads da coorte no período.`} />
+              <KpiCard label="Leads acumulados" value={inteiro(d.perfilSemDado ? null : serie[serie.length - 1].pessoasAcumuladas)} bar="green" title="Pessoas únicas de todas as portas acumuladas desde o início." />
+            </div>
+            <FunilGeral dias={diasCapPeriodo} linhas={linhasCapPeriodo} agregado={agregadoGeral}
+              mql={mqlPagoGeral} mqlBase={mqlPagoBase}
+              ingresso={ingressoTotalPeriodo} ingressoBase={leadsTotalPeriodo} idx={d.idx} perfilSemDado={d.perfilSemDado} />
+            <div className="mt-4"><ResumoLeads linhas={linhasPeriodo} idx={d.idx} grupo={d.grupo.data} compacto semDado={d.perfilSemDado} /></div>
+          </>
+        ) : <>
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-[var(--fg-3)]">
             <span className="sr-only">Dia</span>
@@ -54,12 +88,12 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
 
         <div className="mt-3 grid grid-cols-2 gap-3 max-sm:grid-cols-1 lg:grid-cols-4">
           <KpiCard label="Investimento do dia" value={moeda(dia.gasto)} bar="yellow" title="No funil e canal selecionados." />
-          <KpiCard label="Cadastros do dia" value={inteiro(dia.cadastros)} bar="accent" title={`${inteiro(dia.leadsPagos)} vieram de anúncio.`} />
-          <KpiCard label="Pessoas novas no dia" value={inteiro(dia.pessoasNovas)} bar="green" title="Pessoas que aparecem pela primeira vez na lista neste dia." />
-          <KpiCard label="Leads acumulados" value={inteiro(dia.pessoasAcumuladas)} bar="green" title="Pessoas únicas de todas as portas desde o início; igual ao card Leads contra a meta." />
+          <KpiCard label="Leads acumulados" value={inteiro(d.perfilSemDado ? null : dia.pessoasAcumuladas)} bar="green" title="Pessoas únicas de todas as portas desde o início; igual ao card Leads contra a meta." />
         </div>
 
         <FunilDia key={dia.dia} dia={dia} cap={cap} dados={d} />
+        <ResumoLeads linhas={filtrarLinhas(d.linhasTodas.filter((l) => diaDe(l.criadoEm) === dia.dia && l.pagina !== 'consultoria_respondi'), filtro)} idx={d.idx} compacto semDado={d.perfilSemDado} />
+        </>}
       </SectionCard>
 
       <SectionCard title="Investimento e leads acumulados" subtitle="Barras: investimento do dia no filtro escolhido. Linha: pessoas únicas de todas as portas acumuladas desde o início.">
@@ -67,6 +101,37 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
       </SectionCard>
     </div>
   );
+}
+
+function somaConhecida(valores: (number | null)[]): number {
+  return valores.reduce<number>((soma, valor) => soma + (valor ?? 0), 0);
+}
+
+function formatarTaxa(valor: number | null): string {
+  return valor === null ? 'Sem dado' : new Intl.NumberFormat('pt-BR', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(valor);
+}
+
+function FunilGeral({ dias, linhas, agregado, mql, mqlBase, ingresso, ingressoBase, idx, perfilSemDado }: {
+  dias: DadosTela['dias']; linhas: DadosTela['linhas']; agregado: ReturnType<typeof agregar>;
+  mql: number | null; mqlBase: number | null; ingresso: number | null; ingressoBase: number | null;
+  idx: DadosTela['idx'];
+  perfilSemDado: boolean;
+}) {
+  const calculada = conversaoPagina(dias, linhas, idx);
+  const conversao = perfilSemDado ? { ...calculada, valor: null, num: null, den: null } : calculada;
+  const etapas: EtapaFunil[] = [
+    { chave: 'impressoes', rotulo: 'Impressões', valor: dias.length ? agregado.impressoes : null, ponte: null },
+    { chave: 'cliques', rotulo: 'Cliques no link', valor: agregado.cliques.valor, ponte: { rotulo: 'CTR', taxa: ctr(agregado) } },
+    { chave: 'lpv', rotulo: 'Views da página', valor: agregado.lpv.valor, ponte: { rotulo: 'Connect rate', taxa: connectRate(dias, idx) } },
+    { chave: 'leads', rotulo: 'Leads pagos', valor: conversao.num, ponte: { rotulo: 'Conversão da página', taxa: conversao } },
+    { chave: 'mql', rotulo: 'MQL entre leads pagos', valor: mqlBase ? mql : null, ponte: { rotulo: '% MQL dos pagos', taxa: taxa(mqlBase ? mql : null, mqlBase || null) } },
+    { chave: 'grupo', rotulo: 'Ingresso no grupo · geral', valor: ingressoBase ? ingresso : null, subtexto: `${inteiro(ingresso)}, de ${inteiro(ingressoBase)} leads`, ponte: { rotulo: '% ingresso de todos', taxa: taxa(ingressoBase ? ingresso : null, ingressoBase || null) } },
+  ];
+  return <section aria-label="Funil geral do período" className="mt-4">
+    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)]">Funil geral · filtros ativos</h3>
+    <div className="mx-auto max-w-3xl"><FunilTrapezio etapas={etapas} rotulo="Funil geral do período · tráfego C2/C3 e ingresso de todos os leads" /></div>
+    <p className="mt-2 text-center text-xs text-[var(--fg-3)]">CPM: {moeda(dias.length ? cpm(agregado) : null)}</p>
+  </section>;
 }
 
 function FunilDia({ dia, cap, dados }: { dia: DiaHistorico; cap: DiaHistorico; dados: DadosTela }) {

@@ -14,7 +14,7 @@ const CANAIS_FILTRO: readonly FiltroCanal[] = ['todos', 'meta', 'google'];
 export const ABAS: readonly AbaBlack[] = ['visao', 'jornada', 'criativos', 'mensageria', 'historico'];
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
-export const RECORTE_PADRAO: Recorte = { funil: 'todos', canal: 'todos', periodo: 'desde-inicio', aba: 'visao', criativos: {} };
+export const RECORTE_PADRAO: Recorte = { funil: 'todos', canal: 'todos', periodo: 'desde-inicio', aba: 'visao', criativos: {}, historicoModo: 'dia-a-dia' };
 
 type Params = URLSearchParams | Record<string, string | string[] | undefined>;
 function ler(p: Params, k: string): string | undefined {
@@ -44,6 +44,7 @@ export function lerRecorte(p: Params): Recorte {
     ...(periodoPersonalizado ? { periodoPersonalizado } : {}),
     aba: umDe(ler(p, 'aba'), ABAS, RECORTE_PADRAO.aba),
     criativos,
+    historicoModo: ler(p, 'historico') === 'geral' ? 'geral' : 'dia-a-dia',
   };
 }
 
@@ -51,6 +52,7 @@ export function lerRecorte(p: Params): Recorte {
 export function escreverRecorte(r: Recorte, extras?: URLSearchParams): string {
   const q = new URLSearchParams();
   q.set('funil', r.funil); q.set('periodo', r.periodo); q.set('canal', r.canal); q.set('aba', r.aba);
+  if (r.historicoModo === 'geral') q.set('historico', 'geral');
   if (r.periodo === 'personalizado' && r.periodoPersonalizado) {
     q.set('de', r.periodoPersonalizado.de); q.set('ate', r.periodoPersonalizado.ate);
   }

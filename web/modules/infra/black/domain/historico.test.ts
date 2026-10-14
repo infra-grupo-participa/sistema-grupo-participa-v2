@@ -49,4 +49,18 @@ describe('histórico', () => {
     expect([dia.leadsPagos, dia.mql, dia.mqlPagos, dia.mqlPagosBase, dia.ingressoGrupoPagosMql, dia.pessoasNovas, dia.ingressoGrupo])
       .toEqual([2, 2, 1, 2, 1, 3, 3]);
   });
+  it('soma do funil geral preserva pessoas únicas da coorte e ingressos', () => {
+    const original = b.linhas[0];
+    const linhas: LinhaPerfil[] = [
+      { ...original, pessoaId: 'geral-a', criadoEm: '2026-10-05T10:00:00-03:00', origem: 'pago', campanhaId: 'campanha-a', profissao: 'advogado', entrouGrupoEm: '2026-10-06T10:00:00-03:00' },
+      { ...original, pessoaId: 'geral-a', criadoEm: '2026-10-06T10:00:00-03:00', origem: 'organico', campanhaId: null, profissao: 'advogado', entrouGrupoEm: null },
+      { ...original, pessoaId: 'geral-b', criadoEm: '2026-10-06T12:00:00-03:00', origem: 'organico', campanhaId: null, profissao: 'outros', entrouGrupoEm: null },
+    ];
+    const periodo = ['2026-10-05', '2026-10-06'];
+    const geral = serieHistorico([], linhas, periodo, CONFIG_BLACK);
+    const trafego = serieHistorico([], linhas.filter((l) => l.origem === 'pago'), periodo, CONFIG_BLACK, linhas);
+    expect(geral.reduce((s, d) => s + d.pessoasNovas, 0)).toBe(2);
+    expect(geral.reduce((s, d) => s + (d.ingressoGrupo ?? 0), 0)).toBe(1);
+    expect(trafego.reduce((s, d) => s + d.leadsPagos, 0)).toBe(1);
+  });
 });

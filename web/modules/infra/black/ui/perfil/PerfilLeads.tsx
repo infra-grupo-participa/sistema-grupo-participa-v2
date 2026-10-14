@@ -17,6 +17,7 @@ import { Taxa, inteiro } from '../pecas';
 import { BarrasClicaveis, LIMITE_ROSCA, RoscaClicavel } from './RoscaClicavel';
 import { MapaBrasilBolhas } from './MapaBrasilBolhas';
 import { TabelaLeads } from './TabelaLeads';
+import { ResumoLeads } from '../ResumoLeads';
 
 type SubAba = 'resumo' | 'leads' | 'evolucao';
 const SUBABAS: { k: SubAba; l: string }[] = [{ k: 'resumo', l: 'Resumo' }, { k: 'leads', l: 'Leads' }, { k: 'evolucao', l: 'Evolução' }];
@@ -65,6 +66,7 @@ export function PerfilLeads({ d, linhas, ocultar = [] }: { d: DadosTela; linhas:
       <div role="tabpanel" id={idsAba(`perfil-${base}`, 'resumo').panel} aria-labelledby={idsAba(`perfil-${base}`, 'resumo').tab} hidden={sub !== 'resumo'}>
         {sub === 'resumo' && (
           <div className="space-y-4 atm-historico-panel-enter">
+            <ResumoLeads linhas={filtradas} idx={d.idx} grupo={d.grupo.data} compacto semDado={d.perfilSemDado} />
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               <Mini rotulo="Cadastros" valor={inteiro(filtradas.length)} />
               <Mini rotulo="Pessoas únicas" valor={inteiro(leadsPessoas(filtradas).valor)} />
