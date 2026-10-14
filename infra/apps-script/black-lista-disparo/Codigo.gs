@@ -6,6 +6,9 @@
  * Docs: docs/dashboard-black/README.md, seção "Lista de disparo automática".
  * Migration: infra/supabase/migrations/20261013174100_dados_black_lista_disparo.sql.
  *
+ * DESLIGADO (14/10/2026, migration 20261014010100): public.black_lista_disparo não é mais executável por anon; este
+ * script receberia erro de permissão. Nunca foi ligado. Religar exige migration nova (grant a anon) com ok do Victor.
+ *
  * Fluxo: lê public.black_lista_disparo (anon key + chave própria, em Script Properties) → tira a Turma Especial
  * (planilha da Isabela, aba Página1, por e-mail ou telefone) → regrava as duas abas, mantendo o cabeçalho.
  * Sem service_role. Nenhum dado pessoal vai para o log: só contagens.

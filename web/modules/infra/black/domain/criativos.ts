@@ -2,7 +2,7 @@
 // cruzado. Cada painel vê os filtros dos OUTROS painéis (o próprio só destaca), para o escolhido continuar
 // enxergando os irmãos. Métricas por soma sobre soma, no mesmo recorte de dias e leads.
 import {
-  agregar, connectRate, conversaoPagina, cpl, cpm, ctr, custoPorVisualizacao, ehPago, farolCpl, ingressoGrupoGeral, mqlDoRecorte, taxaVideo75,
+  agregar, connectRate, conversaoPagina, cpl, cpm, ctr, custoPorVisualizacao, ehPago, enviosMaisRecentesPorPessoa, ehMqlPorProfissao, farolCpl, ingressoGrupoGeral, mqlDoRecorte, taxa, taxaVideo75,
   type Farol, type IndiceTrafego, type Taxa,
 } from './metricas';
 import { diaDe } from './recorte';
@@ -46,7 +46,7 @@ export function anuncioPassa(a: Anuncio, f: FiltroCriativos, idx: IndiceTrafego,
 
 export interface ResumoCriativo {
   gasto: number; impressoes: number; cpm: Valor; cliques: Valor; ctr: Taxa; lpv: Valor; connect: Taxa;
-  leads: number; leadsPagos: number; cpl: Valor; farol: Farol; video75: Taxa; custoVisualizacao: Valor;
+  leads: number; leadsPagos: number; mql: Taxa; cpl: Valor; farol: Farol; video75: Taxa; custoVisualizacao: Valor;
   /** true = distribuição (C1/antecipação): a métrica principal é custo por visualização, não CPL. */
   distribuicao: boolean;
 }
@@ -56,10 +56,16 @@ export function resumir(
 ): ResumoCriativo {
   const a = agregar(dias);
   const pagos = linhas.filter(ehPago).length;
+  // A proporção por criativo é exatamente sobre leads pagos (a mesma base do CPL), não sobre todos os cadastros.
+  const linhasPagas = linhas.filter(ehPago);
+  const linhasComMql = enviosMaisRecentesPorPessoa(linhasPagas);
   const valorCpl = distribuicao ? null : cpl(dias.length ? a.gasto : null, pagos);
   return {
     gasto: a.gasto, impressoes: a.impressoes, cpm: cpm(a), cliques: a.cliques.valor, ctr: ctr(a), lpv: a.lpv.valor,
-    connect: connectRate(dias, idx), leads: linhas.length, leadsPagos: pagos, cpl: valorCpl,
+    connect: connectRate(dias, idx), leads: linhas.length, leadsPagos: pagos,
+    mql: linhasComMql.length ? taxa(linhasComMql.filter(ehMqlPorProfissao).length, linhasComMql.length,
+      'Regra B: profissão do envio mais recente entre pessoas com lead pago neste criativo.')
+      : taxa(null, null, 'MQL sem dado no cadastro.'), cpl: valorCpl,
     farol: distribuicao ? 'sem' : farolCpl(valorCpl, regua), video75: taxaVideo75(a), custoVisualizacao: custoPorVisualizacao(a), distribuicao,
   };
 }
@@ -104,15 +110,16 @@ export function painel(
   return out.sort((a, b) => b.resumo.gasto - a.resumo.gasto);
 }
 
-export const ORDENS_GALERIA = ['leads', 'cpl', 'ctr', 'gasto'] as const;
+export const ORDENS_GALERIA = ['leads', 'cpl', 'ctr', 'gasto', 'mql'] as const;
 export type OrdemGaleria = (typeof ORDENS_GALERIA)[number];
-export const ROTULO_ORDEM: Record<OrdemGaleria, string> = { leads: 'Mais leads', cpl: 'Menor CPL', ctr: 'Maior CTR', gasto: 'Mais gasto' };
+export const ROTULO_ORDEM: Record<OrdemGaleria, string> = { leads: 'Mais leads', cpl: 'Menor CPL', ctr: 'Maior CTR', gasto: 'Mais gasto', mql: 'Maior % de MQL' };
 
 /** Valor que a ordem usa (a galeria mostra este número no cartão, para a ordem ficar visível). */
 export function valorOrdem(i: ItemPainel, ordem: OrdemGaleria): Valor {
   if (ordem === 'leads') return i.resumo.distribuicao ? null : i.resumo.leadsPagos;
   if (ordem === 'cpl') return i.resumo.cpl;
   if (ordem === 'ctr') return i.resumo.ctr.valor;
+  if (ordem === 'mql') return i.resumo.leadsPagos < 5 ? null : i.resumo.mql.valor;
   return i.resumo.gasto;
 }
 

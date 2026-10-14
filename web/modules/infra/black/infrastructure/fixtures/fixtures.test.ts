@@ -23,14 +23,9 @@ describe('base fictícia', () => {
     expect(porFunil.reduce((s, n) => s + n, 0) + naoPagos).toBe(b.linhas.length);
     expect(pagos.some((l) => l.funil === 'c1')).toBe(false);
   });
-  it('CPL da etapa = gasto da etapa ÷ leads pagos da etapa', () => {
+  it('Iscas não inclui a campanha C2 da demonstração, pois só C3 pode compor a etapa', () => {
     const iscas = cplPorEtapa(b.dias, b.linhas, idx).find((e) => e.chave === 'iscas')!;
-    const anuncios = new Set(b.anuncios.filter((a) => idx.campanhaDoAnuncio(a.id)?.id === 'cp-iscas').map((a) => a.id));
-    const gasto = b.dias.filter((d) => anuncios.has(d.anuncioId)).reduce((s, d) => s + d.gasto, 0);
-    const pagos = b.linhas.filter((l) => l.origem === 'pago' && l.campanhaId === 'cp-iscas').length;
-    expect(iscas.cpl.gasto).toBeCloseTo(gasto, 6);
-    expect(iscas.cpl.leadsPagos).toBe(pagos);
-    expect(iscas.cpl.valor).toBeCloseTo(gasto / pagos, 6);
+    expect(iscas.cpl).toEqual({ gasto: null, leadsPagos: 0, valor: null });
   });
   it('C1 sem clique (connect rate sem dado) e Google sem LPV (fica fora, com nota)', () => {
     const c1 = b.dias.filter((d) => idx.campanhaDoAnuncio(d.anuncioId)?.funil === 'c1');

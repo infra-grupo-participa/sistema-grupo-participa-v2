@@ -21,9 +21,8 @@ describe('jornada', () => {
     expect(NO.get('base-da-casa')!.sub).toEqual(['cerca de 189 mil leads']);
     expect(NO.get('live')!.sub).toEqual(['03/11 · 19h30 · YouTube + fake live no Insta']);
   });
-  it('CPL dos nós = CPL por etapa do placar (mesma atribuição por campanha)', () => {
+  it('CPL dos nós de captação coincide com a mesma etapa do placar', () => {
     const etapas = cplPorEtapa(b.dias, b.linhas, idx);
-    expect(valor('pagina-isca', 'CPL')).toBeCloseTo(etapas.find((e) => e.chave === 'iscas')!.cpl.valor!, 6);
     expect(valor('aplicacao-consultoria', 'CPL')).toBeCloseTo(etapas.find((e) => e.chave === 'consultoria')!.cpl.valor!, 6);
     expect(valor('captacao-direta', 'CPL')).toBeCloseTo(etapas.find((e) => e.chave === 'c3')!.cpl.valor!, 6);
     expect(valor('remarketing', 'CPL')).toBeCloseTo(cplRemarketing(b.dias, b.linhas, idx).valor!, 6);
@@ -35,9 +34,11 @@ describe('jornada', () => {
     expect(valor('live', 'Presença')).toBeNull();
     expect(valor('live', 'Vendas')).toBeNull();
   });
-  it('C1 não tem CPL nem connect rate', () => {
+  it('Cortes sem subtipo CORTES ficam sem dado; assistiu 75% usa o C1 inteiro', () => {
     expect(mapa.cortes.some((m) => m.rotulo === 'CPL' || m.rotulo === 'Connect rate')).toBe(false);
-    expect(valor('cortes', 'Custo por visualização')).not.toBeNull();
+    expect(mapa.cortes).toEqual([]);
+    expect(valor('assistiu-75', 'Vídeo 75%')).not.toBeNull();
+    expect(mapa.lembrete).not.toEqual(mapa.manifesto);
   });
   it('filtro de funil apaga só os nós de outro funil; cadeia comum nunca apaga', () => {
     expect(noApagado(NO.get('cortes')!, 'iscas')).toBe(true);

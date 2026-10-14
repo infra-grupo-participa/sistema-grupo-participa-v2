@@ -2,7 +2,7 @@
 
 // Aba 5, Histórico (molde HistoricoAtm do ATM). Régua de dias que "toca" o funil dia a dia (autoplay só sem
 // movimento reduzido) e o gráfico do período: investimento por dia em barras, pessoas únicas acumuladas desde o
-// início do projeto contra a meta acumulada (650 por dia desde o início da captação). O funil do dia é só da
+// início do projeto. O funil do dia é só da
 // captação (C2 e C3), como na Visão geral; o investimento e o acumulado seguem o funil e o canal do seletor.
 import { useEffect, useMemo, useState } from 'react';
 import { KpiCard, SectionCard } from '@/shared/ui/components';
@@ -11,7 +11,7 @@ import { serieHistorico, type DiaHistorico } from '../domain/historico';
 import { diaDe } from '../domain/recorte';
 import type { Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
-import { formatar, inteiro, moeda, Numero, Taxa, usePrefereMenosMovimento } from './pecas';
+import { inteiro, moeda, Numero, Taxa, usePrefereMenosMovimento } from './pecas';
 
 const dataCurta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const PASSO_MS = 900;
@@ -50,7 +50,6 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
   if (serie.length === 0) return <p className="text-sm text-[var(--fg-3)]">Sem dia no período.</p>;
   const dia = serie[i];
   const cap = serieCap[i];
-  const meta = dia.metaAcumulada;
 
   return (
     <div className="space-y-4">
@@ -74,14 +73,14 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
           <KpiCard label="Investimento do dia" value={moeda(dia.gasto)} bar="yellow" hint="Funil e canal do seletor" />
           <KpiCard label="Cadastros do dia" value={inteiro(dia.cadastros)} bar="accent" hint={`${inteiro(dia.leadsPagos)} vieram de anúncio`} />
           <KpiCard label="Pessoas novas no dia" value={inteiro(dia.pessoasNovas)} bar="green" hint="Primeira vez na lista" />
-          <KpiCard label="Acumulado x meta" value={inteiro(dia.pessoasAcumuladas)} bar={meta !== null && dia.pessoasAcumuladas >= meta ? 'green' : 'red'}
-            hint={meta === null ? 'Antes do início da captação, sem meta' : `Meta acumulada ${inteiro(meta)}`} />
+          <KpiCard label="Leads acumulados" value={inteiro(dia.pessoasAcumuladas)} bar="green"
+            hint="Pessoas únicas desde o início do projeto." />
         </div>
 
         <FunilDia key={dia.dia} dia={cap} />
       </SectionCard>
 
-      <SectionCard title="Acumulado contra a meta" subtitle="Barras: investimento por dia. Linha cheia: pessoas únicas acumuladas desde o início. Tracejada: meta acumulada.">
+      <SectionCard title="Investimento e leads acumulados" subtitle="Barras: investimento do dia. Linha: pessoas únicas acumuladas desde o início.">
         <Grafico serie={serie} ativo={i} onEscolher={(k) => { setTocando(false); setEscolhido(k); }} />
       </SectionCard>
     </div>
@@ -89,11 +88,16 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
 }
 
 function FunilDia({ dia }: { dia: DiaHistorico }) {
-  const etapas: { rotulo: string; valor: Valor; anterior: Valor }[] = [
-    { rotulo: 'Impressões', valor: dia.impressoes, anterior: null },
-    { rotulo: 'Cliques no link', valor: dia.cliques, anterior: dia.impressoes },
-    { rotulo: 'Views da página', valor: dia.lpv, anterior: dia.cliques },
-    { rotulo: 'Leads pagos', valor: dia.leadsPagos, anterior: dia.lpv },
+  const cpmDia = dia.impressoes > 0 ? dia.gasto * 1000 / dia.impressoes : null;
+  const etapas: { rotulo: string; valor: Valor; pontes: { rotulo: string; taxa?: ReturnType<typeof taxa>; valor?: Valor; formato?: 'brl' }[] }[] = [
+    { rotulo: 'Impressões', valor: dia.impressoes, pontes: [] },
+    { rotulo: 'Cliques no link', valor: dia.cliques, pontes: [
+      { rotulo: 'CTR', taxa: taxa(dia.cliques, dia.impressoes) }, { rotulo: 'CPM', valor: cpmDia, formato: 'brl' },
+    ] },
+    { rotulo: 'Views da página', valor: dia.lpv, pontes: [{ rotulo: 'Connect rate', taxa: taxa(dia.lpv, dia.cliques) }] },
+    { rotulo: 'Leads pagos', valor: dia.leadsPagos, pontes: [{ rotulo: 'Conversão da página', taxa: taxa(dia.leadsPagos, dia.lpv) }] },
+    { rotulo: 'MQL', valor: dia.mql, pontes: [{ rotulo: '% MQL', taxa: taxa(dia.mql, dia.mqlBase) }] },
+    { rotulo: 'Ingresso no grupo', valor: dia.ingressoGrupo, pontes: [{ rotulo: '% ingresso no grupo', taxa: taxa(dia.ingressoGrupo, dia.pessoasNovas) }] },
   ];
   const max = Math.max(1, dia.impressoes);
   return (
@@ -105,7 +109,6 @@ function FunilDia({ dia }: { dia: DiaHistorico }) {
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
               <span className="text-[var(--fg-2)]">{e.rotulo}</span>
               <span className="flex items-baseline gap-2">
-                {k > 0 && <span className="text-xs text-[var(--fg-3)]"><Taxa taxa={taxa(e.valor, e.anterior)} /></span>}
                 <Numero valor={e.valor} formato="int" animado={false} />
               </span>
             </div>
@@ -116,7 +119,15 @@ function FunilDia({ dia }: { dia: DiaHistorico }) {
           </li>
         ))}
       </ol>
-      <p className="mt-2 text-[11px] text-[var(--fg-3)]">Cada taxa é a etapa sobre a anterior, no mesmo dia.</p>
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
+        {etapas.flatMap((etapa) => etapa.pontes.map((ponte) => (
+          <div key={`${etapa.rotulo}-${ponte.rotulo}`} className="flex items-baseline justify-between gap-2 border-t border-[var(--border-faint)] pt-2">
+            <dt className="text-[var(--fg-3)]">{ponte.rotulo}</dt>
+            <dd className="font-semibold text-[var(--fg)]">{ponte.taxa ? <Taxa taxa={ponte.taxa} /> : <Numero valor={ponte.valor ?? null} formato={ponte.formato ?? 'int'} animado={false} />}</dd>
+          </div>
+        )))}
+      </dl>
+      <p className="mt-2 text-[11px] text-[var(--fg-3)]">MQL e ingresso no grupo seguem as pessoas únicas cadastradas neste dia; o grupo conta quem já entrou, mesmo antes do cadastro. Alcance e frequência não são somados por dia.</p>
     </section>
   );
 }
@@ -125,21 +136,21 @@ function Grafico({ serie, ativo, onEscolher }: { serie: DiaHistorico[]; ativo: n
   const W = 720; const H = 220; const topo = 12; const base = H - 24; const n = serie.length;
   const larg = W / n;
   const maxG = Math.max(1, ...serie.map((s) => s.gasto));
-  const maxP = Math.max(1, ...serie.map((s) => Math.max(s.pessoasAcumuladas, s.metaAcumulada ?? 0)));
+  const maxP = Math.max(1, ...serie.map((s) => s.pessoasAcumuladas));
   const yP = (v: number) => base - (v / maxP) * (base - topo);
   const x = (k: number) => (k + 0.5) * larg;
   const linhaPessoas = serie.map((s, k) => `${x(k)},${yP(s.pessoasAcumuladas)}`).join(' ');
-  const linhaMeta = serie.map((s, k) => (s.metaAcumulada === null ? null : `${x(k)},${yP(s.metaAcumulada)}`)).filter(Boolean).join(' ');
   const passos = Math.max(1, Math.ceil(n / 8));
   return (
     <figure className="min-w-0">
       <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img"
-        aria-label={`Período de ${dataCurta(serie[0].dia)} a ${dataCurta(serie[n - 1].dia)}. No último dia: ${inteiro(serie[n - 1].pessoasAcumuladas)} pessoas acumuladas, meta ${formatar(serie[n - 1].metaAcumulada, 'int')}.`}>
+        aria-label={`Período de ${dataCurta(serie[0].dia)} a ${dataCurta(serie[n - 1].dia)}. No último dia: investimento ${moeda(serie[n - 1].gasto)}, ${inteiro(serie[n - 1].pessoasAcumuladas)} leads acumulados.`}>
         {serie.map((s, k) => {
           const h = (s.gasto / maxG) * (base - topo) * 0.6;
-          const dica = `${dataCurta(s.dia)}: ${moeda(s.gasto)} · ${inteiro(s.pessoasAcumuladas)} acumuladas · meta ${formatar(s.metaAcumulada, 'int')}`;
+          const dica = `${dataCurta(s.dia)}: investimento do dia ${moeda(s.gasto)} · ${inteiro(s.pessoasAcumuladas)} leads acumulados`;
           return (
             <g key={s.dia} role="button" tabIndex={0} aria-label={dica} aria-pressed={k === ativo} className="atm-historico-interativo cursor-pointer"
+              onMouseEnter={() => onEscolher(k)} onFocus={() => onEscolher(k)}
               onClick={() => onEscolher(k)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEscolher(k); } }}>
               <rect x={k * larg} y={topo} width={larg} height={base - topo} fill="transparent" />
               <rect className="atm-historico-barra" x={k * larg + larg * 0.18} width={larg * 0.64} y={base - h} height={h} rx="2"
@@ -148,17 +159,18 @@ function Grafico({ serie, ativo, onEscolher }: { serie: DiaHistorico[]; ativo: n
           );
         })}
         <line x1="0" x2={W} y1={base} y2={base} stroke="var(--border)" />
-        {linhaMeta && <polyline points={linhaMeta} fill="none" stroke="var(--fg-3)" strokeWidth="1.5" strokeDasharray="5 4" vectorEffect="non-scaling-stroke" />}
         <polyline points={linhaPessoas} fill="none" stroke="var(--cyan)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
         <line x1={x(ativo)} x2={x(ativo)} y1={topo} y2={base} stroke="var(--accent)" strokeWidth="1" vectorEffect="non-scaling-stroke" opacity="0.6" />
         {serie.map((s, k) => (k % passos === 0 || k === n - 1) && (
           <text key={`t-${s.dia}`} x={x(k)} y={H - 6} textAnchor="middle" className="fill-[var(--fg-3)] text-[13px]">{dataCurta(s.dia)}</text>
         ))}
       </svg>
+      <p role="status" className="mt-2 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--fg)]">
+        {dataCurta(serie[ativo].dia)} · Investimento do dia: <strong>{moeda(serie[ativo].gasto)}</strong> · Leads acumulados: <strong>{inteiro(serie[ativo].pessoasAcumuladas)}</strong>
+      </p>
       <figcaption className="mt-1 flex flex-wrap gap-3 text-xs text-[var(--fg-3)]">
         <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="h-2 w-3 rounded-sm bg-[var(--surface-4)]" />Investimento (máx. {moeda(maxG)})</span>
         <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="h-0.5 w-3 bg-[var(--cyan)]" />Pessoas acumuladas</span>
-        <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="h-0 w-3 border-t border-dashed border-[var(--fg-3)]" />Meta acumulada</span>
       </figcaption>
     </figure>
   );
