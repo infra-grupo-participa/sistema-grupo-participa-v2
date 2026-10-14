@@ -84,3 +84,9 @@ verify_jwt = false
 # Authorization; autentica pelo header x-crm-chave (Vault crm_whatsapp_envio_chave), fail-closed.
 [functions.crm-evolution-enviar]
 verify_jwt = false
+
+# metodo-perfeito: páginas de captação do timeholdingbrasil.com.br (Método Perfeito, fluxograma, consultoria, dp4,
+# renovacao). Publicada com verify_jwt = true (as páginas mandam a chave anon). Fonte trazida para o repo em 14/10/2026;
+# ver infra/supabase/functions/metodo-perfeito/README.md.
+[functions.metodo-perfeito]
+verify_jwt = true
