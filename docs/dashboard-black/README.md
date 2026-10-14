@@ -497,10 +497,14 @@ hora. Migration `20261013174100`; o detalhe da regra está em `infra/supabase/mi
   - quem só está no grupo entra com nome e e-mail vazios;
   - a Turma Especial (planilha da Isabela) sai no Apps Script, por e-mail ou telefone. Não há casamento por documento,
     porque nenhuma fonte da lista pede CPF.
+- **DESLIGADA desde 14/10 (migration `20261014010100`):** `public.black_lista_disparo` não é mais executável por anon
+  (nem por mais ninguém além de `postgres`). O Apps Script nunca foi ligado (chave nunca configurada, 0 leituras); a
+  lista de disparo é o botão da Mensageria. Religar = migration nova com `grant execute ... to anon`, com o ok do Victor
+  e do pentester. O texto abaixo descreve como era.
 - **Caminho (OPCIONAL desde 13/10: o botão da Mensageria substitui):**
   - o Apps Script `infra/apps-script/black-lista-disparo/Codigo.gs` é um projeto separado, só do Victor e não
     compartilhado;
-  - ele chama `public.black_lista_disparo(p_chave)`, que dá acesso só ao anon. A chave é gerada no próprio Apps Script e
+  - ele chamaria `public.black_lista_disparo(p_chave)` (até 14/10 executável por anon; hoje fechada). A chave é gerada no próprio Apps Script e
     o banco guarda só o sha256, em `dados.black_lista_config`;
   - a porta aceita no máximo 1 leitura a cada 5 min;
   - cada leitura grava só contagens em `dados.black_lista_leituras`;
@@ -509,9 +513,8 @@ hora. Migration `20261013174100`; o detalhe da regra está em `infra/supabase/mi
   - `select dados.black_lista_disparo_montar()->'resumo'` no SQL editor, que roda como postgres e devolve só contagens;
   - `select * from dados.black_lista_leituras order by id desc` mostra as leituras do gatilho;
   - na planilha, a aba "Lista" muda a cada hora.
-- **Desligar:**
-  - no projeto do Apps Script, Acionadores, apagar o de `atualizar`;
-  - ou fechar a porta com `update dados.black_lista_config set chave_sha256 = null`.
+- **Desligar:** já desligada no banco (`20261014010100`). Se um dia religarem: no projeto do Apps Script, Acionadores,
+  apagar o de `atualizar`, ou fechar a porta com `update dados.black_lista_config set chave_sha256 = null`.
 - **Reversão completa:** `20261013174100_reversao.sql` e depois desligar o gatilho.
 
 ## Conferência de dado tela x fonte e correções (13/10/2026, noite, NÃO aplicadas)
