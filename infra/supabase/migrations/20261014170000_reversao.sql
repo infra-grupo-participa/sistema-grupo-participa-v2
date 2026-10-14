@@ -6,6 +6,7 @@
 --   select count(*) from pessoas.identificadores where origem = 'activecampaign';    -- (inclui as do webhook de antes)
 -- Os eventos da carga apontam para pessoas.ac_contato por texto (fonte_tabela/fonte_id), sem FK: a reversão não os toca.
 set local lock_timeout = '5s';
+drop function if exists pessoas.carga_ensaio(jsonb);
 drop function if exists pessoas.carga_ac_pessoas(bigint, integer);
 drop function if exists pessoas.casar_email(text, text, text, text);
 drop function if exists pessoas.carga_ac_estagio(bigint, jsonb, text);

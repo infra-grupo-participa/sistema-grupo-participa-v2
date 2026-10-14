@@ -9,8 +9,8 @@ Fases (cada uma retoma de onde parou, pelo cursor gravado em pessoas.carga_execu
 Uso:
   caffeinate -i python3 carga_ac.py --rodar tudo            # catalogo + estagio + pessoas (noite)
   python3 carga_ac.py --rodar estagio --max-lotes 5          # só 5 lotes, para conferir
-  python3 carga_ac.py --ensaio 300                           # amostra real de 300 contatos, numa transação DESFEITA
-                                                              # junto com as migrations (exige --migrations DIR)
+  python3 carga_ac.py --ensaio 300                           # amostra real (até 500) por pessoas.carga_ensaio($1): roda
+                                                              # estágio e pessoas e DESFAZ tudo (exige a 170000 aplicada)
   python3 carga_ac.py --status                               # execuções e contagens
 
 Segurança e regras (Manual de banco; censo-capacidade-ac.md):
@@ -23,10 +23,15 @@ Segurança e regras (Manual de banco; censo-capacidade-ac.md):
     'parada' e sai. Rodar de novo retoma do cursor.
   - Chave do AC: lida do Vault (activecampaign_api_key) a cada execução; nunca impressa nem gravada.
   - Saída e log só com contagens. Nenhum e-mail, nome ou telefone é impresso nem gravado em arquivo.
+  - O lote de contatos vai como PARÂMETRO ligado ($2 da Management API), nunca dentro do texto do SQL: com
+    log_min_error_statement = error, uma instrução com erro grava o texto no log do projeto; o valor do parâmetro não vai
+    (log_parameter_max_length_on_error = 0, conferido em 14/10/2026). Achado do pentester de 14/10.
+  - Erro do banco: só o SQLSTATE e a 1ª linha da mensagem, até 200 caracteres (sem DETAIL nem CONTEXT, que podem trazer
+    a linha com dado pessoal). Qualquer erro numa fase fecha a execução como 'erro' com esse texto curto e sai.
 Credencial do Supabase (Management API): variável SUPABASE_ACCESS_TOKEN, ou --env-file com SUPABASE_ACESS_TOKEN=... (padrão
 do repo: controle-de-eventos/.env).
 """
-import argparse, json, os, re, secrets, sys, time, urllib.error, urllib.request
+import argparse, json, os, re, sys, time, urllib.error, urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -83,34 +88,43 @@ class Banco:
                     return float(l.rsplit(' ', 1)[1]) / 1e6
         raise RuntimeError('métrica node_memory_MemAvailable_bytes não encontrada')
 
-    def sql(self, q, timeout=120):
+    def sql(self, q, params=None, timeout=120):
+        corpo = {'query': q}
+        if params is not None:
+            corpo['parameters'] = params          # parâmetro ligado: o valor não entra no texto do SQL nem no log
         r = urllib.request.Request(f'https://api.supabase.com/v1/projects/{PROJETO}/database/query',
-                                   data=json.dumps({'query': q}).encode(),
+                                   data=json.dumps(corpo).encode(),
                                    headers={'Authorization': 'Bearer ' + self.tok, 'Content-Type': 'application/json', 'User-Agent': UA},
                                    method='POST')
         try:
             with urllib.request.urlopen(r, timeout=timeout) as x:
                 return json.loads(x.read().decode())
         except urllib.error.HTTPError as e:
-            corpo = e.read().decode()
-            try:
-                corpo = json.loads(corpo).get('message', corpo)
-            except Exception:
-                pass
-            raise RuntimeError(f'SQL HTTP {e.code}: {corpo[:8000]}')
+            raise ErroBanco(e.code, e.read().decode())
 
-    def um(self, q):
-        r = self.sql(q)
+    def um(self, q, params=None):
+        r = self.sql(q, params)
         return list(r[0].values())[0] if r else None
 
 
-def lit(obj):
-    """JSON como literal SQL seguro (dollar quoting com marca aleatória)."""
-    s = json.dumps(obj, ensure_ascii=False, separators=(',', ':'))
-    tag = 'j' + secrets.token_hex(6)
-    while f'${tag}$' in s:
-        tag = 'j' + secrets.token_hex(6)
-    return f'${tag}${s}${tag}$::jsonb'
+class ErroBanco(RuntimeError):
+    """Só o SQLSTATE e a 1ª linha da mensagem, até 200 caracteres. DETAIL e CONTEXT (que podem trazer a linha com e-mail,
+    telefone ou nome) nunca saem daqui."""
+    def __init__(self, http, corpo):
+        try:
+            corpo = json.loads(corpo).get('message', corpo)
+        except Exception:
+            pass
+        corpo = str(corpo).replace('Failed to run sql query: ', '')
+        m = re.search(r'ERROR:\s+([0-9A-Z]{5}):\s*([^\n]*)', corpo)
+        if m:
+            self.codigo, linha = m.group(1), m.group(2)
+        else:
+            self.codigo, linha = f'HTTP{http}', corpo.split('\n', 1)[0]
+        linha = re.sub(r'[^\s"\'<>@]+@[^\s"\'<>@]+', '***@***', linha)          # rede de segurança: e-mail
+        linha = re.sub(r'\d[\d.\-\s()]{8,}\d', '***', linha)                   # rede de segurança: telefone/documento
+        self.texto = f'{self.codigo} {linha.strip()}'[:200]
+        super().__init__(self.texto)
 
 
 # ---------------------------------------------------------------- ActiveCampaign
@@ -234,31 +248,64 @@ def esperar_saude(banco, ultimo_ms, lento_s, ram_min_mb):
 
 
 # ---------------------------------------------------------------- fases
+ABERTA = {}
+
+
+def fechar(banco, eid, status_, erro=None):
+    banco.um('select pessoas.carga_fechar($1::bigint, $2::text, $3::text)', [eid, status_, erro])
+    ABERTA.pop('id', None)
+
+
+def rodar_fase(nome, fn, banco, *args):
+    """Qualquer erro: imprime só o texto curto (ErroBanco/AC) e fecha a execução aberta como 'erro'. Ctrl+C: 'parada'."""
+    try:
+        fn(banco, *args)
+        return True
+    except KeyboardInterrupt:
+        if ABERTA.get('id'):
+            fechar(banco, ABERTA['id'], 'parada', 'interrompida à mão')
+        log(f'{nome}: interrompida; rodar de novo retoma do cursor')
+        return False
+    except Exception as e:
+        curto = e.texto if isinstance(e, ErroBanco) else f'{type(e).__name__}: {str(e)[:150]}'
+        if isinstance(e, ErroBanco) is False and ('@' in curto or re.search(r'\d{8,}', curto)):
+            curto = type(e).__name__          # nunca imprimir algo que pareça dado pessoal
+        log(f'{nome}: ERRO {curto}')
+        if ABERTA.get('id'):
+            try:
+                fechar(banco, ABERTA['id'], 'erro', curto)
+            except Exception:
+                log('não consegui fechar a execução como erro; ela segue aberta e retoma na próxima rodada')
+        return False
+
+
 def fase_catalogo(banco, ac, por):
-    ex = banco.um(f"select pessoas.carga_abrir('{FONTE}', 'catalogo', '{por}')")
+    ex = banco.um('select pessoas.carga_abrir($1::text, $2::text, $3::text)', [FONTE, 'catalogo', por])
     eid = ex['execucao']
+    ABERTA['id'] = eid
     itens = [{'tipo': 'lista', 'id': int(x['id']), 'nome': x['name']} for x in ac.todos('lists', 'lists')]
     itens += [{'tipo': 'tag', 'id': int(x['id']), 'nome': x['tag']} for x in ac.todos('tags', 'tags')]
     itens += [{'tipo': 'campo', 'id': int(x['id']), 'nome': x['title'], 'extra': {'perstag': x.get('perstag'), 'tipo': x.get('type')}}
               for x in ac.todos('fields', 'fields')]
-    n = banco.um(f'select pessoas.carga_ac_catalogo({lit(itens)})')
-    banco.sql(f"select pessoas.carga_fechar({eid}, 'ok')")
+    n = banco.um('select pessoas.carga_ac_catalogo($1::jsonb)', [json.dumps(itens, ensure_ascii=False)])
+    fechar(banco, eid, 'ok')
     log(f'catálogo: {len(itens)} itens lidos, {n} gravados/atualizados')
 
 
 def fase_estagio(banco, ac, por, lote_n, max_lotes, lento_s, ram_min_mb):
-    ex = banco.um(f"select pessoas.carga_abrir('{FONTE}', 'estagio', '{por}')")
+    ex = banco.um('select pessoas.carga_abrir($1::text, $2::text, $3::text)', [FONTE, 'estagio', por])
     eid, cursor = ex['execucao'], int(ex['cursor'] or 0)
+    ABERTA['id'] = eid
     log(f"estágio: execução {eid} {'retomada do contato ' + str(cursor) if ex['retomada'] else 'nova'}")
     campos = {str(r['field_id']): r['perstag'] for r in banco.sql('select field_id, perstag from pessoas.ac_campo_carga')}
     lotes, ultimo_ms, t0 = 0, None, time.time()
     while True:
         if max_lotes and lotes >= max_lotes:
-            banco.sql(f"select pessoas.carga_fechar({eid}, 'parada', 'max-lotes atingido')")
+            fechar(banco, eid, 'parada', 'max-lotes atingido')
             log('max-lotes atingido: execução parada (retoma do cursor)')
             return
         if not esperar_saude(banco, ultimo_ms, lento_s, ram_min_mb):
-            banco.sql(f"select pessoas.carga_fechar({eid}, 'parada', 'banco lento ou chave desligada')")
+            fechar(banco, eid, 'parada', 'banco lento ou chave desligada')
             return
         lote, fim = [], False
         while len(lote) < lote_n:
@@ -271,7 +318,8 @@ def fase_estagio(banco, ac, por, lote_n, max_lotes, lento_s, ram_min_mb):
             lote += novos
             cursor = max(c['id'] for c in novos)
         if lote:
-            r = banco.um(f"select pessoas.carga_ac_estagio({eid}, {lit(lote)}, '{cursor}')")
+            r = banco.um('select pessoas.carga_ac_estagio($1::bigint, $2::jsonb, $3::text)',
+                         [eid, json.dumps(lote, ensure_ascii=False, separators=(',', ':')), str(cursor)])
             ultimo_ms = r['ms']
             lotes += 1
             log(f"estágio lote {lotes}: {r['lidas']} lidos, {r['inseridas']} novos, {r['atualizadas']} atualizados, "
@@ -279,49 +327,48 @@ def fase_estagio(banco, ac, por, lote_n, max_lotes, lento_s, ram_min_mb):
                 f"disco {ULTIMA.get('disco_gb')} GB, RAM livre {ULTIMA.get('ram_livre_mb')} MB, conexões {ULTIMA.get('conexoes')})")
             time.sleep(2)
         if fim:
-            banco.sql(f"select pessoas.carga_fechar({eid}, 'ok')")
+            fechar(banco, eid, 'ok')
             log('estágio: fim da lista de contatos do AC')
             return
 
 
 def fase_pessoas(banco, por, lote_n, max_lotes, lento_s, ram_min_mb):
-    ex = banco.um(f"select pessoas.carga_abrir('{FONTE}', 'pessoas', '{por}')")
+    ex = banco.um('select pessoas.carga_abrir($1::text, $2::text, $3::text)', [FONTE, 'pessoas', por])
     eid = ex['execucao']
+    ABERTA['id'] = eid
     log(f"pessoas: execução {eid} {'retomada' if ex['retomada'] else 'nova'}")
     lotes, ultimo_ms = 0, None
     while True:
         if max_lotes and lotes >= max_lotes:
-            banco.sql(f"select pessoas.carga_fechar({eid}, 'parada', 'max-lotes atingido')")
+            fechar(banco, eid, 'parada', 'max-lotes atingido')
             log('max-lotes atingido: execução parada')
             return
         if not esperar_saude(banco, ultimo_ms, lento_s, ram_min_mb):
-            banco.sql(f"select pessoas.carga_fechar({eid}, 'parada', 'banco lento ou chave desligada')")
+            fechar(banco, eid, 'parada', 'banco lento ou chave desligada')
             return
-        r = banco.um(f'select pessoas.carga_ac_pessoas({eid}, {lote_n})')
+        r = banco.um('select pessoas.carga_ac_pessoas($1::bigint, $2::int)', [eid, lote_n])
         ultimo_ms = r['ms']
         lotes += 1
         log(f"pessoas lote {lotes}: {r['lidas']} lidos, {r['pessoas_novas']} pessoas novas, {r['casadas']} casadas, "
             f"{r['sem_email']} sem e-mail, {r['revisao']} revisão, {r['eventos']} eventos, {r['ms']} ms, restam {r['restam']}; "
             f"disco {ULTIMA.get('disco_gb')} GB, RAM livre {ULTIMA.get('ram_livre_mb')} MB, conexões {ULTIMA.get('conexoes')}")
         if r['lidas'] == 0 or r['restam'] == 0:
-            banco.sql(f"select pessoas.carga_fechar({eid}, 'ok')")
+            fechar(banco, eid, 'ok')
             log('pessoas: estágio todo processado')
             return
         time.sleep(2)
 
 
 # ---------------------------------------------------------------- ensaio (amostra real, transação desfeita)
-def ensaio(banco, ac, n, dir_mig):
-    """Aplica as migrations (sem os índices concurrently) + carga de n contatos reais + 2ª passada (idempotência), tudo numa
-    transação que termina em erro proposital: nada fica gravado. Imprime só contagens."""
-    d = Path(dir_mig)
-    corpo = lambda f: re.sub(r"set local statement_timeout = '30s';\n", '', (d / f).read_text(encoding='utf-8'))
-    migs = ['20261014160200_pessoas_vincular_eventos_e_relacoes.sql']   # só pessoas: nada do fin (espera o JP)
-    idx = """create unique index eventos_fonte_unico on pessoas.eventos (fonte_tabela, fonte_id, tipo) where fonte_id is not null;
-create index eventos_evento_idx on pessoas.eventos (evento_id, tipo, quando) where evento_id is not null;
-create index eventos_turma_idx on pessoas.eventos (turma_id, tipo) where turma_id is not null;\n"""
-    # a tabela pessoas.ac_campo_carga ainda não existe: os campos saem do insert da própria migration
-    campos = {m.group(1): m.group(2) for m in re.finditer(r"\((\d+), '([A-Z0-9_]+)'", corpo('20261014170000_pessoas_criar_carga_ac.sql').split('insert into pessoas.ac_campo_carga')[1].split(';')[0])}
+def ensaio(banco, ac, n):
+    """Amostra REAL (até 500 contatos) passada como parâmetro a pessoas.carga_ensaio($1), que roda estágio (2×) e pessoas
+    num bloco interno que sempre volta atrás e devolve só contagens. Termina em rollback, nunca em erro; nada vai para o
+    log. Exige a migration 20261014170000 aplicada (antes disso, o ensaio é o 20261014170000_ensaio.sql do repo, com
+    contatos fictícios)."""
+    if not banco.um("select to_regprocedure('pessoas.carga_ensaio(jsonb)') is not null"):
+        sys.exit('pessoas.carga_ensaio não existe: aplicar a 20261014170000 antes (ou usar o ensaio do repo, com dado fictício)')
+    campos = {str(r['field_id']): r['perstag'] for r in banco.sql('select field_id, perstag from pessoas.ac_campo_carga')}
+    n = min(n, 480)
     lote, cursor = [], 0
     while len(lote) < n:
         pg = ac.get(f'contacts?limit=100&orders[id]=ASC&id_greater={cursor}&include=contactLists,contactTags,fieldValues')
@@ -332,52 +379,14 @@ create index eventos_turma_idx on pessoas.eventos (turma_id, tipo) where turma_i
         cursor = max(c['id'] for c in novos)
         time.sleep(0.5)
     lote = lote[:n]
-    # inclui contatos que caem em listas de SV, para provar o evento pre_checkout (busca por lista 412)
-    pg = ac.get('contacts?limit=20&listid=412&include=contactLists,contactTags,fieldValues')
-    lote += [c for c in montar_lote(pg, campos) if c['id'] not in {x['id'] for x in lote}]
-    s = "begin;\nset local lock_timeout = '5s';\nset local statement_timeout = '110s';\n"
-    s += 'create temp table _z_out (em serial, passo text, linha text);\n'
-    s += "insert into pg_temp._z_out(passo, linha) select '00 antes', (select jsonb_build_object('pessoas', (select count(*) from pessoas.pessoas), 'identificadores', (select count(*) from pessoas.identificadores), 'eventos', (select count(*) from pessoas.eventos), 'revisao', (select count(*) from pessoas.revisao))::text);\n"
-    for f in migs:
-        s += corpo(f) + '\n'
-    s += idx + corpo('20261014170000_pessoas_criar_carga_ac.sql') + '\n'
-    s += f"""
-create temp table _z_e as select (pessoas.carga_abrir('activecampaign', 'estagio', 'ensaio')->>'execucao')::bigint id;
-insert into pg_temp._z_out(passo, linha) select '10 estágio 1ª passada', pessoas.carga_ac_estagio((select id from pg_temp._z_e), {lit(lote)}, '{cursor}')::text;
-insert into pg_temp._z_out(passo, linha) select '11 estágio 2ª passada (idempotente: tudo igual)', pessoas.carga_ac_estagio((select id from pg_temp._z_e), {lit(lote)}, '{cursor}')::text;
-insert into pg_temp._z_out(passo, linha) select '12 estágio: total / com e-mail / descadastrou / desativado_empresa / com campos / com lista SV',
-  count(*) || ' / ' || count(email) || ' / ' || count(*) filter (where descadastrou) || ' / ' || count(*) filter (where desativado_empresa) || ' / ' ||
-  count(*) filter (where campos <> '{{}}') || ' / ' || count(*) filter (where exists (select 1 from jsonb_array_elements(listas) l join pessoas.ac_lista_papel p on p.lista_id = (l->>0)::int)) from pessoas.ac_contato;
-select pessoas.carga_fechar((select id from pg_temp._z_e), 'ok');
-create temp table _z_p as select (pessoas.carga_abrir('activecampaign', 'pessoas', 'ensaio')->>'execucao')::bigint id;
-insert into pg_temp._z_out(passo, linha) select '20 pessoas 1º lote', pessoas.carga_ac_pessoas((select id from pg_temp._z_p), 1000)::text;
-insert into pg_temp._z_out(passo, linha) select '21 pessoas 2º lote (nada pendente)', pessoas.carga_ac_pessoas((select id from pg_temp._z_p), 1000)::text;
-update pessoas.ac_contato set pendente = true;
-insert into pg_temp._z_out(passo, linha) select '22 reprocessar tudo (idempotente: 0 pessoas novas, 0 eventos)', pessoas.carga_ac_pessoas((select id from pg_temp._z_p), 1000)::text;
-insert into pg_temp._z_out(passo, linha) select '23 eventos da carga por tipo', string_agg(tipo || ' ' || n, ', ') from (select tipo, count(*) n from pessoas.eventos where fonte_tabela = 'pessoas.ac_contato' group by 1) x;
-insert into pg_temp._z_out(passo, linha) select '24 contatos com pessoa / pessoa nova / casada com quem já existia', count(pessoa_id) || ' / ' || count(*) filter (where pessoa_nova) || ' / ' || count(*) filter (where pessoa_nova = false) from pessoas.ac_contato;
-insert into pg_temp._z_out(passo, linha) select '25 lotes registrados / execuções', (select count(*) from pessoas.carga_lote) || ' / ' || (select string_agg(fase || ':' || status, ',') from pessoas.carga_execucao);
-update pessoas.carga_chave set ligada = false;
-do $t$ begin
-  begin perform pessoas.carga_ac_pessoas((select id from pg_temp._z_p), 10);
-    insert into pg_temp._z_out(passo, linha) values ('26 chave desligada', 'RODOU (ERRO)');
-  exception when raise_exception then insert into pg_temp._z_out(passo, linha) values ('26 chave desligada', 'recusou (ok)'); end;
-end $t$;
-insert into pg_temp._z_out(passo, linha) select '27 funções executáveis por anon/authenticated', count(*)::text from pg_proc p where p.pronamespace = 'pessoas'::regnamespace and p.proname like any (array['carga%', 'casar_email']) and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'));
-insert into pg_temp._z_out(passo, linha) select '30 depois', (select jsonb_build_object('pessoas', (select count(*) from pessoas.pessoas), 'identificadores', (select count(*) from pessoas.identificadores), 'eventos', (select count(*) from pessoas.eventos), 'revisao', (select count(*) from pessoas.revisao))::text);
-do $saida$ begin raise exception 'ENSAIO_SAIDA%', (select string_agg(passo || ' = ' || linha, E'\\n' order by em) from pg_temp._z_out); end $saida$;
-"""
+    pg = ac.get('contacts?limit=20&listid=412&include=contactLists,contactTags,fieldValues')   # garante lista de SV
+    ids = {x['id'] for x in lote}
+    lote += [c for c in montar_lote(pg, campos) if c['id'] not in ids]
     t0 = time.time()
-    try:
-        banco.sql(s, timeout=200)
-        log('ERRO: o ensaio não abortou (deveria terminar em erro proposital)')
-    except RuntimeError as e:
-        m = str(e)
-        if 'ENSAIO_SAIDA' in m:
-            print(m.split('ENSAIO_SAIDA', 1)[1].split('CONTEXT')[0].replace('\\n', '\n'))
-            log(f'ensaio: {len(lote)} contatos, {time.time() - t0:.1f} s, transação desfeita')
-        else:
-            log('ensaio falhou: ' + m[:600])
+    r = banco.um('select pessoas.carga_ensaio($1::jsonb)', [json.dumps(lote, ensure_ascii=False, separators=(',', ':'))])
+    for k, v in r.items():
+        print(f'{k} = {json.dumps(v, ensure_ascii=False)}')
+    log(f'ensaio: {len(lote)} contatos, {time.time() - t0:.1f} s, desfeito (rollback interno, sem erro)')
 
 
 def status(banco):
@@ -396,7 +405,6 @@ def main():
     a.add_argument('--max-lotes', type=int, default=0)
     a.add_argument('--lento', type=float, default=15.0, help='segundos: lote mais lento que isto conta como banco lento')
     a.add_argument('--ram-min', type=float, default=150.0, help='MB de RAM livre na máquina do banco abaixo dos quais o lote espera')
-    a.add_argument('--migrations', default=str(Path(__file__).resolve().parents[2] / 'supabase/migrations'))
     a.add_argument('--env-file', default=next((str(p / 'controle-de-eventos/.env') for p in Path(__file__).resolve().parents
                                                if (p / 'controle-de-eventos/.env').exists()), None))
     a.add_argument('--por', default='carga_ac.py')
@@ -410,15 +418,18 @@ def main():
         return status(banco)
     ac = AC(banco)
     if x.ensaio:
-        return ensaio(banco, ac, x.ensaio, x.migrations)
+        return ensaio(banco, ac, x.ensaio)
+    ok = True
     if x.rodar in ('catalogo', 'tudo'):
-        fase_catalogo(banco, ac, x.por)
-    if x.rodar in ('estagio', 'tudo'):
-        fase_estagio(banco, ac, x.por, x.lote, x.max_lotes, x.lento, x.ram_min)
-    if x.rodar in ('pessoas', 'tudo'):
-        fase_pessoas(banco, x.por, x.lote, x.max_lotes, x.lento, x.ram_min)
+        ok = rodar_fase('catálogo', lambda b: fase_catalogo(b, ac, x.por), banco)
+    if ok and x.rodar in ('estagio', 'tudo'):
+        ok = rodar_fase('estágio', lambda b: fase_estagio(b, ac, x.por, x.lote, x.max_lotes, x.lento, x.ram_min), banco)
+    if ok and x.rodar in ('pessoas', 'tudo'):
+        ok = rodar_fase('pessoas', lambda b: fase_pessoas(b, x.por, x.lote, x.max_lotes, x.lento, x.ram_min), banco)
     if x.rodar:
         status(banco)
+    if not ok:
+        sys.exit(1)
 
 
 if __name__ == '__main__':

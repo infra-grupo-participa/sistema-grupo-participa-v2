@@ -584,17 +584,60 @@ begin
                             'ms', (extract(epoch from clock_timestamp() - v_t0) * 1000)::int);
 end $f$;
 
+
+-- ensaio com dado REAL sem gravar e sem erro no log: roda estágio (2×) e pessoas num bloco interno que sempre volta atrás
+-- (subtransação desfeita, o erro é capturado aqui dentro) e devolve só contagens. O lote chega como parâmetro ligado
+-- ($1 da Management API), então não vai para o texto do SQL nem para o log. Achado do pentester de 14/10/2026.
+create function pessoas.carga_ensaio(p_lote jsonb) returns jsonb
+language plpgsql set search_path to '' as $f$
+declare v_saida jsonb; v_e bigint; v_p bigint; v_antes jsonb; r1 jsonb; r2 jsonb; r3 jsonb; r4 jsonb;
+begin
+  if jsonb_typeof(p_lote) <> 'array' or jsonb_array_length(p_lote) > 500 then
+    raise exception 'ensaio: lote de até 500 contatos' using errcode = '22023';
+  end if;
+  if exists (select 1 from pessoas.carga_execucao where fonte = 'activecampaign' and status = 'rodando') then
+    raise exception 'ensaio: há carga rodando; esperar ou parar antes' using errcode = 'P0001';
+  end if;
+  v_antes := pessoas.carga_contagem();
+  begin
+    v_e := (pessoas.carga_abrir('activecampaign', 'estagio', 'ensaio')->>'execucao')::bigint;
+    r1 := pessoas.carga_ac_estagio(v_e, p_lote, 'ensaio');
+    r2 := pessoas.carga_ac_estagio(v_e, p_lote, 'ensaio');
+    perform pessoas.carga_fechar(v_e, 'parada');
+    v_p := (pessoas.carga_abrir('activecampaign', 'pessoas', 'ensaio')->>'execucao')::bigint;
+    r3 := pessoas.carga_ac_pessoas(v_p, 2000);
+    update pessoas.ac_contato set pendente = true where contact_id in (select (x->>'id')::int from jsonb_array_elements(p_lote) x);
+    r4 := pessoas.carga_ac_pessoas(v_p, 2000);
+    v_saida := jsonb_build_object(
+      'antes', v_antes, 'estagio_1a', r1, 'estagio_2a_igual', r2, 'pessoas', r3 - 'restam', 'reprocessar', r4 - 'restam',
+      'eventos_por_tipo', (select jsonb_object_agg(tipo, n) from (select tipo, count(*) n from pessoas.eventos where fonte_tabela = 'pessoas.ac_contato' group by 1) x),
+      'descadastrou', (select count(*) from pessoas.ac_contato where descadastrou),
+      'desativado_empresa', (select count(*) from pessoas.ac_contato where desativado_empresa),
+      'depois_dentro', pessoas.carga_contagem());
+    raise exception using errcode = 'P0E01', message = 'ensaio: desfazer';   -- capturado logo abaixo: nada fica gravado
+  exception when sqlstate 'P0E01' then
+    null;
+  end;
+  return v_saida || jsonb_build_object('depois_fora', pessoas.carga_contagem());
+end $f$;
+
 revoke all on function pessoas.carga_ligada(text), pessoas.carga_contagem(), pessoas.carga_abrir(text, text, text),
   pessoas.carga_fechar(bigint, text, text), pessoas.carga_ac_catalogo(jsonb), pessoas.carga_ac_estagio(bigint, jsonb, text),
-  pessoas.casar_email(text, text, text, text), pessoas.carga_ac_pessoas(bigint, integer)
+  pessoas.casar_email(text, text, text, text), pessoas.carga_ac_pessoas(bigint, integer), pessoas.carga_ensaio(jsonb)
   from public, anon, authenticated, service_role;
 
 do $g$
 begin
   if exists (select 1 from pg_proc p where p.pronamespace = 'pessoas'::regnamespace
-               and p.proname in ('carga_ligada', 'carga_contagem', 'carga_abrir', 'carga_fechar', 'carga_ac_catalogo', 'carga_ac_estagio', 'casar_email', 'carga_ac_pessoas')
+               and p.proname in ('carga_ligada', 'carga_contagem', 'carga_abrir', 'carga_fechar', 'carga_ac_catalogo', 'carga_ac_estagio', 'casar_email', 'carga_ac_pessoas', 'carga_ensaio')
                and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))) then
     raise exception '20261014170000: função de carga ficou executável por anon/authenticated.';
+  end if;
+  if exists (select 1 from pg_class c where c.relnamespace = 'pessoas'::regnamespace
+               and c.relname in ('carga_chave', 'carga_execucao', 'carga_lote', 'ac_catalogo', 'ac_campo_carga', 'ac_lista_papel', 'ac_contato')
+               and (has_table_privilege('anon', c.oid, 'select') or has_table_privilege('authenticated', c.oid, 'select')
+                    or has_table_privilege('service_role', c.oid, 'select'))) then
+    raise exception '20261014170000: tabela da carga ficou legível por anon/authenticated/service_role.';
   end if;
 end
 $g$;
@@ -630,6 +673,17 @@ insert into pg_temp._z_out(passo, linha) select '21 reprocessar (0 novas, 0 even
 insert into pg_temp._z_out(passo, linha) select '22 eventos (esperado lead 10, pre_checkout 2)', string_agg(tipo || ' ' || n, ', ') from (select tipo, count(*) n from pessoas.eventos where fonte_tabela = 'pessoas.ac_contato' group by 1 order by 1) x;
 insert into pg_temp._z_out(passo, linha) select '23 identificadores da carga (e-mail 9 + telefone 5)', string_agg(tipo || ' ' || n, ', ') from (select i.tipo, count(*) n from pessoas.identificadores i where i.chave like 'ensaio-%' or (i.tipo = 'telefone' and i.chave like '11%' and i.pessoa_id in (select pessoa_id from pessoas.ac_contato)) group by 1) x;
 insert into pg_temp._z_out(passo, linha) select '24 contato 11 casou com a pessoa que já existia (nova = false)', (select (not pessoa_nova)::text from pessoas.ac_contato where contact_id = 900000011);
+update pessoas.carga_chave set ligada = true;
+select pessoas.carga_fechar((select id from pg_temp._z_p), 'ok');
+create temp table _z_c as select pessoas.carga_contagem() c;
+create temp table _z_en as select pessoas.carga_ensaio((select j from pg_temp._z_lote) || jsonb_build_array(jsonb_build_object('id', 900000099, 'email', 'ensaio-99@exemplo.invalid', 'listas', '[[607, 1, "2026-09-01", false]]'::jsonb))) r;
+insert into pg_temp._z_out(passo, linha) select '29 carga_ensaio: estágio 2ª passada / pessoas / reprocessar', (select (r->'estagio_2a_igual'->>'iguais') || ' iguais / ' || (r->'pessoas'->>'pessoas_novas') || ' novas / ' || (r->'reprocessar'->>'pessoas_novas') || ' novas' from pg_temp._z_en);
+insert into pg_temp._z_out(passo, linha) select '30 carga_ensaio desfez tudo (contagem igual antes e depois)', ((select r->'depois_fora' from pg_temp._z_en) = (select c from pg_temp._z_c))::text || ' (dentro: ' || (select r->'depois_dentro'->>'ac_contato' from pg_temp._z_en) || ' no estágio)';
+do $t$ begin
+  begin perform pessoas.carga_ensaio((select jsonb_agg(jsonb_build_object('id', g)) from generate_series(1, 501) g));
+    insert into pg_temp._z_out(passo, linha) values ('32 lote de 501 no ensaio', 'ACEITOU (ERRO)');
+  exception when invalid_parameter_value then insert into pg_temp._z_out(passo, linha) values ('32 lote de 501 no ensaio', 'recusado (ok)'); end;
+end $t$;
 update pessoas.carga_chave set ligada = false;
 do $t$ begin
   begin perform pessoas.carga_ac_estagio((select id from pg_temp._z_e), '[]'::jsonb, 'x');
