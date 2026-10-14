@@ -1,4 +1,4 @@
-import { ehEntresafraCampanha, type FiltroBase } from './metricas';
+import { ehEntresafraCampanha, funilIncluido, type FiltroBase } from './metricas';
 import type { Periodo, TrafegoBlack, Valor } from './tipos';
 
 export interface InvestimentoCaptacao {
@@ -44,7 +44,7 @@ export function investimentoCaptacao(trafego: TrafegoBlack, _periodo: Periodo, f
   const remarketing: typeof trafego.campanhas = [];
   for (const campanha of trafego.campanhas) {
     if (!pertenceACaptacao(campanha)) continue;
-    if (filtro?.funil && filtro.funil !== 'todos' && campanha.funil !== filtro.funil) continue;
+    if (filtro?.funil && !funilIncluido(filtro.funil, campanha.funil)) continue;
     if (filtro?.canal && filtro.canal !== 'todos' && campanha.canal !== filtro.canal) continue;
     if (ehEntresafraCampanha(campanha)) continue;
     if (ehRemarketing(campanha.nome, campanha.fase)) { remarketing.push(campanha); continue; }

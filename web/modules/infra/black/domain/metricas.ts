@@ -205,6 +205,11 @@ export const pessoasUnicas = (linhas: readonly LinhaPerfil[]) => new Set(linhas.
 // ─── Recorte por funil e canal, e CPL por etapa ────────────────────────────────────────────────────────────
 export interface FiltroBase { funil: FiltroFunil; canal: FiltroCanal }
 
+/** C2 é composto pelas portas classificadas como Consultoria e Iscas. */
+export function funilIncluido(filtro: FiltroFunil, funil: Funil | null | undefined): boolean {
+  return filtro === 'todos' || (filtro === 'c2' ? funil === 'consultoria' || funil === 'iscas' : funil === filtro);
+}
+
 /** A campanha da Entresafra não participa de nenhum gasto ou métrica de tráfego deste dashboard. */
 export function ehEntresafraCampanha(c: Campanha | null | undefined): boolean {
   return !!c && (c.subtipo?.toLocaleUpperCase('pt-BR') === 'ENTRESAFRA' || /\bENTRESAFRA\b/i.test(c.nome));
@@ -215,14 +220,16 @@ export function filtrarDias(dias: readonly DesempenhoDia[], idx: IndiceTrafego, 
   return dias.filter((d) => {
     const c = idx.campanhaDoAnuncio(d.anuncioId);
     if (!c || ehEntresafraCampanha(c)) return false;
-    return (f.funil === 'todos' || c.funil === f.funil) && (f.canal === 'todos' || c.canal === f.canal);
+    return funilIncluido(f.funil, c.funil) && (f.canal === 'todos' || c.canal === f.canal);
   });
 }
 
 /** Cadastros do funil e do canal. Com canal escolhido, quem não veio de tráfego (canal null) sai. */
 export function filtrarLinhas(linhas: readonly LinhaPerfil[], f: FiltroBase): LinhaPerfil[] {
   if (f.funil === 'todos' && f.canal === 'todos') return [...linhas];
-  return linhas.filter((l) => (f.funil === 'todos' || l.funil === f.funil) && (f.canal === 'todos' || l.canal === f.canal));
+  return linhas.filter((l) => {
+    return funilIncluido(f.funil, l.funil) && (f.canal === 'todos' || l.canal === f.canal);
+  });
 }
 
 export const gastoDe = (dias: readonly DesempenhoDia[]) => dias.reduce((s, d) => s + d.gasto, 0);
@@ -241,7 +248,7 @@ export function linhasCaptacao(linhas: readonly LinhaPerfil[], idx: IndiceTrafeg
   const elegivel = (c: Campanha | null) => c !== null && !ehEntresafraCampanha(c) && c.fase !== 'remarketing'
     && !/REMARKETING/i.test(c.nome)
     && (c.etapa === 'C2' || c.etapa === 'C3' || (c.etapa === undefined && c.fase === 'captacao' && ehCaptacao(c.funil)));
-  const passaFunil = (c: Campanha) => filtro.funil === 'todos' || c.funil === filtro.funil
+  const passaFunil = (c: Campanha) => funilIncluido(filtro.funil, c.funil)
     || (filtro.funil === 'iscas' && c.funil === 'c3' && c.subtipo === 'ISCA');
   const campanhas = new Set([...idx.campanha.values()].filter((c) => elegivel(c) && passaFunil(c)
     && (filtro.canal === 'todos' || c.canal === filtro.canal)).map((c) => c.id));
@@ -255,7 +262,7 @@ export function cplPlacar(dias: readonly DesempenhoDia[], linhas: readonly Linha
   const elegivel = (c: Campanha | null) => c !== null && !ehEntresafraCampanha(c) && c.fase !== 'remarketing'
     && !/REMARKETING/i.test(c.nome)
     && (c.etapa === 'C2' || c.etapa === 'C3' || (c.etapa === undefined && c.fase === 'captacao' && ehCaptacao(c.funil)));
-  const passaFunil = (c: Campanha) => filtro.funil === 'todos' || c.funil === filtro.funil
+  const passaFunil = (c: Campanha) => funilIncluido(filtro.funil, c.funil)
     || (filtro.funil === 'iscas' && c.funil === 'c3' && c.subtipo === 'ISCA');
   const candidatas = [...idx.campanha.values()].filter((c) => elegivel(c) && passaFunil(c)
     && (filtro.canal === 'todos' || c.canal === filtro.canal));

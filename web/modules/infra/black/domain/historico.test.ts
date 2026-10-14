@@ -38,7 +38,7 @@ describe('histórico', () => {
     const [dia] = serieHistorico([], linhas, ['2026-10-05'], CONFIG_BLACK);
     expect([dia.pessoasNovas, dia.mql, dia.mqlBase, dia.ingressoGrupo]).toEqual([2, 1, 2, 1]);
   });
-  it('funil do histórico calcula MQL e grupo somente entre os leads pagos pela regra B', () => {
+  it('funil mantém MQL dos pagos e conta ingresso no grupo entre todos os leads', () => {
     const original = b.linhas[0];
     const linhas: LinhaPerfil[] = [
       { ...original, pessoaId: 'paga-mql', origem: 'pago', criadoEm: '2026-10-05T10:00:00-03:00', profissao: 'advogado', entrouGrupoEm: '2026-10-05T12:00:00-03:00' },
@@ -46,7 +46,7 @@ describe('histórico', () => {
       { ...original, pessoaId: 'organica-mql', origem: 'organico', criadoEm: '2026-10-05T12:00:00-03:00', profissao: 'contador', entrouGrupoEm: '2026-10-05T14:00:00-03:00' },
     ];
     const [dia] = serieHistorico([], linhas, ['2026-10-05'], CONFIG_BLACK);
-    expect([dia.leadsPagos, dia.mql, dia.mqlPagos, dia.mqlPagosBase, dia.ingressoGrupoPagosMql])
-      .toEqual([2, 2, 1, 2, 1]);
+    expect([dia.leadsPagos, dia.mql, dia.mqlPagos, dia.mqlPagosBase, dia.ingressoGrupoPagosMql, dia.pessoasNovas, dia.ingressoGrupo])
+      .toEqual([2, 2, 1, 2, 1, 3, 3]);
   });
 });

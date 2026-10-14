@@ -148,7 +148,8 @@ export function espessura(volume: Valor, maximo: number): number {
 }
 
 /** Nó apagado pelo filtro de funil (opacidade 0,25, fora do teclado). A cadeia comum nunca apaga. */
-export const noApagado = (n: DefinicaoNo, funil: FiltroFunil) => funil !== 'todos' && n.funis.length > 0 && !n.funis.includes(funil);
+export const noApagado = (n: DefinicaoNo, funil: FiltroFunil) => funil !== 'todos' && n.funis.length > 0
+  && !(funil === 'c2' ? n.funis.some((f) => f === 'consultoria' || f === 'iscas') : n.funis.includes(funil));
 
 /** Recorta dias e linhas do nó (o que a gaveta da etapa usa). */
 export function recortarNo(n: DefinicaoNo, dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego) {

@@ -6,7 +6,7 @@ import { cardsGrupo } from './grupo';
 import {
   connectRate as calcularConnectRate, conversaoPagina as calcularConversaoPagina, ehEntresafraCampanha,
   ehPago, ingressoGrupo as calcularIngressoJanela, ingressoGrupoGeral as calcularIngressoGeral,
-  linhasCaptacao, mqlDoRecorte, pessoasUnicas, taxa,
+  funilIncluido, linhasCaptacao, mqlDoRecorte, pessoasUnicas, taxa,
   type FiltroBase, type IndiceTrafego, type Taxa,
 } from './metricas';
 import type { DesempenhoDia, GrupoResumoBlack, LinhaPerfil, Periodo, TrafegoBlack, Valor } from './tipos';
@@ -88,7 +88,7 @@ export function investimentoTrafego(trafego: TrafegoBlack, filtro: FiltroBase = 
   const elegiveis = trafego.campanhas.filter((c) => {
     if (ehEntresafraCampanha(c)) return false;
     if (filtro.canal !== 'todos' && c.canal !== filtro.canal) return false;
-    if (filtro.funil !== 'todos' && c.funil !== filtro.funil) return false;
+    if (!funilIncluido(filtro.funil, c.funil)) return false;
     return true;
   });
   const resultados = elegiveis.map((c) => gastoCampanha(trafego, c.id));
@@ -111,8 +111,8 @@ export function mql(linhas: readonly LinhaPerfil[], recorte = 'pessoas únicas n
   return numero(r.valor, r.num, r.den, `Regra do servidor; ${recorte}`, r.nota);
 }
 
-/** Potencial de MQL sobre pessoas únicas no mesmo recorte. */
-export function potencialMql(linhas: readonly LinhaPerfil[], recorte = 'pessoas únicas no recorte'): Numero {
+/** % de MQL sobre pessoas únicas no mesmo recorte. */
+export function taxaMql(linhas: readonly LinhaPerfil[], recorte = 'pessoas únicas no recorte'): Numero {
   const resultadoMql = mql(linhas, recorte);
   const denominador = leadsPessoas(linhas).valor;
   const resultado = taxa(resultadoMql.num, denominador);

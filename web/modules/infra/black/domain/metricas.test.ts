@@ -142,6 +142,15 @@ describe('filtros', () => {
     expect(filtrarDias(dias, idx, { funil: 'todos', canal: 'google' }).map((d) => d.anuncioId)).toEqual(['a3']);
     expect(filtrarLinhas(leads, { funil: 'todos', canal: 'meta' })).toHaveLength(3);
   });
+  it('C2 agrega Consultoria e Iscas, sem incluir C1 ou C3', () => {
+    const campanhaConsulta: Campanha = { id: 'k5', nome: 'CONSULTORIA', canal: 'meta', funil: 'consultoria', fase: 'captacao' };
+    const anuncioConsulta = ad('a5', 'j5');
+    const idxComC2 = indexar({ campanhas: [...campanhas, campanhaConsulta], conjuntos: [...conjuntos, { id: 'j5', campanhaId: 'k5', nome: 'J5', isca: null, conjuntoC3: null }], anuncios: [...anuncios, anuncioConsulta] });
+    const dadosC2 = [...dias, dia('a5', 40, 400, 20, 10)];
+    const linhasC2 = [...leads, linha({ leadId: 'l6', funil: 'consultoria', campanhaId: 'k5', anuncioId: 'a5' })];
+    expect(filtrarDias(dadosC2, idxComC2, { funil: 'c2', canal: 'todos' }).map((d) => d.anuncioId)).toEqual(['a2', 'a5']);
+    expect(filtrarLinhas(linhasC2, { funil: 'c2', canal: 'todos' }).map((l) => l.leadId)).toEqual(['l1', 'l2', 'l6']);
+  });
 });
 
 describe('grupo e pessoas', () => {

@@ -9,7 +9,7 @@ export const ROTULO_PERIODO: Record<ChavePeriodo, string> = {
   hoje: 'Hoje', '7d': '7 dias', 'desde-inicio': 'Desde o início', semana: 'Semana do ciclo', personalizado: 'Personalizado',
 };
 
-const FUNIS_FILTRO: readonly FiltroFunil[] = ['todos', 'c1', 'consultoria', 'iscas', 'c3'];
+const FUNIS_FILTRO: readonly FiltroFunil[] = ['todos', 'c1', 'c2', 'consultoria', 'iscas', 'c3'];
 const CANAIS_FILTRO: readonly FiltroCanal[] = ['todos', 'meta', 'google'];
 export const ABAS: readonly AbaBlack[] = ['visao', 'jornada', 'criativos', 'mensageria', 'historico'];
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
