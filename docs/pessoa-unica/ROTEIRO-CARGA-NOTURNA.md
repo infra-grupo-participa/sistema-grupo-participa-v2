@@ -31,13 +31,12 @@ select pessoas.carga_contagem();   -- anotar: é a contagem "antes" da noite
 
 Sinal de live (escrita bem acima da média, conexões perto de 50, alerta do vigia) = **adiar e avisar o Maestro**.
 
-## 1. Aplicar 170100, 170200 e 170300 (só se o pentester aprovou)
+## 1. Estrutura das cargas: FEITO em 14/10 ~15:22 UTC (12:22 em Brasília)
 
-Pelo `aplicar.py` da sessão ou pela Management API (`/database/migrations`, `begin`/`commit`), nesta ordem:
-`20261014152236_pessoas_criar_cargas_fontes.sql` → `20261014152239_pessoas_criar_carga_planilha_ativacao.sql` →
-`20261014152242_pessoas_criar_rotinas_manter_vivo.sql`. Depois de cada uma: anotar a versão gravada em
-`supabase_migrations.schema_migrations` e renomear o arquivo para ela. Os 2 jobs da 170300 nascem **desligados**.
-Sem o ok do pentester: pular os passos 1, 3 e 4 e fazer só o passo 2.
+O pentester liberou e foram aplicadas `20261014152236_pessoas_criar_cargas_fontes.sql`,
+`20261014152239_pessoas_criar_carga_planilha_ativacao.sql` e `20261014152242_pessoas_criar_rotinas_manter_vivo.sql`
+(versões gravadas em `supabase_migrations.schema_migrations`; os arquivos já têm esses nomes). Os 2 jobs nasceram
+**desligados**. À noite, nada a aplicar: só os passos 2 a 4 (dado) e, com ok do Maestro, o 5.
 
 ## 2. ActiveCampaign completo (~3,5 a 4 h)
 
