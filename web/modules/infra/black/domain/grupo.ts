@@ -152,7 +152,7 @@ export function cardsGrupo(g: GrupoResumoBlack): CardsGrupo {
 /** Resposta vazia (Sem dado em tudo), para quando o bloco ainda não foi lido ou a fonte não existe. */
 export function grupoSemDado(recorte: RecorteGrupo | null = null): GrupoResumoBlack {
   return {
-    periodo: { de: null, ate: null }, recorte, grupos: [],
+    periodo: { de: null, ate: null }, recorte, grupos: [], ingressoGeral: null,
     unicosGruposMql: null, unicosGruposTotal: null, unicosCruzadosMql: null,
     leads: { unicos: null, mql: null, advogado: null, estudanteDireito: null, advogadoMaisEstudante: null, contador: null, outros: null, semProfissao: null, naoMql: null },
     atualizado: { ultimoEventoWebhook: null, ultimaFoto: null },

@@ -198,6 +198,8 @@ export interface RecorteGrupo { tipo: TipoRecorteGrupo; valor: string }
 export interface GrupoResumoBlack {
   periodo: { de: string | null; ate: string | null };
   recorte: RecorteGrupo | null;
+  /** Taxa geral agregada pelo banco, sem cruzar membros do grupo com leads. `pct` vem em pontos percentuais. */
+  ingressoGeral?: { numerosUnicosNoGrupo: Valor; leadsUnicos: Valor; pct: Valor } | null;
   grupos: GrupoBlack[];
   unicosGruposMql: Valor; unicosGruposTotal: Valor;
   /** Dos leads MQL do recorte, quantos estão nos grupos de MQL. null sem recorte. */

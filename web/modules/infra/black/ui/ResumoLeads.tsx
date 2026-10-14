@@ -14,7 +14,7 @@ export function ResumoLeads({ linhas, idx, grupo, compacto = false, semDado = fa
   const trafego = linhasCaptacao(linhas, idx).filter(ehPago);
   const total = semDado ? null : leadsPessoas(linhas).valor;
   const pagosTrafego = semDado ? null : leadsDoTrafego(linhas, idx).valor;
-  const ingressoGeral = semDado ? { valor: null, num: null, den: null, recorte: 'sem fonte', nota: null } : ingressoGrupoGeral(linhas);
+  const ingressoGeral = semDado ? { valor: null, num: null, den: null, recorte: 'sem fonte', nota: null } : ingressoGrupoGeral(linhas, grupo);
   const ingressoTrafego = semDado ? { valor: null, num: null, den: null, recorte: 'sem fonte', nota: null } : ingressoGrupoGeral(trafego);
   const itens = [
     { rotulo: 'Leads totais', valor: total === null ? 'Sem dado' : inteiro(total) },
@@ -39,7 +39,7 @@ export function ResumoLeads({ linhas, idx, grupo, compacto = false, semDado = fa
     <div className="space-y-2" aria-label="Resumo de leads e ingresso no grupo">
       <div className={`grid gap-2 ${compacto ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`}>
         {itens.map((item) => (
-          <div key={item.rotulo} className="min-w-0 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-1)] p-2">
+          <div key={item.rotulo} title={item.rotulo === 'Ingresso no grupo geral' ? 'números únicos que entraram no grupo ÷ leads únicos' : undefined} className="min-w-0 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-1)] p-2">
             <div className="text-[11px] leading-snug text-[var(--fg-3)]">{item.rotulo}</div>
             <div className="mt-1 text-sm font-semibold text-[var(--fg)]">
               {item.taxa ? <><Taxa taxa={item.taxa} />{` · ${inteiro(item.taxa.num)} / ${inteiro(item.taxa.den)}`}</> : item.valor}

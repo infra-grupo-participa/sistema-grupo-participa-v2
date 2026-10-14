@@ -115,6 +115,15 @@ describe('mapeadores das RPCs da Black', () => {
     expect(data.leadsEmAlgumGrupo).toBe(9);
     expect(data.leadsEmMaisDeUmGrupo).toBe(1);
   });
+  it('mapeia a taxa geral de ingresso agregada pelo banco e preserva null com recorte', () => {
+    const geral = mapearGrupo({ ...RESPOSTA_GRUPO,
+      ingresso_geral: { numeros_unicos_no_grupo: 169, leads_unicos: 259, pct: 65.3 },
+    }).data;
+    expect(geral.ingressoGeral).toEqual({ numerosUnicosNoGrupo: 169, leadsUnicos: 259, pct: 65.3 });
+    const recortado = mapearGrupo({ ...RESPOSTA_GRUPO, recorte: { tipo: 'porta', valor: 'isca' }, ingresso_geral: null }).data;
+    expect(recortado.ingressoGeral).toBeNull();
+    expect(mapearGrupo(RESPOSTA_GRUPO).data.ingressoGeral).toBeUndefined();
+  });
   it('perfil: funil pela porta, ids do Meta à parte, ids internos null, linha sem lead_id fora', () => {
     const { data } = mapearPerfil(RESPOSTA_PERFIL);
     expect(data).toHaveLength(2);
