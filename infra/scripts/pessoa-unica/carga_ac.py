@@ -323,7 +323,8 @@ def fase_estagio(banco, ac, por, lote_n, max_lotes, lento_s, ram_min_mb):
             ultimo_ms = r['ms']
             lotes += 1
             log(f"estágio lote {lotes}: {r['lidas']} lidos, {r['inseridas']} novos, {r['atualizadas']} atualizados, "
-                f"{r['iguais']} iguais, {r['ms']} ms (cursor {cursor}, {ac.chamadas} chamadas AC, {time.time() - t0:.0f} s; "
+                f"{r['iguais']} iguais, descartados: {r['descartados_sem_id']} sem id, {r['emails_descartados']} e-mails, "
+                f"{r['repetidos_ou_invalidos']} repetidos/inválidos; {r['ms']} ms (cursor {cursor}, {ac.chamadas} chamadas AC, {time.time() - t0:.0f} s; "
                 f"disco {ULTIMA.get('disco_gb')} GB, RAM livre {ULTIMA.get('ram_livre_mb')} MB, conexões {ULTIMA.get('conexoes')})")
             time.sleep(2)
         if fim:

@@ -262,9 +262,9 @@ declare n integer;
 begin
   if not pessoas.carga_ligada('activecampaign') then raise exception 'carga desligada' using errcode = 'P0001'; end if;
   insert into pessoas.ac_catalogo (tipo, id, nome, extra)
-  select x.tipo, x.id, left(btrim(x.nome), 300), coalesce(x.extra, '{}')
-    from jsonb_to_recordset(p_itens) as x(tipo text, id integer, nome text, extra jsonb)
-   where length(btrim(coalesce(x.nome, ''))) > 0
+  select x.tipo, (x.id)::integer, left(btrim(x.nome), 300), case when jsonb_typeof(x.extra) = 'object' then x.extra else '{}' end
+    from jsonb_to_recordset(p_itens) as x(tipo text, id text, nome text, extra jsonb)
+   where length(btrim(coalesce(x.nome, ''))) > 0 and x.tipo in ('lista', 'tag', 'campo') and x.id ~ '^[0-9]{1,9}$'
   on conflict (tipo, id) do update set nome = excluded.nome, extra = excluded.extra, visto_em = now()
    where (pessoas.ac_catalogo.nome, pessoas.ac_catalogo.extra) is distinct from (excluded.nome, excluded.extra);
   get diagnostics n = row_count;
@@ -275,7 +275,7 @@ end $f$;
 -- listas: [[lista, status, 'aaaa-mm-dd', saiu_pela_pessoa]], tags: [id...], campos: {PERSTAG: valor}}]
 create function pessoas.carga_ac_estagio(p_execucao bigint, p_lote jsonb, p_cursor text) returns jsonb
 language plpgsql set search_path to '' as $f$
-declare v_t0 timestamptz := clock_timestamp(); v_lidas int; v_ins int; v_upd int; v_de text;
+declare v_t0 timestamptz := clock_timestamp(); v_lidas int; v_ins int; v_upd int; v_de text; v_sem_id int; v_desc_email int; v_validas int; v_iguais int;
 begin
   if not pessoas.carga_ligada('activecampaign') then raise exception 'carga desligada' using errcode = 'P0001'; end if;
   if not exists (select 1 from pessoas.carga_execucao where id = p_execucao and fonte = 'activecampaign' and fase = 'estagio' and status = 'rodando') then
@@ -287,17 +287,39 @@ begin
   v_lidas := jsonb_array_length(p_lote);
   select cursor into v_de from pessoas.carga_execucao where id = p_execucao;
 
-  with x as (
-    select r.id, pessoas.norm_email(r.email) email, pessoas.norm_telefone(r.telefone) telefone,
-           nullif(left(btrim(coalesce(r.nome, '')), 160), '') nome, r.cdate, r.udate, r.bounced_hard,
-           coalesce(r.listas, '[]') listas, coalesce(r.tags, '{}') tags, coalesce(r.campos, '{}') campos
-      from jsonb_to_recordset(p_lote) as r(id integer, email text, telefone text, nome text, cdate timestamptz, udate timestamptz,
-                                          bounced_hard smallint, listas jsonb, tags integer[], campos jsonb)
-     where r.id is not null
+  -- Cada valor do lote é validado ANTES de chegar a um CHECK ou a um cast (achado do pentester, 14/10/2026): erro de CHECK
+  -- grava a linha inteira no DETAIL do log, e erro de cast grava o valor na mensagem. O que não passa vira nulo/vazio e é
+  -- contado em 'descartados' (só contagem). pg_input_is_valid (PG 16+) valida sem bloco de exceção.
+  with e as (
+    select el from jsonb_array_elements(p_lote) el where jsonb_typeof(el) = 'object'
+  ), x0 as (
+    select case when el->>'id' ~ '^[0-9]{1,9}$' then (el->>'id')::integer end id,
+           case when jsonb_typeof(el->'email') = 'string' then pessoas.norm_email(left(el->>'email', 1000)) end email0,
+           (jsonb_typeof(el->'email') = 'string' and btrim(el->>'email') <> '') tinha_email,
+           case when jsonb_typeof(el->'telefone') = 'string' then pessoas.norm_telefone(left(el->>'telefone', 40)) end telefone,
+           case when jsonb_typeof(el->'nome') = 'string' then nullif(left(btrim(el->>'nome'), 160), '') end nome,
+           case when pg_input_is_valid(el->>'cdate', 'timestamptz') then (el->>'cdate')::timestamptz end cdate,
+           case when pg_input_is_valid(el->>'udate', 'timestamptz') then (el->>'udate')::timestamptz end udate,
+           case when el->>'bounced_hard' ~ '^[0-9]{1,4}$' then (el->>'bounced_hard')::smallint end bounced_hard,
+           coalesce((select jsonb_agg(jsonb_build_array((l->>0)::integer, (l->>1)::integer,
+                                                        case when pg_input_is_valid(l->>2, 'date') then l->>2 end,
+                                                        coalesce(l->3 = 'true'::jsonb, false)))
+                       from jsonb_array_elements(case when jsonb_typeof(el->'listas') = 'array' then el->'listas' else '[]' end) l
+                      where jsonb_typeof(l) = 'array' and l->>0 ~ '^[0-9]{1,9}$' and l->>1 ~ '^[0-9]$'), '[]') listas,
+           coalesce(array(select v::integer
+                            from jsonb_array_elements_text(case when jsonb_typeof(el->'tags') = 'array' then el->'tags' else '[]' end) v
+                           where v ~ '^[0-9]{1,9}$'), '{}') tags,
+           case when jsonb_typeof(el->'campos') = 'object' then el->'campos' else '{}' end campos
+      from e
+  ), x as (
+    select distinct on (id) id, case when length(email0) <= 320 then email0 end email,
+           tinha_email and (email0 is null or length(email0) > 320) email_descartado,
+           telefone, nome, cdate, udate, bounced_hard, listas, tags, campos
+      from x0 where id is not null order by id
   ), y as (
     select x.*,
-           exists (select 1 from jsonb_array_elements(x.listas) l where l->>1 = '2' and coalesce((l->>3)::boolean, false)) descadastrou,
-           exists (select 1 from jsonb_array_elements(x.listas) l where l->>1 = '2' and not coalesce((l->>3)::boolean, false)) desativado_empresa
+           exists (select 1 from jsonb_array_elements(x.listas) l where l->>1 = '2' and l->3 = 'true'::jsonb) descadastrou,
+           exists (select 1 from jsonb_array_elements(x.listas) l where l->>1 = '2' and l->3 = 'false'::jsonb) desativado_empresa
       from x
   ), up as (
     insert into pessoas.ac_contato as c (contact_id, email, telefone, nome, criado_em_ac, atualizado_em_ac, bounced_hard, listas, tags,
@@ -314,15 +336,25 @@ begin
     returning (xmax = 0) inserida
   )
   select count(*) filter (where inserida), count(*) filter (where not inserida) into v_ins, v_upd from up;
+  -- contagem do que foi descartado (refaz só a parte barata da leitura; nunca devolve valor)
+  select count(distinct el->>'id') filter (where el->>'id' ~ '^[0-9]{1,9}$'),
+         count(*) filter (where el->>'id' is null or el->>'id' !~ '^[0-9]{1,9}$'),
+         count(*) filter (where jsonb_typeof(el->'email') = 'string' and btrim(el->>'email') <> ''
+                            and (pessoas.norm_email(left(el->>'email', 1000)) is null or length(pessoas.norm_email(left(el->>'email', 1000))) > 320))
+    into v_validas, v_sem_id, v_desc_email
+    from jsonb_array_elements(p_lote) el where jsonb_typeof(el) = 'object';
+  v_iguais := v_validas - v_ins - v_upd;
 
-  insert into pessoas.carga_lote (execucao_id, cursor_de, cursor_ate, lidas, inseridas, atualizadas, iguais, ms)
-  values (p_execucao, v_de, p_cursor, v_lidas, v_ins, v_upd, v_lidas - v_ins - v_upd,
+  insert into pessoas.carga_lote (execucao_id, cursor_de, cursor_ate, lidas, inseridas, atualizadas, iguais, detalhe, ms)
+  values (p_execucao, v_de, p_cursor, v_lidas, v_ins, v_upd, v_iguais,
+          jsonb_build_object('descartados_sem_id', v_sem_id, 'emails_descartados', v_desc_email, 'repetidos_ou_invalidos', v_lidas - v_validas),
           (extract(epoch from clock_timestamp() - v_t0) * 1000)::int);
   update pessoas.carga_execucao
      set cursor = p_cursor, lotes = lotes + 1, lidas = lidas + v_lidas, inseridas = inseridas + v_ins,
-         atualizadas = atualizadas + v_upd, iguais = iguais + (v_lidas - v_ins - v_upd), atualizada_em = now()
+         atualizadas = atualizadas + v_upd, iguais = iguais + v_iguais, atualizada_em = now()
    where id = p_execucao;
-  return jsonb_build_object('lidas', v_lidas, 'inseridas', v_ins, 'atualizadas', v_upd, 'iguais', v_lidas - v_ins - v_upd,
+  return jsonb_build_object('lidas', v_lidas, 'inseridas', v_ins, 'atualizadas', v_upd, 'iguais', v_iguais,
+                            'descartados_sem_id', v_sem_id, 'emails_descartados', v_desc_email, 'repetidos_ou_invalidos', v_lidas - v_validas,
                             'ms', (extract(epoch from clock_timestamp() - v_t0) * 1000)::int);
 end $f$;
 
@@ -432,10 +464,10 @@ begin
 
     insert into pessoas.eventos (pessoa_id, tipo, fonte, evento_id, fonte_tabela, fonte_id, quando, detalhe)
     select v_p, 'pre_checkout', 'activecampaign', lp.evento_id, 'pessoas.ac_contato', r.contact_id || ':' || lp.lista_id,
-           coalesce(((l->>2)::date)::timestamp at time zone 'America/Sao_Paulo', r.criado_em_ac, now()),
+           coalesce(case when pg_input_is_valid(l->>2, 'date') then ((l->>2)::date)::timestamp at time zone 'America/Sao_Paulo' end, r.criado_em_ac, now()),
            jsonb_build_object('lista_id', lp.lista_id, 'papel', lp.papel, 'status', (l->>1)::int)
       from jsonb_array_elements(r.listas) l
-      join pessoas.ac_lista_papel lp on lp.lista_id = (l->>0)::int
+      join pessoas.ac_lista_papel lp on l->>0 ~ '^[0-9]{1,9}$' and lp.lista_id = (l->>0)::int
     on conflict (fonte_tabela, fonte_id, tipo) where fonte_id is not null do nothing;
     get diagnostics n_x = row_count; n_ev := n_ev + n_x;
 
@@ -478,7 +510,7 @@ begin
     perform pessoas.carga_fechar(v_e, 'parada');
     v_p := (pessoas.carga_abrir('activecampaign', 'pessoas', 'ensaio')->>'execucao')::bigint;
     r3 := pessoas.carga_ac_pessoas(v_p, 2000);
-    update pessoas.ac_contato set pendente = true where contact_id in (select (x->>'id')::int from jsonb_array_elements(p_lote) x);
+    update pessoas.ac_contato set pendente = true where contact_id in (select (x->>'id')::int from jsonb_array_elements(p_lote) x where x->>'id' ~ '^[0-9]{1,9}$');
     r4 := pessoas.carga_ac_pessoas(v_p, 2000);
     v_saida := jsonb_build_object(
       'antes', v_antes, 'estagio_1a', r1, 'estagio_2a_igual', r2, 'pessoas', r3 - 'restam', 'reprocessar', r4 - 'restam',
