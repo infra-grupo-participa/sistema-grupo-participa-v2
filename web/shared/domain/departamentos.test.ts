@@ -6,6 +6,10 @@ import {
   BASE_MARKETING, DEPARTAMENTOS, MODULO_DEPARTAMENTO, acessoComercial, departamento, departamentoDaRota, ehDoComercial,
   podeEditarArea, podeSolicitarEstrategia, podeVerDepartamento,
 } from './departamentos';
+import { podeOperarFinanceiro, podeVerFinanceiro } from './acesso-financeiro';
+import {
+  podeOperarFinanceiro as podeOperarFinanceiroDoModulo, podeVerFinanceiro as podeVerFinanceiroDoModulo,
+} from '../../modules/financeiro/domain/acesso';
 
 const user = (cargo: Cargo, setores: string[] = []): GpUser =>
   ({ id: 'u', email: 'x@advmais.com', nome: 'X', cargo, status: 'ativo', setores, funcoes: [], podeVerCpf: false, time: null, avatarUrl: null });
@@ -14,9 +18,15 @@ describe('departamentos: registro', () => {
   it('os 5 departamentos da decisão de 05/10/2026, nesta ordem', () => {
     expect(DEPARTAMENTOS.map((d) => d.label)).toEqual(['Educacional', 'Marketing', 'Comercial', 'Financeiro', 'Infra']);
   });
-  it('Financeiro está "Em breve"; os demais departamentos estão ativos', () => {
+  it('todos os departamentos estão ativos (Financeiro deixou de ser "Em breve" em 15/10/2026)', () => {
     const st = Object.fromEntries(DEPARTAMENTOS.map((d) => [d.key, d.status]));
-    expect(st).toEqual({ educacional: 'ativo', marketing: 'ativo', comercial: 'ativo', financeiro: 'em_breve', infra: 'ativo' });
+    expect(st).toEqual({ educacional: 'ativo', marketing: 'ativo', comercial: 'ativo', financeiro: 'ativo', infra: 'ativo' });
+  });
+  it('o módulo Contas a Receber pertence ao departamento Financeiro, e o Educacional não o anuncia mais', () => {
+    expect(MODULO_DEPARTAMENTO.financeiro).toBe('financeiro');
+    expect(departamento('financeiro').path).toBe('/financeiro');
+    expect(departamento('financeiro').descricao).toMatch(/Contas a Receber/);
+    expect(departamento('educacional').descricao).not.toMatch(/Financeiro/i);
   });
   it('Infra não tem mais o nível intermediário de áreas', () => {
     expect(departamento('infra').areas).toEqual([]);
@@ -112,12 +122,63 @@ describe('departamentos: Marketing bloqueado até os níveis de acesso serem des
   it('sem usuário: nada', () => {
     for (const d of DEPARTAMENTOS) expect(podeVerDepartamento(null, d.key)).toBe(false);
   });
-  it('os demais departamentos abrem para qualquer cargo (Educacional mantém o gate de cada tela)', () => {
+  it('Educacional e Infra abrem para qualquer cargo (Educacional mantém o gate de cada tela)', () => {
     for (const c of ['dev', 'admin', 'gestor', 'operador', 'visualizador'] as Cargo[]) {
-      for (const k of ['educacional', 'financeiro', 'infra'] as const) {
+      for (const k of ['educacional', 'infra'] as const) {
         expect(podeVerDepartamento(user(c), k)).toBe(true);
       }
     }
+  });
+});
+
+describe('departamentos: Financeiro (desde 15/10/2026 mostra dinheiro: régua de podeVerFinanceiro)', () => {
+  const todosOsCargos = ['dev', 'admin', 'gestor', 'operador', 'visualizador'] as Cargo[];
+  const operadorQueOpera: GpUser = { ...user('operador', ['financeiro']), funcoes: ['financeiro.operar'] };
+  const casos: GpUser[] = [
+    ...todosOsCargos.map((c) => user(c)),
+    ...todosOsCargos.map((c) => user(c, ['financeiro'])),
+    ...todosOsCargos.map((c) => user(c, ['placas', 'centro_controle'])),
+    operadorQueOpera,
+  ];
+
+  it('dev e admin veem', () => {
+    expect(podeVerDepartamento(user('dev'), 'financeiro')).toBe(true);
+    expect(podeVerDepartamento(user('admin'), 'financeiro')).toBe(true);
+  });
+  it('gestor e operador com a área financeiro veem', () => {
+    expect(podeVerDepartamento(user('gestor', ['financeiro']), 'financeiro')).toBe(true);
+    expect(podeVerDepartamento(user('operador', ['financeiro']), 'financeiro')).toBe(true);
+  });
+  it('visualizador NÃO vê, nem com a área financeiro', () => {
+    expect(podeVerDepartamento(user('visualizador'), 'financeiro')).toBe(false);
+    expect(podeVerDepartamento(user('visualizador', ['financeiro']), 'financeiro')).toBe(false);
+  });
+  it('equipe sem a área financeiro NÃO vê', () => {
+    expect(podeVerDepartamento(user('gestor'), 'financeiro')).toBe(false);
+    expect(podeVerDepartamento(user('operador', ['placas', 'centro_controle']), 'financeiro')).toBe(false);
+  });
+  it('trava: o gate do departamento é idêntico ao do módulo (podeVerFinanceiro), caso a caso', () => {
+    for (const u of [...casos, null]) expect(podeVerDepartamento(u, 'financeiro'), JSON.stringify(u)).toBe(podeVerFinanceiro(u));
+  });
+  it('trava: o módulo lê a mesma fonte (modules/financeiro reexporta shared/domain/acesso-financeiro)', () => {
+    expect(podeVerFinanceiroDoModulo).toBe(podeVerFinanceiro);
+    expect(podeOperarFinanceiroDoModulo).toBe(podeOperarFinanceiro);
+  });
+  it('editar (v1) = canEdit da tela (podeOperarFinanceiro): operador só com financeiro.operar', () => {
+    for (const u of casos) expect(podeEditarArea(u, 'financeiro'), JSON.stringify(u)).toBe(podeOperarFinanceiro(u));
+    expect(podeEditarArea(operadorQueOpera, 'financeiro')).toBe(true);
+    expect(podeEditarArea(user('operador', ['financeiro']), 'financeiro')).toBe(false);
+  });
+  it('v2: ver exige financeiro.ver (inclusive com financeiro em ver) e editar exige financeiro.operar', () => {
+    const v2 = { acessoV2: true };
+    const p = (capacidades: string[], ver: string[]): GpUser =>
+      ({ ...user('visualizador'), acesso: { equipe: true, master: false, vinculos: [], capacidades, ver, editar: [] } });
+    expect(podeVerDepartamento(p([], ['financeiro']), 'financeiro', v2)).toBe(false);
+    expect(podeVerDepartamento(p(['financeiro.ver'], ['financeiro']), 'financeiro', v2)).toBe(true);
+    expect(podeEditarArea(p(['financeiro.ver'], ['financeiro']), 'financeiro', null, v2)).toBe(false);
+    expect(podeEditarArea(p(['financeiro.ver', 'financeiro.operar'], ['financeiro']), 'financeiro', null, v2)).toBe(true);
+    // cargo legado não abre nada no v2 sem `acesso`
+    expect(podeVerDepartamento(user('admin'), 'financeiro', v2)).toBe(false);
   });
 });
 

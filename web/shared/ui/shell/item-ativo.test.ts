@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { REPORTS } from '../nav/config';
+import { NAV_FINANCEIRO } from '../nav/config';
 import { chaveHashPadrao, hashBase, itemHashAtivo } from './item-ativo';
 
-const financeiro = REPORTS.find((g) => g.key === 'financeiro')!;
+const financeiro = NAV_FINANCEIRO;
 const ativos = (hash: string) =>
   financeiro.children.filter((c) => itemHashAtivo(c, hash, true, chaveHashPadrao(financeiro.defaultHref, financeiro.children)))
     .map((c) => c.key);

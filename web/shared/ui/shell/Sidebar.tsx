@@ -4,11 +4,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ehAdminOuAcima, ehDev, podeVer, type GpUser } from '@/shared/domain/auth';
-import { podeVerFinanceiro } from '@/modules/financeiro/domain/acesso';
 import { podeVerRemocao } from '@/modules/remocao-acessos/domain/acesso';
 import { podePedirAlteracao } from '@/modules/alunos/domain/pedidos-alteracao';
-import { REPORTS, SYSTEM_NAV, type ReportGroup } from '@/shared/ui/nav/config';
-import { BASE_MARKETING, DEPARTAMENTOS, acessoComercial, departamento, departamentoDaRota, podeEditarArea, podeVerDepartamento, temCapacidade } from '@/shared/domain/departamentos';
+import { NAV_FINANCEIRO, REPORTS, SYSTEM_NAV, type NavChild, type ReportGroup } from '@/shared/ui/nav/config';
+import { BASE_MARKETING, DEPARTAMENTOS, acessoComercial, departamento, departamentoDaRota, podeEditarArea, podeVerDepartamento } from '@/shared/domain/departamentos';
 import { ACESSO_DEPARTAMENTOS } from '@/shared/composition/acesso-departamentos';
 import { Icon } from '@/shared/ui/icons';
 import { chaveHashPadrao, itemHashAtivo } from './item-ativo';
@@ -94,6 +93,8 @@ export function Sidebar({ user }: { user: GpUser }) {
   const mostraEducacional = depAtual === 'educacional';
   const mostraMarketing = depAtual === 'marketing' && podeVerDepartamento(user, 'marketing', ACESSO_DEPARTAMENTOS);
   const mostraInfra = depAtual === 'infra' && temAcessoInfra;
+  // Financeiro (Contas a Receber; departamento desde 15/10/2026): mesma regra do layout /financeiro.
+  const mostraFinanceiro = depAtual === 'financeiro' && podeVerDepartamento(user, 'financeiro', ACESSO_DEPARTAMENTOS);
   // Comercial: CRM inteiro, ou só Estratégias para quem pede estratégia sem ser do Comercial (mesma regra do layout).
   const acessoCom = acessoComercial(user, ACESSO_DEPARTAMENTOS);
   const mostraComercial = depAtual === 'comercial' && !!acessoCom;
@@ -101,11 +102,9 @@ export function Sidebar({ user }: { user: GpUser }) {
     ? departamento('comercial').areas
     : departamento('comercial').areas.filter((a) => a.key === (acessoCom === 'relatorios' ? 'relatorios' : 'estrategias'));
 
-  // O grupo aparece se o cargo permite E o usuário tem o setor.
-  // Financeiro tem regra própria (visualizador NÃO vê dinheiro) — espelha
-  // gp_pode_ver_financeiro() no banco, senão a tela abriria vazia.
+  // O grupo aparece se o cargo permite E o usuário tem o setor. (O Financeiro saiu do Educacional em 15/10/2026:
+  // o menu dele é NAV_FINANCEIRO, com a regra do departamento, em `mostraFinanceiro`.)
   const podeVerGrupo = (g: ReportGroup) => {
-    if (g.setor === 'financeiro') return ACESSO_DEPARTAMENTOS.acessoV2 ? temCapacidade(user, 'financeiro.ver', ACESSO_DEPARTAMENTOS) : podeVerFinanceiro(user);
     if (g.setor === 'remocao_acessos') return podeVerRemocao(user);
     if (g.setor === 'pedidos_alteracao') return podePedirAlteracao(user);
     if (ACESSO_DEPARTAMENTOS.acessoV2 && g.setor === 'depoimentos') return podeVerDepartamento(user, 'educacional', ACESSO_DEPARTAMENTOS);
@@ -129,6 +128,37 @@ export function Sidebar({ user }: { user: GpUser }) {
     `grid place-items-center w-6 h-6 rounded-[var(--r-sm)] text-[13px] shrink-0 transition-colors duration-[var(--dur-fast)] ${
       active ? 'text-[var(--accent)]' : 'text-[var(--fg-3)] group-hover/item:text-[var(--accent)]'
     }`;
+
+  // Itens de um grupo (hash-nav e títulos de seção). Usado pelos grupos do Educacional e pelo menu do Financeiro.
+  const filhos = (group: ReportGroup, children: NavChild[]) => {
+    const defaultHashKey = chaveHashPadrao(group.defaultHref, children);
+    let secaoAnterior: string | undefined;
+    return children.map((child) => {
+      const onPath = normalize(child.path) === cur;
+      const active = child.hash ? itemHashAtivo(child, hash, onPath, defaultHashKey) : onPath;
+      // Título de seção: só quando o item declara `secao` e ela muda em relação ao item anterior — os
+      // outros grupos nunca usam `secao`, então nunca desenham nada aqui (layout deles não muda).
+      const mostrarSecao = !!child.secao && child.secao !== secaoAnterior;
+      secaoAnterior = child.secao;
+      return (
+        <div key={child.key}>
+          {mostrarSecao && (
+            <div className="px-2 pt-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--fg-4)]">
+              {child.secao}
+            </div>
+          )}
+          <Link
+            href={child.href}
+            onClick={(e) => onHashChildClick(e, child.path, child.hash)}
+            className={itemCls(active)}
+          >
+            <span className={iconBoxCls(active)}><Icon name={child.ico || 'circle'} size={14} /></span>
+            <span>{child.label}</span>
+          </Link>
+        </div>
+      );
+    });
+  };
 
   return (
     <aside className="w-[var(--sidebar-width)] shrink-0 h-full overflow-y-auto bg-[var(--surface-1)] border-r border-[var(--border)] px-3 py-4 flex flex-col gap-1">
@@ -222,6 +252,16 @@ export function Sidebar({ user }: { user: GpUser }) {
         </>
       )}
 
+      {/* Financeiro: as abas da tela de Contas a Receber, direto no grupo (sem o nível "Financeiro > Financeiro"). */}
+      {mostraFinanceiro && (
+        <>
+          <Group label="Financeiro" collapsed={!!groups.financeiro} onToggle={() => toggleGroup('financeiro')}>
+            {filhos(NAV_FINANCEIRO, NAV_FINANCEIRO.children)}
+          </Group>
+          <Divider />
+        </>
+      )}
+
       {mostraComercial && (
         <>
           <Group label="Comercial" collapsed={!!groups.comercial} onToggle={() => toggleGroup('comercial')}>
@@ -282,35 +322,7 @@ export function Sidebar({ user }: { user: GpUser }) {
               </div>
               {children.length > 0 && open && (
                 <div className="ml-4 mt-0.5 flex flex-col gap-0.5">
-                  {(() => {
-                    const defaultHashKey = chaveHashPadrao(group.defaultHref, children);
-                    let secaoAnterior: string | undefined;
-                    return children.map((child) => {
-                      const onPath = normalize(child.path) === cur;
-                      const active = child.hash ? itemHashAtivo(child, hash, onPath, defaultHashKey) : onPath;
-                      // Título de seção: só quando o item declara `secao` e ela muda em relação ao item anterior — os
-                      // outros grupos nunca usam `secao`, então nunca desenham nada aqui (layout deles não muda).
-                      const mostrarSecao = !!child.secao && child.secao !== secaoAnterior;
-                      secaoAnterior = child.secao;
-                      return (
-                        <div key={child.key}>
-                          {mostrarSecao && (
-                            <div className="px-2 pt-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--fg-4)]">
-                              {child.secao}
-                            </div>
-                          )}
-                          <Link
-                            href={child.href}
-                            onClick={(e) => onHashChildClick(e, child.path, child.hash)}
-                            className={itemCls(active)}
-                          >
-                            <span className={iconBoxCls(active)}><Icon name={child.ico || 'circle'} size={14} /></span>
-                            <span>{child.label}</span>
-                          </Link>
-                        </div>
-                      );
-                    });
-                  })()}
+                  {filhos(group, children)}
                 </div>
               )}
             </div>
