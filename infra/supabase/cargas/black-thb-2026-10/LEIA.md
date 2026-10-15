@@ -1,6 +1,6 @@
 # Carga dos aptos da ação black-thb-2026-10 (THB com acesso vencido)
 
-**Situação:** escrita e NÃO aplicada. Quem aplica é o Victor ou o João, com `service_role`/`postgres` (carga de dado,
+**Situação:** APLICADA em 15/10/2026 pelo Victor (ensaio com 386, carga com 386, conferida: 9 gerais, 7 válidos, 5 no grupo). Escrita pelo Hermes. Quem aplica é o Victor ou o João, com `service_role`/`postgres` (carga de dado,
 no mesmo caminho da Lista 1 e 2 do ATM). Nada aqui é migration de estrutura: não cria tabela, coluna nem função.
 
 ## O que faz
