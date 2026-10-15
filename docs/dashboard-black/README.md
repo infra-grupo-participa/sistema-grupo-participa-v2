@@ -920,7 +920,7 @@ o que foi validado e as diferenças de agregação ainda pendentes.
 
 Primeiro lote visual do pedido de 15/10:
 
-- Indicadores com meta exibem o valor alvo, o percentual atingido e uma barra de progresso. Metas ausentes continuam como “Sem meta cadastrada”.
+- Indicadores com meta exibem o valor alvo, a distância acima/abaixo (ou “na meta”), o farol pelo sentido da métrica e a barra de progresso. Metas ausentes continuam como “Sem meta cadastrada”.
 - Removidos da grade macro os cards de Cliques no link, Impressões e Visualizações da página. As métricas seguem disponíveis nos detalhes e recortes que já as usam.
 - Removida a borda colorida dos cards da Visão geral.
 - O modal de ingresso foi dividido em Pessoas, Leads e Evolução do percentual. Pessoas usa contagens por grupo que `dados_black_grupo` publica; Leads reutiliza `TabelaLeads` e só abre dados pessoais com `contato.ver`; Evolução consulta a mesma RPC com `p_ate` por dia, em lotes de até quatro chamadas. A fonte não publica a lista individual de membros, então a aba Pessoas informa essa limitação e mostra apenas as contagens disponíveis.
@@ -943,7 +943,34 @@ Sem alteração de banco. A lista individual de membros do grupo permanece pende
 - A Visão Geral ganhou um bloco recolhido de projeção de leads e investimento até 03/11, abaixo dos cards. A régua copia o CNHF: necessário por dia = saldo da meta após o acumulado de hoje dividido pelos dias a partir de amanhã; faltam hoje = necessário menos o realizado de hoje; projeção = acumulado de hoje mais a média dos últimos três dias fechados com valor maior que zero. O farol compara essa média com o necessário: verde a partir de 100%, amarelo a partir de 80%, vermelho abaixo disso.
 - Leads são pessoas e aparecem como inteiro; necessário por dia e faltam hoje arredondam para cima, média e projeção arredondam ao inteiro mais próximo. Valores financeiros mantêm centavos.
 - A meta de leads e a semente anterior a 12/10 vêm da configuração e do contrato do dashboard. A meta de investimento é o orçamento cadastrado para captação (`ORCAMENTO.porFase.captacao`, hoje R$ 220.000), e o realizado diário vem de `dados_black_trafego.dias_campanha`. Leads novos são deduplicados por pessoa pela primeira aparição em `dados_black_perfil`, em dias de São Paulo, excluindo testes e `consultoria_respondi`.
-- Os modais dos indicadores com meta exibem série e tabela diárias. Indicadores de razão mostram a meta fixa do cartão e o acumulado é calculado como razão sobre as somas acumuladas; leads e investimento mostram a régua dinâmica, incluindo meta acumulada. A aba Evolução do ingresso lê `dados_black_grupo` com `p_ate` por dia, em lotes de até quatro chamadas; entradas do dia e acumulado são apresentados em colunas separadas.
+- Os modais de CPL geral, CPM, CTR, CPC, Connect Rate, Leads, Conversão da página e % de MQL concentram a evolução na aba **Por dia**: gráfico diário e uma única tabela com realizado, meta, distância acima/abaixo e acumulado. Para % de MQL há uma tabela, sem tabelas duplicadas de leads. A comparação de cada linha usa `domain/meta.ts` (`compararMeta`) e o sentido da métrica. Leads e investimento mantêm a régua dinâmica e a meta acumulada. A evolução de ingresso segue no modal próprio, no modelo aprovado, consultando `dados_black_grupo` com `p_ate` por dia em lotes de até quatro chamadas.
 - Os funis lado a lado permitem abrir uma etapa por vez. C1 segmenta pelo nome do anúncio (`TEASER`, `MANIFESTO`, `REELS`/`REEL`, ou `Sem tipo no nome`). Iscas segmentam o tráfego pelo último bloco do nome do conjunto e os leads pelo campo `isca` do perfil. A tela avisa quantos anúncios têm outra isca no nome; o gasto continua atribuído pela isca do conjunto. CPL só aparece quando há leads pagos.
 - Sem migration ou gravação no banco. Para testar: `npx vitest run modules/infra/black/domain/ritmo.test.ts modules/infra/black/infrastructure/fonte-supabase.test.ts`; conferir os exemplos do contrato Galego em `.maestri/entregas/black-visao-geral-requisitos/galego.md`; abrir a Visão Geral, expandir a projeção, abrir os modais de meta e segmentar C1 e Iscas. Checagens completas: `npm run lint`, `npm run lint:tokens`, `npx tsc --noEmit`, `npx vitest run modules/infra/black` e `npm run build`.
 - Como voltar: remover esta seção e reverter os componentes e mapeamentos do lote das 17h. Nenhuma mudança de schema precisa ser desfeita.
+
+## Distância para as metas · lote 18 · 15/10/2026
+
+- Nenhum card exibe mais o percentual atingido como “N% da meta”. Quando há meta, o texto usa “X% acima da meta”, “X% abaixo da meta” ou “na meta”, calculado por `abs(valor / meta - 1) × 100`.
+- O mesmo comparador `domain/meta.ts` (`compararMeta`) gera a distância e o farol, para que cor e texto reflitam a mesma base. Métricas em que menor é melhor (custos, incluindo CPL/CPM/CPC e investimento contra orçamento) ficam verdes abaixo da meta, amarelas até 10% acima e vermelhas além disso. Taxas e contagens em que maior é melhor usam as cores no sentido oposto.
+- Aplicado aos cards com meta da Visão geral: investimento total, investimento em tráfego, leads contra a meta, investimento em captação, CPL, CPM, CTR, CPC, Connect Rate, conversão da página, % de MQL e ingresso no grupo. A projeção também compara o valor projetado à meta pelo mesmo componente.
+- O CPL preserva sua régua: até o ideal (R$ 15) é verde, entre o ideal e o limite é amarelo, acima do limite é vermelho; o texto de distância é calculado contra a meta/limite cadastrado.
+- Nos modais de indicadores citados, a série saiu do topo e aparece somente em “Por dia”, junto à tabela correspondente. Isso evita duplicar o mesmo conteúdo e mantém o padrão aprovado do modal de Ingresso no grupo.
+- Como testar: executar `npx vitest run modules/infra/black/domain/meta.test.ts`, `npx tsc --noEmit`, `npm run lint:tokens` e `npm run build`. Na Visão geral, verificar cada cartão com meta em 1280 px, tema claro; os prints da revisão ficam em `prints/lote-18/`. A função tem testes para maior-melhor e menor-melhor.
+- Sem mudança de fonte, fórmula de métrica ou banco de dados.
+
+## Ajustes da revisão · lote 19 · 15/10/2026
+
+- As barras de progresso agora usam o mesmo estado do farol (`compararMeta`): verde, amarelo ou vermelho. A barra continua respeitando o limite visual do componente, sem alterar a métrica usada no texto.
+- O card de Leads contra a meta compara o total com a meta acumulada da régua até hoje, usando o mesmo cálculo da coluna “Meta acumulada” no modal. O total, a linha de tráfego e a meta aparecem uma vez cada.
+- A série diária do modal de Leads usa a primeira aparição por pessoa como realizado diário e acumulado. Se a fonte tiver pessoas anteriores a 12/10, os dias anteriores aparecem antes da série da captação; não se soma uma semente fixa por cima das mesmas pessoas. Cabeçalho, valor de hoje e acumulado final usam a mesma série.
+- No modo demonstração, a fonte de tráfego agora calcula gasto fictício por campanha e por dia a partir dos dias fictícios gerados. Isso permite conferir CPL geral, captação, tráfego e investimento total sem modificar a regra da fonte real. Disparos mantêm seu custo fictício existente.
+- O modal de CPL deixa de ficar vazio no modo demonstração. Os oito indicadores (CPL, CPM, CTR, CPC, Connect Rate, Leads, Conversão e % de MQL) mostram sua evolução dentro de “Por dia”, sem repetição no topo e com uma tabela diária por modal.
+- Como testar: `npx vitest run modules/infra/black/infrastructure/fixtures/fixtures.test.ts modules/infra/black/domain/meta.test.ts`, `npx tsc --noEmit`, `npm run lint:tokens`, `npx vitest run modules/infra/black` e `npm run build`. Ative `NEXT_PUBLIC_BLACK_DEMO=1`, abra a Visão geral em 1280 px, confira as cores das barras e os valores dos três investimentos e do CPL; abra “Por dia” nos oito modais. Capturas da revisão em `.maestri/entregas/black-visao-geral-requisitos/prints/lote-19/`.
+
+## Correções da revisão · lote 20 · 15/10/2026
+
+- A meta acumulada da régua agora deriva do alvo diário dinâmico e dos dias restantes, sem somar alvos recalculados; permanece entre a semente e a meta total e termina exatamente em 15.000 leads no último dia. A necessidade diária segue sendo recalculada sobre o saldo real.
+- O cabeçalho diário dos oito modais com meta usa a mesma série diária exibida na aba “Por dia”, inclusive CPL; isso evita comparar investimento diário com CPL diário.
+- A contagem regressiva usa “falta 1 dia” no singular.
+- Como testar: com `NEXT_PUBLIC_BLACK_DEMO=1`, abra Leads contra a meta e confira a coluna “Meta acumulada” até 15.000; abra a aba “Por dia” de CPL, CPM, CTR, CPC, Connect Rate, Leads, Conversão da página e % de MQL e compare hoje/ontem do cabeçalho com as linhas correspondentes. As capturas ficam em `.maestri/entregas/black-visao-geral-requisitos/prints/lote-20/`.
+- Sem alteração no banco ou nas fórmulas das métricas de produção. Trabalho local na branch `victor-black-meta-sentido`, sem publicação.

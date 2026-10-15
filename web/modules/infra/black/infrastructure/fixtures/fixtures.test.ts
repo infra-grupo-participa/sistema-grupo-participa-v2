@@ -72,6 +72,14 @@ describe('fonte de demonstração', () => {
     const limite = f.agora().getTime();
     expect(l.data.every((x) => x.entrouGrupoEm === null || Date.parse(x.entrouGrupoEm) <= limite)).toBe(true);
   });
+  it('demo expõe gastos por campanha e dia para o CPL e os cards de investimento', async () => {
+    const f = criarFonteFixtures();
+    const t = (await f.trafego(CHAVE_BLACK, { de: '2026-10-04', ate: '2026-11-03' })).data;
+    expect(t.gastoCampanhas?.length).toBeGreaterThan(0);
+    expect(t.gastoCampanhasDiario?.length).toBeGreaterThan(0);
+    expect(t.gastoCampanhas?.reduce((s, x) => s + x.gasto, 0)).toBeCloseTo(b.dias.reduce((s, x) => s + x.gasto, 0), 2);
+    expect(t.gastoCampanhasDiario?.reduce((s, x) => s + x.gasto, 0)).toBeCloseTo(b.dias.reduce((s, x) => s + x.gasto, 0), 2);
+  });
   it('mensageria: canal = soma dos seus envios; grupo e e-mail sem custo; envios do mais recente ao mais antigo, sem futuro', async () => {
     const f = criarFonteFixtures();
     const m = (await f.mensageria(CHAVE_BLACK, { de: '2026-10-04', ate: '2026-11-03' })).data;

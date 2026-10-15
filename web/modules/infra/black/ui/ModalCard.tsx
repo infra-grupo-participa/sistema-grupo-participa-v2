@@ -4,7 +4,7 @@
 // Por fase · Por dia · Por criativo · Perfil. A que não se aplica ao card diz isso, em vez de sumir (o lugar de
 // cada coisa não muda de um card para outro). Cada linha recalcula a MESMA métrica do card no recorte da linha.
 // Por fase = barras grossas por fase (graficos.tsx); Por dia = gráfico de linha com cursor; Por criativo = lista
-// compacta (top 10, busca e rolagem), clique leva ao criativo.
+// compacta (top 10, busca e rolagem), clique leva ao criativo. Evolução com meta fica dentro de Por dia.
 import { useMemo, useState } from 'react';
 import { Modal, SearchInput } from '@/shared/ui/components';
 import { deslocarDia } from '@/modules/infra/atm/domain/periodo';
@@ -17,7 +17,7 @@ import type { DadosTela } from './contexto';
 import { BarrasFase, GraficoLinha } from './graficos';
 import { Chip, formatar, MODAL_TELA_CHEIA, Numero } from './pecas';
 import { PerfilLeads } from './perfil/PerfilLeads';
-import { EvolucaoMetaIndicador } from './EvolucaoMeta';
+import { EvolucaoMetaIndicador, serieDiariaIndicador } from './EvolucaoMeta';
 
 export type SubAbaModal = 'funil' | 'canal' | 'fase' | 'dia' | 'criativo' | 'perfil';
 const SUBABAS: { k: SubAbaModal; l: string }[] = [
@@ -43,10 +43,18 @@ export interface CardDef {
 
 interface Linha { chave: string; rotulo: string; valor: Valor; anuncioId?: string }
 const dataCurta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const metaDaSeriePara = (cardId: string, d: DadosTela): Valor => cardId === 'leads' ? d.config.metaLeads
+  : cardId === 'cpl' ? (d.config.cplAlvoMedio ?? d.config.reguaCpl?.meta ?? null)
+    : cardId === 'cpm' ? d.config.metas.cpm : cardId === 'ctr' ? d.config.metas.ctr
+      : cardId === 'cpc' ? d.config.metas.cpc : cardId === 'connect' ? d.config.metas.connectRate
+        : cardId === 'conv' ? d.config.metas.conversaoPagina
+          : cardId === 'mql-percentual' ? d.config.metas.mql : null;
 
 export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | null; onClose: () => void }) {
   const [sub, setSub] = useState<SubAbaModal>('funil');
   if (!card) return null;
+  const metaDaSerie = metaDaSeriePara(card.id, d);
+  const pontosIndicador = metaDaSerie !== null ? serieDiariaIndicador(card.id, d) : null;
   const ativa = card.aplica.includes(sub) ? sub : card.aplica[0] ?? 'funil';
   const { idx } = d;
   const canalAtual = { canal: d.recorte.canal };
@@ -54,18 +62,14 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
 
   // Variação de hoje contra ontem, no recorte de funil e canal.
   const hoje = d.periodo.ate; const ontem = deslocarDia(hoje, -1);
-  const doDia = (dia: string) => card.medir(
+  const doDia = (dia: string) => pontosIndicador
+    ? pontosIndicador.find((p) => p.dia === dia)?.realizado ?? null
+    : card.medir(
     filtrarDias(d.diasTodos.filter((x) => x.dia === dia), idx, { ...funilAtual, ...canalAtual }),
     filtrarLinhas(d.linhasTodas.filter((l) => diaDe(l.criadoEm) === dia), { ...funilAtual, ...canalAtual }),
   );
   const vHoje = doDia(hoje); const vOntem = doDia(ontem);
   const variacao = vHoje !== null && vOntem !== null && vOntem !== 0 ? (vHoje - vOntem) / vOntem : null;
-  const metaDaSerie = card.id === 'leads' ? d.config.metaLeads
-    : card.id === 'cpl' ? (d.config.cplAlvoMedio ?? d.config.reguaCpl?.meta ?? null)
-      : card.id === 'cpm' ? d.config.metas.cpm : card.id === 'ctr' ? d.config.metas.ctr
-        : card.id === 'cpc' ? d.config.metas.cpc : card.id === 'connect' ? d.config.metas.connectRate
-          : card.id === 'conv' ? d.config.metas.conversaoPagina : null;
-
   const lista = (): Linha[] => {
     if (ativa === 'funil') return FUNIS.map((f) => ({
       chave: f, rotulo: ROTULO_FUNIL[f],
@@ -82,14 +86,13 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
     <Modal open onClose={onClose} title={card.rotulo} width={`max-w-3xl ${MODAL_TELA_CHEIA}`}>
       <div className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <span className="text-2xl font-bold text-[var(--fg)]"><Numero valor={card.medir(d.dias, d.linhas)} formato={card.formato} /></span>
+          <span className="text-2xl font-bold text-[var(--fg)]"><Numero valor={card.id === 'leads' && pontosIndicador ? pontosIndicador.at(-1)?.acumulado ?? null : card.medir(d.dias, d.linhas)} formato={card.formato} /></span>
           <span className="text-xs text-[var(--fg-3)]">
             Hoje ({dataCurta(hoje)}): {formatar(vHoje, card.formato)} · ontem: {formatar(vOntem, card.formato)}
             {variacao !== null ? ` · variação ${variacao >= 0 ? '+' : ''}${formatar(variacao, 'pct')}` : ''}
           </span>
         </div>
         {(card.dica || CARDS_DE_TRAFEGO.has(card.id)) && <p className="text-xs text-[var(--fg-3)]">{[card.dica, CARDS_DE_TRAFEGO.has(card.id) && !card.dica?.includes(NOTA_ENTRESAFRA) ? NOTA_ENTRESAFRA : null].filter(Boolean).join(' ')}</p>}
-        {metaDaSerie !== null && <EvolucaoMetaIndicador d={d} cardId={card.id} rotulo={card.rotulo} formato={card.formato as 'int' | 'brl' | 'pct'} />}
 
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Detalhar por">
           {SUBABAS.map((s) => (
@@ -113,10 +116,12 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
               }))} />
             </div>
           ) : ativa === 'dia' ? (
-            <GraficoLinha rotuloSerie={card.rotulo} formato={card.formato} pontos={d.diasPeriodo.map((dia) => ({
-              chave: dia, rotulo: dataCurta(dia),
-              valor: card.medir(filtrarDias(d.dias.filter((x) => x.dia === dia), idx, { funil: 'todos', canal: 'todos' }), d.linhas.filter((l) => diaDe(l.criadoEm) === dia)),
-            }))} />
+            metaDaSerie !== null
+              ? <EvolucaoMetaIndicador d={d} cardId={card.id} rotulo={card.rotulo} formato={card.formato as 'int' | 'brl' | 'pct'} pontos={pontosIndicador ?? undefined} />
+              : <GraficoLinha rotuloSerie={card.rotulo} formato={card.formato} pontos={d.diasPeriodo.map((dia) => ({
+                chave: dia, rotulo: dataCurta(dia),
+                valor: card.medir(filtrarDias(d.dias.filter((x) => x.dia === dia), idx, { funil: 'todos', canal: 'todos' }), d.linhas.filter((l) => diaDe(l.criadoEm) === dia)),
+              }))} />
           ) : ativa === 'criativo' ? (
             <PorCriativo d={d} card={card} onIr={(id) => { onClose(); d.irPara({ aba: 'criativos', criativos: { anuncio: id } }); d.abrirGaveta({ tipo: 'criativo', id }); }} />
           ) : (

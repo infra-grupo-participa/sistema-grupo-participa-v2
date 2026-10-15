@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { agregar, connectRate, cpc, cpm, ctr, ehCaptacao, ehEntresafraCampanha, filtrarDias, filtrarLinhas } from '../domain/metricas';
-import { INICIO_CAPTACAO, SEMENTE_LEADS, projetarRitmo, type PontoRitmo } from '../domain/ritmo';
+import { INICIO_CAPTACAO, projetarRitmo, type PontoRitmo } from '../domain/ritmo';
 import { cplCaptacao, conversaoPagina, leadsDoTrafego, taxaMql } from '../domain/numeros';
 import { diaDe } from '../domain/recorte';
+import { compararMeta } from '../domain/meta';
 import type { Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
 import { formatar } from './pecas';
@@ -65,9 +66,8 @@ function serieDiaria(cardId: string, d: DadosTela): LinhaEvolucaoMeta[] {
     if (cardId === 'leads') {
       if (d.perfilSemDado) return null;
       const datas = primeiraDataLeads;
-      const vals = cumulativo ? [...datas.values()].filter((x) => x >= INICIO_CAPTACAO && x <= dia) : [...datas.values()].filter((x) => x === dia);
-      const seed = d.recorte.funil === 'todos' && d.recorte.canal === 'todos' ? SEMENTE_LEADS : 0;
-      return cumulativo ? seed + vals.length : vals.length;
+      const vals = cumulativo ? [...datas.values()].filter((x) => x <= dia) : [...datas.values()].filter((x) => x === dia);
+      return vals.length;
     }
     if (cardId === 'investimento-captacao') return cumulativo ? gastoPorDia(dia) : gastoDiario(dia);
     if (cardId === 'cpl') {
@@ -89,7 +89,23 @@ function serieDiaria(cardId: string, d: DadosTela): LinhaEvolucaoMeta[] {
 
   if (cardId === 'leads' || cardId === 'investimento-captacao') {
     const realizados = new Map<string, Valor>(datas.map((dia) => [dia, calc(dia, false)]));
-    return projetarRitmo({ hoje, meta: metaFinal, realizados, semente: cardId === 'leads' && d.recorte.funil === 'todos' && d.recorte.canal === 'todos' ? SEMENTE_LEADS : 0 }).pontos.filter((p) => p.dia <= ate);
+    if (cardId === 'leads') {
+      const anteriores = [...primeiraDataLeads.values()].filter((dia) => dia < INICIO_CAPTACAO);
+      const semente = anteriores.length;
+      const ritmo = projetarRitmo({ hoje, meta: metaFinal, realizados, semente }).pontos.filter((p) => p.dia <= ate);
+      if (anteriores.length === 0) return ritmo;
+      const diasAnteriores = diasEntre(anteriores.sort()[0], INICIO_CAPTACAO).slice(0, -1);
+      const porDia = new Map<string, number>();
+      for (const dia of anteriores) porDia.set(dia, (porDia.get(dia) ?? 0) + 1);
+      let acumulado = 0;
+      const antes = diasAnteriores.map((dia) => {
+        const realizado = porDia.get(dia) ?? 0;
+        acumulado += realizado;
+        return { dia, realizado, metaDia: null, acumulado, metaAcumulada: null };
+      });
+      return [...antes, ...ritmo];
+    }
+    return projetarRitmo({ hoje, meta: metaFinal, realizados }).pontos.filter((p) => p.dia <= ate);
   }
   let acumulado: Valor = null;
   return datas.map((dia) => {
@@ -99,21 +115,32 @@ function serieDiaria(cardId: string, d: DadosTela): LinhaEvolucaoMeta[] {
   });
 }
 
-export function EvolucaoMetaIndicador({ d, cardId, rotulo, formato }: { d: DadosTela; cardId: string; rotulo: string; formato: 'int' | 'brl' | 'pct' }) {
-  const pontos = useMemo(() => serieDiaria(cardId, d), [cardId, d]);
+export function serieDiariaIndicador(cardId: string, d: DadosTela): LinhaEvolucaoMeta[] { return serieDiaria(cardId, d); }
+export function metaLeadsAcumuladaAte(d: DadosTela, dia: string): Valor {
+  const geral: DadosTela = { ...d, periodo: { ...d.periodo, ate: dia }, recorte: { ...d.recorte, funil: 'todos', canal: 'todos' } };
+  return serieDiaria('leads', geral).find((p) => p.dia === dia)?.metaAcumulada ?? null;
+}
+
+export function EvolucaoMetaIndicador({ d, cardId, rotulo, formato, pontos: pontosFornecidos }: { d: DadosTela; cardId: string; rotulo: string; formato: 'int' | 'brl' | 'pct'; pontos?: LinhaEvolucaoMeta[] }) {
+  const pontosDerivados = useMemo(() => serieDiaria(cardId, d), [cardId, d]);
+  const pontos = pontosFornecidos ?? pontosDerivados;
   if (pontos.length === 0) return <p className="rounded-[var(--r-md)] border border-dashed border-[var(--border-strong)] p-3 text-sm text-[var(--fg-3)]">Sem série diária no período de captação.</p>;
   return <section aria-label={`Evolução diária de ${rotulo}`} className="space-y-2 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-1)] p-3">
     <h3 className="text-sm font-semibold text-[var(--fg)]">Evolução diária</h3>
     <GraficoDiarioMeta pontos={pontos} formato={formato} rotulo={rotulo} />
-    <DataTableMeta pontos={pontos} formato={formato} />
+    <DataTableMeta pontos={pontos} cardId={cardId} formato={formato} />
     <p className="text-[10px] text-[var(--fg-3)]">Fonte: dados_black_perfil e dados_black_trafego. A meta dos indicadores de proporção é fixa; leads e investimento usam a régua dinâmica da captação.</p>
   </section>;
 }
 
-function DataTableMeta({ pontos, formato }: { pontos: LinhaEvolucaoMeta[]; formato: 'int' | 'brl' | 'pct' }) {
+function DataTableMeta({ pontos, cardId, formato }: { pontos: LinhaEvolucaoMeta[]; cardId: string; formato: 'int' | 'brl' | 'pct' }) {
   const temMetaAcumulada = pontos.some((p) => p.metaAcumulada !== null);
-  const formatoMeta = formato === 'int' ? 'dec' : formato;
-  return <div className="overflow-x-auto"><table className={`w-full ${temMetaAcumulada ? 'min-w-[620px]' : 'min-w-[480px]'} border-collapse text-left text-xs`}><thead><tr className="border-b border-[var(--border)] text-[var(--fg-3)]"><th className="p-2">Dia</th><th className="p-2">Realizado</th><th className="p-2">Meta do dia</th><th className="p-2">Acumulado real</th>{temMetaAcumulada && <th className="p-2">Meta acumulada</th>}</tr></thead><tbody>{pontos.map((p) => <tr key={p.dia} className="border-b border-[var(--border-faint)]"><th scope="row" className="p-2 font-medium text-[var(--fg-2)]">{fmtDia(p.dia)}</th><td className="p-2 tabular text-[var(--fg)]">{formatar(p.realizado, formato)}</td><td className="p-2 tabular text-[var(--fg-2)]">{formatar(p.metaDia, formatoMeta)}</td><td className="p-2 tabular text-[var(--fg)]">{formatar(p.acumulado, formato)}</td>{temMetaAcumulada && <td className="p-2 tabular text-[var(--fg-2)]">{formatar(p.metaAcumulada, formatoMeta)}</td>}</tr>)}</tbody></table></div>;
+  const formatoMeta = formato === 'int' ? 'int' : formato;
+  const menorMelhor = ['cpl', 'cpm', 'cpc'].includes(cardId);
+  return <div className="overflow-x-auto"><table className={`w-full ${temMetaAcumulada ? 'min-w-[720px]' : 'min-w-[600px]'} border-collapse text-left text-xs`}><thead><tr className="border-b border-[var(--border)] text-[var(--fg-3)]"><th className="p-2">Dia</th><th className="p-2">Realizado</th><th className="p-2">Meta do dia</th><th className="p-2">Distância da meta</th><th className="p-2">Acumulado real</th>{temMetaAcumulada && <th className="p-2">Meta acumulada</th>}</tr></thead><tbody>{pontos.map((p) => {
+    const distancia = compararMeta(p.realizado, p.metaDia, menorMelhor).distancia ?? 'Sem dado para comparar';
+    return <tr key={p.dia} className="border-b border-[var(--border-faint)]"><th scope="row" className="p-2 font-medium text-[var(--fg-2)]">{fmtDia(p.dia)}</th><td className="p-2 tabular text-[var(--fg)]">{formatar(p.realizado, formato)}</td><td className="p-2 tabular text-[var(--fg-2)]">{formatar(p.metaDia, formatoMeta)}</td><td className="p-2 text-[var(--fg-2)]">{distancia}</td><td className="p-2 tabular text-[var(--fg)]">{formatar(p.acumulado, formato)}</td>{temMetaAcumulada && <td className="p-2 tabular text-[var(--fg-2)]">{formatar(p.metaAcumulada, formatoMeta)}</td>}</tr>;
+  })}</tbody></table></div>;
 }
 
 function GraficoDiarioMeta({ pontos, formato, rotulo }: { pontos: LinhaEvolucaoMeta[]; formato: 'int' | 'brl' | 'pct'; rotulo: string }) {
