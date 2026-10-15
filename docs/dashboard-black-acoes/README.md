@@ -96,3 +96,12 @@ Para testar: autenticar com perfil ativo da equipe sem vínculo Infra nem `finan
   - **Clicar numa barra da Evolução filtra por aquele dia** (campo `Dia`, mesmo chip e mesmo "Limpar filtros"; a Evolução mantém os outros dias visíveis, com o escolhido em destaque, e os demais gráficos e a tabela mostram só aquele dia). Pelo teclado, setas percorrem os dias e Enter filtra. O tooltip fica sempre dentro da área do gráfico (abre para baixo quando não há espaço em cima).
 - **Situação:** na branch `victor-acoes-graficos-interativos`, sem merge e sem deploy. Nenhuma mudança de banco.
 - **Como testar:** `npx vitest run modules/infra/acoes modules/infra/atm`, `npx tsc --noEmit`, `npm run lint:tokens`, `npm run build`. Na tela (Infra > Dashboards > CSM > Ações da Black Friday > card Leads > Resumo): clique em "Unnichat" na rosca de utm_source e confira que as outras roscas, a Evolução e a aba Leads passam a mostrar só esses leads, e que o chip/"Limpar filtros" desfaz. Passe o cursor nas fatias e nos dias da Evolução para ver o tooltip.
+
+## Marcar número do grupo como teste · 15/10/2026
+
+- **Por quê:** o Victor queria marcar teste também no modal de Ingresso no grupo, não só no de Leads.
+- **O que mudou:** no modal de Ingresso no grupo, master vê a coluna "Teste" com "Marcar como teste" e uma confirmação. Chama `dados_marcar_teste` com a etiqueta da ação e **só o telefone do grupo** (`foneGrupo`). O banco aceita número que só está no grupo (`dados.atm_pertence`, tipo `fone`, olha `v_grupo_pessoas_todos`) e grava em `dados.marcacoes_teste` (tipo `fone`, 8 últimos dígitos). Sem banco novo.
+- **Efeito:** o número some da lista (`dados_atm_grupo_leads` já exclui `teste`) e sai do ingresso geral do card (`grupo_entradas` do resumo também exclui). Se o número for lead, sai dos leads também.
+- **Desfazer:** a lista do grupo não traz os testes, então não há "Desmarcar" nela. Se o número for lead, desmarca no modal de Leads com "incluir testes" ligado; se não for, só por SQL (`dados_desmarcar_teste`).
+- **Como testar:** master, aba da ação, card Ingresso no grupo, marcar um número; a linha some e o card cai em 1.
+- **Validação:** `tsc`, `eslint` em `modules/infra/acoes`, `lint:tokens` e `vitest` de `acoes` + `atm` (143) passaram. Não testado na tela publicada.

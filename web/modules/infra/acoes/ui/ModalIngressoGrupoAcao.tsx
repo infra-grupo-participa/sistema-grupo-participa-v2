@@ -1,8 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import type { MetricaAtm, LeadGrupoAtm } from '@/modules/infra/atm/domain/dashboard';
 import type { EstadoListaAtm } from '@/modules/infra/atm/ui/carregador-listas';
-import { EmptyState, Loading, DataTable, Td, Th, Thead, Tr, Modal } from '@/shared/ui/components';
+import { ConfirmDialog, EmptyState, Loading, DataTable, Td, Th, Thead, Tr, Modal } from '@/shared/ui/components';
 
 const inteiro = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const origemLabel: Record<LeadGrupoAtm['origem'], string> = {
@@ -18,7 +19,7 @@ const simNaoVazio = (valor: boolean | null) => valor === null ? '' : valor ? 'Si
 
 export function ModalIngressoGrupoAcao({
   open, onClose, nomeAcao, card, lista, podeVerContato,
-  demonstracao,
+  demonstracao, isMaster = false, onMarcarTeste,
 }: {
   open: boolean;
   onClose: () => void;
@@ -27,7 +28,21 @@ export function ModalIngressoGrupoAcao({
   lista: EstadoListaAtm<LeadGrupoAtm> | null;
   podeVerContato: boolean;
   demonstracao: boolean;
+  /** Marcar número como teste (15/10/2026): só master. O número sai da lista e do ingresso da ação. */
+  isMaster?: boolean;
+  onMarcarTeste?: (linha: LeadGrupoAtm) => Promise<string | null>;
 }) {
+  const [alvo, setAlvo] = useState<LeadGrupoAtm | null>(null);
+  const [salvando, setSalvando] = useState<string | null>(null);
+  const [erroAcao, setErroAcao] = useState<string | null>(null);
+  const comAcao = isMaster && !!onMarcarTeste && !demonstracao;
+  const marcar = async (linha: LeadGrupoAtm) => {
+    if (salvando || !onMarcarTeste) return;
+    setAlvo(null); setSalvando(linha.foneGrupo); setErroAcao(null);
+    const erro = await onMarcarTeste(linha);
+    setSalvando(null);
+    if (erro) setErroAcao(erro);
+  };
   const dados = lista?.data;
   const erro = Boolean(lista?.erro && dados !== null);
   const conteudo = !podeVerContato
@@ -43,12 +58,13 @@ export function ModalIngressoGrupoAcao({
             : lista.data.length === 0
               ? <EmptyState title="Nenhuma entrada no grupo" hint="Não há números únicos retornados para este evento." />
               : <DataTable minWidth={1050} fixed>
-                <Thead><Th className="w-[130px]">Nome</Th><Th className="w-[185px]">E-mail</Th><Th className="w-[135px]">Telefone</Th><Th className="w-[75px]">Turma</Th><Th className="w-[100px]">Instrução</Th><Th className="w-[130px]">Origem</Th><Th className="w-[170px]">Entrada no grupo</Th><Th className="w-[125px]">Situação</Th></Thead>
+                <Thead><Th className="w-[130px]">Nome</Th><Th className="w-[185px]">E-mail</Th><Th className="w-[135px]">Telefone</Th><Th className="w-[75px]">Turma</Th><Th className="w-[100px]">Instrução</Th><Th className="w-[130px]">Origem</Th><Th className="w-[170px]">Entrada no grupo</Th><Th className="w-[125px]">Situação</Th>{comAcao && <Th className="w-[150px]">Teste</Th>}</Thead>
                 <tbody>{lista.data.map((linha) => <Tr key={linha.foneGrupo}>
                   <Td className="break-words">{texto(linha.nome)}</Td><Td className="break-all">{texto(linha.email)}</Td><Td className="break-all tabular">{linha.telefone ?? linha.foneGrupo}</Td>
                   <Td className="break-words">{texto(linha.turma)}</Td><Td className="break-words">{texto(linha.instrucao)}</Td><Td className="break-words">{origemLabel[linha.origem]}</Td>
                   <Td className="whitespace-nowrap">{dataHora(linha.entrouEm)}{linha.entradaAproximada ? <span className="ml-1 text-[var(--fg-3)]">(data aproximada)</span> : null}</Td>
                   <Td className="text-xs">{linha.noGrupo !== null && <div>No grupo: {simNaoVazio(linha.noGrupo)}</div>}{linha.saiuEm && <div className="text-[var(--fg-3)]">Saiu em {dataHora(linha.saiuEm)}</div>}</Td>
+                  {comAcao && <Td><button type="button" disabled={salvando === linha.foneGrupo} onClick={() => { setErroAcao(null); setAlvo(linha); }} className="min-h-9 rounded-[var(--r-md)] border border-[var(--border)] px-2 text-xs font-medium text-[var(--fg)] hover:bg-[var(--surface-3)] disabled:opacity-50">{salvando === linha.foneGrupo ? 'Salvando…' : 'Marcar como teste'}</button></Td>}
                 </Tr>)}</tbody>
               </DataTable>;
 
@@ -62,9 +78,11 @@ export function ModalIngressoGrupoAcao({
       </div>
       {!podeVerContato && <p role="note" className="text-xs text-[var(--fg-3)]">Os indicadores continuam disponíveis para seu usuário.</p>}
       {demonstracao && <p role="note" className="rounded-[var(--r-md)] border border-[var(--yellow)]/40 bg-[var(--surface-2)] p-2 text-xs text-[var(--yellow)]">Dados de demonstração fictícios. Nenhum contato real é exibido.</p>}
+      {erroAcao && <p role="alert" className="text-xs text-[var(--red)]">{erroAcao}</p>}
       {erro && <p role="status" className="text-xs text-[var(--yellow)]">A leitura da lista falhou. Os últimos dados carregados foram mantidos.</p>}
       <div role="tabpanel" aria-label="Leads que entraram no grupo" className="max-h-[65vh] overflow-auto">{conteudo}</div>
       <p className="text-[11px] text-[var(--fg-3)]">Uma linha por número único que entrou no grupo. Nome e contato só aparecem para quem tem permissão de ver contatos.</p>
     </div>
+    {alvo && <ConfirmDialog title="Marcar número do grupo como teste" confirmLabel="Marcar como teste" cancelLabel="Cancelar" onCancel={() => setAlvo(null)} onConfirm={() => void marcar(alvo)} message={`Esta marcação vale só para esta ação da Black. O número ${alvo.telefone ?? alvo.foneGrupo} sai da lista e deixa de contar no ingresso no grupo e nos leads dela. Se o número for lead, dá para desfazer em "Desmarcar teste" no modal de Leads, com "incluir testes" ligado; se não for, só pelo time de dados. Quer continuar?`} />}
   </Modal>;
 }
