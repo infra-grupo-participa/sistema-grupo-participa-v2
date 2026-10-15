@@ -3,18 +3,21 @@
 // Aba 1, Visão geral: "estamos no caminho?". Só cards, cada card abre o ModalCard com as sub-abas fixas.
 // Faixa 1 placar e investimento (primeira dobra) · Faixa 2 métricas de tráfego e funil de leads · Faixa 3 funis + CPL
 // por etapa. O gráfico por fase saiu da visão geral em 13/10 (pedido do Victor): fica no detalhe do card de tráfego. Razão = soma sobre soma no mesmo recorte; sem dado = "Sem dado", nunca zero.
-import { useState, type ReactNode } from 'react';
-import { KpiCard, Modal, ProgressBar, SectionCard } from '@/shared/ui/components';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { DataTable, KpiCard, Modal, ProgressBar, SectionCard, Td, Th, Thead, Tr } from '@/shared/ui/components';
+import { deslocarDia } from '@/modules/infra/atm/domain/periodo';
 import { diaDe } from '../domain/recorte';
+import { alertasNomenclatura } from '../domain/alertas-nomenclatura';
 import {
   agregar, cpc, cplPorEtapa, cpm, ctr, custoPorVisualizacao,
-  dividir, ehCaptacao, ehEntresafraCampanha, ehPago, enviosMqlMaisRecentes, farolCpl, filtrarDias, filtrarLinhas, gastoDe, ingressoGrupo, linhasCaptacao, somar, taxa as construirTaxa,
+  dividir, ehCaptacao, ehEntresafraCampanha, ehPago, enviosMqlMaisRecentes, farolCpl, filtrarDias, filtrarLinhas, gastoDe, linhasCaptacao, somar, taxa as construirTaxa,
   taxaVideo75, type Taxa as TipoTaxa,
 } from '../domain/metricas';
 import { FUNIS, ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
 import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
 import { Farol, formatar, IndicadorMeta, MODAL_TELA_CHEIA, moeda, Numero, Taxa } from './pecas';
+import { GraficoLinha } from './graficos';
 import { TabelaLeads } from './perfil/TabelaLeads';
 import { ResumoLeads } from './ResumoLeads';
 import { cplCaptacao, connectRate as connectRateNumero, conversaoPagina as conversaoPaginaNumero, gastoCampanha, investimentoTrafego, leadsDoTrafego, leadsPessoas, mql as mqlNumero, taxaMql, investimentoDeCaptacao, ingressoGrupoGeral } from '../domain/numeros';
@@ -32,7 +35,7 @@ const valorTaxa = (t: TipoTaxa): Valor => t.valor;
 // de cada linha, e o Ingresso no grupo (card com a lista por grupo) ocupa a linha inteira.
 // Card com lista embaixo do número (Ingresso no grupo): a moldura do KpiCard vai para fora, para a lista ficar dentro
 // dela em qualquer largura; a moldura do KpiCard de dentro some. A partir de 1280 px a moldura de fora ocupa a célula.
-const MOLDURA_COM_LISTA = ' overflow-hidden border border-l-4 border-[var(--border)] border-l-[var(--accent)] bg-[var(--surface-2)]'
+const MOLDURA_COM_LISTA = ' overflow-hidden border border-[var(--border)] bg-[var(--surface-2)]'
   + ' [&>*:first-child]:!rounded-none [&>*:first-child]:!border-0 [&>*:first-child]:!shadow-none';
 const GRADE_MACRO = 'grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5';
 function Cartao({ onAbrir, titulo, children, cheio = false, className = '' }: { onAbrir?: () => void; titulo: string; children: ReactNode; cheio?: boolean | 'xl'; className?: string }) {
@@ -85,11 +88,25 @@ function tempoAte(alvo: string, agora: Date): string {
 /** Tabela aberta por um card que não tem as sub-abas do ModalCard (os números vêm prontos do servidor). */
 interface TabelaAberta { titulo: string; nota: string; linhas: LinhaPerfil[] }
 
+function MetaComProgresso({ valor, meta, formato, menorMelhor = false }: { valor: Valor; meta: Valor; formato: 'brl' | 'pct'; menorMelhor?: boolean }) {
+  if (meta === null) return <p className="text-[11px] text-[var(--fg-3)]">Sem meta cadastrada</p>;
+  const atingido = valor === null ? null : menorMelhor
+    ? valor <= meta ? 1 : valor === 0 ? 1 : Math.min(1, meta / valor)
+    : meta === 0 ? null : Math.min(1, valor / meta);
+  return <div className="space-y-1" title={`${menorMelhor ? 'Meta máxima' : 'Meta'}: ${formatar(meta, formato)}${valor === null ? '' : `; ${Math.round((atingido ?? 0) * 100)}% atingida`}`}>
+    <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-[10px] text-[var(--fg-3)]">
+      <span>Meta {menorMelhor ? 'máx.' : ''} {formatar(meta, formato)}</span>
+      <span>{atingido === null ? 'Sem dado para comparar' : `${Math.round(atingido * 100)}% da meta`}</span>
+    </div>
+    <ProgressBar value={(atingido ?? 0) * 100} ariaLabel={`Progresso em relação à meta ${formatar(meta, formato)}`} />
+  </div>;
+}
+
 /** Cards de MQL mostram a base completa e destacam embaixo a parcela C2/C3. */
 function CardMql({ geral, trafego, onAbrir }: { geral: ReturnType<typeof mqlNumero>; trafego: ReturnType<typeof mqlNumero>; onAbrir: () => void }) {
   return (
     <Cartao cheio titulo="MQLs" onAbrir={onAbrir}>
-      <KpiCard label="MQLs"
+      <KpiCard label="MQLs" bar="none"
         valueClassName="text-2xl sm:text-3xl"
         value={<Numero valor={geral.num} formato="int" falta="sem cadastro no recorte" />}
         hint={<span>Do tráfego C2/C3: <strong className="tabular text-[var(--fg)]"><Numero valor={trafego.num} formato="int" falta="sem cadastro no recorte" /></strong></span>}
@@ -98,16 +115,15 @@ function CardMql({ geral, trafego, onAbrir }: { geral: ReturnType<typeof mqlNume
   );
 }
 
-function CardPercentualMql({ geral, trafego, onAbrir }: { geral: ReturnType<typeof taxaMql>; trafego: ReturnType<typeof taxaMql>; onAbrir: () => void }) {
-  const meta = 0.6;
+function CardPercentualMql({ geral, trafego, meta, onAbrir }: { geral: ReturnType<typeof taxaMql>; trafego: ReturnType<typeof taxaMql>; meta: Valor; onAbrir: () => void }) {
   return (
     <Cartao cheio titulo="% de MQL" onAbrir={onAbrir} className="min-h-[168px]">
-      <KpiCard label="% de MQL" value={<Taxa taxa={geral} className="text-2xl font-bold tracking-tight text-[var(--fg)] no-underline" />}
+      <KpiCard label="% de MQL" bar="none" value={<Taxa taxa={geral} className="text-2xl font-bold tracking-tight text-[var(--fg)] no-underline" />}
         valueClassName="text-2xl sm:text-3xl"
         className="!overflow-visible"
-        hint={<div className="space-y-1 leading-snug">
-          <div className="flex flex-wrap items-center gap-x-1"><span>Geral · meta 60%</span><IndicadorMeta valor={geral.valor} meta={meta} formato="pct" compacto /></div>
-          <div className="flex flex-wrap items-center gap-x-1"><span>Tráfego C2/C3: <strong className="tabular text-[var(--fg)]"><Taxa taxa={trafego} /></strong> · meta 60%</span><IndicadorMeta valor={trafego.valor} meta={meta} formato="pct" compacto /></div>
+        hint={<div className="space-y-2 leading-snug">
+          <div><div className="flex flex-wrap items-center gap-x-1"><span>Geral · </span><IndicadorMeta valor={geral.valor} meta={meta} formato="pct" compacto /></div><MetaComProgresso valor={geral.valor} meta={meta} formato="pct" /></div>
+          <div><div className="flex flex-wrap items-center gap-x-1"><span>Tráfego C2/C3: <strong className="tabular text-[var(--fg)]"><Taxa taxa={trafego} /></strong> · </span><IndicadorMeta valor={trafego.valor} meta={meta} formato="pct" compacto /></div><MetaComProgresso valor={trafego.valor} meta={meta} formato="pct" /></div>
         </div>}
         title={`% de MQL. Geral: ${formatar(geral.num, 'int')} MQL ÷ ${formatar(geral.den, 'int')} leads. Tráfego: ${formatar(trafego.num, 'int')} MQL ÷ ${formatar(trafego.den, 'int')} leads pagos C2/C3. Meta geral e de tráfego: 60%. Regra B; fonte dados_black_perfil.`} />
     </Cartao>
@@ -115,7 +131,7 @@ function CardPercentualMql({ geral, trafego, onAbrir }: { geral: ReturnType<type
 }
 
 /** Ingresso usa a pessoa única do perfil, inclusive não MQL e sem campanha. */
-function CardIngresso({ geral, trafego, grupo, onAbrir }: { geral: ReturnType<typeof ingressoGrupoGeral>; trafego: ReturnType<typeof ingressoGrupoGeral>; grupo: DadosTela['grupo']['data']; onAbrir: () => void }) {
+function CardIngresso({ geral, trafego, grupo, meta, onAbrir }: { geral: ReturnType<typeof ingressoGrupoGeral>; trafego: ReturnType<typeof ingressoGrupoGeral>; grupo: DadosTela['grupo']['data']; meta: Valor; onAbrir: () => void }) {
   const linhasGrupo = ([
     ['advogado', 'Advogados', 'Denominador: leads advogado + estudante de Direito (leads_do_segmento).'],
     ['contador', 'Contadores', 'Denominador: leads contadores (leads_do_segmento).'],
@@ -129,19 +145,20 @@ function CardIngresso({ geral, trafego, grupo, onAbrir }: { geral: ReturnType<ty
   const multiGrupo = grupo?.leadsEmMaisDeUmGrupo;
   return (
     <Cartao cheio titulo="Ingresso no grupo" onAbrir={onAbrir}>
-      <KpiCard label="Ingresso no grupo · todos os leads"
+      <KpiCard label="Ingresso no grupo · todos os leads" bar="none"
         valueClassName="text-2xl sm:text-3xl"
         value={<Taxa taxa={geral} className="text-2xl font-bold tracking-tight text-[var(--fg)] no-underline" />}
         hint={<div className="space-y-2">
-          {geral.valor !== null && <ProgressBar value={geral.valor * 100} ariaLabel={`Ingresso no grupo geral ${formatar(geral.valor, 'pct')}`} />}
-          <p>Geral: <strong className="tabular text-[var(--fg)]">{formatar(geral.num, 'int')} / {formatar(geral.den, 'int')} · <Taxa taxa={geral} /></strong></p>
-          <p>Do tráfego: <strong className="tabular text-[var(--fg)]">{formatar(trafego.num, 'int')} / {formatar(trafego.den, 'int')} · <Taxa taxa={trafego} /></strong></p>
+          <p className="whitespace-nowrap">Geral: <strong className="tabular text-[var(--fg)]"><Taxa taxa={geral} /></strong></p>
+          <MetaComProgresso valor={geral.valor} meta={meta} formato="pct" />
+          <p className="whitespace-nowrap">Do tráfego: <strong className="tabular text-[var(--fg)]"><Taxa taxa={trafego} /></strong></p>
+          <MetaComProgresso valor={trafego.valor} meta={meta} formato="pct" />
           <ul className="border-t border-[var(--border-faint)] pt-1 text-[11px] text-[var(--fg-2)]">
             {linhasGrupo.map(({ nome, dica, taxa: t }) => <li key={nome} title={dica} className="whitespace-nowrap text-[10px]">
               <span>{nome}: </span><span className="font-semibold tabular">{t ? <><Taxa taxa={t} /> · {formatar(t.num, 'int')} / {formatar(t.den, 'int')}</> : 'Sem dado'}</span>
             </li>)}
             <li className="text-[var(--fg-3)]">
-              {multiGrupo === null || multiGrupo === undefined ? 'Sem dado de sobreposição entre grupos.' : `${formatar(multiGrupo, 'int')} pessoas em mais de um grupo`}
+          {multiGrupo === null || multiGrupo === undefined ? 'Sem dado de sobreposição entre grupos.' : `${formatar(multiGrupo, 'int')} pessoas em mais de um grupo`}
             </li>
           </ul>
         </div>}
@@ -155,6 +172,8 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const [detalheCaptacao, setDetalheCaptacao] = useState(false);
   const [etapaAberta, setEtapaAberta] = useState<string | null>(null);
   const [tabela, setTabela] = useState<TabelaAberta | null>(null);
+  const [modalIngresso, setModalIngresso] = useState(false);
+  const [abaVisao, setAbaVisao] = useState<'placar' | 'alertas'>('placar');
   // Sem fonte de cadastros, número de lead é "Sem dado" (nunca o zero de uma lista vazia).
   const semLeads = d.perfilSemDado;
   const { config, idx, recorte } = d;
@@ -207,13 +226,10 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
       hint: `Meta Ads ${moeda(investimento.meta)} · Google Ads ${moeda(investimento.google)}` },
     { c: cardCpl, valor: <Numero valor={placar.valor} formato="brl" falta="sem leads pagos no recorte" />,
       hint: `${formatar(placar.den, 'int')} pessoas pagas` },
-    { c: { id: 'imp', rotulo: 'Impressões', formato: 'int', medir: medirCap((a) => a.impressoes), aplica: TRAFEGO }, valor: <Numero valor={dCap.length ? aCap.impressoes : null} formato="int" /> },
     { c: { id: 'cpm', rotulo: 'CPM', formato: 'brl', medir: medirCap(cpm), aplica: TRAFEGO, menorMelhor: true,
       dica: `Soma do gasto por anúncio em dados_black_trafego.dias_anuncio ÷ impressões desses anúncios × 1.000: ${moeda(aCap.gasto)} ÷ ${formatar(aCap.impressoes, 'int')}. O card de captação usa dias_campanha, agregado por campanha. A Meta coleta cada nível em chamadas independentes, então os totais podem diferir.` }, valor: <Numero valor={dCap.length ? cpm(aCap) : null} formato="brl" /> },
-    { c: { id: 'cliques', rotulo: 'Cliques no link', formato: 'int', medir: (x) => agregar(capDias(x, d)).cliques.valor, aplica: TRAFEGO }, valor: <Numero valor={aCap.cliques.valor} formato="int" /> },
     { c: { id: 'ctr', rotulo: 'CTR', formato: 'pct', medir: (x) => valorTaxa(ctr(agregar(capDias(x, d)))), aplica: TRAFEGO, dica: 'Cliques no link ÷ impressões.' }, valor: <Taxa taxa={ctr(aCap)} /> },
     { c: { id: 'cpc', rotulo: 'CPC', formato: 'brl', medir: medirCap(cpc), aplica: TRAFEGO, menorMelhor: true, dica: 'Custo por clique: gasto ÷ cliques no link, só nas linhas com clique medido.' }, valor: <Numero valor={dCap.length ? cpc(aCap) : null} formato="brl" /> },
-    { c: { id: 'lpv', rotulo: 'Visualizações da página', formato: 'int', medir: (x) => agregar(capDias(x, d)).lpv.valor, aplica: TRAFEGO }, valor: <Numero valor={aCap.lpv.valor} formato="int" />, hint: aCap.lpv.conhecidos < aCap.lpv.total ? 'Parcial: Google sem LPV.' : undefined },
     { c: { id: 'connect', rotulo: 'Connect rate', formato: 'pct', medir: (x) => connectRateNumero(x, idx).valor, aplica: TRAFEGO,
       dica: 'dados_black_trafego.dias_anuncio: soma de views da página ÷ soma de cliques no link em C2/C3, somente nas linhas com os dois campos. O percentual mostra numerador e denominador ao passar o cursor.' }, valor: <Taxa taxa={connectRateNumero(d.dias, idx)} /> },
     { c: cardLeads, valor: <Numero valor={semLeads ? null : leadsPessoas(lGeral).valor} formato="int" falta={d.avisoPerfil ?? undefined} />, hint: <span>Do tráfego C2/C3: <strong className="tabular text-[var(--fg)]"><Numero valor={leadsTrafegoNoFunil} formato="int" falta={d.avisoPerfil ?? undefined} /></strong></span> },
@@ -222,13 +238,13 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
 
   // Indicador de meta (bom/ruim + % da meta) dos cards com fórmula. Metas: Victor, 13/10/2026 (config.metas).
   const m = config.metas;
-  const indicador: Record<string, ReactNode> = {
-    cpl: <IndicadorMeta valor={placar.valor} ideal={config.reguaCpl?.meta ?? null} meta={config.cplAlvoMedio} formato="brl" compacto />,
-    cpm: <IndicadorMeta valor={dCap.length ? cpm(aCap) : null} meta={m.cpm} menorMelhor formato="brl" compacto />,
-    ctr: <IndicadorMeta valor={ctr(aCap).valor} meta={m.ctr} formato="pct" compacto />,
-    cpc: <IndicadorMeta valor={dCap.length ? cpc(aCap) : null} meta={m.cpc} menorMelhor formato="brl" compacto />,
-    connect: <IndicadorMeta valor={connectRateNumero(d.dias, idx).valor} meta={m.connectRate} formato="pct" compacto />,
-    conv: <IndicadorMeta valor={conversaoPaginaNumero(d.dias, d.linhas, idx).valor} meta={m.conversaoPagina} formato="pct" compacto />,
+  const progressoMeta: Record<string, ReactNode> = {
+    cpl: <div className="space-y-1"><IndicadorMeta valor={placar.valor} ideal={config.reguaCpl?.meta ?? null} meta={config.cplAlvoMedio} menorMelhor formato="brl" compacto /><MetaComProgresso valor={placar.valor} meta={config.cplAlvoMedio} formato="brl" menorMelhor /></div>,
+    cpm: <MetaComProgresso valor={dCap.length ? cpm(aCap) : null} meta={m.cpm} formato="brl" menorMelhor />,
+    ctr: <MetaComProgresso valor={ctr(aCap).valor} meta={m.ctr} formato="pct" />,
+    cpc: <MetaComProgresso valor={dCap.length ? cpc(aCap) : null} meta={m.cpc} formato="brl" menorMelhor />,
+    connect: <MetaComProgresso valor={connectRateNumero(d.dias, idx).valor} meta={m.connectRate} formato="pct" />,
+    conv: <MetaComProgresso valor={conversaoPaginaNumero(d.dias, d.linhas, idx).valor} meta={m.conversaoPagina} formato="pct" />,
   };
 
   // Tabelas dos cards MQLs e Ingresso: os envios do período e do nó (cada envio é uma linha; o card conta pessoas).
@@ -238,8 +254,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
     nota: 'MQL pela Regra B: profissão do envio mais recente com profissão, uma pessoa por lead, de todas as portas no período selecionado.' });
   const abrirPctMql = () => setTabela({ titulo: '% de MQL', linhas: linhasMql,
     nota: 'Pessoas usadas no cálculo da taxa: MQL pela Regra B dividido por pessoas únicas do recorte. A meta de 60% vale para a base geral e para C2/C3.' });
-  const abrirGrupo = () => setTabela({ titulo: 'Ingresso no grupo', linhas: linhasGrupo,
-    nota: 'Leads de todas as portas que entraram em algum grupo no período. O card usa pessoas únicas de dados_black_perfil.entrou_grupo_em.' });
+  const abrirGrupo = () => setModalIngresso(true);
 
   // ─── Faixa 4: funis lado a lado ─────────────────────────────────────────────────────────────────────────
   const diasCanal = filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: 'todos', canal: recorte.canal });
@@ -258,6 +273,15 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Visão geral da Black">
+        {([{ id: 'placar', nome: 'Visão geral' }, { id: 'alertas', nome: 'Alertas importantes' }] as const).map((tab) => (
+          <button key={tab.id} type="button" role="tab" aria-selected={abaVisao === tab.id} onClick={() => setAbaVisao(tab.id)}
+            className={`min-h-10 rounded-[var(--r-md)] px-3 text-sm ${abaVisao === tab.id ? 'bg-[var(--accent)] font-semibold text-black' : 'border border-[var(--border)] text-[var(--fg-2)] hover:bg-[var(--surface-3)]'}`}>
+            {tab.nome}
+          </button>
+        ))}
+      </div>
+      {abaVisao === 'placar' ? <div className="space-y-5">
       <section aria-labelledby="vg-placar">
         <div className="mb-2 flex items-center justify-between gap-3">
           <h2 id="vg-placar" className="text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)]">Placar</h2>
@@ -265,20 +289,20 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {/* O limite total reutiliza ORCAMENTO.total enquanto não há orçamento próprio de disparos. */}
-          <KpiCard label="Investimento total" value={<Numero valor={total} formato="brl" falta="sem dado" />} valueClassName="text-2xl sm:text-3xl" title={`${notaTotal} O limite de ${moeda(config.orcamentoTotal)} reutiliza provisoriamente o orçamento total do projeto, pois não há limite separado para disparos.`} bar="accent"
+          <KpiCard label="Investimento total" value={<Numero valor={total} formato="brl" falta="sem dado" />} valueClassName="text-2xl sm:text-3xl" title={`${notaTotal} O limite de ${moeda(config.orcamentoTotal)} reutiliza provisoriamente o orçamento total do projeto, pois não há limite separado para disparos.`} bar="none"
             hint={<div className="space-y-2"><p className="text-xs text-[var(--fg-2)]">{total === null ? `Sem dado de ${moeda(config.orcamentoTotal)} · sem percentual` : `${moeda(total)} de ${moeda(config.orcamentoTotal)} · ${formatar(dividir(total, config.orcamentoTotal), 'pct')}`}</p>{config.orcamentoTotal !== null && <ProgressBar value={total === null ? 0 : (total / config.orcamentoTotal) * 100} tone="yellow" ariaLabel="Investimento total em relação ao orçamento" />}</div>} />
           <Cartao titulo={cardGasto.rotulo} onAbrir={abrir(cardGasto)}>
-            <KpiCard label="Investimento em tráfego" value={<Numero valor={gastoPeriodo} formato="brl" falta="sem dado" />} valueClassName="text-2xl sm:text-3xl" title={`${NOTA_ENTRESAFRA}`} bar="accent"
+            <KpiCard label="Investimento em tráfego" value={<Numero valor={gastoPeriodo} formato="brl" falta="sem dado" />} valueClassName="text-2xl sm:text-3xl" title={`${NOTA_ENTRESAFRA}`} bar="none"
               hint={<div className="space-y-2"><p className="text-xs text-[var(--fg-2)]">Meta Ads {moeda(porCanal('meta'))} · Google Ads {moeda(porCanal('google'))}</p><p className="text-xs text-[var(--fg-2)]">{gastoPeriodo === null ? `Sem dado de ${moeda(config.orcamentoTotal)} · sem percentual` : `${moeda(gastoPeriodo)} de ${moeda(config.orcamentoTotal)} · ${formatar(dividir(gastoPeriodo, config.orcamentoTotal), 'pct')}`}</p>{config.orcamentoTotal !== null && <ProgressBar value={gastoPeriodo === null ? 0 : (gastoPeriodo / config.orcamentoTotal) * 100} tone="yellow" ariaLabel="Investimento em tráfego em relação ao orçamento" />}</div>} />
           </Cartao>
           <Cartao titulo="Disparo" onAbrir={() => d.irPara({ aba: 'mensageria' })}>
-            <KpiCard label="Investimento com disparo" bar="purple" value={<Numero valor={custoDisparo?.valor ?? null} formato="brl" falta="Sem dado" />} valueClassName="text-2xl sm:text-3xl"
+            <KpiCard label="Investimento com disparo" bar="none" value={<Numero valor={custoDisparo?.valor ?? null} formato="brl" falta="Sem dado" />} valueClassName="text-2xl sm:text-3xl"
               title={notaTotal} hint={<div className="space-y-2"><p className="text-xs text-[var(--fg-2)]">limite sem cadastro</p><ProgressBar value={0} ariaLabel="Limite para investimento com disparo sem cadastro" /></div>} />
           </Cartao>
         </div>
         <div className="mt-3 grid grid-cols-1 gap-3">
           <Cartao titulo={cardLeads.rotulo} onAbrir={abrir(cardLeads)}>
-            <KpiCard label="Leads contra a meta" bar="accent" title={`${config.fontes.plano} Pessoas únicas de todas as portas desde o início, sem aplicar o filtro de período. Meta: ${config.metaLeads === null ? 'sem cadastro' : formatar(config.metaLeads, 'int')}.`} valueClassName="text-2xl sm:text-3xl"
+            <KpiCard label="Leads contra a meta" bar="none" title={`${config.fontes.plano} Pessoas únicas de todas as portas desde o início, sem aplicar o filtro de período. Meta: ${config.metaLeads === null ? 'sem cadastro' : formatar(config.metaLeads, 'int')}.`} valueClassName="text-2xl sm:text-3xl"
               value={<span className="flex flex-wrap items-baseline gap-x-2"><Numero valor={leadsAteAgora} formato="int" falta={d.avisoPerfil ?? undefined} />{config.metaLeads !== null && leadsAteAgora !== null && <span className="text-base font-medium text-[var(--fg-2)]">de {formatar(config.metaLeads, 'int')} · {formatar(dividir(leadsAteAgora, config.metaLeads), 'pct')}</span>}</span>}
               hint={<div className="space-y-2">{config.metaLeads !== null && leadsAteAgora !== null && <ProgressBar value={(leadsAteAgora / config.metaLeads) * 100} ariaLabel={`${formatar(leadsAteAgora, 'int')} de ${formatar(config.metaLeads, 'int')} leads`} valueNow={leadsAteAgora} valueMin={0} valueMax={config.metaLeads} />}<p className="text-xs text-[var(--fg-2)]">Do tráfego C2/C3: <strong className="tabular text-[var(--fg)]">{formatar(leadsTrafegoAteAgora, 'int')}</strong></p></div>} />
           </Cartao>
@@ -294,19 +318,19 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           <>
             <ol className={GRADE_MACRO}>
               {cards3.flatMap(({ c, valor, hint }) => [
-                <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={c.id === 'investimento-captacao' ? () => setDetalheCaptacao(true) : abrir(c)}><KpiCard label={c.rotulo} title={`${c.dica ?? ''} ${typeof hint === 'string' ? hint : ''}${c.id === 'investimento-captacao' && detalhesCobertura ? ` ${detalhesCobertura}` : ''}`} bar={c.id === 'ctr' || c.id === 'connect' || c.id === 'conv' ? 'green' : c.id === 'cpm' || c.id === 'cpc' || c.id === 'cpl' ? 'yellow' : c.id === 'lpv' ? 'purple' : 'accent'} valueClassName={c.id === 'investimento-captacao' ? 'whitespace-nowrap text-[clamp(1.125rem,2.2vw,1.875rem)]' : 'text-2xl sm:text-3xl'} value={indicador[c.id] ? <span className="inline-flex flex-wrap items-baseline gap-x-2">{valor}{indicador[c.id]}</span> : valor}
-                  hint={c.id === 'investimento-captacao' ? <span className="block">Meta Ads {moeda(investimento.meta)} · Google Ads {moeda(investimento.google)}</span> : c.id === 'leads' ? hint : undefined} /></Cartao></li>,
+                <li key={c.id} className="min-w-0"><Cartao cheio titulo={c.rotulo} onAbrir={c.id === 'investimento-captacao' ? () => setDetalheCaptacao(true) : abrir(c)}><KpiCard label={c.rotulo} title={`${c.dica ?? ''} ${typeof hint === 'string' ? hint : ''}${c.id === 'investimento-captacao' && detalhesCobertura ? ` ${detalhesCobertura}` : ''}`} bar="none" valueClassName={c.id === 'investimento-captacao' ? 'whitespace-nowrap text-[clamp(1.125rem,2.2vw,1.875rem)]' : 'text-2xl sm:text-3xl'} value={valor}
+                  hint={c.id === 'investimento-captacao' ? <div className="space-y-1"><span className="block">Meta Ads {moeda(investimento.meta)} · Google Ads {moeda(investimento.google)}</span><MetaComProgresso valor={investimento.total} meta={config.previstoPorFase.captacao} formato="brl" /></div> : c.id === 'leads' ? hint : progressoMeta[c.id] ?? undefined} /></Cartao></li>,
                 // MQLs logo depois da conversão da página; o Ingresso no grupo vem em seguida (pedido de 13/10).
                 ...(c.id === 'conv' ? [
                   <li key="mql" className="min-w-0"><CardMql geral={resultadoMqlGeral} trafego={resultadoMqlTrafego} onAbrir={abrirMql} /></li>,
-                  <li key="mql-percentual" className="min-w-0"><CardPercentualMql geral={percentualMqlGeral} trafego={percentualMqlTrafego} onAbrir={abrirPctMql} /></li>,
-                  <li key="ingresso" className="col-span-2 min-w-0 lg:col-span-1"><CardIngresso geral={ingressoGeral} trafego={ingressoTrafego} grupo={d.grupo.data} onAbrir={abrirGrupo} /></li>,
+                  <li key="mql-percentual" className="min-w-0"><CardPercentualMql geral={percentualMqlGeral} trafego={percentualMqlTrafego} meta={config.metas.mql} onAbrir={abrirPctMql} /></li>,
+                  <li key="ingresso" className="col-span-2 min-w-0 lg:col-span-1"><CardIngresso geral={ingressoGeral} trafego={ingressoTrafego} grupo={d.grupo.data} meta={config.metas.ingressoGrupo} onAbrir={abrirGrupo} /></li>,
                 ] : []),
               ])}
             </ol>
             <div className={'mt-3 ' + GRADE_MACRO}>
-              <Cartao cheio titulo="Presença na live"><KpiCard label="Presença na live" value={<Numero valor={d.marcos?.presencaLive ?? null} formato="int" falta="presença da live ainda sem fonte" />} bar="gray" /></Cartao>
-              <Cartao cheio titulo="Vendas"><KpiCard label="Vendas" value={<Numero valor={d.marcos?.vendas ?? null} formato="int" falta="vendas ainda sem fonte" />} bar="gray" /></Cartao>
+              <Cartao cheio titulo="Presença na live"><KpiCard label="Presença na live" value={<Numero valor={d.marcos?.presencaLive ?? null} formato="int" falta="presença da live ainda sem fonte" />} bar="none" /></Cartao>
+              <Cartao cheio titulo="Vendas"><KpiCard label="Vendas" value={<Numero valor={d.marcos?.vendas ?? null} formato="int" falta="vendas ainda sem fonte" />} bar="none" /></Cartao>
             </div>
           </>
         )}
@@ -329,7 +353,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           })}
         </div>
 
-        <SectionCard className="mt-3" title="CPL por etapa" subtitle="Expanda uma etapa para ver campanhas, conjuntos e métricas. Etapas sem CPL não exibem esse indicador.">
+      <SectionCard className="mt-3" title="CPL por etapa" subtitle="C2: campanhas pagas por iscas e aplicação da consultoria; o lead passa pela Central. C3 vai direto ao grupo. Expanda uma etapa para ver campanhas, conjuntos e métricas.">
           <div className="space-y-2">
             <EtapaFechada titulo="C1 · Distribuição" gasto={investimentoTrafego(d.trafegoPeriodo, { funil: 'c1', canal: recorte.canal }).valor} leads={null} cpl={null}
               aberta={etapaAberta === 'c1'} onToggle={() => setEtapaAberta((v) => v === 'c1' ? null : 'c1')}
@@ -367,7 +391,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
         </SectionCard>
       </section>
 
-      <SemEtapa d={d} />
+      {modalIngresso && <ModalIngresso d={d} onClose={() => setModalIngresso(false)} linhas={linhasGrupo} />}
 
       <ModalCard d={d} card={aberto} onClose={() => setAberto(null)} />
       {detalheCaptacao && (
@@ -390,6 +414,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           <TabelaLeads d={d} linhas={tabela.linhas} />
         </Modal>
       )}
+      </div> : <PainelAlertas d={d} />}
     </div>
   );
 }
@@ -562,30 +587,122 @@ function ColunaCaptacao({ d, dias, linhas, funil }: { d: DadosTela; dias: Desemp
       <Linha rotulo="Leads pagos"><Numero valor={leads.valor} formato="int" animado={false} /></Linha>
       <Linha rotulo="CPL"><span className="inline-flex items-center gap-1.5"><Numero valor={c.valor} formato="brl" animado={false} /><Farol farol={farolCpl(c.valor, d.config.reguaCpl)} /></span></Linha>
       <Linha rotulo="Conversão da página"><Taxa taxa={conversaoPaginaNumero(dias, linhas, d.idx)} /></Linha>
-      <Linha rotulo="Grupo em 48h"><Taxa taxa={ingressoGrupo(linhas, 48, d.agora)} /></Linha>
     </div>
   );
 }
 
 const dataBr = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 
-/** Campanhas sem o código de etapa no nome: nome exato da fonte, gasto fora dos funis. A etapa nunca é deduzida. */
-function SemEtapa({ d }: { d: DadosTela }) {
-  const sem = d.trafego.campanhas.filter((c) => c.funil === null);
-  if (sem.length === 0) return null;
-  const gastoDaCampanha = (id: string): Valor => {
-    return gastoCampanha(d.trafego, id).valor;
-  };
-  return (
-    <SectionCard title="Sem etapa" subtitle="Campanhas sem C1, C2 ou C3 no nome: ficam fora dos funis até o tráfego renomear. A etapa nunca é deduzida.">
-      <ul className="divide-y divide-[var(--border-faint)] text-sm">
-        {sem.map((c) => (
-          <li key={c.id} className="flex flex-wrap items-baseline justify-between gap-2 py-1.5">
-            <span className="min-w-0 break-words">{c.nome}{c.conflito ? <span className="ml-2 text-xs text-[var(--yellow)]">nome com dois subtipos</span> : null}</span>
-            <span className="text-xs text-[var(--fg-3)]">Gasto no período <Numero valor={gastoDaCampanha(c.id)} formato="brl" falta="sem gasto por anúncio no período" animado={false} /></span>
-          </li>
-        ))}
-      </ul>
+const ROTULO_REGRA: Record<string, string> = {
+  R1: 'O último campo não é a etiqueta do dashboard.', R2: 'Quantidade de campos fora do padrão.',
+  R3: 'Gestor fora de CF, RS ou EF.', R4: 'Projeto diferente de BF26.',
+  R5: 'Objetivo fora da lista permitida.', R6: 'Etapa não cadastrada no banco.',
+  R7: 'Mais de um subtipo reconhecido no nome.', R8: 'O primeiro bloco do conjunto não é PQ, PF, MIX ou ADV.',
+  R9: 'Anúncio C1 sem TEASER, MANIFESTO ou REELS no nome.', R10: 'Anúncio de isca sem o nome da isca.',
+  R11: 'A isca do anúncio difere da isca do conjunto.', R12: 'Conjunto de campanha C2 ISCA sem nome de isca.',
+  U1: 'utm_campaign marcada fora do padrão pelo banco.', U2: 'Cadastro sem UTM, conforme a sinalização do banco.',
+};
+
+function PainelAlertas({ d }: { d: DadosTela }) {
+  const alertas = useMemo(() => alertasNomenclatura(d.trafego, d.linhasTodas), [d.trafego, d.linhasTodas]);
+  const tipos = ['Campanha', 'Conjunto', 'Anúncio', 'UTM'] as const;
+  const total = alertas.reduce((soma, item) => soma + item.regras.length * item.ocorrencias, 0);
+  return <div className="space-y-3">
+    <SectionCard title="Alertas importantes" subtitle="Inconsistências calculadas a partir dos nomes exatos da fonte e das sinalizações de UTM do banco.">
+      <p className="mb-3 text-sm text-[var(--fg-2)]">{total} ocorrências em {alertas.length} itens. As regras aparecem junto de cada nome para orientar a correção.</p>
+      {alertas.length === 0 ? <p className="rounded-[var(--r-md)] border border-dashed border-[var(--border-strong)] p-5 text-center text-sm text-[var(--fg-3)]">Nenhuma inconsistência encontrada nos dados carregados.</p> : <div className="space-y-4">
+        {tipos.map((tipo) => {
+          const itens = alertas.filter((a) => a.tipo === tipo);
+          if (itens.length === 0) return null;
+          return <section key={tipo} aria-label={`Alertas de ${tipo.toLocaleLowerCase('pt-BR')}`}>
+            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--fg-3)]">{tipo} · {itens.length}</h3>
+            <ul className="divide-y divide-[var(--border-faint)]">
+              {itens.map((item) => <li key={item.chave} className="grid min-w-0 gap-1 py-2 md:grid-cols-[minmax(0,1fr)_minmax(15rem,0.8fr)_auto] md:items-start md:gap-3">
+                <code className="break-words text-xs text-[var(--fg)]">{item.nome}</code>
+                <span className="text-xs text-[var(--fg-2)]">{item.regras.map((r) => `${r}: ${ROTULO_REGRA[r]}`).join(' · ')}</span>
+                <span className="text-xs tabular text-[var(--fg-3)]">{item.ocorrencias > 1 ? `${formatar(item.ocorrencias, 'int')} ocorrências` : item.regras.join(', ')}</span>
+              </li>)}
+            </ul>
+          </section>;
+        })}
+      </div>}
+      <p className="mt-3 border-t border-[var(--border-faint)] pt-2 text-[11px] text-[var(--fg-3)]">R1–R12: padrão de nomenclatura de campanhas, conjuntos e anúncios. U1–U2: flags a_corrigir da RPC dados_black_perfil.</p>
     </SectionCard>
-  );
+  </div>;
+}
+
+type AbaIngresso = 'pessoas' | 'leads' | 'evolucao';
+interface PontoIngresso { dia: string; pct: Valor; membros: Valor; leads: Valor }
+function listaDias(de: string, ate: string): string[] {
+  if (!de || !ate || de > ate) return [];
+  const dias: string[] = [];
+  for (let dia = de; dia <= ate; dia = deslocarDia(dia, 1)) dias.push(dia);
+  return dias;
+}
+const inteiroOuNulo = (n: Valor) => n === null ? 'Sem dado' : formatar(n, 'int');
+
+function ModalIngresso({ d, onClose, linhas }: { d: DadosTela; onClose: () => void; linhas: LinhaPerfil[] }) {
+  const [aba, setAba] = useState<AbaIngresso>('pessoas');
+  const [serie, setSerie] = useState<PontoIngresso[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const carregando = aba === 'evolucao' && serie === null && erro === null;
+  const { fonte, config, periodo, chave } = d;
+  useEffect(() => {
+    if (aba !== 'evolucao' || serie !== null) return;
+    const dias = listaDias(config.inicio, periodo.ate);
+    let vivo = true;
+    const consultar = async (): Promise<PontoIngresso[]> => {
+      const respostas = new Map<string, Awaited<ReturnType<typeof fonte.grupo>>>();
+      for (let i = 0; i < dias.length; i += 4) {
+        const lote = dias.slice(i, i + 4);
+        const lidas = await Promise.all(lote.map(async (dia) => [dia, await fonte.grupo(chave, { de: config.inicio, ate: dia }, null)] as const));
+        lidas.forEach(([dia, resposta]) => respostas.set(dia, resposta));
+      }
+      let membrosAntes: number | null = 0; let leadsAntes: number | null = 0;
+      return dias.map((dia) => {
+        const r = respostas.get(dia);
+        if (!r || r.erro) throw new Error(r?.erro ?? 'Falha na leitura da série.');
+        const g = r.data.ingressoGeral;
+        const membros = g?.numerosUnicosNoGrupo ?? null; const leads = g?.leadsUnicos ?? null;
+        const pct = g?.pct === null || g?.pct === undefined ? null : g.pct / 100;
+        const diaMembros = membros === null || membrosAntes === null ? null : Math.max(0, membros - membrosAntes);
+        const diaLeads = leads === null || leadsAntes === null ? null : Math.max(0, leads - leadsAntes);
+        membrosAntes = membros; leadsAntes = leads;
+        return { dia, pct, membros: diaMembros, leads: diaLeads };
+      });
+    };
+    void consultar().then((pontos) => { if (vivo) setSerie(pontos); }, (e: unknown) => { if (vivo) setErro(e instanceof Error ? e.message : 'Falha na leitura da série.'); });
+    return () => { vivo = false; };
+  }, [aba, config.inicio, chave, fonte, periodo.ate, serie]);
+
+  const grupos = d.grupo.data?.grupos ?? [];
+  return <Modal open onClose={onClose} title="Ingresso no grupo" width={`max-w-4xl ${MODAL_TELA_CHEIA}`}>
+    <div className="space-y-3">
+      <p className="text-xs text-[var(--fg-3)]">Métrica geral: números únicos que entraram no grupo ÷ leads únicos. A lista individual de participantes não é publicada por uma RPC.</p>
+      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Detalhes do ingresso no grupo">
+        {([{ id: 'pessoas', label: 'Pessoas' }, { id: 'leads', label: 'Leads' }, { id: 'evolucao', label: 'Evolução do percentual' }] as const).map((item) => <button key={item.id} type="button" role="tab" aria-selected={aba === item.id} onClick={() => { if (item.id === 'evolucao') setErro(null); setAba(item.id); }} className={`min-h-10 rounded-[var(--r-md)] px-3 text-xs ${aba === item.id ? 'bg-[var(--accent)] font-semibold text-black' : 'border border-[var(--border)] text-[var(--fg-2)] hover:bg-[var(--surface-3)]'}`}>{item.label}</button>)}
+      </div>
+      {aba === 'pessoas' && <div className="space-y-3">
+        <p className="rounded-[var(--r-md)] border border-dashed border-[var(--border-strong)] p-3 text-sm text-[var(--fg-2)]">A fonte publicada informa totais por grupo, sem nomes ou telefones dos membros.</p>
+        <DataTable minWidth={720}>
+          <Thead><Th>Grupo</Th><Th>Números únicos</Th><Th>Webhook</Th><Th>Só foto</Th><Th>Leads no grupo</Th><Th>Leads do segmento</Th></Thead>
+          <tbody>{grupos.map((g) => <Tr key={g.campanha}><Td className="text-xs">{g.campanha}</Td><Td>{inteiroOuNulo(g.unicos)}</Td><Td>{inteiroOuNulo(g.unicosWebhook)}</Td><Td>{inteiroOuNulo(g.unicosSoFoto)}</Td><Td>{inteiroOuNulo(g.leadsNoGrupo ?? null)}</Td><Td>{inteiroOuNulo(g.leadsDoSegmento ?? null)}</Td></Tr>)}</tbody>
+        </DataTable>
+        <p className="text-xs text-[var(--fg-2)]">No grupo: {inteiroOuNulo(d.grupo.data?.ingressoGeral?.numerosUnicosNoGrupo ?? null)} · Leads únicos: {inteiroOuNulo(d.grupo.data?.ingressoGeral?.leadsUnicos ?? null)} · Leads cadastrados em algum grupo: {inteiroOuNulo(d.grupo.data?.leadsEmAlgumGrupo ?? null)} · Atualizado pela foto: {d.grupo.data?.atualizado.ultimaFoto ? new Date(d.grupo.data.atualizado.ultimaFoto).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'Sem dado'}.</p>
+      </div>}
+      {aba === 'leads' && (d.podeVerContato ? <TabelaLeads d={d} linhas={linhas} /> : <p className="py-8 text-center text-sm text-[var(--fg-3)]">A lista de leads com dados pessoais exige a capacidade contato.ver. Os indicadores continuam disponíveis.</p>)}
+      {aba === 'evolucao' && <div className="space-y-3">
+        {carregando && <p role="status" className="text-sm text-[var(--fg-3)]">Carregando a evolução, com até quatro leituras em paralelo…</p>}
+        {erro && <p role="alert" className="text-sm text-[var(--yellow)]">{erro}</p>}
+        {serie && <>
+          <GraficoLinha rotuloSerie="Ingresso geral acumulado" formato="pct" pontos={serie.map((x) => ({ chave: x.dia, rotulo: `${x.dia.slice(8, 10)}/${x.dia.slice(5, 7)}`, valor: x.pct }))} />
+          <DataTable minWidth={560}>
+            <Thead><Th>Dia</Th><Th>Entradas únicas no dia</Th><Th>Novos leads</Th><Th>Ingresso acumulado</Th></Thead>
+            <tbody>{serie.map((x) => <Tr key={x.dia}><Td>{x.dia.slice(8, 10)}/{x.dia.slice(5, 7)}</Td><Td>{inteiroOuNulo(x.membros)}</Td><Td>{inteiroOuNulo(x.leads)}</Td><Td>{formatar(x.pct, 'pct')}</Td></Tr>)}</tbody>
+          </DataTable>
+        </>}
+        <p className="text-[11px] text-[var(--fg-3)]">Fonte: dados_black_grupo com p_ate em cada dia; a taxa é acumulada (membros únicos ÷ leads únicos).</p>
+      </div>}
+    </div>
+  </Modal>;
 }

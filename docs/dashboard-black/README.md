@@ -916,3 +916,19 @@ o que foi validado e as diferenças de agregação ainda pendentes.
 - Se a resposta antiga não tiver o campo, a tela mantém a métrica legada durante atualização gradual; se o campo vier explicitamente null sem recorte, mostra Sem dado. Nenhum null vira zero.
 - Mapeamento: `web/modules/infra/black/infrastructure/fonte-supabase.ts` (`mapearGrupo`). Cálculo e seleção por recorte: `web/modules/infra/black/domain/numeros.ts` (`ingressoGrupoGeral`).
 - Testes: `npx vitest run modules/infra/black/domain/numeros.test.ts modules/infra/black/infrastructure/fonte-supabase.test.ts`.
+# Ajustes da Visão Geral Black VG (15/10/2026)
+
+Primeiro lote visual do pedido de 15/10:
+
+- Indicadores com meta exibem o valor alvo, o percentual atingido e uma barra de progresso. Metas ausentes continuam como “Sem meta cadastrada”.
+- Removidos da grade macro os cards de Cliques no link, Impressões e Visualizações da página. As métricas seguem disponíveis nos detalhes e recortes que já as usam.
+- Removida a borda colorida dos cards da Visão geral.
+- O modal de ingresso foi dividido em Pessoas, Leads e Evolução do percentual. Pessoas usa contagens por grupo que `dados_black_grupo` publica; Leads reutiliza `TabelaLeads` e só abre dados pessoais com `contato.ver`; Evolução consulta a mesma RPC com `p_ate` por dia, em lotes de até quatro chamadas. A fonte não publica a lista individual de membros, então a aba Pessoas informa essa limitação e mostra apenas as contagens disponíveis.
+- Ingresso geral segue `dados_black_grupo.ingresso_geral` (números únicos no grupo ÷ leads únicos); as demais métricas de recorte continuam cruzadas. A linha “Grupo em 48h” foi retirada das colunas de etapa para não apresentar uma janela diferente como ingresso geral.
+- O CPL por etapa mantém a sanfona fechada e inclui a definição de C2 documentada no plano da Black.
+- A lista anterior “Sem etapa” foi substituída pela aba Alertas importantes. As regras R1–R12 avaliam campanhas, conjuntos e anúncios; U1–U2 usam `dados_black_perfil.a_corrigir`. Nomes e contagens são montados dos dados carregados, sem fixture de produção.
+- Em `dados_black_leads`, o erro `42501` usa a mesma mensagem das listas e orienta a solicitar `contato.ver`. Essa resposta pertence só à leitura dos contatos; os demais blocos mantêm a mensagem geral de permissão do dashboard e continuam independentes.
+
+Como testar: na rota da Black VG, confira os cards com meta, abra o card Ingresso no grupo e navegue pelas três abas; confirme que a aba Leads pede `contato.ver` para mostrar nome, e-mail e telefone; abra CPL por etapa; confira Alertas importantes com dados reais. Simule `42501` em `dados_black_leads` e verifique a mensagem de contato, depois em `dados_black_perfil` e confirme a mensagem geral. Repita em tema claro/escuro e viewport desktop/390 px. Testes puros: `npx vitest run modules/infra/black/domain/alertas-nomenclatura.test.ts modules/infra/black/infrastructure/fonte-supabase.test.ts`.
+
+Sem alteração de banco. A lista individual de membros do grupo permanece pendente de uma RPC aprovada e publicada. Para reverter este lote, reverta o commit que contém esta seção e os arquivos da Visão Geral.
