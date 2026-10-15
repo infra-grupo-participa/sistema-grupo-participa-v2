@@ -17,6 +17,7 @@ import type { DadosTela } from './contexto';
 import { BarrasFase, GraficoLinha } from './graficos';
 import { Chip, formatar, MODAL_TELA_CHEIA, Numero } from './pecas';
 import { PerfilLeads } from './perfil/PerfilLeads';
+import { EvolucaoMetaIndicador } from './EvolucaoMeta';
 
 export type SubAbaModal = 'funil' | 'canal' | 'fase' | 'dia' | 'criativo' | 'perfil';
 const SUBABAS: { k: SubAbaModal; l: string }[] = [
@@ -59,6 +60,11 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
   );
   const vHoje = doDia(hoje); const vOntem = doDia(ontem);
   const variacao = vHoje !== null && vOntem !== null && vOntem !== 0 ? (vHoje - vOntem) / vOntem : null;
+  const metaDaSerie = card.id === 'leads' ? d.config.metaLeads
+    : card.id === 'cpl' ? (d.config.cplAlvoMedio ?? d.config.reguaCpl?.meta ?? null)
+      : card.id === 'cpm' ? d.config.metas.cpm : card.id === 'ctr' ? d.config.metas.ctr
+        : card.id === 'cpc' ? d.config.metas.cpc : card.id === 'connect' ? d.config.metas.connectRate
+          : card.id === 'conv' ? d.config.metas.conversaoPagina : null;
 
   const lista = (): Linha[] => {
     if (ativa === 'funil') return FUNIS.map((f) => ({
@@ -83,6 +89,7 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
           </span>
         </div>
         {(card.dica || CARDS_DE_TRAFEGO.has(card.id)) && <p className="text-xs text-[var(--fg-3)]">{[card.dica, CARDS_DE_TRAFEGO.has(card.id) && !card.dica?.includes(NOTA_ENTRESAFRA) ? NOTA_ENTRESAFRA : null].filter(Boolean).join(' ')}</p>}
+        {metaDaSerie !== null && <EvolucaoMetaIndicador d={d} cardId={card.id} rotulo={card.rotulo} formato={card.formato as 'int' | 'brl' | 'pct'} />}
 
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Detalhar por">
           {SUBABAS.map((s) => (

@@ -105,6 +105,8 @@ export interface TrafegoBlack {
   anuncioDesde?: string | null;
   /** Fonte real: gasto do período por campanha (dias_campanha), em reais. Confere com a soma por anúncio. */
   gastoCampanhas?: { campanhaId: string; gasto: number }[];
+  /** Fonte real: gasto diário de campanha, para a régua e as séries de investimento. */
+  gastoCampanhasDiario?: { campanhaId: string; dia: string; gasto: number }[];
 }
 
 /** Uma linha por cadastro (porta). Sem dado pessoal: nome, e-mail e telefone só em LeadDetalhe. */

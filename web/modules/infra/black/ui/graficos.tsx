@@ -93,7 +93,7 @@ function passoBonito(max: number): number {
 export interface PontoLinha { chave: string; rotulo: string; valor: Valor }
 
 /** Gráfico de linha da série diária, interativo (cursor mostra o valor do dia). */
-export function GraficoLinha({ pontos, formato, rotuloSerie }: { pontos: PontoLinha[]; formato: FormatoMetrica; rotuloSerie: string }) {
+export function GraficoLinha({ pontos, formato, rotuloSerie, meta, metaRotulo = 'Meta' }: { pontos: PontoLinha[]; formato: FormatoMetrica; rotuloSerie: string; meta?: Valor; metaRotulo?: string }) {
   const caixa = useRef<HTMLDivElement>(null);
   const linha = useRef<SVGPathElement>(null);
   const grad = `grad-${useId().replace(/:/g, '')}`;
@@ -110,7 +110,7 @@ export function GraficoLinha({ pontos, formato, rotuloSerie }: { pontos: PontoLi
 
   const A = 240; const esq = 56; const dir = 16; const topo = 16; const base = 28;
   const w = largura - esq - dir; const h = A - topo - base;
-  const valores = pontos.map((p) => p.valor).filter((v): v is number => v !== null && Number.isFinite(v));
+  const valores = [...pontos.map((p) => p.valor), meta].filter((v): v is number => v !== null && Number.isFinite(v));
   const passo = passoBonito(Math.max(0, ...valores));
   const teto = Math.max(passo, Math.ceil(Math.max(0, ...valores) / passo) * passo);
   const x = (i: number) => esq + (pontos.length <= 1 ? w / 2 : (i / (pontos.length - 1)) * w);
@@ -164,6 +164,7 @@ export function GraficoLinha({ pontos, formato, rotuloSerie }: { pontos: PontoLi
         {pontos.map((pt, i) => (i % cadaX === 0 || i === pontos.length - 1) && (
           <text key={pt.chave} x={x(i)} y={A - 8} textAnchor="middle" fontSize={11} fill="var(--fg-3)">{pt.rotulo}</text>
         ))}
+        {meta !== undefined && meta !== null && <g><line x1={esq} x2={esq + w} y1={y(meta)} y2={y(meta)} stroke="var(--fg-3)" strokeDasharray="5 4" /><text x={esq + w} y={y(meta) - 4} textAnchor="end" fontSize={10} fill="var(--fg-3)">{metaRotulo}: {formatar(meta, formato)}</text></g>}
         <path d={area} fill={`url(#${grad})`} className={menos ? '' : 'gp-fade-in'} />
         <path ref={linha} d={d} fill="none" stroke="var(--accent)" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" pathLength={1} strokeDasharray="1 1" />
         {p && ativo !== null && (
