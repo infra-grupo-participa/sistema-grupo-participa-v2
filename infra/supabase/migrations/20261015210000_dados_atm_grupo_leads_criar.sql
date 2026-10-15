@@ -3,7 +3,10 @@
 -- cruzado com a lista do disparo (dados.lista_membros da chave -> public.thb_alunos) e com a base de leads da chave
 -- (dados.atm_leads). Pedido do Victor Hugo em 15/10/2026 (frente black-ingresso-grupo-unicos).
 --
--- STATUS: NÃO APLICADA. Ensaio: 20261015210000_ensaio.sql. Reversão: 20261015210000_reversao.sql.
+-- STATUS: APLICADA em produção em 15/10/2026 às 18:35:30 UTC (pentester APROVADO), versão 20261015210000 (nome
+-- dados_atm_grupo_leads_criar), pelo aplica_sql.py aplicar + insert em supabase_migrations.schema_migrations na mesma
+-- transação; md5 gravado = 2ae377c3a16c4d1abdb20b2893407811 = este arquivo antes desta troca de STATUS.
+-- Ensaio: 20261015210000_ensaio.sql. Reversão: 20261015210000_reversao.sql.
 -- Relatório: 20261015210000.explain.md.
 --
 -- REGRAS
