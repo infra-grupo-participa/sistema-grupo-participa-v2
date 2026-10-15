@@ -54,8 +54,10 @@ export function mapearLista(cru: unknown): ListaLida {
   return { linhas: arr(o.linhas), foraPadrao: arr(o.fora_padrao), turmaEspecial: num(o.turma_especial), geradoEm: data(o.gerado_em) };
 }
 
+export const AVISO_CONTATO_VER = 'Seu usuário não tem permissão para ver os contatos das listas. Peça ao Victor a permissão "contato.ver".';
+
 export function mensagemErro(code: string | undefined): string {
-  if (code === '42501') return 'Seu usuário não tem permissão para ver os contatos das listas. Peça ao Victor a permissão "contato.ver".';
+  if (code === '42501') return AVISO_CONTATO_VER;
   if (code === 'P0002') return 'Dashboard não encontrado.';
   if (code === '22023') return 'Lista ou segmento inválido.';
   if (code === 'PGRST202' || code === '42883') return 'As listas ainda não estão ligadas no banco.';
