@@ -73,11 +73,19 @@ export function exibicaoCardLeads(chave: string, geral: { valor: number; semDado
   if (chave === 'leads') {
     return { valor: c.validos, formato: 'inteiro', hint: `válidos para a oferta · ${inteiro.format(c.gerais)} gerais, ${inteiro.format(c.foraDaLista)} fora da lista` };
   }
+  // Ingresso no grupo: o geral é o número grande e o que bate com a lista de leads vem embaixo (Victor, 15/10).
+  // Sem o geral, o card segue com o dos leads válidos e diz que o geral está sem dado.
   if (chave === 'ingressosGrupo' && c.ingressoValidos !== null) {
-    return { valor: c.ingressoValidos, formato: 'inteiro', hint: `entre os leads válidos · ${geral.semDado ? 'geral sem dado' : `${inteiro.format(geral.valor)} no geral`}` };
+    const validos = `${inteiro.format(c.ingressoValidos)} entre os leads válidos`;
+    return geral.semDado
+      ? { valor: c.ingressoValidos, formato: 'inteiro', hint: `entre os leads válidos · geral sem dado` }
+      : { valor: geral.valor, formato: 'inteiro', hint: `no geral · ${validos}` };
   }
   if (chave === 'percentualIngressoGrupo' && c.ingressoValidosPct !== null) {
-    return { valor: c.ingressoValidosPct, formato: 'percentual', hint: `sobre os leads válidos · ${geral.semDado ? 'geral sem dado' : `${decimal.format(geral.valor)}% no geral`}` };
+    const validos = `${decimal.format(c.ingressoValidosPct)}% sobre os leads válidos`;
+    return geral.semDado
+      ? { valor: c.ingressoValidosPct, formato: 'percentual', hint: `sobre os leads válidos · geral sem dado` }
+      : { valor: geral.valor, formato: 'percentual', hint: `no geral · ${validos}` };
   }
   return null;
 }
