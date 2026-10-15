@@ -632,9 +632,9 @@ function ColunaCaptacao({ d, dias, linhas, funil }: { d: DadosTela; dias: Desemp
 const dataBr = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 
 const ROTULO_REGRA: Record<string, string> = {
-  R1: 'O último campo não é a etiqueta do dashboard.', R2: 'Quantidade de campos fora do padrão.',
+  R1: 'O último campo não é a etiqueta do dashboard.', R2: 'Menos de 4 campos (padrão: GESTOR | BF26 | ETAPA | ... | etiqueta).',
   R3: 'Gestor fora de CF, RS ou EF.', R4: 'Projeto diferente de BF26.',
-  R5: 'Objetivo fora da lista permitida.', R6: 'Etapa não cadastrada no banco.',
+  R5: 'O 3º campo não é a etapa C1, C2 ou C3.', R6: 'Etapa não cadastrada no banco.',
   R7: 'Mais de um subtipo reconhecido no nome.', R8: 'O primeiro bloco do conjunto não é PQ, PF, MIX ou ADV.',
   R9: 'Anúncio C1 sem TEASER, MANIFESTO ou REELS no nome.', R10: 'Anúncio de isca sem o nome da isca.',
   R11: 'A isca do anúncio difere da isca do conjunto.', R12: 'Conjunto de campanha C2 ISCA sem nome de isca.',

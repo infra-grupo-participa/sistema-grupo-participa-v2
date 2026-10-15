@@ -38,6 +38,27 @@ describe('alertasNomenclatura', () => {
     expect(alertas.find((x) => x.nome === 'FUTUROMETRO - criativo')?.regras).toContain('R11');
   });
 
+  it('aceita o padrão dos gestores (GESTOR | BF26 | ETAPA | ... | etiqueta) sem R2 nem R5', () => {
+    const nomes = [
+      'CF | BF26 | C1 | AQUECIMENTO | MANIFESTO | META | PQ | ABO | THRUPLAY | black-friday-2026-10',
+      'CF | BF26 | C3 | CAPTAÇÃO | META | PQ | ABO | LEAD | black-friday-2026-10',
+      'CF | BF26 | C2 | ISCAS | CAPTAÇÃO | META | PQ | ABO | LEAD | black-friday-2026-10',
+    ];
+    const alertas = alertasNomenclatura({ ...trafego, conjuntos: [], anuncios: [], campanhas: nomes.map((nome, i) => ({
+      id: `n${i}`, nome, canal: 'meta', funil: null, fase: null, etapa: 'C1', subtipo: null, conflito: false,
+    })) }, []);
+    expect(alertas).toEqual([]);
+  });
+
+  it('marca R2 com menos de 4 campos e R5 sem etapa no 3º campo', () => {
+    const alertas = alertasNomenclatura({ ...trafego, conjuntos: [], anuncios: [], campanhas: [
+      { id: 'x1', nome: 'CF | BF26 | black-friday-2026-10', canal: 'meta', funil: null, fase: null, etapa: 'C1', subtipo: null, conflito: false },
+      { id: 'x2', nome: 'CF | BF26 | LEADS | C1 | black-friday-2026-10', canal: 'meta', funil: null, fase: null, etapa: 'C1', subtipo: null, conflito: false },
+    ] }, []);
+    expect(alertas.find((x) => x.nome === 'CF | BF26 | black-friday-2026-10')?.regras).toEqual(['R2', 'R5']);
+    expect(alertas.find((x) => x.nome === 'CF | BF26 | LEADS | C1 | black-friday-2026-10')?.regras).toEqual(['R5']);
+  });
+
   it('agrupa UTM fora do padrão e ausente, sem incluir pessoas ou dados pessoais', () => {
     const alertas = alertasNomenclatura({ ...trafego, campanhas: [], conjuntos: [], anuncios: [] }, [
       perfil({ aCorrigir: ['utm_campaign_fora_do_padrao'], utmCampaign: 'campanha-x' }),

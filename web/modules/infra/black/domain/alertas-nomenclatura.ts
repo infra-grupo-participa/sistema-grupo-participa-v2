@@ -9,7 +9,9 @@ export interface AlertaNomenclatura {
 }
 
 const ETIQUETA = 'black-friday-2026-10';
-const OBJETIVOS = new Set(['LEADS', 'VENDAS', 'REMARKETING', 'LEMBRETE', 'DISTRIBUIÇÃO', 'CARRINHO', 'AQUECIMENTO']);
+/** Padrão dos gestores (decisão do Victor, 15/10/2026): GESTOR | BF26 | ETAPA | ... | etiqueta, com 4 campos no mínimo. */
+const ETAPAS = new Set(['C1', 'C2', 'C3']);
+const MINIMO_CAMPOS = 4;
 const GESTORES = new Set(['CF', 'RS', 'EF']);
 const TEMPERATURAS = new Set(['PQ', 'PF', 'MIX', 'ADV']);
 const ISCAS = ['CHECKUP', 'FUTUROMETRO', 'FLUXOGRAMA'] as const;
@@ -21,10 +23,10 @@ function regrasCampanha(c: Campanha): string[] {
   const r: string[] = [];
   const p = campos(c.nome);
   if (p[p.length - 1] !== ETIQUETA) r.push('R1');
-  if (p.length !== 5 && p.length !== 6) r.push('R2');
+  if (p.length < MINIMO_CAMPOS) r.push('R2');
   if (!GESTORES.has(p[0] ?? '')) r.push('R3');
   if (p[1] !== 'BF26') r.push('R4');
-  if (!OBJETIVOS.has(p[2] ?? '')) r.push('R5');
+  if (!ETAPAS.has(p[2] ?? '')) r.push('R5');
   if (c.etapa == null) r.push('R6');
   if (c.conflito === true) r.push('R7');
   return r;
