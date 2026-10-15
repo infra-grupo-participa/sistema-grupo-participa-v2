@@ -246,7 +246,7 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
     </SectionCard>
     <ModalLeadsAtm {...comumModal} open={modal === 'leads'} card={metricaDoCardAtm(resumo?.resumo, 'leads')} lista={listaLeads} grupo={podeVerContato ? grupoPeriodo : null} podeVerContato={podeVerContato} onToggleLead={toggleLead} onToggleGrupo={toggleGrupo} />
     <ModalPreCheckoutAtm {...comumModal} open={modal === 'preCheckout'} card={metricaDoCardAtm(resumo?.resumo, 'preCheckout')} lista={listaPreCheckout} grupo={grupoEvento} podeVerContato={podeVerContato} onTogglePessoa={togglePessoa} />
-    <ModalVendasAtm {...comumModal} open={modal === 'vendas'} card={metricaDoCardAtm(resumo?.resumo, 'vendas')} lista={listaVendas} grupo={grupoEvento} podeVerContato={podeVerContato} vendasTeste={resumo?.periodo.vendasTeste ?? null} onToggleVenda={toggleVenda} />
+    <ModalVendasAtm {...comumModal} open={modal === 'vendas'} card={metricaDoCardAtm(resumo?.resumo, 'vendas')} lista={listaVendas} grupo={grupoEvento} podeVerContato={podeVerContato} vendasTeste={resumo?.periodo.vendasTeste ?? null} onToggleVenda={toggleVenda} linkRetorno={projeto.retornoSvUrl} />
     </div>
     <div role="tabpanel" id={idsTrafego.panel} aria-labelledby={idsTrafego.tab} hidden={abaPrincipal !== 'trafego'}>
       {abaPrincipal === 'trafego' && <TrafegoAtm result={trafego} />}
