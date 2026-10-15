@@ -56,7 +56,7 @@ select '81d2eaee-cce1-4058-8714-439b0fc6f970', 'master', 'motivo', 'e1d2863d-c97
        jsonb_build_object('motivo', 'admin do v2 para a Isabela (Head de Sucesso do Cliente), pedido do Victor 15/10',
                           'registrado_por', 'migration 20261015200000', 'registrado_em', now())
  where not exists (select 1 from acesso.log where perfil_id = 'e1d2863d-c975-46bd-b35f-45b1039328e3'
-                     and tabela = 'master' and acao = 'motivo');
+                     and tabela = 'master' and acao = 'motivo' and depois->>'registrado_por' = 'migration 20261015200000');
 
 select set_config('request.jwt.claims', '', true);
 
@@ -68,6 +68,10 @@ begin
   end if;
   if (select cargo from public.perfis where id = 'e1d2863d-c975-46bd-b35f-45b1039328e3') is distinct from 'admin' then
     raise exception '20261015200000: o cargo da Isabela não deveria mudar';
+  end if;
+  if not exists (select 1 from acesso.log where perfil_id = 'e1d2863d-c975-46bd-b35f-45b1039328e3' and tabela = 'master'
+                   and acao = 'insert' and autor = '81d2eaee-cce1-4058-8714-439b0fc6f970') then
+    raise exception '20261015200000: falta o log master/insert da Isabela com autor Victor Hugo (rodou fora de transação?)';
   end if;
 end
 $c$;

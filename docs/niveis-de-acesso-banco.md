@@ -59,7 +59,7 @@ falta. Detalhe e provas de cada passo no `.explain.md` da migration.
 | `20261007204020` | anon sem execute nas 4 guardas; sem MAINTAIN em perfis | aplicada |
 | `20261007204024` | B3: `gps.trocar_meu_nome` não derruba a parte do aluno | aplicada |
 | `20261007204700` | conta de teste QA Tráfego (`qa.trafego@advmais.com`) membro do Tráfego, sem financeiro, para o JP (reversão no explain) | aplicada |
-| `20261015200000` | Isabela Teixeira vira master (admin do v2 com a flag `NEXT_PUBLIC_ACESSO_V2`), pedido do Victor 15/10 | **não aplicada** (aguarda pentester) |
+| `20261015200000` | Isabela Teixeira vira master (admin do v2 com a flag `NEXT_PUBLIC_ACESSO_V2`), pedido do Victor 15/10 | aplicada 15/10 18:04 UTC (pentester aprovado) |
 
 ## Pendências
 

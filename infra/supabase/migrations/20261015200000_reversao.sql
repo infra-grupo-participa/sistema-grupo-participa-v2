@@ -26,5 +26,8 @@ begin
   if exists (select 1 from acesso.master where perfil_id = 'e1d2863d-c975-46bd-b35f-45b1039328e3') then
     raise exception 'reversão 20261015200000: a Isabela continua master';
   end if;
+  if (select count(*) from acesso.master) <> 6 then
+    raise exception 'reversão 20261015200000: esperava 6 masters depois de tirar a Isabela';
+  end if;
 end
 $c$;
