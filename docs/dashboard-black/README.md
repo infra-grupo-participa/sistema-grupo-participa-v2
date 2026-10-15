@@ -974,3 +974,18 @@ Sem alteração de banco. A lista individual de membros do grupo permanece pende
 - A contagem regressiva usa “falta 1 dia” no singular.
 - Como testar: com `NEXT_PUBLIC_BLACK_DEMO=1`, abra Leads contra a meta e confira a coluna “Meta acumulada” até 15.000; abra a aba “Por dia” de CPL, CPM, CTR, CPC, Connect Rate, Leads, Conversão da página e % de MQL e compare hoje/ontem do cabeçalho com as linhas correspondentes. As capturas ficam em `.maestri/entregas/black-visao-geral-requisitos/prints/lote-20/`.
 - Sem alteração no banco ou nas fórmulas das métricas de produção. Trabalho local na branch `victor-black-meta-sentido`, sem publicação.
+
+## Investimento sem farol · 15/10/2026
+
+- Pedido do Victor: investimento contra a verba **não é bom nem ruim**. A meta é gastar a verba; gastar menos não é vitória.
+  Antes, a projeção marcava "Bom" quando o ritmo fechava abaixo dos R$ 220 mil da captação, e o placar pintava de verde os cards
+  de investimento abaixo do orçamento (regra "menor é melhor").
+- Agora, sem cor nem rótulo de bom, atenção ou ruim:
+  - **Projeção até 03/11, bloco Investimento em captação:** sem "Ritmo suficiente/abaixo da meta" no cabeçalho; "No ritmo de hoje
+    fecha em" mostra só a distância em texto ("X% abaixo da meta"). O bloco de Leads continua com farol.
+  - **Placar, cards Investimento total e Investimento em tráfego:** barra neutra com o quanto da verba já foi usado e a distância em
+    texto ("X% abaixo da verba").
+- Como: prop `semFarol` em `ResumoRitmo` (`ui/ProjecaoCaptacao.tsx`) e em `MetaComProgresso` (`ui/AbaVisaoGeral.tsx`). CPL, CPM e CPC
+  continuam com farol de menor é melhor. Sem banco, sem migration.
+- Testar: abrir a Visão Geral, expandir a projeção e olhar o placar. Checagens: `npx tsc --noEmit`, `npm run lint:tokens`,
+  `npx vitest run modules/infra/black` (183 ok em 15/10).
