@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { REDIRECTS_COMERCIAL, REDIRECTS_EDUCACIONAL, destinoDaRotaAntiga, redirectsNext } from './redirects';
+import { REDIRECTS_COMERCIAL, REDIRECTS_EDUCACIONAL, REDIRECTS_FINANCEIRO, destinoDaRotaAntiga, redirectsNext } from './redirects';
 import { departamento } from '../../domain/departamentos';
-import { REPORTS } from './config';
+import { NAV_FINANCEIRO, REPORTS } from './config';
 
 const APP = join(__dirname, '..', '..', '..', 'app');
 const paginaExiste = (rota: string) => existsSync(join(APP, '(admin)', ...rota.split('/').filter(Boolean), 'page.tsx'));
@@ -13,7 +13,7 @@ describe('redirects do Educacional: cada rota antiga vai para a nova', () => {
     '/sistema/alunos': '/educacional/alunos',
     '/sistema/pedidos-alteracao': '/educacional/pedidos-alteracao',
     '/relatorios/placas': '/educacional/placas',
-    '/relatorios/financeiro': '/educacional/financeiro',
+    '/relatorios/financeiro': '/financeiro', // destino trocado em 15/10/2026 (era /educacional/financeiro)
     '/relatorios/remocoes': '/educacional/remocoes',
     '/depoimentos': '/educacional/depoimentos',
     '/depoimentos/biblioteca': '/educacional/depoimentos/biblioteca',
@@ -67,6 +67,40 @@ describe('redirects do Educacional: cada rota antiga vai para a nova', () => {
         expect(href.startsWith('/educacional/'), href).toBe(true);
         expect(antigos).not.toContain(href.split(/[?#]/)[0]);
       }
+    }
+  });
+});
+
+describe('redirects do Financeiro (15/10/2026: Contas a Receber virou o departamento)', () => {
+  it('a tabela é exatamente esta (entrada nunca sai)', () => {
+    expect(Object.fromEntries(REDIRECTS_FINANCEIRO.map((r) => [r.de, r.para]))).toEqual({
+      '/educacional/financeiro': '/financeiro',
+    });
+  });
+
+  it('destino existe como página, a antiga não, e o Next recebe a entrada como 308', () => {
+    for (const r of REDIRECTS_FINANCEIRO) {
+      expect(paginaExiste(r.para), `falta a página ${r.para}`).toBe(true);
+      expect(paginaExiste(r.de), `a página antiga ${r.de} ainda existe`).toBe(false);
+      expect(redirectsNext()).toContainEqual({ source: r.de, destination: r.para, permanent: true });
+    }
+  });
+
+  it('hash e query preservados: #board, sub-aba com ? e filtro', () => {
+    expect(destinoDaRotaAntiga('/educacional/financeiro#board')).toBe('/financeiro#board');
+    expect(destinoDaRotaAntiga('/educacional/financeiro/#escritorio?ver=contratos')).toBe('/financeiro#escritorio?ver=contratos');
+    expect(destinoDaRotaAntiga('/educacional/financeiro?x=1#receber')).toBe('/financeiro?x=1#receber');
+  });
+
+  it('sem cadeia: nenhum destino é, ele mesmo, uma rota antiga', () => {
+    const antigos = new Set(redirectsNext().map((r) => r.source));
+    for (const r of redirectsNext()) expect(antigos.has(r.destination), `${r.source} → ${r.destination} encadeia`).toBe(false);
+    expect(destinoDaRotaAntiga('/relatorios/financeiro#board')).toBe('/financeiro#board');
+  });
+
+  it('o menu do Financeiro só aponta para /financeiro', () => {
+    for (const href of [NAV_FINANCEIRO.path, NAV_FINANCEIRO.defaultHref, ...NAV_FINANCEIRO.children.map((c) => c.href)]) {
+      expect(href.split(/[?#]/)[0], href).toBe('/financeiro');
     }
   });
 });

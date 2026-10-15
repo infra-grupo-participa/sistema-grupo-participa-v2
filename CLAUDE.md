@@ -152,9 +152,10 @@ cd web && npm install && npm run dev   # http://localhost:3000
 
 ### Autenticadas — `app/(admin)/`
 - `/` — cards de departamento.
-- **Educacional**: `/educacional`, `/educacional/alunos`, `/educacional/placas`, `/educacional/depoimentos` (+ `/biblioteca`), `/educacional/financeiro`, `/educacional/remocoes`, `/educacional/pedidos-alteracao`.
+- **Educacional**: `/educacional`, `/educacional/alunos`, `/educacional/placas`, `/educacional/depoimentos` (+ `/biblioteca`), `/educacional/remocoes`, `/educacional/pedidos-alteracao`.
 - **Marketing**: `/marketing` + `/marketing/{web,mensageria,trafego,audiovisual,social-media}` (em breve; gate admin/dev no layout).
-- **Em breve**: `/comercial`, `/financeiro` (departamento ≠ módulo financeiro do Educacional), `/infra`.
+- **Financeiro**: `/financeiro` = Contas a Receber (`web/modules/financeiro`; gate `podeVerFinanceiro`, visualizador não vê). Até 15/10/2026 morava em `/educacional/financeiro` (hoje 308 para `/financeiro`).
+- **Em breve**: `/comercial`, `/infra`.
 - **Globais**: `/usuarios`, `/sistema/configuracoes`, `/sistema/admin-dev`.
 
 ### Públicas

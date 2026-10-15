@@ -21,7 +21,7 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname),
   },
-  // Rotas antigas do Educacional → /educacional/... (308, query preservada). Tabela e motivo em
+  // Rotas antigas → rotas novas por departamento (308, query preservada). Tabela e motivo em
   // shared/ui/nav/redirects.ts. Rodam ANTES do proxy: link antigo sem sessão vai para a rota nova e só
   // então para o login.
   async redirects() {

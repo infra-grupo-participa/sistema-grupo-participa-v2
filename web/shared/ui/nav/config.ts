@@ -80,30 +80,7 @@ export const REPORTS: ReportGroup[] = [
       { key: 'tags', label: 'Tags', path: '/educacional/depoimentos', hash: '#tags', href: '/educacional/depoimentos#tags', ico: 'tags', adminOnly: true },
     ],
   },
-  // Sem adminOnly: o gate é por setor. Quem vê é dev/admin ou quem tem a área
-  // 'financeiro' — ver podeVerFinanceiro(), que espelha gp_pode_ver_financeiro() no banco.
-  {
-    key: 'financeiro',
-    label: 'Financeiro',
-    path: '/educacional/financeiro',
-    defaultHref: '/educacional/financeiro#board',
-    ico: 'wallet',
-    setor: 'financeiro',
-    children: [
-      // "Contas a Receber" é o título de seção (secao?), não o rótulo de item. A Visão geral (#visao, F4) é o 1º item da
-      // seção; o defaultHref do grupo continua #board (a página inicial só muda depois que o Marcio vir a Visão geral).
-      { key: 'visao', label: 'Visão geral', path: '/educacional/financeiro', hash: '#visao', href: '/educacional/financeiro#visao', ico: 'eye', secao: 'Contas a Receber' },
-      // Mesma seção: o título aparece uma vez só (a sidebar desenha quando a seção MUDA). O hash continua #receber.
-      { key: 'receber', label: 'Previsão de caixa', path: '/educacional/financeiro', hash: '#receber', href: '/educacional/financeiro#receber', ico: 'receipt', secao: 'Contas a Receber' },
-      { key: 'faturamento', label: 'Faturamento', path: '/educacional/financeiro', hash: '#faturamento', href: '/educacional/financeiro#faturamento', ico: 'trending-up' },
-      { key: 'board', label: 'Board', path: '/educacional/financeiro', hash: '#board', href: '/educacional/financeiro#board', ico: 'dashboard' },
-      { key: 'funis', label: 'Funis', path: '/educacional/financeiro', hash: '#funis', href: '/educacional/financeiro#funis', ico: 'trending-up' },
-      { key: 'escritorio', label: 'Escritório', path: '/educacional/financeiro', hash: '#escritorio', href: '/educacional/financeiro#escritorio', ico: 'trending-up' },
-      { key: 'ofertas', label: 'Ofertas', path: '/educacional/financeiro', hash: '#ofertas', href: '/educacional/financeiro#ofertas', ico: 'banknote' },
-      { key: 'relatorios', label: 'Relatórios', path: '/educacional/financeiro', hash: '#relatorios', href: '/educacional/financeiro#relatorios', ico: 'file' },
-    ],
-  },
-  // Gate por setor, como o financeiro: ver podeVerRemocao(), espelho de ra_pode_ver().
+  // Gate por setor: ver podeVerRemocao(), espelho de ra_pode_ver().
   {
     key: 'remocoes',
     label: 'Remoção de Acessos',
@@ -124,6 +101,34 @@ export const REPORTS: ReportGroup[] = [
     children: [],
   },
 ];
+
+/**
+ * Menu do departamento Financeiro (Contas a Receber). Até 15/10/2026 era um grupo de REPORTS (menu do Educacional) em
+ * /educacional/financeiro; virou o departamento (pedido do João) com os mesmos hashes, rótulos, seção e ícones.
+ * A sidebar só o mostra dentro de /financeiro e com `podeVerDepartamento('financeiro')` (visualizador NÃO vê dinheiro;
+ * espelha gp_pode_ver_financeiro() no banco).
+ */
+export const NAV_FINANCEIRO: ReportGroup = {
+  key: 'financeiro',
+  label: 'Financeiro',
+  path: '/financeiro',
+  defaultHref: '/financeiro#board',
+  ico: 'wallet',
+  setor: 'financeiro',
+  children: [
+    // "Contas a Receber" é o título de seção (secao?), não o rótulo de item. A Visão geral (#visao, F4) é o 1º item da
+    // seção; o defaultHref do grupo continua #board (a página inicial só muda depois que o Marcio vir a Visão geral).
+    { key: 'visao', label: 'Visão geral', path: '/financeiro', hash: '#visao', href: '/financeiro#visao', ico: 'eye', secao: 'Contas a Receber' },
+    // Mesma seção: o título aparece uma vez só (a sidebar desenha quando a seção MUDA). O hash continua #receber.
+    { key: 'receber', label: 'Previsão de caixa', path: '/financeiro', hash: '#receber', href: '/financeiro#receber', ico: 'receipt', secao: 'Contas a Receber' },
+    { key: 'faturamento', label: 'Faturamento', path: '/financeiro', hash: '#faturamento', href: '/financeiro#faturamento', ico: 'trending-up' },
+    { key: 'board', label: 'Board', path: '/financeiro', hash: '#board', href: '/financeiro#board', ico: 'dashboard' },
+    { key: 'funis', label: 'Funis', path: '/financeiro', hash: '#funis', href: '/financeiro#funis', ico: 'trending-up' },
+    { key: 'escritorio', label: 'Escritório', path: '/financeiro', hash: '#escritorio', href: '/financeiro#escritorio', ico: 'trending-up' },
+    { key: 'ofertas', label: 'Ofertas', path: '/financeiro', hash: '#ofertas', href: '/financeiro#ofertas', ico: 'banknote' },
+    { key: 'relatorios', label: 'Relatórios', path: '/financeiro', hash: '#relatorios', href: '/financeiro#relatorios', ico: 'file' },
+  ],
+};
 
 export const SYSTEM_NAV: SystemNavItem[] = [
   { key: 'admin-dev', label: 'Admin Dev', path: '/sistema/admin-dev', activePrefixes: ['/sistema/admin-dev'], ico: 'wrench', devOnly: true },

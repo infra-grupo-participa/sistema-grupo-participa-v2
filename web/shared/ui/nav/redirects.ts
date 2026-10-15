@@ -1,4 +1,4 @@
-// Rotas antigas → rotas novas (modularização por departamento, 05/10/2026; Comercial, 07/10/2026).
+// Rotas antigas → rotas novas (modularização por departamento, 05/10/2026; Comercial, 07/10/2026; Financeiro, 15/10/2026).
 //
 // 🔴 NUNCA APAGAR uma entrada. Mensagens de Slack já enviadas pela Remoção de Acessos apontam para
 // `/relatorios/remocoes?caso=<id>` (montadas no banco a partir de `ra_config.app_url`, ver
@@ -19,7 +19,8 @@ export const REDIRECTS_EDUCACIONAL: RotaAntiga[] = [
   { de: '/sistema/alunos', para: '/educacional/alunos' },
   { de: '/sistema/pedidos-alteracao', para: '/educacional/pedidos-alteracao' },
   { de: '/relatorios/placas', para: '/educacional/placas' },
-  { de: '/relatorios/financeiro', para: '/educacional/financeiro' },
+  // Destino trocado em 15/10/2026 (era /educacional/financeiro): direto ao departamento, sem cadeia de 2 redirects.
+  { de: '/relatorios/financeiro', para: '/financeiro' },
   { de: '/relatorios/remocoes', para: '/educacional/remocoes' },
   { de: '/depoimentos', para: '/educacional/depoimentos' },
   { de: '/depoimentos/biblioteca', para: '/educacional/depoimentos/biblioteca' },
@@ -33,8 +34,17 @@ export const REDIRECTS_COMERCIAL: RotaAntiga[] = [
   { de: '/comercial/recuperacao', para: '/comercial/estrategias' },
 ];
 
+/**
+ * Financeiro. 🔴 NUNCA APAGAR uma entrada: favoritos e links já enviados apontam para as rotas antigas.
+ * - /educacional/financeiro → /financeiro (15/10/2026, pedido do João: o módulo Contas a Receber saiu do Educacional e
+ *   virou o departamento Financeiro). `#board`, `#receber?ver=…` etc. o navegador mantém.
+ */
+export const REDIRECTS_FINANCEIRO: RotaAntiga[] = [
+  { de: '/educacional/financeiro', para: '/financeiro' },
+];
+
 /** Todas as rotas antigas, de todos os departamentos. */
-export const REDIRECTS: RotaAntiga[] = [...REDIRECTS_EDUCACIONAL, ...REDIRECTS_COMERCIAL];
+export const REDIRECTS: RotaAntiga[] = [...REDIRECTS_EDUCACIONAL, ...REDIRECTS_COMERCIAL, ...REDIRECTS_FINANCEIRO];
 
 /** Formato do `redirects()` do Next. `permanent: true` = 308. */
 export function redirectsNext() {

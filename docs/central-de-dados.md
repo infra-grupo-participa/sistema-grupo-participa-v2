@@ -36,7 +36,7 @@ O painel completo, com o que falta e as decisões, fica no cérebro do Victor: `
 | Educacional | `/educacional` | ativo | tudo o que existia no sistema até 05/10/2026 (sem áreas) |
 | Marketing | `/marketing` | ativo, **só admin e dev** | áreas **Web**, **Mensageria** e **Tráfego** ativas (ver "Web", "Mensageria" e "Tráfego"); Audiovisual, Social Media "Em breve"; Projetos e páginas em `/marketing/projetos` |
 | Comercial | `/comercial` | ativo (do Arthur): admin e dev; gestor/vendedor do Comercial com a flag `NEXT_PUBLIC_COMERCIAL_VENDEDORES` | telas do CRM (funil, conversas, atividades, contatos, recuperação, disparos, relatórios, produtos, registro, playbook, configurações); ver `docs/projetos/comercial/` |
-| Financeiro | `/financeiro` | Em breve | a mapear |
+| Financeiro | `/financeiro` | ativo desde 15/10/2026: dev/admin, gestor/operador com a área `financeiro` (visualizador não) | Contas a Receber: board, previsão de caixa, faturamento, funis, escritório, ofertas e relatórios (`web/modules/financeiro`) |
 | Infra | `/infra` | Em breve | IA e Dados |
 
 - **Fonte única:** `web/shared/domain/departamentos.ts` (departamentos, áreas, status, quem vê, e a que
@@ -50,11 +50,14 @@ O painel completo, com o que falta e as decisões, fica no cérebro do Victor: `
 - **Não mudaram:** `/login`, `/definir-senha`, `/auth/confirm`, `/solicitar-placa`, `/agendar-entrevista`,
   `/modelos`, todo `/api/*` (o pg_cron chama URL fixa).
 
-### Dois "Financeiro" (de propósito, por enquanto)
+### Financeiro: o módulo virou o departamento (15/10/2026)
 
-- **Módulo Financeiro** (Contas a Receber, Board, Funis, Escritório, Ofertas): mora **dentro do Educacional**, em
-  `/educacional/financeiro`, e **mantém o nome** (decisão de 05/10/2026). Código em `web/modules/financeiro`.
-- **Departamento Financeiro:** `/financeiro`, cartão "Em breve". Não tem relação com o módulo acima.
+- Até 15/10/2026 havia dois "Financeiro": o **módulo** (Contas a Receber, Board, Funis, Escritório, Ofertas) dentro do
+  Educacional, em `/educacional/financeiro` (decisão de 05/10/2026), e o **departamento** `/financeiro`, só "Em breve".
+- Em 15/10/2026 (pedido do João) o módulo passou a ser o departamento: mesma tela e mesmos dados, rota `/financeiro`,
+  menu próprio na sidebar (`NAV_FINANCEIRO`) e gate do departamento = régua do módulo (`podeVerFinanceiro`, em
+  `web/shared/domain/acesso-financeiro.ts`; v2: capacidade `financeiro.ver`). A rota antiga é 308 (tabela abaixo).
+  Sem migration: o banco não mudou. Código continua em `web/modules/financeiro`.
 
 ## Rotas do Educacional e redirects
 
@@ -66,7 +69,8 @@ Tabela em `web/shared/ui/nav/redirects.ts`, aplicada por `redirects()` do `web/n
 | `/sistema/alunos` | `/educacional/alunos` |
 | `/sistema/pedidos-alteracao` | `/educacional/pedidos-alteracao` |
 | `/relatorios/placas` | `/educacional/placas` |
-| `/relatorios/financeiro` | `/educacional/financeiro` |
+| `/relatorios/financeiro` | `/financeiro` (até 15/10/2026: `/educacional/financeiro`) |
+| `/educacional/financeiro` | `/financeiro` (15/10/2026) |
 | `/relatorios/remocoes` | `/educacional/remocoes` |
 | `/depoimentos` | `/educacional/depoimentos` |
 | `/depoimentos/biblioteca` | `/educacional/depoimentos/biblioteca` |

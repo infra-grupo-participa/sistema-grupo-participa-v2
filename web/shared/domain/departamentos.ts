@@ -8,6 +8,7 @@
 // Como acrescentar uma área: ver `docs/central-de-dados.md` ("Como adicionar uma área").
 
 import { ehAdminOuAcima, type GpUser } from './auth';
+import { podeOperarFinanceiro, podeVerFinanceiro } from './acesso-financeiro';
 
 export type DepartamentoKey = 'educacional' | 'marketing' | 'comercial' | 'financeiro' | 'infra';
 export type Status = 'ativo' | 'em_breve';
@@ -41,7 +42,7 @@ export const DEPARTAMENTOS: Departamento[] = [
     key: 'educacional',
     label: 'Educacional',
     path: '/educacional',
-    descricao: 'Central de Alunos, placas, depoimentos, Financeiro, remoção de acessos e pedidos de alteração',
+    descricao: 'Central de Alunos, placas, depoimentos, remoção de acessos e pedidos de alteração',
     ico: 'graduation',
     status: 'ativo',
     areas: [], // Educacional não se divide em áreas: é o sistema que já existe, modularizado.
@@ -87,9 +88,11 @@ export const DEPARTAMENTOS: Departamento[] = [
       area('comercial', 'configuracoes', 'Configurações', 'sliders', 'Distribuição, etapas, motivos e links', 'ativo'),
     ],
   },
-  // Departamento Financeiro (Em breve). NÃO confundir com o módulo "Financeiro" (Contas a Receber), que hoje
-  // mora DENTRO do Educacional em /educacional/financeiro e mantém o nome por decisão do Victor (05/10/2026).
-  { key: 'financeiro', label: 'Financeiro', path: '/financeiro', descricao: 'Departamento financeiro da empresa', ico: 'building', status: 'em_breve', areas: [] },
+  // Departamento Financeiro. Até 15/10/2026 era só o aviso "Em breve" e o módulo Contas a Receber
+  // (web/modules/financeiro) morava dentro do Educacional. Em 15/10/2026 (pedido do João) o módulo passou a ser o
+  // departamento: mesma tela, mesmos dados, rota /financeiro (a antiga vira 308, ver shared/ui/nav/redirects.ts).
+  // Não se divide em áreas: as abas da tela (#board, #receber…) são o menu dele (NAV_FINANCEIRO em shared/ui/nav).
+  { key: 'financeiro', label: 'Financeiro', path: '/financeiro', descricao: 'Contas a Receber, board, faturamento, ofertas e relatórios', ico: 'building', status: 'ativo', areas: [] },
   { key: 'infra', label: 'Infra', path: '/infra', descricao: 'IA e Dados', ico: 'server', status: 'ativo', areas: [] },
 ];
 
@@ -110,7 +113,7 @@ export const MODULO_DEPARTAMENTO: Record<string, DepartamentoKey | 'sistema'> = 
   alunos: 'educacional', // inclui Pedidos de alteração
   placas: 'educacional',
   depoimentos: 'educacional',
-  financeiro: 'educacional', // o módulo Contas a Receber, não o departamento Financeiro
+  financeiro: 'financeiro', // Contas a Receber; é o departamento Financeiro desde 15/10/2026 (antes: 'educacional')
   'remocao-acessos': 'educacional',
   usuarios: 'sistema',
   calendario: 'sistema', // home (/): calendário da empresa, toda a equipe
@@ -141,6 +144,8 @@ export function podeEditarArea(u: GpUser | null, key: DepartamentoKey, areaKey: 
   if (!opcoes.acessoV2) {
     if (key === 'marketing' || key === 'infra') return ehAdminOuAcima(u);
     if (key === 'comercial') return ehDoComercial(u);
+    // Financeiro = a tela de Contas a Receber: mesma régua do canEdit dela (gp_pode_operar_financeiro no banco).
+    if (key === 'financeiro') return podeOperarFinanceiro(u);
     return ehAdminOuAcima(u) || (u.cargo === 'gestor' && u.setores.includes(key));
   }
   const acesso = u.acesso;
@@ -184,7 +189,10 @@ export function ehDoComercial(u: GpUser | null): boolean {
  * - Comercial: só admin e dev por padrão. Com `opcoes.comercialVendedores` (flag NEXT_PUBLIC_COMERCIAL_VENDEDORES),
  *   também quem é do Comercial (`ehDoComercial`: gestor com área comercial, vendedor com área + `comercial.vender`).
  *   Visualizador e equipe fora do Comercial continuam fora (e a RLS do schema crm também os nega).
- * - Financeiro: só mostra "Em breve"; qualquer pessoa da equipe vê o aviso.
+ * - Financeiro (desde 15/10/2026 é a tela de Contas a Receber, com dinheiro): a régua do módulo, `podeVerFinanceiro`
+ *   (dev/admin, ou gestor/operador com a área `financeiro`; visualizador NÃO), espelho de gp_pode_ver_financeiro().
+ *   No v2, `financeiro` só entra em `acesso.ver` com a capacidade `financeiro.ver` (acesso.pode_ver no banco), e a
+ *   capacidade é exigida aqui de novo. Até 15/10 era só o aviso "Em breve" e abria para qualquer pessoa da equipe.
  * - Infra: qualquer pessoa da equipe; o dado dos dashboards é travado por `dados.pode_ver` e pela capacidade financeira.
  */
 export function podeVerDepartamento(u: GpUser | null, key: DepartamentoKey, opcoes: OpcoesAcessoDepartamento = {}): boolean {
@@ -193,6 +201,7 @@ export function podeVerDepartamento(u: GpUser | null, key: DepartamentoKey, opco
     (key !== 'financeiro' || temCapacidade(u, 'financeiro.ver', opcoes));
   if (key === 'marketing') return ehAdminOuAcima(u);
   if (key === 'comercial') return ehAdminOuAcima(u) || (opcoes.comercialVendedores === true && ehDoComercial(u));
+  if (key === 'financeiro') return podeVerFinanceiro(u);
   return true;
 }
 
