@@ -6,8 +6,9 @@ falta. Detalhe e provas de cada passo no `.explain.md` da migration.
 
 ## Modelo (schema `acesso`)
 
-- `acesso.master` (Victor Hugo, Arthur Galvão, João Pedro Alves; e a conta de teste QA Sessoes desde 07/10, para o JP
-  testar a tela, ver `20261007204002`), `acesso.vinculo` (departamento/área, papel
+- `acesso.master` (Victor Hugo, Arthur Galvão, João Pedro Alves; a conta de teste QA Sessoes desde 07/10, para o JP
+  testar a tela, ver `20261007204002`; Elaine Montenegro e Marcio Carvalho de Sá desde 14/10, inseridos pelo Arthur
+  sem migration, conforme o `acesso.log`; Isabela Teixeira pela `20261015200000`), `acesso.vinculo` (departamento/área, papel
   responsável ou membro, com vigência), `acesso.capacidade` (`financeiro.ver`, `financeiro.operar`, `cpf.ver`,
   `contato.ver`), `acesso.excecao_admin` (6 não masters com admin/dev, decisão do Victor), `acesso.log` (só acréscimo).
 - Contas de teste para a tela (sem pessoa real): QA Sessoes (`qa.sessoes@advmais.com`, master) e QA Tráfego
@@ -58,6 +59,7 @@ falta. Detalhe e provas de cada passo no `.explain.md` da migration.
 | `20261007204020` | anon sem execute nas 4 guardas; sem MAINTAIN em perfis | aplicada |
 | `20261007204024` | B3: `gps.trocar_meu_nome` não derruba a parte do aluno | aplicada |
 | `20261007204700` | conta de teste QA Tráfego (`qa.trafego@advmais.com`) membro do Tráfego, sem financeiro, para o JP (reversão no explain) | aplicada |
+| `20261015200000` | Isabela Teixeira vira master (admin do v2 com a flag `NEXT_PUBLIC_ACESSO_V2`), pedido do Victor 15/10 | **não aplicada** (aguarda pentester) |
 
 ## Pendências
 
