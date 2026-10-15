@@ -4,7 +4,9 @@ import { useState, type ReactNode } from 'react';
 import { ConfirmDialog, EmptyState, Loading, SkeletonRows, Toggle } from '@/shared/ui/components';
 import { Modal } from '@/shared/ui/components/Modal';
 import { RoscaCategorias } from '@/modules/infra/dados/ui/viz/RoscaCategorias';
+import { EvolucaoInterativa, RoscaInterativa } from './GraficosInterativosAtm';
 import type { MetricaAtm, NumeroGrupoAtm } from '../domain/dashboard';
+import { alternarFiltroGrafico, acumularSerie, aplicarFiltrosGraficos, janelaDaEvolucao, removerFiltroGrafico, valorFiltrado, type FiltroGrafico } from '../domain/filtro-graficos';
 import { contadorDoModalAtm, cruzarComGrupoAtm, distribuicaoAtm, serieDiariaAtm, type DiaSerieAtm, type SituacaoGrupoAtm } from '../domain/modal-pessoas';
 import { hojeEmSaoPaulo } from '../domain/periodo';
 import type { EstadoListaAtm } from './carregador-listas';
@@ -77,6 +79,11 @@ export type PropsModalPessoasAtm<T extends { id: string; teste: boolean }> = {
   resumoNoTopo?: ReactNode;
   /** Recorte só da Evolução e do Resumo; a tabela segue com o conjunto inteiro (Ações da Black: só leads válidos, 15/10/2026). */
   recorteGraficos?: (data: T[]) => T[];
+  /**
+   * Gráficos vivos (Ações da Black, 15/10/2026): animação, destaque e tooltip no cursor, Evolução em barras por dia +
+   * acumulado, e clique numa fatia do Resumo que filtra os outros gráficos e a tabela. O ATM não liga: segue como está.
+   */
+  graficosInterativos?: boolean;
 };
 
 function GraficoDiario({ rows, rotulo }: { rows: DiaSerieAtm[]; rotulo: string }) {
@@ -129,7 +136,7 @@ function estadoSemConteudo<T>(estado: EstadoListaAtm<T> | null, carregando: Reac
 }
 
 export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props: PropsModalPessoasAtm<T>) {
-  const { open, onClose, titulo, abaPessoas, rotuloContador, rotuloCentro, periodoLabel, periodo, card, lista, filtrar, colunas, rotuloData, dataDe, campos, grupo, textos, bloqueio, notas, isMaster, incluirTeste, onIncluirTeste, acaoTeste, graficoEvolucao = 'barras', semAbaGrupo = false, resumoNoTopo, recorteGraficos } = props;
+  const { open, onClose, titulo, abaPessoas, rotuloContador, rotuloCentro, periodoLabel, periodo, card, lista, filtrar, colunas, rotuloData, dataDe, campos, grupo, textos, bloqueio, notas, isMaster, incluirTeste, onIncluirTeste, acaoTeste, graficoEvolucao = 'barras', semAbaGrupo = false, resumoNoTopo, recorteGraficos, graficosInterativos = false } = props;
   const [aba, setAba] = useState(abaPessoas);
   const [alvo, setAlvo] = useState<T | null>(null);
   const [alvoNumero, setAlvoNumero] = useState<NumeroGrupoAtm | null>(null);
@@ -140,8 +147,16 @@ export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props:
   const itens = lista?.data ? (filtrar ? filtrar(lista.data) : lista.data) : [];
   const contador = contadorDoModalAtm(itens);
   const cruzamento = grupo.modo === 'cruzamento' && grupo.estado?.data ? cruzarComGrupoAtm(itens, grupo.telefoneDe, grupo.estado.data) : null;
-  const itensGraficos = recorteGraficos ? recorteGraficos(itens) : itens;
-  const serie = aba === 'Evolução' ? serieDiariaAtm(itensGraficos, dataDe, periodo.de, periodo.ate, hojeEmSaoPaulo()) : [];
+  const [filtros, setFiltros] = useState<FiltroGrafico[]>([]);
+  const filtrosAtivos = graficosInterativos ? filtros : [];
+  const camposFiltraveis = campos.map((c) => ({ nome: c.nome, valor: (item: T) => c.valor(item, cruzamento?.get(item.id)) }));
+  const itensGraficosTodos = recorteGraficos ? recorteGraficos(itens) : itens;
+  const itensGraficos = aplicarFiltrosGraficos(itensGraficosTodos, camposFiltraveis, filtrosAtivos);
+  const linhasTabela = aplicarFiltrosGraficos(itens, camposFiltraveis, filtrosAtivos);
+  const hoje = hojeEmSaoPaulo();
+  const janela = graficosInterativos && aba === 'Evolução' ? janelaDaEvolucao(itensGraficosTodos.filter((i) => !i.teste), dataDe, hoje) : null;
+  const serie = aba === 'Evolução' ? serieDiariaAtm(itensGraficos, dataDe, janela?.de ?? periodo.de, janela?.ate ?? periodo.ate, hoje) : [];
+  const alternar = (campo: string, valor: string) => setFiltros((atual) => alternarFiltroGrafico(atual, campo, valor));
   const temLista = !bloqueio && !!lista?.data;
   const desatualizada = temLista && lista?.erro != null;
   const comAcao = isMaster && !!acaoTeste;
@@ -176,8 +191,8 @@ export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props:
     return <div className={desatualizada ? 'opacity-60' : ''}>{conteudo()}</div>;
   };
 
-  const tabelaPessoas = () => <div className="max-h-[65vh] overflow-auto"><table className="w-full text-sm"><thead className="sticky top-0 bg-[var(--surface-3)]"><tr>{titulosTabela.map((h) => <th key={h} className={CLASSE_TH}>{h}</th>)}</tr></thead><tbody>
-    {itens.map((item) => <tr key={item.id} className={'border-t border-[var(--border)] ' + (item.teste ? 'opacity-60' : '')}>
+  const tabelaPessoas = () => linhasTabela.length === 0 ? <EmptyState title="Nenhum registro com este filtro" hint="use Limpar filtros para voltar à lista inteira" /> : <div className="max-h-[65vh] overflow-auto"><table className="w-full text-sm"><thead className="sticky top-0 bg-[var(--surface-3)]"><tr>{titulosTabela.map((h) => <th key={h} className={CLASSE_TH}>{h}</th>)}</tr></thead><tbody>
+    {linhasTabela.map((item) => <tr key={item.id} className={'border-t border-[var(--border)] ' + (item.teste ? 'opacity-60' : '')}>
       {colunas.map((c) => <td key={c.titulo} className={'p-2 ' + (c.className ?? '')}>{c.celula(item)}</td>)}
       {comAcao && <><td className="p-2">{item.teste ? seloTeste() : 'Não'}</td><td className="p-2">{acaoTeste!.disponivel(item)
         ? <button type="button" disabled={salvando === item.id} onClick={() => { setErroAcao(null); if (item.teste) void executar(item, false); else setAlvo(item); }} className={CLASSE_BOTAO}>{salvando === item.id ? 'Salvando…' : item.teste ? 'Desmarcar teste' : 'Marcar como teste'}</button>
@@ -225,16 +240,20 @@ export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props:
       const g = grupo.estado;
       return <section key={campo.nome} className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] p-4"><h3 className="mb-3 text-sm font-semibold text-[var(--fg)]">{campo.nome}</h3><p className="text-xs text-[var(--fg-3)]">{!g || g.fase === 'carregando' ? 'Carregando os números do grupo…' : g.fase === 'naoPublicada' ? 'Números do grupo indisponíveis' : g.erro ?? 'Sem dado'}</p></section>;
     }
+    if (graficosInterativos) {
+      const doCampo = aplicarFiltrosGraficos(itensGraficosTodos, camposFiltraveis, filtrosAtivos, campo.nome);
+      return <RoscaInterativa key={campo.nome} titulo={campo.nome} rotuloCentro={rotuloCentro} fatias={distribuicaoAtm(doCampo, (item) => campo.valor(item, cruzamento?.get(item.id)))} selecionado={valorFiltrado(filtrosAtivos, campo.nome)} onSelecionar={(valor) => alternar(campo.nome, valor)} />;
+    }
     return <RoscaCategorias key={campo.nome} titulo={campo.nome} rotuloCentro={rotuloCentro} fatias={distribuicaoAtm(itensGraficos, (item) => campo.valor(item, cruzamento?.get(item.id)))} />;
   })}</div>);
 
   const conteudo = aba === 'Grupo'
     ? (grupo.modo === 'numeros' ? abaGrupoNumeros(grupo) : abaGrupoCruzamento(grupo))
-    : aba === 'Evolução' ? comLista(<Loading />, () => (graficoEvolucao === 'linha' ? <GraficoLinhaDiario rows={serie} rotulo={rotuloCentro} /> : <GraficoDiario rows={serie} rotulo={rotuloCentro} />))
+    : aba === 'Evolução' ? comLista(<Loading />, () => (graficosInterativos ? <EvolucaoInterativa rows={acumularSerie(serie)} rotulo={rotuloCentro} chaveAnimacao={JSON.stringify(filtrosAtivos)} /> : graficoEvolucao === 'linha' ? <GraficoLinhaDiario rows={serie} rotulo={rotuloCentro} /> : <GraficoDiario rows={serie} rotulo={rotuloCentro} />))
       : aba === 'Resumo' ? abaResumo()
         : comLista(<TabelaCarregando titulos={titulosTabela} />, tabelaPessoas);
 
-  return <Modal open={open} onClose={() => { setErroAcao(null); onClose(); }} title={titulo} width="max-w-6xl">
+  return <Modal open={open} onClose={() => { setErroAcao(null); setFiltros([]); onClose(); }} title={titulo} width="max-w-6xl">
     <div className="mb-4 flex flex-wrap items-center gap-2">
       {[abaPessoas, ...(semAbaGrupo ? [] : ['Grupo']), 'Evolução', 'Resumo'].map((nome) => <button key={nome} type="button" onClick={() => setAba(nome)} className={'rounded-[var(--r-md)] px-3 py-2 text-sm ' + (aba === nome ? 'bg-[var(--accent)] text-black font-semibold' : 'bg-[var(--surface-3)] text-[var(--fg-2)]')}>{nome}</button>)}
       {isMaster && !bloqueio && <span className="ml-2 text-xs"><Toggle checked={incluirTeste} onChange={onIncluirTeste} label="Incluir testes" /></span>}
@@ -242,6 +261,13 @@ export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props:
     </div>
     {notas}
     {resumoNoTopo}
+    {filtrosAtivos.length > 0 && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-[var(--r-md)] border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-3 py-2 text-xs" role="status">
+      <span className="font-semibold text-[var(--fg)]">Filtro ativo:</span>
+      {filtrosAtivos.map((f) => <button key={f.campo} type="button" onClick={() => setFiltros((atual) => removerFiltroGrafico(atual, f.campo))} aria-label={`Remover filtro ${f.campo}: ${f.valor}`} className="gp-press inline-flex max-w-full items-center gap-1.5 rounded-full border border-[var(--accent-border)] bg-[var(--surface-2)] px-2.5 py-1 text-[var(--fg)] hover:bg-[var(--surface-3)] max-md:min-h-9"><span className="min-w-0 break-words text-left">{f.campo}: {f.valor}</span><span aria-hidden="true">×</span></button>)}
+      <span className="tabular text-[var(--fg-2)]">{plural(contadorDoModalAtm(itensGraficos), rotuloContador)} nos gráficos · {plural(contadorDoModalAtm(linhasTabela), rotuloContador)} na tabela</span>
+      <button type="button" onClick={() => setFiltros([])} className="ml-auto rounded border border-[var(--border)] px-2 py-1 text-[var(--fg-2)] hover:bg-[var(--surface-3)] max-md:min-h-9">Limpar filtros</button>
+    </div>}
+    {graficosInterativos && filtrosAtivos.length === 0 && aba === 'Resumo' && <p className="mb-3 text-xs text-[var(--fg-3)]">Clique numa fatia ou num item da legenda para filtrar os outros gráficos e a tabela. Clique de novo para desfazer.</p>}
     {desatualizada && <p role="status" className="mb-3 rounded border border-[var(--yellow)]/40 p-3 text-sm text-[var(--yellow)]">{lista!.erro} Mostrando a lista lida às {hora(lista!.lidoEm)}.</p>}
     {diverge && <p role="status" className="mb-3 text-xs text-[var(--yellow)]">Card {card.rotulo}: {inteiro.format(card.metrica.valor)} · esta lista: {inteiro.format(contador)}. Precisa conferir antes de usar o número (clique em Atualizar na página para reler os dois).</p>}
     {erroAcao && <p role="alert" className="mb-3 rounded border border-[var(--red)]/40 p-3 text-sm text-[var(--red)]">{erroAcao}</p>}

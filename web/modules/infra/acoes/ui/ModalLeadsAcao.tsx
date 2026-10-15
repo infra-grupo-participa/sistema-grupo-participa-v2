@@ -65,5 +65,5 @@ export function ModalLeadsAcao({ nomeAcao, lista, card, periodoLabel, open, onCl
     bloqueio={podeVerContato ? null : { titulo: 'Lista indisponível', hint: 'A capacidade contato.ver é necessária para visualizar dados pessoais.' }}
     isMaster={isMaster} incluirTeste={incluirTeste} onIncluirTeste={onIncluirTeste}
     acaoTeste={{ disponivel: (l) => !!(l.email || l.telefone), tituloConfirmacao: 'Marcar lead como teste', mensagemConfirmacao: MENSAGEM_TESTE, executar: onToggleLead }}
-    graficoEvolucao="linha" semAbaGrupo resumoNoTopo={faixa} recorteGraficos={soValidos} />;
+    graficoEvolucao="linha" graficosInterativos semAbaGrupo resumoNoTopo={faixa} recorteGraficos={soValidos} />;
 }
