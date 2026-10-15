@@ -76,7 +76,7 @@ marcados (para o botão Desmarcar). `nome` = nome que o SendFlow mandou no event
 ## 0b. Grupo pela foto do SendFlow (20261008200000, 08/10/2026)
 
 O webhook do SendFlow só traz parte das entradas (o próprio SendFlow não registra a maioria). Desde 20261008200000 o
-grupo conta a **foto da lista de participantes** (API `export-leads`, a cada 10 min, chave do Victor no Vault) somada aos
+grupo conta a **foto da lista de participantes** (API `export-leads`, chave do Victor no Vault; até 14/10 a cada ~10 min, desde a 20261014180000 **um export por dia, às 23h BRT, pela conta de final 2536**, só para campanha com `foto_ate` em `dados.dashboard_grupos`; o ATM vai até 15/10) somada aos
 eventos do webhook. Situação da aplicação: `infra/supabase/migrations/20261008200000.explain.md`.
 
 - Entrada = evento do webhook; sem evento, 1ª foto em que o número apareceu (**data aproximada**, coluna
