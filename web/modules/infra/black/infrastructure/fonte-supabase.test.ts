@@ -11,7 +11,6 @@ import { cardMql, cardsGrupo, grupoSemDado, recorteDaTela, recorteGrupoDe, ROTUL
 import type { FiltroCriativos } from '../domain/tipos';
 import { CHAVE_BLACK } from './fixtures/catalogo';
 import { criarFonteFixtures } from './fixtures/fonte-fixtures';
-import { AVISO_CONTATO_VER } from './listas-supabase';
 import {
   AVISO_NAO_LIGADA, assinarMiniaturas, caminhosMiniatura, configReal, fonteSupabaseBlack, limparCacheMiniaturas, linkGerenciadorMeta,
   mapearGrupo, mapearLeads, mapearPerfil, mapearTrafego, MINIATURA_TTL_S,
@@ -350,7 +349,8 @@ describe('fonte real (Supabase simulado)', () => {
   it('42501 em dados_black_leads pede contato.ver e deixa o erro geral nos outros blocos', async () => {
     rpc.mockResolvedValueOnce({ data: null, error: { code: '42501' } });
     const leads = await fonteSupabaseBlack.leads(CHAVE_BLACK, ['lead-de-teste']);
-    expect(leads.erro).toBe(AVISO_CONTATO_VER);
+    expect(leads.erro).toBe('Você não tem permissão para ver os contatos dos leads. Peça acesso ao Victor.');
+    expect(leads.semDado).toBe(true);
     rpc.mockResolvedValueOnce({ data: null, error: { code: '42501' } });
     const perfil = await fonteSupabaseBlack.perfil(CHAVE_BLACK, P);
     expect(perfil.erro).toBe('Sem permissão para ler este dashboard.');

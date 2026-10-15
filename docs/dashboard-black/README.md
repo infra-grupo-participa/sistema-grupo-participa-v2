@@ -927,11 +927,16 @@ Primeiro lote visual do pedido de 15/10:
 - Ingresso geral segue `dados_black_grupo.ingresso_geral` (números únicos no grupo ÷ leads únicos); as demais métricas de recorte continuam cruzadas. A linha “Grupo em 48h” foi retirada das colunas de etapa para não apresentar uma janela diferente como ingresso geral.
 - O CPL por etapa mantém a sanfona fechada e inclui a definição de C2 documentada no plano da Black.
 - A lista anterior “Sem etapa” foi substituída pela aba Alertas importantes. As regras R1–R12 avaliam campanhas, conjuntos e anúncios; U1–U2 usam `dados_black_perfil.a_corrigir`. Nomes e contagens são montados dos dados carregados, sem fixture de produção.
-- Em `dados_black_leads`, o erro `42501` usa a mesma mensagem das listas e orienta a solicitar `contato.ver`. Essa resposta pertence só à leitura dos contatos; os demais blocos mantêm a mensagem geral de permissão do dashboard e continuam independentes.
+- Em `dados_black_leads`, o erro `42501` mostra “Você não tem permissão para ver os contatos dos leads. Peça acesso ao Victor.” O aviso fica na tabela de contatos; os totais e taxas continuam vindo de `dados_black_perfil` e visíveis. As listas mantêm sua mensagem própria, e os demais blocos continuam independentes.
 
 Como testar: na rota da Black VG, confira os cards com meta, abra o card Ingresso no grupo e navegue pelas três abas; confirme que a aba Leads pede `contato.ver` para mostrar nome, e-mail e telefone; abra CPL por etapa; confira Alertas importantes com dados reais. Simule `42501` em `dados_black_leads` e verifique a mensagem de contato, depois em `dados_black_perfil` e confirme a mensagem geral. Repita em tema claro/escuro e viewport desktop/390 px. Testes puros: `npx vitest run modules/infra/black/domain/alertas-nomenclatura.test.ts modules/infra/black/infrastructure/fonte-supabase.test.ts`.
 
 Sem alteração de banco. A lista individual de membros do grupo permanece pendente de uma RPC aprovada e publicada. Para reverter este lote, reverta o commit que contém esta seção e os arquivos da Visão Geral.
+
+## Aviso de permissão dos contatos · 15/10/2026
+
+- A leitura de `dados_black_leads` retorna `42501` para quem não tem `contato.ver`. A tabela agora mostra um aviso claro para pedir essa capacidade ao Victor; os indicadores agregados continuam visíveis porque vêm de `dados_black_perfil`.
+- Como testar: sem `contato.ver`, abra a tabela de leads da Black e confirme o aviso, os totais e as taxas. Com permissão, confirme que a lista de contatos continua carregando. Não houve alteração no banco.
 
 ## Projeção e séries diárias · lote das 17h · 15/10/2026
 

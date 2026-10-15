@@ -11,7 +11,6 @@
 import { safeHttpUrl } from '@/shared/domain/url-segura';
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import { AVISO_CONTATO_VER } from './listas-supabase';
 import type { FonteDadosBlack } from '../application/ports';
 import { grupoSemDado } from '../domain/grupo';
 import { ehC1PeloNome, faseDoNome } from '../domain/fase-campanha';
@@ -59,8 +58,10 @@ function reais(v: unknown): Valor {
 
 export const funcaoInexistente = (code: string | undefined) => code === 'PGRST202' || code === '42883';
 
+const AVISO_CONTATO_LEADS = 'Você não tem permissão para ver os contatos dos leads. Peça acesso ao Victor.';
+
 function mensagemLeitura(nome: string, code: string | undefined): string {
-  if (code === '42501') return nome === 'dados_black_leads' ? AVISO_CONTATO_VER : 'Sem permissão para ler este dashboard.';
+  if (code === '42501') return nome === 'dados_black_leads' ? AVISO_CONTATO_LEADS : 'Sem permissão para ler este dashboard.';
   if (code === 'P0002') return 'Dashboard ou identificador não encontrado neste evento.';
   if (code === '22023') return 'Parâmetro inválido para este bloco.';
   return 'Não foi possível carregar os dados agora.';
