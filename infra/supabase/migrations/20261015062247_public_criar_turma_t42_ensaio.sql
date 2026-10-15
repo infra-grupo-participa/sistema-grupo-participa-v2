@@ -1,4 +1,4 @@
--- Ensaio da 20261015010000 (transação desfeita). Só contagens.
+-- Ensaio da 20261015062247 (transação desfeita). Só contagens.
 begin;
 set local lock_timeout = '5s';
 insert into public.thb_turmas (codigo, tipo) select 'T42', 'thb' where not exists (select 1 from public.thb_turmas where codigo = 'T42');

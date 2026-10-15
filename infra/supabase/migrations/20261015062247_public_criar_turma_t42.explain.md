@@ -1,4 +1,4 @@
-# 20261015010000 · public: criar a turma T42
+# 20261015062247 · public: criar a turma T42
 
 **O quê:** insere a T42 em `public.thb_turmas` (`codigo 'T42'`, `tipo 'thb'`, `atual = false`), igual à função da Central
 `public.fn_turma_criar`. Liga ao `turma_id` da T42 só os eventos e relações da pessoa única vindos da planilha de ativação
@@ -20,3 +20,9 @@ busca; `eventos_fonte_unico` cobre os eventos. **Frequência:** uma vez. **Repet
 **Aplicação:** fora de live, entre scripts de carga (nunca junto com outra escrita), depois do ensaio.
 
 **Aviso ao João (dono da Central):** a T42 aparece no seletor de turmas da tela de acesso HM, sem ser a atual.
+
+**Situação (15/10/2026 03:22):** ensaio passou (T42 única, atual continua T41, T42 com atual false e data/chave nulas;
+desfeito) e a migration foi APLICADA em produção com o ok do Maestro, versão gravada 20261015062247, `thb_turmas.id` 60.
+Na hora da aplicação ainda não havia evento da planilha de ativação no banco (0), então os dois UPDATE afetaram 0 linhas:
+a ligação dos 25 alunos e 13 sócios acontece no `carga_planilha.py`, que procura a turma por `codigo` (agora existe).
+`public.thb_alunos` com a T42: 0 linhas (não foi mexido).

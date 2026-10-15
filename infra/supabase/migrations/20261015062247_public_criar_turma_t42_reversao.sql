@@ -1,4 +1,4 @@
--- Reversão da 20261015010000: desliga a T42 da linha do tempo e apaga a linha da turma SÓ se nada no sistema a usa.
+-- Reversão da 20261015062247: desliga a T42 da linha do tempo e apaga a linha da turma SÓ se nada no sistema a usa.
 begin;
 set local lock_timeout = '5s';
 update pessoas.eventos set turma_id = null
