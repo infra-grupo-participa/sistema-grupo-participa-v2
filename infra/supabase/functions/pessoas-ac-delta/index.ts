@@ -11,7 +11,7 @@
 //      de 100, e grava no estágio por pessoas.carga_ac_estagio (lote como parâmetro ligado, nunca no texto do SQL);
 //   4. passa o estágio pendente para pessoas por pessoas.carga_ac_pessoas, até o orçamento de tempo.
 // Teto: TETO_DIA = 42 requisições ao AC por dia UTC, somando execuções (manual, repetida ou do cron) e tentativas; cada
-// requisição é gravada em pessoas.carga_lote (detalhe chamada_ac) da execução do delta ANTES de sair; uma só execução por vez
+// requisição é gravada em pessoas.carga_lote (detalhe chamada_ac) ANTES de sair, no mesmo comando que confere o teto; uma só execução por vez
 // (pg_try_advisory_lock). Dia comum (medido em 14/10/2026): 2,4 a 3,8 mil contatos
 // atualizados = 25 a 38 páginas. Se o teto bater, a execução fica 'parada' e o dia seguinte continua do cursor.
 // Chave do AC: Vault activecampaign_api_key (nunca impressa). Erro sai só com o código.
@@ -30,6 +30,7 @@ const json = (corpo: unknown, status = 200) =>
   new Response(JSON.stringify(corpo), { status, headers: { "Content-Type": "application/json" } });
 type Obj = Record<string, any>;
 class TetoAtingido extends Error {}
+class TempoEsgotado extends Error {}   // orçamento de 110 s da Edge; não é o teto do dia
 
 function igual(a: string, b: string) {
   if (a.length !== b.length) return false;
@@ -101,12 +102,17 @@ Deno.serve(async (req) => {
     let chamadas = 0;
     const ac = async (caminho: string) => {
       for (let t = 0; t < 3; t++) {
-        const [uso] = await sql`select count(*)::int n from pessoas.carga_lote l join pessoas.carga_execucao e on e.id = l.execucao_id
-                                 where e.fonte = 'activecampaign' and e.por = 'delta' and l.detalhe ? 'chamada_ac'
-                                   and l.em >= (date_trunc('day', now() at time zone 'utc') at time zone 'utc')`;
-        if (uso.n + 1 > TETO_DIA) throw new TetoAtingido();
-        if (Date.now() - t0 > ORCAMENTO_MS) throw new TetoAtingido();
-        await sql`insert into pessoas.carga_lote (execucao_id, detalhe) values (${eid}, ${sql.json({ chamada_ac: 1 })})`;
+        if (Date.now() - t0 > ORCAMENTO_MS) throw new TempoEsgotado();
+        // conferir o teto e gravar a chamada num comando só (achado B1 do pentester, 3ª revisão): com o pool de 1 conexão,
+        // a trava consultiva não separa requisições do mesmo processo; sem linha devolvida = teto do dia atingido.
+        // Soma todas as linhas 'chamada_ac' do dia UTC, de qualquer execução (achado B2: sem filtrar por quem abriu).
+        const gravada = await sql`insert into pessoas.carga_lote (execucao_id, detalhe)
+                                  select ${eid}, ${sql.json({ chamada_ac: 1 })}
+                                   where (select count(*) from pessoas.carga_lote
+                                           where detalhe ? 'chamada_ac'
+                                             and em >= (date_trunc('day', now() at time zone 'utc') at time zone 'utc')) < ${TETO_DIA}
+                                  returning id`;
+        if (gravada.length === 0) throw new TetoAtingido();
         chamadas++;
         const r = await fetch(`${base}/api/3/${caminho}`, { headers: { "Api-Token": k.k, Accept: "application/json" },
                                                            signal: AbortSignal.timeout(RQ_TIMEOUT_MS) });
@@ -123,10 +129,11 @@ Deno.serve(async (req) => {
     for (let off = 0; off < 1000; off += 100) {
       let j: Obj;
       try { j = await ac(`lists?limit=100&offset=${off}`); } catch (e) {
-        if (e instanceof TetoAtingido) {
-          await sql`select pessoas.carga_fechar(${eid}, 'parada', 'teto diário de chamadas ao AC')`;
+        if (e instanceof TetoAtingido || e instanceof TempoEsgotado) {
+          const teto = e instanceof TetoAtingido;
+          await sql`select pessoas.carga_fechar(${eid}, 'parada', ${teto ? "teto diário de chamadas ao AC" : "orçamento de tempo da Edge"})`;
           eid = null;
-          return json({ ok: true, teto_do_dia: true, chamadas_ac: chamadas });
+          return json({ ok: true, ...(teto ? { teto_do_dia: true } : { tempo_esgotado: true }), chamadas_ac: chamadas });
         }
         throw e;
       }
@@ -152,7 +159,7 @@ Deno.serve(async (req) => {
         pg = await ac(`contacts?limit=100&orders[id]=ASC&id_greater=${ultimo}&filters[updated_after]=${desde}` +
                           `&include=contactLists,contactTags,fieldValues`);
       } catch (e) {
-        if (e instanceof TetoAtingido) break;
+        if (e instanceof TetoAtingido || e instanceof TempoEsgotado) break;
         throw e;
       }
       paginas++;

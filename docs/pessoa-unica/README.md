@@ -53,6 +53,16 @@ Script: `infra/scripts/pessoa-unica/carga_ac.py` (leia o `LEIAME.md` da pasta).
 - Dado pessoal: o lote vai como parâmetro ligado (fora do texto do SQL e do log); erro só com código e 1ª linha; cada
   valor do lote é validado antes de CHECK e cast.
 
+## Delta diário do AC (Edge `pessoas-ac-delta`)
+
+Código em `infra/supabase/functions/pessoas-ac-delta/index.ts`. **NÃO publicada**, job e chave desligados.
+- Teto de 42 requisições ao AC por dia UTC. Cada requisição é conferida e gravada em `pessoas.carga_lote` (detalhe
+  `chamada_ac`) **num comando só** (`insert ... select ... where (select count(*) ...) < 42 returning id`; sem linha =
+  teto atingido). A soma conta todas as linhas `chamada_ac` do dia, de qualquer execução (achados B1 e B2 da 3ª revisão
+  do pentester, corrigidos em 14/10 à noite).
+- Estouro do orçamento de tempo (110 s) sai como `tempo_esgotado`, não como `teto_do_dia`.
+- Situação: aguardando a 4ª revisão do pentester; publicar e ligar são do Maestro/JP com ok do Victor.
+
 ## Como testar
 
 - Antes de aplicar: `python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio
