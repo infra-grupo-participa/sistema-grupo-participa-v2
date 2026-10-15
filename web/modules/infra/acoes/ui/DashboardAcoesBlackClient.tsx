@@ -143,6 +143,16 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
     void atualizar();
     return null;
   };
+  // Marcar número do grupo como teste (15/10/2026): mesma RPC, só pelo telefone do grupo (o banco aceita número que só está no grupo).
+  const marcarNumeroGrupo = async (linha: LeadGrupoAtm): Promise<string | null> => {
+    if (!isMaster) return 'Só masters podem marcar testes.';
+    if (!etiqueta) return 'Ação sem etiqueta cadastrada.';
+    const r = await marcarAtmTeste(etiqueta, null, linha.foneGrupo);
+    if (r.erro) return r.erro;
+    setVersaoListas((v) => v + 1);
+    void atualizar();
+    return null;
+  };
   const contagemLeads = listaLeads?.data ? contarLeadsAcao(listaLeads.data) : null;
   const resultadoResumo = dados?.resumo;
   const dashboard: DashboardAtm | null = resultadoResumo && !resultadoResumo.semDado ? resultadoResumo.data : null;
@@ -222,6 +232,6 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
       </div>}
     </div>
     <ModalLeadsAcao open={modalLeads} onClose={() => setModalLeads(false)} nomeAcao={acao.nome} lista={listaLeads} card={dashboard?.resumo.leads ?? { valor: 0, semDado: true }} periodoLabel="período do cadastro" isMaster={isMaster} podeVerContato={podeVerContato} incluirTeste={comTeste} onIncluirTeste={setIncluirTeste} onToggleLead={toggleLead} />
-    <ModalIngressoGrupoAcao open={modalIngressoGrupo} onClose={() => setModalIngressoGrupo(false)} nomeAcao={acao.nome} card={dashboard?.resumo.ingressosGrupo ?? { valor: 0, semDado: true }} lista={listaGrupoLeads} podeVerContato={podeVerContato} demonstracao={demonstracaoGrupo} />
+    <ModalIngressoGrupoAcao open={modalIngressoGrupo} onClose={() => setModalIngressoGrupo(false)} nomeAcao={acao.nome} card={dashboard?.resumo.ingressosGrupo ?? { valor: 0, semDado: true }} lista={listaGrupoLeads} podeVerContato={podeVerContato} demonstracao={demonstracaoGrupo} isMaster={isMaster} onMarcarTeste={marcarNumeroGrupo} />
   </div>;
 }
