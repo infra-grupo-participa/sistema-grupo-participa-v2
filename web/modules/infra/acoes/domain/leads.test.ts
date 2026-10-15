@@ -74,9 +74,9 @@ describe('cards do topo com leads válidos', () => {
   it('leads: o válido no card e o geral ao lado', () => {
     expect(exibicaoCardLeads('leads', { valor: 5, semDado: false }, c)).toEqual({ valor: 4, formato: 'inteiro', hint: 'válidos para a oferta · 5 gerais, 1 fora da lista' });
   });
-  it('ingresso: válidos no card e o geral do resumo ao lado', () => {
-    expect(exibicaoCardLeads('ingressosGrupo', { valor: 3, semDado: false }, c)).toMatchObject({ valor: 2, formato: 'inteiro', hint: 'entre os leads válidos · 3 no geral' });
-    expect(exibicaoCardLeads('percentualIngressoGrupo', { valor: 60, semDado: false }, c)).toMatchObject({ valor: 50, formato: 'percentual', hint: 'sobre os leads válidos · 60% no geral' });
+  it('ingresso: o geral no card e os leads válidos embaixo', () => {
+    expect(exibicaoCardLeads('ingressosGrupo', { valor: 3, semDado: false }, c)).toMatchObject({ valor: 3, formato: 'inteiro', hint: 'no geral · 2 entre os leads válidos' });
+    expect(exibicaoCardLeads('percentualIngressoGrupo', { valor: 60, semDado: false }, c)).toMatchObject({ valor: 60, formato: 'percentual', hint: 'no geral · 50% sobre os leads válidos' });
   });
   it('sem lista de aptos, os cards seguem com o número do resumo', () => {
     const sem = contarLeadsAcao([lead(), lead()]);
