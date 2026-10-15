@@ -7,6 +7,7 @@ import { ehCaptacao } from '../domain/metricas';
 import { diaDe } from '../domain/recorte';
 import type { Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
+import { compararMeta } from '../domain/meta';
 import { formatar, IndicadorMeta, moeda } from './pecas';
 
 function diaEmSaoPaulo(data: Date): string {
@@ -52,8 +53,9 @@ function NumeroRitmo({ valor, brl = false }: { valor: Valor; brl?: boolean }) {
   return <>{brl ? moeda(valor) : valor.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</>;
 }
 
-function ResumoRitmo({ titulo, ritmo, meta, disponivel, brl = false }: {
-  titulo: string; ritmo: ReturnType<typeof progresso>['leads']; meta: Valor; disponivel: boolean; brl?: boolean;
+// `semFarol`: investimento não é bom nem ruim contra a verba (Victor, 15/10/2026). Mostra só a distância, sem cor.
+function ResumoRitmo({ titulo, ritmo, meta, disponivel, brl = false, semFarol = false }: {
+  titulo: string; ritmo: ReturnType<typeof progresso>['leads']; meta: Valor; disponivel: boolean; brl?: boolean; semFarol?: boolean;
 }) {
   const fmt = (v: Valor, modo: 'normal' | 'cima' = 'normal') => brl ? <NumeroRitmo valor={v} brl /> : <NumeroRitmo valor={arredondarInteiroRitmo(v, modo)} />;
   const cobertura: 'verde' | 'amarelo' | 'vermelho' | 'sem' = ritmo.media === null || ritmo.necessarioPorDia === null
@@ -64,14 +66,16 @@ function ResumoRitmo({ titulo, ritmo, meta, disponivel, brl = false }: {
   return <article className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-1)] p-3">
     <div className="flex flex-wrap items-baseline justify-between gap-2">
       <h3 className="font-semibold text-[var(--fg)]">{titulo}</h3>
-      <span className="text-xs text-[var(--fg-3)]">Meta {meta === null ? 'Sem meta cadastrada' : brl ? moeda(meta) : formatar(meta, 'int')} · <span className="font-medium" style={{ color: corCobertura }}>{rotuloCobertura}</span></span>
+      <span className="text-xs text-[var(--fg-3)]">Meta {meta === null ? 'Sem meta cadastrada' : brl ? moeda(meta) : formatar(meta, 'int')}{!semFarol && <> · <span className="font-medium" style={{ color: corCobertura }}>{rotuloCobertura}</span></>}</span>
     </div>
     {!disponivel ? <p className="mt-3 text-sm text-[var(--fg-3)]">Sem dado para projetar.</p> : <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-3">
       <div><dt className="text-[var(--fg-3)]">Acumulado</dt><dd className="mt-0.5 font-semibold tabular text-[var(--fg)]">{fmt(ritmo.acumuladoHoje)}</dd></div>
       <div><dt className="text-[var(--fg-3)]">Necessário por dia</dt><dd className="mt-0.5 font-semibold tabular text-[var(--fg)]">{fmt(ritmo.necessarioPorDia, 'cima')}</dd></div>
       <div><dt className="text-[var(--fg-3)]">Faltam hoje para bater a meta diária</dt><dd className="mt-0.5 font-semibold tabular text-[var(--fg)]">{fmt(ritmo.faltaHoje, 'cima')}</dd></div>
       <div><dt className="text-[var(--fg-3)]">Média dos dias fechados</dt><dd className="mt-0.5 font-semibold tabular text-[var(--fg)]">{fmt(ritmo.media)}</dd><dd className="mt-0.5 text-[10px] text-[var(--fg-3)]">{ritmo.mediaDias.length ? ritmo.mediaDias.map((d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`).join(', ') : 'sem dias com valor > 0'}</dd></div>
-      <div><dt className="text-[var(--fg-3)]">No ritmo de hoje fecha em</dt><dd className="mt-0.5 font-semibold tabular text-[var(--fg)]">{fmt(ritmo.projecao)}</dd>{meta !== null && ritmo.projecao !== null && <dd className="mt-0.5"><IndicadorMeta valor={ritmo.projecao} meta={meta} menorMelhor={brl} formato={brl ? 'brl' : 'int'} compacto /></dd>}</div>
+      <div><dt className="text-[var(--fg-3)]">No ritmo de hoje fecha em</dt><dd className="mt-0.5 font-semibold tabular text-[var(--fg)]">{fmt(ritmo.projecao)}</dd>{meta !== null && ritmo.projecao !== null && (semFarol
+        ? <dd className="mt-0.5 text-[11px] text-[var(--fg-2)]">{compararMeta(ritmo.projecao, meta).distancia ?? 'Sem dado para comparar'}</dd>
+        : <dd className="mt-0.5"><IndicadorMeta valor={ritmo.projecao} meta={meta} menorMelhor={brl} formato={brl ? 'brl' : 'int'} compacto /></dd>)}</div>
       <div><dt className="text-[var(--fg-3)]">Realizado hoje</dt><dd className="mt-0.5 font-semibold tabular text-[var(--fg)]">{fmt(ritmo.realizadoHoje)}</dd></div>
     </dl>}
   </article>;
@@ -87,7 +91,7 @@ export function ProjecaoCaptacao({ d }: { d: DadosTela }) {
       <p className="text-xs text-[var(--fg-3)]">Meta diária recalcula sobre os dias que faltam a partir de amanhã · projeção usa a média dos últimos 3 dias fechados com valor maior que zero. Leads: inclui semente de 154 anteriores a 12/10. Investimento: orçamento da captação ({d.config.previstoPorFase.captacao === null ? 'Sem meta cadastrada' : moeda(d.config.previstoPorFase.captacao)}). Fonte diária: primeira aparição por pessoa e dias_campanha.</p>
       <div className="grid gap-3 md:grid-cols-2">
         <ResumoRitmo titulo="Leads" ritmo={r.leads} meta={d.config.metaLeads} disponivel={r.leadsDisponivel} />
-        <ResumoRitmo titulo="Investimento em captação" ritmo={r.investimento} meta={d.config.previstoPorFase.captacao} disponivel={r.investimentoDisponivel} brl />
+        <ResumoRitmo titulo="Investimento em captação" ritmo={r.investimento} meta={d.config.previstoPorFase.captacao} disponivel={r.investimentoDisponivel} brl semFarol />
       </div>
     </div>
   </details>;

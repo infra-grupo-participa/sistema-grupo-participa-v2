@@ -94,8 +94,21 @@ function tempoAte(alvo: string, agora: Date): string {
 /** Tabela aberta por um card que não tem as sub-abas do ModalCard (os números vêm prontos do servidor). */
 interface TabelaAberta { id: 'mql'; titulo: string; nota: string; linhas: LinhaPerfil[] }
 
-function MetaComProgresso({ valor, meta, formato, menorMelhor = false, ideal }: { valor: Valor; meta: Valor; formato: FormatoMetrica; menorMelhor?: boolean; ideal?: Valor }) {
+// `semFarol`: investimento contra a verba não é bom nem ruim (Victor, 15/10/2026). Barra neutra com o quanto já foi
+// gasto da verba e a distância em texto, sem cor nem rótulo.
+function MetaComProgresso({ valor, meta, formato, menorMelhor = false, ideal, semFarol = false }: { valor: Valor; meta: Valor; formato: FormatoMetrica; menorMelhor?: boolean; ideal?: Valor; semFarol?: boolean }) {
   if (meta === null) return <p className="text-[11px] text-[var(--fg-3)]">Sem meta cadastrada</p>;
+  if (semFarol) {
+    const distancia = compararMeta(valor, meta).distancia?.replace('da meta', 'da verba').replace('na meta', 'na verba') ?? 'Sem dado para comparar';
+    const usado = valor === null || meta <= 0 ? 0 : Math.min(1, valor / meta);
+    return <div className="space-y-1" title={`Verba: ${formatar(meta, formato)}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-[10px] text-[var(--fg-3)]">
+        <span>Verba {formatar(meta, formato)}</span>
+        <span className="text-[11px] text-[var(--fg-2)]">{distancia}</span>
+      </div>
+      <ProgressBar value={usado * 100} tone="neutral" ariaLabel={`Valor e verba: ${formatar(meta, formato)}`} />
+    </div>;
+  }
   const avaliacao = compararMeta(valor, meta, menorMelhor, ideal ?? null);
   const atingido = valor === null ? null : menorMelhor
     ? valor <= meta ? 1 : valor === 0 ? 1 : Math.min(1, meta / valor)
@@ -302,10 +315,10 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {/* O limite total reutiliza ORCAMENTO.total enquanto não há orçamento próprio de disparos. */}
           <KpiCard label="Investimento total" value={<Numero valor={total} formato="brl" falta="sem dado" />} valueClassName="text-2xl sm:text-3xl" title={`${notaTotal} O limite de ${moeda(config.orcamentoTotal)} reutiliza provisoriamente o orçamento total do projeto, pois não há limite separado para disparos.`} bar="none"
-            hint={<MetaComProgresso valor={total} meta={config.orcamentoTotal} formato="brl" menorMelhor />} />
+            hint={<MetaComProgresso valor={total} meta={config.orcamentoTotal} formato="brl" semFarol />} />
           <Cartao titulo={cardGasto.rotulo} onAbrir={abrir(cardGasto)}>
             <KpiCard label="Investimento em tráfego" value={<Numero valor={gastoPeriodo} formato="brl" falta="sem dado" />} valueClassName="text-2xl sm:text-3xl" title={`${NOTA_ENTRESAFRA}`} bar="none"
-              hint={<div className="space-y-2"><p className="text-xs text-[var(--fg-2)]">Meta Ads {moeda(porCanal('meta'))} · Google Ads {moeda(porCanal('google'))}</p><MetaComProgresso valor={gastoPeriodo} meta={config.orcamentoTotal} formato="brl" menorMelhor /></div>} />
+              hint={<div className="space-y-2"><p className="text-xs text-[var(--fg-2)]">Meta Ads {moeda(porCanal('meta'))} · Google Ads {moeda(porCanal('google'))}</p><MetaComProgresso valor={gastoPeriodo} meta={config.orcamentoTotal} formato="brl" semFarol /></div>} />
           </Cartao>
           <Cartao titulo="Disparo" onAbrir={() => d.irPara({ aba: 'mensageria' })}>
             <KpiCard label="Investimento com disparo" bar="none" value={<Numero valor={custoDisparo?.valor ?? null} formato="brl" falta="Sem dado" />} valueClassName="text-2xl sm:text-3xl"
