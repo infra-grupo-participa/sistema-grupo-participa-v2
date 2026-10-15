@@ -59,6 +59,16 @@ describe('mapeadores das RPCs da Black', () => {
       coleta: { estado: 'atual', ultimaOkEm: '2026-10-13T23:45:00Z', validadeMin: 75 },
     });
   });
+  it('mapeia gasto diário por campanha para a régua de investimento', () => {
+    const { data } = mapearTrafego({ ...RESPOSTA_TRAFEGO, dias_campanha: [
+      { campanha_id: 101, dia: '2026-10-12', gasto_centavos: 12345 },
+      { campanha_id: 101, dia: '2026-10-13', gasto_centavos: 0 },
+    ] });
+    expect(data.gastoCampanhasDiario).toEqual([
+      { campanhaId: '101', dia: '2026-10-12', gasto: 123.45 },
+      { campanhaId: '101', dia: '2026-10-13', gasto: 0 },
+    ]);
+  });
   it('funil C1 provisório pelo nome: ANTECIPAÇÃO e MANIFESTO sem etapa viram C1; com etapa no nome, o banco manda', () => {
     const camp = (id: string, nome: string, etapa: string | null, subtipo: string | null = null) =>
       ({ id, nome, plataforma: 'meta', status: 'ACTIVE', objetivo: 'VIDEO', conta: 'c', projeto_id: 1, etapa, subtipo, conflito: false });

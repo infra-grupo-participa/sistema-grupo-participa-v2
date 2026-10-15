@@ -8,6 +8,7 @@ import { DataTable, KpiCard, Modal, ProgressBar, SectionCard, Td, Th, Thead, Tr 
 import { deslocarDia } from '@/modules/infra/atm/domain/periodo';
 import { diaDe } from '../domain/recorte';
 import { alertasNomenclatura } from '../domain/alertas-nomenclatura';
+import { iscaDoNomeConjunto, tipoConteudoC1, type TipoConteudoC1 } from '../domain/ritmo';
 import {
   agregar, cpc, cplPorEtapa, cpm, ctr, custoPorVisualizacao,
   dividir, ehCaptacao, ehEntresafraCampanha, ehPago, enviosMqlMaisRecentes, farolCpl, filtrarDias, filtrarLinhas, gastoDe, linhasCaptacao, somar, taxa as construirTaxa,
@@ -16,8 +17,10 @@ import {
 import { FUNIS, ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
 import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
-import { Farol, formatar, IndicadorMeta, MODAL_TELA_CHEIA, moeda, Numero, Taxa } from './pecas';
+import { Chip, Farol, formatar, IndicadorMeta, MODAL_TELA_CHEIA, moeda, Numero, Taxa } from './pecas';
 import { GraficoLinha } from './graficos';
+import { ProjecaoCaptacao } from './ProjecaoCaptacao';
+import { EvolucaoMetaIndicador } from './EvolucaoMeta';
 import { TabelaLeads } from './perfil/TabelaLeads';
 import { ResumoLeads } from './ResumoLeads';
 import { cplCaptacao, connectRate as connectRateNumero, conversaoPagina as conversaoPaginaNumero, gastoCampanha, investimentoTrafego, leadsDoTrafego, leadsPessoas, mql as mqlNumero, taxaMql, investimentoDeCaptacao, ingressoGrupoGeral } from '../domain/numeros';
@@ -86,7 +89,7 @@ function tempoAte(alvo: string, agora: Date): string {
 }
 
 /** Tabela aberta por um card que não tem as sub-abas do ModalCard (os números vêm prontos do servidor). */
-interface TabelaAberta { titulo: string; nota: string; linhas: LinhaPerfil[] }
+interface TabelaAberta { id: 'mql' | 'mql-percentual'; titulo: string; nota: string; linhas: LinhaPerfil[] }
 
 function MetaComProgresso({ valor, meta, formato, menorMelhor = false }: { valor: Valor; meta: Valor; formato: 'brl' | 'pct'; menorMelhor?: boolean }) {
   if (meta === null) return <p className="text-[11px] text-[var(--fg-3)]">Sem meta cadastrada</p>;
@@ -174,6 +177,8 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const [tabela, setTabela] = useState<TabelaAberta | null>(null);
   const [modalIngresso, setModalIngresso] = useState(false);
   const [abaVisao, setAbaVisao] = useState<'placar' | 'alertas'>('placar');
+  const [tipoC1, setTipoC1] = useState<'todos' | TipoConteudoC1>('todos');
+  const [iscaAberta, setIscaAberta] = useState<string | null>(null);
   // Sem fonte de cadastros, número de lead é "Sem dado" (nunca o zero de uma lista vazia).
   const semLeads = d.perfilSemDado;
   const { config, idx, recorte } = d;
@@ -250,9 +255,9 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   // Tabelas dos cards MQLs e Ingresso: os envios do período e do nó (cada envio é uma linha; o card conta pessoas).
   const linhasMql = enviosMqlMaisRecentes(lGeral);
   const linhasGrupo = lGeral.filter((l) => l.entrouGrupoEm !== null && diaDe(l.entrouGrupoEm) >= d.periodo.de && diaDe(l.entrouGrupoEm) <= d.periodo.ate);
-  const abrirMql = () => setTabela({ titulo: 'MQLs', linhas: linhasMql,
+  const abrirMql = () => setTabela({ id: 'mql', titulo: 'MQLs', linhas: linhasMql,
     nota: 'MQL pela Regra B: profissão do envio mais recente com profissão, uma pessoa por lead, de todas as portas no período selecionado.' });
-  const abrirPctMql = () => setTabela({ titulo: '% de MQL', linhas: linhasMql,
+  const abrirPctMql = () => setTabela({ id: 'mql-percentual', titulo: '% de MQL', linhas: linhasMql,
     nota: 'Pessoas usadas no cálculo da taxa: MQL pela Regra B dividido por pessoas únicas do recorte. A meta de 60% vale para a base geral e para C2/C3.' });
   const abrirGrupo = () => setModalIngresso(true);
 
@@ -307,6 +312,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
               hint={<div className="space-y-2">{config.metaLeads !== null && leadsAteAgora !== null && <ProgressBar value={(leadsAteAgora / config.metaLeads) * 100} ariaLabel={`${formatar(leadsAteAgora, 'int')} de ${formatar(config.metaLeads, 'int')} leads`} valueNow={leadsAteAgora} valueMin={0} valueMax={config.metaLeads} />}<p className="text-xs text-[var(--fg-2)]">Do tráfego C2/C3: <strong className="tabular text-[var(--fg)]">{formatar(leadsTrafegoAteAgora, 'int')}</strong></p></div>} />
           </Cartao>
         </div>
+        <ProjecaoCaptacao d={d} />
       </section>
 
       <section aria-labelledby="vg-funil">
@@ -347,7 +353,9 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
             return (
               <SectionCard key={f} title={ROTULO_FUNIL[f]} className={apagado ? 'opacity-40' : ''}
                 right={<button type="button" className="text-xs text-[var(--accent)] underline-offset-2 hover:underline max-md:-my-3 max-md:-mr-3 max-md:min-h-11 max-md:px-3" onClick={() => d.irPara({ funil: selecionado && recorte.funil !== 'todos' ? 'todos' : f })}>{selecionado && recorte.funil !== 'todos' ? 'Limpar filtro' : 'Filtrar'}</button>}>
-                {f === 'c1' ? <ColunaC1 d={d} dias={df} /> : <ColunaCaptacao d={d} dias={df} linhas={lf} funil={f} />}
+                {f === 'c1' ? <ColunaC1Segmentada d={d} dias={df} selecionado={tipoC1} onSelecionar={setTipoC1} />
+                  : f === 'iscas' ? <ColunaIscasSegmentada d={d} dias={df} linhas={lf} selecionado={iscaAberta} onSelecionar={setIscaAberta} />
+                    : <ColunaCaptacao d={d} dias={df} linhas={lf} funil={f} />}
               </SectionCard>
             );
           })}
@@ -404,12 +412,14 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
             </dl>
             {detalhesCobertura && <p className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-1)] p-3">{detalhesCobertura}.</p>}
             <p className="border-t border-[var(--border)] pt-3 text-xs text-[var(--fg-3)]">Total das campanhas de captação C2/C3, sem remarketing. {NOTA_ENTRESAFRA}.</p>
+            {config.previstoPorFase.captacao !== null && <EvolucaoMetaIndicador d={d} cardId="investimento-captacao" rotulo="Investimento em captação" formato="brl" />}
           </div>
         </Modal>
       )}
       {tabela && (
         <Modal open onClose={() => setTabela(null)} title={tabela.titulo} width={`max-w-5xl ${MODAL_TELA_CHEIA}`}>
           <p className="mb-2 text-xs text-[var(--fg-3)]">{tabela.nota}</p>
+          {tabela.id === 'mql-percentual' && config.metas.mql !== null && <div className="mb-3"><EvolucaoMetaIndicador d={d} cardId="mql-percentual" rotulo="% de MQL" formato="pct" /></div>}
           <div className="mb-3"><ResumoLeads linhas={d.linhas.filter((l) => l.pagina !== 'consultoria_respondi')} idx={d.idx} grupo={d.grupo.data} compacto semDado={d.perfilSemDado} /></div>
           <TabelaLeads d={d} linhas={tabela.linhas} />
         </Modal>
@@ -421,6 +431,76 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
 
 function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
   return <div className="flex items-baseline justify-between gap-3 py-1 text-sm"><span className="text-[var(--fg-3)]">{rotulo}</span><span className="text-right text-[var(--fg)]">{children}</span></div>;
+}
+
+const ROTULOS_C1: readonly TipoConteudoC1[] = ['Teaser', 'Manifesto', 'Reels', 'Sem tipo no nome'];
+const ROTULOS_ISCA = ['Checkup', 'Fluxograma', 'Futurômetro'] as const;
+
+function ColunaC1Segmentada({ d, dias, selecionado, onSelecionar }: {
+  d: DadosTela; dias: DesempenhoDia[]; selecionado: 'todos' | TipoConteudoC1; onSelecionar: (x: 'todos' | TipoConteudoC1) => void;
+}) {
+  const ads = d.trafego.anuncios.filter((a) => d.idx.campanhaDoAnuncio(a.id)?.funil === 'c1');
+  const idsComDado = new Set(dias.map((x) => x.anuncioId));
+  const categoria = new Map(ads.map((a) => [a.id, tipoConteudoC1(a.nome)]));
+  const contagens = new Map<TipoConteudoC1, number>(ROTULOS_C1.map((x) => [x, new Set(ads.filter((a) => idsComDado.has(a.id) && categoria.get(a.id) === x).map((a) => a.nome)).size]));
+  const categorias = selecionado === 'todos' ? null : new Set(ads.filter((a) => idsComDado.has(a.id) && categoria.get(a.id) === selecionado).map((a) => a.id));
+  const recorte = categorias ? dias.filter((x) => categorias.has(x.anuncioId)) : dias;
+  const a = agregar(recorte);
+  return <div className="space-y-3">
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar C1 pelo tipo do anúncio">
+      <Chip ativo={selecionado === 'todos'} onClick={() => onSelecionar('todos')}>Todos</Chip>
+      {ROTULOS_C1.map((nome) => <Chip key={nome} ativo={selecionado === nome} onClick={() => onSelecionar(selecionado === nome ? 'todos' : nome)}>{nome} ({contagens.get(nome) ?? 0})</Chip>)}
+    </div>
+    <p className="text-[10px] text-[var(--fg-3)]">Tipo identificado pelo nome do anúncio. “Sem tipo no nome” mantém os anúncios sem TEASER, MANIFESTO ou REELS.</p>
+    {recorte.length === 0 ? <p className="py-2 text-xs text-[var(--fg-3)]">Sem dado para este tipo no recorte.</p> : <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
+      <Par rotulo="Anúncios"><Numero valor={new Set(recorte.map((x) => d.idx.anuncio.get(x.anuncioId)?.nome).filter(Boolean)).size} formato="int" animado={false} /></Par>
+      <Par rotulo="Investimento"><Numero valor={gastoDe(recorte)} formato="brl" animado={false} /></Par>
+      <Par rotulo="Impressões"><Numero valor={a.impressoes} formato="int" animado={false} /></Par>
+      <Par rotulo="ThruPlay"><Numero valor={a.thruplay.valor} formato="int" animado={false} /></Par>
+      <Par rotulo="Vídeo 75%"><Taxa taxa={taxaVideo75(a)} /></Par>
+      <Par rotulo="CPM"><Numero valor={cpm(a)} formato="brl" animado={false} /></Par>
+    </div>}
+  </div>;
+}
+
+function ColunaIscasSegmentada({ d, dias, linhas, selecionado, onSelecionar }: {
+  d: DadosTela; dias: DesempenhoDia[]; linhas: LinhaPerfil[]; selecionado: string | null; onSelecionar: (x: string | null) => void;
+}) {
+  const campanhasIsca = new Set(d.trafegoPeriodo.campanhas.filter((c) => c.funil === 'iscas' && !ehEntresafraCampanha(c)).map((c) => c.id));
+  const conjuntos = d.trafegoPeriodo.conjuntos.filter((cj) => campanhasIsca.has(cj.campanhaId));
+  const iscaConjunto = new Map(conjuntos.map((cj) => [cj.id, iscaDoNomeConjunto(cj.nome)]));
+  const iscaDoAnuncio = new Map(d.trafegoPeriodo.anuncios.map((a) => [a.id, iscaConjunto.get(a.conjuntoId) ?? null]));
+  const categoria = (x: DesempenhoDia) => iscaDoAnuncio.get(x.anuncioId) ?? null;
+  const escolhida = selecionado ? dias.filter((x) => categoria(x) === selecionado) : dias;
+  const linhasIsla = selecionado ? linhas.filter((x) => x.isca === selecionado) : linhas;
+  const investimento = escolhida.length ? gastoDe(escolhida) : null;
+  const pagos = leadsDoTrafego(linhasIsla, d.idx);
+  const cpl = cplCaptacao(investimento, pagos);
+  const conjuntoIds = new Set(conjuntos.filter((cj) => !selecionado || iscaConjunto.get(cj.id) === selecionado).map((cj) => cj.id));
+  const anunciosNomes = new Set(d.trafegoPeriodo.anuncios.filter((a) => conjuntoIds.has(a.conjuntoId) && escolhida.some((x) => x.anuncioId === a.id)).map((a) => a.nome));
+  const anunciosConflitantes = new Set(d.trafegoPeriodo.anuncios.filter((a) => {
+    const isca = iscaConjunto.get(a.conjuntoId);
+    const nomeNormalizado = a.nome.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleUpperCase('pt-BR');
+    const iscaNormalizada = isca?.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleUpperCase('pt-BR');
+    return isca !== null && isca !== undefined && isca === selecionado && !nomeNormalizado.includes(iscaNormalizada ?? '');
+  }).map((a) => a.nome));
+  return <div className="space-y-3">
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar Iscas por isca">
+      <Chip ativo={selecionado === null} onClick={() => onSelecionar(null)}>Todas</Chip>
+      {ROTULOS_ISCA.map((nome) => <Chip key={nome} ativo={selecionado === nome} onClick={() => onSelecionar(selecionado === nome ? null : nome)}>{nome}</Chip>)}
+    </div>
+    <p className="text-[10px] text-[var(--fg-3)]">Tráfego agrupado pelo último bloco do nome do conjunto; leads pelo campo isca de dados_black_perfil.</p>
+    {escolhida.length === 0 && linhasIsla.length === 0 ? <p className="py-2 text-xs text-[var(--fg-3)]">Sem dado para esta isca no recorte.</p> : <>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
+        <Par rotulo="Anúncios"><Numero valor={anunciosNomes.size} formato="int" animado={false} /></Par>
+        <Par rotulo="Investimento"><Numero valor={investimento} formato="brl" animado={false} /></Par>
+        <Par rotulo="Leads pagos"><Numero valor={pagos.valor} formato="int" animado={false} /></Par>
+        <Par rotulo="CPL"><Numero valor={cpl.valor} formato="brl" animado={false} /></Par>
+        <Par rotulo="Conversão da página"><Taxa taxa={conversaoPaginaNumero(escolhida, linhasIsla, d.idx)} /></Par>
+      </div>
+      {anunciosConflitantes.size > 0 && <p className="rounded-[var(--r-sm)] bg-[var(--surface-3)] p-2 text-[10px] text-[var(--fg-2)]">Anúncio com outra isca no nome: {anunciosConflitantes.size}. O gasto segue a isca do conjunto.</p>}
+    </>}
+  </div>;
 }
 
 function CampanhasEtapa({ d, funil }: { d: DadosTela; funil: Funil }) {
@@ -547,27 +627,6 @@ function AlcanceFrequenciaCampanhas({ d, funil }: { d: DadosTela; funil: Funil }
   );
 }
 
-function ColunaC1({ d, dias }: { d: DadosTela; dias: DesempenhoDia[] }) {
-  const a = agregar(dias);
-  // Alcance e frequência não somam entre campanhas: só com uma campanha C1 no recorte.
-  const campanhas = [...new Set(dias.map((x) => d.idx.campanhaDoAnuncio(x.anuncioId)?.id).filter((x): x is string => Boolean(x)))];
-  const total = campanhas.length === 1 ? d.totaisPeriodo.find((t) => t.nivel === 'campanha' && t.id === campanhas[0]) : undefined;
-  const falta = campanhas.length > 1 ? 'alcance não soma entre campanhas' : 'alcance do período';
-  return (
-    <div className="divide-y divide-[var(--border-faint)]">
-      <Linha rotulo="Gasto"><Numero valor={dias.length ? a.gasto : null} formato="brl" animado={false} /></Linha>
-      <Linha rotulo="Impressões"><Numero valor={dias.length ? a.impressoes : null} formato="int" animado={false} /></Linha>
-      <Linha rotulo="Alcance"><Numero valor={total?.alcance ?? null} formato="int" falta={falta} animado={false} /></Linha>
-      <Linha rotulo="Frequência"><Numero valor={total?.frequencia ?? null} formato="dec" falta={falta} animado={false} /></Linha>
-      {total?.de && total.ate && <Linha rotulo="Período da campanha">de {dataBr(total.de)} a {dataBr(total.ate)}</Linha>}
-      <Linha rotulo="CPM"><Numero valor={dias.length ? cpm(a) : null} formato="brl" animado={false} /></Linha>
-      <Linha rotulo="Vídeo 75%"><Taxa taxa={taxaVideo75(a)} /></Linha>
-      <Linha rotulo="Custo por visualização"><Numero valor={custoPorVisualizacao(a)} formato="brl" falta="ThruPlay" animado={false} /></Linha>
-      <p className="pt-1 text-[11px] text-[var(--fg-3)]">Distribuição: sem leads nem página.</p>
-    </div>
-  );
-}
-
 function ColunaCaptacao({ d, dias, linhas, funil }: { d: DadosTela; dias: DesempenhoDia[]; linhas: LinhaPerfil[]; funil: Funil }) {
   const leads = leadsDoTrafego(linhas, d.idx);
   const investimento = investimentoDeCaptacao(d.trafegoPeriodo, d.periodo, { funil, canal: 'todos' });
@@ -632,7 +691,7 @@ function PainelAlertas({ d }: { d: DadosTela }) {
 }
 
 type AbaIngresso = 'pessoas' | 'leads' | 'evolucao';
-interface PontoIngresso { dia: string; pct: Valor; membros: Valor; leads: Valor }
+interface PontoIngresso { dia: string; pct: Valor; pctDia: Valor; membros: Valor; leads: Valor }
 function listaDias(de: string, ate: string): string[] {
   if (!de || !ate || de > ate) return [];
   const dias: string[] = [];
@@ -668,7 +727,7 @@ function ModalIngresso({ d, onClose, linhas }: { d: DadosTela; onClose: () => vo
         const diaMembros = membros === null || membrosAntes === null ? null : Math.max(0, membros - membrosAntes);
         const diaLeads = leads === null || leadsAntes === null ? null : Math.max(0, leads - leadsAntes);
         membrosAntes = membros; leadsAntes = leads;
-        return { dia, pct, membros: diaMembros, leads: diaLeads };
+        return { dia, pct, pctDia: construirTaxa(diaMembros, diaLeads).valor, membros: diaMembros, leads: diaLeads };
       });
     };
     void consultar().then((pontos) => { if (vivo) setSerie(pontos); }, (e: unknown) => { if (vivo) setErro(e instanceof Error ? e.message : 'Falha na leitura da série.'); });
@@ -695,13 +754,13 @@ function ModalIngresso({ d, onClose, linhas }: { d: DadosTela; onClose: () => vo
         {carregando && <p role="status" className="text-sm text-[var(--fg-3)]">Carregando a evolução, com até quatro leituras em paralelo…</p>}
         {erro && <p role="alert" className="text-sm text-[var(--yellow)]">{erro}</p>}
         {serie && <>
-          <GraficoLinha rotuloSerie="Ingresso geral acumulado" formato="pct" pontos={serie.map((x) => ({ chave: x.dia, rotulo: `${x.dia.slice(8, 10)}/${x.dia.slice(5, 7)}`, valor: x.pct }))} />
+          <GraficoLinha rotuloSerie="Ingresso diário" formato="pct" meta={d.config.metas.ingressoGrupo} pontos={serie.map((x) => ({ chave: x.dia, rotulo: `${x.dia.slice(8, 10)}/${x.dia.slice(5, 7)}`, valor: x.pctDia }))} />
           <DataTable minWidth={560}>
-            <Thead><Th>Dia</Th><Th>Entradas únicas no dia</Th><Th>Novos leads</Th><Th>Ingresso acumulado</Th></Thead>
-            <tbody>{serie.map((x) => <Tr key={x.dia}><Td>{x.dia.slice(8, 10)}/{x.dia.slice(5, 7)}</Td><Td>{inteiroOuNulo(x.membros)}</Td><Td>{inteiroOuNulo(x.leads)}</Td><Td>{formatar(x.pct, 'pct')}</Td></Tr>)}</tbody>
+            <Thead><Th>Dia</Th><Th>Ingresso no dia</Th><Th>Meta do dia</Th><Th>Acumulado real</Th><Th>Entradas únicas</Th><Th>Novos leads</Th></Thead>
+            <tbody>{serie.map((x) => <Tr key={x.dia}><Td>{x.dia.slice(8, 10)}/{x.dia.slice(5, 7)}</Td><Td>{formatar(x.pctDia, 'pct')}</Td><Td>{formatar(d.config.metas.ingressoGrupo, 'pct')}</Td><Td>{formatar(x.pct, 'pct')}</Td><Td>{inteiroOuNulo(x.membros)}</Td><Td>{inteiroOuNulo(x.leads)}</Td></Tr>)}</tbody>
           </DataTable>
         </>}
-        <p className="text-[11px] text-[var(--fg-3)]">Fonte: dados_black_grupo com p_ate em cada dia; a taxa é acumulada (membros únicos ÷ leads únicos).</p>
+        <p className="text-[11px] text-[var(--fg-3)]">Fonte: dados_black_grupo com p_ate em cada dia. Ingresso diário = novas entradas únicas ÷ novos leads; acumulado = membros únicos ÷ leads únicos.</p>
       </div>}
     </div>
   </Modal>;

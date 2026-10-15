@@ -227,9 +227,13 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
     }];
   });
   const porCampanha = new Map<string, number>();
+  const gastoCampanhasDiario: NonNullable<TrafegoBlack['gastoCampanhasDiario']> = [];
   for (const d of linhas(r.dias_campanha)) {
-    const id = texto(d.campanha_id); const g = reais(d.gasto_centavos);
-    if (id && g !== null) porCampanha.set(id, (porCampanha.get(id) ?? 0) + g);
+    const id = texto(d.campanha_id); const g = reais(d.gasto_centavos); const dia = texto(d.dia);
+    if (id && g !== null) {
+      porCampanha.set(id, (porCampanha.get(id) ?? 0) + g);
+      if (dia) gastoCampanhasDiario.push({ campanhaId: id, dia: dia.slice(0, 10), gasto: g });
+    }
   }
   const totais = linhas(r.totais).flatMap((t) => {
     const id = texto(t.campanha_id); const alcance = num(t.alcance); const frequencia = num(t.frequencia);
@@ -241,6 +245,7 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
     data: {
       campanhas, conjuntos, anuncios, paginas: [], dias, totais, coletadoEm: texto(r.coletado_em),
       anuncioDesde: texto(r.anuncio_desde), gastoCampanhas: [...porCampanha].map(([campanhaId, gasto]) => ({ campanhaId, gasto })),
+      gastoCampanhasDiario,
     },
     semDado: campanhas.length === 0,
   };
