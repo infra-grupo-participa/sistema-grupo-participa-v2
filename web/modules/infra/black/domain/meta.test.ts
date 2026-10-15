@@ -1,85 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import { avaliarFaixa, avaliarMeta, distanciaDaMeta } from './meta';
+import { compararMeta } from './meta';
 
-describe('distanciaDaMeta', () => {
-  it('acima da meta', () => {
-    expect(distanciaDaMeta(1.42)).toBe('42% acima da meta');
-    expect(distanciaDaMeta(1.0776)).toBe('8% acima da meta');
+describe('compararMeta · direção do indicador', () => {
+  it('maior é melhor: acima é verde e abaixo é amarelo ou vermelho conforme a distância', () => {
+    expect(compararMeta(0.9, 0.8).estado).toBe('bom');
+    expect(compararMeta(0.9, 0.8).distancia).toBe('13% acima da meta');
+    expect(compararMeta(0.76, 0.8).estado).toBe('atencao');
+    expect(compararMeta(0.76, 0.8).distancia).toBe('5% abaixo da meta');
+    expect(compararMeta(0.7, 0.8).estado).toBe('ruim');
+    expect(compararMeta(0.7, 0.8).distancia).toBe('13% abaixo da meta');
   });
-  it('abaixo da meta', () => {
-    expect(distanciaDaMeta(0.8)).toBe('20% abaixo da meta');
-    expect(distanciaDaMeta(0)).toBe('100% abaixo da meta');
-  });
-  it('exatamente na meta', () => {
-    expect(distanciaDaMeta(1)).toBe('na meta');
-  });
-  it('menos de 1% usa uma casa decimal, para não dizer "0%" sem ter batido a meta', () => {
-    expect(distanciaDaMeta(0.992)).toBe('0,8% abaixo da meta');
-    expect(distanciaDaMeta(1.004)).toBe('0,4% acima da meta');
-  });
-  it('sem dado: null', () => {
-    expect(distanciaDaMeta(null)).toBeNull();
-    expect(distanciaDaMeta(Number.NaN)).toBeNull();
-  });
-});
 
-describe('avaliarFaixa (CPL: ideal R$ 15, limite R$ 16,70)', () => {
-  it('até o ideal é bom', () => {
-    expect(avaliarFaixa(12, 15, 16.7).estado).toBe('bom');
-    expect(avaliarFaixa(15, 15, 16.7).estado).toBe('bom');
+  it('menor é melhor: abaixo é verde e acima é amarelo ou vermelho conforme a distância', () => {
+    expect(compararMeta(90, 100, true).estado).toBe('bom');
+    expect(compararMeta(90, 100, true).distancia).toBe('10% abaixo da meta');
+    expect(compararMeta(105, 100, true).estado).toBe('atencao');
+    expect(compararMeta(105, 100, true).distancia).toBe('5% acima da meta');
+    expect(compararMeta(120, 100, true).estado).toBe('ruim');
+    expect(compararMeta(120, 100, true).distancia).toBe('20% acima da meta');
   });
-  it('entre o ideal e o limite é atenção, inclusive no limite', () => {
-    expect(avaliarFaixa(15.01, 15, 16.7).estado).toBe('atencao');
-    expect(avaliarFaixa(16.7, 15, 16.7).estado).toBe('atencao');
-  });
-  it('acima do limite é ruim; a porcentagem é sobre o limite', () => {
-    const r = avaliarFaixa(20, 15, 16.7);
-    expect(r.estado).toBe('ruim');
-    expect(r.pctDaMeta).toBeCloseTo(1.1976, 3);
-    expect(avaliarFaixa(16.71, 15, 16.7).estado).toBe('ruim');
-  });
-  it('sem valor, sem faixa ou limite abaixo do ideal: sem avaliação', () => {
-    expect(avaliarFaixa(null, 15, 16.7).estado).toBe('sem');
-    expect(avaliarFaixa(15, null, 16.7).estado).toBe('sem');
-    expect(avaliarFaixa(15, 15, null).estado).toBe('sem');
-    expect(avaliarFaixa(15, 15, 10).estado).toBe('sem');
-  });
-});
 
-describe('avaliarMeta', () => {
-  it('maior melhor: na meta ou acima é bom', () => {
-    expect(avaliarMeta(0.85, 0.85, false)).toEqual({ estado: 'bom', pctDaMeta: 1 });
-    const r = avaliarMeta(0.3, 0.2, false);
-    expect(r.estado).toBe('bom');
-    expect(r.pctDaMeta).toBeCloseTo(1.5, 9);
+  it('usa uma casa decimal abaixo de 1% e rotula igualdade como na meta', () => {
+    expect(compararMeta(99.2, 100).distancia).toBe('0,8% abaixo da meta');
+    expect(compararMeta(100.4, 100).distancia).toBe('0,4% acima da meta');
+    expect(compararMeta(100, 100).distancia).toBe('na meta');
   });
-  it('maior melhor: até 10% abaixo da meta é atenção; além disso é ruim', () => {
-    expect(avaliarMeta(0.55, 0.6, false).estado).toBe('atencao'); // 91,7% da meta
-    expect(avaliarMeta(0.54, 0.6, false).estado).toBe('atencao'); // 90% exato
-    const r = avaliarMeta(0.5, 0.6, false); // 83,3%
-    expect(r.estado).toBe('ruim');
-    expect(r.pctDaMeta).toBeCloseTo(0.8333, 3);
+
+  it('mantém a régua especial do CPL: ideal verde, faixa até o limite amarela', () => {
+    expect(compararMeta(14, 16.7, true, 15).estado).toBe('bom');
+    expect(compararMeta(15.5, 16.7, true, 15).estado).toBe('atencao');
+    expect(compararMeta(18, 16.7, true, 15).estado).toBe('ruim');
+    expect(compararMeta(18, 16.7, true, 15).distancia).toBe('8% acima da meta');
+    expect(compararMeta(16.7, 15, true, 16).estado).toBe('sem');
   });
-  it('compara MQL geral e tráfego com a meta comum de 60%', () => {
-    expect(avaliarMeta(0.673, 0.6, false).estado).toBe('bom');
-    expect(avaliarMeta(0.629, 0.6, false).estado).toBe('bom');
-    expect(avaliarMeta(0.55, 0.6, false).estado).toBe('atencao');
-  });
-  it('menor melhor: no teto ou abaixo é bom; até 10% acima é atenção; além é ruim', () => {
-    expect(avaliarMeta(16.7, 16.7, true).estado).toBe('bom');
-    expect(avaliarMeta(12, 16.7, true).estado).toBe('bom');
-    expect(avaliarMeta(18, 16.7, true).estado).toBe('atencao'); // 107,8%
-    expect(avaliarMeta(55, 50, true).estado).toBe('atencao'); // 110% exato
-    expect(avaliarMeta(60, 50, true).estado).toBe('ruim');
-    expect(avaliarMeta(60, 50, true).pctDaMeta).toBeCloseTo(1.2, 5);
-  });
-  it('zero também é um valor (taxa zerada fica ruim, não some)', () => {
-    expect(avaliarMeta(0, 0.2, false)).toEqual({ estado: 'ruim', pctDaMeta: 0 });
-  });
-  it('sem valor, sem meta ou meta zero: sem avaliação', () => {
-    expect(avaliarMeta(null, 0.2, false)).toEqual({ estado: 'sem', pctDaMeta: null });
-    expect(avaliarMeta(0.2, null, false)).toEqual({ estado: 'sem', pctDaMeta: null });
-    expect(avaliarMeta(0.2, 0, false)).toEqual({ estado: 'sem', pctDaMeta: null });
-    expect(avaliarMeta(Number.NaN, 1, true)).toEqual({ estado: 'sem', pctDaMeta: null });
+
+  it('zero também é valor mensurável; sem valor ou meta não inventa comparação', () => {
+    expect(compararMeta(0, 0.2).estado).toBe('ruim');
+    expect(compararMeta(0, 0.2).distancia).toBe('100% abaixo da meta');
+    expect(compararMeta(null, 0.2)).toEqual({ estado: 'sem', pctDaMeta: null, distancia: null });
+    expect(compararMeta(0.2, null)).toEqual({ estado: 'sem', pctDaMeta: null, distancia: null });
+    expect(compararMeta(0.2, 0)).toEqual({ estado: 'sem', pctDaMeta: null, distancia: null });
+    expect(compararMeta(Number.NaN, 1)).toEqual({ estado: 'sem', pctDaMeta: null, distancia: null });
   });
 });

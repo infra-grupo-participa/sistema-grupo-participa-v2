@@ -50,15 +50,21 @@ export function projetarRitmo({
   const diasRestantes = Math.max(1, diasTotais - diasPassados - 1);
   const datas = Array.from({ length: diasTotais }, (_, i) => deslocar(inicio, i));
   let acumuladoReal: Valor = semente;
-  let acumuladoMeta: Valor = semente;
+  let acumuladoReferencia: Valor = semente;
   const pontos: PontoRitmo[] = [];
   for (let i = 0; i < datas.length; i += 1) {
     const dia = datas[i];
     const restante = Math.max(1, diasTotais - i);
-    const metaDia = meta === null || acumuladoReal === null ? null : Math.max(0, (meta - acumuladoReal) / restante);
+    const metaDia = meta === null || acumuladoReferencia === null ? null : Math.max(0, (meta - acumuladoReferencia) / restante);
     const realizado = dia > ultimoDia ? null : realizados.has(dia) ? realizados.get(dia) ?? null : 0;
     acumuladoReal = realizado === null || acumuladoReal === null ? null : acumuladoReal + realizado;
-    acumuladoMeta = metaDia === null || acumuladoMeta === null ? null : acumuladoMeta + metaDia;
+    if (realizado !== null && acumuladoReferencia !== null) acumuladoReferencia += realizado;
+    // O ritmo diário é recalculado sobre o saldo real. Não some esses alvos
+    // diários: isso faz a meta acumulada ultrapassar a meta final. Converta o
+    // alvo diário em acumulado pela distância que falta até o fim.
+    const acumuladoMeta = meta === null || metaDia === null
+      ? null
+      : Math.min(meta, Math.max(semente, meta - metaDia * (diasTotais - i - 1)));
     pontos.push({ dia, realizado, metaDia, acumulado: acumuladoReal, metaAcumulada: acumuladoMeta });
   }
   const doDia = (dia: string): Valor => realizados.has(dia) ? realizados.get(dia) ?? null : 0;

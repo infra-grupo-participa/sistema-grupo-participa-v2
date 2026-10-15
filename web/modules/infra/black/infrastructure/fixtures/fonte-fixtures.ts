@@ -155,9 +155,24 @@ export function criarFonteFixtures(relogio?: string | null): FonteDadosBlack {
         somar('campanha', campanhaDoConjunto.get(cj)!, d.impressoes, d.dia);
       }
       const totais = [...acc.entries()].map(([k, a]) => totalDoPeriodo(a.nivel, k.slice(k.indexOf(':') + 1), a.imp, a.dias.size));
+      const campanhaPorAnuncio = new Map(b.anuncios.map((a) => [a.id, campanhaDoConjunto.get(conjuntoDoAnuncio.get(a.id) ?? '') ?? '']));
+      const gastoDiaPorCampanha = new Map<string, number>();
+      const gastoDiaPorCampanhaData = new Map<string, number>();
+      for (const dia of dias) {
+        const campanhaId = campanhaPorAnuncio.get(dia.anuncioId);
+        if (!campanhaId) continue;
+        gastoDiaPorCampanha.set(campanhaId, (gastoDiaPorCampanha.get(campanhaId) ?? 0) + dia.gasto);
+        const chaveDia = `${campanhaId}:${dia.dia}`;
+        gastoDiaPorCampanhaData.set(chaveDia, (gastoDiaPorCampanhaData.get(chaveDia) ?? 0) + dia.gasto);
+      }
       return ok({
         campanhas: b.campanhas, conjuntos: b.conjuntos, anuncios: b.anuncios, paginas: [...PAGINAS],
         dias, totais, coletadoEm: agora.toISOString(),
+        gastoCampanhas: [...gastoDiaPorCampanha].map(([campanhaId, gasto]) => ({ campanhaId, gasto })),
+        gastoCampanhasDiario: [...gastoDiaPorCampanhaData].map(([chaveDia, gasto]) => {
+          const separador = chaveDia.lastIndexOf(':');
+          return { campanhaId: chaveDia.slice(0, separador), dia: chaveDia.slice(separador + 1), gasto };
+        }),
       });
     },
     async perfil(chave, p, opcoes) {

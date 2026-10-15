@@ -20,6 +20,10 @@ describe('régua da captação Black', () => {
     expect(arredondarInteiroRitmo(r.projecao)).toBe(1007);
     expect(r.pontos.slice(0, 4).map((p) => p.metaDia)).toEqual([expect.closeTo(645.478, 2), expect.closeTo(674, 2), expect.closeTo(703.238, 2), expect.closeTo(736.595, 2)]);
     expect(r.pontos[0].metaAcumulada).toBeCloseTo(799.478, 2);
+    expect(r.pontos.at(-1)?.metaAcumulada).toBe(15_000);
+    expect(r.pontos.every((p, i, pontos) => p.metaAcumulada !== null
+      && p.metaAcumulada <= 15_000
+      && (i === 0 || p.metaAcumulada >= (pontos[i - 1].metaAcumulada ?? 0)))).toBe(true);
   });
 
   it('ignora dia sem gasto na média e calcula investimento contra o orçamento de captação', () => {

@@ -7,7 +7,7 @@ import { ehCaptacao } from '../domain/metricas';
 import { diaDe } from '../domain/recorte';
 import type { Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
-import { formatar, moeda } from './pecas';
+import { formatar, IndicadorMeta, moeda } from './pecas';
 
 function diaEmSaoPaulo(data: Date): string {
   const partes = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(data);
@@ -71,7 +71,7 @@ function ResumoRitmo({ titulo, ritmo, meta, disponivel, brl = false }: {
       <div><dt className="text-[var(--fg-3)]">Necessário por dia</dt><dd className="mt-0.5 font-semibold tabular text-[var(--fg)]">{fmt(ritmo.necessarioPorDia, 'cima')}</dd></div>
       <div><dt className="text-[var(--fg-3)]">Faltam hoje para bater a meta diária</dt><dd className="mt-0.5 font-semibold tabular text-[var(--fg)]">{fmt(ritmo.faltaHoje, 'cima')}</dd></div>
       <div><dt className="text-[var(--fg-3)]">Média dos dias fechados</dt><dd className="mt-0.5 font-semibold tabular text-[var(--fg)]">{fmt(ritmo.media)}</dd><dd className="mt-0.5 text-[10px] text-[var(--fg-3)]">{ritmo.mediaDias.length ? ritmo.mediaDias.map((d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`).join(', ') : 'sem dias com valor > 0'}</dd></div>
-      <div><dt className="text-[var(--fg-3)]">No ritmo de hoje fecha em</dt><dd className="mt-0.5 font-semibold tabular text-[var(--fg)]">{fmt(ritmo.projecao)}</dd>{meta !== null && ritmo.percentualMeta !== null && <dd className="mt-0.5 text-[10px] text-[var(--fg-3)]">{formatar(ritmo.percentualMeta, 'pct')} da meta</dd>}</div>
+      <div><dt className="text-[var(--fg-3)]">No ritmo de hoje fecha em</dt><dd className="mt-0.5 font-semibold tabular text-[var(--fg)]">{fmt(ritmo.projecao)}</dd>{meta !== null && ritmo.projecao !== null && <dd className="mt-0.5"><IndicadorMeta valor={ritmo.projecao} meta={meta} menorMelhor={brl} formato={brl ? 'brl' : 'int'} compacto /></dd>}</div>
       <div><dt className="text-[var(--fg-3)]">Realizado hoje</dt><dd className="mt-0.5 font-semibold tabular text-[var(--fg)]">{fmt(ritmo.realizadoHoje)}</dd></div>
     </dl>}
   </article>;
