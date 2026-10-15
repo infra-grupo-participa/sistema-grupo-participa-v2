@@ -1134,3 +1134,14 @@ p_tipo, p_data_prevista)` e `dados_black_live_remover(p_chave, p_video_id)`. Os 
 reais, não no navegador), exercitar `importar`, `cadastrar` e `remover` em produção, e ver a coleta ao vivo (bloco B) numa
 live real até 29/10; o bloco B só foi visto no demo. Fora do módulo, só o `web/` desta aba foi tocado.
 Decisão do Victor (15/10): chat e comentários de todas as lives visíveis; live de 03/11 em destaque.
+
+### Captação vazia desde 14/10: etapa inferida sem o código C1/C2/C3 (15/10/2026, PROVISÓRIO)
+
+- **Causa:** as campanhas novas da Black saíram sem o termo `C1`, `C2` ou `C3` no nome (`CF | BF26 | CAPTAÇÃO | BASE | ...`,
+  `CF | BF26 | CAPTAÇÃO | ISCAS | ...`). `etapa_black` só achava a etapa por esse termo, então tudo virou "sem etapa" e a
+  captação (C2/C3) sumiu da Visão Geral e do Histórico a partir de 14/10.
+- **Correção:** migration `20261015235000` (aplicada em 15/10 22:55 UTC). Sem código no nome, palavra de C2 (CONSULTORIA,
+  ISCA, ISCAS) dá C2 e, senão, CAPTAÇÃO ou LEADS dá C3. Com código no nome, nada muda. Detalhe, ensaio e reversão em
+  `infra/supabase/migrations/20261015235000.explain.md`. Front não mudou.
+- **A confirmar pelo Victor:** `CAPTAÇÃO | BASE` = C3 é derivado da C3 de 13/10. Vale até o padrão de nomenclatura do Caio.
+- **Como testar:** Visão Geral e Histórico com `funil=todos`, período desde o início: 14 e 15/10 com investimento de captação.
