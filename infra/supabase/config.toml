@@ -90,3 +90,8 @@ verify_jwt = false
 # ver infra/supabase/functions/metodo-perfeito/README.md.
 [functions.metodo-perfeito]
 verify_jwt = true
+
+# black-youtube (20261015220000/20261015220100): coleta da aba Lives do Dashboard da Black. O cron chama via ops.cron_post sem JWT;
+# autentica pelo header x-sync-chave (Vault dados_black_youtube_chave), conferido na própria Edge, fail-closed.
+[functions.black-youtube]
+verify_jwt = false

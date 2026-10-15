@@ -1,3 +1,5 @@
+import type { DetalheLive, Live, PreviaImportacao, ResultadoLiveAcao, TipoLive } from '../domain/lives';
+import type { LinhaStudio } from '../domain/lives-studio';
 import type {
   ConfigBlack, GrupoResumoBlack, LeadDetalhe, LinhaPerfil, Marcos, MensageriaBlack, Periodo, RecorteGrupo, Resultado, ResultadoAcao,
   TrafegoBlack,
@@ -26,6 +28,18 @@ export interface FonteDadosBlack {
   desmarcarTeste(chave: string, lead: LeadDetalhe): Promise<ResultadoAcao>;
   mensageria(chave: string, p: Periodo): Promise<Resultado<MensageriaBlack>>;
   marcos(chave: string): Promise<Resultado<Marcos>>;
+
+  // ── Aba Lives (independente do recorte global: funil, período e canal não se aplicam às lives) ──
+  /** Cadastro das lives com a última leitura da API e o resumo da curva (dados_black_lives). */
+  lives(chave: string): Promise<Resultado<Live[]>>;
+  /** Curva minuto a minuto, chat, comentários e fotos de uma live (dados_black_live_detalhe). */
+  liveDetalhe(chave: string, videoId: string): Promise<Resultado<DetalheLive>>;
+  /** Master. `confirmar` false = só a prévia; true grava (tudo ou nada). Idempotente. */
+  importarLive(chave: string, videoId: string, linhas: readonly LinhaStudio[], confirmar: boolean): Promise<ResultadoLiveAcao<PreviaImportacao>>;
+  /** Master. `dataPrevista` = ISO com fuso (-03:00). */
+  cadastrarLive(chave: string, videoId: string, tipo: TipoLive, dataPrevista: string): Promise<ResultadoLiveAcao<{ videoId: string }>>;
+  /** Master. Tira a live da aba (não apaga o histórico). */
+  removerLive(chave: string, videoId: string): Promise<ResultadoLiveAcao<{ videoId: string }>>;
 }
 
 export const LEADS_POR_PAGINA = 50;

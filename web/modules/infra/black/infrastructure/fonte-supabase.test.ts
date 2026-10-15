@@ -13,7 +13,7 @@ import { CHAVE_BLACK } from './fixtures/catalogo';
 import { criarFonteFixtures } from './fixtures/fonte-fixtures';
 import {
   AVISO_NAO_LIGADA, assinarMiniaturas, caminhosMiniatura, configReal, fonteSupabaseBlack, limparCacheMiniaturas, linkGerenciadorMeta,
-  mapearGrupo, mapearLeads, mapearPerfil, mapearTrafego, MINIATURA_TTL_S,
+  mapearDetalheLive, mapearGrupo, mapearLeads, mapearLives, mapearPerfil, mapearPreviaImportacao, mapearTrafego, MINIATURA_TTL_S,
 } from './fonte-supabase';
 import { RESPOSTA_GRUPO, RESPOSTA_LEADS, RESPOSTA_PERFIL, RESPOSTA_TRAFEGO } from './respostas-rpc-black';
 
@@ -404,5 +404,97 @@ describe('marcar teste no demo', () => {
     expect((await f.grupo(CHAVE_BLACK, p, null)).data.leads.unicos).toBe((unicosAntes ?? 0) - 1);
     expect((await f.desmarcarTeste(CHAVE_BLACK, lead)).data).toBe(1);
     expect((await f.perfil(CHAVE_BLACK, p)).data).toHaveLength(antes.length);
+  });
+});
+
+describe('aba Lives: mapeadores das RPCs', () => {
+  const live = {
+    video_id: 'ZZdemo00001', tipo: 'consultoria', data_prevista: '2026-10-06T22:30:00+00:00', titulo: 'ZZ Live FICTÍCIA 1', miniatura: 'https://i.ytimg.com/vi/ZZdemo00001/mqdefault.jpg',
+    situacao: 'realizada', agendada_em: null, inicio: '2026-10-06T22:30:00+00:00', fim: null, duracao_seg: 5687, views: 1200, likes: null, comentarios: 14,
+    coletado_em: '2026-10-07T01:00:00+00:00', espectadores_agora: null, tem_studio: true, pico: 363, pico_seg: 4080, sala_cheia_seg: 1500, ultimo_espectadores: 302,
+    chat_total: 0, reacoes_total: null, chat_guardado: 25,
+  };
+
+  it('lives: mapeia os campos, nulo continua nulo (nunca zero) e zero medido continua zero', () => {
+    const { data, semDado } = mapearLives({ lives: [live] });
+    expect(semDado).toBe(false);
+    expect(data[0]).toMatchObject({ videoId: 'ZZdemo00001', tipo: 'consultoria', situacao: 'realizada', pico: 363, picoSeg: 4080, likes: null, reacoesTotal: null, chatTotal: 0, temStudio: true, chatGuardado: 25 });
+    expect(data[0].espectadoresAgora).toBeNull();
+  });
+
+  it('lives: miniatura fora do YouTube é descartada; tipo, situação e id inválidos tiram a linha; lista vazia ou resposta inválida = semDado', () => {
+    const { data } = mapearLives({ lives: [{ ...live, miniatura: 'https://exemplo.test/x.jpg' }, { ...live, video_id: 'curto' }, { ...live, tipo: 'outro' }, { ...live, situacao: 'quase' }, { ...live, data_prevista: null }] });
+    expect(data).toHaveLength(1);
+    expect(data[0].miniatura).toBeNull();
+    expect(mapearLives({ lives: [] })).toEqual({ data: [], semDado: true });
+    expect(mapearLives(null).semDado).toBe(true);
+    expect(mapearLives('lixo').semDado).toBe(true);
+  });
+
+  it('detalhe: minutos, chat, comentários e fotos; chat sem texto e minuto sem seg ficam fora; o nome do autor não entra na tela (nem se a RPC ainda o mandar)', () => {
+    const { data, semDado } = mapearDetalheLive({
+      minutos: [{ seg: 0, espectadores: 12, chat: 0, reacoes: null, origem: 'studio' }, { seg: null, espectadores: 1 }, { seg: 60, espectadores: null, chat: 3, reacoes: 1, origem: 'x' }],
+      chat: [{ seg: 5, publicado_em: null, autor: 'Autor Fictício', texto: 'oi' }, { seg: 6, texto: '' }],
+      comentarios: [{ publicado_em: '2026-10-07T00:00:00+00:00', autor: 'Outro Fictício', texto: 'ótima', curtidas: 2, respostas: 0 }],
+      fotos: [{ coletado_em: '2026-10-07T01:00:00+00:00', views: 10, likes: null, comentarios: 1 }, { views: 1 }],
+    });
+    expect(semDado).toBe(false);
+    expect(data.minutos).toEqual([
+      { seg: 0, espectadores: 12, chat: 0, reacoes: null, origem: 'studio' },
+      { seg: 60, espectadores: null, chat: 3, reacoes: 1, origem: null },
+    ]);
+    expect(data.chat).toEqual([{ seg: 5, publicadoEm: null, texto: 'oi' }]);
+    expect(data.comentarios[0]).toEqual({ publicadoEm: '2026-10-07T00:00:00+00:00', texto: 'ótima', curtidas: 2, respostas: 0 });
+    expect(JSON.stringify(data)).not.toContain('Fictício');
+    expect(data.fotos).toHaveLength(1);
+    expect(mapearDetalheLive({ minutos: [], chat: [], comentarios: [], fotos: [] }).semDado).toBe(true);
+    expect(mapearDetalheLive(null).semDado).toBe(true);
+  });
+
+  it('prévia da importação: números, gravado só quando vem; resposta inválida = null', () => {
+    expect(mapearPreviaImportacao({ linhas: 94, pico: 363, pico_seg: 4080, duracao_seg: 5687 })).toEqual({ linhas: 94, pico: 363, picoSeg: 4080, duracaoSeg: 5687, existentes: null, alteradas: null, gravado: null });
+    expect(mapearPreviaImportacao({ linhas: 94, pico: 363, pico_seg: 4080, duracao_seg: 5687, existentes: 94, alteradas: 0, gravado: true })).toMatchObject({ existentes: 94, alteradas: 0, gravado: true });
+    expect(mapearPreviaImportacao(null)).toBeNull();
+  });
+});
+
+describe('aba Lives: ações pela fonte do banco', () => {
+  beforeEach(() => { rpc.mockReset(); });
+
+  it('lives lê dados_black_lives com a chave e devolve a lista mapeada', async () => {
+    rpc.mockResolvedValue({ data: { lives: [{ video_id: 'ZZdemo00001', tipo: 'produto', data_prevista: '2026-10-08T22:30:00+00:00', situacao: 'em_breve' }] }, error: null });
+    const r = await fonteSupabaseBlack.lives(CHAVE_BLACK);
+    expect(rpc).toHaveBeenCalledWith('dados_black_lives', { p_chave: CHAVE_BLACK });
+    expect(r.erro).toBeNull();
+    expect(r.data).toHaveLength(1);
+    expect(r.data[0]).toMatchObject({ tipo: 'produto', situacao: 'em_breve', pico: null });
+  });
+
+  it('erro do banco vira mensagem em português, sem código técnico, e o dado fica vazio (nunca zero)', async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'permission denied' } });
+    const r = await fonteSupabaseBlack.cadastrarLive(CHAVE_BLACK, 'ZZdemo00001', 'produto', '2026-10-08T19:30:00-03:00');
+    expect(r.data).toBeNull();
+    expect(r.erro).toBe('Só quem é master neste dashboard pode fazer isso.');
+    expect(r.erro).not.toMatch(/permission|42501/);
+  });
+
+  it('cadastrar manda os 4 parâmetros do contrato; id inválido nem chama o banco', async () => {
+    rpc.mockResolvedValue({ data: { video_id: 'ZZdemo00001' }, error: null });
+    const f = fonteSupabaseBlack;
+    await f.cadastrarLive(CHAVE_BLACK, 'ZZdemo00001', 'black', '2026-11-03T20:00:00-03:00');
+    expect(rpc).toHaveBeenCalledWith('dados_black_live_cadastrar', { p_chave: CHAVE_BLACK, p_video_id: 'ZZdemo00001', p_tipo: 'black', p_data_prevista: '2026-11-03T20:00:00-03:00' });
+    rpc.mockClear();
+    const ruim = await f.removerLive(CHAVE_BLACK, 'curto');
+    expect(ruim.erro).toMatch(/inválido/);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('importar manda as linhas e p_confirmar; sem confirmar é prévia', async () => {
+    rpc.mockResolvedValue({ data: { linhas: 2, pico: 20, pico_seg: 60, duracao_seg: 120 }, error: null });
+    const r = await fonteSupabaseBlack.importarLive(CHAVE_BLACK, 'ZZdemo00001', [{ seg: 0, espectadores: 10 }, { seg: 60, espectadores: 20 }], false);
+    const args = rpc.mock.calls[0];
+    expect(args[0]).toBe('dados_black_live_importar');
+    expect(args[1]).toMatchObject({ p_chave: CHAVE_BLACK, p_video_id: 'ZZdemo00001', p_confirmar: false });
+    expect(r.data).toMatchObject({ linhas: 2, pico: 20, gravado: null });
   });
 });

@@ -1025,3 +1025,112 @@ Sem alteração de banco. A lista individual de membros do grupo permanece pende
 - **O que falta:** dado real (banco) com `etapa_black` preenchido para as campanhas "sem etapa"/CORTES; enquanto isso, elas ficam em
   "fora dos funis". Alcance e frequência do card C1 seguem "Sem dado" (comportamento do card antigo). Não testado com o banco real.
 - **Como voltar:** reverter `AbaVisaoGeral.tsx` e apagar `ModalFunisEtapa.tsx`, `funis-etapa.ts` e o teste; reverter o catálogo do demo.
+
+## Aba Lives · 15/10/2026 (na main em 15/10/2026; leitura conferida contra produção, escrita pela tela não exercitada)
+
+Pedido do Victor (15/10). Desenho no cérebro: `Projetos/dashboard-black-friday/DESENHO-ABA-LIVES.md`. Código em
+`web/modules/infra/black/` (`domain/lives*.ts`, `infrastructure/zip-studio.ts`, `ui/lives/`, `ui/graficos-lives.tsx`).
+O banco e a coleta (migrations `20261015220000` e `20261015220100`, Edge `black-youtube`) são do back-end e estão nos
+docs deles; aqui é só a tela.
+
+**O que é.** Sexta aba ("Lives") com as 9 lives do cronograma (06/10 a 03/11). Responde: qual live segurou melhor a
+sala, onde a sala caiu e o que o chat dizia naquele minuto. O filtro global (Funil, Período, Canal) fica desligado
+nesta aba, com o aviso "Não se aplica às lives".
+
+**Por que cada bloco**
+- A, Cronograma: 9 faixas de status e um cartão por data (Realizada, Ao vivo, Em breve, "A agendar" só quando a API
+  não achou o vídeo). A live de 03/11 (Black) é destaque com contagem regressiva.
+- B, Ao vivo agora: só aparece com live no ar. Espectadores agora, minuto da live e a curva contra a última live do
+  mesmo tipo, para saber na hora se a sala está acima ou abaixo. Releitura a cada 60 s só quando há live ao vivo.
+- C, Evolução rumo à Black: pico de cada live; cada tipo é comparado só com ele mesmo (pico ÷ pico da anterior do mesmo
+  tipo). Círculo vazado = pico amostrado pela API, sem o CSV do Studio.
+- D, Cartões das realizadas: ordena por "Mais recentes", "Quem segurou mais a sala" (fim em % do pico) ou "Maior pico".
+- E, Detalhe (`?live=ID`): 8 cartões, curva minuto a minuto com marcos (P pico, S sala cheia, Q1 e Q2 quedas) e faixa de
+  chat e reações no mesmo eixo. Clicar num marco ou num minuto filtra o chat daquele minuto, com busca por texto.
+  Comentários do vídeo logo abaixo. Só o texto, sem nome de autor (ver "Autor removido").
+- Admin (só master): Cadastrar live, Importar CSV do Studio (zip lido no navegador, com prévia antes de gravar, trava
+  se o título do CSV não bate com a live e botão Gravar desligado quando o banco já tem exatamente esses minutos) e Remover live (só marca `ativo=false`; os dados guardados continuam no banco).
+
+**Definições (as da tela)**
+- Pico = primeiro minuto com o maior valor. Sala cheia = primeiro minuto com 90% do pico ou mais.
+- Fim em % do pico = espectadores do último minuto ÷ pico (ex.: 42 ÷ 352 = 11,9%).
+- Queda = maior perda absoluta numa janela de até 2 min; duas janelas sem sobreposição. Diverge do desenho, que usava
+  outra janela: na live de 06/10 a janela de 2 min mede 345 para 302 (min 68 a 70).
+- Pico vs anterior = pico ÷ pico da anterior do mesmo tipo com pico (13/10: 352 ÷ 318 = 110,7% no demo).
+- Decisão do Victor (15/10): views ficam no cartão de cada live (bloco D), porque ele pediu "duração, views, curtidas, reações e
+  comentários". A comparação entre lives (bloco C e a ordenação) continua sem usar views totais, porque favorece a live mais
+  antiga: ela acumulou replay por mais tempo.
+- Decisão do Victor (15/10): a dica do Chat no cartão fica fixa em "Mensagens do chat ao vivo (CSV do Studio)", mesmo nas lives
+  sem CSV do Studio (onde o chat vem da API). Revisar depois. Chat ausente aparece como "Sem dado", nunca 0.
+- Sem dado aparece como "Sem dado" ou traço, nunca zero. Se a releitura falha, a tela segura o último valor, esmaece e mostra
+  a idade. Horário de Brasília fixo -03:00 no cadastro.
+
+**Contrato usado** (`application/ports.ts`): `dados_black_lives(p_chave)`, `dados_black_live_detalhe(p_chave, p_video_id)`,
+`dados_black_live_importar(p_chave, p_video_id, p_linhas, p_confirmar)`, `dados_black_live_cadastrar(p_chave, p_video_id,
+p_tipo, p_data_prevista)` e `dados_black_live_remover(p_chave, p_video_id)`. Os três últimos são master.
+
+**Como testar**
+- Demo: `cd web && NEXT_PUBLIC_BLACK_DEMO=1 npm run dev`, abrir a rota do dashboard com `?aba=lives`. Ids fictícios
+  `ZZdemo00001` a `ZZdemo00009`, sem nome de pessoa real.
+- `?relogio=2026-10-15T20:30` fixa o minuto da demo e mostra a live de 15/10 ao vivo. `?live=ZZdemo00003` abre o detalhe
+  com CSV do Studio; `?live=ZZdemo00004` abre o sem Studio; `?live=ZZdemo00009` é a Black em breve. `master=1` na demo
+  liga os modais de admin.
+- Checagens: `npx tsc --noEmit`, `npx eslint modules/infra/black`, `npm run lint:tokens`,
+  `npx vitest run modules/infra/black` (249 ok) e `npm run build`. O bundle de produção não leva a demo
+  (`grep -rl "ZZdemo0000" .next` dá 0).
+- Screenshots (demo, 1280 e 375 px, claro e escuro): `docs/dashboard-black/screenshots-2026-10-15-lives/`.
+
+**Contrato real, conferido em produção em 15/10/2026 (só leitura)**
+- `dados_black_lives('black-friday-2026-10')` e `dados_black_live_detalhe` das lives `fpgmDwBKVcQ`, `Hdsg23VbfHI` e
+  `t0PLYUORt1E` foram chamadas num `begin read only` com `request.jwt.claims` de master e `rollback`. Nada foi escrito.
+  `importar`, `cadastrar` e `remover` NÃO foram chamadas em produção: foram conferidas só pelo corpo SQL e pela assinatura.
+- As respostas reais estão em `infrastructure/respostas-rpc-lives-reais.ts` (sem dado pessoal) e
+  `infrastructure/lives-contrato-real.test.ts` testa o front contra elas.
+- Números na tela x banco: pico 363 (min 48), 125 (min 59) e 342 (min 58); chat do Studio 291, 102 e 242; reações 48, 2 e 61;
+  comentários da API 3, 4 e 2. Os CSVs do Studio no repositório têm exatamente os mesmos minutos que `black_live_minuto`.
+- Datas chegam em UTC com `+00:00` (`2026-10-06T22:30:00+00:00`) e a tela mostra Brasília (22:30Z = 19:30).
+- Origem: se existe algum minuto `studio`, a curva só usa `studio`; senão usa `api`. O "chat do Studio" é a soma da coluna
+  `chat` dos minutos. É outra contagem que o "guardadas" (`chat_guardado`), que conta as linhas de chat gravadas, inclusive as
+  de antes de a live começar (seg negativo: 50, 8 e 27 mensagens nas três lives). A tela mostra as duas, rotuladas.
+- Divergências achadas e corrigidas no front: posição negativa saía "-2:-43:-57" (agora "-1:42:57"); dicas dos cartões Chat
+  e Reações diziam "CSV" mesmo sem Studio; importação idempotente (`alteradas = 0`, `gravado = false`) parecia erro (agora a
+  prévia explica e o Gravar fica desligado); avisos de coluna ausente agora dizem que o campo fica em branco (sem dado).
+- **Regra do banco mudada em 15/10 (migration `20261015230200_dados_black_lives_importar_ausente_null.sql`, APLICADA):**
+  `importar` grava NULL, e não 0, quando chat ou reações não vêm no arquivo (coluna ausente ou célula vazia). 0 passa a
+  significar só "zero medido". A leitura já tratava NULL (`chat_total` e `reacoes_total` saem `null` quando nenhum minuto
+  tem o número; o detalhe manda `null` no minuto). Os dados já gravados não mudaram: os 3 CSVs do Studio não têm célula
+  vazia, e o banco é igual ao arquivo (md5 por live). **Ajuste de front feito (15/10, não commitado):** `domain/lives-studio.ts` não diz mais "o banco grava 0" (os 4 avisos e o comentário
+  passaram a dizer "fica em branco (sem dado)") e `resumirStudio` deixa o minuto ausente fora da soma; se nenhum minuto tem chat
+  (ou reações), o total é `null` e a prévia do arquivo mostra "Sem dado" (`numeroDe` já faz isso), igual a `chat_total = null` do banco.
+  0 que vem no arquivo continua 0. Testes em `domain/lives-studio.test.ts`. O título da live `bN2XvcTwvWA` contém literalmente "[CONFIRMAR convidados]" no banco.
+
+**Autor removido (15/10)**
+- Chat e comentários aparecem só com texto, posição ou data, curtidas e respostas. Saíram o nome na lista, a busca por
+  autor e o campo `autor` dos tipos `MensagemChat` e `ComentarioLive`, do mapeador (`fonte-supabase.ts`) e da demo.
+- O front funciona sem o campo: a RPC pode parar de mandar `autor` (migration `20261015230000_dados_black_lives_sem_autor.sql`,
+  do back-end) ou ainda mandar durante a transição, que o mapeador ignora. Testes: `fonte-supabase.test.ts` (resposta com
+  autor não vaza para o resultado) e `ui/lives/tela-real.test.ts` (HTML sem a palavra "autor").
+
+**Zip do Studio endurecido (15/10)**
+- Antes: `XLSX.CFB.read` descompactava todas as entradas e só o tamanho compactado (5 MB) era limitado; um zip pequeno que
+  declara centenas de MB (zip bomb) travaria a aba.
+- Agora `infrastructure/zip-studio.ts` lê o diretório central e: (1) soma o tamanho descompactado declarado de TODAS as
+  entradas e recusa acima de 20 MB (`LIMITE_DESCOMPACTADO_BYTES`) antes de descompactar qualquer coisa; (2) descompacta só o
+  `liveViewership_*.csv`; (3) aborta a descompressão se sair mais do que o cabeçalho declarou (cabeçalho que mente). Usa
+  `DecompressionStream('deflate-raw')` do navegador, sem dependência nova. Zip64, criptografado e método diferente de 0 ou 8
+  são recusados. O zip real do Studio tem poucos KB.
+- Testes (`zip-studio.test.ts`): zip inflado de 25 MB em menos de 100 KB recusado; soma conta outra entrada; cabeçalho que
+  mente; só o `liveViewership` é aberto (outra entrada com bytes inválidos não atrapalha); os 3 zips reais continuam batendo.
+- Limite: navegador sem `DecompressionStream` (Safari anterior ao 16.4, Firefox anterior ao 113) recusa o zip com a mensagem
+  "Baixe de novo ... ou mande o liveViewership_*.csv extraído"; o CSV solto continua aceito.
+
+**Acessibilidade (tabelas sr-only dos gráficos)**
+- Em `ui/graficos.tsx` as três `<table className="sr-only">` agora ficam dentro de `<div className="sr-only">`. Antes a
+  própria tabela levava um hack (`table-fixed w-px max-w-px overflow-hidden` e `position: fixed`) que podia gerar rolagem.
+  Não foi visto em 375 px no navegador.
+
+**Status e o que falta.** Não commitado, não publicado. Conferido: leitura das RPCs em produção (acima), 249 testes do módulo,
+`tsc`, `eslint`, `lint:tokens` e `build`. Não feito: abrir a tela real logado como master (o HTML foi gerado com as respostas
+reais, não no navegador), exercitar `importar`, `cadastrar` e `remover` em produção, e ver a coleta ao vivo (bloco B) numa
+live real até 29/10; o bloco B só foi visto no demo. Fora do módulo, só o `web/` desta aba foi tocado.
+Decisão do Victor (15/10): chat e comentários de todas as lives visíveis; live de 03/11 em destaque.

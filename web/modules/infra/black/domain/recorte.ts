@@ -11,8 +11,9 @@ export const ROTULO_PERIODO: Record<ChavePeriodo, string> = {
 
 const FUNIS_FILTRO: readonly FiltroFunil[] = ['todos', 'c1', 'c2', 'consultoria', 'iscas', 'c3'];
 const CANAIS_FILTRO: readonly FiltroCanal[] = ['todos', 'meta', 'google'];
-export const ABAS: readonly AbaBlack[] = ['visao', 'jornada', 'criativos', 'mensageria', 'historico'];
+export const ABAS: readonly AbaBlack[] = ['visao', 'jornada', 'criativos', 'mensageria', 'historico', 'lives'];
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const ID_YOUTUBE_RE = /^[A-Za-z0-9_-]{11}$/;
 
 export const RECORTE_PADRAO: Recorte = { funil: 'todos', canal: 'todos', periodo: 'desde-inicio', aba: 'visao', criativos: {}, historicoModo: 'dia-a-dia' };
 
@@ -37,12 +38,15 @@ export function lerRecorte(p: Params): Recorte {
   const de = ler(p, 'de'); const ate = ler(p, 'ate');
   const periodoPersonalizado = periodo === 'personalizado' && de && ate && diaValido(de) && diaValido(ate) && de <= ate
     ? { de, ate } : null;
+  const aba = umDe(ler(p, 'aba'), ABAS, RECORTE_PADRAO.aba);
+  const live = ler(p, 'live');
   return {
     funil: umDe(ler(p, 'funil'), FUNIS_FILTRO, RECORTE_PADRAO.funil),
     canal: umDe(ler(p, 'canal'), CANAIS_FILTRO, RECORTE_PADRAO.canal),
     periodo: periodo === 'personalizado' && !periodoPersonalizado ? RECORTE_PADRAO.periodo : periodo,
     ...(periodoPersonalizado ? { periodoPersonalizado } : {}),
-    aba: umDe(ler(p, 'aba'), ABAS, RECORTE_PADRAO.aba),
+    aba,
+    ...(aba === 'lives' && live !== undefined && ID_YOUTUBE_RE.test(live) ? { live } : {}),
     criativos,
     historicoModo: ler(p, 'historico') === 'geral' ? 'geral' : 'dia-a-dia',
   };
@@ -56,11 +60,12 @@ export function escreverRecorte(r: Recorte, extras?: URLSearchParams): string {
   if (r.periodo === 'personalizado' && r.periodoPersonalizado) {
     q.set('de', r.periodoPersonalizado.de); q.set('ate', r.periodoPersonalizado.ate);
   }
+  if (r.aba === 'lives' && r.live && ID_YOUTUBE_RE.test(r.live)) q.set('live', r.live);
   if (r.criativos.campanha) q.set('cp', r.criativos.campanha);
   if (r.criativos.conjunto) q.set('cj', r.criativos.conjunto);
   if (r.criativos.anuncio) q.set('cr', r.criativos.anuncio);
   if (r.criativos.pagina) q.set('pg', r.criativos.pagina);
-  if (extras) for (const [k, v] of extras) if (!['funil', 'periodo', 'canal', 'aba', 'de', 'ate', 'cp', 'cj', 'cr', 'pg'].includes(k)) q.set(k, v);
+  if (extras) for (const [k, v] of extras) if (!['funil', 'periodo', 'canal', 'aba', 'de', 'ate', 'cp', 'cj', 'cr', 'pg', 'live'].includes(k)) q.set(k, v);
   return q.toString();
 }
 

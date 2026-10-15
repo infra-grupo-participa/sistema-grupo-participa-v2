@@ -7,15 +7,17 @@ import { FUNIS, ROTULO_CANAL, ROTULO_FUNIL, type FiltroCanal, type FiltroFunil, 
 const SELECT = 'min-h-10 w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-1)] px-3 text-sm text-[var(--fg)]';
 const dataCurta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
-export function SeletorGlobal({ funil, periodo, canal, datas, inicio, fim, onChange }: {
+export function SeletorGlobal({ funil, periodo, canal, datas, inicio, fim, onChange, desligado = false }: {
   funil: FiltroFunil; periodo: string; canal: FiltroCanal; datas: Periodo | null; inicio?: string; fim?: string;
+  /** Aba em que o filtro global não se aplica (Lives): os campos ficam desligados, com a explicação. */
+  desligado?: boolean;
   onChange: (m: { funil?: FiltroFunil; periodo?: string; canal?: FiltroCanal; periodoPersonalizado?: Periodo | null }) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3">
+    <div className={'flex flex-wrap items-end gap-3 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3 ' + (desligado ? '[&_label]:opacity-50' : '')} aria-disabled={desligado || undefined}>
       <label className="grid min-w-[9rem] flex-1 gap-1 text-xs text-[var(--fg-2)] sm:flex-none">
         Funil
-        <select className={SELECT} value={funil} onChange={(e) => onChange({ funil: e.target.value as FiltroFunil })}>
+        <select className={SELECT} disabled={desligado} value={funil} onChange={(e) => onChange({ funil: e.target.value as FiltroFunil })}>
           <option value="todos">Todos</option>
           <option value="c1">C1</option>
           <option value="c2" title="Consultoria e Iscas">C2</option>
@@ -24,7 +26,7 @@ export function SeletorGlobal({ funil, periodo, canal, datas, inicio, fim, onCha
       </label>
       <label className="grid min-w-[9rem] flex-1 gap-1 text-xs text-[var(--fg-2)] sm:flex-none">
         Período
-        <select className={SELECT} value={periodo} onChange={(e) => onChange({ periodo: e.target.value,
+        <select className={SELECT} disabled={desligado} value={periodo} onChange={(e) => onChange({ periodo: e.target.value,
           ...(e.target.value === 'personalizado' ? { periodoPersonalizado: datas } : { periodoPersonalizado: null }) })}>
           {PERIODOS.map((p) => <option key={p} value={p}>{ROTULO_PERIODO[p as ChavePeriodo]}</option>)}
         </select>
@@ -45,12 +47,14 @@ export function SeletorGlobal({ funil, periodo, canal, datas, inicio, fim, onCha
       )}
       <label className="grid min-w-[9rem] flex-1 gap-1 text-xs text-[var(--fg-2)] sm:flex-none">
         Canal
-        <select className={SELECT} value={canal} onChange={(e) => onChange({ canal: e.target.value as FiltroCanal })}>
+        <select className={SELECT} disabled={desligado} value={canal} onChange={(e) => onChange({ canal: e.target.value as FiltroCanal })}>
           <option value="todos">Todos</option>
           {(['meta', 'google'] as const).map((c) => <option key={c} value={c}>{ROTULO_CANAL[c]}</option>)}
         </select>
       </label>
-      {datas && (
+      {desligado ? (
+        <p className="w-full text-xs text-[var(--fg-2)] sm:w-auto sm:pb-2.5">Não se aplica às lives: elas mostram sempre todas as datas do cronograma.</p>
+      ) : datas && (
         <p className="w-full text-xs text-[var(--fg-3)] sm:w-auto sm:pb-2.5">
           {datas.de === datas.ate ? dataCurta(datas.de) : `${dataCurta(datas.de)} a ${dataCurta(datas.ate)}`}
           {periodo === 'semana' ? ' (semana de segunda a domingo, provisória)' : ''}

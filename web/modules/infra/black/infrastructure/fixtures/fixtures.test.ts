@@ -61,6 +61,9 @@ describe('fonte de demonstração', () => {
     expect(relogioDemo('2026-10-20').toISOString()).toBe('2026-10-21T02:59:59.000Z');
     expect(relogioDemo('2026-12-01').toISOString()).toBe(new Date(RELOGIO_PADRAO).toISOString());
     expect(relogioDemo('lixo').toISOString()).toBe(new Date(RELOGIO_PADRAO).toISOString());
+    // Com hora (aba Lives): fixa o minuto pedido, no horário de Brasília.
+    expect(relogioDemo('2026-10-15T20:30').toISOString()).toBe('2026-10-15T23:30:00.000Z');
+    expect(relogioDemo('2026-12-01T20:30').toISOString()).toBe(new Date(RELOGIO_PADRAO).toISOString());
   });
   it('corta o período no relógio e não mostra o futuro', async () => {
     const f = criarFonteFixtures('2026-10-20');

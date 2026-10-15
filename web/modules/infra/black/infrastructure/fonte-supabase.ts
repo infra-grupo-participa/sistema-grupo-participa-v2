@@ -13,6 +13,12 @@ import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
 import type { FonteDadosBlack } from '../application/ports';
 import { grupoSemDado } from '../domain/grupo';
+import {
+  DETALHE_VAZIO, SITUACOES_LIVE, TIPOS_LIVE, liveValida,
+  type ComentarioLive, type DetalheLive, type FotoLive, type Live, type MensagemChat, type MinutoLive, type OrigemMinuto,
+  type PreviaImportacao, type ResultadoLiveAcao, type SituacaoLive, type TipoLive,
+} from '../domain/lives';
+import type { LinhaStudio } from '../domain/lives-studio';
 import { ehC1PeloNome, faseDoNome } from '../domain/fase-campanha';
 import {
   FASES, ISCAS,
@@ -439,6 +445,89 @@ export function mapearGrupo(cru: unknown): { data: GrupoResumoBlack; semDado: bo
   };
 }
 
+// ---------- lives ----------
+
+/** dados_black_lives -> lista. Live sem id de 11 caracteres, tipo ou data válidos não entra (não se inventa live). */
+export function mapearLives(cru: unknown): { data: Live[]; semDado: boolean } {
+  const r = objeto(cru);
+  if (!r) return { data: [], semDado: true };
+  const data = linhas(r.lives).flatMap((x): Live[] => {
+    const videoId = texto(x.video_id); const dataPrevista = texto(x.data_prevista);
+    const tipo = TIPOS_LIVE.includes(x.tipo as TipoLive) ? (x.tipo as TipoLive) : null;
+    const situacao = SITUACOES_LIVE.includes(x.situacao as SituacaoLive) ? (x.situacao as SituacaoLive) : null;
+    if (!videoId || !dataPrevista || !tipo || !situacao || !liveValida({ videoId, dataPrevista })) return [];
+    return [{
+      videoId, tipo, dataPrevista, titulo: texto(x.titulo), miniatura: safeHttpUrl(texto(x.miniatura) ?? '', ['ytimg.com', 'youtube.com']),
+      situacao, agendadaEm: texto(x.agendada_em), inicio: texto(x.inicio), fim: texto(x.fim), duracaoSeg: num(x.duracao_seg),
+      views: num(x.views), likes: num(x.likes), comentarios: num(x.comentarios), coletadoEm: texto(x.coletado_em),
+      espectadoresAgora: num(x.espectadores_agora), temStudio: x.tem_studio === true,
+      pico: num(x.pico), picoSeg: num(x.pico_seg), salaCheiaSeg: num(x.sala_cheia_seg), ultimoEspectadores: num(x.ultimo_espectadores),
+      chatTotal: num(x.chat_total), reacoesTotal: num(x.reacoes_total), chatGuardado: num(x.chat_guardado),
+    }];
+  });
+  return { data, semDado: data.length === 0 };
+}
+
+/** dados_black_live_detalhe -> curva, chat, comentários e fotos. Linha sem a chave de ordem (seg, texto, data) não entra. */
+export function mapearDetalheLive(cru: unknown): { data: DetalheLive; semDado: boolean } {
+  const r = objeto(cru);
+  if (!r) return { data: DETALHE_VAZIO, semDado: true };
+  const minutos = linhas(r.minutos).flatMap((x): MinutoLive[] => {
+    const seg = num(x.seg);
+    if (seg === null || seg < 0) return [];
+    return [{ seg, espectadores: num(x.espectadores), chat: num(x.chat), reacoes: num(x.reacoes), origem: x.origem === 'studio' || x.origem === 'api' ? (x.origem as OrigemMinuto) : null }];
+  });
+  const chat = linhas(r.chat).flatMap((x): MensagemChat[] => {
+    const t = texto(x.texto);
+    return t ? [{ seg: num(x.seg), publicadoEm: texto(x.publicado_em), texto: t }] : [];
+  });
+  const comentarios = linhas(r.comentarios).flatMap((x): ComentarioLive[] => {
+    const t = texto(x.texto);
+    return t ? [{ publicadoEm: texto(x.publicado_em), texto: t, curtidas: num(x.curtidas), respostas: num(x.respostas) }] : [];
+  });
+  const fotos = linhas(r.fotos).flatMap((x): FotoLive[] => {
+    const coletadoEm = texto(x.coletado_em);
+    return coletadoEm ? [{ coletadoEm, views: num(x.views), likes: num(x.likes), comentarios: num(x.comentarios) }] : [];
+  });
+  return { data: { minutos, chat, comentarios, fotos }, semDado: minutos.length === 0 && chat.length === 0 && comentarios.length === 0 };
+}
+
+/** dados_black_live_importar -> prévia (ou resultado). Sem objeto = null (a tela diz que o banco não confirmou). */
+export function mapearPreviaImportacao(cru: unknown): PreviaImportacao | null {
+  const r = objeto(cru);
+  if (!r) return null;
+  return {
+    linhas: num(r.linhas), pico: num(r.pico), picoSeg: num(r.pico_seg), duracaoSeg: num(r.duracao_seg),
+    existentes: num(r.existentes), alteradas: num(r.alteradas), gravado: booleano(r.gravado),
+  };
+}
+
+function mensagemLive(code: string | undefined): string {
+  if (code === '42501') return 'Só quem é master neste dashboard pode fazer isso.';
+  if (code === 'P0002') return 'Esta live não está cadastrada neste evento.';
+  if (code === '22023') return 'O banco recusou os dados (link, data ou arquivo fora do padrão). Confira e tente de novo.';
+  if (funcaoInexistente(code)) return 'Esta função ainda não está disponível no banco.';
+  return 'Não foi possível concluir agora. Nada foi alterado que a tela possa confirmar: atualize e confira.';
+}
+
+async function chamarLive<T>(nome: string, args: Record<string, unknown>, mapear: (cru: unknown) => T | null): Promise<ResultadoLiveAcao<T>> {
+  try {
+    const { data, error } = await createBrowserSupabase().rpc(nome, args);
+    if (error) {
+      logQueryError(nome, { message: error.code ?? 'erro' });
+      return { data: null, erro: mensagemLive(error.code) };
+    }
+    const m = mapear(data);
+    return m === null ? { data: null, erro: 'O banco não confirmou a operação. Atualize e confira.' } : { data: m, erro: null };
+  } catch {
+    logQueryError(nome, { message: 'falha de conexão' });
+    return { data: null, erro: 'Falha de conexão. Nada foi confirmado: atualize e confira.' };
+  }
+}
+
+const ID_LIVE = /^[A-Za-z0-9_-]{11}$/;
+const idLiveInvalido = <T,>(): ResultadoLiveAcao<T> => ({ data: null, erro: 'Identificador de live inválido (são 11 caracteres do YouTube).' });
+
 // ---------- fonte ----------
 
 const semFonte = <T,>(data: T): Promise<Resultado<T>> => Promise.resolve({ data, semDado: true, erro: null, aviso: AVISO_SEM_FONTE });
@@ -463,4 +552,22 @@ export const fonteSupabaseBlack: FonteDadosBlack = {
   // Sem fonte no banco: Sem dado, nunca zero.
   mensageria: () => semFonte<MensageriaBlack>({ canais: [], envios: [], regua: [] }),
   marcos: () => semFonte<Marcos>({ presencaLive: null, vendas: null }),
+  lives: (chave) => ler('dados_black_lives', { p_chave: chave }, [] as Live[], mapearLives),
+  liveDetalhe: (chave, videoId) =>
+    ID_LIVE.test(videoId)
+      ? ler('dados_black_live_detalhe', { p_chave: chave, p_video_id: videoId }, DETALHE_VAZIO, mapearDetalheLive)
+      : Promise.resolve({ data: DETALHE_VAZIO, semDado: true, erro: 'Identificador de live inválido.' }),
+  importarLive: (chave: string, videoId: string, linhasStudio: readonly LinhaStudio[], confirmar: boolean) =>
+    ID_LIVE.test(videoId)
+      ? chamarLive('dados_black_live_importar', { p_chave: chave, p_video_id: videoId, p_linhas: linhasStudio, p_confirmar: confirmar }, mapearPreviaImportacao)
+      : Promise.resolve(idLiveInvalido<PreviaImportacao>()),
+  cadastrarLive: (chave, videoId, tipo, dataPrevista) =>
+    ID_LIVE.test(videoId)
+      ? chamarLive('dados_black_live_cadastrar', { p_chave: chave, p_video_id: videoId, p_tipo: tipo, p_data_prevista: dataPrevista },
+        (cru) => (objeto(cru) ? { videoId } : null))
+      : Promise.resolve(idLiveInvalido<{ videoId: string }>()),
+  removerLive: (chave, videoId) =>
+    ID_LIVE.test(videoId)
+      ? chamarLive('dados_black_live_remover', { p_chave: chave, p_video_id: videoId }, (cru) => (objeto(cru) ? { videoId } : null))
+      : Promise.resolve(idLiveInvalido<{ videoId: string }>()),
 };
