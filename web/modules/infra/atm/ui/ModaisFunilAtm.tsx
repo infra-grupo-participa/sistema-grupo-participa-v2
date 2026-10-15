@@ -113,12 +113,14 @@ const CAMPOS_VENDAS: CampoResumoPessoasAtm<VendaSessaoViabilidade>[] = [
   { nome: 'Entrou no grupo?', valor: (_v, g) => grupoSimNao(g), usaGrupo: true },
 ];
 
-export function ModalVendasAtm({ lista, podeVerContato, vendasTeste, onToggleVenda, ...c }: Comum & {
+export function ModalVendasAtm({ lista, podeVerContato, vendasTeste, onToggleVenda, linkRetorno, ...c }: Comum & {
   lista: EstadoListaAtm<VendaSessaoViabilidade> | null;
   podeVerContato: boolean;
   /** `dados_atm_resumo.vendas_teste`: vendas que a marcação de teste tirou do total. */
   vendasTeste: number | null;
   onToggleVenda: (venda: VendaSessaoViabilidade, teste: boolean) => Promise<string | null>;
+  /** Retorno da SV deste evento (`RegistroAtm.retornoSvUrl`). Sem link, o botão não aparece. */
+  linkRetorno?: string;
 }) {
   const notaTeste = c.isMaster ? notaVendasTesteForaDoTotal(vendasTeste) : null;
   const { de, ate } = c.periodo;
@@ -128,6 +130,6 @@ export function ModalVendasAtm({ lista, podeVerContato, vendasTeste, onToggleVen
     grupo={{ modo: 'cruzamento', estado: c.grupo, telefoneDe: (v) => v.telefone, nomeDe: (v) => v.nome }}
     textos={{ naoPublicada: 'A lista de vendas da Sessão de Viabilidade não está publicada no banco', vazio: 'Nenhuma venda da Sessão de Viabilidade registrada neste período' }}
     bloqueio={podeVerContato ? null : SEM_CONTATO}
-    notas={<p className="mb-3 text-xs text-[var(--fg-3)]">Vendas no período aplicado (pela data de aprovação, a mesma regra do card Vendas).{notaTeste ? ` ${notaTeste}.` : ''}</p>}
+    notas={<>{linkRetorno && <a href={linkRetorno} target="_blank" rel="noopener noreferrer" className="mb-3 inline-flex min-h-11 items-center gap-1.5 rounded-[var(--r-md)] border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-3 text-sm font-medium text-[var(--accent)] hover:bg-[var(--surface-3)] md:min-h-9">Ver retorno da SV<span className="sr-only"> (abre em nova aba)</span></a>}<p className="mb-3 text-xs text-[var(--fg-3)]">Vendas no período aplicado (pela data de aprovação, a mesma regra do card Vendas).{notaTeste ? ` ${notaTeste}.` : ''}</p></>}
     acaoTeste={{ disponivel: (v) => !!v.email, semAcao: 'Sem e-mail', tituloConfirmacao: 'Marcar venda como teste', mensagemConfirmacao: 'Esta marcação vale para este Seminário ATM e é feita pelo e-mail desta linha: a pessoa e os dados relacionados deixam de contar nos indicadores deste evento. Quer continuar?', executar: onToggleVenda }} />;
 }

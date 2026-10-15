@@ -87,7 +87,7 @@ export const publicEnv = {
   comercialVendedores: lerFlag(process.env.NEXT_PUBLIC_COMERCIAL_VENDEDORES, true),
   acessoV2: lerFlag(process.env.NEXT_PUBLIC_ACESSO_V2),
   /**
-   * Dashboard da Black (Infra › Dashboards › CSM) com dado FICTÍCIO em memória. Só liga com o valor exato '1'
+   * Dashboard da Black (Infra › Dashboards › Academy) com dado FICTÍCIO em memória. Só liga com o valor exato '1'
    * e nunca em produção (docs/dashboard-black/README.md).
    */
   blackDemo: modoDemoBlack(process.env.NODE_ENV, process.env.NEXT_PUBLIC_BLACK_DEMO),

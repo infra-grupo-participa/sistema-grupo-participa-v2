@@ -1,4 +1,4 @@
-// Tipos do dashboard da Black Friday 2026 (Infra › Dashboards › CSM, modelo 'jornada-captacao').
+// Tipos do dashboard da Black Friday 2026 (Infra › Dashboards › Academy, modelo 'jornada-captacao').
 // Contrato e decisões: docs/dashboard-black/README.md. Plano: PLANO-TECNICO-V2.md (cérebro do Victor).
 
 /** null = sem dado (fonte não mediu); 0 = zero medido. Nunca trocar um pelo outro. */
