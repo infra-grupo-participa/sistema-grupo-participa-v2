@@ -69,6 +69,12 @@ export type PropsModalPessoasAtm<T extends { id: string; teste: boolean }> = {
   incluirTeste: boolean;
   onIncluirTeste: (v: boolean) => void;
   acaoTeste?: AcaoTestePessoasAtm<T>;
+  /** Evolução: barras (padrão, ATM) ou linha com eixos X e Y (Ações da Black, 15/10/2026). */
+  graficoEvolucao?: 'barras' | 'linha';
+  /** Esconde a aba Grupo (Ações da Black não usam). */
+  semAbaGrupo?: boolean;
+  /** Faixa de leitura acima das abas (contagens, avisos). */
+  resumoNoTopo?: ReactNode;
 };
 
 function GraficoDiario({ rows, rotulo }: { rows: DiaSerieAtm[]; rotulo: string }) {
@@ -77,6 +83,32 @@ function GraficoDiario({ rows, rotulo }: { rows: DiaSerieAtm[]; rotulo: string }
   const width = Math.max(360, rows.length * 38);
   return <div className="overflow-x-auto"><svg width={width} height="190" viewBox={'0 0 ' + width + ' 190'} role="img" aria-label={`Evolução diária de ${rotulo}`}>
     {rows.map((r, i) => { const x = i * 38 + 8; const h = r.quantidade / max * 130; return <g key={r.dia}><rect x={x} y={145 - h} width="22" height={h} rx="3" fill="var(--accent)" /><text x={x + 11} y={140 - h} textAnchor="middle" fontSize="9" fill="var(--fg-2)">{r.quantidade}</text><text x={x + 11} y="166" textAnchor="middle" fontSize="9" fill="var(--fg-3)">{r.dia.slice(8, 10) + '/' + r.dia.slice(5, 7)}</text><title>{r.dia + ': ' + r.quantidade}</title></g>; })}
+  </svg></div>;
+}
+
+function GraficoLinhaDiario({ rows, rotulo }: { rows: DiaSerieAtm[]; rotulo: string }) {
+  if (!rows.length) return <EmptyState title={`Sem evolução de ${rotulo}`} hint="nenhuma data no conjunto" />;
+  const esq = 44, dir = 20, topo = 18, base = 44, altura = 250;
+  const largura = Math.max(520, rows.length * 56 + esq + dir);
+  const areaW = largura - esq - dir, areaH = altura - topo - base;
+  const max = Math.max(...rows.map((r) => r.quantidade));
+  const teto = max <= 4 ? 4 : Math.ceil(max / 4) * 4;
+  const x = (i: number) => esq + (rows.length === 1 ? areaW / 2 : (i * areaW) / (rows.length - 1));
+  const y = (v: number) => topo + areaH - (v / teto) * areaH;
+  const passoRotulo = Math.ceil(rows.length / 14);
+  const pontos = rows.map((r, i) => `${x(i)},${y(r.quantidade)}`).join(' ');
+  return <div className="overflow-x-auto"><svg width={largura} height={altura} viewBox={`0 0 ${largura} ${altura}`} role="img" aria-label={`Evolução diária de ${rotulo}, em linha`}>
+    {[0, 1, 2, 3, 4].map((k) => { const v = (teto / 4) * k; return <g key={k}><line x1={esq} x2={largura - dir} y1={y(v)} y2={y(v)} stroke="var(--border)" strokeWidth="1" /><text x={esq - 8} y={y(v) + 3} textAnchor="end" fontSize="10" fill="var(--fg-3)">{v}</text></g>; })}
+    <line x1={esq} x2={esq} y1={topo} y2={topo + areaH} stroke="var(--fg-3)" strokeWidth="1" />
+    <line x1={esq} x2={largura - dir} y1={topo + areaH} y2={topo + areaH} stroke="var(--fg-3)" strokeWidth="1" />
+    {rows.length > 1 && <polyline points={pontos} fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />}
+    {rows.map((r, i) => <g key={r.dia}>
+      <circle cx={x(i)} cy={y(r.quantidade)} r="4" fill="var(--accent)"><title>{r.dia + ': ' + r.quantidade}</title></circle>
+      <text x={x(i)} y={y(r.quantidade) - 9} textAnchor="middle" fontSize="10" fill="var(--fg-2)">{r.quantidade}</text>
+      {i % passoRotulo === 0 && <text x={x(i)} y={topo + areaH + 18} textAnchor="middle" fontSize="10" fill="var(--fg-3)">{r.dia.slice(8, 10) + '/' + r.dia.slice(5, 7)}</text>}
+    </g>)}
+    <text x={esq} y={altura - 6} fontSize="10" fill="var(--fg-3)">Dia</text>
+    <text x={8} y={12} fontSize="10" fill="var(--fg-3)">{rotulo}</text>
   </svg></div>;
 }
 
@@ -95,7 +127,7 @@ function estadoSemConteudo<T>(estado: EstadoListaAtm<T> | null, carregando: Reac
 }
 
 export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props: PropsModalPessoasAtm<T>) {
-  const { open, onClose, titulo, abaPessoas, rotuloContador, rotuloCentro, periodoLabel, periodo, card, lista, filtrar, colunas, rotuloData, dataDe, campos, grupo, textos, bloqueio, notas, isMaster, incluirTeste, onIncluirTeste, acaoTeste } = props;
+  const { open, onClose, titulo, abaPessoas, rotuloContador, rotuloCentro, periodoLabel, periodo, card, lista, filtrar, colunas, rotuloData, dataDe, campos, grupo, textos, bloqueio, notas, isMaster, incluirTeste, onIncluirTeste, acaoTeste, graficoEvolucao = 'barras', semAbaGrupo = false, resumoNoTopo } = props;
   const [aba, setAba] = useState(abaPessoas);
   const [alvo, setAlvo] = useState<T | null>(null);
   const [alvoNumero, setAlvoNumero] = useState<NumeroGrupoAtm | null>(null);
@@ -195,17 +227,18 @@ export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props:
 
   const conteudo = aba === 'Grupo'
     ? (grupo.modo === 'numeros' ? abaGrupoNumeros(grupo) : abaGrupoCruzamento(grupo))
-    : aba === 'Evolução' ? comLista(<Loading />, () => <GraficoDiario rows={serie} rotulo={rotuloCentro} />)
+    : aba === 'Evolução' ? comLista(<Loading />, () => (graficoEvolucao === 'linha' ? <GraficoLinhaDiario rows={serie} rotulo={rotuloCentro} /> : <GraficoDiario rows={serie} rotulo={rotuloCentro} />))
       : aba === 'Resumo' ? abaResumo()
         : comLista(<TabelaCarregando titulos={titulosTabela} />, tabelaPessoas);
 
   return <Modal open={open} onClose={() => { setErroAcao(null); onClose(); }} title={titulo} width="max-w-6xl">
     <div className="mb-4 flex flex-wrap items-center gap-2">
-      {[abaPessoas, 'Grupo', 'Evolução', 'Resumo'].map((nome) => <button key={nome} type="button" onClick={() => setAba(nome)} className={'rounded-[var(--r-md)] px-3 py-2 text-sm ' + (aba === nome ? 'bg-[var(--accent)] text-black font-semibold' : 'bg-[var(--surface-3)] text-[var(--fg-2)]')}>{nome}</button>)}
+      {[abaPessoas, ...(semAbaGrupo ? [] : ['Grupo']), 'Evolução', 'Resumo'].map((nome) => <button key={nome} type="button" onClick={() => setAba(nome)} className={'rounded-[var(--r-md)] px-3 py-2 text-sm ' + (aba === nome ? 'bg-[var(--accent)] text-black font-semibold' : 'bg-[var(--surface-3)] text-[var(--fg-2)]')}>{nome}</button>)}
       {isMaster && !bloqueio && <span className="ml-2 text-xs"><Toggle checked={incluirTeste} onChange={onIncluirTeste} label="Incluir testes" /></span>}
       <span className="ml-auto self-center text-xs text-[var(--fg-3)]" aria-live="polite">{contadorTexto}</span>
     </div>
     {notas}
+    {resumoNoTopo}
     {desatualizada && <p role="status" className="mb-3 rounded border border-[var(--yellow)]/40 p-3 text-sm text-[var(--yellow)]">{lista!.erro} Mostrando a lista lida às {hora(lista!.lidoEm)}.</p>}
     {diverge && <p role="status" className="mb-3 text-xs text-[var(--yellow)]">Card {card.rotulo}: {inteiro.format(card.metrica.valor)} · esta lista: {inteiro.format(contador)}. Precisa conferir antes de usar o número (clique em Atualizar na página para reler os dois).</p>}
     {erroAcao && <p role="alert" className="mb-3 rounded border border-[var(--red)]/40 p-3 text-sm text-[var(--red)]">{erroAcao}</p>}

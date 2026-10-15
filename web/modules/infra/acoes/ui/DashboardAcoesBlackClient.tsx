@@ -1,14 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { dashboardAtmSemDado, type DashboardAtm, type CanalDisparoAtm } from '@/modules/infra/atm/domain/dashboard';
-import type { DisparoDetalheAtm, Resultado } from '@/modules/infra/atm/infrastructure/atm-data';
+import { dashboardAtmSemDado, type DashboardAtm, type CanalDisparoAtm, type LeadAtm } from '@/modules/infra/atm/domain/dashboard';
+import { carregarAtmLeads, type DisparoDetalheAtm, type Resultado } from '@/modules/infra/atm/infrastructure/atm-data';
+import { chaveListaAtm, criarCarregadorListasAtm } from '@/modules/infra/atm/ui/carregador-listas';
+import { useListaAtm } from '@/modules/infra/atm/ui/useListaAtm';
 import { EmptyState, KpiCard, SectionCard, Tabs, idsAba } from '@/shared/ui/components';
 import { CANAIS_DISPARO_ATM } from '@/modules/infra/atm/domain/dashboard';
 import { DisparosDetalhe } from '@/modules/infra/atm/ui/DisparosDetalhe';
 import { cardsResumoAcaoBlack } from '../domain/resumo';
 import { carregarDadosAcoesBlack, mensagemEmPreparacao, type EstadoDadosAcoesBlack, type LinhaAcoes } from '../infrastructure/dados';
 import { registroAcoesBlack } from '../domain/registro';
+import { contarLeadsAcao, exibicaoCardLeads } from '../domain/leads';
+import { ModalLeadsAcao } from './ModalLeadsAcao';
 
 const cardsComparecimento = [
   ['Pico de audiência', 'pico_audiencia', 'inteiro'], ['Comparecimento do grupo', 'presentes_grupo', 'inteiro'],
@@ -48,8 +52,12 @@ function preservarSeFalha<T>(atual: Resultado<T>, proximo: Resultado<T>): Result
   return proximo.semDado ? { ...atual, erro: proximo.erro } : proximo;
 }
 
-export function DashboardAcoesBlackClient() {
+export function DashboardAcoesBlackClient({ isMaster = false }: { isMaster?: boolean }) {
   const [acaoId, setAcaoId] = useState(registroAcoesBlack[0].id);
+  const [modalLeads, setModalLeads] = useState(false);
+  const [incluirTeste, setIncluirTeste] = useState(isMaster);
+  const [versaoListas, setVersaoListas] = useState(0);
+  const [listas] = useState(criarCarregadorListasAtm);
   const [canalAtivo, setCanalAtivo] = useState<CanalDisparoAtm>('api');
   const [dadosCarregados, setDadosCarregados] = useState<{ acaoId: string; dados: EstadoDadosAcoesBlack } | null>(null);
   const [preparacaoCarregada, setPreparacaoCarregada] = useState<{ acaoId: string; emPreparacao: boolean } | null>(null);
@@ -70,6 +78,7 @@ export function DashboardAcoesBlackClient() {
     if (acao.estado !== 'ativa' || !acao.etiqueta || emCurso.current) return;
     emCurso.current = true;
     setAtualizando(true);
+    setVersaoListas((v) => v + 1);
     try {
       const novos = await carregarDadosAcoesBlack(acao);
       if (!novos) return;
@@ -110,6 +119,12 @@ export function DashboardAcoesBlackClient() {
     };
   }, [acao.estado, acao.etiqueta, atualizar]);
 
+  // Lista de leads da ação: lida sempre que a ação está ativa, porque os cards de leads válidos e de ingresso dependem dela
+  // (o modal só a mostra). Só master pede as linhas de teste.
+  const comTeste = isMaster && incluirTeste;
+  const etiqueta = acao.estado === 'ativa' ? acao.etiqueta : null;
+  const listaLeads = useListaAtm<LeadAtm>(listas, etiqueta ? chaveListaAtm('dados_atm_leads', etiqueta, null, comTeste) : null, () => carregarAtmLeads(etiqueta!, undefined, comTeste), versaoListas);
+  const contagemLeads = listaLeads?.data ? contarLeadsAcao(listaLeads.data) : null;
   const resultadoResumo = dados?.resumo;
   const dashboard: DashboardAtm | null = resultadoResumo && !resultadoResumo.semDado ? resultadoResumo.data : null;
   const cards = cardsResumoAcaoBlack(dashboard, acao.ofertaHotmart);
@@ -155,9 +170,13 @@ export function DashboardAcoesBlackClient() {
             {cards.map((card) => {
               const aguardaOferta = ofertaPendente && ['vendas', 'cac', 'faturamentoBruto', 'faturamentoLiquido', 'roas'].includes(card.chave);
               const semDado = !dashboard || card.metrica.semDado;
-              const valor = aguardaOferta ? 'Aguardando oferta' : semDado ? 'Sem dado' : formatar(card.metrica.valor, card.formato);
-              const hint = aguardaOferta ? 'oferta ainda não configurada' : semDado ? 'sem dado ainda' : undefined;
-              return <KpiCard key={card.chave} label={card.rotulo} value={valor} hint={hint} bar={card.chave === 'vendas' ? 'green' : 'accent'} />;
+              const validos = !aguardaOferta && !semDado && contagemLeads ? exibicaoCardLeads(card.chave, card.metrica, contagemLeads) : null;
+              const valor = aguardaOferta ? 'Aguardando oferta' : validos ? formatar(validos.valor, validos.formato) : semDado ? 'Sem dado' : formatar(card.metrica.valor, card.formato);
+              const hint = aguardaOferta ? 'oferta ainda não configurada' : validos ? validos.hint : semDado ? 'sem dado ainda' : undefined;
+              const kpi = <KpiCard key={card.chave} label={card.rotulo} value={valor} hint={hint} bar={card.chave === 'vendas' ? 'green' : 'accent'} />;
+              return card.chave === 'leads'
+                ? <button key={card.chave} type="button" onClick={() => setModalLeads(true)} className="text-left" aria-label="Abrir os leads da ação">{kpi}</button>
+                : kpi;
             })}
           </div>
           {erroResumo && <p role="status" className="mt-2 text-xs text-[var(--yellow)]">Resumo: {erroResumo}</p>}
@@ -183,5 +202,6 @@ export function DashboardAcoesBlackClient() {
         </SectionCard>
       </div>}
     </div>
+    <ModalLeadsAcao open={modalLeads} onClose={() => setModalLeads(false)} nomeAcao={acao.nome} lista={listaLeads} card={dashboard?.resumo.leads ?? { valor: 0, semDado: true }} periodoLabel="período do cadastro" isMaster={isMaster} incluirTeste={comTeste} onIncluirTeste={setIncluirTeste} />
   </div>;
 }

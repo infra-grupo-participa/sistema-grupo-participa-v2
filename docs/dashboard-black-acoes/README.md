@@ -43,3 +43,12 @@ Na primeira versão do front, a etiqueta ainda não estava cadastrada no banco. 
 A etiqueta `black-thb-2026-10` foi cadastrada no projeto 87. Na conferência em localhost, o resumo retornou 3 leads e 1 ingresso no grupo; pré-checkout ficou em 0. Vendas e métricas financeiras dependentes da oferta aparecem como “Aguardando oferta”. Investimento e CPL aparecem como “Sem dado” enquanto o custo de disparo não está sincronizado. A série do dia mostrou uma entrada no grupo e nenhum pré-checkout. Comparecimento carregou, preservando “Sem dado” para medidas ainda ausentes.
 
 A leitura manual em 14/10 confirmou os mesmos dados após clicar em Atualizar. O custo de disparo permanece pendente de sincronização. A oferta ainda não foi configurada. Os dados acima são retrato da validação, não valores fixos na tela.
+
+## Modal de Leads, leads válidos e gerais · 15/10/2026
+
+- **Card Leads abre o modal.** Reaproveita o `ModalPessoasAtm` do ATM (`ui/ModalLeadsAcao.tsx`), sem a aba Grupo. Abas: Leads (tabela), Evolução (leads por dia em **linha**, eixos X e Y) e Resumo (pizzas de `utm_source`, estado, instrução, turma e "válido para a oferta?"). A linha da Evolução existe como opção `graficoEvolucao="linha"` do modal; o ATM segue em barras.
+- **Todo mundo que preenche vira lead**, apto ou não: a Edge `metodo-perfeito` (ação `reuniao`) só valida nome, e-mail e WhatsApp. Quem usa e-mail fora da lista cai na página de "esse evento não é para você" e já está gravado.
+- **Válido para a oferta** = está na lista de aptos da ação, que é `dados.lista_membros` com a chave da ação (mesma tabela da Lista 1/2 do ATM; não há tabela nova). Regra em `domain/leads.ts`: `lista_1`/`lista_2` = sim; `fora_das_listas`/`descartado` = não; sem lista carregada = **sem dado** (nunca "não").
+- **Cards do topo:** Leads, Ingresso no grupo e % ingresso mostram os **válidos** e deixam o geral no hint. O ingresso divide pelos válidos. Sem lista de aptos carregada, os três ficam com o número do resumo, como antes.
+- **Quem é apto:** a lista da planilha "Black do THB com acesso vencido" (386). Os removidos (Turma Especial e Removidos 15/10) são inaptos. A carga está em `infra/supabase/cargas/black-thb-2026-10/` e **não foi aplicada**.
+- **Por que não deduzir da Central:** "THB ou THB-sócio e vencido" dá 328 pessoas, 310 dentro da planilha e 18 fora; a planilha tem regra própria (sócio segue o titular, remoções manuais).
