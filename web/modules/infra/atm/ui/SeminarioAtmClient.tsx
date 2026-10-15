@@ -1,5 +1,6 @@
 'use client';
 
+import { LinkVoltar } from '@/shared/ui/departamentos/LinkVoltar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, KpiCard, SectionCard, EmptyState, Tabs, idsAba } from '@/shared/ui/components';
 import {
@@ -199,7 +200,7 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
   const comumModal = { onClose: () => setModal(null), periodoLabel: intervalo, periodo: periodoModal, isMaster, incluirTeste: comTeste, onIncluirTeste: setIncluirTeste };
 
   return <div className="max-w-7xl space-y-5">
-    <header><div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Infra / Dashboards / Escritório / Seminário ATM</div><h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">{projeto.rotulo}</h1><p className="mt-1 text-sm text-[var(--fg-2)]">Chave {projeto.chave} · {atualizado ? 'atualizado às ' + atualizado.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'aguardando leitura'}</p></header>
+    <header><LinkVoltar href="/infra/dashboards/escritorio" para="Soluções" /><div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Infra / Dashboards / Soluções / Seminário ATM</div><h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">{projeto.rotulo}</h1><p className="mt-1 text-sm text-[var(--fg-2)]">Chave {projeto.chave} · {atualizado ? 'atualizado às ' + atualizado.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'aguardando leitura'}</p></header>
     <Tabs idBase="atm-principal" label="Seções do dashboard" active={abaPrincipal} onChange={trocarAbaPrincipal} tabs={[{ k: 'edicao', l: 'Esta edição' }, { k: 'trafego', l: 'Tráfego' }, { k: 'historico', l: 'Histórico' }]} />
     <div role="tabpanel" id={idsEdicao.panel} aria-labelledby={idsEdicao.tab} hidden={abaPrincipal !== 'edicao'} className="space-y-5">
     <div className="flex flex-wrap items-end gap-3 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3">

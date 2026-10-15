@@ -1,5 +1,6 @@
 'use client';
 
+import { LinkVoltar } from '@/shared/ui/departamentos/LinkVoltar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { publicEnv } from '@/shared/infrastructure/config/env';
 import { dashboardAtmSemDado, type DashboardAtm, type CanalDisparoAtm, type LeadAtm, type LeadGrupoAtm } from '@/modules/infra/atm/domain/dashboard';
@@ -159,7 +160,8 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
 
   return <div className="max-w-7xl space-y-5">
     <header>
-      <div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Infra / Dashboards / CSM</div>
+      <LinkVoltar href="/infra/dashboards/csm" para="Academy" />
+      <div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Infra / Dashboards / Academy</div>
       <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">Ações da Black Friday</h1>
       <p className="mt-1 text-sm text-[var(--fg-2)]">Uma aba por ação, configurada pelo registro.{atualizado ? ` Atualizado às ${atualizado.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.` : ''}</p>
     </header>
