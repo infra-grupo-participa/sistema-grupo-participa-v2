@@ -56,10 +56,11 @@ declare
   d dados.dashboards;
   v_ini timestamptz; v_fim timestamptz;
 begin
-  d := dados.atm_cadastro(p_chave);   -- 42501 sem acesso ao dashboard, P0002 chave fora do cadastro ou outro modelo
+  -- contato.ver primeiro (pentester 15/10): sem ele, nem a existência da chave vaza pela diferença P0002 x 42501
   if not coalesce(acesso.tem('contato.ver'), false) then
     raise exception 'sem permissão para ver contatos' using errcode = '42501';
   end if;
+  d := dados.atm_cadastro(p_chave);   -- 42501 sem acesso ao dashboard, P0002 chave fora do cadastro ou outro modelo
   select x.ini, x.fim into v_ini, v_fim from dados.periodo(d.periodo_inicio, d.periodo_fim, p_de, p_ate) x;
   return query
   with g as (
