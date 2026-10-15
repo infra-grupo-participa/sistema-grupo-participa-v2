@@ -15,14 +15,16 @@ export type Isca = 'Fluxograma' | 'Futurômetro' | 'Checkup';
 export type ConjuntoC3 = 'base' | 'quente' | 'aberto';
 export type Porta = 'isca' | 'consultoria' | 'inscricao_direta';
 export type OrigemLead = 'pago' | 'base_api' | 'grupo_legado' | 'organico';
-export type AbaBlack = 'visao' | 'jornada' | 'criativos' | 'mensageria' | 'historico';
+export type AbaBlack = 'visao' | 'jornada' | 'criativos' | 'mensageria' | 'historico' | 'lives';
 /** As 4 respostas da pergunta de profissão (decisão do Victor de 12/10/2026, noite: sem a opção do patrimônio da família). */
 export type Profissao = 'advogado' | 'contador' | 'estudante_direito' | 'outros';
 
 /** AAAA-MM-DD no fuso de São Paulo, inclusivo nas duas pontas. */
 export interface Periodo { de: string; ate: string }
 export interface FiltroCriativos { campanha?: string; conjunto?: string; anuncio?: string; pagina?: string }
-export interface Recorte { funil: FiltroFunil; canal: FiltroCanal; periodo: string; periodoPersonalizado?: Periodo | null; aba: AbaBlack; criativos: FiltroCriativos; historicoModo?: 'dia-a-dia' | 'geral' }
+export interface Recorte { funil: FiltroFunil; canal: FiltroCanal; periodo: string; periodoPersonalizado?: Periodo | null; aba: AbaBlack; criativos: FiltroCriativos; historicoModo?: 'dia-a-dia' | 'geral';
+  /** Aba Lives: id (11 caracteres do YouTube) da live aberta no detalhe. Fora da aba Lives não vai para a URL. */
+  live?: string }
 
 /** Régua de CPL do Caio (meta e teto, em reais). */
 export interface ReguaCpl { meta: number; teto: number }

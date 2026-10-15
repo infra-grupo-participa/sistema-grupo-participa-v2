@@ -26,6 +26,7 @@ import { AbaCriativosPaginas } from './AbaCriativosPaginas';
 import { AbaMensageria } from './AbaMensageria';
 import { AbaHistorico } from './AbaHistorico';
 import { GavetaLateral } from './GavetaLateral';
+import { AbaLives } from './lives/AbaLives';
 
 const TEMPO_LIMITE_MS = 15_000;
 const RELEITURA_MS = 5 * 60_000;
@@ -36,6 +37,7 @@ const ABAS_TELA: { k: AbaBlack; l: string }[] = [
   { k: 'criativos', l: 'Criativos e páginas' },
   { k: 'mensageria', l: 'Mensageria' },
   { k: 'historico', l: 'Histórico' },
+  { k: 'lives', l: 'Lives' },
 ];
 
 // Abaixo de 768 px as cinco abas quebram linha (nenhuma fica escondida atrás da rolagem) e ganham altura de toque.
@@ -64,6 +66,12 @@ async function lerBloco<T>(nome: string, f: () => Promise<Resultado<T>>, set: (f
 }
 
 const horaCurta = (d: Date) => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+/** "2026-10-15T20:30" vira "15/10 às 20h30"; "2026-11-03" vira "03/11". */
+function relogioTexto(r: string): string {
+  const [dia, hora] = r.split('T');
+  const d = dia.split('-').reverse().slice(0, 2).join('/');
+  return hora ? `${d} às ${hora.slice(0, 2)}h${hora.slice(3, 5)}` : d;
+}
 const dataHora = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 
 export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, isMaster = false, podeVerContato = false }: {
@@ -110,8 +118,10 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
 
   // 2) o resto, em paralelo, depois da config
   const de = periodo?.de; const ate = periodo?.ate; const inicio = completo?.de; const hoje = completo?.ate;
+  // A aba Lives tem leitura própria e não usa funil, período nem canal: não lê o resto enquanto está nela.
+  const naLives = recorte.aba === 'lives';
   useEffect(() => {
-    if (!fonte || !de || !ate || !inicio || !hoje) return;
+    if (!fonte || !de || !ate || !inicio || !hoje || naLives) return;
     const periodo = { de, ate }; const completo = { de: inicio, ate: hoje };
     let vivo = true;
     const marca = `${de}|${ate}|${inicio}|${hoje}|${versao}`;
@@ -124,7 +134,7 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
       lerBloco('os marcos da live', () => fonte.marcos(chave), setMarcos),
     ]).finally(() => { if (vivo) { setLida(marca); ultimaLeitura.current = Date.now(); setRelogioTela(new Date()); } });
     return () => { vivo = false; };
-  }, [fonte, chave, de, ate, inicio, hoje, versao, isMaster]);
+  }, [fonte, chave, de, ate, inicio, hoje, versao, isMaster, naLives]);
 
   // 3) grupo: período e nó da tela (funil, ou o anúncio/conjunto/campanha/página escolhido, pelo id do Meta) vão ao
   // servidor (p_recorte); sem teste.
@@ -135,9 +145,9 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
   );
   const marcaRecorte = alvoGrupo.ok ? chaveRecorte(alvoGrupo.recorte) : 'sem-numero';
   useEffect(() => {
-    if (!fonte || !de || !ate || !alvoGrupo.ok) return;
+    if (!fonte || !de || !ate || !alvoGrupo.ok || naLives) return;
     void lerBloco('o grupo', () => fonte.grupo(chave, { de, ate }, alvoGrupo.recorte), setGrupo);
-  }, [fonte, chave, de, ate, marcaRecorte, versao]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fonte, chave, de, ate, marcaRecorte, versao, naLives]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Releitura a cada 5 min, só com a aba visível; ao voltar para a aba, relê se passou do prazo.
   useEffect(() => {
@@ -188,13 +198,13 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
   }, [fonte, cfg, agora, periodo, trafego.data, perfil.data, perfil.semDado, perfil.aviso, trafegoPeriodo.data, mensageria.data, mensageria.semDado, marcos.data, grupo, alvoGrupo, isMaster, podeVerContato, recorte, chave, irPara]);
 
   const marcaAtual = de && ate && inicio && hoje ? `${de}|${ate}|${inicio}|${hoje}|${versao}` : null;
-  const lendo = marcaAtual !== null && lida !== marcaAtual;
-  const erros = [config, trafego, trafegoPeriodo, perfil, mensageria, marcos, grupo].filter((b) => b.erro);
-  const avisos = ([['Tráfego', trafego], ['Cadastros', perfil], ['Grupo', grupo]] as const).filter(([, b]) => b.aviso && !b.erro);
-  const esmaecido = Boolean(trafego.erro || perfil.erro || config.erro);
+  const lendo = !naLives && marcaAtual !== null && lida !== marcaAtual;
+  const erros = (naLives ? [config] : [config, trafego, trafegoPeriodo, perfil, mensageria, marcos, grupo]).filter((b) => b.erro);
+  const avisos = naLives ? [] : ([['Tráfego', trafego], ['Cadastros', perfil], ['Grupo', grupo]] as const).filter(([, b]) => b.aviso && !b.erro);
+  const esmaecido = !naLives && Boolean(trafego.erro || perfil.erro || config.erro);
   const lidoEm = trafego.lidoEm ?? perfil.lidoEm;
   // Só a config derruba a tela inteira: sem tráfego ou sem cadastros, cada bloco mostra o seu "Sem dado".
-  const semFonteReal = config.semDado;
+  const semFonteReal = config.semDado && !naLives;
   const ids = (k: AbaBlack) => idsAba('black-principal', k);
 
   return (
@@ -217,14 +227,14 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
       {fonte?.modo === 'demonstracao' && (
         <div role="note" className="rounded-[var(--r-md)] border border-[var(--yellow)]/40 bg-[var(--surface-2)] p-3 text-sm text-[var(--yellow)]">
           Dados de demonstração (fictícios). Nenhum número desta tela é real: campanhas com prefixo ZZ e a palavra FICTÍCIO, leads com nome de teste e e-mail em exemplo.test.
-          {relogio ? ` Relógio da demonstração fixado em ${relogio.split('-').reverse().join('/')}.` : ' Relógio da demonstração: 03/11 às 18h.'}
+          {relogio ? ` Relógio da demonstração fixado em ${relogioTexto(relogio)}.` : ' Relógio da demonstração: 03/11 às 18h.'}
         </div>
       )}
 
       <SeletorGlobal funil={recorte.funil} periodo={recorte.periodo} canal={recorte.canal} datas={periodo}
-        inicio={cfg?.inicio} fim={completo?.ate} onChange={irPara} />
+        inicio={cfg?.inicio} fim={completo?.ate} onChange={irPara} desligado={naLives} />
 
-      {recorte.funil !== 'todos' && <div role="status" aria-label={`Filtrando por ${ROTULO_FILTRO_FUNIL[recorte.funil]}`}
+      {!naLives && recorte.funil !== 'todos' && <div role="status" aria-label={`Filtrando por ${ROTULO_FILTRO_FUNIL[recorte.funil]}`}
         className="sticky top-16 z-30 flex items-center justify-between gap-3 rounded-[var(--r-md)] border border-[var(--border-accent)] bg-[var(--surface-2)] px-3 py-2 text-sm shadow-[var(--shadow-sm)]">
         <span className="min-w-0 truncate text-[var(--fg-2)]">Filtrando: <strong className="text-[var(--fg)]">{ROTULO_FILTRO_FUNIL[recorte.funil]}</strong></span>
         <button type="button" className="min-h-9 shrink-0 rounded-[var(--r-sm)] px-2 font-semibold text-[var(--accent)] hover:bg-[var(--accent-subtle)]"
@@ -237,8 +247,15 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
         <p key={nome} role="note" className="text-xs text-[var(--fg-3)]">{nome}: {b.aviso}. Os números deste bloco ficam como Sem dado.</p>
       ))}
 
-      {!fonte || (!dados && !semFonteReal && (lendo || !config.lidoEm)) ? (
+      {!fonte || (!naLives && !dados && !semFonteReal && (lendo || !config.lidoEm)) ? (
         <Loading label="Lendo os dados da Black…" />
+      ) : naLives ? (
+        <div className={ABAS_NO_CELULAR}>
+          <Tabs tabs={ABAS_TELA} active={recorte.aba} onChange={(k) => irPara({ aba: k as AbaBlack })} idBase="black-principal" label="Seções do dashboard" />
+          <section role="tabpanel" id={ids('lives').panel} aria-labelledby={ids('lives').tab}>
+            <AbaLives fonte={fonte} chave={chave} isMaster={isMaster} videoId={recorte.live ?? null} irPara={irPara} versao={versao} />
+          </section>
+        </div>
       ) : semFonteReal ? (
         <SectionCard title="Sem dado">
           <EmptyState icon="chart" title="Dashboard sem cadastro"
@@ -249,7 +266,7 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
       ) : (
         <div className={(esmaecido ? 'opacity-60 transition-opacity' : 'transition-opacity') + ' ' + ABAS_NO_CELULAR}>
           <Tabs tabs={ABAS_TELA} active={recorte.aba} onChange={(k) => irPara({ aba: k as AbaBlack })} idBase="black-principal" label="Seções do dashboard" />
-          {ABAS_TELA.map(({ k }) => (
+          {ABAS_TELA.filter(({ k }) => k !== 'lives').map(({ k }) => (
             <section key={k} role="tabpanel" id={ids(k).panel} aria-labelledby={ids(k).tab} hidden={recorte.aba !== k}>
               {recorte.aba === k && k === 'visao' && <AbaVisaoGeral d={dados} />}
               {recorte.aba === k && k === 'jornada' && <AbaJornada d={dados} gaveta={gaveta} />}

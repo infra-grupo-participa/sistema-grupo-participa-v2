@@ -180,10 +180,10 @@ export function GraficoLinha({ pontos, formato, rotuloSerie, meta, metaRotulo = 
           <span className="text-[var(--fg-3)]">{p.rotulo} · </span><strong className="tabular text-[var(--fg)]">{formatar(p.valor, formato)}</strong>
         </div>
       )}
-      <table className="sr-only table-fixed w-px max-w-px overflow-hidden" style={{ position: 'fixed', top: 0, left: 0 }}>
+      <div className="sr-only"><table>
         <caption>{rotuloSerie} por dia</caption>
         <tbody>{pontos.map((pt) => <tr key={pt.chave}><th scope="row">{pt.rotulo}</th><td>{formatar(pt.valor, formato)}</td></tr>)}</tbody>
-      </table>
+      </table></div>
     </div>
   );
 }
@@ -248,17 +248,19 @@ export function FunilTrapezio({ etapas, rotulo }: { etapas: EtapaFunil[]; rotulo
           );
         })}
       </svg>
-      <table className="sr-only">
-        <caption>{rotulo}</caption>
-        <tbody>
-          {etapas.map((e) => (
-            <tr key={e.chave}>
-              <th scope="row">{e.rotulo}</th><td>{formatar(e.valor, 'int')}{e.subtexto ? `, ${e.subtexto}` : ''}</td>
-              <td>{e.ponte ? `${e.ponte.rotulo}: ${formatar(e.ponte.taxa.valor, 'pct')} (${dicaTaxa(e.ponte.taxa)})` : ''}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="sr-only">
+        <table>
+          <caption>{rotulo}</caption>
+          <tbody>
+            {etapas.map((e) => (
+              <tr key={e.chave}>
+                <th scope="row">{e.rotulo}</th><td>{formatar(e.valor, 'int')}{e.subtexto ? `, ${e.subtexto}` : ''}</td>
+                <td>{e.ponte ? `${e.ponte.rotulo}: ${formatar(e.ponte.taxa.valor, 'pct')} (${dicaTaxa(e.ponte.taxa)})` : ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }
@@ -341,10 +343,12 @@ export function GraficoInvestimentoLeads({ serie }: { serie: DiaInvestimentoLead
         )}
       </div>
       <div className="mt-1 flex justify-between text-[10px] text-[var(--fg-3)]"><span>{dataCurta(serie[0].dia)}</span><span>{dataCurta(serie[n - 1].dia)}</span></div>
-      <table className="sr-only">
-        <caption>{`Investimento total ${moeda(total)}`}</caption>
-        <tbody>{serie.map((s) => <tr key={s.dia}><th scope="row">{dataCurta(s.dia)}</th><td>{moeda(s.gasto)}</td><td>{`${formatar(s.leads, 'int')} leads pagos`}</td></tr>)}</tbody>
-      </table>
+      <div className="sr-only">
+        <table>
+          <caption>{`Investimento total ${moeda(total)}`}</caption>
+          <tbody>{serie.map((s) => <tr key={s.dia}><th scope="row">{dataCurta(s.dia)}</th><td>{moeda(s.gasto)}</td><td>{`${formatar(s.leads, 'int')} leads pagos`}</td></tr>)}</tbody>
+        </table>
+      </div>
     </figure>
   );
 }

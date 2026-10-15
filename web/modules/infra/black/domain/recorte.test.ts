@@ -84,3 +84,19 @@ describe('periodoDe', () => {
     expect(diasDoPeriodo({ de: '2026-10-30', ate: '2026-11-02' })).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
   });
 });
+
+describe('aba Lives no recorte', () => {
+  it('lê a aba e o id da live; id fora do padrão do YouTube é descartado', () => {
+    expect(lerRecorte({ aba: 'lives', live: 'ZZdemo00001' })).toMatchObject({ aba: 'lives', live: 'ZZdemo00001' });
+    expect(lerRecorte({ aba: 'lives', live: 'curto' }).live).toBeUndefined();
+    expect(lerRecorte({ aba: 'lives' }).live).toBeUndefined();
+  });
+  it('o id da live só vale na aba Lives', () => {
+    expect(lerRecorte({ aba: 'visao', live: 'ZZdemo00001' }).live).toBeUndefined();
+  });
+  it('escreve o id na URL só na aba Lives e mantém o relógio da demonstração com hora', () => {
+    const r = lerRecorte({ aba: 'lives', live: 'ZZdemo00001' });
+    expect(escreverRecorte(r, new URLSearchParams('relogio=2026-10-15T20:30'))).toBe('funil=todos&periodo=desde-inicio&canal=todos&aba=lives&live=ZZdemo00001&relogio=2026-10-15T20%3A30');
+    expect(escreverRecorte({ ...r, aba: 'visao' })).not.toContain('live=');
+  });
+});

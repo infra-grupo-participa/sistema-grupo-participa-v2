@@ -10,16 +10,23 @@ import type {
   Resultado, ResultadoAcao, SegmentoGrupo, TotalPeriodo,
 } from '../../domain/tipos';
 import { CHAVE_BLACK, CONFIG_BLACK, PAGINAS } from './catalogo';
+import { criarLivesDemo } from './lives-demo';
 import { baseFicticia, PRIMEIRO_DIA, RELOGIO_PADRAO, ULTIMO_DIA } from './gerador';
 
 const ok = <T,>(data: T): Resultado<T> => ({ data, semDado: false, erro: null });
 const RE_DIA = /^\d{4}-\d{2}-\d{2}$/;
+const RE_DIA_HORA = /^(\d{4}-\d{2}-\d{2})T([01]\d|2[0-3]):([0-5]\d)$/;
 
 /**
  * Relógio do demo. Padrão: 03/11 às 18h. `?relogio=AAAA-MM-DD` (dentro de 04/10 a 03/11) fixa o fim
- * daquele dia, 23h59 de São Paulo; valor fora disso cai no padrão.
+ * daquele dia, 23h59 de São Paulo; `?relogio=AAAA-MM-DDTHH:MM` fixa o minuto (horário de São Paulo), útil para ver a
+ * aba Lives com uma live no ar; valor fora disso cai no padrão.
  */
 export function relogioDemo(relogio?: string | null): Date {
+  const dh = relogio ? RE_DIA_HORA.exec(relogio) : null;
+  if (dh && dh[1] >= PRIMEIRO_DIA && dh[1] <= ULTIMO_DIA && !Number.isNaN(Date.parse(`${relogio}:00-03:00`))) {
+    return new Date(`${relogio}:00-03:00`);
+  }
   if (relogio && RE_DIA.test(relogio) && relogio >= PRIMEIRO_DIA && relogio <= ULTIMO_DIA && !Number.isNaN(Date.parse(relogio))) {
     return new Date(`${relogio}T23:59:59-03:00`);
   }
@@ -127,9 +134,16 @@ export function criarFonteFixtures(relogio?: string | null): FonteDadosBlack {
     return { data: mudou ? 1 : 0, erro: null };
   };
 
+  const lives = criarLivesDemo(agora);
+
   return {
     modo: 'demonstracao',
     agora: () => new Date(agora),
+    async lives(chave) { return lives.lives(chave); },
+    async liveDetalhe(chave, videoId) { return lives.detalhe(chave, videoId); },
+    async importarLive(chave, videoId, linhas, confirmar) { return lives.importar(chave, videoId, linhas, confirmar); },
+    async cadastrarLive(chave, videoId, tipo, dataPrevista) { return lives.cadastrar(chave, videoId, tipo, dataPrevista); },
+    async removerLive(chave, videoId) { return lives.remover(chave, videoId); },
     async config(chave) {
       return chaveErrada(chave, CONFIG_BLACK) ?? ok(CONFIG_BLACK);
     },
