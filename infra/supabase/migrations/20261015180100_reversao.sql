@@ -1,4 +1,21 @@
 -- Reversão da 20261015180100: volta dados_marcar_teste e dados_desmarcar_teste aos corpos de 15/10 (ATM e ações: equipe).
+-- Guarda (recomendação 1 do pentester): só volta se o corpo vivo for o da migration (md5 do prosrc).
+
+do $g$
+begin
+  if (select md5(prosrc) from pg_proc where oid = 'public.dados_marcar_teste(text,text,text,text)'::regprocedure) is distinct from 'c334b6d4e84b51e926e3dce267a42417' then
+    raise exception '20261015180100 reversão: corpo vivo de dados_marcar_teste não é o da 20261015180100; revisar antes de voltar';
+  end if;
+end
+$g$;
+
+do $g$
+begin
+  if (select md5(prosrc) from pg_proc where oid = 'public.dados_desmarcar_teste(text,text,text)'::regprocedure) is distinct from '5047b89d5c21bf4a018518f5698ffc50' then
+    raise exception '20261015180100 reversão: corpo vivo de dados_desmarcar_teste não é o da 20261015180100; revisar antes de voltar';
+  end if;
+end
+$g$;
 
 CREATE OR REPLACE FUNCTION public.dados_marcar_teste(p_chave text, p_email text DEFAULT NULL::text, p_telefone text DEFAULT NULL::text, p_motivo text DEFAULT 'teste'::text)
  RETURNS integer
