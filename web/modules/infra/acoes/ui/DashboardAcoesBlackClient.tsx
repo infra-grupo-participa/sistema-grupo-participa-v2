@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { dashboardAtmSemDado, type DashboardAtm, type CanalDisparoAtm, type LeadAtm } from '@/modules/infra/atm/domain/dashboard';
-import { carregarAtmLeads, type DisparoDetalheAtm, type Resultado } from '@/modules/infra/atm/infrastructure/atm-data';
+import { carregarAtmLeads, desmarcarAtmTeste, marcarAtmTeste, type DisparoDetalheAtm, type Resultado } from '@/modules/infra/atm/infrastructure/atm-data';
 import { chaveListaAtm, criarCarregadorListasAtm } from '@/modules/infra/atm/ui/carregador-listas';
 import { useListaAtm } from '@/modules/infra/atm/ui/useListaAtm';
 import { EmptyState, KpiCard, SectionCard, Tabs, idsAba } from '@/shared/ui/components';
@@ -124,6 +124,16 @@ export function DashboardAcoesBlackClient({ isMaster = false }: { isMaster?: boo
   const comTeste = isMaster && incluirTeste;
   const etiqueta = acao.estado === 'ativa' ? acao.etiqueta : null;
   const listaLeads = useListaAtm<LeadAtm>(listas, etiqueta ? chaveListaAtm('dados_atm_leads', etiqueta, null, comTeste) : null, () => carregarAtmLeads(etiqueta!, undefined, comTeste), versaoListas);
+  // Marcar lead como teste (15/10/2026): mesma RPC do ATM; o banco aceita a chave da ação (modelo acao-black). Só master.
+  const toggleLead = async (lead: LeadAtm, teste: boolean): Promise<string | null> => {
+    if (!isMaster) return 'Só masters podem marcar ou desmarcar testes.';
+    if (!etiqueta) return 'Ação sem etiqueta cadastrada.';
+    const r = teste ? await marcarAtmTeste(etiqueta, lead.email, lead.telefone) : await desmarcarAtmTeste(etiqueta, lead.email, lead.telefone);
+    if (r.erro) return r.erro;
+    setVersaoListas((v) => v + 1);
+    void atualizar();
+    return null;
+  };
   const contagemLeads = listaLeads?.data ? contarLeadsAcao(listaLeads.data) : null;
   const resultadoResumo = dados?.resumo;
   const dashboard: DashboardAtm | null = resultadoResumo && !resultadoResumo.semDado ? resultadoResumo.data : null;
@@ -202,6 +212,6 @@ export function DashboardAcoesBlackClient({ isMaster = false }: { isMaster?: boo
         </SectionCard>
       </div>}
     </div>
-    <ModalLeadsAcao open={modalLeads} onClose={() => setModalLeads(false)} nomeAcao={acao.nome} lista={listaLeads} card={dashboard?.resumo.leads ?? { valor: 0, semDado: true }} periodoLabel="período do cadastro" isMaster={isMaster} incluirTeste={comTeste} onIncluirTeste={setIncluirTeste} />
+    <ModalLeadsAcao open={modalLeads} onClose={() => setModalLeads(false)} nomeAcao={acao.nome} lista={listaLeads} card={dashboard?.resumo.leads ?? { valor: 0, semDado: true }} periodoLabel="período do cadastro" isMaster={isMaster} incluirTeste={comTeste} onIncluirTeste={setIncluirTeste} onToggleLead={toggleLead} />
   </div>;
 }

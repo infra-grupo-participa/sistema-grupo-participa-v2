@@ -75,6 +75,8 @@ export type PropsModalPessoasAtm<T extends { id: string; teste: boolean }> = {
   semAbaGrupo?: boolean;
   /** Faixa de leitura acima das abas (contagens, avisos). */
   resumoNoTopo?: ReactNode;
+  /** Recorte só da Evolução e do Resumo; a tabela segue com o conjunto inteiro (Ações da Black: só leads válidos, 15/10/2026). */
+  recorteGraficos?: (data: T[]) => T[];
 };
 
 function GraficoDiario({ rows, rotulo }: { rows: DiaSerieAtm[]; rotulo: string }) {
@@ -127,7 +129,7 @@ function estadoSemConteudo<T>(estado: EstadoListaAtm<T> | null, carregando: Reac
 }
 
 export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props: PropsModalPessoasAtm<T>) {
-  const { open, onClose, titulo, abaPessoas, rotuloContador, rotuloCentro, periodoLabel, periodo, card, lista, filtrar, colunas, rotuloData, dataDe, campos, grupo, textos, bloqueio, notas, isMaster, incluirTeste, onIncluirTeste, acaoTeste, graficoEvolucao = 'barras', semAbaGrupo = false, resumoNoTopo } = props;
+  const { open, onClose, titulo, abaPessoas, rotuloContador, rotuloCentro, periodoLabel, periodo, card, lista, filtrar, colunas, rotuloData, dataDe, campos, grupo, textos, bloqueio, notas, isMaster, incluirTeste, onIncluirTeste, acaoTeste, graficoEvolucao = 'barras', semAbaGrupo = false, resumoNoTopo, recorteGraficos } = props;
   const [aba, setAba] = useState(abaPessoas);
   const [alvo, setAlvo] = useState<T | null>(null);
   const [alvoNumero, setAlvoNumero] = useState<NumeroGrupoAtm | null>(null);
@@ -138,7 +140,8 @@ export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props:
   const itens = lista?.data ? (filtrar ? filtrar(lista.data) : lista.data) : [];
   const contador = contadorDoModalAtm(itens);
   const cruzamento = grupo.modo === 'cruzamento' && grupo.estado?.data ? cruzarComGrupoAtm(itens, grupo.telefoneDe, grupo.estado.data) : null;
-  const serie = aba === 'Evolução' ? serieDiariaAtm(itens, dataDe, periodo.de, periodo.ate, hojeEmSaoPaulo()) : [];
+  const itensGraficos = recorteGraficos ? recorteGraficos(itens) : itens;
+  const serie = aba === 'Evolução' ? serieDiariaAtm(itensGraficos, dataDe, periodo.de, periodo.ate, hojeEmSaoPaulo()) : [];
   const temLista = !bloqueio && !!lista?.data;
   const desatualizada = temLista && lista?.erro != null;
   const comAcao = isMaster && !!acaoTeste;
@@ -222,7 +225,7 @@ export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props:
       const g = grupo.estado;
       return <section key={campo.nome} className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)] p-4"><h3 className="mb-3 text-sm font-semibold text-[var(--fg)]">{campo.nome}</h3><p className="text-xs text-[var(--fg-3)]">{!g || g.fase === 'carregando' ? 'Carregando os números do grupo…' : g.fase === 'naoPublicada' ? 'Números do grupo indisponíveis' : g.erro ?? 'Sem dado'}</p></section>;
     }
-    return <RoscaCategorias key={campo.nome} titulo={campo.nome} rotuloCentro={rotuloCentro} fatias={distribuicaoAtm(itens, (item) => campo.valor(item, cruzamento?.get(item.id)))} />;
+    return <RoscaCategorias key={campo.nome} titulo={campo.nome} rotuloCentro={rotuloCentro} fatias={distribuicaoAtm(itensGraficos, (item) => campo.valor(item, cruzamento?.get(item.id)))} />;
   })}</div>);
 
   const conteudo = aba === 'Grupo'

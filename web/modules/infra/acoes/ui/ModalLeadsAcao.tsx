@@ -32,10 +32,14 @@ const CAMPOS: CampoResumoPessoasAtm<LeadAtm>[] = [
   { nome: 'Estado', valor: (l) => rotuloValorResumoLead(l.estado) },
   { nome: 'Instrução', valor: (l) => rotuloValorResumoLead(l.instrucao) },
   { nome: 'Turma', valor: (l) => rotuloValorResumoLead(l.turma) },
-  { nome: 'Válido para a oferta?', valor: (l) => validade(l) },
 ];
 
-export function ModalLeadsAcao({ nomeAcao, lista, card, periodoLabel, open, onClose, isMaster, incluirTeste, onIncluirTeste }: {
+const MENSAGEM_TESTE = 'Esta marcação vale só para esta ação da Black. O lead deixa de contar nos indicadores dela (leads, válidos e ingresso no grupo). Quer continuar?';
+
+/** Evolução e Resumo contam só os leads válidos (pedido do Victor, 15/10/2026). Sem lista de aptos carregada, não dá para separar e o conjunto inteiro fica. */
+const soValidos = (leads: LeadAtm[]) => leads.some((l) => l.listaOrigem !== null) ? leads.filter((l) => !l.teste && validadeDaOferta(l) === 'sim') : leads;
+
+export function ModalLeadsAcao({ nomeAcao, lista, card, periodoLabel, open, onClose, isMaster, incluirTeste, onIncluirTeste, onToggleLead }: {
   nomeAcao: string;
   lista: EstadoListaAtm<LeadAtm> | null;
   card: MetricaAtm;
@@ -45,10 +49,11 @@ export function ModalLeadsAcao({ nomeAcao, lista, card, periodoLabel, open, onCl
   isMaster: boolean;
   incluirTeste: boolean;
   onIncluirTeste: (v: boolean) => void;
+  onToggleLead: (lead: LeadAtm, teste: boolean) => Promise<string | null>;
 }) {
   const c = lista?.data ? contarLeadsAcao(lista.data) : null;
   const faixa = c && c.validos !== null
-    ? <p className="mb-3 text-xs text-[var(--fg-2)]"><strong className="tabular text-[var(--fg)]">{c.validos}</strong> válidos para a oferta · <strong className="tabular text-[var(--fg)]">{c.foraDaLista}</strong> fora da lista de aptos · <strong className="tabular text-[var(--fg)]">{c.gerais}</strong> leads gerais. Quem usa um e-mail fora da lista também entra como lead.</p>
+    ? <p className="mb-3 text-xs text-[var(--fg-2)]"><strong className="tabular text-[var(--fg)]">{c.validos}</strong> válidos para a oferta · <strong className="tabular text-[var(--fg)]">{c.foraDaLista}</strong> fora da lista de aptos · <strong className="tabular text-[var(--fg)]">{c.gerais}</strong> leads gerais. Quem usa um e-mail fora da lista também entra como lead. Evolução e Resumo contam só os válidos.</p>
     : c ? <p className="mb-3 text-xs text-[var(--yellow)]">Esta ação ainda não tem a lista de aptos carregada no banco: não dá para separar leads válidos de leads gerais.</p> : null;
   const semGrupo: { modo: 'numeros'; estado: EstadoListaAtm<NumeroGrupoAtm> | null } = { modo: 'numeros', estado: null };
   return <ModalPessoasAtm<LeadAtm>
@@ -57,5 +62,6 @@ export function ModalLeadsAcao({ nomeAcao, lista, card, periodoLabel, open, onCl
     colunas={COLUNAS} rotuloData="Data" dataDe={(l) => l.dataHora} campos={CAMPOS} grupo={semGrupo}
     textos={{ naoPublicada: 'Leads indisponíveis', vazio: 'Nenhum lead nesta ação ainda' }}
     isMaster={isMaster} incluirTeste={incluirTeste} onIncluirTeste={onIncluirTeste}
-    graficoEvolucao="linha" semAbaGrupo resumoNoTopo={faixa} />;
+    acaoTeste={{ disponivel: (l) => !!(l.email || l.telefone), tituloConfirmacao: 'Marcar lead como teste', mensagemConfirmacao: MENSAGEM_TESTE, executar: onToggleLead }}
+    graficoEvolucao="linha" semAbaGrupo resumoNoTopo={faixa} recorteGraficos={soValidos} />;
 }

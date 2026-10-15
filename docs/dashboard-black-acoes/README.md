@@ -52,3 +52,11 @@ A leitura manual em 14/10 confirmou os mesmos dados após clicar em Atualizar. O
 - **Cards do topo:** Leads, Ingresso no grupo e % ingresso mostram os **válidos** e deixam o geral no hint. O ingresso divide pelos válidos. Sem lista de aptos carregada, os três ficam com o número do resumo, como antes.
 - **Quem é apto:** a lista da planilha "Black do THB com acesso vencido" (386). Os removidos (Turma Especial e Removidos 15/10) são inaptos. A carga está em `infra/supabase/cargas/black-thb-2026-10/` e **não foi aplicada**.
 - **Por que não deduzir da Central:** "THB ou THB-sócio e vencido" dá 328 pessoas, 310 dentro da planilha e 18 fora; a planilha tem regra própria (sócio segue o titular, remoções manuais).
+
+## Marcar lead como teste e gráficos só com válidos · 15/10/2026
+
+- **Por quê:** o Victor não conseguia marcar lead como teste no modal de Leads. O botão nunca tinha sido ligado na tela da Black (o `ModalLeadsAcao` não passava `acaoTeste`). O banco já aceitava: a ação tem `modelo = 'acao-black'` em `dados.dashboards`, e `public.dados_marcar_teste` segue o mesmo caminho do ATM (`dados.atm_cadastro` + `dados.atm_pertence`), gravando em `dados.marcacoes_teste`. Conferido em 15/10: todos os 14 leads com e-mail da `black-thb-2026-10` passam em `atm_pertence`. **Nenhuma mudança no banco.**
+- **O que mudou:** na aba Leads, master vê "Marcar como teste" / "Desmarcar teste" (mesmas RPCs `dados_marcar_teste` e `dados_desmarcar_teste` do ATM, pela etiqueta da ação), com confirmação própria da Black. Depois de marcar, a lista e os cards releem.
+- **Evolução e Resumo contam só os leads válidos** (na lista de aptos e sem teste). A tabela continua com todos, com a coluna "Válido para a oferta?". A pizza "válido para a oferta?" saiu do Resumo (seria 100% sim). Sem lista de aptos carregada, os gráficos usam o conjunto inteiro, porque não dá para separar. O recorte é a opção `recorteGraficos` do `ModalPessoasAtm`; o ATM não usa e não muda.
+- **Como testar:** entrar como master, abrir o card Leads da aba THB vencidos, marcar um lead de teste, conferir que o card Leads cai em 1 e que o lead some da Evolução e do Resumo; desmarcar e conferir que volta.
+- **Validação:** `tsc`, `lint`, `lint:tokens`, `vitest` em `modules/infra/acoes` e `modules/infra/atm` (129 testes) e `build` passaram.
