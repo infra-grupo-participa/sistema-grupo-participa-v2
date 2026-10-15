@@ -51,8 +51,9 @@ const CAMPOS_LEADS: CampoResumoPessoasAtm<LeadAtm>[] = [
   { nome: 'Seminário de origem', valor: (l) => rotuloValorResumoLead(l.seminarioOrigem) },
 ];
 
-export function ModalLeadsAtm({ lista, onToggleLead, onToggleGrupo, ...c }: Comum & {
+export function ModalLeadsAtm({ lista, podeVerContato, onToggleLead, onToggleGrupo, ...c }: Comum & {
   lista: EstadoListaAtm<LeadAtm> | null;
+  podeVerContato: boolean;
   onToggleLead: (lead: LeadAtm, teste: boolean) => Promise<string | null>;
   onToggleGrupo: (numero: NumeroGrupoAtm, teste: boolean) => Promise<string | null>;
 }) {
@@ -60,6 +61,7 @@ export function ModalLeadsAtm({ lista, onToggleLead, onToggleGrupo, ...c }: Comu
     card={{ rotulo: 'Leads', metrica: c.card }} lista={lista} colunas={COLUNAS_LEADS} rotuloData="Data" dataDe={(l) => l.dataHora} campos={CAMPOS_LEADS}
     grupo={{ modo: 'numeros', estado: c.grupo, onToggle: onToggleGrupo }}
     textos={{ naoPublicada: 'Leads indisponíveis', vazio: 'Nenhum lead neste período' }}
+    bloqueio={podeVerContato ? null : SEM_CONTATO}
     acaoTeste={{ disponivel: (l) => !!(l.email || l.telefone), tituloConfirmacao: 'Marcar lead como teste', mensagemConfirmacao: MENSAGEM_TESTE, executar: onToggleLead }} />;
 }
 

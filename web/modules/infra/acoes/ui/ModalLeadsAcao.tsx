@@ -39,7 +39,7 @@ const MENSAGEM_TESTE = 'Esta marcação vale só para esta ação da Black. O le
 /** Evolução e Resumo contam só os leads válidos (pedido do Victor, 15/10/2026). Sem lista de aptos carregada, não dá para separar e o conjunto inteiro fica. */
 const soValidos = (leads: LeadAtm[]) => leads.some((l) => l.listaOrigem !== null) ? leads.filter((l) => !l.teste && validadeDaOferta(l) === 'sim') : leads;
 
-export function ModalLeadsAcao({ nomeAcao, lista, card, periodoLabel, open, onClose, isMaster, incluirTeste, onIncluirTeste, onToggleLead }: {
+export function ModalLeadsAcao({ nomeAcao, lista, card, periodoLabel, open, onClose, isMaster, podeVerContato, incluirTeste, onIncluirTeste, onToggleLead }: {
   nomeAcao: string;
   lista: EstadoListaAtm<LeadAtm> | null;
   card: MetricaAtm;
@@ -47,6 +47,7 @@ export function ModalLeadsAcao({ nomeAcao, lista, card, periodoLabel, open, onCl
   open: boolean;
   onClose: () => void;
   isMaster: boolean;
+  podeVerContato: boolean;
   incluirTeste: boolean;
   onIncluirTeste: (v: boolean) => void;
   onToggleLead: (lead: LeadAtm, teste: boolean) => Promise<string | null>;
@@ -61,6 +62,7 @@ export function ModalLeadsAcao({ nomeAcao, lista, card, periodoLabel, open, onCl
     periodoLabel={periodoLabel} periodo={{ de: null, ate: null }} card={{ rotulo: 'Leads', metrica: card }} lista={lista}
     colunas={COLUNAS} rotuloData="Data" dataDe={(l) => l.dataHora} campos={CAMPOS} grupo={semGrupo}
     textos={{ naoPublicada: 'Leads indisponíveis', vazio: 'Nenhum lead nesta ação ainda' }}
+    bloqueio={podeVerContato ? null : { titulo: 'Lista indisponível', hint: 'A capacidade contato.ver é necessária para visualizar dados pessoais.' }}
     isMaster={isMaster} incluirTeste={incluirTeste} onIncluirTeste={onIncluirTeste}
     acaoTeste={{ disponivel: (l) => !!(l.email || l.telefone), tituloConfirmacao: 'Marcar lead como teste', mensagemConfirmacao: MENSAGEM_TESTE, executar: onToggleLead }}
     graficoEvolucao="linha" semAbaGrupo resumoNoTopo={faixa} recorteGraficos={soValidos} />;

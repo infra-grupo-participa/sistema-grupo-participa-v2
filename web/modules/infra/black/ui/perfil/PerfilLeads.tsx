@@ -85,7 +85,7 @@ export function PerfilLeads({ d, linhas, ocultar = [] }: { d: DadosTela; linhas:
       </div>
 
       <div role="tabpanel" id={idsAba(`perfil-${base}`, 'leads').panel} aria-labelledby={idsAba(`perfil-${base}`, 'leads').tab} hidden={sub !== 'leads'}>
-        {sub === 'leads' && <TabelaLeads d={d} linhas={filtradas} />}
+        {sub === 'leads' && (d.podeVerContato ? <TabelaLeads d={d} linhas={filtradas} /> : <p className="py-6 text-center text-sm text-[var(--fg-3)]">A lista com dados pessoais exige a capacidade contato.ver.</p>)}
       </div>
 
       <div role="tabpanel" id={idsAba(`perfil-${base}`, 'evolucao').panel} aria-labelledby={idsAba(`perfil-${base}`, 'evolucao').tab} hidden={sub !== 'evolucao'}>

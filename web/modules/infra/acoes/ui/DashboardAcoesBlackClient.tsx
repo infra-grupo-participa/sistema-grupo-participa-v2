@@ -52,7 +52,7 @@ function preservarSeFalha<T>(atual: Resultado<T>, proximo: Resultado<T>): Result
   return proximo.semDado ? { ...atual, erro: proximo.erro } : proximo;
 }
 
-export function DashboardAcoesBlackClient({ isMaster = false }: { isMaster?: boolean }) {
+export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = false }: { isMaster?: boolean; podeVerContato?: boolean }) {
   const [acaoId, setAcaoId] = useState(registroAcoesBlack[0].id);
   const [modalLeads, setModalLeads] = useState(false);
   const [incluirTeste, setIncluirTeste] = useState(isMaster);
@@ -123,7 +123,7 @@ export function DashboardAcoesBlackClient({ isMaster = false }: { isMaster?: boo
   // (o modal só a mostra). Só master pede as linhas de teste.
   const comTeste = isMaster && incluirTeste;
   const etiqueta = acao.estado === 'ativa' ? acao.etiqueta : null;
-  const listaLeads = useListaAtm<LeadAtm>(listas, etiqueta ? chaveListaAtm('dados_atm_leads', etiqueta, null, comTeste) : null, () => carregarAtmLeads(etiqueta!, undefined, comTeste), versaoListas);
+  const listaLeads = useListaAtm<LeadAtm>(listas, podeVerContato && etiqueta ? chaveListaAtm('dados_atm_leads', etiqueta, null, comTeste) : null, () => carregarAtmLeads(etiqueta!, undefined, comTeste), versaoListas);
   // Marcar lead como teste (15/10/2026): mesma RPC do ATM; o banco aceita a chave da ação (modelo acao-black). Só master.
   const toggleLead = async (lead: LeadAtm, teste: boolean): Promise<string | null> => {
     if (!isMaster) return 'Só masters podem marcar ou desmarcar testes.';
@@ -212,6 +212,6 @@ export function DashboardAcoesBlackClient({ isMaster = false }: { isMaster?: boo
         </SectionCard>
       </div>}
     </div>
-    <ModalLeadsAcao open={modalLeads} onClose={() => setModalLeads(false)} nomeAcao={acao.nome} lista={listaLeads} card={dashboard?.resumo.leads ?? { valor: 0, semDado: true }} periodoLabel="período do cadastro" isMaster={isMaster} incluirTeste={comTeste} onIncluirTeste={setIncluirTeste} onToggleLead={toggleLead} />
+    <ModalLeadsAcao open={modalLeads} onClose={() => setModalLeads(false)} nomeAcao={acao.nome} lista={listaLeads} card={dashboard?.resumo.leads ?? { valor: 0, semDado: true }} periodoLabel="período do cadastro" isMaster={isMaster} podeVerContato={podeVerContato} incluirTeste={comTeste} onIncluirTeste={setIncluirTeste} onToggleLead={toggleLead} />
   </div>;
 }

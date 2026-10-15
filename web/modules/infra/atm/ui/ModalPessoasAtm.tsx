@@ -147,7 +147,7 @@ export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props:
   const comAcao = isMaster && !!acaoTeste;
   const titulosTabela = [...colunas.map((c) => c.titulo), ...(comAcao ? ['Teste', 'Ação'] : [])];
 
-  const contadorTexto = bloqueio ? `— · ${periodoLabel}`
+  const contadorTexto = bloqueio ? `${card.metrica.semDado ? 'Sem dado' : plural(card.metrica.valor, rotuloContador)} · ${periodoLabel} · lista restrita`
     : temLista ? `${plural(contador, rotuloContador)} · ${periodoLabel} · lida às ${hora(lista!.lidoEm)}${lista!.revalidando ? ' · atualizando…' : ''}`
       : !lista || lista.fase === 'carregando' ? `Carregando… · ${periodoLabel}` : `— ${rotuloContador[1]} · ${periodoLabel}`;
   const diverge = temLista && !lista!.revalidando && !desatualizada && !card.metrica.semDado && card.metrica.valor !== contador;

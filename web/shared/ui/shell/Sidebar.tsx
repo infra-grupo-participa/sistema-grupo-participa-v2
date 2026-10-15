@@ -89,10 +89,11 @@ export function Sidebar({ user }: { user: GpUser }) {
   const cur = normalize(pathname);
   // Departamento da rota atual: o menu dele só aparece dentro dele.
   const depAtual = departamentoDaRota(cur);
+  const temAcessoInfra = podeVerDepartamento(user, 'infra', ACESSO_DEPARTAMENTOS);
   // Victor, 05/10/2026: fora de departamento (Início, Usuários, Configurações) não mostra menu de departamento nenhum.
   const mostraEducacional = depAtual === 'educacional';
   const mostraMarketing = depAtual === 'marketing' && podeVerDepartamento(user, 'marketing', ACESSO_DEPARTAMENTOS);
-  const mostraInfra = depAtual === 'infra' && podeVerDepartamento(user, 'infra', ACESSO_DEPARTAMENTOS);
+  const mostraInfra = depAtual === 'infra' && temAcessoInfra;
   // Comercial: CRM inteiro, ou só Estratégias para quem pede estratégia sem ser do Comercial (mesma regra do layout).
   const acessoCom = acessoComercial(user, ACESSO_DEPARTAMENTOS);
   const mostraComercial = depAtual === 'comercial' && !!acessoCom;
@@ -165,6 +166,18 @@ export function Sidebar({ user }: { user: GpUser }) {
       </Group>
 
       <Divider />
+
+      {!temAcessoInfra && (
+        <>
+          <Group label="Dashboards" collapsed={!!groups.dashboards} onToggle={() => toggleGroup('dashboards')}>
+            <Link href="/infra/dashboards" className={itemCls(cur === '/infra/dashboards' || cur.startsWith('/infra/dashboards/'))}>
+              <span className={iconBoxCls(cur === '/infra/dashboards' || cur.startsWith('/infra/dashboards/'))}><Icon name="chart" /></span>
+              <span>Dashboards</span>
+            </Link>
+          </Group>
+          <Divider />
+        </>
+      )}
 
       {mostraMarketing && (
         <>

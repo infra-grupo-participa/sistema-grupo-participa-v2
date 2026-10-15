@@ -65,10 +65,11 @@ async function lerBloco<T>(nome: string, f: () => Promise<Resultado<T>>, set: (f
 const horaCurta = (d: Date) => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 const dataHora = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 
-export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, isMaster = false }: {
+export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, isMaster = false, podeVerContato = false }: {
   chave: string; titulo: string; relogio: string | null; recorteInicial: Recorte;
   /** Master vê e marca os testes (padrão do ATM). */
   isMaster?: boolean;
+  podeVerContato?: boolean;
 }) {
   const router = useRouter();
   const [recorte, setRecorte] = useState<Recorte>(recorteInicial);
@@ -180,10 +181,10 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
       grupo: alvoGrupo.ok
         ? { data: grupo.data, semDado: grupo.semDado || grupo.data === null, aviso: grupo.aviso, motivo: null, erro: grupo.erro, descricao: alvoGrupo.descricao ?? null }
         : { data: null, semDado: true, aviso: null, motivo: alvoGrupo.motivo, erro: null, descricao: null },
-      isMaster, recarregar: () => setVersao((v) => v + 1),
+      isMaster, podeVerContato, recarregar: () => setVersao((v) => v + 1),
       irPara, abrirGaveta: setGaveta,
     };
-  }, [fonte, cfg, agora, periodo, trafego.data, perfil.data, perfil.semDado, perfil.aviso, trafegoPeriodo.data, mensageria.data, mensageria.semDado, marcos.data, grupo, alvoGrupo, isMaster, recorte, chave, irPara]);
+  }, [fonte, cfg, agora, periodo, trafego.data, perfil.data, perfil.semDado, perfil.aviso, trafegoPeriodo.data, mensageria.data, mensageria.semDado, marcos.data, grupo, alvoGrupo, isMaster, podeVerContato, recorte, chave, irPara]);
 
   const marcaAtual = de && ate && inicio && hoje ? `${de}|${ate}|${inicio}|${hoje}|${versao}` : null;
   const lendo = marcaAtual !== null && lida !== marcaAtual;

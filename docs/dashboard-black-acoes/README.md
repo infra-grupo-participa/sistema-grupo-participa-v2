@@ -60,3 +60,13 @@ A leitura manual em 14/10 confirmou os mesmos dados após clicar em Atualizar. O
 - **Evolução e Resumo contam só os leads válidos** (na lista de aptos e sem teste). A tabela continua com todos, com a coluna "Válido para a oferta?". A pizza "válido para a oferta?" saiu do Resumo (seria 100% sim). Sem lista de aptos carregada, os gráficos usam o conjunto inteiro, porque não dá para separar. O recorte é a opção `recorteGraficos` do `ModalPessoasAtm`; o ATM não usa e não muda.
 - **Como testar:** entrar como master, abrir o card Leads da aba THB vencidos, marcar um lead de teste, conferir que o card Leads cai em 1 e que o lead some da Evolução e do Resumo; desmarcar e conferir que volta.
 - **Validação:** `tsc`, `lint`, `lint:tokens`, `vitest` em `modules/infra/acoes` e `modules/infra/atm` (129 testes) e `build` passaram.
+
+## Acesso aos dashboards da Infra · 15/10/2026
+
+Usuários autenticados da equipe podem abrir `/infra/dashboards` e consultar os dashboards CSM, Ações da Black e Escritório/ATM sem vínculo ao departamento Infra ou à capacidade `financeiro.ver`. O menu exibe um grupo próprio **Dashboards** para quem não tem acesso à Infra. A página inicial da Infra e o Laboratório mantêm a verificação de departamento.
+
+Os totais e gráficos permanecem visíveis. As listas com nome, e-mail ou telefone exigem `contato.ver`: isso inclui o detalhe de leads da Black e as listas de leads, pré-checkout e vendas do ATM e de Ações. Sem a capacidade, o front não solicita essas listas e apresenta aviso de acesso restrito. Marcar ou desmarcar registros como teste continua limitado a master.
+
+As RPCs não verificam `infra` nem `financeiro.ver`; exigem perfil ativo da equipe `@advmais.com` e dashboard ativo. As RPCs das listas pessoais do ATM também validam `contato.ver`; `dados_black_leads` ainda não faz essa validação no banco, então a tela evita solicitar seus detalhes quando a capacidade falta. Nenhuma alteração de banco foi feita.
+
+Para testar: autenticar com perfil ativo da equipe sem vínculo Infra nem `financeiro.ver`, abrir `/infra/dashboards`, entrar em CSM, Ações da Black e Escritório/ATM e conferir os indicadores. Abrir o detalhe de leads sem `contato.ver`: os totais continuam disponíveis e a lista não aparece. Confirmar que os controles de marcar teste não aparecem para não master. Abrir `/infra` e `/infra/laboratorio` com o mesmo perfil e confirmar que seguem restritos.

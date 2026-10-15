@@ -49,6 +49,8 @@ export interface DadosTela {
    */
   grupo: { data: GrupoResumoBlack | null; semDado: boolean; aviso: string | null; motivo: string | null; erro: string | null; descricao: string | null };
   isMaster: boolean;
+  /** Acesso a dados pessoais de leads; a lista detalhada só é exibida com esta capacidade. */
+  podeVerContato: boolean;
   /** Relê todos os blocos (depois de marcar ou desmarcar teste). */
   recarregar: () => void;
   /** Muda o recorte (e a URL). */

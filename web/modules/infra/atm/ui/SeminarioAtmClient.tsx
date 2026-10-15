@@ -143,8 +143,8 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
   const periodoLista = useMemo(() => datasDoPeriodo(periodoSelecionado), [periodoSelecionado]);
   const comTeste = isMaster && incluirTeste;
   const chaveDe = (rpc: string, periodo: typeof periodoLista | null, aberto: boolean) => (aberto ? chaveListaAtm(rpc, projeto.chave, periodo, comTeste) : null);
-  const listaLeads = useListaAtm<LeadAtm>(listas, chaveDe('dados_atm_leads', periodoLista, modal === 'leads'), () => carregarAtmLeads(projeto.chave, periodoLista, comTeste), versaoListas);
-  const grupoPeriodo = useListaAtm<NumeroGrupoAtm>(listas, chaveDe('dados_atm_grupo_numeros', periodoLista, modal === 'leads'), () => carregarAtmGrupo(projeto.chave, periodoLista, comTeste), versaoListas);
+  const listaLeads = useListaAtm<LeadAtm>(listas, chaveDe('dados_atm_leads', periodoLista, modal === 'leads' && podeVerContato), () => carregarAtmLeads(projeto.chave, periodoLista, comTeste), versaoListas);
+  const grupoPeriodo = useListaAtm<NumeroGrupoAtm>(listas, chaveDe('dados_atm_grupo_numeros', periodoLista, modal === 'leads' && podeVerContato), () => carregarAtmGrupo(projeto.chave, periodoLista, comTeste), versaoListas);
   // Pré-checkout e Vendas cruzam com o grupo do evento inteiro (quem está ou esteve no grupo, qualquer que seja o período).
   const grupoEvento = useListaAtm<NumeroGrupoAtm>(listas, chaveDe('dados_atm_grupo_numeros', null, (modal === 'preCheckout' || modal === 'vendas') && podeVerContato), () => carregarAtmGrupo(projeto.chave, undefined, comTeste), versaoListas);
   const listaPreCheckout = useListaAtm<PessoaPreCheckoutAtm>(listas, chaveDe('dados_atm_pre_checkout', periodoLista, modal === 'preCheckout' && podeVerContato), () => carregarAtmPreCheckout(projeto.chave, periodoLista, comTeste), versaoListas);
@@ -243,7 +243,7 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
       {posLive.erro && <p role="status" className="mb-3 text-sm text-[var(--yellow)]">{posLive.erro}</p>}
       {posLive.data.length ? <div className="grid gap-4 md:grid-cols-2">{(['aberto', 'fechado'] as const).map((nome) => { const p = ciclo(nome); return <div key={nome} className="rounded-[var(--r-md)] border border-[var(--border)] p-4"><h3 className="font-semibold capitalize">Ciclo {nome}</h3><div className="mt-3 grid grid-cols-2 gap-3"><KpiCard label="Vendas" value={renderVal(p?.vendas, 'inteiro')} hint={p?.vendas == null ? 'sem dado ainda' : undefined} /><KpiCard label="Conversão" value={renderVal(p?.conversao_pct, 'percentual')} hint={p?.conversao_pct == null ? 'sem dado ainda' : undefined} /></div></div>; })}</div> : <EmptyState title="Pós-live sem dados" hint="sem dado ainda" />}
     </SectionCard>
-    <ModalLeadsAtm {...comumModal} open={modal === 'leads'} card={metricaDoCardAtm(resumo?.resumo, 'leads')} lista={listaLeads} grupo={grupoPeriodo} onToggleLead={toggleLead} onToggleGrupo={toggleGrupo} />
+    <ModalLeadsAtm {...comumModal} open={modal === 'leads'} card={metricaDoCardAtm(resumo?.resumo, 'leads')} lista={listaLeads} grupo={podeVerContato ? grupoPeriodo : null} podeVerContato={podeVerContato} onToggleLead={toggleLead} onToggleGrupo={toggleGrupo} />
     <ModalPreCheckoutAtm {...comumModal} open={modal === 'preCheckout'} card={metricaDoCardAtm(resumo?.resumo, 'preCheckout')} lista={listaPreCheckout} grupo={grupoEvento} podeVerContato={podeVerContato} onTogglePessoa={togglePessoa} />
     <ModalVendasAtm {...comumModal} open={modal === 'vendas'} card={metricaDoCardAtm(resumo?.resumo, 'vendas')} lista={listaVendas} grupo={grupoEvento} podeVerContato={podeVerContato} vendasTeste={resumo?.periodo.vendasTeste ?? null} onToggleVenda={toggleVenda} />
     </div>
