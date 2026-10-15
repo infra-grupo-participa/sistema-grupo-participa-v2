@@ -36,6 +36,14 @@ function pertenceACaptacao(c: TrafegoBlack['campanhas'][number]): boolean {
   return c.funil === 'consultoria' || c.funil === 'iscas' || c.funil === 'c3';
 }
 
+/**
+ * A regra do card Investimento em captação: etapa C2/C3, fora entresafra e remarketing. Exportada para o Histórico
+ * somar o dia com a mesma régua da Visão geral (antes ele somava todas as campanhas e o número não batia).
+ */
+export function contaNoInvestimentoCaptacao(c: TrafegoBlack['campanhas'][number]): boolean {
+  return pertenceACaptacao(c) && !ehEntresafraCampanha(c) && !ehRemarketing(c.nome, c.fase);
+}
+
 /** Investimento de campanhas das etapas C2/C3, sem remarketing, separado por plataforma. */
 export function investimentoCaptacao(trafego: TrafegoBlack, _periodo: Periodo, filtro?: FiltroBase): InvestimentoCaptacao {
   // `trafego` já vem filtrado para o período solicitado pela camada de dados.
