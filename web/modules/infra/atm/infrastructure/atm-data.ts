@@ -2,7 +2,7 @@
 
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import { dashboardAtmSemDado, type DashboardAtm, type LeadAtm, type NumeroGrupoAtm, type PeriodoAplicadoAtm, type PessoaPreCheckoutAtm } from '../domain/dashboard';
+import { dashboardAtmSemDado, type DashboardAtm, type LeadAtm, type LeadGrupoAtm, type NumeroGrupoAtm, type PeriodoAplicadoAtm, type PessoaPreCheckoutAtm } from '../domain/dashboard';
 import type { DatasPeriodoAtm } from '../domain/periodo';
 import type { VendaSessaoViabilidade } from '../domain/sessao-viabilidade';
 
@@ -292,6 +292,43 @@ export async function carregarAtmGrupo(chave: string, periodo?: DatasPeriodoAtm,
       testeMotivo: typeof x.teste_motivo === 'string' ? x.teste_motivo : null,
     })),
     ...estadoDaLeitura(r),
+  };
+}
+
+export const MENSAGEM_GRUPO_LEADS_SEM_PERMISSAO = 'Você não tem permissão para ver os contatos dos participantes. Peça a permissão contato.ver.';
+export const MENSAGEM_GRUPO_LEADS_NAO_PUBLICADA = 'A lista de entradas no grupo ainda não foi publicada no banco.';
+
+/** Uma linha por número que entrou no grupo (`dados_atm_grupo_leads`). Dado pessoal fica sob contato.ver. */
+export async function carregarAtmGrupoLeads(chave: string, periodo?: DatasPeriodoAtm, tempoLimiteMs = TEMPO_LIMITE_LISTAS_MS): Promise<Resultado<LeadGrupoAtm[]>> {
+  const nome = 'dados_atm_grupo_leads';
+  const r = await comTempoLimite(nome, rpc(nome, chave, periodo), tempoLimiteMs, MENSAGEM_TEMPO_LISTA);
+  const estado = estadoDaLeitura(r);
+  if (estado.semPermissao) estado.erro = MENSAGEM_GRUPO_LEADS_SEM_PERMISSAO;
+  if (estado.naoPublicada) estado.erro = MENSAGEM_GRUPO_LEADS_NAO_PUBLICADA;
+  return {
+    data: r.data.flatMap((x): LeadGrupoAtm[] => {
+      const foneGrupo = typeof x.fone_grupo === 'string' ? x.fone_grupo : null;
+      if (!foneGrupo) return [];
+      const origem = x.origem === 'lista_disparo' || x.origem === 'base_leads' ? x.origem : 'nao_encontrado';
+      const texto = (v: unknown) => typeof v === 'string' ? v : null;
+      const booleano = (v: unknown) => typeof v === 'boolean' ? v : null;
+      const naoEncontrado = origem === 'nao_encontrado';
+      return [{
+        foneGrupo, origem,
+        naLista: naoEncontrado ? null : booleano(x.na_lista),
+        naBase: naoEncontrado ? null : booleano(x.na_base),
+        nome: naoEncontrado ? null : texto(x.nome),
+        email: naoEncontrado ? null : texto(x.email),
+        telefone: naoEncontrado ? foneGrupo : texto(x.telefone),
+        turma: naoEncontrado ? null : texto(x.turma),
+        instrucao: naoEncontrado ? null : texto(x.instrucao),
+        entrouEm: naoEncontrado ? null : texto(x.entrou_em),
+        saiuEm: naoEncontrado ? null : texto(x.saiu_em),
+        noGrupo: naoEncontrado ? null : booleano(x.no_grupo),
+        entradaAproximada: naoEncontrado ? null : booleano(x.entrada_aproximada),
+      }];
+    }),
+    ...estado,
   };
 }
 

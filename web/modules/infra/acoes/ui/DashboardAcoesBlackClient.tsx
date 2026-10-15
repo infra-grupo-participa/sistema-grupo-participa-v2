@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { dashboardAtmSemDado, type DashboardAtm, type CanalDisparoAtm, type LeadAtm } from '@/modules/infra/atm/domain/dashboard';
-import { carregarAtmLeads, desmarcarAtmTeste, marcarAtmTeste, type DisparoDetalheAtm, type Resultado } from '@/modules/infra/atm/infrastructure/atm-data';
+import { publicEnv } from '@/shared/infrastructure/config/env';
+import { dashboardAtmSemDado, type DashboardAtm, type CanalDisparoAtm, type LeadAtm, type LeadGrupoAtm } from '@/modules/infra/atm/domain/dashboard';
+import { carregarAtmGrupoLeads, carregarAtmLeads, desmarcarAtmTeste, marcarAtmTeste, type DisparoDetalheAtm, type Resultado } from '@/modules/infra/atm/infrastructure/atm-data';
+import { ENTRADAS_GRUPO_ACAO_DEMO } from '../infrastructure/grupo-leads-demo';
 import { chaveListaAtm, criarCarregadorListasAtm } from '@/modules/infra/atm/ui/carregador-listas';
 import { useListaAtm } from '@/modules/infra/atm/ui/useListaAtm';
 import { EmptyState, KpiCard, SectionCard, Tabs, idsAba } from '@/shared/ui/components';
@@ -13,6 +15,7 @@ import { carregarDadosAcoesBlack, mensagemEmPreparacao, type EstadoDadosAcoesBla
 import { registroAcoesBlack } from '../domain/registro';
 import { contarLeadsAcao, exibicaoCardLeads } from '../domain/leads';
 import { ModalLeadsAcao } from './ModalLeadsAcao';
+import { ModalIngressoGrupoAcao } from './ModalIngressoGrupoAcao';
 
 const cardsComparecimento = [
   ['Pico de audiência', 'pico_audiencia', 'inteiro'], ['Comparecimento do grupo', 'presentes_grupo', 'inteiro'],
@@ -55,6 +58,7 @@ function preservarSeFalha<T>(atual: Resultado<T>, proximo: Resultado<T>): Result
 export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = false }: { isMaster?: boolean; podeVerContato?: boolean }) {
   const [acaoId, setAcaoId] = useState(registroAcoesBlack[0].id);
   const [modalLeads, setModalLeads] = useState(false);
+  const [modalIngressoGrupo, setModalIngressoGrupo] = useState(false);
   const [incluirTeste, setIncluirTeste] = useState(isMaster);
   const [versaoListas, setVersaoListas] = useState(0);
   const [listas] = useState(criarCarregadorListasAtm);
@@ -124,6 +128,11 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
   const comTeste = isMaster && incluirTeste;
   const etiqueta = acao.estado === 'ativa' ? acao.etiqueta : null;
   const listaLeads = useListaAtm<LeadAtm>(listas, podeVerContato && etiqueta ? chaveListaAtm('dados_atm_leads', etiqueta, null, comTeste) : null, () => carregarAtmLeads(etiqueta!, undefined, comTeste), versaoListas);
+  const chaveGrupoLeads = podeVerContato && modalIngressoGrupo && etiqueta ? chaveListaAtm('dados_atm_grupo_leads', etiqueta, null, false) : null;
+  const demonstracaoGrupo = publicEnv.blackDemo;
+  const listaGrupoLeads = useListaAtm<LeadGrupoAtm>(listas, chaveGrupoLeads, () => demonstracaoGrupo
+    ? Promise.resolve({ data: ENTRADAS_GRUPO_ACAO_DEMO, semDado: false, erro: null })
+    : carregarAtmGrupoLeads(etiqueta!), versaoListas);
   // Marcar lead como teste (15/10/2026): mesma RPC do ATM; o banco aceita a chave da ação (modelo acao-black). Só master.
   const toggleLead = async (lead: LeadAtm, teste: boolean): Promise<string | null> => {
     if (!isMaster) return 'Só masters podem marcar ou desmarcar testes.';
@@ -184,8 +193,8 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
               const valor = aguardaOferta ? 'Aguardando oferta' : validos ? formatar(validos.valor, validos.formato) : semDado ? 'Sem dado' : formatar(card.metrica.valor, card.formato);
               const hint = aguardaOferta ? 'oferta ainda não configurada' : validos ? validos.hint : semDado ? 'sem dado ainda' : undefined;
               const kpi = <KpiCard key={card.chave} label={card.rotulo} value={valor} hint={hint} bar={card.chave === 'vendas' ? 'green' : 'accent'} />;
-              return card.chave === 'leads'
-                ? <button key={card.chave} type="button" onClick={() => setModalLeads(true)} className="text-left" aria-label="Abrir os leads da ação">{kpi}</button>
+              return card.chave === 'leads' || card.chave === 'ingressosGrupo'
+                ? <button key={card.chave} type="button" onClick={() => card.chave === 'leads' ? setModalLeads(true) : setModalIngressoGrupo(true)} className="text-left" aria-label={card.chave === 'leads' ? 'Abrir os leads da ação' : 'Abrir os números que entraram no grupo'}>{kpi}</button>
                 : kpi;
             })}
           </div>
@@ -213,5 +222,6 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
       </div>}
     </div>
     <ModalLeadsAcao open={modalLeads} onClose={() => setModalLeads(false)} nomeAcao={acao.nome} lista={listaLeads} card={dashboard?.resumo.leads ?? { valor: 0, semDado: true }} periodoLabel="período do cadastro" isMaster={isMaster} podeVerContato={podeVerContato} incluirTeste={comTeste} onIncluirTeste={setIncluirTeste} onToggleLead={toggleLead} />
+    <ModalIngressoGrupoAcao open={modalIngressoGrupo} onClose={() => setModalIngressoGrupo(false)} nomeAcao={acao.nome} card={dashboard?.resumo.ingressosGrupo ?? { valor: 0, semDado: true }} lista={listaGrupoLeads} podeVerContato={podeVerContato} demonstracao={demonstracaoGrupo} />
   </div>;
 }

@@ -93,6 +93,23 @@ export type NumeroGrupoAtm = {
   testeMotivo: string | null;
 };
 
+/** Uma linha por número que entrou no grupo, da RPC dados_atm_grupo_leads. */
+export type LeadGrupoAtm = {
+  foneGrupo: string;
+  origem: 'lista_disparo' | 'base_leads' | 'nao_encontrado';
+  naLista: boolean | null;
+  naBase: boolean | null;
+  nome: string | null;
+  email: string | null;
+  telefone: string | null;
+  turma: string | null;
+  instrucao: string | null;
+  entrouEm: string | null;
+  saiuEm: string | null;
+  noGrupo: boolean | null;
+  entradaAproximada: boolean | null;
+};
+
 export type PeriodoAplicadoAtm = {
   de: string | null;
   ate: string | null;
