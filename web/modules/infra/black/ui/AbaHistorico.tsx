@@ -4,12 +4,15 @@
 // movimento reduzido) e o gráfico do período: investimento por dia em barras, pessoas únicas acumuladas desde o
 // início do projeto. O funil do dia é só da
 // captação (C2 e C3), como na Visão geral; o investimento e o acumulado seguem o funil e o canal do seletor.
+// O card do dia mostra o investimento em captação com a regra do card da Visão geral (C2/C3, fora entresafra e
+// remarketing) e traz o total de todas as campanhas embaixo; as barras do gráfico seguem com o total do filtro.
 import { useMemo, useState } from 'react';
 import { KpiCard, SectionCard } from '@/shared/ui/components';
 import { agregar, cpm, ctr, ehCaptacao, ehEntresafraCampanha, filtrarDias, filtrarLinhas, linhasCaptacao, taxa } from '../domain/metricas';
 import { connectRate, conversaoPagina } from '../domain/numeros';
 import { serieHistorico, type DiaHistorico } from '../domain/historico';
 import { diaDe } from '../domain/recorte';
+import { contaNoInvestimentoCaptacao } from '../domain/custo-captacao';
 import { FunilTrapezio } from './graficos';
 import type { EtapaFunil } from '../domain/criativos';
 import type { DadosTela } from './contexto';
@@ -19,7 +22,7 @@ import { ResumoLeads } from './ResumoLeads';
 const dataCurta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
 export function AbaHistorico({ d }: { d: DadosTela }) {
-  const { serie, serieCap } = useMemo(() => {
+  const { serie, serieCap, gastoCaptacao } = useMemo(() => {
     const fim = d.diasPeriodo[d.diasPeriodo.length - 1] ?? '';
     const f = { funil: d.recorte.funil, canal: d.recorte.canal };
     const dias = filtrarDias(d.diasTodos, d.idx, f);
@@ -28,7 +31,12 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
     const linhasCap = linhasCaptacao(linhas, d.idx);
     const diasCap = dias.filter((x) => ehCaptacao(d.idx.campanhaDoAnuncio(x.anuncioId)?.funil));
     const cfg = { inicioCaptacao: d.config.inicioCaptacao, metaLeadsDia: d.config.metaLeadsDia };
-    return {
+    const gastoCaptacao = new Map<string, number>();
+    for (const x of dias) {
+      const c = d.idx.campanhaDoAnuncio(x.anuncioId);
+      if (c && contaNoInvestimentoCaptacao(c)) gastoCaptacao.set(x.dia, (gastoCaptacao.get(x.dia) ?? 0) + x.gasto);
+    }
+    return { gastoCaptacao,
       serie: serieHistorico(dias, linhas, d.diasPeriodo, cfg, todas),
       serieCap: serieHistorico(diasCap, linhasCap, d.diasPeriodo, cfg, todas),
     };
@@ -87,7 +95,9 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-3 max-sm:grid-cols-1 lg:grid-cols-4">
-          <KpiCard label="Investimento do dia" value={moeda(dia.gasto)} bar="yellow" title="No funil e canal selecionados." />
+          <KpiCard label="Investimento em captação do dia" value={moeda(gastoCaptacao.get(dia.dia) ?? 0)} bar="yellow"
+            title="Campanhas C2/C3, fora entresafra e remarketing, no funil e canal selecionados: a mesma regra do card Investimento em captação da Visão geral."
+            hint={<span>Todas as campanhas do filtro: <strong>{moeda(dia.gasto)}</strong></span>} />
           <KpiCard label="Leads acumulados" value={inteiro(d.perfilSemDado ? null : dia.pessoasAcumuladas)} bar="green" title="Pessoas únicas de todas as portas desde o início; igual ao card Leads contra a meta." />
         </div>
 
@@ -96,7 +106,7 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
         </>}
       </SectionCard>
 
-      <SectionCard title="Investimento e leads acumulados" subtitle="Barras: investimento do dia no filtro escolhido. Linha: pessoas únicas de todas as portas acumuladas desde o início.">
+      <SectionCard title="Investimento e leads acumulados" subtitle="Barras: investimento do dia de todas as campanhas do filtro (captação, aquecimento, antecipação e o resto). Linha: pessoas únicas de todas as portas acumuladas desde o início.">
         <Grafico serie={serie} ativo={i} onEscolher={setEscolhido} />
       </SectionCard>
     </div>

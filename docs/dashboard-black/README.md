@@ -1145,3 +1145,24 @@ Decisão do Victor (15/10): chat e comentários de todas as lives visíveis; liv
   `infra/supabase/migrations/20261015235000.explain.md`. Front não mudou.
 - **A confirmar pelo Victor:** `CAPTAÇÃO | BASE` = C3 é derivado da C3 de 13/10. Vale até o padrão de nomenclatura do Caio.
 - **Como testar:** Visão Geral e Histórico com `funil=todos`, período desde o início: 14 e 15/10 com investimento de captação.
+
+## Histórico: investimento do dia e régua · 16/10/2026 (pedido do Victor)
+
+**Pergunta:** a régua do dia a dia "parou de funcionar", o funil fica vazio, e o card "Investimento do dia" do Histórico
+mostrava R$ 3.230,13 em 15/10 enquanto o card Investimento em captação da Visão geral mostrava R$ 609,91.
+
+**Régua:** não estava quebrada. Testada com o dado real de produção, dentro do AppShell, com mouse, teclado e toque
+(largura de celular): ela percorre 04/10 a 15/10. A sensação de "não puxa" vem do funil vazio de 04/10 a 12/10, que é
+correto: nesses dias o único gasto C3 era a campanha ENTRESAFRA (fora do funil por regra) e o resto era aquecimento e
+antecipação. A captação de verdade começa em 13/10.
+
+**Card do dia:** somava todas as campanhas do filtro. Em 15/10: 609,91 de captação + 2.620,22 de AQUECIMENTO,
+ANTECIPAÇÃO e É HOJE = 3.230,13. Agora o card se chama "Investimento em captação do dia" e usa a mesma regra do card da
+Visão geral (`contaNoInvestimentoCaptacao` em `domain/custo-captacao.ts`: etapa C2/C3, fora entresafra e remarketing).
+O total de todas as campanhas do filtro aparece logo abaixo, no rodapé do card. As barras do gráfico continuam com o
+total do filtro (o subtítulo diz isso).
+
+**Conferido:** 13/10 R$ 523,02 · 14/10 R$ 671,07 · 15/10 R$ 609,91 (igual à Visão geral). tsc, eslint e vitest da
+Black (260) passando, com teste novo para a regra exportada.
+
+**Situação:** na main pelo PR desta branch (`fix/black-historico-investimento-captacao`).

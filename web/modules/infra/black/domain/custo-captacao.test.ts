@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { investimentoCaptacao } from './custo-captacao';
+import { contaNoInvestimentoCaptacao, investimentoCaptacao } from './custo-captacao';
 import type { Campanha, TrafegoBlack } from './tipos';
 
 const campanhas: Campanha[] = [
@@ -87,5 +87,12 @@ describe('investimento de captação', () => {
     const r = investimentoCaptacao(trafego([], [c]), { de: '2026-10-05', ate: '2026-10-10' });
     expect([r.meta, r.total, r.zerosMeta.length]).toEqual([null, null, 0]);
     expect(r.semDadoMeta[0]?.motivo).toContain('última coleta da conta falhou');
+  });
+});
+
+describe('regra por campanha usada no Histórico', () => {
+  it('conta só C2/C3 fora de remarketing e entresafra, igual ao card da Visão geral', () => {
+    const contam = campanhas.filter(contaNoInvestimentoCaptacao).map((c) => c.id);
+    expect(contam).toEqual(['c2', 'c3', 'sem-lead']);
   });
 });
