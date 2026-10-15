@@ -7,7 +7,7 @@ import { RoscaCategorias } from '@/modules/infra/dados/ui/viz/RoscaCategorias';
 import { EvolucaoInterativa, RoscaInterativa } from './GraficosInterativosAtm';
 import type { MetricaAtm, NumeroGrupoAtm } from '../domain/dashboard';
 import { alternarFiltroGrafico, acumularSerie, aplicarFiltrosGraficos, janelaDaEvolucao, removerFiltroGrafico, valorFiltrado, type FiltroGrafico } from '../domain/filtro-graficos';
-import { contadorDoModalAtm, cruzarComGrupoAtm, distribuicaoAtm, serieDiariaAtm, type DiaSerieAtm, type SituacaoGrupoAtm } from '../domain/modal-pessoas';
+import { contadorDoModalAtm, cruzarComGrupoAtm, diaEmSaoPaulo, distribuicaoAtm, serieDiariaAtm, type DiaSerieAtm, type SituacaoGrupoAtm } from '../domain/modal-pessoas';
 import { hojeEmSaoPaulo } from '../domain/periodo';
 import type { EstadoListaAtm } from './carregador-listas';
 
@@ -22,6 +22,9 @@ const hora = (d: Date | null) => (d ? d.toLocaleTimeString('pt-BR', { timeZone: 
 export function dataHoraAtm(iso: string | null) { return iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'Não lançado'; }
 export function simNaoAtm(v: boolean | null, nulo = 'Sem dado') { return v == null ? nulo : v ? 'Sim' : 'Não'; }
 
+/** Nome do filtro por dia (clique numa barra da Evolução). */
+const CAMPO_DIA = 'Dia';
+const dataBr = (dia: string) => (/^\d{4}-\d{2}-\d{2}$/.test(dia) ? `${dia.slice(8, 10)}/${dia.slice(5, 7)}/${dia.slice(0, 4)}` : dia);
 const CLASSE_TH = 'p-2 text-left text-xs';
 const plural = (n: number, [um, varios]: [string, string]) => `${inteiro.format(n)} ${n === 1 ? um : varios}`;
 const CLASSE_BOTAO = 'whitespace-nowrap rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-3)] disabled:opacity-50';
@@ -149,13 +152,14 @@ export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props:
   const cruzamento = grupo.modo === 'cruzamento' && grupo.estado?.data ? cruzarComGrupoAtm(itens, grupo.telefoneDe, grupo.estado.data) : null;
   const [filtros, setFiltros] = useState<FiltroGrafico[]>([]);
   const filtrosAtivos = graficosInterativos ? filtros : [];
-  const camposFiltraveis = campos.map((c) => ({ nome: c.nome, valor: (item: T) => c.valor(item, cruzamento?.get(item.id)) }));
+  const camposFiltraveis = [...campos.map((c) => ({ nome: c.nome, valor: (item: T) => c.valor(item, cruzamento?.get(item.id)) })), { nome: CAMPO_DIA, valor: (item: T) => diaEmSaoPaulo(dataDe(item)) ?? 'Sem data' }];
   const itensGraficosTodos = recorteGraficos ? recorteGraficos(itens) : itens;
   const itensGraficos = aplicarFiltrosGraficos(itensGraficosTodos, camposFiltraveis, filtrosAtivos);
+  const itensEvolucao = aplicarFiltrosGraficos(itensGraficosTodos, camposFiltraveis, filtrosAtivos, CAMPO_DIA);
   const linhasTabela = aplicarFiltrosGraficos(itens, camposFiltraveis, filtrosAtivos);
   const hoje = hojeEmSaoPaulo();
   const janela = graficosInterativos && aba === 'Evolução' ? janelaDaEvolucao(itensGraficosTodos.filter((i) => !i.teste), dataDe, hoje) : null;
-  const serie = aba === 'Evolução' ? serieDiariaAtm(itensGraficos, dataDe, janela?.de ?? periodo.de, janela?.ate ?? periodo.ate, hoje) : [];
+  const serie = aba === 'Evolução' ? serieDiariaAtm(itensEvolucao, dataDe, janela?.de ?? periodo.de, janela?.ate ?? periodo.ate, hoje) : [];
   const alternar = (campo: string, valor: string) => setFiltros((atual) => alternarFiltroGrafico(atual, campo, valor));
   const temLista = !bloqueio && !!lista?.data;
   const desatualizada = temLista && lista?.erro != null;
@@ -249,7 +253,7 @@ export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props:
 
   const conteudo = aba === 'Grupo'
     ? (grupo.modo === 'numeros' ? abaGrupoNumeros(grupo) : abaGrupoCruzamento(grupo))
-    : aba === 'Evolução' ? comLista(<Loading />, () => (graficosInterativos ? <EvolucaoInterativa rows={acumularSerie(serie)} rotulo={rotuloCentro} chaveAnimacao={JSON.stringify(filtrosAtivos)} /> : graficoEvolucao === 'linha' ? <GraficoLinhaDiario rows={serie} rotulo={rotuloCentro} /> : <GraficoDiario rows={serie} rotulo={rotuloCentro} />))
+    : aba === 'Evolução' ? comLista(<Loading />, () => (graficosInterativos ? <EvolucaoInterativa rows={acumularSerie(serie)} rotulo={rotuloCentro} chaveAnimacao={JSON.stringify(filtrosAtivos.filter((f) => f.campo !== CAMPO_DIA))} diaSelecionado={valorFiltrado(filtrosAtivos, CAMPO_DIA)} onSelecionarDia={(dia) => alternar(CAMPO_DIA, dia)} /> : graficoEvolucao === 'linha' ? <GraficoLinhaDiario rows={serie} rotulo={rotuloCentro} /> : <GraficoDiario rows={serie} rotulo={rotuloCentro} />))
       : aba === 'Resumo' ? abaResumo()
         : comLista(<TabelaCarregando titulos={titulosTabela} />, tabelaPessoas);
 
@@ -263,7 +267,7 @@ export function ModalPessoasAtm<T extends { id: string; teste: boolean }>(props:
     {resumoNoTopo}
     {filtrosAtivos.length > 0 && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-[var(--r-md)] border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-3 py-2 text-xs" role="status">
       <span className="font-semibold text-[var(--fg)]">Filtro ativo:</span>
-      {filtrosAtivos.map((f) => <button key={f.campo} type="button" onClick={() => setFiltros((atual) => removerFiltroGrafico(atual, f.campo))} aria-label={`Remover filtro ${f.campo}: ${f.valor}`} className="gp-press inline-flex max-w-full items-center gap-1.5 rounded-full border border-[var(--accent-border)] bg-[var(--surface-2)] px-2.5 py-1 text-[var(--fg)] hover:bg-[var(--surface-3)] max-md:min-h-9"><span className="min-w-0 break-words text-left">{f.campo}: {f.valor}</span><span aria-hidden="true">×</span></button>)}
+      {filtrosAtivos.map((f) => <button key={f.campo} type="button" onClick={() => setFiltros((atual) => removerFiltroGrafico(atual, f.campo))} aria-label={`Remover filtro ${f.campo}: ${f.campo === CAMPO_DIA ? dataBr(f.valor) : f.valor}`} className="gp-press inline-flex max-w-full items-center gap-1.5 rounded-full border border-[var(--accent-border)] bg-[var(--surface-2)] px-2.5 py-1 text-[var(--fg)] hover:bg-[var(--surface-3)] max-md:min-h-9"><span className="min-w-0 break-words text-left">{f.campo}: {f.campo === CAMPO_DIA ? dataBr(f.valor) : f.valor}</span><span aria-hidden="true">×</span></button>)}
       <span className="tabular text-[var(--fg-2)]">{plural(contadorDoModalAtm(itensGraficos), rotuloContador)} nos gráficos · {plural(contadorDoModalAtm(linhasTabela), rotuloContador)} na tabela</span>
       <button type="button" onClick={() => setFiltros([])} className="ml-auto rounded border border-[var(--border)] px-2 py-1 text-[var(--fg-2)] hover:bg-[var(--surface-3)] max-md:min-h-9">Limpar filtros</button>
     </div>}

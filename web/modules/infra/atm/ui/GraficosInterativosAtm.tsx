@@ -23,21 +23,23 @@ const diaLongo = (dia: string) => {
 
 export type FatiaInterativa = { rotulo: string; quantidade: number };
 
-type Dica = { x: number; y: number; linhas: string[] };
+type Dica = { x: number; y: number; linhas: string[]; abaixo?: boolean };
+const ALTURA_DICA = 78;
 
 function Dica({ dica }: { dica: Dica | null }) {
   if (!dica) return null;
-  return <div role="tooltip" className="pointer-events-none absolute z-10 w-max max-w-[16rem] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-4)] px-2.5 py-1.5 text-xs text-[var(--fg)] shadow-[var(--shadow-md)] gp-fade-in" style={{ left: dica.x, top: dica.y, transform: 'translate(-50%, calc(-100% - 10px))' }}>
+  return <div role="tooltip" className="pointer-events-none absolute z-10 w-max max-w-[16rem] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-4)] px-2.5 py-1.5 text-xs text-[var(--fg)] shadow-[var(--shadow-md)] gp-fade-in" style={{ left: dica.x, top: dica.y, transform: dica.abaixo ? 'translate(-50%, 14px)' : 'translate(-50%, calc(-100% - 10px))' }}>
     {dica.linhas.map((t, i) => <div key={i} className={i === 0 ? 'font-semibold' : 'tabular text-[var(--fg-2)]'}>{t}</div>)}
   </div>;
 }
 
 /** Posição do ponteiro dentro do container, para ancorar o tooltip. Mantém o balão dentro da largura do container. */
-function posicao(e: PointerEvent<Element>, caixa: HTMLElement | null): { x: number; y: number } {
+function posicao(e: PointerEvent<Element>, caixa: HTMLElement | null): { x: number; y: number; abaixo: boolean } {
   const r = caixa?.getBoundingClientRect();
-  if (!r) return { x: 0, y: 0 };
+  if (!r) return { x: 0, y: 0, abaixo: false };
   const x = Math.min(Math.max(e.clientX - r.left, 80), Math.max(80, r.width - 80));
-  return { x, y: e.clientY - r.top };
+  const y = e.clientY - r.top;
+  return { x, y, abaixo: y < ALTURA_DICA };
 }
 
 export function RoscaInterativa({ titulo, fatias, rotuloCentro, selecionado, onSelecionar }: {
@@ -93,7 +95,7 @@ function useLargura(ref: React.RefObject<HTMLElement | null>, padrao: number): n
   );
 }
 
-export function EvolucaoInterativa({ rows, rotulo, chaveAnimacao }: { rows: DiaAcumulado[]; rotulo: string; chaveAnimacao: string }) {
+export function EvolucaoInterativa({ rows, rotulo, chaveAnimacao, diaSelecionado, onSelecionarDia }: { rows: DiaAcumulado[]; rotulo: string; chaveAnimacao: string; diaSelecionado: string | null; onSelecionarDia: (dia: string) => void }) {
   const caixa = useRef<HTMLDivElement>(null);
   const largura = Math.max(280, useLargura(caixa, 640));
   const [ativo, setAtivo] = useState<number | null>(null);
@@ -115,7 +117,7 @@ export function EvolucaoInterativa({ rows, rotulo, chaveAnimacao }: { rows: DiaA
   const linha = rows.map((r, i) => `${i === 0 ? 'M' : 'L'}${cx(i).toFixed(1)},${yAcum(r.acumulado).toFixed(1)}`).join(' ');
   const passoRotulo = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(areaW / 46))));
   const texto = (r: DiaAcumulado) => [diaLongo(r.dia), `No dia: ${um(r.quantidade, rotulo)}`, `Acumulado: ${um(r.acumulado, rotulo)}`];
-  const mostrar = (i: number) => { setAtivo(i); setDica({ x: Math.min(Math.max(cx(i), 90), Math.max(90, largura - 90)), y: Math.min(yDia(rows[i].quantidade), yAcum(rows[i].acumulado)), linhas: texto(rows[i]) }); };
+  const mostrar = (i: number) => { setAtivo(i); setDica({ x: Math.min(Math.max(cx(i), 90), Math.max(90, largura - dir - 90)), y: Math.min(yDia(rows[i].quantidade), yAcum(rows[i].acumulado)), linhas: texto(rows[i]), abaixo: Math.min(yDia(rows[i].quantidade), yAcum(rows[i].acumulado)) < ALTURA_DICA + 28 }); };
   const sair = () => { setAtivo(null); setDica(null); };
   const aoTeclar = (e: KeyboardEvent<SVGGElement>) => { if (e.key === 'ArrowRight') mostrar(Math.min(n - 1, (ativo ?? -1) + 1)); else if (e.key === 'ArrowLeft') mostrar(Math.max(0, (ativo ?? n) - 1)); else if (e.key === 'Escape') sair(); };
   const ticks = [0, 1, 2, 3, 4];
@@ -126,7 +128,7 @@ export function EvolucaoInterativa({ rows, rotulo, chaveAnimacao }: { rows: DiaA
       <span className="flex items-center gap-1.5"><span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />Por dia (eixo esquerdo)</span>
       <span className="flex items-center gap-1.5"><span aria-hidden="true" className="h-0.5 w-4 rounded-full" style={{ background: 'var(--cyan)' }} />Acumulado (eixo direito)</span>
     </div>
-    <svg width={largura} height={altura} viewBox={`0 0 ${largura} ${altura}`} role="group" aria-label={`Evolução diária de ${rotulo}: ${resumo}. Use as setas para percorrer os dias.`} className="block max-w-full" onKeyDown={aoTeclar} tabIndex={0} onBlur={sair}>
+    <svg width={largura} height={altura} viewBox={`0 0 ${largura} ${altura}`} role="group" aria-label={`Evolução diária de ${rotulo}: ${resumo}. Use as setas para percorrer os dias e Enter para filtrar por um dia.`} className="block max-w-full" onKeyDown={(e) => { aoTeclar(e); if ((e.key === 'Enter' || e.key === ' ') && ativo !== null) { e.preventDefault(); onSelecionarDia(rows[ativo].dia); } }} tabIndex={0} onBlur={sair}>
       {ticks.map((k) => <g key={k}>
         <line x1={esq} x2={largura - dir} y1={yDia((tetoDia / 4) * k)} y2={yDia((tetoDia / 4) * k)} stroke="var(--border)" strokeWidth="1" />
         <text x={esq - 6} y={yDia((tetoDia / 4) * k) + 3} textAnchor="end" fontSize="10" fill="var(--fg-3)" className="tabular">{inteiro.format((tetoDia / 4) * k)}</text>
@@ -134,7 +136,7 @@ export function EvolucaoInterativa({ rows, rotulo, chaveAnimacao }: { rows: DiaA
       </g>)}
       <g key={chaveAnimacao}>
         {rows.map((r, i) => r.quantidade > 0 && <rect key={r.dia} x={cx(i) - larguraBarra / 2} y={yDia(r.quantidade)} width={larguraBarra} height={topo + areaH - yDia(r.quantidade)} rx="3"
-          fill="var(--accent)" className="gp-graf-barra" style={{ opacity: ativo !== null && ativo !== i ? 0.35 : 1, animationDelay: `${Math.min(i * 25, 400)}ms` }} />)}
+          fill="var(--accent)" className="gp-graf-barra" style={{ opacity: (ativo !== null && ativo !== i) || (diaSelecionado !== null && diaSelecionado !== r.dia) ? 0.3 : 1, animationDelay: `${Math.min(i * 25, 400)}ms` }} />)}
         <path d={linha} fill="none" stroke="var(--cyan)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" pathLength={1} className="gp-graf-linha" />
         {rows.map((r, i) => <circle key={r.dia} cx={cx(i)} cy={yAcum(r.acumulado)} r={ativo === i ? 5.5 : n > 20 ? 0 : 3.5} fill="var(--cyan)" stroke="var(--surface-2)" strokeWidth="1.5" className="gp-graf-ponto" />)}
       </g>
@@ -142,9 +144,9 @@ export function EvolucaoInterativa({ rows, rotulo, chaveAnimacao }: { rows: DiaA
       {rows.map((r, i) => i % passoRotulo === 0 && <text key={r.dia} x={cx(i)} y={topo + areaH + 16} textAnchor="middle" fontSize="10" fill={ativo === i ? 'var(--fg)' : 'var(--fg-3)'}>{diaCurto(r.dia)}</text>)}
       {ativo !== null && <rect x={cx(ativo) - passo / 2} y={topo} width={passo} height={areaH} fill="var(--accent)" opacity="0.1" pointerEvents="none" />}
       {rows.map((r, i) => <rect key={r.dia} x={esq + passo * i} y={topo} width={passo} height={areaH} fill="transparent" className="cursor-pointer"
-        onPointerEnter={() => mostrar(i)} onPointerMove={() => mostrar(i)} onClick={() => mostrar(i)}><title>{texto(r).join(' · ')}</title></rect>)}
+        onPointerEnter={() => mostrar(i)} onPointerMove={() => mostrar(i)} onClick={() => { mostrar(i); onSelecionarDia(r.dia); }} aria-pressed={diaSelecionado === r.dia}><title>{texto(r).join(' · ')}</title></rect>)}
     </svg>
     <Dica dica={dica} />
-    <p className="mt-1 text-xs text-[var(--fg-3)]">{resumo}. Passe o cursor (ou toque) em um dia para ver o detalhe.</p>
+    <p className="mt-1 text-xs text-[var(--fg-3)]">{resumo}. Passe o cursor em um dia para ver o detalhe; clique para filtrar os outros gráficos e a tabela por aquele dia.</p>
   </div>;
 }

@@ -70,4 +70,15 @@ describe('filtro cruzado dos gráficos', () => {
     expect(acumularSerie(cheia).at(-1)?.acumulado).toBe(6);
     expect(acumularSerie(filtrada).at(-1)?.acumulado).toBe(2);
   });
+
+  it('filtro por dia (clique na barra da Evolução) combina com os outros e o dia pode ser trocado ou desfeito', () => {
+    const comDia: CampoFiltravel<L>[] = [...campos, { nome: 'Dia', valor: (x) => (x.quando ?? '').slice(0, 10) }];
+    const itens = [l('1', 'Unnichat', 'SP', '2026-10-14T15:00:00Z'), l('2', 'SendFlow', 'SP', '2026-10-15T15:00:00Z'), l('3', 'Unnichat', 'SP', '2026-10-15T15:00:00Z')];
+    const f = alternarFiltroGrafico([], 'Dia', '2026-10-15');
+    expect(aplicarFiltrosGraficos(itens, comDia, f).map((x) => x.id)).toEqual(['2', '3']);
+    expect(aplicarFiltrosGraficos(itens, comDia, alternarFiltroGrafico(f, 'utm_source', 'Unnichat')).map((x) => x.id)).toEqual(['3']);
+    expect(aplicarFiltrosGraficos(itens, comDia, f, 'Dia')).toHaveLength(3);
+    expect(alternarFiltroGrafico(f, 'Dia', '2026-10-15')).toEqual([]);
+    expect(alternarFiltroGrafico(f, 'Dia', '2026-10-14')).toEqual([{ campo: 'Dia', valor: '2026-10-14' }]);
+  });
 });
