@@ -41,9 +41,10 @@ Login normal em `http://localhost:3000/login` (conta `@advmais.com`, cargo admin
 
 ### Totais da semente (PRNG mulberry32, semente 20261103, dias 04/10 a 03/11)
 
-> **Atualizado em 12/10/2026 (noite):** com o Google zerado e a profissão nova, a semente passou a dar
-> **R$ 263.977,08** de gasto (Google R$ 0), **13.528** cadastros e **13.102** pessoas únicas (medido no teste
-> `fixtures.test.ts`). A tabela abaixo é da versão anterior e não foi remedida linha a linha.
+> **Atualizado em 15/10/2026 (funis em modal):** a semente passou a dar **R$ 278.413,08** de gasto (Google R$ 0),
+> **13.707** cadastros e **13.273** pessoas únicas (medido no teste `fixtures.test.ts`; antes, em 12/10:
+> R$ 263.977,08, 13.528 e 13.102). A diferença vem das campanhas e conjuntos novos do demo descritos na seção
+> "Funis lado a lado em modal" (15/10/2026). A tabela abaixo é da versão anterior e não foi remedida linha a linha.
 
 | Total | Valor |
 |---|---|
@@ -944,7 +945,7 @@ Sem alteração de banco. A lista individual de membros do grupo permanece pende
 - Leads são pessoas e aparecem como inteiro; necessário por dia e faltam hoje arredondam para cima, média e projeção arredondam ao inteiro mais próximo. Valores financeiros mantêm centavos.
 - A meta de leads e a semente anterior a 12/10 vêm da configuração e do contrato do dashboard. A meta de investimento é o orçamento cadastrado para captação (`ORCAMENTO.porFase.captacao`, hoje R$ 220.000), e o realizado diário vem de `dados_black_trafego.dias_campanha`. Leads novos são deduplicados por pessoa pela primeira aparição em `dados_black_perfil`, em dias de São Paulo, excluindo testes e `consultoria_respondi`.
 - Os modais de CPL geral, CPM, CTR, CPC, Connect Rate, Leads, Conversão da página e % de MQL concentram a evolução na aba **Por dia**: gráfico diário e uma única tabela com realizado, meta, distância acima/abaixo e acumulado. Para % de MQL há uma tabela, sem tabelas duplicadas de leads. A comparação de cada linha usa `domain/meta.ts` (`compararMeta`) e o sentido da métrica. Leads e investimento mantêm a régua dinâmica e a meta acumulada. A evolução de ingresso segue no modal próprio, no modelo aprovado, consultando `dados_black_grupo` com `p_ate` por dia em lotes de até quatro chamadas.
-- Os funis lado a lado permitem abrir uma etapa por vez. C1 segmenta pelo nome do anúncio (`TEASER`, `MANIFESTO`, `REELS`/`REEL`, ou `Sem tipo no nome`). Iscas segmentam o tráfego pelo último bloco do nome do conjunto e os leads pelo campo `isca` do perfil. A tela avisa quantos anúncios têm outra isca no nome; o gasto continua atribuído pela isca do conjunto. CPL só aparece quando há leads pagos.
+- (SUBSTITUÍDO em 15/10/2026, ver "Funis lado a lado em modal") Os funis lado a lado permitiam abrir uma etapa por vez. C1 segmentava pelo nome do anúncio (`TEASER`, `MANIFESTO`, `REELS`/`REEL`, ou `Sem tipo no nome`). Iscas segmentam o tráfego pelo último bloco do nome do conjunto e os leads pelo campo `isca` do perfil. A tela avisa quantos anúncios têm outra isca no nome; o gasto continua atribuído pela isca do conjunto. CPL só aparece quando há leads pagos.
 - Sem migration ou gravação no banco. Para testar: `npx vitest run modules/infra/black/domain/ritmo.test.ts modules/infra/black/infrastructure/fonte-supabase.test.ts`; conferir os exemplos do contrato Galego em `.maestri/entregas/black-visao-geral-requisitos/galego.md`; abrir a Visão Geral, expandir a projeção, abrir os modais de meta e segmentar C1 e Iscas. Checagens completas: `npm run lint`, `npm run lint:tokens`, `npx tsc --noEmit`, `npx vitest run modules/infra/black` e `npm run build`.
 - Como voltar: remover esta seção e reverter os componentes e mapeamentos do lote das 17h. Nenhuma mudança de schema precisa ser desfeita.
 
@@ -989,3 +990,37 @@ Sem alteração de banco. A lista individual de membros do grupo permanece pende
   continuam com farol de menor é melhor. Sem banco, sem migration.
 - Testar: abrir a Visão Geral, expandir a projeção e olhar o placar. Checagens: `npx tsc --noEmit`, `npm run lint:tokens`,
   `npx vitest run modules/infra/black` (183 ok em 15/10).
+
+## Funis lado a lado em modal (15/10/2026, pedido do Victor)
+
+- **Pedido:** "na visão geral, no funil lado a lado, não quero botão; volta pro card anterior. Ao clicar no card (C1, por
+  exemplo) abre um modal com todos os funis lado a lado: teaser, manifesto, reels, os que tiverem nomenclatura certa. Mesma coisa
+  para isca. Sem botão de fluxograma nem de futurômetro."
+- **Card antigo:** vem do commit `9192bee` (feat(black): aprimora visao geral e acesso a contatos, #42). O `a1d5557` (#43) o
+  trocou por chips de Teaser/Manifesto/Reels (C1) e Checkup/Fluxograma/Futurômetro (Iscas). Restaurei o `ColunaC1` daquele
+  commit; os chips e as colunas segmentadas (`ColunaC1Segmentada`, `ColunaIscasSegmentada`) saíram de `ui/AbaVisaoGeral.tsx`.
+- **Como funciona:** cada card da faixa (C1, Consultoria, Iscas, C3) é um card clicável ("Ver funis lado a lado") que abre
+  `ui/ModalFunisEtapa.tsx`. O botão Filtrar/Limpar filtro continua no canto do card (irmão do card, não dentro dele).
+  O modal tem uma coluna por **subtipo do banco** (`mkt_trafego.etapa_black`): C1 = TEASER, MANIFESTO, REELS, CORTES; Consultoria
+  = CONSULTORIA; C3 = LEADS. Nas **Iscas**, uma coluna por isca (último bloco do nome do conjunto, como já era; leads pelo campo
+  `isca` do perfil). Título da coluna e nomes das campanhas/conjuntos são a string exata da fonte. Sem botão de troca de visão.
+- **Regra (`domain/funis-etapa.ts`):** campanha sem etapa, com conflito de subtipo ou sem subtipo reconhecido **não entra em
+  coluna** e não é encaixada em outra etapa; o modal mostra "N campanhas fora dos funis" (recolhido), com o nome exato e o motivo.
+  Entresafra fica fora de tudo. Campanha sem dia de desempenho no recorte não conta como "fora". Colunas com gasto de
+  campanha inteira: se alguma campanha da coluna está sem gasto na fonte, o Investimento da coluna é "Sem dado", nunca soma parcial.
+- **Atenção ao comparar com o card:** o card C1 ainda soma as campanhas que o fallback provisório `ehC1PeloNome` põe em C1
+  (ex.: a de CORTES sem subtipo reconhecido). O modal não soma essas: elas aparecem em "fora dos funis". Na demo, card C1
+  R$ 29.092,26 = Teaser 17.964,24 + Manifesto 2.243,05 + Reels 1.384,44 (modal) + Cortes 7.500,53 (fora).
+- **Acessibilidade:** o `Modal` compartilhado não foi alterado. O foco preso, `role="dialog"`, `aria-modal` e a devolução do foco
+  ao card ficam em `ModalFunisEtapa.tsx`. Esc fecha. Em 375 px a página não rola na horizontal; as colunas rolam dentro do modal.
+- **Demo (`NEXT_PUBLIC_BLACK_DEMO=1`):** `infrastructure/fixtures/catalogo.ts` ganhou `cp-manifesto` (MANIFESTO), `cp-reels` (REELS),
+  `cp-sem-etapa` (etapa nula), subtipos em Consultoria/Isca/C3 e conjuntos de isca `FICTÍCIO | FLUXOGRAMA`, `FICTÍCIO | CHECKUP` e
+  `FICTÍCIO | FUTUROMETRO`. `cp-distribuicao` segue sem subtipo, de propósito, para mostrar o caso "fora". Totais novos acima.
+- **Testar:** `npx vitest run modules/infra/black/domain/funis-etapa.test.ts`; `npx tsc --noEmit`; `npx eslint modules/infra/black`;
+  `npm run lint:tokens`; `npm run build`. Na tela: `NEXT_PUBLIC_BLACK_DEMO=1 npm run dev`, abrir a Visão geral e clicar em C1 e em Iscas.
+  Prints em `docs/dashboard-black/screenshots-2026-10-15-funil-modal/` (card e modal, C1 e Iscas, 1280 e 375, claro e escuro;
+  `modal-c1-claro-1280-fora.png` e `modal-c1-claro-375-fora.png` com a lista "fora" aberta). Foram gerados com um harness fora do repo que renderiza o `DashboardBlackClient`
+  real com as fixtures (a rota exige login).
+- **O que falta:** dado real (banco) com `etapa_black` preenchido para as campanhas "sem etapa"/CORTES; enquanto isso, elas ficam em
+  "fora dos funis". Alcance e frequência do card C1 seguem "Sem dado" (comportamento do card antigo). Não testado com o banco real.
+- **Como voltar:** reverter `AbaVisaoGeral.tsx` e apagar `ModalFunisEtapa.tsx`, `funis-etapa.ts` e o teste; reverter o catálogo do demo.

@@ -8,7 +8,6 @@ import { DataTable, KpiCard, Modal, ProgressBar, SectionCard, Td, Th, Thead, Tr 
 import { deslocarDia } from '@/modules/infra/atm/domain/periodo';
 import { diaDe } from '../domain/recorte';
 import { alertasNomenclatura } from '../domain/alertas-nomenclatura';
-import { iscaDoNomeConjunto, tipoConteudoC1, type TipoConteudoC1 } from '../domain/ritmo';
 import {
   agregar, cpc, cplPorEtapa, cpm, ctr, custoPorVisualizacao,
   ehCaptacao, ehEntresafraCampanha, ehPago, enviosMqlMaisRecentes, farolCpl, filtrarDias, filtrarLinhas, gastoDe, linhasCaptacao, somar, taxa as construirTaxa,
@@ -17,7 +16,8 @@ import {
 import { FUNIS, ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
 import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
-import { Chip, Farol, formatar, IndicadorMeta, MODAL_TELA_CHEIA, moeda, Numero, Taxa } from './pecas';
+import { ModalFunisEtapa } from './ModalFunisEtapa';
+import { Farol, formatar, IndicadorMeta, MODAL_TELA_CHEIA, moeda, Numero, Taxa } from './pecas';
 import { GraficoLinha } from './graficos';
 import { ProjecaoCaptacao } from './ProjecaoCaptacao';
 import { EvolucaoMetaIndicador, metaLeadsAcumuladaAte } from './EvolucaoMeta';
@@ -195,8 +195,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const [tabela, setTabela] = useState<TabelaAberta | null>(null);
   const [modalIngresso, setModalIngresso] = useState(false);
   const [abaVisao, setAbaVisao] = useState<'placar' | 'alertas'>('placar');
-  const [tipoC1, setTipoC1] = useState<'todos' | TipoConteudoC1>('todos');
-  const [iscaAberta, setIscaAberta] = useState<string | null>(null);
+  const [funisAbertos, setFunisAbertos] = useState<Funil | null>(null);
   // Sem fonte de cadastros, número de lead é "Sem dado" (nunca o zero de uma lista vazia).
   const semLeads = d.perfilSemDado;
   const { config, idx, recorte } = d;
@@ -370,13 +369,22 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
             const lf = filtrarLinhas(linhasCanal, { funil: f, canal: 'todos' });
             const selecionado = recorte.funil === f || (recorte.funil === 'c2' && (f === 'consultoria' || f === 'iscas'));
             const apagado = recorte.funil !== 'todos' && !selecionado;
+            const filtrando = selecionado && recorte.funil !== 'todos';
+            // O card inteiro abre o modal com os funis da etapa lado a lado. O Filtrar é irmão do card (não filho),
+            // para não haver botão dentro de botão; o espaço dele no título é reservado pelo texto invisível.
             return (
-              <SectionCard key={f} title={ROTULO_FUNIL[f]} className={apagado ? 'opacity-40' : ''}
-                right={<button type="button" className="text-xs text-[var(--accent)] underline-offset-2 hover:underline max-md:-my-3 max-md:-mr-3 max-md:min-h-11 max-md:px-3" onClick={() => d.irPara({ funil: selecionado && recorte.funil !== 'todos' ? 'todos' : f })}>{selecionado && recorte.funil !== 'todos' ? 'Limpar filtro' : 'Filtrar'}</button>}>
-                {f === 'c1' ? <ColunaC1Segmentada d={d} dias={df} selecionado={tipoC1} onSelecionar={setTipoC1} />
-                  : f === 'iscas' ? <ColunaIscasSegmentada d={d} dias={df} linhas={lf} selecionado={iscaAberta} onSelecionar={setIscaAberta} />
-                    : <ColunaCaptacao d={d} dias={df} linhas={lf} funil={f} />}
-              </SectionCard>
+              <div key={f} className={`relative min-w-0 ${apagado ? 'opacity-40' : ''}`}>
+                <Cartao cheio titulo={`${ROTULO_FUNIL[f]}: funis lado a lado`} onAbrir={() => setFunisAbertos(f)}>
+                  <SectionCard title={ROTULO_FUNIL[f]} right={<span aria-hidden="true" className="invisible text-xs">{filtrando ? 'Limpar filtro' : 'Filtrar'}</span>}>
+                    {f === 'c1' ? <ColunaC1 d={d} dias={df} /> : <ColunaCaptacao d={d} dias={df} linhas={lf} funil={f} />}
+                    <p className="mt-2 text-[11px] font-semibold text-[var(--accent)]">Ver funis lado a lado</p>
+                  </SectionCard>
+                </Cartao>
+                <button type="button" onClick={() => d.irPara({ funil: filtrando ? 'todos' : f })}
+                  className="absolute right-3 top-3 z-10 inline-flex min-h-11 items-center px-2 text-xs text-[var(--accent)] underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]">
+                  {filtrando ? 'Limpar filtro' : 'Filtrar'}
+                </button>
+              </div>
             );
           })}
         </div>
@@ -422,6 +430,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
       {modalIngresso && <ModalIngresso d={d} onClose={() => setModalIngresso(false)} linhas={linhasGrupo} />}
 
       <ModalCard d={d} card={aberto} onClose={() => setAberto(null)} />
+      {funisAbertos && <ModalFunisEtapa d={d} funil={funisAbertos} dias={diasCanal} linhas={linhasCanal} onClose={() => setFunisAbertos(null)} />}
       {detalheCaptacao && (
         <Modal open onClose={() => setDetalheCaptacao(false)} title="Investimento em captação" width={`max-w-xl ${MODAL_TELA_CHEIA}`}>
           <div className="space-y-3 text-sm text-[var(--fg-2)]">
@@ -452,74 +461,25 @@ function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
   return <div className="flex items-baseline justify-between gap-3 py-1 text-sm"><span className="text-[var(--fg-3)]">{rotulo}</span><span className="text-right text-[var(--fg)]">{children}</span></div>;
 }
 
-const ROTULOS_C1: readonly TipoConteudoC1[] = ['Teaser', 'Manifesto', 'Reels', 'Sem tipo no nome'];
-const ROTULOS_ISCA = ['Checkup', 'Fluxograma', 'Futurômetro'] as const;
-
-function ColunaC1Segmentada({ d, dias, selecionado, onSelecionar }: {
-  d: DadosTela; dias: DesempenhoDia[]; selecionado: 'todos' | TipoConteudoC1; onSelecionar: (x: 'todos' | TipoConteudoC1) => void;
-}) {
-  const ads = d.trafego.anuncios.filter((a) => d.idx.campanhaDoAnuncio(a.id)?.funil === 'c1');
-  const idsComDado = new Set(dias.map((x) => x.anuncioId));
-  const categoria = new Map(ads.map((a) => [a.id, tipoConteudoC1(a.nome)]));
-  const contagens = new Map<TipoConteudoC1, number>(ROTULOS_C1.map((x) => [x, new Set(ads.filter((a) => idsComDado.has(a.id) && categoria.get(a.id) === x).map((a) => a.nome)).size]));
-  const categorias = selecionado === 'todos' ? null : new Set(ads.filter((a) => idsComDado.has(a.id) && categoria.get(a.id) === selecionado).map((a) => a.id));
-  const recorte = categorias ? dias.filter((x) => categorias.has(x.anuncioId)) : dias;
-  const a = agregar(recorte);
-  return <div className="space-y-3">
-    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar C1 pelo tipo do anúncio">
-      <Chip ativo={selecionado === 'todos'} onClick={() => onSelecionar('todos')}>Todos</Chip>
-      {ROTULOS_C1.map((nome) => <Chip key={nome} ativo={selecionado === nome} onClick={() => onSelecionar(selecionado === nome ? 'todos' : nome)}>{nome} ({contagens.get(nome) ?? 0})</Chip>)}
+function ColunaC1({ d, dias }: { d: DadosTela; dias: DesempenhoDia[] }) {
+  const a = agregar(dias);
+  // Alcance e frequência não somam entre campanhas: só com uma campanha C1 no recorte.
+  const campanhas = [...new Set(dias.map((x) => d.idx.campanhaDoAnuncio(x.anuncioId)?.id).filter((x): x is string => Boolean(x)))];
+  const total = campanhas.length === 1 ? d.totaisPeriodo.find((t) => t.nivel === 'campanha' && t.id === campanhas[0]) : undefined;
+  const falta = campanhas.length > 1 ? 'alcance não soma entre campanhas' : 'alcance do período';
+  return (
+    <div className="divide-y divide-[var(--border-faint)]">
+      <Linha rotulo="Gasto"><Numero valor={dias.length ? a.gasto : null} formato="brl" animado={false} /></Linha>
+      <Linha rotulo="Impressões"><Numero valor={dias.length ? a.impressoes : null} formato="int" animado={false} /></Linha>
+      <Linha rotulo="Alcance"><Numero valor={total?.alcance ?? null} formato="int" falta={falta} animado={false} /></Linha>
+      <Linha rotulo="Frequência"><Numero valor={total?.frequencia ?? null} formato="dec" falta={falta} animado={false} /></Linha>
+      {total?.de && total.ate && <Linha rotulo="Período da campanha">de {dataBr(total.de)} a {dataBr(total.ate)}</Linha>}
+      <Linha rotulo="CPM"><Numero valor={dias.length ? cpm(a) : null} formato="brl" animado={false} /></Linha>
+      <Linha rotulo="Vídeo 75%"><Taxa taxa={taxaVideo75(a)} /></Linha>
+      <Linha rotulo="Custo por visualização"><Numero valor={custoPorVisualizacao(a)} formato="brl" falta="ThruPlay" animado={false} /></Linha>
+      <p className="pt-1 text-[11px] text-[var(--fg-3)]">Distribuição: sem leads nem página.</p>
     </div>
-    <p className="text-[10px] text-[var(--fg-3)]">Tipo identificado pelo nome do anúncio. “Sem tipo no nome” mantém os anúncios sem TEASER, MANIFESTO ou REELS.</p>
-    {recorte.length === 0 ? <p className="py-2 text-xs text-[var(--fg-3)]">Sem dado para este tipo no recorte.</p> : <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
-      <Par rotulo="Anúncios"><Numero valor={new Set(recorte.map((x) => d.idx.anuncio.get(x.anuncioId)?.nome).filter(Boolean)).size} formato="int" animado={false} /></Par>
-      <Par rotulo="Investimento"><Numero valor={gastoDe(recorte)} formato="brl" animado={false} /></Par>
-      <Par rotulo="Impressões"><Numero valor={a.impressoes} formato="int" animado={false} /></Par>
-      <Par rotulo="ThruPlay"><Numero valor={a.thruplay.valor} formato="int" animado={false} /></Par>
-      <Par rotulo="Vídeo 75%"><Taxa taxa={taxaVideo75(a)} /></Par>
-      <Par rotulo="CPM"><Numero valor={cpm(a)} formato="brl" animado={false} /></Par>
-    </div>}
-  </div>;
-}
-
-function ColunaIscasSegmentada({ d, dias, linhas, selecionado, onSelecionar }: {
-  d: DadosTela; dias: DesempenhoDia[]; linhas: LinhaPerfil[]; selecionado: string | null; onSelecionar: (x: string | null) => void;
-}) {
-  const campanhasIsca = new Set(d.trafegoPeriodo.campanhas.filter((c) => c.funil === 'iscas' && !ehEntresafraCampanha(c)).map((c) => c.id));
-  const conjuntos = d.trafegoPeriodo.conjuntos.filter((cj) => campanhasIsca.has(cj.campanhaId));
-  const iscaConjunto = new Map(conjuntos.map((cj) => [cj.id, iscaDoNomeConjunto(cj.nome)]));
-  const iscaDoAnuncio = new Map(d.trafegoPeriodo.anuncios.map((a) => [a.id, iscaConjunto.get(a.conjuntoId) ?? null]));
-  const categoria = (x: DesempenhoDia) => iscaDoAnuncio.get(x.anuncioId) ?? null;
-  const escolhida = selecionado ? dias.filter((x) => categoria(x) === selecionado) : dias;
-  const linhasIsla = selecionado ? linhas.filter((x) => x.isca === selecionado) : linhas;
-  const investimento = escolhida.length ? gastoDe(escolhida) : null;
-  const pagos = leadsDoTrafego(linhasIsla, d.idx);
-  const cpl = cplCaptacao(investimento, pagos);
-  const conjuntoIds = new Set(conjuntos.filter((cj) => !selecionado || iscaConjunto.get(cj.id) === selecionado).map((cj) => cj.id));
-  const anunciosNomes = new Set(d.trafegoPeriodo.anuncios.filter((a) => conjuntoIds.has(a.conjuntoId) && escolhida.some((x) => x.anuncioId === a.id)).map((a) => a.nome));
-  const anunciosConflitantes = new Set(d.trafegoPeriodo.anuncios.filter((a) => {
-    const isca = iscaConjunto.get(a.conjuntoId);
-    const nomeNormalizado = a.nome.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleUpperCase('pt-BR');
-    const iscaNormalizada = isca?.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleUpperCase('pt-BR');
-    return isca !== null && isca !== undefined && isca === selecionado && !nomeNormalizado.includes(iscaNormalizada ?? '');
-  }).map((a) => a.nome));
-  return <div className="space-y-3">
-    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar Iscas por isca">
-      <Chip ativo={selecionado === null} onClick={() => onSelecionar(null)}>Todas</Chip>
-      {ROTULOS_ISCA.map((nome) => <Chip key={nome} ativo={selecionado === nome} onClick={() => onSelecionar(selecionado === nome ? null : nome)}>{nome}</Chip>)}
-    </div>
-    <p className="text-[10px] text-[var(--fg-3)]">Tráfego agrupado pelo último bloco do nome do conjunto; leads pelo campo isca de dados_black_perfil.</p>
-    {escolhida.length === 0 && linhasIsla.length === 0 ? <p className="py-2 text-xs text-[var(--fg-3)]">Sem dado para esta isca no recorte.</p> : <>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
-        <Par rotulo="Anúncios"><Numero valor={anunciosNomes.size} formato="int" animado={false} /></Par>
-        <Par rotulo="Investimento"><Numero valor={investimento} formato="brl" animado={false} /></Par>
-        <Par rotulo="Leads pagos"><Numero valor={pagos.valor} formato="int" animado={false} /></Par>
-        <Par rotulo="CPL"><Numero valor={cpl.valor} formato="brl" animado={false} /></Par>
-        <Par rotulo="Conversão da página"><Taxa taxa={conversaoPaginaNumero(escolhida, linhasIsla, d.idx)} /></Par>
-      </div>
-      {anunciosConflitantes.size > 0 && <p className="rounded-[var(--r-sm)] bg-[var(--surface-3)] p-2 text-[10px] text-[var(--fg-2)]">Anúncio com outra isca no nome: {anunciosConflitantes.size}. O gasto segue a isca do conjunto.</p>}
-    </>}
-  </div>;
+  );
 }
 
 function CampanhasEtapa({ d, funil }: { d: DadosTela; funil: Funil }) {
