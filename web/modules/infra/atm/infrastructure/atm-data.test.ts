@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock('@/shared/infrastructure/supabase/browser-client', () => ({ createBrowserSupabase: () => ({ rpc: mocks.rpc }) }));
 vi.mock('@/shared/infrastructure/supabase/query-log', () => ({ logQueryError: vi.fn() }));
 
-import { carregarAtmDisparosLista, desmarcarAtmTestePorEmail, marcarAtmTestePorEmail, carregarAtmGrupo, carregarAtmSvVendas, carregarAtmLeads, carregarAtmPreCheckout, carregarAtmResumo, carregarAtmTrafego, desmarcarAtmTeste, marcarAtmTeste, MENSAGEM_PRE_CHECKOUT_NAO_PUBLICADA } from './atm-data';
+import { carregarAtmDisparosLista, desmarcarAtmTestePorEmail, marcarAtmTestePorEmail, carregarAtmGrupo, carregarAtmGrupoLeads, carregarAtmSvVendas, carregarAtmLeads, carregarAtmPreCheckout, carregarAtmResumo, carregarAtmTrafego, desmarcarAtmTeste, marcarAtmTeste, MENSAGEM_GRUPO_LEADS_NAO_PUBLICADA, MENSAGEM_GRUPO_LEADS_SEM_PERMISSAO, MENSAGEM_PRE_CHECKOUT_NAO_PUBLICADA } from './atm-data';
 import { contadorDoModalAtm, vendasNoPeriodoAtm } from '../domain/modal-pessoas';
 
 describe('leitura e marcação do dashboard ATM', () => {
@@ -41,6 +41,8 @@ describe('leitura e marcação do dashboard ATM', () => {
     expect(resultado.data.resumo.custoDisparo).toEqual({ valor: 0, semDado: true });
     expect(resultado.data.resumo.custoTrafego).toEqual({ valor: 0, semDado: true });
     expect(resultado.data.resumo.investimentoTotal).toEqual({ valor: 0, semDado: true });
+    expect(resultado.data.resumo.ingressosGrupo).toEqual({ valor: 7, semDado: false });
+    expect(resultado.data.resumo.percentualIngressoGrupo).toEqual({ valor: 11.67, semDado: false });
     expect(resultado.data.periodo).toEqual({ de: '2026-10-07', ate: '2026-10-14', leadsTeste: 1, grupoTeste: 2, vendasTeste: 1, receitaTesteBruta: 197 });
   });
 
@@ -197,6 +199,44 @@ describe('leitura e marcação do dashboard ATM', () => {
       p_chave: 'atm-elaine-1-2026-10', p_de: '2026-10-08', p_ate: '2026-10-08', p_incluir_teste: true,
     });
     expect(resultado.data[0]).toMatchObject({ foneKey: '5511999999999', teste: true, testeMotivo: 'teste' });
+  });
+
+  it('usa a taxa do resumo sem recalcular ou limitar a 100%', async () => {
+    mocks.rpc.mockResolvedValue({ data: [{ grupo_entradas: 13, leads: 9, grupo_pct: 144.44 }], error: null });
+    const resultado = await carregarAtmResumo('black-thb-2026-10');
+    expect(mocks.rpc).toHaveBeenCalledWith('dados_atm_resumo', { p_chave: 'black-thb-2026-10' });
+    expect(resultado.data.resumo.ingressosGrupo).toEqual({ valor: 13, semDado: false });
+    expect(resultado.data.resumo.percentualIngressoGrupo).toEqual({ valor: 144.44, semDado: false });
+  });
+
+  it('carrega a lista de entradas por número e elimina campos dos não encontrados', async () => {
+    mocks.rpc.mockResolvedValue({ data: [
+      { fone_grupo: '5511999990001', origem: 'lista_disparo', na_lista: true, na_base: false, nome: 'Contato Demo', email: 'demo@example.invalid', telefone: '5511999990001', turma: 'THB', instrucao: 'THB sócio', entrou_em: '2026-10-15T12:00:00Z', saiu_em: null, no_grupo: true, entrada_aproximada: false },
+      { fone_grupo: '5511999990002', origem: 'base_leads', na_lista: false, na_base: true, nome: 'Lead Demo', email: 'lead@example.invalid', telefone: '5511999990002', turma: null, instrucao: null, entrou_em: '2026-10-14T12:00:00Z', saiu_em: '2026-10-15T13:00:00Z', no_grupo: false, entrada_aproximada: true },
+      { fone_grupo: '5511999990003', origem: 'nao_encontrado', na_lista: false, na_base: false, nome: 'IGNORAR', email: 'nao-publicar@example.invalid', telefone: '5511999990003', turma: 'IGNORAR', instrucao: 'IGNORAR', entrou_em: '2026-10-13T12:00:00Z', saiu_em: null, no_grupo: true, entrada_aproximada: false },
+    ], error: null });
+
+    const resultado = await carregarAtmGrupoLeads('black-thb-2026-10');
+    expect(mocks.rpc).toHaveBeenCalledWith('dados_atm_grupo_leads', { p_chave: 'black-thb-2026-10' });
+    expect(resultado.data[0]).toMatchObject({ origem: 'lista_disparo', nome: 'Contato Demo', instrucao: 'THB sócio', noGrupo: true });
+    expect(resultado.data[1]).toMatchObject({ origem: 'base_leads', saiuEm: '2026-10-15T13:00:00Z', entradaAproximada: true });
+    expect(resultado.data[2]).toEqual({
+      foneGrupo: '5511999990003', origem: 'nao_encontrado', naLista: null, naBase: null,
+      nome: null, email: null, telefone: '5511999990003', turma: null, instrucao: null,
+      entrouEm: null, saiuEm: null, noGrupo: null, entradaAproximada: null,
+    });
+  });
+
+  it('converte 42501 em aviso de contato.ver e PGRST202 em lista ainda não publicada', async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: null, error: { code: '42501' } });
+    const semPermissao = await carregarAtmGrupoLeads('black-thb-2026-10');
+    expect(semPermissao.semPermissao).toBe(true);
+    expect(semPermissao.erro).toBe(MENSAGEM_GRUPO_LEADS_SEM_PERMISSAO);
+
+    mocks.rpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202' } });
+    const naoPublicada = await carregarAtmGrupoLeads('black-thb-2026-10');
+    expect(naoPublicada.naoPublicada).toBe(true);
+    expect(naoPublicada.erro).toBe(MENSAGEM_GRUPO_LEADS_NAO_PUBLICADA);
   });
 
   it('envia ambos identificadores para desfazer e comunica recusa do banco', async () => {

@@ -69,6 +69,16 @@ Os totais e gráficos permanecem visíveis. As listas com nome, e-mail ou telefo
 
 As RPCs não verificam `infra` nem `financeiro.ver`; exigem perfil ativo da equipe `@advmais.com` e dashboard ativo. As RPCs das listas pessoais do ATM também validam `contato.ver`; `dados_black_leads` ainda não faz essa validação no banco, então a tela evita solicitar seus detalhes quando a capacidade falta. Nenhuma alteração de banco foi feita.
 
+## Ingresso no grupo por números únicos · 15/10/2026
+
+- **Taxa:** nos cards `Ingresso no grupo` e `% ingresso no grupo`, a tela usa diretamente `dados_atm_resumo.grupo_entradas` e `dados_atm_resumo.grupo_pct`. Não recalcula a taxa pelo campo `eh_lead` de `dados_atm_grupo_numeros`; por isso a taxa pode passar de 100% quando há mais números no grupo que leads.
+- **Modal:** o card `Ingresso no grupo` abre a aba `Leads`, uma linha por número único retornado por `dados_atm_grupo_leads`, ordenada pelo banco por `entrou_em` decrescente. A tabela apresenta nome, e-mail, telefone, turma, instrução, origem, entrada, saída e se o número permanece no grupo. `entrada_aproximada` aparece como “data aproximada”. Origem é exibida como “Lista do disparo”, “Base de leads” ou “Não encontrado”. Para `nao_encontrado`, o front mantém somente o telefone; os outros campos ficam vazios.
+- **Permissão:** sem `contato.ver`, o modal mantém a contagem do resumo e não solicita a RPC com contatos. Se a leitura retornar `42501`, a mensagem pede `contato.ver`.
+- **Contrato e estado:** `dados_atm_grupo_leads(p_chave, p_de?, p_ate?)` pertence ao contrato do Galego para `black-thb-2026-10`; a migration `20261015210000` foi aplicada em 15/10/2026 às 18:35 UTC. O front não grava nem altera dados no banco.
+- **Como testar:** `cd web && npx vitest run modules/infra/atm/infrastructure/atm-data.test.ts` cobre chamada sem período (período do evento), os campos da lista, mascaramento de linhas não encontradas, taxa acima de 100%, `42501` e `PGRST202`. Para revisar visualmente sem PII, suba local com `NEXT_PUBLIC_BLACK_DEMO=1`, entre em Ações da Black > THB vencidos e abra o card Ingresso no grupo; a tabela usa contatos fictícios e exibe o aviso de demonstração. Sem a capacidade `contato.ver`, confirme que o total permanece visível e que a lista não é consultada. Para validação real pós-aplicação, use usuário com `contato.ver`; sem essa permissão a RPC retorna `42501` e a tela pede a capacidade.
+
+Nenhuma alteração de banco foi feita. O banco já confirmou 13 linhas: 10 `lista_disparo`, 1 `base_leads` e 2 `nao_encontrado`. Esses totais servem para validar a leitura autorizada; não foram copiados como números fixos para a tela.
+
 Para testar: autenticar com perfil ativo da equipe sem vínculo Infra nem `financeiro.ver`, abrir `/infra/dashboards`, entrar em CSM, Ações da Black e Escritório/ATM e conferir os indicadores. Abrir o detalhe de leads sem `contato.ver`: os totais continuam disponíveis e a lista não aparece. Confirmar que os controles de marcar teste não aparecem para não master. Abrir `/infra` e `/infra/laboratorio` com o mesmo perfil e confirmar que seguem restritos.
 
 ## Gráficos vivos no modal de Leads · 15/10/2026
