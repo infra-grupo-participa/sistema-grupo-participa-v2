@@ -106,8 +106,8 @@ export function AbaHistorico({ d }: { d: DadosTela }) {
         </>}
       </SectionCard>
 
-      <SectionCard title="Investimento e leads acumulados" subtitle="Barras: investimento do dia de todas as campanhas do filtro (captação, aquecimento, antecipação e o resto). Linha: pessoas únicas de todas as portas acumuladas desde o início.">
-        <Grafico serie={serie} ativo={i} onEscolher={setEscolhido} />
+      <SectionCard title="Investimento e leads acumulados" subtitle="Barras: investimento do dia de todas as campanhas do filtro (captação, aquecimento, antecipação e o resto); a dica e a linha abaixo do gráfico mostram também o investimento em captação. Linha: pessoas únicas de todas as portas acumuladas desde o início.">
+        <Grafico serie={serie} gastoCaptacao={gastoCaptacao} ativo={i} onEscolher={setEscolhido} />
       </SectionCard>
     </div>
   );
@@ -167,7 +167,7 @@ function FunilDia({ dia, cap, dados }: { dia: DiaHistorico; cap: DiaHistorico; d
   );
 }
 
-function Grafico({ serie, ativo, onEscolher }: { serie: DiaHistorico[]; ativo: number; onEscolher: (k: number) => void }) {
+function Grafico({ serie, gastoCaptacao, ativo, onEscolher }: { serie: DiaHistorico[]; gastoCaptacao: Map<string, number>; ativo: number; onEscolher: (k: number) => void }) {
   const W = 720; const H = 220; const topo = 12; const base = H - 24; const n = serie.length;
   const larg = W / n;
   const maxG = Math.max(1, ...serie.map((s) => s.gasto));
@@ -179,10 +179,10 @@ function Grafico({ serie, ativo, onEscolher }: { serie: DiaHistorico[]; ativo: n
   return (
     <figure className="min-w-0">
       <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img"
-        aria-label={`Período de ${dataCurta(serie[0].dia)} a ${dataCurta(serie[n - 1].dia)}. No último dia: investimento ${moeda(serie[n - 1].gasto)}, ${inteiro(serie[n - 1].pessoasAcumuladas)} leads acumulados.`}>
+        aria-label={`Período de ${dataCurta(serie[0].dia)} a ${dataCurta(serie[n - 1].dia)}. No último dia: investimento em captação ${moeda(gastoCaptacao.get(serie[n - 1].dia) ?? 0)}, investimento total ${moeda(serie[n - 1].gasto)}, ${inteiro(serie[n - 1].pessoasAcumuladas)} leads acumulados.`}>
         {serie.map((s, k) => {
           const h = (s.gasto / maxG) * (base - topo) * 0.6;
-          const dica = `${dataCurta(s.dia)}: investimento do dia ${moeda(s.gasto)} · ${inteiro(s.pessoasAcumuladas)} leads acumulados`;
+          const dica = `${dataCurta(s.dia)}: investimento em captação ${moeda(gastoCaptacao.get(s.dia) ?? 0)} · investimento total ${moeda(s.gasto)} · ${inteiro(s.pessoasAcumuladas)} leads acumulados`;
           return (
             <g key={s.dia} role="button" tabIndex={0} aria-label={dica} aria-pressed={k === ativo} className="atm-historico-interativo cursor-pointer"
               onMouseEnter={() => onEscolher(k)} onFocus={() => onEscolher(k)}
@@ -201,10 +201,10 @@ function Grafico({ serie, ativo, onEscolher }: { serie: DiaHistorico[]; ativo: n
         ))}
       </svg>
       <p role="status" className="mt-2 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--fg)]">
-        {dataCurta(serie[ativo].dia)} · Investimento do dia: <strong>{moeda(serie[ativo].gasto)}</strong> · Leads acumulados: <strong>{inteiro(serie[ativo].pessoasAcumuladas)}</strong>
+        {dataCurta(serie[ativo].dia)} · Investimento em captação: <strong>{moeda(gastoCaptacao.get(serie[ativo].dia) ?? 0)}</strong> · Investimento total: <strong>{moeda(serie[ativo].gasto)}</strong> · Leads acumulados: <strong>{inteiro(serie[ativo].pessoasAcumuladas)}</strong>
       </p>
       <figcaption className="mt-1 flex flex-wrap gap-3 text-xs text-[var(--fg-3)]">
-        <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="h-2 w-3 rounded-sm bg-[var(--surface-4)]" />Investimento (máx. {moeda(maxG)})</span>
+        <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="h-2 w-3 rounded-sm bg-[var(--surface-4)]" />Investimento total do dia (máx. {moeda(maxG)})</span>
         <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="h-0.5 w-3 bg-[var(--cyan)]" />Pessoas acumuladas</span>
       </figcaption>
     </figure>

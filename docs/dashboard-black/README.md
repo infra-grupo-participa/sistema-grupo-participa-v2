@@ -1166,3 +1166,7 @@ total do filtro (o subtítulo diz isso).
 Black (260) passando, com teste novo para a regra exportada.
 
 **Situação:** na main pelo PR desta branch (`fix/black-historico-investimento-captacao`).
+
+**Complemento (16/10, PR seguinte):** a dica das barras e a linha abaixo do gráfico ainda diziam "Investimento do dia"
+com o total, e o Victor leu isso como o número de captação. Agora as duas mostram "Investimento em captação" (mesma
+regra do card) e "Investimento total"; a legenda das barras virou "Investimento total do dia".
