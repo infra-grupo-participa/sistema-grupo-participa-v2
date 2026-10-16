@@ -9,7 +9,8 @@ import { useMemo, useState } from 'react';
 import { Modal, SearchInput } from '@/shared/ui/components';
 import { deslocarDia } from '@/modules/infra/atm/domain/periodo';
 import { anunciosDoCriativo, idDoCriativo } from '../domain/criativos';
-import { filtrarDias, filtrarLinhas } from '../domain/metricas';
+import { filtrarDias, filtrarLinhas, ROTULO_SEM_DETALHE } from '../domain/metricas';
+import { ratear, semDetalheMista } from '../domain/rateio';
 import type { RecorteGasto } from '../domain/numeros';
 import { diaDe } from '../domain/recorte';
 import { FASES, FUNIS, ROTULO_CANAL, ROTULO_FASE, ROTULO_FUNIL, ROTULO_LINHA, ROTULO_SEM_CLASSIFICACAO, ROTULO_SEM_FASE, type Campanha, type DesempenhoDia, type Fase, type LinhaPerfil, type Valor } from '../domain/tipos';
@@ -124,7 +125,12 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
         { chave: 'remarketing_pagina', rotulo: ROTULO_LINHA.remarketing_pagina, valor: card.medir(noRemarketing.dias, noRemarketing.leads, { funil: 'todos', ...canalAtual, campanha: (c) => linhaDaCampanha(c) === 'remarketing_pagina' }) },
         { chave: 'outras', rotulo: 'Fora de C1, C2 e C3 (lembrete, live, carrinho, sem classificação)', valor: card.medir(outros.dias, outros.leads) },
       ].filter((x) => x.chave === 'remarketing_pagina' || (x.valor !== null && x.valor !== 0));
-      return [...porFunil, ...extra];
+      // Gasto da campanha mista (Consultoria + Iscas) que nenhum anúncio explica: sem ele a soma das linhas não fecha com o card.
+      // Só gasto; o CPL dessa linha é "sem dado" (não há lead nem divisão para sustentar).
+      const semDetalhe = card.id === 'investimento-captacao' || card.id === 'cpl'
+        ? semDetalheMista(ratear(d.diasPeriodoSemFiltro, d.trafegoPeriodo, idx), idx, d.recorte.canal) : 0;
+      const linhaSemDetalhe: Linha[] = semDetalhe > 0 ? [{ chave: 'sem_detalhe', rotulo: ROTULO_SEM_DETALHE, valor: card.id === 'cpl' ? null : semDetalhe }] : [];
+      return [...porFunil, ...extra, ...linhaSemDetalhe];
     }
     if (ativa === 'canal') return (['meta', 'google'] as const).map((c) => ({
       chave: c, rotulo: ROTULO_CANAL[c],

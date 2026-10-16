@@ -1309,7 +1309,8 @@ anúncio (87,10 + 433,11 + 1.404,71 = 1.924,92; Jornada 1.925,40). Caso medido n
 - **Borda corrigida:** o `medir` do card `investimento-captacao`, com recorte, devolvia **R$ 0,00** quando o recorte não tinha campanha de captação
   (canal Google sem campanha do Google; fases Antecipação, Aquecimento, Remarketing). Agora usa `investimentoDoRecorteValor` (`domain/numeros.ts`) e
   devolve `null`, "Sem dado", igual ao `cplDoRecorte`. Com campanha no recorte, o valor não muda.
-- **Testes:** `domain/rateio.test.ts` (11 casos): C2 517,79 exato (520,21 por anúncio), total de captação 1.922,50 = Consultoria + Iscas + C3, modal por
+- **Coleta de anúncios atrasada (`sem_tempo`), última rodada:** o `semDetalhe` da campanha mista (c2) agora também aparece na aba "Por funil" do modal (cards Investimento em captação e CPL: linha "Sem detalhe por anúncio", só gasto, CPL "Sem dado") e como nota na Jornada (sem dividir entre Consultoria e Iscas); a `ColunaC1` passou a incluir a campanha C1 com gasto e nenhum anúncio, pelo valor da campanha (`semDetalheDoFunil`). Reproduzido antes: card 1.945,57 x funil/Jornada 1.605,52.
+- **Testes:** `domain/rateio.test.ts` (16 casos): C2 517,79 exato (520,21 por anúncio), total de captação 1.922,50 = Consultoria + Iscas + C3, modal por
   funil, fechamento ao centavo, dia sem linha de anúncio, campanha sem anúncio, fallback sem `gastoCampanhas`, nós da Jornada e a borda `null`.
   Não há teste de componente: a UI (`AbaVisaoGeral`, linha "Sem detalhe por anúncio", `ColunaC1`) foi só compilada, não aberta.
 
