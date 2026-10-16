@@ -20,7 +20,7 @@ Este documento fica no repositório para quem trabalha aqui sem acesso ao céreb
 - **Ligado em 16/10/2026 (ok do Victor):** migrations `20261016120000` e `20261016120100` aplicadas, Edge `pessoas-ac-delta`
   publicada, jobs 319 (`pessoas-incremental`, hora em hora, minuto 50) e 320 (`pessoas-ac-delta`, 05:40 UTC) **ligados**. Números e
   comandos na seção "Aplicação de 16/10/2026" abaixo. A carga da Hotmart (academy e escritório) terminou em 16/10 (57.424 e 546).
-- **Ainda não feito:** ligação da `fin.identidade` à pessoa, fila de revisão sem dono (816 casos pendentes em 16/10), a primeira
+- **Ainda não feito:** ligação da `fin.identidade` à pessoa, fila de revisão sem dono, a primeira
   volta do delta do AC termina em 3 dias por causa do teto de 42 chamadas por dia (ver "Aplicação").
 
 ## Decisões que valem para o código
