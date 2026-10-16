@@ -103,7 +103,7 @@ export interface AmostraPessoa {
 export interface PreviaPublico {
   total: number;
   excluidos: { optOut: number; jaComprou: number; emNegociacao: number; outraAcao: number };
-  /** Só para o gestor; nome curto e e-mail mascarado. */
+  /** Só para o gestor; nome curto e e-mail completo (desde 16/10/2026). */
   amostra: AmostraPessoa[];
 }
 
