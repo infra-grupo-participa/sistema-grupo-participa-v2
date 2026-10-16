@@ -51,8 +51,8 @@ Este documento fica no repositório para quem trabalha aqui sem acesso ao céreb
 | 20261014152236 | 170100 → 210100 | cargas das fontes do banco (Hotmart por conta, Central, T1-T40, HM, Respondi, leads, CRM) + modo só novos | C | **aplicada 14/10 ~15:22 UTC** (pentester liberou) |
 | 20261014152239 | 170200 → 210200 | planilha "Alunos T1-T42 Ativação" (estágio e carga, sem CPF) | C | **aplicada** |
 | 20261014152242 | 170300 → 210300 | rotina de hora em hora + agendamento do delta do AC; os 2 jobs **desligados** | C | **aplicada** |
-| 20261016120000 | (16/10) | `pessoas-incremental` por fonte, com `COMMIT`, teto de linhas, orçamento em segundos, erro visível no vigia, chaves com fim em 15/11 (achado 7) | C | **escrita, NÃO aplicada** (falta pentester e ok do Victor) |
-| 20261016120100 | (16/10) | `carga_respondi` no modo só novos sem fome (2.643 respostas sem contato travavam a janela) | C | **escrita, NÃO aplicada** |
+| 20261016120000 | (16/10) | `pessoas-incremental` por fonte, com `COMMIT`, teto de linhas, orçamento em segundos, erro visível no vigia, chaves com fim em 15/11 (achado 7) | C | **escrita, ensaiada com rollback, NÃO aplicada** (4ª revisão do pentester corrigida em 16/10; falta o ok do Victor) |
+| 20261016120100 | (16/10) | `carga_respondi` e `carga_aluno_historico` no modo só novos sem fome: filtro = mesmo descarte da `casar_email` (e-mail válido, até 320). Respondi: 3.505 sem evento, só 9 viram evento; aluno_historico: 29 descartadas | C | **escrita, ensaiada com rollback, NÃO aplicada** |
 
 Os arquivos foram renomeados para a versão gravada em `supabase_migrations.schema_migrations` (guia 6.3); o primeiro
 comentário de cada um diz o nome antigo. Cada uma tem `.explain.md`, ensaio e reversão.
@@ -83,7 +83,12 @@ Código em `infra/supabase/functions/pessoas-ac-delta/index.ts`. **NÃO publicad
   com o cursor validado por regex; estágio para pessoas limitado a 6 chamadas de 1.000 por execução.
 - Diferença de 334 contatos (AC 508.976 em 16/10 x `pessoas.ac_contato` 508.642): a carga parou em 15/10 ~04:30 UTC e a
   criação média é ~285/dia, então o delta cobre isso. **Não pega contato apagado no AC** (não verificado, sem a API).
-- Situação: aguardando a 4ª revisão do pentester; publicar e ligar são do Victor.
+- Correções da 4ª revisão (16/10): no fim da leitura o cursor recebe o dia UTC de `iniciada_em` da própria execução (não "hoje": um ciclo
+  retomado depois da meia-noite deixaria de fora o contato atualizado depois da passagem do id); `aguardando` com chave ligada sai `ok:false`;
+  flag em memória além da trava consultiva (esta é de sessão e reentrante) e `idle_timeout` de 150 s (era 20 s e fechava a conexão, soltando a trava,
+  na espera entre tentativas). Data de fim das chaves: 15/11/2026; ao ligar, `ate = current_date + 30`.
+- Situação: correções feitas, **não publicada**; falta o pentester reconferir e o ok do Victor para publicar e ligar. Sem `deno` na máquina:
+  a Edge só teve a sintaxe conferida (`node --experimental-strip-types --check`), não rodou.
 
 ## Como testar
 

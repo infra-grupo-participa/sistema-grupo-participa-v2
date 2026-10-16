@@ -95,19 +95,24 @@ select papel, count(*), count(*) filter (where pendente) pendentes from pessoas.
 - **De hora em hora (só banco: Hotmart, Respondi e as outras fontes do banco).** Ligar só depois dos passos 3 e 4 com
   status `ok`, com o ok do Maestro:
   ```sql
+  update pessoas.carga_chave set ligada = true, ate = current_date + 30, por = 'victor', em = now() where fonte = 'incremental';
   select cron.alter_job(jobid, active := true) from cron.job where jobname = 'pessoas-incremental';
   ```
+  Antes, um `call pessoas.carga_incremental_rodar(20, 60, 200);` à mão (a procedure faz `COMMIT`, então vai num comando só) e conferir
+  `select erro, status from pessoas.carga_execucao where fonte = 'incremental' order by id desc limit 1;`: a coluna `erro` nomeia fontes
+  com problema e as **puladas** (`carga_aberta`, `sem_carga_inicial`), que não derrubam o job.
   Hotmart e Respondi não têm rotina externa: o webhook da Hotmart e o `respondi-sync` já põem o dado no banco.
 - **Delta diário do AC: fica DESLIGADO.** Para ligar (ok do Victor dado em 14/10, com condições):
   1. publicar a Edge `pessoas-ac-delta` (quem publica: Maestro ou JP);
-  2. `update pessoas.carga_chave set ligada = true where fonte = 'activecampaign_delta';` (a data de fim, 31/12/2026, já está gravada);
+  2. `update pessoas.carga_chave set ligada = true, ate = current_date + 30, por = 'victor', em = now() where fonte = 'activecampaign_delta';` (renova a data de fim, que a migration `20261016120000` pôs em 15/11/2026);
   3. `select cron.alter_job(jobid, active := true) from cron.job where jobname = 'pessoas-ac-delta';`
 
   O delta usa:
   - chave do AC do Vault `activecampaign_api_key` (conta do AC `drmarciosa79109`) e segredo do cron Vault `cron_webhook_secret`;
   - 1× por dia, às 05:40 UTC (02:40 em Brasília);
   - no máximo 42 chamadas ao AC por dia (2 de listas + teto de 40 páginas de contatos);
-  - fim em 31/12/2026.
+  - fim em 15/11/2026 (renovar com `ate = current_date + 30` ao ligar); chave ligada com data vencida devolve 503 `chave_vencida`;
+  - `ok:false` em `aguardando` (sem carga inicial ou carga do script aberta), em execução parcial e em `ocupado` (409): o vigia abre incidente.
 
 ## Parar na hora
 

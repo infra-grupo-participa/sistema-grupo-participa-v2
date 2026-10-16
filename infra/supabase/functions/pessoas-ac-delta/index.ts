@@ -2,7 +2,7 @@
 //
 // Chamada: 1×/dia pelo job pg_cron 'pessoas-ac-delta' (05:40 UTC = 02:40 em Brasília), POST com o header
 // x-webhook-secret = Vault cron_webhook_secret (o mesmo dos outros crons de ingestão). O job NASCE DESLIGADO e a chave
-// pessoas.carga_chave 'activecampaign_delta' também (com data de fim 31/12/2026): rotina externa só com ok do Victor.
+// pessoas.carga_chave 'activecampaign_delta' também (com data de fim 15/11/2026; ao ligar, grava current_date + 30): rotina externa só com ok do Victor.
 //
 // O que faz, em série e com teto:
 //   1. confere o segredo, a chave 'activecampaign_delta' (ligada e dentro da data de fim) e a chave 'activecampaign';
@@ -12,7 +12,7 @@
 //   4. passa o estágio pendente para pessoas por pessoas.carga_ac_pessoas, até o orçamento de tempo.
 // Teto: TETO_DIA = 42 requisições ao AC por dia UTC, somando execuções (manual, repetida ou do cron) e tentativas; cada
 // requisição é gravada em pessoas.carga_lote (detalhe chamada_ac) ANTES de sair, no mesmo comando que confere o teto; uma só execução por vez
-// (pg_try_advisory_lock). Dia comum (medido em 14/10/2026): 2,4 a 3,8 mil contatos
+// (flag em memória do isolate + pg_try_advisory_lock do banco). Dia comum (medido em 14/10/2026): 2,4 a 3,8 mil contatos
 // atualizados = 25 a 38 páginas. Se o teto bater, a execução fica 'parada' e o dia seguinte continua do cursor.
 // Chave do AC: Vault activecampaign_api_key (nunca impressa). Erro sai só com o código.
 // Revisão de 16/10/2026 (migration 20261016120000, ainda por revisar pelo pentester):
@@ -22,6 +22,11 @@
 //   - segredo vazio é recusado ANTES de consultar o Vault; cursor é validado antes de ir para a URL do AC;
 //   - estágio -> pessoas tem teto de chamadas (TETO_CHAMADAS_PESSOAS x 1.000 contatos), além do orçamento de tempo;
 //   - primeiro delta nunca começa depois do fim da carga inicial (script): piso = data do fim da carga - 1 dia, para não abrir buraco.
+// Correções do pentester (16/10/2026, 4ª revisão):
+//   - no fim da leitura o cursor recebe o dia UTC de iniciada_em da PRÓPRIA execução (a retomada reaproveita a mesma execução), não "hoje":
+//     um ciclo que atravessa a meia-noite não abre mais buraco para o contato atualizado depois da passagem do id;
+//   - 'aguardando' (sem carga inicial, ou carga do script aberta) com a chave ligada sai ok:false (o vigia enxerga), não ok:true;
+//   - uma execução por vez também dentro do isolate (a trava consultiva é de sessão e reentrante) e idle_timeout de 150 s (> orçamento).
 import postgres from "npm:postgres@3.4.4";
 
 const TETO_PAGINAS = 40;          // teto de páginas de contatos por execução
@@ -33,7 +38,9 @@ const PAUSA_AC_MS = 500;          // entre páginas do AC (< 2 req/s)
 const LOTE_ESTAGIO = 500;         // contatos por chamada a carga_ac_estagio
 const TETO_CHAMADAS_PESSOAS = 6;  // chamadas a carga_ac_pessoas (1.000 contatos cada) por execução: 6.000. Medido em 15/10: lote de 500 leva 1,5 s em média (máx 4,5 s)
 const RE_CURSOR = /^\d{4}-\d{2}-\d{2}\|\d{1,10}$/;   // aaaa-mm-dd|ultimo_id: é o que vai para a URL do AC
-const sql = postgres(Deno.env.get("SUPABASE_DB_URL")!, { max: 1, prepare: false, idle_timeout: 20 });
+// idle_timeout acima dos 150 s da Edge: com 20 s, a espera entre tentativas (fetch de 15 s + 9 s) fechava a conexão e soltava a trava no meio
+const sql = postgres(Deno.env.get("SUPABASE_DB_URL")!, { max: 1, prepare: false, idle_timeout: 150 });
+let emExecucao = false;           // flag do isolate: a trava consultiva é da sessão (reentrante), então dois POSTs aqui passariam juntos
 const espera = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 const json = (corpo: unknown, status = 200) =>
   new Response(JSON.stringify(corpo), { status, headers: { "Content-Type": "application/json" } });
@@ -83,7 +90,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ erro: "método não permitido" }, 405);   // achado 3 do pentester
   const t0 = Date.now();
   let eid: number | null = null;
-  let travado = false;
+  let travado = false, marcado = false;
   try {
     const enviado = req.headers.get("x-webhook-secret") ?? "";
     if (!enviado) return json({ erro: "não autorizado" }, 401);   // fail-closed antes de gastar uma consulta
@@ -101,9 +108,13 @@ Deno.serve(async (req) => {
                   and coalesce(por, '') not in ('delta', 'ensaio')) feita,
         exists (select 1 from pessoas.carga_execucao where fonte = 'activecampaign' and status in ('rodando', 'parada')
                   and coalesce(por, '') <> 'delta') aberta`;
-    if (!ini.feita || ini.aberta) return json({ ok: true, aguardando: ini.aberta ? "carga do script aberta" : "sem carga inicial" });
+    // chave ligada e o delta não pôde rodar: ok:false, para o vigia não ler "tudo certo" (a desligada de propósito é a de cima)
+    if (!ini.feita || ini.aberta) return json({ ok: false, aguardando: ini.aberta ? "carga do script aberta" : "sem carga inicial" });
 
-    // uma execução por vez (POST manual, repetido ou simultâneo ao cron)
+    // uma execução por vez (POST manual, repetido ou simultâneo ao cron): flag do isolate (síncrona, sem espera entre conferir e marcar)
+    // e, entre isolates e conexões, a trava consultiva do banco
+    if (emExecucao) return json({ ok: false, ocupado: true }, 409);
+    emExecucao = true; marcado = true;
     const [lk] = await sql`select pg_try_advisory_lock(hashtext('pessoas-ac-delta')) ok`;
     if (!lk.ok) return json({ ok: false, ocupado: true }, 409);
     travado = true;
@@ -173,7 +184,6 @@ Deno.serve(async (req) => {
           new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10)}|0`;
     if (!RE_CURSOR.test(cursor)) throw new CursorInvalido();
     let [desde, ultimo] = cursor.split("|");
-    const hoje = new Date().toISOString().slice(0, 10);
     let lote: Obj[] = [], paginas = 0, fim = false;
     while (paginas < TETO_PAGINAS && Date.now() - t0 < ORCAMENTO_MS * 0.7) {
       let pg: Obj;
@@ -196,9 +206,11 @@ Deno.serve(async (req) => {
       await espera(PAUSA_AC_MS);
     }
     if (lote.length) await sql`select pessoas.carga_ac_estagio(${eid}, ${sql.json(lote)}::jsonb, ${`${desde}|${ultimo}`})`;
-    // terminou o dia: o próximo delta começa da data de hoje (sobreposição de 1 dia; o estágio é idempotente)
+    // terminou o dia: o próximo delta começa no dia UTC em que ESTA execução começou (iniciada_em; a retomada de uma 'parada' reaproveita a
+    // mesma execução e não muda esse campo), NUNCA em "hoje": se o ciclo atravessou a meia-noite, "hoje" deixaria de fora o contato de id já
+    // percorrido que foi atualizado depois da passagem. Sobreposição de 1 dia ou mais; o estágio é idempotente.
     if (fim) {
-      await sql`update pessoas.carga_execucao set cursor = ${`${hoje}|0`} where id = ${eid}`;
+      await sql`update pessoas.carga_execucao set cursor = to_char(iniciada_em at time zone 'utc', 'YYYY-MM-DD') || '|0' where id = ${eid}`;
       await sql`select pessoas.carga_fechar(${eid}, 'ok')`;
     } else {
       await sql`select pessoas.carga_fechar(${eid}, 'parada', 'teto de páginas ou tempo; continua no próximo delta')`;
@@ -233,5 +245,6 @@ Deno.serve(async (req) => {
     return json({ erro: codigo }, 500);
   } finally {
     if (travado) { try { await sql`select pg_advisory_unlock(hashtext('pessoas-ac-delta'))`; } catch { /* a conexão fecha */ } }
+    if (marcado) emExecucao = false;
   }
 });
