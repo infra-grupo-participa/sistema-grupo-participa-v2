@@ -15,6 +15,13 @@
 // (pg_try_advisory_lock). Dia comum (medido em 14/10/2026): 2,4 a 3,8 mil contatos
 // atualizados = 25 a 38 páginas. Se o teto bater, a execução fica 'parada' e o dia seguinte continua do cursor.
 // Chave do AC: Vault activecampaign_api_key (nunca impressa). Erro sai só com o código.
+// Revisão de 16/10/2026 (migration 20261016120000, ainda por revisar pelo pentester):
+//   - HTTP 200 não é sucesso: execução PARCIAL (teto do dia, tempo, páginas ou estágio por passar) devolve ok:false, e o vigia
+//     (ops.vigiar, regra "2xx com ok:false = falha_http") abre incidente em vez de ver "tudo certo";
+//   - chave 'activecampaign_delta' ligada com data de fim vencida = 503 {ok:false, erro:'chave_vencida'} (a revisão de 30 dias não pode calar);
+//   - segredo vazio é recusado ANTES de consultar o Vault; cursor é validado antes de ir para a URL do AC;
+//   - estágio -> pessoas tem teto de chamadas (TETO_CHAMADAS_PESSOAS x 1.000 contatos), além do orçamento de tempo;
+//   - primeiro delta nunca começa depois do fim da carga inicial (script): piso = data do fim da carga - 1 dia, para não abrir buraco.
 import postgres from "npm:postgres@3.4.4";
 
 const TETO_PAGINAS = 40;          // teto de páginas de contatos por execução
@@ -24,6 +31,8 @@ const RQ_TIMEOUT_MS = 15_000;     // 3 tentativas de 15 s cabem nos 150 s da Edg
 const ORCAMENTO_MS = 110_000;     // a Edge tem 150 s; não começa trabalho novo depois disto
 const PAUSA_AC_MS = 500;          // entre páginas do AC (< 2 req/s)
 const LOTE_ESTAGIO = 500;         // contatos por chamada a carga_ac_estagio
+const TETO_CHAMADAS_PESSOAS = 6;  // chamadas a carga_ac_pessoas (1.000 contatos cada) por execução: 6.000. Medido em 15/10: lote de 500 leva 1,5 s em média (máx 4,5 s)
+const RE_CURSOR = /^\d{4}-\d{2}-\d{2}\|\d{1,10}$/;   // aaaa-mm-dd|ultimo_id: é o que vai para a URL do AC
 const sql = postgres(Deno.env.get("SUPABASE_DB_URL")!, { max: 1, prepare: false, idle_timeout: 20 });
 const espera = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 const json = (corpo: unknown, status = 200) =>
@@ -31,6 +40,7 @@ const json = (corpo: unknown, status = 200) =>
 type Obj = Record<string, any>;
 class TetoAtingido extends Error {}
 class TempoEsgotado extends Error {}   // orçamento de 110 s da Edge; não é o teto do dia
+class CursorInvalido extends Error {}
 
 function igual(a: string, b: string) {
   if (a.length !== b.length) return false;
@@ -75,10 +85,16 @@ Deno.serve(async (req) => {
   let eid: number | null = null;
   let travado = false;
   try {
+    const enviado = req.headers.get("x-webhook-secret") ?? "";
+    if (!enviado) return json({ erro: "não autorizado" }, 401);   // fail-closed antes de gastar uma consulta
     const [seg] = await sql`select decrypted_secret s from vault.decrypted_secrets where name = 'cron_webhook_secret'`;
-    if (!seg?.s || !igual(req.headers.get("x-webhook-secret") ?? "", seg.s)) return json({ erro: "não autorizado" }, 401);
-    const [ch] = await sql`select pessoas.carga_ligada('activecampaign_delta') d, pessoas.carga_ligada('activecampaign') a`;
-    if (!ch.d || !ch.a) return json({ ok: true, desligada: true });
+    if (!seg?.s || !igual(enviado, seg.s)) return json({ erro: "não autorizado" }, 401);
+    const [ch] = await sql`select pessoas.carga_ligada('activecampaign_delta') d, pessoas.carga_ligada('activecampaign') a,
+                                  coalesce((select ligada and ate is not null and current_date > ate
+                                              from pessoas.carga_chave where fonte = 'activecampaign_delta'), false) vencida`;
+    // ligada mas com a data de fim vencida: a revisão de 30 dias venceu. Falha visível (503), não "desligada" calada.
+    if (ch.vencida) return json({ ok: false, erro: "chave_vencida" }, 503);
+    if (!ch.d || !ch.a) return json({ ok: true, desligada: true });   // desligada de propósito: não é falha
     // só depois da carga inicial do AC terminar, e nunca em cima de uma carga aberta pelo script
     const [ini] = await sql`select
         exists (select 1 from pessoas.carga_execucao where fonte = 'activecampaign' and fase = 'pessoas' and status = 'ok'
@@ -133,7 +149,7 @@ Deno.serve(async (req) => {
           const teto = e instanceof TetoAtingido;
           await sql`select pessoas.carga_fechar(${eid}, 'parada', ${teto ? "teto diário de chamadas ao AC" : "orçamento de tempo da Edge"})`;
           eid = null;
-          return json({ ok: true, ...(teto ? { teto_do_dia: true } : { tempo_esgotado: true }), chamadas_ac: chamadas });
+          return json({ ok: false, parcial: true, ...(teto ? { teto_do_dia: true } : { tempo_esgotado: true }), chamadas_ac: chamadas });
         }
         throw e;
       }
@@ -146,10 +162,16 @@ Deno.serve(async (req) => {
     // 3. estágio: cursor "aaaa-mm-dd|ultimo_id" da execução aberta (retomada) ou do último delta ok
     const campos = new Map<string, string>(
       (await sql`select field_id, perstag from pessoas.ac_campo_carga`).map((r: Obj) => [String(r.field_id), r.perstag]));
+    // 1º delta: a partir do fim da carga inicial menos 1 dia (nunca "hoje - 2", que abriria buraco se o cron fosse ligado dias depois);
+    // sem carga inicial registrada cai no "hoje - 2" (mas a Edge já saiu em "sem carga inicial" lá em cima).
     let cursor: string = ab.v.cursor ??
       (await sql`select cursor from pessoas.carga_execucao where fonte = 'activecampaign' and fase = 'estagio'
                    and por = 'delta' and status = 'ok' order by id desc limit 1`)[0]?.cursor ??
-      `${new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10)}|0`;
+      `${(await sql`select ((terminada_em at time zone 'utc')::date - 1)::text d from pessoas.carga_execucao
+                     where fonte = 'activecampaign' and fase = 'estagio' and status = 'ok' and coalesce(por, '') not in ('delta', 'ensaio')
+                     order by id desc limit 1`)[0]?.d ??
+          new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10)}|0`;
+    if (!RE_CURSOR.test(cursor)) throw new CursorInvalido();
     let [desde, ultimo] = cursor.split("|");
     const hoje = new Date().toISOString().slice(0, 10);
     let lote: Obj[] = [], paginas = 0, fim = false;
@@ -186,20 +208,25 @@ Deno.serve(async (req) => {
     // 4. estágio -> pessoas, até o orçamento
     const [pa] = await sql`select pessoas.carga_abrir('activecampaign', 'pessoas', 'delta') v`;
     eid = pa.v.execucao;
-    let restam = 1;
-    while (restam > 0 && Date.now() - t0 < ORCAMENTO_MS) {
+    let restam = 1, chamadasPessoas = 0;
+    while (restam > 0 && chamadasPessoas < TETO_CHAMADAS_PESSOAS && Date.now() - t0 < ORCAMENTO_MS) {
       const [r] = await sql`select pessoas.carga_ac_pessoas(${eid}, 1000) v`;
+      chamadasPessoas++;
       restam = Number(r.v.restam);
       if (Number(r.v.lidas) === 0) break;
     }
     await sql`select pessoas.carga_fechar(${eid}, ${restam > 0 ? "parada" : "ok"})`;
     eid = null;
-    return json({ ok: true, chamadas_ac: chamadas, paginas, fim_do_dia: fim, restam, ms: Date.now() - t0 });
+    // ok só quando o dia foi lido até o fim E o estágio foi todo passado para pessoas; parcial = ok:false (o vigia enxerga)
+    const completo = fim && restam === 0;
+    return json({ ok: completo, ...(completo ? {} : { parcial: true }), chamadas_ac: chamadas, paginas, fim_do_dia: fim, restam,
+                  chamadas_pessoas: chamadasPessoas, ms: Date.now() - t0 });
   } catch (e) {
     // só o código: nunca a mensagem do banco (pode trazer DETAIL com dado) nem a do AC
     const sqlstate = String((e as Obj)?.code ?? "");
     const msg = String((e as Error)?.message ?? "");
-    const codigo = /^[0-9A-Z]{5}$/.test(sqlstate) ? `sql ${sqlstate}` : (/^AC HTTP \d{3}$/.test(msg) ? msg : "erro");
+    const codigo = e instanceof CursorInvalido ? "cursor invalido"
+      : /^[0-9A-Z]{5}$/.test(sqlstate) ? `sql ${sqlstate}` : (/^AC HTTP \d{3}$/.test(msg) ? msg : "erro");
     if (eid !== null) {
       try { await sql`select pessoas.carga_fechar(${eid}, 'erro', ${"delta: " + codigo})`; } catch { /* segue */ }
     }
