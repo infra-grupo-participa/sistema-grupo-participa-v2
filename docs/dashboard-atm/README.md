@@ -318,3 +318,7 @@ serviço segue com acesso por causa da TV do dashboard-ht. Detalhes, tempos e pe
 
 - **Ordem e rótulos** (`domain/comparecimento.ts`, `CARDS_COMPARECIMENTO`), exatamente esta: Total de leads · Total no grupo · Pico da audiência · Pessoas da equipe na sala · Comparecimento do grupo · Comparecimento dos leads · Vendas · Conversão · Conversão no grupo · Conversão sobre pico. O teste fixa chaves e rótulos na ordem.
 - **"Não lançado" nos dois comparecimentos:** o código do PR #32 já lê `pico_sobre_grupo_pct` e `pico_sobre_leads_pct`, que a RPC devolve preenchidos (18,78 e 15,38 com pico 68). A tela que o Victor viu era a versão anterior ao deploy, em que esses dois cards liam `presentes_grupo` e `presentes_leads` (relatório do Zoom por pessoa, nulos): com pico e equipe já lançados, o resto da seção aparecia e só esses dois ficavam "Não lançado". Conferência do deploy e do bundle no ar no relatório de entrega (`.maestri/entregas/atm-comparecimento/vh-2.md`).
+
+## Evolução diária do ingresso no grupo (16/10/2026)
+
+Os cards "Ingresso no grupo" e "% ingresso no grupo" abrem o modal de evolução diária (gráfico e tabela), com a série `dados_atm_serie_diaria` do mesmo período do card. Componente em `web/modules/infra/ingresso-grupo/`; regra e situação em `docs/dashboard-presencial-tela.md`, seção "Padrão: card de ingresso no grupo tem modal com evolução diária".

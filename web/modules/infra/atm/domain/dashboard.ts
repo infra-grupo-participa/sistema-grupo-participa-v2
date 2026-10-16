@@ -134,10 +134,14 @@ export function rotuloListaOrigem(listaOrigem: string | null): string | null {
   return listaOrigem === 'descartado' ? 'Outros' : listaOrigem;
 }
 
-/** Cards do funil que abrem lista. Os outros não abrem modal. */
-export type ModalFunilAtm = 'leads' | 'preCheckout' | 'vendas';
+/**
+ * Cards do funil que abrem modal. Os outros não abrem.
+ * `grupo` = evolução diária do ingresso no grupo (gráfico e tabela): padrão de todo card de ingresso no grupo (Victor, 16/10/2026).
+ */
+export type ModalFunilAtm = 'leads' | 'preCheckout' | 'vendas' | 'grupo';
 
 export function modalDoCardAtm(chave: keyof ResumoAtm): ModalFunilAtm | null {
+  if (chave === 'ingressosGrupo' || chave === 'percentualIngressoGrupo') return 'grupo';
   return chave === 'leads' || chave === 'preCheckout' || chave === 'vendas' ? chave : null;
 }
 

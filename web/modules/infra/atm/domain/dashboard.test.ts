@@ -12,7 +12,9 @@ describe('cards do funil', () => {
     expect(chaves).toEqual(['disparos', 'leads', 'ingressosGrupo', 'percentualIngressoGrupo', 'taxaEvasao', 'cpl', 'preCheckout', 'vendas', 'conversaoPreCheckout', 'cac', 'faturamentoBruto', 'faturamentoLiquido', 'roas']);
   });
 
-  it('só leads, pré-checkout e vendas abrem modal', () => {
+  it('leads, pré-checkout, vendas e os dois cards de ingresso no grupo abrem modal', () => {
+    expect(modalDoCardAtm('ingressosGrupo')).toBe('grupo');
+    expect(modalDoCardAtm('percentualIngressoGrupo')).toBe('grupo');
     expect(modalDoCardAtm('leads')).toBe('leads');
     expect(modalDoCardAtm('preCheckout')).toBe('preCheckout');
     expect(modalDoCardAtm('vendas')).toBe('vendas');

@@ -105,3 +105,7 @@ Para testar: autenticar com perfil ativo da equipe sem vínculo Infra nem `finan
 - **Desfazer:** a lista do grupo não traz os testes, então não há "Desmarcar" nela. Se o número for lead, desmarca no modal de Leads com "incluir testes" ligado; se não for, só por SQL (`dados_desmarcar_teste`).
 - **Como testar:** master, aba da ação, card Ingresso no grupo, marcar um número; a linha some e o card cai em 1.
 - **Validação:** `tsc`, `eslint` em `modules/infra/acoes`, `lint:tokens` e `vitest` de `acoes` + `atm` (143) passaram. Não testado na tela publicada.
+
+## Evolução diária do ingresso no grupo (16/10/2026)
+
+O modal do card "Ingresso no grupo" ganhou a aba "Evolução diária" e o card "% ingresso no grupo" também abre o modal (direto nessa aba). A aba usa a série diária já carregada (`dados_atm_serie_diaria`) e o componente compartilhado `web/modules/infra/ingresso-grupo/`. Regra e situação por dashboard: `docs/dashboard-presencial-tela.md`, seção "Padrão: card de ingresso no grupo tem modal com evolução diária".

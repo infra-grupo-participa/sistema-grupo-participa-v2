@@ -3,7 +3,10 @@
 import { useState } from 'react';
 import type { MetricaAtm, LeadGrupoAtm } from '@/modules/infra/atm/domain/dashboard';
 import type { EstadoListaAtm } from '@/modules/infra/atm/ui/carregador-listas';
+import { EvolucaoIngressoGrupo, type EstadoSerieIngresso } from '@/modules/infra/ingresso-grupo/ui/EvolucaoIngressoGrupo';
 import { ConfirmDialog, EmptyState, Loading, DataTable, Td, Th, Thead, Tr, Modal } from '@/shared/ui/components';
+
+export type AbaIngressoGrupoAcao = 'leads' | 'evolucao';
 
 const inteiro = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const origemLabel: Record<LeadGrupoAtm['origem'], string> = {
@@ -19,7 +22,7 @@ const simNaoVazio = (valor: boolean | null) => valor === null ? '' : valor ? 'Si
 
 export function ModalIngressoGrupoAcao({
   open, onClose, nomeAcao, card, lista, podeVerContato,
-  demonstracao, isMaster = false, onMarcarTeste,
+  demonstracao, isMaster = false, onMarcarTeste, aba, onAba, serie,
 }: {
   open: boolean;
   onClose: () => void;
@@ -31,6 +34,10 @@ export function ModalIngressoGrupoAcao({
   /** Marcar número como teste (15/10/2026): só master. O número sai da lista e do ingresso da ação. */
   isMaster?: boolean;
   onMarcarTeste?: (linha: LeadGrupoAtm) => Promise<string | null>;
+  aba: AbaIngressoGrupoAcao;
+  onAba: (aba: AbaIngressoGrupoAcao) => void;
+  /** Série diária da ação (`dados_atm_serie_diaria`) para a aba Evolução diária, padrão de todo card de ingresso no grupo. */
+  serie: EstadoSerieIngresso;
 }) {
   const [alvo, setAlvo] = useState<LeadGrupoAtm | null>(null);
   const [salvando, setSalvando] = useState<string | null>(null);
@@ -71,17 +78,21 @@ export function ModalIngressoGrupoAcao({
   return <Modal open={open} onClose={onClose} title={`Ingresso no grupo · ${nomeAcao}`} width="max-w-6xl">
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div role="tablist" aria-label="Detalhes do ingresso no grupo">
-          <button type="button" role="tab" aria-selected="true" className="min-h-10 rounded-[var(--r-md)] bg-[var(--accent)] px-3 text-xs font-semibold text-black">Leads</button>
+        <div role="tablist" aria-label="Detalhes do ingresso no grupo" className="flex flex-wrap gap-1.5">
+          {([{ id: 'leads', label: 'Leads' }, { id: 'evolucao', label: 'Evolução diária' }] as const).map((item) => <button key={item.id} type="button" role="tab" aria-selected={aba === item.id} onClick={() => onAba(item.id)} className={`min-h-10 rounded-[var(--r-md)] px-3 text-xs ${aba === item.id ? 'bg-[var(--accent)] font-semibold text-black' : 'border border-[var(--border)] text-[var(--fg-2)] hover:bg-[var(--surface-3)]'}`}>{item.label}</button>)}
         </div>
         <p className="text-sm text-[var(--fg-2)]">Entradas únicas: <strong className="tabular text-[var(--fg)]">{card.semDado ? 'Sem dado' : inteiro.format(card.valor)}</strong></p>
       </div>
-      {!podeVerContato && <p role="note" className="text-xs text-[var(--fg-3)]">Os indicadores continuam disponíveis para seu usuário.</p>}
-      {demonstracao && <p role="note" className="rounded-[var(--r-md)] border border-[var(--yellow)]/40 bg-[var(--surface-2)] p-2 text-xs text-[var(--yellow)]">Dados de demonstração fictícios. Nenhum contato real é exibido.</p>}
+      {aba === 'leads' && !podeVerContato && <p role="note" className="text-xs text-[var(--fg-3)]">Os indicadores continuam disponíveis para seu usuário.</p>}
+      {aba === 'leads' && demonstracao && <p role="note" className="rounded-[var(--r-md)] border border-[var(--yellow)]/40 bg-[var(--surface-2)] p-2 text-xs text-[var(--yellow)]">Dados de demonstração fictícios. Nenhum contato real é exibido.</p>}
       {erroAcao && <p role="alert" className="text-xs text-[var(--red)]">{erroAcao}</p>}
-      {erro && <p role="status" className="text-xs text-[var(--yellow)]">A leitura da lista falhou. Os últimos dados carregados foram mantidos.</p>}
-      <div role="tabpanel" aria-label="Leads que entraram no grupo" className="max-h-[65vh] overflow-auto">{conteudo}</div>
-      <p className="text-[11px] text-[var(--fg-3)]">Uma linha por número único que entrou no grupo. Nome e contato só aparecem para quem tem permissão de ver contatos.</p>
+      {aba === 'leads' && erro && <p role="status" className="text-xs text-[var(--yellow)]">A leitura da lista falhou. Os últimos dados carregados foram mantidos.</p>}
+      {aba === 'leads'
+        ? <>
+          <div role="tabpanel" aria-label="Leads que entraram no grupo" className="max-h-[65vh] overflow-auto">{conteudo}</div>
+          <p className="text-[11px] text-[var(--fg-3)]">Uma linha por número único que entrou no grupo. Nome e contato só aparecem para quem tem permissão de ver contatos.</p>
+        </>
+        : <div role="tabpanel" aria-label="Evolução diária do ingresso no grupo" className="max-h-[70vh] overflow-auto"><EvolucaoIngressoGrupo serie={serie} /></div>}
     </div>
     {alvo && <ConfirmDialog title="Marcar número do grupo como teste" confirmLabel="Marcar como teste" cancelLabel="Cancelar" onCancel={() => setAlvo(null)} onConfirm={() => void marcar(alvo)} message={`Esta marcação vale só para esta ação da Black. O número ${alvo.telefone ?? alvo.foneGrupo} sai da lista e deixa de contar no ingresso no grupo e nos leads dela. Se o número for lead, dá para desfazer em "Desmarcar teste" no modal de Leads, com "incluir testes" ligado; se não for, só pelo time de dados. Quer continuar?`} />}
   </Modal>;

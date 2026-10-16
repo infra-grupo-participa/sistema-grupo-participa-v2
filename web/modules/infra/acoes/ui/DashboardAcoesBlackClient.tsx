@@ -16,7 +16,8 @@ import { carregarDadosAcoesBlack, mensagemEmPreparacao, type EstadoDadosAcoesBla
 import { registroAcoesBlack } from '../domain/registro';
 import { contarLeadsAcao, exibicaoCardLeads } from '../domain/leads';
 import { ModalLeadsAcao } from './ModalLeadsAcao';
-import { ModalIngressoGrupoAcao } from './ModalIngressoGrupoAcao';
+import type { EstadoSerieIngresso } from '@/modules/infra/ingresso-grupo/ui/EvolucaoIngressoGrupo';
+import { ModalIngressoGrupoAcao, type AbaIngressoGrupoAcao } from './ModalIngressoGrupoAcao';
 
 const cardsComparecimento = [
   ['Pico de audiência', 'pico_audiencia', 'inteiro'], ['Comparecimento do grupo', 'presentes_grupo', 'inteiro'],
@@ -60,6 +61,7 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
   const [acaoId, setAcaoId] = useState(registroAcoesBlack[0].id);
   const [modalLeads, setModalLeads] = useState(false);
   const [modalIngressoGrupo, setModalIngressoGrupo] = useState(false);
+  const [abaIngressoGrupo, setAbaIngressoGrupo] = useState<AbaIngressoGrupoAcao>('leads');
   const [incluirTeste, setIncluirTeste] = useState(isMaster);
   const [versaoListas, setVersaoListas] = useState(0);
   const [listas] = useState(criarCarregadorListasAtm);
@@ -129,7 +131,7 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
   const comTeste = isMaster && incluirTeste;
   const etiqueta = acao.estado === 'ativa' ? acao.etiqueta : null;
   const listaLeads = useListaAtm<LeadAtm>(listas, podeVerContato && etiqueta ? chaveListaAtm('dados_atm_leads', etiqueta, null, comTeste) : null, () => carregarAtmLeads(etiqueta!, undefined, comTeste), versaoListas);
-  const chaveGrupoLeads = podeVerContato && modalIngressoGrupo && etiqueta ? chaveListaAtm('dados_atm_grupo_leads', etiqueta, null, false) : null;
+  const chaveGrupoLeads = podeVerContato && modalIngressoGrupo && abaIngressoGrupo === 'leads' && etiqueta ? chaveListaAtm('dados_atm_grupo_leads', etiqueta, null, false) : null;
   const demonstracaoGrupo = publicEnv.blackDemo;
   const listaGrupoLeads = useListaAtm<LeadGrupoAtm>(listas, chaveGrupoLeads, () => demonstracaoGrupo
     ? Promise.resolve({ data: ENTRADAS_GRUPO_ACAO_DEMO, semDado: false, erro: null })
@@ -165,6 +167,12 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
   const erros = [dados?.resumo.erro, dados?.serie.erro, dados?.canais.erro, dados?.disparos.erro, dados?.comparecimento.erro].filter((item): item is string => Boolean(item));
   const erroResumo = dados?.resumo.erro;
   const erroSerie = dados?.serie.erro;
+  // Evolução diária do ingresso no grupo: sem leitura ainda = carregando; falha sem nenhum dado anterior = erro; falha com dado = mantém e avisa.
+  const serieIngresso: EstadoSerieIngresso = !dados
+    ? { data: null, carregando: true }
+    : dados.serie.data.length === 0 && dados.serie.erro
+      ? { data: null, erro: dados.serie.erro }
+      : { data: dados.serie.data, erro: dados.serie.erro };
   const erroCanal = dados?.canais.erro;
   const erroComparecimento = dados?.comparecimento.erro;
 
@@ -205,9 +213,15 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
               const valor = aguardaOferta ? 'Aguardando oferta' : validos ? formatar(validos.valor, validos.formato) : semDado ? 'Sem dado' : formatar(card.metrica.valor, card.formato);
               const hint = aguardaOferta ? 'oferta ainda não configurada' : validos ? validos.hint : semDado ? 'sem dado ainda' : undefined;
               const kpi = <KpiCard key={card.chave} label={card.rotulo} value={valor} hint={hint} bar={card.chave === 'vendas' ? 'green' : 'accent'} />;
-              return card.chave === 'leads' || card.chave === 'ingressosGrupo'
-                ? <button key={card.chave} type="button" onClick={() => card.chave === 'leads' ? setModalLeads(true) : setModalIngressoGrupo(true)} className="text-left" aria-label={card.chave === 'leads' ? 'Abrir os leads da ação' : 'Abrir os números que entraram no grupo'}>{kpi}</button>
-                : kpi;
+              // Todo card de ingresso no grupo abre o modal com a evolução diária (padrão de 16/10/2026): o de % abre direto nela.
+              const abrirGrupo = (aba: AbaIngressoGrupoAcao) => { setAbaIngressoGrupo(aba); setModalIngressoGrupo(true); };
+              return card.chave === 'leads'
+                ? <button key={card.chave} type="button" onClick={() => setModalLeads(true)} className="text-left" aria-label="Abrir os leads da ação">{kpi}</button>
+                : card.chave === 'ingressosGrupo'
+                  ? <button key={card.chave} type="button" onClick={() => abrirGrupo('leads')} className="text-left" aria-label="Abrir os números que entraram no grupo">{kpi}</button>
+                  : card.chave === 'percentualIngressoGrupo'
+                    ? <button key={card.chave} type="button" onClick={() => abrirGrupo('evolucao')} className="text-left" aria-label="Abrir a evolução diária do ingresso no grupo">{kpi}</button>
+                    : kpi;
             })}
           </div>
           {erroResumo && <p role="status" className="mt-2 text-xs text-[var(--yellow)]">Resumo: {erroResumo}</p>}
@@ -234,6 +248,6 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
       </div>}
     </div>
     <ModalLeadsAcao open={modalLeads} onClose={() => setModalLeads(false)} nomeAcao={acao.nome} lista={listaLeads} card={dashboard?.resumo.leads ?? { valor: 0, semDado: true }} periodoLabel="período do cadastro" isMaster={isMaster} podeVerContato={podeVerContato} incluirTeste={comTeste} onIncluirTeste={setIncluirTeste} onToggleLead={toggleLead} />
-    <ModalIngressoGrupoAcao open={modalIngressoGrupo} onClose={() => setModalIngressoGrupo(false)} nomeAcao={acao.nome} card={dashboard?.resumo.ingressosGrupo ?? { valor: 0, semDado: true }} lista={listaGrupoLeads} podeVerContato={podeVerContato} demonstracao={demonstracaoGrupo} isMaster={isMaster} onMarcarTeste={marcarNumeroGrupo} />
+    <ModalIngressoGrupoAcao open={modalIngressoGrupo} onClose={() => setModalIngressoGrupo(false)} nomeAcao={acao.nome} card={dashboard?.resumo.ingressosGrupo ?? { valor: 0, semDado: true }} lista={listaGrupoLeads} podeVerContato={podeVerContato} demonstracao={demonstracaoGrupo} isMaster={isMaster} onMarcarTeste={marcarNumeroGrupo} aba={abaIngressoGrupo} onAba={setAbaIngressoGrupo} serie={serieIngresso} />
   </div>;
 }

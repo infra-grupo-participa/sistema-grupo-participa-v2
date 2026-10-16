@@ -30,6 +30,7 @@ import { DisparosDetalhe } from './DisparosDetalhe';
 import { HistoricoAtm } from './HistoricoAtm';
 import { TrafegoAtm } from './TrafegoAtm';
 import { ModalLeadsAtm, ModalPreCheckoutAtm, ModalVendasAtm } from './ModaisFunilAtm';
+import { ModalEvolucaoIngressoGrupo } from '@/modules/infra/ingresso-grupo/ui/ModalEvolucaoIngressoGrupo';
 import { chaveListaAtm, criarCarregadorListasAtm } from './carregador-listas';
 import { useListaAtm } from './useListaAtm';
 import { AJUDA_EQUIPE, CARDS_COMPARECIMENTO } from '../domain/comparecimento';
@@ -50,6 +51,8 @@ function formatar(v: number, tipo: string) {
 const TITULO_CARD: Partial<Record<keyof ResumoAtm, string>> = {
   preCheckout: 'dados_atm_resumo.pre_checkout_pessoas · clique para ver a lista',
   vendas: 'dados_atm_resumo.vendas · clique para ver a lista',
+  ingressosGrupo: 'dados_atm_resumo.grupo_entradas · clique para ver a evolução diária',
+  percentualIngressoGrupo: 'dados_atm_resumo.grupo_pct = membros únicos no grupo ÷ leads × 100 · clique para ver a evolução diária',
   conversaoPreCheckout: 'dados_atm_resumo.conversao_pre_checkout_pct = compradores distintos ÷ pré-checkout × 100',
 };
 export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato = false, mostrarAvisoTeste = false }: { projeto: RegistroAtm; isMaster?: boolean; podeVerContato?: boolean; mostrarAvisoTeste?: boolean }) {
@@ -244,6 +247,7 @@ export function SeminarioAtmClient({ projeto, isMaster = false, podeVerContato =
       {posLive.erro && <p role="status" className="mb-3 text-sm text-[var(--yellow)]">{posLive.erro}</p>}
       {posLive.data.length ? <div className="grid gap-4 md:grid-cols-2">{(['aberto', 'fechado'] as const).map((nome) => { const p = ciclo(nome); return <div key={nome} className="rounded-[var(--r-md)] border border-[var(--border)] p-4"><h3 className="font-semibold capitalize">Ciclo {nome}</h3><div className="mt-3 grid grid-cols-2 gap-3"><KpiCard label="Vendas" value={renderVal(p?.vendas, 'inteiro')} hint={p?.vendas == null ? 'sem dado ainda' : undefined} /><KpiCard label="Conversão" value={renderVal(p?.conversao_pct, 'percentual')} hint={p?.conversao_pct == null ? 'sem dado ainda' : undefined} /></div></div>; })}</div> : <EmptyState title="Pós-live sem dados" hint="sem dado ainda" />}
     </SectionCard>
+    <ModalEvolucaoIngressoGrupo open={modal === 'grupo'} onClose={() => setModal(null)} titulo={`% ingresso no grupo · evolução diária · ${projeto.rotulo}`} serie={serie.length ? { data: serie, erro } : atualizando ? { data: null, carregando: true } : erro ? { data: null, erro } : { data: [] }} />
     <ModalLeadsAtm {...comumModal} open={modal === 'leads'} card={metricaDoCardAtm(resumo?.resumo, 'leads')} lista={listaLeads} grupo={podeVerContato ? grupoPeriodo : null} podeVerContato={podeVerContato} onToggleLead={toggleLead} onToggleGrupo={toggleGrupo} />
     <ModalPreCheckoutAtm {...comumModal} open={modal === 'preCheckout'} card={metricaDoCardAtm(resumo?.resumo, 'preCheckout')} lista={listaPreCheckout} grupo={grupoEvento} podeVerContato={podeVerContato} onTogglePessoa={togglePessoa} />
     <ModalVendasAtm {...comumModal} open={modal === 'vendas'} card={metricaDoCardAtm(resumo?.resumo, 'vendas')} lista={listaVendas} grupo={grupoEvento} podeVerContato={podeVerContato} vendasTeste={resumo?.periodo.vendasTeste ?? null} onToggleVenda={toggleVenda} linkRetorno={projeto.retornoSvUrl} />

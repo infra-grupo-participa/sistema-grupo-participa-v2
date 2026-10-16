@@ -26,6 +26,26 @@ As cinco funções agregadas novas (`dados_presencial_pagamentos`, `dados_presen
 
 As seis funções constam como aplicadas no banco na migration `20261007212530` (commit `91e4c31`). Se alguma não estiver visível ao PostgREST, só seu bloco mostra `PGRST202`; resumo e série anteriores continuam disponíveis. A conferência numérica ponta a ponta da tela fica para o aviso do Maestro. Não usar números sintéticos na tela publicada.
 
+## Padrão: card de ingresso no grupo tem modal com evolução diária
+
+Regra do Victor (16/10/2026, card ClickUp 17tya50h5m6): **todo card de ingresso no grupo ("Ingresso no grupo" e "% ingresso no grupo") de qualquer dashboard abre um modal com a evolução diária, em gráfico e tabela.** Dashboard novo com esse card só fica pronto com o modal.
+
+**Componente único** (`web/modules/infra/ingresso-grupo/`): `domain/evolucao.ts` (função pura `pontosEvolucaoIngresso`, com testes), `ui/EvolucaoIngressoGrupo.tsx` (conteúdo: resumo do período, gráfico de % ingresso, gráfico de entradas por dia e tabela) e `ui/ModalEvolucaoIngressoGrupo.tsx` (o conteúdo dentro do `Modal` do DS). Os gráficos reutilizam o `GraficoLinha` canônico da Black. Quem tem outras abas no modal (Ações da Black) usa `EvolucaoIngressoGrupo` como aba "Evolução diária".
+
+**Entrada:** as linhas de `dados_atm_serie_diaria(p_chave, p_de, p_ate)` (`dia`, `leads`, `grupo_entradas`). **Tabela:** Data, Entradas no dia, Entradas acumuladas, Leads acumulados, % ingresso no grupo. **Regra da taxa:** membros únicos no grupo ÷ leads, soma sobre soma do início do período até o dia (nunca média de taxas diárias). O último dia reproduz o card, porque `dados_atm_resumo.grupo_pct` usa o mesmo período e o mesmo critério (leads sem teste, entradas de `v_grupo_pessoas` por `entrou_em`, testes fora). `grupo_entradas` nulo vira "—" e a tela diz "Sem fonte de grupo para este projeto"; nunca vira 0%. Série em falha mantém o último dado e avisa; sem dado nenhum mostra o erro.
+
+**Situação (16/10/2026, branch `victor-modal-grupo-diario`, sem push):**
+
+| Dashboard | Card | Situação |
+|---|---|---|
+| Seminário ATM (`SeminarioAtmClient`) | Ingresso no grupo, % ingresso no grupo | Feito: ambos abrem o modal `grupo` (`modalDoCardAtm`). |
+| Ações da Black (`DashboardAcoesBlackClient`) | Ingresso no grupo, % ingresso no grupo | Feito: modal ganhou a aba "Evolução diária"; o card de % abre direto nela. O número grande do card é o geral; a série também é a geral (os "leads válidos" do hint não têm série diária). |
+| Black, Visão geral (`AbaVisaoGeral` `ModalIngresso`) | Ingresso no grupo | Já tinha aba "Evolução do percentual" própria (chama `dados_black_grupo` uma vez por dia, em lotes de 4). Não migrado, para não arriscar o dashboard em uso. Migrar é o passo seguinte. |
+| Black, Histórico (`AbaHistorico`) | Ingresso no grupo geral | Card sem modal; a aba inteira já é por dia. Pendente. |
+| **Clínica de Miami** (`/infra/dashboards/csm/clinica-miami-2026-12`) | não existe | **Bloqueado no back-end.** A tela não tem card de grupo e o banco não tem fonte: `dados_presencial_resumo` não traz grupo e `dados_presencial_vendas` devolve `entrou_grupo` sempre `null` (ver `dashboard-presencial.md` §2.3). Falta (1) ligar o grupo do SendFlow da Clínica à chave do projeto (`dados.dashboard_grupos`) e (2) uma função de série diária de grupo/leads para essa chave (mesmas colunas de `dados_atm_serie_diaria`: `dia`, `leads`, `grupo_entradas`). Com isso o card e o modal entram só com `ModalEvolucaoIngressoGrupo`, sem componente novo. Nenhuma migration foi criada. |
+
+**Como testar:** `npm run dev`, abrir um Seminário ATM (`/infra/dashboards/escritorio`) e clicar nos dois cards de ingresso no grupo; abrir Ações da Black e clicar em "% ingresso no grupo" (abre na aba Evolução diária) e em "Ingresso no grupo" (abre em Leads, trocar de aba). Conferir que a linha do último dia da tabela tem as mesmas entradas, leads e % do card (com o filtro de período igual). Em `web/`: `npx vitest run modules/infra/ingresso-grupo modules/infra/atm`.
+
 ## Verificação
 
 Na pasta `web`, rodar `npm run lint`, `npx tsc --noEmit`, `npm test` e `npm run build`. Para abrir localmente, rodar `npm run dev -- -p 3001`, navegar por `/infra` → `/infra/dashboards` → `/infra/dashboards/csm` → Clínica de Miami com uma conta da equipe e confirmar o aviso Em breve em Escritório. Conferir também os redirects das três URLs antigas listadas acima. Sem as funções aplicadas, a tela deve exibir a mensagem de função ausente no bloco correspondente. Depois da aplicação, conferir cada número diretamente na fonte antes de usar o dashboard para decisão.
