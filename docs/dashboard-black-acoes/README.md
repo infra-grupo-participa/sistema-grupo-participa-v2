@@ -120,3 +120,11 @@ O modal do card "Ingresso no grupo" ganhou a aba "Evolução diária" e o card "
 - **Números na produção (16/10, ação THB vencidos):** 46 números no grupo, 21 aptos (todos pela lista), 15 achados só na Central, 6 não encontrados.
 - **Como testar:** `npx vitest run modules/infra/acoes modules/infra/atm`; na tela, usuário com `contato.ver`, Ações de Renovação da Black Friday > THB vencidos, card Ingresso no grupo mostra "N aptos" e o total de Sim na rosca Apto bate com N.
 - **Pendente (recomendação do pentester, não bloqueante):** contar os aptos no `dados_atm_resumo` para não trazer a lista com dado pessoal só para o card.
+
+## Roscas interativas no Resumo do Ingresso no grupo (16/10/2026)
+
+- **Por quê:** o Victor queria passar o cursor e ver a fatia destacada, e clicar numa fatia para filtrar o resto, como no modal de pessoas do Seminário ATM.
+- **O que mudou (só front, `ui/ModalIngressoGrupoAcao.tsx`):** as 4 roscas (Apto, Origem, Instrução, Turma) usam a `RoscaInterativa` do ATM (`atm/ui/GraficosInterativosAtm.tsx`) e as regras puras de `atm/domain/filtro-graficos.ts`, sem componente novo. Cursor destaca a fatia, mostra quantidade e % no centro e no balão. Clique (na fatia ou na legenda) filtra as outras roscas e a aba Leads; clicar de novo desfaz, outro valor do mesmo campo troca, campos diferentes se somam (E). A rosca do próprio campo continua mostrando todas as opções. Faixa "Filtro ativo" com chip por filtro, "N de M números" e "Limpar filtros"; fechar o modal limpa.
+- **O que não muda:** o número "Entradas únicas" do modal e o card seguem sobre o conjunto sem filtro. Banco intocado.
+- **Situação:** no ar com o push na `main` (auto-deploy da Hostinger). Verificado: `vitest` (acoes + atm, 144 testes), `eslint`, `lint:tokens`, `build`. Não verificado na tela no ar.
+- **Como testar:** card Ingresso no grupo > Resumo, clicar em "Sim" na rosca Apto: Origem, Instrução e Turma passam a contar só os aptos e a aba Leads mostra só eles; "Limpar filtros" volta.

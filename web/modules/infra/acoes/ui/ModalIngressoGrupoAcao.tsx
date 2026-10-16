@@ -5,7 +5,8 @@ import type { MetricaAtm, LeadGrupoAtm } from '@/modules/infra/atm/domain/dashbo
 import type { EstadoListaAtm } from '@/modules/infra/atm/ui/carregador-listas';
 import { EvolucaoIngressoGrupo, type EstadoSerieIngresso } from '@/modules/infra/ingresso-grupo/ui/EvolucaoIngressoGrupo';
 import { ConfirmDialog, EmptyState, Loading, DataTable, Td, Th, Thead, Tr, Modal } from '@/shared/ui/components';
-import { RoscaCategorias } from '@/modules/infra/dados/ui/viz/RoscaCategorias';
+import { RoscaInterativa } from '@/modules/infra/atm/ui/GraficosInterativosAtm';
+import { alternarFiltroGrafico, aplicarFiltrosGraficos, removerFiltroGrafico, valorFiltrado, type CampoFiltravel, type FiltroGrafico } from '@/modules/infra/atm/domain/filtro-graficos';
 
 export type AbaIngressoGrupoAcao = 'leads' | 'resumo' | 'evolucao';
 
@@ -32,12 +33,14 @@ function fatias(itens: readonly LeadGrupoAtm[], valor: (item: LeadGrupoAtm) => s
 /**
  * Roscas da aba Resumo (Victor, 16/10/2026). Apto vem primeiro e é fixa: Sim = o número está na lista do disparo
  * (pelo telefone ou pelo e-mail achado na base de leads ou na Central de Alunos). Achado só na Central não é apto.
+ * Interativas (Victor, 16/10/2026), no mesmo padrão do modal de pessoas do Seminário ATM: o cursor destaca a fatia e
+ * clicar filtra as outras roscas e a aba Leads; clicar de novo desfaz. A rosca do próprio campo ignora o filtro dele.
  */
-const ROSCAS: { titulo: string; valor: (item: LeadGrupoAtm) => string }[] = [
-  { titulo: 'Apto', valor: (item) => item.apto === null ? 'Sem dado' : item.apto ? 'Sim' : 'Não' },
-  { titulo: 'Origem', valor: (item) => origemLabel[item.origem] },
-  { titulo: 'Instrução', valor: (item) => item.instrucao || 'Sem instrução' },
-  { titulo: 'Turma', valor: (item) => item.turma || 'Sem turma' },
+const ROSCAS: CampoFiltravel<LeadGrupoAtm>[] = [
+  { nome: 'Apto', valor: (item) => item.apto === null ? 'Sem dado' : item.apto ? 'Sim' : 'Não' },
+  { nome: 'Origem', valor: (item) => origemLabel[item.origem] },
+  { nome: 'Instrução', valor: (item) => item.instrucao || 'Sem instrução' },
+  { nome: 'Turma', valor: (item) => item.turma || 'Sem turma' },
 ];
 
 export function ModalIngressoGrupoAcao({
@@ -62,6 +65,8 @@ export function ModalIngressoGrupoAcao({
   const [alvo, setAlvo] = useState<LeadGrupoAtm | null>(null);
   const [salvando, setSalvando] = useState<string | null>(null);
   const [erroAcao, setErroAcao] = useState<string | null>(null);
+  const [filtros, setFiltros] = useState<FiltroGrafico[]>([]);
+  const alternar = (campo: string, valor: string) => setFiltros((atual) => alternarFiltroGrafico(atual, campo, valor));
   const comAcao = isMaster && !!onMarcarTeste && !demonstracao;
   const marcar = async (linha: LeadGrupoAtm) => {
     if (salvando || !onMarcarTeste) return;
@@ -71,6 +76,7 @@ export function ModalIngressoGrupoAcao({
     if (erro) setErroAcao(erro);
   };
   const dados = lista?.data;
+  const linhasTabela = dados ? aplicarFiltrosGraficos(dados, ROSCAS, filtros) : [];
   const erro = Boolean(lista?.erro && dados !== null);
   const conteudo = !podeVerContato
     ? <EmptyState title="Lista de participantes restrita" hint="Você não tem permissão para ver os contatos. Peça a permissão contato.ver. Os indicadores continuam disponíveis." />
@@ -85,10 +91,12 @@ export function ModalIngressoGrupoAcao({
             : lista.data.length === 0
               ? <EmptyState title="Nenhuma entrada no grupo" hint="Não há números únicos retornados para este evento." />
               : aba === 'resumo'
-                ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{ROSCAS.map((r) => <RoscaCategorias key={r.titulo} titulo={r.titulo} rotuloCentro="números" fatias={fatias(lista.data!, r.valor)} />)}</div>
-                : <DataTable minWidth={1120} fixed>
+                ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{ROSCAS.map((r) => <RoscaInterativa key={r.nome} titulo={r.nome} rotuloCentro="números" fatias={fatias(aplicarFiltrosGraficos(lista.data!, ROSCAS, filtros, r.nome), r.valor)} selecionado={valorFiltrado(filtros, r.nome)} onSelecionar={(valor) => alternar(r.nome, valor)} />)}</div>
+                : linhasTabela.length === 0
+                  ? <EmptyState title="Nenhum número com este filtro" hint="use Limpar filtros para voltar à lista inteira" />
+                  : <DataTable minWidth={1120} fixed>
                 <Thead><Th className="w-[130px]">Nome</Th><Th className="w-[185px]">E-mail</Th><Th className="w-[135px]">Telefone</Th><Th className="w-[75px]">Turma</Th><Th className="w-[100px]">Instrução</Th><Th className="w-[130px]">Origem</Th><Th className="w-[70px]">Apto</Th><Th className="w-[170px]">Entrada no grupo</Th><Th className="w-[125px]">Situação</Th>{comAcao && <Th className="w-[150px]">Teste</Th>}</Thead>
-                <tbody>{lista.data.map((linha) => <Tr key={linha.foneGrupo}>
+                <tbody>{linhasTabela.map((linha) => <Tr key={linha.foneGrupo}>
                   <Td className="break-words">{texto(linha.nome)}</Td><Td className="break-all">{texto(linha.email)}</Td><Td className="break-all tabular">{linha.telefone ?? linha.foneGrupo}</Td>
                   <Td className="break-words">{texto(linha.turma)}</Td><Td className="break-words">{texto(linha.instrucao)}</Td><Td className="break-words">{origemLabel[linha.origem]}</Td><Td>{simNaoVazio(linha.apto)}</Td>
                   <Td className="whitespace-nowrap">{dataHora(linha.entrouEm)}{linha.entradaAproximada ? <span className="ml-1 text-[var(--fg-3)]">(data aproximada)</span> : null}</Td>
@@ -97,7 +105,7 @@ export function ModalIngressoGrupoAcao({
                 </Tr>)}</tbody>
               </DataTable>;
 
-  return <Modal open={open} onClose={onClose} title={`Ingresso no grupo · ${nomeAcao}`} width="max-w-6xl">
+  return <Modal open={open} onClose={() => { setFiltros([]); onClose(); }} title={`Ingresso no grupo · ${nomeAcao}`} width="max-w-6xl">
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div role="tablist" aria-label="Detalhes do ingresso no grupo" className="flex flex-wrap gap-1.5">
@@ -107,6 +115,13 @@ export function ModalIngressoGrupoAcao({
       </div>
       {aba !== 'evolucao' && !podeVerContato && <p role="note" className="text-xs text-[var(--fg-3)]">Os indicadores continuam disponíveis para seu usuário.</p>}
       {aba !== 'evolucao' && demonstracao && <p role="note" className="rounded-[var(--r-md)] border border-[var(--yellow)]/40 bg-[var(--surface-2)] p-2 text-xs text-[var(--yellow)]">Dados de demonstração fictícios. Nenhum contato real é exibido.</p>}
+      {aba !== 'evolucao' && filtros.length > 0 && <div className="flex flex-wrap items-center gap-2 rounded-[var(--r-md)] border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-3 py-2 text-xs" role="status">
+        <span className="font-semibold text-[var(--fg)]">Filtro ativo:</span>
+        {filtros.map((f) => <button key={f.campo} type="button" onClick={() => setFiltros((atual) => removerFiltroGrafico(atual, f.campo))} aria-label={`Remover filtro ${f.campo}: ${f.valor}`} className="gp-press inline-flex max-w-full items-center gap-1.5 rounded-full border border-[var(--accent-border)] bg-[var(--surface-2)] px-2.5 py-1 text-[var(--fg)] hover:bg-[var(--surface-3)] max-md:min-h-9"><span className="min-w-0 break-words text-left">{f.campo}: {f.valor}</span><span aria-hidden="true">×</span></button>)}
+        <span className="tabular text-[var(--fg-2)]">{inteiro.format(linhasTabela.length)} de {inteiro.format(dados?.length ?? 0)} números</span>
+        <button type="button" onClick={() => setFiltros([])} className="ml-auto rounded border border-[var(--border)] px-2 py-1 text-[var(--fg-2)] hover:bg-[var(--surface-3)] max-md:min-h-9">Limpar filtros</button>
+      </div>}
+      {aba === 'resumo' && filtros.length === 0 && podeVerContato && !!dados?.length && <p className="text-xs text-[var(--fg-3)]">Clique numa fatia ou num item da legenda para filtrar as outras roscas e a aba Leads. Clique de novo para desfazer.</p>}
       {erroAcao && <p role="alert" className="text-xs text-[var(--red)]">{erroAcao}</p>}
       {aba !== 'evolucao' && erro && <p role="status" className="text-xs text-[var(--yellow)]">A leitura da lista falhou. Os últimos dados carregados foram mantidos.</p>}
       {aba !== 'evolucao'
