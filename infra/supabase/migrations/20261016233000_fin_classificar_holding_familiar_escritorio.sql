@@ -1,6 +1,6 @@
 -- 20261016233000: produto Hotmart 3595938 "Holding Familiar" (conta academy) passa de OUTROS para ESCRITORIO
 --
--- STATUS: NÃO APLICADA. Escrita e ensaiada (transação desfeita) em 16/10/2026 por back-end-sr, branch victor-holding-familiar-escritorio.
+-- STATUS: APLICADA em 16/10/2026 12:58 UTC (aplica_sql.py aplicar, transação única, registrada em schema_migrations). Escrita e ensaiada antes por back-end-sr.
 --   Decisão do Victor em 16/10/2026: o 3595938 é do ESCRITÓRIO (como SV 1663254, Croqui 1542521 e SV Elaine 1664749). O 1537308 (Croqui
 --   Estrutural para Holding Familiar, 0 transações) NÃO entra: continua sem decisão. Depende de 20261016230100 (pessoas.hotmart_setor) e
 --   de 20261016230200 (aplicada), nessa ordem.
