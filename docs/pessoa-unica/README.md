@@ -54,6 +54,7 @@ Este documento fica no repositório para quem trabalha aqui sem acesso ao céreb
 | 20261014152242 | 170300 → 210300 | rotina de hora em hora + agendamento do delta do AC; os 2 jobs **desligados** | C | **aplicada** |
 | 20261016120000 | (16/10) | `pessoas-incremental` por fonte, com `COMMIT`, teto de linhas, orçamento em segundos, erro visível no vigia, chaves com fim em 15/11 (achado 7) | C | **aplicada 16/10 ~12:33 UTC**; job 319 ligado ~12:35 UTC |
 | 20261016120100 | (16/10) | `carga_respondi` e `carga_aluno_historico` no modo só novos sem fome: filtro = mesmo descarte da `casar_email` (e-mail válido, até 320). Respondi: 3.505 sem evento, só 9 viram evento; aluno_historico: 29 descartadas | C | **aplicada 16/10 ~12:33 UTC** (md5 dos corpos conferidos) |
+| (não gravada) | 20261017010000 | revisão em lote da fila `pessoas.revisao`: classificador só leitura, passo, procedure com `COMMIT`, reversão, cópia em `arquivo.*`; chave `revisao_lote` **desligada** | C | **NÃO aplicada** (escrita 16/10, ensaio não rodado) |
 
 Os arquivos foram renomeados para a versão gravada em `supabase_migrations.schema_migrations` (guia 6.3); o primeiro
 comentário de cada um diz o nome antigo. Cada uma tem `.explain.md`, ensaio e reversão.
@@ -162,3 +163,27 @@ Dado carregado não se apaga (regra I-03).
   algumas consultas da Management API deram "connection timeout". Nenhuma consulta pesada aparecia em `pg_stat_activity`; a causa não foi achada.
 - 13:14 UTC: Edge republicada como **versão 3** a partir do arquivo do repo (`TETO_DIA = 42`). A puxada extra ficou suspensa; o restante entra
   pelos crons diários (05:40 UTC) a partir de 17/10.
+
+## Revisão em lote da fila de revisão (16/10/2026, NÃO aplicada)
+Branch `victor-revisao-em-lote`, migration `20261017010000` (arquivos `_pessoas_revisao_em_lote.sql`, `_reversao.sql`, `_ensaio.sql`,
+`_contagem.sql` e `.explain.md`). Nada foi aplicado em produção; a chave `revisao_lote` nasce desligada.
+- **O que é a fila:** `pessoas.revisao`, com a pessoa nova em `situacao = 'revisar'` e até 20 candidatas em `candidatos[]`. Motivos gravados
+  pelo `pessoas.resolver`: `email_conflito`, `telefone_email_diferente`, `telefone_nome_diferente`, `telefone_varios`, `so_nome`. Hoje só um
+  humano decide, um caso por vez, por `public.pessoas_revisao_decidir`.
+- **Medido em 16/10/2026 ~10:30 (SELECT, mesmo corpo do classificador):** 822 pendentes, 6.423 pares. Nível (a) juntar: **94**
+  (A1 telefone e nome igual 79, A2 e-mail com domínio errado e nome 1, A3 telefone e e-mail com domínio errado 14). Nível (b) manter separado:
+  **303** (B1 CPF diferente 27, B2 telefone igual e primeiro nome sem relação 16, B3 homônimo com 20 candidatas e nenhum sinal 260).
+  Nível (c) humano: **425** (sem regra 348, alunos duplicados 66, vários candidatos iguais 8, pessoa com várias revisões 3). Critério exato,
+  exemplos anonimizados e o que a contagem revela (B3 é um nome só em 256 pessoas; B1 e H1 são 1 e 4 pessoas repetidas): ver o `.explain.md`.
+- **Como funciona:** `pessoas.revisao_classificar` só lê. `pessoas.revisao_lote_passo` aplica poucos casos: junta com `pessoas.mesclar` (alias,
+  nunca apaga) ou fecha como "diferente". Antes de tocar copia a revisão e a pessoa para `arquivo.pessoas_revisao_lote_item`;
+  `pessoas.revisao_lote_reverter` devolve ao estado copiado. `pessoas.revisao_lote_rodar` é uma `PROCEDURE` com `COMMIT` por passo, teto de
+  aplicadas, orçamento de segundos e a chave `pessoas.carga_chave` (`revisao_lote`) que falha fechada. Nenhuma permissão para anon,
+  authenticated ou service_role. O CPF é lido só para comparar (nunca junta, só impede ou separa) e não é gravado.
+- **Decisões de máquina ficam marcadas:** `decidido_por` nulo, `detalhe.lote` e `detalhe.regras` na revisão, evento `revisao` com `fonte = 'sistema'`
+  e linha em `pessoas.acessos`.
+- **Como testar:** só contagem, sem escrever: `20261017010000_contagem.sql` (leu em 3,5 s). Ensaio com escrita desfeita:
+  `python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio infra/supabase/migrations/20261017010000_ensaio.sql` (não rodado).
+  A procedure com `COMMIT` só se prova na aplicação, com `p_max_aplicadas` pequeno. Passo a passo para aplicar e ligar: `.explain.md`.
+- **O que falta:** ok dos donos do banco para aplicar; decisão do Victor sobre B3 (o nome que se repete em 256 pessoas); pentester antes de ligar
+  (a rotina escreve em `pessoas`); corrigir a causa no resolver, que reabre o mesmo par e abre `so_nome` para nome com 20 ou mais homônimos.
