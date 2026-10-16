@@ -460,7 +460,7 @@ select '20 classificação do cenário (esperado: r1 mesma A1; r2 diferente B2; 
   from pessoas.revisao_classificar(0, 100, (select v::bigint[] from pg_temp._z where k = 'ids')) order by revisao_id;
 
 create temp table _z_antes as
-select r.id, to_jsonb(r) j from pessoas.revisao r where r.id = any((select v::bigint[] from pg_temp._z where k = 'ids'));
+select r.id, to_jsonb(r) j from pessoas.revisao r where r.id in (select unnest(v::bigint[]) from pg_temp._z where k = 'ids');
 create temp table _z_pantes as
 select p.id, p.situacao, p.mesclada_em from pessoas.pessoas p where p.id in (select v::uuid from pg_temp._z where k in ('a1', 'p1', 'p2', 'p3', 'p4', 'p5', 'a5'));
 
@@ -482,7 +482,7 @@ select '22 estado depois dos passos 21 e 21b', jsonb_build_object(
   'p1_mesclada_na_a1', (select mesclada_em = (select v::uuid from pg_temp._z where k = 'a1') from pessoas.pessoas where id = (select v::uuid from pg_temp._z where k = 'p1')),
   'r2_status', (select status from pessoas.revisao where id = (select v::bigint from pg_temp._z where k = 'r2')),
   'p2_situacao', (select situacao from pessoas.pessoas where id = (select v::uuid from pg_temp._z where k = 'p2')),
-  'r3_r4_ainda_pendentes', (select count(*) from pessoas.revisao where status = 'pendente' and id = any((select v::bigint[] from pg_temp._z where k = 'ids')) and id not in
+  'r3_r4_ainda_pendentes', (select count(*) from pessoas.revisao where status = 'pendente' and id in (select unnest(v::bigint[]) from pg_temp._z where k = 'ids') and id not in
                              ((select v::bigint from pg_temp._z where k = 'r1'), (select v::bigint from pg_temp._z where k = 'r2'), (select v::bigint from pg_temp._z where k = 'r5'))),
   'itens_de_copia', (select count(*) from arquivo.pessoas_revisao_lote_item where lote_id = (select v::bigint from pg_temp._z where k = 'lote')),
   'copia_sem_cpf_e_email', (select count(*) from arquivo.pessoas_revisao_lote_item where rev_antes::text ~ '@' or pessoa_antes::text ~ '@'))::text;
