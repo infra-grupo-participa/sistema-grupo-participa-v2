@@ -38,6 +38,16 @@ Visualizador geral **não** entra (dado pessoal). Tabelas `ra_*` fechadas; tudo 
 
 ## Slack (n8n)
 
+> **PAUSADO desde 16/10/2026** (pedido do Victor): o workflow `[Central] Remoção de Acessos — Slack`
+> (id `955FlqEJiEYnglNC`) está **desativado** no n8n. Motivo: ninguém estava usando as mensagens no canal.
+> O Victor vai repensar como melhorar e aplicar o fluxo antes de religar.
+> - Enquanto pausado: o banco continua chamando o webhook a cada mudança de caso (`trg_ra_avisar_n8n`), a chamada
+>   não acha workflow ativo e não faz nada; nenhuma mensagem nem lembrete das 10h sai no Slack. Casos, tela
+>   `/relatorios/remocoes` e webhook próprio seguem funcionando.
+> - Ao pausar havia 0 mensagens pendentes. **Ao religar, tudo o que mudou no período sai de uma vez** no canal
+>   (as mensagens ficam pendentes até `ra_slack_confirmar`); avaliar antes de reativar.
+> - Religar: ativar o workflow no n8n (ou rodar de novo `Analises/scripts/n8n/cria_remocao_acessos.py` do cérebro).
+
 Toda mudança de caso chama na hora o webhook do n8n (`trg_ra_avisar_n8n` + pg_net, URL em
 `ra_config.n8n_webhook_url`); o disparo de 5 em 5 min é a garantia. O n8n, com a chave anon, reserva o que
 vai postar com `ra_slack_reservar(segredo)` (reserva de 2 min, para os dois caminhos não duplicarem), posta
