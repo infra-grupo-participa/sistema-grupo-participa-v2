@@ -100,7 +100,7 @@ export type StatusNegocio = 'aberto' | 'ganho' | 'perdido';
 export type PapelComercial = 'gestor' | 'vendedor';
 /**
  * Papel de quem está olhando (crm_sessao). 'leitor' (20261008151801) = admin/dev do sistema fora do Comercial:
- * vê tudo o que o gestor vê, com e-mail/telefone mascarados, e não escreve nada (o banco recusa "Acesso só de leitura.").
+ * vê tudo o que o gestor vê, com e-mail e telefone completos (desde 16/10/2026), e não escreve nada (o banco recusa "Acesso só de leitura.").
  */
 export type PapelSessao = PapelComercial | 'leitor';
 

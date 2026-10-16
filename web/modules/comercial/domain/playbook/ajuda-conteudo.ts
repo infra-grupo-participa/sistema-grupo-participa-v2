@@ -572,7 +572,7 @@ const MODULOS: SecaoAjuda[] = [
     ],
     soGestor: [
       'O gestor comercial vê todos os pedidos, coloca em análise, recusa (sempre com motivo) e conclui.',
-      '**"Transformar em ação":** confira a prévia (quantas pessoas, quem saiu e por quê, e uma amostra com dados mascarados) e escolha entre fila de recuperação ou funil próprio. As pessoas vão para os vendedores pela distribuição, e quem já tem dono fica com o mesmo dono.',
+      '**"Transformar em ação":** confira a prévia (quantas pessoas, quem saiu e por quê, e uma amostra de 8 pessoas com nome curto e e-mail completo) e escolha entre fila de recuperação ou funil próprio. As pessoas vão para os vendedores pela distribuição, e quem já tem dono fica com o mesmo dono.',
       'Na fila, o gestor vê todos os responsáveis e muda o status de qualquer pessoa.',
     ],
     dicas: [
@@ -1376,7 +1376,7 @@ const SISTEMA: SecaoAjuda[] = [
     sinonimos: ['permissão', 'papel', 'acesso', 'pode', 'não consigo', 'bloqueado', 'quem é gestor', 'administrador', 'leitor', 'somente leitura', 'só leitura'],
     blocos: [
       p('**Quem é gestor:** o Jonathan (gestor comercial) e o Arthur (supervisor dele), no CRM e em Estratégias. A lista fica no banco: ser administrador do sistema não faz ninguém gestor do Comercial.'),
-      p('**Quem é leitor:** administrador (ou dev) do sistema que não é gestor nem vendedor do Comercial. Vê tudo o que o gestor vê (todos os funis, negócios, contatos, conversas, painéis, desempenho e Estratégias), com e-mail e telefone mascarados, e não altera nada: os botões de ação somem e o banco recusa com "Acesso só de leitura.". O selo "Somente leitura" aparece no topo das telas. O leitor não entra na distribuição, não recebe aviso e não aparece como vendedor.'),
+      p('**Quem é leitor:** administrador (ou dev) do sistema que não é gestor nem vendedor do Comercial. Vê tudo o que o gestor vê (todos os funis, negócios, contatos, conversas, painéis, desempenho e Estratégias), com e-mail e telefone completos (desde 16/10/2026), e não altera nada: os botões de ação somem e o banco recusa com "Acesso só de leitura.". O selo "Somente leitura" aparece no topo das telas. O leitor não entra na distribuição, não recebe aviso e não aparece como vendedor.'),
       tab(['O quê', 'Vendedor', 'Gestor'], [
         ['Início', '"Meu dia", com os próprios números', '"Visão do time", Controle das 9h e o painel de cada vendedor'],
         ['Conversas', 'Escreve só nas próprias', 'Escreve em qualquer uma, atribui dono e exclui conversa (ex.: teste)'],
