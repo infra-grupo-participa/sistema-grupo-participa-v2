@@ -1,7 +1,7 @@
 -- APLICADA em 14/10/2026 com a versão gravada 20261014150150 (o arquivo se chamava 20261014160510; renomeado conforme o guia 6.3).
 -- 20261014160510: o evento 59 é o HT21 (06 a 12/04/2026)
 --
--- STATUS: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 160000, 160100 e 160450.
+-- STATUS (corrigido em 16/10/2026): APLICADA, ver a linha 1. Texto original: NÃO APLICADA. Terminal Censo (pessoa única), 14/10/2026. Depende de 160000, 160100 e 160450.
 --   Mexe em fin.eventos (nome de 1 linha): aplicar com o aceite do JP (dono do fin) e o ok do Maestro.
 --
 -- POR QUE: correção do Victor, 14/10/2026 ~15h10 (PEDIDO-ETAPA2B-respostas.md): o HT21 foi de 06 a 12/04/2026, "foi

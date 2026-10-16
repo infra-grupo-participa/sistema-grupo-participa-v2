@@ -8,6 +8,20 @@ sem planilha.
 Decisões do Victor (14/10/2026) e plano completo: no segundo cérebro (`Projetos/sistema-unico/pessoa-unica/PLANO.md`).
 Este documento fica no repositório para quem trabalha aqui sem acesso ao cérebro.
 
+## Donos e situação (16/10/2026)
+
+- **Donos do banco:** Victor Hugo, Arthur Galvão e João Pedro Alves (JP). Mudança de estrutura passa por um deles,
+  pelo passo a passo `departamentos/dados/areas/infraestrutura/banco-de-dados/alterar-a-estrutura-do-banco.md` do
+  `gp-operacoes`. Dono de cada schema: `mapa-dos-sistemas.md`, na mesma pasta.
+- **Código:** a branch `victor-pessoa-unica` entrou na `main` em 16/10 (merge `2bcbeca`). O banco já tinha as
+  migrations aplicadas desde 14/10; o merge só alinhou o código ao banco.
+- **No banco (lido em 16/10):** `fin.eventos` tem 88 eventos, todos com chave (as 87 da 160000 mais, ao que tudo
+  indica, o ATM de setembro da 160500; a conferir). Evento 59 = `Holding Total (HT21)`, chave `ht21-2026-04`.
+- **Ainda não feito:** carga da Hotmart da conta academy (parada em 1.250 de 57.424 linhas), ligação da
+  `fin.identidade` à pessoa, fila de revisão sem dono (742 casos pendentes), Edge `pessoas-ac-delta` sem a 4ª revisão
+  do pentester e achado 7 aberto (a rotina de hora em hora, se passar de 120 s, desfaz a rodada sem deixar registro).
+  Os jobs seguem desligados; ligar exige o ok do Victor.
+
 ## Decisões que valem para o código
 
 | Decisão | Consequência no banco |
@@ -28,12 +42,12 @@ Este documento fica no repositório para quem trabalha aqui sem acesso ao céreb
 | 20261014150003 | 160200 | `pessoas.eventos` + evento/turma/fonte; `pessoas.relacoes` (sócio de); `pessoas.vw_oferta` | A | **aplicada 14/10 ~15:00 UTC** |
 | (não registrada) | 160300 | índices `concurrently` (único por fonte, por evento, por turma); um por chamada, fora de transação | A | **aplicada 14/10 ~15:01 UTC**, 3 válidos |
 | 20261014150034 | 170000 | carga do ActiveCampaign: estágio, controle, chave de desligar (com data de fim), funções, regra das listas de SV | A | **aplicada 14/10 ~15:00 UTC** |
-| 20261014150135 | 160000 | `fin.eventos.chave` (87 chaves aprovadas pelo Victor) | B | **aplicada 14/10 ~15:01 UTC** (aceite do JP) |
+| 20261014150135 | 160000 | `fin.eventos.chave` (87 chaves aprovadas pelo Victor; 88 no banco em 16/10) | B | **aplicada 14/10 ~15:01 UTC** (aceite do JP) |
 | 20261014150138 | 160100 | `evento_id` em `mkt.projetos`, `ht_editions`, `controle.evento`, `ht.cohorts`; `thb_turmas.chave` | B | **aplicada** |
 | 20261014150141 | 160400 | tipo das ofertas (`pessoas.oferta_tipo`, 68 pelo nome) | B | **aplicada** |
 | 20261014150144 | 160450 | `fin.eventos.captacao_inicio` (HT20 01/01, HT21 13/03) | B | **aplicada** |
 | 20261014150148 | 160500 | evento ATM de setembro (`atm-2-2026-09`) | B | **aplicada** |
-| 20261014150150 | 160510 | evento 59 = HT21 | B | **aplicada** |
+| 20261014150150 | 160510 | evento 59 = HT21 | B | **aplicada** (conferido no banco em 16/10; o cabeçalho antigo do arquivo dizia "NÃO APLICADA") |
 | 20261014152236 | 170100 → 210100 | cargas das fontes do banco (Hotmart por conta, Central, T1-T40, HM, Respondi, leads, CRM) + modo só novos | C | **aplicada 14/10 ~15:22 UTC** (pentester liberou) |
 | 20261014152239 | 170200 → 210200 | planilha "Alunos T1-T42 Ativação" (estágio e carga, sem CPF) | C | **aplicada** |
 | 20261014152242 | 170300 → 210300 | rotina de hora em hora + agendamento do delta do AC; os 2 jobs **desligados** | C | **aplicada** |

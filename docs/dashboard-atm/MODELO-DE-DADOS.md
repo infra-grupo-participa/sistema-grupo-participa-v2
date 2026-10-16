@@ -283,7 +283,7 @@ Lista de vendas, se a tela quiser: `dados_presencial_vendas(p_chave)` serve para
 
 ## 4. Como cadastrar o próximo ATM (ou completar este)
 
-Tudo por SQL de 1 linha, rodado por quem tem acesso de dono (hoje o JP), documentado no diário do banco.
+Tudo por SQL de 1 linha, rodado por quem tem acesso de dono (Victor, Arthur ou JP), documentado no diário do banco.
 
 ```sql
 -- projeto (sigla aprovada pelo Victor, formato ^[A-Z]{2,10}[0-9]{2,4}$)
