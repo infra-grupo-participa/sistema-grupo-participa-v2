@@ -24,7 +24,7 @@ import { ProjecaoCaptacao } from './ProjecaoCaptacao';
 import { EvolucaoMetaIndicador, metaLeadsAcumuladaAte } from './EvolucaoMeta';
 import { TabelaLeads } from './perfil/TabelaLeads';
 import { ResumoLeads } from './ResumoLeads';
-import { cplCaptacao, connectRate as connectRateNumero, conversaoPagina as conversaoPaginaNumero, gastoCampanha, investimentoTrafego, leadsDoTrafego, leadsPessoas, mql as mqlNumero, taxaMql, investimentoDeCaptacao, ingressoGrupoGeral } from '../domain/numeros';
+import { cplCaptacao, cplDoRecorte, investimentoDoRecorte, connectRate as connectRateNumero, conversaoPagina as conversaoPaginaNumero, gastoCampanha, investimentoTrafego, leadsDoTrafego, leadsPessoas, mql as mqlNumero, taxaMql, investimentoDeCaptacao, ingressoGrupoGeral } from '../domain/numeros';
 import type { FormatoMetrica } from '../domain/jornada';
 import { compararMeta } from '../domain/meta';
 
@@ -213,7 +213,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
     dica: 'No detalhe, o recorte é o período escolhido no topo. Uma pessoa com duas portas conta uma vez.' };
   const cardMqlPct: CardDef = { id: 'mql-percentual', rotulo: '% de MQL', formato: 'pct', medir: (_, l) => taxaMql(l.filter((x) => x.pagina !== 'consultoria_respondi')).valor, aplica: TODAS,
     dica: 'Pessoas MQL pela Regra B ÷ pessoas únicas do recorte. O detalhe diário mostra uma linha por dia.' };
-  const cardCpl: CardDef = { id: 'cpl', rotulo: 'CPL geral', formato: 'brl', medir: (_, l) => cplCaptacao(investimentoDeCaptacao(d.trafegoPeriodo, d.periodo, filtro).total, leadsDoTrafego(l, idx, filtro)).valor, aplica: TRAFEGO, menorMelhor: true,
+  const cardCpl: CardDef = { id: 'cpl', rotulo: 'CPL geral', formato: 'brl', medir: (x, l, recorte) => cplDoRecorte(d.trafegoPeriodo, d.periodo, x, l, idx, recorte).valor, aplica: TRAFEGO, menorMelhor: true,
     dica: `Investimento em captação (iscas, consultoria, C3 e remarketing da página) ÷ leads pagos dessas linhas, no mesmo período. ${NOTA_ENTRESAFRA}.` };
   const cardGasto: CardDef = { id: 'gasto', rotulo: 'Gasto de tráfego', formato: 'brl', medir: (x) => (x.length ? gastoDe(x) : null), aplica: TRAFEGO,
     dica: `No detalhe, o recorte é o período escolhido no topo. ${NOTA_ENTRESAFRA}.` };
@@ -244,7 +244,10 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const medirCap = (f: (a: ReturnType<typeof agregar>) => Valor) => (x: DesempenhoDia[]) => { const c = capDias(x, d); return c.length ? f(agregar(c)) : null; };
   // Ordem pedida pelo Victor (12/10): Impressões, CPM, Cliques, CTR, CPC, Visualizações, Connect, Inscrições, Conversão. O card Grupo em 48h saiu em 13/10: fica a taxa de Ingresso no grupo.
   const cards3: { c: CardDef; valor: ReactNode; hint?: ReactNode }[] = [
-    { c: { id: 'investimento-captacao', rotulo: 'Investimento em captação', formato: 'brl', medir: () => investimento.total, aplica: TRAFEGO,
+    { c: { id: 'investimento-captacao', rotulo: 'Investimento em captação', formato: 'brl', medir: (x, _l, recorte) => {
+        if (recorte) return investimentoDoRecorte(d.trafegoPeriodo, d.periodo, recorte).total;
+        const cap = capDias(x, d); return cap.length ? gastoDe(cap) : null;
+      }, aplica: TRAFEGO,
       dica: `Campanhas de captação pela linha do banco: iscas, consultoria, C3 e remarketing da página. ${NOTA_ENTRESAFRA}.` },
       valor: <Numero valor={investimento.total} formato="brl" falta="sem dado por cobertura incompleta" />,
       hint: `Meta Ads ${moeda(investimento.meta)} · Google Ads ${moeda(investimento.google)}` },
@@ -282,7 +285,10 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   // ─── Faixa 4: funis lado a lado ─────────────────────────────────────────────────────────────────────────
   const diasCanal = filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: 'todos', canal: recorte.canal });
   const linhasCanal = filtrarLinhas(d.linhasPeriodoSemFiltro, { funil: 'todos', canal: recorte.canal }, idx);
-  const etapas = cplPorEtapa(d.dias, d.linhas, idx, d.trafegoPeriodo.gastoCampanhas);
+  // Cada etapa é o seu funil: dias, cadastros e gasto seguem o canal da tela, não o funil (senão o gasto da etapa, que é do período
+  // todo, ficaria sobre os leads de outro funil, ou de um só canal).
+  const etapas = cplPorEtapa(diasCanal, linhasCanal, idx, d.trafegoPeriodo.gastoCampanhas, recorte.canal);
+  const dEtapas: DadosTela = { ...d, dias: diasCanal, linhas: linhasCanal };
   const etapaRemarketing = etapas.find((e) => e.chave === 'remarketing_pagina')?.cpl ?? null;
   // Campanhas que o banco não classificou (linha null): contam no tráfego, ficam fora da captação, e aparecem aqui.
   const semClassificacao = d.trafegoPeriodo.campanhas.filter((c) => linhaDaCampanha(c) === null);
@@ -413,7 +419,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
                   leads={principal?.leadsPagos ?? null} cpl={principal} aberta={etapaAberta === funil}
                   onToggle={() => setEtapaAberta((v) => v === funil ? null : funil)} onAbrir={() => abrirEtapa(funil)}>
                   {funil === 'consultoria' && <AlcanceFrequenciaCampanhas d={d} funil="consultoria" />}
-                  <CampanhasEtapa d={d} etapa={funil} gastoPorCampanha={gastoPorCampanhaDaEtapa(etapas, chave)} />
+                  <CampanhasEtapa d={dEtapas} etapa={funil} gastoPorCampanha={gastoPorCampanhaDaEtapa(etapas, chave)} />
                   {itens.map((e) => (
                     <div key={e.chave} className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-faint)] py-2 text-sm">
                       <span className="min-w-0 break-words font-medium text-[var(--fg-2)]">{e.rotulo}</span>
@@ -431,7 +437,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
             <EtapaFechada titulo="Remarketing da página" gasto={etapaRemarketing?.gasto != null && (etapaRemarketing.gasto > 0 || etapaRemarketing.leadsPagos) ? etapaRemarketing.gasto : null}
               leads={etapaRemarketing?.leadsPagos ?? null} cpl={etapaRemarketing ?? null} aberta={etapaAberta === 'remarketing_pagina'}
               onToggle={() => setEtapaAberta((v) => v === 'remarketing_pagina' ? null : 'remarketing_pagina')} onAbrir={() => d.irPara({ aba: 'criativos', funil: 'todos', criativos: {} })}>
-              <CampanhasEtapa d={d} etapa="remarketing_pagina" gastoPorCampanha={gastoPorCampanhaDaEtapa(etapas, 'remarketing_pagina')} />
+              <CampanhasEtapa d={dEtapas} etapa="remarketing_pagina" gastoPorCampanha={gastoPorCampanhaDaEtapa(etapas, 'remarketing_pagina')} />
               {etapaRemarketing?.valor != null && etapaRemarketing.gasto !== null && <p className="border-t border-[var(--border-faint)] py-2 text-xs text-[var(--fg-2)]">Cálculo do CPL: {moeda(etapaRemarketing.gasto)} ÷ {formatar(etapaRemarketing.leadsPagos, 'int')} leads pagos.</p>}
             </EtapaFechada>
             {semClassificacao.length > 0 && (
@@ -646,7 +652,7 @@ function AlcanceFrequenciaCampanhas({ d, funil }: { d: DadosTela; funil: Funil }
 
 function ColunaCaptacao({ d, dias, linhas, funil }: { d: DadosTela; dias: DesempenhoDia[]; linhas: LinhaPerfil[]; funil: Funil }) {
   const leads = leadsDoTrafego(linhas, d.idx);
-  const investimento = investimentoDeCaptacao(d.trafegoPeriodo, d.periodo, { funil, canal: 'todos' });
+  const investimento = investimentoDeCaptacao(d.trafegoPeriodo, d.periodo, { funil, canal: d.recorte.canal });
   const c = cplCaptacao(investimento.total, leads);
   const campanhas = [...new Set(dias.map((x) => d.idx.campanhaDoAnuncio(x.anuncioId)?.id).filter((x): x is string => Boolean(x)))];
   const total = campanhas.length === 1 ? d.totaisPeriodo.find((t) => t.nivel === 'campanha' && t.id === campanhas[0]) : undefined;

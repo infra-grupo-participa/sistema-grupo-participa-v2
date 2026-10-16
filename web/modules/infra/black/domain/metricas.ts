@@ -336,9 +336,11 @@ export interface LinhaCplEtapa {
 /**
  * CPL por etapa, tudo pela LINHA do banco: Consultoria, Iscas (e cada isca), Remarketing da página, C3 (e cada conjunto).
  * Gasto da etapa ÷ leads pagos atribuídos aos mesmos conjuntos. Rótulo do conjunto = nome exato da fonte.
+ * `dias` e `linhas` chegam já no recorte de canal (o de funil não se aplica: cada etapa é o seu funil); `canal` filtra o
+ * gasto por campanha, que a fonte não entrega dividido por canal.
  */
 export function cplPorEtapa(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego,
-  gastoCampanhas?: readonly { campanhaId: string; gasto: number }[]): LinhaCplEtapa[] {
+  gastoCampanhas?: readonly { campanhaId: string; gasto: number }[], canal: FiltroCanal = 'todos'): LinhaCplEtapa[] {
   const leadsDe = (pertence: (l: LinhaBlack | null) => boolean, conjuntoOk?: (cj: Conjunto | undefined) => boolean) => linhas.filter((l) => {
     if (l.pagina === 'consultoria_respondi' || !ehPago(l)) return false;
     const linha = linhaDoLead(l, idx);
@@ -346,7 +348,8 @@ export function cplPorEtapa(dias: readonly DesempenhoDia[], linhas: readonly Lin
     return !conjuntoOk || conjuntoOk(l.conjuntoId ? idx.conjunto.get(l.conjuntoId) : undefined);
   });
   const etapa = (linha: LinhaBlack): { cpl: Cpl; campanhas: { id: string; gasto: number }[] } => {
-    const g = gastoDasLinhas(dias, gastoCampanhas, idx, (l) => l === linha);
+    // O gasto da campanha (dias_campanha) não vem filtrado por canal: com canal escolhido, só as campanhas dele entram, como os leads.
+    const g = gastoDasLinhas(dias, gastoCampanhas, idx, (l) => l === linha, (c) => canal === 'todos' || c.canal === canal);
     const leadsPagos = pessoasUnicas(leadsDe((l) => l === linha));
     return { cpl: { gasto: g.gasto, leadsPagos, valor: cpl(g.gasto, leadsPagos) },
       campanhas: [...g.porCampanha].map(([id, gasto]) => ({ id, gasto })) };
