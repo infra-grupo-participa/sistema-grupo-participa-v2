@@ -15,6 +15,18 @@ describe('painel do /renov', () => {
     expect(p.aplicacoes[0].nome).toBeNull();
     expect(p.veContato).toBe(false);
   });
+  it('mapeia contato quando ve_contato é true', () => {
+    const p = mapearPainelRenov({
+      aplicacoes_total: 1, por_opcao: { 'renovar-holding-masters': 1 }, aplicaram_e_pagaram: 1, vendas: [],
+      aplicacoes: [{ criado_em: '2026-10-16T16:40:03Z', opcao: 'renovar-holding-masters', origem: 'email', pagou: true,
+        nome: 'Zz Teste', email: 'zz@exemplo.invalid', telefone: '+550000000000' }],
+      ultimas_vendas: [{ em: '2026-10-16T17:00:00Z', oferta: 'nv5f10zq', valor: 6000, aplicou: true, nome: 'Zz Teste', email: 'zz@exemplo.invalid' }],
+      ve_contato: true,
+    });
+    expect(p.veContato).toBe(true);
+    expect(p.aplicacoes[0]).toMatchObject({ nome: 'Zz Teste', email: 'zz@exemplo.invalid', telefone: '+550000000000', pagou: true, origem: 'email' });
+    expect(p.ultimasVendas[0]).toMatchObject({ nome: 'Zz Teste', email: 'zz@exemplo.invalid', aplicou: true, valor: 6000 });
+  });
   it('aguenta resposta vazia', () => {
     const p = mapearPainelRenov(null);
     expect(p.total).toBe(0);

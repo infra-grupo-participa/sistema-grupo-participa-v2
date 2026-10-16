@@ -24,7 +24,7 @@ export function PainelRenovThb() {
   }, []);
   useEffect(() => { void ler(); }, [ler]);
 
-  return <SectionCard title="Aplicações do /renov e vendas" subtitle="hm.timeholdingbrasil.com.br/renov. Vendas pelas ofertas do checkout (aprovadas e completas), sem testes."
+  return <SectionCard title="Aplicações do /renov e vendas" subtitle="hm.timeholdingbrasil.com.br/renov. Aplicações sem as de teste. Vendas pelas ofertas do checkout (aprovadas e completas)."
     right={<button type="button" onClick={() => void ler()} disabled={lendo} className="min-h-9 rounded-[var(--r-md)] border border-[var(--border)] px-3 text-xs font-medium text-[var(--fg)] hover:bg-[var(--surface-3)] disabled:opacity-50">{lendo ? 'Lendo…' : 'Atualizar'}</button>}>
     {erro && <p role="status" className="mb-3 text-sm text-[var(--yellow)]">{erro}</p>}
     {!dados ? <EmptyState title={lendo ? 'Carregando…' : 'Sem dado ainda'} /> : <div className="space-y-5">
@@ -34,7 +34,7 @@ export function PainelRenovThb() {
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {dados.vendas.map((v) => <KpiCard key={v.oferta} label={`Vendas: ${v.rotulo}`} value={v.vendas} hint={moeda.format(v.valor)} bar="green" />)}
-        <KpiCard label="Aplicaram e pagaram" value={dados.aplicaramEPagaram} hint="cruzado pelo e-mail" bar="green" />
+        <KpiCard label="Aplicaram e pagaram" value={dados.aplicaramEPagaram} hint="pessoas, cruzado pelo e-mail" bar="green" />
       </div>
       <div className="overflow-x-auto">
         <h3 className="mb-2 text-sm font-semibold text-[var(--fg)]">Aplicações</h3>
