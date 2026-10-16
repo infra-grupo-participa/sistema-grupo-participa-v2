@@ -95,3 +95,8 @@ verify_jwt = true
 # autentica pelo header x-sync-chave (Vault dados_black_youtube_chave), conferido na própria Edge, fail-closed.
 [functions.black-youtube]
 verify_jwt = false
+
+# pessoas-ac-delta: chamada 1×/dia pelo cron pessoas-ac-delta via ops.cron_post, sem Authorization; autentica pelo header
+# x-webhook-secret (Vault cron_webhook_secret), fail-closed. Só POST. NÃO publicada (pentester, 14/10/2026).
+[functions.pessoas-ac-delta]
+verify_jwt = false
