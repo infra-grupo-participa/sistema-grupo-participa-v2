@@ -1,6 +1,6 @@
-# Ações da Black Friday · dados
+# Ações de Renovação da Black Friday · dados
 
-A parte de banco do dashboard "Ações da Black Friday". A tela (card no CSM, abas e componentes) está no README desta
+A parte de banco do dashboard "Ações de Renovação da Black Friday". A tela (card em Academy, abas e componentes) está no README desta
 pasta. Migrations: `20261014210000` (estrutura) e `20261014210100` (cadastro da primeira ação). O porquê e o ensaio estão
 em `infra/supabase/migrations/20261014210000.explain.md`.
 

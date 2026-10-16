@@ -21,7 +21,7 @@ export default function CsmDashboardsPage() {
           ))}
           <CartaoModulo
             href="/infra/dashboards/csm/acoes-black"
-            label="Ações da Black Friday"
+            label="Ações de Renovação da Black Friday"
             descricao="Acompanhamento das ações de renovação e ofertas da Black Friday."
             ico="chart"
           />

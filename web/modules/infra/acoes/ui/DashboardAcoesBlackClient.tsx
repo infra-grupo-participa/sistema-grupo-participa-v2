@@ -172,11 +172,11 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
     <header>
       <LinkVoltar href="/infra/dashboards/csm" para="Academy" />
       <div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Infra / Dashboards / Academy</div>
-      <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">Ações da Black Friday</h1>
+      <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">Ações de Renovação da Black Friday</h1>
       <p className="mt-1 text-sm text-[var(--fg-2)]">Uma aba por ação, configurada pelo registro.{atualizado ? ` Atualizado às ${atualizado.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.` : ''}</p>
     </header>
 
-    <Tabs idBase="acoes-black" label="Ações da Black Friday" active={acao.id} onChange={setAcaoId} tabs={tabs} />
+    <Tabs idBase="acoes-black" label="Ações de Renovação da Black Friday" active={acao.id} onChange={setAcaoId} tabs={tabs} />
     <div role="tabpanel" id={idsAcao.panel} aria-labelledby={idsAcao.tab}>
       {acao.estado === 'em breve' ? <PainelEmBreve nome={acao.nome} /> : <div className="space-y-5">
         {emPreparacao && <p role="status" className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm text-[var(--fg-2)]">{mensagemEmPreparacao()}</p>}

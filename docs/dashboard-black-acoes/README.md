@@ -1,8 +1,8 @@
-# Ações da Black Friday
+# Ações de Renovação da Black Friday
 
 ## Implementação inicial · 14/10/2026
 
-Foi criado o card `Ações da Black Friday` em Infra > Dashboards > CSM e uma tela dirigida pelo registro de ações em `web/modules/infra/acoes/domain/registro.ts`.
+Foi criado o card `Ações de Renovação da Black Friday` em Infra > Dashboards > Academy (antigo CSM) e uma tela dirigida pelo registro de ações em `web/modules/infra/acoes/domain/registro.ts`.
 
 O registro ativo é `THB vencidos`, com etiqueta `black-thb-2026-10` e origem `renovacao-thb-vencidos`. `THB a vencer` e `Aurum` aparecem como “em breve”; nenhuma etiqueta ou oferta foi inventada para elas. A oferta Hotmart de Holding Masters segue nula no registro até o Victor fornecer o código.
 
@@ -35,7 +35,7 @@ Na primeira versão do front, a etiqueta ainda não estava cadastrada no banco. 
 
 - `npx vitest run modules/infra/acoes` verifica o mapeamento de custo, a espera por oferta, a chamada com etiqueta e a ausência de chamadas para abas sem etiqueta.
 - `npx tsc --noEmit`, `npm run lint:tokens` e `npm run build` verificam tipos, tokens e compilação.
-- Abra Infra > Dashboards > CSM > Ações da Black Friday. Confira THB vencidos, os cartões e o detalhe de disparos; selecione THB a vencer e Aurum e confirme o aviso “Ação em breve”.
+- Abra Infra > Dashboards > Academy > Ações de Renovação da Black Friday. Confira THB vencidos, os cartões e o detalhe de disparos; selecione THB a vencer e Aurum e confirme o aviso “Ação em breve”.
 - Com a etiqueta cadastrada, THB vencidos deve carregar os dados publicados nas RPCs. Se a chave não existir, a tela mostra “Dashboard em preparação”.
 
 ## Validação com a etiqueta cadastrada · 14/10/2026
@@ -95,7 +95,7 @@ Para testar: autenticar com perfil ativo da equipe sem vínculo Infra nem `finan
   - A tabela de Leads filtra por qualquer campo do Resumo (utm_source, Estado, Instrução, Turma) e continua mostrando também os não válidos; o contador do modal e o aviso de divergência do card seguem sobre o conjunto sem filtro.
   - **Clicar numa barra da Evolução filtra por aquele dia** (campo `Dia`, mesmo chip e mesmo "Limpar filtros"; a Evolução mantém os outros dias visíveis, com o escolhido em destaque, e os demais gráficos e a tabela mostram só aquele dia). Pelo teclado, setas percorrem os dias e Enter filtra. O tooltip fica sempre dentro da área do gráfico (abre para baixo quando não há espaço em cima).
 - **Situação:** na branch `victor-acoes-graficos-interativos`, sem merge e sem deploy. Nenhuma mudança de banco.
-- **Como testar:** `npx vitest run modules/infra/acoes modules/infra/atm`, `npx tsc --noEmit`, `npm run lint:tokens`, `npm run build`. Na tela (Infra > Dashboards > CSM > Ações da Black Friday > card Leads > Resumo): clique em "Unnichat" na rosca de utm_source e confira que as outras roscas, a Evolução e a aba Leads passam a mostrar só esses leads, e que o chip/"Limpar filtros" desfaz. Passe o cursor nas fatias e nos dias da Evolução para ver o tooltip.
+- **Como testar:** `npx vitest run modules/infra/acoes modules/infra/atm`, `npx tsc --noEmit`, `npm run lint:tokens`, `npm run build`. Na tela (Infra > Dashboards > Academy > Ações de Renovação da Black Friday > card Leads > Resumo): clique em "Unnichat" na rosca de utm_source e confira que as outras roscas, a Evolução e a aba Leads passam a mostrar só esses leads, e que o chip/"Limpar filtros" desfaz. Passe o cursor nas fatias e nos dias da Evolução para ver o tooltip.
 
 ## Marcar número do grupo como teste · 15/10/2026
 
