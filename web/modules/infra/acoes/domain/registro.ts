@@ -18,7 +18,7 @@ export const registroAcoesBlack: RegistroAcaoBlack[] = [
     estado: 'ativa',
     etiqueta: 'black-thb-2026-10',
     origem: 'renovacao-thb-vencidos',
-    ofertaHotmart: null,
+    ofertaHotmart: 'nv5f10zq',
   },
   { id: 'thb-a-vencer', nome: 'THB a vencer', estado: 'em breve', etiqueta: null, origem: null, ofertaHotmart: null },
   { id: 'aurum', nome: 'Aurum', estado: 'em breve', etiqueta: null, origem: null, ofertaHotmart: null },
