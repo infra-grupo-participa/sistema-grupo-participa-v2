@@ -438,7 +438,7 @@ Uma chamada por atualização da tela. Passe em `p_md5` o `md5` da resposta ante
 
 - Aplicar `20261016240000`, publicar a Edge (`dados-planilha-relatorio`, `verify_jwt=false`), rodar uma vez à mão e só então aplicar `20261016240100` (cron).
   Sem a Edge no ar o cron recebe 404 e o vigia de rotinas abre incidente.
-- A tela (abas Relatório, Presença por evento, Diamantes e Compradores) é outro passo do plano (front-end).
+- A tela (abas Relatório, Presença por evento, Diamantes e Compradores) está feita e não publicada; ver `docs/dashboard-presencial-tela.md` (seção "Clínica de Miami: abas da cópia da planilha").
 - Revisar o gate de contato quando os níveis de acesso forem revistos (ver a decisão provisória).
 
 ## 3. Migrations (ordem e versão gravada)

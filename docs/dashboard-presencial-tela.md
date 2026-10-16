@@ -51,3 +51,41 @@ Regra do Victor (16/10/2026, card ClickUp 17tya50h5m6): **todo card de ingresso 
 Na pasta `web`, rodar `npm run lint`, `npx tsc --noEmit`, `npm test` e `npm run build`. Para abrir localmente, rodar `npm run dev -- -p 3001`, navegar por `/infra` → `/infra/dashboards` → `/infra/dashboards/csm` → Clínica de Miami com uma conta da equipe e confirmar o aviso Em breve em Escritório. Conferir também os redirects das três URLs antigas listadas acima. Sem as funções aplicadas, a tela deve exibir a mensagem de função ausente no bloco correspondente. Depois da aplicação, conferir cada número diretamente na fonte antes de usar o dashboard para decisão.
 
 Após a aplicação das funções do §2.9, comparar o total de vendas dos pagamentos, o total das roscas e o último ponto de vendas acumuladas com `resumo.vendas`; comparar receita acumulada final com `resumo.receita_bruta`. Nos cards, conferir que o total de pessoas não é a soma das categorias quando há sobreposição. Abrir cada modal e conferir a contagem de linhas com a linha `total` do grupo. Na aba visível, observar a segunda leitura após 60 s; disparos e a lista dos modais não devem ser chamados pelo polling. Repetir com a aba oculta e simular falha de uma função para confirmar que só seu bloco mostra aviso e mantém os dados anteriores.
+
+## Clínica de Miami: abas da cópia da planilha (card ClickUp 17tya50h3b8)
+
+Situação: **não publicado**. Branch `victor-miami-relatorio`, commit local, sem push. A migration `20261016240000` (função `public.dados_miami_relatorio`) e a Edge `dados-planilha-relatorio` ainda **não estão aplicadas nem no ar** (ver `docs/dashboard-presencial.md` §2.12.3). Sem a função, a tela degrada: só estas abas mostram a mensagem de função ausente; o restante do dashboard segue normal.
+
+### O que foi feito e por quê
+
+O Victor pediu que o dashboard da Clínica de Miami replique a aba "Relatório" da planilha "Dados [MIAMI 2026]" da Isabela, mantendo-se atualizado. O back-end copia a aba para o banco e a tela lê só por `public.dados_miami_relatorio(p_chave, p_md5)` (contrato em `docs/dashboard-presencial.md` §2.12 e §2.12.1). A tela não lê a planilha.
+
+Abas (só para `clinica-miami-2026-12`): **Relatório**, **Diamantes** (conteúdo trocado pelo da planilha, 22 colunas), **Compradores** (nova, 16 colunas), **Presença por evento** (inclui Camisas) e **Fichas de interesse** (inalterada).
+
+- **Relatório:** os três blocos de indicadores viram cards (`KpiCard`). Percentual ganha barra de progresso. Subgrupo em que todos os itens são contagens inteiras (um item sem valor abre o subgrupo) vira rosca, porque a soma das fatias é o total do subgrupo. As linhas 1 a 30 foram deixadas a critério do front-end pelo Victor.
+- **Diamantes e Compradores:** gráficos de barras por coluna categórica (no máximo 12 valores distintos; clicar na barra filtra a tabela), busca sem acento nem caixa, ordenação por coluna (data, número pt-BR, texto; vazio sempre no fim), cabeçalho fixo, contador "X de Y linhas", chips de filtro, interruptor "Todas as colunas" (a visão padrão mostra as colunas principais; as demais ficam no detalhe), lista de cartões no mobile e modal com a linha completa ao clicar.
+- **Presença por evento:** três gráficos (Diamante, Time e Total geral estimados), uma barra por evento. Evento com "—" não vira zero: fica fora da barra e é contado como "sem dado". Tabela completa, modal por evento e tabela de Camisas com a linha Total em destaque.
+- **Rótulos e cabeçalhos** são a string exata do contrato. Nada foi renomeado. Um rótulo da planilha ("... (clique no número para ver quem)") é mantido, mas **o clique não existe na tela**.
+- **Contato** (`E-mail`, `Telefone (WhatsApp)`, `Telefone`): visível para todos, decisão provisória do Victor (16/10). Com `contato_visivel = false` as três colunas somem da tabela e do detalhe. Na visão padrão elas já ficam fora da tabela e aparecem no detalhe e em "Todas as colunas".
+- **Atualização:** polling de 60 s só com a aba do navegador visível. Envia `p_md5` apenas quando já há cópia; resposta `igual` não troca o conteúdo. O botão Atualizar força a leitura e religa o polling parado. Timeout de 15 s por chamada, `try/catch`, e o log recebe só o código do erro.
+- **Estados:** carregando; sem cópia (`disponivel = false`, nada de zero); erro sem cópia (alerta); erro com cópia boa (mantém o último valor, esmaece, mostra "lida em ... (há X)" e o aviso); erro do leitor da planilha (código do erro e a data da cópia exibida); `avisos` do contrato sempre visíveis. `42501`, `PGRST202` e `P0002` são permanentes (o polling para).
+
+### Arquivos (módulo `web/modules/infra/dados`)
+
+Novos: `domain/relatorio-miami.ts` (contrato, busca, ordenação, agrupamento), `application/relatorio-miami-estado.ts` (junção de leituras), `infrastructure/relatorio-miami-data.ts` (RPC), `ui/useRelatorioMiami.ts` (polling), `ui/AbaRelatorioMiami.tsx`, `ResumoRelatorioMiami.tsx`, `TabelaRelatorioMiami.tsx`, `PresencaMiami.tsx`, `ModalLinhaRelatorio.tsx` e os testes. `domain/relatorio-miami.fixture.ts` só serve aos testes e usa pessoas inventadas, com cabeçalhos importados do leitor da Edge.
+
+Alterados: `ui/DashboardPresencialClient.tsx` (só registro das abas, o hook e o botão Atualizar; o modal de ingresso no grupo, trabalho de outro agente, não foi tocado). Removido: `ui/AbaDiamantes.tsx` (substituído). Mantidos de propósito: `carregarDiamantesMiami`, `DiamantePresencial` e seu teste (a função `dados_miami_diamantes` segue no banco); o campo `diamantes` nos refs `miamiEmAndamento` e `recarregarMiami` ficou como resíduo para reduzir conflito de merge e pode sair numa limpeza posterior.
+
+### Como testar
+
+1. Em `web/`: `npx tsc --noEmit`, `npm run lint`, `npx vitest run`, `npm run build`, `npm run lint:tokens`.
+2. Hoje (função ainda ausente): abrir `/infra/dashboards/csm/clinica-miami-2026-12`, entrar em Relatório, Diamantes, Compradores e Presença. Cada uma mostra "Esta função ainda não está no banco..." e as demais abas continuam funcionando.
+3. Depois de aplicar a migration, publicar a Edge e rodar a primeira leitura (§2.12.2): comparar na tela, com a planilha aberta, `Pessoas na Lista Diamantes`, `Compradores da Clínica` e uma contagem de Presença; conferir o total de linhas de Diamantes e Compradores. Número só vale depois de conferido na fonte.
+4. Com a aba visível, observar o polling no Network (a cada 60 s; segunda chamada com `p_md5`; resposta `igual: true` sem recarregar a tabela). Simular falha e ver o conteúdo esmaecido com a idade da cópia.
+
+### O que falta
+
+- Aplicar a migration, publicar a Edge e conferir os números contra a planilha (a tela com dados reais **não foi aberta**: a função não existe no banco e a rota exige login).
+- Tornar o número "clique para ver quem" clicável, se o Victor quiser (precisa de decisão e de contrato: hoje a cópia não traz a lista de quem).
+- Revisar o gate de contato quando os níveis de acesso forem revistos.
+- Teste visual em navegador (desktop e mobile) após a aplicação.
