@@ -2,7 +2,7 @@
 --   acessos à página (metodo.renov_visitas), acessos de cada visitante antes de aplicar, marcar teste por linha,
 --   e-mail @advmais.com sempre teste na leitura, "aplicaram e pagaram" por pessoa distinta (parecer do Auditor no PR 65).
 -- Marcar teste: public.renov_marcar_teste, só master (mesma regra de dados_marcar_teste, 20261015180100).
--- Volume pequeno (centenas de linhas): leitura direta. Reversão: 20261016180500_reversao.sql (volta o corpo da v1).
+-- Volume pequeno (centenas de linhas): leitura direta. Reversão: 20261016173552_reversao.sql (volta o corpo da v1).
 do $g$ begin
   if (select md5(prosrc) from pg_proc where oid = 'public.dados_renov_thb(boolean)'::regprocedure) is distinct from 'c527ebe1f000af9e6c06228de48d26d1' then
     raise exception 'premissa: corpo vivo de dados_renov_thb mudou; revisar antes de aplicar';
