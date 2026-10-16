@@ -19,7 +19,7 @@ Este documento fica no repositório para quem trabalha aqui sem acesso ao céreb
   indica, o ATM de setembro da 160500; a conferir). Evento 59 = `Holding Total (HT21)`, chave `ht21-2026-04`.
 - **Ainda não feito:** carga da Hotmart da conta academy (parada em 1.250 de 57.424 linhas), ligação da
   `fin.identidade` à pessoa, fila de revisão sem dono (742 casos pendentes), Edge `pessoas-ac-delta` sem a 4ª revisão
-  do pentester e achado 7 aberto (a rotina de hora em hora, se passar de 120 s, desfaz a rodada sem deixar registro).
+  do pentester e achado 7 (a rotina de hora em hora, se passar de 120 s, desfaz a rodada sem deixar registro) com correção escrita em 16/10 na migration `20261016120000`, **não aplicada**.
   Os jobs seguem desligados; ligar exige o ok do Victor.
 
 ## Decisões que valem para o código
@@ -51,6 +51,8 @@ Este documento fica no repositório para quem trabalha aqui sem acesso ao céreb
 | 20261014152236 | 170100 → 210100 | cargas das fontes do banco (Hotmart por conta, Central, T1-T40, HM, Respondi, leads, CRM) + modo só novos | C | **aplicada 14/10 ~15:22 UTC** (pentester liberou) |
 | 20261014152239 | 170200 → 210200 | planilha "Alunos T1-T42 Ativação" (estágio e carga, sem CPF) | C | **aplicada** |
 | 20261014152242 | 170300 → 210300 | rotina de hora em hora + agendamento do delta do AC; os 2 jobs **desligados** | C | **aplicada** |
+| 20261016120000 | (16/10) | `pessoas-incremental` por fonte, com `COMMIT`, teto de linhas, orçamento em segundos, erro visível no vigia, chaves com fim em 15/11 (achado 7) | C | **escrita, NÃO aplicada** (falta pentester e ok do Victor) |
+| 20261016120100 | (16/10) | `carga_respondi` no modo só novos sem fome (2.643 respostas sem contato travavam a janela) | C | **escrita, NÃO aplicada** |
 
 Os arquivos foram renomeados para a versão gravada em `supabase_migrations.schema_migrations` (guia 6.3); o primeiro
 comentário de cada um diz o nome antigo. Cada uma tem `.explain.md`, ensaio e reversão.
@@ -75,7 +77,13 @@ Código em `infra/supabase/functions/pessoas-ac-delta/index.ts`. **NÃO publicad
   teto atingido). A soma conta todas as linhas `chamada_ac` do dia, de qualquer execução (achados B1 e B2 da 3ª revisão
   do pentester, corrigidos em 14/10 à noite).
 - Estouro do orçamento de tempo (110 s) sai como `tempo_esgotado`, não como `teto_do_dia`.
-- Situação: aguardando a 4ª revisão do pentester; publicar e ligar são do Maestro/JP com ok do Victor.
+- Revisão de 16/10 (`victor-ac-delta`, não publicada): header vazio devolve 401 antes do Vault; chave ligada com `ate`
+  vencida devolve 503 `chave_vencida`; parcial na fase das listas vira `ok:false, parcial:true` (HTTP 200 não é sucesso);
+  primeiro delta parte do dia anterior ao fim da carga inicial (cobre os ~334 contatos criados desde a parada de 15/10),
+  com o cursor validado por regex; estágio para pessoas limitado a 6 chamadas de 1.000 por execução.
+- Diferença de 334 contatos (AC 508.976 em 16/10 x `pessoas.ac_contato` 508.642): a carga parou em 15/10 ~04:30 UTC e a
+  criação média é ~285/dia, então o delta cobre isso. **Não pega contato apagado no AC** (não verificado, sem a API).
+- Situação: aguardando a 4ª revisão do pentester; publicar e ligar são do Victor.
 
 ## Como testar
 
