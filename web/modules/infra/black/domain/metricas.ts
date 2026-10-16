@@ -3,6 +3,7 @@
 import {
   leadNoFunil, linhaDaCampanha, linhaDoConjunto, linhaDoLead, linhaEhCaptacao, linhaNoFunil, noDoConjunto,
 } from './linha-black';
+import { gastoDaParte, ratear, somaSemDetalhe } from './rateio';
 import { PROFISSOES_MQL } from './tipos';
 import type {
   Anuncio, Campanha, Conjunto, DesempenhoDia, FiltroCanal, FiltroFunil, Funil, LinhaBlack, LinhaPerfil, NoBlack, ReguaCpl, TrafegoBlack, Valor,
@@ -251,6 +252,8 @@ export function filtrarLinhas(linhas: readonly LinhaPerfil[], f: FiltroBase, idx
 }
 
 export const gastoDe = (dias: readonly DesempenhoDia[]) => dias.reduce((s, d) => s + d.gasto, 0);
+/** Soma em centavos inteiros: o total rateado fecha exato com o gasto da campanha. */
+const centavosSomados = (dias: readonly DesempenhoDia[]) => dias.reduce((s, d) => s + Math.round(d.gasto * 100), 0) / 100;
 
 export interface Cpl { gasto: Valor; leadsPagos: number; valor: Valor }
 /** CPL de um recorte: dias e linhas JÁ filtrados pelo mesmo critério. */
@@ -261,8 +264,10 @@ export function cplDo(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerf
 }
 
 /**
- * Gasto de UMA campanha somando os anúncios cujo conjunto está na linha. É o único jeito de separar consultoria de
+ * Gasto CRU de UMA campanha somando os anúncios cujo conjunto está na linha. É o único jeito de separar consultoria de
  * iscas dentro da campanha `c2`; só existe desde `anuncioDesde` (dias por anúncio). null = sem linha de anúncio.
+ * Serve de PESO para o rateio (rateio.ts), não de dinheiro: o dinheiro é o gasto da campanha. Quando o gasto por campanha
+ * está disponível, as telas usam `gastoDaParte(ratear(...))`, que fecha com a campanha.
  */
 export function gastoCampanhaPorConjunto(dias: readonly DesempenhoDia[], idx: IndiceTrafego, campanhaId: string,
   pertence: (l: LinhaBlack | null) => boolean = () => true): Valor {
@@ -275,15 +280,19 @@ export function gastoCampanhaPorConjunto(dias: readonly DesempenhoDia[], idx: In
 }
 
 /**
- * Gasto das campanhas de uma linha. Campanha inteira na linha: gasto da campanha (dias_campanha, desde 01/09).
- * Campanha `c2` diante de uma linha só (Consultoria ou Iscas): soma dos anúncios do conjunto (desde `anuncioDesde`).
- * Diante das duas (C2, Todos, captação): gasto da campanha. Sem gasto conhecido da campanha, ela fica fora da soma.
- * `porCampanha` guarda o que entrou, para a lista de campanhas da etapa fechar com o total.
+ * Gasto das campanhas de uma linha. A CAMPANHA é o dinheiro (dias_campanha, desde 01/09); o anúncio só divide.
+ * Campanha inteira na linha: gasto da campanha. Campanha `c2` diante de uma linha só (Consultoria ou Iscas): a parte do
+ * gasto da campanha proporcional ao gasto por anúncio dos conjuntos da linha (rateio.ts), então Consultoria + Iscas fecha
+ * com o gasto da campanha ao centavo. Diante das duas (C2, Todos, captação): gasto da campanha. Sem gasto conhecido da
+ * campanha, ela fica fora da soma. `porCampanha` guarda o que entrou, para a lista de campanhas da etapa fechar com o total.
+ * Sem gasto por campanha na fonte (`gastoCampanhas` ausente), vale o gasto cru por anúncio, como antes.
  */
 export function gastoDasLinhas(dias: readonly DesempenhoDia[], gastoCampanhas: readonly { campanhaId: string; gasto: number }[] | undefined,
-  idx: IndiceTrafego, pertence: (l: LinhaBlack | null) => boolean, aceita: (c: Campanha) => boolean = () => true):
+  idx: IndiceTrafego, pertence: (l: LinhaBlack | null) => boolean, aceita: (c: Campanha) => boolean = () => true,
+  gastoDiario?: TrafegoBlack['gastoCampanhasDiario']):
   { gasto: Valor; porCampanha: Map<string, number> } {
   const doBanco = new Map((gastoCampanhas ?? []).map((x) => [x.campanhaId, x.gasto]));
+  const rateio = ratear(dias, { gastoCampanhas, gastoCampanhasDiario: gastoDiario }, idx);
   const porCampanha = new Map<string, number>();
   for (const c of idx.campanha.values()) {
     if (!aceita(c)) continue;
@@ -291,7 +300,7 @@ export function gastoDasLinhas(dias: readonly DesempenhoDia[], gastoCampanhas: r
     let g: Valor;
     if (lc === 'c2' && !(pertence('iscas') && pertence('consultoria'))) {
       if (!pertence('iscas') && !pertence('consultoria')) continue;
-      g = gastoCampanhaPorConjunto(dias, idx, c.id, pertence);
+      g = gastoDaParte(rateio, idx, c.id, pertence);
     } else if (lc === 'c2' || pertence(lc)) {
       g = gastoCampanhas ? doBanco.get(c.id) ?? null : gastoCampanhaPorConjunto(dias, idx, c.id);
     } else continue;
@@ -321,15 +330,18 @@ export function linhasCaptacao(linhas: readonly LinhaPerfil[], idx: IndiceTrafeg
 /** CPL geral: campanhas de captação (predicado único) e só leads pagos atribuídos a elas. */
 export function cplPlacar(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego,
   gastoCampanhas?: readonly { campanhaId: string; gasto: number }[],
-  filtro: FiltroBase = { funil: 'todos', canal: 'todos' }): Cpl {
+  filtro: FiltroBase = { funil: 'todos', canal: 'todos' }, gastoDiario?: TrafegoBlack['gastoCampanhasDiario']): Cpl {
   const { gasto } = gastoDasLinhas(dias, gastoCampanhas, idx, (l) => linhaEhCaptacao(l) && linhaNoFunil(filtro.funil, l),
-    (c) => filtro.canal === 'todos' || c.canal === filtro.canal);
+    (c) => filtro.canal === 'todos' || c.canal === filtro.canal, gastoDiario);
   const leadsPagos = pessoasUnicas(linhasCaptacao(linhas, idx, filtro).filter(ehPago));
   return { gasto, leadsPagos, valor: cpl(gasto, leadsPagos) };
 }
 
+/** Rótulo da linha que guarda o gasto de uma campanha mista (`c2`) que nenhum anúncio explica. */
+export const ROTULO_SEM_DETALHE = 'Sem detalhe por anúncio';
+
 export interface LinhaCplEtapa {
-  chave: string; rotulo: string; nivel: 'etapa' | 'isca' | 'conjunto'; funil: Funil | null; linha: LinhaBlack; cpl: Cpl;
+  chave: string; rotulo: string; nivel: 'etapa' | 'isca' | 'conjunto' | 'sem_detalhe'; funil: Funil | null; linha: LinhaBlack; cpl: Cpl;
   /** Gasto de cada campanha que entrou na linha da etapa (soma = gasto da linha). Só nas linhas de nível `etapa`. */
   campanhas?: { id: string; gasto: number }[];
 }
@@ -338,9 +350,14 @@ export interface LinhaCplEtapa {
  * Gasto da etapa ÷ leads pagos atribuídos aos mesmos conjuntos. Rótulo do conjunto = nome exato da fonte.
  * `dias` e `linhas` chegam já no recorte de canal (o de funil não se aplica: cada etapa é o seu funil); `canal` filtra o
  * gasto por campanha, que a fonte não entrega dividido por canal.
+ * A CAMPANHA é o dinheiro e o anúncio só divide (rateio.ts): Consultoria + Iscas + "Sem detalhe por anúncio" = gasto da
+ * campanha `c2`; isca e conjunto da C3 saem do mesmo rateio. `gastoDiario` (gastoCampanhasDiario) limita o peso aos dias
+ * que têm linha de anúncio.
  */
 export function cplPorEtapa(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego,
-  gastoCampanhas?: readonly { campanhaId: string; gasto: number }[], canal: FiltroCanal = 'todos'): LinhaCplEtapa[] {
+  gastoCampanhas?: readonly { campanhaId: string; gasto: number }[], canal: FiltroCanal = 'todos',
+  gastoDiario?: TrafegoBlack['gastoCampanhasDiario']): LinhaCplEtapa[] {
+  const rateio = ratear(dias, { gastoCampanhas, gastoCampanhasDiario: gastoDiario }, idx);
   const leadsDe = (pertence: (l: LinhaBlack | null) => boolean, conjuntoOk?: (cj: Conjunto | undefined) => boolean) => linhas.filter((l) => {
     if (l.pagina === 'consultoria_respondi' || !ehPago(l)) return false;
     const linha = linhaDoLead(l, idx);
@@ -349,16 +366,16 @@ export function cplPorEtapa(dias: readonly DesempenhoDia[], linhas: readonly Lin
   });
   const etapa = (linha: LinhaBlack): { cpl: Cpl; campanhas: { id: string; gasto: number }[] } => {
     // O gasto da campanha (dias_campanha) não vem filtrado por canal: com canal escolhido, só as campanhas dele entram, como os leads.
-    const g = gastoDasLinhas(dias, gastoCampanhas, idx, (l) => l === linha, (c) => canal === 'todos' || c.canal === canal);
+    const g = gastoDasLinhas(dias, gastoCampanhas, idx, (l) => l === linha, (c) => canal === 'todos' || c.canal === canal, gastoDiario);
     const leadsPagos = pessoasUnicas(leadsDe((l) => l === linha));
     return { cpl: { gasto: g.gasto, leadsPagos, valor: cpl(g.gasto, leadsPagos) },
       campanhas: [...g.porCampanha].map(([id, gasto]) => ({ id, gasto })) };
   };
-  // Nível conjunto e isca: só dias por anúncio (o gasto de campanha não separa conjunto).
+  // Nível conjunto e isca: o gasto da campanha rateado pelo gasto por anúncio (a campanha não separa conjunto sozinha).
   const porConjunto = (linha: LinhaBlack, conjuntoOk: (cj: Conjunto | undefined) => boolean): Cpl => {
-    const ds = dias.filter((d) => idx.linhaDoAnuncio(d.anuncioId) === linha && conjuntoOk(idx.conjuntoDoAnuncio(d.anuncioId) ?? undefined));
+    const ds = rateio.dias.filter((d) => idx.linhaDoAnuncio(d.anuncioId) === linha && conjuntoOk(idx.conjuntoDoAnuncio(d.anuncioId) ?? undefined));
     const leadsPagos = pessoasUnicas(leadsDe((l) => l === linha, conjuntoOk));
-    const gasto = ds.length ? gastoDe(ds) : null;
+    const gasto = ds.length ? centavosSomados(ds) : null;
     return { gasto, leadsPagos, valor: cpl(gasto, leadsPagos) };
   };
   const linhaEtapa = (chave: string, rotulo: string, linha: LinhaBlack, funil: Funil | null): LinhaCplEtapa => {
@@ -376,12 +393,19 @@ export function cplPorEtapa(dias: readonly DesempenhoDia[], linhas: readonly Lin
   out.push(linhaEtapa('remarketing_pagina', 'Remarketing da página', 'remarketing_pagina', null));
   out.push(linhaEtapa('c3', 'C3', 'c3', 'c3'));
   const conjuntosC3 = new Map<string, string>();
-  for (const d of dias) {
+  for (const d of rateio.dias) {
     const cj = idx.conjuntoDoAnuncio(d.anuncioId);
     if (cj && idx.linhaDoAnuncio(d.anuncioId) === 'c3') conjuntosC3.set(cj.id, cj.nome);
   }
   for (const [id, nome] of conjuntosC3) {
     out.push({ chave: `conjunto:${id}`, rotulo: nome, nivel: 'conjunto', funil: 'c3', linha: 'c3', cpl: porConjunto('c3', (cj) => cj?.id === id) });
+  }
+  // Gasto da campanha mista (`c2`) que nenhum anúncio explica (campanha sem linha de anúncio no recorte, ou dias sem linha):
+  // sem ele, Consultoria + Iscas ficaria abaixo do gasto da campanha. Não tem lead (não há como atribuir sem o anúncio).
+  const semDetalhe = somaSemDetalhe(rateio, idx, (c) => linhaDaCampanha(c) === 'c2' && (canal === 'todos' || c.canal === canal));
+  if (semDetalhe > 0) {
+    out.push({ chave: 'sem-detalhe', rotulo: ROTULO_SEM_DETALHE, nivel: 'sem_detalhe', funil: null, linha: 'c2',
+      cpl: { gasto: semDetalhe, leadsPagos: 0, valor: null } });
   }
   return out;
 }

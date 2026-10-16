@@ -9,7 +9,7 @@ import { deslocarDia } from '@/modules/infra/atm/domain/periodo';
 import { diaDe } from '../domain/recorte';
 import { alertasNomenclatura } from '../domain/alertas-nomenclatura';
 import {
-  agregar, cpc, cplPorEtapa, cpm, ctr, custoPorVisualizacao,
+  agregar, cpc, cplPorEtapa, ROTULO_SEM_DETALHE, cpm, ctr, custoPorVisualizacao,
   ehPago, enviosMqlMaisRecentes, farolCpl, filtrarDias, filtrarLinhas, gastoDe, linhasCaptacao, somar, taxa as construirTaxa,
   taxaVideo75, type Taxa as TipoTaxa,
 } from '../domain/metricas';
@@ -24,9 +24,10 @@ import { ProjecaoCaptacao } from './ProjecaoCaptacao';
 import { EvolucaoMetaIndicador, metaLeadsAcumuladaAte } from './EvolucaoMeta';
 import { TabelaLeads } from './perfil/TabelaLeads';
 import { ResumoLeads } from './ResumoLeads';
-import { cplCaptacao, cplDoRecorte, investimentoDoRecorte, connectRate as connectRateNumero, conversaoPagina as conversaoPaginaNumero, gastoCampanha, investimentoTrafego, leadsDoTrafego, leadsPessoas, mql as mqlNumero, taxaMql, investimentoDeCaptacao, ingressoGrupoGeral } from '../domain/numeros';
+import { cplCaptacao, cplDoRecorte, investimentoDoRecorteValor, connectRate as connectRateNumero, conversaoPagina as conversaoPaginaNumero, gastoCampanha, investimentoTrafego, leadsDoTrafego, leadsPessoas, mql as mqlNumero, taxaMql, investimentoDeCaptacao, ingressoGrupoGeral } from '../domain/numeros';
 import type { FormatoMetrica } from '../domain/jornada';
 import { compararMeta } from '../domain/meta';
+import { ratear, somaSemDetalhe } from '../domain/rateio';
 
 const TODAS: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo', 'perfil'];
 const TRAFEGO: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo'];
@@ -245,7 +246,8 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   // Ordem pedida pelo Victor (12/10): Impressões, CPM, Cliques, CTR, CPC, Visualizações, Connect, Inscrições, Conversão. O card Grupo em 48h saiu em 13/10: fica a taxa de Ingresso no grupo.
   const cards3: { c: CardDef; valor: ReactNode; hint?: ReactNode }[] = [
     { c: { id: 'investimento-captacao', rotulo: 'Investimento em captação', formato: 'brl', medir: (x, _l, recorte) => {
-        if (recorte) return investimentoDoRecorte(d.trafegoPeriodo, d.periodo, recorte).total;
+        // Recorte sem campanha de captação (canal Google, fases Antecipação, Aquecimento, Remarketing): null, "Sem dado", nunca R$ 0,00 (igual ao cplDoRecorte).
+        if (recorte) return investimentoDoRecorteValor(d.trafegoPeriodo, d.periodo, recorte);
         const cap = capDias(x, d); return cap.length ? gastoDe(cap) : null;
       }, aplica: TRAFEGO,
       dica: `Campanhas de captação pela linha do banco: iscas, consultoria, C3 e remarketing da página. ${NOTA_ENTRESAFRA}.` },
@@ -287,9 +289,10 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const linhasCanal = filtrarLinhas(d.linhasPeriodoSemFiltro, { funil: 'todos', canal: recorte.canal }, idx);
   // Cada etapa é o seu funil: dias, cadastros e gasto seguem o canal da tela, não o funil (senão o gasto da etapa, que é do período
   // todo, ficaria sobre os leads de outro funil, ou de um só canal).
-  const etapas = cplPorEtapa(diasCanal, linhasCanal, idx, d.trafegoPeriodo.gastoCampanhas, recorte.canal);
+  const etapas = cplPorEtapa(diasCanal, linhasCanal, idx, d.trafegoPeriodo.gastoCampanhas, recorte.canal, d.trafegoPeriodo.gastoCampanhasDiario);
   const dEtapas: DadosTela = { ...d, dias: diasCanal, linhas: linhasCanal };
   const etapaRemarketing = etapas.find((e) => e.chave === 'remarketing_pagina')?.cpl ?? null;
+  const etapaSemDetalhe = etapas.find((e) => e.nivel === 'sem_detalhe') ?? null;
   // Campanhas que o banco não classificou (linha null): contam no tráfego, ficam fora da captação, e aparecem aqui.
   const semClassificacao = d.trafegoPeriodo.campanhas.filter((c) => linhaDaCampanha(c) === null);
   const semClassificacaoGasto: Valor = semClassificacao.length === 0 ? null
@@ -434,6 +437,15 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
                 </EtapaFechada>
               );
             })}
+            {etapaSemDetalhe && (
+              <section className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] p-3" aria-label={ROTULO_SEM_DETALHE}>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span className="min-w-32 flex-1 font-semibold text-[var(--fg)]">{ROTULO_SEM_DETALHE}</span>
+                  <span className="text-xs text-[var(--fg-2)]">Investimento <strong className="ml-1 tabular text-[var(--fg)]"><Numero valor={etapaSemDetalhe.cpl.gasto} formato="brl" animado={false} /></strong></span>
+                </div>
+                <p className="mt-1 text-[11px] text-[var(--fg-3)]">Gasto da campanha mista (Consultoria + Iscas) sem linha de anúncio no período: entra no total da campanha, mas nenhuma isca nem a consultoria o explica. Sem CPL.</p>
+              </section>
+            )}
             <EtapaFechada titulo="Remarketing da página" gasto={etapaRemarketing?.gasto != null && (etapaRemarketing.gasto > 0 || etapaRemarketing.leadsPagos) ? etapaRemarketing.gasto : null}
               leads={etapaRemarketing?.leadsPagos ?? null} cpl={etapaRemarketing ?? null} aberta={etapaAberta === 'remarketing_pagina'}
               onToggle={() => setEtapaAberta((v) => v === 'remarketing_pagina' ? null : 'remarketing_pagina')} onAbrir={() => d.irPara({ aba: 'criativos', funil: 'todos', criativos: {} })}>
@@ -488,16 +500,22 @@ function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
 
 function ColunaC1({ d, dias }: { d: DadosTela; dias: DesempenhoDia[] }) {
   const a = agregar(dias);
+  const rateio = ratear(dias, d.trafegoPeriodo, d.idx);
+  const diasRateados = rateio.dias;
+  const gastoC1 = gastoDe(diasRateados) ?? 0;
+  const semDetalheC1 = somaSemDetalhe(rateio, d.idx, (c) => dias.some((x) => d.idx.campanhaDoAnuncio(x.anuncioId)?.id === c.id));
   // Alcance e frequência não somam entre campanhas: só com uma campanha C1 no recorte.
   const campanhas = [...new Set(dias.map((x) => d.idx.campanhaDoAnuncio(x.anuncioId)?.id).filter((x): x is string => Boolean(x)))];
   const total = campanhas.length === 1 ? d.totaisPeriodo.find((t) => t.nivel === 'campanha' && t.id === campanhas[0]) : undefined;
   const falta = campanhas.length > 1 ? 'alcance não soma entre campanhas' : 'alcance do período';
   return (
     <div className="divide-y divide-[var(--border-faint)]">
-      <Linha rotulo="Gasto"><Numero valor={dias.length ? a.gasto : null} formato="brl" animado={false} /></Linha>
+      {/* Gasto = o da campanha (igual à linha C1 · Distribuição de CPL por etapa, na mesma tela), dividido pelos anúncios; o resto (dias sem linha de anúncio) vem em "Sem detalhe por anúncio". Impressões, CPM e vídeo seguem por anúncio. */}
+      <Linha rotulo="Gasto"><Numero valor={dias.length ? gastoC1 + semDetalheC1 : null} formato="brl" animado={false} /></Linha>
       {dias.length > 0 && <>
-        <Linha rotulo="Gasto · teaser e manifesto"><Numero valor={gastoDe(dias.filter((x) => d.idx.linhaDoAnuncio(x.anuncioId) === 'c1'))} formato="brl" animado={false} /></Linha>
-        <Linha rotulo="Gasto · distribuição"><Numero valor={gastoDe(dias.filter((x) => d.idx.linhaDoAnuncio(x.anuncioId) === 'distribuicao'))} formato="brl" animado={false} /></Linha>
+        <Linha rotulo="Gasto · teaser e manifesto"><Numero valor={gastoDe(diasRateados.filter((x) => d.idx.linhaDoAnuncio(x.anuncioId) === 'c1'))} formato="brl" animado={false} /></Linha>
+        <Linha rotulo="Gasto · distribuição"><Numero valor={gastoDe(diasRateados.filter((x) => d.idx.linhaDoAnuncio(x.anuncioId) === 'distribuicao'))} formato="brl" animado={false} /></Linha>
+        {semDetalheC1 > 0 && <Linha rotulo={`Gasto · ${ROTULO_SEM_DETALHE.toLowerCase()}`}><Numero valor={semDetalheC1} formato="brl" animado={false} /></Linha>}
       </>}
       <Linha rotulo="Impressões"><Numero valor={dias.length ? a.impressoes : null} formato="int" animado={false} /></Linha>
       <Linha rotulo="Alcance"><Numero valor={total?.alcance ?? null} formato="int" falta={falta} animado={false} /></Linha>

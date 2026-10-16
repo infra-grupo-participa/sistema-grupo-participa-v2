@@ -190,17 +190,21 @@ export function metricasDistribuicao(dias: readonly DesempenhoDia[]): MetricaNo[
   ];
 }
 
-/** Métricas de captação (C2 e C3): tráfego, página e leads. */
-export function metricasCaptacao(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego, rotuloLeads = 'Leads pagos'): MetricaNo[] {
-  if (dias.length === 0 && linhas.length === 0) return [];
+/**
+ * Métricas de captação (C2 e C3): tráfego, página e leads. `semDetalhe` é o gasto das campanhas únicas da linha que nenhum
+ * anúncio explica (campanha sem linha de anúncio no recorte): a campanha é o dinheiro, então entra no Investimento do nó.
+ */
+export function metricasCaptacao(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego, rotuloLeads = 'Leads pagos', semDetalhe = 0): MetricaNo[] {
+  if (dias.length === 0 && linhas.length === 0 && semDetalhe <= 0) return [];
   const a = agregar(dias);
   const leads = leadsPagosUnicos(linhas);
-  const c = cplCaptacao(dias.length ? a.gasto : null, leads);
+  const gasto: Valor = dias.length || semDetalhe > 0 ? a.gasto + semDetalhe : null;
+  const c = cplCaptacao(gasto, leads);
   const cr = connectRate(dias, idx);
   const conv = conversaoPagina(dias, linhas, idx);
   const t = ctr(a);
   return [
-    m('Investimento', dias.length ? a.gasto : null, 'brl'), m('Impressões', dias.length ? a.impressoes : null, 'int'),
+    m('Investimento', gasto, 'brl'), m('Impressões', dias.length ? a.impressoes : null, 'int'),
     m('Cliques', a.cliques.valor, 'int'), m('CTR', t.valor, 'pct', { taxa: t }),
     m('Views da página', a.lpv.valor, 'int'), m('Connect rate', cr.valor, 'pct', { taxa: cr, nota: cr.nota ?? undefined }),
     m(rotuloLeads, leads.valor, 'int'), m('Conversão da página', conv.valor, 'pct', { taxa: conv, nota: conv.nota ?? undefined }),
@@ -209,23 +213,28 @@ export function metricasCaptacao(dias: readonly DesempenhoDia[], linhas: readonl
 }
 
 /** Topo do anúncio (sem página): investimento, impressões, cliques e CTR. */
-function metricasCriativo(dias: readonly DesempenhoDia[]): MetricaNo[] {
-  if (dias.length === 0) return [];
+function metricasCriativo(dias: readonly DesempenhoDia[], semDetalhe = 0): MetricaNo[] {
+  if (dias.length === 0 && semDetalhe <= 0) return [];
   const a = agregar(dias);
   const t = ctr(a);
-  return [m('Investimento', a.gasto, 'brl'), m('Impressões', a.impressoes, 'int'), m('Cliques', a.cliques.valor, 'int'), m('CTR', t.valor, 'pct', { taxa: t })];
+  return [m('Investimento', a.gasto + semDetalhe, 'brl'), m('Impressões', a.impressoes, 'int'), m('Cliques', a.cliques.valor, 'int'), m('CTR', t.valor, 'pct', { taxa: t })];
 }
 
 /**
  * Métricas de cada nó. Nós de funil usam os dados SEM o filtro de funil (o filtro só apaga os outros nós); a
  * cadeia comum (Lista em diante) usa as linhas já filtradas pelo funil escolhido (`linhasDoFunil`).
  * Lista vazia = nó sem dado no período (a tela mostra "Sem dado").
+ * A CAMPANHA é o dinheiro (rateio.ts): `dias` chegam com o gasto já rateado pelo gasto da campanha, e `semDetalhe` traz, por
+ * linha, o gasto das campanhas únicas sem linha de anúncio (vai inteiro para o nó da linha). Campanha mista (`c2`) sem
+ * detalhe não tem nó: aparece como "Sem detalhe por anúncio" no CPL por etapa da Visão geral.
  */
 export function calcularJornada(args: {
   dias: readonly DesempenhoDia[]; linhas: readonly LinhaPerfil[]; linhasDoFunil: readonly LinhaPerfil[]; idx: IndiceTrafego;
   config: Pick<ConfigBlack, 'baseDaCasa' | 'metaLeads'>; agora: Date; mensageria: MensageriaBlack | null;
+  semDetalhe?: Partial<Record<LinhaBlack, number>>;
 }): MapaMetricas {
   const { dias, linhas, linhasDoFunil, idx, config, agora, mensageria } = args;
+  const sem = (l: LinhaBlack) => args.semDetalhe?.[l] ?? 0;
   const out: MapaMetricas = {};
   for (const n of NOS) out[n.id] = [];
   const rec = (id: string) => recortarNo(NO.get(id)!, dias, linhas, idx);
@@ -250,15 +259,15 @@ export function calcularJornada(args: {
     m('Já na base e cadastrados', linhas.filter((l) => l.jaNaBase === true).length, 'int'),
   ];
   const cons = rec('convite-consultoria');
-  out['convite-consultoria'] = metricasCriativo(cons.dias);
-  out['aplicacao-consultoria'] = metricasCaptacao(cons.dias, cons.linhas, idx, 'Aplicações');
+  out['convite-consultoria'] = metricasCriativo(cons.dias, sem('consultoria'));
+  out['aplicacao-consultoria'] = metricasCaptacao(cons.dias, cons.linhas, idx, 'Aplicações', sem('consultoria'));
   const isc = rec('criativo-isca');
-  out['criativo-isca'] = metricasCriativo(isc.dias);
-  out['pagina-isca'] = metricasCaptacao(isc.dias, isc.linhas, idx);
+  out['criativo-isca'] = metricasCriativo(isc.dias, sem('iscas'));
+  out['pagina-isca'] = metricasCaptacao(isc.dias, isc.linhas, idx, 'Leads pagos', sem('iscas'));
   const c3 = rec('captacao-direta');
-  out['captacao-direta'] = metricasCaptacao(c3.dias, c3.linhas, idx);
+  out['captacao-direta'] = metricasCaptacao(c3.dias, c3.linhas, idx, 'Leads pagos', sem('c3'));
   const rmk = rec('remarketing');
-  out.remarketing = metricasCaptacao(rmk.dias, rmk.linhas, idx);
+  out.remarketing = metricasCaptacao(rmk.dias, rmk.linhas, idx, 'Leads pagos', sem('remarketing_pagina'));
   const ins = rec('inscricao');
   const pessoasInscricao = leadsPessoas(ins.linhas).valor ?? 0;
   const pagosInscricao = leadsDoTrafego(ins.linhas, idx).valor ?? 0;

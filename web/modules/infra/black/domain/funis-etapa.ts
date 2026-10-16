@@ -7,6 +7,7 @@ import type { Campanha, Conjunto, DesempenhoDia, Funil, LinhaPerfil, NoBlack, Tr
 import { ROTULO_NO } from './tipos';
 import { linhaDaCampanha, linhaNoFunil, noDoConjunto } from './linha-black';
 import type { IndiceTrafego } from './metricas';
+import { ratear } from './rateio';
 
 export interface ColunaFunil {
   /** Título da coluna: peça do C1, isca (Iscas), Consultoria, subtipo ou nome da campanha (C3). */
@@ -18,7 +19,8 @@ export interface ColunaFunil {
   linhas: LinhaPerfil[];
   /**
    * Investimento da coluna. Campanha que cabe inteira na coluna entra pelo gasto da campanha (dias_campanha); campanha
-   * repartida entre colunas (ou mista) entra pela soma dos anúncios dos conjuntos da coluna. null = sem dado de alguma.
+   * repartida entre colunas (ou mista) entra com a parte do gasto da campanha proporcional aos anúncios dos conjuntos da
+   * coluna (rateio.ts: a campanha é o dinheiro, o anúncio só divide). null = sem dado de alguma.
    */
   gasto: Valor;
 }
@@ -45,12 +47,13 @@ function rotuloC1(no: NoBlack | null, linha: string | null): string {
 }
 
 /**
- * `dias` e `linhas` chegam já no período e no canal escolhidos, de todos os funis. Só entram conjuntos com dado no
- * recorte (dia de desempenho).
+ * `dias` e `linhas` chegam já no período e no canal escolhidos, de todos os funis (o rateio precisa de todas as linhas da
+ * campanha, não só as de um funil). Só entram conjuntos com dado no recorte (dia de desempenho). As linhas de cada coluna
+ * (`col.dias`) saem já rateadas, então impressões e CPM da coluna continuam sobre o mesmo gasto do Investimento.
  */
 export function funisDaEtapa(funil: Funil, trafego: TrafegoBlack, dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego): FunisDaEtapa {
   const comDado = new Map<string, DesempenhoDia[]>();
-  for (const d of dias) {
+  for (const d of ratear(dias, trafego, idx).dias) {
     const cj = idx.conjuntoDoAnuncio(d.anuncioId);
     if (!cj) continue;
     comDado.set(cj.id, [...(comDado.get(cj.id) ?? []), d]);
@@ -110,7 +113,7 @@ export function funisDaEtapa(funil: Funil, trafego: TrafegoBlack, dias: readonly
         return null;
       }
       const ds = diasDaColuna.filter((d) => idx.campanhaDoAnuncio(d.anuncioId)?.id === c.id);
-      return ds.length ? ds.reduce((s, d) => s + d.gasto, 0) : null;
+      return ds.length ? ds.reduce((s, d) => s + Math.round(d.gasto * 100), 0) / 100 : null;
     });
     const gasto: Valor = gastoPorCampanha.length === 0 || gastoPorCampanha.some((x) => x === null) ? null : gastoPorCampanha.reduce<number>((s, x) => s + (x as number), 0);
     const leadsDaColuna = linhas.filter((l) => {
