@@ -207,7 +207,7 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
           </div>
         </SectionCard>
 
-        {acao.id === 'thb-vencidos' && <PainelRenovThb />}
+        {acao.id === 'thb-vencidos' && etiqueta && <PainelRenovThb chave={etiqueta} onMudou={() => { setVersaoListas((v) => v + 1); void atualizar(); }} />}
 
         <section aria-label="Indicadores da ação">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

@@ -9,7 +9,7 @@ describe('registro de ações da Black', () => {
       nome: 'THB vencidos',
       etiqueta: 'black-thb-2026-10',
       origem: 'renovacao-thb-vencidos',
-      ofertaHotmart: null,
+      ofertaHotmart: 'nv5f10zq',
     });
   });
 

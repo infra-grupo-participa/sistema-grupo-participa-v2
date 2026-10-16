@@ -1,4 +1,4 @@
-/** Painel do /renov (hm.timeholdingbrasil.com.br/renov), 16/10/2026. Lê a RPC dados_renov_thb. */
+/** Painel do /renov (hm.timeholdingbrasil.com.br/renov), 16/10/2026. Lê a RPC dados_renov_thb(p_chave, p_incluir_teste). */
 
 export const OPCOES_RENOV = [
   { chave: 'nao-renovar', rotulo: 'Não renova' },
@@ -17,7 +17,8 @@ export const OPCAO_DA_OFERTA: Record<string, string> = { nv5f10zq: 'renovar-hold
 
 export type AplicacaoRenov = {
   id: string; criadoEm: string; opcao: string; origem: string; pagou: boolean;
-  teste: boolean; testeFixo: boolean; acessosAntes: number | null;
+  /** teste efetivo = coluna legada OU e-mail @advmais.com OU marcação do dashboard (dados.marcacoes_teste). */
+  teste: boolean; testeFixo: boolean; testeColuna: boolean; testeMarcado: boolean; acessosAntes: number | null;
   nome: string | null; email: string | null; telefone: string | null;
 };
 export type VendaRenov = { em: string; oferta: string; valor: number; aplicou: boolean; nome: string | null; email: string | null };
@@ -25,6 +26,10 @@ export type PainelRenov = {
   total: number;
   porOpcao: { chave: string; rotulo: string; n: number }[];
   aplicaramEPagaram: number;
+  /** Vendas e valor das ofertas da ação, pela mesma regra do card Vendas. */
+  vendasTotal: number;
+  valorTotal: number;
+  semOferta: boolean;
   acessos: number;
   visitantes: number;
   visitantesQueAplicaram: number;
@@ -55,6 +60,9 @@ export function mapearPainelRenov(bruto: unknown): PainelRenov {
     total: n(r.aplicacoes_total),
     porOpcao: OPCOES_RENOV.map((o) => ({ chave: o.chave, rotulo: o.rotulo, n: n(porOpcao[o.chave]) })),
     aplicaramEPagaram: n(r.aplicaram_e_pagaram),
+    vendasTotal: n(r.vendas_total),
+    valorTotal: n(r.valor_total),
+    semOferta: r.sem_oferta === true,
     acessos: n(r.acessos),
     visitantes,
     visitantesQueAplicaram,
@@ -62,7 +70,7 @@ export function mapearPainelRenov(bruto: unknown): PainelRenov {
     vendas: lista(r.vendas).map((v) => ({ oferta: String(v.oferta), rotulo: OFERTAS_RENOV[String(v.oferta)] ?? String(v.oferta), vendas: n(v.vendas), valor: n(v.valor) })),
     aplicacoes: lista(r.aplicacoes).map((a) => ({
       id: String(a.id ?? ''), criadoEm: String(a.criado_em), opcao: String(a.opcao), origem: s(a.origem) ?? '', pagou: a.pagou === true,
-      teste: a.teste === true, testeFixo: a.teste_fixo === true,
+      teste: a.teste === true, testeFixo: a.teste_fixo === true, testeColuna: a.teste_coluna === true, testeMarcado: a.teste_marcado === true,
       acessosAntes: a.acessos_antes === null || a.acessos_antes === undefined ? null : n(a.acessos_antes),
       nome: s(a.nome), email: s(a.email), telefone: s(a.telefone),
     })),

@@ -2,13 +2,15 @@
 
 // Aplicações do /renov (hm.timeholdingbrasil.com.br/renov), acessos da página e vendas das duas ofertas, 16/10/2026.
 // Uma RPC (dados_renov_thb), lida ao abrir, no Atualizar e ao ligar "ver testes". Cards filtram a tabela.
-// Marcar teste por linha só para master (renov_marcar_teste); e-mail @advmais.com é sempre teste.
+// Teste = coluna legada OU e-mail @advmais.com OU marcação do dashboard (dados.marcacoes_teste, a mesma da aba Leads). Marcar e desmarcar só master.
+// A RPC é da ação (p_chave) e passa pela guarda do dashboard (dados.atm_cadastro).
 import { useCallback, useEffect, useState } from 'react';
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
-import { EmptyState, KpiCard, SectionCard } from '@/shared/ui/components';
+import { desmarcarAtmTeste, marcarAtmTeste } from '@/modules/infra/atm/infrastructure/atm-data';
+import { ConfirmDialog, EmptyState, KpiCard, SectionCard } from '@/shared/ui/components';
 import {
   filtrarAplicacoesRenov, LINK_OFERTA_RENOV, mapearPainelRenov, mesmoFiltroRenov, OFERTAS_RENOV, rotuloOpcaoRenov,
-  type FiltroRenov, type PainelRenov,
+  type AplicacaoRenov, type FiltroRenov, type PainelRenov,
 } from '../domain/renov';
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
@@ -21,29 +23,46 @@ function CardFiltro({ ativo, onClick, children }: { ativo: boolean; onClick: () 
     className={`text-left rounded-[var(--r-lg)] ${ativo ? 'ring-2 ring-[var(--accent)]' : ''}`}>{children}</button>;
 }
 
-export function PainelRenovThb() {
+type AlvoTeste = { aplicacao: AplicacaoRenov; teste: boolean };
+
+/** `onMudou` avisa o dashboard para reler os cards (marcar o e-mail tira a venda e o lead dos números da ação). */
+export function PainelRenovThb({ chave, onMudou }: { chave: string; onMudou?: () => void }) {
   const [dados, setDados] = useState<PainelRenov | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [lendo, setLendo] = useState(false);
   const [verTestes, setVerTestes] = useState(false);
   const [filtro, setFiltro] = useState<FiltroRenov>(null);
   const [marcando, setMarcando] = useState<string | null>(null);
+  const [alvo, setAlvo] = useState<AlvoTeste | null>(null);
 
   const ler = useCallback(async (comTestes: boolean) => {
     setLendo(true);
-    const { data, error } = await createBrowserSupabase().rpc('dados_renov_thb', { p_incluir_teste: comTestes });
+    const { data, error } = await createBrowserSupabase().rpc('dados_renov_thb', { p_chave: chave, p_incluir_teste: comTestes });
     if (error) setErro('Não foi possível ler as aplicações agora.');
     else { setErro(null); setDados(mapearPainelRenov(data)); }
     setLendo(false);
-  }, []);
+  }, [chave]);
   useEffect(() => { void ler(verTestes); }, [ler, verTestes]);
 
   const alternar = (f: FiltroRenov) => setFiltro((atual) => (mesmoFiltroRenov(atual, f) ? null : f));
-  const marcarTeste = async (id: string, teste: boolean) => {
-    setMarcando(id);
-    const { error } = await createBrowserSupabase().rpc('renov_marcar_teste', { p_id: id, p_teste: teste });
-    if (error) setErro(error.code === '42501' ? 'Só master marca teste.' : 'Não foi possível marcar agora.');
+  // Marcar: pelo e-mail (o telefone da pessoa pode ser de um lead real e mexeria nos números do grupo). Desmarcar: tira a marcação do e-mail e do
+  // telefone dessa pessoa e, se a linha ainda tem a coluna legada, também ela.
+  const confirmarTeste = async ({ aplicacao: a, teste }: AlvoTeste) => {
+    setAlvo(null);
+    setMarcando(a.id);
+    let falha: string | null = null;
+    if (teste) {
+      falha = (await marcarAtmTeste(chave, a.email, null)).erro;
+    } else {
+      if (a.testeMarcado) falha = (await desmarcarAtmTeste(chave, a.email, a.telefone)).erro;
+      if (!falha && a.testeColuna) {
+        const { error } = await createBrowserSupabase().rpc('renov_marcar_teste', { p_id: a.id, p_teste: false });
+        if (error) falha = error.code === '42501' ? 'Só master marca teste.' : 'Não foi possível desmarcar agora.';
+      }
+    }
+    setErro(falha);
     await ler(verTestes);
+    if (!falha) onMudou?.();
     setMarcando(null);
   };
 
@@ -87,7 +106,8 @@ export function PainelRenovThb() {
             <td className="p-2">{a.pagou ? 'Sim' : 'Não'}</td>
             {dados.veContato && <><td className="p-2">{a.nome}</td><td className="p-2">{a.email}</td><td className="p-2 whitespace-nowrap">{a.telefone}</td></>}
             {dados.ehMaster && <td className="p-2">{a.testeFixo ? <span className="text-xs text-[var(--fg-3)]">sempre teste</span> :
-              <button type="button" disabled={marcando === a.id || !a.id} onClick={() => void marcarTeste(a.id, !a.teste)} className={botao}>{a.teste ? 'Desmarcar' : 'Marcar teste'}</button>}</td>}
+              !a.teste && !dados.veContato ? <span className="text-xs text-[var(--fg-3)]">precisa de contato.ver</span> :
+              <button type="button" disabled={marcando === a.id || !a.id} onClick={() => setAlvo({ aplicacao: a, teste: !a.teste })} className={botao}>{a.teste ? 'Desmarcar' : 'Marcar teste'}</button>}</td>}
           </tr>)}</tbody></table>}
       </div>
       <div className="overflow-x-auto">
@@ -104,5 +124,10 @@ export function PainelRenovThb() {
         <p className="mt-2 text-xs text-[var(--fg-3)]">Ofertas: {Object.entries(OFERTAS_RENOV).map(([cod, rotulo], i) => <span key={cod}>{i > 0 ? ' · ' : ''}<a href={LINK_OFERTA_RENOV(cod)} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] underline">{cod}</a> {rotulo}</span>)}</p>
       </div>
     </div>}
+    {alvo && <ConfirmDialog title={alvo.teste ? 'Marcar aplicação como teste' : 'Desmarcar teste'} confirmLabel={alvo.teste ? 'Marcar como teste' : 'Desmarcar'} cancelLabel="Cancelar"
+      onCancel={() => setAlvo(null)} onConfirm={() => void confirmarTeste(alvo)}
+      message={alvo.teste
+        ? 'A marcação vale só para esta ação da Black e é pelo e-mail da pessoa. A aplicação sai da contagem e, se esse e-mail também tiver comprado ou for lead desta ação, a venda e o lead saem dos números dela. Dá para desfazer aqui, com "Ver testes" ligado. Quer continuar?'
+        : 'A pessoa volta a contar nesta ação: a aplicação, e a venda e o lead se houver. Tira a marcação do e-mail e do telefone dela. Quer continuar?'} />}
   </SectionCard>;
 }
