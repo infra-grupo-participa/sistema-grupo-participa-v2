@@ -31,16 +31,24 @@ export function veComoGestor(quem: Quem): boolean {
   return quem?.papel === 'gestor' || quem?.papel === 'leitor';
 }
 
-/** Gestor mexe em qualquer negócio; vendedor só no que é dele. Sem sessão: não mexe. */
+/**
+ * 20261017000300 (crm.eh_operador): por enquanto, vendedor ativo opera o Comercial como o gestor (mexe em qualquer negócio,
+ * troca dono, atribui, conclui atividade de outro, escreve para qualquer contato). Configuração continua só do gestor.
+ */
+export function operaComoGestor(quem: Quem): boolean {
+  return quem?.papel === 'gestor' || quem?.papel === 'vendedor';
+}
+
+/** Gestor e vendedor (20261017000300) mexem em qualquer negócio. Sem sessão ou leitor: não mexe. */
 export function podeMexerNoNegocio(n: Pick<Negocio, 'donoId'>, quem: Quem): boolean {
   if (!quem || somenteLeitura(quem)) return false;
-  if (quem.papel === 'gestor') return true;
+  if (operaComoGestor(quem)) return true;
   return !!n.donoId && n.donoId === quem.vendedorId;
 }
 
 /** Trocar o dono do negócio (ou definir o dono do contato) é só do gestor. */
 export function podeTrocarDono(quem: Quem): boolean {
-  return quem?.papel === 'gestor';
+  return operaComoGestor(quem);  // 20261017000300
 }
 
 /**
@@ -64,7 +72,7 @@ export function motivoSomenteLeitura(n: Pick<Negocio, 'donoId'>, quem: Quem, nom
 /** Concluir atividade (espelho de `crm_concluir_atividade`): só o dono DA ATIVIDADE ou o gestor; já concluída, ninguém. */
 export function podeConcluirAtividade(a: Pick<Atividade, 'donoId' | 'concluidaEm'>, quem: Quem): boolean {
   if (!quem || a.concluidaEm || somenteLeitura(quem)) return false;
-  return quem.papel === 'gestor' || (!!a.donoId && a.donoId === quem.vendedorId);
+  return operaComoGestor(quem) || (!!a.donoId && a.donoId === quem.vendedorId);
 }
 
 /**
@@ -73,7 +81,7 @@ export function podeConcluirAtividade(a: Pick<Atividade, 'donoId' | 'concluidaEm
  */
 export function podeAbrirNegocioPara(c: Pick<Contato, 'donoId'>, negociosDaPessoa: Pick<Negocio, 'donoId'>[], quem: Quem): boolean {
   if (!quem || somenteLeitura(quem)) return false;
-  if (quem.papel === 'gestor') return true;
+  if (operaComoGestor(quem)) return true;  // 20261017000300
   return !c.donoId || c.donoId === quem.vendedorId || negociosDaPessoa.some((n) => !!n.donoId && n.donoId === quem.vendedorId);
 }
 
@@ -124,7 +132,7 @@ export function rotulosCampos(campos: CampoKey[]): string[] {
  */
 export function podeEscreverContato(c: Pick<Contato, 'donoId'>, negociosDaPessoa: Pick<Negocio, 'donoId'>[], quem: Quem): boolean {
   if (!quem || somenteLeitura(quem)) return false;
-  if (quem.papel === 'gestor') return true;
+  if (operaComoGestor(quem)) return true;  // 20261017000300
   return (!!c.donoId && c.donoId === quem.vendedorId) || negociosDaPessoa.some((n) => !!n.donoId && n.donoId === quem.vendedorId);
 }
 

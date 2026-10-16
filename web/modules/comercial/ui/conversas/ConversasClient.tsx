@@ -10,7 +10,7 @@ import { fmtDataHora } from '@/shared/ui/format';
 import { Icon } from '@/shared/ui/icons';
 import { fmtTelefone } from '../../domain/regras';
 import type { Contato, Conversa, Negocio } from '../../domain/types';
-import { motivoSomenteLeitura, podeEscrever, podeEscreverContato, travaMover } from '../../domain/travas';
+import { motivoSomenteLeitura, operaComoGestor, podeEscrever, podeEscreverContato, travaMover } from '../../domain/travas';
 import { ModalNovaConversa } from './ModalNovaConversa';
 import { BotaoPlaybook, EstadoErro, FaixaErroAtualizacao, FaixaNumeros, PaginaComercial, Segmentado, Vazio, useEquipe, useParamUrl } from '../comum';
 import { ContatoDrawer } from '../contatos/ContatoDrawer';
@@ -98,7 +98,7 @@ export function ConversasClient() {
   const cvAtiva = conversas?.find((c) => c.contatoId === ativo);
   const donoAtivo = cvAtiva?.atribuidaA ?? null;
   const temNaoLida = (cvAtiva?.naoLidas ?? 0) > 0;
-  const podeMarcarLida = !!ativo && !!sessao && (donoAtivo === sessao.vendedorId || (!donoAtivo && gestor));
+  const podeMarcarLida = !!ativo && !!sessao && (donoAtivo === sessao.vendedorId || (!donoAtivo && operaComoGestor(sessao)));
   const marcadaPara = useRef<string | null>(null);
   useEffect(() => {
     if (!ativo || !podeMarcarLida) return;
@@ -202,7 +202,7 @@ export function ConversasClient() {
   // Atividade/lembrete pelo painel: no negócio aberto mais recente (ou só na pessoa, sem negócio).
   const criarAtividade = async (tipo: Parameters<typeof repo.criarAtividade>[0]['tipo'], titulo: string, venceEm: string) => {
     if (!contato) return;
-    const n = negociosAbertos.find((x) => gestor || x.donoId === sessao?.vendedorId) ?? null;
+    const n = negociosAbertos.find((x) => operaComoGestor(sessao) || x.donoId === sessao?.vendedorId) ?? null;
     const r = await repo.criarAtividade({ negocioId: n?.id ?? null, contatoId: contato.id, tipo, titulo, venceEm });
     flash(r.ok ? r.msg ?? (acao === 'lembrete' ? 'Lembrete criado.' : 'Atividade agendada.') : r.msg ?? 'Não foi possível agendar.');
     if (r.ok) { setAcao(null); avisarMudanca(); }

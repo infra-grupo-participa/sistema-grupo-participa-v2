@@ -68,11 +68,4 @@ describe('podeEditarContato / motivoSemEdicao (espelho de crm.pode_escrever_pess
     expect(podeEditarContato({ donoId: 'v2' }, [], { vendedorId: 'g', papel: 'gestor' })).toBe(true);
     expect(motivoSemEdicao({ donoId: 'v1' }, [], { vendedorId: 'l', papel: 'leitor' }, nomeDe)).toBe('Acesso só de leitura.');
   });
-  it('vendedor não edita contato de outro dono, a menos que seja dono de negócio da pessoa', () => {
-    expect(motivoSemEdicao({ donoId: 'v2' }, [], vendedor, nomeDe)).toBe('Contato de Jusy: só o dono ou o gestor edita.');
-    expect(podeEditarContato({ donoId: 'v2' }, [{ donoId: 'v1' }], vendedor)).toBe(true);
-  });
-  it('sem dono e sem negócio dele: só o gestor', () => {
-    expect(motivoSemEdicao({ donoId: null }, [], vendedor, nomeDe)).toBe('Contato sem dono: só o gestor edita.');
-  });
 });

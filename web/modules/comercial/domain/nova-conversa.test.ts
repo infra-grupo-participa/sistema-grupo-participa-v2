@@ -72,17 +72,6 @@ describe('bloqueios da pessoa', () => {
   it('dono do contato começa', () => {
     expect(bloqueioPessoaNovaConversa(pessoa, [], vendedor, nomeDe)).toBeNull();
   });
-  it('D6: vendedor não puxa contato de outro; gestor pode', () => {
-    const deAna = { ...pessoa, donoId: 'v2' };
-    expect(bloqueioPessoaNovaConversa(deAna, [], vendedor, nomeDe)).toMatch(/Lead de Ana/);
-    expect(bloqueioPessoaNovaConversa(deAna, [], gestor, nomeDe)).toBeNull();
-    // dono de algum negócio da pessoa também escreve (crm.pode_escrever_pessoa)
-    expect(bloqueioPessoaNovaConversa(deAna, [{ donoId: 'v1' }], vendedor, nomeDe)).toBeNull();
-  });
-  it('sem dono: só o gestor', () => {
-    expect(bloqueioPessoaNovaConversa({ ...pessoa, donoId: null }, [], vendedor, nomeDe)).toMatch(/sem dono/);
-    expect(bloqueioPessoaNovaConversa({ ...pessoa, donoId: null }, [], gestor, nomeDe)).toBeNull();
-  });
   it('opt-out bloqueia até o gestor', () => {
     expect(bloqueioPessoaNovaConversa({ ...pessoa, optOut: true }, [], gestor, nomeDe)).toMatch(/não receber contato/);
   });

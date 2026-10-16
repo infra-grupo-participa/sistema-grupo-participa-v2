@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { etapasPadrao } from './funis';
 import {
   motivoSemEscrita, motivoSemNovoNegocio, motivoSomenteLeitura, MSG_SOMENTE_LEITURA, podeAbrirNegocioPara, podeConcluirAtividade, podeEscrever, podeEscreverContato, podeMexerNoNegocio, podePuxarNegocio, podeTrocarDono,
-  somenteLeitura, travaMover, veComoGestor,
+  operaComoGestor, somenteLeitura, travaMover, veComoGestor,
 } from './travas';
 import type { Funil, Negocio, SessaoComercial } from './types';
 
@@ -18,25 +18,9 @@ const neg = (p: Partial<Negocio> = {}): Pick<Negocio, 'donoId' | 'campos' | 'sta
 });
 
 describe('podeMexerNoNegocio (espelho de "Este negócio não é seu.")', () => {
-  it('dono mexe; vendedor não mexe no de outro dono', () => {
-    expect(podeMexerNoNegocio({ donoId: 'ana' }, ana)).toBe(true);
-    expect(podeMexerNoNegocio({ donoId: 'bia' }, ana)).toBe(false);
-  });
-  it('negócio sem dono: só o gestor (o banco compara dono = eu)', () => {
-    expect(podeMexerNoNegocio({ donoId: null }, ana)).toBe(false);
-    expect(podeMexerNoNegocio({ donoId: null }, gestor)).toBe(true);
-  });
   it('gestor mexe em qualquer um; sem sessão ninguém mexe', () => {
     expect(podeMexerNoNegocio({ donoId: 'bia' }, gestor)).toBe(true);
     expect(podeMexerNoNegocio({ donoId: 'ana' }, null)).toBe(false);
-  });
-});
-
-describe('podeTrocarDono', () => {
-  it('só o gestor', () => {
-    expect(podeTrocarDono(gestor)).toBe(true);
-    expect(podeTrocarDono(ana)).toBe(false);
-    expect(podeTrocarDono(null)).toBe(false);
   });
 });
 
@@ -52,14 +36,6 @@ describe('podePuxarNegocio', () => {
     expect(podePuxarNegocio({ donoId: 'jonathan', funilId: 'f-thb' }, ana)).toBe(false);
     expect(podePuxarNegocio({ donoId: 'jonathan', funilId: 'f-thb' }, { ...luis, papel: 'leitor' })).toBe(false);
     expect(podePuxarNegocio({ donoId: 'jonathan', funilId: 'f-thb' }, null)).toBe(false);
-  });
-});
-
-describe('motivoSomenteLeitura', () => {
-  it('explica de quem é, ou que está sem dono', () => {
-    expect(motivoSomenteLeitura({ donoId: 'bia' }, ana, nomeDe)).toBe('Negócio de Bia: só o dono ou o gestor altera.');
-    expect(motivoSomenteLeitura({ donoId: null }, ana, nomeDe)).toMatch(/sem dono/);
-    expect(motivoSomenteLeitura({ donoId: 'ana' }, ana, nomeDe)).toBeNull();
   });
 });
 
@@ -84,18 +60,9 @@ describe('travaMover', () => {
     expect(travaMover(neg(), funil, 'e-primeiro_contato', ana, nomeDe).permitido).toBe(false);
     expect(travaMover(neg(), funil, 'x', ana, nomeDe).motivo).toMatch(/não existe/);
   });
-  it('dono vem antes de tudo: vendedor nem vê os campos do negócio alheio', () => {
-    const t = travaMover(neg({ donoId: 'bia' }), funil, 'e-negociar', ana, nomeDe);
-    expect(t).toEqual({ permitido: false, motivo: 'Negócio de Bia: só o dono ou o gestor altera.', faltam: [] });
-  });
 });
 
 describe('podeConcluirAtividade (espelho de "Esta atividade não é sua.")', () => {
-  it('dono da atividade conclui; o de outro, não; o gestor, qualquer uma', () => {
-    expect(podeConcluirAtividade({ donoId: 'ana', concluidaEm: null }, ana)).toBe(true);
-    expect(podeConcluirAtividade({ donoId: 'bia', concluidaEm: null }, ana)).toBe(false);
-    expect(podeConcluirAtividade({ donoId: 'bia', concluidaEm: null }, gestor)).toBe(true);
-  });
   it('já concluída ou sem sessão: ninguém', () => {
     expect(podeConcluirAtividade({ donoId: 'ana', concluidaEm: '2026-10-06T12:00:00Z' }, ana)).toBe(false);
     expect(podeConcluirAtividade({ donoId: 'ana', concluidaEm: null }, null)).toBe(false);
@@ -107,23 +74,11 @@ describe('podeAbrirNegocioPara (espelho de crm.pode_ver_pessoa em crm_criar_nego
     expect(podeAbrirNegocioPara({ donoId: 'ana' }, [], ana)).toBe(true);
     expect(podeAbrirNegocioPara({ donoId: null }, [], ana)).toBe(true);
   });
-  it('contato de outro: só se eu já tenho negócio da pessoa, ou sou gestor', () => {
-    expect(podeAbrirNegocioPara({ donoId: 'bia' }, [{ donoId: 'bia' }, { donoId: null }], ana)).toBe(false);
-    expect(podeAbrirNegocioPara({ donoId: 'bia' }, [{ donoId: 'ana' }], ana)).toBe(true);
-    expect(podeAbrirNegocioPara({ donoId: 'bia' }, [], gestor)).toBe(true);
-    expect(podeAbrirNegocioPara({ donoId: null }, [], null)).toBe(false);
-  });
-  it('motivo explica de quem é o contato', () => {
-    expect(motivoSemNovoNegocio({ donoId: 'bia' }, [], ana, nomeDe)).toBe('Contato de Bia: só o dono ou o gestor abre negócio.');
-    expect(motivoSemNovoNegocio({ donoId: 'ana' }, [], ana, nomeDe)).toBeNull();
-    expect(motivoSemNovoNegocio({ donoId: 'ana' }, [], null, nomeDe)).toBe('Carregando quem você é.');
-  });
 });
 
 describe('podeEscreverContato (espelho de crm.pode_escrever_pessoa em crm_enviar_mensagem)', () => {
   const vend = { vendedorId: 'v1', papel: 'vendedor' as const };
   const gest = { vendedorId: 'g1', papel: 'gestor' as const };
-  const nomeDe = (id: string | null) => (id ? `Nome ${id}` : 'sem dono');
   it('gestor escreve para qualquer contato, inclusive sem dono', () => {
     expect(podeEscreverContato({ donoId: null }, [], gest)).toBe(true);
     expect(podeEscreverContato({ donoId: 'v2' }, [], gest)).toBe(true);
@@ -133,19 +88,8 @@ describe('podeEscreverContato (espelho de crm.pode_escrever_pessoa em crm_enviar
     expect(podeEscreverContato({ donoId: 'v2' }, [{ donoId: 'v1' }], vend)).toBe(true);
     expect(podeEscreverContato({ donoId: null }, [{ donoId: 'v1' }], vend)).toBe(true);
   });
-  it('vendedor não escreve para contato sem dono, de outro, ou com negócio sem dono', () => {
-    expect(podeEscreverContato({ donoId: null }, [], vend)).toBe(false);
-    expect(podeEscreverContato({ donoId: 'v2' }, [{ donoId: 'v2' }], vend)).toBe(false);
-    expect(podeEscreverContato({ donoId: null }, [{ donoId: null }], vend)).toBe(false);
-  });
   it('sem sessão não escreve', () => {
     expect(podeEscreverContato({ donoId: 'v1' }, [], null)).toBe(false);
-  });
-  it('motivo explica o bloqueio', () => {
-    expect(motivoSemEscrita({ donoId: 'v1' }, [], vend, nomeDe)).toBeNull();
-    expect(motivoSemEscrita({ donoId: null }, [], vend, nomeDe)).toMatch(/sem dono/);
-    expect(motivoSemEscrita({ donoId: 'v2' }, [], vend, nomeDe)).toMatch(/Lead de Nome v2/);
-    expect(motivoSemEscrita({ donoId: 'v1' }, [], null, nomeDe)).toMatch(/Carregando/);
   });
 });
 
@@ -170,5 +114,23 @@ describe('leitor (admin/dev fora do Comercial, 20261008151801): vê tudo, não e
     expect([somenteLeitura(leitor), somenteLeitura(gestor), somenteLeitura(ana), somenteLeitura(null)]).toEqual([true, false, false, false]);
     expect([podeEscrever(leitor), podeEscrever(gestor), podeEscrever(ana), podeEscrever(null)]).toEqual([false, true, true, false]);
     expect([veComoGestor(leitor), veComoGestor(gestor), veComoGestor(ana), veComoGestor(undefined)]).toEqual([true, true, false, false]);
+  });
+});
+
+describe('20261017000300: vendedor opera como gestor (crm.eh_operador)', () => {
+  const ana: SessaoComercial = { vendedorId: 'ana', papel: 'vendedor' };
+  it('mexe, arrasta e troca dono em negócio de outro e sem dono', () => {
+    expect(podeMexerNoNegocio({ donoId: 'bia' }, ana)).toBe(true);
+    expect(podeMexerNoNegocio({ donoId: null }, ana)).toBe(true);
+    expect(motivoSomenteLeitura({ donoId: 'bia' }, ana, () => 'Bia')).toBeNull();
+    expect(podeTrocarDono(ana)).toBe(true);
+    expect(operaComoGestor(ana)).toBe(true);
+    expect(operaComoGestor({ vendedorId: 'l', papel: 'leitor' })).toBe(false);
+  });
+  it('conclui atividade, abre negócio e escreve para contato de outro e sem dono', () => {
+    expect(podeConcluirAtividade({ donoId: 'bia', concluidaEm: null }, ana)).toBe(true);
+    expect(podeAbrirNegocioPara({ donoId: 'bia' }, [], ana)).toBe(true);
+    expect(podeEscreverContato({ donoId: 'bia' }, [], ana)).toBe(true);
+    expect(podeEscreverContato({ donoId: null }, [], ana)).toBe(true);
   });
 });
