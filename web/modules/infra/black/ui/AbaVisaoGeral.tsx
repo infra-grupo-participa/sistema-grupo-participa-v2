@@ -27,7 +27,7 @@ import { ResumoLeads } from './ResumoLeads';
 import { cplCaptacao, cplDoRecorte, investimentoDoRecorteValor, connectRate as connectRateNumero, conversaoPagina as conversaoPaginaNumero, gastoCampanha, investimentoTrafego, leadsDoTrafego, leadsPessoas, mql as mqlNumero, taxaMql, investimentoDeCaptacao, ingressoGrupoGeral } from '../domain/numeros';
 import type { FormatoMetrica } from '../domain/jornada';
 import { compararMeta } from '../domain/meta';
-import { ratear, somaSemDetalhe } from '../domain/rateio';
+import { ratear, semDetalheDoFunil } from '../domain/rateio';
 
 const TODAS: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo', 'perfil'];
 const TRAFEGO: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo'];
@@ -503,7 +503,9 @@ function ColunaC1({ d, dias }: { d: DadosTela; dias: DesempenhoDia[] }) {
   const rateio = ratear(dias, d.trafegoPeriodo, d.idx);
   const diasRateados = rateio.dias;
   const gastoC1 = gastoDe(diasRateados) ?? 0;
-  const semDetalheC1 = somaSemDetalhe(rateio, d.idx, (c) => dias.some((x) => d.idx.campanhaDoAnuncio(x.anuncioId)?.id === c.id));
+  // Campanha C1 com gasto e nenhum anúncio no recorte (a coleta de anúncios atrasou) entra pelo valor da campanha: a regra é a da
+  // linha "C1 · Distribuição" do CPL por etapa (campanhaNoFunil 'sim', canal da tela), não "campanhas que aparecem em `dias`".
+  const semDetalheC1 = semDetalheDoFunil(rateio, d.idx, 'c1', d.recorte.canal);
   // Alcance e frequência não somam entre campanhas: só com uma campanha C1 no recorte.
   const campanhas = [...new Set(dias.map((x) => d.idx.campanhaDoAnuncio(x.anuncioId)?.id).filter((x): x is string => Boolean(x)))];
   const total = campanhas.length === 1 ? d.totaisPeriodo.find((t) => t.nivel === 'campanha' && t.id === campanhas[0]) : undefined;
@@ -511,8 +513,8 @@ function ColunaC1({ d, dias }: { d: DadosTela; dias: DesempenhoDia[] }) {
   return (
     <div className="divide-y divide-[var(--border-faint)]">
       {/* Gasto = o da campanha (igual à linha C1 · Distribuição de CPL por etapa, na mesma tela), dividido pelos anúncios; o resto (dias sem linha de anúncio) vem em "Sem detalhe por anúncio". Impressões, CPM e vídeo seguem por anúncio. */}
-      <Linha rotulo="Gasto"><Numero valor={dias.length ? gastoC1 + semDetalheC1 : null} formato="brl" animado={false} /></Linha>
-      {dias.length > 0 && <>
+      <Linha rotulo="Gasto"><Numero valor={dias.length || semDetalheC1 > 0 ? gastoC1 + semDetalheC1 : null} formato="brl" animado={false} /></Linha>
+      {(dias.length > 0 || semDetalheC1 > 0) && <>
         <Linha rotulo="Gasto · teaser e manifesto"><Numero valor={gastoDe(diasRateados.filter((x) => d.idx.linhaDoAnuncio(x.anuncioId) === 'c1'))} formato="brl" animado={false} /></Linha>
         <Linha rotulo="Gasto · distribuição"><Numero valor={gastoDe(diasRateados.filter((x) => d.idx.linhaDoAnuncio(x.anuncioId) === 'distribuicao'))} formato="brl" animado={false} /></Linha>
         {semDetalheC1 > 0 && <Linha rotulo={`Gasto · ${ROTULO_SEM_DETALHE.toLowerCase()}`}><Numero valor={semDetalheC1} formato="brl" animado={false} /></Linha>}

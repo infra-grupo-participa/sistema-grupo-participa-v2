@@ -12,7 +12,8 @@
 // o gasto da campanha desse dia fica em `semDetalhe` e nunca é espalhado sobre os dias que têm detalhe (senão a campanha
 // teria as suas partes infladas).
 import type { IndiceTrafego } from './metricas';
-import type { Campanha, DesempenhoDia, LinhaBlack, Valor } from './tipos';
+import { campanhaNoFunil, ehPreCaptacao, linhaDaCampanha } from './linha-black';
+import type { Campanha, DesempenhoDia, FiltroCanal, FiltroFunil, LinhaBlack, Valor } from './tipos';
 
 export interface FonteRateio {
   gastoCampanhas?: readonly { campanhaId: string; gasto: number }[];
@@ -106,4 +107,19 @@ export function somaSemDetalhe(r: Rateio, idx: IndiceTrafego, aceita: (c: Campan
   let s = 0;
   for (const [id, v] of r.semDetalhe) { const c = idx.campanha.get(id); if (c && aceita(c)) s += centavos(v); }
   return s / 100;
+}
+
+const noCanal = (c: Campanha, canal: FiltroCanal) => canal === 'todos' || c.canal === canal;
+
+/**
+ * `semDetalhe` das campanhas que entram INTEIRAS no funil (campanhaNoFunil = 'sim', pré-captação fora), no canal. Cobre a campanha
+ * que tem gasto e nenhum anúncio no recorte (a coleta de anúncios atrasou): o gasto dela vale pelo valor da campanha.
+ */
+export function semDetalheDoFunil(r: Rateio, idx: IndiceTrafego, funil: FiltroFunil, canal: FiltroCanal = 'todos'): number {
+  return somaSemDetalhe(r, idx, (c) => !ehPreCaptacao(c) && campanhaNoFunil(funil, c) === 'sim' && noCanal(c, canal));
+}
+
+/** `semDetalhe` da campanha MISTA (`c2`, Consultoria + Iscas): não tem como dividir sem anúncio, então não vai para nó nem etapa. */
+export function semDetalheMista(r: Rateio, idx: IndiceTrafego, canal: FiltroCanal = 'todos'): number {
+  return somaSemDetalhe(r, idx, (c) => linhaDaCampanha(c) === 'c2' && noCanal(c, canal));
 }

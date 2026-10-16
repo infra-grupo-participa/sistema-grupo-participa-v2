@@ -4,7 +4,8 @@ import { RELOGIO_PADRAO } from '../infrastructure/fixtures/gerador';
 import { calcularJornada } from './jornada';
 import { cplPorEtapa, filtrarDias, indexar } from './metricas';
 import { cplDoRecorte, investimentoDeCaptacao, investimentoDoRecorte, investimentoDoRecorteValor, investimentoTrafego } from './numeros';
-import { gastoDaParte, ratear, somaSemDetalhe } from './rateio';
+import { gastoDaParte, ratear, semDetalheDoFunil, semDetalheMista, somaSemDetalhe } from './rateio';
+import { FUNIS } from './tipos';
 import { linhaNoFunil } from './linha-black';
 import type { Anuncio, Campanha, Conjunto, DesempenhoDia, TrafegoBlack } from './tipos';
 
@@ -161,5 +162,79 @@ describe('borda: investimento em captação de um recorte sem campanha de capta�
     expect(noCentavo(investimentoDoRecorteValor(trafego, periodo, { funil: 'todos', canal: 'google' }))).toBe(140471);
     expect(noCentavo(investimentoDoRecorteValor(trafego, periodo, { funil: 'todos', canal: 'meta' }))).toBe(51779);
     expect(noCentavo(investimentoDoRecorteValor(trafego, periodo, { funil: 'todos', canal: 'todos', campanha: (c) => c.fase === 'captacao' }))).toBe(192250);
+  });
+});
+
+// Coleta de anúncios atrasada (já aconteceu, sem_tempo): a campanha tem gasto e nenhum, ou só alguns, anúncios no recorte.
+describe('coleta de anúncios atrasada: o gasto sem anúncio aparece no funil, na Jornada e na ColunaC1 e a soma das partes fecha com o card', () => {
+  const card = (t: TrafegoBlack) => noCentavo(investimentoDeCaptacao(t, periodo, { funil: 'todos', canal: 'todos' }).total);
+  // A soma que o "Por funil" do modal mostra: uma linha por funil + a linha "Sem detalhe por anúncio" (a mesma conta do ModalCard).
+  const somaPorFunil = (t: TrafegoBlack) => {
+    const ix = indexar(t);
+    const linhas = FUNIS.map((f) => investimentoDoRecorteValor(t, periodo, { funil: f, canal: 'todos' }));
+    const rmk = investimentoDoRecorteValor(t, periodo, { funil: 'todos', canal: 'todos', campanha: (c) => c.linha === 'remarketing_pagina' });
+    const sem = semDetalheMista(ratear(t.dias, t, ix), ix, 'todos');
+    return [...linhas, rmk].reduce<number>((s, v) => s + noCentavo(v ?? 0), 0) + noCentavo(sem);
+  };
+
+  it('c2 sem nenhum anúncio: Por funil + Sem detalhe = card, e a Jornada tem o valor para a nota', () => {
+    const semC2 = dias.filter((x) => x.anuncioId !== 'a-cons' && x.anuncioId !== 'a-iscas');
+    const t: TrafegoBlack = { ...trafego, dias: semC2 };
+    const ix = indexar(t);
+    expect(card(t)).toBe(192250);
+    // Sem a linha extra, as linhas do funil dariam só a C3: 1.404,71 contra o card de 1.922,50 (o defeito reproduzido).
+    expect(somaPorFunil(t) - noCentavo(semDetalheMista(ratear(semC2, t, ix), ix, 'todos'))).toBe(140471);
+    expect(somaPorFunil(t)).toBe(192250);
+    const r = ratear(semC2, t, ix);
+    expect(semDetalheMista(r, ix, 'todos')).toBe(517.79);
+    expect(semDetalheMista(r, ix, 'meta')).toBe(517.79);
+    expect(semDetalheMista(r, ix, 'google')).toBe(0);
+    // Consultoria e Iscas ficam sem dado (não inventa a divisão).
+    expect(gastoDaParte(r, ix, 'k-c2', consultoria)).toBeNull();
+    expect(gastoDaParte(r, ix, 'k-c2', iscas)).toBeNull();
+    // CPL por etapa: a mesma linha, só gasto.
+    const etapas = cplPorEtapa(semC2, [], ix, t.gastoCampanhas, 'todos', t.gastoCampanhasDiario);
+    const sem = etapas.find((e) => e.nivel === 'sem_detalhe')!;
+    expect(sem.cpl.gasto).toBe(517.79);
+    expect(sem.cpl.valor).toBeNull();
+  });
+
+  it('c2 com anúncio em parte dos dias: Por funil + Sem detalhe = card', () => {
+    const diario = [{ campanhaId: 'k-c2', dia: '2026-10-14', gasto: 100 }, { campanhaId: 'k-c2', dia: '2026-10-15', gasto: 417.79 },
+      { campanhaId: 'k-c3', dia: '2026-10-15', gasto: 1404.71 }, { campanhaId: 'k-c1', dia: '2026-10-15', gasto: 300 }];
+    const t: TrafegoBlack = { ...trafego, gastoCampanhasDiario: diario };
+    expect(somaPorFunil(t)).toBe(card(t));
+  });
+
+  it('com todos os anúncios não aparece linha de sem detalhe (nada some nem duplica)', () => {
+    const ix = indexar(trafego);
+    expect(semDetalheMista(ratear(dias, trafego, ix), ix, 'todos')).toBe(0);
+    expect(somaPorFunil(trafego)).toBe(card(trafego));
+  });
+
+  it('ColunaC1: campanha C1 com gasto e nenhum anúncio entra pelo valor da campanha', () => {
+    const semC1 = dias.filter((x) => x.anuncioId !== 'a-c1');
+    const ix = indexar(trafego);
+    const r = ratear(semC1, trafego, ix);
+    // A tela filtra `dias` por funil C1 antes de chamar; com a coleta atrasada ele chega vazio.
+    const diasC1: DesempenhoDia[] = [];
+    const gastoColuna = noCentavo(ratear(diasC1, trafego, ix).dias.reduce((s, x) => s + x.gasto, 0)) + noCentavo(semDetalheDoFunil(ratear(diasC1, trafego, ix), ix, 'c1', 'todos'));
+    expect(gastoColuna).toBe(30000);
+    // O mesmo número da linha "C1 · Distribuição" do CPL por etapa.
+    expect(noCentavo(investimentoTrafego(trafego, { funil: 'c1', canal: 'todos' }).valor)).toBe(gastoColuna);
+    // Canal sem a campanha, e outros funis, não entram.
+    expect(semDetalheDoFunil(r, ix, 'c1', 'google')).toBe(0);
+    expect(semDetalheDoFunil(r, ix, 'c3', 'todos')).toBe(0);
+  });
+
+  it('ColunaC1: com anúncio, o gasto dos anúncios rateado + o resto = o valor da campanha', () => {
+    const diario = [{ campanhaId: 'k-c1', dia: '2026-10-14', gasto: 100 }, { campanhaId: 'k-c1', dia: '2026-10-15', gasto: 200 }];
+    const t: TrafegoBlack = { ...trafego, gastoCampanhasDiario: diario };
+    const ix = indexar(t);
+    const diasC1 = dias.filter((x) => x.anuncioId === 'a-c1');
+    const r = ratear(diasC1, t, ix);
+    const gasto = noCentavo(r.dias.reduce((s, x) => s + x.gasto, 0)) + noCentavo(semDetalheDoFunil(r, ix, 'c1', 'todos'));
+    expect(gasto).toBe(30000);
+    expect(semDetalheDoFunil(r, ix, 'c1', 'todos')).toBe(100);
   });
 });
