@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LeadAtm } from '@/modules/infra/atm/domain/dashboard';
-import { contarAptosGrupo, contarLeadsAcao, exibicaoCardIngressoGrupo, exibicaoCardLeads, motivoDeNaoValido, rotuloValidadeOferta, validadeDaOferta } from './leads';
+import { contarLeadsAcao, exibicaoCardIngressoGrupo, exibicaoCardLeads, motivoDeNaoValido, rotuloValidadeOferta, validadeDaOferta } from './leads';
 
 function lead(parcial: Partial<LeadAtm> = {}): LeadAtm {
   return {
@@ -87,14 +87,12 @@ describe('cards do topo com leads válidos', () => {
     expect(exibicaoCardLeads('cpl', { valor: 9, semDado: false }, c)).toBeNull();
   });
   it('ingresso: o geral no card e os aptos embaixo', () => {
-    expect(contarAptosGrupo([{ apto: true }, { apto: false }, { apto: true }])).toBe(2);
-    expect(exibicaoCardIngressoGrupo({ valor: 46, semDado: false }, 21)).toEqual({ valor: 46, formato: 'inteiro', hint: 'no geral · 21 aptos' });
-    expect(exibicaoCardIngressoGrupo({ valor: 5, semDado: false }, 1)?.hint).toBe('no geral · 1 apto');
+    expect(exibicaoCardIngressoGrupo({ valor: 46, semDado: false }, { valor: 21, semDado: false })).toEqual({ valor: 46, formato: 'inteiro', hint: 'no geral · 21 aptos' });
+    expect(exibicaoCardIngressoGrupo({ valor: 5, semDado: false }, { valor: 1, semDado: false })?.hint).toBe('no geral · 1 apto');
+    expect(exibicaoCardIngressoGrupo({ valor: 5, semDado: false }, { valor: 0, semDado: false })?.hint).toBe('no geral · 0 aptos');
   });
-  it('sem a coluna apto ou sem o geral, o card não inventa', () => {
-    expect(contarAptosGrupo(null)).toBeNull();
-    expect(contarAptosGrupo([{ apto: true }, { apto: null }])).toBeNull();
-    expect(exibicaoCardIngressoGrupo({ valor: 46, semDado: false }, null)).toBeNull();
-    expect(exibicaoCardIngressoGrupo({ valor: 0, semDado: true }, 3)).toBeNull();
+  it('sem o campo de aptos do resumo ou sem o geral, o card não inventa', () => {
+    expect(exibicaoCardIngressoGrupo({ valor: 46, semDado: false }, { valor: 0, semDado: true })).toBeNull();
+    expect(exibicaoCardIngressoGrupo({ valor: 0, semDado: true }, { valor: 3, semDado: false })).toBeNull();
   });
 });

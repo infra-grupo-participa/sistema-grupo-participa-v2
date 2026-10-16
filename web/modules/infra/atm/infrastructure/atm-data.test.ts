@@ -209,6 +209,21 @@ describe('leitura e marcação do dashboard ATM', () => {
     expect(resultado.data.resumo.percentualIngressoGrupo).toEqual({ valor: 144.44, semDado: false });
   });
 
+  it('aptos do grupo vêm do resumo (grupo_aptos); nulo ou ausente é sem dado, nunca zero', async () => {
+    mocks.rpc.mockResolvedValue({ data: [{ grupo_entradas: 46, grupo_aptos: 21 }], error: null });
+    const com = await carregarAtmResumo('black-thb-2026-10');
+    expect(com.data.resumo.ingressosGrupoAptos).toEqual({ valor: 21, semDado: false });
+
+    mocks.rpc.mockResolvedValue({ data: [{ grupo_entradas: 46, grupo_aptos: null }], error: null });
+    const nulo = await carregarAtmResumo('black-thb-2026-10');
+    expect(nulo.data.resumo.ingressosGrupoAptos).toEqual({ valor: 0, semDado: true });
+
+    mocks.rpc.mockResolvedValue({ data: [{ grupo_entradas: 46 }], error: null });
+    const antigo = await carregarAtmResumo('black-thb-2026-10');
+    expect(antigo.data.resumo.ingressosGrupoAptos).toEqual({ valor: 0, semDado: true });
+    expect(antigo.data.resumo.ingressosGrupo).toEqual({ valor: 46, semDado: false });
+  });
+
   it('carrega a lista de entradas por número e elimina campos dos não encontrados', async () => {
     mocks.rpc.mockResolvedValue({ data: [
       { fone_grupo: '5511999990001', origem: 'lista_disparo', na_lista: true, na_base: false, nome: 'Contato Demo', email: 'demo@example.invalid', telefone: '5511999990001', turma: 'THB', instrucao: 'THB sócio', entrou_em: '2026-10-15T12:00:00Z', saiu_em: null, no_grupo: true, entrada_aproximada: false, na_central: true, apto: true },

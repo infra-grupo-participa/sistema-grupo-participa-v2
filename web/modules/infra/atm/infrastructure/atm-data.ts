@@ -213,7 +213,7 @@ export async function carregarAtmResumo(chave: string, periodo?: DatasPeriodoAtm
       resumo: {
         custoTrafego: valorCentavos('custo_trafego_centavos'),
         investimentoTotal: valorCentavos('investimento_total_centavos'),
-        disparos: valor('disparos_qtd'), leads: valor('leads'), ingressosGrupo: valor('grupo_entradas'),
+        disparos: valor('disparos_qtd'), leads: valor('leads'), ingressosGrupo: valor('grupo_entradas'), ingressosGrupoAptos: valor('grupo_aptos'),
         percentualIngressoGrupo: valor('grupo_pct'), taxaEvasao: valor('evasao_pct'),
         custoDisparo: valorCentavos('custo_disparo_centavos'),
         cpl: metricaDependenteDoInvestimento('cpl_centavos'),

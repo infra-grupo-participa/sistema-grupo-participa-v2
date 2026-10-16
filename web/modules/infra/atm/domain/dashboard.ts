@@ -46,6 +46,11 @@ export type ResumoAtm = {
   disparos: MetricaAtm;
   leads: MetricaAtm;
   ingressosGrupo: MetricaAtm;
+  /**
+   * `dados_atm_resumo.grupo_aptos` (migration 20261017003000): números do grupo que estão na lista do disparo. Só vem para quem
+   * tem contato.ver e com a fonte de grupo; fora disso é `semDado` e o card esconde o hint. Não é um card do funil.
+   */
+  ingressosGrupoAptos: MetricaAtm;
   percentualIngressoGrupo: MetricaAtm;
   taxaEvasao: MetricaAtm;
   custoDisparo: MetricaAtm;
@@ -214,7 +219,7 @@ export function dashboardAtmSemDado(chave: string): DashboardAtm {
     periodo: { de: null, ate: null, leadsTeste: null, grupoTeste: null, vendasTeste: null, receitaTesteBruta: null },
     resumo: {
       custoTrafego: zero(), investimentoTotal: zero(),
-      disparos: zero(), leads: zero(), ingressosGrupo: zero(), percentualIngressoGrupo: zero(), taxaEvasao: zero(),
+      disparos: zero(), leads: zero(), ingressosGrupo: zero(), ingressosGrupoAptos: zero(), percentualIngressoGrupo: zero(), taxaEvasao: zero(),
       custoDisparo: zero(), cpl: zero(), preCheckout: zero(), vendas: zero(), conversaoPreCheckout: zero(), cac: zero(),
       faturamentoBruto: zero(), faturamentoLiquido: zero(), roas: zero(),
     },

@@ -119,7 +119,7 @@ O modal do card "Ingresso no grupo" ganhou a aba "Evolução diária" e o card "
 - **Modal:** abas Leads, Resumo e Evolução diária. Leads ganhou a coluna "Apto" e a origem "Central de Alunos". Resumo tem 4 roscas: Apto (fixa), Origem, Instrução e Turma.
 - **Números na produção (16/10, ação THB vencidos):** 46 números no grupo, 21 aptos (todos pela lista), 15 achados só na Central, 6 não encontrados.
 - **Como testar:** `npx vitest run modules/infra/acoes modules/infra/atm`; na tela, usuário com `contato.ver`, Ações de Renovação da Black Friday > THB vencidos, card Ingresso no grupo mostra "N aptos" e o total de Sim na rosca Apto bate com N.
-- **Pendente (recomendação do pentester, não bloqueante):** contar os aptos no `dados_atm_resumo` para não trazer a lista com dado pessoal só para o card.
+- **Pendente (recomendação do pentester, não bloqueante):** contar os aptos no `dados_atm_resumo` para não trazer a lista com dado pessoal só para o card. **Feito em 16/10/2026, ver a seção "Aptos do card vêm do resumo" abaixo.**
 
 ## Roscas interativas no Resumo do Ingresso no grupo (16/10/2026)
 
@@ -128,3 +128,12 @@ O modal do card "Ingresso no grupo" ganhou a aba "Evolução diária" e o card "
 - **O que não muda:** o número "Entradas únicas" do modal e o card seguem sobre o conjunto sem filtro. Banco intocado.
 - **Situação:** no ar com o push na `main` (auto-deploy da Hostinger). Verificado: `vitest` (acoes + atm, 144 testes), `eslint`, `lint:tokens`, `build`. Não verificado na tela no ar.
 - **Como testar:** card Ingresso no grupo > Resumo, clicar em "Sim" na rosca Apto: Origem, Instrução e Turma passam a contar só os aptos e a aba Leads mostra só eles; "Limpar filtros" volta.
+
+## Aptos do card vêm do resumo (16/10/2026)
+
+- **Por quê:** desde 16/10 o card "Ingresso no grupo" contava os aptos baixando a lista inteira do grupo, com nome, e-mail e telefone, a cada refresh de 60 s. Pedido do Victor ("se a lista do resumo da ação for a mesma, pode fazer essa melhoria") e recomendação 3 do pentester.
+- **Provado que é a mesma lista:** o resumo e a RPC do grupo usam a mesma chave, o mesmo período (`dados.periodo`), o mesmo universo (`dados.v_grupo_pessoas_todos` sem teste, um por `fone8`) e a mesma lista (`dados.lista_membros` da chave). Em produção os totais bateram nas duas chaves (grupo_entradas do resumo = linhas da RPC; ver o explain).
+- **Banco (NÃO APLICADA):** migration `20261017003000_dados_atm_resumo_grupo_aptos` acrescenta `grupo_aptos` ao `dados_atm_resumo`. Só vem preenchido para quem tem `contato.ver` e com fonte de grupo; para os outros e para a service_role do dashboard-ht vem nulo. Relatório, ensaio e reversão em `infra/supabase/migrations/20261017003000.explain.md`.
+- **Front:** `carregarAtmResumo` lê `grupo_aptos` em `resumo.ingressosGrupoAptos` (nulo ou ausente = `semDado`); `exibicaoCardIngressoGrupo` usa esse campo e `contarAptosGrupo` saiu. A lista do grupo volta a ser lida só com o modal aberto, nas abas Leads e Resumo (a Resumo precisa da lista para as roscas; a Evolução diária vem da série).
+- **Ordem de publicação:** pode subir o front antes da migration: sem `grupo_aptos` o hint "N aptos" some (o card mostra só o geral). Para o hint voltar, aplicar a migration.
+- **Como testar:** `cd web && npx vitest run modules/infra/acoes modules/infra/atm`; na tela, com `contato.ver`, o card mostra "no geral · N aptos" e N bate com o total de Sim da rosca Apto no modal; sem `contato.ver` o card mostra só o geral. No Network, o refresh de 60 s não chama mais `dados_atm_grupo_leads`.
