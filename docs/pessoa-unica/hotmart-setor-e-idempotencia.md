@@ -11,7 +11,8 @@ Terminal Hotmart (back-end-sr), 16/10/2026, branch `victor-hotmart-setor`. **Sit
 - Cada migration tem `.explain.md` (5 perguntas), reversão e o ensaio `20261016230100_ensaio.sql` cobre as três e a carga.
 
 ## Decisões e pontos a confirmar
-- **A confirmar com o Victor (NÃO reclassificado):** `3595938 Holding Familiar` (família `OUTROS`, 44 transações de 12/2023 a 05/2025) e `1537308 Croqui Estrutural para Holding Familiar` (família `OUTROS`, 0 transações). Se forem escritório: mudar `fin.produtos.familia` (ou a regra `e_comprador_escritorio`) e repetir o passo 3 da 230200.
+- **DECIDIDO pelo Victor em 16/10/2026: `3595938 Holding Familiar` é do escritório** (hoje família `OUTROS`, `sincroniza = false`, 44 transações: aprovações de 12/2023 a 12/2024, último pedido em 01/05/2025). A migration `20261016233000_fin_classificar_holding_familiar_escritorio.sql` está **escrita, ensaiada com rollback e NÃO aplicada**: muda a família para `ESCRITORIO` (sem mexer em `sincroniza`), marca `detalhe.setor = 'escritorio'` nas 44 linhas da linha do tempo e anula o `evento_id` das 14 que estavam presas a evento de educação (backup em `arquivo`). Medição de impacto, trade-off do `evento_id` e comando de aplicação em `infra/supabase/migrations/20261016233000.explain.md`. Atenção: nenhuma tela do Financeiro lista a família `ESCRITORIO`, então R$ 405.410,08 de valor da oferta (23 vendas) saem da aba "Outros produtos" no histórico completo e não aparecem em outra aba (na janela padrão de 90 dias o efeito é zero).
+- **Ainda sem decisão (NÃO reclassificado):** `1537308 Croqui Estrutural para Holding Familiar` (família `OUTROS`, 0 transações). O texto anterior citava uma regra `e_comprador_escritorio`; ela não existe no banco nem no repositório, então a reclassificação é só `fin.produtos.familia` mais a mesma marcação de setor.
 - `fin.identidade.calculado_em` parado em 11/10 **não é defeito**: a reescrita é diferencial e só avança quando a `pessoa_chave` muda; o cron de hora em hora roda (71 execuções ok desde 13/10).
 
 ## Como testar
@@ -34,5 +35,6 @@ Corrigidos: reversão só por id (achado 1), guarda de premissa e pós-condiçã
 - **Resultado:** academy 57.424 de 57.424 transações ligadas à pessoa única e escritório 546 de 546; 1.916 linhas com `setor = escritorio` (SV, Croqui e SV com a Elaine vendidas na academy, mais toda a conta escritório); query de duplicados vazia.
 
 ## O que falta
+- Aplicar a `20261016233000` (3595938 = escritório) quando o Victor liberar; antes, decidir o que fazer com a aba "Outros produtos" do Financeiro e com a família `ESCRITORIO`, que não tem aba (ver o explain).
 - `fin.identidade` → `pessoas.pessoas` (coluna ou tabela de ligação `fin.identidade_pessoa`): não feito; próximo passo é a migration `230300` do plano (18.580 ligadas, 4.211 sem pessoa, 388 com várias pessoas, medidos em 16/10; CPF não casa pessoa).
 - `evento_id` nulo nas linhas do webhook (6.945 de 7.543 linhas Hotmart): a carga preenche ao reivindicar; ligar em massa é passo seguinte.
