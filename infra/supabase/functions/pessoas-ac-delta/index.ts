@@ -1,8 +1,8 @@
 // pessoas-ac-delta: delta diário do ActiveCampaign para a pessoa única (migrations 20261014150034 e 20261014152242).
 //
 // Chamada: 1×/dia pelo job pg_cron 'pessoas-ac-delta' (05:40 UTC = 02:40 em Brasília), POST com o header
-// x-webhook-secret = Vault cron_webhook_secret (o mesmo dos outros crons de ingestão). O job NASCE DESLIGADO e a chave
-// pessoas.carga_chave 'activecampaign_delta' também (com data de fim 15/11/2026; ao ligar, grava current_date + 30): rotina externa só com ok do Victor.
+// x-webhook-secret = Vault cron_webhook_secret (o mesmo dos outros crons de ingestão). Job e chave pessoas.carga_chave 'activecampaign_delta' foram
+// LIGADOS em 16/10/2026 com o ok do Victor (data de fim 15/11/2026; ao religar, grava current_date + 30): rotina externa só com ok do Victor.
 //
 // O que faz, em série e com teto:
 //   1. confere o segredo, a chave 'activecampaign_delta' (ligada e dentro da data de fim) e a chave 'activecampaign';
@@ -15,7 +15,7 @@
 // (flag em memória do isolate + pg_try_advisory_lock do banco). Dia comum (medido em 14/10/2026): 2,4 a 3,8 mil contatos
 // atualizados = 25 a 38 páginas. Se o teto bater, a execução fica 'parada' e o dia seguinte continua do cursor.
 // Chave do AC: Vault activecampaign_api_key (nunca impressa). Erro sai só com o código.
-// Revisão de 16/10/2026 (migration 20261016120000, ainda por revisar pelo pentester):
+// Revisão de 16/10/2026 (migration 20261016120000; pentester aprovou a 5ª revisão):
 //   - HTTP 200 não é sucesso: execução PARCIAL (teto do dia, tempo, páginas ou estágio por passar) devolve ok:false, e o vigia
 //     (ops.vigiar, regra "2xx com ok:false = falha_http") abre incidente em vez de ver "tudo certo";
 //   - chave 'activecampaign_delta' ligada com data de fim vencida = 503 {ok:false, erro:'chave_vencida'} (a revisão de 30 dias não pode calar);

@@ -1,8 +1,9 @@
 -- 20261016120000: pessoas-incremental por fonte (COMMIT entre fontes), com teto, data de fim e falha visível
 --
--- STATUS: ESCRITA, NÃO APLICADA (16/10/2026, back-end-sr, frente "manter a pessoa única viva"). Depende de 20261014152242 (aplicada).
+-- STATUS: APLICADA 16/10/2026 ~12:33 UTC em produção (versão 20261016120000 em schema_migrations). Job 319 LIGADO ~12:35 UTC (chave incremental com fim em 2026-11-15).
+--   Escrita pelo back-end-sr em 16/10/2026 (frente "manter a pessoa única viva"). Dependia de 20261014152242 (aplicada).
 --   Ensaio: 20261016120000_ensaio.sql. Reversão: 20261016120000_reversao.sql. Detalhe: 20261016120000.explain.md.
---   O job 'pessoas-incremental' (jobid 319) continua DESLIGADO depois desta migration; ligar é decisão do Victor, depois do pentester.
+--   O job 'pessoas-incremental' (jobid 319) ficou DESLIGADO pela migration; foi ligado depois, à mão, com o ok do Victor de 16/10/2026.
 --
 -- POR QUE (achado 7 do pentester, 14/10/2026): pessoas.carga_incremental(200) roda as 11 fontes numa chamada só. Se passar dos 120 s do
 --   statement_timeout, a hora inteira é desfeita e NADA fica registrado em pessoas.carga_execucao. O erro de uma fonte também só virava

@@ -1,6 +1,7 @@
 -- 20261016120100: pessoas.carga_respondi e pessoas.carga_aluno_historico no modo "só novos" não ficam presas em linha que nunca vira evento
 --
--- STATUS: ESCRITA, NÃO APLICADA (16/10/2026, back-end-sr; refeita no mesmo dia depois do achado 1 do pentester). Independente de 20261016120000
+-- STATUS: APLICADA 16/10/2026 ~12:33 UTC em produção (versão 20261016120100 em schema_migrations; md5 dos corpos conferidos depois).
+--   Escrita pelo back-end-sr em 16/10/2026, refeita no mesmo dia depois do achado 1 do pentester. Independente de 20261016120000
 --   (a procedure funciona sem esta), mas sem ela as fontes 'respondi' e 'aluno_historico' relêem para sempre as linhas descartadas.
 --   Ensaio: 20261016120000_ensaio.sql (traz as duas migrations). Reversão: 20261016120100_reversao.sql. Detalhe: 20261016120100.explain.md.
 --

@@ -92,7 +92,7 @@ select papel, count(*), count(*) filter (where pendente) pendentes from pessoas.
 
 ## 5. Manter vivo
 
-- **De hora em hora (só banco: Hotmart, Respondi e as outras fontes do banco).** Ligar só depois dos passos 3 e 4 com
+- **De hora em hora (só banco: Hotmart, Respondi e as outras fontes do banco). LIGADO em 16/10/2026 ~12:35 UTC (job 319, minuto 50).** Para religar, ligar só depois dos passos 3 e 4 com
   status `ok`, com o ok do Maestro:
   ```sql
   update pessoas.carga_chave set ligada = true, ate = current_date + 30, por = 'victor', em = now() where fonte = 'incremental';
@@ -102,7 +102,7 @@ select papel, count(*), count(*) filter (where pendente) pendentes from pessoas.
   `select erro, status from pessoas.carga_execucao where fonte = 'incremental' order by id desc limit 1;`: a coluna `erro` nomeia fontes
   com problema e as **puladas** (`carga_aberta`, `sem_carga_inicial`), que não derrubam o job.
   Hotmart e Respondi não têm rotina externa: o webhook da Hotmart e o `respondi-sync` já põem o dado no banco.
-- **Delta diário do AC: fica DESLIGADO.** Para ligar (ok do Victor dado em 14/10, com condições):
+- **Delta diário do AC: LIGADO em 16/10/2026 ~12:36 UTC (chave) e 12:38 UTC (job 320), com o ok do Victor. A 1ª volta (9.853 contatos desde 14/10) leva 3 dias por causa do teto de 42 chamadas/dia; ver README, seção "Aplicação de 16/10/2026".** Para ligar de novo (ok do Victor dado em 14/10, com condições):
   1. publicar a Edge `pessoas-ac-delta` (quem publica: Maestro ou JP);
   2. `update pessoas.carga_chave set ligada = true, ate = current_date + 30, por = 'victor', em = now() where fonte = 'activecampaign_delta';` (renova a data de fim, que a migration `20261016120000` pôs em 15/11/2026);
   3. `select cron.alter_job(jobid, active := true) from cron.job where jobname = 'pessoas-ac-delta';`
