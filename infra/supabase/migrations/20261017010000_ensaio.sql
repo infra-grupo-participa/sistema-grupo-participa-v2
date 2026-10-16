@@ -507,5 +507,5 @@ select '33 depois de reverter, aplicar de novo funciona (esperado: aplicadas > 0
        pessoas.revisao_lote_passo((select v::bigint from pg_temp._z where k = 'lote'), 0, 50, array['A1_telefone_nome', 'B2_telefone_nome_diferente'],
          (select v::bigint[] from pg_temp._z where k = 'ids'))::text;
 
-select em, passo, linha from pg_temp._z_out order by em;
+select passo, linha from pg_temp._z_out order by em, passo;
 rollback;
