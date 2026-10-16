@@ -59,7 +59,7 @@ Este documento fica no repositório para quem trabalha aqui sem acesso ao céreb
 | 20261017030000 | (16/10) | regras automáticas novas da fila de revisão (A4, B4, B5, B6, D1 duplicada), em cima da máquina de 20261017010000 | C | **aplicada em 16/10/2026** e lotes rodados: 37 juntadas, 257 separadas, 64 duplicadas apagadas com cópia, fila humana 71 |
 | 20261016230250 | (16/10) | índice único `eventos_hotmart_ref_unico` (uma linha por transação e tipo da Hotmart), `concurrently` | C | **aplicada 16/10 16:29 UTC** |
 | 20261016230255 | (16/10) | webhook `crm.hotmart_processar` e carga `pessoas.carga_fin_hotmart` com `on conflict`, sem lock de aviso | C | **aplicada 16/10 16:29 UTC** |
-| 20261017040000 | (16/10) | atributos da pessoa (`pessoas.atributos`, `vw_compra`, `vw_oferta_a_conferir`, `atributos_calcular`, `atributos_lote`) | C | **NÃO aplicada**, ensaio ok; branch `victor-pessoas-atributos` |
+| 20261017040000 | (16/10) | atributos da pessoa (`pessoas.atributos`, `vw_compra`, `vw_oferta_a_conferir`, `atributos_calcular`, `atributos_lote`) | C | **NÃO aplicada**, ensaio ok (2ª rodada de regras 16/10); branch `victor-pessoas-atributos` |
 
 Os arquivos foram renomeados para a versão gravada em `supabase_migrations.schema_migrations` (guia 6.3); o primeiro
 comentário de cada um diz o nome antigo. Cada uma tem `.explain.md`, ensaio e reversão.
@@ -218,7 +218,12 @@ Migration `20261017040000`: uma linha por pessoa em `pessoas.atributos` com os a
 Turma Especial, totais bruto e líquido, pode disparar). Ensaio ok; detalhes, limitações e roteiro em
 `infra/supabase/migrations/20261017040000.explain.md`.
 
-Antes de aplicar, faltam respostas do Victor: classificar as ofertas HM/Aurum sem tipo (`pessoas.vw_oferta_a_conferir`),
-o ok da regra de aluno ativo (e as 68 com situação nula), se sócio conta como ex-aluno, o Seminário Conjunto (fora de
-`fin.eventos`), se o pré-checkout da SV vale para todo status da lista e o que fazer com compra em outra moeda.
-Seminário fica vazio até o lead de Seminário ser ligado a evento.
+Segunda rodada de regras (Victor, 16/10/2026), ensaiada de novo: HM e Aurum ligados pela matrícula (`thb_alunos` e
+`cs.vw_aurum_por_aluno`) sem esperar o mapeamento das ofertas; o produto `446345` "Curso Prático de Holding Familiar" é o
+antigo HM e quem comprou é ex-THB; sócio não conta como ex-aluno e ganha `e_ex_socio`; pré-checkout da SV conta todo
+status; compra em outra moeda conta como compra e soma em `total_outra_moeda` sem converter. Na base toda, HM passa de
+217 pessoas (só pelo tipo da oferta) para 7.678, com 5 ainda a conferir; Aurum de 263 para 364, com 113 a conferir.
+
+Fica para depois, sem travar a aplicação: mapear o tipo de cada oferta, os 68 alunos com situação nula, a carga do
+Seminário Conjunto (fora de `fin.eventos`) e ligar lead de Seminário a evento (até lá `seminario_edicoes` sai vazio).
+Aplicar só com o ok do Victor.

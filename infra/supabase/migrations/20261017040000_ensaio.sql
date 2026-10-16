@@ -30,20 +30,26 @@ create temp table _z (k text primary key, v text);
 -- REGRAS (de onde vem cada atributo; nomes exatos das fontes):
 --   compra aprovada = fin.hotmart_transacoes.status in ('COMPLETE','APPROVED') (o status atual já reflete reembolso e chargeback).
 --   família = coalesce(pessoas.vw_oferta.familia, fin.produtos.familia); tipo = pessoas.vw_oferta.tipo (sinal, saldo, integral, renovacao).
---   hm / aurum = aprovada com tipo integral ou saldo (decisão 1: sinal não é compra). *_so_sinal = tem sinal e não tem hm/aurum.
---   *_renovou = aprovada com tipo renovacao (decisão 8: não conta como compra nova). *_a_conferir = aprovada da família sem tipo.
+--   hm = aprovada HM com tipo integral ou saldo (decisão 1: sinal não é compra), OU aprovada sem tipo do produto 446345 'Curso Prático de Holding
+--      Familiar' (o antigo HM, Victor 16/10), OU qualquer aprovada HM de quem tem matrícula em public.thb_alunos (Victor 16/10: ligar pela matrícula).
+--   aurum = aprovada AURUM com tipo integral ou saldo, OU qualquer aprovada AURUM de quem está em cs.vw_aurum_por_aluno (pelo aluno_id).
+--   *_so_sinal = tem sinal e não é hm/aurum. *_renovou = aprovada com tipo renovacao (decisão 8: não conta como compra nova).
+--   *_a_conferir = aprovada da família sem tipo e que nenhuma regra acima confirmou (vai para pessoas.vw_oferta_a_conferir).
 --   ht_edicoes = chave do evento das compras aprovadas família HT em evento categoria holding_total.
 --   ethb / clinica / imersao = chave do evento das compras aprovadas família EVENTOS em evento categoria encontro_thb / clinica / imersao.
 --   seminario_edicoes = chave dos eventos seminario_elaine e seminario_marcio em que foi lead ou mql (cada chave é um produto; decisão do dicionário).
---   sv_checkout_sem_compra = linha activecampaign pre_checkout com detalhe papel 'sv_pre_checkout' (todas as listas SV, decisão 5) e nenhuma compra
+--   sv_checkout_sem_compra = linha activecampaign pre_checkout com detalhe papel 'sv_pre_checkout' (todas as listas SV e todo status, decisão 5) e nenhuma compra
 --      aprovada dos produtos 'Sessão de Viabilidade' (5238525, 1663254, 1664749 em fin.produtos).
---   e_aluno_ativo = public.thb_alunos via pessoas.aluno_id com situacao_acesso in ('em_dia','a_vencer','acompanha_titular') e cancelado_em nulo
---      (PROPOSTA, a confirmar com o Victor).
---   e_ex_aluno_thb = (ativação importada com programa 'thb' ou aba de turma 'T<n>...', ou linha em thb_alunos) e não é aluno ativo.
---   e_socio = relação socio_de como sócio (pessoas.relacoes.pessoa_id) ou vínculo importado da aba 'Sócios...'.
+--   e_aluno_ativo = public.thb_alunos via pessoas.aluno_id com situacao_acesso in ('em_dia','a_vencer','acompanha_titular') e cancelado_em nulo;
+--      sócio (eh_socio) só é ativo se o titular (socio_de_aluno_id) também estiver nessa situação.
+--   e_socio = relação socio_de como sócio (pessoas.relacoes.pessoa_id), vínculo importado da aba 'Sócios...' ou thb_alunos.eh_socio.
+--   e_ex_aluno_thb = não é aluno ativo e (comprou o produto 446345 'Curso Prático de Holding Familiar', ou tem matrícula própria em thb_alunos
+--      que não é de sócio, ou ativação importada com programa 'thb' ou aba 'T<n>...' sem ser sócio). Sócio não conta como ex-aluno (Victor 16/10).
+--   e_ex_socio = é sócio e não é aluno ativo (o titular saiu ou o acesso dele acabou).
 --   turma_especial = sha256 do e-mail, dos 8 últimos dígitos do telefone ou do documento bate com dados.turma_especial_chaves.
 --   pode_disparar = não turma_especial e nenhum contato do AC com descadastrou (decisões 4 e 6: desativado pela empresa continua disparável).
---   total_pago_bruto / _liquido = soma de valor_cobrado / liquido_produtor das aprovadas em BRL (decisão 3); compras_outra_moeda conta as demais.
+--   total_pago_bruto / _liquido = soma de valor_cobrado / liquido_produtor das aprovadas em BRL (decisão 3); compras_outra_moeda conta as demais
+--      e total_outra_moeda guarda a soma de valor_cobrado por moeda ({"USD": 1234.5}), sem converter (decisão 3).
 --   primeiro_contato / ultimo_contato = menor e maior quando da linha do tempo, sem a fonte 'sistema' (vínculo, mescla, revisão não são contato).
 --   email_principal / telefone_principal = valor do identificador mais recente (criado_em, depois id).
 -- COMO VOLTAR: 20261017040000_reversao.sql (apaga as 2 funções, as 2 views e a tabela; nada fora delas depende delas).
@@ -62,6 +68,7 @@ create table if not exists pessoas.atributos (
   e_aluno_ativo           boolean not null default false,
   e_ex_aluno_thb          boolean not null default false,
   e_socio                 boolean not null default false,
+  e_ex_socio              boolean not null default false,
   turma_especial          boolean not null default false,
   eventos_lead            text[] not null default '{}',
   eventos_comprou         text[] not null default '{}',
@@ -83,6 +90,7 @@ create table if not exists pessoas.atributos (
   total_pago_liquido      numeric not null default 0,
   qtd_compras             integer not null default 0,
   compras_outra_moeda     integer not null default 0,
+  total_outra_moeda       jsonb not null default '{}',
   primeiro_contato        timestamptz,
   ultimo_contato          timestamptz,
   email_principal         text,
@@ -177,11 +185,14 @@ begin
            coalesce(array_agg(distinct c.evento_chave order by c.evento_chave) filter (where c.aprovada and c.familia = 'EVENTOS' and c.evento_categoria = 'encontro_thb'), '{}') as ethb,
            coalesce(array_agg(distinct c.evento_chave order by c.evento_chave) filter (where c.aprovada and c.familia = 'EVENTOS' and c.evento_categoria = 'clinica'), '{}') as clinica,
            coalesce(array_agg(distinct c.evento_chave order by c.evento_chave) filter (where c.aprovada and c.familia = 'EVENTOS' and c.evento_categoria = 'imersao'), '{}') as imersao,
-           bool_or(c.aprovada and c.familia = 'HM' and c.tipo in ('integral', 'saldo')) as hm,
+           bool_or(c.aprovada and c.familia = 'HM' and (c.tipo in ('integral', 'saldo') or (c.tipo is null and c.produto_id = '446345'))) as hm_tipado,
+           bool_or(c.aprovada and c.familia = 'HM') as hm_qualquer,
+           bool_or(c.aprovada and c.produto_id = '446345') as curso_pratico,
            bool_or(c.aprovada and c.familia = 'HM' and c.tipo = 'sinal') as hm_sinal,
            bool_or(c.aprovada and c.familia = 'HM' and c.tipo = 'renovacao') as hm_renovou,
            bool_or(c.aprovada and c.familia = 'HM' and c.tipo is null) as hm_a_conferir,
-           bool_or(c.aprovada and c.familia = 'AURUM' and c.tipo in ('integral', 'saldo')) as aurum,
+           bool_or(c.aprovada and c.familia = 'AURUM' and c.tipo in ('integral', 'saldo')) as aurum_tipado,
+           bool_or(c.aprovada and c.familia = 'AURUM') as aurum_qualquer,
            bool_or(c.aprovada and c.familia = 'AURUM' and c.tipo = 'sinal') as aurum_sinal,
            bool_or(c.aprovada and c.familia = 'AURUM' and c.tipo = 'renovacao') as aurum_renovou,
            bool_or(c.aprovada and c.familia = 'AURUM' and c.tipo is null) as aurum_a_conferir,
@@ -197,10 +208,28 @@ begin
   ),
   al as (
     select a.id as pessoa_id,
-           (t.situacao_acesso in ('em_dia', 'a_vencer', 'acompanha_titular') and t.cancelado_em is null) as ativo,
+           (t.situacao_acesso in ('em_dia', 'a_vencer', 'acompanha_titular') and t.cancelado_em is null
+            and (not coalesce(t.eh_socio, false) or t.socio_de_aluno_id is null
+                 or (ti.situacao_acesso in ('em_dia', 'a_vencer', 'acompanha_titular') and ti.cancelado_em is null))) as ativo,
+           coalesce(t.eh_socio, false) as eh_socio,
            nullif(regexp_replace(coalesce(t.documento, ''), '\D', '', 'g'), '') as documento
       from alvo a
       join public.thb_alunos t on t.id = a.aluno_id
+      left join public.thb_alunos ti on ti.id = t.socio_de_aluno_id
+  ),
+  om as (
+    select x.pessoa_id, jsonb_object_agg(x.moeda, x.total order by x.moeda) as total_outra_moeda
+      from (select c.pessoa_id, coalesce(c.moeda, '?') as moeda, sum(c.valor_cobrado) as total
+              from alvo a
+              join pessoas.vw_compra c on c.pessoa_id = a.id
+             where c.aprovada and coalesce(c.moeda, '') <> 'BRL'
+             group by 1, 2) x
+     group by x.pessoa_id
+  ),
+  au as (
+    select distinct a.id as pessoa_id
+      from alvo a
+      join cs.vw_aurum_por_aluno v on v.aluno_id = a.aluno_id
   ),
   so as (
     select distinct r.pessoa_id
@@ -245,8 +274,12 @@ begin
            coalesce(co.e_comprador_escritorio, false) as e_comprador_escritorio,
            coalesce(co.e_comprador_educacional, false) as e_comprador_educacional,
            coalesce(al.ativo, false) as e_aluno_ativo,
-           ((coalesce(ev.thb_importado, false) or al.pessoa_id is not null) and not coalesce(al.ativo, false)) as e_ex_aluno_thb,
-           (so.pessoa_id is not null or coalesce(ev.socio_importado, false)) as e_socio,
+           (not coalesce(al.ativo, false)
+            and (coalesce(co.curso_pratico, false)
+                 or (al.pessoa_id is not null and not al.eh_socio)
+                 or (coalesce(ev.thb_importado, false) and not (so.pessoa_id is not null or coalesce(ev.socio_importado, false) or coalesce(al.eh_socio, false))))) as e_ex_aluno_thb,
+           (so.pessoa_id is not null or coalesce(ev.socio_importado, false) or coalesce(al.eh_socio, false)) as e_socio,
+           ((so.pessoa_id is not null or coalesce(ev.socio_importado, false) or coalesce(al.eh_socio, false)) and not coalesce(al.ativo, false)) as e_ex_socio,
            (te.pessoa_id is not null) as turma_especial,
            coalesce(ev.eventos_lead, '{}') as eventos_lead,
            coalesce(co.eventos_comprou, '{}') as eventos_comprou,
@@ -255,19 +288,20 @@ begin
            coalesce(co.ethb, '{}') as ethb,
            coalesce(co.clinica, '{}') as clinica,
            coalesce(co.imersao, '{}') as imersao,
-           coalesce(co.hm, false) as hm,
-           (coalesce(co.hm_sinal, false) and not coalesce(co.hm, false)) as hm_so_sinal,
+           coalesce(co.hm_tipado or (al.pessoa_id is not null and co.hm_qualquer), false) as hm,
+           (coalesce(co.hm_sinal, false) and not coalesce(co.hm_tipado or (al.pessoa_id is not null and co.hm_qualquer), false)) as hm_so_sinal,
            coalesce(co.hm_renovou, false) as hm_renovou,
-           coalesce(co.hm_a_conferir, false) as hm_a_conferir,
-           coalesce(co.aurum, false) as aurum,
-           (coalesce(co.aurum_sinal, false) and not coalesce(co.aurum, false)) as aurum_so_sinal,
+           (coalesce(co.hm_a_conferir, false) and not coalesce(co.hm_tipado or (al.pessoa_id is not null and co.hm_qualquer), false)) as hm_a_conferir,
+           coalesce(co.aurum_tipado or (au.pessoa_id is not null and co.aurum_qualquer), false) as aurum,
+           (coalesce(co.aurum_sinal, false) and not coalesce(co.aurum_tipado or (au.pessoa_id is not null and co.aurum_qualquer), false)) as aurum_so_sinal,
            coalesce(co.aurum_renovou, false) as aurum_renovou,
-           coalesce(co.aurum_a_conferir, false) as aurum_a_conferir,
+           (coalesce(co.aurum_a_conferir, false) and not coalesce(co.aurum_tipado or (au.pessoa_id is not null and co.aurum_qualquer), false)) as aurum_a_conferir,
            (coalesce(ev.sv_pre_checkout, false) and not coalesce(co.sv_comprou, false)) as sv_checkout_sem_compra,
            coalesce(co.total_pago_bruto, 0) as total_pago_bruto,
            coalesce(co.total_pago_liquido, 0) as total_pago_liquido,
            coalesce(co.qtd_compras, 0) as qtd_compras,
            coalesce(co.compras_outra_moeda, 0) as compras_outra_moeda,
+           coalesce(om.total_outra_moeda, '{}') as total_outra_moeda,
            ev.primeiro_contato,
            ev.ultimo_contato,
            idf.email_principal,
@@ -281,24 +315,27 @@ begin
       left join te  on te.pessoa_id = a.id
       left join ds  on ds.pessoa_id = a.id
       left join idf on idf.pessoa_id = a.id
+      left join om  on om.pessoa_id = a.id
+      left join au  on au.pessoa_id = a.id
   )
   insert into pessoas.atributos as x (
-    pessoa_id, e_lead, e_comprador, e_comprador_escritorio, e_comprador_educacional, e_aluno_ativo, e_ex_aluno_thb, e_socio, turma_especial,
+    pessoa_id, e_lead, e_comprador, e_comprador_escritorio, e_comprador_educacional, e_aluno_ativo, e_ex_aluno_thb, e_socio, e_ex_socio, turma_especial,
     eventos_lead, eventos_comprou, ht_edicoes, seminario_edicoes, ethb, clinica, imersao,
     hm, hm_so_sinal, hm_renovou, hm_a_conferir, aurum, aurum_so_sinal, aurum_renovou, aurum_a_conferir,
-    sv_checkout_sem_compra, total_pago_bruto, total_pago_liquido, qtd_compras, compras_outra_moeda,
+    sv_checkout_sem_compra, total_pago_bruto, total_pago_liquido, qtd_compras, compras_outra_moeda, total_outra_moeda,
     primeiro_contato, ultimo_contato, email_principal, telefone_principal, pode_disparar, calculado_em)
   select l.*, now() from linha l
   on conflict (pessoa_id) do update set
     e_lead = excluded.e_lead, e_comprador = excluded.e_comprador, e_comprador_escritorio = excluded.e_comprador_escritorio,
     e_comprador_educacional = excluded.e_comprador_educacional, e_aluno_ativo = excluded.e_aluno_ativo, e_ex_aluno_thb = excluded.e_ex_aluno_thb,
-    e_socio = excluded.e_socio, turma_especial = excluded.turma_especial,
+    e_socio = excluded.e_socio, e_ex_socio = excluded.e_ex_socio, turma_especial = excluded.turma_especial,
     eventos_lead = excluded.eventos_lead, eventos_comprou = excluded.eventos_comprou, ht_edicoes = excluded.ht_edicoes,
     seminario_edicoes = excluded.seminario_edicoes, ethb = excluded.ethb, clinica = excluded.clinica, imersao = excluded.imersao,
     hm = excluded.hm, hm_so_sinal = excluded.hm_so_sinal, hm_renovou = excluded.hm_renovou, hm_a_conferir = excluded.hm_a_conferir,
     aurum = excluded.aurum, aurum_so_sinal = excluded.aurum_so_sinal, aurum_renovou = excluded.aurum_renovou, aurum_a_conferir = excluded.aurum_a_conferir,
     sv_checkout_sem_compra = excluded.sv_checkout_sem_compra, total_pago_bruto = excluded.total_pago_bruto,
     total_pago_liquido = excluded.total_pago_liquido, qtd_compras = excluded.qtd_compras, compras_outra_moeda = excluded.compras_outra_moeda,
+    total_outra_moeda = excluded.total_outra_moeda,
     primeiro_contato = excluded.primeiro_contato, ultimo_contato = excluded.ultimo_contato,
     email_principal = excluded.email_principal, telefone_principal = excluded.telefone_principal,
     pode_disparar = excluded.pode_disparar, calculado_em = excluded.calculado_em;
@@ -365,6 +402,9 @@ select distinct id from (
   union all (select e.pessoa_id from pessoas.eventos e where e.tipo = 'pre_checkout' and e.detalhe->>'papel' = 'sv_pre_checkout' limit 300)
   union all (select e.pessoa_id from pessoas.eventos e where e.tipo = 'lead' and e.evento_id is not null limit 300)
   union all (select r.pessoa_id from pessoas.relacoes r where r.tipo = 'socio_de' limit 300)
+  union all (select c.pessoa_id from pessoas.vw_compra c where c.aprovada and c.produto_id = '446345' limit 300)
+  union all (select p.id from pessoas.pessoas p join cs.vw_aurum_por_aluno v on v.aluno_id = p.aluno_id where p.situacao = 'ativa' limit 300)
+  union all (select p.id from pessoas.pessoas p join public.thb_alunos t on t.id = p.aluno_id where t.eh_socio and p.situacao = 'ativa' limit 300)
   union all (select ac.pessoa_id from pessoas.ac_contato ac where ac.descadastrou and ac.pessoa_id is not null limit 300)
   union all (select i.pessoa_id from pessoas.identificadores i join dados.turma_especial_chaves k
                on i.tipo = 'email' and k.tipo = 'email' and k.hash = encode(sha256(convert_to(i.chave, 'UTF8')), 'hex'))
@@ -386,7 +426,9 @@ select '04 contagens na amostra+lote (cada atributo verdadeiro / nao vazio)', js
   'escritorio', count(*) filter (where e_comprador_escritorio), 'educacional', count(*) filter (where e_comprador_educacional),
   'aluno_ativo', count(*) filter (where e_aluno_ativo), 'ex_aluno_thb', count(*) filter (where e_ex_aluno_thb),
   'ativo_e_ex', count(*) filter (where e_aluno_ativo and e_ex_aluno_thb),
-  'socio', count(*) filter (where e_socio), 'turma_especial', count(*) filter (where turma_especial),
+  'socio', count(*) filter (where e_socio), 'ex_socio', count(*) filter (where e_ex_socio),
+  'ex_socio_e_ativo', count(*) filter (where e_ex_socio and e_aluno_ativo), 'socio_e_ex_aluno', count(*) filter (where e_socio and e_ex_aluno_thb),
+  'turma_especial', count(*) filter (where turma_especial),
   'eventos_lead', count(*) filter (where cardinality(eventos_lead) > 0), 'eventos_comprou', count(*) filter (where cardinality(eventos_comprou) > 0),
   'ht', count(*) filter (where cardinality(ht_edicoes) > 0), 'seminario', count(*) filter (where cardinality(seminario_edicoes) > 0),
   'ethb', count(*) filter (where cardinality(ethb) > 0), 'clinica', count(*) filter (where cardinality(clinica) > 0), 'imersao', count(*) filter (where cardinality(imersao) > 0),
@@ -396,6 +438,9 @@ select '04 contagens na amostra+lote (cada atributo verdadeiro / nao vazio)', js
   'pode_disparar_false', count(*) filter (where not pode_disparar), 'turma_esp_disparavel', count(*) filter (where turma_especial and pode_disparar),
   'com_email', count(email_principal), 'com_tel', count(telefone_principal),
   'outra_moeda', count(*) filter (where compras_outra_moeda > 0),
+  'total_outra_moeda_preenchido', count(*) filter (where total_outra_moeda <> '{}'),
+  'moeda_incoerente', count(*) filter (where (compras_outra_moeda > 0) <> (total_outra_moeda <> '{}')),
+  'hm_e_a_conferir', count(*) filter (where hm and hm_a_conferir), 'aurum_e_a_conferir', count(*) filter (where aurum and aurum_a_conferir),
   'comprador_sem_valor', count(*) filter (where e_comprador and total_pago_bruto = 0 and compras_outra_moeda = 0),
   'bruto_menor_que_liquido', count(*) filter (where total_pago_bruto < total_pago_liquido),
   'sem_contato', count(*) filter (where primeiro_contato is null))::text
@@ -406,7 +451,26 @@ insert into pg_temp._z_out(passo, linha)
 select '05 conferencia hm (esperado: diferenca 0)', jsonb_build_object(
   'tabela', (select count(*) from pessoas.atributos where hm),
   'direto', (select count(distinct c.pessoa_id) from pessoas.vw_compra c join pessoas.atributos a on a.pessoa_id = c.pessoa_id
-              where c.aprovada and c.familia = 'HM' and c.tipo in ('integral', 'saldo')))::text;
+              join pessoas.pessoas p on p.id = c.pessoa_id
+              where c.aprovada and c.familia = 'HM'
+                and (c.tipo in ('integral', 'saldo') or (c.tipo is null and c.produto_id = '446345')
+                     or exists (select 1 from public.thb_alunos t where t.id = p.aluno_id))),
+  'so_tipo', (select count(distinct c.pessoa_id) from pessoas.vw_compra c join pessoas.atributos a on a.pessoa_id = c.pessoa_id
+              where c.aprovada and c.familia = 'HM' and c.tipo in ('integral', 'saldo')),
+  'curso_pratico', (select count(distinct c.pessoa_id) from pessoas.vw_compra c join pessoas.atributos a on a.pessoa_id = c.pessoa_id
+              where c.aprovada and c.produto_id = '446345'),
+  'curso_pratico_ex_ou_ativo', (select count(distinct c.pessoa_id) from pessoas.vw_compra c join pessoas.atributos a on a.pessoa_id = c.pessoa_id
+              where c.aprovada and c.produto_id = '446345' and (a.e_ex_aluno_thb or a.e_aluno_ativo)))::text;
+
+insert into pg_temp._z_out(passo, linha)
+select '05b conferencia aurum (esperado: diferenca 0)', jsonb_build_object(
+  'tabela', (select count(*) from pessoas.atributos where aurum),
+  'direto', (select count(distinct c.pessoa_id) from pessoas.vw_compra c join pessoas.atributos a on a.pessoa_id = c.pessoa_id
+              join pessoas.pessoas p on p.id = c.pessoa_id
+              where c.aprovada and c.familia = 'AURUM'
+                and (c.tipo in ('integral', 'saldo') or exists (select 1 from cs.vw_aurum_por_aluno v where v.aluno_id = p.aluno_id))),
+  'so_tipo', (select count(distinct c.pessoa_id) from pessoas.vw_compra c join pessoas.atributos a on a.pessoa_id = c.pessoa_id
+              where c.aprovada and c.familia = 'AURUM' and c.tipo in ('integral', 'saldo')))::text;
 
 -- idempotência: recalcular tudo de novo e comparar o hash sem calculado_em
 insert into pg_temp._z values ('h1', (select md5(string_agg((to_jsonb(a) - 'calculado_em')::text, '|' order by pessoa_id)) from pessoas.atributos a));
