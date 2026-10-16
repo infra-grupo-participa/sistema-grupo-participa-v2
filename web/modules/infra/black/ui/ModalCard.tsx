@@ -10,6 +10,7 @@ import { Modal, SearchInput } from '@/shared/ui/components';
 import { deslocarDia } from '@/modules/infra/atm/domain/periodo';
 import { anunciosDoCriativo, idDoCriativo } from '../domain/criativos';
 import { filtrarDias, filtrarLinhas } from '../domain/metricas';
+import type { RecorteGasto } from '../domain/numeros';
 import { diaDe } from '../domain/recorte';
 import { FASES, FUNIS, ROTULO_CANAL, ROTULO_FASE, ROTULO_FUNIL, ROTULO_LINHA, ROTULO_SEM_CLASSIFICACAO, ROTULO_SEM_FASE, type Campanha, type DesempenhoDia, type Fase, type LinhaPerfil, type Valor } from '../domain/tipos';
 import { funilDaLinha, linhaDaCampanha, linhaDoLead } from '../domain/linha-black';
@@ -33,8 +34,11 @@ export interface CardDef {
   id: string;
   rotulo: string;
   formato: FormatoMetrica;
-  /** A métrica do card, recalculável em qualquer recorte de dias e cadastros. */
-  medir: (dias: DesempenhoDia[], linhas: LinhaPerfil[]) => Valor;
+  /**
+   * A métrica do card, recalculável em qualquer recorte de dias e cadastros. Card de custo (CPL) recebe também o `recorte`
+   * (funil, canal, fase) para buscar o gasto das mesmas campanhas dos leads; sem ele, o recorte é de dias soltos (dia, criativo).
+   */
+  medir: (dias: DesempenhoDia[], linhas: LinhaPerfil[], recorte?: RecorteGasto) => Valor;
   /** Sub-abas que fazem sentido para este card. */
   aplica: SubAbaModal[];
   dica?: string;
@@ -72,10 +76,12 @@ function itensFase(d: DadosTela, card: CardDef): ItemFase[] {
     dias: dias.filter((x) => faseDe(idx.campanhaDoAnuncio(x.anuncioId)) === chave),
     leads: d.linhas.filter((l) => faseDe(campanhaDoLead(l)) === chave),
   });
-  const itens: ItemFase[] = FASES.map((f) => { const b = por(f); return { fase: f, rotulo: ROTULO_FASE[f], valor: card.medir(b.dias, b.leads) }; });
+  // O gasto de cada barra sai das campanhas da fase, no funil e canal da tela (os mesmos de d.dias e d.linhas).
+  const recorteDe = (chave: string): RecorteGasto => ({ funil: d.recorte.funil, canal: d.recorte.canal, campanha: (c) => faseDe(c) === chave });
+  const itens: ItemFase[] = FASES.map((f) => { const b = por(f); return { fase: f, rotulo: ROTULO_FASE[f], valor: card.medir(b.dias, b.leads, recorteDe(f)) }; });
   for (const [fase, rotulo] of [['sem_fase', ROTULO_SEM_FASE], ['sem_classificacao', ROTULO_SEM_CLASSIFICACAO]] as const) {
     const b = por(fase);
-    if (b.dias.length > 0 || b.leads.length > 0) itens.push({ fase, rotulo, valor: card.medir(b.dias, b.leads) });
+    if (b.dias.length > 0 || b.leads.length > 0) itens.push({ fase, rotulo, valor: card.medir(b.dias, b.leads, recorteDe(fase)) });
   }
   return itens;
 }
@@ -104,7 +110,7 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
     if (ativa === 'funil') {
       const porFunil: Linha[] = FUNIS.map((f) => ({
         chave: f, rotulo: ROTULO_FUNIL[f],
-        valor: card.medir(filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: f, ...canalAtual }), filtrarLinhas(d.linhasPeriodoSemFiltro, { funil: f, ...canalAtual }, idx)),
+        valor: card.medir(filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: f, ...canalAtual }), filtrarLinhas(d.linhasPeriodoSemFiltro, { funil: f, ...canalAtual }, idx), { funil: f, ...canalAtual }),
       }));
       // Linhas que não são C1, C2 nem C3 também contam nos totais: aparecem à parte para a soma das linhas fechar com o card.
       const todosDias = filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: 'todos', ...canalAtual });
@@ -115,14 +121,14 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
         leads: todosLeads.filter((l) => { const x = linhaDoLead(l, idx); return x !== 'remarketing_pagina' && funilDaLinha(x) === null && x !== undefined; }),
       };
       const extra: Linha[] = [
-        { chave: 'remarketing_pagina', rotulo: ROTULO_LINHA.remarketing_pagina, valor: card.medir(noRemarketing.dias, noRemarketing.leads) },
+        { chave: 'remarketing_pagina', rotulo: ROTULO_LINHA.remarketing_pagina, valor: card.medir(noRemarketing.dias, noRemarketing.leads, { funil: 'todos', ...canalAtual, campanha: (c) => linhaDaCampanha(c) === 'remarketing_pagina' }) },
         { chave: 'outras', rotulo: 'Fora de C1, C2 e C3 (lembrete, live, carrinho, sem classificação)', valor: card.medir(outros.dias, outros.leads) },
       ].filter((x) => x.chave === 'remarketing_pagina' || (x.valor !== null && x.valor !== 0));
       return [...porFunil, ...extra];
     }
     if (ativa === 'canal') return (['meta', 'google'] as const).map((c) => ({
       chave: c, rotulo: ROTULO_CANAL[c],
-      valor: card.medir(filtrarDias(d.diasPeriodoSemFiltro, idx, { ...funilAtual, canal: c }), filtrarLinhas(d.linhasPeriodoSemFiltro, { ...funilAtual, canal: c }, idx)),
+      valor: card.medir(filtrarDias(d.diasPeriodoSemFiltro, idx, { ...funilAtual, canal: c }), filtrarLinhas(d.linhasPeriodoSemFiltro, { ...funilAtual, canal: c }, idx), { ...funilAtual, canal: c }),
     }));
     return [];
   };
@@ -131,7 +137,7 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
     <Modal open onClose={onClose} title={card.rotulo} width={`max-w-3xl ${MODAL_TELA_CHEIA}`}>
       <div className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <span className="text-2xl font-bold text-[var(--fg)]"><Numero valor={card.id === 'leads' && pontosIndicador ? pontosIndicador.at(-1)?.acumulado ?? null : card.medir(d.dias, d.linhas)} formato={card.formato} /></span>
+          <span className="text-2xl font-bold text-[var(--fg)]"><Numero valor={card.id === 'leads' && pontosIndicador ? pontosIndicador.at(-1)?.acumulado ?? null : card.medir(d.dias, d.linhas, { funil: d.recorte.funil, canal: d.recorte.canal })} formato={card.formato} /></span>
           <span className="text-xs text-[var(--fg-3)]">
             Hoje ({dataCurta(hoje)}): {formatar(vHoje, card.formato)} · ontem: {formatar(vOntem, card.formato)}
             {variacao !== null ? ` · variação ${variacao >= 0 ? '+' : ''}${formatar(variacao, 'pct')}` : ''}

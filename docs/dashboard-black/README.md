@@ -1189,7 +1189,8 @@ campanha ganha `linha` e `fase`; conjunto ganha `linha`, `no` e `isca`.
 
 **Fases novas** (migration `20261016001200`): objetivo `CAPTAÇÃO` em `mkt.campanha_objetivos`; fases `distribuicao` e
 `pre_captacao` em `mkt_trafego.fases`; `CAPTAÇÃO` → `captacao` e `DISTRIBUIÇÃO` → `distribuicao` em `mkt_trafego.objetivo_fase`.
-Efeito colateral: as duas fases aparecem na tela de Tráfego de todos os projetos. A leitura das campanhas só é regravada na próxima coleta.
+Efeito: as duas fases entram no catálogo de fases (`trafego_config`) de todos os projetos, mas a tela de Tráfego de um projeto só as mostra
+se ele tiver campanha nelas ou as planejar (`trafego_projeto`). A leitura das campanhas só é regravada na próxima coleta.
 
 **Conferido em produção (01/09 a 14/10, BRL, tabelas `mkt_trafego` e `linha_black`)** contra a seção 2 do guia do Caio:
 Antecipação R$ 15.110,20 (`c1`/antecipacao) · Aquecimento R$ 4.551,70 (+ fake live R$ 87,16) · Captação R$ 1.195,50
@@ -1197,10 +1198,10 @@ Antecipação R$ 15.110,20 (`c1`/antecipacao) · Aquecimento R$ 4.551,70 (+ fake
 Nenhuma campanha com gasto sem `linha`; nenhum conjunto sem `linha` e `no` (108 na tabela, 105 na RPC do período).
 `dados.black_leads` igual antes e depois (mesmo hash por porta, com corte de horário).
 
-**Recarga do Meta (uma chamada, 01/09 a 15/10):** trouxe o desempenho das 3 campanhas CPF01 (pré-captação de R$ 638,59 para
-R$ 14.685,01), mas a fase de conjuntos terminou em `sem_tempo` e **os nomes dos conjuntos continuam os antigos**
-(14 `PQ | 00 |` e 14 `PQ | EP01 |`). A classificação não depende disso (esses conjuntos caem em `c1`/`manifesto` e `c1`/`teaser`).
-Se os nomes novos importarem, o próximo passo é decisão do Victor: nova recarga em janelas menores.
+**Recarga do Meta:** a primeira chamada (01/09 a 15/10) trouxe o desempenho das 3 campanhas CPF01 (pré-captação de R$ 638,59 para
+R$ 14.685,01), mas a fase de conjuntos terminou em `sem_tempo`. Uma segunda chamada em janela menor (03/10 a 12/10) terminou ok
+(35 conjuntos, 49 anúncios): os conjuntos com nome antigo (14 `PQ | 00 |` e 14 `PQ | EP01 |`) caíram para 0, o gasto por linha
+seguiu igual ao guia e a classificação dos 105 conjuntos não mudou. As coletas do cron seguintes registraram ok.
 
 **Custo:** a RPC passou de ~36 ms para ~50 ms (12 execuções) por causa de ~120 chamadas à função; depois da recarga, com o dado novo,
 fica em ~85 ms (`explain (analyze)`). Sem índice novo.
@@ -1251,3 +1252,41 @@ investimento de captação soma só `iscas`, `consultoria`, `c2`, `c3`, `remarke
 
 **Falta.** Conferir na tela com dado real (a RPC só dá acesso a `authenticated`); nome dos cortes com o Caio; nome real da campanha de
 remarketing da página (sobe em 16/10; os testes usam o padrão do guia); fixtures de demonstração seguem fictícias.
+
+## Auditoria pós-deploy (16/10)
+
+**Situação:** correções no front em `web/modules/infra/black/`, **sem commit e não publicadas** neste momento. Só código de tela e testes; nenhuma migration.
+
+**Bug do CPL no modal (corrigido).** O `medir` do card de CPL dividia o **investimento de captação do período inteiro** pelos **leads só do
+recorte** (abas Funil, Canal e Fase do `ModalCard`): numerador e denominador de períodos/recortes diferentes. Caso real 04/10 a 15/10:
+Iscas mostrava 1.893,90 / 29 = **65,31** e o certo é 409,87 / 29 = **14,13**; C3 mostrava 45,09 e o certo é 1.397,54 / 42 = **33,27**.
+- **Correção da classe:** `domain/numeros.ts` ganhou `RecorteGasto` (`funil`, `canal`, `campanha`), `investimentoDoRecorte` (investimento de captação
+  com o mesmo recorte dos leads) e `cplDoRecorte`. `CardDef.medir` recebe o recorte como terceiro argumento e o `ModalCard` o passa em cada aba
+  (Funil, Canal, Fase, linha do remarketing da página, cabeçalho). O gasto de campanha mista (`c2`) segue saindo dos anúncios do conjunto.
+- **Card principal não muda:** o cabeçalho do modal usa o recorte da tela e reproduz o valor do card. Sem campanha de captação no recorte, o CPL é
+  "sem dado" (`null`), nunca zero.
+- **Mesmo padrão, também corrigido:** o `medir` do card `investimento-captacao` (mesmo recorte); `cplPorEtapa` (recebe o `canal` da tela);
+  `CampanhasEtapa` e `ColunaCaptacao` (gasto de campanha pelo canal/funil da tela, não do período todo). Efeito: com filtro de canal ou de funil
+  ligado, os números das etapas mudam para o valor do recorte; sem filtro, ficam iguais.
+- **Fica por anúncio:** abas Dia e Criativo, e hoje/ontem, usam o gasto por anúncio (o gasto por campanha não é diário por recorte). Pode haver
+  diferença de centavos contra o gasto por campanha.
+- **Testes:** `domain/cpl-recorte.test.ts` (16 casos): Iscas, Consultoria, C3, canal, fase, remarketing da página, soma das partes = total e
+  card principal inalterado.
+
+**`remarketing_pagina` e o filtro de funil (decisão).** A linha entra no investimento de captação (`contaNoInvestimentoCaptacao`) e aparece em
+**"todos"**, mas **não tem funil próprio**: os filtros C1, C2, Consultoria, Iscas e C3 a excluem. Por isso, nos filtros de funil, a soma das partes
+não inclui o remarketing da página; ele só aparece no total e como linha extra no modal "Por funil". A soma das partes (funis + remarketing da página)
+fecha com o total, e isso tem teste. Não foi criado funil novo.
+
+**Fatos conferidos na auditoria.**
+- **ATMEL126 (projeto 75)** passou a mostrar a campanha `CF | ATM1OUT26 | DISTRIBUIÇÃO | BY THE WAY | META | PQ | ABO | ALCANCE` na fase
+  **Distribuição**. Correto pelo nome; decisão: manter.
+- **Conjuntos com nome antigo:** os 28 conjuntos `PQ | 00 |` / `PQ | EP01 |` foram renomeados pela recarga do Meta e hoje são **0**. O front ainda
+  aceita o nome antigo só por compatibilidade com dado de outro projeto ou de coleta anterior.
+- **Totais de captação** vêm do **gasto por campanha**; etapas e nós da Jornada vêm do **gasto por anúncio**. Diferença de centavos ou de poucos reais
+  entre os dois é **defasagem de coleta**, não erro de cálculo.
+
+**Como testar.** Em `web/`: `npx tsc --noEmit`, `npx vitest run modules/infra/black`, `npm run build`. Na tela da Black com o período 04/10 a 15/10, abrir o modal do
+card de CPL: aba Funil, Iscas deve dar 14,13 e C3 33,27; o cabeçalho deve repetir o valor do card.
+
+**Falta.** Conferir na tela com dado real (a RPC só dá acesso a `authenticated`); não há teste de componente do `ModalCard`/`AbaVisaoGeral`, só do domínio.

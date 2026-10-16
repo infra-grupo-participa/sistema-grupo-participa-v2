@@ -5,11 +5,11 @@ import { investimentoCaptacao, type InvestimentoCaptacao } from './custo-captaca
 import { cardsGrupo } from './grupo';
 import {
   connectRate as calcularConnectRate, conversaoPagina as calcularConversaoPagina, gastoCampanhaPorConjunto, indexar,
-  ehPago, ingressoGrupo as calcularIngressoJanela, ingressoGrupoGeral as calcularIngressoGeral,
+  ehPago, gastoDe, ingressoGrupo as calcularIngressoJanela, ingressoGrupoGeral as calcularIngressoGeral,
   linhasCaptacao, mqlDoRecorte, pessoasUnicas, taxa,
   type FiltroBase, type IndiceTrafego, type Taxa,
 } from './metricas';
-import type { DesempenhoDia, GrupoResumoBlack, LinhaPerfil, Periodo, TrafegoBlack, Valor } from './tipos';
+import type { Campanha, DesempenhoDia, FiltroCanal, FiltroFunil, GrupoResumoBlack, LinhaPerfil, Periodo, TrafegoBlack, Valor } from './tipos';
 import { campanhaNoFunil, ehPreCaptacao, linhaNoFunil } from './linha-black';
 import { diaDe } from './recorte';
 
@@ -112,6 +112,36 @@ export function cplCaptacao(investimento: Valor | Pick<InvestimentoCaptacao, 'to
   const gasto = typeof investimento === 'number' || investimento === null ? investimento : investimento.total;
   const resultado = taxa(gasto, leads.valor);
   return taxaNumerica(resultado, 'gasto de captação ÷ pessoas únicas pagas com campanha de captação');
+}
+
+/**
+ * Recorte de uma linha do modal de um card de custo (CPL): funil e canal e, quando a linha é uma fase ou só o remarketing da
+ * página, um predicado de campanha. O gasto do CPL sai das MESMAS campanhas que os leads da linha (soma sobre soma, mesmo
+ * período, mesmo recorte); nunca o total do período inteiro sobre os leads de um pedaço.
+ */
+export interface RecorteGasto { funil?: FiltroFunil; canal?: FiltroCanal; campanha?: (c: Campanha) => boolean }
+
+/** Investimento em captação das campanhas do recorte (mesmo predicado único, mesma cobertura: sem gasto medido de uma campanha, o total é null). */
+export function investimentoDoRecorte(trafego: TrafegoBlack, periodo: Periodo, recorte: RecorteGasto): InvestimentoCaptacao {
+  const base = recorte.campanha ? { ...trafego, campanhas: trafego.campanhas.filter(recorte.campanha) } : trafego;
+  return investimentoCaptacao(base, periodo, { funil: recorte.funil ?? 'todos', canal: recorte.canal ?? 'todos' });
+}
+
+/**
+ * CPL de um recorte do modal (dias e cadastros JÁ filtrados pelo chamador). Com `recorte` (funil, canal ou fase), o gasto vem
+ * das campanhas desse recorte, igual ao card principal quando o recorte é o da tela. Sem `recorte` (dia, criativo), o
+ * recorte não é uma campanha inteira: o gasto é a soma dos anúncios de captação dos próprios dias recebidos. Recorte sem
+ * campanha de captação ou sem dia de captação é "sem dado", nunca zero.
+ */
+export function cplDoRecorte(trafego: TrafegoBlack, periodo: Periodo, dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[],
+  idx: IndiceTrafego, recorte?: RecorteGasto): Numero {
+  if (!recorte) {
+    const captacao = dias.filter((x) => idx.anuncioEhCaptacao(x.anuncioId));
+    return cplCaptacao(captacao.length ? gastoDe(captacao) : null, leadsDoTrafego(linhas, idx));
+  }
+  const investimento = investimentoDoRecorte(trafego, periodo, recorte);
+  const temCampanha = investimento.campanhasMetaTotal + investimento.campanhasGoogleTotal > 0;
+  return cplCaptacao(temCampanha ? investimento.total : null, leadsDoTrafego(linhas, idx, { funil: recorte.funil ?? 'todos', canal: recorte.canal ?? 'todos' }));
 }
 
 /** MQL pela regra do servidor: profissão do envio mais recente que contém profissão. */
