@@ -1,4 +1,4 @@
--- ENSAIO de 20261016120000 e 20261016120100 (ESCRITO em 16/10/2026, NÃO RODADO: o back-end-sr só tinha leitura). Transação DESFEITA.
+-- ENSAIO de 20261016120000 e 20261016120100 (ESCRITO em 16/10/2026 e refeito no mesmo dia depois do pentester; rodado com rollback, ver 20261016120000.explain.md). Transação DESFEITA.
 -- Rodar com: python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio <este arquivo>   (banco em produção: fora do :47-:52 e de 05:35-05:45 UTC)
 -- A PROCEDURE carga_incremental_rodar NÃO roda aqui: COMMIT não vale dentro de BEGIN. Ela se prova com o CALL manual do roteiro (explain.md).
 begin;
@@ -30,6 +30,8 @@ insert into pg_temp._z_out(passo, linha) select '00 antes', (select jsonb_build_
 --      Grava 1 linha de saúde por execução em pessoas.carga_execucao (fonte 'incremental') e, se houve erro, sem_avanco ou orçamento
 --      estourado, termina com RAISE EXCEPTION: o job fica 'failed' em cron.job_run_details e o vigia (ops.vigiar) abre incidente.
 --      Chave 'incremental' ligada mas com data de fim vencida também falha (revisão), em vez de calar.
+--      Fonte com chave ligada que NÃO rodou (carga_aberta, sem_carga_inicial) fica nomeada na linha de saúde ('puladas: ...'), sem derrubar o job.
+--      Parâmetros nulos são recusados (is null or not between), não só os fora da faixa.
 --   3. Chave 'incremental' ganha data de fim 2026-11-15 (revisão em 30 dias; estava sem fim). Ao ligar, o comando do roteiro grava
 --      current_date + 30. Chave 'activecampaign_delta' passa de 2026-12-31 para 2026-11-15 pelo mesmo motivo.
 --   4. O job 'pessoas-incremental' passa a chamar a procedure (cron.alter_job só do command; continua desligado, mesmo minuto :50).
@@ -61,8 +63,9 @@ language plpgsql set search_path to '' as $f$
 declare
   v_e bigint; r jsonb; v_lidas int; v_eventos int; v_sem_avanco boolean := false; v_sqlstate text;
 begin
-  if p_limite not between 1 and 1000 then raise exception 'limite entre 1 e 1.000' using errcode = '22023'; end if;
-  if p_fonte <> all (array['hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios',
+  -- nulo falha FECHADO: 'not between' com NULL não dispara (achado 3 do pentester), então o nulo é recusado de forma explícita
+  if p_limite is null or p_limite not between 1 and 1000 then raise exception 'limite entre 1 e 1.000' using errcode = '22023'; end if;
+  if p_fonte is null or p_fonte <> all (array['hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios',
                            'respondi', 'leads_cnhf', 'leads_workbook', 'leads_black', 'crm_negocio']) then
     raise exception 'fonte inválida' using errcode = '22023';
   end if;
@@ -124,13 +127,14 @@ declare
                            'respondi', 'leads_cnhf', 'leads_workbook', 'leads_black', 'crm_negocio'];
   v_n int := 11; v_ini int; i int; f text; r jsonb;
   v_t0 timestamptz := clock_timestamp(); v_total int := 0; v_rodadas int := 0;
-  v_problemas text[] := '{}'; v_motivo_parada text; v_sp text := current_setting('search_path');
+  v_problemas text[] := '{}'; v_puladas text[] := '{}'; v_motivo_parada text; v_sp text := current_setting('search_path');
   v_ligada boolean; v_ate date;
 begin
   -- Procedure com cláusula SET roda atômica e não pode fazer COMMIT; por isso o search_path é posto aqui (e devolvido no fim).
   perform pg_catalog.set_config('search_path', '', false);
   perform pg_catalog.set_config('lock_timeout', '5s', false);
-  if p_limite not between 1 and 1000 or p_orcamento_s not between 5 and 100 or p_teto_linhas not between 1 and 11000 then
+  if p_limite is null or p_limite not between 1 and 1000 or p_orcamento_s is null or p_orcamento_s not between 5 and 100
+     or p_teto_linhas is null or p_teto_linhas not between 1 and 11000 then
     raise exception 'parâmetros fora da faixa (limite 1-1000, orçamento 5-100 s, teto 1-11000)' using errcode = '22023';
   end if;
   select ligada, ate into v_ligada, v_ate from pessoas.carga_chave where fonte = 'incremental';
@@ -156,13 +160,18 @@ begin
     if r->>'estado' in ('erro', 'sem_avanco') then
       v_problemas := v_problemas || (f || ': ' || (r->>'estado') || coalesce(' ' || (r->>'sqlstate'), ''));
     end if;
+    -- chave ligada mas a fonte não rodou (carga da fonte aberta ou sem carga inicial): não falha o job, mas fica NOMEADA na linha de saúde
+    if r->>'estado' in ('carga_aberta', 'sem_carga_inicial') then v_puladas := v_puladas || (f || ' (' || (r->>'estado') || ')'); end if;
     commit;                                               -- a fonte que terminou fica gravada, aconteça o que acontecer depois
   end loop;
 
   -- uma linha de saúde por hora (fonte 'incremental'): consulta direta mostra a última rodada e o motivo de qualquer parada
   insert into pessoas.carga_execucao (fonte, fase, status, lotes, lidas, erro, por, terminada_em)
   values ('incremental', 'pessoas', case when cardinality(v_problemas) > 0 then 'erro' else 'ok' end, v_rodadas, v_total,
-          left(nullif(array_to_string(case when v_motivo_parada is null then v_problemas else v_problemas || array['parou: ' || v_motivo_parada] end, '; '), ''), 2000), 'incremental', now());
+          left(nullif(array_to_string(v_problemas
+                                      || case when v_motivo_parada is not null then array['parou: ' || v_motivo_parada] else '{}'::text[] end
+                                      || case when cardinality(v_puladas) > 0 then array['puladas: ' || array_to_string(v_puladas, ', ')] else '{}'::text[] end,
+                                      '; '), ''), 2000), 'incremental', now());
   commit;
   perform pg_catalog.set_config('search_path', v_sp, false);
   if cardinality(v_problemas) > 0 then
@@ -176,10 +185,10 @@ comment on procedure pessoas.carga_incremental_rodar(integer, integer, integer) 
 
 -- ===================== 3. chave com data de fim =====================
 update pessoas.carga_chave
-   set ate = date '2026-11-15', por = 'migration 20261016120000: revisão em 30 dias (ao ligar, o roteiro grava current_date + 30)', em = now()
+   set ate = date '2026-11-15', por = 'migration 20261016120000: revisão em 30 dias (ligar: current_date + 30)', em = now()
  where fonte = 'incremental' and ate is null;
 update pessoas.carga_chave
-   set ate = date '2026-11-15', por = 'migration 20261016120000: revisão em 30 dias (ao ligar, o roteiro grava current_date + 30)', em = now()
+   set ate = date '2026-11-15', por = 'migration 20261016120000: revisão em 30 dias (ligar: current_date + 30)', em = now()
  where fonte = 'activecampaign_delta' and ate = date '2026-12-31';
 
 -- ===================== 4. o job chama a procedure (continua desligado) =====================
@@ -211,29 +220,33 @@ begin
 end
 $g$;
 
--- ===== 20261016120100 =====
--- 20261016120100: pessoas.carga_respondi no modo "só novos" não fica mais presa em respostas que nunca viram evento
+-- 20261016120100: pessoas.carga_respondi e pessoas.carga_aluno_historico no modo "só novos" não ficam presas em linha que nunca vira evento
 --
--- STATUS: ESCRITA, NÃO APLICADA (16/10/2026, back-end-sr). Independente de 20261016120000 (a procedure funciona sem esta),
---   mas sem ela a fonte 'respondi' do incremental acusa 'sem_avanco' toda hora. Ensaio: 20261016120100_ensaio.sql.
---   Reversão: 20261016120100_reversao.sql. Detalhe: 20261016120100.explain.md.
+-- STATUS: ESCRITA, NÃO APLICADA (16/10/2026, back-end-sr; refeita no mesmo dia depois do achado 1 do pentester). Independente de 20261016120000
+--   (a procedure funciona sem esta), mas sem ela as fontes 'respondi' e 'aluno_historico' relêem para sempre as linhas descartadas.
+--   Ensaio: 20261016120000_ensaio.sql (traz as duas migrations). Reversão: 20261016120100_reversao.sql. Detalhe: 20261016120100.explain.md.
 --
--- POR QUE: no modo p_novos a função lê as 200 primeiras respostas (por uuid) sem evento. Medido em 16/10/2026: 23.022 respostas,
---   3.505 sem evento, 2.643 delas sem e-mail e sem telefone (nunca viram pessoa). A janela de 200 fica presa nessas, para sempre, e as
---   862 restantes (e qualquer resposta nova com uuid maior) nunca são lidas.
+-- POR QUE: no modo p_novos a função lê as 200 primeiras linhas sem evento. Quem não tem e-mail válido nunca vira pessoa
+--   (pessoas._casar_email_seguro devolve pessoa nula e a linha é só contada como pulada), logo nunca ganha evento e fica na janela para sempre.
+--   Medido em 16/10/2026: respondi tem 3.505 respostas sem evento e 3.496 delas não têm e-mail válido (a 1ª versão desta migration filtrava por
+--   "8 dígitos no telefone" e deixava passar 853 dessas); aluno_historico tem 29 linhas sem evento, todas com e-mail inválido.
 -- O QUE MUDA (só o WHERE/ORDER BY do modo p_novos; carga inicial e cursor idênticos):
---   1. p_novos só considera resposta com '@' no e-mail ou 8 dígitos seguidos no telefone (e-mail/telefone da coluna ou de dados->>).
---   2. p_novos ordena pelas mais recentes primeiro (respondido_em), para uma linha antiga que não casa nunca tapar a janela.
---   Assinatura, search_path, acl e retorno iguais. Corpo anterior (md5 cc382c4c995d9d475c2e984f8203b4fd) está na reversão.
--- AS 5 PERGUNTAS: escala = 23 mil linhas, 200 por execução; índice = eventos_fonte_unico no anti-join (sem índice novo; o sort das
---   candidatas é sobre as ~3.5 mil sem evento); frequência = 1×/hora, só pelo job pessoas-incremental (desligado); repetição = idempotente
---   (on conflict do nothing); reversão = 20261016120100_reversao.sql.
+--   1. respondi, p_novos: só considera resposta com e-mail normalizado válido e de até 320 caracteres, o MESMO critério do descarte
+--      (length(pessoas.norm_email(left(coalesce(email, dados->>'email'), 1000))) <= 320). Ordena pelas mais recentes (respondido_em).
+--   2. aluno_historico, p_novos: o mesmo critério sobre email_norm. As 29 linhas deixam de ser relidas e nunca geram 'sem_avanco' falso.
+--   Assinaturas, search_path, acl e retorno iguais. Corpos anteriores (md5 cc382c4c995d9d475c2e984f8203b4fd e 65ab8c104745e404dc33a1d5d943e79f) estão na reversão.
+-- AS 5 PERGUNTAS: escala = 23 mil respostas e 7,6 mil linhas de histórico, 200 por execução; índice = eventos_fonte_unico no anti-join (sem índice
+--   novo; o filtro roda sobre as ~3,5 mil respostas sem evento); frequência = 1×/hora, só pelo job pessoas-incremental (desligado); repetição =
+--   idempotente (on conflict do nothing); reversão = 20261016120100_reversao.sql.
 
 
 do $g$
 begin
   if (select md5(prosrc) from pg_proc where oid = 'pessoas.carga_respondi(bigint,integer,boolean)'::regprocedure) <> 'cc382c4c995d9d475c2e984f8203b4fd' then
     raise exception '20261016120100: o corpo de pessoas.carga_respondi não é o esperado (md5 cc382c4c995d9d475c2e984f8203b4fd). Reler antes de aplicar.';
+  end if;
+  if (select md5(prosrc) from pg_proc where oid = 'pessoas.carga_aluno_historico(bigint,integer,boolean)'::regprocedure) <> '65ab8c104745e404dc33a1d5d943e79f' then
+    raise exception '20261016120100: o corpo de pessoas.carga_aluno_historico não é o esperado (md5 65ab8c104745e404dc33a1d5d943e79f). Reler antes de aplicar.';
   end if;
 end
 $g$;
@@ -249,8 +262,9 @@ begin
              from respondi.respostas x left join respondi.formularios f on f.slug = x.form_slug
             where (not p_novos and x.uuid::text > v_cur)
                or (p_novos and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'respondi.respostas' and e.fonte_id = x.uuid::text and e.tipo = 'resposta')
-                   -- 16/10/2026: resposta sem e-mail e sem telefone nunca vira pessoa (2.643 delas, medido) e travava a janela de 200
-                   and (coalesce(x.email, x.dados->>'email', '') ~ '@' or coalesce(x.telefone, x.dados->>'telefone', '') ~ '[0-9]{8}'))
+                   -- mesmo descarte de pessoas._casar_email_seguro: e-mail normalizado válido e de até 320 caracteres. Quem não passa aqui nunca vira
+                   -- pessoa nem evento e travaria a janela de 200 (medido em 16/10/2026: 3.505 sem evento, 3.496 delas não passam)
+                   and length(pessoas.norm_email(left(coalesce(x.email, x.dados->>'email'), 1000))) <= 320)
             -- só novos: as mais recentes primeiro, para uma linha antiga que não casa nunca tapar a janela; carga inicial: pelo uuid, como antes
             order by case when p_novos then -extract(epoch from coalesce(x.respondido_em, timestamptz 'epoch')) end, x.uuid::text limit p_limite loop
     n_l := n_l + 1; v_de := coalesce(v_de, r.uuid::text); v_ate := r.uuid::text;
@@ -286,15 +300,66 @@ begin
   return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, n_n, n_c, n_s, n_e, n_r, v_t0);
 end $f$;
 
+create or replace function pessoas.carga_aluno_historico(p_execucao bigint, p_limite integer default 1000, p_novos boolean default false) returns jsonb
+language plpgsql set search_path to '' as $f$
+declare
+  v_t0 timestamptz := clock_timestamp(); v_cur text; r record; v jsonb; v_p uuid; v_chave text; v_quando timestamptz;
+  n_l int := 0; n_n int := 0; n_c int := 0; n_s int := 0; n_e int := 0; n_x int; v_de text; v_ate text;
+begin
+  v_cur := coalesce(pessoas._carga_exigir(p_execucao, 'aluno_historico'), '');
+  -- cursor = md5(e-mail):turma (o espelho é regravado todo dia e os ids mudam)
+  for r in select md5(h.email_norm) || ':' || coalesce(h.turma, '') k, h.*
+             from controle.aluno_historico h
+            where h.email_norm is not null
+              and ((not p_novos and md5(h.email_norm) || ':' || coalesce(h.turma, '') > v_cur)
+                   -- mesmo descarte de pessoas._casar_email_seguro (e-mail normalizado válido, até 320): as 29 linhas de e-mail inválido da carga
+                   -- inicial nunca viram evento e eram relidas toda hora (medido em 16/10/2026)
+                   or (p_novos and length(pessoas.norm_email(left(h.email_norm, 1000))) <= 320
+                       and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'controle.aluno_historico'
+                                                 and e.fonte_id = md5(h.email_norm) || ':' || coalesce(h.turma, '') and e.tipo = 'ativacao')))
+            order by 1 limit p_limite loop
+    n_l := n_l + 1; v_de := coalesce(v_de, r.k); v_ate := r.k;
+    v := pessoas._casar_email_seguro(r.nome, r.email_norm, null, 'importacao');
+    v_p := (v->>'pessoa_id')::uuid;
+    if v_p is null then n_s := n_s + 1; continue; end if;
+    if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
+    v_quando := case when r.primeira_compra ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
+                          and pg_input_is_valid(substr(r.primeira_compra, 7, 4) || '-' || substr(r.primeira_compra, 4, 2) || '-' || substr(r.primeira_compra, 1, 2), 'date')
+                     then (substr(r.primeira_compra, 7, 4) || '-' || substr(r.primeira_compra, 4, 2) || '-' || substr(r.primeira_compra, 1, 2))::date::timestamp at time zone 'America/Sao_Paulo' end;
+    insert into pessoas.eventos (pessoa_id, tipo, fonte, turma_id, fonte_tabela, fonte_id, quando, detalhe)
+    values (v_p, 'ativacao', 'importacao',
+            (select t.id from public.thb_turmas t where t.codigo = replace(r.turma, '.R', 'R')),
+            'controle.aluno_historico', r.k, coalesce(v_quando, now()),
+            jsonb_strip_nulls(jsonb_build_object('programa', 'thb', 'turma_fonte', left(r.turma, 20), 'data_estimada', v_quando is null)))
+    on conflict (fonte_tabela, fonte_id, tipo) where fonte_id is not null do nothing;
+    get diagnostics n_x = row_count; n_e := n_e + n_x;
+    if nullif(btrim(r.turma_aurum), '') is not null then
+      insert into pessoas.eventos (pessoa_id, tipo, fonte, turma_id, fonte_tabela, fonte_id, quando, detalhe)
+      values (v_p, 'ativacao', 'importacao', (select t.id from public.thb_turmas t where t.codigo = btrim(r.turma_aurum)),
+              'controle.aluno_historico', md5(r.email_norm) || ':' || left(btrim(r.turma_aurum), 20), coalesce(v_quando, now()),
+              jsonb_build_object('programa', 'aurum', 'turma_fonte', left(btrim(r.turma_aurum), 20)))
+      on conflict (fonte_tabela, fonte_id, tipo) where fonte_id is not null do nothing;
+      get diagnostics n_x = row_count; n_e := n_e + n_x;
+    end if;
+  end loop;
+  return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, n_n, n_c, n_s, n_e, 0, v_t0);
+end $f$;
+
 do $g$
 begin
-  if (select md5(prosrc) from pg_proc where oid = 'pessoas.carga_respondi(bigint,integer,boolean)'::regprocedure) <> '10823ee791c2358f7c0ead4ec2c2eb98' then
-    raise exception '20261016120100: o corpo gravado não bate com o esperado (md5 10823ee791c2358f7c0ead4ec2c2eb98).';
+  if (select md5(prosrc) from pg_proc where oid = 'pessoas.carga_respondi(bigint,integer,boolean)'::regprocedure) <> '149b00e7a0d02de0b7b4a402c9e84ed7' then
+    raise exception '20261016120100: o corpo gravado de carga_respondi não bate com o esperado (md5 149b00e7a0d02de0b7b4a402c9e84ed7).';
+  end if;
+  if (select md5(prosrc) from pg_proc where oid = 'pessoas.carga_aluno_historico(bigint,integer,boolean)'::regprocedure) <> 'cae0c7825b3ff8c98291a91c755804df' then
+    raise exception '20261016120100: o corpo gravado de carga_aluno_historico não bate com o esperado (md5 cae0c7825b3ff8c98291a91c755804df).';
   end if;
   if has_function_privilege('anon', 'pessoas.carga_respondi(bigint,integer,boolean)', 'execute')
      or has_function_privilege('authenticated', 'pessoas.carga_respondi(bigint,integer,boolean)', 'execute')
-     or has_function_privilege('service_role', 'pessoas.carga_respondi(bigint,integer,boolean)', 'execute') then
-    raise exception '20261016120100: carga_respondi executável por anon/authenticated/service_role.';
+     or has_function_privilege('service_role', 'pessoas.carga_respondi(bigint,integer,boolean)', 'execute')
+     or has_function_privilege('anon', 'pessoas.carga_aluno_historico(bigint,integer,boolean)', 'execute')
+     or has_function_privilege('authenticated', 'pessoas.carga_aluno_historico(bigint,integer,boolean)', 'execute')
+     or has_function_privilege('service_role', 'pessoas.carga_aluno_historico(bigint,integer,boolean)', 'execute') then
+    raise exception '20261016120100: carga_respondi ou carga_aluno_historico executável por anon/authenticated/service_role.';
   end if;
 end
 $g$;
@@ -303,6 +368,19 @@ $g$;
 insert into pg_temp._z_out(passo, linha) select '10 job / chaves', (select command from cron.job where jobname = 'pessoas-incremental') || ' | ativo=' || (select active from cron.job where jobname = 'pessoas-incremental')
   || ' | ' || (select string_agg(fonte || '=' || ligada || ' ate ' || coalesce(ate::text, 'null'), ', ') from pessoas.carga_chave where fonte in ('incremental', 'activecampaign_delta'));
 -- cada fonte, limite 20 (grava no estado desfeito): estado, lidas, eventos, ms
+-- candidatas do modo só novos de respondi: antes (filtro do 1º rascunho, 8 dígitos no telefone) x depois (mesmo descarte da casar_email)
+insert into pg_temp._z_out(passo, linha) select '19 respondi candidatas', jsonb_build_object(
+  'sem_evento', count(*),
+  'passa_filtro_antigo_telefone', count(*) filter (where coalesce(x.email, x.dados->>'email', '') ~ '@' or coalesce(x.telefone, x.dados->>'telefone', '') ~ '[0-9]{8}'),
+  'passa_filtro_novo_email', count(*) filter (where length(pessoas.norm_email(left(coalesce(x.email, x.dados->>'email'), 1000))) <= 320))::text
+  from respondi.respostas x
+ where not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'respondi.respostas' and e.fonte_id = x.uuid::text and e.tipo = 'resposta');
+insert into pg_temp._z_out(passo, linha) select '19 aluno_historico candidatas', jsonb_build_object(
+  'sem_evento', count(*),
+  'passa_filtro_novo_email', count(*) filter (where length(pessoas.norm_email(left(h.email_norm, 1000))) <= 320))::text
+  from controle.aluno_historico h
+ where h.email_norm is not null
+   and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'controle.aluno_historico' and e.fonte_id = md5(h.email_norm) || ':' || coalesce(h.turma, '') and e.tipo = 'ativacao');
 do $t$ declare t0 timestamptz := clock_timestamp(); r jsonb; begin
   r := pessoas.carga_incremental_fonte('hotmart_academy', 20);
   insert into pg_temp._z_out(passo, linha) values ('20 fonte hotmart_academy', (r - 'fonte')::text || ' ' || round(extract(epoch from clock_timestamp() - t0) * 1000) || ' ms');
@@ -328,9 +406,11 @@ do $t$ declare t0 timestamptz := clock_timestamp(); r jsonb; begin
   insert into pg_temp._z_out(passo, linha) values ('20 fonte hm_socios', (r - 'fonte')::text || ' ' || round(extract(epoch from clock_timestamp() - t0) * 1000) || ' ms');
 end $t$;
 do $t$ declare t0 timestamptz := clock_timestamp(); r jsonb; begin
-  r := pessoas.carga_incremental_fonte('respondi', 20);
-  insert into pg_temp._z_out(passo, linha) values ('20 fonte respondi', (r - 'fonte')::text || ' ' || round(extract(epoch from clock_timestamp() - t0) * 1000) || ' ms');
+  r := pessoas.carga_incremental_fonte('respondi', 1000);
+  insert into pg_temp._z_out(passo, linha) values ('20 fonte respondi (limite 1000)', (r - 'fonte')::text || ' ' || round(extract(epoch from clock_timestamp() - t0) * 1000) || ' ms');
 end $t$;
+insert into pg_temp._z_out(passo, linha) select '21 respondi sem evento depois', count(*)::text from respondi.respostas x
+ where not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'respondi.respostas' and e.fonte_id = x.uuid::text and e.tipo = 'resposta');
 do $t$ declare t0 timestamptz := clock_timestamp(); r jsonb; begin
   r := pessoas.carga_incremental_fonte('leads_cnhf', 20);
   insert into pg_temp._z_out(passo, linha) values ('20 fonte leads_cnhf', (r - 'fonte')::text || ' ' || round(extract(epoch from clock_timestamp() - t0) * 1000) || ' ms');
@@ -360,18 +440,38 @@ update pessoas.carga_chave set ligada = false where fonte = 'leads_black';
 insert into pg_temp._z_out(passo, linha) select '40 desligada', (pessoas.carga_incremental_fonte('leads_black', 20))::text;
 do $t$ begin perform pessoas.carga_incremental_fonte('fonte_que_nao_existe', 20); exception when others then
   insert into pg_temp._z_out(passo, linha) values ('41 fonte inválida', 'sqlstate ' || sqlstate); end $t$;
+-- parâmetros nulos falham fechado (achado 3): esperado sqlstate 22023 nos dois
+do $t$ begin perform pessoas.carga_incremental_fonte('respondi', null); exception when others then
+  insert into pg_temp._z_out(passo, linha) values ('42 limite nulo', 'sqlstate ' || sqlstate); end $t$;
+do $t$ begin perform pessoas.carga_incremental_fonte(null, 20); exception when others then
+  insert into pg_temp._z_out(passo, linha) values ('43 fonte nula', 'sqlstate ' || sqlstate); end $t$;
+-- a procedure recusa parâmetro nulo ANTES de qualquer COMMIT (por isso dá para chamar aqui, dentro do BEGIN): esperado 22023 nos três casos
+do $t$ begin call pessoas.carga_incremental_rodar(null, 60, 1500); exception when others then
+  insert into pg_temp._z_out(passo, linha) values ('44 procedure limite nulo', 'sqlstate ' || sqlstate); end $t$;
+do $t$ begin call pessoas.carga_incremental_rodar(200, null, 1500); exception when others then
+  insert into pg_temp._z_out(passo, linha) values ('44 procedure orçamento nulo', 'sqlstate ' || sqlstate); end $t$;
+do $t$ begin call pessoas.carga_incremental_rodar(200, 60, null); exception when others then
+  insert into pg_temp._z_out(passo, linha) values ('44 procedure teto nulo', 'sqlstate ' || sqlstate); end $t$;
+-- cópia da expressão da linha de saúde (problema + parada + fontes puladas): só confere tipos e o texto; a procedure em si só roda no CALL real
+insert into pg_temp._z_out(passo, linha) select '45 linha de saúde (expressão)', left(nullif(array_to_string(array['respondi: erro 57014']::text[]
+    || case when 'teto de linhas' is not null then array['parou: ' || 'teto de linhas'] else '{}'::text[] end
+    || case when cardinality(array['hotmart_academy (carga_aberta)', 'hotmart_escritorio (carga_aberta)']) > 0
+            then array['puladas: ' || array_to_string(array['hotmart_academy (carga_aberta)', 'hotmart_escritorio (carga_aberta)'], ', ')] else '{}'::text[] end,
+    '; '), ''), 2000);
 -- explain (analyze) do SELECT do modo só novos de respondi, antes e depois (o plano completo vai para o .explain.md)
 -- (rodar à parte, em autocommit: python3 ... explain; ver 20261016120100.explain.md)
 insert into pg_temp._z_out(passo, linha) select '90 execuções criadas no ensaio', count(*)::text from pessoas.carga_execucao where por = 'incremental';
-select passo, linha from pg_temp._z_out order by em, passo;
 -- ===== reversões ensaiadas =====
--- Reversão de 20261016120100: volta pessoas.carga_respondi ao corpo anterior (md5 cc382c4c995d9d475c2e984f8203b4fd).
+-- Reversão de 20261016120100: volta pessoas.carga_respondi (md5 cc382c4c995d9d475c2e984f8203b4fd) e pessoas.carga_aluno_historico (md5 65ab8c104745e404dc33a1d5d943e79f) aos corpos anteriores.
 -- Rodar com o job pessoas-incremental desligado ou numa janela em que ele não esteja executando.
 
 do $g$
 begin
-  if (select md5(prosrc) from pg_proc where oid = 'pessoas.carga_respondi(bigint,integer,boolean)'::regprocedure) <> '10823ee791c2358f7c0ead4ec2c2eb98' then
-    raise exception 'reversão 20261016120100: o corpo atual não é o desta migration (md5 10823ee791c2358f7c0ead4ec2c2eb98); não sobrescrever.';
+  if (select md5(prosrc) from pg_proc where oid = 'pessoas.carga_respondi(bigint,integer,boolean)'::regprocedure) <> '149b00e7a0d02de0b7b4a402c9e84ed7' then
+    raise exception 'reversão 20261016120100: o corpo atual de carga_respondi não é o desta migration (md5 149b00e7a0d02de0b7b4a402c9e84ed7); não sobrescrever.';
+  end if;
+  if (select md5(prosrc) from pg_proc where oid = 'pessoas.carga_aluno_historico(bigint,integer,boolean)'::regprocedure) <> 'cae0c7825b3ff8c98291a91c755804df' then
+    raise exception 'reversão 20261016120100: o corpo atual de carga_aluno_historico não é o desta migration (md5 cae0c7825b3ff8c98291a91c755804df); não sobrescrever.';
   end if;
 end
 $g$;
@@ -421,10 +521,55 @@ begin
   return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, n_n, n_c, n_s, n_e, n_r, v_t0);
 end $f$;
 
+create or replace function pessoas.carga_aluno_historico(p_execucao bigint, p_limite integer default 1000, p_novos boolean default false) returns jsonb
+language plpgsql set search_path to '' as $f$
+declare
+  v_t0 timestamptz := clock_timestamp(); v_cur text; r record; v jsonb; v_p uuid; v_chave text; v_quando timestamptz;
+  n_l int := 0; n_n int := 0; n_c int := 0; n_s int := 0; n_e int := 0; n_x int; v_de text; v_ate text;
+begin
+  v_cur := coalesce(pessoas._carga_exigir(p_execucao, 'aluno_historico'), '');
+  -- cursor = md5(e-mail):turma (o espelho é regravado todo dia e os ids mudam)
+  for r in select md5(h.email_norm) || ':' || coalesce(h.turma, '') k, h.*
+             from controle.aluno_historico h
+            where h.email_norm is not null
+              and ((not p_novos and md5(h.email_norm) || ':' || coalesce(h.turma, '') > v_cur)
+                   or (p_novos and not exists (select 1 from pessoas.eventos e where e.fonte_tabela = 'controle.aluno_historico'
+                                                 and e.fonte_id = md5(h.email_norm) || ':' || coalesce(h.turma, '') and e.tipo = 'ativacao')))
+            order by 1 limit p_limite loop
+    n_l := n_l + 1; v_de := coalesce(v_de, r.k); v_ate := r.k;
+    v := pessoas._casar_email_seguro(r.nome, r.email_norm, null, 'importacao');
+    v_p := (v->>'pessoa_id')::uuid;
+    if v_p is null then n_s := n_s + 1; continue; end if;
+    if (v->>'nova')::boolean then n_n := n_n + 1; else n_c := n_c + 1; end if;
+    v_quando := case when r.primeira_compra ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
+                          and pg_input_is_valid(substr(r.primeira_compra, 7, 4) || '-' || substr(r.primeira_compra, 4, 2) || '-' || substr(r.primeira_compra, 1, 2), 'date')
+                     then (substr(r.primeira_compra, 7, 4) || '-' || substr(r.primeira_compra, 4, 2) || '-' || substr(r.primeira_compra, 1, 2))::date::timestamp at time zone 'America/Sao_Paulo' end;
+    insert into pessoas.eventos (pessoa_id, tipo, fonte, turma_id, fonte_tabela, fonte_id, quando, detalhe)
+    values (v_p, 'ativacao', 'importacao',
+            (select t.id from public.thb_turmas t where t.codigo = replace(r.turma, '.R', 'R')),
+            'controle.aluno_historico', r.k, coalesce(v_quando, now()),
+            jsonb_strip_nulls(jsonb_build_object('programa', 'thb', 'turma_fonte', left(r.turma, 20), 'data_estimada', v_quando is null)))
+    on conflict (fonte_tabela, fonte_id, tipo) where fonte_id is not null do nothing;
+    get diagnostics n_x = row_count; n_e := n_e + n_x;
+    if nullif(btrim(r.turma_aurum), '') is not null then
+      insert into pessoas.eventos (pessoa_id, tipo, fonte, turma_id, fonte_tabela, fonte_id, quando, detalhe)
+      values (v_p, 'ativacao', 'importacao', (select t.id from public.thb_turmas t where t.codigo = btrim(r.turma_aurum)),
+              'controle.aluno_historico', md5(r.email_norm) || ':' || left(btrim(r.turma_aurum), 20), coalesce(v_quando, now()),
+              jsonb_build_object('programa', 'aurum', 'turma_fonte', left(btrim(r.turma_aurum), 20)))
+      on conflict (fonte_tabela, fonte_id, tipo) where fonte_id is not null do nothing;
+      get diagnostics n_x = row_count; n_e := n_e + n_x;
+    end if;
+  end loop;
+  return pessoas._carga_lote_fim(p_execucao, v_de, case when p_novos then null else v_ate end, n_l, n_n, n_c, n_s, n_e, 0, v_t0);
+end $f$;
+
 do $g$
 begin
   if (select md5(prosrc) from pg_proc where oid = 'pessoas.carga_respondi(bigint,integer,boolean)'::regprocedure) <> 'cc382c4c995d9d475c2e984f8203b4fd' then
-    raise exception 'reversão 20261016120100: o corpo não voltou ao anterior (md5 cc382c4c995d9d475c2e984f8203b4fd).';
+    raise exception 'reversão 20261016120100: carga_respondi não voltou ao anterior (md5 cc382c4c995d9d475c2e984f8203b4fd).';
+  end if;
+  if (select md5(prosrc) from pg_proc where oid = 'pessoas.carga_aluno_historico(bigint,integer,boolean)'::regprocedure) <> '65ab8c104745e404dc33a1d5d943e79f' then
+    raise exception 'reversão 20261016120100: carga_aluno_historico não voltou ao anterior (md5 65ab8c104745e404dc33a1d5d943e79f).';
   end if;
 end
 $g$;
@@ -455,6 +600,8 @@ $g$;
 -- depois: delete from supabase_migrations.schema_migrations where version = '20261016120000';
 -- as linhas de saúde (fonte 'incremental') e de erro por fonte ficam em pessoas.carga_execucao como histórico.
 
-insert into pg_temp._z_out(passo, linha) select '95 depois das reversões', coalesce(to_regprocedure('pessoas.carga_incremental_rodar(integer,integer,integer)')::text, 'procedure removida') || ' | ' || (select command from cron.job where jobname = 'pessoas-incremental');
-select passo, linha from pg_temp._z_out where passo >= '95' order by em;
+insert into pg_temp._z_out(passo, linha) select '95 depois das reversões', coalesce(to_regprocedure('pessoas.carga_incremental_rodar(integer,integer,integer)')::text, 'procedure removida') || ' | ' || (select command from cron.job where jobname = 'pessoas-incremental')
+  || ' | respondi md5 ' || (select md5(prosrc) from pg_proc where oid = 'pessoas.carga_respondi(bigint,integer,boolean)'::regprocedure)
+  || ' | aluno_historico md5 ' || (select md5(prosrc) from pg_proc where oid = 'pessoas.carga_aluno_historico(bigint,integer,boolean)'::regprocedure);
+select passo, linha from pg_temp._z_out order by em, passo;
 rollback;

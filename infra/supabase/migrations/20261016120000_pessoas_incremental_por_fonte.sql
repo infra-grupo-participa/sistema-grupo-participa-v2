@@ -21,6 +21,8 @@
 --      Grava 1 linha de saúde por execução em pessoas.carga_execucao (fonte 'incremental') e, se houve erro, sem_avanco ou orçamento
 --      estourado, termina com RAISE EXCEPTION: o job fica 'failed' em cron.job_run_details e o vigia (ops.vigiar) abre incidente.
 --      Chave 'incremental' ligada mas com data de fim vencida também falha (revisão), em vez de calar.
+--      Fonte com chave ligada que NÃO rodou (carga_aberta, sem_carga_inicial) fica nomeada na linha de saúde ('puladas: ...'), sem derrubar o job.
+--      Parâmetros nulos são recusados (is null or not between), não só os fora da faixa.
 --   3. Chave 'incremental' ganha data de fim 2026-11-15 (revisão em 30 dias; estava sem fim). Ao ligar, o comando do roteiro grava
 --      current_date + 30. Chave 'activecampaign_delta' passa de 2026-12-31 para 2026-11-15 pelo mesmo motivo.
 --   4. O job 'pessoas-incremental' passa a chamar a procedure (cron.alter_job só do command; continua desligado, mesmo minuto :50).
@@ -54,8 +56,9 @@ language plpgsql set search_path to '' as $f$
 declare
   v_e bigint; r jsonb; v_lidas int; v_eventos int; v_sem_avanco boolean := false; v_sqlstate text;
 begin
-  if p_limite not between 1 and 1000 then raise exception 'limite entre 1 e 1.000' using errcode = '22023'; end if;
-  if p_fonte <> all (array['hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios',
+  -- nulo falha FECHADO: 'not between' com NULL não dispara (achado 3 do pentester), então o nulo é recusado de forma explícita
+  if p_limite is null or p_limite not between 1 and 1000 then raise exception 'limite entre 1 e 1.000' using errcode = '22023'; end if;
+  if p_fonte is null or p_fonte <> all (array['hotmart_academy', 'hotmart_escritorio', 'thb_alunos', 'aluno_historico', 'contatos_hm', 'hm_socios',
                            'respondi', 'leads_cnhf', 'leads_workbook', 'leads_black', 'crm_negocio']) then
     raise exception 'fonte inválida' using errcode = '22023';
   end if;
@@ -117,13 +120,14 @@ declare
                            'respondi', 'leads_cnhf', 'leads_workbook', 'leads_black', 'crm_negocio'];
   v_n int := 11; v_ini int; i int; f text; r jsonb;
   v_t0 timestamptz := clock_timestamp(); v_total int := 0; v_rodadas int := 0;
-  v_problemas text[] := '{}'; v_motivo_parada text; v_sp text := current_setting('search_path');
+  v_problemas text[] := '{}'; v_puladas text[] := '{}'; v_motivo_parada text; v_sp text := current_setting('search_path');
   v_ligada boolean; v_ate date;
 begin
   -- Procedure com cláusula SET roda atômica e não pode fazer COMMIT; por isso o search_path é posto aqui (e devolvido no fim).
   perform pg_catalog.set_config('search_path', '', false);
   perform pg_catalog.set_config('lock_timeout', '5s', false);
-  if p_limite not between 1 and 1000 or p_orcamento_s not between 5 and 100 or p_teto_linhas not between 1 and 11000 then
+  if p_limite is null or p_limite not between 1 and 1000 or p_orcamento_s is null or p_orcamento_s not between 5 and 100
+     or p_teto_linhas is null or p_teto_linhas not between 1 and 11000 then
     raise exception 'parâmetros fora da faixa (limite 1-1000, orçamento 5-100 s, teto 1-11000)' using errcode = '22023';
   end if;
   select ligada, ate into v_ligada, v_ate from pessoas.carga_chave where fonte = 'incremental';
@@ -149,13 +153,18 @@ begin
     if r->>'estado' in ('erro', 'sem_avanco') then
       v_problemas := v_problemas || (f || ': ' || (r->>'estado') || coalesce(' ' || (r->>'sqlstate'), ''));
     end if;
+    -- chave ligada mas a fonte não rodou (carga da fonte aberta ou sem carga inicial): não falha o job, mas fica NOMEADA na linha de saúde
+    if r->>'estado' in ('carga_aberta', 'sem_carga_inicial') then v_puladas := v_puladas || (f || ' (' || (r->>'estado') || ')'); end if;
     commit;                                               -- a fonte que terminou fica gravada, aconteça o que acontecer depois
   end loop;
 
   -- uma linha de saúde por hora (fonte 'incremental'): consulta direta mostra a última rodada e o motivo de qualquer parada
   insert into pessoas.carga_execucao (fonte, fase, status, lotes, lidas, erro, por, terminada_em)
   values ('incremental', 'pessoas', case when cardinality(v_problemas) > 0 then 'erro' else 'ok' end, v_rodadas, v_total,
-          left(nullif(array_to_string(case when v_motivo_parada is null then v_problemas else v_problemas || array['parou: ' || v_motivo_parada] end, '; '), ''), 2000), 'incremental', now());
+          left(nullif(array_to_string(v_problemas
+                                      || case when v_motivo_parada is not null then array['parou: ' || v_motivo_parada] else '{}'::text[] end
+                                      || case when cardinality(v_puladas) > 0 then array['puladas: ' || array_to_string(v_puladas, ', ')] else '{}'::text[] end,
+                                      '; '), ''), 2000), 'incremental', now());
   commit;
   perform pg_catalog.set_config('search_path', v_sp, false);
   if cardinality(v_problemas) > 0 then
@@ -169,10 +178,10 @@ comment on procedure pessoas.carga_incremental_rodar(integer, integer, integer) 
 
 -- ===================== 3. chave com data de fim =====================
 update pessoas.carga_chave
-   set ate = date '2026-11-15', por = 'migration 20261016120000: revisão em 30 dias (ao ligar, o roteiro grava current_date + 30)', em = now()
+   set ate = date '2026-11-15', por = 'migration 20261016120000: revisão em 30 dias (ligar: current_date + 30)', em = now()
  where fonte = 'incremental' and ate is null;
 update pessoas.carga_chave
-   set ate = date '2026-11-15', por = 'migration 20261016120000: revisão em 30 dias (ao ligar, o roteiro grava current_date + 30)', em = now()
+   set ate = date '2026-11-15', por = 'migration 20261016120000: revisão em 30 dias (ligar: current_date + 30)', em = now()
  where fonte = 'activecampaign_delta' and ate = date '2026-12-31';
 
 -- ===================== 4. o job chama a procedure (continua desligado) =====================
