@@ -579,6 +579,8 @@ export interface TokenMcp {
 export interface SessaoComercial {
   vendedorId: string;
   papel: PapelSessao;
+  /** Funis em que o vendedor vê os negócios de todos e pode puxar negócio aberto para si (20261017000100). Ausente = nenhum. */
+  funisVeTodos?: string[];
 }
 
 // ── Jornada da pessoa: tudo o que a pessoa fez com a empresa, em ordem ──

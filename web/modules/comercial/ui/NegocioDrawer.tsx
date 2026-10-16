@@ -20,7 +20,7 @@ import {
 } from '../domain/catalogo';
 import { COR_ETAPA, bloqueioMoverNoFunil, camposFaltandoNoFunil } from '../domain/funis';
 import { atividadeAtrasada, fmtTelefone, situacaoSla } from '../domain/regras';
-import { motivoSomenteLeitura, MSG_SOMENTE_LEITURA, podeTrocarDono, travaMover } from '../domain/travas';
+import { motivoSomenteLeitura, MSG_SOMENTE_LEITURA, podePuxarNegocio, podeTrocarDono, travaMover } from '../domain/travas';
 import type { CampoKey, EventoTimeline, Funil, MotivoPerda, TipoAtividade } from '../domain/types';
 import {
   Aviso, BotaoConversa, BotaoCopiar, Campo, Chip, Dono, EsqueletoLista, EstadoErro, NotaRodape, ProdutoTag, RodapeAcoes,
@@ -252,7 +252,7 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
                 <Row k="Dono" v={
                   <span className="inline-flex items-center gap-2">
                     <Dono id={n.donoId} nomeDe={nomeDe} />
-                    {podeTrocarDono(sessao) && aberto && <Button size="sm" variant="link" onClick={() => setTransferir(true)}>Trocar</Button>}
+                    {(podeTrocarDono(sessao) || podePuxarNegocio(n, sessao)) && aberto && <Button size="sm" variant="link" onClick={() => setTransferir(true)}>{podeTrocarDono(sessao) ? 'Trocar' : 'Puxar para mim'}</Button>}
                   </span>
                 } />
                 <Row k="Criado" v={fmtDataHora(n.criadoEm)} />
@@ -350,7 +350,8 @@ export function NegocioDrawer({ negocioId, onClose, flash: flashPagina }: {
       {transferir && (
         <ModalTransferir
           atual={n.donoId}
-          vendedores={vendedores.filter((v) => v.ativo)}
+          vendedores={vendedores.filter((v) => v.ativo && (podeTrocarDono(sessao) || v.id === sessao?.vendedorId))}
+          soParaMim={!podeTrocarDono(sessao)}
           onClose={() => setTransferir(false)}
           onConfirmar={async (dono, motivo) => { if (await executar(repo.transferirDono(n.id, dono, motivo), 'Dono trocado.')) setTransferir(false); }}
         />
@@ -635,10 +636,12 @@ export function ModalPerdido({ onClose, onConfirmar }: { onClose: () => void; on
   );
 }
 
-function ModalTransferir({ atual, vendedores, onClose, onConfirmar }: {
+function ModalTransferir({ atual, vendedores, soParaMim = false, onClose, onConfirmar }: {
   atual: string | null; vendedores: { id: string; nome: string }[]; onClose: () => void; onConfirmar: (dono: string, motivo: string) => void;
+  /** Vendedor com o funil liberado (20261017000100): só puxa para si. */
+  soParaMim?: boolean;
 }) {
-  const [dono, setDono] = useState('');
+  const [dono, setDono] = useState(soParaMim && vendedores.length === 1 ? vendedores[0].id : '');
   const [motivo, setMotivo] = useState('');
   return (
     <Modal
@@ -659,7 +662,9 @@ function ModalTransferir({ atual, vendedores, onClose, onConfirmar }: {
         <Campo rotulo="Motivo" extra={<span className="text-[var(--fg-3)]">obrigatório</span>}>
           <Textarea rows={2} value={motivo} onChange={(e) => setMotivo(e.target.value)} />
         </Campo>
-        <NotaRodape>Só o gestor troca dono, sempre com o motivo registrado. O contato acompanha o novo dono.</NotaRodape>
+        <NotaRodape>{soParaMim
+          ? 'Neste funil você pode puxar o negócio de outra pessoa para você, sempre com o motivo registrado. O contato acompanha o novo dono.'
+          : 'Só o gestor troca dono, sempre com o motivo registrado. O contato acompanha o novo dono.'}</NotaRodape>
       </div>
     </Modal>
   );

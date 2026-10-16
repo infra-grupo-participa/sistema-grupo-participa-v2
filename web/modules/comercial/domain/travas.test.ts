@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { etapasPadrao } from './funis';
 import {
-  motivoSemEscrita, motivoSemNovoNegocio, motivoSomenteLeitura, MSG_SOMENTE_LEITURA, podeAbrirNegocioPara, podeConcluirAtividade, podeEscrever, podeEscreverContato, podeMexerNoNegocio, podeTrocarDono,
+  motivoSemEscrita, motivoSemNovoNegocio, motivoSomenteLeitura, MSG_SOMENTE_LEITURA, podeAbrirNegocioPara, podeConcluirAtividade, podeEscrever, podeEscreverContato, podeMexerNoNegocio, podePuxarNegocio, podeTrocarDono,
   somenteLeitura, travaMover, veComoGestor,
 } from './travas';
 import type { Funil, Negocio, SessaoComercial } from './types';
@@ -37,6 +37,21 @@ describe('podeTrocarDono', () => {
     expect(podeTrocarDono(gestor)).toBe(true);
     expect(podeTrocarDono(ana)).toBe(false);
     expect(podeTrocarDono(null)).toBe(false);
+  });
+});
+
+describe('podePuxarNegocio', () => {
+  const luis = { vendedorId: 'luis', papel: 'vendedor' as const, funisVeTodos: ['f-thb'] };
+  it('vendedor puxa negócio de outro só no funil liberado', () => {
+    expect(podePuxarNegocio({ donoId: 'jonathan', funilId: 'f-thb' }, luis)).toBe(true);
+    expect(podePuxarNegocio({ donoId: null, funilId: 'f-thb' }, luis)).toBe(true);
+    expect(podePuxarNegocio({ donoId: 'jonathan', funilId: 'outro' }, luis)).toBe(false);
+    expect(podePuxarNegocio({ donoId: 'luis', funilId: 'f-thb' }, luis)).toBe(false);
+  });
+  it('sem funil liberado, gestor, leitor ou sem sessão: não', () => {
+    expect(podePuxarNegocio({ donoId: 'jonathan', funilId: 'f-thb' }, ana)).toBe(false);
+    expect(podePuxarNegocio({ donoId: 'jonathan', funilId: 'f-thb' }, { ...luis, papel: 'leitor' })).toBe(false);
+    expect(podePuxarNegocio({ donoId: 'jonathan', funilId: 'f-thb' }, null)).toBe(false);
   });
 });
 

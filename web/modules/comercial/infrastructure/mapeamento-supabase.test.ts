@@ -37,6 +37,8 @@ describe('sessão, config, vendedores, agrupadores, motivos', () => {
     expect(mapSessao({ vendedorId: U1, papel: 'gestor' })).toEqual({ vendedorId: U1, papel: 'gestor' });
     expect(mapSessao({ vendedorId: U1, papel: 'leitor' })).toEqual({ vendedorId: U1, papel: 'leitor' });
     expect(() => mapSessao({ vendedorId: U1, papel: 'admin' })).toThrow();
+    expect(mapSessao({ vendedorId: U1, papel: 'vendedor', funisVeTodos: ['f1'] })).toEqual({ vendedorId: U1, papel: 'vendedor', funisVeTodos: ['f1'] });
+    expect(mapSessao({ vendedorId: U1, papel: 'vendedor', funisVeTodos: [] })).toEqual({ vendedorId: U1, papel: 'vendedor' });
   });
   it('crm_config descarta escritaLigada e mantém limite null', () => {
     expect(mapConfig({ horarioContato: '', limiteNegociosAbertos: null, escritaLigada: false }))

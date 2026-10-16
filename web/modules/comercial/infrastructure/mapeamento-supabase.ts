@@ -94,7 +94,8 @@ export function mapSessao(d: unknown): SessaoComercial {
   const o = obj(d, 'crm_sessao', 'sessão');
   const papel = o.papel === 'gestor' ? 'gestor' : o.papel === 'vendedor' ? 'vendedor' : o.papel === 'leitor' ? 'leitor' : null;
   if (!o.vendedorId || !papel) throw new FormatoInesperado('crm_sessao', 'sem vendedorId ou papel');
-  return { vendedorId: str(o.vendedorId), papel };
+  const funis = Array.isArray(o.funisVeTodos) ? o.funisVeTodos.filter((x): x is string => typeof x === 'string') : [];
+  return funis.length ? { vendedorId: str(o.vendedorId), papel, funisVeTodos: funis } : { vendedorId: str(o.vendedorId), papel };
 }
 
 export function mapConfig(d: unknown): ConfigComercial {

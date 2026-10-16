@@ -7,7 +7,7 @@ import { ROTULO_CAMPO } from './catalogo';
 import { bloqueioMoverNoFunil, camposFaltandoNoFunil } from './funis';
 import type { Atividade, CampoKey, Contato, Funil, Negocio, SessaoComercial } from './types';
 
-type Quem = Pick<SessaoComercial, 'vendedorId' | 'papel'> | null | undefined;
+type Quem = Pick<SessaoComercial, 'vendedorId' | 'papel' | 'funisVeTodos'> | null | undefined;
 
 /** Texto padrão da recusa do leitor — o mesmo que o banco devolve (`crm.guarda_escrita` / `crm.pode_escrever`). */
 export const MSG_SOMENTE_LEITURA = 'Acesso só de leitura.';
@@ -41,6 +41,15 @@ export function podeMexerNoNegocio(n: Pick<Negocio, 'donoId'>, quem: Quem): bool
 /** Trocar o dono do negócio (ou definir o dono do contato) é só do gestor. */
 export function podeTrocarDono(quem: Quem): boolean {
   return quem?.papel === 'gestor';
+}
+
+/**
+ * 20261017000100: vendedor com o funil liberado (crm.vendedor_funil_aberto) vê os negócios de todos nesse funil e puxa
+ * para SI o negócio de outra pessoa. Espelho de `crm_transferir_dono`: só para si mesmo, só negócio aberto (o chamador confere).
+ */
+export function podePuxarNegocio(n: Pick<Negocio, 'donoId' | 'funilId'>, quem: Quem): boolean {
+  if (!quem || quem.papel !== 'vendedor') return false;
+  return !!quem.funisVeTodos?.includes(n.funilId) && n.donoId !== quem.vendedorId;
 }
 
 /** Frase para a tela explicar por que o negócio está só para leitura. null = pode mexer. */
