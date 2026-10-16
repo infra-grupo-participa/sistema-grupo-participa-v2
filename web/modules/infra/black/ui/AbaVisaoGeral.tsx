@@ -14,7 +14,7 @@ import {
   taxaVideo75, type Taxa as TipoTaxa,
 } from '../domain/metricas';
 import { campanhaNoFunil, linhaDaCampanha, linhaDoConjunto, linhaDoLead, linhaNoFunil } from '../domain/linha-black';
-import { FUNIS, ROTULO_FUNIL, ROTULO_SEM_CLASSIFICACAO, type Campanha, type DesempenhoDia, type Funil, type LinhaBlack, type LinhaPerfil, type Valor } from '../domain/tipos';
+import { FASES, FUNIS, ROTULO_FUNIL, ROTULO_SEM_CLASSIFICACAO, type Campanha, type DesempenhoDia, type Funil, type LinhaBlack, type LinhaPerfil, type Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
 import { ModalCard, type CardDef, type SubAbaModal } from './ModalCard';
 import { ModalFunisEtapa } from './ModalFunisEtapa';
@@ -216,7 +216,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
     dica: 'Pessoas MQL pela Regra B ÷ pessoas únicas do recorte. O detalhe diário mostra uma linha por dia.' };
   const cardCpl: CardDef = { id: 'cpl', rotulo: 'CPL geral', formato: 'brl', medir: (x, l, recorte) => cplDoRecorte(d.trafegoPeriodo, d.periodo, x, l, idx, recorte).valor, aplica: TRAFEGO, menorMelhor: true,
     dica: `Investimento em captação (iscas, consultoria, C3 e remarketing da página) ÷ leads pagos dessas linhas, no mesmo período. ${NOTA_ENTRESAFRA}.` };
-  const cardGasto: CardDef = { id: 'gasto', rotulo: 'Gasto de tráfego', formato: 'brl', medir: (x) => (x.length ? gastoDe(x) : null), aplica: TRAFEGO,
+  const cardGasto: CardDef = { id: 'gasto', rotulo: 'Gasto de tráfego', formato: 'brl', medir: (x) => (x.length ? gastoDe(x) : null), aplica: TRAFEGO, fasesComVerba: FASES,
     dica: `No detalhe, o recorte é o período escolhido no topo. ${NOTA_ENTRESAFRA}.` };
 
   // ─── Faixa 2: investimento (período) ────────────────────────────────────────────────────────────────────
@@ -249,7 +249,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
         // Recorte sem campanha de captação (canal Google, fases Antecipação, Aquecimento, Remarketing): null, "Sem dado", nunca R$ 0,00 (igual ao cplDoRecorte).
         if (recorte) return investimentoDoRecorteValor(d.trafegoPeriodo, d.periodo, recorte);
         const cap = capDias(x, d); return cap.length ? gastoDe(cap) : null;
-      }, aplica: TRAFEGO,
+      }, aplica: TRAFEGO, fasesComVerba: ['captacao'],
       dica: `Campanhas de captação pela linha do banco: iscas, consultoria, C3 e remarketing da página. ${NOTA_ENTRESAFRA}.` },
       valor: <Numero valor={investimento.total} formato="brl" falta="sem dado por cobertura incompleta" />,
       hint: `Meta Ads ${moeda(investimento.meta)} · Google Ads ${moeda(investimento.google)}` },

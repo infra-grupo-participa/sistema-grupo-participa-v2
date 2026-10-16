@@ -58,6 +58,49 @@ Login normal em `http://localhost:3000/login` (conta `@advmais.com`, cargo admin
 Conferido na tela renderizada com o padrão `desde-inicio` (placar 14.146 de 15.000; verba R$ 276.000,76 de
 R$ 428.571,00; CPL do placar R$ 14,61 = R$ 192.079,46 ÷ 13.145; soma das 6 fases = R$ 276.000,76).
 
+## Por fase com o limite de verba de cada fase · 16/10/2026 (pedido do Victor)
+
+- **Pedido:** no card Investimento em tráfego, aba "Por fase" do modal, a barra de cada fase só mostrava o gasto. O Victor
+  quer ver o limite de verba da fase (captação, remarketing, aquecimento etc.) e o quão perto ou longe a gente está.
+  Exemplo dele: gastou R$ 1.000 em captação, limite de R$ 50.000: marcar onde estão os R$ 50.000 e quanto falta.
+- **Fonte dos limites (nada novo, nada inventado):** `ConfigBlack.previstoPorFase`, preenchido no adaptador
+  (`ORCAMENTO` em `infrastructure/fonte-supabase.ts`) com a tabela "Orçamento por fase" da concepção do Caio de 12/10/2026
+  (mídia sem o imposto do Meta): 0. Antecipação R$ 17.591 · 1. Distribuição R$ 47.575 · 2. Captação R$ 220.000 ·
+  3. Aquecimento R$ 26.909 · 4. Remarketing R$ 30.000 · 5. Live e carrinho R$ 70.000 (soma R$ 412.075) + Reserva R$ 16.496 = R$ 428.571.
+  **Não há cadastro desses limites no banco** (conferido: `dados.dashboards` só guarda o início do período). Sem migration.
+  Fase sem limite no config mostra "Sem limite cadastrado", nunca um número chutado.
+- **Feito:**
+  - `domain/verba-fase.ts` (`verbaDaFase`): gasto ÷ limite, saldo (limite menos gasto), posição do marco e do preenchimento.
+    Gasto nulo = "Sem dado" (nunca 0); limite ausente ou zero = "Sem limite cadastrado"; gasto igual ao limite até o centavo = "no limite".
+  - `BarrasFase` (`ui/graficos.tsx`): cada barra com limite ganha um **marco vertical** na posição do limite, com o rótulo
+    "Limite R$ X" embaixo dele, o gasto e o limite no cabeçalho ("R$ gasto de R$ limite") e a linha de leitura:
+    "N% do limite · faltam R$ X" ou "N% do limite · passou R$ X do limite". A escala de cada barra cabe o limite e o gasto
+    (trilha = maior dos dois × 1,15, para o marco não colar na ponta); cada fase é lida contra o próprio limite, então as
+    larguras de fases diferentes não se comparam entre si (o valor em reais está em todas). A prop `previsto`, que nenhum
+    chamador usava, foi trocada por `limite` (+ `limiteComparavel`).
+  - `ModalCard.tsx`: novo campo `CardDef.fasesComVerba`. Ligado no card **Investimento em tráfego** (`gasto`, as 6 fases) e no
+    **Investimento em captação** (só a fase Captação, as outras fases já são "Sem dado" nesse card). CPL e demais cards não mudam.
+    Rodapé `NotaVerba` diz de onde vem o limite e o que fica fora (reserva, pré-captação, ENTRESAFRA).
+  - Sem farol: investimento contra a verba continua não sendo bom nem ruim (decisão de 15/10). Passar do limite aparece em texto
+    neutro, sem vermelho.
+- **Quando a conta vale:** o limite é do evento inteiro e de todos os canais. Percentual e saldo só aparecem com período
+  "desde o início", funil Todos e canal Todos. Em qualquer recorte menor a barra mostra o marco e o gasto do recorte, e a linha
+  de leitura avisa "Recorte parcial". Gasto de fase sem campanha (hoje Remarketing e Live e carrinho) é "Sem dado".
+- **ENTRESAFRA** continua fora de todo gasto (decisão do Victor de 13/10); a pré-captação (CPF01 e ENTRESAFRA) não entra em barra
+  nenhuma. A concepção conta R$ 14.575 de CPF01 dentro da verba de Distribuição ("já gasto até 11/10"), mas esse gasto é de
+  setembro, antes do início do dashboard (04/10): a barra de Distribuição mostra só o gasto desde 04/10.
+- **Conferência contra o banco (16/10, SELECT em `mkt_trafego`, gasto de campanha desde 04/10, sem pré-captação):** Antecipação
+  R$ 15.110,20 · Distribuição R$ 2.675,42 · Captação R$ 2.612,35 (C2 933,94 + C3 1.678,41 + remarketing da página 0,00) ·
+  Aquecimento R$ 7.791,88 (c1 6.102,84 + fake live 719,01 + lembrete 970,03) · Remarketing e Live e carrinho sem campanha. Gasto por
+  anúncio e por campanha deram o mesmo valor em todas as linhas. A tela renderizada com esses números (harness estático, não a
+  rota autenticada) mostra, por exemplo, Captação "1,2% do limite · faltam R$ 217.387,65".
+- **Como testar:** em `web/`, `npx vitest run modules/infra/black` (`domain/verba-fase.test.ts` e `ui/graficos.test.ts`),
+  `npx tsc --noEmit`, `npx eslint modules/infra/black`, `npm run lint:tokens`, `npm run build`. Na tela: Visão geral, card
+  Investimento em tráfego, aba Por fase; trocar o canal para Google e conferir o aviso de recorte parcial.
+- **Não coberto:** sub-limites dentro da fase (C2 iscas R$ 70.000 e C3 convite direto R$ 150.000 na captação; manifesto R$ 15.400 e
+  lives R$ 9.000 no aquecimento; convite R$ 10.000 e carrinho R$ 60.000 em live e carrinho) existem na concepção, mas a tela só
+  tem a fase. Teste de componente completo do modal (`itensFase`) continua inexistente: o recorte comparável está só no código.
+
 ## Ajustes da auditoria do Victor (12/10/2026)
 
 - **P1, gaveta que não fechava.** Causa: a gaveta era `fixed z-40` dentro da página e a barra do app é `z-[60]`;

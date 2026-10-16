@@ -12,7 +12,7 @@ import { anunciosDoCriativo, idDoCriativo } from '../domain/criativos';
 import { filtrarDias, filtrarLinhas, ROTULO_SEM_DETALHE } from '../domain/metricas';
 import { ratear, semDetalheMista } from '../domain/rateio';
 import type { RecorteGasto } from '../domain/numeros';
-import { diaDe } from '../domain/recorte';
+import { diaDe, periodoDe } from '../domain/recorte';
 import { FASES, FUNIS, ROTULO_CANAL, ROTULO_FASE, ROTULO_FUNIL, ROTULO_LINHA, ROTULO_SEM_CLASSIFICACAO, ROTULO_SEM_FASE, type Campanha, type DesempenhoDia, type Fase, type LinhaPerfil, type Valor } from '../domain/tipos';
 import { funilDaLinha, linhaDaCampanha, linhaDoLead } from '../domain/linha-black';
 import type { FormatoMetrica } from '../domain/jornada';
@@ -45,6 +45,11 @@ export interface CardDef {
   dica?: string;
   /** Custo (CPL, CPM, CPC): menor é melhor, a lista de criativos abre pelo menor. */
   menorMelhor?: boolean;
+  /**
+   * Cards de INVESTIMENTO: fases cuja barra em "Por fase" ganha o marco da verba (limite do orçamento por fase, config.previstoPorFase).
+   * Ausente = o card não é de investimento e a barra não tem limite (CPL, leads etc.).
+   */
+  fasesComVerba?: readonly Fase[];
 }
 
 interface Linha { chave: string; rotulo: string; valor: Valor; anuncioId?: string }
@@ -79,12 +84,31 @@ function itensFase(d: DadosTela, card: CardDef): ItemFase[] {
   });
   // O gasto de cada barra sai das campanhas da fase, no funil e canal da tela (os mesmos de d.dias e d.linhas).
   const recorteDe = (chave: string): RecorteGasto => ({ funil: d.recorte.funil, canal: d.recorte.canal, campanha: (c) => faseDe(c) === chave });
-  const itens: ItemFase[] = FASES.map((f) => { const b = por(f); return { fase: f, rotulo: ROTULO_FASE[f], valor: card.medir(b.dias, b.leads, recorteDe(f)) }; });
+  // Limite da fase só em card de investimento. O limite é do evento inteiro e de todos os canais: % e saldo só valem quando a tela
+  // também mostra o evento inteiro (período desde o início, funil e canal em Todos); em recorte parcial a barra mostra o marco, sem conta.
+  const completo = periodoDe('desde-inicio', d.agora, d.config);
+  const limiteComparavel = d.recorte.funil === 'todos' && d.recorte.canal === 'todos' && d.periodo.de === completo.de && d.periodo.ate === completo.ate;
+  const comVerba = (f: Fase): Pick<ItemFase, 'limite' | 'limiteComparavel'> =>
+    card.fasesComVerba?.includes(f) ? { limite: d.config.previstoPorFase[f], limiteComparavel } : {};
+  const itens: ItemFase[] = FASES.map((f) => { const b = por(f); return { fase: f, rotulo: ROTULO_FASE[f], valor: card.medir(b.dias, b.leads, recorteDe(f)), ...comVerba(f) }; });
   for (const [fase, rotulo] of [['sem_fase', ROTULO_SEM_FASE], ['sem_classificacao', ROTULO_SEM_CLASSIFICACAO]] as const) {
     const b = por(fase);
     if (b.dias.length > 0 || b.leads.length > 0) itens.push({ fase, rotulo, valor: card.medir(b.dias, b.leads, recorteDe(fase)) });
   }
   return itens;
+}
+
+/** Rodapé da aba Por fase dos cards de investimento: de onde vem o limite e o que fica fora da conta. */
+function NotaVerba({ d, fases }: { d: DadosTela; fases: readonly Fase[] }) {
+  const semLimite = fases.filter((f) => d.config.previstoPorFase[f] === null);
+  return (
+    <div className="mt-5 space-y-1 text-xs text-[var(--fg-3)]">
+      <p>Limite de cada fase = orçamento por fase da concepção do Caio (12/10/2026), mídia sem o imposto do Meta. Gasto do período escolhido no topo (padrão: desde {dataCurta(d.config.inicio)}). {NOTA_ENTRESAFRA}.</p>
+      <p>Pré-captação (CPF01) não entra em nenhuma barra.{d.config.reserva !== null ? ` A reserva (${formatar(d.config.reserva, 'brl')}) não é fase e fica fora das barras.` : ''}{' '}
+        &quot;Sem fase&quot; e &quot;Sem classificação&quot; não têm limite próprio.</p>
+      {semLimite.length > 0 && <p>Sem limite cadastrado: {semLimite.map((f) => ROTULO_FASE[f]).join(', ')}.</p>}
+    </div>
+  );
 }
 
 export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | null; onClose: () => void }) {
@@ -168,6 +192,7 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
           ) : ativa === 'fase' ? (
             <div className="pt-2">
               <BarrasFase formato={card.formato} itens={itensFase(d, card)} />
+              {card.fasesComVerba && <NotaVerba d={d} fases={card.fasesComVerba} />}
             </div>
           ) : ativa === 'dia' ? (
             metaDaSerie !== null

@@ -1,7 +1,7 @@
 'use client';
 
 // Gráficos do dashboard da Black, só SVG e tokens (sem biblioteca nova):
-// - BarrasFase: uma barra grossa por fase do Caio, cada fase com uma cor própria (sem vermelho), marca do previsto,
+// - BarrasFase: uma barra grossa por fase do Caio, cada fase com uma cor própria (sem vermelho), marco do limite de verba,
 //   entrada animada e dica com o valor ao passar o mouse ou focar com o teclado.
 // - GraficoLinha: série diária (eixo X = dia, eixo Y = métrica do dia), linha desenhada na entrada, cursor que
 //   mostra o valor do dia. Dia sem dado quebra a linha (nunca vira zero).
@@ -14,6 +14,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { EtapaFunil } from '../domain/criativos';
 import type { FormatoMetrica } from '../domain/jornada';
 import type { Fase, Valor } from '../domain/tipos';
+import { verbaDaFase, type VerbaDaFase } from '../domain/verba-fase';
 import { dicaTaxa, formatar, moeda, usePrefereMenosMovimento } from './pecas';
 
 /** Cor de cada fase: distintas entre si, sem vermelho (vermelho é só farol). */
@@ -28,20 +29,45 @@ export const COR_FASE: Record<Fase | 'sem_fase' | 'sem_classificacao', string> =
   live_carrinho: 'var(--green)',
 };
 
-/** `sem_fase` e `sem_classificacao`: campanhas que o banco não pôs em fase ou não classificou (barra neutra). */
-export interface ItemFase { fase: Fase | 'sem_fase' | 'sem_classificacao'; rotulo: string; valor: Valor; previsto?: Valor }
+/**
+ * `sem_fase` e `sem_classificacao`: campanhas que o banco não pôs em fase ou não classificou (barra neutra).
+ * `limite` = verba da fase: `undefined` o card não usa limite; `null` a fase está sem limite cadastrado; número = o limite.
+ * `limiteComparavel` falso (recorte parcial: período, funil ou canal) mostra o marco mas não calcula % nem saldo.
+ */
+export interface ItemFase { fase: Fase | 'sem_fase' | 'sem_classificacao'; rotulo: string; valor: Valor; limite?: Valor; limiteComparavel?: boolean }
 
-/** Barras por fase. `previsto` (opcional) vira uma marca vertical na barra e entra na dica. */
+const TEXTO_RECORTE_PARCIAL = 'Recorte parcial: o limite é do evento todo. % e saldo só com período desde o início, funil e canal em Todos.';
+
+/** Linha de leitura sob a barra: o quão perto ou longe do limite. Sem dado e sem limite dizem isso, nunca 0. */
+export function textoDaVerba(v: VerbaDaFase, comparavel: boolean): string {
+  if (v.situacao === 'sem_limite') return 'Sem limite cadastrado';
+  if (v.situacao === 'sem_dado') return `Sem dado de gasto · limite ${moeda(v.limite)}`;
+  if (!comparavel) return TEXTO_RECORTE_PARCIAL;
+  const pct = `${formatar(v.pctDoLimite, 'pct')} do limite`;
+  if (v.situacao === 'no_limite') return `${pct} · no limite`;
+  if (v.situacao === 'estourou') return `${pct} · passou ${moeda(-(v.saldo as number))} do limite`;
+  return `${pct} · faltam ${moeda(v.saldo)}`;
+}
+
+/**
+ * Barras por fase. Com `limite`, a barra ganha um marco vertical na posição do limite e a escala dela cabe o limite (e o
+ * gasto, se passar): cada fase é lida contra o próprio limite. Sem `limite`, a escala é comum às barras sem limite.
+ */
 export function BarrasFase({ itens, formato }: { itens: ItemFase[]; formato: FormatoMetrica }) {
   const [foco, setFoco] = useState<ItemFase['fase'] | null>(null);
-  const escala = Math.max(0, ...itens.flatMap((i) => [i.valor ?? 0, i.previsto ?? 0]));
+  const escala = Math.max(0, ...itens.filter((i) => i.limite === undefined).map((i) => i.valor ?? 0));
   const pctDe = (v: Valor) => (escala > 0 && v !== null && v > 0 ? Math.min(100, (v / escala) * 100) : 0);
   return (
     <ul className="space-y-6">
       {itens.map((it, i) => {
         const cor = COR_FASE[it.fase];
-        const acima = it.previsto != null && it.valor !== null && it.valor > it.previsto;
-        const dica = `${it.rotulo}: ${formatar(it.valor, formato)}${it.previsto !== undefined ? ` de ${formatar(it.previsto, formato)} previsto` : ''}${acima ? ' (acima do previsto)' : ''}`;
+        const comLimite = it.limite !== undefined;
+        const v = comLimite ? verbaDaFase(it.valor, it.limite) : null;
+        const comparavel = it.limiteComparavel !== false;
+        const largura = v ? v.preenchimento * 100 : pctDe(it.valor);
+        const marco = v?.marcador != null ? v.marcador * 100 : null;
+        const leitura = v ? textoDaVerba(v, comparavel) : null;
+        const dica = `${it.rotulo}: ${formatar(it.valor, formato)}${v?.limite != null ? ` de ${formatar(v.limite, formato)} de limite` : ''}${leitura ? `. ${leitura}` : ''}`;
         return (
           <li key={it.fase}>
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm">
@@ -51,31 +77,43 @@ export function BarrasFase({ itens, formato }: { itens: ItemFase[]; formato: For
               </span>
               <span className="tabular text-[var(--fg)]">
                 {formatar(it.valor, formato)}
-                {it.previsto !== undefined && <span className="text-[var(--fg-3)]"> de {formatar(it.previsto, formato)}</span>}
-                {acima && <span className="ml-2 text-xs text-[var(--fg-2)]">acima do previsto</span>}
+                {v?.limite != null && <span className="text-[var(--fg-3)]"> de {formatar(v.limite, formato)}</span>}
               </span>
             </div>
             <div tabIndex={0} role="img" aria-label={dica} title={dica}
               onMouseEnter={() => setFoco(it.fase)} onMouseLeave={() => setFoco(null)} onFocus={() => setFoco(it.fase)} onBlur={() => setFoco(null)}
               className="relative h-4 cursor-default rounded-full bg-[var(--surface-4)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]">
               <div className="atm-historico-barra h-full rounded-full transition-[filter] duration-150"
-                style={{ width: `${pctDe(it.valor)}%`, background: cor, animationDelay: `${i * 70}ms`, filter: foco === it.fase ? 'brightness(1.2)' : undefined }} />
-              {it.previsto != null && it.previsto > 0 && (
-                <span aria-hidden="true" className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-[var(--fg)]" style={{ left: `calc(${pctDe(it.previsto)}% - 1px)` }} />
+                style={{ width: `${largura}%`, background: cor, animationDelay: `${i * 70}ms`, filter: foco === it.fase ? 'brightness(1.2)' : undefined }} />
+              {marco !== null && (
+                <span aria-hidden="true" data-marco-limite className="absolute -top-1.5 -bottom-1.5 w-0.5 rounded-full bg-[var(--fg)]" style={{ left: `calc(${marco}% - 1px)` }} />
               )}
               {foco === it.fase && (
                 <span role="tooltip" className="gp-fade-in pointer-events-none absolute bottom-full z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-[var(--r-md)] border border-[var(--border-strong)] bg-[var(--surface-3)] px-2.5 py-1.5 text-xs text-[var(--fg)] shadow-[var(--shadow-md)]"
-                  style={{ left: `${Math.min(85, Math.max(15, pctDe(it.valor)))}%` }}>
+                  style={{ left: `${Math.min(85, Math.max(15, largura))}%` }}>
                   <strong className="tabular">{formatar(it.valor, formato)}</strong>
-                  {it.previsto !== undefined && <span className="text-[var(--fg-2)]"> de {formatar(it.previsto, formato)} previsto</span>}
+                  {v?.limite != null && <span className="text-[var(--fg-2)]"> de {formatar(v.limite, formato)} de limite</span>}
                 </span>
               )}
             </div>
+            {v && (
+              <div className="mt-1">
+                {v.limite != null && marco !== null && (
+                  <div className="relative h-4" aria-hidden="true">
+                    <span className="tabular absolute top-0 whitespace-nowrap text-xs text-[var(--fg-2)]"
+                      style={marco > 60 ? { right: `calc(${100 - marco}% - 1px)` } : marco < 25 ? { left: `calc(${marco}% - 1px)` } : { left: `${marco}%`, transform: 'translateX(-50%)' }}>
+                      Limite {formatar(v.limite, formato)}
+                    </span>
+                  </div>
+                )}
+                <p className="tabular text-xs text-[var(--fg-2)]">{leitura}</p>
+              </div>
+            )}
           </li>
         );
       })}
-      {itens.some((i) => i.previsto !== undefined) && (
-        <li className="flex items-center gap-2 text-xs text-[var(--fg-3)]"><span aria-hidden="true" className="inline-block h-3 w-0.5 rounded-full bg-[var(--fg)]" /> marca do previsto da fase</li>
+      {itens.some((i) => i.limite != null) && (
+        <li className="flex items-center gap-2 text-xs text-[var(--fg-3)]"><span aria-hidden="true" className="inline-block h-3 w-0.5 rounded-full bg-[var(--fg)]" /> marco do limite de verba da fase</li>
       )}
     </ul>
   );
