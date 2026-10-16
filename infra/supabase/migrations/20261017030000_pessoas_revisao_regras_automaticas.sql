@@ -1,7 +1,7 @@
 -- 20261017030000: pessoa única, regras automáticas novas para a fila de revisão (pessoas.revisao), sobre a máquina de 20261017010000
 --
--- STATUS: NÃO APLICADA. Escrita em 16/10/2026 (branch victor-revisao-regras). Só foi rodado o ENSAIO (begin ... rollback) e a contagem (somente leitura).
---   A chave pessoas.carga_chave 'revisao_lote' continua DESLIGADA; esta migration só cria objetos e garante a chave desligada. Nada é executado sobre a fila.
+-- STATUS: APLICADA em 16/10/2026 (branch victor-revisao-regras), depois do ensaio (begin ... rollback) e da contagem (somente leitura). Lotes rodados: ver 20261017030000.explain.md.
+--   Esta migration só cria objetos e garante a chave pessoas.carga_chave 'revisao_lote' desligada; a chave foi ligada só para a rodada e desligada de novo.
 --   Ensaio: 20261017030000_ensaio.sql. Contagem (só leitura): 20261017030000_contagem.sql. Reversão: 20261017030000_reversao.sql.
 --   Detalhe, números e decisões: 20261017030000.explain.md e docs/pessoa-unica/README.md (seção "Revisão em lote").
 --
