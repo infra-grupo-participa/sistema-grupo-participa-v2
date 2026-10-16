@@ -153,3 +153,12 @@ Dado carregado não se apaga (regra I-03).
   (com pentester).
 - Limpeza do estágio `pessoas.ac_contato`: e-mail, telefone e nome em D+2 depois da carga conferida; campos em até 30 dias
   (aprovado pelo Victor em 14/10/2026).
+
+## Puxada extra do Active em 16/10/2026 (suspensa)
+- Pedido do Victor: liberar uma vez mais 60 chamadas ao AC no dia para zerar o atraso, com cuidado com o banco.
+- 13:09 UTC: Edge `pessoas-ac-delta` publicada como **versão 2** com `TETO_DIA = 102` (só essa linha diferente do repo), e 1 POST igual ao do cron.
+- Resultado: a execução 118 avançou de 4.000 para 5.500 contatos lidos (345 atualizados, cursor `2026-10-14|433654`) e parou por tempo; a fase
+  pessoas (execução 132) ficou `parada` com 0 lidas. Durante a rodada a carga da máquina subiu (load1 até ~30, memória livre até 120 MB) e
+  algumas consultas da Management API deram "connection timeout". Nenhuma consulta pesada aparecia em `pg_stat_activity`; a causa não foi achada.
+- 13:14 UTC: Edge republicada como **versão 3** a partir do arquivo do repo (`TETO_DIA = 42`). A puxada extra ficou suspensa; o restante entra
+  pelos crons diários (05:40 UTC) a partir de 17/10.
