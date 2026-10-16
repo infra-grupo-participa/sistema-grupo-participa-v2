@@ -295,7 +295,7 @@ export const FERRAMENTAS: DefFerramenta[] = [
     name: 'comercial_buscar_pessoa',
     title: 'Buscar pessoa no CRM',
     description: 'Busca contatos do Comercial por e-mail, telefone ou nome (mínimo 3 caracteres, até 20 resultados). '
-      + 'E-mail/telefone completos só para o dono do contato ou gestor; o resto vem mascarado. Nunca CPF.',
+      + 'E-mail e telefone vêm completos para quem é do Comercial. Nunca CPF.',
     escopo: 'ler',
     inputSchema: { type: 'object', properties: { busca: { type: 'string', minLength: 3, maxLength: 120 } }, required: ['busca'], additionalProperties: false },
     annotations: ANOT_LER,
