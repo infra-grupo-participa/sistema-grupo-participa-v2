@@ -1318,3 +1318,14 @@ anúncio (87,10 + 433,11 + 1.404,71 = 1.924,92; Jornada 1.925,40). Caso medido n
 card de CPL: aba Funil, Iscas deve dar 14,13 e C3 33,27; o cabeçalho deve repetir o valor do card.
 
 **Falta.** Conferir na tela com dado real (a RPC só dá acesso a `authenticated`); não há teste de componente do `ModalCard`/`AbaVisaoGeral`, só do domínio.
+
+### Leads contra a meta volta a mostrar a meta final de 15.000 (16/10/2026, pedido do Victor)
+
+- **Por quê:** desde o PR #47 (15/10) a barra do card comparava o total com a meta acumulada da régua até hoje
+  (~1.100 em 16/10), o que contrariava a decisão de 14/10 ("card mostra de 15.000") e dava a leitura de que a meta era 1.100.
+- **Feito:** a barra, o percentual e o farol de `Leads contra a meta` usam `config.metaLeads` (15.000). A meta acumulada
+  da régua continua visível numa linha menor, "Meta até hoje pela régua", com o mesmo cálculo da coluna "Meta acumulada" do modal.
+- **Efeito esperado:** no começo da captação o farol do card fica vermelho, porque compara com a meta final; o ritmo do dia
+  segue no card de projeção da captação e na linha da régua.
+- **Como testar:** em `web/`, `npx tsc --noEmit` e `npx vitest run modules/infra/black`; na tela, o card deve mostrar "Meta 15.000"
+  e a linha da régua com o mesmo valor do modal no dia de hoje.

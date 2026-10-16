@@ -342,7 +342,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
           <Cartao titulo={cardLeads.rotulo} onAbrir={abrir(cardLeads)}>
             <KpiCard label="Leads contra a meta" bar="none" title={`${config.fontes.plano} Pessoas únicas de todas as portas desde o início, sem aplicar o filtro de período. Meta: ${config.metaLeads === null ? 'sem cadastro' : formatar(config.metaLeads, 'int')}.`} valueClassName="text-2xl sm:text-3xl"
               value={<Numero valor={leadsAteAgora} formato="int" falta={d.avisoPerfil ?? undefined} />}
-              hint={<div className="space-y-2"><MetaComProgresso valor={leadsAteAgora} meta={metaLeadsAcumuladaAte(d, hojeSaoPaulo)} formato="int" /><p className="text-xs text-[var(--fg-2)]">Do tráfego de captação: <strong className="tabular text-[var(--fg)]">{formatar(leadsTrafegoAteAgora, 'int')}</strong></p></div>} />
+              hint={<div className="space-y-2"><MetaComProgresso valor={leadsAteAgora} meta={config.metaLeads} formato="int" /><p className="text-xs text-[var(--fg-2)]">Do tráfego de captação: <strong className="tabular text-[var(--fg)]">{formatar(leadsTrafegoAteAgora, 'int')}</strong></p><p className="text-[11px] text-[var(--fg-3)]">Meta até hoje pela régua: <span className="tabular">{formatar(metaLeadsAcumuladaAte(d, hojeSaoPaulo), 'int')}</span></p></div>} />
           </Cartao>
         </div>
         <ProjecaoCaptacao d={d} />
