@@ -42,8 +42,8 @@ set local statement_timeout = '60s';
 
 do $g$
 begin
-  if to_regclass('pessoas.eventos_hotmart_ref_idx') is null then
-    raise exception '20261016230100: falta o índice eventos_hotmart_ref_idx (20261016230000); sem ele cada consulta varre a tabela';
+  if not exists (select 1 from pg_index i where i.indexrelid = to_regclass('pessoas.eventos_hotmart_ref_idx') and i.indisvalid and i.indisready) then
+    raise exception '20261016230100: falta o índice eventos_hotmart_ref_idx (20261016230000) existente, válido e pronto; sem ele cada consulta varre a tabela';
   end if;
   if (select count(*) from fin.produtos where familia in ('ESCRITORIO', 'ESCRITORIO_SOLUCOES')) <> 6 then
     raise exception '20261016230100: esperava 6 produtos de escritório em fin.produtos (medido em 16/10); revisar antes de aplicar';
@@ -406,35 +406,56 @@ insert into pg_temp._z_out(passo, linha) select '03 relogio antes da 230200', cl
 -- 20261016230200: corrige os eventos Hotmart já gravados na linha do tempo (duplicados, evento de educação em venda de escritório, setor)
 --
 -- STATUS: NÃO APLICADA. Terminal Hotmart (back-end-sr), 16/10/2026, branch victor-hotmart-setor. Depende de 20261016230000 e 20261016230100.
+-- REVISADA após o pentest de 16/10 (PENTEST-HOTMART-SETOR-2026-10-16.md): guarda de premissa exata, pós-condição, backup do passo 3 e
+--   guarda de índice válido.
 -- ORDEM: depois da 230100 (senão o webhook recria duplicata no meio da limpeza).
--- POR QUE (medido em 16/10/2026): 13 grupos de linhas com o mesmo ref_id e tipo (7 checkout, 6 reembolso; nenhum com pessoas diferentes);
---   2 linhas de venda de produto de escritório (família ESCRITORIO na academy) presas a evento de educação (1 Croqui em encontro_thb,
---   1 em holding_total); 578 linhas de produto de escritório sem a marca de setor.
--- O QUE FAZ (só pessoas.eventos, 3 passos, reversível):
---   1. Duplicados: por (ref_id, tipo) de ref_tipo 'hotmart.transacao', fica UMA linha (a que tem fonte_id; empate: a de menor id) e as
---      outras saem. A linha que sai vai antes para o backup arquivo.pessoas__eventos__20261016 (coluna motivo = duplicado_removido).
---   2. Evento de educação em venda de escritório: evento_id vira null (a linha antes vai ao backup, motivo = evento_educacao_em_escritorio).
---      Não se atribui outro evento: a regra do financeiro não tem evento de escritório para essa venda.
---   3. Setor: detalhe.setor = 'escritorio' nas linhas de produto de família ESCRITORIO/ESCRITORIO_SOLUCOES (UPDATE só com IS DISTINCT FROM;
---      aditivo: reverter é tirar a chave).
+-- POR QUE (medido em 16/10/2026): 13 grupos de linhas com o mesmo ref_id e tipo (7 checkout, 6 reembolso; nenhum com pessoas diferentes,
+--   nenhum com mais de 2 linhas); 2 linhas de venda de produto de escritório (família ESCRITORIO na academy) presas a evento de educação
+--   (1 Croqui em encontro_thb, 1 em holding_total); 578 linhas de produto de escritório sem a marca de setor.
+-- O QUE FAZ (só pessoas.eventos, 3 passos, reversível; cada linha tocada vai antes ao backup com um motivo):
+--   1. Duplicados (motivo duplicado_removido): por (ref_id, tipo) de ref_tipo 'hotmart.transacao', fica UMA linha (a que tem fonte_id;
+--      empate: a de menor id) e as outras saem.
+--   2. Evento de educação em venda de escritório (motivo evento_educacao_em_escritorio): evento_id vira null. Não se atribui outro
+--      evento: a regra do financeiro não tem evento de escritório para essa venda.
+--   3. Setor (motivo setor_marcado): detalhe.setor = 'escritorio' nas linhas de produto de família ESCRITORIO/ESCRITORIO_SOLUCOES, com a
+--      linha anterior guardada no backup (id e detalhe) para a reversão voltar SÓ essas linhas. UPDATE só do que difere.
+-- GUARDA DE PREMISSA (aborta se qualquer uma falhar): índice eventos_hotmart_ref_idx válido e pronto; no máximo 13 grupos duplicados;
+--   nenhum grupo com mais de uma pessoa ou mais de 2 linhas; exatamente 2 linhas de escritório com evento de educação; backup ainda não existe.
+-- PÓS-CONDIÇÃO (aborta e desfaz tudo se falhar): sem grupo duplicado; backup com 13 duplicado_removido, 2 evento_educacao_em_escritorio e
+--   tantas setor_marcado quantas linhas ficaram marcadas; nenhuma linha de escritório sem setor.
 -- NÃO FAZ: não reclassifica o produto 3595938 (Holding Familiar, família OUTROS: a confirmar) nem o 1537308 (Croqui Estrutural para
 --   Holding Familiar, família OUTROS, 0 transações); não toca em linha de outro tipo de evento; não mexe em pessoas nem identificadores.
 -- AS 5 PERGUNTAS: escala = ~7,5 mil linhas Hotmart de 641 mil (índice parcial da 230000; o passo 3 lê a tabela inteira UMA vez, sem filtro
---   de índice); índice = eventos_hotmart_ref_idx; frequência = única; repetição = idempotente (rodar de novo não acha nada a fazer);
---   reversão = 20261016230200_reversao.sql (reinsere do backup, restaura evento_id, tira a chave setor).
+--   de índice); índice = eventos_hotmart_ref_idx; frequência = única; repetição = recusada pela guarda (o backup já existe) e, se o backup
+--   for removido, os UPDATEs só tocam o que difere; reversão = 20261016230200_reversao.sql (reinsere do backup, restaura evento_id e o
+--   detalhe das linhas marcadas pelo passo 3).
 -- Backup: schema arquivo, dono Victor Hugo, prazo 90 dias (2027-01-14), RLS ligado e sem policy. Não é lido por função viva.
--- ENSAIO: 20261016230200_ensaio.sql. Detalhe: 20261016230200.explain.md.
+--   O prazo está só no comentário da tabela: falta o card que lembra de apagar (ver docs/pessoa-unica/hotmart-setor-e-idempotencia.md).
+-- ENSAIO: 20261016230100_ensaio.sql. Detalhe: 20261016230200.explain.md.
 
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
 
 do $g$
+declare v_grupos int; v_multi int; v_alvo2 int;
 begin
-  if to_regclass('pessoas.eventos_hotmart_ref_idx') is null or to_regprocedure('pessoas.hotmart_setor(text)') is null then
-    raise exception '20261016230200: falta o índice da 230000 ou a função da 230100; aplicar nessa ordem';
+  if not exists (select 1 from pg_index i where i.indexrelid = to_regclass('pessoas.eventos_hotmart_ref_idx') and i.indisvalid and i.indisready)
+     or to_regprocedure('pessoas.hotmart_setor(text)') is null then
+    raise exception '20261016230200: falta o índice da 230000 (existente, válido e pronto) ou a função da 230100; aplicar nessa ordem';
   end if;
-  if (select count(*) from (select 1 from pessoas.eventos where ref_tipo = 'hotmart.transacao' group by ref_id, tipo having count(*) > 1) x) > 100 then
-    raise exception '20261016230200: mais de 100 grupos duplicados (medido: 13 em 16/10); a regra de limpeza precisa de revisão';
+  select count(*), count(*) filter (where n > 2 or p > 1) into v_grupos, v_multi
+    from (select count(*) n, count(distinct pessoa_id) p from pessoas.eventos
+           where ref_tipo = 'hotmart.transacao' group by ref_id, tipo having count(*) > 1) x;
+  if v_grupos > 13 then
+    raise exception '20261016230200: % grupos duplicados (medido: 13 em 16/10); a regra de limpeza precisa de revisão', v_grupos;
+  end if;
+  if v_multi > 0 then
+    raise exception '20261016230200: % grupo(s) duplicado(s) com mais de 2 linhas ou com pessoas diferentes; a regra de limpeza não vale', v_multi;
+  end if;
+  select count(*) into v_alvo2 from pessoas.eventos e join fin.eventos fe on fe.id = e.evento_id
+   where e.ref_tipo = 'hotmart.transacao' and pessoas.hotmart_setor(e.detalhe ->> 'produto') = 'escritorio' and fe.setor is distinct from 'escritorio';
+  if v_alvo2 <> 2 then
+    raise exception '20261016230200: % venda(s) de escritório com evento de educação (medido: exatamente 2 em 16/10)', v_alvo2;
   end if;
   if to_regclass('arquivo.pessoas__eventos__20261016') is not null then
     raise exception '20261016230200: o backup arquivo.pessoas__eventos__20261016 já existe; esta migration já rodou?';
@@ -446,7 +467,7 @@ create table arquivo.pessoas__eventos__20261016 as
 alter table arquivo.pessoas__eventos__20261016 enable row level security;
 revoke all on arquivo.pessoas__eventos__20261016 from public, anon, authenticated;
 comment on table arquivo.pessoas__eventos__20261016 is
-  '20261016230200: linhas de pessoas.eventos tiradas ou alteradas na correção da Hotmart. dono: Victor Hugo · prazo: 2027-01-14 (90 dias) · reversão: 20261016230200_reversao.sql';
+  '20261016230200: linhas de pessoas.eventos tiradas ou alteradas na correção da Hotmart (motivo: duplicado_removido, evento_educacao_em_escritorio, setor_marcado). dono: Victor Hugo · prazo: 2027-01-14 (90 dias) · reversão: 20261016230200_reversao.sql';
 
 -- 1. duplicados: sai a sobra, fica uma
 with d as (
@@ -470,10 +491,34 @@ with alvo as (
 )
 update pessoas.eventos x set evento_id = null from salva where x.id = salva.id and x.evento_id is not null;
 
--- 3. setor pelo produto (aditivo)
+-- 3. setor pelo produto (aditivo): a linha anterior vai ao backup, para a reversão voltar só as linhas marcadas aqui
+with alvo as (
+  select e.id from pessoas.eventos e
+   where e.ref_tipo = 'hotmart.transacao' and pessoas.hotmart_setor(e.detalhe ->> 'produto') = 'escritorio'
+     and e.detalhe ->> 'setor' is distinct from 'escritorio'
+), salva as (
+  insert into arquivo.pessoas__eventos__20261016 select e.*, 'setor_marcado' from pessoas.eventos e join alvo using (id) returning id
+)
 update pessoas.eventos x set detalhe = x.detalhe || jsonb_build_object('setor', 'escritorio')
- where x.ref_tipo = 'hotmart.transacao' and pessoas.hotmart_setor(x.detalhe ->> 'produto') = 'escritorio'
-   and x.detalhe ->> 'setor' is distinct from 'escritorio';
+  from salva where x.id = salva.id and x.detalhe ->> 'setor' is distinct from 'escritorio';
+
+-- pós-condição: se qualquer número fugir do medido, a transação inteira é desfeita
+do $p$
+declare v_dup int; v_n1 int; v_n2 int; v_n3 int; v_total int; v_sem int;
+begin
+  select count(*) into v_dup from (select 1 from pessoas.eventos where ref_tipo = 'hotmart.transacao' group by ref_id, tipo having count(*) > 1) x;
+  select count(*) filter (where motivo = 'duplicado_removido'), count(*) filter (where motivo = 'evento_educacao_em_escritorio'),
+         count(*) filter (where motivo = 'setor_marcado'), count(*)
+    into v_n1, v_n2, v_n3, v_total from arquivo.pessoas__eventos__20261016;
+  select count(*) into v_sem from pessoas.eventos e
+   where e.ref_tipo = 'hotmart.transacao' and pessoas.hotmart_setor(e.detalhe ->> 'produto') = 'escritorio' and e.detalhe ->> 'setor' is distinct from 'escritorio';
+  if v_dup <> 0 then raise exception '20261016230200: ainda há % grupo(s) duplicado(s); desfeito', v_dup; end if;
+  if v_n1 <> 13 or v_n2 <> 2 then
+    raise exception '20261016230200: backup com % duplicado_removido e % evento_educacao_em_escritorio (esperado 13 e 2); desfeito', v_n1, v_n2;
+  end if;
+  if v_total <> 15 + v_n3 then raise exception '20261016230200: backup com % linhas (esperado 15 + % setor_marcado); desfeito', v_total, v_n3; end if;
+  if v_sem <> 0 then raise exception '20261016230200: % linha(s) de escritório continuam sem setor; desfeito', v_sem; end if;
+end $p$;
 
 insert into pg_temp._z_out(passo, linha) select '04 relogio depois da 230200', clock_timestamp()::text;
 insert into pg_temp._z_out(passo, linha) select '05 depois da 230200 (C)', (select jsonb_build_object(
@@ -486,30 +531,6 @@ insert into pg_temp._z_out(passo, linha) select '05b depois da 230200: pendênci
   'escritorio_com_evento_educacao', (select count(*) from pessoas.eventos e join fin.eventos fe on fe.id = e.evento_id where e.ref_tipo = 'hotmart.transacao' and pessoas.hotmart_setor(e.detalhe ->> 'produto') = 'escritorio' and fe.setor is distinct from 'escritorio'),
   'backup_existe', (select count(*) from pg_class where relname = 'pessoas__eventos__20261016')))::text;
 insert into pg_temp._z_out(passo, linha) select '05c backup por motivo', (select jsonb_object_agg(motivo, n) from (select motivo, count(*) n from arquivo.pessoas__eventos__20261016 group by 1) x)::text;
--- ===== reversão da 230200 =====
--- Reversão de 20261016230200: devolve as linhas tiradas, restaura o evento_id e tira a chave setor das linhas Hotmart.
--- Lê o backup arquivo.pessoas__eventos__20261016 (não apaga o backup: ele vale até 2027-01-14).
-set local lock_timeout = '5s';
-set local statement_timeout = '60s';
-insert into pessoas.eventos overriding system value
-  select a.id, a.pessoa_id, a.tipo, a.projeto_id, a.origem_id, a.fonte, a.ref_tipo, a.ref_id, a.detalhe, a.quando, a.por, a.evento_id, a.turma_id, a.fonte_tabela, a.fonte_id
-    from arquivo.pessoas__eventos__20261016 a where a.motivo = 'duplicado_removido'
-  on conflict do nothing;
-update pessoas.eventos x set evento_id = a.evento_id
-  from arquivo.pessoas__eventos__20261016 a
- where a.motivo = 'evento_educacao_em_escritorio' and a.id = x.id and x.evento_id is distinct from a.evento_id;
-update pessoas.eventos x set detalhe = x.detalhe - 'setor'
- where x.ref_tipo = 'hotmart.transacao' and x.detalhe ->> 'setor' = 'escritorio';
-
-insert into pg_temp._z_out(passo, linha) select '06 depois da reversão da 230200 (D, esperado igual a A)', (select jsonb_build_object(
-  'hotmart_linhas', count(*) filter (where e.ref_tipo = 'hotmart.transacao'),
-  'grupos_duplicados', (select count(*) from (select 1 from pessoas.eventos where ref_tipo = 'hotmart.transacao' group by ref_id, tipo having count(*) > 1) x),
-  'hotmart_sem_evento_id', count(*) filter (where e.ref_tipo = 'hotmart.transacao' and e.evento_id is null),
-  'com_setor_escritorio', count(*) filter (where e.detalhe ->> 'setor' = 'escritorio')) from pessoas.eventos e)::text;
-insert into pg_temp._z_out(passo, linha) select '06b depois da reversão: pendências (D)', (select jsonb_build_object(
-  'escritorio_sem_setor', (select count(*) from pessoas.eventos e where e.ref_tipo = 'hotmart.transacao' and pessoas.hotmart_setor(e.detalhe ->> 'produto') = 'escritorio' and e.detalhe ->> 'setor' is distinct from 'escritorio'),
-  'escritorio_com_evento_educacao', (select count(*) from pessoas.eventos e join fin.eventos fe on fe.id = e.evento_id where e.ref_tipo = 'hotmart.transacao' and pessoas.hotmart_setor(e.detalhe ->> 'produto') = 'escritorio' and fe.setor is distinct from 'escritorio'),
-  'backup_existe', (select count(*) from pg_class where relname = 'pessoas__eventos__20261016')))::text;
 -- webhook x webhook: mesma transação e tipo, chaves diferentes (dado fictício; nada pessoal)
 do $x$
 declare v text; i int; p jsonb; k text[] := array['ens-1', 'ens-2', 'ens-3'];
@@ -527,6 +548,163 @@ begin
   end loop;
 end $x$;
 insert into pg_temp._z_out(passo, linha) select '08 linhas da transação de ensaio por tipo (esperado checkout 1, reembolso 1) e setor', (select jsonb_agg(jsonb_build_object('tipo', tipo, 'setor', detalhe ->> 'setor') order by tipo) from pessoas.eventos where ref_id = 'HP-ENSAIO-0001')::text;
+-- ===== reversão da 230200 =====
+-- Reversão de 20261016230200: devolve as linhas tiradas, restaura o evento_id e volta o setor SÓ das linhas que o passo 3 marcou.
+-- Lê o backup arquivo.pessoas__eventos__20261016 (não apaga o backup: ele vale até 2027-01-14).
+-- Linhas que o webhook ou a carga gravaram depois da 230200 NÃO são tocadas: o setor só volta nas linhas com motivo setor_marcado, por id,
+-- e só a chave setor (o resto do detalhe, inclusive o que mudou depois, fica).
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
+insert into pessoas.eventos overriding system value
+  select a.id, a.pessoa_id, a.tipo, a.projeto_id, a.origem_id, a.fonte, a.ref_tipo, a.ref_id, a.detalhe, a.quando, a.por, a.evento_id, a.turma_id, a.fonte_tabela, a.fonte_id
+    from arquivo.pessoas__eventos__20261016 a where a.motivo = 'duplicado_removido'
+  on conflict do nothing;
+update pessoas.eventos x set evento_id = a.evento_id
+  from arquivo.pessoas__eventos__20261016 a
+ where a.motivo = 'evento_educacao_em_escritorio' and a.id = x.id and x.evento_id is distinct from a.evento_id;
+update pessoas.eventos x
+   set detalhe = case when a.detalhe ? 'setor' then x.detalhe || jsonb_build_object('setor', a.detalhe -> 'setor') else x.detalhe - 'setor' end
+  from arquivo.pessoas__eventos__20261016 a
+ where a.motivo = 'setor_marcado' and a.id = x.id and x.detalhe -> 'setor' is distinct from a.detalhe -> 'setor';
+
+insert into pg_temp._z_out(passo, linha) select '06 depois da reversão da 230200 (D, esperado A mais 2 linhas e 2 setores do webhook de ensaio)', (select jsonb_build_object(
+  'hotmart_linhas', count(*) filter (where e.ref_tipo = 'hotmart.transacao'),
+  'grupos_duplicados', (select count(*) from (select 1 from pessoas.eventos where ref_tipo = 'hotmart.transacao' group by ref_id, tipo having count(*) > 1) x),
+  'hotmart_sem_evento_id', count(*) filter (where e.ref_tipo = 'hotmart.transacao' and e.evento_id is null),
+  'com_setor_escritorio', count(*) filter (where e.detalhe ->> 'setor' = 'escritorio')) from pessoas.eventos e)::text;
+insert into pg_temp._z_out(passo, linha) select '06b depois da reversão: pendências (D)', (select jsonb_build_object(
+  'escritorio_sem_setor', (select count(*) from pessoas.eventos e where e.ref_tipo = 'hotmart.transacao' and pessoas.hotmart_setor(e.detalhe ->> 'produto') = 'escritorio' and e.detalhe ->> 'setor' is distinct from 'escritorio'),
+  'escritorio_com_evento_educacao', (select count(*) from pessoas.eventos e join fin.eventos fe on fe.id = e.evento_id where e.ref_tipo = 'hotmart.transacao' and pessoas.hotmart_setor(e.detalhe ->> 'produto') = 'escritorio' and fe.setor is distinct from 'escritorio'),
+  'backup_existe', (select count(*) from pg_class where relname = 'pessoas__eventos__20261016')))::text;
+insert into pg_temp._z_out(passo, linha) select '06d linhas do webhook de ensaio depois da reversão (esperado: setor escritorio nas duas, a reversão só volta os id do backup)', (select jsonb_agg(jsonb_build_object('tipo', tipo, 'setor', detalhe ->> 'setor') order by tipo) from pessoas.eventos where ref_id = 'HP-ENSAIO-0001')::text;
+-- guarda: um grupo duplicado com pessoas diferentes tem de abortar a 230200 (backup apagado só dentro do ensaio)
+drop table arquivo.pessoas__eventos__20261016;
+update pessoas.eventos set pessoa_id = (select id from pessoas.pessoas where id <> (select pessoa_id from pessoas.eventos where id = x.id) limit 1)
+  from (select max(id) id from pessoas.eventos where ref_tipo = 'hotmart.transacao' group by ref_id, tipo having count(*) > 1 limit 1) x
+ where pessoas.eventos.id = x.id;
+do $t$
+begin
+  execute $m$-- 20261016230200: corrige os eventos Hotmart já gravados na linha do tempo (duplicados, evento de educação em venda de escritório, setor)
+--
+-- STATUS: NÃO APLICADA. Terminal Hotmart (back-end-sr), 16/10/2026, branch victor-hotmart-setor. Depende de 20261016230000 e 20261016230100.
+-- REVISADA após o pentest de 16/10 (PENTEST-HOTMART-SETOR-2026-10-16.md): guarda de premissa exata, pós-condição, backup do passo 3 e
+--   guarda de índice válido.
+-- ORDEM: depois da 230100 (senão o webhook recria duplicata no meio da limpeza).
+-- POR QUE (medido em 16/10/2026): 13 grupos de linhas com o mesmo ref_id e tipo (7 checkout, 6 reembolso; nenhum com pessoas diferentes,
+--   nenhum com mais de 2 linhas); 2 linhas de venda de produto de escritório (família ESCRITORIO na academy) presas a evento de educação
+--   (1 Croqui em encontro_thb, 1 em holding_total); 578 linhas de produto de escritório sem a marca de setor.
+-- O QUE FAZ (só pessoas.eventos, 3 passos, reversível; cada linha tocada vai antes ao backup com um motivo):
+--   1. Duplicados (motivo duplicado_removido): por (ref_id, tipo) de ref_tipo 'hotmart.transacao', fica UMA linha (a que tem fonte_id;
+--      empate: a de menor id) e as outras saem.
+--   2. Evento de educação em venda de escritório (motivo evento_educacao_em_escritorio): evento_id vira null. Não se atribui outro
+--      evento: a regra do financeiro não tem evento de escritório para essa venda.
+--   3. Setor (motivo setor_marcado): detalhe.setor = 'escritorio' nas linhas de produto de família ESCRITORIO/ESCRITORIO_SOLUCOES, com a
+--      linha anterior guardada no backup (id e detalhe) para a reversão voltar SÓ essas linhas. UPDATE só do que difere.
+-- GUARDA DE PREMISSA (aborta se qualquer uma falhar): índice eventos_hotmart_ref_idx válido e pronto; no máximo 13 grupos duplicados;
+--   nenhum grupo com mais de uma pessoa ou mais de 2 linhas; exatamente 2 linhas de escritório com evento de educação; backup ainda não existe.
+-- PÓS-CONDIÇÃO (aborta e desfaz tudo se falhar): sem grupo duplicado; backup com 13 duplicado_removido, 2 evento_educacao_em_escritorio e
+--   tantas setor_marcado quantas linhas ficaram marcadas; nenhuma linha de escritório sem setor.
+-- NÃO FAZ: não reclassifica o produto 3595938 (Holding Familiar, família OUTROS: a confirmar) nem o 1537308 (Croqui Estrutural para
+--   Holding Familiar, família OUTROS, 0 transações); não toca em linha de outro tipo de evento; não mexe em pessoas nem identificadores.
+-- AS 5 PERGUNTAS: escala = ~7,5 mil linhas Hotmart de 641 mil (índice parcial da 230000; o passo 3 lê a tabela inteira UMA vez, sem filtro
+--   de índice); índice = eventos_hotmart_ref_idx; frequência = única; repetição = recusada pela guarda (o backup já existe) e, se o backup
+--   for removido, os UPDATEs só tocam o que difere; reversão = 20261016230200_reversao.sql (reinsere do backup, restaura evento_id e o
+--   detalhe das linhas marcadas pelo passo 3).
+-- Backup: schema arquivo, dono Victor Hugo, prazo 90 dias (2027-01-14), RLS ligado e sem policy. Não é lido por função viva.
+--   O prazo está só no comentário da tabela: falta o card que lembra de apagar (ver docs/pessoa-unica/hotmart-setor-e-idempotencia.md).
+-- ENSAIO: 20261016230100_ensaio.sql. Detalhe: 20261016230200.explain.md.
+
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
+
+do $g$
+declare v_grupos int; v_multi int; v_alvo2 int;
+begin
+  if not exists (select 1 from pg_index i where i.indexrelid = to_regclass('pessoas.eventos_hotmart_ref_idx') and i.indisvalid and i.indisready)
+     or to_regprocedure('pessoas.hotmart_setor(text)') is null then
+    raise exception '20261016230200: falta o índice da 230000 (existente, válido e pronto) ou a função da 230100; aplicar nessa ordem';
+  end if;
+  select count(*), count(*) filter (where n > 2 or p > 1) into v_grupos, v_multi
+    from (select count(*) n, count(distinct pessoa_id) p from pessoas.eventos
+           where ref_tipo = 'hotmart.transacao' group by ref_id, tipo having count(*) > 1) x;
+  if v_grupos > 13 then
+    raise exception '20261016230200: % grupos duplicados (medido: 13 em 16/10); a regra de limpeza precisa de revisão', v_grupos;
+  end if;
+  if v_multi > 0 then
+    raise exception '20261016230200: % grupo(s) duplicado(s) com mais de 2 linhas ou com pessoas diferentes; a regra de limpeza não vale', v_multi;
+  end if;
+  select count(*) into v_alvo2 from pessoas.eventos e join fin.eventos fe on fe.id = e.evento_id
+   where e.ref_tipo = 'hotmart.transacao' and pessoas.hotmart_setor(e.detalhe ->> 'produto') = 'escritorio' and fe.setor is distinct from 'escritorio';
+  if v_alvo2 <> 2 then
+    raise exception '20261016230200: % venda(s) de escritório com evento de educação (medido: exatamente 2 em 16/10)', v_alvo2;
+  end if;
+  if to_regclass('arquivo.pessoas__eventos__20261016') is not null then
+    raise exception '20261016230200: o backup arquivo.pessoas__eventos__20261016 já existe; esta migration já rodou?';
+  end if;
+end $g$;
+
+create table arquivo.pessoas__eventos__20261016 as
+  select e.*, null::text as motivo from pessoas.eventos e where false;
+alter table arquivo.pessoas__eventos__20261016 enable row level security;
+revoke all on arquivo.pessoas__eventos__20261016 from public, anon, authenticated;
+comment on table arquivo.pessoas__eventos__20261016 is
+  '20261016230200: linhas de pessoas.eventos tiradas ou alteradas na correção da Hotmart (motivo: duplicado_removido, evento_educacao_em_escritorio, setor_marcado). dono: Victor Hugo · prazo: 2027-01-14 (90 dias) · reversão: 20261016230200_reversao.sql';
+
+-- 1. duplicados: sai a sobra, fica uma
+with d as (
+  select e.id,
+         row_number() over (partition by e.ref_id, e.tipo order by (e.fonte_id is not null) desc, e.id) as rn
+    from pessoas.eventos e
+   where e.ref_tipo = 'hotmart.transacao'
+     and (e.ref_id, e.tipo) in (select ref_id, tipo from pessoas.eventos where ref_tipo = 'hotmart.transacao' group by ref_id, tipo having count(*) > 1)
+), apagadas as (
+  delete from pessoas.eventos e using d where e.id = d.id and d.rn > 1 returning e.*
+)
+insert into arquivo.pessoas__eventos__20261016 select a.*, 'duplicado_removido' from apagadas a;
+
+-- 2. evento de educação em venda de escritório: copia a linha para o backup e zera o evento_id
+with alvo as (
+  select e.id from pessoas.eventos e
+    join fin.eventos fe on fe.id = e.evento_id
+   where e.ref_tipo = 'hotmart.transacao' and pessoas.hotmart_setor(e.detalhe ->> 'produto') = 'escritorio' and fe.setor is distinct from 'escritorio'
+), salva as (
+  insert into arquivo.pessoas__eventos__20261016 select e.*, 'evento_educacao_em_escritorio' from pessoas.eventos e join alvo using (id) returning id
+)
+update pessoas.eventos x set evento_id = null from salva where x.id = salva.id and x.evento_id is not null;
+
+-- 3. setor pelo produto (aditivo): a linha anterior vai ao backup, para a reversão voltar só as linhas marcadas aqui
+with alvo as (
+  select e.id from pessoas.eventos e
+   where e.ref_tipo = 'hotmart.transacao' and pessoas.hotmart_setor(e.detalhe ->> 'produto') = 'escritorio'
+     and e.detalhe ->> 'setor' is distinct from 'escritorio'
+), salva as (
+  insert into arquivo.pessoas__eventos__20261016 select e.*, 'setor_marcado' from pessoas.eventos e join alvo using (id) returning id
+)
+update pessoas.eventos x set detalhe = x.detalhe || jsonb_build_object('setor', 'escritorio')
+  from salva where x.id = salva.id and x.detalhe ->> 'setor' is distinct from 'escritorio';
+
+-- pós-condição: se qualquer número fugir do medido, a transação inteira é desfeita
+do $p$
+declare v_dup int; v_n1 int; v_n2 int; v_n3 int; v_total int; v_sem int;
+begin
+  select count(*) into v_dup from (select 1 from pessoas.eventos where ref_tipo = 'hotmart.transacao' group by ref_id, tipo having count(*) > 1) x;
+  select count(*) filter (where motivo = 'duplicado_removido'), count(*) filter (where motivo = 'evento_educacao_em_escritorio'),
+         count(*) filter (where motivo = 'setor_marcado'), count(*)
+    into v_n1, v_n2, v_n3, v_total from arquivo.pessoas__eventos__20261016;
+  select count(*) into v_sem from pessoas.eventos e
+   where e.ref_tipo = 'hotmart.transacao' and pessoas.hotmart_setor(e.detalhe ->> 'produto') = 'escritorio' and e.detalhe ->> 'setor' is distinct from 'escritorio';
+  if v_dup <> 0 then raise exception '20261016230200: ainda há % grupo(s) duplicado(s); desfeito', v_dup; end if;
+  if v_n1 <> 13 or v_n2 <> 2 then
+    raise exception '20261016230200: backup com % duplicado_removido e % evento_educacao_em_escritorio (esperado 13 e 2); desfeito', v_n1, v_n2;
+  end if;
+  if v_total <> 15 + v_n3 then raise exception '20261016230200: backup com % linhas (esperado 15 + % setor_marcado); desfeito', v_total, v_n3; end if;
+  if v_sem <> 0 then raise exception '20261016230200: % linha(s) de escritório continuam sem setor; desfeito', v_sem; end if;
+end $p$;
+$m$;
+  insert into pg_temp._z_out(passo, linha) values ('06c guarda de pessoas diferentes', 'NAO ABORTOU');
+exception when others then
+  insert into pg_temp._z_out(passo, linha) values ('06c guarda de pessoas diferentes', 'abortou: ' || sqlerrm);
+end $t$;
 -- carga: academy (execução 71 reaberta dentro da transação) e escritório (72)
 do $x$
 declare a jsonb; e bigint; t0 timestamptz; f text; n int;

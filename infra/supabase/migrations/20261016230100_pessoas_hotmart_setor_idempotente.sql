@@ -28,8 +28,8 @@ set local statement_timeout = '60s';
 
 do $g$
 begin
-  if to_regclass('pessoas.eventos_hotmart_ref_idx') is null then
-    raise exception '20261016230100: falta o índice eventos_hotmart_ref_idx (20261016230000); sem ele cada consulta varre a tabela';
+  if not exists (select 1 from pg_index i where i.indexrelid = to_regclass('pessoas.eventos_hotmart_ref_idx') and i.indisvalid and i.indisready) then
+    raise exception '20261016230100: falta o índice eventos_hotmart_ref_idx (20261016230000) existente, válido e pronto; sem ele cada consulta varre a tabela';
   end if;
   if (select count(*) from fin.produtos where familia in ('ESCRITORIO', 'ESCRITORIO_SOLUCOES')) <> 6 then
     raise exception '20261016230100: esperava 6 produtos de escritório em fin.produtos (medido em 16/10); revisar antes de aplicar';
