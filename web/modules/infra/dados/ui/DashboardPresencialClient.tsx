@@ -3,8 +3,9 @@
 import { LinkVoltar } from '@/shared/ui/departamentos/LinkVoltar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Tabs } from '@/shared/ui/components';
-import { carregarDisparos, carregarFichasInteresseMiami, carregarLeads, carregarPagamentos, carregarPendencias, carregarPerfilCompradores, carregarPessoasPendencias, carregarResumo, carregarSerieDiaria, carregarSerieVendas, carregarVendas, carregarVendasPorHora, marcarLeadTeste, type Resultado } from '../infrastructure/presencial-data';
-import type { DiaPresencial, DisparoPresencial, FichaInteresseMiami, GrupoPendencia, LeadPresencial, PagamentoPresencial, PendenciaPresencial, PerfilCompradorPresencial, PessoaPendenciaPresencial, ResumoPresencial, SerieVendasPresencial, VendaHoraPresencial, VendaPresencial } from '../domain/presencial';
+import type { DisparoDetalheAtm, Linha, Resultado as ResultadoAtm } from '@/modules/infra/atm/infrastructure/atm-data';
+import { carregarDisparosCanais, carregarDisparosLista, carregarFichasInteresseMiami, carregarLeads, carregarPagamentos, carregarPendencias, carregarPerfilCompradores, carregarPessoasPendencias, carregarResumo, carregarSerieDiaria, carregarSerieVendas, carregarVendas, carregarVendasPorHora, marcarLeadTeste, type Resultado } from '../infrastructure/presencial-data';
+import type { DiaPresencial, FichaInteresseMiami, GrupoPendencia, LeadPresencial, PagamentoPresencial, PendenciaPresencial, PerfilCompradorPresencial, PessoaPendenciaPresencial, ResumoPresencial, SerieVendasPresencial, VendaHoraPresencial, VendaPresencial } from '../domain/presencial';
 import { CardsResumo } from './CardsResumo';
 import { AbaDisparos } from './AbaDisparos';
 import { AbaVisaoVendas } from './AbaVisaoVendas';
@@ -16,7 +17,7 @@ import { useRelatorioMiami } from './useRelatorioMiami';
 import { AbaFichasInteresse } from './AbaFichasInteresse';
 import { dataBR } from './formato';
 import { deveCarregar } from '../application/carga-sob-demanda';
-import { manterUltimoDado, type EstadoLeitura } from '../application/ultimo-dado';
+import { manterUltimaLeituraAtm, manterUltimoDado, type EstadoLeitura } from '../application/ultimo-dado';
 
 const inicial = <T,>(): EstadoLeitura<T> => ({ resultado: null, carregando: true });
 // Leads e vendas só carregam quando o modal abre: começam ociosos.
@@ -31,7 +32,9 @@ export function DashboardPresencialClient({ chave, isMaster = false }: { chave: 
   const [pendencias, setPendencias] = useState<EstadoLeitura<PendenciaPresencial[]>>(inicial);
   const [serieVendas, setSerieVendas] = useState<EstadoLeitura<SerieVendasPresencial[]>>(inicial);
   const [porHora, setPorHora] = useState<EstadoLeitura<VendaHoraPresencial[]>>(inicial);
-  const [disparos, setDisparos] = useState<EstadoLeitura<DisparoPresencial[]>>(inicial);
+  // Visão de disparos no formato do ATM/Black: canais e lista, lidos juntos na primeira abertura da aba e no Atualizar (nunca no polling).
+  const [disparos, setDisparos] = useState<{ canais: ResultadoAtm<Linha[]>; lista: ResultadoAtm<DisparoDetalheAtm[]> } | null>(null);
+  const disparosEmAndamento = useRef(false);
   const [leads, setLeads] = useState<EstadoLeitura<LeadPresencial[]>>(ocioso);
   const [vendas, setVendas] = useState<EstadoLeitura<VendaPresencial[]>>(ocioso);
   const [interesse, setInteresse] = useState<EstadoLeitura<FichaInteresseMiami[]>>(ocioso);
@@ -127,10 +130,22 @@ export function DashboardPresencialClient({ chave, isMaster = false }: { chave: 
       setPessoasPendencias((anterior) => ({ ...anterior, [grupo]: { resultado: manterUltimoDado(anterior[grupo].resultado, lido), carregando: false } }));
     }).finally(() => { pendenciasEmAndamento.current[grupo] = false; });
   }, [chave]);
+  const lerDisparos = useCallback(() => {
+    if (disparosEmAndamento.current) return;
+    disparosEmAndamento.current = true;
+    void Promise.all([carregarDisparosCanais(chave), carregarDisparosLista(chave)]).then(([canais, lista]) => {
+      setDisparos((anterior) => ({
+        canais: anterior ? manterUltimaLeituraAtm(anterior.canais, canais) : canais,
+        lista: anterior ? manterUltimaLeituraAtm(anterior.lista, lista) : lista,
+      }));
+    }).catch(() => {
+      const erro = 'Não foi possível carregar os disparos agora.';
+      setDisparos((anterior) => ({ canais: { ...(anterior?.canais ?? { data: [], semDado: true }), erro }, lista: { ...(anterior?.lista ?? { data: [], semDado: true }), erro } }));
+    }).finally(() => { disparosEmAndamento.current = false; });
+  }, [chave]);
   useEffect(() => {
-    if (aba !== 'disparos' || disparos.resultado) return;
-    carregarDisparos(chave).then((r) => setDisparos({ resultado: r, carregando: false }));
-  }, [aba, chave, versao, disparos.resultado]);
+    if (aba === 'disparos' && !disparos) lerDisparos();
+  }, [aba, disparos, lerDisparos]);
 
   useEffect(() => {
     if (aba === 'interesse' && miamiEmAndamento.current.interesse) recarregarMiami.current.interesse = true;
@@ -149,7 +164,8 @@ export function DashboardPresencialClient({ chave, isMaster = false }: { chave: 
   const atualizar = () => {
     if (lendoRelatorioMiami) void relatorioMiami.atualizar();
     if (!atualizarLevesRef.current()) return;
-    setDisparos(inicial()); setLeads(ocioso()); setVendas(ocioso()); setVersao((v) => v + 1);
+    if (aba === 'disparos' || disparos) lerDisparos();
+    setLeads(ocioso()); setVendas(ocioso()); setVersao((v) => v + 1);
   };
   const r = resumo.resultado;
   const ehClinicaMiami = chave === 'clinica-miami-2026-12';
@@ -162,7 +178,7 @@ export function DashboardPresencialClient({ chave, isMaster = false }: { chave: 
     <div className="flex flex-wrap items-start justify-between gap-3"><div><LinkVoltar href="/infra/dashboards/csm" para="Academy" /><div className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Infra / Dashboards / Academy</div><h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">{r?.data?.projeto_nome ?? 'Dashboard presencial'}</h1>{r?.data && <p className="mt-1 text-sm text-[var(--fg-2)]">{r.data.projeto_sigla} · {dataBR(r.data.evento_inicio)} a {dataBR(r.data.evento_fim)}</p>}{atualizadoEm && <p className="mt-1 text-xs text-[var(--fg-2)]" role="status">Atualizado às {atualizadoEm.toLocaleTimeString('pt-BR', { hour12: false })}</p>}</div><Button onClick={atualizar} disabled={atualizando}>Atualizar</Button></div>
     {resumo.carregando ? <p>Carregando resumo…</p> : <>{r?.erro && <p role="alert" className="text-sm text-[var(--fg-2)]">{r.erro} {r.data && 'Exibindo o último resumo carregado.'}</p>}{r?.data ? <CardsResumo resumo={r.data} abrirLeads={abrirLeads} abrirVendas={abrirVendas} /> : !r?.erro && <p role="alert">Não foi possível carregar agora.</p>}</>}
     <section><Tabs tabs={abas} active={aba} onChange={setAba} label="Visões do dashboard" />
-      {aba === 'disparos' ? <AbaDisparos linhas={disparos.resultado?.data ?? null} erro={disparos.resultado?.erro ?? null} carregando={disparos.carregando} /> : aba === 'vendas' ? <AbaVisaoVendas dias={serie} pagamentos={pagamentos} perfil={perfil} pendencias={pendencias} serieVendas={serieVendas} porHora={porHora} abrirPendencias={abrirPendencias} /> : ehSecaoRelatorioMiami(aba) ? <AbaRelatorioMiami secao={aba} estado={relatorioMiami.estado} /> : <AbaFichasInteresse linhas={interesse.resultado?.data ?? null} erro={interesse.resultado?.erro ?? null} carregando={interesse.carregando} />}
+      {aba === 'disparos' ? <AbaDisparos canais={disparos?.canais ?? null} lista={disparos?.lista ?? null} carregando={disparos === null} /> : aba === 'vendas' ? <AbaVisaoVendas dias={serie} pagamentos={pagamentos} perfil={perfil} pendencias={pendencias} serieVendas={serieVendas} porHora={porHora} abrirPendencias={abrirPendencias} /> : ehSecaoRelatorioMiami(aba) ? <AbaRelatorioMiami secao={aba} estado={relatorioMiami.estado} /> : <AbaFichasInteresse linhas={interesse.resultado?.data ?? null} erro={interesse.resultado?.erro ?? null} carregando={interesse.carregando} />}
     </section>
     {modal === 'leads' && <ModalPreCheckout linhas={leads.resultado?.data ?? null} erro={leads.resultado?.erro ?? null} carregando={leads.carregando} onClose={() => setModal(null)} isMaster={isMaster} onToggleTeste={alternarTeste} />}
     {modal === 'vendas' && <ModalVendas linhas={vendas.resultado?.data ?? null} erro={vendas.resultado?.erro ?? null} carregando={vendas.carregando} onClose={() => setModal(null)} />}

@@ -19,11 +19,6 @@ export type VendaPresencial = {
   telefone: string | null; estado: string | null; instrucao: string | null; turma: string | null;
   no_pre_checkout: boolean; entrou_grupo: boolean | null; grupo_fonte: string | null;
 };
-export type DisparoPresencial = {
-  disparo_id: number; dia: string | null; nome: string; canal: string | null; ferramenta: string | null;
-  tamanho_lista: number | null; entregues: number | null; lidas: number | null; cliques: number | null; falhas: number | null;
-  custo_centavos: Numerico; entrega_pct: Numerico; leitura_pct: Numerico; clique_pct: Numerico;
-};
 export type DiaPresencial = { dia: string; pre_checkout: number; pedidos: number; vendas: number; abandonos: number | null };
 export type PagamentoPresencial = { forma: string; forma_nome: string; parcelas: number | null; vendas: number; receita_bruta: Numerico };
 export type PerfilCompradorPresencial = { dimensao: 'turma' | 'instrucao' | 'casamento'; valor: string; compradores: number };

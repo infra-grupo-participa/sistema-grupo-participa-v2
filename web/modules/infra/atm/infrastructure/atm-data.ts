@@ -87,7 +87,7 @@ export type DadosTrafegoAtm = {
   dias: DiaTrafegoAtm[];
   campanhas: CampanhaTrafegoAtm[];
 };
-type Linha = Record<string, unknown>;
+export type Linha = Record<string, unknown>;
 
 function objeto(v: unknown): Linha | null {
   return typeof v === 'object' && v !== null && !Array.isArray(v) ? v as Linha : null;
@@ -151,7 +151,7 @@ async function rpc(nome: string, chave: string, periodo?: DatasPeriodoAtm, adici
 }
 
 /** Corrida contra o relógio: a leitura que não volta em `ms` vira falha com aviso (a tela mantém a última lista). */
-async function comTempoLimite(nome: string, leitura: Promise<Resultado<Linha[]>>, ms: number, mensagem: string): Promise<Resultado<Linha[]>> {
+export async function comTempoLimite(nome: string, leitura: Promise<Resultado<Linha[]>>, ms: number, mensagem: string): Promise<Resultado<Linha[]>> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const esgotou = new Promise<Resultado<Linha[]>>((resolve) => {
     timer = setTimeout(() => {
@@ -412,35 +412,37 @@ function mensagemAcao(codigo?: string): string {
 export async function carregarAtmCanais(chave: string, periodo?: DatasPeriodoAtm): Promise<Resultado<Linha[]>> {
   return rpc('dados_atm_disparos_canais', chave, periodo);
 }
+/** Tradução pura das linhas de `dados_atm_disparos_lista` (e de `dados_presencial_disparos_lista`, mesmas colunas) para a tela. */
+export function traduzirDisparosLista(linhasLidas: Linha[]): DisparoDetalheAtm[] {
+  return linhasLidas.map((x) => ({
+    id: num(x.disparo_id),
+    dataHora: typeof x.data_hora === 'string' ? x.data_hora : null,
+    enviadoEm: typeof x.enviado_em === 'string' ? x.enviado_em : null,
+    canal: x.canal === 'whatsapp_api' || x.canal === 'email' || x.canal === 'sms' || x.canal === 'ligacao' || x.canal === 'grupo' ? x.canal : null,
+    canalPago: booleano(x.canal_pago),
+    tipo: typeof x.tipo === 'string' ? x.tipo : null,
+    ferramenta: typeof x.ferramenta === 'string' ? x.ferramenta : null,
+    numero: typeof x.numero === 'string' ? x.numero : null,
+    campanha: typeof x.campanha === 'string' ? x.campanha : null,
+    publicoLista: typeof x.publico_lista === 'string' ? x.publico_lista : null,
+    publicoOrigem: typeof x.publico_origem === 'string' ? x.publico_origem : null,
+    copyTexto: typeof x.copy_texto === 'string' ? x.copy_texto : null,
+    copyLink: typeof x.copy_link === 'string' ? x.copy_link : null,
+    enviados: num(x.tamanho_lista),
+    entregues: num(x.entregues),
+    lidas: num(x.lidas),
+    cliques: num(x.cliques),
+    falhas: num(x.falhas),
+    custoCentavos: num(x.custo_centavos),
+    origem: typeof x.origem === 'string' ? x.origem : null,
+    retornoEm: typeof x.retorno_em === 'string' ? x.retorno_em : null,
+  }));
+}
+/** Mesma leitura (erros, `semDado`, `naoPublicada`, `semPermissao`) para RPCs de disparo de outros módulos, que só mandam `p_chave`. */
+export { rpc as lerRpcDisparos };
 export async function carregarAtmDisparosLista(chave: string, periodo?: DatasPeriodoAtm): Promise<Resultado<DisparoDetalheAtm[]>> {
   const r = await rpc('dados_atm_disparos_lista', chave, periodo);
-  return {
-    data: r.data.map((x) => ({
-      id: num(x.disparo_id),
-      dataHora: typeof x.data_hora === 'string' ? x.data_hora : null,
-      enviadoEm: typeof x.enviado_em === 'string' ? x.enviado_em : null,
-      canal: x.canal === 'whatsapp_api' || x.canal === 'email' || x.canal === 'sms' || x.canal === 'ligacao' || x.canal === 'grupo' ? x.canal : null,
-      canalPago: booleano(x.canal_pago),
-      tipo: typeof x.tipo === 'string' ? x.tipo : null,
-      ferramenta: typeof x.ferramenta === 'string' ? x.ferramenta : null,
-      numero: typeof x.numero === 'string' ? x.numero : null,
-      campanha: typeof x.campanha === 'string' ? x.campanha : null,
-      publicoLista: typeof x.publico_lista === 'string' ? x.publico_lista : null,
-      publicoOrigem: typeof x.publico_origem === 'string' ? x.publico_origem : null,
-      copyTexto: typeof x.copy_texto === 'string' ? x.copy_texto : null,
-      copyLink: typeof x.copy_link === 'string' ? x.copy_link : null,
-      enviados: num(x.tamanho_lista),
-      entregues: num(x.entregues),
-      lidas: num(x.lidas),
-      cliques: num(x.cliques),
-      falhas: num(x.falhas),
-      custoCentavos: num(x.custo_centavos),
-      origem: typeof x.origem === 'string' ? x.origem : null,
-      retornoEm: typeof x.retorno_em === 'string' ? x.retorno_em : null,
-    })),
-    semDado: r.semDado,
-    erro: r.erro,
-  };
+  return { data: traduzirDisparosLista(r.data), semDado: r.semDado, erro: r.erro };
 }
 export async function carregarAtmTrafego(chave: string, periodo?: DatasPeriodoAtm): Promise<Resultado<DadosTrafegoAtm>> {
   const nome = 'dados_atm_trafego';

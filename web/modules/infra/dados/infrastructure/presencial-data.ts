@@ -2,7 +2,8 @@
 
 import { createBrowserSupabase } from '@/shared/infrastructure/supabase/browser-client';
 import { logQueryError } from '@/shared/infrastructure/supabase/query-log';
-import { normalizarNumericos, type ResumoPresencial, type LeadPresencial, type VendaPresencial, type DisparoPresencial, type DiaPresencial, type PagamentoPresencial, type PerfilCompradorPresencial, type PendenciaPresencial, type PessoaPendenciaPresencial, type SerieVendasPresencial, type VendaHoraPresencial, type GrupoPendencia, type DiamantePresencial, type FichaInteresseMiami } from '../domain/presencial';
+import { comTempoLimite, lerRpcDisparos, TEMPO_LIMITE_LISTAS_MS, traduzirDisparosLista, type DisparoDetalheAtm, type Linha, type Resultado as ResultadoAtm } from '@/modules/infra/atm/infrastructure/atm-data';
+import { normalizarNumericos, type ResumoPresencial, type LeadPresencial, type VendaPresencial, type DiaPresencial, type PagamentoPresencial, type PerfilCompradorPresencial, type PendenciaPresencial, type PessoaPendenciaPresencial, type SerieVendasPresencial, type VendaHoraPresencial, type GrupoPendencia, type DiamantePresencial, type FichaInteresseMiami } from '../domain/presencial';
 
 export type Resultado<T> = { data: T | null; erro: string | null };
 
@@ -37,9 +38,17 @@ export async function carregarVendas(chave: string): Promise<Resultado<VendaPres
   const r = await chamar<VendaPresencial[]>('dados_presencial_vendas', chave);
   return { ...r, data: r.data?.map((v) => normalizarNumericos(v, ['valor_bruto', 'valor_liquido'])) ?? null };
 }
-export async function carregarDisparos(chave: string): Promise<Resultado<DisparoPresencial[]>> {
-  const r = await chamar<DisparoPresencial[]>('dados_presencial_disparos', chave);
-  return { ...r, data: r.data?.map((v) => normalizarNumericos(v, ['custo_centavos', 'entrega_pct', 'leitura_pct', 'clique_pct'])) ?? null };
+/**
+ * Visão de disparos igual à do Seminário ATM e à das Ações da Black: as RPCs `dados_presencial_disparos_canais` e
+ * `dados_presencial_disparos_lista` devolvem as mesmas colunas de `dados_atm_disparos_canais` e `dados_atm_disparos_lista`
+ * e só recebem `p_chave` (sem período). A leitura, os estados e a tradução são as do ATM.
+ */
+const MENSAGEM_TEMPO_DISPAROS = 'Os disparos demoraram a responder. Os últimos dados disponíveis foram mantidos.';
+export const carregarDisparosCanais = (chave: string, limiteMs = TEMPO_LIMITE_LISTAS_MS): Promise<ResultadoAtm<Linha[]>> =>
+  comTempoLimite('dados_presencial_disparos_canais', lerRpcDisparos('dados_presencial_disparos_canais', chave), limiteMs, MENSAGEM_TEMPO_DISPAROS);
+export async function carregarDisparosLista(chave: string, limiteMs = TEMPO_LIMITE_LISTAS_MS): Promise<ResultadoAtm<DisparoDetalheAtm[]>> {
+  const r = await comTempoLimite('dados_presencial_disparos_lista', lerRpcDisparos('dados_presencial_disparos_lista', chave), limiteMs, MENSAGEM_TEMPO_DISPAROS);
+  return { data: traduzirDisparosLista(r.data), semDado: r.semDado, erro: r.erro };
 }
 export const carregarSerieDiaria = (chave: string) => chamar<DiaPresencial[]>('dados_presencial_serie_diaria', chave);
 export async function carregarPagamentos(chave: string): Promise<Resultado<PagamentoPresencial[]>> {

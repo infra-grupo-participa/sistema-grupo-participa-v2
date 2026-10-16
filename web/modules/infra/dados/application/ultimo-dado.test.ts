@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { manterUltimoDado } from './ultimo-dado';
+import { manterUltimaLeituraAtm, manterUltimoDado } from './ultimo-dado';
 
 describe('manterUltimoDado', () => {
   it('preserva o último resultado em falha de leitura', () => {
@@ -15,5 +15,17 @@ describe('manterUltimoDado', () => {
   it('mantém ausência de dado como ausência, sem fabricar zero', () => {
     expect(manterUltimoDado(null, { data: null, erro: 'Falha' }))
       .toEqual({ data: null, erro: 'Falha' });
+  });
+});
+
+describe('manterUltimaLeituraAtm', () => {
+  it('em falha (semDado) mantém a última lista e só troca o aviso', () => {
+    expect(manterUltimaLeituraAtm({ data: [1], semDado: false, erro: null }, { data: [], semDado: true, erro: 'Falha' }))
+      .toEqual({ data: [1], semDado: false, erro: 'Falha' });
+  });
+
+  it('leitura válida, mesmo vazia, substitui a anterior', () => {
+    expect(manterUltimaLeituraAtm({ data: [1], semDado: false, erro: 'Falha' }, { data: [], semDado: false, erro: null }))
+      .toEqual({ data: [], semDado: false, erro: null });
   });
 });

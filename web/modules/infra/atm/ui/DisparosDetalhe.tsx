@@ -57,9 +57,12 @@ function Dado({ label, value, calculado = false }: { label: string; value: strin
 export function DisparosDetalhe({
   result,
   canal,
+  semFiltroPeriodo = false,
 }: {
   result: Resultado<DisparoDetalheAtm[]>;
   canal: string;
+  /** Dashboards sem filtro de período (Clínica): a lista vazia não pode dizer "no período". Padrão falso: ATM e Black ficam como estavam. */
+  semFiltroPeriodo?: boolean;
 }) {
   const rows = result.data.filter((row) => row.canal === canal);
   const canalAtual = canalRotulo[canal as keyof typeof canalRotulo] ?? 'Sem dado';
@@ -73,7 +76,7 @@ export function DisparosDetalhe({
     </div>
 
     {result.erro && <p role="status" className="mt-3 text-sm text-[var(--yellow)]">{result.erro}</p>}
-    {result.semDado ? <div className="mt-3"><EmptyState title="Detalhe de disparos indisponível" hint="sem dado ainda" /></div> : rows.length === 0 ? <div className="mt-3"><EmptyState title={result.data.length === 0 ? 'Nenhum disparo no período' : 'Nenhum disparo neste canal'} hint={result.data.length === 0 ? 'sem dado ainda' : undefined} /></div> :
+    {result.semDado ? <div className="mt-3"><EmptyState title="Detalhe de disparos indisponível" hint="sem dado ainda" /></div> : rows.length === 0 ? <div className="mt-3"><EmptyState title={result.data.length === 0 ? (semFiltroPeriodo ? 'Nenhum disparo registrado' : 'Nenhum disparo no período') : 'Nenhum disparo neste canal'} hint={result.data.length === 0 ? 'sem dado ainda' : undefined} /></div> :
       <div className="mt-3 space-y-2">
         {rows.map((row, index) => {
           const link = linkHttp(row.copyLink);

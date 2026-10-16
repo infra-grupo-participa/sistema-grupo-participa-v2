@@ -113,7 +113,9 @@ turma text, no_pre_checkout boolean, entrou_grupo boolean, grupo_fonte text`
 - `telefone` = `comprador_telefone`, `estado` = `comprador_uf` da Hotmart.
 - `entrou_grupo` sempre `null` e `grupo_fonte` sempre `'sem_fonte'`: não há grupo da Clínica no banco.
 
-### 2.4 `dados_presencial_disparos` (1 linha por disparo, mais recente primeiro)
+### 2.4 `dados_presencial_disparos` (1 linha por disparo, mais recente primeiro) — SUBSTITUÍDA NA TELA em 16/10/2026
+
+> A tela não chama mais esta função: a Visão de disparos passou a ler `dados_presencial_disparos_canais` e `dados_presencial_disparos_lista` (§2.13). A função antiga continua no banco, sem uso no front; reverter a tela é voltar o commit da §2.13.4.
 
 `disparo_id bigint, dia date, nome text, canal text, ferramenta text, tamanho_lista integer, entregues integer,
 lidas integer, cliques integer, falhas integer, custo_centavos bigint, entrega_pct numeric, leitura_pct numeric,
@@ -123,6 +125,7 @@ clique_pct numeric`
   `canal` = código (`whatsapp_api`, `email`, `sms`, `ligacao`, `grupo`); `ferramenta` = `mkt_mensageria.ferramentas.nome`.
 - Não existe coluna "enviadas": a tela mostra `tamanho_lista` como "Tamanho da lista".
 - Taxas: entregues ÷ tamanho; lidas ÷ entregues; cliques ÷ entregues. Divisor 0 ou nulo = `null`.
+- Formato do ATM para a tela: ver §2.13.
 - Para o disparo entrar: projeto escolhido no cadastro manual da Mensageria ou campanha com `[CNFMIAMI26]` na integração.
 
 ### 2.5 `dados_presencial_serie_diaria` (1 linha por dia, sem buraco, do 1º dia com dado até hoje)
@@ -172,7 +175,7 @@ tem. Quando o sync traz a transação, vale a linha do espelho: nada conta duas 
 No repo, entrar em `web` e rodar `npm run dev -- -p 3001`. Abrir `/infra/dashboards/csm/clinica-miami-2026-12`
 com uma conta autorizada. Conferir o horário, esperar 60 s com a aba visível e conferir novo horário sem piscar os
 cards. Deixar a aba oculta por mais de 60 s: não deve haver leitura periódica; ao voltar, resumo e série devem
-atualizar. No painel de rede, `dados_presencial_disparos`, `dados_presencial_leads` e `dados_presencial_vendas` não
+atualizar. No painel de rede, `dados_presencial_disparos_canais`, `dados_presencial_disparos_lista`, `dados_presencial_leads` e `dados_presencial_vendas` não
 devem aparecer por causa do polling. Em falha de uma leitura, os dados anteriores daquele bloco devem continuar
 visíveis com aviso; não substituir ausência por zero. O botão Atualizar continua permitindo recarregar também as abas
 sob demanda.
@@ -439,6 +442,153 @@ Uma chamada por atualização da tela. Passe em `p_md5` o `md5` da resposta ante
 - A tela (abas Relatório, Presença por evento, Diamantes e Compradores) está feita e depende do push na `main`; ver `docs/dashboard-presencial-tela.md` (seção "Clínica de Miami: abas da cópia da planilha").
 - Revisar o gate de contato quando os níveis de acesso forem revistos (ver a decisão provisória).
 
+## 2.13 Clínica Miami: disparos no formato do ATM (migrations `20261017020500` e `20261017020600`, APLICADAS em 16/10/2026)
+
+Objetivo: a aba de disparos da Clínica reaproveita os componentes do ATM. Para isso o banco entrega a Clínica no mesmo formato.
+
+### 2.13.1 Funções novas (só leitura, `authenticated`, gate `dados.presencial_cadastro`)
+
+`public.dados_presencial_disparos_canais(p_chave text, p_de date default null, p_ate date default null)` devolve sempre 5 linhas
+(whatsapp_api, grupo, sms, ligacao, email): `canal text, disparos integer, enviados integer, entregues integer, lidas integer,
+cliques integer, falhas integer, custo_centavos bigint, disparos_sem_custo integer, custo_completo boolean`.
+
+`public.dados_presencial_disparos_lista(p_chave text, p_de date default null, p_ate date default null)` devolve 1 linha por disparo:
+`disparo_id bigint, data_hora timestamptz, enviado_em timestamptz, canal text, canal_pago boolean, tipo text, ferramenta text,
+numero text, campanha text, publico_lista text, publico_origem text, copy_texto text, copy_link text, tamanho_lista integer,
+entregues integer, lidas integer, cliques integer, falhas integer, custo_centavos integer, origem text, retorno_em timestamptz`.
+
+Iguais, em colunas e tipos, às `dados_atm_disparos_canais` e `dados_atm_disparos_lista` (comparado no ensaio). O ATM chama
+`rpc(nome, { p_chave, p_de, p_ate })`; a tela da Clínica chama só com `p_chave` (§2.13.4). Chave de outro modelo ou inexistente: P0002; sem acesso: 42501. A
+`dados_presencial_disparos(p_chave)` da §2.4 continua como está.
+
+### 2.13.2 Ligação dos disparos já gravados ao projeto 68
+
+Ligados (era `projeto_id` nulo, origem `api`): e-mails do ActiveCampaign ids 39935, 41099, 42695, 44024, 44512 e WhatsApp API ids
+39925 e 40560. **A ferramenta do WhatsApp API é o Unichat (id 2), não o Infobip:** é o que está gravado. Ficaram de fora os 2 de
+"Compra Aprovada" (ids 50162 e 50132, pós-compra) e os grupos `ALUNOS ATIVOS` do SendFlow.
+
+Medido em produção depois de aplicar (chave `clinica-miami-2026-12`, como equipe): whatsapp_api 2 disparos e 2.945 enviados;
+email 5 disparos, 7.827 enviados, 7.814 entregues, 1.078 lidas, 23 cliques, 13 falhas; grupo, sms e ligacao 0. Sem custo
+lançado: `custo_completo = false`.
+
+### 2.13.3 Planilha de mensageria da Clínica (NÃO cadastrada ainda)
+
+Fonte: `[CLINICA INTERNACIONAL DIAMANTES] MENSAGERIA.xlsx` no Drive (id `142Piu91iZH6PXYWw06j5lWMA4RhvAfKl`), abas GRUPO (18),
+API (2, com "Custo (R$) - ESTIMADO") e EMAIL (5). O arquivo é XLSX: o sync lê Google Sheets, então precisa ser **convertido** antes
+(Arquivo, Salvar como Planilhas Google). Cabeçalho e letras abaixo valem só depois da conversão e têm que ser conferidos na planilha convertida.
+
+Por que não cadastrei: falta o ID da planilha convertida, falta a coluna de hora (o Thomas cria), falta o texto de `lista_fixa`
+(obrigatório) e falta confirmar a ferramenta dos grupos. Nada disso eu invento.
+
+Mapa proposto:
+
+| Aba | canal | ferramenta | data | campanha | tipo | status | tamanho_lista | entregues | lidas | falhas | custo |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| API | `whatsapp_api` | 2 (Unichat) | A | B (Nome) | D (Marketing/Utilidade) | E | F (Contatos na base) | H | I | J | M (Custo (R$) - ESTIMADO) |
+| GRUPO | `grupo` | 1 (SendFlow, a confirmar) | A | B | sem coluna | D | F (Participantes) | G | H | sem coluna | sem coluna |
+
+- A coluna E da aba GRUPO (COPY, "MENSAGERIA (PROVISÓRIO)") **não** é mapeada. A aba EMAIL **não** é lida (e-mail vem do ActiveCampaign).
+- `tamanho_lista` é obrigatório no mapa: a regra `entregues + falhas <= tamanho_lista` do banco exige.
+- Custo precisa estar formatado como R$ com 2 casas (o sync lê o valor formatado).
+
+SQL pronto (colunas de `mkt_mensageria.planilhas` conferidas na `20261011120000`: `planilha_id, nome, projeto_id, desde, ate, abas, ativa`;
+formato de `abas` e opção `lista_fixa` como na `20261014210100`). Cabeçalhos copiados da planilha XLSX em 16/10/2026. Marcadores `<...>`
+são o que falta. Entra com `ativa = false`:
+
+```sql
+insert into mkt_mensageria.planilhas (planilha_id, nome, projeto_id, desde, ate, abas, ativa)
+values ('<ID DO GOOGLE SHEETS CONVERTIDO>', '[CLINICA INTERNACIONAL DIAMANTES] MENSAGERIA', 68, date '<DESDE, A CONFIRMAR>', null, $j$[
+  {"aba": "API", "canal": "whatsapp_api", "ferramenta_id": 2, "cabecalho_linha": 1,
+   "lista_fixa": "<TEXTO A FORNECER PELO VICTOR OU THOMAS>",
+   "colunas": {"data": "A", "hora": "<LETRA DA COLUNA DE HORA>", "campanha": "B", "tipo": "D", "status": "E",
+               "tamanho_lista": "F", "entregues": "H", "lidas": "I", "falhas": "J", "custo": "M"},
+   "cabecalho": {"A": "Data", "B": "Nome", "D": "Categoria do template (inferida)", "E": "Status",
+                 "F": "Contatos na base", "H": "Entregues", "I": "Lidos", "J": "Falhas", "M": "Custo (R$) - ESTIMADO"}},
+  {"aba": "GRUPO", "canal": "grupo", "ferramenta_id": 1, "cabecalho_linha": 1,
+   "lista_fixa": "<TEXTO A FORNECER PELO VICTOR OU THOMAS>",
+   "colunas": {"data": "A", "hora": "<LETRA DA COLUNA DE HORA>", "campanha": "B", "status": "D",
+               "tamanho_lista": "F", "entregues": "G", "lidas": "H"},
+   "cabecalho": {"A": "Data", "B": "Campanha", "D": "Status", "F": "Participantes",
+                 "G": "Entregues (painel)", "H": "Visualizações (painel)"}}
+]$j$::jsonb, false);
+```
+
+Dúvidas que o SQL carrega: os nomes de campo (`data`, `hora`, `campanha`, `tipo`, `status`, `tamanho_lista`, `entregues`, `lidas`, `falhas`,
+`custo`, `lista_fixa`) foram copiados do precedente do ATM; o valor aceito em `tipo` ("Marketing"/"Utilidade") e se `hora` é obrigatória
+devem ser conferidos no ensaio da migration que cadastrar, antes de aplicar. No XLSX a data vem como número de série (46304 = 09/10/2026);
+o sync lê `FORMATTED_VALUE`, então só vale depois da conversão para Planilhas Google com a coluna formatada como data.
+
+Ao **ativar** (`ativa = true`), na mesma migration, desligar o vínculo das 2 mensagens de WhatsApp que a aba API já traz, senão contam em
+dobro (o sync cria linha nova de origem `planilha` e a adoção só casa disparo `manual` ou `planilha`, não `api`):
+
+```sql
+update mkt_mensageria.disparos set projeto_id = null
+ where id in (39925, 40560) and projeto_id = 68 and origem = 'api';
+```
+
+### 2.13.4 A tela: visão de disparos igual à do Seminário ATM e à das Ações da Black (16/10/2026)
+
+**Situação:** banco aplicado em produção (§2.13.1 a 2.13.3), tela pronta e testada na branch `victor-miami-disparos-tela`, **merge na `main` pendente**
+(sem push até aqui).
+
+**Validação com dado real (16/10/2026): a tela NÃO foi aberta logada.** Não há sessão de conta da equipe neste ambiente, e o `.env.local` do v2 só tem a URL e a
+chave `anon` do Supabase (sem service role), então também não li as linhas do banco. O que foi provado: os números medidos em produção (§2.13.2,
+anotados em `20261017020500.explain.md`) passam pelo render da `AbaDisparos` em teste (`ui/AbaDisparos.test.ts`) e saem como esperado: API 2 disparos e 2.945 enviados,
+o resto "Sem dado"; E-mail 5, 7.827, 7.814, 1.078, 23 e 13; Grupo, SMS e Ligação 0. As linhas desse teste são **montadas à mão a partir dessas anotações**,
+não lidas do banco; a lista (`traduzirDisparosLista`) foi testada com uma linha fictícia. A conferência com dado real fica para quem abrir a rota logado.
+
+**Pedido do Victor:** a aba "Visão de disparos" da Clínica tem que ficar igual (Ctrl+C Ctrl+V) à visão de disparos do Seminário ATM
+(`web/modules/infra/atm/ui/SeminarioAtmClient.tsx`) e à das Ações da Black (`web/modules/infra/acoes/ui/DashboardAcoesBlackClient.tsx`).
+O custo estimado entra, e o rótulo do card de Custo fica "Custo", igual ao ATM.
+
+**Contrato usado:** `dados_presencial_disparos_canais(p_chave, p_de, p_ate)` e `dados_presencial_disparos_lista(p_chave, p_de, p_ate)` (§2.13.1).
+A tela chama só com `p_chave`: a Clínica não tem filtro de período e, com `p_de` e `p_ate` nulos, o banco não limita (o cadastro da Clínica
+tem `periodo_inicio` e `periodo_fim` nulos).
+
+**O que a tela mostra** (`web/modules/infra/dados/ui/AbaDisparos.tsx`):
+- abas por canal, com `CANAIS_DISPARO_ATM` (API, Grupo, SMS, Ligação, E-mail), o mesmo `Tabs` da Black;
+- os 7 cards: Disparos, Enviados, Entregues, Lidas / atendidas, Cliques, Falhas, Custo (`custo_centavos` ÷ 100). Valor nulo vira "Sem dado", não zero;
+- canal sem resumo: o `EmptyState` "Sem dados para este canal" do ATM;
+- a lista de disparos é o `DisparosDetalhe` do ATM, importado sem cópia: abrir um disparo mostra as taxas e todas as métricas. Lista vazia diz "Nenhum disparo registrado"
+  (prop opcional `semFiltroPeriodo`, falsa por padrão: ATM e Black continuam com "Nenhum disparo no período").
+O canal "API" é a linha `whatsapp_api` do banco, como no ATM e na Black.
+
+**Como foi feito:**
+- `atm/infrastructure/atm-data.ts`: a tradução das linhas da lista saiu de `carregarAtmDisparosLista` para a função pura exportada
+  `traduzirDisparosLista`; o ATM e a Black seguem chamando `carregarAtmDisparosLista` com o mesmo resultado de antes. Foram exportados também
+  o tipo `Linha`, `comTempoLimite` e a leitura `rpc` (com o nome `lerRpcDisparos`), para a Clínica ter o mesmo tratamento de erro do ATM
+  (`42501`, `PGRST202`, falha de rede).
+- `dados/infrastructure/presencial-data.ts`: `carregarDisparosCanais` e `carregarDisparosLista`, que devolvem o `Resultado` do ATM
+  (`{ data, semDado, erro }`), com tempo limite de 20 s por leitura (`TEMPO_LIMITE_LISTAS_MS`). `carregarDisparos` e o tipo `DisparoPresencial` saíram.
+- `dados/ui/DashboardPresencialClient.tsx`: as duas leituras rodam juntas na **primeira abertura da aba** e no botão **Atualizar**,
+  fora do polling de 60 s. Leitura que falha mantém a última lista e troca só o aviso (`manterUltimaLeituraAtm`, em `application/ultimo-dado.ts`).
+
+**Por que vale para todos os eventos presenciais:** a rota `/infra/dashboards/csm/[chave]` renderiza o mesmo `DashboardPresencialClient` para
+qualquer chave; as RPCs novas recebem `p_chave`, então a nova visão serve a todos sem ramificar por evento. Hoje só a Clínica de Miami usa o modelo
+`presencial-base`. Nenhuma outra aba mudou.
+
+**Como testar:**
+1. `cd web && npx vitest run modules/infra/dados modules/infra/atm modules/infra/acoes` e `npx tsc --noEmit`.
+2. Abrir `/infra/dashboards/csm/clinica-miami-2026-12`, aba "Visão de disparos". Esperado (medido em §2.13.2): API 2 disparos e 2.945 enviados
+   (o resto "Sem dado"); E-mail 5 disparos, 7.827 enviados, 7.814 entregues, 1.078 lidas, 23 cliques, 13 falhas; Grupo, SMS e Ligação 0.
+   Abrir um disparo e conferir as métricas.
+3. No painel de rede: as duas RPCs aparecem na primeira abertura da aba e ao clicar em Atualizar, nunca a cada 60 s.
+
+**O que falta:**
+- Merge da branch `victor-miami-disparos-tela` na `main` (checklist de subida) e deploy.
+- Teste visual em navegador, com conta da equipe.
+- Cadastrar a planilha de mensageria da Clínica (§2.13.3), que trará os grupos e o custo estimado do WhatsApp.
+
+### 2.13.5 Risco conhecido, não alterado
+
+`dados_presencial_resumo` calcula `custo_completo` com todos os canais, e e-mail não tem custo. Com os 5 e-mails ligados,
+CAC e custo por pré-checkout da Clínica seguem nulos mesmo com o WhatsApp todo custeado (já eram nulos com 0 disparos). A
+`dados_atm_resumo` conta só canal pago. Alinhar é uma migration à parte, a decidir pelo Victor.
+
+### 2.13.6 Divergência a confirmar
+
+A planilha diz Clínica em 1 e 2/12; `mkt.projetos` 68 e esta doc dizem 03 e 04/12.
+
 ## 3. Migrations (ordem e versão gravada)
 
 | Versão | Nome | O quê |
@@ -456,6 +606,8 @@ Uma chamada por atualização da tela. Passe em `p_md5` o `md5` da resposta ante
 | `20261009190100` | `respondi_carga_mesmo_formulario` | `fn_respondi_carga` não atualiza resposta de outro formulário (pentester) |
 | `20261016240000` (APLICADA 16/10/2026) | `dados_miami_relatorio_planilha` | cópia da aba Relatório da planilha Dados [MIAMI 2026] (`dados.relatorio_planilha`), funções internas e `dados_miami_relatorio` (§2.12) |
 | `20261016240100` (APLICADA 16/10/2026) | `dados_miami_relatorio_cron` | cron `dados-relatorio-planilha-sync` (a cada 5 min) e linha do vigia; aplicada depois da Edge publicada |
+| `20261017020500` (APLICADA 16/10/2026) | `dados_presencial_disparos_canais_lista` | `dados_presencial_disparos_canais` e `_lista`, no formato do ATM (§2.13) |
+| `20261017020600` (APLICADA 16/10/2026) | `mkt_msg_clinica_liga_disparos_projeto_68` | liga ao projeto 68 os 5 e-mails e os 2 WhatsApp API da Clínica (§2.13.2) |
 
 Cada uma tem `.explain.md` com ensaio, explain e reversão.
 
@@ -524,7 +676,7 @@ Hoje a tela expõe 1 lead e 1 pedido, ambos teste interno; o risco cresce quando
 
 - Abandono de checkout: depende de o webhook receber a oferta `mjzv4v0s` (decisão do Victor e do dono do disparos-thb).
 - Grupo da Clínica no SendFlow ligado ao projeto.
-- Disparos da Clínica com projeto 68 (hoje 0).
+- Disparos da Clínica com projeto 68: ligados 7 em 16/10/2026 (§2.13). Falta cadastrar a planilha de mensageria (ID convertido, hora, `lista_fixa`). A tela da aba está pronta (§2.13.4), merge na `main` pendente.
 
 ### Correção 09/10/2026: aba Diamantes não abria
 
