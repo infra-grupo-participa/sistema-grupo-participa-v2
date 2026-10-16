@@ -1,7 +1,7 @@
 -- 20261016240100: liga a cópia da aba Relatório (cron dados-relatorio-planilha-sync → Edge dados-planilha-relatorio).
 --
--- STATUS: NÃO APLICADA. APLICAR SÓ DEPOIS de (1) 20261016240000 aplicada, (2) a Edge dados-planilha-relatorio publicada e
---   (3) uma rodada manual com sucesso (ver 20261016240000.explain.md, "Ordem"). Sem a Edge no ar o cron recebe 404 e o vigia abre incidente.
+-- STATUS: APLICADA em 16/10/2026 13:21 UTC (aplica_sql.py aplicar, transação única, registrada em schema_migrations), depois de 20261016240000, da Edge publicada e de uma
+--   rodada manual com sucesso (ver 20261016240000.explain.md). Sem a Edge no ar o cron recebe 404 e o vigia abre incidente.
 -- COMO VOLTAR: 20261016240100_reversao.sql. Desligar sem apagar: select cron.alter_job((select jobid from cron.job where jobname = 'dados-relatorio-planilha-sync'), active := false);
 -- O QUE FAZ
 --   a. Cron dados-relatorio-planilha-sync, a cada 5 minutos nos minutos 2, 7, 12... (2-59/5; a mensageria-planilha-sync roda nos

@@ -1,5 +1,5 @@
 -- Ensaio de 20261016240000 + 20261016240100 numa transação DESFEITA (rollback). Dado inventado: nomes "Pessoa Teste N" e e-mails .invalid.
--- NÃO RODADO até o fechamento desta entrega (o back-end-sr não toca o banco vivo). Rodar com o executor que só aceita arquivo
+-- RODADO em 16/10/2026 (aplica_sql.py ensaio, transação desfeita); saída em 20261016240000.explain.md §8. Rodar com o executor que só aceita arquivo
 -- terminado em rollback. O segredo do Vault nunca é impresso (só existência e tamanho).
 -- Prova: a migration inteira roda; o seed nasce sem cópia; gravar (novo, igual, erro, inválido, chave inexistente); a função da tela
 -- (equipe vê tudo, md5 igual não devolve conteúdo, chave inexistente P0002, fora da equipe 42501, anon 42501, tabela e funções internas

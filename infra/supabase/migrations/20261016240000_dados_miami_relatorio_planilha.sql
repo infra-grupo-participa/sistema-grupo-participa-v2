@@ -1,6 +1,6 @@
 -- 20261016240000: cópia da aba `Relatório` da planilha "Dados [MIAMI 2026]" no banco + função que a tela da Clínica Miami lê.
 --
--- STATUS: ver 20261016240000.explain.md (NÃO APLICADA; Edge dados-planilha-relatorio NÃO PUBLICADA).
+-- STATUS: APLICADA em 16/10/2026 13:20 UTC (aplica_sql.py aplicar, transação única, registrada em schema_migrations). Edge dados-planilha-relatorio PUBLICADA (versão 1). Ver 20261016240000.explain.md.
 -- POR QUE: o time da Clínica Miami mantém o Relatório de preenchimento numa planilha (Diamantes e Time); o Victor pediu o
 --   mesmo relatório dentro do dashboard (16/10/2026). A tela não lê a planilha direto (cota do Google, chave no navegador):
 --   uma Edge copia a aba para o banco a cada 5 minutos e a tela lê a cópia por uma função.

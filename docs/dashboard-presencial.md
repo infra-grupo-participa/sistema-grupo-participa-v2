@@ -361,14 +361,13 @@ recusado ou estornado.
   - A planilha mostra 35 e 41 porque não recebeu 14 respostas que o Respondi tem (pela API).
   - Interesse: 31 pessoas, 3 com compra paga.
 
-## 2.12 Clínica Miami: aba "Relatório" copiada da planilha (migrations `20261016240000` e `20261016240100`, NÃO APLICADAS; Edge NÃO PUBLICADA)
+## 2.12 Clínica Miami: aba "Relatório" copiada da planilha (migrations `20261016240000` e `20261016240100` APLICADAS em 16/10/2026; Edge PUBLICADA)
 
 Pedido do Victor de 16/10/2026 (card 17tya50h3b8): replicar no dashboard o relatório que o time mantém na aba `Relatório` da
 planilha "Dados [MIAMI 2026]" (`1MjGDuk32NgcJ7N-ab0oPfk75kwu1pgHoJ3FkCURZCA0`). Detalhe técnico, ensaio e reversão:
 `infra/supabase/migrations/20261016240000.explain.md`.
 
-**Situação (16/10/2026):** só código e teste na branch `victor-miami-relatorio`. Migrations não aplicadas, Edge não publicada, cron não
-agendado, sem push. O ensaio (`20261016240000_ensaio.sql`) está escrito e ainda não foi rodado.
+**Situação (16/10/2026, 13:20 a 13:27 UTC):** APLICADA em produção. `20261016240000` às 13:20 UTC, Edge `dados-planilha-relatorio` publicada (versão 1, `verify_jwt=false`), rodada manual com `erro` nulo, `20261016240100` (cron, jobid 361, a cada 5 min) às 13:21 UTC; as rodadas de 13:22 e 13:27 deram HTTP 200. Cópia conferida contra a planilha (Lista Diamantes 76, Compradores da Clínica 13, Presença por evento e Camisas idênticas); pares e `explain` em `infra/supabase/migrations/20261016240000.explain.md` §8 e §10. A tela (front) só aparece depois do push na `main`.
 
 **Como funciona (opção B):** a tela nunca lê a planilha. A Edge `dados-planilha-relatorio` lê a aba a cada 5 minutos com a conta de serviço
 (só leitura), transforma em JSON por um leitor puro (`infra/supabase/functions/dados-planilha-relatorio/relatorio-miami.ts`) e guarda a cópia em
@@ -436,9 +435,8 @@ Uma chamada por atualização da tela. Passe em `p_md5` o `md5` da resposta ante
 
 ### 2.12.3 O que falta
 
-- Aplicar `20261016240000`, publicar a Edge (`dados-planilha-relatorio`, `verify_jwt=false`), rodar uma vez à mão e só então aplicar `20261016240100` (cron).
-  Sem a Edge no ar o cron recebe 404 e o vigia de rotinas abre incidente.
-- A tela (abas Relatório, Presença por evento, Diamantes e Compradores) está feita e não publicada; ver `docs/dashboard-presencial-tela.md` (seção "Clínica de Miami: abas da cópia da planilha").
+- Banco e Edge: nada (aplicado em 16/10/2026, ver a situação acima).
+- A tela (abas Relatório, Presença por evento, Diamantes e Compradores) está feita e depende do push na `main`; ver `docs/dashboard-presencial-tela.md` (seção "Clínica de Miami: abas da cópia da planilha").
 - Revisar o gate de contato quando os níveis de acesso forem revistos (ver a decisão provisória).
 
 ## 3. Migrations (ordem e versão gravada)
@@ -456,8 +454,8 @@ Uma chamada por atualização da tela. Passe em `p_md5` o `md5` da resposta ante
 | `20261007171902` (APLICADA 07/10) | `crm_lista_614_todos` | regra 42 com `para_todos`: quem entra na lista 614 vira contato comercial e é catalogado na Clínica. Ensaio refeito antes da aplicação, igual ao esperado |
 | `20261009190000` | `dados_miami_respondi` | fichas do Respondi por dashboard, Lista Diamantes, webhook, RPCs `dados_miami_diamantes` e `dados_miami_interesse` |
 | `20261009190100` | `respondi_carga_mesmo_formulario` | `fn_respondi_carga` não atualiza resposta de outro formulário (pentester) |
-| `20261016240000` (NÃO APLICADA) | `dados_miami_relatorio_planilha` | cópia da aba Relatório da planilha Dados [MIAMI 2026] (`dados.relatorio_planilha`), funções internas e `dados_miami_relatorio` (§2.12) |
-| `20261016240100` (NÃO APLICADA) | `dados_miami_relatorio_cron` | cron `dados-relatorio-planilha-sync` (a cada 5 min) e linha do vigia; só depois da Edge publicada |
+| `20261016240000` (APLICADA 16/10/2026) | `dados_miami_relatorio_planilha` | cópia da aba Relatório da planilha Dados [MIAMI 2026] (`dados.relatorio_planilha`), funções internas e `dados_miami_relatorio` (§2.12) |
+| `20261016240100` (APLICADA 16/10/2026) | `dados_miami_relatorio_cron` | cron `dados-relatorio-planilha-sync` (a cada 5 min) e linha do vigia; aplicada depois da Edge publicada |
 
 Cada uma tem `.explain.md` com ensaio, explain e reversão.
 

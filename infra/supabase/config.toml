@@ -49,7 +49,7 @@ verify_jwt = false
 
 # dados-planilha-relatorio (20261016240000): cópia da aba Relatório da planilha Dados [MIAMI 2026]. Chamada pelo cron
 # dados-relatorio-planilha-sync via ops.cron_post sem Authorization; autentica pelo header x-sync-chave
-# (Vault dados_relatorio_planilha_chave), fail-closed. NÃO PUBLICADA até o Victor mandar.
+# (Vault dados_relatorio_planilha_chave), fail-closed. PUBLICADA em 16/10/2026 (versão 1, verify_jwt=false).
 [functions.dados-planilha-relatorio]
 verify_jwt = false
 
