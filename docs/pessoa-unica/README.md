@@ -57,6 +57,9 @@ Este documento fica no repositório para quem trabalha aqui sem acesso ao céreb
 | 20261017010000 | (16/10) | revisão em lote da fila `pessoas.revisao`: classificador só leitura, passo, procedure com `COMMIT`, reversão, cópia em `arquivo.*`; chave `revisao_lote` | C | **aplicada 16/10 ~13:50 UTC** e rodada nos 397 (A e B); chave desligada de novo |
 | 20261017020000 | (16/10) | nome padrão não é nome (`pessoas.nome_padrao`, `pessoas.nome_limpo`) nas 4 funções que gravam nome ou abrem revisão; par já decidido não reabre revisão; limpeza das 2.508 "GUARDIAO DO LEGADO" com cópia em `arquivo.*` | C | **aplicada** (versão gravada em `supabase_migrations.schema_migrations`); branch `victor-nome-padrao` |
 | 20261017030000 | (16/10) | regras automáticas novas da fila de revisão (A4, B4, B5, B6, D1 duplicada), em cima da máquina de 20261017010000 | C | **aplicada em 16/10/2026** e lotes rodados: 37 juntadas, 257 separadas, 64 duplicadas apagadas com cópia, fila humana 71 |
+| 20261016230250 | (16/10) | índice único `eventos_hotmart_ref_unico` (uma linha por transação e tipo da Hotmart), `concurrently` | C | **aplicada 16/10 16:29 UTC** |
+| 20261016230255 | (16/10) | webhook `crm.hotmart_processar` e carga `pessoas.carga_fin_hotmart` com `on conflict`, sem lock de aviso | C | **aplicada 16/10 16:29 UTC** |
+| 20261017040000 | (16/10) | atributos da pessoa (`pessoas.atributos`, `vw_compra`, `vw_oferta_a_conferir`, `atributos_calcular`, `atributos_lote`) | C | **NÃO aplicada**, ensaio ok; branch `victor-pessoas-atributos` |
 
 Os arquivos foram renomeados para a versão gravada em `supabase_migrations.schema_migrations` (guia 6.3); o primeiro
 comentário de cada um diz o nome antigo. Cada uma tem `.explain.md`, ensaio e reversão.
@@ -207,3 +210,15 @@ Branch `victor-nome-padrao`, migration `20261017020000` (arquivos `_pessoas_nome
 - **Medido em 16/10/2026 (~14:05 a 14:15 UTC):** 426 pendentes, **0** com par já decidido; 19 pendentes `so_nome` existem só pelo nome padrão (proposta: fechar como `diferente` depois de zerar os nomes, com ok do Victor; a migration não muda status de revisão). Cópias do nome que **não** foram mexidas: `pessoas.ac_contato` (2.506), `public.compradores` (57), `crm.negocio` (1).
 - **Como testar:** `python3 Central-de-Alunos/scripts/thb-implementacao/aplica_sql.py ensaio infra/supabase/migrations/20261017020000_ensaio.sql` (transação desfeita; cada passo diz o esperado). Roteiro de aplicação, riscos e reversão: `.explain.md`.
 - **O que falta:** rodar o ensaio, aplicar, limpar; decidir as 19; medir de novo a forma final do helper; o espelho `ac_contato` pode devolver o nome se alguma carga copiar de lá sem passar pelo resolver.
+
+## Atributos da pessoa (16/10/2026, NÃO APLICADA)
+
+Migration `20261017040000`: uma linha por pessoa em `pessoas.atributos` com os atributos do dicionário do Victor
+(lead, comprador, conta, HT/ETHB/clínica/imersão, HM e Aurum com sinal e renovação, aluno ativo, ex-aluno, sócio,
+Turma Especial, totais bruto e líquido, pode disparar). Ensaio ok; detalhes, limitações e roteiro em
+`infra/supabase/migrations/20261017040000.explain.md`.
+
+Antes de aplicar, faltam respostas do Victor: classificar as ofertas HM/Aurum sem tipo (`pessoas.vw_oferta_a_conferir`),
+o ok da regra de aluno ativo (e as 68 com situação nula), se sócio conta como ex-aluno, o Seminário Conjunto (fora de
+`fin.eventos`), se o pré-checkout da SV vale para todo status da lista e o que fazer com compra em outra moeda.
+Seminário fica vazio até o lead de Seminário ser ligado a evento.
