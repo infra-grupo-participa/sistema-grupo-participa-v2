@@ -1036,7 +1036,7 @@ Hoje há uma planilha cadastrada: `[SEMATM OUT/26] MENSAGERIA` → projeto 75 (`
 - **Desligar (kill-switch):** `update mkt_mensageria.planilhas set ativa = false where nome = '[SEMATM OUT/26] MENSAGERIA';`
 - **Nova planilha (próxima edição):** `insert` em `mkt_mensageria.planilhas` com o id da planilha, o projeto, `desde` e o
   mapa de abas (copiar o do ATM e conferir as letras). Compartilhar a planilha como leitor com a conta de serviço do
-  segredo `SHEETS_SA_B64` (`dashboard-eventos@...iam.gserviceaccount.com`).
+  segredo `SHEETS_SA_B64` (`dashboard-eventos@valid-spark-491917-d1.iam.gserviceaccount.com`; a mesma conta lê a planilha Dados [MIAMI 2026], ver `docs/dashboard-presencial.md` §2.12).
 - **Acesso:** tabelas e funções `planilha*` só do postgres (a Edge entra pelo `SUPABASE_DB_URL`); nada exposto na API.
 
 ## Ordem para aplicar em produção (Marketing: Web e Tráfego)

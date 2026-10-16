@@ -361,6 +361,86 @@ recusado ou estornado.
   - A planilha mostra 35 e 41 porque não recebeu 14 respostas que o Respondi tem (pela API).
   - Interesse: 31 pessoas, 3 com compra paga.
 
+## 2.12 Clínica Miami: aba "Relatório" copiada da planilha (migrations `20261016240000` e `20261016240100`, NÃO APLICADAS; Edge NÃO PUBLICADA)
+
+Pedido do Victor de 16/10/2026 (card 17tya50h3b8): replicar no dashboard o relatório que o time mantém na aba `Relatório` da
+planilha "Dados [MIAMI 2026]" (`1MjGDuk32NgcJ7N-ab0oPfk75kwu1pgHoJ3FkCURZCA0`). Detalhe técnico, ensaio e reversão:
+`infra/supabase/migrations/20261016240000.explain.md`.
+
+**Situação (16/10/2026):** só código e teste na branch `victor-miami-relatorio`. Migrations não aplicadas, Edge não publicada, cron não
+agendado, sem push. O ensaio (`20261016240000_ensaio.sql`) está escrito e ainda não foi rodado.
+
+**Como funciona (opção B):** a tela nunca lê a planilha. A Edge `dados-planilha-relatorio` lê a aba a cada 5 minutos com a conta de serviço
+(só leitura), transforma em JSON por um leitor puro (`infra/supabase/functions/dados-planilha-relatorio/relatorio-miami.ts`) e guarda a cópia em
+`dados.relatorio_planilha`. A tela chama a função `dados_miami_relatorio`. Leitura que falha (Google fora, aba renomeada, título ou cabeçalho
+diferente) NÃO apaga a cópia: o banco mantém a anterior e grava o erro (`erro`, `tentado_em`).
+
+**Conta de serviço:** é a do segredo `SHEETS_SA_B64`, `dashboard-eventos@valid-spark-491917-d1.iam.gserviceaccount.com`, a única com leitor
+na planilha `[SEMATM OUT/26] MENSAGERIA` que a Edge `mensageria-planilha` já lê. Em 16/10/2026 o Victor compartilhou a planilha
+`1MjGDuk32NgcJ7N-ab0oPfk75kwu1pgHoJ3FkCURZCA0` como **Leitor** com ela. Sem esse compartilhamento a leitura volta `google_leitura`.
+
+**Decisão provisória (Victor, 16/10/2026): quem pode ver o dashboard vê e-mail e telefone.** A função só checa `dados.pode_ver`; NÃO filtra por
+`contato.ver`. Provisório, a pedido do Victor em 16/10, até a revisão dos níveis de acesso. A resposta traz `contato_visivel = true` fixo para a
+tela não precisar mudar quando o filtro voltar (nesse dia, a função passa a limpar e-mail e telefone e `contato_visivel` vira falso para quem não pode).
+
+**Acesso e erros (iguais aos outros `dados_*`):** só authenticated (revoke de public e anon). 42501 `sem acesso` para quem não é da equipe ou não passa em
+`dados.pode_ver`; P0002 `dashboard não cadastrado`. Sem cópia ainda (antes da 1ª leitura boa): devolve `disponivel = false`, sem erro.
+
+### 2.12.1 `dados_miami_relatorio(p_chave text, p_md5 text default null)` devolve `jsonb`
+
+Uma chamada por atualização da tela. Passe em `p_md5` o `md5` da resposta anterior: se a cópia não mudou, vem `igual = true` e `conteudo = null`
+(a tela mantém o que já tem; o conteúdo tem dezenas de KB).
+
+| Chave | Tipo | O quê |
+|---|---|---|
+| `disponivel` | boolean | há cópia boa (falso antes da 1ª leitura, ou sem planilha cadastrada) |
+| `md5` | text ou null | identifica a cópia |
+| `igual` | boolean | `p_md5` é o da cópia (então `conteudo` vem null) |
+| `lido_em` | timestamptz ou null | última leitura boa da planilha |
+| `tentado_em` | timestamptz ou null | última tentativa, boa ou ruim |
+| `erro` | text ou null | código do erro da última tentativa; a cópia anterior continua valendo. Códigos do leitor: `aba_vazia`, `titulo_ausente:<bloco>`, `titulo_duplicado:<bloco>`, `rotulo_ausente:<bloco>:<n>`, `cabecalho_diferente:<bloco>:<n>`; da Edge: `sem_conta_de_servico`, `google_token`, `google_leitura`, `conteudo_invalido`, `banco` |
+| `contato_visivel` | boolean | hoje sempre true (decisão provisória acima) |
+| `conteudo` | jsonb ou null | ver abaixo |
+
+`conteudo` (`versao` 1; valores sempre o texto formatado da planilha, "—" e "88,2%" ficam como texto, nunca viram número):
+
+```
+{ "versao": 1, "aba": "Relatório",
+  "avisos": [ { "codigo": text, "texto": text } ],
+  "blocos": {
+    "dados_iniciais":  { "titulo": text, "itens": [ { "rotulo": text, "valor": text | null } ] },
+    "time_formulario": { "titulo": text, "itens": [ ... ] },
+    "participacao":    { "titulo": text, "itens": [ ... ] },
+    "camisas":     { "titulo": text, "colunas": text[], "linhas": text[][] },
+    "presenca":    { "titulo": text, "colunas": text[], "linhas": text[][] },
+    "diamantes":   { "titulo": text, "colunas": text[], "linhas": text[][] },
+    "compradores": { "titulo": text, "colunas": text[], "linhas": text[][] } } }
+```
+
+- Os rótulos de KPI se repetem entre blocos (`% de preenchimento`); ache sempre dentro do bloco. `valor` é null quando a célula está vazia
+  (ex.: o rótulo `Situação de quem respondeu` é cabeçalho de um subgrupo e não tem valor).
+- `linhas[i][k]` corresponde a `colunas[k]`; a ordem das colunas é a da planilha. `diamantes` tem 22 colunas e `compradores` 16 (as 2 colunas
+  auxiliares da planilha ficam de fora). Linha sem valor numa célula vem string vazia, nunca null.
+- `avisos`: `diamantes_linhas_menos_que_a_lista` e `compradores_linhas_menos_que_os_compradores` (a tabela por pessoa tem menos linhas do que a contagem do
+  próprio relatório; pode haver gente fora da tabela na planilha), as variantes `_ilegivel`, `teto_linhas` (passou de 1.000 linhas por tabela) e `teto_celula`
+  (célula acima de 500 caracteres foi cortada). A tela deve mostrar o aviso, não escondê-lo.
+- Textos livres (ex.: `Quem acompanha`) vêm como a planilha tem e podem ter nomes de pessoas.
+
+### 2.12.2 Como testar
+
+- Leitor: `cd web && npx vitest run modules/infra/dados/infrastructure/relatorio-miami-parser.test.ts` (24 testes, dados inventados).
+- Ensaio no banco (transação desfeita): `20261016240000_ensaio.sql`, pelo executor que só aceita arquivo terminado em `rollback`.
+- Depois de aplicar e publicar: chamar a Edge uma vez à mão (`ops.cron_post` ou `curl` com o header `x-sync-chave`, a chave está no Vault
+  `dados_relatorio_planilha_chave`; nunca no chat), conferir `select md5, lido_em, erro from dados.relatorio_planilha` e comparar 3 números da tela
+  com a planilha (`Pessoas na Lista Diamantes`, `Compradores da Clínica` e uma contagem de `presenca`).
+
+### 2.12.3 O que falta
+
+- Aplicar `20261016240000`, publicar a Edge (`dados-planilha-relatorio`, `verify_jwt=false`), rodar uma vez à mão e só então aplicar `20261016240100` (cron).
+  Sem a Edge no ar o cron recebe 404 e o vigia de rotinas abre incidente.
+- A tela (abas Relatório, Presença por evento, Diamantes e Compradores) é outro passo do plano (front-end).
+- Revisar o gate de contato quando os níveis de acesso forem revistos (ver a decisão provisória).
+
 ## 3. Migrations (ordem e versão gravada)
 
 | Versão | Nome | O quê |
@@ -376,6 +456,8 @@ recusado ou estornado.
 | `20261007171902` (APLICADA 07/10) | `crm_lista_614_todos` | regra 42 com `para_todos`: quem entra na lista 614 vira contato comercial e é catalogado na Clínica. Ensaio refeito antes da aplicação, igual ao esperado |
 | `20261009190000` | `dados_miami_respondi` | fichas do Respondi por dashboard, Lista Diamantes, webhook, RPCs `dados_miami_diamantes` e `dados_miami_interesse` |
 | `20261009190100` | `respondi_carga_mesmo_formulario` | `fn_respondi_carga` não atualiza resposta de outro formulário (pentester) |
+| `20261016240000` (NÃO APLICADA) | `dados_miami_relatorio_planilha` | cópia da aba Relatório da planilha Dados [MIAMI 2026] (`dados.relatorio_planilha`), funções internas e `dados_miami_relatorio` (§2.12) |
+| `20261016240100` (NÃO APLICADA) | `dados_miami_relatorio_cron` | cron `dados-relatorio-planilha-sync` (a cada 5 min) e linha do vigia; só depois da Edge publicada |
 
 Cada uma tem `.explain.md` com ensaio, explain e reversão.
 

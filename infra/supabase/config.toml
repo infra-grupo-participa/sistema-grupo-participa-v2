@@ -47,6 +47,12 @@ verify_jwt = false
 [functions.mensageria-planilha]
 verify_jwt = false
 
+# dados-planilha-relatorio (20261016240000): cópia da aba Relatório da planilha Dados [MIAMI 2026]. Chamada pelo cron
+# dados-relatorio-planilha-sync via ops.cron_post sem Authorization; autentica pelo header x-sync-chave
+# (Vault dados_relatorio_planilha_chave), fail-closed. NÃO PUBLICADA até o Victor mandar.
+[functions.dados-planilha-relatorio]
+verify_jwt = false
+
 # trafego-meta e trafego-clickup (migration 20261006i): chamadas pelo cron via ops.cron_post sem Authorization;
 # autenticam pelo header x-sync-chave (Vault trafego_coleta_chave), fail-closed. Nascem sem cron (desligadas).
 [functions.trafego-meta]
