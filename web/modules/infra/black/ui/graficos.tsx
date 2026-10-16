@@ -17,7 +17,9 @@ import type { Fase, Valor } from '../domain/tipos';
 import { dicaTaxa, formatar, moeda, usePrefereMenosMovimento } from './pecas';
 
 /** Cor de cada fase: distintas entre si, sem vermelho (vermelho é só farol). */
-export const COR_FASE: Record<Fase, string> = {
+export const COR_FASE: Record<Fase | 'sem_fase' | 'sem_classificacao', string> = {
+  sem_fase: 'var(--fg-3)',
+  sem_classificacao: 'var(--fg-3)',
   antecipacao: 'var(--info)',
   distribuicao: 'var(--nivel-ouro)',
   captacao: 'var(--purple)',
@@ -26,11 +28,12 @@ export const COR_FASE: Record<Fase, string> = {
   live_carrinho: 'var(--green)',
 };
 
-export interface ItemFase { fase: Fase; rotulo: string; valor: Valor; previsto?: Valor }
+/** `sem_fase` e `sem_classificacao`: campanhas que o banco não pôs em fase ou não classificou (barra neutra). */
+export interface ItemFase { fase: Fase | 'sem_fase' | 'sem_classificacao'; rotulo: string; valor: Valor; previsto?: Valor }
 
 /** Barras por fase. `previsto` (opcional) vira uma marca vertical na barra e entra na dica. */
 export function BarrasFase({ itens, formato }: { itens: ItemFase[]; formato: FormatoMetrica }) {
-  const [foco, setFoco] = useState<Fase | null>(null);
+  const [foco, setFoco] = useState<ItemFase['fase'] | null>(null);
   const escala = Math.max(0, ...itens.flatMap((i) => [i.valor ?? 0, i.previsto ?? 0]));
   const pctDe = (v: Valor) => (escala > 0 && v !== null && v > 0 ? Math.min(100, (v / escala) * 100) : 0);
   return (

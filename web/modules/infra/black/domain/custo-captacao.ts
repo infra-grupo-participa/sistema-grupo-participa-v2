@@ -1,4 +1,5 @@
-import { ehEntresafraCampanha, funilIncluido, type FiltroBase } from './metricas';
+import { campanhaNoFunil, contaNoInvestimentoCaptacao as predicadoCaptacao, linhaNoFunil } from './linha-black';
+import { gastoCampanhaPorConjunto, indexar, type FiltroBase } from './metricas';
 import type { Periodo, TrafegoBlack, Valor } from './tipos';
 
 export interface InvestimentoCaptacao {
@@ -18,45 +19,37 @@ export interface InvestimentoCaptacao {
   zerosGoogle: { nome: string; coletaEm: string | null }[];
   semDadoMeta: { nome: string; motivo: string; coletaEm: string | null }[];
   semDadoGoogle: { nome: string; motivo: string; coletaEm: string | null }[];
+  /** Dentro das campanhas somadas, as de remarketing da página (linha `remarketing_pagina`): entram na conta (Victor, 16/10/2026). */
   campanhasRemarketing: string[];
 }
-
-const ehRemarketing = (nome: string, fase: string | null) => fase === 'remarketing'
-  || nome.toLocaleUpperCase('pt-BR').includes('REMARKETING');
 
 function coletaComprovaZero(c: TrafegoBlack['campanhas'][number]): boolean {
   // A RPC é a fonte de verdade para a prova de ausência de entrega; não reproduzir sua regra no cliente.
   return c.semEntregaComprovada === true;
 }
 
-function pertenceACaptacao(c: TrafegoBlack['campanhas'][number]): boolean {
-  // Na fonte real, etapa vem do campo mkt_trafego.etapa_black. O fallback atende somente aos fixtures antigos.
-  if (c.etapa === 'C2' || c.etapa === 'C3') return true;
-  if (c.etapa !== undefined) return false;
-  return c.funil === 'consultoria' || c.funil === 'iscas' || c.funil === 'c3';
-}
-
 /**
- * A regra do card Investimento em captação: etapa C2/C3, fora entresafra e remarketing. Exportada para o Histórico
- * somar o dia com a mesma régua da Visão geral (antes ele somava todas as campanhas e o número não batia).
+ * O PREDICADO ÚNICO do investimento em captação, o mesmo de todos os cards de captação (linha-black.ts): linha iscas,
+ * consultoria, c2, c3 ou remarketing_pagina. Pré-captação (CPF01, ENTRESAFRA) fica fora. Exportado também para o
+ * Histórico somar o dia com a mesma régua da Visão geral.
  */
-export function contaNoInvestimentoCaptacao(c: TrafegoBlack['campanhas'][number]): boolean {
-  return pertenceACaptacao(c) && !ehEntresafraCampanha(c) && !ehRemarketing(c.nome, c.fase);
-}
+export const contaNoInvestimentoCaptacao = predicadoCaptacao;
 
-/** Investimento de campanhas das etapas C2/C3, sem remarketing, separado por plataforma. */
+/** Investimento das campanhas de captação (linha do banco), com o remarketing da página, separado por plataforma. */
 export function investimentoCaptacao(trafego: TrafegoBlack, _periodo: Periodo, filtro?: FiltroBase): InvestimentoCaptacao {
   // `trafego` já vem filtrado para o período solicitado pela camada de dados.
   void _periodo;
   const elegiveis: typeof trafego.campanhas = [];
   const remarketing: typeof trafego.campanhas = [];
+  const divididas = new Set<string>();
   for (const campanha of trafego.campanhas) {
-    if (!pertenceACaptacao(campanha)) continue;
-    if (filtro?.funil && !funilIncluido(filtro.funil, campanha.funil)) continue;
+    if (!contaNoInvestimentoCaptacao(campanha)) continue;
+    const noFiltro = filtro?.funil ? campanhaNoFunil(filtro.funil, campanha) : 'sim';
+    if (noFiltro === 'nao') continue;
     if (filtro?.canal && filtro.canal !== 'todos' && campanha.canal !== filtro.canal) continue;
-    if (ehEntresafraCampanha(campanha)) continue;
-    if (ehRemarketing(campanha.nome, campanha.fase)) { remarketing.push(campanha); continue; }
+    if (noFiltro === 'divide') divididas.add(campanha.id);
     elegiveis.push(campanha);
+    if (campanha.linha === 'remarketing_pagina' || (campanha.linha === undefined && campanha.fase === 'remarketing')) remarketing.push(campanha);
   }
 
   const gastoPorCampanha = new Map<string, number>();
@@ -64,6 +57,16 @@ export function investimentoCaptacao(trafego: TrafegoBlack, _periodo: Periodo, f
   for (const linha of trafego.gastoCampanhas ?? []) {
     gastoPorCampanha.set(linha.campanhaId, linha.gasto);
     medido.add(linha.campanhaId);
+  }
+  // Campanha `c2` (iscas + consultoria) diante de Consultoria ou Iscas: só o conjunto separa, e o gasto vem por anúncio.
+  // O gasto da campanha inteira não serve de resposta aqui, então sai da conta antes.
+  if (divididas.size > 0 && filtro?.funil) {
+    const idx = indexar(trafego);
+    for (const id of divididas) {
+      gastoPorCampanha.delete(id); medido.delete(id);
+      const g = gastoCampanhaPorConjunto(trafego.dias, idx, id, (l) => linhaNoFunil(filtro.funil, l));
+      if (g !== null) { gastoPorCampanha.set(id, g); medido.add(id); }
+    }
   }
 
   // Só prova genérica fornecida pelo banco pode converter ausência de linha em zero.
@@ -77,6 +80,7 @@ export function investimentoCaptacao(trafego: TrafegoBlack, _periodo: Periodo, f
   }
 
   const motivoSemDado = (c: typeof elegiveis[number]) => {
+    if (divididas.has(c.id)) return 'a consultoria só se separa das iscas pelo anúncio, e não há gasto por anúncio no período';
     if (c.semEntregaComprovada === undefined) return 'metadados de coleta ainda não disponíveis na fonte';
     if (!c.primeiraVistaEm) return 'campanha ainda não vista pelo coletor';
     if (c.semEntregaComprovada && !coletaComprovaZero(c)) return 'fonte sem confirmação de ausência de entrega';

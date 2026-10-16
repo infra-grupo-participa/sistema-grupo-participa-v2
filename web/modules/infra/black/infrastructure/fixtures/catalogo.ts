@@ -1,7 +1,7 @@
 // Catálogo FICTÍCIO do modo demonstração do dashboard da Black. Nada aqui é campanha, pessoa ou página real:
 // gestor `ZZ` (não existe), descrição começando com FICTÍCIO, páginas em exemplo.test (domínio reservado).
 // Os únicos números reais são os do CONFIG, cada um com a fonte ao lado.
-import type { Campanha, ConfigBlack, Conjunto, Fase, Isca, ConjuntoC3, Pagina, Valor } from '../../domain/tipos';
+import type { Campanha, ConfigBlack, Conjunto, Fase, Isca, ConjuntoC3, LinhaBlack, NoBlack, Pagina, Valor } from '../../domain/tipos';
 
 export const CHAVE_BLACK = 'black-friday-2026-10';
 const CONCEPCAO = 'CONCEPCAO-TRAFEGO-CAIO.md (cérebro do Victor, Projetos/dashboard-black-friday, DRE de 10/10/2026)';
@@ -78,11 +78,31 @@ export interface PlanoConjunto {
   anuncios: { nome: string; formato: 'video' | 'imagem' | null }[]; paginaId: string | null;
 }
 
+/**
+ * Classificação que a RPC dados_black_trafego devolve (contrato de 16/10/2026): `linha` por campanha e por conjunto, `no`
+ * e `isca` por conjunto. Aqui é escrita à mão, no formato do banco, para a demonstração passar pelo mesmo caminho da tela.
+ */
+const LINHA_DA_CAMPANHA: Readonly<Record<string, LinhaBlack | null>> = {
+  'cp-antecipacao': 'c1', 'cp-distribuicao': 'distribuicao', 'cp-manifesto': 'c1', 'cp-reels': 'distribuicao', 'cp-sem-etapa': null,
+  'cp-consultoria': 'consultoria', 'cp-iscas': 'iscas', 'cp-c3': 'c3', 'cp-remarketing': 'remarketing_pagina',
+  'cp-aquecimento': 'lembrete', 'cp-carrinho': 'carrinho', 'cp-google': 'c3',
+};
+const NO_DO_CONJUNTO: Readonly<Record<string, NoBlack | null>> = {
+  'cj-teaser': 'teaser', 'cj-pf-aberto': 'reels_pago', 'cj-pf-interesses': 'reels_pago', 'cj-manifesto': 'manifesto', 'cj-reels': 'reels_pago',
+  'cj-sem-etapa': null, 'cj-consultoria': 'consultoria', 'cj-fluxograma': 'iscas', 'cj-checkup': 'iscas', 'cj-futurometro': 'iscas',
+  'cj-c3-base': 'c3', 'cj-c3-quente': 'c3', 'cj-c3-aberto': 'c3', 'cj-remarketing': 'remarketing_pagina', 'cj-aquecimento': 'lembrete',
+  'cj-carrinho': 'carrinho', 'cj-google': 'c3',
+};
+const ISCA_DO_BANCO: Readonly<Record<Isca, string>> = { Fluxograma: 'FLUXOGRAMA', Checkup: 'CHECKUP', Futurômetro: 'FUTUROMETRO' };
 const cj = (id: string, campanhaId: string, nome: string, isca: Isca | null = null, conjuntoC3: ConjuntoC3 | null = null): Conjunto =>
-  ({ id, campanhaId, nome, isca, conjuntoC3 });
+  ({
+    id, campanhaId, nome, isca, conjuntoC3,
+    linha: LINHA_DA_CAMPANHA[campanhaId] ?? null, no: NO_DO_CONJUNTO[id] ?? null,
+    iscaBanco: isca ? ISCA_DO_BANCO[isca] : id === 'cj-consultoria' ? 'CONSULTORIA' : null,
+  });
 const videos = (prefixo: string, n: number) => Array.from({ length: n }, (_, i) => ({ nome: `${prefixo} ${String(i + 1).padStart(2, '0')}`, formato: 'video' as const }));
 
-export const CAMPANHAS: readonly Campanha[] = [
+const CAMPANHAS_SEM_LINHA: readonly Campanha[] = [
   { id: 'cp-antecipacao', nome: 'ZZ | BF26 | ANTECIPAÇÃO | FICTÍCIO TEASER', canal: 'meta', funil: 'c1', fase: 'antecipacao', etapa: 'C1', subtipo: 'TEASER' },
   { id: 'cp-distribuicao', nome: 'ZZ | BF26 | DISTRIBUIÇÃO | FICTÍCIO C1 CORTES', canal: 'meta', funil: 'c1', fase: 'distribuicao', etapa: 'C1' },
   { id: 'cp-manifesto', nome: 'ZZ | BF26 | DISTRIBUIÇÃO | FICTÍCIO C1 MANIFESTO', canal: 'meta', funil: 'c1', fase: 'distribuicao', etapa: 'C1', subtipo: 'MANIFESTO' },
@@ -96,6 +116,8 @@ export const CAMPANHAS: readonly Campanha[] = [
   { id: 'cp-carrinho', nome: 'ZZ | BF26 | CARRINHO | FICTÍCIO CARRINHO', canal: 'meta', funil: null, fase: 'live_carrinho' },
   { id: 'cp-google', nome: 'ZZ | BF26 | LEADS | FICTÍCIO GOOGLE PESQUISA', canal: 'google', funil: 'c3', fase: 'captacao' },
 ];
+
+export const CAMPANHAS: readonly Campanha[] = CAMPANHAS_SEM_LINHA.map((c) => ({ ...c, linha: LINHA_DA_CAMPANHA[c.id] ?? null }));
 
 export const PLANOS: readonly PlanoConjunto[] = [
   { conjunto: cj('cj-teaser', 'cp-antecipacao', 'FICTÍCIO TEASER ABERTO'), de: '2026-10-04', ate: '2026-10-12', gastoDia: 1950, cplAlvo: null, anuncios: videos('FICTÍCIO TEASER', 2), paginaId: null },

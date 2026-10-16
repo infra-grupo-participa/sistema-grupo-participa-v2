@@ -72,10 +72,12 @@ export function resumir(
   };
 }
 
-const ehDistribuicao = (idx: IndiceTrafego, anuncioId: string) => {
-  const c = idx.campanhaDoAnuncio(anuncioId);
-  return c === null || c.funil === 'c1' || c.funil === null;
-};
+/**
+ * Anúncio de distribuição (custo por visualização, sem CPL): C1, distribuição, lembrete, fake live e o que o banco não
+ * classifica para captação (remarketing da live, carrinho, pré-captação, sem classificação). Captação (iscas, consultoria,
+ * C3 e remarketing da página) mostra CPL. Decisão pela linha do banco, nunca pelo nome.
+ */
+export const ehDistribuicao = (idx: IndiceTrafego, anuncioId: string) => !idx.anuncioEhCaptacao(anuncioId);
 
 export interface ItemPainel { id: string; nome: string; resumo: ResumoCriativo; anuncios: string[] }
 

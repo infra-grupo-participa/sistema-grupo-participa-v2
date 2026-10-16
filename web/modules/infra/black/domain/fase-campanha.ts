@@ -1,5 +1,7 @@
 import type { Fase } from './tipos';
 
+// FALLBACK LEGADO (16/10): só vale quando a RPC `dados_black_trafego` ainda não devolve `linha`/`fase` (fonte-supabase.ts).
+// Com `linha`/`fase` no banco, quem classifica é o banco (domain/linha-black.ts).
 // Fase da campanha pelo NOME (Victor, 13/10/2026). O nome vem em blocos separados por "|", por exemplo
 // "CF | BF26 | ANTECIPAÇÃO | TEASER | META | PQ | ABO | THRUPLAY". Procura o bloco que diz a fase:
 //   ANTECIPAÇÃO → antecipação · AQUECIMENTO → aquecimento · LEAD ou LEADS → captação.

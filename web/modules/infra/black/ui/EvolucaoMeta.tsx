@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { agregar, connectRate, cpc, cpm, ctr, ehCaptacao, ehEntresafraCampanha, filtrarDias, filtrarLinhas } from '../domain/metricas';
+import { agregar, connectRate, cpc, cpm, ctr, filtrarDias, filtrarLinhas, linhasCaptacao } from '../domain/metricas';
+import { campanhaNoFunil, contaNoInvestimentoCaptacao } from '../domain/linha-black';
 import { INICIO_CAPTACAO, projetarRitmo, type PontoRitmo } from '../domain/ritmo';
 import { cplCaptacao, conversaoPagina, leadsDoTrafego, taxaMql } from '../domain/numeros';
 import { diaDe } from '../domain/recorte';
@@ -26,24 +27,29 @@ function serieDiaria(cardId: string, d: DadosTela): LinhaEvolucaoMeta[] {
   const datas = diasEntre(INICIO_CAPTACAO, ate);
   if (datas.length === 0) return [];
   const filtro = { funil: d.recorte.funil, canal: d.recorte.canal };
-  const linhasTodas = filtrarLinhas(d.linhasTodas.filter((l) => !l.teste && l.pagina !== 'consultoria_respondi'), filtro);
+  const linhasTodas = filtrarLinhas(d.linhasTodas.filter((l) => !l.teste && l.pagina !== 'consultoria_respondi'), filtro, d.idx);
   const diasTodos = filtrarDias(d.diasTodos, d.idx, filtro);
-  const campanhasCap = d.trafego.campanhas.filter((c) => !ehEntresafraCampanha(c) && c.fase !== 'remarketing' && !/REMARKETING/i.test(c.nome)
-    && (c.etapa === 'C2' || c.etapa === 'C3' || (c.etapa === undefined && ehCaptacao(c.funil)))
-    && (d.recorte.canal === 'todos' || c.canal === d.recorte.canal)
-    && (d.recorte.funil === 'todos' || (d.recorte.funil === 'c2' ? c.funil === 'consultoria' || c.funil === 'iscas' || c.funil === 'c3' : c.funil === d.recorte.funil)));
+  // Mesmo predicado único dos cards de captação (iscas, consultoria, C2, C3 e remarketing da página; pré-captação fora).
+  // Campanha mista (`c2`) diante de Consultoria ou Iscas: o gasto da campanha não separa, então vem dos anúncios do conjunto.
+  const campanhasCap = d.trafego.campanhas.filter((c) => contaNoInvestimentoCaptacao(c)
+    && (d.recorte.canal === 'todos' || c.canal === d.recorte.canal) && campanhaNoFunil(d.recorte.funil, c) !== 'nao');
   const idsCampanha = new Set(campanhasCap.map((c) => c.id));
+  const idsDivididas = new Set(campanhasCap.filter((c) => campanhaNoFunil(d.recorte.funil, c) === 'divide').map((c) => c.id));
   const serieGastoDisponivel = Array.isArray(d.trafego.gastoCampanhasDiario) && idsCampanha.size > 0;
+  const gastoDivididas = (de: string, ateDia: string): number => diasTodos
+    .filter((x) => x.dia >= de && x.dia <= ateDia && idsDivididas.has(d.idx.campanhaDoAnuncio(x.anuncioId)?.id ?? ''))
+    .reduce((s, x) => s + x.gasto, 0);
   const gastoPorDia = (ateDia: string): Valor => {
     if (!serieGastoDisponivel) return null;
-    return d.trafego.gastoCampanhasDiario!.filter((x) => idsCampanha.has(x.campanhaId) && x.dia >= INICIO_CAPTACAO && x.dia <= ateDia)
-      .reduce((s, x) => s + x.gasto, 0);
+    return d.trafego.gastoCampanhasDiario!.filter((x) => idsCampanha.has(x.campanhaId) && !idsDivididas.has(x.campanhaId) && x.dia >= INICIO_CAPTACAO && x.dia <= ateDia)
+      .reduce((s, x) => s + x.gasto, 0) + gastoDivididas(INICIO_CAPTACAO, ateDia);
   };
   const gastoDiario = (dia: string): Valor => {
     if (!serieGastoDisponivel) return null;
-    return d.trafego.gastoCampanhasDiario!.filter((x) => idsCampanha.has(x.campanhaId) && x.dia === dia).reduce((s, x) => s + x.gasto, 0);
+    return d.trafego.gastoCampanhasDiario!.filter((x) => idsCampanha.has(x.campanhaId) && !idsDivididas.has(x.campanhaId) && x.dia === dia).reduce((s, x) => s + x.gasto, 0)
+      + gastoDivididas(dia, dia);
   };
-  const capLinhas = linhasTodas.filter((l) => l.campanhaId !== null && idsCampanha.has(l.campanhaId));
+  const capLinhas = linhasCaptacao(linhasTodas, d.idx, filtro);
   const pagos = capLinhas.filter((l) => l.origem === 'pago');
   const primeiraDataPorPessoa = (ls: typeof linhasTodas) => {
     const out = new Map<string, string>();
@@ -60,7 +66,7 @@ function serieDiaria(cardId: string, d: DadosTela): LinhaEvolucaoMeta[] {
   const trafegoAte = (dia: string) => diasTodos.filter((x) => x.dia >= INICIO_CAPTACAO && x.dia <= dia);
   const capTraffic = (dia: string, cumulativo: boolean) => {
     const ds = cumulativo ? trafegoAte(dia) : diasTodos.filter((x) => x.dia === dia);
-    return ds.filter((x) => idsCampanha.has(d.idx.campanhaDoAnuncio(x.anuncioId)?.id ?? ''));
+    return ds.filter((x) => d.idx.anuncioEhCaptacao(x.anuncioId));
   };
   const calc = (dia: string, cumulativo: boolean): Valor => {
     if (cardId === 'leads') {

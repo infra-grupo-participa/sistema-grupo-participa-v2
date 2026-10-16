@@ -2,14 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { contaNoInvestimentoCaptacao, investimentoCaptacao } from './custo-captacao';
 import type { Campanha, TrafegoBlack } from './tipos';
 
+// Nomes do guia do Caio (15/10/2026); `linha` é o que a RPC dados_black_trafego devolve. A campanha de remarketing da página
+// sobe em 16/10: o nome abaixo segue o padrão do guia (CAPTAÇÃO | REMARKETING), o real é conferido no Meta. O canal do `c3`
+// é google só para o teste ter as duas plataformas.
+const ETQ = 'black-friday-2026-10';
 const campanhas: Campanha[] = [
-  { id: 'c2', nome: 'CF | BF26 | LEADS | C2 | CONSULTORIA', canal: 'meta', funil: 'consultoria', etapa: 'C2', fase: 'captacao' },
-  { id: 'c3', nome: 'CF | BF26 | LEAD | C3 | CAPTACAO', canal: 'google', funil: 'c3', etapa: 'C3', fase: 'captacao' },
-  { id: 'sem-lead', nome: 'CF | BF26 | C2 | CONSULTORIA', canal: 'meta', funil: 'consultoria', etapa: 'C2', fase: null },
-  { id: 'remarketing', nome: 'CF | BF26 | LEAD | C3 | REMARKETING', canal: 'meta', funil: 'c3', etapa: 'C3', fase: 'remarketing' },
-  { id: 'c1', nome: 'CF | BF26 | LEAD | C1', canal: 'meta', funil: 'c1', etapa: 'C1', fase: 'distribuicao' },
-  { id: 'sem-etapa', nome: 'CF | BF26 | LEAD', canal: 'meta', funil: null, etapa: null, fase: 'captacao' },
-  { id: 'entresafra', nome: 'CF | BF26 | C3 | ENTRESAFRA | META | MORNO | ABO | LEAD', canal: 'meta', funil: 'c3', etapa: 'C3', fase: 'captacao' },
+  { id: 'c2', nome: `CF | BF26 | CAPTAÇÃO | ISCAS | FB | PQ | ABO | LEAD | ${ETQ}`, canal: 'meta', funil: 'iscas', etapa: null, fase: 'captacao', linha: 'c2' },
+  { id: 'c3', nome: `CF | BF26 | CAPTAÇÃO | BASE | FB | PQ | ABO | LEAD | ${ETQ}`, canal: 'google', funil: 'c3', etapa: null, fase: 'captacao', linha: 'c3' },
+  { id: 'remarketing', nome: `CF | BF26 | CAPTAÇÃO | REMARKETING | FB | PQ | ABO | LEAD | ${ETQ}`, canal: 'meta', funil: null, etapa: null, fase: 'captacao', linha: 'remarketing_pagina' },
+  { id: 'c1', nome: `CF | BF26 | ANTECIPAÇÃO | FB | PQ | ABO | ${ETQ}`, canal: 'meta', funil: 'c1', etapa: null, fase: 'antecipacao', linha: 'c1' },
+  { id: 'distribuicao', nome: `CF | BF26 | ANTECIPAÇÃO | FB | PF | ABO | ${ETQ}`, canal: 'meta', funil: 'c1', etapa: null, fase: 'antecipacao', linha: 'distribuicao' },
+  { id: 'lembrete', nome: 'CF | BF26 | É HOJE | AQUECIMENTO | FB | PQ | ABO | black-friday-UN2026-10', canal: 'meta', funil: null, etapa: null, fase: 'aquecimento', linha: 'lembrete' },
+  { id: 'fake-live', nome: 'CF | BF26 | AQUECIMENTO | LIVE FAKE', canal: 'meta', funil: null, etapa: null, fase: 'aquecimento', linha: 'fake_live' },
+  { id: 'sem-classificacao', nome: 'Campanha antiga', canal: 'meta', funil: null, etapa: null, fase: null, linha: null },
+  { id: 'entresafra', nome: `CF | BF26 | C3 | ENTRESAFRA | META | MORNO | ABO | LEAD | ${ETQ}`, canal: 'meta', funil: 'c3', etapa: 'C3', fase: null, linha: 'pre_captacao' },
+  { id: 'cpf01', nome: 'BF26 | CPF01 | META | IG | MORNO | ABO | VV ANTIGO | black-friday-2026-10', canal: 'meta', funil: 'c1', etapa: null, fase: null, linha: 'pre_captacao' },
 ];
 
 const trafego = (gastoCampanhas: NonNullable<TrafegoBlack['gastoCampanhas']>, campanhaList: Campanha[] = campanhas.slice(0, 2)): TrafegoBlack => ({
@@ -17,23 +24,23 @@ const trafego = (gastoCampanhas: NonNullable<TrafegoBlack['gastoCampanhas']>, ca
 });
 
 describe('investimento de captação', () => {
-  it('soma por etapa C2/C3 mesmo sem LEAD no nome e exclui remarketing/C1/Sem etapa/Entresafra', () => {
+  it('soma iscas, C3 e remarketing da página; exclui C1, distribuição, lembrete, fake live, sem classificação e pré-captação', () => {
     const r = investimentoCaptacao(trafego([
-      { campanhaId: 'c2', gasto: 125 }, { campanhaId: 'c3', gasto: 75 },
-      { campanhaId: 'sem-lead', gasto: 9000 }, { campanhaId: 'remarketing', gasto: 8000 },
-      { campanhaId: 'c1', gasto: 7000 }, { campanhaId: 'sem-etapa', gasto: 6000 },
-      { campanhaId: 'entresafra', gasto: 50000 },
+      { campanhaId: 'c2', gasto: 125 }, { campanhaId: 'c3', gasto: 75 }, { campanhaId: 'remarketing', gasto: 800 },
+      { campanhaId: 'c1', gasto: 7000 }, { campanhaId: 'distribuicao', gasto: 7100 }, { campanhaId: 'lembrete', gasto: 7200 },
+      { campanhaId: 'fake-live', gasto: 7300 }, { campanhaId: 'sem-classificacao', gasto: 6000 },
+      { campanhaId: 'entresafra', gasto: 50000 }, { campanhaId: 'cpf01', gasto: 3238 },
     ], campanhas), { de: '2026-10-05', ate: '2026-10-10' });
 
     expect(r).toEqual({
-      meta: 9125, google: 75, total: 9200,
-      metaMedido: 9125, googleMedido: 75,
+      meta: 925, google: 75, total: 1000,
+      metaMedido: 925, googleMedido: 75,
       campanhasMetaMedidas: 2, campanhasGoogleMedidas: 1,
       campanhasMetaTotal: 2, campanhasGoogleTotal: 1,
-      campanhasMeta: ['CF | BF26 | C2 | CONSULTORIA', 'CF | BF26 | LEADS | C2 | CONSULTORIA'],
-      campanhasGoogle: ['CF | BF26 | LEAD | C3 | CAPTACAO'],
+      campanhasMeta: [campanhas[0].nome, campanhas[2].nome],
+      campanhasGoogle: [campanhas[1].nome],
       zerosMeta: [], zerosGoogle: [], semDadoMeta: [], semDadoGoogle: [],
-      campanhasRemarketing: ['CF | BF26 | LEAD | C3 | REMARKETING'],
+      campanhasRemarketing: [campanhas[2].nome],
     });
   });
 
@@ -91,8 +98,8 @@ describe('investimento de captação', () => {
 });
 
 describe('regra por campanha usada no Histórico', () => {
-  it('conta só C2/C3 fora de remarketing e entresafra, igual ao card da Visão geral', () => {
+  it('conta iscas, C3 e remarketing da página; pré-captação fica fora, igual ao card da Visão geral', () => {
     const contam = campanhas.filter(contaNoInvestimentoCaptacao).map((c) => c.id);
-    expect(contam).toEqual(['c2', 'c3', 'sem-lead']);
+    expect(contam).toEqual(['c2', 'c3', 'remarketing']);
   });
 });
