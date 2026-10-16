@@ -211,19 +211,21 @@ describe('leitura e marcação do dashboard ATM', () => {
 
   it('carrega a lista de entradas por número e elimina campos dos não encontrados', async () => {
     mocks.rpc.mockResolvedValue({ data: [
-      { fone_grupo: '5511999990001', origem: 'lista_disparo', na_lista: true, na_base: false, nome: 'Contato Demo', email: 'demo@example.invalid', telefone: '5511999990001', turma: 'THB', instrucao: 'THB sócio', entrou_em: '2026-10-15T12:00:00Z', saiu_em: null, no_grupo: true, entrada_aproximada: false },
-      { fone_grupo: '5511999990002', origem: 'base_leads', na_lista: false, na_base: true, nome: 'Lead Demo', email: 'lead@example.invalid', telefone: '5511999990002', turma: null, instrucao: null, entrou_em: '2026-10-14T12:00:00Z', saiu_em: '2026-10-15T13:00:00Z', no_grupo: false, entrada_aproximada: true },
-      { fone_grupo: '5511999990003', origem: 'nao_encontrado', na_lista: false, na_base: false, nome: 'IGNORAR', email: 'nao-publicar@example.invalid', telefone: '5511999990003', turma: 'IGNORAR', instrucao: 'IGNORAR', entrou_em: '2026-10-13T12:00:00Z', saiu_em: null, no_grupo: true, entrada_aproximada: false },
+      { fone_grupo: '5511999990001', origem: 'lista_disparo', na_lista: true, na_base: false, nome: 'Contato Demo', email: 'demo@example.invalid', telefone: '5511999990001', turma: 'THB', instrucao: 'THB sócio', entrou_em: '2026-10-15T12:00:00Z', saiu_em: null, no_grupo: true, entrada_aproximada: false, na_central: true, apto: true },
+      { fone_grupo: '5511999990002', origem: 'base_leads', na_lista: false, na_base: true, nome: 'Lead Demo', email: 'lead@example.invalid', telefone: '5511999990002', turma: null, instrucao: null, entrou_em: '2026-10-14T12:00:00Z', saiu_em: '2026-10-15T13:00:00Z', no_grupo: false, entrada_aproximada: true, na_central: false, apto: false },
+      { fone_grupo: '5511999990004', origem: 'central_alunos', na_lista: false, na_base: false, nome: 'Aluno Demo', email: 'aluno@example.invalid', telefone: '5511999990004', turma: 'T10', instrucao: 'THB', entrou_em: '2026-10-12T12:00:00Z', saiu_em: null, no_grupo: true, entrada_aproximada: false, na_central: true, apto: false },
+      { fone_grupo: '5511999990003', origem: 'nao_encontrado', na_lista: false, na_base: false, nome: 'IGNORAR', email: 'nao-publicar@example.invalid', telefone: '5511999990003', turma: 'IGNORAR', instrucao: 'IGNORAR', entrou_em: '2026-10-13T12:00:00Z', saiu_em: null, no_grupo: true, entrada_aproximada: false, na_central: false, apto: false },
     ], error: null });
 
     const resultado = await carregarAtmGrupoLeads('black-thb-2026-10');
     expect(mocks.rpc).toHaveBeenCalledWith('dados_atm_grupo_leads', { p_chave: 'black-thb-2026-10' });
-    expect(resultado.data[0]).toMatchObject({ origem: 'lista_disparo', nome: 'Contato Demo', instrucao: 'THB sócio', noGrupo: true });
-    expect(resultado.data[1]).toMatchObject({ origem: 'base_leads', saiuEm: '2026-10-15T13:00:00Z', entradaAproximada: true });
-    expect(resultado.data[2]).toEqual({
+    expect(resultado.data[0]).toMatchObject({ origem: 'lista_disparo', nome: 'Contato Demo', instrucao: 'THB sócio', noGrupo: true, naCentral: true, apto: true });
+    expect(resultado.data[1]).toMatchObject({ origem: 'base_leads', saiuEm: '2026-10-15T13:00:00Z', entradaAproximada: true, apto: false });
+    expect(resultado.data[2]).toMatchObject({ origem: 'central_alunos', nome: 'Aluno Demo', turma: 'T10', naCentral: true, apto: false });
+    expect(resultado.data[3]).toEqual({
       foneGrupo: '5511999990003', origem: 'nao_encontrado', naLista: null, naBase: null,
       nome: null, email: null, telefone: '5511999990003', turma: null, instrucao: null,
-      entrouEm: null, saiuEm: null, noGrupo: null, entradaAproximada: null,
+      entrouEm: null, saiuEm: null, noGrupo: null, entradaAproximada: null, naCentral: null, apto: false,
     });
   });
 

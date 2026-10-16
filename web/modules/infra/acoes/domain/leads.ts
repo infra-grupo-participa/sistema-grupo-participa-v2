@@ -1,4 +1,4 @@
-import type { LeadAtm } from '@/modules/infra/atm/domain/dashboard';
+import type { LeadAtm, LeadGrupoAtm } from '@/modules/infra/atm/domain/dashboard';
 
 /*
  * Leads gerais x leads válidos das Ações da Black (pedido do Victor, 15/10/2026).
@@ -73,14 +73,8 @@ export function exibicaoCardLeads(chave: string, geral: { valor: number; semDado
   if (chave === 'leads') {
     return { valor: c.validos, formato: 'inteiro', hint: `válidos para a oferta · ${inteiro.format(c.gerais)} gerais, ${inteiro.format(c.foraDaLista)} fora da lista` };
   }
-  // Ingresso no grupo: o geral é o número grande e o que bate com a lista de leads vem embaixo (Victor, 15/10).
-  // Sem o geral, o card segue com o dos leads válidos e diz que o geral está sem dado.
-  if (chave === 'ingressosGrupo' && c.ingressoValidos !== null) {
-    const validos = `${inteiro.format(c.ingressoValidos)} entre os leads válidos`;
-    return geral.semDado
-      ? { valor: c.ingressoValidos, formato: 'inteiro', hint: `entre os leads válidos · geral sem dado` }
-      : { valor: geral.valor, formato: 'inteiro', hint: `no geral · ${validos}` };
-  }
+  // Ingresso no grupo: o hint "entre os leads válidos" saiu em 16/10 (Victor); quem entra no grupo veio do disparo, não
+  // da página. O card agora diz quantos números são aptos, em exibicaoCardIngressoGrupo.
   if (chave === 'percentualIngressoGrupo' && c.ingressoValidosPct !== null) {
     const validos = `${decimal.format(c.ingressoValidosPct)}% sobre os leads válidos`;
     return geral.semDado
@@ -88,4 +82,19 @@ export function exibicaoCardLeads(chave: string, geral: { valor: number; semDado
       : { valor: geral.valor, formato: 'percentual', hint: `no geral · ${validos}` };
   }
   return null;
+}
+
+/**
+ * Quantos números do grupo são aptos (estão na lista do disparo; regra do Victor, 16/10/2026). `null` quando a lista
+ * não chegou ou veio da RPC anterior à 20261016234500 (sem a coluna apto): sem o dado, o card não inventa.
+ */
+export function contarAptosGrupo(lista: readonly Pick<LeadGrupoAtm, 'apto'>[] | null | undefined): number | null {
+  if (!lista || lista.some((x) => x.apto === null)) return null;
+  return lista.filter((x) => x.apto).length;
+}
+
+/** Card "Ingresso no grupo" (Victor, 16/10/2026): o geral é o número grande e embaixo quantos deles são aptos. */
+export function exibicaoCardIngressoGrupo(geral: { valor: number; semDado: boolean }, aptos: number | null): ExibicaoCardLeads | null {
+  if (geral.semDado || aptos === null) return null;
+  return { valor: geral.valor, formato: 'inteiro', hint: `no geral · ${inteiro.format(aptos)} ${aptos === 1 ? 'apto' : 'aptos'}` };
 }

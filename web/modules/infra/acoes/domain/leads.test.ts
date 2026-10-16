@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LeadAtm } from '@/modules/infra/atm/domain/dashboard';
-import { contarLeadsAcao, exibicaoCardLeads, motivoDeNaoValido, rotuloValidadeOferta, validadeDaOferta } from './leads';
+import { contarAptosGrupo, contarLeadsAcao, exibicaoCardIngressoGrupo, exibicaoCardLeads, motivoDeNaoValido, rotuloValidadeOferta, validadeDaOferta } from './leads';
 
 function lead(parcial: Partial<LeadAtm> = {}): LeadAtm {
   return {
@@ -74,8 +74,8 @@ describe('cards do topo com leads válidos', () => {
   it('leads: o válido no card e o geral ao lado', () => {
     expect(exibicaoCardLeads('leads', { valor: 5, semDado: false }, c)).toEqual({ valor: 4, formato: 'inteiro', hint: 'válidos para a oferta · 5 gerais, 1 fora da lista' });
   });
-  it('ingresso: o geral no card e os leads válidos embaixo', () => {
-    expect(exibicaoCardLeads('ingressosGrupo', { valor: 3, semDado: false }, c)).toMatchObject({ valor: 3, formato: 'inteiro', hint: 'no geral · 2 entre os leads válidos' });
+  it('ingresso: o hint de leads válidos saiu (16/10) e o percentual continua', () => {
+    expect(exibicaoCardLeads('ingressosGrupo', { valor: 3, semDado: false }, c)).toBeNull();
     expect(exibicaoCardLeads('percentualIngressoGrupo', { valor: 60, semDado: false }, c)).toMatchObject({ valor: 60, formato: 'percentual', hint: 'no geral · 50% sobre os leads válidos' });
   });
   it('sem lista de aptos, os cards seguem com o número do resumo', () => {
@@ -86,7 +86,15 @@ describe('cards do topo com leads válidos', () => {
   it('outros cards não mudam', () => {
     expect(exibicaoCardLeads('cpl', { valor: 9, semDado: false }, c)).toBeNull();
   });
-  it('geral sem dado é dito, não vira zero', () => {
-    expect(exibicaoCardLeads('ingressosGrupo', { valor: 0, semDado: true }, c)?.hint).toBe('entre os leads válidos · geral sem dado');
+  it('ingresso: o geral no card e os aptos embaixo', () => {
+    expect(contarAptosGrupo([{ apto: true }, { apto: false }, { apto: true }])).toBe(2);
+    expect(exibicaoCardIngressoGrupo({ valor: 46, semDado: false }, 21)).toEqual({ valor: 46, formato: 'inteiro', hint: 'no geral · 21 aptos' });
+    expect(exibicaoCardIngressoGrupo({ valor: 5, semDado: false }, 1)?.hint).toBe('no geral · 1 apto');
+  });
+  it('sem a coluna apto ou sem o geral, o card não inventa', () => {
+    expect(contarAptosGrupo(null)).toBeNull();
+    expect(contarAptosGrupo([{ apto: true }, { apto: null }])).toBeNull();
+    expect(exibicaoCardIngressoGrupo({ valor: 46, semDado: false }, null)).toBeNull();
+    expect(exibicaoCardIngressoGrupo({ valor: 0, semDado: true }, 3)).toBeNull();
   });
 });

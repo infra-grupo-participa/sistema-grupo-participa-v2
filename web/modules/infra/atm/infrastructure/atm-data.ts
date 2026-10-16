@@ -309,7 +309,7 @@ export async function carregarAtmGrupoLeads(chave: string, periodo?: DatasPeriod
     data: r.data.flatMap((x): LeadGrupoAtm[] => {
       const foneGrupo = typeof x.fone_grupo === 'string' ? x.fone_grupo : null;
       if (!foneGrupo) return [];
-      const origem = x.origem === 'lista_disparo' || x.origem === 'base_leads' ? x.origem : 'nao_encontrado';
+      const origem = x.origem === 'lista_disparo' || x.origem === 'base_leads' || x.origem === 'central_alunos' ? x.origem : 'nao_encontrado';
       const texto = (v: unknown) => typeof v === 'string' ? v : null;
       const booleano = (v: unknown) => typeof v === 'boolean' ? v : null;
       const naoEncontrado = origem === 'nao_encontrado';
@@ -326,6 +326,8 @@ export async function carregarAtmGrupoLeads(chave: string, periodo?: DatasPeriod
         saiuEm: naoEncontrado ? null : texto(x.saiu_em),
         noGrupo: naoEncontrado ? null : booleano(x.no_grupo),
         entradaAproximada: naoEncontrado ? null : booleano(x.entrada_aproximada),
+        naCentral: naoEncontrado ? null : booleano(x.na_central),
+        apto: booleano(x.apto),
       }];
     }),
     ...estado,

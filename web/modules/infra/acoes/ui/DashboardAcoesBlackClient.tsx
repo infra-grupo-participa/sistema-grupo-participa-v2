@@ -14,7 +14,7 @@ import { DisparosDetalhe } from '@/modules/infra/atm/ui/DisparosDetalhe';
 import { cardsResumoAcaoBlack } from '../domain/resumo';
 import { carregarDadosAcoesBlack, mensagemEmPreparacao, type EstadoDadosAcoesBlack, type LinhaAcoes } from '../infrastructure/dados';
 import { registroAcoesBlack } from '../domain/registro';
-import { contarLeadsAcao, exibicaoCardLeads } from '../domain/leads';
+import { contarAptosGrupo, contarLeadsAcao, exibicaoCardIngressoGrupo, exibicaoCardLeads } from '../domain/leads';
 import { ModalLeadsAcao } from './ModalLeadsAcao';
 import type { EstadoSerieIngresso } from '@/modules/infra/ingresso-grupo/ui/EvolucaoIngressoGrupo';
 import { ModalIngressoGrupoAcao, type AbaIngressoGrupoAcao } from './ModalIngressoGrupoAcao';
@@ -131,7 +131,8 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
   const comTeste = isMaster && incluirTeste;
   const etiqueta = acao.estado === 'ativa' ? acao.etiqueta : null;
   const listaLeads = useListaAtm<LeadAtm>(listas, podeVerContato && etiqueta ? chaveListaAtm('dados_atm_leads', etiqueta, null, comTeste) : null, () => carregarAtmLeads(etiqueta!, undefined, comTeste), versaoListas);
-  const chaveGrupoLeads = podeVerContato && modalIngressoGrupo && abaIngressoGrupo === 'leads' && etiqueta ? chaveListaAtm('dados_atm_grupo_leads', etiqueta, null, false) : null;
+  // Números do grupo: lidos sempre (não só com o modal aberto) desde 16/10, porque o card conta os aptos.
+  const chaveGrupoLeads = podeVerContato && etiqueta ? chaveListaAtm('dados_atm_grupo_leads', etiqueta, null, false) : null;
   const demonstracaoGrupo = publicEnv.blackDemo;
   const listaGrupoLeads = useListaAtm<LeadGrupoAtm>(listas, chaveGrupoLeads, () => demonstracaoGrupo
     ? Promise.resolve({ data: ENTRADAS_GRUPO_ACAO_DEMO, semDado: false, erro: null })
@@ -157,6 +158,7 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
     return null;
   };
   const contagemLeads = listaLeads?.data ? contarLeadsAcao(listaLeads.data) : null;
+  const aptosGrupo = contarAptosGrupo(listaGrupoLeads?.data);
   const resultadoResumo = dados?.resumo;
   const dashboard: DashboardAtm | null = resultadoResumo && !resultadoResumo.semDado ? resultadoResumo.data : null;
   const cards = cardsResumoAcaoBlack(dashboard, acao.ofertaHotmart);
@@ -209,7 +211,9 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
             {cards.map((card) => {
               const aguardaOferta = ofertaPendente && ['vendas', 'cac', 'faturamentoBruto', 'faturamentoLiquido', 'roas'].includes(card.chave);
               const semDado = !dashboard || card.metrica.semDado;
-              const validos = !aguardaOferta && !semDado && contagemLeads ? exibicaoCardLeads(card.chave, card.metrica, contagemLeads) : null;
+              const validos = aguardaOferta || semDado ? null
+                : card.chave === 'ingressosGrupo' ? exibicaoCardIngressoGrupo(card.metrica, aptosGrupo)
+                  : contagemLeads ? exibicaoCardLeads(card.chave, card.metrica, contagemLeads) : null;
               const valor = aguardaOferta ? 'Aguardando oferta' : validos ? formatar(validos.valor, validos.formato) : semDado ? 'Sem dado' : formatar(card.metrica.valor, card.formato);
               const hint = aguardaOferta ? 'oferta ainda não configurada' : validos ? validos.hint : semDado ? 'sem dado ainda' : undefined;
               const kpi = <KpiCard key={card.chave} label={card.rotulo} value={valor} hint={hint} bar={card.chave === 'vendas' ? 'green' : 'accent'} />;

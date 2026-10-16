@@ -109,3 +109,14 @@ Para testar: autenticar com perfil ativo da equipe sem vínculo Infra nem `finan
 ## Evolução diária do ingresso no grupo (16/10/2026)
 
 O modal do card "Ingresso no grupo" ganhou a aba "Evolução diária" e o card "% ingresso no grupo" também abre o modal (direto nessa aba). A aba usa a série diária já carregada (`dados_atm_serie_diaria`) e o componente compartilhado `web/modules/infra/ingresso-grupo/`. Regra e situação por dashboard: `docs/dashboard-presencial-tela.md`, seção "Padrão: card de ingresso no grupo tem modal com evolução diária".
+
+## Ingresso no grupo cruzado com a Central de Alunos e coluna Apto (16/10/2026)
+
+- **Por quê:** o link do grupo também foi para grupos antigos e muita gente entra com número diferente do da lista. Pedido do Victor: identificar essas pessoas pela Central de Alunos e mostrar quem é apto.
+- **Regra do Apto (Victor):** Sim só para quem está na lista do disparo da ação, pelo telefone ou pelo e-mail achado na base de leads ou na Central. Lead fora da lista não é apto; quem é achado só na Central também não.
+- **Banco:** migration `20261016234500_dados_atm_grupo_leads_apto`, **APLICADA em 16/10/2026**, pentester APROVADO. Detalhes, ensaio e risco do casamento por 8 dígitos em `infra/supabase/migrations/20261016234500.explain.md`.
+- **Card "Ingresso no grupo":** o hint "X entre os leads válidos" saiu; agora é "no geral · N aptos" (`exibicaoCardIngressoGrupo` e `contarAptosGrupo` em `domain/leads.ts`). A lista do grupo passa a ser lida sempre que o usuário tem `contato.ver` (não só com o modal aberto). Sem a coluna `apto`, o hint some.
+- **Modal:** abas Leads, Resumo e Evolução diária. Leads ganhou a coluna "Apto" e a origem "Central de Alunos". Resumo tem 4 roscas: Apto (fixa), Origem, Instrução e Turma.
+- **Números na produção (16/10, ação THB vencidos):** 46 números no grupo, 21 aptos (todos pela lista), 15 achados só na Central, 6 não encontrados.
+- **Como testar:** `npx vitest run modules/infra/acoes modules/infra/atm`; na tela, usuário com `contato.ver`, Ações de Renovação da Black Friday > THB vencidos, card Ingresso no grupo mostra "N aptos" e o total de Sim na rosca Apto bate com N.
+- **Pendente (recomendação do pentester, não bloqueante):** contar os aptos no `dados_atm_resumo` para não trazer a lista com dado pessoal só para o card.

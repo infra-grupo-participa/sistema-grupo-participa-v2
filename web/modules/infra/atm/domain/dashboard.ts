@@ -96,7 +96,7 @@ export type NumeroGrupoAtm = {
 /** Uma linha por número que entrou no grupo, da RPC dados_atm_grupo_leads. */
 export type LeadGrupoAtm = {
   foneGrupo: string;
-  origem: 'lista_disparo' | 'base_leads' | 'nao_encontrado';
+  origem: 'lista_disparo' | 'base_leads' | 'central_alunos' | 'nao_encontrado';
   naLista: boolean | null;
   naBase: boolean | null;
   nome: string | null;
@@ -108,6 +108,10 @@ export type LeadGrupoAtm = {
   saiuEm: string | null;
   noGrupo: boolean | null;
   entradaAproximada: boolean | null;
+  /** O número está na Central de Alunos (thb_alunos, 3 campos de telefone). Migration 20261016234500. */
+  naCentral: boolean | null;
+  /** Está na lista do disparo da chave, pelo telefone ou pelo e-mail achado na base ou na Central. Null antes da 20261016234500. */
+  apto: boolean | null;
 };
 
 export type PeriodoAplicadoAtm = {
