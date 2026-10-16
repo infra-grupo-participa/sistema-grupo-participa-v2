@@ -61,15 +61,19 @@ sin as (
          (n.np is not null and n.np = n.nc and n.np like '% %') nome_igual,
          (coalesce(cardinality(t.tp), 0) >= 2 and coalesce(cardinality(t.tc), 0) >= 2 and t.tp[1] = t.tc[1]
             and (t.tp <@ t.tc or t.tc <@ t.tp)) nome_sub,
+         -- 030000 (pentest): a diferença entre os dois conjuntos de palavras (o que o nome maior tem a mais) traz sufixo de geração
+         -- (pai e filho, avô e neto costumam dividir telefone): a A4 NÃO vale e o par fica para o humano.
+         exists (select 1 from unnest(case when t.tp <@ t.tc then t.tc else t.tp end) w
+                  where w = any(sg.suf) and not (w = any(case when t.tp <@ t.tc then t.tp else t.tc end))) sufixo_geracao,
          (t.tp[1] is not null and t.tp[1] = t.tc[1]) nome_prim,
          (t.tp[1] is not null and t.tc[1] is not null and left(t.tp[1], 1) <> left(t.tc[1], 1)
             and position(t.tp[1] in t.tc[1]) = 0 and position(t.tc[1] in t.tp[1]) = 0
             and public.similarity(t.tp[1], t.tc[1]) < 0.3) prim_dif,
          -- 030000: teste/equipe dos dois lados: pessoas.teste = true, e-mail @advmais.com, ou o nome é de quem a lista de eq nomeia.
          -- Também vale o par em que a pessoa da revisão só tem telefone (sem nome e sem e-mail), o telefone é o mesmo e o candidato é de teste/equipe.
-         (coalesce(ic.teste or exists (select 1 from unnest(ic.emails) em where em like '%@advmais.com%')
+         (coalesce(ic.teste or exists (select 1 from unnest(ic.emails) em where em like '%@advmais.com')
                    or n.nc = any(eq.nomes) or n.nc like any(eq.inicios), false)
-          and coalesce(ip.teste or exists (select 1 from unnest(ip.emails) em where em like '%@advmais.com%')
+          and coalesce(ip.teste or exists (select 1 from unnest(ip.emails) em where em like '%@advmais.com')
                        or n.np = any(eq.nomes) or n.np like any(eq.inicios)
                        or (ip.nome is null and cardinality(ip.emails) = 0 and (ip.fones && ic.fones)), false)) interno_ambos,
          (ip.padrao or ic.padrao) padrao_algum,
@@ -80,6 +84,8 @@ sin as (
    cross join lateral (select pessoas.norm_nome(ip.nome) np, pessoas.norm_nome(ic.nome) nc) n
    cross join lateral (select string_to_array(n.np, ' ') tp, string_to_array(n.nc, ' ') tc) t
    cross join lateral (select array['ARTHUR GALVAO']::text[] nomes, array['IROMAR %', 'ARTHUR GALVAO %']::text[] inicios) eq
+   -- 030000 (pentest): sufixos de geração, em MAIÚSCULAS como pessoas.norm_nome devolve
+   cross join lateral (select array['JUNIOR', 'JR', 'FILHO', 'FILHA', 'NETO', 'NETA', 'SOBRINHO', 'SOBRINHA', 'SEGUNDO', 'TERCEIRO', 'II', 'III']::text[] suf) sg
    cross join lateral (
      select array['gmail.com','hotmail.com','hotmail.com.br','yahoo.com','yahoo.com.br','outlook.com','outlook.com.br',
                   'icloud.com','live.com','msn.com','bol.com.br','uol.com.br','terra.com.br','globo.com','ig.com.br','me.com','mail.com'] prov
@@ -103,7 +109,7 @@ cls as (
               when s.tel and s.nome_igual then 'A1_telefone_nome'
               when s.typo and s.nome_igual then 'A2_email_digitado_errado_nome'
               when s.tel and s.typo and s.nome_prim then 'A3_telefone_email_digitado_errado'
-              when s.tel and s.nome_sub then 'A4_telefone_nome_contido'
+              when s.tel and s.nome_sub and not s.sufixo_geracao then 'A4_telefone_nome_contido'
          end a_regra,
          case when s.doc_dif then 'B1_documento_diferente'
               when s.interno_ambos then 'B5_teste_ou_equipe'

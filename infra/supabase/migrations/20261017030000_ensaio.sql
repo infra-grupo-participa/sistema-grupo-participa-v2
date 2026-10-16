@@ -38,7 +38,9 @@ select '00 antes: fila real pendente e colunas (esperado: chave ligada=true so n
 --   3. pessoas.carga_chave 'revisao_lote': garantida DESLIGADA (não é criada aqui; já existe desde 20261017010000).
 --   4. pessoas.revisao_classificar, revisao_lote_passo, revisao_lote_rodar, revisao_lote_reverter: create or replace, mesma assinatura.
 -- REGRAS NOVAS (o CALL escolhe quais valem):
---   A4_telefone_nome_contido (juntar): telefone igual, os dois nomes com 2 palavras ou mais, primeira palavra igual e o conjunto de palavras de um contido no do outro.
+--   A4_telefone_nome_contido (juntar): telefone igual, os dois nomes com 2 palavras ou mais, primeira palavra igual e o conjunto de palavras de um contido no do outro,
+--     E a diferença entre os dois conjuntos (o que o nome maior tem a mais) SEM sufixo de geração: JUNIOR, JR, FILHO, FILHA, NETO, NETA, SOBRINHO, SOBRINHA, SEGUNDO, TERCEIRO, II, III
+--     (pai e filho dividem telefone; o par com sufixo vai para a fila humana). Lista CONSTANTE VISÍVEL no classificador (lateral sg).
 --   B4_so_nome_sem_sinal (separar): motivo so_nome e nenhum sinal em comum (telefone, e-mail, parte local do e-mail, CPF).
 --   B6_nome_padrao_sem_sinal (separar): igual à B4 e uma das pessoas já teve o nome padrão tirado (arquivo.pessoas_nome_padrao_item, não revertido). Vem antes da B4 só para o código dizer a causa.
 --   B5_teste_ou_equipe (separar): os dois lados são teste/equipe: pessoas.teste, e-mail @advmais.com, ou nome na lista abaixo. Também bloqueia qualquer regra A.
@@ -46,6 +48,11 @@ select '00 antes: fila real pendente e colunas (esperado: chave ligada=true so n
 --   D1_revisao_duplicada (nova ação 'duplicada'): só motivo email_conflito; existe revisão pendente de id menor com o mesmo motivo, a mesma pessoa e o mesmo conjunto de candidatas.
 --     A repetida é APAGADA depois de cópia completa (to_jsonb da linha) em arquivo.pessoas_revisao_lote_item; a reversão a insere de volta, com o mesmo id.
 --     Motivo de apagar: pessoas.revisao não tem status 'duplicada' no CHECK, e mexer na tabela compartilhada seria pior do que apagar com cópia.
+-- CORREÇÕES DO PENTEST (16/10/2026, mesma data; o pentester reprovou a primeira versão):
+--   MÉDIO  A4 juntava pai e filho (diferença com FILHO, mesmo telefone): agora o sufixo de geração na diferença tira o par da A4.
+--   BAIXO  e-mail interno casava '%@advmais.com%' (pegava advmais.com.br e afins): agora casa o domínio exato no fim, '%@advmais.com'.
+--   BAIXO  D1 travava só a repetida; agora trava também a gêmea de id menor (for share, skip locked) antes de apagar.
+--   BAIXO  ao forçar ligada = false, a chave também zera o 'ate' (data de fim), para que religar exija data nova.
 -- A1_telefone_nome (já existia) só precisa entrar no CALL para as 3 que não rodaram.
 -- NÃO MEXE em public.compradores nem em crm.negocio (decisão pendente do Victor).
 -- COMO VOLTAR: 20261017030000_reversao.sql (reverte os lotes posteriores ao marcador e devolve os 4 corpos de 20261017010000). Coluna e CHECK alargado ficam (histórico).
@@ -104,7 +111,7 @@ insert into pessoas.revisao_lote (regras, tamanho_passo, terminou_em, motivo_fim
 values (array[]::text[], 1, now(), 'marcador 20261017030000');
 
 -- a chave continua (ou volta a ficar) DESLIGADA. Ligar: update pessoas.carga_chave set ligada = true, ate = current_date + 7, por = 'victor' where fonte = 'revisao_lote';
-update pessoas.carga_chave set ligada = false, por = 'migration 20261017030000', em = now() where fonte = 'revisao_lote';
+update pessoas.carga_chave set ligada = false, ate = null, por = 'migration 20261017030000', em = now() where fonte = 'revisao_lote';
 
 -- ===================== 2. classificador (só leitura) =====================
 -- acao: mesma | diferente | duplicada | humano. 'mesma' só se EXATAMENTE 1 candidata bate numa regra A e a pessoa só tem esta revisão pendente.
@@ -170,15 +177,19 @@ sin as (
          (n.np is not null and n.np = n.nc and n.np like '% %') nome_igual,
          (coalesce(cardinality(t.tp), 0) >= 2 and coalesce(cardinality(t.tc), 0) >= 2 and t.tp[1] = t.tc[1]
             and (t.tp <@ t.tc or t.tc <@ t.tp)) nome_sub,
+         -- 030000 (pentest): a diferença entre os dois conjuntos de palavras (o que o nome maior tem a mais) traz sufixo de geração
+         -- (pai e filho, avô e neto costumam dividir telefone): a A4 NÃO vale e o par fica para o humano.
+         exists (select 1 from unnest(case when t.tp <@ t.tc then t.tc else t.tp end) w
+                  where w = any(sg.suf) and not (w = any(case when t.tp <@ t.tc then t.tp else t.tc end))) sufixo_geracao,
          (t.tp[1] is not null and t.tp[1] = t.tc[1]) nome_prim,
          (t.tp[1] is not null and t.tc[1] is not null and left(t.tp[1], 1) <> left(t.tc[1], 1)
             and position(t.tp[1] in t.tc[1]) = 0 and position(t.tc[1] in t.tp[1]) = 0
             and public.similarity(t.tp[1], t.tc[1]) < 0.3) prim_dif,
          -- 030000: teste/equipe dos dois lados: pessoas.teste = true, e-mail @advmais.com, ou o nome é de quem a lista de eq nomeia.
          -- Também vale o par em que a pessoa da revisão só tem telefone (sem nome e sem e-mail), o telefone é o mesmo e o candidato é de teste/equipe.
-         (coalesce(ic.teste or exists (select 1 from unnest(ic.emails) em where em like '%@advmais.com%')
+         (coalesce(ic.teste or exists (select 1 from unnest(ic.emails) em where em like '%@advmais.com')
                    or n.nc = any(eq.nomes) or n.nc like any(eq.inicios), false)
-          and coalesce(ip.teste or exists (select 1 from unnest(ip.emails) em where em like '%@advmais.com%')
+          and coalesce(ip.teste or exists (select 1 from unnest(ip.emails) em where em like '%@advmais.com')
                        or n.np = any(eq.nomes) or n.np like any(eq.inicios)
                        or (ip.nome is null and cardinality(ip.emails) = 0 and (ip.fones && ic.fones)), false)) interno_ambos,
          (ip.padrao or ic.padrao) padrao_algum,
@@ -189,6 +200,8 @@ sin as (
    cross join lateral (select pessoas.norm_nome(ip.nome) np, pessoas.norm_nome(ic.nome) nc) n
    cross join lateral (select string_to_array(n.np, ' ') tp, string_to_array(n.nc, ' ') tc) t
    cross join lateral (select array['ARTHUR GALVAO']::text[] nomes, array['IROMAR %', 'ARTHUR GALVAO %']::text[] inicios) eq
+   -- 030000 (pentest): sufixos de geração, em MAIÚSCULAS como pessoas.norm_nome devolve
+   cross join lateral (select array['JUNIOR', 'JR', 'FILHO', 'FILHA', 'NETO', 'NETA', 'SOBRINHO', 'SOBRINHA', 'SEGUNDO', 'TERCEIRO', 'II', 'III']::text[] suf) sg
    cross join lateral (
      select array['gmail.com','hotmail.com','hotmail.com.br','yahoo.com','yahoo.com.br','outlook.com','outlook.com.br',
                   'icloud.com','live.com','msn.com','bol.com.br','uol.com.br','terra.com.br','globo.com','ig.com.br','me.com','mail.com'] prov
@@ -212,7 +225,7 @@ cls as (
               when s.tel and s.nome_igual then 'A1_telefone_nome'
               when s.typo and s.nome_igual then 'A2_email_digitado_errado_nome'
               when s.tel and s.typo and s.nome_prim then 'A3_telefone_email_digitado_errado'
-              when s.tel and s.nome_sub then 'A4_telefone_nome_contido'
+              when s.tel and s.nome_sub and not s.sufixo_geracao then 'A4_telefone_nome_contido'
          end a_regra,
          case when s.doc_dif then 'B1_documento_diferente'
               when s.interno_ambos then 'B5_teste_ou_equipe'
@@ -275,7 +288,7 @@ create or replace function pessoas.revisao_lote_passo(p_lote bigint, p_apos bigi
 returns jsonb
 language plpgsql set search_path to '' as $f$
 declare
-  r record; x record; v jsonb; v_pa jsonb; v_ultimo bigint := p_apos;
+  r record; x record; v jsonb; v_pa jsonb; v_ultimo bigint := p_apos; v_gemea bigint;
   v_ex int := 0; v_m int := 0; v_d int := 0; v_dup int := 0; v_h int := 0; v_fora int := 0; v_f int := 0; v_erro text;
 begin
   if p_lote is null or p_apos is null or p_n is null or p_n not between 1 and 100 or p_regras is null then
@@ -291,11 +304,18 @@ begin
       select jsonb_build_object('id', p.id, 'situacao', p.situacao, 'mesclada_em', p.mesclada_em, 'atualizado_em', p.atualizado_em)
         into v_pa from pessoas.pessoas p where p.id = r.pessoa_id for update;
       if r.acao = 'duplicada' then
-        -- confere de novo, já com a linha travada: ainda existe a pendente de id menor com a mesma pergunta?
-        if x.motivo <> 'email_conflito' or not exists (select 1 from pessoas.revisao y
-                        where y.status = 'pendente' and y.id < x.id and y.motivo = x.motivo and pessoas.atual(y.pessoa_id) = r.pessoa_id
-                          and (select array_agg(distinct pessoas.atual(z) order by pessoas.atual(z)) from unnest(y.candidatos) z)
-                              = (select array_agg(distinct pessoas.atual(z) order by pessoas.atual(z)) from unnest(x.candidatos) z)) then
+        -- confere de novo, já com a linha travada, e trava TAMBÉM a gêmea de id menor (for share): enquanto esta transação não termina, ninguém decide nem
+        -- apaga a gêmea. Gêmea travada por outra sessão (skip locked) ou que já mudou: não apaga (conta como falha, fica para outra rodada).
+        v_gemea := null;
+        if x.motivo = 'email_conflito' then
+          select y.id into v_gemea from pessoas.revisao y
+           where y.status = 'pendente' and y.id < x.id and y.motivo = x.motivo and pessoas.atual(y.pessoa_id) = r.pessoa_id
+             and (select array_agg(distinct pessoas.atual(z) order by pessoas.atual(z)) from unnest(y.candidatos) z)
+                 = (select array_agg(distinct pessoas.atual(z) order by pessoas.atual(z)) from unnest(x.candidatos) z)
+           order by y.id limit 1
+             for share of y skip locked;
+        end if;
+        if v_gemea is null then
           v_f := v_f + 1; continue;
         end if;
         insert into arquivo.pessoas_revisao_lote_item (lote_id, revisao_id, pessoa_id, alvo, acao, regras, rev_antes, pessoa_antes)
@@ -471,7 +491,7 @@ insert into pg_temp._z_out(passo, linha)
 select '02 rls ligada (esperado: true, true)', (select relrowsecurity::text from pg_class where oid = 'pessoas.revisao_lote'::regclass) || ', '
     || (select relrowsecurity::text from pg_class where oid = 'arquivo.pessoas_revisao_lote_item'::regclass);
 insert into pg_temp._z_out(passo, linha)
-select '03 chave depois da migration (esperado: ligada=false, por=migration 20261017030000)', jsonb_build_object('ligada', ligada, 'por', por)::text
+select '03 chave depois da migration (esperado: ligada=false, ate=null mesmo com a chave ligada com data antes, por=migration 20261017030000)', jsonb_build_object('ligada', ligada, 'ate', ate, 'por', por)::text
   from pessoas.carga_chave where fonte = 'revisao_lote';
 insert into pg_temp._z_out(passo, linha)
 select '03b coluna, CHECK e marcador (esperado: duplicadas existe; check cita duplicada; 1 marcador)', jsonb_build_object(
@@ -522,18 +542,18 @@ begin
     v_h := v_h + (r->>'humano')::int; v_fora := v_fora + (r->>'fora_das_regras')::int; v_f := v_f + (r->>'falhas')::int;
   end loop;
   insert into pg_temp._z_out(passo, linha)
-  values ('12 dry-run na fila real, todas as regras (esperado: falhas 0; diferentes 257, duplicadas 64; mesmas 37 e humano 71, porque 1 revisão humana vira A1 depois que as outras fecham: o classificador lê o estado vivo a cada passo)',
+  values ('12 dry-run na fila real, todas as regras (esperado: falhas 0; diferentes 257, duplicadas 64; mesmas 36 e humano 72 (A4 32 depois do pentest), porque 1 revisão humana vira A1 depois que as outras fecham: o classificador lê o estado vivo a cada passo)',
           jsonb_build_object('examinadas', v_ex, 'mesmas', v_m, 'diferentes', v_d, 'duplicadas', v_dup, 'humano', v_h, 'fora_das_regras', v_fora, 'falhas', v_f)::text);
 end
 $t$;
 insert into pg_temp._z_out(passo, linha)
-select '13 fila que sobra depois do dry-run (esperado: 71 pendentes, 1 mesma A1 + 70 humano: precisa de uma segunda rodada)', jsonb_build_object(
+select '13 fila que sobra depois do dry-run (esperado: 72 pendentes, 1 mesma A1 + 71 humano: precisa de uma segunda rodada)', jsonb_build_object(
   'pendentes', (select count(*) from pessoas.revisao where status = 'pendente'),
   'por_nivel', (select coalesce(jsonb_object_agg(acao, n), '{}') from (select acao, count(*) n from pessoas.revisao_classificar(0, 100000) group by acao) x),
   'por_regra', (select coalesce(jsonb_object_agg(r, n), '{}') from (select array_to_string(regras, ',') r, count(*) n from pessoas.revisao_classificar(0, 100000) group by regras) x),
   'itens_de_copia', (select count(*) from arquivo.pessoas_revisao_lote_item where lote_id = (select v::bigint from pg_temp._z where k = 'lote_real')))::text;
 insert into pg_temp._z_out(passo, linha)
-select '14 reverter o dry-run (esperado: puladas 0, revertidas = 358 = 37 + 257 + 64)', pessoas.revisao_lote_reverter((select v::bigint from pg_temp._z where k = 'lote_real'), 5000)::text;
+select '14 reverter o dry-run (esperado: puladas 0, revertidas = 357 = 36 + 257 + 64)', pessoas.revisao_lote_reverter((select v::bigint from pg_temp._z where k = 'lote_real'), 5000)::text;
 create temp table _z_h1 as
 select 'revisao' k, md5(coalesce(string_agg(to_jsonb(r)::text, '|' order by r.id), '')) v from pessoas.revisao r
 union all select 'pessoas', md5(coalesce(string_agg(p.id::text || coalesce(p.situacao, '') || coalesce(p.mesclada_em::text, '') || p.atualizado_em::text, '|' order by p.id), '')) from pessoas.pessoas p
@@ -550,15 +570,16 @@ select '15 estado depois de reverter o dry-run, comparado com o de antes (espera
 do $t$
 declare
   a1 uuid; p1 uuid; c2a uuid; c2b uuid; p2 uuid; a3 uuid; p3 uuid; a3b uuid; p3b uuid; a4 uuid; p4 uuid; a5 uuid; p5 uuid; a6 uuid; p6 uuid;
-  a7 uuid; p7 uuid; a8 uuid; p8 uuid; a9 uuid; p9 uuid;
-  r1 bigint; r2 bigint; r3 bigint; r3b bigint; r4 bigint; r5 bigint; r6 bigint; r7a bigint; r7b bigint; r8a bigint; r8b bigint; r9a bigint; r9b bigint;
+  a7 uuid; p7 uuid; a8 uuid; p8 uuid; a9 uuid; p9 uuid; a10 uuid; p10 uuid; a11 uuid; p11 uuid; a12 uuid; p12 uuid; a13 uuid; p13 uuid;
+  r1 bigint; r2 bigint; r3 bigint; r3b bigint; r4 bigint; r5 bigint; r6 bigint; r7a bigint; r7b bigint; r8a bigint; r8b bigint; r9a bigint; r9b bigint; r10 bigint; r11 bigint; r12 bigint; r13 bigint;
 begin
   -- 1 A4: mesmo telefone, 'Zzmaria Silva' contido em 'Zzmaria Silva Souza'
   insert into pessoas.pessoas (nome) values ('Zzmaria Silva Souza') returning id into a1;
   insert into pessoas.pessoas (nome, situacao) values ('Zzmaria Silva', 'revisar') returning id into p1;
-  -- 2 A4 com DUAS candidatas que batem: vira H2
+  -- 2 A4 com DUAS candidatas que batem: vira H2. (A segunda era 'Lima Neto'; com a regra de sufixo de geração do pentest 'Neto' tira o par da A4,
+  --   então a segunda candidata válida passou a ser 'Santos'. O 'Neto' ficou provado nos cenários 9 a 11.)
   insert into pessoas.pessoas (nome) values ('Zzjoao Pereira Lima') returning id into c2a;
-  insert into pessoas.pessoas (nome) values ('Zzjoao Pereira Lima Neto') returning id into c2b;
+  insert into pessoas.pessoas (nome) values ('Zzjoao Pereira Santos') returning id into c2b;
   insert into pessoas.pessoas (nome, situacao) values ('Zzjoao Pereira', 'revisar') returning id into p2;
   -- 3 B4: so_nome sem nenhum sinal
   insert into pessoas.pessoas (nome) values ('Zzcarla Bastos Lima') returning id into a3;
@@ -582,13 +603,35 @@ begin
   -- 8 escopo da D1: duas so_nome idênticas NÃO são duplicata (as duas viram B4)
   insert into pessoas.pessoas (nome) values ('Zzrita Neves Dantas') returning id into a8;
   insert into pessoas.pessoas (nome, situacao) values ('Zzrita Neves', 'revisar') returning id into p8;
+  -- 9 (pentest) A4 NÃO vale: a diferença entre os nomes é 'Filho' (provável pai e filho, mesmo telefone): humano H9
+  insert into pessoas.pessoas (nome) values ('Zzpaulo Mendes Filho') returning id into a9;
+  insert into pessoas.pessoas (nome, situacao) values ('Zzpaulo Mendes', 'revisar') returning id into p9;
+  -- 10 (pentest) A4 NÃO vale, no sentido contrário: a pessoa da revisão é a de nome maior ('Junior'): humano H9
+  insert into pessoas.pessoas (nome) values ('Zzlucas Reis') returning id into a10;
+  insert into pessoas.pessoas (nome, situacao) values ('Zzlucas Reis Junior', 'revisar') returning id into p10;
+  -- 11 (pentest) o sufixo está nos DOIS nomes: a diferença é só 'Silva', A4 vale: mesma
+  insert into pessoas.pessoas (nome) values ('Zzrui Lopes Neto Silva') returning id into a11;
+  insert into pessoas.pessoas (nome, situacao) values ('Zzrui Lopes Neto', 'revisar') returning id into p11;
+  -- 12 (pentest) e-mail @advmais.com.br NÃO é interno (domínio exato): não vira B5, A4 vale: mesma
+  insert into pessoas.pessoas (nome) values ('Zzana Moura Reis') returning id into a12;
+  insert into pessoas.pessoas (nome, situacao) values ('Zzana Moura', 'revisar') returning id into p12;
+  -- 13 (pentest) e-mail @advmais.com exato dos dois lados: interno, B5 bloqueia a A4: diferente
+  insert into pessoas.pessoas (nome) values ('Zzbia Souza Lima') returning id into a13;
+  insert into pessoas.pessoas (nome, situacao) values ('Zzbia Souza', 'revisar') returning id into p13;
   insert into pessoas.identificadores (pessoa_id, tipo, valor, chave, origem) values
     (a1, 'telefone', '5599900030001', '5599900030001', 'importacao'), (p1, 'telefone', '5599900030001', '5599900030001', 'importacao'),
     (c2a, 'telefone', '5599900030002', '5599900030002', 'importacao'), (c2b, 'telefone', '5599900030002', '5599900030002', 'importacao'),
     (p2, 'telefone', '5599900030002', '5599900030002', 'importacao'),
     (a3b, 'telefone', '5599900030003', '5599900030003', 'importacao'), (p3b, 'telefone', '5599900030003', '5599900030003', 'importacao'),
     (a5, 'telefone', '5599900030005', '5599900030005', 'importacao'), (p5, 'telefone', '5599900030005', '5599900030005', 'importacao'),
-    (a6, 'telefone', '5599900030006', '5599900030006', 'importacao'), (p6, 'telefone', '5599900030006', '5599900030006', 'importacao');
+    (a6, 'telefone', '5599900030006', '5599900030006', 'importacao'), (p6, 'telefone', '5599900030006', '5599900030006', 'importacao'),
+    (a9, 'telefone', '5599900030009', '5599900030009', 'importacao'), (p9, 'telefone', '5599900030009', '5599900030009', 'importacao'),
+    (a10, 'telefone', '5599900030010', '5599900030010', 'importacao'), (p10, 'telefone', '5599900030010', '5599900030010', 'importacao'),
+    (a11, 'telefone', '5599900030011', '5599900030011', 'importacao'), (p11, 'telefone', '5599900030011', '5599900030011', 'importacao'),
+    (a12, 'telefone', '5599900030012', '5599900030012', 'importacao'), (p12, 'telefone', '5599900030012', '5599900030012', 'importacao'),
+    (a13, 'telefone', '5599900030013', '5599900030013', 'importacao'), (p13, 'telefone', '5599900030013', '5599900030013', 'importacao'),
+    (a12, 'email', 'zzana1@advmais.com.br', 'zzana1@advmais.com.br', 'importacao'), (p12, 'email', 'zzana2@advmais.com.br', 'zzana2@advmais.com.br', 'importacao'),
+    (a13, 'email', 'zzbia1@advmais.com', 'zzbia1@advmais.com', 'importacao'), (p13, 'email', 'zzbia2@advmais.com', 'zzbia2@advmais.com', 'importacao');
   insert into pessoas.revisao (pessoa_id, motivo, candidatos) values (p1, 'telefone_nome_diferente', array[a1]) returning id into r1;
   insert into pessoas.revisao (pessoa_id, motivo, candidatos) values (p2, 'telefone_varios', array[c2a, c2b]) returning id into r2;
   insert into pessoas.revisao (pessoa_id, motivo, candidatos) values (p3, 'so_nome', array[a3]) returning id into r3;
@@ -600,12 +643,17 @@ begin
   insert into pessoas.revisao (pessoa_id, motivo, candidatos) values (p7, 'email_conflito', array[a7]) returning id into r7b;
   insert into pessoas.revisao (pessoa_id, motivo, candidatos) values (p8, 'so_nome', array[a8]) returning id into r8a;
   insert into pessoas.revisao (pessoa_id, motivo, candidatos) values (p8, 'so_nome', array[a8]) returning id into r8b;
-  insert into pg_temp._z values ('ids', array[r1, r2, r3, r3b, r4, r5, r6, r7a, r7b, r8a, r8b]::text),
+  insert into pessoas.revisao (pessoa_id, motivo, candidatos) values (p9, 'telefone_nome_diferente', array[a9]) returning id into r9a;
+  insert into pessoas.revisao (pessoa_id, motivo, candidatos) values (p10, 'telefone_nome_diferente', array[a10]) returning id into r10;
+  insert into pessoas.revisao (pessoa_id, motivo, candidatos) values (p11, 'telefone_nome_diferente', array[a11]) returning id into r11;
+  insert into pessoas.revisao (pessoa_id, motivo, candidatos) values (p12, 'telefone_nome_diferente', array[a12]) returning id into r12;
+  insert into pessoas.revisao (pessoa_id, motivo, candidatos) values (p13, 'telefone_nome_diferente', array[a13]) returning id into r13;
+  insert into pg_temp._z values ('ids', array[r1, r2, r3, r3b, r4, r5, r6, r7a, r7b, r8a, r8b, r9a, r10, r11, r12, r13]::text),
     ('r1', r1::text), ('r7b', r7b::text), ('r7a', r7a::text), ('p1', p1::text), ('a1', a1::text);
 end
 $t$;
 insert into pg_temp._z_out(passo, linha)
-select '20 classificação do cenário (esperado por ordem: mesma A4; humano H2; diferente B4; humano H9 (so_nome com telefone); diferente B6; diferente B5; diferente B5; humano H9 (primeira email_conflito); duplicada D1 (a de id maior); diferente B4; diferente B4)',
+select '20 classificação do cenário (esperado por ordem: mesma A4; humano H2; diferente B4; humano H9 (so_nome com telefone); diferente B6; diferente B5; diferente B5; humano H9 (primeira email_conflito); duplicada D1 (a de id maior); diferente B4; diferente B4; humano H9 (A4 barrada por FILHO); humano H9 (A4 barrada por JUNIOR); mesma A4 (sufixo nos dois nomes); mesma A4 (advmais.com.br não é interno); diferente B5 (advmais.com exato))',
        revisao_id - (select min(x) from (select unnest(v::bigint[]) x from pg_temp._z where k = 'ids') m) + 1 || ' | ' || acao || ' | ' || array_to_string(regras, ',')
   from pessoas.revisao_classificar(0, 100, (select v::bigint[] from pg_temp._z where k = 'ids')) order by revisao_id;
 
@@ -629,7 +677,7 @@ select '21 passo só com a regra B4 (esperado: diferentes 3 (r3 e as duas so_nom
        pessoas.revisao_lote_passo((select v::bigint from pg_temp._z where k = 'lote'), 0, 50, array['B4_so_nome_sem_sinal'],
          (select v::bigint[] from pg_temp._z where k = 'ids'))::text;
 insert into pg_temp._z_out(passo, linha)
-select '21b passo com todas as regras (esperado: mesmas 1, diferentes 3 (B6, B5, B5), duplicadas 1, humano 3, falhas 0)',
+select '21b passo com todas as regras (esperado: mesmas 3 (A4 de r1, r11, r12), diferentes 4 (B6, B5, B5, B5 de r13), duplicadas 1, humano 5 (H2, H9 do so_nome com telefone, H9 da primeira email_conflito, H9 de FILHO, H9 de JUNIOR), falhas 0)',
        pessoas.revisao_lote_passo((select v::bigint from pg_temp._z where k = 'lote'), 0, 50, array['A1_telefone_nome', 'A2_email_digitado_errado_nome', 'A3_telefone_email_digitado_errado', 'A4_telefone_nome_contido', 'B1_documento_diferente', 'B2_telefone_nome_diferente', 'B3_homonimo_comum', 'B4_so_nome_sem_sinal', 'B5_teste_ou_equipe', 'B6_nome_padrao_sem_sinal', 'D1_revisao_duplicada'],
          (select v::bigint[] from pg_temp._z where k = 'ids'))::text;
 insert into pg_temp._z_out(passo, linha)
@@ -651,7 +699,7 @@ select '24 regra fora do CALL fica de fora (esperado: so D1 pedida, nada pendent
          (select v::bigint[] from pg_temp._z where k = 'ids'))::text;
 
 insert into pg_temp._z_out(passo, linha)
-select '30 reverter (esperado: revertidas = 8, puladas 0)', pessoas.revisao_lote_reverter((select v::bigint from pg_temp._z where k = 'lote'), 100)::text;
+select '30 reverter (esperado: revertidas = 11 = 3 B4 + 3 mesmas + 4 diferentes + 1 duplicada, puladas 0)', pessoas.revisao_lote_reverter((select v::bigint from pg_temp._z where k = 'lote'), 100)::text;
 insert into pg_temp._z_out(passo, linha)
 select '31 estado depois de reverter, comparado com o de antes (esperado: revisoes_diferentes 0, pessoas_diferentes 0, hash global sem diferença, nao revertidos 0)', jsonb_build_object(
   'revisoes_diferentes_do_antes', (select count(*) from pg_temp._z_antes z left join pessoas.revisao r on r.id = z.id where to_jsonb(r) is distinct from z.j),
@@ -668,11 +716,11 @@ select '31 estado depois de reverter, comparado com o de antes (esperado: reviso
 insert into pg_temp._z_out(passo, linha)
 select '32 reverter de novo (esperado: revertidas 0, puladas 0)', pessoas.revisao_lote_reverter((select v::bigint from pg_temp._z where k = 'lote'), 100)::text;
 insert into pg_temp._z_out(passo, linha)
-select '33 depois de reverter, aplicar de novo funciona (esperado: duplicadas 1, mesmas 1; índice único parcial livre)',
+select '33 depois de reverter, aplicar de novo funciona (esperado: duplicadas 1, mesmas 3; índice único parcial livre)',
        pessoas.revisao_lote_passo((select v::bigint from pg_temp._z where k = 'lote'), 0, 50, array['A4_telefone_nome_contido', 'D1_revisao_duplicada'],
          (select v::bigint[] from pg_temp._z where k = 'ids'))::text;
 insert into pg_temp._z_out(passo, linha)
-select '34 reverter o passo 33 (esperado: revertidas 2)', pessoas.revisao_lote_reverter((select v::bigint from pg_temp._z where k = 'lote'), 100)::text;
+select '34 reverter o passo 33 (esperado: revertidas 4)', pessoas.revisao_lote_reverter((select v::bigint from pg_temp._z where k = 'lote'), 100)::text;
 
 -- ===== reversão (20261017030000_reversao.sql) dentro do ensaio =====
 -- Reversão de 20261017030000: desfaz os lotes feitos DEPOIS desta migration e devolve os 4 corpos de 20261017010000.
@@ -695,7 +743,7 @@ begin
   if n > 0 then
     raise exception '20261017030000: % item(ns) sem reverter. Nada foi trocado; conferir à mão.', n;
   end if;
-  update pessoas.carga_chave set ligada = false, por = 'reversao 20261017030000', em = now() where fonte = 'revisao_lote';
+  update pessoas.carga_chave set ligada = false, ate = null, por = 'reversao 20261017030000', em = now() where fonte = 'revisao_lote';
 end
 $r$;
 
@@ -997,7 +1045,8 @@ select '40 corpos devolvidos (esperado: os 4 md5 iguais aos de 20261017010000; c
   ) t(sig, ok)),
   'tem_duplicadas', exists (select 1 from information_schema.columns where table_schema = 'pessoas' and table_name = 'revisao_lote' and column_name = 'duplicadas'),
   'marcadores', (select count(*) from pessoas.revisao_lote where motivo_fim = 'marcador 20261017030000'),
-  'chave_ligada', (select ligada from pessoas.carga_chave where fonte = 'revisao_lote'))::text;
+  'chave_ligada', (select ligada from pessoas.carga_chave where fonte = 'revisao_lote'),
+  'chave_ate', (select ate from pessoas.carga_chave where fonte = 'revisao_lote'))::text;
 insert into pg_temp._z_out(passo, linha)
 select '41 grants depois da reversão (esperado: tudo false)', jsonb_build_object(
   'anon_executa_classificar', has_function_privilege('anon', 'pessoas.revisao_classificar(bigint,integer,bigint[])', 'execute'),

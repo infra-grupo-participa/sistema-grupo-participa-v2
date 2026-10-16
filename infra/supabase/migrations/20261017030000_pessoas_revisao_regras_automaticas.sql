@@ -14,7 +14,9 @@
 --   3. pessoas.carga_chave 'revisao_lote': garantida DESLIGADA (não é criada aqui; já existe desde 20261017010000).
 --   4. pessoas.revisao_classificar, revisao_lote_passo, revisao_lote_rodar, revisao_lote_reverter: create or replace, mesma assinatura.
 -- REGRAS NOVAS (o CALL escolhe quais valem):
---   A4_telefone_nome_contido (juntar): telefone igual, os dois nomes com 2 palavras ou mais, primeira palavra igual e o conjunto de palavras de um contido no do outro.
+--   A4_telefone_nome_contido (juntar): telefone igual, os dois nomes com 2 palavras ou mais, primeira palavra igual e o conjunto de palavras de um contido no do outro,
+--     E a diferença entre os dois conjuntos (o que o nome maior tem a mais) SEM sufixo de geração: JUNIOR, JR, FILHO, FILHA, NETO, NETA, SOBRINHO, SOBRINHA, SEGUNDO, TERCEIRO, II, III
+--     (pai e filho dividem telefone; o par com sufixo vai para a fila humana). Lista CONSTANTE VISÍVEL no classificador (lateral sg).
 --   B4_so_nome_sem_sinal (separar): motivo so_nome e nenhum sinal em comum (telefone, e-mail, parte local do e-mail, CPF).
 --   B6_nome_padrao_sem_sinal (separar): igual à B4 e uma das pessoas já teve o nome padrão tirado (arquivo.pessoas_nome_padrao_item, não revertido). Vem antes da B4 só para o código dizer a causa.
 --   B5_teste_ou_equipe (separar): os dois lados são teste/equipe: pessoas.teste, e-mail @advmais.com, ou nome na lista abaixo. Também bloqueia qualquer regra A.
@@ -22,6 +24,11 @@
 --   D1_revisao_duplicada (nova ação 'duplicada'): só motivo email_conflito; existe revisão pendente de id menor com o mesmo motivo, a mesma pessoa e o mesmo conjunto de candidatas.
 --     A repetida é APAGADA depois de cópia completa (to_jsonb da linha) em arquivo.pessoas_revisao_lote_item; a reversão a insere de volta, com o mesmo id.
 --     Motivo de apagar: pessoas.revisao não tem status 'duplicada' no CHECK, e mexer na tabela compartilhada seria pior do que apagar com cópia.
+-- CORREÇÕES DO PENTEST (16/10/2026, mesma data; o pentester reprovou a primeira versão):
+--   MÉDIO  A4 juntava pai e filho (diferença com FILHO, mesmo telefone): agora o sufixo de geração na diferença tira o par da A4.
+--   BAIXO  e-mail interno casava '%@advmais.com%' (pegava advmais.com.br e afins): agora casa o domínio exato no fim, '%@advmais.com'.
+--   BAIXO  D1 travava só a repetida; agora trava também a gêmea de id menor (for share, skip locked) antes de apagar.
+--   BAIXO  ao forçar ligada = false, a chave também zera o 'ate' (data de fim), para que religar exija data nova.
 -- A1_telefone_nome (já existia) só precisa entrar no CALL para as 3 que não rodaram.
 -- NÃO MEXE em public.compradores nem em crm.negocio (decisão pendente do Victor).
 -- COMO VOLTAR: 20261017030000_reversao.sql (reverte os lotes posteriores ao marcador e devolve os 4 corpos de 20261017010000). Coluna e CHECK alargado ficam (histórico).
@@ -80,7 +87,7 @@ insert into pessoas.revisao_lote (regras, tamanho_passo, terminou_em, motivo_fim
 values (array[]::text[], 1, now(), 'marcador 20261017030000');
 
 -- a chave continua (ou volta a ficar) DESLIGADA. Ligar: update pessoas.carga_chave set ligada = true, ate = current_date + 7, por = 'victor' where fonte = 'revisao_lote';
-update pessoas.carga_chave set ligada = false, por = 'migration 20261017030000', em = now() where fonte = 'revisao_lote';
+update pessoas.carga_chave set ligada = false, ate = null, por = 'migration 20261017030000', em = now() where fonte = 'revisao_lote';
 
 -- ===================== 2. classificador (só leitura) =====================
 -- acao: mesma | diferente | duplicada | humano. 'mesma' só se EXATAMENTE 1 candidata bate numa regra A e a pessoa só tem esta revisão pendente.
@@ -146,15 +153,19 @@ sin as (
          (n.np is not null and n.np = n.nc and n.np like '% %') nome_igual,
          (coalesce(cardinality(t.tp), 0) >= 2 and coalesce(cardinality(t.tc), 0) >= 2 and t.tp[1] = t.tc[1]
             and (t.tp <@ t.tc or t.tc <@ t.tp)) nome_sub,
+         -- 030000 (pentest): a diferença entre os dois conjuntos de palavras (o que o nome maior tem a mais) traz sufixo de geração
+         -- (pai e filho, avô e neto costumam dividir telefone): a A4 NÃO vale e o par fica para o humano.
+         exists (select 1 from unnest(case when t.tp <@ t.tc then t.tc else t.tp end) w
+                  where w = any(sg.suf) and not (w = any(case when t.tp <@ t.tc then t.tp else t.tc end))) sufixo_geracao,
          (t.tp[1] is not null and t.tp[1] = t.tc[1]) nome_prim,
          (t.tp[1] is not null and t.tc[1] is not null and left(t.tp[1], 1) <> left(t.tc[1], 1)
             and position(t.tp[1] in t.tc[1]) = 0 and position(t.tc[1] in t.tp[1]) = 0
             and public.similarity(t.tp[1], t.tc[1]) < 0.3) prim_dif,
          -- 030000: teste/equipe dos dois lados: pessoas.teste = true, e-mail @advmais.com, ou o nome é de quem a lista de eq nomeia.
          -- Também vale o par em que a pessoa da revisão só tem telefone (sem nome e sem e-mail), o telefone é o mesmo e o candidato é de teste/equipe.
-         (coalesce(ic.teste or exists (select 1 from unnest(ic.emails) em where em like '%@advmais.com%')
+         (coalesce(ic.teste or exists (select 1 from unnest(ic.emails) em where em like '%@advmais.com')
                    or n.nc = any(eq.nomes) or n.nc like any(eq.inicios), false)
-          and coalesce(ip.teste or exists (select 1 from unnest(ip.emails) em where em like '%@advmais.com%')
+          and coalesce(ip.teste or exists (select 1 from unnest(ip.emails) em where em like '%@advmais.com')
                        or n.np = any(eq.nomes) or n.np like any(eq.inicios)
                        or (ip.nome is null and cardinality(ip.emails) = 0 and (ip.fones && ic.fones)), false)) interno_ambos,
          (ip.padrao or ic.padrao) padrao_algum,
@@ -165,6 +176,8 @@ sin as (
    cross join lateral (select pessoas.norm_nome(ip.nome) np, pessoas.norm_nome(ic.nome) nc) n
    cross join lateral (select string_to_array(n.np, ' ') tp, string_to_array(n.nc, ' ') tc) t
    cross join lateral (select array['ARTHUR GALVAO']::text[] nomes, array['IROMAR %', 'ARTHUR GALVAO %']::text[] inicios) eq
+   -- 030000 (pentest): sufixos de geração, em MAIÚSCULAS como pessoas.norm_nome devolve
+   cross join lateral (select array['JUNIOR', 'JR', 'FILHO', 'FILHA', 'NETO', 'NETA', 'SOBRINHO', 'SOBRINHA', 'SEGUNDO', 'TERCEIRO', 'II', 'III']::text[] suf) sg
    cross join lateral (
      select array['gmail.com','hotmail.com','hotmail.com.br','yahoo.com','yahoo.com.br','outlook.com','outlook.com.br',
                   'icloud.com','live.com','msn.com','bol.com.br','uol.com.br','terra.com.br','globo.com','ig.com.br','me.com','mail.com'] prov
@@ -188,7 +201,7 @@ cls as (
               when s.tel and s.nome_igual then 'A1_telefone_nome'
               when s.typo and s.nome_igual then 'A2_email_digitado_errado_nome'
               when s.tel and s.typo and s.nome_prim then 'A3_telefone_email_digitado_errado'
-              when s.tel and s.nome_sub then 'A4_telefone_nome_contido'
+              when s.tel and s.nome_sub and not s.sufixo_geracao then 'A4_telefone_nome_contido'
          end a_regra,
          case when s.doc_dif then 'B1_documento_diferente'
               when s.interno_ambos then 'B5_teste_ou_equipe'
@@ -251,7 +264,7 @@ create or replace function pessoas.revisao_lote_passo(p_lote bigint, p_apos bigi
 returns jsonb
 language plpgsql set search_path to '' as $f$
 declare
-  r record; x record; v jsonb; v_pa jsonb; v_ultimo bigint := p_apos;
+  r record; x record; v jsonb; v_pa jsonb; v_ultimo bigint := p_apos; v_gemea bigint;
   v_ex int := 0; v_m int := 0; v_d int := 0; v_dup int := 0; v_h int := 0; v_fora int := 0; v_f int := 0; v_erro text;
 begin
   if p_lote is null or p_apos is null or p_n is null or p_n not between 1 and 100 or p_regras is null then
@@ -267,11 +280,18 @@ begin
       select jsonb_build_object('id', p.id, 'situacao', p.situacao, 'mesclada_em', p.mesclada_em, 'atualizado_em', p.atualizado_em)
         into v_pa from pessoas.pessoas p where p.id = r.pessoa_id for update;
       if r.acao = 'duplicada' then
-        -- confere de novo, já com a linha travada: ainda existe a pendente de id menor com a mesma pergunta?
-        if x.motivo <> 'email_conflito' or not exists (select 1 from pessoas.revisao y
-                        where y.status = 'pendente' and y.id < x.id and y.motivo = x.motivo and pessoas.atual(y.pessoa_id) = r.pessoa_id
-                          and (select array_agg(distinct pessoas.atual(z) order by pessoas.atual(z)) from unnest(y.candidatos) z)
-                              = (select array_agg(distinct pessoas.atual(z) order by pessoas.atual(z)) from unnest(x.candidatos) z)) then
+        -- confere de novo, já com a linha travada, e trava TAMBÉM a gêmea de id menor (for share): enquanto esta transação não termina, ninguém decide nem
+        -- apaga a gêmea. Gêmea travada por outra sessão (skip locked) ou que já mudou: não apaga (conta como falha, fica para outra rodada).
+        v_gemea := null;
+        if x.motivo = 'email_conflito' then
+          select y.id into v_gemea from pessoas.revisao y
+           where y.status = 'pendente' and y.id < x.id and y.motivo = x.motivo and pessoas.atual(y.pessoa_id) = r.pessoa_id
+             and (select array_agg(distinct pessoas.atual(z) order by pessoas.atual(z)) from unnest(y.candidatos) z)
+                 = (select array_agg(distinct pessoas.atual(z) order by pessoas.atual(z)) from unnest(x.candidatos) z)
+           order by y.id limit 1
+             for share of y skip locked;
+        end if;
+        if v_gemea is null then
           v_f := v_f + 1; continue;
         end if;
         insert into arquivo.pessoas_revisao_lote_item (lote_id, revisao_id, pessoa_id, alvo, acao, regras, rev_antes, pessoa_antes)

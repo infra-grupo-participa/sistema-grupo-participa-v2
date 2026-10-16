@@ -18,7 +18,7 @@ begin
   if n > 0 then
     raise exception '20261017030000: % item(ns) sem reverter. Nada foi trocado; conferir à mão.', n;
   end if;
-  update pessoas.carga_chave set ligada = false, por = 'reversao 20261017030000', em = now() where fonte = 'revisao_lote';
+  update pessoas.carga_chave set ligada = false, ate = null, por = 'reversao 20261017030000', em = now() where fonte = 'revisao_lote';
 end
 $r$;
 
