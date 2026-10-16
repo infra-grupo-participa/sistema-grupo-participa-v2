@@ -6,12 +6,13 @@
 //
 // Recorte dos nós pelo que o BANCO devolve (padrão do Caio, 16/10/2026): `linha` e `no` do conjunto, nunca pelo nome.
 // Onde cada linha cai (decisões documentadas em docs/dashboard-black/README.md):
-//   c1 + distribuicao ........ Assistiu 75%?;  no teaser / manifesto / reels_pago ... Teaser / Manifesto / Reels
+//   c1 + distribuicao ........ Assistiu 75%?;  no teaser / manifesto / reels_pago / cortes ... Teaser / Manifesto / Reels / Cortes
 //   consultoria .............. Convite e Aplicação da consultoria;  iscas ... Criativo e Página da isca
 //   c3 ....................... Captação direta (e Inscrição, pela porta);  remarketing_pagina ... Quem viu e não se cadastrou
 //   lembrete e fake_live ..... Lembrete de cada live (fake live em linhas próprias, separada do lembrete)
 //   remarketing_live ......... Lembrete da live de 03/11;  carrinho ... Live do Método Perfeito
-//   Cortes: o guia não traz campanha nem conjunto de cortes; fica sem dado, com o motivo. pre_captacao: fora de tudo.
+//   Cortes (Victor, 16/10): conjunto com CORTES no nome dentro da campanha de ANTECIPAÇÃO do C1; o banco devolve no = cortes
+//   (20261017040000). Sem conjunto assim no período, o nó mostra Sem dado. pre_captacao: fora de tudo.
 import {
   agregar, cpm, ctr, custoPorVisualizacao, taxa, taxaVideo75,
   type IndiceTrafego, type Taxa,
@@ -79,7 +80,7 @@ export const NOS: readonly DefinicaoNo[] = [
   { id: 'manifesto', kicker: 'C1', titulo: 'Manifesto', sub: ['um capítulo por segunda'], forma: 'caixa', x: 35, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { anuncio: doNo('manifesto'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
   { id: 'teaser', kicker: 'C1', titulo: 'Teaser', sub: ['distribuído separado'], forma: 'caixa', x: 295, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { anuncio: doNo('teaser'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
   { id: 'reels', kicker: 'C1 · orgânico', titulo: 'Reels do Marcio', sub: ['quem consome 75% entra no C2'], forma: 'caixa', x: 555, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { anuncio: doNo('reels_pago'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
-  { id: 'cortes', kicker: 'C1 · novo', titulo: 'Cortes das consultorias', sub: ['4 por live, no YouTube e impulsionados'], forma: 'caixa', destaque: true, x: 815, y: 110, w: 230, h: 120, funis: ['c1'], recorte: null, semFonte: 'O guia do Caio (15/10) não traz campanha nem conjunto de cortes; aguardando o nome com o Caio. Nada é somado aqui enquanto isso.' },
+  { id: 'cortes', kicker: 'C1 · novo', titulo: 'Cortes das consultorias', sub: ['4 por live, no YouTube e impulsionados'], forma: 'caixa', destaque: true, x: 815, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { anuncio: doNo('cortes'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
   { id: 'assistiu-75', kicker: null, titulo: 'Assistiu 75%?', sub: [], forma: 'decisao', x: 450, y: 262, w: 200, h: 112, funis: ['c1'], recorte: { anuncio: daLinha('c1', 'distribuicao'), linha: null, distribuicao: true }, resumo: ['Vídeo 75%', 'Taxa de 75%'] },
   { id: 'segue-c1', kicker: null, titulo: 'segue vendo C1', sub: [], forma: 'pilula', x: 170, y: 298, w: 154, h: 40, funis: ['c1'], recorte: null },
   { id: 'base-da-casa', kicker: null, titulo: 'Base da casa', sub: ['cerca de 189 mil leads'], forma: 'pilula', x: 800, y: 274, w: 240, h: 104, funis: ['c3'], recorte: null, resumo: ['Tamanho da base', 'Já na base e cadastrados'] },
@@ -239,7 +240,7 @@ export function calcularJornada(args: {
   for (const n of NOS) out[n.id] = [];
   const rec = (id: string) => recortarNo(NO.get(id)!, dias, linhas, idx);
 
-  for (const id of ['manifesto', 'teaser', 'reels', 'lembrete', 'lembrete-final']) out[id] = metricasDistribuicao(rec(id).dias);
+  for (const id of ['manifesto', 'teaser', 'reels', 'cortes', 'lembrete', 'lembrete-final']) out[id] = metricasDistribuicao(rec(id).dias);
   // Fake live: linha própria, encaixada no nó do lembrete e mostrada separada (não é C1 nem C2, não soma no lembrete).
   const fake = dias.filter((d) => idx.linhaDoAnuncio(d.anuncioId) === 'fake_live');
   if (fake.length) {

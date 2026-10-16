@@ -34,11 +34,21 @@ describe('jornada', () => {
     expect(valor('live', 'Presença')).toBeNull();
     expect(valor('live', 'Vendas')).toBeNull();
   });
-  it('Cortes sem subtipo CORTES ficam sem dado; assistiu 75% usa o C1 inteiro', () => {
-    expect(mapa.cortes.some((m) => m.rotulo === 'CPL' || m.rotulo === 'Connect rate')).toBe(false);
+  it('Cortes sem conjunto de nó cortes no período ficam sem dado; assistiu 75% usa o C1 inteiro', () => {
     expect(mapa.cortes).toEqual([]);
     expect(valor('assistiu-75', 'Vídeo 75%')).not.toBeNull();
     expect(mapa.lembrete).not.toEqual(mapa.manifesto);
+  });
+  it('Cortes: conjunto que o banco devolve com no = cortes entra no nó, com métricas de distribuição e dentro do Assistiu 75%', () => {
+    const alvo = b.conjuntos.find((c) => c.no === 'reels_pago')!;
+    const bc = { ...b, conjuntos: b.conjuntos.map((c) => (c.id === alvo.id ? { ...c, linha: 'c1' as const, no: 'cortes' as const } : c)) };
+    const ic = indexar(bc);
+    const mc = calcularJornada({ dias: bc.dias, linhas: bc.linhas, linhasDoFunil: bc.linhas, idx: ic, config: CONFIG_BLACK, agora, mensageria: null });
+    const dosCortes = bc.dias.filter((d) => ic.conjuntoDoAnuncio(d.anuncioId)?.id === alvo.id);
+    expect(dosCortes.length).toBeGreaterThan(0);
+    expect(mc.cortes.find((m) => m.rotulo === 'Investimento')?.valor).toBeGreaterThan(0);
+    expect(mc.cortes.some((m) => m.rotulo === 'CPL' || m.rotulo === 'Connect rate')).toBe(false);
+    expect(mc['assistiu-75'].find((m) => m.rotulo === 'Vídeo 75%')?.valor).toBe(mapa['assistiu-75'].find((m) => m.rotulo === 'Vídeo 75%')?.valor);
   });
   it('filtro de funil apaga só os nós de outro funil; cadeia comum nunca apaga', () => {
     expect(noApagado(NO.get('cortes')!, 'iscas')).toBe(true);

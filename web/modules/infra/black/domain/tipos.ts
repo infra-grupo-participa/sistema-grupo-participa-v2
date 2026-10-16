@@ -13,7 +13,7 @@ export type Funil = 'c1' | 'consultoria' | 'iscas' | 'c3';
 export type LinhaBlack = 'c1' | 'distribuicao' | 'lembrete' | 'fake_live' | 'iscas' | 'consultoria' | 'c2' | 'c3'
   | 'remarketing_pagina' | 'remarketing_live' | 'carrinho' | 'pre_captacao';
 /** Peça ou nó do conjunto (campo `no` de dados_black_trafego). */
-export type NoBlack = 'teaser' | 'manifesto' | 'reels_pago' | 'iscas' | 'consultoria' | 'c3' | 'remarketing_pagina'
+export type NoBlack = 'teaser' | 'manifesto' | 'reels_pago' | 'cortes' | 'iscas' | 'consultoria' | 'c3' | 'remarketing_pagina'
   | 'lembrete' | 'fake_live' | 'remarketing_live' | 'carrinho' | 'pre_captacao';
 /** C2 é o agrupamento das portas Consultoria e Iscas no filtro global. */
 export type FiltroFunil = 'todos' | 'c2' | Funil;
@@ -232,7 +232,7 @@ export interface GrupoResumoBlack {
 export const FUNIS: readonly Funil[] = ['c1', 'consultoria', 'iscas', 'c3'];
 export const LINHAS_BLACK: readonly LinhaBlack[] = ['c1', 'distribuicao', 'lembrete', 'fake_live', 'iscas', 'consultoria', 'c2', 'c3',
   'remarketing_pagina', 'remarketing_live', 'carrinho', 'pre_captacao'];
-export const NOS_BLACK: readonly NoBlack[] = ['teaser', 'manifesto', 'reels_pago', 'iscas', 'consultoria', 'c3', 'remarketing_pagina',
+export const NOS_BLACK: readonly NoBlack[] = ['teaser', 'manifesto', 'reels_pago', 'cortes', 'iscas', 'consultoria', 'c3', 'remarketing_pagina',
   'lembrete', 'fake_live', 'remarketing_live', 'carrinho', 'pre_captacao'];
 /** Rótulo de cada linha na tela. */
 export const ROTULO_LINHA: Record<LinhaBlack, string> = {
@@ -242,7 +242,7 @@ export const ROTULO_LINHA: Record<LinhaBlack, string> = {
 };
 /** Rótulo da peça (nó) do conjunto, para as colunas do C1. */
 export const ROTULO_NO: Record<NoBlack, string> = {
-  teaser: 'Teaser', manifesto: 'Manifesto', reels_pago: 'Reels pago', iscas: 'Iscas', consultoria: 'Consultoria', c3: 'C3',
+  teaser: 'Teaser', manifesto: 'Manifesto', reels_pago: 'Reels pago', cortes: 'Cortes', iscas: 'Iscas', consultoria: 'Consultoria', c3: 'C3',
   remarketing_pagina: 'Remarketing da página', lembrete: 'Lembrete', fake_live: 'Fake live', remarketing_live: 'Remarketing da live',
   carrinho: 'Carrinho', pre_captacao: 'Pré-captação',
 };

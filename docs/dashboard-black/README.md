@@ -1280,7 +1280,7 @@ conjunto (`linha`, `no`, `isca`). Fica toda em `domain/linha-black.ts`; `infrast
 
 **Jornada, nó a nó (escolhas minhas, a confirmar com o Victor):**
 - Manifesto, Teaser e Reels do Marcio: anúncios do conjunto com `no` = `manifesto`, `teaser`, `reels_pago` (o Reels mostra só o pago).
-- Cortes das consultorias: **vazio com o motivo escrito** (o guia não traz campanha nem conjunto de cortes; aguardando o Caio). Nada é somado.
+- Cortes das consultorias: **vazio com o motivo escrito** (o guia não traz campanha nem conjunto de cortes; aguardando o Caio). Nada é somado. *(Superado em 16/10: ver "Cortes pelo conjunto" no fim.)*
 - Lembrete de cada live: linha `lembrete`, com a `fake_live` em linhas separadas dentro do mesmo nó.
 - Lembrete da live de 03/11: linha `remarketing_live`. Live do Método Perfeito: linha `carrinho`.
 - "Quem viu e não se cadastrou": linha `remarketing_pagina`. Inscrição: `c3` + porta de inscrição direta.
@@ -1372,3 +1372,18 @@ card de CPL: aba Funil, Iscas deve dar 14,13 e C3 33,27; o cabeçalho deve repet
   segue no card de projeção da captação e na linha da régua.
 - **Como testar:** em `web/`, `npx tsc --noEmit` e `npx vitest run modules/infra/black`; na tela, o card deve mostrar "Meta 15.000"
   e a linha da régua com o mesmo valor do modal no dia de hoje.
+
+
+## Cortes pelo conjunto (16/10/2026)
+
+- **Regra (Victor, 16/10):** os cortes da consultoria entram com a nomenclatura no **conjunto**, dentro da campanha de
+  **ANTECIPAÇÃO do C1**, e o nome do conjunto **contém `CORTES`**. Ainda não há corte rodando; a regra já está aplicada.
+- **Banco:** migration `20261017040000` (`mkt_trafego.linha_black`): conjunto com `CORTES` em campanha de ANTECIPAÇÃO
+  devolve `linha = c1`, `no = cortes`; fase continua a da campanha. Ensaio: 0 diferença nos 257 pares do banco.
+  Detalhe em `infra/supabase/migrations/20261017040000.explain.md`.
+- **Tela:** `NoBlack` ganhou `cortes`. Jornada: o nó "Cortes das consultorias" deixa de ser "sem fonte" e mostra as
+  métricas de distribuição (Investimento, Impressões, CPM, Vídeo 75%, Custo por visualização), ou "Sem dado no período"
+  enquanto não houver conjunto. Modal do C1: coluna "Cortes". Assistiu 75%: já incluía todo o C1, segue igual.
+- **Supera** as linhas antigas que dizem "Cortes exige `subtipo = CORTES`" e "aguardando o nome com o Caio".
+- **Falta:** conferir o nome real do conjunto quando a primeira campanha de cortes subir; "os 4" do remarketing seguem
+  pendentes com o Caio.
