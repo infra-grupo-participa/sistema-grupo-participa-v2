@@ -3,20 +3,30 @@
 // baixo, rótulos de seta, título do painel semanal) são os do fluxograma, sem mudar uma letra; a posição foi
 // redistribuída para caber os números (mesmas colunas, linhas mais altas). Nó sem fonte de dado mostra
 // "Sem dado" com o motivo; nunca zero.
+//
+// Recorte dos nós pelo que o BANCO devolve (padrão do Caio, 16/10/2026): `linha` e `no` do conjunto, nunca pelo nome.
+// Onde cada linha cai (decisões documentadas em docs/dashboard-black/README.md):
+//   c1 + distribuicao ........ Assistiu 75%?;  no teaser / manifesto / reels_pago ... Teaser / Manifesto / Reels
+//   consultoria .............. Convite e Aplicação da consultoria;  iscas ... Criativo e Página da isca
+//   c3 ....................... Captação direta (e Inscrição, pela porta);  remarketing_pagina ... Quem viu e não se cadastrou
+//   lembrete e fake_live ..... Lembrete de cada live (fake live em linhas próprias, separada do lembrete)
+//   remarketing_live ......... Lembrete da live de 03/11;  carrinho ... Live do Método Perfeito
+//   Cortes: o guia não traz campanha nem conjunto de cortes; fica sem dado, com o motivo. pre_captacao: fora de tudo.
 import {
   agregar, cpm, ctr, custoPorVisualizacao, taxa, taxaVideo75,
   type IndiceTrafego, type Taxa,
 } from './metricas';
 import { connectRate, conversaoPagina, cplCaptacao, ingressoGrupoJanela, leadsDoTrafego, leadsPagosUnicos, leadsPessoas } from './numeros';
-import type { Campanha, ConfigBlack, DesempenhoDia, FiltroFunil, Funil, LinhaPerfil, MensageriaBlack, Valor } from './tipos';
+import { linhaDoLead } from './linha-black';
+import type { ConfigBlack, DesempenhoDia, FiltroFunil, Funil, LinhaBlack, LinhaPerfil, MensageriaBlack, NoBlack, Valor } from './tipos';
 
 export type FormatoMetrica = 'int' | 'brl' | 'pct' | 'dec';
 export interface MetricaNo { rotulo: string; valor: Valor; formato: FormatoMetrica; taxa?: Taxa; nota?: string }
 
 export type FormaNo = 'caixa' | 'pilula' | 'decisao';
 export interface RecorteNo {
-  /** Campanhas do nó (o tráfego entra pelos anúncios delas). */
-  campanha: (c: Campanha) => boolean;
+  /** Anúncios do nó (pela linha e pelo nó do CONJUNTO que o banco devolve). */
+  anuncio: (idx: IndiceTrafego, anuncioId: string) => boolean;
   /** Leads do nó. null = o nó não tem lead (distribuição, lembrete). */
   linha: ((l: LinhaPerfil, idx: IndiceTrafego) => boolean) | null;
   /** C1, teaser e lembretes: métricas de distribuição (sem CPL, sem connect rate). */
@@ -49,37 +59,42 @@ export interface RotuloSolto { texto: string; x: number; y: number }
 
 export const VIEWBOX_JORNADA = { largura: 1100, altura: 1900 } as const;
 
-const naFase = (f: Campanha['fase']) => (c: Campanha) => c.fase === f;
-const captacao = (f: Funil) => (c: Campanha) => c.funil === f && c.fase === 'captacao';
-const subtipoC1 = (subtipo: string) => (c: Campanha) => c.etapa === 'C1' && c.subtipo === subtipo;
-const leadDa = (pred: (c: Campanha) => boolean) => (l: LinhaPerfil, idx: IndiceTrafego) => {
-  const c = l.campanhaId ? idx.campanha.get(l.campanhaId) : undefined;
-  return c !== undefined && pred(c);
+const daLinha = (...linhasOk: LinhaBlack[]) => (idx: IndiceTrafego, id: string) => { const l = idx.linhaDoAnuncio(id); return l !== null && linhasOk.includes(l); };
+const doNo = (...nos: NoBlack[]) => (idx: IndiceTrafego, id: string) => { const n = idx.noDoAnuncio(id); return n !== null && nos.includes(n); };
+/**
+ * Linha do cadastro pelo conjunto (ou campanha) do anúncio que o trouxe. Cadastro na campanha mista (`CAPTAÇÃO | ISCAS`)
+ * sem conjunto casado cai pela porta do cadastro; sem anúncio casado, fora de qualquer nó de tráfego.
+ */
+const linhaDoCadastro = (l: LinhaPerfil, idx: IndiceTrafego): LinhaBlack | null => {
+  const x = linhaDoLead(l, idx);
+  if (x === 'c2') return l.funil === 'consultoria' ? 'consultoria' : l.funil === 'iscas' ? 'iscas' : 'c2';
+  return x ?? null;
 };
+const leadDaLinha = (...linhasOk: LinhaBlack[]) => (l: LinhaPerfil, idx: IndiceTrafego) => { const x = linhaDoCadastro(l, idx); return x !== null && linhasOk.includes(x); };
 const RESUMO_CAPTACAO = ['Leads pagos', 'CPL', 'Conversão da página'] as const;
 const RESUMO_DISTRIBUICAO = ['Investimento', 'Impressões', 'Custo por visualização'] as const;
 
 export const NOS: readonly DefinicaoNo[] = [
   { id: 'publico-frio', kicker: null, titulo: 'Público frio', sub: [], forma: 'pilula', x: 430, y: 20, w: 240, h: 46, funis: ['c1'], recorte: null },
-  { id: 'manifesto', kicker: 'C1', titulo: 'Manifesto', sub: ['um capítulo por segunda'], forma: 'caixa', x: 35, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { campanha: subtipoC1('MANIFESTO'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
-  { id: 'teaser', kicker: 'C1', titulo: 'Teaser', sub: ['distribuído separado'], forma: 'caixa', x: 295, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { campanha: subtipoC1('TEASER'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
-  { id: 'reels', kicker: 'C1 · orgânico', titulo: 'Reels do Marcio', sub: ['quem consome 75% entra no C2'], forma: 'caixa', x: 555, y: 110, w: 230, h: 120, funis: ['c1'], recorte: null, semFonte: 'Orgânico: sem fonte no dashboard.' },
-  { id: 'cortes', kicker: 'C1 · novo', titulo: 'Cortes das consultorias', sub: ['4 por live, no YouTube e impulsionados'], forma: 'caixa', destaque: true, x: 815, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { campanha: subtipoC1('CORTES'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
-  { id: 'assistiu-75', kicker: null, titulo: 'Assistiu 75%?', sub: [], forma: 'decisao', x: 450, y: 262, w: 200, h: 112, funis: ['c1'], recorte: { campanha: (c) => c.funil === 'c1', linha: null, distribuicao: true }, resumo: ['Vídeo 75%', 'Taxa de 75%'] },
+  { id: 'manifesto', kicker: 'C1', titulo: 'Manifesto', sub: ['um capítulo por segunda'], forma: 'caixa', x: 35, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { anuncio: doNo('manifesto'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
+  { id: 'teaser', kicker: 'C1', titulo: 'Teaser', sub: ['distribuído separado'], forma: 'caixa', x: 295, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { anuncio: doNo('teaser'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
+  { id: 'reels', kicker: 'C1 · orgânico', titulo: 'Reels do Marcio', sub: ['quem consome 75% entra no C2'], forma: 'caixa', x: 555, y: 110, w: 230, h: 120, funis: ['c1'], recorte: { anuncio: doNo('reels_pago'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
+  { id: 'cortes', kicker: 'C1 · novo', titulo: 'Cortes das consultorias', sub: ['4 por live, no YouTube e impulsionados'], forma: 'caixa', destaque: true, x: 815, y: 110, w: 230, h: 120, funis: ['c1'], recorte: null, semFonte: 'O guia do Caio (15/10) não traz campanha nem conjunto de cortes; aguardando o nome com o Caio. Nada é somado aqui enquanto isso.' },
+  { id: 'assistiu-75', kicker: null, titulo: 'Assistiu 75%?', sub: [], forma: 'decisao', x: 450, y: 262, w: 200, h: 112, funis: ['c1'], recorte: { anuncio: daLinha('c1', 'distribuicao'), linha: null, distribuicao: true }, resumo: ['Vídeo 75%', 'Taxa de 75%'] },
   { id: 'segue-c1', kicker: null, titulo: 'segue vendo C1', sub: [], forma: 'pilula', x: 170, y: 298, w: 154, h: 40, funis: ['c1'], recorte: null },
   { id: 'base-da-casa', kicker: null, titulo: 'Base da casa', sub: ['cerca de 189 mil leads'], forma: 'pilula', x: 800, y: 274, w: 240, h: 104, funis: ['c3'], recorte: null, resumo: ['Tamanho da base', 'Já na base e cadastrados'] },
-  { id: 'convite-consultoria', kicker: 'C2 · novo', titulo: 'Convite para a consultoria', sub: ['criativos a pedir ao Marcio'], forma: 'caixa', destaque: true, x: 70, y: 430, w: 240, h: 120, funis: ['consultoria'], recorte: { campanha: captacao('consultoria'), linha: leadDa(captacao('consultoria')) }, resumo: ['Investimento', 'Cliques', 'CTR'] },
-  { id: 'criativo-isca', kicker: 'C2 · ver links', titulo: 'Criativo de isca', sub: ['Checkup · Futurômetro · Fluxograma'], forma: 'caixa', x: 430, y: 430, w: 240, h: 120, funis: ['iscas'], recorte: { campanha: captacao('iscas'), linha: leadDa(captacao('iscas')) }, resumo: ['Investimento', 'Cliques', 'CTR'] },
-  { id: 'aplicacao-consultoria', kicker: 'Respondi · ver link', titulo: 'Aplicação da consultoria', sub: ['formulário; página ainda não existe'], forma: 'caixa', x: 70, y: 620, w: 240, h: 120, funis: ['consultoria'], recorte: { campanha: captacao('consultoria'), linha: leadDa(captacao('consultoria')) }, resumo: ['Aplicações', 'CPL', 'Conversão da página'] },
-  { id: 'pagina-isca', kicker: 'Página · entrega a isca', titulo: 'Página da isca', sub: ['nome, e-mail e WhatsApp'], forma: 'caixa', x: 430, y: 620, w: 240, h: 120, funis: ['iscas'], recorte: { campanha: captacao('iscas'), linha: leadDa(captacao('iscas')) }, resumo: RESUMO_CAPTACAO },
-  { id: 'captacao-direta', kicker: 'C3 · ver criativos', titulo: 'Captação direta', sub: ['convite direto para o Método Perfeito'], forma: 'caixa', x: 800, y: 620, w: 240, h: 120, funis: ['c3'], recorte: { campanha: captacao('c3'), linha: leadDa(captacao('c3')) }, resumo: RESUMO_CAPTACAO },
-  { id: 'remarketing', kicker: 'Remarketing · C2 e C3', titulo: 'Quem viu e não se cadastrou', sub: ['anúncio curto e direto', 'da isca ou da inscrição,', 'sem conteúdo novo'], forma: 'caixa', destaque: true, x: 70, y: 810, w: 240, h: 150, funis: ['consultoria', 'iscas', 'c3'], recorte: { campanha: naFase('remarketing'), linha: leadDa(naFase('remarketing')) }, resumo: ['Leads pagos', 'CPL'] },
+  { id: 'convite-consultoria', kicker: 'C2 · novo', titulo: 'Convite para a consultoria', sub: ['criativos a pedir ao Marcio'], forma: 'caixa', destaque: true, x: 70, y: 430, w: 240, h: 120, funis: ['consultoria'], recorte: { anuncio: daLinha('consultoria'), linha: leadDaLinha('consultoria') }, resumo: ['Investimento', 'Cliques', 'CTR'] },
+  { id: 'criativo-isca', kicker: 'C2 · ver links', titulo: 'Criativo de isca', sub: ['Checkup · Futurômetro · Fluxograma'], forma: 'caixa', x: 430, y: 430, w: 240, h: 120, funis: ['iscas'], recorte: { anuncio: daLinha('iscas'), linha: leadDaLinha('iscas') }, resumo: ['Investimento', 'Cliques', 'CTR'] },
+  { id: 'aplicacao-consultoria', kicker: 'Respondi · ver link', titulo: 'Aplicação da consultoria', sub: ['formulário; página ainda não existe'], forma: 'caixa', x: 70, y: 620, w: 240, h: 120, funis: ['consultoria'], recorte: { anuncio: daLinha('consultoria'), linha: leadDaLinha('consultoria') }, resumo: ['Aplicações', 'CPL', 'Conversão da página'] },
+  { id: 'pagina-isca', kicker: 'Página · entrega a isca', titulo: 'Página da isca', sub: ['nome, e-mail e WhatsApp'], forma: 'caixa', x: 430, y: 620, w: 240, h: 120, funis: ['iscas'], recorte: { anuncio: daLinha('iscas'), linha: leadDaLinha('iscas') }, resumo: RESUMO_CAPTACAO },
+  { id: 'captacao-direta', kicker: 'C3 · ver criativos', titulo: 'Captação direta', sub: ['convite direto para o Método Perfeito'], forma: 'caixa', x: 800, y: 620, w: 240, h: 120, funis: ['c3'], recorte: { anuncio: daLinha('c3'), linha: leadDaLinha('c3') }, resumo: RESUMO_CAPTACAO },
+  { id: 'remarketing', kicker: 'Remarketing · C2 e C3', titulo: 'Quem viu e não se cadastrou', sub: ['anúncio curto e direto', 'da isca ou da inscrição,', 'sem conteúdo novo'], forma: 'caixa', destaque: true, x: 70, y: 810, w: 240, h: 150, funis: ['consultoria', 'iscas', 'c3'], recorte: { anuncio: daLinha('remarketing_pagina'), linha: leadDaLinha('remarketing_pagina') }, resumo: ['Leads pagos', 'CPL'] },
   { id: 'central', kicker: 'Novo · obrigado de tudo', titulo: 'Central do Método Perfeito', sub: ['live de 03/11 e calendário', 'consultorias, Pilares, teasers e manifestos', 'convite para baixar o app', 'link do grupo'], forma: 'caixa', destaque: true, x: 430, y: 810, w: 240, h: 150, funis: ['consultoria', 'iscas'], recorte: null, semFonte: 'Página nova, ainda sem medição.' },
-  { id: 'inscricao', kicker: 'Página', titulo: 'Inscrição', sub: ['timeholdingbrasil.com.br/metodo-perfeito'], forma: 'caixa', x: 800, y: 810, w: 240, h: 150, funis: ['c3'], recorte: { campanha: captacao('c3'), linha: (l) => l.porta === 'inscricao_direta' }, resumo: ['Inscrições', 'Pagas', 'Fora do tráfego'] },
-  { id: 'lista', kicker: 'Ponto de encontro', titulo: 'Lista do Método Perfeito', sub: ['uma pessoa, uma régua', 'reconhecida por e-mail ou pelos 8 últimos dígitos'], forma: 'caixa', destaque: true, x: 380, y: 1000, w: 340, h: 140, funis: [], recorte: { campanha: () => true, linha: () => true }, resumo: ['Pessoas', 'Cadastros', 'Da meta de 15 mil'] },
-  { id: 'grupos', kicker: 'WhatsApp · ver links', titulo: 'Grupos por profissão', sub: ['em silêncio até 31/10'], forma: 'caixa', x: 70, y: 1190, w: 240, h: 132, funis: [], recorte: { campanha: () => false, linha: () => true }, resumo: ['Em 2h', 'Em 24h', 'Em 48h'] },
+  { id: 'inscricao', kicker: 'Página', titulo: 'Inscrição', sub: ['timeholdingbrasil.com.br/metodo-perfeito'], forma: 'caixa', x: 800, y: 810, w: 240, h: 150, funis: ['c3'], recorte: { anuncio: daLinha('c3'), linha: (l) => l.porta === 'inscricao_direta' }, resumo: ['Inscrições', 'Pagas', 'Fora do tráfego'] },
+  { id: 'lista', kicker: 'Ponto de encontro', titulo: 'Lista do Método Perfeito', sub: ['uma pessoa, uma régua', 'reconhecida por e-mail ou pelos 8 últimos dígitos'], forma: 'caixa', destaque: true, x: 380, y: 1000, w: 340, h: 140, funis: [], recorte: { anuncio: () => true, linha: () => true }, resumo: ['Pessoas', 'Cadastros', 'Da meta de 15 mil'] },
+  { id: 'grupos', kicker: 'WhatsApp · ver links', titulo: 'Grupos por profissão', sub: ['em silêncio até 31/10'], forma: 'caixa', x: 70, y: 1190, w: 240, h: 132, funis: [], recorte: { anuncio: () => false, linha: () => true }, resumo: ['Em 2h', 'Em 24h', 'Em 48h'] },
   { id: 'regua', kicker: 'API · ver mensageria', titulo: 'Régua do aquecimento', sub: ['boas-vindas e convites da semana'], forma: 'caixa', x: 430, y: 1190, w: 240, h: 132, funis: [], recorte: null, semFonte: 'Mensageria por API: sem fonte ligada.', resumo: ['Enviados', 'Entregues', 'Custo'] },
-  { id: 'lembrete', kicker: 'Tráfego', titulo: 'Lembrete de cada live', sub: ['é amanhã · é hoje · ao vivo'], forma: 'caixa', x: 800, y: 1190, w: 240, h: 132, funis: [], recorte: { campanha: (c) => c.fase === 'aquecimento' && c.funil !== 'c1' && c.etapa !== 'C1', linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
+  { id: 'lembrete', kicker: 'Tráfego', titulo: 'Lembrete de cada live', sub: ['é amanhã · é hoje · ao vivo'], forma: 'caixa', x: 800, y: 1190, w: 240, h: 132, funis: [], recorte: { anuncio: daLinha('lembrete'), linha: null, distribuicao: true }, resumo: [...RESUMO_DISTRIBUICAO, 'Fake live · Investimento'] },
   // Ciclo semanal (painel "Toda semana · 13 a 29/10"): sem fonte por etapa nesta versão.
   { id: 'seg', kicker: 'Segunda · API', titulo: 'Consultoria é amanhã', sub: ['e convite para aplicar'], forma: 'caixa', x: 70, y: 1416, w: 210, h: 100, funis: [], recorte: null, semFonte: 'Sem fonte por dia da semana.' },
   { id: 'ter', kicker: 'Terça · 19h30 · YouTube', titulo: 'Consultoria ao vivo', sub: ['a dor da semana em casos', '+ fake live no Insta'], forma: 'caixa', destaque: true, x: 320, y: 1416, w: 210, h: 100, funis: [], recorte: null, semFonte: 'Presença nas lives: sem fonte ainda.' },
@@ -87,8 +102,8 @@ export const NOS: readonly DefinicaoNo[] = [
   { id: 'qui', kicker: 'Quinta · 19h30 · YouTube', titulo: 'Live do Pilar', sub: ['o produto que resolve', '+ fake live no Insta'], forma: 'caixa', destaque: true, x: 820, y: 1416, w: 210, h: 100, funis: [], recorte: null, semFonte: 'Presença nas lives: sem fonte ainda.' },
   // Reta final.
   { id: 'carga', kicker: '01 e 02/11 · Grupo', titulo: 'Carga de mensagens', sub: ['faltam 2 dias · falta 1 dia'], forma: 'caixa', x: 70, y: 1640, w: 240, h: 80, funis: [], recorte: null, semFonte: 'Sem fonte por mensagem do grupo.' },
-  { id: 'lembrete-final', kicker: 'A partir de 27/10 · Tráfego', titulo: 'Lembrete da live de 03/11', sub: ['todo dia até a hora da live'], forma: 'caixa', x: 800, y: 1640, w: 240, h: 80, funis: [], recorte: null, semFonte: 'Sem campanha própria separada do lembrete de cada live.' },
-  { id: 'live', kicker: null, titulo: 'Live do Método Perfeito', sub: ['03/11 · 19h30 · YouTube + fake live no Insta'], forma: 'pilula', destaque: true, x: 400, y: 1760, w: 300, h: 112, funis: [], recorte: { campanha: naFase('live_carrinho'), linha: null, distribuicao: true }, resumo: ['Investimento', 'Presença', 'Vendas'] },
+  { id: 'lembrete-final', kicker: 'A partir de 27/10 · Tráfego', titulo: 'Lembrete da live de 03/11', sub: ['todo dia até a hora da live'], forma: 'caixa', x: 800, y: 1640, w: 240, h: 80, funis: [], recorte: { anuncio: daLinha('remarketing_live'), linha: null, distribuicao: true }, resumo: RESUMO_DISTRIBUICAO },
+  { id: 'live', kicker: null, titulo: 'Live do Método Perfeito', sub: ['03/11 · 19h30 · YouTube + fake live no Insta'], forma: 'pilula', destaque: true, x: 400, y: 1760, w: 300, h: 112, funis: [], recorte: { anuncio: daLinha('carrinho'), linha: null, distribuicao: true }, resumo: ['Investimento', 'Presença', 'Vendas'] },
 ];
 export const NO = new Map(NOS.map((n) => [n.id, n]));
 
@@ -157,7 +172,7 @@ export function recortarNo(n: DefinicaoNo, dias: readonly DesempenhoDia[], linha
   const r = n.recorte;
   const linha = r.linha;
   return {
-    dias: dias.filter((d) => { const c = idx.campanhaDoAnuncio(d.anuncioId); return c !== null && r.campanha(c); }),
+    dias: dias.filter((d) => r.anuncio(idx, d.anuncioId)),
     linhas: linha ? linhas.filter((l) => linha(l, idx)) : [],
   };
 }
@@ -215,8 +230,17 @@ export function calcularJornada(args: {
   for (const n of NOS) out[n.id] = [];
   const rec = (id: string) => recortarNo(NO.get(id)!, dias, linhas, idx);
 
-  for (const id of ['manifesto', 'teaser', 'cortes', 'lembrete']) out[id] = metricasDistribuicao(rec(id).dias);
-  const c1 = dias.filter((d) => { const campanha = idx.campanhaDoAnuncio(d.anuncioId); return campanha?.funil === 'c1' || campanha?.etapa === 'C1'; });
+  for (const id of ['manifesto', 'teaser', 'reels', 'lembrete', 'lembrete-final']) out[id] = metricasDistribuicao(rec(id).dias);
+  // Fake live: linha própria, encaixada no nó do lembrete e mostrada separada (não é C1 nem C2, não soma no lembrete).
+  const fake = dias.filter((d) => idx.linhaDoAnuncio(d.anuncioId) === 'fake_live');
+  if (fake.length) {
+    const a = agregar(fake);
+    out.lembrete = [...out.lembrete,
+      m('Fake live · Investimento', a.gasto, 'brl', { nota: 'Campanhas de live fake (linha fake_live), separadas do lembrete' }),
+      m('Fake live · Impressões', a.impressoes, 'int'),
+      m('Fake live · Custo por visualização', custoPorVisualizacao(a), 'brl', { nota: 'Investimento ÷ ThruPlay' })];
+  }
+  const c1 = rec('assistiu-75').dias;
   if (c1.length) {
     const v75 = taxaVideo75(agregar(c1));
     out['assistiu-75'] = [m('Vídeo 75%', v75.num, 'int', { taxa: v75 }), m('Taxa de 75%', v75.valor, 'pct', { taxa: v75 })];

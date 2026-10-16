@@ -81,6 +81,62 @@ describe('mapeadores das RPCs da Black', () => {
     expect(data.campanhas.map((c) => [c.id, c.funil])).toEqual([['1', 'c1'], ['2', 'c1'], ['3', null], ['4', 'iscas'], ['5', 'c1']]);
     expect(data.campanhas.map((c) => [c.id, c.fase])).toEqual([['1', 'antecipacao'], ['2', 'aquecimento'], ['3', 'captacao'], ['4', 'antecipacao'], ['5', null]]);
   });
+  describe('classificação do banco (linha, fase, no, isca) com nomes do guia do Caio', () => {
+    const ETQ = 'black-friday-2026-10';
+    const camp = (id: string, nome: string, extra: object) =>
+      ({ id, nome, plataforma: 'meta', status: 'ACTIVE', objetivo: 'LEAD', conta: 'c', projeto_id: 1, etapa: null, subtipo: null, conflito: false, ...extra });
+    const cj = (id: string, campanha_id: string, nome: string, extra: object) =>
+      ({ id, campanha_id, nome, status: 'ACTIVE', meta_otimizacao: 'LEAD', ...extra });
+    const resposta = (comLinha: boolean) => ({
+      ...RESPOSTA_TRAFEGO,
+      campanhas: [
+        camp('1', `CF | BF26 | CAPTAÇÃO | ISCAS | FB | PQ | ABO | LEAD | ${ETQ}`, comLinha ? { linha: 'c2', fase: 'captacao' } : {}),
+        camp('2', `CF | BF26 | CAPTAÇÃO | BASE | FB | PQ | ABO | LEAD | ${ETQ}`, comLinha ? { linha: 'c3', fase: 'captacao' } : {}),
+        camp('3', 'BF26 | CPF01 | META | IG | MORNO | ABO | LEAD', comLinha ? { linha: null, fase: null } : {}),
+        camp('4', 'CF | BF26 | ENTRESAFRA | META', comLinha ? { linha: 'pre_captacao', fase: 'pre_captacao' } : {}),
+      ],
+      conjuntos: [
+        cj('11', '1', 'VV C1 | CONSULTORIA', comLinha ? { linha: 'consultoria', no: 'consultoria', isca: 'CONSULTORIA' } : {}),
+        cj('12', '1', 'VV C1 | FUTUROMETRO', comLinha ? { linha: 'iscas', no: 'iscas', isca: 'FUTUROMETRO' } : {}),
+        cj('21', '2', 'C3 | MIX PQ | CONVITE--DIRETO_01', comLinha ? { linha: 'c3', no: 'c3', isca: null } : {}),
+        cj('31', '3', 'C1 | TEASER | LEADS HT', comLinha ? { linha: null, no: null, isca: null } : {}),
+      ],
+      anuncios: [], dias_campanha: [], dias_anuncio: [],
+    });
+
+    it('com `linha`: classifica só pelo que o banco devolve (campanha, conjunto, no, isca e fase)', () => {
+      const { data } = mapearTrafego(resposta(true));
+      expect(data.campanhas.map((c) => [c.id, c.linha, c.fase])).toEqual([
+        ['1', 'c2', 'captacao'], ['2', 'c3', 'captacao'], ['3', null, null], ['4', 'pre_captacao', null],
+      ]);
+      expect(data.campanhas.map((c) => [c.id, c.funil])).toEqual([['1', 'iscas'], ['2', 'c3'], ['3', null], ['4', null]]);
+      expect(data.conjuntos.map((j) => [j.id, j.linha, j.no, j.isca])).toEqual([
+        ['11', 'consultoria', 'consultoria', null], ['12', 'iscas', 'iscas', 'Futurômetro'],
+        ['21', 'c3', 'c3', null], ['31', null, null, null],
+      ]);
+      expect(data.conjuntos.find((j) => j.id === '11')?.iscaBanco).toBe('CONSULTORIA');
+    });
+    it('`linha: null` vira "Sem classificação" e nunca cai no legado, mesmo com nome que o legado reconheceria', () => {
+      const { data } = mapearTrafego(resposta(true));
+      expect(data.campanhas.find((c) => c.id === '3')?.linha).toBeNull();
+      expect(data.conjuntos.find((j) => j.id === '31')?.linha).toBeNull();
+    });
+    it('valor fora do contrato (linha, no) vira null, não é repassado', () => {
+      const { data } = mapearTrafego({ ...resposta(true),
+        campanhas: [camp('9', 'X', { linha: 'inventada', fase: 'qualquer' })],
+        conjuntos: [cj('91', '9', 'Y', { linha: 'inventada', no: 'inventado', isca: 'OUTRA' })],
+      });
+      expect(data.campanhas[0]).toMatchObject({ linha: null, fase: null });
+      expect(data.conjuntos[0]).toMatchObject({ linha: null, no: null, isca: null });
+    });
+    it('sem a chave `linha` (RPC antiga): `linha` fica undefined e o front usa o legado pelo nome e pela etapa', () => {
+      const { data } = mapearTrafego(resposta(false));
+      expect(data.campanhas.every((c) => c.linha === undefined)).toBe(true);
+      expect(data.conjuntos.every((j) => j.linha === undefined && j.no === undefined)).toBe(true);
+      // legado: o último bloco do nome do conjunto ainda dá a isca (só quando a chave não veio)
+      expect(data.conjuntos.find((j) => j.id === '12')?.isca).toBe('Futurômetro');
+    });
+  });
   it('tráfego: link do Gerenciador pela conta da campanha e o id do anúncio; sem id do anúncio = sem link; prévia e miniatura null', () => {
     const { data } = mapearTrafego(RESPOSTA_TRAFEGO);
     const a = data.anuncios.find((x) => x.id === '301'); const b = data.anuncios.find((x) => x.id === '302');

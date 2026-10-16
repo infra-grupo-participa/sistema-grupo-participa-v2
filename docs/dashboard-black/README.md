@@ -1170,3 +1170,84 @@ Black (260) passando, com teste novo para a regra exportada.
 **Complemento (16/10, PR seguinte):** a dica das barras e a linha abaixo do gráfico ainda diziam "Investimento do dia"
 com o total, e o Victor leu isso como o número de captação. Agora as duas mostram "Investimento em captação" (mesma
 regra do card) e "Investimento total"; a legenda das barras virou "Investimento total do dia".
+
+## Banco: classificação pelo padrão do Caio (16/10)
+
+**Situação:** as 3 migrations abaixo estão **aplicadas em produção** (16/10/2026, madrugada UTC), sem commit no momento em que
+isto foi escrito. Detalhe, ensaio e reversão de cada uma em `infra/supabase/migrations/<versão>.explain.md`.
+
+**Função:** `mkt_trafego.linha_black(p_campanha, p_conjunto default null)` devolve `linha, etapa, fase, no, isca` pelo nome
+(migration `20261016001000`). A regra mora só aqui; o front não precisa repetir a leitura do nome.
+- Linhas: `c1`, `distribuicao`, `lembrete`, `fake_live`, `iscas`, `consultoria`, `c2` (só campanha), `c3`, `remarketing_pagina`,
+  `remarketing_live`, `carrinho`, `pre_captacao`, ou nulo.
+- Fases: `antecipacao`, `aquecimento`, `captacao`, `distribuicao`, `remarketing`, `live_carrinho`, `pre_captacao`.
+- Etapa: `c1` e `distribuicao` dão C1; `iscas`, `consultoria` e `c2` dão C2; `c3` dá C3.
+- Captação = linha em `iscas`, `consultoria`, `c2`, `c3`, `remarketing_pagina`. **Pré-captação fica fora da captação** (decisão do Victor, 16/10).
+
+**Campos novos em `public.dados_black_trafego`** (migration `20261016001100`, aditivo, nenhuma chave antiga mudou, sem GRANT novo):
+campanha ganha `linha` e `fase`; conjunto ganha `linha`, `no` e `isca`.
+
+**Fases novas** (migration `20261016001200`): objetivo `CAPTAÇÃO` em `mkt.campanha_objetivos`; fases `distribuicao` e
+`pre_captacao` em `mkt_trafego.fases`; `CAPTAÇÃO` → `captacao` e `DISTRIBUIÇÃO` → `distribuicao` em `mkt_trafego.objetivo_fase`.
+Efeito colateral: as duas fases aparecem na tela de Tráfego de todos os projetos. A leitura das campanhas só é regravada na próxima coleta.
+
+**Conferido em produção (01/09 a 14/10, BRL, tabelas `mkt_trafego` e `linha_black`)** contra a seção 2 do guia do Caio:
+Antecipação R$ 15.110,20 (`c1`/antecipacao) · Aquecimento R$ 4.551,70 (+ fake live R$ 87,16) · Captação R$ 1.195,50
+(C2 R$ 194,59 + C3 R$ 1.000,91; o guia: 194,59 + 665,75 + 335,16) · Pré-captação R$ 14.685,01 · total R$ 35.629,57. Todos iguais ao guia.
+Nenhuma campanha com gasto sem `linha`; nenhum conjunto sem `linha` e `no` (108 na tabela, 105 na RPC do período).
+`dados.black_leads` igual antes e depois (mesmo hash por porta, com corte de horário).
+
+**Recarga do Meta (uma chamada, 01/09 a 15/10):** trouxe o desempenho das 3 campanhas CPF01 (pré-captação de R$ 638,59 para
+R$ 14.685,01), mas a fase de conjuntos terminou em `sem_tempo` e **os nomes dos conjuntos continuam os antigos**
+(14 `PQ | 00 |` e 14 `PQ | EP01 |`). A classificação não depende disso (esses conjuntos caem em `c1`/`manifesto` e `c1`/`teaser`).
+Se os nomes novos importarem, o próximo passo é decisão do Victor: nova recarga em janelas menores.
+
+**Custo:** a RPC passou de ~36 ms para ~50 ms (12 execuções) por causa de ~120 chamadas à função; depois da recarga, com o dado novo,
+fica em ~85 ms (`explain (analyze)`). Sem índice novo.
+
+**Como testar:** `select * from mkt_trafego.linha_black('CF | BF26 | CAPTAÇÃO | ISCAS | FB | PQ | ABO | LEAD | b');` deve dar `c2` (campanha de isca é c2; `iscas` só no conjunto),
+etapa C2, fase `captacao`. Pela RPC (usuário com acesso): `public.dados_black_trafego('black-friday-2026-10', '2026-09-01', '2026-10-15')`
+traz `linha` em todas as campanhas.
+
+**Como reverter (nesta ordem):** `20261016001200_reversao.sql`, `20261016001100_reversao.sql`, `20261016001000_reversao.sql`;
+depois `delete from supabase_migrations.schema_migrations where version in ('20261016001200','20261016001100','20261016001000');`.
+A reversão da `001000` recusa rodar se outra função ainda citar `linha_black`; a da `001200` recusa se alguém já usou a fase.
+
+## Front: classificação pelo padrão do Caio (16/10)
+
+**Situação:** implementado em `web/modules/infra/black/`, **não publicado e sem commit** neste momento. Depende das migrations da seção
+"Banco" acima (`linha`, `fase`, `no`, `isca` em `public.dados_black_trafego`). Sem a chave `linha` na resposta, o front cai no legado (abaixo).
+
+**O que mudou.** A classificação do tráfego deixou de ser deduzida pelo nome no front: vem do banco, por campanha (`linha`, `fase`) e por
+conjunto (`linha`, `no`, `isca`). Fica toda em `domain/linha-black.ts`; `infrastructure/fonte-supabase.ts` só mapeia os campos
+(valor fora do contrato vira `null` = "Sem classificação", nunca é repassado).
+- **Captação = um predicado só**, `contaNoInvestimentoCaptacao` (linhas `iscas`, `consultoria`, `c2`, `c3`, `remarketing_pagina`), usado
+  no investimento, no CPL, nos cards, na meta, na projeção e no Histórico. Remarketing da página entra; **pré-captação fica fora** (decisão do Victor, 16/10).
+  O filtro C2 da meta deixou de somar C3.
+- **C2 = consultoria + iscas.** O funil Consultoria sai do **conjunto** (`VV C1 | CONSULTORIA`) e Iscas é o resto de `CAPTAÇÃO | ISCAS`.
+  Vale no filtro global, nos funis lado a lado, no CPL por etapa, no modal, em alcance e frequência. A campanha mista (`c2`) usa o gasto
+  diário por conjunto (só existe desde 04/10); a diferença conhecida contra o gasto da campanha é de ~R$ 42,48 de ~R$ 25,2k.
+  Alcance e frequência da campanha mista são da campanha inteira (o banco não separa por conjunto).
+- **C1 = teaser + manifesto** (`c1`); a distribuição (PF) é separada. `fake_live` não é C1 nem C2.
+- **Barras por fase** ganham "Sem fase" e "Sem classificação" (campanha com `linha` nula).
+- **Alertas de nomenclatura** (R1 a R12) leem por valor e pelo `no`/`isca` do banco; aceitam nome antigo de conjunto (`PQ | 00 |`, `PQ | EP01 |`, `MIX PQ`).
+  R2 passou a exigir menos de 3 campos; textos de R5 e R6 reescritos. Corrigidos: `isca` sempre nula, lista de Iscas que exigia funil c3 e o C3 inteiro em "fora" no modal.
+- **Criativos:** custo por visualização para `c1`, `distribuicao`, `lembrete` e `fake_live`; CPL para captação.
+
+**Jornada, nó a nó (escolhas minhas, a confirmar com o Victor):**
+- Manifesto, Teaser e Reels do Marcio: anúncios do conjunto com `no` = `manifesto`, `teaser`, `reels_pago` (o Reels mostra só o pago).
+- Cortes das consultorias: **vazio com o motivo escrito** (o guia não traz campanha nem conjunto de cortes; aguardando o Caio). Nada é somado.
+- Lembrete de cada live: linha `lembrete`, com a `fake_live` em linhas separadas dentro do mesmo nó.
+- Lembrete da live de 03/11: linha `remarketing_live`. Live do Método Perfeito: linha `carrinho`.
+- "Quem viu e não se cadastrou": linha `remarketing_pagina`. Inscrição: `c3` + porta de inscrição direta.
+- Rótulos de peça (`ROTULO_NO`) foram escritos por mim a partir do guia; rótulo de campanha e conjunto é sempre a string da fonte.
+
+**Legado.** Sem a chave `linha` na resposta (RPC antiga), `linhaLegadaDaCampanha` classifica pelo funil/fase/nome como antes; com a chave
+presente e `null`, é "Sem classificação" e **nunca** cai no legado. O legado some quando a migration estiver em todos os ambientes.
+
+**Como testar.** Em `web/`: `npx tsc --noEmit`, `npx vitest run` (286 arquivos, 3187 testes) e `npm run build`. Os testes usam nomes reais do guia;
+`fonte-supabase.test.ts` passa resposta crua da RPC por `mapearTrafego`, com e sem `linha`. Com o banco aplicado: abrir `/infra/dashboards/csm/[chave]` (a chave do dashboard da Black, `black-friday-2026-10`), conferir que o
+investimento de captação soma só `iscas`, `consultoria`, `c2`, `c3`, `remarketing_pagina` e que a soma da lista de campanhas de cada etapa fecha com o total da linha.
+
+**Falta.** Conferir na tela com dado real (a RPC só dá acesso a `authenticated`); nome dos cortes com o Caio; nome real da campanha de
+remarketing da página (sobe em 16/10; os testes usam o padrão do guia); fixtures de demonstração seguem fictícias.

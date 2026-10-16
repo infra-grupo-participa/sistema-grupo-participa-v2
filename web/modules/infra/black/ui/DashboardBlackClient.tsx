@@ -175,7 +175,8 @@ export function DashboardBlackClient({ chave, titulo, relogio, recorteInicial, i
     const noPeriodo = (l: LinhaPerfil) => { const d = diaDe(l.criadoEm); return d >= periodo.de && d <= periodo.ate; };
     const linhasPeriodoSemFiltro = linhasTodas.filter((l) => { const d = diaDe(l.criadoEm); return d >= periodo.de && d <= periodo.ate; });
     const filtro = { funil: recorte.funil, canal: recorte.canal };
-    const linhas = filtrarLinhas(linhasPeriodoSemFiltro, filtro);
+    // A classificação (linha do conjunto) não depende do mapeamento de páginas: o índice da base serve ao filtro dos cadastros.
+    const linhas = filtrarLinhas(linhasPeriodoSemFiltro, filtro, indexar(tBase));
     // A atribuição de página precisa respeitar o período e os filtros atuais: sem lead pago no recorte não se mede página.
     const t = mapearPaginasPorLeadsPagos(tBase, linhas);
     const tPeriodo = mapearPaginasPorLeadsPagos(trafegoPeriodo.data ?? tBase, linhas);

@@ -20,6 +20,8 @@ import {
 } from '../domain/lives';
 import type { LinhaStudio } from '../domain/lives-studio';
 import { ehC1PeloNome, faseDoNome } from '../domain/fase-campanha';
+import { funilDaLinha, iscaDoBanco, lerLinha, lerNo } from '../domain/linha-black';
+import { iscaDoNomeConjunto } from '../domain/ritmo';
 import {
   FASES, ISCAS,
   type Anuncio, type Campanha, type ConfigBlack, type Conjunto, type DesempenhoDia, type EtapaCampanha, type Fase, type Funil,
@@ -181,6 +183,9 @@ export function funilDaEtapa(etapa: EtapaCampanha | null, subtipo: string | null
 
 const etapaDe = (v: unknown): EtapaCampanha | null => (v === 'C1' || v === 'C2' || v === 'C3' ? v : null);
 
+/** Fase do banco (campanha.fase). `pre_captacao` e valor desconhecido = sem fase (a linha `pre_captacao` já diz o que é). */
+const faseDoBanco = (v: unknown): Fase | null => (typeof v === 'string' && (FASES as readonly string[]).includes(v) ? (v as Fase) : null);
+
 export const TRAFEGO_VAZIO: TrafegoBlack = { campanhas: [], conjuntos: [], anuncios: [], paginas: [], dias: [], totais: [], coletadoEm: null };
 
 export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: boolean } {
@@ -197,9 +202,13 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
     const coleta = objeto(c.coleta);
     const estadoColeta = coleta?.estado;
     const estadosValidos: EstadoColetaCampanha[] = ['atual', 'falha_recente', 'velha', 'sem_coleta'];
+    // Classificação só do banco: `linha` e `fase`. Campo AUSENTE (RPC antiga) = legado pelo nome, só para o front subir
+    // antes do banco; campo presente com null = "Sem classificação" (nunca cai no legado).
+    const linha = 'linha' in c ? lerLinha(c.linha) : undefined;
     campanhas.push({
-      id, nome, canal: 'meta', funil: funilDaEtapa(etapa, subtipo) ?? (etapa === null && ehC1PeloNome(nome) ? 'c1' : null),
-      fase: faseDoNome(nome), etapa, subtipo, conflito: booleano(c.conflito), idExterno: texto(c.campanha_externa),
+      id, nome, canal: 'meta', linha,
+      funil: linha !== undefined ? funilDaLinha(linha) : funilDaEtapa(etapa, subtipo) ?? (etapa === null && ehC1PeloNome(nome) ? 'c1' : null),
+      fase: 'fase' in c ? faseDoBanco(c.fase) : faseDoNome(nome), etapa, subtipo, conflito: booleano(c.conflito), idExterno: texto(c.campanha_externa),
       primeiraVistaEm: texto(c.primeira_vista_em),
       coleta: coleta && estadosValidos.includes(estadoColeta as EstadoColetaCampanha) ? {
         estado: estadoColeta as EstadoColetaCampanha, ultimaOkEm: texto(coleta.ultima_ok_em),
@@ -210,7 +219,14 @@ export function mapearTrafego(cru: unknown): { data: TrafegoBlack; semDado: bool
   }
   const conjuntos: Conjunto[] = linhas(r.conjuntos).flatMap((j) => {
     const id = texto(j.id); const campanhaId = texto(j.campanha_id); const nome = texto(j.nome);
-    return id && campanhaId && nome ? [{ id, campanhaId, nome, isca: null, conjuntoC3: null, idExterno: texto(j.conjunto_externa) }] : [];
+    if (!id || !campanhaId || !nome) return [];
+    return [{
+      id, campanhaId, nome, conjuntoC3: null, iscaBanco: texto(j.isca),
+      // Isca: o que o banco devolve. RPC antiga (sem `linha`) não trazia o campo: só aí vale o último bloco do nome (legado).
+      isca: iscaDoBanco(texto(j.isca)) ?? ('linha' in j ? null : (iscaDoNomeConjunto(nome) as Conjunto['isca'])),
+      linha: 'linha' in j ? lerLinha(j.linha) : undefined, no: 'no' in j ? lerNo(j.no) : undefined,
+      idExterno: texto(j.conjunto_externa),
+    }];
   });
   const campanhaDoConjunto = new Map(conjuntos.map((j) => [j.id, j.campanhaId]));
   const anuncios: Anuncio[] = linhas(r.anuncios).flatMap((a) => {
@@ -364,7 +380,7 @@ export function mapearPerfil(cru: unknown): { data: LinhaPerfil[]; semDado: bool
     const leadId = texto(x.lead_id); const pessoaId = texto(x.pessoa_id); const criadoEm = texto(x.criado_em);
     if (!leadId || !pessoaId || !criadoEm) return [];
     const porta = PORTAS.includes(x.porta as Porta) ? (x.porta as Porta) : null;
-    const isca = ISCAS.includes(x.isca as Isca) ? (x.isca as Isca) : null;
+    const isca = ISCAS.includes(x.isca as Isca) ? (x.isca as Isca) : iscaDoBanco(texto(x.isca));
     const canal = x.canal === 'meta' || x.canal === 'google' ? x.canal : null;
     const profissao = PROFISSOES.includes(x.profissao as Profissao) ? (x.profissao as Profissao) : null;
     const campos = objeto(x.campos);

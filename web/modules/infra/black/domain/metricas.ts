@@ -1,7 +1,12 @@
 // Métricas do dashboard da Black. Regra única: razão = soma sobre soma, numerador e denominador no MESMO
 // recorte e só nas linhas em que os dois são conhecidos. Sem dado (null) nunca vira zero.
-import { FASES, ISCAS, PROFISSOES_MQL } from './tipos';
-import type { Anuncio, Campanha, Conjunto, DesempenhoDia, Fase, FiltroCanal, FiltroFunil, Funil, LinhaPerfil, ReguaCpl, TrafegoBlack, Valor } from './tipos';
+import {
+  leadNoFunil, linhaDaCampanha, linhaDoConjunto, linhaDoLead, linhaEhCaptacao, linhaNoFunil, noDoConjunto,
+} from './linha-black';
+import { PROFISSOES_MQL } from './tipos';
+import type {
+  Anuncio, Campanha, Conjunto, DesempenhoDia, FiltroCanal, FiltroFunil, Funil, LinhaBlack, LinhaPerfil, NoBlack, ReguaCpl, TrafegoBlack, Valor,
+} from './tipos';
 
 /** Divisão segura: null ou zero no denominador = null (sem dado), null no numerador = null. */
 export function dividir(num: Valor, den: Valor): Valor {
@@ -21,7 +26,7 @@ export function somar(valores: readonly Valor[]): Soma {
 export interface Taxa { valor: Valor; num: Valor; den: Valor; nota: string | null }
 export const taxa = (num: Valor, den: Valor, nota: string | null = null): Taxa => ({ valor: dividir(num, den), num, den, nota });
 
-/** Funis da captação: só eles têm view de página, connect rate e conversão da página. O C1 é distribuição. */
+/** Funis das colunas da tela (Consultoria, Iscas e C3). Quem decide o que é captação é a LINHA (linha-black.ts), não o funil. */
 export const FUNIS_CAPTACAO: readonly Funil[] = ['consultoria', 'iscas', 'c3'];
 export const ehCaptacao = (f: Funil | null | undefined) => f === 'consultoria' || f === 'iscas' || f === 'c3';
 
@@ -33,6 +38,12 @@ export interface IndiceTrafego {
   /** anúncio → campanha (pelo conjunto). */
   campanhaDoAnuncio: (anuncioId: string) => Campanha | null;
   conjuntoDoAnuncio: (anuncioId: string) => Conjunto | null;
+  /** Linha do banco do anúncio (a do conjunto; no `c2` o conjunto separa iscas de consultoria). null = Sem classificação. */
+  linhaDoAnuncio: (anuncioId: string) => LinhaBlack | null;
+  linhaDoConjuntoPorId: (conjuntoId: string) => LinhaBlack | null;
+  noDoAnuncio: (anuncioId: string) => NoBlack | null;
+  /** O anúncio conta nas métricas de captação (Iscas, Consultoria, C3 e remarketing da página; pré-captação fora). */
+  anuncioEhCaptacao: (anuncioId: string) => boolean;
 }
 export function indexar(t: Pick<TrafegoBlack, 'campanhas' | 'conjuntos' | 'anuncios'>): IndiceTrafego {
   const campanha = new Map(t.campanhas.map((c) => [c.id, c]));
@@ -40,7 +51,22 @@ export function indexar(t: Pick<TrafegoBlack, 'campanhas' | 'conjuntos' | 'anunc
   const anuncio = new Map(t.anuncios.map((a) => [a.id, a]));
   const conjuntoDoAnuncio = (id: string) => { const a = anuncio.get(id); return a ? conjunto.get(a.conjuntoId) ?? null : null; };
   const campanhaDoAnuncio = (id: string) => { const c = conjuntoDoAnuncio(id); return c ? campanha.get(c.campanhaId) ?? null : null; };
-  return { campanha, conjunto, anuncio, campanhaDoAnuncio, conjuntoDoAnuncio };
+  const linhaDoAnuncio = (id: string): LinhaBlack | null => {
+    const cj = conjuntoDoAnuncio(id);
+    return cj ? linhaDoConjunto(cj, campanha.get(cj.campanhaId)) : null;
+  };
+  const linhaDoConjuntoPorId = (id: string): LinhaBlack | null => {
+    const cj = conjunto.get(id);
+    return cj ? linhaDoConjunto(cj, campanha.get(cj.campanhaId)) : null;
+  };
+  const noDoAnuncio = (id: string): NoBlack | null => {
+    const cj = conjuntoDoAnuncio(id);
+    return cj ? noDoConjunto(cj, campanha.get(cj.campanhaId)) : null;
+  };
+  return {
+    campanha, conjunto, anuncio, campanhaDoAnuncio, conjuntoDoAnuncio, linhaDoAnuncio, linhaDoConjuntoPorId, noDoAnuncio,
+    anuncioEhCaptacao: (id: string) => linhaEhCaptacao(linhaDoAnuncio(id)),
+  };
 }
 
 // ─── Agregado de desempenho ────────────────────────────────────────────────────────────────────────────────
@@ -85,12 +111,13 @@ export const custoPorVisualizacao = (a: Agregado): Valor => dividir(a.gasto, a.t
 export const taxaVideo75 = (a: Agregado): Taxa => taxa(a.p75.valor, a.p75.valor === null ? null : a.impressoesComVideo);
 
 /**
- * Connect rate = Σ LPV ÷ Σ cliques no link, SÓ consultoria, iscas e C3, só nas linhas com as duas métricas.
- * O C1 nunca entra (distribuição, sem view de página). Linha sem LPV (ex.: Google) fica fora e vira nota.
+ * Connect rate = Σ LPV ÷ Σ cliques no link, só nos anúncios de captação (predicado único: iscas, consultoria, C3 e
+ * remarketing da página), só nas linhas com as duas métricas. O C1, o lembrete e a fake live nunca entram (distribuição,
+ * sem view de página). Linha sem LPV (ex.: Google) fica fora e vira nota.
  */
 export function connectRate(dias: readonly DesempenhoDia[], idx: IndiceTrafego): Taxa {
-  const cap = dias.filter((d) => ehCaptacao(idx.campanhaDoAnuncio(d.anuncioId)?.funil));
-  if (cap.length === 0) return taxa(null, null, 'Só existe em C2 e C3 (o C1 é distribuição).');
+  const cap = dias.filter((d) => idx.anuncioEhCaptacao(d.anuncioId));
+  if (cap.length === 0) return taxa(null, null, 'Só existe em captação (o C1 é distribuição).');
   const a = agregar(cap);
   const fora = cap.length - a.parLpv.linhas;
   const nota = fora > 0 ? `${fora} linha(s) sem view de página ficaram fora da conta (Google sem LPV).` : null;
@@ -101,14 +128,14 @@ export function connectRate(dias: readonly DesempenhoDia[], idx: IndiceTrafego):
 export const ehPago = (l: LinhaPerfil) => l.origem === 'pago';
 
 /**
- * Conversão da página = inscrições pagas ÷ Σ LPV, mesma regra do connect rate: só anúncios de C2/C3 que têm LPV
+ * Conversão da página = inscrições pagas ÷ Σ LPV, mesma regra do connect rate: só anúncios de captação que têm LPV
  * conhecida no recorte; as inscrições contadas são as desses mesmos anúncios.
  */
 export function conversaoPagina(dias: readonly DesempenhoDia[], leads: readonly LinhaPerfil[], idx: IndiceTrafego): Taxa {
   const comLpv = new Set<string>();
   let lpv = 0;
   for (const d of dias) {
-    if (!ehCaptacao(idx.campanhaDoAnuncio(d.anuncioId)?.funil) || d.landingPageViews === null) continue;
+    if (!idx.anuncioEhCaptacao(d.anuncioId) || d.landingPageViews === null) continue;
     comLpv.add(d.anuncioId); lpv += d.landingPageViews;
   }
   if (comLpv.size === 0) return taxa(null, null, 'Sem view de página no recorte.');
@@ -205,31 +232,22 @@ export const pessoasUnicas = (linhas: readonly LinhaPerfil[]) => new Set(linhas.
 // ─── Recorte por funil e canal, e CPL por etapa ────────────────────────────────────────────────────────────
 export interface FiltroBase { funil: FiltroFunil; canal: FiltroCanal }
 
-/** C2 é composto pelas portas classificadas como Consultoria e Iscas. */
-export function funilIncluido(filtro: FiltroFunil, funil: Funil | null | undefined): boolean {
-  return filtro === 'todos' || (filtro === 'c2' ? funil === 'consultoria' || funil === 'iscas' : funil === filtro);
-}
-
-/** A campanha da Entresafra não participa de nenhum gasto ou métrica de tráfego deste dashboard. */
-export function ehEntresafraCampanha(c: Campanha | null | undefined): boolean {
-  return !!c && (c.subtipo?.toLocaleUpperCase('pt-BR') === 'ENTRESAFRA' || /\bENTRESAFRA\b/i.test(c.nome));
-}
-
-/** Linhas de desempenho do funil e do canal escolhidos (pela campanha do anúncio). */
+/** Desempenho do funil e do canal escolhidos, pela LINHA do conjunto do anúncio (C2 = consultoria + iscas). Pré-captação sai sempre. */
 export function filtrarDias(dias: readonly DesempenhoDia[], idx: IndiceTrafego, f: FiltroBase): DesempenhoDia[] {
   return dias.filter((d) => {
     const c = idx.campanhaDoAnuncio(d.anuncioId);
-    if (!c || ehEntresafraCampanha(c)) return false;
-    return funilIncluido(f.funil, c.funil) && (f.canal === 'todos' || c.canal === f.canal);
+    if (!c) return false;
+    return linhaNoFunil(f.funil, idx.linhaDoAnuncio(d.anuncioId)) && (f.canal === 'todos' || c.canal === f.canal);
   });
 }
 
-/** Cadastros do funil e do canal. Com canal escolhido, quem não veio de tráfego (canal null) sai. */
-export function filtrarLinhas(linhas: readonly LinhaPerfil[], f: FiltroBase): LinhaPerfil[] {
+/**
+ * Cadastros do funil e do canal. Com `idx`, o cadastro que casou com um anúncio entra pela LINHA do conjunto dele (a mesma
+ * dos dias de tráfego); sem anúncio casado vale a porta. Com canal escolhido, quem não veio de tráfego (canal null) sai.
+ */
+export function filtrarLinhas(linhas: readonly LinhaPerfil[], f: FiltroBase, idx: IndiceTrafego): LinhaPerfil[] {
   if (f.funil === 'todos' && f.canal === 'todos') return [...linhas];
-  return linhas.filter((l) => {
-    return funilIncluido(f.funil, l.funil) && (f.canal === 'todos' || l.canal === f.canal);
-  });
+  return linhas.filter((l) => leadNoFunil(f.funil, l, idx) && (f.canal === 'todos' || l.canal === f.canal));
 }
 
 export const gastoDe = (dias: readonly DesempenhoDia[]) => dias.reduce((s, d) => s + d.gasto, 0);
@@ -242,104 +260,125 @@ export function cplDo(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerf
   return { gasto, leadsPagos, valor: cpl(gasto, leadsPagos) };
 }
 
-/** Linhas atribuídas às campanhas elegíveis de captação C2/C3, no mesmo recorte de funil/canal do CPL. */
-export function linhasCaptacao(linhas: readonly LinhaPerfil[], idx: IndiceTrafego,
-  filtro: FiltroBase = { funil: 'todos', canal: 'todos' }): LinhaPerfil[] {
-  const elegivel = (c: Campanha | null) => c !== null && !ehEntresafraCampanha(c) && c.fase !== 'remarketing'
-    && !/REMARKETING/i.test(c.nome)
-    && (c.etapa === 'C2' || c.etapa === 'C3' || (c.etapa === undefined && c.fase === 'captacao' && ehCaptacao(c.funil)));
-  const passaFunil = (c: Campanha) => funilIncluido(filtro.funil, c.funil)
-    || (filtro.funil === 'iscas' && c.funil === 'c3' && c.subtipo === 'ISCA');
-  const campanhas = new Set([...idx.campanha.values()].filter((c) => elegivel(c) && passaFunil(c)
-    && (filtro.canal === 'todos' || c.canal === filtro.canal)).map((c) => c.id));
-  return linhas.filter((l) => l.pagina !== 'consultoria_respondi' && l.campanhaId !== null && campanhas.has(l.campanhaId));
+/**
+ * Gasto de UMA campanha somando os anúncios cujo conjunto está na linha. É o único jeito de separar consultoria de
+ * iscas dentro da campanha `c2`; só existe desde `anuncioDesde` (dias por anúncio). null = sem linha de anúncio.
+ */
+export function gastoCampanhaPorConjunto(dias: readonly DesempenhoDia[], idx: IndiceTrafego, campanhaId: string,
+  pertence: (l: LinhaBlack | null) => boolean = () => true): Valor {
+  let soma = 0; let k = 0;
+  for (const d of dias) {
+    if (idx.campanhaDoAnuncio(d.anuncioId)?.id !== campanhaId || !pertence(idx.linhaDoAnuncio(d.anuncioId))) continue;
+    soma += d.gasto; k += 1;
+  }
+  return k === 0 ? null : soma;
 }
 
-/** CPL geral: campanhas de C2/C3 em captação, sem remarketing, e só leads pagos atribuídos a elas. */
+/**
+ * Gasto das campanhas de uma linha. Campanha inteira na linha: gasto da campanha (dias_campanha, desde 01/09).
+ * Campanha `c2` diante de uma linha só (Consultoria ou Iscas): soma dos anúncios do conjunto (desde `anuncioDesde`).
+ * Diante das duas (C2, Todos, captação): gasto da campanha. Sem gasto conhecido da campanha, ela fica fora da soma.
+ * `porCampanha` guarda o que entrou, para a lista de campanhas da etapa fechar com o total.
+ */
+export function gastoDasLinhas(dias: readonly DesempenhoDia[], gastoCampanhas: readonly { campanhaId: string; gasto: number }[] | undefined,
+  idx: IndiceTrafego, pertence: (l: LinhaBlack | null) => boolean, aceita: (c: Campanha) => boolean = () => true):
+  { gasto: Valor; porCampanha: Map<string, number> } {
+  const doBanco = new Map((gastoCampanhas ?? []).map((x) => [x.campanhaId, x.gasto]));
+  const porCampanha = new Map<string, number>();
+  for (const c of idx.campanha.values()) {
+    if (!aceita(c)) continue;
+    const lc = linhaDaCampanha(c);
+    let g: Valor;
+    if (lc === 'c2' && !(pertence('iscas') && pertence('consultoria'))) {
+      if (!pertence('iscas') && !pertence('consultoria')) continue;
+      g = gastoCampanhaPorConjunto(dias, idx, c.id, pertence);
+    } else if (lc === 'c2' || pertence(lc)) {
+      g = gastoCampanhas ? doBanco.get(c.id) ?? null : gastoCampanhaPorConjunto(dias, idx, c.id);
+    } else continue;
+    if (g !== null) porCampanha.set(c.id, g);
+  }
+  const gasto = porCampanha.size ? [...porCampanha.values()].reduce((s, x) => s + x, 0) : null;
+  return { gasto, porCampanha };
+}
+
+/**
+ * Cadastros atribuídos a campanhas de captação (predicado único: iscas, consultoria, C3 e remarketing da página; pré-captação
+ * fora), no mesmo recorte de funil e canal do CPL. O cadastro entra pela linha do CONJUNTO do anúncio que o trouxe.
+ * Resposta da consultoria (pagina consultoria_respondi) não é cadastro novo e fica fora.
+ */
+export function linhasCaptacao(linhas: readonly LinhaPerfil[], idx: IndiceTrafego,
+  filtro: FiltroBase = { funil: 'todos', canal: 'todos' }): LinhaPerfil[] {
+  return linhas.filter((l) => {
+    if (l.pagina === 'consultoria_respondi') return false;
+    const linha = linhaDoLead(l, idx);
+    if (linha === undefined || !linhaEhCaptacao(linha) || !linhaNoFunil(filtro.funil, linha)) return false;
+    const cj = l.conjuntoId ? idx.conjunto.get(l.conjuntoId) : undefined;
+    const c = l.campanhaId ? idx.campanha.get(l.campanhaId) : cj ? idx.campanha.get(cj.campanhaId) : undefined;
+    return c !== undefined && (filtro.canal === 'todos' || c.canal === filtro.canal);
+  });
+}
+
+/** CPL geral: campanhas de captação (predicado único) e só leads pagos atribuídos a elas. */
 export function cplPlacar(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego,
   gastoCampanhas?: readonly { campanhaId: string; gasto: number }[],
   filtro: FiltroBase = { funil: 'todos', canal: 'todos' }): Cpl {
-  const elegivel = (c: Campanha | null) => c !== null && !ehEntresafraCampanha(c) && c.fase !== 'remarketing'
-    && !/REMARKETING/i.test(c.nome)
-    && (c.etapa === 'C2' || c.etapa === 'C3' || (c.etapa === undefined && c.fase === 'captacao' && ehCaptacao(c.funil)));
-  const passaFunil = (c: Campanha) => funilIncluido(filtro.funil, c.funil)
-    || (filtro.funil === 'iscas' && c.funil === 'c3' && c.subtipo === 'ISCA');
-  const candidatas = [...idx.campanha.values()].filter((c) => elegivel(c) && passaFunil(c)
-    && (filtro.canal === 'todos' || c.canal === filtro.canal));
-  const campanhas = new Set(candidatas.map((c) => c.id));
-  const l = linhasCaptacao(linhas, idx, filtro);
-  if (gastoCampanhas) {
-    const gastos = gastoCampanhas.filter((x) => campanhas.has(x.campanhaId));
-    const gasto = gastos.length ? gastos.reduce((s, x) => s + x.gasto, 0) : null;
-    const leadsPagos = pessoasUnicas(l.filter(ehPago));
-    return { gasto, leadsPagos, valor: cpl(gasto, leadsPagos) };
-  }
-  const d = dias.filter((x) => { const c = idx.campanhaDoAnuncio(x.anuncioId); return c !== null && campanhas.has(c.id); });
-  const leadsPagos = pessoasUnicas(l.filter(ehPago));
-  return { gasto: d.length ? gastoDe(d) : null, leadsPagos, valor: cpl(d.length ? gastoDe(d) : null, leadsPagos) };
+  const { gasto } = gastoDasLinhas(dias, gastoCampanhas, idx, (l) => linhaEhCaptacao(l) && linhaNoFunil(filtro.funil, l),
+    (c) => filtro.canal === 'todos' || c.canal === filtro.canal);
+  const leadsPagos = pessoasUnicas(linhasCaptacao(linhas, idx, filtro).filter(ehPago));
+  return { gasto, leadsPagos, valor: cpl(gasto, leadsPagos) };
 }
 
-export interface LinhaCplEtapa { chave: string; rotulo: string; nivel: 'etapa' | 'isca' | 'conjunto'; funil: Funil; cpl: Cpl }
+export interface LinhaCplEtapa {
+  chave: string; rotulo: string; nivel: 'etapa' | 'isca' | 'conjunto'; funil: Funil | null; linha: LinhaBlack; cpl: Cpl;
+  /** Gasto de cada campanha que entrou na linha da etapa (soma = gasto da linha). Só nas linhas de nível `etapa`. */
+  campanhas?: { id: string; gasto: number }[];
+}
 /**
- * CPL por etapa: consultoria; iscas C2/C3 no geral e por campanha; C3 no geral e por conjunto.
- * Só campanhas da fase de captação (o remarketing tem linha própria). Gasto da etapa ÷ leads pagos atribuídos às
- * mesmas campanhas/conjuntos. Rótulo do conjunto = nome exato da fonte.
+ * CPL por etapa, tudo pela LINHA do banco: Consultoria, Iscas (e cada isca), Remarketing da página, C3 (e cada conjunto).
+ * Gasto da etapa ÷ leads pagos atribuídos aos mesmos conjuntos. Rótulo do conjunto = nome exato da fonte.
  */
 export function cplPorEtapa(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego,
   gastoCampanhas?: readonly { campanhaId: string; gasto: number }[]): LinhaCplEtapa[] {
-  const recorte = (ok: (c: Campanha, cj: Conjunto | null) => boolean, usarGastoCampanhas = true) => {
-    const ids = new Set([...idx.campanha.values()].filter((c) => ok(c, null)).map((c) => c.id));
-    const ds = dias.filter((d) => {
-      const c = idx.campanhaDoAnuncio(d.anuncioId);
-      return c !== null && (gastoCampanhas && usarGastoCampanhas ? ids.has(c.id) : ok(c, idx.conjuntoDoAnuncio(d.anuncioId)));
-    });
-    const ls = linhas.filter((l) => {
-      const c = l.campanhaId ? idx.campanha.get(l.campanhaId) : undefined;
-      return c !== undefined && ok(c, l.conjuntoId ? idx.conjunto.get(l.conjuntoId) ?? null : null);
-    });
-    if (!gastoCampanhas || !usarGastoCampanhas) return cplDo(ds, ls);
-    const custos = gastoCampanhas.filter((x) => ids.has(x.campanhaId));
-    const gasto = custos.length ? custos.reduce((s, x) => s + x.gasto, 0) : null;
-    const leadsPagos = pessoasUnicas(ls.filter(ehPago));
+  const leadsDe = (pertence: (l: LinhaBlack | null) => boolean, conjuntoOk?: (cj: Conjunto | undefined) => boolean) => linhas.filter((l) => {
+    if (l.pagina === 'consultoria_respondi' || !ehPago(l)) return false;
+    const linha = linhaDoLead(l, idx);
+    if (linha === undefined || !pertence(linha)) return false;
+    return !conjuntoOk || conjuntoOk(l.conjuntoId ? idx.conjunto.get(l.conjuntoId) : undefined);
+  });
+  const etapa = (linha: LinhaBlack): { cpl: Cpl; campanhas: { id: string; gasto: number }[] } => {
+    const g = gastoDasLinhas(dias, gastoCampanhas, idx, (l) => l === linha);
+    const leadsPagos = pessoasUnicas(leadsDe((l) => l === linha));
+    return { cpl: { gasto: g.gasto, leadsPagos, valor: cpl(g.gasto, leadsPagos) },
+      campanhas: [...g.porCampanha].map(([id, gasto]) => ({ id, gasto })) };
+  };
+  // Nível conjunto e isca: só dias por anúncio (o gasto de campanha não separa conjunto).
+  const porConjunto = (linha: LinhaBlack, conjuntoOk: (cj: Conjunto | undefined) => boolean): Cpl => {
+    const ds = dias.filter((d) => idx.linhaDoAnuncio(d.anuncioId) === linha && conjuntoOk(idx.conjuntoDoAnuncio(d.anuncioId) ?? undefined));
+    const leadsPagos = pessoasUnicas(leadsDe((l) => l === linha, conjuntoOk));
+    const gasto = ds.length ? gastoDe(ds) : null;
     return { gasto, leadsPagos, valor: cpl(gasto, leadsPagos) };
   };
-  const captacao = (f: Funil) => (c: Campanha) => c.funil === f
-    && (c.etapa === 'C2' || c.etapa === 'C3' || (c.etapa === undefined && c.fase === 'captacao'))
-    && c.fase !== 'remarketing' && !/REMARKETING/i.test(c.nome) && !ehEntresafraCampanha(c);
-  const iscaCampanha = (c: Campanha, cj: Conjunto | null) => captacao('iscas')(c)
-    || (captacao('c3')(c) && (c.subtipo === 'ISCA' || (cj?.isca !== null && cj?.isca !== undefined)));
+  const linhaEtapa = (chave: string, rotulo: string, linha: LinhaBlack, funil: Funil | null): LinhaCplEtapa => {
+    const e = etapa(linha);
+    return { chave, rotulo, nivel: 'etapa', funil, linha, cpl: e.cpl, campanhas: e.campanhas };
+  };
   const out: LinhaCplEtapa[] = [
-    { chave: 'consultoria', rotulo: 'Consultoria', nivel: 'etapa', funil: 'consultoria', cpl: recorte(captacao('consultoria')) },
-    { chave: 'iscas', rotulo: 'Iscas', nivel: 'etapa', funil: 'iscas', cpl: recorte(iscaCampanha) },
+    linhaEtapa('consultoria', 'Consultoria', 'consultoria', 'consultoria'),
+    linhaEtapa('iscas', 'Iscas', 'iscas', 'iscas'),
   ];
-  for (const isca of ISCAS) {
-    const calculo = recorte((c, cj) => iscaCampanha(c, cj) && cj?.isca === isca, false);
-    if ((calculo.gasto ?? 0) > 0 || calculo.leadsPagos > 0) out.push({ chave: `isca:${isca}`, rotulo: isca, nivel: 'isca', funil: 'iscas', cpl: calculo });
+  for (const isca of ['Fluxograma', 'Futurômetro', 'Checkup'] as const) {
+    const calculo = porConjunto('iscas', (cj) => cj?.isca === isca);
+    if ((calculo.gasto ?? 0) > 0 || calculo.leadsPagos > 0) out.push({ chave: `isca:${isca}`, rotulo: isca, nivel: 'isca', funil: 'iscas', linha: 'iscas', cpl: calculo });
   }
-  out.push({ chave: 'c3', rotulo: 'C3', nivel: 'etapa', funil: 'c3', cpl: recorte(captacao('c3')) });
+  out.push(linhaEtapa('remarketing_pagina', 'Remarketing da página', 'remarketing_pagina', null));
+  out.push(linhaEtapa('c3', 'C3', 'c3', 'c3'));
   const conjuntosC3 = new Map<string, string>();
   for (const d of dias) {
-    const c = idx.campanhaDoAnuncio(d.anuncioId); const cj = idx.conjuntoDoAnuncio(d.anuncioId);
-    if (c && cj && captacao('c3')(c)) conjuntosC3.set(cj.id, cj.nome);
+    const cj = idx.conjuntoDoAnuncio(d.anuncioId);
+    if (cj && idx.linhaDoAnuncio(d.anuncioId) === 'c3') conjuntosC3.set(cj.id, cj.nome);
   }
   for (const [id, nome] of conjuntosC3) {
-    out.push({ chave: `conjunto:${id}`, rotulo: nome, nivel: 'conjunto', funil: 'c3', cpl: recorte((c, cj) => captacao('c3')(c) && cj?.id === id, false) });
+    out.push({ chave: `conjunto:${id}`, rotulo: nome, nivel: 'conjunto', funil: 'c3', linha: 'c3', cpl: porConjunto('c3', (cj) => cj?.id === id) });
   }
   return out;
-}
-
-/** CPL do remarketing (fase 4), para a linha própria ao lado das etapas. */
-export function cplRemarketing(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego): Cpl {
-  return cplDo(
-    dias.filter((d) => idx.campanhaDoAnuncio(d.anuncioId)?.fase === 'remarketing'),
-    linhas.filter((l) => (l.campanhaId ? idx.campanha.get(l.campanhaId)?.fase : null) === 'remarketing'),
-  );
-}
-
-/** Gasto por fase do Caio (fase da campanha). Campanha sem fase fica em `semFase`. */
-export function gastoPorFase(dias: readonly DesempenhoDia[], idx: IndiceTrafego): { porFase: Record<Fase, number>; semFase: number } {
-  const porFase = Object.fromEntries(FASES.map((f) => [f, 0])) as Record<Fase, number>;
-  let semFase = 0;
-  for (const d of dias) { const f = idx.campanhaDoAnuncio(d.anuncioId)?.fase; if (f) porFase[f] += d.gasto; else semFase += d.gasto; }
-  return { porFase, semFase };
 }

@@ -5,6 +5,16 @@
 export type Valor = number | null;
 
 export type Funil = 'c1' | 'consultoria' | 'iscas' | 'c3';
+/**
+ * Linha do orçamento, como o banco devolve em dados_black_trafego (campanha e conjunto), padrão de nomes do Caio.
+ * `c2` só existe na CAMPANHA `CAPTAÇÃO | ISCAS` (mistura iscas e consultoria); o conjunto dela é `iscas` ou `consultoria`.
+ * null = "Sem classificação" (o banco não reconheceu o nome): aparece na tela, nunca some.
+ */
+export type LinhaBlack = 'c1' | 'distribuicao' | 'lembrete' | 'fake_live' | 'iscas' | 'consultoria' | 'c2' | 'c3'
+  | 'remarketing_pagina' | 'remarketing_live' | 'carrinho' | 'pre_captacao';
+/** Peça ou nó do conjunto (campo `no` de dados_black_trafego). */
+export type NoBlack = 'teaser' | 'manifesto' | 'reels_pago' | 'iscas' | 'consultoria' | 'c3' | 'remarketing_pagina'
+  | 'lembrete' | 'fake_live' | 'remarketing_live' | 'carrinho' | 'pre_captacao';
 /** C2 é o agrupamento das portas Consultoria e Iscas no filtro global. */
 export type FiltroFunil = 'todos' | 'c2' | Funil;
 export type Canal = 'meta' | 'google';
@@ -70,6 +80,8 @@ export interface EstadoColetaConta {
 }
 export interface Campanha {
   id: string; nome: string; canal: Canal; funil: Funil | null; fase: Fase | null;
+  /** Linha do banco. `undefined` = a RPC ainda não devolve o campo (vale o legado, ver domain/linha-black.ts); null = Sem classificação. */
+  linha?: LinhaBlack | null;
   /** Só a fonte real preenche: etapa e subtipo como vêm do banco, e se o nome tem dois subtipos (conflito). */
   etapa?: EtapaCampanha | null; subtipo?: string | null; conflito?: boolean | null;
   /** Prova de cobertura de coleta por conta, contrato proposto da RPC dados_black_trafego. */
@@ -79,6 +91,10 @@ export interface Campanha {
 }
 export interface Conjunto {
   id: string; campanhaId: string; nome: string; isca: Isca | null; conjuntoC3: ConjuntoC3 | null;
+  /** Linha e nó do conjunto, do banco. `undefined` = campo ausente na RPC (vale o legado); null = Sem classificação. */
+  linha?: LinhaBlack | null; no?: NoBlack | null;
+  /** Isca como o banco devolve (CONSULTORIA, CHECKUP, FUTUROMETRO, FLUXOGRAMA), string exata. `isca` acima é só o rótulo das 3 iscas de página. */
+  iscaBanco?: string | null;
   /** Id do conjunto no Meta (mkt_trafego.conjuntos.conjunto_externa), quando dados_black_trafego devolver. */
   idExterno?: string | null;
 }
@@ -214,6 +230,24 @@ export interface GrupoResumoBlack {
 }
 
 export const FUNIS: readonly Funil[] = ['c1', 'consultoria', 'iscas', 'c3'];
+export const LINHAS_BLACK: readonly LinhaBlack[] = ['c1', 'distribuicao', 'lembrete', 'fake_live', 'iscas', 'consultoria', 'c2', 'c3',
+  'remarketing_pagina', 'remarketing_live', 'carrinho', 'pre_captacao'];
+export const NOS_BLACK: readonly NoBlack[] = ['teaser', 'manifesto', 'reels_pago', 'iscas', 'consultoria', 'c3', 'remarketing_pagina',
+  'lembrete', 'fake_live', 'remarketing_live', 'carrinho', 'pre_captacao'];
+/** Rótulo de cada linha na tela. */
+export const ROTULO_LINHA: Record<LinhaBlack, string> = {
+  c1: 'C1 · Teaser e manifesto', distribuicao: 'C1 · Distribuição', lembrete: 'Lembrete', fake_live: 'Fake live',
+  iscas: 'Iscas', consultoria: 'Consultoria', c2: 'C2 · Iscas e consultoria', c3: 'C3',
+  remarketing_pagina: 'Remarketing da página', remarketing_live: 'Remarketing da live', carrinho: 'Carrinho', pre_captacao: 'Pré-captação',
+};
+/** Rótulo da peça (nó) do conjunto, para as colunas do C1. */
+export const ROTULO_NO: Record<NoBlack, string> = {
+  teaser: 'Teaser', manifesto: 'Manifesto', reels_pago: 'Reels pago', iscas: 'Iscas', consultoria: 'Consultoria', c3: 'C3',
+  remarketing_pagina: 'Remarketing da página', lembrete: 'Lembrete', fake_live: 'Fake live', remarketing_live: 'Remarketing da live',
+  carrinho: 'Carrinho', pre_captacao: 'Pré-captação',
+};
+export const ROTULO_SEM_CLASSIFICACAO = 'Sem classificação';
+export const ROTULO_SEM_FASE = 'Sem fase';
 export const FASES: readonly Fase[] = ['antecipacao', 'distribuicao', 'captacao', 'aquecimento', 'remarketing', 'live_carrinho'];
 export const ISCAS: readonly Isca[] = ['Fluxograma', 'Futurômetro', 'Checkup'];
 export const CONJUNTOS_C3: readonly ConjuntoC3[] = ['base', 'quente', 'aberto'];

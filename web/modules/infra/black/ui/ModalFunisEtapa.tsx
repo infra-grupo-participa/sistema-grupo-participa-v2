@@ -1,12 +1,12 @@
 'use client';
 
 // Modal aberto pelo card de uma etapa da Visão geral (C1, Consultoria, Iscas, C3): todos os funis da etapa lado a lado,
-// um por subtipo do banco (nas Iscas, um por isca). Sem botão de troca de visão. Campanha sem etapa, com conflito ou
-// sem subtipo reconhecido fica fora das colunas e o modal diz quantas e quais (nome exato). Sem dado = "Sem dado".
+// uma por peça (C1), por isca (Iscas), a Consultoria e um por subtipo (C3), tudo pela linha que o banco devolve. Campanha
+// sem classificação fica fora das colunas e o modal diz quantas e quais (nome exato). Sem dado = "Sem dado".
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Modal } from '@/shared/ui/components';
-import { agregar, cpm, ctr, custoPorVisualizacao, farolCpl, gastoDe, taxaVideo75 } from '../domain/metricas';
-import { cplCaptacao, conversaoPagina, gastoCampanha, leadsDoTrafego } from '../domain/numeros';
+import { agregar, cpm, ctr, custoPorVisualizacao, farolCpl, taxaVideo75 } from '../domain/metricas';
+import { cplCaptacao, conversaoPagina, leadsDoTrafego } from '../domain/numeros';
 import { funisDaEtapa, type ColunaFunil } from '../domain/funis-etapa';
 import { ROTULO_FUNIL, type DesempenhoDia, type Funil, type LinhaPerfil, type Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
@@ -45,26 +45,17 @@ function Metrica({ rotulo, children }: { rotulo: string; children: ReactNode }) 
   return <div className="flex items-baseline justify-between gap-3 py-1 text-sm"><dt className="text-[var(--fg-3)]">{rotulo}</dt><dd className="text-right text-[var(--fg)]">{children}</dd></div>;
 }
 
-/** Gasto das campanhas inteiras (dias_campanha). Se uma campanha está sem dado, a coluna fica sem dado, nunca soma parcial. */
-function gastoDasCampanhas(d: DadosTela, col: ColunaFunil): Valor {
-  if (col.campanhas.length === 0) return null;
-  let soma = 0;
-  for (const c of col.campanhas) {
-    const g = gastoCampanha(d.trafegoPeriodo, c.id).valor;
-    if (g === null) return null;
-    soma += g;
-  }
-  return soma;
-}
-
 function Coluna({ d, funil, col }: { d: DadosTela; funil: Funil; col: ColunaFunil }) {
   const a = agregar(col.dias);
   const temDia = col.dias.length > 0;
-  // Nas Iscas o gasto vem dos anúncios do conjunto (a fonte não divide o gasto da campanha por conjunto).
-  const gasto: Valor = funil === 'iscas' ? (temDia ? gastoDe(col.dias) : null) : gastoDasCampanhas(d, col);
-  const nomes = funil === 'iscas' ? col.conjuntos.map((j) => j.nome) : col.campanhas.map((c) => c.nome);
-  const unica = col.campanhas.length === 1 ? d.totaisPeriodo.find((t) => t.nivel === 'campanha' && t.id === col.campanhas[0].id) : undefined;
-  const faltaAlcance = col.campanhas.length > 1 ? 'alcance não soma entre campanhas' : 'alcance do período';
+  // O investimento já vem calculado da coluna (funis-etapa): campanha inteira quando cabe na coluna, anúncios do conjunto quando não.
+  const gasto: Valor = col.gasto;
+  const porConjunto = funil === 'iscas' || funil === 'consultoria';
+  const nomes = porConjunto ? col.conjuntos.map((j) => j.nome) : col.campanhas.map((c) => c.nome);
+  // Alcance e frequência são da campanha inteira: só valem quando a coluna tem todos os conjuntos dela.
+  const inteira = col.campanhas.length === 1 && d.trafegoPeriodo.conjuntos.filter((j) => j.campanhaId === col.campanhas[0].id).every((j) => col.conjuntos.some((x) => x.id === j.id));
+  const unica = inteira ? d.totaisPeriodo.find((t) => t.nivel === 'campanha' && t.id === col.campanhas[0].id) : undefined;
+  const faltaAlcance = col.campanhas.length > 1 ? 'alcance não soma entre campanhas' : inteira ? 'alcance do período' : 'o Meta não separa o alcance por conjunto';
   const pagos = d.perfilSemDado ? null : leadsDoTrafego(col.linhas, d.idx);
   const cpl = pagos ? cplCaptacao(gasto, pagos) : null;
   return (
@@ -90,7 +81,7 @@ function Coluna({ d, funil, col }: { d: DadosTela; funil: Funil; col: ColunaFuni
           <Metrica rotulo="Conversão da página"><Taxa taxa={conversaoPagina(col.dias, col.linhas, d.idx)} /></Metrica>
         </>}
       </dl>
-      {funil === 'iscas' && <p className="mt-2 text-[10px] text-[var(--fg-3)]">Tráfego agrupado pelo último bloco do nome do conjunto; leads pelo campo isca do perfil.</p>}
+      {porConjunto && <p className="mt-2 text-[10px] text-[var(--fg-3)]">Conjuntos que o banco classificou como {funil === 'iscas' ? 'iscas (a consultoria fica na própria coluna)' : 'consultoria'}; investimento pelos anúncios do conjunto.</p>}
     </section>
   );
 }
@@ -107,7 +98,7 @@ export function ModalFunisEtapa({ d, funil, dias, linhas, onClose }: {
     <Modal open onClose={onClose} title={titulo} width={`max-w-7xl ${MODAL_TELA_CHEIA}`}>
       <div ref={raiz} className="space-y-3">
         {colunas.length === 0
-          ? <p className="rounded-[var(--r-md)] border border-dashed border-[var(--border-strong)] p-4 text-sm text-[var(--fg-3)]">Nenhum funil com nomenclatura reconhecida no {ROTULO_FUNIL[funil]} neste recorte.</p>
+          ? <p className="rounded-[var(--r-md)] border border-dashed border-[var(--border-strong)] p-4 text-sm text-[var(--fg-3)]">Nenhum funil com classificação do banco no {ROTULO_FUNIL[funil]} neste recorte.</p>
           : <div role="region" aria-label={`Funis: ${ROTULO_FUNIL[funil]}`} tabIndex={0} className="flex gap-3 overflow-x-auto pb-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]">
             {colunas.map((col) => <Coluna key={col.rotulo} d={d} funil={funil} col={col} />)}
           </div>}
@@ -118,7 +109,7 @@ export function ModalFunisEtapa({ d, funil, dias, linhas, onClose }: {
               {fora.length > 0 && conjuntosSemIsca.length > 0 && ' · '}
               {conjuntosSemIsca.length > 0 && `${conjuntosSemIsca.length} ${conjuntosSemIsca.length === 1 ? 'conjunto' : 'conjuntos'} de isca sem a isca no nome`}
             </summary>
-            <p className="mt-2 text-[var(--fg-3)]">Sem etapa, com conflito de subtipo ou sem subtipo reconhecido no nome: não entram em nenhuma coluna (nem em outra etapa). Corrigir o nome no gerenciador.</p>
+            <p className="mt-2 text-[var(--fg-3)]">O banco não reconheceu o nome destas campanhas (Sem classificação): não entram em nenhuma coluna nem em outra etapa. Corrigir o nome no gerenciador.</p>
             <ul className="mt-2 space-y-1">
               {fora.map(({ campanha, motivo }) => <li key={campanha.id} className="break-words"><code className="text-[var(--fg)]">{campanha.nome}</code> <span className="text-[var(--fg-3)]">({motivo})</span></li>)}
               {funil === 'iscas' && conjuntosSemIsca.map((j) => <li key={j.id} className="break-words"><code className="text-[var(--fg)]">{j.nome}</code> <span className="text-[var(--fg-3)]">(conjunto sem isca reconhecida)</span></li>)}

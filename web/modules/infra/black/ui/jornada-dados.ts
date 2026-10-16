@@ -10,7 +10,7 @@ export interface DadosJornada { dias: DesempenhoDia[]; linhas: LinhaPerfil[]; me
 
 export function dadosJornada(d: DadosTela): DadosJornada {
   const dias = filtrarDias(d.diasPeriodoSemFiltro, d.idx, { funil: 'todos', canal: d.recorte.canal });
-  const linhas = filtrarLinhas(d.linhasPeriodoSemFiltro, { funil: 'todos', canal: d.recorte.canal });
+  const linhas = filtrarLinhas(d.linhasPeriodoSemFiltro, { funil: 'todos', canal: d.recorte.canal }, d.idx);
   const metricas = calcularJornada({ dias, linhas, linhasDoFunil: d.linhas, idx: d.idx, config: d.config, agora: d.agora, mensageria: d.mensageria });
   return { dias, linhas, metricas };
 }

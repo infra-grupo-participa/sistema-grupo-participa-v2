@@ -6,7 +6,7 @@
 // demonstração os botões ficam desabilitados.
 import { useMemo } from 'react';
 import { safeHttpUrl } from '@/shared/domain/url-segura';
-import { anunciosDoCriativo, funilCriativo, resumir, serieDiariaAnuncio } from '../domain/criativos';
+import { anunciosDoCriativo, ehDistribuicao, funilCriativo, resumir, serieDiariaAnuncio } from '../domain/criativos';
 import { filtrarDias } from '../domain/metricas';
 import type { DadosTela } from './contexto';
 import { FunilTrapezio, GraficoInvestimentoLeads } from './graficos';
@@ -20,8 +20,7 @@ export function GavetaCriativo({ d, id }: { d: DadosTela; id: string }) {
     const ids = anunciosDoCriativo(d.idx, id); const conjunto = new Set(ids);
     const dias = filtrarDias(d.diasPeriodoSemFiltro.filter((x) => conjunto.has(x.anuncioId)), d.idx, { funil: 'todos', canal: 'todos' });
     const linhas = d.linhasPeriodoSemFiltro.filter((l) => l.anuncioId !== null && conjunto.has(l.anuncioId));
-    const camps = ids.map((x) => d.idx.campanhaDoAnuncio(x));
-    const distribuicao = camps.every((c) => c === null || c.funil === 'c1' || c.funil === null);
+    const distribuicao = ids.every((x) => ehDistribuicao(d.idx, x));
     const resumo = resumir(dias, linhas, d.idx, d.config.reguaCpl, distribuicao);
     return { ids, dias, linhas, distribuicao, resumo, funil: funilCriativo(resumo, dias, linhas), serie: serieDiariaAnuncio(ids, dias, linhas, d.diasPeriodo) };
   }, [d, id]);

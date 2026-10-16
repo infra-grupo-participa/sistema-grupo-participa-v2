@@ -11,10 +11,11 @@ import { deslocarDia } from '@/modules/infra/atm/domain/periodo';
 import { anunciosDoCriativo, idDoCriativo } from '../domain/criativos';
 import { filtrarDias, filtrarLinhas } from '../domain/metricas';
 import { diaDe } from '../domain/recorte';
-import { FASES, FUNIS, ROTULO_CANAL, ROTULO_FASE, ROTULO_FUNIL, type DesempenhoDia, type LinhaPerfil, type Valor } from '../domain/tipos';
+import { FASES, FUNIS, ROTULO_CANAL, ROTULO_FASE, ROTULO_FUNIL, ROTULO_LINHA, ROTULO_SEM_CLASSIFICACAO, ROTULO_SEM_FASE, type Campanha, type DesempenhoDia, type Fase, type LinhaPerfil, type Valor } from '../domain/tipos';
+import { funilDaLinha, linhaDaCampanha, linhaDoLead } from '../domain/linha-black';
 import type { FormatoMetrica } from '../domain/jornada';
 import type { DadosTela } from './contexto';
-import { BarrasFase, GraficoLinha } from './graficos';
+import { BarrasFase, GraficoLinha, type ItemFase } from './graficos';
 import { Chip, formatar, MODAL_TELA_CHEIA, Numero } from './pecas';
 import { PerfilLeads } from './perfil/PerfilLeads';
 import { EvolucaoMetaIndicador, serieDiariaIndicador } from './EvolucaoMeta';
@@ -50,6 +51,35 @@ const metaDaSeriePara = (cardId: string, d: DadosTela): Valor => cardId === 'lea
         : cardId === 'conv' ? d.config.metas.conversaoPagina
           : cardId === 'mql-percentual' ? d.config.metas.mql : null;
 
+type Bloco = { dias: DesempenhoDia[]; leads: LinhaPerfil[] };
+/**
+ * Barras por fase (fase que o banco devolve por campanha). Campanha sem fase vira "Sem fase" e campanha que o banco não
+ * classificou vira "Sem classificação": as duas aparecem quando existem, para a soma das barras fechar com o card.
+ * Pré-captação fica fora (decisão do Victor): não entra em barra nenhuma.
+ */
+function itensFase(d: DadosTela, card: CardDef): ItemFase[] {
+  const { idx } = d;
+  const campanhaDoLead = (l: LinhaPerfil) => (l.campanhaId ? idx.campanha.get(l.campanhaId) : undefined);
+  const faseDe = (c: Campanha | null | undefined): Fase | 'sem_fase' | 'sem_classificacao' | 'pre_captacao' | null => {
+    if (!c) return null;
+    const linha = linhaDaCampanha(c);
+    if (linha === 'pre_captacao') return 'pre_captacao';
+    if (linha === null) return 'sem_classificacao';
+    return c.fase ?? 'sem_fase';
+  };
+  const dias = filtrarDias(d.dias, idx, { funil: 'todos', canal: 'todos' });
+  const por = (chave: string): Bloco => ({
+    dias: dias.filter((x) => faseDe(idx.campanhaDoAnuncio(x.anuncioId)) === chave),
+    leads: d.linhas.filter((l) => faseDe(campanhaDoLead(l)) === chave),
+  });
+  const itens: ItemFase[] = FASES.map((f) => { const b = por(f); return { fase: f, rotulo: ROTULO_FASE[f], valor: card.medir(b.dias, b.leads) }; });
+  for (const [fase, rotulo] of [['sem_fase', ROTULO_SEM_FASE], ['sem_classificacao', ROTULO_SEM_CLASSIFICACAO]] as const) {
+    const b = por(fase);
+    if (b.dias.length > 0 || b.leads.length > 0) itens.push({ fase, rotulo, valor: card.medir(b.dias, b.leads) });
+  }
+  return itens;
+}
+
 export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | null; onClose: () => void }) {
   const [sub, setSub] = useState<SubAbaModal>('funil');
   if (!card) return null;
@@ -66,18 +96,33 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
     ? pontosIndicador.find((p) => p.dia === dia)?.realizado ?? null
     : card.medir(
     filtrarDias(d.diasTodos.filter((x) => x.dia === dia), idx, { ...funilAtual, ...canalAtual }),
-    filtrarLinhas(d.linhasTodas.filter((l) => diaDe(l.criadoEm) === dia), { ...funilAtual, ...canalAtual }),
+    filtrarLinhas(d.linhasTodas.filter((l) => diaDe(l.criadoEm) === dia), { ...funilAtual, ...canalAtual }, idx),
   );
   const vHoje = doDia(hoje); const vOntem = doDia(ontem);
   const variacao = vHoje !== null && vOntem !== null && vOntem !== 0 ? (vHoje - vOntem) / vOntem : null;
   const lista = (): Linha[] => {
-    if (ativa === 'funil') return FUNIS.map((f) => ({
-      chave: f, rotulo: ROTULO_FUNIL[f],
-      valor: card.medir(filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: f, ...canalAtual }), filtrarLinhas(d.linhasPeriodoSemFiltro, { funil: f, ...canalAtual })),
-    }));
+    if (ativa === 'funil') {
+      const porFunil: Linha[] = FUNIS.map((f) => ({
+        chave: f, rotulo: ROTULO_FUNIL[f],
+        valor: card.medir(filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: f, ...canalAtual }), filtrarLinhas(d.linhasPeriodoSemFiltro, { funil: f, ...canalAtual }, idx)),
+      }));
+      // Linhas que não são C1, C2 nem C3 também contam nos totais: aparecem à parte para a soma das linhas fechar com o card.
+      const todosDias = filtrarDias(d.diasPeriodoSemFiltro, idx, { funil: 'todos', ...canalAtual });
+      const todosLeads = filtrarLinhas(d.linhasPeriodoSemFiltro, { funil: 'todos', ...canalAtual }, idx);
+      const noRemarketing = { dias: todosDias.filter((x) => idx.linhaDoAnuncio(x.anuncioId) === 'remarketing_pagina'), leads: todosLeads.filter((l) => linhaDoLead(l, idx) === 'remarketing_pagina') };
+      const outros = {
+        dias: todosDias.filter((x) => { const l = idx.linhaDoAnuncio(x.anuncioId); return l !== 'remarketing_pagina' && funilDaLinha(l) === null; }),
+        leads: todosLeads.filter((l) => { const x = linhaDoLead(l, idx); return x !== 'remarketing_pagina' && funilDaLinha(x) === null && x !== undefined; }),
+      };
+      const extra: Linha[] = [
+        { chave: 'remarketing_pagina', rotulo: ROTULO_LINHA.remarketing_pagina, valor: card.medir(noRemarketing.dias, noRemarketing.leads) },
+        { chave: 'outras', rotulo: 'Fora de C1, C2 e C3 (lembrete, live, carrinho, sem classificação)', valor: card.medir(outros.dias, outros.leads) },
+      ].filter((x) => x.chave === 'remarketing_pagina' || (x.valor !== null && x.valor !== 0));
+      return [...porFunil, ...extra];
+    }
     if (ativa === 'canal') return (['meta', 'google'] as const).map((c) => ({
       chave: c, rotulo: ROTULO_CANAL[c],
-      valor: card.medir(filtrarDias(d.diasPeriodoSemFiltro, idx, { ...funilAtual, canal: c }), filtrarLinhas(d.linhasPeriodoSemFiltro, { ...funilAtual, canal: c })),
+      valor: card.medir(filtrarDias(d.diasPeriodoSemFiltro, idx, { ...funilAtual, canal: c }), filtrarLinhas(d.linhasPeriodoSemFiltro, { ...funilAtual, canal: c }, idx)),
     }));
     return [];
   };
@@ -110,10 +155,7 @@ export function ModalCard({ d, card, onClose }: { d: DadosTela; card: CardDef | 
             <PerfilLeads d={d} linhas={d.linhas} />
           ) : ativa === 'fase' ? (
             <div className="pt-2">
-              <BarrasFase formato={card.formato} itens={FASES.map((f) => ({
-                fase: f, rotulo: ROTULO_FASE[f],
-                valor: card.medir(filtrarDias(d.dias.filter((x) => idx.campanhaDoAnuncio(x.anuncioId)?.fase === f), idx, { funil: 'todos', canal: 'todos' }), d.linhas.filter((l) => (l.campanhaId ? idx.campanha.get(l.campanhaId)?.fase : null) === f)),
-              }))} />
+              <BarrasFase formato={card.formato} itens={itensFase(d, card)} />
             </div>
           ) : ativa === 'dia' ? (
             metaDaSerie !== null

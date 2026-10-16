@@ -88,7 +88,7 @@ export function tipoConteudoC1(nome: string): TipoConteudoC1 {
   return 'Sem tipo no nome';
 }
 
-/** Isca do conjunto C2: o último bloco não vazio depois do separador, sem supor CONSULTORIA como isca. */
+/** FALLBACK LEGADO (RPC sem `isca`): o banco devolve a isca do conjunto; isto só vale sem esse campo. Isca do conjunto C2: o último bloco não vazio depois do separador, sem supor CONSULTORIA como isca. */
 export function iscaDoNomeConjunto(nome: string): string | null {
   const parte = nome.split('|').map((x) => x.trim()).filter(Boolean).at(-1);
   if (!parte || /^CONSULTORIA$/i.test(parte)) return null;

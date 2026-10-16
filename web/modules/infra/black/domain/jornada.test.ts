@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { baseFicticia, RELOGIO_PADRAO } from '../infrastructure/fixtures/gerador';
 import { CONFIG_BLACK } from '../infrastructure/fixtures/catalogo';
-import { cplPorEtapa, cplRemarketing, indexar, pessoasUnicas } from './metricas';
+import { cplPorEtapa, indexar, pessoasUnicas } from './metricas';
 import { calcularJornada, espessura, NO, NOS, noApagado, resumoDoNo, SETAS } from './jornada';
 
 const b = baseFicticia();
@@ -25,7 +25,7 @@ describe('jornada', () => {
     const etapas = cplPorEtapa(b.dias, b.linhas, idx);
     expect(valor('aplicacao-consultoria', 'CPL')).toBeCloseTo(etapas.find((e) => e.chave === 'consultoria')!.cpl.valor!, 6);
     expect(valor('captacao-direta', 'CPL')).toBeCloseTo(etapas.find((e) => e.chave === 'c3')!.cpl.valor!, 6);
-    expect(valor('remarketing', 'CPL')).toBeCloseTo(cplRemarketing(b.dias, b.linhas, idx).valor!, 6);
+    expect(valor('remarketing', 'CPL')).toBeCloseTo(etapas.find((e) => e.chave === 'remarketing_pagina')!.cpl.valor!, 6);
   });
   it('lista conta pessoas únicas; nó sem fonte não vira zero', () => {
     expect(valor('lista', 'Pessoas')).toBe(pessoasUnicas(b.linhas));

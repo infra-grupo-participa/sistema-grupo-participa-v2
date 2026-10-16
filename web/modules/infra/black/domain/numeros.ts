@@ -4,12 +4,13 @@
 import { investimentoCaptacao, type InvestimentoCaptacao } from './custo-captacao';
 import { cardsGrupo } from './grupo';
 import {
-  connectRate as calcularConnectRate, conversaoPagina as calcularConversaoPagina, ehEntresafraCampanha,
+  connectRate as calcularConnectRate, conversaoPagina as calcularConversaoPagina, gastoCampanhaPorConjunto, indexar,
   ehPago, ingressoGrupo as calcularIngressoJanela, ingressoGrupoGeral as calcularIngressoGeral,
-  funilIncluido, linhasCaptacao, mqlDoRecorte, pessoasUnicas, taxa,
+  linhasCaptacao, mqlDoRecorte, pessoasUnicas, taxa,
   type FiltroBase, type IndiceTrafego, type Taxa,
 } from './metricas';
 import type { DesempenhoDia, GrupoResumoBlack, LinhaPerfil, Periodo, TrafegoBlack, Valor } from './tipos';
+import { campanhaNoFunil, ehPreCaptacao, linhaNoFunil } from './linha-black';
 import { diaDe } from './recorte';
 
 export interface Numero { valor: Valor; num: Valor; den: Valor; recorte: string; nota: string | null }
@@ -46,17 +47,17 @@ export function acumuladoLeadsPessoas(linhas: readonly LinhaPerfil[], dias: read
   return dias.map((dia) => resultado.get(dia) ?? 0);
 }
 
-/** Pessoas únicas atribuídas a campanhas C2/C3; `captacao` torna o recorte explícito no ponto de uso. */
+/** Pessoas únicas atribuídas a campanhas de captação (iscas, consultoria, C3 e remarketing da página); `captacao` torna o recorte explícito no ponto de uso. */
 export function inscricoes(linhas: readonly LinhaPerfil[], opcoes: { captacao: true; idx: IndiceTrafego; filtro?: FiltroBase }): Numero {
   const elegiveis = linhasCaptacao(linhas, opcoes.idx, opcoes.filtro);
   const total = pessoasUnicas(elegiveis);
-  return numero(total, total, null, 'pessoas únicas atribuídas a C2/C3 no período');
+  return numero(total, total, null, 'pessoas únicas atribuídas a campanhas de captação no período');
 }
 
 /** Pessoas únicas pagas com campanha de captação elegível. Pagos sem campanha ficam fora. */
 export function leadsDoTrafego(linhas: readonly LinhaPerfil[], idx: IndiceTrafego, filtro?: FiltroBase): Numero {
   const elegiveis = linhasCaptacao(linhas, idx, filtro);
-  return leadsPagosUnicos(elegiveis, 'pessoas únicas pagas atribuídas a C2/C3 no período');
+  return leadsPagosUnicos(elegiveis, 'pessoas únicas pagas atribuídas a campanhas de captação no período');
 }
 
 /** Pagadores distintos de linhas atribuídas às campanhas selecionadas pelo chamador. */
@@ -66,7 +67,7 @@ export function leadsPagosUnicos(linhas: readonly LinhaPerfil[], recorte = 'pess
   return numero(total, total, null, recorte);
 }
 
-/** Gasto C2/C3 por campanha (dias_campanha), com a cobertura e os zeros validados pela fonte. */
+/** Gasto de captação por campanha (dias_campanha; campanha mista por anúncio), com a cobertura e os zeros validados pela fonte. */
 export function investimentoDeCaptacao(trafego: TrafegoBlack, periodo: Periodo, filtro?: FiltroBase): InvestimentoCaptacao {
   return investimentoCaptacao(trafego, periodo, filtro);
 }
@@ -74,35 +75,43 @@ export function investimentoDeCaptacao(trafego: TrafegoBlack, periodo: Periodo, 
 /** Gasto de uma campanha na fonte por campanha; a ausência de linha só vale zero com prova do banco. */
 export function gastoCampanha(trafego: TrafegoBlack, campanhaId: string): Numero {
   const campanha = trafego.campanhas.find((c) => c.id === campanhaId);
-  if (!campanha || ehEntresafraCampanha(campanha)) return numero(null, null, null, 'campanha fora do recorte de investimento');
+  if (!campanha || ehPreCaptacao(campanha)) return numero(null, null, null, 'campanha fora do recorte de investimento');
   const linha = trafego.gastoCampanhas?.find((x) => x.campanhaId === campanhaId);
   if (linha) return numero(linha.gasto, linha.gasto, null, 'gasto da campanha, fonte dias_campanha');
   if (campanha.semEntregaComprovada === true) return numero(0, 0, null, 'sem entrega comprovada pelo coletor do Meta');
   return numero(null, null, null, 'sem linha de campanha e sem prova de coleta');
 }
 
-/** Gasto total por campanha (dias_campanha), todas as etapas menos Entresafra.
- * Campanha sem linha só vale zero quando a fonte confirma sem_entrega_comprovada.
+/** Gasto total por campanha (dias_campanha), todas as linhas menos a pré-captação (CPF01, ENTRESAFRA).
+ * Campanha sem linha só vale zero quando a fonte confirma sem_entrega_comprovada. Campanha mista (`c2`) diante de
+ * Consultoria ou Iscas soma só os anúncios do conjunto (a fonte por campanha não separa).
  */
 export function investimentoTrafego(trafego: TrafegoBlack, filtro: FiltroBase = { funil: 'todos', canal: 'todos' }): Numero {
-  const elegiveis = trafego.campanhas.filter((c) => {
-    if (ehEntresafraCampanha(c)) return false;
-    if (filtro.canal !== 'todos' && c.canal !== filtro.canal) return false;
-    if (!funilIncluido(filtro.funil, c.funil)) return false;
-    return true;
+  const idx = filtro.funil === 'consultoria' || filtro.funil === 'iscas' ? indexar(trafego) : null;
+  const elegiveis: { c: TrafegoBlack['campanhas'][number]; divide: boolean }[] = [];
+  for (const c of trafego.campanhas) {
+    if (ehPreCaptacao(c)) continue;
+    if (filtro.canal !== 'todos' && c.canal !== filtro.canal) continue;
+    const r = campanhaNoFunil(filtro.funil, c);
+    if (r === 'nao') continue;
+    elegiveis.push({ c, divide: r === 'divide' });
+  }
+  const resultados = elegiveis.map(({ c, divide }) => {
+    if (!divide || !idx) return gastoCampanha(trafego, c.id);
+    const g = gastoCampanhaPorConjunto(trafego.dias, idx, c.id, (l) => linhaNoFunil(filtro.funil, l));
+    return numero(g, g, null, 'gasto dos anúncios do conjunto');
   });
-  const resultados = elegiveis.map((c) => gastoCampanha(trafego, c.id));
   const total = elegiveis.length === 0 ? 0
     : resultados.some((x) => x.valor === null) ? null
       : resultados.reduce((soma, x) => soma + x.valor!, 0);
-  return numero(total, total, null, 'gasto de campanhas no período, fonte dias_campanha, sem Entresafra');
+  return numero(total, total, null, 'gasto de campanhas no período, fonte dias_campanha, sem pré-captação (CPF01 e ENTRESAFRA)');
 }
 
-/** CPL de captação: gasto C2/C3 ÷ pessoas pagas e atribuídas às mesmas campanhas. */
+/** CPL de captação: gasto de captação ÷ pessoas pagas e atribuídas às mesmas campanhas. */
 export function cplCaptacao(investimento: Valor | Pick<InvestimentoCaptacao, 'total'>, leads: Numero): Numero {
   const gasto = typeof investimento === 'number' || investimento === null ? investimento : investimento.total;
   const resultado = taxa(gasto, leads.valor);
-  return taxaNumerica(resultado, 'gasto C2/C3 ÷ pessoas únicas pagas com campanha C2/C3 de captação');
+  return taxaNumerica(resultado, 'gasto de captação ÷ pessoas únicas pagas com campanha de captação');
 }
 
 /** MQL pela regra do servidor: profissão do envio mais recente que contém profissão. */
@@ -121,12 +130,12 @@ export function taxaMql(linhas: readonly LinhaPerfil[], recorte = 'pessoas únic
 
 /** A mesma função para Connect rate em Visão, Histórico, Jornada e Páginas. */
 export function connectRate(dias: readonly DesempenhoDia[], idx: IndiceTrafego): Numero {
-  return taxaNumerica(calcularConnectRate(dias, idx), 'LPV ÷ cliques pareados de C2/C3 no período');
+  return taxaNumerica(calcularConnectRate(dias, idx), 'LPV ÷ cliques pareados de campanhas de captação no período');
 }
 
 /** A mesma função para conversão de página em Visão, Histórico, Jornada e Páginas. */
 export function conversaoPagina(dias: readonly DesempenhoDia[], linhas: readonly LinhaPerfil[], idx: IndiceTrafego): Numero {
-  return taxaNumerica(calcularConversaoPagina(dias, linhas, idx), 'pessoas únicas pagas dos anúncios com LPV ÷ LPV de C2/C3 no período');
+  return taxaNumerica(calcularConversaoPagina(dias, linhas, idx), 'pessoas únicas pagas dos anúncios com LPV ÷ LPV de campanhas de captação no período');
 }
 
 /** Ingresso MQL: valor consolidado pelo servidor, sobre MQL, nos grupos elegíveis. */

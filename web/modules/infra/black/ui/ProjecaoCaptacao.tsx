@@ -1,9 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
-import { ehEntresafraCampanha } from '../domain/metricas';
+import { contaNoInvestimentoCaptacao } from '../domain/linha-black';
 import { arredondarInteiroRitmo, FIM_CAPTACAO, INICIO_CAPTACAO, SEMENTE_LEADS, projetarRitmo } from '../domain/ritmo';
-import { ehCaptacao } from '../domain/metricas';
 import { diaDe } from '../domain/recorte';
 import type { Valor } from '../domain/tipos';
 import type { DadosTela } from './contexto';
@@ -31,8 +30,8 @@ function progresso(d: DadosTela) {
     for (const dia of primeira.values()) if (dia >= INICIO_CAPTACAO && dia <= FIM_CAPTACAO) leads.set(dia, (leads.get(dia) ?? 0) + 1);
   }
 
-  const campanhas = new Set(d.trafego.campanhas.filter((c) => !ehEntresafraCampanha(c) && c.fase !== 'remarketing'
-    && !/REMARKETING/i.test(c.nome) && (c.etapa === 'C2' || c.etapa === 'C3' || (c.etapa === undefined && ehCaptacao(c.funil)))).map((c) => c.id));
+  // Predicado único de captação (linha do banco): iscas, consultoria, C2, C3 e remarketing da página; pré-captação fora.
+  const campanhas = new Set(d.trafego.campanhas.filter(contaNoInvestimentoCaptacao).map((c) => c.id));
   const investimento = new Map<string, number>();
   const temSerieInvestimento = Array.isArray(d.trafego.gastoCampanhasDiario);
   for (const item of d.trafego.gastoCampanhasDiario ?? []) {
