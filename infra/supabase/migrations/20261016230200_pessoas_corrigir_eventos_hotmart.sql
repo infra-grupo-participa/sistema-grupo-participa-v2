@@ -1,6 +1,6 @@
 -- 20261016230200: corrige os eventos Hotmart já gravados na linha do tempo (duplicados, evento de educação em venda de escritório, setor)
 --
--- STATUS: NÃO APLICADA. Terminal Hotmart (back-end-sr), 16/10/2026, branch victor-hotmart-setor. Depende de 20261016230000 e 20261016230100.
+-- STATUS: APLICADA em 16/10/2026 11:32 UTC pelo Victor (sessão principal), com a carga parada; 13 duplicados removidos, backup em arquivo.pessoas__eventos__20261016; versão 20261016230200 em schema_migrations. Terminal Hotmart (back-end-sr), 16/10/2026, branch victor-hotmart-setor. Depende de 20261016230000 e 20261016230100.
 -- REVISADA após o pentest de 16/10 (PENTEST-HOTMART-SETOR-2026-10-16.md): guarda de premissa exata, pós-condição, backup do passo 3 e
 --   guarda de índice válido.
 -- ORDEM: depois da 230100 (senão o webhook recria duplicata no meio da limpeza).

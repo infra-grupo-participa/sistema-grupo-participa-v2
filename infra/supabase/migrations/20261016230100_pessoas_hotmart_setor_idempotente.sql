@@ -1,6 +1,6 @@
 -- 20261016230100: setor pelo produto e idempotência da linha do tempo da Hotmart (pessoa única)
 --
--- STATUS: NÃO APLICADA. Terminal Hotmart (back-end-sr), 16/10/2026, branch victor-hotmart-setor. Depende de 20261016230000 (índice).
+-- STATUS: APLICADA em 16/10/2026 11:32 UTC pelo Victor (sessão principal), depois do pentest APROVADO; versão 20261016230100 em schema_migrations. Terminal Hotmart (back-end-sr), 16/10/2026, branch victor-hotmart-setor. Depende de 20261016230000 (índice).
 -- ORDEM: aplicar ANTES da 230200 (a limpeza só fica limpa se o webhook já parou de duplicar).
 -- POR QUE (medido em 16/10/2026):
 --   1) a carga marcava pela conta e não pelo setor: SV e Croqui vendidos na academy caíram em evento de educação (2 linhas: 1 Croqui em

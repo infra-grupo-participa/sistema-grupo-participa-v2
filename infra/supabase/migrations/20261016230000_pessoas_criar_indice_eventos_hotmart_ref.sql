@@ -1,6 +1,6 @@
 -- 20261016230000: índice da linha do tempo para achar o evento Hotmart pela transação (carga repetível e webhook idempotente)
 --
--- STATUS: NÃO APLICADA. Terminal Hotmart (back-end-sr), 16/10/2026, branch victor-hotmart-setor. Pacote com 230100, 230200, 230300 e 230400.
+-- STATUS: APLICADA em 16/10/2026 11:31 UTC pelo Victor (sessão principal), depois do pentest APROVADO; versão 20261016230000 em schema_migrations. Terminal Hotmart (back-end-sr), 16/10/2026, branch victor-hotmart-setor. Pacote com 230100, 230200, 230300 e 230400.
 -- ORDEM DE APLICAÇÃO: este primeiro. As funções da 230100 consultam por ref_id e sem este índice cada consulta varre a tabela inteira.
 -- CONCURRENTLY: não trava a escrita ao vivo do webhook em pessoas.eventos. NÃO pode rodar dentro de transação: aplicar com o runner
 --   sem begin/commit (um statement por chamada), nunca com `aplica_sql.py aplicar`. Se ficar INVALID, dropar e rodar de novo.

@@ -1,6 +1,6 @@
 # Hotmart na pessoa única: setor pelo produto e linha do tempo sem duplicata
 
-Terminal Hotmart (back-end-sr), 16/10/2026, branch `victor-hotmart-setor`. **Situação: escrito e ensaiado (transação desfeita); NADA aplicado em produção.** Falta o pentester (escreve em `pessoas`, reescreve `crm.hotmart_processar`) e o aplicar do Victor.
+Terminal Hotmart (back-end-sr), 16/10/2026, branch `victor-hotmart-setor`. **Situação: APLICADO em produção em 16/10/2026, entre 11:31 e 11:33 UTC**, pelo Victor (sessão principal), depois da 2ª rodada do pentest (APROVADO). Ordem 230000 → 230100 → 230200, com a carga parada na 230200; as três versões estão em `supabase_migrations.schema_migrations`. Detalhe da aplicação na seção "Aplicação" abaixo.
 
 ## O que foi feito e por quê
 - **Setor pelo produto, não pela conta** (`20261016230100`). SV, Croqui e SV com a Elaine vendidos na conta academy são escritório. A função nova `pessoas.hotmart_setor(produto_id)` devolve `'escritorio'` para `fin.produtos.familia` `ESCRITORIO` e `ESCRITORIO_SOLUCOES`; qualquer outro devolve `null` (não afirma "educação"). A carga (`pessoas.carga_fin_hotmart`) e o webhook (`crm.hotmart_processar`) gravam `detalhe.setor`.
@@ -25,7 +25,14 @@ Corrigidos: reversão só por id (achado 1), guarda de premissa e pós-condiçã
 - **Prazo do backup**: `arquivo.pessoas__eventos__20261016` vence em 2027-01-14 e não há rotina que apague; precisa de card (dono Victor).
 - **Mudança de comportamento, DECIDIDA pelo Victor em 16/10/2026:** o webhook agora grava uma linha por transação e tipo. `compra_em_aberto` seguido de `expirada` na mesma transação (os dois viram `checkout`) passa a ser **uma linha só** (a primeira); antes eram duas. O Victor aprovou: a compra "deixa de ficar aberta".
 
+## Aplicação (16/10/2026)
+- **230000** (11:31:39 a 11:31:42 UTC): `create index concurrently` numa chamada só, fora de transação. `indisvalid` e `indisready` verdadeiros, 320 kB.
+- **230100** (11:32:08 a 11:32:10): aplicada em transação única. Conferido: `pessoas.hotmart_setor('1663254')` (SV vendida na conta academy) = `escritorio`; `pessoas.hotmart_setor('446345')` = null.
+- **230200** (11:32:21 a 11:32:24): grupos repetidos 13 → 0; backup com `duplicado_removido` 13, `evento_educacao_em_escritorio` 2, `setor_marcado` 572.
+- **Carga do escritório** (execução 72): fechou `ok`, 546 transações lidas (7 novas, 539 já ligadas).
+- **Carga da academy** (execução 71): retomada em lotes de 500 com o freio de RAM (150 MB) ligado, de 11:33 a 11:50 UTC; fechou `ok` com 57.424 lidas (1.161 novas, 56.263 casadas), lotes de 0,7 a 6 s, sem travar o banco.
+- **Resultado:** academy 57.424 de 57.424 transações ligadas à pessoa única e escritório 546 de 546; 1.916 linhas com `setor = escritorio` (SV, Croqui e SV com a Elaine vendidas na academy, mais toda a conta escritório); query de duplicados vazia.
+
 ## O que falta
 - `fin.identidade` → `pessoas.pessoas` (coluna ou tabela de ligação `fin.identidade_pessoa`): não feito; próximo passo é a migration `230300` do plano (18.580 ligadas, 4.211 sem pessoa, 388 com várias pessoas, medidos em 16/10; CPF não casa pessoa).
 - `evento_id` nulo nas linhas do webhook (6.945 de 7.543 linhas Hotmart): a carga preenche ao reivindicar; ligar em massa é passo seguinte.
-- Retomada da carga 71 (academy) e fechamento da 72 (escritório): roteiro em `ROTEIRO-CARGA-NOTURNA.md` e no relatório; só depois de aplicar 230000 a 230200.
