@@ -16,6 +16,7 @@ import { carregarDadosAcoesBlack, mensagemEmPreparacao, type EstadoDadosAcoesBla
 import { registroAcoesBlack } from '../domain/registro';
 import { contarLeadsAcao, exibicaoCardIngressoGrupo, exibicaoCardLeads } from '../domain/leads';
 import { ModalLeadsAcao } from './ModalLeadsAcao';
+import { PainelRenovThb } from './PainelRenovThb';
 import type { EstadoSerieIngresso } from '@/modules/infra/ingresso-grupo/ui/EvolucaoIngressoGrupo';
 import { ModalIngressoGrupoAcao, type AbaIngressoGrupoAcao } from './ModalIngressoGrupoAcao';
 
@@ -205,6 +206,8 @@ export function DashboardAcoesBlackClient({ isMaster = false, podeVerContato = f
             </div>
           </div>
         </SectionCard>
+
+        {acao.id === 'thb-vencidos' && <PainelRenovThb />}
 
         <section aria-label="Indicadores da ação">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
