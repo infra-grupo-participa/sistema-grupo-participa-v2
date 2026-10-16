@@ -1,0 +1,30 @@
+-- Reversao da 20261016201957 (Radar, sistema original): tira tudo o que ela criou e nada mais.
+-- So rodar se o gestor (Luis Fernando) decidir desistir da migracao: apaga os schemas do Radar com os dados copiados.
+begin;
+set local lock_timeout = '5s';
+drop schema if exists radar cascade;
+drop schema if exists radar_crm cascade;
+drop function if exists public.radar_crm_receber(p_chave text, p jsonb);
+drop function if exists public.radar_acessos(p_acao text, p jsonb);
+drop function if exists public.radar_api(rota text, f jsonb);
+drop function if exists public.radar_chaves(p_acao text, p jsonb);
+drop function if exists public.radar_coletar(text);
+drop function if exists public.radar_crm(acao text, f jsonb);
+drop function if exists public.radar_equipe(p_acao text, p jsonb);
+drop function if exists public.radar_eu();
+drop function if exists public.radar_externo(chave text, rota text, f jsonb);
+drop function if exists public.radar_feedback(acao text, f jsonb);
+drop function if exists public.radar_gravacoes(acao text, f jsonb);
+drop function if exists public.radar_integracoes(p_acao text, p jsonb);
+drop function if exists public.radar_minha_chave(p_acao text, p jsonb);
+drop function if exists public.radar_minha_senha(p_atual text, p_nova text);
+drop function if exists public.radar_primeiro_acesso(p_senha_painel text, p_email text, p_senha text, p_nome text);
+drop function if exists public.radar_primeiro_acesso_aberto();
+drop function if exists public.radar_rotina(p_acao text, p jsonb);
+drop function if exists public.radar_salvar_projeto(cfg jsonb);
+drop function if exists public.radar_salvar_publicacoes(lista jsonb);
+drop function if exists public.radar_sendflow(p_segredo text, p_corpo jsonb);
+drop function if exists public.radar_split_contar(p jsonb);
+drop function if exists public.radar_split_regras(p_dominio text);
+delete from supabase_migrations.schema_migrations where version = '20261016201957';
+commit;
