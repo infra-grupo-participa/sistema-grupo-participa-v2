@@ -48,7 +48,7 @@ function Metrica({ rotulo, children }: { rotulo: string; children: ReactNode }) 
 function Coluna({ d, funil, col }: { d: DadosTela; funil: Funil; col: ColunaFunil }) {
   const a = agregar(col.dias);
   const temDia = col.dias.length > 0;
-  // O investimento já vem calculado da coluna (funis-etapa): campanha inteira quando cabe na coluna, anúncios do conjunto quando não.
+  // O investimento já vem calculado da coluna (funis-etapa): campanha inteira quando cabe na coluna, a parte da campanha pelo peso dos anúncios do conjunto quando não.
   const gasto: Valor = col.gasto;
   const porConjunto = funil === 'iscas' || funil === 'consultoria';
   const nomes = porConjunto ? col.conjuntos.map((j) => j.nome) : col.campanhas.map((c) => c.nome);
@@ -81,7 +81,7 @@ function Coluna({ d, funil, col }: { d: DadosTela; funil: Funil; col: ColunaFuni
           <Metrica rotulo="Conversão da página"><Taxa taxa={conversaoPagina(col.dias, col.linhas, d.idx)} /></Metrica>
         </>}
       </dl>
-      {porConjunto && <p className="mt-2 text-[10px] text-[var(--fg-3)]">Conjuntos que o banco classificou como {funil === 'iscas' ? 'iscas (a consultoria fica na própria coluna)' : 'consultoria'}; investimento pelos anúncios do conjunto.</p>}
+      {porConjunto && <p className="mt-2 text-[10px] text-[var(--fg-3)]">Conjuntos que o banco classificou como {funil === 'iscas' ? 'iscas (a consultoria fica na própria coluna)' : 'consultoria'}; investimento = gasto da campanha dividido pelo gasto dos anúncios do conjunto.</p>}
     </section>
   );
 }

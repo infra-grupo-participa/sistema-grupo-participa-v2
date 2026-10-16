@@ -4,7 +4,7 @@
 import { investimentoCaptacao, type InvestimentoCaptacao } from './custo-captacao';
 import { cardsGrupo } from './grupo';
 import {
-  connectRate as calcularConnectRate, conversaoPagina as calcularConversaoPagina, gastoCampanhaPorConjunto, indexar,
+  connectRate as calcularConnectRate, conversaoPagina as calcularConversaoPagina, indexar,
   ehPago, gastoDe, ingressoGrupo as calcularIngressoJanela, ingressoGrupoGeral as calcularIngressoGeral,
   linhasCaptacao, mqlDoRecorte, pessoasUnicas, taxa,
   type FiltroBase, type IndiceTrafego, type Taxa,
@@ -12,6 +12,7 @@ import {
 import type { Campanha, DesempenhoDia, FiltroCanal, FiltroFunil, GrupoResumoBlack, LinhaPerfil, Periodo, TrafegoBlack, Valor } from './tipos';
 import { campanhaNoFunil, ehPreCaptacao, linhaNoFunil } from './linha-black';
 import { diaDe } from './recorte';
+import { gastoDaParte, ratear } from './rateio';
 
 export interface Numero { valor: Valor; num: Valor; den: Valor; recorte: string; nota: string | null }
 const numero = (valor: Valor, num: Valor, den: Valor, recorte: string, nota: string | null = null): Numero => ({ valor, num, den, recorte, nota });
@@ -84,10 +85,11 @@ export function gastoCampanha(trafego: TrafegoBlack, campanhaId: string): Numero
 
 /** Gasto total por campanha (dias_campanha), todas as linhas menos a pré-captação (CPF01, ENTRESAFRA).
  * Campanha sem linha só vale zero quando a fonte confirma sem_entrega_comprovada. Campanha mista (`c2`) diante de
- * Consultoria ou Iscas soma só os anúncios do conjunto (a fonte por campanha não separa).
+ * Consultoria ou Iscas entra com a parte do gasto da campanha proporcional aos anúncios do conjunto (rateio.ts).
  */
 export function investimentoTrafego(trafego: TrafegoBlack, filtro: FiltroBase = { funil: 'todos', canal: 'todos' }): Numero {
   const idx = filtro.funil === 'consultoria' || filtro.funil === 'iscas' ? indexar(trafego) : null;
+  const rateio = idx ? ratear(trafego.dias, trafego, idx) : null;
   const elegiveis: { c: TrafegoBlack['campanhas'][number]; divide: boolean }[] = [];
   for (const c of trafego.campanhas) {
     if (ehPreCaptacao(c)) continue;
@@ -97,9 +99,9 @@ export function investimentoTrafego(trafego: TrafegoBlack, filtro: FiltroBase = 
     elegiveis.push({ c, divide: r === 'divide' });
   }
   const resultados = elegiveis.map(({ c, divide }) => {
-    if (!divide || !idx) return gastoCampanha(trafego, c.id);
-    const g = gastoCampanhaPorConjunto(trafego.dias, idx, c.id, (l) => linhaNoFunil(filtro.funil, l));
-    return numero(g, g, null, 'gasto dos anúncios do conjunto');
+    if (!divide || !idx || !rateio) return gastoCampanha(trafego, c.id);
+    const g = gastoDaParte(rateio, idx, c.id, (l) => linhaNoFunil(filtro.funil, l));
+    return numero(g, g, null, 'gasto da campanha dividido pelo gasto dos anúncios do conjunto');
   });
   const total = elegiveis.length === 0 ? 0
     : resultados.some((x) => x.valor === null) ? null
@@ -128,6 +130,16 @@ export function investimentoDoRecorte(trafego: TrafegoBlack, periodo: Periodo, r
 }
 
 /**
+ * Investimento em captação de um recorte do modal como VALOR do card: recorte sem campanha de captação (canal Google sem
+ * campanha, fase Antecipação, Aquecimento, Remarketing) é "sem dado" (null), nunca R$ 0,00. Com campanha, o total do
+ * investimento (null se faltar gasto de alguma).
+ */
+export function investimentoDoRecorteValor(trafego: TrafegoBlack, periodo: Periodo, recorte: RecorteGasto): Valor {
+  const investimento = investimentoDoRecorte(trafego, periodo, recorte);
+  return investimento.campanhasMetaTotal + investimento.campanhasGoogleTotal > 0 ? investimento.total : null;
+}
+
+/**
  * CPL de um recorte do modal (dias e cadastros JÁ filtrados pelo chamador). Com `recorte` (funil, canal ou fase), o gasto vem
  * das campanhas desse recorte, igual ao card principal quando o recorte é o da tela. Sem `recorte` (dia, criativo), o
  * recorte não é uma campanha inteira: o gasto é a soma dos anúncios de captação dos próprios dias recebidos. Recorte sem
@@ -139,9 +151,7 @@ export function cplDoRecorte(trafego: TrafegoBlack, periodo: Periodo, dias: read
     const captacao = dias.filter((x) => idx.anuncioEhCaptacao(x.anuncioId));
     return cplCaptacao(captacao.length ? gastoDe(captacao) : null, leadsDoTrafego(linhas, idx));
   }
-  const investimento = investimentoDoRecorte(trafego, periodo, recorte);
-  const temCampanha = investimento.campanhasMetaTotal + investimento.campanhasGoogleTotal > 0;
-  return cplCaptacao(temCampanha ? investimento.total : null, leadsDoTrafego(linhas, idx, { funil: recorte.funil ?? 'todos', canal: recorte.canal ?? 'todos' }));
+  return cplCaptacao(investimentoDoRecorteValor(trafego, periodo, recorte), leadsDoTrafego(linhas, idx, { funil: recorte.funil ?? 'todos', canal: recorte.canal ?? 'todos' }));
 }
 
 /** MQL pela regra do servidor: profissão do envio mais recente que contém profissão. */

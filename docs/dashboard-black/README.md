@@ -1283,8 +1283,35 @@ fecha com o total, e isso tem teste. Não foi criado funil novo.
   **Distribuição**. Correto pelo nome; decisão: manter.
 - **Conjuntos com nome antigo:** os 28 conjuntos `PQ | 00 |` / `PQ | EP01 |` foram renomeados pela recarga do Meta e hoje são **0**. O front ainda
   aceita o nome antigo só por compatibilidade com dado de outro projeto ou de coleta anterior.
-- **Totais de captação** vêm do **gasto por campanha**; etapas e nós da Jornada vêm do **gasto por anúncio**. Diferença de centavos ou de poucos reais
-  entre os dois é **defasagem de coleta**, não erro de cálculo.
+- **Totais de captação** vêm do **gasto por campanha**. Até esta rodada, etapas, modal por funil e nós da Jornada vinham do **gasto por anúncio**, e a
+  diferença (defasagem de coleta, as duas tabelas são gravadas com ~20 s de diferença) fazia a soma das partes não fechar com o card. Corrigido na
+  seção seguinte.
+
+**Soma das partes = total da captação: campanha é o dinheiro, anúncio só divide (reauditoria, 16/10).** O card "Investimento em captação" usava o gasto
+por campanha (1.922,50), mas a divisão Consultoria/Iscas (modal por funil, CPL por etapa, colunas do funil) e os nós da Jornada usavam o gasto por
+anúncio (87,10 + 433,11 + 1.404,71 = 1.924,92; Jornada 1.925,40). Caso medido na C2 (campanha mista): **517,79 por campanha, 520,21 por anúncio**.
+- **Regra (`domain/rateio.ts`).** O gasto por campanha (`gastoCampanhas`, igual ao gerenciador) é o total. O anúncio só serve de peso:
+  `parte = gasto da campanha × (gasto da parte por anúncio ÷ gasto da campanha por anúncio)`, no mesmo recorte de dias. O arredondamento fecha ao
+  centavo por campanha (maior resto, por linha dia × anúncio), então qualquer partição das linhas soma o gasto da campanha exato:
+  Consultoria + Iscas = 517,79.
+- **Dia sem linha de anúncio não infla as partes.** O peso só usa os dias em que a campanha tem linha de anúncio **e** entrada em `gastoCampanhasDiario`
+  (a C1 tem gasto de 01/09 a 03/10 sem anúncio, que só chega desde ~04/10). O restante (campanha menos o que os anúncios explicam) vira
+  `semDetalhe`. Campanha única (C3, remarketing da página, uma isca) sem linha de anúncio no recorte: o gasto inteiro vai para o nó/etapa dela.
+  Campanha mista (`c2`): linha **"Sem detalhe por anúncio"** (só gasto, sem CPL, nem leads) em "CPL por etapa", entre C3 e Remarketing da página.
+- **Aplicado em:** `cplPorEtapa` e `cplPlacar`, `investimentoCaptacao` (ramo da campanha mista), `investimentoTrafego`, `funisDaEtapa` (colunas e modal
+  por funil), `CampanhasEtapa` (herda de `cplPorEtapa`), nós da Jornada (`jornada-dados.ts` passa `semDetalhe` por linha: Consultoria, Iscas, C3,
+  Remarketing da página) e a `ColunaC1` da Visão geral (Gasto, teaser e manifesto, distribuição, mais a linha de sem detalhe, porque ela fica na mesma
+  tela que a linha "C1 · Distribuição" do CPL por etapa, que usa o gasto da campanha).
+- **Sem `gastoCampanhas` na fonte** (dado antigo ou RPC sem o campo): vale o gasto cru por anúncio, como antes. Nunca inventa total.
+- **Continua por anúncio, de propósito:** card hoje/ontem, abas Dia e Criativo do modal, lista de criativos da `GavetaEtapa`, `DetalhesConjuntos`
+  (Investimento do conjunto = "Sem dado"), impressões, CPM, cliques e vídeo da `ColunaC1`. Não foram alterados (pedido da rodada); pode haver diferença de
+  centavos contra o gasto por campanha, por defasagem de coleta. A `ColunaC1` foi a única exceção, pelo motivo acima.
+- **Borda corrigida:** o `medir` do card `investimento-captacao`, com recorte, devolvia **R$ 0,00** quando o recorte não tinha campanha de captação
+  (canal Google sem campanha do Google; fases Antecipação, Aquecimento, Remarketing). Agora usa `investimentoDoRecorteValor` (`domain/numeros.ts`) e
+  devolve `null`, "Sem dado", igual ao `cplDoRecorte`. Com campanha no recorte, o valor não muda.
+- **Testes:** `domain/rateio.test.ts` (11 casos): C2 517,79 exato (520,21 por anúncio), total de captação 1.922,50 = Consultoria + Iscas + C3, modal por
+  funil, fechamento ao centavo, dia sem linha de anúncio, campanha sem anúncio, fallback sem `gastoCampanhas`, nós da Jornada e a borda `null`.
+  Não há teste de componente: a UI (`AbaVisaoGeral`, linha "Sem detalhe por anúncio", `ColunaC1`) foi só compilada, não aberta.
 
 **Como testar.** Em `web/`: `npx tsc --noEmit`, `npx vitest run modules/infra/black`, `npm run build`. Na tela da Black com o período 04/10 a 15/10, abrir o modal do
 card de CPL: aba Funil, Iscas deve dar 14,13 e C3 33,27; o cabeçalho deve repetir o valor do card.

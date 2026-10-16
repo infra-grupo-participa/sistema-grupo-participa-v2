@@ -1,5 +1,6 @@
 import { campanhaNoFunil, contaNoInvestimentoCaptacao as predicadoCaptacao, linhaNoFunil } from './linha-black';
-import { gastoCampanhaPorConjunto, indexar, type FiltroBase } from './metricas';
+import { indexar, type FiltroBase } from './metricas';
+import { gastoDaParte, ratear } from './rateio';
 import type { Periodo, TrafegoBlack, Valor } from './tipos';
 
 export interface InvestimentoCaptacao {
@@ -58,13 +59,15 @@ export function investimentoCaptacao(trafego: TrafegoBlack, _periodo: Periodo, f
     gastoPorCampanha.set(linha.campanhaId, linha.gasto);
     medido.add(linha.campanhaId);
   }
-  // Campanha `c2` (iscas + consultoria) diante de Consultoria ou Iscas: só o conjunto separa, e o gasto vem por anúncio.
-  // O gasto da campanha inteira não serve de resposta aqui, então sai da conta antes.
+  // Campanha `c2` (iscas + consultoria) diante de Consultoria ou Iscas: só o conjunto separa. O dinheiro continua sendo o da
+  // campanha (dias_campanha); o gasto por anúncio só DIVIDE esse total entre Consultoria e Iscas (rateio.ts), então
+  // Consultoria + Iscas = gasto da campanha ao centavo. Sem gasto por campanha na fonte, vale o gasto cru por anúncio.
   if (divididas.size > 0 && filtro?.funil) {
     const idx = indexar(trafego);
+    const rateio = ratear(trafego.dias, trafego, idx);
     for (const id of divididas) {
       gastoPorCampanha.delete(id); medido.delete(id);
-      const g = gastoCampanhaPorConjunto(trafego.dias, idx, id, (l) => linhaNoFunil(filtro.funil, l));
+      const g = gastoDaParte(rateio, idx, id, (l) => linhaNoFunil(filtro.funil, l));
       if (g !== null) { gastoPorCampanha.set(id, g); medido.add(id); }
     }
   }
