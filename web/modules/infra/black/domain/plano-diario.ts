@@ -165,7 +165,12 @@ export function resumoAjusteDoDia(dia: DiaPlano | undefined, agora: Date, conver
   const partes: string[] = [];
   const pctVerbaDia = t.verbaReal === null || t.verbaMeta <= 0 || f <= 0 ? null : (t.verbaReal / (t.verbaMeta * f)) * 100;
   const pctLeadsDia = t.leadsReal === null || t.leadsMeta <= 0 || f <= 0 ? null : (t.leadsReal / (t.leadsMeta * f)) * 100;
-  partes.push(`Hoje, às ${hora} (verba em mídia, sem imposto do Meta): verba em ${pct(pctVerbaDia)} do ritmo, faltam ${brl(Math.max(0, t.verbaMeta - (t.verbaReal ?? 0)))} para a meta do dia; leads em ${pct(pctLeadsDia)} do ritmo, faltam ${Math.max(0, t.leadsMeta - (t.leadsReal ?? 0))}.`);
+  const julga = f >= 1 || horaSp(agora) >= VIGIA_BLACK.horaInicioRitmo;
+  const faltaVerba = brl(Math.max(0, t.verbaMeta - (t.verbaReal ?? 0)));
+  const faltaLeads = Math.max(0, t.leadsMeta - (t.leadsReal ?? 0));
+  partes.push(julga
+    ? `Hoje, às ${hora} (verba em mídia, sem imposto do Meta): verba em ${pct(pctVerbaDia)} do ritmo, faltam ${faltaVerba} para a meta do dia; leads em ${pct(pctLeadsDia)} do ritmo, faltam ${faltaLeads}.`
+    : `Hoje, às ${hora} (verba em mídia, sem imposto do Meta): faltam ${faltaVerba} e ${faltaLeads} leads para a meta do dia.`);
   const alertas = alertasDoDia(dia, agora);
   const teto = VIGIA_BLACK.cplTeto;
   if (f < 1 && horaSp(agora) < VIGIA_BLACK.horaInicioRitmo) partes.push(`Antes das ${VIGIA_BLACK.horaInicioRitmo}h o ritmo por segmento não é julgado: pouco dado no dia.`);

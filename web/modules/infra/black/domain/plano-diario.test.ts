@@ -50,7 +50,9 @@ describe('plano diário da Black', () => {
     const [hoje] = agruparPorDia(mapearPlano(bruto));
     const cedo = new Date('2026-10-17T03:30:00Z'); // 00h30 em São Paulo
     expect(alertasDoDia(hoje, cedo).filter((a) => a.verbaAtras || a.leadsAtras)).toHaveLength(0);
-    expect(resumoAjusteDoDia(hoje, cedo, null)).toContain('Antes das 9h o ritmo por segmento não é julgado');
+    const tc = resumoAjusteDoDia(hoje, cedo, null)!;
+    expect(tc).toContain('Antes das 9h o ritmo por segmento não é julgado');
+    expect(tc).not.toContain('do ritmo,');
     const semCpl = agruparPorDia(mapearPlano([{ dia: '2026-10-17', plataforma: 'meta', camada: 'c2', verba_meta: 2000, verba_real: 900, leads_meta: 100, leads_real: 0 }]))[0];
     const t = resumoAjusteDoDia(semCpl, meioDia, null)!;
     expect(t).toContain('gastou sem nenhum lead hoje');
