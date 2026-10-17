@@ -95,18 +95,38 @@ export function fracaoDoDia(dia: string, agora: Date): number {
   return Math.min(1, Math.max(0, (h * 60 + m) / (24 * 60)));
 }
 
-export interface AlertaRitmo { segmento: Segmento; pctVerba: Valor; pctLeads: Valor; faltaVerba: number; faltaLeads: number; parado: boolean }
+/**
+ * Limites da vigia da Black (decisão 15 de 15/10/2026, aprovada pelo Arthur): os mesmos do alerta do Slack.
+ * Ritmo com tolerância de 40% até 12h e 25% depois; zero lead a partir das 9h; CPL com teto R$ 30
+ * (R$ 100 em campanha de aluno, piso R$ 8). Aqui o CPL é o do dia no segmento, não a janela de 3 horas da vigia.
+ */
+export const VIGIA_BLACK = {
+  toleranciaAte12h: 0.4, toleranciaDepois12h: 0.25, horaZeroLead: 9,
+  cplTeto: 30, cplTetoAluno: 100, cplPiso: 8,
+} as const;
+
+function horaSp(agora: Date): number {
+  const [h, m] = agora.toLocaleTimeString('sv-SE', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }).split(':').map(Number);
+  return h + m / 60;
+}
+export const toleranciaRitmo = (agora: Date) => (horaSp(agora) < 12 ? VIGIA_BLACK.toleranciaAte12h : VIGIA_BLACK.toleranciaDepois12h);
+
+export interface AlertaRitmo {
+  segmento: Segmento; pctVerba: Valor; pctLeads: Valor; faltaVerba: number; faltaLeads: number; cpl: Valor;
+  verbaAtras: boolean; leadsAtras: boolean; parado: boolean; zeroLead: boolean;
+}
 
 /**
- * Regras do parágrafo dos Alertas, sobre o dia de hoje:
- * - ritmo esperado = meta do dia × fração do dia já passada;
- * - abaixo de 80% do ritmo (verba ou leads) entra no resumo;
- * - meta do dia acima de zero e gasto zero depois das 10h = campanha possivelmente parada.
+ * Regras do parágrafo dos Alertas, sobre o dia de hoje (limites em VIGIA_BLACK):
+ * - ritmo esperado = meta do dia × fração do dia já passada; atrás = abaixo de (1 - tolerância) do ritmo;
+ * - parado: meta de verba e gasto zero a partir das 9h; zero lead: meta de leads e nenhum lead a partir das 9h.
  */
-export function alertasDoDia(dia: DiaPlano | undefined, agora: Date, limite = 0.8): AlertaRitmo[] {
+export function alertasDoDia(dia: DiaPlano | undefined, agora: Date): AlertaRitmo[] {
   if (!dia) return [];
   const f = fracaoDoDia(dia.dia, agora);
   if (f <= 0) return [];
+  const piso = (1 - (f >= 1 ? VIGIA_BLACK.toleranciaDepois12h : toleranciaRitmo(agora))) * 100;
+  const depoisDas9 = f >= 1 || horaSp(agora) >= VIGIA_BLACK.horaZeroLead;
   const out: AlertaRitmo[] = [];
   for (const s of dia.segmentos) {
     if (s.verbaReal === null || s.verbaMeta <= 0) continue; // sem coleta (Google) ou sem meta
@@ -114,11 +134,14 @@ export function alertasDoDia(dia: DiaPlano | undefined, agora: Date, limite = 0.
     const ritmoLeads = s.leadsMeta * f;
     const pctVerba = ritmoVerba > 0 ? (s.verbaReal / ritmoVerba) * 100 : null;
     const pctLeads = ritmoLeads > 0 && s.leadsReal !== null ? (s.leadsReal / ritmoLeads) * 100 : null;
-    const parado = s.verbaReal === 0 && f >= 10 / 24;
-    const abaixo = (pctVerba !== null && pctVerba < limite * 100) || (pctLeads !== null && pctLeads < limite * 100);
-    if (!abaixo && !parado) continue;
+    const parado = s.verbaReal === 0 && depoisDas9;
+    const zeroLead = s.leadsMeta > 0 && s.leadsReal === 0 && s.verbaReal > 0 && depoisDas9;
+    const verbaAtras = pctVerba !== null && pctVerba < piso;
+    const leadsAtras = pctLeads !== null && pctLeads < piso;
+    if (!verbaAtras && !leadsAtras && !parado && !zeroLead) continue;
     out.push({
-      segmento: s.segmento, pctVerba, pctLeads, parado,
+      segmento: s.segmento, pctVerba, pctLeads, parado, zeroLead, verbaAtras, leadsAtras,
+      cpl: s.leadsReal && s.leadsReal > 0 ? s.verbaReal / s.leadsReal : null,
       faltaVerba: Math.max(0, s.verbaMeta - s.verbaReal),
       faltaLeads: Math.max(0, s.leadsMeta - (s.leadsReal ?? 0)),
     });
@@ -138,17 +161,26 @@ export function resumoAjusteDoDia(dia: DiaPlano | undefined, agora: Date, conver
   const partes: string[] = [];
   const pctVerbaDia = t.verbaReal === null || t.verbaMeta <= 0 || f <= 0 ? null : (t.verbaReal / (t.verbaMeta * f)) * 100;
   const pctLeadsDia = t.leadsReal === null || t.leadsMeta <= 0 || f <= 0 ? null : (t.leadsReal / (t.leadsMeta * f)) * 100;
-  partes.push(`Hoje, às ${hora}: verba em ${pct(pctVerbaDia)} do ritmo (faltam ${brl(Math.max(0, t.verbaMeta - (t.verbaReal ?? 0)))} no dia) e leads em ${pct(pctLeadsDia)} do ritmo (faltam ${Math.max(0, t.leadsMeta - (t.leadsReal ?? 0))}).`);
+  partes.push(`Hoje, às ${hora} (verba em mídia, sem imposto do Meta): verba em ${pct(pctVerbaDia)} do ritmo, faltam ${brl(Math.max(0, t.verbaMeta - (t.verbaReal ?? 0)))} para a meta do dia; leads em ${pct(pctLeadsDia)} do ritmo, faltam ${Math.max(0, t.leadsMeta - (t.leadsReal ?? 0))}.`);
   const alertas = alertasDoDia(dia, agora);
-  const abaixo = alertas.filter((a) => !a.parado).slice(0, 3);
-  for (const a of abaixo) {
-    partes.push(`${a.segmento.rotulo} em ${pct(a.pctVerba)} do ritmo de verba e ${pct(a.pctLeads)} do de leads: subir a verba em ${brl(a.faltaVerba)} até o fim do dia.`);
+  const teto = VIGIA_BLACK.cplTeto;
+  for (const a of alertas.filter((x) => !x.parado).slice(0, 3)) {
+    const cplTxt = a.cpl === null ? 'CPL sem dado' : `CPL ${brl(a.cpl)}`;
+    if (a.zeroLead) {
+      partes.push(`${a.segmento.rotulo} gastou sem nenhum lead hoje: conferir criativo, público e página antes de manter a verba.`);
+    } else if (a.leadsAtras && (a.cpl === null || a.cpl > teto)) {
+      partes.push(`${a.segmento.rotulo} com leads em ${pct(a.pctLeads)} do ritmo e ${cplTxt} (teto ${brl(teto)}): revisar criativo, público ou página; não subir verba enquanto o CPL estiver acima do teto.`);
+    } else if (a.verbaAtras) {
+      partes.push(`${a.segmento.rotulo} com verba em ${pct(a.pctVerba)} do ritmo e ${cplTxt}, dentro do teto: faltam ${brl(a.faltaVerba)} para a meta do dia, dá para acelerar a entrega.`);
+    } else if (a.leadsAtras) {
+      partes.push(`${a.segmento.rotulo} com leads em ${pct(a.pctLeads)} do ritmo e ${cplTxt}: faltam ${a.faltaLeads} leads; olhar a conversão da página e os criativos.`);
+    }
   }
   const parados = alertas.filter((a) => a.parado).map((a) => a.segmento.rotulo);
   if (parados.length) partes.push(`Sem gasto hoje com meta: ${parados.join(', ')}. Conferir se a campanha está parada.`);
   if (conversaoPagina !== null && conversaoPagina < 40) partes.push(`Página convertendo ${Math.round(conversaoPagina)}%, abaixo de 40%: revisar a página antes de subir verba.`);
   const semGoogle = dia.segmentos.some((s) => s.plataforma === 'google' && s.verbaMeta > 0 && s.verbaReal === null);
   if (semGoogle) partes.push('Google sem coleta no banco: o realizado do Google não entra nesta conta.');
-  if (partes.length === 1 && pctVerbaDia !== null && pctVerbaDia >= 80 && (pctLeadsDia === null || pctLeadsDia >= 80)) partes.push('Todos os segmentos com coleta estão no ritmo.');
+  if (alertas.length === 0 && pctVerbaDia !== null) partes.push('Todos os segmentos com coleta estão dentro da tolerância da vigia.');
   return partes.join(' ');
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agruparPorDia, alertasDoDia, fracaoDoDia, mapearPlano, pctDaMeta, resumoAjusteDoDia, segmentoDe, segmentosDoPeriodo } from './plano-diario';
+import { agruparPorDia, alertasDoDia, fracaoDoDia, mapearPlano, pctDaMeta, resumoAjusteDoDia, segmentoDe, segmentosDoPeriodo, toleranciaRitmo, VIGIA_BLACK } from './plano-diario';
 
 const bruto = [
   { dia: '2026-10-17', plataforma: 'meta', camada: 'c3', verba_meta: 10000, verba_real: 4000, leads_meta: 300, leads_real: 100 },
@@ -29,17 +29,30 @@ describe('plano diário da Black', () => {
     expect(fracaoDoDia('2026-10-18', meioDia)).toBe(0);
     expect(fracaoDoDia('2026-10-17', meioDia)).toBeCloseTo(0.5, 2);
   });
-  it('aponta segmento abaixo do ritmo e segmento parado, e ignora Google sem coleta', () => {
+  it('usa os limites da vigia: 25% de tolerância depois das 12h, 40% antes, e parado a partir das 9h', () => {
     const [hoje] = agruparPorDia(mapearPlano(bruto));
     const a = alertasDoDia(hoje, meioDia);
-    expect(a.map((x) => [x.segmento.rotulo, x.parado])).toEqual([['Meta C3', false], ['Meta C2', true]]);
-    expect(a[0].pctVerba).toBeCloseTo(80, 0);
+    expect(a.map((x) => [x.segmento.rotulo, x.verbaAtras, x.leadsAtras, x.parado])).toEqual([['Meta C3', false, true, false], ['Meta C2', true, true, true]]);
+    expect(a[0].cpl).toBe(40);
+    expect(toleranciaRitmo(new Date('2026-10-17T13:00:00Z'))).toBe(VIGIA_BLACK.toleranciaAte12h);
+    expect(toleranciaRitmo(meioDia)).toBe(VIGIA_BLACK.toleranciaDepois12h);
+    // 8h30: ainda não marca parado
+    expect(alertasDoDia(hoje, new Date('2026-10-17T11:30:00Z')).some((x) => x.parado)).toBe(false);
+  });
+  it('só recomenda acelerar verba com CPL dentro do teto', () => {
+    const dentro = agruparPorDia(mapearPlano([{ dia: '2026-10-17', plataforma: 'meta', camada: 'c3', verba_meta: 10000, verba_real: 2000, leads_meta: 300, leads_real: 100 }]))[0];
+    const t = resumoAjusteDoDia(dentro, meioDia, null)!;
+    expect(t).toContain('dá para acelerar');
+    expect(t).toContain('faltam R$');
+    expect(t).not.toContain('subir a verba em');
   });
   it('escreve o parágrafo com falta do dia, segmentos, parados, página e Google', () => {
     const [hoje] = agruparPorDia(mapearPlano(bruto));
     const t = resumoAjusteDoDia(hoje, meioDia, 32)!;
     expect(t).toContain('Hoje, às 12:00');
     expect(t).toContain('Meta C2');
+    expect(t).toContain('não subir verba enquanto o CPL estiver acima do teto');
+    expect(t).toContain('sem imposto do Meta');
     expect(t).toContain('abaixo de 40%');
     expect(t).toContain('Google sem coleta');
     expect(resumoAjusteDoDia(undefined, meioDia, null)).toBeNull();

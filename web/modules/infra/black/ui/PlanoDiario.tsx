@@ -127,7 +127,7 @@ function GraficoPlano({ dias, agora }: { dias: DiaPlano[]; agora: Date }) {
 export function ModalPlanoDiario({ chave, agora, open, onClose }: { chave: string; agora: Date; open: boolean; onClose: () => void }) {
   const { dias, erro, lendo } = usePlanoDiario(chave, open);
   const [aba, setAba] = useState<'tabela' | 'grafico'>('tabela');
-  return <Modal open={open} onClose={onClose} width="max-w-6xl" title="Investimento: meta contra realizado por dia e segmento">
+  return <Modal open={open} onClose={onClose} width="max-w-6xl" title="Investimento: meta contra realizado por dia e segmento (verba em mídia, sem imposto do Meta)">
     <p className="mb-3 text-xs text-[var(--fg-3)]">Meta do plano diário aprovado (verba em mídia, sem o imposto do Meta). Realizado do Meta pela coleta a cada 30 min; leads pela base oficial da Black, sem testes. Google sem coleta mostra &quot;sem dado&quot;.</p>
     <Tabs idBase="plano-diario" label="Visão do plano" active={aba} onChange={(k) => setAba(k as 'tabela' | 'grafico')} tabs={[{ k: 'tabela', l: 'Tabela' }, { k: 'grafico', l: 'Gráfico' }]} />
     <div className="mt-3">
