@@ -46,6 +46,14 @@ describe('plano diário da Black', () => {
     expect(t).toContain('faltam R$');
     expect(t).not.toContain('subir a verba em');
   });
+  it('não manda acelerar com CPL acima do teto ou sem dado, mesmo com verba atrás', () => {
+    const alto = agruparPorDia(mapearPlano([{ dia: '2026-10-17', plataforma: 'meta', camada: 'c3', verba_meta: 10000, verba_real: 2000, leads_meta: 20, leads_real: 40 }]))[0];
+    expect(resumoAjusteDoDia(alto, meioDia, null)).toContain('não acelerar');
+    const semLead = agruparPorDia(mapearPlano([{ dia: '2026-10-17', plataforma: 'meta', camada: 'c3', verba_meta: 10000, verba_real: 2000, leads_meta: 0, leads_real: 0 }]))[0];
+    const t = resumoAjusteDoDia(semLead, meioDia, null)!;
+    expect(t).toContain('CPL ainda sem dado');
+    expect(t).not.toContain('dá para acelerar');
+  });
   it('escreve o parágrafo com falta do dia, segmentos, parados, página e Google', () => {
     const [hoje] = agruparPorDia(mapearPlano(bruto));
     const t = resumoAjusteDoDia(hoje, meioDia, 32)!;

@@ -99,6 +99,8 @@ export function fracaoDoDia(dia: string, agora: Date): number {
  * Limites da vigia da Black (decisão 15 de 15/10/2026, aprovada pelo Arthur): os mesmos do alerta do Slack.
  * Ritmo com tolerância de 40% até 12h e 25% depois; zero lead a partir das 9h; CPL com teto R$ 30
  * (R$ 100 em campanha de aluno, piso R$ 8). Aqui o CPL é o do dia no segmento, não a janela de 3 horas da vigia.
+ * O painel ainda não separa campanha de aluno: todo segmento é julgado pelo teto geral (cplTetoAluno fica registrado
+ * para quando a camada trouxer essa marca). O piso vale: CPL abaixo dele não recomenda acelerar.
  */
 export const VIGIA_BLACK = {
   toleranciaAte12h: 0.4, toleranciaDepois12h: 0.25, horaZeroLead: 9,
@@ -170,8 +172,11 @@ export function resumoAjusteDoDia(dia: DiaPlano | undefined, agora: Date, conver
       partes.push(`${a.segmento.rotulo} gastou sem nenhum lead hoje: conferir criativo, público e página antes de manter a verba.`);
     } else if (a.leadsAtras && (a.cpl === null || a.cpl > teto)) {
       partes.push(`${a.segmento.rotulo} com leads em ${pct(a.pctLeads)} do ritmo e ${cplTxt} (teto ${brl(teto)}): revisar criativo, público ou página; não subir verba enquanto o CPL estiver acima do teto.`);
-    } else if (a.verbaAtras) {
+    } else if (a.verbaAtras && a.cpl !== null && a.cpl >= VIGIA_BLACK.cplPiso && a.cpl <= teto) {
       partes.push(`${a.segmento.rotulo} com verba em ${pct(a.pctVerba)} do ritmo e ${cplTxt}, dentro do teto: faltam ${brl(a.faltaVerba)} para a meta do dia, dá para acelerar a entrega.`);
+    } else if (a.verbaAtras) {
+      const porque = a.cpl === null ? 'CPL ainda sem dado' : a.cpl < VIGIA_BLACK.cplPiso ? `${cplTxt}, abaixo do piso de ${brl(VIGIA_BLACK.cplPiso)}: conferir se os leads são reais` : `${cplTxt}, acima do teto`;
+      partes.push(`${a.segmento.rotulo} com verba em ${pct(a.pctVerba)} do ritmo (faltam ${brl(a.faltaVerba)} para a meta do dia) e ${porque}; não acelerar até o CPL estar dentro do teto.`);
     } else if (a.leadsAtras) {
       partes.push(`${a.segmento.rotulo} com leads em ${pct(a.pctLeads)} do ritmo e ${cplTxt}: faltam ${a.faltaLeads} leads; olhar a conversão da página e os criativos.`);
     }
