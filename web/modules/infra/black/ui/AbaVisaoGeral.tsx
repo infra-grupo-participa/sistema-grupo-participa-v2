@@ -28,6 +28,7 @@ import { cplCaptacao, cplDoRecorte, investimentoDoRecorteValor, connectRate as c
 import type { FormatoMetrica } from '../domain/jornada';
 import { compararMeta } from '../domain/meta';
 import { ratear, semDetalheDoFunil } from '../domain/rateio';
+import { ModalPlanoDiario, ResumoAjusteDoDia } from './PlanoDiario';
 
 const TODAS: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo', 'perfil'];
 const TRAFEGO: SubAbaModal[] = ['funil', 'canal', 'fase', 'dia', 'criativo'];
@@ -190,6 +191,7 @@ function CardIngresso({ geral, trafego, grupo, meta, onAbrir }: { geral: ReturnT
 
 export function AbaVisaoGeral({ d }: { d: DadosTela }) {
   const [aberto, setAberto] = useState<CardDef | null>(null);
+  const [planoAberto, setPlanoAberto] = useState(false);
   const [detalheCaptacao, setDetalheCaptacao] = useState(false);
   const [etapaAberta, setEtapaAberta] = useState<string | null>(null);
   const [tabela, setTabela] = useState<TabelaAberta | null>(null);
@@ -327,8 +329,10 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {/* O limite total reutiliza ORCAMENTO.total enquanto não há orçamento próprio de disparos. */}
-          <KpiCard label="Investimento total" value={<Numero valor={total} formato="brl" falta="sem dado" />} valueClassName="text-2xl sm:text-3xl" title={`${notaTotal} O limite de ${moeda(config.orcamentoTotal)} reutiliza provisoriamente o orçamento total do projeto, pois não há limite separado para disparos.`} bar="none"
-            hint={<MetaComProgresso valor={total} meta={config.orcamentoTotal} formato="brl" semFarol />} />
+          <Cartao titulo="Investimento: meta contra realizado por dia" onAbrir={() => setPlanoAberto(true)}>
+            <KpiCard label="Investimento total" value={<Numero valor={total} formato="brl" falta="sem dado" />} valueClassName="text-2xl sm:text-3xl" title={`${notaTotal} O limite de ${moeda(config.orcamentoTotal)} reutiliza provisoriamente o orçamento total do projeto, pois não há limite separado para disparos. Clique para ver a meta contra o realizado por dia e segmento.`} bar="none"
+              hint={<MetaComProgresso valor={total} meta={config.orcamentoTotal} formato="brl" semFarol />} />
+          </Cartao>
           <Cartao titulo={cardGasto.rotulo} onAbrir={abrir(cardGasto)}>
             <KpiCard label="Investimento em tráfego" value={<Numero valor={gastoPeriodo} formato="brl" falta="sem dado" />} valueClassName="text-2xl sm:text-3xl" title={`${NOTA_ENTRESAFRA}`} bar="none"
               hint={<div className="space-y-2"><p className="text-xs text-[var(--fg-2)]">Meta Ads {moeda(porCanal('meta'))} · Google Ads {moeda(porCanal('google'))}</p><MetaComProgresso valor={gastoPeriodo} meta={config.orcamentoTotal} formato="brl" semFarol /></div>} />
@@ -467,6 +471,7 @@ export function AbaVisaoGeral({ d }: { d: DadosTela }) {
       {modalIngresso && <ModalIngresso d={d} onClose={() => setModalIngresso(false)} linhas={linhasGrupo} />}
 
       <ModalCard d={d} card={aberto} onClose={() => setAberto(null)} />
+      <ModalPlanoDiario chave={d.chave} agora={d.agora} open={planoAberto} onClose={() => setPlanoAberto(false)} />
       {funisAbertos && <ModalFunisEtapa d={d} funil={funisAbertos} dias={diasCanal} linhas={linhasCanal} onClose={() => setFunisAbertos(null)} />}
       {detalheCaptacao && (
         <Modal open onClose={() => setDetalheCaptacao(false)} title="Investimento em captação" width={`max-w-xl ${MODAL_TELA_CHEIA}`}>
@@ -710,7 +715,9 @@ function PainelAlertas({ d }: { d: DadosTela }) {
   const alertas = useMemo(() => alertasNomenclatura(d.trafego, d.linhasTodas), [d.trafego, d.linhasTodas]);
   const tipos = ['Campanha', 'Conjunto', 'Anúncio', 'UTM'] as const;
   const total = alertas.reduce((soma, item) => soma + item.regras.length * item.ocorrencias, 0);
+  const conv = conversaoPaginaNumero(d.dias, d.linhas, d.idx).valor;
   return <div className="space-y-3">
+    <ResumoAjusteDoDia chave={d.chave} agora={d.agora} conversaoPagina={conv === null ? null : conv * 100} />
     <SectionCard title="Alertas importantes" subtitle="Inconsistências calculadas a partir dos nomes exatos da fonte e das sinalizações de UTM do banco.">
       <p className="mb-3 text-sm text-[var(--fg-2)]">{total} ocorrências em {alertas.length} itens. As regras aparecem junto de cada nome para orientar a correção.</p>
       {alertas.length === 0 ? <p className="rounded-[var(--r-md)] border border-dashed border-[var(--border-strong)] p-5 text-center text-sm text-[var(--fg-3)]">Nenhuma inconsistência encontrada nos dados carregados.</p> : <div className="space-y-4">
