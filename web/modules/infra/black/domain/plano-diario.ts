@@ -103,7 +103,7 @@ export function fracaoDoDia(dia: string, agora: Date): number {
  * para quando a camada trouxer essa marca). O piso vale: CPL abaixo dele não recomenda acelerar.
  */
 export const VIGIA_BLACK = {
-  toleranciaAte12h: 0.4, toleranciaDepois12h: 0.25, horaZeroLead: 9,
+  toleranciaAte12h: 0.4, toleranciaDepois12h: 0.25, horaZeroLead: 9, horaInicioRitmo: 9,
   cplTeto: 30, cplTetoAluno: 100, cplPiso: 8,
 } as const;
 
@@ -129,6 +129,8 @@ export function alertasDoDia(dia: DiaPlano | undefined, agora: Date): AlertaRitm
   if (f <= 0) return [];
   const piso = (1 - (f >= 1 ? VIGIA_BLACK.toleranciaDepois12h : toleranciaRitmo(agora))) * 100;
   const depoisDas9 = f >= 1 || horaSp(agora) >= VIGIA_BLACK.horaZeroLead;
+  // pedido do Arthur (17/10): antes das 9h o ritmo não é julgado, com poucos minutos de dado o alerta exagera
+  const julgaRitmo = f >= 1 || horaSp(agora) >= VIGIA_BLACK.horaInicioRitmo;
   const out: AlertaRitmo[] = [];
   for (const s of dia.segmentos) {
     if (s.verbaReal === null || s.verbaMeta <= 0) continue; // sem coleta (Google) ou sem meta
@@ -138,8 +140,8 @@ export function alertasDoDia(dia: DiaPlano | undefined, agora: Date): AlertaRitm
     const pctLeads = ritmoLeads > 0 && s.leadsReal !== null ? (s.leadsReal / ritmoLeads) * 100 : null;
     const parado = s.verbaReal === 0 && depoisDas9;
     const zeroLead = s.leadsMeta > 0 && s.leadsReal === 0 && s.verbaReal > 0 && depoisDas9;
-    const verbaAtras = pctVerba !== null && pctVerba < piso;
-    const leadsAtras = pctLeads !== null && pctLeads < piso;
+    const verbaAtras = julgaRitmo && pctVerba !== null && pctVerba < piso;
+    const leadsAtras = julgaRitmo && pctLeads !== null && pctLeads < piso;
     if (!verbaAtras && !leadsAtras && !parado && !zeroLead) continue;
     out.push({
       segmento: s.segmento, pctVerba, pctLeads, parado, zeroLead, verbaAtras, leadsAtras,
@@ -166,11 +168,14 @@ export function resumoAjusteDoDia(dia: DiaPlano | undefined, agora: Date, conver
   partes.push(`Hoje, às ${hora} (verba em mídia, sem imposto do Meta): verba em ${pct(pctVerbaDia)} do ritmo, faltam ${brl(Math.max(0, t.verbaMeta - (t.verbaReal ?? 0)))} para a meta do dia; leads em ${pct(pctLeadsDia)} do ritmo, faltam ${Math.max(0, t.leadsMeta - (t.leadsReal ?? 0))}.`);
   const alertas = alertasDoDia(dia, agora);
   const teto = VIGIA_BLACK.cplTeto;
+  if (f < 1 && horaSp(agora) < VIGIA_BLACK.horaInicioRitmo) partes.push(`Antes das ${VIGIA_BLACK.horaInicioRitmo}h o ritmo por segmento não é julgado: pouco dado no dia.`);
   for (const a of alertas.filter((x) => !x.parado).slice(0, 3)) {
     const cplTxt = a.cpl === null ? 'CPL sem dado' : `CPL ${brl(a.cpl)}`;
     if (a.zeroLead) {
       partes.push(`${a.segmento.rotulo} gastou sem nenhum lead hoje: conferir criativo, público e página antes de manter a verba.`);
-    } else if (a.leadsAtras && (a.cpl === null || a.cpl > teto)) {
+    } else if (a.leadsAtras && a.cpl === null) {
+      partes.push(`${a.segmento.rotulo} com leads em ${pct(a.pctLeads)} do ritmo e CPL ainda sem dado: revisar criativo, público ou página antes de subir verba.`);
+    } else if (a.leadsAtras && a.cpl !== null && a.cpl > teto) {
       partes.push(`${a.segmento.rotulo} com leads em ${pct(a.pctLeads)} do ritmo e ${cplTxt} (teto ${brl(teto)}): revisar criativo, público ou página; não subir verba enquanto o CPL estiver acima do teto.`);
     } else if (a.verbaAtras && a.cpl !== null && a.cpl >= VIGIA_BLACK.cplPiso && a.cpl <= teto) {
       partes.push(`${a.segmento.rotulo} com verba em ${pct(a.pctVerba)} do ritmo e ${cplTxt}, dentro do teto: faltam ${brl(a.faltaVerba)} para a meta do dia, dá para acelerar a entrega.`);
@@ -186,6 +191,6 @@ export function resumoAjusteDoDia(dia: DiaPlano | undefined, agora: Date, conver
   if (conversaoPagina !== null && conversaoPagina < 40) partes.push(`Página convertendo ${Math.round(conversaoPagina)}%, abaixo de 40%: revisar a página antes de subir verba.`);
   const semGoogle = dia.segmentos.some((s) => s.plataforma === 'google' && s.verbaMeta > 0 && s.verbaReal === null);
   if (semGoogle) partes.push('Google sem coleta no banco: o realizado do Google não entra nesta conta.');
-  if (alertas.length === 0 && pctVerbaDia !== null) partes.push('Todos os segmentos com coleta estão dentro da tolerância da vigia.');
+  if (alertas.length === 0 && pctVerbaDia !== null && (f >= 1 || horaSp(agora) >= VIGIA_BLACK.horaInicioRitmo)) partes.push('Todos os segmentos com coleta estão dentro da tolerância da vigia.');
   return partes.join(' ');
 }
