@@ -44,6 +44,12 @@ describe('plano diário da Black', () => {
     expect(t).toContain('Google sem coleta');
     expect(resumoAjusteDoDia(undefined, meioDia, null)).toBeNull();
   });
+  it('rotula o teaser histórico e o põe no fim', () => {
+    const dias = agruparPorDia(mapearPlano([...bruto, { dia: '2026-10-17', plataforma: 'meta', camada: 'historico', verba_meta: 0, verba_real: 50, leads_meta: 0, leads_real: 0 }]));
+    const rotulos = dias[0].segmentos.map((s) => s.segmento.rotulo);
+    expect(rotulos).toContain('Meta Teaser (histórico)');
+    expect(rotulos.indexOf('Meta Teaser (histórico)')).toBeGreaterThan(rotulos.indexOf('Google C3'));
+  });
   it('lista os segmentos do período com cor fixa por camada', () => {
     const segs = segmentosDoPeriodo(agruparPorDia(mapearPlano(bruto)));
     expect(segs[0].chave).toBe('meta:c3');

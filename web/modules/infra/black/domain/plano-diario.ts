@@ -15,14 +15,14 @@ export interface DiaPlano {
 }
 
 /** Ordem do pedido: Meta C3, C2, remarketing, C1, aquecimento; Google C3, C2, C1, aquecimento; depois live e carrinho. */
-const ORDEM_CAMADAS = ['c3', 'c2', 'remarketing', 'c1', 'aquecimento', 'remarketing_live', 'carrinho'] as const;
+const ORDEM_CAMADAS = ['c3', 'c2', 'remarketing', 'c1', 'aquecimento', 'remarketing_live', 'carrinho', 'historico'] as const;
 const ROTULO_CAMADA: Record<string, string> = {
   c3: 'C3', c2: 'C2', remarketing: 'Remarketing', c1: 'C1', aquecimento: 'Aquecimento',
-  remarketing_live: 'Remarketing da live', carrinho: 'Carrinho',
+  remarketing_live: 'Remarketing da live', carrinho: 'Carrinho', historico: 'Teaser (histórico)',
 };
 const COR_CAMADA: Record<string, string> = {
   c3: 'var(--accent)', c2: 'var(--cyan)', remarketing: 'var(--purple)', c1: 'var(--green)', aquecimento: 'var(--yellow)',
-  remarketing_live: 'var(--red)', carrinho: 'var(--info)',
+  remarketing_live: 'var(--red)', carrinho: 'var(--info)', historico: 'var(--fg-3)',
 };
 
 export function segmentoDe(plataforma: Plataforma, camada: string | null): Segmento {
